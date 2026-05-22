@@ -1,9 +1,10 @@
-import { Columns3, BookOpen, Users, AlertTriangle, Save, Plus, LogOut } from 'lucide-react';
+import { Columns3, CalendarDays, BookOpen, Users, AlertTriangle, Save, Plus, LogOut } from 'lucide-react';
 import { T } from '../theme.js';
 import { avatarFor } from '../utils/helpers.js';
 
 const ITEMS = [
   { id: 'kanban', label: '看板', icon: Columns3 },
+  { id: 'briefing', label: '日报总览', icon: CalendarDays },
   { id: 'method', label: 'Method', icon: BookOpen },
   { id: 'team', label: '团队', icon: Users },
   { id: 'risks', label: '风险', icon: AlertTriangle },

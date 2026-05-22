@@ -21,19 +21,24 @@ import { supabase } from './supabase.js';
 import {
   KEY_META,
   KEY_ATT_PREFIX,
+  KEY_LEGACY_V6,
   KEY_LEGACY_V5,
   KEY_LEGACY_V4,
   KEY_LEGACY_V3,
 } from '../constants/storage.js';
 
+// Preserve any forms a record already has, fill the rest, and (for the
+// oldest dossier-based records) lift dossier answers into SPACE_SURVEY.
 const migrateRecord = (p, fromDossier) => ({
   ...p,
   forms: {
-    SPACE_SURVEY: { answers: fromDossier ? p.dossier?.answers || {} : {} },
-    MEASUREMENT: { answers: {} },
-    INSTALL_QC: { answers: {} },
-    HANDOVER: { answers: {} },
+    SPACE_SURVEY: p.forms?.SPACE_SURVEY || { answers: fromDossier ? p.dossier?.answers || {} : {} },
+    MEASUREMENT: p.forms?.MEASUREMENT || { answers: {} },
+    SITE_CHECK: p.forms?.SITE_CHECK || { answers: {} },
+    INSTALL_QC: p.forms?.INSTALL_QC || { answers: {} },
+    HANDOVER: p.forms?.HANDOVER || { answers: {} },
   },
+  dailyReports: p.dailyReports || [],
   attachments: p.attachments || {},
 });
 
@@ -51,6 +56,7 @@ export function createLocalRepo() {
       } catch (e) { /* fall through to migrations */ }
 
       const migrations = [
+        { key: KEY_LEGACY_V6, fromDossier: false },
         { key: KEY_LEGACY_V5, fromDossier: true },
         { key: KEY_LEGACY_V4, fromDossier: true },
         { key: KEY_LEGACY_V3, fromDossier: false },

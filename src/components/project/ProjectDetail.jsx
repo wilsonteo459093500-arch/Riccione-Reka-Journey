@@ -15,11 +15,13 @@ import { useConfirm } from '../ui/UIProvider.jsx';
 import GateRow from './GateRow.jsx';
 import RiskForm from '../risks/RiskForm.jsx';
 import RiskRow from '../risks/RiskRow.jsx';
+import DailyReportsBlock from '../daily/DailyReportsBlock.jsx';
 
 export default function ProjectDetail({
   project, onBack, onToggleGate, onUpdate, onDelete, onUpdateNote,
   onAddRisk, onRemoveRisk, onAddAttachment, onRemoveAttachment,
   fetchAttachment, onClientView, onOpenForm,
+  onSaveDailyReport, onDeleteDailyReport,
 }) {
   const [expandedStage, setExpandedStage] = useState(currentStage(project).code);
   const [showRiskForm, setShowRiskForm] = useState(false);
@@ -226,15 +228,19 @@ export default function ProjectDetail({
                   <div className="ink-divider mb-3" />
                   <div className="text-xs italic mb-4 px-3" style={{ color: T.inkSoft }}>"{stage.tagline}"</div>
 
-                  {stage.linkedForm && FORMS[stage.linkedForm] && (() => {
-                    const fc = formCompletion(project, stage.linkedForm);
-                    const f = FORMS[stage.linkedForm];
+                  {(stage.linkedForms || []).map((lf) => {
+                    if (!FORMS[lf.formCode]) return null;
+                    const fc = formCompletion(project, lf.formCode);
+                    const f = FORMS[lf.formCode];
                     return (
-                      <div className="mb-4 p-4 flex items-center justify-between gap-4 flex-wrap" style={{ background: T.cream, borderRadius: '2px' }}>
+                      <div key={lf.formCode} className="mb-4 p-4 flex items-center justify-between gap-4 flex-wrap" style={{ background: T.cream, borderRadius: '2px' }}>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-baseline gap-2 mb-1 flex-wrap">
                             <div className="text-xs uppercase tracking-widest" style={{ color: T.inkSoft }}>{f.en}</div>
                             <div className="font-display text-xl" style={{ color: T.ink }}>{f.title}</div>
+                            {lf.gate && (
+                              <span className="font-mono text-[10px] px-1.5 py-0.5" style={{ background: T.wood, color: T.paper, borderRadius: '2px' }}>{lf.gate}</span>
+                            )}
                           </div>
                           <div className="text-xs mb-2" style={{ color: T.inkSoft }}>{f.purpose}</div>
                           <div className="text-sm" style={{ color: T.ink }}>
@@ -245,13 +251,22 @@ export default function ProjectDetail({
                             <div className="h-full" style={{ background: fc.pct === 100 ? T.sage : T.wood, width: `${fc.pct}%` }} />
                           </div>
                         </div>
-                        <button onClick={() => onOpenForm(stage.linkedForm)} className="text-sm flex items-center gap-1.5 px-4 py-2 flex-shrink-0" style={{ background: T.ink, color: T.paper, borderRadius: '2px' }}>
+                        <button onClick={() => onOpenForm(lf.formCode)} className="text-sm flex items-center gap-1.5 px-4 py-2 flex-shrink-0" style={{ background: T.ink, color: T.paper, borderRadius: '2px' }}>
                           <BookOpen size={13} strokeWidth={1.5} />
                           {fc.filled === 0 ? '开始填写' : fc.filled === fc.total ? '查看 / 编辑' : '继续填写'}
                         </button>
                       </div>
                     );
-                  })()}
+                  })}
+
+                  {stage.hasDailyReports && (
+                    <DailyReportsBlock
+                      project={project}
+                      onSaveReport={onSaveDailyReport}
+                      onDeleteReport={onDeleteDailyReport}
+                      fetchAttachment={fetchAttachment}
+                    />
+                  )}
 
                   <div className="space-y-3">
                     {stage.gates.map((gate) => (

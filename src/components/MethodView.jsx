@@ -1,4 +1,4 @@
-import { FileText, Printer } from 'lucide-react';
+import { FileText, CalendarDays, Printer } from 'lucide-react';
 import { T } from '../theme.js';
 import { STAGES, OWNERS } from '../constants/stages.js';
 import { FORMS, formTotal } from '../constants/forms.js';
@@ -73,12 +73,25 @@ export default function MethodView() {
                 </span>
                 <span>典型周期: {s.days}</span>
               </div>
-              {s.linkedForm && FORMS[s.linkedForm] && (
-                <div className="mt-3 pt-3 flex items-center gap-2 text-xs flex-wrap" style={{ borderTop: `1px solid ${T.lineSoft}` }}>
-                  <FileText size={12} strokeWidth={1.5} style={{ color: T.wood }} />
-                  <span style={{ color: T.inkSoft }}>本章核心表单:</span>
-                  <span className="font-display text-base" style={{ color: T.ink }}>《{FORMS[s.linkedForm].title}》</span>
-                  <span style={{ color: T.inkSoft }}>· {formTotal(s.linkedForm)} 项</span>
+              {(s.linkedForms || []).length > 0 && (
+                <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${T.lineSoft}` }}>
+                  <div className="text-xs mb-2" style={{ color: T.inkSoft }}>本章核心表单:</div>
+                  <div className="space-y-1.5">
+                    {(s.linkedForms || []).map((lf) => FORMS[lf.formCode] && (
+                      <div key={lf.formCode} className="flex items-center gap-2 text-xs">
+                        <FileText size={12} strokeWidth={1.5} style={{ color: T.wood }} />
+                        <span className="font-display text-base" style={{ color: T.ink }}>《{FORMS[lf.formCode].title}》</span>
+                        <span style={{ color: T.inkSoft }}>· {formTotal(lf.formCode)} 项</span>
+                      </div>
+                    ))}
+                    {s.hasDailyReports && (
+                      <div className="flex items-center gap-2 text-xs">
+                        <CalendarDays size={12} strokeWidth={1.5} style={{ color: T.wood }} />
+                        <span className="font-display text-base" style={{ color: T.ink }}>《安装每日报告》</span>
+                        <span style={{ color: T.inkSoft }}>· 每日时间轴</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

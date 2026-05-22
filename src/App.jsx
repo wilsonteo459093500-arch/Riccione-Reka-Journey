@@ -14,6 +14,7 @@ import NewProjectModal from './components/project/NewProjectModal.jsx';
 import FormEditor from './components/forms/FormEditor.jsx';
 import TeamView from './components/team/TeamView.jsx';
 import RisksView from './components/risks/RisksView.jsx';
+import BriefingView from './components/briefing/BriefingView.jsx';
 import ClientShareView from './components/client/ClientShareView.jsx';
 
 function AppInner({ repo, user, onSignOut }) {
@@ -24,6 +25,7 @@ function AppInner({ repo, user, onSignOut }) {
     projects, loading, saveStatus,
     loadSample, clearAll, updateProject, toggleGate, addProject, deleteProject,
     addRisk, removeRisk, updateNote, updateForm, addAttachment, removeAttachment, fetchAttachment,
+    saveDailyReport, deleteDailyReport,
   } = store;
 
   const [view, setView] = useState('kanban');
@@ -90,7 +92,11 @@ function AppInner({ repo, user, onSignOut }) {
             fetchAttachment={fetchAttachment}
             onClientView={() => setClientViewProject(selected)}
             onOpenForm={(formCode) => setFormContext({ projectId: selected.id, formCode })}
+            onSaveDailyReport={(report, uploads) => saveDailyReport(selected.id, report, uploads)}
+            onDeleteDailyReport={(rid) => deleteDailyReport(selected.id, rid)}
           />
+        ) : view === 'briefing' ? (
+          <BriefingView projects={projects} onOpen={(id) => { setSelectedId(id); setView('project'); }} />
         ) : view === 'method' ? (
           <MethodView />
         ) : view === 'team' ? (

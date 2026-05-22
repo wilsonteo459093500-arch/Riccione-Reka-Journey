@@ -5,6 +5,7 @@ import { sampleProjects } from '../utils/sampleData.js';
 const emptyForms = () => ({
   SPACE_SURVEY: { answers: {} },
   MEASUREMENT: { answers: {} },
+  SITE_CHECK: { answers: {} },
   INSTALL_QC: { answers: {} },
   HANDOVER: { answers: {} },
 });
@@ -136,6 +137,7 @@ export function useProjects(repo, { onToast } = {}) {
         risks: [],
         attachments: {},
         forms: emptyForms(),
+        dailyReports: [],
       };
       upsert(proj);
       return proj;
@@ -250,6 +252,52 @@ export function useProjects(repo, { onToast } = {}) {
     [repo]
   );
 
+  const saveDailyReport = useCallback(
+    async (pid, report, newPhotoUploads = []) => {
+      const p = ref.current.find((x) => x.id === pid);
+      if (!p) return;
+      for (const upload of newPhotoUploads) {
+        if (upload.att.source === 'upload' && upload.content) {
+          try {
+            await repo.setAttachment(upload.att.id, upload.content);
+          } catch (e) {
+            onToast?.('照片上传失败: ' + (e.message || e), 'error');
+            return;
+          }
+        }
+      }
+      const list = p.dailyReports || [];
+      const idx = list.findIndex((r) => r.id === report.id);
+      const now = new Date().toISOString();
+      let next;
+      if (idx >= 0) {
+        next = list.map((r, i) => (i === idx ? { ...report, updatedAt: now } : r));
+      } else {
+        next = [...list, { ...report, createdAt: now, updatedAt: now }];
+      }
+      next.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+      updateProject(pid, { dailyReports: next });
+    },
+    [repo, updateProject, onToast]
+  );
+
+  const deleteDailyReport = useCallback(
+    async (pid, rid) => {
+      const p = ref.current.find((x) => x.id === pid);
+      if (!p) return;
+      const r = (p.dailyReports || []).find((x) => x.id === rid);
+      if (r) {
+        for (const photo of r.photos || []) {
+          if (photo.source === 'upload') {
+            try { await repo.delAttachment(photo.id); } catch (e) { /* ignore */ }
+          }
+        }
+      }
+      updateProject(pid, { dailyReports: (p.dailyReports || []).filter((x) => x.id !== rid) });
+    },
+    [repo, updateProject]
+  );
+
   return {
     projects,
     loading,
@@ -267,5 +315,7 @@ export function useProjects(repo, { onToast } = {}) {
     addAttachment,
     removeAttachment,
     fetchAttachment,
+    saveDailyReport,
+    deleteDailyReport,
   };
 }

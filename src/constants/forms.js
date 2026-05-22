@@ -126,7 +126,63 @@ export const FORMS = {
     ],
   },
 
-  // ---- Stage D · ARRIVAL ----
+  // ---- Stage D · ARRIVAL · pre-install ----
+  SITE_CHECK: {
+    code: 'SITE_CHECK',
+    title: '场地检查表',
+    en: 'Site Check',
+    purpose: '安装开工前的现场就绪核查 (人员/物料/安全/动线)',
+    role: 'staff', // SS 主理
+    sections: [
+      {
+        code: 'SCHEDULE', cn: '时间节点', desc: '人员与物料进场时间',
+        questions: [
+          { id: 'sc1', q: '垃圾桶进场日期', type: 'text', placeholder: 'YYYY-MM-DD (Drop-off date)' },
+          { id: 'sc2', q: '安装师傅进场日期', type: 'text', placeholder: 'YYYY-MM-DD (Installer arrival)' },
+          { id: 'sc3', q: '预计安装总天数', type: 'text', placeholder: '例: 3 天 / 5 天' },
+          { id: 'sc4', q: '客户授权进场时段', type: 'text', placeholder: '例: 9am - 6pm 每日' },
+        ],
+      },
+      {
+        code: 'ASSESSMENT', cn: '场地评估', desc: '现场基础条件',
+        questions: [
+          { id: 'sc5', q: '现场清洁度', type: 'choice', options: ['干净可直接施工', '一般', '需先清理'] },
+          { id: 'sc6', q: '地面保护垫已铺设', type: 'bool' },
+          { id: 'sc7', q: '防尘措施 (墙面遮挡)', type: 'bool' },
+          { id: 'sc8', q: '邻居已告知工期', type: 'bool' },
+          { id: 'sc9', q: '物业入场登记完成', type: 'bool' },
+        ],
+      },
+      {
+        code: 'RESOURCES', cn: '资源链接', desc: '影像与图纸资料',
+        questions: [
+          { id: 'sc10', q: '🎬 进场全场视频链接', type: 'text', placeholder: 'Google Drive / Dropbox 视频链接' },
+          { id: 'sc11', q: '📐 场地规划 / 平面图链接', type: 'text', placeholder: '云盘链接 (平面图 + 柜体定位图)' },
+          { id: 'sc12', q: '🚚 进场动线图 / 说明', type: 'text', placeholder: '电梯/楼梯/堆放区动线' },
+          { id: 'sc13', q: '📷 现场总览照片已存档', type: 'bool' },
+        ],
+      },
+      {
+        code: 'SAFETY', cn: '安全准备', desc: '临时设施 + 应急',
+        questions: [
+          { id: 'sc14', q: '灭火器位置已确认', type: 'bool' },
+          { id: 'sc15', q: '急救箱位置已确认', type: 'bool' },
+          { id: 'sc16', q: '临时电源稳定可用', type: 'bool' },
+          { id: 'sc17', q: '临时照明充足', type: 'bool' },
+        ],
+      },
+      {
+        code: 'SIGNOFF', cn: '收尾确认', desc: '签字与备注',
+        questions: [
+          { id: 'sc18', q: 'SS 现场确认签字', type: 'bool' },
+          { id: 'sc19', q: '客户/物业代表确认 (如适用)', type: 'bool' },
+          { id: 'sc20', q: '特殊情况 / 备注', type: 'text', placeholder: '例: 周末禁止施工、特定时段噪音限制' },
+        ],
+      },
+    ],
+  },
+
+  // ---- Stage D · ARRIVAL · post-install ----
   INSTALL_QC: {
     code: 'INSTALL_QC',
     title: '安装质量检查表',

@@ -20,8 +20,7 @@ export const STAGES = [
     taglineCN: '先聆听 — 在动笔之前，理解整个家。',
     owner: 'SD',
     days: '销售前',
-    linkedForm: 'SPACE_SURVEY',
-    formGate: 'A3',
+    linkedForms: [{ formCode: 'SPACE_SURVEY', gate: 'A3' }],
     gates: [
       { id: 'A1', short: 'BOND-1 Begin', label: '首次接触 + 客户档案建档', en: 'First contact + profile' },
       { id: 'A2', short: 'BOND-2 Observe', label: '展厅接待 + 现场感知', en: 'Showroom + initial site visit' },
@@ -40,8 +39,7 @@ export const STAGES = [
     taglineCN: '以精度为准 — 每一毫米都丈量过。',
     owner: 'SD',
     days: '1-2 周',
-    linkedForm: 'MEASUREMENT',
-    formGate: 'B2',
+    linkedForms: [{ formCode: 'MEASUREMENT', gate: 'B2' }],
     gates: [
       { id: 'B1', short: '4S-1 Start', label: 'Kickoff: 项目编号 + 群 + 文件夹', en: 'Project ID + group + folder' },
       { id: 'B2', short: '4S-2 Survey', label: '现场量尺核查表 (20项) 完成', en: 'Site Measurement done' },
@@ -77,11 +75,14 @@ export const STAGES = [
     taglineCN: '精心安装 — 按时按图，万无一失。',
     owner: 'SS',
     days: '1-3 周',
-    linkedForm: 'INSTALL_QC',
-    formGate: 'D5',
+    linkedForms: [
+      { formCode: 'SITE_CHECK', gate: 'D2' },
+      { formCode: 'INSTALL_QC', gate: 'D5' },
+    ],
+    hasDailyReports: true,
     gates: [
       { id: 'D1', short: '5O-Product', label: '点货 + 开箱 + 分单标签', en: 'Product inspection' },
-      { id: 'D2', short: '5O-Site', label: 'Site Ready 复检', en: 'Site re-check' },
+      { id: 'D2', short: '5O-Site', label: '场地检查表 (20项) 完成', en: 'Site Check done' },
       { id: 'D3', short: '5O-Payment', label: '付款 + 入住日期 + DO 确认', en: 'Payment + move-in + DO' },
       { id: 'D4', short: '5O-Logistics', label: '排车 + 安装队期', en: 'Truck + crew scheduled' },
       { id: 'D5', short: '5T-Install', label: '安装质量检查表 (20项) 完成', en: 'Install QC done' },
@@ -99,8 +100,7 @@ export const STAGES = [
     taglineCN: '客户百分百满意时，才是真正的交付。',
     owner: 'SS',
     days: '1-2 天',
-    linkedForm: 'HANDOVER',
-    formGate: 'E1',
+    linkedForms: [{ formCode: 'HANDOVER', gate: 'E1' }],
     gates: [
       { id: 'E1', short: '5H-Product', label: '最终验收表 (16项) 全过', en: 'Final Handover form Pass' },
       { id: 'E2', short: '5H-Protection', label: '成品保护 (膜/护角)', en: 'Product protection' },
