@@ -1,7 +1,10 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { T } from './theme.js';
 import { useProjects } from './hooks/useProjects.js';
+import { cloudConfigured } from './services/supabase.js';
+import { createLocalRepo, createCloudRepo } from './services/repo.js';
 import { UIProvider, useToast, useConfirm } from './components/ui/UIProvider.jsx';
+import AuthGate from './components/auth/AuthGate.jsx';
 import Nav from './components/Nav.jsx';
 import EmptyState from './components/EmptyState.jsx';
 import MethodView from './components/MethodView.jsx';
@@ -13,10 +16,10 @@ import TeamView from './components/team/TeamView.jsx';
 import RisksView from './components/risks/RisksView.jsx';
 import ClientShareView from './components/client/ClientShareView.jsx';
 
-function AppInner() {
+function AppInner({ repo, user, onSignOut }) {
   const toast = useToast();
   const confirm = useConfirm();
-  const store = useProjects({ onToast: toast });
+  const store = useProjects(repo, { onToast: toast });
   const {
     projects, loading, saveStatus,
     loadSample, clearAll, updateProject, toggleGate, addProject, deleteProject,
@@ -31,6 +34,7 @@ function AppInner() {
 
   const selected = selectedId ? projects.find((p) => p.id === selectedId) : null;
   const formProject = formContext ? projects.find((p) => p.id === formContext.projectId) : null;
+  const storageLabel = repo.mode === 'cloud' ? '云端同步 (Supabase)' : '数据本地存储 (this device)';
 
   const handleCreate = (data) => {
     const proj = addProject(data);
@@ -53,7 +57,14 @@ function AppInner() {
 
   return (
     <div className="min-h-screen font-body" style={{ background: T.paper, color: T.ink }}>
-      <Nav view={view} setView={(v) => { setView(v); setSelectedId(null); }} onNew={() => setShowNew(true)} saveStatus={saveStatus} />
+      <Nav
+        view={view}
+        setView={(v) => { setView(v); setSelectedId(null); }}
+        onNew={() => setShowNew(true)}
+        saveStatus={saveStatus}
+        user={user}
+        onSignOut={onSignOut}
+      />
 
       <main className={view === 'kanban' && !selected ? '' : 'max-w-7xl mx-auto px-6 lg:px-10 py-10'}>
         {loading ? (
@@ -93,7 +104,7 @@ function AppInner() {
         {projects.length > 0 && view !== 'kanban' && view !== 'method' && (
           <footer className="mt-24 pt-8" style={{ borderTop: `1px solid ${T.lineSoft}` }}>
             <div className="flex items-center justify-between text-xs" style={{ color: T.inkSoft }}>
-              <div>溪岸 SAIL · Delivery OS · 数据本地存储 (this device)</div>
+              <div>溪岸 SAIL · Delivery OS · {storageLabel}</div>
               <button onClick={handleClearAll} className="underline hover:no-underline opacity-50 hover:opacity-100">清空全部</button>
             </div>
           </footer>
@@ -118,9 +129,17 @@ function AppInner() {
 }
 
 export default function App() {
+  // Repos are stable singletons so the data hook doesn't reload each render.
+  const localRepo = useMemo(() => createLocalRepo(), []);
+  const cloudRepo = useMemo(() => (cloudConfigured ? createCloudRepo() : null), []);
+
   return (
     <UIProvider>
-      <AppInner />
+      {cloudConfigured ? (
+        <AuthGate>{({ user, signOut }) => <AppInner repo={cloudRepo} user={user} onSignOut={signOut} />}</AuthGate>
+      ) : (
+        <AppInner repo={localRepo} />
+      )}
     </UIProvider>
   );
 }

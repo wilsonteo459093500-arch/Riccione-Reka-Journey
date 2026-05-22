@@ -14,7 +14,30 @@
 
 ## 技术栈
 
-Vite + React 18 + Tailwind CSS。数据存于浏览器 IndexedDB（附件以 base64 单独存储）；若宿主页面提供 `window.storage` 共享运行时则自动复用。
+Vite + React 18 + Tailwind CSS。**两种数据模式**：
+
+- **本地模式**（默认）：数据存于当前浏览器 IndexedDB，仅本机可见。
+- **云端同步模式**：配置 Supabase 后启用 —— 多设备 / 多人共享同一份数据、实时同步、邮箱登录。
+
+## 云端同步设置（可选）
+
+要让全团队共享数据，按以下步骤接入 Supabase（免费额度足够小团队）：
+
+1. 在 [supabase.com](https://supabase.com) 新建一个 project。
+2. 打开 **SQL Editor**，把 `supabase/schema.sql` 的内容粘贴执行（建表 + 权限 + 实时）。
+3. 在 **Authentication → Users → Add user** 给每个团队成员创建邮箱+密码账号。
+   建议在 **Authentication → Providers → Email** 里关闭公开注册（Disable signups），只允许管理员添加。
+4. 在 **Project Settings → API** 复制 `Project URL` 和 `anon public` key。
+5. 本地开发：复制 `.env.example` 为 `.env.local` 并填入：
+
+   ```
+   VITE_SUPABASE_URL=https://xxxx.supabase.co
+   VITE_SUPABASE_ANON_KEY=eyJhbGci...
+   ```
+
+6. 部署（如 Vercel / Netlify）：在平台的环境变量里设置这两个值，重新构建即可。
+
+设置好后，应用会自动显示登录页；登录后所有改动实时同步给其他成员。未配置时则保持本地模式。
 
 ## 开发
 
@@ -33,9 +56,14 @@ src/
   theme.js                # 配色
   constants/              # stages / forms / storage keys
   utils/                  # 纯函数 helpers + 示范数据
-  services/storage.js     # IndexedDB 键值存储（含 window.storage 适配）
-  hooks/useProjects.js    # 数据加载 / 迁移 / 持久化（稳定回调）
+  services/
+    storage.js            # IndexedDB 键值存储（含 window.storage 适配）
+    supabase.js           # Supabase 客户端（按 env 自动启用）
+    repo.js               # 数据仓库抽象：本地 / 云端两套实现
+  hooks/useProjects.js    # 数据加载 / 持久化 / 实时同步（稳定回调）
   components/
+    auth/                 # 登录页 + 会话守卫
     ui/                   # 输入控件 + 确认弹窗 / Toast
     kanban/ project/ forms/ risks/ team/ client/
+supabase/schema.sql       # 一次性建表脚本
 ```

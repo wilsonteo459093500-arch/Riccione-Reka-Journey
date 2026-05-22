@@ -1,5 +1,6 @@
-import { Columns3, BookOpen, Users, AlertTriangle, Save, Plus } from 'lucide-react';
+import { Columns3, BookOpen, Users, AlertTriangle, Save, Plus, LogOut } from 'lucide-react';
 import { T } from '../theme.js';
+import { avatarFor } from '../utils/helpers.js';
 
 const ITEMS = [
   { id: 'kanban', label: '看板', icon: Columns3 },
@@ -8,7 +9,8 @@ const ITEMS = [
   { id: 'risks', label: '风险', icon: AlertTriangle },
 ];
 
-export default function Nav({ view, setView, onNew, saveStatus }) {
+export default function Nav({ view, setView, onNew, saveStatus, user, onSignOut }) {
+  const av = user?.email ? avatarFor(user.email) : null;
   return (
     <header
       className="sticky top-0 z-30 backdrop-blur-md no-print"
@@ -58,6 +60,22 @@ export default function Nav({ view, setView, onNew, saveStatus }) {
             <Plus size={14} strokeWidth={2} />
             <span className="hidden sm:inline">新建</span>
           </button>
+          {user && (
+            <div className="flex items-center gap-2 ml-2 pl-2" style={{ borderLeft: `1px solid ${T.line}` }}>
+              {av && (
+                <span
+                  title={user.email}
+                  className="hidden sm:flex items-center justify-center font-mono text-[10px] uppercase"
+                  style={{ width: 24, height: 24, borderRadius: '50%', background: av.color, color: T.paper, fontWeight: 600 }}
+                >
+                  {av.initial}
+                </span>
+              )}
+              <button onClick={onSignOut} title="退出登录" className="p-1.5 opacity-60 hover:opacity-100" style={{ color: T.inkSoft }}>
+                <LogOut size={15} strokeWidth={1.5} />
+              </button>
+            </div>
+          )}
         </nav>
       </div>
     </header>
