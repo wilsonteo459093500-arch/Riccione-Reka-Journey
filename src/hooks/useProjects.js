@@ -138,6 +138,7 @@ export function useProjects(repo, { onToast } = {}) {
         attachments: {},
         forms: emptyForms(),
         dailyReports: [],
+        defects: [],
       };
       upsert(proj);
       return proj;
@@ -298,6 +299,48 @@ export function useProjects(repo, { onToast } = {}) {
     [repo, updateProject]
   );
 
+  const saveDefect = useCallback(
+    async (pid, defect, newPhotoUploads = []) => {
+      const p = ref.current.find((x) => x.id === pid);
+      if (!p) return;
+      for (const upload of newPhotoUploads) {
+        if (upload.att.source === 'upload' && upload.content) {
+          try {
+            await repo.setAttachment(upload.att.id, upload.content);
+          } catch (e) {
+            onToast?.('照片上传失败: ' + (e.message || e), 'error');
+            return;
+          }
+        }
+      }
+      const list = p.defects || [];
+      const idx = list.findIndex((d) => d.id === defect.id);
+      const now = new Date().toISOString();
+      let next;
+      if (idx >= 0) next = list.map((d, i) => (i === idx ? { ...defect, updatedAt: now } : d));
+      else next = [...list, { ...defect, createdAt: now, updatedAt: now }];
+      updateProject(pid, { defects: next });
+    },
+    [repo, updateProject, onToast]
+  );
+
+  const deleteDefect = useCallback(
+    async (pid, did) => {
+      const p = ref.current.find((x) => x.id === pid);
+      if (!p) return;
+      const d = (p.defects || []).find((x) => x.id === did);
+      if (d) {
+        for (const photo of d.photos || []) {
+          if (photo.source === 'upload') {
+            try { await repo.delAttachment(photo.id); } catch (e) { /* ignore */ }
+          }
+        }
+      }
+      updateProject(pid, { defects: (p.defects || []).filter((x) => x.id !== did) });
+    },
+    [repo, updateProject]
+  );
+
   return {
     projects,
     loading,
@@ -317,5 +360,7 @@ export function useProjects(repo, { onToast } = {}) {
     fetchAttachment,
     saveDailyReport,
     deleteDailyReport,
+    saveDefect,
+    deleteDefect,
   };
 }

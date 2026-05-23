@@ -16,12 +16,14 @@ import GateRow from './GateRow.jsx';
 import RiskForm from '../risks/RiskForm.jsx';
 import RiskRow from '../risks/RiskRow.jsx';
 import DailyReportsBlock from '../daily/DailyReportsBlock.jsx';
+import DefectsBlock from '../defects/DefectsBlock.jsx';
 
 export default function ProjectDetail({
   project, onBack, onToggleGate, onUpdate, onDelete, onUpdateNote,
   onAddRisk, onRemoveRisk, onAddAttachment, onRemoveAttachment,
   fetchAttachment, onClientView, onOpenForm,
   onSaveDailyReport, onDeleteDailyReport,
+  onSaveDefect, onDeleteDefect,
 }) {
   const [expandedStage, setExpandedStage] = useState(currentStage(project).code);
   const [showRiskForm, setShowRiskForm] = useState(false);
@@ -290,6 +292,14 @@ export default function ProjectDetail({
           );
         })}
       </div>
+
+      {/* Defects & Reorders */}
+      <DefectsBlock
+        project={project}
+        onSaveDefect={onSaveDefect}
+        onDeleteDefect={onDeleteDefect}
+        fetchAttachment={fetchAttachment}
+      />
 
       {/* Risks */}
       <div className="mb-12">

@@ -21,16 +21,36 @@ import { supabase } from './supabase.js';
 import {
   KEY_META,
   KEY_ATT_PREFIX,
+  KEY_LEGACY_V8,
+  KEY_LEGACY_V7,
   KEY_LEGACY_V6,
   KEY_LEGACY_V5,
   KEY_LEGACY_V4,
   KEY_LEGACY_V3,
 } from '../constants/storage.js';
+import { LEGACY_GATE_REMAP, LEGACY_STAGE_REMAP } from '../constants/stages.js';
+
+// Stage codes changed in v9 (A→V, B→S, C→M, D→O/T, E→H). For records
+// from any pre-v9 store we remap gate ids, note keys, attachment keys
+// and the risk.stage field; otherwise the records appear in the wrong
+// columns and the old gates are unreachable.
+const remapKeys = (obj) => {
+  const next = {};
+  Object.entries(obj || {}).forEach(([k, v]) => {
+    next[LEGACY_GATE_REMAP[k] || k] = v;
+  });
+  return next;
+};
 
 // Preserve any forms a record already has, fill the rest, and (for the
 // oldest dossier-based records) lift dossier answers into SPACE_SURVEY.
-const migrateRecord = (p, fromDossier) => ({
+// `remap` is true when the source store still used A-E gate codes.
+const migrateRecord = (p, { fromDossier, remap }) => ({
   ...p,
+  gates: remap ? remapKeys(p.gates) : p.gates || {},
+  notes: remap ? remapKeys(p.notes) : p.notes || {},
+  attachments: remap ? remapKeys(p.attachments) : p.attachments || {},
+  risks: (p.risks || []).map((r) => (remap ? { ...r, stage: LEGACY_STAGE_REMAP[r.stage] || r.stage } : r)),
   forms: {
     SPACE_SURVEY: p.forms?.SPACE_SURVEY || { answers: fromDossier ? p.dossier?.answers || {} : {} },
     MEASUREMENT: p.forms?.MEASUREMENT || { answers: {} },
@@ -39,7 +59,7 @@ const migrateRecord = (p, fromDossier) => ({
     HANDOVER: p.forms?.HANDOVER || { answers: {} },
   },
   dailyReports: p.dailyReports || [],
-  attachments: p.attachments || {},
+  defects: p.defects || [],
 });
 
 // ---------- LOCAL (IndexedDB single blob) ----------
@@ -55,11 +75,16 @@ export function createLocalRepo() {
         if (meta) return JSON.parse(meta) || [];
       } catch (e) { /* fall through to migrations */ }
 
+      // Any pre-v9 record uses A-E gate codes and needs remap. v9 records
+      // already use V-SMOOTH codes (no remap needed) but they're the same
+      // shape as v8, so this list is in store-age order; first hit wins.
       const migrations = [
-        { key: KEY_LEGACY_V6, fromDossier: false },
-        { key: KEY_LEGACY_V5, fromDossier: true },
-        { key: KEY_LEGACY_V4, fromDossier: true },
-        { key: KEY_LEGACY_V3, fromDossier: false },
+        { key: KEY_LEGACY_V8, fromDossier: false, remap: true },
+        { key: KEY_LEGACY_V7, fromDossier: false, remap: true },
+        { key: KEY_LEGACY_V6, fromDossier: false, remap: true },
+        { key: KEY_LEGACY_V5, fromDossier: true,  remap: true },
+        { key: KEY_LEGACY_V4, fromDossier: true,  remap: true },
+        { key: KEY_LEGACY_V3, fromDossier: false, remap: true },
       ];
       for (const m of migrations) {
         try {
@@ -67,7 +92,7 @@ export function createLocalRepo() {
           if (!raw) continue;
           const parsed = JSON.parse(raw);
           if (!Array.isArray(parsed)) continue;
-          const migrated = parsed.map((p) => migrateRecord(p, m.fromDossier));
+          const migrated = parsed.map((p) => migrateRecord(p, m));
           await writeAll(migrated);
           return migrated;
         } catch (e) { /* try next */ }

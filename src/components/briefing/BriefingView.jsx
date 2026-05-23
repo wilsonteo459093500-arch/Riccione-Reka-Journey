@@ -105,7 +105,7 @@ export default function BriefingView({ projects, onOpen }) {
   const missingReports = useMemo(() => {
     return projects.filter((p) => {
       const cur = currentStage(p);
-      if (cur.code !== 'D') return false;
+      if (cur.code !== 'T') return false; // Daily reports live in Stage T (TACKLE)
       if (isComplete(p)) return false;
       return (p.dailyReports || []).length === 0;
     });

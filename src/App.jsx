@@ -4,6 +4,7 @@ import { useProjects } from './hooks/useProjects.js';
 import { cloudConfigured } from './services/supabase.js';
 import { createLocalRepo, createCloudRepo } from './services/repo.js';
 import { UIProvider, useToast, useConfirm } from './components/ui/UIProvider.jsx';
+import { LangProvider, useT } from './i18n/LangProvider.jsx';
 import AuthGate from './components/auth/AuthGate.jsx';
 import Nav from './components/Nav.jsx';
 import EmptyState from './components/EmptyState.jsx';
@@ -20,12 +21,14 @@ import ClientShareView from './components/client/ClientShareView.jsx';
 function AppInner({ repo, user, onSignOut }) {
   const toast = useToast();
   const confirm = useConfirm();
+  const { t } = useT();
   const store = useProjects(repo, { onToast: toast });
   const {
     projects, loading, saveStatus,
     loadSample, clearAll, updateProject, toggleGate, addProject, deleteProject,
     addRisk, removeRisk, updateNote, updateForm, addAttachment, removeAttachment, fetchAttachment,
     saveDailyReport, deleteDailyReport,
+    saveDefect, deleteDefect,
   } = store;
 
   const [view, setView] = useState('kanban');
@@ -94,6 +97,8 @@ function AppInner({ repo, user, onSignOut }) {
             onOpenForm={(formCode) => setFormContext({ projectId: selected.id, formCode })}
             onSaveDailyReport={(report, uploads) => saveDailyReport(selected.id, report, uploads)}
             onDeleteDailyReport={(rid) => deleteDailyReport(selected.id, rid)}
+            onSaveDefect={(d, uploads) => saveDefect(selected.id, d, uploads)}
+            onDeleteDefect={(did) => deleteDefect(selected.id, did)}
           />
         ) : view === 'briefing' ? (
           <BriefingView projects={projects} onOpen={(id) => { setSelectedId(id); setView('project'); }} />
@@ -111,7 +116,7 @@ function AppInner({ repo, user, onSignOut }) {
           <footer className="mt-24 pt-8" style={{ borderTop: `1px solid ${T.lineSoft}` }}>
             <div className="flex items-center justify-between text-xs" style={{ color: T.inkSoft }}>
               <div>溪岸 SAIL · Delivery OS · {storageLabel}</div>
-              <button onClick={handleClearAll} className="underline hover:no-underline opacity-50 hover:opacity-100">清空全部</button>
+              <button onClick={handleClearAll} className="underline hover:no-underline opacity-50 hover:opacity-100">{t('footer_clear')}</button>
             </div>
           </footer>
         )}
@@ -140,12 +145,14 @@ export default function App() {
   const cloudRepo = useMemo(() => (cloudConfigured ? createCloudRepo() : null), []);
 
   return (
-    <UIProvider>
-      {cloudConfigured ? (
-        <AuthGate>{({ user, signOut }) => <AppInner repo={cloudRepo} user={user} onSignOut={signOut} />}</AuthGate>
-      ) : (
-        <AppInner repo={localRepo} />
-      )}
-    </UIProvider>
+    <LangProvider>
+      <UIProvider>
+        {cloudConfigured ? (
+          <AuthGate>{({ user, signOut }) => <AppInner repo={cloudRepo} user={user} onSignOut={signOut} />}</AuthGate>
+        ) : (
+          <AppInner repo={localRepo} />
+        )}
+      </UIProvider>
+    </LangProvider>
   );
 }
