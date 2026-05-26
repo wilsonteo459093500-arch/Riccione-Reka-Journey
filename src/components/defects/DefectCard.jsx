@@ -1,58 +1,70 @@
 import { memo } from 'react';
-import { Wrench, PackageCheck, Clock, CheckCircle2, Image as ImageIcon } from 'lucide-react';
+import { ChevronRight, Image as ImageIcon, Clock } from 'lucide-react';
 import { T } from '../../theme.js';
-import { fmt } from '../../utils/helpers.js';
-
-const STATUS_META = {
-  open:    { label: '待处理',   en: 'Open',    color: '#C4543A', Icon: Wrench },
-  ordered: { label: '已补货',   en: 'Ordered', color: '#B8945E', Icon: Clock },
-  closed:  { label: '已解决',   en: 'Closed',  color: '#5C7A4A', Icon: CheckCircle2 },
-};
+import { daysUntil } from '../../utils/helpers.js';
+import { defectStatusInfo } from './statuses.js';
 
 function DefectCard({ defect, onClick }) {
-  const sm = STATUS_META[defect.status] || STATUS_META.open;
-  const sevColor = defect.severity === 'high' ? T.terra : defect.severity === 'medium' ? T.gold : T.inkSoft;
-  const sevLabel = defect.severity === 'high' ? '高' : defect.severity === 'medium' ? '中' : '低';
+  const info = defectStatusInfo(defect.status);
+  const Icon = info.icon || info.Icon;
   const photoCount = (defect.photos || []).length;
-  const StatusIcon = sm.Icon;
+  const daysToETA = defect.eta ? daysUntil(defect.eta) : null;
 
   return (
     <button
       onClick={onClick}
-      className="w-full text-left p-3 hover-lift transition-all"
-      style={{ background: T.paper, border: `1px solid ${T.line}`, borderLeft: `3px solid ${sm.color}`, borderRadius: '2px' }}
+      className="w-full text-left p-4 hover-lift transition-all"
+      style={{
+        background: T.paper,
+        border: `1px solid ${T.line}`,
+        borderLeft: `4px solid ${info.color}`,
+        borderRadius: '2px',
+      }}
     >
-      <div className="flex items-baseline justify-between gap-2 mb-1 flex-wrap">
-        <div className="flex items-baseline gap-2 flex-wrap min-w-0">
-          <span className="font-display text-lg leading-tight" style={{ color: T.ink }}>{defect.item}</span>
-          {defect.discoveredAtStage && (
-            <span className="font-mono text-[10px] px-1.5 py-0.5" style={{ background: T.wood, color: T.paper, borderRadius: '2px' }}>
-              {defect.discoveredAtStage}
-            </span>
+      <div className="flex items-start gap-3">
+        <div
+          className="flex-shrink-0 mt-1 px-2 py-1 flex items-center gap-1 text-[10px] uppercase tracking-wider"
+          style={{ background: info.color, color: T.paper, borderRadius: '2px' }}
+        >
+          <Icon size={11} strokeWidth={1.5} />
+          {info.label} · {info.en}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="font-display text-lg leading-tight mb-1" style={{ color: T.ink }}>{defect.item}</div>
+          {defect.itemEn && (
+            <div className="text-xs italic mb-1" style={{ color: T.inkSoft }}>{defect.itemEn}</div>
+          )}
+          <div className="text-sm" style={{ color: T.ink }}>{defect.description}</div>
+          <div className="flex items-center gap-3 mt-2 text-xs flex-wrap" style={{ color: T.inkSoft }}>
+            {defect.discoveredBy && <span>发现人: {defect.discoveredBy}</span>}
+            {defect.discoveredAtStage && <span>· 章节 {defect.discoveredAtStage}</span>}
+            {defect.reorderRef && (
+              <>
+                <span>·</span>
+                <span className="font-mono" style={{ color: T.wood }}>补货单 RO# {defect.reorderRef}</span>
+              </>
+            )}
+            {daysToETA !== null && defect.status !== 'closed' && (
+              <>
+                <span>·</span>
+                <span style={{ color: daysToETA < 0 ? T.terra : daysToETA <= 7 ? T.gold : T.inkSoft }}>
+                  <Clock size={10} className="inline mr-1" />
+                  ETA {daysToETA < 0 ? `逾 ${Math.abs(daysToETA)} 天` : daysToETA === 0 ? '今天' : `${daysToETA} 天后`}
+                </span>
+              </>
+            )}
+            {photoCount > 0 && (
+              <>
+                <span>·</span>
+                <span className="flex items-center gap-0.5"><ImageIcon size={10} strokeWidth={1.5} />{photoCount}</span>
+              </>
+            )}
+          </div>
+          {defect.resolutionNote && defect.status === 'closed' && (
+            <div className="mt-2 text-xs italic" style={{ color: T.sage }}>✓ {defect.resolutionNote}</div>
           )}
         </div>
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          <span className="px-2 py-0.5 text-[10px] uppercase tracking-wider" style={{ background: sevColor, color: T.paper, borderRadius: '2px' }}>{sevLabel}</span>
-          <span className="px-2 py-0.5 text-[10px] flex items-center gap-1" style={{ background: sm.color, color: T.paper, borderRadius: '2px' }}>
-            <StatusIcon size={10} strokeWidth={2} />{sm.label}
-          </span>
-        </div>
-      </div>
-      <div className="text-sm mt-1" style={{ color: T.ink }}>{defect.description}</div>
-      <div className="flex items-center gap-3 mt-2 text-[10px]" style={{ color: T.inkSoft }}>
-        {defect.discoveredBy && <span>发现: {defect.discoveredBy}</span>}
-        {defect.reorderRef && (
-          <span className="flex items-center gap-0.5"><PackageCheck size={10} strokeWidth={1.5} />{defect.reorderRef}</span>
-        )}
-        {defect.eta && defect.status !== 'closed' && (
-          <span style={{ color: T.gold }}>ETA: {fmt(defect.eta)}</span>
-        )}
-        {photoCount > 0 && (
-          <span className="flex items-center gap-0.5"><ImageIcon size={10} strokeWidth={1.5} />{photoCount}</span>
-        )}
-        {defect.history?.length > 0 && (
-          <span>· {defect.history.length} 条记录</span>
-        )}
+        <ChevronRight size={16} strokeWidth={1.5} style={{ color: T.inkSoft, opacity: 0.5 }} />
       </div>
     </button>
   );

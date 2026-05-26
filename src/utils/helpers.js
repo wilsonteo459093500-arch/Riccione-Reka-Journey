@@ -185,6 +185,71 @@ export const formatBriefingForWhatsApp = (projectsWithReports, briefingDate) => 
   return lines.join('\n');
 };
 
+export const formatDefectsBriefingForWhatsApp = (defectItems, briefingDate) => {
+  const lines = [];
+  lines.push(`🔧 *SAIL 售后 / 补货 日报*`);
+  lines.push(`📅 ${briefingDate}`);
+  lines.push(`━━━━━━━━━━━━━━━━━━━`);
+  lines.push('');
+  if (defectItems.length === 0) {
+    lines.push('✓ 所有缺陷已关闭, 无待处理项');
+  } else {
+    const sevEmoji = { high: '🔴', medium: '🟡', low: '🟢' };
+    const statusEmoji = { open: '⚠️', ordered: '📦', arrived: '✅' };
+    defectItems.forEach(({ project, defect }, idx) => {
+      lines.push(`${sevEmoji[defect.severity] || '🟡'} *${project.name}*`);
+      lines.push(`   ${statusEmoji[defect.status] || '·'} ${defect.item}`);
+      lines.push(`   ${defect.description.slice(0, 80)}${defect.description.length > 80 ? '…' : ''}`);
+      const meta = [];
+      if (defect.reorderRef) meta.push(`RO# ${defect.reorderRef}`);
+      if (defect.eta) {
+        const d = daysUntil(defect.eta);
+        meta.push(`ETA ${d < 0 ? `逾 ${Math.abs(d)} 天` : d === 0 ? '今天' : `${d} 天后`}`);
+      }
+      if (defect.status === 'arrived') meta.push('→ 待复装');
+      if (meta.length > 0) lines.push(`   ${meta.join('  ·  ')}`);
+      if (idx < defectItems.length - 1) lines.push('');
+    });
+  }
+  lines.push('');
+  lines.push(`━━━━━━━━━━━━━━━━━━━`);
+  lines.push(`溪岸 SAIL · Aftercare`);
+  return lines.join('\n');
+};
+
+// Build a Reorder-Request-to-factory text for a single defect.
+export const formatDefectReorderRequest = (project, defect) => {
+  const lines = [];
+  lines.push(`🔧 *补货单 / Reorder Request*`);
+  lines.push(`━━━━━━━━━━━━━━━`);
+  lines.push(`🏠 项目: ${project.name}`);
+  lines.push(`👤 客户: ${project.client}`);
+  if (project.address) lines.push(`📍 ${project.address}`);
+  lines.push('');
+  lines.push(`📦 *物品 / Item*`);
+  lines.push(defect.item || '—');
+  if (defect.itemEn) lines.push(`(${defect.itemEn})`);
+  lines.push('');
+  lines.push(`📝 *问题描述 / Description*`);
+  lines.push(defect.description || '—');
+  lines.push('');
+  const sevLabel = { high: '🔴 高 High', medium: '🟡 中 Med', low: '🟢 低 Low' }[defect.severity] || defect.severity;
+  lines.push(`严重程度 / Severity: ${sevLabel}`);
+  if (defect.discoveredBy) lines.push(`发现人 / Found by: ${defect.discoveredBy}`);
+  if (defect.discoveredAtStage) lines.push(`阶段 / Stage: ${defect.discoveredAtStage}`);
+  const photoCount = (defect.photos || []).length;
+  if (photoCount > 0) lines.push(`📷 现场照片: ${photoCount} 张 (已上传平台 / on platform)`);
+  if (defect.reorderRef) lines.push(`补货单编号 / RO#: ${defect.reorderRef}`);
+  if (defect.eta) lines.push(`预计到货 / ETA: ${defect.eta}`);
+  lines.push('');
+  lines.push(`请工厂尽快安排补货, 并告知确认 ETA。`);
+  lines.push(`Please confirm reorder + ETA at earliest.`);
+  lines.push('');
+  lines.push(`━━━━━━━━━━━━━━━`);
+  lines.push(`溪岸 SAIL · Aftercare`);
+  return lines.join('\n');
+};
+
 export const copyToClipboard = async (text) => {
   try {
     await navigator.clipboard.writeText(text);
