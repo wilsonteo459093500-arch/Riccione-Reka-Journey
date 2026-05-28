@@ -2,6 +2,16 @@
 -- 溪岸 SAIL · Delivery OS — Supabase schema
 -- Run this in the Supabase SQL Editor (one time) to set up cloud sync.
 -- ============================================================
+--
+-- Storage strategy (hybrid):
+--   · Structured project data lives here in Postgres.
+--   · Files (photos / PDFs / drawings) live in YOUR Google Drive.
+--     The app only stores URLs — never binary content. If this app
+--     ever disappears, your files are still in Drive, untouched.
+--
+-- (Earlier versions had an `attachments` table for base64 blobs;
+-- it's no longer used. Existing tables are harmless if left.)
+-- ============================================================
 
 -- One row per project. The full project object lives in `data` (jsonb).
 create table if not exists public.projects (
@@ -10,22 +20,11 @@ create table if not exists public.projects (
   updated_at  timestamptz not null default now()
 );
 
--- Attachment binaries (base64 data URLs), keyed by attachment id.
-create table if not exists public.attachments (
-  id       text primary key,
-  content  text not null
-);
-
 -- ---- Row Level Security: only authenticated users may read/write ----
-alter table public.projects   enable row level security;
-alter table public.attachments enable row level security;
+alter table public.projects enable row level security;
 
 drop policy if exists "authenticated full access" on public.projects;
 create policy "authenticated full access" on public.projects
-  for all to authenticated using (true) with check (true);
-
-drop policy if exists "authenticated full access" on public.attachments;
-create policy "authenticated full access" on public.attachments
   for all to authenticated using (true) with check (true);
 
 -- ---- Realtime: broadcast project changes to all connected clients ----

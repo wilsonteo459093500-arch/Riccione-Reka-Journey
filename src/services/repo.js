@@ -8,19 +8,19 @@
 //   saveProject(project, all)    -> persist one project
 //   removeProject(id, all)       -> delete one project
 //   replaceAll(all)              -> wholesale replace (sample / clear)
-//   getAttachment(id)            -> base64 string | null
-//   setAttachment(id, content)
-//   delAttachment(id)
 //   subscribe(onChange)          -> unsubscribe fn (live updates)
 //
 // localRepo  : single JSON blob in IndexedDB (+ legacy migrations)
 // cloudRepo  : one row per project in Supabase + Realtime sync
+//
+// Attachments are external links only — the app stores URLs in project
+// metadata, never binary content. So your files live in Drive / Dropbox,
+// not here. If this app disappears, your files don't.
 // ============================================================
 import { storage } from './storage.js';
 import { supabase } from './supabase.js';
 import {
   KEY_META,
-  KEY_ATT_PREFIX,
   KEY_LEGACY_V8,
   KEY_LEGACY_V7,
   KEY_LEGACY_V6,
@@ -30,10 +30,6 @@ import {
 } from '../constants/storage.js';
 import { LEGACY_GATE_REMAP, LEGACY_STAGE_REMAP } from '../constants/stages.js';
 
-// Stage codes changed in v9 (A→V, B→S, C→M, D→O/T, E→H). For records
-// from any pre-v9 store we remap gate ids, note keys, attachment keys
-// and the risk.stage field; otherwise the records appear in the wrong
-// columns and the old gates are unreachable.
 const remapKeys = (obj) => {
   const next = {};
   Object.entries(obj || {}).forEach(([k, v]) => {
@@ -42,14 +38,38 @@ const remapKeys = (obj) => {
   return next;
 };
 
-// Preserve any forms a record already has, fill the rest, and (for the
-// oldest dossier-based records) lift dossier answers into SPACE_SURVEY.
-// `remap` is true when the source store still used A-E gate codes.
+// Legacy data may contain attachments with `source: 'upload'` whose
+// binary content used to live in storage. We no longer fetch those
+// blobs, so we mark such entries as "missing" so users see them and
+// can either re-link to Drive or delete.
+const sanitizeAttachments = (atts) => {
+  const out = {};
+  Object.entries(atts || {}).forEach(([gateId, list]) => {
+    out[gateId] = (list || [])
+      .map((a) => {
+        if (a.source === 'link') return a;
+        return {
+          ...a,
+          source: 'link',
+          url: a.url || '',
+          name: (a.name || 'file') + ' (legacy upload — re-link to Drive)',
+        };
+      })
+      .filter((a) => a.url); // drop legacy uploads with no URL
+  });
+  return out;
+};
+
+const sanitizePhotos = (photos) =>
+  (photos || [])
+    .map((p) => (p.source === 'link' ? p : { ...p, source: 'link', url: p.url || '' }))
+    .filter((p) => p.url);
+
 const migrateRecord = (p, { fromDossier, remap }) => ({
   ...p,
   gates: remap ? remapKeys(p.gates) : p.gates || {},
   notes: remap ? remapKeys(p.notes) : p.notes || {},
-  attachments: remap ? remapKeys(p.attachments) : p.attachments || {},
+  attachments: sanitizeAttachments(remap ? remapKeys(p.attachments) : p.attachments),
   risks: (p.risks || []).map((r) => (remap ? { ...r, stage: LEGACY_STAGE_REMAP[r.stage] || r.stage } : r)),
   forms: {
     SPACE_SURVEY: p.forms?.SPACE_SURVEY || { answers: fromDossier ? p.dossier?.answers || {} : {} },
@@ -58,8 +78,8 @@ const migrateRecord = (p, { fromDossier, remap }) => ({
     INSTALL_QC: p.forms?.INSTALL_QC || { answers: {} },
     HANDOVER: p.forms?.HANDOVER || { answers: {} },
   },
-  dailyReports: p.dailyReports || [],
-  defects: p.defects || [],
+  dailyReports: (p.dailyReports || []).map((r) => ({ ...r, photos: sanitizePhotos(r.photos) })),
+  defects: (p.defects || []).map((d) => ({ ...d, photos: sanitizePhotos(d.photos) })),
 });
 
 // ---------- LOCAL (IndexedDB single blob) ----------
@@ -72,12 +92,13 @@ export function createLocalRepo() {
     async load() {
       try {
         const meta = await storage.get(KEY_META);
-        if (meta) return JSON.parse(meta) || [];
+        if (meta) {
+          const parsed = JSON.parse(meta) || [];
+          // Apply attachment sanitization on every load (cheap, idempotent).
+          return parsed.map((p) => migrateRecord(p, { fromDossier: false, remap: false }));
+        }
       } catch (e) { /* fall through to migrations */ }
 
-      // Any pre-v9 record uses A-E gate codes and needs remap. v9 records
-      // already use V-SMOOTH codes (no remap needed) but they're the same
-      // shape as v8, so this list is in store-age order; first hit wins.
       const migrations = [
         { key: KEY_LEGACY_V8, fromDossier: false, remap: true },
         { key: KEY_LEGACY_V7, fromDossier: false, remap: true },
@@ -104,10 +125,6 @@ export function createLocalRepo() {
     removeProject: (_id, all) => writeAll(all),
     replaceAll: (all) => writeAll(all),
 
-    getAttachment: (id) => storage.get(KEY_ATT_PREFIX + id),
-    setAttachment: (id, content) => storage.set(KEY_ATT_PREFIX + id, content),
-    delAttachment: (id) => storage.del(KEY_ATT_PREFIX + id),
-
     subscribe: () => () => {},
   };
 }
@@ -123,7 +140,7 @@ export function createCloudRepo() {
         .select('data')
         .order('updated_at', { ascending: false });
       if (error) throw error;
-      return (data || []).map((r) => r.data);
+      return (data || []).map((r) => migrateRecord(r.data, { fromDossier: false, remap: false }));
     },
 
     async saveProject(project) {
@@ -146,25 +163,6 @@ export function createCloudRepo() {
         const { error } = await supabase.from('projects').insert(rows);
         if (error) throw error;
       }
-    },
-
-    async getAttachment(id) {
-      const { data, error } = await supabase
-        .from('attachments')
-        .select('content')
-        .eq('id', id)
-        .maybeSingle();
-      if (error) return null;
-      return data?.content || null;
-    },
-
-    async setAttachment(id, content) {
-      const { error } = await supabase.from('attachments').upsert({ id, content });
-      if (error) throw error;
-    },
-
-    async delAttachment(id) {
-      await supabase.from('attachments').delete().eq('id', id);
     },
 
     subscribe(onChange) {

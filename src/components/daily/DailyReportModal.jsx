@@ -8,7 +8,7 @@ import AttachmentItem from '../attachments/AttachmentItem.jsx';
 import AttachmentModal from '../attachments/AttachmentModal.jsx';
 import { SafetyToggle } from './Safety.jsx';
 
-export default function DailyReportModal({ project, report, dayNumber, onClose, onSave, onDelete, fetchAttachment }) {
+export default function DailyReportModal({ project, report, dayNumber, onClose, onSave, onDelete }) {
   const isNew = !report;
   const today = new Date().toISOString().slice(0, 10);
   const [date, setDate] = useState(report?.date || today);
@@ -18,7 +18,6 @@ export default function DailyReportModal({ project, report, dayNumber, onClose, 
   const [eodNote, setEodNote] = useState(report?.eodNote || '');
   const [author, setAuthor] = useState(report?.author || '');
   const [photos, setPhotos] = useState(report?.photos || []);
-  const [pendingUploads, setPendingUploads] = useState([]); // [{ att, content }]
   const [copied, setCopied] = useState(false);
   const [showAttach, setShowAttach] = useState(false);
   const toast = useToast();
@@ -30,26 +29,21 @@ export default function DailyReportModal({ project, report, dayNumber, onClose, 
       toast('请填写今日进度', 'error');
       return;
     }
-    const r = {
+    onSave({
       id: report?.id || newId('dr'),
       date, progress: progress.trim(), issues: issues.trim(),
       eodChecks, eodNote: eodNote.trim(), author: author.trim(),
       photos,
-    };
-    onSave(r, pendingUploads);
+    });
   };
 
-  const addPhoto = (att, content) => {
+  const addPhoto = (att) => {
     setPhotos((prev) => [...prev, att]);
-    if (att.source === 'upload' && content) {
-      setPendingUploads((prev) => [...prev, { att, content }]);
-    }
     setShowAttach(false);
   };
 
   const removePhoto = (id) => {
     setPhotos((prev) => prev.filter((p) => p.id !== id));
-    setPendingUploads((prev) => prev.filter((u) => u.att.id !== id));
   };
 
   const handleCopy = async () => {
@@ -102,15 +96,15 @@ export default function DailyReportModal({ project, report, dayNumber, onClose, 
             {/* Photos */}
             <div>
               <div className="flex items-baseline justify-between mb-2">
-                <label className="text-[10px] uppercase tracking-widest" style={{ color: T.inkSoft }}>今日照片 Photos · {photos.length} 张</label>
+                <label className="text-[10px] uppercase tracking-widest" style={{ color: T.inkSoft }}>今日照片链接 Photos · {photos.length} 张</label>
                 <button onClick={() => setShowAttach(true)} className="text-xs flex items-center gap-1" style={{ color: T.wood }}>
-                  <Plus size={12} />添加照片
+                  <Plus size={12} />添加照片链接
                 </button>
               </div>
               {photos.length > 0 && (
                 <div className="space-y-1">
                   {photos.map((p) => (
-                    <AttachmentItem key={p.id} attachment={p} onRemove={() => removePhoto(p.id)} fetchAttachment={fetchAttachment} />
+                    <AttachmentItem key={p.id} attachment={p} onRemove={() => removePhoto(p.id)} />
                   ))}
                 </div>
               )}

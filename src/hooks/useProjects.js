@@ -102,18 +102,7 @@ export function useProjects(repo, { onToast } = {}) {
 
   const loadSample = useCallback(() => replaceAll(sampleProjects()), [replaceAll]);
 
-  const clearAll = useCallback(async () => {
-    for (const p of ref.current) {
-      for (const gid in p.attachments || {}) {
-        for (const att of p.attachments[gid] || []) {
-          if (att.source === 'upload') {
-            try { await repo.delAttachment(att.id); } catch (e) { /* ignore */ }
-          }
-        }
-      }
-    }
-    replaceAll([]);
-  }, [repo, replaceAll]);
+  const clearAll = useCallback(() => replaceAll([]), [replaceAll]);
 
   const toggleGate = useCallback(
     (pid, gid) => {
@@ -147,22 +136,10 @@ export function useProjects(repo, { onToast } = {}) {
   );
 
   const deleteProject = useCallback(
-    async (id) => {
-      const p = ref.current.find((x) => x.id === id);
+    (id) => {
       const next = ref.current.filter((x) => x.id !== id);
       setRef(next);
-      await runSave(async () => {
-        await repo.removeProject(id, next);
-        if (p) {
-          for (const gid in p.attachments || {}) {
-            for (const att of p.attachments[gid] || []) {
-              if (att.source === 'upload') {
-                try { await repo.delAttachment(att.id); } catch (e) { /* ignore */ }
-              }
-            }
-          }
-        }
-      });
+      runSave(() => repo.removeProject(id, next));
     },
     [repo, runSave]
   );
@@ -207,66 +184,34 @@ export function useProjects(repo, { onToast } = {}) {
     [updateProject]
   );
 
+  // Attachments are now Drive links only — pure metadata, no binary storage.
   const addAttachment = useCallback(
-    async (pid, gid, att, content = null) => {
+    (pid, gid, att) => {
       const p = ref.current.find((x) => x.id === pid);
       if (!p) return;
-      if (att.source === 'upload' && content) {
-        try {
-          await repo.setAttachment(att.id, content);
-        } catch (e) {
-          onToast?.('上传失败: ' + (e.message || e), 'error');
-          return;
-        }
-      }
       const nextAtts = { ...(p.attachments || {}) };
       nextAtts[gid] = [...(nextAtts[gid] || []), att];
       updateProject(pid, { attachments: nextAtts });
     },
-    [repo, updateProject, onToast]
+    [updateProject]
   );
 
   const removeAttachment = useCallback(
-    async (pid, gid, aid) => {
+    (pid, gid, aid) => {
       const p = ref.current.find((x) => x.id === pid);
       if (!p) return;
-      const att = (p.attachments?.[gid] || []).find((a) => a.id === aid);
-      if (att?.source === 'upload') {
-        try { await repo.delAttachment(aid); } catch (e) { /* ignore */ }
-      }
       const nextAtts = { ...(p.attachments || {}) };
       nextAtts[gid] = (nextAtts[gid] || []).filter((a) => a.id !== aid);
       if (nextAtts[gid].length === 0) delete nextAtts[gid];
       updateProject(pid, { attachments: nextAtts });
     },
-    [repo, updateProject]
-  );
-
-  const fetchAttachment = useCallback(
-    async (aid) => {
-      try {
-        return (await repo.getAttachment(aid)) || null;
-      } catch (e) {
-        return null;
-      }
-    },
-    [repo]
+    [updateProject]
   );
 
   const saveDailyReport = useCallback(
-    async (pid, report, newPhotoUploads = []) => {
+    (pid, report) => {
       const p = ref.current.find((x) => x.id === pid);
       if (!p) return;
-      for (const upload of newPhotoUploads) {
-        if (upload.att.source === 'upload' && upload.content) {
-          try {
-            await repo.setAttachment(upload.att.id, upload.content);
-          } catch (e) {
-            onToast?.('照片上传失败: ' + (e.message || e), 'error');
-            return;
-          }
-        }
-      }
       const list = p.dailyReports || [];
       const idx = list.findIndex((r) => r.id === report.id);
       const now = new Date().toISOString();
@@ -279,40 +224,22 @@ export function useProjects(repo, { onToast } = {}) {
       next.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
       updateProject(pid, { dailyReports: next });
     },
-    [repo, updateProject, onToast]
+    [updateProject]
   );
 
   const deleteDailyReport = useCallback(
-    async (pid, rid) => {
+    (pid, rid) => {
       const p = ref.current.find((x) => x.id === pid);
       if (!p) return;
-      const r = (p.dailyReports || []).find((x) => x.id === rid);
-      if (r) {
-        for (const photo of r.photos || []) {
-          if (photo.source === 'upload') {
-            try { await repo.delAttachment(photo.id); } catch (e) { /* ignore */ }
-          }
-        }
-      }
       updateProject(pid, { dailyReports: (p.dailyReports || []).filter((x) => x.id !== rid) });
     },
-    [repo, updateProject]
+    [updateProject]
   );
 
   const saveDefect = useCallback(
-    async (pid, defect, newPhotoUploads = []) => {
+    (pid, defect) => {
       const p = ref.current.find((x) => x.id === pid);
       if (!p) return;
-      for (const upload of newPhotoUploads) {
-        if (upload.att.source === 'upload' && upload.content) {
-          try {
-            await repo.setAttachment(upload.att.id, upload.content);
-          } catch (e) {
-            onToast?.('照片上传失败: ' + (e.message || e), 'error');
-            return;
-          }
-        }
-      }
       const list = p.defects || [];
       const idx = list.findIndex((d) => d.id === defect.id);
       const now = new Date().toISOString();
@@ -321,24 +248,16 @@ export function useProjects(repo, { onToast } = {}) {
       else next = [...list, { ...defect, createdAt: now, updatedAt: now }];
       updateProject(pid, { defects: next });
     },
-    [repo, updateProject, onToast]
+    [updateProject]
   );
 
   const deleteDefect = useCallback(
-    async (pid, did) => {
+    (pid, did) => {
       const p = ref.current.find((x) => x.id === pid);
       if (!p) return;
-      const d = (p.defects || []).find((x) => x.id === did);
-      if (d) {
-        for (const photo of d.photos || []) {
-          if (photo.source === 'upload') {
-            try { await repo.delAttachment(photo.id); } catch (e) { /* ignore */ }
-          }
-        }
-      }
       updateProject(pid, { defects: (p.defects || []).filter((x) => x.id !== did) });
     },
-    [repo, updateProject]
+    [updateProject]
   );
 
   return {
@@ -357,7 +276,6 @@ export function useProjects(repo, { onToast } = {}) {
     updateForm,
     addAttachment,
     removeAttachment,
-    fetchAttachment,
     saveDailyReport,
     deleteDailyReport,
     saveDefect,

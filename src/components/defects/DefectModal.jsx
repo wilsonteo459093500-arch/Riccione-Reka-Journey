@@ -14,7 +14,7 @@ const SEVERITIES = [
   { code: 'high',   label: '高 High', color: '#C4543A' },
 ];
 
-export default function DefectModal({ project, defect, onClose, onSave, onDelete, fetchAttachment }) {
+export default function DefectModal({ project, defect, onClose, onSave, onDelete }) {
   const isNew = !defect;
   const [item, setItem] = useState(defect?.item || '');
   const [itemEn, setItemEn] = useState(defect?.itemEn || '');
@@ -28,7 +28,6 @@ export default function DefectModal({ project, defect, onClose, onSave, onDelete
   const [resolutionNote, setResolutionNote] = useState(defect?.resolutionNote || '');
   const [statusChangeNote, setStatusChangeNote] = useState('');
   const [photos, setPhotos] = useState(defect?.photos || []);
-  const [pendingUploads, setPendingUploads] = useState([]);
   const [showAttach, setShowAttach] = useState(false);
   const [copied, setCopied] = useState(false);
   const toast = useToast();
@@ -59,18 +58,16 @@ export default function DefectModal({ project, defect, onClose, onSave, onDelete
       eta, resolutionNote: resolutionNote.trim(),
       photos, history: newHistory,
     };
-    onSave(d, pendingUploads);
+    onSave(d);
   };
 
-  const addPhoto = (att, content) => {
+  const addPhoto = (att) => {
     setPhotos((prev) => [...prev, att]);
-    if (att.source === 'upload' && content) setPendingUploads((prev) => [...prev, { att, content }]);
     setShowAttach(false);
   };
 
   const removePhoto = (id) => {
     setPhotos((prev) => prev.filter((p) => p.id !== id));
-    setPendingUploads((prev) => prev.filter((u) => u.att.id !== id));
   };
 
   const reorderText = useMemo(
@@ -161,15 +158,15 @@ export default function DefectModal({ project, defect, onClose, onSave, onDelete
             {/* Photos */}
             <div>
               <div className="flex items-baseline justify-between mb-2">
-                <label className="text-[10px] uppercase tracking-widest" style={{ color: T.inkSoft }}>现场照片 / Photos · {photos.length} 张</label>
+                <label className="text-[10px] uppercase tracking-widest" style={{ color: T.inkSoft }}>现场照片链接 / Photo Links · {photos.length} 张</label>
                 <button onClick={() => setShowAttach(true)} className="text-xs flex items-center gap-1" style={{ color: T.wood }}>
-                  <Plus size={12} />添加照片 / Add Photo
+                  <Plus size={12} />添加链接 / Add Link
                 </button>
               </div>
               {photos.length > 0 && (
                 <div className="space-y-1">
                   {photos.map((p) => (
-                    <AttachmentItem key={p.id} attachment={p} onRemove={() => removePhoto(p.id)} fetchAttachment={fetchAttachment} />
+                    <AttachmentItem key={p.id} attachment={p} onRemove={() => removePhoto(p.id)} />
                   ))}
                 </div>
               )}

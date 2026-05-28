@@ -7,7 +7,7 @@ import DefectModal from './DefectModal.jsx';
 
 const STATUS_ORDER = { open: 0, ordered: 1, arrived: 2, closed: 3 };
 
-export default function DefectsBlock({ project, onSaveDefect, onDeleteDefect, fetchAttachment }) {
+export default function DefectsBlock({ project, onSaveDefect, onDeleteDefect }) {
   const [editing, setEditing] = useState(null);
   const confirm = useConfirm();
   const defects = project.defects || [];
@@ -65,14 +65,13 @@ export default function DefectsBlock({ project, onSaveDefect, onDeleteDefect, fe
           project={project}
           defect={editing.isNew ? null : editing}
           onClose={() => setEditing(null)}
-          onSave={(d, uploads) => { onSaveDefect(d, uploads); setEditing(null); }}
+          onSave={(d) => { onSaveDefect(d); setEditing(null); }}
           onDelete={async () => {
             if (!editing.isNew && (await confirm({ title: '删除缺陷工单', message: '确定删除此条? 历史记录也会一并删除。', danger: true, confirmText: '删除' }))) {
               onDeleteDefect(editing.id);
               setEditing(null);
             }
           }}
-          fetchAttachment={fetchAttachment}
         />
       )}
     </div>

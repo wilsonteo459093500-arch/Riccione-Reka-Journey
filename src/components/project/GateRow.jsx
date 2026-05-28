@@ -4,7 +4,7 @@ import { T } from '../../theme.js';
 import AttachmentItem from '../attachments/AttachmentItem.jsx';
 import AttachmentModal from '../attachments/AttachmentModal.jsx';
 
-function GateRow({ gate, checked, note, attachments, onToggle, onUpdateNote, onAddAttachment, onRemoveAttachment, fetchAttachment }) {
+function GateRow({ gate, checked, note, attachments, onToggle, onUpdateNote, onAddAttachment, onRemoveAttachment }) {
   const [showNote, setShowNote] = useState(!!note);
   const [draft, setDraft] = useState(note);
   const [showAttach, setShowAttach] = useState(false);
@@ -33,7 +33,7 @@ function GateRow({ gate, checked, note, attachments, onToggle, onUpdateNote, onA
         {attachments.length > 0 && (
           <div className="mt-2 space-y-1">
             {attachments.map((a) => (
-              <AttachmentItem key={a.id} attachment={a} onRemove={() => onRemoveAttachment(a.id)} fetchAttachment={fetchAttachment} />
+              <AttachmentItem key={a.id} attachment={a} onRemove={() => onRemoveAttachment(a.id)} />
             ))}
           </div>
         )}
@@ -59,7 +59,7 @@ function GateRow({ gate, checked, note, attachments, onToggle, onUpdateNote, onA
           )}
           <button onClick={() => setShowAttach(true)} className="flex items-center gap-1 opacity-40 hover:opacity-100" style={{ color: T.inkSoft }}>
             <Paperclip size={11} strokeWidth={1.5} />
-            附件
+            链接
           </button>
         </div>
       </div>
@@ -68,8 +68,8 @@ function GateRow({ gate, checked, note, attachments, onToggle, onUpdateNote, onA
         <AttachmentModal
           gateName={`${gate.short} · ${gate.label}`}
           onClose={() => setShowAttach(false)}
-          onSave={(a, c) => {
-            onAddAttachment(a, c);
+          onSave={(a) => {
+            onAddAttachment(a);
             setShowAttach(false);
           }}
         />

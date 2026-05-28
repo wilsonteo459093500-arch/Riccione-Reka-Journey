@@ -53,18 +53,6 @@ export const dateInputValue = (d) => {
 
 // ---- Misc ----
 export const newId = (p = 'p') => p + '_' + Math.random().toString(36).slice(2, 9);
-export const fmtBytes = (n) =>
-  n < 1024 ? n + 'B' : n < 1048576 ? (n / 1024).toFixed(0) + 'KB' : (n / 1048576).toFixed(1) + 'MB';
-export const isImage = (m) => m?.startsWith('image/');
-export const isPDF = (m) => m === 'application/pdf';
-
-export const fileToBase64 = (f) =>
-  new Promise((res, rej) => {
-    const r = new FileReader();
-    r.onload = () => res(r.result);
-    r.onerror = rej;
-    r.readAsDataURL(f);
-  });
 
 // Generate avatar color/initial from name
 export const avatarFor = (name) => {

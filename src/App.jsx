@@ -26,7 +26,7 @@ function AppInner({ repo, user, onSignOut }) {
   const {
     projects, loading, saveStatus,
     loadSample, clearAll, updateProject, toggleGate, addProject, deleteProject,
-    addRisk, removeRisk, updateNote, updateForm, addAttachment, removeAttachment, fetchAttachment,
+    addRisk, removeRisk, updateNote, updateForm, addAttachment, removeAttachment,
     saveDailyReport, deleteDailyReport,
     saveDefect, deleteDefect,
   } = store;
@@ -90,14 +90,13 @@ function AppInner({ repo, user, onSignOut }) {
             onUpdateNote={(g, n) => updateNote(selected.id, g, n)}
             onAddRisk={(r) => addRisk(selected.id, r)}
             onRemoveRisk={(r) => removeRisk(selected.id, r)}
-            onAddAttachment={(g, a, c) => addAttachment(selected.id, g, a, c)}
+            onAddAttachment={(g, a) => addAttachment(selected.id, g, a)}
             onRemoveAttachment={(g, a) => removeAttachment(selected.id, g, a)}
-            fetchAttachment={fetchAttachment}
             onClientView={() => setClientViewProject(selected)}
             onOpenForm={(formCode) => setFormContext({ projectId: selected.id, formCode })}
-            onSaveDailyReport={(report, uploads) => saveDailyReport(selected.id, report, uploads)}
+            onSaveDailyReport={(report) => saveDailyReport(selected.id, report)}
             onDeleteDailyReport={(rid) => deleteDailyReport(selected.id, rid)}
-            onSaveDefect={(d, uploads) => saveDefect(selected.id, d, uploads)}
+            onSaveDefect={(d) => saveDefect(selected.id, d)}
             onDeleteDefect={(did) => deleteDefect(selected.id, did)}
           />
         ) : view === 'briefing' ? (

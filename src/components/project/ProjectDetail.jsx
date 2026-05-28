@@ -21,7 +21,7 @@ import DefectsBlock from '../defects/DefectsBlock.jsx';
 export default function ProjectDetail({
   project, onBack, onToggleGate, onUpdate, onDelete, onUpdateNote,
   onAddRisk, onRemoveRisk, onAddAttachment, onRemoveAttachment,
-  fetchAttachment, onClientView, onOpenForm,
+  onClientView, onOpenForm,
   onSaveDailyReport, onDeleteDailyReport,
   onSaveDefect, onDeleteDefect,
 }) {
@@ -266,7 +266,6 @@ export default function ProjectDetail({
                       project={project}
                       onSaveReport={onSaveDailyReport}
                       onDeleteReport={onDeleteDailyReport}
-                      fetchAttachment={fetchAttachment}
                     />
                   )}
 
@@ -280,9 +279,8 @@ export default function ProjectDetail({
                         attachments={project.attachments?.[gate.id] || []}
                         onToggle={() => onToggleGate(gate.id)}
                         onUpdateNote={(n) => onUpdateNote(gate.id, n)}
-                        onAddAttachment={(a, c) => onAddAttachment(gate.id, a, c)}
+                        onAddAttachment={(a) => onAddAttachment(gate.id, a)}
                         onRemoveAttachment={(a) => onRemoveAttachment(gate.id, a)}
-                        fetchAttachment={fetchAttachment}
                       />
                     ))}
                   </div>
@@ -298,7 +296,6 @@ export default function ProjectDetail({
         project={project}
         onSaveDefect={onSaveDefect}
         onDeleteDefect={onDeleteDefect}
-        fetchAttachment={fetchAttachment}
       />
 
       {/* Risks */}
