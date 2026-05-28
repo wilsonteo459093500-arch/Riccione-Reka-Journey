@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { T } from './theme.js';
 import { useProjects } from './hooks/useProjects.js';
+import { useAppointments } from './hooks/useAppointments.js';
 import { cloudConfigured } from './services/supabase.js';
 import { createLocalRepo, createCloudRepo } from './services/repo.js';
 import { UIProvider, useToast, useConfirm } from './components/ui/UIProvider.jsx';
@@ -16,6 +17,7 @@ import FormEditor from './components/forms/FormEditor.jsx';
 import TeamView from './components/team/TeamView.jsx';
 import RisksView from './components/risks/RisksView.jsx';
 import BriefingView from './components/briefing/BriefingView.jsx';
+import CalendarView from './components/calendar/CalendarView.jsx';
 import ClientShareView from './components/client/ClientShareView.jsx';
 
 function AppInner({ repo, user, onSignOut }) {
@@ -32,11 +34,14 @@ function AppInner({ repo, user, onSignOut }) {
     startDesignFlow, completeDesignStep, addPresentation, updatePresentation, removePresentation,
   } = store;
 
+  const { appointments, addAppointment, deleteAppointment } = useAppointments(repo, { onToast: toast });
+
   const [view, setView] = useState('kanban');
   const [selectedId, setSelectedId] = useState(null);
   const [showNew, setShowNew] = useState(false);
   const [clientViewProject, setClientViewProject] = useState(null);
   const [formContext, setFormContext] = useState(null); // { projectId, formCode }
+  const [calendarSeed, setCalendarSeed] = useState(null);
 
   const selected = selectedId ? projects.find((p) => p.id === selectedId) : null;
   const formProject = formContext ? projects.find((p) => p.id === formContext.projectId) : null;
@@ -104,9 +109,31 @@ function AppInner({ repo, user, onSignOut }) {
             onAddPresentation={(payload) => addPresentation(selected.id, payload)}
             onUpdatePresentation={(presId, updates) => updatePresentation(selected.id, presId, updates)}
             onRemovePresentation={(presId) => removePresentation(selected.id, presId)}
+            onScheduleAppointment={(type) => {
+              setCalendarSeed({
+                type: type || 'site_visit',
+                projectId: selected.id,
+                projectName: selected.name,
+                address: selected.address || '',
+                pic: selected.assigned?.SS || selected.assigned?.SD || '',
+                date: new Date().toISOString().slice(0, 10),
+              });
+              setSelectedId(null);
+              setView('calendar');
+            }}
           />
         ) : view === 'briefing' ? (
           <BriefingView projects={projects} onOpen={(id) => { setSelectedId(id); setView('project'); }} />
+        ) : view === 'calendar' ? (
+          <CalendarView
+            appointments={appointments}
+            projects={projects}
+            onAdd={addAppointment}
+            onDelete={deleteAppointment}
+            onOpenProject={(p) => { setSelectedId(p.id); setView('project'); }}
+            seed={calendarSeed}
+            clearSeed={() => setCalendarSeed(null)}
+          />
         ) : view === 'method' ? (
           <MethodView />
         ) : view === 'team' ? (

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   ArrowLeft, Share2, MapPin, ChevronDown, CheckCircle2, Paperclip,
-  BookOpen, FileText, Plus, Trash2,
+  BookOpen, FileText, Plus, Trash2, Calendar,
 } from 'lucide-react';
 import { T } from '../../theme.js';
 import { STAGES, OWNERS } from '../../constants/stages.js';
@@ -26,6 +26,7 @@ export default function ProjectDetail({
   onSaveDailyReport, onDeleteDailyReport,
   onSaveDefect, onDeleteDefect,
   onStartDesignFlow, onCompleteDesignStep, onAddPresentation, onUpdatePresentation, onRemovePresentation,
+  onScheduleAppointment,
 }) {
   const [expandedStage, setExpandedStage] = useState(currentStage(project).code);
   const [showRiskForm, setShowRiskForm] = useState(false);
@@ -67,10 +68,22 @@ export default function ProjectDetail({
           <ArrowLeft size={14} strokeWidth={1.5} />
           返回看板
         </button>
-        <button onClick={onClientView} className="flex items-center gap-1.5 text-sm px-3 py-1.5" style={{ background: T.cream, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }}>
-          <Share2 size={13} strokeWidth={1.5} />
-          客户分享视图
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {onScheduleAppointment && (
+            <button
+              onClick={() => onScheduleAppointment()}
+              className="flex items-center gap-1.5 text-sm px-3 py-1.5"
+              style={{ background: T.cream, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }}
+            >
+              <Calendar size={13} strokeWidth={1.5} />
+              安排日程
+            </button>
+          )}
+          <button onClick={onClientView} className="flex items-center gap-1.5 text-sm px-3 py-1.5" style={{ background: T.cream, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }}>
+            <Share2 size={13} strokeWidth={1.5} />
+            客户分享视图
+          </button>
+        </div>
       </div>
 
       {/* Header */}

@@ -20,12 +20,25 @@ create table if not exists public.projects (
   updated_at  timestamptz not null default now()
 );
 
+-- One row per appointment. Same simple jsonb pattern as projects.
+create table if not exists public.appointments (
+  id          text primary key,
+  data        jsonb not null,
+  updated_at  timestamptz not null default now()
+);
+
 -- ---- Row Level Security: only authenticated users may read/write ----
 alter table public.projects enable row level security;
+alter table public.appointments enable row level security;
 
 drop policy if exists "authenticated full access" on public.projects;
 create policy "authenticated full access" on public.projects
   for all to authenticated using (true) with check (true);
 
--- ---- Realtime: broadcast project changes to all connected clients ----
+drop policy if exists "authenticated full access" on public.appointments;
+create policy "authenticated full access" on public.appointments
+  for all to authenticated using (true) with check (true);
+
+-- ---- Realtime: broadcast changes to all connected clients ----
 alter publication supabase_realtime add table public.projects;
+alter publication supabase_realtime add table public.appointments;

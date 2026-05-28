@@ -1,4 +1,5 @@
 export const KEY_META = 'sail-meta-v9';
+export const KEY_APPOINTMENTS = 'sail-appointments-v1';
 export const KEY_LANG = 'sail-lang';
 export const KEY_LEGACY_V8 = 'sail-meta-v8';
 export const KEY_LEGACY_V7 = 'sail-meta-v7';

@@ -21,6 +21,7 @@ import { storage } from './storage.js';
 import { supabase } from './supabase.js';
 import {
   KEY_META,
+  KEY_APPOINTMENTS,
   KEY_LEGACY_V8,
   KEY_LEGACY_V7,
   KEY_LEGACY_V6,
@@ -126,7 +127,18 @@ export function createLocalRepo() {
     removeProject: (_id, all) => writeAll(all),
     replaceAll: (all) => writeAll(all),
 
+    // Appointments — one blob, same simple model as projects.
+    async loadAppointments() {
+      try {
+        const raw = await storage.get(KEY_APPOINTMENTS);
+        if (raw) return JSON.parse(raw) || [];
+      } catch (e) { /* ignore */ }
+      return [];
+    },
+    saveAppointments: (all) => storage.set(KEY_APPOINTMENTS, JSON.stringify(all)),
+
     subscribe: () => () => {},
+    subscribeAppointments: () => () => {},
   };
 }
 
@@ -166,10 +178,39 @@ export function createCloudRepo() {
       }
     },
 
+    // Appointments — one row per appointment, mirrors projects pattern.
+    async loadAppointments() {
+      const { data, error } = await supabase
+        .from('appointments')
+        .select('data')
+        .order('updated_at', { ascending: false });
+      if (error) throw error;
+      return (data || []).map((r) => r.data);
+    },
+
+    async saveAppointments(all) {
+      // Whole-list replace keeps the local + cloud APIs symmetrical.
+      const { error: delErr } = await supabase.from('appointments').delete().not('id', 'is', null);
+      if (delErr) throw delErr;
+      if (all.length) {
+        const rows = all.map((a) => ({ id: a.id, data: a, updated_at: new Date().toISOString() }));
+        const { error } = await supabase.from('appointments').insert(rows);
+        if (error) throw error;
+      }
+    },
+
     subscribe(onChange) {
       const channel = supabase
         .channel('projects-sync')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => onChange())
+        .subscribe();
+      return () => supabase.removeChannel(channel);
+    },
+
+    subscribeAppointments(onChange) {
+      const channel = supabase
+        .channel('appointments-sync')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => onChange())
         .subscribe();
       return () => supabase.removeChannel(channel);
     },
