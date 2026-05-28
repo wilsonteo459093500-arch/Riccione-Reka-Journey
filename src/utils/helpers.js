@@ -51,6 +51,55 @@ export const dateInputValue = (d) => {
   return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
 };
 
+// ---- Working-day (Mon-Fri) math for the design workflow SLAs ----
+export const toISODate = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+const isWeekend = (d) => {
+  const day = d.getDay();
+  return day === 0 || day === 6;
+};
+
+export const addWorkingDays = (start, n) => {
+  const d = new Date(start);
+  d.setHours(0, 0, 0, 0);
+  let added = 0;
+  while (added < n) {
+    d.setDate(d.getDate() + 1);
+    if (!isWeekend(d)) added++;
+  }
+  return d;
+};
+
+export const subWorkingDays = (start, n) => {
+  const d = new Date(start);
+  d.setHours(0, 0, 0, 0);
+  let removed = 0;
+  while (removed < n) {
+    d.setDate(d.getDate() - 1);
+    if (!isWeekend(d)) removed++;
+  }
+  return d;
+};
+
+// Working days from today to a due date (negative = overdue, 0 = due today).
+export const workingDaysUntil = (dueISO) => {
+  if (!dueISO) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(dueISO);
+  due.setHours(0, 0, 0, 0);
+  if (due.getTime() === today.getTime()) return 0;
+  let count = 0;
+  const dir = due > today ? 1 : -1;
+  const d = new Date(today);
+  while (d.getTime() !== due.getTime()) {
+    d.setDate(d.getDate() + dir);
+    if (!isWeekend(d)) count += dir;
+  }
+  return count;
+};
+
 // ---- Misc ----
 export const newId = (p = 'p') => p + '_' + Math.random().toString(36).slice(2, 9);
 

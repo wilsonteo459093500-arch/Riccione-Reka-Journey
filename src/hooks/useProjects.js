@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { newId } from '../utils/helpers.js';
 import { sampleProjects } from '../utils/sampleData.js';
+import {
+  initDesignFlow,
+  advanceDesignFlow,
+  recomputeInternalDue,
+  presentationLimit,
+} from '../constants/design.js';
 
 const emptyForms = () => ({
   SPACE_SURVEY: { answers: {} },
@@ -128,6 +134,7 @@ export function useProjects(repo, { onToast } = {}) {
         forms: emptyForms(),
         dailyReports: [],
         defects: [],
+        designFlow: null,
       };
       upsert(proj);
       return proj;
@@ -260,6 +267,84 @@ export function useProjects(repo, { onToast } = {}) {
     [updateProject]
   );
 
+  // ---- Design workflow ----
+  const startDesignFlow = useCallback(
+    (pid) => {
+      const p = ref.current.find((x) => x.id === pid);
+      if (!p || p.designFlow) return;
+      updateProject(pid, { designFlow: initDesignFlow(p) });
+    },
+    [updateProject]
+  );
+
+  const completeDesignStep = useCallback(
+    (pid, stepId, decision) => {
+      const p = ref.current.find((x) => x.id === pid);
+      if (!p?.designFlow) return;
+      updateProject(pid, { designFlow: advanceDesignFlow(p, stepId, decision, 'Wilson') });
+    },
+    [updateProject]
+  );
+
+  const addPresentation = useCallback(
+    (pid, payload) => {
+      const p = ref.current.find((x) => x.id === pid);
+      if (!p?.designFlow) return;
+      const limit = presentationLimit(p.quotationAmount);
+      const used = (p.designFlow.presentations || []).length;
+      if (used >= limit) {
+        onToast?.(`此报价区间最多 ${limit} 次客户演示, 已达上限`, 'error');
+        return;
+      }
+      const pres = {
+        id: newId('pres'),
+        date: payload.date,
+        notes: payload.notes || '',
+        outcome: 'pending',
+        createdBy: 'Wilson',
+        createdAt: new Date().toISOString(),
+      };
+      const nextFlow = recomputeInternalDue({
+        ...p,
+        designFlow: { ...p.designFlow, presentations: [...(p.designFlow.presentations || []), pres] },
+      });
+      updateProject(pid, { designFlow: nextFlow });
+    },
+    [updateProject, onToast]
+  );
+
+  const updatePresentation = useCallback(
+    (pid, presId, updates) => {
+      const p = ref.current.find((x) => x.id === pid);
+      if (!p?.designFlow) return;
+      const nextFlow = recomputeInternalDue({
+        ...p,
+        designFlow: {
+          ...p.designFlow,
+          presentations: (p.designFlow.presentations || []).map((x) => (x.id === presId ? { ...x, ...updates } : x)),
+        },
+      });
+      updateProject(pid, { designFlow: nextFlow });
+    },
+    [updateProject]
+  );
+
+  const removePresentation = useCallback(
+    (pid, presId) => {
+      const p = ref.current.find((x) => x.id === pid);
+      if (!p?.designFlow) return;
+      const nextFlow = recomputeInternalDue({
+        ...p,
+        designFlow: {
+          ...p.designFlow,
+          presentations: (p.designFlow.presentations || []).filter((x) => x.id !== presId),
+        },
+      });
+      updateProject(pid, { designFlow: nextFlow });
+    },
+    [updateProject]
+  );
+
   return {
     projects,
     loading,
@@ -280,5 +365,10 @@ export function useProjects(repo, { onToast } = {}) {
     deleteDailyReport,
     saveDefect,
     deleteDefect,
+    startDesignFlow,
+    completeDesignStep,
+    addPresentation,
+    updatePresentation,
+    removePresentation,
   };
 }

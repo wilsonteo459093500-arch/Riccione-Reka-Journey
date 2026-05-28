@@ -80,6 +80,7 @@ const migrateRecord = (p, { fromDossier, remap }) => ({
   },
   dailyReports: (p.dailyReports || []).map((r) => ({ ...r, photos: sanitizePhotos(r.photos) })),
   defects: (p.defects || []).map((d) => ({ ...d, photos: sanitizePhotos(d.photos) })),
+  designFlow: p.designFlow || null,
 });
 
 // ---------- LOCAL (IndexedDB single blob) ----------

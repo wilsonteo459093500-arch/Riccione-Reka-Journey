@@ -29,6 +29,7 @@ function AppInner({ repo, user, onSignOut }) {
     addRisk, removeRisk, updateNote, updateForm, addAttachment, removeAttachment,
     saveDailyReport, deleteDailyReport,
     saveDefect, deleteDefect,
+    startDesignFlow, completeDesignStep, addPresentation, updatePresentation, removePresentation,
   } = store;
 
   const [view, setView] = useState('kanban');
@@ -98,6 +99,11 @@ function AppInner({ repo, user, onSignOut }) {
             onDeleteDailyReport={(rid) => deleteDailyReport(selected.id, rid)}
             onSaveDefect={(d) => saveDefect(selected.id, d)}
             onDeleteDefect={(did) => deleteDefect(selected.id, did)}
+            onStartDesignFlow={() => startDesignFlow(selected.id)}
+            onCompleteDesignStep={(stepId, decision) => completeDesignStep(selected.id, stepId, decision)}
+            onAddPresentation={(payload) => addPresentation(selected.id, payload)}
+            onUpdatePresentation={(presId, updates) => updatePresentation(selected.id, presId, updates)}
+            onRemovePresentation={(presId) => removePresentation(selected.id, presId)}
           />
         ) : view === 'briefing' ? (
           <BriefingView projects={projects} onOpen={(id) => { setSelectedId(id); setView('project'); }} />

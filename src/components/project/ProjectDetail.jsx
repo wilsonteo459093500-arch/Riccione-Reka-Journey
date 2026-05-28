@@ -17,6 +17,7 @@ import RiskForm from '../risks/RiskForm.jsx';
 import RiskRow from '../risks/RiskRow.jsx';
 import DailyReportsBlock from '../daily/DailyReportsBlock.jsx';
 import DefectsBlock from '../defects/DefectsBlock.jsx';
+import DesignWorkflowBlock from '../design/DesignWorkflowBlock.jsx';
 
 export default function ProjectDetail({
   project, onBack, onToggleGate, onUpdate, onDelete, onUpdateNote,
@@ -24,6 +25,7 @@ export default function ProjectDetail({
   onClientView, onOpenForm,
   onSaveDailyReport, onDeleteDailyReport,
   onSaveDefect, onDeleteDefect,
+  onStartDesignFlow, onCompleteDesignStep, onAddPresentation, onUpdatePresentation, onRemovePresentation,
 }) {
   const [expandedStage, setExpandedStage] = useState(currentStage(project).code);
   const [showRiskForm, setShowRiskForm] = useState(false);
@@ -260,6 +262,17 @@ export default function ProjectDetail({
                       </div>
                     );
                   })}
+
+                  {stage.code === 'S' && (
+                    <DesignWorkflowBlock
+                      project={project}
+                      onStart={onStartDesignFlow}
+                      onCompleteStep={onCompleteDesignStep}
+                      onAddPresentation={onAddPresentation}
+                      onUpdatePresentation={onUpdatePresentation}
+                      onRemovePresentation={onRemovePresentation}
+                    />
+                  )}
 
                   {stage.hasDailyReports && (
                     <DailyReportsBlock
