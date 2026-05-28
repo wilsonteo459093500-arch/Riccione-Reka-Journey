@@ -258,8 +258,14 @@ function ApptCard({ appt: a, leads, onDelete, setViewingLead, showDate }) {
             {a.createdBy && <span className="text-[10px] text-sail-faint">· set by {a.createdBy}</span>}
           </div>
         </div>
-        <button type="button" onClick={() => onDelete(a.id)}
-          className="text-sail-faint hover:text-sail-danger p-0.5" aria-label="Delete">
+        <button
+          type="button"
+          onClick={() => {
+            const label = `${getApptTypeMeta(a.type).label}${a.leadName ? ' · ' + a.leadName : ''} on ${a.date}`;
+            if (confirm(`Delete this appointment?\n\n${label}`)) onDelete(a.id);
+          }}
+          className="text-sail-faint hover:text-sail-danger p-0.5" aria-label="Delete"
+        >
           <Trash2 className="w-3 h-3" />
         </button>
       </div>
