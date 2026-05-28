@@ -139,6 +139,31 @@ export const CLIENT_STAGES = {
   H: { label: 'Handover · 交付', desc: '完工验收与长期售后关怀 / Final inspection + long-term after-care' },
 };
 
+// ============================================================
+// GATE CONFIRMATIONS — signed-document gates
+// Checking these gates requires an explicit confirmation + a Drive link
+// to the signed document. The link is stored as a regular attachment
+// on the gate (so it shows up alongside any other attachments there).
+// ============================================================
+export const GATE_CONFIRMATIONS = {
+  S3: {
+    title: '确认图纸签核 / Confirm Drawing Sign-off',
+    note: '采购单 PO 不能在客户签核图纸之前下达。请确认客户已经在图纸上签字, 并提供 Drive 链接存档。 / No PO until the customer has signed the drawing. Confirm sign-off and provide the Drive link for the record.',
+    checkLabel: '客户已在图纸上签字 / Customer has signed the drawing',
+    linkLabel: 'Drive 链接到已签字的图纸 / Drive link to the signed drawing',
+    linkPlaceholder: 'https://drive.google.com/...',
+    attachmentName: '已签字图纸 / Signed drawing',
+  },
+  H1: {
+    title: '确认最终验收 / Confirm Final Handover',
+    note: '只有在客户签署最终验收单 AND 现场主管上传全部验收照片之后才能勾选。 / This can only be checked once the customer has signed the final handover form AND the site supervisor has uploaded all handover photos to Drive.',
+    checkLabel: '客户已签署最终验收单 / Customer has signed the handover form',
+    linkLabel: 'Drive 链接到验收照片文件夹 / Drive link to handover photos',
+    linkPlaceholder: 'https://drive.google.com/drive/folders/...',
+    attachmentName: '验收照片文件夹 / Handover photos',
+  },
+};
+
 // Stage code remap from legacy A-E to V-SMOOTH (gates + stage codes).
 // Used by storage migrations to upgrade existing data.
 export const LEGACY_GATE_REMAP = {
