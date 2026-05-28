@@ -1,0 +1,102 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =============================================================
+   Sail CRM — global theme overrides
+   The original prototype had several places where text/icons used
+   colors close to the cream background (#F5F1EA / #FAF7F2), making
+   them disappear on light screens or invert badly in dark mode.
+   This stylesheet pins everything to a readable, light scheme.
+   ============================================================= */
+
+:root {
+  color-scheme: light;
+  /* High-contrast palette */
+  --c-ink:        #1A1614;
+  --c-muted:      #5C5247;     /* was #6B6358 — bumped contrast for body copy */
+  --c-faint:      #7E7466;     /* was #9A8F7E — bumped so labels remain legible */
+  --c-line:       #E0D8C8;
+  --c-paper:      #F5F1EA;
+  --c-tint:       #FAF7F2;
+  --c-card:       #FFFFFF;
+  --c-brand:      #3D5A4A;
+  --c-brand-700:  #2D4A3E;
+  --c-accent:     #A87C4F;
+  --c-gold:       #B8995A;
+  --c-warn:       #C0843A;
+  --c-danger:     #9C3D2E;
+}
+
+html, body, #root {
+  height: 100%;
+  background: var(--c-paper);
+  color: var(--c-ink);
+  font-family: 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.font-display { font-family: 'Fraunces', 'Georgia', serif; font-feature-settings: 'ss01'; }
+
+/* Force form controls to render light, never inverted in dark-mode browsers.
+   This was the single biggest readability bug — selects/options/dates went
+   white-on-white on dark-mode iOS Safari. */
+input,
+select,
+textarea,
+option,
+button {
+  color: var(--c-ink);
+  background-color: #FFFFFF;
+  color-scheme: light;
+}
+select option { color: var(--c-ink); background-color: #FFFFFF; }
+input::placeholder,
+textarea::placeholder { color: #8A8070; opacity: 1; }
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"],
+input[type="number"] { color: var(--c-ink); }
+
+/* iOS Safari otherwise renders date pickers in faint grey */
+input::-webkit-date-and-time-value { color: var(--c-ink); text-align: left; }
+
+/* Make icon buttons that used the very pale #C5BBA8 readable on tint bg. */
+[data-faint-icon] { color: var(--c-faint); }
+[data-faint-icon]:hover { color: var(--c-ink); }
+
+/* Slim scrollbars */
+.scrollbar-thin::-webkit-scrollbar { height: 8px; width: 8px; }
+.scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: #C9BEAA; border-radius: 4px; }
+.scrollbar-thin::-webkit-scrollbar-thumb:hover { background: #A89A82; }
+
+/* Better mobile tap targets */
+button, a, select { touch-action: manipulation; }
+
+/* Safe-area padding for iOS notch */
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+.safe-top    { padding-top:  env(safe-area-inset-top); }
+
+/* Subtle grid background used by hero sections */
+.grid-bg {
+  background-image:
+    linear-gradient(to right, rgba(168, 124, 79, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(168, 124, 79, 0.05) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* Drag-and-drop kanban — show drop target clearly */
+.drop-target { outline: 2px dashed var(--c-brand); outline-offset: -4px; background: rgba(61, 90, 74, 0.04); }
+
+/* Reduce motion respect */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* Print styles for PDF export */
+@media print {
+  body { background: white; }
+  .no-print { display: none !important; }
+}
