@@ -8,6 +8,7 @@ import { UIProvider, useToast, useConfirm } from './components/ui/UIProvider.jsx
 import { LangProvider, useT } from './i18n/LangProvider.jsx';
 import AuthGate from './components/auth/AuthGate.jsx';
 import Nav from './components/Nav.jsx';
+import ReminderBar from './components/ReminderBar.jsx';
 import EmptyState from './components/EmptyState.jsx';
 import MethodView from './components/MethodView.jsx';
 import KanbanView from './components/kanban/KanbanView.jsx';
@@ -18,6 +19,7 @@ import TeamView from './components/team/TeamView.jsx';
 import RisksView from './components/risks/RisksView.jsx';
 import BriefingView from './components/briefing/BriefingView.jsx';
 import CalendarView from './components/calendar/CalendarView.jsx';
+import DesignDashboard from './components/design/DesignDashboard.jsx';
 import ClientShareView from './components/client/ClientShareView.jsx';
 
 function AppInner({ repo, user, onSignOut }) {
@@ -31,6 +33,7 @@ function AppInner({ repo, user, onSignOut }) {
     addRisk, removeRisk, updateNote, updateForm, addAttachment, removeAttachment,
     saveDailyReport, deleteDailyReport,
     saveDefect, deleteDefect,
+    saveAfterSale, deleteAfterSale, resolveAfterSale,
     startDesignFlow, completeDesignStep, addPresentation, updatePresentation, removePresentation,
   } = store;
 
@@ -77,6 +80,12 @@ function AppInner({ repo, user, onSignOut }) {
         onSignOut={onSignOut}
       />
 
+      <ReminderBar
+        projects={projects}
+        appointments={appointments}
+        onJump={(target) => { setSelectedId(null); setView(target); }}
+      />
+
       <main className={view === 'kanban' && !selected ? '' : 'max-w-7xl mx-auto px-6 lg:px-10 py-10'}>
         {loading ? (
           <div className="text-center py-20" style={{ color: T.inkSoft }}>
@@ -104,6 +113,9 @@ function AppInner({ repo, user, onSignOut }) {
             onDeleteDailyReport={(rid) => deleteDailyReport(selected.id, rid)}
             onSaveDefect={(d) => saveDefect(selected.id, d)}
             onDeleteDefect={(did) => deleteDefect(selected.id, did)}
+            onSaveAfterSale={(t) => saveAfterSale(selected.id, t)}
+            onDeleteAfterSale={(asId) => deleteAfterSale(selected.id, asId)}
+            onResolveAfterSale={(asId, payload) => resolveAfterSale(selected.id, asId, payload)}
             onStartDesignFlow={() => startDesignFlow(selected.id)}
             onCompleteDesignStep={(stepId, decision) => completeDesignStep(selected.id, stepId, decision)}
             onAddPresentation={(payload) => addPresentation(selected.id, payload)}
@@ -122,6 +134,8 @@ function AppInner({ repo, user, onSignOut }) {
               setView('calendar');
             }}
           />
+        ) : view === 'design' ? (
+          <DesignDashboard projects={projects} onOpen={(id) => { setSelectedId(id); setView('project'); }} />
         ) : view === 'briefing' ? (
           <BriefingView projects={projects} onOpen={(id) => { setSelectedId(id); setView('project'); }} />
         ) : view === 'calendar' ? (

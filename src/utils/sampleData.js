@@ -107,6 +107,20 @@ export const sampleProjects = () => {
           createdAt: daysAgo(2), updatedAt: daysAgo(2),
         },
       ],
+      afterSales: [
+        {
+          id: 'as_001',
+          category: 'adjustment',
+          issue: '客厅吊柜底部 LED 灯条偶尔闪烁, 客户要求上门调试',
+          status: 'open',
+          driveLink: '',
+          resolutionNote: '',
+          photos: [],
+          createdBy: 'Wilson',
+          createdAt: daysAgo(1),
+          updatedAt: daysAgo(1),
+        },
+      ],
     },
     {
       id: 'p_004', name: 'KLCC · Chen Suite', client: 'Mrs. Chen',

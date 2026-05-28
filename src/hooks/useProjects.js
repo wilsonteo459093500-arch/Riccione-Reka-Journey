@@ -134,6 +134,7 @@ export function useProjects(repo, { onToast } = {}) {
         forms: emptyForms(),
         dailyReports: [],
         defects: [],
+        afterSales: [],
         designFlow: null,
       };
       upsert(proj);
@@ -267,6 +268,47 @@ export function useProjects(repo, { onToast } = {}) {
     [updateProject]
   );
 
+  // ---- After-sales (post-handover warranty / repair tickets) ----
+  const saveAfterSale = useCallback(
+    (pid, ticket) => {
+      const p = ref.current.find((x) => x.id === pid);
+      if (!p) return;
+      const list = p.afterSales || [];
+      const idx = list.findIndex((t) => t.id === ticket.id);
+      const now = new Date().toISOString();
+      let next;
+      if (idx >= 0) next = list.map((t, i) => (i === idx ? { ...ticket, updatedAt: now } : t));
+      else next = [...list, { ...ticket, createdAt: now, updatedAt: now }];
+      updateProject(pid, { afterSales: next });
+    },
+    [updateProject]
+  );
+
+  const deleteAfterSale = useCallback(
+    (pid, asId) => {
+      const p = ref.current.find((x) => x.id === pid);
+      if (!p) return;
+      updateProject(pid, { afterSales: (p.afterSales || []).filter((t) => t.id !== asId) });
+    },
+    [updateProject]
+  );
+
+  const resolveAfterSale = useCallback(
+    (pid, asId, { driveLink, resolutionNote }) => {
+      const p = ref.current.find((x) => x.id === pid);
+      if (!p) return;
+      const now = new Date().toISOString();
+      updateProject(pid, {
+        afterSales: (p.afterSales || []).map((t) =>
+          t.id === asId
+            ? { ...t, status: 'resolved', resolvedAt: now, driveLink: driveLink || t.driveLink || '', resolutionNote: resolutionNote || t.resolutionNote || '', updatedAt: now }
+            : t
+        ),
+      });
+    },
+    [updateProject]
+  );
+
   // ---- Design workflow ----
   const startDesignFlow = useCallback(
     (pid) => {
@@ -365,6 +407,9 @@ export function useProjects(repo, { onToast } = {}) {
     deleteDailyReport,
     saveDefect,
     deleteDefect,
+    saveAfterSale,
+    deleteAfterSale,
+    resolveAfterSale,
     startDesignFlow,
     completeDesignStep,
     addPresentation,

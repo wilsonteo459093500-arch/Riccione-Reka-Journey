@@ -17,6 +17,7 @@ import RiskForm from '../risks/RiskForm.jsx';
 import RiskRow from '../risks/RiskRow.jsx';
 import DailyReportsBlock from '../daily/DailyReportsBlock.jsx';
 import DefectsBlock from '../defects/DefectsBlock.jsx';
+import AfterSalesBlock from '../aftersales/AfterSalesBlock.jsx';
 import DesignWorkflowBlock from '../design/DesignWorkflowBlock.jsx';
 
 export default function ProjectDetail({
@@ -27,6 +28,7 @@ export default function ProjectDetail({
   onSaveDefect, onDeleteDefect,
   onStartDesignFlow, onCompleteDesignStep, onAddPresentation, onUpdatePresentation, onRemovePresentation,
   onScheduleAppointment,
+  onSaveAfterSale, onDeleteAfterSale, onResolveAfterSale,
 }) {
   const [expandedStage, setExpandedStage] = useState(currentStage(project).code);
   const [showRiskForm, setShowRiskForm] = useState(false);
@@ -323,6 +325,16 @@ export default function ProjectDetail({
         onSaveDefect={onSaveDefect}
         onDeleteDefect={onDeleteDefect}
       />
+
+      {/* After-Sales — only after handover stage starts */}
+      {(cur.code === 'H' || isComplete(project)) && (
+        <AfterSalesBlock
+          project={project}
+          onSave={onSaveAfterSale}
+          onDelete={onDeleteAfterSale}
+          onResolve={onResolveAfterSale}
+        />
+      )}
 
       {/* Risks */}
       <div className="mb-12">

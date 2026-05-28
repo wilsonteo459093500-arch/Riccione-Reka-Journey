@@ -81,6 +81,7 @@ const migrateRecord = (p, { fromDossier, remap }) => ({
   },
   dailyReports: (p.dailyReports || []).map((r) => ({ ...r, photos: sanitizePhotos(r.photos) })),
   defects: (p.defects || []).map((d) => ({ ...d, photos: sanitizePhotos(d.photos) })),
+  afterSales: (p.afterSales || []).map((a) => ({ ...a, photos: sanitizePhotos(a.photos) })),
   designFlow: p.designFlow || null,
 });
 

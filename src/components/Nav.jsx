@@ -1,4 +1,4 @@
-import { Columns3, CalendarDays, Calendar, BookOpen, Users, AlertTriangle, Save, Plus, LogOut } from 'lucide-react';
+import { Columns3, CalendarDays, Calendar, BookOpen, Users, AlertTriangle, Save, Plus, LogOut, Ruler } from 'lucide-react';
 import { T } from '../theme.js';
 import { avatarFor } from '../utils/helpers.js';
 import { useT } from '../i18n/LangProvider.jsx';
@@ -6,6 +6,7 @@ import { useT } from '../i18n/LangProvider.jsx';
 const ITEMS = [
   { id: 'kanban',   key: 'nav_kanban',   icon: Columns3 },
   { id: 'briefing', key: 'nav_briefing', icon: CalendarDays },
+  { id: 'design',   key: 'nav_design',   icon: Ruler },
   { id: 'calendar', key: 'nav_calendar', icon: Calendar },
   { id: 'method',   key: 'nav_method',   icon: BookOpen },
   { id: 'team',     key: 'nav_team',     icon: Users },
