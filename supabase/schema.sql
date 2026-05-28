@@ -27,9 +27,17 @@ create table if not exists public.appointments (
   updated_at  timestamptz not null default now()
 );
 
+-- Singleton team config (members + role labels). Always has one row id='team'.
+create table if not exists public.team_config (
+  id          text primary key,
+  data        jsonb not null,
+  updated_at  timestamptz not null default now()
+);
+
 -- ---- Row Level Security: only authenticated users may read/write ----
 alter table public.projects enable row level security;
 alter table public.appointments enable row level security;
+alter table public.team_config enable row level security;
 
 drop policy if exists "authenticated full access" on public.projects;
 create policy "authenticated full access" on public.projects
@@ -39,6 +47,11 @@ drop policy if exists "authenticated full access" on public.appointments;
 create policy "authenticated full access" on public.appointments
   for all to authenticated using (true) with check (true);
 
+drop policy if exists "authenticated full access" on public.team_config;
+create policy "authenticated full access" on public.team_config
+  for all to authenticated using (true) with check (true);
+
 -- ---- Realtime: broadcast changes to all connected clients ----
 alter publication supabase_realtime add table public.projects;
 alter publication supabase_realtime add table public.appointments;
+alter publication supabase_realtime add table public.team_config;

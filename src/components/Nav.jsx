@@ -1,4 +1,4 @@
-import { Columns3, CalendarDays, Calendar, BookOpen, Users, AlertTriangle, Save, Plus, LogOut, Ruler } from 'lucide-react';
+import { Columns3, CalendarDays, Calendar, BookOpen, Users, AlertTriangle, Save, Plus, LogOut, Ruler, Settings } from 'lucide-react';
 import { T } from '../theme.js';
 import { avatarFor } from '../utils/helpers.js';
 import { useT } from '../i18n/LangProvider.jsx';
@@ -11,6 +11,7 @@ const ITEMS = [
   { id: 'method',   key: 'nav_method',   icon: BookOpen },
   { id: 'team',     key: 'nav_team',     icon: Users },
   { id: 'risks',    key: 'nav_risks',    icon: AlertTriangle },
+  { id: 'settings', key: 'nav_settings', icon: Settings },
 ];
 
 export default function Nav({ view, setView, onNew, saveStatus, user, onSignOut }) {

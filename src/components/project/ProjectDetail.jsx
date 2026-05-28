@@ -36,6 +36,9 @@ export default function ProjectDetail({
   const [meta, setMeta] = useState({
     name: project.name, client: project.client, address: project.address,
     propertyType: project.propertyType, area: project.area, moveIn: project.moveIn,
+    phone: project.phone || '', email: project.email || '', wechat: project.wechat || '',
+    decisionMaker: project.decisionMaker || '', source: project.source || '',
+    clientNotes: project.clientNotes || '',
   });
   const [assigned, setAssigned] = useState(project.assigned || { SD: '', SS: '', WH: '', PU: '' });
   const confirm = useConfirm();
@@ -44,6 +47,9 @@ export default function ProjectDetail({
     setMeta({
       name: project.name, client: project.client, address: project.address,
       propertyType: project.propertyType, area: project.area, moveIn: project.moveIn,
+      phone: project.phone || '', email: project.email || '', wechat: project.wechat || '',
+      decisionMaker: project.decisionMaker || '', source: project.source || '',
+      clientNotes: project.clientNotes || '',
     });
     setAssigned(project.assigned || { SD: '', SS: '', WH: '', PU: '' });
   }, [project.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -106,6 +112,33 @@ export default function ProjectDetail({
                 <LabeledInput label="面积 Area" value={meta.area} onChange={(v) => setMeta({ ...meta, area: v })} />
                 <LabeledInput label="入住日期 Move-in" type="date" value={dateInputValue(meta.moveIn)} onChange={(v) => setMeta({ ...meta, moveIn: v })} />
               </div>
+
+              <div className="mt-5">
+                <div className="text-xs uppercase tracking-wider mb-2" style={{ color: T.inkSoft }}>
+                  客户信息 Client Info
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <LabeledInput label="电话 Phone" value={meta.phone} onChange={(v) => setMeta({ ...meta, phone: v })} placeholder="012-345 6789" />
+                  <LabeledInput label="邮箱 Email" value={meta.email} onChange={(v) => setMeta({ ...meta, email: v })} placeholder="client@email.com" />
+                  <LabeledInput label="微信 WeChat" value={meta.wechat} onChange={(v) => setMeta({ ...meta, wechat: v })} placeholder="wechat ID" />
+                  <LabeledInput label="决策人 Decision Maker" value={meta.decisionMaker} onChange={(v) => setMeta({ ...meta, decisionMaker: v })} placeholder="例: 太太 / 业主本人" />
+                  <LabeledInput label="客户来源 Source" value={meta.source} onChange={(v) => setMeta({ ...meta, source: v })} placeholder="例: 转介绍 · Instagram · 展厅" />
+                </div>
+                <div className="mt-3">
+                  <label className="block text-[10px] uppercase tracking-widest mb-1.5" style={{ color: T.inkSoft }}>
+                    备注 Notes
+                  </label>
+                  <textarea
+                    value={meta.clientNotes}
+                    onChange={(e) => setMeta({ ...meta, clientNotes: e.target.value })}
+                    placeholder="特殊偏好 / 注意事项 / 历史背景..."
+                    rows={2}
+                    className="w-full px-3 py-2 text-sm outline-none resize-none"
+                    style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }}
+                  />
+                </div>
+              </div>
+
               <div className="mt-5">
                 <div className="text-xs uppercase tracking-wider mb-2" style={{ color: T.inkSoft }}>团队分工 Team</div>
                 <div className="grid grid-cols-2 gap-2">
@@ -133,8 +166,22 @@ export default function ProjectDetail({
                 <span>·</span>
                 <span>{project.area}</span>
               </div>
+              {(project.phone || project.email || project.wechat || project.decisionMaker || project.source) && (
+                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs" style={{ color: T.inkSoft }}>
+                  {project.phone && <span>📞 {project.phone}</span>}
+                  {project.email && <span>✉ {project.email}</span>}
+                  {project.wechat && <span>微信 {project.wechat}</span>}
+                  {project.decisionMaker && <span>· 决策人: {project.decisionMaker}</span>}
+                  {project.source && <span>· 来源: {project.source}</span>}
+                </div>
+              )}
+              {project.clientNotes && (
+                <div className="mt-2 text-xs italic" style={{ color: T.inkSoft, opacity: 0.85 }}>
+                  📝 {project.clientNotes}
+                </div>
+              )}
               <button onClick={() => setEditingMeta(true)} className="mt-4 text-xs underline opacity-50 hover:opacity-100" style={{ color: T.inkSoft }}>
-                编辑项目信息 + 分工
+                编辑项目信息 + 客户资料 + 分工
               </button>
             </>
           )}

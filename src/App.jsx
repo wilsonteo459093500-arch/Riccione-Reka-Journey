@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { T } from './theme.js';
 import { useProjects } from './hooks/useProjects.js';
 import { useAppointments } from './hooks/useAppointments.js';
+import { useTeam } from './hooks/useTeam.js';
+import { defaultAssignmentFromTeam } from './constants/team.js';
 import { cloudConfigured } from './services/supabase.js';
 import { createLocalRepo, createCloudRepo } from './services/repo.js';
 import { UIProvider, useToast, useConfirm } from './components/ui/UIProvider.jsx';
@@ -20,6 +22,7 @@ import RisksView from './components/risks/RisksView.jsx';
 import BriefingView from './components/briefing/BriefingView.jsx';
 import CalendarView from './components/calendar/CalendarView.jsx';
 import DesignDashboard from './components/design/DesignDashboard.jsx';
+import SettingsView from './components/settings/SettingsView.jsx';
 import ClientShareView from './components/client/ClientShareView.jsx';
 
 function AppInner({ repo, user, onSignOut }) {
@@ -38,6 +41,7 @@ function AppInner({ repo, user, onSignOut }) {
   } = store;
 
   const { appointments, addAppointment, deleteAppointment } = useAppointments(repo, { onToast: toast });
+  const { team, addMember, updateMember, removeMember, updateRoleLabel, resetToDefaults } = useTeam(repo, { onToast: toast });
 
   const [view, setView] = useState('kanban');
   const [selectedId, setSelectedId] = useState(null);
@@ -51,7 +55,7 @@ function AppInner({ repo, user, onSignOut }) {
   const storageLabel = repo.mode === 'cloud' ? '云端同步 (Supabase)' : '数据本地存储 (this device)';
 
   const handleCreate = (data) => {
-    const proj = addProject(data);
+    const proj = addProject({ ...data, assigned: defaultAssignmentFromTeam(team) });
     setShowNew(false);
     setSelectedId(proj.id);
     setView('project');
@@ -133,6 +137,15 @@ function AppInner({ repo, user, onSignOut }) {
               setSelectedId(null);
               setView('calendar');
             }}
+          />
+        ) : view === 'settings' ? (
+          <SettingsView
+            team={team}
+            addMember={addMember}
+            updateMember={updateMember}
+            removeMember={removeMember}
+            updateRoleLabel={updateRoleLabel}
+            resetToDefaults={resetToDefaults}
           />
         ) : view === 'design' ? (
           <DesignDashboard projects={projects} onOpen={(id) => { setSelectedId(id); setView('project'); }} />

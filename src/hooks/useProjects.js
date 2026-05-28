@@ -127,7 +127,7 @@ export function useProjects(repo, { onToast } = {}) {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         gates: {},
-        assigned: { SD: 'Wilson', SS: '', WH: '', PU: '' },
+        assigned: data.assigned || { SD: 'Wilson', SS: '', WH: '', PU: '' },
         notes: {},
         risks: [],
         attachments: {},

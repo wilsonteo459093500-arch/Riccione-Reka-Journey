@@ -2,7 +2,7 @@
 // localization via the `t()` helper; rest of the copy stays in CN.
 export const I18N = {
   cn: {
-    nav_kanban: '看板', nav_briefing: '日报总览', nav_design: '设计', nav_calendar: '日历', nav_method: '方法论', nav_team: '团队', nav_risks: '风险',
+    nav_kanban: '看板', nav_briefing: '日报总览', nav_design: '设计', nav_calendar: '日历', nav_method: '方法论', nav_team: '团队', nav_risks: '风险', nav_settings: '设置',
     nav_new: '新建', nav_subtitle: 'The Method',
     save_syncing: '同步中…', save_saved: '已同步',
     footer_clear: '清空全部',
@@ -18,7 +18,7 @@ export const I18N = {
     method_title: 'V · SMOOTH',
   },
   en: {
-    nav_kanban: 'Kanban', nav_briefing: 'Briefing', nav_design: 'Design', nav_calendar: 'Calendar', nav_method: 'Method', nav_team: 'Team', nav_risks: 'Risks',
+    nav_kanban: 'Kanban', nav_briefing: 'Briefing', nav_design: 'Design', nav_calendar: 'Calendar', nav_method: 'Method', nav_team: 'Team', nav_risks: 'Risks', nav_settings: 'Settings',
     nav_new: 'New', nav_subtitle: 'The Method',
     save_syncing: 'Syncing…', save_saved: 'Saved',
     footer_clear: 'Clear all',

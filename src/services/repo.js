@@ -22,6 +22,7 @@ import { supabase } from './supabase.js';
 import {
   KEY_META,
   KEY_APPOINTMENTS,
+  KEY_TEAM,
   KEY_LEGACY_V8,
   KEY_LEGACY_V7,
   KEY_LEGACY_V6,
@@ -138,8 +139,19 @@ export function createLocalRepo() {
     },
     saveAppointments: (all) => storage.set(KEY_APPOINTMENTS, JSON.stringify(all)),
 
+    // Team config — single object (members + role labels).
+    async loadTeam() {
+      try {
+        const raw = await storage.get(KEY_TEAM);
+        if (raw) return JSON.parse(raw);
+      } catch (e) { /* ignore */ }
+      return null;
+    },
+    saveTeam: (team) => storage.set(KEY_TEAM, JSON.stringify(team)),
+
     subscribe: () => () => {},
     subscribeAppointments: () => () => {},
+    subscribeTeam: () => () => {},
   };
 }
 
@@ -212,6 +224,32 @@ export function createCloudRepo() {
       const channel = supabase
         .channel('appointments-sync')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => onChange())
+        .subscribe();
+      return () => supabase.removeChannel(channel);
+    },
+
+    // Team config — single row keyed 'team'.
+    async loadTeam() {
+      const { data, error } = await supabase
+        .from('team_config')
+        .select('data')
+        .eq('id', 'team')
+        .maybeSingle();
+      if (error) return null;
+      return data?.data || null;
+    },
+
+    async saveTeam(team) {
+      const { error } = await supabase
+        .from('team_config')
+        .upsert({ id: 'team', data: team, updated_at: new Date().toISOString() });
+      if (error) throw error;
+    },
+
+    subscribeTeam(onChange) {
+      const channel = supabase
+        .channel('team-sync')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'team_config' }, () => onChange())
         .subscribe();
       return () => supabase.removeChannel(channel);
     },
