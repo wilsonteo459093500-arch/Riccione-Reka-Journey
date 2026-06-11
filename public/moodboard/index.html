@@ -53,16 +53,19 @@ input[type=color]{width:28px;height:28px;border:none;background:none;padding:0;c
   <canvas id="board"></canvas>
 
   <div class="panel">
+    <div class="lab" style="margin-top:0">STEP 1 · 上传项目效果图（可多张 / 拖拽 / Ctrl+V 粘贴）</div>
     <div class="row">
       <label class="btn">＋ 上传效果图<input id="file" type="file" accept="image/*" multiple hidden></label>
-      <button id="analyzeBtn" class="primary">✦ AI 生成文案</button>
     </div>
     <div id="msg" class="msg" hidden></div>
 
-    <button id="genImgBtn" class="primary wfull" style="margin-top:8px">✦ Nano Banana 生成照片级材质平铺图</button>
-    <div class="note">用 Google Gemini 2.5 Flash Image（俗称 Nano Banana）：以你上传的效果图为参考，生成一张照片级材质平铺，自动设为底图，再叠加品牌 / 色板 / 标签。生成约 10–20 秒。</div>
+    <div class="lab">STEP 2 · 生成（可选 — 没有 key 直接跳过，上传后已自动拼贴）</div>
+    <button id="genImgBtn" class="primary wfull" style="margin-top:0">✦ Nano Banana 生成照片级材质平铺图</button>
+    <div class="note">需要 Gemini key（<b>付费档</b>，免费档图像额度为 0）。以你的效果图为参考生成照片级材质平铺并自动设为底图。</div>
+    <button id="analyzeBtn" class="wfull">✦ AI 生成文案（Claude · 可选）</button>
 
-    <div class="lab">版式</div>
+    <div class="lab">STEP 3 · 版式与微调</div>
+    <div class="lab" style="margin-top:6px">版式</div>
     <div class="seg" id="layoutSeg">
       <button data-layout="stack" class="on">叠层拼贴</button>
       <button data-layout="base">整图底图</button>
@@ -71,6 +74,7 @@ input[type=color]{width:28px;height:28px;border:none;background:none;padding:0;c
 
     <div class="lab">已上传（叠层模式按上传顺序铺位；底图模式点选一张设为底图）</div>
     <div id="thumbs" class="thumbs"></div>
+    <div class="note">💡 对某块材质不满意？<b>直接点预览图上的那个样块</b>，自动换下一处材质特写，多点几次直到满意（导出即所见）。</div>
 
     <div class="lab">项目名称</div>
     <input type="text" id="project">
@@ -112,7 +116,8 @@ input[type=color]{width:28px;height:28px;border:none;background:none;padding:0;c
     <textarea id="promptBox" hidden style="min-height:150px;font-size:11px;font-family:'DM Sans',Arial,sans-serif;margin-top:8px"></textarea>
     <button id="copyBtn" class="wfull" hidden>⧉ 复制 Prompt</button>
 
-    <button id="exportBtn" class="primary wfull" style="margin-top:16px;padding:14px 0">⤓ 导出高清 PNG（1500×2000 · 3:4）</button>
+    <div class="lab">STEP 4 · 导出</div>
+    <button id="exportBtn" class="primary wfull" style="margin-top:0;padding:14px 0">⤓ 导出高清 PNG（1500×2000 · 3:4）</button>
   </div>
 </div>
 
@@ -133,9 +138,10 @@ const SANS  = "'DM Sans', Arial, sans-serif";
 
 /* ── 全局状态 ── */
 const state = {
-  images: [],        // [{ src, img: HTMLImageElement }]
+  images: [],        // [{ src, img: HTMLImageElement, patches: [...] }]
   layout: "stack",   // "stack" 叠层拼贴 | "base" 整图底图
   baseIdx: null,     // 整图底图模式下选中的图
+  pick: {},          // 每个样块槽位的「换一块」偏移（点预览样块 +1）
   project: "Tuai Timur Residence — Setia Alam",
   spaceType: "WHOLE-HOME CUSTOM",
   keywords: "NATURAL MINIMAL · WABI-SABI · WARM WOOD",
@@ -239,6 +245,63 @@ function extractPalette(imgs) {
   while (picked.length < 6) picked.push("#bfae97");
   picked.sort((a,b)=>lum(b)-lum(a));
   return picked.map((hex)=>({ hex, name: guessName(hex) }));
+}
+
+/* ── 材质感知取材：在效果图里找「平整纹理面」（木纹/石纹/布纹），
+   避开窗户、屏幕、强轮廓和过曝区 —— 让样块像材质小样，而不是房间一角。
+   返回 [{fx,fy,frac,hex}]，按「越平整越像材质」排序。 ── */
+function findMaterialPatches(img, maxN = 16) {
+  const c = document.createElement("canvas");
+  const sc = 180 / Math.max(img.width, img.height);
+  c.width = Math.max(16, Math.round(img.width * sc));
+  c.height = Math.max(16, Math.round(img.height * sc));
+  const cx2 = c.getContext("2d", { willReadFrequently: true });
+  cx2.drawImage(img, 0, 0, c.width, c.height);
+  const W = c.width, H = c.height, d = cx2.getImageData(0, 0, W, H).data;
+  const L = new Float32Array(W * H);
+  for (let i = 0; i < W * H; i++) L[i] = 0.299*d[i*4] + 0.587*d[i*4+1] + 0.114*d[i*4+2];
+  const CS = Math.max(10, Math.round(Math.min(W, H) / 9));   /* 取样格 ≈ 短边 1/9 */
+  const cells = [];
+  for (let cy = 0; cy + CS <= H; cy += CS >> 1) {
+    for (let cx = 0; cx + CS <= W; cx += CS >> 1) {
+      let edge = 0, r = 0, g = 0, b = 0, n = 0, bad = 0;
+      for (let y = cy; y < cy + CS; y++) for (let x = cx; x < cx + CS; x++) {
+        const i = y * W + x, l = L[i];
+        if (x + 1 < cx + CS) edge += Math.abs(l - L[i + 1]);
+        if (y + 1 < cy + CS) edge += Math.abs(l - L[i + W]);
+        if (l > 244 || l < 14) bad++;                /* 过曝（窗/灯）或纯黑（屏幕） */
+        r += d[i*4]; g += d[i*4+1]; b += d[i*4+2]; n++;
+      }
+      if (bad / n > 0.15) continue;
+      const e = edge / (n * 2);
+      if (e > 13) continue;                          /* 强边缘 = 家具轮廓 / 整景，跳过 */
+      cells.push({
+        fx: (cx + CS/2) / W, fy: (cy + CS/2) / H, frac: CS / W, e,
+        hex: "#" + [r, g, b].map((v) => Math.round(v / n).toString(16).padStart(2, "0")).join(""),
+      });
+    }
+  }
+  cells.sort((a, b) => a.e - b.e);
+  const picked = [];
+  for (const p of cells) {
+    /* 去重：颜色相近且位置相邻的不重复选，保证 7+7 个样块各有面貌 */
+    if (!picked.every((q) => cdist(q.hex, p.hex) > 26 || Math.hypot(q.fx - p.fx, q.fy - p.fy) > 0.22)) continue;
+    picked.push(p);
+    if (picked.length === maxN) break;
+  }
+  return picked;
+}
+
+/* 在 (0,0) 为中心绘制 patch 周边的紧裁切（读起来像材质小样） */
+function drawPatch(ctx, img, w, h, p) {
+  let srcW = Math.max(64, img.width * p.frac * 1.7);
+  let srcH = srcW * (h / w);
+  if (srcH > img.height * 0.6) { srcH = img.height * 0.6; srcW = srcH * (w / h); }
+  if (srcW > img.width) { srcW = img.width; srcH = srcW * (h / w); }
+  let sx = p.fx * img.width - srcW / 2, sy = p.fy * img.height - srcH / 2;
+  sx = Math.max(0, Math.min(img.width - srcW, sx));
+  sy = Math.max(0, Math.min(img.height - srcH, sy));
+  ctx.drawImage(img, sx, sy, srcW, srcH, -w / 2, -h / 2, w, h);
 }
 
 /* 中英混排自动换行 */
@@ -365,7 +428,7 @@ function renderBoard(ctx, S) {
     ctx.strokeRect(40*S, 152*S, 480*S, 618*S);
   } else if (els.length) {
     SWATCHES.forEach((s, i) => {
-      const img = els[i % els.length];
+      const rec = state.images[i % state.images.length];
       ctx.save();
       ctx.translate((s.x + s.w/2)*S, (s.y + s.h/2)*S);
       ctx.rotate((s.rot * Math.PI) / 180);
@@ -373,7 +436,9 @@ function renderBoard(ctx, S) {
       ctx.fillStyle = "#000";
       ctx.fillRect(-s.w/2*S, -s.h/2*S, s.w*S, s.h*S);   /* 投影载体 */
       noShadow();
-      drawCrop(ctx, img, s.w*S, s.h*S, s.zoom, s.f[0], s.f[1]);
+      const ps = rec.patches;
+      if (ps && ps.length) drawPatch(ctx, rec.img, s.w*S, s.h*S, ps[(i + (state.pick[i] || 0)) % ps.length]);
+      else drawCrop(ctx, rec.img, s.w*S, s.h*S, s.zoom, s.f[0], s.f[1]);
       ctx.strokeStyle = "rgba(255,255,255,.10)"; ctx.lineWidth = 1.5*S;       /* 内高光边 */
       ctx.strokeRect(-s.w/2*S + S, -s.h/2*S + S, s.w*S - 2*S, s.h*S - 2*S);
       ctx.strokeStyle = "rgba(0,0,0,.06)"; ctx.lineWidth = S;
@@ -432,13 +497,15 @@ function renderBoard(ctx, S) {
   const tw = (totalW - (n-1)*gap) / n, ty = 806*S;
   for (let i = 0; i < n; i++) {
     if (els.length) {
-      const img = els[i % els.length];
+      const rec = state.images[i % state.images.length];
       ctx.save();
       ctx.translate(x0 + i*(tw+gap) + tw/2, ty + tw/2);
       ctx.shadowColor = "rgba(60,50,40,.16)"; ctx.shadowBlur = 14*S; ctx.shadowOffsetY = 7*S;
       ctx.fillStyle = "#000"; ctx.fillRect(-tw/2, -tw/2, tw, tw);
       noShadow();
-      drawCrop(ctx, img, tw, tw, 3.5, STRIP_F[i][0], STRIP_F[i][1]);
+      const ps = rec.patches;
+      if (ps && ps.length) drawPatch(ctx, rec.img, tw, tw, ps[(7 + i + (state.pick[7 + i] || 0)) % ps.length]);
+      else drawCrop(ctx, rec.img, tw, tw, 3.5, STRIP_F[i][0], STRIP_F[i][1]);
       ctx.strokeStyle = "rgba(0,0,0,.06)"; ctx.lineWidth = S;
       ctx.strokeRect(-tw/2, -tw/2, tw, tw);
       ctx.restore();
@@ -488,7 +555,7 @@ $("layoutSeg").addEventListener("click", (e) => {
 /* ── 图片管理 ── */
 async function addSrc(src) {
   const img = await loadImg(src);
-  state.images.push({ src, img });
+  state.images.push({ src, img, patches: findMaterialPatches(img) });
   if (state.images.length === 1) state.palette = extractPalette([img]);
   renderThumbs(); renderPaletteUI(); render();
 }
@@ -507,6 +574,27 @@ window.addEventListener("paste", (e) => {
 });
 board.addEventListener("dragover", (e) => e.preventDefault());
 board.addEventListener("drop", (e) => { e.preventDefault(); readFiles(e.dataTransfer.files); });
+
+/* 点预览上的样块 = 给该槽位换下一块材质特写（手机直接点屏幕即可） */
+board.addEventListener("click", (e) => {
+  if (state.layout !== "stack" || !state.images.length) return;
+  const r = board.getBoundingClientRect();
+  const dx = (e.clientX - r.left) / r.width * 750;
+  const dy = (e.clientY - r.top) / r.height * 1000;
+  let hit = null;
+  for (let i = SWATCHES.length - 1; i >= 0; i--) {   /* 倒序 = 优先点中最上层 */
+    const s = SWATCHES[i];
+    if (dx >= s.x && dx <= s.x + s.w && dy >= s.y && dy <= s.y + s.h) { hit = i; break; }
+  }
+  if (hit === null && dy >= 806 && dy <= 892) {       /* 底部材质条：7 格，每格 86 + 间距 10 */
+    const i = Math.floor((dx - 44) / 96);
+    if (i >= 0 && i < 7 && dx - 44 - i * 96 <= 86) hit = 7 + i;
+  }
+  if (hit === null) return;
+  state.pick[hit] = (state.pick[hit] || 0) + 1;
+  render();
+  say("已为该样块换一处取材 ✓（不满意就再点）");
+});
 
 function renderThumbs() {
   const box = $("thumbs"); box.innerHTML = "";
@@ -582,6 +670,20 @@ $("repaletteBtn").onclick = () => {
   renderPaletteUI(); render();
 };
 
+/* ── 把 API 报错翻译成「下一步该做什么」的人话 ── */
+function humanAiError(msg) {
+  const m = String(msg || "");
+  if (/quota|RESOURCE_EXHAUSTED|exceeded|free_tier|rate.?limit/i.test(m))
+    return "这把 Gemini key 没有图像生成额度（Google 免费档为 0）。两个办法：① 到 aistudio.google.com 给项目绑定付费（约 US$0.04/张）再回来点这个按钮；② 不用 key —— 直接用下面的「叠层拼贴」，点预览样块即可换料。";
+  if (/api.?key|invalid|API_KEY|unregistered/i.test(m))
+    return "Key 无效：请确认复制完整（AIza 开头）且已在 AI Studio 启用。";
+  if (/credit balance|billing/i.test(m))
+    return "Anthropic 余额不足：到 console.anthropic.com 充值，或先手动填写文案。";
+  if (/overloaded|529|503|UNAVAILABLE/i.test(m))
+    return "模型暂时繁忙，等几秒再点一次即可。";
+  return m.length > 140 ? m.slice(0, 140) + "…" : m;
+}
+
 /* ── AI 文案（Claude Vision，浏览器直连，需 API key） ── */
 const resizeJpeg = (img, max = 800) => {
   const sc = Math.min(1, max / Math.max(img.width, img.height));
@@ -632,7 +734,7 @@ $("analyzeBtn").onclick = async () => {
     if (Array.isArray(j.material_labels)) state.materials = state.materials.map((x, i) => (j.material_labels[i] || x).toUpperCase());
     renderPaletteUI(); renderMaterialsUI(); render();
     say("AI 分析完成 ✓");
-  } catch (e) { say("AI 分析失败：" + e.message); }
+  } catch (e) { say("AI 分析失败：" + humanAiError(e.message)); }
   $("analyzeBtn").disabled = false;
 };
 
@@ -685,13 +787,13 @@ $("genImgBtn").onclick = async () => {
     const refs = state.images.slice(0, 3).map((i) => resizeJpeg(i.img, 1024).split(",")[1]);
     const dataUrl = await geminiGenerate(genImagePrompt(), refs);
     const img = await loadImg(dataUrl);
-    state.images.push({ src: dataUrl, img });
+    state.images.push({ src: dataUrl, img, patches: findMaterialPatches(img) });
     state.layout = "base";
     state.baseIdx = state.images.length - 1;
     [...$("layoutSeg").children].forEach((x) => x.classList.toggle("on", x.dataset.layout === "base"));
     renderThumbs(); render();
     say("Nano Banana 生成完成 ✓ 已设为底图（可在缩略图取消 / 切回叠层）");
-  } catch (e) { say("生成失败：" + e.message); }
+  } catch (e) { say("生成失败：" + humanAiError(e.message)); }
   $("genImgBtn").disabled = false;
 };
 
