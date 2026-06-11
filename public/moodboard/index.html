@@ -106,7 +106,8 @@ input[type=color]{width:28px;height:28px;border:none;background:none;padding:0;c
 
     <div class="lab">Google Gemini API Key（Nano Banana 生成整图用，存在本机 localStorage）</div>
     <input type="password" id="geminiKey" placeholder="AIza...">
-    <div class="note">免费获取：<b>aistudio.google.com → Get API key</b>。⚠ 浏览器直连仅适合本地自用，上线请走后端代理。</div>
+    <button id="testKeyBtn" class="wfull">🔍 测试 Key · 列出这把 key 可用的图像模型</button>
+    <div class="note">获取：<b>aistudio.google.com → Get API key</b>（注意：订阅 Gemini App 会员 ≠ API 付费；key 必须建在已绑定 billing 的项目里）。⚠ 浏览器直连仅适合本地自用，上线请走后端代理。</div>
 
     <div class="lab">Anthropic API Key（仅「AI 生成文案」需要，存在本机 localStorage）</div>
     <input type="password" id="apiKey" placeholder="sk-ant-...">
@@ -641,8 +642,22 @@ $("apiKey").addEventListener("input", (e) => {
 $("geminiKey").value = state.geminiKey;
 $("geminiKey").addEventListener("input", (e) => {
   state.geminiKey = e.target.value.trim();
+  geminiModelCache = null;                     /* 换了 key 要重新发现模型 */
   localStorage.setItem("sail_gemini_key", state.geminiKey);
 });
+
+/* 一键诊断：key 是否有效、这把 key 看得到哪些图像模型 */
+$("testKeyBtn").onclick = async () => {
+  if (!state.geminiKey) return say("请先在上面填入 Gemini API Key");
+  say("检测中…"); $("testKeyBtn").disabled = true;
+  try {
+    geminiModelCache = null;
+    const models = await geminiListImageModels();
+    say("Key 有效 ✓ 可用图像模型：" + models.slice(0, 4).join("、") +
+        "。直接点上方「Nano Banana 生成」即可；若生成时仍报 quota=0，说明这把 key 所在项目没绑付费 —— 去 AI Studio 在已绑 billing 的项目里重新建一把 key。");
+  } catch (e) { say("Key 检测失败：" + humanAiError(e.message)); }
+  $("testKeyBtn").disabled = false;
+};
 
 /* ── 色板 / 材质标签 UI ── */
 function renderPaletteUI() {
@@ -674,7 +689,7 @@ $("repaletteBtn").onclick = () => {
 function humanAiError(msg) {
   const m = String(msg || "");
   if (/quota|RESOURCE_EXHAUSTED|exceeded|free_tier|rate.?limit/i.test(m))
-    return "这把 Gemini key 没有图像生成额度（Google 免费档为 0）。两个办法：① 到 aistudio.google.com 给项目绑定付费（约 US$0.04/张）再回来点这个按钮；② 不用 key —— 直接用下面的「叠层拼贴」，点预览样块即可换料。";
+    return "这把 key 所在的 Google 项目没有图像生成额度。最常见原因：① 订阅了 Gemini App 会员（Google AI Pro）—— 那是 App 订阅，不等于 API 付费；② key 建在另一个没绑 billing 的项目里。解决：aistudio.google.com → Get API key → 在『已绑定 billing 的项目』里新建 key，粘贴进来后点「🔍 测试 Key」确认。不想折腾就用「叠层拼贴」（免费）。";
   if (/api.?key|invalid|API_KEY|unregistered/i.test(m))
     return "Key 无效：请确认复制完整（AIza 开头）且已在 AI Studio 启用。";
   if (/credit balance|billing/i.test(m))
@@ -751,8 +766,26 @@ function genImagePrompt() {
     "Ultra-detailed, magazine quality, vertical 3:4 composition. " +
     "IMPORTANT: do NOT render any text, labels, logos or watermarks in the image.";
 }
+/* 动态发现这把 key 实际可用的图像生成模型（不同项目/付费档可见模型不同） */
+let geminiModelCache = null;
+async function geminiListImageModels() {
+  if (geminiModelCache) return geminiModelCache;
+  const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000&key=" +
+    encodeURIComponent(state.geminiKey));
+  const data = await res.json().catch(() => ({}));
+  if (data.error) throw new Error(data.error.message || ("HTTP " + res.status));
+  const score = (n) => (/flash-image|banana/.test(n) ? 4 : 0) + (/preview/.test(n) ? 0 : 2) + (/-3|2\.5/.test(n) ? 1 : 0);
+  const img = (data.models || [])
+    .filter((m) => (m.supportedGenerationMethods || m.supported_generation_methods || []).includes("generateContent"))
+    .map((m) => m.name.replace(/^models\//, ""))
+    .filter((n) => /image/i.test(n) && !/embed/i.test(n))
+    .sort((a, b) => score(b) - score(a));
+  geminiModelCache = img.length ? img : ["gemini-2.5-flash-image", "gemini-2.5-flash-image-preview"];
+  return geminiModelCache;
+}
+
 async function geminiGenerate(prompt, refsB64) {
-  const models = ["gemini-2.5-flash-image", "gemini-2.5-flash-image-preview"];
+  const models = await geminiListImageModels();
   const parts = [{ text: prompt }, ...refsB64.map((d) => ({ inlineData: { mimeType: "image/jpeg", data: d } }))];
   const body = JSON.stringify({
     contents: [{ role: "user", parts }],
