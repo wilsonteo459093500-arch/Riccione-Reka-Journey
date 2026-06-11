@@ -2,8 +2,11 @@
 
 全屋定制项目交付管理工具。围绕 **SAIL 方法论**的五个章节（Vision · Blueprint · Craft · Arrival · Signature）组织项目，让 SD / SS / WH / 采购在同一套流程上协作。
 
-> 📁 本 repo 还包含一个独立 app：**Sail CRM** — 销售 / pipeline / 售后管理。
-> 代码在 [`/crm`](./crm)，部署指南见 [`crm/DEPLOY.md`](./crm/DEPLOY.md)。两套 app 共用 repo 但各自独立部署。
+> 📁 本 repo 还包含两个独立 app：
+> - **Sail CRM** — 销售 / pipeline / 售后管理。代码在 [`/crm`](./crm)，部署指南见 [`crm/DEPLOY.md`](./crm/DEPLOY.md)。
+> - **Material Mood Board Generator** — 把效果图变成 Minotti 式材质情绪板并导出高清 PNG。零依赖单文件，代码在 [`/moodboard`](./moodboard)。
+>
+> 各 app 共用 repo 但各自独立部署。
 
 ## 功能
 
