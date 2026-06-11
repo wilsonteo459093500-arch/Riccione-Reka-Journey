@@ -4,7 +4,7 @@
 
 > 📁 本 repo 还包含两个独立 app：
 > - **Sail CRM** — 销售 / pipeline / 售后管理。代码在 [`/crm`](./crm)，部署指南见 [`crm/DEPLOY.md`](./crm/DEPLOY.md)。
-> - **Material Mood Board Generator** — 把效果图变成 Minotti 式材质情绪板并导出高清 PNG。零依赖单文件，代码在 [`/moodboard`](./moodboard)。
+> - **Material Mood Board Generator** — 把效果图变成 Minotti 式材质情绪板并导出高清 PNG。零依赖单文件，代码在 [`public/moodboard`](./public/moodboard)，部署后访问 `<部署域名>/moodboard/`。
 >
 > 各 app 共用 repo 但各自独立部署。
 
