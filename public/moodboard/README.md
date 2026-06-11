@@ -17,6 +17,16 @@
 4. 自动取色生成 6 色色板，可手动改名 / 改色；材质标签、文案、品牌句均可编辑。
 5. **⤓ 导出高清 PNG**。
 
+## Nano Banana 生成整图（可选，照片级）
+
+填入 **Google Gemini API Key**（aistudio.google.com 免费获取）后点
+**✦ Nano Banana 生成照片级材质平铺图**：以你上传的效果图为参考，调用
+Gemini 2.5 Flash Image 生成一张照片级材质平铺，自动设为底图，再叠加品牌 /
+色板 / 标签。这是最接近 Minotti 参考图那种「真实材质样块」效果的方式
+（叠层拼贴只是从你的图里裁材质，不会凭空生成新材质）。
+
+> ⚠ 浏览器直连仅适合本地自用；上线请走后端代理。Key 仅存于本机 `localStorage`。
+
 ## AI 文案（可选）
 
 填入 **Anthropic API Key** 后点 **✦ AI 生成文案**：用 Claude Vision 读图，自动产出

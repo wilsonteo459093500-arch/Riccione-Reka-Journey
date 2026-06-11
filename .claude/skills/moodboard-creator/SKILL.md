@@ -43,12 +43,26 @@ canvas — it is **WYSIWYG**. Sections:
 - **Restraint:** calm rotations, generous negative space, neutral natural
   palette (ivory / sand / taupe / oak / walnut / charcoal + one accent).
 
+## Two ways to get the board image
+
+- **Composite (default):** crop material close-ups from the user's uploads
+  and arrange them (叠层拼贴). No new pixels are synthesized.
+- **Generate photoreal (Nano Banana):** call **Gemini 2.5 Flash Image**
+  with the uploads as references to synthesize a true photorealistic
+  material flat-lay (real marble veining, boucle weave, wood grain), then
+  set it as the base layer so branding/palette/labels overlay on top. This
+  is the path that actually matches the Minotti reference look. Needs a
+  Google Gemini API key (browser-direct, stored in `localStorage`). Endpoint:
+  `generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent`.
+
 ## How to drive it
 
 1. Open `public/moodboard/index.html` (locally or via the deployed
    `/moodboard/` URL).
 2. Upload render(s) — multi-select, drag-drop, or `Ctrl+V` paste.
-3. Pick a layout: **叠层拼贴** (auto collage) or **整图底图** (full-image base).
+3. (Optional, recommended) **✦ Nano Banana 生成照片级材质平铺图** — needs a
+   Gemini key; generates a photoreal flat-lay and sets it as base.
+4. Pick a layout: **叠层拼贴** (auto collage) or **整图底图** (full-image base).
 4. (Optional) **✦ AI 生成文案** — needs an Anthropic API key (stored only in
    `localStorage`, browser-direct is local-use only). Uses Claude Vision to
    fill narrative, mood line, keywords, 6 color names, 7 material labels.
