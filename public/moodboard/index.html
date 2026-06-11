@@ -59,6 +59,9 @@ input[type=color]{width:28px;height:28px;border:none;background:none;padding:0;c
     </div>
     <div id="msg" class="msg" hidden></div>
 
+    <button id="genImgBtn" class="primary wfull" style="margin-top:8px">✦ Nano Banana 生成照片级材质平铺图</button>
+    <div class="note">用 Google Gemini 2.5 Flash Image（俗称 Nano Banana）：以你上传的效果图为参考，生成一张照片级材质平铺，自动设为底图，再叠加品牌 / 色板 / 标签。生成约 10–20 秒。</div>
+
     <div class="lab">版式</div>
     <div class="seg" id="layoutSeg">
       <button data-layout="stack" class="on">叠层拼贴</button>
@@ -96,6 +99,10 @@ input[type=color]{width:28px;height:28px;border:none;background:none;padding:0;c
 
     <div class="lab">底部品牌句</div>
     <input type="text" id="tagline">
+
+    <div class="lab">Google Gemini API Key（Nano Banana 生成整图用，存在本机 localStorage）</div>
+    <input type="password" id="geminiKey" placeholder="AIza...">
+    <div class="note">免费获取：<b>aistudio.google.com → Get API key</b>。⚠ 浏览器直连仅适合本地自用，上线请走后端代理。</div>
 
     <div class="lab">Anthropic API Key（仅「AI 生成文案」需要，存在本机 localStorage）</div>
     <input type="password" id="apiKey" placeholder="sk-ant-...">
@@ -142,6 +149,7 @@ const state = {
   materials: ["BOUCLÉ", "DARK WOOD", "WHITE OAK", "MARBLE", "TRAVERTINE", "BRONZE", "SMOKED GLASS"],
   tagline: "以木为语，与自然共生",
   apiKey: localStorage.getItem("sail_key") || "",
+  geminiKey: localStorage.getItem("sail_gemini_key") || "",
 };
 
 /* ── 拼贴版式（设计坐标，区域 40..520 × 150..770）──
@@ -542,6 +550,11 @@ $("apiKey").addEventListener("input", (e) => {
   state.apiKey = e.target.value.trim();
   localStorage.setItem("sail_key", state.apiKey);
 });
+$("geminiKey").value = state.geminiKey;
+$("geminiKey").addEventListener("input", (e) => {
+  state.geminiKey = e.target.value.trim();
+  localStorage.setItem("sail_gemini_key", state.geminiKey);
+});
 
 /* ── 色板 / 材质标签 UI ── */
 function renderPaletteUI() {
@@ -621,6 +634,65 @@ $("analyzeBtn").onclick = async () => {
     say("AI 分析完成 ✓");
   } catch (e) { say("AI 分析失败：" + e.message); }
   $("analyzeBtn").disabled = false;
+};
+
+/* ── Nano Banana 生成整图（Gemini 2.5 Flash Image，浏览器直连，需 Gemini key） ── */
+function genImagePrompt() {
+  return "Generate a photorealistic top-down editorial flat-lay MATERIAL & FINISH mood board " +
+    "for a high-end " + state.spaceType.toLowerCase() + " interior, " +
+    state.keywords.toLowerCase().split(" · ").join(", ") + " style. " +
+    "Arrange overlapping real physical material samples: " + state.materials.join(", ").toLowerCase() + ". " +
+    "Add a dried botanical branch and a small smoked-glass or ceramic object as styling. " +
+    "Honour this colour palette: " + state.palette.map((p) => p.name.toLowerCase() + " " + p.hex).join(", ") + ". " +
+    "Use the attached interior renders ONLY as colour / material / mood reference — reproduce their real textures and tones. " +
+    "Soft natural daylight from the upper-left, gentle long shadows, warm cream textured paper background. " +
+    "Ultra-detailed, magazine quality, vertical 3:4 composition. " +
+    "IMPORTANT: do NOT render any text, labels, logos or watermarks in the image.";
+}
+async function geminiGenerate(prompt, refsB64) {
+  const models = ["gemini-2.5-flash-image", "gemini-2.5-flash-image-preview"];
+  const parts = [{ text: prompt }, ...refsB64.map((d) => ({ inlineData: { mimeType: "image/jpeg", data: d } }))];
+  const body = JSON.stringify({
+    contents: [{ role: "user", parts }],
+    generationConfig: { responseModalities: ["IMAGE", "TEXT"] },
+  });
+  let lastErr = "";
+  for (const model of models) {
+    const url = "https://generativelanguage.googleapis.com/v1beta/models/" + model +
+      ":generateContent?key=" + encodeURIComponent(state.geminiKey);
+    const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body });
+    const data = await res.json().catch(() => ({}));
+    if (data.error) {
+      lastErr = data.error.message || ("HTTP " + res.status);
+      if (res.status === 404 || /not found|not supported|unsupported/i.test(lastErr)) continue; /* 换下一个模型 */
+      throw new Error(lastErr);
+    }
+    const partsOut = ((data.candidates || [])[0]?.content?.parts) || [];
+    const imgPart = partsOut.find((p) => p.inlineData || p.inline_data);
+    if (imgPart) {
+      const inl = imgPart.inlineData || imgPart.inline_data;
+      return "data:" + (inl.mimeType || inl.mime_type || "image/png") + ";base64," + inl.data;
+    }
+    lastErr = partsOut.map((p) => p.text).filter(Boolean).join(" ") || "模型未返回图片";
+  }
+  throw new Error(lastErr || "生成失败");
+}
+$("genImgBtn").onclick = async () => {
+  if (!state.images.length) return say("请先上传至少一张效果图作参考");
+  if (!state.geminiKey) return say("请先在下方填入 Google Gemini API Key");
+  say("Nano Banana 生成中…（约 10–20 秒）"); $("genImgBtn").disabled = true;
+  try {
+    const refs = state.images.slice(0, 3).map((i) => resizeJpeg(i.img, 1024).split(",")[1]);
+    const dataUrl = await geminiGenerate(genImagePrompt(), refs);
+    const img = await loadImg(dataUrl);
+    state.images.push({ src: dataUrl, img });
+    state.layout = "base";
+    state.baseIdx = state.images.length - 1;
+    [...$("layoutSeg").children].forEach((x) => x.classList.toggle("on", x.dataset.layout === "base"));
+    renderThumbs(); render();
+    say("Nano Banana 生成完成 ✓ 已设为底图（可在缩略图取消 / 切回叠层）");
+  } catch (e) { say("生成失败：" + e.message); }
+  $("genImgBtn").disabled = false;
 };
 
 /* ── 出图 Prompt（贴去建E网AI / 即梦 / MJ） ── */
