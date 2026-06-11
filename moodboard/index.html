@@ -1,0 +1,674 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="color-scheme" content="light"/>
+<meta name="description" content="SAIL 溪岸 Material Mood Board Generator — 顶级室内设计材质情绪板生成器 by Riccione Reka."/>
+<title>SAIL 溪岸 · Material Mood Board Generator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=DM+Sans:wght@400;500;600&display=swap"/>
+<style>
+:root{--paper:#f4efe6;--ink:#2e2a24;--fade:#8a7f6e;--line:#cfc3ae;--bg:#e7ddcd;--panel:#faf6ef;--accent:#3d4a3a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'DM Sans','Helvetica Neue',Arial,sans-serif;padding:16px 12px 60px}
+.wrap{max-width:560px;margin:0 auto}
+h1{font-family:'Fraunces',Georgia,serif;font-style:italic;font-weight:400;font-size:28px;text-align:center;margin:0;letter-spacing:.5px}
+h1 span{font-style:normal;font-size:18px}
+.sub{font-size:9px;letter-spacing:3px;color:var(--fade);text-align:center;margin:5px 0 14px}
+#board{width:100%;display:block;box-shadow:0 8px 30px rgba(46,42,36,.18);background:var(--paper)}
+.panel{background:var(--panel);border:1px solid var(--line);padding:16px;margin-top:16px}
+.row{display:flex;gap:8px}
+.lab{font-size:10px;letter-spacing:2px;color:var(--fade);margin:14px 0 6px;text-transform:uppercase}
+input[type=text],input[type=password],textarea{width:100%;background:var(--panel);border:1px solid var(--line);padding:8px 10px;font-family:'Fraunces',Georgia,serif;font-size:14px;color:var(--ink);outline:none}
+textarea{min-height:56px;resize:vertical}
+button,label.btn{flex:1;padding:11px 0;cursor:pointer;font-family:inherit;font-size:12px;letter-spacing:2px;border:1px solid var(--ink);background:transparent;color:var(--ink);text-align:center;transition:background .15s,color .15s}
+button:hover,label.btn:hover{background:rgba(46,42,36,.06)}
+.primary{background:var(--ink);color:var(--paper)}
+.primary:hover{background:#43392f;color:var(--paper)}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.thumbs{display:flex;gap:6px;flex-wrap:wrap}
+.thumb{position:relative;width:52px;height:52px;background-size:cover;background-position:center;cursor:pointer;outline:1px solid var(--line)}
+.thumb.base{outline:2px solid var(--ink)}
+.thumb .x{position:absolute;top:-6px;right:-6px;width:16px;height:16px;border-radius:50%;background:var(--ink);color:var(--paper);font-size:10px;line-height:16px;text-align:center}
+.msg{font-size:11px;color:#7a5c3a;margin-top:8px}
+.note{font-size:9.5px;color:var(--fade);margin-top:6px;line-height:1.6}
+.small{padding:5px 6px !important;font-size:10px !important;font-family:'DM Sans',Arial,sans-serif !important}
+.colorrow{display:flex;gap:6px;align-items:center}
+input[type=color]{width:28px;height:28px;border:none;background:none;padding:0;cursor:pointer}
+.wfull{width:100%;margin-top:8px}
+.seg{display:flex;gap:0;border:1px solid var(--line)}
+.seg button{border:none;border-right:1px solid var(--line);letter-spacing:1px;font-size:11px;padding:9px 0}
+.seg button:last-child{border-right:none}
+.seg button.on{background:var(--ink);color:var(--paper)}
+[hidden]{display:none !important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>sAil <span>溪岸</span></h1>
+  <div class="sub">MATERIAL MOOD BOARD GENERATOR · BY RICCIONE REKA</div>
+
+  <canvas id="board"></canvas>
+
+  <div class="panel">
+    <div class="row">
+      <label class="btn">＋ 上传效果图<input id="file" type="file" accept="image/*" multiple hidden></label>
+      <button id="analyzeBtn" class="primary">✦ AI 生成文案</button>
+    </div>
+    <div id="msg" class="msg" hidden></div>
+
+    <div class="lab">版式</div>
+    <div class="seg" id="layoutSeg">
+      <button data-layout="stack" class="on">叠层拼贴</button>
+      <button data-layout="base">整图底图</button>
+    </div>
+    <div class="note">「叠层拼贴」从图片自动裁出材质特写做高级拼贴；「整图底图」让你选一张建E网AI / 即梦出的整张平铺图占满拼贴区，本工具负责叠加品牌与信息排版。也支持拖拽 / Ctrl+V 粘贴图片。</div>
+
+    <div class="lab">已上传（叠层模式按上传顺序铺位；底图模式点选一张设为底图）</div>
+    <div id="thumbs" class="thumbs"></div>
+
+    <div class="lab">项目名称</div>
+    <input type="text" id="project">
+    <div class="row">
+      <div style="flex:1">
+        <div class="lab">空间类型</div>
+        <input type="text" id="spaceType">
+      </div>
+      <div style="flex:1.4">
+        <div class="lab">风格关键词</div>
+        <input type="text" id="keywords">
+      </div>
+    </div>
+
+    <div class="lab">英文叙述（MATERIAL PALETTE）</div>
+    <textarea id="narrative"></textarea>
+    <div class="lab">中文氛围句（MATERIALITY）</div>
+    <input type="text" id="moodCn">
+
+    <div class="lab">色板（自动取色，可改名 / 改色）</div>
+    <div id="paletteUI" class="grid3"></div>
+    <button id="repaletteBtn" class="wfull">↻ 从全部图片重新取色</button>
+
+    <div class="lab">材质标签（7 个：拼贴标注 + 底部材质条）</div>
+    <div id="materialsUI" class="grid3"></div>
+
+    <div class="lab">底部品牌句</div>
+    <input type="text" id="tagline">
+
+    <div class="lab">Anthropic API Key（仅「AI 生成文案」需要，存在本机 localStorage）</div>
+    <input type="password" id="apiKey" placeholder="sk-ant-...">
+    <div class="note">⚠ 浏览器直连仅适合本地自用；上线请改走后端代理，不要把 key 暴露在前端。</div>
+
+    <button id="promptBtn" class="wfull">✎ 出图 Prompt（建E网AI / 即梦 / MJ）</button>
+    <textarea id="promptBox" hidden style="min-height:150px;font-size:11px;font-family:'DM Sans',Arial,sans-serif;margin-top:8px"></textarea>
+    <button id="copyBtn" class="wfull" hidden>⧉ 复制 Prompt</button>
+
+    <button id="exportBtn" class="primary wfull" style="margin-top:16px;padding:14px 0">⤓ 导出高清 PNG（1500×2000 · 3:4）</button>
+  </div>
+</div>
+
+<script>
+/* ════════════════════════════════════════════════════════════
+   SAIL 溪岸 · Material Mood Board Generator
+   架构：单一渲染引擎 renderBoard(ctx, S)
+   —— 预览（屏幕 canvas）与导出（1500×2000 离屏 canvas）
+   共用同一套绘制代码，所见即所得。
+   设计坐标系固定 750 × 1000（3:4），S 为缩放倍率。
+   设计语言：Minotti 式材质平铺 — 自然光晕 + 柔影 + 编辑级衬线。
+   ════════════════════════════════════════════════════════════ */
+
+const $ = (id) => document.getElementById(id);
+const PAPER = "#f4efe6", INK = "#2e2a24", FADE = "#8a7f6e", LINE = "#cfc3ae";
+const SERIF = "'Fraunces', Georgia, serif";
+const SANS  = "'DM Sans', Arial, sans-serif";
+
+/* ── 全局状态 ── */
+const state = {
+  images: [],        // [{ src, img: HTMLImageElement }]
+  layout: "stack",   // "stack" 叠层拼贴 | "base" 整图底图
+  baseIdx: null,     // 整图底图模式下选中的图
+  project: "Tuai Timur Residence — Setia Alam",
+  spaceType: "WHOLE-HOME CUSTOM",
+  keywords: "NATURAL MINIMAL · WABI-SABI · WARM WOOD",
+  narrative: "A refined selection of materials, textures and finishes that embody natural elegance and timeless comfort.",
+  moodCn: "自然的木与石，在静默中相互映照，让家回到温润的本质。",
+  palette: [
+    { hex: "#efe7da", name: "IVORY" }, { hex: "#d8c9b2", name: "SAND" },
+    { hex: "#b3a48e", name: "TAUPE" }, { hex: "#9a7b56", name: "OAK" },
+    { hex: "#6b4f35", name: "WALNUT" }, { hex: "#3a322a", name: "CHARCOAL" },
+  ],
+  materials: ["BOUCLÉ", "DARK WOOD", "WHITE OAK", "MARBLE", "TRAVERTINE", "BRONZE", "SMOKED GLASS"],
+  tagline: "以木为语，与自然共生",
+  apiKey: localStorage.getItem("sail_key") || "",
+};
+
+/* ── 拼贴版式（设计坐标，区域 40..520 × 150..770）──
+   数组顺序 = 由后到前的图层（先画的在底）。
+   x,y,w,h 位置尺寸 | rot 旋转角 | zoom 取材放大倍率
+   f 取材焦点 [0-1] | li 在样块下方标注 materials[li] */
+const SWATCHES = [
+  { x: 248, y: 198, w: 228, h: 312, rot: -0.8, zoom: 2.2, f: [0.50, 0.52], li: 3 }, /* 大理石主板（底） */
+  { x:  72, y: 178, w: 172, h: 252, rot: -1.6, zoom: 3.0, f: [0.30, 0.30] },        /* 立绒 高条 */
+  { x: 166, y: 160, w: 192, h: 174, rot:  1.2, zoom: 3.4, f: [0.66, 0.24], li: 0 }, /* 圈圈绒 顶 */
+  { x:  98, y: 338, w: 150, h: 210, rot:  1.2, zoom: 3.6, f: [0.20, 0.70], li: 1 }, /* 深木 */
+  { x: 186, y: 430, w: 162, h: 162, rot: -2.0, zoom: 3.8, f: [0.60, 0.80], li: 4 }, /* 洞石 */
+  { x: 330, y: 468, w: 150, h: 176, rot:  1.8, zoom: 3.2, f: [0.80, 0.50], li: 5 }, /* 石/铜 */
+  { x:  58, y: 504, w: 152, h: 108, rot: -1.0, zoom: 3.0, f: [0.40, 0.40] },        /* 小样块 */
+];
+const STRIP_F = [[0.2,0.3],[0.5,0.2],[0.8,0.4],[0.3,0.7],[0.6,0.6],[0.85,0.8],[0.45,0.45]];
+
+/* ── 工具函数 ── */
+const loadImg = (src) => new Promise((res, rej) => {
+  const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src;
+});
+const lum = (hex) => {
+  const n = parseInt(hex.slice(1), 16);
+  return 0.299*(n>>16) + 0.587*((n>>8)&255) + 0.114*(n&255);
+};
+const cdist = (a, b) => {
+  const x = parseInt(a.slice(1),16), y = parseInt(b.slice(1),16);
+  const dr=(x>>16)-(y>>16), dg=((x>>8)&255)-((y>>8)&255), db=(x&255)-(y&255);
+  return Math.sqrt(dr*dr+dg*dg+db*db);
+};
+const guessName = (hex) => {
+  const l = lum(hex), n = parseInt(hex.slice(1),16), warm = (n>>16)-(n&255);
+  if (l > 215) return "IVORY";
+  if (l > 180) return warm > 18 ? "SAND" : "MIST";
+  if (l > 140) return warm > 25 ? "OAK" : "TAUPE";
+  if (l > 95)  return warm > 30 ? "WALNUT" : "STONE";
+  if (l > 55)  return warm > 20 ? "BRONZE" : "UMBER";
+  return "CHARCOAL";
+};
+
+/* 字体预加载：canvas 必须等字体就绪，否则导出会回退默认字形 */
+async function ensureFonts() {
+  if (!document.fonts) return;
+  try {
+    await Promise.all([
+      document.fonts.load("400 40px 'Fraunces'"),
+      document.fonts.load("italic 400 40px 'Fraunces'"),
+      document.fonts.load("500 40px 'Fraunces'"),
+      document.fonts.load("400 20px 'DM Sans'"),
+      document.fonts.load("500 20px 'DM Sans'"),
+    ]);
+    await document.fonts.ready;
+  } catch (e) {}
+}
+
+/* 从已加载图片提取 6 色（5-bit 量化 + 去背景纸色 / 高光 + 去近似 + 按明度排序） */
+function extractPalette(imgs) {
+  const bins = new Map();
+  imgs.slice(0, 6).forEach((img) => {
+    const c = document.createElement("canvas");
+    const sc = 96 / Math.max(img.width, img.height);
+    c.width = Math.max(1, Math.round(img.width*sc));
+    c.height = Math.max(1, Math.round(img.height*sc));
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+    const d = ctx.getImageData(0, 0, c.width, c.height).data;
+    for (let i = 0; i < d.length; i += 4) {
+      const r = d[i], g = d[i+1], b = d[i+2];
+      const l = 0.299*r + 0.587*g + 0.114*b;
+      if (l > 246 || l < 10) continue;                 /* 跳过过曝背景 / 纯黑 */
+      const key = (r>>3)+","+(g>>3)+","+(b>>3);          /* 5-bit 分箱，更细腻 */
+      const e = bins.get(key) || { r:0,g:0,b:0,n:0 };
+      e.r+=r; e.g+=g; e.b+=b; e.n++;
+      bins.set(key, e);
+    }
+  });
+  const sorted = [...bins.values()].sort((a,b)=>b.n-a.n).map((e)=>{
+    const h=(v)=>Math.round(v/e.n).toString(16).padStart(2,"0");
+    return "#"+h(e.r)+h(e.g)+h(e.b);
+  });
+  const picked = [];
+  for (const hex of sorted) {
+    if (cdist(hex, PAPER) < 22) continue;               /* 丢掉接近纸面背景的色 */
+    if (picked.every((p)=>cdist(p,hex)>44)) picked.push(hex);
+    if (picked.length === 6) break;
+  }
+  while (picked.length < 6) picked.push("#bfae97");
+  picked.sort((a,b)=>lum(b)-lum(a));
+  return picked.map((hex)=>({ hex, name: guessName(hex) }));
+}
+
+/* 中英混排自动换行 */
+function wrapMixed(ctx, text, x, y, maxW, lh) {
+  const tokens = String(text).split(/(\s+)/).flatMap((t) =>
+    /[一-鿿　-〿＀-￯]/.test(t) ? t.split("") : [t]
+  );
+  let line = "";
+  for (const t of tokens) {
+    const cand = line + t;
+    if (ctx.measureText(cand).width > maxW && line.trim()) {
+      ctx.fillText(line.trimEnd(), x, y); y += lh; line = t.trimStart();
+    } else line = cand;
+  }
+  if (line.trim()) { ctx.fillText(line.trimEnd(), x, y); y += lh; }
+  return y;
+}
+
+/* 在 (0,0) 为中心绘制 img 的局部放大裁切 */
+function drawCrop(ctx, img, w, h, zoom, fx, fy) {
+  let srcW = img.width / zoom;
+  let srcH = srcW * (h / w);
+  if (srcH > img.height) { srcH = img.height / zoom; srcW = srcH * (w / h); }
+  srcW = Math.min(srcW, img.width); srcH = Math.min(srcH, img.height);
+  const sx = (img.width - srcW) * fx, sy = (img.height - srcH) * fy;
+  ctx.drawImage(img, sx, sy, srcW, srcH, -w/2, -h/2, w, h);
+}
+function drawCover(ctx, img, x, y, w, h) {
+  const ir = img.width / img.height, r = w / h;
+  let sw, sh, sx, sy;
+  if (ir > r) { sh = img.height; sw = sh*r; sx = (img.width-sw)/2; sy = 0; }
+  else { sw = img.width; sh = sw/r; sx = 0; sy = (img.height-sh)/2; }
+  ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
+}
+
+/* 纸面颗粒噪点（很轻） */
+function paperNoise(ctx, W, H) {
+  const n = Math.floor((W * H) / 900);
+  for (let i = 0; i < n; i++) {
+    ctx.fillStyle = Math.random() < 0.5 ? "rgba(46,42,36,.025)" : "rgba(255,255,255,.05)";
+    ctx.fillRect(Math.random()*W, Math.random()*H, 1.2, 1.2);
+  }
+}
+
+/* 自然光晕：左上柔光 + 右下轻暗角，让平铺读起来像被自然光拍下 */
+function daylight(ctx, W, H) {
+  const g = ctx.createLinearGradient(0, 0, W*0.85, H*0.55);
+  g.addColorStop(0,   "rgba(255,252,244,.55)");
+  g.addColorStop(0.38,"rgba(255,250,241,.12)");
+  g.addColorStop(1,   "rgba(150,135,112,0)");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  const v = ctx.createRadialGradient(W*0.74, H*0.82, H*0.12, W*0.74, H*0.82, H*0.72);
+  v.addColorStop(0, "rgba(58,50,38,0)");
+  v.addColorStop(1, "rgba(58,50,38,.08)");
+  ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+}
+
+/* 顶部细叶枝（olive / eucalyptus 线描，编辑级点缀，设计坐标） */
+function drawSprig(ctx, S) {
+  ctx.save();
+  ctx.scale(S, S);
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  /* 主茎 */
+  const stem = new Path2D("M300 540 C 326 452, 350 356, 396 268 C 420 222, 446 188, 466 154");
+  ctx.strokeStyle = "rgba(116,126,92,.92)"; ctx.lineWidth = 1.5; ctx.stroke(stem);
+  /* 一根次茎 */
+  const twig = new Path2D("M356 360 C 348 338, 346 320, 352 300");
+  ctx.lineWidth = 1.0; ctx.stroke(twig);
+  /* 叶子：沿茎交替分布 */
+  const leaf = (x, y, ang, len, wd, alpha) => {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+    ctx.fillStyle = "rgba(126,140,100," + alpha + ")";
+    ctx.beginPath(); ctx.ellipse(len/2, 0, len/2, wd, 0, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = "rgba(88,98,68," + (alpha*0.5) + ")"; ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(len, 0); ctx.stroke();
+    ctx.restore();
+  };
+  const nodes = [
+    [322,452,-62],[336,406,-63],[350,360,-64],[366,316,-66],
+    [384,276,-68],[404,238,-70],[426,202,-72],[448,170,-74],
+  ];
+  nodes.forEach(([x,y,deg], i) => {
+    const a = deg * Math.PI/180;
+    const side = i % 2 ? 1 : -1;
+    leaf(x, y, a + side*1.15, 13 - i*0.55, 4.3 - i*0.14, 0.9 - i*0.02);
+  });
+  ctx.fillStyle = "rgba(150,160,118,.9)";
+  ctx.beginPath(); ctx.arc(466, 154, 2.6, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+/* ════════ 核心：渲染整张情绪板 ════════ */
+function renderBoard(ctx, S) {
+  const W = 750*S, H = 1000*S;
+  const ls = (v) => { try { ctx.letterSpacing = v + "px"; } catch (e) {} };
+  const noShadow = () => { ctx.shadowColor = "transparent"; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0; ctx.shadowOffsetX = 0; };
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, H);
+  paperNoise(ctx, W, H);
+  daylight(ctx, W, H);
+  ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+
+  /* ── 头部 ── */
+  ctx.fillStyle = INK;
+  ctx.font = "italic 400 " + 38*S + "px " + SERIF; ls(0);
+  ctx.fillText("sAil", 44*S, 80*S);
+  ctx.font = "400 " + 24*S + "px " + SERIF;
+  ctx.fillText(" 溪岸", 44*S + ctx.measureText("sAil").width + 16*S, 80*S);
+  ctx.font = "500 " + 9.5*S + "px " + SANS; ls(2*S); ctx.fillStyle = FADE;
+  ctx.fillText("BY RICCIONE REKA", 46*S, 98*S);
+  ctx.fillStyle = INK; ctx.font = "italic 400 " + 15*S + "px " + SERIF; ls(0);
+  ctx.fillText(state.project, 46*S, 122*S);
+  ctx.font = "500 " + 8.5*S + "px " + SANS; ls(2.5*S); ctx.fillStyle = FADE;
+  ctx.fillText(state.spaceType + "  ·  MOOD REFERENCE", 46*S, 140*S);
+
+  /* ── 拼贴区 ── */
+  const els = state.images.map((i) => i.img);
+  if (state.layout === "base" && state.baseIdx !== null && els[state.baseIdx]) {
+    ctx.shadowColor = "rgba(60,50,40,.22)"; ctx.shadowBlur = 30*S; ctx.shadowOffsetY = 14*S;
+    drawCover(ctx, els[state.baseIdx], 40*S, 152*S, 480*S, 618*S);
+    noShadow();
+    ctx.strokeStyle = "rgba(0,0,0,.05)"; ctx.lineWidth = S;
+    ctx.strokeRect(40*S, 152*S, 480*S, 618*S);
+  } else if (els.length) {
+    SWATCHES.forEach((s, i) => {
+      const img = els[i % els.length];
+      ctx.save();
+      ctx.translate((s.x + s.w/2)*S, (s.y + s.h/2)*S);
+      ctx.rotate((s.rot * Math.PI) / 180);
+      ctx.shadowColor = "rgba(60,50,40,.20)"; ctx.shadowBlur = 30*S; ctx.shadowOffsetX = 6*S; ctx.shadowOffsetY = 16*S;
+      ctx.fillStyle = "#000";
+      ctx.fillRect(-s.w/2*S, -s.h/2*S, s.w*S, s.h*S);   /* 投影载体 */
+      noShadow();
+      drawCrop(ctx, img, s.w*S, s.h*S, s.zoom, s.f[0], s.f[1]);
+      ctx.strokeStyle = "rgba(255,255,255,.10)"; ctx.lineWidth = 1.5*S;       /* 内高光边 */
+      ctx.strokeRect(-s.w/2*S + S, -s.h/2*S + S, s.w*S - 2*S, s.h*S - 2*S);
+      ctx.strokeStyle = "rgba(0,0,0,.06)"; ctx.lineWidth = S;
+      ctx.strokeRect(-s.w/2*S, -s.h/2*S, s.w*S, s.h*S);
+      ctx.restore();
+    });
+    /* 细叶枝（在样块之上、标注之下） */
+    drawSprig(ctx, S);
+    /* 标注统一最后画，避免被后层样块盖住 */
+    ctx.fillStyle = "#5c5347"; ls(1.5*S); ctx.textAlign = "center";
+    SWATCHES.forEach((s) => {
+      if (s.li === undefined) return;
+      ctx.font = "500 " + 7.5*S + "px " + SANS;
+      ctx.fillText(state.materials[s.li] || "", (s.x + s.w/2)*S, (s.y + s.h + 16)*S);
+    });
+    ctx.textAlign = "left";
+  } else {
+    ctx.fillStyle = "#e9e0d0"; ctx.fillRect(40*S, 152*S, 480*S, 618*S);
+    ctx.fillStyle = FADE; ctx.font = "400 " + 12*S + "px " + SERIF; ls(2*S);
+    ctx.textAlign = "center";
+    ctx.fillText("上传效果图后自动生成材质拼贴", 280*S, 465*S);
+    ctx.textAlign = "left";
+  }
+
+  /* ── 右侧信息栏 ── */
+  const cx = 548*S, cw = 162*S;
+  const heading = (t, y) => {
+    ctx.fillStyle = INK; ctx.font = "500 " + 9.5*S + "px " + SANS; ls(2.5*S);
+    ctx.fillText(t, cx, y);
+    ctx.strokeStyle = LINE; ctx.lineWidth = S;
+    ctx.beginPath(); ctx.moveTo(cx, y + 9*S); ctx.lineTo(cx + 34*S, y + 9*S); ctx.stroke();
+  };
+  heading("MATERIAL PALETTE", 168*S);
+  ctx.font = "400 " + 10.5*S + "px " + SERIF; ls(0); ctx.fillStyle = "#4c443a";
+  wrapMixed(ctx, state.narrative, cx, 196*S, cw, 16*S);
+
+  heading("COLOR PALETTE", 340*S);
+  state.palette.forEach((p, i) => {
+    const col = i % 3, row = Math.floor(i / 3);
+    const ccx = cx + col*56*S + 15*S, ccy = 384*S + row*64*S;
+    ctx.beginPath(); ctx.arc(ccx, ccy, 15*S, 0, Math.PI*2);
+    ctx.fillStyle = p.hex; ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,.08)"; ctx.lineWidth = S; ctx.stroke();
+    ctx.fillStyle = FADE; ctx.font = "500 " + 6.5*S + "px " + SANS; ls(0.5*S);
+    ctx.textAlign = "center"; ctx.fillText(p.name, ccx, ccy + 27*S); ctx.textAlign = "left";
+  });
+
+  heading("MATERIALITY", 560*S);
+  ctx.font = "400 " + 11.5*S + "px " + SERIF; ls(0.5*S); ctx.fillStyle = "#4c443a";
+  const yy = wrapMixed(ctx, state.moodCn, cx, 590*S, cw, 20*S);
+  ctx.font = "500 " + 8*S + "px " + SANS; ls(1.5*S); ctx.fillStyle = FADE;
+  wrapMixed(ctx, state.keywords, cx, yy + 8*S, cw, 14*S);
+
+  /* ── 底部材质条 ── */
+  const n = 7, gap = 10*S, x0 = 44*S, totalW = 662*S;
+  const tw = (totalW - (n-1)*gap) / n, ty = 806*S;
+  for (let i = 0; i < n; i++) {
+    if (els.length) {
+      const img = els[i % els.length];
+      ctx.save();
+      ctx.translate(x0 + i*(tw+gap) + tw/2, ty + tw/2);
+      ctx.shadowColor = "rgba(60,50,40,.16)"; ctx.shadowBlur = 14*S; ctx.shadowOffsetY = 7*S;
+      ctx.fillStyle = "#000"; ctx.fillRect(-tw/2, -tw/2, tw, tw);
+      noShadow();
+      drawCrop(ctx, img, tw, tw, 3.5, STRIP_F[i][0], STRIP_F[i][1]);
+      ctx.strokeStyle = "rgba(0,0,0,.06)"; ctx.lineWidth = S;
+      ctx.strokeRect(-tw/2, -tw/2, tw, tw);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = "#e9e0d0";
+      ctx.fillRect(x0 + i*(tw+gap), ty, tw, tw);
+    }
+    ctx.fillStyle = FADE; ctx.font = "500 " + 6.5*S + "px " + SANS; ls(0.8*S);
+    ctx.textAlign = "center";
+    ctx.fillText(state.materials[i] || "", x0 + i*(tw+gap) + tw/2, ty + tw + 16*S);
+    ctx.textAlign = "left";
+  }
+
+  /* ── 底部品牌 ── */
+  ctx.textAlign = "center";
+  ctx.fillStyle = INK; ctx.font = "400 " + 14*S + "px " + SERIF; ls(4*S);
+  ctx.fillText(state.tagline, W/2, 952*S);
+  ctx.fillStyle = FADE; ctx.font = "500 " + 7.5*S + "px " + SANS; ls(2*S);
+  ctx.fillText("SAIL BY RICCIONE REKA  ·  WWW.SAILDZ.COM  ·  @SAIL_MALAYSIA", W/2, 974*S);
+  ctx.textAlign = "left";
+}
+
+/* ── 预览渲染（响应式 + 高分屏） ── */
+const board = $("board");
+function render() {
+  const cssW = board.clientWidth || 560;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  board.width = Math.round(cssW * dpr);
+  board.height = Math.round(cssW * (4/3) * dpr);
+  board.style.height = cssW * (4/3) + "px";
+  renderBoard(board.getContext("2d"), board.width / 750);
+}
+window.addEventListener("resize", render);
+
+/* ── 消息提示 ── */
+function say(t) { const m = $("msg"); m.hidden = !t; m.textContent = t; }
+
+/* ── 版式切换 ── */
+$("layoutSeg").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  state.layout = b.dataset.layout;
+  [...$("layoutSeg").children].forEach((x) => x.classList.toggle("on", x === b));
+  if (state.layout === "base" && state.baseIdx === null && state.images.length) state.baseIdx = 0;
+  renderThumbs(); render();
+});
+
+/* ── 图片管理 ── */
+async function addSrc(src) {
+  const img = await loadImg(src);
+  state.images.push({ src, img });
+  if (state.images.length === 1) state.palette = extractPalette([img]);
+  renderThumbs(); renderPaletteUI(); render();
+}
+function readFiles(files) {
+  [...files].forEach((f) => {
+    const r = new FileReader();
+    r.onload = () => addSrc(r.result);
+    r.readAsDataURL(f);
+  });
+}
+$("file").addEventListener("change", (e) => { readFiles(e.target.files); e.target.value = ""; });
+window.addEventListener("paste", (e) => {
+  [...(e.clipboardData?.items || [])]
+    .filter((it) => it.type.startsWith("image"))
+    .forEach((it) => readFiles([it.getAsFile()]));
+});
+board.addEventListener("dragover", (e) => e.preventDefault());
+board.addEventListener("drop", (e) => { e.preventDefault(); readFiles(e.dataTransfer.files); });
+
+function renderThumbs() {
+  const box = $("thumbs"); box.innerHTML = "";
+  const baseMode = state.layout === "base";
+  state.images.forEach((im, i) => {
+    const d = document.createElement("div");
+    d.className = "thumb" + (baseMode && i === state.baseIdx ? " base" : "");
+    d.style.backgroundImage = "url(" + im.src + ")";
+    d.title = baseMode ? "点选设为底图" : "";
+    d.onclick = () => {
+      if (!baseMode) return;
+      state.baseIdx = state.baseIdx === i ? null : i;
+      renderThumbs(); render();
+    };
+    const x = document.createElement("div");
+    x.className = "x"; x.textContent = "✕";
+    x.onclick = (e) => {
+      e.stopPropagation();
+      state.images.splice(i, 1);
+      if (state.baseIdx !== null) {
+        if (state.baseIdx === i) state.baseIdx = null;
+        else if (state.baseIdx > i) state.baseIdx--;
+      }
+      renderThumbs(); render();
+    };
+    d.appendChild(x); box.appendChild(d);
+  });
+}
+
+/* ── 文本输入绑定 ── */
+[["project","project"],["spaceType","spaceType"],["keywords","keywords"],
+ ["narrative","narrative"],["moodCn","moodCn"],["tagline","tagline"]].forEach(([id, key]) => {
+  $(id).value = state[key];
+  $(id).addEventListener("input", (e) => {
+    state[key] = key === "spaceType" ? e.target.value.toUpperCase() : e.target.value;
+    render();
+  });
+});
+$("apiKey").value = state.apiKey;
+$("apiKey").addEventListener("input", (e) => {
+  state.apiKey = e.target.value.trim();
+  localStorage.setItem("sail_key", state.apiKey);
+});
+
+/* ── 色板 / 材质标签 UI ── */
+function renderPaletteUI() {
+  const box = $("paletteUI"); box.innerHTML = "";
+  state.palette.forEach((p, i) => {
+    const row = document.createElement("div"); row.className = "colorrow";
+    const c = document.createElement("input"); c.type = "color"; c.value = p.hex;
+    c.oninput = () => { state.palette[i].hex = c.value; render(); };
+    const t = document.createElement("input"); t.type = "text"; t.value = p.name; t.className = "small";
+    t.oninput = () => { state.palette[i].name = t.value.toUpperCase(); render(); };
+    row.append(c, t); box.appendChild(row);
+  });
+}
+function renderMaterialsUI() {
+  const box = $("materialsUI"); box.innerHTML = "";
+  state.materials.forEach((m, i) => {
+    const t = document.createElement("input"); t.type = "text"; t.value = m; t.className = "small";
+    t.oninput = () => { state.materials[i] = t.value.toUpperCase(); render(); };
+    box.appendChild(t);
+  });
+}
+$("repaletteBtn").onclick = () => {
+  if (!state.images.length) return say("请先上传图片");
+  state.palette = extractPalette(state.images.map((i) => i.img));
+  renderPaletteUI(); render();
+};
+
+/* ── AI 文案（Claude Vision，浏览器直连，需 API key） ── */
+const resizeJpeg = (img, max = 800) => {
+  const sc = Math.min(1, max / Math.max(img.width, img.height));
+  const c = document.createElement("canvas");
+  c.width = Math.round(img.width*sc); c.height = Math.round(img.height*sc);
+  c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", 0.82);
+};
+$("analyzeBtn").onclick = async () => {
+  if (!state.images.length) return say("请先上传方案效果图");
+  if (!state.apiKey) return say("请先在下方填入 Anthropic API Key");
+  say("分析中…"); $("analyzeBtn").disabled = true;
+  try {
+    const content = [
+      ...state.images.slice(0, 3).map((i) => ({
+        type: "image",
+        source: { type: "base64", media_type: "image/jpeg", data: resizeJpeg(i.img).split(",")[1] },
+      })),
+      { type: "text", text:
+        'You are a senior interior mood-board art director for SAIL (natural-minimalist whole-home custom furniture). ' +
+        'These are renders from a client proposal "' + state.project + '" (' + state.spaceType + '). ' +
+        'Extracted colour hexes in order: ' + state.palette.map((p) => p.hex).join(", ") + '.\n' +
+        'Respond ONLY with raw JSON, no markdown fences, keys: ' +
+        'narrative_en (max 22 words, refined editorial tone, like a Minotti material palette caption), ' +
+        'mood_cn (一句16-24字的中文氛围短句，自然、宁静、克制), ' +
+        'style_keywords (array of 3 short uppercase English phrases), ' +
+        'color_names (array of exactly 6 uppercase English colour names, max 2 words, matching the hexes in order), ' +
+        'material_labels (array of exactly 7 uppercase English material/finish names actually visible in these renders).' },
+    ];
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": state.apiKey,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true",
+      },
+      body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: [{ role: "user", content }] }),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message || "API error");
+    const text = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n");
+    const j = JSON.parse(text.replace(/```json|```/g, "").trim());
+    if (j.narrative_en) { state.narrative = j.narrative_en; $("narrative").value = j.narrative_en; }
+    if (j.mood_cn) { state.moodCn = j.mood_cn; $("moodCn").value = j.mood_cn; }
+    if (Array.isArray(j.style_keywords)) { state.keywords = j.style_keywords.join(" · "); $("keywords").value = state.keywords; }
+    if (Array.isArray(j.color_names)) state.palette.forEach((c, i) => { if (j.color_names[i]) c.name = j.color_names[i].toUpperCase(); });
+    if (Array.isArray(j.material_labels)) state.materials = state.materials.map((x, i) => (j.material_labels[i] || x).toUpperCase());
+    renderPaletteUI(); renderMaterialsUI(); render();
+    say("AI 分析完成 ✓");
+  } catch (e) { say("AI 分析失败：" + e.message); }
+  $("analyzeBtn").disabled = false;
+};
+
+/* ── 出图 Prompt（贴去建E网AI / 即梦 / MJ） ── */
+function genPrompt() {
+  return "【建E网AI / 即梦 / Midjourney 出图 Prompt】\n\n" +
+    "EN:\nTop-down editorial flat-lay material board for a high-end " + state.spaceType.toLowerCase() +
+    " interior proposal, " + state.keywords.toLowerCase().split(" · ").join(", ") + " style. " +
+    "Overlapping physical samples of " + state.materials.join(", ").toLowerCase() +
+    ", with a dried botanical branch and a small ceramic object. " +
+    "Colour palette: " + state.palette.map((p) => p.name.toLowerCase() + " (" + p.hex + ")").join(", ") + ". " +
+    "Soft natural daylight, gentle shadows, warm cream textured paper background, photorealistic, ultra detailed, vertical 3:4 --ar 3:4\n\n" +
+    "中文：\n竖版3:4高端室内设计物料情绪板，俯拍平铺构图：" + state.materials.join("、") +
+    "等真实材质样块层叠摆放，配干花枝与陶器点缀，" + state.keywords.replace(/ · /g, "、") +
+    "风格，色调为" + state.palette.map((p) => p.name).join("、") +
+    "，柔和自然光与轻投影，米白纸面背景，照片级真实感，专业提案物料板。";
+}
+$("promptBtn").onclick = () => {
+  const box = $("promptBox"), cp = $("copyBtn");
+  box.hidden = !box.hidden; cp.hidden = box.hidden;
+  if (!box.hidden) box.value = genPrompt();
+};
+$("copyBtn").onclick = async () => {
+  try { await navigator.clipboard.writeText(genPrompt()); say("Prompt 已复制 ✓"); }
+  catch (e) { $("promptBox").select(); say("请手动复制选中文本"); }
+};
+
+/* ── 导出高清 PNG ── */
+$("exportBtn").onclick = async () => {
+  if (!state.images.length) return say("请先上传图片");
+  say("生成高清图中…");
+  await ensureFonts();
+  const cv = document.createElement("canvas");
+  cv.width = 1500; cv.height = 2000;          /* 750×1000 × 2 */
+  renderBoard(cv.getContext("2d"), 2);
+  const a = document.createElement("a");
+  a.download = "SAIL-moodboard.png";
+  a.href = cv.toDataURL("image/png");
+  a.click();
+  say("已导出 PNG ✓");
+};
+
+/* ── 启动 ── */
+(async () => {
+  renderPaletteUI(); renderMaterialsUI(); renderThumbs();
+  render();                 /* 先画一帧，避免白屏 */
+  await ensureFonts();
+  render();                 /* 字体就绪后重画，确保字形正确 */
+})();
+</script>
+</body>
+</html>
