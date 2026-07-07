@@ -16,6 +16,7 @@ import TeamView from './components/team/TeamView.jsx';
 import RisksView from './components/risks/RisksView.jsx';
 import BriefingView from './components/briefing/BriefingView.jsx';
 import ClientShareView from './components/client/ClientShareView.jsx';
+import QuotationView from './components/quote/QuotationView.jsx';
 
 function AppInner({ repo, user, onSignOut }) {
   const toast = useToast();
@@ -73,6 +74,8 @@ function AppInner({ repo, user, onSignOut }) {
           <div className="text-center py-20" style={{ color: T.inkSoft }}>
             <div className="font-display text-2xl">载入中…</div>
           </div>
+        ) : view === 'quote' ? (
+          <QuotationView />
         ) : projects.length === 0 ? (
           <div className="max-w-7xl mx-auto px-6 lg:px-10 py-10">
             <EmptyState onLoadSample={loadSample} onNew={() => setShowNew(true)} onSeeMethod={() => setView('method')} />
