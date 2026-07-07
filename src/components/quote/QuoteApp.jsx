@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Search, Trash2, Copy, Calculator, FileText } from 'lucide-react';
+import { Plus, Search, Trash2, Copy, Layers, Calculator, FileText } from 'lucide-react';
 import { T } from '../../theme.js';
 import { newId } from '../../utils/helpers.js';
 import { UIProvider, useToast, useConfirm } from '../ui/UIProvider.jsx';
@@ -14,7 +14,7 @@ const nowTs = () => Date.now();
 function newRecord() {
   return {
     id: newId('rec'),
-    meta: { name: '', location: '', ref: '', pic: '', date: todayISO() },
+    meta: { name: '', location: '', ref: '', pic: '', version: '1', date: todayISO() },
     zones: [blankZone('')],
     adjustPct: 0,
     createdAt: nowTs(),
@@ -81,11 +81,22 @@ function Inner() {
     records: s.records.map((r) => (r.id === s.activeId ? { ...r, ...doc, updatedAt: nowTs() } : r)),
   }));
 
+  // 复制：同户型换客户 —— 保留全部内容，名称加「(Copy)」，版本重置为 1。
   const duplicate = (id) => setStore((s) => {
     const src = s.records.find((r) => r.id === id);
     if (!src) return s;
     const copy = { ...structuredClone(src), id: newId('rec'), createdAt: nowTs(), updatedAt: nowTs() };
-    copy.meta = { ...copy.meta, name: (copy.meta.name || '未命名') + ' (Copy 副本)' };
+    copy.meta = { ...copy.meta, name: (copy.meta.name || '未命名') + ' (Copy 副本)', version: '1' };
+    return { records: [copy, ...s.records], activeId: copy.id };
+  });
+
+  // 新版本：同客户改版 —— 保留名称，版本号 +1（如非数字则追加 -2）。
+  const newVersion = (id) => setStore((s) => {
+    const src = s.records.find((r) => r.id === id);
+    if (!src) return s;
+    const copy = { ...structuredClone(src), id: newId('rec'), createdAt: nowTs(), updatedAt: nowTs() };
+    const cur = parseInt(src.meta.version, 10);
+    copy.meta = { ...copy.meta, version: Number.isFinite(cur) ? String(cur + 1) : `${src.meta.version || '1'}-2`, date: todayISO() };
     return { records: [copy, ...s.records], activeId: copy.id };
   });
 
@@ -150,13 +161,19 @@ function Inner() {
                   style={{ background: on ? T.sand : T.cream, border: `1px solid ${on ? T.wood : T.lineSoft}` }}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="font-medium truncate" style={{ color: T.ink }}>{r.meta.name || 'Untitled 未命名客户'}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium truncate" style={{ color: T.ink }}>{r.meta.name || 'Untitled 未命名客户'}</span>
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-full shrink-0"
+                          style={{ background: T.sand, color: T.inkSoft }}>Rev {r.meta.version || '1'}</span>
+                      </div>
                       <div className="text-xs truncate" style={{ color: T.inkSoft }}>{r.meta.location || '—'}</div>
                     </div>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={(e) => { e.stopPropagation(); duplicate(r.id); }} title="复制"
+                      <button onClick={(e) => { e.stopPropagation(); newVersion(r.id); }} title="New version 新版本 (+1)"
+                        style={{ color: T.inkSoft }}><Layers size={13} /></button>
+                      <button onClick={(e) => { e.stopPropagation(); duplicate(r.id); }} title="Duplicate 复制 (换客户)"
                         style={{ color: T.inkSoft }}><Copy size={13} /></button>
-                      <button onClick={(e) => { e.stopPropagation(); remove(r.id); }} title="删除"
+                      <button onClick={(e) => { e.stopPropagation(); remove(r.id); }} title="Delete 删除"
                         style={{ color: T.terra }}><Trash2 size={13} /></button>
                     </div>
                   </div>

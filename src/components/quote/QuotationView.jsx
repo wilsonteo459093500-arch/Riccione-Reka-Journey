@@ -65,11 +65,11 @@ export default function QuotationView({ doc, onChange }) {
       {/* ===== 左侧：编辑区 ===== */}
       <div className="space-y-6">
         {/* 客户信息 */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 rounded"
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 p-4 rounded"
           style={{ background: T.cream, border: `1px solid ${T.lineSoft}` }}>
           {[
             ['Name 客户', 'name'], ['Location 地点', 'location'],
-            ['Ref 编号', 'ref'], ['PIC 负责人', 'pic'],
+            ['Ref 编号', 'ref'], ['PIC 负责人', 'pic'], ['Version 版本', 'version'],
           ].map(([label, key]) => (
             <div key={key}>
               <label className="block text-[9px] uppercase tracking-widest mb-1" style={{ color: T.inkSoft }}>{label}</label>
@@ -230,6 +230,7 @@ function buildTextQuote(meta, computed) {
   L.push('━━━━━━━━━━━━━━━');
   if (meta.name) L.push(`👤 Name 客户：${meta.name}`);
   if (meta.location) L.push(`📍 Location 地点：${meta.location}`);
+  L.push(`📄 Rev 版本：${meta.version || '1'}`);
   L.push('');
   computed.zoneResults.forEach((zr) => {
     if (!zr.zone.items.length) return;

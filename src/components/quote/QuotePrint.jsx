@@ -35,6 +35,7 @@ export default function QuotePrint({ meta, computed, onClose }) {
                 <div className="text-xs tracking-widest uppercase mt-1" style={{ color: T.inkSoft }}>Estimated Quotation 预估报价</div>
               </div>
               <div className="text-right text-xs" style={{ color: T.inkSoft }}>
+                <div className="font-medium" style={{ color: T.ink }}>Rev 版本 {meta.version || '1'}</div>
                 <div>Date 日期 {fmt(meta.date)}</div>
                 {meta.ref && <div>Ref 编号 {meta.ref}</div>}
                 {meta.pic && <div>PIC 负责人 {meta.pic}</div>}

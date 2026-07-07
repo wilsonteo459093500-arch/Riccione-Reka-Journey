@@ -18,7 +18,7 @@ export async function exportExcel(meta, computed) {
   row([]);
   row(['Name 客户', meta.name || '', '', 'Date 日期', fmt(meta.date)]);
   row(['Location 地点', meta.location || '', '', 'Ref 编号', meta.ref || '']);
-  row(['PIC 负责人', meta.pic || '']);
+  row(['PIC 负责人', meta.pic || '', '', 'Rev 版本', meta.version || '1']);
   row([]);
 
   const HEAD = ['Description 项目', 'Qty 数量', 'UOM 单位', 'Unit Price RM 单价', 'Amount RM 金额'];
@@ -61,6 +61,7 @@ export async function exportExcel(meta, computed) {
   XLSX.utils.book_append_sheet(wb, ws, 'Quotation');
 
   const safe = (s) => (s || '').replace(/[\\/:*?"<>|]/g, '').trim().replace(/\s+/g, '_');
-  const name = `Quotation_${safe(meta.name) || 'Customer'}_${(meta.date || '').replace(/-/g, '') || 'draft'}.xlsx`;
+  const rev = `Rev${meta.version || '1'}`;
+  const name = `Quotation_${safe(meta.name) || 'Customer'}_${rev}_${(meta.date || '').replace(/-/g, '') || 'draft'}.xlsx`;
   XLSX.writeFile(wb, name);
 }
