@@ -43,7 +43,7 @@ function Sel({ value, onChange, children }) {
   );
 }
 
-const TYPE_LABEL = { panel: '墙板 Panel', roomdoor: '房门 Door', led: '灯带 LED', other: '其他 Other' };
+const TYPE_LABEL = { panel: 'Panel 墙板', roomdoor: 'Door 房门', led: 'LED 灯带', other: 'Other 其他' };
 
 // 单条明细编辑器 —— 依 item.type 呈现不同字段
 export default function QuoteLineItem({ item, result, onChange, onRemove }) {
@@ -58,7 +58,7 @@ export default function QuoteLineItem({ item, result, onChange, onRemove }) {
 
           {item.type === 'cabinet' && (
             <>
-              <Field label="柜体类型 Type" w="col-span-3">
+              <Field label="Type 柜体类型" w="col-span-3">
                 <Sel value={item.cabType} onChange={(id) => {
                   const t = cabTypeById(id);
                   set({ cabType: id, h: t.h, d: t.d });
@@ -66,41 +66,41 @@ export default function QuoteLineItem({ item, result, onChange, onRemove }) {
                   {CABINET_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
                 </Sel>
               </Field>
-              <Field label="名称 Name (选填)" w="col-span-3">
-                <Txt value={item.name} onChange={(v) => set({ name: v })} placeholder="如 e.g. 电视柜 TV" />
+              <Field label="Name 名称 (optional)" w="col-span-3">
+                <Txt value={item.name} onChange={(v) => set({ name: v })} placeholder="e.g. TV 电视柜" />
               </Field>
-              <Field label={`长度 Length 米 · ${isLinear(item.h) ? '延米 L.m' : '面积 Area'}`} w="col-span-2">
+              <Field label={`Length 长度 m · ${isLinear(item.h) ? 'L.m 延米' : 'Area 面积'}`} w="col-span-2">
                 <Txt value={item.length} onChange={(v) => set({ length: v })} placeholder="2.86+2.6" />
               </Field>
-              <Field label="高 H 米" w="col-span-1">
+              <Field label="H 高 m" w="col-span-1">
                 <Txt value={item.h} onChange={(v) => set({ h: v })} />
               </Field>
-              <Field label="深 D 米" w="col-span-1">
+              <Field label="D 深 m" w="col-span-1">
                 <Txt value={item.d} onChange={(v) => set({ d: v })} />
               </Field>
-              <Field label="抽屉 Drawer 套" w="col-span-2">
+              <Field label="Drawer 抽屉 set" w="col-span-2">
                 <Txt value={item.drawers} onChange={(v) => set({ drawers: v })} placeholder="0" />
               </Field>
 
-              <Field label="门板系列 Door Series" w="col-span-4">
+              <Field label="Door Series 门板系列" w="col-span-4">
                 <Sel value={item.doorSeries} onChange={(v) => set({ doorSeries: v })}>
-                  {DOOR_SERIES.map((id) => <option key={id} value={id}>{id} 系列 Series</option>)}
+                  {DOOR_SERIES.map((id) => <option key={id} value={id}>{id} Series 系列</option>)}
                 </Sel>
               </Field>
-              <Field label="柜体系列 Carcass Series" w="col-span-4">
+              <Field label="Carcass Series 柜体系列" w="col-span-4">
                 <Sel value={item.carcassSeries} onChange={(v) => set({ carcassSeries: v })}>
-                  {CARCASS_SERIES.map((id) => <option key={id} value={id}>{id} 系列 Series</option>)}
+                  {CARCASS_SERIES.map((id) => <option key={id} value={id}>{id} Series 系列</option>)}
                 </Sel>
               </Field>
-              <Field label="包含 Include" w="col-span-4">
+              <Field label="Include 包含" w="col-span-4">
                 <div className="flex gap-3 pt-1.5 text-[11px]" style={{ color: T.inkSoft }}>
                   <label className="flex items-center gap-1 cursor-pointer">
                     <input type="checkbox" checked={item.hasDoor !== false}
-                      onChange={(e) => set({ hasDoor: e.target.checked })} />门板 Door
+                      onChange={(e) => set({ hasDoor: e.target.checked })} />Door 门板
                   </label>
                   <label className="flex items-center gap-1 cursor-pointer">
                     <input type="checkbox" checked={item.hasCarcass !== false}
-                      onChange={(e) => set({ hasCarcass: e.target.checked })} />柜体 Carcass
+                      onChange={(e) => set({ hasCarcass: e.target.checked })} />Carcass 柜体
                   </label>
                 </div>
               </Field>
@@ -109,7 +109,7 @@ export default function QuoteLineItem({ item, result, onChange, onRemove }) {
 
           {item.type === 'panel' && (
             <>
-              <Field label="墙板类型 Panel Type" w="col-span-3">
+              <Field label="Panel Type 墙板类型" w="col-span-3">
                 <Sel value={item.preset} onChange={(id) => {
                   const p = WALL_PANEL_PRESETS.find((x) => x.id === id);
                   set({ preset: id, h: p.h, name: item.name || p.label });
@@ -117,16 +117,16 @@ export default function QuoteLineItem({ item, result, onChange, onRemove }) {
                   {WALL_PANEL_PRESETS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
                 </Sel>
               </Field>
-              <Field label="名称 Name (选填)" w="col-span-3">
-                <Txt value={item.name} onChange={(v) => set({ name: v })} placeholder="如 e.g. 客厅护墙板" />
+              <Field label="Name 名称 (optional)" w="col-span-3">
+                <Txt value={item.name} onChange={(v) => set({ name: v })} placeholder="e.g. Living wall 客厅护墙板" />
               </Field>
-              <Field label="长度 Length 米" w="col-span-2">
+              <Field label="Length 长度 m" w="col-span-2">
                 <Txt value={item.length} onChange={(v) => set({ length: v })} placeholder="3.5" />
               </Field>
-              <Field label="高 H 米" w="col-span-2">
+              <Field label="H 高 m" w="col-span-2">
                 <Txt value={item.h} onChange={(v) => set({ h: v })} />
               </Field>
-              <Field label="系列 Series" w="col-span-2">
+              <Field label="Series 系列" w="col-span-2">
                 <Sel value={item.panelSeries} onChange={(v) => set({ panelSeries: v })}>
                   {DOOR_SERIES.map((id) => <option key={id} value={id}>{id}</option>)}
                 </Sel>
@@ -136,7 +136,7 @@ export default function QuoteLineItem({ item, result, onChange, onRemove }) {
 
           {item.type === 'roomdoor' && (
             <>
-              <Field label="房门类型 Door Type" w="col-span-4">
+              <Field label="Door Type 房门类型" w="col-span-4">
                 <Sel value={item.preset} onChange={(id) => {
                   const p = ROOM_DOOR_PRESETS.find((x) => x.id === id);
                   set({ preset: id, unitMyr: p.price, desc: item.desc || p.label });
@@ -144,13 +144,13 @@ export default function QuoteLineItem({ item, result, onChange, onRemove }) {
                   {ROOM_DOOR_PRESETS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
                 </Sel>
               </Field>
-              <Field label="名称/位置 Name" w="col-span-4">
-                <Txt value={item.desc} onChange={(v) => set({ desc: v })} placeholder="如 e.g. 主卧房门" />
+              <Field label="Name 名称/位置" w="col-span-4">
+                <Txt value={item.desc} onChange={(v) => set({ desc: v })} placeholder="e.g. Master door 主卧房门" />
               </Field>
-              <Field label="数量 Qty 樘" w="col-span-2">
+              <Field label="Qty 数量 pc" w="col-span-2">
                 <Txt value={item.qty} onChange={(v) => set({ qty: v })} placeholder="1" />
               </Field>
-              <Field label="单价 Unit RM" w="col-span-2">
+              <Field label="Unit 单价 RM" w="col-span-2">
                 <Txt value={item.unitMyr} onChange={(v) => set({ unitMyr: v })} />
               </Field>
             </>
@@ -158,10 +158,10 @@ export default function QuoteLineItem({ item, result, onChange, onRemove }) {
 
           {item.type === 'led' && (
             <>
-              <Field label="名称 Name" w="col-span-6">
-                <Txt value={item.desc} onChange={(v) => set({ desc: v })} placeholder="整体灯带 LED" />
+              <Field label="Name 名称" w="col-span-6">
+                <Txt value={item.desc} onChange={(v) => set({ desc: v })} placeholder="LED 整体灯带" />
               </Field>
-              <Field label="长度 Length 米" w="col-span-3">
+              <Field label="Length 长度 m" w="col-span-3">
                 <Txt value={item.length} onChange={(v) => set({ length: v })} placeholder="30" />
               </Field>
               <div className="col-span-3 flex items-end text-[11px] pb-1.5" style={{ color: T.inkSoft }}>
@@ -172,16 +172,16 @@ export default function QuoteLineItem({ item, result, onChange, onRemove }) {
 
           {item.type === 'other' && (
             <>
-              <Field label="项目名称 Item" w="col-span-5">
-                <Txt value={item.desc} onChange={(v) => set({ desc: v })} placeholder="如 e.g. 金属拉手 / 安装费" />
+              <Field label="Item 项目名称" w="col-span-5">
+                <Txt value={item.desc} onChange={(v) => set({ desc: v })} placeholder="e.g. Handle 金属拉手 / Install 安装费" />
               </Field>
-              <Field label="数量 Qty" w="col-span-2">
+              <Field label="Qty 数量" w="col-span-2">
                 <Txt value={item.qty} onChange={(v) => set({ qty: v })} placeholder="1" />
               </Field>
-              <Field label="单位 UOM" w="col-span-2">
-                <Txt value={item.uom} onChange={(v) => set({ uom: v })} placeholder="项 item" />
+              <Field label="UOM 单位" w="col-span-2">
+                <Txt value={item.uom} onChange={(v) => set({ uom: v })} placeholder="item 项" />
               </Field>
-              <Field label="单价 Unit RM" w="col-span-3">
+              <Field label="Unit 单价 RM" w="col-span-3">
                 <Txt value={item.unitMyr} onChange={(v) => set({ unitMyr: v })} />
               </Field>
             </>
@@ -190,7 +190,7 @@ export default function QuoteLineItem({ item, result, onChange, onRemove }) {
 
         <div className="flex flex-col items-end justify-between self-stretch min-w-[110px]">
           <button onClick={onRemove} className="opacity-40 hover:opacity-100 transition-opacity"
-            style={{ color: T.terra }} title="删除 Delete">
+            style={{ color: T.terra }} title="Delete 删除">
             <Trash2 size={15} strokeWidth={1.5} />
           </button>
           <div className="text-right">

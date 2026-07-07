@@ -8,7 +8,7 @@ export default function QuotePrint({ meta, computed, onClose }) {
   const handlePrint = () => window.print();
   const zones = computed.zoneResults.filter((zr) => zr.zone.items.length > 0);
 
-  const qtyDp = (uom) => (['套', '樘', '项', 'pcs'].includes(uom) ? 0 : 2);
+  const qtyDp = (uom) => (/套|樘|项|set|pc|item/i.test(uom || '') ? 0 : 2);
 
   return (
     <div className="fixed inset-0 z-50 overflow-auto" style={{ background: 'rgba(45,62,54,0.85)' }} onClick={onClose}>
@@ -17,11 +17,11 @@ export default function QuotePrint({ meta, computed, onClose }) {
 
           {/* toolbar */}
           <div className="no-print flex items-center justify-between p-4" style={{ borderBottom: `1px solid ${T.lineSoft}` }}>
-            <span className="text-xs uppercase tracking-widest" style={{ color: T.inkSoft }}>预估报价单 · 预览</span>
+            <span className="text-xs uppercase tracking-widest" style={{ color: T.inkSoft }}>Quotation Preview · 报价单预览</span>
             <div className="flex items-center gap-2">
               <button onClick={handlePrint} className="px-3 py-1.5 text-xs flex items-center gap-1.5"
                 style={{ background: T.wood, color: '#fff', borderRadius: '2px' }}>
-                <Printer size={12} /> 打印 / 存 PDF
+                <Printer size={12} /> Print / Save PDF 打印
               </button>
               <button onClick={onClose} className="p-1.5" style={{ color: T.inkSoft }}><X size={16} /></button>
             </div>
@@ -35,28 +35,28 @@ export default function QuotePrint({ meta, computed, onClose }) {
                 <div className="text-xs tracking-widest uppercase mt-1" style={{ color: T.inkSoft }}>Estimated Quotation 预估报价</div>
               </div>
               <div className="text-right text-xs" style={{ color: T.inkSoft }}>
-                <div>日期 Date {fmt(meta.date)}</div>
-                {meta.ref && <div>编号 Ref {meta.ref}</div>}
-                {meta.pic && <div>负责人 PIC {meta.pic}</div>}
+                <div>Date 日期 {fmt(meta.date)}</div>
+                {meta.ref && <div>Ref 编号 {meta.ref}</div>}
+                {meta.pic && <div>PIC 负责人 {meta.pic}</div>}
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-xs mb-5">
-              <div><span style={{ color: T.inkSoft }}>客户 NAME：</span>{meta.name || '—'}</div>
-              <div><span style={{ color: T.inkSoft }}>地点 SITE：</span>{meta.location || '—'}</div>
+              <div><span style={{ color: T.inkSoft }}>NAME 客户：</span>{meta.name || '—'}</div>
+              <div><span style={{ color: T.inkSoft }}>SITE 地点：</span>{meta.location || '—'}</div>
             </div>
 
             {/* 每个区域一块 */}
             {zones.map((zr) => (
               <div key={zr.zone.id} className="mb-4" style={{ breakInside: 'avoid' }}>
                 <div className="px-2 py-1 font-medium text-xs uppercase tracking-wide"
-                  style={{ background: T.sand }}>{zr.zone.name || '未命名区域 Untitled'}</div>
+                  style={{ background: T.sand }}>{zr.zone.name || 'Untitled 未命名'}</div>
                 <table className="w-full" style={{ borderCollapse: 'collapse' }}>
                   <thead>
                     <tr className="text-[10px] uppercase tracking-wide" style={{ color: T.inkSoft }}>
-                      <th className="text-left font-normal py-1 px-2" style={{ width: '42%' }}>项目 Description</th>
-                      <th className="text-right font-normal py-1 px-2">数量 Qty</th>
-                      <th className="text-left font-normal py-1 px-2">单位 UOM</th>
+                      <th className="text-left font-normal py-1 px-2" style={{ width: '42%' }}>Description 项目</th>
+                      <th className="text-right font-normal py-1 px-2">Qty 数量</th>
+                      <th className="text-left font-normal py-1 px-2">UOM 单位</th>
                       <th className="text-right font-normal py-1 px-2">单价 RM</th>
                       <th className="text-right font-normal py-1 px-2">金额 RM</th>
                     </tr>
@@ -79,7 +79,7 @@ export default function QuotePrint({ meta, computed, onClose }) {
                       ))
                     )}
                     <tr style={{ borderTop: `1.5px solid ${T.line}` }}>
-                      <td colSpan={4} className="text-right py-1 px-2 text-xs" style={{ color: T.inkSoft }}>小计 Sub-Total</td>
+                      <td colSpan={4} className="text-right py-1 px-2 text-xs" style={{ color: T.inkSoft }}>Sub-Total 小计</td>
                       <td className="text-right py-1 px-2 font-medium">{fmtNum(zr.subtotal, 0)}</td>
                     </tr>
                   </tbody>
@@ -91,16 +91,16 @@ export default function QuotePrint({ meta, computed, onClose }) {
             <div className="mt-6 flex justify-end" style={{ breakInside: 'avoid' }}>
               <div className="w-72 text-sm">
                 <div className="flex justify-between py-1">
-                  <span style={{ color: T.inkSoft }}>合计 Gross</span><span>{fmtMYR(computed.gross)}</span>
+                  <span style={{ color: T.inkSoft }}>Gross 合计</span><span>{fmtMYR(computed.gross)}</span>
                 </div>
                 {computed.discount > 0 && (
                   <div className="flex justify-between py-1" style={{ color: T.terra }}>
-                    <span>折扣 Discount</span><span>− {fmtMYR(computed.discount)}</span>
+                    <span>Discount 折扣</span><span>− {fmtMYR(computed.discount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between py-2 mt-1 font-display text-xl"
                   style={{ borderTop: `2px solid ${T.ink}` }}>
-                  <span>预估总额 Total</span><span>{fmtMYR(computed.net)}</span>
+                  <span>Total 预估总额</span><span>{fmtMYR(computed.net)}</span>
                 </div>
               </div>
             </div>
@@ -120,8 +120,8 @@ export default function QuotePrint({ meta, computed, onClose }) {
             </div>
 
             <div className="grid grid-cols-2 gap-8 mt-10 text-xs">
-              <div style={{ borderTop: `1px solid ${T.line}`, paddingTop: 6 }}>董事签名 / 日期 · Director Signature / Date</div>
-              <div style={{ borderTop: `1px solid ${T.line}`, paddingTop: 6 }}>客户签名 / 日期 · Customer Signature / Date</div>
+              <div style={{ borderTop: `1px solid ${T.line}`, paddingTop: 6 }}>Director Signature / Date · 董事签名/日期</div>
+              <div style={{ borderTop: `1px solid ${T.line}`, paddingTop: 6 }}>Customer Signature / Date · 客户签名/日期</div>
             </div>
           </div>
         </div>

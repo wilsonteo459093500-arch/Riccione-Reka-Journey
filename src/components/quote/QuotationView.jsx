@@ -18,18 +18,18 @@ export function makeItem(kind) {
   }
   if (kind === 'panel') return { ...base, type: 'panel', preset: 'wall', name: '', length: '', h: 2.7, panelSeries: 'A' };
   if (kind === 'roomdoor') return { ...base, type: 'roomdoor', preset: 'std', desc: '', qty: '1', unitMyr: 7570 };
-  if (kind === 'led') return { ...base, type: 'led', desc: '整体灯带 LED', length: '' };
+  if (kind === 'led') return { ...base, type: 'led', desc: 'LED 整体灯带', length: '' };
   return { ...base, type: 'other', desc: '', qty: '1', uom: '项', unitMyr: '' };
 }
 
 const ADD_TYPES = [
-  { kind: 'base', label: '地柜 Base' },
-  { kind: 'wall', label: '吊柜 Wall' },
-  { kind: 'tall', label: '高柜 Tall' },
-  { kind: 'panel', label: '墙板 Panel' },
-  { kind: 'roomdoor', label: '房门 Door' },
-  { kind: 'led', label: '灯带 LED' },
-  { kind: 'other', label: '其他 Other' },
+  { kind: 'base', label: 'Base 地柜' },
+  { kind: 'wall', label: 'Wall 吊柜' },
+  { kind: 'tall', label: 'Tall 高柜' },
+  { kind: 'panel', label: 'Panel 墙板' },
+  { kind: 'roomdoor', label: 'Door 房门' },
+  { kind: 'led', label: 'LED 灯带' },
+  { kind: 'other', label: 'Other 其他' },
 ];
 
 export const blankZone = (name = '') => ({ id: newId('zone'), name, items: [], collapsed: false });
@@ -67,8 +67,8 @@ export default function QuotationView({ doc, onChange }) {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 rounded"
           style={{ background: T.cream, border: `1px solid ${T.lineSoft}` }}>
           {[
-            ['客户 Name', 'name'], ['地点 Location', 'location'],
-            ['编号 Ref', 'ref'], ['负责人 PIC', 'pic'],
+            ['Name 客户', 'name'], ['Location 地点', 'location'],
+            ['Ref 编号', 'ref'], ['PIC 负责人', 'pic'],
           ].map(([label, key]) => (
             <div key={key}>
               <label className="block text-[9px] uppercase tracking-widest mb-1" style={{ color: T.inkSoft }}>{label}</label>
@@ -92,11 +92,11 @@ export default function QuotationView({ doc, onChange }) {
                 <select value={ROOMS.includes(zone.name) ? zone.name : ''}
                   onChange={(e) => updateZone(zone.id, { name: e.target.value === CUSTOM_ROOM ? '' : e.target.value })}
                   className="bg-transparent outline-none font-display text-lg cursor-pointer" style={{ color: T.ink }}>
-                  <option value="" disabled>选区域 Room…</option>
+                  <option value="" disabled>Room 选区域…</option>
                   {ROOMS.map((r) => <option key={r} value={r}>{r}</option>)}
                 </select>
                 <input value={zone.name} onChange={(e) => updateZone(zone.id, { name: e.target.value })}
-                  placeholder="自定义区域名 Custom room"
+                  placeholder="Custom room 自定义区域名"
                   className="flex-1 bg-transparent outline-none text-sm" style={{ color: T.inkSoft }} />
                 <span className="font-display text-lg" style={{ color: T.wood }}>{fmtMYR(zr?.subtotal || 0)}</span>
                 <button onClick={() => removeZone(zone.id)} className="opacity-40 hover:opacity-100"
@@ -106,7 +106,7 @@ export default function QuotationView({ doc, onChange }) {
               {!zone.collapsed && (
                 <div className="p-3 space-y-3" style={{ background: T.paper }}>
                   {zone.items.length === 0 && (
-                    <div className="text-center py-4 text-sm" style={{ color: T.inkSoft }}>选下方柜体类型添加 · Add an item below</div>
+                    <div className="text-center py-4 text-sm" style={{ color: T.inkSoft }}>Add an item below 选下方类型添加</div>
                   )}
                   {zone.items.map((it) => (
                     <QuoteLineItem key={it.id} item={it}
@@ -136,7 +136,7 @@ export default function QuotationView({ doc, onChange }) {
           style={{ border: `1px dashed ${T.line}`, borderRadius: '2px', color: T.inkSoft }}
           onMouseEnter={(e) => (e.currentTarget.style.borderColor = T.wood)}
           onMouseLeave={(e) => (e.currentTarget.style.borderColor = T.line)}>
-          <LayoutGrid size={15} /> 新增区域 / 房间 · Add Room
+          <LayoutGrid size={15} /> Add Room 新增区域 / 房间
         </button>
       </div>
 
@@ -144,16 +144,16 @@ export default function QuotationView({ doc, onChange }) {
       <div className="space-y-4">
         <div className="sticky top-6 space-y-4">
           <div className="p-5 rounded" style={{ background: T.ink, color: T.paper }}>
-            <div className="text-[10px] uppercase tracking-widest opacity-70">预估总额 Estimated Total</div>
+            <div className="text-[10px] uppercase tracking-widest opacity-70">Estimated Total 预估总额</div>
             <div className="font-display text-4xl mt-1">{fmtMYR(computed.net)}</div>
             {computed.discount > 0 && (
-              <div className="text-xs mt-2 opacity-80">原价 {fmtMYR(computed.gross)} − 折扣 {fmtMYR(computed.discount)}</div>
+              <div className="text-xs mt-2 opacity-80">Gross 原价 {fmtMYR(computed.gross)} − Discount 折扣 {fmtMYR(computed.discount)}</div>
             )}
           </div>
 
           {/* 分类明细 */}
           <div className="p-4 rounded" style={{ background: T.cream, border: `1px solid ${T.lineSoft}` }}>
-            <div className="text-[10px] uppercase tracking-widest mb-2" style={{ color: T.inkSoft }}>分类明细 Breakdown</div>
+            <div className="text-[10px] uppercase tracking-widest mb-2" style={{ color: T.inkSoft }}>Breakdown 分类明细</div>
             <div className="space-y-1.5">
               {CATEGORIES.map((c) => {
                 const v = Math.round(computed.byCategory[c.key] || 0);
@@ -166,7 +166,7 @@ export default function QuotationView({ doc, onChange }) {
                 );
               })}
               <div className="flex justify-between text-sm pt-1.5 mt-1" style={{ borderTop: `1px solid ${T.line}` }}>
-                <span style={{ color: T.inkSoft }}>合计 Gross</span>
+                <span style={{ color: T.inkSoft }}>Gross 合计</span>
                 <span className="font-medium" style={{ color: T.ink }}>{fmtMYR(computed.gross)}</span>
               </div>
             </div>
@@ -174,13 +174,13 @@ export default function QuotationView({ doc, onChange }) {
 
           {/* 折扣 */}
           <div className="p-4 rounded" style={{ background: T.cream, border: `1px solid ${T.lineSoft}` }}>
-            <label className="block text-[10px] uppercase tracking-widest mb-1.5" style={{ color: T.inkSoft }}>折扣 / 赞助 Discount %</label>
+            <label className="block text-[10px] uppercase tracking-widest mb-1.5" style={{ color: T.inkSoft }}>Discount 折扣 / 赞助 %</label>
             <div className="flex items-center gap-2">
               <input type="number" value={adjustPct}
                 onChange={(e) => patch({ adjustPct: Number(e.target.value) || 0 })}
                 className="w-20 px-2 py-1.5 text-sm outline-none"
                 style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }} />
-              <span className="text-sm" style={{ color: T.inkSoft }}>%　→ 减 {fmtMYR(computed.discount)}</span>
+              <span className="text-sm" style={{ color: T.inkSoft }}>%　→ − {fmtMYR(computed.discount)}</span>
             </div>
           </div>
 
@@ -189,15 +189,15 @@ export default function QuotationView({ doc, onChange }) {
             <button onClick={() => setShowPrint(true)}
               className="flex items-center justify-center gap-1.5 py-2.5 text-sm"
               style={{ background: T.wood, color: T.paper, borderRadius: '2px' }}>
-              <FileText size={14} /> 生成报价单 Quote
+              <FileText size={14} /> Quote 生成报价单
             </button>
             <button onClick={async () => {
               const ok = await copyToClipboard(buildTextQuote(meta, computed));
-              toast(ok ? '已复制报价文本 Copied' : '复制失败 Copy failed', ok ? 'success' : 'error');
+              toast(ok ? 'Copied 已复制' : 'Copy failed 复制失败', ok ? 'success' : 'error');
             }}
               className="flex items-center justify-center gap-1.5 py-2.5 text-sm"
               style={{ border: `1px solid ${T.line}`, borderRadius: '2px', color: T.inkSoft }}>
-              <Copy size={14} /> 复制文本 Copy
+              <Copy size={14} /> Copy 复制文本
             </button>
           </div>
         </div>
@@ -211,27 +211,27 @@ export default function QuotationView({ doc, onChange }) {
 // ---- WhatsApp / 纯文本报价 ----
 function buildTextQuote(meta, computed) {
   const L = [];
-  L.push('📋 *预估报价 Estimated Quotation · SAIL by Riccione Reka*');
+  L.push('📋 *Estimated Quotation 预估报价 · SAIL by Riccione Reka*');
   L.push('━━━━━━━━━━━━━━━');
-  if (meta.name) L.push(`👤 客户 Name：${meta.name}`);
-  if (meta.location) L.push(`📍 地点 Location：${meta.location}`);
+  if (meta.name) L.push(`👤 Name 客户：${meta.name}`);
+  if (meta.location) L.push(`📍 Location 地点：${meta.location}`);
   L.push('');
   computed.zoneResults.forEach((zr) => {
     if (!zr.zone.items.length) return;
-    L.push(`▪️ *${zr.zone.name || '未命名区域 Untitled'}* — ${fmtMYR(zr.subtotal)}`);
+    L.push(`▪️ *${zr.zone.name || 'Untitled 未命名'}* — ${fmtMYR(zr.subtotal)}`);
   });
   L.push('');
-  L.push('*分类明细 Breakdown*');
+  L.push('*Breakdown 分类明细*');
   CATEGORIES.forEach((c) => {
     const v = Math.round(computed.byCategory[c.key] || 0);
     if (v > 0) L.push(`  ${c.label}：${fmtMYR(v)}`);
   });
   L.push('');
   if (computed.discount > 0) {
-    L.push(`合计 Gross：${fmtMYR(computed.gross)}`);
-    L.push(`折扣 Discount：− ${fmtMYR(computed.discount)}`);
+    L.push(`Gross 合计：${fmtMYR(computed.gross)}`);
+    L.push(`Discount 折扣：− ${fmtMYR(computed.discount)}`);
   }
-  L.push(`*预估总额 Total：${fmtMYR(computed.net)}*`);
+  L.push(`*Total 预估总额：${fmtMYR(computed.net)}*`);
   L.push('━━━━━━━━━━━━━━━');
   L.push('Validity 报价有效期');
   L.push('• Quotation is valid for 14 days from the date of quotation.');
