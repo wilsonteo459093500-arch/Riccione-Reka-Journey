@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
-import { Plus, Copy, Trash2, ChevronDown, ChevronRight, FileText, LayoutGrid } from 'lucide-react';
+import { Plus, Copy, Trash2, ChevronDown, ChevronRight, FileText, FileSpreadsheet, LayoutGrid } from 'lucide-react';
 import { T } from '../../theme.js';
 import { newId, copyToClipboard } from '../../utils/helpers.js';
 import { useToast } from '../ui/UIProvider.jsx';
 import { computeQuote, CATEGORIES, ROOMS, CUSTOM_ROOM, cabTypeById, fmtMYR } from '../../constants/pricing.js';
 import QuoteLineItem from './QuoteLineItem.jsx';
 import QuotePrint from './QuotePrint.jsx';
+import { exportExcel } from './exportExcel.js';
 
 // ---- 新明细的默认值 ----
 export function makeItem(kind) {
@@ -185,19 +186,33 @@ export default function QuotationView({ doc, onChange }) {
           </div>
 
           {/* 操作 */}
-          <div className="grid grid-cols-2 gap-2">
-            <button onClick={() => setShowPrint(true)}
-              className="flex items-center justify-center gap-1.5 py-2.5 text-sm"
-              style={{ background: T.wood, color: T.paper, borderRadius: '2px' }}>
-              <FileText size={14} /> Quote 生成报价单
-            </button>
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => setShowPrint(true)}
+                className="flex items-center justify-center gap-1.5 py-2.5 text-sm"
+                style={{ background: T.wood, color: T.paper, borderRadius: '2px' }}>
+                <FileText size={14} /> Quote 报价单
+              </button>
+              <button onClick={async () => {
+                try {
+                  await exportExcel(meta, computed);
+                  toast('Excel exported 已导出', 'success');
+                } catch (e) {
+                  toast('Export failed 导出失败', 'error');
+                }
+              }}
+                className="flex items-center justify-center gap-1.5 py-2.5 text-sm"
+                style={{ background: T.sage, color: T.paper, borderRadius: '2px' }}>
+                <FileSpreadsheet size={14} /> Excel
+              </button>
+            </div>
             <button onClick={async () => {
               const ok = await copyToClipboard(buildTextQuote(meta, computed));
               toast(ok ? 'Copied 已复制' : 'Copy failed 复制失败', ok ? 'success' : 'error');
             }}
-              className="flex items-center justify-center gap-1.5 py-2.5 text-sm"
+              className="w-full flex items-center justify-center gap-1.5 py-2.5 text-sm"
               style={{ border: `1px solid ${T.line}`, borderRadius: '2px', color: T.inkSoft }}>
-              <Copy size={14} /> Copy 复制文本
+              <Copy size={14} /> Copy text 复制文本
             </button>
           </div>
         </div>

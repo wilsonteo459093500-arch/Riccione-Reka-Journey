@@ -108,7 +108,7 @@ function Inner() {
         <div className="max-w-[1400px] mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-baseline gap-3">
             <Calculator size={18} style={{ color: T.wood }} />
-            <div className="font-display text-2xl" style={{ color: T.ink }}>Quotation <span className="text-base">预估报价</span></div>
+            <div className="font-display text-2xl" style={{ color: T.ink }}>Estimated Quotation <span className="text-base">预估报价</span></div>
             <div className="hidden md:block text-xs uppercase tracking-[0.2em]" style={{ color: T.inkSoft }}>
               SAIL by Riccione Reka
             </div>
