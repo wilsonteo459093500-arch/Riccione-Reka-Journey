@@ -5,7 +5,7 @@ import { avatarFor } from '../utils/helpers.js';
 const ITEMS = [
   { id: 'kanban', label: '看板', icon: Columns3 },
   { id: 'briefing', label: '日报总览', icon: CalendarDays },
-  { id: 'quote', label: '报价', icon: Calculator },
+  { id: 'quote', label: '报价', icon: Calculator, href: '/quote.html' },
   { id: 'method', label: 'Method', icon: BookOpen },
   { id: 'team', label: '团队', icon: Users },
   { id: 'risks', label: '风险', icon: AlertTriangle },
@@ -30,6 +30,20 @@ export default function Nav({ view, setView, onNew, saveStatus, user, onSignOut 
           {ITEMS.map((it) => {
             const active = view === it.id || (it.id === 'kanban' && view === 'project');
             const Icon = it.icon;
+            // 独立页面（如报价工具）用链接打开
+            if (it.href) {
+              return (
+                <a
+                  key={it.id}
+                  href={it.href}
+                  className="relative px-3 lg:px-4 py-2 flex items-center gap-2 text-sm transition-colors"
+                  style={{ color: T.inkSoft }}
+                >
+                  <Icon size={15} strokeWidth={1.5} />
+                  <span className="hidden sm:inline">{it.label}</span>
+                </a>
+              );
+            }
             return (
               <button
                 key={it.id}

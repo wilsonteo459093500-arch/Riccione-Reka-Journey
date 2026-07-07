@@ -1,71 +1,55 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Plus, Copy, Printer, Trash2, ChevronDown, ChevronRight, FileText, LayoutGrid } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Plus, Copy, Trash2, ChevronDown, ChevronRight, FileText, LayoutGrid } from 'lucide-react';
 import { T } from '../../theme.js';
 import { newId, copyToClipboard } from '../../utils/helpers.js';
 import { useToast } from '../ui/UIProvider.jsx';
-import {
-  computeQuote, CATEGORIES, fmtMYR, CABINET_PRESETS, presetById,
-} from '../../constants/pricing.js';
+import { computeQuote, CATEGORIES, ROOMS, cabTypeById, fmtMYR } from '../../constants/pricing.js';
 import QuoteLineItem from './QuoteLineItem.jsx';
 import QuotePrint from './QuotePrint.jsx';
 
-const STORE_KEY = 'sail.quote.v1';
-
 // ---- 新明细的默认值 ----
-function makeItem(type) {
+export function makeItem(kind) {
   const base = { id: newId('it') };
-  if (type === 'cabinet') {
-    const p = presetById('wardrobe');
-    return { ...base, type, preset: 'wardrobe', name: '', length: '', h: p.h, d: p.d, doorSeries: 'D', carcassSeries: 'A', drawers: '', hasDoor: true, hasCarcass: true };
+  // kind：base/wall/tall → 橱柜；panel/roomdoor/led/other → 其余
+  if (['base', 'wall', 'tall'].includes(kind)) {
+    const t = cabTypeById(kind);
+    return { ...base, type: 'cabinet', cabType: kind, name: '', length: '', h: t.h, d: t.d,
+      doorSeries: 'A', carcassSeries: 'A', drawers: '', hasDoor: true, hasCarcass: true };
   }
-  if (type === 'panel') return { ...base, type, preset: 'wall', name: '', length: '', h: 2.7, panelSeries: 'A' };
-  if (type === 'roomdoor') return { ...base, type, preset: 'std', desc: '', qty: '1', unitMyr: 7570 };
-  if (type === 'led') return { ...base, type, desc: '整体灯带 LED', length: '' };
+  if (kind === 'panel') return { ...base, type: 'panel', preset: 'wall', name: '', length: '', h: 2.7, panelSeries: 'A' };
+  if (kind === 'roomdoor') return { ...base, type: 'roomdoor', preset: 'std', desc: '', qty: '1', unitMyr: 7570 };
+  if (kind === 'led') return { ...base, type: 'led', desc: '整体灯带 LED', length: '' };
   return { ...base, type: 'other', desc: '', qty: '1', uom: '项', unitMyr: '' };
 }
 
 const ADD_TYPES = [
-  { type: 'cabinet', label: '橱柜' },
-  { type: 'panel', label: '墙板' },
-  { type: 'roomdoor', label: '房门' },
-  { type: 'led', label: '灯带' },
-  { type: 'other', label: '其他' },
+  { kind: 'base', label: '地柜' },
+  { kind: 'wall', label: '吊柜' },
+  { kind: 'tall', label: '高柜' },
+  { kind: 'panel', label: '墙板' },
+  { kind: 'roomdoor', label: '房门' },
+  { kind: 'led', label: '灯带' },
+  { kind: 'other', label: '其他' },
 ];
 
-const blankZone = (name = '') => ({ id: newId('zone'), name, items: [], collapsed: false });
+export const blankZone = (name = '') => ({ id: newId('zone'), name, items: [], collapsed: false });
 
-const seedState = () => ({
-  meta: { name: '', location: '', ref: '', pic: '', date: new Date().toISOString().slice(0, 10) },
-  zones: [blankZone('玄关鞋柜')],
-  adjustPct: 0,
-});
-
-export default function QuotationView() {
+// 受控组件：doc = { meta, zones, adjustPct }；改动通过 onChange 回传上层（记录管理器负责持久化）。
+export default function QuotationView({ doc, onChange }) {
   const toast = useToast();
-  const [state, setState] = useState(() => {
-    try {
-      const raw = localStorage.getItem(STORE_KEY);
-      if (raw) return JSON.parse(raw);
-    } catch (e) { /* ignore */ }
-    return seedState();
-  });
   const [showPrint, setShowPrint] = useState(false);
-
-  useEffect(() => {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
-  }, [state]);
-
-  const { meta, zones, adjustPct } = state;
+  const { meta, zones, adjustPct } = doc;
   const computed = useMemo(() => computeQuote(zones, adjustPct), [zones, adjustPct]);
 
   // ---- mutators ----
-  const setMeta = (patch) => setState((s) => ({ ...s, meta: { ...s.meta, ...patch } }));
-  const setZones = (fn) => setState((s) => ({ ...s, zones: fn(s.zones) }));
+  const patch = (p) => onChange({ ...doc, ...p });
+  const setMeta = (p) => patch({ meta: { ...meta, ...p } });
+  const setZones = (fn) => patch({ zones: fn(zones) });
   const addZone = () => setZones((zs) => [...zs, blankZone('')]);
-  const updateZone = (id, patch) => setZones((zs) => zs.map((z) => (z.id === id ? { ...z, ...patch } : z)));
+  const updateZone = (id, p) => setZones((zs) => zs.map((z) => (z.id === id ? { ...z, ...p } : z)));
   const removeZone = (id) => setZones((zs) => zs.filter((z) => z.id !== id));
-  const addItem = (zoneId, type) =>
-    setZones((zs) => zs.map((z) => (z.id === zoneId ? { ...z, items: [...z.items, makeItem(type)] } : z)));
+  const addItem = (zoneId, kind) =>
+    setZones((zs) => zs.map((z) => (z.id === zoneId ? { ...z, items: [...z.items, makeItem(kind)] } : z)));
   const updateItem = (zoneId, item) =>
     setZones((zs) => zs.map((z) => (z.id === zoneId
       ? { ...z, items: z.items.map((it) => (it.id === item.id ? item : it)) } : z)));
@@ -73,21 +57,12 @@ export default function QuotationView() {
     setZones((zs) => zs.map((z) => (z.id === zoneId
       ? { ...z, items: z.items.filter((it) => it.id !== itemId) } : z)));
 
-  const resetAll = () => setState(seedState());
-
   const zoneResultById = (id) => computed.zoneResults.find((zr) => zr.zone.id === id);
 
   return (
     <div className="grid gap-8" style={{ gridTemplateColumns: 'minmax(0,1fr) 320px' }}>
       {/* ===== 左侧：编辑区 ===== */}
       <div className="space-y-6">
-        <div>
-          <h1 className="font-display text-3xl" style={{ color: T.ink }}>预估报价 Quotation</h1>
-          <p className="text-sm mt-1" style={{ color: T.inkSoft }}>
-            选区域 / 橱柜 → 只填长度，系统按「高&lt;1m 延米 · 高≥1m 面积」自动计算。价格已由人民币零售价换算为马来西亚零售价。
-          </p>
-        </div>
-
         {/* 客户信息 */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 rounded"
           style={{ background: T.cream, border: `1px solid ${T.lineSoft}` }}>
@@ -110,14 +85,18 @@ export default function QuotationView() {
           return (
             <div key={zone.id} className="rounded overflow-hidden" style={{ border: `1px solid ${T.line}` }}>
               <div className="flex items-center gap-2 px-4 py-3" style={{ background: T.sand }}>
-                <button onClick={() => updateZone(zone.id, { collapsed: !zone.collapsed })}
-                  style={{ color: T.inkSoft }}>
+                <button onClick={() => updateZone(zone.id, { collapsed: !zone.collapsed })} style={{ color: T.inkSoft }}>
                   {zone.collapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
                 </button>
+                {/* 区域 = 房间：下拉选常见房间，也可直接改名 */}
+                <select value={ROOMS.includes(zone.name) ? zone.name : ''} onChange={(e) => updateZone(zone.id, { name: e.target.value })}
+                  className="bg-transparent outline-none font-display text-lg cursor-pointer" style={{ color: T.ink }}>
+                  <option value="" disabled>选区域…</option>
+                  {ROOMS.map((r) => <option key={r} value={r}>{r}</option>)}
+                </select>
                 <input value={zone.name} onChange={(e) => updateZone(zone.id, { name: e.target.value })}
-                  placeholder="区域名称，如：主卧衣柜"
-                  className="flex-1 bg-transparent outline-none font-display text-lg"
-                  style={{ color: T.ink }} />
+                  placeholder="或自定义区域名"
+                  className="flex-1 bg-transparent outline-none text-sm" style={{ color: T.inkSoft }} />
                 <span className="font-display text-lg" style={{ color: T.wood }}>{fmtMYR(zr?.subtotal || 0)}</span>
                 <button onClick={() => removeZone(zone.id)} className="opacity-40 hover:opacity-100"
                   style={{ color: T.terra }} title="删除区域"><Trash2 size={15} /></button>
@@ -126,7 +105,7 @@ export default function QuotationView() {
               {!zone.collapsed && (
                 <div className="p-3 space-y-3" style={{ background: T.paper }}>
                   {zone.items.length === 0 && (
-                    <div className="text-center py-4 text-sm" style={{ color: T.inkSoft }}>还没有明细，点下方按钮添加</div>
+                    <div className="text-center py-4 text-sm" style={{ color: T.inkSoft }}>选下方柜体类型添加</div>
                   )}
                   {zone.items.map((it) => (
                     <QuoteLineItem key={it.id} item={it}
@@ -136,7 +115,7 @@ export default function QuotationView() {
                   ))}
                   <div className="flex flex-wrap gap-2 pt-1">
                     {ADD_TYPES.map((a) => (
-                      <button key={a.type} onClick={() => addItem(zone.id, a.type)}
+                      <button key={a.kind} onClick={() => addItem(zone.id, a.kind)}
                         className="flex items-center gap-1 px-3 py-1.5 text-xs transition-colors"
                         style={{ border: `1px solid ${T.line}`, borderRadius: '2px', color: T.inkSoft }}
                         onMouseEnter={(e) => { e.currentTarget.style.borderColor = T.wood; e.currentTarget.style.color = T.wood; }}
@@ -156,20 +135,18 @@ export default function QuotationView() {
           style={{ border: `1px dashed ${T.line}`, borderRadius: '2px', color: T.inkSoft }}
           onMouseEnter={(e) => (e.currentTarget.style.borderColor = T.wood)}
           onMouseLeave={(e) => (e.currentTarget.style.borderColor = T.line)}>
-          <LayoutGrid size={15} /> 新增区域 / 橱柜
+          <LayoutGrid size={15} /> 新增区域 / 房间
         </button>
       </div>
 
       {/* ===== 右侧：汇总 ===== */}
       <div className="space-y-4">
-        <div className="sticky top-24 space-y-4">
+        <div className="sticky top-6 space-y-4">
           <div className="p-5 rounded" style={{ background: T.ink, color: T.paper }}>
             <div className="text-[10px] uppercase tracking-widest opacity-70">预估总额 Estimated Total</div>
             <div className="font-display text-4xl mt-1">{fmtMYR(computed.net)}</div>
             {computed.discount > 0 && (
-              <div className="text-xs mt-2 opacity-80">
-                原价 {fmtMYR(computed.gross)} − 折扣 {fmtMYR(computed.discount)}
-              </div>
+              <div className="text-xs mt-2 opacity-80">原价 {fmtMYR(computed.gross)} − 折扣 {fmtMYR(computed.discount)}</div>
             )}
           </div>
 
@@ -187,8 +164,7 @@ export default function QuotationView() {
                   </div>
                 );
               })}
-              <div className="flex justify-between text-sm pt-1.5 mt-1"
-                style={{ borderTop: `1px solid ${T.line}` }}>
+              <div className="flex justify-between text-sm pt-1.5 mt-1" style={{ borderTop: `1px solid ${T.line}` }}>
                 <span style={{ color: T.inkSoft }}>合计 Gross</span>
                 <span className="font-medium" style={{ color: T.ink }}>{fmtMYR(computed.gross)}</span>
               </div>
@@ -197,12 +173,10 @@ export default function QuotationView() {
 
           {/* 折扣 */}
           <div className="p-4 rounded" style={{ background: T.cream, border: `1px solid ${T.lineSoft}` }}>
-            <label className="block text-[10px] uppercase tracking-widest mb-1.5" style={{ color: T.inkSoft }}>
-              折扣 / 赞助 Discount %
-            </label>
+            <label className="block text-[10px] uppercase tracking-widest mb-1.5" style={{ color: T.inkSoft }}>折扣 / 赞助 Discount %</label>
             <div className="flex items-center gap-2">
               <input type="number" value={adjustPct}
-                onChange={(e) => setState((s) => ({ ...s, adjustPct: Number(e.target.value) || 0 }))}
+                onChange={(e) => patch({ adjustPct: Number(e.target.value) || 0 })}
                 className="w-20 px-2 py-1.5 text-sm outline-none"
                 style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }} />
               <span className="text-sm" style={{ color: T.inkSoft }}>%　→ 减 {fmtMYR(computed.discount)}</span>
@@ -225,14 +199,10 @@ export default function QuotationView() {
               <Copy size={14} /> 复制文本
             </button>
           </div>
-          <button onClick={resetAll} className="w-full text-xs underline opacity-50 hover:opacity-100"
-            style={{ color: T.inkSoft }}>清空重来</button>
         </div>
       </div>
 
-      {showPrint && (
-        <QuotePrint meta={meta} computed={computed} onClose={() => setShowPrint(false)} />
-      )}
+      {showPrint && <QuotePrint meta={meta} computed={computed} onClose={() => setShowPrint(false)} />}
     </div>
   );
 }

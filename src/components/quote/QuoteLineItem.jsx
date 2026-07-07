@@ -1,7 +1,7 @@
 import { Trash2 } from 'lucide-react';
 import { T } from '../../theme.js';
 import {
-  SERIES, DOOR_SERIES, CARCASS_SERIES, CABINET_PRESETS, presetById,
+  DOOR_SERIES, CARCASS_SERIES, CABINET_TYPES, cabTypeById,
   WALL_PANEL_PRESETS, ROOM_DOOR_PRESETS, isLinear, fmtMYR,
 } from '../../constants/pricing.js';
 
@@ -40,17 +40,13 @@ function Sel({ value, onChange, children }) {
   );
 }
 
+const TYPE_LABEL = { cabinet: '橱柜', panel: '墙板', roomdoor: '房门', led: '灯带', other: '其他' };
+
 // 单条明细编辑器 —— 依 item.type 呈现不同字段
 export default function QuoteLineItem({ item, result, onChange, onRemove }) {
   const set = (patch) => onChange({ ...item, ...patch });
   const total = result?.total || 0;
-
-  const TypeBadge = (
-    <span className="text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0"
-      style={{ background: T.sand, color: T.inkSoft }}>
-      {({ cabinet: '橱柜', panel: '墙板', roomdoor: '房门', led: '灯带', other: '其他' })[item.type]}
-    </span>
-  );
+  const cabLabel = item.type === 'cabinet' ? (cabTypeById(item.cabType).label) : TYPE_LABEL[item.type];
 
   return (
     <div className="p-3 rounded" style={{ background: T.cream, border: `1px solid ${T.lineSoft}` }}>
@@ -59,48 +55,42 @@ export default function QuoteLineItem({ item, result, onChange, onRemove }) {
 
           {item.type === 'cabinet' && (
             <>
-              <Field label="区域 / 橱柜" w="col-span-4">
-                <Sel value={item.preset} onChange={(id) => {
-                  const p = presetById(id);
-                  set({ preset: id, h: p.h, d: p.d, name: item.name || p.label });
+              <Field label="柜体类型" w="col-span-3">
+                <Sel value={item.cabType} onChange={(id) => {
+                  const t = cabTypeById(id);
+                  set({ cabType: id, h: t.h, d: t.d });
                 }}>
-                  {CABINET_PRESETS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                  {CABINET_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
                 </Sel>
               </Field>
-              <Field label="名称 (报价显示)" w="col-span-4">
-                <Txt value={item.name} onChange={(v) => set({ name: v })} placeholder="如：主卧衣柜" />
+              <Field label="名称 (选填)" w="col-span-3">
+                <Txt value={item.name} onChange={(v) => set({ name: v })} placeholder="如：电视柜" />
               </Field>
-              <Field label={`长度 米 ${isLinear(item.h) ? '· 延米' : '· 面积'}`} w="col-span-2">
+              <Field label={`长度 米 · ${isLinear(item.h) ? '延米' : '面积'}`} w="col-span-2">
                 <Txt value={item.length} onChange={(v) => set({ length: v })} placeholder="2.86+2.6" />
+              </Field>
+              <Field label="高 米" w="col-span-1">
+                <Txt value={item.h} onChange={(v) => set({ h: v })} />
+              </Field>
+              <Field label="深 米" w="col-span-1">
+                <Txt value={item.d} onChange={(v) => set({ d: v })} />
               </Field>
               <Field label="抽屉 套" w="col-span-2">
                 <Txt value={item.drawers} onChange={(v) => set({ drawers: v })} placeholder="0" />
               </Field>
 
-              <Field label="门板系列" w="col-span-3">
+              <Field label="门板系列" w="col-span-4">
                 <Sel value={item.doorSeries} onChange={(v) => set({ doorSeries: v })}>
-                  {DOOR_SERIES.map((id) => {
-                    const s = SERIES.find((x) => x.id === id);
-                    return <option key={id} value={id}>{id} · {s.material}</option>;
-                  })}
+                  {DOOR_SERIES.map((id) => <option key={id} value={id}>{id} 系列</option>)}
                 </Sel>
               </Field>
-              <Field label="柜体系列" w="col-span-3">
+              <Field label="柜体系列" w="col-span-4">
                 <Sel value={item.carcassSeries} onChange={(v) => set({ carcassSeries: v })}>
-                  {CARCASS_SERIES.map((id) => {
-                    const s = SERIES.find((x) => x.id === id);
-                    return <option key={id} value={id}>{id} · {s.material}</option>;
-                  })}
+                  {CARCASS_SERIES.map((id) => <option key={id} value={id}>{id} 系列</option>)}
                 </Sel>
               </Field>
-              <Field label="高 米" w="col-span-2">
-                <Txt value={item.h} onChange={(v) => set({ h: v })} />
-              </Field>
-              <Field label="深 米" w="col-span-2">
-                <Txt value={item.d} onChange={(v) => set({ d: v })} />
-              </Field>
-              <Field label="含" w="col-span-2">
-                <div className="flex gap-2 pt-1.5 text-[11px]" style={{ color: T.inkSoft }}>
+              <Field label="包含" w="col-span-4">
+                <div className="flex gap-3 pt-1.5 text-[11px]" style={{ color: T.inkSoft }}>
                   <label className="flex items-center gap-1 cursor-pointer">
                     <input type="checkbox" checked={item.hasDoor !== false}
                       onChange={(e) => set({ hasDoor: e.target.checked })} />门板
@@ -124,7 +114,7 @@ export default function QuoteLineItem({ item, result, onChange, onRemove }) {
                   {WALL_PANEL_PRESETS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
                 </Sel>
               </Field>
-              <Field label="名称" w="col-span-3">
+              <Field label="名称 (选填)" w="col-span-3">
                 <Txt value={item.name} onChange={(v) => set({ name: v })} placeholder="如：客厅护墙板" />
               </Field>
               <Field label="长度 米" w="col-span-2">
@@ -201,7 +191,8 @@ export default function QuoteLineItem({ item, result, onChange, onRemove }) {
             <Trash2 size={15} strokeWidth={1.5} />
           </button>
           <div className="text-right">
-            <div className="flex items-center gap-1.5 justify-end">{TypeBadge}</div>
+            <span className="text-[10px] px-2 py-0.5 rounded-full font-medium"
+              style={{ background: T.sand, color: T.inkSoft }}>{cabLabel}</span>
             <div className="font-display text-lg mt-1" style={{ color: T.ink }}>{fmtMYR(total)}</div>
           </div>
         </div>
@@ -212,7 +203,7 @@ export default function QuoteLineItem({ item, result, onChange, onRemove }) {
           style={{ borderTop: `1px dashed ${T.line}`, color: T.inkSoft }}>
           {result.lines.map((ln, i) => (
             <span key={i}>
-              {ln.desc}: {ln.qty.toFixed(ln.uom === '套' || ln.uom === '樘' || ln.uom === '项' ? 0 : 2)}{ln.uom} × RM{Math.round(ln.unitMyr)} = <b style={{ color: T.ink }}>{fmtMYR(ln.total)}</b>
+              {ln.desc}: {ln.qty.toFixed(['套', '樘', '项'].includes(ln.uom) ? 0 : 2)}{ln.uom} × RM{Math.round(ln.unitMyr)} = <b style={{ color: T.ink }}>{fmtMYR(ln.total)}</b>
             </span>
           ))}
         </div>
