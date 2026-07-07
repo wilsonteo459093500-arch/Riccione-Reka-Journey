@@ -43,11 +43,14 @@ export const CARCASS_SERIES = SERIES.filter((s) => s.carcass != null).map((s) =>
 export const DRAWER_CNY = 970; // 基础款全拉四方抽 元/套
 export const LED_CNY = 370;    // D-001 平照灯带 元/米
 
-// ---- 区域 / 房间（尽量覆盖家里需要做定制的地方）----
+// ---- 区域 / 房间 Rooms（中英文；尽量覆盖家里需要做定制的地方）----
+export const CUSTOM_ROOM = '自定义 Custom';
 export const ROOMS = [
-  '玄关', '客厅', '餐厅', '厨房', '中岛', '吧台', '书房',
-  '主卧', '次卧', '儿童房', '长辈房', '衣帽间',
-  '卫生间', '洗衣房', '阳台', '储藏室', '走廊', '神台', '其他',
+  '玄关 Foyer', '客厅 Living Room', '餐厅 Dining', '厨房 Kitchen', '中岛 Island',
+  '吧台 Bar', '书房 Study',
+  '主卧 Master Bedroom', '卧室2 Bedroom 2', '卧室3 Bedroom 3', '卧室4 Bedroom 4',
+  '衣帽间 Walk-in Closet', '卫生间 Bathroom', '洗衣房 Laundry', '阳台 Balcony',
+  '储藏室 Storeroom', '走廊 Hallway', '神台 Altar', CUSTOM_ROOM,
 ];
 
 // ---- 柜体类型：决定常规高度 / 深度 & 计价方式 ----
@@ -56,26 +59,26 @@ export const ROOMS = [
 //   'sqm'   → 面积法：长度 × max(高,深)（高度 ≥ 1m —— 高柜）
 // 高 h / 深 d 仅作预填，可行内调整；实际计价方式随高度自动判定（h<1 即延米）。
 export const CABINET_TYPES = [
-  { id: 'base', label: '地柜', h: 0.85, d: 0.6,  method: 'linear' },
-  { id: 'wall', label: '吊柜', h: 0.75, d: 0.35, method: 'linear' },
-  { id: 'tall', label: '高柜', h: 2.7,  d: 0.6,  method: 'sqm' },
+  { id: 'base', label: '地柜 Base', h: 0.85, d: 0.6,  method: 'linear' },
+  { id: 'wall', label: '吊柜 Wall', h: 0.75, d: 0.35, method: 'linear' },
+  { id: 'tall', label: '高柜 Tall', h: 2.7,  d: 0.6,  method: 'sqm' },
 ];
 export const cabTypeById = (id) => CABINET_TYPES.find((t) => t.id === id) || CABINET_TYPES[0];
 
 // 墙板预设高度（面积法，长 × 高）
 export const WALL_PANEL_PRESETS = [
-  { id: 'wall',      label: '护墙板', h: 2.7 },
-  { id: 'headboard', label: '床头板', h: 1.2 },
-  { id: 'feature',   label: '造型墙', h: 2.4 },
-  { id: 'custom',    label: '自定义', h: 2.7 },
+  { id: 'wall',      label: '护墙板 Wall Panel', h: 2.7 },
+  { id: 'headboard', label: '床头板 Headboard',  h: 1.2 },
+  { id: 'feature',   label: '造型墙 Feature',    h: 2.4 },
+  { id: 'custom',    label: '自定义 Custom',      h: 2.7 },
 ];
 
 // 房门预设（马来西亚零售价，元/樘）
 export const ROOM_DOOR_PRESETS = [
-  { id: 'std',    label: '普通房门',   price: 7570 },
-  { id: 'prem',   label: '高级房门',   price: 10370 },
-  { id: 'ward',   label: '衣柜门',     price: 7755 },
-  { id: 'custom', label: '自定义',     price: 7570 },
+  { id: 'std',    label: '普通房门 Standard', price: 7570 },
+  { id: 'prem',   label: '高级房门 Premium',  price: 10370 },
+  { id: 'ward',   label: '衣柜门 Wardrobe',   price: 7755 },
+  { id: 'custom', label: '自定义 Custom',      price: 7570 },
 ];
 
 // ---- 计算辅助 ----
@@ -110,17 +113,14 @@ export const fmtNum = (n, dp = 2) =>
 //              · roomdoor 房门 · led 灯带 · other 其他
 // ============================================================
 export const CATEGORIES = [
-  { key: 'door',     label: '门板' },
-  { key: 'carcass',  label: '柜体' },
-  { key: 'drawer',   label: '抽屉' },
-  { key: 'panel',    label: '墙板' },
-  { key: 'roomdoor', label: '房门' },
-  { key: 'led',      label: '灯带' },
-  { key: 'other',    label: '其他' },
+  { key: 'door',     label: '门板 Door Panel' },
+  { key: 'carcass',  label: '柜体 Carcass' },
+  { key: 'drawer',   label: '抽屉 Drawer' },
+  { key: 'panel',    label: '墙板 Wall Panel' },
+  { key: 'roomdoor', label: '房门 Room Door' },
+  { key: 'led',      label: '灯带 LED' },
+  { key: 'other',    label: '其他 Other' },
 ];
-
-// 柜体类型中文名（用于报价行描述）
-const CAB_LABEL = { base: '地柜', wall: '吊柜', tall: '高柜' };
 
 // 计算单条明细 → 返回 { lines: [{bucket, desc, qty, uom, unitMyr, total}], total }
 export function computeItem(item) {
@@ -134,25 +134,24 @@ export function computeItem(item) {
   if (item.type === 'cabinet') {
     const L = parseLength(item.length);
     const qty = cabinetQty(L, item.h, item.d);
-    const uom = isLinear(item.h) ? '延米' : '㎡';
-    const tag = CAB_LABEL[item.cabType] || '柜';
+    const uom = isLinear(item.h) ? '延米 L.m' : '㎡';
     const door = seriesById(item.doorSeries);
     const carc = seriesById(item.carcassSeries);
-    if (item.hasDoor !== false) push('door', `${tag}门板 ${door.id}`, qty, uom, cnyToMyr(door.door));
-    if (item.hasCarcass !== false) push('carcass', `${tag}柜体 ${carc.id}`, qty, uom, cnyToMyr(carc.carcass));
+    if (item.hasDoor !== false) push('door', `门板 Door ${door.id}`, qty, uom, cnyToMyr(door.door));
+    if (item.hasCarcass !== false) push('carcass', `柜体 Carcass ${carc.id}`, qty, uom, cnyToMyr(carc.carcass));
     const drawers = Number(item.drawers) || 0;
-    if (drawers > 0) push('drawer', '抽屉', drawers, '套', cnyToMyr(DRAWER_CNY));
+    if (drawers > 0) push('drawer', '抽屉 Drawer', drawers, '套 set', cnyToMyr(DRAWER_CNY));
   } else if (item.type === 'panel') {
     const L = parseLength(item.length);
     const qty = L * (Number(item.h) || 0);
     const s = seriesById(item.panelSeries);
-    push('panel', `墙板 ${s.id}`, qty, '㎡', cnyToMyr(s.panel));
+    push('panel', `墙板 Panel ${s.id}`, qty, '㎡', cnyToMyr(s.panel));
   } else if (item.type === 'roomdoor') {
-    push('roomdoor', item.desc || '房门', Number(item.qty) || 0, '樘', Number(item.unitMyr) || 0);
+    push('roomdoor', item.desc || '房门 Room Door', Number(item.qty) || 0, '樘 pc', Number(item.unitMyr) || 0);
   } else if (item.type === 'led') {
-    push('led', '灯带 LED', parseLength(item.length), '米', cnyToMyr(LED_CNY));
+    push('led', '灯带 LED', parseLength(item.length), '米 m', cnyToMyr(LED_CNY));
   } else if (item.type === 'other') {
-    push('other', item.desc || '其他', Number(item.qty) || 0, item.uom || '项', Number(item.unitMyr) || 0);
+    push('other', item.desc || '其他 Other', Number(item.qty) || 0, item.uom || '项 item', Number(item.unitMyr) || 0);
   }
 
   const total = lines.reduce((a, b) => a + b.total, 0);

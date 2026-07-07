@@ -3,7 +3,7 @@ import { Plus, Copy, Trash2, ChevronDown, ChevronRight, FileText, LayoutGrid } f
 import { T } from '../../theme.js';
 import { newId, copyToClipboard } from '../../utils/helpers.js';
 import { useToast } from '../ui/UIProvider.jsx';
-import { computeQuote, CATEGORIES, ROOMS, cabTypeById, fmtMYR } from '../../constants/pricing.js';
+import { computeQuote, CATEGORIES, ROOMS, CUSTOM_ROOM, cabTypeById, fmtMYR } from '../../constants/pricing.js';
 import QuoteLineItem from './QuoteLineItem.jsx';
 import QuotePrint from './QuotePrint.jsx';
 
@@ -23,13 +23,13 @@ export function makeItem(kind) {
 }
 
 const ADD_TYPES = [
-  { kind: 'base', label: '地柜' },
-  { kind: 'wall', label: '吊柜' },
-  { kind: 'tall', label: '高柜' },
-  { kind: 'panel', label: '墙板' },
-  { kind: 'roomdoor', label: '房门' },
-  { kind: 'led', label: '灯带' },
-  { kind: 'other', label: '其他' },
+  { kind: 'base', label: '地柜 Base' },
+  { kind: 'wall', label: '吊柜 Wall' },
+  { kind: 'tall', label: '高柜 Tall' },
+  { kind: 'panel', label: '墙板 Panel' },
+  { kind: 'roomdoor', label: '房门 Door' },
+  { kind: 'led', label: '灯带 LED' },
+  { kind: 'other', label: '其他 Other' },
 ];
 
 export const blankZone = (name = '') => ({ id: newId('zone'), name, items: [], collapsed: false });
@@ -88,14 +88,15 @@ export default function QuotationView({ doc, onChange }) {
                 <button onClick={() => updateZone(zone.id, { collapsed: !zone.collapsed })} style={{ color: T.inkSoft }}>
                   {zone.collapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
                 </button>
-                {/* 区域 = 房间：下拉选常见房间，也可直接改名 */}
-                <select value={ROOMS.includes(zone.name) ? zone.name : ''} onChange={(e) => updateZone(zone.id, { name: e.target.value })}
+                {/* 区域 = 房间：下拉选常见房间，也可直接改名；选「自定义」清空以便自填 */}
+                <select value={ROOMS.includes(zone.name) ? zone.name : ''}
+                  onChange={(e) => updateZone(zone.id, { name: e.target.value === CUSTOM_ROOM ? '' : e.target.value })}
                   className="bg-transparent outline-none font-display text-lg cursor-pointer" style={{ color: T.ink }}>
-                  <option value="" disabled>选区域…</option>
+                  <option value="" disabled>选区域 Room…</option>
                   {ROOMS.map((r) => <option key={r} value={r}>{r}</option>)}
                 </select>
                 <input value={zone.name} onChange={(e) => updateZone(zone.id, { name: e.target.value })}
-                  placeholder="或自定义区域名"
+                  placeholder="自定义区域名 Custom room"
                   className="flex-1 bg-transparent outline-none text-sm" style={{ color: T.inkSoft }} />
                 <span className="font-display text-lg" style={{ color: T.wood }}>{fmtMYR(zr?.subtotal || 0)}</span>
                 <button onClick={() => removeZone(zone.id)} className="opacity-40 hover:opacity-100"
@@ -105,7 +106,7 @@ export default function QuotationView({ doc, onChange }) {
               {!zone.collapsed && (
                 <div className="p-3 space-y-3" style={{ background: T.paper }}>
                   {zone.items.length === 0 && (
-                    <div className="text-center py-4 text-sm" style={{ color: T.inkSoft }}>选下方柜体类型添加</div>
+                    <div className="text-center py-4 text-sm" style={{ color: T.inkSoft }}>选下方柜体类型添加 · Add an item below</div>
                   )}
                   {zone.items.map((it) => (
                     <QuoteLineItem key={it.id} item={it}
@@ -135,7 +136,7 @@ export default function QuotationView({ doc, onChange }) {
           style={{ border: `1px dashed ${T.line}`, borderRadius: '2px', color: T.inkSoft }}
           onMouseEnter={(e) => (e.currentTarget.style.borderColor = T.wood)}
           onMouseLeave={(e) => (e.currentTarget.style.borderColor = T.line)}>
-          <LayoutGrid size={15} /> 新增区域 / 房间
+          <LayoutGrid size={15} /> 新增区域 / 房间 · Add Room
         </button>
       </div>
 
@@ -188,15 +189,15 @@ export default function QuotationView({ doc, onChange }) {
             <button onClick={() => setShowPrint(true)}
               className="flex items-center justify-center gap-1.5 py-2.5 text-sm"
               style={{ background: T.wood, color: T.paper, borderRadius: '2px' }}>
-              <FileText size={14} /> 生成报价单
+              <FileText size={14} /> 生成报价单 Quote
             </button>
             <button onClick={async () => {
               const ok = await copyToClipboard(buildTextQuote(meta, computed));
-              toast(ok ? '已复制报价文本' : '复制失败', ok ? 'success' : 'error');
+              toast(ok ? '已复制报价文本 Copied' : '复制失败 Copy failed', ok ? 'success' : 'error');
             }}
               className="flex items-center justify-center gap-1.5 py-2.5 text-sm"
               style={{ border: `1px solid ${T.line}`, borderRadius: '2px', color: T.inkSoft }}>
-              <Copy size={14} /> 复制文本
+              <Copy size={14} /> 复制文本 Copy
             </button>
           </div>
         </div>
@@ -210,28 +211,33 @@ export default function QuotationView({ doc, onChange }) {
 // ---- WhatsApp / 纯文本报价 ----
 function buildTextQuote(meta, computed) {
   const L = [];
-  L.push('📋 *预估报价 · SAIL by Riccione Reka*');
+  L.push('📋 *预估报价 Estimated Quotation · SAIL by Riccione Reka*');
   L.push('━━━━━━━━━━━━━━━');
-  if (meta.name) L.push(`👤 客户：${meta.name}`);
-  if (meta.location) L.push(`📍 地点：${meta.location}`);
+  if (meta.name) L.push(`👤 客户 Name：${meta.name}`);
+  if (meta.location) L.push(`📍 地点 Location：${meta.location}`);
   L.push('');
   computed.zoneResults.forEach((zr) => {
     if (!zr.zone.items.length) return;
-    L.push(`▪️ *${zr.zone.name || '未命名区域'}* — ${fmtMYR(zr.subtotal)}`);
+    L.push(`▪️ *${zr.zone.name || '未命名区域 Untitled'}* — ${fmtMYR(zr.subtotal)}`);
   });
   L.push('');
-  L.push('*分类明细*');
+  L.push('*分类明细 Breakdown*');
   CATEGORIES.forEach((c) => {
     const v = Math.round(computed.byCategory[c.key] || 0);
     if (v > 0) L.push(`  ${c.label}：${fmtMYR(v)}`);
   });
   L.push('');
   if (computed.discount > 0) {
-    L.push(`合计：${fmtMYR(computed.gross)}`);
-    L.push(`折扣：− ${fmtMYR(computed.discount)}`);
+    L.push(`合计 Gross：${fmtMYR(computed.gross)}`);
+    L.push(`折扣 Discount：− ${fmtMYR(computed.discount)}`);
   }
-  L.push(`*预估总额：${fmtMYR(computed.net)}*`);
+  L.push(`*预估总额 Total：${fmtMYR(computed.net)}*`);
   L.push('━━━━━━━━━━━━━━━');
-  L.push('※ 此为预估价，实际以正式报价为准。');
+  L.push('Validity 报价有效期');
+  L.push('• Quotation is valid for 14 days from the date of quotation.');
+  L.push('• 报价自出具日期起 14 天内有效。');
+  L.push('Disclaimer 声明');
+  L.push('Prices are subject to change based on final design confirmation, material selection, and site conditions.');
+  L.push('最终价格将根据设计确认、材质选择及现场状况进行调整。');
   return L.join('\n');
 }

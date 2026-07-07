@@ -35,9 +35,9 @@ export default function QuotePrint({ meta, computed, onClose }) {
                 <div className="text-xs tracking-widest uppercase mt-1" style={{ color: T.inkSoft }}>Estimated Quotation 预估报价</div>
               </div>
               <div className="text-right text-xs" style={{ color: T.inkSoft }}>
-                <div>日期 {fmt(meta.date)}</div>
-                {meta.ref && <div>编号 {meta.ref}</div>}
-                {meta.pic && <div>PIC {meta.pic}</div>}
+                <div>日期 Date {fmt(meta.date)}</div>
+                {meta.ref && <div>编号 Ref {meta.ref}</div>}
+                {meta.pic && <div>负责人 PIC {meta.pic}</div>}
               </div>
             </div>
 
@@ -50,13 +50,13 @@ export default function QuotePrint({ meta, computed, onClose }) {
             {zones.map((zr) => (
               <div key={zr.zone.id} className="mb-4" style={{ breakInside: 'avoid' }}>
                 <div className="px-2 py-1 font-medium text-xs uppercase tracking-wide"
-                  style={{ background: T.sand }}>{zr.zone.name || '未命名区域'}</div>
+                  style={{ background: T.sand }}>{zr.zone.name || '未命名区域 Untitled'}</div>
                 <table className="w-full" style={{ borderCollapse: 'collapse' }}>
                   <thead>
                     <tr className="text-[10px] uppercase tracking-wide" style={{ color: T.inkSoft }}>
                       <th className="text-left font-normal py-1 px-2" style={{ width: '42%' }}>项目 Description</th>
                       <th className="text-right font-normal py-1 px-2">数量 Qty</th>
-                      <th className="text-left font-normal py-1 px-2">单位</th>
+                      <th className="text-left font-normal py-1 px-2">单位 UOM</th>
                       <th className="text-right font-normal py-1 px-2">单价 RM</th>
                       <th className="text-right font-normal py-1 px-2">金额 RM</th>
                     </tr>
@@ -100,18 +100,28 @@ export default function QuotePrint({ meta, computed, onClose }) {
                 )}
                 <div className="flex justify-between py-2 mt-1 font-display text-xl"
                   style={{ borderTop: `2px solid ${T.ink}` }}>
-                  <span>预估总额</span><span>{fmtMYR(computed.net)}</span>
+                  <span>预估总额 Total</span><span>{fmtMYR(computed.net)}</span>
                 </div>
               </div>
             </div>
 
-            <div className="mt-8 text-[10px]" style={{ color: T.inkSoft }}>
-              ※ 本报价为预估价，实际以正式报价为准。价格已含板材换算（人民币零售价 × 1.3 ÷ 1.65，取整至 5）。
+            {/* 条款 Terms */}
+            <div className="mt-8 space-y-3 text-[11px]" style={{ color: T.inkSoft, breakInside: 'avoid' }}>
+              <div>
+                <div className="font-medium" style={{ color: T.ink }}>Validity 报价有效期</div>
+                <div>• Quotation is valid for 14 days from the date of quotation.</div>
+                <div>• 报价自出具日期起 14 天内有效。</div>
+              </div>
+              <div>
+                <div className="font-medium" style={{ color: T.ink }}>Disclaimer 声明</div>
+                <div>Prices are subject to change based on final design confirmation, material selection, and site conditions.</div>
+                <div>最终价格将根据设计确认、材质选择及现场状况进行调整。</div>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-8 mt-10 text-xs">
-              <div style={{ borderTop: `1px solid ${T.line}`, paddingTop: 6 }}>DIRECTOR 签名 / 日期</div>
-              <div style={{ borderTop: `1px solid ${T.line}`, paddingTop: 6 }}>CUSTOMER 签名 / 日期</div>
+              <div style={{ borderTop: `1px solid ${T.line}`, paddingTop: 6 }}>董事签名 / 日期 · Director Signature / Date</div>
+              <div style={{ borderTop: `1px solid ${T.line}`, paddingTop: 6 }}>客户签名 / 日期 · Customer Signature / Date</div>
             </div>
           </div>
         </div>

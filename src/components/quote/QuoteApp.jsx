@@ -33,9 +33,9 @@ function load() {
 const relTime = (ts) => {
   if (!ts) return '';
   const d = Math.floor((Date.now() - ts) / 1000);
-  if (d < 60) return '刚刚';
-  if (d < 3600) return `${Math.floor(d / 60)} 分钟前`;
-  if (d < 86400) return `${Math.floor(d / 3600)} 小时前`;
+  if (d < 60) return '刚刚 now';
+  if (d < 3600) return `${Math.floor(d / 60)} 分 min`;
+  if (d < 86400) return `${Math.floor(d / 3600)} 时 hr`;
   return new Date(ts).toISOString().slice(0, 10);
 };
 
@@ -85,18 +85,18 @@ function Inner() {
     const src = s.records.find((r) => r.id === id);
     if (!src) return s;
     const copy = { ...structuredClone(src), id: newId('rec'), createdAt: nowTs(), updatedAt: nowTs() };
-    copy.meta = { ...copy.meta, name: (copy.meta.name || '未命名') + ' (副本)' };
+    copy.meta = { ...copy.meta, name: (copy.meta.name || '未命名') + ' (副本 Copy)' };
     return { records: [copy, ...s.records], activeId: copy.id };
   });
 
   const remove = async (id) => {
     const rec = records.find((r) => r.id === id);
-    if (await confirm({ title: '删除报价', message: `确定删除「${rec?.meta.name || '未命名'}」的报价记录?`, danger: true, confirmText: '删除' })) {
+    if (await confirm({ title: '删除报价 Delete', message: `确定删除「${rec?.meta.name || '未命名'}」的报价记录? Delete this quotation?`, danger: true, confirmText: '删除 Delete', cancelText: '取消 Cancel' })) {
       setStore((s) => {
         const rest = s.records.filter((r) => r.id !== id);
         return { records: rest, activeId: s.activeId === id ? (rest[0]?.id || null) : s.activeId };
       });
-      toast('已删除', 'success');
+      toast('已删除 Deleted', 'success');
     }
   };
 
@@ -108,7 +108,7 @@ function Inner() {
         <div className="max-w-[1400px] mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-baseline gap-3">
             <Calculator size={18} style={{ color: T.wood }} />
-            <div className="font-display text-2xl" style={{ color: T.ink }}>预估报价</div>
+            <div className="font-display text-2xl" style={{ color: T.ink }}>预估报价 <span className="text-base">Quotation</span></div>
             <div className="hidden md:block text-xs uppercase tracking-[0.2em]" style={{ color: T.inkSoft }}>
               SAIL by Riccione Reka
             </div>
@@ -117,7 +117,7 @@ function Inner() {
             style={{ background: T.ink, color: T.paper, borderRadius: '2px' }}
             onMouseEnter={(e) => (e.currentTarget.style.background = T.wood)}
             onMouseLeave={(e) => (e.currentTarget.style.background = T.ink)}>
-            <Plus size={14} /> 新客户报价
+            <Plus size={14} /> 新客户报价 New
           </button>
         </div>
       </header>
@@ -127,19 +127,19 @@ function Inner() {
         <aside className="no-print space-y-3">
           <div className="relative">
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: T.inkSoft }} />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索客户 / 地点 / 编号"
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索 Search 客户/地点/编号"
               className="w-full pl-8 pr-2 py-2 text-sm outline-none"
               style={{ background: T.cream, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }} />
           </div>
 
           <div className="text-[10px] uppercase tracking-widest" style={{ color: T.inkSoft }}>
-            客户记录 · {records.length}
+            客户记录 Records · {records.length}
           </div>
 
           <div className="space-y-2">
             {filtered.length === 0 && (
               <div className="text-sm py-6 text-center" style={{ color: T.inkSoft }}>
-                {records.length === 0 ? '还没有报价，点右上「新客户报价」' : '无匹配结果'}
+                {records.length === 0 ? '还没有报价，点右上新建 · No records yet, click New' : '无匹配结果 No match'}
               </div>
             )}
             {filtered.map((r) => {
@@ -150,7 +150,7 @@ function Inner() {
                   style={{ background: on ? T.sand : T.cream, border: `1px solid ${on ? T.wood : T.lineSoft}` }}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="font-medium truncate" style={{ color: T.ink }}>{r.meta.name || '未命名客户'}</div>
+                      <div className="font-medium truncate" style={{ color: T.ink }}>{r.meta.name || '未命名客户 Untitled'}</div>
                       <div className="text-xs truncate" style={{ color: T.inkSoft }}>{r.meta.location || '—'}</div>
                     </div>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -178,13 +178,15 @@ function Inner() {
             <div className="flex flex-col items-center justify-center py-32 text-center" style={{ color: T.inkSoft }}>
               <FileText size={40} strokeWidth={1} style={{ color: T.line }} />
               <div className="font-display text-2xl mt-4" style={{ color: T.ink }}>选一份报价，或新建客户</div>
-              <p className="text-sm mt-2 max-w-md">
+              <div className="text-sm" style={{ color: T.inkSoft }}>Select a quotation, or create a new customer</div>
+              <p className="text-sm mt-3 max-w-md">
                 选区域（客厅、餐厅、卧室…）→ 选柜体类型（地柜 / 吊柜 / 高柜 / 墙板）→ 只填长度，
-                系统按「高&lt;1m 延米 · 高≥1m 面积」自动算，并换算成马来西亚零售价。
+                系统自动按「高&lt;1m 延米 · 高≥1m 面积」计算。<br />
+                Pick a room → pick a cabinet type → enter length only; totals compute automatically.
               </p>
               <button onClick={create} className="mt-5 flex items-center gap-1.5 px-4 py-2 text-sm"
                 style={{ background: T.wood, color: T.paper, borderRadius: '2px' }}>
-                <Plus size={14} /> 新客户报价
+                <Plus size={14} /> 新客户报价 New
               </button>
             </div>
           )}
