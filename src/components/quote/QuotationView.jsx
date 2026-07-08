@@ -206,6 +206,26 @@ export default function QuotationView({ doc, onChange }) {
           <LayoutGrid size={15} /> Add Room 新增区域 / 房间
         </button>
 
+        {/* ===== 定制小计 Cabinet Sub-Total（含独立折扣）===== */}
+        <div className="p-4 rounded" style={{ background: T.cream, border: `1px solid ${T.lineSoft}` }}>
+          <div className="flex items-center justify-between">
+            <span className="font-display text-lg" style={{ color: T.ink }}>Cabinet Sub-Total 定制小计</span>
+            <span className="font-display text-lg" style={{ color: T.wood }}>{fmtMYR(computed.net)}</span>
+          </div>
+          <div className="flex items-center gap-4 flex-wrap mt-2 text-xs" style={{ color: T.inkSoft }}>
+            <span>Gross 合计 {fmtMYR(computed.gross)}</span>
+            <span className="flex items-center gap-2">
+              <span className="uppercase tracking-widest text-[10px]">Discount 折扣</span>
+              <input type="number" value={adjustPct}
+                onChange={(e) => patch({ adjustPct: Number(e.target.value) || 0 })}
+                className="w-16 px-2 py-1 text-sm outline-none"
+                style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }} />
+              <span>%</span>
+            </span>
+            {computed.discount > 0 && <span style={{ color: T.terra }}>− {fmtMYR(computed.discount)}</span>}
+          </div>
+        </div>
+
         {/* ===== Loose Furniture 家具（Riccione Furniture · 报价单另起一页）===== */}
         <div className="rounded overflow-hidden" style={{ border: `1px solid ${T.line}` }}>
           <div className="flex items-center gap-2 px-4 py-3" style={{ background: T.sand }}>
@@ -272,20 +292,16 @@ export default function QuotationView({ doc, onChange }) {
           <div className="p-5 rounded" style={{ background: T.ink, color: T.paper }}>
             <div className="text-[10px] uppercase tracking-widest opacity-70">Estimated Total 预估总额</div>
             <div className="font-display text-4xl mt-1">{fmtMYR(grandTotal)}</div>
-            {computed.discount > 0 && (
-              <div className="text-xs mt-2 opacity-80">Gross 原价 {fmtMYR(computed.gross)} − Discount 折扣 {computed.adjustPct}% ({fmtMYR(computed.discount)})</div>
-            )}
-            {looseCalc.total > 0 && (
-              <div className="text-xs mt-2 pt-2 opacity-80 space-y-0.5" style={{ borderTop: '1px solid rgba(255,255,255,0.15)' }}>
-                <div className="flex justify-between"><span>Cabinet 橱柜</span><span>{fmtMYR(computed.net)}</span></div>
-                <div className="flex justify-between"><span>Loose Furniture 家具</span><span>{fmtMYR(looseCalc.total)}</span></div>
-              </div>
-            )}
+            {/* 定制 + 家具 两个小计 */}
+            <div className="text-xs mt-3 pt-3 opacity-90 space-y-1" style={{ borderTop: '1px solid rgba(255,255,255,0.15)' }}>
+              <div className="flex justify-between"><span>Cabinet 定制</span><span>{fmtMYR(computed.net)}</span></div>
+              <div className="flex justify-between"><span>Loose Furniture 家具</span><span>{fmtMYR(looseCalc.net)}</span></div>
+            </div>
           </div>
 
-          {/* 分类明细 */}
+          {/* 分类明细（定制）*/}
           <div className="p-4 rounded" style={{ background: T.cream, border: `1px solid ${T.lineSoft}` }}>
-            <div className="text-[10px] uppercase tracking-widest mb-2" style={{ color: T.inkSoft }}>Breakdown 分类明细</div>
+            <div className="text-[10px] uppercase tracking-widest mb-2" style={{ color: T.inkSoft }}>Cabinet Breakdown 定制分类</div>
             <div className="space-y-1.5">
               {CATEGORIES.map((c) => {
                 const v = Math.round(computed.byCategory[c.key] || 0);
@@ -301,18 +317,6 @@ export default function QuotationView({ doc, onChange }) {
                 <span style={{ color: T.inkSoft }}>Gross 合计</span>
                 <span className="font-medium" style={{ color: T.ink }}>{fmtMYR(computed.gross)}</span>
               </div>
-            </div>
-          </div>
-
-          {/* 折扣 */}
-          <div className="p-4 rounded" style={{ background: T.cream, border: `1px solid ${T.lineSoft}` }}>
-            <label className="block text-[10px] uppercase tracking-widest mb-1.5" style={{ color: T.inkSoft }}>Discount 折扣 / 赞助 %</label>
-            <div className="flex items-center gap-2">
-              <input type="number" value={adjustPct}
-                onChange={(e) => patch({ adjustPct: Number(e.target.value) || 0 })}
-                className="w-20 px-2 py-1.5 text-sm outline-none"
-                style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }} />
-              <span className="text-sm" style={{ color: T.inkSoft }}>%　→ − {fmtMYR(computed.discount)}</span>
             </div>
           </div>
 
