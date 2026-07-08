@@ -66,8 +66,7 @@ export default function QuotePrint({ meta, computed, loose, lang = 'both', onClo
   );
 
   const Signatures = () => (
-    <div className="grid grid-cols-2 gap-8 mt-10 text-xs">
-      <div style={{ borderTop: `1px solid ${T.line}`, paddingTop: 6 }}>{t(RLBL.director)}</div>
+    <div className="mt-12 text-xs" style={{ width: '48%' }}>
       <div style={{ borderTop: `1px solid ${T.line}`, paddingTop: 6 }}>{t(RLBL.customer)}</div>
     </div>
   );
