@@ -16,6 +16,7 @@ function newRecord() {
     id: newId('rec'),
     meta: { name: '', location: '', ref: '', pic: '', version: '1', outputLang: 'en', date: todayISO() },
     zones: [blankZone('')],
+    looseItems: [],
     adjustPct: 0,
     createdAt: nowTs(),
     updatedAt: nowTs(),

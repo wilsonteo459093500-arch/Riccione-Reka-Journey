@@ -203,6 +203,10 @@ export const RLBL = {
   uom:       { en: 'UOM', zh: '单位' },
   unitPrice: { en: 'Unit Price RM', zh: '单价 RM' },
   amount:    { en: 'Amount RM', zh: '金额 RM' },
+  productType: { en: 'Product Type', zh: '产品类型' },
+  model:     { en: 'Model', zh: '型号' },
+  color:     { en: 'Color', zh: '颜色' },
+  looseSection: { en: 'Loose Furniture', zh: '家具' },
   subtotal:  { en: 'Sub-Total', zh: '小计' },
   gross:     { en: 'Gross', zh: '合计' },
   discount:  { en: 'Discount', zh: '折扣' },
@@ -271,4 +275,15 @@ export function computeQuote(zones = [], adjustPct = 0) {
   const net = gross - discount;
 
   return { zoneResults, byCategory, gross, discount, net, adjustPct: pct };
+}
+
+// ---- Loose Furniture 家具（品牌：Riccione Furniture）----
+// 每项：{ type 产品类型, model 型号, color 颜色, qty 数量, unitMyr 单价 } → total 总价
+export function computeLoose(items = []) {
+  const rows = (items || []).map((it) => ({
+    ...it,
+    total: (Number(it.qty) || 0) * (Number(it.unitMyr) || 0),
+  }));
+  const total = mround(rows.reduce((a, b) => a + b.total, 0), 1);
+  return { rows, total };
 }
