@@ -292,31 +292,18 @@ export default function QuotationView({ doc, onChange }) {
           <div className="p-5 rounded" style={{ background: T.ink, color: T.paper }}>
             <div className="text-[10px] uppercase tracking-widest opacity-70">Estimated Total 预估总额</div>
             <div className="font-display text-4xl mt-1">{fmtMYR(grandTotal)}</div>
-            {/* 定制 + 家具 两个小计 */}
-            <div className="text-xs mt-3 pt-3 opacity-90 space-y-1" style={{ borderTop: '1px solid rgba(255,255,255,0.15)' }}>
-              <div className="flex justify-between"><span>Cabinet 定制</span><span>{fmtMYR(computed.net)}</span></div>
-              <div className="flex justify-between"><span>Loose Furniture 家具</span><span>{fmtMYR(looseCalc.net)}</span></div>
-            </div>
-          </div>
-
-          {/* 分类明细（定制）*/}
-          <div className="p-4 rounded" style={{ background: T.cream, border: `1px solid ${T.lineSoft}` }}>
-            <div className="text-[10px] uppercase tracking-widest mb-2" style={{ color: T.inkSoft }}>Cabinet Breakdown 定制分类</div>
-            <div className="space-y-1.5">
-              {CATEGORIES.map((c) => {
-                const v = Math.round(computed.byCategory[c.key] || 0);
-                if (v === 0) return null;
-                return (
-                  <div key={c.key} className="flex justify-between text-sm">
-                    <span style={{ color: T.inkSoft }}>{c.label}</span>
-                    <span style={{ color: T.ink }}>{fmtMYR(v)}</span>
-                  </div>
-                );
-              })}
-              <div className="flex justify-between text-sm pt-1.5 mt-1" style={{ borderTop: `1px solid ${T.line}` }}>
-                <span style={{ color: T.inkSoft }}>Gross 合计</span>
-                <span className="font-medium" style={{ color: T.ink }}>{fmtMYR(computed.gross)}</span>
+            {/* 定制 + 家具 两个小计（已含各自折扣）*/}
+            <div className="text-xs mt-3 pt-3 opacity-90 space-y-1.5" style={{ borderTop: '1px solid rgba(255,255,255,0.15)' }}>
+              <div className="flex justify-between">
+                <span>Cabinet 定制{computed.discount > 0 ? ` (−${computed.adjustPct}%)` : ''}</span>
+                <span>{fmtMYR(computed.net)}</span>
               </div>
+              {looseCalc.rows.length > 0 && (
+                <div className="flex justify-between">
+                  <span>Loose Furniture 家具{looseCalc.discount > 0 ? ` (−${looseCalc.adjustPct}%)` : ''}</span>
+                  <span>{fmtMYR(looseCalc.net)}</span>
+                </div>
+              )}
             </div>
           </div>
 
