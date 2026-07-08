@@ -80,7 +80,9 @@ export async function exportExcel(meta, computed, loose, lang = 'both') {
     looseRows.forEach((r) => {
       row([r.type || '', r.model || '', r.color || '', round0(r.qty), round0(r.unitMyr), round0(r.total)]);
     });
-    row(['', '', '', '', t(RLBL.total), round0(loose.total)]);
+    row(['', '', '', '', t(RLBL.gross), round0(loose.gross)]);
+    if (loose.discount > 0) row(['', '', '', '', `${t(RLBL.discount)} (${loose.adjustPct}%)`, -round0(loose.discount)]);
+    row(['', '', '', '', t(RLBL.total), round0(loose.net)]);
     row([]);
     termLines(QUOTE_TERMS.slice(0, 1), aoa); // 只放 Validity
     const ws = XLSX.utils.aoa_to_sheet(aoa);

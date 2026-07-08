@@ -190,8 +190,18 @@ export default function QuotePrint({ meta, computed, loose, lang = 'both', onClo
                       </tr>
                     ))}
                     <tr style={{ borderTop: `1.5px solid ${T.line}` }}>
-                      <td colSpan={5} className="text-right py-1 px-2 text-xs" style={{ color: T.inkSoft }}>{t(RLBL.total)}</td>
-                      <td className="text-right py-1 px-2 font-medium">{fmtNum(loose.total, 0)}</td>
+                      <td colSpan={5} className="text-right py-1 px-2 text-xs" style={{ color: T.inkSoft }}>{t(RLBL.gross)}</td>
+                      <td className="text-right py-1 px-2">{fmtNum(loose.gross, 0)}</td>
+                    </tr>
+                    {loose.discount > 0 && (
+                      <tr style={{ color: T.terra }}>
+                        <td colSpan={5} className="text-right py-1 px-2 text-xs">{t(RLBL.discount)} ({loose.adjustPct}%)</td>
+                        <td className="text-right py-1 px-2">− {fmtNum(loose.discount, 0)}</td>
+                      </tr>
+                    )}
+                    <tr style={{ borderTop: `1px solid ${T.line}` }}>
+                      <td colSpan={5} className="text-right py-1 px-2 font-medium">{t(RLBL.total)}</td>
+                      <td className="text-right py-1 px-2 font-medium">{fmtNum(loose.net, 0)}</td>
                     </tr>
                   </tbody>
                 </table>

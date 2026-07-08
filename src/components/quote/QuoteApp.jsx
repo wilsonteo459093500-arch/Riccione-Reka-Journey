@@ -18,6 +18,7 @@ function newRecord() {
     zones: [blankZone('')],
     looseItems: [],
     adjustPct: 0,
+    looseAdjustPct: 0,
     createdAt: nowTs(),
     updatedAt: nowTs(),
   };

@@ -83,10 +83,11 @@ export default function QuotationView({ doc, onChange }) {
   const [showPrint, setShowPrint] = useState(false);
   const { meta, zones, adjustPct } = doc;
   const looseItems = doc.looseItems || [];
+  const looseAdjustPct = doc.looseAdjustPct || 0;
   const lang = meta.outputLang || 'en';
   const computed = useMemo(() => computeQuote(zones, adjustPct), [zones, adjustPct]);
-  const looseCalc = useMemo(() => computeLoose(looseItems), [looseItems]);
-  const grandTotal = computed.net + looseCalc.total;
+  const looseCalc = useMemo(() => computeLoose(looseItems, looseAdjustPct), [looseItems, looseAdjustPct]);
+  const grandTotal = computed.net + looseCalc.net;
   const dragRef = useRef(null); // { zoneId, from } 或 { loose:true, from }
 
   // ---- mutators ----
@@ -242,13 +243,25 @@ export default function QuotationView({ doc, onChange }) {
                   dragRef.current = null;
                 }} />
             ))}
-            <button onClick={addLoose}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs transition-colors"
-              style={{ border: `1px solid ${T.line}`, borderRadius: '2px', color: T.inkSoft }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = T.wood; e.currentTarget.style.color = T.wood; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = T.line; e.currentTarget.style.color = T.inkSoft; }}>
-              <Plus size={12} /> Loose furniture 家具
-            </button>
+            <div className="flex items-center gap-3 flex-wrap pt-1">
+              <button onClick={addLoose}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs transition-colors"
+                style={{ border: `1px solid ${T.line}`, borderRadius: '2px', color: T.inkSoft }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = T.wood; e.currentTarget.style.color = T.wood; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = T.line; e.currentTarget.style.color = T.inkSoft; }}>
+                <Plus size={12} /> Loose furniture 家具
+              </button>
+              {looseItems.length > 0 && (
+                <div className="flex items-center gap-2 text-xs" style={{ color: T.inkSoft }}>
+                  <span className="uppercase tracking-widest text-[10px]">Discount 折扣</span>
+                  <input type="number" value={looseAdjustPct}
+                    onChange={(e) => patch({ looseAdjustPct: Number(e.target.value) || 0 })}
+                    className="w-16 px-2 py-1 text-sm outline-none"
+                    style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }} />
+                  <span>%　{looseCalc.discount > 0 ? `− ${fmtMYR(looseCalc.discount)} → ${fmtMYR(looseCalc.net)}` : ''}</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -394,7 +407,11 @@ function buildTextQuote(meta, computed, loose, lang = 'both') {
       const nm = [r.type, r.model, r.color].filter(Boolean).join(' ');
       L.push(`  ${nm || '-'} ×${Number(r.qty) || 0} — ${fmtMYR(r.total)}`);
     });
-    L.push(`*${t(RLBL.total)}：${fmtMYR(loose.total)}*`);
+    if (loose.discount > 0) {
+      L.push(`${t(RLBL.gross)}：${fmtMYR(loose.gross)}`);
+      L.push(`${t(RLBL.discount)} (${loose.adjustPct}%)：− ${fmtMYR(loose.discount)}`);
+    }
+    L.push(`*${t(RLBL.total)}：${fmtMYR(loose.net)}*`);
   }
   L.push('━━━━━━━━━━━━━━━');
   QUOTE_TERMS.forEach((sec) => {

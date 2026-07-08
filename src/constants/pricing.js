@@ -277,13 +277,16 @@ export function computeQuote(zones = [], adjustPct = 0) {
   return { zoneResults, byCategory, gross, discount, net, adjustPct: pct };
 }
 
-// ---- Loose Furniture 家具（品牌：Riccione Furniture）----
+// ---- Loose Furniture 家具（品牌：Riccione Furniture；独立折扣）----
 // 每项：{ type 产品类型, model 型号, color 颜色, qty 数量, unitMyr 单价 } → total 总价
-export function computeLoose(items = []) {
+export function computeLoose(items = [], adjustPct = 0) {
   const rows = (items || []).map((it) => ({
     ...it,
     total: (Number(it.qty) || 0) * (Number(it.unitMyr) || 0),
   }));
-  const total = mround(rows.reduce((a, b) => a + b.total, 0), 1);
-  return { rows, total };
+  const gross = mround(rows.reduce((a, b) => a + b.total, 0), 1);
+  const pct = Number(adjustPct) || 0;
+  const discount = Math.round((gross * pct) / 100);
+  const net = gross - discount;
+  return { rows, gross, discount, net, adjustPct: pct, total: net }; // total=net，兼容旧引用
 }
