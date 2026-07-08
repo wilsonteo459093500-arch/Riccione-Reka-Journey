@@ -99,7 +99,7 @@ export default function QuotePrint({ meta, computed, lang = 'both', onClose }) {
                 </div>
                 {computed.discount > 0 && (
                   <div className="flex justify-between py-1" style={{ color: T.terra }}>
-                    <span>{t(RLBL.discount)}</span><span>− {fmtMYR(computed.discount)}</span>
+                    <span>{t(RLBL.discount)} ({computed.adjustPct}%)</span><span>− {fmtMYR(computed.discount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between py-2 mt-1 font-display text-xl"

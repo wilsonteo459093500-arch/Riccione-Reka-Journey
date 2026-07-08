@@ -266,8 +266,9 @@ export function computeQuote(zones = [], adjustPct = 0) {
   );
 
   const gross = zoneResults.reduce((a, b) => a + b.subtotal, 0);
-  const discount = Math.round((gross * (Number(adjustPct) || 0)) / 100);
+  const pct = Number(adjustPct) || 0;
+  const discount = Math.round((gross * pct) / 100);
   const net = gross - discount;
 
-  return { zoneResults, byCategory, gross, discount, net };
+  return { zoneResults, byCategory, gross, discount, net, adjustPct: pct };
 }

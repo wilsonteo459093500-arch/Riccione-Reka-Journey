@@ -149,7 +149,7 @@ export default function QuotationView({ doc, onChange }) {
             <div className="text-[10px] uppercase tracking-widest opacity-70">Estimated Total 预估总额</div>
             <div className="font-display text-4xl mt-1">{fmtMYR(computed.net)}</div>
             {computed.discount > 0 && (
-              <div className="text-xs mt-2 opacity-80">Gross 原价 {fmtMYR(computed.gross)} − Discount 折扣 {fmtMYR(computed.discount)}</div>
+              <div className="text-xs mt-2 opacity-80">Gross 原价 {fmtMYR(computed.gross)} − Discount 折扣 {computed.adjustPct}% ({fmtMYR(computed.discount)})</div>
             )}
           </div>
 
@@ -266,7 +266,7 @@ function buildTextQuote(meta, computed, lang = 'both') {
   L.push('');
   if (computed.discount > 0) {
     L.push(`${t(RLBL.gross)}：${fmtMYR(computed.gross)}`);
-    L.push(`${t(RLBL.discount)}：− ${fmtMYR(computed.discount)}`);
+    L.push(`${t(RLBL.discount)} (${computed.adjustPct}%)：− ${fmtMYR(computed.discount)}`);
   }
   L.push(`*${t(RLBL.total)}：${fmtMYR(computed.net)}*`);
   L.push('━━━━━━━━━━━━━━━');

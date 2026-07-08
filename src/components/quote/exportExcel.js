@@ -45,7 +45,7 @@ export async function exportExcel(meta, computed, lang = 'both') {
 
   // ---- 汇总 ----
   row(['', '', '', t(RLBL.gross), round0(computed.gross)]);
-  if (computed.discount > 0) row(['', '', '', t(RLBL.discount), -round0(computed.discount)]);
+  if (computed.discount > 0) row(['', '', '', `${t(RLBL.discount)} (${computed.adjustPct}%)`, -round0(computed.discount)]);
   row(['', '', '', t(RLBL.total), round0(computed.net)]);
   row([]);
 
