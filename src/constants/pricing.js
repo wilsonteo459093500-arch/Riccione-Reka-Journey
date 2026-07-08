@@ -122,41 +122,134 @@ export const CATEGORIES = [
   { key: 'other',    label: 'Other 其他' },
 ];
 
-// 计算单条明细 → 返回 { lines: [{bucket, desc, qty, uom, unitMyr, total}], total }
+// 计算单条明细 → 每行携带独立中英文（descEn/descZh、uomEn/uomZh），
+// 供报价单按所选语言渲染。piece=true 表示按个/件计（数量不显示小数）。
 export function computeItem(item) {
   const lines = [];
-  const push = (bucket, desc, qty, uom, unitMyr) => {
-    // 保留小数，仅在区域小计处四舍五入（与 Excel 一致）。
-    const total = (Number(qty) || 0) * (Number(unitMyr) || 0);
-    lines.push({ bucket, desc, qty, uom, unitMyr, total });
+  const push = (bucket, en, zh, qty, uEn, uZh, piece, unitMyr) => {
+    const total = (Number(qty) || 0) * (Number(unitMyr) || 0); // 仅在区域小计处四舍五入
+    lines.push({ bucket, descEn: en, descZh: zh, uomEn: uEn, uomZh: uZh, piece, qty, unitMyr, total });
   };
 
   if (item.type === 'cabinet') {
-    const L = parseLength(item.length);
-    const qty = cabinetQty(L, item.h, item.d);
-    const uom = isLinear(item.h) ? 'L.m 延米' : '㎡';
+    const len = parseLength(item.length);
+    const qty = cabinetQty(len, item.h, item.d);
+    const lin = isLinear(item.h);
+    const uEn = lin ? 'L.m' : 'm²';
+    const uZh = lin ? '延米' : '㎡';
     const door = seriesById(item.doorSeries);
     const carc = seriesById(item.carcassSeries);
-    if (item.hasDoor !== false) push('door', `Door 门板 ${door.id}`, qty, uom, cnyToMyr(door.door));
-    if (item.hasCarcass !== false) push('carcass', `Carcass 柜体 ${carc.id}`, qty, uom, cnyToMyr(carc.carcass));
+    if (item.hasDoor !== false) push('door', `Door ${door.id}`, `门板 ${door.id}`, qty, uEn, uZh, false, cnyToMyr(door.door));
+    if (item.hasCarcass !== false) push('carcass', `Carcass ${carc.id}`, `柜体 ${carc.id}`, qty, uEn, uZh, false, cnyToMyr(carc.carcass));
     const drawers = Number(item.drawers) || 0;
-    if (drawers > 0) push('drawer', 'Drawer 抽屉', drawers, 'set 套', cnyToMyr(DRAWER_CNY));
+    if (drawers > 0) push('drawer', 'Drawer', '抽屉', drawers, 'set', '套', true, cnyToMyr(DRAWER_CNY));
   } else if (item.type === 'panel') {
-    const L = parseLength(item.length);
-    const qty = L * (Number(item.h) || 0);
+    const len = parseLength(item.length);
+    const qty = len * (Number(item.h) || 0);
     const s = seriesById(item.panelSeries);
-    push('panel', `Panel 墙板 ${s.id}`, qty, '㎡', cnyToMyr(s.panel));
+    push('panel', `Panel ${s.id}`, `墙板 ${s.id}`, qty, 'm²', '㎡', false, cnyToMyr(s.panel));
   } else if (item.type === 'roomdoor') {
-    push('roomdoor', item.desc || 'Room Door 房门', Number(item.qty) || 0, 'pc 樘', Number(item.unitMyr) || 0);
+    const t = item.desc || '';
+    push('roomdoor', t || 'Room Door', t || '房门', Number(item.qty) || 0, 'pc', '樘', true, Number(item.unitMyr) || 0);
   } else if (item.type === 'led') {
-    push('led', 'LED 灯带', parseLength(item.length), 'm 米', cnyToMyr(LED_CNY));
+    push('led', 'LED', '灯带', parseLength(item.length), 'm', '米', false, cnyToMyr(LED_CNY));
   } else if (item.type === 'other') {
-    push('other', item.desc || 'Other 其他', Number(item.qty) || 0, item.uom || 'item 项', Number(item.unitMyr) || 0);
+    const t = item.desc || '';
+    const u = item.uom || '';
+    push('other', t || 'Other', t || '其他', Number(item.qty) || 0, u || 'item', u || '项', /pc|set|item|套|樘|项/i.test(u), Number(item.unitMyr) || 0);
   }
 
   const total = lines.reduce((a, b) => a + b.total, 0);
   return { lines, total };
 }
+
+// ============================================================
+// 输出语言 i18n —— 报价单/Excel/文本按 lang（'en' | 'zh' | 'both'）渲染
+// ============================================================
+export const OUTPUT_LANGS = [
+  { id: 'en', label: 'EN' },
+  { id: 'zh', label: '中文' },
+  { id: 'both', label: 'EN+中' },
+];
+
+// obj = { en, zh } → 按语言取值（both 则并列）
+export function tr(obj, lang) {
+  if (!obj) return '';
+  if (lang === 'en') return obj.en;
+  if (lang === 'zh') return obj.zh;
+  return [obj.en, obj.zh].filter(Boolean).join(' ');
+}
+
+// 把 "English 中文" 形式的字符串按语言拆分取用；无中文则原样返回。
+export function pickLang(text, lang) {
+  const s = String(text || '');
+  if (lang === 'both' || !s) return s;
+  const m = s.match(/^(.*?)[\s·]+([一-鿿][一-鿿0-9．·\s]*)$/);
+  if (!m) return s;
+  return lang === 'en' ? (m[1].trim() || s) : (m[2].trim() || s);
+}
+
+// 报价单固定文案
+export const RLBL = {
+  estQuote:  { en: 'Estimated Quotation', zh: '预估报价' },
+  name:      { en: 'Name', zh: '客户' },
+  site:      { en: 'Site', zh: '地点' },
+  date:      { en: 'Date', zh: '日期' },
+  ref:       { en: 'Ref', zh: '编号' },
+  pic:       { en: 'PIC', zh: '负责人' },
+  rev:       { en: 'Rev', zh: '版本' },
+  desc:      { en: 'Description', zh: '项目' },
+  qty:       { en: 'Qty', zh: '数量' },
+  uom:       { en: 'UOM', zh: '单位' },
+  unitPrice: { en: 'Unit Price RM', zh: '单价 RM' },
+  amount:    { en: 'Amount RM', zh: '金额 RM' },
+  subtotal:  { en: 'Sub-Total', zh: '小计' },
+  gross:     { en: 'Gross', zh: '合计' },
+  discount:  { en: 'Discount', zh: '折扣' },
+  total:     { en: 'Total', zh: '预估总额' },
+  untitled:  { en: 'Untitled', zh: '未命名' },
+  director:  { en: 'Director Signature / Date', zh: '董事签名 / 日期' },
+  customer:  { en: 'Customer Signature / Date', zh: '客户签名 / 日期' },
+  preview:   { en: 'Quotation Preview', zh: '报价单预览' },
+  printBtn:  { en: 'Print / Save PDF', zh: '打印 / 存 PDF' },
+};
+
+// 报价单条款（有效期 / 声明 / 产品规格 / 标准材质与五金）
+export const QUOTE_TERMS = [
+  {
+    title: { en: 'Validity', zh: '报价有效期' },
+    lines: [
+      { en: 'Quotation is valid for 14 days from the date of quotation.', zh: '报价自出具日期起 14 天内有效。' },
+    ],
+  },
+  {
+    title: { en: 'Disclaimer', zh: '声明' },
+    lines: [
+      { en: 'Prices are subject to change based on final design confirmation, material selection, and site conditions.', zh: '最终价格将根据设计确认、材质选择及现场状况进行调整。' },
+    ],
+  },
+  {
+    title: { en: 'Specifications', zh: '产品规格' },
+    bullet: true,
+    lines: [
+      { en: 'Door panel thickness: 18mm', zh: '门板厚度：18mm' },
+      { en: 'Internal carcass thickness: 18mm', zh: '柜体厚度：18mm' },
+      { en: 'Back panel thickness: 9mm', zh: '背板厚度：9mm' },
+      { en: 'Edge technique: PUR edge banding', zh: '封边工艺：PUR封边' },
+      { en: "Environmental grade: F★★★★ (Japan's highest environmental standard)", zh: '环保等级：F★★★★（日本最高环保等级）' },
+    ],
+  },
+  {
+    title: { en: 'Standard Materials & Hardware', zh: '标准材质与五金' },
+    bullet: true,
+    lines: [
+      { en: 'Material: Solid wood melamine (particle board)', zh: '材质：实木颗粒板' },
+      { en: 'Hinges brand: Salice', zh: '铰链品牌：萨郦奇' },
+      { en: 'Drawer runner brand: Blum', zh: '导轨品牌：百隆' },
+    ],
+    note: { en: '*Upgrade of material option is available', zh: '*可选择升级材质' },
+  },
+];
 
 // 计算整个报价 → 各区域小计 + 分类汇总 + 总额
 export function computeQuote(zones = [], adjustPct = 0) {

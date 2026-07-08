@@ -3,7 +3,7 @@ import { Plus, Copy, Trash2, ChevronDown, ChevronRight, FileText, FileSpreadshee
 import { T } from '../../theme.js';
 import { newId, copyToClipboard } from '../../utils/helpers.js';
 import { useToast } from '../ui/UIProvider.jsx';
-import { computeQuote, CATEGORIES, ROOMS, CUSTOM_ROOM, cabTypeById, fmtMYR } from '../../constants/pricing.js';
+import { computeQuote, CATEGORIES, ROOMS, CUSTOM_ROOM, OUTPUT_LANGS, tr, pickLang, RLBL, QUOTE_TERMS, cabTypeById, fmtMYR } from '../../constants/pricing.js';
 import QuoteLineItem from './QuoteLineItem.jsx';
 import QuotePrint from './QuotePrint.jsx';
 import { exportExcel } from './exportExcel.js';
@@ -40,6 +40,7 @@ export default function QuotationView({ doc, onChange }) {
   const toast = useToast();
   const [showPrint, setShowPrint] = useState(false);
   const { meta, zones, adjustPct } = doc;
+  const lang = meta.outputLang || 'en';
   const computed = useMemo(() => computeQuote(zones, adjustPct), [zones, adjustPct]);
 
   // ---- mutators ----
@@ -185,6 +186,24 @@ export default function QuotationView({ doc, onChange }) {
             </div>
           </div>
 
+          {/* 输出语言 Output language */}
+          <div className="p-3 rounded flex items-center gap-2" style={{ background: T.cream, border: `1px solid ${T.lineSoft}` }}>
+            <span className="text-[10px] uppercase tracking-widest" style={{ color: T.inkSoft }}>Language 语言</span>
+            <div className="flex gap-1 ml-auto">
+              {OUTPUT_LANGS.map((o) => {
+                const on = lang === o.id;
+                return (
+                  <button key={o.id} onClick={() => setMeta({ outputLang: o.id })}
+                    className="px-2.5 py-1 text-xs transition-colors"
+                    style={{ borderRadius: '2px', background: on ? T.ink : 'transparent',
+                      color: on ? T.paper : T.inkSoft, border: `1px solid ${on ? T.ink : T.line}` }}>
+                    {o.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* 操作 */}
           <div className="space-y-2">
             <div className="grid grid-cols-2 gap-2">
@@ -195,7 +214,7 @@ export default function QuotationView({ doc, onChange }) {
               </button>
               <button onClick={async () => {
                 try {
-                  await exportExcel(meta, computed);
+                  await exportExcel(meta, computed, lang);
                   toast('Excel exported 已导出', 'success');
                 } catch (e) {
                   toast('Export failed 导出失败', 'error');
@@ -207,7 +226,7 @@ export default function QuotationView({ doc, onChange }) {
               </button>
             </div>
             <button onClick={async () => {
-              const ok = await copyToClipboard(buildTextQuote(meta, computed));
+              const ok = await copyToClipboard(buildTextQuote(meta, computed, lang));
               toast(ok ? 'Copied 已复制' : 'Copy failed 复制失败', ok ? 'success' : 'error');
             }}
               className="w-full flex items-center justify-center gap-1.5 py-2.5 text-sm"
@@ -218,42 +237,45 @@ export default function QuotationView({ doc, onChange }) {
         </div>
       </div>
 
-      {showPrint && <QuotePrint meta={meta} computed={computed} onClose={() => setShowPrint(false)} />}
+      {showPrint && <QuotePrint meta={meta} computed={computed} lang={lang} onClose={() => setShowPrint(false)} />}
     </div>
   );
 }
 
-// ---- WhatsApp / 纯文本报价 ----
-function buildTextQuote(meta, computed) {
+// ---- WhatsApp / 纯文本报价（按语言）----
+function buildTextQuote(meta, computed, lang = 'both') {
+  const t = (obj) => tr(obj, lang);
+  const pl = (text) => pickLang(text, lang);
   const L = [];
-  L.push('📋 *Estimated Quotation 预估报价 · SAIL by Riccione Reka*');
+  L.push(`📋 *${t(RLBL.estQuote)} · SAIL by Riccione Reka*`);
   L.push('━━━━━━━━━━━━━━━');
-  if (meta.name) L.push(`👤 Name 客户：${meta.name}`);
-  if (meta.location) L.push(`📍 Location 地点：${meta.location}`);
-  L.push(`📄 Rev 版本：${meta.version || '1'}`);
+  if (meta.name) L.push(`👤 ${t(RLBL.name)}：${meta.name}`);
+  if (meta.location) L.push(`📍 ${t(RLBL.site)}：${meta.location}`);
+  L.push(`📄 ${t(RLBL.rev)}：${meta.version || '1'}`);
   L.push('');
   computed.zoneResults.forEach((zr) => {
     if (!zr.zone.items.length) return;
-    L.push(`▪️ *${zr.zone.name || 'Untitled 未命名'}* — ${fmtMYR(zr.subtotal)}`);
+    L.push(`▪️ *${pl(zr.zone.name) || t(RLBL.untitled)}* — ${fmtMYR(zr.subtotal)}`);
   });
   L.push('');
-  L.push('*Breakdown 分类明细*');
+  L.push(`*${t({ en: 'Breakdown', zh: '分类明细' })}*`);
   CATEGORIES.forEach((c) => {
     const v = Math.round(computed.byCategory[c.key] || 0);
-    if (v > 0) L.push(`  ${c.label}：${fmtMYR(v)}`);
+    if (v > 0) L.push(`  ${pl(c.label)}：${fmtMYR(v)}`);
   });
   L.push('');
   if (computed.discount > 0) {
-    L.push(`Gross 合计：${fmtMYR(computed.gross)}`);
-    L.push(`Discount 折扣：− ${fmtMYR(computed.discount)}`);
+    L.push(`${t(RLBL.gross)}：${fmtMYR(computed.gross)}`);
+    L.push(`${t(RLBL.discount)}：− ${fmtMYR(computed.discount)}`);
   }
-  L.push(`*Total 预估总额：${fmtMYR(computed.net)}*`);
+  L.push(`*${t(RLBL.total)}：${fmtMYR(computed.net)}*`);
   L.push('━━━━━━━━━━━━━━━');
-  L.push('Validity 报价有效期');
-  L.push('• Quotation is valid for 14 days from the date of quotation.');
-  L.push('• 报价自出具日期起 14 天内有效。');
-  L.push('Disclaimer 声明');
-  L.push('Prices are subject to change based on final design confirmation, material selection, and site conditions.');
-  L.push('最终价格将根据设计确认、材质选择及现场状况进行调整。');
+  QUOTE_TERMS.forEach((sec) => {
+    L.push(t(sec.title));
+    sec.lines.forEach((ln) => {
+      L.push((sec.bullet ? '• ' : '') + (lang === 'both' ? `${ln.en}　${ln.zh}` : t(ln)));
+    });
+    if (sec.note) L.push(lang === 'both' ? `${sec.note.en}　${sec.note.zh}` : t(sec.note));
+  });
   return L.join('\n');
 }

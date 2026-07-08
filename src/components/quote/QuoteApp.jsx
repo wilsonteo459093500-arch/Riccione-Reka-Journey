@@ -14,7 +14,7 @@ const nowTs = () => Date.now();
 function newRecord() {
   return {
     id: newId('rec'),
-    meta: { name: '', location: '', ref: '', pic: '', version: '1', date: todayISO() },
+    meta: { name: '', location: '', ref: '', pic: '', version: '1', outputLang: 'en', date: todayISO() },
     zones: [blankZone('')],
     adjustPct: 0,
     createdAt: nowTs(),

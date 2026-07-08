@@ -8,9 +8,6 @@ import {
 const cellStyle = { background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' };
 const lbl = 'block text-[9px] uppercase tracking-widest mb-1';
 
-// 单位是否按“个/件”计（用于决定数量是否显示小数）
-const isPieceUom = (uom) => /套|樘|项|set|pc|item/i.test(uom || '');
-
 function Field({ label, children, w = '' }) {
   return (
     <div className={w}>
@@ -206,7 +203,7 @@ export default function QuoteLineItem({ item, result, onChange, onRemove }) {
           style={{ borderTop: `1px dashed ${T.line}`, color: T.inkSoft }}>
           {result.lines.map((ln, i) => (
             <span key={i}>
-              {ln.desc}: {ln.qty.toFixed(isPieceUom(ln.uom) ? 0 : 2)}{ln.uom} × RM{Math.round(ln.unitMyr)} = <b style={{ color: T.ink }}>{fmtMYR(ln.total)}</b>
+              {ln.descEn} {ln.descZh}: {ln.qty.toFixed(ln.piece ? 0 : 2)}{ln.uomZh} × RM{Math.round(ln.unitMyr)} = <b style={{ color: T.ink }}>{fmtMYR(ln.total)}</b>
             </span>
           ))}
         </div>
