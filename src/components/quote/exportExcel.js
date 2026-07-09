@@ -1,4 +1,4 @@
-import { tr, pickLang, RLBL, QUOTE_TERMS } from '../../constants/pricing.js';
+import { tr, pickLang, capColor, cabTypeById, RLBL, QUOTE_TERMS } from '../../constants/pricing.js';
 import { fmt } from '../../utils/helpers.js';
 
 const round0 = (n) => Math.round(Number(n) || 0);
@@ -45,8 +45,13 @@ export async function exportExcel(meta, computed, loose, notes = {}, lang = 'bot
       row(HEAD);
       zr.items.forEach((ir) => {
         ir.lines.forEach((ln, i) => {
-          const nm = (i === 0 && (ir.item.name || ir.item.desc)) ? pickLang(ir.item.name || ir.item.desc, lang) : '';
-          const label = nm ? `${nm} · ${lineDesc(ln)}` : lineDesc(ln);
+          let prefix = '';
+          if (i === 0) {
+            const typeLabel = ir.item.type === 'cabinet' ? pickLang(cabTypeById(ir.item.cabType).label, lang) : '';
+            const nm = pickLang(ir.item.name || ir.item.desc || '', lang);
+            prefix = [typeLabel, nm].filter(Boolean).join(' · ');
+          }
+          const label = prefix ? `${prefix} · ${lineDesc(ln)}` : lineDesc(ln);
           const qty = ln.piece ? round0(ln.qty) : Number(ln.qty.toFixed(2));
           row([label, qty, lineUom(ln), round0(ln.unitMyr), round0(ln.total)]);
         });
@@ -79,7 +84,7 @@ export async function exportExcel(meta, computed, loose, notes = {}, lang = 'bot
     row([]);
     row([t(RLBL.productType), t(RLBL.model), t(RLBL.color), t(RLBL.qty), t(RLBL.unitPrice), t(RLBL.amount)]);
     looseRows.forEach((r) => {
-      row([r.type || '', r.model || '', r.color || '', round0(r.qty), round0(r.unitMyr), round0(r.total)]);
+      row([r.type || '', r.model || '', capColor(r.color) || '', round0(r.qty), round0(r.unitMyr), round0(r.total)]);
     });
     row(['', '', '', '', t(RLBL.gross), round0(loose.gross)]);
     if (loose.discount > 0) row(['', '', '', '', `${t(RLBL.discount)} (${loose.adjustPct}%)`, -round0(loose.discount)]);

@@ -180,6 +180,14 @@ export function tr(obj, lang) {
   return [obj.en, obj.zh].filter(Boolean).join(' ');
 }
 
+// 颜色/规格首字母大写：把每个 " / " 段的首个小写字母大写（walnut→Walnut）。
+export function capColor(s) {
+  return String(s || '').split(' / ').map((seg) => {
+    const t = seg.trim();
+    return /^[a-z]/.test(t) ? t.charAt(0).toUpperCase() + t.slice(1) : t;
+  }).join(' / ');
+}
+
 // 把 "English 中文" 形式的字符串按语言拆分取用；无中文则原样返回。
 export function pickLang(text, lang) {
   const s = String(text || '');
@@ -212,6 +220,8 @@ export const RLBL = {
   summary:   { en: 'Summary', zh: '总览' },
   customCabinet: { en: 'Custom Cabinet', zh: '定制橱柜' },
   grandTotal: { en: 'Grand Total', zh: '总计' },
+  totalBeforeDiscount: { en: 'Total Before Discount', zh: '原价合计' },
+  totalDiscountAmt: { en: 'Total Discount', zh: '折扣合计' },
   detailNote: { en: 'Detailed breakdown on the following pages.', zh: '详细明细见后页。' },
   subtotal:  { en: 'Sub-Total', zh: '小计' },
   gross:     { en: 'Gross', zh: '合计' },

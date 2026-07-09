@@ -1,7 +1,7 @@
 import { createPortal } from 'react-dom';
 import { Printer, X } from 'lucide-react';
 import { T } from '../../theme.js';
-import { fmtMYR, fmtNum, tr, pickLang, RLBL, QUOTE_TERMS } from '../../constants/pricing.js';
+import { fmtMYR, fmtNum, tr, pickLang, capColor, cabTypeById, RLBL, QUOTE_TERMS } from '../../constants/pricing.js';
 import { fmt } from '../../utils/helpers.js';
 
 // 报价单（可打印 / 另存 PDF）。lang：'en' | 'zh' | 'both'。
@@ -136,6 +136,17 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                   <tbody>
                     <SummarySection label={t(RLBL.customCabinet)} brand="SAIL by Riccione Reka" calc={computed} />
                     <SummarySection label={t(RLBL.looseSection)} brand="Riccione Furniture" calc={loose} />
+                    {/* 合计（两部分）*/}
+                    <tr style={{ borderTop: `1.5px solid ${T.line}` }}>
+                      <td className="pt-2 px-2" style={{ color: T.inkSoft }}>{t(RLBL.totalBeforeDiscount)}</td>
+                      <td className="text-right pt-2 px-2">{fmtMYR(computed.gross + (loose?.gross || 0))}</td>
+                    </tr>
+                    {(computed.discount + (loose?.discount || 0)) > 0 && (
+                      <tr style={{ color: T.terra }}>
+                        <td className="py-0.5 px-2">{t(RLBL.totalDiscountAmt)}</td>
+                        <td className="text-right py-0.5 px-2">− {fmtMYR(computed.discount + (loose?.discount || 0))}</td>
+                      </tr>
+                    )}
                     <tr style={{ borderTop: `2px solid ${T.ink}` }}>
                       <td className="py-3 px-2 font-display text-xl">{t(RLBL.grandTotal)}</td>
                       <td className="text-right py-3 px-2 font-display text-xl">{fmtMYR(grand)}</td>
@@ -173,8 +184,12 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                         ir.lines.map((ln, i) => (
                           <tr key={ir.item.id + i} style={{ borderTop: `1px solid ${T.lineSoft}` }}>
                             <td className="py-1 px-2">
-                              {i === 0 && (ir.item.name || ir.item.desc)
-                                ? <span className="font-medium">{pickLang(ir.item.name || ir.item.desc, lang)} · </span> : null}
+                              {i === 0 && (() => {
+                                const typeLabel = ir.item.type === 'cabinet' ? pickLang(cabTypeById(ir.item.cabType).label, lang) : '';
+                                const nm = pickLang(ir.item.name || ir.item.desc || '', lang);
+                                const prefix = [typeLabel, nm].filter(Boolean).join(' · ');
+                                return prefix ? <span className="font-medium">{prefix} · </span> : null;
+                              })()}
                               {lineDesc(ln)}
                             </td>
                             <td className="text-right py-1 px-2">{fmtNum(ln.qty, ln.piece ? 0 : 2)}</td>
@@ -245,7 +260,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                         </td>
                         <td className="py-1 px-2">{r.type || '—'}</td>
                         <td className="py-1 px-2">{r.model || '—'}</td>
-                        <td className="py-1 px-2">{r.color || '—'}</td>
+                        <td className="py-1 px-2">{capColor(r.color) || '—'}</td>
                         <td className="text-right py-1 px-2">{fmtNum(Number(r.qty) || 0, 0)}</td>
                         <td className="text-right py-1 px-2">{fmtNum(Math.round(Number(r.unitMyr) || 0), 0)}</td>
                         <td className="text-right py-1 px-2">{fmtNum(r.total, 0)}</td>
