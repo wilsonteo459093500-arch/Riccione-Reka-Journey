@@ -10,6 +10,16 @@ export async function exportExcel(meta, computed, loose, notes = {}, lang = 'bot
   const t = (obj) => tr(obj, lang);
   const lineDesc = (ln) => (lang === 'en' ? ln.descEn : lang === 'zh' ? ln.descZh : `${ln.descEn} ${ln.descZh}`);
   const lineUom = (ln) => (lang === 'en' ? ln.uomEn : lang === 'zh' ? ln.uomZh : ln.uomZh);
+  // 定制柜体子项描述：门板/柜体 → "Door: A Series"；抽屉 → "Drawers"
+  const cabLineLabel = (ln) => {
+    const sid = (ln.descEn.split(' ')[1] || '').trim();
+    const map = {
+      door:    { en: `Door: ${sid} Series`,    zh: `门板：${sid} 系列` },
+      carcass: { en: `Carcass: ${sid} Series`, zh: `柜体：${sid} 系列` },
+      drawer:  { en: 'Drawers',                zh: '抽屉' },
+    };
+    return map[ln.bucket] ? t(map[ln.bucket]) : lineDesc(ln);
+  };
 
   const termLines = (terms, aoa) => {
     terms.forEach((sec) => {
@@ -44,17 +54,23 @@ export async function exportExcel(meta, computed, loose, notes = {}, lang = 'bot
       merges.push({ s: { r: zr0, c: 0 }, e: { r: zr0, c: 4 } });
       row(HEAD);
       zr.items.forEach((ir) => {
-        ir.lines.forEach((ln, i) => {
-          let prefix = '';
-          if (i === 0) {
-            const typeLabel = ir.item.type === 'cabinet' ? pickLang(cabTypeById(ir.item.cabType).label, lang) : '';
-            const nm = pickLang(ir.item.name || ir.item.desc || '', lang);
-            prefix = [typeLabel, nm].filter(Boolean).join(' · ');
-          }
-          const label = prefix ? `${prefix} · ${lineDesc(ln)}` : lineDesc(ln);
-          const qty = ln.piece ? round0(ln.qty) : Number(ln.qty.toFixed(2));
-          row([label, qty, lineUom(ln), round0(ln.unitMyr), round0(ln.total)]);
-        });
+        if (ir.item.type === 'cabinet') {
+          // 柜体类型（+名称）作为分组抬头，子项缩进列在下面
+          const typeLabel = pickLang(cabTypeById(ir.item.cabType).label, lang);
+          const nm = pickLang(ir.item.name || ir.item.desc || '', lang);
+          row([[typeLabel, nm].filter(Boolean).join(' · ')]);
+          ir.lines.forEach((ln) => {
+            const qty = ln.piece ? round0(ln.qty) : Number(ln.qty.toFixed(2));
+            row([`    ${cabLineLabel(ln)}`, qty, lineUom(ln), round0(ln.unitMyr), round0(ln.total)]);
+          });
+        } else {
+          ir.lines.forEach((ln, i) => {
+            const nm = i === 0 ? pickLang(ir.item.name || ir.item.desc || '', lang) : '';
+            const label = nm ? `${nm} · ${lineDesc(ln)}` : lineDesc(ln);
+            const qty = ln.piece ? round0(ln.qty) : Number(ln.qty.toFixed(2));
+            row([label, qty, lineUom(ln), round0(ln.unitMyr), round0(ln.total)]);
+          });
+        }
       });
       row(['', '', '', t(RLBL.subtotal), round0(zr.subtotal)]);
       row([]);

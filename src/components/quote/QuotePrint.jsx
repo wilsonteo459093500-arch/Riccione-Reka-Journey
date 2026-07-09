@@ -17,6 +17,16 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
   const t = (obj) => tr(obj, lang);
   const lineDesc = (ln) => (lang === 'en' ? ln.descEn : lang === 'zh' ? ln.descZh : `${ln.descEn} ${ln.descZh}`);
   const lineUom = (ln) => (lang === 'en' ? ln.uomEn : lang === 'zh' ? ln.uomZh : ln.uomZh);
+  // 定制柜体子项描述：门板/柜体 → "Door: A Series"；抽屉 → "Drawers"
+  const cabLineLabel = (ln) => {
+    const sid = (ln.descEn.split(' ')[1] || '').trim();
+    const map = {
+      door:    { en: `Door: ${sid} Series`,    zh: `门板：${sid} 系列` },
+      carcass: { en: `Carcass: ${sid} Series`, zh: `柜体：${sid} 系列` },
+      drawer:  { en: 'Drawers',                zh: '抽屉' },
+    };
+    return map[ln.bucket] ? t(map[ln.bucket]) : lineDesc(ln);
+  };
 
   // PDF 文件名：EST QUOTE_RICCIONE_[客户]_[Site]_YYYYMMDD（Chrome 存 PDF 默认取 document.title）
   const handlePrint = () => {
@@ -180,25 +190,45 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                       </tr>
                     </thead>
                     <tbody>
-                      {zr.items.flatMap((ir) =>
-                        ir.lines.map((ln, i) => (
+                      {zr.items.flatMap((ir) => {
+                        const qtyCell = (ln) => <td className="text-right py-1 px-2">{fmtNum(ln.qty, ln.piece ? 0 : 2)}</td>;
+                        // 定制柜体：柜体类型（+名称）作为分组抬头，门板/柜体/抽屉缩进列在下面
+                        if (ir.item.type === 'cabinet') {
+                          const typeLabel = pickLang(cabTypeById(ir.item.cabType).label, lang);
+                          const nm = pickLang(ir.item.name || ir.item.desc || '', lang);
+                          const head = [typeLabel, nm].filter(Boolean).join(' · ');
+                          return [
+                            <tr key={ir.item.id + '-h'} style={{ borderTop: `1px solid ${T.lineSoft}` }}>
+                              <td className="py-1 px-2 font-medium" colSpan={5}>{head}</td>
+                            </tr>,
+                            ...ir.lines.map((ln, i) => (
+                              <tr key={ir.item.id + i}>
+                                <td className="py-1 px-2 pl-6" style={{ color: T.inkSoft }}>{cabLineLabel(ln)}</td>
+                                {qtyCell(ln)}
+                                <td className="py-1 px-2">{lineUom(ln)}</td>
+                                <td className="text-right py-1 px-2">{fmtNum(Math.round(ln.unitMyr), 0)}</td>
+                                <td className="text-right py-1 px-2">{fmtNum(ln.total, 0)}</td>
+                              </tr>
+                            )),
+                          ];
+                        }
+                        // 其他类型（墙板/房门/灯带/其他）：单行，首行带名称前缀
+                        return ir.lines.map((ln, i) => (
                           <tr key={ir.item.id + i} style={{ borderTop: `1px solid ${T.lineSoft}` }}>
                             <td className="py-1 px-2">
                               {i === 0 && (() => {
-                                const typeLabel = ir.item.type === 'cabinet' ? pickLang(cabTypeById(ir.item.cabType).label, lang) : '';
                                 const nm = pickLang(ir.item.name || ir.item.desc || '', lang);
-                                const prefix = [typeLabel, nm].filter(Boolean).join(' · ');
-                                return prefix ? <span className="font-medium">{prefix} · </span> : null;
+                                return nm ? <span className="font-medium">{nm} · </span> : null;
                               })()}
                               {lineDesc(ln)}
                             </td>
-                            <td className="text-right py-1 px-2">{fmtNum(ln.qty, ln.piece ? 0 : 2)}</td>
+                            {qtyCell(ln)}
                             <td className="py-1 px-2">{lineUom(ln)}</td>
                             <td className="text-right py-1 px-2">{fmtNum(Math.round(ln.unitMyr), 0)}</td>
                             <td className="text-right py-1 px-2">{fmtNum(ln.total, 0)}</td>
                           </tr>
-                        ))
-                      )}
+                        ));
+                      })}
                       <tr style={{ borderTop: `1.5px solid ${T.line}` }}>
                         <td colSpan={4} className="text-right py-1 px-2 text-xs" style={{ color: T.inkSoft }}>{t(RLBL.subtotal)}</td>
                         <td className="text-right py-1 px-2 font-medium">{fmtNum(zr.subtotal, 0)}</td>

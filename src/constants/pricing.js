@@ -59,9 +59,9 @@ export const ROOMS = [
 //   'sqm'   → 面积法：长度 × max(高,深)（高度 ≥ 1m —— 高柜）
 // 高 h / 深 d 仅作预填，可行内调整；实际计价方式随高度自动判定（h<1 即延米）。
 export const CABINET_TYPES = [
-  { id: 'base', label: 'Base 地柜', h: 0.85, d: 0.6,  method: 'linear' },
-  { id: 'wall', label: 'Wall 吊柜', h: 0.75, d: 0.35, method: 'linear' },
-  { id: 'tall', label: 'Tall 高柜', h: 2.7,  d: 0.6,  method: 'sqm' },
+  { id: 'base', label: 'Base Cabinet 地柜', h: 0.85, d: 0.6,  method: 'linear' },
+  { id: 'wall', label: 'Top Cabinet 吊柜',  h: 0.75, d: 0.35, method: 'linear' },
+  { id: 'tall', label: 'Tall Cabinet 高柜', h: 2.7,  d: 0.6,  method: 'sqm' },
 ];
 export const cabTypeById = (id) => CABINET_TYPES.find((t) => t.id === id) || CABINET_TYPES[0];
 
