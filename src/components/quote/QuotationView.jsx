@@ -134,7 +134,7 @@ export default function QuotationView({ doc, onChange }) {
       {/* ===== 左侧：编辑区 ===== */}
       <div className="space-y-6">
         {/* 客户信息 */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 p-4 rounded"
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-3 p-4 rounded"
           style={{ background: T.cream, border: `1px solid ${T.lineSoft}` }}>
           {[
             ['Name 客户', 'name'], ['Location 地点', 'location'],
@@ -147,6 +147,12 @@ export default function QuotationView({ doc, onChange }) {
                 style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }} />
             </div>
           ))}
+          <div>
+            <label className="block text-[9px] uppercase tracking-widest mb-1" style={{ color: T.inkSoft }}>Date 日期</label>
+            <input type="date" value={meta.date || ''} onChange={(e) => setMeta({ date: e.target.value })}
+              className="w-full px-2 py-1.5 text-sm outline-none"
+              style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }} />
+          </div>
         </div>
 
         {/* 区域列表 */}
