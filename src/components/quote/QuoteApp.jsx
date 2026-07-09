@@ -19,6 +19,8 @@ function newRecord() {
     looseItems: [],
     adjustPct: 0,
     looseAdjustPct: 0,
+    cabinetNote: '',
+    looseNote: '',
     createdAt: nowTs(),
     updatedAt: nowTs(),
   };

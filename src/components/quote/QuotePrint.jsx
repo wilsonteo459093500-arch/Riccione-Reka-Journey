@@ -6,7 +6,7 @@ import { fmt } from '../../utils/helpers.js';
 
 // 报价单（可打印 / 另存 PDF）。lang：'en' | 'zh' | 'both'。
 // 定制橱柜（SAIL by Riccione Reka）+ Loose Furniture（Riccione Furniture，另起一页）。
-export default function QuotePrint({ meta, computed, loose, lang = 'both', onClose }) {
+export default function QuotePrint({ meta, computed, loose, cabinetNote = '', looseNote = '', lang = 'both', onClose }) {
   const zones = computed.zoneResults.filter((zr) => zr.zone.items.length > 0);
   const looseRows = loose?.rows || [];
   const hasCab = zones.length > 0;
@@ -63,6 +63,15 @@ export default function QuotePrint({ meta, computed, loose, lang = 'both', onClo
         </div>
       ))}
     </div>
+  );
+
+  const NoteBlock = ({ text }) => (
+    text ? (
+      <div className="mt-5 text-[11px]" style={{ color: T.inkSoft, breakInside: 'avoid' }}>
+        <div className="font-medium" style={{ color: T.ink }}>{t(RLBL.notes)}</div>
+        <div style={{ whiteSpace: 'pre-line' }}>{text}</div>
+      </div>
+    ) : null
   );
 
   const Signatures = () => (
@@ -151,6 +160,7 @@ export default function QuotePrint({ meta, computed, loose, lang = 'both', onClo
                 </div>
               </div>
 
+              <NoteBlock text={cabinetNote} />
               <Terms terms={QUOTE_TERMS} />
               <Signatures />
             </div>
@@ -210,6 +220,7 @@ export default function QuotePrint({ meta, computed, loose, lang = 'both', onClo
                 </table>
               </div>
 
+              <NoteBlock text={looseNote} />
               {/* Loose Furniture 只放 Validity 条款 */}
               <Terms terms={QUOTE_TERMS.slice(0, 1)} />
               <Signatures />

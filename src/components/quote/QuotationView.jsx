@@ -96,6 +96,8 @@ export default function QuotationView({ doc, onChange }) {
   const { meta, zones, adjustPct } = doc;
   const looseItems = doc.looseItems || [];
   const looseAdjustPct = doc.looseAdjustPct || 0;
+  const cabinetNote = doc.cabinetNote || '';
+  const looseNote = doc.looseNote || '';
   const lang = meta.outputLang || 'en';
   const computed = useMemo(() => computeQuote(zones, adjustPct), [zones, adjustPct]);
   const looseCalc = useMemo(() => computeLoose(looseItems, looseAdjustPct), [looseItems, looseAdjustPct]);
@@ -261,6 +263,14 @@ export default function QuotationView({ doc, onChange }) {
             </span>
             {computed.discount > 0 && <span style={{ color: T.terra }}>− {fmtMYR(computed.discount)}</span>}
           </div>
+          {/* 定制部分备注 */}
+          <div className="mt-3 pt-3" style={{ borderTop: `1px dashed ${T.line}` }}>
+            <label className="block text-[9px] uppercase tracking-widest mb-1" style={{ color: T.inkSoft }}>Notes 备注（定制 Cabinet）</label>
+            <textarea value={cabinetNote} onChange={(e) => patch({ cabinetNote: e.target.value })} rows={2}
+              placeholder="定制部分的特别备注 / 条款，会显示在报价单… Special notes for cabinet"
+              className="w-full px-2 py-1.5 text-sm outline-none resize-y"
+              style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }} />
+          </div>
         </div>
 
         {/* ===== Loose Furniture 家具（Riccione Furniture · 报价单另起一页）===== */}
@@ -325,6 +335,14 @@ export default function QuotationView({ doc, onChange }) {
                 </div>
               )}
             </div>
+            {/* 家具部分备注 */}
+            <div className="pt-1">
+              <label className="block text-[9px] uppercase tracking-widest mb-1" style={{ color: T.inkSoft }}>Notes 备注（家具 Loose Furniture）</label>
+              <textarea value={looseNote} onChange={(e) => patch({ looseNote: e.target.value })} rows={2}
+                placeholder="家具部分的特别备注 / 条款… Special notes for loose furniture"
+                className="w-full px-2 py-1.5 text-sm outline-none resize-y"
+                style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }} />
+            </div>
           </div>
         </div>
       </div>
@@ -378,7 +396,7 @@ export default function QuotationView({ doc, onChange }) {
               </button>
               <button onClick={async () => {
                 try {
-                  await exportExcel(meta, computed, looseCalc, lang);
+                  await exportExcel(meta, computed, looseCalc, { cabinetNote, looseNote }, lang);
                   toast('Excel exported 已导出', 'success');
                 } catch (e) {
                   toast('Export failed 导出失败', 'error');
@@ -390,7 +408,7 @@ export default function QuotationView({ doc, onChange }) {
               </button>
             </div>
             <button onClick={async () => {
-              const ok = await copyToClipboard(buildTextQuote(meta, computed, looseCalc, lang));
+              const ok = await copyToClipboard(buildTextQuote(meta, computed, looseCalc, { cabinetNote, looseNote }, lang));
               toast(ok ? 'Copied 已复制' : 'Copy failed 复制失败', ok ? 'success' : 'error');
             }}
               className="w-full flex items-center justify-center gap-1.5 py-2.5 text-sm"
@@ -401,7 +419,7 @@ export default function QuotationView({ doc, onChange }) {
         </div>
       </div>
 
-      {showPrint && <QuotePrint meta={meta} computed={computed} loose={looseCalc} lang={lang} onClose={() => setShowPrint(false)} />}
+      {showPrint && <QuotePrint meta={meta} computed={computed} loose={looseCalc} cabinetNote={cabinetNote} looseNote={looseNote} lang={lang} onClose={() => setShowPrint(false)} />}
       {showCatalog && (
         <CatalogPicker
           onAdd={(it) => setLoose((ls) => [...ls, { id: newId('lf'), ...it }])}
@@ -412,7 +430,7 @@ export default function QuotationView({ doc, onChange }) {
 }
 
 // ---- WhatsApp / 纯文本报价（按语言）----
-function buildTextQuote(meta, computed, loose, lang = 'both') {
+function buildTextQuote(meta, computed, loose, notes = {}, lang = 'both') {
   const t = (obj) => tr(obj, lang);
   const pl = (text) => pickLang(text, lang);
   const L = [];
@@ -438,6 +456,7 @@ function buildTextQuote(meta, computed, loose, lang = 'both') {
     L.push(`${t(RLBL.discount)} (${computed.adjustPct}%)：− ${fmtMYR(computed.discount)}`);
   }
   L.push(`*${t(RLBL.total)}：${fmtMYR(computed.net)}*`);
+  if (notes.cabinetNote) L.push(`${t(RLBL.notes)}：${notes.cabinetNote}`);
   // Loose furniture 家具（Riccione Furniture）
   if (loose && loose.rows.length > 0) {
     L.push('');
@@ -451,6 +470,7 @@ function buildTextQuote(meta, computed, loose, lang = 'both') {
       L.push(`${t(RLBL.discount)} (${loose.adjustPct}%)：− ${fmtMYR(loose.discount)}`);
     }
     L.push(`*${t(RLBL.total)}：${fmtMYR(loose.net)}*`);
+    if (notes.looseNote) L.push(`${t(RLBL.notes)}：${notes.looseNote}`);
   }
   L.push('━━━━━━━━━━━━━━━');
   QUOTE_TERMS.forEach((sec) => {

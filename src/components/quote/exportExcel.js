@@ -5,7 +5,7 @@ const round0 = (n) => Math.round(Number(n) || 0);
 
 // 导出为 Excel（.xlsx）。lang：'en' | 'zh' | 'both'。
 // Sheet1：定制橱柜（SAIL by Riccione Reka）；Sheet2：Loose Furniture（Riccione Furniture）。
-export async function exportExcel(meta, computed, loose, lang = 'both') {
+export async function exportExcel(meta, computed, loose, notes = {}, lang = 'both') {
   const XLSX = await import('xlsx');
   const t = (obj) => tr(obj, lang);
   const lineDesc = (ln) => (lang === 'en' ? ln.descEn : lang === 'zh' ? ln.descZh : `${ln.descEn} ${ln.descZh}`);
@@ -58,6 +58,7 @@ export async function exportExcel(meta, computed, loose, lang = 'both') {
     if (computed.discount > 0) row(['', '', '', `${t(RLBL.discount)} (${computed.adjustPct}%)`, -round0(computed.discount)]);
     row(['', '', '', t(RLBL.total), round0(computed.net)]);
     row([]);
+    if (notes.cabinetNote) { row([t(RLBL.notes), notes.cabinetNote]); row([]); }
     termLines(QUOTE_TERMS, aoa);
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     ws['!merges'] = merges;
@@ -84,6 +85,7 @@ export async function exportExcel(meta, computed, loose, lang = 'both') {
     if (loose.discount > 0) row(['', '', '', '', `${t(RLBL.discount)} (${loose.adjustPct}%)`, -round0(loose.discount)]);
     row(['', '', '', '', t(RLBL.total), round0(loose.net)]);
     row([]);
+    if (notes.looseNote) { row([t(RLBL.notes), notes.looseNote]); row([]); }
     termLines(QUOTE_TERMS.slice(0, 1), aoa); // 只放 Validity
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     ws['!cols'] = [{ wch: 22 }, { wch: 16 }, { wch: 14 }, { wch: 10 }, { wch: 16 }, { wch: 14 }];

@@ -208,6 +208,7 @@ export const RLBL = {
   color:     { en: 'Color', zh: '颜色' },
   photo:     { en: 'Photo', zh: '照片' },
   looseSection: { en: 'Loose Furniture', zh: '家具' },
+  notes:     { en: 'Notes', zh: '备注' },
   subtotal:  { en: 'Sub-Total', zh: '小计' },
   gross:     { en: 'Gross', zh: '合计' },
   discount:  { en: 'Discount', zh: '折扣' },
