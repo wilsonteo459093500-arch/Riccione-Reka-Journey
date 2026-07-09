@@ -128,7 +128,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
           {/* ===== 第一页：总览 Summary（定制 + 家具 总计）===== */}
           {hasSummary && (
             <div className="p-8 text-[#2D3E36]" style={{ fontSize: 13 }}>
-              <Head brand="SAIL BY RICCIONE REKA" />
+              <Head brand="RICCIONE" />
               <CustomerRow />
               <div className="mt-6" style={{ breakInside: 'avoid' }}>
                 <div className="px-2 py-1 font-medium text-xs uppercase tracking-wide" style={{ background: T.sand }}>{t(RLBL.summary)}</div>
