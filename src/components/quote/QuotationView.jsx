@@ -6,6 +6,7 @@ import { useToast } from '../ui/UIProvider.jsx';
 import { computeQuote, computeLoose, CATEGORIES, ROOMS, CUSTOM_ROOM, OUTPUT_LANGS, tr, pickLang, RLBL, QUOTE_TERMS, cabTypeById, fmtMYR } from '../../constants/pricing.js';
 import QuoteLineItem from './QuoteLineItem.jsx';
 import QuotePrint from './QuotePrint.jsx';
+import CatalogPicker from './CatalogPicker.jsx';
 import { exportExcel } from './exportExcel.js';
 
 // ---- 新明细的默认值 ----
@@ -91,6 +92,7 @@ function LooseRow({ item, onChange, onRemove, onDragStart, onDrop, onMoveUp, onM
 export default function QuotationView({ doc, onChange }) {
   const toast = useToast();
   const [showPrint, setShowPrint] = useState(false);
+  const [showCatalog, setShowCatalog] = useState(false);
   const { meta, zones, adjustPct } = doc;
   const looseItems = doc.looseItems || [];
   const looseAdjustPct = doc.looseAdjustPct || 0;
@@ -274,12 +276,17 @@ export default function QuotationView({ doc, onChange }) {
                 }} />
             ))}
             <div className="flex items-center gap-3 flex-wrap pt-1">
+              <button onClick={() => setShowCatalog(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs"
+                style={{ background: T.wood, color: T.paper, borderRadius: '2px' }}>
+                <Sofa size={13} /> Catalog 目录选品
+              </button>
               <button onClick={addLoose}
                 className="flex items-center gap-1 px-3 py-1.5 text-xs transition-colors"
                 style={{ border: `1px solid ${T.line}`, borderRadius: '2px', color: T.inkSoft }}
                 onMouseEnter={(e) => { e.currentTarget.style.borderColor = T.wood; e.currentTarget.style.color = T.wood; }}
                 onMouseLeave={(e) => { e.currentTarget.style.borderColor = T.line; e.currentTarget.style.color = T.inkSoft; }}>
-                <Plus size={12} /> Loose furniture 家具
+                <Plus size={12} /> Manual 手动
               </button>
               {looseItems.length > 0 && (
                 <div className="flex items-center gap-2 text-xs" style={{ color: T.inkSoft }}>
@@ -369,6 +376,11 @@ export default function QuotationView({ doc, onChange }) {
       </div>
 
       {showPrint && <QuotePrint meta={meta} computed={computed} loose={looseCalc} lang={lang} onClose={() => setShowPrint(false)} />}
+      {showCatalog && (
+        <CatalogPicker
+          onAdd={(it) => setLoose((ls) => [...ls, { id: newId('lf'), ...it }])}
+          onClose={() => setShowCatalog(false)} />
+      )}
     </div>
   );
 }
