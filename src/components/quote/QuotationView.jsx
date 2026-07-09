@@ -109,6 +109,7 @@ export default function QuotationView({ doc, onChange }) {
   const addZone = () => setZones((zs) => [...zs, blankZone('')]);
   const updateZone = (id, p) => setZones((zs) => zs.map((z) => (z.id === id ? { ...z, ...p } : z)));
   const removeZone = (id) => setZones((zs) => zs.filter((z) => z.id !== id));
+  const moveZone = (from, to) => setZones((zs) => moveInArray(zs, from, to));
   const addItem = (zoneId, kind) =>
     setZones((zs) => zs.map((z) => (z.id === zoneId ? { ...z, items: [...z.items, makeItem(kind)] } : z)));
   const updateItem = (zoneId, item) =>
@@ -156,11 +157,28 @@ export default function QuotationView({ doc, onChange }) {
         </div>
 
         {/* 区域列表 */}
-        {zones.map((zone) => {
+        {zones.map((zone, zi) => {
           const zr = zoneResultById(zone.id);
           return (
-            <div key={zone.id} className="rounded overflow-hidden" style={{ border: `1px solid ${T.line}` }}>
+            <div key={zone.id} className="rounded overflow-hidden" style={{ border: `1px solid ${T.line}` }}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const d = dragRef.current;
+                if (d && d.zone && d.from !== zi) moveZone(d.from, zi);
+                dragRef.current = null;
+              }}>
               <div className="flex items-center gap-2 px-4 py-3" style={{ background: T.sand }}>
+                {/* 区域拖动 / 上下排序 */}
+                <div className="flex flex-col items-center shrink-0" style={{ marginLeft: -4 }}>
+                  <button onClick={() => moveZone(zi, zi - 1)} disabled={zi === 0} title="上移 Move up"
+                    className="disabled:opacity-25" style={{ color: T.inkSoft }}><ChevronUp size={13} /></button>
+                  <button draggable
+                    onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text', ''); dragRef.current = { zone: true, from: zi }; }}
+                    title="拖动排序区域 Drag zone" className="cursor-grab active:cursor-grabbing" style={{ color: T.line }}><GripVertical size={13} /></button>
+                  <button onClick={() => moveZone(zi, zi + 1)} disabled={zi === zones.length - 1} title="下移 Move down"
+                    className="disabled:opacity-25" style={{ color: T.inkSoft }}><ChevronDown size={13} /></button>
+                </div>
                 <button onClick={() => updateZone(zone.id, { collapsed: !zone.collapsed })} style={{ color: T.inkSoft }}>
                   {zone.collapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
                 </button>
@@ -195,7 +213,8 @@ export default function QuotationView({ doc, onChange }) {
                       onDragStart={() => { dragRef.current = { zoneId: zone.id, from: idx }; }}
                       onDrop={() => {
                         const d = dragRef.current;
-                        if (d && d.zoneId === zone.id && d.from !== idx) moveItem(zone.id, d.from, idx);
+                        if (!d || !d.zoneId) return; // 非明细拖动 → 交给外层区域处理
+                        if (d.zoneId === zone.id && d.from !== idx) moveItem(zone.id, d.from, idx);
                         dragRef.current = null;
                       }} />
                   ))}
@@ -277,7 +296,8 @@ export default function QuotationView({ doc, onChange }) {
                 onDragStart={() => { dragRef.current = { loose: true, from: idx }; }}
                 onDrop={() => {
                   const d = dragRef.current;
-                  if (d && d.loose && d.from !== idx) moveLoose(d.from, idx);
+                  if (!d || !d.loose) return;
+                  if (d.from !== idx) moveLoose(d.from, idx);
                   dragRef.current = null;
                 }} />
             ))}
