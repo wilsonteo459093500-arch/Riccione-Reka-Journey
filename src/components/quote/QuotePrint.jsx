@@ -77,6 +77,29 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
     ) : null
   );
 
+  // 总览页：某部分的 原价 / 折扣 / 折后小计
+  const SummarySection = ({ label, brand, calc }) => (
+    <>
+      <tr style={{ borderTop: `1px solid ${T.line}` }}>
+        <td className="pt-2 px-2 font-medium" colSpan={2}>{label} <span style={{ color: T.inkSoft }}>· {brand}</span></td>
+      </tr>
+      <tr>
+        <td className="py-0.5 px-2 pl-5" style={{ color: T.inkSoft }}>{t(RLBL.gross)}</td>
+        <td className="text-right py-0.5 px-2">{fmtMYR(calc.gross)}</td>
+      </tr>
+      {calc.discount > 0 && (
+        <tr style={{ color: T.terra }}>
+          <td className="py-0.5 px-2 pl-5">{t(RLBL.discount)} ({calc.adjustPct}%)</td>
+          <td className="text-right py-0.5 px-2">− {fmtMYR(calc.discount)}</td>
+        </tr>
+      )}
+      <tr>
+        <td className="py-0.5 px-2 pl-5 font-medium">{t(RLBL.subtotal)}</td>
+        <td className="text-right py-0.5 px-2 font-medium">{fmtMYR(calc.net)}</td>
+      </tr>
+    </>
+  );
+
   const Signatures = () => (
     <div className="mt-12 text-xs" style={{ width: '48%' }}>
       <div style={{ borderTop: `1px solid ${T.line}`, paddingTop: 6 }}>{t(RLBL.customer)}</div>
@@ -111,14 +134,8 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                 <div className="px-2 py-1 font-medium text-xs uppercase tracking-wide" style={{ background: T.sand }}>{t(RLBL.summary)}</div>
                 <table className="w-full" style={{ borderCollapse: 'collapse' }}>
                   <tbody>
-                    <tr style={{ borderTop: `1px solid ${T.lineSoft}` }}>
-                      <td className="py-2 px-2">{t(RLBL.customCabinet)} <span style={{ color: T.inkSoft }}>· SAIL by Riccione Reka</span></td>
-                      <td className="text-right py-2 px-2">{fmtMYR(computed.net)}</td>
-                    </tr>
-                    <tr style={{ borderTop: `1px solid ${T.lineSoft}` }}>
-                      <td className="py-2 px-2">{t(RLBL.looseSection)} <span style={{ color: T.inkSoft }}>· Riccione Furniture</span></td>
-                      <td className="text-right py-2 px-2">{fmtMYR(looseNet)}</td>
-                    </tr>
+                    <SummarySection label={t(RLBL.customCabinet)} brand="SAIL by Riccione Reka" calc={computed} />
+                    <SummarySection label={t(RLBL.looseSection)} brand="Riccione Furniture" calc={loose} />
                     <tr style={{ borderTop: `2px solid ${T.ink}` }}>
                       <td className="py-3 px-2 font-display text-xl">{t(RLBL.grandTotal)}</td>
                       <td className="text-right py-3 px-2 font-display text-xl">{fmtMYR(grand)}</td>
