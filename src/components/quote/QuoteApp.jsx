@@ -3,7 +3,7 @@ import { Plus, Search, Trash2, Copy, Layers, Calculator, FileText } from 'lucide
 import { T } from '../../theme.js';
 import { newId } from '../../utils/helpers.js';
 import { UIProvider, useToast, useConfirm } from '../ui/UIProvider.jsx';
-import { computeQuote, fmtMYR } from '../../constants/pricing.js';
+import { computeQuote, computeLoose, fmtMYR } from '../../constants/pricing.js';
 import QuotationView, { blankZone } from './QuotationView.jsx';
 
 const STORE_KEY = 'sail.quote.records.v2';
@@ -56,10 +56,14 @@ function Inner() {
   const { records, activeId } = store;
   const active = records.find((r) => r.id === activeId) || null;
 
-  // 每份记录的总额（用于列表显示）
+  // 每份记录的总额（定制 + 家具，用于列表显示）
   const totals = useMemo(() => {
     const m = {};
-    records.forEach((r) => { m[r.id] = computeQuote(r.zones, r.adjustPct).net; });
+    records.forEach((r) => {
+      const cab = computeQuote(r.zones, r.adjustPct).net;
+      const loose = computeLoose(r.looseItems || [], r.looseAdjustPct || 0).net;
+      m[r.id] = cab + loose;
+    });
     return m;
   }, [records]);
 
