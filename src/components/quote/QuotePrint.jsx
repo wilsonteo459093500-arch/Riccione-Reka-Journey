@@ -11,6 +11,9 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
   const looseRows = loose?.rows || [];
   const hasCab = zones.length > 0;
   const hasLoose = looseRows.length > 0;
+  const looseNet = loose?.net || 0;
+  const grand = computed.net + looseNet;
+  const hasSummary = hasCab && hasLoose; // 两个部分都有才需要总览页
   const t = (obj) => tr(obj, lang);
   const lineDesc = (ln) => (lang === 'en' ? ln.descEn : lang === 'zh' ? ln.descZh : `${ln.descEn} ${ln.descZh}`);
   const lineUom = (ln) => (lang === 'en' ? ln.uomEn : lang === 'zh' ? ln.uomZh : ln.uomZh);
@@ -99,9 +102,38 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
             </div>
           </div>
 
+          {/* ===== 第一页：总览 Summary（定制 + 家具 总计）===== */}
+          {hasSummary && (
+            <div className="p-8 text-[#2D3E36]" style={{ fontSize: 13 }}>
+              <Head brand="SAIL BY RICCIONE REKA" />
+              <CustomerRow />
+              <div className="mt-6" style={{ breakInside: 'avoid' }}>
+                <div className="px-2 py-1 font-medium text-xs uppercase tracking-wide" style={{ background: T.sand }}>{t(RLBL.summary)}</div>
+                <table className="w-full" style={{ borderCollapse: 'collapse' }}>
+                  <tbody>
+                    <tr style={{ borderTop: `1px solid ${T.lineSoft}` }}>
+                      <td className="py-2 px-2">{t(RLBL.customCabinet)} <span style={{ color: T.inkSoft }}>· SAIL by Riccione Reka</span></td>
+                      <td className="text-right py-2 px-2">{fmtMYR(computed.net)}</td>
+                    </tr>
+                    <tr style={{ borderTop: `1px solid ${T.lineSoft}` }}>
+                      <td className="py-2 px-2">{t(RLBL.looseSection)} <span style={{ color: T.inkSoft }}>· Riccione Furniture</span></td>
+                      <td className="text-right py-2 px-2">{fmtMYR(looseNet)}</td>
+                    </tr>
+                    <tr style={{ borderTop: `2px solid ${T.ink}` }}>
+                      <td className="py-3 px-2 font-display text-xl">{t(RLBL.grandTotal)}</td>
+                      <td className="text-right py-3 px-2 font-display text-xl">{fmtMYR(grand)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <div className="mt-4 text-[11px] italic" style={{ color: T.inkSoft }}>{t(RLBL.detailNote)}</div>
+              </div>
+              <Signatures />
+            </div>
+          )}
+
           {/* ===== 定制橱柜 SAIL BY RICCIONE REKA ===== */}
           {hasCab && (
-            <div className="p-8 text-[#2D3E36]" style={{ fontSize: 13 }}>
+            <div className="p-8 text-[#2D3E36]" style={{ fontSize: 13, breakBefore: hasSummary ? 'page' : 'auto' }}>
               <Head brand="SAIL BY RICCIONE REKA" />
               <CustomerRow />
 
@@ -162,7 +194,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
 
               <NoteBlock text={cabinetNote} />
               <Terms terms={QUOTE_TERMS} />
-              <Signatures />
+              {!hasSummary && <Signatures />}
             </div>
           )}
 
@@ -223,7 +255,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
               <NoteBlock text={looseNote} />
               {/* Loose Furniture 只放 Validity 条款 */}
               <Terms terms={QUOTE_TERMS.slice(0, 1)} />
-              <Signatures />
+              {!hasSummary && <Signatures />}
             </div>
           )}
 
