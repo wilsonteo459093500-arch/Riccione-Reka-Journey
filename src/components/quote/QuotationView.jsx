@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { Plus, Copy, Trash2, GripVertical, Sofa, ChevronUp, ChevronDown, ChevronRight, FileText, FileSpreadsheet, LayoutGrid } from 'lucide-react';
+import { Plus, Copy, Trash2, GripVertical, Sofa, ChevronUp, ChevronDown, ChevronRight, FileText, FileSpreadsheet, LayoutGrid, Image as ImageIcon } from 'lucide-react';
 import { T } from '../../theme.js';
 import { newId, copyToClipboard } from '../../utils/helpers.js';
 import { useToast } from '../ui/UIProvider.jsx';
@@ -34,7 +34,7 @@ const ADD_TYPES = [
 ];
 
 export const blankZone = (name = '') => ({ id: newId('zone'), name, items: [], collapsed: false });
-const blankLoose = () => ({ id: newId('lf'), type: '', model: '', color: '', qty: '1', unitMyr: '' });
+const blankLoose = () => ({ id: newId('lf'), type: '', model: '', color: '', qty: '1', unitMyr: '', image: '' });
 
 // 数组内移动元素（拖动排序用）
 const moveInArray = (arr, from, to) => {
@@ -54,9 +54,9 @@ function LooseRow({ item, onChange, onRemove, onDragStart, onDrop, onMoveUp, onM
       onFocus={(e) => (e.target.style.borderColor = T.wood)} onBlur={(e) => (e.target.style.borderColor = T.line)} />
   );
   return (
-    <div className="flex items-center gap-2 p-2 rounded" style={{ background: T.cream, border: `1px solid ${T.lineSoft}` }}
+    <div className="flex items-start gap-2 p-2 rounded" style={{ background: T.cream, border: `1px solid ${T.lineSoft}` }}
       onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); onDrop(); }}>
-      <div className="flex flex-col items-center shrink-0">
+      <div className="flex flex-col items-center shrink-0 pt-1">
         <button onClick={onMoveUp} disabled={!canUp} title="上移 Move up" className="disabled:opacity-25" style={{ color: T.inkSoft }}><ChevronUp size={12} /></button>
         <button draggable onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text', ''); onDragStart(); }}
           title="拖动排序 Drag to reorder" className="cursor-grab active:cursor-grabbing" style={{ color: T.line }}><GripVertical size={13} /></button>
@@ -69,8 +69,18 @@ function LooseRow({ item, onChange, onRemove, onDragStart, onDrop, onMoveUp, onM
         <div className="col-span-1">{inp('qty', '1')}</div>
         <div className="col-span-2">{inp('unitMyr', 'RM')}</div>
         <div className="col-span-2 text-right font-display text-sm pr-1" style={{ color: T.ink }}>{fmtMYR(total)}</div>
+        {/* 图片行 Image line */}
+        <div className="col-span-12 flex items-center gap-2 mt-1">
+          {item.image
+            ? <img src={item.image} alt="" className="shrink-0 object-cover" style={{ width: 34, height: 34, borderRadius: '2px', border: `1px solid ${T.line}` }} />
+            : <div className="shrink-0 flex items-center justify-center" style={{ width: 34, height: 34, borderRadius: '2px', border: `1px dashed ${T.line}`, color: T.line }}><ImageIcon size={14} /></div>}
+          <input value={item.image ?? ''} onChange={(e) => onChange({ image: e.target.value })}
+            placeholder="Image URL 图片链接（从 Riccione 网站复制图片地址）"
+            className="flex-1 px-2 py-1 text-xs outline-none" style={cell}
+            onFocus={(e) => (e.target.style.borderColor = T.wood)} onBlur={(e) => (e.target.style.borderColor = T.line)} />
+        </div>
       </div>
-      <button onClick={onRemove} className="opacity-40 hover:opacity-100 shrink-0" style={{ color: T.terra }} title="删除 Delete">
+      <button onClick={onRemove} className="opacity-40 hover:opacity-100 shrink-0 self-start" style={{ color: T.terra }} title="删除 Delete">
         <Trash2 size={14} />
       </button>
     </div>

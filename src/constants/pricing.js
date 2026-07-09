@@ -206,6 +206,7 @@ export const RLBL = {
   productType: { en: 'Product Type', zh: '产品类型' },
   model:     { en: 'Model', zh: '型号' },
   color:     { en: 'Color', zh: '颜色' },
+  photo:     { en: 'Photo', zh: '照片' },
   looseSection: { en: 'Loose Furniture', zh: '家具' },
   subtotal:  { en: 'Sub-Total', zh: '小计' },
   gross:     { en: 'Gross', zh: '合计' },
