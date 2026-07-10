@@ -277,10 +277,10 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                 <table className="w-full" style={{ borderCollapse: 'collapse' }}>
                   <thead>
                     <tr className="text-[10px] uppercase tracking-wide" style={{ color: T.inkSoft }}>
-                      <th className="text-left font-normal py-1 px-2" style={{ width: 64 }}>{t(RLBL.photo)}</th>
+                      <th className="text-left font-normal py-1 px-2" style={{ width: 110 }}>{t(RLBL.photo)}</th>
                       <th className="text-left font-normal py-1 px-2" style={{ width: '24%' }}>{t(RLBL.productType)}</th>
                       <th className="text-left font-normal py-1 px-2">{t(RLBL.model)}</th>
-                      <th className="text-left font-normal py-1 px-2">{t(RLBL.color)}</th>
+                      <th className="text-left font-normal py-1 px-2" style={{ width: 72 }}>{t(RLBL.color)}</th>
                       <th className={th}>{t(RLBL.qty)}</th>
                       <th className={th}>{t(RLBL.unitPrice)}</th>
                       <th className={th}>{t(RLBL.amount)}</th>
@@ -290,7 +290,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                     {looseRows.map((r) => (
                       <tr key={r.id} style={{ borderTop: `1px solid ${T.lineSoft}`, breakInside: 'avoid' }}>
                         <td className="py-1 px-2">
-                          {r.image ? <img src={r.image} alt="" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 2, border: `1px solid ${T.lineSoft}` }} /> : null}
+                          {r.image ? <img src={r.image} alt="" style={{ width: 96, height: 96, objectFit: 'cover', borderRadius: 2, border: `1px solid ${T.lineSoft}` }} /> : null}
                         </td>
                         <td className="py-1 px-2">{r.type || '—'}</td>
                         <td className="py-1 px-2">{r.model || '—'}</td>
