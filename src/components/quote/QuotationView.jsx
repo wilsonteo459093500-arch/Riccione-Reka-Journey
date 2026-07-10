@@ -47,7 +47,7 @@ const moveInArray = (arr, from, to) => {
 };
 
 // Loose Furniture 单行编辑
-function LooseRow({ item, onChange, onRemove, onDragStart, onDrop, onMoveUp, onMoveDown, canUp, canDown }) {
+function LooseRow({ item, onChange, onRemove, onDragStart, onDrop, onMoveUp, onMoveDown, canUp, canDown, selected, onToggleSelect }) {
   const total = (Number(item.qty) || 0) * (Number(item.unitMyr) || 0);
   const cell = { background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' };
   const inp = (key, ph = '') => (
@@ -56,9 +56,13 @@ function LooseRow({ item, onChange, onRemove, onDragStart, onDrop, onMoveUp, onM
       onFocus={(e) => (e.target.style.borderColor = T.wood)} onBlur={(e) => (e.target.style.borderColor = T.line)} />
   );
   return (
-    <div className="flex items-start gap-2 p-2 rounded" style={{ background: T.cream, border: `1px solid ${T.lineSoft}` }}
+    <div className="flex items-start gap-2 p-2 rounded" style={{ background: selected ? T.sand : T.cream, border: `1px solid ${selected ? T.wood : T.lineSoft}` }}
       onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); onDrop(); }}>
-      <div className="flex flex-col items-center shrink-0 pt-1">
+      <div className="flex flex-col items-center shrink-0 pt-1 gap-1">
+        {onToggleSelect && (
+          <input type="checkbox" checked={!!selected} onChange={onToggleSelect}
+            title="Select 选择" className="cursor-pointer" style={{ accentColor: T.wood }} />
+        )}
         <button onClick={onMoveUp} disabled={!canUp} title="上移 Move up" className="disabled:opacity-25" style={{ color: T.inkSoft }}><ChevronUp size={12} /></button>
         <button draggable onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text', ''); onDragStart(); }}
           title="拖动排序 Drag to reorder" className="cursor-grab active:cursor-grabbing" style={{ color: T.line }}><GripVertical size={13} /></button>
@@ -133,6 +137,30 @@ export default function QuotationView({ doc, onChange }) {
   const removeLoose = (id) => setLoose((ls) => ls.filter((it) => it.id !== id));
   const moveLoose = (from, to) => setLoose((ls) => moveInArray(ls, from, to));
 
+  // ---- 多选批量操作（选多个 item 批量复制/删除）----
+  const [selItems, setSelItems] = useState(() => new Set());
+  const [selLoose, setSelLoose] = useState(() => new Set());
+  const toggleSelItem = (id) => setSelItems((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleSelLoose = (id) => setSelLoose((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const clearSelItems = () => setSelItems(new Set());
+  const clearSelLoose = () => setSelLoose(new Set());
+  const bulkDeleteItems = () => { setZones((zs) => zs.map((z) => ({ ...z, items: z.items.filter((it) => !selItems.has(it.id)) }))); clearSelItems(); };
+  const bulkDuplicateItems = () => {
+    setZones((zs) => zs.map((z) => {
+      let changed = false; const out = [];
+      z.items.forEach((it) => { out.push(it); if (selItems.has(it.id)) { out.push({ ...structuredClone(it), id: newId('it') }); changed = true; } });
+      return changed ? { ...z, items: out } : z;
+    }));
+    clearSelItems();
+  };
+  const bulkDeleteLoose = () => { setLoose((ls) => ls.filter((l) => !selLoose.has(l.id))); clearSelLoose(); };
+  const bulkDuplicateLoose = () => {
+    setLoose((ls) => { const out = []; ls.forEach((l) => { out.push(l); if (selLoose.has(l.id)) out.push({ ...structuredClone(l), id: newId('lf') }); }); return out; });
+    clearSelLoose();
+  };
+  const selectAllItems = () => setSelItems(new Set(zones.flatMap((z) => z.items.map((it) => it.id))));
+  const selectAllLoose = () => setSelLoose(new Set(looseItems.map((l) => l.id)));
+
   const zoneResultById = (id) => computed.zoneResults.find((zr) => zr.zone.id === id);
 
   return (
@@ -160,6 +188,20 @@ export default function QuotationView({ doc, onChange }) {
               style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }} />
           </div>
         </div>
+
+        {/* 定制 items 批量操作条 */}
+        {selItems.size > 0 && (
+          <div className="flex items-center gap-2 px-4 py-2 rounded text-sm sticky top-2 z-20 no-print"
+            style={{ background: T.ink, color: T.paper }}>
+            <span className="font-medium">{selItems.size} selected 已选</span>
+            <button onClick={bulkDuplicateItems} className="flex items-center gap-1 px-2.5 py-1 rounded"
+              style={{ background: 'rgba(255,255,255,0.15)' }}><Copy size={13} /> Duplicate 复制</button>
+            <button onClick={bulkDeleteItems} className="flex items-center gap-1 px-2.5 py-1 rounded"
+              style={{ background: T.terra, color: '#fff' }}><Trash2 size={13} /> Delete 删除</button>
+            <button onClick={selectAllItems} className="px-2 py-1 opacity-80 hover:opacity-100">Select all 全选</button>
+            <button onClick={clearSelItems} className="ml-auto px-2 py-1 opacity-80 hover:opacity-100">Clear 取消</button>
+          </div>
+        )}
 
         {/* 区域列表 */}
         {zones.map((zone, zi) => {
@@ -210,6 +252,8 @@ export default function QuotationView({ doc, onChange }) {
                   {zone.items.map((it, idx) => (
                     <QuoteLineItem key={it.id} item={it}
                       result={zr?.items.find((r) => r.item.id === it.id)}
+                      selected={selItems.has(it.id)}
+                      onToggleSelect={() => toggleSelItem(it.id)}
                       onChange={(next) => updateItem(zone.id, next)}
                       onRemove={() => removeItem(zone.id, it.id)}
                       canUp={idx > 0} canDown={idx < zone.items.length - 1}
@@ -295,6 +339,19 @@ export default function QuotationView({ doc, onChange }) {
             {looseItems.length === 0 && (
               <div className="text-center py-4 text-sm" style={{ color: T.inkSoft }}>No loose furniture 暂无家具</div>
             )}
+            {/* 家具 items 批量操作条 */}
+            {selLoose.size > 0 && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded text-sm no-print"
+                style={{ background: T.ink, color: T.paper }}>
+                <span className="font-medium">{selLoose.size} selected 已选</span>
+                <button onClick={bulkDuplicateLoose} className="flex items-center gap-1 px-2.5 py-1 rounded"
+                  style={{ background: 'rgba(255,255,255,0.15)' }}><Copy size={13} /> Duplicate 复制</button>
+                <button onClick={bulkDeleteLoose} className="flex items-center gap-1 px-2.5 py-1 rounded"
+                  style={{ background: T.terra, color: '#fff' }}><Trash2 size={13} /> Delete 删除</button>
+                <button onClick={selectAllLoose} className="px-2 py-1 opacity-80 hover:opacity-100">Select all 全选</button>
+                <button onClick={clearSelLoose} className="ml-auto px-2 py-1 opacity-80 hover:opacity-100">Clear 取消</button>
+              </div>
+            )}
             {/* 表头 */}
             {looseItems.length > 0 && (
               <div className="grid gap-2 px-6 text-[9px] uppercase tracking-widest" style={{ gridTemplateColumns: 'repeat(12, minmax(0,1fr))', color: T.inkSoft }}>
@@ -308,6 +365,8 @@ export default function QuotationView({ doc, onChange }) {
             )}
             {looseItems.map((it, idx) => (
               <LooseRow key={it.id} item={it} idx={idx}
+                selected={selLoose.has(it.id)}
+                onToggleSelect={() => toggleSelLoose(it.id)}
                 onChange={(p) => updateLoose(it.id, p)}
                 onRemove={() => removeLoose(it.id)}
                 canUp={idx > 0} canDown={idx < looseItems.length - 1}

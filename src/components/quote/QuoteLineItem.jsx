@@ -43,28 +43,34 @@ function Sel({ value, onChange, children }) {
 const TYPE_LABEL = { panel: 'Panel 墙板', roomdoor: 'Door 房门', led: 'LED 灯带', other: 'Other 其他' };
 
 // 单条明细编辑器 —— 依 item.type 呈现不同字段
-export default function QuoteLineItem({ item, result, onChange, onRemove, onDragStart, onDrop, onMoveUp, onMoveDown, canUp, canDown }) {
+export default function QuoteLineItem({ item, result, onChange, onRemove, onDragStart, onDrop, onMoveUp, onMoveDown, canUp, canDown, selected, onToggleSelect }) {
   const set = (patch) => onChange({ ...item, ...patch });
   const total = result?.total || 0;
   const badge = item.type === 'cabinet' ? cabTypeById(item.cabType).label : TYPE_LABEL[item.type];
 
   return (
-    <div className="p-3 rounded" style={{ background: T.cream, border: `1px solid ${T.lineSoft}` }}
+    <div className="p-3 rounded" style={{ background: selected ? T.sand : T.cream, border: `1px solid ${selected ? T.wood : T.lineSoft}` }}
       onDragOver={onDrop ? (e) => e.preventDefault() : undefined}
       onDrop={onDrop ? (e) => { e.preventDefault(); onDrop(); } : undefined}>
       <div className="flex items-start gap-2">
-        {(onDragStart || onMoveUp) && (
-          <div className="flex flex-col items-center pt-0.5 shrink-0">
-            <button onClick={onMoveUp} disabled={!canUp} title="上移 Move up"
-              className="disabled:opacity-25" style={{ color: T.inkSoft }}><ChevronUp size={13} /></button>
-            <button draggable
-              onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text', ''); onDragStart?.(); }}
-              title="拖动排序 Drag to reorder"
-              className="cursor-grab active:cursor-grabbing" style={{ color: T.line }}><GripVertical size={14} /></button>
-            <button onClick={onMoveDown} disabled={!canDown} title="下移 Move down"
-              className="disabled:opacity-25" style={{ color: T.inkSoft }}><ChevronDown size={13} /></button>
-          </div>
-        )}
+        <div className="flex flex-col items-center pt-0.5 shrink-0 gap-1">
+          {onToggleSelect && (
+            <input type="checkbox" checked={!!selected} onChange={onToggleSelect}
+              title="Select 选择" className="cursor-pointer" style={{ accentColor: T.wood }} />
+          )}
+          {(onDragStart || onMoveUp) && (
+            <>
+              <button onClick={onMoveUp} disabled={!canUp} title="上移 Move up"
+                className="disabled:opacity-25" style={{ color: T.inkSoft }}><ChevronUp size={13} /></button>
+              <button draggable
+                onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text', ''); onDragStart?.(); }}
+                title="拖动排序 Drag to reorder"
+                className="cursor-grab active:cursor-grabbing" style={{ color: T.line }}><GripVertical size={14} /></button>
+              <button onClick={onMoveDown} disabled={!canDown} title="下移 Move down"
+                className="disabled:opacity-25" style={{ color: T.inkSoft }}><ChevronDown size={13} /></button>
+            </>
+          )}
+        </div>
         <div className="flex-1 grid gap-2" style={{ gridTemplateColumns: 'repeat(12, minmax(0,1fr))' }}>
 
           {item.type === 'cabinet' && (
