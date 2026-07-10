@@ -270,7 +270,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
               <Head brand="RICCIONE FURNITURE" />
               <CustomerRow />
 
-              <div style={{ breakInside: 'avoid' }}>
+              <div>
                 <div className="px-2 py-1 font-medium text-xs uppercase tracking-wide" style={{ background: T.sand }}>
                   {t(RLBL.looseSection)}
                 </div>
