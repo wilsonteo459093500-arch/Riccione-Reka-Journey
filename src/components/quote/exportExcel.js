@@ -14,9 +14,10 @@ export async function exportExcel(meta, computed, loose, notes = {}, lang = 'bot
   const cabLineLabel = (ln) => {
     const sid = (ln.descEn.split(' ')[1] || '').trim();
     const map = {
-      door:    { en: `Door: ${sid} Series`,    zh: `门板：${sid} 系列` },
-      carcass: { en: `Carcass: ${sid} Series`, zh: `柜体：${sid} 系列` },
-      drawer:  { en: 'Drawers',                zh: '抽屉' },
+      door:    { en: `Door: ${sid} Series`,         zh: `门板：${sid} 系列` },
+      carcass: { en: `Carcass: ${sid} Series`,      zh: `柜体：${sid} 系列` },
+      open:    { en: `Open Cabinet: ${sid} Series`, zh: `开放柜：${sid} 系列` },
+      drawer:  { en: 'Blum Full Extension Drawer',  zh: 'Blum 全展抽屉' },
     };
     return map[ln.bucket] ? t(map[ln.bucket]) : lineDesc(ln);
   };
@@ -76,7 +77,7 @@ export async function exportExcel(meta, computed, loose, notes = {}, lang = 'bot
       row([]);
     });
     row(['', '', '', t(RLBL.gross), round0(computed.gross)]);
-    if (computed.discount > 0) row(['', '', '', `${t(RLBL.discount)} (${computed.adjustPct}%)`, -round0(computed.discount)]);
+    if (computed.discount > 0) row(['', '', '', `${t(RLBL.discount)} (${computed.adjustPct}%)${notes.discountNote ? ` — ${notes.discountNote}` : ''}`, -round0(computed.discount)]);
     row(['', '', '', t(RLBL.total), round0(computed.net)]);
     row([]);
     if (notes.cabinetNote) { row([t(RLBL.notes), notes.cabinetNote]); row([]); }
@@ -103,7 +104,7 @@ export async function exportExcel(meta, computed, loose, notes = {}, lang = 'bot
       row([r.type || '', r.model || '', capColor(r.color) || '', round0(r.qty), round0(r.unitMyr), round0(r.total)]);
     });
     row(['', '', '', '', t(RLBL.gross), round0(loose.gross)]);
-    if (loose.discount > 0) row(['', '', '', '', `${t(RLBL.discount)} (${loose.adjustPct}%)`, -round0(loose.discount)]);
+    if (loose.discount > 0) row(['', '', '', '', `${t(RLBL.discount)} (${loose.adjustPct}%)${notes.looseDiscountNote ? ` — ${notes.looseDiscountNote}` : ''}`, -round0(loose.discount)]);
     row(['', '', '', '', t(RLBL.total), round0(loose.net)]);
     row([]);
     if (notes.looseNote) { row([t(RLBL.notes), notes.looseNote]); row([]); }

@@ -19,25 +19,27 @@ export const cnyToMyr = (cny) => (cny == null ? null : mround((cny * RATE.mult) 
 // door   = 门板（含门框及拉五器）
 // panel  = 见光板 / 顶板（墙板取此价）
 // carcass= 柜身（不含门板）—— 仅 A/B/C 有价（价格表其余系列为 “—”）
+// open   = 开放柜投影 元/平米（无门开放柜，按投影面积计，A–K 全系列有价）
 // strip  = 装饰条 元/米
 // 注：系列只用字母区分，不写基材（同一字母在不同项目可能是不同材料）。
 export const SERIES = [
-  { id: 'A', door: 670,  panel: 670,  carcass: 1370, strip: 90 },
-  { id: 'B', door: 870,  panel: 870,  carcass: 1770, strip: 110 },
-  { id: 'C', door: 1070, panel: 1070, carcass: 2070, strip: 130 },
-  { id: 'D', door: 1370, panel: 1370, carcass: null, strip: 150 },
-  { id: 'E', door: 1670, panel: 1670, carcass: null, strip: 180 },
-  { id: 'F', door: 1970, panel: 1970, carcass: null, strip: 210 },
-  { id: 'G', door: 2270, panel: 2270, carcass: null, strip: 240 },
-  { id: 'H', door: 2670, panel: 2670, carcass: null, strip: 270 },
-  { id: 'I', door: 3070, panel: 3070, carcass: null, strip: 330 },
-  { id: 'J', door: 3570, panel: 3570, carcass: null, strip: 390 },
-  { id: 'K', door: 4070, panel: 4070, carcass: null, strip: 460 },
+  { id: 'A', door: 670,  panel: 670,  carcass: 1370, open: 2070,  strip: 90 },
+  { id: 'B', door: 870,  panel: 870,  carcass: 1770, open: 2770,  strip: 110 },
+  { id: 'C', door: 1070, panel: 1070, carcass: 2070, open: 3470,  strip: 130 },
+  { id: 'D', door: 1370, panel: 1370, carcass: null, open: 4170,  strip: 150 },
+  { id: 'E', door: 1670, panel: 1670, carcass: null, open: 5180,  strip: 180 },
+  { id: 'F', door: 1970, panel: 1970, carcass: null, open: 6270,  strip: 210 },
+  { id: 'G', door: 2270, panel: 2270, carcass: null, open: 7270,  strip: 240 },
+  { id: 'H', door: 2670, panel: 2670, carcass: null, open: 9070,  strip: 270 },
+  { id: 'I', door: 3070, panel: 3070, carcass: null, open: 10770, strip: 330 },
+  { id: 'J', door: 3570, panel: 3570, carcass: null, open: 12570, strip: 390 },
+  { id: 'K', door: 4070, panel: 4070, carcass: null, open: 14270, strip: 460 },
 ];
 
 export const seriesById = (id) => SERIES.find((s) => s.id === id) || SERIES[0];
 export const DOOR_SERIES = SERIES.map((s) => s.id);                                     // 门板可选全部系列
 export const CARCASS_SERIES = SERIES.filter((s) => s.carcass != null).map((s) => s.id); // 柜体仅 A/B/C
+export const OPEN_SERIES = SERIES.filter((s) => s.open != null).map((s) => s.id);        // 开放柜 A–K
 
 // ---- 五金 / 配件（人民币）----
 export const DRAWER_CNY = 970; // 基础款全拉四方抽 元/套
@@ -115,6 +117,7 @@ export const fmtNum = (n, dp = 2) =>
 export const CATEGORIES = [
   { key: 'door',     label: 'Door Panel 门板' },
   { key: 'carcass',  label: 'Carcass 柜体' },
+  { key: 'open',     label: 'Open Cabinet 开放柜' },
   { key: 'drawer',   label: 'Drawer 抽屉' },
   { key: 'panel',    label: 'Wall Panel 墙板' },
   { key: 'roomdoor', label: 'Room Door 房门' },
@@ -141,8 +144,14 @@ export function computeItem(item) {
     const carc = seriesById(item.carcassSeries);
     if (item.hasDoor !== false) push('door', `Door ${door.id}`, `门板 ${door.id}`, qty, uEn, uZh, false, cnyToMyr(door.door));
     if (item.hasCarcass !== false) push('carcass', `Carcass ${carc.id}`, `柜体 ${carc.id}`, qty, uEn, uZh, false, cnyToMyr(carc.carcass));
+    // 开放柜（无门）：按投影面积计（长 × 高），A–K 各系列有独立投影价
+    if (item.hasOpen) {
+      const op = seriesById(item.openSeries || 'A');
+      const openQty = (Number(len) || 0) * (Number(item.h) || 0);
+      push('open', `Open ${op.id}`, `开放柜 ${op.id}`, openQty, 'm²', '㎡', false, cnyToMyr(op.open));
+    }
     const drawers = Number(item.drawers) || 0;
-    if (drawers > 0) push('drawer', 'Drawer', '抽屉', drawers, 'set', '套', true, cnyToMyr(DRAWER_CNY));
+    if (drawers > 0) push('drawer', 'Blum Full Extension Drawer', 'Blum 全展抽屉', drawers, 'set', '套', true, cnyToMyr(DRAWER_CNY));
   } else if (item.type === 'panel') {
     const len = parseLength(item.length);
     const qty = len * (Number(item.h) || 0);

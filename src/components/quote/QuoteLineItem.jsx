@@ -1,7 +1,7 @@
 import { Trash2, GripVertical, ChevronUp, ChevronDown } from 'lucide-react';
 import { T } from '../../theme.js';
 import {
-  DOOR_SERIES, CARCASS_SERIES, CABINET_TYPES, cabTypeById,
+  DOOR_SERIES, CARCASS_SERIES, OPEN_SERIES, CABINET_TYPES, cabTypeById,
   WALL_PANEL_PRESETS, ROOM_DOOR_PRESETS, isLinear, fmtMYR,
 } from '../../constants/pricing.js';
 
@@ -103,8 +103,13 @@ export default function QuoteLineItem({ item, result, onChange, onRemove, onDrag
                   {CARCASS_SERIES.map((id) => <option key={id} value={id}>{id} Series 系列</option>)}
                 </Sel>
               </Field>
-              <Field label="Include 包含" w="col-span-4">
-                <div className="flex gap-3 pt-1.5 text-[11px]" style={{ color: T.inkSoft }}>
+              <Field label="Open Cab. Series 开放柜系列" w="col-span-4">
+                <Sel value={item.openSeries || 'A'} onChange={(v) => set({ openSeries: v })}>
+                  {OPEN_SERIES.map((id) => <option key={id} value={id}>{id} Series 系列</option>)}
+                </Sel>
+              </Field>
+              <Field label="Include 包含" w="col-span-12">
+                <div className="flex flex-wrap gap-4 pt-1.5 text-[11px]" style={{ color: T.inkSoft }}>
                   <label className="flex items-center gap-1 cursor-pointer">
                     <input type="checkbox" checked={item.hasDoor !== false}
                       onChange={(e) => set({ hasDoor: e.target.checked })} />Door 门板
@@ -112,6 +117,10 @@ export default function QuoteLineItem({ item, result, onChange, onRemove, onDrag
                   <label className="flex items-center gap-1 cursor-pointer">
                     <input type="checkbox" checked={item.hasCarcass !== false}
                       onChange={(e) => set({ hasCarcass: e.target.checked })} />Carcass 柜体
+                  </label>
+                  <label className="flex items-center gap-1 cursor-pointer">
+                    <input type="checkbox" checked={!!item.hasOpen}
+                      onChange={(e) => set({ hasOpen: e.target.checked })} />Open Cabinet 开放柜 (投影)
                   </label>
                 </div>
               </Field>

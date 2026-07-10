@@ -16,7 +16,8 @@ export function makeItem(kind) {
   if (['base', 'wall', 'tall'].includes(kind)) {
     const t = cabTypeById(kind);
     return { ...base, type: 'cabinet', cabType: kind, name: '', length: '', h: t.h, d: t.d,
-      doorSeries: 'A', carcassSeries: 'A', drawers: '', hasDoor: true, hasCarcass: true };
+      doorSeries: 'A', carcassSeries: 'A', openSeries: 'A', drawers: '',
+      hasDoor: true, hasCarcass: true, hasOpen: false };
   }
   if (kind === 'panel') return { ...base, type: 'panel', preset: 'wall', name: '', length: '', h: 2.7, panelSeries: 'A' };
   if (kind === 'roomdoor') return { ...base, type: 'roomdoor', preset: 'std', desc: '', qty: '1', unitMyr: 7570 };
@@ -98,6 +99,8 @@ export default function QuotationView({ doc, onChange }) {
   const looseAdjustPct = doc.looseAdjustPct || 0;
   const cabinetNote = doc.cabinetNote || '';
   const looseNote = doc.looseNote || '';
+  const discountNote = doc.discountNote || '';
+  const looseDiscountNote = doc.looseDiscountNote || '';
   const lang = meta.outputLang || 'en';
   const computed = useMemo(() => computeQuote(zones, adjustPct), [zones, adjustPct]);
   const looseCalc = useMemo(() => computeLoose(looseItems, looseAdjustPct), [looseItems, looseAdjustPct]);
@@ -263,6 +266,13 @@ export default function QuotationView({ doc, onChange }) {
             </span>
             {computed.discount > 0 && <span style={{ color: T.terra }}>− {fmtMYR(computed.discount)}</span>}
           </div>
+          {/* 折扣条件（显示在报价单折扣旁）*/}
+          <div className="mt-2">
+            <input value={discountNote} onChange={(e) => patch({ discountNote: e.target.value })}
+              placeholder="Discount condition 折扣条件, e.g. Confirm order within 1 month 1个月内确认订单"
+              className="w-full px-2 py-1.5 text-xs outline-none"
+              style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }} />
+          </div>
           {/* 定制部分备注 */}
           <div className="mt-3 pt-3" style={{ borderTop: `1px dashed ${T.line}` }}>
             <label className="block text-[9px] uppercase tracking-widest mb-1" style={{ color: T.inkSoft }}>Notes 备注（定制 Cabinet）</label>
@@ -335,6 +345,14 @@ export default function QuotationView({ doc, onChange }) {
                 </div>
               )}
             </div>
+            {looseItems.length > 0 && (
+              <div className="pt-1">
+                <input value={looseDiscountNote} onChange={(e) => patch({ looseDiscountNote: e.target.value })}
+                  placeholder="Discount condition 折扣条件, e.g. Confirm within 2 weeks 2周内确认"
+                  className="w-full px-2 py-1.5 text-xs outline-none"
+                  style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }} />
+              </div>
+            )}
             {/* 家具部分备注 */}
             <div className="pt-1">
               <label className="block text-[9px] uppercase tracking-widest mb-1" style={{ color: T.inkSoft }}>Notes 备注（家具 Loose Furniture）</label>
@@ -396,7 +414,7 @@ export default function QuotationView({ doc, onChange }) {
               </button>
               <button onClick={async () => {
                 try {
-                  await exportExcel(meta, computed, looseCalc, { cabinetNote, looseNote }, lang);
+                  await exportExcel(meta, computed, looseCalc, { cabinetNote, looseNote, discountNote, looseDiscountNote }, lang);
                   toast('Excel exported 已导出', 'success');
                 } catch (e) {
                   toast('Export failed 导出失败', 'error');
@@ -408,7 +426,7 @@ export default function QuotationView({ doc, onChange }) {
               </button>
             </div>
             <button onClick={async () => {
-              const ok = await copyToClipboard(buildTextQuote(meta, computed, looseCalc, { cabinetNote, looseNote }, lang));
+              const ok = await copyToClipboard(buildTextQuote(meta, computed, looseCalc, { cabinetNote, looseNote, discountNote, looseDiscountNote }, lang));
               toast(ok ? 'Copied 已复制' : 'Copy failed 复制失败', ok ? 'success' : 'error');
             }}
               className="w-full flex items-center justify-center gap-1.5 py-2.5 text-sm"
@@ -419,7 +437,7 @@ export default function QuotationView({ doc, onChange }) {
         </div>
       </div>
 
-      {showPrint && <QuotePrint meta={meta} computed={computed} loose={looseCalc} cabinetNote={cabinetNote} looseNote={looseNote} lang={lang} onClose={() => setShowPrint(false)} />}
+      {showPrint && <QuotePrint meta={meta} computed={computed} loose={looseCalc} cabinetNote={cabinetNote} looseNote={looseNote} discountNote={discountNote} looseDiscountNote={looseDiscountNote} lang={lang} onClose={() => setShowPrint(false)} />}
       {showCatalog && (
         <CatalogPicker
           onAdd={(it) => setLoose((ls) => [...ls, { id: newId('lf'), ...it }])}
@@ -453,7 +471,7 @@ function buildTextQuote(meta, computed, loose, notes = {}, lang = 'both') {
   L.push('');
   if (computed.discount > 0) {
     L.push(`${t(RLBL.gross)}：${fmtMYR(computed.gross)}`);
-    L.push(`${t(RLBL.discount)} (${computed.adjustPct}%)：− ${fmtMYR(computed.discount)}`);
+    L.push(`${t(RLBL.discount)} (${computed.adjustPct}%)${notes.discountNote ? ` — ${notes.discountNote}` : ''}：− ${fmtMYR(computed.discount)}`);
   }
   L.push(`*${t(RLBL.total)}：${fmtMYR(computed.net)}*`);
   if (notes.cabinetNote) L.push(`${t(RLBL.notes)}：${notes.cabinetNote}`);
@@ -467,7 +485,7 @@ function buildTextQuote(meta, computed, loose, notes = {}, lang = 'both') {
     });
     if (loose.discount > 0) {
       L.push(`${t(RLBL.gross)}：${fmtMYR(loose.gross)}`);
-      L.push(`${t(RLBL.discount)} (${loose.adjustPct}%)：− ${fmtMYR(loose.discount)}`);
+      L.push(`${t(RLBL.discount)} (${loose.adjustPct}%)${notes.looseDiscountNote ? ` — ${notes.looseDiscountNote}` : ''}：− ${fmtMYR(loose.discount)}`);
     }
     L.push(`*${t(RLBL.total)}：${fmtMYR(loose.net)}*`);
     if (notes.looseNote) L.push(`${t(RLBL.notes)}：${notes.looseNote}`);

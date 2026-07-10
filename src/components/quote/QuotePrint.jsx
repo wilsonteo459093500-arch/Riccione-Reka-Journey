@@ -6,7 +6,7 @@ import { fmt } from '../../utils/helpers.js';
 
 // 报价单（可打印 / 另存 PDF）。lang：'en' | 'zh' | 'both'。
 // 定制橱柜（SAIL by Riccione Reka）+ Loose Furniture（Riccione Furniture，另起一页）。
-export default function QuotePrint({ meta, computed, loose, cabinetNote = '', looseNote = '', lang = 'both', onClose }) {
+export default function QuotePrint({ meta, computed, loose, cabinetNote = '', looseNote = '', discountNote = '', looseDiscountNote = '', lang = 'both', onClose }) {
   const zones = computed.zoneResults.filter((zr) => zr.zone.items.length > 0);
   const looseRows = loose?.rows || [];
   const hasCab = zones.length > 0;
@@ -21,9 +21,10 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
   const cabLineLabel = (ln) => {
     const sid = (ln.descEn.split(' ')[1] || '').trim();
     const map = {
-      door:    { en: `Door: ${sid} Series`,    zh: `门板：${sid} 系列` },
-      carcass: { en: `Carcass: ${sid} Series`, zh: `柜体：${sid} 系列` },
-      drawer:  { en: 'Drawers',                zh: '抽屉' },
+      door:    { en: `Door: ${sid} Series`,         zh: `门板：${sid} 系列` },
+      carcass: { en: `Carcass: ${sid} Series`,      zh: `柜体：${sid} 系列` },
+      open:    { en: `Open Cabinet: ${sid} Series`, zh: `开放柜：${sid} 系列` },
+      drawer:  { en: 'Blum Full Extension Drawer',  zh: 'Blum 全展抽屉' },
     };
     return map[ln.bucket] ? t(map[ln.bucket]) : lineDesc(ln);
   };
@@ -88,7 +89,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
   );
 
   // 总览页：某部分的 原价 / 折扣 / 折后小计
-  const SummarySection = ({ label, brand, calc }) => (
+  const SummarySection = ({ label, brand, calc, note }) => (
     <>
       <tr style={{ borderTop: `1px solid ${T.line}` }}>
         <td className="pt-2 px-2 font-medium" colSpan={2}>{label} <span style={{ color: T.inkSoft }}>· {brand}</span></td>
@@ -99,7 +100,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
       </tr>
       {calc.discount > 0 && (
         <tr style={{ color: T.terra }}>
-          <td className="py-0.5 px-2 pl-5">{t(RLBL.discount)} ({calc.adjustPct}%)</td>
+          <td className="py-0.5 px-2 pl-5">{t(RLBL.discount)} ({calc.adjustPct}%){note ? <span className="italic"> — {note}</span> : null}</td>
           <td className="text-right py-0.5 px-2">− {fmtMYR(calc.discount)}</td>
         </tr>
       )}
@@ -144,8 +145,8 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                 <div className="px-2 py-1 font-medium text-xs uppercase tracking-wide" style={{ background: T.sand }}>{t(RLBL.summary)}</div>
                 <table className="w-full" style={{ borderCollapse: 'collapse' }}>
                   <tbody>
-                    <SummarySection label={t(RLBL.customCabinet)} brand="SAIL by Riccione Reka" calc={computed} />
-                    <SummarySection label={t(RLBL.looseSection)} brand="Riccione Furniture" calc={loose} />
+                    <SummarySection label={t(RLBL.customCabinet)} brand="SAIL by Riccione Reka" calc={computed} note={discountNote} />
+                    <SummarySection label={t(RLBL.looseSection)} brand="Riccione Furniture" calc={loose} note={looseDiscountNote} />
                     {/* 合计（两部分）*/}
                     <tr style={{ borderTop: `1.5px solid ${T.line}` }}>
                       <td className="pt-2 px-2" style={{ color: T.inkSoft }}>{t(RLBL.totalBeforeDiscount)}</td>
@@ -244,9 +245,12 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                     <span style={{ color: T.inkSoft }}>{t(RLBL.gross)}</span><span>{fmtMYR(computed.gross)}</span>
                   </div>
                   {computed.discount > 0 && (
-                    <div className="flex justify-between py-1" style={{ color: T.terra }}>
-                      <span>{t(RLBL.discount)} ({computed.adjustPct}%)</span><span>− {fmtMYR(computed.discount)}</span>
-                    </div>
+                    <>
+                      <div className="flex justify-between py-1" style={{ color: T.terra }}>
+                        <span>{t(RLBL.discount)} ({computed.adjustPct}%)</span><span>− {fmtMYR(computed.discount)}</span>
+                      </div>
+                      {discountNote && <div className="text-[10px] italic -mt-0.5 pb-1" style={{ color: T.inkSoft }}>{discountNote}</div>}
+                    </>
                   )}
                   <div className="flex justify-between py-2 mt-1 font-display text-xl" style={{ borderTop: `2px solid ${T.ink}` }}>
                     <span>{t(RLBL.total)}</span><span>{fmtMYR(computed.net)}</span>
@@ -302,7 +306,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                     </tr>
                     {loose.discount > 0 && (
                       <tr style={{ color: T.terra }}>
-                        <td colSpan={6} className="text-right py-1 px-2 text-xs">{t(RLBL.discount)} ({loose.adjustPct}%)</td>
+                        <td colSpan={6} className="text-right py-1 px-2 text-xs">{t(RLBL.discount)} ({loose.adjustPct}%){looseDiscountNote ? <span className="italic"> — {looseDiscountNote}</span> : null}</td>
                         <td className="text-right py-1 px-2">− {fmtNum(loose.discount, 0)}</td>
                       </tr>
                     )}
