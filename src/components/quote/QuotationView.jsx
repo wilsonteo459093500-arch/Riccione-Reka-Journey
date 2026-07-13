@@ -12,12 +12,14 @@ import { exportExcel } from './exportExcel.js';
 // ---- 新明细的默认值 ----
 export function makeItem(kind) {
   const base = { id: newId('it') };
-  // kind：base/wall/tall → 橱柜；panel/roomdoor/led/other → 其余
-  if (['base', 'wall', 'tall'].includes(kind)) {
+  // kind：base/wall/tall/open → 橱柜；panel/roomdoor/led/other → 其余
+  if (['base', 'wall', 'tall', 'open'].includes(kind)) {
     const t = cabTypeById(kind);
+    const isOpen = kind === 'open';
+    // 开放柜默认只含开放柜（无门无柜体）；其余默认门+柜体
     return { ...base, type: 'cabinet', cabType: kind, name: '', length: '', h: t.h, d: t.d,
       doorSeries: 'A', carcassSeries: 'A', openSeries: 'A', drawers: '',
-      hasDoor: true, hasCarcass: true, hasOpen: false };
+      hasDoor: !isOpen, hasCarcass: !isOpen, hasOpen: isOpen };
   }
   if (kind === 'panel') return { ...base, type: 'panel', preset: 'wall', name: '', length: '', h: 2.7, panelSeries: 'A' };
   if (kind === 'roomdoor') return { ...base, type: 'roomdoor', preset: 'std', desc: '', qty: '1', unitMyr: 7570 };
@@ -29,6 +31,7 @@ const ADD_TYPES = [
   { kind: 'base', label: 'Base 地柜' },
   { kind: 'wall', label: 'Wall 吊柜' },
   { kind: 'tall', label: 'Tall 高柜' },
+  { kind: 'open', label: 'Open 开放柜' },
   { kind: 'panel', label: 'Panel 墙板' },
   { kind: 'roomdoor', label: 'Door 房门' },
   { kind: 'led', label: 'LED 灯带' },

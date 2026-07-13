@@ -78,7 +78,12 @@ export default function QuoteLineItem({ item, result, onChange, onRemove, onDrag
               <Field label="Type 柜体类型" w="col-span-3">
                 <Sel value={item.cabType} onChange={(id) => {
                   const t = cabTypeById(id);
-                  set({ cabType: id, h: t.h, d: t.d });
+                  const wasOpen = item.cabType === 'open';
+                  const isOpen = id === 'open';
+                  const patch = { cabType: id, h: t.h, d: t.d };
+                  if (isOpen && !wasOpen) { patch.hasDoor = false; patch.hasCarcass = false; patch.hasOpen = true; }
+                  if (!isOpen && wasOpen) { patch.hasDoor = true; patch.hasCarcass = true; patch.hasOpen = false; }
+                  set(patch);
                 }}>
                   {CABINET_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
                 </Sel>

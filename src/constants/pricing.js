@@ -64,6 +64,7 @@ export const CABINET_TYPES = [
   { id: 'base', label: 'Base Cabinet 地柜', h: 0.85, d: 0.6,  method: 'linear' },
   { id: 'wall', label: 'Top Cabinet 吊柜',  h: 0.75, d: 0.35, method: 'linear' },
   { id: 'tall', label: 'Tall Cabinet 高柜', h: 2.7,  d: 0.6,  method: 'sqm' },
+  { id: 'open', label: 'Open Cabinet 开放柜', h: 2.0, d: 0.35, method: 'sqm' }, // 开放柜：投影面积计价
 ];
 export const cabTypeById = (id) => CABINET_TYPES.find((t) => t.id === id) || CABINET_TYPES[0];
 
