@@ -92,6 +92,32 @@ select {
   body {
     background: white !important;
   }
+
+  /* 打印报价单时，隐藏整个 app，只留 portal 到 body 的报价单，
+     以正常文档流铺满页面（避免浮层 + 内部滚动导致多余空白页）。 */
+  #root {
+    display: none !important;
+  }
+  .quote-print-overlay {
+    position: static !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  .quote-print-overlay > div {
+    display: block !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+  }
+  .quote-print-sheet {
+    max-width: none !important;
+    width: 100% !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+  @page {
+    margin: 12mm;
+  }
 }
 
 .stage-roman {
