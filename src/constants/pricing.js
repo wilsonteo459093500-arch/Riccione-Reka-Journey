@@ -48,7 +48,7 @@ export const LED_CNY = 370;    // D-001 平照灯带 元/米
 // ---- Rooms 区域/房间（英文为主；尽量覆盖家里需要做定制的地方）----
 export const CUSTOM_ROOM = 'Custom 自定义';
 export const ROOMS = [
-  'Foyer 玄关', 'Living Room 客厅', 'Dining 餐厅', 'Kitchen 厨房', 'Island 中岛',
+  'Foyer 玄关', 'Living Room 客厅', 'Dining 餐厅', 'Dry Kitchen 干厨', 'Wet Kitchen 湿厨', 'Island 中岛',
   'Bar 吧台', 'Study 书房',
   'Master Bedroom 主卧', 'Bedroom 2 卧室2', 'Bedroom 3 卧室3', 'Bedroom 4 卧室4',
   'Walk-in Closet 衣帽间', 'Bathroom 卫生间', 'Laundry 洗衣房', 'Balcony 阳台',
