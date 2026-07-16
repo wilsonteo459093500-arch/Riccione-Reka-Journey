@@ -35,17 +35,24 @@ Vite + React 18 + Tailwind CSS。**两种数据模式**：
 
 1. 在 [supabase.com](https://supabase.com) 新建一个 project。
 2. 打开 **SQL Editor**，把 `supabase/schema.sql` 的内容粘贴执行（建表 + 权限 + 实时）。
-3. 在 **Authentication → Users → Add user** 给每个团队成员创建邮箱+密码账号。
-   建议在 **Authentication → Providers → Email** 里关闭公开注册（Disable signups），只允许管理员添加。
-4. 在 **Project Settings → API** 复制 `Project URL` 和 `anon public` key。
-5. 本地开发：复制 `.env.example` 为 `.env.local` 并填入：
+3. 在 **Project Settings → API** 复制 `Project URL` 和 `anon public` key。
+4. 本地开发：复制 `.env.example` 为 `.env.local` 并填入：
 
    ```
    VITE_SUPABASE_URL=https://xxxx.supabase.co
    VITE_SUPABASE_ANON_KEY=eyJhbGci...
    ```
 
-6. 部署（如 Vercel / Netlify）：在平台的环境变量里设置这两个值，重新构建即可。
+5. 部署（如 Vercel / Netlify）：在平台的环境变量里设置这两个值，重新构建即可。
+
+### ⚠️ 访问模型：开放团队 (Open-team)
+
+当前设置**没有登录页** —— 拿到网址的人就能读写全部数据（`schema.sql` 里 RLS 用的 `to public` 策略）。
+这是给互相信任的小团队用的方案：**安全靠网址保密**，不靠账号。
+
+- 想让谁用 → 把网址发给 ta
+- 想撤销访问 → 在 Supabase 换掉 anon key + 更新 Vercel 环境变量重新部署
+- 想加登录 → 恢复 `src/App.jsx` 里 `<AuthGate>` 包裹, 把 `schema.sql` 里的 `to public` 改回 `to authenticated`
 
 设置好后，应用会自动显示登录页；登录后所有改动实时同步给其他成员。未配置时则保持本地模式。
 

@@ -9,6 +9,14 @@
 --     The app only stores URLs — never binary content. If this app
 --     ever disappears, your files are still in Drive, untouched.
 --
+-- Access model (open-team mode):
+--   The app has NO login screen. Anyone with the deployed URL — and
+--   therefore the bundled Supabase anon key — can read and write all
+--   data. Security here is URL-based, not identity-based. This is a
+--   deliberate choice for a small trusted team; to lock down, re-wrap
+--   AppInner with AuthGate in src/App.jsx and flip the policies below
+--   back to `to authenticated`.
+--
 -- (Earlier versions had an `attachments` table for base64 blobs;
 -- it's no longer used. Existing tables are harmless if left.)
 -- ============================================================
@@ -34,22 +42,27 @@ create table if not exists public.team_config (
   updated_at  timestamptz not null default now()
 );
 
--- ---- Row Level Security: only authenticated users may read/write ----
+-- ---- Row Level Security: PUBLIC access (open-team mode) ----
+-- `to public` covers both the anon and authenticated roles, so anyone
+-- calling the API with your project's anon key can read/write.
 alter table public.projects enable row level security;
 alter table public.appointments enable row level security;
 alter table public.team_config enable row level security;
 
 drop policy if exists "authenticated full access" on public.projects;
-create policy "authenticated full access" on public.projects
-  for all to authenticated using (true) with check (true);
+drop policy if exists "public full access" on public.projects;
+create policy "public full access" on public.projects
+  for all to public using (true) with check (true);
 
 drop policy if exists "authenticated full access" on public.appointments;
-create policy "authenticated full access" on public.appointments
-  for all to authenticated using (true) with check (true);
+drop policy if exists "public full access" on public.appointments;
+create policy "public full access" on public.appointments
+  for all to public using (true) with check (true);
 
 drop policy if exists "authenticated full access" on public.team_config;
-create policy "authenticated full access" on public.team_config
-  for all to authenticated using (true) with check (true);
+drop policy if exists "public full access" on public.team_config;
+create policy "public full access" on public.team_config
+  for all to public using (true) with check (true);
 
 -- ---- Realtime: broadcast changes to all connected clients ----
 alter publication supabase_realtime add table public.projects;
