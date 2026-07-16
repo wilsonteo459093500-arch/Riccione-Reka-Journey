@@ -4,7 +4,6 @@ import { useProjects } from './hooks/useProjects.js';
 import { cloudConfigured } from './services/supabase.js';
 import { createLocalRepo, createCloudRepo } from './services/repo.js';
 import { UIProvider, useToast, useConfirm } from './components/ui/UIProvider.jsx';
-import AuthGate from './components/auth/AuthGate.jsx';
 import Nav from './components/Nav.jsx';
 import EmptyState from './components/EmptyState.jsx';
 import MethodView from './components/MethodView.jsx';
@@ -139,13 +138,12 @@ export default function App() {
   const localRepo = useMemo(() => createLocalRepo(), []);
   const cloudRepo = useMemo(() => (cloudConfigured ? createCloudRepo() : null), []);
 
+  // Open access: anyone with the URL is signed in as a shared team session.
+  // In cloud mode the Supabase anon key + permissive RLS policies (see
+  // supabase/schema.sql) grant the anon role full read/write on all tables.
   return (
     <UIProvider>
-      {cloudConfigured ? (
-        <AuthGate>{({ user, signOut }) => <AppInner repo={cloudRepo} user={user} onSignOut={signOut} />}</AuthGate>
-      ) : (
-        <AppInner repo={localRepo} />
-      )}
+      <AppInner repo={cloudConfigured ? cloudRepo : localRepo} />
     </UIProvider>
   );
 }
