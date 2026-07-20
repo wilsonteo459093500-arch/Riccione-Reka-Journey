@@ -2,6 +2,9 @@
 
 全屋定制项目交付管理工具。围绕 **SAIL 方法论**的五个章节（Vision · Blueprint · Craft · Arrival · Signature）组织项目，让 SD / SS / WH / 采购在同一套流程上协作。
 
+> 📁 本 repo 还包含一个独立 app：**Sail CRM** — 销售 / pipeline / 售后管理。
+> 代码在 [`/crm`](./crm)，部署指南见 [`crm/DEPLOY.md`](./crm/DEPLOY.md)。两套 app 共用 repo 但各自独立部署。
+
 ## 功能
 
 - **看板** — 项目按当前章节自动归位，支持按成员筛选
@@ -54,8 +57,6 @@ Vite + React 18 + Tailwind CSS。**两种数据模式**：
 - 想撤销访问 → 在 Supabase 换掉 anon key + 更新 Vercel 环境变量重新部署
 - 想加登录 → 恢复 `src/App.jsx` 里 `<AuthGate>` 包裹, 把 `schema.sql` 里的 `to public` 改回 `to authenticated`
 
-设置好后，应用会自动显示登录页；登录后所有改动实时同步给其他成员。未配置时则保持本地模式。
-
 ## 开发
 
 ```bash
@@ -71,16 +72,18 @@ npm run preview  # 预览构建产物
 src/
   App.jsx                 # 视图路由 + 状态编排
   theme.js                # 配色
-  constants/              # stages / forms / storage keys
+  constants/              # stages / forms / storage keys / design / calendar / team
   utils/                  # 纯函数 helpers + 示范数据
   services/
-    storage.js            # IndexedDB 键值存储（含 window.storage 适配）
+    storage.js            # IndexedDB 键值存储
     supabase.js           # Supabase 客户端（按 env 自动启用）
     repo.js               # 数据仓库抽象：本地 / 云端两套实现
-  hooks/useProjects.js    # 数据加载 / 持久化 / 实时同步（稳定回调）
+  hooks/                  # useProjects, useAppointments, useTeam
+  i18n/                   # 中英翻译 + LangProvider
   components/
-    auth/                 # 登录页 + 会话守卫
     ui/                   # 输入控件 + 确认弹窗 / Toast
     kanban/ project/ forms/ risks/ team/ client/
+    daily/ defects/ aftersales/ design/ briefing/ calendar/ settings/
 supabase/schema.sql       # 一次性建表脚本
+crm/                      # 独立的 Sail CRM app（单独部署）
 ```
