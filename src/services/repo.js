@@ -8,29 +8,71 @@
 //   saveProject(project, all)    -> persist one project
 //   removeProject(id, all)       -> delete one project
 //   replaceAll(all)              -> wholesale replace (sample / clear)
-//   getAttachment(id)            -> base64 string | null
-//   setAttachment(id, content)
-//   delAttachment(id)
 //   subscribe(onChange)          -> unsubscribe fn (live updates)
 //
 // localRepo  : single JSON blob in IndexedDB (+ legacy migrations)
 // cloudRepo  : one row per project in Supabase + Realtime sync
+//
+// Attachments are external links only — the app stores URLs in project
+// metadata, never binary content. So your files live in Drive / Dropbox,
+// not here. If this app disappears, your files don't.
 // ============================================================
 import { storage } from './storage.js';
 import { supabase } from './supabase.js';
 import {
   KEY_META,
-  KEY_ATT_PREFIX,
+  KEY_APPOINTMENTS,
+  KEY_TEAM,
+  KEY_LEGACY_V8,
+  KEY_LEGACY_V7,
   KEY_LEGACY_V6,
   KEY_LEGACY_V5,
   KEY_LEGACY_V4,
   KEY_LEGACY_V3,
 } from '../constants/storage.js';
+import { LEGACY_GATE_REMAP, LEGACY_STAGE_REMAP } from '../constants/stages.js';
 
-// Preserve any forms a record already has, fill the rest, and (for the
-// oldest dossier-based records) lift dossier answers into SPACE_SURVEY.
-const migrateRecord = (p, fromDossier) => ({
+const remapKeys = (obj) => {
+  const next = {};
+  Object.entries(obj || {}).forEach(([k, v]) => {
+    next[LEGACY_GATE_REMAP[k] || k] = v;
+  });
+  return next;
+};
+
+// Legacy data may contain attachments with `source: 'upload'` whose
+// binary content used to live in storage. We no longer fetch those
+// blobs, so we mark such entries as "missing" so users see them and
+// can either re-link to Drive or delete.
+const sanitizeAttachments = (atts) => {
+  const out = {};
+  Object.entries(atts || {}).forEach(([gateId, list]) => {
+    out[gateId] = (list || [])
+      .map((a) => {
+        if (a.source === 'link') return a;
+        return {
+          ...a,
+          source: 'link',
+          url: a.url || '',
+          name: (a.name || 'file') + ' (legacy upload — re-link to Drive)',
+        };
+      })
+      .filter((a) => a.url); // drop legacy uploads with no URL
+  });
+  return out;
+};
+
+const sanitizePhotos = (photos) =>
+  (photos || [])
+    .map((p) => (p.source === 'link' ? p : { ...p, source: 'link', url: p.url || '' }))
+    .filter((p) => p.url);
+
+const migrateRecord = (p, { fromDossier, remap }) => ({
   ...p,
+  gates: remap ? remapKeys(p.gates) : p.gates || {},
+  notes: remap ? remapKeys(p.notes) : p.notes || {},
+  attachments: sanitizeAttachments(remap ? remapKeys(p.attachments) : p.attachments),
+  risks: (p.risks || []).map((r) => (remap ? { ...r, stage: LEGACY_STAGE_REMAP[r.stage] || r.stage } : r)),
   forms: {
     SPACE_SURVEY: p.forms?.SPACE_SURVEY || { answers: fromDossier ? p.dossier?.answers || {} : {} },
     MEASUREMENT: p.forms?.MEASUREMENT || { answers: {} },
@@ -38,8 +80,10 @@ const migrateRecord = (p, fromDossier) => ({
     INSTALL_QC: p.forms?.INSTALL_QC || { answers: {} },
     HANDOVER: p.forms?.HANDOVER || { answers: {} },
   },
-  dailyReports: p.dailyReports || [],
-  attachments: p.attachments || {},
+  dailyReports: (p.dailyReports || []).map((r) => ({ ...r, photos: sanitizePhotos(r.photos) })),
+  defects: (p.defects || []).map((d) => ({ ...d, photos: sanitizePhotos(d.photos) })),
+  afterSales: (p.afterSales || []).map((a) => ({ ...a, photos: sanitizePhotos(a.photos) })),
+  designFlow: p.designFlow || null,
 });
 
 // ---------- LOCAL (IndexedDB single blob) ----------
@@ -52,14 +96,20 @@ export function createLocalRepo() {
     async load() {
       try {
         const meta = await storage.get(KEY_META);
-        if (meta) return JSON.parse(meta) || [];
+        if (meta) {
+          const parsed = JSON.parse(meta) || [];
+          // Apply attachment sanitization on every load (cheap, idempotent).
+          return parsed.map((p) => migrateRecord(p, { fromDossier: false, remap: false }));
+        }
       } catch (e) { /* fall through to migrations */ }
 
       const migrations = [
-        { key: KEY_LEGACY_V6, fromDossier: false },
-        { key: KEY_LEGACY_V5, fromDossier: true },
-        { key: KEY_LEGACY_V4, fromDossier: true },
-        { key: KEY_LEGACY_V3, fromDossier: false },
+        { key: KEY_LEGACY_V8, fromDossier: false, remap: true },
+        { key: KEY_LEGACY_V7, fromDossier: false, remap: true },
+        { key: KEY_LEGACY_V6, fromDossier: false, remap: true },
+        { key: KEY_LEGACY_V5, fromDossier: true,  remap: true },
+        { key: KEY_LEGACY_V4, fromDossier: true,  remap: true },
+        { key: KEY_LEGACY_V3, fromDossier: false, remap: true },
       ];
       for (const m of migrations) {
         try {
@@ -67,7 +117,7 @@ export function createLocalRepo() {
           if (!raw) continue;
           const parsed = JSON.parse(raw);
           if (!Array.isArray(parsed)) continue;
-          const migrated = parsed.map((p) => migrateRecord(p, m.fromDossier));
+          const migrated = parsed.map((p) => migrateRecord(p, m));
           await writeAll(migrated);
           return migrated;
         } catch (e) { /* try next */ }
@@ -79,11 +129,29 @@ export function createLocalRepo() {
     removeProject: (_id, all) => writeAll(all),
     replaceAll: (all) => writeAll(all),
 
-    getAttachment: (id) => storage.get(KEY_ATT_PREFIX + id),
-    setAttachment: (id, content) => storage.set(KEY_ATT_PREFIX + id, content),
-    delAttachment: (id) => storage.del(KEY_ATT_PREFIX + id),
+    // Appointments — one blob, same simple model as projects.
+    async loadAppointments() {
+      try {
+        const raw = await storage.get(KEY_APPOINTMENTS);
+        if (raw) return JSON.parse(raw) || [];
+      } catch (e) { /* ignore */ }
+      return [];
+    },
+    saveAppointments: (all) => storage.set(KEY_APPOINTMENTS, JSON.stringify(all)),
+
+    // Team config — single object (members + role labels).
+    async loadTeam() {
+      try {
+        const raw = await storage.get(KEY_TEAM);
+        if (raw) return JSON.parse(raw);
+      } catch (e) { /* ignore */ }
+      return null;
+    },
+    saveTeam: (team) => storage.set(KEY_TEAM, JSON.stringify(team)),
 
     subscribe: () => () => {},
+    subscribeAppointments: () => () => {},
+    subscribeTeam: () => () => {},
   };
 }
 
@@ -98,7 +166,7 @@ export function createCloudRepo() {
         .select('data')
         .order('updated_at', { ascending: false });
       if (error) throw error;
-      return (data || []).map((r) => r.data);
+      return (data || []).map((r) => migrateRecord(r.data, { fromDossier: false, remap: false }));
     },
 
     async saveProject(project) {
@@ -123,29 +191,65 @@ export function createCloudRepo() {
       }
     },
 
-    async getAttachment(id) {
+    // Appointments — one row per appointment, mirrors projects pattern.
+    async loadAppointments() {
       const { data, error } = await supabase
-        .from('attachments')
-        .select('content')
-        .eq('id', id)
-        .maybeSingle();
-      if (error) return null;
-      return data?.content || null;
-    },
-
-    async setAttachment(id, content) {
-      const { error } = await supabase.from('attachments').upsert({ id, content });
+        .from('appointments')
+        .select('data')
+        .order('updated_at', { ascending: false });
       if (error) throw error;
+      return (data || []).map((r) => r.data);
     },
 
-    async delAttachment(id) {
-      await supabase.from('attachments').delete().eq('id', id);
+    async saveAppointments(all) {
+      // Whole-list replace keeps the local + cloud APIs symmetrical.
+      const { error: delErr } = await supabase.from('appointments').delete().not('id', 'is', null);
+      if (delErr) throw delErr;
+      if (all.length) {
+        const rows = all.map((a) => ({ id: a.id, data: a, updated_at: new Date().toISOString() }));
+        const { error } = await supabase.from('appointments').insert(rows);
+        if (error) throw error;
+      }
     },
 
     subscribe(onChange) {
       const channel = supabase
         .channel('projects-sync')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => onChange())
+        .subscribe();
+      return () => supabase.removeChannel(channel);
+    },
+
+    subscribeAppointments(onChange) {
+      const channel = supabase
+        .channel('appointments-sync')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => onChange())
+        .subscribe();
+      return () => supabase.removeChannel(channel);
+    },
+
+    // Team config — single row keyed 'team'.
+    async loadTeam() {
+      const { data, error } = await supabase
+        .from('team_config')
+        .select('data')
+        .eq('id', 'team')
+        .maybeSingle();
+      if (error) return null;
+      return data?.data || null;
+    },
+
+    async saveTeam(team) {
+      const { error } = await supabase
+        .from('team_config')
+        .upsert({ id: 'team', data: team, updated_at: new Date().toISOString() });
+      if (error) throw error;
+    },
+
+    subscribeTeam(onChange) {
+      const channel = supabase
+        .channel('team-sync')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'team_config' }, () => onChange())
         .subscribe();
       return () => supabase.removeChannel(channel);
     },

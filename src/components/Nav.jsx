@@ -1,17 +1,23 @@
-import { Columns3, CalendarDays, BookOpen, Users, AlertTriangle, Save, Plus, LogOut } from 'lucide-react';
+import { Columns3, CalendarDays, Calendar, BookOpen, Users, AlertTriangle, Save, Plus, LogOut, Ruler, Settings } from 'lucide-react';
 import { T } from '../theme.js';
 import { avatarFor } from '../utils/helpers.js';
+import { useT } from '../i18n/LangProvider.jsx';
 
 const ITEMS = [
-  { id: 'kanban', label: '看板', icon: Columns3 },
-  { id: 'briefing', label: '日报总览', icon: CalendarDays },
-  { id: 'method', label: 'Method', icon: BookOpen },
-  { id: 'team', label: '团队', icon: Users },
-  { id: 'risks', label: '风险', icon: AlertTriangle },
+  { id: 'kanban',   key: 'nav_kanban',   icon: Columns3 },
+  { id: 'briefing', key: 'nav_briefing', icon: CalendarDays },
+  { id: 'design',   key: 'nav_design',   icon: Ruler },
+  { id: 'calendar', key: 'nav_calendar', icon: Calendar },
+  { id: 'method',   key: 'nav_method',   icon: BookOpen },
+  { id: 'team',     key: 'nav_team',     icon: Users },
+  { id: 'risks',    key: 'nav_risks',    icon: AlertTriangle },
+  { id: 'settings', key: 'nav_settings', icon: Settings },
 ];
 
 export default function Nav({ view, setView, onNew, saveStatus, user, onSignOut }) {
+  const { t, lang, setLang } = useT();
   const av = user?.email ? avatarFor(user.email) : null;
+
   return (
     <header
       className="sticky top-0 z-30 backdrop-blur-md no-print"
@@ -22,7 +28,7 @@ export default function Nav({ view, setView, onNew, saveStatus, user, onSignOut 
           <div className="font-display text-3xl tracking-tight" style={{ color: T.ink }}>溪岸</div>
           <div className="font-display italic text-xl" style={{ color: T.wood }}>SAIL</div>
           <div className="hidden md:block text-xs uppercase tracking-[0.2em] ml-2" style={{ color: T.inkSoft }}>
-            The Method
+            {t('nav_subtitle')}
           </div>
         </div>
         <nav className="flex items-center gap-1">
@@ -37,7 +43,7 @@ export default function Nav({ view, setView, onNew, saveStatus, user, onSignOut 
                 style={{ color: active ? T.ink : T.inkSoft }}
               >
                 <Icon size={15} strokeWidth={1.5} />
-                <span className="hidden sm:inline">{it.label}</span>
+                <span className="hidden sm:inline">{t(it.key)}</span>
                 {active && (
                   <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-px" style={{ background: T.wood }} />
                 )}
@@ -45,10 +51,16 @@ export default function Nav({ view, setView, onNew, saveStatus, user, onSignOut 
             );
           })}
           <div className="w-px h-5 mx-2" style={{ background: T.line }} />
+
+          <div className="flex items-center text-xs mr-1" style={{ border: `1px solid ${T.line}`, borderRadius: '2px' }}>
+            <button onClick={() => setLang('cn')} className="px-2 py-1 transition-all" style={{ background: lang === 'cn' ? T.ink : 'transparent', color: lang === 'cn' ? T.paper : T.inkSoft }}>中</button>
+            <button onClick={() => setLang('en')} className="px-2 py-1 transition-all" style={{ background: lang === 'en' ? T.ink : 'transparent', color: lang === 'en' ? T.paper : T.inkSoft }}>EN</button>
+          </div>
+
           {saveStatus !== 'idle' && (
             <div className="flex items-center gap-1.5 text-xs px-2" style={{ color: T.sage }}>
               <Save size={12} />
-              {saveStatus === 'saving' ? '同步中…' : '已同步'}
+              {saveStatus === 'saving' ? t('save_syncing') : t('save_saved')}
             </div>
           )}
           <button
@@ -59,7 +71,7 @@ export default function Nav({ view, setView, onNew, saveStatus, user, onSignOut 
             onMouseLeave={(e) => (e.currentTarget.style.background = T.ink)}
           >
             <Plus size={14} strokeWidth={2} />
-            <span className="hidden sm:inline">新建</span>
+            <span className="hidden sm:inline">{t('nav_new')}</span>
           </button>
           {user && (
             <div className="flex items-center gap-2 ml-2 pl-2" style={{ borderLeft: `1px solid ${T.line}` }}>
@@ -72,7 +84,7 @@ export default function Nav({ view, setView, onNew, saveStatus, user, onSignOut 
                   {av.initial}
                 </span>
               )}
-              <button onClick={onSignOut} title="退出登录" className="p-1.5 opacity-60 hover:opacity-100" style={{ color: T.inkSoft }}>
+              <button onClick={onSignOut} title="退出登录 / Sign out" className="p-1.5 opacity-60 hover:opacity-100" style={{ color: T.inkSoft }}>
                 <LogOut size={15} strokeWidth={1.5} />
               </button>
             </div>

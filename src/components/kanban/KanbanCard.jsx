@@ -1,5 +1,5 @@
 import { memo, useMemo } from 'react';
-import { Calendar, Paperclip, AlertTriangle } from 'lucide-react';
+import { Calendar, Paperclip, AlertTriangle, Wrench } from 'lucide-react';
 import { T } from '../../theme.js';
 import { daysUntil, currentStage, stageProgress, avatarFor } from '../../utils/helpers.js';
 
@@ -87,6 +87,14 @@ function KanbanCard({ project, onClick, done }) {
               {project.risks.length}
             </div>
           )}
+          {(() => {
+            const open = (project.defects || []).filter((d) => d.status !== 'closed').length;
+            return open > 0 ? (
+              <div title="待处理缺陷 / Open defects" className="flex items-center gap-0.5" style={{ color: T.wood }}>
+                <Wrench size={10} strokeWidth={1.5} />{open}
+              </div>
+            ) : null;
+          })()}
         </div>
       </div>
     </button>

@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { newId } from '../utils/helpers.js';
 import { sampleProjects } from '../utils/sampleData.js';
+import {
+  initDesignFlow,
+  advanceDesignFlow,
+  recomputeInternalDue,
+  presentationLimit,
+} from '../constants/design.js';
 
 const emptyForms = () => ({
   SPACE_SURVEY: { answers: {} },
@@ -102,18 +108,7 @@ export function useProjects(repo, { onToast } = {}) {
 
   const loadSample = useCallback(() => replaceAll(sampleProjects()), [replaceAll]);
 
-  const clearAll = useCallback(async () => {
-    for (const p of ref.current) {
-      for (const gid in p.attachments || {}) {
-        for (const att of p.attachments[gid] || []) {
-          if (att.source === 'upload') {
-            try { await repo.delAttachment(att.id); } catch (e) { /* ignore */ }
-          }
-        }
-      }
-    }
-    replaceAll([]);
-  }, [repo, replaceAll]);
+  const clearAll = useCallback(() => replaceAll([]), [replaceAll]);
 
   const toggleGate = useCallback(
     (pid, gid) => {
@@ -132,12 +127,15 @@ export function useProjects(repo, { onToast } = {}) {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         gates: {},
-        assigned: { SD: 'Wilson', SS: '', WH: '', PU: '' },
+        assigned: data.assigned || { SD: 'Wilson', SS: '', WH: '', PU: '' },
         notes: {},
         risks: [],
         attachments: {},
         forms: emptyForms(),
         dailyReports: [],
+        defects: [],
+        afterSales: [],
+        designFlow: null,
       };
       upsert(proj);
       return proj;
@@ -146,22 +144,10 @@ export function useProjects(repo, { onToast } = {}) {
   );
 
   const deleteProject = useCallback(
-    async (id) => {
-      const p = ref.current.find((x) => x.id === id);
+    (id) => {
       const next = ref.current.filter((x) => x.id !== id);
       setRef(next);
-      await runSave(async () => {
-        await repo.removeProject(id, next);
-        if (p) {
-          for (const gid in p.attachments || {}) {
-            for (const att of p.attachments[gid] || []) {
-              if (att.source === 'upload') {
-                try { await repo.delAttachment(att.id); } catch (e) { /* ignore */ }
-              }
-            }
-          }
-        }
-      });
+      runSave(() => repo.removeProject(id, next));
     },
     [repo, runSave]
   );
@@ -206,66 +192,34 @@ export function useProjects(repo, { onToast } = {}) {
     [updateProject]
   );
 
+  // Attachments are now Drive links only — pure metadata, no binary storage.
   const addAttachment = useCallback(
-    async (pid, gid, att, content = null) => {
+    (pid, gid, att) => {
       const p = ref.current.find((x) => x.id === pid);
       if (!p) return;
-      if (att.source === 'upload' && content) {
-        try {
-          await repo.setAttachment(att.id, content);
-        } catch (e) {
-          onToast?.('上传失败: ' + (e.message || e), 'error');
-          return;
-        }
-      }
       const nextAtts = { ...(p.attachments || {}) };
       nextAtts[gid] = [...(nextAtts[gid] || []), att];
       updateProject(pid, { attachments: nextAtts });
     },
-    [repo, updateProject, onToast]
+    [updateProject]
   );
 
   const removeAttachment = useCallback(
-    async (pid, gid, aid) => {
+    (pid, gid, aid) => {
       const p = ref.current.find((x) => x.id === pid);
       if (!p) return;
-      const att = (p.attachments?.[gid] || []).find((a) => a.id === aid);
-      if (att?.source === 'upload') {
-        try { await repo.delAttachment(aid); } catch (e) { /* ignore */ }
-      }
       const nextAtts = { ...(p.attachments || {}) };
       nextAtts[gid] = (nextAtts[gid] || []).filter((a) => a.id !== aid);
       if (nextAtts[gid].length === 0) delete nextAtts[gid];
       updateProject(pid, { attachments: nextAtts });
     },
-    [repo, updateProject]
-  );
-
-  const fetchAttachment = useCallback(
-    async (aid) => {
-      try {
-        return (await repo.getAttachment(aid)) || null;
-      } catch (e) {
-        return null;
-      }
-    },
-    [repo]
+    [updateProject]
   );
 
   const saveDailyReport = useCallback(
-    async (pid, report, newPhotoUploads = []) => {
+    (pid, report) => {
       const p = ref.current.find((x) => x.id === pid);
       if (!p) return;
-      for (const upload of newPhotoUploads) {
-        if (upload.att.source === 'upload' && upload.content) {
-          try {
-            await repo.setAttachment(upload.att.id, upload.content);
-          } catch (e) {
-            onToast?.('照片上传失败: ' + (e.message || e), 'error');
-            return;
-          }
-        }
-      }
       const list = p.dailyReports || [];
       const idx = list.findIndex((r) => r.id === report.id);
       const now = new Date().toISOString();
@@ -278,24 +232,159 @@ export function useProjects(repo, { onToast } = {}) {
       next.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
       updateProject(pid, { dailyReports: next });
     },
-    [repo, updateProject, onToast]
+    [updateProject]
   );
 
   const deleteDailyReport = useCallback(
-    async (pid, rid) => {
+    (pid, rid) => {
       const p = ref.current.find((x) => x.id === pid);
       if (!p) return;
-      const r = (p.dailyReports || []).find((x) => x.id === rid);
-      if (r) {
-        for (const photo of r.photos || []) {
-          if (photo.source === 'upload') {
-            try { await repo.delAttachment(photo.id); } catch (e) { /* ignore */ }
-          }
-        }
-      }
       updateProject(pid, { dailyReports: (p.dailyReports || []).filter((x) => x.id !== rid) });
     },
-    [repo, updateProject]
+    [updateProject]
+  );
+
+  const saveDefect = useCallback(
+    (pid, defect) => {
+      const p = ref.current.find((x) => x.id === pid);
+      if (!p) return;
+      const list = p.defects || [];
+      const idx = list.findIndex((d) => d.id === defect.id);
+      const now = new Date().toISOString();
+      let next;
+      if (idx >= 0) next = list.map((d, i) => (i === idx ? { ...defect, updatedAt: now } : d));
+      else next = [...list, { ...defect, createdAt: now, updatedAt: now }];
+      updateProject(pid, { defects: next });
+    },
+    [updateProject]
+  );
+
+  const deleteDefect = useCallback(
+    (pid, did) => {
+      const p = ref.current.find((x) => x.id === pid);
+      if (!p) return;
+      updateProject(pid, { defects: (p.defects || []).filter((x) => x.id !== did) });
+    },
+    [updateProject]
+  );
+
+  // ---- After-sales (post-handover warranty / repair tickets) ----
+  const saveAfterSale = useCallback(
+    (pid, ticket) => {
+      const p = ref.current.find((x) => x.id === pid);
+      if (!p) return;
+      const list = p.afterSales || [];
+      const idx = list.findIndex((t) => t.id === ticket.id);
+      const now = new Date().toISOString();
+      let next;
+      if (idx >= 0) next = list.map((t, i) => (i === idx ? { ...ticket, updatedAt: now } : t));
+      else next = [...list, { ...ticket, createdAt: now, updatedAt: now }];
+      updateProject(pid, { afterSales: next });
+    },
+    [updateProject]
+  );
+
+  const deleteAfterSale = useCallback(
+    (pid, asId) => {
+      const p = ref.current.find((x) => x.id === pid);
+      if (!p) return;
+      updateProject(pid, { afterSales: (p.afterSales || []).filter((t) => t.id !== asId) });
+    },
+    [updateProject]
+  );
+
+  const resolveAfterSale = useCallback(
+    (pid, asId, { driveLink, resolutionNote }) => {
+      const p = ref.current.find((x) => x.id === pid);
+      if (!p) return;
+      const now = new Date().toISOString();
+      updateProject(pid, {
+        afterSales: (p.afterSales || []).map((t) =>
+          t.id === asId
+            ? { ...t, status: 'resolved', resolvedAt: now, driveLink: driveLink || t.driveLink || '', resolutionNote: resolutionNote || t.resolutionNote || '', updatedAt: now }
+            : t
+        ),
+      });
+    },
+    [updateProject]
+  );
+
+  // ---- Design workflow ----
+  const startDesignFlow = useCallback(
+    (pid) => {
+      const p = ref.current.find((x) => x.id === pid);
+      if (!p || p.designFlow) return;
+      updateProject(pid, { designFlow: initDesignFlow(p) });
+    },
+    [updateProject]
+  );
+
+  const completeDesignStep = useCallback(
+    (pid, stepId, decision) => {
+      const p = ref.current.find((x) => x.id === pid);
+      if (!p?.designFlow) return;
+      updateProject(pid, { designFlow: advanceDesignFlow(p, stepId, decision, 'Wilson') });
+    },
+    [updateProject]
+  );
+
+  const addPresentation = useCallback(
+    (pid, payload) => {
+      const p = ref.current.find((x) => x.id === pid);
+      if (!p?.designFlow) return;
+      const limit = presentationLimit(p.quotationAmount);
+      const used = (p.designFlow.presentations || []).length;
+      if (used >= limit) {
+        onToast?.(`此报价区间最多 ${limit} 次客户演示, 已达上限`, 'error');
+        return;
+      }
+      const pres = {
+        id: newId('pres'),
+        date: payload.date,
+        notes: payload.notes || '',
+        outcome: 'pending',
+        createdBy: 'Wilson',
+        createdAt: new Date().toISOString(),
+      };
+      const nextFlow = recomputeInternalDue({
+        ...p,
+        designFlow: { ...p.designFlow, presentations: [...(p.designFlow.presentations || []), pres] },
+      });
+      updateProject(pid, { designFlow: nextFlow });
+    },
+    [updateProject, onToast]
+  );
+
+  const updatePresentation = useCallback(
+    (pid, presId, updates) => {
+      const p = ref.current.find((x) => x.id === pid);
+      if (!p?.designFlow) return;
+      const nextFlow = recomputeInternalDue({
+        ...p,
+        designFlow: {
+          ...p.designFlow,
+          presentations: (p.designFlow.presentations || []).map((x) => (x.id === presId ? { ...x, ...updates } : x)),
+        },
+      });
+      updateProject(pid, { designFlow: nextFlow });
+    },
+    [updateProject]
+  );
+
+  const removePresentation = useCallback(
+    (pid, presId) => {
+      const p = ref.current.find((x) => x.id === pid);
+      if (!p?.designFlow) return;
+      const nextFlow = recomputeInternalDue({
+        ...p,
+        designFlow: {
+          ...p.designFlow,
+          presentations: (p.designFlow.presentations || []).filter((x) => x.id !== presId),
+        },
+      });
+      updateProject(pid, { designFlow: nextFlow });
+    },
+    [updateProject]
   );
 
   return {
@@ -314,8 +403,17 @@ export function useProjects(repo, { onToast } = {}) {
     updateForm,
     addAttachment,
     removeAttachment,
-    fetchAttachment,
     saveDailyReport,
     deleteDailyReport,
+    saveDefect,
+    deleteDefect,
+    saveAfterSale,
+    deleteAfterSale,
+    resolveAfterSale,
+    startDesignFlow,
+    completeDesignStep,
+    addPresentation,
+    updatePresentation,
+    removePresentation,
   };
 }

@@ -5,7 +5,7 @@ import { useConfirm } from '../ui/UIProvider.jsx';
 import DailyReportCard from './DailyReportCard.jsx';
 import DailyReportModal from './DailyReportModal.jsx';
 
-export default function DailyReportsBlock({ project, onSaveReport, onDeleteReport, fetchAttachment }) {
+export default function DailyReportsBlock({ project, onSaveReport, onDeleteReport }) {
   const [editingReport, setEditingReport] = useState(null); // existing report or { isNew: true }
   const confirm = useConfirm();
 
@@ -60,14 +60,13 @@ export default function DailyReportsBlock({ project, onSaveReport, onDeleteRepor
           report={editingReport.isNew ? null : editingReport}
           dayNumber={editingReport.isNew ? reports.length + 1 : reports.findIndex((r) => r.id === editingReport.id) + 1}
           onClose={() => setEditingReport(null)}
-          onSave={(report, uploads) => { onSaveReport(report, uploads); setEditingReport(null); }}
+          onSave={(report) => { onSaveReport(report); setEditingReport(null); }}
           onDelete={async () => {
             if (!editingReport.isNew && (await confirm({ title: '删除日报', message: '确定删除此条日报?', danger: true, confirmText: '删除' }))) {
               onDeleteReport(editingReport.id);
               setEditingReport(null);
             }
           }}
-          fetchAttachment={fetchAttachment}
         />
       )}
     </div>
