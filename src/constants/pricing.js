@@ -249,7 +249,7 @@ export const QUOTE_TERMS = [
   {
     title: { en: 'Validity', zh: '报价有效期' },
     lines: [
-      { en: 'Quotation is valid for 14 days from the date of quotation.', zh: '报价自出具日期起 14 天内有效。' },
+      { en: 'Quotation is valid for 30 days from the date of quotation.', zh: '报价自出具日期起 30 天内有效。' },
     ],
   },
   {
