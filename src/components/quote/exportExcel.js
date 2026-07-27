@@ -77,7 +77,7 @@ export async function exportExcel(meta, computed, loose, notes = {}, lang = 'bot
       row([]);
     });
     row(['', '', '', t(RLBL.gross), round0(computed.gross)]);
-    if (computed.discount > 0) row(['', '', '', `${t(RLBL.discount)} (${computed.adjustPct}%)${notes.discountNote ? ` — ${notes.discountNote}` : ''}`, -round0(computed.discount)]);
+    if (computed.discount > 0) row(['', '', '', `${t(RLBL.discount)}${computed.discountMode === 'amt' ? '' : ` (${computed.adjustPct}%)`}${notes.discountNote ? ` — ${notes.discountNote}` : ''}`, -round0(computed.discount)]);
     row(['', '', '', t(RLBL.total), round0(computed.net)]);
     row([]);
     if (notes.cabinetNote) { row([t(RLBL.notes), notes.cabinetNote]); row([]); }
@@ -104,7 +104,7 @@ export async function exportExcel(meta, computed, loose, notes = {}, lang = 'bot
       row([r.type || '', r.model || '', capColor(r.color) || '', round0(r.qty), round0(r.unitMyr), round0(r.total)]);
     });
     row(['', '', '', '', t(RLBL.gross), round0(loose.gross)]);
-    if (loose.discount > 0) row(['', '', '', '', `${t(RLBL.discount)} (${loose.adjustPct}%)${notes.looseDiscountNote ? ` — ${notes.looseDiscountNote}` : ''}`, -round0(loose.discount)]);
+    if (loose.discount > 0) row(['', '', '', '', `${t(RLBL.discount)}${loose.discountMode === 'amt' ? '' : ` (${loose.adjustPct}%)`}${notes.looseDiscountNote ? ` — ${notes.looseDiscountNote}` : ''}`, -round0(loose.discount)]);
     row(['', '', '', '', t(RLBL.total), round0(loose.net)]);
     row([]);
     if (notes.looseNote) { row([t(RLBL.notes), notes.looseNote]); row([]); }

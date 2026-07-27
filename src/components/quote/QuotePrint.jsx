@@ -100,7 +100,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
       </tr>
       {calc.discount > 0 && (
         <tr style={{ color: T.terra }}>
-          <td className="py-0.5 px-2 pl-5">{t(RLBL.discount)} ({calc.adjustPct}%){note ? <span className="italic"> — {note}</span> : null}</td>
+          <td className="py-0.5 px-2 pl-5">{t(RLBL.discount)}{calc.discountMode === 'amt' ? '' : ` (${calc.adjustPct}%)`}{note ? <span className="italic"> — {note}</span> : null}</td>
           <td className="text-right py-0.5 px-2">− {fmtMYR(calc.discount)}</td>
         </tr>
       )}
@@ -247,7 +247,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                   {computed.discount > 0 && (
                     <>
                       <div className="flex justify-between py-1" style={{ color: T.terra }}>
-                        <span>{t(RLBL.discount)} ({computed.adjustPct}%)</span><span>− {fmtMYR(computed.discount)}</span>
+                        <span>{t(RLBL.discount)}{computed.discountMode === 'amt' ? '' : ` (${computed.adjustPct}%)`}</span><span>− {fmtMYR(computed.discount)}</span>
                       </div>
                       {discountNote && <div className="text-[10px] italic -mt-0.5 pb-1" style={{ color: T.inkSoft }}>{discountNote}</div>}
                     </>
@@ -306,7 +306,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                     </tr>
                     {loose.discount > 0 && (
                       <tr style={{ color: T.terra }}>
-                        <td colSpan={6} className="text-right py-1 px-2 text-xs">{t(RLBL.discount)} ({loose.adjustPct}%){looseDiscountNote ? <span className="italic"> — {looseDiscountNote}</span> : null}</td>
+                        <td colSpan={6} className="text-right py-1 px-2 text-xs">{t(RLBL.discount)}{loose.discountMode === 'amt' ? '' : ` (${loose.adjustPct}%)`}{looseDiscountNote ? <span className="italic"> — {looseDiscountNote}</span> : null}</td>
                         <td className="text-right py-1 px-2">− {fmtNum(loose.discount, 0)}</td>
                       </tr>
                     )}

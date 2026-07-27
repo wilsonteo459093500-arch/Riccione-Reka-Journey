@@ -282,7 +282,7 @@ export const QUOTE_TERMS = [
 ];
 
 // 计算整个报价 → 各区域小计 + 分类汇总 + 总额
-export function computeQuote(zones = [], adjustPct = 0) {
+export function computeQuote(zones = [], adjustPct = 0, discountMode = 'pct', discountAmt = 0) {
   const zoneResults = zones.map((z) => {
     const items = (z.items || []).map((it) => ({ item: it, ...computeItem(it) }));
     const subtotal = mround(items.reduce((a, b) => a + b.total, 0), 1);
@@ -297,22 +297,26 @@ export function computeQuote(zones = [], adjustPct = 0) {
 
   const gross = zoneResults.reduce((a, b) => a + b.subtotal, 0);
   const pct = Number(adjustPct) || 0;
-  const discount = Math.round((gross * pct) / 100);
+  const discount = discountMode === 'amt'
+    ? Math.min(Math.max(Math.round(Number(discountAmt) || 0), 0), gross) // 定额：不超过合计
+    : Math.round((gross * pct) / 100);
   const net = gross - discount;
 
-  return { zoneResults, byCategory, gross, discount, net, adjustPct: pct };
+  return { zoneResults, byCategory, gross, discount, net, adjustPct: pct, discountMode, discountAmt: Number(discountAmt) || 0 };
 }
 
 // ---- Loose Furniture 家具（品牌：Riccione Furniture；独立折扣）----
 // 每项：{ type 产品类型, model 型号, color 颜色, qty 数量, unitMyr 单价 } → total 总价
-export function computeLoose(items = [], adjustPct = 0) {
+export function computeLoose(items = [], adjustPct = 0, discountMode = 'pct', discountAmt = 0) {
   const rows = (items || []).map((it) => ({
     ...it,
     total: (Number(it.qty) || 0) * (Number(it.unitMyr) || 0),
   }));
   const gross = mround(rows.reduce((a, b) => a + b.total, 0), 1);
   const pct = Number(adjustPct) || 0;
-  const discount = Math.round((gross * pct) / 100);
+  const discount = discountMode === 'amt'
+    ? Math.min(Math.max(Math.round(Number(discountAmt) || 0), 0), gross)
+    : Math.round((gross * pct) / 100);
   const net = gross - discount;
-  return { rows, gross, discount, net, adjustPct: pct, total: net }; // total=net，兼容旧引用
+  return { rows, gross, discount, net, adjustPct: pct, discountMode, discountAmt: Number(discountAmt) || 0, total: net }; // total=net，兼容旧引用
 }

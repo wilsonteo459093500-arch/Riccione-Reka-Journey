@@ -69,8 +69,8 @@ function Inner() {
   const totals = useMemo(() => {
     const m = {};
     records.forEach((r) => {
-      const cab = computeQuote(r.zones, r.adjustPct).net;
-      const loose = computeLoose(r.looseItems || [], r.looseAdjustPct || 0).net;
+      const cab = computeQuote(r.zones, r.adjustPct, r.discountMode, r.discountAmt).net;
+      const loose = computeLoose(r.looseItems || [], r.looseAdjustPct || 0, r.looseDiscountMode, r.looseDiscountAmt).net;
       m[r.id] = cab + loose;
     });
     return m;

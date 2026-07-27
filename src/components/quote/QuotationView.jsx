@@ -108,9 +108,13 @@ export default function QuotationView({ doc, onChange }) {
   const looseNote = doc.looseNote || '';
   const discountNote = doc.discountNote || '';
   const looseDiscountNote = doc.looseDiscountNote || '';
+  const discountMode = doc.discountMode || 'pct';           // 'pct' 百分比 | 'amt' 定额
+  const discountAmt = doc.discountAmt || 0;
+  const looseDiscountMode = doc.looseDiscountMode || 'pct';
+  const looseDiscountAmt = doc.looseDiscountAmt || 0;
   const lang = meta.outputLang || 'en';
-  const computed = useMemo(() => computeQuote(zones, adjustPct), [zones, adjustPct]);
-  const looseCalc = useMemo(() => computeLoose(looseItems, looseAdjustPct), [looseItems, looseAdjustPct]);
+  const computed = useMemo(() => computeQuote(zones, adjustPct, discountMode, discountAmt), [zones, adjustPct, discountMode, discountAmt]);
+  const looseCalc = useMemo(() => computeLoose(looseItems, looseAdjustPct, looseDiscountMode, looseDiscountAmt), [looseItems, looseAdjustPct, looseDiscountMode, looseDiscountAmt]);
   const grandTotal = computed.net + looseCalc.net;
   const dragRef = useRef(null); // { zoneId, from } 或 { loose:true, from }
 
@@ -305,11 +309,26 @@ export default function QuotationView({ doc, onChange }) {
             <span>Gross 合计 {fmtMYR(computed.gross)}</span>
             <span className="flex items-center gap-2">
               <span className="uppercase tracking-widest text-[10px]">Discount 折扣</span>
-              <input type="number" value={adjustPct}
-                onChange={(e) => patch({ adjustPct: Number(e.target.value) || 0 })}
-                className="w-16 px-2 py-1 text-sm outline-none"
-                style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }} />
-              <span>%</span>
+              <select value={discountMode} onChange={(e) => patch({ discountMode: e.target.value })}
+                className="px-1 py-1 text-sm outline-none"
+                style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }}>
+                <option value="pct">% 百分比</option>
+                <option value="amt">RM 定额</option>
+              </select>
+              {discountMode === 'amt' ? (
+                <input type="number" value={discountAmt}
+                  onChange={(e) => patch({ discountAmt: Number(e.target.value) || 0 })}
+                  className="w-24 px-2 py-1 text-sm outline-none"
+                  style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }} />
+              ) : (
+                <>
+                  <input type="number" value={adjustPct}
+                    onChange={(e) => patch({ adjustPct: Number(e.target.value) || 0 })}
+                    className="w-16 px-2 py-1 text-sm outline-none"
+                    style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }} />
+                  <span>%</span>
+                </>
+              )}
             </span>
             {computed.discount > 0 && <span style={{ color: T.terra }}>− {fmtMYR(computed.discount)}</span>}
           </div>
@@ -399,11 +418,27 @@ export default function QuotationView({ doc, onChange }) {
               {looseItems.length > 0 && (
                 <div className="flex items-center gap-2 text-xs" style={{ color: T.inkSoft }}>
                   <span className="uppercase tracking-widest text-[10px]">Discount 折扣</span>
-                  <input type="number" value={looseAdjustPct}
-                    onChange={(e) => patch({ looseAdjustPct: Number(e.target.value) || 0 })}
-                    className="w-16 px-2 py-1 text-sm outline-none"
-                    style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }} />
-                  <span>%　{looseCalc.discount > 0 ? `− ${fmtMYR(looseCalc.discount)} → ${fmtMYR(looseCalc.net)}` : ''}</span>
+                  <select value={looseDiscountMode} onChange={(e) => patch({ looseDiscountMode: e.target.value })}
+                    className="px-1 py-1 text-sm outline-none"
+                    style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }}>
+                    <option value="pct">% 百分比</option>
+                    <option value="amt">RM 定额</option>
+                  </select>
+                  {looseDiscountMode === 'amt' ? (
+                    <input type="number" value={looseDiscountAmt}
+                      onChange={(e) => patch({ looseDiscountAmt: Number(e.target.value) || 0 })}
+                      className="w-24 px-2 py-1 text-sm outline-none"
+                      style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }} />
+                  ) : (
+                    <>
+                      <input type="number" value={looseAdjustPct}
+                        onChange={(e) => patch({ looseAdjustPct: Number(e.target.value) || 0 })}
+                        className="w-16 px-2 py-1 text-sm outline-none"
+                        style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }} />
+                      <span>%</span>
+                    </>
+                  )}
+                  <span>　{looseCalc.discount > 0 ? `− ${fmtMYR(looseCalc.discount)} → ${fmtMYR(looseCalc.net)}` : ''}</span>
                 </div>
               )}
             </div>
@@ -436,12 +471,12 @@ export default function QuotationView({ doc, onChange }) {
             {/* 定制 + 家具 两个小计（已含各自折扣）*/}
             <div className="text-xs mt-3 pt-3 opacity-90 space-y-1.5" style={{ borderTop: '1px solid rgba(255,255,255,0.15)' }}>
               <div className="flex justify-between">
-                <span>Cabinet 定制{computed.discount > 0 ? ` (−${computed.adjustPct}%)` : ''}</span>
+                <span>Cabinet 定制{computed.discount > 0 ? (computed.discountMode === 'amt' ? ` (−${fmtMYR(computed.discount)})` : ` (−${computed.adjustPct}%)`) : ''}</span>
                 <span>{fmtMYR(computed.net)}</span>
               </div>
               {looseCalc.rows.length > 0 && (
                 <div className="flex justify-between">
-                  <span>Loose Furniture 家具{looseCalc.discount > 0 ? ` (−${looseCalc.adjustPct}%)` : ''}</span>
+                  <span>Loose Furniture 家具{looseCalc.discount > 0 ? (looseCalc.discountMode === 'amt' ? ` (−${fmtMYR(looseCalc.discount)})` : ` (−${looseCalc.adjustPct}%)`) : ''}</span>
                   <span>{fmtMYR(looseCalc.net)}</span>
                 </div>
               )}
@@ -533,7 +568,7 @@ function buildTextQuote(meta, computed, loose, notes = {}, lang = 'both') {
   L.push('');
   if (computed.discount > 0) {
     L.push(`${t(RLBL.gross)}：${fmtMYR(computed.gross)}`);
-    L.push(`${t(RLBL.discount)} (${computed.adjustPct}%)${notes.discountNote ? ` — ${notes.discountNote}` : ''}：− ${fmtMYR(computed.discount)}`);
+    L.push(`${t(RLBL.discount)}${computed.discountMode === 'amt' ? '' : ` (${computed.adjustPct}%)`}${notes.discountNote ? ` — ${notes.discountNote}` : ''}：− ${fmtMYR(computed.discount)}`);
   }
   L.push(`*${t(RLBL.total)}：${fmtMYR(computed.net)}*`);
   if (notes.cabinetNote) L.push(`${t(RLBL.notes)}：${notes.cabinetNote}`);
@@ -547,7 +582,7 @@ function buildTextQuote(meta, computed, loose, notes = {}, lang = 'both') {
     });
     if (loose.discount > 0) {
       L.push(`${t(RLBL.gross)}：${fmtMYR(loose.gross)}`);
-      L.push(`${t(RLBL.discount)} (${loose.adjustPct}%)${notes.looseDiscountNote ? ` — ${notes.looseDiscountNote}` : ''}：− ${fmtMYR(loose.discount)}`);
+      L.push(`${t(RLBL.discount)}${loose.discountMode === 'amt' ? '' : ` (${loose.adjustPct}%)`}${notes.looseDiscountNote ? ` — ${notes.looseDiscountNote}` : ''}：− ${fmtMYR(loose.discount)}`);
     }
     L.push(`*${t(RLBL.total)}：${fmtMYR(loose.net)}*`);
     if (notes.looseNote) L.push(`${t(RLBL.notes)}：${notes.looseNote}`);
