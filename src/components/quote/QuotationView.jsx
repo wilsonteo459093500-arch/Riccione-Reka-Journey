@@ -223,6 +223,10 @@ export default function QuotationView({ doc, onChange }) {
         {/* 区域列表 */}
         {zones.map((zone, zi) => {
           const zr = zoneResultById(zone.id);
+          // 区域交替浅/深底色，方便区分不同区域
+          const altZone = zi % 2 === 1;
+          const zoneHeadBg = altZone ? T.line : T.sand;
+          const zoneBodyBg = altZone ? T.sand : T.paper;
           return (
             <div key={zone.id} className="rounded overflow-hidden" style={{ border: `1px solid ${T.line}` }}
               onDragOver={(e) => e.preventDefault()}
@@ -232,7 +236,7 @@ export default function QuotationView({ doc, onChange }) {
                 if (d && d.zone && d.from !== zi) moveZone(d.from, zi);
                 dragRef.current = null;
               }}>
-              <div className="flex items-center gap-2 px-4 py-3" style={{ background: T.sand }}>
+              <div className="flex items-center gap-2 px-4 py-3" style={{ background: zoneHeadBg }}>
                 {/* 区域拖动 / 上下排序 */}
                 <div className="flex flex-col items-center shrink-0" style={{ marginLeft: -4 }}>
                   <button onClick={() => moveZone(zi, zi - 1)} disabled={zi === 0} title="上移 Move up"
@@ -262,7 +266,7 @@ export default function QuotationView({ doc, onChange }) {
               </div>
 
               {!zone.collapsed && (
-                <div className="p-3 space-y-3" style={{ background: T.paper }}>
+                <div className="p-3 space-y-3" style={{ background: zoneBodyBg }}>
                   {zone.items.length === 0 && (
                     <div className="text-center py-4 text-sm" style={{ color: T.inkSoft }}>Add an item below 选下方类型添加</div>
                   )}

@@ -220,13 +220,15 @@ function Inner() {
                 {records.length === 0 ? 'No records yet, click New 点右上新建' : 'No match 无匹配结果'}
               </div>
             )}
-            {filteredGroups.map((g) => {
+            {filteredGroups.map((g, gi) => {
               const on = active && gidOf(active) === g.gid;
               const rep = on ? active : g.latest; // 该组激活时显示当前版本信息
+              // 交替浅/深底色，方便区分不同客户
+              const bg = on ? T.sand : (gi % 2 === 0 ? T.cream : T.lineSoft);
               return (
                 <div key={g.gid} onClick={() => openGroup(g)}
                   className="p-3 rounded cursor-pointer transition-all group"
-                  style={{ background: on ? T.sand : T.cream, border: `1px solid ${on ? T.wood : T.lineSoft}` }}>
+                  style={{ background: bg, border: `1px solid ${on ? T.wood : T.lineSoft}` }}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
