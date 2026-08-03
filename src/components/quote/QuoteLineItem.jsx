@@ -219,12 +219,21 @@ export default function QuoteLineItem({ item, result, onChange, onRemove, onDrag
           )}
         </div>
 
-        <div className="flex flex-col items-end justify-between self-stretch min-w-[110px]">
+        <div className="flex flex-col items-end justify-between self-stretch min-w-[120px]">
           <button onClick={onRemove} className="opacity-40 hover:opacity-100 transition-opacity"
             style={{ color: T.terra }} title="Delete 删除">
             <Trash2 size={15} strokeWidth={1.5} />
           </button>
           <div className="text-right">
+            {/* 系数（特殊工艺）：单价 × 系数 */}
+            <div className="flex items-center gap-1 justify-end mb-1" title="Special-craft multiplier 特殊工艺系数">
+              <span className="text-[9px] uppercase tracking-wide" style={{ color: T.inkSoft }}>× Coef 系数</span>
+              <input type="number" step="0.01" min="0" value={item.coef ?? ''}
+                onChange={(e) => set({ coef: e.target.value })} placeholder="1"
+                className="w-14 px-1.5 py-1 text-sm outline-none text-right" style={cellStyle}
+                onFocus={(e) => (e.target.style.borderColor = T.wood)}
+                onBlur={(e) => (e.target.style.borderColor = T.line)} />
+            </div>
             <span className="text-[10px] px-2 py-0.5 rounded-full font-medium"
               style={{ background: T.sand, color: T.inkSoft }}>{badge}</span>
             <div className="font-display text-lg mt-1" style={{ color: T.ink }}>{fmtMYR(total)}</div>

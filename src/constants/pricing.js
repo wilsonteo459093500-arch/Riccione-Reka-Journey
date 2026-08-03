@@ -130,9 +130,12 @@ export const CATEGORIES = [
 // 供报价单按所选语言渲染。piece=true 表示按个/件计（数量不显示小数）。
 export function computeItem(item) {
   const lines = [];
+  // 系数（特殊工艺）：>0 时乘到每条明细的单价上；默认 1（不影响）
+  const coef = Number(item.coef) > 0 ? Number(item.coef) : 1;
   const push = (bucket, en, zh, qty, uEn, uZh, piece, unitMyr) => {
-    const total = (Number(qty) || 0) * (Number(unitMyr) || 0); // 仅在区域小计处四舍五入
-    lines.push({ bucket, descEn: en, descZh: zh, uomEn: uEn, uomZh: uZh, piece, qty, unitMyr, total });
+    const u = (Number(unitMyr) || 0) * coef;
+    const total = (Number(qty) || 0) * u; // 仅在区域小计处四舍五入
+    lines.push({ bucket, descEn: en, descZh: zh, uomEn: uEn, uomZh: uZh, piece, qty, unitMyr: u, total });
   };
 
   if (item.type === 'cabinet') {
