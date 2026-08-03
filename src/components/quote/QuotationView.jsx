@@ -33,7 +33,6 @@ const ADD_TYPES = [
   { kind: 'tall', label: 'Tall 高柜' },
   { kind: 'open', label: 'Open 开放柜' },
   { kind: 'panel', label: 'Panel 墙板' },
-  { kind: 'roomdoor', label: 'Door 房门' },
   { kind: 'led', label: 'LED 灯带' },
   { kind: 'other', label: 'Other 其他' },
 ];
