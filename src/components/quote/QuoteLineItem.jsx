@@ -104,37 +104,40 @@ export default function QuoteLineItem({ item, result, onChange, onRemove, onDrag
                 <Txt value={item.drawers} onChange={(v) => set({ drawers: v })} placeholder="0" />
               </Field>
 
-              <Field label="Door Series 门板系列" w="col-span-4">
-                <Sel value={item.doorSeries} onChange={(v) => set({ doorSeries: v })}>
-                  {DOOR_SERIES.map((id) => <option key={id} value={id}>{id} Series 系列</option>)}
-                </Sel>
-              </Field>
-              <Field label="Carcass Series 柜体系列" w="col-span-4">
-                <Sel value={item.carcassSeries} onChange={(v) => set({ carcassSeries: v })}>
-                  {CARCASS_SERIES.map((id) => <option key={id} value={id}>{id} Series 系列</option>)}
-                </Sel>
-              </Field>
-              <Field label="Open Cab. Series 开放柜系列" w="col-span-4">
-                <Sel value={item.openSeries || 'A'} onChange={(v) => set({ openSeries: v })}>
-                  {OPEN_SERIES.map((id) => <option key={id} value={id}>{id} Series 系列</option>)}
-                </Sel>
-              </Field>
-              <Field label="Include 包含" w="col-span-12">
-                <div className="flex flex-wrap gap-4 pt-1.5 text-[11px]" style={{ color: T.inkSoft }}>
-                  <label className="flex items-center gap-1 cursor-pointer">
-                    <input type="checkbox" checked={item.hasDoor !== false}
-                      onChange={(e) => set({ hasDoor: e.target.checked })} />Door 门板
-                  </label>
-                  <label className="flex items-center gap-1 cursor-pointer">
-                    <input type="checkbox" checked={item.hasCarcass !== false}
-                      onChange={(e) => set({ hasCarcass: e.target.checked })} />Carcass 柜体
-                  </label>
-                  <label className="flex items-center gap-1 cursor-pointer">
-                    <input type="checkbox" checked={!!item.hasOpen}
-                      onChange={(e) => set({ hasOpen: e.target.checked })} />Open Cabinet 开放柜 (投影)
-                  </label>
-                </div>
-              </Field>
+              {item.cabType === 'open' ? (
+                /* 开放柜：只需开放柜系列（无门板/柜体）*/
+                <Field label="Open Cab. Series 开放柜系列" w="col-span-4">
+                  <Sel value={item.openSeries || 'A'} onChange={(v) => set({ openSeries: v })}>
+                    {OPEN_SERIES.map((id) => <option key={id} value={id}>{id} Series 系列</option>)}
+                  </Sel>
+                </Field>
+              ) : (
+                /* 地柜/吊柜/高柜：门板 + 柜体 */
+                <>
+                  <Field label="Door Series 门板系列" w="col-span-4">
+                    <Sel value={item.doorSeries} onChange={(v) => set({ doorSeries: v })}>
+                      {DOOR_SERIES.map((id) => <option key={id} value={id}>{id} Series 系列</option>)}
+                    </Sel>
+                  </Field>
+                  <Field label="Carcass Series 柜体系列" w="col-span-4">
+                    <Sel value={item.carcassSeries} onChange={(v) => set({ carcassSeries: v })}>
+                      {CARCASS_SERIES.map((id) => <option key={id} value={id}>{id} Series 系列</option>)}
+                    </Sel>
+                  </Field>
+                  <Field label="Include 包含" w="col-span-4">
+                    <div className="flex flex-wrap gap-4 pt-1.5 text-[11px]" style={{ color: T.inkSoft }}>
+                      <label className="flex items-center gap-1 cursor-pointer">
+                        <input type="checkbox" checked={item.hasDoor !== false}
+                          onChange={(e) => set({ hasDoor: e.target.checked })} />Door 门板
+                      </label>
+                      <label className="flex items-center gap-1 cursor-pointer">
+                        <input type="checkbox" checked={item.hasCarcass !== false}
+                          onChange={(e) => set({ hasCarcass: e.target.checked })} />Carcass 柜体
+                      </label>
+                    </div>
+                  </Field>
+                </>
+              )}
             </>
           )}
 
