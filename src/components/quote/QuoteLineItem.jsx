@@ -231,8 +231,8 @@ export default function QuoteLineItem({ item, result, onChange, onRemove, onDrag
           </button>
           <div className="text-right">
             {/* 系数（特殊工艺）：单价 × 系数 */}
-            <div className="flex items-center gap-1 justify-end mb-1" title="Special-craft multiplier 特殊工艺系数">
-              <span className="text-[9px] uppercase tracking-wide" style={{ color: T.inkSoft }}>× Coef 系数</span>
+            <div className="flex items-center gap-1 justify-end mb-1" title={item.type === 'cabinet' ? '系数只乘门板 Coef applies to door only' : '特殊工艺系数 Special-craft multiplier'}>
+              <span className="text-[9px] uppercase tracking-wide" style={{ color: T.inkSoft }}>{item.type === 'cabinet' ? '× 门板 Door 系数' : '× Coef 系数'}</span>
               <input type="number" step="0.01" min="0" value={item.coef ?? ''}
                 onChange={(e) => set({ coef: e.target.value })} placeholder="1"
                 className="w-14 px-1.5 py-1 text-sm outline-none text-right" style={cellStyle}

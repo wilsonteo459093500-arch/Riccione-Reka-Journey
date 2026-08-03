@@ -130,10 +130,10 @@ export const CATEGORIES = [
 // 供报价单按所选语言渲染。piece=true 表示按个/件计（数量不显示小数）。
 export function computeItem(item) {
   const lines = [];
-  // 系数（特殊工艺）：>0 时乘到每条明细的单价上；默认 1（不影响）
+  // 系数（特殊工艺）：默认 1（不影响）。定制柜只乘「门板」；其他类型乘该项。
   const coef = Number(item.coef) > 0 ? Number(item.coef) : 1;
-  const push = (bucket, en, zh, qty, uEn, uZh, piece, unitMyr) => {
-    const u = (Number(unitMyr) || 0) * coef;
+  const push = (bucket, en, zh, qty, uEn, uZh, piece, unitMyr, applyCoef = false) => {
+    const u = (Number(unitMyr) || 0) * (applyCoef ? coef : 1);
     const total = (Number(qty) || 0) * u; // 仅在区域小计处四舍五入
     lines.push({ bucket, descEn: en, descZh: zh, uomEn: uEn, uomZh: uZh, piece, qty, unitMyr: u, total });
   };
@@ -146,7 +146,7 @@ export function computeItem(item) {
     const uZh = lin ? '延米' : '㎡';
     const door = seriesById(item.doorSeries);
     const carc = seriesById(item.carcassSeries);
-    if (item.hasDoor !== false) push('door', `Door ${door.id}`, `门板 ${door.id}`, qty, uEn, uZh, false, cnyToMyr(door.door));
+    if (item.hasDoor !== false) push('door', `Door ${door.id}`, `门板 ${door.id}`, qty, uEn, uZh, false, cnyToMyr(door.door), true); // 系数只乘门板
     if (item.hasCarcass !== false) push('carcass', `Carcass ${carc.id}`, `柜体 ${carc.id}`, qty, uEn, uZh, false, cnyToMyr(carc.carcass));
     // 开放柜（无门）：按投影面积计（长 × 高），A–K 各系列有独立投影价
     if (item.hasOpen) {
@@ -160,16 +160,16 @@ export function computeItem(item) {
     const len = parseLength(item.length);
     const qty = len * (Number(item.h) || 0);
     const s = seriesById(item.panelSeries);
-    push('panel', `Panel ${s.id}`, `墙板 ${s.id}`, qty, 'm²', '㎡', false, cnyToMyr(s.panel));
+    push('panel', `Panel ${s.id}`, `墙板 ${s.id}`, qty, 'm²', '㎡', false, cnyToMyr(s.panel), true);
   } else if (item.type === 'roomdoor') {
     const t = item.desc || '';
-    push('roomdoor', t || 'Room Door', t || '房门', Number(item.qty) || 0, 'pc', '樘', true, Number(item.unitMyr) || 0);
+    push('roomdoor', t || 'Room Door', t || '房门', Number(item.qty) || 0, 'pc', '樘', true, Number(item.unitMyr) || 0, true);
   } else if (item.type === 'led') {
-    push('led', 'LED', '灯带', parseLength(item.length), 'm', '米', false, cnyToMyr(LED_CNY));
+    push('led', 'LED', '灯带', parseLength(item.length), 'm', '米', false, cnyToMyr(LED_CNY), true);
   } else if (item.type === 'other') {
     const t = item.desc || '';
     const u = item.uom || '';
-    push('other', t || 'Other', t || '其他', Number(item.qty) || 0, u || 'item', u || '项', /pc|set|item|套|樘|项/i.test(u), Number(item.unitMyr) || 0);
+    push('other', t || 'Other', t || '其他', Number(item.qty) || 0, u || 'item', u || '项', /pc|set|item|套|樘|项/i.test(u), Number(item.unitMyr) || 0, true);
   }
 
   const total = lines.reduce((a, b) => a + b.total, 0);
