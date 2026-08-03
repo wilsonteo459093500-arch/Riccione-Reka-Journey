@@ -37,6 +37,17 @@ const ADD_TYPES = [
   { kind: 'other', label: 'Other 其他' },
 ];
 
+// 特殊工艺系数参考（内部报价用）
+const CRAFT_COEF = [
+  { name: '圆弧 Arc', coef: 3 },
+  { name: '加厚 Thickened (25/36)', coef: 2.5 },
+  { name: '加厚 Thickened (50)', coef: 3.5 },
+  { name: '格栅 Grille', coef: 3 },
+  { name: '拼框门 Framed Door', coef: 2.5 },
+  { name: '拼框玻璃门 Framed Glass Door', coef: 1.5 },
+  { name: '洞洞板 Pegboard', coef: 1.5 },
+];
+
 export const blankZone = (name = '') => ({ id: newId('zone'), name, items: [], collapsed: false });
 const blankLoose = () => ({ id: newId('lf'), type: '', model: '', color: '', qty: '1', unitMyr: '', image: '' });
 
@@ -529,6 +540,29 @@ export default function QuotationView({ doc, onChange }) {
               style={{ border: `1px solid ${T.line}`, borderRadius: '2px', color: T.inkSoft }}>
               <Copy size={14} /> Copy text 复制文本
             </button>
+          </div>
+
+          {/* 内部参考：特殊工艺系数（不出现在报价单）*/}
+          <div className="p-3 rounded" style={{ background: T.cream, border: `1px solid ${T.lineSoft}` }}>
+            <div className="text-[10px] uppercase tracking-widest mb-2" style={{ color: T.inkSoft }}>
+              Special-craft Coef 特殊工艺系数 · Internal 内部
+            </div>
+            <table className="w-full text-xs" style={{ borderCollapse: 'collapse' }}>
+              <thead>
+                <tr className="text-[9px] uppercase tracking-wide" style={{ color: T.inkSoft }}>
+                  <th className="text-left font-normal py-1">特殊工艺 Craft</th>
+                  <th className="text-right font-normal py-1">系数 Coef</th>
+                </tr>
+              </thead>
+              <tbody>
+                {CRAFT_COEF.map((c) => (
+                  <tr key={c.name} style={{ borderTop: `1px solid ${T.lineSoft}` }}>
+                    <td className="py-1" style={{ color: T.ink }}>{c.name}</td>
+                    <td className="py-1 text-right font-medium" style={{ color: T.wood }}>× {c.coef}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
