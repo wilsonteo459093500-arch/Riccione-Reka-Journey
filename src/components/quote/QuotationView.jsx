@@ -24,7 +24,7 @@ export function makeItem(kind) {
   if (kind === 'panel') return { ...base, type: 'panel', preset: 'wall', name: '', length: '', h: 2.7, panelSeries: 'A' };
   if (kind === 'roomdoor') return { ...base, type: 'roomdoor', preset: 'std', desc: '', qty: '1', unitMyr: 7570 };
   if (kind === 'led') return { ...base, type: 'led', desc: 'LED 整体灯带', length: '' };
-  return { ...base, type: 'other', desc: '', qty: '1', uom: '项', unitCny: '', unitMyr: '' };
+  return { ...base, type: 'other', desc: '', qty: '1', uom: '', unitCny: '', unitMyr: '' };
 }
 
 const ADD_TYPES = [
