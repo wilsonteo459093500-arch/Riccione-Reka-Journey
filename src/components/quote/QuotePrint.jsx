@@ -218,7 +218,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                           <tr key={ir.item.id + i} style={{ borderTop: `1px solid ${T.lineSoft}` }}>
                             <td className="py-1 px-2">
                               {i === 0 && (() => {
-                                const nm = pickLang(ir.item.name || ir.item.desc || '', lang);
+                                const nm = pickLang(ir.item.name || '', lang); // 房门/其他/灯带的 desc 即描述，避免重复
                                 return nm ? <span className="font-medium">{nm} · </span> : null;
                               })()}
                               {lineDesc(ln)}

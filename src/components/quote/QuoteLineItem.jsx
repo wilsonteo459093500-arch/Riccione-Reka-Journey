@@ -2,7 +2,7 @@ import { Trash2, GripVertical, ChevronUp, ChevronDown } from 'lucide-react';
 import { T } from '../../theme.js';
 import {
   DOOR_SERIES, CARCASS_SERIES, OPEN_SERIES, CABINET_TYPES, cabTypeById,
-  WALL_PANEL_PRESETS, ROOM_DOOR_PRESETS, isLinear, fmtMYR,
+  WALL_PANEL_PRESETS, ROOM_DOOR_PRESETS, isLinear, fmtMYR, cnyToMyr,
 } from '../../constants/pricing.js';
 
 const cellStyle = { background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' };
@@ -203,7 +203,7 @@ export default function QuoteLineItem({ item, result, onChange, onRemove, onDrag
 
           {item.type === 'other' && (
             <>
-              <Field label="Item 项目名称" w="col-span-5">
+              <Field label="Item 项目名称" w="col-span-4">
                 <Txt value={item.desc} onChange={(v) => set({ desc: v })} placeholder="e.g. Handle 金属拉手 / Install 安装费" />
               </Field>
               <Field label="Qty 数量" w="col-span-2">
@@ -212,8 +212,13 @@ export default function QuoteLineItem({ item, result, onChange, onRemove, onDrag
               <Field label="UOM 单位" w="col-span-2">
                 <Txt value={item.uom} onChange={(v) => set({ uom: v })} placeholder="item 项" />
               </Field>
-              <Field label="Unit 单价 RM" w="col-span-3">
-                <Txt value={item.unitMyr} onChange={(v) => set({ unitMyr: v })} />
+              {/* 人民币价 → 自动换算马币零售价 MROUND(CNY*1.3/1.65,5) */}
+              <Field label="Unit 单价 CNY 人民币" w="col-span-2">
+                <Txt value={item.unitCny} placeholder="自动换算"
+                  onChange={(v) => set({ unitCny: v, unitMyr: v ? String(cnyToMyr(Number(v) || 0)) : item.unitMyr })} />
+              </Field>
+              <Field label="Unit 单价 RM" w="col-span-2">
+                <Txt value={item.unitMyr} onChange={(v) => set({ unitMyr: v, unitCny: '' })} />
               </Field>
             </>
           )}

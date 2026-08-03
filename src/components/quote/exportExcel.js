@@ -66,7 +66,7 @@ export async function exportExcel(meta, computed, loose, notes = {}, lang = 'bot
           });
         } else {
           ir.lines.forEach((ln, i) => {
-            const nm = i === 0 ? pickLang(ir.item.name || ir.item.desc || '', lang) : '';
+            const nm = i === 0 ? pickLang(ir.item.name || '', lang) : '';
             const label = nm ? `${nm} · ${lineDesc(ln)}` : lineDesc(ln);
             const qty = ln.piece ? round0(ln.qty) : Number(ln.qty.toFixed(2));
             row([label, qty, lineUom(ln), round0(ln.unitMyr), round0(ln.total)]);
