@@ -30,3 +30,22 @@ create policy "authenticated full access" on public.attachments
 
 -- ---- Realtime: broadcast project changes to all connected clients ----
 alter publication supabase_realtime add table public.projects;
+
+-- ============================================================
+-- Estimated Quotation (报价工具) — shared team records
+-- One row per quotation record (each version is its own row; versions
+-- of the same customer share a groupId inside `data`).
+-- ============================================================
+create table if not exists public.quotes (
+  id          text primary key,
+  data        jsonb not null,
+  updated_at  timestamptz not null default now()
+);
+
+alter table public.quotes enable row level security;
+
+drop policy if exists "authenticated full access" on public.quotes;
+create policy "authenticated full access" on public.quotes
+  for all to authenticated using (true) with check (true);
+
+alter publication supabase_realtime add table public.quotes;

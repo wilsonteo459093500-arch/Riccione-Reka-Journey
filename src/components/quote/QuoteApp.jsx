@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Plus, Search, Trash2, Copy, Layers, Calculator, FileText } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Plus, Search, Trash2, Copy, Layers, Calculator, FileText, Cloud, LogOut } from 'lucide-react';
 import { T } from '../../theme.js';
 import { newId } from '../../utils/helpers.js';
 import { UIProvider, useToast, useConfirm } from '../ui/UIProvider.jsx';
 import { computeQuote, computeLoose, fmtMYR } from '../../constants/pricing.js';
 import QuotationView, { blankZone } from './QuotationView.jsx';
+import AuthGate from '../auth/AuthGate.jsx';
+import { quoteCloud, cloudConfigured } from '../../services/quoteRepo.js';
 
 const STORE_KEY = 'sail.quote.records.v2';
 
@@ -51,15 +53,40 @@ const relTime = (ts) => {
   return new Date(ts).toISOString().slice(0, 10);
 };
 
-function Inner() {
+function Inner({ signOut } = {}) {
   const toast = useToast();
   const confirm = useConfirm();
   const [store, setStore] = useState(load);
   const [q, setQ] = useState('');
 
+  // 本地缓存（activeId 属个人 UI 状态；records 也缓存以便离线/秒开）
   useEffect(() => {
     try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); } catch (e) { /* ignore */ }
   }, [store]);
+
+  // ---- 云端同步（Supabase；配置了才启用，否则纯本地）----
+  const saveTimers = useRef({});
+  const cloudSave = (rec) => {
+    if (!cloudConfigured || !rec) return;
+    clearTimeout(saveTimers.current[rec.id]);
+    saveTimers.current[rec.id] = setTimeout(() => { quoteCloud.saveRecord(rec).catch(() => {}); }, 600);
+  };
+  const cloudRemove = (ids) => { if (cloudConfigured && ids.length) quoteCloud.removeMany(ids).catch(() => {}); };
+
+  useEffect(() => {
+    if (!cloudConfigured) return;
+    let alive = true;
+    const pull = async () => {
+      try {
+        const records = await quoteCloud.load();
+        if (!alive) return;
+        setStore((s) => ({ records, activeId: records.some((r) => r.id === s.activeId) ? s.activeId : (records[0]?.id || null) }));
+      } catch (e) { /* keep local cache */ }
+    };
+    pull();
+    const unsub = quoteCloud.subscribe(pull);
+    return () => { alive = false; if (unsub) unsub(); };
+  }, []);
 
   const { records, activeId } = store;
   const active = records.find((r) => r.id === activeId) || null;
@@ -113,6 +140,7 @@ function Inner() {
   const create = () => {
     const rec = newRecord();
     setStore((s) => ({ records: [rec, ...s.records], activeId: rec.id }));
+    cloudSave(rec);
   };
 
   const openRec = (id) => setStore((s) => ({ ...s, activeId: id }));
@@ -123,10 +151,12 @@ function Inner() {
     return { ...s, activeId: inGroup ? s.activeId : g.latest.id };
   });
 
-  const updateActive = (doc) => setStore((s) => ({
-    ...s,
-    records: s.records.map((r) => (r.id === s.activeId ? { ...r, ...doc, updatedAt: nowTs() } : r)),
-  }));
+  const updateActive = (doc) => setStore((s) => {
+    let saved = null;
+    const records = s.records.map((r) => (r.id === s.activeId ? (saved = { ...r, ...doc, updatedAt: nowTs() }) : r));
+    cloudSave(saved);
+    return { ...s, records };
+  });
 
   // 复制：同户型换客户 —— 新的 groupId，版本重置为 1。
   const duplicate = (id) => setStore((s) => {
@@ -135,6 +165,7 @@ function Inner() {
     const nid = newId('rec');
     const copy = { ...structuredClone(src), id: nid, groupId: nid, createdAt: nowTs(), updatedAt: nowTs() };
     copy.meta = { ...copy.meta, name: (copy.meta.name || '未命名') + ' (Copy 副本)', version: '1' };
+    cloudSave(copy);
     return { records: [copy, ...s.records], activeId: copy.id };
   });
 
@@ -146,6 +177,7 @@ function Inner() {
     const maxV = Math.max(0, ...s.records.filter((r) => (r.groupId || r.id) === gid).map(versionNum));
     const copy = { ...structuredClone(src), id: newId('rec'), groupId: gid, createdAt: nowTs(), updatedAt: nowTs() };
     copy.meta = { ...copy.meta, version: String(maxV + 1), date: todayISO() };
+    cloudSave(copy);
     return { records: [copy, ...s.records], activeId: copy.id };
   });
 
@@ -163,6 +195,7 @@ function Inner() {
         }
         return { records: rest, activeId: nextActive };
       });
+      cloudRemove([id]);
       toast('Deleted 已删除', 'success');
     }
   };
@@ -170,10 +203,12 @@ function Inner() {
   // 删除整个客户（所有版本）
   const removeCustomer = async (g) => {
     if (await confirm({ title: 'Delete 删除客户', message: `Delete「${g.latest.meta.name || '未命名'}」and all ${g.recs.length} version(s)? 删除该客户全部版本?`, danger: true, confirmText: 'Delete 删除', cancelText: 'Cancel 取消' })) {
+      const ids = g.recs.map((r) => r.id);
       setStore((s) => {
         const rest = s.records.filter((r) => (r.groupId || r.id) !== g.gid);
         return { records: rest, activeId: rest.some((r) => r.id === s.activeId) ? s.activeId : (rest[0]?.id || null) };
       });
+      cloudRemove(ids);
       toast('Deleted 已删除', 'success');
     }
   };
@@ -191,12 +226,24 @@ function Inner() {
               SAIL by Riccione Reka
             </div>
           </div>
-          <button onClick={create} className="flex items-center gap-1.5 px-4 py-2 text-sm"
-            style={{ background: T.ink, color: T.paper, borderRadius: '2px' }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = T.wood)}
-            onMouseLeave={(e) => (e.currentTarget.style.background = T.ink)}>
-            <Plus size={14} /> New 新客户报价
-          </button>
+          <div className="flex items-center gap-3">
+            {cloudConfigured && (
+              <span className="hidden md:flex items-center gap-1 text-[11px]" style={{ color: T.sage }} title="Shared team cloud 团队云同步">
+                <Cloud size={13} /> Cloud 云同步
+              </span>
+            )}
+            <button onClick={create} className="flex items-center gap-1.5 px-4 py-2 text-sm"
+              style={{ background: T.ink, color: T.paper, borderRadius: '2px' }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = T.wood)}
+              onMouseLeave={(e) => (e.currentTarget.style.background = T.ink)}>
+              <Plus size={14} /> New 新客户报价
+            </button>
+            {signOut && (
+              <button onClick={signOut} className="p-2" style={{ color: T.inkSoft }} title="Sign out 退出登录">
+                <LogOut size={16} />
+              </button>
+            )}
+          </div>
         </div>
       </header>
 
@@ -318,6 +365,14 @@ function Inner() {
 }
 
 export default function QuoteApp() {
+  // 配置了 Supabase → 团队登录 + 共享云端；否则纯本地（个人浏览器）。
+  if (cloudConfigured) {
+    return (
+      <UIProvider>
+        <AuthGate>{({ signOut }) => <Inner signOut={signOut} />}</AuthGate>
+      </UIProvider>
+    );
+  }
   return (
     <UIProvider>
       <Inner />
