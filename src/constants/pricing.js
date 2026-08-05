@@ -270,7 +270,7 @@ export const QUOTE_TERMS = [
   {
     title: { en: 'Contract Value', zh: '合约金额' },
     lines: [
-      { en: 'Once the order is confirmed, the contract value may be increased. Any reduction to the contract value shall be limited to a maximum of twenty percent (20%) of the original contract value.', zh: '订单确认后，合约金额可因新增项目而增加；如需减少，最终合约金额不得低于原合约金额的百分之八十（80%），即减少幅度不得超过原合约金额的百分之二十（20%）。' },
+      { en: 'Once the order is confirmed, the contract value may be increased due to additional items required. Any reduction to the contract value shall be limited to a maximum of twenty percent (20%) of the original contract value.', zh: '订单确认后，合约金额可因新增项目而增加；如需减少，最终合约金额不得低于原合约金额的百分之八十（80%），即减少幅度不得超过原合约金额的百分之二十（20%）。' },
     ],
   },
   {
