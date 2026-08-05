@@ -76,11 +76,23 @@ function Inner({ signOut } = {}) {
   useEffect(() => {
     if (!cloudConfigured) return;
     let alive = true;
+    let migrated = false;
     const pull = async () => {
       try {
-        const records = await quoteCloud.load();
+        const cloudRecs = await quoteCloud.load();
         if (!alive) return;
-        setStore((s) => ({ records, activeId: records.some((r) => r.id === s.activeId) ? s.activeId : (records[0]?.id || null) }));
+        // 首次开启云端且云端为空 → 把本机已有记录上传，避免旧记录“消失”
+        if (cloudRecs.length === 0 && !migrated) {
+          let local = [];
+          try { local = (JSON.parse(localStorage.getItem(STORE_KEY) || '{}').records) || []; } catch (e) { /* ignore */ }
+          if (local.length) {
+            migrated = true;
+            await Promise.all(local.map((r) => quoteCloud.saveRecord(r).catch(() => {})));
+            setStore((s) => ({ records: local, activeId: s.activeId || local[0]?.id || null }));
+            return;
+          }
+        }
+        setStore((s) => ({ records: cloudRecs, activeId: cloudRecs.some((r) => r.id === s.activeId) ? s.activeId : (cloudRecs[0]?.id || null) }));
       } catch (e) { /* keep local cache */ }
     };
     pull();
