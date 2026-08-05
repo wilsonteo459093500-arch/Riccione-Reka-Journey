@@ -262,6 +262,18 @@ export const QUOTE_TERMS = [
     ],
   },
   {
+    title: { en: 'Payment & Delivery', zh: '付款与交付' },
+    lines: [
+      { en: 'Payments are non-refundable, and orders must be delivered within 12 months from the date of initial payment received, to prevent forfeiture of payments. The unit price of all products and services is valid for 12 months from the date of the initial payment.', zh: '所有已支付款项均不予退还。为避免已支付款项被没收，订单必须于首次收到付款之日起十二（12）个月内完成交付。所有产品及服务的单价，自首次收到付款之日起十二（12）个月内有效。' },
+    ],
+  },
+  {
+    title: { en: 'Contract Value', zh: '合约金额' },
+    lines: [
+      { en: 'Once the order is confirmed, the contract value may be increased. Any reduction to the contract value shall be limited to a maximum of twenty percent (20%) of the original contract value.', zh: '订单确认后，合约金额可因新增项目而增加；如需减少，最终合约金额不得低于原合约金额的百分之八十（80%），即减少幅度不得超过原合约金额的百分之二十（20%）。' },
+    ],
+  },
+  {
     title: { en: 'Specifications', zh: '产品规格' },
     bullet: true,
     lines: [
