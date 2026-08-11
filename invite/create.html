@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" data-lang="zh">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>销售端 · 生成需求卡与邀请函 | 溪岸 Sail</title>
+<meta name="robots" content="noindex, nofollow" />
+<meta name="theme-color" content="#F4F0E8" />
+<link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&family=Noto+Sans+SC:wght@300;400;500;600&family=Noto+Serif+SC:wght@300;400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/css/invite.css" />
+<link rel="stylesheet" href="assets/css/form.css" />
+</head>
+
+<body class="form-body">
+<div class="grain" aria-hidden="true"></div>
+
+<header class="f-top">
+  <div class="row">
+    <img src="assets/img/brand/riccione-reka.png" alt="Riccione Reka" />
+    <span class="f-count">销售端 · INTERNAL TOOL</span>
+  </div>
+</header>
+
+<main class="f-stage" style="max-width:1180px;padding-bottom:60px">
+
+  <div style="margin-bottom:clamp(24px,4vw,42px)">
+    <p class="step-tag">SALES CONSOLE</p>
+    <h2 style="font-family:var(--serif);font-weight:400;font-size:clamp(26px,4.4vw,40px);margin:0 0 10px">
+      两步走：先发需求卡，读完再发邀请函
+    </h2>
+    <p class="muted" style="max-width:60ch;margin:0">
+      ① WhatsApp 聊上之后 → 发<b>需求卡</b>；② 读完需求卡、做好初步方案 → 用这个理由发<b>邀请函</b>。
+      填一次资料，两条链接一起生成。这个页面只在内部用，不要发给客户。
+    </p>
+  </div>
+
+  <!-- 我是谁 -->
+  <section class="panel" style="margin-bottom:clamp(20px,3vw,32px)">
+    <h3>我是谁</h3>
+    <p class="hint">填一次就会记住，下次打开自动带出。</p>
+    <div class="row2 thirds">
+      <div class="field" style="margin-bottom:0">
+        <label class="q" for="g-host">姓名 <i class="muted small">Your name</i></label>
+        <input type="text" id="g-host" placeholder="Wilson Teo" />
+      </div>
+      <div class="field" style="margin-bottom:0">
+        <label class="q" for="g-role">职称 / 品牌线 <i class="muted small">Role</i></label>
+        <input type="text" id="g-role" placeholder="溪岸 Sail by Riccione Reka" />
+      </div>
+      <div class="field" style="margin-bottom:0">
+        <label class="q" for="g-wa">您的 WhatsApp <i class="muted small">Digits only</i></label>
+        <input type="tel" id="g-wa" placeholder="60189661919" />
+      </div>
+    </div>
+  </section>
+
+  <div class="gen">
+    <!-- 左：客户与约定 -->
+    <div>
+      <section class="panel" style="margin-bottom:clamp(20px,3vw,28px)">
+        <h3>客户资料</h3>
+        <p class="hint">姓名会出现在邀请函封面上 —— 写客户习惯被称呼的样子。</p>
+        <div class="row2">
+          <div class="field">
+            <label class="q" for="g-name">客户称呼 <i class="muted small">Guest name</i></label>
+            <input type="text" id="g-name" placeholder="陈志明 / Ar. Tan" />
+          </div>
+          <div class="field">
+            <label class="q" for="g-honor">称谓 <i class="muted small">Honorific</i></label>
+            <select id="g-honor">
+              <option value="">（不加）</option>
+              <option>设计师</option><option>先生</option><option>女士</option>
+              <option>小姐</option><option>老师</option><option>Ar.</option><option>Ir.</option>
+            </select>
+          </div>
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label class="q" for="g-cwa">客户 WhatsApp <i class="muted small">选填，填了就能一键发送</i></label>
+          <input type="tel" id="g-cwa" placeholder="60123456789" />
+        </div>
+      </section>
+
+      <section class="panel">
+        <h3>到馆约定 <span class="muted small" style="font-family:var(--sans)">— 邀请函用</span></h3>
+        <p class="hint">还没约好时间？日期留空也能发，封面会显示「待确认」。</p>
+        <div class="row2 thirds">
+          <div class="field">
+            <label class="q" for="g-date">日期 <i class="muted small">Date</i></label>
+            <input type="date" id="g-date" />
+          </div>
+          <div class="field">
+            <label class="q" for="g-time">时间 <i class="muted small">Time</i></label>
+            <input type="time" id="g-time" value="14:00" />
+          </div>
+          <div class="field">
+            <label class="q" for="g-dur">时长 <i class="muted small">Minutes</i></label>
+            <input type="number" id="g-dur" value="60" min="15" step="15" />
+          </div>
+        </div>
+
+        <div class="field" style="margin-bottom:12px">
+          <label class="q" for="g-msg">给客户的一句话 <i class="muted small">会印在邀请信里</i></label>
+          <span class="sub">读完需求卡之后写这一句 —— 让邀请有理由，而不只是「欢迎参观」。</span>
+          <textarea id="g-msg" placeholder="例：您提到厨房永远收不干净 —— 我们照着您的平面图画了三种做法，也备好了对应的板材，到馆那天直接看实物。"></textarea>
+        </div>
+        <div class="opts tight" id="msg-presets" style="grid-template-columns:1fr">
+          <button class="btn ghost" type="button" style="justify-content:flex-start;text-align:left;font-weight:400"
+            data-msg="我们读过您填的需求卡，已经照着您的平面图画了一版初步布局。到馆那天，我们直接从这版开始聊。">
+            📄 已读需求卡 · 已有初步布局
+          </button>
+          <button class="btn ghost" type="button" style="justify-content:flex-start;text-align:left;font-weight:400"
+            data-msg="您提到的收纳问题，我们准备了三种做法与对应的板材色号，到馆那天可以上手比对，看看哪一种真的适合您家。">
+            🧩 针对收纳痛点 · 备好三种做法
+          </button>
+          <button class="btn ghost" type="button" style="justify-content:flex-start;text-align:left;font-weight:400"
+            data-msg="您选的风格方向，我们在展厅有一组 1:1 的实景样板。照片看不出来的比例与手感，到现场十分钟就清楚了。">
+            🪵 风格方向 · 展厅有 1:1 实景
+          </button>
+        </div>
+      </section>
+    </div>
+
+    <!-- 右：输出 -->
+    <div class="sticky-side">
+      <section class="panel" style="margin-bottom:clamp(20px,3vw,28px)">
+        <h3>① 需求卡链接 <span class="muted small" style="font-family:var(--sans)">— 见面前发</span></h3>
+        <p class="hint">WhatsApp 刚聊上就发这条。客户填完，内容会直接回到您的 WhatsApp。</p>
+        <div class="link-out" id="out-brief-link">—</div>
+        <div class="preview-msg" id="out-brief-msg">—</div>
+        <div class="btn-row">
+          <a class="btn gold" id="send-brief" href="#" target="_blank" rel="noopener">用 WhatsApp 发送</a>
+          <button class="btn ghost" type="button" data-copy="out-brief-msg">复制文案</button>
+          <button class="btn ghost" type="button" data-copy="out-brief-link">复制链接</button>
+          <a class="btn ghost" id="open-brief" href="brief.html" target="_blank" rel="noopener">预览</a>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h3>② 邀请函链接 <span class="muted small" style="font-family:var(--sans)">— 有方案之后发</span></h3>
+        <p class="hint">读完需求卡、做好初步方案，再发这一条。</p>
+        <div class="link-out" id="out-invite-link">—</div>
+        <div class="preview-msg" id="out-invite-msg">—</div>
+        <div class="btn-row">
+          <a class="btn gold" id="send-invite" href="#" target="_blank" rel="noopener">用 WhatsApp 发送</a>
+          <button class="btn ghost" type="button" data-copy="out-invite-msg">复制文案</button>
+          <button class="btn ghost" type="button" data-copy="out-invite-link">复制链接</button>
+          <a class="btn ghost" id="open-invite" href="index.html" target="_blank" rel="noopener">预览</a>
+        </div>
+        <p class="small muted" style="margin-top:16px">
+          预览会跳过封面动画。想看客户真实看到的样子，就直接点上面的链接。
+        </p>
+      </section>
+    </div>
+  </div>
+</main>
+
+<div class="toast" id="toast">已复制</div>
+
+<script src="assets/js/config.js"></script>
+<script src="assets/js/create.js"></script>
+</body>
+</html>

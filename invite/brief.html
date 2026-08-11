@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" data-lang="zh">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>客户需求卡 · 溪岸 Sail by Riccione Reka</title>
+<meta name="description" content="3 分钟填写您的空间需求，我们会先想好方案，再邀请您到馆。Client brief for Sail by Riccione Reka." />
+<meta name="theme-color" content="#F4F0E8" />
+<meta property="og:title" content="客户需求卡 · 溪岸 Sail by Riccione Reka" />
+<meta property="og:description" content="3 分钟，让我们先认识您的家 —— 见面时直接聊方案，不再从零开始。" />
+<meta property="og:image" content="assets/img/scene-living-wide.jpg" />
+<link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&family=Noto+Sans+SC:wght@300;400;500;600&family=Noto+Serif+SC:wght@300;400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/css/invite.css" />
+<link rel="stylesheet" href="assets/css/form.css" />
+</head>
+
+<body class="form-body">
+<div class="grain" aria-hidden="true"></div>
+
+<header class="f-top">
+  <div class="row">
+    <img src="assets/img/brand/riccione-reka.png" alt="Riccione Reka" />
+    <span class="f-count" id="f-count">客户需求卡 · CLIENT BRIEF</span>
+  </div>
+  <div class="f-bar"><i id="f-bar"></i></div>
+</header>
+
+<main class="f-stage">
+
+<!-- ========== STEP 0 · 开场 ========== -->
+<section class="step on" data-step="0">
+  <div class="f-hero">
+    <img class="mark" src="assets/img/brand/sail.png" alt="溪岸 Sail" />
+    <p class="from" id="from-line" hidden><span>邀请人</span> <b id="from-name"></b></p>
+    <h1>先让我们<br />认识您的家</h1>
+    <p>在见面之前，用 3 分钟告诉我们几件事 —— 房子、家人、习惯，还有您现在最想解决的那一件。</p>
+    <p class="small muted">Tell us about your home in three minutes. We'll come to the table with ideas already drawn.</p>
+
+    <div class="meta-row">
+      <div><b>3</b><span>分钟 MINUTES</span></div>
+      <div><b>6</b><span>组问题 SECTIONS</span></div>
+      <div><b>24h</b><span>内回复 REPLY</span></div>
+    </div>
+
+    <img class="cover" src="assets/img/scene-living-wide.jpg" alt="溪岸空间实景" />
+
+    <p class="small muted" style="margin-top:26px">
+      填完之后，我们会先做一版初步方案，再约您到展厅 —— 见面那天，直接聊方案，不用从零开始。
+    </p>
+  </div>
+</section>
+
+<!-- ========== STEP 1 · 关于您 ========== -->
+<section class="step" data-step="1">
+  <p class="step-tag">A · 关于您 &nbsp;YOU</p>
+  <h2>怎么称呼您？</h2>
+  <p class="hint">这两项是我们唯一需要的联络方式，只用于跟进您的项目。</p>
+
+  <div class="row2">
+    <div class="field">
+      <label class="q" for="f-name">姓名 / 称呼 <i class="muted small">Name</i><span class="req">*</span></label>
+      <input type="text" id="f-name" name="name" autocomplete="name" placeholder="例：陈志明 / Mr. Tan" />
+    </div>
+    <div class="field">
+      <label class="q" for="f-wa">WhatsApp <i class="muted small">Mobile</i><span class="req">*</span></label>
+      <input type="tel" id="f-wa" name="wa" autocomplete="tel" placeholder="012-345 6789" />
+    </div>
+  </div>
+
+  <fieldset class="fieldset">
+    <legend>您是从哪里认识我们的？ <i class="muted small">How did you find us</i><span class="req">*</span></legend>
+    <span class="sub">只选一个「第一次认识我们」的渠道。</span>
+    <div class="opts" data-name="source">
+      <label class="opt"><input type="radio" name="source" value="小红书 XHS" /><span>小红书 <i>XHS</i></span></label>
+      <label class="opt"><input type="radio" name="source" value="Instagram" /><span>Instagram</span></label>
+      <label class="opt"><input type="radio" name="source" value="Facebook" /><span>Facebook</span></label>
+      <label class="opt"><input type="radio" name="source" value="TikTok" /><span>TikTok</span></label>
+      <label class="opt"><input type="radio" name="source" value="YouTube" /><span>YouTube</span></label>
+      <label class="opt"><input type="radio" name="source" value="Google 搜索 / 地图" /><span>Google 搜索 <i>Maps</i></span></label>
+      <label class="opt"><input type="radio" name="source" value="官网 Website" /><span>官网 <i>Website</i></span></label>
+      <label class="opt"><input type="radio" name="source" value="设计师推荐" data-other="source-other" /><span>设计师推荐 <i>Designer</i></span></label>
+      <label class="opt"><input type="radio" name="source" value="朋友转介绍" data-other="source-other" /><span>朋友转介绍 <i>Referral</i></span></label>
+      <label class="opt"><input type="radio" name="source" value="老客户回购" /><span>老客户 <i>Repeat</i></span></label>
+      <label class="opt"><input type="radio" name="source" value="展厅路过 Walk-in" /><span>展厅路过 <i>Walk-in</i></span></label>
+      <label class="opt"><input type="radio" name="source" value="活动 / 展会" data-other="source-other" /><span>活动 / 展会 <i>Event</i></span></label>
+      <label class="opt"><input type="radio" name="source" value="其他" data-other="source-other" /><span>其他 <i>Other</i></span></label>
+    </div>
+    <div class="other-in" id="source-other">
+      <input type="text" name="sourceDetail" placeholder="请写下设计师 / 介绍人 / 活动名称 —— 我们想当面谢谢他" />
+    </div>
+  </fieldset>
+  <p class="err-line" id="err-1">请填写姓名、WhatsApp，并选择一个认识渠道。</p>
+</section>
+
+<!-- ========== STEP 2 · 房子 ========== -->
+<section class="step" data-step="2">
+  <p class="step-tag">B · 房产 &nbsp;THE PROPERTY</p>
+  <h2>这个家，现在是什么状态？</h2>
+  <p class="hint">知道了交房时间与硬装进度，我们才能倒推出真正来得及的排期。</p>
+
+  <div class="row2">
+    <div class="field">
+      <label class="q" for="f-project">楼盘 / 单位号 <i class="muted small">Project &amp; unit</i></label>
+      <input type="text" id="f-project" name="project" placeholder="例：Setia Alam · Cyber Heights Block B-12-3" />
+    </div>
+    <div class="field">
+      <label class="q" for="f-size">面积 <i class="muted small">Size (sq ft)</i></label>
+      <input type="number" id="f-size" name="size" min="0" step="10" placeholder="1200" />
+    </div>
+  </div>
+
+  <fieldset class="fieldset">
+    <legend>房型 <i class="muted small">Property type</i></legend>
+    <div class="opts">
+      <label class="opt"><input type="radio" name="ptype" value="公寓 Condo" /><span>公寓 <i>Condo</i></span></label>
+      <label class="opt"><input type="radio" name="ptype" value="排屋 Terrace" /><span>排屋 <i>Terrace</i></span></label>
+      <label class="opt"><input type="radio" name="ptype" value="半独立 Semi-D" /><span>半独立 <i>Semi-D</i></span></label>
+      <label class="opt"><input type="radio" name="ptype" value="独立 Bungalow" /><span>独立 <i>Bungalow</i></span></label>
+      <label class="opt"><input type="radio" name="ptype" value="商用 Commercial" /><span>商用 <i>Commercial</i></span></label>
+    </div>
+  </fieldset>
+
+  <fieldset class="fieldset">
+    <legend>状态 <i class="muted small">Status</i></legend>
+    <div class="opts">
+      <label class="opt"><input type="radio" name="status" value="新房未交 Not handed over" /><span>新房 · 还没交<em>Not handed over</em></span></label>
+      <label class="opt"><input type="radio" name="status" value="新房已交 Handed over" /><span>新房 · 已交房<em>Handed over</em></span></label>
+      <label class="opt"><input type="radio" name="status" value="翻新 Renovation" /><span>翻新 · 已住<em>Renovation</em></span></label>
+    </div>
+  </fieldset>
+
+  <div class="row2">
+    <div class="field">
+      <label class="q" for="f-keys">预计拿钥匙 / 入伙 <i class="muted small">Keys / move-in</i></label>
+      <input type="month" id="f-keys" name="keys" />
+    </div>
+    <div class="field">
+      <label class="q" for="f-reno">硬装进度 <i class="muted small">Renovation stage</i></label>
+      <select id="f-reno" name="reno">
+        <option value="">请选择 Select…</option>
+        <option>未开始 Not started</option>
+        <option>进行中 · 泥水阶段 In progress (wet works)</option>
+        <option>进行中 · 木工阶段 In progress (carpentry)</option>
+        <option>已完成 Completed</option>
+        <option>不确定 Not sure</option>
+      </select>
+    </div>
+  </div>
+</section>
+
+<!-- ========== STEP 3 · 需求 ========== -->
+<section class="step" data-step="3">
+  <p class="step-tag">C · 需求 &nbsp;THE BRIEF</p>
+  <h2>想做哪些部分？</h2>
+  <p class="hint">可以多选。不确定的先跳过，到馆那天我们一起看。</p>
+
+  <fieldset class="fieldset">
+    <legend>定制范围 <i class="muted small">Scope</i></legend>
+    <div class="opts">
+      <label class="opt"><input type="checkbox" name="scope" value="全屋 Whole house" /><span>全屋 <i>Whole</i></span></label>
+      <label class="opt"><input type="checkbox" name="scope" value="厨房 Kitchen" /><span>厨房 <i>Kitchen</i></span></label>
+      <label class="opt"><input type="checkbox" name="scope" value="衣柜 Wardrobe" /><span>衣柜 <i>Wardrobe</i></span></label>
+      <label class="opt"><input type="checkbox" name="scope" value="鞋柜 Shoe cabinet" /><span>鞋柜 <i>Shoe</i></span></label>
+      <label class="opt"><input type="checkbox" name="scope" value="电视柜 TV feature" /><span>电视柜 <i>TV</i></span></label>
+      <label class="opt"><input type="checkbox" name="scope" value="书房 Study" /><span>书房 <i>Study</i></span></label>
+      <label class="opt"><input type="checkbox" name="scope" value="浴室柜 Vanity" /><span>浴室柜 <i>Vanity</i></span></label>
+      <label class="opt"><input type="checkbox" name="scope" value="门 · 墙板 Doors & wall panels" /><span>门 · 墙板 <i>Doors</i></span></label>
+      <label class="opt"><input type="checkbox" name="scope" value="成品家具 Loose furniture" /><span>成品家具 <i>Furniture</i></span></label>
+      <label class="opt"><input type="checkbox" name="scope" value="其他" data-other="scope-other" /><span>其他 <i>Other</i></span></label>
+    </div>
+    <div class="other-in" id="scope-other">
+      <input type="text" name="scopeDetail" placeholder="还想做的部分…" />
+    </div>
+  </fieldset>
+
+  <fieldset class="fieldset">
+    <legend>风格倾向 <i class="muted small">Style direction</i></legend>
+    <span class="sub">凭直觉选，最多三个。</span>
+    <div class="opts">
+      <label class="opt"><input type="checkbox" name="style" value="自然原木 Natural wood" /><span>自然原木 <em>Natural wood</em></span></label>
+      <label class="opt"><input type="checkbox" name="style" value="现代简约 Modern minimal" /><span>现代简约 <em>Modern minimal</em></span></label>
+      <label class="opt"><input type="checkbox" name="style" value="侘寂 Wabi-sabi" /><span>侘寂 <em>Wabi-sabi</em></span></label>
+      <label class="opt"><input type="checkbox" name="style" value="日式 Japandi" /><span>日式 <em>Japandi</em></span></label>
+      <label class="opt"><input type="checkbox" name="style" value="北欧 Nordic" /><span>北欧 <em>Nordic</em></span></label>
+      <label class="opt"><input type="checkbox" name="style" value="轻奢 Modern luxe" /><span>轻奢 <em>Modern luxe</em></span></label>
+      <label class="opt"><input type="checkbox" name="style" value="中古 Mid-century" /><span>中古 <em>Mid-century</em></span></label>
+      <label class="opt"><input type="checkbox" name="style" value="还没想好 Not decided" /><span>还没想好 <em>Not decided</em></span></label>
+    </div>
+  </fieldset>
+
+  <div class="field">
+    <label class="q" for="f-ref">参考图链接 <i class="muted small">Reference images</i></label>
+    <span class="sub">Pinterest / 小红书 / IG 收藏夹都可以，一条链接就够。也可以稍后直接 WhatsApp 发给我们。</span>
+    <input type="text" id="f-ref" name="ref" placeholder="https://…" />
+  </div>
+</section>
+
+<!-- ========== STEP 4 · 家庭与生活习惯 ========== -->
+<section class="step" data-step="4">
+  <p class="step-tag">D · 生活习惯 &nbsp;HOW YOU LIVE</p>
+  <h2>谁会住在这里？<br />平常怎么过日子？</h2>
+  <p class="hint">这一段最重要 —— 到馆那天，它会变成一份属于您的「生活习惯表」。</p>
+
+  <div class="row2 thirds">
+    <div class="field">
+      <label class="q" for="f-adults">大人 <i class="muted small">Adults</i></label>
+      <input type="number" id="f-adults" name="adults" min="0" max="20" placeholder="2" />
+    </div>
+    <div class="field">
+      <label class="q" for="f-children">小孩 <i class="muted small">Children</i></label>
+      <input type="number" id="f-children" name="children" min="0" max="20" placeholder="1" />
+    </div>
+    <div class="field">
+      <label class="q" for="f-kidage">小孩年龄 <i class="muted small">Ages</i></label>
+      <input type="text" id="f-kidage" name="kidage" placeholder="例：3 岁、7 岁" />
+    </div>
+  </div>
+
+  <fieldset class="fieldset">
+    <legend>还有谁 <i class="muted small">Also living here</i></legend>
+    <div class="opts tight">
+      <label class="opt"><input type="checkbox" name="household" value="同住长辈 Elderly" /><span>同住长辈</span></label>
+      <label class="opt"><input type="checkbox" name="household" value="宠物 Pets" /><span>宠物</span></label>
+      <label class="opt"><input type="checkbox" name="household" value="帮佣 Helper" /><span>帮佣</span></label>
+      <label class="opt"><input type="checkbox" name="household" value="常有客人 Frequent guests" /><span>常有客人</span></label>
+    </div>
+  </fieldset>
+
+  <fieldset class="fieldset">
+    <legend>做饭频率 <i class="muted small">How often you cook</i></legend>
+    <div class="opts">
+      <label class="opt"><input type="radio" name="cook" value="天天开火 Daily" /><span>天天开火<em>Daily, heavy cooking</em></span></label>
+      <label class="opt"><input type="radio" name="cook" value="一周几次 A few times a week" /><span>一周几次<em>A few times a week</em></span></label>
+      <label class="opt"><input type="radio" name="cook" value="几乎不开火 Rarely" /><span>几乎不开火<em>Rarely / light only</em></span></label>
+    </div>
+  </fieldset>
+
+  <fieldset class="fieldset">
+    <legend>收纳压力最大的是 <i class="muted small">Biggest storage pressure</i></legend>
+    <span class="sub">可以多选。这几项决定柜内的分区，比外观更早需要定下来。</span>
+    <div class="opts">
+      <label class="opt"><input type="checkbox" name="storage" value="厨房锅具 / 电器多" /><span>厨房锅具 · 电器多</span></label>
+      <label class="opt"><input type="checkbox" name="storage" value="衣物特别多" /><span>衣物特别多</span></label>
+      <label class="opt"><input type="checkbox" name="storage" value="孩子的玩具与用品" /><span>孩子的玩具用品</span></label>
+      <label class="opt"><input type="checkbox" name="storage" value="书籍 / 收藏品" /><span>书籍 · 收藏品</span></label>
+      <label class="opt"><input type="checkbox" name="storage" value="行李箱 / 大件杂物" /><span>行李箱 · 大件杂物</span></label>
+      <label class="opt"><input type="checkbox" name="storage" value="鞋子很多" /><span>鞋子很多</span></label>
+    </div>
+  </fieldset>
+
+  <div class="field">
+    <label class="q" for="f-pain">现在最想解决的一件事 <i class="muted small">The one thing to fix</i></label>
+    <span class="sub">一句话就好。这句话，通常就是整个方案的起点。</span>
+    <textarea id="f-pain" name="pain" placeholder="例：厨房永远收不干净；玄关一进门就乱；衣服没有地方挂…"></textarea>
+  </div>
+</section>
+
+<!-- ========== STEP 5 · 预算与决策 ========== -->
+<section class="step" data-step="5">
+  <p class="step-tag">E · 预算与决策 &nbsp;BUDGET &amp; DECISION</p>
+  <h2>大概的预算区间</h2>
+  <p class="hint">给一个区间就好，不是报价。有了区间，我们才知道该给您看哪一层的板材与五金 —— 也不会浪费您的时间。</p>
+
+  <fieldset class="fieldset">
+    <legend>定制预算带 <i class="muted small">Budget range (cabinetry)</i></legend>
+    <div class="opts wide">
+      <label class="opt"><input type="radio" name="budget" value="RM 50k 以下" /><span>RM 50k 以下 <i>Below 50k</i></span></label>
+      <label class="opt"><input type="radio" name="budget" value="RM 50k – 100k" /><span>RM 50k – 100k</span></label>
+      <label class="opt"><input type="radio" name="budget" value="RM 100k – 200k" /><span>RM 100k – 200k</span></label>
+      <label class="opt"><input type="radio" name="budget" value="RM 200k 以上" /><span>RM 200k 以上 <i>Above 200k</i></span></label>
+      <label class="opt"><input type="radio" name="budget" value="还没有概念，想先了解" /><span>还没有概念 <em>Would like guidance</em></span></label>
+    </div>
+  </fieldset>
+
+  <fieldset class="fieldset">
+    <legend>谁一起做决定 <i class="muted small">Decision maker</i></legend>
+    <div class="opts">
+      <label class="opt"><input type="radio" name="decider" value="我自己" /><span>我自己</span></label>
+      <label class="opt"><input type="radio" name="decider" value="夫妻共同" /><span>夫妻共同</span></label>
+      <label class="opt"><input type="radio" name="decider" value="全家一起" /><span>全家一起</span></label>
+      <label class="opt"><input type="radio" name="decider" value="设计师主导" /><span>设计师主导</span></label>
+    </div>
+  </fieldset>
+
+  <fieldset class="fieldset">
+    <legend>平面图 <i class="muted small">Floor plan</i></legend>
+    <span class="sub">有平面图的话，我们能在见面前就画出第一版布局。</span>
+    <div class="opts">
+      <label class="opt"><input type="radio" name="plan" value="有，稍后 WhatsApp 发" /><span>有，稍后发给你们<em>Will send on WhatsApp</em></span></label>
+      <label class="opt"><input type="radio" name="plan" value="有，但要找一下" /><span>有，但要找一下<em>Need to dig it up</em></span></label>
+      <label class="opt"><input type="radio" name="plan" value="没有平面图" /><span>没有<em>Not available</em></span></label>
+    </div>
+  </fieldset>
+
+  <fieldset class="fieldset">
+    <legend>希望什么时候开始 <i class="muted small">Timeline</i></legend>
+    <div class="opts">
+      <label class="opt"><input type="radio" name="timeline" value="一个月内" /><span>一个月内</span></label>
+      <label class="opt"><input type="radio" name="timeline" value="1 – 3 个月" /><span>1 – 3 个月</span></label>
+      <label class="opt"><input type="radio" name="timeline" value="3 – 6 个月" /><span>3 – 6 个月</span></label>
+      <label class="opt"><input type="radio" name="timeline" value="还在了解阶段" /><span>还在了解阶段</span></label>
+    </div>
+  </fieldset>
+</section>
+
+<!-- ========== STEP 6 · 提交 ========== -->
+<section class="step" data-step="6">
+  <p class="step-tag">F · 下一步 &nbsp;NEXT STEP</p>
+  <h2>最后一步</h2>
+  <p class="hint">送出之后，我们会读一遍，做一版初步想法，再约您到展厅。</p>
+
+  <fieldset class="fieldset">
+    <legend>哪个时段比较方便到馆 <i class="muted small">Best time to visit</i></legend>
+    <div class="opts">
+      <label class="opt"><input type="checkbox" name="visitPref" value="平日白天" /><span>平日白天</span></label>
+      <label class="opt"><input type="checkbox" name="visitPref" value="平日傍晚" /><span>平日傍晚</span></label>
+      <label class="opt"><input type="checkbox" name="visitPref" value="周六" /><span>周六</span></label>
+      <label class="opt"><input type="checkbox" name="visitPref" value="周日" /><span>周日</span></label>
+    </div>
+  </fieldset>
+
+  <div class="field">
+    <label class="q" for="f-note">还有什么想让我们知道 <i class="muted small">Anything else</i></label>
+    <textarea id="f-note" name="note" placeholder="任何顾虑、时间限制、以前不好的经验… 都可以直接写。"></textarea>
+  </div>
+
+  <div class="note-line">
+    <span>按下送出后，会打开 WhatsApp 并自动带上您填的内容 —— 您只需要按发送。我们只用这些资料跟进您的项目，不作他用。</span>
+  </div>
+  <p class="err-line" id="err-6">请先回到第一步，填写姓名与 WhatsApp。</p>
+</section>
+
+<!-- ========== 完成 ========== -->
+<section class="step" data-step="7">
+  <div class="done">
+    <div class="seal-ok">溪</div>
+    <h2 style="font-family:var(--serif);font-size:clamp(28px,5.4vw,44px);font-weight:400;margin:0 0 14px">谢谢您，<br />我们收到了</h2>
+    <p class="muted" style="max-width:44ch;margin:0 auto 8px">
+      接下来 24 小时内，<b id="done-host">我们</b> 会带着第一版想法回来找您 —— 然后，再正式邀请您到展厅。
+    </p>
+    <p class="small muted">Thank you. We'll come back within 24 hours with a first direction, then invite you to the gallery.</p>
+
+    <div class="summary" id="summary"></div>
+
+    <div class="btn-row" style="justify-content:center">
+      <a class="btn gold" id="btn-send-again" href="#" target="_blank" rel="noopener">重新用 WhatsApp 发送</a>
+      <button class="btn ghost" id="btn-copy" type="button">复制内容</button>
+      <button class="btn ghost" id="btn-restart" type="button">再填一份</button>
+    </div>
+
+    <p class="small muted" style="margin-top:34px">
+      RICCIONE Malaysia · Setia Alam, Selangor &nbsp;·&nbsp; <span id="done-hours"></span>
+    </p>
+  </div>
+</section>
+
+</main>
+
+<nav class="f-nav" id="f-nav">
+  <div class="row">
+    <button class="btn ghost" id="btn-back" type="button">上一步</button>
+    <button class="btn next" id="btn-next" type="button">开始填写 · 3 分钟</button>
+    <span class="tip" id="f-tip">按 Enter 也可以继续</span>
+  </div>
+</nav>
+
+<div class="toast" id="toast">已复制</div>
+
+<script src="assets/js/config.js"></script>
+<script src="assets/js/brief.js"></script>
+</body>
+</html>
