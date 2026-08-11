@@ -74,14 +74,14 @@ Formspree、Supabase Edge Function、Google Apps Script 都行。送出时会 PO
 | 参数 | 意思 | 例 |
 |---|---|---|
 | `n` | 客人称呼 | `陈志明` |
-| `t` | 称谓 | `设计师` |
+| `t` | 称谓 | `先生` |
 | `d` `h` | 日期 · 时间 | `2026-08-20` `14:00` |
 | `dur` | 时长（分钟） | `60` |
 | `by` `role` `wa` | 邀请人姓名 · 职称 · WhatsApp | |
 | `msg` | 印在信里的那一句话 | |
 | `open=1` | 跳过封面动画（预览用） | |
 
-例：`index.html?n=陈志明&t=设计师&d=2026-08-20&h=14:00`
+例：`index.html?n=陈志明&t=先生&d=2026-08-20&h=14:00`
 
 **需求卡** `brief.html?by=Wilson%20Teo&wa=60189661919&n=陈志明`
 （`wa` = 需求卡送到哪个号码，会盖过 config 里的 `briefInbox`）

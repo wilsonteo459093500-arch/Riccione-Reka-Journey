@@ -2,7 +2,7 @@
    邀请函 · invitation runtime
    URL 参数由销售端 create.html 生成：
      ?i=<base64url(JSON)>              （推荐，链接干净）
-     ?n=陈志明&t=设计师&d=2026-08-20…   （明文，方便手改）
+     ?n=陈志明&t=先生&d=2026-08-20…   （明文，方便手改）
    ============================================================ */
 (function () {
   'use strict';
@@ -78,7 +78,7 @@
   /* ---------- 填充内容 ------------------------------------- */
   function paint() {
     var zh = lang() === 'zh';
-    var fallbackName = zh ? '设计师朋友' : 'Dear Designer';
+    var fallbackName = zh ? '亲爱的朋友' : 'Dear Friend';
     var name = guest || fallbackName;
 
     ['#s-name', '#t-name', '#l-name'].forEach(function (sel) {
