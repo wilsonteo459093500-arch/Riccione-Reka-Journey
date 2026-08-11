@@ -90,7 +90,18 @@ Formspree、Supabase Edge Function、Google Apps Script 都行。送出时会 PO
 
 ## 部署
 
-静态站，任选其一：
+**现在就能打开的：** 根目录的 `npm run build` 会把整个 `invite/` 原样复制进 `dist/invite/`
+（见 `package.json` 的 build script），所以 root 那个 Vercel 项目每次部署都会带上这套页面：
+
+```
+<部署网址>/invite/index.html    邀请函
+<部署网址>/invite/brief.html    需求卡
+<部署网址>/invite/create.html   销售端
+```
+
+不用改 Vercel 任何设置。等要用自己的域名（例如 invite.riccione.com.my）再按下面开独立项目。
+
+**独立部署**，任选其一：
 
 - **Vercel / Netlify**：把 `invite/` 设为 root directory，无需 build command。
 - **GitHub Pages**：把 `invite/` 推上去，Settings → Pages 选对应目录。
