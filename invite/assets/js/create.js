@@ -13,7 +13,8 @@
   var F = {
     host: $('#g-host'), role: $('#g-role'), wa: $('#g-wa'),
     name: $('#g-name'), honor: $('#g-honor'), cwa: $('#g-cwa'),
-    date: $('#g-date'), time: $('#g-time'), dur: $('#g-dur'), msg: $('#g-msg')
+    date: $('#g-date'), time: $('#g-time'), dur: $('#g-dur'), msg: $('#g-msg'),
+    printMsg: $('#g-print-msg')
   };
 
   /* ---------- 记住销售自己的资料 --------------------------- */
@@ -35,10 +36,6 @@
 
   /* ---------- 工具 ---------------------------------------- */
   function digits(s) { return String(s || '').replace(/\D/g, ''); }
-  function b64url(str) {
-    return btoa(unescape(encodeURIComponent(str)))
-      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  }
 
   var WD = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
   function dateLabel() {
@@ -66,7 +63,9 @@
     bq.set('by', host);
     if (hostWa) bq.set('wa', hostWa);
     if (name) bq.set('n', name);
-    var briefLink = BASE + 'brief.html?' + bq.toString();
+    // 线上开了 cleanUrls，可以省掉 .html；本地用 python 起的服务器不行
+    var local = /^(localhost|127\.|0\.0\.0\.0|\[?::1)/.test(location.hostname);
+    var briefLink = BASE + (local ? 'brief.html?' : 'brief?') + bq.toString();
 
     var briefMsg =
       call + '，您好，我是溪岸的 ' + host + '。\n\n' +
@@ -74,20 +73,21 @@
       briefLink + '\n\n' +
       '填完之后我会先读一遍，做一版初步想法，再约您到展厅。这样见面那天，我们可以直接聊方案，不用从零开始。';
 
-    /* ② 邀请函 */
-    // 与 config.js 默认值相同的字段就不写进链接里，链接短一点
+    /* ② 邀请函 —— 用可读参数，链接看起来才像一封邀请，不像钓鱼
+       与 config.js 默认值相同的字段直接省略 */
     var def = CFG.host || {};
-    var payload = {};
-    if (host !== def.name) payload.by = host;
-    if (role !== def.role) payload.role = role;
-    if (hostWa && hostWa !== String(def.wa || '')) payload.wa = hostWa;
-    if (name) payload.n = name;
-    if (honor) payload.t = honor;
-    if (F.date.value) payload.d = F.date.value;
-    if (F.time.value) payload.h = F.time.value;
-    if (F.dur.value && +F.dur.value !== 60) payload.dur = String(+F.dur.value);
-    if (F.msg.value.trim()) payload.msg = F.msg.value.trim();
-    var inviteLink = BASE + 'index.html?i=' + b64url(JSON.stringify(payload));
+    var iq = new URLSearchParams();
+    if (name) iq.set('for', name);
+    if (honor) iq.set('title', honor);
+    if (F.date.value) iq.set('on', F.date.value);
+    if (F.time.value && F.time.value !== '14:00') iq.set('at', F.time.value);
+    if (F.dur.value && +F.dur.value !== 60) iq.set('mins', String(+F.dur.value));
+    if (host !== def.name) iq.set('from', host);
+    if (role !== def.role) iq.set('role', role);
+    if (hostWa && hostWa !== String(def.wa || '')) iq.set('wa', hostWa);
+    if (F.msg.value.trim() && F.printMsg.checked) iq.set('note', F.msg.value.trim());
+    var qs = iq.toString();
+    var inviteLink = BASE + (qs ? '?' + qs : '');
 
     var dl = dateLabel();
     var inviteMsg =
@@ -107,7 +107,7 @@
     $('#send-brief').href  = 'https://wa.me/' + cwa + '?text=' + encodeURIComponent(briefMsg);
     $('#send-invite').href = 'https://wa.me/' + cwa + '?text=' + encodeURIComponent(inviteMsg);
     $('#open-brief').href  = briefLink;
-    $('#open-invite').href = inviteLink + '&open=1';
+    $('#open-invite').href = inviteLink + (qs ? '&' : '?') + 'open=1';
   }
 
   $$('input, select, textarea').forEach(function (el) {

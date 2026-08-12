@@ -18,12 +18,22 @@
     try { return decodeURIComponent(escape(atob(s))); } catch (e) { return ''; }
   }
 
+  /* 可读参数名 → 内部短名。两套都认，老链接不会失效。
+     /invite/?for=陈志明&on=2026-08-25&at=14:00 */
+  var ALIAS = {
+    'for': 'n', title: 't', on: 'd', at: 'h',
+    mins: 'dur', from: 'by', role: 'role', wa: 'wa', note: 'msg'
+  };
+
   function readParams() {
     var q = new URLSearchParams(location.search);
     var data = {};
     if (q.get('i')) {
       try { data = JSON.parse(b64urlDecode(q.get('i'))) || {}; } catch (e) { data = {}; }
     }
+    Object.keys(ALIAS).forEach(function (k) {
+      if (q.get(k)) data[ALIAS[k]] = q.get(k);
+    });
     ['n', 't', 'co', 'd', 'h', 'dur', 'by', 'role', 'wa', 'msg'].forEach(function (k) {
       if (q.get(k)) data[k] = q.get(k);
     });

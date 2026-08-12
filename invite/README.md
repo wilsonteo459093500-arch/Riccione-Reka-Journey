@@ -1,4 +1,6 @@
-# 溪岸 · 邀约体验网站 Invitation Suite
+# RICCIONE REKA JOURNEY
+
+溪岸 · 邀约体验网站
 
 给「WhatsApp 聊上 → 填需求卡 → 做初步方案 → 发邀请函 → 客人到馆」这条动线做的一套静态网页。
 纯 HTML / CSS / JS，没有构建步骤、没有后端 —— 丢到任何静态托管上就能用。
@@ -69,21 +71,25 @@ Formspree、Supabase Edge Function、Google Apps Script 都行。送出时会 PO
 
 ## 链接参数
 
-**邀请函** `index.html?i=<base64>`，由 `create.html` 生成。也可以手写明文参数调试：
+**邀请函** —— 由 `create.html` 生成，参数都是可读的，链接不会像钓鱼：
+
+```
+/?for=Mr%20Tan&on=2026-08-25&at=15:00
+```
 
 | 参数 | 意思 | 例 |
 |---|---|---|
-| `n` | 客人称呼 | `陈志明` |
-| `t` | 称谓 | `先生` |
-| `d` `h` | 日期 · 时间 | `2026-08-20` `14:00` |
-| `dur` | 时长（分钟） | `60` |
-| `by` `role` `wa` | 邀请人姓名 · 职称 · WhatsApp | |
-| `msg` | 印在信里的那一句话 | |
-| `open=1` | 跳过封面动画（预览用） | |
+| `for` | 客人称呼 | `Mr Tan` |
+| `title` | 称谓 | `先生` |
+| `on` `at` | 日期 · 时间 | `2026-08-25` `15:00`（14:00 是默认值，会省略） |
+| `mins` | 时长，默认 60 | `90` |
+| `from` `role` `wa` | 邀请人姓名 · 职称 · WhatsApp（与 config 相同就省略） | |
+| `note` | 印在信里的那一句话（勾选才会带上） | |
+| `open=1` | 跳过封面动画，预览用 | |
 
-例：`index.html?n=陈志明&t=先生&d=2026-08-20&h=14:00`
+旧的短参数（`n` `t` `d` `h` `dur` `by` `msg`）和 `?i=<base64>` 打包格式仍然认，发出去的旧链接不会失效。
 
-**需求卡** `brief.html?by=Wilson%20Teo&wa=60189661919&n=陈志明`
+**需求卡** `/brief?by=Wilson%20Teo&wa=60189661919&n=陈志明`
 （`wa` = 需求卡送到哪个号码，会盖过 config 里的 `briefInbox`）
 
 ---
@@ -101,11 +107,29 @@ Formspree、Supabase Edge Function、Google Apps Script 都行。送出时会 PO
 
 不用改 Vercel 任何设置。等要用自己的域名（例如 invite.riccione.com.my）再按下面开独立项目。
 
-**独立部署**，任选其一：
+**独立部署（推荐，链接才好看）**
 
-- **Vercel / Netlify**：把 `invite/` 设为 root directory，无需 build command。
-- **GitHub Pages**：把 `invite/` 推上去，Settings → Pages 选对应目录。
-- **自己的服务器**：整个目录丢进去就行。
+在 Vercel 新建一个 project：
+
+| 设置 | 值 |
+|---|---|
+| Project Name | `riccione-reka-journey` |
+| Root Directory | `invite` |
+| Framework Preset | Other |
+| Build Command | 留空 |
+
+出来的网址就是 `riccione-reka-journey.vercel.app`，链接长这样：
+
+```
+riccione-reka-journey.vercel.app/?for=Mr%20Tan&on=2026-08-25    邀请函
+riccione-reka-journey.vercel.app/brief                          需求卡
+riccione-reka-journey.vercel.app/create                         销售端
+```
+
+有自己的域名之后，在 Vercel 的 Domains 里接上去（例如 `journey.riccione.com.my`）就更干净。
+`invite/vercel.json` 已经开了 `cleanUrls`，所以路径里不会出现 `.html`。
+
+其它选择：Netlify（publish directory 填 `invite`）、GitHub Pages、自己的服务器 —— 整个目录丢进去就行。
 
 本地预览：
 
