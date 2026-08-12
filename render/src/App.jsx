@@ -1,0 +1,215 @@
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import Header from './components/Header.jsx';
+import Controls from './components/Controls.jsx';
+import Results from './components/Results.jsx';
+import HistoryPanel from './components/HistoryPanel.jsx';
+import SettingsModal from './components/SettingsModal.jsx';
+import { MODES } from './constants.js';
+import { buildPrompt } from './prompt.js';
+import { loadSettings, saveSettings, generateImage } from './services/gemini.js';
+import { compressForStorage, makeThumb, dataUrlToInput } from './services/images.js';
+import { listHistory, saveRecord, updateRecord, deleteRecord } from './services/history.js';
+
+const uid = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+export default function App() {
+  const [settings, setSettings] = useState(loadSettings);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [history, setHistory] = useState([]);
+
+  // 生成参数
+  const [modeId, setModeId] = useState('restyle');
+  const [image, setImage] = useState(null); // { dataUrl, mimeType, base64 }
+  const [roomId, setRoomId] = useState('living');
+  const [styleId, setStyleId] = useState('modern');
+  const [lightingId, setLightingId] = useState('auto');
+  const [fidelityId, setFidelityId] = useState('strict');
+  const [aspect, setAspect] = useState('16:9');
+  const [extra, setExtra] = useState('');
+  const [count, setCount] = useState(2);
+
+  // 生成结果槽位: { id, status: 'loading'|'done'|'error', dataUrl?, error? }
+  const [slots, setSlots] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState(null);
+  const resultsRef = useRef(null);
+
+  const mode = useMemo(() => MODES.find((m) => m.id === modeId) || MODES[0], [modeId]);
+
+  useEffect(() => {
+    listHistory().then(setHistory);
+  }, []);
+
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 4000);
+    return () => clearTimeout(t);
+  }, [notice]);
+
+  function handleSaveSettings(next) {
+    setSettings(next);
+    saveSettings(next);
+    setShowSettings(false);
+  }
+
+  function updateSlot(id, patch) {
+    setSlots((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+  }
+
+  async function handleGenerate() {
+    if (busy) return;
+    if (!settings.apiKey) {
+      setShowSettings(true);
+      setNotice({ type: 'warn', text: '先配置 API key（免费申请，1 分钟搞定）' });
+      return;
+    }
+    if (mode.needsImage && !image) {
+      setNotice({ type: 'warn', text: '这个模式需要先上传一张照片或草图' });
+      return;
+    }
+    if (mode.needsInstruction && !extra.trim()) {
+      setNotice({ type: 'warn', text: '指令修改模式需要写清楚要改什么，例如：把电视墙换成岩板' });
+      return;
+    }
+
+    const newSlots = Array.from({ length: count }, () => ({ id: uid(), status: 'loading' }));
+    setSlots(newSlots);
+    setBusy(true);
+    resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    const inputImage = mode.needsImage ? image : null;
+    const params = { modeId, roomId, styleId, lightingId, fidelityId, extra };
+
+    const tasks = newSlots.map(async (slot, i) => {
+      const prompt = buildPrompt({ ...params, variationIndex: i });
+      try {
+        const raw = await generateImage(settings, prompt, inputImage, mode.needsImage ? null : aspect);
+        const dataUrl = await compressForStorage(raw);
+        updateSlot(slot.id, { status: 'done', dataUrl });
+        return { ok: true, dataUrl };
+      } catch (e) {
+        updateSlot(slot.id, { status: 'error', error: e.message });
+        return { ok: false };
+      }
+    });
+
+    const results = await Promise.all(tasks);
+    setBusy(false);
+
+    const outputs = results.filter((r) => r.ok).map((r) => r.dataUrl);
+    if (outputs.length) {
+      const record = {
+        id: uid(),
+        ts: Date.now(),
+        modeId,
+        roomId,
+        styleId,
+        extra: extra.trim(),
+        inputThumb: inputImage ? await makeThumb(inputImage.dataUrl) : null,
+        inputFull: inputImage ? inputImage.dataUrl : null,
+        outputs,
+        fav: false,
+      };
+      await saveRecord(record);
+      setHistory(await listHistory());
+    } else {
+      setNotice({ type: 'error', text: '本次全部失败了，看看每张图上的错误提示' });
+    }
+  }
+
+  /** 把某张结果图设为新的输入，继续迭代 */
+  function handleIterate(dataUrl) {
+    setImage(dataUrlToInput(dataUrl));
+    setModeId('edit');
+    setExtra('');
+    setNotice({ type: 'ok', text: '已把这张图设为底图 — 写一句指令继续改（如：换成暖色灯光）' });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  async function handleToggleFav(id, fav) {
+    await updateRecord(id, { fav });
+    setHistory(await listHistory());
+  }
+
+  async function handleDeleteRecord(id) {
+    await deleteRecord(id);
+    setHistory(await listHistory());
+  }
+
+  /** 从历史记录恢复输入图 */
+  function handleReuseInput(record) {
+    if (record.inputFull) {
+      setImage(dataUrlToInput(record.inputFull));
+      setModeId(record.modeId);
+      setRoomId(record.roomId);
+      setStyleId(record.styleId);
+      setShowHistory(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }
+
+  return (
+    <div className="min-h-screen">
+      <Header
+        onOpenSettings={() => setShowSettings(true)}
+        onOpenHistory={() => setShowHistory(true)}
+        hasKey={!!settings.apiKey}
+        historyCount={history.length}
+      />
+
+      {notice && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl shadow-lg text-sm font-medium bg-sail-ink text-sail-paper">
+          {notice.text}
+        </div>
+      )}
+
+      <main className="max-w-7xl mx-auto px-4 pb-24 pt-6 grid gap-6 lg:grid-cols-[400px_1fr]">
+        <Controls
+          mode={mode}
+          modeId={modeId}
+          setModeId={setModeId}
+          image={image}
+          setImage={setImage}
+          roomId={roomId}
+          setRoomId={setRoomId}
+          styleId={styleId}
+          setStyleId={setStyleId}
+          lightingId={lightingId}
+          setLightingId={setLightingId}
+          fidelityId={fidelityId}
+          setFidelityId={setFidelityId}
+          aspect={aspect}
+          setAspect={setAspect}
+          extra={extra}
+          setExtra={setExtra}
+          count={count}
+          setCount={setCount}
+          busy={busy}
+          onGenerate={handleGenerate}
+        />
+        <div ref={resultsRef}>
+          <Results slots={slots} inputImage={mode.needsImage ? image : null} onIterate={handleIterate} busy={busy} />
+        </div>
+      </main>
+
+      {showSettings && (
+        <SettingsModal settings={settings} onSave={handleSaveSettings} onClose={() => setShowSettings(false)} />
+      )}
+
+      {showHistory && (
+        <HistoryPanel
+          history={history}
+          onClose={() => setShowHistory(false)}
+          onToggleFav={handleToggleFav}
+          onDelete={handleDeleteRecord}
+          onReuseInput={handleReuseInput}
+          onIterate={(dataUrl) => {
+            setShowHistory(false);
+            handleIterate(dataUrl);
+          }}
+        />
+      )}
+    </div>
+  );
+}
