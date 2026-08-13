@@ -82,11 +82,15 @@ export default function App() {
     const params = { modeId, roomId, styleId, lightingId, fidelityId, extra };
 
     const tasks = newSlots.map(async (slot, i) => {
+      // 错开发送，避免多张同时发瞬间撞免费额度的每分钟限流
+      if (i > 0) await new Promise((r) => setTimeout(r, i * 2500));
       const prompt = buildPrompt({ ...params, variationIndex: i });
       try {
-        const raw = await generateImage(settings, prompt, inputImage, mode.needsImage ? null : aspect);
+        const raw = await generateImage(settings, prompt, inputImage, mode.needsImage ? null : aspect, (waitSec, attempt) =>
+          updateSlot(slot.id, { note: `被限流，${waitSec} 秒后自动重试（第 ${attempt}/3 次）…` })
+        );
         const dataUrl = await compressForStorage(raw);
-        updateSlot(slot.id, { status: 'done', dataUrl });
+        updateSlot(slot.id, { status: 'done', dataUrl, note: null });
         return { ok: true, dataUrl };
       } catch (e) {
         updateSlot(slot.id, { status: 'error', error: e.message });
