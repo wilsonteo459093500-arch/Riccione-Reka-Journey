@@ -2,9 +2,10 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Header from './components/Header.jsx';
 import Controls from './components/Controls.jsx';
 import Results from './components/Results.jsx';
+import MoodBoard from './components/MoodBoard.jsx';
 import HistoryPanel from './components/HistoryPanel.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
-import { MODES } from './constants.js';
+import { MODES, ENHANCE_PROMPT } from './constants.js';
 import { buildPrompt } from './prompt.js';
 import { loadSettings, saveSettings, generateImage } from './services/gemini.js';
 import { compressForStorage, makeThumb, dataUrlToInput } from './services/images.js';
@@ -17,6 +18,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState([]);
+  const [view, setView] = useState('render'); // 'render' | 'board'
 
   // 生成参数
   const [modeId, setModeId] = useState('restyle');
@@ -122,6 +124,29 @@ export default function App() {
     }
   }
 
+  /** 二次渲染：构图不变，只提升摄影真实感 */
+  async function handleEnhance(slotId) {
+    const slot = slots.find((s) => s.id === slotId);
+    if (!slot?.dataUrl || busy) return;
+    if (!settings.apiKey) {
+      setShowSettings(true);
+      return;
+    }
+    const prevUrl = slot.dataUrl;
+    updateSlot(slotId, { status: 'loading', note: '增强真实感中，约 15 秒…' });
+    try {
+      const raw = await generateImage(settings, ENHANCE_PROMPT, dataUrlToInput(prevUrl), null, (w, a) =>
+        updateSlot(slotId, { note: `被限流，${w} 秒后自动重试（第 ${a}/3 次）…` })
+      );
+      const dataUrl = await compressForStorage(raw);
+      updateSlot(slotId, { status: 'done', dataUrl, note: null });
+      setNotice({ type: 'ok', text: '已增强 — 影子、纹理和光感都重新渲染了' });
+    } catch (e) {
+      updateSlot(slotId, { status: 'done', dataUrl: prevUrl, note: null });
+      setNotice({ type: 'error', text: `增强失败：${e.message}` });
+    }
+  }
+
   /** 把某张结果图设为新的输入，继续迭代 */
   function handleIterate(dataUrl) {
     setImage(dataUrlToInput(dataUrl));
@@ -156,6 +181,8 @@ export default function App() {
   return (
     <div className="min-h-screen">
       <Header
+        view={view}
+        setView={setView}
         onOpenSettings={() => setShowSettings(true)}
         onOpenHistory={() => setShowHistory(true)}
         hasKey={!!settings.apiKey}
@@ -168,33 +195,45 @@ export default function App() {
         </div>
       )}
 
-      <main className="max-w-7xl mx-auto px-4 pb-24 pt-6 grid gap-6 lg:grid-cols-[400px_1fr]">
-        <Controls
-          mode={mode}
-          modeId={modeId}
-          setModeId={setModeId}
-          image={image}
-          setImage={setImage}
-          roomId={roomId}
-          setRoomId={setRoomId}
-          styleId={styleId}
-          setStyleId={setStyleId}
-          lightingId={lightingId}
-          setLightingId={setLightingId}
-          fidelityId={fidelityId}
-          setFidelityId={setFidelityId}
-          aspect={aspect}
-          setAspect={setAspect}
-          extra={extra}
-          setExtra={setExtra}
-          count={count}
-          setCount={setCount}
-          busy={busy}
-          onGenerate={handleGenerate}
-        />
-        <div ref={resultsRef}>
-          <Results slots={slots} inputImage={mode.needsImage ? image : null} onIterate={handleIterate} busy={busy} />
-        </div>
+      <main className="max-w-7xl mx-auto px-4 pb-24 pt-6">
+        {view === 'render' ? (
+          <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
+            <Controls
+              mode={mode}
+              modeId={modeId}
+              setModeId={setModeId}
+              image={image}
+              setImage={setImage}
+              roomId={roomId}
+              setRoomId={setRoomId}
+              styleId={styleId}
+              setStyleId={setStyleId}
+              lightingId={lightingId}
+              setLightingId={setLightingId}
+              fidelityId={fidelityId}
+              setFidelityId={setFidelityId}
+              aspect={aspect}
+              setAspect={setAspect}
+              extra={extra}
+              setExtra={setExtra}
+              count={count}
+              setCount={setCount}
+              busy={busy}
+              onGenerate={handleGenerate}
+            />
+            <div ref={resultsRef}>
+              <Results
+                slots={slots}
+                inputImage={mode.needsImage ? image : null}
+                onIterate={handleIterate}
+                onEnhance={handleEnhance}
+                busy={busy}
+              />
+            </div>
+          </div>
+        ) : (
+          <MoodBoard settings={settings} onOpenSettings={() => setShowSettings(true)} notify={setNotice} />
+        )}
       </main>
 
       {showSettings && (

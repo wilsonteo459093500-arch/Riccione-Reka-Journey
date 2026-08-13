@@ -1,13 +1,27 @@
 import React from 'react';
 import { History, Settings, KeyRound } from 'lucide-react';
 
-export default function Header({ onOpenSettings, onOpenHistory, hasKey, historyCount }) {
+export default function Header({ view, setView, onOpenSettings, onOpenHistory, hasKey, historyCount }) {
+  const tab = (id, label) => (
+    <button
+      onClick={() => setView(id)}
+      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+        view === id ? 'bg-sail-green-deep text-white' : 'text-sail-muted hover:bg-sail-tint'
+      }`}
+    >
+      {label}
+    </button>
+  );
+
   return (
     <header className="sticky top-0 z-40 bg-sail-paper/90 backdrop-blur border-b border-sail-line">
-      <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
-        <div className="flex items-baseline gap-2">
-          <span className="font-display text-xl font-semibold text-sail-green-deep">溪岸 Render</span>
-          <span className="text-xs text-sail-faint hidden sm:inline">AI 效果图工作室</span>
+      <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="font-display text-xl font-semibold text-sail-green-deep whitespace-nowrap">溪岸 Render</span>
+          <nav className="flex gap-1 bg-white border border-sail-line rounded-xl p-1">
+            {tab('render', 'AI 效果图')}
+            {tab('board', 'Mood Board')}
+          </nav>
         </div>
         <div className="flex items-center gap-2">
           <button

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Download, RefreshCw, Maximize2, X, Columns2, ImageIcon, AlertTriangle } from 'lucide-react';
+import { Download, RefreshCw, Maximize2, X, Columns2, ImageIcon, AlertTriangle, Wand2 } from 'lucide-react';
 import CompareSlider from './CompareSlider.jsx';
 import { downloadDataUrl } from '../services/images.js';
 
@@ -17,7 +17,7 @@ function EmptyState() {
   );
 }
 
-function Slot({ slot, inputImage, onIterate, onOpen }) {
+function Slot({ slot, inputImage, onIterate, onEnhance, onOpen }) {
   if (slot.status === 'loading') {
     return (
       <div className="aspect-[4/3] rounded-2xl shimmer border border-sail-line flex items-center justify-center">
@@ -44,6 +44,14 @@ function Slot({ slot, inputImage, onIterate, onOpen }) {
         onClick={() => onOpen(slot)}
       />
       <div className="absolute inset-x-0 bottom-0 p-2 flex gap-1.5 justify-end opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-t from-black/50 to-transparent">
+        <button
+          type="button"
+          title="增强真实感（重渲染影子 / 纹理 / 光感）"
+          onClick={() => onEnhance(slot.id)}
+          className="p-2 rounded-lg bg-sail-gold/90 text-sail-ink hover:bg-sail-gold"
+        >
+          <Wand2 size={15} />
+        </button>
         <button
           type="button"
           title="放大查看 / 对比原图"
@@ -73,7 +81,7 @@ function Slot({ slot, inputImage, onIterate, onOpen }) {
   );
 }
 
-export default function Results({ slots, inputImage, onIterate, busy }) {
+export default function Results({ slots, inputImage, onIterate, onEnhance, busy }) {
   const [lightbox, setLightbox] = useState(null); // { slot, compare }
 
   if (!slots.length) return <EmptyState />;
@@ -82,7 +90,14 @@ export default function Results({ slots, inputImage, onIterate, busy }) {
     <>
       <div className={`grid gap-4 ${slots.length > 1 ? 'sm:grid-cols-2' : ''}`}>
         {slots.map((slot) => (
-          <Slot key={slot.id} slot={slot} inputImage={inputImage} onIterate={onIterate} onOpen={(s) => setLightbox({ slot: s, compare: false })} />
+          <Slot
+            key={slot.id}
+            slot={slot}
+            inputImage={inputImage}
+            onIterate={onIterate}
+            onEnhance={onEnhance}
+            onOpen={(s) => setLightbox({ slot: s, compare: false })}
+          />
         ))}
       </div>
 
@@ -106,6 +121,17 @@ export default function Results({ slots, inputImage, onIterate, busy }) {
                     对比原图
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLightbox(null);
+                    onEnhance(lightbox.slot.id);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-sail-gold text-sail-ink hover:bg-sail-gold/80"
+                >
+                  <Wand2 size={15} />
+                  增强真实感
+                </button>
                 <button
                   type="button"
                   onClick={() => onIterate(lightbox.slot.dataUrl)}

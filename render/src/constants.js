@@ -252,11 +252,47 @@ export const ASPECT_RATIOS = [
 export const VARIATION_COUNTS = [1, 2, 3, 4];
 
 // 统一的画质收尾要求，附加到所有 prompt 末尾。
+// 用真实摄影语言（机身/镜头/光圈/影子行为/材质微纹理）压住 “CGI 假感”。
 export const QUALITY_SUFFIX =
-  'Output ONE photorealistic interior visualization image: architectural photography quality, ' +
-  'physically accurate global illumination and shadows, realistic material textures (wood grain, ' +
-  'fabric weave, stone veining), correct perspective, magazine-cover composition. ' +
-  'No people, no text, no watermark, no split-screen or collage.';
+  'Render as an ultra-photorealistic interior PHOTOGRAPH, indistinguishable from a real photo ' +
+  'shot by a professional architectural photographer: full-frame camera, 24mm lens at f/8, ISO 100, ' +
+  'tripod at chest height, perfectly vertical lines. Physically accurate global illumination with ' +
+  'soft shadow falloff, realistic contact shadows and ambient occlusion where objects ' +
+  'meet floors and walls, accurate glass and metal reflections, high dynamic range with detail in ' +
+  'both highlights and shadows. True-to-life material micro-textures: visible wood grain, fabric weave, ' +
+  'stone veining, subtle imperfections on plaster and paint. Natural white balance, restrained saturation. ' +
+  'Absolutely avoid: CGI plastic sheen, fake uniform lighting, over-smooth surfaces, oversaturated colors, ' +
+  'blurry textures. No people, no text, no watermark, no split-screen or collage. Output ONE image.';
+
+// “增强真实感” 二次渲染：构图内容全保留，只修真实感。
+export const ENHANCE_PROMPT =
+  'This interior image looks slightly artificial (CGI-like). Re-render it as an ultra-photorealistic ' +
+  'photograph while keeping EVERYTHING identical: same composition, camera angle, room layout, furniture, ' +
+  'materials, colors and lighting direction. Improve ONLY the realism: physically accurate light falloff, ' +
+  'soft contact shadows and ambient occlusion where furniture meets the floor, realistic reflections, ' +
+  'lifelike material micro-textures (wood grain, fabric weave, stone veining, subtle surface imperfections), ' +
+  'natural white balance and dynamic range. Remove any plastic sheen, fake smoothness, banding or ' +
+  'oversaturation. No people, no text, no watermark. Output ONE image.';
+
+// Mood board AI 实拍排版：把所有素材合成一张摄影级俯拍 flat-lay。
+export const FLATLAY_PROMPT =
+  'Create ONE photorealistic top-down flat-lay PHOTOGRAPH of an interior design material board, ' +
+  'composed from ALL of the provided sample images. Treat every sample as a real physical object — ' +
+  'stone slab, wood plank, tile, fabric swatch, paint chip, hardware piece — cut to clean rectangles or ' +
+  'kept in its natural shape, laid on the backdrop surface described below. Arrange them in an elegant, ' +
+  'editorial, asymmetric composition with slight overlaps. CRITICAL FOR REALISM: every piece must have ' +
+  'visible physical thickness and cast a soft natural shadow, as if photographed in a studio with soft ' +
+  'directional daylight from the upper left; material colors and textures must stay faithful to the source ' +
+  'images. Add one or two subtle stylist props if space allows (a dried olive branch, a small ceramic bowl ' +
+  'or a stone sphere). Muted, warm, high-end interior magazine aesthetic. No text, no logos, no watermark. ' +
+  'Output ONE image.';
+
+// Mood board 抠图：主体不动，背景换纯白。
+export const CUTOUT_PROMPT =
+  'Professional product photography cleanup for an interior design material board. ' +
+  'Isolate the main object / material sample in this image and place it on a seamless pure white (#FFFFFF) ' +
+  'studio background with a very soft natural drop shadow. Keep the object itself completely unchanged — ' +
+  'same shape, color, texture and perspective. Remove everything else. No text, no watermark. Output ONE image.';
 
 export const SETTINGS_KEY = 'sailrender.settings.v1';
 
