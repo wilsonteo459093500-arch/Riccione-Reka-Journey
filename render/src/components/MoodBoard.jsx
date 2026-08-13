@@ -1,12 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   UploadCloud, Scissors, Trash2, ChevronUp, ChevronDown, LayoutGrid,
-  Sparkles, Download, Loader2,
+  Sparkles, Download, Loader2, Plus, Wand2, ListOrdered,
 } from 'lucide-react';
-import { CUTOUT_PROMPT, FLATLAY_PROMPT } from '../constants.js';
+import { CUTOUT_PROMPT, FLATLAY_PROMPT, LIB_CATS, SWATCH_PROMPT } from '../constants.js';
 import { generateImage } from '../services/gemini.js';
-import { prepareInputImage, compressForStorage, dataUrlToInput, downloadDataUrl, applyWatermark } from '../services/images.js';
-import { loadBoard, saveBoard } from '../services/moodboardStore.js';
+import {
+  prepareInputImage, compressForStorage, dataUrlToInput, downloadDataUrl, applyWatermark, shrinkDataUrl,
+} from '../services/images.js';
+import { listBoards, putBoard, removeBoard, getActiveBoardId, setActiveBoardId } from '../services/moodboardStore.js';
+import { listLibrary, putLibraryItem, removeLibraryItem } from '../services/library.js';
 
 const RATIOS = [
   { id: 'a4l', label: 'A4 横', ratio: 297 / 210 },
@@ -25,7 +28,6 @@ const BGS = [
 
 const uid = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
-// AI 实拍排版的输出画幅（Gemini 支持的固定比例集合）
 const FLATLAY_ASPECT = { a4l: '4:3', a4p: '3:4', '16:9': '16:9', '1:1': '1:1' };
 
 const BG_TONE = {
@@ -49,7 +51,7 @@ function measureAspect(dataUrl) {
 function gridLayout(items, boardH) {
   const n = items.length;
   if (!n) return items;
-  const usableH = boardH - 16; // 底部留标题
+  const usableH = boardH - 16;
   const cols = Math.ceil(Math.sqrt(n * (100 / usableH)));
   const rows = Math.ceil(n / cols);
   const gap = 3;
@@ -69,7 +71,7 @@ function gridLayout(items, boardH) {
   });
 }
 
-/** 杂志拼贴排版：大小错落、轻微旋转、允许叠压（确定性，不用随机数） */
+/** 杂志拼贴排版：大小错落、轻微旋转（确定性） */
 function collageLayout(items, boardH) {
   const n = items.length;
   if (!n) return items;
@@ -90,79 +92,246 @@ function collageLayout(items, boardH) {
 }
 
 export default function MoodBoard({ settings, onOpenSettings, notify }) {
+  // ---- 画板集合 ----
+  const [boards, setBoards] = useState([]); // [{id,name,ts}]（轻量列表，内容按需读）
+  const [activeId, setActiveId] = useState(null);
   const [board, setBoard] = useState({ ratioId: 'a4l', bgId: 'paper', title: '', subtitle: '' });
   const [items, setItems] = useState([]);
+  const [boardName, setBoardName] = useState('画板 1');
   const [selectedId, setSelectedId] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [showLegend, setShowLegend] = useState(true);
+
+  // ---- 材质库 ----
+  const [library, setLibrary] = useState([]);
+  const [libCat, setLibCat] = useState('all');
+  const [genDesc, setGenDesc] = useState('');
+  const [genBusy, setGenBusy] = useState(false);
+
+  // ---- AI 实拍排版 ----
   const [flatlayUrl, setFlatlayUrl] = useState(null);
   const [flatlayBusy, setFlatlayBusy] = useState(false);
   const [flatlayNote, setFlatlayNote] = useState('');
 
   const fileRef = useRef(null);
+  const libFileRef = useRef(null);
   const stageRef = useRef(null);
   const dragRef = useRef(null);
   const saveTimer = useRef(null);
+  const latestRef = useRef(null);
 
   const ratio = RATIOS.find((r) => r.id === board.ratioId) || RATIOS[0];
   const bg = BGS.find((b) => b.id === board.bgId) || BGS[0];
-  const boardH = 100 / ratio.ratio; // 板高（board units，板宽=100）
+  const boardH = 100 / ratio.ratio;
   const selected = items.find((it) => it.id === selectedId) || null;
+  const legendItems = useMemo(() => items.filter((it) => (it.label || '').trim()), [items]);
 
-  // ---- 持久化 ----
+  // ---- 初始加载：画板集合 + 材质库 ----
   useEffect(() => {
-    loadBoard().then((saved) => {
-      if (saved?.board) setBoard(saved.board);
-      if (saved?.items) setItems(saved.items.map((it) => ({ ...it, busy: false })));
+    (async () => {
+      const [all, act, lib] = await Promise.all([listBoards(), getActiveBoardId(), listLibrary()]);
+      setLibrary(lib);
+      if (all.length) {
+        const rec = all.find((b) => b.id === act) || all[0];
+        setBoards(all.map(({ id, name, ts }) => ({ id, name, ts })));
+        applyRecord(rec);
+      } else {
+        const rec = { id: `b-${uid()}`, name: '画板 1', board: { ratioId: 'a4l', bgId: 'paper', title: '', subtitle: '' }, items: [], ts: Date.now() };
+        await putBoard(rec);
+        await setActiveBoardId(rec.id);
+        setBoards([{ id: rec.id, name: rec.name, ts: rec.ts }]);
+        applyRecord(rec);
+      }
       setLoaded(true);
-    });
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const latestRef = useRef(null);
-  useEffect(() => {
-    if (!loaded) return;
-    latestRef.current = { board, items: items.map(({ busy, ...it }) => it) };
-    clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => saveBoard(latestRef.current), 800);
-    return () => clearTimeout(saveTimer.current);
-  }, [board, items, loaded]);
+  function applyRecord(rec) {
+    setActiveId(rec.id);
+    setBoardName(rec.name || '画板');
+    setBoard(rec.board || { ratioId: 'a4l', bgId: 'paper', title: '', subtitle: '' });
+    setItems((rec.items || []).map((it) => ({ ...it, busy: false })));
+    setSelectedId(null);
+    setFlatlayUrl(null);
+  }
 
-  // 卸载（切换 tab / 关页面前）立即落盘，避免 debounce 中的修改丢失
+  // ---- 自动保存（debounce + 卸载即时落盘） ----
+  useEffect(() => {
+    if (!loaded || !activeId) return;
+    latestRef.current = {
+      id: activeId,
+      name: boardName,
+      board,
+      items: items.map(({ busy, ...it }) => it),
+      ts: Date.now(),
+    };
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => putBoard(latestRef.current), 800);
+    return () => clearTimeout(saveTimer.current);
+  }, [board, items, boardName, activeId, loaded]);
+
   useEffect(
     () => () => {
-      if (latestRef.current) saveBoard(latestRef.current);
+      if (latestRef.current) putBoard(latestRef.current);
     },
     []
   );
 
-  // ---- 添加图片 ----
-  const addFiles = useCallback(
+  // ---- 画板管理 ----
+  async function flushSave() {
+    clearTimeout(saveTimer.current);
+    if (latestRef.current) await putBoard(latestRef.current);
+  }
+
+  async function switchBoard(id) {
+    if (id === activeId) return;
+    await flushSave();
+    const all = await listBoards();
+    const rec = all.find((b) => b.id === id);
+    if (rec) {
+      applyRecord(rec);
+      await setActiveBoardId(id);
+      setBoards(all.map(({ id: i, name, ts }) => ({ id: i, name, ts })));
+    }
+  }
+
+  async function newBoard() {
+    await flushSave();
+    const rec = {
+      id: `b-${uid()}`,
+      name: `画板 ${boards.length + 1}`,
+      board: { ratioId: board.ratioId, bgId: board.bgId, title: '', subtitle: '' },
+      items: [],
+      ts: Date.now(),
+    };
+    await putBoard(rec);
+    await setActiveBoardId(rec.id);
+    setBoards((prev) => [{ id: rec.id, name: rec.name, ts: rec.ts }, ...prev]);
+    applyRecord(rec);
+  }
+
+  async function deleteBoard() {
+    if (boards.length <= 1) {
+      notify?.({ type: 'warn', text: '至少保留一块画板' });
+      return;
+    }
+    await removeBoard(activeId);
+    latestRef.current = null;
+    const all = await listBoards();
+    setBoards(all.map(({ id, name, ts }) => ({ id, name, ts })));
+    if (all.length) {
+      applyRecord(all[0]);
+      await setActiveBoardId(all[0].id);
+    }
+    notify?.({ type: 'ok', text: '画板已删除' });
+  }
+
+  // ---- 材质库 ----
+  const addLibraryFiles = useCallback(
     async (fileList) => {
       const files = [...(fileList || [])].filter((f) => f.type.startsWith('image/'));
       for (const file of files) {
         const img = await prepareInputImage(file);
-        const aspect = await measureAspect(img.dataUrl);
-        setItems((prev) => [
-          ...prev,
-          {
-            id: uid(),
-            dataUrl: img.dataUrl,
-            aspect,
-            w: 24,
-            x: 6 + ((prev.length * 17) % 55),
-            y: 6 + ((prev.length * 11) % 40),
-            rot: 0,
-            label: '',
-            busy: false,
-          },
-        ]);
+        const small = await shrinkDataUrl(img.dataUrl, 640);
+        const item = {
+          id: uid(),
+          dataUrl: small,
+          name: '',
+          cat: libCat === 'all' ? 'other' : libCat,
+          ts: Date.now(),
+        };
+        await putLibraryItem(item);
+        setLibrary((prev) => [item, ...prev]);
       }
     },
-    []
+    [libCat]
   );
 
-  const patchItem = (id, patch) =>
-    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
+  async function genSwatch() {
+    if (!settings.apiKey) {
+      onOpenSettings();
+      return;
+    }
+    if (!genDesc.trim() || genBusy) return;
+    setGenBusy(true);
+    try {
+      const prompt = SWATCH_PROMPT.replace('{DESC}', genDesc.trim());
+      const raw = await generateImage(settings, prompt, null, '1:1');
+      const small = await shrinkDataUrl(await compressForStorage(raw), 640);
+      const item = {
+        id: uid(),
+        dataUrl: small,
+        name: genDesc.trim(),
+        cat: libCat === 'all' ? 'other' : libCat,
+        ts: Date.now(),
+      };
+      await putLibraryItem(item);
+      setLibrary((prev) => [item, ...prev]);
+      setGenDesc('');
+      notify?.({ type: 'ok', text: '材质样片已生成并存入材质库' });
+    } catch (e) {
+      notify?.({ type: 'error', text: `生成失败：${e.message}` });
+    } finally {
+      setGenBusy(false);
+    }
+  }
+
+  async function renameLibItem(id, name) {
+    setLibrary((prev) => prev.map((it) => (it.id === id ? { ...it, name } : it)));
+    const item = library.find((it) => it.id === id);
+    if (item) await putLibraryItem({ ...item, name });
+  }
+
+  async function deleteLibItem(id) {
+    await removeLibraryItem(id);
+    setLibrary((prev) => prev.filter((it) => it.id !== id));
+  }
+
+  /** 材质库 → 画板 */
+  async function addLibToBoard(libItem) {
+    const aspect = await measureAspect(libItem.dataUrl);
+    setItems((prev) => [
+      ...prev,
+      {
+        id: uid(),
+        dataUrl: libItem.dataUrl,
+        aspect,
+        w: 20,
+        x: 6 + ((prev.length * 17) % 55),
+        y: 6 + ((prev.length * 11) % 40),
+        rot: 0,
+        label: libItem.name || '',
+        busy: false,
+      },
+    ]);
+  }
+
+  // ---- 直接上传到画板 ----
+  const addFiles = useCallback(async (fileList) => {
+    const files = [...(fileList || [])].filter((f) => f.type.startsWith('image/'));
+    for (const file of files) {
+      const img = await prepareInputImage(file);
+      const aspect = await measureAspect(img.dataUrl);
+      setItems((prev) => [
+        ...prev,
+        {
+          id: uid(),
+          dataUrl: img.dataUrl,
+          aspect,
+          w: 24,
+          x: 6 + ((prev.length * 17) % 55),
+          y: 6 + ((prev.length * 11) % 40),
+          rot: 0,
+          label: '',
+          busy: false,
+        },
+      ]);
+    }
+  }, []);
+
+  const patchItem = (id, patch) => setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
 
   // ---- 拖动 / 缩放 ----
   function unitsPerPx() {
@@ -201,7 +370,6 @@ export default function MoodBoard({ settings, onOpenSettings, notify }) {
     window.removeEventListener('pointermove', onDragMove);
   }
 
-  // ---- 层级 / 删除 ----
   function moveLayer(id, dir) {
     setItems((prev) => {
       const i = prev.findIndex((it) => it.id === id);
@@ -234,7 +402,7 @@ export default function MoodBoard({ settings, onOpenSettings, notify }) {
     }
   }
 
-  // ---- AI 实拍级排版：所有素材合成一张摄影级 flat-lay ----
+  // ---- AI 实拍级排版 ----
   async function aiFlatlay() {
     if (!settings.apiKey) {
       onOpenSettings();
@@ -269,7 +437,6 @@ export default function MoodBoard({ settings, onOpenSettings, notify }) {
     }
   }
 
-  /** 把标题字压到图上后下载（提案封面） */
   async function downloadFlatlay() {
     if (!flatlayUrl) return;
     const img = await new Promise((resolve, reject) => {
@@ -308,11 +475,11 @@ export default function MoodBoard({ settings, onOpenSettings, notify }) {
     }
     downloadDataUrl(
       await applyWatermark(canvas.toDataURL('image/png'), settings.watermark),
-      `moodboard-flatlay-${board.title || 'sail'}.png`
+      `moodboard-flatlay-${board.title || 'riccione'}.png`
     );
   }
 
-  // ---- 导出 PNG ----
+  // ---- 导出手动画板 PNG（含图例） ----
   async function exportPng() {
     if (!items.length) {
       notify?.({ type: 'warn', text: '先加几张材质 / 家具图片再导出' });
@@ -330,6 +497,8 @@ export default function MoodBoard({ settings, onOpenSettings, notify }) {
       ctx.fillStyle = bg.color;
       ctx.fillRect(0, 0, W, H);
 
+      let legendNo = 0;
+      const legendRows = [];
       for (const it of items) {
         const img = await new Promise((resolve, reject) => {
           const im = new Image();
@@ -349,18 +518,64 @@ export default function MoodBoard({ settings, onOpenSettings, notify }) {
         ctx.shadowOffsetY = 14;
         ctx.drawImage(img, -w / 2, -h / 2, w, h);
         ctx.shadowColor = 'transparent';
-        if (it.label) {
-          const fs = Math.max(22, W * 0.013);
-          ctx.font = `500 ${fs}px "DM Sans", "Noto Sans SC", sans-serif`;
-          const tw = ctx.measureText(it.label).width;
-          const pad = fs * 0.6;
-          const ly = h / 2 - fs - pad;
-          ctx.fillStyle = 'rgba(255,255,255,0.92)';
-          ctx.fillRect(-w / 2 + pad, ly - pad * 0.4, tw + pad * 1.2, fs * 1.6);
-          ctx.fillStyle = '#1A1614';
-          ctx.fillText(it.label, -w / 2 + pad * 1.6, ly + fs * 0.85);
-        }
         ctx.restore();
+
+        // 编号圆点（有名称的材质）
+        if (showLegend && (it.label || '').trim()) {
+          legendNo += 1;
+          legendRows.push({ no: legendNo, label: it.label.trim() });
+          const r = W * 0.011;
+          const dx = (it.x + 1.2) * s + r;
+          const dy = it.y * s + r + W * 0.004;
+          ctx.beginPath();
+          ctx.arc(dx, dy, r, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(26,22,20,0.85)';
+          ctx.fill();
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = `600 ${r * 1.1}px "DM Sans", sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(String(legendNo), dx, dy + r * 0.05);
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'alphabetic';
+        }
+      }
+
+      // 图例清单卡（右上）
+      if (showLegend && legendRows.length) {
+        const fs = W * 0.014;
+        const lh = fs * 1.7;
+        const pad = fs * 1.2;
+        ctx.font = `500 ${fs}px "DM Sans", "Noto Sans SC", sans-serif`;
+        const boxW = Math.min(
+          W * 0.34,
+          Math.max(...legendRows.map((r) => ctx.measureText(`${r.no}. ${r.label}`).width)) + pad * 2 + fs * 1.6
+        );
+        const boxH = legendRows.length * lh + pad * 1.6;
+        const bx = W - boxW - W * 0.025;
+        const by = W * 0.025;
+        ctx.fillStyle = 'rgba(255,255,255,0.92)';
+        ctx.beginPath();
+        ctx.roundRect(bx, by, boxW, boxH, fs);
+        ctx.fill();
+        legendRows.forEach((r, i) => {
+          const ry = by + pad + i * lh + fs * 0.4;
+          const cr = fs * 0.62;
+          ctx.beginPath();
+          ctx.arc(bx + pad + cr, ry, cr, 0, Math.PI * 2);
+          ctx.fillStyle = '#1A1614';
+          ctx.fill();
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = `600 ${cr * 1.1}px "DM Sans", sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(String(r.no), bx + pad + cr, ry + cr * 0.06);
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'alphabetic';
+          ctx.fillStyle = '#1A1614';
+          ctx.font = `500 ${fs}px "DM Sans", "Noto Sans SC", sans-serif`;
+          ctx.fillText(r.label, bx + pad + cr * 2 + fs * 0.5, ry + fs * 0.36);
+        });
       }
 
       // 标题区（左下）
@@ -385,183 +600,306 @@ export default function MoodBoard({ settings, onOpenSettings, notify }) {
 
       downloadDataUrl(
         await applyWatermark(canvas.toDataURL('image/png'), settings.watermark),
-        `moodboard-${board.title || 'sail'}.png`
+        `moodboard-${board.title || 'riccione'}.png`
       );
     } finally {
       setExporting(false);
     }
   }
 
-  const stageStyle = useMemo(
-    () => ({ background: bg.color, aspectRatio: `${ratio.ratio}` }),
-    [bg.color, ratio.ratio]
-  );
+  const stageStyle = useMemo(() => ({ background: bg.color, aspectRatio: `${ratio.ratio}` }), [bg.color, ratio.ratio]);
+  const filteredLib = libCat === 'all' ? library : library.filter((it) => it.cat === libCat);
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
-      {/* 左侧控制 */}
-      <div className="space-y-5 bg-sail-card border border-sail-line rounded-2xl p-5 h-fit lg:sticky lg:top-20">
-        <div>
-          <div className="text-xs font-semibold text-sail-faint mb-2">素材</div>
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            className="w-full h-24 rounded-xl border-2 border-dashed border-sail-line hover:border-sail-green/50 flex flex-col items-center justify-center gap-1 text-sail-faint"
-          >
-            <UploadCloud size={20} />
-            <span className="text-sm">添加图片（可多选）</span>
-            <span className="text-[11px]">材质小样、家具、地板、五金、灵感照片</span>
-          </button>
+    <div className="grid gap-6 lg:grid-cols-[340px_1fr]">
+      {/* 左侧：材质库 + 画板控制 */}
+      <div className="space-y-5 h-fit lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto thin-scroll">
+        {/* 材质库 */}
+        <div className="bg-sail-card border border-sail-line rounded-2xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-semibold">材质库</div>
+            <span className="text-[11px] text-sail-faint">点样片 = 加进画板</span>
+          </div>
+          <div className="flex flex-wrap gap-1">
+            <button
+              type="button"
+              onClick={() => setLibCat('all')}
+              className={`px-2 py-1 rounded-md text-[11px] border ${libCat === 'all' ? 'bg-sail-green text-white border-sail-green' : 'bg-white text-sail-muted border-sail-line'}`}
+            >
+              全部
+            </button>
+            {LIB_CATS.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setLibCat(c.id)}
+                className={`px-2 py-1 rounded-md text-[11px] border ${libCat === c.id ? 'bg-sail-green text-white border-sail-green' : 'bg-white text-sail-muted border-sail-line'}`}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+
+          {filteredLib.length > 0 && (
+            <div className="grid grid-cols-3 gap-2 max-h-64 overflow-y-auto thin-scroll pr-1">
+              {filteredLib.map((it) => (
+                <div key={it.id} className="group">
+                  <div className="relative rounded-lg overflow-hidden border border-sail-line">
+                    <img
+                      src={it.dataUrl}
+                      alt={it.name || '材质样片'}
+                      className="w-full h-16 object-cover cursor-pointer hover:opacity-85"
+                      onClick={() => addLibToBoard(it)}
+                      title="点击加进画板"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => deleteLibItem(it.id)}
+                      className="absolute top-1 right-1 p-0.5 rounded-full bg-sail-ink/70 text-white opacity-0 group-hover:opacity-100"
+                      title="从材质库删除"
+                    >
+                      <Trash2 size={10} />
+                    </button>
+                  </div>
+                  <input
+                    value={it.name}
+                    onChange={(e) => renameLibItem(it.id, e.target.value)}
+                    placeholder="名称/编号"
+                    className="mt-1 w-full rounded border border-sail-line px-1 py-0.5 text-[10px] focus:outline-none focus:border-sail-green"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => libFileRef.current?.click()}
+              className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg border border-dashed border-sail-line hover:border-sail-green/50 text-xs text-sail-faint"
+            >
+              <UploadCloud size={13} /> 上传材质
+            </button>
+          </div>
           <input
-            ref={fileRef}
+            ref={libFileRef}
             type="file"
             accept="image/*"
             multiple
             className="hidden"
             onChange={(e) => {
-              addFiles(e.target.files);
+              addLibraryFiles(e.target.files);
               e.target.value = '';
             }}
           />
-        </div>
-
-        <div>
-          <div className="text-xs font-semibold text-sail-faint mb-2">封面文字</div>
-          <input
-            value={board.title}
-            onChange={(e) => setBoard({ ...board, title: e.target.value })}
-            placeholder="项目名，如：湖景苑 12-3A"
-            className="w-full rounded-xl border border-sail-line px-3 py-2 text-sm mb-2 focus:outline-none focus:border-sail-green"
-          />
-          <input
-            value={board.subtitle}
-            onChange={(e) => setBoard({ ...board, subtitle: e.target.value })}
-            placeholder="副标题，如：Material Board · 奶油风"
-            className="w-full rounded-xl border border-sail-line px-3 py-2 text-sm focus:outline-none focus:border-sail-green"
-          />
-        </div>
-
-        <div>
-          <div className="text-xs font-semibold text-sail-faint mb-2">画幅 / 底色</div>
-          <div className="flex flex-wrap gap-1.5 mb-2">
-            {RATIOS.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => setBoard({ ...board, ratioId: r.id })}
-                className={`px-3 py-1.5 rounded-lg text-sm border ${
-                  board.ratioId === r.id
-                    ? 'bg-sail-green text-white border-sail-green'
-                    : 'bg-white text-sail-muted border-sail-line'
-                }`}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            {BGS.map((b) => (
-              <button
-                key={b.id}
-                type="button"
-                onClick={() => setBoard({ ...board, bgId: b.id })}
-                className={`w-8 h-8 rounded-full border-2 ${
-                  board.bgId === b.id ? 'border-sail-green' : 'border-sail-line'
-                }`}
-                style={{ background: b.color }}
-                title={b.id}
-              />
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <div className="text-xs font-semibold text-sail-faint mb-2">一键排版</div>
-          <button
-            type="button"
-            onClick={aiFlatlay}
-            disabled={flatlayBusy}
-            className="w-full mb-2 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-sail-gold/15 border border-sail-gold text-sm font-medium text-sail-ink hover:bg-sail-gold/25 disabled:opacity-60"
-            title="把所有素材交给 AI，合成一张摄影级俯拍材料板（真实厚度和影子）"
-          >
-            {flatlayBusy ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
-            AI 实拍级排版 ✨
-          </button>
-          {flatlayBusy && <div className="text-[11px] text-sail-faint mb-2 text-center">{flatlayNote}</div>}
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => setItems((prev) => gridLayout(prev, boardH))}
-              className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-sail-line text-sm text-sail-muted hover:bg-sail-tint"
-            >
-              <LayoutGrid size={15} /> 整齐网格
-            </button>
-            <button
-              type="button"
-              onClick={() => setItems((prev) => collageLayout(prev, boardH))}
-              className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-sail-line text-sm text-sail-muted hover:bg-sail-tint"
-            >
-              <LayoutGrid size={15} className="rotate-45" /> 杂志拼贴
-            </button>
-          </div>
-          <div className="text-[11px] text-sail-faint mt-1.5 leading-relaxed">
-            「AI 实拍级排版」= 参考图那种真实摄影效果；网格 / 拼贴 = 手动精确控制。
-          </div>
-        </div>
-
-        {selected && (
-          <div className="rounded-xl bg-sail-tint border border-sail-line p-3 space-y-2">
-            <div className="text-xs font-semibold text-sail-faint">选中的素材</div>
+          <div className="flex gap-1.5">
             <input
-              value={selected.label}
-              onChange={(e) => patchItem(selected.id, { label: e.target.value })}
-              placeholder="材质 / 名字，如：橡木饰面 EW-302"
-              className="w-full rounded-lg border border-sail-line px-3 py-1.5 text-sm focus:outline-none focus:border-sail-green"
+              value={genDesc}
+              onChange={(e) => setGenDesc(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && genSwatch()}
+              placeholder="AI 生成样片，如：深胡桃直纹木饰面"
+              className="flex-1 rounded-lg border border-sail-line px-2 py-1.5 text-xs focus:outline-none focus:border-sail-green"
             />
+            <button
+              type="button"
+              onClick={genSwatch}
+              disabled={genBusy || !genDesc.trim()}
+              className="px-2.5 py-1.5 rounded-lg bg-sail-gold/20 border border-sail-gold text-xs font-medium disabled:opacity-50"
+              title="AI 生成无缝材质样片并存入材质库"
+            >
+              {genBusy ? <Loader2 size={13} className="animate-spin" /> : <Wand2 size={13} />}
+            </button>
+          </div>
+        </div>
+
+        {/* 画板控制 */}
+        <div className="bg-sail-card border border-sail-line rounded-2xl p-4 space-y-4">
+          <div>
+            <div className="text-xs font-semibold text-sail-faint mb-1.5">画板</div>
             <div className="flex gap-1.5">
+              <select
+                value={activeId || ''}
+                onChange={(e) => switchBoard(e.target.value)}
+                className="flex-1 rounded-lg border border-sail-line px-2 py-1.5 text-sm bg-white focus:outline-none"
+              >
+                {boards.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.id === activeId ? boardName : b.name}
+                  </option>
+                ))}
+              </select>
+              <button type="button" onClick={newBoard} className="px-2 rounded-lg border border-sail-line text-sail-muted hover:bg-sail-tint" title="新建画板">
+                <Plus size={15} />
+              </button>
+              <button type="button" onClick={deleteBoard} className="px-2 rounded-lg border border-sail-line text-sail-faint hover:text-sail-danger hover:bg-sail-tint" title="删除当前画板">
+                <Trash2 size={14} />
+              </button>
+            </div>
+            <input
+              value={boardName}
+              onChange={(e) => {
+                setBoardName(e.target.value);
+                setBoards((prev) => prev.map((b) => (b.id === activeId ? { ...b, name: e.target.value } : b)));
+              }}
+              placeholder="画板名称，如：湖景苑 12-3A 主卧"
+              className="mt-1.5 w-full rounded-lg border border-sail-line px-2 py-1.5 text-xs focus:outline-none focus:border-sail-green"
+            />
+          </div>
+
+          <div>
+            <div className="text-xs font-semibold text-sail-faint mb-1.5">封面文字</div>
+            <input
+              value={board.title}
+              onChange={(e) => setBoard({ ...board, title: e.target.value })}
+              placeholder="项目名，如：湖景苑 12-3A"
+              className="w-full rounded-xl border border-sail-line px-3 py-2 text-sm mb-1.5 focus:outline-none focus:border-sail-green"
+            />
+            <input
+              value={board.subtitle}
+              onChange={(e) => setBoard({ ...board, subtitle: e.target.value })}
+              placeholder="副标题，如：Material Board · 奶油风"
+              className="w-full rounded-xl border border-sail-line px-3 py-2 text-sm focus:outline-none focus:border-sail-green"
+            />
+          </div>
+
+          <div>
+            <div className="text-xs font-semibold text-sail-faint mb-1.5">画幅 / 底色</div>
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {RATIOS.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => setBoard({ ...board, ratioId: r.id })}
+                  className={`px-3 py-1.5 rounded-lg text-sm border ${board.ratioId === r.id ? 'bg-sail-green text-white border-sail-green' : 'bg-white text-sail-muted border-sail-line'}`}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              {BGS.map((b) => (
+                <button
+                  key={b.id}
+                  type="button"
+                  onClick={() => setBoard({ ...board, bgId: b.id })}
+                  className={`w-8 h-8 rounded-full border-2 ${board.bgId === b.id ? 'border-sail-green' : 'border-sail-line'}`}
+                  style={{ background: b.color }}
+                  title={b.id}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div className="text-xs font-semibold text-sail-faint mb-1.5">一键排版</div>
+            <button
+              type="button"
+              onClick={aiFlatlay}
+              disabled={flatlayBusy}
+              className="w-full mb-2 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-sail-gold/15 border border-sail-gold text-sm font-medium text-sail-ink hover:bg-sail-gold/25 disabled:opacity-60"
+            >
+              {flatlayBusy ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
+              AI 实拍级排版 ✨
+            </button>
+            {flatlayBusy && <div className="text-[11px] text-sail-faint mb-2 text-center">{flatlayNote}</div>}
+            <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => cutout(selected.id)}
-                disabled={selected.busy}
-                className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg border border-sail-line text-xs text-sail-muted hover:bg-white disabled:opacity-50"
-                title="AI 把背景换成干净白底"
+                onClick={() => setItems((prev) => gridLayout(prev, boardH))}
+                className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-sail-line text-sm text-sail-muted hover:bg-sail-tint"
               >
-                {selected.busy ? <Loader2 size={13} className="animate-spin" /> : <Scissors size={13} />}
-                AI 抠图
-              </button>
-              <button type="button" onClick={() => moveLayer(selected.id, 1)} className="px-2 py-1.5 rounded-lg border border-sail-line text-sail-muted hover:bg-white" title="上移一层">
-                <ChevronUp size={13} />
-              </button>
-              <button type="button" onClick={() => moveLayer(selected.id, -1)} className="px-2 py-1.5 rounded-lg border border-sail-line text-sail-muted hover:bg-white" title="下移一层">
-                <ChevronDown size={13} />
+                <LayoutGrid size={15} /> 整齐网格
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setItems((prev) => prev.filter((it) => it.id !== selected.id));
-                  setSelectedId(null);
-                }}
-                className="px-2 py-1.5 rounded-lg border border-sail-line text-sail-muted hover:text-sail-danger hover:bg-white"
-                title="删除"
+                onClick={() => setItems((prev) => collageLayout(prev, boardH))}
+                className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-sail-line text-sm text-sail-muted hover:bg-sail-tint"
               >
-                <Trash2 size={13} />
+                <LayoutGrid size={15} className="rotate-45" /> 杂志拼贴
               </button>
             </div>
           </div>
-        )}
 
-        <button
-          type="button"
-          onClick={exportPng}
-          disabled={exporting}
-          className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-sail-green-deep text-white font-semibold hover:bg-sail-green disabled:opacity-60"
-        >
-          {exporting ? <Loader2 size={17} className="animate-spin" /> : <Download size={17} />}
-          导出高清 PNG（提案封面）
-        </button>
+          {selected && (
+            <div className="rounded-xl bg-sail-tint border border-sail-line p-3 space-y-2">
+              <div className="text-xs font-semibold text-sail-faint">选中的素材</div>
+              <input
+                value={selected.label}
+                onChange={(e) => patchItem(selected.id, { label: e.target.value })}
+                placeholder="材质 / 名字，如：橡木饰面 EW-302"
+                className="w-full rounded-lg border border-sail-line px-3 py-1.5 text-sm focus:outline-none focus:border-sail-green"
+              />
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => cutout(selected.id)}
+                  disabled={selected.busy}
+                  className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg border border-sail-line text-xs text-sail-muted hover:bg-white disabled:opacity-50"
+                >
+                  {selected.busy ? <Loader2 size={13} className="animate-spin" /> : <Scissors size={13} />}
+                  AI 抠图
+                </button>
+                <button type="button" onClick={() => moveLayer(selected.id, 1)} className="px-2 py-1.5 rounded-lg border border-sail-line text-sail-muted hover:bg-white" title="上移一层">
+                  <ChevronUp size={13} />
+                </button>
+                <button type="button" onClick={() => moveLayer(selected.id, -1)} className="px-2 py-1.5 rounded-lg border border-sail-line text-sail-muted hover:bg-white" title="下移一层">
+                  <ChevronDown size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setItems((prev) => prev.filter((it) => it.id !== selected.id));
+                    setSelectedId(null);
+                  }}
+                  className="px-2 py-1.5 rounded-lg border border-sail-line text-sail-muted hover:text-sail-danger hover:bg-white"
+                  title="删除"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            </div>
+          )}
+
+          <label className="flex items-center gap-2 text-xs text-sail-muted cursor-pointer">
+            <input type="checkbox" checked={showLegend} onChange={(e) => setShowLegend(e.target.checked)} className="w-4 h-4 accent-[#3D5A4A]" />
+            <ListOrdered size={13} />
+            显示编号 + 材质图例清单（有名称的素材）
+          </label>
+
+          <button
+            type="button"
+            onClick={exportPng}
+            disabled={exporting}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-sail-green-deep text-white font-semibold hover:bg-sail-green disabled:opacity-60"
+          >
+            {exporting ? <Loader2 size={17} className="animate-spin" /> : <Download size={17} />}
+            导出高清 PNG（含图例）
+          </button>
+
+          <div>
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="w-full py-2 rounded-xl border border-dashed border-sail-line hover:border-sail-green/50 text-xs text-sail-faint"
+            >
+              或者直接上传图片到画板（不进材质库）
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                addFiles(e.target.files);
+                e.target.value = '';
+              }}
+            />
+          </div>
+        </div>
       </div>
 
-      {/* 画板 */}
+      {/* 右侧：画板 */}
       <div>
         <div
           ref={stageRef}
@@ -577,46 +915,52 @@ export default function MoodBoard({ settings, onOpenSettings, notify }) {
           {!items.length && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-sail-faint pointer-events-none">
               <UploadCloud size={32} strokeWidth={1.2} />
-              <div className="text-sm">把材质、家具图片拖进来，或用左边「添加图片」</div>
-              <div className="text-xs">拖动摆位 · 右下角拉大小 · 一键排版 · AI 抠图 · 导出封面</div>
+              <div className="text-sm">从左侧材质库点样片加进来，或直接拖图片到这里</div>
+              <div className="text-xs">拖动摆位 · 右下角拉大小 · 命名后自动进图例清单</div>
             </div>
           )}
 
-          {items.map((it) => {
-            const sel = it.id === selectedId;
-            return (
-              <div
-                key={it.id}
-                onPointerDown={(e) => startDrag(e, it.id, 'move')}
-                className={`absolute cursor-grab active:cursor-grabbing ${sel ? 'ring-2 ring-sail-green' : ''}`}
-                style={{
-                  left: `${it.x}%`,
-                  top: `${(it.y / boardH) * 100}%`,
-                  width: `${it.w}%`,
-                  transform: `rotate(${it.rot}deg)`,
-                  filter: 'drop-shadow(0 6px 14px rgba(26,22,20,0.18))',
-                }}
-              >
-                <img src={it.dataUrl} alt={it.label || '素材'} className="w-full block pointer-events-none" draggable={false} />
-                {it.label && (
-                  <span className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 bg-white/90 text-sail-ink text-[10px] font-medium rounded">
-                    {it.label}
-                  </span>
-                )}
-                {it.busy && (
-                  <span className="absolute inset-0 bg-white/60 flex items-center justify-center">
-                    <Loader2 size={18} className="animate-spin text-sail-green" />
-                  </span>
-                )}
-                {sel && (
-                  <span
-                    onPointerDown={(e) => startDrag(e, it.id, 'resize')}
-                    className="absolute -right-1.5 -bottom-1.5 w-4 h-4 rounded-full bg-sail-green border-2 border-white cursor-nwse-resize"
-                  />
-                )}
-              </div>
-            );
-          })}
+          {(() => {
+            let no = 0;
+            return items.map((it) => {
+              const sel = it.id === selectedId;
+              const labeled = showLegend && (it.label || '').trim();
+              if (labeled) no += 1;
+              const thisNo = no;
+              return (
+                <div
+                  key={it.id}
+                  onPointerDown={(e) => startDrag(e, it.id, 'move')}
+                  className={`absolute cursor-grab active:cursor-grabbing ${sel ? 'ring-2 ring-sail-green' : ''}`}
+                  style={{
+                    left: `${it.x}%`,
+                    top: `${(it.y / boardH) * 100}%`,
+                    width: `${it.w}%`,
+                    transform: `rotate(${it.rot}deg)`,
+                    filter: 'drop-shadow(0 6px 14px rgba(26,22,20,0.18))',
+                  }}
+                >
+                  <img src={it.dataUrl} alt={it.label || '素材'} className="w-full block pointer-events-none" draggable={false} />
+                  {labeled && (
+                    <span className="absolute top-1 left-1 w-5 h-5 rounded-full bg-sail-ink/85 text-white text-[10px] font-semibold flex items-center justify-center">
+                      {thisNo}
+                    </span>
+                  )}
+                  {it.busy && (
+                    <span className="absolute inset-0 bg-white/60 flex items-center justify-center">
+                      <Loader2 size={18} className="animate-spin text-sail-green" />
+                    </span>
+                  )}
+                  {sel && (
+                    <span
+                      onPointerDown={(e) => startDrag(e, it.id, 'resize')}
+                      className="absolute -right-1.5 -bottom-1.5 w-4 h-4 rounded-full bg-sail-green border-2 border-white cursor-nwse-resize"
+                    />
+                  )}
+                </div>
+              );
+            });
+          })()}
 
           {(board.title || board.subtitle) && (
             <div className="absolute left-[4.5%] bottom-[4.5%] pointer-events-none" style={{ color: bg.ink }}>
@@ -628,8 +972,26 @@ export default function MoodBoard({ settings, onOpenSettings, notify }) {
             </div>
           )}
         </div>
+
+        {/* 屏幕上的图例清单 */}
+        {showLegend && legendItems.length > 0 && (
+          <div className="mt-3 bg-sail-card border border-sail-line rounded-2xl p-4">
+            <div className="text-xs font-semibold text-sail-faint mb-2">材质图例</div>
+            <div className="grid gap-1.5 sm:grid-cols-2">
+              {legendItems.map((it, i) => (
+                <div key={it.id} className="flex items-center gap-2 text-sm text-sail-muted">
+                  <span className="w-5 h-5 rounded-full bg-sail-ink text-white text-[10px] font-semibold flex items-center justify-center shrink-0">
+                    {i + 1}
+                  </span>
+                  <span className="truncate">{it.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="text-[11px] text-sail-faint mt-2 text-center">
-          画板会自动保存在本机 · 导出为 2400px 高清 PNG，可直接放进 proposal
+          画板自动保存本机 · 导出 2400px 高清 PNG（含编号图例 + logo 水印）
         </div>
 
         {(flatlayUrl || flatlayBusy) && (

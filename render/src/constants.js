@@ -399,6 +399,27 @@ export const ADVISOR_PROMPT =
   '3. 【优先改的前三件事】按影响排序\n' +
   '做得好的地方也要点出 1–2 条（客户需要信心）。全文控制在 500 字以内，说重点。';
 
+// ---------------------------------------------------------------------------
+// Mood Board 材质库
+// ---------------------------------------------------------------------------
+
+export const LIB_CATS = [
+  { id: 'wood', label: '木饰面' },
+  { id: 'stone', label: '石材瓷砖' },
+  { id: 'fabric', label: '布艺皮革' },
+  { id: 'metal', label: '金属五金' },
+  { id: 'paint', label: '涂料墙面' },
+  { id: 'other', label: '其他' },
+];
+
+// AI 生成无缝材质样片
+export const SWATCH_PROMPT =
+  'Generate ONE flat, seamless, top-down close-up material swatch texture photograph: {DESC}. ' +
+  'The material must fill the ENTIRE frame edge to edge — no objects, no props, no perspective, ' +
+  'no borders, no text. Even diffuse studio lighting, photographic texture fidelity ' +
+  '(visible grain / weave / veining as appropriate), true-to-life color. ' +
+  'It should look like a real physical material sample photographed straight-on.';
+
 export const SETTINGS_KEY = 'sailrender.settings.v1';
 
 export const DEFAULT_SETTINGS = {
