@@ -58,7 +58,13 @@ export async function testFalKey(falKey) {
     throw new Error('测试需要在正式部署的网址上进行（本地开发模式没有代理接口）。');
   }
   if (res.status === 401 || res.status === 403) {
-    throw new Error(`key 无效（HTTP ${res.status}）—— 确认是从 fal.ai/dashboard/keys 创建并完整复制的。`);
+    const data = await res.json().catch(() => null);
+    const detail = data?.detail || data?.error || data?.raw || '';
+    const detailText = detail ? `fal 说：“${String(typeof detail === 'string' ? detail : JSON.stringify(detail)).slice(0, 120)}”。` : '';
+    throw new Error(
+      `key 被拒（HTTP ${res.status}）。${detailText}检查三点：① key 要完整 —— fal 的 key 中间有个冒号「:」，两段都要复制；` +
+      '② 在 fal.ai/dashboard/keys 重新 Create key（scope 选 API）换一把新的试；③ 到 fal.ai/dashboard/billing 看免费额度是否还在。'
+    );
   }
   if (res.ok || res.status === 422 || res.status === 400) return true; // 校验错 = 认证已通过
   const data = await res.json().catch(() => null);
