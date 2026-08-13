@@ -360,4 +360,5 @@ export const DEFAULT_SETTINGS = {
   apiKey: '',
   model: 'gemini-2.5-flash-image',
   baseUrl: 'https://generativelanguage.googleapis.com',
+  falKey: '', // 「极致真实」二次精炼引擎（fal.ai），可选
 };

@@ -8,6 +8,7 @@ import SettingsModal from './components/SettingsModal.jsx';
 import { MODES, ENHANCE_PROMPT } from './constants.js';
 import { buildPrompt } from './prompt.js';
 import { loadSettings, saveSettings, generateImage } from './services/gemini.js';
+import { refineImage } from './services/fal.js';
 import { compressForStorage, makeThumb, dataUrlToInput } from './services/images.js';
 import { listHistory, saveRecord, updateRecord, deleteRecord } from './services/history.js';
 
@@ -151,6 +152,27 @@ export default function App() {
     }
   }
 
+  /** 「极致真实」二次精炼：fal.ai 扩散精炼 + 2x 放大，洗掉 AI 光滑感 */
+  async function handleRefine(slotId) {
+    const slot = slots.find((s) => s.id === slotId);
+    if (!slot?.dataUrl) return;
+    if (!settings.falKey) {
+      setShowSettings(true);
+      setNotice({ type: 'warn', text: '先在设置里配置 fal.ai key（📸 极致真实引擎那一栏）' });
+      return;
+    }
+    const prevUrl = slot.dataUrl;
+    updateSlot(slotId, { status: 'loading', note: '📸 极致真实精炼中…' });
+    try {
+      const raw = await refineImage(settings.falKey, prevUrl, (text) => updateSlot(slotId, { note: `📸 ${text}` }));
+      updateSlot(slotId, { status: 'done', dataUrl: raw, note: null });
+      setNotice({ type: 'ok', text: '精炼完成 — 已放大 2 倍并重铺照片级纹理' });
+    } catch (e) {
+      updateSlot(slotId, { status: 'done', dataUrl: prevUrl, note: null });
+      setNotice({ type: 'error', text: `精炼失败：${e.message}` });
+    }
+  }
+
   /** 把某张结果图设为新的输入，继续迭代 */
   function handleIterate(dataUrl) {
     setImage(dataUrlToInput(dataUrl));
@@ -235,6 +257,7 @@ export default function App() {
                 inputImage={mode.needsImage ? image : null}
                 onIterate={handleIterate}
                 onEnhance={handleEnhance}
+                onRefine={handleRefine}
                 busy={busy}
               />
             </div>

@@ -23,6 +23,6 @@
     }
   ],
   "rewrites": [
-    { "source": "/((?!assets|icon\\.svg|robots\\.txt).*)", "destination": "/index.html" }
+    { "source": "/((?!api/|assets|icon\\.svg|robots\\.txt).*)", "destination": "/index.html" }
   ]
 }
