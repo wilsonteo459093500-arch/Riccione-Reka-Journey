@@ -21,7 +21,9 @@ function Slot({ slot, inputImage, onIterate, onOpen }) {
   if (slot.status === 'loading') {
     return (
       <div className="aspect-[4/3] rounded-2xl shimmer border border-sail-line flex items-center justify-center">
-        <span className="text-xs text-sail-faint bg-white/70 px-3 py-1 rounded-full">AI 渲染中…</span>
+        <span className="text-xs text-sail-faint bg-white/70 px-3 py-1 rounded-full max-w-[85%] text-center">
+          {slot.note || 'AI 渲染中…'}
+        </span>
       </div>
     );
   }
