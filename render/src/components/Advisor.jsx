@@ -1,6 +1,6 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { UploadCloud, X, Loader2, ClipboardCheck, Copy } from 'lucide-react';
-import { ROOM_TYPES, ADVISOR_FOCUS, ADVISOR_MODEL, ADVISOR_PROMPT } from '../constants.js';
+import { ROOM_TYPES, ADVISOR_FOCUS, ADVISOR_PROMPT } from '../constants.js';
 import { analyzeImage } from '../services/gemini.js';
 import { prepareInputImage } from '../services/images.js';
 
@@ -83,7 +83,7 @@ export default function Advisor({ settings, onOpenSettings, notify, image, setIm
       const prompt =
         `${ADVISOR_PROMPT}\n\n空间类型：${room?.label || '未指定'}。\n本次审查侧重：${focus.prompt}` +
         (question.trim() ? `\n客户/设计师特别想知道：${question.trim()}` : '');
-      const text = await analyzeImage(settings, ADVISOR_MODEL, prompt, image);
+      const text = await analyzeImage(settings, prompt, image);
       setReview(text);
     } catch (e) {
       notify?.({ type: 'error', text: `点评失败：${e.message}` });
