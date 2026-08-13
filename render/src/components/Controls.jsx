@@ -74,7 +74,7 @@ export default function Controls(props) {
     [acceptFile]
   );
 
-  const showFidelity = mode.needsImage && modeId !== 'sketch' && modeId !== 'edit';
+  const showFidelity = mode.needsImage && !mode.skipFidelity && modeId !== 'sketch' && modeId !== 'edit';
 
   return (
     <div className="space-y-5 bg-sail-card border border-sail-line rounded-2xl p-5 h-fit lg:sticky lg:top-20" onPaste={onPaste}>
@@ -150,25 +150,29 @@ export default function Controls(props) {
         </Section>
       )}
 
-      <Section title="空间类型">
-        <div className="flex flex-wrap gap-1.5">
-          {ROOM_TYPES.map((r) => (
-            <Chip key={r.id} active={roomId === r.id} onClick={() => setRoomId(r.id)}>
-              {r.label}
-            </Chip>
-          ))}
-        </div>
-      </Section>
+      {!mode.skipRoom && (
+        <Section title="空间类型">
+          <div className="flex flex-wrap gap-1.5">
+            {ROOM_TYPES.map((r) => (
+              <Chip key={r.id} active={roomId === r.id} onClick={() => setRoomId(r.id)}>
+                {r.label}
+              </Chip>
+            ))}
+          </div>
+        </Section>
+      )}
 
-      <Section title="目标风格">
-        <div className="flex flex-wrap gap-1.5">
-          {STYLES.map((s) => (
-            <Chip key={s.id} active={styleId === s.id} onClick={() => setStyleId(s.id)}>
-              {s.label}
-            </Chip>
-          ))}
-        </div>
-      </Section>
+      {!mode.skipStyle && (
+        <Section title="目标风格">
+          <div className="flex flex-wrap gap-1.5">
+            {STYLES.map((s) => (
+              <Chip key={s.id} active={styleId === s.id} onClick={() => setStyleId(s.id)}>
+                {s.label}
+              </Chip>
+            ))}
+          </div>
+        </Section>
+      )}
 
       <Section title="灯光氛围">
         <div className="flex flex-wrap gap-1.5">
