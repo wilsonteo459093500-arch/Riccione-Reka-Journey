@@ -23,11 +23,11 @@ export function buildPrompt({ modeId, roomId, styleId, lightingId, fidelityId, e
     mode.prompt,
   ];
 
-  if (room) {
+  if (room && !mode.skipRoom) {
     lines.push(`The space is a ${room.en}; the design must suit how this room type is actually used.`);
   }
 
-  if (style && style.id !== 'custom' && style.prompt) {
+  if (!mode.skipStyle && style && style.id !== 'custom' && style.prompt) {
     lines.push(`Target style — ${style.en}: ${style.prompt}.`);
   }
 
@@ -37,7 +37,14 @@ export function buildPrompt({ modeId, roomId, styleId, lightingId, fidelityId, e
 
   // 结构保真只对有图片输入、且非草图模式以外的模式有意义；
   // 草图模式本身已要求严格跟随线稿，指令修改模式已要求只改指定内容。
-  if (mode.needsImage && mode.id !== 'sketch' && mode.id !== 'edit' && fidelity && fidelity.prompt) {
+  if (
+    mode.needsImage &&
+    !mode.skipFidelity &&
+    mode.id !== 'sketch' &&
+    mode.id !== 'edit' &&
+    fidelity &&
+    fidelity.prompt
+  ) {
     lines.push(fidelity.prompt);
   }
 

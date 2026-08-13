@@ -15,6 +15,31 @@ export const MODES = [
       'replace furniture, finishes, lighting fixtures and decor to match the target style.',
   },
   {
+    id: 'polish',
+    label: '效果图精修',
+    hint: '设计不动，只加强灯光氛围和细节',
+    needsImage: true,
+    skipRoom: true,
+    skipStyle: true,
+    skipFidelity: true,
+    prompt:
+      'The source image is an interior design rendering that must be POLISHED, not redesigned. ' +
+      'ABSOLUTE CONSTRAINT — change NOTHING about the design: keep the room layout, architecture, ' +
+      'camera angle and framing, every piece of furniture and its exact position, the cabinetry and ' +
+      'joinery design, all wall / floor / ceiling materials and the entire color scheme exactly as in the source. ' +
+      'Improve ONLY these three things: ' +
+      '(1) LIGHTING ATMOSPHERE — rebuild the lighting as a realistic layered scheme: cove and recessed ' +
+      'lights softly glowing, table and floor lamps switched on with warm halos, natural window light with ' +
+      'soft believable falloff, accurate contact shadows and ambient occlusion under and around furniture, ' +
+      'gentle light gradients across walls and ceilings; ' +
+      '(2) DETAIL REFINEMENT — enrich the micro-textures of existing surfaces: wood grain on cabinetry doors ' +
+      'and wall panels, fabric weave and natural wrinkles on bedding and upholstery, plaster and paint texture ' +
+      'on walls, stone veining; make the existing decorative objects (vases, branches, books, ceramics, artwork, ' +
+      'rugs) look convincingly real and tactile; ' +
+      '(3) PHOTOGRAPHIC REALISM — natural white balance, high dynamic range, subtle real-world imperfections. ' +
+      'The result must look like a professional photograph of the EXACT same room.',
+  },
+  {
     id: 'empty',
     label: '毛坯 / 空房出图',
     hint: '毛坯或空房照片，一键全屋布置',
