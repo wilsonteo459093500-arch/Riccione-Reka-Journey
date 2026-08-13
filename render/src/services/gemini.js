@@ -77,12 +77,13 @@ export async function testConnection(settings) {
 export async function generateImage(settings, prompt, image, aspectRatio, onWait) {
   if (!settings.apiKey) throw new Error('还没有配置 API key，点右上角设置。');
 
-  const parts = [];
-  if (image) parts.push({ inline_data: { mime_type: image.mimeType, data: image.base64 } });
+  // image 可以是单张 { mimeType, base64 }，也可以是多张数组（如 flat-lay 合成）
+  const images = Array.isArray(image) ? image : image ? [image] : [];
+  const parts = images.map((img) => ({ inline_data: { mime_type: img.mimeType, data: img.base64 } }));
   parts.push({ text: prompt });
 
   const generationConfig = { responseModalities: ['TEXT', 'IMAGE'] };
-  if (!image && aspectRatio) {
+  if (aspectRatio) {
     generationConfig.imageConfig = { aspectRatio };
   }
 
