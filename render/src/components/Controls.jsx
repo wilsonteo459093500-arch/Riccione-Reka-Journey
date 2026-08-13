@@ -289,7 +289,7 @@ export default function Controls(props) {
 
       <Section
         title="生成张数"
-        right={<span className="text-[11px] text-sail-faint">每张约 US$0.04 · 用自己的 key</span>}
+        right={<span className="text-[11px] text-sail-faint">2K 高清 · 约 US$0.13/张</span>}
       >
         <div className="flex gap-1.5">
           {VARIATION_COUNTS.map((n) => (
