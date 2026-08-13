@@ -66,18 +66,26 @@ export default function App() {
     setSlots((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
   }
 
-  async function handleGenerate() {
+  async function handleGenerate(maybeOverrides) {
+    // 支持带参调用（如顾问「一键修改」）；onClick 事件对象会被忽略
+    const o =
+      maybeOverrides && (maybeOverrides.modeId || maybeOverrides.image || maybeOverrides.extra) ? maybeOverrides : {};
+    const gModeId = o.modeId || modeId;
+    const gImage = o.image !== undefined ? o.image : image;
+    const gExtra = o.extra !== undefined ? o.extra : extra;
+    const gMode = MODES.find((m) => m.id === gModeId) || MODES[0];
+
     if (busy) return;
     if (!settings.apiKey) {
       setShowSettings(true);
       setNotice({ type: 'warn', text: '先配置 API key（免费申请，1 分钟搞定）' });
       return;
     }
-    if (mode.needsImage && !image) {
+    if (gMode.needsImage && !gImage) {
       setNotice({ type: 'warn', text: '这个模式需要先上传一张照片或草图' });
       return;
     }
-    if (mode.needsInstruction && !extra.trim()) {
+    if (gMode.needsInstruction && !gExtra.trim()) {
       setNotice({ type: 'warn', text: '指令修改模式需要写清楚要改什么，例如：把电视墙换成岩板' });
       return;
     }
@@ -87,14 +95,14 @@ export default function App() {
     setBusy(true);
     resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-    const inputImage = mode.needsImage ? image : null;
-    const useRef = !!(inputImage && refImage && !mode.needsInstruction);
-    const useSwatches = inputImage && !mode.needsInstruction ? swatches : [];
+    const inputImage = gMode.needsImage ? gImage : null;
+    const useRef = !!(inputImage && refImage && !gMode.needsInstruction);
+    const useSwatches = inputImage && !gMode.needsInstruction ? swatches : [];
     const modelInput = inputImage
       ? [inputImage, ...(useRef ? [refImage] : []), ...useSwatches]
       : inputImage;
     const params = {
-      modeId,
+      modeId: gModeId,
       roomId,
       styleId,
       lightingId,
@@ -102,7 +110,7 @@ export default function App() {
       polishScopeId,
       hasRef: useRef,
       swatchLabels: useSwatches.map((s) => s.label || ''),
-      extra,
+      extra: gExtra,
     };
 
     const tasks = newSlots.map(async (slot, i) => {
@@ -110,13 +118,13 @@ export default function App() {
       if (i > 0) await new Promise((r) => setTimeout(r, i * 2500));
       const prompt = buildPrompt({ ...params, variationIndex: i });
       try {
-        const raw = await generateImage(settings, prompt, modelInput, mode.needsImage ? null : aspect, (waitSec, attempt) =>
+        const raw = await generateImage(settings, prompt, modelInput, gMode.needsImage ? null : aspect, (waitSec, attempt) =>
           updateSlot(slot.id, { note: `被限流，${waitSec} 秒后自动重试（第 ${attempt}/3 次）…` })
         );
         let dataUrl = await compressForStorage(raw);
 
         // 双通道：非精修模式自动追加一道真实感精修 pass，对齐精修模式的出图水准
-        if (autoPolish && ['sketch', 'restyle', 'empty'].includes(modeId)) {
+        if (autoPolish && ['sketch', 'restyle', 'empty'].includes(gModeId)) {
           updateSlot(slot.id, { note: '第 2 道 · 真实感精修中…' });
           try {
             const polished = await generateImage(settings, ENHANCE_PROMPT, dataUrlToInput(dataUrl), null, (waitSec, attempt) =>
@@ -144,10 +152,10 @@ export default function App() {
       const record = {
         id: uid(),
         ts: Date.now(),
-        modeId,
+        modeId: gModeId,
         roomId,
         styleId,
-        extra: extra.trim(),
+        extra: gExtra.trim(),
         inputThumb: inputImage ? await makeThumb(inputImage.dataUrl) : null,
         inputFull: inputImage ? inputImage.dataUrl : null,
         outputs,
@@ -203,6 +211,19 @@ export default function App() {
       updateSlot(slotId, { status: 'done', dataUrl: prevUrl, note: null });
       setNotice({ type: 'error', text: `精炼失败：${e.message}` });
     }
+  }
+
+  /** 顾问「一键修改」：把被点评的图 + 勾选的建议直接送进指令修改模式生成 */
+  function handleApplyFix(imageInput, suggestions) {
+    const instruction =
+      '按以下设计顾问的修改建议调整这张图，只改建议提到的内容，其余一切保持不变：\n' +
+      suggestions.map((s, i) => `${i + 1}. ${s}`).join('\n');
+    setView('render');
+    setModeId('edit');
+    setImage(imageInput);
+    setExtra(instruction);
+    setNotice({ type: 'ok', text: '正在按建议修改效果图…' });
+    handleGenerate({ modeId: 'edit', image: imageInput, extra: instruction });
   }
 
   /** 把结果图送去「设计顾问」点评 */
@@ -314,6 +335,7 @@ export default function App() {
             notify={setNotice}
             image={advisorImage}
             setImage={setAdvisorImage}
+            onApplyFix={handleApplyFix}
           />
         ) : (
           <MoodBoard settings={settings} onOpenSettings={() => setShowSettings(true)} notify={setNotice} />
