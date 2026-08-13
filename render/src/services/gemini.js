@@ -56,6 +56,46 @@ function parseRetryDelaySeconds(data) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * 图像理解 / 文字分析（设计顾问审图用）。
+ * @param {object} settings { apiKey, baseUrl }
+ * @param {string} model    文字模型 id（如 gemini-2.5-flash）
+ * @param {string} prompt   分析指令
+ * @param {object} image    { mimeType, base64 }
+ * @returns {Promise<string>} 文字点评
+ */
+export async function analyzeImage(settings, model, prompt, image) {
+  if (!settings.apiKey) throw new Error('还没有配置 API key，点右上角设置。');
+  const url = endpoint(settings, `/v1beta/models/${model}:generateContent?key=${encodeURIComponent(settings.apiKey)}`);
+  const parts = [{ inline_data: { mime_type: image.mimeType, data: image.base64 } }, { text: prompt }];
+
+  let res = null;
+  let data = null;
+  for (let attempt = 0; ; attempt++) {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ role: 'user', parts }] }),
+    });
+    try {
+      data = await res.json();
+    } catch {
+      data = null;
+    }
+    const retryable = res.status === 429 || res.status >= 500;
+    if (res.ok || !retryable || attempt >= 2) break;
+    await sleep((parseRetryDelaySeconds(data) ?? 10 * 2 ** attempt) * 1000);
+  }
+  if (!res.ok) throw new Error(friendlyError(res.status, data?.error?.message));
+
+  const text = (data?.candidates?.[0]?.content?.parts || [])
+    .map((p) => p.text || '')
+    .join('')
+    .trim();
+  if (!text) throw new Error('模型没有返回点评，请重试。');
+  return text;
+}
+
 /** 测试 key / 模型是否可用 */
 export async function testConnection(settings) {
   const url = endpoint(settings, `/v1beta/models/${settings.model}?key=${encodeURIComponent(settings.apiKey)}`);

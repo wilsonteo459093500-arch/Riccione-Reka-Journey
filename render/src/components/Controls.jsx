@@ -43,7 +43,7 @@ function Chip({ active, onClick, children, title }) {
 export default function Controls(props) {
   const {
     mode, modeId, setModeId, image, setImage,
-    refImage, setRefImage, polishScopeId, setPolishScopeId,
+    refImage, setRefImage, swatches, setSwatches, polishScopeId, setPolishScopeId,
     roomId, setRoomId, styleId, setStyleId,
     lightingId, setLightingId, fidelityId, setFidelityId,
     aspect, setAspect, extra, setExtra, count, setCount,
@@ -53,6 +53,7 @@ export default function Controls(props) {
 
   const fileRef = useRef(null);
   const refFileRef = useRef(null);
+  const swatchFileRef = useRef(null);
   const [dragOver, setDragOver] = useState(false);
   const [reading, setReading] = useState(false);
 
@@ -75,6 +76,17 @@ export default function Controls(props) {
       setRefImage(await prepareInputImage(file));
     },
     [setRefImage]
+  );
+
+  const acceptSwatchFiles = useCallback(
+    async (fileList) => {
+      const files = [...(fileList || [])].filter((f) => f.type.startsWith('image/'));
+      for (const file of files) {
+        const img = await prepareInputImage(file);
+        setSwatches((prev) => (prev.length >= 3 ? prev : [...prev, { ...img, label: '' }]));
+      }
+    },
+    [setSwatches]
   );
 
   const onPaste = useCallback(
@@ -233,6 +245,61 @@ export default function Controls(props) {
             className="hidden"
             onChange={(e) => {
               acceptRefFile(e.target.files?.[0]);
+              e.target.value = '';
+            }}
+          />
+        </Section>
+      )}
+
+      {mode.needsImage && !mode.needsInstruction && (
+        <Section
+          title="材质色板（确保颜色一致，≤3 张）"
+          right={<span className="text-[11px] text-sail-faint">锁死柜体饰面颜色</span>}
+        >
+          {swatches.length > 0 && (
+            <div className="grid grid-cols-3 gap-2 mb-2">
+              {swatches.map((s, i) => (
+                <div key={i} className="space-y-1">
+                  <div className="relative rounded-lg overflow-hidden border border-sail-line">
+                    <img src={s.dataUrl} alt={`色板 ${i + 1}`} className="w-full h-16 object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setSwatches((prev) => prev.filter((_, j) => j !== i))}
+                      className="absolute top-1 right-1 p-0.5 rounded-full bg-sail-ink/70 text-white hover:bg-sail-ink"
+                      title="移除色板"
+                    >
+                      <X size={11} />
+                    </button>
+                  </div>
+                  <input
+                    value={s.label}
+                    onChange={(e) =>
+                      setSwatches((prev) => prev.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))
+                    }
+                    placeholder={`部位，如：柜体饰面`}
+                    className="w-full rounded-md border border-sail-line px-1.5 py-1 text-[11px] focus:outline-none focus:border-sail-green"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+          {swatches.length < 3 && (
+            <button
+              type="button"
+              onClick={() => swatchFileRef.current?.click()}
+              className="w-full py-2 rounded-xl border border-dashed border-sail-line hover:border-sail-green/50 text-xs text-sail-faint"
+            >
+              上传你的真实色板照片 —— AI 会精确复现颜色和木纹
+            </button>
+          )}
+          <input
+            ref={swatchFileRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              acceptSwatchFiles(e.target.files);
               e.target.value = '';
             }}
           />

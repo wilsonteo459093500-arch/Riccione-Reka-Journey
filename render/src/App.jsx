@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Header from './components/Header.jsx';
 import Controls from './components/Controls.jsx';
 import Results from './components/Results.jsx';
+import Advisor from './components/Advisor.jsx';
 import MoodBoard from './components/MoodBoard.jsx';
 import HistoryPanel from './components/HistoryPanel.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
@@ -19,12 +20,14 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState([]);
-  const [view, setView] = useState('render'); // 'render' | 'board'
+  const [view, setView] = useState('render'); // 'render' | 'advisor' | 'board'
+  const [advisorImage, setAdvisorImage] = useState(null); // 设计顾问待审图
 
   // 生成参数
   const [modeId, setModeId] = useState('restyle');
   const [image, setImage] = useState(null); // { dataUrl, mimeType, base64 }
   const [refImage, setRefImage] = useState(null); // 质感参考图（可选）
+  const [swatches, setSwatches] = useState([]); // 材质色板 [{dataUrl,mimeType,base64,label}]，≤3 张
   const [roomId, setRoomId] = useState('living');
   const [styleId, setStyleId] = useState('modern');
   const [lightingId, setLightingId] = useState('auto');
@@ -86,8 +89,21 @@ export default function App() {
 
     const inputImage = mode.needsImage ? image : null;
     const useRef = !!(inputImage && refImage && !mode.needsInstruction);
-    const modelInput = useRef ? [inputImage, refImage] : inputImage;
-    const params = { modeId, roomId, styleId, lightingId, fidelityId, polishScopeId, hasRef: useRef, extra };
+    const useSwatches = inputImage && !mode.needsInstruction ? swatches : [];
+    const modelInput = inputImage
+      ? [inputImage, ...(useRef ? [refImage] : []), ...useSwatches]
+      : inputImage;
+    const params = {
+      modeId,
+      roomId,
+      styleId,
+      lightingId,
+      fidelityId,
+      polishScopeId,
+      hasRef: useRef,
+      swatchLabels: useSwatches.map((s) => s.label || ''),
+      extra,
+    };
 
     const tasks = newSlots.map(async (slot, i) => {
       // 错开发送，避免多张同时发瞬间撞免费额度的每分钟限流
@@ -189,6 +205,13 @@ export default function App() {
     }
   }
 
+  /** 把结果图送去「设计顾问」点评 */
+  function handleConsult(dataUrl) {
+    setAdvisorImage(dataUrlToInput(dataUrl));
+    setView('advisor');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
   /** 把某张结果图设为新的输入，继续迭代 */
   function handleIterate(dataUrl) {
     setImage(dataUrlToInput(dataUrl));
@@ -248,6 +271,8 @@ export default function App() {
               setImage={setImage}
               refImage={refImage}
               setRefImage={setRefImage}
+              swatches={swatches}
+              setSwatches={setSwatches}
               polishScopeId={polishScopeId}
               setPolishScopeId={setPolishScopeId}
               roomId={roomId}
@@ -276,11 +301,20 @@ export default function App() {
                 onIterate={handleIterate}
                 onEnhance={handleEnhance}
                 onRefine={handleRefine}
+                onConsult={handleConsult}
                 busy={busy}
                 watermark={settings.watermark}
               />
             </div>
           </div>
+        ) : view === 'advisor' ? (
+          <Advisor
+            settings={settings}
+            onOpenSettings={() => setShowSettings(true)}
+            notify={setNotice}
+            image={advisorImage}
+            setImage={setAdvisorImage}
+          />
         ) : (
           <MoodBoard settings={settings} onOpenSettings={() => setShowSettings(true)} notify={setNotice} />
         )}

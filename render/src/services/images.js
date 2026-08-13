@@ -84,30 +84,35 @@ export function dataUrlToInput(dataUrl) {
   return { dataUrl, mimeType, base64 };
 }
 
-/** 右下角品牌水印（下载/导出时烙进图片；text 为空则原样返回） */
-export async function applyWatermark(dataUrl, text) {
-  if (!text || !text.trim()) return dataUrl;
+// 品牌 logo 印章（public/watermark.png：白色 + 透明底），只加载一次
+let logoPromise = null;
+function loadLogo() {
+  if (!logoPromise) {
+    logoPromise = loadImageEl('/watermark.png').catch(() => null);
+  }
+  return logoPromise;
+}
+
+/** 右下角品牌 logo 水印（下载/导出时烙进图片；enabled 为空则原样返回） */
+export async function applyWatermark(dataUrl, enabled) {
+  if (!enabled) return dataUrl;
   try {
-    const img = await loadImageEl(dataUrl);
+    const [img, logo] = await Promise.all([loadImageEl(dataUrl), loadLogo()]);
+    if (!logo) return dataUrl;
     const canvas = document.createElement('canvas');
     canvas.width = img.naturalWidth;
     canvas.height = img.naturalHeight;
     const ctx = canvas.getContext('2d');
     ctx.drawImage(img, 0, 0);
-    const fs = Math.max(16, Math.round(canvas.width * 0.018));
-    ctx.font = `600 ${fs}px "DM Sans", "Noto Sans SC", sans-serif`;
-    try {
-      ctx.letterSpacing = `${Math.round(fs * 0.18)}px`;
-    } catch {
-      /* 旧浏览器不支持 letterSpacing，忽略 */
-    }
-    const pad = Math.round(fs * 1.1);
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'alphabetic';
-    ctx.shadowColor = 'rgba(0,0,0,0.5)';
-    ctx.shadowBlur = fs * 0.4;
-    ctx.fillStyle = 'rgba(255,255,255,0.88)';
-    ctx.fillText(text.trim().toUpperCase(), canvas.width - pad, canvas.height - pad);
+
+    // logo 宽 = 图宽 18%（下限 140px），白色印章 + 轻微暗影保证浅色底也可见
+    const lw = Math.max(140, Math.round(canvas.width * 0.18));
+    const lh = Math.round(lw * (logo.naturalHeight / logo.naturalWidth));
+    const pad = Math.round(canvas.width * 0.025);
+    ctx.shadowColor = 'rgba(0,0,0,0.35)';
+    ctx.shadowBlur = Math.round(lw * 0.04);
+    ctx.globalAlpha = 0.9;
+    ctx.drawImage(logo, canvas.width - lw - pad, canvas.height - lh - pad, lw, lh);
     return canvas.toDataURL('image/jpeg', 0.92);
   } catch {
     return dataUrl;
