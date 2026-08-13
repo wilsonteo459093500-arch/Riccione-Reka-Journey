@@ -33,6 +33,7 @@ export default function App() {
   const [aspect, setAspect] = useState('16:9');
   const [extra, setExtra] = useState('');
   const [count, setCount] = useState(2);
+  const [autoPolish, setAutoPolish] = useState(true); // 双通道出图：生成后自动追加一道精修 pass
 
   // 生成结果槽位: { id, status: 'loading'|'done'|'error', dataUrl?, error? }
   const [slots, setSlots] = useState([]);
@@ -96,7 +97,21 @@ export default function App() {
         const raw = await generateImage(settings, prompt, modelInput, mode.needsImage ? null : aspect, (waitSec, attempt) =>
           updateSlot(slot.id, { note: `被限流，${waitSec} 秒后自动重试（第 ${attempt}/3 次）…` })
         );
-        const dataUrl = await compressForStorage(raw);
+        let dataUrl = await compressForStorage(raw);
+
+        // 双通道：非精修模式自动追加一道真实感精修 pass，对齐精修模式的出图水准
+        if (autoPolish && ['sketch', 'restyle', 'empty'].includes(modeId)) {
+          updateSlot(slot.id, { note: '第 2 道 · 真实感精修中…' });
+          try {
+            const polished = await generateImage(settings, ENHANCE_PROMPT, dataUrlToInput(dataUrl), null, (waitSec, attempt) =>
+              updateSlot(slot.id, { note: `第 2 道被限流，${waitSec} 秒后重试（${attempt}/3）…` })
+            );
+            dataUrl = await compressForStorage(polished);
+          } catch {
+            /* 第二道失败就保留第一道的结果，不让整张图失败 */
+          }
+        }
+
         updateSlot(slot.id, { status: 'done', dataUrl, note: null });
         return { ok: true, dataUrl };
       } catch (e) {
@@ -249,6 +264,8 @@ export default function App() {
               setExtra={setExtra}
               count={count}
               setCount={setCount}
+              autoPolish={autoPolish}
+              setAutoPolish={setAutoPolish}
               busy={busy}
               onGenerate={handleGenerate}
             />

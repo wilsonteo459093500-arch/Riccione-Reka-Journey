@@ -47,6 +47,7 @@ export default function Controls(props) {
     roomId, setRoomId, styleId, setStyleId,
     lightingId, setLightingId, fidelityId, setFidelityId,
     aspect, setAspect, extra, setExtra, count, setCount,
+    autoPolish, setAutoPolish,
     busy, onGenerate,
   } = props;
 
@@ -273,6 +274,24 @@ export default function Controls(props) {
           className="w-full rounded-xl border border-sail-line bg-white px-3 py-2 text-sm focus:outline-none focus:border-sail-green resize-none"
         />
       </Section>
+
+      {['sketch', 'restyle', 'empty'].includes(modeId) && (
+        <label className="flex items-start gap-2.5 rounded-xl border border-sail-gold/50 bg-sail-gold/10 p-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={autoPolish}
+            onChange={(e) => setAutoPolish(e.target.checked)}
+            className="mt-0.5 w-4 h-4 accent-[#3D5A4A]"
+          />
+          <span className="text-xs leading-relaxed">
+            <span className="font-semibold text-sail-ink">双通道出图（推荐）</span>
+            <span className="text-sail-muted">
+              {' '}
+              — 生成后自动追加一道「真实感精修」，对齐精修模式的逼真度。耗时和费用约 ×2。
+            </span>
+          </span>
+        </label>
+      )}
 
       <Section
         title="生成张数"
