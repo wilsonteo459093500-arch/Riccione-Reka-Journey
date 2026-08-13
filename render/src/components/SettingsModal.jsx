@@ -70,6 +70,25 @@ export default function SettingsModal({ settings, onSave, onClose }) {
             />
           </label>
 
+          <div className="rounded-xl border border-sail-gold/50 bg-sail-gold/10 p-4 space-y-2">
+            <div className="text-sm font-medium text-sail-ink">📸 「极致真实」精炼引擎（可选，强烈推荐）</div>
+            <p className="text-xs text-sail-muted leading-relaxed">
+              出图后一键把画面精炼成照片级：2x 放大 + 重铺布纹/木纹/墙面微观纹理，洗掉 AI 光滑感。
+              到{' '}
+              <a href="https://fal.ai/dashboard/keys" target="_blank" rel="noreferrer" className="text-sail-green underline inline-flex items-center gap-0.5">
+                fal.ai/dashboard/keys <ExternalLink size={11} />
+              </a>{' '}
+              注册（送免费额度）→ Create Key → 粘贴到下面。约 US$0.05/张。
+            </p>
+            <input
+              type="password"
+              value={form.falKey || ''}
+              onChange={(e) => setForm({ ...form, falKey: e.target.value.trim() })}
+              placeholder="fal.ai API Key（形如 xxxx:yyyy）"
+              className="w-full rounded-xl border border-sail-line px-3 py-2 text-sm focus:outline-none focus:border-sail-green"
+            />
+          </div>
+
           <details className="text-sm">
             <summary className="cursor-pointer text-sail-faint text-xs">高级选项（一般不用改）</summary>
             <div className="mt-3 space-y-3">

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Download, RefreshCw, Maximize2, X, Columns2, ImageIcon, AlertTriangle, Wand2 } from 'lucide-react';
+import { Download, RefreshCw, Maximize2, X, Columns2, ImageIcon, AlertTriangle, Wand2, Camera } from 'lucide-react';
 import CompareSlider from './CompareSlider.jsx';
 import { downloadDataUrl } from '../services/images.js';
 
@@ -17,7 +17,7 @@ function EmptyState() {
   );
 }
 
-function Slot({ slot, inputImage, onIterate, onEnhance, onOpen }) {
+function Slot({ slot, inputImage, onIterate, onEnhance, onRefine, onOpen }) {
   if (slot.status === 'loading') {
     return (
       <div className="aspect-[4/3] rounded-2xl shimmer border border-sail-line flex items-center justify-center">
@@ -44,6 +44,14 @@ function Slot({ slot, inputImage, onIterate, onEnhance, onOpen }) {
         onClick={() => onOpen(slot)}
       />
       <div className="absolute inset-x-0 bottom-0 p-2 flex gap-1.5 justify-end opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-t from-black/50 to-transparent">
+        <button
+          type="button"
+          title="📸 极致真实（2x 放大 + 照片级纹理精炼）"
+          onClick={() => onRefine(slot.id)}
+          className="p-2 rounded-lg bg-sail-green text-white hover:bg-sail-green-deep"
+        >
+          <Camera size={15} />
+        </button>
         <button
           type="button"
           title="增强真实感（重渲染影子 / 纹理 / 光感）"
@@ -81,7 +89,7 @@ function Slot({ slot, inputImage, onIterate, onEnhance, onOpen }) {
   );
 }
 
-export default function Results({ slots, inputImage, onIterate, onEnhance, busy }) {
+export default function Results({ slots, inputImage, onIterate, onEnhance, onRefine, busy }) {
   const [lightbox, setLightbox] = useState(null); // { slot, compare }
 
   if (!slots.length) return <EmptyState />;
@@ -96,6 +104,7 @@ export default function Results({ slots, inputImage, onIterate, onEnhance, busy 
             inputImage={inputImage}
             onIterate={onIterate}
             onEnhance={onEnhance}
+            onRefine={onRefine}
             onOpen={(s) => setLightbox({ slot: s, compare: false })}
           />
         ))}
@@ -121,6 +130,17 @@ export default function Results({ slots, inputImage, onIterate, onEnhance, busy 
                     对比原图
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLightbox(null);
+                    onRefine(lightbox.slot.id);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-sail-green text-white hover:bg-sail-green-deep"
+                >
+                  <Camera size={15} />
+                  极致真实
+                </button>
                 <button
                   type="button"
                   onClick={() => {
