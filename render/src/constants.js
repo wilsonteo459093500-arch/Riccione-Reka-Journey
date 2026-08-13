@@ -59,35 +59,46 @@ export const MODES = [
       'and camera angle of the drawing. Apply realistic materials, lighting and textures in the target style.',
   },
   {
-    id: 'staging',
-    label: '虚拟软装',
-    hint: '保留硬装，只做家具软装搭配',
-    needsImage: true,
-    prompt:
-      'Virtually stage the room in the source photo. Keep ALL existing hard finishes exactly as they are — ' +
-      'floors, walls, ceiling, windows, doors, built-in cabinetry must stay unchanged. ' +
-      'Only add or replace loose furniture, rugs, curtains, artwork, plants and decorative accessories in the target style.',
-  },
-  {
+    // 隐藏模式：不在界面显示，但「以此继续改」迭代流程内部使用
     id: 'edit',
     label: '指令修改',
     hint: '“把电视墙换成岩板” 式局部修改',
     needsImage: true,
     needsInstruction: true,
+    hidden: true,
     prompt:
       'Edit the source interior photo following the instruction below. ' +
       'Change ONLY what the instruction asks for; keep everything else in the image — geometry, camera angle, ' +
       'other furniture, lighting and overall look — exactly the same.',
   },
-  {
-    id: 'text',
-    label: '文字生成',
-    hint: '无需图片，从描述生成概念图',
-    needsImage: false,
-    prompt:
-      'Generate a photorealistic interior design concept render from the description below.',
-  },
 ];
+
+// ---------------------------------------------------------------------------
+// 所有带图模式共用的三条铁律（对齐「效果图精修」的出图水准）
+// ---------------------------------------------------------------------------
+
+// 建筑结构锁：禁止拆墙、开洞、加窗 —— 修复「草稿图后面的墙壁被敲掉」问题
+export const ARCHITECTURE_LOCK =
+  'NON-NEGOTIABLE ARCHITECTURE LOCK: never demolish, remove, move or open any wall; ' +
+  'never add windows, doors, skylights, openings, voids or extra rooms that do not exist in the source image; ' +
+  'a solid wall in the source MUST remain a solid wall in the output; ' +
+  'ceiling height, floor area, staircase geometry and room boundaries stay exactly as in the source.';
+
+// 材质歧义规则：草稿里画成平灰/留白的面，默认按素色乳胶漆/腻子处理 ——
+// 修复「wet kitchen 两边墙壁变成奇怪深色纹理」问题
+export const AMBIGUOUS_MATERIAL_RULE =
+  'MATERIAL AMBIGUITY RULE: any surface drawn as flat grey, flat white or otherwise unspecified in the draft ' +
+  'is simply an unfinished surface — render it as smooth painted plaster in a neutral tone that matches the ' +
+  'design palette. Do NOT invent dramatic materials (dark stone, marble slabs, heavy rough textures) for ' +
+  'surfaces whose material is not clearly indicated. Where the draft does indicate a material ' +
+  '(wood grain, tile joints, stone veining), follow it faithfully.';
+
+// 灯光真实感（从「效果图精修」提炼，应用到所有出图模式）
+export const LIGHTING_REALISM =
+  'LIGHTING: light the scene as realistic photography with a layered scheme — natural directional daylight ' +
+  'from the actual windows with soft believable falloff, warm glow from cove / recessed / lamp fixtures where ' +
+  'present, accurate contact shadows and ambient occlusion where objects meet floors and walls, ' +
+  'gentle light gradients across large surfaces, lifelike micro-textures on every material.';
 
 export const ROOM_TYPES = [
   { id: 'living', label: '客厅', en: 'living room' },
@@ -362,6 +373,7 @@ export const DEFAULT_SETTINGS = {
   model: 'gemini-3.1-flash-image-preview',
   baseUrl: 'https://generativelanguage.googleapis.com',
   falKey: '', // 「极致真实」二次精炼引擎（fal.ai），可选
+  watermark: 'SAIL BY RICCIONE', // 下载/导出图右下角的品牌水印，留空 = 关闭
 };
 
 // 旧默认模型，用于静默升级已存的设置

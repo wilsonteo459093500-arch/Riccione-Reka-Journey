@@ -84,6 +84,36 @@ export function dataUrlToInput(dataUrl) {
   return { dataUrl, mimeType, base64 };
 }
 
+/** 右下角品牌水印（下载/导出时烙进图片；text 为空则原样返回） */
+export async function applyWatermark(dataUrl, text) {
+  if (!text || !text.trim()) return dataUrl;
+  try {
+    const img = await loadImageEl(dataUrl);
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    const fs = Math.max(16, Math.round(canvas.width * 0.018));
+    ctx.font = `600 ${fs}px "DM Sans", "Noto Sans SC", sans-serif`;
+    try {
+      ctx.letterSpacing = `${Math.round(fs * 0.18)}px`;
+    } catch {
+      /* 旧浏览器不支持 letterSpacing，忽略 */
+    }
+    const pad = Math.round(fs * 1.1);
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'alphabetic';
+    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    ctx.shadowBlur = fs * 0.4;
+    ctx.fillStyle = 'rgba(255,255,255,0.88)';
+    ctx.fillText(text.trim().toUpperCase(), canvas.width - pad, canvas.height - pad);
+    return canvas.toDataURL('image/jpeg', 0.92);
+  } catch {
+    return dataUrl;
+  }
+}
+
 export function downloadDataUrl(dataUrl, filename) {
   const a = document.createElement('a');
   a.href = dataUrl;

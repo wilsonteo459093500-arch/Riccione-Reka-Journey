@@ -7,7 +7,6 @@ import {
   LIGHTING_OPTIONS,
   FIDELITY_OPTIONS,
   POLISH_SCOPES,
-  ASPECT_RATIOS,
   VARIATION_COUNTS,
 } from '../constants.js';
 import { prepareInputImage } from '../services/images.js';
@@ -91,7 +90,7 @@ export default function Controls(props) {
     <div className="space-y-5 bg-sail-card border border-sail-line rounded-2xl p-5 h-fit lg:sticky lg:top-20" onPaste={onPaste}>
       <Section title="工作模式">
         <div className="grid grid-cols-2 gap-2">
-          {MODES.map((m) => (
+          {MODES.filter((m) => !m.hidden).map((m) => (
             <button
               key={m.id}
               type="button"
@@ -255,18 +254,6 @@ export default function Controls(props) {
             {FIDELITY_OPTIONS.map((f) => (
               <Chip key={f.id} active={fidelityId === f.id} onClick={() => setFidelityId(f.id)} title={f.hint}>
                 {f.label}
-              </Chip>
-            ))}
-          </div>
-        </Section>
-      )}
-
-      {!mode.needsImage && (
-        <Section title="画幅比例">
-          <div className="flex flex-wrap gap-1.5">
-            {ASPECT_RATIOS.map((a) => (
-              <Chip key={a.id} active={aspect === a.id} onClick={() => setAspect(a.id)}>
-                {a.label}
               </Chip>
             ))}
           </div>

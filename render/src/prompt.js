@@ -6,6 +6,9 @@ import {
   FIDELITY_OPTIONS,
   POLISH_SCOPES,
   REF_IMAGE_PROMPT,
+  ARCHITECTURE_LOCK,
+  AMBIGUOUS_MATERIAL_RULE,
+  LIGHTING_REALISM,
   QUALITY_SUFFIX,
 } from './constants.js';
 
@@ -38,6 +41,11 @@ export function buildPrompt({
   if (mode.id === 'polish' && polishScope) {
     lines.push(polishScope.prompt);
   }
+
+  // 三条铁律：结构锁（所有带图模式）、材质歧义规则（草图）、灯光真实感（精修以外的出图模式）
+  if (mode.needsImage) lines.push(ARCHITECTURE_LOCK);
+  if (mode.id === 'sketch') lines.push(AMBIGUOUS_MATERIAL_RULE);
+  if (['restyle', 'empty', 'sketch'].includes(mode.id)) lines.push(LIGHTING_REALISM);
 
   if (room && !mode.skipRoom) {
     lines.push(`The space is a ${room.en}; the design must suit how this room type is actually used.`);
