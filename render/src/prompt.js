@@ -5,7 +5,6 @@ import {
   LIGHTING_OPTIONS,
   FIDELITY_OPTIONS,
   POLISH_SCOPES,
-  REF_IMAGE_PROMPT,
   ARCHITECTURE_LOCK,
   AMBIGUOUS_MATERIAL_RULE,
   LIGHTING_REALISM,
@@ -16,6 +15,31 @@ import {
  * 把用户的选择组装成一条专业级英文 prompt。
  * 结构：角色设定 → (参考图说明) → 模式任务 → 空间 → 风格四层描述 → 灯光 → 结构保真 → 润饰范围 → 用户补充 → 画质收尾。
  */
+/** 多图输入时给每张图分配角色说明（底图 / 质感参考 / 材质色板） */
+function imageRoles({ hasRef, swatchLabels }) {
+  const lines = [];
+  let idx = 1;
+  lines.push(`IMAGE ROLES: Image ${idx} is the room to render — its design is the ground truth.`);
+  idx += 1;
+  if (hasRef) {
+    lines.push(
+      `Image ${idx} is a QUALITY AND MOOD REFERENCE only: copy its photographic realism, lighting atmosphere, ` +
+        'color grading and material richness — never its layout, furniture, materials or architecture.'
+    );
+    idx += 1;
+  }
+  for (const label of swatchLabels || []) {
+    lines.push(
+      `Image ${idx} is the client's REAL MATERIAL SAMPLE${label ? ` for: ${label}` : ''} — ` +
+        'COLOR FIDELITY IS CRITICAL: reproduce its exact hue, tone, value and grain pattern on the corresponding ' +
+        'surfaces. Do not shift, restyle or "improve" this color; under neutral daylight the rendered surface ' +
+        'must visually match this sample.'
+    );
+    idx += 1;
+  }
+  return lines.join('\n');
+}
+
 export function buildPrompt({
   modeId,
   roomId,
@@ -24,6 +48,7 @@ export function buildPrompt({
   fidelityId,
   polishScopeId,
   hasRef,
+  swatchLabels,
   extra,
   variationIndex,
 }) {
@@ -35,7 +60,9 @@ export function buildPrompt({
   const polishScope = POLISH_SCOPES.find((p) => p.id === polishScopeId);
 
   const lines = ['You are a top-tier interior designer and architectural visualization artist.'];
-  if (hasRef) lines.push(REF_IMAGE_PROMPT);
+  if (hasRef || (swatchLabels && swatchLabels.length)) {
+    lines.push(imageRoles({ hasRef, swatchLabels }));
+  }
   lines.push(mode.prompt);
 
   if (mode.id === 'polish' && polishScope) {

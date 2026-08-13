@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Download, RefreshCw, Maximize2, X, Columns2, ImageIcon, AlertTriangle, Wand2, Camera } from 'lucide-react';
+import { Download, RefreshCw, Maximize2, X, Columns2, ImageIcon, AlertTriangle, Wand2, Camera, ClipboardCheck } from 'lucide-react';
 import CompareSlider from './CompareSlider.jsx';
 import { downloadDataUrl, applyWatermark } from '../services/images.js';
 
@@ -10,9 +10,11 @@ async function downloadWithWatermark(dataUrl, filename, watermark) {
 function WatermarkBadge({ text }) {
   if (!text) return null;
   return (
-    <span className="absolute bottom-2 right-2 text-[10px] font-semibold tracking-[0.18em] uppercase text-white/80 pointer-events-none [text-shadow:0_1px_4px_rgba(0,0,0,0.5)]">
-      {text}
-    </span>
+    <img
+      src="/watermark.png"
+      alt="SAIL logo 水印"
+      className="absolute bottom-2 right-2 w-[18%] min-w-[90px] opacity-90 pointer-events-none drop-shadow-[0_1px_4px_rgba(0,0,0,0.4)]"
+    />
   );
 }
 
@@ -103,7 +105,7 @@ function Slot({ slot, inputImage, onIterate, onEnhance, onRefine, onOpen, waterm
   );
 }
 
-export default function Results({ slots, inputImage, onIterate, onEnhance, onRefine, busy, watermark }) {
+export default function Results({ slots, inputImage, onIterate, onEnhance, onRefine, onConsult, busy, watermark }) {
   const [lightbox, setLightbox] = useState(null); // { slot, compare }
 
   if (!slots.length) return <EmptyState />;
@@ -174,6 +176,17 @@ export default function Results({ slots, inputImage, onIterate, onEnhance, onRef
                 >
                   <RefreshCw size={15} />
                   以此继续改
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLightbox(null);
+                    onConsult(lightbox.slot.dataUrl);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-white/15 text-white hover:bg-white/25"
+                >
+                  <ClipboardCheck size={15} />
+                  顾问点评
                 </button>
                 <button
                   type="button"
