@@ -56,15 +56,35 @@ function parseRetryDelaySeconds(data) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+const ADVISOR_MODEL_KEY = 'sailrender.advisorModel';
+
 /**
  * 图像理解 / 文字分析（设计顾问审图用）。
- * @param {object} settings { apiKey, baseUrl }
- * @param {string} model    文字模型 id（如 gemini-2.5-flash）
- * @param {string} prompt   分析指令
- * @param {object} image    { mimeType, base64 }
- * @returns {Promise<string>} 文字点评
+ * 模型不写死：按候选列表逐个尝试（404 才换下一个），成功的记进 localStorage；
+ * 最后保底用当前出图模型（它必然可用）。
  */
-export async function analyzeImage(settings, model, prompt, image) {
+export async function analyzeImage(settings, prompt, image) {
+  const cached = localStorage.getItem(ADVISOR_MODEL_KEY);
+  const candidates = [
+    ...new Set(
+      [cached, 'gemini-2.5-flash', 'gemini-flash-latest', 'gemini-3-flash', settings.model].filter(Boolean)
+    ),
+  ];
+  let lastErr = null;
+  for (const model of candidates) {
+    try {
+      const text = await analyzeOnce(settings, model, prompt, image);
+      localStorage.setItem(ADVISOR_MODEL_KEY, model);
+      return text;
+    } catch (e) {
+      lastErr = e;
+      if (!e.modelNotFound) throw e; // 只有「模型不存在」才尝试下一个候选
+    }
+  }
+  throw lastErr || new Error('没有可用的分析模型。');
+}
+
+async function analyzeOnce(settings, model, prompt, image) {
   if (!settings.apiKey) throw new Error('还没有配置 API key，点右上角设置。');
   const url = endpoint(settings, `/v1beta/models/${model}:generateContent?key=${encodeURIComponent(settings.apiKey)}`);
   const parts = [{ inline_data: { mime_type: image.mimeType, data: image.base64 } }, { text: prompt }];
@@ -86,7 +106,11 @@ export async function analyzeImage(settings, model, prompt, image) {
     if (res.ok || !retryable || attempt >= 2) break;
     await sleep((parseRetryDelaySeconds(data) ?? 10 * 2 ** attempt) * 1000);
   }
-  if (!res.ok) throw new Error(friendlyError(res.status, data?.error?.message));
+  if (!res.ok) {
+    const err = new Error(friendlyError(res.status, data?.error?.message));
+    err.modelNotFound = res.status === 404;
+    throw err;
+  }
 
   const text = (data?.candidates?.[0]?.content?.parts || [])
     .map((p) => p.text || '')
