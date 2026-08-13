@@ -1,5 +1,5 @@
-import React, { useCallback, useRef, useState } from 'react';
-import { UploadCloud, X, Loader2, ClipboardCheck, Copy } from 'lucide-react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { UploadCloud, X, Loader2, ClipboardCheck, Copy, Wand2 } from 'lucide-react';
 import { ROOM_TYPES, ADVISOR_FOCUS, ADVISOR_PROMPT } from '../constants.js';
 import { analyzeImage } from '../services/gemini.js';
 import { prepareInputImage } from '../services/images.js';
@@ -18,6 +18,31 @@ function Chip({ active, onClick, children }) {
       {children}
     </button>
   );
+}
+
+/**
+ * 从点评文字里抽出可执行的修改建议：
+ * 优先取「优先改的前三件事」的编号条目，不足则补「修改建议：」行。
+ */
+function parseSuggestions(text) {
+  const lines = text.split('\n').map((l) => l.trim());
+  const out = [];
+  const priorityIdx = lines.findIndex((l) => l.includes('优先'));
+  if (priorityIdx >= 0) {
+    for (const l of lines.slice(priorityIdx + 1)) {
+      const m = l.match(/^(?:[*\-]\s*)?(\d+)[.、)]\s*(.+)/);
+      if (m) out.push(m[2].trim());
+      if (out.length >= 5) break;
+    }
+  }
+  if (out.length < 3) {
+    for (const l of lines) {
+      const m = l.match(/修改建议[：:]\s*(.+)/);
+      if (m && !out.includes(m[1].trim())) out.push(m[1].trim());
+      if (out.length >= 6) break;
+    }
+  }
+  return out;
 }
 
 /** 简易排版：【标题】行加粗、✅⚠️❌ 行高亮 */
@@ -48,13 +73,16 @@ function ReviewText({ text }) {
   );
 }
 
-export default function Advisor({ settings, onOpenSettings, notify, image, setImage }) {
+export default function Advisor({ settings, onOpenSettings, notify, image, setImage, onApplyFix }) {
   const fileRef = useRef(null);
   const [roomId, setRoomId] = useState('living');
   const [focusId, setFocusId] = useState('all');
   const [question, setQuestion] = useState('');
   const [busy, setBusy] = useState(false);
   const [review, setReview] = useState(null);
+  const [checked, setChecked] = useState({}); // 建议勾选状态 {index: bool}
+
+  const suggestions = useMemo(() => (review ? parseSuggestions(review) : []), [review]);
 
   const acceptFile = useCallback(
     async (file) => {
@@ -85,6 +113,7 @@ export default function Advisor({ settings, onOpenSettings, notify, image, setIm
         (question.trim() ? `\n客户/设计师特别想知道：${question.trim()}` : '');
       const text = await analyzeImage(settings, prompt, image);
       setReview(text);
+      setChecked({}); // 默认全选（未记录 = 选中）
     } catch (e) {
       notify?.({ type: 'error', text: `点评失败：${e.message}` });
     } finally {
@@ -206,6 +235,43 @@ export default function Advisor({ settings, onOpenSettings, notify, image, setIm
               </button>
             </div>
             <ReviewText text={review} />
+
+            {suggestions.length > 0 && (
+              <div className="mt-6 rounded-xl border border-sail-gold/50 bg-sail-gold/10 p-4">
+                <div className="text-sm font-semibold mb-2">✨ 一键按建议修改 —— 勾选要执行的：</div>
+                <div className="space-y-1.5 mb-3">
+                  {suggestions.map((s, i) => (
+                    <label key={i} className="flex items-start gap-2 cursor-pointer text-sm text-sail-muted">
+                      <input
+                        type="checkbox"
+                        checked={checked[i] !== false}
+                        onChange={(e) => setChecked((prev) => ({ ...prev, [i]: e.target.checked }))}
+                        className="mt-0.5 w-4 h-4 accent-[#3D5A4A] shrink-0"
+                      />
+                      <span>{s}</span>
+                    </label>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const selected = suggestions.filter((_, i) => checked[i] !== false);
+                    if (!selected.length) {
+                      notify?.({ type: 'warn', text: '至少勾选一条建议' });
+                      return;
+                    }
+                    onApplyFix(image, selected);
+                  }}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-sail-green-deep text-white text-sm font-semibold hover:bg-sail-green"
+                >
+                  <Wand2 size={16} />
+                  按所选建议修改效果图
+                </button>
+                <div className="text-[11px] text-sail-faint mt-1.5">
+                  会跳到「AI 效果图」自动生成修改版；只动勾选的内容，其余保持不变。
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="h-full min-h-[420px] rounded-2xl border-2 border-dashed border-sail-line flex flex-col items-center justify-center gap-3 text-sail-faint bg-sail-tint/50">
