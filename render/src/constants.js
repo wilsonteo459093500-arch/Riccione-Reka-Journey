@@ -358,7 +358,11 @@ export const SETTINGS_KEY = 'sailrender.settings.v1';
 
 export const DEFAULT_SETTINGS = {
   apiKey: '',
-  model: 'gemini-2.5-flash-image',
+  // Nano Banana 2：支持 2K/4K 输出与 thinking，质量显著优于 2.5（预览版若不可用可在设置换回 gemini-2.5-flash-image）
+  model: 'gemini-3.1-flash-image-preview',
   baseUrl: 'https://generativelanguage.googleapis.com',
   falKey: '', // 「极致真实」二次精炼引擎（fal.ai），可选
 };
+
+// 旧默认模型，用于静默升级已存的设置
+export const LEGACY_DEFAULT_MODEL = 'gemini-2.5-flash-image';

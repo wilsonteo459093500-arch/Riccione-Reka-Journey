@@ -1,20 +1,25 @@
 // Gemini 图像模型客户端 —— 浏览器直连 generativelanguage.googleapis.com，
 // API key 只存在本机 localStorage，不经过任何中间服务器。
 
-import { SETTINGS_KEY, DEFAULT_SETTINGS } from '../constants.js';
+import { SETTINGS_KEY, DEFAULT_SETTINGS, LEGACY_DEFAULT_MODEL } from '../constants.js';
 
 export function loadSettings() {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (!raw) return { ...DEFAULT_SETTINGS };
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    const merged = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    // 旧默认模型静默升级到 Nano Banana 2；用户在设置里手动保存过的选择（userPinnedModel）不动
+    if (merged.model === LEGACY_DEFAULT_MODEL && !merged.userPinnedModel) {
+      merged.model = DEFAULT_SETTINGS.model;
+    }
+    return merged;
   } catch {
     return { ...DEFAULT_SETTINGS };
   }
 }
 
 export function saveSettings(settings) {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...settings, userPinnedModel: true }));
 }
 
 function endpoint(settings, path) {
@@ -30,6 +35,9 @@ function friendlyError(status, message) {
       return '今天的免费额度用完了。明天会重置；想不受限制，去 Google AI Studio 开通按量付费（约 US$0.04/张，无月费）。';
     }
     return '已重试多次仍被限流（免费 key 每分钟额度很小）。选 1 张、等 1 分钟再试；想稳定出图，去 Google AI Studio 开通按量付费（约 US$0.04/张）。';
+  }
+  if (status === 404) {
+    return '当前模型不可用（可能预览版已下线或你的账号没权限）。到设置 → 高级选项把模型换成 gemini-2.5-flash-image 再试。';
   }
   if (status >= 500) return 'AI 服务暂时不稳定，稍后重试即可。';
   return message || `请求失败（HTTP ${status}）`;
@@ -83,9 +91,11 @@ export async function generateImage(settings, prompt, image, aspectRatio, onWait
   parts.push({ text: prompt });
 
   const generationConfig = { responseModalities: ['TEXT', 'IMAGE'] };
-  if (aspectRatio) {
-    generationConfig.imageConfig = { aspectRatio };
-  }
+  const imageConfig = {};
+  if (aspectRatio) imageConfig.aspectRatio = aspectRatio;
+  // 2.5 只支持 1K；新模型（3.1+）显式要 2K 高清输出（值必须大写，小写会被静默忽略）
+  if (!/2\.5-flash-image/.test(settings.model || '')) imageConfig.imageSize = '2K';
+  if (Object.keys(imageConfig).length) generationConfig.imageConfig = imageConfig;
 
   const url = endpoint(
     settings,
