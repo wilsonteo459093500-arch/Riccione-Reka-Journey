@@ -213,7 +213,7 @@ export default function App() {
     }
   }
 
-  /** 顾问「一键修改」：把被点评的图 + 勾选的建议直接送进指令修改模式生成 */
+  /** 顾问「一键修改」：把被点评的图 + 勾选的建议填进指令修改模式，等用户确认后再生成 */
   function handleApplyFix(imageInput, suggestions) {
     const instruction =
       '按以下设计顾问的修改建议调整这张图，只改建议提到的内容，其余一切保持不变：\n' +
@@ -222,8 +222,8 @@ export default function App() {
     setModeId('edit');
     setImage(imageInput);
     setExtra(instruction);
-    setNotice({ type: 'ok', text: '正在按建议修改效果图…' });
-    handleGenerate({ modeId: 'edit', image: imageInput, extra: instruction });
+    setNotice({ type: 'ok', text: '指令已填好 —— 可以先编辑，确认后点「生成效果图」' });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   /** 把结果图送去「设计顾问」点评 */
