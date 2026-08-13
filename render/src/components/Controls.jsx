@@ -6,6 +6,7 @@ import {
   STYLES,
   LIGHTING_OPTIONS,
   FIDELITY_OPTIONS,
+  POLISH_SCOPES,
   ASPECT_RATIOS,
   VARIATION_COUNTS,
 } from '../constants.js';
@@ -43,6 +44,7 @@ function Chip({ active, onClick, children, title }) {
 export default function Controls(props) {
   const {
     mode, modeId, setModeId, image, setImage,
+    refImage, setRefImage, polishScopeId, setPolishScopeId,
     roomId, setRoomId, styleId, setStyleId,
     lightingId, setLightingId, fidelityId, setFidelityId,
     aspect, setAspect, extra, setExtra, count, setCount,
@@ -50,6 +52,7 @@ export default function Controls(props) {
   } = props;
 
   const fileRef = useRef(null);
+  const refFileRef = useRef(null);
   const [dragOver, setDragOver] = useState(false);
   const [reading, setReading] = useState(false);
 
@@ -64,6 +67,14 @@ export default function Controls(props) {
       }
     },
     [setImage]
+  );
+
+  const acceptRefFile = useCallback(
+    async (file) => {
+      if (!file || !file.type.startsWith('image/')) return;
+      setRefImage(await prepareInputImage(file));
+    },
+    [setRefImage]
   );
 
   const onPaste = useCallback(
@@ -171,6 +182,60 @@ export default function Controls(props) {
               </Chip>
             ))}
           </div>
+        </Section>
+      )}
+
+      {modeId === 'polish' && (
+        <Section title="润饰范围">
+          <div className="grid grid-cols-3 gap-1.5">
+            {POLISH_SCOPES.map((p) => (
+              <Chip key={p.id} active={polishScopeId === p.id} onClick={() => setPolishScopeId(p.id)} title={p.hint}>
+                {p.label}
+              </Chip>
+            ))}
+          </div>
+          <div className="text-[11px] text-sail-faint mt-1.5 leading-relaxed">
+            设计（柜体/家具/布局/材质）永远锁死；这里只控制 AI 能不能补充装饰让画面更活。
+          </div>
+        </Section>
+      )}
+
+      {mode.needsImage && !mode.needsInstruction && modeId !== 'sketch' && (
+        <Section
+          title="质感参考图（可选）"
+          right={<span className="text-[11px] text-sail-faint">只学它的光感质感，不学设计</span>}
+        >
+          {refImage ? (
+            <div className="relative rounded-xl overflow-hidden border border-sail-line w-28">
+              <img src={refImage.dataUrl} alt="质感参考图" className="w-full h-20 object-cover bg-sail-tint" />
+              <button
+                type="button"
+                onClick={() => setRefImage(null)}
+                className="absolute top-1 right-1 p-1 rounded-full bg-sail-ink/70 text-white hover:bg-sail-ink"
+                title="移除参考图"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => refFileRef.current?.click()}
+              className="w-full py-2.5 rounded-xl border border-dashed border-sail-line hover:border-sail-green/50 text-xs text-sail-faint"
+            >
+              上传一张你喜欢的实拍图 —— AI 会对齐它的真实感 / 灯光氛围
+            </button>
+          )}
+          <input
+            ref={refFileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              acceptRefFile(e.target.files?.[0]);
+              e.target.value = '';
+            }}
+          />
         </Section>
       )}
 

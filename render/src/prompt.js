@@ -4,24 +4,40 @@ import {
   STYLES,
   LIGHTING_OPTIONS,
   FIDELITY_OPTIONS,
+  POLISH_SCOPES,
+  REF_IMAGE_PROMPT,
   QUALITY_SUFFIX,
 } from './constants.js';
 
 /**
  * 把用户的选择组装成一条专业级英文 prompt。
- * 结构：角色设定 → 模式任务 → 空间 → 风格四层描述 → 灯光 → 结构保真 → 用户补充 → 画质收尾。
+ * 结构：角色设定 → (参考图说明) → 模式任务 → 空间 → 风格四层描述 → 灯光 → 结构保真 → 润饰范围 → 用户补充 → 画质收尾。
  */
-export function buildPrompt({ modeId, roomId, styleId, lightingId, fidelityId, extra, variationIndex }) {
+export function buildPrompt({
+  modeId,
+  roomId,
+  styleId,
+  lightingId,
+  fidelityId,
+  polishScopeId,
+  hasRef,
+  extra,
+  variationIndex,
+}) {
   const mode = MODES.find((m) => m.id === modeId) || MODES[0];
   const room = ROOM_TYPES.find((r) => r.id === roomId);
   const style = STYLES.find((s) => s.id === styleId);
   const lighting = LIGHTING_OPTIONS.find((l) => l.id === lightingId);
   const fidelity = FIDELITY_OPTIONS.find((f) => f.id === fidelityId);
+  const polishScope = POLISH_SCOPES.find((p) => p.id === polishScopeId);
 
-  const lines = [
-    'You are a top-tier interior designer and architectural visualization artist.',
-    mode.prompt,
-  ];
+  const lines = ['You are a top-tier interior designer and architectural visualization artist.'];
+  if (hasRef) lines.push(REF_IMAGE_PROMPT);
+  lines.push(mode.prompt);
+
+  if (mode.id === 'polish' && polishScope) {
+    lines.push(polishScope.prompt);
+  }
 
   if (room && !mode.skipRoom) {
     lines.push(`The space is a ${room.en}; the design must suit how this room type is actually used.`);

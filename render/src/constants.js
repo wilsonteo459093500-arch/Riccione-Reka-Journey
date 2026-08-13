@@ -23,21 +23,20 @@ export const MODES = [
     skipStyle: true,
     skipFidelity: true,
     prompt:
-      'The source image is an interior design rendering that must be POLISHED, not redesigned. ' +
-      'ABSOLUTE CONSTRAINT — change NOTHING about the design: keep the room layout, architecture, ' +
+      'The source image is a PRELIMINARY CGI DRAFT of an interior design: its lighting is flat, uniform and ' +
+      'FALSE, its walls may be blank and overexposed, its window may be blown out to pure white. ' +
+      'Your job is to re-shoot this exact room as a real professional photograph. ' +
+      'ABSOLUTE DESIGN CONSTRAINT — change NOTHING about the design: keep the room layout, architecture, ' +
       'camera angle and framing, every piece of furniture and its exact position, the cabinetry and ' +
-      'joinery design, all wall / floor / ceiling materials and the entire color scheme exactly as in the source. ' +
-      'Improve ONLY these three things: ' +
-      '(1) LIGHTING ATMOSPHERE — rebuild the lighting as a realistic layered scheme: cove and recessed ' +
-      'lights softly glowing, table and floor lamps switched on with warm halos, natural window light with ' +
-      'soft believable falloff, accurate contact shadows and ambient occlusion under and around furniture, ' +
-      'gentle light gradients across walls and ceilings; ' +
-      '(2) DETAIL REFINEMENT — enrich the micro-textures of existing surfaces: wood grain on cabinetry doors ' +
-      'and wall panels, fabric weave and natural wrinkles on bedding and upholstery, plaster and paint texture ' +
-      'on walls, stone veining; make the existing decorative objects (vases, branches, books, ceramics, artwork, ' +
-      'rugs) look convincingly real and tactile; ' +
-      '(3) PHOTOGRAPHIC REALISM — natural white balance, high dynamic range, subtle real-world imperfections. ' +
-      'The result must look like a professional photograph of the EXACT same room.',
+      'joinery design, all specified materials and the entire color scheme exactly as in the source. ' +
+      'DISCARD the draft lighting completely and re-light the scene from scratch as realistic photography: ' +
+      'cove and recessed lights glowing warmly with visible gradients on nearby surfaces, lamps switched on ' +
+      'with soft halos, natural directional daylight entering from the actual window with believable falloff, ' +
+      'a realistic bright exterior view or soft sheer-curtain glow in the window instead of blown-out white, ' +
+      'accurate contact shadows and ambient occlusion under and around every object. ' +
+      'Enrich micro-textures on existing surfaces: wood grain on cabinetry, fabric weave and folds, ' +
+      'plaster and paint texture on walls, floor reflections. ' +
+      'The result must look like a magazine photograph of the EXACT same room.',
   },
   {
     id: 'empty',
@@ -265,6 +264,42 @@ export const FIDELITY_OPTIONS = [
       'Use the source image as loose inspiration only; you may freely re-imagine the space for the best possible result.',
   },
 ];
+
+// 精修模式的润饰范围：AI 可以动多少「画面内容」（设计永远锁死）
+export const POLISH_SCOPES = [
+  {
+    id: 'strict',
+    label: '严格只修光影',
+    hint: '不加不减任何物件',
+    prompt:
+      'Do not add or remove ANY object. Only re-light the scene and refine the textures of what already exists.',
+  },
+  {
+    id: 'decor',
+    label: '加强装饰细节',
+    hint: '已有装饰做精，可加小摆件',
+    prompt:
+      'You may refine and upgrade the existing decorative items and add a few very small styling touches ' +
+      '(books, a small plant, a ceramic piece) where they naturally belong. ' +
+      'Never alter or add furniture, cabinetry or architectural elements.',
+  },
+  {
+    id: 'staging',
+    label: '允许软装点缀',
+    hint: '空白墙面/地面可加挂画地毯绿植',
+    prompt:
+      'You may add tasteful soft styling to bring the scene to life: artwork on empty walls, a rug, plants, ' +
+      'cushions, books and decorative objects — all matching the existing style and color scheme. ' +
+      'The built-in cabinetry, furniture pieces, architecture and materials must stay exactly as designed.',
+  },
+];
+
+// 质感参考图：只学它的光感/氛围/质感，不学它的设计
+export const REF_IMAGE_PROMPT =
+  'TWO images are provided. The FIRST image is the room to render — its design is the ground truth. ' +
+  'The SECOND image is a QUALITY AND MOOD REFERENCE ONLY: study its photographic realism, lighting ' +
+  'atmosphere, shadow quality, color grading and material richness, and reproduce THAT LEVEL OF REALISM ' +
+  'in your output. Do NOT copy the reference image\'s layout, furniture, materials or architecture.';
 
 export const ASPECT_RATIOS = [
   { id: '16:9', label: '16:9 横幅' },
