@@ -27,18 +27,19 @@ function Chip({ active, onClick, children }) {
 function parseSuggestions(text) {
   const lines = text.split('\n').map((l) => l.trim());
   const out = [];
+  const clean = (s) => s.replace(/\*\*/g, '').trim();
   const priorityIdx = lines.findIndex((l) => l.includes('优先'));
   if (priorityIdx >= 0) {
     for (const l of lines.slice(priorityIdx + 1)) {
       const m = l.match(/^(?:[*\-]\s*)?(\d+)[.、)]\s*(.+)/);
-      if (m) out.push(m[2].trim());
+      if (m) out.push(clean(m[2]));
       if (out.length >= 5) break;
     }
   }
   if (out.length < 3) {
     for (const l of lines) {
       const m = l.match(/修改建议[：:]\s*(.+)/);
-      if (m && !out.includes(m[1].trim())) out.push(m[1].trim());
+      if (m && !out.includes(clean(m[1]))) out.push(clean(m[1]));
       if (out.length >= 6) break;
     }
   }
@@ -265,10 +266,10 @@ export default function Advisor({ settings, onOpenSettings, notify, image, setIm
                   className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-sail-green-deep text-white text-sm font-semibold hover:bg-sail-green"
                 >
                   <Wand2 size={16} />
-                  按所选建议修改效果图
+                  把所选建议填入修改指令
                 </button>
                 <div className="text-[11px] text-sail-faint mt-1.5">
-                  会跳到「AI 效果图」自动生成修改版；只动勾选的内容，其余保持不变。
+                  会跳到「AI 效果图」并填好底图和指令 —— 你可以先编辑内容，确认后再点「生成效果图」。
                 </div>
               </div>
             )}
