@@ -17,7 +17,10 @@ export default function Header({ view, setView, onOpenSettings, onOpenHistory, h
     <header className="sticky top-0 z-40 bg-sail-paper/90 backdrop-blur border-b border-sail-line">
       <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
         <div className="flex items-center gap-3 min-w-0">
-          <span className="font-display text-xl font-semibold text-sail-green-deep whitespace-nowrap">溪岸 Render</span>
+          <div className="leading-tight whitespace-nowrap">
+            <div className="font-display text-lg font-semibold text-sail-green-deep">RICCIONE REKA</div>
+            <div className="text-[9px] tracking-[0.3em] text-sail-faint uppercase">Design Studio</div>
+          </div>
           <nav className="flex gap-1 bg-white border border-sail-line rounded-xl p-1 overflow-x-auto">
             {tab('render', 'AI 效果图')}
             {tab('advisor', '设计顾问')}
