@@ -9,7 +9,7 @@ import { MODES, ENHANCE_PROMPT } from './constants.js';
 import { buildPrompt } from './prompt.js';
 import { loadSettings, saveSettings, generateImage } from './services/gemini.js';
 import { refineImage } from './services/fal.js';
-import { compressForStorage, makeThumb, dataUrlToInput } from './services/images.js';
+import { compressForStorage, makeThumb, dataUrlToInput, shrinkDataUrl } from './services/images.js';
 import { listHistory, saveRecord, updateRecord, deleteRecord } from './services/history.js';
 
 const uid = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -164,7 +164,8 @@ export default function App() {
     const prevUrl = slot.dataUrl;
     updateSlot(slotId, { status: 'loading', note: '📸 极致真实精炼中…' });
     try {
-      const raw = await refineImage(settings.falKey, prevUrl, (text) => updateSlot(slotId, { note: `📸 ${text}` }));
+      const compact = await shrinkDataUrl(prevUrl);
+      const raw = await refineImage(settings.falKey, compact, (text) => updateSlot(slotId, { note: `📸 ${text}` }));
       updateSlot(slotId, { status: 'done', dataUrl: raw, note: null });
       setNotice({ type: 'ok', text: '精炼完成 — 已放大 2 倍并重铺照片级纹理' });
     } catch (e) {

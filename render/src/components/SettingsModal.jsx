@@ -1,12 +1,28 @@
 import React, { useState } from 'react';
 import { X, Loader2, CheckCircle2, XCircle, ExternalLink } from 'lucide-react';
 import { testConnection } from '../services/gemini.js';
+import { testFalKey } from '../services/fal.js';
 import { DEFAULT_SETTINGS } from '../constants.js';
 
 export default function SettingsModal({ settings, onSave, onClose }) {
   const [form, setForm] = useState({ ...settings });
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null); // { ok, text }
+  const [falTesting, setFalTesting] = useState(false);
+  const [falResult, setFalResult] = useState(null); // { ok, text }
+
+  async function handleTestFal() {
+    setFalTesting(true);
+    setFalResult(null);
+    try {
+      await testFalKey(form.falKey);
+      setFalResult({ ok: true, text: 'fal.ai 连接成功，「极致真实」可以用了' });
+    } catch (e) {
+      setFalResult({ ok: false, text: e.message });
+    } finally {
+      setFalTesting(false);
+    }
+  }
 
   async function handleTest() {
     setTesting(true);
@@ -80,13 +96,30 @@ export default function SettingsModal({ settings, onSave, onClose }) {
               </a>{' '}
               注册（送免费额度）→ Create Key → 粘贴到下面。约 US$0.05/张。
             </p>
-            <input
-              type="password"
-              value={form.falKey || ''}
-              onChange={(e) => setForm({ ...form, falKey: e.target.value.trim() })}
-              placeholder="fal.ai API Key（形如 xxxx:yyyy）"
-              className="w-full rounded-xl border border-sail-line px-3 py-2 text-sm focus:outline-none focus:border-sail-green"
-            />
+            <div className="flex gap-2">
+              <input
+                type="password"
+                value={form.falKey || ''}
+                onChange={(e) => setForm({ ...form, falKey: e.target.value.trim() })}
+                placeholder="fal.ai API Key（形如 xxxx:yyyy）"
+                className="flex-1 rounded-xl border border-sail-line px-3 py-2 text-sm focus:outline-none focus:border-sail-green"
+              />
+              <button
+                type="button"
+                onClick={handleTestFal}
+                disabled={falTesting || !form.falKey}
+                className="flex items-center gap-1 px-3 py-2 rounded-xl border border-sail-line text-xs text-sail-muted hover:bg-white disabled:opacity-50 whitespace-nowrap"
+              >
+                {falTesting && <Loader2 size={12} className="animate-spin" />}
+                测试 fal 连接
+              </button>
+            </div>
+            {falResult && (
+              <div className={`flex items-start gap-1.5 text-xs rounded-lg p-2 ${falResult.ok ? 'bg-sail-green/10 text-sail-green-deep' : 'bg-sail-danger/10 text-sail-danger'}`}>
+                {falResult.ok ? <CheckCircle2 size={13} className="mt-0.5 shrink-0" /> : <XCircle size={13} className="mt-0.5 shrink-0" />}
+                <span>{falResult.text}</span>
+              </div>
+            )}
           </div>
 
           <details className="text-sm">

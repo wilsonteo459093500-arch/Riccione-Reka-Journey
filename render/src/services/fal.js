@@ -26,13 +26,43 @@ async function proxyCall(key, url, method = 'GET', body = null) {
   }
   const data = await res.json().catch(() => null);
   if (!res.ok) {
-    const msg = data?.error?.message || data?.error || data?.detail || `HTTP ${res.status}`;
-    if (res.status === 401 || res.status === 403 || /unauthorized|invalid/i.test(String(msg))) {
-      throw new Error('fal.ai key 无效或没额度，请到设置里检查。');
+    let msg = data?.error?.message || data?.error || data?.detail || data?.raw || `HTTP ${res.status}`;
+    if (typeof msg !== 'string') msg = JSON.stringify(msg);
+    if (res.status === 401 || res.status === 403) {
+      throw new Error(`fal.ai 拒绝了这把 key（HTTP ${res.status}）。到设置里点「测试 fal 连接」检查 —— 注意别贴成 Google 的 key。`);
     }
-    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg).slice(0, 160));
+    if (res.status === 402 || /balance|credit|quota/i.test(msg)) {
+      throw new Error('fal.ai 额度用完了，到 fal.ai/dashboard/billing 充值（按量计费）。');
+    }
+    throw new Error(`fal 返回错误（HTTP ${res.status}）：${msg.slice(0, 200)}`);
   }
   return data;
+}
+
+/**
+ * 免费验证 key：提交一个空 input，
+ * 401/403 = key 无效；422 参数校验错误 = key 有效（请求没被执行，不扣费）。
+ */
+export async function testFalKey(falKey) {
+  let res;
+  try {
+    res = await fetch('/api/fal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: falKey, url: `https://queue.fal.run/${FAL_MODEL}`, method: 'POST', body: { input: {} } }),
+    });
+  } catch {
+    throw new Error('网络错误，稍后重试。');
+  }
+  if (res.status === 404 || res.status === 405) {
+    throw new Error('测试需要在正式部署的网址上进行（本地开发模式没有代理接口）。');
+  }
+  if (res.status === 401 || res.status === 403) {
+    throw new Error(`key 无效（HTTP ${res.status}）—— 确认是从 fal.ai/dashboard/keys 创建并完整复制的。`);
+  }
+  if (res.ok || res.status === 422 || res.status === 400) return true; // 校验错 = 认证已通过
+  const data = await res.json().catch(() => null);
+  throw new Error(`测试失败（HTTP ${res.status}）：${JSON.stringify(data?.detail || data?.error || data || '').slice(0, 160)}`);
 }
 
 /**

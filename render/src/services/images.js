@@ -67,6 +67,16 @@ export async function makeThumb(dataUrl) {
   }
 }
 
+/** 精炼前收紧尺寸/体积，避免 data URI 过大被拒（失败则原样返回） */
+export async function shrinkDataUrl(dataUrl, maxEdge = 1400) {
+  try {
+    const img = await loadImageEl(dataUrl);
+    return drawScaled(img, maxEdge, 'image/jpeg', 0.88);
+  } catch {
+    return dataUrl;
+  }
+}
+
 /** 把结果 dataURL 转成用于再次输入模型的对象 */
 export function dataUrlToInput(dataUrl) {
   const [head, base64] = dataUrl.split(',');
