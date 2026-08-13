@@ -260,6 +260,7 @@ export default function App() {
                 onEnhance={handleEnhance}
                 onRefine={handleRefine}
                 busy={busy}
+                watermark={settings.watermark}
               />
             </div>
           </div>
@@ -275,6 +276,7 @@ export default function App() {
       {showHistory && (
         <HistoryPanel
           history={history}
+          watermark={settings.watermark}
           onClose={() => setShowHistory(false)}
           onToggleFav={handleToggleFav}
           onDelete={handleDeleteRecord}

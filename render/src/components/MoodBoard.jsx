@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { CUTOUT_PROMPT, FLATLAY_PROMPT } from '../constants.js';
 import { generateImage } from '../services/gemini.js';
-import { prepareInputImage, compressForStorage, dataUrlToInput, downloadDataUrl } from '../services/images.js';
+import { prepareInputImage, compressForStorage, dataUrlToInput, downloadDataUrl, applyWatermark } from '../services/images.js';
 import { loadBoard, saveBoard } from '../services/moodboardStore.js';
 
 const RATIOS = [
@@ -306,7 +306,10 @@ export default function MoodBoard({ settings, onOpenSettings, notify }) {
       ctx.fillStyle = '#B8995A';
       ctx.fillRect(mx, by, W * 0.055, Math.max(3, W * 0.0024));
     }
-    downloadDataUrl(canvas.toDataURL('image/png'), `moodboard-flatlay-${board.title || 'sail'}.png`);
+    downloadDataUrl(
+      await applyWatermark(canvas.toDataURL('image/png'), settings.watermark),
+      `moodboard-flatlay-${board.title || 'sail'}.png`
+    );
   }
 
   // ---- 导出 PNG ----
@@ -380,7 +383,10 @@ export default function MoodBoard({ settings, onOpenSettings, notify }) {
         ctx.fillRect(mx, by, W * 0.05, Math.max(4, W * 0.0022));
       }
 
-      downloadDataUrl(canvas.toDataURL('image/png'), `moodboard-${board.title || 'sail'}.png`);
+      downloadDataUrl(
+        await applyWatermark(canvas.toDataURL('image/png'), settings.watermark),
+        `moodboard-${board.title || 'sail'}.png`
+      );
     } finally {
       setExporting(false);
     }

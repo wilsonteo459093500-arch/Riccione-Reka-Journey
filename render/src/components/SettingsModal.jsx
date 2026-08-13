@@ -122,6 +122,17 @@ export default function SettingsModal({ settings, onSave, onClose }) {
             )}
           </div>
 
+          <label className="block">
+            <span className="text-xs font-semibold text-sail-faint">品牌水印（印在下载/导出图右下角，留空 = 不加）</span>
+            <input
+              type="text"
+              value={form.watermark ?? ''}
+              onChange={(e) => setForm({ ...form, watermark: e.target.value })}
+              placeholder="SAIL BY RICCIONE"
+              className="mt-1 w-full rounded-xl border border-sail-line px-3 py-2 text-sm focus:outline-none focus:border-sail-green"
+            />
+          </label>
+
           <details className="text-sm">
             <summary className="cursor-pointer text-sail-faint text-xs">高级选项（一般不用改）</summary>
             <div className="mt-3 space-y-3">

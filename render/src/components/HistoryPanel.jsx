@@ -1,7 +1,11 @@
 import React from 'react';
 import { X, Star, Trash2, Download, RefreshCw, ImagePlus } from 'lucide-react';
 import { MODES, ROOM_TYPES, STYLES } from '../constants.js';
-import { downloadDataUrl } from '../services/images.js';
+import { downloadDataUrl, applyWatermark } from '../services/images.js';
+
+async function downloadWithWatermark(dataUrl, filename, watermark) {
+  downloadDataUrl(await applyWatermark(dataUrl, watermark), filename);
+}
 
 function labelOf(list, id) {
   return list.find((x) => x.id === id)?.label || '';
@@ -13,7 +17,7 @@ function fmtTime(ts) {
   return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export default function HistoryPanel({ history, onClose, onToggleFav, onDelete, onReuseInput, onIterate }) {
+export default function HistoryPanel({ history, onClose, onToggleFav, onDelete, onReuseInput, onIterate, watermark }) {
   return (
     <div className="fixed inset-0 z-50 bg-sail-ink/50 flex justify-end" onClick={onClose}>
       <div
@@ -95,8 +99,8 @@ export default function HistoryPanel({ history, onClose, onToggleFav, onDelete, 
                       </button>
                       <button
                         type="button"
-                        title="下载"
-                        onClick={() => downloadDataUrl(out, `sail-render-${rec.id}-${i + 1}.jpg`)}
+                        title="下载（带水印）"
+                        onClick={() => downloadWithWatermark(out, `sail-render-${rec.id}-${i + 1}.jpg`, watermark)}
                         className="p-1.5 rounded-lg bg-white/90 text-sail-ink hover:bg-white"
                       >
                         <Download size={13} />

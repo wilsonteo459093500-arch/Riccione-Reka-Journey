@@ -1,7 +1,20 @@
 import React, { useState } from 'react';
 import { Download, RefreshCw, Maximize2, X, Columns2, ImageIcon, AlertTriangle, Wand2, Camera } from 'lucide-react';
 import CompareSlider from './CompareSlider.jsx';
-import { downloadDataUrl } from '../services/images.js';
+import { downloadDataUrl, applyWatermark } from '../services/images.js';
+
+async function downloadWithWatermark(dataUrl, filename, watermark) {
+  downloadDataUrl(await applyWatermark(dataUrl, watermark), filename);
+}
+
+function WatermarkBadge({ text }) {
+  if (!text) return null;
+  return (
+    <span className="absolute bottom-2 right-2 text-[10px] font-semibold tracking-[0.18em] uppercase text-white/80 pointer-events-none [text-shadow:0_1px_4px_rgba(0,0,0,0.5)]">
+      {text}
+    </span>
+  );
+}
 
 function EmptyState() {
   return (
@@ -17,7 +30,7 @@ function EmptyState() {
   );
 }
 
-function Slot({ slot, inputImage, onIterate, onEnhance, onRefine, onOpen }) {
+function Slot({ slot, inputImage, onIterate, onEnhance, onRefine, onOpen, watermark }) {
   if (slot.status === 'loading') {
     return (
       <div className="aspect-[4/3] rounded-2xl shimmer border border-sail-line flex items-center justify-center">
@@ -43,6 +56,7 @@ function Slot({ slot, inputImage, onIterate, onEnhance, onRefine, onOpen }) {
         className="w-full cursor-zoom-in"
         onClick={() => onOpen(slot)}
       />
+      <WatermarkBadge text={watermark} />
       <div className="absolute inset-x-0 bottom-0 p-2 flex gap-1.5 justify-end opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-t from-black/50 to-transparent">
         <button
           type="button"
@@ -78,8 +92,8 @@ function Slot({ slot, inputImage, onIterate, onEnhance, onRefine, onOpen }) {
         </button>
         <button
           type="button"
-          title="下载"
-          onClick={() => downloadDataUrl(slot.dataUrl, `sail-render-${slot.id}.jpg`)}
+          title="下载（带水印）"
+          onClick={() => downloadWithWatermark(slot.dataUrl, `sail-render-${slot.id}.jpg`, watermark)}
           className="p-2 rounded-lg bg-white/90 text-sail-ink hover:bg-white"
         >
           <Download size={15} />
@@ -89,7 +103,7 @@ function Slot({ slot, inputImage, onIterate, onEnhance, onRefine, onOpen }) {
   );
 }
 
-export default function Results({ slots, inputImage, onIterate, onEnhance, onRefine, busy }) {
+export default function Results({ slots, inputImage, onIterate, onEnhance, onRefine, busy, watermark }) {
   const [lightbox, setLightbox] = useState(null); // { slot, compare }
 
   if (!slots.length) return <EmptyState />;
@@ -106,6 +120,7 @@ export default function Results({ slots, inputImage, onIterate, onEnhance, onRef
             onEnhance={onEnhance}
             onRefine={onRefine}
             onOpen={(s) => setLightbox({ slot: s, compare: false })}
+            watermark={watermark}
           />
         ))}
       </div>
@@ -162,7 +177,7 @@ export default function Results({ slots, inputImage, onIterate, onEnhance, onRef
                 </button>
                 <button
                   type="button"
-                  onClick={() => downloadDataUrl(lightbox.slot.dataUrl, `sail-render-${lightbox.slot.id}.jpg`)}
+                  onClick={() => downloadWithWatermark(lightbox.slot.dataUrl, `sail-render-${lightbox.slot.id}.jpg`, watermark)}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-white/15 text-white hover:bg-white/25"
                 >
                   <Download size={15} />
@@ -177,7 +192,10 @@ export default function Results({ slots, inputImage, onIterate, onEnhance, onRef
             {lightbox.compare && inputImage ? (
               <CompareSlider before={inputImage.dataUrl} after={lightbox.slot.dataUrl} />
             ) : (
-              <img src={lightbox.slot.dataUrl} alt="效果图大图" className="w-full max-h-[80vh] object-contain rounded-xl" />
+              <div className="relative">
+                <img src={lightbox.slot.dataUrl} alt="效果图大图" className="w-full max-h-[80vh] object-contain rounded-xl" />
+                <WatermarkBadge text={watermark} />
+              </div>
             )}
           </div>
         </div>
