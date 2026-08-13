@@ -4,7 +4,7 @@ import { testConnection } from '../services/gemini.js';
 import { testFalKey } from '../services/fal.js';
 import { DEFAULT_SETTINGS } from '../constants.js';
 
-export default function SettingsModal({ settings, onSave, onClose }) {
+export default function SettingsModal({ settings, onSave, onClose, onLogout }) {
   const [form, setForm] = useState({ ...settings });
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null); // { ok, text }
@@ -172,7 +172,17 @@ export default function SettingsModal({ settings, onSave, onClose }) {
           </div>
         )}
 
-        <div className="flex gap-2 justify-end">
+        <div className="flex gap-2 items-center">
+          {onLogout && (
+            <button
+              type="button"
+              onClick={onLogout}
+              className="px-3 py-2 rounded-xl text-sm text-sail-faint hover:text-sail-danger hover:bg-sail-tint"
+            >
+              退出登录
+            </button>
+          )}
+          <div className="flex-1" />
           <button
             type="button"
             onClick={handleTest}

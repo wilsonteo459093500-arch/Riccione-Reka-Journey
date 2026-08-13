@@ -6,6 +6,8 @@ import Advisor from './components/Advisor.jsx';
 import MoodBoard from './components/MoodBoard.jsx';
 import HistoryPanel from './components/HistoryPanel.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
+import LoginGate from './components/LoginGate.jsx';
+import { isAuthed, logout } from './services/auth.js';
 import { MODES, ENHANCE_PROMPT } from './constants.js';
 import { buildPrompt } from './prompt.js';
 import { loadSettings, saveSettings, generateImage } from './services/gemini.js';
@@ -16,6 +18,7 @@ import { listHistory, saveRecord, updateRecord, deleteRecord } from './services/
 const uid = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
 export default function App() {
+  const [authed, setAuthed] = useState(isAuthed);
   const [settings, setSettings] = useState(loadSettings);
   const [showSettings, setShowSettings] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -264,6 +267,10 @@ export default function App() {
     }
   }
 
+  if (!authed) {
+    return <LoginGate onSuccess={() => setAuthed(true)} />;
+  }
+
   return (
     <div className="min-h-screen">
       <Header
@@ -343,7 +350,16 @@ export default function App() {
       </main>
 
       {showSettings && (
-        <SettingsModal settings={settings} onSave={handleSaveSettings} onClose={() => setShowSettings(false)} />
+        <SettingsModal
+          settings={settings}
+          onSave={handleSaveSettings}
+          onClose={() => setShowSettings(false)}
+          onLogout={() => {
+            logout();
+            setShowSettings(false);
+            setAuthed(false);
+          }}
+        />
       )}
 
       {showHistory && (
