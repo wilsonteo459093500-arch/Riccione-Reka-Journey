@@ -9,7 +9,7 @@ export const DEFAULT_SETTINGS = {
   apiKey: '',
   baseUrl: 'https://generativelanguage.googleapis.com',
   textModel: 'gemini-2.5-flash',
-  imageModel: 'gemini-3-pro-image-preview',
+  imageModel: 'gemini-3.1-flash-image-preview',
   brand: '',
   audience: '',
   tone: '',
@@ -18,11 +18,14 @@ export const DEFAULT_SETTINGS = {
 /** 分析类调用的模型候选：逐个尝试，只有 404（模型不存在）才换下一个 */
 export const TEXT_MODEL_CANDIDATES = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-3-flash', 'gemini-2.5-pro'];
 
-/** 出图模型候选（封面 / 案例图 / 动态帖单帧） */
+/**
+ * 出图模型候选（封面 / 案例图 / 动态帖单帧）。
+ * gemini-3-pro-image-preview 已被 Google 于 2026-03-09 关停，调用会硬报错 —— 不要再放回来。
+ * 2.0-flash-preview-image-generation 也已废弃。
+ */
 export const IMAGE_MODEL_CANDIDATES = [
-  'gemini-3-pro-image-preview',
-  'gemini-2.5-flash-image',
-  'gemini-2.0-flash-preview-image-generation',
+  'gemini-3.1-flash-image-preview', // Nano Banana 2：14 种画幅、最高 4K
+  'gemini-2.5-flash-image',         // 兜底：GA、1K、更便宜
 ];
 
 // ---------------------------------------------------------------------------

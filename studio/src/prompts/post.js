@@ -2,6 +2,7 @@
 
 import { DIRECTOR_PERSONA, JSON_TAIL, brandContext } from './shared.js';
 import { platformById } from '../constants.js';
+import { IMAGE_PROMPT_RULES } from '../services/imagePrompt.js';
 
 const POST_SCHEMA = `{
   "platform": "xhs",
@@ -72,8 +73,12 @@ ${brandContext(settings)}
   视频号写得像跟熟人说话，克制、可信、值得转发。
 - hashtags 按平台数量习惯：小红书 5–10 个（大中小词搭配），抖音 3–5 个，Reels/TikTok 3–5 个，视频号 2–3 个。
 - "keywords" 是搜索词，不是标签 —— 写用户真的会在搜索框打出来的字。
-- 封面 prompt 用英文写，包含：主体、构图、光线、色调、留白位置（给标题字留的地方）、画幅。
-  不要在 prompt 里要求模型写中文字 —— 文字由排版叠上去，prompt 只负责画面和留白。
+- 封面 prompt 必须严格按下面这套规则写（它直接决定出图质量）：
+
+${IMAGE_PROMPT_RULES}
+
+  另外这张是封面，构图上**必须留出一块安静的区域给标题大字**，在 prompt 里明确写清楚留在哪
+  （例如 "MUST leave the upper-left third visually quiet for overlaid type"）。
 - "post_time" 要给具体时段和理由，结合这个平台目标人群的作息。
 - 不要写空话。"提升品牌影响力" 这种句子一句都不要出现。
 

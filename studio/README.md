@@ -116,3 +116,22 @@ studio/
 - **抽帧模式听不到声音。** 涉及口播和音乐的判断会标「推测：」，自己核一下。
 - **时间码是模型看出来的，不是解码出来的。** 导出的 in/out 已经夹回素材真实时长内，
   但真正的精度来自渲染端用词级时间戳做吸附 —— 这也是推荐走 video-use 的原因。
+
+---
+
+## 出图：Creative Director 引擎
+
+出图这条线不是把文案里那句话直接丢给模型，而是过一道 `services/imagePrompt.js`
+（方法论固化自 `.claude/skills/banana`，对齐 Google 2026-03 官方提示指南）：
+
+- **5 段式公式** — 主体 → 动作 → 场景与时间 → 构图 → 风格（光线在风格里）。写成叙述段落，不是逗号关键词列表。
+- **禁用词拦截** — `8K / masterpiece / photorealistic / ultra-realistic / highly detailed / award winning …`
+  这些词会被 Nano Banana 的系统提示**主动惩罚**，出图前统一洗掉，并告诉你洗了哪些。
+  分辨率靠 `imageSize` 参数控制，不是靠在 prompt 里喊。
+- **5 个 domain** — 空间全景 / 单品 / 材质微距 / 生活场景 / 封面。
+  每个自带真实相机型号、镜头光圈、光线方案和 prestigious anchor（Architectural Digest、Wallpaper*、Kinfolk）。
+- **安全拦截 → 具体改写建议** — 被过滤器拦下时指出触发点并给三条改写方向，而不是让你自己猜。
+- **不点名木材树种** — 讲木纹与质感，对齐品牌表达规范。
+
+模型：`gemini-3.1-flash-image-preview`（Nano Banana 2），兜底 `gemini-2.5-flash-image`。
+> ⚠️ `gemini-3-pro-image-preview` 已被 Google 于 **2026-03-09 关停**，调用会硬报错，不要放回候选列表。
