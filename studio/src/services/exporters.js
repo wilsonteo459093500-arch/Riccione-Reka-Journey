@@ -405,20 +405,79 @@ export function toClaudePrompt(plan, assets, recipe, opts = {}) {
 
   const files = [...new Set(assets.map((a) => a.name))].map((n) => `  - ${n}`).join('\n');
 
-  return `我要剪一条短视频。下面是已经排好的完整方案，请用 video-use 帮我渲染出来。
+  // 全静图的方案不能套实拍流水线：没有源音频就没有词级时间戳，
+  // 「吸附词边界 / 逐段抽取 ranges / 切点音频淡入淡出」三步全部落空，
+  // agent 照着跑会去找不存在的东西，然后开始瞎凑。
+  const usesVideo = timed.some((r) => byId[r.assetId]?.kind === 'video');
+  const usesStills = timed.some((r) => byId[r.assetId]?.kind === 'image');
+  const stillsOnly = usesStills && !usesVideo;
+
+  // 所有镜头都来自同一条素材 —— 观众三四个镜头就会认出来，得先提醒
+  const uniqueSources = new Set(timed.map((r) => r.assetId).filter((id) => byId[id]));
+  const singleSource = uniqueSources.size === 1 && timed.length >= 4;
+
+  const steps = stillsOnly
+    ? `我已经把这份时间轴导成了 \`edl.json\`（和这段提示一起给你）。**请直接用它**，不要重新做剪辑决策 ——
+你要做的是执行 + 打磨。
+
+⚠️ **这条片子里没有任何视频素材，全部是静图。**所以 video-use 那套「转写 → 吸附词边界 → 逐段抽取」
+**完全不适用**：没有源音频可转写，\`edl.json\` 的 \`ranges\` 是空的，全部内容在 \`_studio.stills\`。
+不要去跑 \`transcribe_batch.py\`，不要找不存在的音轨。**其实这条用 ffmpeg 直接做就够了，不需要 video-use。**
+
+1. 每个 slot 用 \`zoompan\` 从静图生成一段，按 \`_studio.stills\` 里的 motion 描述做运镜。
+   **缓动必须是 ease-out-cubic，不能匀速** —— 匀速平移是「一眼假」最主要的来源。
+   zoompan 默认线性，要用 \`if(...)\` 表达式或分段 \`z\` 曲线手动做缓动。
+2. **每段单独调色**（${g.id}），再 concat。不要 concat 之后整体调。
+3. 配乐：按下面第 3 节的搜索词找一条，**按卡点时间戳对齐**。这条片子的节奏完全靠音乐撑，
+   因为画面本身没有真实的时间变化。
+4. 口播：${timed.some((r) => r.vo) ? '文案已经写好但**没有录音**。要么你自己录，要么用 TTS（ElevenLabs 等）生成后混进去。没有配音的话，这条只能靠字幕。' : '无口播。'}
+5. 叠加动画（见 overlays）——用 HyperFrames 做透明 WebM，PTS 位移 \`setpts=PTS-STARTPTS+T/TB\`。
+6. **字幕最后烧**，用 \`master.srt\`。
+7. 渲完自检：逐个切点看画面跳变、字幕遮挡、缓动曲线是否生硬。最多返工 3 次。`
+    : `我已经把这份时间轴导成了 \`edl.json\`（和这段提示一起给你）。**请直接用它**，不要重新做剪辑决策 ——
+你要做的是执行 + 打磨：
+
+1. 先跑 \`transcribe_batch.py\` 拿到词级时间戳，把上面每个 in/out **吸附到最近的词边界**（不要切在词中间），
+   前后各留 30–80ms 余量。
+2. 按 \`edl.json\` 的 ranges 逐段抽取，**每段单独调色**（不要 concat 之后整体调），然后无损 \`-c copy\` 拼接。
+3. 每个切点加 30ms 音频淡入淡出：\`afade=t=in:st=0:d=0.03,afade=t=out:st={dur-0.03}:d=0.03\`
+${usesStills ? '4. 静图部分（见 `_studio.stills`）用 ffmpeg zoompan 做缓推，缓动用 ease-out-cubic，再插进对应 slot。\n' : ''}${usesStills ? '5' : '4'}. 叠加动画（见 overlays）——用 HyperFrames 做透明 WebM，PTS 位移 \`setpts=PTS-STARTPTS+T/TB\`。
+${usesStills ? '6' : '5'}. **字幕最后烧**，用 \`master.srt\`，输出时间轴偏移 \`output_time = word.start - segment_start + segment_offset\`。
+${usesStills ? '7' : '6'}. 渲完自检：在每个切点用 \`timeline_view\` 检查画面跳变、音频爆音、字幕遮挡，最多返工 3 次。`;
+
+  const warning = singleSource
+    ? `\n\n## ⚠️ 开工前先看这一条\n\n**这 ${timed.length} 个镜头全部来自同一条素材。**
+观众通常在第 3–4 个镜头就会认出来「这是同一张图在裁来裁去」，完播率会掉得很快。
+裁切、缩放、变速都改变不了这个事实 —— 它们能改变的只是「多久被认出来」。
+
+渲之前先确认一件事：**这条片子的核心承诺，靠现有素材撑得起来吗？**
+如果承诺是「前后对比」但你手上只有「后」，那么无论怎么剪，观众要的那一半都不存在。
+${(plan.gaps || []).length ? '下面第 4 节列了缺口和顶替方案 —— 但顶替方案是用来救小缺口的，不是用来伪造核心卖点的。\n' : ''}
+建议：要么补拍最关键的那 2–3 个镜头再剪，要么把选题换成现有素材撑得住的（比如「一张图看懂侘寂风的 5 个材质」——
+单图讲解型，不承诺过程）。`
+    : '';
+
+  return `我要剪一条短视频。下面是已经排好的完整方案，请用 ${stillsOnly ? 'ffmpeg' : 'video-use'} 帮我渲染出来。${warning}
 
 ## 0. 前置
 
 素材都在当前目录：
 ${files}
 
-如果还没装 video-use：
+${
+  stillsOnly
+    ? `这条只需要 ffmpeg，不需要装 video-use：
+\`\`\`bash
+brew install ffmpeg
+\`\`\``
+    : `如果还没装 video-use：
 \`\`\`bash
 git clone https://github.com/browser-use/video-use ~/Developer/video-use
 ln -sfn ~/Developer/video-use ~/.claude/skills/video-use
 cd ~/Developer/video-use && uv sync && brew install ffmpeg
-cp .env.example .env   # 填 ELEVENLABS_API_KEY
-\`\`\`
+cp .env.example .env   # 填 ELEVENLABS_API_KEY（转写用）
+\`\`\``
+}
 
 ## 1. 成片目标
 
@@ -436,17 +495,7 @@ cp .env.example .env   # 填 ELEVENLABS_API_KEY
 ${shots}
 \`\`\`
 
-我已经把这份时间轴导成了 \`edl.json\`（和这段提示一起给你）。**请直接用它**，不要重新做剪辑决策 ——
-你要做的是执行 + 打磨：
-
-1. 先跑 \`transcribe_batch.py\` 拿到词级时间戳，把上面每个 in/out **吸附到最近的词边界**（不要切在词中间），
-   前后各留 30–80ms 余量。
-2. 按 \`edl.json\` 的 ranges 逐段抽取，**每段单独调色**（不要 concat 之后整体调），然后无损 \`-c copy\` 拼接。
-3. 每个切点加 30ms 音频淡入淡出：\`afade=t=in:st=0:d=0.03,afade=t=out:st={dur-0.03}:d=0.03\`
-4. 静图部分（见 \`_studio.stills\`）用 ffmpeg zoompan 做缓推，再插进对应 slot。
-5. 叠加动画（见 overlays）——用 HyperFrames 做透明 WebM，PTS 位移 \`setpts=PTS-STARTPTS+T/TB\`。
-6. **字幕最后烧**，用 \`master.srt\`，输出时间轴偏移 \`output_time = word.start - segment_start + segment_offset\`。
-7. 渲完自检：在每个切点用 \`timeline_view\` 检查画面跳变、音频爆音、字幕遮挡，最多返工 3 次。
+${steps}
 
 ## 3. 音乐
 
@@ -499,6 +548,67 @@ ${shots}
 
 ${plan.overlays?.length ? `**叠加图形**：\n${plan.overlays.map((o) => `- slot ${o.after_slot} 之后：${o.type}「${o.text}」${o.duration_s}s，${o.style}`).join('\n')}\n先 browsePresets 找现成的，没有合适的再 loadSkill('motion-graphics') 自己做。\n` : ''}
 搭完用 captureFrame 抽查 ${timed.slice(0, 3).map((r) => `${r.output_start.toFixed(1)}s`).join('、')} 这几个点，确认画面对得上再告诉我。`;
+}
+
+// ---------------------------------------------------------------------------
+// 缺口补拍 —— 交给带 Higgsfield MCP 的 agent 去「生成」拍不到的镜头
+// ---------------------------------------------------------------------------
+
+/**
+ * 把 plan.gaps 变成一份可以直接粘给 Claude（已连 Higgsfield MCP）的生成指令。
+ *
+ * 这是整条链上最省事的一环：剪辑方案本来就知道「缺哪一拍、要什么画面、多长」，
+ * 这些正好就是文生视频需要的全部输入。不用再描述一遍。
+ *
+ * 注意：AI 生成的镜头适合做氛围空镜、抽象转场、概念画面。
+ * **不要用它生成你的真实案例** —— 客户认得出自己家，做出来是假的。
+ */
+export function toHiggsfieldPrompts(plan, recipe) {
+  const gaps = plan.gaps || [];
+  if (!gaps.length) return null;
+
+  const g = gradeById(plan.grade_preset);
+  const aspect = plan.aspect || '9:16';
+
+  const shots = gaps
+    .map((gap, i) => {
+      const b = beatById(gap.beat);
+      return `### ${i + 1}. [${b.label}] ${gap.need}
+
+- **画面**：${gap.how_to_shoot}
+- **时长**：2–4 秒（够剪进 ${b.label} 那一拍就行）
+- **画幅**：${aspect}
+- **调性**：${g.look || g.desc}
+- **不要**：出现人脸特写、可辨认的品牌 logo、任何看起来像"真实案例"的完整空间`;
+    })
+    .join('\n\n');
+
+  return `我在剪一条${recipe?.format || '短视频'}，有 ${gaps.length} 个镜头手上没有素材、也不方便补拍。
+你已经连了 Higgsfield MCP，帮我生成它们。
+
+## 先做两件事
+
+1. \`higgsfield_get_credits\` 看一下余额够不够
+2. \`higgsfield_list_models\` 列出可用的视频模型和它们的参数
+
+## 要生成的镜头
+
+${shots}
+
+## 生成要求
+
+- **全片调性必须一致**：${g.label} — ${g.look || g.desc}。
+  同一套光线、同一个色温、同样的景深感，剪在一起不能有一块特别跳。
+- **优先走「先出图再动起来」**：\`higgsfield_generate_image\` 出一张定帧 → 确认构图对了 →
+  再用 image2video 让它动。比直接文生视频可控得多，也省额度。
+- 每个镜头**先只生成 1 条**给我看。我确认了再批量出其余的。
+- 提交后用 \`higgsfield_wait_for_job\` 等结果，把最终的 URL 列给我。
+
+## 重要边界
+
+这些是**补空镜和氛围镜头**，不是用来伪造案例的。
+如果哪个缺口本质上必须是真实项目画面（成品空间、实际工艺、客户现场），
+**直接告诉我"这个得你自己去拍"，不要生成** —— 我宁可少一个镜头，也不要让客户看到假的案例。`;
 }
 
 /** video-use 的 project.md，放进 edit/ 目录做会话记忆 */

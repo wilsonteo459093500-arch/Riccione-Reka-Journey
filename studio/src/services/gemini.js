@@ -303,7 +303,7 @@ export async function uploadVideo(settings, file, onProgress) {
  * @param {string|null} aspectRatio 如 '9:16'（只在纯文生图时有效）
  * @returns {Promise<string>} dataURL
  */
-export async function generateImage(settings, prompt, images, aspectRatio, onWait) {
+export async function generateImage(settings, prompt, images, aspectRatio, onWait, imageSize = '2K') {
   if (!settings.apiKey) throw new Error('还没有配置 API key，点右上角设置。');
 
   const list = Array.isArray(images) ? images : images ? [images] : [];
@@ -319,8 +319,12 @@ export async function generateImage(settings, prompt, images, aspectRatio, onWai
       const generationConfig = { responseModalities: ['TEXT', 'IMAGE'] };
       const imageConfig = {};
       if (aspectRatio && !list.length) imageConfig.aspectRatio = aspectRatio;
-      if (!/2\.5-flash-image/.test(model)) imageConfig.imageSize = '2K';
-      if (Object.keys(imageConfig).length) generationConfig.imageConfig = imageConfig;
+      // imageSize 必须大写，小写会被 API 静默忽略。
+      // 2.5-flash-image 只到 1K，给它更高的值没有意义。
+      imageConfig.imageSize = /2\.5-flash-image/.test(model)
+        ? '1K'
+        : String(imageSize || '2K').toUpperCase();
+      generationConfig.imageConfig = imageConfig;
 
       const url = endpoint(
         settings,
@@ -355,9 +359,30 @@ export async function generateImage(settings, prompt, images, aspectRatio, onWai
         throw err;
       }
 
-      const candidateParts = data?.candidates?.[0]?.content?.parts || [];
+      const candidate = data?.candidates?.[0];
+      const candidateParts = candidate?.content?.parts || [];
       const imagePart = candidateParts.find((p) => p.inlineData?.data || p.inline_data?.data);
+
       if (!imagePart) {
+        // 安全拦截要跟「模型抽风」分开报，因为处理方式完全不同：
+        // 前者必须改写 prompt，后者重试一次通常就好。
+        const reason = candidate?.finishReason;
+        if (reason === 'IMAGE_SAFETY' || reason === 'SAFETY') {
+          const err = new Error('这张图被安全过滤器拦下了（重试没用，得改写画面描述）。');
+          err.safetyBlocked = true;
+          throw err;
+        }
+        if (reason === 'PROHIBITED_CONTENT') {
+          const err = new Error('这个题材被内容政策直接禁止，换个画面概念吧。');
+          err.safetyBlocked = true;
+          err.hardBlock = true;
+          throw err;
+        }
+        if (reason === 'RECITATION') {
+          const err = new Error('生成结果太接近已有的受版权保护画面，换个描述重试。');
+          err.safetyBlocked = true;
+          throw err;
+        }
         const text = candidateParts.find((p) => p.text)?.text;
         throw new Error(text ? `模型没有返回图片：${text.slice(0, 160)}` : '模型没有返回图片，请重试。');
       }

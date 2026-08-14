@@ -7,6 +7,7 @@ import { PLATFORMS, platformById } from '../constants.js';
 import { postPrompt, animatedPostPrompt } from '../prompts/post.js';
 import { generateJSON, generateImage } from '../services/gemini.js';
 import { downloadDataUrl } from '../services/media.js';
+import { DOMAINS, IMAGE_SIZES, lintPrompt, safetyAdvice, domainById } from '../services/imagePrompt.js';
 import { toHyperFrames } from '../services/exporters.js';
 
 export default function PostView({ settings, notify, recipe, plan, assets, platformId, setPlatformId, onOpenSettings }) {
@@ -17,6 +18,9 @@ export default function PostView({ settings, notify, recipe, plan, assets, platf
   const [cover, setCover] = useState(null); // dataURL
   const [coverBusy, setCoverBusy] = useState(false);
   const [coverRefId, setCoverRefId] = useState('');
+  const [domainId, setDomainId] = useState('cover');
+  const [imageSize, setImageSize] = useState('2K');
+  const [coverIssue, setCoverIssue] = useState(null); // 安全拦截时的改写建议
 
   const [story, setStory] = useState(null);
   const [storyBusy, setStoryBusy] = useState(false);
@@ -48,25 +52,45 @@ export default function PostView({ settings, notify, recipe, plan, assets, platf
   }
 
   async function handleCover() {
-    const prompt = post?.cover?.prompt || plan?.cover?.prompt;
-    if (!prompt) return;
+    const raw = post?.cover?.prompt || plan?.cover?.prompt;
+    if (!raw) return;
     setCoverBusy(true);
+    setCoverIssue(null);
     try {
       const refAsset = assets.find((a) => a.id === coverRefId && a.kind === 'image');
+      const d = domainById(domainId);
+
+      // 模型偶尔还是会漏出「8K / photorealistic」这类被系统提示惩罚的词，出图前统一洗一遍
+      let text = raw;
+      if (refAsset) {
+        text +=
+          '\n\nUse the supplied photograph as the base: keep its subject, layout, materials and proportions ' +
+          'unchanged — only re-light and re-compose it into the described cover. ' +
+          'MUST leave clean negative space where the title type will sit.';
+      }
+      text += `\n\nCaptured with ${d.camera}. ${d.lighting}. ${d.anchor}.`;
+      const { clean, removed } = lintPrompt(text);
+      if (removed.length) {
+        notify({ type: 'warn', text: `已洗掉会降质的词：${removed.join('、')}` });
+      }
+
       const dataUrl = await generateImage(
         settings,
-        refAsset
-          ? `${prompt}\n\nUse the supplied photograph as the base: keep its subject, layout and materials, ` +
-              `re-light and re-compose it into the described cover. Leave clean negative space where the title text will sit.`
-          : prompt,
+        clean,
         refAsset ? [refAsset.input] : null,
         p.aspect,
-        (sec, n) => notify({ type: 'warn', text: `被限流，${sec} 秒后重试（${n}/3）` })
+        (sec, n) => notify({ type: 'warn', text: `被限流，${sec} 秒后重试（${n}/3）` }),
+        imageSize
       );
       setCover(dataUrl);
-      notify({ type: 'ok', text: '封面出好了 —— 大字建议用排版软件叠上去，模型写中文字不稳' });
+      notify({ type: 'ok', text: `封面出好了（${d.label} · ${imageSize}）—— 大字自己叠，模型写中文字不稳` });
     } catch (err) {
-      notify({ type: 'error', text: err.message });
+      if (err.safetyBlocked) {
+        setCoverIssue(safetyAdvice(raw));
+        notify({ type: 'error', text: err.message });
+      } else {
+        notify({ type: 'error', text: err.message });
+      }
     } finally {
       setCoverBusy(false);
     }
@@ -241,6 +265,31 @@ export default function PostView({ settings, notify, recipe, plan, assets, platf
                           ))}
                       </select>
                     </Field>
+                  )}
+
+                  <Field label="拍法" hint={domainById(domainId).desc}>
+                    <ChipRow options={DOMAINS} value={domainId} onChange={setDomainId} />
+                  </Field>
+
+                  <Field label="出图尺寸" hint="按需求选，不要靠在 prompt 里写「8K」—— 那个词反而会降质">
+                    <ChipRow options={IMAGE_SIZES} value={imageSize} onChange={setImageSize} />
+                  </Field>
+
+                  {coverIssue && (
+                    <div className="rounded-xl border border-sail-danger/40 bg-sail-danger/5 p-3.5">
+                      <p className="text-xs font-semibold text-sail-danger mb-1.5">被安全过滤器拦下了，重试没用</p>
+                      <ul className="space-y-1 text-xs text-sail-muted leading-relaxed">
+                        {coverIssue.reasons.map((r, i) => (
+                          <li key={`r${i}`}>· {r}</li>
+                        ))}
+                      </ul>
+                      <p className="text-[11px] font-semibold text-sail-faint mt-2 mb-1">怎么改：</p>
+                      <ul className="space-y-1 text-xs text-sail-muted leading-relaxed">
+                        {coverIssue.suggestions.map((s, i) => (
+                          <li key={`s${i}`}>{i + 1}. {s}</li>
+                        ))}
+                      </ul>
+                    </div>
                   )}
 
                   <div className="flex flex-wrap gap-2">

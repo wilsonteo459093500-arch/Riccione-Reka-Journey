@@ -1,20 +1,22 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Film, Upload, Sparkles, Wand2, X, AlertTriangle, Lightbulb, ShoppingBag, Music, Palette, Type, ArrowRight,
 } from 'lucide-react';
-import { Card, Btn, Field, TextArea, ChipRow, Tag, Empty, Progress, Fold, CopyBtn } from './ui/Bits.jsx';
+import { Card, Btn, Field, TextArea, TextInput, ChipRow, Tag, Empty, Progress, Fold, CopyBtn } from './ui/Bits.jsx';
 import { PLATFORMS, TEMPLATES, BEATS, beatById, platformById } from '../constants.js';
 import { deconstructPrompt, recipeFromTemplatePrompt } from '../prompts/deconstruct.js';
 import { generateJSON, uploadVideo } from '../services/gemini.js';
 import { probeVideo, sampleFrames, videoToInline, videoThumb, fmtBytes, fmtTime, INLINE_MAX_BYTES } from '../services/media.js';
+import { parseVideoUrl, youtubePart } from '../services/videoUrl.js';
 
 const FRAME_COUNT = 18;
 
 export default function IdeateView({
   settings, notify, platformId, setPlatformId, recipe, setRecipe, seedBrief, onOpenSettings, onGoEdit,
 }) {
-  const [source, setSource] = useState('reference'); // 'reference' | 'template'
+  const [source, setSource] = useState('reference'); // 'reference' | 'link' | 'template'
   const [ref, setRef] = useState(null); // { file, url, duration, width, height, thumb }
+  const [link, setLink] = useState('');
   const [notes, setNotes] = useState('');
   const [templateId, setTemplateId] = useState('before_after');
   const [brief, setBrief] = useState('');
@@ -22,6 +24,8 @@ export default function IdeateView({
   const [progress, setProgress] = useState(null); // { pct, note }
   const fileRef = useRef(null);
   const urlRef = useRef(null);
+
+  const parsedLink = useMemo(() => parseVideoUrl(link), [link]);
 
   useEffect(() => () => urlRef.current && URL.revokeObjectURL(urlRef.current), []);
 
@@ -87,11 +91,23 @@ export default function IdeateView({
       notify({ type: 'warn', text: '先上传一条参考视频' });
       return;
     }
+    if (source === 'link' && !parsedLink.ok) {
+      notify({ type: 'warn', text: parsedLink.reason || '先粘贴一条能用的链接' });
+      return;
+    }
     setBusy(true);
     setProgress({ pct: 5, note: '准备中…' });
     try {
       let parts;
-      if (source === 'reference') {
+      if (source === 'link') {
+        // Google 直接去取这条 YouTube —— 不下载、不上传，也不经过浏览器
+        setProgress({ pct: 40, note: 'Google 正在读取这条 YouTube…' });
+        parts = [
+          youtubePart(parsedLink.canonical),
+          { text: deconstructPrompt({ platformId, mode: 'video', notes, settings }) },
+        ];
+        setProgress({ pct: 75, note: '拆解中，这一步最花时间（30–90 秒）…' });
+      } else if (source === 'reference') {
         const media = await buildMediaParts();
         setProgress({ pct: 88, note: '拆解中，这一步最花时间（30–90 秒）…' });
         parts = [
@@ -109,10 +125,23 @@ export default function IdeateView({
 
       const out = await generateJSON(settings, parts, { temperature: 0.6 });
       if (!out?.beats?.length) throw new Error('模型没有拆出结构，重试一次通常就好');
-      setRecipe({ ...out, _sourceKind: source, _refName: ref?.file?.name || '', _platformId: platformId });
+      setRecipe({
+        ...out,
+        _sourceKind: source,
+        _refName: source === 'link' ? parsedLink.canonical : ref?.file?.name || '',
+        _platformId: platformId,
+      });
       notify({ type: 'ok', text: `拆出 ${out.beats.length} 拍 —— 往下滚看素材清单` });
     } catch (err) {
-      notify({ type: 'error', text: err.message });
+      // YouTube 取片失败最常见的原因是「不是公开视频」，直接把话说清楚，别让人去猜
+      const linkIssue =
+        source === 'link' && /youtube|video|url|fetch|unsupported|invalid/i.test(err.message || '');
+      notify({
+        type: 'error',
+        text: linkIssue
+          ? `${err.message}｜多半是这条视频不公开（不公开/私享的读不到），或超了当天 8 小时免费额度。可以改用「传文件」。`
+          : err.message,
+      });
     } finally {
       setBusy(false);
       setProgress(null);
@@ -135,8 +164,9 @@ export default function IdeateView({
         <Card title="第二步 · 给个方向">
           <div className="flex gap-1 bg-sail-tint border border-sail-line rounded-xl p-1 mb-4">
             {[
-              { id: 'reference', label: '有参考视频' },
-              { id: 'template', label: '没有，用模板' },
+              { id: 'link', label: '粘链接' },
+              { id: 'reference', label: '传文件' },
+              { id: 'template', label: '用模板' },
             ].map((t) => (
               <button
                 key={t.id}
@@ -150,7 +180,62 @@ export default function IdeateView({
             ))}
           </div>
 
-          {source === 'reference' ? (
+          {source === 'link' ? (
+            <div className="space-y-3">
+              <Field
+                label="参考视频链接"
+                hint="目前只有 YouTube 能直接读（含 Shorts）—— Google 自己去取片，不用下载也不用上传。"
+              >
+                <TextInput
+                  value={link}
+                  onChange={(e) => setLink(e.target.value)}
+                  placeholder="https://www.youtube.com/shorts/..."
+                  spellCheck={false}
+                />
+              </Field>
+
+              {parsedLink.ok && (
+                <div className="rounded-xl overflow-hidden border border-sail-line bg-black">
+                  <iframe
+                    src={parsedLink.embed}
+                    title="参考视频预览"
+                    allow="encrypted-media; picture-in-picture"
+                    allowFullScreen
+                    className="w-full aspect-video block"
+                    style={{ border: 0 }}
+                  />
+                </div>
+              )}
+
+              {link.trim() && !parsedLink.ok && parsedLink.kind !== 'empty' && (
+                <div className="rounded-xl border border-sail-warn/40 bg-sail-warn/5 p-3.5">
+                  <p className="text-sm font-medium text-sail-ink">{parsedLink.reason}</p>
+                  {parsedLink.hint && (
+                    <p className="text-xs text-sail-muted mt-1.5 leading-relaxed">{parsedLink.hint}</p>
+                  )}
+                  {parsedLink.kind === 'unsupported' && (
+                    <Btn
+                      size="sm"
+                      variant="soft"
+                      className="mt-2.5"
+                      onClick={() => setSource('reference')}
+                    >
+                      切到「传文件」
+                    </Btn>
+                  )}
+                </div>
+              )}
+
+              <Field label="补充说明（可选）" hint="告诉它你到底看中了这条视频的什么，拆出来会准很多">
+                <TextArea
+                  rows={3}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="如：我要的是它前 3 秒那种反差感和字幕节奏，配乐不用管"
+                />
+              </Field>
+            </div>
+          ) : source === 'reference' ? (
             <div className="space-y-3">
               {ref ? (
                 <div className="relative rounded-xl overflow-hidden border border-sail-line bg-sail-ink">
@@ -217,10 +302,17 @@ export default function IdeateView({
 
         <Card>
           <Btn className="w-full" busy={busy} icon={busy ? undefined : Sparkles} onClick={handleDeconstruct}>
-            {busy ? '分析中…' : source === 'reference' ? '拆解这条参考视频' : '生成配方'}
+            {busy ? '分析中…' : source === 'template' ? '生成配方' : '拆解这条参考视频'}
           </Btn>
           {progress && <div className="mt-3"><Progress value={progress.pct} note={progress.note} /></div>}
-          {!progress && (
+          {!progress && source === 'link' && (
+            <p className="text-[11px] text-sail-faint mt-2.5 leading-relaxed">
+              链接由 Google 那边直接取片，<strong className="text-sail-muted">不下载也不上传，最快</strong>。
+              免费额度每天可分析 8 小时 YouTube，且<strong className="text-sail-muted">只能是公开视频</strong>
+              （不公开 / 私享的读不到）。
+            </p>
+          )}
+          {!progress && source === 'reference' && (
             <p className="text-[11px] text-sail-faint mt-2.5 leading-relaxed">
               小于 14MB 的视频会连声音一起分析；更大的会先试上传通道，不行就在本机抽 {FRAME_COUNT} 帧分析
               —— <strong className="text-sail-muted">原片始终不会上传到我们的服务器</strong>。
