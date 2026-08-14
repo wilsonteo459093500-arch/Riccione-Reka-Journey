@@ -2,6 +2,17 @@
 <html lang="zh-Hans" data-lang="zh">
 <head>
 <meta charset="UTF-8" />
+<script>
+/* 这一页是资料夹的首页。网址若少了结尾的斜线（/invite 而不是 /invite/），
+   浏览器会把 invite 当成档案名，样式与图片就会去上一层找 —— 全部 404。
+   补上斜线再往下走。必须放在所有 <link> 之前。 */
+(function () {
+  var p = location.pathname;
+  if (!/\/$/.test(p) && !/\.[a-z0-9]+$/i.test(p)) {
+    location.replace(p + '/' + location.search + location.hash);
+  }
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>邀请函 · RICCIONE REKA JOURNEY</title>
 <meta name="description" content="谨此邀请您莅临溪岸自然主义生活体验馆 —— 一段约 60 分钟的到馆行程：材料、色号、工艺细节，以及一份属于您的理想家蓝图。" />

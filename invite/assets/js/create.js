@@ -14,7 +14,8 @@
   var local = /^(localhost|127\.|0\.0\.0\.0|\[?::1)/.test(location.hostname);
   var dir   = location.pathname.replace(/[^/]*$/, '');
   var BASE  = location.origin + dir.replace(/\/$/, '');
-  var PATH_INVITE = local ? BASE + '/index.html' : BASE || location.origin;
+  // 结尾的斜线不能省：少了它，浏览器会把 /invite 当档案，相对路径的样式与图片全部 404
+  var PATH_INVITE = local ? BASE + '/index.html' : BASE + '/';
   var PATH_BRIEF  = local ? BASE + '/brief.html' : BASE + '/brief';
 
   var F = {
