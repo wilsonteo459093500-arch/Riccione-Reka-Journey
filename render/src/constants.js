@@ -93,6 +93,19 @@ export const AMBIGUOUS_MATERIAL_RULE =
   'surfaces whose material is not clearly indicated. Where the draft does indicate a material ' +
   '(wood grain, tile joints, stone veining), follow it faithfully.';
 
+// 木作层次法则 —— 只用于 AI 自行选材的模式（实景焕新 / 毛坯出图）。
+// 让木质空间「高级」的关键：一个主木色打底，深浅克制，并与 1–2 种其他材质对比。
+export const WOOD_HIERARCHY_RULE =
+  'WOOD DISCIPLINE (apply whenever wood surfaces appear): establish ONE dominant wood tone that covers ' +
+  'at least 60% of all wood surfaces (floor, tall cabinetry, wall panelling read as one family); ' +
+  'add at most one secondary wood tone and a small accent tone, keeping the whole scheme within a 2–3 step ' +
+  'depth range — never four unrelated wood colours. Large joinery carries the base tone quietly; ' +
+  'small pieces (tables, chairs, side tables) provide the accent with visibly lighter, slimmer profiles. ' +
+  'Keep wood grain clearly legible on surfaces seen up close. Pair the wood with only 1–2 companion ' +
+  'materials — stone for weight, metal for crispness, fabric for softness — so the room reads as ' +
+  '2–3 main materials total, never an all-wood box and never a jumble. ' +
+  'Match wood tone to the light: warm light with warm wood; under cool daylight avoid grey-cast wood.';
+
 // 灯光真实感（从「效果图精修」提炼，应用到所有出图模式）
 export const LIGHTING_REALISM =
   'LIGHTING: light the scene as realistic photography with a layered scheme — natural directional daylight ' +
@@ -375,6 +388,14 @@ export const ADVISOR_FOCUS = [
   { id: 'all', label: '整体审查', prompt: '对布局动线、柜体规划、灯光、配色材质做全面审查。' },
   { id: 'layout', label: '动线与布局', prompt: '重点审查空间规划：通行净宽、功能分区、家具尺度与摆位、门扇冲突。' },
   { id: 'cabinet', label: '柜体规划', prompt: '重点审查全屋定制柜体：尺寸规范、收纳容量、分区合理性、五金与使用动作。' },
+  {
+    id: 'wood',
+    label: '木作专项',
+    prompt:
+      '重点按「木质空间四要点」审查木作：① 光线 —— 现场光的冷暖是否适配所选木色；' +
+      '② 用量 —— 是否已确立单一主木色，深浅层次是否克制；③ 搭配 —— 木材与石/金属/布艺的组合关系、' +
+      '主材质是否控制在 2–3 种；④ 维护 —— 日晒、潮湿、耐污耐磨的实际风险。',
+  },
   { id: 'lighting', label: '灯光方案', prompt: '重点审查照明：分层（环境/任务/重点）、照度是否足够、色温统一性、防眩。' },
   { id: 'color', label: '配色与材质', prompt: '重点审查色彩与材质搭配：60-30-10、底调统一、木纹数量与方向、耐用性。' },
 ];
@@ -392,7 +413,19 @@ export const ADVISOR_PROMPT =
   '- 照明：必须分层（环境+任务+重点）；客厅100–200lx（阅读区300–500）、餐桌面200–300、厨房台面500、书桌500、' +
   '镜前垂直照度300–500；色温起居2700–3000K、任务区3500–4000K、全屋≤2档；CRI≥90；灯带见光不见灯；' +
   '单一主灯 = 「照明荒漠」要点名。\n' +
-  '- 配色：60-30-10 法则；冷暖底调统一；小空间墙面 LRV≥60。\n\n' +
+  '- 配色：60-30-10 法则；冷暖底调统一；小空间墙面 LRV≥60。\n' +
+  '- 木作（全屋定制的命门，凡画面里有木饰面/木地板/木家具必查）：\n' +
+  '  ① 光线定木色：暖光让木色更柔和，冷白光容易显灰显硬；判断木色要「白天看本色、夜里看灯下变化」。' +
+  '若图中光源色温与木色不搭（如冷白光配黄调木），要点名。\n' +
+  '  ② 用量定层次：大面积木作必须先确立**一个主木色**（地板/墙柜/护墙不要全用同一深浅，也不要各走各的）；' +
+  '主木色为底，辅助色少量，点缀色更少。判断标准：主木色应占木作面积 ≥60%，深浅跨度控制在 2–3 档以内；' +
+  '出现 4 种以上互不相干的木色 = 杂乱，要点名。\n' +
+  '  ③ 小面积木作负责调节、不负责抢戏：桌椅边几用来补层次，空间越小造型越要轻（桌腿纤细、脚下留空）；' +
+  '桌面等近距离接触面应保留清楚木纹；数量少而准比多而杂耐看。\n' +
+  '  ④ 木要和其他材质配着看：木+石更稳重、木+金属更利落、木+布艺更柔和；一个空间主材质控制在 2–3 种。' +
+  '全木无对比 = 闷；材质超过 4 种 = 乱。\n' +
+  '  ⑤ 好看之前先问维护：长时间直晒会让木色变化（西晒面要提醒）；潮湿区（卫浴/阳台/水槽下）必须确认封边与工艺；' +
+  '桌面台面要考虑耐污耐磨与清洁方式。\n\n' +
   '输出格式（中文，用词专业但客户能听懂）：\n' +
   '1. 【总结论】✅ 可行 / ⚠️ 需调整 / ❌ 有重大问题 + 一句话概括\n' +
   '2. 分节点评：【动线与布局】【柜体规划】【灯光】【配色材质】—— 每条问题按「问题 → 依据（数字）→ 修改建议」写\n' +

@@ -7,6 +7,7 @@ import {
   POLISH_SCOPES,
   ARCHITECTURE_LOCK,
   AMBIGUOUS_MATERIAL_RULE,
+  WOOD_HIERARCHY_RULE,
   LIGHTING_REALISM,
   QUALITY_SUFFIX,
 } from './constants.js';
@@ -72,6 +73,8 @@ export function buildPrompt({
   // 三条铁律：结构锁（所有带图模式）、材质歧义规则（草图）、灯光真实感（精修以外的出图模式）
   if (mode.needsImage) lines.push(ARCHITECTURE_LOCK);
   if (mode.id === 'sketch') lines.push(AMBIGUOUS_MATERIAL_RULE);
+  // 木作层次只在 AI 自行选材时生效（草图/精修/指令修改的材质由底图或用户决定）
+  if (['restyle', 'empty'].includes(mode.id)) lines.push(WOOD_HIERARCHY_RULE);
   if (['restyle', 'empty', 'sketch'].includes(mode.id)) lines.push(LIGHTING_REALISM);
 
   if (room && !mode.skipRoom) {
