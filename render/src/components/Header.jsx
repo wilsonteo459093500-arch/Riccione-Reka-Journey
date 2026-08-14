@@ -18,8 +18,8 @@ export default function Header({ view, setView, onOpenSettings, onOpenHistory, h
       <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
         <div className="flex items-center gap-3 min-w-0">
           <div className="leading-tight whitespace-nowrap">
-            <div className="font-display text-lg font-semibold text-sail-green-deep">RICCIONE REKA</div>
-            <div className="text-[9px] tracking-[0.3em] text-sail-faint uppercase">Design Studio</div>
+            <div className="font-display text-lg font-semibold text-sail-green-deep tracking-wide">UKIR STUDIO</div>
+            <div className="text-[9px] tracking-[0.25em] text-sail-faint uppercase">by Riccione Reka</div>
           </div>
           <nav className="flex gap-1 bg-white border border-sail-line rounded-xl p-1 overflow-x-auto">
             {tab('render', 'AI 效果图')}

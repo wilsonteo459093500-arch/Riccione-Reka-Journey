@@ -28,8 +28,9 @@ export default function LoginGate({ onSuccess }) {
     <div className="min-h-screen flex items-center justify-center px-4">
       <form onSubmit={handleSubmit} className="w-full max-w-sm bg-sail-card border border-sail-line rounded-2xl p-8 shadow-sm">
         <div className="text-center mb-6">
-          <div className="font-display text-3xl font-semibold text-sail-green-deep">RICCIONE REKA</div>
-          <div className="text-xs text-sail-faint mt-1 tracking-[0.3em] uppercase">Design Studio · 内部工具</div>
+          <div className="w-10 h-1 bg-sail-gold mx-auto mb-4" />
+          <div className="font-display text-4xl font-semibold text-sail-green-deep tracking-wide">UKIR STUDIO</div>
+          <div className="text-[11px] text-sail-faint mt-2 tracking-[0.3em] uppercase">by Riccione Reka</div>
         </div>
 
         <label className="block mb-3">
