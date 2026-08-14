@@ -3,7 +3,7 @@ import {
   UploadCloud, Scissors, Trash2, ChevronUp, ChevronDown, LayoutGrid,
   Sparkles, Download, Loader2, Plus, Wand2, ListOrdered,
 } from 'lucide-react';
-import { CUTOUT_PROMPT, FLATLAY_PROMPT, LIB_CATS, SWATCH_PROMPT } from '../constants.js';
+import { CUTOUT_PROMPT, FLATLAY_PROMPT, LIB_CATS, SWATCH_PROMPT, TITLE_FONTS, TITLE_POSITIONS } from '../constants.js';
 import { generateImage } from '../services/gemini.js';
 import {
   prepareInputImage, compressForStorage, dataUrlToInput, downloadDataUrl, applyWatermark, shrinkDataUrl,
@@ -27,6 +27,71 @@ const BGS = [
 ];
 
 const uid = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+const DEFAULT_BOARD = {
+  ratioId: 'a4l',
+  bgId: 'paper',
+  title: '',
+  subtitle: '',
+  titleFont: 'serif', // TITLE_FONTS id
+  titleScale: 1, // 0.6 – 1.8
+  titlePos: 'bl', // TITLE_POSITIONS id
+  titleColor: '', // 空 = 跟随底色自动（浅底墨黑 / 深底暖白）
+  notes: '', // 排版偏好描述，喂给 AI 实拍排版
+};
+
+const TITLE_COLOR_PRESETS = ['#1A1614', '#F5F1EA', '#B8995A', '#2D4A3E', '#A87C4F'];
+
+/** 封面文字块（金线 + 标题 + 副标题），画板导出与 flat-lay 导出共用 */
+function drawTitleBlock(ctx, W, H, board, { defaultColor, shadow }) {
+  const { title, subtitle } = board;
+  if (!title && !subtitle) return;
+  const font = TITLE_FONTS.find((f) => f.id === board.titleFont) || TITLE_FONTS[0];
+  const scale = board.titleScale || 1;
+  const pos = board.titlePos || 'bl';
+  const color = board.titleColor || defaultColor;
+  const m = W * 0.045;
+  const titleFs = W * 0.032 * scale;
+  const subFs = W * 0.014 * scale;
+  const ruleH = Math.max(3, W * 0.0022);
+  const gapA = W * 0.02 * scale;
+  const gapB = W * 0.016 * scale;
+  const blockH = ruleH + gapA + (title ? titleFs : 0) + (subtitle ? gapB + subFs : 0);
+  const top = pos[0] === 't' ? m : pos === 'c' ? (H - blockH) / 2 : H - m - blockH;
+  const center = pos === 'c';
+  const right = pos[1] === 'r';
+  const x = center ? W / 2 : right ? W - m : m;
+
+  ctx.save();
+  if (shadow) {
+    ctx.shadowColor = 'rgba(26,22,20,0.35)';
+    ctx.shadowBlur = W * 0.008;
+  }
+  ctx.textAlign = center ? 'center' : right ? 'right' : 'left';
+  ctx.textBaseline = 'alphabetic';
+
+  const ruleW = W * 0.05;
+  const ruleX = center ? W / 2 - ruleW / 2 : right ? W - m - ruleW : m;
+  ctx.fillStyle = '#B8995A';
+  ctx.fillRect(ruleX, top, ruleW, ruleH);
+
+  let y = top + ruleH + gapA;
+  if (title) {
+    y += titleFs * 0.82;
+    ctx.font = `600 ${titleFs}px ${font.css}`;
+    ctx.fillStyle = color;
+    ctx.fillText(title, x, y);
+  }
+  if (subtitle) {
+    y += (title ? gapB : subFs * 0.82) + subFs * (title ? 0.82 : 0);
+    ctx.font = `500 ${subFs}px ${font.css}`;
+    ctx.globalAlpha = 0.72;
+    ctx.fillStyle = color;
+    ctx.fillText(subtitle.toUpperCase(), x, y);
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+}
 
 const FLATLAY_ASPECT = { a4l: '4:3', a4p: '3:4', '16:9': '16:9', '1:1': '1:1' };
 
@@ -95,7 +160,7 @@ export default function MoodBoard({ settings, onOpenSettings, notify }) {
   // ---- 画板集合 ----
   const [boards, setBoards] = useState([]); // [{id,name,ts}]（轻量列表，内容按需读）
   const [activeId, setActiveId] = useState(null);
-  const [board, setBoard] = useState({ ratioId: 'a4l', bgId: 'paper', title: '', subtitle: '' });
+  const [board, setBoard] = useState({ ...DEFAULT_BOARD });
   const [items, setItems] = useState([]);
   const [boardName, setBoardName] = useState('画板 1');
   const [selectedId, setSelectedId] = useState(null);
@@ -137,7 +202,7 @@ export default function MoodBoard({ settings, onOpenSettings, notify }) {
         setBoards(all.map(({ id, name, ts }) => ({ id, name, ts })));
         applyRecord(rec);
       } else {
-        const rec = { id: `b-${uid()}`, name: '画板 1', board: { ratioId: 'a4l', bgId: 'paper', title: '', subtitle: '' }, items: [], ts: Date.now() };
+        const rec = { id: `b-${uid()}`, name: '画板 1', board: { ...DEFAULT_BOARD }, items: [], ts: Date.now() };
         await putBoard(rec);
         await setActiveBoardId(rec.id);
         setBoards([{ id: rec.id, name: rec.name, ts: rec.ts }]);
@@ -151,7 +216,7 @@ export default function MoodBoard({ settings, onOpenSettings, notify }) {
   function applyRecord(rec) {
     setActiveId(rec.id);
     setBoardName(rec.name || '画板');
-    setBoard(rec.board || { ratioId: 'a4l', bgId: 'paper', title: '', subtitle: '' });
+    setBoard({ ...DEFAULT_BOARD, ...(rec.board || {}) });
     setItems((rec.items || []).map((it) => ({ ...it, busy: false })));
     setSelectedId(null);
     setFlatlayUrl(null);
@@ -202,7 +267,7 @@ export default function MoodBoard({ settings, onOpenSettings, notify }) {
     const rec = {
       id: `b-${uid()}`,
       name: `画板 ${boards.length + 1}`,
-      board: { ratioId: board.ratioId, bgId: board.bgId, title: '', subtitle: '' },
+      board: { ...DEFAULT_BOARD, ratioId: board.ratioId, bgId: board.bgId },
       items: [],
       ts: Date.now(),
     };
@@ -423,7 +488,10 @@ export default function MoodBoard({ settings, onOpenSettings, notify }) {
         .filter(Boolean);
       const prompt =
         `${FLATLAY_PROMPT}\nBackdrop surface: ${BG_TONE[board.bgId] || BG_TONE.paper}.` +
-        (labels.length ? `\nSample notes: ${labels.join('; ')}.` : '');
+        (labels.length ? `\nSample notes: ${labels.join('; ')}.` : '') +
+        (board.notes?.trim()
+          ? `\nDesigner styling preferences — FOLLOW THESE STRICTLY for how each sample is cut, shaped and arranged: ${board.notes.trim()}`
+          : '');
       const raw = await generateImage(settings, prompt, inputs, FLATLAY_ASPECT[board.ratioId] || '4:3', (w, a) =>
         setFlatlayNote(`被限流，${w} 秒后自动重试（第 ${a}/3 次）…`)
       );
@@ -452,27 +520,7 @@ export default function MoodBoard({ settings, onOpenSettings, notify }) {
     ctx.drawImage(img, 0, 0);
     const W = canvas.width;
     const H = canvas.height;
-    if (board.title || board.subtitle) {
-      const mx = W * 0.05;
-      let by = H - W * 0.05;
-      ctx.shadowColor = 'rgba(26,22,20,0.35)';
-      ctx.shadowBlur = W * 0.008;
-      if (board.subtitle) {
-        ctx.font = `500 ${W * 0.016}px "DM Sans", "Noto Sans SC", sans-serif`;
-        ctx.fillStyle = 'rgba(255,255,255,0.92)';
-        ctx.fillText(board.subtitle.toUpperCase(), mx, by);
-        by -= W * 0.032;
-      }
-      if (board.title) {
-        ctx.font = `600 ${W * 0.036}px Fraunces, Georgia, "Noto Sans SC", serif`;
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillText(board.title, mx, by);
-        by -= W * 0.05;
-      }
-      ctx.shadowColor = 'transparent';
-      ctx.fillStyle = '#B8995A';
-      ctx.fillRect(mx, by, W * 0.055, Math.max(3, W * 0.0024));
-    }
+    drawTitleBlock(ctx, W, H, board, { defaultColor: '#FFFFFF', shadow: true });
     downloadDataUrl(
       await applyWatermark(canvas.toDataURL('image/png'), settings.watermark),
       `moodboard-flatlay-${board.title || 'riccione'}.png`
@@ -578,25 +626,8 @@ export default function MoodBoard({ settings, onOpenSettings, notify }) {
         });
       }
 
-      // 标题区（左下）
-      if (board.title || board.subtitle) {
-        const mx = W * 0.045;
-        let by = H - W * 0.045;
-        if (board.subtitle) {
-          ctx.font = `500 ${W * 0.014}px "DM Sans", "Noto Sans SC", sans-serif`;
-          ctx.fillStyle = bg.ink + 'B3';
-          ctx.fillText(board.subtitle.toUpperCase(), mx, by);
-          by -= W * 0.028;
-        }
-        if (board.title) {
-          ctx.font = `600 ${W * 0.032}px Fraunces, Georgia, "Noto Sans SC", serif`;
-          ctx.fillStyle = bg.ink;
-          ctx.fillText(board.title, mx, by);
-          by -= W * 0.045;
-        }
-        ctx.fillStyle = '#B8995A';
-        ctx.fillRect(mx, by, W * 0.05, Math.max(4, W * 0.0022));
-      }
+      // 标题区（位置/字体/字号/颜色跟随画板设置）
+      drawTitleBlock(ctx, W, H, board, { defaultColor: bg.ink, shadow: false });
 
       downloadDataUrl(
         await applyWatermark(canvas.toDataURL('image/png'), settings.watermark),
@@ -759,6 +790,89 @@ export default function MoodBoard({ settings, onOpenSettings, notify }) {
               onChange={(e) => setBoard({ ...board, subtitle: e.target.value })}
               placeholder="副标题，如：Material Board · 奶油风"
               className="w-full rounded-xl border border-sail-line px-3 py-2 text-sm focus:outline-none focus:border-sail-green"
+            />
+
+            <div className="mt-2 space-y-2">
+              <div className="flex flex-wrap gap-1">
+                {TITLE_FONTS.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setBoard({ ...board, titleFont: f.id })}
+                    style={{ fontFamily: f.css }}
+                    className={`px-2 py-1 rounded-md text-[11px] border ${board.titleFont === f.id ? 'bg-sail-green text-white border-sail-green' : 'bg-white text-sail-muted border-sail-line'}`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-sail-faint shrink-0">字号</span>
+                <input
+                  type="range"
+                  min="0.6"
+                  max="1.8"
+                  step="0.05"
+                  value={board.titleScale}
+                  onChange={(e) => setBoard({ ...board, titleScale: Number(e.target.value) })}
+                  className="flex-1 accent-[#3D5A4A]"
+                />
+                <span className="text-[11px] text-sail-faint w-8 text-right">{Math.round(board.titleScale * 100)}%</span>
+              </div>
+
+              <div className="flex flex-wrap gap-1">
+                {TITLE_POSITIONS.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setBoard({ ...board, titlePos: p.id })}
+                    className={`px-2 py-1 rounded-md text-[11px] border ${board.titlePos === p.id ? 'bg-sail-green text-white border-sail-green' : 'bg-white text-sail-muted border-sail-line'}`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-sail-faint shrink-0">颜色</span>
+                <button
+                  type="button"
+                  onClick={() => setBoard({ ...board, titleColor: '' })}
+                  className={`px-1.5 py-0.5 rounded text-[10px] border ${!board.titleColor ? 'bg-sail-green text-white border-sail-green' : 'bg-white text-sail-muted border-sail-line'}`}
+                  title="跟随底色自动（浅底墨黑 / 深底暖白）"
+                >
+                  自动
+                </button>
+                {TITLE_COLOR_PRESETS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setBoard({ ...board, titleColor: c })}
+                    className={`w-5 h-5 rounded-full border-2 ${board.titleColor === c ? 'border-sail-green' : 'border-sail-line'}`}
+                    style={{ background: c }}
+                    title={c}
+                  />
+                ))}
+                <input
+                  type="color"
+                  value={board.titleColor || bg.ink}
+                  onChange={(e) => setBoard({ ...board, titleColor: e.target.value })}
+                  className="w-6 h-6 rounded cursor-pointer border border-sail-line p-0 bg-white"
+                  title="自定义颜色"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div className="text-xs font-semibold text-sail-faint mb-1.5">排版偏好（告诉 AI 你想要的）</div>
+            <textarea
+              value={board.notes}
+              onChange={(e) => setBoard({ ...board, notes: e.target.value })}
+              rows={3}
+              placeholder={'例：面板切成整齐的方块小样；石材保留完整大板；玻璃切成圆形；深色材质集中放右下。\n「AI 实拍级排版」会严格照做。'}
+              className="w-full rounded-xl border border-sail-line bg-white px-3 py-2 text-xs leading-relaxed focus:outline-none focus:border-sail-green resize-none"
             />
           </div>
 
@@ -962,15 +1076,44 @@ export default function MoodBoard({ settings, onOpenSettings, notify }) {
             });
           })()}
 
-          {(board.title || board.subtitle) && (
-            <div className="absolute left-[4.5%] bottom-[4.5%] pointer-events-none" style={{ color: bg.ink }}>
-              <div className="w-10 h-1 mb-2" style={{ background: '#B8995A' }} />
-              {board.title && <div className="font-display text-2xl font-semibold leading-tight">{board.title}</div>}
-              {board.subtitle && (
-                <div className="text-[11px] tracking-widest uppercase opacity-70 mt-1">{board.subtitle}</div>
-              )}
-            </div>
-          )}
+          {(board.title || board.subtitle) &&
+            (() => {
+              const pos = board.titlePos || 'bl';
+              const font = TITLE_FONTS.find((f) => f.id === board.titleFont) || TITLE_FONTS[0];
+              const scale = board.titleScale || 1;
+              const color = board.titleColor || bg.ink;
+              const posCls =
+                pos === 'tl'
+                  ? 'top-[4.5%] left-[4.5%] items-start text-left'
+                  : pos === 'tr'
+                    ? 'top-[4.5%] right-[4.5%] items-end text-right'
+                    : pos === 'c'
+                      ? 'inset-0 items-center justify-center text-center'
+                      : pos === 'br'
+                        ? 'bottom-[4.5%] right-[4.5%] items-end text-right'
+                        : 'bottom-[4.5%] left-[4.5%] items-start text-left';
+              return (
+                <div className={`absolute flex flex-col ${posCls} pointer-events-none`} style={{ color }}>
+                  <div className="w-10 h-1 mb-2" style={{ background: '#B8995A' }} />
+                  {board.title && (
+                    <div
+                      className="font-semibold leading-tight"
+                      style={{ fontFamily: font.css, fontSize: `${1.5 * scale}rem` }}
+                    >
+                      {board.title}
+                    </div>
+                  )}
+                  {board.subtitle && (
+                    <div
+                      className="tracking-widest uppercase opacity-70 mt-1"
+                      style={{ fontFamily: font.css, fontSize: `${0.68 * scale}rem` }}
+                    >
+                      {board.subtitle}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
         </div>
 
         {/* 屏幕上的图例清单 */}

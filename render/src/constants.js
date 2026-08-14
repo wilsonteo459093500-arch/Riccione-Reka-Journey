@@ -412,6 +412,21 @@ export const LIB_CATS = [
   { id: 'other', label: '其他' },
 ];
 
+// Mood Board 封面文字可选字体与位置
+export const TITLE_FONTS = [
+  { id: 'serif', label: '经典衬线', css: 'Fraunces, Georgia, "Noto Sans SC", serif' },
+  { id: 'elegant', label: '法式衬线', css: '"Cormorant Garamond", Georgia, "Noto Sans SC", serif' },
+  { id: 'sans', label: '现代无衬线', css: '"DM Sans", "Noto Sans SC", sans-serif' },
+];
+
+export const TITLE_POSITIONS = [
+  { id: 'tl', label: '左上' },
+  { id: 'tr', label: '右上' },
+  { id: 'c', label: '居中' },
+  { id: 'bl', label: '左下' },
+  { id: 'br', label: '右下' },
+];
+
 // AI 生成无缝材质样片
 export const SWATCH_PROMPT =
   'Generate ONE flat, seamless, top-down close-up material swatch texture photograph: {DESC}. ' +
