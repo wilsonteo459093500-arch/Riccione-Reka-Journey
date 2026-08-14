@@ -6,6 +6,7 @@ import {
 import { Card, Btn, Field, TextArea, ChipRow, Tag, Empty, Progress } from './ui/Bits.jsx';
 import StoryboardPlayer from './StoryboardPlayer.jsx';
 import ExportPanel from './ExportPanel.jsx';
+import RecutPanel from './RecutPanel.jsx';
 import { GRADES, CAPTION_STYLES, beatById, platformById } from '../constants.js';
 import { labelAssetPrompt } from '../prompts/assets.js';
 import { planPrompt } from '../prompts/plan.js';
@@ -460,6 +461,15 @@ export default function EditView({
                 </Card>
               )}
             </div>
+
+            <RecutPanel
+              settings={settings}
+              notify={notify}
+              plan={plan}
+              recipe={recipe}
+              platformId={platformId}
+              onOpenSettings={onOpenSettings}
+            />
 
             <ExportPanel plan={plan} assets={assets} recipe={recipe} />
           </>
