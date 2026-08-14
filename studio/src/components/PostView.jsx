@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  Send, ImageIcon, Download, Clock, MessageCircle, Hash, Repeat, ShieldAlert, Layers,
+  Send, ImageIcon, Download, Clock, MessageCircle, Hash, Repeat, ShieldAlert, Layers, Sparkles,
 } from 'lucide-react';
 import { Card, Btn, Field, TextArea, ChipRow, Tag, Empty, Fold, CopyBtn, DownloadBtn } from './ui/Bits.jsx';
 import { PLATFORMS, platformById } from '../constants.js';
@@ -8,7 +8,8 @@ import { postPrompt, animatedPostPrompt } from '../prompts/post.js';
 import { generateJSON, generateImage } from '../services/gemini.js';
 import { downloadDataUrl } from '../services/media.js';
 import { DOMAINS, IMAGE_SIZES, lintPrompt, safetyAdvice, domainById } from '../services/imagePrompt.js';
-import { toHyperFrames } from '../services/exporters.js';
+import { toHyperFrames, toVibeMotionPrompt } from '../services/exporters.js';
+import MotionStage from './MotionStage.jsx';
 
 export default function PostView({ settings, notify, recipe, plan, assets, platformId, setPlatformId, onOpenSettings }) {
   const [topic, setTopic] = useState('');
@@ -123,11 +124,12 @@ export default function PostView({ settings, notify, recipe, plan, assets, platf
     }
   }
 
-  // 合成尺寸按平台画幅走；预览按 1/4 缩放塞进侧栏
+  // 合成尺寸按平台画幅走；预览缩放塞进侧栏
   const compW = 1080;
   const compH = p.aspect === '3:4' ? 1440 : 1920;
-  const PREVIEW_SCALE = 0.25;
+  const PREVIEW_SCALE = p.aspect === '3:4' ? 0.3 : 0.25;
   const storyHtml = story ? toHyperFrames(story, { width: compW, height: compH }) : '';
+  const vibePrompt = story ? toVibeMotionPrompt(story, { width: compW, height: compH }) : null;
 
   return (
     <div className="grid gap-5 lg:grid-cols-[380px_1fr] items-start">
@@ -430,29 +432,25 @@ export default function PostView({ settings, notify, recipe, plan, assets, platf
               </div>
 
               <div className="space-y-2">
-                <div
-                  className="relative overflow-hidden rounded-xl border border-sail-line bg-white mx-auto"
-                  style={{ width: compW * PREVIEW_SCALE, height: compH * PREVIEW_SCALE }}
-                >
-                  <iframe
-                    title="动态帖预览"
-                    srcDoc={storyHtml}
-                    sandbox=""
-                    scrolling="no"
-                    className="absolute top-0 left-0 origin-top-left"
-                    style={{
-                      border: 0,
-                      width: compW,
-                      height: compH,
-                      transform: `scale(${PREVIEW_SCALE})`,
-                    }}
-                  />
-                </div>
+                <MotionStage storyboard={story} width={compW} height={compH} scale={PREVIEW_SCALE} />
                 <p className="text-[11px] text-sail-faint leading-relaxed">
-                  这是真实渲染的第一屏。下载 HTML 后用{' '}
-                  <code className="font-mono bg-sail-tint px-1 rounded">npx hyperframes render</code> 出 MP4，
-                  或者直接浏览器打开录屏。
+                  这是真的在播，不是截图 —— 拖进度条能逐帧看。下载的 HTML 用的是同一份动效数据，
+                  所以<strong className="text-sail-muted">你在这里看到的就是渲出来的</strong>。
                 </p>
+                {vibePrompt && (
+                  <div className="rounded-xl border border-sail-gold/50 bg-sail-gold/5 p-3">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Sparkles size={13} className="text-sail-gold" />
+                      <span className="text-xs font-medium text-sail-ink">想要更复杂的版式？</span>
+                    </div>
+                    <p className="text-[11px] text-sail-faint leading-relaxed mb-2">
+                      上面这套是模板版式，永远免费、随便改。
+                      <strong className="text-sail-muted">图表动画、数字滚动、复杂排版</strong>手写做不动，
+                      把这段贴给 Higgsfield Vibe Motion —— 它会连 Remotion 源码一起给你，以后能自己改了重渲。
+                    </p>
+                    <CopyBtn text={vibePrompt} label="复制 Vibe Motion 简报" />
+                  </div>
+                )}
                 {story.caption && (
                   <div className="rounded-xl bg-sail-tint border border-sail-line p-3">
                     <p className="text-xs text-sail-muted whitespace-pre-wrap leading-relaxed">{story.caption}</p>

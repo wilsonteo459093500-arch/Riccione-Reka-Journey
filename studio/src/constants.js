@@ -116,31 +116,44 @@ export const beatById = (id) => BEATS.find((b) => b.id === id) || BEATS[0];
 // 调色 / 字幕 / 转场 —— 与 video-use 的 grade.py、字幕规范对齐
 // ---------------------------------------------------------------------------
 
+/**
+ * 每一档调色都给两套参数：
+ *   filter   → ffmpeg（video-use / 命令行出片）
+ *   jianying → 剪映专业版「调节 > 基础」的滑块值（-100 ~ +100）
+ *
+ * 两套不可能算出完全一致的结果 —— ffmpeg 的 colorbalance 按 阴影/中间调/高光 三段分别作用，
+ * 剪映只给一个全局色温/色调。下面的数字是按「肉眼看上去是同一个调」手工对齐的，
+ * 不是数学换算。落地时以画面为准，允许再微调 ±5。
+ */
 export const GRADES = [
-  { id: 'none', label: '原片直出', desc: '不调色', filter: null },
+  { id: 'none', label: '原片直出', desc: '不调色', filter: null, jianying: null },
   {
     id: 'warm_cinematic',
     label: '暖调电影感',
     desc: '青橙分离、轻度去饱和 —— 家装/生活方式最稳的一档',
     filter: 'colorbalance=rs=.04:gs=.01:bs=-.05:rm=.03:bm=-.03:rh=.02:bh=-.04,eq=contrast=1.06:saturation=0.94',
+    jianying: { 色温: 12, 色调: -4, 饱和度: -8, 对比度: 8, 光感: 2, 高光: -5, 阴影: 6, 褪色: 8 },
   },
   {
     id: 'neutral_punch',
     label: '通透干净',
     desc: '提对比不偏色 —— 产品图、白墙空间',
     filter: 'eq=contrast=1.12:saturation=1.05:gamma=0.98',
+    jianying: { 对比度: 15, 饱和度: 8, 亮度: -3, 光感: 5, 高光: -4, 阴影: 4, 锐化: 12 },
   },
   {
     id: 'soft_muji',
     label: '奶油无印',
     desc: '低对比高亮部、米白氛围 —— 小红书家居爆款调性',
     filter: 'eq=contrast=0.94:saturation=0.88:brightness=0.03,colorbalance=rh=.03:gh=.02:bh=-.02',
+    jianying: { 色温: 6, 饱和度: -15, 对比度: -10, 亮度: 8, 高光: 10, 阴影: 12, 褪色: 18 },
   },
   {
     id: 'moody_dark',
     label: '深色高级',
     desc: '压暗中间调、留住高光 —— 岩板/木饰面质感',
     filter: 'eq=contrast=1.18:saturation=0.9:gamma=0.92,colorbalance=rs=-.03:bs=.04',
+    jianying: { 色温: -8, 饱和度: -12, 对比度: 22, 亮度: -8, 高光: -12, 阴影: -15, 暗角: 15 },
   },
 ];
 
@@ -250,6 +263,13 @@ export const TEMPLATES = [
 // ---------------------------------------------------------------------------
 
 export const PIPELINES = [
+  {
+    id: 'jianying',
+    label: '剪映专业版（+ 即梦）',
+    repo: 'https://www.capcut.cn/',
+    desc: '国内路线：即梦出运镜镜头 → 剪映组装。工作台导出操作单（含每段的分割点、关键帧数值、调色滑块）和 SRT，直接照着做',
+    good: '有剪映会员和国内账号；不想碰命令行，也不想为生成付美金',
+  },
   {
     id: 'video-use',
     label: 'video-use',

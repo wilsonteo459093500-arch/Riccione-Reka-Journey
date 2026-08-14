@@ -1,10 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { ExternalLink, Terminal, FileJson, Subtitles, ListTree, Bot, Sparkles, Film } from 'lucide-react';
+import { ExternalLink, Terminal, FileJson, Subtitles, ListTree, Bot, Sparkles, Film, Scissors } from 'lucide-react';
 import { Card, Btn, CopyBtn, DownloadBtn, Fold, TextInput, Field } from './ui/Bits.jsx';
 import { PIPELINES } from '../constants.js';
 import {
   toEDL, toSRT, toShotList, toClaudePrompt, toVyraPrompt, toProjectMd, toHiggsfieldPrompts, toSeedancePrompt,
-  captionsFromTimeline,
+  toJianyingGuide, toVibeMotionOverlays, captionsFromTimeline,
 } from '../services/exporters.js';
 
 /**
@@ -25,6 +25,8 @@ export default function ExportPanel({ plan, assets, recipe }) {
       projectMd: toProjectMd(plan, recipe, assets),
       higgsfield: toHiggsfieldPrompts(plan, recipe),
       seedance: toSeedancePrompt(plan, assets),
+      jianying: toJianyingGuide(plan, assets, recipe),
+      vibeOverlays: toVibeMotionOverlays(plan, recipe),
     };
   }, [plan, assets, recipe, dir]);
 
@@ -43,7 +45,35 @@ export default function ExportPanel({ plan, assets, recipe }) {
           <TextInput value={dir} onChange={(e) => setDir(e.target.value)} placeholder="/Users/wilson/Videos/项目A" />
         </Field>
 
-        {/* 首选路径 */}
+        {/* 首选路径 · 国内 */}
+        <div className="rounded-xl border-2 border-sail-brown/40 bg-sail-tint p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Scissors size={16} className="text-sail-brown" />
+            <span className="text-sm font-semibold text-sail-ink">不碰命令行 · 剪映专业版</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-sail-brown/15 text-sail-brown font-medium">
+              零成本
+            </span>
+          </div>
+          <p className="text-xs text-sail-muted leading-relaxed mb-3">
+            操作单里每一个数字都算好了 —— 第几秒按 <code className="font-mono text-[11px] bg-white px-1 rounded">Ctrl+B</code> 分割、
+            静图的关键帧缩放到百分之几、调色六个滑块各拉多少。字幕直接导{' '}
+            <code className="font-mono text-[11px] bg-white px-1 rounded">master.srt</code>，
+            <strong className="text-sail-ink">不用重新对轴</strong>。
+            方案里有静图的话，末尾还附了一份即梦的生成清单（你的会员权益里有免费额度）。
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <DownloadBtn
+              filename={`剪映操作单_${slug}.md`}
+              text={bundle.jianying}
+              mime="text/markdown"
+              label="下载操作单"
+            />
+            <CopyBtn text={bundle.jianying} label="复制" />
+            <DownloadBtn filename="master.srt" text={bundle.srt} label="master.srt" />
+          </div>
+        </div>
+
+        {/* 首选路径 · 命令行 */}
         <div className="rounded-xl border-2 border-sail-green-deep/30 bg-sail-tint p-4">
           <div className="flex items-center gap-2 mb-2">
             <Terminal size={16} className="text-sail-green-deep" />
@@ -132,6 +162,23 @@ export default function ExportPanel({ plan, assets, recipe }) {
                 </strong>
               </p>
               <CopyBtn text={bundle.higgsfield} label="复制补拍指令" />
+            </div>
+          )}
+
+          {bundle.vibeOverlays && (
+            <div className="rounded-xl border border-sail-line p-3.5">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Sparkles size={14} className="text-sail-gold" />
+                <span className="text-sm font-medium text-sail-ink">
+                  标题卡 · Vibe Motion（{plan.overlays.length} 张）
+                </span>
+              </div>
+              <p className="text-xs text-sail-faint leading-relaxed mb-2.5">
+                方案里的叠加图形卡。Vibe Motion 底层是 Claude + Remotion，
+                <strong className="text-sail-muted">会连源码一起给你</strong> —— 以后换文案自己改了重渲，不用再花额度。
+                指令里已经写死了「导出带 alpha 通道」，不然叠不上实拍画面。
+              </p>
+              <CopyBtn text={bundle.vibeOverlays} label="复制图形卡指令" />
             </div>
           )}
 
