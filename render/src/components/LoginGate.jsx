@@ -27,13 +27,10 @@ export default function LoginGate({ onSuccess }) {
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
       <form onSubmit={handleSubmit} className="w-full max-w-sm bg-sail-card border border-sail-line rounded-2xl p-8 shadow-sm">
-        <div className="text-center mb-7">
-          <div className="font-display text-[32px] leading-none font-semibold text-sail-green-deep">UKIR STUDIO</div>
-          {/* 居中 + 宽字距会因为末位字符后面那一格显得偏右，负右边距把它抵掉 */}
-          <div className="text-[10px] text-sail-faint mt-2.5 tracking-[0.3em] uppercase -mr-[0.3em]">
-            by Riccione Reka
-          </div>
-          <p className="text-xs text-sail-muted mt-4">内部工具 · 与「Cipta Studio」同一套账号密码</p>
+        <div className="text-center mb-6">
+          <div className="w-10 h-1 bg-sail-gold mx-auto mb-4" />
+          <div className="font-display text-4xl font-semibold text-sail-green-deep tracking-wide">UKIR STUDIO</div>
+          <div className="text-[11px] text-sail-faint mt-2 tracking-[0.3em] uppercase">by Riccione Reka</div>
         </div>
 
         <label className="block mb-3">

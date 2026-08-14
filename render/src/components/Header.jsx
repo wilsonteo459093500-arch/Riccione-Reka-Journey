@@ -17,10 +17,9 @@ export default function Header({ view, setView, onOpenSettings, onOpenHistory, h
     <header className="sticky top-0 z-40 bg-sail-paper/90 backdrop-blur border-b border-sail-line">
       <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
         <div className="flex items-center gap-3 min-w-0">
-          {/* 与 CIPTA STUDIO 同一套字标规则：产品名在上，母品牌背书在下 */}
-          <div className="leading-none whitespace-nowrap">
-            <div className="font-display text-[19px] font-semibold text-sail-green-deep">UKIR STUDIO</div>
-            <div className="text-[8px] tracking-[0.26em] text-sail-faint uppercase mt-1.5">BY RICCIONE REKA</div>
+          <div className="leading-tight whitespace-nowrap">
+            <div className="font-display text-lg font-semibold text-sail-green-deep tracking-wide">UKIR STUDIO</div>
+            <div className="text-[9px] tracking-[0.25em] text-sail-faint uppercase">by Riccione Reka</div>
           </div>
           <nav className="flex gap-1 bg-white border border-sail-line rounded-xl p-1 overflow-x-auto">
             {tab('render', 'AI 效果图')}

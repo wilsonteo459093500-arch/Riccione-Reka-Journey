@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" data-lang="zh">
+<head>
+<meta charset="UTF-8" />
+<script>
+/* 这一页是资料夹的首页。网址若少了结尾的斜线（/invite 而不是 /invite/），
+   浏览器会把 invite 当成档案名，样式与图片就会去上一层找 —— 全部 404。
+   补上斜线再往下走。必须放在所有 <link> 之前。 */
+(function () {
+  var p = location.pathname;
+  if (!/\/$/.test(p) && !/\.[a-z0-9]+$/i.test(p)) {
+    location.replace(p + '/' + location.search + location.hash);
+  }
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>邀请函 · RICCIONE REKA JOURNEY</title>
+<meta name="description" content="谨此邀请您莅临溪岸自然主义生活体验馆 —— 一段约 60 分钟的到馆行程：材料、色号、工艺细节，以及一份属于您的理想家蓝图。" />
+<meta name="theme-color" content="#1B1815" />
+
+<meta property="og:type" content="website" />
+<meta property="og:title" content="谨此邀请 · RICCIONE REKA JOURNEY" />
+<meta property="og:description" content="An invitation to Sail by Riccione Reka — 约 60 分钟，看见材料的真实。" />
+<meta property="og:image" content="assets/img/hero-sail.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&family=Noto+Sans+SC:wght@300;400;500;600&family=Noto+Serif+SC:wght@300;400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/css/invite.css" />
+</head>
+
+<body data-state="sealed">
+<div class="grain" aria-hidden="true"></div>
+<div id="progress" aria-hidden="true"></div>
+
+<!-- ============================================================
+     COVER · 封缄
+     ============================================================ -->
+<section id="seal" aria-label="邀请函封面">
+  <div class="bg" aria-hidden="true"></div>
+  <div class="veil" aria-hidden="true"></div>
+  <div class="seal-frame" aria-hidden="true"></div>
+
+  <div class="lang-toggle on-dark" role="group" aria-label="Language">
+    <button type="button" data-set-lang="zh" aria-pressed="true">中文</button>
+    <button type="button" data-set-lang="en" aria-pressed="false">EN</button>
+  </div>
+
+  <div class="seal-inner">
+    <img class="seal-brand reveal-up d1" src="assets/img/brand/sail.png" alt="溪岸 Sail by Riccione Reka" />
+
+    <p class="seal-kicker reveal-up d2">
+      <span class="zh">溪岸自然主义生活体验馆 · 吉隆坡</span>
+      <span class="en">Sail Naturalist Living Gallery · Kuala Lumpur</span>
+    </p>
+
+    <p class="seal-title reveal-up d3">
+      <span class="zh">谨 此 邀 请</span>
+      <span class="en">A N&nbsp; I N V I T A T I O N</span>
+    </p>
+
+    <h1 class="seal-name reveal-up d4">
+      <span id="s-name">亲爱的朋友</span><span class="honor" id="s-honor"></span>
+    </h1>
+
+    <hr class="seal-hr reveal-up d4" />
+
+    <p class="seal-meta reveal-up d5" id="s-meta">Riccione Reka × Sail</p>
+
+    <button class="seal-btn reveal-up d6" id="openBtn" type="button">
+      <span class="glyph">溪</span>
+      <span class="word zh">开启邀请函</span>
+      <span class="word en">OPEN</span>
+    </button>
+  </div>
+
+  <p class="seal-foot">
+    <span class="zh">邀请人 · <span class="s-host">Wilson Teo</span></span>
+    <span class="en">Invited by <span class="s-host">Wilson Teo</span></span>
+  </p>
+</section>
+
+<!-- ============================================================
+     TOP BAR
+     ============================================================ -->
+<header id="topbar">
+  <div class="who">
+    <img src="assets/img/brand/riccione-reka.png" alt="Riccione Reka" />
+    <span class="guest" id="t-name">亲爱的朋友</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:14px">
+    <span class="when" id="t-when"></span>
+    <div class="lang-toggle" role="group" aria-label="Language">
+      <button type="button" data-set-lang="zh" aria-pressed="true">中文</button>
+      <button type="button" data-set-lang="en" aria-pressed="false">EN</button>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<!-- ============================================================
+     1 · 谢谢
+     ============================================================ -->
+<section id="thanks">
+  <div class="wrap narrow">
+    <p class="eyebrow center r">
+      <span class="zh">谢谢您 · 我们已经准备好了</span>
+      <span class="en">Thank you · We are ready for you</span>
+    </p>
+
+    <article class="letter r s1">
+      <p class="salute">
+        <span id="l-name">亲爱的朋友</span><span id="l-honor"></span><span class="zh">，您好：</span><span class="en">, hello —</span>
+      </p>
+
+      <p class="big">
+        <span class="zh">谢谢您，愿意把这段时间<span class="accent">留给我们</span>。</span>
+        <span class="en">Thank you for giving this time <span class="accent">to us</span>.</span>
+      </p>
+
+      <p>
+        <span class="zh">在马来西亚，做全屋定制的品牌不少。您愿意在众多选择里，把一段时间留给溪岸 —— 这件事本身，我们非常珍惜。</span>
+        <span class="en">There is no shortage of custom cabinetry brands in Malaysia. That you chose to set aside time for Sail is something we genuinely value.</span>
+      </p>
+
+      <p>
+        <span class="zh">所以这不会是一场推销。我们准备的是一段约 60 分钟的行程：先听您说，再让您上手摸到板材、看见色号在不同光线下的样子，最后一起把「理想的家」画成可以执行的东西。</span>
+        <span class="en">So this will not be a sales pitch. What we have prepared is a 60-minute visit: first we listen, then you touch the boards and see how each colour behaves under real light, and together we turn "the ideal home" into something buildable.</span>
+      </p>
+
+      <p id="l-msg-wrap" hidden>
+        <em id="l-msg" style="font-style:normal;color:var(--gold)"></em>
+      </p>
+
+      <p>
+        <span class="zh">咖啡已经备好，期待与您见面。</span>
+        <span class="en">The coffee is ready. We look forward to meeting you.</span>
+      </p>
+
+      <div class="sig">
+        <div class="name s-host">Wilson Teo</div>
+        <div class="role" id="l-role">溪岸 Sail by Riccione Reka</div>
+      </div>
+    </article>
+
+    <dl class="appt r s2">
+      <div>
+        <dt><span class="zh">日期</span><span class="en">Date</span></dt>
+        <dd id="a-date">待确认<small id="a-weekday"></small></dd>
+      </div>
+      <div>
+        <dt><span class="zh">时间</span><span class="en">Time</span></dt>
+        <dd id="a-time">—<small id="a-dur">约 60 分钟</small></dd>
+      </div>
+      <div>
+        <dt><span class="zh">地点</span><span class="en">Venue</span></dt>
+        <dd><span class="zh">溪岸体验馆</span><span class="en">Sail Gallery</span><small>Setia Alam, Selangor</small></dd>
+      </div>
+    </dl>
+
+    <p class="countdown r s2" id="countdown" hidden></p>
+
+    <div class="btn-row r s3" style="margin-top:26px">
+      <a class="btn gold" id="btn-confirm" href="#" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.46 1.32 4.96L2 22l5.25-1.38a9.9 9.9 0 004.79 1.22h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0012.04 2zm5.8 14.13c-.25.69-1.44 1.32-1.99 1.36-.53.04-1.02.23-3.44-.72-2.9-1.14-4.74-4.11-4.88-4.3-.14-.19-1.16-1.55-1.16-2.95s.73-2.09 1-2.38c.26-.29.57-.36.76-.36.19 0 .38 0 .55.01.18.01.41-.07.64.49.25.6.83 2.07.9 2.22.07.15.12.32.02.51-.1.19-.15.31-.29.48-.14.17-.3.37-.43.5-.14.14-.29.29-.12.57.17.29.75 1.23 1.6 2 1.1.98 2.02 1.28 2.31 1.42.29.14.46.12.63-.07.17-.19.72-.84.91-1.13.19-.29.38-.24.64-.14.26.09 1.65.78 1.93.92.29.14.48.21.55.33.07.12.07.69-.18 1.38z"/></svg>
+        <span class="zh">WhatsApp 确认出席</span><span class="en">Confirm on WhatsApp</span>
+      </a>
+      <button class="btn ghost" id="btn-ics" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>
+        <span class="zh">加入日历</span><span class="en">Add to calendar</span>
+      </button>
+      <a class="btn ghost" href="#parking">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M12 21s7-5.6 7-11a7 7 0 10-14 0c0 5.4 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+        <span class="zh">到馆路线</span><span class="en">How to find us</span>
+      </a>
+    </div>
+
+    <p class="small muted r s3" id="brief-link" style="margin-top:20px" hidden>
+      <span class="zh">还没填过需求卡？<a href="brief.html?from=invite" style="color:var(--gold)">用 3 分钟填一份</a> —— 我们会先把方案想好，再见面。</span>
+      <span class="en">Haven't filled in the brief yet? <a href="brief.html?from=invite" style="color:var(--gold)">Three minutes here</a> — so we arrive with ideas already prepared.</span>
+    </p>
+  </div>
+</section>
+
+<!-- ============================================================
+     2 · 关于我们
+     ============================================================ -->
+<section id="about">
+  <div class="wrap">
+    <div class="split">
+      <div class="r">
+        <p class="eyebrow"><span class="zh">关于我们</span><span class="en">About us</span></p>
+        <h2 class="display">
+          <span class="zh">在溪岸，<br />回归生活的美好</span>
+          <span class="en">In the Sail,<br />return to the beauty of life</span>
+        </h2>
+        <p class="lede">
+          <span class="zh">溪岸 Sail 创立于成都，承载着对理想生活的追求 —— 以自然为源，让设计回归宁静与美好。我们相信，家的温度，能在时光中沉淀。</span>
+          <span class="en">Founded in Chengdu, Sail embodies the pursuit of an ideal life. With nature as our source, we bring design back to serenity. We believe the warmth of a home deepens over time.</span>
+        </p>
+        <p class="lede">
+          <span class="zh">在马来西亚，溪岸由 <b>RICCIONE REKA</b> 以东南亚总代理的身份落地。RICCIONE 是一个 2015 年创立的马来西亚实木家具品牌 —— 十年只做一件事：把木头做成能陪着人过日子的东西。</span>
+          <span class="en">In Malaysia, Sail is brought to ground by <b>RICCIONE REKA</b> as the exclusive Southeast Asia distributor. RICCIONE is a Malaysian solid-wood furniture brand founded in 2015 — ten years spent on one thing: turning timber into pieces people can actually live with.</span>
+        </p>
+        <p class="lede" style="margin-bottom:0">
+          <span class="zh">五个系列，五种性格。往下点开任何一个，都能看到它在真实空间里的样子。</span>
+          <span class="en">Five collections, five temperaments. Open any one below to see it in a real space.</span>
+        </p>
+      </div>
+
+      <figure class="figure frame-gold r s2" style="margin:0">
+        <img src="assets/img/scene-living-wide.jpg" alt="溪岸雾山系列空间实景" loading="lazy" />
+        <figcaption>MISTY MOUNTAIN SERIES · 雾山</figcaption>
+      </figure>
+    </div>
+
+    <!-- 作品 · case gallery -->
+    <div style="margin-top:clamp(48px,7.5vw,88px)">
+      <p class="eyebrow r"><span class="zh">作品 · 点开看看</span><span class="en">Our work · tap to open</span></p>
+      <h3 class="sub r" style="max-width:22ch">
+        <span class="zh">同样一个家，五种做法长什么样</span>
+        <span class="en">One home, five ways of doing it</span>
+      </h3>
+      <div class="work-grid" id="work-grid"></div>
+      <p class="work-note r">
+        <span class="zh">这些是各系列的空间实例。到馆那天，其中大部分您都能在展厅里 1:1 走进去 —— 照片看不出来的比例与手感，站进去十分钟就清楚了。</span>
+        <span class="en">These are spatial examples from each collection. On the day, most of them can be walked into at 1:1 in the gallery — proportion and feel don't survive a photograph.</span>
+      </p>
+    </div>
+
+    <!-- C+1 -->
+    <div class="model r" style="margin-top:clamp(44px,7vw,80px)">
+      <div>
+        <span class="tag">C + 1 MODEL</span>
+        <h4><span class="zh">中国设计制造</span><span class="en">Designed &amp; made in China</span></h4>
+        <p><span class="zh">成都设计中心 + 中国供应链。奖项与工艺标准，来自一个已经跑通 18 家品牌门店的体系。</span><span class="en">Chengdu design centre plus a mature Chinese supply chain — the same system already running 18 branded stores.</span></p>
+      </div>
+      <div>
+        <span class="tag">× MALAYSIA</span>
+        <h4><span class="zh">马来西亚落地服务</span><span class="en">Delivered on the ground here</span></h4>
+        <p><span class="zh">本地展厅、本地仓储、本地安装团队。量尺、对图、安装、售后，全部在马来西亚完成对接 —— 不是把您丢给一个海外号码。</span><span class="en">Local gallery, local warehouse, local installation team. Measuring, drawings, installation and after-sales are all handled here — not left to an overseas number.</span></p>
+      </div>
+      <div>
+        <span class="tag">YOUR HOME</span>
+        <h4><span class="zh">决定权，始终在您手上</span><span class="en">The decisions stay yours</span></h4>
+        <p><span class="zh">我们不替您决定家该长什么样，只负责把您想要的准确地做出来 —— 并给您一位从量尺到安装、全程对接的项目经理。</span><span class="en">We don't decide what your home should look like; we build what you want, accurately — with one project manager from measuring through to installation.</span></p>
+      </div>
+    </div>
+
+    <!-- numbers -->
+    <div class="stats r">
+      <div><b>10<span class="unit">年</span></b><span class="zh">只做实木与定制，没换过方向</span><span class="en">Ten years in solid wood, one direction</span></div>
+      <div><b>21,000<span class="unit">sqft</span></b><span class="zh">佛山旗舰展厅 · 中国</span><span class="en">Foshan flagship showroom, China</span></div>
+      <div><b>11,000<span class="unit">sqft</span></b><span class="zh">吉隆坡展厅 · 您要来的这一间</span><span class="en">KL gallery — the one you're visiting</span></div>
+      <div><b>18<span class="unit">家</span></b><span class="zh">中国品牌门店，同一套标准</span><span class="en">Branded stores in China, same standard</span></div>
+      <div><b>9<span class="unit">国</span></b><span class="zh">出口与服务覆盖，含日本 · 欧洲</span><span class="en">Markets served, incl. Japan &amp; Europe</span></div>
+    </div>
+
+    <!-- history -->
+    <div class="years r">
+      <p class="eyebrow"><span class="zh">十年 · 我们走过的路</span><span class="en">Ten years · how we got here</span></p>
+      <h3 class="sub" style="max-width:26ch">
+        <span class="zh">这十年发生的事，<br />最后只剩三件跟您有关</span>
+        <span class="en">Ten years of milestones —<br />three of them actually matter to you</span>
+      </h3>
+      <p class="lede">
+        <span class="zh">展会、出口、经销网络 —— 这些其实跟您没什么关系。但它们最后留下了三样东西：一间您可以走进去的展厅、一支住在本地的安装团队，以及出问题时找得到的人。下面这条路，是为了这三件事走的。</span>
+        <span class="en">Trade fairs, exports, dealer networks — none of that is really about you. But it left three things that are: a gallery you can walk into, an installation team that lives here, and someone who picks up when something goes wrong. That is what the road below was for.</span>
+      </p>
+      <ol>
+        <li><span class="y">2015</span><div><h4><span class="zh">从一间工厂开始</span><span class="en">It starts with a workshop</span></h4><p><span class="zh">RICCIONE 在马来西亚成立，只做实木。</span><span class="en">RICCIONE is founded in Malaysia, working only in solid wood.</span></p></div></li>
+        <li class="key"><span class="y">2017</span><div><h4><span class="zh">佛山 21,000 平方尺旗舰展厅</span><span class="en">A 21,000 sq ft flagship in Foshan</span></h4><p><span class="zh">第一次把「看得见、摸得到」当成卖东西的前提。同年获马来西亚 ARCHIDEX 最佳展位设计奖。</span><span class="en">The first time "see it and touch it" became a precondition for selling. Best Booth Design Award at ARCHIDEX Malaysia the same year.</span></p></div></li>
+        <li><span class="y">2019</span><div><h4><span class="zh">产品出口日本与欧洲</span><span class="en">Exporting to Japan and Europe</span></h4><p><span class="zh">首次亮相 CIFF 广州，并获中国广东佛山最佳家具设计奖 —— 经得起别人的标准。</span><span class="en">Debut at CIFF Guangzhou and a Foshan Best Furniture Design Award — held to other people's standards.</span></p></div></li>
+        <li class="key"><span class="y">2020</span><div><h4><span class="zh">吉隆坡 11,000 平方尺展厅落成</span><span class="en">An 11,000 sq ft gallery opens in KL</span></h4><p><span class="zh">就是您这次要来的这一间。从这一年起，本地有了自己的场地、仓库与安装团队。</span><span class="en">The one you are coming to. From this year, the local team has its own space, warehouse and installers.</span></p></div></li>
+        <li><span class="y">2022</span><div><h4><span class="zh">从住宅走进酒店与商业空间</span><span class="en">From homes into hotels and commercial space</span></h4><p><span class="zh">工程项目最不能拖期 —— 交付流程就是在这几年被逼着打磨出来的。</span><span class="en">Commercial projects cannot slip. Those are the years the delivery process got hammered into shape.</span></p></div></li>
+        <li><span class="y">2024</span><div><h4><span class="zh">中国市场升级为品牌专卖体系 · 18 家门店</span><span class="en">China moves to branded retail · 18 stores</span></h4><p><span class="zh">同一套材料标准与工艺标准，在两个国家同时跑。</span><span class="en">One set of material and workmanship standards, running in two countries at once.</span></p></div></li>
+        <li class="key"><span class="y">2025</span><div><h4><span class="zh">溪岸 Sail 落地东南亚</span><span class="en">Sail arrives in Southeast Asia</span></h4><p><span class="zh">RICCIONE REKA 正式发展全屋定制，并成为自然主义定制品牌「溪岸」的东南亚总代理。</span><span class="en">RICCIONE REKA formally takes on whole-house customization and becomes the Southeast Asia distributor for Sail.</span></p></div></li>
+      </ol>
+    </div>
+
+    <div class="split rev r" style="margin-top:clamp(44px,7vw,80px)">
+      <figure class="figure r s2" style="margin:0">
+        <img src="assets/img/scene-detail.jpg" alt="板材工艺细节" loading="lazy" />
+        <figcaption><span class="zh">工艺细节 · 上手可摸</span><span class="en">Details you can touch</span></figcaption>
+      </figure>
+      <div>
+        <p class="eyebrow"><span class="zh">奖项与认证</span><span class="en">Awards &amp; certification</span></p>
+        <h3 class="sub"><span class="zh">每一份认证，都是信任的证明</span><span class="en">Certified quality, proven trust</span></h3>
+        <p class="lede">
+          <span class="zh">溪岸「自然线」系列获 <b>HCA 国际高端定制家居设计奖</b>；<b>美国 MUSE 设计金奖</b>。板材与工艺通过多项权威环保与品质认证 —— 到馆时，这些证书就摆在材料墙旁边，欢迎逐一查看。</span>
+          <span class="en">Sail's Natural Line won the <b>HCA International High-End Customized Home Design Award</b>, and the brand holds an <b>American MUSE Design Gold Award</b>. Boards and finishes carry multiple environmental and quality certifications — all displayed beside the material wall for you to inspect.</span>
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     3 · AGENDA
+     ============================================================ -->
+<section id="agenda">
+  <div class="wrap">
+    <div class="agenda-head">
+      <div class="r">
+        <p class="eyebrow"><span class="zh">今天的流程</span><span class="en">Today's agenda</span></p>
+        <h2 class="display">
+          <span class="zh">在您到访之前，<br />先跟您说明今天的安排</span>
+          <span class="en">Before you arrive,<br />here is how the visit runs</span>
+        </h2>
+      </div>
+      <div class="r s2" style="text-align:left">
+        <p class="lede">
+          <span class="zh">一段紧凑但不赶的行程。每一站都欢迎上手，不只是看。</span>
+          <span class="en">Compact but unhurried. Every stop is hands-on, not just to look at.</span>
+        </p>
+        <span class="total-pill"><b>60</b> <span class="zh">分钟 · 全程</span><span class="en">MINUTES IN TOTAL</span></span>
+      </div>
+    </div>
+
+    <ol class="agenda-list">
+      <li class="r">
+        <div class="time">00:00 – 00:05 <em>05'</em></div>
+        <div>
+          <h4><span class="zh">迎接</span><span class="en">Welcome</span></h4>
+          <p><span class="zh">一杯咖啡，认识彼此，以及今天在场的每一位同事。</span><span class="en">A cup of coffee, introductions, and every colleague who will be with you today.</span></p>
+        </div>
+      </li>
+      <li class="r key">
+        <div class="time">00:05 – 00:15 <em>10'</em></div>
+        <div>
+          <h4><span class="zh">先聊聊您的家</span><span class="en">First, your home</span></h4>
+          <p><span class="zh">这十分钟属于您。房子在哪、什么时候交、家里几口人、现在最担心的是哪一件 —— 延期、色差、做完不合用、出问题找不到人？我们想先听。</span><span class="en">These ten minutes are yours. Where the home is, when you get the keys, who lives there, and what worries you most — delays, colour mismatch, cabinets that don't fit how you live, nobody answering after handover? We want to hear it first.</span></p>
+        </div>
+      </li>
+      <li class="r">
+        <div class="time">00:15 – 00:25 <em>10'</em></div>
+        <div>
+          <h4><span class="zh">关于溪岸</span><span class="en">About Sail</span></h4>
+          <p><span class="zh">C+1 模式：中国设计制造 × 马来西亚落地服务。为什么这样安排，对您来说差别在哪里 —— 我们用五分钟说明白。</span><span class="en">The C+1 model: designed and made in China, delivered on the ground in Malaysia. Why it's set up this way, and what difference it makes to you — explained in five minutes.</span></p>
+        </div>
+      </li>
+      <li class="r key">
+        <div class="time">00:25 – 00:45 <em>20'</em></div>
+        <div>
+          <h4><span class="zh">体验馆导览</span><span class="en">Gallery walkthrough</span></h4>
+          <p><span class="zh">板材与色号 · 工艺细节 · 实景样板。我们会一起看不同光线下的颜色表现，聊生活习惯与动线怎么落进柜体。每一站都欢迎上手，不只是看。</span><span class="en">Boards and colour codes, joinery details, full-scale room sets. We look at how each colour behaves under different light, and how daily habits and circulation translate into cabinetry. Hands-on at every stop.</span></p>
+        </div>
+      </li>
+      <li class="r">
+        <div class="time">00:45 – 00:55 <em>10'</em></div>
+        <div>
+          <h4><span class="zh">交付与售后</span><span class="en">Delivery &amp; after-sales</span></h4>
+          <p><span class="zh">量尺、生产、安装、验收，各要多久，谁负责。以及做完之后出了问题，找谁、多快能到 —— 这一段我们讲清楚，您再决定。</span><span class="en">Measuring, production, installation, handover — how long each takes and who owns it. And if something goes wrong afterwards: who you call, and how fast we come. We spell this out before you decide.</span></p>
+        </div>
+      </li>
+      <li class="r">
+        <div class="time">00:55 – 01:00 <em>05'</em></div>
+        <div>
+          <h4><span class="zh">提问 · 下一步</span><span class="en">Questions &amp; next step</span></h4>
+          <p><span class="zh">您的问题，和一个这周就能开始的合作方式。</span><span class="en">Your questions, and one way of working together that can start this week.</span></p>
+        </div>
+      </li>
+    </ol>
+
+    <div class="agenda-note r">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/></svg>
+      <p>
+        <span class="zh">欢迎带上您家的平面图 —— 或者只是一张现场照片、几张您收藏的参考图，我们一起看。手上有真实的空间，这 60 分钟的价值会完全不同。</span>
+        <span class="en">Bring your floor plan — or just a photo of the site, or a few reference images you've saved. With a real space on the table, these 60 minutes become far more useful.</span>
+      </p>
+    </div>
+
+    <div class="agenda-strip r s2">
+      <img src="assets/img/scene-wardrobe.jpg" alt="衣帽间实景" loading="lazy" />
+      <img src="assets/img/scene-kitchen.jpg" alt="厨房实景" loading="lazy" />
+      <img src="assets/img/scene-shelf.jpg" alt="书架实景" loading="lazy" />
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     4 · 这场体验将得到什么
+     ============================================================ -->
+<section id="takeaway">
+  <div class="wrap">
+    <div class="narrow" style="text-align:center">
+      <p class="eyebrow center r"><span class="zh">这场体验将得到什么</span><span class="en">What you take home</span></p>
+      <h2 class="display r s1">
+        <span class="zh">您带走的，<br />不只是一次参观</span>
+        <span class="en">You leave with more<br />than a showroom tour</span>
+      </h2>
+      <p class="lede r s2" style="margin:0 auto">
+        <span class="zh">离馆之后的 24 小时内，以下三份文件会整理好发给您。</span>
+        <span class="en">Within 24 hours of your visit, these three documents will be in your inbox.</span>
+      </p>
+    </div>
+
+    <div class="cards">
+      <article class="card r s1">
+        <div class="num">01</div>
+        <h4><span class="zh">专属生活习惯表</span><span class="en">Living Habits Profile</span></h4>
+        <div class="en-sub">LIVING HABITS PROFILE</div>
+        <p><span class="zh">起床后走的第一条动线、锅具有多少、外套挂在哪里、孩子几岁 —— 我们会把您一家人的使用习惯逐条记录下来，让柜子照着您的生活长，而不是反过来。</span><span class="en">The first path you walk each morning, how many pots you own, where coats get hung, how old the children are — every habit written down, so the cabinetry follows your life rather than the other way round.</span></p>
+        <div class="tick"><span class="zh">→ 每一格的分区都有依据</span><span class="en">→ Every compartment has a reason</span></div>
+      </article>
+
+      <article class="card r s2">
+        <div class="num">02</div>
+        <h4><span class="zh">到馆纪要</span><span class="en">Visit Memo</span></h4>
+        <div class="en-sub">VISIT MEMO</div>
+        <p><span class="zh">今天聊过的每一个决定、看中的每一个色号与板材编号、每一个待确认项与负责人 —— 24 小时内整理成文字发给您，不靠记忆，也不靠口头承诺。</span><span class="en">Every decision made, every colour code and board reference you liked, every open item and its owner — written up within 24 hours. Nothing left to memory or verbal promises.</span></p>
+        <div class="tick"><span class="zh">→ 24 小时内送达</span><span class="en">→ Delivered within 24 hours</span></div>
+      </article>
+
+      <article class="card r s3">
+        <div class="num">03</div>
+        <h4><span class="zh">理想家蓝图</span><span class="en">Ideal Home Blueprint</span></h4>
+        <div class="en-sub">IDEAL HOME BLUEPRINT</div>
+        <p><span class="zh">空间关系 · 材料方向 · 预算区间的初步草案。不是报价单，而是让下一步有据可依的一张图 —— 知道钱花在哪里，也知道下一个决定是什么。</span><span class="en">Spatial relationships, material direction and a budget range. Not a quotation — a single sheet that tells you where the money goes and what the next decision is.</span></p>
+        <div class="tick"><span class="zh">→ 含预算区间与下一步</span><span class="en">→ With budget range &amp; next step</span></div>
+      </article>
+    </div>
+
+    <div class="promise r s2">
+      <p>
+        <span class="zh">以及一位<span style="color:var(--gold)">专属项目经理</span> —— 从今天起到安装完成，您的家由同一个人跟到底。</span>
+        <span class="en">And one <span style="color:var(--gold)">dedicated project manager</span> — from today until installation is done, your home stays with the same person.</span>
+      </p>
+      <span class="small muted"><span class="zh">设计 · 安装 · 售后</span><span class="en">Design · Installation · After-sales</span></span>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     5 · PARKING DIRECTORY
+     ============================================================ -->
+<section id="parking">
+  <div class="wrap">
+    <div class="split">
+      <div class="r">
+        <p class="eyebrow"><span class="zh">停车 · 到店指引</span><span class="en">Parking directory</span></p>
+        <h2 class="display">
+          <span class="zh">从高速出口<br />到您的车位</span>
+          <span class="en">From the highway exit<br />to your parking spot</span>
+        </h2>
+        <p class="lede">
+          <span class="zh">全程 9 步指引，一步步带您顺利抵达 RICCIONE。第一次来的朋友，建议出发前先看一遍。</span>
+          <span class="en">A nine-step guide that takes you from the highway all the way to the showroom door. If it is your first visit, a quick read before you set off helps.</span>
+        </p>
+        <div class="btn-row" style="margin-top:22px">
+          <a class="btn" id="btn-maps" href="#" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M12 21s7-5.6 7-11a7 7 0 10-14 0c0 5.4 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+            <span class="zh">Google 地图导航</span><span class="en">Open in Google Maps</span>
+          </a>
+          <a class="btn ghost" id="btn-waze" href="#" target="_blank" rel="noopener">
+            <span class="zh">用 Waze 导航</span><span class="en">Navigate with Waze</span>
+          </a>
+        </div>
+      </div>
+      <figure class="figure r s2" style="margin:0">
+        <img src="assets/img/showroom-facade.jpg" alt="RICCIONE 展厅外观" loading="lazy" />
+        <figcaption>RICCIONE MALAYSIA · SETIA ALAM</figcaption>
+      </figure>
+    </div>
+
+    <ol class="route">
+      <li class="r">
+        <div class="badge">01</div>
+        <div class="body">
+          <span class="dir"><span class="zh">左转 · LEFT</span><span class="en">TURN LEFT</span></span>
+          <h4><span class="zh">左转驶出高速公路</span><span class="en">Turn left to exit the highway</span></h4>
+          <p><span class="zh">看到 Setia Alam 指示牌后，靠左驶出。</span><span class="en">Follow the Setia Alam signboard and keep left as you exit.</span></p>
+          <div class="shots"><img src="assets/img/steps/step-01.jpg" alt="步骤 1 · 左转驶出高速" loading="lazy" /></div>
+        </div>
+      </li>
+      <li class="r">
+        <div class="badge">02</div>
+        <div class="body">
+          <span class="dir"><span class="zh">直行 · STRAIGHT</span><span class="en">GO STRAIGHT</span></span>
+          <h4><span class="zh">沿 Setia Avenue 一直直行</span><span class="en">Continue straight along Setia Avenue</span></h4>
+          <p><span class="zh">经过商店街，保持直行。</span><span class="en">Pass the shop rows and keep going straight.</span></p>
+          <div class="shots"><img src="assets/img/steps/step-02.jpg" alt="步骤 2 · 直行" loading="lazy" /></div>
+        </div>
+      </li>
+      <li class="r">
+        <div class="badge">03</div>
+        <div class="body">
+          <span class="dir"><span class="zh">右转 · RIGHT</span><span class="en">TURN RIGHT</span></span>
+          <h4><span class="zh">在前方路口处右转</span><span class="en">Turn right at the junction</span></h4>
+          <p><span class="zh">路口右转，进入内街。</span><span class="en">Take the right turn into the inner road.</span></p>
+          <div class="shots"><img src="assets/img/steps/step-03.jpg" alt="步骤 3 · 路口右转" loading="lazy" /></div>
+        </div>
+      </li>
+      <li class="r">
+        <div class="badge">04</div>
+        <div class="body">
+          <span class="dir"><span class="zh">右转 · RIGHT</span><span class="en">TURN RIGHT</span></span>
+          <h4><span class="zh">右转进入 Setia Avenue</span><span class="en">Turn right into Setia Avenue</span></h4>
+          <p><span class="zh">再一次右转，前方即为大楼区域。</span><span class="en">Turn right once more; the building block is ahead.</span></p>
+          <div class="shots"><img src="assets/img/steps/step-04.jpg" alt="步骤 4 · 右转进入 Setia Avenue" loading="lazy" /></div>
+        </div>
+      </li>
+      <li class="r">
+        <div class="badge">05</div>
+        <div class="body">
+          <span class="dir"><span class="zh">左转 · LEFT</span><span class="en">TURN LEFT</span></span>
+          <h4><span class="zh">左转驶入停车场坡道</span><span class="en">Turn left into the parking ramp</span></h4>
+          <p><span class="zh">看到坡道入口后左转下行。</span><span class="en">Turn left down the ramp entrance.</span></p>
+          <div class="shots"><img src="assets/img/steps/step-05.jpg" alt="步骤 5 · 驶入停车场坡道" loading="lazy" /></div>
+        </div>
+      </li>
+      <li class="r">
+        <div class="badge">06</div>
+        <div class="body">
+          <span class="dir"><span class="zh">楼梯 · STAIRS</span><span class="en">STAIRCASE</span></span>
+          <h4><span class="zh">泊车后，经 9 号楼梯上至 Podium 层（入口 1）</span><span class="en">Park, then take Staircase 9 up to the Podium (Entrance 1)</span></h4>
+          <p><span class="zh">停好车后，往 9 号楼梯方向走。</span><span class="en">Once parked, walk towards Staircase 9.</span></p>
+          <div class="shots">
+            <img src="assets/img/steps/step-06.jpg" alt="步骤 6 · 前往 9 号楼梯" loading="lazy" />
+            <img src="assets/img/steps/step-06b.jpg" alt="步骤 6 · 停车层" loading="lazy" />
+          </div>
+        </div>
+      </li>
+      <li class="r">
+        <div class="badge">07</div>
+        <div class="body">
+          <span class="dir"><span class="zh">步行 · WALK</span><span class="en">WALK</span></span>
+          <h4><span class="zh">上楼梯后直行前往大楼正门</span><span class="en">Go up the stairs, then walk straight to the main entrance</span></h4>
+          <p><span class="zh">上到 Podium 层后，沿走廊直行。</span><span class="en">At the podium level, follow the corridor straight ahead.</span></p>
+          <div class="shots">
+            <img src="assets/img/steps/step-07.jpg" alt="步骤 7 · 上楼梯" loading="lazy" />
+            <img src="assets/img/steps/step-07b.jpg" alt="步骤 7 · 走廊直行" loading="lazy" />
+          </div>
+        </div>
+      </li>
+      <li class="r">
+        <div class="badge">08</div>
+        <div class="body">
+          <span class="dir"><span class="zh">右侧 · ON YOUR RIGHT</span><span class="en">ON YOUR RIGHT</span></span>
+          <h4><span class="zh">RICCIONE 展厅就在您的右手边</span><span class="en">The RICCIONE showroom is on your right</span></h4>
+          <p><span class="zh">看到 RICCIONE 招牌即到达。</span><span class="en">You have arrived once you see the RICCIONE signage.</span></p>
+          <div class="shots"><img src="assets/img/steps/step-08.jpg" alt="步骤 8 · 展厅在右手边" loading="lazy" /></div>
+        </div>
+      </li>
+      <li class="r">
+        <div class="badge">09</div>
+        <div class="body">
+          <span class="dir"><span class="zh">您已抵达 · YOU ARE HERE</span><span class="en">YOU ARE HERE</span></span>
+          <h4><span class="zh">欢迎莅临 RICCIONE 展厅</span><span class="en">Welcome to RICCIONE</span></h4>
+          <p><span class="zh">推门进来，说一声您的名字，我们已经在等您了。</span><span class="en">Come in, give us your name — we are already expecting you.</span></p>
+          <div class="shots"><img class="wide" src="assets/img/steps/step-09.jpg" alt="步骤 9 · 抵达 RICCIONE 展厅" loading="lazy" /></div>
+        </div>
+      </li>
+    </ol>
+
+    <div class="venue">
+      <div class="venue-card r">
+        <dl>
+          <div>
+            <dt><span class="zh">地址 · Address</span><span class="en">Address</span></dt>
+            <dd>RICCIONE Malaysia Sdn. Bhd.<br />23-3, Jalan Setia Prima S U13/S, Seksyen U13,<br />Setia Alam, 40170 Shah Alam, Selangor</dd>
+          </div>
+          <div>
+            <dt><span class="zh">营业时间 · Opening hours</span><span class="en">Opening hours</span></dt>
+            <dd><span class="zh">周一至周五 9:00am – 6:00pm<br />周六 · 周日 10:00am – 6:00pm</span><span class="en">Mon – Fri 9:00am – 6:00pm<br />Sat – Sun 10:00am – 6:00pm</span></dd>
+          </div>
+          <div>
+            <dt><span class="zh">预约咨询 · Enquiry</span><span class="en">Enquiry</span></dt>
+            <dd><a id="v-phone" href="tel:+60189661919" style="text-decoration:none;border-bottom:1px solid var(--line)">018-966 1919</a><br /><span class="small muted"><span class="zh">WhatsApp · 致电预约</span><span class="en">WhatsApp · Call to arrange</span></span></dd>
+          </div>
+        </dl>
+        <div class="venue-qr">
+          <img src="assets/img/brand/qr-navigate.png" alt="扫码导航至展厅" loading="lazy" />
+          <div>
+            <span class="zh">扫码导航至展厅<br /><span class="muted small">SCAN TO NAVIGATE</span></span>
+            <span class="en">Scan to navigate to the showroom</span>
+          </div>
+        </div>
+      </div>
+      <figure class="figure r s2" style="margin:0">
+        <img src="assets/img/showroom-welcome.jpg" alt="RICCIONE 展厅招牌" loading="lazy" />
+        <figcaption>STEP 09 · RICCIONE MALAYSIA SHOWROOM</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     6 · CLOSING
+     ============================================================ -->
+<section id="closing">
+  <div class="wrap narrow">
+    <div class="stamp r">溪</div>
+    <h2 class="r s1">
+      <span class="zh">谢谢您，<br />期待您的到来</span>
+      <span class="en">Thank you.<br />We look forward to seeing you.</span>
+    </h2>
+    <p class="r s2">
+      <span class="zh">若行程有任何变动，随时在 WhatsApp 告诉我们一声就好 —— 咖啡可以再煮，时间我们为您留着。</span>
+      <span class="en">If anything changes in your schedule, just tell us on WhatsApp. The coffee can be brewed again; the time stays reserved for you.</span>
+    </p>
+    <p class="r s2" style="margin-top:26px">
+      <span class="s-host" style="font-family:var(--serif);font-size:22px;color:#EBE4D7"></span><br />
+      <span class="small" id="c-role" style="letter-spacing:.14em">溪岸 Sail by Riccione Reka</span>
+    </p>
+    <div class="btn-row r s3" style="justify-content:center;margin-top:30px">
+      <a class="btn gold" id="btn-confirm-2" href="#" target="_blank" rel="noopener">
+        <span class="zh">WhatsApp 确认出席</span><span class="en">Confirm on WhatsApp</span>
+      </a>
+    </div>
+    <div class="marks">
+      <img src="assets/img/brand/riccione.png" alt="RICCIONE Furniture" />
+      <img src="assets/img/brand/riccione-reka.png" alt="Riccione Reka" />
+      <img class="tall" src="assets/img/brand/sail.png" alt="Sail 溪岸" />
+    </div>
+    <p class="fine">RICCIONE REKA JOURNEY · SETIA ALAM · SELANGOR</p>
+  </div>
+</section>
+
+</main>
+
+<!-- mobile dock -->
+<nav id="dock" aria-label="快捷操作">
+  <a class="btn gold" id="btn-confirm-3" href="#" target="_blank" rel="noopener"><span class="zh">确认出席</span><span class="en">Confirm</span></a>
+  <a class="btn ghost" id="btn-maps-2" href="#" target="_blank" rel="noopener"><span class="zh">导航</span><span class="en">Navigate</span></a>
+</nav>
+
+<script src="assets/js/config.js"></script>
+<script src="assets/js/cases.js"></script>
+<script src="assets/js/invite.js"></script>
+</body>
+</html>
