@@ -1,9 +1,9 @@
 {
-  "name": "ukir-studio",
+  "name": "cipta-studio",
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "UKIR STUDIO by RICCIONE REKA — 照片/草图秒变照片级效果图",
+  "description": "CIPTA STUDIO by RICCIONE REKA — 构思 / 剪辑 / 发布 一条龙的内容工作台",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
