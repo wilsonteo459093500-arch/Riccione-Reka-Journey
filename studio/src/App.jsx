@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import Header from './components/Header.jsx';
+import Landing from './components/Landing.jsx';
 import LoginGate from './components/LoginGate.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
 import ProjectsPanel from './components/ProjectsPanel.jsx';
@@ -14,6 +15,8 @@ import { uid } from './services/media.js';
 
 export default function App() {
   const [authed, setAuthed] = useState(isAuthed);
+  // 已经登录过的人不该再看一次首页，直接进工作台
+  const [entered, setEntered] = useState(isAuthed);
   const [settings, setSettings] = useState(loadSettings);
   const [showSettings, setShowSettings] = useState(false);
   const [showProjects, setShowProjects] = useState(false);
@@ -96,6 +99,7 @@ export default function App() {
     setNotice({ type: 'ok', text: '选题已带到「构思」—— 选「没有，用模板」那一栏' });
   }
 
+  if (!entered) return <Landing onEnter={() => setEntered(true)} />;
   if (!authed) return <LoginGate onSuccess={() => setAuthed(true)} />;
 
   const noticeStyle =
@@ -196,6 +200,7 @@ export default function App() {
             logout();
             setShowSettings(false);
             setAuthed(false);
+            setEntered(false);
           }}
         />
       )}

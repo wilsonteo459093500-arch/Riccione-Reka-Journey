@@ -1,5 +1,6 @@
 import React from 'react';
 import { Settings, KeyRound, FolderOpen } from 'lucide-react';
+import Wordmark from './Wordmark.jsx';
 
 const TABS = [
   { id: 'ideate', label: '构思', hint: '拆参考视频 → 配方' },
@@ -13,10 +14,8 @@ export default function Header({ view, setView, onOpenSettings, onOpenProjects, 
     <header className="sticky top-0 z-40 bg-sail-paper/90 backdrop-blur border-b border-sail-line">
       <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="leading-tight whitespace-nowrap">
-            <div className="font-display text-lg font-semibold text-sail-green-deep">RICCIONE REKA</div>
-            <div className="text-[9px] tracking-[0.3em] text-sail-faint uppercase">Studio</div>
-          </div>
+          <Wordmark sub="CONTENT STUDIO" className="hidden sm:block" />
+          <Wordmark sub="" className="sm:hidden" />
           <nav className="flex gap-1 bg-white border border-sail-line rounded-xl p-1 overflow-x-auto">
             {TABS.map((t) => (
               <button

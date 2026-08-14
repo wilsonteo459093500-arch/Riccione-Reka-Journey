@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Loader2, LogIn } from 'lucide-react';
 import { login } from '../services/auth.js';
+import Wordmark from './Wordmark.jsx';
 
 export default function LoginGate({ onSuccess }) {
   const [username, setUsername] = useState('');
@@ -27,10 +28,9 @@ export default function LoginGate({ onSuccess }) {
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
       <form onSubmit={handleSubmit} className="w-full max-w-sm bg-sail-card border border-sail-line rounded-2xl p-8 shadow-sm">
-        <div className="text-center mb-6">
-          <div className="font-display text-3xl font-semibold text-sail-green-deep">RICCIONE REKA</div>
-          <div className="text-xs text-sail-faint mt-1 tracking-[0.3em] uppercase">Studio · 内部工具</div>
-          <p className="text-xs text-sail-muted mt-3">与「Render 效果图」同一套账号密码</p>
+        <div className="mb-7">
+          <Wordmark size="lg" sub="CONTENT STUDIO" />
+          <p className="text-xs text-sail-muted mt-5">内部工具 · 与「Render 效果图」同一套账号密码</p>
         </div>
 
         <label className="block mb-3">
