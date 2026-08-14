@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { ExternalLink, Terminal, FileJson, Subtitles, ListTree, Bot } from 'lucide-react';
+import { ExternalLink, Terminal, FileJson, Subtitles, ListTree, Bot, Sparkles } from 'lucide-react';
 import { Card, Btn, CopyBtn, DownloadBtn, Fold, TextInput, Field } from './ui/Bits.jsx';
 import { PIPELINES } from '../constants.js';
 import {
-  toEDL, toSRT, toShotList, toClaudePrompt, toVyraPrompt, toProjectMd, captionsFromTimeline,
+  toEDL, toSRT, toShotList, toClaudePrompt, toVyraPrompt, toProjectMd, toHiggsfieldPrompts,
+  captionsFromTimeline,
 } from '../services/exporters.js';
 
 /**
@@ -22,6 +23,7 @@ export default function ExportPanel({ plan, assets, recipe }) {
       claude: toClaudePrompt(plan, assets, recipe),
       vyra: toVyraPrompt(plan, assets, recipe),
       projectMd: toProjectMd(plan, recipe, assets),
+      higgsfield: toHiggsfieldPrompts(plan, recipe),
     };
   }, [plan, assets, recipe, dir]);
 
@@ -80,6 +82,33 @@ export default function ExportPanel({ plan, assets, recipe }) {
             </p>
             <CopyBtn text={bundle.vyra} label="复制 Vyra 指令" />
           </div>
+
+          {bundle.higgsfield && (
+            <div className="rounded-xl border border-sail-gold/50 bg-sail-gold/5 p-3.5 sm:col-span-2">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Sparkles size={14} className="text-sail-gold" />
+                <span className="text-sm font-medium text-sail-ink">
+                  补缺口 · Higgsfield（{plan.gaps.length} 个镜头）
+                </span>
+                <a
+                  href="https://higgsfield.ai/mcp"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-sail-green underline inline-flex items-center gap-0.5"
+                >
+                  MCP <ExternalLink size={11} />
+                </a>
+              </div>
+              <p className="text-xs text-sail-faint leading-relaxed mb-2.5">
+                上面「还缺的素材」里那些拍不到的镜头，可以让 AI 生成。这段指令已经把画面、时长、
+                画幅、调色一致性都写好了 —— 粘给连了 Higgsfield MCP 的 Claude 就能跑。
+                <strong className="text-sail-muted">
+                  只用来补空镜和氛围镜头；真实案例画面它会拒绝生成。
+                </strong>
+              </p>
+              <CopyBtn text={bundle.higgsfield} label="复制补拍指令" />
+            </div>
+          )}
 
           <div className="rounded-xl border border-sail-line p-3.5">
             <div className="flex items-center gap-1.5 mb-1">

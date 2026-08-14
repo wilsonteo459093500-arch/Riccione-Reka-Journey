@@ -501,6 +501,67 @@ ${plan.overlays?.length ? `**叠加图形**：\n${plan.overlays.map((o) => `- sl
 搭完用 captureFrame 抽查 ${timed.slice(0, 3).map((r) => `${r.output_start.toFixed(1)}s`).join('、')} 这几个点，确认画面对得上再告诉我。`;
 }
 
+// ---------------------------------------------------------------------------
+// 缺口补拍 —— 交给带 Higgsfield MCP 的 agent 去「生成」拍不到的镜头
+// ---------------------------------------------------------------------------
+
+/**
+ * 把 plan.gaps 变成一份可以直接粘给 Claude（已连 Higgsfield MCP）的生成指令。
+ *
+ * 这是整条链上最省事的一环：剪辑方案本来就知道「缺哪一拍、要什么画面、多长」，
+ * 这些正好就是文生视频需要的全部输入。不用再描述一遍。
+ *
+ * 注意：AI 生成的镜头适合做氛围空镜、抽象转场、概念画面。
+ * **不要用它生成你的真实案例** —— 客户认得出自己家，做出来是假的。
+ */
+export function toHiggsfieldPrompts(plan, recipe) {
+  const gaps = plan.gaps || [];
+  if (!gaps.length) return null;
+
+  const g = gradeById(plan.grade_preset);
+  const aspect = plan.aspect || '9:16';
+
+  const shots = gaps
+    .map((gap, i) => {
+      const b = beatById(gap.beat);
+      return `### ${i + 1}. [${b.label}] ${gap.need}
+
+- **画面**：${gap.how_to_shoot}
+- **时长**：2–4 秒（够剪进 ${b.label} 那一拍就行）
+- **画幅**：${aspect}
+- **调性**：${g.look || g.desc}
+- **不要**：出现人脸特写、可辨认的品牌 logo、任何看起来像"真实案例"的完整空间`;
+    })
+    .join('\n\n');
+
+  return `我在剪一条${recipe?.format || '短视频'}，有 ${gaps.length} 个镜头手上没有素材、也不方便补拍。
+你已经连了 Higgsfield MCP，帮我生成它们。
+
+## 先做两件事
+
+1. \`higgsfield_get_credits\` 看一下余额够不够
+2. \`higgsfield_list_models\` 列出可用的视频模型和它们的参数
+
+## 要生成的镜头
+
+${shots}
+
+## 生成要求
+
+- **全片调性必须一致**：${g.label} — ${g.look || g.desc}。
+  同一套光线、同一个色温、同样的景深感，剪在一起不能有一块特别跳。
+- **优先走「先出图再动起来」**：\`higgsfield_generate_image\` 出一张定帧 → 确认构图对了 →
+  再用 image2video 让它动。比直接文生视频可控得多，也省额度。
+- 每个镜头**先只生成 1 条**给我看。我确认了再批量出其余的。
+- 提交后用 \`higgsfield_wait_for_job\` 等结果，把最终的 URL 列给我。
+
+## 重要边界
+
+这些是**补空镜和氛围镜头**，不是用来伪造案例的。
+如果哪个缺口本质上必须是真实项目画面（成品空间、实际工艺、客户现场），
+**直接告诉我"这个得你自己去拍"，不要生成** —— 我宁可少一个镜头，也不要让客户看到假的案例。`;
+}
+
 /** video-use 的 project.md，放进 edit/ 目录做会话记忆 */
 export function toProjectMd(plan, recipe, assets) {
   const today = new Date().toISOString().slice(0, 10);
