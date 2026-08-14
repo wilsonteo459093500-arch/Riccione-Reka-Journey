@@ -30,9 +30,13 @@ window.SAIL = {
      Edge Function / Google Apps Script 都可以）。留空则只走 WhatsApp。 */
   briefEndpoint: '',
 
-  /* 团队 · 销售端下拉选单会读这里 ---------------------------- */
+  /* 团队 -----------------------------------------------------
+     code 是链接里用的短代号（只用小写英文，别用空格）。
+     有了它，链接里就不必出现电话号码，也不必出现中文姓名：
+        /invite/brief?from=wilson&for=Peggy
+     新同事加一行就好；不在名单里的人，链接会自动退回长格式。 */
   team: [
-    { name: 'Wilson Teo', role: '溪岸 Sail by Riccione Reka', wa: '60189661919' }
+    { code: 'wilson', name: 'Wilson Teo', role: '溪岸 Sail by Riccione Reka', wa: '60189661919' }
   ],
 
   /* 邀请函里是否显示「先填需求卡」的入口 */

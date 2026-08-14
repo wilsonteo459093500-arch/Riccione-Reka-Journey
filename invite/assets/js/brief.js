@@ -10,8 +10,21 @@
   var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
 
   var Q = new URLSearchParams(location.search);
-  var hostName = (Q.get('by') || (CFG.host && CFG.host.name) || 'Wilson Teo').trim();
-  var inbox = String(Q.get('wa') || CFG.briefInbox || (CFG.host && CFG.host.wa) || '').replace(/\D/g, '');
+
+  /* from=wilson 这样的团队代号，链接里就不用带电话号码 */
+  function member(v) {
+    if (!v) return null;
+    var t = CFG.team || [];
+    for (var i = 0; i < t.length; i++) {
+      if (t[i].code && t[i].code.toLowerCase() === String(v).toLowerCase()) return t[i];
+    }
+    return null;
+  }
+  var M = member(Q.get('from'));
+  var hostName = (M ? M.name : Q.get('by') || (CFG.host && CFG.host.name) || 'Wilson Teo').trim();
+  var inbox = String((M && M.wa) || Q.get('wa') || CFG.briefInbox ||
+                     (CFG.host && CFG.host.wa) || '').replace(/\D/g, '');
+  var preName = Q.get('for') || Q.get('n') || '';
 
   var steps = $$('.step');
   var LAST_INPUT = steps.length - 2;   // 最后一个填写步骤（不含完成页）
@@ -25,9 +38,9 @@
   var next  = $('#btn-next');
 
   /* ---------- 预填 ---------------------------------------- */
-  if (Q.get('n')) $('#f-name').value = Q.get('n');
+  if (preName) $('#f-name').value = preName;
   var fl = $('#from-line');
-  if (fl && Q.get('by')) { $('#from-name').textContent = hostName; fl.hidden = false; }
+  if (fl && (M || Q.get('by'))) { $('#from-name').textContent = hostName; fl.hidden = false; }
   $('#done-host').textContent = hostName;
   if (CFG.venue) $('#done-hours').textContent = CFG.venue.hoursZh;
 
