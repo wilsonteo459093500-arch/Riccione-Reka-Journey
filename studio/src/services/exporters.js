@@ -298,7 +298,7 @@ export function toHyperFrames(storyboard, opts = {}) {
 <meta charset="utf-8" />
 <title>${esc(storyboard.title || 'Animated Post')}</title>
 <!--
-  HyperFrames 合成文件 —— 由 RICCIONE REKA · Studio 生成
+  HyperFrames 合成文件 —— 由 CIPTA STUDIO 生成
   预览：npx hyperframes preview     渲染：npx hyperframes render
   直接用浏览器打开这个文件也能看动画（CSS 动画是可 seek 的，符合 HyperFrames 的要求）。
   字体、配图请在 assets/ 里替换成品牌资产后重渲。

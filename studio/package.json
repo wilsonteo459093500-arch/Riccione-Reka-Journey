@@ -1,9 +1,9 @@
 {
-  "name": "riccione-studio",
+  "name": "cipta-studio",
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "RICCIONE REKA · Studio — 构思 / 剪辑 / 发布 一条龙的内容工作台",
+  "description": "CIPTA STUDIO by RICCIONE REKA — 构思 / 剪辑 / 发布 一条龙的内容工作台",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

@@ -1,4 +1,4 @@
-# RICCIONE REKA · Studio · 部署指南 (Vercel)
+# CIPTA STUDIO · 部署指南 (Vercel)
 
 纯前端，不需要 Supabase，5 分钟上线。
 

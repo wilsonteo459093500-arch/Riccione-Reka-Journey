@@ -29,7 +29,7 @@ export default function LoginGate({ onSuccess }) {
     <div className="min-h-screen flex items-center justify-center px-4">
       <form onSubmit={handleSubmit} className="w-full max-w-sm bg-sail-card border border-sail-line rounded-2xl p-8 shadow-sm">
         <div className="mb-7">
-          <Wordmark size="lg" sub="CIPTA STUDIO" />
+          <Wordmark size="lg" />
           <p className="text-xs text-sail-muted mt-5">内部工具 · 与「Render 效果图」同一套账号密码</p>
         </div>
 

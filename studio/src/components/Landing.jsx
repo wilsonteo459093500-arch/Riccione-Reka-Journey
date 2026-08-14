@@ -39,7 +39,7 @@ export default function Landing({ onEnter }) {
       {/* nav */}
       <header className="sticky top-0 z-40 bg-sail-paper/90 backdrop-blur border-b border-sail-line">
         <div className="max-w-6xl mx-auto px-5 h-16 flex items-center justify-between">
-          <Wordmark sub="CIPTA STUDIO" />
+          <Wordmark />
           <button
             onClick={onEnter}
             className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-sail-green-deep text-white text-sm font-medium hover:bg-sail-green transition-colors"
@@ -53,7 +53,7 @@ export default function Landing({ onEnter }) {
       <section className="max-w-6xl mx-auto px-5 pt-20 pb-16 sm:pt-28 sm:pb-24">
         <div className="max-w-3xl">
           <p className="text-[11px] tracking-[0.36em] uppercase text-sail-faint mb-6">
-            Reka 构思 · Cipta 创造
+            Cipta · 马来文「创造」
           </p>
           <h1 className="font-display text-[38px] sm:text-[58px] leading-[1.08] font-semibold text-sail-ink tracking-tight">
             给它一条参考视频，
@@ -153,7 +153,7 @@ export default function Landing({ onEnter }) {
         <div className="max-w-6xl mx-auto px-5 py-8 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Mark size={26} className="text-sail-green-deep" />
-            <Wordmark sub="" />
+            <Wordmark by="" />
           </div>
           <p className="text-xs text-sail-faint max-w-sm sm:text-right">
             马来文：<span className="text-sail-muted">reka</span> 是设计、构思，

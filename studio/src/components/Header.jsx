@@ -14,8 +14,8 @@ export default function Header({ view, setView, onOpenSettings, onOpenProjects, 
     <header className="sticky top-0 z-40 bg-sail-paper/90 backdrop-blur border-b border-sail-line">
       <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
         <div className="flex items-center gap-3 min-w-0">
-          <Wordmark sub="CIPTA STUDIO" className="hidden sm:block" />
-          <Wordmark sub="" className="sm:hidden" />
+          <Wordmark className="hidden sm:block" />
+          <Wordmark by="" className="sm:hidden" />
           <nav className="flex gap-1 bg-white border border-sail-line rounded-xl p-1 overflow-x-auto">
             {TABS.map((t) => (
               <button

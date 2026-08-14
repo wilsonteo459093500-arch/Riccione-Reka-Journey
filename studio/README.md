@@ -1,4 +1,4 @@
-# RICCIONE REKA · Studio
+# CIPTA STUDIO · by RICCIONE REKA
 
 内容工作台 —— **构思 / 剪辑 / 发布** 一条龙。
 
