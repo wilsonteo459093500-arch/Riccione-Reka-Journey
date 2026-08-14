@@ -611,6 +611,84 @@ ${shots}
 **直接告诉我"这个得你自己去拍"，不要生成** —— 我宁可少一个镜头，也不要让客户看到假的案例。`;
 }
 
+// ---------------------------------------------------------------------------
+// 静图动起来 —— 用 Seedance 的 image-to-video 替代假的 Ken Burns
+// ---------------------------------------------------------------------------
+
+/** Seedance 2.5 @ fal.ai 的按秒单价（token 计费折算） */
+const SEEDANCE_RATE = { '720p': 0.473, '480p': 0.2205 };
+
+/**
+ * 把方案里的静图 slot 变成一份 Seedance image-to-video 指令。
+ *
+ * 为什么这条比「补缺口」更值得做：缺口是生成你**没有**的镜头（从文字凭空造），
+ * 这条是让你**已经有的真实照片**动起来 —— 素材还是你自己的，只是多了运镜。
+ * 对「静图多、视频少」的素材结构，这是性价比最高的一步。
+ *
+ * 关键：image-to-video 把图当第一帧，prompt 描述的是**运动**，不是重新描述空间。
+ */
+export function toSeedancePrompt(plan, assets, opts = {}) {
+  const byId = Object.fromEntries(assets.map((a) => [a.id, a]));
+  const timed = withOutputTimes(plan.timeline || []);
+  const stills = timed.filter((r) => byId[r.assetId]?.kind === 'image');
+  if (!stills.length) return null;
+
+  const res = opts.resolution === '480p' ? '480p' : '720p';
+  const g = gradeById(plan.grade_preset);
+  const totalSec = stills.reduce((s, r) => s + Math.min(12, Math.max(4, r.output_duration)), 0);
+  const cost = totalSec * SEEDANCE_RATE[res];
+
+  const shots = stills
+    .map((r, i) => {
+      const a = byId[r.assetId];
+      // Seedance 最短 4 秒；比 4 秒短的 slot 生成后在剪辑里裁掉多余部分
+      const gen = Math.min(12, Math.max(4, Number(r.output_duration.toFixed(1))));
+      return `### ${i + 1}. slot ${r.slot}（成片 ${r.output_start.toFixed(1)}s，需要 ${r.output_duration.toFixed(1)}s）
+
+- **首帧图**：\`${a.name}\`
+- **生成时长**：${gen}s（Seedance 最短 4s；多出来的部分在剪辑里裁掉）
+- **运动 prompt**（只描述运动，不要重新描述空间 —— 空间已经在图里了）：
+  > ${r.reframe || '缓慢推近'}。${
+    r.beat === 'HOOK' ? 'Start slightly wider and push in with subtle parallax. ' : ''
+  }Very slow, restrained camera movement with natural parallax between foreground and background. Ambient light shifts gently. No objects change shape or position. Locked, deliberate, cinematic.
+- **音频**：关闭（这条片子的声音统一在剪辑里配，生成的音频会打架）`;
+    })
+    .join('\n\n');
+
+  return `我有 ${stills.length} 张真实案例照片，想用 Seedance 让它们真的动起来（而不是用 Ken Burns 假装）。
+
+## 模型
+
+fal.ai 上的 \`bytedance/seedance-2.5/image-to-video\` —— 把图当第一帧，生成运镜和运动。
+（也可以走 Higgsfield MCP，它的模型库里就有 Seedance。）
+
+**预估成本**：${stills.length} 个镜头共 ${totalSec.toFixed(0)} 秒 @${res} ≈ **US$${cost.toFixed(2)}**
+（720p ≈ $0.47/秒，480p ≈ $0.22/秒。竖屏发社媒的话 480p 往往就够，先用 480p 试对不对，再决定要不要 720p 重出。）
+
+## 要生成的镜头
+
+${shots}
+
+## 全局要求
+
+- **调性统一**：${g.label} — ${g.look || g.desc}。所有镜头同一套光线走向和色温。
+- **运动要克制**。这是家具/空间内容，不是特效片。观众要看清材质，镜头一快就全糊了。
+  宁可动得不够，也不要动得太多。
+- 每个镜头**先出 1 条**给我看，确认了再出其余的。
+
+## ⚠️ 这一条是硬规矩
+
+这些是**我自己项目的真实照片**，所以底线跟凭空生成不一样，但仍然有底线：
+
+**可以**：视差、光线缓慢流动、窗纱轻微飘动、尘埃浮动 —— 这些不改变我做的东西。
+
+**不可以**：柜门自己打开、五金件形状变化、木纹纹理被重新生成、家具比例漂移、
+凭空多出或少掉物件。**那些不是我做的东西了。**
+
+生成完请逐条告诉我：**每个镜头里有没有出现上面「不可以」那一类的变化？**
+有的话直接标出来，我宁可这一拍退回用普通的缓推，也不要一个会被客户认出来不对劲的镜头。`;
+}
+
 /** video-use 的 project.md，放进 edit/ 目录做会话记忆 */
 export function toProjectMd(plan, recipe, assets) {
   const today = new Date().toISOString().slice(0, 10);

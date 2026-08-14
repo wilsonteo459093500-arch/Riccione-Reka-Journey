@@ -272,6 +272,13 @@ export const PIPELINES = [
     good: '产品讲解、教程、需要 AI 配音的口播视频',
   },
   {
+    id: 'seedance',
+    label: 'Seedance（静图→视频）',
+    repo: 'https://fal.ai/models/bytedance/seedance-2.5/image-to-video',
+    desc: '字节的视频模型，把一张图当第一帧生成真运镜；fal.ai 上约 $0.47/秒（720p）、$0.22/秒（480p）',
+    good: '静图多、视频少的时候，让你自己的真实案例图动起来 —— 比假的 Ken Burns 强一个档次',
+  },
+  {
     id: 'vyra',
     label: 'Vyra（MCP 实时剪辑）',
     repo: 'https://vyra.ai',

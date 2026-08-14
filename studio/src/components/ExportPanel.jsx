@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { ExternalLink, Terminal, FileJson, Subtitles, ListTree, Bot, Sparkles } from 'lucide-react';
+import { ExternalLink, Terminal, FileJson, Subtitles, ListTree, Bot, Sparkles, Film } from 'lucide-react';
 import { Card, Btn, CopyBtn, DownloadBtn, Fold, TextInput, Field } from './ui/Bits.jsx';
 import { PIPELINES } from '../constants.js';
 import {
-  toEDL, toSRT, toShotList, toClaudePrompt, toVyraPrompt, toProjectMd, toHiggsfieldPrompts,
+  toEDL, toSRT, toShotList, toClaudePrompt, toVyraPrompt, toProjectMd, toHiggsfieldPrompts, toSeedancePrompt,
   captionsFromTimeline,
 } from '../services/exporters.js';
 
@@ -24,6 +24,7 @@ export default function ExportPanel({ plan, assets, recipe }) {
       vyra: toVyraPrompt(plan, assets, recipe),
       projectMd: toProjectMd(plan, recipe, assets),
       higgsfield: toHiggsfieldPrompts(plan, recipe),
+      seedance: toSeedancePrompt(plan, assets),
     };
   }, [plan, assets, recipe, dir]);
 
@@ -82,6 +83,30 @@ export default function ExportPanel({ plan, assets, recipe }) {
             </p>
             <CopyBtn text={bundle.vyra} label="复制 Vyra 指令" />
           </div>
+
+          {bundle.seedance && (
+            <div className="rounded-xl border border-sail-green/45 bg-sail-green/5 p-3.5 sm:col-span-2">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Film size={14} className="text-sail-green" />
+                <span className="text-sm font-medium text-sail-ink">让静图真的动起来 · Seedance</span>
+                <a
+                  href="https://fal.ai/models/bytedance/seedance-2.5/image-to-video"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-sail-green underline inline-flex items-center gap-0.5"
+                >
+                  模型 <ExternalLink size={11} />
+                </a>
+              </div>
+              <p className="text-xs text-sail-faint leading-relaxed mb-2.5">
+                方案里的静图默认走 Ken Burns（假的推拉）。Seedance 的 image-to-video 把
+                <strong className="text-sail-muted">你自己的真实照片</strong>当第一帧，生成真的运镜和视差。
+                指令已经算好每个镜头的时长和费用，并写死了一条边界：
+                <strong className="text-sail-muted">柜门自己开、五金变形、木纹被重画 —— 一律退回普通缓推。</strong>
+              </p>
+              <CopyBtn text={bundle.seedance} label="复制运镜指令" />
+            </div>
+          )}
 
           {bundle.higgsfield && (
             <div className="rounded-xl border border-sail-gold/50 bg-sail-gold/5 p-3.5 sm:col-span-2">
