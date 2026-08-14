@@ -17,7 +17,9 @@ const PLAN_SCHEMA = `{
       "speed": 1.0,
       "reframe": "画幅适配方式，如「竖裁保左侧人物」「静图 Ken Burns 缓推 8%」",
       "onscreen_text": "这一拍屏幕上的文字（没有就空字符串）",
+      "onscreen_text_en": "上面那句的英文（只在字幕风格是 bilingual 时填，否则空字符串）",
       "vo": "这一拍的口播（没有就空字符串）",
+      "vo_en": "上面那句口播的英文（只在字幕风格是 bilingual 时填，否则空字符串）",
       "sfx": "音效点（没有就空字符串）",
       "transition_in": "cut",
       "grade": "warm_cinematic",
@@ -161,6 +163,10 @@ ${brandContext(settings)}
 6. Slot durations must produce the pacing the recipe describes. Fast section = 0.5–1.2s slots. Breathing room = 2–4s.
 7. "captions" covers the whole timeline in output-timeline seconds (starting at 0), chunked to the caption style.
    Text must match the "vo" and "onscreen_text" you wrote. If the caption style is "none", return an empty array.
+   **If the caption style is "bilingual"**, also fill every "onscreen_text_en" / "vo_en" and give each caption a
+   "secondary" field with the English line. The English is a *subtitle*, not a translation exercise: keep it to one
+   line, cut filler, match the spoken meaning rather than the words. A Chinese line of 12 字 should become roughly
+   6–9 English words — if it runs longer than the Chinese line looks on screen, cut it down.
 8. "cover" — pick the assetId with the best hero potential, or set source to "generate" if nothing is strong enough.
    The "prompt" field is written in English and must be self-contained.
 9. "gaps" is where you are most useful. Be specific and shoot-able. "补一个转折镜头" is useless;

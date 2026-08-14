@@ -184,6 +184,16 @@ export const CAPTION_STYLES = [
     upper: false,
     ass: 'FontName=Helvetica,FontSize=14,Bold=0,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=0,Shadow=0,Alignment=2,MarginV=90',
   },
+  {
+    id: 'bilingual',
+    label: '中英双语（马来西亚）',
+    desc: '华语讲，中英两行 —— 同一条片子同时吃华人和英语受众，本地账号最被低估的一招',
+    chunk: 8,
+    upper: false,
+    bilingual: true,
+    // 两行要留出高度，MarginV 比单行档位抬高一些；第二行想小一号得在剪辑软件里分轨
+    ass: 'FontName=Helvetica,FontSize=14,Bold=0,PrimaryColour=&H00FFFFFF,OutlineColour=&H90000000,BorderStyle=1,Outline=1,Shadow=0,Alignment=2,MarginV=100',
+  },
   { id: 'none', label: '不加字幕', desc: '纯画面 + 音乐', chunk: 0, upper: false, ass: '' },
 ];
 

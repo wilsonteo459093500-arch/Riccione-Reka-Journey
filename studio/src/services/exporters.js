@@ -134,11 +134,22 @@ export function toEDL(plan, assets, opts = {}) {
 // 字幕
 // ---------------------------------------------------------------------------
 
+/**
+ * SRT。带 `secondary` 的字幕会写成两行（主语言在上、第二语言在下）——
+ * SRT 本来就允许一条字幕多行，所以这是标准写法，剪映和 ffmpeg 都直接吃。
+ *
+ * 两行的字号差异做不到 —— SRT 没有样式。要让第二行小一号，
+ * 得在剪辑软件里把字幕拆成两条轨，或者改用 ASS。导出说明里写清楚了。
+ */
 export function toSRT(captions = []) {
   return (
     captions
       .filter((c) => (c.text || '').trim())
-      .map((c, i) => `${i + 1}\n${srtTime(c.start)} --> ${srtTime(c.end)}\n${c.text.trim()}\n`)
+      .map((c, i) => {
+        const second = (c.secondary || '').trim();
+        const body = second ? `${c.text.trim()}\n${second}` : c.text.trim();
+        return `${i + 1}\n${srtTime(c.start)} --> ${srtTime(c.end)}\n${body}\n`;
+      })
       .join('\n') || ''
   );
 }
@@ -150,6 +161,7 @@ export function captionsFromTimeline(timeline = []) {
       start: r.output_start,
       end: Number((r.output_start + r.output_duration).toFixed(2)),
       text: (r.onscreen_text || r.vo || '').trim(),
+      secondary: (r.onscreen_text_en || r.vo_en || '').trim(),
     }))
     .filter((c) => c.text);
 }
