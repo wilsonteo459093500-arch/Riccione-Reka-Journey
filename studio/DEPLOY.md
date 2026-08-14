@@ -12,6 +12,24 @@
 
 确认方法：在 GitHub 上把分支切到 `main`，能看到 `studio/` 文件夹就没问题。
 
+### 代码明明在 `main` 上，下拉框里还是没有？
+
+**Vercel 会缓存仓库的目录树。**如果你在合并之前打开过导入页面，它会一直显示旧的那份列表
+（症状很好认：`src` 和 `supabase` 之间少了 `studio`，其余目录都在）。
+
+按顺序试：
+
+1. **整个关掉导入流程**，回到 <https://vercel.com/new> 硬刷新（`Cmd/Ctrl + Shift + R`），重新选一次 repo
+2. 还是没有 → **直接绕过那个选择器**（最稳）：
+   - Root Directory 保持默认，先 **Deploy** 一次（这一次会部署成 Delivery OS，是预期的，不用管）
+   - 部署完进 Project → **Settings** → **Build & Deployment** → **Root Directory**
+   - 那是个可以**直接打字**的输入框 —— 填 `studio`，Save
+   - 回 **Deployments** → 最新那条右边 `⋯` → **Redeploy**
+3. 或者用 CLI 一步到位：
+   ```bash
+   npx vercel --cwd studio
+   ```
+
 ---
 
 ## 1) 在 Vercel 新建一个独立项目
@@ -128,7 +146,7 @@ cp .env.example .env      # 填 ELEVENLABS_API_KEY（转写用）
 
 | 症状 | 原因 / 解法 |
 |---|---|
-| **Root Directory 下拉框里没有 `studio`** | 代码还没进 `main`。见上面第 0 节 |
+| **Root Directory 下拉框里没有 `studio`** | 要么代码还没进 `main`，要么 Vercel 缓存了旧目录树。见上面第 0 节，含绕过办法 |
 | 部署出来是 Delivery OS 不是 Cipta Studio | Root Directory 没设成 `studio`，改完 Redeploy |
 | 测试连接失败 / 403 | key 复制不完整；或该地区需要在设置 → 高级里填中转接口地址 |
 | 提示限流 (429) | 免费 key 每分钟额度很小。等一分钟再试，或去 AI Studio 开按量付费 |
