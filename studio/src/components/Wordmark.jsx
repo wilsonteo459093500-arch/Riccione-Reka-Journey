@@ -31,9 +31,14 @@ export function Mark({ size = 32, className = '' }) {
 
 /**
  * 字标。名字永远只是 RICCIONE REKA；sub 是描述性副标签，不是名字的一部分。
+ *
+ * 副标签用了 CIPTA —— 它和 REKA 一样是马来文实词（reka cipta ＝ 创作），
+ * 所以层级必须一眼分得开，否则会被读成「RICCIONE REKA CIPTA」。
+ * 靠四个轴同时拉开：字号 2.25×、字重、颜色（深绿 vs 浅灰）、字距（0.36em vs 0）。
+ *
  * size: 'sm' 导航栏，'lg' 登录页 / 首页。
  */
-export default function Wordmark({ size = 'sm', sub = 'CONTENT STUDIO', className = '' }) {
+export default function Wordmark({ size = 'sm', sub = 'CIPTA STUDIO', className = '' }) {
   const lg = size === 'lg';
   return (
     <div className={`leading-none ${className}`}>

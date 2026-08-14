@@ -39,7 +39,7 @@ export default function Landing({ onEnter }) {
       {/* nav */}
       <header className="sticky top-0 z-40 bg-sail-paper/90 backdrop-blur border-b border-sail-line">
         <div className="max-w-6xl mx-auto px-5 h-16 flex items-center justify-between">
-          <Wordmark sub="CONTENT STUDIO" />
+          <Wordmark sub="CIPTA STUDIO" />
           <button
             onClick={onEnter}
             className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-sail-green-deep text-white text-sm font-medium hover:bg-sail-green transition-colors"
@@ -53,7 +53,7 @@ export default function Landing({ onEnter }) {
       <section className="max-w-6xl mx-auto px-5 pt-20 pb-16 sm:pt-28 sm:pb-24">
         <div className="max-w-3xl">
           <p className="text-[11px] tracking-[0.36em] uppercase text-sail-faint mb-6">
-            Reka · 马来文「设计、构思」
+            Reka 构思 · Cipta 创造
           </p>
           <h1 className="font-display text-[38px] sm:text-[58px] leading-[1.08] font-semibold text-sail-ink tracking-tight">
             给它一条参考视频，
@@ -155,8 +155,9 @@ export default function Landing({ onEnter }) {
             <Mark size={26} className="text-sail-green-deep" />
             <Wordmark sub="" />
           </div>
-          <p className="text-xs text-sail-faint">
-            Reka · 马来文「设计」 —— 名字取自这里，因为这就是这件事的全部。
+          <p className="text-xs text-sail-faint max-w-sm sm:text-right">
+            马来文：<span className="text-sail-muted">reka</span> 是设计、构思，
+            <span className="text-sail-muted">cipta</span> 是创造 —— 合起来 reka cipta，正是「创作」。
           </p>
         </div>
       </footer>
