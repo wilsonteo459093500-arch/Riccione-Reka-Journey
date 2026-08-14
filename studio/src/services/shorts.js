@@ -5,19 +5,18 @@
 // 写错不是"质量差一点"，是废片。
 
 import { platformById } from '../constants.js';
+import { collector, findOpeningClashes, mergedSpan, OPEN_GAP } from './audit.js';
 
-const OPEN_GAP = 2.0; // 两支切片的开场至少差这么久
 const MAX_SHARE = 0.6; // 单支不超过主片的 60%，否则算重发
 
 /**
  * @param {object} result shortsPrompt 的输出
  * @param {number} total  主片总时长
- * @returns {Array<{level:'error'|'warn', id?:string, kind:string, msg:string}>}
+ * @returns {Array<{level:'error'|'warn', ref?:string, kind:string, msg:string}>}
  */
 export function auditShorts(result, total) {
   const list = result?.shorts || [];
-  const issues = [];
-  const add = (level, kind, msg, id) => issues.push({ level, kind, msg, id });
+  const { add, issues } = collector();
 
   list.forEach((s) => {
     const from = Number(s.from_s);
@@ -66,49 +65,34 @@ export function auditShorts(result, total) {
     if (hit) add('warn', 'standalone', `${s.id} 的新开场里出现了「${hit}」—— 它依赖主片的上文，切出来就断了。`, s.id);
   });
 
-  // ---- 开场不能撞 ----
-  const sorted = list
-    .filter((s) => Number.isFinite(Number(s.from_s)))
-    .map((s) => ({ id: s.id, from: Number(s.from_s) }))
-    .sort((a, b) => a.from - b.from);
-  for (let i = 1; i < sorted.length; i++) {
-    const gap = sorted[i].from - sorted[i - 1].from;
-    if (gap < OPEN_GAP) {
-      add(
-        'error',
-        'open',
-        `${sorted[i - 1].id} 和 ${sorted[i].id} 的开场只差 ${gap.toFixed(1)}s（都在主片第 ${sorted[i - 1].from.toFixed(1)}s 附近）。前 1.5 秒决定一切 —— 两支开头几乎一样，第二支在信息流里是隐形的。`,
-        sorted[i].id
-      );
-    }
-  }
+  // ---- 开场不能撞（和「量产」共用同一份实现，见 audit.js）----
+  // 切片全部来自同一条主片，所以 source 一律为 null；开场是一个时间点，from = to。
+  findOpeningClashes(
+    list
+      .filter((s) => Number.isFinite(Number(s.from_s)))
+      .map((s) => ({ ref: s.id, source: null, from: Number(s.from_s), to: Number(s.from_s) }))
+  ).forEach((c) => {
+    const at = list.find((s) => s.id === c.a);
+    add(
+      'error',
+      'open',
+      `${c.a} 和 ${c.b} 的开场只差 ${(c.gap ?? 0).toFixed(1)}s（都在主片第 ${Number(at?.from_s || 0).toFixed(1)}s 附近）。前 1.5 秒决定一切 —— 两支开头几乎一样，第二支在信息流里是隐形的。`,
+      c.b
+    );
+  });
 
-  // ---- 平台时长 ----
   return issues;
 }
 
-/** 主片有多少被真正用上了（合并重叠区间后算） */
+/** 主片有多少被真正用上了（重叠区间要合并，否则利用率会虚高） */
 export function shortsCoverage(result, total) {
   const spans = (result?.shorts || [])
     .map((s) => [Number(s.from_s), Number(s.to_s)])
-    .filter(([a, b]) => Number.isFinite(a) && Number.isFinite(b) && b > a)
-    .sort((x, y) => x[0] - y[0]);
+    .filter(([a, b]) => Number.isFinite(a) && Number.isFinite(b) && b > a);
 
-  let covered = 0;
-  let curStart = null;
-  let curEnd = null;
-  for (const [a, b] of spans) {
-    if (curEnd === null || a > curEnd) {
-      if (curEnd !== null) covered += curEnd - curStart;
-      [curStart, curEnd] = [a, b];
-    } else {
-      curEnd = Math.max(curEnd, b);
-    }
-  }
-  if (curEnd !== null) covered += curEnd - curStart;
-
+  const covered = mergedSpan(spans);
   return {
-    covered: Number(covered.toFixed(2)),
+    covered,
     total,
     ratio: total ? covered / total : 0,
     totalOutput: Number(spans.reduce((s, [a, b]) => s + (b - a), 0).toFixed(2)),

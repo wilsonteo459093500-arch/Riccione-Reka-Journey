@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import {
   Layers3, AlertTriangle, CalendarDays, ArrowRight, Camera, Ban, Copy, Sparkles,
 } from 'lucide-react';
-import { Card, Btn, Field, TextArea, ChipRow, Tag, Empty, Fold, CopyBtn, DownloadBtn } from './ui/Bits.jsx';
+import { Card, Btn, Field, TextArea, ChipRow, Tag, Empty, Fold, CopyBtn, DownloadBtn, IssueList } from './ui/Bits.jsx';
 import { PLATFORMS, platformById } from '../constants.js';
 import { matrixPrompt } from '../prompts/matrix.js';
 import { generateJSON } from '../services/gemini.js';
@@ -42,7 +42,7 @@ export default function MatrixView({
 
   const errors = issues.filter((i) => i.level === 'error');
   const warns = issues.filter((i) => i.level === 'warn');
-  const issuesFor = (id) => issues.filter((i) => i.pieceId === id);
+  const issuesFor = (id) => issues.filter((i) => i.ref === id);
 
   async function run() {
     if (!settings.apiKey) return onOpenSettings();
@@ -233,16 +233,7 @@ export default function MatrixView({
                   </Btn>
                 }
               >
-                <ul className="space-y-1.5">
-                  {[...errors, ...warns].map((it, i) => (
-                    <li key={i} className="text-xs leading-relaxed flex gap-1.5">
-                      <span className={it.level === 'error' ? 'text-sail-brown' : 'text-sail-gold'}>
-                        {it.level === 'error' ? '✗' : '!'}
-                      </span>
-                      <span className="text-sail-muted">{it.msg}</span>
-                    </li>
-                  ))}
-                </ul>
+                <IssueList issues={issues} compact />
               </Card>
             )}
 
@@ -304,14 +295,9 @@ export default function MatrixView({
                       )}
 
                       {bad.length > 0 && (
-                        <ul className="mt-2 space-y-1">
-                          {bad.map((b, i) => (
-                            <li key={i} className={`text-[11px] leading-relaxed ${b.level === 'error' ? 'text-sail-brown' : 'text-sail-gold'}`}>
-                              {b.level === 'error' ? '✗ ' : '! '}
-                              {b.msg}
-                            </li>
-                          ))}
-                        </ul>
+                        <div className="mt-2">
+                          <IssueList issues={bad} compact />
+                        </div>
                       )}
 
                       {onUsePiece && (

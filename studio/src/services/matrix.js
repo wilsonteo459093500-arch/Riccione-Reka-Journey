@@ -4,7 +4,7 @@
 // 算出来的问题直接摆在 UI 上，让人一眼看到哪一条要重做 ——
 // 而不是等发出去三条之后才发现开场镜头全一样。
 
-const OPEN_GAP = 2.0; // 两条内容的开场镜头，用同一素材时至少要隔这么久
+import { collector, findOpeningClashes } from './audit.js';
 
 /** "A3 6.2-7.0" / "A3 6.2–7.0s" / "A3" → { assetId, from, to } */
 export function parseOpenWith(str) {
@@ -18,9 +18,6 @@ export function parseOpenWith(str) {
   };
 }
 
-const overlaps = (a, b, pad = 0) =>
-  a.from != null && b.from != null && a.from - pad < b.to && b.from - pad < a.to;
-
 /** 这段时间落在素材标注的可用片段里吗 */
 function insideBestMoment(label, from, to) {
   const ms = label?.best_moments || [];
@@ -32,31 +29,30 @@ const VAGUE = [/^展示/, /^介绍/, /案例展示/, /全屋定制$/, /设计理
 
 /**
  * 给一份矩阵做体检。
- * @returns {Array<{level:'error'|'warn', pieceId?:string, kind:string, msg:string}>}
+ * @returns {Array<{level:'error'|'warn', ref?:string, kind:string, msg:string}>}
  */
 export function auditMatrix(matrix, assets = []) {
   const pieces = matrix?.pieces || [];
   const byId = Object.fromEntries(assets.map((a) => [a.id, a]));
-  const issues = [];
-  const add = (level, kind, msg, pieceId) => issues.push({ level, kind, msg, pieceId });
+  const { add, issues } = collector();
 
-  // ---- 1. 开场镜头不能撞 ----
-  const opens = pieces.map((p) => ({ id: p.id, ...parseOpenWith(p.open_with) }));
-  for (let i = 0; i < opens.length; i++) {
-    for (let j = i + 1; j < opens.length; j++) {
-      const [a, b] = [opens[i], opens[j]];
-      if (!a.assetId || a.assetId !== b.assetId) continue;
-      const noRange = a.from == null || b.from == null;
-      if (noRange || overlaps(a, b, OPEN_GAP)) {
-        add(
-          'error',
-          'open',
-          `${a.id} 和 ${b.id} 用同一个开场镜头（${a.assetId}${noRange ? '' : ` ${a.from}s / ${b.from}s`}）。前 1.5 秒决定一切 —— 两条开头一样，第二条就是隐形的。`,
-          b.id
-        );
-      }
-    }
-  }
+  // ---- 1. 开场镜头不能撞（和「再切」共用同一份实现，见 audit.js）----
+  const parsed = pieces.map((p) => ({ ref: p.id, ...parseOpenWith(p.open_with) }));
+  const byRef = Object.fromEntries(parsed.map((o) => [o.ref, o]));
+  findOpeningClashes(
+    // 没有素材 id 的（如动态图文帖不消耗素材）不参与比较
+    parsed.filter((o) => o.assetId).map((o) => ({ ref: o.ref, source: o.assetId, from: o.from, to: o.to }))
+  ).forEach((c) => {
+    const a = byRef[c.a];
+    const b = byRef[c.b];
+    const where = c.gap === null ? '' : ` ${a.from}s / ${b.from}s`;
+    add(
+      'error',
+      'open',
+      `${c.a} 和 ${c.b} 用同一个开场镜头（${c.source}${where}）。前 1.5 秒决定一切 —— 两条开头一样，第二条就是隐形的。`,
+      c.b
+    );
+  });
 
   // ---- 2. 引用的时间段必须真的存在 ----
   pieces.forEach((p) => {

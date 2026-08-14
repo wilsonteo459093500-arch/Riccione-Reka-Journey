@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Split, AlertTriangle, Clock } from 'lucide-react';
-import { Card, Btn, Tag, CopyBtn, DownloadBtn, Field } from './ui/Bits.jsx';
+import { Split, Clock } from 'lucide-react';
+import { Card, Btn, Tag, CopyBtn, DownloadBtn, Field, IssueList } from './ui/Bits.jsx';
 import { platformById } from '../constants.js';
 import { shortsPrompt } from '../prompts/shorts.js';
 import { generateJSON } from '../services/gemini.js';
@@ -25,9 +25,7 @@ export default function RecutPanel({ settings, notify, plan, recipe, platformId,
 
   const issues = useMemo(() => (result ? auditShorts(result, total) : []), [result, total]);
   const cov = useMemo(() => (result ? shortsCoverage(result, total) : null), [result, total]);
-  const errors = issues.filter((i) => i.level === 'error');
-  const warns = issues.filter((i) => i.level === 'warn');
-  const forId = (id) => issues.filter((i) => i.id === id);
+  const forId = (id) => issues.filter((i) => i.ref === id);
 
   const guide = useMemo(
     () => (result ? toShortsGuide(result, { total, platformId, masterName: 'final.mp4' }) : ''),
@@ -118,29 +116,7 @@ export default function RecutPanel({ settings, notify, plan, recipe, platformId,
             </div>
           )}
 
-          {issues.length > 0 && (
-            <div
-              className={`rounded-xl border p-3 ${
-                errors.length ? 'border-sail-brown/40 bg-sail-brown/5' : 'border-sail-gold/40 bg-sail-gold/5'
-              }`}
-            >
-              <p className="text-xs font-medium text-sail-ink mb-1.5 flex items-center gap-1.5">
-                <AlertTriangle size={13} className={errors.length ? 'text-sail-brown' : 'text-sail-gold'} />
-                {errors.length ? `${errors.length} 处硬伤 · ` : ''}
-                {warns.length} 处建议
-              </p>
-              <ul className="space-y-1">
-                {[...errors, ...warns].map((it, i) => (
-                  <li key={i} className="text-[11px] leading-relaxed flex gap-1.5">
-                    <span className={it.level === 'error' ? 'text-sail-brown' : 'text-sail-gold'}>
-                      {it.level === 'error' ? '✗' : '!'}
-                    </span>
-                    <span className="text-sail-muted">{it.msg}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+          <IssueList issues={issues} />
 
           <div className="space-y-2">
             {(result.shorts || []).map((s) => {
@@ -185,17 +161,9 @@ export default function RecutPanel({ settings, notify, plan, recipe, platformId,
                   </div>
 
                   {bad.length > 0 && (
-                    <ul className="mt-1.5 space-y-0.5">
-                      {bad.map((b, i) => (
-                        <li
-                          key={i}
-                          className={`text-[11px] leading-relaxed ${b.level === 'error' ? 'text-sail-brown' : 'text-sail-gold'}`}
-                        >
-                          {b.level === 'error' ? '✗ ' : '! '}
-                          {b.msg}
-                        </li>
-                      ))}
-                    </ul>
+                    <div className="mt-1.5">
+                      <IssueList issues={bad} compact />
+                    </div>
                   )}
                 </div>
               );
