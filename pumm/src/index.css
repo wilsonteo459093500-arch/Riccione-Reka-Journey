@@ -1,0 +1,84 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =============================================================
+   PUMM ROUNDTABLE — 全局主题
+   桌长常在手机、投影、别人的笔电上开这个页面，所以一律钉死浅色，
+   不跟随系统深色模式，免得表单控件变白底白字。
+   ============================================================= */
+
+:root {
+  color-scheme: light;
+  --c-ink:       #17181A;
+  --c-muted:     #585B60;
+  --c-faint:     #7C8087;
+  --c-line:      #E1DDD4;
+  --c-paper:     #F6F4EF;
+  --c-tint:      #FBFAF7;
+  --c-card:      #FFFFFF;
+  --c-brand:     #23303D;
+  --c-brand-700: #16212B;
+  --c-brass:     #B08D4F;
+  --c-ok:        #3F7D5C;
+  --c-warn:      #C0843A;
+  --c-danger:    #9C3D2E;
+}
+
+html, body, #root {
+  height: 100%;
+  background: var(--c-paper);
+  color: var(--c-ink);
+  font-family: 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto,
+               'PingFang SC', 'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.font-display { font-family: 'Fraunces', 'Georgia', serif; font-feature-settings: 'ss01'; }
+
+/* 表单控件强制浅色 —— iOS Safari 深色模式下否则会白底白字 */
+input, select, textarea, option, button {
+  color: var(--c-ink);
+  background-color: #FFFFFF;
+  color-scheme: light;
+}
+select option { color: var(--c-ink); background-color: #FFFFFF; }
+input::placeholder, textarea::placeholder { color: #8C9098; opacity: 1; }
+input[type="date"], input[type="time"], input[type="number"] { color: var(--c-ink); }
+input::-webkit-date-and-time-value { color: var(--c-ink); text-align: left; }
+
+/* 细滚动条 */
+.scrollbar-thin::-webkit-scrollbar { height: 8px; width: 8px; }
+.scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: #CBC5B8; border-radius: 4px; }
+.scrollbar-thin::-webkit-scrollbar-thumb:hover { background: #A79E8C; }
+
+button, a, select { touch-action: manipulation; }
+
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+.safe-top    { padding-top:  env(safe-area-inset-top); }
+
+/* 登录页与主持模式的桌面纹理 */
+.felt-bg {
+  background-image:
+    radial-gradient(circle at 50% 0%, rgba(176, 141, 79, 0.10), transparent 60%),
+    linear-gradient(to right, rgba(35, 48, 61, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(35, 48, 61, 0.045) 1px, transparent 1px);
+  background-size: 100% 100%, 32px 32px, 32px 32px;
+}
+
+/* 计时器超时闪烁 */
+@keyframes pumm-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+.timer-over { animation: pumm-pulse 1.4s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* 打印：1 页 Case Record 直接 Ctrl+P 出纸 */
+@media print {
+  body { background: white; }
+  .no-print { display: none !important; }
+  .print-page { break-inside: avoid; }
+}
