@@ -10,13 +10,13 @@
 1. 打开 <https://vercel.com/new>
 2. 选择 GitHub repo `wilsonteo459093500-arch/Wilson` → **Import**
 3. **Configure Project** 页面：
-   - **Project Name**: `riccione-studio`（随便起）
+   - **Project Name**: `cipta-studio`（随便起）
    - **Framework Preset**: 自动检测为 **Vite**
    - **Root Directory**: 点 **Edit** → 选 **studio** ⚠️ 最关键的一步
    - Build Command / Output Directory 保持默认
 4. 不需要任何环境变量，直接 **Deploy**
 
-拿到网址后打开，看到登录页即部署成功。账号密码和「溪岸 Render」是同一套。
+拿到网址后打开，看到登录页即部署成功。账号密码和「UKIR STUDIO」（原 Render 效果图）是同一套。
 
 ## 2) 每个使用者自己配 API key
 

@@ -30,7 +30,7 @@ export default function LoginGate({ onSuccess }) {
       <form onSubmit={handleSubmit} className="w-full max-w-sm bg-sail-card border border-sail-line rounded-2xl p-8 shadow-sm">
         <div className="mb-7">
           <Wordmark size="lg" />
-          <p className="text-xs text-sail-muted mt-5">内部工具 · 与「Render 效果图」同一套账号密码</p>
+          <p className="text-xs text-sail-muted mt-5">内部工具 · 与「UKIR STUDIO」同一套账号密码</p>
         </div>
 
         <label className="block mb-3">

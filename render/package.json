@@ -1,9 +1,9 @@
 {
-  "name": "sail-render-studio",
+  "name": "ukir-studio",
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "溪岸 Render · AI 效果图工作室 — 照片/草图秒变照片级效果图",
+  "description": "UKIR STUDIO by RICCIONE REKA — 照片/草图秒变照片级效果图",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
