@@ -8,6 +8,7 @@
 //   toVyraPrompt   → 贴给 Vyra（MCP 实时剪辑器）的操作指令
 
 import { gradeById, captionStyleById, beatById } from '../constants.js';
+import { buildMotionSpec, flatTracks, waapiFrame, cssEase, selectorFor } from './motion.js';
 
 // ---------------------------------------------------------------------------
 // 小工具
@@ -222,71 +223,71 @@ const esc = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 /**
- * 生成一个 HyperFrames 合成文件。
- * 直接双击也能在浏览器里预览（用的是标准 CSS 动画）；
- * 交给 `npx hyperframes render` 则逐帧渲染成确定性 MP4。
+ * 生成一个可逐帧渲染的合成文件。
+ *
+ * 关键点：这份 HTML 和网站里的实时预览读的是**同一份 spec**（services/motion.js）。
+ * 预览用 anime.js 播，这里用浏览器原生的 Web Animations API 播 ——
+ * 两套引擎、同一组关键帧，所以「预览看到的」就是「渲出来的」。
+ *
+ * 导出的文件是完全独立的：没有 CDN、没有 npm 依赖、断网也能打开。
+ *
+ * 三种用法：
+ *   1. 双击打开        → 自动播放，直接看
+ *   2. `?t=1.234`      → 精确停在第 1.234 秒，并把 body[data-ready] 置为 1
+ *                        任何截图工具（Playwright / Puppeteer / HyperFrames）都能靠这个逐帧抓
+ *   3. `window.seekTo(秒)` → 在控制台或渲染脚本里直接调
  *
  * @param {object} storyboard animatedPostPrompt 的输出
  * @param {object} [opts] { width, height, fps }
  */
 export function toHyperFrames(storyboard, opts = {}) {
-  const width = opts.width || 1080;
-  const height = opts.height || 1920;
-  const fps = opts.fps || 30;
-  const pal = storyboard.palette || {};
-  const bg = pal.bg || '#F5F1EA';
-  const ink = pal.ink || '#1A1614';
-  const accent = pal.accent || '#2D4A3E';
+  const spec = buildMotionSpec(storyboard, opts);
+  const { width, height, fps, palette, total } = spec;
 
-  // 先算好每屏的起止，才能生成「只在自己那一段可见」的关键帧
-  const slides = (storyboard.slides || []).map((s, i) => {
-    const d = Math.max(0.3, Number(s.duration_s) || 2.2);
-    return { ...s, _i: i, _d: d };
+  // 关键帧编译成 WAAPI 能直接吃的数组，连同选择器一起内联进文件。
+  // 内联而不是运行时算，是为了让这个 HTML 打开就能跑，不依赖任何构建产物。
+  //
+  // fill 模式很关键，踩过一次：同一个元素上有先后两条动画时，
+  // 后一条如果也用 fill:'both'，它的「反向填充」会在自己还没开始时就把
+  // 起始值盖到元素上 —— 而且因为它创建得晚，合成顺序更高，直接压掉前一条。
+  // 具体表现是每一屏的淡出动画（from opacity 1）让所有屏从第 0 秒就全亮着。
+  //
+  // 正确做法：一个元素上**最早**那条用 'both'（它负责定初始状态），
+  // 后面的一律 'forwards'（只管自己开始之后的事）。
+  const seen = new Set();
+  const tracks = flatTracks(spec).map((t) => {
+    const s = selectorFor(t);
+    const first = !seen.has(s);
+    seen.add(s);
+    return {
+      s,
+      k: [waapiFrame(t.from), waapiFrame(t.to)],
+      d: Math.round(t.start * 1000),
+      u: Math.max(10, Math.round(t.duration * 1000)),
+      e: cssEase(t.easing),
+      f: first ? 'both' : 'forwards',
+    };
   });
-  let cursor = 0;
-  slides.forEach((s) => {
-    s._start = cursor;
-    cursor += s._d;
-  });
-  const total = Math.max(0.5, cursor);
 
-  // 每屏一段 opacity 关键帧：所有 clip 共用同一条 total 秒的时间线，各自只在窗口内显形。
-  // 这样单独用浏览器打开也能正确播放，同时保持可 seek（HyperFrames 逐帧渲染的前提）。
-  const pct = (t) => Math.min(100, Math.max(0, (t / total) * 100));
-  const keyframes = slides
+  const clips = spec.slides
     .map((s) => {
-      const a = pct(s._start);
-      const b = pct(s._start + s._d);
-      const stops = [
-        a > 0 ? `0%, ${(a - 0.001).toFixed(3)}% { opacity: 0 }` : null,
-        `${a.toFixed(3)}% { opacity: 1 }`,
-        b < 100 ? `${(b - 0.001).toFixed(3)}% { opacity: 1 }` : `100% { opacity: 1 }`,
-        b < 100 ? `${b.toFixed(3)}%, 100% { opacity: 0 }` : null,
-      ].filter(Boolean);
-      return `  @keyframes clip-${s._i + 1} { ${stops.join(' ')} }`;
-    })
-    .join('\n');
-
-  const clips = slides
-    .map((s) => {
-      const i = s._i;
-      const chars = [...esc(s.headline || '')]
-        .map((ch, ci) => `<span style="--i:${ci}">${ch === ' ' ? '&nbsp;' : ch}</span>`)
+      const chars = s.chars
+        .map((ch, ci) => `<span data-char="${ci}">${ch === ' ' ? '&nbsp;' : esc(ch)}</span>`)
         .join('');
+      const bgAttr =
+        s.bgKind === 'image' && s.imagePrompt
+          ? ` data-image-prompt="${esc(s.imagePrompt)}" style="background-image:var(--img-${s.index + 1},none)"`
+          : '';
 
-      return `  <!-- slide ${i + 1} · ${esc(s.layout || '')} -->
-  <div class="clip" data-start="${s._start.toFixed(2)}" data-duration="${s._d.toFixed(2)}" data-track-index="0"
-       style="--t0:${s._start.toFixed(2)}s; animation-name: clip-${i + 1}">
-    <div class="bg ${s.bg_kind === 'gradient' ? 'grad' : ''}"${
-        s.bg_kind === 'image' && s.image_prompt
-          ? ` data-image-prompt="${esc(s.image_prompt)}" style="background-image:var(--img-${i + 1},none)"`
-          : ''
-      }></div>
+      return `  <!-- 第 ${s.index + 1} 屏 · ${esc(s.layout)} -->
+  <div class="clip" data-slide="${s.index}"
+       data-start="${s.start.toFixed(2)}" data-duration="${s.duration.toFixed(2)}" data-track-index="0">
+    <div class="bg${s.bgKind === 'gradient' ? ' grad' : ''}" data-el="bg"${bgAttr}></div>
     <div class="frame">
-      <div class="kicker">${String(i + 1).padStart(2, '0')}</div>
+      <div class="kicker" data-el="kicker">${String(s.index + 1).padStart(2, '0')}</div>
       <h1 class="headline">${chars}</h1>
-      ${s.sub ? `<p class="sub">${esc(s.sub)}</p>` : ''}
-      <div class="rule"></div>
+      ${s.sub ? `<p class="sub" data-el="sub">${esc(s.sub)}</p>` : ''}
+      <div class="rule" data-el="rule"></div>
     </div>
   </div>`;
     })
@@ -296,18 +297,29 @@ export function toHyperFrames(storyboard, opts = {}) {
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8" />
-<title>${esc(storyboard.title || 'Animated Post')}</title>
+<title>${esc(spec.title)}</title>
 <!--
-  HyperFrames 合成文件 —— 由 CIPTA STUDIO 生成
-  预览：npx hyperframes preview     渲染：npx hyperframes render
-  直接用浏览器打开这个文件也能看动画（CSS 动画是可 seek 的，符合 HyperFrames 的要求）。
-  字体、配图请在 assets/ 里替换成品牌资产后重渲。
+  动态帖合成文件 —— 由 CIPTA STUDIO by RICCIONE REKA 生成
+  ${spec.slides.length} 屏 · ${total.toFixed(2)}s · ${width}×${height} @${fps}fps
+
+  怎么变成 MP4（三选一）：
+
+  A) 最省事 —— 浏览器打开，用系统录屏，然后剪掉头尾
+  B) HyperFrames —— 把这个文件放进项目目录，跑 npx hyperframes render
+  C) 自己逐帧抓（最准，不掉帧）：
+
+     npx playwright screenshot --viewport-size=${width},${height} \\
+       "file://$PWD/${'${这个文件名}'}?t=0.033" frame_0001.png
+     …循环 ${Math.round(total * fps)} 帧，然后
+     ffmpeg -framerate ${fps} -i frame_%04d.png -c:v libx264 -pix_fmt yuv420p -crf 18 out.mp4
+
+  字体：想换成品牌字体，改下面 .headline / .sub 的 font-family 就行。
 -->
 <style>
   :root {
-    --bg: ${bg};
-    --ink: ${ink};
-    --accent: ${accent};
+    --bg: ${palette.bg};
+    --ink: ${palette.ink};
+    --accent: ${palette.accent};
     --pad: ${Math.round(width * 0.09)}px;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -315,15 +327,9 @@ export function toHyperFrames(storyboard, opts = {}) {
 
   #composition { position: relative; width: ${width}px; height: ${height}px; }
 
-  /* 每个 clip 只在自己的时间窗口内可见 —— 关键帧在下面按屏生成 */
-  .clip {
-    position: absolute; inset: 0; opacity: 0;
-    animation-duration: ${total.toFixed(2)}s;
-    animation-timing-function: linear;
-    animation-fill-mode: both;
-    animation-iteration-count: 1;
-  }
-  .bg { position: absolute; inset: 0; background: var(--bg) center/cover no-repeat; }
+  /* 初始状态全部写死在 CSS 里 —— JS 还没跑的那一帧不能闪出成品画面 */
+  .clip { position: absolute; inset: 0; opacity: 0; will-change: opacity; }
+  .bg { position: absolute; inset: 0; background: var(--bg) center/cover no-repeat; will-change: transform; }
   .bg.grad { background: linear-gradient(160deg, var(--bg) 0%, color-mix(in srgb, var(--accent) 18%, var(--bg)) 100%); }
 
   .frame {
@@ -333,53 +339,88 @@ export function toHyperFrames(storyboard, opts = {}) {
     gap: ${Math.round(width * 0.028)}px;
   }
 
-  /* 屏内元素的入场都相对本屏起点 (--t0) 延迟，否则会在第 0 秒全部跑完 */
   .kicker {
     font: 600 ${Math.round(width * 0.032)}px/1 "DM Sans", system-ui, sans-serif;
-    letter-spacing: .32em; color: var(--accent); opacity: .75;
-    animation: fadeUp .5s cubic-bezier(.22,1,.36,1) both;
-    animation-delay: var(--t0);
+    letter-spacing: .32em; color: var(--accent); opacity: 0;
+    will-change: transform, opacity;
   }
 
   .headline {
     font: 700 ${Math.round(width * 0.096)}px/1.18 "Fraunces", Georgia, serif;
     color: var(--ink); letter-spacing: -.01em;
   }
-  .headline span {
-    display: inline-block;
-    animation: charIn .52s cubic-bezier(.22,1,.36,1) both;
-    animation-delay: calc(var(--t0) + var(--i) * .035s + .1s);
-  }
+  .headline span { display: inline-block; opacity: 0; will-change: transform, opacity, filter; }
 
   .sub {
     font: 400 ${Math.round(width * 0.038)}px/1.5 "DM Sans", "Noto Sans SC", system-ui, sans-serif;
     color: color-mix(in srgb, var(--ink) 62%, transparent);
-    animation: fadeUp .6s cubic-bezier(.22,1,.36,1) both;
-    animation-delay: calc(var(--t0) + .38s);
+    opacity: 0; will-change: transform, opacity, filter;
   }
 
   .rule {
     height: ${Math.max(3, Math.round(width * 0.005))}px; background: var(--accent); border-radius: 99px;
-    transform-origin: left center;
-    animation: wipe .7s cubic-bezier(.22,1,.36,1) both;
-    animation-delay: calc(var(--t0) + .5s);
+    transform-origin: left center; transform: scaleX(0); will-change: transform;
   }
-
-  @keyframes charIn { from { opacity: 0; transform: translateY(.5em) } to { opacity: 1; transform: none } }
-  @keyframes fadeUp { from { opacity: 0; transform: translateY(24px) } to { opacity: 1; transform: none } }
-  @keyframes wipe   { from { transform: scaleX(0) } to { transform: scaleX(1) } }
-
-  /* 每屏的显隐窗口 */
-${keyframes}
 </style>
 </head>
 <body>
 <div id="composition"
-     data-composition-id="${esc((storyboard.title || 'post').toLowerCase().replace(/\s+/g, '-'))}"
+     data-composition-id="${esc(spec.title.toLowerCase().replace(/\s+/g, '-'))}"
      data-width="${width}" data-height="${height}" data-fps="${fps}"
      data-duration="${total.toFixed(2)}">
 ${clips}
 </div>
+<script>
+(function () {
+  var DURATION = ${total.toFixed(3)};
+  var FPS = ${fps};
+  var TRACKS = ${JSON.stringify(tracks)};
+
+  // 每条 track 一个 WAAPI 动画，delay 就是它在全片里的绝对起点。
+  // fill:'both' 意味着 delay 之前保持 from、结束之后保持 to ——
+  // 所以「把所有动画的 currentTime 设成同一个绝对时刻」就等于给整条片子 seek。
+  var anims = TRACKS.map(function (t) {
+    var el = document.querySelector(t.s);
+    if (!el) return null;
+    var a = el.animate(t.k, { delay: t.d, duration: t.u, easing: t.e, fill: t.f });
+    a.pause();
+    return a;
+  }).filter(Boolean);
+
+  var ms = DURATION * 1000;
+
+  function seekTo(seconds) {
+    var time = Math.max(0, Math.min(ms, seconds * 1000));
+    for (var i = 0; i < anims.length; i++) anims[i].currentTime = time;
+    return time / 1000;
+  }
+  window.seekTo = seekTo;
+  window.compositionDuration = DURATION;
+  window.compositionFps = FPS;
+
+  var qs = new URLSearchParams(location.search);
+  if (qs.has('t')) {
+    // 逐帧渲染模式：停在指定时刻，等排版和字体稳定后再举手
+    seekTo(parseFloat(qs.get('t')) || 0);
+    var done = function () {
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () { document.body.dataset.ready = '1'; });
+      });
+    };
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(done); else done();
+  } else {
+    // 直接打开：自己播一遍，循环
+    var t0 = null;
+    var tick = function (now) {
+      if (t0 === null) t0 = now;
+      var elapsed = ((now - t0) / 1000) % DURATION;
+      seekTo(elapsed);
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+})();
+</script>
 </body>
 </html>
 `;
@@ -609,6 +650,414 @@ ${shots}
 这些是**补空镜和氛围镜头**，不是用来伪造案例的。
 如果哪个缺口本质上必须是真实项目画面（成品空间、实际工艺、客户现场），
 **直接告诉我"这个得你自己去拍"，不要生成** —— 我宁可少一个镜头，也不要让客户看到假的案例。`;
+}
+
+// ---------------------------------------------------------------------------
+// 静图动起来 —— 用 Seedance 的 image-to-video 替代假的 Ken Burns
+// ---------------------------------------------------------------------------
+
+/** Seedance 2.5 @ fal.ai 的按秒单价（token 计费折算） */
+const SEEDANCE_RATE = { '720p': 0.473, '480p': 0.2205 };
+
+/**
+ * 把方案里的静图 slot 变成一份 Seedance image-to-video 指令。
+ *
+ * 为什么这条比「补缺口」更值得做：缺口是生成你**没有**的镜头（从文字凭空造），
+ * 这条是让你**已经有的真实照片**动起来 —— 素材还是你自己的，只是多了运镜。
+ * 对「静图多、视频少」的素材结构，这是性价比最高的一步。
+ *
+ * 关键：image-to-video 把图当第一帧，prompt 描述的是**运动**，不是重新描述空间。
+ */
+export function toSeedancePrompt(plan, assets, opts = {}) {
+  const byId = Object.fromEntries(assets.map((a) => [a.id, a]));
+  const timed = withOutputTimes(plan.timeline || []);
+  const stills = timed.filter((r) => byId[r.assetId]?.kind === 'image');
+  if (!stills.length) return null;
+
+  const res = opts.resolution === '480p' ? '480p' : '720p';
+  const g = gradeById(plan.grade_preset);
+  const totalSec = stills.reduce((s, r) => s + Math.min(12, Math.max(4, r.output_duration)), 0);
+  const cost = totalSec * SEEDANCE_RATE[res];
+
+  const shots = stills
+    .map((r, i) => {
+      const a = byId[r.assetId];
+      // Seedance 最短 4 秒；比 4 秒短的 slot 生成后在剪辑里裁掉多余部分
+      const gen = Math.min(12, Math.max(4, Number(r.output_duration.toFixed(1))));
+      return `### ${i + 1}. slot ${r.slot}（成片 ${r.output_start.toFixed(1)}s，需要 ${r.output_duration.toFixed(1)}s）
+
+- **首帧图**：\`${a.name}\`
+- **生成时长**：${gen}s（Seedance 最短 4s；多出来的部分在剪辑里裁掉）
+- **运动 prompt**（只描述运动，不要重新描述空间 —— 空间已经在图里了）：
+  > ${r.reframe || '缓慢推近'}。${
+    r.beat === 'HOOK' ? 'Start slightly wider and push in with subtle parallax. ' : ''
+  }Very slow, restrained camera movement with natural parallax between foreground and background. Ambient light shifts gently. No objects change shape or position. Locked, deliberate, cinematic.
+- **音频**：关闭（这条片子的声音统一在剪辑里配，生成的音频会打架）`;
+    })
+    .join('\n\n');
+
+  return `我有 ${stills.length} 张真实案例照片，想用 Seedance 让它们真的动起来（而不是用 Ken Burns 假装）。
+
+## 模型
+
+fal.ai 上的 \`bytedance/seedance-2.5/image-to-video\` —— 把图当第一帧，生成运镜和运动。
+（也可以走 Higgsfield MCP，它的模型库里就有 Seedance。）
+
+**预估成本**：${stills.length} 个镜头共 ${totalSec.toFixed(0)} 秒 @${res} ≈ **US$${cost.toFixed(2)}**
+（720p ≈ $0.47/秒，480p ≈ $0.22/秒。竖屏发社媒的话 480p 往往就够，先用 480p 试对不对，再决定要不要 720p 重出。）
+
+## 要生成的镜头
+
+${shots}
+
+## 全局要求
+
+- **调性统一**：${g.label} — ${g.look || g.desc}。所有镜头同一套光线走向和色温。
+- **运动要克制**。这是家具/空间内容，不是特效片。观众要看清材质，镜头一快就全糊了。
+  宁可动得不够，也不要动得太多。
+- 每个镜头**先出 1 条**给我看，确认了再出其余的。
+
+## ⚠️ 这一条是硬规矩
+
+这些是**我自己项目的真实照片**，所以底线跟凭空生成不一样，但仍然有底线：
+
+**可以**：视差、光线缓慢流动、窗纱轻微飘动、尘埃浮动 —— 这些不改变我做的东西。
+
+**不可以**：柜门自己打开、五金件形状变化、木纹纹理被重新生成、家具比例漂移、
+凭空多出或少掉物件。**那些不是我做的东西了。**
+
+生成完请逐条告诉我：**每个镜头里有没有出现上面「不可以」那一类的变化？**
+有的话直接标出来，我宁可这一拍退回用普通的缓推，也不要一个会被客户认出来不对劲的镜头。`;
+}
+
+// ---------------------------------------------------------------------------
+// 剪映专业版操作单 —— 国内路线，不碰命令行、不花美金
+// ---------------------------------------------------------------------------
+
+/** 从 reframe 文本里抠出运镜幅度和方向；抠不到就用默认的缓推 8% */
+function kenBurns(reframe) {
+  const s = String(reframe || '');
+  const m = s.match(/(\d+(?:\.\d+)?)\s*%/);
+  const amount = m ? Math.min(40, Math.max(2, Number(m[1]))) : 8;
+  const out = /拉远|拉出|pull|zoom.?out|后退/i.test(s);
+  return {
+    amount,
+    from: out ? 100 + amount : 100,
+    to: out ? 100 : 100 + amount,
+    label: out ? `缓拉 ${amount}%` : `缓推 ${amount}%`,
+  };
+}
+
+/**
+ * 静图运镜的三点关键帧。
+ *
+ * 剪映的关键帧默认线性插值 —— 匀速平移是「一眼假」最主要的来源。
+ * 老版本没有「右键关键帧设缓动」，所以这里用一个到处都能用的办法：
+ * 中间多打一个关键帧，放在时长的 50%、但参数已经走完 85%。
+ * 分段线性去逼近 ease-out-cubic（真值在 50% 处是 87.5%），肉眼分辨不出来。
+ */
+function easeOutKeys(kb, duration) {
+  const mid = kb.from + (kb.to - kb.from) * 0.85;
+  return [
+    { at: 0, v: kb.from },
+    { at: Number((duration * 0.5).toFixed(2)), v: Number(mid.toFixed(1)) },
+    { at: Number(duration.toFixed(2)), v: kb.to },
+  ];
+}
+
+/**
+ * 一份可以照着点的剪映专业版操作单。
+ *
+ * 这不是给 AI 的 prompt —— 剪映没有 agent 接口，草稿文件从 6.0 起就加密了，
+ * 社区那些改草稿的库只能对 5.9 以下或特定 Windows 版本生效，版本一升就废。
+ * 所以这里走另一条路：把工作台已经算好的所有数字（分割点、关键帧数值、
+ * 调色滑块、字幕时间）整理成人可以照着操作的清单。
+ * 慢，但永远不会因为剪映升级而失效。
+ */
+export function toJianyingGuide(plan, assets, recipe) {
+  const byId = Object.fromEntries(assets.map((a) => [a.id, a]));
+  const timed = withOutputTimes(plan.timeline || []);
+  const g = gradeById(plan.grade_preset);
+  const c = captionStyleById(plan.caption_style);
+  const total = planDuration(plan.timeline);
+  const aspect = plan.aspect || '9:16';
+
+  const files = [...new Set(timed.map((r) => byId[r.assetId]?.name).filter(Boolean))];
+
+  const steps = timed
+    .map((r) => {
+      const a = byId[r.assetId];
+      const end = r.output_start + r.output_duration;
+      const head = `### 第 ${r.slot} 段 · [${beatById(r.beat).label}] 成片 ${r.output_start.toFixed(2)}s → ${end.toFixed(2)}s`;
+
+      if (!a) return `${head}\n\n- ⚠️ 缺素材 \`${r.assetId}\` —— 先补上，或者把这一段删掉重新算后面的时间。`;
+
+      if (a.kind === 'image') {
+        const kb = kenBurns(r.reframe);
+        const keys = easeOutKeys(kb, r.output_duration);
+        return `${head}
+
+- **素材**：\`${a.name}\`（静图）
+- 拖到主轨，双击右侧时长框，直接输入 **${r.output_duration.toFixed(2)}s**
+- **运镜：${kb.label}**（画面 > 基础 > 缩放）。播放头依次移到下面三个位置，每次改完「缩放」剪映会自动打点：
+${keys.map((k) => `  - 段内 ${k.at.toFixed(2)}s → 缩放 **${k.v}%**`).join('\n')}
+  > 中间那个点是用来做缓动的。只打首尾两个点＝匀速推，一眼就看出是图在动。
+${r.onscreen_text ? `- **屏幕文字**：${r.onscreen_text}\n` : ''}${r.why ? `- 为什么这么剪：${r.why}\n` : ''}`;
+      }
+
+      const speed = Number(r.speed) || 1;
+      return `${head}
+
+- **素材**：\`${a.name}\`
+- 拖到主轨。播放头移到 **${Number(r.in).toFixed(2)}s** 按 \`Ctrl/Cmd + B\` 分割，
+  再移到 **${Number(r.out).toFixed(2)}s** 再分割一次，删掉前后两截，只留中间。
+${speed !== 1 ? `- **变速**：选中这段 → 变速 > 常规变速 → **${speed}×**（勾上「智能补帧」如果是慢放）\n` : ''}${
+        r.transition_in && r.transition_in !== 'cut'
+          ? `- **进点转场**：${r.transition_in}（拖到这一段和上一段的接缝上，时长 0.3s 以内）\n`
+          : ''
+      }${r.onscreen_text ? `- **屏幕文字**：${r.onscreen_text}\n` : ''}${r.vo ? `- **口播**：${r.vo}\n` : ''}${r.sfx ? `- **音效**：${r.sfx}\n` : ''}${r.why ? `- 为什么这么剪：${r.why}\n` : ''}${r.risk ? `- ⚠️ ${r.risk}\n` : ''}`;
+    })
+    .join('\n');
+
+  const gradeBlock = g.jianying
+    ? `选中主轨所有片段（框选或 \`Ctrl/Cmd + A\`）→ 右侧「调节」→ 基础，按下面拉：
+
+| 参数 | 数值 |
+| --- | --- |
+${Object.entries(g.jianying).map(([k, v]) => `| ${k} | ${v > 0 ? '+' : ''}${v} |`).join('\n')}
+
+> 这套数字是照着 **${g.label}**（${g.desc}）对齐的，不是数学换算 —— 剪映只有一个全局色温，
+> 做不出 ffmpeg 那种分三段调的效果。以画面为准，允许再微调 ±5。
+> 调好之后可以「保存预设」，下一条片子一键套用。`
+    : '这条不调色，跳过。';
+
+  const stills = timed.filter((r) => byId[r.assetId]?.kind === 'image');
+
+  return `# 剪映专业版操作单 · ${recipe?.title || plan.summary?.slice(0, 20) || '未命名'}
+
+> ${plan.summary || ''}
+
+**成片** ${total.toFixed(1)}s ｜ **画幅** ${aspect} ｜ **${timed.length} 段** ｜ **调色** ${g.label}
+
+所有时间都是工作台算好的，照着填就行。每做完一节回来打个勾。
+
+- [ ] 0. 建草稿
+- [ ] 1. 导素材
+- [ ] 2. 铺时间线（${timed.length} 段）
+- [ ] 3. 调色
+- [ ] 4. 字幕
+- [ ] 5. 音乐
+- [ ] 6. 导出
+
+---
+
+## 0. 建草稿
+
+开始创作 → 右上角**比例**选 **${aspect}** → 设置里把**帧率**设 **30fps**。
+先把比例定死，后面加了文字再改比例，所有文字位置都要重排。
+
+## 1. 导素材
+
+把这些文件拖进「媒体 > 本地」：
+
+${files.map((f) => `- \`${f}\``).join('\n') || '- （没有素材）'}
+
+**先别急着拖到时间线**，下一节按顺序一段一段来。
+
+## 2. 铺时间线
+
+${steps || '（时间轴是空的）'}
+
+## 3. 调色
+
+${gradeBlock}
+
+## 4. 字幕
+
+工作台已经导出了 \`master.srt\`，时间戳和上面的时间轴完全对得上，**不用重新对轴**：
+
+1. 文本 → 左侧「本地字幕」→ 导入字幕文件 → 选 \`master.srt\`
+   （有的版本在 文本 > 智能字幕 旁边，找不到就在文本面板里翻一下「导入」）
+2. 导进来是一整条字幕轨，全选 → 右侧改样式：
+   - 风格：**${c.label}**${c.chunk ? `（每 ${c.chunk} 字一组）` : ''}
+   - 位置：底部往上留白，${aspect === '9:16' ? '距底边约 12%（避开平台的进度条和按钮）' : '距底边约 8%'}
+   - 描边或底色二选一，别都加 —— 两个都上会很脏
+
+> 如果你想要「一个字一个字蹦」的效果：剪映的**智能字幕 > 识别歌词**做不到，
+> 要用「文本 > 花字」或者逐条手打。**这条建议直接跳过** —— 收益很小，时间花不起。
+
+## 5. 音乐
+
+${
+  plan.music
+    ? `- 要什么：${plan.music.brief}
+- 在剪映「音频 > 音乐素材」里搜：${(plan.music.search_terms || []).join(' / ')}
+- **卡点位置**（成片时间轴）：${(plan.music.cut_points_s || []).map((s) => `${s}s`).join(' · ') || '（未指定）'}
+- 口播段落把音乐音量压到 **${plan.music.duck_under_vo_db ?? -12}dB** 左右${
+        timed.some((r) => r.vo) ? '（选中音乐 → 音量，在口播那几段打关键帧压下去）' : ''
+      }
+- 结尾加 **1s 淡出**（音频 > 淡出时长）`
+    : '（方案里没指定音乐，去「音乐素材」里挑一条节奏和片子长度对得上的）'
+}
+
+## 6. 导出
+
+右上角导出：
+
+- 分辨率 **1080P**｜帧率 **30**｜码率 **推荐** 或更高
+- 格式 MP4，编码 H.264
+- **关掉「智能补帧」和任何 AI 增强** —— 会把木纹和布纹搓糊
+- 关掉片尾的剪映水印（设置 > 关闭片尾）
+
+导出后逐条确认：
+
+${(plan.qc || ['首帧静止时可读', '没有切在词中间', '字幕没被平台 UI 遮住']).map((q) => `- [ ] ${q}`).join('\n')}
+
+${
+  stills.length
+    ? `---
+
+## 附：这 ${stills.length} 个静图镜头，值得先去即梦生成
+
+上面第 2 节给静图的是**关键帧缓推** —— 它是假的，画面里没有任何真实的时间变化。
+你有剪映会员和国内账号，那就有一条更好的路：
+
+1. 打开 **即梦 AI**（jimeng.jianying.com），图片生视频
+2. 上传下面这些图当**首帧**，运动描述照抄
+3. 生成的素材**可以直接同步到剪映**（即梦和剪映是同一家，素材库打通）
+4. 回到剪映，用生成的视频替换掉对应那一段静图，关键帧就不用打了
+
+${stills
+  .map((r) => {
+    const a = byId[r.assetId];
+    return `- **第 ${r.slot} 段** · \`${a.name}\` · 需要 ${r.output_duration.toFixed(1)}s
+  > 运动描述：${r.reframe || '缓慢推近'}。镜头极慢，前景和背景之间有轻微视差，环境光缓慢流动。物体本身不改变形状和位置。`;
+  })
+  .join('\n')}
+
+**免费额度**：即梦每天有免费的生成次数；剪映会员另有权益。先拿一两个镜头试，
+效果对了再批量做 —— 不要一次全生成完才发现调性不对。
+
+### ⚠️ 这条是硬规矩
+
+这些是**你自己项目的真实照片**。生成之后逐个检查：
+
+- **可以**：视差、光线缓慢流动、窗纱轻微飘动、尘埃浮动
+- **不可以**：柜门自己打开、五金件形状变化、木纹被重新生成、家具比例漂移、凭空多出或少掉物件
+
+只要出现「不可以」那一类，**这一拍就退回用普通缓推**。宁可画面死一点，
+也不要一个会被客户认出来不对劲的镜头。`
+    : ''
+}
+`;
+}
+
+// ---------------------------------------------------------------------------
+// Higgsfield Vibe Motion —— 文字 → 动态图形（底层是 Claude + Remotion）
+// ---------------------------------------------------------------------------
+
+/**
+ * 把动态帖分镜写成一份 Vibe Motion 的生成简报。
+ *
+ * Vibe Motion 和这个工作台的 HTML 导出是**互补**，不是替代：
+ *   - HTML 导出：你完全掌控、可无限次改、不花钱，但版式就是模板那一套
+ *   - Vibe Motion：能做出图表动画、复杂排版、数据逐个蹦出来这类手写做不动的东西，
+ *     而且吐出来的是 Remotion 源码，改完还能自己渲
+ *
+ * 所以规矩是：**能用 HTML 导出解决的就别花额度**，把 Vibe Motion 留给
+ * 「数字/图表/复杂版式」这三类它明显更强的场景。
+ */
+export function toVibeMotionPrompt(storyboard, opts = {}) {
+  if (!storyboard?.slides?.length) return null;
+  const spec = buildMotionSpec(storyboard, opts);
+  const { palette, total, slides } = spec;
+
+  const screens = slides
+    .map(
+      (s) => `### 第 ${s.index + 1} 屏 · ${s.duration.toFixed(1)}s（${s.start.toFixed(1)}s → ${s.end.toFixed(1)}s）
+
+- 主文案：**${s.headline}**${s.sub ? `\n- 副文案：${s.sub}` : ''}
+- 版式：${s.layout || '文字压在下三分之一，上方大面积留白'}
+- 动效：${s.motion || '主文案逐字上浮淡入，随后下划线从左擦出'}
+- 出场：${s.transitionOut || '与下一屏叠化'}`
+    )
+    .join('\n\n');
+
+  return `帮我做一条动态图文短片。下面是已经排好的完整分镜，请照这个做，不要重新构思结构。
+
+## 规格
+
+- **画幅**：${spec.width}×${spec.height}（${spec.width < spec.height ? '9:16 竖屏' : '横屏'}）
+- **总时长**：${total.toFixed(1)}s，${slides.length} 屏
+- **帧率**：${spec.fps}fps
+- **配色**：底 \`${palette.bg}\`｜字 \`${palette.ink}\`｜强调 \`${palette.accent}\`
+- **字体气质**：${spec.fontFeel || '标题用衬线体（有重量、有骨架），正文用无衬线体，中文要能正常显示'}
+
+## 分镜
+
+${screens}
+
+## 动效规矩（这几条比好看更重要）
+
+1. **缓动永远不是线性的**。入场 ease-out（快进慢收），出场 ease-in。
+   匀速的位移是「一眼看出是模板」的头号原因。
+2. **每一屏的最终状态至少停 0.6s** 再切走。观众需要时间读完。
+3. **一屏只讲一件事**。同时动的元素不超过两个。
+4. 字**不要飞来飞去**。上浮、淡入、遮罩推出 —— 位移幅度控制在一个字高以内。
+5. 最后一屏要能**无缝接回第一屏**，这样在社媒上循环播放不突兀。
+
+## 交付
+
+- 导出 **MP4**（${spec.width}×${spec.height}，${spec.fps}fps）
+- **同时把 Remotion 源码给我** —— 以后换文案、换配色我要能自己改了重渲，
+  不想每次都回来重新生成。
+
+## 边界
+
+这是家具/空间品牌的内容。**画面里不要出现任何 AI 生成的家具或室内实景** ——
+背景用纯色、渐变、几何图形、材质纹理都行，但只要看起来像"一个真实的家"，就是在替我
+伪造案例。真实空间的画面我自己拍。`;
+}
+
+/** 给成片里那几张标题卡 / 数据卡用的简短版 */
+export function toVibeMotionOverlays(plan, recipe) {
+  const overlays = plan.overlays || [];
+  if (!overlays.length) return null;
+  const timed = withOutputTimes(plan.timeline || []);
+  const aspect = plan.aspect || '9:16';
+  const g = gradeById(plan.grade_preset);
+
+  const items = overlays
+    .map((o, i) => {
+      const anchor = timed.find((r) => r.slot === o.after_slot);
+      const at = anchor ? (anchor.output_start + anchor.output_duration).toFixed(1) : '?';
+      return `### ${i + 1}. 「${o.text || ''}」
+
+- **类型**：${o.type || '标题卡'}
+- **时长**：${o.duration_s || 2}s
+- **落在成片的**：${at}s（第 ${o.after_slot} 段之后）
+- **样式**：${o.style || '与全片调性一致'}
+- **背景**：**必须透明**（alpha 通道），我要叠在实拍画面上`;
+    })
+    .join('\n\n');
+
+  return `我在剪一条${recipe?.format || '短视频'}，需要 ${overlays.length} 张叠加图形卡。
+
+## 规格
+
+- 画幅 ${aspect}，${plan.aspect === '16:9' ? '1920×1080' : '1080×1920'}，30fps
+- **导出带 alpha 的 WebM 或 ProRes 4444** —— 这些要叠在实拍视频上，不能有底色
+- 全片调性：${g.label}（${g.desc}），图形卡的配色要压得住，不能比画面还跳
+
+## 要做的卡
+
+${items}
+
+## 要求
+
+- 每张卡**自己是一个独立文件**，我要分别拖进时间线
+- 入场 ease-out、出场 ease-in，各 0.3–0.4s；中间保持静止
+- 把 Remotion 源码一起给我，文案我以后要能自己换`;
 }
 
 /** video-use 的 project.md，放进 edit/ 目录做会话记忆 */

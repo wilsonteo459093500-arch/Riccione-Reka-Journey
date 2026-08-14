@@ -81,7 +81,9 @@ async function callModel(settings, model, parts, opts = {}) {
   if (!settings.apiKey) throw new Error('还没有配置 API key，点右上角设置。');
 
   const generationConfig = { temperature: opts.temperature ?? 0.7 };
-  if (opts.json) generationConfig.responseMimeType = 'application/json';
+  // 注意：接了 google_search 就不能再要 responseMimeType: 'application/json' ——
+  // 两者互斥，一起传会 400。接地的调用改成让模型输出 ```json 围栏，再用 parseJson 兜。
+  if (opts.json && !opts.tools) generationConfig.responseMimeType = 'application/json';
   if (opts.maxTokens) generationConfig.maxOutputTokens = opts.maxTokens;
 
   const url = endpoint(
@@ -97,7 +99,11 @@ async function callModel(settings, model, parts, opts = {}) {
     res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig }),
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts }],
+        generationConfig,
+        ...(opts.tools ? { tools: opts.tools } : {}),
+      }),
     });
 
     data = null;
@@ -133,6 +139,21 @@ async function callModel(settings, model, parts, opts = {}) {
   if (!text) {
     const finish = data?.candidates?.[0]?.finishReason;
     throw new Error(finish === 'MAX_TOKENS' ? '内容太长被截断了，减少素材数量再试。' : '模型没有返回内容，请重试。');
+  }
+
+  if (opts.wantMeta) {
+    const gm = data?.candidates?.[0]?.groundingMetadata || {};
+    return {
+      text,
+      // 真实来源链接。没有这个，「热搜」就只是模型在背书，无从查证
+      sources: (gm.groundingChunks || [])
+        .map((c) => c.web)
+        .filter((w) => w?.uri)
+        .map((w) => ({ uri: w.uri, title: w.title || w.domain || w.uri, domain: w.domain || '' })),
+      queries: gm.webSearchQueries || [],
+      // Google 的接地条款要求把这段搜索建议原样显示出来
+      searchEntryPoint: gm.searchEntryPoint?.renderedContent || '',
+    };
   }
   return text;
 }
@@ -193,6 +214,37 @@ export async function generateJSON(settings, parts, opts = {}) {
     (model) => callModel(settings, model, parts, { ...opts, json: true, maxTokens: opts.maxTokens ?? 32768 })
   );
   return parseJson(text);
+}
+
+/**
+ * 接 Google 搜索的调用 —— 模型会先去搜，再基于搜到的真实网页回答。
+ *
+ * 这是这个纯前端应用能拿到「今天」的唯一通用办法：没有后端、没有爬虫，
+ * 但接地返回的 `sources` 是**真实 URL**，可以点开自己核，不是模型编的。
+ *
+ * 两个限制写在这里，免得以后踩：
+ *  1. 不能同时用 responseMimeType: 'application/json'（互斥，会 400）。
+ *     所以让模型输出 ```json 围栏，再走 parseJson。
+ *  2. 免费额度：Gemini 2.5 系每天 1500 次接地请求，3.x 系每月 5000 次。
+ *     所以这个功能做了 15 分钟缓存，不要每次切平台都重新搜。
+ *
+ * @returns {Promise<{data:object, sources:Array, queries:Array, searchEntryPoint:string}>}
+ */
+export async function generateGroundedJSON(settings, parts, opts = {}) {
+  const preferred = settings.textModel ? [settings.textModel] : [];
+  const out = await withModelFallback(
+    settings,
+    TEXT_MODEL_CACHE,
+    [...preferred, ...TEXT_MODEL_CANDIDATES],
+    (model) =>
+      callModel(settings, model, parts, {
+        ...opts,
+        tools: [{ google_search: {} }],
+        wantMeta: true,
+        maxTokens: opts.maxTokens ?? 32768,
+      })
+  );
+  return { ...out, data: parseJson(out.text) };
 }
 
 /** 纯文本返回（趋势解读之类不需要严格结构的场景） */

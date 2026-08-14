@@ -237,3 +237,62 @@ video-use 会剪，但不知道要剪成什么样；HyperFrames 会渲，但不�
 - [digitalsamba/claude-code-video-toolkit](https://github.com/digitalsamba/claude-code-video-toolkit) · [wilwaldon/Claude-Code-Video-Toolkit](https://github.com/wilwaldon/Claude-Code-Video-Toolkit)
 - [whisper.cpp](https://github.com/ggerganov/whisper.cpp) · [faster-whisper](https://github.com/SYSTRAN/faster-whisper) · [WhisperX](https://github.com/m-bain/whisperX)
 - [jordanrendric/claude-video-vision](https://github.com/jordanrendric/claude-video-vision) — 给 Claude 加「看视频」能力的插件，抽帧 + 多模态音频分析
+
+---
+
+## 7. Seedance —— 让静图真的动起来
+
+字节跳动的视频生成模型，2026 年已经迭代到 **Seedance 2.5**。
+
+| 版本 | 能力 |
+|---|---|
+| 1.5 Pro | 720p、4–12 秒，音画同步生成，支持首尾帧 |
+| 2.5 | 单镜头最长 30 秒、最多 50 张参考图、3D 运镜编排 |
+
+**怎么用**：fal.ai 上三个端点 —— `text-to-video`、`image-to-video`、`reference-to-video`。
+也可以走火山引擎 ARK / BytePlus（无免费额度，要先充值），或者直接用 Higgsfield MCP（它的模型库里就有 Seedance）。
+
+### 先算账，这决定了它该怎么用
+
+fal.ai 按 token 计费，折算下来约 **$0.47/秒（720p）**、**$0.22/秒（480p）**：
+
+| 用途 | 720p | 480p |
+|---|---|---|
+| 补 1 个 4 秒缺口镜头 | $1.89 | $0.88 |
+| 补 3 个镜头（12 秒） | $5.68 | $2.65 |
+| 整条 28.6 秒片子 | $13.53 | $6.31 |
+| 一周 3 条（各 30 秒） | $42.57 | $19.84 |
+
+对比：Cipta Studio 拆一条参考视频 + 排剪辑 + 写发布包 ≈ **$0.05**。
+整条片子用 Seedance 生成是规划成本的 **271 倍**。
+
+> **结论：Seedance 是「补单个镜头」的工具，不是「生成整条片子」的工具。**
+
+### 它真正值钱的那个用法
+
+不是凭空生成镜头（那是 Higgsfield 那条线），而是 **image-to-video：把你自己的真实案例照片当第一帧**。
+
+这正好对上「静图多、视频少」的素材结构 —— 与其给一张图套假的 Ken Burns 推拉，
+不如让它生成真的视差和运镜。素材还是你自己的，只是多了运动。
+
+工作台里的「让静图真的动起来」导出就是干这个：自动挑出方案里的静图 slot，
+算好每个的生成时长（Seedance 最短 4 秒）和总费用，并把 prompt 写成**只描述运动、不重新描述空间**
+（空间已经在图里了）。
+
+### 一条比成本更重要的边界
+
+用自己的真实照片做 image-to-video，跟凭空生成不是一回事 —— 但仍然有底线：
+
+| | |
+|---|---|
+| ✅ **可以** | 视差、光线缓慢流动、窗纱轻微飘动、尘埃浮动 —— 这些不改变你做的东西 |
+| ❌ **不可以** | 柜门自己打开、五金件形状变化、木纹被重新生成、家具比例漂移、凭空多出或少掉物件 |
+
+后面那一类**已经不是你做的东西了**。导出的指令里要求逐条汇报有没有出现这类变化，
+有的话宁可退回普通缓推 —— 少一个花哨镜头，好过一个会被客户认出来不对劲的镜头。
+
+### 落地路径
+
+`render/`（UKIR STUDIO）里已经有完整的 fal.ai 队列集成（`api/fal.js` 代理 + 提交/轮询/取结果），
+要把 Seedance 做进 Cipta Studio 的话，那套代码可以直接搬 —— 大约一两个小时的工作量。
+在那之前，用导出的指令走 Higgsfield MCP 或 fal.ai 控制台，效果一样。

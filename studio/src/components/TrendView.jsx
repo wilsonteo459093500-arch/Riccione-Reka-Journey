@@ -4,6 +4,7 @@ import { Card, Btn, Field, TextArea, TextInput, ChipRow, Tag, Empty, Fold, CopyB
 import { PLATFORMS, platformById } from '../constants.js';
 import { trendPrompt } from '../prompts/trend.js';
 import { generateJSON } from '../services/gemini.js';
+import HotNow from './HotNow.jsx';
 
 const FIT_COLOR = { high: '#2D4A3E', mid: '#B8995A', low: '#9A8F7E' };
 const FIT_LABEL = { high: '很适合你', mid: '可以试', low: '不建议' };
@@ -86,12 +87,22 @@ export default function TrendView({ settings, notify, platformId, setPlatformId,
       </div>
 
       <div className="space-y-4">
+        <HotNow
+          settings={settings}
+          platformId={platformId}
+          niche={industry}
+          notify={notify}
+          onOpenSettings={onOpenSettings}
+          onUseAngle={onUseAngle}
+        />
+
         {!report ? (
           <Card>
             <Empty icon={Radar} title="还没有分析">
-              这一屏不做「今天热搜是什么」（那需要实时数据）。它做的是更值钱的事：
-              <strong>拆解格式为什么有效</strong>、找出<strong>同行都在做的红海</strong>和
-              <strong>没人做但观众想看的盲区</strong>，然后给你一批明天就能开工的选题。
+              上面那个按钮回答「<strong>今天什么最红</strong>」——现搜现答，带真实链接。
+              这里做的是另一件事、也是更值钱的一件事：<strong>拆解格式为什么有效</strong>、
+              找出<strong>同行都在做的红海</strong>和<strong>没人做但观众想看的盲区</strong>，
+              然后给你一批明天就能开工的选题。
             </Empty>
           </Card>
         ) : (

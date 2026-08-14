@@ -6,6 +6,7 @@ import SettingsModal from './components/SettingsModal.jsx';
 import ProjectsPanel from './components/ProjectsPanel.jsx';
 import IdeateView from './components/IdeateView.jsx';
 import EditView from './components/EditView.jsx';
+import MatrixView from './components/MatrixView.jsx';
 import PostView from './components/PostView.jsx';
 import TrendView from './components/TrendView.jsx';
 import { isAuthed, logout } from './services/auth.js';
@@ -89,14 +90,49 @@ export default function App() {
   }
 
   /** 从「趋势」里挑一个选题，带进「构思」 */
-  function handleUseAngle(angle) {
-    setSeedBrief(
-      `选题：${angle.title}\n格式：${angle.format}\n开场：${angle.hook}\n结构：${(angle.beats || []).join(' → ')}\n素材：${angle.asset_need}`
-    );
-    if (angle.platform) setPlatformId(angle.platform);
+  /**
+   * 「趋势」和「量产」都会把一个选题丢进「构思」。两边的字段不完全一样，
+   * 所以按有什么写什么 —— 缺字段直接跳过，不要在 brief 里留下 "格式：undefined"。
+   */
+  function seedFrom(rows, platform, note) {
+    setSeedBrief(rows.filter(([, v]) => v && String(v).trim()).map(([k, v]) => `${k}：${v}`).join('\n'));
+    if (platform) setPlatformId(platform);
     setView('ideate');
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    setNotice({ type: 'ok', text: '选题已带到「构思」—— 选「没有，用模板」那一栏' });
+    setNotice({ type: 'ok', text: note });
+  }
+
+  function handleUseAngle(angle) {
+    seedFrom(
+      [
+        ['选题', angle.title],
+        ['格式', angle.format],
+        ['开场', angle.hook || angle.hook_line],
+        ['结构', (angle.beats || []).join(' → ')],
+        ['素材', angle.asset_need],
+        ['为什么现在', angle.why],
+      ],
+      angle.platform,
+      '选题已带到「构思」—— 选「没有，用模板」那一栏'
+    );
+  }
+
+  function handleUsePiece(piece) {
+    seedFrom(
+      [
+        ['选题', piece.title],
+        ['只讲这一件事', piece.one_idea],
+        ['格式', piece.format_note || piece.type],
+        ['开场', piece.hook_line],
+        ['开场镜头', piece.open_with],
+        ['目标时长', piece.duration_s ? `${piece.duration_s}s` : ''],
+        ['用到的素材', (piece.uses || []).map((u) => `${u.assetId}${u.from != null ? ` ${u.from}-${u.to}s` : ''}${u.role ? `（${u.role}）` : ''}`).join('；')],
+        ['它承担什么', piece.why_this_exists],
+        ['还缺', (piece.needs_shooting || []).join('；')],
+      ],
+      piece.platform,
+      `${piece.id} 已带到「构思」—— 选「没有，用模板」那一栏`
+    );
   }
 
   if (!entered) return <Landing onEnter={() => setEntered(true)} />;
@@ -118,7 +154,7 @@ export default function App() {
         onOpenProjects={() => setShowProjects(true)}
         hasKey={!!settings.apiKey}
         projectCount={projects.length}
-        stage={{ ideate: !!recipe, edit: !!plan, post: false, trend: false }}
+        stage={{ ideate: !!recipe, edit: !!plan, matrix: assets.some((a) => a.label), post: false, trend: false }}
       />
 
       {notice && (
@@ -163,6 +199,19 @@ export default function App() {
               setView('post');
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
+          />
+        )}
+
+        {view === 'matrix' && (
+          <MatrixView
+            settings={settings}
+            notify={setNotice}
+            assets={assets}
+            platformId={platformId}
+            setPlatformId={setPlatformId}
+            onOpenSettings={() => setShowSettings(true)}
+            onGoEdit={() => setView('edit')}
+            onUsePiece={handleUsePiece}
           />
         )}
 
