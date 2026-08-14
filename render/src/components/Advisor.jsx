@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { UploadCloud, X, Loader2, ClipboardCheck, Copy, Wand2 } from 'lucide-react';
-import { ROOM_TYPES, ADVISOR_FOCUS, ADVISOR_PROMPT } from '../constants.js';
+import { UploadCloud, X, Loader2, ClipboardCheck, Copy, Wand2, TreePine, MessageSquare } from 'lucide-react';
+import { ROOM_TYPES, ADVISOR_FOCUS, ADVISOR_PROMPT, WOOD_AUDIT_PROMPT } from '../constants.js';
 import { analyzeImage } from '../services/gemini.js';
 import { prepareInputImage } from '../services/images.js';
 
@@ -28,7 +28,7 @@ function parseSuggestions(text) {
   const lines = text.split('\n').map((l) => l.trim());
   const out = [];
   const clean = (s) => s.replace(/\*\*/g, '').trim();
-  const priorityIdx = lines.findIndex((l) => l.includes('优先'));
+  const priorityIdx = lines.findIndex((l) => l.includes('优先') || l.includes('必改'));
   if (priorityIdx >= 0) {
     for (const l of lines.slice(priorityIdx + 1)) {
       const m = l.match(/^(?:[*\-]\s*)?(\d+)[.、)]\s*(.+)/);
@@ -80,7 +80,9 @@ export default function Advisor({ settings, onOpenSettings, notify, image, setIm
   const [focusId, setFocusId] = useState('all');
   const [question, setQuestion] = useState('');
   const [busy, setBusy] = useState(false);
+  const [busyKind, setBusyKind] = useState(''); // 'review' | 'audit'
   const [review, setReview] = useState(null);
+  const [reviewKind, setReviewKind] = useState('review');
   const [checked, setChecked] = useState({}); // 建议勾选状态 {index: bool}
 
   const suggestions = useMemo(() => (review ? parseSuggestions(review) : []), [review]);
@@ -94,7 +96,7 @@ export default function Advisor({ settings, onOpenSettings, notify, image, setIm
     [setImage]
   );
 
-  async function handleReview() {
+  async function runAnalysis(kind) {
     if (busy) return;
     if (!settings.apiKey) {
       onOpenSettings();
@@ -105,29 +107,53 @@ export default function Advisor({ settings, onOpenSettings, notify, image, setIm
       return;
     }
     setBusy(true);
+    setBusyKind(kind);
     setReview(null);
     try {
       const room = ROOM_TYPES.find((r) => r.id === roomId);
-      const focus = ADVISOR_FOCUS.find((f) => f.id === focusId) || ADVISOR_FOCUS[0];
-      const prompt =
-        `${ADVISOR_PROMPT}\n\n空间类型：${room?.label || '未指定'}。\n本次审查侧重：${focus.prompt}` +
-        (question.trim() ? `\n客户/设计师特别想知道：${question.trim()}` : '');
+      let prompt;
+      if (kind === 'audit') {
+        prompt =
+          `${WOOD_AUDIT_PROMPT}\n\n空间类型：${room?.label || '未指定'}。` +
+          (question.trim() ? `\n设计师特别想知道：${question.trim()}` : '');
+      } else {
+        const focus = ADVISOR_FOCUS.find((f) => f.id === focusId) || ADVISOR_FOCUS[0];
+        prompt =
+          `${ADVISOR_PROMPT}\n\n空间类型：${room?.label || '未指定'}。\n本次审查侧重：${focus.prompt}` +
+          (question.trim() ? `\n客户/设计师特别想知道：${question.trim()}` : '');
+      }
       const text = await analyzeImage(settings, prompt, image);
       setReview(text);
+      setReviewKind(kind);
       setChecked({}); // 默认全选（未记录 = 选中）
     } catch (e) {
-      notify?.({ type: 'error', text: `点评失败：${e.message}` });
+      notify?.({ type: 'error', text: `${kind === 'audit' ? '体检' : '点评'}失败：${e.message}` });
     } finally {
       setBusy(false);
+      setBusyKind('');
     }
   }
 
-  function copyReview() {
-    navigator.clipboard?.writeText(review).then(
-      () => notify?.({ type: 'ok', text: '点评已复制，可直接发给客户 / 团队' }),
+  function copyText(text, okMsg) {
+    navigator.clipboard?.writeText(text).then(
+      () => notify?.({ type: 'ok', text: okMsg }),
       () => notify?.({ type: 'error', text: '复制失败，手动选择文字复制' })
     );
   }
+
+  /** 从体检报告里抽出「给客户的话术」段落 */
+  const clientScript = useMemo(() => {
+    if (!review) return '';
+    const i = review.indexOf('给客户的话术');
+    if (i < 0) return '';
+    return review
+      .slice(i)
+      .split('\n')
+      .slice(1)
+      .join('\n')
+      .replace(/[*#【】]/g, '')
+      .trim();
+  }, [review]);
 
   return (
     <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
@@ -210,30 +236,57 @@ export default function Advisor({ settings, onOpenSettings, notify, image, setIm
 
         <button
           type="button"
-          onClick={handleReview}
+          onClick={() => runAnalysis('review')}
           disabled={busy}
           className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-sail-green-deep text-white font-semibold hover:bg-sail-green disabled:opacity-60"
         >
-          {busy ? <Loader2 size={18} className="animate-spin" /> : <ClipboardCheck size={18} />}
-          {busy ? '主案设计师审图中…' : '开始专业点评'}
+          {busyKind === 'review' ? <Loader2 size={18} className="animate-spin" /> : <ClipboardCheck size={18} />}
+          {busyKind === 'review' ? '主案设计师审图中…' : '开始专业点评'}
         </button>
         <div className="text-[11px] text-sail-faint leading-relaxed">
           按专业标准逐项核对：动线净宽 / 柜体规范 / 照明分层与照度 / 配色法则，给出带数字的修改建议。
+        </div>
+
+        <button
+          type="button"
+          onClick={() => runAnalysis('audit')}
+          disabled={busy}
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-sail-gold/15 border border-sail-gold text-sm font-semibold text-sail-ink hover:bg-sail-gold/25 disabled:opacity-60"
+        >
+          {busyKind === 'audit' ? <Loader2 size={16} className="animate-spin" /> : <TreePine size={16} />}
+          {busyKind === 'audit' ? '木作体检中…' : '一键木作体检报告'}
+        </button>
+        <div className="text-[11px] text-sail-faint leading-relaxed">
+          按木作四要点六项自检出报告：主木色占比 / 木色档数 / 灯光配色 / 材质搭配 / 家具轻重 / 维护三问，
+          附「交付前必改」与<span className="text-sail-muted font-medium">可直接发客户的话术</span>。
         </div>
       </div>
 
       <div>
         {review ? (
           <div className="bg-sail-card border border-sail-line rounded-2xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-display font-semibold text-lg">设计顾问点评</h2>
-              <button
-                type="button"
-                onClick={copyReview}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-sail-line text-xs text-sail-muted hover:bg-sail-tint"
-              >
-                <Copy size={13} /> 复制全文
-              </button>
+            <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+              <h2 className="font-display font-semibold text-lg">
+                {reviewKind === 'audit' ? '🪵 木作体检报告' : '设计顾问点评'}
+              </h2>
+              <div className="flex gap-1.5">
+                {clientScript && (
+                  <button
+                    type="button"
+                    onClick={() => copyText(clientScript, '客户话术已复制，可直接粘贴到 WhatsApp')}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sail-green-deep text-white text-xs font-medium hover:bg-sail-green"
+                  >
+                    <MessageSquare size={13} /> 复制客户话术
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => copyText(review, '全文已复制')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-sail-line text-xs text-sail-muted hover:bg-sail-tint"
+                >
+                  <Copy size={13} /> 复制全文
+                </button>
+              </div>
             </div>
             <ReviewText text={review} />
 
