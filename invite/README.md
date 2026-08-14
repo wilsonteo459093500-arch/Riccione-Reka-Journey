@@ -71,26 +71,29 @@ Formspree、Supabase Edge Function、Google Apps Script 都行。送出时会 PO
 
 ## 链接参数
 
-**邀请函** —— 由 `create.html` 生成，参数都是可读的，链接不会像钓鱼：
+**邀请函** —— 由 `create.html` 生成。参数都是可读的短词，链接里不会出现电话号码、
+中文乱码（`%E5%A5%B3%E5%A3%AB` 那种），也不会有 base64：
 
 ```
-/?for=Mr%20Tan&on=2026-08-25&at=15:00
+/invite?for=Peggy&title=ms&on=2026-08-26
 ```
 
 | 参数 | 意思 | 例 |
 |---|---|---|
-| `for` | 客人称呼 | `Mr Tan` |
-| `title` | 称谓 | `先生` |
-| `on` `at` | 日期 · 时间 | `2026-08-25` `15:00`（14:00 是默认值，会省略） |
+| `for` | 客人称呼 | `Peggy` |
+| `title` | 称谓代号 | `mr` `ms` `mrs` `miss` `teacher` `designer`（直接写中文也认） |
+| `on` `at` | 日期 · 时间 | `2026-08-26` `15:00`（14:00 是默认值，会省略） |
 | `mins` | 时长，默认 60 | `90` |
-| `from` `role` `wa` | 邀请人姓名 · 职称 · WhatsApp（与 config 相同就省略） | |
+| `from` | 邀请人代号，取自 `config.js` 的 `team[].code` | `wilson` |
 | `note` | 印在信里的那一句话（勾选才会带上） | |
 | `open=1` | 跳过封面动画，预览用 | |
 
-旧的短参数（`n` `t` `d` `h` `dur` `by` `msg`）和 `?i=<base64>` 打包格式仍然认，发出去的旧链接不会失效。
+**需求卡** `/invite/brief?from=wilson&for=Peggy`
 
-**需求卡** `/brief?by=Wilson%20Teo&wa=60189661919&n=陈志明`
-（`wa` = 需求卡送到哪个号码，会盖过 config 里的 `briefInbox`）
+`from` 决定填完之后送到谁的 WhatsApp。名单在 `config.js` 的 `team`，
+不在名单里的人会自动退回 `by=姓名&wa=号码` 的长格式 —— 所以新同事记得加一行。
+
+旧的短参数（`n` `t` `d` `h` `by` `wa` `msg`）和 `?i=<base64>` 都还认得，发出去的旧链接不会失效。
 
 ---
 

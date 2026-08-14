@@ -8,7 +8,14 @@
   var $  = function (s) { return document.querySelector(s); };
   var $$ = function (s) { return Array.prototype.slice.call(document.querySelectorAll(s)); };
 
-  var BASE = location.href.replace(/[^/]*$/, '');   // …/invite/
+  /* 路径：本地开发要带 .html，线上开了 cleanUrls 就不用。
+     dir 是 create.html 所在的资料夹 —— 独立部署时是 '/'，
+     挂在主站底下时是 '/invite/'，两种都自动算对。 */
+  var local = /^(localhost|127\.|0\.0\.0\.0|\[?::1)/.test(location.hostname);
+  var dir   = location.pathname.replace(/[^/]*$/, '');
+  var BASE  = location.origin + dir.replace(/\/$/, '');
+  var PATH_INVITE = local ? BASE + '/index.html' : BASE || location.origin;
+  var PATH_BRIEF  = local ? BASE + '/brief.html' : BASE + '/brief';
 
   var F = {
     host: $('#g-host'), role: $('#g-role'), wa: $('#g-wa'),
@@ -54,18 +61,27 @@
     var role = F.role.value.trim() || (CFG.host && CFG.host.role) || '溪岸 Sail by Riccione Reka';
     var hostWa = digits(F.wa.value) || (CFG.host && CFG.host.wa) || '';
     var name = F.name.value.trim();
-    var honor = F.honor.value;
-    var call = name ? name + (honor ? honor : '') : '您';
+    var honor = F.honor.value;   // 存的是短代号：mr / ms / …
+    var HONOR_ZH = { mr: '先生', ms: '女士', mrs: '太太', miss: '小姐', teacher: '老师', designer: '设计师' };
+    var call = name ? name + (HONOR_ZH[honor] || '') : '您';
     var cwa = digits(F.cwa.value);
+
+    /* 邀请人在团队名单里的话，用代号，链接里就不必出现电话与中文姓名 */
+    var me = null, team = CFG.team || [];
+    for (var i = 0; i < team.length; i++) {
+      if (team[i].name && team[i].name.toLowerCase() === host.toLowerCase()) { me = team[i]; break; }
+    }
 
     /* ① 需求卡 */
     var bq = new URLSearchParams();
-    bq.set('by', host);
-    if (hostWa) bq.set('wa', hostWa);
-    if (name) bq.set('n', name);
-    // 线上开了 cleanUrls，可以省掉 .html；本地用 python 起的服务器不行
-    var local = /^(localhost|127\.|0\.0\.0\.0|\[?::1)/.test(location.hostname);
-    var briefLink = BASE + (local ? 'brief.html?' : 'brief?') + bq.toString();
+    if (me && me.code) {
+      bq.set('from', me.code);
+    } else {
+      bq.set('by', host);
+      if (hostWa) bq.set('wa', hostWa);
+    }
+    if (name) bq.set('for', name);
+    var briefLink = PATH_BRIEF + '?' + bq.toString();
 
     var briefMsg =
       call + '，您好，我是溪岸的 ' + host + '。\n\n' +
@@ -82,12 +98,18 @@
     if (F.date.value) iq.set('on', F.date.value);
     if (F.time.value && F.time.value !== '14:00') iq.set('at', F.time.value);
     if (F.dur.value && +F.dur.value !== 60) iq.set('mins', String(+F.dur.value));
-    if (host !== def.name) iq.set('from', host);
-    if (role !== def.role) iq.set('role', role);
-    if (hostWa && hostWa !== String(def.wa || '')) iq.set('wa', hostWa);
+    if (host !== def.name) {
+      if (me && me.code) {
+        iq.set('from', me.code);
+      } else {
+        iq.set('from', host);
+        if (role !== def.role) iq.set('role', role);
+        if (hostWa && hostWa !== String(def.wa || '')) iq.set('wa', hostWa);
+      }
+    }
     if (F.msg.value.trim() && F.printMsg.checked) iq.set('note', F.msg.value.trim());
     var qs = iq.toString();
-    var inviteLink = BASE + (qs ? '?' + qs : '');
+    var inviteLink = PATH_INVITE + (qs ? '?' + qs : '');
 
     var dl = dateLabel();
     var inviteMsg =

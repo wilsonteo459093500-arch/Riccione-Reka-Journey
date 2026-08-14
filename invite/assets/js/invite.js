@@ -42,12 +42,40 @@
 
   var P = readParams();
 
+  /* 称谓用短代号，链接里就不会出现 %E5%A5%B3%E5%A3%AB 这种乱码。
+     写死的中文也照样认得。 */
+  var HONORIFIC = {
+    mr:       { zh: '先生',   en: 'Mr' },
+    ms:       { zh: '女士',   en: 'Ms' },
+    mrs:      { zh: '太太',   en: 'Mrs' },
+    miss:     { zh: '小姐',   en: 'Miss' },
+    teacher:  { zh: '老师',   en: '' },
+    designer: { zh: '设计师', en: '' }
+  };
+
+  /* 邀请人用团队代号（from=wilson），链接里不必出现电话与中文姓名 */
+  function member(v) {
+    if (!v) return null;
+    var t = CFG.team || [];
+    for (var i = 0; i < t.length; i++) {
+      if (t[i].code && t[i].code.toLowerCase() === String(v).toLowerCase()) return t[i];
+    }
+    return null;
+  }
+
   var guest = (P.n || '').trim();
   var honor = (P.t || '').trim();
-  var host  = (P.by || (CFG.host && CFG.host.name) || 'Wilson Teo').trim();
-  var role  = (P.role || (CFG.host && CFG.host.role) || '溪岸 Sail by Riccione Reka').trim();
-  var hostWa = String(P.wa || (CFG.host && CFG.host.wa) || '').replace(/\D/g, '');
+  var M     = member(P.by);
+  var host  = (M ? M.name : P.by || (CFG.host && CFG.host.name) || 'Wilson Teo').trim();
+  var role  = ((M && M.role) || P.role || (CFG.host && CFG.host.role) || '溪岸 Sail by Riccione Reka').trim();
+  var hostWa = String((M && M.wa) || P.wa || (CFG.host && CFG.host.wa) || '').replace(/\D/g, '');
   var dur   = parseInt(P.dur, 10) > 0 ? parseInt(P.dur, 10) : 60;
+
+  function honorText(zh) {
+    if (!honor) return '';
+    var h = HONORIFIC[honor.toLowerCase()];
+    return h ? (zh ? h.zh : h.en) : honor;
+  }
 
   /* ---------- 日期 ----------------------------------------- */
   var when = null;               // Date 对象（当地时间）
@@ -89,14 +117,17 @@
   function paint() {
     var zh = lang() === 'zh';
     var fallbackName = zh ? '亲爱的朋友' : 'Dear Friend';
+    var hv = guest ? honorText(zh) : '';
+    // 中文称谓在名字后（陈志明 先生），英文在名字前（Ms Peggy）
     var name = guest || fallbackName;
+    var after = '';
+    if (hv) { if (zh) after = hv; else name = hv + ' ' + guest; }
 
     ['#s-name', '#t-name', '#l-name'].forEach(function (sel) {
       var el = $(sel); if (el) el.textContent = name;
     });
-    ['#s-honor', '#l-honor'].forEach(function (sel) {
-      var el = $(sel); if (el) el.textContent = guest && honor ? (sel === '#s-honor' ? honor : ' ' + honor) : '';
-    });
+    var sh = $('#s-honor'); if (sh) sh.textContent = after;
+    var lh = $('#l-honor'); if (lh) lh.textContent = after ? ' ' + after : '';
 
     $$('.s-host').forEach(function (el) { el.textContent = host; });
     var lr = $('#l-role'); if (lr) lr.textContent = role;
