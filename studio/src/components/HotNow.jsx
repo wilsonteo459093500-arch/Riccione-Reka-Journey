@@ -210,7 +210,12 @@ export default function HotNow({ settings, platformId, niche, notify, onOpenSett
                         <span className="text-[11px] text-sail-faint">（这条没有可核对的链接）</span>
                       )}
                       {onUseAngle && h.your_move && (
-                        <Btn size="sm" variant="ghost" icon={Play} onClick={() => onUseAngle(h)}>
+                        <Btn
+                          size="sm"
+                          variant="ghost"
+                          icon={Play}
+                          onClick={() => onUseAngle({ title: h.title, format: h.format, hook_line: h.your_move, why: h.why_now })}
+                        >
                           拿去构思
                         </Btn>
                       )}

@@ -5,6 +5,7 @@ import Wordmark from './Wordmark.jsx';
 const TABS = [
   { id: 'ideate', label: '构思', hint: '拆参考视频 → 配方' },
   { id: 'edit', label: '剪辑', hint: '配方 × 素材 → 时间轴' },
+  { id: 'matrix', label: '量产', hint: '一套素材 → 一个月内容' },
   { id: 'post', label: '发布', hint: '标题 / 正文 / 封面' },
   { id: 'trend', label: '趋势', hint: '选题雷达' },
 ];

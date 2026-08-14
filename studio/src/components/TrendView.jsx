@@ -93,7 +93,7 @@ export default function TrendView({ settings, notify, platformId, setPlatformId,
           niche={industry}
           notify={notify}
           onOpenSettings={onOpenSettings}
-          onUseAngle={onUseAngle ? (h) => onUseAngle({ title: h.title, hook_line: h.your_move, why: h.why_now }) : null}
+          onUseAngle={onUseAngle}
         />
 
         {!report ? (

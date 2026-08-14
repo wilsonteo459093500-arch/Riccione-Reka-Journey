@@ -40,7 +40,7 @@ export const RETENTION_RULES = `RETENTION MECHANICS (2026):
 - Saves and shares outrank likes. Content that is a *reference* (checklists, numbers, before/after) gets saved.`;
 
 /** 把品牌信息拼成一段上下文（都为空时返回空串） */
-export function brandContext({ brand, audience, tone }) {
+export function brandContext({ brand, audience, tone } = {}) {
   const lines = [];
   if (brand?.trim()) lines.push(`Brand / business: ${brand.trim()}`);
   if (audience?.trim()) lines.push(`Target audience: ${audience.trim()}`);
