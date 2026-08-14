@@ -6,7 +6,7 @@
   "description": "溪岸 SAIL · Delivery OS — 全屋定制项目交付管理",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && cp -r invite dist/invite",
     "preview": "vite preview"
   },
   "dependencies": {
