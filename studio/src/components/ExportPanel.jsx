@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { ExternalLink, Terminal, FileJson, Subtitles, ListTree, Bot, Sparkles, Film, Scissors } from 'lucide-react';
+import { ExternalLink, Terminal, FileJson, Subtitles, ListTree, Bot, Sparkles, Film, Scissors, Zap } from 'lucide-react';
 import { Card, Btn, CopyBtn, DownloadBtn, Fold, TextInput, Field } from './ui/Bits.jsx';
 import { PIPELINES } from '../constants.js';
 import {
   toEDL, toSRT, toShotList, toClaudePrompt, toVyraPrompt, toProjectMd, toHiggsfieldPrompts, toSeedancePrompt,
   toJianyingGuide, toVibeMotionOverlays, captionsFromTimeline,
 } from '../services/exporters.js';
+import { toDraftScripts } from '../services/cutscript.js';
 
 /**
  * 出片交接面板 —— 网站负责「想清楚怎么剪」，这里把方案翻译成
@@ -27,6 +28,7 @@ export default function ExportPanel({ plan, assets, recipe }) {
       seedance: toSeedancePrompt(plan, assets),
       jianying: toJianyingGuide(plan, assets, recipe),
       vibeOverlays: toVibeMotionOverlays(plan, recipe),
+      draft: toDraftScripts(plan, assets),
     };
   }, [plan, assets, recipe, dir]);
 
@@ -44,6 +46,39 @@ export default function ExportPanel({ plan, assets, recipe }) {
         >
           <TextInput value={dir} onChange={(e) => setDir(e.target.value)} placeholder="/Users/wilson/Videos/项目A" />
         </Field>
+
+        {/* 最快路径 · 一键出草稿 */}
+        {bundle.draft.segments > 0 && (
+          <div className="rounded-xl border-2 border-sail-green-deep/40 bg-sail-green/5 p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Zap size={16} className="text-sail-green-deep" />
+              <span className="text-sm font-semibold text-sail-ink">先出草稿 · 双击就出片</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-sail-green-deep/15 text-sail-green-deep font-medium">
+                不用 AI，不用配置
+              </span>
+            </div>
+            <p className="text-xs text-sail-muted leading-relaxed mb-3">
+              把脚本和 <code className="font-mono text-[11px] bg-white px-1 rounded">master.srt</code> 放进素材文件夹，
+              <strong className="text-sail-ink">双击</strong> —— 按上面的时间轴自动切段、变速、静图缓推、调色、拼接、烧字幕，
+              出一版 {bundle.draft.res} 草稿（{bundle.draft.segments} 段）。
+              电脑装过一次 ffmpeg 就行（Windows：<code className="font-mono text-[11px] bg-white px-1 rounded">winget install ffmpeg</code>）。
+              <strong className="text-sail-ink">草稿只用来审节奏和切点</strong>，确认了再进剪映做终稿 ——
+              审片循环从手剪半小时压到跑脚本一分钟。
+            </p>
+            {bundle.draft.warnings.length > 0 && (
+              <ul className="text-[11px] text-sail-brown leading-relaxed mb-2 space-y-0.5">
+                {bundle.draft.warnings.map((w, i) => (
+                  <li key={i}>! {w}</li>
+                ))}
+              </ul>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <DownloadBtn filename="出草稿.bat" text={bundle.draft.bat} mime="text/plain" label="Windows 脚本" />
+              <DownloadBtn filename="draft.sh" text={bundle.draft.sh} mime="text/plain" label="Mac 脚本" />
+              <DownloadBtn filename="master.srt" text={bundle.srt} label="master.srt" />
+            </div>
+          </div>
+        )}
 
         {/* 首选路径 · 国内 */}
         <div className="rounded-xl border-2 border-sail-brown/40 bg-sail-tint p-4">

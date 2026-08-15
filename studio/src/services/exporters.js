@@ -747,7 +747,7 @@ ${shots}
 // ---------------------------------------------------------------------------
 
 /** 从 reframe 文本里抠出运镜幅度和方向；抠不到就用默认的缓推 8% */
-function kenBurns(reframe) {
+export function kenBurns(reframe) {
   const s = String(reframe || '');
   const m = s.match(/(\d+(?:\.\d+)?)\s*%/);
   const amount = m ? Math.min(40, Math.max(2, Number(m[1]))) : 8;
