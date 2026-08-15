@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Film, Upload, Sparkles, Wand2, X, AlertTriangle, Lightbulb, ShoppingBag, Music, Palette, Type, ArrowRight,
+  Film, Upload, Sparkles, Wand2, X, AlertTriangle, Lightbulb, ShoppingBag, Music, Palette, Type, ArrowRight, Zap,
 } from 'lucide-react';
 import { Card, Btn, Field, TextArea, TextInput, ChipRow, Tag, Empty, Progress, Fold, CopyBtn } from './ui/Bits.jsx';
 import { PLATFORMS, TEMPLATES, BEATS, beatById, platformById } from '../constants.js';
 import { deconstructPrompt, recipeFromTemplatePrompt } from '../prompts/deconstruct.js';
+import { parseMetrics, analyzeMetrics } from '../services/metrics.js';
 import { generateJSON, uploadVideo } from '../services/gemini.js';
 import { probeVideo, sampleFrames, videoToInline, videoThumb, fmtBytes, fmtTime, INLINE_MAX_BYTES } from '../services/media.js';
 import { parseVideoUrl, youtubePart } from '../services/videoUrl.js';
@@ -18,6 +19,7 @@ export default function IdeateView({
   const [ref, setRef] = useState(null); // { file, url, duration, width, height, thumb }
   const [link, setLink] = useState('');
   const [notes, setNotes] = useState('');
+  const [metricsText, setMetricsText] = useState('');
   const [templateId, setTemplateId] = useState('before_after');
   const [brief, setBrief] = useState('');
   const [busy, setBusy] = useState(false);
@@ -104,7 +106,7 @@ export default function IdeateView({
         setProgress({ pct: 40, note: 'Google 正在读取这条 YouTube…' });
         parts = [
           youtubePart(parsedLink.canonical),
-          { text: deconstructPrompt({ platformId, mode: 'video', notes, settings }) },
+          { text: deconstructPrompt({ platformId, mode: 'video', notes, metrics: parseMetrics(metricsText), settings }) },
         ];
         setProgress({ pct: 75, note: '拆解中，这一步最花时间（30–90 秒）…' });
       } else if (source === 'reference') {
@@ -112,7 +114,12 @@ export default function IdeateView({
         setProgress({ pct: 88, note: '拆解中，这一步最花时间（30–90 秒）…' });
         parts = [
           ...media.parts,
-          { text: deconstructPrompt({ platformId, mode: media.mode, duration: ref.duration, notes, settings }) },
+          {
+            text: deconstructPrompt({
+              platformId, mode: media.mode, duration: ref.duration, notes,
+              metrics: parseMetrics(metricsText), settings,
+            }),
+          },
         ];
         if (media.mode === 'frames') {
           notify({ type: 'warn', text: '这次是按抽帧分析的 —— 声音相关的判断标了「推测」，可以自己再核一下' });
@@ -226,6 +233,8 @@ export default function IdeateView({
                 </div>
               )}
 
+              <MetricsField value={metricsText} onChange={setMetricsText} />
+
               <Field label="补充说明（可选）" hint="告诉它你到底看中了这条视频的什么，拆出来会准很多">
                 <TextArea
                   rows={3}
@@ -270,6 +279,8 @@ export default function IdeateView({
                 </button>
               )}
               <input ref={fileRef} type="file" accept="video/*" className="hidden" onChange={handlePick} />
+
+              <MetricsField value={metricsText} onChange={setMetricsText} />
 
               <Field label="补充说明（可选）" hint="告诉它你到底看中了这条视频的什么，拆出来会准很多">
                 <TextArea
@@ -487,6 +498,31 @@ function Recipe({ recipe, onGoEdit }) {
 
       {/* 分析结论 */}
       <div className="space-y-3">
+        {recipe.engine?.driver && (
+          <div className="rounded-xl border-2 border-sail-green-deep/30 bg-sail-tint p-4">
+            <div className="flex items-center gap-2 mb-1.5">
+              <Zap size={15} className="text-sail-green-deep" />
+              <span className="text-sm font-semibold text-sail-ink">引擎：{recipe.engine.driver}</span>
+              {recipe.engine.persistent && <Tag color="#9C3D2E">全程常驻</Tag>}
+              {recipe.engine.at_s > 0 && (
+                <span className="text-[11px] text-sail-faint">第 {recipe.engine.at_s}s 出现</span>
+              )}
+            </div>
+            {recipe.engine.device && (
+              <p className="text-sm text-sail-ink leading-relaxed">
+                <strong>靠这个动作：</strong>
+                {recipe.engine.device}
+              </p>
+            )}
+            {recipe.engine.transferable && (
+              <p className="text-xs text-sail-muted leading-relaxed mt-1.5">
+                <strong>能不能搬：</strong>
+                {recipe.engine.transferable}
+              </p>
+            )}
+          </div>
+        )}
+
         <Fold title="为什么这条能起量" count={recipe.why_it_works?.length} open>
           <ul className="space-y-2 text-sm text-sail-muted leading-relaxed">
             {(recipe.why_it_works || []).map((w, i) => (
@@ -534,5 +570,69 @@ function Recipe({ recipe, onGoEdit }) {
         </div>
       </Card>
     </>
+  );
+}
+
+/**
+ * 互动数据输入 —— 模型看不到画面之外的东西，这几个数字是它唯一的外部证据。
+ *
+ * 边打边解析，把比值当场显示出来：用户能在花掉一次 API 调用之前，
+ * 就看到自己有没有粘错、以及这条片子到底靠什么起来的。
+ */
+function MetricsField({ value, onChange }) {
+  const parsed = parseMetrics(value);
+  const a = analyzeMetrics(parsed);
+  const has = Object.keys(parsed).length > 0;
+
+  return (
+    <Field
+      label="它的互动数据（可选，但这一栏最值钱）"
+      hint="从帖子上把数字抄下来，随便粘。模型看不到这些 —— 而「靠转发起来的」和「靠评论起来的」，抄法完全不同。"
+    >
+      <TextArea
+        rows={2}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="如：363 赞 1197 评论 397 收藏 360 分享"
+      />
+      {has && (
+        <div className="mt-2 rounded-xl bg-sail-tint border border-sail-line p-2.5 space-y-1.5">
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-sail-muted tabular-nums">
+            {[
+              ['赞', parsed.likes],
+              ['评论', parsed.comments],
+              ['收藏', parsed.saves],
+              ['分享', parsed.shares],
+              ['播放', parsed.views],
+            ]
+              .filter(([, v]) => v > 0)
+              .map(([k, v]) => (
+                <span key={k}>
+                  {k} <strong className="text-sail-ink">{v.toLocaleString('en-US')}</strong>
+                </span>
+              ))}
+          </div>
+          {a.ok ? (
+            a.drivers.length > 0 ? (
+              <p className="text-[11px] leading-relaxed text-sail-green-deep">
+                <strong>{a.drivers.map((d) => d.name).join(' + ')}</strong>
+                {' · '}
+                {a.drivers
+                  .map((d) => `${d.name.replace('驱动', '')}是赞的 ${Math.round(d.ratio * 100)}%`)
+                  .join('，')}
+              </p>
+            ) : (
+              <p className="text-[11px] leading-relaxed text-sail-faint">
+                三项都在常见区间 —— 这条靠的是画面和完播，没装专门的互动机制。
+              </p>
+            )
+          ) : (
+            <p className="text-[11px] leading-relaxed text-sail-brown">
+              还缺点赞数。所有判断都是「相对它自己的赞数」，没有它算不出比值。
+            </p>
+          )}
+        </div>
+      )}
+    </Field>
   );
 }

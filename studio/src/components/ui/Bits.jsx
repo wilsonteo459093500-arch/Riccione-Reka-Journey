@@ -183,3 +183,47 @@ export function Fold({ title, count, children, open: initial = false }) {
     </div>
   );
 }
+
+/**
+ * 体检结果列表 —— 「量产」和「再切」共用。
+ *
+ * 这两处原本各写了一遍几乎相同的 JSX，连 ✗ / ! 的配色都是复制的。
+ * 体检是这个工具最该保持一致的地方：同一个严重程度，在任何页面都该长得一样，
+ * 否则用户会以为「量产的红」和「再切的红」不是一回事。
+ */
+export function IssueList({ issues = [], compact = false }) {
+  if (!issues.length) return null;
+  const errors = issues.filter((i) => i.level === 'error');
+  const warns = issues.filter((i) => i.level === 'warn');
+  const ordered = [...errors, ...warns];
+
+  const body = (
+    <ul className={compact ? 'space-y-0.5' : 'space-y-1.5'}>
+      {ordered.map((it, i) => (
+        <li key={i} className="text-[11px] leading-relaxed flex gap-1.5">
+          <span className={it.level === 'error' ? 'text-sail-brown' : 'text-sail-gold'}>
+            {it.level === 'error' ? '✗' : '!'}
+          </span>
+          <span className="text-sail-muted">{it.msg}</span>
+        </li>
+      ))}
+    </ul>
+  );
+
+  if (compact) return body;
+
+  return (
+    <div
+      className={`rounded-xl border p-3 ${
+        errors.length ? 'border-sail-brown/40 bg-sail-brown/5' : 'border-sail-gold/40 bg-sail-gold/5'
+      }`}
+    >
+      <p className="text-xs font-medium text-sail-ink mb-1.5">
+        {errors.length ? `${errors.length} 处硬伤` : ''}
+        {errors.length && warns.length ? ' · ' : ''}
+        {warns.length ? `${warns.length} 处建议` : ''}
+      </p>
+      {body}
+    </div>
+  );
+}

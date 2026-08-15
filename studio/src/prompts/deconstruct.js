@@ -2,6 +2,7 @@
 
 import { DIRECTOR_PERSONA, CRAFT_RULES, RETENTION_RULES, JSON_TAIL, brandContext } from './shared.js';
 import { platformById } from '../constants.js';
+import { metricsBrief } from '../services/metrics.js';
 
 const RECIPE_SCHEMA = `{
   "title": "给这个配方起的名字，如「毛坯到成品·数字倒计时」",
@@ -71,6 +72,13 @@ const RECIPE_SCHEMA = `{
     "motion": "文字动效方式"
   },
   "cta": { "line": "结尾引导语原文", "placement": "出现在第几秒、用什么形式" },
+  "engine": {
+    "driver": "这条靠什么起来：完播 / 转发 / 收藏 / 评论 / 搜索。有真实数据就按数据判，没有就写「推测：」",
+    "device": "画面里到底是哪一个**具体动作**把它拉起来的。例如「底部全程挂着一行『留言 開剪』」「第 12 秒甩出一张必须暂停才看得清的参数表」。写不出具体动作就说明没看清，不要用「内容优质」凑",
+    "at_s": 0.0,
+    "persistent": false,
+    "transferable": "这个动作能不能搬到别的品类。能就说怎么搬，不能就直说为什么不能（例如靠的是话题红利或产品本身）"
+  },
   "why_it_works": ["3-5 条：这条视频能起量的真实原因，要具体"],
   "traps": ["2-4 条：新手照抄最容易做砸的地方"],
   "adapt_notes": ["3-5 条：把这个配方套到「品牌上下文」的行业时，该改什么"]
@@ -82,9 +90,10 @@ const RECIPE_SCHEMA = `{
  * @param {'video'|'frames'} o.mode 模型拿到的是完整视频还是抽帧
  * @param {number} [o.duration] 抽帧模式下要告诉模型总时长
  * @param {string} [o.notes] 用户补充说明
+ * @param {object} [o.metrics] 真实互动数据 { likes, comments, shares, saves, views }
  * @param {object} o.settings 含 brand / audience / tone
  */
-export function deconstructPrompt({ platformId, mode, duration, notes, settings }) {
+export function deconstructPrompt({ platformId, mode, duration, notes, metrics, settings }) {
   const p = platformById(platformId);
 
   const modeNote =
@@ -116,7 +125,7 @@ required adjustment in "adapt_notes".
 ${RETENTION_RULES}
 
 ${CRAFT_RULES}
-${brandContext(settings)}${notes?.trim() ? `\n\nUSER'S OWN NOTE ABOUT THIS REFERENCE (weight it heavily):\n${notes.trim()}` : ''}
+${brandContext(settings)}${metricsBrief(metrics)}${notes?.trim() ? `\n\nUSER'S OWN NOTE ABOUT THIS REFERENCE (weight it heavily):\n${notes.trim()}` : ''}
 
 BEAT LABELS — every beat must use exactly one of these ids:
   HOOK   前 0–2 秒，让人停下来
