@@ -19,9 +19,10 @@ export default function RemindersView({ snapshot }) {
       <SectionTitle>提醒</SectionTitle>
 
       <Notice tone="info" icon={MessageSquare}>
-        <strong>半自动</strong>：规则由系统算，讯息由你发。
-        每条都附好文案，按「复制」贴进 WhatsApp 就行 —— 不用自己想措辞。
-        要做到真正自动发送，得接一个后端排程（见 README「下一步」）。
+        <strong>半自动</strong>：规则由系统算，讯息由你发 ——
+        每条都附好文案，按「复制」贴进 WhatsApp 就行。
+        想升级成每天早上 9 点全自动发送，照 DEPLOY.md 第 7 节接上
+        WhatsApp Cloud API（约 30 分钟，函数已写好）。
       </Notice>
 
       {reminders.length === 0 ? (

@@ -8,7 +8,7 @@ import {
   seatedMembers, memberById, memberName, uid, fmtDate, dueDateFor, mmss,
   openCommitments,
 } from '../../utils.js';
-import { Card, Button, Badge, Notice, Field, inputCls, inputBase, Hint, EmptyState } from '../Shared.jsx';
+import { Card, Button, Badge, Notice, Field, inputCls, inputBase, Hint, EmptyState, VoiceButton } from '../Shared.jsx';
 
 export default function RunSessionView({
   snapshot, sessionId, onBack, onSaveSession, onSaveCase, onSaveCommitment,
@@ -134,7 +134,7 @@ export default function RunSessionView({
         {phase.key === 'commit' && (
           <CommitPhase
             sess={sess} presenter={presenter} kase={kase} patchCase={patchCase}
-            commitments={commitments} onSaveCommitment={onSaveCommitment}
+            commitments={commitments} onSaveCommitment={onSaveCommitment} members={members}
           />
         )}
         {phase.key === 'takeaway' && (
@@ -374,7 +374,10 @@ function StatePhase({ presenter, kase, patchCase }) {
           placeholder="例：两个老师傅带不动新人，出货一慢客户就跑，我不敢接大单。"
         />
       </Field>
-      <Button tone="primary" onClick={() => patchCase(presenter.id, { problemStatement: text })}>存下这句话</Button>
+      <div className="flex gap-2">
+        <Button tone="primary" onClick={() => patchCase(presenter.id, { problemStatement: text })}>存下这句话</Button>
+        <VoiceButton onText={(t) => setText(prev => (prev ? `${prev}${t}` : t))} />
+      </div>
     </div>
   );
 }
@@ -416,8 +419,9 @@ function AskPhase({ members, presenter, kase, patchCase }) {
           value={text}
           onChange={e => setText(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') add(); }}
-          placeholder="问题…（打完按 Enter）"
+          placeholder="问题…（打完按 Enter，或按麦克风说）"
         />
+        <VoiceButton onText={(t) => setText(prev => (prev ? `${prev}${t}` : t))} />
         <Button tone="primary" icon={Plus} onClick={add}>加</Button>
       </div>
 
@@ -513,8 +517,9 @@ function AdvisePhase({ members, presenter, kase, patchCase }) {
           value={text}
           onChange={e => setText(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') add(); }}
-          placeholder={nextUp ? `轮到 ${nextUp.name}…（打完按 Enter）` : '建议…'}
+          placeholder={nextUp ? `轮到 ${nextUp.name}…（按 Enter 或按麦克风说）` : '建议…'}
         />
+        <VoiceButton onText={(t) => setText(prev => (prev ? `${prev}${t}` : t))} />
         <Button tone="primary" icon={Plus} onClick={add}>加</Button>
       </div>
 
@@ -540,18 +545,24 @@ function AdvisePhase({ members, presenter, kase, patchCase }) {
 // =====================================================================
 // 5. 锁诺 15′ —— L 步。1 诺 · 30 天。
 // =====================================================================
-function CommitPhase({ sess, presenter, kase, patchCase, commitments, onSaveCommitment }) {
+function CommitPhase({ sess, presenter, kase, patchCase, commitments, onSaveCommitment, members }) {
   const existing = commitments.find(c => c.caseId === kase?.id);
   const [text, setText] = useState(existing?.content || kase?.commitmentText || '');
   const [due, setDue] = useState(existing?.dueDate || kase?.commitmentDue || dueDateFor(sess.date));
+  const [sourceIds, setSourceIds] = useState(existing?.sourceAdviceIds || []);
 
   useEffect(() => {
     setText(existing?.content || kase?.commitmentText || '');
     setDue(existing?.dueDate || kase?.commitmentDue || dueDateFor(sess.date));
+    setSourceIds(existing?.sourceAdviceIds || []);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kase?.id, existing?.id]);
 
   if (!presenter) return <NoPresenter />;
+
+  const advices = kase?.advices || [];
+  const toggleSource = (id) =>
+    setSourceIds(ids => (ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]));
 
   const lock = () => {
     if (!text.trim()) return;
@@ -564,6 +575,7 @@ function CommitPhase({ sess, presenter, kase, patchCase, commitments, onSaveComm
       memberId: presenter.id,
       content: text.trim(),
       dueDate: due,
+      sourceAdviceIds: sourceIds,
       status: existing?.status || 'open',
       reviewNote: existing?.reviewNote || '',
       reviewedAt: existing?.reviewedAt || null,
@@ -584,6 +596,34 @@ function CommitPhase({ sess, presenter, kase, patchCase, commitments, onSaveComm
           placeholder="例：这个月把主力工序拍成 5 支教学视频，交给新人先学。"
         />
       </Field>
+
+      {advices.length > 0 && (
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-pumm-muted font-semibold mb-1">
+            这个行动主要来自谁的建议？（可多选）
+          </div>
+          <Hint>选了才有贡献榜 —— 让给出好建议的老板有面子，这是「老板帮老板」的证据链。</Hint>
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {advices.map(a => {
+              const on = sourceIds.includes(a.id);
+              return (
+                <button
+                  key={a.id} type="button" onClick={() => toggleSource(a.id)}
+                  title={a.text}
+                  className={`px-2.5 py-1.5 rounded-md text-xs border text-left max-w-full transition-colors ${
+                    on ? 'bg-pumm-brand text-white border-pumm-brand' : 'bg-white text-pumm-muted border-pumm-line hover:border-pumm-faint'
+                  }`}
+                >
+                  <span className="font-semibold">{memberName(members, a.advisorId)}</span>
+                  <span className={`ml-1 ${on ? 'opacity-80' : 'text-pumm-faint'}`}>
+                    {a.text.slice(0, 16)}{a.text.length > 16 ? '…' : ''}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <Field label="到期日" hint={`预设为会期 + ${TABLE.commitmentDays} 天`}>

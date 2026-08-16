@@ -175,18 +175,45 @@ export function demoDataset() {
     createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
   };
 
-  const mkCommitment = (kase, sessionId, memberId, status, note) => ({
+  const mkCommitment = (kase, sessionId, memberId, status, note, sourceAdviceIds = []) => ({
     id: uid('cmt'), tableId: TABLE.id, caseId: kase.id, sessionId,
     memberId, content: kase.commitmentText, dueDate: kase.commitmentDue,
+    sourceAdviceIds,
     status, reviewNote: note || '',
     reviewedAt: status === 'open' ? null : new Date().toISOString(),
     createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
   });
 
   const commitments = [
-    mkCommitment(c1, s1.id, 'mbr_demo_1', 'done', '拍了 5 支，新人上手快了两周。'),
-    mkCommitment(c2, s2.id, 'mbr_demo_2', 'open', ''),
+    // c1 的行动直接来自头两条建议（拍视频教学 + 带徒津贴）—— 贡献榜有东西可示范
+    mkCommitment(c1, s1.id, 'mbr_demo_1', 'done', '拍了 5 支，新人上手快了两周。',
+      c1.advices.slice(0, 2).map(a => a.id)),
+    mkCommitment(c2, s2.id, 'mbr_demo_2', 'open', '', c2.advices.slice(0, 1).map(a => a.id)),
     mkCommitment(c3, s2.id, 'mbr_demo_3', 'open', ''),
+  ];
+
+  const prospects = [
+    {
+      id: 'pros_demo_1', tableId: TABLE.id,
+      name: '许文龙', company: '文龙五金', industry: '五金机械',
+      phone: '', referrerId: 'mbr_demo_1', status: 'visited',
+      visitedSessionId: s2.id, notes: '看完承诺复盘那段就说想加入。',
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    },
+    {
+      id: 'pros_demo_2', tableId: TABLE.id,
+      name: '罗美琪', company: '美琪花艺', industry: '零售',
+      phone: '', referrerId: 'mbr_demo_6', status: 'lead',
+      visitedSessionId: '', notes: '看到招募故事来问的。',
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    },
+    {
+      id: 'pros_demo_3', tableId: TABLE.id,
+      name: '陈建发', company: '建发餐饮', industry: '餐饮',
+      phone: '', referrerId: '', status: 'lead',
+      visitedSessionId: '', notes: '行业跟林淑芬撞了 —— 等第二桌。',
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    },
   ];
 
   return {
@@ -194,6 +221,7 @@ export function demoDataset() {
     sessions: [s1, s2, s3],
     cases: [c1, c2, c3],
     commitments,
+    prospects,
   };
 }
 

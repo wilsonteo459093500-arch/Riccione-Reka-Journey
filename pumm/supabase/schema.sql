@@ -39,6 +39,13 @@ create table if not exists public.commitments (
   updated_at timestamptz default now()
 );
 
+-- 招募 pipeline：为第二桌囤候选人（线索/已邀请/参观过/洽谈/婉拒）
+create table if not exists public.prospects (
+  id text primary key,
+  data jsonb not null,
+  updated_at timestamptz default now()
+);
+
 -- 常用查询路径的索引
 create index if not exists idx_sessions_date      on public.sessions   ((data->>'date'));
 create index if not exists idx_cases_session      on public.cases      ((data->>'sessionId'));
@@ -51,6 +58,7 @@ alter table public.members     enable row level security;
 alter table public.sessions    enable row level security;
 alter table public.cases       enable row level security;
 alter table public.commitments enable row level security;
+alter table public.prospects   enable row level security;
 
 do $$ begin
   create policy "read members"      on public.members     for select using (true);
@@ -61,6 +69,8 @@ do $$ begin
   create policy "write cases"       on public.cases       for all    using (true) with check (true);
   create policy "read commitments"  on public.commitments for select using (true);
   create policy "write commitments" on public.commitments for all    using (true) with check (true);
+  create policy "read prospects"    on public.prospects   for select using (true);
+  create policy "write prospects"   on public.prospects   for all    using (true) with check (true);
 exception when duplicate_object then null;
 end $$;
 
@@ -71,6 +81,7 @@ do $$ begin
   alter publication supabase_realtime add table public.sessions;
   alter publication supabase_realtime add table public.cases;
   alter publication supabase_realtime add table public.commitments;
+  alter publication supabase_realtime add table public.prospects;
 exception when duplicate_object then null;
 end $$;
 
@@ -78,30 +89,9 @@ end $$;
 -- 加固（把案例正文真正锁起来）
 --
 -- 第一版的角色权限是在浏览器里执行的：会员／理事会看不到案例页，
--- 但数据库本身没有拦。会员敢不敢讲真问题，取决于这一层 ——
--- 桌子跑顺了、要开第二桌之前，务必补上：
+-- 但数据库本身没有拦。会员敢不敢讲真问题，取决于这一层。
 --
---   1. Supabase Authentication 打开邮箱登录，每位会员一个账号。
---   2. 建一张 profiles(user_id uuid primary key, member_id text, role text)。
---   3. 把 cases / commitments 的 select 策略换成：
---
---        create policy "cases: chair & recorder only"
---          on public.cases for select
---          using (exists (
---            select 1 from public.profiles p
---            where p.user_id = auth.uid() and p.role in ('chair','recorder')
---          ));
---
---   4. commitments 允许会员读自己那条：
---
---        create policy "commitments: own or staff"
---          on public.commitments for select
---          using (exists (
---            select 1 from public.profiles p
---            where p.user_id = auth.uid()
---              and (p.role in ('chair','recorder')
---                   or p.member_id = public.commitments.data->>'memberId')
---          ));
---
---   5. 删掉上面那几条 using (true) 的宽松策略。
+-- 完整的加固脚本已经写好，在同目录的 harden.sql ——
+-- 前提是先在 Supabase 打开邮箱登录（它会换掉现在的 PIN 登录方式），
+-- 步骤全部写在 harden.sql 文件头。桌子跑顺了、开第二桌之前务必执行。
 -- =====================================================================

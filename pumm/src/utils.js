@@ -155,6 +155,47 @@ export function membersAtRisk(members, sessions) {
 }
 
 // ---------------------------------------------------------------------
+// 建议贡献榜 —— 「老板帮老板」从口号变成排行榜
+//
+// 给出 = 这个人在所有案例里留下的建议条数。
+// 被采纳 = 案主锁诺时标了「这个行动主要来自谁的建议」（commitment.
+// sourceAdviceIds），其中属于这个人的建议数。
+// 只统计数字，不带任何建议正文 —— 所以理事会也能看这张榜。
+// ---------------------------------------------------------------------
+export function advisorLeaderboard(members, cases, commitments) {
+  const adviceOwner = {};                    // adviceId → advisorId
+  const given = {};                          // advisorId → 条数
+  cases.forEach(c => (c.advices || []).forEach(a => {
+    adviceOwner[a.id] = a.advisorId;
+    given[a.advisorId] = (given[a.advisorId] || 0) + 1;
+  }));
+
+  const adopted = {};                        // advisorId → 被采纳数
+  commitments.forEach(cm => (cm.sourceAdviceIds || []).forEach(aid => {
+    const owner = adviceOwner[aid];
+    if (owner) adopted[owner] = (adopted[owner] || 0) + 1;
+  }));
+
+  return rosterMembers(members)
+    .map(m => ({ member: m, given: given[m.id] || 0, adopted: adopted[m.id] || 0 }))
+    .filter(r => r.given > 0 || r.adopted > 0)
+    .sort((a, b) => (b.adopted - a.adopted) || (b.given - a.given));
+}
+
+// ---------------------------------------------------------------------
+// 招募 pipeline
+// 行业冲突只是提前预警（软提示），不硬拦 —— 现在占位的人明年未必续会。
+// ---------------------------------------------------------------------
+export function prospectIndustryClash(prospect, members) {
+  const norm = (s) => (s || '').trim().toLowerCase().replace(/\s+/g, '');
+  if (!norm(prospect.industry)) return null;
+  const clash = members.find(m =>
+    m.status === 'active' && !isDirector(m) && norm(m.industry) === norm(prospect.industry)
+  );
+  return clash ? `行业与在册会员 ${clash.name}（${clash.company}）重复 —— 除非那位出局或不续会，否则进不了这一桌。` : null;
+}
+
+// ---------------------------------------------------------------------
 // 承诺
 // ---------------------------------------------------------------------
 export function dueDateFor(sessionDate) {

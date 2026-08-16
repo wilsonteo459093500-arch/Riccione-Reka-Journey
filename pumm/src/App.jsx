@@ -10,6 +10,7 @@ import { PermissionWall } from './components/Shared.jsx';
 
 import DashboardView   from './components/views/Dashboard.jsx';
 import MembersView     from './components/views/Members.jsx';
+import ProspectsView   from './components/views/Prospects.jsx';
 import ScheduleView    from './components/views/Schedule.jsx';
 import RunSessionView  from './components/views/RunSession.jsx';
 import CommitmentsView from './components/views/Commitments.jsx';
@@ -38,7 +39,7 @@ export default function App() {
       .then(() => { unsub = repo.subscribe(setSnapshot); })
       .catch(err => {
         console.error('Repo init failed', err);
-        setSnapshot({ members: [], sessions: [], cases: [], commitments: [] });
+        setSnapshot({ members: [], sessions: [], cases: [], commitments: [], prospects: [] });
       });
     return () => { if (unsub) unsub(); };
   }, []);
@@ -67,6 +68,8 @@ export default function App() {
 
   // ---------- 写入 ----------
   const saveMember     = useCallback((m) => repo.upsert('members', m), []);
+  const saveProspect   = useCallback((p) => repo.upsert('prospects', p), []);
+  const removeProspect = useCallback((id) => repo.remove('prospects', id), []);
   const saveSession    = useCallback((s) => repo.upsert('sessions', s), []);
   const saveSessions   = useCallback((rows) => repo.upsertMany('sessions', rows), []);
   const saveCase       = useCallback((c) => repo.upsert('cases', c), []);
@@ -135,7 +138,7 @@ export default function App() {
           <Views
             view={view} role={role} session={session} snapshot={snapshot}
             reminders={reminders}
-            actions={{ saveMember, saveSession, saveSessions, saveCase, saveCommitment, loadDemo }}
+            actions={{ saveMember, saveProspect, removeProspect, saveSession, saveSessions, saveCase, saveCommitment, loadDemo }}
             onRun={(id) => { setRunningId(id); setView('run'); }}
           />
         )}
@@ -163,6 +166,15 @@ function Views({ view, role, session, snapshot, actions, onRun }) {
             canManage={can(role, 'manageMembers')}
           />
         : <PermissionWall what="会员名单" />;
+
+    case 'prospects':
+      return can(role, 'manageProspects')
+        ? <ProspectsView
+            snapshot={snapshot}
+            onSaveProspect={actions.saveProspect}
+            onRemoveProspect={actions.removeProspect}
+          />
+        : <PermissionWall what="招募名单" />;
 
     case 'schedule':
       return (

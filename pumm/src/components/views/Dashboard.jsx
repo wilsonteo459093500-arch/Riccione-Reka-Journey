@@ -1,14 +1,19 @@
 import React, { useMemo } from 'react';
-import { TrendingUp, AlertTriangle, CheckCircle2, CalendarDays } from 'lucide-react';
+import { TrendingUp, AlertTriangle, CheckCircle2, CalendarDays, Lightbulb } from 'lucide-react';
 import { METRIC_TARGETS, TABLE_STEPS, TABLE } from '../../constants.js';
 import {
   computeMetrics, pilotVerdict, pct, fmtDate, todayISO, daysUntil, memberById,
+  advisorLeaderboard,
 } from '../../utils.js';
 import { Card, StatCard, Notice, SectionTitle, Hint, Badge } from '../Shared.jsx';
 
 export default function DashboardView({ snapshot, role }) {
   const metrics = useMemo(() => computeMetrics(snapshot), [snapshot]);
   const verdict = useMemo(() => pilotVerdict(metrics), [metrics]);
+  const leaderboard = useMemo(
+    () => advisorLeaderboard(snapshot.members, snapshot.cases, snapshot.commitments),
+    [snapshot]
+  );
   const isDirector = role === 'director';
 
   const today = todayISO();
@@ -109,6 +114,35 @@ export default function DashboardView({ snapshot, role }) {
           </div>
         </div>
       </Card>
+
+      {/* ---- 建议贡献榜 ----
+          只有名字和数字，没有任何建议正文，所以理事会也能看。
+          「被采纳」来自案主锁诺时自己点的来源 —— 不是桌长评的，是案主投的票。 */}
+      {leaderboard.length > 0 && (
+        <Card>
+          <div className="flex items-center gap-1.5 mb-2">
+            <Lightbulb className="w-4 h-4 text-pumm-brass" />
+            <span className="text-[10px] uppercase tracking-wider text-pumm-muted font-semibold">
+              建议贡献榜 · 谁的建议最常被案主采纳
+            </span>
+          </div>
+          <div className="space-y-1">
+            {leaderboard.slice(0, 10).map((r, i) => (
+              <div key={r.member.id} className="flex items-center gap-2.5 py-1 border-b border-pumm-line last:border-0">
+                <span className={`w-5 text-center font-display text-sm font-semibold ${i < 3 ? 'text-pumm-brass' : 'text-pumm-faint'}`}>
+                  {i + 1}
+                </span>
+                <span className="text-sm text-pumm-ink min-w-0 flex-1 truncate">{r.member.name}</span>
+                <span className="text-xs text-pumm-muted tabular-nums">给出 {r.given}</span>
+                <Badge color={r.adopted > 0 ? '#3F7D5C' : '#7C8087'}>被采纳 {r.adopted}</Badge>
+              </div>
+            ))}
+          </div>
+          <Hint>
+            「被采纳」是案主锁诺时自己点的 —— 这一栏就是「老板帮老板，不是顾问给答案」的证据链。
+          </Hint>
+        </Card>
+      )}
 
       <div className="grid sm:grid-cols-2 gap-3">
         <Card>

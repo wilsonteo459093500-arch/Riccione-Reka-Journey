@@ -17,10 +17,20 @@
 | 会员与桌 | T 上桌 | 名单、**行业查重**、年费状态、NDA、在桌／出局、缺席预警 |
 | 排期与出席 | T 上桌 | 一键排全年、案主自动排序、出席登记 |
 | 会议运行 | A 只问 · B 出策 | 六段计时器、提问记录、建议逐条（**含提议人**） |
-| 承诺追踪 | L 锁诺 | 1 诺 30 天、下场开场自动带出未结承诺、达成率 |
+| 承诺追踪 | L 锁诺 | 1 诺 30 天、**锁诺时标注建议来源**、下场开场自动带出未结承诺、达成率 |
 | 案例资产 | E 留证 | 每场一页归档、检索、导出成招募素材（匿名版） |
+| 招募 | 传 | prospects pipeline：线索→邀请→参观→洽谈，行业冲突提前预警（桌长专属） |
 
-外加**看板**（四个自动计算的数字）与**提醒**（五条规则，算好文案一键复制）。
+外加**看板**（四个自动计算的数字 + **建议贡献榜**）与**提醒**（五条规则，
+一键复制；接上 WhatsApp Cloud API 后每天早上 9 点全自动发送，见 DEPLOY.md 第 7 节）。
+
+**建议贡献榜**：案主锁诺时自己点「这个行动主要来自谁的建议」，看板就有了
+『谁的建议最常被采纳』的榜 —— 被采纳是案主投的票，不是桌长评的。
+这是「老板帮老板，不是顾问给答案」从口号变成排行榜的那一步。
+
+**会中语音输入**：陈述／提问／建议三个输入框都带麦克风按钮（浏览器自带
+Web Speech API，语音不经过任何第三方服务器），记录员追不上老板讲话时
+按一下说就行；不支持的浏览器自动隐藏按钮，退化回打字。
 
 ---
 
@@ -53,8 +63,9 @@
 案例正文只有一个入口（`cases` 页），会员与理事会的导航里根本没有这一项。
 
 > ⚠️ **第一版的权限跑在浏览器里。** 数据库那一层还没锁 —— 拿到网址与 anon key 的人，
-> 技术上能读到案例。开第二桌之前务必按 `supabase/schema.sql` 末尾的「加固」一节补上
-> RLS 策略。这一点在 README 写明，是因为它关系到会员对这张桌的信任，不该含糊过去。
+> 技术上能读到案例。加固脚本已写好（`supabase/harden.sql`，前提是先开邮箱登录，
+> 步骤在脚本文件头），开第二桌之前务必执行。这一点在 README 写明，
+> 是因为它关系到会员对这张桌的信任，不该含糊过去。
 
 ---
 
@@ -87,13 +98,13 @@
 | 同一会员无故缺席第 2 次 | 通知桌长 |
 | 年费到期前 30 天（未续会） | 提醒续会 |
 
-要真正自动发送，见下面「下一步」。
+要升级成全自动发送，Edge Function 已写好，照 DEPLOY.md 第 7 节接上即可。
 
 ---
 
 ## 数据模型
 
-四张表，对应规格第 3 节：
+五张表（规格的四张 + 招募 prospects）：
 
 ```
 members      id, name, company, industry, tableId, joinedAt,
@@ -109,7 +120,11 @@ cases        id, sessionId, presenterId, problemStatement,
              commitmentText, commitmentDue, archivedAt
 
 commitments  id, caseId, sessionId, memberId, content,
-             dueDate(= session.date + 30d), status(open|done|missed), reviewNote
+             dueDate(= session.date + 30d), status(open|done|missed), reviewNote,
+             sourceAdviceIds[]           ← 采纳闭环：案主标的「来自谁的建议」
+
+prospects    id, name, company, industry, phone, referrerId,
+             status(lead|invited|visited|joining|declined), visitedSessionId, notes
 ```
 
 **`cases.advices[].advisorId` 是全系统最关键的字段** —— 日后要证明「老板帮老板」
@@ -146,7 +161,7 @@ cd pumm
 npm install
 npm run dev      # http://localhost:5175
 npm run build    # 生产构建到 dist/
-npm test         # 桌规／看板／提醒／排期的逻辑冒烟测试（30 项，无需依赖）
+npm test         # 桌规／看板／提醒／排期／贡献榜的逻辑测试（34 项，无需依赖）
 ```
 
 首次启动会自建三个账号：**桌长 / 记录员 / Star Director**，PIN 都是 `1234`
@@ -167,11 +182,14 @@ src/
   components/
     Shared.jsx            # 卡片 / 按钮 / 徽章 / 弹窗 / 权限墙
     LoginScreen.jsx Header.jsx
-    views/                # dashboard · members · schedule · run · commitments
-                          # · cases · reminders · rules · me
+    views/                # dashboard · members · prospects · schedule · run
+                          # · commitments · cases · reminders · rules · me
     modals/MemberFormModal.jsx
 test/logic.test.mjs       # node test/logic.test.mjs
-supabase/schema.sql       # 建表脚本 + RLS 加固指南
+supabase/
+  schema.sql              # 建表脚本（宽松策略，网址即密码）
+  harden.sql              # 数据库层权限加固（开第二桌前执行）
+  functions/send-reminders/  # WhatsApp 每日自动提醒（Edge Function）
 ```
 
 ---
@@ -185,9 +203,12 @@ supabase/schema.sql       # 建表脚本 + RLS 加固指南
 
 ## 下一步（按值得做的顺序）
 
-1. **数据库层权限加固** —— `supabase/schema.sql` 末尾已写好步骤。开第二桌前必须做。
-2. **真正的自动发送** —— 接 WhatsApp Business API 或 Twilio + 一个 cron
-   （Supabase Edge Function 每天跑一次 `buildReminders`）。规则函数是纯函数，
-   搬到服务端不用改写。
-3. **Case Record 出 PDF** —— 现在靠浏览器打印（已写好 print 样式）与纯文字导出。
-4. **拆 attendance 表 + 多桌** —— 等真的要开第二桌再做，别提前上多租户架构。
+1. **数据库层权限加固** —— 脚本已写好（`supabase/harden.sql`），前提是先开
+   邮箱登录，步骤在脚本文件头 + DEPLOY.md 第 8 节。开第二桌前必须做。
+2. **WhatsApp 全自动发送** —— Edge Function 已写好
+   （`supabase/functions/send-reminders`），照 DEPLOY.md 第 7 节接上
+   Meta 的 token 就跑。⚠️ 改提醒规则时 `src/utils.js` 与该函数要两边同步。
+3. **会员个人价值账单** —— 跑满三场有真实数据后做：我拿到几条建议、我给出几条、
+   我被采纳几次、年度一页回顾。这是续会武器（贡献榜是它的第一块）。
+4. **Case Record 出 PDF** —— 现在靠浏览器打印（已写好 print 样式）与纯文字导出。
+5. **拆 attendance 表 + 多桌** —— 等真的要开第二桌再做，别提前上多租户架构。

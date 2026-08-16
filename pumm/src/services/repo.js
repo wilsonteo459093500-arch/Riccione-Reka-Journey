@@ -17,9 +17,9 @@ import { cloudConfigured, supabase } from './supabase.js';
 import { localKV } from './storage.js';
 import { bootstrapMembers } from '../seed.js';
 
-export const KINDS = ['members', 'sessions', 'cases', 'commitments'];
+export const KINDS = ['members', 'sessions', 'cases', 'commitments', 'prospects'];
 
-const emptyState = () => ({ members: [], sessions: [], cases: [], commitments: [] });
+const emptyState = () => ({ members: [], sessions: [], cases: [], commitments: [], prospects: [] });
 
 // ---------------------------------------------------------------------
 // 形状升级：老记录补上后来才加的字段，UI 永远不会因为少一个属性而崩。
@@ -40,8 +40,13 @@ const upgrade = {
     ...c,
   }),
   commitments: (c) => ({
-    status: 'open', reviewNote: '', reviewedAt: null,
+    status: 'open', reviewNote: '', reviewedAt: null, sourceAdviceIds: [],
     ...c,
+  }),
+  prospects: (p) => ({
+    status: 'lead', industry: '', company: '', referrerId: '', phone: '',
+    visitedSessionId: '', notes: '',
+    ...p,
   }),
 };
 
@@ -65,6 +70,7 @@ function makeLocalRepo() {
   const snapshot = () => ({
     members: state.members.slice(), sessions: state.sessions.slice(),
     cases: state.cases.slice(), commitments: state.commitments.slice(),
+    prospects: state.prospects.slice(),
   });
   const emit = () => subs.forEach(fn => fn(snapshot()));
 
@@ -135,6 +141,7 @@ function makeCloudRepo() {
   const snapshot = () => ({
     members: state.members.slice(), sessions: state.sessions.slice(),
     cases: state.cases.slice(), commitments: state.commitments.slice(),
+    prospects: state.prospects.slice(),
   });
   const emit = () => subs.forEach(fn => fn(snapshot()));
 

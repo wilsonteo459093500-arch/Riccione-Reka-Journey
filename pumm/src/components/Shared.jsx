@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Check, Copy, X, AlertTriangle, Lock } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Check, Copy, X, AlertTriangle, Lock, Mic, MicOff } from 'lucide-react';
 import { copyText } from '../utils.js';
 
 // ---------------- 基础容器 ----------------
@@ -102,6 +102,62 @@ export function CopyButton({ text, label = '复制', size = 'sm', tone = 'ghost'
     >
       {done ? '已复制' : label}
     </Button>
+  );
+}
+
+// ---------------- 语音输入 ----------------
+// 会中体验最大的痛：记录员打字追不上老板讲话。
+// 用浏览器自带的 Web Speech API（Chrome / Edge / Safari 都有），
+// 不经过任何第三方服务器 —— 案例内容有保密协议，语音也不该外流。
+// 浏览器不支持时按钮整个不渲染，功能优雅退化回打字。
+const SR = typeof window !== 'undefined'
+  ? (window.SpeechRecognition || window.webkitSpeechRecognition)
+  : null;
+
+export const voiceSupported = !!SR;
+
+export function VoiceButton({ onText, lang = 'zh-CN', title = '按住说，说完自动停' }) {
+  const [listening, setListening] = useState(false);
+  const recRef = useRef(null);
+
+  useEffect(() => () => { recRef.current?.abort?.(); }, []);
+
+  if (!SR) return null;
+
+  const toggle = () => {
+    if (listening) {
+      recRef.current?.stop();
+      return;
+    }
+    const rec = new SR();
+    rec.lang = lang;
+    rec.continuous = false;         // 一句一停：说完一条建议就落一条，节奏跟会议一致
+    rec.interimResults = false;
+    rec.onresult = (e) => {
+      const text = Array.from(e.results).map(r => r[0]?.transcript || '').join('').trim();
+      if (text) onText(text);
+    };
+    rec.onend = () => setListening(false);
+    rec.onerror = () => setListening(false);
+    recRef.current = rec;
+    setListening(true);
+    rec.start();
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      title={title}
+      aria-label={listening ? '停止语音输入' : '语音输入'}
+      className={`inline-flex items-center justify-center w-9 rounded-md border transition-colors flex-shrink-0 ${
+        listening
+          ? 'bg-pumm-danger border-pumm-danger text-white timer-over'
+          : 'bg-white border-pumm-line text-pumm-muted hover:border-pumm-brand hover:text-pumm-brand'
+      }`}
+    >
+      {listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+    </button>
   );
 }
 

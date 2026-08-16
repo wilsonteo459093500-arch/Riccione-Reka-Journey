@@ -37,6 +37,7 @@ export const ROLE_KEYS = Object.keys(ROLES);
 // 能力矩阵。列出的角色 = 有权限。
 const CAPABILITIES = {
   manageMembers:    ['chair'],                          // 增删会员、年费、NDA、出局
+  manageProspects:  ['chair'],                          // 招募 pipeline（候选人名单）
   manageSchedule:   ['chair'],                          // 全年日期、案主排序
   recordAttendance: ['chair', 'recorder'],
   runSession:       ['chair', 'recorder'],              // 主持模式
@@ -58,7 +59,7 @@ export function can(role, capability) {
 
 // 每个角色进来后能看到的页签（顺序即导航顺序）
 export const ROLE_TABS = {
-  chair:    ['dashboard', 'members', 'schedule', 'run', 'commitments', 'cases', 'reminders', 'rules'],
+  chair:    ['dashboard', 'members', 'prospects', 'schedule', 'run', 'commitments', 'cases', 'reminders', 'rules'],
   recorder: ['dashboard', 'schedule', 'run', 'commitments', 'cases', 'reminders', 'rules'],
   member:   ['me', 'schedule', 'rules'],
   director: ['dashboard', 'rules'],
@@ -67,6 +68,7 @@ export const ROLE_TABS = {
 export const TAB_LABELS = {
   dashboard:   '看板',
   members:     '会员与桌',
+  prospects:   '招募',
   schedule:    '排期与出席',
   run:         '会议运行',
   commitments: '承诺追踪',
@@ -149,6 +151,15 @@ export const SESSION_STATUS = {
   scheduled: { label: '已排期', color: '#7C8087' },
   running:   { label: '进行中', color: '#B08D4F' },
   closed:    { label: '已结束', color: '#23303D' },
+};
+
+// 招募 pipeline —— 为第二桌囤候选人。故事回流招募，招募回流到这张表。
+export const PROSPECT_STATUS = {
+  lead:     { label: '线索',   color: '#7C8087' },
+  invited:  { label: '已邀请', color: '#B08D4F' },
+  visited:  { label: '来参观过', color: '#23303D' },
+  joining:  { label: '洽谈入桌', color: '#3F7D5C' },
+  declined: { label: '不合适/婉拒', color: '#9C3D2E' },
 };
 
 // 行业清单只是输入提示，可自由填写；查重按最终文本比对。

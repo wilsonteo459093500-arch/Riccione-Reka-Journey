@@ -112,7 +112,51 @@ key 也读不到案例正文。
 
 ---
 
-## 7) 备份
+## 7) WhatsApp 自动提醒（可选，约 30 分钟）
+
+不做这一步，「提醒」页照常能用（算好文案、一键复制）。做了这一步，
+五条提醒每天早上自动发到会员 WhatsApp，桌长完全不用管。
+
+1. **Meta 侧**（一次性）：
+   - https://developers.facebook.com → 创建 App（类型 Business）→ 添加 **WhatsApp** 产品
+   - 拿到 **Phone Number ID** 和一个**永久 System User Token**（App 面板 → WhatsApp → API Setup；
+     临时 token 只活 24 小时，要在 Business Settings → System Users 里生成永久的）
+   - ⚠️ WhatsApp 规矩：企业主动发消息要用**已审核模板**，自由文本只能发给
+     24 小时内回过你消息的人。最简单的过渡做法：入会时让每位会员先给这个号码发一句
+     「hi」；正式一点就把提醒文案在 Meta 后台申请成 utility 模板。
+2. **Supabase 侧**：
+   ```bash
+   supabase functions deploy send-reminders
+   supabase secrets set WHATSAPP_TOKEN=EAAxxxx WHATSAPP_PHONE_ID=1234567890
+   ```
+3. **每天定时跑**（SQL Editor 执行一次；先在 Database → Extensions 打开 `pg_cron` 和 `pg_net`）：
+   ```sql
+   select cron.schedule(
+     'pumm-daily-reminders',
+     '0 1 * * *',   -- UTC 01:00 = 马来西亚早上 9 点
+     $$
+     select net.http_post(
+       url     := 'https://<你的项目ref>.supabase.co/functions/v1/send-reminders',
+       headers := jsonb_build_object('Authorization', 'Bearer <SERVICE_ROLE_KEY>')
+     );
+     $$
+   );
+   ```
+4. 验证：Edge Functions → send-reminders → Logs，每天 9 点会有一条
+   `x/y 发送成功` 的记录，失败会写明原因（没电话号码 / 超出 24h 窗口）。
+
+会员的电话就用「会员与桌」里那一栏，01x 开头的马来西亚号码会自动转成国际格式。
+
+## 8) 数据库权限加固（开第二桌前必做）
+
+第 5 节讲过：现在数据库层没锁。真正锁上按 `supabase/harden.sql` 文件头的
+五个步骤做 —— 核心是先开邮箱登录、每位会员一个账号，然后执行那份脚本。
+执行完之后，案例正文在数据库层就只有桌长与记录员读得到，
+会员只读得到自己的承诺，理事会连表都碰不到。
+
+⚠️ 顺序别反：先改前端登录、再跑 harden.sql。先跑脚本的话 PIN 登录会读不到数据。
+
+## 9) 备份
 
 - **承诺追踪** 页有「导出 CSV」
 - **案例资产** 里每个案例可下载文字档（会内版／匿名招募版）

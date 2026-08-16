@@ -4,6 +4,7 @@ import {
   validateMember, computeMetrics, pilotVerdict, buildReminders, generateYearDates,
   suggestPresenters, absenceCount, dueDateFor, addDays, todayISO,
   caseToText, caseToStoryText, isSeated, daysUntil, toCSV,
+  advisorLeaderboard, prospectIndustryClash,
 } from '../src/utils.js';
 import { demoDataset } from '../src/seed.js';
 
@@ -157,6 +158,38 @@ t('案主自动排：没上过桌的排前面', () => {
 t('承诺到期日 = 会期 + 30 天', () => {
   assert.equal(dueDateFor('2026-03-01'), '2026-03-31');
   assert.equal(daysUntil(addDays(todayISO(), 5)), 5);
+});
+
+console.log('\n— 贡献榜与招募 —');
+t('贡献榜：被采纳数按锁诺来源算、按采纳排序', () => {
+  const lb = advisorLeaderboard(demo.members, demo.cases, demo.commitments);
+  assert.ok(lb.length > 0);
+  // demo：c1 采纳了前两条建议、c2 采纳一条 —— 共 3 个被采纳记号
+  const adoptedTotal = lb.reduce((n, r) => n + r.adopted, 0);
+  assert.equal(adoptedTotal, 3);
+  // 排序：被采纳多的在前
+  for (let i = 1; i < lb.length; i++) {
+    assert.ok(lb[i - 1].adopted >= lb[i].adopted);
+  }
+  // 每个人的给出数 >= 被采纳数
+  lb.forEach(r => assert.ok(r.given >= 0 && r.adopted <= r.given + 1));
+});
+t('贡献榜不含案例正文字段', () => {
+  const lb = advisorLeaderboard(demo.members, demo.cases, demo.commitments);
+  lb.forEach(r => {
+    assert.deepEqual(Object.keys(r).sort(), ['adopted', 'given', 'member']);
+  });
+});
+t('候选人行业冲突：撞在册会员出预警、不撞放行、出局的人不占', () => {
+  const clash = prospectIndustryClash({ industry: '餐饮' }, demo.members);
+  assert.ok(clash && clash.includes('林淑芬'));
+  assert.equal(prospectIndustryClash({ industry: '五金机械' }, demo.members), null);
+  const withRemoved = demo.members.map(m => m.industry === '餐饮' ? { ...m, status: 'removed' } : m);
+  assert.equal(prospectIndustryClash({ industry: '餐饮' }, withRemoved), null);
+});
+t('示范数据带招募 pipeline', () => {
+  assert.ok(demo.prospects.length >= 3);
+  assert.ok(demo.prospects.some(p => p.status === 'visited'));
 });
 
 console.log('\n— 案例导出 —');
