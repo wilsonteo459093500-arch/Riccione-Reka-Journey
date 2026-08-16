@@ -1,7 +1,7 @@
 {
   "name": "pumm-roundtable-ops",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "description": "PUMM ROUNDTABLE 运维系统 — 私董会会员 / 排期 / 会议运行 / 承诺追踪 / 案例资产",
   "scripts": {
