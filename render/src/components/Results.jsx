@@ -59,6 +59,39 @@ function Slot({ slot, inputImage, onIterate, onEnhance, onRefine, onOpen, waterm
         onClick={() => onOpen(slot)}
       />
       <WatermarkBadge text={watermark} />
+      {slot.qc && (
+        <div className="border-t border-sail-line">
+          {slot.qc.status === 'checking' ? (
+            <div className="px-3 py-1.5 text-[11px] text-sail-faint flex items-center gap-1.5 bg-sail-tint">
+              <span className="animate-pulse">●</span> 差异质检中…
+            </div>
+          ) : slot.qc.status === 'error' ? (
+            <div className="px-3 py-1.5 text-[11px] text-sail-faint bg-sail-tint">{slot.qc.text}</div>
+          ) : (
+            <details className="group/qc">
+              <summary
+                className={`px-3 py-1.5 text-[11px] font-medium cursor-pointer list-none flex items-center gap-1.5 ${
+                  slot.qc.verdict === 'pass'
+                    ? 'bg-sail-green/10 text-sail-green-deep'
+                    : slot.qc.verdict === 'warn'
+                      ? 'bg-sail-gold/15 text-sail-ink'
+                      : 'bg-sail-danger/10 text-sail-danger'
+                }`}
+              >
+                {slot.qc.verdict === 'pass'
+                  ? '✅ 质检通过 — 无设计漂移'
+                  : slot.qc.verdict === 'warn'
+                    ? '⚠️ 轻微漂移 — 点开看详情'
+                    : '❌ 严重漂移 — 建议重跑'}
+                <span className="ml-auto text-sail-faint group-open/qc:hidden">展开</span>
+              </summary>
+              <div className="px-3 py-2 text-[11px] leading-relaxed text-sail-muted whitespace-pre-wrap bg-white">
+                {slot.qc.text}
+              </div>
+            </details>
+          )}
+        </div>
+      )}
       <div className="absolute inset-x-0 bottom-0 p-2 flex gap-1.5 justify-end opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-t from-black/50 to-transparent">
         <button
           type="button"

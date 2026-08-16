@@ -87,7 +87,12 @@ export async function analyzeImage(settings, prompt, image) {
 async function analyzeOnce(settings, model, prompt, image) {
   if (!settings.apiKey) throw new Error('还没有配置 API key，点右上角设置。');
   const url = endpoint(settings, `/v1beta/models/${model}:generateContent?key=${encodeURIComponent(settings.apiKey)}`);
-  const parts = [{ inline_data: { mime_type: image.mimeType, data: image.base64 } }, { text: prompt }];
+  // image 可为单张 { mimeType, base64 } 或多张数组（如差异质检需要底图+出图两张）
+  const images = Array.isArray(image) ? image : [image];
+  const parts = [
+    ...images.map((img) => ({ inline_data: { mime_type: img.mimeType, data: img.base64 } })),
+    { text: prompt },
+  ];
 
   let res = null;
   let data = null;

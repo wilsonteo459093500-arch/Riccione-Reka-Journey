@@ -48,6 +48,7 @@ export default function Controls(props) {
     lightingId, setLightingId, fidelityId, setFidelityId,
     aspect, setAspect, extra, setExtra, count, setCount,
     autoPolish, setAutoPolish,
+    contractMode, setContractMode,
     busy, onGenerate,
   } = props;
 
@@ -342,7 +343,30 @@ export default function Controls(props) {
         />
       </Section>
 
-      {['sketch', 'restyle', 'empty'].includes(modeId) && (
+      {mode.needsImage && (
+        <label
+          className={`flex items-start gap-2.5 rounded-xl border p-3 cursor-pointer ${
+            contractMode ? 'border-sail-green bg-sail-green/10' : 'border-sail-line bg-sail-tint'
+          }`}
+        >
+          <input
+            type="checkbox"
+            checked={contractMode}
+            onChange={(e) => setContractMode(e.target.checked)}
+            className="mt-0.5 w-4 h-4 accent-[#3D5A4A]"
+          />
+          <span className="text-xs leading-relaxed">
+            <span className="font-semibold text-sail-ink">📋 合同图保真模式</span>
+            <span className="text-sail-muted">
+              {' '}
+              — 客户要签字的图用这个：单道生成（不重画第二遍）+ 最高保真指令 +
+              生成后自动质检「墙体/地板/柜体/五金」四项漂移并出报告。
+            </span>
+          </span>
+        </label>
+      )}
+
+      {!contractMode && ['sketch', 'restyle', 'empty'].includes(modeId) && (
         <label className="flex items-start gap-2.5 rounded-xl border border-sail-gold/50 bg-sail-gold/10 p-3 cursor-pointer">
           <input
             type="checkbox"
@@ -351,10 +375,10 @@ export default function Controls(props) {
             className="mt-0.5 w-4 h-4 accent-[#3D5A4A]"
           />
           <span className="text-xs leading-relaxed">
-            <span className="font-semibold text-sail-ink">双通道出图（推荐）</span>
+            <span className="font-semibold text-sail-ink">双通道出图（灵感图推荐）</span>
             <span className="text-sail-muted">
               {' '}
-              — 生成后自动追加一道「真实感精修」，对齐精修模式的逼真度。耗时和费用约 ×2。
+              — 生成后自动追加一道「真实感精修」，更逼真但整图会重画一遍，保真要求高时请用上面的合同图模式。耗时和费用约 ×2。
             </span>
           </span>
         </label>

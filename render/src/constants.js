@@ -134,6 +134,17 @@ export const ROOM_TYPES = [
 // 这是出图质量的核心 —— 比单写风格名稳定得多。
 export const STYLES = [
   {
+    // 品牌预设：总部溪岸的留白风 —— 放第一位并作默认
+    id: 'sail',
+    label: '溪岸留白 · 品牌',
+    en: 'SAIL restrained style (house style)',
+    prompt:
+      'generous negative space and breathing room, restrained curated composition, warm white walls, ' +
+      'light natural wood as the main accent, very few but intentional decor pieces, ' +
+      'soft diffused natural daylight, calm quiet-luxury atmosphere achieved through restraint — ' +
+      'nothing loud, nothing crowded',
+  },
+  {
     id: 'modern',
     label: '现代简约',
     en: 'modern minimalist style',
@@ -467,6 +478,26 @@ export const SWATCH_PROMPT =
   'no borders, no text. Even diffuse studio lighting, photographic texture fidelity ' +
   '(visible grain / weave / veining as appropriate), true-to-life color. ' +
   'It should look like a real physical material sample photographed straight-on.';
+
+// 合同图保真模式：追加到 prompt 的最高优先级保真指令
+export const CONTRACT_FIDELITY_PROMPT =
+  'CONTRACT RENDER — ABSOLUTE FIDELITY REQUIRED: this image will be signed by a client and the built result ' +
+  'must match it. Reproduce the source design EXACTLY: every wall stays a wall with no new openings or windows; ' +
+  'floor material, colour and plank direction unchanged; cabinetry keeps its exact proportions, panel divisions ' +
+  'and door style; hardware, skirting, light coves and switches are preserved, not redrawn. ' +
+  'When in doubt between beauty and fidelity, ALWAYS choose fidelity.';
+
+// 差异质检：比对底图与出图，四项逐查（对应用户最恼火的四类漂移）
+export const FIDELITY_QC_PROMPT =
+  '你是效果图质检员。图 1 是设计底图（唯一标准），图 2 是 AI 渲染结果。' +
+  '只检查设计保真度，忽略灯光氛围、材质细腻度、真实感的提升（那些是预期的改进）。逐项比对：\n' +
+  '① 墙体/开洞：有没有实心墙被打开、新增的窗/门/洞口、消失的隔断\n' +
+  '② 地板：材质、颜色、纹理方向有没有变\n' +
+  '③ 柜体：比例、分格、门板样式、悬空高度有没有被改\n' +
+  '④ 五金细节：拉手、踢脚线、灯槽、开关面板有没有丢失或乱画\n\n' +
+  '输出格式（中文，≤150 字，不要多余前言）：\n' +
+  '第一行只写一个总评：✅ 通过 / ⚠️ 轻微漂移 / ❌ 严重漂移\n' +
+  '然后四行，每行「①②③④ + 结论」：无变化直接写"无变化"；有变化用一句话说清楚变在哪里。';
 
 // 一键木作体检 —— 按四要点六项自检出结构化报告，含可直接发客户的话术
 export const WOOD_AUDIT_PROMPT =
