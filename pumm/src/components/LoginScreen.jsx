@@ -69,7 +69,7 @@ export default function LoginScreen({ members, onLogin }) {
             value={pin}
             onChange={(e) => { setPin(e.target.value); setError(''); }}
             onKeyDown={(e) => e.key === 'Enter' && attempt()}
-            placeholder="预设 1234"
+            placeholder="输入你的 PIN"
             className={`mt-1 ${inputCls}`}
           />
           {error && <p className="text-xs text-pumm-danger mt-2">{error}</p>}
@@ -79,7 +79,7 @@ export default function LoginScreen({ members, onLogin }) {
 
         <p className="text-[10px] text-pumm-faint text-center mt-4 leading-relaxed">
           登录是为了分清谁能看什么 —— 会员看不到别人的案例，理事会只看数字。<br />
-          桌长可在「会员与桌」里改每个人的 PIN。
+          刚开桌？开局账号预设 PIN 是 1234，进去后请在「我的」页立刻改掉。
         </p>
       </div>
     </div>

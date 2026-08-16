@@ -2,13 +2,37 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   ArrowLeft, Play, Pause, RotateCcw, Plus, Trash2, Check, X, Clock,
   MessageCircleQuestion, Lightbulb, Lock, CheckCircle2, Users, Flag,
+  Volume2, VolumeX, CalendarCheck,
 } from 'lucide-react';
-import { SESSION_PHASES, TABLE, ATTENDANCE_STATUS } from '../../constants.js';
+import { SESSION_PHASES, TABLE, ATTENDANCE_STATUS, VOICE_LANGS } from '../../constants.js';
 import {
   seatedMembers, memberById, memberName, uid, fmtDate, dueDateFor, mmss,
   openCommitments,
 } from '../../utils.js';
-import { Card, Button, Badge, Notice, Field, inputCls, inputBase, Hint, EmptyState, VoiceButton } from '../Shared.jsx';
+import {
+  Card, Button, Badge, Notice, Field, inputCls, inputBase, Hint, EmptyState,
+  VoiceButton, VoiceLangChip, armTimerSound, timerAlert,
+} from '../Shared.jsx';
+
+// ---------------------------------------------------------------------
+// 会中状态持久化 —— 3.5 小时的会，手机一定会锁屏/刷新。
+// 段落位置、当前案主、每段计时器都存 localStorage，回来接着开。
+// 计时器存的是「到点时刻」（绝对时间戳），刷新后按真实时间补足。
+// ---------------------------------------------------------------------
+const runKey = (sessId) => `pumm-run-${sessId}`;
+
+export function loadRunState(sessId) {
+  try { return JSON.parse(localStorage.getItem(runKey(sessId))) || {}; } catch { return {}; }
+}
+function saveRunState(sessId, patch) {
+  try {
+    const cur = loadRunState(sessId);
+    localStorage.setItem(runKey(sessId), JSON.stringify({ ...cur, ...patch }));
+  } catch { /* 隐私模式 */ }
+}
+export function clearRunState(sessId) {
+  try { localStorage.removeItem(runKey(sessId)); } catch { /* ignore */ }
+}
 
 export default function RunSessionView({
   snapshot, sessionId, onBack, onSaveSession, onSaveCase, onSaveCommitment,
@@ -16,8 +40,21 @@ export default function RunSessionView({
   const { members, sessions, cases, commitments } = snapshot;
   const sess = sessions.find(s => s.id === sessionId);
 
-  const [phaseIdx, setPhaseIdx] = useState(0);
-  const [presenterIdx, setPresenterIdx] = useState(0);
+  const saved = useMemo(() => loadRunState(sessionId), [sessionId]);
+  const [phaseIdx, setPhaseIdxRaw] = useState(() =>
+    Math.min(saved.phaseIdx || 0, SESSION_PHASES.length - 1));
+  const [presenterIdx, setPresenterIdxRaw] = useState(saved.presenterIdx || 0);
+
+  const setPhaseIdx = (v) => setPhaseIdxRaw(prev => {
+    const next = typeof v === 'function' ? v(prev) : v;
+    saveRunState(sessionId, { phaseIdx: next });
+    return next;
+  });
+  const setPresenterIdx = (v) => setPresenterIdxRaw(prev => {
+    const next = typeof v === 'function' ? v(prev) : v;
+    saveRunState(sessionId, { presenterIdx: next });
+    return next;
+  });
 
   const phase = SESSION_PHASES[phaseIdx];
   const presenters = useMemo(
@@ -85,7 +122,7 @@ export default function RunSessionView({
 
       <PhaseBar phaseIdx={phaseIdx} setPhaseIdx={setPhaseIdx} />
 
-      <PhaseTimer key={phase.key} minutes={phase.minutes} name={phase.name} />
+      <PhaseTimer key={phase.key} sessId={sess.id} phaseKey={phase.key} minutes={phase.minutes} name={phase.name} />
 
       {phase.perPresenter && presenters.length > 1 && (
         <div className="flex gap-1.5">
@@ -196,26 +233,82 @@ function PhaseBar({ phaseIdx, setPhaseIdx }) {
 }
 
 // =====================================================================
-// 计时器 —— 每段一个，超时会闪，但不会自己跳段（桌长说了算）
+// 计时器 —— 每段一个，超时会闪 + 响一声（可静音），不会自己跳段。
+// 状态存 localStorage（存「到点时刻」），刷新/锁屏回来接着走真实时间。
 // =====================================================================
-function PhaseTimer({ minutes, name }) {
+const MUTE_KEY = 'pumm-timer-mute';
+
+function PhaseTimer({ sessId, phaseKey, minutes, name }) {
   const total = minutes * 60;
-  const [left, setLeft] = useState(total);
-  const [running, setRunning] = useState(false);
-  const tick = useRef(null);
+
+  // 从持久化恢复：running 存 endAt（绝对毫秒），暂停存 pausedLeft（秒）
+  const restore = () => {
+    const t = (loadRunState(sessId).timers || {})[phaseKey];
+    if (!t) return { left: total, running: false };
+    if (t.running && t.endAt) return { left: Math.round((t.endAt - Date.now()) / 1000), running: true };
+    return { left: t.pausedLeft ?? total, running: false };
+  };
+  const init = restore();
+
+  const [left, setLeft] = useState(init.left);
+  const [running, setRunning] = useState(init.running);
+  const [muted, setMuted] = useState(() => {
+    try { return localStorage.getItem(MUTE_KEY) === '1'; } catch { return false; }
+  });
+  const alerted = useRef(init.left < 0);      // 恢复时已超时就别再响一次
+
+  const persistTimer = (t) => {
+    const cur = loadRunState(sessId);
+    saveRunState(sessId, { timers: { ...(cur.timers || {}), [phaseKey]: t } });
+  };
 
   useEffect(() => {
     if (!running) return undefined;
-    tick.current = setInterval(() => setLeft(l => l - 1), 1000);
-    return () => clearInterval(tick.current);
-  }, [running]);
+    const iv = setInterval(() => {
+      setLeft(l => {
+        const next = l - 1;
+        if (next < 0 && !alerted.current) {
+          alerted.current = true;
+          timerAlert(muted);
+        }
+        return next;
+      });
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [running, muted]);
+
+  const toggleRun = () => {
+    if (running) {
+      setRunning(false);
+      persistTimer({ running: false, pausedLeft: left });
+    } else {
+      armTimerSound();                        // 手势时机建 AudioContext
+      alerted.current = left < 0;
+      setRunning(true);
+      persistTimer({ running: true, endAt: Date.now() + left * 1000 });
+    }
+  };
+
+  const reset = () => {
+    setRunning(false);
+    setLeft(total);
+    alerted.current = false;
+    persistTimer({ running: false, pausedLeft: total });
+  };
+
+  const toggleMute = () => {
+    setMuted(m => {
+      try { localStorage.setItem(MUTE_KEY, m ? '0' : '1'); } catch { /* ignore */ }
+      return !m;
+    });
+  };
 
   const over = left < 0;
   const pctLeft = Math.max(0, Math.min(1, left / total));
 
   return (
     <div className="bg-white border border-pumm-line rounded-lg px-4 py-3 no-print">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2.5">
         <Clock className={`w-4 h-4 flex-shrink-0 ${over ? 'text-pumm-danger timer-over' : 'text-pumm-faint'}`} />
         <div
           className={`font-display text-2xl font-semibold tabular-nums leading-none ${over ? 'text-pumm-danger timer-over' : 'text-pumm-ink'}`}
@@ -223,12 +316,19 @@ function PhaseTimer({ minutes, name }) {
           {over ? '+' : ''}{mmss(Math.abs(left))}
         </div>
         <div className="text-xs text-pumm-muted flex-1 min-w-0 truncate">
-          {name} · 预定 {minutes} 分钟{over ? ' · 超时了' : ''}
+          {name} · {minutes}′{over ? ' · 超时' : ''}
         </div>
-        <Button size="sm" tone={running ? 'ghost' : 'primary'} icon={running ? Pause : Play} onClick={() => setRunning(r => !r)}>
+        <button
+          type="button" onClick={toggleMute}
+          title={muted ? '已静音（只震动）' : '到点会响'}
+          className="p-1.5 text-pumm-faint hover:text-pumm-ink"
+        >
+          {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+        </button>
+        <Button size="sm" tone={running ? 'ghost' : 'primary'} icon={running ? Pause : Play} onClick={toggleRun}>
           {running ? '暂停' : '开始'}
         </Button>
-        <Button size="sm" icon={RotateCcw} onClick={() => { setRunning(false); setLeft(total); }} aria-label="重置">
+        <Button size="sm" icon={RotateCcw} onClick={reset} aria-label="重置">
           <span className="sr-only">重置</span>
         </Button>
       </div>
@@ -252,11 +352,25 @@ function ReviewPhase({ snapshot, sess, patchSession, onSaveCommitment }) {
   const [notes, setNotes] = useState({});
 
   const marks = sess.attendance || {};
+  const rsvp = sess.rsvp || {};
   const setMark = (memberId, status) =>
     patchSession({ attendance: { ...marks, [memberId]: status } });
 
   const markAllPresent = () =>
     patchSession({ attendance: { ...Object.fromEntries(seated.map(m => [m.id, 'present'])), ...marks } });
+
+  // 按会员的自助预报预填：我会到→出席，请假→请假；没报的不动
+  const rsvpYes = seated.filter(m => rsvp[m.id] === 'yes').length;
+  const rsvpNo = seated.filter(m => rsvp[m.id] === 'no').length;
+  const prefillFromRsvp = () =>
+    patchSession({
+      attendance: {
+        ...Object.fromEntries(
+          seated.filter(m => rsvp[m.id]).map(m => [m.id, rsvp[m.id] === 'yes' ? 'present' : 'excused'])
+        ),
+        ...marks,
+      },
+    });
 
   const close = (c, status) =>
     onSaveCommitment({
@@ -273,15 +387,23 @@ function ReviewPhase({ snapshot, sess, patchSession, onSaveCommitment }) {
     <div className="space-y-5">
       {/* ---- 出席登记 ---- */}
       <div>
-        <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
           <div className="flex items-center gap-1.5">
             <Users className="w-4 h-4 text-pumm-faint" />
             <span className="text-sm font-semibold text-pumm-ink">出席登记</span>
             <span className="text-xs text-pumm-faint">{markedCount}/{seated.length}</span>
+            {(rsvpYes > 0 || rsvpNo > 0) && (
+              <Badge color="#B08D4F"><CalendarCheck className="w-3 h-3" />预报 到{rsvpYes}·假{rsvpNo}</Badge>
+            )}
           </div>
-          <Button size="sm" onClick={markAllPresent}>全部标到</Button>
+          <div className="flex gap-1.5">
+            {(rsvpYes > 0 || rsvpNo > 0) && (
+              <Button size="sm" tone="brass" onClick={prefillFromRsvp}>按预报预填</Button>
+            )}
+            <Button size="sm" onClick={markAllPresent}>全部标到</Button>
+          </div>
         </div>
-        <Hint>先按「全部标到」，再把没来的人改掉 —— 两三下就完事。请假与无故缺席要分清，只有无故缺席才累计出局。</Hint>
+        <Hint>会员会前自助报过的，按「按预报预填」一键带入；再把没报的人补上。请假与无故缺席要分清，只有无故缺席才累计出局。</Hint>
 
         <div className="space-y-1.5 mt-2">
           {seated.map(m => (
@@ -325,15 +447,23 @@ function ReviewPhase({ snapshot, sess, patchSession, onSaveCommitment }) {
               <div key={c.id} className="border border-pumm-line rounded-md p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    <div className="text-sm font-semibold text-pumm-ink">{memberName(members, c.memberId)}</div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-sm font-semibold text-pumm-ink">{memberName(members, c.memberId)}</span>
+                      {c.selfDone && <Badge color="#3F7D5C">本人自评：做完了</Badge>}
+                    </div>
                     <div className="text-sm text-pumm-ink mt-0.5 leading-snug">{c.content}</div>
                     <div className="text-[11px] text-pumm-faint mt-1">到期 {fmtDate(c.dueDate)}</div>
+                    {c.selfNote && (
+                      <div className="text-xs text-pumm-muted mt-1 pl-2 border-l-2 border-pumm-line">
+                        本人进度：{c.selfNote}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <input
                   className={`${inputCls} mt-2`}
                   placeholder="一句话复盘（做到什么／卡在哪）"
-                  value={notes[c.id] ?? c.reviewNote ?? ''}
+                  value={notes[c.id] ?? c.reviewNote ?? c.selfNote ?? ''}
                   onChange={e => setNotes(n => ({ ...n, [c.id]: e.target.value }))}
                 />
                 <div className="flex gap-2 mt-2">
@@ -376,6 +506,7 @@ function StatePhase({ presenter, kase, patchCase }) {
       </Field>
       <div className="flex gap-2">
         <Button tone="primary" onClick={() => patchCase(presenter.id, { problemStatement: text })}>存下这句话</Button>
+        <VoiceLangChip langs={VOICE_LANGS} />
         <VoiceButton onText={(t) => setText(prev => (prev ? `${prev}${t}` : t))} />
       </div>
     </div>
@@ -421,6 +552,7 @@ function AskPhase({ members, presenter, kase, patchCase }) {
           onKeyDown={e => { if (e.key === 'Enter') add(); }}
           placeholder="问题…（打完按 Enter，或按麦克风说）"
         />
+        <VoiceLangChip langs={VOICE_LANGS} />
         <VoiceButton onText={(t) => setText(prev => (prev ? `${prev}${t}` : t))} />
         <Button tone="primary" icon={Plus} onClick={add}>加</Button>
       </div>
@@ -519,6 +651,7 @@ function AdvisePhase({ members, presenter, kase, patchCase }) {
           onKeyDown={e => { if (e.key === 'Enter') add(); }}
           placeholder={nextUp ? `轮到 ${nextUp.name}…（按 Enter 或按麦克风说）` : '建议…'}
         />
+        <VoiceLangChip langs={VOICE_LANGS} />
         <VoiceButton onText={(t) => setText(prev => (prev ? `${prev}${t}` : t))} />
         <Button tone="primary" icon={Plus} onClick={add}>加</Button>
       </div>
@@ -672,6 +805,7 @@ function TakeawayPhase({ members, sess, patchSession, cases, commitments, onBack
     // 案例的归档时间由「案例资产」页按一次「归档」写入 ——
     // 散会不强制归档，记录员通常要回去补完整才归档。
     patchSession({ status: 'closed', closedAt: new Date().toISOString() });
+    clearRunState(sess.id);                  // 散会 = 会中进度归零，下场从头开始
     onBack();
   };
 

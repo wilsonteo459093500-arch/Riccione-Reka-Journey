@@ -513,6 +513,96 @@ export function suggestPresenters(members, sessions, cases, count = 2) {
     .map(m => m.id);
 }
 
+// ---------------------------------------------------------------------
+// Case Record → 分享长图（WhatsApp 直接发）。
+// 不用第三方库：Canvas 手绘排版，中文按字符折行。
+// ---------------------------------------------------------------------
+export function caseToImageBlob(kase, { members, session }) {
+  const presenter = memberById(members, kase.presenterId);
+  const W = 900, PAD = 56, LINE = 40, SMALL = 32;
+  const wrap = (ctx, text, maxW) => {
+    const out = [];
+    let line = '';
+    for (const ch of String(text || '—')) {
+      if (ch === '\n') { out.push(line); line = ''; continue; }
+      if (ctx.measureText(line + ch).width > maxW) { out.push(line); line = ch; }
+      else line += ch;
+    }
+    if (line) out.push(line);
+    return out;
+  };
+
+  // 先量高再画
+  const measure = document.createElement('canvas').getContext('2d');
+  const blocks = [];
+  const addBlock = (label, text, opts = {}) => blocks.push({ label, text, ...opts });
+
+  addBlock(null, 'PUMM ROUNDTABLE · CASE RECORD', { title: true });
+  addBlock(null, `${fmtDate(session?.date)}　${presenter ? `${presenter.name} · ${presenter.industry}` : ''}`, { sub: true });
+  addBlock('问题 · 一句话', kase.problemStatement);
+  addBlock(`只提问（${(kase.questions || []).length}）`,
+    (kase.questions || []).map((q, i) => `${i + 1}. ${q.text} —— ${memberName(members, q.askerId)}`).join('\n'));
+  addBlock(`同桌老板给的建议（${(kase.advices || []).length}）`,
+    (kase.advices || []).map((a, i) => `${i + 1}. ${a.text} —— ${memberName(members, a.advisorId)}`).join('\n'));
+  addBlock('锁诺 · 30 天 1 件事',
+    `${kase.commitmentText || '—'}${kase.commitmentDue ? `\n到期：${fmtDate(kase.commitmentDue)}` : ''}`);
+  addBlock(null, '老板帮老板 —— 给建议的全是同桌的老板，不是顾问。', { footer: true });
+
+  let h = PAD;
+  const layout = [];
+  for (const b of blocks) {
+    const fontBody = b.title ? 'bold 40px sans-serif' : b.sub ? '28px sans-serif' : b.footer ? '26px sans-serif' : '30px sans-serif';
+    measure.font = fontBody;
+    const lines = wrap(measure, b.text, W - PAD * 2);
+    layout.push({ ...b, lines, fontBody });
+    if (b.label) h += SMALL + 8;
+    h += lines.length * LINE + (b.title || b.sub ? 12 : 28);
+  }
+  h += PAD;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#F6F4EF';
+  ctx.fillRect(0, 0, W, h);
+  ctx.fillStyle = '#23303D';
+  ctx.fillRect(0, 0, W, 10);
+
+  let y = PAD + 8;
+  for (const b of layout) {
+    if (b.label) {
+      ctx.font = 'bold 24px sans-serif';
+      ctx.fillStyle = '#B08D4F';
+      ctx.fillText(b.label, PAD, y);
+      y += SMALL + 8;
+    }
+    ctx.font = b.fontBody;
+    ctx.fillStyle = b.sub || b.footer ? '#585B60' : '#17181A';
+    for (const line of b.lines) {
+      ctx.fillText(line, PAD, y);
+      y += LINE;
+    }
+    y += b.title || b.sub ? 12 : 28;
+  }
+
+  return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+}
+
+/** 分享长图：手机上直接进 WhatsApp 分享面板，电脑上退化为下载 PNG */
+export async function shareCaseImage(kase, ctxData, filename) {
+  const blob = await caseToImageBlob(kase, ctxData);
+  if (!blob) return false;
+  const file = new File([blob], filename, { type: 'image/png' });
+  if (navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file] }); return true; } catch { /* 用户取消 */ }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+  return true;
+}
+
 export const roleMeta = (role) => ROLES[role] || ROLES.member;
 export const attendanceMeta = (s) => ATTENDANCE_STATUS[s] || { label: '未记录', color: '#7C8087', short: '—' };
 export const commitmentMeta = (s) => COMMITMENT_STATUS[s] || COMMITMENT_STATUS.open;

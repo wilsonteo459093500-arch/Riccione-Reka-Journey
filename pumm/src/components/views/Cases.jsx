@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import {
   FileText, Search, Printer, Archive, Megaphone, Lightbulb, MessageCircleQuestion, Lock,
+  Download, Share2,
 } from 'lucide-react';
 import {
-  memberById, memberName, fmtDate, caseToText, caseToStoryText, download,
+  memberById, memberName, fmtDate, caseToText, caseToStoryText, download, shareCaseImage,
 } from '../../utils.js';
 import {
   Card, Button, Badge, EmptyState, SectionTitle, Hint, Modal, CopyButton, Notice, inputCls,
@@ -119,6 +120,26 @@ function CaseRecordModal({ kase, members, session, canEdit, onSaveCase, onClose 
 
   const recordText = caseToText(kase, { members, session });
   const storyText = caseToStoryText(kase, { members, session });
+  const baseName = `pumm-case-${session?.date || ''}-${presenter?.name || ''}`;
+
+  // 打印/存 PDF：把当前文字版临时挂到 body 下，只印它
+  const printRecord = () => {
+    const sheet = document.createElement('pre');
+    sheet.className = 'case-print-sheet';
+    sheet.style.whiteSpace = 'pre-wrap';
+    sheet.textContent = tab === 'record' ? recordText : storyText;
+    document.body.appendChild(sheet);
+    document.body.classList.add('printing-case');
+    const cleanup = () => {
+      document.body.classList.remove('printing-case');
+      sheet.remove();
+      window.removeEventListener('afterprint', cleanup);
+    };
+    window.addEventListener('afterprint', cleanup);
+    window.print();
+    // Safari 不一定触发 afterprint，兜底清一次
+    setTimeout(cleanup, 2000);
+  };
 
   const archive = () => onSaveCase({
     ...kase,
@@ -134,14 +155,15 @@ function CaseRecordModal({ kase, members, session, canEdit, onSaveCase, onClose 
       onClose={onClose}
       footer={<>
         <CopyButton size="md" text={tab === 'record' ? recordText : storyText} label="复制文字" />
+        <Button icon={Share2} onClick={() => shareCaseImage(kase, { members, session }, `${baseName}.png`)}>
+          分享图片
+        </Button>
+        <Button icon={Printer} onClick={printRecord}>打印 / PDF</Button>
         <Button
-          icon={Printer}
-          onClick={() => download(
-            `pumm-case-${session?.date || ''}-${presenter?.name || ''}.txt`,
-            tab === 'record' ? recordText : storyText
-          )}
+          icon={Download}
+          onClick={() => download(`${baseName}.txt`, tab === 'record' ? recordText : storyText)}
         >
-          下载
+          txt
         </Button>
         {canEdit && (
           <Button tone={kase.archivedAt ? 'ghost' : 'primary'} icon={Archive} onClick={archive}>

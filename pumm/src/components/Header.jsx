@@ -43,7 +43,8 @@ export default function Header({ tabs, view, setView, session, onLogout, reminde
           </div>
         </div>
 
-        <nav className="flex gap-0.5 overflow-x-auto scrollbar-thin -mx-1 px-1">
+        {/* 顶部页签只给桌面端；手机用底部导航（BottomNav） */}
+        <nav className="hidden sm:flex gap-0.5 overflow-x-auto scrollbar-thin -mx-1 px-1">
           {tabs.map(t => (
             <button
               key={t}

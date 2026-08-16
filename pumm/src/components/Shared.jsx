@@ -116,7 +116,36 @@ const SR = typeof window !== 'undefined'
 
 export const voiceSupported = !!SR;
 
-export function VoiceButton({ onText, lang = 'zh-CN', title = '按住说，说完自动停' }) {
+// 语音语言全局记住一个（桌上主要讲哪种就切哪种），存浏览器本地
+const VOICE_LANG_KEY = 'pumm-voice-lang';
+export const getVoiceLang = () => {
+  try { return localStorage.getItem(VOICE_LANG_KEY) || 'zh-CN'; } catch { return 'zh-CN'; }
+};
+const setVoiceLang = (code) => { try { localStorage.setItem(VOICE_LANG_KEY, code); } catch { /* 隐私模式 */ } };
+
+/** 华/EN/BM 循环切换的小 chip —— 只在浏览器支持语音时出现 */
+export function VoiceLangChip({ langs }) {
+  const [code, setCode] = useState(getVoiceLang());
+  if (!SR) return null;
+  const idx = langs.findIndex(l => l.code === code);
+  const cur = langs[idx >= 0 ? idx : 0];
+  const next = () => {
+    const n = langs[(langs.findIndex(l => l.code === cur.code) + 1) % langs.length];
+    setVoiceLang(n.code);
+    setCode(n.code);
+  };
+  return (
+    <button
+      type="button" onClick={next}
+      title={`语音识别语言：${cur.label}（点击切换）`}
+      className="inline-flex items-center justify-center w-9 rounded-md border border-pumm-line bg-white text-[11px] font-semibold text-pumm-muted hover:border-pumm-brand hover:text-pumm-brand flex-shrink-0"
+    >
+      {cur.label}
+    </button>
+  );
+}
+
+export function VoiceButton({ onText, title = '按一下说话，说完自动停' }) {
   const [listening, setListening] = useState(false);
   const recRef = useRef(null);
 
@@ -130,7 +159,7 @@ export function VoiceButton({ onText, lang = 'zh-CN', title = '按住说，说�
       return;
     }
     const rec = new SR();
-    rec.lang = lang;
+    rec.lang = getVoiceLang();
     rec.continuous = false;         // 一句一停：说完一条建议就落一条，节奏跟会议一致
     rec.interimResults = false;
     rec.onresult = (e) => {
@@ -159,6 +188,37 @@ export function VoiceButton({ onText, lang = 'zh-CN', title = '按住说，说�
       {listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
     </button>
   );
+}
+
+// ---------------- 计时到点提醒 ----------------
+// WebAudio 两声短哔 + 手机震动。AudioContext 在用户按「开始」那一下
+// 建好（浏览器要求有手势才准出声）。
+let audioCtx = null;
+export function armTimerSound() {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  } catch { audioCtx = null; }
+}
+
+export function timerAlert(muted) {
+  if (!muted && audioCtx) {
+    try {
+      [0, 0.35].forEach(delay => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 880;
+        gain.gain.setValueAtTime(0.001, audioCtx.currentTime + delay);
+        gain.gain.exponentialRampToValueAtTime(0.35, audioCtx.currentTime + delay + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + delay + 0.28);
+        osc.connect(gain).connect(audioCtx.destination);
+        osc.start(audioCtx.currentTime + delay);
+        osc.stop(audioCtx.currentTime + delay + 0.3);
+      });
+    } catch { /* 出不了声就算了 */ }
+  }
+  try { navigator.vibrate?.([200, 120, 200]); } catch { /* 桌面浏览器没有震动 */ }
 }
 
 // ---------------- 弹窗 ----------------

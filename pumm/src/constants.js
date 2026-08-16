@@ -61,7 +61,7 @@ export function can(role, capability) {
 export const ROLE_TABS = {
   chair:    ['dashboard', 'members', 'prospects', 'schedule', 'run', 'commitments', 'cases', 'reminders', 'rules'],
   recorder: ['dashboard', 'schedule', 'run', 'commitments', 'cases', 'reminders', 'rules'],
-  member:   ['me', 'schedule', 'rules'],
+  member:   ['me', 'roster', 'schedule', 'rules'],
   director: ['dashboard', 'rules'],
 };
 
@@ -76,6 +76,7 @@ export const TAB_LABELS = {
   reminders:   '提醒',
   rules:       '桌规',
   me:          '我的',
+  roster:      '名单',
 };
 
 // ---------------------------------------------------------------------
@@ -183,6 +184,13 @@ export const METRIC_TARGETS = {
   commitmentRate: { label: '承诺达成率', target: null, unit: '%', gate: false,
     formula: 'done / 总承诺' },
 };
+
+// 会中语音识别可选语言 —— 马来西亚桌上华语/英语/马来语混着讲
+export const VOICE_LANGS = [
+  { code: 'zh-CN', label: '华' },
+  { code: 'en-US', label: 'EN' },
+  { code: 'ms-MY', label: 'BM' },
+];
 
 export const APP_NAME = 'PUMM ROUNDTABLE';
 export const APP_TAGLINE = '老板帮老板';

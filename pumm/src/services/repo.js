@@ -31,7 +31,7 @@ const upgrade = {
     ...m,
   }),
   sessions: (s) => ({
-    status: 'scheduled', presenterIds: [], attendance: {}, takeaways: [], notes: '',
+    status: 'scheduled', presenterIds: [], attendance: {}, rsvp: {}, takeaways: [], notes: '',
     ...s,
   }),
   cases: (c) => ({
@@ -41,6 +41,7 @@ const upgrade = {
   }),
   commitments: (c) => ({
     status: 'open', reviewNote: '', reviewedAt: null, sourceAdviceIds: [],
+    selfDone: false, selfNote: '', selfAt: null,
     ...c,
   }),
   prospects: (p) => ({

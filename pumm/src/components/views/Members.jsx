@@ -9,6 +9,11 @@ import { Card, Button, Badge, Notice, EmptyState, SectionTitle, Hint } from '../
 import MemberFormModal from '../modals/MemberFormModal.jsx';
 
 export default function MembersView({ snapshot, onSaveMember, onLoadDemo, canManage }) {
+  const confirmDemo = () => {
+    if (window.confirm('示范数据会覆盖现有全部数据，并把你切换成示范桌的桌长身份。确定载入？')) {
+      onLoadDemo();
+    }
+  };
   const { members, sessions } = snapshot;
   const [editing, setEditing] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -71,7 +76,7 @@ export default function MembersView({ snapshot, onSaveMember, onLoadDemo, canMan
               </Hint>
               <div className="flex gap-2 mt-3">
                 <Button tone="primary" icon={UserPlus} onClick={() => setAdding(true)}>加第一位</Button>
-                <Button icon={Sparkles} onClick={onLoadDemo}>载入示范数据</Button>
+                <Button icon={Sparkles} onClick={confirmDemo}>载入示范数据</Button>
               </div>
             </div>
           </div>

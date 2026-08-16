@@ -8,7 +8,7 @@ import {
 import { Card, Button, Badge, Modal, Field, inputCls, EmptyState, SectionTitle, Hint, Notice } from '../Shared.jsx';
 
 export default function ScheduleView({
-  snapshot, session, canManage, canRecordAttendance, onSaveSession, onSaveSessions, onRun,
+  snapshot, session, canManage, canRecordAttendance, onSaveSession, onSaveSessions, onRun, onRsvp,
 }) {
   const { members, sessions } = snapshot;
   const [editing, setEditing] = useState(null);
@@ -68,7 +68,7 @@ export default function ScheduleView({
               <SessionRow
                 key={s.id} s={s} members={members} me={session}
                 canManage={canManage} canRecordAttendance={canRecordAttendance}
-                onEdit={() => setEditing(s)} onRun={() => onRun(s.id)}
+                onEdit={() => setEditing(s)} onRun={() => onRun(s.id)} onRsvp={onRsvp}
               />
             ))}
           </div>
@@ -111,14 +111,20 @@ export default function ScheduleView({
 }
 
 // ---------------------------------------------------------------------
-function SessionRow({ s, members, me, canManage, canRecordAttendance, onEdit, onRun, past }) {
+function SessionRow({ s, members, me, canManage, canRecordAttendance, onEdit, onRun, onRsvp, past }) {
   const meta = SESSION_STATUS[s.status] || SESSION_STATUS.scheduled;
   const d = daysUntil(s.date);
   const presenters = (s.presenterIds || []).map(id => memberById(members, id)).filter(Boolean);
   const marks = s.attendance || {};
+  const rsvp = s.rsvp || {};
   const presentCount = Object.values(marks).filter(v => v === 'present').length;
   const marked = Object.keys(marks).length;
   const myMark = marks[me.memberId];
+  const myRsvp = rsvp[me.memberId];
+  const rsvpYes = Object.values(rsvp).filter(v => v === 'yes').length;
+  const rsvpNo = Object.values(rsvp).filter(v => v === 'no').length;
+  // 会员对还没开始的场次可以自助预报出席
+  const canRsvp = !!onRsvp && !canRecordAttendance && s.status === 'scheduled' && !past;
 
   return (
     <div className={`bg-white border border-pumm-line rounded-lg p-3.5 ${past ? 'opacity-80' : ''}`}>
@@ -149,6 +155,35 @@ function SessionRow({ s, members, me, canManage, canRecordAttendance, onEdit, on
           {marked > 0 && (
             <div className="text-[11px] text-pumm-faint mt-1">
               出席 {presentCount}/{marked} 人已登记
+            </div>
+          )}
+          {canRecordAttendance && (rsvpYes > 0 || rsvpNo > 0) && (
+            <div className="text-[11px] text-pumm-brass mt-1">
+              会员预报：到 {rsvpYes} · 请假 {rsvpNo}
+            </div>
+          )}
+
+          {canRsvp && (
+            <div className="flex items-center gap-1.5 mt-2.5">
+              <span className="text-[11px] text-pumm-muted">这场我：</span>
+              <button
+                type="button"
+                onClick={() => onRsvp(s.id, myRsvp === 'yes' ? null : 'yes')}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold border transition-colors ${
+                  myRsvp === 'yes' ? 'bg-pumm-ok text-white border-pumm-ok' : 'bg-white text-pumm-muted border-pumm-line'
+                }`}
+              >
+                ✓ 我会到
+              </button>
+              <button
+                type="button"
+                onClick={() => onRsvp(s.id, myRsvp === 'no' ? null : 'no')}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold border transition-colors ${
+                  myRsvp === 'no' ? 'bg-pumm-warn text-white border-pumm-warn' : 'bg-white text-pumm-muted border-pumm-line'
+                }`}
+              >
+                请假
+              </button>
             </div>
           )}
         </div>

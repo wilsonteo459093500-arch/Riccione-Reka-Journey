@@ -17,6 +17,8 @@ import CommitmentsView from './components/views/Commitments.jsx';
 import CasesView       from './components/views/Cases.jsx';
 import RemindersView   from './components/views/Reminders.jsx';
 import RulesView       from './components/views/Rules.jsx';
+import RosterView      from './components/views/Roster.jsx';
+import BottomNav       from './components/BottomNav.jsx';
 import MyPageView      from './components/views/MyPage.jsx';
 
 export default function App() {
@@ -25,7 +27,29 @@ export default function App() {
     try { return JSON.parse(sessionStorage.getItem(SESSION_KEY)); } catch { return null; }
   });
   const [view, setView] = useState('dashboard');
-  const [runningId, setRunningId] = useState(null);
+  // 会中刷新恢复：进入主持模式时记下场次 id，刷新回来自动接着开
+  const [runningId, setRunningId] = useState(() => {
+    try { return localStorage.getItem('pumm-active-run') || null; } catch { return null; }
+  });
+
+  const enterRun = useCallback((id) => {
+    try { localStorage.setItem('pumm-active-run', id); } catch { /* ignore */ }
+    setRunningId(id);
+    setView('run');
+  }, []);
+  const exitRun = useCallback(() => {
+    try { localStorage.removeItem('pumm-active-run'); } catch { /* ignore */ }
+    setRunningId(null);
+  }, []);
+
+  // 恢复的场次已经散会/被删 → 清掉，不要把人困在主持模式
+  useEffect(() => {
+    if (!snapshot || !runningId) return;
+    const s = snapshot.sessions.find(x => x.id === runningId);
+    if (!s || s.status === 'closed') exitRun();
+    else setView('run');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snapshot === null]);
 
   // 登录状态只存在这个页签里，关掉就要重登
   useEffect(() => {
@@ -74,6 +98,32 @@ export default function App() {
   const saveSessions   = useCallback((rows) => repo.upsertMany('sessions', rows), []);
   const saveCase       = useCallback((c) => repo.upsert('cases', c), []);
   const saveCommitment = useCallback((c) => repo.upsert('commitments', c), []);
+
+  // 会员自改 PIN（旧 PIN 已在 MyPage 校验过）
+  const changeMyPin = useCallback((newPin) => {
+    const me = repo.getSnapshot().members.find(m => m.id === session?.memberId);
+    if (me) repo.upsert('members', { ...me, pin: newPin, updatedAt: new Date().toISOString() });
+  }, [session?.memberId]);
+
+  // 会员承诺自评：只动 selfDone/selfNote，正式状态仍由桌上复盘写
+  const selfReport = useCallback((commitmentId, done, note) => {
+    const c = repo.getSnapshot().commitments.find(x => x.id === commitmentId);
+    if (!c || c.memberId !== session?.memberId) return;
+    repo.upsert('commitments', {
+      ...c, selfDone: done, selfNote: note || '',
+      selfAt: done ? new Date().toISOString() : null,
+      updatedAt: new Date().toISOString(),
+    });
+  }, [session?.memberId]);
+
+  // 会员出席预报：我会到 / 请假 / 取消
+  const rsvpSession = useCallback((sessionId, answer) => {
+    const s = repo.getSnapshot().sessions.find(x => x.id === sessionId);
+    if (!s || !session?.memberId) return;
+    const rsvp = { ...(s.rsvp || {}) };
+    if (answer) rsvp[session.memberId] = answer; else delete rsvp[session.memberId];
+    repo.upsert('sessions', { ...s, rsvp, updatedAt: new Date().toISOString() });
+  }, [session?.memberId]);
   // 示范数据会覆盖整份名单，所以顺手把你切成示范桌的桌长 —— 否则你登录用的
   // 那个账号被换掉，人就被弹回登录页了。
   const loadDemo = useCallback(async () => {
@@ -118,18 +168,18 @@ export default function App() {
       <Header
         tabs={tabs}
         view={view}
-        setView={(v) => { setView(v); if (v !== 'run') setRunningId(null); }}
+        setView={(v) => { setView(v); if (v !== 'run') exitRun(); }}
         session={session}
         onLogout={() => setSession(null)}
         reminderCount={reminders.filter(r => r.level === 'urgent').length}
       />
 
-      <main className="max-w-6xl mx-auto px-4 py-5 pb-16 safe-bottom">
+      <main className="max-w-6xl mx-auto px-4 py-5 pb-24 sm:pb-16 safe-bottom">
         {inRunMode ? (
           <RunSessionView
             snapshot={snapshot}
             sessionId={runningId}
-            onBack={() => { setRunningId(null); setView('schedule'); }}
+            onBack={() => { exitRun(); setView('schedule'); }}
             onSaveSession={saveSession}
             onSaveCase={saveCase}
             onSaveCommitment={saveCommitment}
@@ -138,11 +188,20 @@ export default function App() {
           <Views
             view={view} role={role} session={session} snapshot={snapshot}
             reminders={reminders}
-            actions={{ saveMember, saveProspect, removeProspect, saveSession, saveSessions, saveCase, saveCommitment, loadDemo }}
-            onRun={(id) => { setRunningId(id); setView('run'); }}
+            actions={{ saveMember, saveProspect, removeProspect, saveSession, saveSessions, saveCase, saveCommitment, loadDemo, changeMyPin, selfReport, rsvpSession }}
+            onRun={enterRun}
           />
         )}
       </main>
+
+      {!inRunMode && (
+        <BottomNav
+          tabs={tabs}
+          view={view}
+          setView={(v) => { setView(v); if (v !== 'run') exitRun(); }}
+          reminderCount={reminders.filter(r => r.level === 'urgent').length}
+        />
+      )}
     </div>
   );
 }
@@ -154,7 +213,7 @@ function Views({ view, role, session, snapshot, actions, onRun }) {
   switch (view) {
     case 'dashboard':
       return can(role, 'viewStats')
-        ? <DashboardView snapshot={snapshot} role={role} />
+        ? <DashboardView snapshot={snapshot} role={role} onRun={can(role, 'runSession') ? onRun : null} />
         : <PermissionWall what="看板" />;
 
     case 'members':
@@ -186,6 +245,7 @@ function Views({ view, role, session, snapshot, actions, onRun }) {
           onSaveSession={actions.saveSession}
           onSaveSessions={actions.saveSessions}
           onRun={onRun}
+          onRsvp={actions.rsvpSession}
         />
       );
 
@@ -200,6 +260,7 @@ function Views({ view, role, session, snapshot, actions, onRun }) {
             onSaveSession={actions.saveSession}
             onSaveSessions={actions.saveSessions}
             onRun={onRun}
+            onRsvp={actions.rsvpSession}
           />
         : <PermissionWall what="会议运行" />;
 
@@ -224,7 +285,17 @@ function Views({ view, role, session, snapshot, actions, onRun }) {
         : <PermissionWall what="提醒" />;
 
     case 'me':
-      return <MyPageView snapshot={snapshot} session={session} />;
+      return (
+        <MyPageView
+          snapshot={snapshot}
+          session={session}
+          onChangePin={actions.changeMyPin}
+          onSelfReport={actions.selfReport}
+        />
+      );
+
+    case 'roster':
+      return <RosterView snapshot={snapshot} />;
 
     case 'rules':
     default:

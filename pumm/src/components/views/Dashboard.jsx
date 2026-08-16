@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { TrendingUp, AlertTriangle, CheckCircle2, CalendarDays, Lightbulb } from 'lucide-react';
+import { TrendingUp, AlertTriangle, CheckCircle2, CalendarDays, Lightbulb, Play, HardDrive } from 'lucide-react';
+import { repo } from '../../services/repo.js';
 import { METRIC_TARGETS, TABLE_STEPS, TABLE } from '../../constants.js';
 import {
   computeMetrics, pilotVerdict, pct, fmtDate, todayISO, daysUntil, memberById,
@@ -7,7 +8,7 @@ import {
 } from '../../utils.js';
 import { Card, StatCard, Notice, SectionTitle, Hint, Badge } from '../Shared.jsx';
 
-export default function DashboardView({ snapshot, role }) {
+export default function DashboardView({ snapshot, role, onRun }) {
   const metrics = useMemo(() => computeMetrics(snapshot), [snapshot]);
   const verdict = useMemo(() => pilotVerdict(metrics), [metrics]);
   const leaderboard = useMemo(
@@ -31,6 +32,13 @@ export default function DashboardView({ snapshot, role }) {
         </Notice>
       )}
 
+      {repo.mode === 'local' && !isDirector && (
+        <Notice tone="warn" icon={HardDrive} title="本地模式：数据只在这台设备">
+          还没接云端同步 —— 你在这里录的东西，会员的手机上看不到。
+          发网址给会员之前，先照 DEPLOY.md 第 2–3 节接上 Supabase（约 10 分钟）。
+        </Notice>
+      )}
+
       {next && (
         <Card className="bg-pumm-brand text-white border-pumm-brand">
           <div className="flex items-center gap-3">
@@ -44,12 +52,23 @@ export default function DashboardView({ snapshot, role }) {
                 </div>
               )}
             </div>
-            <div className="text-right flex-shrink-0">
-              <div className="font-display text-2xl font-semibold leading-none">
-                {Math.max(0, daysUntil(next.date) ?? 0)}
+            {onRun && (daysUntil(next.date) ?? 99) <= 1 && next.status !== 'closed' ? (
+              <button
+                type="button"
+                onClick={() => onRun(next.id)}
+                className="flex items-center gap-1.5 bg-pumm-brass hover:bg-[#9A7A42] text-white text-sm font-semibold rounded-lg px-4 py-2.5 flex-shrink-0"
+              >
+                <Play className="w-4 h-4" />
+                {next.status === 'running' ? '继续开会' : '开场'}
+              </button>
+            ) : (
+              <div className="text-right flex-shrink-0">
+                <div className="font-display text-2xl font-semibold leading-none">
+                  {Math.max(0, daysUntil(next.date) ?? 0)}
+                </div>
+                <div className="text-[10px] opacity-70">天后</div>
               </div>
-              <div className="text-[10px] opacity-70">天后</div>
-            </div>
+            )}
           </div>
         </Card>
       )}

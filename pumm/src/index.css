@@ -82,3 +82,18 @@ button, a, select { touch-action: manipulation; }
   .no-print { display: none !important; }
   .print-page { break-inside: avoid; }
 }
+
+/* Case Record「打印/存 PDF」：临时把整页藏起来，只印记录本身。
+   body 上有 printing-case 时，#root 整个不进打印流，
+   只有挂在 body 下的 .case-print-sheet 会被打出来。 */
+.case-print-sheet { display: none; }
+@media print {
+  body.printing-case #root { display: none !important; }
+  body.printing-case .case-print-sheet {
+    display: block;
+    font-family: 'DM Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    color: #17181A;
+    padding: 24px;
+    max-width: 720px;
+  }
+}
