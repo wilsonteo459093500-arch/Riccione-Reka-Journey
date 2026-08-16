@@ -8,9 +8,9 @@ import HistoryPanel from './components/HistoryPanel.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
 import LoginGate from './components/LoginGate.jsx';
 import { isAuthed, logout } from './services/auth.js';
-import { MODES, ENHANCE_PROMPT } from './constants.js';
+import { MODES, ENHANCE_PROMPT, CONTRACT_FIDELITY_PROMPT, FIDELITY_QC_PROMPT } from './constants.js';
 import { buildPrompt } from './prompt.js';
-import { loadSettings, saveSettings, generateImage } from './services/gemini.js';
+import { loadSettings, saveSettings, generateImage, analyzeImage } from './services/gemini.js';
 import { refineImage } from './services/fal.js';
 import { compressForStorage, makeThumb, dataUrlToInput, shrinkDataUrl } from './services/images.js';
 import { listHistory, saveRecord, updateRecord, deleteRecord } from './services/history.js';
@@ -32,7 +32,7 @@ export default function App() {
   const [refImage, setRefImage] = useState(null); // 质感参考图（可选）
   const [swatches, setSwatches] = useState([]); // 材质色板 [{dataUrl,mimeType,base64,label}]，≤3 张
   const [roomId, setRoomId] = useState('living');
-  const [styleId, setStyleId] = useState('modern');
+  const [styleId, setStyleId] = useState('sail'); // 默认品牌风格：溪岸留白
   const [lightingId, setLightingId] = useState('auto');
   const [fidelityId, setFidelityId] = useState('strict');
   const [polishScopeId, setPolishScopeId] = useState('decor');
@@ -40,6 +40,7 @@ export default function App() {
   const [extra, setExtra] = useState('');
   const [count, setCount] = useState(2);
   const [autoPolish, setAutoPolish] = useState(true); // 双通道出图：生成后自动追加一道精修 pass
+  const [contractMode, setContractMode] = useState(false); // 合同图保真模式：单道生成 + 最高保真指令 + 自动差异质检
 
   // 生成结果槽位: { id, status: 'loading'|'done'|'error', dataUrl?, error? }
   const [slots, setSlots] = useState([]);
@@ -119,7 +120,9 @@ export default function App() {
     const tasks = newSlots.map(async (slot, i) => {
       // 错开发送，避免多张同时发瞬间撞免费额度的每分钟限流
       if (i > 0) await new Promise((r) => setTimeout(r, i * 2500));
-      const prompt = buildPrompt({ ...params, variationIndex: i });
+      let prompt = buildPrompt({ ...params, variationIndex: i });
+      // 合同图模式：追加最高优先级保真指令
+      if (contractMode && inputImage) prompt = `${prompt}\n${CONTRACT_FIDELITY_PROMPT}`;
       try {
         const raw = await generateImage(settings, prompt, modelInput, gMode.needsImage ? null : aspect, (waitSec, attempt) =>
           updateSlot(slot.id, { note: `被限流，${waitSec} 秒后自动重试（第 ${attempt}/3 次）…` })
@@ -127,7 +130,8 @@ export default function App() {
         let dataUrl = await compressForStorage(raw);
 
         // 双通道：非精修模式自动追加一道真实感精修 pass，对齐精修模式的出图水准
-        if (autoPolish && ['sketch', 'restyle', 'empty'].includes(gModeId)) {
+        // 合同图模式下跳过 —— 每多一道 pass 就多一次整图重绘，漂移风险翻倍
+        if (!contractMode && autoPolish && ['sketch', 'restyle', 'empty'].includes(gModeId)) {
           updateSlot(slot.id, { note: '第 2 道 · 真实感精修中…' });
           try {
             const polished = await generateImage(settings, ENHANCE_PROMPT, dataUrlToInput(dataUrl), null, (waitSec, attempt) =>
@@ -140,6 +144,20 @@ export default function App() {
         }
 
         updateSlot(slot.id, { status: 'done', dataUrl, note: null });
+
+        // 合同图模式：自动差异质检（底图 vs 出图，四项逐查）—— 失败不阻断出图
+        if (contractMode && inputImage) {
+          updateSlot(slot.id, { qc: { status: 'checking' } });
+          try {
+            const qcText = await analyzeImage(settings, FIDELITY_QC_PROMPT, [inputImage, dataUrlToInput(dataUrl)]);
+            const firstLine = qcText.split('\n')[0] || '';
+            const verdict = firstLine.includes('❌') ? 'fail' : firstLine.includes('⚠️') ? 'warn' : 'pass';
+            updateSlot(slot.id, { qc: { status: 'done', verdict, text: qcText } });
+          } catch (e) {
+            updateSlot(slot.id, { qc: { status: 'error', text: `质检失败：${e.message}` } });
+          }
+        }
+
         return { ok: true, dataUrl };
       } catch (e) {
         updateSlot(slot.id, { status: 'error', error: e.message });
@@ -319,6 +337,8 @@ export default function App() {
               setCount={setCount}
               autoPolish={autoPolish}
               setAutoPolish={setAutoPolish}
+              contractMode={contractMode}
+              setContractMode={setContractMode}
               busy={busy}
               onGenerate={handleGenerate}
             />
