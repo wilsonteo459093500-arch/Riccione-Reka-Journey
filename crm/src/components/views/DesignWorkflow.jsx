@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Ruler, CheckCircle2, Clock, User, ArrowRight, CalendarDays, PlusCircle,
-  Trash2, ChevronDown, AlertTriangle,
+  Trash2, ChevronDown, AlertTriangle, Undo2,
 } from 'lucide-react';
 import { DESIGN_STEPS, DESIGN_STEP_MAP, canViewLead } from '../../constants.js';
 import {
@@ -20,7 +20,7 @@ const stepColor = (step, isActive) => {
   return '#A87C4F';
 };
 
-export default function DesignWorkflowView({ leads, role, setViewingLead, onCompleteStep, onAddPresentation, onUpdatePresentation, onRemovePresentation }) {
+export default function DesignWorkflowView({ leads, role, setViewingLead, onCompleteStep, onReopenLastStep, onAddPresentation, onUpdatePresentation, onRemovePresentation }) {
   const designLeads = useMemo(() =>
     leads
       .filter(l => l.salesStage === 'Stage 3: Design' && l.designFlow && canViewLead(role, l))
@@ -103,6 +103,7 @@ export default function DesignWorkflowView({ leads, role, setViewingLead, onComp
             <DesignProjectCard
               key={l.id} lead={l} role={role}
               onCompleteStep={onCompleteStep}
+              onReopenLastStep={onReopenLastStep}
               onAddPresentation={onAddPresentation}
               onUpdatePresentation={onUpdatePresentation}
               onRemovePresentation={onRemovePresentation}
@@ -115,7 +116,7 @@ export default function DesignWorkflowView({ leads, role, setViewingLead, onComp
   );
 }
 
-function DesignProjectCard({ lead, role, onCompleteStep, onAddPresentation, onUpdatePresentation, onRemovePresentation, onOpen }) {
+function DesignProjectCard({ lead, role, onCompleteStep, onReopenLastStep, onAddPresentation, onUpdatePresentation, onRemovePresentation, onOpen }) {
   const [expanded, setExpanded] = useState(false);
   const [addingPres, setAddingPres] = useState(false);
   const [presDate, setPresDate] = useState('');
@@ -178,8 +179,26 @@ function DesignProjectCard({ lead, role, onCompleteStep, onAddPresentation, onUp
             {lead.pic} · {lead.quotationAmount > 0 ? fmtMoney(lead.quotationAmount) : 'no quote'} · render SLA: {tier.label}
           </div>
         </div>
-        <div className="text-right">
+        <div className="text-right flex flex-col items-end gap-1">
           <div className="text-[10px] text-sail-muted uppercase tracking-wider">{doneCount}/6 steps</div>
+          {canAct && doneCount > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                const lastDone = [...df.steps]
+                  .filter(s => s.status === 'done')
+                  .sort((a, b) => new Date(b.completedAt || 0) - new Date(a.completedAt || 0))[0];
+                const label = DESIGN_STEP_MAP[lastDone?.id]?.label || 'last step';
+                if (confirm(`Reopen "${label}"?\n\nThis undoes the last completed step. The current active step (if any) will go back to pending.`)) {
+                  onReopenLastStep(lead.id);
+                }
+              }}
+              className="flex items-center gap-1 text-[10px] text-sail-muted hover:text-sail-warn font-medium"
+              title="Reopen the most recently completed step — useful if Mark done was clicked by mistake"
+            >
+              <Undo2 className="w-3 h-3" /> Undo last step
+            </button>
+          )}
         </div>
       </div>
 
