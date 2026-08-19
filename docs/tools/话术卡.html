@@ -106,14 +106,19 @@ h1{
 .setup h2{
   font-family:var(--f-display);font-size:18px;font-weight:600;margin:0 0 4px;
 }
-.setup p.hint{margin:0 0 16px;font-size:13.5px;color:var(--muted);line-height:1.6}
-.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.setup p.hint{margin:0 0 18px;font-size:13.5px;color:var(--muted);line-height:1.6}
+.grp{margin-bottom:18px}
+.grp:last-of-type{margin-bottom:0}
+.grp-title{
+  font-family:var(--f-mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--sand);margin:0 0 9px;
+}
+.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:12px}
 .field{display:flex;flex-direction:column;gap:5px}
 .field label{
-  font-family:var(--f-mono);font-size:10.5px;letter-spacing:.12em;
-  text-transform:uppercase;color:var(--muted);
+  font-family:var(--f-body);font-size:12.5px;color:var(--muted);
 }
-.field label b{color:var(--accent);font-weight:600}
+.field label b{font-family:var(--f-mono);color:var(--accent);font-weight:600;font-size:11px;letter-spacing:.06em}
 .field input{
   font-family:var(--f-mono);font-size:15px;font-weight:500;
   padding:9px 11px;
@@ -126,14 +131,16 @@ h1{
 .field input::placeholder{color:var(--muted);opacity:.7}
 .field input:focus-visible{outline:2px solid var(--accent);outline-offset:1px;background:var(--surface)}
 .setup-foot{
-  margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
-  font-size:13px;color:var(--muted);
+  margin-top:18px;padding-top:14px;border-top:1px solid var(--line);
+  display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;
+  font-size:13px;color:var(--muted);line-height:1.65;
 }
+.setup-foot p{margin:0;flex:1;min-width:220px}
 .badge{
   display:inline-flex;align-items:center;gap:6px;
   font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;
   padding:4px 9px;border-radius:999px;
-  border:1px solid var(--line);
+  border:1px solid var(--line);white-space:nowrap;
 }
 .badge.warn{color:var(--stop);border-color:var(--stop)}
 .badge.ok{color:var(--go);border-color:var(--go)}
@@ -248,8 +255,6 @@ h2.sec{
 }
 .btn:hover{opacity:.88}
 .btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.btn.ghost{background:transparent;color:var(--ink-soft);border-color:var(--line)}
-.btn.ghost:hover{border-color:var(--accent);color:var(--ink)}
 .langs{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
 .langs button{
   font-family:var(--f-mono);font-size:11.5px;letter-spacing:.06em;
@@ -262,14 +267,14 @@ h2.sec{
 
 /* callout */
 .callout{
-  border:1px solid var(--stop);
+  border:1px solid var(--bar,var(--stop));
   border-radius:var(--radius);
   background:var(--surface);
   padding:16px 18px;
   margin:20px 0 4px;
 }
 .callout h3{
-  font-family:var(--f-display);font-size:16px;margin:0 0 6px;color:var(--stop);font-weight:600;
+  font-family:var(--f-display);font-size:16px;margin:0 0 6px;color:var(--bar,var(--stop));font-weight:600;
 }
 .callout p{margin:0 0 8px;font-size:14px;line-height:1.7;color:var(--ink-soft)}
 .callout p:last-child{margin-bottom:0}
@@ -304,40 +309,57 @@ footer code{font-family:var(--f-mono);font-size:11.5px;color:var(--ink-soft)}
 <header class="mast">
   <div class="eyebrow">Sail by Riccione Reka · 销售话术</div>
   <h1>询盘话术卡</h1>
-  <p class="dek">客人正在等你回 WhatsApp 的时候，打开这一页。先填三个价格数字，下面所有话术会自动填好，按一下就能复制。</p>
+  <p class="dek">客人正在等你回 WhatsApp 的时候，打开这一页。价格表填一次，下面所有话术会自动填好，按一下就能复制。</p>
 </header>
 <hr class="rule">
 
 <div class="setup">
-  <h2>先填三个数字</h2>
-  <p class="hint">这三个数字由老板定一次、全公司统一。填完存在这台手机上，下次打开还在。没填的地方会用红色虚线标出来 —— <b>带红色虚线的话术不要发出去</b>。</p>
-  <div class="fields">
-    <div class="field">
-      <label for="pA"><b>A</b> · 全屋起步价</label>
-      <input id="pA" inputmode="numeric" placeholder="例 80,000" autocomplete="off">
-    </div>
-    <div class="field">
-      <label for="pB"><b>B</b> · 常见区间 下限</label>
-      <input id="pB" inputmode="numeric" placeholder="例 100,000" autocomplete="off">
-    </div>
-    <div class="field">
-      <label for="pC"><b>C</b> · 常见区间 上限</label>
-      <input id="pC" inputmode="numeric" placeholder="例 180,000" autocomplete="off">
-    </div>
-    <div class="field">
-      <label for="pD"><b>D</b> · 单空间起步价</label>
-      <input id="pD" inputmode="numeric" placeholder="例 25,000" autocomplete="off">
+  <h2>先填价格表</h2>
+  <p class="hint">每家户型不同、要的柜子也不同，所以我们不报一个总价，而是报<b>按空间的起步价</b>加<b>按房型的常见区间</b> —— 客人自己会加、自己会对号入座。这张表由老板定一次、全公司统一，填完存在这台手机上。<b>话术里带红色虚线的地方还没填，不要发出去。</b></p>
+
+  <div class="grp">
+    <p class="grp-title">按空间 · 起步价</p>
+    <div class="fields">
+      <div class="field"><label for="pK"><b>K</b> 厨房</label><input id="pK" inputmode="numeric" placeholder="例 28,000" autocomplete="off"></div>
+      <div class="field"><label for="pW"><b>W</b> 主卧衣帽间</label><input id="pW" inputmode="numeric" placeholder="例 22,000" autocomplete="off"></div>
+      <div class="field"><label for="pT"><b>T</b> 电视墙／玄关</label><input id="pT" inputmode="numeric" placeholder="例 12,000" autocomplete="off"></div>
+      <div class="field"><label for="pS"><b>S</b> 次卧衣柜</label><input id="pS" inputmode="numeric" placeholder="例 9,000" autocomplete="off"></div>
     </div>
   </div>
+
+  <div class="grp">
+    <p class="grp-title">按房型 · 常见区间</p>
+    <div class="fields">
+      <div class="field"><label for="pC3L"><b>C3L</b> 3 房公寓 下限</label><input id="pC3L" inputmode="numeric" placeholder="例 90,000" autocomplete="off"></div>
+      <div class="field"><label for="pC3H"><b>C3H</b> 3 房公寓 上限</label><input id="pC3H" inputmode="numeric" placeholder="例 150,000" autocomplete="off"></div>
+      <div class="field"><label for="pLL"><b>LL</b> 排屋 下限</label><input id="pLL" inputmode="numeric" placeholder="例 140,000" autocomplete="off"></div>
+      <div class="field"><label for="pLH"><b>LH</b> 排屋 上限</label><input id="pLH" inputmode="numeric" placeholder="例 260,000" autocomplete="off"></div>
+    </div>
+  </div>
+
+  <div class="grp">
+    <p class="grp-title">全屋起步价 · 分流规则用这个</p>
+    <div class="fields">
+      <div class="field"><label for="pA"><b>A</b> 全屋起步价</label><input id="pA" inputmode="numeric" placeholder="例 80,000" autocomplete="off"></div>
+      <div class="field"><label><b>MIN</b> 单空间最低（自动）</label><input id="pMIN" disabled placeholder="填完上面自动算"></div>
+    </div>
+  </div>
+
   <div class="setup-foot">
     <span id="setupState" class="badge warn">尚未填写</span>
-    <span>怎么定：取最近 12 个月已成交合同额排序 —— A 取第 10–25 百分位，B–C 取 P25–P75，D 取只做一个空间的最小成交额。</span>
+    <p>怎么定：导出最近 12–24 单已成交，每单记「房型／做了哪些空间／板材档次／合同额」。按空间起步价＝只做该空间那几单的最低额；房型区间＝该房型的 P25–P75；A＝最小的全屋成交额向下取整。样本不够就用「最小可交付组合」倒推。</p>
   </div>
+</div>
+
+<div class="callout" style="--bar:var(--hold)">
+  <h3>给区间的两个坑</h3>
+  <p><b>上限一定要给够。</b>下限是筛选器，上限是保护。客人最后收到的正式报价一旦超出你给过的上限，前面建立的信任会一次性归零 —— 所以话术里都留了「做得很满的会更高」这个不封顶的尾巴，别删掉它。</p>
+  <p><b>慎用「每尺多少钱」。</b>客人会拿去跟别家的尺价比，而别家的尺价通常不含五金、安装、售后。真要报，必须紧跟一句「我们这个尺价里含什么」，否则等于把自己送上比价台。</p>
 </div>
 
 <section>
   <div class="sec-head"><h2 class="sec">分流规则</h2></div>
-  <p class="sec-note">拿到客人预算之后，照这张表走，不要自行判断。规则的目的是：让预算不匹配的客人在第一条 WhatsApp 就被温和地接住，而不是浪费一次展厅接待、带着挫败感离开。</p>
+  <p class="sec-note">拿到客人预算之后，照这张表走，不要自行判断。表里的 <b>A</b> 就是上面填的全屋起步价。规则的目的是：让预算不匹配的客人在第一条 WhatsApp 就被温和地接住，而不是浪费一次展厅接待、带着挫败感离开。</p>
   <div class="triage">
     <div class="tri" style="--bar:var(--go)">
       <div class="who">≥ A</div>
@@ -384,7 +406,7 @@ footer code{font-family:var(--f-mono);font-size:11.5px;color:var(--ink-soft)}
 
 <section>
   <div class="sec-head"><h2 class="sec">话术卡</h2></div>
-  <p class="sec-note">三段式，一段都不能少：<b>① 先给区间</b>（让客人自己判断） → <b>② 讲清区间由什么决定</b>（面积／材料等级／是否含设计安装） → <b>③ 反问，必须包含预算</b>。第一条回复里永远不要出现算出来的具体数字。</p>
+  <p class="sec-note">三段式，一段都不能少：<b>① 先给起步价与区间</b>（让客人自己对号入座） → <b>② 讲清价格差在哪三件事</b>（做几个空间／板材五金档次／有没有造型岛台） → <b>③ 反问，必须包含预算</b>。第一条回复里永远不要出现算出来的具体总价。</p>
 
   <div class="filters" role="group" aria-label="按客人说了什么筛选">
     <button class="chip" data-f="all" aria-pressed="true">全部</button>
@@ -437,7 +459,7 @@ footer code{font-family:var(--f-mono);font-size:11.5px;color:var(--ink-soft)}
   <div class="checks">
     <div class="check">
       <div class="num">100%</div>
-      <div class="lbl">发出起步价区间的比例<small>每一个询盘都必须先收到区间，再收到具体报价</small></div>
+      <div class="lbl">发出起步价与区间的比例<small>每一个询盘都必须先收到区间，再收到具体报价</small></div>
     </div>
     <div class="check">
       <div class="num">20% → &lt;5%</div>
@@ -452,89 +474,137 @@ footer code{font-family:var(--f-mono);font-size:11.5px;color:var(--ink-soft)}
 
 <footer>
   配套文件：《询盘转化诊断与优化建议》（2026-08-18）· 《询盘转化工具包》<code>docs/询盘转化工具包.md</code> · 《Sail 询盘追踪表》<code>docs/tools/</code><br>
-  话术里的 <code>__</code> 是需要业务员按客人情况填的（区／空间／年限／材料），不是漏掉的价格。
+  话术里的 <code>__</code> 是需要业务员按客人情况填的（区／房型／空间／年限／材料），不是漏掉的价格。
 </footer>
 
 </div>
 
 <script>
-const SLOTS = ["A","B","C","D"];
-const SLOT_LABEL = {A:"全屋起步价", B:"区间下限", C:"区间上限", D:"单空间起步价"};
-let prices = {A:"",B:"",C:"",D:""};
+// K/W/T/S 按空间起步价 · C3L–C3H / LL–LH 按房型区间 · A 全屋起步价（分流规则用）
+// MIN 不是输入项，是 K/W/T/S 里的最小值，代表「单空间最低从多少起」
+const SLOTS = ["K","W","T","S","C3L","C3H","LL","LH","A"];
+const SLOT_LABEL = {
+  K:"厨房起步价", W:"主卧衣帽间起步价", T:"电视墙／玄关起步价", S:"次卧衣柜起步价",
+  C3L:"3 房公寓区间下限", C3H:"3 房公寓区间上限",
+  LL:"排屋区间下限", LH:"排屋区间上限",
+  A:"全屋起步价", MIN:"单空间最低起步价"
+};
+let prices = {};
+SLOTS.forEach(k => prices[k] = "");
 
 try {
-  const saved = localStorage.getItem("sail-prices");
-  if (saved) prices = Object.assign(prices, JSON.parse(saved));
+  const saved = localStorage.getItem("sail-prices-v2");
+  if (saved) Object.assign(prices, JSON.parse(saved));
 } catch (e) { /* storage unavailable — page still works, values just won't persist */ }
+
+// 单空间最低 = 四个空间起步价里最小的那个；有任何一个没填也照样从已填的里面取
+function minSpace(){
+  const nums = ["K","W","T","S"]
+    .map(k => ({ raw: prices[k], n: Number(String(prices[k]).replace(/[^\d.]/g, "")) }))
+    .filter(x => x.raw && isFinite(x.n) && x.n > 0);
+  if (!nums.length) return "";
+  return nums.reduce((a, b) => (a.n <= b.n ? a : b)).raw;
+}
+function val(key){ return key === "MIN" ? minSpace() : prices[key]; }
 
 const CARDS = [
   {
     id:"2-1", f:["ask"],
     title:"客人开门见山问价",
-    when:"最高频。占 PM 的大多数 —— 这一条回好了，70% 不回复就能压下来。",
+    when:"最高频，占 PM 的大多数。不报总价，报按空间起步价 + 按房型区间 —— 客人自己会加，自己会对号入座。",
     zh:`您好，谢谢您对 Sail 的关注 🙏
 
-先给您一个参考，方便您判断合不合适：
-我们的全屋定制项目从 RM {A} 起，大部分落在 RM {B} 到 RM {C} 之间；
-如果只做单个空间（例如厨房或主卧衣帽间），通常从 RM {D} 起。
+先给您一个参考，方便您判断合不合适。我们按空间报起步价：
+· 厨房 从 RM {K} 起
+· 主卧衣帽间 从 RM {W} 起
+· 电视墙／玄关 从 RM {T} 起
+· 次卧衣柜 从 RM {S} 起
 
-价格差别主要来自三点：
-① 面积与柜体数量  ② 板材与五金等级  ③ 是否包含设计、量尺与安装
+整套下来，3 房公寓大多落在 RM {C3L} 到 RM {C3H}，双层排屋大多在 RM {LL} 到 RM {LH}；做得很满的会更高。
 
-方便请教三个问题，我给您一版贴合您情况的建议：
-1️⃣ 房子在哪个区、几房？
+同样的空间，价格还是会差，主要在三件事，您可以自己对号入座：
+① 做几个空间  ② 板材五金选哪一档  ③ 有没有造型／岛台／特殊五金
+
+您看看大概落在哪一段？方便告诉我：
+1️⃣ 房子在哪个区、什么房型？
 2️⃣ 这次想先做哪几个空间？
-3️⃣ 这部分您心里预留的预算大概在哪个区间？`,
+3️⃣ 这部分预留的预算大概在哪个区间？
+
+我给您一版更贴您情况的。`,
     en:`Hi, thank you for reaching out to Sail 🙏
 
-Before we go further, here's a reference point so you can see if we're a fit:
-Our full-home projects start from RM {A}, with most landing between RM {B} and RM {C}.
-If you'd like to do a single space (kitchen or master wardrobe, for example), that usually starts from RM {D}.
+Here's a reference point first, so you can see whether we're a fit. We quote a starting price per space:
+· Kitchen — from RM {K}
+· Master wardrobe — from RM {W}
+· TV wall / entryway — from RM {T}
+· Bedroom wardrobe — from RM {S}
 
-Three things move that number:
-1. Area and number of cabinets  2. Material and hardware grade  3. Whether design, measurement and installation are included
+All in, a 3-room condo usually lands between RM {C3L} and RM {C3H}; a double-storey house between RM {LL} and RM {LH}. Heavily specified homes go higher.
 
-May I ask three quick questions so I can come back with something relevant to you?
-1. Which area is the property in, and how many rooms?
+Two homes with the same spaces can still differ, and it comes down to three things — see where you'd place yourself:
+1. How many spaces  2. Which grade of board and hardware  3. Whether there's profiling, an island, or specialty hardware
+
+Where do you think you'd sit? If you can tell me:
+1. Which area, and what type of property?
 2. Which spaces would you like to start with?
-3. Roughly what budget range have you set aside for this part?`,
-    after:"发完文字，立刻补发《价格区间卡片》那张图 —— 客人会截图转发给家人，这是让你的价格锚定跟着他回家的唯一方式。"
+3. Roughly what budget range you've set aside for this part
+
+— I'll come back with something much closer to your case.`,
+    after:"发完文字紧跟两样：价格区间卡片那张图，以及下面这张「锚点案例句」。客人会截图转发给家人 —— 这是让你的价格锚定跟着他回家的唯一方式。"
+  },
+  {
+    id:"2-1b", f:["ask","expensive"],
+    title:"锚点案例句 · 紧跟在区间后面",
+    when:"整套话术里最硬的一句。它陈述的是已经发生的事实，不是承诺 —— 所以比任何抽象区间都有说服力。",
+    zh:`跟您户型比较接近的是这一套：__ 房 __ sqft，做了厨房 + 主卧衣帽间 + 电视墙，板材是 __ 档，最后落在 RM __。
+（附 2–3 张照片）
+
+您看看这个配置跟您想要的接不接近？如果差不多，您的落点大概也在这附近。
+要是想做得更满一点或者材料再上一档，我可以给您看另一套。`,
+    en:`The closest project to your layout is this one: a __-room, __ sqft home — kitchen, master wardrobe and TV wall, __ grade board — it came in at RM __.
+(attach 2–3 photos)
+
+Does this spec feel close to what you have in mind? If it does, you'd likely land somewhere around here.
+If you'd want more coverage or a higher material grade, I can show you another one.`,
+    after:"这句话需要 3–5 个真实锚点案例做后盾（户型／做了哪几个空间／板材档次／成交额），最好有照片。素材清单见工具包第 5 章。"
   },
   {
     id:"2-2", f:["ask"],
     title:"客人只丢了户型图，没说话",
-    when:"别急着算报价。先给范围，再承诺两个工作日出建议。",
+    when:"别急着算报价。先给参照，再承诺两个工作日出建议。",
     zh:`收到，谢谢您 🙏 图我先看着。
 
 在我出具体建议之前，先给您一个价格参照：
-这样的户型做全屋定制，通常在 RM {B} 到 RM {C} 之间，从 RM {A} 起；
-只做厨房或一个空间的话，从 RM {D} 起。
+公寓做全屋大多落在 RM {C3L} 到 RM {C3H}，排屋大多在 RM {LL} 到 RM {LH}，做得很满的会更高；
+如果先做单个空间，从 RM {MIN} 起。
 
 您先看看这个范围符不符合您的规划？
 如果合适，我把这份图排一下，两个工作日内给您一版空间建议和更准确的报价。`,
     en:`Got it, thank you 🙏 I'll take a look at the plan.
 
-Before I put together anything specific, here's a price reference:
-A layout like this typically lands between RM {B} and RM {C} for full-home custom, starting from RM {A}.
-A single space — a kitchen, for instance — starts from RM {D}.
+Before I put anything specific together, here's a price reference:
+Condos usually land between RM {C3L} and RM {C3H} for a full home; landed properties between RM {LL} and RM {LH}. Heavily specified homes go higher.
+If you'd rather start with a single space, that begins at RM {MIN}.
 
-Does that range fit what you had in mind?
-If it does, I'll work through the plan and come back within two working days with a space proposal and a firmer quotation.`
+Does that range fit your plan?
+If it does, I'll work through the layout and come back within two working days with a space proposal and a firmer quotation.`
   },
   {
     id:"2-3", f:["ask","budget"],
     title:"客人追问「给我一个具体数字」",
-    when:"不要屈服，但要给台阶。把「不给数字」讲成是为客人好，而不是在藏。",
+    when:"不要屈服，但要给台阶。把「不给数字」讲成是为客人好，而不是在藏价。",
     zh:`可以，我一定给您具体数字 —— 但我不想给一个不准的数字让您做判断，那对您没帮助。
 
-要准确，我需要知道：面积、要做哪几个空间、板材等级偏好。
-在那之前，我能给您最诚实的答案是这个范围：RM {B} 到 RM {C}。
+要准确，我需要知道三件事：房型和面积、要做哪几个空间、板材等级偏好。
+在那之前，我能给您最诚实的答案是这个范围：公寓大多 RM {C3L}–{C3H}，排屋大多 RM {LL}–{LH}。
+按单个空间算的话，厨房从 RM {K} 起，主卧衣帽间从 RM {W} 起。
 
 这样吧：您告诉我预算大概在哪个量级，我直接告诉您这个预算在我们这里能做到什么程度、以及需不需要调整范围。这样比我瞎报一个数字有用得多。`,
     en:`Absolutely, I'll get you a specific number — but I don't want to hand you an inaccurate one to make a decision on. That wouldn't help you.
 
-To be accurate I need three things: the area, which spaces, and your preference on material grade.
-Until then, the most honest answer I can give you is the range: RM {B} to RM {C}.
+To be accurate I need three things: the property type and size, which spaces, and your preference on material grade.
+Until then, the most honest answer I can give you is the range: condos mostly RM {C3L}–{C3H}, landed mostly RM {LL}–{LH}.
+Per space, a kitchen starts from RM {K} and a master wardrobe from RM {W}.
 
 Here's a better way: tell me roughly what budget you're working with, and I'll tell you straight what that gets you with us, and whether we'd need to adjust the scope. That's far more useful than a number I've guessed at.`
   },
@@ -546,14 +616,14 @@ Here's a better way: tell me roughly what budget you're working with, and I'll t
 那我换个问法，您只要选 A 或 B 就行：
 
 A. 这次预算在 RM {A} 以上，想把全屋一次做到位
-B. 预算在 RM {D} 上下，想先把最重要的一两个空间做好
+B. 预算在 RM {MIN} 上下，想先把最重要的一两个空间做好
 
 两种我们都做，只是方案完全不同，我不想给您错的那一版。`,
     en:`Understood — a lot of clients aren't ready to share that upfront 😊
 Let me ask it differently. Just pick A or B:
 
 A. Budget above RM {A}, and you'd like the whole home done in one go
-B. Budget around RM {D}, and you'd rather do the one or two spaces that matter most, done properly
+B. Budget around RM {MIN}, and you'd rather do the one or two spaces that matter most, done properly
 
 We do both — but the proposals are completely different, and I don't want to send you the wrong one.`
   },
@@ -600,12 +670,12 @@ Does this feel close to the direction you had in mind?`
     zh:`Hi __，不打扰您太久，就问最后一个问题：
 
 是价格不在您的规划内，还是时间还没到？
-如果是价格 —— 我们有单空间的做法，从 RM {D} 起，很多客户先做厨房；
+如果是价格 —— 我们有单空间的做法，从 RM {MIN} 起，很多客户先做厨房；
 如果是时间 —— 您告诉我大概什么时候，我到时候再联系您，中间不打扰。`,
     en:`Hi __, I won't take up more of your time — just one last question:
 
 Is it that the price isn't in your plan, or that the timing isn't right yet?
-If it's price — we do single-space projects starting from RM {D}; a lot of clients begin with the kitchen.
+If it's price — we do single-space projects starting from RM {MIN}; a lot of clients begin with the kitchen.
 If it's timing — tell me roughly when, and I'll come back to you then. Nothing in between.`
   },
   {
@@ -628,7 +698,7 @@ Whenever you feel like picking this up again, just message me.`
 但有一个做法我很推荐，很多客户就是这么开始的：先做一个空间。
 同样的板材、同样的五金、同样的安装团队，先把您每天用得最多的地方做到位 —— 大部分人从厨房或主卧衣帽间开始，其他空间以后再接着做，出来是一整套，不会不搭。
 
-这个做法从 RM {D} 起。
+厨房从 RM {K} 起，主卧衣帽间从 RM {W} 起。
 我发一份介绍和两个真实案例给您看看？看完不合适也没关系，您心里有个数就好。`,
     en:`Thank you for being straight with me — that's the only way I can give you advice worth anything 🙏
 
@@ -637,7 +707,7 @@ So I'll be straight back: at that budget, I can't deliver a full home at the sta
 There is something I'd genuinely recommend, and it's how a lot of our clients start: do one space first.
 Same board, same hardware, same installation team — you get the space you use most, done properly. Most people start with the kitchen or the master wardrobe, and add the rest later. It still comes together as one piece; nothing looks mismatched.
 
-That route starts from RM {D}.
+A kitchen starts from RM {K}, a master wardrobe from RM {W}.
 Shall I send you the one-pager and two real projects? Even if it's not right for you, at least you'll know where you stand.`,
     after:"发完必须紧跟《单空间定制》一页纸 + 2 个单空间案例。没有这份素材，这条话术等于空话。"
   },
@@ -668,13 +738,13 @@ Would you like to come to the showroom? You can handle the actual board and hard
     when:"预算低于起步价一半。不约展厅不是看不起客人，是保护客人。",
     zh:`明白 🙏 那这次我就不占用您时间去展厅跑一趟了 —— 以这个预算，我怕您来了反而觉得压力大，那不是我想要的。
 
-我发一份《单空间定制》的介绍给您，从 RM {D} 起，您留着；
+我发一份《单空间定制》的介绍给您，从 RM {MIN} 起，您留着；
 另外我把我们的《十怕十诺》也发您 —— 就算这次不做我们家，您拿去对照其他厂商问问题，也不会吃亏。
 
 以后什么时候想做了，随时找我，不用客气。`,
     en:`Understood 🙏 In that case I won't have you make the trip to the showroom this time — at this budget I'd rather not put you in a position where the visit just feels uncomfortable.
 
-Let me send you two things to keep: our single-space guide (starting from RM {D}), and our "Ten Concerns, Ten Commitments" sheet. Even if you go with someone else, use it as a checklist when you ask them questions — you'll be better off for it.
+Let me send you two things to keep: our single-space guide (starting from RM {MIN}), and our "Ten Concerns, Ten Commitments" sheet. Even if you go with someone else, use it as a checklist when you ask them questions — you'll be better off for it.
 
 Whenever the timing is right, just message me. No pressure at all.`
   },
@@ -690,7 +760,7 @@ Whenever the timing is right, just message me. No pressure at all.`
 我只讲一件事：这个价格里有哪些东西是省不掉的……（拿出《价格里包含什么》一页纸）
 
 那我们来看实际一点的：
-如果这次只做 __（客人最在意的那个空间），从 RM {D} 起，配置一样不降。
+如果这次只做 __（客人最在意的那个空间），从 RM {MIN} 起，配置一样不降。
 您先住进去用一年，其他空间以后再说 —— 反正样式我们这边留档，接得上。
 
 要不要我现在就按这个方向给您排一版？`,
@@ -702,7 +772,7 @@ I'm not going to tell you it's "worth it" — that's your call, not mine.
 I'll tell you one thing only: which parts of this price can't be taken out… (bring out the "What's included" sheet)
 
 Now, something more practical:
-If we do just the __ this time — the space you care about most — it starts from RM {D}, with nothing downgraded.
+If we do just the __ this time — the space you care about most — it starts from RM {MIN}, with nothing downgraded.
 Live with it for a year, and we handle the rest later. We keep your specification on file, so it will match.
 
 Want me to work up that version right now?`
@@ -800,18 +870,22 @@ And I'll check back with you on __ (name the day). Does that work?`
 
 const deck = document.getElementById("deck");
 const esc = s => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const TOKEN = /\{(K|W|T|S|C3L|C3H|LL|LH|A|MIN)\}/g;
 
 function render(text){
-  // blanks first, then price slots — otherwise the "__ (A)" inside an unfilled
+  // blanks first, then price slots — otherwise the "__ (K)" inside an unfilled
   // slot gets wrapped a second time as a blank
   return esc(text)
     .replace(/(^|[^_])__(?!_)/g, (m, pre) => `${pre}<span class="blank">__</span>`)
-    .replace(/\{([ABCD])\}/g, (_, k) => prices[k]
-      ? `<span class="slot">${esc(prices[k])}</span>`
-      : `<span class="slot empty" title="尚未填写${SLOT_LABEL[k]}">__ (${k})</span>`);
+    .replace(TOKEN, (_, k) => {
+      const v = val(k);
+      return v
+        ? `<span class="slot">${esc(v)}</span>`
+        : `<span class="slot empty" title="尚未填写${SLOT_LABEL[k]}">__ (${k})</span>`;
+    });
 }
 function plain(text){
-  return text.replace(/\{([ABCD])\}/g, (_, k) => prices[k] || `__ (${k})`);
+  return text.replace(TOKEN, (_, k) => val(k) || `__ (${k})`);
 }
 
 CARDS.forEach(c => {
@@ -896,13 +970,15 @@ document.querySelectorAll(".chip").forEach(chip => {
 
 // ---- price inputs ----
 const stateEl = document.getElementById("setupState");
+const minEl = document.getElementById("pMIN");
 function refreshState(){
+  minEl.value = minSpace();
   const missing = SLOTS.filter(k => !prices[k]);
   if (missing.length === 0){
-    stateEl.textContent = "四个数字都填好了 ✓";
+    stateEl.textContent = "价格表填好了 ✓";
     stateEl.className = "badge ok";
   } else {
-    stateEl.textContent = `还差 ${missing.join(" / ")}`;
+    stateEl.textContent = `还差 ${missing.length} 项：${missing.join(" / ")}`;
     stateEl.className = "badge warn";
   }
   document.querySelectorAll(".card").forEach(c => c._paint && c._paint());
@@ -912,7 +988,7 @@ SLOTS.forEach(k => {
   input.value = prices[k];
   input.addEventListener("input", () => {
     prices[k] = input.value.trim();
-    try { localStorage.setItem("sail-prices", JSON.stringify(prices)); } catch (e) {}
+    try { localStorage.setItem("sail-prices-v2", JSON.stringify(prices)); } catch (e) {}
     refreshState();
   });
 });
