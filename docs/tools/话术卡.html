@@ -92,6 +92,11 @@ h1{
   text-wrap:balance;
 }
 .dek{margin:0;color:var(--ink-soft);max-width:56ch}
+.globallang{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:6px;
+  font-size:12.5px;color:var(--muted);
+}
+.glhint{font-size:11.5px;opacity:.8}
 .rule{height:1px;background:var(--line);border:0;margin:0}
 
 /* ---------- price setup ---------- */
@@ -310,6 +315,14 @@ footer code{font-family:var(--f-mono);font-size:11.5px;color:var(--ink-soft)}
   <div class="eyebrow">Sail by Riccione Reka · 销售话术</div>
   <h1>询盘话术卡</h1>
   <p class="dek">客人正在等你回 WhatsApp 的时候，打开这一页。价格表填一次，下面所有话术会自动填好，按一下就能复制。</p>
+  <div class="globallang">
+    <span>全部话术语言</span>
+    <span class="langs" id="globalLang">
+      <button data-lang="zh" aria-pressed="false">中文</button>
+      <button data-lang="en" aria-pressed="true">EN</button>
+    </span>
+    <span class="glhint">单张卡片仍可各自切换</span>
+  </div>
 </header>
 <hr class="rule">
 
@@ -410,11 +423,15 @@ footer code{font-family:var(--f-mono);font-size:11.5px;color:var(--ink-soft)}
 
   <div class="filters" role="group" aria-label="按客人说了什么筛选">
     <button class="chip" data-f="all" aria-pressed="true">全部</button>
+    <button class="chip" data-f="open" aria-pressed="false">开场</button>
     <button class="chip" data-f="ask" aria-pressed="false">一问价</button>
     <button class="chip" data-f="budget" aria-pressed="false">不肯说预算</button>
     <button class="chip" data-f="low" aria-pressed="false">预算不足</button>
     <button class="chip" data-f="expensive" aria-pressed="false">说太贵</button>
     <button class="chip" data-f="silent" aria-pressed="false">没回复</button>
+    <button class="chip" data-f="showroom" aria-pressed="false">展厅／预约</button>
+    <button class="chip" data-f="material" aria-pressed="false">材料</button>
+    <button class="chip" data-f="process" aria-pressed="false">流程／报价</button>
   </div>
 
   <div class="deck" id="deck"></div>
@@ -508,6 +525,82 @@ function minSpace(){
 function val(key){ return key === "MIN" ? minSpace() : prices[key]; }
 
 const CARDS = [
+  {
+    id:"1-1", f:["open"],
+    title:"开场 · 客人来问但还没问价",
+    when:"合并原来的四个开场版本。关键改动：把预算做成第 3 问，并加一句说明为什么问 —— 问预算显得是在帮他，而不是在筛他。",
+    zh:`您好 👋🏻 谢谢您联系 Sail by Riccione Reka 😊
+
+我是 Reina，请问怎么称呼您？
+
+我们专做设计主导的全屋定制柜体、护墙板和隐形门 —— 每一个项目都包含设计咨询、空间规划和材料选配。
+
+为了给您对的建议，想先请教三件事：
+1️⃣ 房子在哪个区？什么房型（公寓／排屋）？
+2️⃣ 这次想做哪几个空间的柜子？方便的话发个户型图或现场照片给我，帮助很大 📐
+3️⃣ 这部分您预留的预算大概在哪个范围？
+
+第 3 个问题是为了一开始就把方向给对：有的客户一次把全屋做完，有的先做一两个空间以后再加 —— 两种我们都做，但方案完全不一样，我不想给您错的那一版。`,
+    en:`Hi 👋🏻 Thanks for reaching out to Sail by Riccione Reka 😊
+
+I'm Reina — may I know how to address you?
+
+We specialise in design-led custom cabinetry, wall panels and hidden doors. Every project includes design consultation, space planning and material selection.
+
+So I can advise you properly, may I ask three things:
+1️⃣ Which area is your property in, and what type is it — condo or landed?
+2️⃣ Which spaces are you looking to customise? A floor plan or photos of the area helps a lot 📐
+3️⃣ Roughly what budget range have you set aside for this?
+
+Question 3 is so I point you in the right direction from the start: some clients do the whole home in one go, others start with one or two spaces and add on later. We do both — but the proposals look completely different, and I'd rather not send you the wrong one.`,
+    after:"原版问的是「house area」和「what cabinets」，两个问题都没有预算 —— 这是 70% 报价后不回复的源头。第 3 问不加，后面所有分流规则都无法执行。"
+  },
+  {
+    id:"1-2", f:["open"],
+    title:"开场追问 · 客人说了空间但没给尺寸",
+    when:"原版的「rough size (length & height)」放在开场问，对客人来说太技术了。放到第二轮问，并给三个都可以的选项。",
+    zh:`收到，谢谢您 😊
+
+为了估得准一点，方便给我其中任何一样就行：
+· 那面墙／那个区域大概的长和高
+· 或者现场拍一张照片
+· 或者户型图
+
+哪个方便就发哪个，不用特意去量。`,
+    en:`Noted, thank you 😊
+
+To size it properly, any one of these works:
+· the rough length and height of the wall or area
+· a photo of the space
+· or your floor plan
+
+Whichever is easiest — no need to go and measure specially.`
+  },
+  {
+    id:"1-3", f:["open","showroom"],
+    title:"两条路二选一 · 展厅 vs 线上估价",
+    when:"原版直接给两个选项。改动：先给价格参照再让他选 —— 否则选「线上估价」的人会直接收到一个数字然后消失。",
+    zh:`谢谢您提供的资料 😊
+
+我们通常有两种开始方式：
+
+1️⃣ 展厅参观（需预约）— 在 Setia Alam。可以现场摸到实际的板材和五金，也能一起把设计方向聊清楚。大部分客户觉得这是最快知道我们合不合适的方式。
+2️⃣ 线上初步估价 — 我按您的户型先给一个范围，您可以先看看落点。
+
+不管选哪个，先给您一个参照：厨房从 RM {K} 起，主卧衣帽间从 RM {W} 起；整套下来公寓大多在 RM {C3L}–{C3H}，排屋大多在 RM {LL}–{LH}，做得很满的会更高。
+
+您觉得哪个方式方便？`,
+    en:`Thanks for sharing that 😊
+
+We usually start one of two ways:
+
+1️⃣ Showroom visit (by appointment) — in Setia Alam. You can handle the actual board and hardware, and we'll talk through the design direction together. Most clients find this the fastest way to know whether we're the right fit.
+2️⃣ Online estimate — I'll prepare a starting range based on your layout so you can see where this sits first.
+
+Either way, here's a reference point: a kitchen starts from RM {K} and a master wardrobe from RM {W}. All in, condos mostly land between RM {C3L} and RM {C3H}, landed properties between RM {LL} and RM {LH}. Heavily specified homes go higher.
+
+Which works better for you?`
+  },
   {
     id:"2-1", f:["ask"],
     title:"客人开门见山问价",
@@ -865,9 +958,258 @@ Let me get everything ready for you to take back, so you're not left retelling i
 One question: what does __ usually care about most — price, style, or durability? I'll add something specific on that point.
 
 And I'll check back with you on __ (name the day). Does that work?`
+  },
+  {
+    id:"5-1", f:["showroom"],
+    title:"展厅地址 + 营业时间 + 约时间",
+    when:"原来是三条分开的消息。合成一条，最后一定要以「哪天方便」收尾 —— 给地址不问时间，等于把下一步交给客人。",
+    zh:`我们的展厅采预约制 📍
+Sail by Riccione Reka · Setia Alam
+https://maps.app.goo.gl/b8d3J9D1jUZafNNg6
+
+🕘 营业时间：周一至周六 9:00am – 6:00pm（周日休息）
+
+您哪天、大概几点方便？我帮您看一下时段然后确认 😊`,
+    en:`Our showroom is by appointment only 📍
+Sail by Riccione Reka · Setia Alam
+https://maps.app.goo.gl/b8d3J9D1jUZafNNg6
+
+🕘 Monday to Saturday, 9:00am – 6:00pm (closed Sunday)
+
+Which day and roughly what time suits you? I'll check the slot and confirm 😊`
+  },
+  {
+    id:"5-2", f:["showroom"],
+    title:"预约确认",
+    when:"原版的「we kindly appreciate your punctual arrival」读起来像在提醒客人守规矩。改成「这个时段我们留给您了」—— 同样的意思，但是站在客人那一边。",
+    zh:`您的展厅预约已确认 ✨
+
+📅 日期：__
+⏰ 时间：__
+📍 Sail by Riccione Reka
+23-2 Jalan Setia Prima S U13/S, 40170 Shah Alam, Selangor
+Waze：https://waze.com/ul/hw281smx3q
+
+因为是预约制，这个时段我们留给您了，会有专人接待。如果临时有变动，提前跟我说一声就好。
+
+期待见到您 😊
+— Riccione Reka Team`,
+    en:`Your showroom appointment is confirmed ✨
+
+📅 Date: __
+⏰ Time: __
+📍 Sail by Riccione Reka
+23-2 Jalan Setia Prima S U13/S, 40170 Shah Alam, Selangor
+Waze: https://waze.com/ul/hw281smx3q
+
+As visits are by appointment, we've set this slot aside for you and someone will be there to receive you. If anything changes on your end, just let me know in advance.
+
+Looking forward to welcoming you 😊
+— Riccione Reka Team`
+  },
+  {
+    id:"5-3", f:["showroom"],
+    title:"轻推一下 · 邀约展厅",
+    when:"原版是「Would you like to pay a visit?」—— 没有给理由。加一个只有展厅才有的理由：手感。",
+    zh:`要不要找个时间来展厅看看？
+
+板材和五金的差别，说实话照片传达不了，得上手摸 —— 边封、开合的阻尼、表面手感，看图都是一样的，摸过就不一样了。
+
+我帮您安排时间 😊`,
+    en:`Would you like to come by the showroom sometime?
+
+Honestly, the difference in board and hardware doesn't come across in photos — you have to handle it. The edge, the damping when you close a drawer, the surface: they all look identical on screen and feel nothing alike in person.
+
+Happy to arrange a time for you 😊`
+  },
+  {
+    id:"6-1", f:["material"],
+    title:"材料说明 · 简版",
+    when:"客人问「用什么板」时的标准答案。承诺了检测报告就一定要拿得出来。",
+    zh:`这份报价用的是 ENF／F4-star 三聚氰胺板 + PUR 封边 —— 甲醛释放量的最高环保等级。
+
+这是意大利系统家具品牌在用的同一套材料体系：更耐潮、封边密封更好，表面处理经得起时间。
+
+我们也做多层板、饰面板和实木，同样是 ENF／F4-star 等级。您用的那批板的检测报告我可以直接发给您。`,
+    en:`The material in this quotation is ENF / F4-star melamine board with PUR edge banding — the highest eco-grade classification for formaldehyde emission.
+
+It's the same material system Italian system furniture brands build on: better moisture resistance, properly sealed edges, and a finish that holds up over time.
+
+We also work in plywood, veneer and solid wood, all at ENF / F4-star grade. I can send you the test report for the exact board we'd use.`,
+    after:"⚠️ 先跟供应商拿到检测报告编号，写进《价格里包含什么》。承诺了给不出来，比不承诺更伤。"
+  },
+  {
+    id:"6-2", f:["material","expensive"],
+    title:"「三聚氰胺板不是很低档吗？」⭐",
+    when:"原版已经写得很好，改动只有两处：把「用胶比劣质多层板少」改成可验证的标准口径；结尾从「建议您来展厅」改成一个具体的对比动作。",
+    zh:`这个看法在马来西亚很常见，我完全理解它是怎么来的 😊
+
+真正的差别不在「三聚氰胺板 vs 多层板」，而在两件事：基材的密度，和封边工艺。本地很多工厂用低密度基材配基础封边，三聚氰胺板的名声就是这么来的。
+
+我们用的是高密度基材 + PUR 封边，也就是意大利系统家具品牌在用的那一套。实际差在哪：
+· 该耐潮的地方耐潮（厨房、湿区）
+· 边缘密封到位，接缝不会胀、不会脱
+· 五年后看还是对的
+
+至于安全，这个是测出来的、不是说出来的：ENF 和 F☆☆☆☆ 分别是中国和日本标准里最严的甲醛释放等级。您要的话，我把我们要用的那批板的检测报告发给您。
+
+不过老实说，这件事上手最快。您来展厅一趟，我把我们的板和市面上常见的那种放一起，您摸一下边、看一下断面，比我讲十句有用。`,
+    en:`That perception is very common here, and I understand exactly where it comes from 😊
+
+The real difference isn't melamine versus plywood — it's two other things: the density of the core board, and the edge-banding technology. A lot of local factories use low-density board with basic edge finishing, and that's where melamine earned its reputation.
+
+What we use is high-density board with PUR edge banding — the same system Italian system furniture brands build on. In practice:
+· moisture resistance where it actually matters (kitchen, wet areas)
+· edges properly sealed, so no swelling or peeling at the joints
+· a finish that still looks right in year five
+
+On safety, the grade is measured rather than claimed: ENF and F☆☆☆☆ are the strictest formaldehyde-emission classes under the Chinese and Japanese standards respectively. I'm happy to send you the test report for the exact board we'd use.
+
+Honestly though, this one settles fastest by hand. Come to the showroom and I'll put our board next to the common one — feel the edge, look at the cut section. It'll tell you more than anything I can type.`,
+    after:"⚠️「意大利系统家具品牌用同一套材料体系」要准备好 2–3 个能说出口的品牌名，客人一定会追问。答不上来，这句话反而变成扣分项。"
+  },
+  {
+    id:"7-1", f:["ask","process"],
+    title:"正式估价（看过户型图之后）",
+    when:"原版直接给 RM65k–100k 就结束。改动：加上「落在区间哪一段取决于什么」+ 锚点案例 + 报价里包含什么，最后才是下一步。",
+    zh:`让您久等了 😊
+
+按您给的户型，全屋柜体大概会落在 RM __ 到 RM __ 这个范围。
+
+具体落在区间的哪一段，取决于三件事：
+· 做几个空间
+· 板材和五金选哪一档
+· 有没有造型、岛台或特殊五金
+
+给您一个参照：跟您户型最接近的一套是 __ 房 __ sqft，做了厨房 + 主卧衣帽间 + 电视墙，最后落在 RM __。
+
+这个价格涵盖的是完整流程：设计咨询、上门量尺、深化图、板材五金、我们自己团队安装，以及售后。
+
+如果这个范围在您的规划内，下一步就是把设计细化 —— 这一步在展厅做最有效率，可以一起看户型、材料和收口。要不要我帮您看个时间？`,
+    en:`Thanks for your patience 😊
+
+Based on the layout you shared, whole-house cabinetry for this unit would sit in the RM __ to RM __ range.
+
+Where you land inside that range comes down to three things:
+· how many spaces you cover
+· the grade of board and hardware
+· whether there's profiling, an island or specialty hardware
+
+For reference, the closest project we've completed to your layout — a __-room, __ sqft home with kitchen, master wardrobe and TV wall — came in at RM __.
+
+That price covers the full scope: design consultation, site measurement, detailed drawings, materials and hardware, installation by our own team, and after-sales support.
+
+If this range works for you, the next step is going through the design in detail. That's most efficient at the showroom, where we can look at the layout, materials and finishes together. Shall I check a slot for you?`
+  },
+  {
+    id:"7-2", f:["process","showroom"],
+    title:"交期 · 10–14 周",
+    when:"原版对了，补一句把 10–14 周拆开 —— 客人听到「14 周」的第一反应是「怎么那么久」，看到中间有几段就不一样了。",
+    zh:`设计确认之后，到完工大概 10–14 周 😊
+
+中间大致是：深化图确认 → 生产 → 送货与安装。设计定下来之后我会给您具体日期，不是一个笼统的区间。
+
+如果预算范围没问题，我们现在就可以进设计阶段。建议先来一趟展厅 —— 方向一次谈清楚，比来回改几轮快很多。要不要约个时间？`,
+    en:`Once the design is confirmed, the full timeline to completion is about 10–14 weeks 😊
+
+Broadly: detailed drawings and sign-off → production → delivery and installation. Once the design is locked I'll give you specific dates rather than a range.
+
+If the budget range works for you, we can start the design stage now. I'd suggest a showroom visit first — settling the direction in one sitting is much faster than several rounds back and forth. Shall we arrange a time?`,
+    after:"确认一下 10–14 周是否含旺季（年底／农历新年前）。如果旺季会拉长，现在就说，比交期到了才说好。"
+  },
+  {
+    id:"7-3", f:["process"],
+    title:"付款条件",
+    when:"原版只列了三笔钱。改动：在后面补一句每笔钱背后是什么 —— 把付款条件从「我们的要求」变成「你的保障」。",
+    zh:`付款方式：
+· 10% 订金 — 上门量尺、2D 与 3D 图
+· 40% — 开始生产
+· 50% — 安装前 3 天
+
+有两件事值得说明：生产是在您确认并签署深化图之后才开始的；最后交付要等您对照验收清单检查过安装才算结案。也就是说，每一笔款项后面，都对应一件已经经您确认的事。`,
+    en:`Payment terms:
+· 10% deposit — site visit, 2D and 3D drawings
+· 40% — to commence production
+· 50% — 3 days before installation
+
+Two things worth knowing: production only begins after you've signed off on the detailed drawings, and the project is only closed once you've checked the installation against the handover list. Each payment sits behind something you've already approved.`,
+    after:"这两道确认（深化图签署、验收清单签署）就是 Sail CRM 里的 Stage Gate，本来就在跑。既然在跑，就该讲给客人听。"
+  },
+  {
+    id:"7-4", f:["process","expensive"],
+    title:"「柜子是中国生产的？」",
+    when:"原版只有一句陈述。这个问题在本地市场是信任问题，不是事实问题 —— 要主动把「为什么这样安排」讲完。",
+    zh:`这个问题我直接回答您。
+
+柜体在中国生产，设计、量尺、安装和售后全部由马来西亚团队负责。
+
+这是刻意的分工：工厂那边给的是材料体系和加工一致性 —— 这个稳定度，本地小厂做不到；而本地团队的意义是，出事的时候有一个在这里、找得到人、负得起责的团队，不是一个海外的电邮地址。
+
+每一件柜体出厂前有一道检验，到了这边安装还有一道 QC。真出问题，是我们的人来处理，不是让您去跨国索赔。`,
+    en:`Let me answer that directly.
+
+The cabinetry is produced in China; design, site measurement, installation and after-sales are all handled by our Malaysia team.
+
+That split is deliberate. The factory gives us the material system and the machining consistency that small local workshops can't hold. The local team means that when something needs fixing, there's someone here — reachable and accountable — rather than an email address overseas.
+
+Every unit is inspected before it leaves the factory, and again at installation QC here. If something isn't right, it's our team sorting it out, not a claim you file abroad.`,
+    after:"⚠️ 措辞要跟实际情况对上：如果是合作工厂而非自有工厂，就不要暗示是自有的。这一条被拆穿的代价极高。"
+  },
+  {
+    id:"7-5", f:["process"],
+    title:"客人要的是室内设计，不是柜子",
+    when:"原版已经很好。唯一改动：把「以后可以找我们做柜子」变成一个具体的时间点，否则这条线索就断了。",
+    zh:`谢谢您分享项目的情况 😊
+
+我们专做定制柜体和嵌入式木作，不做完整的室内设计。
+
+如果您在找室内设计师，我可以帮您推荐我们长期合作的设计伙伴。等您的室内设计方案定下来，柜体和木作这部分我们很乐意接手 —— 通常在设计师出平面图之后、动工之前介入最顺，那时候尺寸和收口都还改得动。
+
+需要的话跟我说一声，我把联系方式发您。`,
+    en:`Thanks for sharing the details of your project 😊
+
+We specialise in custom cabinetry and built-in joinery rather than full interior design.
+
+If you're looking for an interior designer, I'd be glad to recommend one of our trusted design partners. And once your interior design is settled, we'd be happy to take on the cabinetry and built-in works — the smoothest point to bring us in is after the designer's floor plan but before construction starts, while dimensions and detailing can still be adjusted.
+
+Just say the word and I'll share the contact.`
+  },
+  {
+    id:"7-6", f:["ask","process"],
+    title:"「你们怎么不按尺算？」",
+    when:"原版说了「因为我们是设计主导」。改动：给出不按尺算的实际理由 —— 尺价会把决定品质的东西藏起来。",
+    zh:`我们是按户型和实际要做的柜子报价，不用固定的每尺单价。
+
+原因很实际：每尺单价会把真正决定品质的东西藏起来 —— 基材密度、五金、封边、安装、售后，这些要么在里面要么不在。两份「每尺一样价」的报价，做出来可能是完全不同的两件事。
+
+您把户型图发我，告诉我想做哪些地方，我出一份完整的报价，我们再一起看设计上的选择。`,
+    en:`We quote based on your layout and the cabinets you actually need, rather than a fixed rate per square foot.
+
+The reason is practical: a per-foot rate hides the things that decide what you actually get — core density, hardware, edge sealing, installation and after-sales are each either in or out. Two quotes at the same rate per foot can be very different pieces of work.
+
+Send me your floor plan and what you'd like to do, and I'll prepare a proper quotation so we can go through the design options together.`
+  },
+  {
+    id:"7-7", f:["process"],
+    title:"收 e-invoice 资料",
+    when:"加一句用途说明。客人给 IC 号码会犹豫，说清楚只用于开票就顺很多。",
+    zh:`Hi __ 😊 为了开立账单文件与日后提交 e-invoice，方便给我：
+
+1. 全名（与 IC 一致）
+2. IC 号码
+
+这两项只用于发票文件，不作其他用途。`,
+    en:`Hi __ 😊 For issuing billing documents and submitting the e-invoice later, could I have:
+
+1. Full name (as per IC)
+2. IC number
+
+These are used only for the invoicing documents, nothing else.`
   }
 ];
 
+// 客人多数用英文，所以整页默认英文；顶部可以一键切成中文，单张卡也能各自切
+const DEFAULT_LANG = "en";
 const deck = document.getElementById("deck");
 const esc = s => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 const TOKEN = /\{(K|W|T|S|C3L|C3H|LL|LH|A|MIN)\}/g;
@@ -907,7 +1249,7 @@ CARDS.forEach(c => {
     <div class="card-foot">
       <button class="btn" data-copy>复制这段</button>
       <span class="langs">
-        <button data-lang="zh" aria-pressed="true">中文</button>
+        <button data-lang="zh" aria-pressed="false">中文</button>
         <button data-lang="en" aria-pressed="false">EN</button>
       </span>
       <span class="copied" hidden>已复制 ✓</span>
@@ -916,22 +1258,20 @@ CARDS.forEach(c => {
 
   const p = el.querySelector(".script");
   const copied = el.querySelector(".copied");
-  let lang = "zh";
+  let lang = DEFAULT_LANG;
 
   const paint = () => {
     p.dataset.lang = lang;
     p.innerHTML = render(c[lang]);
+    el.querySelectorAll(".card-foot .langs button").forEach(x =>
+      x.setAttribute("aria-pressed", String(x.dataset.lang === lang)));
   };
   paint();
   el._paint = paint;
+  el._setLang = (l) => { lang = l; paint(); };
 
-  el.querySelectorAll(".langs button").forEach(b => {
-    b.addEventListener("click", () => {
-      lang = b.dataset.lang;
-      el.querySelectorAll(".langs button").forEach(x =>
-        x.setAttribute("aria-pressed", String(x.dataset.lang === lang)));
-      paint();
-    });
+  el.querySelectorAll(".card-foot .langs button").forEach(b => {
+    b.addEventListener("click", () => el._setLang(b.dataset.lang));
   });
 
   el.querySelector("[data-copy]").addEventListener("click", async () => {
@@ -953,6 +1293,16 @@ CARDS.forEach(c => {
     copied.style.color = ok ? "var(--go)" : "var(--stop)";
     copied.hidden = false;
     setTimeout(() => { copied.hidden = true; }, 2200);
+  });
+});
+
+// ---- 全局语言切换 ----
+document.querySelectorAll("#globalLang button").forEach(b => {
+  b.addEventListener("click", () => {
+    const l = b.dataset.lang;
+    document.querySelectorAll("#globalLang button").forEach(x =>
+      x.setAttribute("aria-pressed", String(x.dataset.lang === l)));
+    document.querySelectorAll(".card").forEach(c => c._setLang && c._setLang(l));
   });
 });
 
