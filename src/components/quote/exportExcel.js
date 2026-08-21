@@ -81,10 +81,13 @@ export async function exportExcel(meta, computed, loose, notes = {}, lang = 'bot
       row(['', '', '', t(RLBL.subtotal), round0(zr.subtotal)]);
       row([]);
     });
-    row(['', '', '', t(RLBL.gross), round0(computed.gross)]);
-    if (computed.discount > 0) row(['', '', '', `${t(RLBL.discount)}${computed.discountMode === 'amt' ? '' : ` (${computed.adjustPct}%)`}${notes.discountNote ? ` — ${notes.discountNote}` : ''}`, -round0(computed.discount)]);
-    row(['', '', '', isDesigner ? t({ en: 'Retail Total', zh: '零售总额' }) : t(RLBL.total), round0(computed.net)]);
-    if (isDesigner) row(['', '', '', supplyLbl(), supply(computed.net)]);
+    if (!isDesigner) {
+      row(['', '', '', t(RLBL.gross), round0(computed.gross)]);
+      if (computed.discount > 0) row(['', '', '', `${t(RLBL.discount)}${computed.discountMode === 'amt' ? '' : ` (${computed.adjustPct}%)`}${notes.discountNote ? ` — ${notes.discountNote}` : ''}`, -round0(computed.discount)]);
+    }
+    const cabRetail = isDesigner ? computed.gross : computed.net; // 设计师版按原价
+    row(['', '', '', isDesigner ? t({ en: 'Retail Total', zh: '零售总额' }) : t(RLBL.total), round0(cabRetail)]);
+    if (isDesigner) row(['', '', '', supplyLbl(), supply(cabRetail)]);
     row([]);
     if (notes.cabinetNote) { row([t(RLBL.notes), notes.cabinetNote]); row([]); }
     termLines(QUOTE_TERMS, aoa);
@@ -109,10 +112,13 @@ export async function exportExcel(meta, computed, loose, notes = {}, lang = 'bot
     looseRows.forEach((r) => {
       row([r.type || '', r.model || '', capColor(r.color) || '', round0(r.qty), round0(r.unitMyr), round0(r.total)]);
     });
-    row(['', '', '', '', t(RLBL.gross), round0(loose.gross)]);
-    if (loose.discount > 0) row(['', '', '', '', `${t(RLBL.discount)}${loose.discountMode === 'amt' ? '' : ` (${loose.adjustPct}%)`}${notes.looseDiscountNote ? ` — ${notes.looseDiscountNote}` : ''}`, -round0(loose.discount)]);
-    row(['', '', '', '', isDesigner ? t({ en: 'Retail Total', zh: '零售总额' }) : t(RLBL.total), round0(loose.net)]);
-    if (isDesigner) row(['', '', '', '', supplyLbl(), supply(loose.net)]);
+    if (!isDesigner) {
+      row(['', '', '', '', t(RLBL.gross), round0(loose.gross)]);
+      if (loose.discount > 0) row(['', '', '', '', `${t(RLBL.discount)}${loose.discountMode === 'amt' ? '' : ` (${loose.adjustPct}%)`}${notes.looseDiscountNote ? ` — ${notes.looseDiscountNote}` : ''}`, -round0(loose.discount)]);
+    }
+    const looseRetail = isDesigner ? loose.gross : loose.net; // 设计师版按原价
+    row(['', '', '', '', isDesigner ? t({ en: 'Retail Total', zh: '零售总额' }) : t(RLBL.total), round0(looseRetail)]);
+    if (isDesigner) row(['', '', '', '', supplyLbl(), supply(looseRetail)]);
     row([]);
     if (notes.looseNote) { row([t(RLBL.notes), notes.looseNote]); row([]); }
     termLines(QUOTE_TERMS.slice(0, 1), aoa); // 只放 Validity
