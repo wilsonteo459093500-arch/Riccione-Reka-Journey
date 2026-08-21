@@ -6,7 +6,7 @@ import { fmt } from '../../utils/helpers.js';
 
 // 报价单（可打印 / 另存 PDF）。lang：'en' | 'zh' | 'both'。
 // 定制橱柜（SAIL by Riccione Reka）+ Loose Furniture（Riccione Furniture，另起一页）。
-export default function QuotePrint({ meta, computed, loose, cabinetNote = '', looseNote = '', discountNote = '', looseDiscountNote = '', lang = 'both', onClose }) {
+export default function QuotePrint({ meta, computed, loose, cabinetNote = '', looseNote = '', discountNote = '', looseDiscountNote = '', audience = 'retail', designerPct = 0, lang = 'both', onClose }) {
   const zones = computed.zoneResults.filter((zr) => zr.zone.items.length > 0);
   const looseRows = loose?.rows || [];
   const hasCab = zones.length > 0;
@@ -14,6 +14,10 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
   const looseNet = loose?.net || 0;
   const grand = computed.net + looseNet;
   const hasSummary = hasCab && hasLoose; // 两个部分都有才需要总览页
+  // 设计师版：供货价 = 零售 ×(100-折扣%)%
+  const isDesigner = audience === 'designer';
+  const supplyRate = (100 - (Number(designerPct) || 0)) / 100;
+  const supply = (retail) => Math.round((Number(retail) || 0) * supplyRate);
   const t = (obj) => tr(obj, lang);
   const lineDesc = (ln) => (lang === 'en' ? ln.descEn : lang === 'zh' ? ln.descZh : `${ln.descEn} ${ln.descZh}`);
   const lineUom = (ln) => (lang === 'en' ? ln.uomEn : lang === 'zh' ? ln.uomZh : ln.uomZh);
@@ -34,7 +38,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
     const prev = document.title;
     const safe = (s) => (s || '').replace(/[\\/:*?"<>|]/g, '').trim().replace(/\s+/g, ' ');
     const d = (meta.date || '').replace(/-/g, '');
-    document.title = `EST QUOTE_RICCIONE_${safe(meta.name) || 'Customer'}_${safe(meta.location) || 'Site'}_${d || 'draft'}`;
+    document.title = `EST QUOTE_RICCIONE_${safe(meta.name) || 'Customer'}_${safe(meta.location) || 'Site'}_${d || 'draft'}${isDesigner ? '_DESIGNER' : ''}`;
     const restore = () => { document.title = prev; window.removeEventListener('afterprint', restore); };
     window.addEventListener('afterprint', restore);
     window.print();
@@ -46,6 +50,12 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
       <div>
         <div className="font-display text-2xl">{brand}</div>
         <div className="text-xs tracking-widest uppercase mt-1" style={{ color: T.inkSoft }}>{t(RLBL.estQuote)}</div>
+        {isDesigner && (
+          <div className="inline-block mt-1 px-2 py-0.5 text-[10px] uppercase tracking-widest"
+            style={{ background: T.wood, color: '#fff', borderRadius: 2 }}>
+            {t({ en: 'Designer Copy', zh: '设计师版' })} · {t({ en: 'Confidential', zh: '内部' })}
+          </div>
+        )}
       </div>
       <div className="text-right text-xs" style={{ color: T.inkSoft }}>
         <div className="font-medium" style={{ color: T.ink }}>{t(RLBL.rev)} {meta.version || '1'}</div>
@@ -159,9 +169,15 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                       </tr>
                     )}
                     <tr style={{ borderTop: `2px solid ${T.ink}` }}>
-                      <td className="py-3 px-2 font-display text-xl">{t(RLBL.grandTotal)}</td>
+                      <td className="py-3 px-2 font-display text-xl">{isDesigner ? t({ en: 'Retail Total', zh: '零售总额' }) : t(RLBL.grandTotal)}</td>
                       <td className="text-right py-3 px-2 font-display text-xl">{fmtMYR(grand)}</td>
                     </tr>
+                    {isDesigner && (
+                      <tr style={{ color: T.wood, borderTop: `1px solid ${T.line}` }}>
+                        <td className="py-3 px-2 font-display text-xl">{t({ en: 'Designer Supply', zh: '设计师供货价' })} ({100 - (Number(designerPct) || 0)}%)</td>
+                        <td className="text-right py-3 px-2 font-display text-xl">{fmtMYR(supply(grand))}</td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
                 <div className="mt-4 text-[11px] italic" style={{ color: T.inkSoft }}>{t(RLBL.detailNote)}</div>
@@ -253,8 +269,13 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                     </>
                   )}
                   <div className="flex justify-between py-2 mt-1 font-display text-xl" style={{ borderTop: `2px solid ${T.ink}` }}>
-                    <span>{t(RLBL.total)}</span><span>{fmtMYR(computed.net)}</span>
+                    <span>{isDesigner ? t({ en: 'Retail Total', zh: '零售总额' }) : t(RLBL.total)}</span><span>{fmtMYR(computed.net)}</span>
                   </div>
+                  {isDesigner && (
+                    <div className="flex justify-between py-1 font-medium" style={{ color: T.wood }}>
+                      <span>{t({ en: 'Designer Supply', zh: '设计师供货价' })} ({100 - (Number(designerPct) || 0)}%)</span><span>{fmtMYR(supply(computed.net))}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -311,9 +332,15 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                       </tr>
                     )}
                     <tr style={{ borderTop: `1px solid ${T.line}` }}>
-                      <td colSpan={6} className="text-right py-1 px-2 font-medium">{t(RLBL.total)}</td>
+                      <td colSpan={6} className="text-right py-1 px-2 font-medium">{isDesigner ? t({ en: 'Retail Total', zh: '零售总额' }) : t(RLBL.total)}</td>
                       <td className="text-right py-1 px-2 font-medium">{fmtNum(loose.net, 0)}</td>
                     </tr>
+                    {isDesigner && (
+                      <tr style={{ color: T.wood }}>
+                        <td colSpan={6} className="text-right py-1 px-2 font-medium">{t({ en: 'Designer Supply', zh: '设计师供货价' })} ({100 - (Number(designerPct) || 0)}%)</td>
+                        <td className="text-right py-1 px-2 font-medium">{fmtNum(supply(loose.net), 0)}</td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>

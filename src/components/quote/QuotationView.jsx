@@ -123,6 +123,8 @@ export default function QuotationView({ doc, onChange }) {
   const looseDiscountMode = doc.looseDiscountMode || 'pct';
   const looseDiscountAmt = doc.looseDiscountAmt || 0;
   const lang = meta.outputLang || 'en';
+  const audience = meta.audience || 'retail';          // 'retail' 零售 | 'designer' 设计师
+  const designerPct = meta.designerPct ?? 30;          // 设计师折扣 %：供货价 = 零售 ×(100-%)%
   const computed = useMemo(() => computeQuote(zones, adjustPct, discountMode, discountAmt), [zones, adjustPct, discountMode, discountAmt]);
   const looseCalc = useMemo(() => computeLoose(looseItems, looseAdjustPct, looseDiscountMode, looseDiscountAmt), [looseItems, looseAdjustPct, looseDiscountMode, looseDiscountAmt]);
   const grandTotal = computed.net + looseCalc.net;
@@ -515,6 +517,36 @@ export default function QuotationView({ doc, onChange }) {
             </div>
           </div>
 
+          {/* 客户类型 Client type：零售 / 设计师（设计师版显示供货价）*/}
+          <div className="p-3 rounded" style={{ background: T.cream, border: `1px solid ${T.lineSoft}` }}>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase tracking-widest" style={{ color: T.inkSoft }}>Client 客户</span>
+              <div className="flex gap-1 ml-auto">
+                {[['retail', 'Retail 零售'], ['designer', 'Designer 设计师']].map(([id, label]) => {
+                  const on = audience === id;
+                  return (
+                    <button key={id} onClick={() => setMeta({ audience: id })}
+                      className="px-2.5 py-1 text-xs transition-colors"
+                      style={{ borderRadius: '2px', background: on ? T.ink : 'transparent',
+                        color: on ? T.paper : T.inkSoft, border: `1px solid ${on ? T.ink : T.line}` }}>
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            {audience === 'designer' && (
+              <div className="flex items-center gap-2 mt-2 text-xs" style={{ color: T.inkSoft }}>
+                <span className="uppercase tracking-widest text-[10px]">Designer discount 设计师折扣</span>
+                <input type="number" value={designerPct}
+                  onChange={(e) => setMeta({ designerPct: Number(e.target.value) || 0 })}
+                  className="w-16 px-2 py-1 text-sm outline-none"
+                  style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }} />
+                <span>%　→ 供货价 = 零售 × {100 - (Number(designerPct) || 0)}%</span>
+              </div>
+            )}
+          </div>
+
           {/* 操作 */}
           <div className="space-y-2">
             <div className="grid grid-cols-2 gap-2">
@@ -525,7 +557,7 @@ export default function QuotationView({ doc, onChange }) {
               </button>
               <button onClick={async () => {
                 try {
-                  await exportExcel(meta, computed, looseCalc, { cabinetNote, looseNote, discountNote, looseDiscountNote }, lang);
+                  await exportExcel(meta, computed, looseCalc, { cabinetNote, looseNote, discountNote, looseDiscountNote, audience, designerPct }, lang);
                   toast('Excel exported 已导出', 'success');
                 } catch (e) {
                   toast('Export failed 导出失败', 'error');
@@ -571,7 +603,7 @@ export default function QuotationView({ doc, onChange }) {
         </div>
       </div>
 
-      {showPrint && <QuotePrint meta={meta} computed={computed} loose={looseCalc} cabinetNote={cabinetNote} looseNote={looseNote} discountNote={discountNote} looseDiscountNote={looseDiscountNote} lang={lang} onClose={() => setShowPrint(false)} />}
+      {showPrint && <QuotePrint meta={meta} computed={computed} loose={looseCalc} cabinetNote={cabinetNote} looseNote={looseNote} discountNote={discountNote} looseDiscountNote={looseDiscountNote} audience={audience} designerPct={designerPct} lang={lang} onClose={() => setShowPrint(false)} />}
       {showCatalog && (
         <CatalogPicker
           onAdd={(it) => setLoose((ls) => [...ls, { id: newId('lf'), ...it }])}

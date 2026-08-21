@@ -8,6 +8,11 @@ const round0 = (n) => Math.round(Number(n) || 0);
 export async function exportExcel(meta, computed, loose, notes = {}, lang = 'both') {
   const XLSX = await import('xlsx');
   const t = (obj) => tr(obj, lang);
+  // 设计师版：供货价 = 零售 ×(100-折扣%)%
+  const isDesigner = notes.audience === 'designer';
+  const supplyRate = (100 - (Number(notes.designerPct) || 0)) / 100;
+  const supply = (retail) => Math.round((Number(retail) || 0) * supplyRate);
+  const supplyLbl = () => `${t({ en: 'Designer Supply', zh: '设计师供货价' })} (${100 - (Number(notes.designerPct) || 0)}%)`;
   const lineDesc = (ln) => (lang === 'en' ? ln.descEn : lang === 'zh' ? ln.descZh : `${ln.descEn} ${ln.descZh}`);
   const lineUom = (ln) => (lang === 'en' ? ln.uomEn : lang === 'zh' ? ln.uomZh : ln.uomZh);
   // 定制柜体子项描述：门板/柜体 → "Door: A Series"；抽屉 → "Drawers"
@@ -78,7 +83,8 @@ export async function exportExcel(meta, computed, loose, notes = {}, lang = 'bot
     });
     row(['', '', '', t(RLBL.gross), round0(computed.gross)]);
     if (computed.discount > 0) row(['', '', '', `${t(RLBL.discount)}${computed.discountMode === 'amt' ? '' : ` (${computed.adjustPct}%)`}${notes.discountNote ? ` — ${notes.discountNote}` : ''}`, -round0(computed.discount)]);
-    row(['', '', '', t(RLBL.total), round0(computed.net)]);
+    row(['', '', '', isDesigner ? t({ en: 'Retail Total', zh: '零售总额' }) : t(RLBL.total), round0(computed.net)]);
+    if (isDesigner) row(['', '', '', supplyLbl(), supply(computed.net)]);
     row([]);
     if (notes.cabinetNote) { row([t(RLBL.notes), notes.cabinetNote]); row([]); }
     termLines(QUOTE_TERMS, aoa);
@@ -105,7 +111,8 @@ export async function exportExcel(meta, computed, loose, notes = {}, lang = 'bot
     });
     row(['', '', '', '', t(RLBL.gross), round0(loose.gross)]);
     if (loose.discount > 0) row(['', '', '', '', `${t(RLBL.discount)}${loose.discountMode === 'amt' ? '' : ` (${loose.adjustPct}%)`}${notes.looseDiscountNote ? ` — ${notes.looseDiscountNote}` : ''}`, -round0(loose.discount)]);
-    row(['', '', '', '', t(RLBL.total), round0(loose.net)]);
+    row(['', '', '', '', isDesigner ? t({ en: 'Retail Total', zh: '零售总额' }) : t(RLBL.total), round0(loose.net)]);
+    if (isDesigner) row(['', '', '', '', supplyLbl(), supply(loose.net)]);
     row([]);
     if (notes.looseNote) { row([t(RLBL.notes), notes.looseNote]); row([]); }
     termLines(QUOTE_TERMS.slice(0, 1), aoa); // 只放 Validity
@@ -119,6 +126,6 @@ export async function exportExcel(meta, computed, loose, notes = {}, lang = 'bot
   // 文件名：EST QUOTE_RICCIONE_[客户]_[Site]_YYYYMMDD.xlsx
   const safe = (s) => (s || '').replace(/[\\/:*?"<>|]/g, '').trim().replace(/\s+/g, ' ');
   const d = (meta.date || '').replace(/-/g, '');
-  const name = `EST QUOTE_RICCIONE_${safe(meta.name) || 'Customer'}_${safe(meta.location) || 'Site'}_${d || 'draft'}.xlsx`;
+  const name = `EST QUOTE_RICCIONE_${safe(meta.name) || 'Customer'}_${safe(meta.location) || 'Site'}_${d || 'draft'}${isDesigner ? '_DESIGNER' : ''}.xlsx`;
   XLSX.writeFile(wb, name);
 }
