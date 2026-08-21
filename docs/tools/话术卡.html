@@ -462,6 +462,7 @@ footer code{font-family:var(--f-mono);font-size:11.5px;color:var(--ink-soft)}
     <button class="chip" data-f="ask" aria-pressed="false">一问价</button>
     <button class="chip" data-f="budget" aria-pressed="false">不肯说预算</button>
     <button class="chip" data-f="low" aria-pressed="false">预算不足</button>
+    <button class="chip" data-f="oneroom" aria-pressed="false">单区客人</button>
     <button class="chip" data-f="expensive" aria-pressed="false">说太贵</button>
     <button class="chip" data-f="silent" aria-pressed="false">没回复</button>
     <button class="chip" data-f="showroom" aria-pressed="false">展厅／预约</button>
@@ -1017,6 +1018,68 @@ Let me get everything ready for you to take back, so you're not left retelling i
 One question: what does __ usually care about most — price, style, or durability? I'll add something specific on that point.
 
 And I'll check back with you on __ (name the day). Does that work?`
+  },
+  {
+    id:"4-6", f:["oneroom","low","expensive"],
+    title:"卡 4-6 · 单区客人说「没 budget」→ 先分清是哪一种",
+    when:"单区客人说没预算，九成不是真的没钱，而是三件事之一：报价高过他心里的数／时机没到／礼貌拒绝。三种处理方式完全不同，问清楚再动。",
+    zh:`明白 —— 我想问清楚一点：
+
+是这个数字比您心里预期的高，还是现在这个时间点先不打算做这块？
+
+这两个我建议的做法不一样，所以想先确认一下 🙏`,
+    en:`Understood — let me just check one thing:
+
+Is the figure higher than what you had in mind, or is it more that now isn't the right time for this part?
+
+I'd suggest different things for those two, so I'd rather ask first 🙏`,
+    after:"答得出具体数字 → 用卡 4-7 给缩小版。答「先不打算」→ 直接跳卡 4-8 归档，别再报价。含糊过去、回复变短 → 也走卡 4-8，那是礼貌拒绝。"
+  },
+  {
+    id:"4-7", f:["oneroom","low"],
+    title:"卡 4-7 · 单区 · 给缩小版（不降单价）",
+    when:"只对「报价高过他心里的数」这一种用。同样板材，做少一点 —— 降的是范围不是单价。一旦给了折扣，他之后的全屋单也会来谈价。",
+    zh:`谢谢您说实话，这样我好帮您 👍
+
+单价我这边动不了 —— 打折对之前照原价签的客户不公平。
+但「做多满」是可以调的，而且这块调下来省得比折扣多：
+
+① 同样的板材和五金，内部配置做精简版（拿掉 __、__）
+② 或者这次先做 __ 这一段，剩下的留着以后接着做
+
+两个方向我都可以重排一版给您。您想先看哪一个？`,
+    en:`Thanks for telling me straight — that helps me help you 👍
+
+The unit rate I can't move — discounting would be unfair to everyone who signed at full price.
+But how much cabinetry we build is adjustable, and that saves more than a discount would:
+
+1. Same boards and hardware, simplified internals (drop the __ and __)
+2. Or build just the __ section now and continue the rest later
+
+I can rework either version for you. Which would you like to see first?`,
+    after:"重排的版本要能看出「少了什么」，不要只给一个更小的数字 —— 客人要知道钱省在哪里，不然会以为你本来就在报高。"
+  },
+  {
+    id:"4-8", f:["oneroom","silent","low"],
+    title:"卡 4-8 · 单区 · 归档信（第 10 天，发完就移出跟进名单）",
+    when:"三张卡里回报最高的一张。单区客人真正的价值不是这一单，是两年后的全屋和转介 —— 逼单会把这两样一起烧掉。这封信经常在几个月后把单子自己带回来。",
+    zh:`Hi __，这边先不打扰您了 🙂
+
+报价单我保留着，规格和价格帮您锁到 __ 月底。
+如果之后时间点合适了，或者装修排到这一块，随时 WhatsApp 我 ——
+不用重新量尺、重新报，直接接着走就行。
+
+另外无论做不做，这份《__》给您留着，里面有几个坑，
+就算找别家做也用得上 👍`,
+    en:`Hi __, I'll stop chasing you on this one 🙂
+
+I'm keeping your quotation on file — specs and pricing held until end of __.
+Whenever the timing works, or your renovation reaches this part, just WhatsApp me.
+No need to re-measure or re-quote; we pick up where we left off.
+
+And whether or not you build with us, keep this __ — there are a few pitfalls in it
+that are worth knowing even if you go with someone else 👍`,
+    after:"发完就归档，不再单独跟。之后只做零成本触达：新案例、工地实拍、节日群发。"
   },
   {
     id:"5-1", f:["showroom"],
