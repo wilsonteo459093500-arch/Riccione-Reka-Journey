@@ -1,12 +1,12 @@
 import { createPortal } from 'react-dom';
 import { Printer, X } from 'lucide-react';
 import { T } from '../../theme.js';
-import { fmtMYR, fmtNum, tr, pickLang, capColor, cabTypeById, RLBL, QUOTE_TERMS } from '../../constants/pricing.js';
+import { fmtMYR, fmtNum, tr, pickLang, capColor, cabTypeById, RLBL, QUOTE_TERMS, discountChainRate, discountChainLabel } from '../../constants/pricing.js';
 import { fmt } from '../../utils/helpers.js';
 
 // 报价单（可打印 / 另存 PDF）。lang：'en' | 'zh' | 'both'。
 // 定制橱柜（SAIL by Riccione Reka）+ Loose Furniture（Riccione Furniture，另起一页）。
-export default function QuotePrint({ meta, computed, loose, cabinetNote = '', looseNote = '', discountNote = '', looseDiscountNote = '', audience = 'retail', designerPct = 0, lang = 'both', onClose }) {
+export default function QuotePrint({ meta, computed, loose, cabinetNote = '', looseNote = '', discountNote = '', looseDiscountNote = '', audience = 'retail', designerDisc = '30', lang = 'both', onClose }) {
   const zones = computed.zoneResults.filter((zr) => zr.zone.items.length > 0);
   const looseRows = loose?.rows || [];
   const hasCab = zones.length > 0;
@@ -14,10 +14,11 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
   const looseNet = loose?.net || 0;
   const grand = computed.net + looseNet;
   const hasSummary = hasCab && hasLoose; // 两个部分都有才需要总览页
-  // 设计师版：供货价 = 零售 ×(100-折扣%)%
+  // 设计师版：供货价 = 零售 × 折扣链系数（支持 "30+10" 叠加）
   const isDesigner = audience === 'designer';
-  const supplyRate = (100 - (Number(designerPct) || 0)) / 100;
+  const supplyRate = discountChainRate(designerDisc);
   const supply = (retail) => Math.round((Number(retail) || 0) * supplyRate);
+  const discTag = discountChainLabel(designerDisc); // "30%+10%"
   const t = (obj) => tr(obj, lang);
   const lineDesc = (ln) => (lang === 'en' ? ln.descEn : lang === 'zh' ? ln.descZh : `${ln.descEn} ${ln.descZh}`);
   const lineUom = (ln) => (lang === 'en' ? ln.uomEn : lang === 'zh' ? ln.uomZh : ln.uomZh);
@@ -174,7 +175,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                     </tr>
                     {isDesigner && (
                       <tr style={{ color: T.wood, borderTop: `1px solid ${T.line}` }}>
-                        <td className="py-3 px-2 font-display text-xl">{t({ en: 'Designer Supply', zh: '设计师供货价' })} ({100 - (Number(designerPct) || 0)}%)</td>
+                        <td className="py-3 px-2 font-display text-xl">{t({ en: 'Designer Supply', zh: '设计师供货价' })} ({discTag})</td>
                         <td className="text-right py-3 px-2 font-display text-xl">{fmtMYR(supply(grand))}</td>
                       </tr>
                     )}
@@ -273,7 +274,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                   </div>
                   {isDesigner && (
                     <div className="flex justify-between py-1 font-medium" style={{ color: T.wood }}>
-                      <span>{t({ en: 'Designer Supply', zh: '设计师供货价' })} ({100 - (Number(designerPct) || 0)}%)</span><span>{fmtMYR(supply(computed.net))}</span>
+                      <span>{t({ en: 'Designer Supply', zh: '设计师供货价' })} ({discTag})</span><span>{fmtMYR(supply(computed.net))}</span>
                     </div>
                   )}
                 </div>
@@ -337,7 +338,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                     </tr>
                     {isDesigner && (
                       <tr style={{ color: T.wood }}>
-                        <td colSpan={6} className="text-right py-1 px-2 font-medium">{t({ en: 'Designer Supply', zh: '设计师供货价' })} ({100 - (Number(designerPct) || 0)}%)</td>
+                        <td colSpan={6} className="text-right py-1 px-2 font-medium">{t({ en: 'Designer Supply', zh: '设计师供货价' })} ({discTag})</td>
                         <td className="text-right py-1 px-2 font-medium">{fmtNum(supply(loose.net), 0)}</td>
                       </tr>
                     )}

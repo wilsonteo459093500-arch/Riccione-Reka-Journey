@@ -185,6 +185,16 @@ export const OUTPUT_LANGS = [
   { id: 'both', label: 'EN+中' },
 ];
 
+// 叠加折扣链："30+10" → 供货系数 0.7×0.9=0.63；标签 "30%+10%"
+export function discountChainRate(str) {
+  const parts = String(str ?? '').split('+').map((s) => parseFloat(s.trim())).filter((n) => !Number.isNaN(n));
+  return parts.reduce((r, p) => r * (1 - (Number(p) || 0) / 100), 1);
+}
+export function discountChainLabel(str) {
+  const parts = String(str ?? '').split('+').map((s) => s.trim()).filter(Boolean);
+  return parts.map((p) => `${p}%`).join('+');
+}
+
 // obj = { en, zh } → 按语言取值（both 则并列）
 export function tr(obj, lang) {
   if (!obj) return '';

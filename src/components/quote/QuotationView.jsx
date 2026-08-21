@@ -3,7 +3,7 @@ import { Plus, Copy, Trash2, GripVertical, Sofa, ChevronUp, ChevronDown, Chevron
 import { T } from '../../theme.js';
 import { newId, copyToClipboard } from '../../utils/helpers.js';
 import { useToast } from '../ui/UIProvider.jsx';
-import { computeQuote, computeLoose, CATEGORIES, ROOMS, CUSTOM_ROOM, OUTPUT_LANGS, tr, pickLang, RLBL, QUOTE_TERMS, cabTypeById, fmtMYR } from '../../constants/pricing.js';
+import { computeQuote, computeLoose, CATEGORIES, ROOMS, CUSTOM_ROOM, OUTPUT_LANGS, tr, pickLang, RLBL, QUOTE_TERMS, cabTypeById, fmtMYR, discountChainRate, discountChainLabel } from '../../constants/pricing.js';
 import QuoteLineItem from './QuoteLineItem.jsx';
 import QuotePrint from './QuotePrint.jsx';
 import CatalogPicker from './CatalogPicker.jsx';
@@ -124,7 +124,9 @@ export default function QuotationView({ doc, onChange }) {
   const looseDiscountAmt = doc.looseDiscountAmt || 0;
   const lang = meta.outputLang || 'en';
   const audience = meta.audience || 'retail';          // 'retail' 零售 | 'designer' 设计师
-  const designerPct = meta.designerPct ?? 30;          // 设计师折扣 %：供货价 = 零售 ×(100-%)%
+  // 设计师折扣链："30" 或 "30+10"（叠加）；供货价 = 零售 × 系数
+  const designerDisc = meta.designerDisc ?? (meta.designerPct != null ? String(meta.designerPct) : '30');
+  const designerRate = discountChainRate(designerDisc);
   const computed = useMemo(() => computeQuote(zones, adjustPct, discountMode, discountAmt), [zones, adjustPct, discountMode, discountAmt]);
   const looseCalc = useMemo(() => computeLoose(looseItems, looseAdjustPct, looseDiscountMode, looseDiscountAmt), [looseItems, looseAdjustPct, looseDiscountMode, looseDiscountAmt]);
   const grandTotal = computed.net + looseCalc.net;
@@ -536,13 +538,14 @@ export default function QuotationView({ doc, onChange }) {
               </div>
             </div>
             {audience === 'designer' && (
-              <div className="flex items-center gap-2 mt-2 text-xs" style={{ color: T.inkSoft }}>
+              <div className="flex items-center gap-2 mt-2 text-xs flex-wrap" style={{ color: T.inkSoft }}>
                 <span className="uppercase tracking-widest text-[10px]">Designer discount 设计师折扣</span>
-                <input type="number" value={designerPct}
-                  onChange={(e) => setMeta({ designerPct: Number(e.target.value) || 0 })}
-                  className="w-16 px-2 py-1 text-sm outline-none"
+                <input type="text" value={designerDisc}
+                  onChange={(e) => setMeta({ designerDisc: e.target.value })}
+                  placeholder="30 或 30+10"
+                  className="w-24 px-2 py-1 text-sm outline-none"
                   style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }} />
-                <span>%　→ 供货价 = 零售 × {100 - (Number(designerPct) || 0)}%</span>
+                <span>%　→ 供货价 = 零售 × {Math.round(designerRate * 1000) / 10}%（{discountChainLabel(designerDisc) || '—'}）</span>
               </div>
             )}
           </div>
@@ -557,7 +560,7 @@ export default function QuotationView({ doc, onChange }) {
               </button>
               <button onClick={async () => {
                 try {
-                  await exportExcel(meta, computed, looseCalc, { cabinetNote, looseNote, discountNote, looseDiscountNote, audience, designerPct }, lang);
+                  await exportExcel(meta, computed, looseCalc, { cabinetNote, looseNote, discountNote, looseDiscountNote, audience, designerDisc }, lang);
                   toast('Excel exported 已导出', 'success');
                 } catch (e) {
                   toast('Export failed 导出失败', 'error');
@@ -603,7 +606,7 @@ export default function QuotationView({ doc, onChange }) {
         </div>
       </div>
 
-      {showPrint && <QuotePrint meta={meta} computed={computed} loose={looseCalc} cabinetNote={cabinetNote} looseNote={looseNote} discountNote={discountNote} looseDiscountNote={looseDiscountNote} audience={audience} designerPct={designerPct} lang={lang} onClose={() => setShowPrint(false)} />}
+      {showPrint && <QuotePrint meta={meta} computed={computed} loose={looseCalc} cabinetNote={cabinetNote} looseNote={looseNote} discountNote={discountNote} looseDiscountNote={looseDiscountNote} audience={audience} designerDisc={designerDisc} lang={lang} onClose={() => setShowPrint(false)} />}
       {showCatalog && (
         <CatalogPicker
           onAdd={(it) => setLoose((ls) => [...ls, { id: newId('lf'), ...it }])}

@@ -1,4 +1,4 @@
-import { tr, pickLang, capColor, cabTypeById, RLBL, QUOTE_TERMS } from '../../constants/pricing.js';
+import { tr, pickLang, capColor, cabTypeById, RLBL, QUOTE_TERMS, discountChainRate, discountChainLabel } from '../../constants/pricing.js';
 import { fmt } from '../../utils/helpers.js';
 
 const round0 = (n) => Math.round(Number(n) || 0);
@@ -8,11 +8,11 @@ const round0 = (n) => Math.round(Number(n) || 0);
 export async function exportExcel(meta, computed, loose, notes = {}, lang = 'both') {
   const XLSX = await import('xlsx');
   const t = (obj) => tr(obj, lang);
-  // 设计师版：供货价 = 零售 ×(100-折扣%)%
+  // 设计师版：供货价 = 零售 × 折扣链系数（支持 "30+10" 叠加）
   const isDesigner = notes.audience === 'designer';
-  const supplyRate = (100 - (Number(notes.designerPct) || 0)) / 100;
+  const supplyRate = discountChainRate(notes.designerDisc);
   const supply = (retail) => Math.round((Number(retail) || 0) * supplyRate);
-  const supplyLbl = () => `${t({ en: 'Designer Supply', zh: '设计师供货价' })} (${100 - (Number(notes.designerPct) || 0)}%)`;
+  const supplyLbl = () => `${t({ en: 'Designer Supply', zh: '设计师供货价' })} (${discountChainLabel(notes.designerDisc)})`;
   const lineDesc = (ln) => (lang === 'en' ? ln.descEn : lang === 'zh' ? ln.descZh : `${ln.descEn} ${ln.descZh}`);
   const lineUom = (ln) => (lang === 'en' ? ln.uomEn : lang === 'zh' ? ln.uomZh : ln.uomZh);
   // 定制柜体子项描述：门板/柜体 → "Door: A Series"；抽屉 → "Drawers"
