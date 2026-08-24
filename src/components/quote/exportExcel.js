@@ -8,11 +8,17 @@ const round0 = (n) => Math.round(Number(n) || 0);
 export async function exportExcel(meta, computed, loose, notes = {}, lang = 'both') {
   const XLSX = await import('xlsx');
   const t = (obj) => tr(obj, lang);
-  // 设计师版：供货价 = 零售 × 折扣链系数（支持 "30+10" 叠加）
+  // 三种版本：retail / designer 双价 / designer_net 净价（每个单价都是供货价）
   const isDesigner = notes.audience === 'designer';
+  const isDesignerNet = notes.audience === 'designer_net';
+  const anyDesigner = isDesigner || isDesignerNet;
   const supplyRate = discountChainRate(notes.designerDisc);
   const supply = (retail) => Math.round((Number(retail) || 0) * supplyRate);
-  const supplyLbl = () => `${t({ en: 'Designer Supply', zh: '设计师供货价' })} (${discountChainLabel(notes.designerDisc)})`;
+  const priceScale = isDesignerNet ? supplyRate : 1;
+  const px = (v) => Math.round((Number(v) || 0) * priceScale);
+  const discTag = discountChainLabel(notes.designerDisc);
+  const supplyLbl = () => `${t({ en: 'Designer Supply', zh: '设计师供货价' })} (${discTag})`;
+  const dTotalLbl = () => `${t({ en: 'Designer Total', zh: '设计师总额' })} (${discTag})`;
   const lineDesc = (ln) => (lang === 'en' ? ln.descEn : lang === 'zh' ? ln.descZh : `${ln.descEn} ${ln.descZh}`);
   const lineUom = (ln) => (lang === 'en' ? ln.uomEn : lang === 'zh' ? ln.uomZh : ln.uomZh);
   // 定制柜体子项描述：门板/柜体 → "Door: A Series"；抽屉 → "Drawers"
@@ -67,27 +73,31 @@ export async function exportExcel(meta, computed, loose, notes = {}, lang = 'bot
           row([[typeLabel, nm].filter(Boolean).join(' · ')]);
           ir.lines.forEach((ln) => {
             const qty = ln.piece ? round0(ln.qty) : Number(ln.qty.toFixed(2));
-            row([`    ${cabLineLabel(ln)}`, qty, lineUom(ln), round0(ln.unitMyr), round0(ln.total)]);
+            row([`    ${cabLineLabel(ln)}`, qty, lineUom(ln), px(ln.unitMyr), px(ln.total)]);
           });
         } else {
           ir.lines.forEach((ln, i) => {
             const nm = i === 0 ? pickLang(ir.item.name || '', lang) : '';
             const label = nm ? `${nm} · ${lineDesc(ln)}` : lineDesc(ln);
             const qty = ln.piece ? round0(ln.qty) : Number(ln.qty.toFixed(2));
-            row([label, qty, lineUom(ln), round0(ln.unitMyr), round0(ln.total)]);
+            row([label, qty, lineUom(ln), px(ln.unitMyr), px(ln.total)]);
           });
         }
       });
-      row(['', '', '', t(RLBL.subtotal), round0(zr.subtotal)]);
+      row(['', '', '', t(RLBL.subtotal), px(zr.subtotal)]);
       row([]);
     });
-    if (!isDesigner) {
+    if (!anyDesigner) {
       row(['', '', '', t(RLBL.gross), round0(computed.gross)]);
       if (computed.discount > 0) row(['', '', '', `${t(RLBL.discount)}${computed.discountMode === 'amt' ? '' : ` (${computed.adjustPct}%)`}${notes.discountNote ? ` — ${notes.discountNote}` : ''}`, -round0(computed.discount)]);
     }
-    const cabRetail = isDesigner ? computed.gross : computed.net; // 设计师版按原价
-    row(['', '', '', isDesigner ? t({ en: 'Retail Total', zh: '零售总额' }) : t(RLBL.total), round0(cabRetail)]);
-    if (isDesigner) row(['', '', '', supplyLbl(), supply(cabRetail)]);
+    const cabRetail = anyDesigner ? computed.gross : computed.net; // 设计师版按原价
+    if (isDesignerNet) {
+      row(['', '', '', dTotalLbl(), supply(cabRetail)]);
+    } else {
+      row(['', '', '', isDesigner ? t({ en: 'Retail Total', zh: '零售总额' }) : t(RLBL.total), round0(cabRetail)]);
+      if (isDesigner) row(['', '', '', supplyLbl(), supply(cabRetail)]);
+    }
     row([]);
     if (notes.cabinetNote) { row([t(RLBL.notes), notes.cabinetNote]); row([]); }
     termLines(QUOTE_TERMS, aoa);
@@ -110,15 +120,19 @@ export async function exportExcel(meta, computed, loose, notes = {}, lang = 'bot
     row([]);
     row([t(RLBL.productType), t(RLBL.model), t(RLBL.color), t(RLBL.qty), t(RLBL.unitPrice), t(RLBL.amount)]);
     looseRows.forEach((r) => {
-      row([r.type || '', r.model || '', capColor(r.color) || '', round0(r.qty), round0(r.unitMyr), round0(r.total)]);
+      row([r.type || '', r.model || '', capColor(r.color) || '', round0(r.qty), px(r.unitMyr), px(r.total)]);
     });
-    if (!isDesigner) {
+    if (!anyDesigner) {
       row(['', '', '', '', t(RLBL.gross), round0(loose.gross)]);
       if (loose.discount > 0) row(['', '', '', '', `${t(RLBL.discount)}${loose.discountMode === 'amt' ? '' : ` (${loose.adjustPct}%)`}${notes.looseDiscountNote ? ` — ${notes.looseDiscountNote}` : ''}`, -round0(loose.discount)]);
     }
-    const looseRetail = isDesigner ? loose.gross : loose.net; // 设计师版按原价
-    row(['', '', '', '', isDesigner ? t({ en: 'Retail Total', zh: '零售总额' }) : t(RLBL.total), round0(looseRetail)]);
-    if (isDesigner) row(['', '', '', '', supplyLbl(), supply(looseRetail)]);
+    const looseRetail = anyDesigner ? loose.gross : loose.net; // 设计师版按原价
+    if (isDesignerNet) {
+      row(['', '', '', '', dTotalLbl(), supply(looseRetail)]);
+    } else {
+      row(['', '', '', '', isDesigner ? t({ en: 'Retail Total', zh: '零售总额' }) : t(RLBL.total), round0(looseRetail)]);
+      if (isDesigner) row(['', '', '', '', supplyLbl(), supply(looseRetail)]);
+    }
     row([]);
     if (notes.looseNote) { row([t(RLBL.notes), notes.looseNote]); row([]); }
     termLines(QUOTE_TERMS.slice(0, 1), aoa); // 只放 Validity
@@ -132,6 +146,6 @@ export async function exportExcel(meta, computed, loose, notes = {}, lang = 'bot
   // 文件名：EST QUOTE_RICCIONE_[客户]_[Site]_YYYYMMDD.xlsx
   const safe = (s) => (s || '').replace(/[\\/:*?"<>|]/g, '').trim().replace(/\s+/g, ' ');
   const d = (meta.date || '').replace(/-/g, '');
-  const name = `EST QUOTE_RICCIONE_${safe(meta.name) || 'Customer'}_${safe(meta.location) || 'Site'}_${d || 'draft'}${isDesigner ? '_DESIGNER' : ''}.xlsx`;
+  const name = `EST QUOTE_RICCIONE_${safe(meta.name) || 'Customer'}_${safe(meta.location) || 'Site'}_${d || 'draft'}${isDesignerNet ? '_DESIGNER_NET' : isDesigner ? '_DESIGNER' : ''}.xlsx`;
   XLSX.writeFile(wb, name);
 }

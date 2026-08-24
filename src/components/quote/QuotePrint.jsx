@@ -14,14 +14,18 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
   const looseNet = loose?.net || 0;
   const grand = computed.net + looseNet;
   const hasSummary = hasCab && hasLoose; // 两个部分都有才需要总览页
-  // 设计师版：供货价 = 零售 × 折扣链系数（支持 "30+10" 叠加）
-  const isDesigner = audience === 'designer';
+  // 三种版本：retail 零售 / designer 双价(零售+供货,只在总额) / designer_net 净价(每个单价都是供货价)
+  const isDesigner = audience === 'designer';         // 双价
+  const isDesignerNet = audience === 'designer_net';  // 净价
+  const anyDesigner = isDesigner || isDesignerNet;
   const supplyRate = discountChainRate(designerDisc);
   const supply = (retail) => Math.round((Number(retail) || 0) * supplyRate);
   const discTag = discountChainLabel(designerDisc); // "30%+10%"
+  const priceScale = isDesignerNet ? supplyRate : 1; // 净价版把每个价格 × 系数
+  const px = (v) => Math.round((Number(v) || 0) * priceScale); // 显示价（净价版=供货价）
   // 设计师版按「零售原价 gross」计（不理会给零售客户的折扣）；零售版按折后 net 计。
-  const cabRetail = isDesigner ? computed.gross : computed.net;
-  const looseRetailV = isDesigner ? (loose?.gross || 0) : looseNet;
+  const cabRetail = anyDesigner ? computed.gross : computed.net;
+  const looseRetailV = anyDesigner ? (loose?.gross || 0) : looseNet;
   const grandRetail = cabRetail + looseRetailV;
   const t = (obj) => tr(obj, lang);
   const lineDesc = (ln) => (lang === 'en' ? ln.descEn : lang === 'zh' ? ln.descZh : `${ln.descEn} ${ln.descZh}`);
@@ -43,7 +47,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
     const prev = document.title;
     const safe = (s) => (s || '').replace(/[\\/:*?"<>|]/g, '').trim().replace(/\s+/g, ' ');
     const d = (meta.date || '').replace(/-/g, '');
-    document.title = `EST QUOTE_RICCIONE_${safe(meta.name) || 'Customer'}_${safe(meta.location) || 'Site'}_${d || 'draft'}${isDesigner ? '_DESIGNER' : ''}`;
+    document.title = `EST QUOTE_RICCIONE_${safe(meta.name) || 'Customer'}_${safe(meta.location) || 'Site'}_${d || 'draft'}${isDesignerNet ? '_DESIGNER_NET' : isDesigner ? '_DESIGNER' : ''}`;
     const restore = () => { document.title = prev; window.removeEventListener('afterprint', restore); };
     window.addEventListener('afterprint', restore);
     window.print();
@@ -55,10 +59,10 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
       <div>
         <div className="font-display text-2xl">{brand}</div>
         <div className="text-xs tracking-widest uppercase mt-1" style={{ color: T.inkSoft }}>{t(RLBL.estQuote)}</div>
-        {isDesigner && (
+        {anyDesigner && (
           <div className="inline-block mt-1 px-2 py-0.5 text-[10px] uppercase tracking-widest"
             style={{ background: T.wood, color: '#fff', borderRadius: 2 }}>
-            {t({ en: 'Designer Copy', zh: '设计师版' })} · {t({ en: 'Confidential', zh: '内部' })}
+            {t({ en: 'Designer Copy', zh: '设计师版' })}{isDesignerNet ? ` · ${t({ en: 'Net Price', zh: '净价' })}` : ''} · {t({ en: 'Confidential', zh: '内部' })}
           </div>
         )}
       </div>
@@ -109,11 +113,11 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
       <tr style={{ borderTop: `1px solid ${T.line}` }}>
         <td className="pt-2 px-2 font-medium" colSpan={2}>{label} <span style={{ color: T.inkSoft }}>· {brand}</span></td>
       </tr>
-      {isDesigner ? (
-        /* 设计师版：只显示零售原价小计（不理会零售折扣）*/
+      {anyDesigner ? (
+        /* 设计师版：只显示一个小计（双价=零售原价；净价=供货价）*/
         <tr>
           <td className="py-0.5 px-2 pl-5 font-medium">{t(RLBL.subtotal)}</td>
-          <td className="text-right py-0.5 px-2 font-medium">{fmtMYR(calc.gross)}</td>
+          <td className="text-right py-0.5 px-2 font-medium">{fmtMYR(isDesignerNet ? supply(calc.gross) : calc.gross)}</td>
         </tr>
       ) : (
         <>
@@ -173,7 +177,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                     <SummarySection label={t(RLBL.customCabinet)} brand="SAIL by Riccione Reka" calc={computed} note={discountNote} />
                     <SummarySection label={t(RLBL.looseSection)} brand="Riccione Furniture" calc={loose} note={looseDiscountNote} />
                     {/* 合计（两部分）—— 零售版才显示原价/折扣分解 */}
-                    {!isDesigner && (
+                    {!anyDesigner && (
                       <>
                         <tr style={{ borderTop: `1.5px solid ${T.line}` }}>
                           <td className="pt-2 px-2" style={{ color: T.inkSoft }}>{t(RLBL.totalBeforeDiscount)}</td>
@@ -187,15 +191,25 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                         )}
                       </>
                     )}
-                    <tr style={{ borderTop: `2px solid ${T.ink}` }}>
-                      <td className="py-3 px-2 font-display text-xl">{isDesigner ? t({ en: 'Retail Total', zh: '零售总额' }) : t(RLBL.grandTotal)}</td>
-                      <td className="text-right py-3 px-2 font-display text-xl">{fmtMYR(grandRetail)}</td>
-                    </tr>
-                    {isDesigner && (
-                      <tr style={{ color: T.wood, borderTop: `1px solid ${T.line}` }}>
-                        <td className="py-3 px-2 font-display text-xl">{t({ en: 'Designer Supply', zh: '设计师供货价' })} ({discTag})</td>
+                    {isDesignerNet ? (
+                      /* 净价版：直接一个供货总额 */
+                      <tr style={{ borderTop: `2px solid ${T.ink}`, color: T.wood }}>
+                        <td className="py-3 px-2 font-display text-xl">{t({ en: 'Designer Total', zh: '设计师总额' })} ({discTag})</td>
                         <td className="text-right py-3 px-2 font-display text-xl">{fmtMYR(supply(grandRetail))}</td>
                       </tr>
+                    ) : (
+                      <>
+                        <tr style={{ borderTop: `2px solid ${T.ink}` }}>
+                          <td className="py-3 px-2 font-display text-xl">{isDesigner ? t({ en: 'Retail Total', zh: '零售总额' }) : t(RLBL.grandTotal)}</td>
+                          <td className="text-right py-3 px-2 font-display text-xl">{fmtMYR(grandRetail)}</td>
+                        </tr>
+                        {isDesigner && (
+                          <tr style={{ color: T.wood, borderTop: `1px solid ${T.line}` }}>
+                            <td className="py-3 px-2 font-display text-xl">{t({ en: 'Designer Supply', zh: '设计师供货价' })} ({discTag})</td>
+                            <td className="text-right py-3 px-2 font-display text-xl">{fmtMYR(supply(grandRetail))}</td>
+                          </tr>
+                        )}
+                      </>
                     )}
                   </tbody>
                 </table>
@@ -242,8 +256,8 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                                 <td className="py-1 px-2 pl-6" style={{ color: T.inkSoft }}>{cabLineLabel(ln)}</td>
                                 {qtyCell(ln)}
                                 <td className="py-1 px-2">{lineUom(ln)}</td>
-                                <td className="text-right py-1 px-2">{fmtNum(Math.round(ln.unitMyr), 0)}</td>
-                                <td className="text-right py-1 px-2">{fmtNum(ln.total, 0)}</td>
+                                <td className="text-right py-1 px-2">{fmtNum(px(ln.unitMyr), 0)}</td>
+                                <td className="text-right py-1 px-2">{fmtNum(px(ln.total), 0)}</td>
                               </tr>
                             )),
                           ];
@@ -260,14 +274,14 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                             </td>
                             {qtyCell(ln)}
                             <td className="py-1 px-2">{lineUom(ln)}</td>
-                            <td className="text-right py-1 px-2">{fmtNum(Math.round(ln.unitMyr), 0)}</td>
-                            <td className="text-right py-1 px-2">{fmtNum(ln.total, 0)}</td>
+                            <td className="text-right py-1 px-2">{fmtNum(px(ln.unitMyr), 0)}</td>
+                            <td className="text-right py-1 px-2">{fmtNum(px(ln.total), 0)}</td>
                           </tr>
                         ));
                       })}
                       <tr style={{ borderTop: `1.5px solid ${T.line}` }}>
                         <td colSpan={4} className="text-right py-1 px-2 text-xs" style={{ color: T.inkSoft }}>{t(RLBL.subtotal)}</td>
-                        <td className="text-right py-1 px-2 font-medium">{fmtNum(zr.subtotal, 0)}</td>
+                        <td className="text-right py-1 px-2 font-medium">{fmtNum(px(zr.subtotal), 0)}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -276,7 +290,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
 
               <div className="mt-6 flex justify-end" style={{ breakInside: 'avoid' }}>
                 <div className="w-72 text-sm">
-                  {!isDesigner && (
+                  {!anyDesigner && (
                     <>
                       <div className="flex justify-between py-1">
                         <span style={{ color: T.inkSoft }}>{t(RLBL.gross)}</span><span>{fmtMYR(computed.gross)}</span>
@@ -291,13 +305,21 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                       )}
                     </>
                   )}
-                  <div className="flex justify-between py-2 mt-1 font-display text-xl" style={{ borderTop: `2px solid ${T.ink}` }}>
-                    <span>{isDesigner ? t({ en: 'Retail Total', zh: '零售总额' }) : t(RLBL.total)}</span><span>{fmtMYR(cabRetail)}</span>
-                  </div>
-                  {isDesigner && (
-                    <div className="flex justify-between py-1 font-medium" style={{ color: T.wood }}>
-                      <span>{t({ en: 'Designer Supply', zh: '设计师供货价' })} ({discTag})</span><span>{fmtMYR(supply(cabRetail))}</span>
+                  {isDesignerNet ? (
+                    <div className="flex justify-between py-2 mt-1 font-display text-xl" style={{ borderTop: `2px solid ${T.ink}`, color: T.wood }}>
+                      <span>{t({ en: 'Designer Total', zh: '设计师总额' })} ({discTag})</span><span>{fmtMYR(supply(cabRetail))}</span>
                     </div>
+                  ) : (
+                    <>
+                      <div className="flex justify-between py-2 mt-1 font-display text-xl" style={{ borderTop: `2px solid ${T.ink}` }}>
+                        <span>{isDesigner ? t({ en: 'Retail Total', zh: '零售总额' }) : t(RLBL.total)}</span><span>{fmtMYR(cabRetail)}</span>
+                      </div>
+                      {isDesigner && (
+                        <div className="flex justify-between py-1 font-medium" style={{ color: T.wood }}>
+                          <span>{t({ en: 'Designer Supply', zh: '设计师供货价' })} ({discTag})</span><span>{fmtMYR(supply(cabRetail))}</span>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -340,11 +362,11 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                         <td className="py-1 px-2">{r.model || '—'}</td>
                         <td className="py-1 px-2">{capColor(r.color) || '—'}</td>
                         <td className="text-right py-1 px-2">{fmtNum(Number(r.qty) || 0, 0)}</td>
-                        <td className="text-right py-1 px-2">{fmtNum(Math.round(Number(r.unitMyr) || 0), 0)}</td>
-                        <td className="text-right py-1 px-2">{fmtNum(r.total, 0)}</td>
+                        <td className="text-right py-1 px-2">{fmtNum(px(r.unitMyr), 0)}</td>
+                        <td className="text-right py-1 px-2">{fmtNum(px(r.total), 0)}</td>
                       </tr>
                     ))}
-                    {!isDesigner && (
+                    {!anyDesigner && (
                       <>
                         <tr style={{ borderTop: `1.5px solid ${T.line}` }}>
                           <td colSpan={6} className="text-right py-1 px-2 text-xs" style={{ color: T.inkSoft }}>{t(RLBL.gross)}</td>
@@ -358,15 +380,24 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                         )}
                       </>
                     )}
-                    <tr style={{ borderTop: `1.5px solid ${T.line}` }}>
-                      <td colSpan={6} className="text-right py-1 px-2 font-medium">{isDesigner ? t({ en: 'Retail Total', zh: '零售总额' }) : t(RLBL.total)}</td>
-                      <td className="text-right py-1 px-2 font-medium">{fmtNum(looseRetailV, 0)}</td>
-                    </tr>
-                    {isDesigner && (
-                      <tr style={{ color: T.wood }}>
-                        <td colSpan={6} className="text-right py-1 px-2 font-medium">{t({ en: 'Designer Supply', zh: '设计师供货价' })} ({discTag})</td>
+                    {isDesignerNet ? (
+                      <tr style={{ borderTop: `1.5px solid ${T.line}`, color: T.wood }}>
+                        <td colSpan={6} className="text-right py-1 px-2 font-medium">{t({ en: 'Designer Total', zh: '设计师总额' })} ({discTag})</td>
                         <td className="text-right py-1 px-2 font-medium">{fmtNum(supply(looseRetailV), 0)}</td>
                       </tr>
+                    ) : (
+                      <>
+                        <tr style={{ borderTop: `1.5px solid ${T.line}` }}>
+                          <td colSpan={6} className="text-right py-1 px-2 font-medium">{isDesigner ? t({ en: 'Retail Total', zh: '零售总额' }) : t(RLBL.total)}</td>
+                          <td className="text-right py-1 px-2 font-medium">{fmtNum(looseRetailV, 0)}</td>
+                        </tr>
+                        {isDesigner && (
+                          <tr style={{ color: T.wood }}>
+                            <td colSpan={6} className="text-right py-1 px-2 font-medium">{t({ en: 'Designer Supply', zh: '设计师供货价' })} ({discTag})</td>
+                            <td className="text-right py-1 px-2 font-medium">{fmtNum(supply(looseRetailV), 0)}</td>
+                          </tr>
+                        )}
+                      </>
                     )}
                   </tbody>
                 </table>

@@ -519,12 +519,12 @@ export default function QuotationView({ doc, onChange }) {
             </div>
           </div>
 
-          {/* 客户类型 Client type：零售 / 设计师（设计师版显示供货价）*/}
+          {/* 客户类型 Client type：零售 / 设计师双价 / 设计师净价 */}
           <div className="p-3 rounded" style={{ background: T.cream, border: `1px solid ${T.lineSoft}` }}>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[10px] uppercase tracking-widest" style={{ color: T.inkSoft }}>Client 客户</span>
-              <div className="flex gap-1 ml-auto">
-                {[['retail', 'Retail 零售'], ['designer', 'Designer 设计师']].map(([id, label]) => {
+              <div className="flex gap-1 ml-auto flex-wrap justify-end">
+                {[['retail', 'Retail 零售'], ['designer', 'Designer 双价'], ['designer_net', 'Designer 净价']].map(([id, label]) => {
                   const on = audience === id;
                   return (
                     <button key={id} onClick={() => setMeta({ audience: id })}
@@ -537,7 +537,7 @@ export default function QuotationView({ doc, onChange }) {
                 })}
               </div>
             </div>
-            {audience === 'designer' && (
+            {audience !== 'retail' && (
               <div className="flex items-center gap-2 mt-2 text-xs flex-wrap" style={{ color: T.inkSoft }}>
                 <span className="uppercase tracking-widest text-[10px]">Designer discount 设计师折扣</span>
                 <input type="text" value={designerDisc}
@@ -545,7 +545,7 @@ export default function QuotationView({ doc, onChange }) {
                   placeholder="30 或 30+10"
                   className="w-24 px-2 py-1 text-sm outline-none"
                   style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }} />
-                <span>%　→ 供货价 = 零售 × {Math.round(designerRate * 1000) / 10}%（{discountChainLabel(designerDisc) || '—'}）</span>
+                <span>%　→ 供货价 = 零售 × {Math.round(designerRate * 1000) / 10}%（{discountChainLabel(designerDisc) || '—'}）{audience === 'designer_net' ? ' · 每个单价都换算' : ''}</span>
               </div>
             )}
           </div>
