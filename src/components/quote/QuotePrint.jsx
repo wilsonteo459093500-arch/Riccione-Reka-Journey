@@ -194,7 +194,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                     {isDesignerNet ? (
                       /* 净价版：直接一个供货总额 */
                       <tr style={{ borderTop: `2px solid ${T.ink}`, color: T.wood }}>
-                        <td className="py-3 px-2 font-display text-xl">{t({ en: 'Designer Total', zh: '设计师总额' })} ({discTag})</td>
+                        <td className="py-3 px-2 font-display text-xl">{t({ en: 'Designer Total', zh: '设计师总额' })}</td>
                         <td className="text-right py-3 px-2 font-display text-xl">{fmtMYR(supply(grandRetail))}</td>
                       </tr>
                     ) : (
@@ -307,7 +307,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                   )}
                   {isDesignerNet ? (
                     <div className="flex justify-between py-2 mt-1 font-display text-xl" style={{ borderTop: `2px solid ${T.ink}`, color: T.wood }}>
-                      <span>{t({ en: 'Designer Total', zh: '设计师总额' })} ({discTag})</span><span>{fmtMYR(supply(cabRetail))}</span>
+                      <span>{t({ en: 'Designer Total', zh: '设计师总额' })}</span><span>{fmtMYR(supply(cabRetail))}</span>
                     </div>
                   ) : (
                     <>
@@ -382,7 +382,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                     )}
                     {isDesignerNet ? (
                       <tr style={{ borderTop: `1.5px solid ${T.line}`, color: T.wood }}>
-                        <td colSpan={6} className="text-right py-1 px-2 font-medium">{t({ en: 'Designer Total', zh: '设计师总额' })} ({discTag})</td>
+                        <td colSpan={6} className="text-right py-1 px-2 font-medium">{t({ en: 'Designer Total', zh: '设计师总额' })}</td>
                         <td className="text-right py-1 px-2 font-medium">{fmtNum(supply(looseRetailV), 0)}</td>
                       </tr>
                     ) : (

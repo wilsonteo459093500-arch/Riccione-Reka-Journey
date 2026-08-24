@@ -18,7 +18,7 @@ export async function exportExcel(meta, computed, loose, notes = {}, lang = 'bot
   const px = (v) => Math.round((Number(v) || 0) * priceScale);
   const discTag = discountChainLabel(notes.designerDisc);
   const supplyLbl = () => `${t({ en: 'Designer Supply', zh: '设计师供货价' })} (${discTag})`;
-  const dTotalLbl = () => `${t({ en: 'Designer Total', zh: '设计师总额' })} (${discTag})`;
+  const dTotalLbl = () => t({ en: 'Designer Total', zh: '设计师总额' });
   const lineDesc = (ln) => (lang === 'en' ? ln.descEn : lang === 'zh' ? ln.descZh : `${ln.descEn} ${ln.descZh}`);
   const lineUom = (ln) => (lang === 'en' ? ln.uomEn : lang === 'zh' ? ln.uomZh : ln.uomZh);
   // 定制柜体子项描述：门板/柜体 → "Door: A Series"；抽屉 → "Drawers"
