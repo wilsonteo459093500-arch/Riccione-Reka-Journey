@@ -31,10 +31,14 @@ function friendlyError(status, message) {
   if (status === 400 && /api key/i.test(message || '')) return 'API key 无效，请到设置里检查。';
   if (status === 401 || status === 403) return 'API key 无权限或已失效，请到设置里检查。';
   if (status === 429) {
+    const raw = message ? `【Google 原话】${String(message).slice(0, 220)}` : '';
     if (/per\s*day|PerDay|daily/i.test(message || '')) {
-      return '今天的免费额度用完了。明天会重置；想不受限制，去 Google AI Studio 开通按量付费（约 US$0.04/张，无月费）。';
+      return `这个模型今天的额度上限到了（预览版模型每日有上限，付费也一样）。应急：设置 → 高级选项把模型换成 gemini-2.5-flash-image 顶一天，明天自动恢复。${raw}`;
     }
-    return '已重试多次仍被限流（免费 key 每分钟额度很小）。选 1 张、等 1 分钟再试；想稳定出图，去 Google AI Studio 开通按量付费（约 US$0.04/张）。';
+    if (/prepa|balance|billing|exhaust/i.test(message || '')) {
+      return `疑似预付余额不足：到 aistudio.google.com 左边栏 Billing 检查 Prepay 余额并充值。${raw}`;
+    }
+    return `重试多次仍被限流。请把这条报错截图发给管理员判断（每分钟限流 / 每日上限 / 余额问题）。${raw}`;
   }
   if (status === 404) {
     return '当前模型不可用（可能预览版已下线或你的账号没权限）。到设置 → 高级选项把模型换成 gemini-2.5-flash-image 再试。';
