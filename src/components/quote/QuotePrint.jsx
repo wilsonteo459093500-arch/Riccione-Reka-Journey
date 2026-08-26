@@ -226,9 +226,9 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
               <CustomerRow />
 
               {zones.map((zr) => (
-                <div key={zr.zone.id} className="mb-4" style={{ breakInside: 'avoid' }}>
+                <div key={zr.zone.id} className="mb-4">
                   <div className="px-2 py-1 font-medium text-xs uppercase tracking-wide"
-                    style={{ background: T.sand }}>{pickLang(zr.zone.name, lang) || t(RLBL.untitled)}</div>
+                    style={{ background: T.sand, breakInside: 'avoid', breakAfter: 'avoid' }}>{pickLang(zr.zone.name, lang) || t(RLBL.untitled)}</div>
                   <table className="w-full" style={{ borderCollapse: 'collapse' }}>
                     <thead>
                       <tr className="text-[10px] uppercase tracking-wide" style={{ color: T.inkSoft }}>
@@ -248,7 +248,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                           const nm = pickLang(ir.item.name || ir.item.desc || '', lang);
                           const head = [typeLabel, nm].filter(Boolean).join(' · ');
                           return [
-                            <tr key={ir.item.id + '-h'} style={{ borderTop: `1px solid ${T.lineSoft}` }}>
+                            <tr key={ir.item.id + '-h'} style={{ borderTop: `1px solid ${T.lineSoft}`, breakInside: 'avoid' }}>
                               <td className="py-1 px-2 font-medium" colSpan={5}>{head}</td>
                             </tr>,
                             ...ir.lines.map((ln, i) => (
@@ -264,7 +264,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                         }
                         // 其他类型（墙板/房门/灯带/其他）：单行，首行带名称前缀
                         return ir.lines.map((ln, i) => (
-                          <tr key={ir.item.id + i} style={{ borderTop: `1px solid ${T.lineSoft}` }}>
+                          <tr key={ir.item.id + i} style={{ borderTop: `1px solid ${T.lineSoft}`, breakInside: 'avoid' }}>
                             <td className="py-1 px-2">
                               {i === 0 && (() => {
                                 const nm = pickLang(ir.item.name || '', lang); // 房门/其他/灯带的 desc 即描述，避免重复
