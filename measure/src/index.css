@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  @apply bg-sail-paper text-sail-ink font-sans antialiased;
+  margin: 0;
+}
+
+.thin-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.thin-scroll::-webkit-scrollbar-thumb {
+  background: #d8d0c2;
+  border-radius: 3px;
+}
+
+/* 画布上的数字用等宽，跳动时不抖 */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
