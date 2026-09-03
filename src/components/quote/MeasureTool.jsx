@@ -4,6 +4,15 @@ import { X, Upload, Ruler, RotateCcw, Trash2, Plus, CornerDownRight, Undo2 } fro
 import { T } from '../../theme.js';
 import { CABINET_TYPES } from '../../constants/pricing.js';
 
+// 量尺单位 → 换算成米（报价内部一律用米）。寸 = 英寸 2.54cm（马来西亚木工常用）。
+const UNITS = [
+  { id: 'mm', label: 'mm 毫米', toM: 0.001 },
+  { id: 'cm', label: 'cm 厘米', toM: 0.01 },
+  { id: 'm', label: 'm 米', toM: 1 },
+  { id: 'ft', label: 'feet 尺', toM: 0.3048 },
+  { id: 'in', label: '寸 (inch)', toM: 0.0254 },
+];
+
 // ============================================================
 // Ukur 量尺 —— 上传图纸 → 划线校准比例 → 划线量尺 → 直接加入报价
 // 全程浏览器本地运行；坐标用图片原始像素，缩放/换窗不影响比例。
@@ -20,7 +29,12 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
   const [targetZone, setTargetZone] = useState(zones[0]?.id || '__new');
   const [newZoneName, setNewZoneName] = useState('');
   const [cabKind, setCabKind] = useState('base');
+  const [unit, setUnit] = useState('m');        // 显示 / 输入单位
   const imgRef = useRef(null);
+
+  const u = UNITS.find((x) => x.id === unit) || UNITS[2];
+  const toDisp = (m) => m / u.toM;                          // 米 → 当前单位
+  const fmtLen = (m) => `${toDisp(m).toFixed(u.id === 'm' ? 2 : u.id === 'cm' ? 1 : 0)}${u.id === 'in' ? '"' : u.id === 'ft' ? "'" : u.id}`;
 
   const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
   const pathPx = (pts) => pts.reduce((s, p, i) => (i ? s + dist(pts[i - 1], p) : 0), 0);
@@ -76,9 +90,10 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
   const setLineKind = (id, kind) => setLines((ls) => ls.map((l) => (l.id === id ? { ...l, kind } : l)));
 
   const applyCalibration = () => {
-    const m = parseFloat(askMeters);
-    if (!calib || !(m > 0)) return;
-    setPxPerM(dist(calib.a, calib.b) / m);
+    const v = parseFloat(askMeters);
+    if (!calib || !(v > 0)) return;
+    const meters = v * u.toM;                    // 输入值按当前单位换成米
+    setPxPerM(dist(calib.a, calib.b) / meters);
   };
 
   const recalibrate = () => { setPxPerM(0); setCalib(null); setPending(null); setAskMeters(''); setDraft([]); };
@@ -134,7 +149,7 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
                       ? (calib ? '① 已画校准线 → 在右边填这条线的真实长度（米）' : '① 校准：在一段已知长度上点两下画一条线（例如一面 3 米的墙）')
                       : '② 量尺：在墙/柜上点，直的点两下即可；L 型柜连续点转角，然后按「完成这段」。'}
                     {pending && <span style={{ color: T.terra }}>　（已点起点，点第二下完成校准线）</span>}
-                    {pxPerM > 0 && draft.length > 0 && <span style={{ color: T.terra }}>　（进行中 {draftLenM.toFixed(2)}m · 点转角继续，或按完成）</span>}
+                    {pxPerM > 0 && draft.length > 0 && <span style={{ color: T.terra }}>　（进行中 {fmtLen(draftLenM)} · 点转角继续，或按完成）</span>}
                   </div>
                   <div style={{ position: 'relative', display: 'inline-block', maxWidth: '100%', lineHeight: 0 }}>
                     <img ref={imgRef} src={img.src} alt="plan" draggable={false}
@@ -160,7 +175,7 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
                             <polyline points={ptsStr(l.pts)} fill="none" stroke={T.wood} strokeWidth={sw} strokeLinejoin="round" />
                             {l.pts.map((p, j) => <circle key={j} cx={p.x} cy={p.y} r={sw * 1.4} fill={T.wood} />)}
                             <text x={c.x} y={c.y - sw * 2} fill={T.wood} fontSize={fs} fontWeight="700" textAnchor="middle">
-                              {(l.name ? l.name + ' ' : '') + l.len.toFixed(2) + 'm'}
+                              {(l.name ? l.name + ' ' : '') + fmtLen(l.len)}
                             </text>
                           </g>
                         );
@@ -190,7 +205,7 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
                         <button onClick={finishDraft} disabled={draft.length < 2}
                           className="text-xs px-3 py-1.5 flex items-center gap-1"
                           style={{ background: draft.length < 2 ? T.line : T.wood, color: '#fff', borderRadius: 2, opacity: draft.length < 2 ? 0.6 : 1 }}>
-                          <CornerDownRight size={12} /> 完成这段 {draft.length >= 2 ? `(${draftLenM.toFixed(2)}m)` : ''}
+                          <CornerDownRight size={12} /> 完成这段 {draft.length >= 2 ? `(${fmtLen(draftLenM)})` : ''}
                         </button>
                         <button onClick={undoPoint} className="text-xs px-3 py-1.5 flex items-center gap-1" style={{ border: `1px solid ${T.line}`, borderRadius: 2, color: T.inkSoft }}>
                           <Undo2 size={12} /> 撤销点
@@ -208,17 +223,28 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
               )}
             </div>
 
-            {/* 右：校准输入 + 量尺列表 + 加入报价 */}
+            {/* 右：单位 + 校准输入 + 量尺列表 + 加入报价 */}
             <div className="space-y-3">
+              {img && (
+                <div className="p-3 rounded" style={{ background: T.cream, border: `1px solid ${T.lineSoft}` }}>
+                  <div className="text-[10px] uppercase tracking-widest mb-1" style={{ color: T.inkSoft }}>Unit 尺寸单位</div>
+                  <select value={unit} onChange={(e) => setUnit(e.target.value)}
+                    className="w-full px-2 py-1.5 text-sm outline-none" style={{ background: T.paper, border: `1px solid ${T.line}`, borderRadius: 2, color: T.ink }}>
+                    {UNITS.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
+                  </select>
+                  <p className="text-[10px] mt-1" style={{ color: T.inkSoft }}>校准与显示都用这个单位；报价内部一律换算成米。</p>
+                </div>
+              )}
+
               {img && pxPerM <= 0 && calib && (
                 <div className="p-3 rounded" style={{ background: T.cream, border: `1px solid ${T.lineSoft}` }}>
                   <div className="text-[10px] uppercase tracking-widest mb-1" style={{ color: T.inkSoft }}>Calibrate 校准</div>
                   <div className="flex items-center gap-2 text-sm">
                     <span style={{ color: T.inkSoft }}>这条线 =</span>
-                    <input type="number" step="0.01" value={askMeters} autoFocus
-                      onChange={(e) => setAskMeters(e.target.value)} placeholder="3"
-                      className="w-20 px-2 py-1 outline-none" style={{ background: T.paper, border: `1px solid ${T.line}`, borderRadius: 2 }} />
-                    <span style={{ color: T.inkSoft }}>m</span>
+                    <input type="number" step="any" value={askMeters} autoFocus
+                      onChange={(e) => setAskMeters(e.target.value)} placeholder={u.id === 'm' ? '3' : u.id === 'cm' ? '300' : u.id === 'mm' ? '3000' : u.id === 'ft' ? '10' : '120'}
+                      className="w-24 px-2 py-1 outline-none" style={{ background: T.paper, border: `1px solid ${T.line}`, borderRadius: 2 }} />
+                    <span style={{ color: T.inkSoft }}>{u.label.split(' ')[0]}</span>
                     <button onClick={applyCalibration} className="px-3 py-1 text-sm" style={{ background: T.wood, color: '#fff', borderRadius: 2 }}>Set</button>
                   </div>
                 </div>
@@ -228,7 +254,7 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
                 <div className="p-3 rounded" style={{ background: T.cream, border: `1px solid ${T.lineSoft}` }}>
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-[10px] uppercase tracking-widest" style={{ color: T.inkSoft }}>Measurements 量尺 · {lines.length}</span>
-                    <span className="text-xs" style={{ color: T.wood }}>Σ {total.toFixed(2)} m</span>
+                    <span className="text-xs" style={{ color: T.wood }}>Σ {fmtLen(total)}</span>
                   </div>
                   {lines.length === 0 && <div className="text-xs py-2" style={{ color: T.inkSoft }}>在图上画线…</div>}
                   <div className="space-y-2 max-h-72 overflow-auto">
@@ -237,7 +263,7 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
                         <div className="flex items-center gap-1.5 text-sm">
                           <input value={l.name} onChange={(e) => renameLine(l.id, e.target.value)} placeholder={`#${i + 1}${l.pts.length > 2 ? ' (L型)' : ''}`}
                             className="flex-1 min-w-0 px-2 py-1 text-xs outline-none" style={{ background: T.cream, border: `1px solid ${T.line}`, borderRadius: 2 }} />
-                          <span className="font-medium" style={{ color: T.ink }}>{l.len.toFixed(2)}m</span>
+                          <span className="font-medium" style={{ color: T.ink }}>{fmtLen(l.len)}</span>
                           <button onClick={() => removeLine(l.id)} style={{ color: T.terra }}><Trash2 size={13} /></button>
                         </div>
                         <select value={l.kind || cabKind} onChange={(e) => setLineKind(l.id, e.target.value)}
