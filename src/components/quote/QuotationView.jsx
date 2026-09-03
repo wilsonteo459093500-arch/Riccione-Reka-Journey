@@ -202,6 +202,15 @@ export default function QuotationView({ doc, onChange }) {
     <div className="grid gap-8" style={{ gridTemplateColumns: 'minmax(0,1fr) 320px' }}>
       {/* ===== 左侧：编辑区 ===== */}
       <div className="space-y-6">
+        {/* Ukur 量尺（放最上面，方便一开始就上传图量尺出报价）*/}
+        <button onClick={() => setShowMeasure(true)}
+          className="w-full py-3 flex items-center justify-center gap-2 text-sm transition-colors"
+          style={{ background: T.wood, color: '#fff', borderRadius: '2px' }}
+          onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.9')}
+          onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}>
+          <Ruler size={16} /> Ukur 量尺 · 上传图算尺寸直接报价
+        </button>
+
         {/* 客户信息 */}
         <div className="grid grid-cols-2 md:grid-cols-6 gap-3 p-4 rounded"
           style={{ background: T.cream, border: `1px solid ${T.lineSoft}` }}>
@@ -323,22 +332,13 @@ export default function QuotationView({ doc, onChange }) {
           );
         })}
 
-        <div className="grid grid-cols-2 gap-2">
-          <button onClick={addZone}
-            className="py-3 flex items-center justify-center gap-2 text-sm transition-colors"
-            style={{ border: `1px dashed ${T.line}`, borderRadius: '2px', color: T.inkSoft }}
-            onMouseEnter={(e) => (e.currentTarget.style.borderColor = T.wood)}
-            onMouseLeave={(e) => (e.currentTarget.style.borderColor = T.line)}>
-            <LayoutGrid size={15} /> Add Room 新增区域
-          </button>
-          <button onClick={() => setShowMeasure(true)}
-            className="py-3 flex items-center justify-center gap-2 text-sm transition-colors"
-            style={{ border: `1px dashed ${T.wood}`, borderRadius: '2px', color: T.wood }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = T.cream)}
-            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
-            <Ruler size={15} /> Ukur 量尺（上传图算尺寸）
-          </button>
-        </div>
+        <button onClick={addZone}
+          className="w-full py-3 flex items-center justify-center gap-2 text-sm transition-colors"
+          style={{ border: `1px dashed ${T.line}`, borderRadius: '2px', color: T.inkSoft }}
+          onMouseEnter={(e) => (e.currentTarget.style.borderColor = T.wood)}
+          onMouseLeave={(e) => (e.currentTarget.style.borderColor = T.line)}>
+          <LayoutGrid size={15} /> Add Room 新增区域 / 房间
+        </button>
 
         {/* ===== 定制小计 Cabinet Sub-Total（含独立折扣）===== */}
         <div className="p-4 rounded" style={{ background: T.cream, border: `1px solid ${T.lineSoft}` }}>
