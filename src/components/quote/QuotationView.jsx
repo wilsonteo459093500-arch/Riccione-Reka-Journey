@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { Plus, Copy, Trash2, GripVertical, Sofa, ChevronUp, ChevronDown, ChevronRight, FileText, FileSpreadsheet, LayoutGrid, Image as ImageIcon } from 'lucide-react';
+import { Plus, Copy, Trash2, GripVertical, Sofa, ChevronUp, ChevronDown, ChevronRight, FileText, FileSpreadsheet, LayoutGrid, Image as ImageIcon, Ruler } from 'lucide-react';
 import { T } from '../../theme.js';
 import { newId, copyToClipboard } from '../../utils/helpers.js';
 import { useToast } from '../ui/UIProvider.jsx';
@@ -7,6 +7,7 @@ import { computeQuote, computeLoose, CATEGORIES, ROOMS, CUSTOM_ROOM, OUTPUT_LANG
 import QuoteLineItem from './QuoteLineItem.jsx';
 import QuotePrint from './QuotePrint.jsx';
 import CatalogPicker from './CatalogPicker.jsx';
+import MeasureTool from './MeasureTool.jsx';
 import { exportExcel } from './exportExcel.js';
 
 // ---- 新明细的默认值 ----
@@ -111,6 +112,7 @@ export default function QuotationView({ doc, onChange }) {
   const toast = useToast();
   const [showPrint, setShowPrint] = useState(false);
   const [showCatalog, setShowCatalog] = useState(false);
+  const [showMeasure, setShowMeasure] = useState(false);
   const { meta, zones, adjustPct } = doc;
   const looseItems = doc.looseItems || [];
   const looseAdjustPct = doc.looseAdjustPct || 0;
@@ -137,6 +139,18 @@ export default function QuotationView({ doc, onChange }) {
   const setMeta = (p) => patch({ meta: { ...meta, ...p } });
   const setZones = (fn) => patch({ zones: fn(zones) });
   const addZone = () => setZones((zs) => [...zs, blankZone('')]);
+  // Ukur 量尺 → 把量到的长度变成柜体项目加入报价
+  const handleMeasureAdd = ({ zoneId, newZoneName, kind, measures }) => {
+    const items = measures.map((m) => ({ ...makeItem(kind), length: String(m.length), name: m.name || '' }));
+    setZones((zs) => {
+      if (zoneId === '__new') {
+        const z = blankZone(newZoneName || '');
+        z.items = items;
+        return [...zs, z];
+      }
+      return zs.map((z) => (z.id === zoneId ? { ...z, items: [...z.items, ...items] } : z));
+    });
+  };
   const updateZone = (id, p) => setZones((zs) => zs.map((z) => (z.id === id ? { ...z, ...p } : z)));
   const removeZone = (id) => setZones((zs) => zs.filter((z) => z.id !== id));
   const moveZone = (from, to) => setZones((zs) => moveInArray(zs, from, to));
@@ -309,13 +323,22 @@ export default function QuotationView({ doc, onChange }) {
           );
         })}
 
-        <button onClick={addZone}
-          className="w-full py-3 flex items-center justify-center gap-2 text-sm transition-colors"
-          style={{ border: `1px dashed ${T.line}`, borderRadius: '2px', color: T.inkSoft }}
-          onMouseEnter={(e) => (e.currentTarget.style.borderColor = T.wood)}
-          onMouseLeave={(e) => (e.currentTarget.style.borderColor = T.line)}>
-          <LayoutGrid size={15} /> Add Room 新增区域 / 房间
-        </button>
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={addZone}
+            className="py-3 flex items-center justify-center gap-2 text-sm transition-colors"
+            style={{ border: `1px dashed ${T.line}`, borderRadius: '2px', color: T.inkSoft }}
+            onMouseEnter={(e) => (e.currentTarget.style.borderColor = T.wood)}
+            onMouseLeave={(e) => (e.currentTarget.style.borderColor = T.line)}>
+            <LayoutGrid size={15} /> Add Room 新增区域
+          </button>
+          <button onClick={() => setShowMeasure(true)}
+            className="py-3 flex items-center justify-center gap-2 text-sm transition-colors"
+            style={{ border: `1px dashed ${T.wood}`, borderRadius: '2px', color: T.wood }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = T.cream)}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+            <Ruler size={15} /> Ukur 量尺（上传图算尺寸）
+          </button>
+        </div>
 
         {/* ===== 定制小计 Cabinet Sub-Total（含独立折扣）===== */}
         <div className="p-4 rounded" style={{ background: T.cream, border: `1px solid ${T.lineSoft}` }}>
@@ -611,6 +634,12 @@ export default function QuotationView({ doc, onChange }) {
         <CatalogPicker
           onAdd={(it) => setLoose((ls) => [...ls, { id: newId('lf'), ...it }])}
           onClose={() => setShowCatalog(false)} />
+      )}
+      {showMeasure && (
+        <MeasureTool
+          zones={zones.map((z) => ({ id: z.id, name: pickLang(z.name, lang) }))}
+          onAddItems={handleMeasureAdd}
+          onClose={() => setShowMeasure(false)} />
       )}
     </div>
   );
