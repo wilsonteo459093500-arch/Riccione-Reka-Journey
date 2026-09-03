@@ -2,11 +2,12 @@
 
 全屋定制项目交付管理工具。围绕 **SAIL 方法论**的五个章节（Vision · Blueprint · Craft · Arrival · Signature）组织项目，让 SD / SS / WH / 采购在同一套流程上协作。
 
-> 📁 本 repo 还包含四个独立 app（共用 repo、各自独立部署）：
+> 📁 本 repo 还包含五个独立 app（共用 repo、各自独立部署）：
 > - **Sail CRM** — 销售 / pipeline / 售后管理。代码在 [`/crm`](./crm)，部署指南见 [`crm/DEPLOY.md`](./crm/DEPLOY.md)。
 > - **UKIR STUDIO**（by RICCIONE REKA）— AI 效果图工作室：照片/草图秒变照片级效果图，给设计师减负。代码在 [`/render`](./render)，部署指南见 [`render/DEPLOY.md`](./render/DEPLOY.md)。
 > - **CIPTA STUDIO**（by RICCIONE REKA）— 内容工作台：上传一条参考视频 + 你的原片/案例图，拆出配方、排好剪辑方案、写好发布文案。代码在 [`/studio`](./studio)，部署指南见 [`studio/DEPLOY.md`](./studio/DEPLOY.md)，工具调研见 [`studio/RESEARCH.md`](./studio/RESEARCH.md)。
 > - **RICCIONE REKA JOURNEY** — 客户需求卡 + 展厅邀请函（纯静态，无需构建）。代码在 [`/invite`](./invite)，说明见 [`invite/README.md`](./invite/README.md)。
+> - **UKUR**（by RICCIONE REKA）— 户型图量尺：上传户型图，标定一个已知尺寸，其余长度按比例量出来，自动汇总橱柜延尺与预估报价。代码在 [`/measure`](./measure)，部署指南见 [`measure/DEPLOY.md`](./measure/DEPLOY.md)。
 
 ## 功能
 
@@ -91,4 +92,5 @@ supabase/schema.sql       # 一次性建表脚本
 crm/                      # 独立的 Sail CRM app（单独部署）
 render/                   # 独立的 溪岸 Render AI 效果图 app（单独部署）
 invite/                   # RICCIONE REKA JOURNEY 邀约体验网站（纯静态）
+measure/                  # 独立的 UKUR 户型图量尺 app（单独部署）
 ```
