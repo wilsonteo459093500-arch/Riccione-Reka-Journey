@@ -141,7 +141,7 @@ export default function QuotationView({ doc, onChange }) {
   const addZone = () => setZones((zs) => [...zs, blankZone('')]);
   // Ukur 量尺 → 把量到的长度变成柜体项目加入报价
   const handleMeasureAdd = ({ zoneId, newZoneName, kind, measures }) => {
-    const items = measures.map((m) => ({ ...makeItem(kind), length: String(m.length), name: m.name || '' }));
+    const items = measures.map((m) => ({ ...makeItem(m.kind || kind), length: String(m.length), name: m.name || '' }));
     setZones((zs) => {
       if (zoneId === '__new') {
         const z = blankZone(newZoneName || '');

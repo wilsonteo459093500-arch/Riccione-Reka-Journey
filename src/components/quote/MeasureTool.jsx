@@ -68,11 +68,12 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
   const finishDraft = () => {
     if (draft.length < 2) return;
     const pts = draft;
-    setLines((ls) => [...ls, { id: 'm' + Date.now(), pts, name: '', len: pathM(pts) }]);
+    setLines((ls) => [...ls, { id: 'm' + Date.now(), pts, name: '', len: pathM(pts), kind: cabKind }]);
     setDraft([]);
   };
   const undoPoint = () => setDraft((d) => d.slice(0, -1));
   const cancelDraft = () => setDraft([]);
+  const setLineKind = (id, kind) => setLines((ls) => ls.map((l) => (l.id === id ? { ...l, kind } : l)));
 
   const applyCalibration = () => {
     const m = parseFloat(askMeters);
@@ -91,7 +92,7 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
 
   const addToQuote = () => {
     if (!lines.length) return;
-    const measures = lines.map((l) => ({ length: Math.round(l.len * 100) / 100, name: l.name }));
+    const measures = lines.map((l) => ({ length: Math.round(l.len * 100) / 100, name: l.name, kind: l.kind || cabKind }));
     onAddItems({ zoneId: targetZone, newZoneName: newZoneName.trim(), kind: cabKind, measures });
     onClose();
   };
@@ -230,13 +231,19 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
                     <span className="text-xs" style={{ color: T.wood }}>Σ {total.toFixed(2)} m</span>
                   </div>
                   {lines.length === 0 && <div className="text-xs py-2" style={{ color: T.inkSoft }}>在图上画线…</div>}
-                  <div className="space-y-1.5 max-h-64 overflow-auto">
+                  <div className="space-y-2 max-h-72 overflow-auto">
                     {lines.map((l, i) => (
-                      <div key={l.id} className="flex items-center gap-1.5 text-sm">
-                        <input value={l.name} onChange={(e) => renameLine(l.id, e.target.value)} placeholder={`#${i + 1}${l.pts.length > 2 ? ' (L型)' : ''}`}
-                          className="flex-1 min-w-0 px-2 py-1 text-xs outline-none" style={{ background: T.paper, border: `1px solid ${T.line}`, borderRadius: 2 }} />
-                        <span className="font-medium" style={{ color: T.ink }}>{l.len.toFixed(2)}m</span>
-                        <button onClick={() => removeLine(l.id)} style={{ color: T.terra }}><Trash2 size={13} /></button>
+                      <div key={l.id} className="p-1.5 rounded" style={{ background: T.paper, border: `1px solid ${T.lineSoft}` }}>
+                        <div className="flex items-center gap-1.5 text-sm">
+                          <input value={l.name} onChange={(e) => renameLine(l.id, e.target.value)} placeholder={`#${i + 1}${l.pts.length > 2 ? ' (L型)' : ''}`}
+                            className="flex-1 min-w-0 px-2 py-1 text-xs outline-none" style={{ background: T.cream, border: `1px solid ${T.line}`, borderRadius: 2 }} />
+                          <span className="font-medium" style={{ color: T.ink }}>{l.len.toFixed(2)}m</span>
+                          <button onClick={() => removeLine(l.id)} style={{ color: T.terra }}><Trash2 size={13} /></button>
+                        </div>
+                        <select value={l.kind || cabKind} onChange={(e) => setLineKind(l.id, e.target.value)}
+                          className="w-full mt-1 px-2 py-1 text-xs outline-none" style={{ background: T.cream, border: `1px solid ${T.line}`, borderRadius: 2, color: T.ink }}>
+                          {CABINET_TYPES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                        </select>
                       </div>
                     ))}
                   </div>
@@ -257,7 +264,7 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
                     <input value={newZoneName} onChange={(e) => setNewZoneName(e.target.value)} placeholder="Room name 区域名，如 Kitchen 厨房"
                       className="w-full px-2 py-1.5 text-sm outline-none" style={{ background: T.paper, border: `1px solid ${T.line}`, borderRadius: 2 }} />
                   )}
-                  <label className="block text-[10px]" style={{ color: T.inkSoft }}>Cabinet type 柜体类型
+                  <label className="block text-[10px]" style={{ color: T.inkSoft }}>Default type for new lines 新线默认柜体类型
                     <select value={cabKind} onChange={(e) => setCabKind(e.target.value)}
                       className="w-full mt-1 px-2 py-1.5 text-sm outline-none" style={{ background: T.paper, border: `1px solid ${T.line}`, borderRadius: 2 }}>
                       {CABINET_TYPES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
@@ -267,7 +274,7 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
                     style={{ background: T.ink, color: T.paper, borderRadius: 2 }}>
                     <Plus size={14} /> Add {lines.length} item(s) 加入 {lines.length} 项
                   </button>
-                  <p className="text-[10px]" style={{ color: T.inkSoft }}>每条量尺（含 L 型折线）会变成一个柜体项目，长度自动填入。之后可在报价里微调。</p>
+                  <p className="text-[10px]" style={{ color: T.inkSoft }}>每条量尺（含 L 型折线）会变成一个柜体项目，柜体类型可在上面每条单独选，长度自动填入。之后可在报价里微调。</p>
                 </div>
               )}
             </div>
