@@ -29,7 +29,11 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
   const [targetZone, setTargetZone] = useState(zones[0]?.id || '__new');
   const [newZoneName, setNewZoneName] = useState('');
   const [cabKind, setCabKind] = useState('base');
-  const [unit, setUnit] = useState('m');        // 显示 / 输入单位
+  const [unit, setUnitState] = useState(() => {
+    try { const v = localStorage.getItem('sail.ukur.unit'); if (UNITS.some((x) => x.id === v)) return v; } catch { /* ignore */ }
+    return 'm';
+  });
+  const setUnit = (v) => { setUnitState(v); try { localStorage.setItem('sail.ukur.unit', v); } catch { /* ignore */ } };
   const imgRef = useRef(null);
 
   const u = UNITS.find((x) => x.id === unit) || UNITS[2];
