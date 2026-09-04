@@ -353,7 +353,7 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
                         <div className="flex items-center gap-1.5 text-sm">
                           <input value={l.name} onChange={(e) => renameLine(l.id, e.target.value)} placeholder={`#${i + 1}${l.pts.length > 2 ? ' (L型)' : ''}`}
                             className="flex-1 min-w-0 px-2 py-1 text-xs outline-none" style={{ background: T.cream, border: `1px solid ${T.line}`, borderRadius: 2 }} />
-                          <span className="font-medium" style={{ color: T.ink }}>{fmtLen(l.len)}</span>
+                          <span className="font-medium" style={{ color: T.ink }}>{fmtLen(pathM(l.pts))}</span>
                           <button onClick={() => removeLine(l.id)} style={{ color: T.terra }}><Trash2 size={13} /></button>
                         </div>
                         <select value={l.kind || cabKind} onChange={(e) => setLineKind(l.id, e.target.value)}
