@@ -92,3 +92,37 @@ crm/                      # 独立的 Sail CRM app（单独部署）
 render/                   # 独立的 溪岸 Render AI 效果图 app（单独部署）
 invite/                   # RICCIONE REKA JOURNEY 邀约体验网站（纯静态）
 ```
+
+## AI 协作插件（Claude Code）
+
+本 repo 在 `.claude/settings.json` 里登记了两个 Claude Code 插件源。用 Claude Code 打开本项目并信任目录后，会自动拉取安装，**不需要手动 `/plugin install`**，插件代码也不进 repo（始终跟随上游更新）：
+
+| 插件 | 来源 | 作用 |
+| --- | --- | --- |
+| [**superpowers**](https://github.com/obra/superpowers) | `obra/superpowers` | 14 个开发工作流 skill：TDD 红绿重构、系统化调试、写/执行实施计划、并行 subagent、code review 收发、git worktree、完工前验证等。常驻约 700 token。 |
+| [**caveman**](https://github.com/JuliusBrussee/caveman) | `JuliusBrussee/caveman` | 21 个 skill + 3 个 agent，把回复压缩成极简"穴居人语"，实测比无提示基线省约 65% 输出 token，技术准确度不变。只压缩风格不换语言 —— 你用中文提问它仍用中文回。常驻约 1.8k token。 |
+
+### caveman 默认模式
+
+根目录的 `.caveman.json` 把本项目默认模式钉在 `full`（常开压缩）。这是 repo 级设置，不污染每个人的全局配置。
+
+```jsonc
+{ "defaultMode": "full" }
+```
+
+- 临时切换（仅当前会话）：`/caveman off` · `/caveman lite` · `/caveman ultra` · `/caveman wenyan`（中文文言压缩模式）
+- 想改全项目默认：改 `.caveman.json` 的 `defaultMode`，可选 `off` / `lite` / `full` / `ultra` / `wenyan*`
+- 只对自己关掉、不动 repo：设环境变量 `CAVEMAN_DEFAULT_MODE=off`（优先级高于 `.caveman.json`）
+
+### 常用命令
+
+- superpowers：skill 按场景自动触发，无需手动调用；也可 `/brainstorming`、`/writing-plans` 等直接点名
+- caveman：`/caveman`（切模式）、`/caveman-stats`（省了多少 token）、`/caveman-review`、`/caveman-commit`
+
+### 不想要插件
+
+删掉 `.claude/settings.json` 里对应的 `extraKnownMarketplaces` / `enabledPlugins` 条目即可；或在自己的 `.claude/settings.local.json`（已被 gitignore）里把插件设为 `false` 单独覆盖：
+
+```json
+{ "enabledPlugins": { "caveman@caveman": false } }
+```
