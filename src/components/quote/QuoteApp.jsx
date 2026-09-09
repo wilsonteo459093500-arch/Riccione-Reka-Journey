@@ -230,25 +230,25 @@ function Inner({ signOut } = {}) {
       {/* 顶栏 */}
       <header className="sticky top-0 z-30 backdrop-blur-md no-print"
         style={{ background: 'rgba(250,248,243,0.9)', borderBottom: `1px solid ${T.lineSoft}` }}>
-        <div className="max-w-[1400px] mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-baseline gap-3">
-            <Calculator size={18} style={{ color: T.wood }} />
-            <div className="font-display text-2xl" style={{ color: T.ink }}>Estimated Quotation <span className="text-base">预估报价</span></div>
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-2">
+          <div className="flex items-baseline gap-2 sm:gap-3 min-w-0">
+            <Calculator size={18} style={{ color: T.wood }} className="shrink-0" />
+            <div className="font-display text-lg sm:text-2xl truncate" style={{ color: T.ink }}>Estimated Quotation <span className="text-sm sm:text-base">预估报价</span></div>
             <div className="hidden md:block text-xs uppercase tracking-[0.2em]" style={{ color: T.inkSoft }}>
               SAIL by Riccione Reka
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {cloudConfigured && (
               <span className="hidden md:flex items-center gap-1 text-[11px]" style={{ color: T.sage }} title="Shared team cloud 团队云同步">
                 <Cloud size={13} /> Cloud 云同步
               </span>
             )}
-            <button onClick={create} className="flex items-center gap-1.5 px-4 py-2 text-sm"
+            <button onClick={create} className="flex items-center gap-1.5 px-3 sm:px-4 py-2 text-sm whitespace-nowrap"
               style={{ background: T.ink, color: T.paper, borderRadius: '2px' }}
               onMouseEnter={(e) => (e.currentTarget.style.background = T.wood)}
               onMouseLeave={(e) => (e.currentTarget.style.background = T.ink)}>
-              <Plus size={14} /> New 新客户报价
+              <Plus size={14} /> <span className="hidden sm:inline">New 新客户报价</span><span className="sm:hidden">New</span>
             </button>
             {signOut && (
               <button onClick={signOut} className="p-2" style={{ color: T.inkSoft }} title="Sign out 退出登录">
@@ -259,7 +259,7 @@ function Inner({ signOut } = {}) {
         </div>
       </header>
 
-      <div className="max-w-[1400px] mx-auto px-6 py-6 grid gap-6" style={{ gridTemplateColumns: '260px minmax(0,1fr)' }}>
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 grid gap-6 grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)]">
         {/* 左：客户记录列表（每个客户一张卡，含全部版本）*/}
         <aside className="no-print space-y-3">
           <div className="relative">

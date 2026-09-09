@@ -192,7 +192,7 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
             <button onClick={onClose} style={{ color: T.inkSoft }}><X size={18} /></button>
           </div>
 
-          <div className="grid gap-4 p-4" style={{ gridTemplateColumns: 'minmax(0,1fr) 300px' }}>
+          <div className="grid gap-4 p-4 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px]">
             {/* 左：图纸 + 画布 */}
             <div>
               {!img ? (

@@ -83,12 +83,12 @@ function LooseRow({ item, onChange, onRemove, onDragStart, onDrop, onMoveUp, onM
         <button onClick={onMoveDown} disabled={!canDown} title="下移 Move down" className="disabled:opacity-25" style={{ color: T.inkSoft }}><ChevronDown size={12} /></button>
       </div>
       <div className="flex-1 grid gap-2 items-center" style={{ gridTemplateColumns: 'repeat(12, minmax(0,1fr))' }}>
-        <div className="col-span-3">{inp('type', 'e.g. Sofa 沙发')}</div>
-        <div className="col-span-2">{inp('model', 'Model 型号')}</div>
-        <div className="col-span-2">{inp('color', 'Color 颜色')}</div>
-        <div className="col-span-1">{inp('qty', '1')}</div>
-        <div className="col-span-2">{inp('unitMyr', 'RM')}</div>
-        <div className="col-span-2 text-right font-display text-sm pr-1" style={{ color: T.ink }}>{fmtMYR(total)}</div>
+        <div className="col-span-6 md:col-span-3">{inp('type', 'e.g. Sofa 沙发')}</div>
+        <div className="col-span-6 md:col-span-2">{inp('model', 'Model 型号')}</div>
+        <div className="col-span-6 md:col-span-2">{inp('color', 'Color 颜色')}</div>
+        <div className="col-span-3 md:col-span-1">{inp('qty', '1')}</div>
+        <div className="col-span-3 md:col-span-2">{inp('unitMyr', 'RM')}</div>
+        <div className="col-span-6 md:col-span-2 text-right font-display text-sm pr-1" style={{ color: T.ink }}>{fmtMYR(total)}</div>
         {/* 图片行 Image line */}
         <div className="col-span-12 flex items-center gap-2 mt-1">
           {item.image
@@ -199,7 +199,7 @@ export default function QuotationView({ doc, onChange }) {
   const zoneResultById = (id) => computed.zoneResults.find((zr) => zr.zone.id === id);
 
   return (
-    <div className="grid gap-8" style={{ gridTemplateColumns: 'minmax(0,1fr) 320px' }}>
+    <div className="grid gap-6 lg:gap-8 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px]">
       {/* ===== 左侧：编辑区 ===== */}
       <div className="space-y-6">
         {/* Ukur 量尺（放最上面，方便一开始就上传图量尺出报价）*/}
@@ -280,15 +280,15 @@ export default function QuotationView({ doc, onChange }) {
                 {/* 区域 = 房间：下拉选常见房间，也可直接改名；选「自定义」清空以便自填 */}
                 <select value={ROOMS.includes(zone.name) ? zone.name : ''}
                   onChange={(e) => updateZone(zone.id, { name: e.target.value === CUSTOM_ROOM ? '' : e.target.value })}
-                  className="bg-transparent outline-none font-display text-lg cursor-pointer" style={{ color: T.ink }}>
+                  className="bg-transparent outline-none font-display text-base sm:text-lg cursor-pointer min-w-0 max-w-[45%] shrink" style={{ color: T.ink }}>
                   <option value="" disabled>Room 选区域…</option>
                   {ROOMS.map((r) => <option key={r} value={r}>{r}</option>)}
                 </select>
                 <input value={zone.name} onChange={(e) => updateZone(zone.id, { name: e.target.value })}
                   placeholder="Custom room 自定义区域名"
-                  className="flex-1 bg-transparent outline-none text-sm" style={{ color: T.inkSoft }} />
-                <span className="font-display text-lg" style={{ color: T.wood }}>{fmtMYR(zr?.subtotal || 0)}</span>
-                <button onClick={() => removeZone(zone.id)} className="opacity-40 hover:opacity-100"
+                  className="flex-1 min-w-0 bg-transparent outline-none text-sm" style={{ color: T.inkSoft }} />
+                <span className="font-display text-base sm:text-lg shrink-0" style={{ color: T.wood }}>{fmtMYR(zr?.subtotal || 0)}</span>
+                <button onClick={() => removeZone(zone.id)} className="opacity-40 hover:opacity-100 shrink-0"
                   style={{ color: T.terra }} title="删除区域"><Trash2 size={15} /></button>
               </div>
 
@@ -417,7 +417,7 @@ export default function QuotationView({ doc, onChange }) {
             )}
             {/* 表头 */}
             {looseItems.length > 0 && (
-              <div className="grid gap-2 px-6 text-[9px] uppercase tracking-widest" style={{ gridTemplateColumns: 'repeat(12, minmax(0,1fr))', color: T.inkSoft }}>
+              <div className="hidden md:grid gap-2 px-6 text-[9px] uppercase tracking-widest" style={{ gridTemplateColumns: 'repeat(12, minmax(0,1fr))', color: T.inkSoft }}>
                 <div className="col-span-3">Product Type 产品类型</div>
                 <div className="col-span-2">Model 型号</div>
                 <div className="col-span-2">Color 颜色</div>
