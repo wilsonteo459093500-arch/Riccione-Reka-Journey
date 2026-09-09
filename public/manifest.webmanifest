@@ -1,0 +1,17 @@
+{
+  "name": "RICCIONE 报价 Quote",
+  "short_name": "RICCIONE",
+  "description": "定制橱柜 + 活动家具报价与量尺工具 · Cabinet & furniture quotation and measuring tool",
+  "start_url": "/quote.html",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#FAF8F3",
+  "theme_color": "#2D3E36",
+  "lang": "zh",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
