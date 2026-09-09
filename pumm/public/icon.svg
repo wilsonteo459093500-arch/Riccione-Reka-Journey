@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" rx="14" fill="#23303D"/>
+  <!-- the table -->
+  <circle cx="32" cy="34" r="13" fill="none" stroke="#C9A961" stroke-width="2.5"/>
+  <!-- ten seats -->
+  <g fill="#F6F4EF">
+    <circle cx="32" cy="15" r="3"/>
+    <circle cx="43.2" cy="18.6" r="3"/>
+    <circle cx="50.1" cy="28.2" r="3"/>
+    <circle cx="50.1" cy="39.8" r="3"/>
+    <circle cx="43.2" cy="49.4" r="3"/>
+    <circle cx="32" cy="53" r="3"/>
+    <circle cx="20.8" cy="49.4" r="3"/>
+    <circle cx="13.9" cy="39.8" r="3"/>
+    <circle cx="13.9" cy="28.2" r="3"/>
+    <circle cx="20.8" cy="18.6" r="3"/>
+  </g>
+</svg>
