@@ -174,10 +174,25 @@ export default function ItemEditorModal({ item: initial, isNew = false, onSave, 
             </>
           )}
 
-          {/* 系数（特殊工艺）*/}
-          <Row label={item.type === 'cabinet' ? '× 门板 Door 系数 Coef' : '× Coef 系数'} hint="· 特殊工艺才填，留空 = 1">
-            <Txt value={item.coef ?? ''} onChange={(v) => set({ coef: v })} placeholder="1" {...num} />
-          </Row>
+          {/* 系数（特殊工艺）：定制柜可选乘门板 / 柜体 / 两者，默认门板 */}
+          {item.type === 'cabinet' ? (
+            <div className="grid grid-cols-2 gap-3">
+              <Row label="× Coef 系数" hint="· 特殊工艺才填，留空 = 1">
+                <Txt value={item.coef ?? ''} onChange={(v) => set({ coef: v })} placeholder="1" {...num} />
+              </Row>
+              <Row label="Apply to 乘在">
+                <Sel value={item.coefTarget || 'door'} onChange={(v) => set({ coefTarget: v })}>
+                  <option value="door">Door 门板</option>
+                  <option value="carcass">Carcass 柜体</option>
+                  <option value="both">Both 两者</option>
+                </Sel>
+              </Row>
+            </div>
+          ) : (
+            <Row label="× Coef 系数" hint="· 特殊工艺才填，留空 = 1">
+              <Txt value={item.coef ?? ''} onChange={(v) => set({ coef: v })} placeholder="1" {...num} />
+            </Row>
+          )}
 
           {/* 实时算价 */}
           <div className="p-3 rounded" style={{ background: T.cream, border: `1px solid ${T.lineSoft}` }}>

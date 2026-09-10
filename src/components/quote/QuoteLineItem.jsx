@@ -233,9 +233,17 @@ export default function QuoteLineItem({ item, result, onChange, onRemove, onDrag
             <Trash2 size={15} strokeWidth={1.5} />
           </button>
           <div className="text-right">
-            {/* 系数（特殊工艺）：单价 × 系数 */}
-            <div className="flex items-center gap-1 justify-end mb-1" title={item.type === 'cabinet' ? '系数只乘门板 Coef applies to door only' : '特殊工艺系数 Special-craft multiplier'}>
-              <span className="text-[9px] uppercase tracking-wide" style={{ color: T.inkSoft }}>{item.type === 'cabinet' ? '× 门板 Door 系数' : '× Coef 系数'}</span>
+            {/* 系数（特殊工艺）：单价 × 系数。定制柜可选乘门板 / 柜体 / 两者（默认门板） */}
+            <div className="flex items-center gap-1 justify-end mb-1" title={item.type === 'cabinet' ? '特殊工艺系数：选乘门板、柜体或两者 Coef target' : '特殊工艺系数 Special-craft multiplier'}>
+              <span className="text-[9px] uppercase tracking-wide" style={{ color: T.inkSoft }}>× 系数</span>
+              {item.type === 'cabinet' && (
+                <select value={item.coefTarget || 'door'} onChange={(e) => set({ coefTarget: e.target.value })}
+                  className="text-[11px] px-1 py-1 outline-none" style={cellStyle} title="系数乘在哪部分">
+                  <option value="door">门板 Door</option>
+                  <option value="carcass">柜体 Carcass</option>
+                  <option value="both">两者 Both</option>
+                </select>
+              )}
               <input type="number" step="0.01" min="0" value={item.coef ?? ''}
                 onChange={(e) => set({ coef: e.target.value })} placeholder="1"
                 className="w-14 px-1.5 py-1 text-sm outline-none text-right" style={cellStyle}

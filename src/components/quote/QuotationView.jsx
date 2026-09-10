@@ -133,6 +133,7 @@ function MobileItemCard({ item, result, selected, onToggleSelect, onEdit, canUp,
     if (item.length) parts.push(`L ${item.length}m`);
     parts.push(`H ${item.h} × D ${item.d}`);
     if (Number(item.drawers) > 0) parts.push(`${item.drawers} 抽屉`);
+    if (Number(item.coef) > 0 && Number(item.coef) !== 1) parts.push(`×${item.coef} ${item.coefTarget === 'carcass' ? '柜体' : item.coefTarget === 'both' ? '门+柜' : '门板'}`);
     if (item.cabType === 'open') parts.push(`开放柜 ${item.openSeries || 'A'}`);
     else parts.push(`门 ${item.doorSeries} / 柜 ${item.carcassSeries}`);
     dims = parts.join(' · ');

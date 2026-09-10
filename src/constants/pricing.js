@@ -146,8 +146,10 @@ export function computeItem(item) {
     const uZh = lin ? '延米' : '㎡';
     const door = seriesById(item.doorSeries);
     const carc = seriesById(item.carcassSeries);
-    if (item.hasDoor !== false) push('door', `Door ${door.id}`, `门板 ${door.id}`, qty, uEn, uZh, false, cnyToMyr(door.door), true); // 系数只乘门板
-    if (item.hasCarcass !== false) push('carcass', `Carcass ${carc.id}`, `柜体 ${carc.id}`, qty, uEn, uZh, false, cnyToMyr(carc.carcass));
+    // 系数乘哪部分：默认门板；可切换成柜体，或两者都乘
+    const ct = item.coefTarget === 'carcass' ? 'carcass' : item.coefTarget === 'both' ? 'both' : 'door';
+    if (item.hasDoor !== false) push('door', `Door ${door.id}`, `门板 ${door.id}`, qty, uEn, uZh, false, cnyToMyr(door.door), ct !== 'carcass');
+    if (item.hasCarcass !== false) push('carcass', `Carcass ${carc.id}`, `柜体 ${carc.id}`, qty, uEn, uZh, false, cnyToMyr(carc.carcass), ct !== 'door');
     // 开放柜（无门）：按投影面积计（长 × 高），A–K 各系列有独立投影价
     if (item.hasOpen) {
       const op = seriesById(item.openSeries || 'A');
