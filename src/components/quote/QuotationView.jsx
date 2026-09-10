@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState } from 'react';
-import { Plus, Copy, Trash2, GripVertical, Sofa, ChevronUp, ChevronDown, ChevronRight, FileText, FileSpreadsheet, LayoutGrid, Image as ImageIcon, Ruler } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Plus, Copy, Trash2, GripVertical, Sofa, ChevronUp, ChevronDown, ChevronRight, FileText, FileSpreadsheet, LayoutGrid, Image as ImageIcon, Ruler, Pencil } from 'lucide-react';
 import { T } from '../../theme.js';
 import { newId, copyToClipboard } from '../../utils/helpers.js';
 import { useToast } from '../ui/UIProvider.jsx';
@@ -8,7 +8,21 @@ import QuoteLineItem from './QuoteLineItem.jsx';
 import QuotePrint from './QuotePrint.jsx';
 import CatalogPicker from './CatalogPicker.jsx';
 import MeasureTool from './MeasureTool.jsx';
+import ItemEditorModal from './ItemEditorModal.jsx';
 import { exportExcel } from './exportExcel.js';
+
+// 手机（< lg）用弹窗编辑项目；桌面保持行内编辑
+function useIsMobile() {
+  const q = '(max-width: 1023px)';
+  const [m, setM] = useState(() => (typeof window !== 'undefined' ? window.matchMedia(q).matches : false));
+  useEffect(() => {
+    const mq = window.matchMedia(q);
+    const on = (e) => setM(e.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return m;
+}
 
 // ---- 新明细的默认值 ----
 export function makeItem(kind) {
@@ -107,12 +121,55 @@ function LooseRow({ item, onChange, onRemove, onDragStart, onDrop, onMoveUp, onM
   );
 }
 
+// 手机版项目摘要卡：只看关键信息，点「编辑」开弹窗
+const MOBILE_TYPE_LABEL = { panel: 'Panel 墙板', roomdoor: 'Door 房门', led: 'LED 灯带', other: 'Other 其他' };
+function MobileItemCard({ item, result, selected, onToggleSelect, onEdit, canUp, canDown, onMoveUp, onMoveDown }) {
+  const total = result?.total || 0;
+  const badge = item.type === 'cabinet' ? cabTypeById(item.cabType).label : MOBILE_TYPE_LABEL[item.type];
+  const name = item.name || item.desc || '';
+  let dims = '';
+  if (item.type === 'cabinet') {
+    const parts = [];
+    if (item.length) parts.push(`L ${item.length}m`);
+    parts.push(`H ${item.h} × D ${item.d}`);
+    if (Number(item.drawers) > 0) parts.push(`${item.drawers} 抽屉`);
+    if (item.cabType === 'open') parts.push(`开放柜 ${item.openSeries || 'A'}`);
+    else parts.push(`门 ${item.doorSeries} / 柜 ${item.carcassSeries}`);
+    dims = parts.join(' · ');
+  } else if (item.type === 'panel') dims = `L ${item.length || '—'}m × H ${item.h} · ${item.panelSeries}`;
+  else if (item.type === 'roomdoor') dims = `${item.qty || 0} pc × RM${item.unitMyr || 0}`;
+  else if (item.type === 'led') dims = `L ${item.length || '—'}m`;
+  else if (item.type === 'other') dims = `${item.qty || 0} ${item.uom || ''} × RM${item.unitMyr || 0}`;
+  return (
+    <div className="rounded p-3 flex items-start gap-2" style={{ background: selected ? T.sand : T.cream, border: `1px solid ${selected ? T.wood : T.lineSoft}` }}>
+      <div className="flex flex-col items-center gap-1 shrink-0 pt-0.5">
+        <input type="checkbox" checked={!!selected} onChange={onToggleSelect} className="w-4 h-4" style={{ accentColor: T.wood }} />
+        <button onClick={onMoveUp} disabled={!canUp} className="disabled:opacity-25" style={{ color: T.inkSoft }}><ChevronUp size={14} /></button>
+        <button onClick={onMoveDown} disabled={!canDown} className="disabled:opacity-25" style={{ color: T.inkSoft }}><ChevronDown size={14} /></button>
+      </div>
+      <button onClick={onEdit} className="flex-1 min-w-0 text-left">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] px-1.5 py-0.5 rounded shrink-0" style={{ background: T.sand, color: T.inkSoft }}>{badge}</span>
+          {name && <span className="text-sm truncate" style={{ color: T.ink }}>{name}</span>}
+        </div>
+        <div className="text-xs mt-1" style={{ color: T.inkSoft }}>{dims}</div>
+        <div className="flex items-center justify-between mt-1.5">
+          <span className="text-[11px] flex items-center gap-1" style={{ color: T.wood }}><Pencil size={11} /> Edit 编辑</span>
+          <span className="font-display text-base" style={{ color: T.ink }}>{fmtMYR(total)}</span>
+        </div>
+      </button>
+    </div>
+  );
+}
+
 // 受控组件：doc = { meta, zones, looseItems, adjustPct }；改动通过 onChange 回传上层。
 export default function QuotationView({ doc, onChange }) {
   const toast = useToast();
   const [showPrint, setShowPrint] = useState(false);
   const [showCatalog, setShowCatalog] = useState(false);
   const [showMeasure, setShowMeasure] = useState(false);
+  const isMobile = useIsMobile();
+  const [editing, setEditing] = useState(null); // { zoneId, item, isNew } → 手机弹窗编辑
   const { meta, zones, adjustPct } = doc;
   const looseItems = doc.looseItems || [];
   const looseAdjustPct = doc.looseAdjustPct || 0;
@@ -154,8 +211,10 @@ export default function QuotationView({ doc, onChange }) {
   const updateZone = (id, p) => setZones((zs) => zs.map((z) => (z.id === id ? { ...z, ...p } : z)));
   const removeZone = (id) => setZones((zs) => zs.filter((z) => z.id !== id));
   const moveZone = (from, to) => setZones((zs) => moveInArray(zs, from, to));
-  const addItem = (zoneId, kind) =>
-    setZones((zs) => zs.map((z) => (z.id === zoneId ? { ...z, items: [...z.items, makeItem(kind)] } : z)));
+  const addItem = (zoneId, kind, prebuilt) =>
+    setZones((zs) => zs.map((z) => (z.id === zoneId ? { ...z, items: [...z.items, prebuilt || makeItem(kind)] } : z)));
+  // 手机：按类型按钮 → 弹窗填尺寸；桌面：直接行内新增
+  const onAddType = (zoneId, kind) => (isMobile ? setEditing({ zoneId, item: makeItem(kind), isNew: true }) : addItem(zoneId, kind));
   const updateItem = (zoneId, item) =>
     setZones((zs) => zs.map((z) => (z.id === zoneId
       ? { ...z, items: z.items.map((it) => (it.id === item.id ? item : it)) } : z)));
@@ -298,6 +357,17 @@ export default function QuotationView({ doc, onChange }) {
                     <div className="text-center py-4 text-sm" style={{ color: T.inkSoft }}>Add an item below 选下方类型添加</div>
                   )}
                   {zone.items.map((it, idx) => (
+                    isMobile ? (
+                      /* 手机：紧凑摘要卡，点开弹窗编辑 */
+                      <MobileItemCard key={it.id} item={it}
+                        result={zr?.items.find((r) => r.item.id === it.id)}
+                        selected={selItems.has(it.id)}
+                        onToggleSelect={() => toggleSelItem(it.id)}
+                        onEdit={() => setEditing({ zoneId: zone.id, item: it, isNew: false })}
+                        canUp={idx > 0} canDown={idx < zone.items.length - 1}
+                        onMoveUp={() => moveItem(zone.id, idx, idx - 1)}
+                        onMoveDown={() => moveItem(zone.id, idx, idx + 1)} />
+                    ) : (
                     <QuoteLineItem key={it.id} item={it}
                       result={zr?.items.find((r) => r.item.id === it.id)}
                       selected={selItems.has(it.id)}
@@ -314,10 +384,11 @@ export default function QuotationView({ doc, onChange }) {
                         if (d.zoneId === zone.id && d.from !== idx) moveItem(zone.id, d.from, idx);
                         dragRef.current = null;
                       }} />
+                    )
                   ))}
                   <div className="flex flex-wrap gap-2 pt-1">
                     {ADD_TYPES.map((a) => (
-                      <button key={a.kind} onClick={() => addItem(zone.id, a.kind)}
+                      <button key={a.kind} onClick={() => onAddType(zone.id, a.kind)}
                         className="flex items-center gap-1 px-3 py-1.5 text-xs transition-colors"
                         style={{ border: `1px solid ${T.line}`, borderRadius: '2px', color: T.inkSoft }}
                         onMouseEnter={(e) => { e.currentTarget.style.borderColor = T.wood; e.currentTarget.style.color = T.wood; }}
@@ -640,6 +711,15 @@ export default function QuotationView({ doc, onChange }) {
           zones={zones.map((z) => ({ id: z.id, name: pickLang(z.name, lang) }))}
           onAddItems={handleMeasureAdd}
           onClose={() => setShowMeasure(false)} />
+      )}
+      {editing && (
+        <ItemEditorModal
+          key={editing.item.id}
+          item={editing.item}
+          isNew={editing.isNew}
+          onSave={(next) => (editing.isNew ? addItem(editing.zoneId, next.type, next) : updateItem(editing.zoneId, next))}
+          onDelete={editing.isNew ? undefined : () => removeItem(editing.zoneId, editing.item.id)}
+          onClose={() => setEditing(null)} />
       )}
     </div>
   );

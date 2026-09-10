@@ -33,7 +33,11 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
     try { const v = localStorage.getItem('sail.ukur.unit'); if (UNITS.some((x) => x.id === v)) return v; } catch { /* ignore */ }
     return 'm';
   });
-  const setUnit = (v) => { setUnitState(v); try { localStorage.setItem('sail.ukur.unit', v); } catch { /* ignore */ } };
+  const setUnit = (v) => {
+    setUnitState(v);
+    setLines((ls) => ls.map((l) => (l.manualTxt != null ? { ...l, manualTxt: null } : l))); // 换单位后按米值重新显示
+    try { localStorage.setItem('sail.ukur.unit', v); } catch { /* ignore */ }
+  };
   const [zoom, setZoom] = useState(1);          // 放大倍数（点线更精准）
   // 撤销/重做历史（快照可回退的部分：校准 + 量尺线 + 草稿）
   const [past, setPast] = useState([]);
@@ -47,6 +51,8 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
   const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
   const pathPx = (pts) => pts.reduce((s, p, i) => (i ? s + dist(pts[i - 1], p) : 0), 0);
   const pathM = (pts) => (pxPerM > 0 ? pathPx(pts) / pxPerM : 0);   // 长度由点+比例现算，重新校准后自动更新
+  // 有效长度：手动填了准确尺寸就用手动值（手机画不准时直接打数字），否则按图算
+  const effM = (l) => (l.manualM != null && l.manualM > 0 ? l.manualM : pathM(l.pts));
   const centroid = (pts) => ({
     x: pts.reduce((s, p) => s + p.x, 0) / pts.length,
     y: pts.reduce((s, p) => s + p.y, 0) / pts.length,
@@ -150,7 +156,14 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
   const sw = img ? Math.max(2, img.w / 320) / zoom : 2;   // 线宽（随放大缩小，保持视觉一致）
   const fs = img ? Math.max(12, img.w / 45) / zoom : 12;  // 字号
   const draftLenM = pathM(draft);
-  const total = lines.reduce((a, l) => a + pathM(l.pts), 0);
+  const total = lines.reduce((a, l) => a + effM(l), 0);
+  // manualTxt 保留用户原始输入（避免打 "2." 时被格式化吃掉小数点）；manualM 存米
+  const setManual = (id, v) => {
+    const n = parseFloat(v);
+    setLines((ls) => ls.map((l) => (l.id === id ? { ...l, manualTxt: v, manualM: n > 0 ? n * u.toM : null } : l)));
+  };
+  const clearManual = (id) => setLines((ls) => ls.map((l) => (l.id === id ? { ...l, manualM: null, manualTxt: null } : l)));
+  const dispLen = (l) => (l.manualTxt != null && l.manualM != null ? l.manualTxt : Number(toDisp(effM(l)).toFixed(u.id === 'm' ? 2 : u.id === 'cm' ? 1 : 0)));
   const canUndo = past.length > 0;
   const canRedo = future.length > 0;
 
@@ -170,7 +183,7 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
 
   const addToQuote = () => {
     if (!lines.length) return;
-    const measures = lines.map((l) => ({ length: Math.round(pathM(l.pts) * 100) / 100, name: l.name, kind: l.kind || cabKind }));
+    const measures = lines.map((l) => ({ length: Math.round(effM(l) * 100) / 100, name: l.name, kind: l.kind || cabKind }));
     onAddItems({ zoneId: targetZone, newZoneName: newZoneName.trim(), kind: cabKind, measures });
     onClose();
   };
@@ -239,7 +252,7 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
                             <polyline points={ptsStr(l.pts)} fill="none" stroke={T.wood} strokeWidth={sw} strokeLinejoin="round" />
                             {l.pts.map((p, j) => <circle key={j} cx={p.x} cy={p.y} r={sw * 1.4} fill={T.wood} />)}
                             <text x={c.x} y={c.y - sw * 2} fill={T.wood} fontSize={fs} fontWeight="700" textAnchor="middle">
-                              {(l.name ? l.name + ' ' : '') + fmtLen(pathM(l.pts))}
+                              {(l.name ? l.name + ' ' : '') + fmtLen(effM(l)) + (l.manualM != null ? ' ✎' : '')}
                             </text>
                           </g>
                         );
@@ -353,7 +366,17 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
                         <div className="flex items-center gap-1.5 text-sm">
                           <input value={l.name} onChange={(e) => renameLine(l.id, e.target.value)} placeholder={`#${i + 1}${l.pts.length > 2 ? ' (L型)' : ''}`}
                             className="flex-1 min-w-0 px-2 py-1 text-xs outline-none" style={{ background: T.cream, border: `1px solid ${T.line}`, borderRadius: 2 }} />
-                          <span className="font-medium" style={{ color: T.ink }}>{fmtLen(pathM(l.pts))}</span>
+                          {/* 长度可直接打数字（画不准时输入准确尺寸）*/}
+                          <input type="number" step="any" inputMode="decimal"
+                            value={dispLen(l)}
+                            onChange={(e) => setManual(l.id, e.target.value)}
+                            title="可直接输入准确长度 Type exact length"
+                            className="w-20 px-1.5 py-1 text-sm text-right font-medium outline-none"
+                            style={{ background: l.manualM != null ? T.sand : T.cream, border: `1px solid ${l.manualM != null ? T.wood : T.line}`, borderRadius: 2, color: T.ink }} />
+                          <span className="text-xs" style={{ color: T.inkSoft }}>{u.id === 'in' ? '"' : u.id === 'ft' ? "'" : u.id}</span>
+                          {l.manualM != null && (
+                            <button onClick={() => clearManual(l.id)} title="恢复按图量的长度" style={{ color: T.inkSoft }}><RotateCcw size={12} /></button>
+                          )}
                           <button onClick={() => removeLine(l.id)} style={{ color: T.terra }}><Trash2 size={13} /></button>
                         </div>
                         <select value={l.kind || cabKind} onChange={(e) => setLineKind(l.id, e.target.value)}
