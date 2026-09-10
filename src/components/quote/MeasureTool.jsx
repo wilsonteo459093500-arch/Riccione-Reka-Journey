@@ -213,11 +213,15 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calib]);
   // 用普通函数而不是子组件：保证拖动中 <circle> 元素不被重建（否则 pointer capture 会丢）
+  // 大圈半透明（手指按的区域）+ 中间小实心点（真正的位置），这样看得到线头对没对准
   const handle = (key, p, r, fill, kind, id, idx) => (
-    <circle key={key} cx={p.x} cy={p.y} r={r} fill={fill} stroke="#fff" strokeWidth={sw * 0.6}
-      style={{ touchAction: 'none', cursor: 'move' }}
-      onPointerDown={startDrag(kind, id, idx)} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}
-      onClick={(e) => e.stopPropagation()} />
+    <g key={key}>
+      <circle cx={p.x} cy={p.y} r={r} fill={fill} fillOpacity={0.18} stroke={fill} strokeOpacity={0.6} strokeWidth={sw * 0.5}
+        style={{ touchAction: 'none', cursor: 'move' }}
+        onPointerDown={startDrag(kind, id, idx)} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}
+        onClick={(e) => e.stopPropagation()} />
+      <circle cx={p.x} cy={p.y} r={sw * 0.9} fill={fill} stroke="#fff" strokeWidth={sw * 0.35} style={{ pointerEvents: 'none' }} />
+    </g>
   );
 
   const finishDraft = () => {
@@ -370,7 +374,12 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
                           {draft.map((p, j) => handle(j, p, hr * 1.1, T.terra, 'draft', null, j))}
                         </g>
                       )}
-                      {pending && <circle cx={pending.x} cy={pending.y} r={hr} fill={T.terra} stroke="#fff" strokeWidth={sw * 0.6} />}
+                      {pending && (
+                        <g>
+                          <circle cx={pending.x} cy={pending.y} r={hr} fill={T.terra} fillOpacity={0.18} stroke={T.terra} strokeOpacity={0.6} strokeWidth={sw * 0.5} />
+                          <circle cx={pending.x} cy={pending.y} r={sw * 0.9} fill={T.terra} stroke="#fff" strokeWidth={sw * 0.35} />
+                        </g>
+                      )}
                     </svg>
                   </div>
                   </div>
