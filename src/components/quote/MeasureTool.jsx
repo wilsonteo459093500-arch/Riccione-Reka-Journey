@@ -42,7 +42,12 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
   // 撤销/重做历史（快照可回退的部分：校准 + 量尺线 + 草稿）
   const [past, setPast] = useState([]);
   const [future, setFuture] = useState([]);
+  const [calibM, setCalibM] = useState(0);      // 校准时输入的米数（拖校准端点后可重算比例）
+  const [snapOrtho, setSnapOrtho] = useState(true); // 自动拉直成水平/垂直
+  const [snapEdge, setSnapEdge] = useState(true);   // 自动吸到图上的墙线（深色线）
   const imgRef = useRef(null);
+  const canvasRef = useRef(null);               // 离屏画布：取像素做吸附
+  const dragRef = useRef(null);                 // 正在拖的端点 {kind:'line'|'draft'|'calib', id, idx}
 
   const u = UNITS.find((x) => x.id === unit) || UNITS[2];
   const toDisp = (m) => m / u.toM;                          // 米 → 当前单位
@@ -59,9 +64,9 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
   });
 
   // 记录快照 → 支持撤销。任何会改动测量的动作前调用。
-  const snapshot = () => ({ pxPerM, calib, pending, draft, lines });
+  const snapshot = () => ({ pxPerM, calibM, calib, pending, draft, lines });
   const commit = () => { setPast((p) => [...p.slice(-99), snapshot()]); setFuture([]); };
-  const restore = (s) => { setPxPerM(s.pxPerM); setCalib(s.calib); setPending(s.pending); setDraft(s.draft); setLines(s.lines); };
+  const restore = (s) => { setPxPerM(s.pxPerM); setCalibM(s.calibM ?? 0); setCalib(s.calib); setPending(s.pending); setDraft(s.draft); setLines(s.lines); };
   const undo = () => {
     setPast((p) => {
       if (!p.length) return p;
@@ -87,8 +92,15 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
     reader.onload = (e) => {
       const im = new Image();
       im.onload = () => {
+        // 离屏画布存原图像素，供「吸附墙线」取样
+        try {
+          const cv = document.createElement('canvas');
+          cv.width = im.naturalWidth; cv.height = im.naturalHeight;
+          cv.getContext('2d', { willReadFrequently: true }).drawImage(im, 0, 0);
+          canvasRef.current = cv;
+        } catch { canvasRef.current = null; }
         setImg({ src: e.target.result, w: im.naturalWidth, h: im.naturalHeight });
-        setPxPerM(0); setCalib(null); setLines([]); setPending(null); setDraft([]);
+        setPxPerM(0); setCalibM(0); setCalib(null); setLines([]); setPending(null); setDraft([]);
         setPast([]); setFuture([]); setZoom(1);
       };
       im.src = e.target.result;
@@ -111,23 +123,102 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
     };
   };
 
+  // ---- 吸附：让手机上随手点也准 ----
+  // 吸附墙线：在点击处小窗口内找最深色的像素（墙线通常是深色），把点吸过去
+  const edgeSnap = (p) => {
+    const cv = canvasRef.current;
+    if (!snapEdge || !cv || !img) return p;
+    const r = Math.max(6, Math.round(img.w / 90));
+    const x0 = Math.max(0, Math.round(p.x) - r), y0 = Math.max(0, Math.round(p.y) - r);
+    const w = Math.min(img.w - x0, 2 * r + 1), h = Math.min(img.h - y0, 2 * r + 1);
+    if (w <= 0 || h <= 0) return p;
+    let data;
+    try { data = cv.getContext('2d', { willReadFrequently: true }).getImageData(x0, y0, w, h).data; } catch { return p; }
+    const lum = new Float32Array(w * h);
+    let min = 255, max = 0;
+    for (let i = 0; i < w * h; i++) {
+      const L = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
+      lum[i] = L; if (L < min) min = L; if (L > max) max = L;
+    }
+    if (max - min < 40) return p; // 附近没有明显线条，不吸
+    const thr = min + 0.35 * (max - min);
+    let best = null, bd = Infinity;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      if (lum[y * w + x] > thr) continue;
+      const px = x0 + x, py = y0 + y;
+      const d = (px - p.x) ** 2 + (py - p.y) ** 2;
+      if (d < bd) { bd = d; best = { x: px, y: py }; }
+    }
+    return best || p;
+  };
+  // 直角吸附：与上一点接近水平/垂直（±8°）就拉直
+  const orthoSnap = (p, prev) => {
+    if (!snapOrtho || !prev) return p;
+    const dx = p.x - prev.x, dy = p.y - prev.y, t = Math.tan((8 * Math.PI) / 180);
+    if (Math.abs(dy) <= Math.abs(dx) * t) return { x: p.x, y: prev.y };
+    if (Math.abs(dx) <= Math.abs(dy) * t) return { x: prev.x, y: p.y };
+    return p;
+  };
+  const snapPoint = (p, prev) => orthoSnap(edgeSnap(p), prev);
+
   const handleClick = (e) => {
     if (!img) return;
     const p = pointAt(e);
     if (pxPerM <= 0) {
       // 校准：两点一条线
       commit();
-      if (!pending) { setPending(p); return; }
-      setCalib({ a: pending, b: p });
+      if (!pending) { setPending(edgeSnap(p)); return; }
+      setCalib({ a: pending, b: snapPoint(p, pending) });
       setPending(null);
       setAskMeters('');
     } else {
       // 量尺：连续点转角，累加成一条折线（忽略与上一点几乎重合的误点）
-      if (draft.length && dist(draft[draft.length - 1], p) < img.w / 400) return;
+      const prev = draft.length ? draft[draft.length - 1] : null;
+      const q = snapPoint(p, prev);
+      if (prev && dist(prev, q) < img.w / 400) return;
       commit();
-      setDraft((d) => [...d, p]);
+      setDraft((d) => [...d, q]);
     }
   };
+
+  // ---- 拖动端点微调（校准线 / 量尺线 / 草稿点）----
+  const startDrag = (kind, id, idx) => (e) => {
+    e.stopPropagation(); e.preventDefault();
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+    commit();
+    dragRef.current = { kind, id, idx };
+  };
+  const moveDrag = (e) => {
+    const d = dragRef.current;
+    if (!d || !img) return;
+    e.stopPropagation(); e.preventDefault();
+    let prev = null;
+    if (d.kind === 'line') { const l = lines.find((x) => x.id === d.id); prev = l?.pts[d.idx - 1] ?? l?.pts[d.idx + 1] ?? null; }
+    else if (d.kind === 'draft') prev = draft[d.idx - 1] ?? draft[d.idx + 1] ?? null;
+    else if (d.kind === 'calib') prev = d.idx === 0 ? calib?.b : calib?.a;
+    const p = snapPoint(pointAt(e), prev);
+    if (d.kind === 'line') setLines((ls) => ls.map((l) => (l.id === d.id ? { ...l, pts: l.pts.map((q, j) => (j === d.idx ? p : q)) } : l)));
+    else if (d.kind === 'draft') setDraft((ds) => ds.map((q, j) => (j === d.idx ? p : q)));
+    else if (d.kind === 'calib') setCalib((c) => ({ ...c, [d.idx === 0 ? 'a' : 'b']: p }));
+  };
+  const endDrag = (e) => {
+    if (!dragRef.current) return;
+    e.stopPropagation();
+    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+    dragRef.current = null;
+  };
+  // 拖了校准端点 → 按原来输入的米数重算比例
+  useEffect(() => {
+    if (pxPerM > 0 && calibM > 0 && calib) setPxPerM(dist(calib.a, calib.b) / calibM);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calib]);
+  // 用普通函数而不是子组件：保证拖动中 <circle> 元素不被重建（否则 pointer capture 会丢）
+  const handle = (key, p, r, fill, kind, id, idx) => (
+    <circle key={key} cx={p.x} cy={p.y} r={r} fill={fill} stroke="#fff" strokeWidth={sw * 0.6}
+      style={{ touchAction: 'none', cursor: 'move' }}
+      onPointerDown={startDrag(kind, id, idx)} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}
+      onClick={(e) => e.stopPropagation()} />
+  );
 
   const finishDraft = () => {
     if (draft.length < 2) return;
@@ -145,6 +236,7 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
     if (!calib || !(v > 0)) return;
     const meters = v * u.toM;                    // 输入值按当前单位换成米
     commit();
+    setCalibM(meters);
     setPxPerM(dist(calib.a, calib.b) / meters);
   };
 
@@ -153,8 +245,20 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
   const renameLine = (id, name) => setLines((ls) => ls.map((l) => (l.id === id ? { ...l, name } : l)));
   const clearAll = () => { if (!lines.length) return; if (!window.confirm('清空全部量尺？校准保留。')) return; commit(); setLines([]); setDraft([]); };
 
-  const sw = img ? Math.max(2, img.w / 320) / zoom : 2;   // 线宽（随放大缩小，保持视觉一致）
-  const fs = img ? Math.max(12, img.w / 45) / zoom : 12;  // 字号
+  // 屏幕像素 → 原图像素的比例：让线宽/字号/端点在手机、桌面、放大后都保持同样的「屏幕大小」
+  const [natPerPx, setNatPerPx] = useState(1);
+  useEffect(() => {
+    const el = imgRef.current;
+    if (!el || !img) return;
+    const upd = () => { const w = el.getBoundingClientRect().width; if (w > 0) setNatPerPx(img.w / w); };
+    upd();
+    const ro = new ResizeObserver(upd);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [img, zoom]);
+  const sw = 2 * natPerPx;    // 线宽 ≈ 2 屏幕像素
+  const fs = 11 * natPerPx;   // 字号 ≈ 11 屏幕像素
+  const hr = 11 * natPerPx;   // 端点半径 ≈ 11 屏幕像素（手指点得到）
   const draftLenM = pathM(draft);
   const total = lines.reduce((a, l) => a + effM(l), 0);
   // manualTxt 保留用户原始输入（避免打 "2." 时被格式化吃掉小数点）；manualM 存米
@@ -242,6 +346,8 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
                             fill={T.terra} fontSize={fs} fontWeight="700" textAnchor="middle">
                             {pxPerM > 0 ? '校准 CAL' : '校准线'}
                           </text>
+                          {handle('ca', calib.a, hr, T.terra, 'calib', null, 0)}
+                          {handle('cb', calib.b, hr, T.terra, 'calib', null, 1)}
                         </g>
                       )}
                       {/* 已完成的量尺折线 */}
@@ -250,7 +356,7 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
                         return (
                           <g key={l.id}>
                             <polyline points={ptsStr(l.pts)} fill="none" stroke={T.wood} strokeWidth={sw} strokeLinejoin="round" />
-                            {l.pts.map((p, j) => <circle key={j} cx={p.x} cy={p.y} r={sw * 1.4} fill={T.wood} />)}
+                            {l.pts.map((p, j) => handle(j, p, hr, T.wood, 'line', l.id, j))}
                             <text x={c.x} y={c.y - sw * 2} fill={T.wood} fontSize={fs} fontWeight="700" textAnchor="middle">
                               {(l.name ? l.name + ' ' : '') + fmtLen(effM(l)) + (l.manualM != null ? ' ✎' : '')}
                             </text>
@@ -261,10 +367,10 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
                       {draft.length > 0 && (
                         <g>
                           {draft.length > 1 && <polyline points={ptsStr(draft)} fill="none" stroke={T.terra} strokeWidth={sw} strokeDasharray={`${sw * 2} ${sw * 2}`} strokeLinejoin="round" />}
-                          {draft.map((p, j) => <circle key={j} cx={p.x} cy={p.y} r={sw * 1.8} fill={T.terra} />)}
+                          {draft.map((p, j) => handle(j, p, hr * 1.1, T.terra, 'draft', null, j))}
                         </g>
                       )}
-                      {pending && <circle cx={pending.x} cy={pending.y} r={sw * 2} fill={T.terra} />}
+                      {pending && <circle cx={pending.x} cy={pending.y} r={hr} fill={T.terra} stroke="#fff" strokeWidth={sw * 0.6} />}
                     </svg>
                   </div>
                   </div>
@@ -289,6 +395,17 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
                       <button onClick={() => setZoom(1)} disabled={zoom === 1} title="还原大小"
                         className="text-xs px-2.5 py-1.5 disabled:opacity-30" style={{ color: T.inkSoft, borderLeft: `1px solid ${T.line}` }}><Maximize2 size={13} /></button>
                     </div>
+                    {/* 吸附开关 */}
+                    <button onClick={() => setSnapOrtho((v) => !v)} title="自动拉直成水平 / 垂直（±8°）"
+                      className="text-xs px-2.5 py-1.5"
+                      style={{ border: `1px solid ${snapOrtho ? T.wood : T.line}`, background: snapOrtho ? T.sand : 'transparent', color: snapOrtho ? T.wood : T.inkSoft, borderRadius: 2 }}>
+                      ⊾ 直角
+                    </button>
+                    <button onClick={() => setSnapEdge((v) => !v)} title="点击处自动吸到图上的墙线（深色线）"
+                      className="text-xs px-2.5 py-1.5"
+                      style={{ border: `1px solid ${snapEdge ? T.wood : T.line}`, background: snapEdge ? T.sand : 'transparent', color: snapEdge ? T.wood : T.inkSoft, borderRadius: 2 }}>
+                      🧲 吸附墙线
+                    </button>
                     <label className="text-xs px-3 py-1.5 cursor-pointer" style={{ border: `1px solid ${T.line}`, borderRadius: 2, color: T.inkSoft }}>
                       <Upload size={12} className="inline mr-1" /> 换图
                       <input type="file" accept="image/*" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
@@ -320,7 +437,7 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
                       <button onClick={() => setPending(null)} className="underline ml-1">取消</button></span>}
                   </div>
                   {pxPerM > 0 && (
-                    <p className="text-[11px] mt-1.5" style={{ color: T.inkSoft }}>直的柜：点两下按「完成这段」。L 型 / 转角柜：连续点每个转角再按完成，长度自动累加成一个柜（双击 = 完成，Enter = 完成，Esc = 取消这段）。点错随时按「撤销」(Ctrl+Z)。图太小可放大再点更准。</p>
+                    <p className="text-[11px] mt-1.5" style={{ color: T.inkSoft }}>在墙上大概点一下即可：会自动<b>吸到墙线</b>并<b>拉直</b>；不准就<b>按住端点拖</b>微调，或在右边直接打准确尺寸。直的柜点两下按「完成这段」；L 型连续点转角再完成（双击 / Enter = 完成，Esc = 取消）。点错按「撤销」。</p>
                   )}
                 </>
               )}
