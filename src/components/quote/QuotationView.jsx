@@ -641,7 +641,7 @@ export default function QuotationView({ doc, onChange }) {
                   placeholder="30 或 30+10"
                   className="w-24 px-2 py-1 text-sm outline-none"
                   style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }} />
-                <span>%　→ 供货价 = 零售 × {Math.round(designerRate * 1000) / 10}%（{discountChainLabel(designerDisc) || '—'}）{audience === 'designer_net' ? ' · 每个单价都换算' : ''}</span>
+                <span>%　→ 供货价 = 零售 × {Math.round(designerRate * 1000) / 10}%（{discountChainLabel(designerDisc) || '—'}）{audience === 'designer_net' ? ' · 每个单价都换算' : ''}{computed.excluded > 0 ? ` · 岩板 ${fmtMYR(computed.excluded)} 不打折` : ''}</span>
               </div>
             )}
           </div>

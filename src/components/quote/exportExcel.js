@@ -16,9 +16,14 @@ export async function exportExcel(meta, computed, loose, notes = {}, lang = 'bot
   const supply = (retail) => Math.round((Number(retail) || 0) * supplyRate);
   const priceScale = isDesignerNet ? supplyRate : 1;
   const px = (v) => Math.round((Number(v) || 0) * priceScale);
+  // 岩板 sintered stone 不折扣：设计师版也不打供货折扣
+  const pxi = (v, ir) => (ir?.noDiscount ? Math.round(Number(v) || 0) : px(v));
+  const zoneShown = (zr) => Math.round(zr.items.reduce((s, ir) => s + (ir.noDiscount ? ir.total : ir.total * priceScale), 0));
+  const excluded = computed.excluded || 0;
+  const exclTag = excluded > 0 ? ` · ${t(RLBL.noDiscExcl)}` : '';
   const discTag = discountChainLabel(notes.designerDisc);
-  const supplyLbl = () => `${t({ en: 'Designer Supply', zh: '设计师供货价' })} (${discTag})`;
-  const dTotalLbl = () => t({ en: 'Designer Total', zh: '设计师总额' });
+  const supplyLbl = () => `${t({ en: 'Designer Supply', zh: '设计师供货价' })} (${discTag})${exclTag}`;
+  const dTotalLbl = () => `${t({ en: 'Designer Total', zh: '设计师总额' })}${exclTag}`;
   const lineDesc = (ln) => (lang === 'en' ? ln.descEn : lang === 'zh' ? ln.descZh : `${ln.descEn} ${ln.descZh}`);
   const lineUom = (ln) => (lang === 'en' ? ln.uomEn : lang === 'zh' ? ln.uomZh : ln.uomZh);
   // 定制柜体子项描述：门板/柜体 → "Door: A Series"；抽屉 → "Drawers"
@@ -73,18 +78,18 @@ export async function exportExcel(meta, computed, loose, notes = {}, lang = 'bot
           row([[typeLabel, nm].filter(Boolean).join(' · ')]);
           ir.lines.forEach((ln) => {
             const qty = ln.piece ? round0(ln.qty) : Number(ln.qty.toFixed(2));
-            row([`    ${cabLineLabel(ln)}`, qty, lineUom(ln), px(ln.unitMyr), px(ln.total)]);
+            row([`    ${cabLineLabel(ln)}`, qty, lineUom(ln), pxi(ln.unitMyr, ir), pxi(ln.total, ir)]);
           });
         } else {
           ir.lines.forEach((ln, i) => {
             const nm = i === 0 ? pickLang(ir.item.name || '', lang) : '';
             const label = nm ? `${nm} · ${lineDesc(ln)}` : lineDesc(ln);
             const qty = ln.piece ? round0(ln.qty) : Number(ln.qty.toFixed(2));
-            row([label, qty, lineUom(ln), px(ln.unitMyr), px(ln.total)]);
+            row([label, qty, lineUom(ln), pxi(ln.unitMyr, ir), pxi(ln.total, ir)]);
           });
         }
       });
-      row(['', '', '', t(RLBL.subtotal), px(zr.subtotal)]);
+      row(['', '', '', t(RLBL.subtotal), zoneShown(zr)]);
       row([]);
     });
     if (!anyDesigner) {
@@ -92,11 +97,12 @@ export async function exportExcel(meta, computed, loose, notes = {}, lang = 'bot
       if (computed.discount > 0) row(['', '', '', `${t(RLBL.discount)}${computed.discountMode === 'amt' ? '' : ` (${computed.adjustPct}%)`}${computed.excluded > 0 ? ` · ${t(RLBL.noDiscExcl)}` : ''}${notes.discountNote ? ` — ${notes.discountNote}` : ''}`, -round0(computed.discount)]);
     }
     const cabRetail = anyDesigner ? computed.gross : computed.net; // 设计师版按原价
+    const cabSupply = supply(cabRetail - excluded) + Math.round(excluded); // 岩板不打供货折扣
     if (isDesignerNet) {
-      row(['', '', '', dTotalLbl(), supply(cabRetail)]);
+      row(['', '', '', dTotalLbl(), cabSupply]);
     } else {
       row(['', '', '', isDesigner ? t({ en: 'Retail Total', zh: '零售总额' }) : t(RLBL.total), round0(cabRetail)]);
-      if (isDesigner) row(['', '', '', supplyLbl(), supply(cabRetail)]);
+      if (isDesigner) row(['', '', '', supplyLbl(), cabSupply]);
     }
     row([]);
     if (notes.cabinetNote) { row([t(RLBL.notes), notes.cabinetNote]); row([]); }

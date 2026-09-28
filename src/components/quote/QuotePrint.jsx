@@ -23,10 +23,19 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
   const discTag = discountChainLabel(designerDisc); // "30%+10%"
   const priceScale = isDesignerNet ? supplyRate : 1; // 净价版把每个价格 × 系数
   const px = (v) => Math.round((Number(v) || 0) * priceScale); // 显示价（净价版=供货价）
+  // 岩板 sintered stone 不折扣：设计师版也不打供货折扣。按项目判断（ir.noDiscount）。
+  const pxi = (v, ir) => (ir?.noDiscount ? Math.round(Number(v) || 0) : px(v));
+  const zoneShown = (zr) => Math.round(zr.items.reduce((s, ir) => s + (ir.noDiscount ? ir.total : ir.total * priceScale), 0));
+  const excluded = computed.excluded || 0;
   // 设计师版按「零售原价 gross」计（不理会给零售客户的折扣）；零售版按折后 net 计。
   const cabRetail = anyDesigner ? computed.gross : computed.net;
   const looseRetailV = anyDesigner ? (loose?.gross || 0) : looseNet;
   const grandRetail = cabRetail + looseRetailV;
+  // 供货价：定制 = (原价 − 岩板) × 系数 + 岩板；家具 = 原价 × 系数
+  const cabSupply = supply(cabRetail - excluded) + Math.round(excluded);
+  const looseSupply = supply(looseRetailV);
+  const grandSupply = cabSupply + looseSupply;
+  const exclTag = excluded > 0 ? ` · ${tr(RLBL.noDiscExcl, lang)}` : '';
   const t = (obj) => tr(obj, lang);
   const lineDesc = (ln) => (lang === 'en' ? ln.descEn : lang === 'zh' ? ln.descZh : `${ln.descEn} ${ln.descZh}`);
   const lineUom = (ln) => (lang === 'en' ? ln.uomEn : lang === 'zh' ? ln.uomZh : ln.uomZh);
@@ -108,7 +117,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
   );
 
   // 总览页：某部分的 原价 / 折扣 / 折后小计
-  const SummarySection = ({ label, brand, calc, note }) => (
+  const SummarySection = ({ label, brand, calc, note, supplyVal }) => (
     <>
       <tr style={{ borderTop: `1px solid ${T.line}` }}>
         <td className="pt-2 px-2 font-medium" colSpan={2}>{label} <span style={{ color: T.inkSoft }}>· {brand}</span></td>
@@ -117,7 +126,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
         /* 设计师版：只显示一个小计（双价=零售原价；净价=供货价）*/
         <tr>
           <td className="py-0.5 px-2 pl-5 font-medium">{t(RLBL.subtotal)}</td>
-          <td className="text-right py-0.5 px-2 font-medium">{fmtMYR(isDesignerNet ? supply(calc.gross) : calc.gross)}</td>
+          <td className="text-right py-0.5 px-2 font-medium">{fmtMYR(isDesignerNet ? supplyVal : calc.gross)}</td>
         </tr>
       ) : (
         <>
@@ -174,8 +183,8 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                 <div className="px-2 py-1 font-medium text-xs uppercase tracking-wide" style={{ background: T.sand }}>{t(RLBL.summary)}</div>
                 <table className="w-full" style={{ borderCollapse: 'collapse' }}>
                   <tbody>
-                    <SummarySection label={t(RLBL.customCabinet)} brand="SAIL by Riccione Reka" calc={computed} note={discountNote} />
-                    <SummarySection label={t(RLBL.looseSection)} brand="Riccione Furniture" calc={loose} note={looseDiscountNote} />
+                    <SummarySection label={t(RLBL.customCabinet)} brand="SAIL by Riccione Reka" calc={computed} note={discountNote} supplyVal={cabSupply} />
+                    <SummarySection label={t(RLBL.looseSection)} brand="Riccione Furniture" calc={loose} note={looseDiscountNote} supplyVal={looseSupply} />
                     {/* 合计（两部分）—— 零售版才显示原价/折扣分解 */}
                     {!anyDesigner && (
                       <>
@@ -194,8 +203,8 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                     {isDesignerNet ? (
                       /* 净价版：直接一个供货总额 */
                       <tr style={{ borderTop: `2px solid ${T.ink}`, color: T.wood }}>
-                        <td className="py-3 px-2 font-display text-xl">{t({ en: 'Designer Total', zh: '设计师总额' })}</td>
-                        <td className="text-right py-3 px-2 font-display text-xl">{fmtMYR(supply(grandRetail))}</td>
+                        <td className="py-3 px-2 font-display text-xl">{t({ en: 'Designer Total', zh: '设计师总额' })}{exclTag && <span className="text-xs font-body" style={{ color: T.inkSoft }}>{exclTag}</span>}</td>
+                        <td className="text-right py-3 px-2 font-display text-xl">{fmtMYR(grandSupply)}</td>
                       </tr>
                     ) : (
                       <>
@@ -205,8 +214,8 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                         </tr>
                         {isDesigner && (
                           <tr style={{ color: T.wood, borderTop: `1px solid ${T.line}` }}>
-                            <td className="py-3 px-2 font-display text-xl">{t({ en: 'Designer Supply', zh: '设计师供货价' })} ({discTag})</td>
-                            <td className="text-right py-3 px-2 font-display text-xl">{fmtMYR(supply(grandRetail))}</td>
+                            <td className="py-3 px-2 font-display text-xl">{t({ en: 'Designer Supply', zh: '设计师供货价' })} ({discTag}){exclTag && <span className="text-xs font-body" style={{ color: T.inkSoft }}>{exclTag}</span>}</td>
+                            <td className="text-right py-3 px-2 font-display text-xl">{fmtMYR(grandSupply)}</td>
                           </tr>
                         )}
                       </>
@@ -256,8 +265,8 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                                 <td className="py-1 px-2 pl-6" style={{ color: T.inkSoft }}>{cabLineLabel(ln)}</td>
                                 {qtyCell(ln)}
                                 <td className="py-1 px-2">{lineUom(ln)}</td>
-                                <td className="text-right py-1 px-2">{fmtNum(px(ln.unitMyr), 0)}</td>
-                                <td className="text-right py-1 px-2">{fmtNum(px(ln.total), 0)}</td>
+                                <td className="text-right py-1 px-2">{fmtNum(pxi(ln.unitMyr, ir), 0)}</td>
+                                <td className="text-right py-1 px-2">{fmtNum(pxi(ln.total, ir), 0)}</td>
                               </tr>
                             )),
                           ];
@@ -274,14 +283,14 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                             </td>
                             {qtyCell(ln)}
                             <td className="py-1 px-2">{lineUom(ln)}</td>
-                            <td className="text-right py-1 px-2">{fmtNum(px(ln.unitMyr), 0)}</td>
-                            <td className="text-right py-1 px-2">{fmtNum(px(ln.total), 0)}</td>
+                            <td className="text-right py-1 px-2">{fmtNum(pxi(ln.unitMyr, ir), 0)}</td>
+                            <td className="text-right py-1 px-2">{fmtNum(pxi(ln.total, ir), 0)}</td>
                           </tr>
                         ));
                       })}
                       <tr style={{ borderTop: `1.5px solid ${T.line}` }}>
                         <td colSpan={4} className="text-right py-1 px-2 text-xs" style={{ color: T.inkSoft }}>{t(RLBL.subtotal)}</td>
-                        <td className="text-right py-1 px-2 font-medium">{fmtNum(px(zr.subtotal), 0)}</td>
+                        <td className="text-right py-1 px-2 font-medium">{fmtNum(zoneShown(zr), 0)}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -307,7 +316,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                   )}
                   {isDesignerNet ? (
                     <div className="flex justify-between py-2 mt-1 font-display text-xl" style={{ borderTop: `2px solid ${T.ink}`, color: T.wood }}>
-                      <span>{t({ en: 'Designer Total', zh: '设计师总额' })}</span><span>{fmtMYR(supply(cabRetail))}</span>
+                      <span>{t({ en: 'Designer Total', zh: '设计师总额' })}{exclTag && <span className="text-xs font-body" style={{ color: T.inkSoft }}>{exclTag}</span>}</span><span>{fmtMYR(cabSupply)}</span>
                     </div>
                   ) : (
                     <>
@@ -316,7 +325,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                       </div>
                       {isDesigner && (
                         <div className="flex justify-between py-1 font-medium" style={{ color: T.wood }}>
-                          <span>{t({ en: 'Designer Supply', zh: '设计师供货价' })} ({discTag})</span><span>{fmtMYR(supply(cabRetail))}</span>
+                          <span>{t({ en: 'Designer Supply', zh: '设计师供货价' })} ({discTag}){exclTag}</span><span>{fmtMYR(cabSupply)}</span>
                         </div>
                       )}
                     </>
