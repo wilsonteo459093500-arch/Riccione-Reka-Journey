@@ -444,6 +444,7 @@ export default function QuotationView({ doc, onChange }) {
               )}
             </span>
             {computed.discount > 0 && <span style={{ color: T.terra }}>− {fmtMYR(computed.discount)}</span>}
+            {computed.excluded > 0 && <span title="岩板 Sintered stone 不参与折扣，折扣只算在其余金额上">· 岩板不折扣 {fmtMYR(computed.excluded)}（折扣基数 {fmtMYR(computed.discountable)}）</span>}
           </div>
           {/* 折扣条件（显示在报价单折扣旁）*/}
           <div className="mt-2">
@@ -750,7 +751,7 @@ function buildTextQuote(meta, computed, loose, notes = {}, lang = 'both') {
   L.push('');
   if (computed.discount > 0) {
     L.push(`${t(RLBL.gross)}：${fmtMYR(computed.gross)}`);
-    L.push(`${t(RLBL.discount)}${computed.discountMode === 'amt' ? '' : ` (${computed.adjustPct}%)`}${notes.discountNote ? ` — ${notes.discountNote}` : ''}：− ${fmtMYR(computed.discount)}`);
+    L.push(`${t(RLBL.discount)}${computed.discountMode === 'amt' ? '' : ` (${computed.adjustPct}%)`}${computed.excluded > 0 ? ` · ${t(RLBL.noDiscExcl)}` : ''}${notes.discountNote ? ` — ${notes.discountNote}` : ''}：− ${fmtMYR(computed.discount)}`);
   }
   L.push(`*${t(RLBL.total)}：${fmtMYR(computed.net)}*`);
   if (notes.cabinetNote) L.push(`${t(RLBL.notes)}：${notes.cabinetNote}`);

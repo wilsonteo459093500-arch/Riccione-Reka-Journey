@@ -251,6 +251,7 @@ export const RLBL = {
   subtotal:  { en: 'Sub-Total', zh: '小计' },
   gross:     { en: 'Gross', zh: '合计' },
   discount:  { en: 'Discount', zh: '折扣' },
+  noDiscExcl: { en: 'excl. sintered stone', zh: '岩板不折扣' },
   total:     { en: 'Total', zh: '预估总额' },
   untitled:  { en: 'Untitled', zh: '未命名' },
   director:  { en: 'Director Signature / Date', zh: '董事签名 / 日期' },
@@ -271,6 +272,7 @@ export const QUOTE_TERMS = [
     title: { en: 'Disclaimer', zh: '声明' },
     lines: [
       { en: 'Prices are subject to change based on final design confirmation, material selection, and site conditions.', zh: '最终价格将根据设计确认、材质选择及现场状况进行调整。' },
+      { en: 'Sintered stone is quoted at net price and is not subject to any discount or promotion.', zh: '岩板按净价报价，不参与任何折扣或促销。' },
     ],
   },
   {
@@ -309,9 +311,16 @@ export const QUOTE_TERMS = [
 ];
 
 // 计算整个报价 → 各区域小计 + 分类汇总 + 总额
+// 岩板 Sintered stone 不参与折扣：名称/描述含 sintered / 岩板 自动识别，也可在项目上勾「不折扣」。
+export const NO_DISCOUNT_RE = /sintered|岩板/i;
+export function isNoDiscount(item) {
+  if (item?.noDiscount === true) return true;
+  if (item?.noDiscount === false) return false;
+  return NO_DISCOUNT_RE.test(`${item?.name || ''} ${item?.desc || ''}`);
+}
 export function computeQuote(zones = [], adjustPct = 0, discountMode = 'pct', discountAmt = 0) {
   const zoneResults = zones.map((z) => {
-    const items = (z.items || []).map((it) => ({ item: it, ...computeItem(it) }));
+    const items = (z.items || []).map((it) => ({ item: it, ...computeItem(it), noDiscount: isNoDiscount(it) }));
     const subtotal = mround(items.reduce((a, b) => a + b.total, 0), 1);
     return { zone: z, items, subtotal };
   });
@@ -323,13 +332,16 @@ export function computeQuote(zones = [], adjustPct = 0, discountMode = 'pct', di
   );
 
   const gross = zoneResults.reduce((a, b) => a + b.subtotal, 0);
+  // 不参与折扣的部分（岩板等）：折扣只算在其余金额上
+  const excluded = Math.round(zoneResults.reduce((a, zr) => a + zr.items.reduce((s, ir) => s + (ir.noDiscount ? ir.total : 0), 0), 0));
+  const discountable = Math.max(gross - excluded, 0);
   const pct = Number(adjustPct) || 0;
   const discount = discountMode === 'amt'
-    ? Math.min(Math.max(Math.round(Number(discountAmt) || 0), 0), gross) // 定额：不超过合计
-    : Math.round((gross * pct) / 100);
+    ? Math.min(Math.max(Math.round(Number(discountAmt) || 0), 0), discountable) // 定额：不超过可折扣金额
+    : Math.round((discountable * pct) / 100);
   const net = gross - discount;
 
-  return { zoneResults, byCategory, gross, discount, net, adjustPct: pct, discountMode, discountAmt: Number(discountAmt) || 0 };
+  return { zoneResults, byCategory, gross, excluded, discountable, discount, net, adjustPct: pct, discountMode, discountAmt: Number(discountAmt) || 0 };
 }
 
 // ---- Loose Furniture 家具（品牌：Riccione Furniture；独立折扣）----

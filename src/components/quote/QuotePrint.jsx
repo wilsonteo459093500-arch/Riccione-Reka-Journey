@@ -127,7 +127,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
           </tr>
           {calc.discount > 0 && (
             <tr style={{ color: T.terra }}>
-              <td className="py-0.5 px-2 pl-5">{t(RLBL.discount)}{calc.discountMode === 'amt' ? '' : ` (${calc.adjustPct}%)`}{note ? <span className="italic"> — {note}</span> : null}</td>
+              <td className="py-0.5 px-2 pl-5">{t(RLBL.discount)}{calc.discountMode === 'amt' ? '' : ` (${calc.adjustPct}%)`}{calc.excluded > 0 ? ` · ${t(RLBL.noDiscExcl)}` : ''}{note ? <span className="italic"> — {note}</span> : null}</td>
               <td className="text-right py-0.5 px-2">− {fmtMYR(calc.discount)}</td>
             </tr>
           )}
@@ -298,7 +298,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                       {computed.discount > 0 && (
                         <>
                           <div className="flex justify-between py-1" style={{ color: T.terra }}>
-                            <span>{t(RLBL.discount)}{computed.discountMode === 'amt' ? '' : ` (${computed.adjustPct}%)`}</span><span>− {fmtMYR(computed.discount)}</span>
+                            <span>{t(RLBL.discount)}{computed.discountMode === 'amt' ? '' : ` (${computed.adjustPct}%)`}{computed.excluded > 0 ? ` · ${t(RLBL.noDiscExcl)}` : ''}</span><span>− {fmtMYR(computed.discount)}</span>
                           </div>
                           {discountNote && <div className="text-[10px] italic -mt-0.5 pb-1" style={{ color: T.inkSoft }}>{discountNote}</div>}
                         </>

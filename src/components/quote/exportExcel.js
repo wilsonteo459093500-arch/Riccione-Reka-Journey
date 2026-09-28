@@ -89,7 +89,7 @@ export async function exportExcel(meta, computed, loose, notes = {}, lang = 'bot
     });
     if (!anyDesigner) {
       row(['', '', '', t(RLBL.gross), round0(computed.gross)]);
-      if (computed.discount > 0) row(['', '', '', `${t(RLBL.discount)}${computed.discountMode === 'amt' ? '' : ` (${computed.adjustPct}%)`}${notes.discountNote ? ` — ${notes.discountNote}` : ''}`, -round0(computed.discount)]);
+      if (computed.discount > 0) row(['', '', '', `${t(RLBL.discount)}${computed.discountMode === 'amt' ? '' : ` (${computed.adjustPct}%)`}${computed.excluded > 0 ? ` · ${t(RLBL.noDiscExcl)}` : ''}${notes.discountNote ? ` — ${notes.discountNote}` : ''}`, -round0(computed.discount)]);
     }
     const cabRetail = anyDesigner ? computed.gross : computed.net; // 设计师版按原价
     if (isDesignerNet) {

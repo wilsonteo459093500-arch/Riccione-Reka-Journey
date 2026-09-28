@@ -4,7 +4,7 @@ import { X, Trash2, Check } from 'lucide-react';
 import { T } from '../../theme.js';
 import {
   DOOR_SERIES, CARCASS_SERIES, OPEN_SERIES, CABINET_TYPES, cabTypeById,
-  WALL_PANEL_PRESETS, ROOM_DOOR_PRESETS, isLinear, fmtMYR, cnyToMyr, computeItem,
+  WALL_PANEL_PRESETS, ROOM_DOOR_PRESETS, isLinear, fmtMYR, cnyToMyr, computeItem, isNoDiscount,
 } from '../../constants/pricing.js';
 
 // ============================================================
@@ -193,6 +193,12 @@ export default function ItemEditorModal({ item: initial, isNew = false, onSave, 
               <Txt value={item.coef ?? ''} onChange={(v) => set({ coef: v })} placeholder="1" {...num} />
             </Row>
           )}
+
+          {/* 不折扣：岩板 sintered stone 自动勾上，也可手动改 */}
+          <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: isNoDiscount(item) ? T.terra : T.ink }}>
+            <input type="checkbox" className="w-5 h-5" checked={isNoDiscount(item)} onChange={(e) => set({ noDiscount: e.target.checked })} style={{ accentColor: T.terra }} />
+            No discount 不参与折扣<span className="text-xs" style={{ color: T.inkSoft }}>（岩板 sintered stone 自动勾）</span>
+          </label>
 
           {/* 实时算价 */}
           <div className="p-3 rounded" style={{ background: T.cream, border: `1px solid ${T.lineSoft}` }}>

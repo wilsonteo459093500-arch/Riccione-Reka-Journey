@@ -2,7 +2,7 @@ import { Trash2, GripVertical, ChevronUp, ChevronDown } from 'lucide-react';
 import { T } from '../../theme.js';
 import {
   DOOR_SERIES, CARCASS_SERIES, OPEN_SERIES, CABINET_TYPES, cabTypeById,
-  WALL_PANEL_PRESETS, ROOM_DOOR_PRESETS, isLinear, fmtMYR, cnyToMyr,
+  WALL_PANEL_PRESETS, ROOM_DOOR_PRESETS, isLinear, fmtMYR, cnyToMyr, isNoDiscount,
 } from '../../constants/pricing.js';
 
 const cellStyle = { background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' };
@@ -252,6 +252,11 @@ export default function QuoteLineItem({ item, result, onChange, onRemove, onDrag
             </div>
             <span className="text-[10px] px-2 py-0.5 rounded-full font-medium"
               style={{ background: T.sand, color: T.inkSoft }}>{badge}</span>
+            {/* 不折扣：岩板 sintered stone 自动勾上，也可手动改 */}
+            <label className="flex items-center justify-end gap-1 mt-1 text-[10px] cursor-pointer" style={{ color: isNoDiscount(item) ? T.terra : T.inkSoft }} title="不参与折扣 No discount on this item">
+              <input type="checkbox" checked={isNoDiscount(item)} onChange={(e) => set({ noDiscount: e.target.checked })} style={{ accentColor: T.terra }} />
+              No disc. 不折扣
+            </label>
             <div className="font-display text-lg mt-1" style={{ color: T.ink }}>{fmtMYR(total)}</div>
           </div>
         </div>
