@@ -3,7 +3,7 @@ import { Plus, Copy, Trash2, GripVertical, Sofa, ChevronUp, ChevronDown, Chevron
 import { T } from '../../theme.js';
 import { newId, copyToClipboard } from '../../utils/helpers.js';
 import { useToast } from '../ui/UIProvider.jsx';
-import { computeQuote, computeLoose, CATEGORIES, ROOMS, CUSTOM_ROOM, OUTPUT_LANGS, tr, pickLang, RLBL, QUOTE_TERMS, cabTypeById, fmtMYR, discountChainRate, discountChainLabel } from '../../constants/pricing.js';
+import { computeQuote, computeLoose, CATEGORIES, ROOMS, CUSTOM_ROOM, OUTPUT_LANGS, tr, pickLang, RLBL, QUOTE_TERMS, buildQuoteTerms, DEFAULT_MATERIALS, cabTypeById, fmtMYR, discountChainRate, discountChainLabel } from '../../constants/pricing.js';
 import QuoteLineItem from './QuoteLineItem.jsx';
 import QuotePrint from './QuotePrint.jsx';
 import CatalogPicker from './CatalogPicker.jsx';
@@ -175,6 +175,8 @@ export default function QuotationView({ doc, onChange }) {
   const looseItems = doc.looseItems || [];
   const looseAdjustPct = doc.looseAdjustPct || 0;
   const cabinetNote = doc.cabinetNote || '';
+  const materials = doc.materials || {};          // { material, hinge, runner }：空 = 标准配置
+  const setMaterials = (p) => patch({ materials: { ...materials, ...p } });
   const looseNote = doc.looseNote || '';
   const discountNote = doc.discountNote || '';
   const looseDiscountNote = doc.looseDiscountNote || '';
@@ -452,6 +454,31 @@ export default function QuotationView({ doc, onChange }) {
               className="w-full px-2 py-1.5 text-xs outline-none"
               style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }} />
           </div>
+          {/* 材质与五金：默认标准配置，报价用了别的材质/五金就在这里改，条款会跟着写 */}
+          <div className="mt-3 pt-3" style={{ borderTop: `1px dashed ${T.line}` }}>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[9px] uppercase tracking-widest" style={{ color: T.inkSoft }}>Materials & Hardware 材质与五金（写进条款）</label>
+              {(materials.material || materials.hinge || materials.runner) && (
+                <button onClick={() => patch({ materials: {} })} className="text-[10px] underline" style={{ color: T.inkSoft }}>Reset to standard 恢复标准</button>
+              )}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {[
+                ['material', 'Material 材质', DEFAULT_MATERIALS.material.en],
+                ['hinge', 'Hinges 铰链品牌', DEFAULT_MATERIALS.hinge.en],
+                ['runner', 'Drawer runner 导轨品牌', DEFAULT_MATERIALS.runner.en],
+              ].map(([key, label, ph]) => (
+                <div key={key}>
+                  <label className="block text-[9px] uppercase tracking-widest mb-1" style={{ color: T.inkSoft }}>{label}</label>
+                  <input value={materials[key] || ''} onChange={(e) => setMaterials({ [key]: e.target.value })}
+                    placeholder={`${ph}（标准）`}
+                    className="w-full px-2 py-1.5 text-sm outline-none"
+                    style={{ background: T.paper, color: T.ink, border: `1px solid ${materials[key] ? T.wood : T.line}`, borderRadius: '2px' }} />
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] mt-1" style={{ color: T.inkSoft }}>留空 = 标准配置（条款显示「Standard Materials & Hardware」）；填了就按你填的出，标题改为「Materials & Hardware」。</p>
+          </div>
           {/* 定制部分备注 */}
           <div className="mt-3 pt-3" style={{ borderTop: `1px dashed ${T.line}` }}>
             <label className="block text-[9px] uppercase tracking-widest mb-1" style={{ color: T.inkSoft }}>Notes 备注（定制 Cabinet）</label>
@@ -655,7 +682,7 @@ export default function QuotationView({ doc, onChange }) {
               </button>
               <button onClick={async () => {
                 try {
-                  await exportExcel(meta, computed, looseCalc, { cabinetNote, looseNote, discountNote, looseDiscountNote, audience, designerDisc }, lang);
+                  await exportExcel(meta, computed, looseCalc, { cabinetNote, looseNote, discountNote, looseDiscountNote, audience, designerDisc, materials }, lang);
                   toast('Excel exported 已导出', 'success');
                 } catch (e) {
                   toast('Export failed 导出失败', 'error');
@@ -667,7 +694,7 @@ export default function QuotationView({ doc, onChange }) {
               </button>
             </div>
             <button onClick={async () => {
-              const ok = await copyToClipboard(buildTextQuote(meta, computed, looseCalc, { cabinetNote, looseNote, discountNote, looseDiscountNote }, lang));
+              const ok = await copyToClipboard(buildTextQuote(meta, computed, looseCalc, { cabinetNote, looseNote, discountNote, looseDiscountNote, materials }, lang));
               toast(ok ? 'Copied 已复制' : 'Copy failed 复制失败', ok ? 'success' : 'error');
             }}
               className="w-full flex items-center justify-center gap-1.5 py-2.5 text-sm"
@@ -701,7 +728,7 @@ export default function QuotationView({ doc, onChange }) {
         </div>
       </div>
 
-      {showPrint && <QuotePrint meta={meta} computed={computed} loose={looseCalc} cabinetNote={cabinetNote} looseNote={looseNote} discountNote={discountNote} looseDiscountNote={looseDiscountNote} audience={audience} designerDisc={designerDisc} lang={lang} onClose={() => setShowPrint(false)} />}
+      {showPrint && <QuotePrint meta={meta} computed={computed} loose={looseCalc} cabinetNote={cabinetNote} looseNote={looseNote} discountNote={discountNote} looseDiscountNote={looseDiscountNote} audience={audience} designerDisc={designerDisc} lang={lang} materials={materials} onClose={() => setShowPrint(false)} />}
       {showCatalog && (
         <CatalogPicker
           onAdd={(it) => setLoose((ls) => [...ls, { id: newId('lf'), ...it }])}
@@ -770,7 +797,7 @@ function buildTextQuote(meta, computed, loose, notes = {}, lang = 'both') {
     if (notes.looseNote) L.push(`${t(RLBL.notes)}：${notes.looseNote}`);
   }
   L.push('━━━━━━━━━━━━━━━');
-  QUOTE_TERMS.forEach((sec) => {
+  buildQuoteTerms(notes.materials || {}).forEach((sec) => {
     L.push(t(sec.title));
     sec.lines.forEach((ln) => {
       L.push((sec.bullet ? '• ' : '') + (lang === 'both' ? `${ln.en}　${ln.zh}` : t(ln)));

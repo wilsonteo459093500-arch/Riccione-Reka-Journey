@@ -1,4 +1,4 @@
-import { tr, pickLang, capColor, cabTypeById, RLBL, QUOTE_TERMS, discountChainRate, discountChainLabel } from '../../constants/pricing.js';
+import { tr, pickLang, capColor, cabTypeById, RLBL, QUOTE_TERMS, buildQuoteTerms, discountChainRate, discountChainLabel } from '../../constants/pricing.js';
 import { fmt } from '../../utils/helpers.js';
 
 const round0 = (n) => Math.round(Number(n) || 0);
@@ -100,7 +100,7 @@ export async function exportExcel(meta, computed, loose, notes = {}, lang = 'bot
     }
     row([]);
     if (notes.cabinetNote) { row([t(RLBL.notes), notes.cabinetNote]); row([]); }
-    termLines(QUOTE_TERMS, aoa);
+    termLines(buildQuoteTerms(notes.materials || {}), aoa);
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     ws['!merges'] = merges;
     ws['!cols'] = [{ wch: 44 }, { wch: 10 }, { wch: 12 }, { wch: 16 }, { wch: 14 }];
