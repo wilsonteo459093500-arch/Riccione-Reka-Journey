@@ -304,7 +304,7 @@ export const QUOTE_TERMS = [
       { en: 'Hinges brand: Salice', zh: '铰链品牌：萨郦奇' },
       { en: 'Drawer runner brand: Blum', zh: '导轨品牌：百隆' },
     ],
-    note: { en: '*Unless otherwise stated in the quotation above. Upgrade of material option is available.', zh: '*除非上方报价另有注明。可选择升级材质。' },
+    note: { en: '*Materials and hardware are as per the items stated above; the following apply where not specified. Upgrade of material option is available.', zh: '*材质与五金以上方报价所列项目为准；未注明者按以下标准配置。可选择升级材质。' },
   },
 ];
 
