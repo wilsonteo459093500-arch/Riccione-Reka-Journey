@@ -308,37 +308,6 @@ export const QUOTE_TERMS = [
   },
 ];
 
-// 「材质与五金」默认值（标准配置）。每份报价可改，改了就按报价写的出条款。
-export const DEFAULT_MATERIALS = {
-  material: { en: 'Solid wood melamine (particle board)', zh: '实木颗粒板' },
-  hinge:    { en: 'Salice', zh: '萨郦奇' },
-  runner:   { en: 'Blum',   zh: '百隆' },
-};
-
-// 按本份报价的材质/五金生成条款（空值回退到标准配置）。
-// materials = { material, hinge, runner }：字符串，可只填英文；标题在非标准时改为 "Materials & Hardware"。
-export function buildQuoteTerms(materials = {}) {
-  const pick = (key) => {
-    const v = (materials[key] ?? '').toString().trim();
-    return v ? { en: v, zh: v, custom: true } : { ...DEFAULT_MATERIALS[key], custom: false };
-  };
-  const m = pick('material'), h = pick('hinge'), r = pick('runner');
-  const isStd = !m.custom && !h.custom && !r.custom;
-  const matSec = {
-    title: isStd ? { en: 'Standard Materials & Hardware', zh: '标准材质与五金' } : { en: 'Materials & Hardware', zh: '材质与五金' },
-    bullet: true,
-    lines: [
-      { en: `Material: ${m.en}`, zh: `材质：${m.zh}` },
-      { en: `Hinges brand: ${h.en}`, zh: `铰链品牌：${h.zh}` },
-      { en: `Drawer runner brand: ${r.en}`, zh: `导轨品牌：${r.zh}` },
-    ],
-    note: isStd
-      ? { en: '*Upgrade of material option is available', zh: '*可选择升级材质' }
-      : { en: '*Materials & hardware as stated in this quotation', zh: '*材质与五金以本报价单所列为准' },
-  };
-  return [...QUOTE_TERMS.slice(0, -1), matSec];
-}
-
 // 计算整个报价 → 各区域小计 + 分类汇总 + 总额
 export function computeQuote(zones = [], adjustPct = 0, discountMode = 'pct', discountAmt = 0) {
   const zoneResults = zones.map((z) => {

@@ -1,13 +1,12 @@
 import { createPortal } from 'react-dom';
 import { Printer, X } from 'lucide-react';
 import { T } from '../../theme.js';
-import { fmtMYR, fmtNum, tr, pickLang, capColor, cabTypeById, RLBL, QUOTE_TERMS, buildQuoteTerms, discountChainRate, discountChainLabel } from '../../constants/pricing.js';
+import { fmtMYR, fmtNum, tr, pickLang, capColor, cabTypeById, RLBL, QUOTE_TERMS, discountChainRate, discountChainLabel } from '../../constants/pricing.js';
 import { fmt } from '../../utils/helpers.js';
 
 // 报价单（可打印 / 另存 PDF）。lang：'en' | 'zh' | 'both'。
 // 定制橱柜（SAIL by Riccione Reka）+ Loose Furniture（Riccione Furniture，另起一页）。
-export default function QuotePrint({ meta, computed, loose, cabinetNote = '', looseNote = '', discountNote = '', looseDiscountNote = '', audience = 'retail', designerDisc = '30', lang = 'both', materials = {}, onClose }) {
-  const TERMS = buildQuoteTerms(materials);
+export default function QuotePrint({ meta, computed, loose, cabinetNote = '', looseNote = '', discountNote = '', looseDiscountNote = '', audience = 'retail', designerDisc = '30', lang = 'both', onClose }) {
   const zones = computed.zoneResults.filter((zr) => zr.zone.items.length > 0);
   const looseRows = loose?.rows || [];
   const hasCab = zones.length > 0;
@@ -326,7 +325,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
               </div>
 
               <NoteBlock text={cabinetNote} />
-              <Terms terms={TERMS} />
+              <Terms terms={QUOTE_TERMS} />
               {!hasSummary && <Signatures />}
             </div>
           )}
