@@ -33,7 +33,7 @@ export async function exportExcel(meta, computed, loose, notes = {}, lang = 'bot
       door:    { en: `Door: ${sid} Series`,         zh: `门板：${sid} 系列` },
       carcass: { en: `Carcass: ${sid} Series`,      zh: `柜体：${sid} 系列` },
       open:    { en: `Open Cabinet: ${sid} Series`, zh: `开放柜：${sid} 系列` },
-      drawer:  { en: 'Blum Full Extension Drawer',  zh: 'Blum 全展抽屉' },
+      drawer:  { en: ln.descEn, zh: ln.descZh }, // 全展 / 半展 由明细自带
     };
     return map[ln.bucket] ? t(map[ln.bucket]) : lineDesc(ln);
   };

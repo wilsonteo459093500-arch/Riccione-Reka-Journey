@@ -100,8 +100,11 @@ export default function QuoteLineItem({ item, result, onChange, onRemove, onDrag
               <Field label="D 深 m" w="col-span-4 md:col-span-1">
                 <Txt value={item.d} onChange={(v) => set({ d: v })} />
               </Field>
-              <Field label="Drawer 抽屉 set" w="col-span-4 md:col-span-2">
+              <Field label="Drawer Full 全展 set" w="col-span-4 md:col-span-1">
                 <Txt value={item.drawers} onChange={(v) => set({ drawers: v })} placeholder="0" />
+              </Field>
+              <Field label="Drawer Half 半展 set" w="col-span-4 md:col-span-1">
+                <Txt value={item.drawersHalf} onChange={(v) => set({ drawersHalf: v })} placeholder="0" />
               </Field>
 
               {item.cabType === 'open' ? (

@@ -42,7 +42,8 @@ export const CARCASS_SERIES = SERIES.filter((s) => s.carcass != null).map((s) =>
 export const OPEN_SERIES = SERIES.filter((s) => s.open != null).map((s) => s.id);        // 开放柜 A–K
 
 // ---- 五金 / 配件（人民币）----
-export const DRAWER_CNY = 970; // 基础款全拉四方抽 元/套
+export const DRAWER_CNY = 970;      // Blum 全展抽屉 Full Extension 元/套
+export const DRAWER_HALF_CNY = 470; // Blum 半展抽屉 Half Extension 元/套
 export const LED_CNY = 370;    // D-001 平照灯带 元/米
 
 // ---- Rooms 区域/房间（英文为主；尽量覆盖家里需要做定制的地方）----
@@ -156,8 +157,11 @@ export function computeItem(item) {
       const openQty = (Number(len) || 0) * (Number(item.h) || 0);
       push('open', `Open ${op.id}`, `开放柜 ${op.id}`, openQty, 'm²', '㎡', false, cnyToMyr(op.open));
     }
+    // 抽屉两种：全展 Full（drawers）/ 半展 Half（drawersHalf），各自数量
     const drawers = Number(item.drawers) || 0;
     if (drawers > 0) push('drawer', 'Blum Full Extension Drawer', 'Blum 全展抽屉', drawers, 'set', '套', true, cnyToMyr(DRAWER_CNY));
+    const drawersHalf = Number(item.drawersHalf) || 0;
+    if (drawersHalf > 0) push('drawer', 'Blum Half Extension Drawer', 'Blum 半展抽屉', drawersHalf, 'set', '套', true, cnyToMyr(DRAWER_HALF_CNY));
   } else if (item.type === 'panel') {
     const len = parseLength(item.length);
     const qty = len * (Number(item.h) || 0);

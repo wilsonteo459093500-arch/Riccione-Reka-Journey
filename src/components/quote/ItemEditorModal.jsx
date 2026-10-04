@@ -86,7 +86,10 @@ export default function ItemEditorModal({ item: initial, isNew = false, onSave, 
                 <Row label="H 高 m"><Txt value={item.h} onChange={(v) => set({ h: v })} {...num} /></Row>
                 <Row label="D 深 m"><Txt value={item.d} onChange={(v) => set({ d: v })} {...num} /></Row>
               </div>
-              <Row label="Drawer 抽屉 set"><Txt value={item.drawers} onChange={(v) => set({ drawers: v })} placeholder="0" {...num} /></Row>
+              <div className="grid grid-cols-2 gap-3">
+                <Row label="Drawer Full 全展 set" hint="· Blum ¥970"><Txt value={item.drawers} onChange={(v) => set({ drawers: v })} placeholder="0" {...num} /></Row>
+                <Row label="Drawer Half 半展 set" hint="· Blum ¥470"><Txt value={item.drawersHalf} onChange={(v) => set({ drawersHalf: v })} placeholder="0" {...num} /></Row>
+              </div>
 
               {item.cabType === 'open' ? (
                 <Row label="Open Cab. Series 开放柜系列">

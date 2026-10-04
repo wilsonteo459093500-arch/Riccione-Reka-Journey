@@ -33,7 +33,7 @@ export function makeItem(kind) {
     const isOpen = kind === 'open';
     // 开放柜默认只含开放柜（无门无柜体）；其余默认门+柜体
     return { ...base, type: 'cabinet', cabType: kind, name: '', length: '', h: t.h, d: t.d,
-      doorSeries: 'A', carcassSeries: 'A', openSeries: 'A', drawers: '',
+      doorSeries: 'A', carcassSeries: 'A', openSeries: 'A', drawers: '', drawersHalf: '',
       hasDoor: !isOpen, hasCarcass: !isOpen, hasOpen: isOpen };
   }
   if (kind === 'panel') return { ...base, type: 'panel', preset: 'wall', name: '', length: '', h: 2.7, panelSeries: 'A' };
@@ -132,7 +132,8 @@ function MobileItemCard({ item, result, selected, onToggleSelect, onEdit, canUp,
     const parts = [];
     if (item.length) parts.push(`L ${item.length}m`);
     parts.push(`H ${item.h} × D ${item.d}`);
-    if (Number(item.drawers) > 0) parts.push(`${item.drawers} 抽屉`);
+    if (Number(item.drawers) > 0) parts.push(`${item.drawers} 全展抽屉`);
+    if (Number(item.drawersHalf) > 0) parts.push(`${item.drawersHalf} 半展抽屉`);
     if (Number(item.coef) > 0 && Number(item.coef) !== 1) parts.push(`×${item.coef} ${item.coefTarget === 'carcass' ? '柜体' : item.coefTarget === 'both' ? '门+柜' : '门板'}`);
     if (item.cabType === 'open') parts.push(`开放柜 ${item.openSeries || 'A'}`);
     else parts.push(`门 ${item.doorSeries} / 柜 ${item.carcassSeries}`);
