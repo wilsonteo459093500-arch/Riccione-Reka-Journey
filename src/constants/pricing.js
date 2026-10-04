@@ -251,7 +251,7 @@ export const RLBL = {
   subtotal:  { en: 'Sub-Total', zh: '小计' },
   gross:     { en: 'Gross', zh: '合计' },
   discount:  { en: 'Discount', zh: '折扣' },
-  noDiscExcl: { en: 'excl. sintered stone', zh: '岩板不折扣' },
+  noDiscExcl: { en: 'discount excl. sintered stone', zh: '折扣不含岩板' },
   total:     { en: 'Total', zh: '预估总额' },
   untitled:  { en: 'Untitled', zh: '未命名' },
   director:  { en: 'Director Signature / Date', zh: '董事签名 / 日期' },
