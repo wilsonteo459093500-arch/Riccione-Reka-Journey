@@ -159,7 +159,7 @@
     if (lg === 'en') {
       return (name ? 'Hi ' + name + '! ' : '') +
         'DUDU turns ONE! You\'re invited to the 1st Annual Godparents\' Meeting (AGM): lunch on Saturday 14 Nov 2026, 12:00pm, at Wilson\'s home in Muar (' +
-        P.event.address + '). The only investment is showing up hungry. RSVP in 30 sec (adults + kids): ' + url + ' Huat ah!';
+        P.event.address + '). The main investment is showing up hungry. RSVP in 30 sec (adults + kids): ' + url + ' Huat ah!';
     }
     return [
       '【丞鹤控股 · 股东大会通告】',

@@ -681,6 +681,8 @@ html[data-lang="en"] .note-label { font: 700 17px/1.1 var(--hand-en) !important;
 }
 .inv-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 0 0 6px; font-size: 15px; }
 .inv-k { font: 700 13px/1.4 var(--sans); color: var(--gold-deep); min-width: 84px; }
+.inv-note { margin-top: 4px; padding-top: 8px; border-top: 1px dotted var(--line); }
+.inv-note > span:last-child { font-weight: 700; color: var(--red-deep); }
 .reel-win { display: inline-block; height: 1.6em; overflow: hidden; vertical-align: bottom; }
 .reel-track { display: block; transition: transform .28s cubic-bezier(.3, 1.4, .6, 1); }
 .reel-track span { display: block; height: 1.6em; line-height: 1.6em; font-weight: 700; white-space: nowrap; }
