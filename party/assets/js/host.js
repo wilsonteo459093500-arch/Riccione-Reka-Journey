@@ -213,12 +213,7 @@
   }
 
   function inviteText(name, en) {
-    var url = inviteUrl(name, en);
-    var I = window.PARTY_INVITE_TEXT;
-    if (typeof I === 'function') return I(name, en, url);
-    return en
-      ? (name ? 'Hi ' + name + '! ' : '') + 'DUDU turns ONE 🎂 You\'re invited to the Godparents\' General Meeting — ' + P.event.dateEn + ', ' + P.event.timeEn + ' at ' + P.event.venueEn + '. Please RSVP here 👉 ' + url
-      : (name ? name + '，' : '') + '张丞鹤 DUDU 一岁啦 🎂 诚邀你出席「干爹干妈召集会」！' + P.event.dateZh + P.event.timeZh + ' · ' + P.event.venueZh + '。点这里回复会不会来 👉 ' + url;
+    return C.inviteText(name, en ? 'en' : 'zh', inviteUrl(name, en));
   }
 
   function refreshGen() {

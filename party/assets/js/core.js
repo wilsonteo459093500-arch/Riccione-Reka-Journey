@@ -138,7 +138,7 @@
   function rsvpWhatsAppText(r, lg) {
     var en = lg === 'en';
     var lines = [];
-    lines.push(en ? '【DUDU Godparents\' Meeting · RSVP】' : '【DUDU 干爹干妈召集会 · 回复】');
+    lines.push(en ? '【DUDU 1st Birthday · RSVP】' : '【DUDU 一岁生日 · 出席登记】');
     lines.push((en ? 'Name: ' : '名字：') + r.name);
     if (r.attending === 'yes') {
       lines.push(en ? 'Attending: YES ✅' : '出席：会来 ✅');
@@ -152,6 +152,31 @@
     }
     if (r.wish) lines.push((en ? 'Message for DUDU: ' : '给 DUDU 的话：') + r.wish);
     return lines.join('\n');
+  }
+
+  /** 发给朋友的邀请文字（主人页「发专属邀请」和页尾「转发」共用）。 */
+  function inviteText(name, lg, url) {
+    if (lg === 'en') {
+      return (name ? 'Hi ' + name + '! ' : '') +
+        'DUDU turns ONE! You\'re invited to the 1st Annual Godparents\' Meeting (AGM): lunch on Saturday 14 Nov 2026, 12:00pm, at Wilson\'s home in Muar (' +
+        P.event.address + '). The only investment is showing up hungry. RSVP in 30 sec (adults + kids): ' + url + ' Huat ah!';
+    }
+    return [
+      '【丞鹤控股 · 股东大会通告】',
+      '张丞鹤 DUDU',
+      '未来首富一岁生日',
+      '干爹干妈召集会',
+      '',
+      (name ? name + '，' : '各位准干爹干妈：') + '本公司董事长即将满一岁，现诚邀你出席第一届股东大会（主要议程：吃午餐）。',
+      '入股方式：人到就算数，带个空肚子就好。',
+      '',
+      '日期：' + P.event.dateZh,
+      '时间：中午12点',
+      '地点：' + P.event.venueZh + '，' + P.event.address,
+      '',
+      '点链接登记出席人数（大人＋小孩，30秒搞定），方便准备食物：',
+      url
+    ].join('\n');
   }
 
   function waLink(text, number) {
@@ -171,7 +196,7 @@
   function calendarText(lg) {
     var en = lg === 'en';
     return {
-      title: en ? 'DUDU turns ONE · Godparents\' Meeting 🎂' : '张丞鹤 DUDU 一岁生日 · 干爹干妈召集会 🎂',
+      title: en ? 'DUDU turns ONE · Godparents\' AGM' : '张丞鹤 DUDU 未来首富一岁生日 · 干爹干妈召集会',
       details: (en ? 'Lunch at ' + P.event.venueEn : '午餐 · ' + P.event.venueZh) + '\n' + P.event.address + '\n' + location.origin + location.pathname,
       location: P.event.venueZh + ', ' + P.event.address
     };
@@ -361,6 +386,7 @@
     dietText: dietText,
     DIET_LABEL: DIET_LABEL,
     rsvpWhatsAppText: rsvpWhatsAppText,
+    inviteText: inviteText,
     waLink: waLink,
     googleCalUrl: googleCalUrl,
     downloadIcs: downloadIcs,

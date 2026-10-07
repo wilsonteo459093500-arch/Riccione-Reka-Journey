@@ -90,6 +90,9 @@ async function main() {
     await page.screenshot({ path: path.join(SHOTS, '03-photo.png') });
     await page.screenshot({ path: path.join(SHOTS, '03b-full.png'), fullPage: true });
 
+    const wide = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    check(wide <= 0, `整页滑完没有被撑宽（多出 ${wide}px）`);
+
     const bodyText = await page.textContent('body');
     for (const fact of ['14/11/2026', '29-18, Jalan Haji Jaib, 84000 Muar, Johor', 'Wilson麻坡家', '张丞鹤', 'DUDU', '未来首富一岁生日', '干爹干妈召集会']) {
       check(bodyText.includes(fact), `页面有「${fact}」`);
@@ -133,10 +136,13 @@ async function main() {
     const remembered = await page.evaluate(() => !!localStorage.getItem('dudu.rsvp'));
     check(remembered, '本机记住了回复');
 
-    // 改成来不了
-    await page.evaluate(() => (document.body.dataset.state = 'open'));
-    if (await page.isVisible('#rsvpEdit')) {
-      await page.click('#rsvpEdit');
+    // 再打开：先看到「欢迎回来」，再改成来不了
+    await page.click('#openBtn');
+    await page.waitForFunction(() => document.body.dataset.state === 'open', null, { timeout: 8000 });
+    await page.locator('#welcomeBack').scrollIntoViewIfNeeded();
+    check((await page.textContent('#welcomeBack')).includes('Ah Meng'), '再打开时看到「欢迎回来」');
+    if (await page.isVisible('#wbEdit')) {
+      await page.click('#wbEdit');
       await page.waitForTimeout(900); // 等平滑卷动停下
       await page.click('#rsvpForm .choice .no');
       check(await page.isChecked('#rsvpForm [name="attending"][value="no"]'), '改成「来不了」');
