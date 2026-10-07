@@ -13,7 +13,7 @@ export default async function handler(req, res) {
     return;
   }
   if (auth !== 'ok') {
-    await sleep(700); // 让乱猜密码慢一点
+    await sleep(700); // 只是让单次乱猜慢一点；真正挡住乱猜的是密码本身够不够难猜
     send(res, 401, { error: 'wrong_key' });
     return;
   }
@@ -46,7 +46,14 @@ export default async function handler(req, res) {
         return;
       }
       await store.remove(id);
-      const list = await store.list();
+      let list;
+      try {
+        list = await store.list();
+      } catch {
+        // 已经删掉了，只是重新读名单失败：告诉主人页自己再读一次
+        send(res, 200, { ok: true, guests: null });
+        return;
+      }
       await store.putSummary(publicSummary(list)).catch(() => {});
       send(res, 200, { ok: true, guests: sortForHost(list), summary: summarize(list) });
       return;

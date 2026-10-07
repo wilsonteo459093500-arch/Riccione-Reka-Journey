@@ -116,6 +116,7 @@ code { background: var(--gold-soft); padding: 1px 5px; border-radius: 4px; font-
 .g-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
 .g-name { font-weight: 700; font-size: 16px; word-break: break-word; }
 .g-as { color: var(--muted); font-size: 12px; }
+.g-dup { font-size: 12px; padding: 1px 8px; border-radius: 999px; background: #FDECC8; color: #7A4B00; }
 .g-badge { margin-left: auto; font-size: 12px; padding: 1px 8px; border-radius: 999px; background: #E3F1E9; color: var(--green); }
 .g.no .g-badge { background: #EEE9E0; color: var(--muted); }
 .g-count { margin-top: 4px; }

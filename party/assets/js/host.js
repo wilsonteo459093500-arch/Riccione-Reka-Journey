@@ -10,6 +10,8 @@
   var $ = function (id) { return document.getElementById(id); };
 
   var state = { guests: [], summary: null, filter: 'all', q: '' };
+  // 密码同时放在变量里：手机禁用 localStorage 时也能登入（只是下次要再输）
+  var hostKey = C.mem.get(KEY, '');
 
   /* ---------- 小工具 ---------- */
   function toast(msg) {
@@ -57,7 +59,8 @@
   function api(method, path) {
     return C.fetchJson(path, {
       method: method,
-      headers: { Accept: 'application/json', 'x-host-key': C.mem.get(KEY, '') }
+      // 编码后再送：标头只收英文字元，中文密码不编码会直接送不出去
+      headers: { Accept: 'application/json', 'x-host-key': encodeURIComponent(hostKey) }
     }, 20000);
   }
 
@@ -90,9 +93,15 @@
       showBoard('none');
       return true;
     }
-    var msg = '出了点问题（' + r.status + '）。';
+    if (r.status >= 500 && !$('board').hidden) {
+      // 已经在名册页：读不到就留在原地，提示等一下再刷新（不要踢回登录页）
+      toast('名册暂时读不到，等一下再按「刷新」');
+      return true;
+    }
+    var msg = r.status >= 500 ? '名册暂时读不到（' + r.status + '），等一下再试。' : '出了点问题（' + r.status + '）。';
     if (r.status === 401) {
       msg = '密码不对。';
+      hostKey = '';
       C.mem.del(KEY);
     } else if (r.data && r.data.error === 'host_key_not_set') {
       msg = '还没设主人密码：到 Vercel → Settings → Environment Variables 加一个 PARTY_HOST_KEY，再 Redeploy。';
@@ -130,17 +139,25 @@
     C.countUp($('sDeclined'), s.declined, 700);
     C.countUp($('sPortions'), s.portions, 700);
 
-    // 饮食
+    // 饮食：只算「几户」，不算人数 —— 一家 4 口里可能只有 1 位吃素，看客人自己写的备注
     var L = C.DIET_LABEL.zh;
+    var going = state.guests.filter(function (g) { return g.attending === 'yes'; });
     var dietRows = Object.keys(L).map(function (k) {
-      var d = (s.diet || {})[k] || { groups: 0, people: 0, names: [] };
-      if (!d.groups) return '';
-      return '<li><b>' + esc(L[k]) + '</b> <span class="pill">' + d.groups + ' 户 · ' + d.people + ' 人</span><span class="names">' + d.names.map(esc).join('、') + '</span></li>';
+      var hh = going.filter(function (g) { return (g.diet || []).indexOf(k) !== -1; });
+      if (!hh.length) return '';
+      return '<li><b>' + esc(L[k]) + '</b> <span class="pill">' + hh.length + ' 户</span><span class="names">' +
+        hh.map(function (g) { return esc(g.name) + (g.dietNote ? '（' + esc(g.dietNote) + '）' : ''); }).join('、') + '</span></li>';
     }).join('');
-    var notes = state.guests.filter(function (g) { return g.attending === 'yes' && g.dietNote; }).map(function (g) {
+    var loose = going.filter(function (g) { return g.dietNote && !(g.diet || []).length; }).map(function (g) {
       return '<li><b>' + esc(g.name) + '</b><span class="names">' + esc(g.dietNote) + '</span></li>';
     }).join('');
-    $('dietList').innerHTML = dietRows + notes || '<li class="muted">目前没有人提特别饮食需求。</li>';
+    $('dietList').innerHTML = dietRows + loose || '<li class="muted">目前没有人提特别饮食需求。</li>';
+
+    // 同一家人用两支手机各回一次：名字一样就标「可能重复」
+    var keyOf = function (g) { return String(g.name || '').toLowerCase().replace(/[\s\p{P}\p{S}]/gu, ''); };
+    var seen = {};
+    state.guests.forEach(function (g) { var k = keyOf(g); if (k) seen[k] = (seen[k] || 0) + 1; });
+    var dupCount = state.guests.filter(function (g) { return seen[keyOf(g)] > 1; }).length;
 
     // 名单
     var q = state.q.trim().toLowerCase();
@@ -149,7 +166,7 @@
       if (q && (g.name + ' ' + (g.invitedAs || '')).toLowerCase().indexOf(q) === -1) return false;
       return true;
     });
-    $('listCount').textContent = '共 ' + state.guests.length + ' 条回复';
+    $('listCount').textContent = '共 ' + state.guests.length + ' 条回复' + (dupCount ? ' · ' + dupCount + ' 条可能重复（确认后删掉多的那条）' : '');
     $('emptyMsg').hidden = state.guests.length > 0;
     $('guestList').innerHTML = rows.map(function (g) {
       var yes = g.attending === 'yes';
@@ -158,6 +175,7 @@
         '<div class="g-head">' +
           '<span class="g-name">' + esc(g.name) + '</span>' +
           (g.invitedAs && g.invitedAs !== g.name ? '<span class="g-as">邀请名：' + esc(g.invitedAs) + '</span>' : '') +
+          (seen[keyOf(g)] > 1 ? '<span class="g-dup">可能重复</span>' : '') +
           '<span class="g-badge">' + (yes ? '会来' : '来不了') + '</span>' +
         '</div>' +
         (yes ? '<div class="g-count">大人 <b>' + g.adults + '</b> · 小孩 <b>' + g.kids + '</b></div>' : '') +
@@ -234,6 +252,7 @@
     e.preventDefault();
     var k = $('keyInput').value.trim();
     if (!k) return;
+    hostKey = k;
     C.mem.set(KEY, k);
     $('loginMsg').textContent = '';
     load().then(function (ok) { if (ok) $('keyInput').value = ''; });
@@ -244,6 +263,7 @@
   });
 
   $('logoutBtn').addEventListener('click', function () {
+    hostKey = '';
     C.mem.del(KEY);
     state.guests = [];
     showLogin();
@@ -269,10 +289,11 @@
     b.disabled = true;
     api('DELETE', '/api/guests?id=' + encodeURIComponent(b.getAttribute('data-del'))).then(function (r) {
       if (r.status === 200 && r.data.ok) {
+        toast('已删除');
+        if (!r.data.guests) { load(true); return; }
         state.guests = r.data.guests;
         state.summary = r.data.summary;
         render();
-        toast('已删除');
       } else {
         b.disabled = false;
         toast('删除失败（' + r.status + '）');
@@ -309,7 +330,7 @@
 
   /* ---------- 开始 ---------- */
   refreshGen();
-  if (C.mem.get(KEY, '')) load(true);
+  if (hostKey) load(true);
   else showLogin();
   // 开着页面时每分钟自动更新一次
   setInterval(function () {

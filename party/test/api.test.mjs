@@ -9,6 +9,7 @@ import rsvpHandler from '../api/rsvp.js';
 import guestsHandler from '../api/guests.js';
 import { normalizeRsvp, summarize, publicSummary, cleanText } from '../lib/rsvp.js';
 import { createBlobStore } from '../lib/store.js';
+import { checkHostKey } from '../lib/http.js';
 
 function fakeRes() {
   const res = { statusCode: 200, headers: {}, body: undefined };
@@ -204,26 +205,32 @@ test('guests: list sorted newest first, with summary; delete removes', async () 
 
 /* ---------------- Vercel Blob 适配层（用假 SDK） ---------------- */
 
-function fakeBlobSdk({ storeAccess = 'private' } = {}) {
+// 照真的 @vercel/blob 的行为：用错 access 写入会被拒（错误讯息不一定提到 access）；
+// 用错 access 按路径读，是去另一个网域找，只会 404（get 回 null），不会报「模式不对」。
+function fakeBlobSdk({ storeAccess = 'private', failGets = 0, failPath = null } = {}) {
   const files = new Map();
   const calls = [];
-  const check = (access) => {
-    if (access !== storeAccess) throw new Error(`Vercel Blob: Cannot use ${access} access on a ${storeAccess} store`);
-  };
+  const host = (a) => `https://store.${a}.blob/`;
+  let fails = failGets;
   return {
     files,
     calls,
     async put(pathname, body, opts) {
       calls.push(['put', pathname, opts]);
-      check(opts.access);
+      if (opts.access !== storeAccess) throw new Error('Vercel Blob: Failed to put blob: 403 Forbidden');
       if (files.has(pathname) && !opts.allowOverwrite) throw new Error('exists');
       files.set(pathname, body);
-      return { pathname, url: `https://store.${storeAccess}.blob/${pathname}` };
+      return { pathname, url: host(storeAccess) + pathname };
     },
     async get(urlOrPath, opts) {
       calls.push(['get', urlOrPath, opts]);
-      check(opts.access);
+      const isUrl = urlOrPath.startsWith('https://');
       const p = urlOrPath.replace(/^https:\/\/store\.\w+\.blob\//, '');
+      if ((failPath === null || p === failPath) && fails > 0) {
+        fails--;
+        throw new Error('Vercel Blob: Failed to fetch blob: 503');
+      }
+      if (!isUrl && opts.access !== storeAccess) return null;
       if (!files.has(p)) return null;
       return { statusCode: 200, stream: new Response(files.get(p)).body, blob: {} };
     },
@@ -234,7 +241,7 @@ function fakeBlobSdk({ storeAccess = 'private' } = {}) {
       const page = all.slice(start, start + 2); // 小分页，测翻页
       const next = start + 2;
       return {
-        blobs: page.map((p) => ({ pathname: p, url: `https://store.${storeAccess}.blob/${p}` })),
+        blobs: page.map((p) => ({ pathname: p, url: host(storeAccess) + p })),
         hasMore: next < all.length,
         cursor: next < all.length ? String(next) : undefined
       };
@@ -276,4 +283,39 @@ test('blob store: pinned access does not silently switch', async () => {
   const sdk = fakeBlobSdk({ storeAccess: 'public' });
   const store = createBlobStore(sdk, { access: 'private' });
   await assert.rejects(store.put({ id: 'guest-x0000000', name: 'X', attending: 'no' }));
+});
+
+test('blob store: a fresh instance can read an existing record from a public store', async () => {
+  const sdk = fakeBlobSdk({ storeAccess: 'public' });
+  await createBlobStore(sdk).put({ id: 'guest-pub11111', name: 'Old', attending: 'yes', adults: 1, kids: 0 });
+  const cold = createBlobStore(sdk); // 新的函数实例，还不知道 access
+  assert.equal((await cold.get('guest-pub11111')).name, 'Old');
+  assert.equal(cold.access, 'public');
+  assert.equal(await cold.get('guest-nothere0'), null);
+});
+
+test('blob store: one flaky read is retried, the household is not dropped', async () => {
+  const sdk = fakeBlobSdk({ failGets: 1, failPath: 'rsvp/guest-b0000000.json' });
+  const store = createBlobStore(sdk, { access: 'private' });
+  for (const id of ['guest-a0000000', 'guest-b0000000', 'guest-c0000000']) {
+    await store.put({ id, name: id, attending: 'yes', adults: 2, kids: 1 });
+  }
+  assert.equal((await store.list()).length, 3);
+});
+
+test('blob store: a read that keeps failing fails the whole list (no silent undercount)', async () => {
+  const sdk = fakeBlobSdk({ failGets: 99, failPath: 'rsvp/guest-b0000000.json' });
+  const store = createBlobStore(sdk, { access: 'private' });
+  for (const id of ['guest-a0000000', 'guest-b0000000']) {
+    await store.put({ id, name: id, attending: 'yes', adults: 1, kids: 0 });
+  }
+  await assert.rejects(store.list());
+});
+
+test('host key: Chinese password works when the page URL-encodes it; raw ASCII still works', () => {
+  const env = { PARTY_HOST_KEY: '嘟嘟发大财' };
+  assert.equal(checkHostKey({ headers: { 'x-host-key': encodeURIComponent('嘟嘟发大财') } }, env), 'ok');
+  assert.equal(checkHostKey({ headers: { 'x-host-key': encodeURIComponent('不对') } }, env), 'wrong');
+  assert.equal(checkHostKey({ headers: { 'x-host-key': '1234' } }, { PARTY_HOST_KEY: '1234' }), 'ok');
+  assert.equal(checkHostKey({ headers: { 'x-host-key': '%E0%A4%A' } }, { PARTY_HOST_KEY: '1234' }), 'wrong');
 });

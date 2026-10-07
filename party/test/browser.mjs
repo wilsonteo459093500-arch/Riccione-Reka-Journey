@@ -78,6 +78,7 @@ async function main() {
     await page.waitForFunction(() => document.body.dataset.state === 'open', null, { timeout: 8000 });
     await page.waitForTimeout(2500);
     await page.screenshot({ path: path.join(SHOTS, '02-opened.png') });
+    check(await page.isHidden('#noteList'), '披露清单一开始是收起的（不先剧透）');
 
     // 往下滑，让标注、动画都跑起来
     const h = await page.evaluate(() => document.documentElement.scrollHeight);
@@ -89,6 +90,11 @@ async function main() {
     await page.waitForTimeout(5000);
     await page.screenshot({ path: path.join(SHOTS, '03-photo.png') });
     await page.screenshot({ path: path.join(SHOTS, '03b-full.png'), fullPage: true });
+    await page.click('#allNotes');
+    check(await page.isVisible('#noteList'), '「全部显示」打开披露清单');
+    check(!(await page.evaluate(() => document.getElementById('photoFrame').classList.contains('spot'))), '按过按钮后照片不会卡在聚光灯小圆');
+    await page.click('#allNotes');
+    check(await page.isHidden('#noteList'), '再按一次收起');
 
     const wide = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     check(wide <= 0, `整页滑完没有被撑宽（多出 ${wide}px）`);
@@ -113,6 +119,12 @@ async function main() {
     await page.screenshot({ path: path.join(SHOTS, '03d-lightbox.png') });
     await page.click('#lbClose');
     check(await page.isHidden('#lightbox'), '大图可以关闭');
+    const urlBefore = page.url();
+    await page.click('#reel .snap-btn >> nth=1');
+    await page.waitForSelector('#lightbox:not([hidden])');
+    await page.goBack();
+    await page.waitForTimeout(400);
+    check(await page.isHidden('#lightbox') && page.url() === urlBefore, '手机「返回」关掉大图，不会离开邀请函');
     const broken = await page.evaluate(() => Array.from(document.querySelectorAll('#reel img')).filter((i) => i.complete && i.naturalWidth === 0).length);
     check(broken === 0, '相册图片都载得出来');
 
@@ -132,6 +144,12 @@ async function main() {
     await page.waitForTimeout(2500);
     await page.screenshot({ path: path.join(SHOTS, '05-done-yes.png') });
     check((await page.textContent('#rsvpDone')).includes('Ah Meng'), '成功画面写上名字');
+    check(await page.isHidden('#changeMind'), '出席的证书下面没有「改变主意？我要来！」');
+    check((await page.textContent('#stickyRsvp')).includes('已入股'), '底部栏写「已入股」');
+    await page.click('.topbar [data-set-lang="en"]');
+    await page.waitForTimeout(300);
+    check(await page.isVisible('#certTitle >> text=Godparent Share Certificate'), '切换英文，证书也变英文');
+    await page.click('.topbar [data-set-lang="zh"]');
 
     // 再打开 → 记得已回复，可修改
     await page.reload({ waitUntil: 'networkidle' });
@@ -153,6 +171,20 @@ async function main() {
       await page.waitForTimeout(1500);
       await page.screenshot({ path: path.join(SHOTS, '06-done-no.png') });
       check(true, '可以修改回复');
+      check(await page.isVisible('#changeMind'), '来不了的证书下面有「改变主意」');
+      check((await page.textContent('#stickyRsvp')).includes('已回复'), '来不了的底部栏写「已回复」，不是「已入股」');
+
+      // 帮另一家人回复：不能把自己那一户忘掉
+      await page.click('#rsvpAnother');
+      await page.fill('#rsvpForm [name="name"]', 'Auntie Mei');
+      await page.click('#rsvpForm .choice .yes');
+      await page.click('#rsvpSubmit');
+      await page.waitForSelector('#rsvpDone:not([hidden])', { timeout: 8000 });
+      check(await page.isVisible('#rsvpMine'), '帮别人回复后可以回到自己的证书');
+      await page.reload({ waitUntil: 'networkidle' });
+      await page.click('#openBtn');
+      await page.waitForFunction(() => document.body.dataset.state === 'open', null, { timeout: 8000 });
+      check((await page.textContent('#wbText')).includes('Ah Meng'), '帮别人回复后，再打开还是认得自己（Ah Meng）');
     } else {
       check(false, '再打开时看得到「修改回复」');
     }
@@ -180,6 +212,7 @@ async function main() {
     const hostText = await host.textContent('#guestList');
     check(hostText.includes('Ah Meng'), '主人页看得到 Ah Meng');
     check(hostText.includes('来不了'), '主人页显示已改成来不了');
+    check(hostText.includes('Auntie Mei') && !hostText.includes('邀请名：Ah Meng'), '帮别人回复的那一家，不会被标成 Ah Meng 的邀请名');
 
     await ctx.close();
   } finally {
@@ -209,6 +242,8 @@ async function main() {
     check(/wa\.me\/60163881919/.test(waUrl) || /api\.whatsapp\.com/.test(waUrl), 'WhatsApp 后备链接指向主人号码');
     check(decodeURIComponent(waUrl).includes('Mei Ling'), 'WhatsApp 文字带名字');
     await page.screenshot({ path: path.join(SHOTS, '10-fallback.png') });
+    check((await page.textContent('#rsvpFallback')).includes('最后一步'), '走 WhatsApp 时说「最后一步」，不是「网络塞车」');
+    check(await page.isHidden('#certRibbon'), '还没送出去时不挂「CONFIRM PLUS CHOP ✓」');
 
     // 主人页：密码对了但没接存储 → 照样进得去，看到接存储步骤和发邀请
     const host = await ctx.newPage();
@@ -229,6 +264,23 @@ async function main() {
     await host.reload({ waitUntil: 'networkidle' });
     await host.waitForTimeout(800);
     check(await host.isVisible('#setupCard'), '没接存储：重新打开不用再输密码');
+
+    // 之后接上存储：客人再打开邀请函，之前走 WhatsApp 的回复会自动补进名册
+    s2.child.kill();
+    await new Promise((r) => setTimeout(r, 300));
+    const syncDir = await mkdtemp(path.join(tmpdir(), 'party-sync-'));
+    const s2b = await startServer({ PORT: '8792', PARTY_STORE_DIR: syncDir, PARTY_HOST_KEY: 'dev' });
+    try {
+      await page.reload({ waitUntil: 'networkidle' });
+      await page.click('#openBtn');
+      await page.waitForFunction(() => document.body.dataset.state === 'open', null, { timeout: 8000 });
+      await page.waitForTimeout(1200);
+      const g = await page.evaluate(async () => (await fetch('/api/guests', { headers: { 'x-host-key': 'dev' } })).json());
+      check(g.guests && g.guests.some((x) => x.name === 'Mei Ling'), '接上存储后，之前走 WhatsApp 的回复自动补进名册');
+      check((await page.textContent('#wbText')).includes('你已入股'), '补送成功后改回「你已入股 ✓」');
+    } finally {
+      s2b.child.kill();
+    }
     await ctx.close();
   } finally {
     s2.child.kill();
@@ -247,7 +299,29 @@ async function main() {
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     check(overflow <= 0, `320px 宽没有横向卷动（多出 ${overflow}px）`);
     await page.screenshot({ path: path.join(SHOTS, '11-narrow.png'), fullPage: true });
+
+    // 没选出席就按送出：要念出错误、标出栏位
+    await page.locator('#rsvpForm').scrollIntoViewIfNeeded();
+    await page.fill('#rsvpForm [name="name"]', 'Narrow');
+    await page.click('#rsvpSubmit');
+    await page.waitForTimeout(200);
+    check((await page.textContent('#formMsg')).includes('来，还是不来'), '漏填时 #formMsg 会念出错误');
+    check(await page.getAttribute('#rsvpForm [name="attending"][value="yes"]', 'aria-invalid') === 'true', '漏填的栏位标上 aria-invalid');
+    await page.click('#rsvpForm .choice .yes');
+    const plus = await page.locator('[data-step="kids:+1"]').boundingBox();
+    check(plus && plus.x + plus.width <= 320, `320px 宽，小孩的「+」按钮完整看得到（右边 ${plus && Math.round(plus.x + plus.width)}px）`);
     await ctx.close();
+
+    // 派对当天中午过后：倒数不要剩一排「--」
+    const day = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const dp = await day.newPage();
+    dp.on('pageerror', (e) => consoleErrors.push(String(e)));
+    await dp.clock.install({ time: new Date('2026-11-14T13:30:00+08:00') });
+    await dp.goto(s3.url + '/?open=1', { waitUntil: 'networkidle' });
+    await dp.waitForTimeout(500);
+    const cd = (await dp.evaluate(() => document.getElementById('countdown').innerText)).trim();
+    check(!cd.includes('--') && cd.includes('大会进行中'), `派对当天倒数显示「大会进行中」（实际：${cd.replace(/\s+/g, ' ')}）`);
+    await day.close();
   } finally {
     s3.child.kill();
   }

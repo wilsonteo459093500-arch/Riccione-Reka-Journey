@@ -167,6 +167,7 @@
   }
 
   $('openBtn').addEventListener('click', function () { openSeal(false); });
+  window.__partySealBound = true; // index.html 的后备脚本靠这个判断 JS 有没有跑起来
   if (params.get('open') === '1') openSeal(true);
 
   /* ---------- 股价牌：0.00 → 1.00，涨幅一路飙到 ∞ ---------- */
@@ -224,6 +225,7 @@
   NOTES.forEach(function (n, i) {
     var t = el('button', 'note-target');
     t.type = 'button';
+    t.tabIndex = -1; // 红圈出现前看不到，先不让 Tab 停在上面
     t.style.left = (n.x / W0 * 100) + '%';
     t.style.top = (n.y / H0 * 100) + '%';
     t.setAttribute('aria-label', (i + 1) + '. ' + n.zh + ' / ' + n.en);
@@ -308,21 +310,27 @@
     bar.style.animation = '';
   }
 
+  function setTarget(n, on) {
+    n.target.classList.toggle('on', on);
+    n.target.tabIndex = on ? 0 : -1;
+  }
+
   function showNote(i) {
     NOTES.forEach(function (n) { n.label.classList.remove('on'); });
     arrowPath.classList.remove('on');
     current = i;
     if (i < 0) return;
     var n = NOTES[i];
-    n.target.classList.add('on');
+    setTarget(n, true);
     placeLabel(n);
     var len = 0;
     try { len = Math.ceil(arrowPath.getTotalLength()); } catch (e) { len = 200; }
     arrowPath.style.setProperty('--len', len);
     arrowPath.getBoundingClientRect();
     requestAnimationFrame(function () {
+      if (current !== i) return; // 连按「下一条」时，旧的标签别再冒出来
       arrowPath.classList.add('on');
-      setTimeout(function () { n.label.classList.add('on'); }, RM ? 0 : 240);
+      setTimeout(function () { if (current === i) n.label.classList.add('on'); }, RM ? 0 : 240);
     });
     setCard(String(i + 1), n.zh, n.en);
     if (n.glint) glintOnce();
@@ -400,8 +408,10 @@
     clearTimers();
     resetDeal();
     var start = fromIndex || 0;
-    if (start === 0) NOTES.forEach(function (n) { n.target.classList.remove('on'); });
+    if (start === 0) NOTES.forEach(function (n) { setTarget(n, false); });
     showNote(-1);
+    // 自动播放时不要每 2.8 秒对读屏念一次；客人自己按「下一条」才念
+    $('noteCard').setAttribute('aria-live', 'off');
     var step = RM ? 1600 : 2800;
     for (var i = start; i < NOTES.length; i++) {
       (function (i, k) {
@@ -432,10 +442,16 @@
     }, 3500));
   }
 
+  // 客人在开场动画途中点了照片/按钮：直接跳到开场结束的样子（聚光灯、CCTV 都收掉）
   function forceReveal() {
-    if (revealed) return;
     revealed = true;
     frame.classList.remove('spot');
+    $('cctv').classList.remove('on');
+    $('recTag').classList.remove('on');
+  }
+
+  function userStep() {
+    $('noteCard').setAttribute('aria-live', 'polite');
   }
 
   notesEl.addEventListener('click', function (e) {
@@ -444,6 +460,7 @@
     clearTimers();
     resetDeal();
     forceReveal();
+    userStep();
     var i = Number(t.dataset.i);
     showNote(i);
     if (NOTES[i].dad) timers.push(setTimeout(dealWithIt, 900));
@@ -451,6 +468,7 @@
   $('nextNote').addEventListener('click', function () {
     forceReveal();
     clearTimers();
+    userStep();
     if (current >= NOTES.length - 1) { dealWithIt(); return; }
     resetDeal();
     var i = current + 1;
@@ -460,9 +478,14 @@
   $('allNotes').addEventListener('click', function () {
     var list = $('noteList');
     list.hidden = !list.hidden;
+    this.setAttribute('aria-expanded', String(!list.hidden));
+    bi(this, list.hidden ? '全部显示' : '收起', list.hidden ? 'Show all' : 'Hide list');
     if (!list.hidden) {
+      clearTimers();
       forceReveal();
-      NOTES.forEach(function (n) { n.target.classList.add('on'); });
+      resetDeal();
+      showNote(-1);
+      NOTES.forEach(function (n) { setTarget(n, true); });
     }
   });
   $('replayNotes').addEventListener('click', function () {
@@ -529,7 +552,7 @@
   var reelTimers = [];
   function spinReel() {
     var track = $('slotTrack');
-    if (RM || !reelTimers) return;
+    if (RM) return;
     reelTimers.forEach(clearTimeout);
     reelTimers = [];
     track.style.transition = 'none';
@@ -541,6 +564,8 @@
     });
   }
   $('spinAgain').addEventListener('click', spinReel);
+  // 减少动态时转盘本来就停在答案上，没东西可以重播
+  if (RM) $('spinAgain').hidden = true;
 
   /* ============================================================
      附件 B · 董事长工作照
@@ -622,18 +647,37 @@
         img.classList.add('swap');
       }
     }
+    // 大图打开时，背后的页面全部 inert：Tab 不会跑到看不见的按钮上
+    function setBgInert(on) {
+      Array.prototype.forEach.call(document.body.children, function (c) {
+        if (c !== lb && c.tagName !== 'SCRIPT') c.inert = on;
+      });
+    }
+    // 手机的「返回」键 / iOS 左滑：关掉大图，而不是离开邀请函
+    var pushed = false;
     function open(i) {
       lastFocus = document.activeElement;
       render(i, false);
       lb.hidden = false;
       document.body.classList.add('lb-open');
+      setBgInert(true);
       $('lbClose').focus();
+      if (!pushed) {
+        try { history.pushState({ lb: 1 }, ''); pushed = true; } catch (e) { /* 不支持就算了 */ }
+      }
     }
-    function close() {
+    function hide() {
+      if (lb.hidden) return;
+      setBgInert(false); // 要先解除 inert，focus() 才有效
       lb.hidden = true;
       document.body.classList.remove('lb-open');
       if (lastFocus && lastFocus.focus) lastFocus.focus({ preventScroll: true });
     }
+    function close() {
+      hide();
+      if (pushed) { pushed = false; history.back(); }
+    }
+    window.addEventListener('popstate', function () { pushed = false; hide(); });
     reel.addEventListener('click', function (e) {
       var b = e.target.closest('.snap-btn');
       if (b) open(Number(b.dataset.i));
@@ -700,22 +744,29 @@
   }
   $('stickyRsvp').addEventListener('click', function (e) {
     e.preventDefault();
-    var target = !$('rsvpDone').hidden ? $('cert') : $('rsvp');
+    var target = !$('rsvpDone').hidden ? $('rsvpDone') : $('rsvp');
     target.scrollIntoView({ behavior: RM ? 'auto' : 'smooth', block: 'start' });
   });
 
-  function setStickyDone(done) {
+  // yes = 会来（显示「已入股」）；不来的人显示「已回复」
+  function setStickyDone(done, yes) {
+    var b = $('stickyRsvp');
     $('stickyBar').classList.toggle('done', done);
-    $('stickyRsvp').querySelector('.sb-todo').hidden = done;
-    $('stickyRsvp').querySelector('.sb-done').hidden = !done;
+    b.querySelector('.sb-todo').hidden = done;
+    b.querySelector('.sb-done').hidden = !(done && yes);
+    b.querySelector('.sb-done-no').hidden = !(done && !yes);
   }
 
   /* ============================================================
      RSVP · 股东出席登记表
      ============================================================ */
   var form = $('rsvpForm');
-  var saved = C.mem.get(RSVP_KEY, null); // { id, data, sent }
+  var saved = C.mem.get(RSVP_KEY, null); // 自己这一户 { id, data, sent }
   var rsvpId = (saved && saved.id) || C.newId();
+  // 「帮另一家人回复」：另一家的回复只放在记忆体里，不覆盖自己那一户
+  var forOther = false;
+  var other = null;
+  function curReply() { return forOther ? other : saved; }
   var counts = { adults: 1, kids: 0 };
   var DIET_REAL = ['vegetarian', 'no-beef', 'halal', 'no-spicy', 'allergy'];
 
@@ -812,8 +863,30 @@
   $('rWish').addEventListener('input', function () { $('wishCount').textContent = $('rWish').value.length + ' / 200'; });
   document.addEventListener('langchange', setPlaceholders);
 
-  function setError(id) { $(id).classList.add('error'); }
-  function clearError(id) { $(id).classList.remove('error'); }
+  // 每个栏位出错时：红字 + aria-invalid + 跟错误说明连起来（读屏会念）
+  var ERR = {
+    'f-name': { err: 'err-name', ctl: function () { return [$('rName')]; } },
+    'f-attending': { err: 'err-attending', ctl: function () { return form.querySelectorAll('[name="attending"]'); } },
+    'f-diet': { err: 'err-diet', ctl: function () { return [$('rDietNote')]; } }
+  };
+  function setError(id) {
+    $(id).classList.add('error');
+    Array.prototype.forEach.call(ERR[id].ctl(), function (c) {
+      c.setAttribute('aria-invalid', 'true');
+      c.setAttribute('aria-describedby', ERR[id].err);
+    });
+  }
+  function clearError(id) {
+    $(id).classList.remove('error');
+    Array.prototype.forEach.call(ERR[id].ctl(), function (c) {
+      c.removeAttribute('aria-invalid');
+      c.removeAttribute('aria-describedby');
+    });
+  }
+  function announce(text) {
+    $('formMsg').textContent = '';
+    setTimeout(function () { $('formMsg').textContent = text; }, 30); // 下一拍再写，同一句话才会再念一次
+  }
 
   function fill(d) {
     $('rName').value = d.name || '';
@@ -840,7 +913,7 @@
       diet: diet,
       dietNote: a === 'yes' && diet.length ? $('rDietNote').value.trim() : '',
       wish: $('rWish').value.trim(),
-      invitedAs: invitedAs,
+      invitedAs: forOther ? '' : invitedAs,
       lang: C.lang(),
       website: form.querySelector('[name="website"]').value
     };
@@ -866,8 +939,13 @@
     if (d.attending === 'yes' && d.diet.indexOf('allergy') !== -1 && !d.dietNote) { setError('f-diet'); bad = true; }
     if (bad) {
       var first = form.querySelector('.field.error');
-      if (first) first.scrollIntoView({ behavior: RM ? 'auto' : 'smooth', block: 'center' });
-      if (!d.name) $('rName').focus({ preventScroll: true });
+      if (first) {
+        first.scrollIntoView({ behavior: RM ? 'auto' : 'smooth', block: 'center' });
+        var ctl = ERR[first.id].ctl()[0];
+        if (ctl) ctl.focus({ preventScroll: true });
+        var msg = first.querySelector('.err .' + C.lang());
+        announce(msg ? msg.textContent : '');
+      }
       return;
     }
 
@@ -884,8 +962,7 @@
   function handleResult(res, d, waUrl) {
     busy(false);
     if (res.ok) {
-      saved = { id: rsvpId, data: d, at: Date.now(), sent: true };
-      C.mem.set(RSVP_KEY, saved);
+      remember({ id: rsvpId, data: d, at: Date.now(), sent: true });
       showDone(d, false, true);
       if (res.data && res.data.summary) showLive(res.data.summary);
       return;
@@ -893,22 +970,27 @@
     if (res.invalid) {
       if (res.fields.name) setError('f-name');
       if (res.fields.attending) setError('f-attending');
-      $('formMsg').textContent = C.lang() === 'en' ? 'Please check the form.' : '请检查一下表格。';
+      announce(C.lang() === 'en' ? 'Please check the form.' : '请检查一下表格。');
       return;
     }
     if (res.status === 503) {
-      // 还没接存储：直接走 WhatsApp
-      saved = { id: rsvpId, data: d, at: Date.now(), sent: false };
-      C.mem.set(RSVP_KEY, saved);
+      // 还没接存储：直接走 WhatsApp。sent:false 的回复下次打开会自动补送进名册
+      remember({ id: rsvpId, data: d, at: Date.now(), sent: false });
       $('waLink').href = waUrl;
       showDone(d, true, true);
       window.open(waUrl, '_blank', 'noopener');
       return;
     }
     // 断网 / 伺服器出错：可以再试，也可以改用 WhatsApp
-    $('formMsg').textContent = C.lang() === 'en' ? 'Network jam, please try again.' : '网络塞车，再试一次。';
+    announce(C.lang() === 'en' ? 'Network jam, please try again.' : '网络塞车，再试一次。');
     $('formWaLink').href = waUrl;
     $('formWa').hidden = false;
+  }
+
+  function remember(rec) {
+    if (forOther) { other = rec; return; }
+    saved = rec;
+    C.mem.set(RSVP_KEY, saved);
   }
 
   /* ---------- 证书 ---------- */
@@ -920,7 +1002,6 @@
 
   function showDone(d, fallback, animate) {
     var yes = d.attending === 'yes';
-    var en = C.lang() === 'en';
     var anim = animate && !RM;
     form.hidden = true;
     $('welcomeBack').hidden = true;
@@ -928,48 +1009,59 @@
     $('rsvpFallback').hidden = !fallback;
     if (fallback) $('waLink').href = C.waLink(C.rsvpWhatsAppText(d, d.lang));
     $('changeMind').hidden = yes;
-    setStickyDone(!fallback);
+    $('certRibbon').hidden = !!fallback; // 还没送出去，就别先写「CONFIRM PLUS CHOP ✓」
+    $('rsvpMine').hidden = !(forOther && saved && saved.data);
+    if (!forOther) setStickyDone(!fallback, yes);
 
     var cert = $('cert');
     cert.classList.toggle('no-cert', !yes);
     var no = 'DUDU-1122-' + shareNo(rsvpId);
     var addr = P.event.address;
+    // 每一栏都写中英两份（bi），切换语言时证书跟着换
     var T = yes ? {
-      kicker: (en ? 'DUDU Holdings Berhad · Bursa Bayi 1122 · No. ' : '丞鹤控股 · Bursa Bayi 1122 · 股东编号 ') + no,
-      title: en ? 'Godparent Share Certificate' : '干爹干妈股权证书',
-      body: en ? 'This certifies that the above is now a Lifetime Godparent-Shareholder of DUDU Holdings Berhad.' : '兹证明以上股东已正式入股，成为 张丞鹤 DUDU 的终身干爹干妈。',
-      extra: en ? 'Valuation: priceless · Non-dilutable · No exit strategy' : '估值：无价 · 不可稀释 · 不设退出机制',
-      meta: en ? 'Report to: Saturday 14 Nov 2026, 12:00pm · ' + P.event.venueEn + ' · ' + addr : '报到：2026年11月14日（星期六）中午12点 · ' + P.event.venueZh + ' · ' + addr,
-      sign: en ? 'Signed: The Boss [drool mark] · Company Secretary: Wilson' : '签署：董事长［口水印］ · 公司秘书 Wilson',
-      stamp: fallback ? (en ? 'PENDING · WhatsApp' : '待发 WhatsApp') : (en ? 'APPROVED' : '已入股 · APPROVED'),
-      tip: fallback ? '' : (en ? 'Screenshot this! Show it at the door for the VIP lane. (There\'s no queue. Just come.)' : '截图保存！当天出示可走 VIP 通道（其实没人排队，人来就好）。')
+      kicker: ['丞鹤控股 · Bursa Bayi 1122 · 股东编号 ' + no, 'DUDU Holdings Berhad · Bursa Bayi 1122 · No. ' + no],
+      title: ['干爹干妈股权证书', 'Godparent Share Certificate'],
+      body: ['兹证明以上股东已正式入股，成为 张丞鹤 DUDU 的终身干爹干妈。', 'This certifies that the above is now a Lifetime Godparent-Shareholder of DUDU Holdings Berhad.'],
+      extra: ['估值：无价 · 不可稀释 · 不设退出机制', 'Valuation: priceless · Non-dilutable · No exit strategy'],
+      meta: ['报到：2026年11月14日（星期六）中午12点 · ' + P.event.venueZh + ' · ' + addr, 'AGM: Saturday 14 Nov 2026, 12:00pm · ' + P.event.venueEn + ' · ' + addr],
+      sign: ['签署：董事长［口水印］ · 公司秘书 Wilson', 'Signed: The Boss [drool mark] · Company Secretary: Wilson'],
+      stamp: fallback ? ['待发 WhatsApp', 'PENDING · WhatsApp'] : ['已入股 · APPROVED', 'APPROVED'],
+      tip: fallback ? ['', ''] : ['截图保存！当天出示可走 VIP 通道（其实没人排队，人来就好）。', 'Screenshot this! Show it at the door for the VIP lane. (There\'s no queue. Just come.)']
     } : {
-      kicker: (en ? 'DUDU Holdings Berhad · No. ' : '丞鹤控股 · 股东编号 ') + no,
-      title: en ? 'Spiritual Shareholder Certificate' : '精神股东证书',
-      body: en ? 'This certifies that the above is a Spiritual Shareholder of DUDU Holdings Berhad: attendance optional, good vibes mandatory.' : '兹证明以上人士为丞鹤控股「精神股东」：人可以不到，祝福要准时到。',
-      extra: (en ? 'The Boss totally understands. (The Boss can\'t talk yet, but the look behind the shades said it all.) Your shares are reserved forever, with priority access at the 2nd AGM!' : '董事长表示完全理解（其实董事长还不会说话，但墨镜后面的眼神很理解）。你的股份永久保留，两岁股东大会优先认购！') +
-        (d.wish ? (en ? ' Your message has been delivered to the Boss\'s office (the baby carrier). It will be read aloud at the meeting (or possibly chewed).' : ' 你的祝福已送达董事长办公室（就是那个背带），将于大会上宣读（或被咬一下）。') : ''),
-      meta: en ? 'Valuation: priceless' : '估值：无价',
-      sign: '',
-      stamp: fallback ? (en ? 'PENDING · WhatsApp' : '待发 WhatsApp') : (en ? 'SHARES RESERVED' : '股份保留'),
-      tip: fallback ? '' : (en ? 'Wilson has your reply. Thank you!' : 'Wilson 已收到你的回复，谢谢！')
+      kicker: ['丞鹤控股 · 股东编号 ' + no, 'DUDU Holdings Berhad · No. ' + no],
+      title: ['精神股东证书', 'Spiritual Shareholder Certificate'],
+      body: ['兹证明以上人士为丞鹤控股「精神股东」：人可以不到，祝福要准时到。', 'This certifies that the above is a Spiritual Shareholder of DUDU Holdings Berhad: attendance optional, good vibes mandatory.'],
+      extra: [
+        '董事长表示完全理解（其实董事长还不会说话，但墨镜后面的眼神很理解）。你的股份永久保留，两岁股东大会优先认购！' +
+          (!d.wish ? '' : fallback ? '你的祝福会跟 WhatsApp 一起送到董事长办公室（就是那个背带），将于大会上宣读（或被咬一下）。' : '你的祝福已送达董事长办公室（就是那个背带），将于大会上宣读（或被咬一下）。'),
+        'The Boss totally understands. (The Boss can\'t talk yet, but the look behind the shades said it all.) Your shares are reserved forever, with priority access at the 2nd AGM!' +
+          (!d.wish ? '' : fallback ? ' Once you send it on WhatsApp, your message goes to the Boss\'s office (the baby carrier) and will be read aloud at the meeting (or possibly chewed).' : ' Your message has been delivered to the Boss\'s office (the baby carrier). It will be read aloud at the meeting (or possibly chewed).')
+      ],
+      meta: ['估值：无价', 'Valuation: priceless'],
+      sign: ['', ''],
+      stamp: fallback ? ['待发 WhatsApp', 'PENDING · WhatsApp'] : ['股份保留', 'SHARES RESERVED'],
+      tip: fallback ? ['', ''] : ['Wilson 已收到你的回复，谢谢！', 'Wilson has your reply. Thank you!']
     };
-    $('certKicker').textContent = T.kicker;
-    $('certTitle').textContent = T.title;
-    $('certBody').textContent = T.body;
-    $('certExtra').textContent = T.extra;
-    $('certMeta').textContent = T.meta;
-    $('certSign').textContent = T.sign;
-    $('certStamp').textContent = T.stamp;
+    bi($('certKicker'), T.kicker[0], T.kicker[1]);
+    bi($('certTitle'), T.title[0], T.title[1]);
+    bi($('certBody'), T.body[0], T.body[1]);
+    bi($('certExtra'), T.extra[0], T.extra[1]);
+    bi($('certMeta'), T.meta[0], T.meta[1]);
+    bi($('certSign'), T.sign[0], T.sign[1]);
+    bi($('certStamp'), T.stamp[0], T.stamp[1]);
     $('certStamp').style.borderColor = yes ? '' : '#5B6B82';
     $('certStamp').style.color = yes ? '' : '#5B6B82';
-    $('doneTip').textContent = T.tip;
+    bi($('doneTip'), T.tip[0], T.tip[1]);
 
     var units = $('certUnits');
     units.textContent = '';
     if (yes) {
-      units.appendChild(el('span', '', en ? d.adults + (d.adults === 1 ? ' adult' : ' adults') : '大股东（大人）' + d.adults + ' 位'));
-      units.appendChild(el('span', '', en ? d.kids + (d.kids === 1 ? ' kid' : ' kids') : '小股东（小孩）' + d.kids + ' 位'));
+      var u1 = el('span');
+      bi(u1, '大股东（大人）' + d.adults + ' 位', d.adults + (d.adults === 1 ? ' adult' : ' adults'));
+      var u2 = el('span');
+      bi(u2, '小股东（小孩）' + d.kids + ' 位', d.kids + (d.kids === 1 ? ' kid' : ' kids'));
+      units.appendChild(u1);
+      units.appendChild(u2);
     }
 
     // 名字一个字一个字打出来
@@ -1000,36 +1092,50 @@
     }
   }
 
+  function backToMine() {
+    forOther = false;
+    other = null;
+    if (saved) rsvpId = saved.id;
+  }
+
   function editReply(preset) {
     form.hidden = false;
     $('rsvpDone').hidden = true;
     $('welcomeBack').hidden = true;
-    if (saved && saved.data) fill(saved.data);
+    var cur = curReply();
+    if (cur && cur.data) fill(cur.data);
     if (preset) {
       form.querySelectorAll('[name="attending"]').forEach(function (r) { r.checked = r.value === preset; });
       syncMode();
     }
     form.scrollIntoView({ behavior: RM ? 'auto' : 'smooth', block: 'start' });
+    // 按钮所在的区块被藏起来了，焦点要接住；选「出席与否」而不是名字，免得手机跳出键盘
+    var f = form.querySelector('[name="attending"]:checked') || $('rName');
+    f.focus({ preventScroll: true });
+  }
+
+  function viewMine() {
+    backToMine();
+    if (saved && saved.data) showDone(saved.data, saved.sent === false, false);
+    $('rsvpDone').scrollIntoView({ behavior: RM ? 'auto' : 'smooth', block: 'start' });
   }
 
   $('rsvpEdit').addEventListener('click', function () { editReply(); });
   $('changeMind').addEventListener('click', function () { editReply('yes'); });
-  $('wbEdit').addEventListener('click', function () { editReply(); });
-  $('wbView').addEventListener('click', function () {
-    if (saved && saved.data) showDone(saved.data, saved.sent === false, false);
-    $('cert').scrollIntoView({ behavior: RM ? 'auto' : 'smooth', block: 'start' });
-  });
+  $('wbEdit').addEventListener('click', function () { backToMine(); editReply(); });
+  $('wbView').addEventListener('click', viewMine);
+  $('rsvpMine').addEventListener('click', viewMine);
 
   $('rsvpAnother').addEventListener('click', function () {
+    // 自己那一户留着（下次打开还认得你），另一家用新的编号
+    forOther = true;
+    other = null;
     rsvpId = C.newId();
-    saved = null;
-    C.mem.del(RSVP_KEY);
     fill({ name: '', attending: '', adults: 1, kids: 0, diet: [], wish: '' });
     form.querySelectorAll('[name="attending"]').forEach(function (r) { r.checked = false; });
     syncMode();
     form.hidden = false;
     $('rsvpDone').hidden = true;
-    setStickyDone(false);
     $('rName').focus();
   });
 
@@ -1071,15 +1177,42 @@
   setCount('adults', 1);
   setCount('kids', 0);
   setPlaceholders();
+  function welcome() {
+    var d = saved.data;
+    var yes = d.attending === 'yes';
+    var pending = saved.sent === false;
+    $('welcomeBack').classList.toggle('pending', pending);
+    $('wbWa').hidden = !pending;
+    if (pending) {
+      // 页面不知道客人当时有没有在 WhatsApp 按「发送」，所以说法不要太肯定
+      $('wbWa').href = C.waLink(C.rsvpWhatsAppText(d, d.lang));
+      bi($('wbText'),
+        '欢迎回来，' + d.name + '！回复要在 WhatsApp 按「发送」才会到 Wilson 那里。已经发过就不用管；还没发的话，按下面再发一次 👇',
+        'Welcome back, ' + d.name + '! Your reply reaches Wilson once you press Send in WhatsApp. Already sent? You\'re all set. If not, tap below 👇');
+    } else {
+      bi($('wbText'),
+        '欢迎回来，' + d.name + '！' + (yes ? '你已入股 ✓' : '你的祝福已登记 ✓'),
+        'Welcome back, ' + d.name + '! ' + (yes ? 'You\'re in ✓' : 'Your wishes are registered ✓'));
+    }
+    setStickyDone(!pending, yes);
+  }
+
   if (saved && saved.data) {
     // 再次打开：先打招呼，不直接跳证书
     fill(saved.data);
     form.hidden = true;
     $('welcomeBack').hidden = false;
-    bi($('wbText'),
-      '欢迎回来，' + saved.data.name + '！' + (saved.data.attending === 'yes' ? '你已入股 ✓' : '你的祝福已登记 ✓'),
-      'Welcome back, ' + saved.data.name + '! ' + (saved.data.attending === 'yes' ? 'You\'re in ✓' : 'Your wishes are registered ✓'));
-    if (saved.sent !== false) setStickyDone(true);
+    welcome();
+    // 之前没接存储时走了 WhatsApp 的回复：悄悄补送进名册（同一个 id，重送只会更新，不会重复）
+    if (saved.sent === false) {
+      C.api.submit(saved.data).then(function (res) {
+        if (!res.ok || !saved) return;
+        saved.sent = true;
+        saved.at = Date.now();
+        C.mem.set(RSVP_KEY, saved);
+        if (!$('welcomeBack').hidden) welcome();
+      });
+    }
   } else if (invitedAs) {
     $('rName').value = invitedAs;
   }

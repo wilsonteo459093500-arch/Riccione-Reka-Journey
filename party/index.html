@@ -23,8 +23,11 @@
 <link rel="preload" href="assets/img/dudu.jpg" as="image" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=IBM+Plex+Mono:wght@500;700&family=Long+Cang&family=Noto+Sans+SC:wght@400;500;600;700;800;900&family=Noto+Serif+SC:wght@700;900&family=ZCOOL+KuaiLe&display=swap" rel="stylesheet" />
+<!-- 中文内文用手机自带的字体（iPhone 苹方、Android 思源黑体），只下载标题用的几款；字体表不挡首屏 -->
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=IBM+Plex+Mono:wght@500;700&family=Long+Cang&family=Noto+Serif+SC:wght@700;900&family=ZCOOL+KuaiLe&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+<noscript><link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=IBM+Plex+Mono:wght@500;700&family=Long+Cang&family=Noto+Serif+SC:wght@700;900&family=ZCOOL+KuaiLe&display=swap" rel="stylesheet" /></noscript>
 <link rel="stylesheet" href="assets/css/party.css" />
+<script>document.documentElement.classList.add('js');</script>
 </head>
 
 <body data-state="sealed">
@@ -71,7 +74,7 @@
         </div>
         <span class="stamp confidential">
           <span class="zh">机密 · 仅限准干爹干妈</span>
-          <span class="en">CONFIDENTIAL · GODPARENTS ONLY</span>
+          <span class="en">CONFIDENTIAL ·<br />GODPARENTS ONLY</span>
         </span>
 
         <p class="env-to">
@@ -228,7 +231,7 @@
         </div>
         <div class="photo-caption">
           <button type="button" class="btn-text" id="nextNote"><span class="zh">下一条 ›</span><span class="en">Next ›</span></button>
-          <button type="button" class="btn-text" id="allNotes"><span class="zh">全部显示</span><span class="en">Show all</span></button>
+          <button type="button" class="btn-text" id="allNotes" aria-expanded="false" aria-controls="noteList"><span class="zh">全部显示</span><span class="en">Show all</span></button>
           <button type="button" class="btn-text" id="replayNotes"><span class="zh">再看一次</span><span class="en">Replay</span></button>
         </div>
         <ol class="note-list" id="noteList" hidden></ol>
@@ -395,6 +398,7 @@
           <button type="button" class="btn solid" id="wbView"><span class="zh">查看我的证书</span><span class="en">View my pass</span></button>
           <button type="button" class="btn" id="wbEdit"><span class="zh">修改回复</span><span class="en">Edit my reply</span></button>
         </div>
+        <a class="btn wa" id="wbWa" href="https://wa.me/60163881919" target="_blank" rel="noopener" hidden><svg><use href="#i-wa" /></svg><span class="zh">用 WhatsApp 再发一次</span><span class="en">Send it on WhatsApp</span></a>
       </div>
 
       <form class="slip" id="rsvpForm" novalidate>
@@ -402,10 +406,10 @@
 
         <div class="field" id="f-name">
           <label for="rName"><span class="zh">股东姓名</span><span class="en">Shareholder name</span>
-            <span class="hint"><span class="zh">一家人填一次就好</span><span class="en">One reply per family is enough</span></span>
+            <span class="hint"><span class="zh">写你的名字或一家的称呼就好，例如「阿明一家」</span><span class="en">Your name or your family's, e.g. "Ah Ming &amp; family"</span></span>
           </label>
           <input class="input" id="rName" name="name" type="text" maxlength="40" autocomplete="name" enterkeyhint="next" />
-          <p class="err"><span class="zh">保镖需要知道你是谁啦 👀</span><span class="en">Security needs your name 👀</span></p>
+          <p class="err" id="err-name"><span class="zh">保镖需要知道你是谁啦 👀</span><span class="en">Security needs your name 👀</span></p>
         </div>
 
         <fieldset class="field" id="f-attending" style="border:0;padding:0;margin:0 0 18px">
@@ -420,7 +424,7 @@
               <span class="face"><span class="ico" aria-hidden="true">🙏</span><span class="zh">这次来不了</span><span class="en">Can't make it</span><small><span class="zh">祝福一定送到</span><span class="en">Sending good wishes</span></small></span>
             </label>
           </div>
-          <p class="err"><span class="zh">请选一个：来，还是不来？</span><span class="en">Please pick one: coming or not?</span></p>
+          <p class="err" id="err-attending"><span class="zh">请选一个：来，还是不来？</span><span class="en">Please pick one: coming or not?</span></p>
         </fieldset>
 
         <div class="yes-only" hidden>
@@ -466,7 +470,7 @@
               <label for="rDietNote" class="sr-only">饮食备注 / Diet details</label>
               <input class="input" id="rDietNote" name="dietNote" type="text" maxlength="120" />
             </div>
-            <p class="err"><span class="zh">请写一下过敏或其他要求</span><span class="en">Please tell us the allergy or need</span></p>
+            <p class="err" id="err-diet"><span class="zh">请写一下过敏或其他要求</span><span class="en">Please tell us the allergy or need</span></p>
           </fieldset>
         </div>
 
@@ -485,11 +489,11 @@
           <button type="submit" class="btn-submit" id="rsvpSubmit">
             <span data-when="yes"><span class="zh">盖章 · 正式入股</span><span class="en">Chop it · I'm in</span></span>
             <span data-when="no" hidden><span class="zh">提交 · 送上祝福</span><span class="en">Send my wishes</span></span>
-            <span data-when="busy" hidden><span class="shades-loader" aria-hidden="true"></span><span class="zh">董事长审批中…（推眼镜中）</span><span class="en">The Boss is reviewing… (adjusting shades)</span></span>
+            <span data-when="busy" hidden><span class="shades-loader" aria-hidden="true"></span><span class="zh">董事长审批中…（推墨镜中）</span><span class="en">The Boss is reviewing… (adjusting shades)</span></span>
           </button>
           <p class="form-msg" id="formMsg" role="alert"></p>
           <p class="form-wa" id="formWa" hidden>
-            <a id="formWaLink" href="#" target="_blank" rel="noopener"><span class="zh">改用 WhatsApp 告诉 Wilson</span><span class="en">Tell Wilson on WhatsApp instead</span></a>
+            <a id="formWaLink" href="https://wa.me/60163881919" target="_blank" rel="noopener"><span class="zh">改用 WhatsApp 告诉 Wilson</span><span class="en">Tell Wilson on WhatsApp instead</span></a>
           </p>
         </div>
 
@@ -521,10 +525,10 @@
 
         <div class="fallback" id="rsvpFallback" hidden>
           <p>
-            <span class="zh">网络塞车，回复还没送到。按下面的按钮，用 WhatsApp 发给 Wilson（内容已经帮你写好）：</span>
-            <span class="en">Network jam — your reply hasn't been filed yet. Tap below to send it to Wilson on WhatsApp (already written for you):</span>
+            <span class="zh">最后一步：按下面的按钮，用 WhatsApp 发给 Wilson（内容已经帮你写好，按「发送」才算数）。已经发过的话就不用再发啦。</span>
+            <span class="en">One last step: tap below to send your reply to Wilson on WhatsApp. It's already written, just hit Send (that's what makes it count). Already sent it? You're all set.</span>
           </p>
-          <a class="btn wa" id="waLink" href="#" target="_blank" rel="noopener"><svg><use href="#i-wa" /></svg><span class="zh">用 WhatsApp 发给 Wilson</span><span class="en">Send to Wilson on WhatsApp</span></a>
+          <a class="btn wa" id="waLink" href="https://wa.me/60163881919" target="_blank" rel="noopener"><svg><use href="#i-wa" /></svg><span class="zh">用 WhatsApp 发给 Wilson</span><span class="en">Send to Wilson on WhatsApp</span></a>
         </div>
 
         <div class="done-actions" style="margin-top:14px">
@@ -535,6 +539,7 @@
           </div>
           <button type="button" class="btn" id="rsvpEdit"><span class="zh">修改回复</span><span class="en">Edit my reply</span></button>
           <button type="button" class="btn-text" id="rsvpAnother" style="justify-self:center"><span class="zh">帮另一家人回复</span><span class="en">Reply for another family</span></button>
+          <button type="button" class="btn-text" id="rsvpMine" style="justify-self:center" hidden><span class="zh">← 回到我自己的证书</span><span class="en">← Back to my own pass</span></button>
         </div>
       </div>
     </section>
@@ -588,11 +593,21 @@
   <a class="sb-btn" id="stickyRsvp" href="#rsvp">
     <span class="sb-todo"><span class="zh">立即入股 RSVP</span><span class="en">RSVP</span></span>
     <span class="sb-done" hidden><span class="zh">已入股 ✓ 查看证书</span><span class="en">You're in ✓ View pass</span></span>
+    <span class="sb-done-no" hidden><span class="zh">已回复 ✓ 查看证书</span><span class="en">Replied ✓ View certificate</span></span>
   </a>
 </div>
 
 <script src="assets/js/config.js"></script>
 <script src="assets/js/core.js"></script>
 <script src="assets/js/party.js"></script>
+<script>
+  // 后备：脚本没载到或中途出错，就别把客人卡在信封上 —— 直接打开整页，回复改走 WhatsApp
+  if (!window.__partySealBound) {
+    document.documentElement.classList.add('fallback');
+    document.body.dataset.state = 'open';
+    var w = document.getElementById('formWa'); if (w) w.hidden = false;
+    var b = document.getElementById('rsvpSubmit'); if (b) b.hidden = true;
+  }
+</script>
 </body>
 </html>

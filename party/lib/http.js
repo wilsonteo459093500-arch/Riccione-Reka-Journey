@@ -28,9 +28,17 @@ const sha = (s) => createHash('sha256').update(String(s)).digest();
 export function checkHostKey(req, env = process.env) {
   const expected = (env.PARTY_HOST_KEY || '').trim();
   if (!expected) return 'unset';
-  const given = String(req.headers['x-host-key'] || '').trim();
-  if (!given) return 'wrong';
-  return timingSafeEqual(sha(given), sha(expected)) ? 'ok' : 'wrong';
+  const raw = String(req.headers['x-host-key'] || '').trim();
+  if (!raw) return 'wrong';
+  // 主人页会先 encodeURIComponent（标头不收中文）；直接用 curl 送原文也照样认得
+  let decoded = raw;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    decoded = raw;
+  }
+  const e = sha(expected);
+  return timingSafeEqual(sha(decoded), e) || timingSafeEqual(sha(raw), e) ? 'ok' : 'wrong';
 }
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

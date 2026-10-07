@@ -84,55 +84,93 @@ async function streamToText(stream) {
   return new Response(stream).text();
 }
 
-/** 存储是 private 还是 public 由建 store 时决定；没指定就先试 private，被拒再换 public。 */
-function looksLikeAccessMismatch(err) {
-  const msg = String((err && err.message) || err || '').toLowerCase();
-  return msg.includes('access') && (msg.includes('private') || msg.includes('public'));
-}
+/**
+ * 存储是 private 还是 public，由建 store 时决定（README 叫你选 Private）。
+ * 没用 PARTY_BLOB_ACCESS 指定的话，先试 private、不行再试 public，
+ * 一旦有一次读或写成功就记住，之后只用那一种。
+ */
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export function createBlobStore(sdk, opts = {}) {
   let access = opts.access === 'public' || opts.access === 'private' ? opts.access : null;
   const pinned = Boolean(access);
-
-  // 只有「写入成功」才记住 access：读一个不存在的档在两种模式下都只是 null，证明不了什么。
-  async function withAccess(fn, { learn = false } = {}) {
-    const first = access || 'private';
-    try {
-      const out = await fn(first);
-      if (learn) access = first;
-      return out;
-    } catch (err) {
-      if (pinned || !looksLikeAccessMismatch(err)) throw err;
-      const second = first === 'private' ? 'public' : 'private';
-      const out = await fn(second);
-      if (learn) access = second;
-      return out;
-    }
-  }
+  const modes = () => (access ? [access] : ['private', 'public']);
 
   async function putJson(pathname, data) {
     const body = JSON.stringify(data);
-    await withAccess((a) =>
-      sdk.put(pathname, body, {
-        access: a,
-        addRandomSuffix: false,
-        allowOverwrite: true,
-        contentType: 'application/json',
-        cacheControlMaxAge: 60
-      }),
-      { learn: true }
-    );
+    let firstErr;
+    for (const a of modes()) {
+      try {
+        await sdk.put(pathname, body, {
+          access: a,
+          addRandomSuffix: false,
+          allowOverwrite: true,
+          contentType: 'application/json',
+          cacheControlMaxAge: 60
+        });
+        if (!pinned) access = a;
+        return;
+      } catch (err) {
+        firstErr = firstErr || err;
+      }
+    }
+    throw firstErr;
   }
 
+  /**
+   * 读一份 JSON。真的不存在 → null；读不到（网络、5xx）→ 丢错误，不要假装没有这一户。
+   * access 还不知道时两种都试：public store 用 private 去读只会是 404/错误，不会报「模式不对」。
+   */
   async function getJson(urlOrPathname) {
-    const res = await withAccess((a) => sdk.get(urlOrPathname, { access: a, useCache: false }));
-    if (!res || res.statusCode !== 200) return null;
-    const text = await streamToText(res.stream);
-    try {
-      return JSON.parse(text);
-    } catch {
-      return null;
+    let missing = false;
+    let firstErr;
+    for (const a of modes()) {
+      try {
+        const res = await sdk.get(urlOrPathname, { access: a, useCache: false });
+        if (!res || res.statusCode === 404) {
+          missing = true;
+          continue;
+        }
+        if (res.statusCode !== 200) throw new Error(`blob get ${res.statusCode}`);
+        if (!pinned) access = a;
+        const text = await streamToText(res.stream);
+        try {
+          return JSON.parse(text);
+        } catch {
+          return null;
+        }
+      } catch (err) {
+        firstErr = firstErr || err;
+      }
     }
+    if (missing) return null;
+    throw firstErr;
+  }
+
+  // 偶尔一次网络抖动不要让整户消失：重试两次
+  async function getJsonRetry(p) {
+    for (let i = 0; ; i++) {
+      try {
+        return await getJson(p);
+      } catch (err) {
+        if (i >= 2) throw err;
+        await wait(200 * 3 ** i);
+      }
+    }
+  }
+
+  // 同时最多读 8 份，免得几十户一起打过去被限流
+  async function mapPool(items, n, fn) {
+    const out = new Array(items.length);
+    let next = 0;
+    async function worker() {
+      while (next < items.length) {
+        const i = next++;
+        out[i] = await fn(items[i]);
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(n, items.length) }, worker));
+    return out;
   }
 
   async function listAll(prefix) {
@@ -160,9 +198,10 @@ export function createBlobStore(sdk, opts = {}) {
     async remove(id) {
       await sdk.del(`${RSVP_PREFIX}${id}.json`);
     },
+    // 有任何一户读不到就整个丢错误：宁可主人看到「等一下再刷新」，也不要给一个偏少的人数
     async list() {
       const blobs = await listAll(RSVP_PREFIX);
-      const rows = await Promise.all(blobs.map((b) => getJson(b.url || b.pathname).catch(() => null)));
+      const rows = await mapPool(blobs, 8, (b) => getJsonRetry(b.url || b.pathname));
       return rows.filter(Boolean);
     },
     async getSummary() {

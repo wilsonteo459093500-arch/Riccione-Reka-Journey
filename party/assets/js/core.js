@@ -124,8 +124,8 @@
 
   /* ---------- WhatsApp ---------- */
   var DIET_LABEL = {
-    zh: { vegetarian: '素食', 'no-beef': '不吃牛', halal: 'Halal', 'no-spicy': '不吃辣', allergy: '过敏' },
-    en: { vegetarian: 'Vegetarian', 'no-beef': 'No beef', halal: 'Halal', 'no-spicy': 'No spicy', allergy: 'Allergy' }
+    zh: { vegetarian: '素食', 'no-beef': '不吃牛', halal: 'Halal', 'no-spicy': '不吃辣', allergy: '过敏/其他' },
+    en: { vegetarian: 'Vegetarian', 'no-beef': 'No beef', halal: 'Halal', 'no-spicy': 'No spicy', allergy: 'Allergy/other' }
   };
 
   function dietText(r, lg) {
@@ -167,7 +167,7 @@
       '未来首富一岁生日',
       '干爹干妈召集会',
       '',
-      (name ? name + '，' : '各位准干爹干妈：') + '本公司董事长即将满一岁，现诚邀你出席第一届股东大会（主要议程：吃午餐）。',
+      (name ? name + '，' : '各位准干爹干妈：') + '本公司董事长即将满一岁，现诚邀' + (name ? '你' : '各位') + '出席第一届股东大会（主要议程：吃午餐）。',
       '入股方式：人到就算数，带个空肚子就好。',
       '',
       '日期：' + P.event.dateZh,
