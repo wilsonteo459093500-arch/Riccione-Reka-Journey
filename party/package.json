@@ -1,0 +1,17 @@
+{
+  "name": "dudu-party",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "张丞鹤 DUDU 一岁生日 · 干爹干妈召集会 — 邀请函 + RSVP",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@vercel/blob": "^2.8.1"
+  }
+}

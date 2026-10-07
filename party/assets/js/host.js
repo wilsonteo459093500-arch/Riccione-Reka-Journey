@@ -1,0 +1,314 @@
+/* ============================================================
+   股东名册（主人专用）
+   ============================================================ */
+(function () {
+  'use strict';
+
+  var P = window.PARTY;
+  var C = window.PartyCore;
+  var KEY = 'dudu.hostKey';
+  var $ = function (id) { return document.getElementById(id); };
+
+  var state = { guests: [], summary: null, filter: 'all', q: '' };
+
+  /* ---------- 小工具 ---------- */
+  function toast(msg) {
+    var t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function () { t.classList.remove('show'); }, 2200);
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function when(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d)) return '';
+    return d.toLocaleString('zh-CN', { timeZone: 'Asia/Kuala_Lumpur', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+  }
+
+  function copy(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(text).then(function () { return true; }, function () { return legacyCopy(text); });
+    }
+    return Promise.resolve(legacyCopy(text));
+  }
+
+  function legacyCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;top:-1000px;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    ta.remove();
+    return ok;
+  }
+
+  /* ---------- 读名册 ---------- */
+  function api(method, path) {
+    return C.fetchJson(path, {
+      method: method,
+      headers: { Accept: 'application/json', 'x-host-key': C.mem.get(KEY, '') }
+    }, 20000);
+  }
+
+  function load(silent) {
+    if (!silent) $('refreshBtn').disabled = true;
+    return api('GET', '/api/guests').then(function (r) {
+      $('refreshBtn').disabled = false;
+      if (r.status === 200 && r.data.ok) {
+        state.guests = r.data.guests || [];
+        state.summary = r.data.summary;
+        showBoard(r.data.storage);
+        render();
+        return true;
+      }
+      handleError(r);
+      return false;
+    }, function () {
+      $('refreshBtn').disabled = false;
+      $('loginMsg').textContent = '连不上伺服器。网络不稳？等一下再试。';
+      showLogin();
+      return false;
+    });
+  }
+
+  function handleError(r) {
+    var msg = '出了点问题（' + r.status + '）。';
+    if (r.status === 401) {
+      msg = '密码不对。';
+      C.mem.del(KEY);
+    } else if (r.data && r.data.error === 'host_key_not_set') {
+      msg = '还没设主人密码：到 Vercel → Settings → Environment Variables 加一个 PARTY_HOST_KEY，再 Redeploy。';
+    } else if (r.data && r.data.error === 'not_configured') {
+      msg = '还没接存储：到 Vercel → Storage 建一个 Blob store 并连到这个项目，再 Redeploy。在那之前，客人的回复会以 WhatsApp 发到你手机。';
+    }
+    $('loginMsg').textContent = msg;
+    showLogin();
+  }
+
+  function showLogin() {
+    $('loginCard').hidden = false;
+    $('board').hidden = true;
+    $('refreshBtn').hidden = true;
+    $('logoutBtn').hidden = true;
+  }
+
+  function showBoard(storage) {
+    $('loginCard').hidden = true;
+    $('board').hidden = false;
+    $('refreshBtn').hidden = false;
+    $('logoutBtn').hidden = false;
+    $('storageNote').textContent = storage === 'file' ? '（本机测试模式：资料存在 party/.data/）' : '资料存在 Vercel Blob，只有知道主人密码的人看得到完整名单。';
+  }
+
+  /* ---------- 画面 ---------- */
+  function render() {
+    var s = state.summary || { people: 0, adults: 0, kids: 0, groups: 0, declined: 0, portions: 0, diet: {}, responses: 0 };
+    C.countUp($('sPeople'), s.people, 700);
+    C.countUp($('sAdults'), s.adults, 700);
+    C.countUp($('sKids'), s.kids, 700);
+    C.countUp($('sGroups'), s.groups, 700);
+    C.countUp($('sDeclined'), s.declined, 700);
+    C.countUp($('sPortions'), s.portions, 700);
+
+    // 饮食
+    var L = C.DIET_LABEL.zh;
+    var dietRows = Object.keys(L).map(function (k) {
+      var d = (s.diet || {})[k] || { groups: 0, people: 0, names: [] };
+      if (!d.groups) return '';
+      return '<li><b>' + esc(L[k]) + '</b> <span class="pill">' + d.groups + ' 户 · ' + d.people + ' 人</span><span class="names">' + d.names.map(esc).join('、') + '</span></li>';
+    }).join('');
+    var notes = state.guests.filter(function (g) { return g.attending === 'yes' && g.dietNote; }).map(function (g) {
+      return '<li><b>' + esc(g.name) + '</b><span class="names">' + esc(g.dietNote) + '</span></li>';
+    }).join('');
+    $('dietList').innerHTML = dietRows + notes || '<li class="muted">目前没有人提特别饮食需求。</li>';
+
+    // 名单
+    var q = state.q.trim().toLowerCase();
+    var rows = state.guests.filter(function (g) {
+      if (state.filter !== 'all' && g.attending !== state.filter) return false;
+      if (q && (g.name + ' ' + (g.invitedAs || '')).toLowerCase().indexOf(q) === -1) return false;
+      return true;
+    });
+    $('listCount').textContent = '共 ' + state.guests.length + ' 条回复';
+    $('emptyMsg').hidden = state.guests.length > 0;
+    $('guestList').innerHTML = rows.map(function (g) {
+      var yes = g.attending === 'yes';
+      var diet = yes ? C.dietText(g, 'zh') : '';
+      return '<li class="g ' + (yes ? 'yes' : 'no') + '">' +
+        '<div class="g-head">' +
+          '<span class="g-name">' + esc(g.name) + '</span>' +
+          (g.invitedAs && g.invitedAs !== g.name ? '<span class="g-as">邀请名：' + esc(g.invitedAs) + '</span>' : '') +
+          '<span class="g-badge">' + (yes ? '会来' : '来不了') + '</span>' +
+        '</div>' +
+        (yes ? '<div class="g-count">大人 <b>' + g.adults + '</b> · 小孩 <b>' + g.kids + '</b></div>' : '') +
+        (diet ? '<div class="g-diet">🍽 ' + esc(diet) + '</div>' : '') +
+        (g.wish ? '<div class="g-wish">“' + esc(g.wish) + '”</div>' : '') +
+        '<div class="g-foot"><span>' + when(g.updatedAt) + (g.edits ? ' · 改过 ' + g.edits + ' 次' : '') + (g.lang === 'en' ? ' · EN' : '') + '</span>' +
+          '<button type="button" class="g-del" data-del="' + esc(g.id) + '" data-name="' + esc(g.name) + '">删除</button></div>' +
+      '</li>';
+    }).join('');
+  }
+
+  /* ---------- 名单文字 / CSV ---------- */
+  function summaryText() {
+    var s = state.summary;
+    var yes = state.guests.filter(function (g) { return g.attending === 'yes'; });
+    var no = state.guests.filter(function (g) { return g.attending === 'no'; });
+    var lines = [
+      '【DUDU 一岁生日 · 出席名单】',
+      P.event.dateShort + ' ' + P.event.timeZh + ' · ' + P.event.venueZh,
+      '',
+      '总人数：' + s.people + '（大人 ' + s.adults + '，小孩 ' + s.kids + '）',
+      '出席：' + s.groups + ' 户　来不了：' + s.declined + ' 户',
+      '建议餐量：约 ' + s.portions + ' 份（小孩算半份）',
+      ''
+    ];
+    yes.forEach(function (g, i) {
+      var d = C.dietText(g, 'zh');
+      lines.push((i + 1) + '. ' + g.name + ' — 大人 ' + g.adults + '，小孩 ' + g.kids + (d ? '（' + d + '）' : ''));
+    });
+    if (no.length) {
+      lines.push('');
+      lines.push('来不了：' + no.map(function (g) { return g.name; }).join('、'));
+    }
+    return lines.join('\n');
+  }
+
+  function csv() {
+    var head = ['名字', '邀请名', '出席', '大人', '小孩', '饮食', '饮食备注', '给DUDU的话', '语言', '最后更新'];
+    var cell = function (v) {
+      var s = String(v == null ? '' : v);
+      // 防止 Excel 把 = + - @ 开头当公式
+      if (/^[=+\-@]/.test(s)) s = "'" + s;
+      return '"' + s.replace(/"/g, '""') + '"';
+    };
+    var lines = [head.map(cell).join(',')];
+    state.guests.forEach(function (g) {
+      lines.push([
+        g.name, g.invitedAs || '', g.attending === 'yes' ? '会来' : '来不了', g.adults, g.kids,
+        (g.diet || []).map(function (k) { return C.DIET_LABEL.zh[k] || k; }).join('、'), g.dietNote || '', g.wish || '',
+        g.lang || 'zh', when(g.updatedAt)
+      ].map(cell).join(','));
+    });
+    return '﻿' + lines.join('\r\n'); // BOM：Excel 打开中文不乱码
+  }
+
+  /* ---------- 专属邀请 ---------- */
+  function inviteUrl(name, en) {
+    var u = new URL(location.origin + '/');
+    if (name) u.searchParams.set('to', name);
+    if (en) u.searchParams.set('lang', 'en');
+    return u.toString();
+  }
+
+  function inviteText(name, en) {
+    var url = inviteUrl(name, en);
+    var I = window.PARTY_INVITE_TEXT;
+    if (typeof I === 'function') return I(name, en, url);
+    return en
+      ? (name ? 'Hi ' + name + '! ' : '') + 'DUDU turns ONE 🎂 You\'re invited to the Godparents\' General Meeting — ' + P.event.dateEn + ', ' + P.event.timeEn + ' at ' + P.event.venueEn + '. Please RSVP here 👉 ' + url
+      : (name ? name + '，' : '') + '张丞鹤 DUDU 一岁啦 🎂 诚邀你出席「干爹干妈召集会」！' + P.event.dateZh + P.event.timeZh + ' · ' + P.event.venueZh + '。点这里回复会不会来 👉 ' + url;
+  }
+
+  function refreshGen() {
+    $('genText').value = inviteText($('toInput').value.trim(), $('enInput').checked);
+  }
+
+  /* ---------- 事件 ---------- */
+  $('loginForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var k = $('keyInput').value.trim();
+    if (!k) return;
+    C.mem.set(KEY, k);
+    $('loginMsg').textContent = '';
+    load().then(function (ok) { if (ok) $('keyInput').value = ''; });
+  });
+
+  $('refreshBtn').addEventListener('click', function () {
+    load().then(function (ok) { if (ok) toast('已更新'); });
+  });
+
+  $('logoutBtn').addEventListener('click', function () {
+    C.mem.del(KEY);
+    state.guests = [];
+    showLogin();
+  });
+
+  document.querySelectorAll('[data-filter]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      state.filter = b.getAttribute('data-filter');
+      document.querySelectorAll('[data-filter]').forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+      render();
+    });
+  });
+
+  $('searchInput').addEventListener('input', function (e) {
+    state.q = e.target.value;
+    render();
+  });
+
+  $('guestList').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-del]');
+    if (!b) return;
+    if (!confirm('删除「' + b.getAttribute('data-name') + '」这条回复？删了就找不回来。')) return;
+    b.disabled = true;
+    api('DELETE', '/api/guests?id=' + encodeURIComponent(b.getAttribute('data-del'))).then(function (r) {
+      if (r.status === 200 && r.data.ok) {
+        state.guests = r.data.guests;
+        state.summary = r.data.summary;
+        render();
+        toast('已删除');
+      } else {
+        b.disabled = false;
+        toast('删除失败（' + r.status + '）');
+      }
+    }, function () {
+      b.disabled = false;
+      toast('网络不稳，删除失败');
+    });
+  });
+
+  $('copyBtn').addEventListener('click', function () {
+    copy(summaryText()).then(function (ok) { toast(ok ? '已复制，去 WhatsApp 贴上吧' : '复制失败，请手动选取'); });
+  });
+
+  $('csvBtn').addEventListener('click', function () {
+    var blob = new Blob([csv()], { type: 'text/csv;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'DUDU-股东名册.csv';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 1000);
+  });
+
+  $('toInput').addEventListener('input', refreshGen);
+  $('enInput').addEventListener('change', refreshGen);
+  $('genWa').addEventListener('click', function () {
+    window.open('https://wa.me/?text=' + encodeURIComponent($('genText').value), '_blank', 'noopener');
+  });
+  $('genCopy').addEventListener('click', function () {
+    copy($('genText').value).then(function (ok) { toast(ok ? '已复制' : '复制失败，请手动选取'); });
+  });
+
+  /* ---------- 开始 ---------- */
+  refreshGen();
+  if (C.mem.get(KEY, '')) load(true);
+  else showLogin();
+  // 开着页面时每分钟自动更新一次
+  setInterval(function () {
+    if (!$('board').hidden && document.visibilityState === 'visible') load(true);
+  }, 60000);
+})();
