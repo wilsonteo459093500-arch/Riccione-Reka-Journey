@@ -12,7 +12,7 @@ window.PARTY = {
   /* 主人 · 收 RSVP 后备 WhatsApp 的号码（纯数字，60 开头，不要 + 和空格） */
   host: {
     name: 'Wilson',
-    wa: '60189661919'
+    wa: '60163881919'   // 016-388 1919
   },
 
   event: {

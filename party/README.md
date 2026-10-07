@@ -75,7 +75,7 @@ host.html    主人名册：谁会来、几个大人几个小孩、饮食需求�
 只改 `assets/js/config.js`：
 
 ```js
-host:   { name: 'Wilson', wa: '60189661919' }   // WhatsApp 后备号码
+host:   { name: 'Wilson', wa: '60163881919' }   // WhatsApp 后备号码（016-388 1919）
 event:  { start, end, dateZh, timeZh, venueZh, address, … }
 rsvpBy: '2026-11-07'                             // 请大家几号前回复（留空就不显示）
 siteUrl: 'https://dudu-party.vercel.app'

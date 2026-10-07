@@ -204,7 +204,7 @@ async function main() {
     const waHref = await page.getAttribute('#waLink', 'href').catch(() => null);
     const popUrl = pop ? pop.url() : '';
     const waUrl = /wa\.me|whatsapp/.test(popUrl) ? popUrl : waHref || '';
-    check(/wa\.me\/60189661919/.test(waUrl) || /api\.whatsapp\.com/.test(waUrl), 'WhatsApp 后备链接指向主人号码');
+    check(/wa\.me\/60163881919/.test(waUrl) || /api\.whatsapp\.com/.test(waUrl), 'WhatsApp 后备链接指向主人号码');
     check(decodeURIComponent(waUrl).includes('Mei Ling'), 'WhatsApp 文字带名字');
     await page.screenshot({ path: path.join(SHOTS, '10-fallback.png') });
     await ctx.close();
