@@ -94,9 +94,11 @@ async function main() {
     check(wide <= 0, `整页滑完没有被撑宽（多出 ${wide}px）`);
 
     const bodyText = await page.textContent('body');
-    for (const fact of ['14/11/2026', '29-18, Jalan Haji Jaib, 84000 Muar, Johor', 'Wilson麻坡家', '张丞鹤', 'DUDU', '未来首富一岁生日', '干爹干妈召集会']) {
+    for (const fact of ['14/11/2026', '29-18, Jalan Haji Jaib, 84000 Muar, Johor', 'Wilson麻坡家', '张丞鹤', 'DUDU', '未来首富一岁生日', '干爹干妈召集会', '股票代码 1122']) {
       check(bodyText.includes(fact), `页面有「${fact}」`);
     }
+    // 股票代码是 DUDU 真正生日 11/22，不是开会日期
+    check(!bodyText.includes('1411'), '没有旧股票代码 1411');
 
     // 相册：7 张、点开大图、下一张、关闭
     await page.locator('#gallery').scrollIntoViewIfNeeded();

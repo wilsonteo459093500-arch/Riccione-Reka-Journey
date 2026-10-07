@@ -932,10 +932,10 @@
 
     var cert = $('cert');
     cert.classList.toggle('no-cert', !yes);
-    var no = 'DUDU-1411-' + shareNo(rsvpId);
+    var no = 'DUDU-1122-' + shareNo(rsvpId);
     var addr = P.event.address;
     var T = yes ? {
-      kicker: (en ? 'DUDU Holdings Berhad · Bursa Bayi 1411 · No. ' : '丞鹤控股 · Bursa Bayi 1411 · 股东编号 ') + no,
+      kicker: (en ? 'DUDU Holdings Berhad · Bursa Bayi 1122 · No. ' : '丞鹤控股 · Bursa Bayi 1122 · 股东编号 ') + no,
       title: en ? 'Godparent Share Certificate' : '干爹干妈股权证书',
       body: en ? 'This certifies that the above is now a Lifetime Godparent-Shareholder of DUDU Holdings Berhad.' : '兹证明以上股东已正式入股，成为 张丞鹤 DUDU 的终身干爹干妈。',
       extra: en ? 'Valuation: priceless · Non-dilutable · No exit strategy' : '估值：无价 · 不可稀释 · 不设退出机制',
