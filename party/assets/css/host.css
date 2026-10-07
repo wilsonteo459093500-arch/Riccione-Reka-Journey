@@ -72,6 +72,13 @@ code { background: var(--gold-soft); padding: 1px 5px; border-radius: 4px; font-
 }
 .h-msg { color: var(--red); min-height: 1.5em; margin: 10px 0 0; }
 
+/* 密码对了但还没接存储：只显示接存储步骤 + 发邀请 */
+.no-store .needs-store { display: none; }
+.h-setup { border: 2px solid var(--gold); background: var(--gold-soft); }
+.h-setup p { margin: 0 0 8px; }
+.h-steps { margin: 0 0 14px; padding-left: 1.4em; display: grid; gap: 6px; }
+.h-setup .h-btn { display: inline-flex; align-items: center; text-decoration: none; }
+
 .h-stats {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px;
 }

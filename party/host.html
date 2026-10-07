@@ -44,7 +44,22 @@
   <!-- 名册 -->
   <div id="board" hidden>
 
-    <section class="h-stats" aria-label="人数">
+    <!-- 密码对了、但还没接存储：先让主人进来，告诉他怎么接 -->
+    <section class="h-card h-setup" id="setupCard" hidden>
+      <h2>名册还没接上存储</h2>
+      <p>密码对了 👍 只是 Vercel 还没帮名册开「仓库」，所以这里暂时看不到名单。</p>
+      <p><b>回复不会漏掉：</b>现在客人按「确认」，手机会自动打开 WhatsApp，把回复发给你。</p>
+      <p class="muted">想让名单自动出现在这里（大约 2 分钟）：</p>
+      <ol class="h-steps">
+        <li>按下面的按钮，打开 Vercel 的 <b>Storage</b> 页（要先登入 Vercel）</li>
+        <li><b>Create Database</b> → 选 <b>Blob</b> → Access 选 <b>Private</b> → <b>Create</b></li>
+        <li>问你连哪个项目时，选 <b>dudu-party</b> → <b>Connect</b></li>
+        <li>回到 <b>Deployments</b>，最新那条右边 <b>⋯</b> → <b>Redeploy</b>，再回来按「刷新」</li>
+      </ol>
+      <a class="h-btn" href="https://vercel.com/wilsonteo459093500-3777s-projects/dudu-party/stores" target="_blank" rel="noopener">打开 Vercel Storage</a>
+    </section>
+
+    <section class="h-stats needs-store" aria-label="人数">
       <div class="stat big">
         <span class="n" id="sPeople">0</span>
         <span class="l">总人数<br /><small>大人 + 小孩</small></span>
@@ -71,12 +86,12 @@
       </div>
     </section>
 
-    <section class="h-card">
+    <section class="h-card needs-store">
       <h2>饮食需求 <small class="muted">订餐时注意</small></h2>
       <ul class="h-diet" id="dietList"></ul>
     </section>
 
-    <section class="h-card">
+    <section class="h-card needs-store">
       <div class="h-row">
         <h2>名单 <small class="muted" id="listCount"></small></h2>
         <div class="h-tools">

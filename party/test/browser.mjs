@@ -209,6 +209,26 @@ async function main() {
     check(/wa\.me\/60163881919/.test(waUrl) || /api\.whatsapp\.com/.test(waUrl), 'WhatsApp 后备链接指向主人号码');
     check(decodeURIComponent(waUrl).includes('Mei Ling'), 'WhatsApp 文字带名字');
     await page.screenshot({ path: path.join(SHOTS, '10-fallback.png') });
+
+    // 主人页：密码对了但没接存储 → 照样进得去，看到接存储步骤和发邀请
+    const host = await ctx.newPage();
+    host.on('pageerror', (e) => consoleErrors.push('host: ' + String(e)));
+    await host.goto(s2.url + '/host', { waitUntil: 'networkidle' });
+    await host.fill('#keyInput', 'wrong');
+    await host.click('#loginForm button[type=submit]');
+    await host.waitForTimeout(1200);
+    check((await host.textContent('#loginMsg')).includes('密码不对'), '没接存储：错密码照样被拒');
+    await host.fill('#keyInput', 'dev');
+    await host.click('#loginForm button[type=submit]');
+    const inBoard = await host.waitForSelector('#board:not([hidden])', { timeout: 5000 }).then(() => true, () => false);
+    check(inBoard, '没接存储：对的密码进得了名册页');
+    check(await host.isVisible('#setupCard'), '没接存储：显示接存储步骤');
+    check(!(await host.isVisible('.h-stats')), '没接存储：不显示 0 人的假统计');
+    check(await host.isVisible('#genText'), '没接存储：发专属邀请照样能用');
+    await host.screenshot({ path: path.join(SHOTS, '10b-host-nostore.png'), fullPage: true });
+    await host.reload({ waitUntil: 'networkidle' });
+    await host.waitForTimeout(800);
+    check(await host.isVisible('#setupCard'), '没接存储：重新打开不用再输密码');
     await ctx.close();
   } finally {
     s2.child.kill();

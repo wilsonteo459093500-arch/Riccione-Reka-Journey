@@ -72,8 +72,7 @@
         render();
         return true;
       }
-      handleError(r);
-      return false;
+      return handleError(r);
     }, function () {
       $('refreshBtn').disabled = false;
       $('loginMsg').textContent = '连不上伺服器。网络不稳？等一下再试。';
@@ -82,18 +81,25 @@
     });
   }
 
+  // 返回 true = 已进入名册页（例如密码对了、只是还没接存储）
   function handleError(r) {
+    if (r.data && r.data.error === 'not_configured') {
+      // 服务器先验密码再找存储，走到这里代表密码是对的：让主人进来，显示接存储的步骤
+      state.guests = [];
+      state.summary = null;
+      showBoard('none');
+      return true;
+    }
     var msg = '出了点问题（' + r.status + '）。';
     if (r.status === 401) {
       msg = '密码不对。';
       C.mem.del(KEY);
     } else if (r.data && r.data.error === 'host_key_not_set') {
       msg = '还没设主人密码：到 Vercel → Settings → Environment Variables 加一个 PARTY_HOST_KEY，再 Redeploy。';
-    } else if (r.data && r.data.error === 'not_configured') {
-      msg = '还没接存储：到 Vercel → Storage 建一个 Blob store 并连到这个项目，再 Redeploy。在那之前，客人的回复会以 WhatsApp 发到你手机。';
     }
     $('loginMsg').textContent = msg;
     showLogin();
+    return false;
   }
 
   function showLogin() {
@@ -104,11 +110,14 @@
   }
 
   function showBoard(storage) {
+    state.noStore = storage === 'none';
     $('loginCard').hidden = true;
     $('board').hidden = false;
+    $('board').classList.toggle('no-store', state.noStore);
+    $('setupCard').hidden = !state.noStore;
     $('refreshBtn').hidden = false;
     $('logoutBtn').hidden = false;
-    $('storageNote').textContent = storage === 'file' ? '（本机测试模式：资料存在 party/.data/）' : '资料存在 Vercel Blob，只有知道主人密码的人看得到完整名单。';
+    $('storageNote').textContent = state.noStore ? '' : storage === 'file' ? '（本机测试模式：资料存在 party/.data/）' : '资料存在 Vercel Blob，只有知道主人密码的人看得到完整名单。';
   }
 
   /* ---------- 画面 ---------- */
@@ -231,7 +240,7 @@
   });
 
   $('refreshBtn').addEventListener('click', function () {
-    load().then(function (ok) { if (ok) toast('已更新'); });
+    load().then(function (ok) { if (ok) toast(state.noStore ? '还没接上存储' : '已更新'); });
   });
 
   $('logoutBtn').addEventListener('click', function () {
