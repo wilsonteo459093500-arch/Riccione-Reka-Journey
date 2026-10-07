@@ -95,6 +95,22 @@ async function main() {
       check(bodyText.includes(fact), `页面有「${fact}」`);
     }
 
+    // 相册：7 张、点开大图、下一张、关闭
+    await page.locator('#gallery').scrollIntoViewIfNeeded();
+    await page.waitForTimeout(1500);
+    check((await page.locator('#reel .snap').count()) === 7, '相册有 7 张照片');
+    await page.screenshot({ path: path.join(SHOTS, '03c-gallery.png') });
+    await page.click('#reel .snap-btn >> nth=0');
+    await page.waitForSelector('#lightbox:not([hidden])');
+    await page.click('#lbNext');
+    check((await page.textContent('#lbCount')).trim() === '2 / 7', '大图可以翻到下一张');
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: path.join(SHOTS, '03d-lightbox.png') });
+    await page.click('#lbClose');
+    check(await page.isHidden('#lightbox'), '大图可以关闭');
+    const broken = await page.evaluate(() => Array.from(document.querySelectorAll('#reel img')).filter((i) => i.complete && i.naturalWidth === 0).length);
+    check(broken === 0, '相册图片都载得出来');
+
     // 回复
     await page.locator('#rsvpForm').scrollIntoViewIfNeeded();
     const nameVal = await page.inputValue('#rsvpForm [name="name"]');

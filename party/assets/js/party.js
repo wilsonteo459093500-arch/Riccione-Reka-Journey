@@ -356,6 +356,128 @@
     });
   })();
 
+  /* ============================================================
+     附件 B · 董事长工作照
+     ============================================================ */
+  var GALLERY = [
+    { src: 'shark', pos: '50% 62%', tagZh: '风险承受能力 <b class="up">▲ 满分</b>', tagEn: 'Risk appetite <b class="up">▲ MAX</b>',
+      zh: '市场大鳄来袭。董事长：就这？', en: 'A market shark attacks. The CEO: "That\'s it?"' },
+    { src: 'lunch', pos: '32% 44%', tagZh: '耐心指数 <b class="down">▼ 跌停</b>', tagEn: 'Patience <b class="down">▼ LIMIT DOWN</b>',
+      zh: '听说午餐要 12 点才开。董事长：……', en: 'Told lunch starts at 12. The CEO: "…"' },
+    { src: 'kipas', pos: '55% 42%', tagZh: '成本控制 <b class="up">✓ 达标</b>', tagEn: 'Cost control <b class="up">✓ ON TARGET</b>',
+      zh: '亲自检查总部冷气系统：确认只开 kipas', en: 'Inspecting HQ air-con in person. Confirmed: kipas only.' },
+    { src: 'landbank', pos: '45% 68%', tagZh: '土地储备 <b class="up">▲ 扩张中</b>', tagEn: 'Land bank <b class="up">▲ EXPANDING</b>',
+      zh: '考察麻坡土地储备：这片草，我要了', en: 'Land-bank inspection. This patch of grass? Mine.' },
+    { src: 'chopper', pos: '42% 28%', tagZh: '交通工具：人肉直升机', tagEn: 'Transport: human chopper',
+      zh: '高空视察业务。坐骑表情管理：失败', en: 'Aerial site inspection. The ride\'s poker face: failed.' },
+    { src: 'retreat', pos: '52% 62%', tagZh: '今日 KPI：放空', tagEn: 'Today\'s KPI: zoning out',
+      zh: '董事会户外静修。会议议程：发呆', en: 'Board off-site retreat. Agenda: staring into the jungle.' },
+    { src: 'board', pos: '30% 56%', tagZh: '表决结果 <b class="up">全票通过</b>', tagEn: 'Vote <b class="up">UNANIMOUS</b>',
+      zh: '家族董事会：资深董事坐镇，董事长笑得最大声', en: 'Family board meeting. Senior director presiding; the CEO laughs loudest.' }
+  ];
+
+  (function () {
+    var reel = $('reel');
+    var dots = $('reelDots');
+    GALLERY.forEach(function (g, i) {
+      var fig = document.createElement('figure');
+      fig.className = 'snap';
+      fig.setAttribute('role', 'listitem');
+      fig.style.setProperty('--tilt', (i % 2 ? 2 : -2) + 'deg');
+      fig.innerHTML =
+        '<button type="button" class="snap-btn" data-i="' + i + '">' +
+          '<span class="snap-photo"><img loading="lazy" decoding="async" src="assets/img/gallery/' + g.src + '.jpg" alt="" style="object-position:' + g.pos + '" />' +
+          '<span class="snap-tag"><span class="zh">' + g.tagZh + '</span><span class="en">' + g.tagEn + '</span></span></span>' +
+          '<span class="snap-cap"><span class="zh"></span><span class="en"></span></span>' +
+        '</button>';
+      fig.querySelector('.snap-cap .zh').textContent = g.zh;
+      fig.querySelector('.snap-cap .en').textContent = g.en;
+      fig.querySelector('img').alt = g.zh + ' / ' + g.en;
+      reel.appendChild(fig);
+      dots.appendChild(document.createElement('i'));
+    });
+
+    var figs = reel.querySelectorAll('.snap');
+    function updateDots() {
+      var mid = reel.scrollLeft + reel.clientWidth / 2;
+      var best = 0;
+      var bestD = Infinity;
+      figs.forEach(function (f, i) {
+        var d = Math.abs(f.offsetLeft + f.offsetWidth / 2 - mid);
+        if (d < bestD) { bestD = d; best = i; }
+      });
+      dots.querySelectorAll('i').forEach(function (d, i) { d.classList.toggle('on', i === best); });
+    }
+    reel.addEventListener('scroll', function () { requestAnimationFrame(updateDots); }, { passive: true });
+    updateDots();
+
+    whenOpen(function () {
+      onEnter(reel, function () {
+        figs.forEach(function (f, i) { setTimeout(function () { f.classList.add('is-on'); }, RM ? 0 : i * 110); });
+        if (!RM) setTimeout(function () { reel.classList.add('hint'); }, 700);
+      }, 0.25);
+    });
+
+    /* ---- 大图 ---- */
+    var lb = $('lightbox');
+    var idx = 0;
+    var lastFocus = null;
+    function render(i, animate) {
+      idx = (i + GALLERY.length) % GALLERY.length;
+      var g = GALLERY[idx];
+      var img = $('lbImg');
+      img.src = 'assets/img/gallery/' + g.src + '.jpg';
+      img.alt = g.zh + ' / ' + g.en;
+      $('lbTag').innerHTML = '<span class="zh">' + g.tagZh + '</span><span class="en">' + g.tagEn + '</span>';
+      $('lbCap').innerHTML = '<span class="zh"></span><span class="en"></span>';
+      $('lbCap').querySelector('.zh').textContent = g.zh;
+      $('lbCap').querySelector('.en').textContent = g.en;
+      $('lbCount').textContent = (idx + 1) + ' / ' + GALLERY.length;
+      if (animate && !RM) {
+        img.classList.remove('swap');
+        void img.offsetWidth;
+        img.classList.add('swap');
+      }
+    }
+    function open(i) {
+      lastFocus = document.activeElement;
+      render(i, false);
+      lb.hidden = false;
+      document.body.classList.add('lb-open');
+      $('lbClose').focus();
+    }
+    function close() {
+      lb.hidden = true;
+      document.body.classList.remove('lb-open');
+      if (lastFocus && lastFocus.focus) lastFocus.focus({ preventScroll: true });
+    }
+    reel.addEventListener('click', function (e) {
+      var b = e.target.closest('.snap-btn');
+      if (b) open(Number(b.dataset.i));
+    });
+    $('lbClose').addEventListener('click', close);
+    $('lbPrev').addEventListener('click', function () { render(idx - 1, true); });
+    $('lbNext').addEventListener('click', function () { render(idx + 1, true); });
+    lb.addEventListener('click', function (e) { if (e.target === lb) close(); });
+    document.addEventListener('keydown', function (e) {
+      if (lb.hidden) return;
+      if (e.key === 'Escape') close();
+      if (e.key === 'ArrowLeft') render(idx - 1, true);
+      if (e.key === 'ArrowRight') render(idx + 1, true);
+    });
+    // 左右滑动换张
+    var sx = null;
+    var sy = null;
+    lb.addEventListener('touchstart', function (e) { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+    lb.addEventListener('touchend', function (e) {
+      if (sx === null) return;
+      var dx = e.changedTouches[0].clientX - sx;
+      var dy = e.changedTouches[0].clientY - sy;
+      sx = null;
+      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) render(idx + (dx < 0 ? 1 : -1), true);
+    }, { passive: true });
+  })();
+
   /* ---------- 倒数 ---------- */
   C.countdown(function (t) {
     $('cdDays').textContent = String(t.days);

@@ -385,6 +385,73 @@ html[data-lang="en"] .note-label { font: 600 19px/1.1 var(--hand-en); }
 .btn.gold { background: linear-gradient(180deg, var(--gold-hi), var(--gold)); border-color: var(--gold-deep); color: var(--navy); }
 .btn svg { width: 18px; height: 18px; flex: none; }
 
+/* ---------- 附件 B · 董事长工作照（拍立得横向相册） ---------- */
+.reel {
+  display: flex; gap: 14px; overflow-x: auto; overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch;
+  margin: 0 calc(-1 * var(--gutter)); padding: 10px var(--gutter) 22px;
+  scrollbar-width: none;
+}
+.reel::-webkit-scrollbar { display: none; }
+.snap {
+  flex: 0 0 min(68%, 250px); margin: 0; scroll-snap-align: center;
+  opacity: 0; transform: translateX(60px) rotate(6deg);
+}
+.snap.is-on { opacity: 1; transform: rotate(var(--tilt, -2deg)); transition: opacity .5s, transform .7s var(--ease-back); }
+.snap-btn {
+  display: block; width: 100%; padding: 9px 9px 0; border: 0; text-align: left;
+  background: #fff; border-radius: 4px; box-shadow: 0 10px 24px rgba(15, 26, 46, .18), 0 1px 3px rgba(15, 26, 46, .15);
+  transition: transform .2s var(--ease-out);
+}
+.snap-btn:active { transform: scale(.97); }
+.snap-photo { position: relative; aspect-ratio: 4 / 5; overflow: hidden; background: var(--paper-2); border-radius: 2px; }
+.snap-photo img { width: 100%; height: 100%; object-fit: cover; }
+.snap-tag {
+  position: absolute; left: 8px; top: 8px; max-width: calc(100% - 16px);
+  padding: 3px 8px; border-radius: 3px; background: rgba(15, 26, 46, .82); color: #fff;
+  font: 600 11px/1.3 var(--mono); letter-spacing: .02em;
+}
+.snap-tag .up { color: #39D98A; }
+.snap-tag .down { color: #FF7A84; }
+.snap-cap { display: block; padding: 10px 2px 12px; font: 400 19px/1.25 var(--hand); color: var(--ink); min-height: 4.2em; }
+html[data-lang="en"] .snap-cap { font: 600 18px/1.2 var(--hand-en); }
+.reel-dots { display: flex; justify-content: center; gap: 6px; margin-top: -6px; }
+.reel-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--line); transition: background .2s, transform .2s; }
+.reel-dots i.on { background: var(--gold-deep); transform: scale(1.3); }
+.reel.hint { animation: reelHint 1.4s .3s ease-in-out 1; }
+@keyframes reelHint { 0%, 100% { transform: translateX(0); } 40% { transform: translateX(-28px); } 70% { transform: translateX(6px); } }
+
+.lightbox {
+  position: fixed; inset: 0; z-index: 80; display: grid; place-items: center;
+  padding: calc(56px + env(safe-area-inset-top)) 12px calc(20px + env(safe-area-inset-bottom));
+  background: rgba(10, 16, 30, .985); color: var(--paper);
+  animation: lbIn .25s ease-out;
+}
+.lightbox[hidden] { display: none; }
+@keyframes lbIn { from { opacity: 0; } to { opacity: 1; } }
+.lb-fig { margin: 0; width: min(100%, 460px); text-align: center; }
+.lb-fig img {
+  width: auto; max-width: 100%; max-height: 68vh; margin: 0 auto; border: 8px solid #fff; border-radius: 3px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, .5); touch-action: pan-y;
+}
+.lb-fig img.swap { animation: lbSwap .3s var(--ease-out); }
+@keyframes lbSwap { from { opacity: .2; transform: scale(.96); } to { opacity: 1; transform: none; } }
+.lb-fig figcaption { display: grid; gap: 6px; margin-top: 14px; }
+.lb-tag { justify-self: center; padding: 3px 10px; border-radius: 3px; background: rgba(255, 255, 255, .1); font: 600 12px/1.4 var(--mono); color: var(--gold-hi); }
+.lb-cap { font: 400 24px/1.3 var(--hand); }
+html[data-lang="en"] .lb-cap { font: 600 23px/1.2 var(--hand-en); }
+.lb-count { font: 500 12px/1 var(--mono); color: rgba(247, 240, 225, .55); }
+.lb-close, .lb-nav {
+  position: absolute; border: 0; background: rgba(255, 255, 255, .12); color: #fff;
+  width: 46px; height: 46px; border-radius: 50%; font: 400 26px/1 var(--sans); display: grid; place-items: center;
+}
+.lb-close { top: calc(10px + env(safe-area-inset-top)); right: 12px; font-size: 20px; }
+.lb-nav { top: 50%; margin-top: -23px; }
+.lb-nav.prev { left: 8px; }
+.lb-nav.next { right: 8px; }
+body.lb-open { overflow: hidden; }
+body.lb-open .sticky-rsvp { visibility: hidden; }
+
 /* ---------- 年度业绩 · KPI 卡 ---------- */
 .kpis { display: grid; gap: 12px; }
 .kpi {
@@ -656,4 +723,5 @@ html[data-lang="en"] .cert .c-name { font: 700 40px/1.05 var(--hand-en); }
   .ticker-track { animation: none; }
   .reveal, .kpi, .badge { opacity: 1; transform: none; }
   .glint, .sparkle { display: none; }
+  .snap { opacity: 1; transform: rotate(var(--tilt, -2deg)); }
 }
