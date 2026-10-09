@@ -71,7 +71,7 @@ export default function Settings() {
     setBusy('backup');
     try {
       const blob = await exportBackup({ includeVideos: !noVideo, onProgress: (d, t) => setProg(`${d} / ${t}`) });
-      downloadBlob(blob, `溪岸SITE备份_${todayISO()}${noVideo ? '_无视频' : ''}.jsonl`);
+      downloadBlob(blob, `TORA备份_${todayISO()}${noVideo ? '_无视频' : ''}.jsonl`);
       toast(`备份文件已下载（${fmtBytes(blob.size)}），请存到云盘`);
     } catch (e) {
       toast(`备份失败：${e.message}`, 'error');
@@ -186,7 +186,7 @@ export default function Settings() {
         </section>
 
         <section className="px-2 pb-4 text-center text-[12px] leading-relaxed text-ink-mute">
-          溪岸 SITE · 现场报告 v1
+          TORA by Riccione Reka · 现场报告 v1
           <br />
           {store.settings.company || '溪岸 Sail by Riccione Reka'}
         </section>

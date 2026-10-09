@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "溪岸 SITE — 现场主管手机填报告，一键出 PDF / Word / Excel / WhatsApp 文案",
+  "description": "TORA by Riccione Reka — 现场主管手机填报告，一键出 PDF / Word / Excel / WhatsApp 文案",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

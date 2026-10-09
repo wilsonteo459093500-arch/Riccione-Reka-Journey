@@ -95,7 +95,7 @@ export async function importBackup(file, { onProgress } = {}) {
     if (e instanceof RangeError) throw new Error('备份文件太大，这台设备读不了');
     throw new Error('不是有效的备份文件');
   }
-  if (head?.format !== FORMAT) throw new Error('不是溪岸 SITE 的备份文件');
+  if (head?.format !== FORMAT) throw new Error('不是 TORA 的备份文件');
 
   const stats = { projects: 0, reports: 0, media: 0, skipped: 0 };
   const newer = async (store, row) => {

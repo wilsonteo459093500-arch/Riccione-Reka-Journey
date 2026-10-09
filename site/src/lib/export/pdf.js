@@ -124,7 +124,7 @@ export async function exportPdf(model, media, { onProgress, quality = 0.88, scal
     title: m.filename || 'report',
     subject: m.templateId || '',
     author: 'Sail by Riccione Reka',
-    creator: 'Sail SITE',
+    creator: 'TORA by Riccione Reka',
   });
   return pdf.output('blob');
 }

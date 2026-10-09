@@ -1,4 +1,4 @@
-// 溪岸 SITE service worker（构建时由 vite.config.js 生成 dist/sw.js，注入版本号与预缓存清单）
+// TORA service worker（构建时由 vite.config.js 生成 dist/sw.js，注入版本号与预缓存清单）
 //
 // - 安装时预缓存整个 App（含 PDF / Word / Excel 引擎）：第一次联网打开后，工地没信号也能打开、填写、导出
 // - 页面：网络优先，但 3 秒拿不到就用缓存（信号差时不白屏）；只缓存正常的 HTML（不缓存 404 / 门户登录页）

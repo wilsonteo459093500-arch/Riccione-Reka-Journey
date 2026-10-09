@@ -133,9 +133,8 @@ export default function Home() {
       <header className="bg-pine pt-safe text-white">
         <div className="mx-auto max-w-lg px-4 pb-6 pt-4">
           <div className="flex items-center gap-2">
-            <div className="font-serif text-[26px] italic leading-none tracking-wide">Sail</div>
-            <div className="text-[18px] font-semibold tracking-[0.2em]">溪岸</div>
-            <div className="ml-1 rounded-md bg-white/15 px-1.5 py-0.5 text-[11px] font-bold tracking-widest">SITE</div>
+            <div className="text-[24px] font-bold leading-none tracking-[0.3em]">TORA</div>
+            <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/70">by Riccione Reka</div>
           </div>
           <div className="mt-4 text-[22px] font-bold leading-tight">{hello}</div>
           <div className="mt-1 text-[13px] text-white/70">手机填写 · 逐项拍照 · 一键出 PDF / Word / Excel / WhatsApp 文案</div>

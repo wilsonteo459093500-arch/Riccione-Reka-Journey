@@ -1155,7 +1155,7 @@ function buildChildren(model, M, logo, A) {
   if (meta.footer) kids.push(P(T(meta.footer, { size: 8, bold: true, color: A }), { align: AlignmentType.CENTER, before: 240 }));
   const gen = fmtGenerated(meta.generatedAt);
   kids.push(
-    P(T(`${meta.dept ? `${clean(meta.dept)} · ` : ''}溪岸 SITE 生成 Generated ${gen}`, { size: 6.5, color: C.faint }), {
+    P(T(`${meta.dept ? `${clean(meta.dept)} · ` : ''}TORA 生成 Generated ${gen}`, { size: 6.5, color: C.faint }), {
       align: AlignmentType.CENTER,
       before: meta.footer ? 60 : 300,
     }),
@@ -1178,7 +1178,7 @@ export async function exportDocx(model, media, { logo } = {}) {
 
   const doc = new Document({
     creator: clean(meta.company || '溪岸 Sail by Riccione Reka'),
-    lastModifiedBy: '溪岸 SITE',
+    lastModifiedBy: 'TORA by Riccione Reka',
     title: clean(meta.reportTitle || t.zh || 'Report'),
     subject: [t.zh, t.en].filter(Boolean).join(' '),
     description: clean(meta.reportTitle || ''),

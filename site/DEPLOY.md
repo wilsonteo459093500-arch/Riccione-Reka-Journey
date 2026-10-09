@@ -1,22 +1,22 @@
-# 溪岸 SITE · 部署指南 (Vercel)
+# TORA by Riccione Reka · 部署指南 (Vercel)
 
 和 UKIR STUDIO 一样：**纯前端，不需要数据库、不需要 API key**，5 分钟上线。
 
 ## 1) 在 Vercel 创建独立项目
 
 > 这个 repo 里已经有好几个 Vercel 项目（Delivery OS / CRM / Render / Studio）。
-> 溪岸 SITE 要**再开一个**，指向 `site/` 子目录。
+> TORA 要**再开一个**，指向 `site/` 子目录。
 
 1. 打开 https://vercel.com/new
 2. 选择 GitHub repo `wilsonteo459093500-arch/Riccione-Reka-Journey` → **Import**
 3. **Configure Project** 页面：
-   - **Project Name**：`sail-site`（随便起）
+   - **Project Name**：`tora-riccione-reka`（随便起）
    - **Framework Preset**：自动识别为 **Vite**
    - **Root Directory**：点 **Edit** → 选 **site** ⚠️ 最关键的一步
    - Build Command / Output Directory 保持默认
 4. 不需要任何环境变量，直接 **Deploy**
 
-拿到 `sail-site-xxxx.vercel.app` 网址后用手机打开，看到「今天做哪份报告？」即成功。
+拿到 `tora-riccione-reka.vercel.app` 网址后用手机打开，看到「今天做哪份报告？」即成功。
 （可在 Vercel → Settings → Domains 绑一个好记的域名，例如 `site.你的域名.com`。）
 
 ## 2) 发给现场主管
