@@ -7,7 +7,8 @@ globalThis.localStorage = {
   setItem: (k, v) => mem.set(k, String(v)),
   removeItem: (k) => mem.delete(k),
 };
-globalThis.window ??= { addEventListener() {} };
+globalThis.window ??= new EventTarget();
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const { markPicker, clearPicker, takeInterrupted, anchorOf } = await import('../src/lib/pickerGuard.js');
 
@@ -29,6 +30,20 @@ export const tests = [
     localStorage.setItem('tora.picker', JSON.stringify({ reportId: 'r1', at: Date.now() - 11 * 60 * 1000 }));
     assert.equal(takeInterrupted(), null);
     localStorage.setItem('tora.picker', '{坏数据');
+    assert.equal(takeInterrupted(), null);
+  }],
+  ['连着拍：上一张回来的延时清理不会误删下一次的记录', async () => {
+    markPicker(null, { reportId: 'r1', anchor: 'item-a', kind: 'camera' });
+    window.dispatchEvent(new Event('focus')); // 第一张拍完回来，1.5 秒后清理
+    await wait(200);
+    markPicker(null, { reportId: 'r1', anchor: 'item-b', kind: 'camera' }); // 马上拍下一项
+    await wait(1700);
+    const info = takeInterrupted(); // 第二次拍照时页面被关掉
+    assert.equal(info?.anchor, 'item-b');
+    // 正常回来：焦点回到页面 1.5 秒后清掉
+    markPicker(null, { reportId: 'r1', anchor: 'item-c', kind: 'camera' });
+    window.dispatchEvent(new Event('focus'));
+    await wait(1700);
     assert.equal(takeInterrupted(), null);
   }],
   ['取按钮所在检查项 / 字段的 id', () => {

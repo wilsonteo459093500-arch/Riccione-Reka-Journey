@@ -1,7 +1,9 @@
 // TORA service worker（构建时由 vite.config.js 生成 dist/sw.js，注入版本号与预缓存清单）
 //
 // - 安装时预缓存整个 App（含 PDF / Word / Excel 引擎）：第一次联网打开后，工地没信号也能打开、填写、导出
-// - 页面：网络优先，但 3 秒拿不到就用缓存（信号差时不白屏）；只缓存正常的 HTML（不缓存 404 / 门户登录页）
+// - 安装是整批的：任何一个文件没下载成功就算安装失败，旧版本和它完整的缓存继续用（下次打开再试）
+// - 页面：网络优先，但 3 秒拿不到就用缓存（信号差时不白屏）；新发布的版本主程序还没缓存好时先用旧版，
+//   新版在后台下载完会自动接管，下次打开就是新版（避免新 HTML 配上没下载完的新 JS 而白屏）
 // - 打包资源（文件名带 hash）：缓存优先
 const VERSION = 'site-__VERSION__';
 const PRECACHE = __PRECACHE__;
@@ -10,7 +12,7 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(VERSION)
-      .then((c) => Promise.all(PRECACHE.map((u) => c.add(new Request(u, { cache: 'reload' })).catch(() => {}))))
+      .then((c) => c.addAll(PRECACHE.map((u) => new Request(u, { cache: 'reload' }))))
       .then(() => self.skipWaiting()),
   );
 });
@@ -36,16 +38,14 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       (async () => {
         const cached = await caches.match('/index.html');
+        if (!cached) return fetch(req);
         const net = fetch(req).then(async (res) => {
-          if (isHtml(res)) {
-            // 直接写缓存（3 秒兜底已返回时 respondWith 已结束，不能再 waitUntil）
-            const copy = res.clone();
-            caches.open(VERSION).then((c) => c.put('/index.html', copy)).catch(() => {});
-            return res;
-          }
-          return cached || res;
+          if (!isHtml(res)) return cached;
+          // /index.html 只来自各版本自己的预缓存（和同版本的 JS 配套），这里不写缓存
+          const entry = (await res.clone().text()).match(/<script[^>]*type="module"[^>]*src="([^"]+)"/)?.[1];
+          if (entry && !(await caches.match(entry))) return cached;
+          return res;
         });
-        if (!cached) return net;
         const slow = new Promise((resolve) => setTimeout(() => resolve(cached), 3000));
         try {
           return await Promise.race([net, slow]);

@@ -289,7 +289,19 @@ try {
       }),
   );
   assert.equal(crewReports, 1, `师傅手机上应只有 1 份汇报，实际 ${crewReports}`);
+  // 师傅自己关掉师傅模式后，第二天再点链接不会又被打开
+  await crewPage.goto(`${BASE}/#/`);
+  await crewPage.getByRole('button', { name: '显示全部报告' }).click();
+  await crewPage.waitForTimeout(300);
+  assert.ok((await crewPage.locator('main button.card div.text-\\[15px\\]').count()) >= 7);
+  await crewPage.goto(crewUrl);
+  await crewPage.getByText('每日安装汇报').first().waitFor();
+  await crewPage.goto(`${BASE}/#/`);
+  await crewPage.getByText('今天做哪份').waitFor();
+  assert.ok((await crewPage.locator('main button.card div.text-\\[15px\\]').count()) >= 7, '关掉的师傅模式又被链接打开了');
   // 文案可以发群
+  await crewPage.goto(crewUrl);
+  await crewPage.getByText('每日安装汇报').first().waitFor();
   await crewPage.getByRole('button', { name: /生成文案/ }).click();
   await crewPage.getByText('WhatsApp 文案').waitFor();
   assert.match(await crewPage.locator('div.whitespace-pre-wrap').first().textContent(), /鞋柜、主卧衣柜柜体安装完成/);

@@ -91,7 +91,7 @@ function daily(previous = []) {
   return r;
 }
 
-const prev = (id, date, extra = {}) => ({ id, templateId: 'daily-report', projectId: P.id, values: { date }, ...extra });
+const prev = (id, date, extra = {}) => ({ id, templateId: 'daily-report', projectId: P.id, values: { date, todayWork: '柜体安装' }, ...extra });
 
 // 其他 agent 并行写的模板：存在就测，不存在跳过
 async function maybe(path) {
@@ -247,24 +247,27 @@ export const tests = [
       prev('f', '2026-10-05', { projectId: 'p_other' }),
       prev('g', '2026-10-05', { templateId: 'quality-check' }),
       prev('h', ''),
-      { id: 'i', values: { date: '2026-10-01' } }, // 调用方已过滤，没有 templateId / projectId 也算
+      { id: 'i', values: { date: '2026-10-01', todayWork: '进场' } }, // 调用方已过滤，没有 templateId / projectId 也算
+      prev('j', '2026-10-02', { values: { date: '2026-10-02' } }), // 只点开没填的草稿不算
     ];
     assert.equal(dayNumber(previous, '2026-10-08', { projectId: P.id }), 4);
     assert.equal(dayNumber([], '2026-10-08'), 1);
     assert.equal(dayNumber(previous, '', { projectId: P.id }), 1);
     assert.equal(dayNumber([prev('x', '2026-10-07'), prev('self', '2026-10-01')], '2026-10-08', { reportId: 'self' }), 2);
-    const ctx = { project: P, previous, report: { id: 'r1', values: { date: '2026-10-08' } }, today: '2026-10-20' };
+    // 不带开工日期（开工日期的规则见 crew.test.mjs）
+    const NP = { ...P, startDate: '' };
+    const ctx = { project: NP, previous, report: { id: 'r1', values: { date: '2026-10-08' } }, today: '2026-10-20' };
     assert.equal(autoDuration(ctx), '剩余 2 天（今天第 4 天 / 共 5 天）');
-    assert.equal(autoDuration({ ...ctx, project: { ...P, plannedDays: 3 } }), '已超出预计工期（今天第 4 天 / 原定 3 天）');
-    assert.equal(autoDuration({ ...ctx, project: { ...P, plannedDays: '' } }), '');
+    assert.equal(autoDuration({ ...ctx, project: { ...NP, plannedDays: 3 } }), '已超出预计工期（今天第 4 天 / 原定 3 天）');
+    assert.equal(autoDuration({ ...ctx, project: { ...NP, plannedDays: '' } }), '');
     // 新建时按今天算：前两天各一份 → 今天第 3 天
     const t = todayISO();
-    const r = createReport(dailyReport, { project: P, settings: S, previous: [prev('y', addDays(t, -2)), prev('z', addDays(t, -1)), prev('w', t)] });
+    const r = createReport(dailyReport, { project: NP, settings: S, previous: [prev('y', addDays(t, -2)), prev('z', addDays(t, -1)), prev('w', t)] });
     assert.equal(r.values.duration, '剩余 3 天（今天第 3 天 / 共 5 天）');
     assert.equal(r.values.date, t);
     // 「照上次再写一份」：工期重新计算，今日内容 / 下一步计划清空
     const src = daily();
-    const dup = duplicateReport(dailyReport, src, { project: P, settings: S, previous: [prev('y', addDays(t, -1))] });
+    const dup = duplicateReport(dailyReport, src, { project: NP, settings: S, previous: [prev('y', addDays(t, -1))] });
     assert.equal(dup.values.duration, '剩余 4 天（今天第 2 天 / 共 5 天）');
     assert.equal(dup.values.todayWork, '');
     assert.equal(dup.values.nextPlan, '');

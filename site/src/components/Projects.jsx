@@ -143,11 +143,14 @@ export function ProjectEdit({ projectId }) {
         {!isNew && !p.shared && (
           <CrewShare
             project={p}
-            ensureSaved={async () => {
+            current={() => {
               const d = draft.current;
-              if (!dirty.current || !d || !(d.name || '').trim()) return null;
+              if (!dirty.current || !d || !(d.name || '').trim()) return { p, dirty: false };
+              return { p: { ...p, ...d, name: d.name.trim(), updatedAt: Date.now() }, dirty: true };
+            }}
+            persist={(next) => {
               dirty.current = false;
-              return store.saveProject({ ...d, name: d.name.trim() });
+              store.saveProject(next);
             }}
           />
         )}

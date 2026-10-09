@@ -153,11 +153,11 @@ export default function Settings() {
                 type="checkbox"
                 className="h-5 w-5 accent-terra"
                 checked={!!store.settings.crew}
-                onChange={(e) => store.updateSettings({ crew: e.target.checked })}
+                onChange={(e) => store.updateSettings({ crew: e.target.checked, crewChosen: true })}
               />
               <span className="flex-1">
                 <span className="block text-[15px] font-bold text-ink">安装师傅模式</span>
-                <span className="block text-[12px] text-ink-mute">首页只显示每日汇报（用主管发的链接打开时自动开启）</span>
+                <span className="block text-[12px] text-ink-mute">首页只显示每日汇报（新手机第一次用主管发的链接打开时自动开启）</span>
               </span>
             </label>
           </section>

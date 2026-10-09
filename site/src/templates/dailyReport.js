@@ -28,31 +28,56 @@ export function durationText(total, dayN = 1) {
   return `剩余 ${left} 天（今天第 ${k} 天 / 共 ${t} 天）`;
 }
 
+// 只点开、什么都没填的草稿（如师傅开工前点链接看看）不算一个工作日
+const FILLED = ['todayWork', 'progressPhotos', 'hygienePhotos', 'utilitiesPhotos', 'exitVideo'];
+const filled = (r) => FILLED.some((k) => has(r?.values?.[k]));
+
 /**
- * 今天是第几天：之前（日期严格早于 date）的每日汇报按日期去重计数 + 1。
- * 同一天补发 / 日期更晚的汇报不算；不同项目 / 其他模板的报告忽略。
+ * 之前的每日汇报：日期严格早于 date、已填写；同一项目（调用方没给项目时不限）；
+ * 给了开工日期时，开工前的不算。不同项目 / 其他模板 / 本报告自己忽略。
  */
-export function dayNumber(previous, date, { projectId, reportId } = {}) {
+function earlierReports(previous, date, { projectId, reportId, startDate } = {}) {
   const today = fmtDate(date);
-  if (!ISO.test(today)) return 1;
-  const days = new Set();
-  for (const p of previous || []) {
-    if (!p || (reportId && p.id === reportId)) continue;
-    if (p.templateId && p.templateId !== ID) continue;
-    if (projectId && p.projectId && p.projectId !== projectId) continue;
+  if (!ISO.test(today)) return [];
+  const start = fmtDate(startDate);
+  return (previous || []).filter((p) => {
+    if (!p || (reportId && p.id === reportId)) return false;
+    if (p.templateId && p.templateId !== ID) return false;
+    if (projectId && p.projectId && p.projectId !== projectId) return false;
     const d = fmtDate(p.values?.date);
-    if (ISO.test(d) && d < today) days.add(d);
-  }
-  return days.size + 1;
+    return ISO.test(d) && d < today && (!ISO.test(start) || d >= start) && filled(p);
+  });
 }
 
-/** 新建时自动带出预计工期（报告日期未定时按今天算） */
+/** 今天是第几天：之前的每日汇报按日期去重计数 + 1（同一天补发只算一天） */
+export function dayNumber(previous, date, opts = {}) {
+  return new Set(earlierReports(previous, date, opts).map((p) => fmtDate(p.values.date))).size + 1;
+}
+
+const DAY_RE = /今天第\s*(\d+)\s*天/;
+
+/**
+ * 新建时自动带出预计工期（报告日期未定时按今天算）：
+ * 1. 这台手机上有之前的汇报 → 接着最近那份的「今天第 k 天」往下数（手改过就照改过的数）
+ * 2. 没有（如师傅中途接手、换了手机 / 浏览器）→ 按项目开工日期推算
+ * 3. 最近那份没写第几天（旧报告）→ 按汇报计数，再补上开工到第一份汇报之间的天数
+ */
 export function autoDuration(ctx) {
   const date = fmtDate(ctx.report?.values?.date || ctx.today);
-  let n = dayNumber(ctx.previous, date, { projectId: ctx.project?.id, reportId: ctx.report?.id });
-  // 这台手机上没有之前的汇报（如师傅换了手机 / 浏览器）：按项目开工日期推算第几天
   const start = fmtDate(ctx.project?.startDate);
-  if (n === 1 && ISO.test(start) && ISO.test(date) && date > start) n = daysBetween(start, date) + 1;
+  const opts = { projectId: ctx.project?.id, reportId: ctx.report?.id, startDate: start };
+  const earlier = earlierReports(ctx.previous, date, opts).sort((a, b) => fmtDate(a.values.date).localeCompare(fmtDate(b.values.date)));
+  let n = 1;
+  if (earlier.length) {
+    const k = Number(String(earlier[earlier.length - 1].values?.duration || '').match(DAY_RE)?.[1]);
+    if (k > 0) n = k + 1;
+    else {
+      const first = fmtDate(earlier[0].values.date);
+      n = dayNumber(ctx.previous, date, opts) + (ISO.test(start) && first > start ? daysBetween(start, first) : 0);
+    }
+  } else if (ISO.test(start) && ISO.test(date) && date > start) {
+    n = daysBetween(start, date) + 1;
+  }
   return durationText(ctx.project?.plannedDays, n);
 }
 

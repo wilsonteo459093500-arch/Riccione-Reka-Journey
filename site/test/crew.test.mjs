@@ -117,8 +117,33 @@ export const tests = [
     assert.equal(autoDuration(ctx('2026-10-06')), '预计 5 天（今天第 1 天）');
     assert.equal(autoDuration(ctx('2026-10-01')), '预计 5 天（今天第 1 天）', '开工之前');
     assert.equal(autoDuration(ctx('2026-10-08', [], { ...P, startDate: '' })), '预计 5 天（今天第 1 天）');
-    // 有之前的汇报时仍按汇报计数（跳过没开工的日子）
-    const prev = [{ id: 'a', templateId: 'daily-report', projectId: 'p', values: { date: '2026-10-07' } }];
-    assert.equal(autoDuration(ctx('2026-10-09', prev)), '剩余 4 天（今天第 2 天 / 共 5 天）');
+    // 之前那份没写第几天（旧报告）：汇报计数 + 开工到第一份之间的天数
+    const old = [{ id: 'a', templateId: 'daily-report', projectId: 'p', values: { date: '2026-10-07', todayWork: '柜体' } }];
+    assert.equal(autoDuration(ctx('2026-10-09', old)), '剩余 3 天（今天第 3 天 / 共 5 天）');
+    // 只点开没填的草稿、开工前的汇报都不算
+    const drafts = [
+      { id: 'd1', templateId: 'daily-report', projectId: 'p', values: { date: '2026-10-07' } },
+      { id: 'd2', templateId: 'daily-report', projectId: 'p', values: { date: '2026-10-05', todayWork: '量尺' } },
+    ];
+    assert.equal(autoDuration(ctx('2026-10-08', drafts)), '剩余 3 天（今天第 3 天 / 共 5 天）');
+    // 主管把链接提前一天发来，师傅当晚点开看看（空草稿）→ 开工当天仍是第 1 天
+    const eve = [{ id: 'e', templateId: 'daily-report', projectId: 'p', values: { date: '2026-10-05', duration: '预计 5 天（今天第 1 天）' } }];
+    assert.equal(autoDuration(ctx('2026-10-06', eve)), '预计 5 天（今天第 1 天）');
+  }],
+  ['预计工期：师傅中途接手，之后每天接着往下数（不会倒退回第 2 天）', () => {
+    // 开工 10-05，主管在自己手机上发了 4 天；师傅 10-09 用新手机第一次点链接
+    const P = { id: 'p', plannedDays: 10, startDate: '2026-10-05' };
+    const device = [];
+    const day = (date, extra = {}) => {
+      const duration = autoDuration({ project: P, previous: device, report: { id: `r_${date}`, values: { date } }, today: date });
+      device.push({ id: `r_${date}`, templateId: 'daily-report', projectId: 'p', values: { date, duration, todayWork: '安装', ...extra } });
+      return duration;
+    };
+    assert.equal(day('2026-10-09'), '剩余 6 天（今天第 5 天 / 共 10 天）');
+    assert.equal(day('2026-10-10'), '剩余 5 天（今天第 6 天 / 共 10 天）');
+    assert.equal(day('2026-10-12'), '剩余 4 天（今天第 7 天 / 共 10 天）', '周日没开工，跳过的日子不算');
+    // 师傅手改了天数 → 第二天照改过的数
+    device[device.length - 1].values.duration = '剩余 3 天（今天第 8 天 / 共 10 天）';
+    assert.equal(day('2026-10-13'), '剩余 2 天（今天第 9 天 / 共 10 天）');
   }],
 ];

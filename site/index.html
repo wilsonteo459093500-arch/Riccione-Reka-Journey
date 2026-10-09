@@ -15,6 +15,18 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // 信号太差、主程序没下载下来时不要一直白屏：12 秒后还没画出来就提示（主程序一画出来就会盖掉这段）
+      setTimeout(function () {
+        var r = document.getElementById('root');
+        if (r && !r.firstChild) {
+          r.innerHTML =
+            '<div style="max-width:22rem;margin:30vh auto 0;padding:0 24px;text-align:center;font:15px/1.6 system-ui,sans-serif;color:#4a4a44">' +
+            '信号太差，TORA 还没下载完。<br>请到信号好一点的地方再打开。' +
+            '<br><button onclick="location.reload()" style="margin-top:16px;padding:10px 22px;border:0;border-radius:12px;background:#2F4A3C;color:#fff;font:inherit">重新打开</button></div>';
+        }
+      }, 12000);
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

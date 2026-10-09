@@ -19,13 +19,13 @@ export async function openCrewToday(store, project, { replace = false } = {}) {
   navigate(`/r/${report.id}`, { replace });
 }
 
-/** 导入链接里的项目；新手机（没有自己的项目 / 报告）自动切换成师傅模式。返回项目 */
+/** 导入链接里的项目；新手机（没有自己的项目 / 报告）第一次自动切换成师傅模式（之后以手动开关为准）。返回项目 */
 export async function importCrew(store, data) {
   const local = store.projectById(data.project.id);
   const merged = mergeCrewProject(local, data);
   const fresh = !hasOwnWork(store.projects, store.reports);
   const project = merged ? await store.saveProject(merged) : local;
-  if (fresh && !store.settings.crew) await store.updateSettings({ crew: true });
+  if (fresh && !store.settings.crew && !store.settings.crewChosen) await store.updateSettings({ crew: true, crewChosen: true });
   return project;
 }
 
@@ -68,15 +68,19 @@ export default function CrewLink({ payload }) {
   );
 }
 
-/** 项目页：把每日汇报链接发给安装师傅 */
-export function CrewShare({ project, ensureSaved }) {
+/**
+ * 项目页：把每日汇报链接发给安装师傅。
+ * current() 同步给出含未保存修改的项目；先打开 WhatsApp / 复制，再 persist() 保存 ——
+ * iPhone 只在点按当下允许弹出 / 写剪贴板，中间等存储就会失效。
+ */
+export function CrewShare({ project, current, persist }) {
   const store = useStore();
   const { toast } = useUI();
   const included = CREW_FIELDS.filter((k) => project[k] != null && String(project[k]).trim()).map((k) => CREW_FIELD_LABELS[k]);
 
-  const build = async () => {
-    const p = (await ensureSaved?.()) || project;
-    return { p, link: crewLink(p, store.settings) };
+  const build = () => {
+    const { p, dirty } = current?.() || { p: project, dirty: false };
+    return { p, dirty, link: crewLink(p, store.settings) };
   };
 
   return (
@@ -98,9 +102,10 @@ export function CrewShare({ project, ensureSaved }) {
       <div className="mt-3 flex gap-2">
         <button
           className="btn-primary flex-1 py-2.5 text-[14px]"
-          onClick={async () => {
-            const { p, link } = await build();
+          onClick={() => {
+            const { p, dirty, link } = build();
             openWhatsApp(crewMessage(siteLabel(p), link));
+            if (dirty) persist?.(p);
           }}
         >
           <Icon name="MessageCircle" size={17} /> WhatsApp 发送
@@ -108,8 +113,10 @@ export function CrewShare({ project, ensureSaved }) {
         <button
           className="btn-ghost flex-1 py-2.5 text-[14px]"
           onClick={async () => {
-            const { link } = await build();
-            const ok = await copyText(link);
+            const { p, dirty, link } = build();
+            const copied = copyText(link);
+            if (dirty) persist?.(p);
+            const ok = await copied;
             toast(ok ? '链接已复制，可以粘贴到 WhatsApp 发给师傅' : '复制失败，请改用「WhatsApp 发送」', ok ? 'ok' : 'error');
           }}
         >
@@ -121,14 +128,14 @@ export function CrewShare({ project, ensureSaved }) {
 }
 
 /** 新手机首页：粘贴主管发的链接（iPhone 主屏幕 App 和 Safari 资料分开，点链接导入不到主屏幕 App 时用） */
-export function CrewPaste() {
+export function CrewPaste({ label = '安装师傅？点这里粘贴主管发的链接' }) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState('');
   const [bad, setBad] = useState(false);
   if (!open) {
     return (
       <button className="mx-auto mb-6 block text-[13px] font-semibold text-terra" onClick={() => setOpen(true)}>
-        安装师傅？点这里粘贴主管发的链接
+        {label}
       </button>
     );
   }

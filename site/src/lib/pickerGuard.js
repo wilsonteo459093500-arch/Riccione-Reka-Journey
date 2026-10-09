@@ -12,21 +12,42 @@ export function clearPicker() {
   }
 }
 
+let pending = null; // 上一次打开的善后（计时器 / 监听），下一次打开前先撤掉
+
 /**
  * 在 input.click() 之前调用。
  * @param {HTMLInputElement|null} input
  * @param {{ reportId?: string, anchor?: string, kind?: 'camera'|'library'|'video' }} info
  */
 export function markPicker(input, info) {
+  pending?.();
+  pending = null;
+  const at = Date.now();
   try {
-    localStorage.setItem(KEY, JSON.stringify({ ...info, at: Date.now() }));
+    localStorage.setItem(KEY, JSON.stringify({ ...info, at }));
   } catch {
     return;
   }
+  // 只清自己这一次的记录：上一张拍完回来的延时清理不能误删紧接着这一次的记录
+  const clearMine = () => {
+    try {
+      if (JSON.parse(localStorage.getItem(KEY) || 'null')?.at === at) localStorage.removeItem(KEY);
+    } catch {
+      /* ignore */
+    }
+  };
   // 取消选择：新版 Chrome 会发 cancel；旧版只能等页面重新拿到焦点
-  input?.addEventListener('cancel', clearPicker, { once: true });
-  const onFocus = () => setTimeout(clearPicker, 1500);
+  let timer = 0;
+  const onFocus = () => {
+    timer = setTimeout(clearMine, 1500);
+  };
+  input?.addEventListener('cancel', clearMine, { once: true });
   window.addEventListener('focus', onFocus, { once: true });
+  pending = () => {
+    clearTimeout(timer);
+    input?.removeEventListener('cancel', clearMine);
+    window.removeEventListener('focus', onFocus);
+  };
 }
 
 /** 页面刚加载时调用一次：返回被打断的那次记录（并清掉），没有则 null */

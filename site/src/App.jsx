@@ -32,8 +32,9 @@ function InterruptNotice() {
         `${act}时手机运行内存不够，浏览器被系统暂时关掉了，所以这次的${what}没传回来。报告已自动保存，填过的内容都在。\n\n` +
         '这样做就不会再丢：\n' +
         '• 先用手机相机拍好，再点「相册」一次选多张（最稳）\n' +
-        '• 拍照前把后台其他 App 关掉\n' +
-        '• 用 Chrome 打开并加到主屏幕使用，不要在 WhatsApp 里直接打开',
+        '• 拍照前把后台其他 App 关掉' +
+        // iPhone 的主屏幕 App / Chrome 和 Safari 资料分开，不建议换地方；安卓 Chrome 与主屏幕 App 共用资料
+        (/android/i.test(navigator.userAgent) ? '\n• 用 Chrome 打开并加到主屏幕使用，不要在 WhatsApp 里直接打开' : ''),
       okText: '知道了',
       alert: true,
     });

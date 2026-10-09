@@ -150,7 +150,7 @@ export default function Home() {
       </header>
 
       <main className="mx-auto -mt-3 max-w-lg px-3">
-        {isIOS && !standalone && !hideInstall && (
+        {isIOS && !standalone && !hideInstall && !crew && (
           <div className="card mb-3 border-l-4 border-l-pine p-3">
             <div className="flex items-start gap-3">
               <Icon name="Smartphone" size={20} className="mt-0.5 shrink-0 text-pine" />
@@ -193,6 +193,13 @@ export default function Home() {
             <div className="text-[13px] leading-relaxed text-ink-soft">
               <b className="text-ink">安装师傅</b>：每天收工前填好每日汇报，点「分享文案 + 照片」发到群里。
             </div>
+            {isIOS && (
+              <div className="mt-1 text-[12px] leading-relaxed text-ink-mute">
+                {standalone
+                  ? 'WhatsApp 里的链接会用 Safari 打开，和这里的资料不通：请固定在一个地方填（收到新链接就在下面粘贴）。'
+                  : '每天从 WhatsApp 点链接打开就行，不用加到主屏幕（主屏幕 App 和 Safari 的资料是分开的）。'}
+              </div>
+            )}
             {sharedProjects.map((p) => (
               <button key={p.id} className="btn-primary mt-2 w-full justify-start py-2.5 text-[14px]" onClick={() => openCrewToday(store, p)}>
                 <Icon name="CalendarCheck" size={17} className="shrink-0" />
@@ -201,7 +208,7 @@ export default function Home() {
             ))}
             <div className="mt-2 flex items-center justify-between gap-2 text-[12px] text-ink-mute">
               <span className="truncate">{sharedBy ? `项目由 ${[sharedBy.name, sharedBy.phone].filter(Boolean).join(' ')} 分享` : ''}</span>
-              <button className="shrink-0 font-semibold text-terra" onClick={() => store.updateSettings({ crew: false })}>
+              <button className="shrink-0 font-semibold text-terra" onClick={() => store.updateSettings({ crew: false, crewChosen: true })}>
                 显示全部报告
               </button>
             </div>
@@ -269,7 +276,7 @@ export default function Home() {
           )}
           {recent.length === 0 && <Empty icon="ClipboardList" title="还没有报告" hint="点上面任意一种报告开始填写。草稿会自动保存。" />}
         </section>
-        {store.projects.length === 0 && store.reports.length === 0 && <CrewPaste />}
+        {store.projects.length === 0 && store.reports.length === 0 ? <CrewPaste /> : crew && <CrewPaste label="收到主管的新链接？点这里粘贴" />}
       </main>
 
       <Sheet open={!!picking} onClose={() => setPicking(null)} title={picking ? `新建：${picking.name.zh}` : ''} tall>
