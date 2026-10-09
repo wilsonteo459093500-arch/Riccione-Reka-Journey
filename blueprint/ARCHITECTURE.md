@@ -27,7 +27,7 @@ Project ──engine/deck.js renderDeck()──▶ 渲染页 [{ bg, els }]（eng
 | `src/engine/pptx/` | `buildPptx(slides, { loadImage })` → .pptx（JSZip，浏览器 / Node 通用） |
 | `src/store/db.js` | IndexedDB：projects / assets |
 | `src/store/assets.js` | `'asset:<id>'` ↔ Blob / object URL / 尺寸；`storeBlob`、`preloadProjectAssets`、`resolveUrl`、`metaOf`、`loadForPptx`、`toInlineImage` |
-| `src/ai/` | Gemini 客户端（`gemini.js`）、设置（`settings.js`）、标题润色（`polish.js`） |
+| `src/ai/` | Gemini 客户端（`gemini.js`）、设置（`settings.js`）、标题润色（`polish.js`）、3D 全屋立体图（`dollhouse.js`） |
 | `src/import/` | PDF 解析：`pdfExtract.js`（pdf.js）、`analyze.js`（纯函数）、`labels.js`（词典与文字解析）、`importPdf.js`（编排） |
 | `src/moodboard/` | Material Board（移植自 UKIR STUDIO，只保留 material board 功能） |
 | `src/components/` | 界面：首页 / 编辑器 / 检查器 / 材料清单 / 导出 / 设置 |
@@ -42,12 +42,12 @@ Project ──engine/deck.js renderDeck()──▶ 渲染页 [{ bg, els }]（eng
 - **AI 设置**：`settings`（`ai/settings.js`）；没 key 时调用 `onOpenSettings()`。
 - `importPdfFile(file, { onProgress(stage, done, total) })` → `Project`（已存好全部图片、已排好整套页面）。
 - `<MoodBoard project settings notify onOpenSettings onUseAsCover={(blob) => …} />`
+- `<DollhousePanel project settings notify onOpenSettings onChange />`
 - `polishProject(project, settings, { onProgress })` → `[{ slideId, patch }]`（只给建议，由用户确认后套用）。
 
 ## 设计原则
 
 1. **所见即所得**：预览与导出共用一份元素规格；不要在任一端单独「微调」。
 2. **定稿为准**：版式坐标取自已定稿 PPT，改版式先改定稿 PPT，再重跑 `scripts/` 里的抽取脚本。
-3. **AI 只是加分项**：没有 API key 也能完整走完「上传 → 编辑 → 导出」；AI 功能（润色 / Material Board 实拍）按需使用。
+3. **AI 只是加分项**：没有 API key 也能完整走完「上传 → 编辑 → 导出」；AI 功能（润色 / Material Board 实拍 / 3D 立体图）按需使用。
 4. **数据在本机**：项目与图片存在设计师浏览器的 IndexedDB；PDF 不上传任何服务器。
-5. **3D 立体图不在本工具范围**：「Sims 风」全屋立体图由另一个软件负责，做好的图可当普通效果图插进提案。

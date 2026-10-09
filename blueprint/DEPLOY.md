@@ -27,7 +27,7 @@
 ## 2) 每位设计师第一次使用
 
 - **不填 API key 也能用**：上传 PDF → 自动排版 → 修改 → 导出 PPT，全部离线完成。
-- 要用 AI 功能（AI 润色标题 / Material Board 实拍排版），在右上角 ⚙️ 设置里粘贴 Google AI Studio 的 key
+- 要用 AI 功能（AI 润色标题 / Material Board 实拍排版 / 3D 全屋立体图），在右上角 ⚙️ 设置里粘贴 Google AI Studio 的 key
   （<https://aistudio.google.com/apikey>，和 UKIR STUDIO 用的是同一种 key）。key 只存在本机浏览器。
 
 ## 3) 字体（导出的 PPT 要好看，打开 PPT 的电脑需要装）
