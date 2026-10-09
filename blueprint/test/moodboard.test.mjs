@@ -237,3 +237,54 @@ test('文件名与颜色工具', () => {
   assert.equal(isLightColor('#FFFFFF'), true);
   assert.equal(isLightColor('bad'), true);
 });
+
+// ---------------- 独立画板 / 旧版 UKIR STUDIO 搬家 ----------------
+import { convertBoard, convertLibraryItem } from '../src/moodboard/migrate.js';
+import { STANDALONE_ID, STANDALONE_RATIO_ID, DEFAULT_BOARD as DB2 } from '../src/moodboard/constants.js';
+
+test('独立画板：标题留空（与旧版 UKIR 一致），画幅 A4 横；提案画板仍取项目信息', () => {
+  const s = newBoardSettings(null, { ratioId: STANDALONE_RATIO_ID });
+  assert.equal(s.ratioId, 'a4l');
+  assert.equal(s.title, '');
+  assert.equal(s.subtitle, '');
+  const p = newBoardSettings({ client: 'Mr Lau', location: 'Muar' });
+  assert.equal(p.title, 'Mr Lau · Muar');
+  assert.equal(p.subtitle, 'THE DREAM HOUSE JOURNEY');
+  assert.deepEqual(defaultTitles(null), { title: '', subtitle: 'THE DREAM HOUSE JOURNEY' });
+});
+
+test('convertBoard：旧画板 → 独立画板（设置补齐、去掉 busy、丢掉没有图的素材）', () => {
+  const old = {
+    id: 'b-old1',
+    name: '客厅板',
+    board: { ratioId: 'a4l', bgId: 'green', title: 'MISS CHUA', subtitle: 'THE MINES', titleFont: 'serif', titleScale: 1.2, titlePos: 'tr', titleColor: '' },
+    items: [
+      { id: 'i1', dataUrl: 'data:image/png;base64,AAA', aspect: 1.5, w: 20, x: 10, y: 12, rot: 3, label: '浅川橡 AG273', busy: true },
+      { id: 'i2', dataUrl: '', aspect: 1, w: 10, x: 0, y: 0 },
+      { id: 'i3', dataUrl: 'data:image/jpeg;base64,BBB', aspect: 0.8, w: 18, x: 40, y: 30 },
+    ],
+    ts: 1700000000000,
+  };
+  const rec = convertBoard(old, 42);
+  assert.equal(rec.id, 'b-old1');
+  assert.equal(rec.projectId, STANDALONE_ID);
+  assert.equal(rec.name, '客厅板');
+  assert.equal(rec.createdAt, 1700000000000);
+  assert.equal(rec.board.bgId, 'green');
+  assert.equal(rec.board.titlePos, 'tr');
+  assert.equal(rec.board.titleScale, 1.2);
+  assert.equal(rec.board.showLegend, DB2.showLegend, '新字段用默认值补齐');
+  assert.deepEqual(rec.items.map((it) => it.id), ['i1', 'i3']);
+  assert.equal('busy' in rec.items[0], false);
+  assert.equal(rec.items[1].rot, 0);
+  assert.equal(rec.items[1].label, '');
+  // 旧版的画幅 / 底色 / 字体 / 位置 id 在新版里都认得
+  for (const key of ['ratioId', 'bgId', 'titleFont', 'titlePos']) assert.ok(rec.board[key]);
+});
+
+test('convertLibraryItem：结构相同，补齐缺省；坏条目丢掉', () => {
+  assert.deepEqual(convertLibraryItem({ id: 'l1', dataUrl: 'data:x', name: '木隐', cat: 'wood', ts: 5 }, 9), { id: 'l1', dataUrl: 'data:x', name: '木隐', cat: 'wood', ts: 5 });
+  assert.deepEqual(convertLibraryItem({ id: 'l2', dataUrl: 'data:y' }, 9), { name: '', cat: 'other', ts: 9, id: 'l2', dataUrl: 'data:y' });
+  assert.equal(convertLibraryItem({ id: 'l3' }), null);
+  assert.equal(convertLibraryItem(null), null);
+});

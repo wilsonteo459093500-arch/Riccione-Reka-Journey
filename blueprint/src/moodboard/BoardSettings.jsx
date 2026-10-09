@@ -9,7 +9,7 @@ import { card, sectionLabel, input, chip, iconBtn } from './ui.js';
  * props: { boards:[{id,name}], activeId, boardName, onRename(name), onSwitch(id), onNew(), onDelete(),
  *          board, onBoardChange(patch) }
  */
-export function BoardPanel({ boards, activeId, boardName, onRename, onSwitch, onNew, onDelete, board, onBoardChange }) {
+export function BoardPanel({ boards, activeId, boardName, onRename, onSwitch, onNew, onDelete, board, onBoardChange, standalone = false }) {
   return (
     <div className={`${card} space-y-4`}>
       <div>
@@ -36,7 +36,7 @@ export function BoardPanel({ boards, activeId, boardName, onRename, onSwitch, on
         <input
           value={boardName}
           onChange={(e) => onRename(e.target.value)}
-          placeholder="画板名称，如：方案封面画板"
+          placeholder={standalone ? '画板名称，如：Mr Lau 客厅' : '画板名称，如：方案封面画板'}
           className={`${input} mt-1.5 text-xs`}
         />
       </div>
@@ -56,7 +56,7 @@ export function BoardPanel({ boards, activeId, boardName, onRename, onSwitch, on
             </button>
           ))}
         </div>
-        <div className="text-[11px] text-bp-faint mt-1.5 leading-relaxed">左文右图封面用竖版，满版封面用 16:9。</div>
+        <div className="text-[11px] text-bp-faint mt-1.5 leading-relaxed">{standalone ? 'A4 适合打印，方形适合社媒；要当提案封面：左文右图用竖版，满版用 16:9。' : '左文右图封面用竖版，满版封面用 16:9。'}</div>
       </div>
 
       <div>
@@ -80,20 +80,22 @@ export function BoardPanel({ boards, activeId, boardName, onRename, onSwitch, on
 }
 
 /** props: { board, onBoardChange(patch), onResetTitles() } */
-export function TitlePanel({ board, onBoardChange, onResetTitles }) {
+export function TitlePanel({ board, onBoardChange, onResetTitles, standalone = false }) {
   const ink = bgOf(board.bgId).ink;
   return (
     <div className={`${card} space-y-2.5`}>
       <div className="flex items-center justify-between">
         <div className="text-xs font-semibold text-bp-faint">标题（下载 PNG 用）</div>
-        <button
-          type="button"
-          onClick={onResetTitles}
-          className="flex items-center gap-1 text-[11px] text-bp-muted hover:text-bp-ink"
-          title="用项目信息里的封面标题 / 客户 · 地点"
-        >
-          <RotateCcw size={11} /> 用项目信息
-        </button>
+        {!standalone && (
+          <button
+            type="button"
+            onClick={onResetTitles}
+            className="flex items-center gap-1 text-[11px] text-bp-muted hover:text-bp-ink"
+            title="用项目信息里的封面标题 / 客户 · 地点"
+          >
+            <RotateCcw size={11} /> 用项目信息
+          </button>
+        )}
       </div>
       <input
         value={board.title}
@@ -185,7 +187,9 @@ export function TitlePanel({ board, onBoardChange, onResetTitles }) {
         加编号 + 材质图例清单
       </label>
       <div className="text-[11px] text-bp-faint leading-relaxed">
-        标题和图例只出现在下载的 PNG（发 WhatsApp / 社媒）；设为方案封面时不带 —— PPT 里的标题是可编辑文字。
+        {standalone
+          ? '标题和图例只出现在下载的 PNG（发 WhatsApp / 社媒 / 打印）。'
+          : '标题和图例只出现在下载的 PNG（发 WhatsApp / 社媒）；设为方案封面时不带 —— PPT 里的标题是可编辑文字。'}
       </div>
     </div>
   );

@@ -84,6 +84,11 @@ export const DEFAULT_SUBTITLE = 'THE DREAM HOUSE JOURNEY';
 
 export const FIRST_BOARD_NAME = '方案封面画板';
 
+/** 独立画板（不属于任何提案，首页「Material Board」进入；旧版 UKIR STUDIO 的画板也搬到这里） */
+export const STANDALONE_ID = 'ukir-boards';
+/** 独立画板默认 A4 横（与旧版 UKIR STUDIO 一致） */
+export const STANDALONE_RATIO_ID = 'a4l';
+
 export const DEFAULT_BOARD = {
   ratioId: DEFAULT_RATIO_ID,
   bgId: 'paper',

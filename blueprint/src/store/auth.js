@@ -9,9 +9,16 @@ async function sha256Hex(text) {
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+const LEGACY_AUTH_KEY = 'sailrender.auth.v1'; // 旧版 UKIR STUDIO 的通行票（同一网址时沿用，不用重新登录）
+
 export function isAuthed() {
   try {
-    return localStorage.getItem(AUTH_KEY) === AUTH_HASH;
+    if (localStorage.getItem(AUTH_KEY) === AUTH_HASH) return true;
+    if (localStorage.getItem(LEGACY_AUTH_KEY) === AUTH_HASH) {
+      localStorage.setItem(AUTH_KEY, AUTH_HASH);
+      return true;
+    }
+    return false;
   } catch {
     return false;
   }
@@ -29,4 +36,5 @@ export async function login(username, password) {
 
 export function logout() {
   localStorage.removeItem(AUTH_KEY);
+  localStorage.removeItem(LEGACY_AUTH_KEY);
 }

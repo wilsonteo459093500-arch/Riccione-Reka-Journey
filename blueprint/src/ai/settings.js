@@ -12,10 +12,22 @@ export const DEFAULT_SETTINGS = {
   watermark: 'SAIL BY RICCIONE', // 下载 Material Board 图时右下角 logo 水印，留空 = 关闭
 };
 
+/** 旧版 UKIR STUDIO 的设置（同一网址时读得到）：沿用它的 API key / 接口地址 / 水印 */
+const LEGACY_KEY = 'sailrender.settings.v1';
+
 export function loadSettings() {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
-    return raw ? { ...DEFAULT_SETTINGS, ...JSON.parse(raw) } : { ...DEFAULT_SETTINGS };
+    if (raw) return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    const legacy = JSON.parse(localStorage.getItem(LEGACY_KEY) || 'null');
+    if (legacy && typeof legacy === 'object') {
+      const pick = {};
+      if (typeof legacy.apiKey === 'string') pick.apiKey = legacy.apiKey;
+      if (typeof legacy.baseUrl === 'string' && legacy.baseUrl) pick.baseUrl = legacy.baseUrl;
+      if (typeof legacy.watermark === 'string') pick.watermark = legacy.watermark;
+      return { ...DEFAULT_SETTINGS, ...pick };
+    }
+    return { ...DEFAULT_SETTINGS };
   } catch {
     return { ...DEFAULT_SETTINGS };
   }

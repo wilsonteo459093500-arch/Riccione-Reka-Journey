@@ -1,14 +1,17 @@
-// DREAMHOUSE BLUEPRINT 应用外壳：登录门 → 首页（项目列表 / 导入 PDF）↔ 编辑器（#/p/<项目 id>，刷新可回到原项目）
+// UKIR STUDIO 应用外壳：登录门 → 首页（项目列表 / 导入 PDF）↔ 编辑器（#/p/<项目 id>，刷新可回到原项目）
+// ↔ 独立 Material Board（#/boards）。启动时把旧版 UKIR STUDIO 的材质库 / 画板搬过来（同一网址时）。
 
 import React, { useCallback, useEffect, useState } from 'react';
 import LoginGate from './components/LoginGate.jsx';
 import Home from './components/Home.jsx';
 import Editor from './components/Editor.jsx';
+import BoardsPage from './components/BoardsPage.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
 import Toaster, { useToasts } from './components/Toaster.jsx';
 import { isAuthed, logout } from './store/auth.js';
 import { requestPersistence } from './store/db.js';
 import { loadSettings, saveSettings, SETTINGS_KEY } from './ai/settings.js';
+import { migrateFromUkir } from './moodboard/migrate.js';
 
 /** '#/p/<id>' → id */
 function parseHash() {
@@ -21,7 +24,10 @@ function parseHash() {
   }
 }
 
+const isBoardsHash = () => /^#\/boards\b/.test(window.location.hash || '');
+
 let persistenceAsked = false;
+let migrationStarted = false;
 
 export default function App() {
   const [authed, setAuthed] = useState(isAuthed);
@@ -40,6 +46,7 @@ function Workspace({ onLogout }) {
   const [settings, setSettings] = useState(loadSettings);
   const [showSettings, setShowSettings] = useState(false);
   const [projectId, setProjectId] = useState(parseHash);
+  const [boardsOpen, setBoardsOpen] = useState(isBoardsHash);
   const { toasts, notify, dismiss } = useToasts();
 
   // 申请持久化存储（避免浏览器空间紧张时清掉项目），只问一次
@@ -49,9 +56,25 @@ function Workspace({ onLogout }) {
     requestPersistence();
   }, []);
 
+  // 旧版 UKIR STUDIO 的材质库 / 画板（同一网址时读得到）→ 搬到独立 Material Board，只搬一次
+  useEffect(() => {
+    if (migrationStarted) return;
+    migrationStarted = true;
+    migrateFromUkir()
+      .then(({ library, boards }) => {
+        if (!library && !boards) return;
+        const parts = [library ? `${library} 个材质` : '', boards ? `${boards} 块画板` : ''].filter(Boolean).join('、');
+        notify({ type: 'ok', text: `已从旧版 UKIR STUDIO 搬来 ${parts} —— 在首页「Material Board」里` });
+      })
+      .catch(() => {});
+  }, [notify]);
+
   // 浏览器前进 / 后退
   useEffect(() => {
-    const onHash = () => setProjectId(parseHash());
+    const onHash = () => {
+      setProjectId(parseHash());
+      setBoardsOpen(isBoardsHash());
+    };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
@@ -73,8 +96,15 @@ function Workspace({ onLogout }) {
   }, []);
 
   const goHome = useCallback(() => {
-    if (parseHash()) window.location.hash = '#/';
+    if (parseHash() || isBoardsHash()) window.location.hash = '#/';
     setProjectId(null);
+    setBoardsOpen(false);
+  }, []);
+
+  const openBoards = useCallback(() => {
+    if (!isBoardsHash()) window.location.hash = '#/boards';
+    setProjectId(null);
+    setBoardsOpen(true);
   }, []);
 
   const openSettings = useCallback(() => setShowSettings(true), []);
@@ -97,8 +127,10 @@ function Workspace({ onLogout }) {
           onOpenSettings={openSettings}
           onExit={goHome}
         />
+      ) : boardsOpen ? (
+        <BoardsPage settings={settings} notify={notify} onOpenSettings={openSettings} onBack={goHome} />
       ) : (
-        <Home notify={notify} onOpenProject={openProject} onOpenSettings={openSettings} hasKey={!!settings.apiKey} />
+        <Home notify={notify} onOpenProject={openProject} onOpenBoards={openBoards} onOpenSettings={openSettings} hasKey={!!settings.apiKey} />
       )}
 
       {showSettings && (

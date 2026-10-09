@@ -1,8 +1,8 @@
-// 首页：拖入方案 PDF（或点击 / 粘贴）→ 导入；四步说明；最近项目（打开 / 复制 / 删除）；存储用量；导入项目备份
+// 首页：拖入方案 PDF（或点击 / 粘贴）→ 导入；独立 Material Board 入口；四步说明；最近项目（打开 / 复制 / 删除）；存储用量；导入项目备份
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  FileUp, FileText, Copy, Trash2, Loader2, ArchiveRestore, HardDrive, ScanSearch, Stamp, Download, ImageOff, ArrowRight,
+  FileUp, FileText, Copy, Trash2, Loader2, ArchiveRestore, HardDrive, ScanSearch, Stamp, Download, ImageOff, ArrowRight, LayoutGrid,
 } from 'lucide-react';
 import Header from './Header.jsx';
 import ImportDialog from './ImportDialog.jsx';
@@ -27,7 +27,7 @@ const STEPS = [
   { n: '04', icon: Download, title: '导出可编辑 PPT', text: '在 PowerPoint / WPS 里还能继续改字、换图' },
 ];
 
-export default function Home({ notify, onOpenProject, onOpenSettings, hasKey }) {
+export default function Home({ notify, onOpenProject, onOpenBoards, onOpenSettings, hasKey }) {
   const [projects, setProjects] = useState(null); // null = 读取中
   const [usage, setUsage] = useState(null);
   const [thumbTick, setThumbTick] = useState(0);
@@ -225,7 +225,7 @@ export default function Home({ notify, onOpenProject, onOpenSettings, hasKey }) 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 pb-16">
         {/* 标题 */}
         <section className={returning ? 'pt-8 pb-6' : 'pt-10 sm:pt-14 pb-7'}>
-          <div className={cls.eyebrow}>Proposal Studio · 提案工作台</div>
+          <div className={cls.eyebrow}>UKIR STUDIO · 提案工作台</div>
           <h1 className="mt-3 font-serif text-3xl sm:text-[40px] leading-tight text-bp-ink">一份方案 PDF，生成整套品牌提案</h1>
           <p className="mt-3 max-w-2xl text-sm sm:text-[15px] leading-relaxed text-bp-muted">
             把设计师从 WPS / PowerPoint 导出的方案 PDF 放进来：公司页沿用定稿模板，效果图、材料、楼层自动排好版，
@@ -273,6 +273,24 @@ export default function Home({ notify, onOpenProject, onOpenSettings, hasKey }) 
             e.target.value = '';
           }}
         />
+
+        {/* 独立 Material Board（原 UKIR STUDIO 的 Material Board，不做提案也能用） */}
+        <button
+          type="button"
+          onClick={onOpenBoards}
+          className={`${cls.card} mt-4 w-full px-5 py-4 flex items-center gap-4 text-left hover:border-bp-gold hover:bg-bp-tint transition-colors focus:outline-none focus-visible:ring-4 focus-visible:ring-bp-gold/30`}
+        >
+          <span className="w-11 h-11 rounded-full bg-bp-gold/15 text-bp-eyebrow flex items-center justify-center shrink-0">
+            <LayoutGrid size={20} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-serif text-lg text-bp-ink">Material Board · 材质排版图</span>
+            <span className="block mt-0.5 text-xs sm:text-sm text-bp-muted">
+              不做提案也能用：材质库、拖拽排版、AI 实拍排版，下载高清 PNG 发客户
+            </span>
+          </span>
+          <ArrowRight size={18} className="text-bp-faint shrink-0" />
+        </button>
 
         {!returning && steps}
 

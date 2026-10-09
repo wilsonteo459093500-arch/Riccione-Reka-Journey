@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "DREAMHOUSE BLUEPRINT by RICCIONE REKA — 设计师方案 PDF 一键生成品牌提案 PPT（可编辑）+ Material Board 封面",
+  "description": "UKIR STUDIO by RICCIONE REKA — 设计师方案 PDF 一键生成 Dreamhouse Blueprint 品牌提案 PPT（可编辑）+ Material Board + 3D 全屋立体图",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

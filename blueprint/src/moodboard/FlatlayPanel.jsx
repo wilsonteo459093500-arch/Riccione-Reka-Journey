@@ -77,7 +77,7 @@ export default function FlatlayPanel({
       );
       const rec = { id: uid(), boardId: startBoard, projectId, dataUrl: await compressForStorage(raw), ratioId: board.ratioId, ts: Date.now() };
       const ok = await putShot(rec, MAX_SHOTS);
-      if (!ok) notify?.({ type: 'warn', text: '实拍图没能存到本机（存储空间可能不足），记得先下载或设为封面' });
+      if (!ok) notify?.({ type: 'warn', text: '实拍图没能存到本机（存储空间可能不足），记得先下载' });
       if (boardRef.current === startBoard) {
         setShots((prev) => [rec, ...prev].slice(0, MAX_SHOTS));
         setActiveShotId(rec.id);
@@ -130,7 +130,7 @@ export default function FlatlayPanel({
           <div className="flex items-center gap-1.5 text-sm font-semibold text-bp-ink">
             <Sparkles size={15} className="text-bp-gold" /> AI 实拍排版
           </div>
-          <div className="text-xs text-bp-faint mt-0.5">把画板上的材质「拍」成一张杂志级俯拍照，最适合做方案封面。</div>
+          <div className="text-xs text-bp-faint mt-0.5">把画板上的材质「拍」成一张杂志级俯拍照{onUseAsCover ? '，最适合做方案封面' : ''}。</div>
         </div>
         {!hasKey && (
           <button type="button" onClick={() => onOpenSettings?.()} className={`${btnGhost} shrink-0 text-xs py-1.5`}>
@@ -221,10 +221,12 @@ export default function FlatlayPanel({
 
           {shot && (
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={asCover} disabled={!!coverBusy} className={btnPrimary}>
-                {coverBusy === 'flatlay' ? <LoaderCircle size={15} className="animate-spin" /> : <Stamp size={15} />}
-                设为方案封面
-              </button>
+              {onUseAsCover && (
+                <button type="button" onClick={asCover} disabled={!!coverBusy} className={btnPrimary}>
+                  {coverBusy === 'flatlay' ? <LoaderCircle size={15} className="animate-spin" /> : <Stamp size={15} />}
+                  设为方案封面
+                </button>
+              )}
               <button type="button" onClick={download} disabled={downloading} className={btnGhost}>
                 {downloading ? <LoaderCircle size={15} className="animate-spin" /> : <Download size={15} />}
                 下载 PNG（带标题{settings?.watermark ? ' + logo' : ''}）

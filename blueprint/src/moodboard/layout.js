@@ -169,7 +169,8 @@ export function mergeImported(prev, incoming, boardH, { titlePos = 'bl' } = {}) 
 }
 
 /** 画板默认标题：封面大标题 || 客户 · 地点；副标题 || THE DREAM HOUSE JOURNEY */
-export function defaultTitles(info = {}) {
+export function defaultTitles(info) {
+  info = info || {};
   const title =
     (info.coverTitle || '').trim() ||
     [info.client, info.location].map((s) => (s || '').trim()).filter(Boolean).join(' · ');
@@ -183,7 +184,7 @@ export function newBoardSettings(info, inherit = {}) {
     ...DEFAULT_BOARD,
     ...(inherit.ratioId ? { ratioId: inherit.ratioId } : {}),
     ...(inherit.bgId ? { bgId: inherit.bgId } : {}),
-    ...defaultTitles(info),
+    ...(info === null ? {} : defaultTitles(info)), // null = 独立画板：标题留空（与旧版 UKIR STUDIO 一致）
   };
 }
 

@@ -1,15 +1,19 @@
-// Material Board —— 移植自 UKIR STUDIO（只保留 material board 功能）。
-// 每个项目一组画板；第一块「方案封面画板」自动导入本案材料；成品（手动画板或 AI 实拍排版）一键设为方案封面。
+// Material Board —— 移植自旧版 UKIR STUDIO（只保留 material board 功能）。
+// 两种用法：
+//   · 提案里（编辑器「Material Board 封面」分页）：每个项目一组画板；第一块「方案封面画板」自动导入本案材料；
+//     成品（手动画板或 AI 实拍排版）一键设为方案封面。
+//   · 独立画板（standalone，首页进入）：和旧版 UKIR STUDIO 一样，单纯做材质排版图（下载 PNG 发 WhatsApp / 社媒 / 打印）。
 //
-// props: { project, settings, notify, onOpenSettings, onUseAsCover: (blob, meta?) => Promise|void }
+// props: { project, settings, notify, onOpenSettings, onUseAsCover: (blob, meta?) => Promise|void, standalone? }
 //   meta = { source:'board'|'flatlay'|'upload', orientation:'portrait'|'landscape'|'square' }（可忽略）
+//   standalone 时 project = { id: STANDALONE_ID }，不传 onUseAsCover
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   PackageOpen, ImagePlus, LayoutGrid, Download, Stamp, LoaderCircle, Scissors, ChevronUp, ChevronDown, Trash2,
   RotateCcw,
 } from 'lucide-react';
 import { generateImage } from '../ai/gemini.js';
-import { CUTOUT_PROMPT, DEFAULT_BOARD, FIRST_BOARD_NAME, EXPORT_LONG_EDGE } from './constants.js';
+import { CUTOUT_PROMPT, DEFAULT_BOARD, FIRST_BOARD_NAME, EXPORT_LONG_EDGE, STANDALONE_RATIO_ID } from './constants.js';
 import {
   boardHeight, gridLayout, collageLayout, nextSlot, materialLabel, materialsToImport, mergeImported, defaultTitles,
   newBoardSettings, legendEntries, orientationOf, safeFileName,
@@ -30,7 +34,7 @@ const uid = (p = 'i') => `${p}-${Date.now().toString(36)}-${Math.random().toStri
 const boardMeta = ({ id, name, createdAt, ts }) => ({ id, name, createdAt: createdAt || ts || 0 });
 const stripBusy = (items) => items.map(({ busy, ...it }) => it);
 
-export default function MoodBoard({ project, settings, notify, onOpenSettings, onUseAsCover }) {
+export default function MoodBoard({ project, settings, notify, onOpenSettings, onUseAsCover, standalone = false }) {
   const projectId = project?.id || null;
   const info = project?.info;
   const materials = project?.materials;
@@ -101,8 +105,8 @@ export default function MoodBoard({ project, settings, notify, onOpenSettings, o
         rec = {
           id: uid('b'),
           projectId,
-          name: FIRST_BOARD_NAME,
-          board: newBoardSettings(info),
+          name: standalone ? '画板 1' : FIRST_BOARD_NAME,
+          board: standalone ? newBoardSettings(null, { ratioId: STANDALONE_RATIO_ID }) : newBoardSettings(info),
           items: [],
           createdAt: now,
           ts: now,
@@ -170,7 +174,7 @@ export default function MoodBoard({ project, settings, notify, onOpenSettings, o
       id: uid('b'),
       projectId,
       name: `画板 ${boards.length + 1}`,
-      board: newBoardSettings(info, board),
+      board: newBoardSettings(standalone ? null : info, board),
       items: [],
       createdAt: now,
       ts: now,
@@ -256,7 +260,7 @@ export default function MoodBoard({ project, settings, notify, onOpenSettings, o
   const firstBoardId = boards[0]?.id;
   const importableCount = importable.length;
   useEffect(() => {
-    if (!loaded || !activeId || activeId !== firstBoardId) return;
+    if (standalone || !loaded || !activeId || activeId !== firstBoardId) return;
     if (items.length || board.autoImported || !importableCount) return;
     importMaterials({ auto: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -449,26 +453,31 @@ export default function MoodBoard({ project, settings, notify, onOpenSettings, o
           onDelete={deleteBoard}
           board={board}
           onBoardChange={setBoard}
+          standalone={standalone}
         />
-        <TitlePanel board={board} onBoardChange={setBoard} onResetTitles={() => setBoard(defaultTitles(info))} />
+        <TitlePanel board={board} onBoardChange={setBoard} onResetTitles={() => setBoard(defaultTitles(info))} standalone={standalone} />
         <LibraryPanel settings={settings} notify={notify} onOpenSettings={onOpenSettings} onPick={addFromLibrary} />
       </div>
 
       {/* 右侧：封面卡 + 工具条 + 画板 + AI 实拍排版 */}
       <div className="space-y-4 min-w-0 order-1 lg:order-2">
-        <CoverCard project={project} ratioId={board.ratioId} coverBusy={coverBusy} coverDone={coverDone} onUploadCover={uploadCover} />
+        {!standalone && (
+          <CoverCard project={project} ratioId={board.ratioId} coverBusy={coverBusy} coverDone={coverDone} onUploadCover={uploadCover} />
+        )}
 
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => importMaterials()}
-            disabled={importing}
-            className={btnGhost}
-            title={importable.length ? '把 PDF 里识别到的材质小样加到画板（已在画板上的会跳过）' : '本案材料都已在画板上'}
-          >
-            {importing ? <LoaderCircle size={15} className="animate-spin" /> : <PackageOpen size={15} />}
-            导入本案材料{importable.length ? `（${importable.length}）` : ''}
-          </button>
+          {!standalone && (
+            <button
+              type="button"
+              onClick={() => importMaterials()}
+              disabled={importing}
+              className={btnGhost}
+              title={importable.length ? '把 PDF 里识别到的材质小样加到画板（已在画板上的会跳过）' : '本案材料都已在画板上'}
+            >
+              {importing ? <LoaderCircle size={15} className="animate-spin" /> : <PackageOpen size={15} />}
+              导入本案材料{importable.length ? `（${importable.length}）` : ''}
+            </button>
+          )}
           <button type="button" onClick={() => boardFileRef.current?.click()} className={btnGhost}>
             <ImagePlus size={15} /> 加图片
           </button>
@@ -494,10 +503,12 @@ export default function MoodBoard({ project, settings, notify, onOpenSettings, o
             {exporting ? <LoaderCircle size={15} className="animate-spin" /> : <Download size={15} />}
             下载 PNG
           </button>
-          <button type="button" onClick={boardAsCover} disabled={!!coverBusy || !items.length} className={btnPrimary}>
-            {coverBusy === 'board' ? <LoaderCircle size={15} className="animate-spin" /> : <Stamp size={15} />}
-            设为方案封面
-          </button>
+          {!standalone && (
+            <button type="button" onClick={boardAsCover} disabled={!!coverBusy || !items.length} className={btnPrimary}>
+              {coverBusy === 'board' ? <LoaderCircle size={15} className="animate-spin" /> : <Stamp size={15} />}
+              设为方案封面
+            </button>
+          )}
         </div>
 
         {/* 选中素材的工具条：固定高度，选中 / 取消时画板不跳动 */}
@@ -549,7 +560,9 @@ export default function MoodBoard({ project, settings, notify, onOpenSettings, o
             <div className="text-xs text-bp-faint truncate">
               {items.length
                 ? '点选画板上的素材：改名称 / 旋转 / AI 抠图 / 调图层 · Delete 删除 · 方向键微调'
-                : '画板还是空的 —— 先导入本案材料，或者把图片拖进下面的画板'}
+                : standalone
+                  ? '画板还是空的 —— 从左边「我的材质库」点选，或者把图片拖进下面的画板'
+                  : '画板还是空的 —— 先导入本案材料，或者把图片拖进下面的画板'}
             </div>
           )}
         </div>
@@ -586,7 +599,7 @@ export default function MoodBoard({ project, settings, notify, onOpenSettings, o
         )}
 
         <div className="text-[11px] text-bp-faint text-center">
-          画板自动保存在本机 · 下载 PNG 为 {EXPORT_LONG_EDGE}px 高清（带标题{settings?.watermark ? ' + logo 水印' : ''}）· 设为封面为无字版
+          画板自动保存在本机 · 下载 PNG 为 {EXPORT_LONG_EDGE}px 高清（带标题{settings?.watermark ? ' + logo 水印' : ''}）{standalone ? '' : ' · 设为封面为无字版'}
         </div>
 
         <FlatlayPanel
@@ -598,7 +611,7 @@ export default function MoodBoard({ project, settings, notify, onOpenSettings, o
           settings={settings}
           notify={notify}
           onOpenSettings={onOpenSettings}
-          onUseAsCover={flatlayAsCover}
+          onUseAsCover={standalone ? undefined : flatlayAsCover}
           coverBusy={coverBusy}
         />
       </div>

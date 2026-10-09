@@ -10,7 +10,7 @@ export const MOD_KEY = isMac ? '⌘' : 'Ctrl+';
 function Brand({ compact = false }) {
   return (
     <div className="leading-tight whitespace-nowrap select-none">
-      <div className={`font-display font-semibold text-bp-ink tracking-wide ${compact ? 'text-base' : 'text-lg'}`}>DREAMHOUSE BLUEPRINT</div>
+      <div className={`font-display font-semibold text-bp-ink tracking-wide ${compact ? 'text-base' : 'text-lg'}`}>UKIR STUDIO</div>
       <div className="text-[9px] tracking-[0.25em] text-bp-faint uppercase">by Riccione Reka</div>
     </div>
   );
@@ -95,16 +95,24 @@ function SettingsButton({ onClick, hasKey }) {
 }
 
 /**
- * @param {{ onOpenSettings:()=>void, hasKey:boolean,
+ * @param {{ onOpenSettings:()=>void, hasKey:boolean, onBack?:()=>void, title?:string,
  *   editor?: { name:string, onRename:(n:string)=>void, onBack:()=>void, saveState:string, onRetrySave:()=>void,
  *              onExport:()=>void, canUndo:boolean, canRedo:boolean, onUndo:()=>void, onRedo:()=>void } }} props
  */
-export default function Header({ onOpenSettings, hasKey, editor }) {
+export default function Header({ onOpenSettings, hasKey, editor, onBack: onPageBack, title }) {
   if (!editor) {
     return (
       <header className="sticky top-0 z-40 bg-bp-paper/90 backdrop-blur border-b border-bp-line">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
-          <Brand />
+        <div className={`${onPageBack ? 'max-w-7xl' : 'max-w-6xl'} mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3`}>
+          <div className="flex items-center gap-2 min-w-0">
+            {onPageBack && (
+              <button type="button" onClick={onPageBack} className={`${cls.iconBtn} w-9 h-9 shrink-0 -ml-2`} title="回到首页" aria-label="回到首页">
+                <ArrowLeft size={18} />
+              </button>
+            )}
+            <Brand />
+            {title && <span className="hidden sm:inline pl-3 ml-1 border-l border-bp-line font-serif text-lg text-bp-ink truncate">{title}</span>}
+          </div>
           <SettingsButton onClick={onOpenSettings} hasKey={hasKey} />
         </div>
       </header>

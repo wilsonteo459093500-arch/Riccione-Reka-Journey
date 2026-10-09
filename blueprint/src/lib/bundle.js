@@ -63,7 +63,7 @@ export function buildBundleManifest(project, records, { now = Date.now() } = {})
   const manifest = {
     format: BUNDLE_FORMAT,
     version: BUNDLE_VERSION,
-    app: 'DREAMHOUSE BLUEPRINT',
+    app: 'UKIR STUDIO',
     exportedAt: new Date(now).toISOString(),
     project,
     assets,
@@ -80,7 +80,7 @@ export function parseBundleManifest(text) {
     throw new Error('备份文件损坏：project.json 不是有效的 JSON。');
   }
   if (!data || data.format !== BUNDLE_FORMAT || !data.project || typeof data.project !== 'object') {
-    throw new Error('这不是 Dreamhouse Blueprint 的项目备份（.blueprint.zip）。');
+    throw new Error('这不是 UKIR STUDIO 的项目备份（.blueprint.zip）。');
   }
   if ((data.version || 1) > BUNDLE_VERSION) {
     throw new Error('这个备份来自更新版本的 Blueprint，请先刷新页面再试。');
@@ -127,7 +127,7 @@ export async function importBundle(file, { onProgress } = {}) {
     throw new Error('打不开这个文件 —— 请选择从 Blueprint 下载的 .blueprint.zip 项目备份。');
   }
   const entry = zip.file('project.json');
-  if (!entry) throw new Error('这不是 Dreamhouse Blueprint 的项目备份（缺少 project.json）。');
+  if (!entry) throw new Error('这不是 UKIR STUDIO 的项目备份（缺少 project.json）。');
   const { project, assets } = parseBundleManifest(await entry.async('string'));
   const id = uid('p');
   const srcMap = new Map();
