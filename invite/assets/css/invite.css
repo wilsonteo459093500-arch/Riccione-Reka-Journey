@@ -328,15 +328,6 @@ body[data-state="open"] #seal { transform: translateY(-102%); opacity: 0; pointe
   transform: translate(14px, 14px); pointer-events: none;
 }
 
-.stats {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
-  border-top: 1px solid var(--line); margin-top: clamp(44px, 7vw, 80px);
-}
-.stats div { padding: 26px 20px 6px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line-soft); }
-.stats div:last-child { border-right: 0; }
-.stats b { display: block; font-family: var(--serif); font-size: clamp(30px, 4.4vw, 46px); font-weight: 400; line-height: 1; }
-.stats b .unit { font-size: .42em; letter-spacing: .1em; margin-left: .2em; color: var(--ink-soft); }
-.stats span { display: block; font-size: 12.5px; color: var(--ink-soft); margin-top: 10px; }
 
 /* c+1 model */
 .model {
