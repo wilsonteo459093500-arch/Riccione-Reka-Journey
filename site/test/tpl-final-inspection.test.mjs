@@ -14,6 +14,10 @@ const blank = () => createReport(t, { project: SAMPLE_PROJECT, settings: SAMPLE_
 /** 把第 n 项判为 r */
 const mark = (report, nos, r) => nos.forEach((no) => { report.items[`fi${no}`] = { r, note: '', photos: [] }; });
 
+
+// checks() 可返回字符串或 { text, sectionId, target }：测试只比较文字
+const checksText = (ctx) => (t.checks(ctx) || []).map((x) => (typeof x === 'string' ? x : x.text));
+
 export const tests = [
   ['基本信息', () => {
     assert.equal(t.id, 'final-inspection');
@@ -78,7 +82,7 @@ export const tests = [
       const sum = m.blocks.find((b) => b.type === 'summary');
       assert.equal(sum.items.length, 5);
       assert.ok(sum.items.every((i) => typeof i.value === 'string' && i.tone));
-      assert.ok(Array.isArray(t.checks(ctxOf(r))));
+      assert.ok(Array.isArray(checksText(ctxOf(r))));
       assert.ok(Array.isArray(issues(t, r, { project: SAMPLE_PROJECT, settings: SAMPLE_SETTINGS })));
       const p = progress(t, r);
       assert.ok(p.total === 27 + 3, `progress total ${p.total}`);
@@ -100,7 +104,7 @@ export const tests = [
       assert.ok(s && s.items.length === 5);
       assert.equal(s.items[2].value, '27 项 items');
       assert.equal(s.items[4].value, '未选择 Not selected');
-      assert.deepEqual(t.checks(makeCtx({ template: t, report: rep })), []);
+      assert.deepEqual(checksText(makeCtx({ template: t, report: rep })), []);
     }
     assert.match(t.filename(makeCtx({ template: t, report: empty })), /^完工终检/);
   }],
@@ -126,17 +130,17 @@ export const tests = [
     const s2 = t.summary(ctxOf(r));
     assert.equal(s2.items[4].tone, 'pass');
     assert.match(s2.items[4].value, /复验合格 2026-10-13/);
-    assert.deepEqual(t.checks(ctxOf(r)), []);
+    assert.deepEqual(checksText(ctxOf(r)), []);
   }],
   ['checks：不合格未记入整改 / 结论矛盾 / 关单照片', () => {
     const r = blank();
     mark(r, [3, 9, 18], 'F');
-    let c = t.checks(ctxOf(r));
+    let c = checksText(ctxOf(r));
     assert.ok(c.includes('有 3 项不合格还没记入整改清单'), c.join(' | '));
 
     r.tables.rectification = [{ loc: '厨房', desc: '台面拼缝高低差', before: ['m_photo1'] }];
     r.values.result = 'pass';
-    c = t.checks(ctxOf(r));
+    c = checksText(ctxOf(r));
     assert.ok(c.includes('有 2 项不合格还没记入整改清单'));
     assert.ok(c.some((x) => x.includes('还有 1 项整改未关闭')));
     assert.ok(c.some((x) => x.includes('还有 3 项不合格未复验关闭')));
@@ -147,7 +151,7 @@ export const tests = [
       { loc: '厨房', recheck: 'P', closed: '2026-10-12' },
       { loc: '鞋柜', closed: '2026-10-12', before: ['m_photo1'] },
     ];
-    c = t.checks(ctxOf(r));
+    c = checksText(ctxOf(r));
     assert.ok(c.includes('整改第 1 项缺少问题照片'));
     assert.ok(c.includes('整改第 1 项已关闭，但缺少复验照片'));
     assert.ok(c.includes('整改第 2 项填了关闭日，但复验未选「合格」'));
@@ -163,7 +167,7 @@ export const tests = [
     const r = fillReport(t, 'pass');
     r.tables.rectification = [];
     r.values.result = 'pass';
-    assert.deepEqual(t.checks(ctxOf(r)), []);
+    assert.deepEqual(checksText(ctxOf(r)), []);
     const s = t.summary(ctxOf(r));
     assert.equal(s.items[1].value, '0 项 items');
     assert.equal(s.items[4].value, '合格 — 可安排交付 Passed — Ready for Handover');

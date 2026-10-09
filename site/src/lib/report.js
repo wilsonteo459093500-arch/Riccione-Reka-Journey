@@ -89,6 +89,7 @@ export function createReport(template, { project, settings, previous } = {}) {
       for (const r of s.roles) {
         const name = resolveBind(r.bind, ctx);
         report.signatures[r.id] = { name: name || '', date: '', image: null };
+        if (r.bind?.startsWith('project.') && name) report.autofill[`sig:${r.id}`] = name;
       }
     }
   }
@@ -129,7 +130,43 @@ export function applyProject(template, report, project, settings, oldProject, pr
       else next.autofill[f.key] = clone(v);
     }
   }
+  // 签名人姓名（如客户签名绑定 project.client）：还没签、且仍是自动带入的名字时跟着换
+  for (const s of template.sections) {
+    if (s.type !== 'signatures') continue;
+    for (const r of s.roles) {
+      if (!r.bind?.startsWith('project.')) continue;
+      const cur = next.signatures?.[r.id] || {};
+      if (cur.image) continue;
+      const key = `sig:${r.id}`;
+      const auto = key in next.autofill ? cur.name === next.autofill[key] : cur.name === (resolveBind(r.bind, ctxOld) || '');
+      if (isEmpty(cur.name) || auto) {
+        const name = resolveBind(r.bind, ctxNew) || '';
+        next.signatures = { ...next.signatures, [r.id]: { ...cur, name } };
+        if (name) next.autofill[key] = name;
+        else delete next.autofill[key];
+      }
+    }
+  }
   next.title = reportTitle(template, next, project);
+  return next;
+}
+
+/**
+ * 改了报告日期等之后：重新计算「默认值是函数」且仍是自动值的字段（如回访日期、预计工期）。
+ */
+export function refreshAuto(template, report, { project, settings, previous = [] } = {}) {
+  const next = { ...report, values: { ...report.values }, autofill: { ...(report.autofill || {}) } };
+  const ctx = makeCtx({ template, report: next, project, settings, previous });
+  for (const f of allFields(template)) {
+    if (typeof f.default !== 'function' || f.key === 'date') continue;
+    const cur = next.values[f.key];
+    const auto = f.key in next.autofill ? same(cur, next.autofill[f.key]) : isEmpty(cur);
+    if (!auto) continue;
+    const v = safeDefault(f, ctx);
+    next.values[f.key] = v == null ? '' : clone(v);
+    if (isEmpty(v)) delete next.autofill[f.key];
+    else next.autofill[f.key] = clone(v);
+  }
   return next;
 }
 
@@ -141,10 +178,13 @@ export function reportTitle(template, report, project) {
   return [template.name.zh, where, date].filter(Boolean).join(' · ');
 }
 
-function itemAnswered(item, answer) {
+export function itemAnswered(item, answer) {
   if (item.input) return !isEmpty(answer?.value);
   return !!answer?.r;
 }
+
+/** 选填的填写项（如「差异 / 未完成事项」）：空着也算完成，不计入进度 */
+export const isOptionalItem = (item) => !!item.input?.optional;
 
 /** 进度：{ done, total, pct } — 判定项 + 必填字段 */
 export function progress(template, report) {
@@ -156,6 +196,7 @@ export function progress(template, report) {
     if (!isEmpty(report.values?.[f.key])) done += 1;
   }
   for (const { item } of allItems(template)) {
+    if (isOptionalItem(item)) continue;
     total += 1;
     if (itemAnswered(item, report.items?.[item.id])) done += 1;
   }
@@ -181,7 +222,7 @@ export function issues(template, report, { project, settings } = {}) {
       for (const it of s.items) {
         const a = report.items?.[it.id];
         if (!itemAnswered(it, a)) {
-          empty += 1;
+          if (!isOptionalItem(it)) empty += 1;
           continue;
         }
         if (it.input) continue;
@@ -199,7 +240,7 @@ export function issues(template, report, { project, settings } = {}) {
         if (it.media && (!a.photos || a.photos.length === 0) && opt?.tone !== 'na') {
           out.push({
             level: 'warn',
-            text: `第 ${it.no} 项「${L(it.title, 'zh')}」需要影像存档，还没有照片`,
+            text: `第 ${it.no} 项「${L(it.title, 'zh')}」需要影像存档，还没有照片 / 视频`,
             sectionId: s.id,
             target: it.id,
           });
@@ -212,7 +253,11 @@ export function issues(template, report, { project, settings } = {}) {
   }
   if (typeof template.checks === 'function') {
     const ctx = makeCtx({ template, report, project, settings });
-    for (const t of template.checks(ctx) || []) out.push({ level: 'warn', text: t });
+    // checks() 可返回字符串，或 { text, sectionId?, target? }（导出页点一下可跳到对应位置）
+    for (const t of template.checks(ctx) || []) {
+      if (!t) continue;
+      out.push(typeof t === 'string' ? { level: 'warn', text: t } : { level: 'warn', ...t });
+    }
   }
   return out;
 }

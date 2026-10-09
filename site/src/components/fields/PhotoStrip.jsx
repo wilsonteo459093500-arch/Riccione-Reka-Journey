@@ -7,14 +7,26 @@ import { useMediaUrl, useMediaRecord, setCaption, forgetMedia } from './media.js
 
 function Thumb({ id, onClick, size = 'md' }) {
   const url = useMediaUrl(id, 'thumb');
+  const [m] = useMediaRecord(id);
   const dim = size === 'sm' ? 'h-14 w-14' : 'h-[76px] w-[76px]';
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`${dim} shrink-0 overflow-hidden rounded-xl bg-cream-deep ring-1 ring-line active:scale-95`}
+      className={`${dim} relative shrink-0 overflow-hidden rounded-xl bg-cream-deep ring-1 ring-line active:scale-95`}
     >
-      {url ? <img src={url} alt="" className="h-full w-full object-cover" draggable={false} /> : <Spinner className="m-auto text-ink-faint" />}
+      {url ? (
+        <img src={url} alt="" className="h-full w-full object-cover" draggable={false} />
+      ) : url === null ? (
+        <Icon name={m?.kind === 'video' ? 'Video' : 'Image'} size={22} className="m-auto text-ink-faint" />
+      ) : (
+        <Spinner className="m-auto text-ink-faint" />
+      )}
+      {m?.kind === 'video' && (
+        <span className="absolute inset-0 flex items-center justify-center bg-black/20">
+          <Icon name="Play" size={18} className="text-white drop-shadow" />
+        </span>
+      )}
     </button>
   );
 }
@@ -57,7 +69,13 @@ function Viewer({ id, index, total, onClose, onDelete, onMove }) {
       }
     >
       <div className="overflow-hidden rounded-2xl bg-black/5">
-        {url ? <img src={url} alt="" className="mx-auto max-h-[52dvh] w-auto object-contain" /> : <div className="flex h-60 items-center justify-center"><Spinner /></div>}
+        {url && m?.kind === 'video' ? (
+          <video src={url} controls playsInline className="mx-auto max-h-[52dvh] w-full bg-black" />
+        ) : url ? (
+          <img src={url} alt="" className="mx-auto max-h-[52dvh] w-auto object-contain" />
+        ) : (
+          <div className="flex h-60 items-center justify-center">{url === null ? '无法预览' : <Spinner />}</div>
+        )}
       </div>
       <label className="label mt-4">照片说明（可选，会印在报告上）</label>
       <input
@@ -76,7 +94,7 @@ function Viewer({ id, index, total, onClose, onDelete, onMove }) {
  * @param {{ ids: string[], onChange: (updater)=>void, reportId: string, max?: number,
  *           compact?: boolean, label?: string }} props
  */
-export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, compact = false, label }) {
+export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, compact = false, label, acceptVideo = false }) {
   const { addMediaFile, removeMedia, track } = useStore();
   const alive = useRef(true);
   useEffect(() => {
@@ -94,7 +112,10 @@ export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, com
   const left = Math.max(0, max - list.length);
 
   const addFiles = (fileList) => {
-    const files = [...(fileList || [])].filter((f) => f.type.startsWith('image/') || /\.(heic|heif|jpe?g|png|webp)$/i.test(f.name));
+    const isVideo = (f) => f.type.startsWith('video/') || /\.(mp4|mov|m4v|webm)$/i.test(f.name);
+    const files = [...(fileList || [])].filter(
+      (f) => f.type.startsWith('image/') || /\.(heic|heif|jpe?g|png|webp)$/i.test(f.name) || (acceptVideo && isVideo(f)),
+    );
     if (!files.length) return;
     const take = files.slice(0, left);
     if (files.length > left) toast(`最多 ${max} 张，已加入前 ${take.length} 张`, 'warn');
@@ -104,7 +125,7 @@ export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, com
       (async () => {
         for (const f of take) {
           try {
-            const id = await addMediaFile(reportId, f, 'photo');
+            const id = await addMediaFile(reportId, f, acceptVideo && isVideo(f) ? 'video' : 'photo');
             onChange((prev) => [...(prev || []), id]);
           } catch (e) {
             toast(e.message || '照片处理失败', 'error');
@@ -169,7 +190,7 @@ export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, com
               onClick={() => libRef.current?.click()}
             >
               <Icon name="ImagePlus" size={compact ? 18 : 22} />
-              {!compact && <span className="text-[11px] font-semibold">相册</span>}
+              {!compact && <span className="text-[11px] font-semibold">{acceptVideo ? '相册/视频' : '相册'}</span>}
             </button>
           </>
         )}
@@ -188,7 +209,7 @@ export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, com
       <input
         ref={libRef}
         type="file"
-        accept="image/*"
+        accept={acceptVideo ? 'image/*,video/*' : 'image/*'}
         multiple
         className="hidden"
         onChange={(e) => {

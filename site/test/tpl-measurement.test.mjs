@@ -13,6 +13,10 @@ const model = (report) => buildDocModel({ template: t, report, ...opts });
 const ctxOf = (report) => makeCtx({ template: t, report, ...opts });
 const byId = () => Object.fromEntries(allItems(t).map(({ item }) => [item.id, item]));
 
+
+// checks() 可返回字符串或 { text, sectionId, target }：测试只比较文字
+const checksText = (ctx) => (t.checks(ctx) || []).map((x) => (typeof x === 'string' ? x : x.text));
+
 export const tests = [
   ['结构：A–D 四节，共 22 项', () => {
     assert.equal(t.id, 'measurement');
@@ -83,7 +87,7 @@ export const tests = [
       assert.equal(cl.reduce((n, b) => n + b.rows.length, 0), 22);
       assert.equal(m.meta.brand, 'vsmooth');
       assert.ok(m.meta.filename.startsWith('复尺确认_Hailey_'));
-      const checks = t.checks(ctxOf(r));
+      const checks = checksText(ctxOf(r));
       assert.ok(Array.isArray(checks) && checks.every((s) => typeof s === 'string'));
       const list = issues(t, r, opts);
       assert.ok(Array.isArray(list));
@@ -119,7 +123,7 @@ export const tests = [
       const s = t.summary(ctx);
       assert.equal(s.items.find((i) => i.label.en === 'Not checked').value, '22 项 items');
       assert.equal(s.items.find((i) => i.label.en === 'Action needed').value, '无 None');
-      assert.deepEqual(t.checks(ctx), ['客户还未签名：请客户阅读「客户确认声明」后签名', '复尺人员还未签名']);
+      assert.deepEqual(checksText(ctx), ['客户还未签名：请客户阅读「客户确认声明」后签名', '复尺人员还未签名']);
       assert.equal(t.filename(ctx), '复尺确认');
     }
     assert.doesNotThrow(() => model({ values: {}, items: {}, tables: {}, signatures: {} }));
@@ -147,7 +151,7 @@ export const tests = [
     assert.equal(v['Action needed'].tone, 'fail');
     // 签名提醒：有客户签名图后只剩复尺人员
     r.signatures.customer.image = 'm_sig';
-    assert.deepEqual(t.checks(ctxOf(r)), ['复尺人员还未签名']);
+    assert.deepEqual(checksText(ctxOf(r)), ['复尺人员还未签名']);
     assert.ok(issues(t, r, opts).some((i) => i.text === '复尺人员还未签名'));
   }],
 ];

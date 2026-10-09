@@ -11,6 +11,10 @@ const lists = handover.sections.filter((s) => s.type === 'checklist');
 const model = (report) => buildDocModel({ template: handover, report, project: SAMPLE_PROJECT, settings: SAMPLE_SETTINGS });
 const ctxOf = (report) => makeCtx({ template: handover, report, project: SAMPLE_PROJECT, settings: SAMPLE_SETTINGS });
 
+
+// checks() 可返回字符串或 { text, sectionId, target }：测试只比较文字
+const checksText = (ctx) => (handover.checks(ctx) || []).map((x) => (typeof x === 'string' ? x : x.text));
+
 export const tests = [
   ['结构：5 个 H，共 20 项', () => {
     assert.equal(handover.id, 'handover');
@@ -56,7 +60,7 @@ export const tests = [
     assert.equal(r.values.followup30, addDays(r.values.date, 30));
     assert.equal(r.values.followup1y, addDays(r.values.date, 365));
     assert.deepEqual(r.values.acceptPhotos, []);
-    assert.equal(handover.checks(ctxOf(r)).length, 0);
+    assert.equal(checksText(ctxOf(r)).length, 0);
   }],
   ['full / pass / empty：文档模型 + 统计 + 提醒不报错', () => {
     for (const variant of ['full', 'pass', 'empty']) {
@@ -67,7 +71,7 @@ export const tests = [
       assert.ok(cl.every((b) => b.resultLayout === 'ticks'));
       assert.equal(cl.reduce((n, b) => n + b.rows.length, 0), 20);
       assert.ok(m.meta.filename.startsWith('交付清单'));
-      assert.ok(Array.isArray(handover.checks(ctxOf(r))));
+      assert.ok(Array.isArray(checksText(ctxOf(r))));
       assert.ok(Array.isArray(issues(handover, r, { project: SAMPLE_PROJECT, settings: SAMPLE_SETTINGS })));
       const p = progress(handover, r);
       const sum = m.blocks.at(-1);
@@ -88,7 +92,7 @@ export const tests = [
     const s = handover.summary(makeCtx({ template: handover, report: bare }));
     assert.equal(s.items[0].value, '0 / 20 项 items');
     assert.match(s.items.find((i) => i.label.en === 'Remaining').value, /^Ⅰ-1 全屋清洁完成.*等共 20 项$/);
-    assert.deepEqual(handover.checks(makeCtx({ template: handover, report: bare })), ['未填写 30天回访日期', '未填写 1年回访日期']);
+    assert.deepEqual(checksText(makeCtx({ template: handover, report: bare })), ['未填写 30天回访日期', '未填写 1年回访日期']);
     assert.equal(handover.summary(makeCtx({ template: handover, report: {} })).items[0].value, '0 / 20 项 items');
     assert.doesNotThrow(() => model(bare));
   }],

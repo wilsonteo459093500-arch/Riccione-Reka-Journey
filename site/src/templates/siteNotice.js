@@ -2,7 +2,7 @@
 // 来源：现场主管 WhatsApp 进场通知（【进场通知】Tuai Timur Residence – Hailey 单位安装）
 // 主输出 = text()（WhatsApp 文案，逐字对齐原文格式）；PDF 由文档模型通用生成。
 import { val } from './helpers.js';
-import { addDays, fmtDateCN, fmtTime, parseISODate } from '../lib/format.js';
+import { addDays, fmtDateCN, fmtTime, parseISODate, toISODate } from '../lib/format.js';
 
 const pad = (n) => String(n).padStart(2, '0');
 
@@ -69,7 +69,8 @@ export default {
           key: 'date',
           type: 'date',
           label: { zh: '日期', en: 'Date' },
-          default: (ctx) => addDays(ctx.today, 1),
+          // 以「建报告那天」为准的明天：之后换项目 / 隔天再改，不会自动跳到新的明天
+          default: (ctx) => addDays(ctx.report?.createdAt ? toISODate(new Date(ctx.report.createdAt)) : ctx.today, 1),
           hint: '默认明天',
         },
         { key: 'location', type: 'text', label: { zh: '地点', en: 'Location' }, bind: 'project.name', hint: '默认 = 项目名，可改成楼盘 / 栋别' },

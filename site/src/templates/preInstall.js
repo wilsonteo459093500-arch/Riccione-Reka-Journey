@@ -147,6 +147,7 @@ export default {
       I(2, '04', '临时水电可用,够师傅施工', '', KEY),
       W(2, '05', { zh: '差异 / 未完成事项' }, {
         key: 'diffs',
+        optional: true, // 没有差异时留空即可
         type: 'textarea',
         placeholder: '填写示例:哪里 / 差什么 / 谁负责 / 几时好',
       }),
@@ -203,6 +204,7 @@ export default {
         { id: DECISION_ID, no: '01', title: { zh: '开工判定', en: 'GO / NO-GO DECISION' }, scale: GONOGO },
         W('s', '04', { zh: '备注 / 整改责任人与期限' }, {
           key: 'remarks',
+          optional: true, // 只有「有条件开工」时必填（见 checks）
           type: 'textarea',
           placeholder: '填写示例:事项 / 负责人 / 完成期限',
         }),
@@ -285,11 +287,11 @@ export default {
     const items = ctx.report?.items || {};
     const d = items[DECISION_ID]?.r;
     if (!d) {
-      out.push('未选择开工判定（GO / 有条件开工 / NO-GO）');
+      out.push({ text: '未选择开工判定（GO / 有条件开工 / NO-GO）', target: DECISION_ID });
       return out;
     }
-    if (d === 'GO' && a.keyFails.length) out.push('有关键项不通过，不能判定 GO');
-    if (d === 'COND' && a.keyFails.length) out.push('有关键项不通过，不能判定「有条件开工」');
+    if (d === 'GO' && a.keyFails.length) out.push({ text: '有关键项不通过，不能判定 GO', target: DECISION_ID });
+    if (d === 'COND' && a.keyFails.length) out.push({ text: '有关键项不通过，不能判定「有条件开工」', target: DECISION_ID });
     if ((d === 'GO' || d === 'COND') && !a.keyFails.length && a.keyDone < a.keyTotal) {
       out.push(`还有 ${a.keyTotal - a.keyDone} 个关键项(★)未判定，不能放行`);
     }
@@ -297,11 +299,11 @@ export default {
       out.push(`有 ${a.generalFails.length} 项一般异常未结，应判定「有条件开工」`);
     }
     if (d === 'COND' && !String(items[REMARK_ID]?.value || '').trim()) {
-      out.push('有条件开工须在「备注 / 整改责任人与期限」列明事项 / 负责人 / 完成期限');
+      out.push({ text: '有条件开工须在「备注 / 整改责任人与期限」列明事项 / 负责人 / 完成期限', target: 'pis_04' });
     }
     if (d === 'GO' || d === 'COND') {
       const pm = ctx.report?.signatures?.pm;
-      if (!pm || (!String(pm.name || '').trim() && !pm.image)) out.push('现场主管无权放行，须由项目经理复核签名');
+      if (!pm || (!String(pm.name || '').trim() && !pm.image)) out.push({ text: '现场主管无权放行，须由项目经理复核签名', sectionId: 'signoff' });
     }
     return out;
   },

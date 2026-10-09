@@ -277,9 +277,9 @@ export default {
       title: { zh: '综合结论', en: 'Overall Conclusion' },
       columns: 2,
       fields: [
-        { key: 'result', type: 'radio', label: { zh: '综合结论', en: 'Overall Conclusion' }, options: CONCLUSION, span: 2, required: true },
-        { key: 'rectifiedDate', type: 'date', label: { zh: '整改完成日期', en: 'Rectification Completed' } },
-        { key: 'recheckDate', type: 'date', label: { zh: '复验合格日期', en: 'Re-inspection Passed' } },
+        { key: 'result', type: 'radio', label: { zh: '综合结论', en: 'Overall Conclusion' }, options: CONCLUSION, span: 2, required: true, keepOnDuplicate: false },
+        { key: 'rectifiedDate', type: 'date', label: { zh: '整改完成日期', en: 'Rectification Completed' }, keepOnDuplicate: false },
+        { key: 'recheckDate', type: 'date', label: { zh: '复验合格日期', en: 'Re-inspection Passed' }, keepOnDuplicate: false },
       ],
     },
     {
@@ -320,7 +320,7 @@ export default {
     let tone = 'warn';
     if (result === 'pass') {
       conclusion = L(opt);
-      tone = F > closed || open ? 'warn' : 'pass';
+      tone = F > closed || open || c._empty ? 'warn' : 'pass'; // 还有未检查项时不能显示绿色
     } else if (result === 'rectify') {
       conclusion = L(opt);
       if (filled(recheckDate)) {
@@ -360,20 +360,21 @@ export default {
     const open = rows.length - closed;
     const result = val(ctx, 'result');
 
-    if (F > rows.length) out.push(`有 ${F - rows.length} 项不合格还没记入整改清单`);
+    if (val(ctx, 'result') === 'pass' && countResults(ctx)._empty) out.push({ text: '结论为「合格 — 可安排交付」，但还有检查项未检查', sectionId: 'conclusion' });
+    if (F > rows.length) out.push({ text: `有 ${F - rows.length} 项不合格还没记入整改清单`, sectionId: 'rectification' });
     if (result === 'pass') {
-      if (open) out.push(`结论为「合格 — 可安排交付」，但还有 ${open} 项整改未关闭`);
-      if (F > closed) out.push(`结论为「合格 — 可安排交付」，但还有 ${F - closed} 项不合格未复验关闭`);
+      if (open) out.push({ text: `结论为「合格 — 可安排交付」，但还有 ${open} 项整改未关闭`, sectionId: 'conclusion' });
+      if (F > closed) out.push({ text: `结论为「合格 — 可安排交付」，但还有 ${F - closed} 项不合格未复验关闭`, sectionId: 'conclusion' });
     }
     if (result === 'rectify' && filled(val(ctx, 'recheckDate')) && open) {
-      out.push(`已填复验合格日期，但还有 ${open} 项整改未关闭`);
+      out.push({ text: `已填复验合格日期，但还有 ${open} 项整改未关闭`, sectionId: 'conclusion' });
     }
     // ★ 关单规则：每项须附「问题照片 + 整改后复验照片」
     rows.forEach((r) => {
       const { n } = r;
-      if (!filled(r.before)) out.push(`整改第 ${n} 项缺少问题照片`);
-      if (isClosed(r) && !filled(r.after)) out.push(`整改第 ${n} 项已关闭，但缺少复验照片`);
-      if (filled(r.closed) && r.recheck !== 'P') out.push(`整改第 ${n} 项填了关闭日，但复验未选「合格」`);
+      if (!filled(r.before)) out.push({ text: `整改第 ${n} 项缺少问题照片`, sectionId: 'rectification' });
+      if (isClosed(r) && !filled(r.after)) out.push({ text: `整改第 ${n} 项已关闭，但缺少复验照片`, sectionId: 'rectification' });
+      if (filled(r.closed) && r.recheck !== 'P') out.push({ text: `整改第 ${n} 项填了关闭日，但复验未选「合格」`, sectionId: 'rectification' });
     });
     return out;
   },

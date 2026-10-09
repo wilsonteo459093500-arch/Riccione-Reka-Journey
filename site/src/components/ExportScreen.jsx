@@ -202,6 +202,7 @@ export default function ExportScreen({ reportId }) {
   const batches = shareMedia ? shareBatches(shareMedia) : [];
 
   const jumpTo = (p) => {
+    if (!p.target && !p.sectionId) return;
     window.__siteScrollTo = [p.target && `item-${p.target}`, p.target && `field-${p.target}`, p.sectionId && `sec-${p.sectionId}`].filter(Boolean);
     navigate(`/r/${report.id}`);
   };
@@ -223,7 +224,7 @@ export default function ExportScreen({ reportId }) {
             </summary>
             <div className="space-y-1 border-t border-line px-3 pb-3 pt-2">
               {[...errors, ...warns].map((p, i) => (
-                <button key={i} className="flex w-full items-start gap-2 rounded-lg px-1 py-1.5 text-left text-[13px] leading-snug active:bg-cream" onClick={() => jumpTo(p)}>
+                <button key={i} className={`flex w-full items-start gap-2 rounded-lg px-1 py-1.5 text-left text-[13px] leading-snug ${p.target || p.sectionId ? 'active:bg-cream' : 'cursor-default'}`} onClick={() => jumpTo(p)}>
                   <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${p.level === 'error' ? 'bg-fail' : 'bg-[#C98A1B]'}`} />
                   <span className="flex-1 text-ink-soft">{p.text}</span>
                   {(p.target || p.sectionId) && <Icon name="ChevronRight" size={16} className="mt-0.5 text-ink-faint" />}

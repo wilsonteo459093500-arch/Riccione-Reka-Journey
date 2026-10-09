@@ -25,6 +25,10 @@ function allPass(patch = {}) {
   return r;
 }
 
+
+// checks() 可返回字符串或 { text, sectionId, target }：测试只比较文字
+const checksText = (ctx) => (t.checks(ctx) || []).map((x) => (typeof x === 'string' ? x : x.text));
+
 export const tests = [
   ['结构：O1–O5 + 签核，共 27 项', () => {
     assert.equal(t.id, 'pre-install');
@@ -125,7 +129,7 @@ export const tests = [
       const sum = m.blocks[6];
       assert.equal(sum.items.length, 8);
       assert.equal(sum.conclusion.label.zh, '系统建议');
-      const checks = t.checks(ctxOf(r));
+      const checks = checksText(ctxOf(r));
       assert.ok(Array.isArray(checks) && checks.every((x) => typeof x === 'string'));
       const iss = issues(t, r, { project: SAMPLE_PROJECT, settings: SAMPLE_SETTINGS });
       assert.ok(Array.isArray(iss));
@@ -166,7 +170,7 @@ export const tests = [
       assert.equal(s.items[0].value, '是 0 · 否 0 · 未填 2');
       assert.equal(s.items[5].value, '0 / 18');
       assert.equal(s.items[7].value, '未选择 Not selected');
-      assert.deepEqual(t.checks(ctx), ['未选择开工判定（GO / 有条件开工 / NO-GO）']);
+      assert.deepEqual(checksText(ctx), ['未选择开工判定（GO / 有条件开工 / NO-GO）']);
       assert.equal(t.filename(ctx), '场前审核');
       assert.doesNotThrow(() => model(report));
     }
@@ -198,22 +202,22 @@ export const tests = [
     assert.equal(t.summary(ctxOf(allPass({ pis_01: { r: 'NOGO' } }))).conclusion.value, 'GO 可开工');
   }],
   ['提醒：判定与结果矛盾 / 有条件开工未列责任人 / 项目经理未复核', () => {
-    assert.deepEqual(t.checks(ctxOf(allPass())), []);
-    assert.deepEqual(t.checks(ctxOf(allPass({ pi2_03: { r: 'F', note: '返潮' } }))), ['有关键项不通过，不能判定 GO']);
-    assert.deepEqual(t.checks(ctxOf(allPass({ pi2_03: { r: 'F' }, pis_01: { r: 'NOGO' } }))), []);
+    assert.deepEqual(checksText(ctxOf(allPass())), []);
+    assert.deepEqual(checksText(ctxOf(allPass({ pi2_03: { r: 'F', note: '返潮' } }))), ['有关键项不通过，不能判定 GO']);
+    assert.deepEqual(checksText(ctxOf(allPass({ pi2_03: { r: 'F' }, pis_01: { r: 'NOGO' } }))), []);
     assert.deepEqual(
-      t.checks(ctxOf(allPass({ pi4_02: { r: 'F', note: '转角窄' } }))),
+      checksText(ctxOf(allPass({ pi4_02: { r: 'F', note: '转角窄' } }))),
       ['有 1 项一般异常未结，应判定「有条件开工」'],
     );
     assert.deepEqual(
-      t.checks(ctxOf(allPass({ pi4_02: { r: 'F' }, pis_01: { r: 'COND' } }))),
+      checksText(ctxOf(allPass({ pi4_02: { r: 'F' }, pis_01: { r: 'COND' } }))),
       ['有条件开工须在「备注 / 整改责任人与期限」列明事项 / 负责人 / 完成期限'],
     );
-    assert.deepEqual(t.checks(ctxOf(allPass({ pi4_02: { r: 'F' }, pis_01: { r: 'COND' }, pis_04: { value: '转角 / Ah Keong / 10月10日' } }))), []);
+    assert.deepEqual(checksText(ctxOf(allPass({ pi4_02: { r: 'F' }, pis_01: { r: 'COND' }, pis_04: { value: '转角 / Ah Keong / 10月10日' } }))), []);
     const r = allPass();
     r.signatures.pm = { name: '', date: '', image: null };
-    assert.deepEqual(t.checks(ctxOf(r)), ['现场主管无权放行，须由项目经理复核签名']);
-    assert.deepEqual(t.checks(ctxOf(allPass({ pi1_02: { r: '' } }))), ['还有 1 个关键项(★)未判定，不能放行']);
+    assert.deepEqual(checksText(ctxOf(r)), ['现场主管无权放行，须由项目经理复核签名']);
+    assert.deepEqual(checksText(ctxOf(allPass({ pi1_02: { r: '' } }))), ['还有 1 个关键项(★)未判定，不能放行']);
   }],
   ['填写提醒：否 必须写异常说明；【影像】项要照片', () => {
     const r = createReport(t, { project: SAMPLE_PROJECT, settings: SAMPLE_SETTINGS });

@@ -151,7 +151,7 @@ function ChecklistItem({ section, item, answer, onChange, reportId, flagged }) {
         {/* 照片 */}
         {photosOpen && (
           <div className="mt-3">
-            <PhotoStrip ids={photos} onChange={(fn) => set((prev) => ({ photos: fn(prev.photos || []) }))} reportId={reportId} compact max={12} />
+            <PhotoStrip ids={photos} onChange={(fn) => set((prev) => ({ photos: fn(prev.photos || []) }))} reportId={reportId} compact max={12} acceptVideo={!!item.media} />
           </div>
         )}
 

@@ -11,17 +11,18 @@ import ProjectPicker from './ProjectPicker.jsx';
 import { useStore } from '../lib/store.jsx';
 import { getTemplate } from '../templates/index.js';
 import { L, resolveScale } from '../templates/schema.js';
-import { applyProject, makeCtx, progress, reportTitle, siteLabel } from '../lib/report.js';
+import { applyProject, isOptionalItem, makeCtx, progress, refreshAuto, reportTitle, siteLabel } from '../lib/report.js';
 import { navigate, goBack } from '../lib/router.js';
 
 function sectionCount(section, report) {
   if (section.type === 'checklist') {
-    const done = section.items.filter((it) => {
+    const items = section.items.filter((it) => !isOptionalItem(it));
+    const done = items.filter((it) => {
       const a = report.items?.[it.id];
       if (it.input) return a?.value && (!Array.isArray(a.value) || a.value.length);
       return !!a?.r;
     }).length;
-    return `${done}/${section.items.length}`;
+    return `${done}/${items.length}`;
   }
   if (section.type === 'table') return String((report.tables?.[section.id] || []).length);
   if (section.type === 'signatures') {
@@ -84,6 +85,10 @@ export default function Editor({ reportId }) {
   const latest = useRef(stored || null); // 始终是最新状态（同步更新，组件卸载后迟到的照片也能写进来）
   const retryTimer = useRef(null);
   const mounted = useRef(true);
+  const storeRef = useRef(store);
+  storeRef.current = store;
+  const previousFor = (r, projectId = r.projectId) =>
+    storeRef.current.reports.filter((x) => x.id !== r.id && x.templateId === r.templateId && (x.projectId || null) === (projectId || null));
 
   const template = report ? getTemplate(report.templateId) : null;
   const project = report?.projectId ? store.projectById(report.projectId) : null;
@@ -95,6 +100,17 @@ export default function Editor({ reportId }) {
       setReport(stored);
     }
   }, [stored, report]);
+
+  // 项目资料在建报告之后补充过（如预计天数、设计师）→ 打开时补进还空着 / 仍是自动值的字段
+  useEffect(() => {
+    const r = latest.current;
+    if (!r || !project || !template) return;
+    if ((project.updatedAt || 0) <= (r.updatedAt || 0)) return;
+    const next = applyProject(template, r, project, store.settings, project, previousFor(r));
+    if (JSON.stringify(next.values) !== JSON.stringify(r.values) || JSON.stringify(next.signatures) !== JSON.stringify(r.signatures)) {
+      update(() => next);
+    }
+  }, [report?.id, project?.updatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 从导出页的「填写提醒」跳回来：滚到对应项目
   useEffect(() => {
@@ -179,7 +195,15 @@ export default function Editor({ reportId }) {
 
   const resolve = (v, prev) => (typeof v === 'function' ? v(prev) : v);
   const setValue = useCallback(
-    (key, v) => update((r) => ({ ...r, values: { ...r.values, [key]: resolve(v, r.values?.[key]) } })),
+    (key, v) =>
+      update((r) => {
+        const next = { ...r, values: { ...r.values, [key]: resolve(v, r.values?.[key]) } };
+        if (key !== 'date') return next;
+        // 改了日期：回访日期 / 预计工期等按新日期重算（用户手改过的不动）
+        const t = getTemplate(r.templateId);
+        const p = r.projectId ? storeRef.current.projectById(r.projectId) : null;
+        return refreshAuto(t, next, { project: p, settings: storeRef.current.settings, previous: previousFor(r) });
+      }),
     [update],
   );
   /** patch 可以是对象或 (prevAnswer) => 对象；合并进最新的答案 */
@@ -242,13 +266,13 @@ export default function Editor({ reportId }) {
   }
 
   const prog = progress(template, report);
+  const hasSummarySlot = template.sections.some((s) => s.type === 'summary');
   const jump = (id) => document.getElementById(`sec-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   const navSections = template.sections.filter((s) => s.type !== 'note' && s.type !== 'summary');
 
   const changeProject = (p) => {
     setPicking(false);
-    const previous = store.reports.filter((x) => x.id !== report.id && x.templateId === template.id && (x.projectId || null) === (p?.id || null));
-    update((r) => applyProject(template, r, p, store.settings, project, previous));
+    update((r) => applyProject(template, r, p, store.settings, project, previousFor(r, p?.id)));
   };
 
   return (
@@ -299,10 +323,18 @@ export default function Editor({ reportId }) {
         </button>
 
         {template.sections.map((s) => {
-          if (s.type === 'summary') return null;
+          if (s.type === 'summary') {
+            // 模板指定的统计位置（如场前审核：建议放在签核判定之前）
+            return summary ? (
+              <div key={s.id} id={`sec-${s.id}`} className="mt-6 scroll-mt-32">
+                <SummaryCard summary={summary} />
+              </div>
+            ) : null;
+          }
           if (s.type === 'note') {
             return (
               <div key={s.id} id={`sec-${s.id}`} className="mt-4 scroll-mt-32">
+                {s.title && <div className="mb-1.5 px-1 text-[14px] font-bold text-ink">{L(s.title, 'zh')}{s.title.en && s.title.zh && <span className="ml-1.5 text-[11px] font-normal text-ink-mute">{s.title.en}</span>}</div>}
                 <Note note={s.lines} tone={s.tone} />
               </div>
             );
@@ -334,7 +366,7 @@ export default function Editor({ reportId }) {
               )}
               {s.type === 'signatures' && (
                 <>
-                  {summary && (
+                  {summary && !hasSummarySlot && (
                     <div className="mb-3">
                       <SummaryCard summary={summary} />
                     </div>
@@ -346,7 +378,7 @@ export default function Editor({ reportId }) {
           );
         })}
 
-        {summary && !template.sections.some((s) => s.type === 'signatures') && (
+        {summary && !hasSummarySlot && !template.sections.some((s) => s.type === 'signatures') && (
           <div className="mt-6">
             <SummaryCard summary={summary} />
           </div>

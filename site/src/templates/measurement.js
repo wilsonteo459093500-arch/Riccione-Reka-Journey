@@ -127,7 +127,7 @@ export default {
       title: { zh: '补充记录', en: 'Additional Notes' },
       columns: 1,
       fields: [
-        { key: 'notes', type: 'textarea', label: { zh: '补充记录', en: 'Additional Notes' }, rows: 4 },
+        { key: 'notes', type: 'textarea', label: { zh: '补充记录', en: 'Additional Notes' }, rows: 4, keepOnDuplicate: false },
         { key: 'photos', type: 'photos', label: { zh: '现场照片', en: 'Site photos' }, max: 20 },
       ],
     },
@@ -177,8 +177,8 @@ export default {
   checks(ctx) {
     const out = [];
     const sig = ctx.report?.signatures || {};
-    if (!sig.customer?.image) out.push('客户还未签名：请客户阅读「客户确认声明」后签名');
-    if (!sig.supervisor?.image) out.push('复尺人员还未签名');
+    if (!sig.customer?.image) out.push({ text: '客户还未签名：请客户阅读「客户确认声明」后签名', sectionId: 'signoff' });
+    if (!sig.supervisor?.image) out.push({ text: '复尺人员还未签名', sectionId: 'signoff' });
     return out;
   },
   filename(ctx) {

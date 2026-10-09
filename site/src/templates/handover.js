@@ -198,14 +198,14 @@ export default {
     const date = val(ctx, 'date');
     const f30 = val(ctx, 'followup30');
     const f1y = val(ctx, 'followup1y');
-    if (!f30) out.push('未填写 30天回访日期');
-    if (!f1y) out.push('未填写 1年回访日期');
+    if (!f30) out.push({ text: '未填写 30天回访日期', sectionId: 'followup' });
+    if (!f1y) out.push({ text: '未填写 1年回访日期', sectionId: 'followup' });
     const early = (d) => {
       const n = date && d ? daysBetween(date, d) : null;
       return n != null && n <= 0;
     };
-    if (early(f30)) out.push('30天回访日期不晚于交付日期，请核对');
-    if (early(f1y)) out.push('1年回访日期不晚于交付日期，请核对');
+    if (early(f30)) out.push({ text: '30天回访日期不晚于交付日期，请核对', sectionId: 'followup' });
+    if (early(f1y)) out.push({ text: '1年回访日期不晚于交付日期，请核对', sectionId: 'followup' });
     return out;
   },
   filename(ctx) {

@@ -12,7 +12,13 @@ export function mediaUrl(id, which = 'thumb') {
       getMedia(id)
         .then((m) => {
           if (!m) return null;
-          const b = which === 'full' ? m.blob : which === 'poster' ? m.poster || m.thumb : m.thumb || m.blob;
+          // 视频的 blob 是视频文件：缩略图 / 封面只能用 poster
+          const b =
+            which === 'full'
+              ? m.blob
+              : which === 'poster' || m.kind === 'video'
+                ? m.poster || m.thumb
+                : m.thumb || m.blob;
           return b ? URL.createObjectURL(b) : null;
         })
         .catch(() => null),
@@ -30,12 +36,13 @@ export function forgetMedia(id) {
   }
 }
 
+/** 返回 undefined = 加载中，null = 没有可显示的图（如视频截不到封面） */
 export function useMediaUrl(id, which = 'thumb') {
-  const [url, setUrl] = useState(null);
+  const [url, setUrl] = useState(undefined);
   useEffect(() => {
     let alive = true;
-    setUrl(null);
-    if (id) mediaUrl(id, which).then((u) => alive && setUrl(u));
+    setUrl(undefined);
+    if (id) mediaUrl(id, which).then((u) => alive && setUrl(u || null));
     return () => {
       alive = false;
     };
