@@ -1,5 +1,5 @@
 // 项目页：项目列表 / 新建 / 编辑；项目下的报告一览
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import Icon from './ui/Icon.jsx';
 import { TopBar, Empty, useUI } from './ui/UI.jsx';
 import ProjectForm from './ProjectForm.jsx';
@@ -65,6 +65,18 @@ export function ProjectEdit({ projectId }) {
   const { confirm, toast } = useUI();
   const isNew = projectId === 'new';
   const dirty = useRef(false);
+  const draft = useRef(null);
+  const discard = useRef(false);
+  // 安卓返回键 / 手势返回不会经过页头的确认：已有项目离开时自动保存修改
+  useEffect(
+    () => () => {
+      const d = draft.current;
+      if (dirty.current && !discard.current && !isNew && d && (d.name || '').trim()) {
+        store.saveProject({ ...d, name: d.name.trim() });
+      }
+    },
+    [], // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const p = isNew ? {} : store.projectById(projectId);
   const projReports = useMemo(
     () => store.reports.filter((r) => r.projectId === projectId).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)),
@@ -84,11 +96,12 @@ export function ProjectEdit({ projectId }) {
       <TopBar
         title={isNew ? '新建项目' : siteLabel(p)}
         onBack={async () => {
-          if (dirty.current) {
-            const ok = await confirm({ title: '有修改还没保存', message: '离开后这次的修改会丢失。', okText: '不保存，离开', cancelText: '继续编辑', danger: true });
+          if (dirty.current && isNew) {
+            const ok = await confirm({ title: '新项目还没保存', message: '离开后填写的内容会丢失。', okText: '不保存，离开', cancelText: '继续编辑', danger: true });
             if (!ok) return;
+            discard.current = true;
           }
-          goBack('/projects');
+          goBack('/projects'); // 已有项目：离开时自动保存
         }}
       />
       <main className="mx-auto max-w-lg px-3 pt-3">
@@ -98,6 +111,9 @@ export function ProjectEdit({ projectId }) {
             initial={p}
             onDirty={(v) => {
               dirty.current = v;
+            }}
+            onChange={(next) => {
+              draft.current = next;
             }}
             onSave={async (data) => {
               dirty.current = false;

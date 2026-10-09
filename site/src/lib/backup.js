@@ -27,39 +27,46 @@ export async function exportBackup({ includeVideos = true, onProgress } = {}) {
   ];
   for (let i = 0; i < list.length; i += 1) {
     const { blob, thumb, poster, ...meta } = list[i];
+    // 每条先包成小 Blob：base64 大字符串用完即可回收，内存不会随视频数量叠加
     parts.push(
-      JSON.stringify({
-        media: {
-          ...meta,
-          blob: blob ? await blobToDataURL(blob) : null,
-          thumb: thumb ? await blobToDataURL(thumb) : null,
-          poster: poster ? await blobToDataURL(poster) : null,
-        },
-      }),
-      '\n',
+      new Blob([
+        JSON.stringify({
+          media: {
+            ...meta,
+            blob: blob ? await blobToDataURL(blob) : null,
+            thumb: thumb ? await blobToDataURL(thumb) : null,
+            poster: poster ? await blobToDataURL(poster) : null,
+          },
+        }),
+        '\n',
+      ]),
     );
     onProgress?.(i + 1, list.length);
   }
   return new Blob(parts, { type: 'application/x-ndjson' });
 }
 
-/** 逐行读文件（支持流式的浏览器不一次性读进内存） */
-async function* readLines(file) {
+/** 逐行读文件：只扫描新到的数据块（线性时间），整行拼好再交出（视频一行可能上百 MB） */
+export async function* readLines(file) {
   if (file.stream && typeof TextDecoderStream !== 'undefined') {
     const reader = file.stream().pipeThrough(new TextDecoderStream()).getReader();
-    let buf = '';
+    let pieces = [];
     for (;;) {
       const { value, done } = await reader.read();
       if (done) break;
-      buf += value;
+      let start = 0;
       let i;
-      while ((i = buf.indexOf('\n')) >= 0) {
-        const line = buf.slice(0, i);
-        buf = buf.slice(i + 1);
+      while ((i = value.indexOf('\n', start)) >= 0) {
+        pieces.push(value.slice(start, i));
+        const line = pieces.join('');
+        pieces = [];
         if (line.trim()) yield line;
+        start = i + 1;
       }
+      if (start < value.length) pieces.push(value.slice(start));
     }
-    if (buf.trim()) yield buf;
+    const rest = pieces.join('');
+    if (rest.trim()) yield rest;
     return;
   }
   for (const line of (await file.text()).split('\n')) if (line.trim()) yield line;

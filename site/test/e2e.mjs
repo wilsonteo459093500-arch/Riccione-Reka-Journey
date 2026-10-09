@@ -207,13 +207,13 @@ try {
   // ② 照片处理中直接返回 → 照片仍要存进报告
   const card2 = page.locator('[id^="item-"]').nth(1);
   await card2.getByRole('button', { name: '照片' }).click();
-  await card2.locator('input[type="file"][multiple]').setInputFiles([join(ASSETS, 'photo5.jpg')]);
+  await card2.locator('input[type="file"][multiple]').setInputFiles([join(ASSETS, 'photo5.jpg'), join(ASSETS, 'photo6.jpg'), join(ASSETS, 'photo7.jpg')]);
   await page.getByRole('button', { name: '返回' }).click();
   await page.getByText('今天做哪份').waitFor({ timeout: 15000 });
   await page.waitForTimeout(800);
   await page.locator('main button', { hasText: '安装质检清单' }).filter({ hasText: '草稿' }).first().click();
   await page.getByText('已自动保存').first().waitFor();
-  assert.ok((await page.locator('[id^="item-"]').nth(1).locator('img').count()) >= 1, '处理中离开，照片丢了');
+  assert.equal(await page.locator('[id^="item-"]').nth(1).locator('img').count(), 3, '整批照片处理中离开，照片丢了');
   assert.equal(await page.locator('[id^="item-"]').nth(0).locator('textarea').first().inputValue(), '门板缝隙过大，明天整改');
   await shot('30-regression-slow-photo');
   console.log('✓ 回归：照片处理慢时判定 / 备注 / 照片都不丢');

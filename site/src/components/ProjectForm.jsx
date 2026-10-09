@@ -17,11 +17,15 @@ export const PROJECT_FIELDS = [
   { key: 'notes', label: '备注', type: 'textarea', placeholder: '物业规定、施工时段、钥匙…' },
 ];
 
-export default function ProjectForm({ initial = {}, onSave, onCancel, onDelete, onDirty, compact = false }) {
+export default function ProjectForm({ initial = {}, onSave, onCancel, onDelete, onDirty, onChange, compact = false }) {
   const [p, setP] = useState({ entryNote: 'Guard house 登记，带护照', parking: '访客停车场', ...initial });
   const fields = compact ? PROJECT_FIELDS.filter((f) => ['name', 'unit', 'client', 'so', 'address', 'mapLink'].includes(f.key)) : PROJECT_FIELDS;
   const set = (k, v) => {
-    setP((x) => ({ ...x, [k]: v }));
+    setP((x) => {
+      const next = { ...x, [k]: v };
+      onChange?.(next);
+      return next;
+    });
     onDirty?.(true);
   };
   const valid = (p.name || '').trim().length > 0;

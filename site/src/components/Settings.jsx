@@ -23,6 +23,7 @@ export default function Settings() {
   const [est, setEst] = useState(null);
   const [persisted, setPersisted] = useState(null);
   const [busy, setBusy] = useState('');
+  const [prog, setProg] = useState('');
   const [noVideo, setNoVideo] = useState(false);
   const [savedTick, setSavedTick] = useState(false);
   const fileRef = useRef(null);
@@ -69,13 +70,14 @@ export default function Settings() {
   const backup = async () => {
     setBusy('backup');
     try {
-      const blob = await exportBackup({ includeVideos: !noVideo });
+      const blob = await exportBackup({ includeVideos: !noVideo, onProgress: (d, t) => setProg(`${d} / ${t}`) });
       downloadBlob(blob, `溪岸SITE备份_${todayISO()}${noVideo ? '_无视频' : ''}.jsonl`);
       toast(`备份文件已下载（${fmtBytes(blob.size)}），请存到云盘`);
     } catch (e) {
       toast(`备份失败：${e.message}`, 'error');
     } finally {
       setBusy('');
+      setProg('');
     }
   };
 
@@ -89,13 +91,14 @@ export default function Settings() {
     if (!ok) return;
     setBusy('restore');
     try {
-      const r = await importBackup(file);
+      const r = await importBackup(file, { onProgress: (d, t) => setProg(t ? `${d} / ${t}` : String(d)) });
       await store.reload();
       toast(`已恢复：${r.projects} 个项目，${r.reports} 份报告，${r.media} 个照片/视频${r.skipped ? `（${r.skipped} 份本机较新，保留本机）` : ''}`);
     } catch (e) {
       toast(e.message || '恢复失败', 'error');
     } finally {
       setBusy('');
+      setProg('');
     }
   };
 
@@ -169,10 +172,10 @@ export default function Settings() {
           )}
           <div className="grid grid-cols-2 gap-2">
             <button className="btn-ghost text-[14px]" disabled={!!busy} onClick={backup}>
-              {busy === 'backup' ? <Spinner /> : <Icon name="Download" size={17} />} 导出备份
+              {busy === 'backup' ? <Spinner /> : <Icon name="Download" size={17} />} {busy === 'backup' && prog ? `打包中 ${prog}` : '导出备份'}
             </button>
             <button className="btn-ghost text-[14px]" disabled={!!busy} onClick={() => fileRef.current?.click()}>
-              {busy === 'restore' ? <Spinner /> : <Icon name="Upload" size={17} />} 从备份恢复
+              {busy === 'restore' ? <Spinner /> : <Icon name="Upload" size={17} />} {busy === 'restore' && prog ? `恢复中 ${prog}` : '从备份恢复'}
             </button>
           </div>
           <label className="flex items-center gap-2 text-[13px] text-ink-soft">
