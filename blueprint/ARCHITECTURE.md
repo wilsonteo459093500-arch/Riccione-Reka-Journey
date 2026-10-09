@@ -41,9 +41,15 @@ Project ──engine/deck.js renderDeck()──▶ 渲染页 [{ bg, els }]（eng
 - **提示**：`notify({ type: 'ok' | 'warn' | 'error', text })`。
 - **AI 设置**：`settings`（`ai/settings.js`）；没 key 时调用 `onOpenSettings()`。
 - `importPdfFile(file, { onProgress(stage, done, total) })` → `Project`（已存好全部图片、已排好整套页面）。
-- `<MoodBoard project settings notify onOpenSettings onUseAsCover={(blob) => …} />`
-- `<DollhousePanel project settings notify onOpenSettings onChange />`
-- `polishProject(project, settings, { onProgress })` → `[{ slideId, patch }]`（只给建议，由用户确认后套用）。
+- `<MoodBoard project settings notify onOpenSettings onUseAsCover={async (blob, meta) => …} />`
+  —— `meta = { source: 'board' | 'flatlay' | 'upload', orientation: 'portrait' | 'landscape' | 'square' }`；
+  MoodBoard 会 await 它并自己弹成功 / 失败提示（壳层出错直接抛）。默认画板竖版 3:4（左文右图封面），满版封面用 16:9。
+  画板存在独立的 IndexedDB，删项目时要一起调 `removeBoardsOf(projectId)`（`src/moodboard/store.js`）。
+- `<DollhousePanel project settings notify onOpenSettings onChange />` —— 立体图页 = `kind: 'view', tag: '3d', layout: 'full'`，
+  插在该层章节页之后；不进楼层空间清单、不参与 AI 润色。
+- `<PolishDialog project settings notify onOpenSettings onApply onClose onlySlideIds? />` —— 内部跑
+  `polishProject(project, settings, { onProgress, onlySlideIds })` → `[{ slideId, before, patch }]`（只给建议），
+  设计师勾选后 `onApply(patches)`，编辑器用 `applyPolishPatches(project, patches)` 套用（只改 subtitle / roomEn / notes，材料永远不动）。
 
 ## 设计原则
 
