@@ -182,7 +182,7 @@ export function layoutViewFull(view, floor, ctx) {
   const cols = [
     ...(view.notes || []).map((n, i) => ({ n, i })).filter(({ n }) => (n.text || n.label || '').trim())
       .map(({ n, i }) => ({ kind: 'note', i, label: (n.label || '备注').trim(), text: (n.text || '').trim() })),
-    ...(view.materials || []).map((r, i) => ({ kind: 'mat', i, label: (r.role || '材料').trim(), mat: ctx.project ? (ctx.project.materials || []).find((m) => m.id === r.materialId) : null })),
+    ...(view.materials || []).map((r, i) => ({ kind: 'mat', i, materialId: r.materialId, label: (r.role || '材料').trim(), mat: ctx.project ? (ctx.project.materials || []).find((m) => m.id === r.materialId) : null })),
   ].map((col) => {
     const labelW = measureText(col.label, 'sans', 18, 3.6);
     const valueW = col.kind === 'mat' ? materialValueWidth(col.mat) : measureText(col.text, 'serif', 22.5);
@@ -205,6 +205,9 @@ export function layoutViewFull(view, floor, ctx) {
   const shown = rowsOfCols.slice(0, 2);
   const hidden = rowsOfCols.slice(2).reduce((n, r) => n + r.length, 0);
   if (hidden) warnings.push(`满版页右下放不下全部 ${cols.length} 项（隐藏了 ${hidden} 项）—— 建议切换成「框图」版式`);
+  for (const col of cols) {
+    if (col.kind === 'mat' && !col.mat) warnings.push(col.materialId ? `第 ${col.i + 1} 项材料已被删除` : `第 ${col.i + 1} 项还没选材料`);
+  }
   let bottom = 1012;
   shown.forEach((row) => {
     const rowValueH = Math.max(...row.map((c) => c.valueH));
@@ -258,10 +261,11 @@ export function layoutViewFramed(view, floor, ctx) {
   const tLineH = lineHeightPx(tSize, 90.58);
   els.push(text(X, 212.8, W, Math.max(76.8, tLines * tLineH + 16), title, { font: 'serif', size: tSize, color: C.ink }, { lineSpacing: 90.58, edit: { field: 'title' } }));
 
-  const notes = (view.notes || []).filter((n) => (n.text || n.label || '').trim());
+  // i = 在 view.notes / view.materials 里的原始序号（edit 字段与数据下标一致）
+  const notes = (view.notes || []).map((n, i) => ({ n, i })).filter(({ n }) => (n.text || n.label || '').trim());
   const mats = view.materials || [];
   const rows = [
-    ...notes.map((n, i) => ({ kind: 'note', i, n })),
+    ...notes.map(({ n, i }) => ({ kind: 'note', i, n })),
     ...mats.map((r, i) => ({ kind: 'mat', i, r, mat: (ctx.project?.materials || []).find((m) => m.id === r.materialId) || null })),
   ];
   if (!rows.length) {
@@ -303,7 +307,7 @@ export function layoutViewFramed(view, floor, ctx) {
       const tw = 1824 - tx;
       els.push(text(tx, sy + 3.6, tw, 35.8, (row.r.role || '材料').trim(), TS.label, { edit: { field: `materials.${row.i}.role` } }));
       els.push(richText(tx, sy + (compact ? 34 : 41.4), tw, h - (compact ? 52 : 66), [{ runs: materialRuns(mat, false) }], { edit: { field: `materials.${row.i}` } }));
-      if (!mat) warnings.push(`第 ${row.i + 1} 项材料已被删除`);
+      if (!mat) warnings.push(row.r.materialId ? `第 ${row.i + 1} 项材料已被删除` : `第 ${row.i + 1} 项还没选材料`);
     }
     y += h;
     els.push(rect(X, y, 524, 1, C.line));
@@ -418,7 +422,8 @@ export function layoutTeam(team) {
   els.push(rect(96, 149.9, 56, 1, C.rule));
   els.push(text(96, 182.9, 900, 87.2, '本案服务团队', { font: 'serif', size: 48, color: C.ink }, { lineSpacing: 90.38 }));
   els.push(text(96, 298.1, 900, 61, '从方案到交付，一个团队全程陪伴。', { font: 'serif', size: 22.5, color: C.muted }, { lineSpacing: 132.59 }));
-  const members = (team || []).filter((m) => (m.name || '').trim() || (m.role || '').trim()).slice(0, 6);
+  // idx = 在 info.team 里的原始序号（edit 字段与数据下标一致）
+  const members = (team || []).map((m, idx) => ({ ...m, idx })).filter((m) => (m.name || '').trim() || (m.role || '').trim()).slice(0, 6);
   const warnings = [];
   if (!members.some((m) => (m.name || '').trim())) warnings.push('服务团队还没填名字（项目信息 → 服务团队）');
   const n = Math.max(1, members.length);
@@ -429,10 +434,10 @@ export function layoutTeam(team) {
     const w = colW - pad - 8;
     els.push(rect(x, 520, colW, 1, C.rule));
     if (i) els.push(rect(x, 520, 1, 267.8, C.line));
-    els.push(text(x + pad, 560.9, w, 33.9, (m.en || '').toUpperCase(), { font: 'sans', size: 18, spacing: 5.4, color: C.eyebrow }, { edit: { field: `team.${i}.en` } }));
+    els.push(text(x + pad, 560.9, w, 33.9, (m.en || '').toUpperCase(), { font: 'sans', size: 18, spacing: 5.4, color: C.eyebrow }, { edit: { field: `team.${m.idx}.en` } }));
     const name = (m.name || '').trim() || '—';
-    els.push(text(x + pad, 618.8, w, 70, name, { font: hasCJK(name) ? 'serif' : 'display', size: 45, color: C.ink }, { lineSpacing: 72, edit: { field: `team.${i}.name` } }));
-    els.push(text(x + pad, 704.8, w, 47, m.role || '', { font: 'serif', size: 22.5, color: C.ink }, { edit: { field: `team.${i}.role` } }));
+    els.push(text(x + pad, 618.8, w, 70, name, { font: hasCJK(name) ? 'serif' : 'display', size: 45, color: C.ink }, { lineSpacing: 72, edit: { field: `team.${m.idx}.name` } }));
+    els.push(text(x + pad, 704.8, w, 47, m.role || '', { font: 'serif', size: 22.5, color: C.ink }, { edit: { field: `team.${m.idx}.role` } }));
   });
   els.push(...footer(false, 'SERVICE · 04'));
   return { bg: C.paper, els, warnings };

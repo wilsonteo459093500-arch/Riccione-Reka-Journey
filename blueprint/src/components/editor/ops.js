@@ -506,21 +506,9 @@ export function applyFix(project, fixId, slideId, { newId } = {}) {
  * 把画布元素的 edit.field 换成检查器里输入框的 data-field：
  *   框图版式的备注序号是「非空备注」里的序号 → 换回原始序号；团队页序号 → info.team 里的序号
  */
-export function inputFieldFor(field, slide, project, layout) {
-  const f = String(field || '');
-  const note = /^notes\.(\d+)\.(label|text)$/.exec(f);
-  if (note && slide?.kind === 'view' && layout === 'framed') {
-    const idx = (slide.notes || []).map((n, i) => ({ n, i })).filter(({ n }) => (n.text || n.label || '').trim());
-    const hit = idx[Number(note[1])];
-    return hit ? `notes.${hit.i}.${note[2]}` : f;
-  }
-  const team = /^team\.(\d+)\.(en|name|role)$/.exec(f);
-  if (team) {
-    const vis = teamVisibleIndices(project?.info?.team);
-    const orig = vis[Number(team[1])];
-    return `team.${orig ?? 0}.${team[2]}`;
-  }
-  return f;
+export function inputFieldFor(field) {
+  // 版式输出的 edit 字段已经是数据下标（notes.N / materials.N / team.N 都按原始序号），直接对应输入框
+  return String(field || '');
 }
 
 // ---------------------------------------------------------------------------

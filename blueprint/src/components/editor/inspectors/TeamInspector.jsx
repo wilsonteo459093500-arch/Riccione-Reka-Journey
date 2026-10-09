@@ -23,13 +23,11 @@ export default function TeamInspector({ project, change, onGoTab }) {
       <div className="space-y-2">
         {team.map((m, i) => {
           const vis = visIdx.get(i);
-          const hl = (k) => (vis === undefined ? undefined : `team.${vis}.${k}`);
           return (
             <div key={i} className={`rounded-xl border p-2 space-y-1.5 ${vis === undefined ? 'border-dashed border-bp-line opacity-70' : 'border-bp-line bg-bp-tint/40'}`}>
               <div className="flex items-center gap-1">
                 <input
                   data-field={`team.${i}.en`}
-                  data-hl={hl('en')}
                   className={`${inputCls} !py-1 text-xs uppercase tracking-wider`}
                   value={m.en || ''}
                   placeholder="DESIGN"
@@ -50,7 +48,6 @@ export default function TeamInspector({ project, change, onGoTab }) {
               <div className="grid grid-cols-2 gap-1.5">
                 <input
                   data-field={`team.${i}.name`}
-                  data-hl={hl('name')}
                   className={inputCls}
                   value={m.name || ''}
                   placeholder="名字"
@@ -58,7 +55,6 @@ export default function TeamInspector({ project, change, onGoTab }) {
                 />
                 <input
                   data-field={`team.${i}.role`}
-                  data-hl={hl('role')}
                   className={inputCls}
                   value={m.role || ''}
                   placeholder="职位，如 方案设计师"

@@ -1,5 +1,6 @@
 // 「页面」编辑器纯函数（src/components/editor/ops.js）：排序 / 复制 / 删除 / 新增 / 版式 / 材料 / 改字 / 提醒修复
 import assert from 'node:assert/strict';
+import { layoutTeam, layoutViewFramed, layoutViewFull } from '../src/engine/layouts.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -345,8 +346,10 @@ test('团队：显示序号 ↔ info.team 序号；增删改', () => {
   const q = updateCover(p, {});
   const t = { ...q, info: { ...q.info, team } };
   assert.deepEqual(teamVisibleIndices(team), [1, 2]);
-  assert.equal(inputFieldFor('team.0.name', null, t, null), 'team.1.name');
-  assert.equal(inputFieldFor('team.1.role', null, t, null), 'team.2.role');
+  // 画布上的 edit 字段就是 info.team 原始序号
+  const teamFields = layoutTeam(team).els.filter((e) => e.edit).map((e) => e.edit.field);
+  assert.deepEqual(teamFields, ['team.1.en', 'team.1.name', 'team.1.role', 'team.2.en', 'team.2.name', 'team.2.role']);
+  assert.equal(inputFieldFor('team.1.name'), 'team.1.name');
   const u = updateTeamMember(t, 0, { name: 'Lau' });
   assert.equal(u.info.team[0].name, 'Lau');
   assert.equal(addTeamMember(t).info.team.length, 4);
@@ -473,13 +476,13 @@ test('nextWarningIndex / warningPageCount：只看启用的页，循环查找', 
   assert.equal(nextWarningIndex([{ enabled: true, warnings: [] }], 0), -1);
 });
 
-test('inputFieldFor：框图版式的备注序号换回原始序号', () => {
-  const v = { kind: 'view', notes: [{ label: '', text: '' }, { label: 'A', text: '1' }, { label: 'B', text: '2' }] };
-  assert.equal(inputFieldFor('notes.0.text', v, null, 'framed'), 'notes.1.text');
-  assert.equal(inputFieldFor('notes.1.label', v, null, 'framed'), 'notes.2.label');
-  assert.equal(inputFieldFor('notes.1.label', v, null, 'full'), 'notes.1.label');
-  assert.equal(inputFieldFor('materials.2.role', v, null, 'framed'), 'materials.2.role');
-  assert.equal(inputFieldFor('title', v, null, 'framed'), 'title');
+test('框图 / 满版：备注的 edit 字段是原始序号（空备注跳过但不改号）', () => {
+  const v = { kind: 'view', room: '客厅', layout: 'framed', notes: [{ label: '', text: '' }, { label: 'A', text: '1' }, { label: 'B', text: '2' }], materials: [] };
+  const fields = (els) => els.filter((e) => e.edit && /^notes\./.test(e.edit.field)).map((e) => e.edit.field);
+  assert.deepEqual(fields(layoutViewFramed(v, null, { project: null, meta: () => null }).els), ['notes.1.label', 'notes.1.text', 'notes.2.label', 'notes.2.text']);
+  assert.deepEqual(fields(layoutViewFull(v, null, { project: null, meta: () => null }).els).sort(), ['notes.1.label', 'notes.1.text', 'notes.2.label', 'notes.2.text']);
+  assert.equal(inputFieldFor('materials.2.role'), 'materials.2.role');
+  assert.equal(inputFieldFor('title'), 'title');
 });
 
 test('projectImages / roomSuggestions / viewTitleOf', () => {

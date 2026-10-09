@@ -510,7 +510,7 @@ export default function DollhousePanel({ project, settings, notify, onOpenSettin
 
       {/* 大图预览 */}
       {preview && (
-        <div className="fixed inset-0 z-50 bg-bp-ink/80 flex items-center justify-center p-6" onClick={() => setPreview(null)}>
+        <div role="dialog" aria-modal="true" aria-label="立体图预览" className="fixed inset-0 z-50 bg-bp-ink/80 flex items-center justify-center p-6" onClick={() => setPreview(null)}>
           <img src={preview} alt="立体图预览" className="max-w-full max-h-full rounded-xl shadow-2xl" />
           <button type="button" className="absolute top-4 right-4 p-2 rounded-lg bg-white/90 text-bp-muted hover:text-bp-ink" onClick={() => setPreview(null)}>
             <X size={18} />

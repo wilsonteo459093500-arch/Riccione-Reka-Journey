@@ -154,6 +154,18 @@ export default function PolishDialog({ project, settings, notify, onOpenSettings
     []
   );
 
+  // Esc 关闭（润色进行中不关，避免丢掉已花的额度）
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape' && phase !== 'running') {
+        e.stopPropagation();
+        onClose?.();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [phase, onClose]);
+
   async function run(ids, { append = false } = {}) {
     if (!settings?.apiKey) {
       onOpenSettings?.();
@@ -222,7 +234,7 @@ export default function PolishDialog({ project, settings, notify, onOpenSettings
   const pct = progress.total ? Math.round((progress.done / progress.total) * 100) : 4;
 
   return (
-    <div className="fixed inset-0 z-50 bg-bp-ink/50 flex items-center justify-center p-4" onClick={phase === 'running' ? undefined : onClose}>
+    <div role="dialog" aria-modal="true" aria-label="AI 润色标题" className="fixed inset-0 z-50 bg-bp-ink/50 flex items-center justify-center p-4" onClick={phase === 'running' ? undefined : onClose}>
       <div
         className="w-full max-w-4xl bg-bp-card rounded-2xl shadow-xl flex flex-col max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}

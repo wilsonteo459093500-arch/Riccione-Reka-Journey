@@ -47,13 +47,6 @@ export default function ViewInspector({ project, slide, change, notify, openPoli
 
   const listOp = (name, fn) => change((p) => updateViewList(p, id, name, fn));
   const listNow = (name, fn) => change((p) => updateViewList(p, id, name, fn), NOW);
-  // 框图版式在画布上只给非空备注编号 → 输入框获得焦点时用这个编号高亮画布
-  const noteHl = (i, k) => {
-    if (layout !== 'framed') return undefined;
-    const filled = (n) => !!(n?.text || n?.label || '').trim();
-    if (!filled(notes[i])) return undefined;
-    return `notes.${notes.slice(0, i + 1).filter(filled).length - 1}.${k}`;
-  };
   const addRow = (materialId, name) => {
     const n = mats.length;
     change((p) => assignMaterial(p, id, -1, materialId, inferRole(name)), NOW);
@@ -226,7 +219,7 @@ export default function ViewInspector({ project, slide, change, notify, openPoli
               <div className="flex items-center gap-1">
                 <input
                   data-field={`notes.${i}.label`}
-                  data-hl={noteHl(i, 'label')}
+                  
                   className={`${inputCls} !py-1 text-xs`}
                   value={n.label || ''}
                   placeholder="标签，如 隐形门 · Hidden door"
@@ -241,7 +234,7 @@ export default function ViewInspector({ project, slide, change, notify, openPoli
               </div>
               <AutoTextarea
                 data-field={`notes.${i}.text`}
-                data-hl={noteHl(i, 'text')}
+                
                 value={n.text || ''}
                 placeholder="说明文字，如 液压闭门器，配反弹器"
                 onChange={(t) => listOp('notes', (l) => listUpdate(l, i, { text: t }))}
