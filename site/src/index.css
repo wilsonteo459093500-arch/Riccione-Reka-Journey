@@ -1,0 +1,72 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+html,
+body {
+  background: #f8f4eb;
+  color: #2b2a27;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior-y: none;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+}
+
+/* iOS：输入框字号 < 16px 会自动放大页面 */
+input,
+textarea,
+select {
+  font-size: 16px;
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl bg-white shadow-[0_1px_2px_rgba(43,42,39,0.06)] ring-1 ring-line/70;
+  }
+  .btn {
+    @apply inline-flex select-none items-center justify-center gap-2 rounded-xl px-4 py-3 text-[15px] font-semibold transition active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100;
+  }
+  .btn-primary {
+    @apply btn bg-pine text-white shadow-sm;
+  }
+  .btn-accent {
+    @apply btn bg-terra text-white shadow-sm;
+  }
+  .btn-ghost {
+    @apply btn bg-white text-ink ring-1 ring-line;
+  }
+  .btn-soft {
+    @apply btn bg-cream-deep text-ink;
+  }
+  .input {
+    @apply w-full rounded-xl border border-line bg-white px-3.5 py-3 text-[16px] text-ink placeholder:text-ink-faint focus:border-terra focus:outline-none focus:ring-2 focus:ring-terra/20;
+  }
+  .label {
+    @apply mb-1.5 block text-[13px] font-semibold text-ink-soft;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[14px] ring-1 transition active:scale-95;
+  }
+  .pb-safe {
+    padding-bottom: calc(var(--safe-bottom) + 0.75rem);
+  }
+  .pt-safe {
+    padding-top: var(--safe-top);
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+}
