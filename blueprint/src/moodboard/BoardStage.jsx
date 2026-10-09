@@ -106,7 +106,7 @@ function Overlay({ items, board, showLegend, ratio }) {
 /**
  * props: { items, board, selectedId, onSelect(id|null), onPatch(id, patch), showLegend, onDropFiles(FileList) }
  */
-export default function BoardStage({ items, board, selectedId, onSelect, onPatch, showLegend, onDropFiles }) {
+export default function BoardStage({ items, board, selectedId, onSelect, onPatch, showLegend, onDropFiles, standalone = false }) {
   const ratio = ratioOf(board.ratioId).ratio;
   const boardH = 100 / ratio;
   const bg = bgOf(board.bgId);
@@ -197,7 +197,7 @@ export default function BoardStage({ items, board, selectedId, onSelect, onPatch
       {!items.length && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center text-bp-faint pointer-events-none">
           <CloudUpload size={32} strokeWidth={1.2} />
-          <div className="text-sm">点上方「导入本案材料」，或从左侧材质库点样片、直接拖图片进来</div>
+          <div className="text-sm">{standalone ? '从左侧材质库点样片，或直接拖图片进来' : '点上方「导入本案材料」，或从左侧材质库点样片、直接拖图片进来'}</div>
           <div className="text-xs">拖动摆位 · 右下角拉大小 · 顶部圆点旋转 · 命名后自动进图例</div>
         </div>
       )}

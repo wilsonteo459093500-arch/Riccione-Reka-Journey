@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Loader2, CheckCircle2, XCircle, ExternalLink, Eye, EyeOff, Settings, Sparkles, LogOut, RotateCcw } from 'lucide-react';
-import { testConnection } from '../ai/gemini.js';
+import { testConnection, checkBaseUrl } from '../ai/gemini.js';
 import { DEFAULT_SETTINGS } from '../ai/settings.js';
 import { Modal, cls } from '../lib/ui.jsx';
 
@@ -32,6 +32,13 @@ export default function SettingsModal({ settings, onSave, onClose, onLogout }) {
 
   function handleSave(e) {
     e?.preventDefault?.();
+    // 接口地址写错（没写 https://）会把 key 发到别处：保存前先挡下
+    try {
+      if ((form.baseUrl || '').trim()) checkBaseUrl(form.baseUrl);
+    } catch (err) {
+      setTestResult({ ok: false, text: err.message });
+      return;
+    }
     // 高级项留空 = 用默认值
     onSave({
       ...form,
@@ -39,7 +46,7 @@ export default function SettingsModal({ settings, onSave, onClose, onLogout }) {
       model: (form.model || '').trim() || DEFAULT_SETTINGS.model,
       model3d: (form.model3d || '').trim() || DEFAULT_SETTINGS.model3d,
       baseUrl: (form.baseUrl || '').trim().replace(/\/+$/, '') || DEFAULT_SETTINGS.baseUrl,
-      watermark: (form.watermark || '').trim(),
+      watermark: form.watermark ? 'logo' : '',
     });
   }
 
@@ -137,16 +144,17 @@ export default function SettingsModal({ settings, onSave, onClose, onLogout }) {
           </div>
         )}
 
-        <label className="block">
-          <span className={cls.label}>Material Board 下载水印</span>
+        <label className="flex items-start gap-2.5 cursor-pointer">
           <input
-            type="text"
-            value={form.watermark || ''}
-            onChange={(e) => set({ watermark: e.target.value })}
-            placeholder="留空 = 不加水印"
-            className={`${cls.input} mt-1`}
+            type="checkbox"
+            checked={!!form.watermark}
+            onChange={(e) => set({ watermark: e.target.checked ? 'logo' : '' })}
+            className="mt-0.5 w-4 h-4 accent-[#B8995A]"
           />
-          <span className="block mt-1 text-[11px] text-bp-faint">下载 Material Board 图片时印在右下角，例如 {DEFAULT_SETTINGS.watermark}</span>
+          <span>
+            <span className={cls.label}>Material Board 下载时印 logo 水印</span>
+            <span className="block mt-0.5 text-[11px] text-bp-faint">下载的画板 / 实拍图右下角印「sAil 溪岸」logo（方案封面永远不印）</span>
+          </span>
         </label>
 
         <details className="text-sm" open={advOpen || undefined}>

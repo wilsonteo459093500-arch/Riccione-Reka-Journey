@@ -10,23 +10,25 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   PackageOpen, ImagePlus, LayoutGrid, Download, Stamp, LoaderCircle, Scissors, ChevronUp, ChevronDown, Trash2,
-  RotateCcw,
+  RotateCcw, FolderInput,
 } from 'lucide-react';
 import { generateImage } from '../ai/gemini.js';
 import { CUTOUT_PROMPT, DEFAULT_BOARD, FIRST_BOARD_NAME, EXPORT_LONG_EDGE, STANDALONE_RATIO_ID } from './constants.js';
 import {
   boardHeight, gridLayout, collageLayout, nextSlot, materialLabel, materialsToImport, mergeImported, defaultTitles,
-  newBoardSettings, legendEntries, orientationOf, safeFileName,
+  newBoardSettings, legendEntries, orientationOf, safeFileName, clampMove, ratioOf, coverSlotRatio, bgOf,
 } from './layout.js';
 import { listBoards, putBoard, removeBoard, getActiveBoardId, setActiveBoardId } from './store.js';
 import {
   fileToBoardImage, assetToBoardImage, compressForStorage, dataUrlToInput, measureAspect, downloadBlob,
 } from './images.js';
-import { renderBoardCanvas, finishForDownload, canvasToCoverBlob } from './render.js';
+import { renderBoardCanvas, finishForDownload, canvasToCoverBlob, padToAspect } from './render.js';
+import { coverLayoutFor } from '../lib/project.js';
 import BoardStage from './BoardStage.jsx';
 import LibraryPanel from './LibraryPanel.jsx';
 import FlatlayPanel from './FlatlayPanel.jsx';
 import CoverCard from './CoverCard.jsx';
+import CopyToProject from './CopyToProject.jsx';
 import { BoardPanel, TitlePanel } from './BoardSettings.jsx';
 import { card, input, btnPrimary, btnGhost, iconBtn } from './ui.js';
 
@@ -34,7 +36,7 @@ const uid = (p = 'i') => `${p}-${Date.now().toString(36)}-${Math.random().toStri
 const boardMeta = ({ id, name, createdAt, ts }) => ({ id, name, createdAt: createdAt || ts || 0 });
 const stripBusy = (items) => items.map(({ busy, ...it }) => it);
 
-export default function MoodBoard({ project, settings, notify, onOpenSettings, onUseAsCover, standalone = false }) {
+export default function MoodBoard({ project, settings, notify, onOpenSettings, onUseAsCover, onOpenProject, standalone = false }) {
   const projectId = project?.id || null;
   const info = project?.info;
   const materials = project?.materials;
@@ -53,6 +55,7 @@ export default function MoodBoard({ project, settings, notify, onOpenSettings, o
   const [exporting, setExporting] = useState(false);
   const [coverBusy, setCoverBusy] = useState(null); // 'board' | 'flatlay' | 'upload'
   const [coverDone, setCoverDone] = useState(false);
+  const [copyOpen, setCopyOpen] = useState(false);
 
   const rootRef = useRef(null);
   const boardFileRef = useRef(null);
@@ -348,7 +351,9 @@ export default function MoodBoard({ project, settings, notify, onOpenSettings, o
         const step = e.shiftKey ? 2 : 0.5;
         const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
         const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
-        setItems((prev) => prev.map((it) => (it.id === selectedId ? { ...it, x: it.x + dx, y: it.y + dy } : it)));
+        // 和拖动一样限制在画板内（推出去就点不到了）
+        const bh = boardHeight(boardRef.current.ratioId);
+        setItems((prev) => prev.map((it) => (it.id === selectedId ? { ...it, ...clampMove(it, dx, dy, bh) } : it)));
       }
     }
     window.addEventListener('keydown', onKey);
@@ -389,13 +394,16 @@ export default function MoodBoard({ project, settings, notify, onOpenSettings, o
       return;
     }
     const snapshot = { items: stripBusy(items), board };
+    const orientation = orientationOf(board.ratioId);
+    // 设封面后的版式（竖版 → 左文右图，横版 → 满版…）→ 把画板补到那个位置的比例，四周补底色，材料不会被裁掉
+    const slot = coverSlotRatio(coverLayoutFor(project?.cover?.layout, orientation));
     runCover(
       'board',
       async () => {
         const canvas = await renderBoardCanvas({ ...snapshot, longEdge: EXPORT_LONG_EDGE, withTitle: false, withLegend: false });
-        return await canvasToCoverBlob(canvas);
+        return await canvasToCoverBlob(padToAspect(canvas, slot, bgOf(board.bgId).color));
       },
-      { orientation: orientationOf(board.ratioId) }
+      { orientation: slot > 1 ? 'landscape' : 'portrait' }
     );
   }
 
@@ -415,7 +423,9 @@ export default function MoodBoard({ project, settings, notify, onOpenSettings, o
     }
     setExporting(true);
     try {
-      const canvas = await renderBoardCanvas({ items, board, longEdge: EXPORT_LONG_EDGE, withTitle: true, withLegend: !!board.showLegend });
+      // 与旧版 UKIR STUDIO 一样按宽 2400 出图（竖版 A4 = 2400 × 3394，打印够清楚）
+      const longEdge = EXPORT_LONG_EDGE / Math.min(1, ratioOf(board.ratioId).ratio);
+      const canvas = await renderBoardCanvas({ items, board, longEdge, withTitle: true, withLegend: !!board.showLegend });
       const blob = await finishForDownload(canvas, settings?.watermark);
       downloadBlob(blob, `material-board-${safeFileName(board.title || boardName)}.png`);
     } catch (e) {
@@ -503,6 +513,11 @@ export default function MoodBoard({ project, settings, notify, onOpenSettings, o
             {exporting ? <LoaderCircle size={15} className="animate-spin" /> : <Download size={15} />}
             下载 PNG
           </button>
+          {standalone && (
+            <button type="button" onClick={() => setCopyOpen(true)} disabled={!items.length} className={btnPrimary} title="复制一份到某个提案，当方案封面用">
+              <FolderInput size={15} /> 复制到提案…
+            </button>
+          )}
           {!standalone && (
             <button type="button" onClick={boardAsCover} disabled={!!coverBusy || !items.length} className={btnPrimary}>
               {coverBusy === 'board' ? <LoaderCircle size={15} className="animate-spin" /> : <Stamp size={15} />}
@@ -568,6 +583,7 @@ export default function MoodBoard({ project, settings, notify, onOpenSettings, o
         </div>
 
         <BoardStage
+          standalone={standalone}
           items={items}
           board={board}
           selectedId={selectedId}
@@ -615,6 +631,18 @@ export default function MoodBoard({ project, settings, notify, onOpenSettings, o
           coverBusy={coverBusy}
         />
       </div>
+
+      {copyOpen && (
+        <CopyToProject
+          notify={notify}
+          onOpenProject={onOpenProject}
+          onClose={() => setCopyOpen(false)}
+          getRecord={async () => {
+            await flushSave();
+            return { ...recRef.current, name: boardName, board, items: stripBusy(items) };
+          }}
+        />
+      )}
     </div>
   );
 }

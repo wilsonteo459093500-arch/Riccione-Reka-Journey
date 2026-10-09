@@ -22,7 +22,8 @@ test('默认画板：竖版 3:4，实拍比例 3:4（方案封面图区 810×108
   assert.equal(orientationOf('16:9'), 'landscape');
   assert.equal(orientationOf('1:1'), 'square');
   for (const r of RATIOS) assert.ok(FLATLAY_ASPECT[r.id], `缺少 ${r.id} 的出图比例`);
-  assert.equal(TITLE_FONTS.some((f) => /Fraunces|DM Sans/.test(f.css)), false, '字体应换成 Blueprint 字体');
+  assert.ok(!/Fraunces|DM Sans/.test(TITLE_FONTS.find((f) => f.id === DEFAULT_BOARD.titleFont).css), '默认标题字体用 Blueprint 字体');
+  assert.ok(TITLE_FONTS.some((f) => f.id === 'fraunces') && TITLE_FONTS.some((f) => f.id === 'dmsans'), '旧版 UKIR 的两款字体仍可选');
 });
 
 test('exportSize：按长边出图', () => {
@@ -273,7 +274,9 @@ test('convertBoard：旧画板 → 独立画板（设置补齐、去掉 busy、�
   assert.equal(rec.board.bgId, 'green');
   assert.equal(rec.board.titlePos, 'tr');
   assert.equal(rec.board.titleScale, 1.2);
-  assert.equal(rec.board.showLegend, DB2.showLegend, '新字段用默认值补齐');
+  assert.equal(rec.board.showLegend, true, '旧版下载默认带图例：有命名素材的画板打开图例');
+  assert.equal(rec.board.titleFont, 'fraunces', '旧版 serif = Fraunces');
+  assert.equal(rec.board.notes, DB2.notes, '新字段用默认值补齐');
   assert.deepEqual(rec.items.map((it) => it.id), ['i1', 'i3']);
   assert.equal('busy' in rec.items[0], false);
   assert.equal(rec.items[1].rot, 0);

@@ -1,12 +1,31 @@
 // Gemini 客户端（取自 UKIR STUDIO，同一套重试 / 报错文案）—— 浏览器直连 generativelanguage.googleapis.com，
 // API key 只存在本机 localStorage，不经过任何中间服务器。
+// key 放在请求头 x-goog-api-key 里（不放网址 ?key=，免得出错时控制台 / 截图 / 代理日志里露出 key）。
 
 import { DEFAULT_SETTINGS } from './settings.js';
 
-function endpoint(settings, path) {
-  const base = (settings.baseUrl || DEFAULT_SETTINGS.baseUrl).replace(/\/+$/, '');
-  return `${base}${path}`;
+/** 接口地址必须是完整的 https 网址（本机调试可用 http://localhost）；否则 key 会被发到别处 */
+export function checkBaseUrl(raw) {
+  const base = String(raw || DEFAULT_SETTINGS.baseUrl).trim().replace(/\/+$/, '');
+  let u;
+  try {
+    u = new URL(base);
+  } catch {
+    throw new Error('接口地址要写完整，以 https:// 开头（例如 https://generativelanguage.googleapis.com）。');
+  }
+  const local = u.hostname === 'localhost' || u.hostname === '127.0.0.1';
+  if (u.protocol !== 'https:' && !(local && u.protocol === 'http:')) throw new Error('接口地址要以 https:// 开头。');
+  return base;
 }
+
+function endpoint(settings, path) {
+  return `${checkBaseUrl(settings.baseUrl)}${path}`;
+}
+
+const authHeaders = (settings, json = true) => ({
+  ...(json ? { 'Content-Type': 'application/json' } : {}),
+  'x-goog-api-key': settings.apiKey,
+});
 
 function friendlyError(status, message) {
   if (status === 400 && /api key/i.test(message || '')) return 'API key 无效，请到设置里检查。';
@@ -71,7 +90,7 @@ export async function analyzeImage(settings, prompt, image, opts = {}) {
 
 async function analyzeOnce(settings, model, prompt, image, opts = {}) {
   if (!settings.apiKey) throw new Error('还没有配置 API key，点右上角设置。');
-  const url = endpoint(settings, `/v1beta/models/${model}:generateContent?key=${encodeURIComponent(settings.apiKey)}`);
+  const url = endpoint(settings, `/v1beta/models/${model}:generateContent`);
   // image 可为单张 { mimeType, base64 } 或多张数组（如差异质检需要底图+出图两张）
   const images = Array.isArray(image) ? image : image ? [image] : [];
   const parts = [
@@ -84,7 +103,7 @@ async function analyzeOnce(settings, model, prompt, image, opts = {}) {
   for (let attempt = 0; ; attempt++) {
     res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(settings),
       body: JSON.stringify({
         contents: [{ role: 'user', parts }],
         // opts.json：要求模型只回 JSON（标题润色 / 材料识别）
@@ -110,23 +129,29 @@ async function analyzeOnce(settings, model, prompt, image, opts = {}) {
     .map((p) => p.text || '')
     .join('')
     .trim();
-  if (!text) throw new Error('模型没有返回内容，请重试。');
+  if (!text) {
+    // 被安全策略拦截 / 空回复：只影响这一次请求（批量润色时跳过这一组，继续下一组）
+    const why = data?.promptFeedback?.blockReason || data?.candidates?.[0]?.finishReason;
+    const err = new Error(why && why !== 'STOP' ? `这一组被 AI 拒绝处理（${why}），已跳过。` : '模型没有返回内容，请重试。');
+    err.skip = true;
+    throw err;
+  }
   return text;
 }
 
 /** 测试 key / 模型是否可用 */
 export async function testConnection(settings) {
-  const url = endpoint(settings, `/v1beta/models/${settings.model}?key=${encodeURIComponent(settings.apiKey)}`);
-  const res = await fetch(url);
-  if (!res.ok) {
-    let msg = '';
-    try {
-      msg = (await res.json())?.error?.message || '';
-    } catch {
-      /* ignore */
-    }
-    throw new Error(friendlyError(res.status, msg));
+  const url = endpoint(settings, `/v1beta/models/${settings.model}`);
+  const res = await fetch(url, { headers: authHeaders(settings, false) });
+  let data = null;
+  try {
+    data = await res.json();
+  } catch {
+    data = null;
   }
+  if (!res.ok) throw new Error(friendlyError(res.status, data?.error?.message || ''));
+  // 必须真是 Gemini 的回复（接口地址填错时可能拿到一个网页，也是 200）
+  if (!String(data?.name || '').startsWith('models/')) throw new Error('这个接口地址没有返回 Gemini 的模型信息，请检查「接口地址」。');
   return true;
 }
 
@@ -155,10 +180,7 @@ export async function generateImage(settings, prompt, image, aspectRatio, onWait
   if (!/2\.5-flash-image/.test(settings.model || '')) imageConfig.imageSize = '2K';
   if (Object.keys(imageConfig).length) generationConfig.imageConfig = imageConfig;
 
-  const url = endpoint(
-    settings,
-    `/v1beta/models/${settings.model}:generateContent?key=${encodeURIComponent(settings.apiKey)}`
-  );
+  const url = endpoint(settings, `/v1beta/models/${settings.model}:generateContent`);
 
   const MAX_RETRIES = 3;
   let res = null;
@@ -167,7 +189,7 @@ export async function generateImage(settings, prompt, image, aspectRatio, onWait
   for (let attempt = 0; ; attempt++) {
     res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(settings),
       body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig }),
     });
 

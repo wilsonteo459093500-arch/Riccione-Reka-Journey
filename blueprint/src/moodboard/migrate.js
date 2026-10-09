@@ -79,16 +79,26 @@ async function oldDbExists(name) {
   return true; // 不支持 databases()：交给 openExisting 判断
 }
 
+// 旧版的字体 id → 新版（旧版 'serif' 是 Fraunces、'sans' 是 DM Sans；新版同名 id 换成了思源宋体 / Outfit）
+const UKIR_FONTS = { serif: 'fraunces', sans: 'dmsans' };
+
 /** 旧画板记录 → 新画板记录（独立画板，不属于任何提案） */
 export function convertBoard(rec, now = Date.now()) {
   const items = (rec.items || [])
     .filter((it) => it && it.dataUrl)
     .map(({ busy, ...it }) => ({ rot: 0, label: '', ...it }));
+  const old = rec.board || {};
   return {
     id: rec.id,
     projectId: STANDALONE_ID,
     name: rec.name || '画板',
-    board: { ...DEFAULT_BOARD, ...(rec.board || {}) },
+    board: {
+      ...DEFAULT_BOARD,
+      ...old,
+      titleFont: UKIR_FONTS[old.titleFont] || old.titleFont || 'fraunces',
+      // 旧版下载的 PNG 默认带编号图例
+      showLegend: old.showLegend ?? items.some((it) => (it.label || '').trim()),
+    },
     items,
     createdAt: rec.createdAt || rec.ts || now,
     ts: rec.ts || now,
@@ -102,12 +112,19 @@ export function convertLibraryItem(item, now = Date.now()) {
   return { name: '', cat: 'other', ts: now, ...item };
 }
 
+let running = null;
+/** 同一页里只跑一次；独立画板页要等它搬完再读画板（否则会先建一块空画板） */
+export function migrateOnce() {
+  if (!running) running = migrateFromUkir().catch(() => ({ library: 0, boards: 0, failed: 0 }));
+  return running;
+}
+
 /**
  * 把旧版 UKIR STUDIO 的材质库和画板搬进来（只搬一次；返回搬了多少）
  * @returns {Promise<{ library:number, boards:number }>}
  */
 export async function migrateFromUkir({ force = false } = {}) {
-  const result = { library: 0, boards: 0 };
+  const result = { library: 0, boards: 0, failed: 0 };
   try {
     if (!force && localStorage.getItem(DONE_KEY)) return result;
   } catch {
@@ -125,6 +142,7 @@ export async function migrateFromUkir({ force = false } = {}) {
         const item = convertLibraryItem(raw);
         if (!item || have.has(item.id)) continue;
         if (await putLibraryItem(item)) result.library += 1;
+        else result.failed += 1;
       }
     }
   }
@@ -146,6 +164,7 @@ export async function migrateFromUkir({ force = false } = {}) {
       for (const raw of old) {
         if (!raw?.id || have.has(raw.id)) continue;
         if (await putBoard(convertBoard(raw))) result.boards += 1;
+        else result.failed += 1;
       }
       if (result.boards && oldActive && !(await getActiveBoardId(STANDALONE_ID))) {
         await setActiveBoardId(STANDALONE_ID, oldActive);
@@ -153,10 +172,13 @@ export async function migrateFromUkir({ force = false } = {}) {
     }
   }
 
-  try {
-    localStorage.setItem(DONE_KEY, String(Date.now()));
-  } catch {
-    /* ignore */
+  // 全部写进去了才记「已搬完」；有写失败的（如存储空间不足）下次打开再补（按 id 跳过已搬的）
+  if (!result.failed) {
+    try {
+      localStorage.setItem(DONE_KEY, String(Date.now()));
+    } catch {
+      /* ignore */
+    }
   }
   return result;
 }

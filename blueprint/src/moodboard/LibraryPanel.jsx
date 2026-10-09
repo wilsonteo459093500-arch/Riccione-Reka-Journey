@@ -35,7 +35,10 @@ export default function LibraryPanel({ settings, notify, onOpenSettings, onPick 
     for (const file of files) {
       try {
         const { dataUrl } = await fileToBoardImage(file, 640);
-        const item = { id: uid(), dataUrl, name: file.name.replace(/\.[^.]+$/, ''), cat: cat === 'all' ? 'other' : cat, ts: Date.now() };
+        // 手机 / 相机 / WhatsApp 自动起的文件名不当材质名（否则会进图例、发给 AI）
+        const base = file.name.replace(/\.[^.]+$/, '').trim();
+        const junk = /^(IMG|DSC|DSCN|PXL|MVIMG|DCIM|Screenshot|Screen Shot|WhatsApp Image|photo|image|微信图片|截屏|截图)[\s_\-]?/i.test(base) || /^[\d\s_\-.]+$/.test(base);
+        const item = { id: uid(), dataUrl, name: junk ? '' : base, cat: cat === 'all' ? 'other' : cat, ts: Date.now() };
         await save(item);
         setLibrary((prev) => [item, ...prev]);
       } catch (e) {

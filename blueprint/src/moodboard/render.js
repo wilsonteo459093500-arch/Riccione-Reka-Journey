@@ -164,5 +164,24 @@ export async function finishForDownload(canvas, watermark) {
   return await canvasToBlob(canvas, 'image/png');
 }
 
+/**
+ * 封面用：把画板补到封面位置的比例（四周补画板底色），放进 PPT 时不会被裁掉材料。
+ * 比例差不多（≤ 1%）就原样返回。
+ */
+export function padToAspect(canvas, aspect, color) {
+  const r = canvas.width / canvas.height;
+  if (Math.abs(r - aspect) / aspect <= 0.01) return canvas;
+  const W = r < aspect ? Math.round(canvas.height * aspect) : canvas.width;
+  const H = r < aspect ? canvas.height : Math.round(canvas.width / aspect);
+  const out = document.createElement('canvas');
+  out.width = W;
+  out.height = H;
+  const ctx = out.getContext('2d');
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, W, H);
+  ctx.drawImage(canvas, Math.round((W - canvas.width) / 2), Math.round((H - canvas.height) / 2));
+  return out;
+}
+
 /** 封面用：无字、无水印的 JPEG */
 export const canvasToCoverBlob = (canvas) => canvasToBlob(canvas, 'image/jpeg', 0.92);

@@ -170,3 +170,8 @@ test('applyPolishPatches：只改 subtitle / roomEn / notes，材料与其它页
   assert.equal(next.slides[1], p.slides[1]);
   assert.equal(applyPolishPatches(p, []), p);
 });
+
+test('sanitizeSubtitle：视角名只是重复空间名 → 丢掉（不出「客厅 · 客厅」）', () => {
+  assert.equal(sanitizeSubtitle('客厅', { room: '客厅' }), '');
+  assert.equal(sanitizeSubtitle('「主人房」', { room: '主人房' }), '');
+});

@@ -9,7 +9,7 @@ export const DEFAULT_SETTINGS = {
   // 3D 全屋立体图优先用 Pro 图像模型（空间推理更强），失败自动回退到 model
   model3d: 'gemini-3-pro-image-preview',
   baseUrl: 'https://generativelanguage.googleapis.com',
-  watermark: 'SAIL BY RICCIONE', // 下载 Material Board 图时右下角 logo 水印，留空 = 关闭
+  watermark: 'logo', // 下载 Material Board 图时右下角印 sAil 溪岸 logo；'' = 关闭（旧版 UKIR STUDIO 也是这个值）
 };
 
 /** 旧版 UKIR STUDIO 的设置（同一网址时读得到）：沿用它的 API key / 接口地址 / 水印 */

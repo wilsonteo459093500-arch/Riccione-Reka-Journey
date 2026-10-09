@@ -182,7 +182,7 @@ export default function PolishDialog({ project, settings, notify, onOpenSettings
         onlySlideIds: ids,
         signal,
         onProgress: (done, total, label) => alive.current && setProgress({ done, total, label }),
-        onGroupError: (err, group) => failed.push({ label: group.label, message: err.message, slideIds: group.slides.map((s) => s.id) }),
+        onGroupError: (err, group) => failed.push({ label: group.label, message: err.message, slideIds: group.slides.map((s) => s.id), pending: !!err.pending }),
       });
       if (!alive.current) return; // 弹窗已关
       if (signal.aborted) notify?.({ type: 'warn', text: '已停止，下面是已完成部分的建议' });
@@ -194,7 +194,7 @@ export default function PolishDialog({ project, settings, notify, onOpenSettings
       });
       setSkipped(failed);
       setPhase('review');
-      if (failed.length) notify?.({ type: 'warn', text: `有 ${failed.length} 组没拿到有效建议，已跳过（可点「再试一次」）` });
+      if (failed.length) notify?.({ type: 'warn', text: `有 ${failed.length} 组没拿到建议（出错或未处理），可点「再试一次」` });
     } catch (e) {
       if (!alive.current) return;
       setErrorText(e.message || String(e));
@@ -301,7 +301,7 @@ export default function PolishDialog({ project, settings, notify, onOpenSettings
                 <div className="flex items-start gap-2 rounded-xl border border-bp-warn/40 bg-bp-warn/10 px-3 py-2 text-xs text-bp-ink">
                   <TriangleAlert size={14} className="text-bp-warn mt-0.5 shrink-0" />
                   <div className="flex-1">
-                    这几组没拿到有效建议，已跳过：{skipped.map((s) => s.label).join('、')}
+                    这几组没拿到建议：{skipped.map((s) => `${s.label}${s.pending ? '（未处理）' : ''}`).join('、')}
                   </div>
                   <button
                     type="button"
@@ -317,7 +317,11 @@ export default function PolishDialog({ project, settings, notify, onOpenSettings
                   <div className="flex items-center justify-between text-xs text-bp-faint">
                     <span>
                       共 {rows.length} 页有建议，已选 {checkedRows.length} 页
-                      {pageCount > rows.length ? `；其余 ${pageCount - rows.length} 页已经很好，无需修改` : ''}
+                      {(() => {
+                        // 「无需修改」只算真正处理过的页（跳过 / 未处理的不算）
+                        const done = pageCount - skipped.reduce((n, s) => n + s.slideIds.length, 0);
+                        return done > rows.length ? `；其余 ${done - rows.length} 页已经很好，无需修改` : '';
+                      })()}
                     </span>
                     <span className="flex gap-3">
                       <button type="button" className="hover:text-bp-ink" onClick={() => setAll(true)}>

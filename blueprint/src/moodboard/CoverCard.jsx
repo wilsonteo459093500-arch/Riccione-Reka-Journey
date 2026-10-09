@@ -3,7 +3,8 @@ import React, { useRef } from 'react';
 import { ImageUp, Check, LoaderCircle, Info } from 'lucide-react';
 import { resolveUrl } from '../store/assets.js';
 import { COVER_LAYOUTS } from '../engine/layouts.js';
-import { orientationOf } from './layout.js';
+import { orientationOf, coverRatioMismatch } from './layout.js';
+import { coverLayoutFor } from '../lib/project.js';
 import { card, btnGhost } from './ui.js';
 
 /**
@@ -17,7 +18,9 @@ export default function CoverCard({ project, ratioId, coverBusy, coverDone, onUp
   const layoutLabel = COVER_LAYOUTS.find((l) => l.id === layout)?.label || layout;
   const full = layout === 'full';
   const orient = orientationOf(ratioId);
-  const mismatch = (full && orient === 'portrait') || (!full && orient === 'landscape');
+  // 设封面时版式会跟着画板方向换；换完后比例仍不同（方形 / A4）→ 提示四周会补底色
+  const nextLayout = coverLayoutFor(layout, orient);
+  const mismatch = coverRatioMismatch(ratioId, nextLayout);
 
   return (
     <div className={`${card} flex gap-4 items-start`}>
@@ -53,9 +56,9 @@ export default function CoverCard({ project, ratioId, coverBusy, coverDone, onUp
         </div>
         {mismatch && (
           <div className="text-[11px] text-bp-warn leading-relaxed">
-            {full
-              ? '当前封面是「满版大图」，竖版画板放上去会被裁掉上下 —— 建议画幅换成 16:9，或在页面里把封面换成左文右图。'
-              : '当前封面是「左文右图」，横版画板放上去会被裁掉左右 —— 建议画幅换成竖版 3:4，或在页面里把封面换成满版大图。'}
+            {nextLayout === 'full'
+              ? '设为封面后是「满版大图」（16:9）：这块画板的比例不同，四周会补上底色 —— 想铺满就把画幅换成 16:9。'
+              : '设为封面后是「左文右图」（3:4）：这块画板的比例不同，四周会补上底色 —— 想铺满就把画幅换成竖版 3:4。'}
           </div>
         )}
         <div className="pt-1">

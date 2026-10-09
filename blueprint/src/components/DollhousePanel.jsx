@@ -25,7 +25,7 @@ const chip = (active) =>
   }`;
 
 // —— 生成任务放在模块级：切到别的标签再回来，进行中的状态还在 ——
-const jobs = new Map(); // floorId → { startedAt, msg }
+const jobs = new Map(); // '项目id:楼层id' → { startedAt, msg }（按项目区分：复制出来的项目楼层 id 相同）
 const jobListeners = new Set();
 function setJob(floorId, job) {
   if (job) jobs.set(floorId, job);
@@ -119,8 +119,10 @@ export default function DollhousePanel({ project, settings, notify, onOpenSettin
   const [pendingInsert, setPendingInsert] = useState(null); // src：该层已有立体图页时，问替换还是再加一页
   const fileRef = useRef(null);
 
-  const job = jobMap.get(fid);
-  const now = useNow(jobMap.size > 0);
+  const jobKey = (floorId) => `${project.id}:${floorId}`;
+  const job = jobMap.get(jobKey(fid));
+  const myJobs = [...jobMap.keys()].filter((k) => k.startsWith(`${project.id}:`)).length;
+  const now = useNow(myJobs > 0);
   const planUrl = resolveUrl(floor?.plan);
   const renders = [...(floor?.renders3d || [])].reverse(); // 最新在前
   const deck3d = findDollhouseSlides(project, fid);
@@ -177,8 +179,10 @@ export default function DollhousePanel({ project, settings, notify, onOpenSettin
     }
     const target = fid;
     const targetFloor = floor;
+    const key = jobKey(target);
+    const projectName = project.name || '这个项目';
     const refSrcs = refIds.map((id) => views.find((v) => v.id === id)?.image).filter(Boolean);
-    setJob(target, { startedAt: Date.now(), msg: '' });
+    setJob(key, { startedAt: Date.now(), msg: '' });
     try {
       const planBlob = await getBlob(targetFloor.plan);
       if (!planBlob) throw new Error('平面图找不到了，请重新上传');
@@ -190,16 +194,16 @@ export default function DollhousePanel({ project, settings, notify, onOpenSettin
         angle,
         style,
         roomsList: floorRoomsList(project, target),
-        onWait: (sec, n) => setJob(target, { ...jobs.get(target), msg: `被限流了，${sec} 秒后自动重试（第 ${n} 次）` }),
-        onFallback: (model) => setJob(target, { ...jobs.get(target), msg: `高级 3D 模型暂不可用，改用 ${model} 再试一次…` }),
+        onWait: (sec, n) => setJob(key, { ...jobs.get(key), msg: `被限流了，${sec} 秒后自动重试（第 ${n} 次）` }),
+        onFallback: (model) => setJob(key, { ...jobs.get(key), msg: `高级 3D 模型暂不可用，改用 ${model} 再试一次…` }),
       });
       const src = await storeBlob(blob, { projectId: project.id });
       onChange((p) => addRender3d(p, target, src), { history: false });
-      notify?.({ type: 'ok', text: `${targetFloor.zh || '全屋'}立体图生成好了，可以插入提案` });
+      notify?.({ type: 'ok', text: `「${projectName}」${targetFloor.zh || '全屋'}立体图生成好了，可以插入提案` });
     } catch (e) {
-      notify?.({ type: 'error', text: `立体图生成失败：${e.message || e}` });
+      notify?.({ type: 'error', text: `「${projectName}」立体图生成失败：${e.message || e}` });
     } finally {
-      setJob(target, null);
+      setJob(key, null);
     }
   }
 
@@ -264,7 +268,7 @@ export default function DollhousePanel({ project, settings, notify, onOpenSettin
               {floors.map((f) => (
                 <button key={f.id} type="button" className={chip(f.id === fid)} onClick={() => setFloorId(f.id)}>
                   {f.zh || f.en || '未命名楼层'}
-                  {jobMap.has(f.id) && <Loader2 size={11} className="inline ml-1 animate-spin" />}
+                  {jobMap.has(jobKey(f.id)) && <Loader2 size={11} className="inline ml-1 animate-spin" />}
                 </button>
               ))}
             </div>

@@ -11,7 +11,7 @@ import Toaster, { useToasts } from './components/Toaster.jsx';
 import { isAuthed, logout } from './store/auth.js';
 import { requestPersistence } from './store/db.js';
 import { loadSettings, saveSettings, SETTINGS_KEY } from './ai/settings.js';
-import { migrateFromUkir } from './moodboard/migrate.js';
+import { migrateOnce } from './moodboard/migrate.js';
 
 /** '#/p/<id>' → id */
 function parseHash() {
@@ -60,7 +60,7 @@ function Workspace({ onLogout }) {
   useEffect(() => {
     if (migrationStarted) return;
     migrationStarted = true;
-    migrateFromUkir()
+    migrateOnce()
       .then(({ library, boards }) => {
         if (!library && !boards) return;
         const parts = [library ? `${library} 个材质` : '', boards ? `${boards} 块画板` : ''].filter(Boolean).join('、');
@@ -128,7 +128,7 @@ function Workspace({ onLogout }) {
           onExit={goHome}
         />
       ) : boardsOpen ? (
-        <BoardsPage settings={settings} notify={notify} onOpenSettings={openSettings} onBack={goHome} />
+        <BoardsPage settings={settings} notify={notify} onOpenSettings={openSettings} onBack={goHome} onOpenProject={openProject} />
       ) : (
         <Home notify={notify} onOpenProject={openProject} onOpenBoards={openBoards} onOpenSettings={openSettings} hasKey={!!settings.apiKey} />
       )}

@@ -14,6 +14,15 @@ export const fontOf = (fontId) => TITLE_FONTS.find((f) => f.id === fontId) || TI
 export const boardHeight = (ratioId) => 100 / ratioOf(ratioId).ratio;
 export const flatlayAspect = (ratioId) => FLATLAY_ASPECT[ratioId] || '3:4';
 
+/** 方案封面位置的宽高比：左文右图的右半边 810×1080，满版 16:9 */
+export const coverSlotRatio = (layout) => (layout === 'full' ? 16 / 9 : 810 / 1080);
+
+/** 画板比例与封面位置差多少（> 8% 就要补边，否则会被裁掉） */
+export const coverRatioMismatch = (ratioId, layout) => {
+  const slot = coverSlotRatio(layout);
+  return Math.abs(ratioOf(ratioId).ratio - slot) / slot > 0.08;
+};
+
 /** 画板方向：portrait 适合「左文右图」封面，landscape 适合满版封面 */
 export function orientationOf(ratioId) {
   const r = ratioOf(ratioId).ratio;

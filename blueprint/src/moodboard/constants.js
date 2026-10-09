@@ -66,6 +66,9 @@ export const TITLE_FONTS = [
   { id: 'elegant', label: '法式衬线', css: '"Cormorant Garamond","Noto Serif SC",Georgia,serif' },
   { id: 'serif', label: '思源宋体', css: '"Noto Serif SC","Source Han Serif CN","Source Han Serif SC",Georgia,serif' },
   { id: 'sans', label: '现代无衬线', css: 'Outfit,"Noto Sans SC",system-ui,sans-serif' },
+  // 旧版 UKIR STUDIO 的两款（搬过来的画板保持原样）
+  { id: 'fraunces', label: '经典衬线 · UKIR', css: 'Fraunces,Georgia,"Noto Serif SC",serif' },
+  { id: 'dmsans', label: '无衬线 · UKIR', css: '"DM Sans","Noto Sans SC",sans-serif' },
 ];
 
 export const TITLE_POSITIONS = [

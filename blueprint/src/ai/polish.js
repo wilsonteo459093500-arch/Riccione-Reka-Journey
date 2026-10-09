@@ -185,6 +185,7 @@ export function sanitizeSubtitle(raw, { room = '', before = '' } = {}) {
   s = normalizeDots(s).replace(/[。．，,;；!！]+$/, '').trim();
   const r = (room || '').trim();
   if (r && s.startsWith(r) && len(s) > len(r)) s = normalizeDots(s.slice(r.length).replace(/^[\s·:：\-—]+/, ''));
+  if (r && s === r) return ''; // 视角名只是重复空间名（「客厅 · 客厅」）→ 不要
   if (!s) return '';
 
   const segs = s.split(' · ').filter(Boolean);
@@ -443,17 +444,30 @@ export async function polishProject(project, settings, { onProgress, onlySlideId
   const groups = groupViewSlides(project, { onlySlideIds });
   const out = [];
   let succeeded = 0;
+  // 停下来时（出错 / 设计师点了停止）：还没处理的组也报给界面，别让它们看起来像「已经很好、无需修改」
+  const reportPending = (from, why) => {
+    for (let j = from; j < groups.length; j++) {
+      const err = new Error(why);
+      err.pending = true;
+      onGroupError?.(err, groups[j], true);
+    }
+  };
   for (let k = 0; k < groups.length; k++) {
-    if (signal?.aborted) break;
+    if (signal?.aborted) {
+      reportPending(k, '已停止，未处理');
+      break;
+    }
     onProgress?.(k, groups.length, groups[k].label);
     try {
       out.push(...(await polishGroup(project, settings, groups[k])));
       succeeded += 1;
     } catch (e) {
-      const fatal = !e.parse;
+      // 回复格式不对 / 被安全策略拦截 / 空回复：只跳过这一组；网络 / key / 额度错误：停下
+      const fatal = !e.parse && !e.skip;
       onGroupError?.(e, groups[k], fatal);
       if (fatal) {
         if (!succeeded) throw e;
+        reportPending(k + 1, '前面出错后停下，未处理');
         break;
       }
     }
