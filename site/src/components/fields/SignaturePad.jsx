@@ -52,7 +52,8 @@ export default function SignaturePad({ open, title = '签名', onClose, onSave }
       const rect = c.getBoundingClientRect();
       const w = Math.round(rect.width);
       const h = Math.round(rect.height);
-      if (!w || !h || (w === lastW && h === lastH)) return;
+      // 只在宽度变化（转屏 / 窗口变宽）时重设：浏览器工具栏伸缩导致的高度变化不清空笔迹
+      if (!w || !h || w === lastW) return;
       const hadInk = lastW > 0;
       lastW = w;
       lastH = h;
@@ -139,7 +140,7 @@ export default function SignaturePad({ open, title = '签名', onClose, onSave }
       <div className="relative mt-3 rounded-2xl bg-white ring-1 ring-line">
         <canvas
           ref={canvasRef}
-          className="block h-[44dvh] max-h-[320px] min-h-[200px] w-full touch-none rounded-2xl"
+          className="block h-[240px] w-full touch-none rounded-2xl"
           onPointerDown={down}
           onPointerMove={move}
           onPointerUp={up}

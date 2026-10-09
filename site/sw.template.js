@@ -38,8 +38,9 @@ self.addEventListener('fetch', (event) => {
         const cached = await caches.match('/index.html');
         const net = fetch(req).then(async (res) => {
           if (isHtml(res)) {
+            // 直接写缓存（3 秒兜底已返回时 respondWith 已结束，不能再 waitUntil）
             const copy = res.clone();
-            event.waitUntil(caches.open(VERSION).then((c) => c.put('/index.html', copy)));
+            caches.open(VERSION).then((c) => c.put('/index.html', copy)).catch(() => {});
             return res;
           }
           return cached || res;

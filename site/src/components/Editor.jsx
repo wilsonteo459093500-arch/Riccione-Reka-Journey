@@ -222,7 +222,20 @@ export default function Editor({ reportId }) {
   const setSigs = useCallback((sigs) => update((r) => ({ ...r, signatures: resolve(sigs, r.signatures || {}) })), [update]);
 
   /** 离开编辑页前：等照片处理完 + 保存成功；失败时让用户决定 */
+  const leaving = useRef(false);
   const leave = useCallback(
+    async (go) => {
+      if (leaving.current) return; // 等照片处理时连点返回：只走一次
+      leaving.current = true;
+      try {
+        await doLeave(go);
+      } finally {
+        leaving.current = false;
+      }
+    },
+    [], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const doLeave = useCallback(
     async (go) => {
       if (store.pendingMedia() > 0) toast('照片 / 视频处理中，请稍候…', 'warn');
       await store.waitMedia();
