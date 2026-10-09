@@ -1,5 +1,5 @@
 /* ============================================================
-   Moodboard 生成器 · 读需求卡
+   VISI · 读需求卡
    ------------------------------------------------------------
    客户在 brief.html 填完，WhatsApp 上收到的是一段
    「【溪岸 · 客户需求卡】…」文字。整段贴进来，这里把它拆回字段，
@@ -30,10 +30,12 @@
       var m = line.match(/^([^:：]{1,14})[:：]\s*(.*)$/);
       var key = m && LABELS[m[1].trim()];
       if (!key) {
-        // 「最想解决」「补充」是客户自己打的多行字：没有标签的下一行接在后面
-        var structural = !line || /^〔.*〕$/.test(line) || /^[—\-]{3,}/.test(line) || /^【.*】$/.test(line) || /^（由.*生成）$/.test(line);
-        if (structural || m) { last = null; return; }
-        if (last === 'pain' || last === 'note') out[last] += '\n' + line;
+        // 「最想解决」「补充」是客户自己打的多行字：空行、不认识的「xx：」都接在后面，
+        // 只有真正的分段（〔…〕、—— 分隔线、【…】、生成说明）才结束
+        if (!line) return;
+        var structural = /^〔.*〕$/.test(line) || /^[—\-]{3,}/.test(line) || /^【.*】$/.test(line) || /^（由.*生成）$/.test(line);
+        if (structural) { last = null; return; }
+        if (last === 'pain' || last === 'note') out[last] = (out[last] ? out[last] + '\n' : '') + line;
         return;
       }
       last = key;
@@ -82,13 +84,15 @@
       });
     });
 
-    // 需求：做饭 / 收纳 / 同住 → 「你说的 · 我们做的」
+    // 需求：做饭 / 收纳 / 同住 → 「你说的 · 我们做的」（公寓用公寓版的落点）
+    var probe = { property: setup.property };
     Object.keys(MB.NEEDS).forEach(function (k) {
       var n = MB.NEEDS[k];
       var v = b[n.field];
       if (v && has(v, n.match)) {
         setup.needs.push({ key: k });
-        want[n.room] = want[n.room] || 2; // 需求点到的空间也带上
+        var d = MB.needDef(probe, k);
+        want[d.room] = want[d.room] || 2; // 需求点到的空间也带上
       }
     });
     if (b.pain) {

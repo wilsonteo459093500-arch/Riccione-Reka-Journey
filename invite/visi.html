@@ -3,30 +3,35 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Moodboard 生成器 · RICCIONE REKA JOURNEY</title>
+<title>VISI · by RICCIONE REKA</title>
+<meta name="description" content="VISI by RICCIONE REKA —— 贴需求卡，十分钟出一份客户方案（A4 PDF），连发方案、邀约到馆的文案一起写好。" />
 <meta name="robots" content="noindex, nofollow" />
 <meta name="theme-color" content="#F4F0E8" />
-<link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="assets/img/visi.svg" type="image/svg+xml" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,400&family=Jost:wght@300;400;500;600&family=Noto+Sans+SC:wght@300;400;500;600&family=Noto+Serif+SC:wght@300;400;500&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="assets/css/invite.css" />
 <link rel="stylesheet" href="assets/css/form.css" />
-<link rel="stylesheet" href="assets/css/moodboard.css" />
+<link rel="stylesheet" href="assets/css/visi.css" />
 </head>
 
 <body class="form-body mb-body">
 
 <header class="f-top mb-top">
   <div class="row">
-    <a href="create.html" title="回到销售端"><img src="assets/img/brand/riccione-reka.png" alt="Riccione Reka" /></a>
+    <!-- 字标：VISI 是产品名，BY RICCIONE REKA 是母品牌背书（同 UKIR / CIPTA STUDIO 的做法：每个 app 用自己的首字母章） -->
+    <a class="visi-mark" href="create.html" title="回到销售端">
+      <img src="assets/img/visi.svg" alt="" width="30" height="30" />
+      <span><b>VISI</b><i>BY RICCIONE REKA</i></span>
+    </a>
     <div class="proj">
       <select id="proj-select" aria-label="方案"></select>
       <button class="mini dark" type="button" id="proj-new">＋ 新方案</button>
       <button class="mini" type="button" id="proj-dup">复制</button>
       <button class="mini danger" type="button" id="proj-del">删除</button>
     </div>
-    <span class="f-count">MOODBOARD · 销售端</span>
+    <span class="f-count">方案 · 文案 · 销售端</span>
   </div>
 </header>
 
@@ -47,7 +52,8 @@
     <!-- ① 客户 -->
     <section class="mb-pane" data-pane="brief">
       <h3>客户与需求</h3>
-      <p class="hint">最快的做法：把客户填好的<b>需求卡</b>整段贴进来 —— 名字、楼盘、空间、风格、需求会自动带出，图也会自动配好。
+      <p class="hint">最快的做法：把客户填好的<b>需求卡</b>整段贴进来 —— 名字、楼盘、空间、风格、需求会自动带出，图库里有的空间也会自动配好图。
+        内置图库没有玄关、浴室的照片 —— 把以前的 proposal PDF 拖进「图库」一次，之后就会自动配上。
         客户还没填？到 <a href="create.html">销售端</a> 发需求卡链接。</p>
 
       <div class="panel">
@@ -164,6 +170,12 @@
           <div class="field"><label class="q" for="v-date2">时段 2 · 备选</label><input type="date" id="v-date2" data-bind="visit.date2" /></div>
           <div class="field"><label class="q" for="v-time2">时间</label><input type="time" id="v-time2" data-bind="visit.time2" /></div>
         </div>
+        <div class="btn-row" style="gap:8px;align-items:center;margin:-4px 0 14px">
+          <button class="mini" type="button" id="slot-swap">客户选了时段 2</button>
+          <span class="hint" style="margin:0">回「2」就按一下：时段 2 变成正式时段，邀请函、二维码与提醒都跟着换。</span>
+        </div>
+        <p class="hint" id="slot-auto" hidden style="color:#8A5E22">这两个时段是按需求卡「方便到馆」自动建议的 —— 确认展厅真的留了，再发「已为你们保留」。
+          <button class="mini" type="button" id="slot-ok" style="margin-left:6px">已确认留好</button></p>
         <div class="field" style="margin-bottom:0;max-width:160px"><label class="q" for="v-mins">时长（分钟）</label>
           <input type="number" id="v-mins" min="15" step="15" data-bind="visit.mins" /></div>
       </div>
@@ -301,14 +313,14 @@
 <script src="assets/js/config.js"></script>
 <script src="assets/js/cases.js"></script>
 <script src="assets/vendor/qrcode.js"></script>
-<script src="assets/js/moodboard/data.js"></script>
-<script src="assets/js/moodboard/store.js"></script>
-<script src="assets/js/moodboard/model.js"></script>
-<script src="assets/js/moodboard/brief-parse.js"></script>
-<script src="assets/js/moodboard/pdf-import.js"></script>
-<script src="assets/js/moodboard/deck.js"></script>
-<script src="assets/js/moodboard/copy.js"></script>
-<script src="assets/js/moodboard/check.js"></script>
-<script src="assets/js/moodboard/app.js"></script>
+<script src="assets/js/visi/data.js"></script>
+<script src="assets/js/visi/store.js"></script>
+<script src="assets/js/visi/model.js"></script>
+<script src="assets/js/visi/brief-parse.js"></script>
+<script src="assets/js/visi/pdf-import.js"></script>
+<script src="assets/js/visi/deck.js"></script>
+<script src="assets/js/visi/copy.js"></script>
+<script src="assets/js/visi/check.js"></script>
+<script src="assets/js/visi/app.js"></script>
 </body>
 </html>

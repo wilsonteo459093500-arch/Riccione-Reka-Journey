@@ -1,5 +1,5 @@
 /* ============================================================
-   Moodboard 生成器 · 方案模型
+   VISI · 方案模型
    ------------------------------------------------------------
    一份方案（project）长什么样、默认值从哪里来、页码怎么排。
    画面（deck.js）、文案（copy.js）、体检（check.js）都从这里取值，
@@ -68,7 +68,7 @@
       needs: [],
       rooms: [],
       plan: { src: null, w: 0, h: 0, pins: {} },
-      visit: { date: '', time: '14:00', date2: '', time2: '11:00', mins: 60, prepared: [null, null, null] },
+      visit: { date: '', time: '14:00', date2: '', time2: '11:00', mins: 60, auto: false, prepared: [null, null, null] },
       pages: { glance: true, needs: true, plan: true, practical: true, language: true, invite: true, back: true },
       extra: { notIncluded: '', timeline: '', budget: '', built: '' },
       images: { cover: null, glance: null, invite: null, back: null },
@@ -79,7 +79,7 @@
   MB.newRoom = function (key) {
     var r = MB.ROOM[key];
     return {
-      uid: MB.uid('r-'), key: key, title: null, images: [],
+      uid: MB.uid('r-'), key: key, title: null, images: [], manual: false,
       feats: r.feats.filter(function (f) { return f.def; }).map(function (f) { return f.id; }),
       note: null
     };
@@ -94,20 +94,33 @@
     return { en: r.en, zh: r.zh };
   };
 
+  /** 公寓 / condo：没有楼梯底，大件改放主卧衣柜顶 */
+  MB.isCondo = function (p) {
+    return /condo|公寓|apartment|serviced/i.test((p && p.property && p.property.type) || '');
+  };
+  /** 需求卡对应的默认（公寓有自己的版本） */
+  MB.needDef = function (p, key) {
+    var d = key && MB.NEEDS[key];
+    if (!d) return null;
+    return d.condo && MB.isCondo(p) ? d.condo : d;
+  };
+
   MB.needQuote = function (n) {
     if (n.quote != null) return n.quote;
     return n.key && MB.NEEDS[n.key] ? MB.NEEDS[n.key].quote : '';
   };
-  MB.needAnswer = function (n) {
+  MB.needAnswer = function (n, p) {
     if (n.answer != null) return n.answer;
-    return n.key && MB.NEEDS[n.key] ? MB.NEEDS[n.key].answer : '';
+    var d = MB.needDef(p, n.key);
+    return d ? d.answer : '';
   };
   /** 这条需求落在哪个空间（用来标页码）：指定的那一间 > 同类第一间 */
   MB.needRoom = function (p, n) {
     if (n.roomUid) {
       for (var j = 0; j < p.rooms.length; j++) if (p.rooms[j].uid === n.roomUid) return p.rooms[j];
     }
-    var key = n.room || (n.key && MB.NEEDS[n.key] && MB.NEEDS[n.key].room);
+    var d = MB.needDef(p, n.key);
+    var key = n.room || (d && d.room);
     if (!key) return null;
     for (var i = 0; i < p.rooms.length; i++) if (p.rooms[i].key === key) return p.rooms[i];
     return null;
@@ -117,12 +130,22 @@
   MB.roomNote = function (p, room) {
     if (room.note != null) return room.note;
     for (var i = 0; i < p.needs.length; i++) {
-      var n = p.needs[i];
-      if (n.key && MB.NEEDS[n.key] && MB.NEEDS[n.key].room === room.key && MB.needRoom(p, n) === room) {
-        return MB.NEEDS[n.key].note;
-      }
+      var n = p.needs[i], d = MB.needDef(p, n.key);
+      if (d && d.room === room.key && MB.needRoom(p, n) === room) return d.note;
     }
     return '';
+  };
+
+  /** 房间页印出来的特点：需求卡点到的排最前（双语只印 3 条，不能先砍掉客户在乎的那条） */
+  MB.roomFeats = function (p, room) {
+    var def = MB.ROOM[room.key];
+    var first = {};
+    p.needs.forEach(function (n) {
+      var d = MB.needDef(p, n.key);
+      if (d && d.feats && MB.needRoom(p, n) === room) d.feats.forEach(function (id) { first[id] = 1; });
+    });
+    var picked = def.feats.filter(function (f) { return room.feats.indexOf(f.id) > -1; });
+    return picked.filter(function (f) { return first[f.id]; }).concat(picked.filter(function (f) { return !first[f.id]; }));
   };
 
   MB.promise = function (p, i) {
@@ -147,15 +170,23 @@
     short: { en: 'your floor plan, printed large', zh: '你们的平面图大图' } };
   var PREP_BOARDS = { en: 'Board and colour samples in your palette', zh: '按你们配色挑好的板材与色板',
     short: { en: 'board samples in your palette', zh: '你们配色的板材样板' } };
+  var PREP_HARDWARE = { en: 'Hinges, runners and handles to try by hand', zh: '铰链、滑轨与把手，现场亲手试',
+    short: { en: 'the hinges, runners and handles', zh: '铰链与滑轨样品' } };
+
+  /** 有平面图才答应「打印大图」—— 客户在需求卡写了「没有平面图」，就别这样承诺 */
+  MB.hasPlan = function (p) {
+    return !!p.plan.src || /平面图[:：]\s*有/.test(p.brief || '');
+  };
 
   function autoPrepared(p) {
+    var hasPlan = MB.hasPlan(p);
     var auto = [];
     MB.roomPriority(p).forEach(function (r) {
       var prep = MB.ROOM[r.key].prep;
-      if (prep && auto.length < 2) auto.push(prep);
+      if (prep && auto.length < (hasPlan ? 2 : 3) && auto.indexOf(prep) < 0) auto.push(prep);
     });
-    auto.push(PREP_PLAN);
-    while (auto.length < 3) auto.push(PREP_BOARDS);
+    if (hasPlan) auto.push(PREP_PLAN);
+    [PREP_BOARDS, PREP_HARDWARE].forEach(function (x) { if (auto.length < 3) auto.push(x); });
     return auto;
   }
 
@@ -174,10 +205,9 @@
     return MB.t(a.short || a, L);
   };
 
-  MB.namesOr = function (p, lang) {
-    var n = (p.client.names || '').trim();
-    if (n) return n;
-    return lang === 'zh' ? '您' : 'there';
+  /** 客户称呼；没填就回空串，由各处自己决定怎么写（不要印出「there」） */
+  MB.namesOr = function (p) {
+    return (p.client.names || '').trim();
   };
 
   MB.propertyLabel = function (p) {
@@ -256,7 +286,11 @@
     });
     cands.sort(function (a, b) { return score(b) - score(a); });
     function score(im) { return (im.own ? 4 : 0) + (im.series === series ? 2 : 0) + (im.w >= 900 ? 1 : 0); }
-    return cands.slice(0, count).map(function (im) { return im.ref; });
+    if (!cands.length) return [];
+    // 同一页只用同一系列（没标系列的自己的图除外），免得自己挑的图被体检判「混了系列」
+    var hero = cands[0];
+    var rest = cands.slice(1).filter(function (im) { return !im.series || !hero.series || im.series === hero.series; });
+    return [hero].concat(rest).slice(0, count).map(function (im) { return im.ref; });
   };
 
   /** 封面 / 一页看懂 / 邀约 / 封底 用哪张：销售选的 > 自动 */
@@ -293,14 +327,22 @@
       skip[cover] = 1;
       return second || seriesPick(skip) || cover;
     }
+    if (slot === 'back') return 'b:hero-sail';
     if (slot === 'invite') {
-      // 邀约页不要和封面撞图：优先用这个系列、还没出现过的那张
+      // 邀约页不要和前面任何一页撞图（封面、一页看懂、空间页、封底）
       var used = {};
       used[cover] = 1;
+      if (p.pages.glance) used[MB.pageImage(p, 'glance', resolve)] = 1;
+      if (p.pages.back) used[MB.pageImage(p, 'back', resolve)] = 1;
       p.rooms.forEach(function (r) { r.images.forEach(function (ref) { used[ref] = 1; }); });
-      return seriesPick(used) || (cover !== 'b:living-wide' ? 'b:living-wide' : 'b:hero-sail');
+      var pick = seriesPick(used);
+      if (pick) return pick;
+      for (var i = 0; i < MB.BUILTIN.length; i++) {
+        var b = MB.BUILTIN[i];
+        if (b.rooms.indexOf('showroom') < 0 && !used[b.id]) return b.id;
+      }
+      return !used['b:living-wide'] ? 'b:living-wide' : cover;
     }
-    if (slot === 'back') return 'b:hero-sail';
     return null;
   };
 
@@ -352,6 +394,7 @@
     out.ts = +p.ts || Date.now();
     out.lang = ['en', 'zh', 'bi'].indexOf(p.lang) > -1 ? p.lang : 'en';
     out.label = str(p.label, 40);
+    if (p.demo === true) out.demo = true;
     var c = p.client || {};
     out.client = { names: str(c.names, 120), honor: ['mr', 'ms', 'mrs', 'miss', 'teacher', 'designer'].indexOf(c.honor) > -1 ? c.honor : '', wa: MB.msisdn(c.wa) };
     var pr = p.property || {};
@@ -384,7 +427,8 @@
         uid: uid, key: r.key, title: strOrNull(r.title, 80) || null,
         images: (Array.isArray(r.images) ? r.images : []).map(ref).filter(Boolean).slice(0, 4),
         feats: (Array.isArray(r.feats) ? r.feats : []).filter(function (f) { return valid.indexOf(f) > -1; }),
-        note: strOrNull(r.note, 600)
+        note: strOrNull(r.note, 600),
+        manual: r.manual === true
       };
     });
     out.needs = (Array.isArray(p.needs) ? p.needs : []).slice(0, 12).map(function (n) {
@@ -410,7 +454,7 @@
     var v = p.visit || {};
     out.visit = {
       date: iso(v.date), time: hm(v.time) || '14:00', date2: iso(v.date2), time2: hm(v.time2) || '11:00',
-      mins: Math.max(15, Math.min(480, +v.mins || 60)),
+      mins: Math.max(15, Math.min(480, +v.mins || 60)), auto: v.auto === true,
       prepared: [0, 1, 2].map(function (i) { return strOrNull((v.prepared || [])[i], 200); })
     };
     var pg = p.pages || {};

@@ -13,12 +13,13 @@ window.SAIL = {
     hoursEn:   'Mon–Fri 9:00am–6:00pm / Sat–Sun 10:00am–6:00pm',
     phone:     '+60189661919',      // tel: 链接用
     phoneShow: '018-966 1919',
-    website:   'www.saildz.com',    // moodboard 封底用
-    instagram: '@sail_malaysia'
+    website:   'www.saildz.com',    // VISI 方案封底用
+    instagram: '@sail_malaysia',
+    township:  'Setia Alam'         // 客户楼盘也在这个镇区时，邀约页才会写「就在你们新家同一个镇区」
   },
 
   /* 选填：正式网址（例 'https://riccione-reka-journey.vercel.app'）。
-     moodboard 里的二维码 / 邀请函链接会用它；留空则用当前网址。
+     VISI 方案里的二维码 / 邀请函链接会用它；留空则用当前网址。
      在自己电脑上（localhost）做方案时，填了它，二维码才扫得开。 */
   publicBase: '',
 

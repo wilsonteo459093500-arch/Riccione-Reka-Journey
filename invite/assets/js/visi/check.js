@@ -1,5 +1,5 @@
 /* ============================================================
-   Moodboard 生成器 · 发出去之前的体检
+   VISI · 发出去之前的体检
    ------------------------------------------------------------
    每一条都对应《快思慢想》里一个具体原理。
    bad = 一定要改；warn = 建议改；tip = 提醒；ok = 已做到
@@ -10,9 +10,10 @@
   var MB = window.MB = window.MB || {};
 
   /**
+   * @param {object} [overflow]  预览量出来放不下的页：{ needs, plan, rooms:[uid] }（app.js fitText）
    * @returns {{items: Array<{level,text,why,goto}>, score:number, total:number}}
    */
-  MB.checkProject = function (p, resolve) {
+  MB.checkProject = function (p, resolve, overflow) {
     var items = [];
     function add(level, text, why, go) { items.push({ level: level, text: text, why: why, goto: go || null }); }
 
@@ -54,22 +55,39 @@
     if (!p.pages.needs) { /* 关掉了这一页，不检查 */ }
     else if (!p.needs.length) add('warn', '没有「你们说的 · 我们做的」', '客户最想确认的是「你有没有听懂我」。贴需求卡就会自动带出来。', 'brief');
     else {
-      var empty = p.needs.filter(function (n) { return !MB.needAnswer(n); }).length;
+      var empty = p.needs.filter(function (n) { return !MB.needAnswer(n, p); }).length;
       if (empty) add('bad', empty + ' 条客户原话还没写我们的做法', '只引用不回答，等于告诉客户「我们听到了，但没做」。', 'brief');
       else add('ok', '客户的原话都有对应做法', '用他们自己的话开头，最容易被接受。');
       if (p.needs.length > 5) add('tip', '需求超过 5 条，只会显示前 5 条', '挑最痛的 3–5 条就好。', 'brief');
     }
 
-    // 4b · 英文方案里混了中文（销售自己打的字不会自动翻译）
+    // 4b · 英文方案里混了中文（销售自己打的字不会自动翻译）—— 「去改」直接到第一处所在的分页
     if (p.lang === 'en') {
-      var CJK = /[㐀-鿿]/, mixedLang = 0;
-      p.needs.forEach(function (n) {
-        if (typeof MB.needQuote(n) === 'string' && CJK.test(MB.needQuote(n))) mixedLang++;
-        if (typeof MB.needAnswer(n) === 'string' && CJK.test(MB.needAnswer(n))) mixedLang++;
-      });
-      p.rooms.forEach(function (r) { if (typeof r.note === 'string' && CJK.test(r.note)) mixedLang++; });
-      p.visit.prepared.concat(p.promises).forEach(function (t) { if (typeof t === 'string' && CJK.test(t)) mixedLang++; });
-      if (mixedLang) add('warn', '英文方案里有 ' + mixedLang + ' 处中文', '一份文件两种语言会造成认知紧张。翻成英文，或把方案切到「双语」。', 'brief');
+      var CJK = /[㐀-鿿]/, mixedLang = 0, firstTab = null;
+      var hit = function (v, tab) {
+        if (typeof v === 'string' && CJK.test(v)) { mixedLang++; firstTab = firstTab || tab; }
+      };
+      p.needs.forEach(function (n) { hit(MB.needQuote(n), 'brief'); hit(MB.needAnswer(n, p), 'brief'); });
+      p.rooms.forEach(function (r) { hit(r.title, 'rooms'); hit(r.note, 'rooms'); });
+      p.promises.forEach(function (t) { hit(t, 'style'); });
+      p.visit.prepared.forEach(function (t) { hit(t, 'visit'); });
+      var x = p.extra || {};
+      if (MB.hasPractical(p) && p.pages.practical !== false) { hit(x.timeline, 'visit'); hit(x.budget, 'visit'); hit(x.built, 'visit'); }
+      if (p.pages.plan && p.plan.src) hit(x.notIncluded, 'plan');
+      if (mixedLang) add('warn', '英文方案里有 ' + mixedLang + ' 处中文', '一份文件两种语言会造成认知紧张。翻成英文，或把方案切到「双语」。', firstTab);
+    }
+
+    // 4c · 排版放不下（自动缩小两级后还是太多）
+    var ov = overflow || {};
+    if (ov.needs) add('warn', '「你们说的」放不下，最后几条会被裁掉', '挑最痛的 3–4 条，或把做法写短。被裁掉的话，客户只会看到半句。', 'brief');
+    if (ov.plan) add('warn', '平面图页右边的编号清单放不下', '空间太多或「这次没包含」写太长 —— 合并相近的空间，或把那句写短。', 'plan');
+    if (ov.rooms && ov.rooms.length) {
+      var names = p.rooms.filter(function (r) { return ov.rooms.indexOf(r.uid) > -1; }).map(function (r) { return MB.t(MB.roomTitle(p, r), 'zh'); });
+      if (names.length) add('warn', '字太多放不下：' + names.join('、'), '「为你」那句写短一点，或少勾一个卖点。一页只讲一件事，System 1 才接得住。', 'rooms');
+    }
+    if (p.lang === 'bi') {
+      var cut = p.rooms.filter(function (r) { return r.feats.length > 3; }).map(function (r) { return MB.t(MB.roomTitle(p, r), 'zh'); });
+      if (cut.length) add('tip', '双语每页只印 3 个卖点：' + cut.join('、'), '需求卡点到的排最前，其余的留到展厅讲。', 'rooms');
     }
 
     // 5 · 平面图
@@ -84,9 +102,10 @@
     // 6 · 结尾 = 下一步
     var today = new Date(); today.setHours(0, 0, 0, 0);
     var vd = MB.parseISO(p.visit.date);
-    if (!p.pages.invite) add('bad', '关掉了到馆邀约页', '峰终定律：客户记住的是最后一页。最后一页应该是下一步，不是电话号码。', 'visit');
+    if (!p.pages.invite) add('bad', '关掉了到馆邀约页', '峰终定律：到馆那天的高峰和离开时的感受决定他们怎么记住这次体验 —— 方案最后一页要给下一步，而不是电话号码。', 'visit');
     else if (!vd) add('bad', '还没定到馆时间', '「欢迎参观」不是下一步。先替他们留好一个时段 —— 改时间比决定要不要来容易。', 'visit');
     else if (vd < today) add('bad', '到馆日期已经过了', '改成未来的日期。', 'visit');
+    else if (p.visit.auto) add('warn', '到馆时段是按需求卡自动建议的 —— 先确认真的留了', '「已为你们保留」只有在真的保留时才能写。确认后到 ⑤ 按「已确认留好」（或直接改时段），这条就会消失。', 'visit');
     else {
       add('ok', '结尾已经替客户留好时段', '默认选项：已经留好的时间，最容易被接受。');
       if (!MB.parseISO(p.visit.date2)) add('tip', '可以再给一个备选时段', '给两个选项，让他们回「1」或「2」—— 不问开放题（最省力法则）。', 'visit');

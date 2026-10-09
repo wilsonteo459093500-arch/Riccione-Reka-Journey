@@ -1,5 +1,5 @@
 /* ============================================================
-   Moodboard 生成器
+   VISI by RICCIONE REKA —— 方案与文案生成器
    依赖 invite.css（设计变量）与 form.css（输入框 / 面板 / 按钮）
    上半：销售端工作台；下半：A4 方案页（.pg）与打印
    ============================================================ */
@@ -7,6 +7,10 @@
 /* ---------- 工作台骨架 ------------------------------------ */
 body.mb-body { overflow: hidden; height: 100vh; }
 .mb-top .row { max-width: none; padding: 10px clamp(14px, 2.4vw, 26px); }
+.visi-mark { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); flex: none; }
+.visi-mark img { height: 30px; width: 30px; }
+.visi-mark b { display: block; font-family: var(--serif); font-size: 21px; font-weight: 600; letter-spacing: .1em; line-height: 1; }
+.visi-mark i { display: block; font-style: normal; font-size: 8.5px; letter-spacing: .24em; color: var(--ink-faint); margin-top: 4px; line-height: 1; }
 .mb-top .proj { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; justify-content: center; }
 .mb-top select { width: auto; max-width: 280px; padding: 8px 34px 8px 12px; font-size: 14px; }
 .mini {
@@ -70,6 +74,8 @@ body.mb-body { overflow: hidden; height: 100vh; }
 .mb-pane textarea { min-height: 76px; }
 .mb-pane .row2 { gap: 10px; }
 .mb-pane .row2.thirds { grid-template-columns: repeat(3, 1fr); }
+/* 带 display 的元素会盖掉 hidden 属性（例：文案的「↺ 用自动生成」、到馆的提示）—— 统一关掉 */
+.mb [hidden], .mb-modal [hidden] { display: none !important; }
 .reset {
   border: 0; background: none; color: var(--gold); font-size: 12px; cursor: pointer; padding: 0 0 0 6px;
 }
@@ -257,6 +263,9 @@ body.mb-body { overflow: hidden; height: 100vh; }
   position: absolute; left: 56px; right: 56px; bottom: 22px; display: flex; justify-content: space-between;
   font-size: 9.5px; letter-spacing: .24em; text-transform: uppercase; color: #ABA192; line-height: 1;
 }
+/* 长名字 / 长楼盘名：左边截断，右边页码永远完整 */
+.pg-foot span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pg-foot span:last-child { flex: none; margin-left: 24px; white-space: nowrap; }
 
 /* 封面 */
 .pg-cover .cv-img { position: absolute; left: 0; top: 0; bottom: 0; width: 612px; }
@@ -303,6 +312,14 @@ body.mb-body { overflow: hidden; height: 100vh; }
 .pg-needs .nd-arr { color: var(--pg); font-size: 18px; }
 .pg-needs .nd-a { font-size: 15px; line-height: 1.65; }
 .pg-needs .nd-a em { font-style: normal; color: var(--pg); font-size: 10.5px; letter-spacing: .14em; margin-left: 4px; white-space: nowrap; }
+.deck.lang-bi .pg-needs .nd { padding: 10px 0; }
+/* 字太多放不下：先缩一号（tight），再缩一号（tighter）；还放不下，体检会提醒 */
+.pg-needs.tight .nd { padding: 8px 0; gap: 14px; }
+.pg-needs.tight .nd-q { font-size: 20px; line-height: 1.28; }
+.pg-needs.tight .nd-a { font-size: 14px; line-height: 1.55; }
+.pg-needs.tighter .nd { padding: 6px 0; }
+.pg-needs.tighter .nd-q { font-size: 18px; }
+.pg-needs.tighter .nd-a { font-size: 13px; line-height: 1.5; }
 .pg .todo { color: #C2553B; }
 
 .pg-plan .hd h2 { font-size: 30px; }
@@ -321,6 +338,13 @@ body.mb-body { overflow: hidden; height: 100vh; }
 .pg-plan .pl-legend .pin { position: static; margin: 0; flex: none; width: 22px; height: 22px; font-size: 11px; box-shadow: none; }
 .pg-plan .pl-legend b { flex: 1; font-weight: 500; }
 .pg-plan .pl-legend em { font-style: normal; color: var(--pg); font-size: 10.5px; letter-spacing: .12em; }
+.pg-plan .pl-legend b .bi { display: inline; margin-left: 6px; }
+.deck.lang-bi .pg-plan .pl-box { top: 156px; height: 572px; }   /* 双语标题多一行，平面图往下让 */
+.pg-plan.tight .pl-legend li { padding: 5px 0; font-size: 13px; gap: 10px; }
+.pg-plan.tight .pl-not { margin-top: 10px; font-size: 12px; }
+.pg-plan.tighter .pl-legend li { padding: 3px 0; font-size: 12px; }
+.pg-plan.tighter .pl-legend .pin { width: 18px; height: 18px; font-size: 10px; }
+.pg-plan.tighter .pl-legend b .bi { display: none; }
 
 /* 空间页 */
 .pg-room .rm-head { position: absolute; left: 56px; right: 56px; top: 44px; display: flex; align-items: flex-end; gap: 22px; }
@@ -338,7 +362,12 @@ body.mb-body { overflow: hidden; height: 100vh; }
 .pg-room .rm-imgs.l4 { grid-template: 1fr 1fr / 1.3fr 1fr 1fr; }
 .pg-room .rm-imgs.l4 .hero { grid-row: span 2; }
 .pg-room .rm-imgs.l4 .ph:nth-child(4) { grid-column: span 2; }
-.pg-room .rm-txt { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.pg-room .rm-txt { display: flex; flex-direction: column; min-height: 0; overflow: hidden; contain: size; }   /* contain：打印分页时字太多也不能把整页撑开 */
+.pg-room .rm-body.rm-noimg { grid-template-columns: minmax(0, 680px); }   /* 没有图：文字占满，不留空白框 */
+.pg-room .rm-noimg .rm-feats b { font-size: 17px; }
+.pg-room .rm-noimg .rm-feats span { font-size: 14.5px; }
+.pg-room .rm-noimg .rm-for { margin-top: 40px; }
+.pg-room .rm-noimg .rm-for p:last-child { font-size: 26px; line-height: 1.3; }
 .pg-room .rm-feats li { padding: 10px 0; border-top: 1px solid var(--pl); }
 .pg-room .rm-feats li:first-child { border-top: 0; padding-top: 0; }
 .pg-room .rm-feats b { display: block; font-size: 15px; font-weight: 600; margin-bottom: 2px; line-height: 1.4; }
@@ -350,7 +379,12 @@ body.mb-body { overflow: hidden; height: 100vh; }
 .pg-room .rm-mats { display: flex; flex-wrap: wrap; gap: 5px 14px; margin-top: 14px; font-size: 11px; color: var(--pf); letter-spacing: .04em; }
 .pg-room .rm-mats .bi { display: none; }
 .pg-room .rm-mats i { width: 9px; height: 9px; display: inline-block; vertical-align: -1px; margin-right: 6px; border-radius: 1px; }
-.deck.lang-bi .pg-room .rm-feats li:nth-child(n+4), .deck.lang-bi .pg-room .rm-mats { display: none; }
+.deck.lang-bi .pg-room .rm-mats { display: none; }   /* 双语只印 3 个卖点（deck.js 已按需求排好先后） */
+.pg-room.tight .rm-feats li { padding: 7px 0; }
+.pg-room.tight .rm-feats span { font-size: 12.5px; line-height: 1.5; }
+.pg-room.tight .rm-for p:last-child { font-size: 17px; }
+.pg-room.tighter .rm-feats span { display: none; }
+.pg-room.tighter .rm-for p:last-child { font-size: 15.5px; }
 
 /* 工期 · 预算 · 保障 */
 .pg-practical .pr-cols { position: absolute; left: 64px; right: 64px; top: 220px; bottom: 70px; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 40px; }

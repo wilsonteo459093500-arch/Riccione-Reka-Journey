@@ -1,5 +1,5 @@
 /* ============================================================
-   Moodboard 生成器 · 排版（A4 横向，每页 1122 × 793）
+   VISI · 排版（A4 横向，每页 1122 × 793）
    ------------------------------------------------------------
    页序照《快思慢想》排：
      封面写客人名字            → System 1 第一眼就知道「这是我的」
@@ -60,7 +60,6 @@
     var s = MB.t(v, lang);
     return lang === 'zh' ? '「' + esc(s) + '」' : '“' + esc(s) + '”';
   }
-  function names(p, lang) { return esc(MB.namesOr(p, lang === 'zh' ? 'zh' : 'en')); }
 
   /** 页脚：「07 / 13 · Kitchen」—— 客户回讯息时说得出是哪一页 */
   function footer(p, n, total, name) {
@@ -77,11 +76,12 @@
     var o = pg.room ? MB.roomTitle(p, pg.room) : PAGE_NAMES[pg.type];
     return MB.t(o, lang === 'zh' ? 'zh' : 'en');
   }
-  /** 楼盘和展厅在同一个镇区（例：都在 Setia Alam）→ 邀约页可以说「就在你们新家附近」 */
+  /** 楼盘和展厅在同一个镇区（config 的 venue.township，例：Setia Alam）→ 邀约页可以说「同一个镇区」。
+      只认完全相同的镇区名：Shah Alam、Selangor 都在地址里，但不是同一个镇区 */
   function sameTown(p, ctx) {
-    var area = (p.property.area || '').trim().toLowerCase();
-    var addr = ((ctx.venue && ctx.venue.address) || '').toLowerCase();
-    return area.length > 2 && addr.indexOf(area) > -1;
+    var t = ((ctx.venue && ctx.venue.township) || '').trim().toLowerCase();
+    var area = String(p.property.area || '').split(/[,，·]/)[0].trim().toLowerCase();
+    return !!t && area === t;
   }
   MB.sameTown = sameTown;
 
@@ -95,14 +95,17 @@
   function cover(p, ctx, lang) {
     var prop = MB.propertyLabel(p);
     var by = p.host.name ? (lang === 'zh' ? '设计顾问 ' : 'Prepared by ') + esc(p.host.name) : '';
+    var who = MB.namesOr(p);
+    // 没填客户名（例如内部样稿）：大字改放楼盘，不要印出「Prepared for there」
+    var big = who ? esc(who) : prop ? esc(prop) : MB.th({ en: 'Your new home', zh: '你们的新家' }, lang);
     return img(ctx, MB.pageImage(p, 'cover', ctx.resolve), 'cv-img') +
       '<div class="cv-txt">' +
         '<img class="cv-logo" src="assets/img/brand/sail.png" alt="Sail 溪岸" />' +
         '<div class="cv-mid">' +
-          lbl({ en: 'Prepared for', zh: '专属方案 · 为' }, lang) +
-          '<h1 class="cv-name">' + names(p, lang) + '</h1>' +
+          lbl(who ? { en: 'Prepared for', zh: '专属方案 · 为' } : { en: 'A proposal for', zh: '专属方案' }, lang) +
+          '<h1 class="cv-name">' + big + '</h1>' +
           '<span class="rule"></span>' +
-          (prop ? '<p class="cv-prop">' + esc(prop) + '</p>' : '') +
+          (prop && who ? '<p class="cv-prop">' + esc(prop) + '</p>' : '') +
           '<p class="cv-kind">' + MB.th(p.rooms.length
             ? { en: 'Built-in cabinetry proposal · ' + p.rooms.length + (p.rooms.length > 1 ? ' spaces' : ' space'), zh: '全屋定制方案 · ' + p.rooms.length + ' 个空间' }
             : { en: 'Built-in cabinetry proposal', zh: '全屋定制方案' }, lang) + '</p>' +
@@ -141,12 +144,17 @@
     var rows = p.needs.slice(0, 5).map(function (n) {
       var r = MB.needRoom(p, n);
       var pn = r ? MB.roomPageNo(p, r) : 0;
-      var ans = MB.needAnswer(n);
+      var ans = MB.needAnswer(n, p);
+      var ref = pn ? ' <em>p.' + MB.pad2(pn) + '</em>' : '';
+      // 页码紧跟主语言那句；双语时放在中文之前，免得多占一行
+      var body = !ans ? '<span class="todo">' + (lang === 'zh' ? '（写下我们的做法）' : '(write our answer)') + '</span>' + ref
+        : lang === 'bi' && typeof ans === 'object' && ans.en && ans.zh
+          ? esc(ans.en) + ref + '<span class="bi">' + esc(ans.zh) + '</span>'
+          : text(ans, lang) + ref;
       return '<div class="nd">' +
         '<p class="nd-q">' + quote(MB.needQuote(n), lang) + '</p>' +
         '<span class="nd-arr">→</span>' +
-        '<p class="nd-a">' + (ans ? text(ans, lang) : '<span class="todo">' + (lang === 'zh' ? '（写下我们的做法）' : '(write our answer)') + '</span>') +
-          (pn ? ' <em>p.' + MB.pad2(pn) + '</em>' : '') + '</p>' +
+        '<p class="nd-a">' + body + '</p>' +
       '</div>';
     }).join('');
     return '<div class="hd">' +
@@ -159,7 +167,7 @@
   /* ---------- 4 · 平面图 ------------------------------------ */
   function plan(p, ctx, lang) {
     var notIn = ((p.extra || {}).notIncluded || '').trim();
-    var boxW = 735, boxH = 600;
+    var boxW = 730, boxH = lang === 'bi' ? 572 : 590;   // 与 CSS 的 .pl-box 一致
     var w = p.plan.w || 1000, h = p.plan.h || 700;
     var k = Math.min(boxW / w, boxH / h);
     var iw = Math.round(w * k), ih = Math.round(h * k);
@@ -191,9 +199,8 @@
     var idx = p.rooms.indexOf(r) + 1;
     var refs = r.images.filter(function (ref) { return ctx.resolve(ref); }).slice(0, 4);
     var layout = 'l' + Math.max(1, refs.length);
-    var imgs = refs.length ? refs.map(function (ref, i) { return img(ctx, ref, i === 0 ? 'hero' : ''); }).join('')
-      : img(ctx, null, 'hero');
-    var feats = def.feats.filter(function (f) { return r.feats.indexOf(f.id) > -1; }).slice(0, 4).map(function (f) {
+    var imgs = refs.map(function (ref, i) { return img(ctx, ref, i === 0 ? 'hero' : ''); }).join('');
+    var feats = MB.roomFeats(p, r).slice(0, lang === 'bi' ? 3 : 4).map(function (f) {
       return '<li><b>' + text({ en: f.en, zh: f.zh }, lang) + '</b><span>' + text(f.why, lang) + '</span></li>';
     }).join('');
     var note = MB.roomNote(p, r);
@@ -207,8 +214,9 @@
         '<div><h2>' + text(MB.roomTitle(p, r), lang) + '</h2>' +
         '<p class="rm-line">' + text(def.head, lang) + '</p></div>' +
       '</div>' +
-      '<div class="rm-body">' +
-        '<div class="rm-imgs ' + layout + '">' + imgs + '</div>' +
+      // 没有图：不留空白米色框（客户会以为方案没做完），文字占满整页
+      '<div class="rm-body' + (refs.length ? '' : ' rm-noimg') + '">' +
+        (refs.length ? '<div class="rm-imgs ' + layout + '">' + imgs + '</div>' : '') +
         '<div class="rm-txt">' +
           (feats ? '<ol class="rm-feats">' + feats + '</ol>' : '') +
           (note ? '<div class="rm-for"><p class="lbl">' + MB.th(forLbl, lang === 'bi' ? 'en' : lang) + '</p><p>' + text(note, lang) + '</p></div>' : '') +
@@ -281,10 +289,10 @@
         '<p class="iv-meta">' + (L1 === 'zh' ? '约 ' + mins + ' 分钟 · Setia Alam 展厅' : mins + ' minutes · our Setia Alam showroom') + '</p>'
       : '<p class="iv-slot">' + (L1 === 'zh' ? '时间由你们定 —— 回我一个方便的时段' : 'Tell us a time that suits you') + '</p>';
     var wa = MB.msisdn(p.host.wa);
-    var who = MB.namesOr(p, L1), prop = MB.propertyLabel(p);
+    var who = MB.namesOr(p), prop = MB.propertyLabel(p);
     var hello = L1 === 'zh'
-      ? '你好 ' + (p.host.name || '') + '，我是 ' + who + (prop ? '（' + prop + '）' : '') + '，想约时间到展厅看看。'
-      : 'Hi ' + (p.host.name || '') + ', this is ' + who + (prop ? ' (' + prop + ')' : '') + '. We’d like to visit the showroom.';
+      ? '你好 ' + (p.host.name || '') + '，' + (who ? '我是 ' + who + (prop ? '（' + prop + '）' : '') + '，' : '') + '想约时间到展厅看看。'
+      : 'Hi ' + (p.host.name || '') + ', ' + (who ? 'this is ' + who + (prop ? ' (' + prop + ')' : '') + '. ' : '') + 'We’d like to visit the showroom.';
     // 打印成 PDF 后链接仍然点得开：客户在手机上一点就 WhatsApp / 导航
     var links = [
       wa ? '<a href="https://wa.me/' + wa + '?text=' + encodeURIComponent(hello) + '">WhatsApp ' + esc(p.host.name || '') + '</a>' : '',
@@ -292,8 +300,8 @@
       ctx.maps ? '<a href="' + esc(ctx.maps) + '">Google Maps</a>' : ''
     ].filter(Boolean).join(' · ');
     var near = sameTown(p, ctx) ? '<p class="iv-near">' + MB.th({
-      en: 'Our showroom is in ' + p.property.area.trim() + ' too — the same township as your new home.',
-      zh: '展厅也在 ' + p.property.area.trim() + ' —— 和你们新家在同一个镇区。' }, lang) + '</p>' : '';
+      en: 'Our showroom is in ' + ctx.venue.township + ' too — the same township as your new home.',
+      zh: '展厅也在 ' + ctx.venue.township + ' —— 和你们新家在同一个镇区。' }, lang) + '</p>' : '';
     return img(ctx, MB.pageImage(p, 'invite', ctx.resolve), 'iv-img') +
       '<div class="iv-txt">' +
         lbl({ en: 'Next · Come and feel it', zh: '下一步 · 到展厅摸一摸' }, lang) +
@@ -311,6 +319,11 @@
   }
 
   /* ---------- 8 · 封底 -------------------------------------- */
+  function thanks(p, lang) {
+    var who = esc(MB.namesOr(p));
+    if (lang === 'zh') return who ? '谢谢，' + who + '。' : '谢谢。';
+    return who ? 'Thank you, ' + who + '.' : 'Thank you.';
+  }
   function back(p, ctx, lang) {
     var v = ctx.venue || {};
     var rows = [
@@ -322,7 +335,7 @@
     ].filter(Boolean).map(function (r) { return '<li><span>' + esc(r[0]) + '</span>' + esc(r[1]) + '</li>'; }).join('');
     return '<div class="bk-txt">' +
         '<img class="cv-logo" src="assets/img/brand/sail.png" alt="Sail 溪岸" />' +
-        '<h2>' + (lang === 'zh' ? '谢谢，' + names(p, lang) + '。' : 'Thank you, ' + names(p, lang) + '.') + '</h2>' +
+        '<h2>' + thanks(p, lang) + '</h2>' +
         '<p class="bk-line">' + MB.th({ en: 'Designs that soothe the soul — made for the way you live.', zh: '抚慰人心的设计，为你们的生活方式而做。' }, lang) + '</p>' +
         '<ul class="bk-contact">' + rows + '</ul>' +
       '</div>' +

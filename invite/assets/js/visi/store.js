@@ -1,5 +1,5 @@
 /* ============================================================
-   Moodboard 生成器 · 本机存储（IndexedDB）
+   VISI · 本机存储（IndexedDB）
    ------------------------------------------------------------
    projects  每份方案一条（客户资料 · 空间 · 平面图）
    images    销售自己的图库（上传 / 从旧 PDF 导入），存压缩后的 JPEG
@@ -10,7 +10,7 @@
   'use strict';
 
   var MB = window.MB = window.MB || {};
-  var DB_NAME = 'sail-moodboard-v1';
+  var DB_NAME = 'sail-visi-v1';
   var dbPromise = null;
 
   function open() {

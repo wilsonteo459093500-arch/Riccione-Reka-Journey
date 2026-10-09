@@ -1,5 +1,5 @@
 /* ============================================================
-   Moodboard 生成器 · 资料库
+   VISI · 资料库
    ------------------------------------------------------------
    空间 · 功能卖点 · 风格方向 · 需求卡对照 · 内置图库
    全部是纯资料：要改文案、加空间、换配色，只动这一份。
@@ -29,7 +29,7 @@
       feats: [
         { id: 'fullheight', def: true, en: 'Full-height storage wall', zh: '通顶收纳墙',
           why: { en: 'No dusty gap on top — the whole wall works, floor to ceiling.', zh: '柜顶不留缝、不积灰，整面墙从地面用到天花。' } },
-        { id: 'understair', def: true, en: 'Under-stair storage', zh: '楼梯底收纳',
+        { id: 'understair', en: 'Under-stair storage', zh: '楼梯底收纳',
           why: { en: 'The awkward triangle under the stairs stops being dead space.', zh: '楼梯下那块尴尬的三角位，不再是死角。' } },
         { id: 'ventilated', en: 'Ventilated shoe compartments', zh: '透气鞋柜',
           why: { en: 'Closed cabinets trap humidity and odour — vents keep the air moving.', zh: '密封鞋柜在潮湿天气容易闷出味道，透气设计让空气流动。' } },
@@ -80,7 +80,7 @@
       prep: { en: 'Your kitchen boards and handles, laid out in daylight', zh: '你们厨房的板材与把手实物，在自然光下摆好', short: { en: 'your kitchen boards and handles', zh: '你们厨房的板材与把手' } },
       feats: [
         { id: 'topbase', def: true, en: 'Top + base cabinets', zh: '吊柜 + 地柜',
-          why: { en: 'Maximum closed storage — what you don’t use daily goes up and out of sight.', zh: '收纳量最大：不常用的放上面，看不见就不乱。' } },
+          why: { en: 'Maximum closed storage — what you don’t use daily goes up and out of sight.', zh: '收纳量最大，不常用的放上面，看不见就不乱。' } },
         { id: 'pantry', def: true, en: 'Tall pull-out pantry', zh: '高柜拉篮',
           why: { en: 'Every jar in one glance — nothing expires at the back of a deep cabinet.', zh: '瓶瓶罐罐一眼看完，不再有东西卡在深柜里过期。' } },
         { id: 'openshelf', en: 'Open shelving instead of top cabinets', zh: '开放层架代替吊柜',
@@ -90,7 +90,7 @@
         { id: 'island', en: 'Island with storage', zh: '中岛（带收纳）',
           why: { en: 'Prep, breakfast and homework in one spot, storage on both sides.', zh: '备菜、早餐、写功课都在这里，两面都能收纳。' } },
         { id: 'wetkitchen', en: 'Moisture-resistant wet kitchen', zh: '湿厨房防潮柜体',
-          why: { en: 'Steam and splashes every day — carcass and edges specified for wet use, so doors don’t swell.', zh: '天天蒸汽水渍，柜体与封边按湿区规格做，柜门不会泡胀。' } },
+          why: { en: 'Steam and splashes every day — carcass and edges specified for wet areas, built to take the moisture.', zh: '天天蒸汽水渍，柜体与封边按湿区规格做，更耐潮。' } },
         { id: 'skeleton', en: 'Skeleton-line frame detail', zh: '骨骼线框细节',
           why: { en: 'A fine frame line gives the doors shadow and rhythm — detail without ornament.', zh: '细线框让柜门有光影节奏，有细节但不繁复。' } }
       ]
@@ -168,13 +168,13 @@
         { id: 'mirrorcab', def: true, en: 'Mirror cabinet', zh: '镜柜',
           why: { en: 'Toiletries disappear behind the mirror; the counter stays clear.', zh: '瓶瓶罐罐收进镜子后面，台面保持干净。' } },
         { id: 'moisture', en: 'Moisture-proof board, sealed edges', zh: '防潮板 + 全封边',
-          why: { en: 'Built for steam — no swelling, no peeling.', zh: '为蒸汽而做，不胀、不脱皮。' } },
+          why: { en: 'Board and edges specified for steam and splashes.', zh: '板材与封边按湿区规格做，更耐蒸汽水汽。' } },
         { id: 'niche', en: 'Recessed shower niche', zh: '淋浴壁龛',
           why: { en: 'Bottles off the floor, nothing to knock over.', zh: '瓶子不再放地上，也不会被碰倒。' } }
       ]
     },
     {
-      key: 'bedroom', en: 'Bedroom', zh: '卧室',
+      key: 'bedroom', en: 'Kids’ Room', zh: '儿童房',
       head: { en: 'A room that grows with them.', zh: '一间会跟着孩子长大的房间。' },
       hint: '例：孩子 6 岁 —— 低位开放收纳，他自己就能收玩具。',
       prep: { en: 'Adjustable wardrobe interiors you can reconfigure by hand', zh: '可调式衣柜内部，现场亲手调整', short: { en: 'the adjustable wardrobe interiors', zh: '可调式衣柜' } },
@@ -214,7 +214,7 @@
         { id: 'storage', def: true, en: 'Closed storage below', zh: '下方收纳',
           why: { en: 'Joss sticks, candles and offerings stay tidy and out of sight.', zh: '香、烛、供品整齐收好，不外露。' } },
         { id: 'heat', en: 'Heat-resistant top', zh: '耐热台面',
-          why: { en: 'Daily incense and candles without marks on the surface.', zh: '每天上香点烛，台面不留痕。' } }
+          why: { en: 'A top chosen for daily incense and candles.', zh: '台面选用适合每日上香点烛的材质。' } }
       ]
     },
     {
@@ -276,7 +276,7 @@
       promises: [
         { en: 'Lines that catch the light.', zh: '线条在光里有影子。' },
         { en: 'Storage that reads as architecture.', zh: '收纳本身就是建筑感。' },
-        { en: 'Classic enough to last twenty years.', zh: '经典到二十年都不过时。' }
+        { en: 'Classic lines that won’t date quickly.', zh: '经典线条，不容易过时。' }
       ]
     },
     {
@@ -390,6 +390,11 @@
     },
     luggage: {
       field: 'storage', match: '行李箱', room: 'foyer', feats: ['understair'],
+      condo: {
+        room: 'master', feats: ['fullheight'],
+        answer: { en: 'Wardrobes run to the ceiling — the top section takes luggage and bulky items, so nothing sits on top collecting dust.', zh: '衣柜做到天花，最上层放行李箱与大件，柜顶不再堆杂物积灰。' },
+        note: { en: 'Luggage and bulky items go into the top section of a ceiling-high wardrobe — out of sight, off the floor.', zh: '行李箱与大件放进通顶衣柜的最上层 —— 看不见，也不占地面。' }
+      },
       quote: { en: 'Luggage and bulky things have nowhere to go.', zh: '行李箱和大件杂物没地方放。' },
       answer: { en: 'The under-stair space and the top of every wardrobe become storage for bulky items.', zh: '楼梯底与每个衣柜顶部，都变成大件收纳。' },
       note: { en: 'The space under the stairs takes the luggage and bulky items, so they never reach the bedrooms.', zh: '楼梯底收下行李箱与大件杂物，不再挤进卧室。' }
@@ -515,7 +520,8 @@
     { re: /DINING|SIDEBOARD|餐厅|餐边/, room: 'dining' },
     { re: /LIVING|TVWALL|TVFEATURE|客厅|电视/, room: 'living' },
     { re: /STUDY|书房/, room: 'study' },
-    { re: /KIDS|CHILD|BEDROOM\d|BEDROOM|儿童|卧室/, room: 'bedroom' },
+    { re: /KIDS|CHILD|儿童/, room: 'bedroom' },
+    { re: /BEDROOM\d|BEDROOM|卧室/, room: 'guest' },
     { re: /ALTAR|神台/, room: 'altar' },
     { re: /GUEST|STUDIO|客房/, room: 'guest' },
     { re: /SKELETON|EMPTYMOUNTAIN|WEAVING|MISTY|WABI|ABOUTTHEBRAND|SHOWROOM/, room: 'showroom' }
