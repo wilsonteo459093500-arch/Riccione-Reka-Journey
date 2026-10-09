@@ -151,6 +151,7 @@ export default function Home({ notify, onOpenProject, onOpenBoards, onOpenSettin
       type: 'ok',
       text: `导入完成：${st.floors} 个楼层 · ${st.views} 张效果图 · ${st.materials} 种材料`,
     });
+    for (const w of project.importWarnings || []) notify({ type: 'warn', text: w });
     onOpenProject(project.id);
   }
 

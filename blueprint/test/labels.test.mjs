@@ -255,3 +255,33 @@ test('行拼接：远处同一基线的文字是不同的行；字距拉开的�
   ]);
   assert.deepEqual(lines.map((l) => l.text), ['圆弧形床边设计', '床头织物纹理设', '（待确认）']);
 });
+
+test('中文输入法写法：全角字母数字、／、∶、【待确认】', () => {
+  assert.deepEqual(parseMaterialLabel('浅川橡ＡＧ２７３'), { role: '', name: '浅川橡', code: 'AG273', pending: false });
+  assert.deepEqual(parseMaterialLabel('浅川橡 AG273【待确认】'), { role: '', name: '浅川橡', code: 'AG273', pending: true });
+  assert.equal(parseMaterialLabel('柜体／柜门 木隐 AG355').role, '柜体 & 柜门');
+  assert.equal(parseMaterialLabel('柜体 & 柜门﹕木隐 AG355').name, '木隐');
+  assert.equal(parseMaterialLabel('台面∶岩板 SS061M').role, '台面');
+});
+
+test('楼层写法：1st / 2nd Floor、1/F、Upper Ground', () => {
+  assert.deepEqual(parseFloorLabel('1ST FLOOR'), { zh: '二楼', en: 'FIRST FLOOR' });
+  assert.deepEqual(parseFloorLabel('2nd Floor'), { zh: '三楼', en: 'SECOND FLOOR' });
+  assert.deepEqual(parseFloorLabel('1/F'), { zh: '二楼', en: 'FIRST FLOOR' });
+  assert.equal(parseFloorLabel('UPPER GROUND FLOOR').en, 'UPPER GROUND FLOOR');
+  assert.deepEqual(parseFloorLabel('1F'), { zh: '一楼', en: 'GROUND FLOOR' }, '中文习惯 1F 仍是一楼');
+});
+
+test('空间标题：分隔符后的视角、词典外英文名、英文楼层前缀', () => {
+  const t = (s) => { const r = parseRoomTitle(s); return [r.room, r.roomEn, r.subtitle]; };
+  assert.deepEqual(t('客厅 - 电视柜'), ['客厅', 'LIVING AREA', '电视柜']);
+  assert.deepEqual(t('客厅｜电视柜'), ['客厅', 'LIVING AREA', '电视柜']);
+  assert.deepEqual(t('客厅：电视柜'), ['客厅', 'LIVING AREA', '电视柜']);
+  assert.deepEqual(t('Master Bedroom - Walk-in Wardrobe'), ['主人房', 'MASTER BEDROOM', 'Walk-In Wardrobe']);
+  assert.deepEqual(t('GUEST BEDROOM'), ['客房', 'GUEST ROOM', '']);
+  assert.deepEqual(t('Laundry Area'), ['洗衣房', 'LAUNDRY', '']);
+  assert.deepEqual(t('Sunroom'), ['Sunroom', 'SUNROOM', '']);
+  assert.equal(parseRoomTitle('GF Living Room').floor.zh, '一楼');
+  assert.equal(parseRoomTitle('客厅').known, true);
+  assert.equal(parseRoomTitle('SAIL').known, false);
+});

@@ -184,3 +184,85 @@ if (process.env.BLUEPRINT_PDF) {
     checkSample(a, { client: process.env.BLUEPRINT_CLIENT || 'Mr Lau' });
   });
 }
+
+// ---------------------------------------------------------------------------
+// 其它设计师的 PDF（审查发现的问题回归）：合成的页面数据
+// ---------------------------------------------------------------------------
+
+const L = (text, x, y, fs = 12, w) => ({ text, x, y, w: w ?? text.length * fs * 0.8, h: fs, fs });
+const I = (key, x, y, w, h, pxW = 1600, pxH = 1000) => ({ key, x, y, w, h, pxW, pxH });
+const pageOf = (n, lines, images, W = 720, H = 540) => ({ n, width: W, height: H, lines, images });
+
+test('每页都有的页脚（网址 / 品牌）：不当备注、不吞掉最后两页、不影响楼层页', () => {
+  const footer = (n) => [L('www.saildz.com', 600, 520, 8), L(`P.${String(n).padStart(2, '0')}`, 20, 520, 8)];
+  const withFooter = {
+    ...raw,
+    pages: raw.pages.map((p) => ({ ...p, lines: [...p.lines, ...footer(p.n)] })),
+  };
+  const a = analyzePages(withFooter, { fileName: '2026.8.6 Muar - Mr Demo - GF  L1.pdf' });
+  checkSample(a);
+  for (const v of a.views) assert.ok(!v.notes.some((n) => /saildz|P\./.test(n.text + n.label)), `p${v.page} 页脚变成了备注`);
+});
+
+test('最大的图是阴影位图（低清、比效果图大一圈）：取真正的效果图', () => {
+  const pages = [1, 2, 3].map((n) =>
+    pageOf(n, [L(['客厅 LIVING AREA', '饭厅 DINING', '厨房 KITCHEN'][n - 1], 20, 20, 20), L('柜体 & 柜门', 800, 240), L(`浅川橡 AG27${n}`, 800, 256)], [
+      I('shadow', 1, 71, 784, 464, 650, 385),
+      I(`render${n}`, 10, 80, 760, 440, 1600, 1000),
+      I(`sw${n}`, 800, 100, 130, 130, 500, 500),
+    ], 960, 540)
+  );
+  const a = analyzePages({ pages });
+  assert.deepEqual(a.views.map((v) => v.imageKey), ['render1', 'render2', 'render3']);
+  assert.equal(a.materials.length, 3);
+});
+
+test('贴着上边的整幅效果图（A4 竖版 / 横幅）不是装饰条；多页重复的风景条才是', () => {
+  const portrait = [1, 2].map((n) =>
+    pageOf(n, [L(['客厅 LIVING AREA', '主人房 MASTER BEDROOM'][n - 1], 30, 400, 22), L('柜体 & 柜门', 160, 476), L(`浅川橡 AG27${n}`, 160, 494)], [
+      I(`r${n}`, 0, 0, 595, 379),
+      I(`s${n}`, 30, 463, 120, 120, 500, 500),
+    ], 595, 842)
+  );
+  const a = analyzePages({ pages: portrait });
+  assert.deepEqual(a.views.map((v) => v.room), ['客厅', '主人房']);
+  assert.deepEqual(a.pages.map((p) => p.kind), ['view', 'view']);
+  // 真实样稿：标题页 / 楼层页底部的风景条（同一张图出现 3 次）仍被当成装饰
+  const s = analyzePages(raw, { fileName: '2026.8.6 Muar - Mr Demo - GF  L1.pdf' });
+  assert.equal(s.pages.find((p) => p.n === 3).kind, 'floor');
+});
+
+test('第一页：有空间标题 / 材料标签的效果图不是封面；整份只有一页也能导入；纯图片 PDF 不丢第一页', () => {
+  const render = (n, title) => pageOf(n, title ? [L(title, 20, 20, 20)] : [], [I(`r${n}`, 0, 0, 720, 540)]);
+  assert.equal(analyzePages({ pages: [render(1, '客厅 LIVING AREA'), render(2, '饭厅')] }).pages[0].kind, 'view');
+  assert.equal(analyzePages({ pages: [render(1, '客厅 LIVING AREA')] }).views.length, 1);
+  assert.equal(analyzePages({ pages: [render(1), render(2), render(3)] }).views.length, 3);
+  // 真正的封面（满版图、没有文字）仍是封面
+  assert.equal(analyzePages({ pages: [render(1), render(2, '客厅'), render(3, '饭厅')] }).pages[0].kind, 'cover');
+});
+
+test('标题：底部标题、中文大标题下的小字英文、只有英文的空间名、标题里的楼层前缀', () => {
+  const pg = (n, lines) => pageOf(n, lines, [I(`r${n}`, 5, 60, 576, 389)]);
+  const a = analyzePages({
+    pages: [
+      pg(1, [L('客厅', 20, 20, 24), L('LIVING AREA', 20, 50, 11)]),
+      pg(2, [L('Powder Room', 20, 20, 20)]),
+      pg(3, [L('二楼 主人房', 20, 20, 20)]),
+      pg(4, [L('厨房 KITCHEN', 20, 470, 20)]),
+    ],
+  });
+  assert.deepEqual(a.views.map((v) => [v.room, v.roomEn]), [['客厅', 'LIVING AREA'], ['化妆间', 'POWDER ROOM'], ['主人房', 'MASTER BEDROOM'], ['厨房', 'KITCHEN']]);
+  assert.deepEqual(a.floors.map((f) => f.zh), ['二楼']);
+  assert.equal(a.views[2].floorKey, a.floors[0].key);
+});
+
+test('楼层章节页同时列了本层空间：仍认得出', () => {
+  const a = analyzePages({
+    pages: [
+      pageOf(1, [L('FIRST FLOOR 二楼设计图', 200, 200, 28), L('主人房 · 中厅 · 客房 1 · 客房 2', 200, 260, 14)], []),
+      pageOf(2, [L('主人房 MASTER BEDROOM', 20, 20, 20)], [I('r2', 5, 60, 576, 389)]),
+    ],
+  });
+  assert.equal(a.pages[0].kind, 'floor');
+  assert.equal(a.views[0].floorKey, a.floors[0].key);
+});

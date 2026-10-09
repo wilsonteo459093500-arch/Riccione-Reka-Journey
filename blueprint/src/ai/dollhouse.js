@@ -6,6 +6,7 @@ import { generateImage } from './gemini.js';
 import { toInlineImage, toJpegBlob, dataUrlToBlob, canvasToBlob } from '../store/assets.js';
 import { uid } from '../engine/model.js';
 import { dollhousePromptText, resolveAngle, DOLLHOUSE_ANGLES } from './prompts.js';
+import { PDFJS_DOC_OPTIONS } from '../import/pdfjsAssets.js';
 
 export { DOLLHOUSE_ANGLES, resolveAngle };
 
@@ -99,7 +100,7 @@ export async function renderPlanToImage(fileOrBlob, { page = 1, maxEdge = PLAN_E
 
   const pdfjs = await loadPdfjs();
   const data = new Uint8Array(await fileOrBlob.arrayBuffer());
-  const doc = await pdfjs.getDocument({ data, verbosity: 0 }).promise;
+  const doc = await pdfjs.getDocument({ data, verbosity: 0, ...PDFJS_DOC_OPTIONS }).promise;
   try {
     const n = Math.min(Math.max(1, Math.round(page) || 1), doc.numPages);
     onInfo?.({ pages: doc.numPages, page: n });

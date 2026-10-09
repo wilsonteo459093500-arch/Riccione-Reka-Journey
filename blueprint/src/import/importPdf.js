@@ -3,7 +3,8 @@
 
 import * as pdfjs from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import { extractPdf } from './pdfExtract.js';
+import { extractPdf, placementTransform, RENDER_AREA } from './pdfExtract.js';
+import { PDFJS_DOC_OPTIONS } from './pdfjsAssets.js';
 import { analyzePages } from './analyze.js';
 import { newProject, assembleDeck, uid, clientLine } from '../engine/model.js';
 import { applyLayoutRhythm } from '../engine/layouts.js';
@@ -69,28 +70,42 @@ function rawToCanvas(obj) {
 }
 
 /**
- * 编码一张 PDF 图片：效果图最长边 2560 / JPEG 0.86；色板等小图最长边 900 / JPEG 0.88；透明处垫白
+ * 编码一张 PDF 图片：效果图最长边 2560 / JPEG 0.86；色板等小图最长边 900 / JPEG 0.88；透明处垫白。
+ * place（转了方向 / 被裁切的图）→ 画成页面上看到的样子（色板木纹方向、裁掉的部分都和原稿一致）
  * @returns {Promise<{ blob:Blob, w:number, h:number }|null>}
  */
-async function encodePdfImage(obj, { maxArea }) {
+async function encodePdfImage(obj, { maxArea, place }) {
   const w0 = obj?.width || 0;
   const h0 = obj?.height || 0;
   if (!w0 || !h0 || w0 * h0 < 64) return null;
-  const isRender = maxArea >= 0.15;
+  const isRender = maxArea >= RENDER_AREA;
   const maxEdge = isRender ? 2560 : 900;
   const quality = isRender ? 0.86 : 0.88;
-  const scale = Math.min(1, maxEdge / Math.max(w0, h0));
-  const w = Math.max(1, Math.round(w0 * scale));
-  const h = Math.max(1, Math.round(h0 * scale));
   const source = obj.bitmap || (obj.data ? rawToCanvas(obj) : null);
   if (!source) return null;
+  let w;
+  let h;
+  let matrix = null;
+  if (place) {
+    ({ w, h, matrix } = placementTransform(place, w0, h0, maxEdge));
+  } else {
+    const scale = Math.min(1, maxEdge / Math.max(w0, h0));
+    w = Math.max(1, Math.round(w0 * scale));
+    h = Math.max(1, Math.round(h0 * scale));
+  }
   const canvas = makeCanvas(w, h);
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(0, 0, w, h);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(source, 0, 0, w, h);
+  if (matrix) {
+    ctx.setTransform(...matrix);
+    ctx.drawImage(source, 0, 0, w0, h0);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  } else {
+    ctx.drawImage(source, 0, 0, w, h);
+  }
   const blob = await canvasBlob(canvas, 'image/jpeg', quality);
   return { blob, w, h };
 }
@@ -179,6 +194,7 @@ export async function importPdfFile(file, { onProgress } = {}) {
         return r.blob;
       },
       renderThumb: renderPageThumb,
+      docOptions: PDFJS_DOC_OPTIONS, // 没嵌入字体的中文 PDF 靠 CMap 才读得出字
     });
   } catch (err) {
     throw friendlyError(err);
@@ -188,6 +204,10 @@ export async function importPdfFile(file, { onProgress } = {}) {
   const analysis = analyzePages(raw, { fileName: file.name });
   if (!analysis.views.length) {
     throw new Error('没有找到效果图 —— 请确认 PDF 里有整页的效果图（不是纯文字，也不是加密 / 扫描后无法读取的文件）。');
+  }
+  const importWarnings = [];
+  if (!raw.pages.some((p) => p.lines?.length)) {
+    importWarnings.push('这个 PDF 里读不到文字（可能是「导出为图片」或扫描件）—— 空间名和材料需要手动填写。');
   }
 
   // 3) 建项目 + 存图（每张图只存一次）
@@ -263,6 +283,7 @@ export async function importPdfFile(file, { onProgress } = {}) {
   project.slides = assembleDeck(designSlides);
   project.pages = analysis.pages.map((p) => ({ n: p.n, kind: p.kind, title: p.title || '', thumb: thumbOf.get(p.n) || null }));
   project.updatedAt = Date.now();
+  if (importWarnings.length) project.importWarnings = importWarnings;
   progress('layout', 1, 1);
   return project;
 }

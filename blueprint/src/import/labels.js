@@ -97,6 +97,8 @@ export function normalizeText(str, { keepHanSpaces = false } = {}) {
   let s = String(str ?? '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
   if (!s) return '';
   s = s.replace(/＆/g, '&').replace(/＋/g, '+').replace(/[‘’`]/g, '\'');
+  // 中文输入法打出来的全角字母数字 / 斜杠 / 比例冒号：ＡＧ２７３ → AG273，柜体／柜门 → 柜体/柜门，∶ ﹕ → ：
+  s = s.replace(/[０-９Ａ-Ｚａ-ｚ]/g, (c) => c.normalize('NFKC')).replace(/／/g, '/').replace(/[∶﹕]/g, '：');
   if (hasHan(s)) {
     s = s.replace(/\(/g, '（').replace(/\)/g, '）');
     s = s.replace(new RegExp(`([${HAN}）])\\s*:`, 'g'), '$1：');
@@ -252,6 +254,11 @@ export const ROOM_DICT = {
   '书柜': 'BOOKCASE',
   '餐边柜': 'SIDEBOARD',
   '展示柜': 'DISPLAY CABINET',
+  '客餐厅': 'LIVING & DINING',
+  '化妆间': 'POWDER ROOM',
+  '茶水间': 'PANTRY',
+  '储藏室': 'STORE ROOM',
+  '工人房': 'MAID\'S ROOM',
 };
 
 // 英文空间名（大写、撇号统一为 '）→ 规范英文；用于修正设计师的写法
@@ -276,6 +283,20 @@ const EN_ALIASES = {
   'STAIRCASE STORAGE': 'STAIRCASE CABINET',
   'STAIR CABINET': 'STAIRCASE CABINET',
   'SHOE RACK': 'SHOE CABINET',
+  'GUEST BEDROOM': 'GUEST ROOM',
+  'KIDS BEDROOM': 'KIDS ROOM',
+  'KID\'S ROOM': 'KIDS ROOM',
+  'KID\'S BEDROOM': 'KIDS ROOM',
+  'CHILDREN\'S ROOM': 'KIDS ROOM',
+  'FAMILY ROOM': 'FAMILY HALL',
+  'FAMILY AREA': 'FAMILY HALL',
+  'FAMILY LOUNGE': 'FAMILY HALL',
+  'LAUNDRY AREA': 'LAUNDRY',
+  'LAUNDRY ROOM': 'LAUNDRY',
+  'POWDER': 'POWDER ROOM',
+  'LIVING AND DINING': 'LIVING & DINING',
+  'LIVING DINING': 'LIVING & DINING',
+  'BED ROOM': 'BEDROOM',
 };
 
 /** 英文 → 中文空间名（'Living Area' → '客厅'） */
@@ -324,6 +345,7 @@ const SPECIAL_FLOORS = {
   mezz: { zh: '夹层', en: 'MEZZANINE' },
   attic: { zh: '阁楼', en: 'ATTIC' },
   roof: { zh: '天台', en: 'ROOF TOP' },
+  upper: { zh: 'UG 层', en: 'UPPER GROUND FLOOR' },
 };
 const ZH_NUM = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6 };
 const EN_ORD = { GROUND: 0, FIRST: 1, SECOND: 2, THIRD: 3, FOURTH: 4, FIFTH: 5 };
@@ -340,6 +362,10 @@ function findFloorToken(s) {
   };
   push(/(?:^|[^A-Za-z])(GROUND|FIRST|SECOND|THIRD|FOURTH|FIFTH)\s*(?:FLOOR|FLR)\b/i, (m) => FLOOR_LEVELS[EN_ORD[m[1].toUpperCase()]]);
   push(/LOWER\s*GROUND(?:\s*FLOOR)?/i, () => SPECIAL_FLOORS.lower);
+  push(/UPPER\s*GROUND(?:\s*FLOOR)?|(?:^|[^A-Za-z0-9])UG(?:\s*FLOOR)?(?![A-Za-z0-9])/i, () => SPECIAL_FLOORS.upper);
+  // '1st Floor' / '2nd Floor'（马来西亚：1st = 二楼）、'1/F'（港式：G/F 之上的第一层 = 二楼）
+  push(/(?:^|[^A-Za-z0-9])([1-5])\s*(?:ST|ND|RD|TH)\s*(?:FLOOR|FLR)\b/i, (m) => FLOOR_LEVELS[Number(m[1])]);
+  push(/(?:^|[^A-Za-z0-9])([1-5])\s*\/\s*F(?![A-Za-z0-9])/i, (m) => FLOOR_LEVELS[Number(m[1])]);
   push(/\bBASEMENT\b/i, () => SPECIAL_FLOORS.basement);
   push(/\bMEZZANINE\b/i, () => SPECIAL_FLOORS.mezz);
   push(/\bATTIC\b/i, () => SPECIAL_FLOORS.attic);
@@ -359,7 +385,7 @@ function findFloorToken(s) {
 }
 
 // 楼层标签里允许出现的其它字样
-const FLOOR_FILLER = /设计图|效果图|平面图|布置图|设计|方案|楼层|3\s*D|DESIGN|PLAN|LAYOUT|FLOOR|[-–—·•|:：/\\(),（）\s]/gi;
+const FLOOR_FILLER = /设计图|效果图|平面图|布置图|设计|方案|楼层|3\s*D|DESIGN|PLAN|LAYOUT|FLOOR|UPPER|GROUND|[-–—·•|:：/\\(),（）\s]/gi;
 
 /**
  * 楼层标签 → { zh, en } | null
@@ -416,9 +442,21 @@ const CN_ORDINAL = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八
  *   '麻将房 Mah Jong’s Room'      → { room:'麻将房', roomEn:'MAHJONG ROOM' }
  */
 export function parseRoomTitle(str) {
-  const out = { room: '', roomEn: '', subtitle: '', qualifier: '', feature: '', floor: null };
+  const out = { room: '', roomEn: '', subtitle: '', qualifier: '', feature: '', floor: null, known: false };
   let s = cleanLine(str);
   if (!s) return out;
+
+  // 0) 分隔符后面的是视角 / 细节：'客厅 - 电视柜'、'客厅｜电视柜'、'客厅：电视柜'、'Master Bedroom - Walk-in Wardrobe'
+  s = s.replace(new RegExp(`([${HAN}）])\\s*[-–—]\\s*(?=[${HAN}A-Za-z])`, 'g'), '$1｜');
+  const sepParts = s.split(/\s+[-–—]\s+|\s*[｜|：]\s*/).map((x) => x.trim()).filter((x) => x && !/^[-–—|｜/:：·•\s]+$/.test(x));
+  s = sepParts[0] || '';
+  // 英文楼层前缀（'GF Living Room'、'1F 客厅'）
+  const fp0 = splitFloorPrefix(s);
+  if (fp0) {
+    out.floor = fp0.floor;
+    s = fp0.rest;
+  }
+  const tailFeatures = sepParts.slice(1).map((x) => (/[A-Za-z]/.test(x) && !hasHan(x) ? titleCase(fixTypos(x)) : x));
 
   // 1) 括号里的限定词
   const quals = [];
@@ -448,6 +486,7 @@ export function parseRoomTitle(str) {
   const zhTokens = [];
   let prevEn = false;
   for (const tok of s.split(/\s+/).filter(Boolean)) {
+    if (/^[-–—|｜/:：·•]+$/.test(tok)) continue; // 孤立的分隔符
     const en = (/^[A-Za-z][A-Za-z'.\-]*$/.test(tok) && tok.length > 1) || (tok === '&' && prevEn);
     if (en) enWords.push(tok);
     else zhTokens.push(tok);
@@ -510,6 +549,11 @@ export function parseRoomTitle(str) {
     roomDisplay = roomZhFromEn(enPart);
     roomKey = roomDisplay;
   }
+  // 是否认得这个空间（词典里有）：封面 / 标题判断用
+  out.known = !!roomKey && (!!ROOM_DICT[roomKey] || ROOM_KEYS_ZH.some((k) => roomKey.startsWith(k)));
+  // 词典里没有的纯英文空间名（'Powder Room' 以外的生僻写法）：直接用英文
+  if (!roomDisplay && enPart) roomDisplay = titleCase(fixTypos(enPart));
+  features.push(...tailFeatures);
 
   out.room = pangu(number ? `${roomDisplay} ${number}` : roomDisplay);
   let en = enPart ? canonicalRoomEn(enPart) : '';
@@ -552,7 +596,7 @@ export function findCode(s) {
   if (!m) return null;
   return { code: m[2].toUpperCase(), index: m.index + m[1].length, length: m[2].length };
 }
-const PENDING_RE = /[（(]?\s*待\s*(?:确\s*认|定)\s*[）)]?/g;
+const PENDING_RE = /[（(【\[]?\s*待\s*(?:确\s*认|定)\s*[）)】\]]?/g;
 
 /** 名称片段整理：中文片段用 ' · ' 连，英文单词保持空格 */
 function tidyName(raw, role) {
@@ -739,7 +783,8 @@ export function joinLines(lines) {
     const l = String(raw ?? '').trim();
     if (!l) continue;
     if (!out) out = l;
-    else if (isCJKChar(out[out.length - 1]) || isCJKChar(l[0])) out += l;
+    // 两边都是中文 → 直接接（中文折行）；中文接英文 / 英文接英文 → 空一格（'客厅' + 'LIVING AREA'）
+    else if (isCJKChar(out[out.length - 1]) && isCJKChar(l[0])) out += l;
     else out += ` ${l}`;
   }
   return normalizeText(out);

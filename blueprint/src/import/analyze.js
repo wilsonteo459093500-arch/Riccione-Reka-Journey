@@ -143,8 +143,8 @@ export function analyzePages(raw, { fileName } = {}) {
     for (const im of p.images || []) {
       const box = clamp(im, W, H);
       if (!area(box)) continue;
-      // 身上或紧挨着（≤15pt）有材料文字 → 是色板，不会是 logo
-      const labelled = (p.lines || []).some((l) => (contains(box, center(l)) || rectDistance(l, box) <= 15) && looksLikeMaterial(l.text));
+      // 身上或附近（≤40pt，和分配标签的半径一致）有材料文字 → 是色板，不会是 logo
+      const labelled = (p.lines || []).some((l) => (contains(box, center(l)) || rectDistance(l, box) <= 40) && looksLikeMaterial(l.text));
       if (!occ.has(im.key)) occ.set(im.key, []);
       occ.get(im.key).push({ n: p.n, box, frac: area(box) / (W * H), labelled });
     }
@@ -160,6 +160,34 @@ export function analyzePages(raw, { fileName } = {}) {
     const steady = list.filter((o) => Math.hypot(center(o.box).x - cx, center(o.box).y - cy) <= 36).length;
     if (steady / list.length >= 0.6) decor.add(key);
   }
+
+  // 同一张图出现在几页（横幅装饰条判断用）
+  const pagesWith = new Map([...occ].map(([key, list]) => [key, new Set(list.map((o) => o.n)).size]));
+
+  // -------------------------------------------------------------------------
+  // 1b) 页面固定元素：同一行字在 3 页以上同一位置重复（网址 / 电话 / 品牌 / 页码）→ 不参与分析
+  //     材料标签、编号、'*' 备注永远保留；普通文字要出现在一半以上的页面才算
+  // -------------------------------------------------------------------------
+  const FURNITURE_HINT = /www\.|\.com\b|\+\s*6\s*0|whats\s*app|instagram|facebook|sail|riccione|reka|溪岸|^(?:p\.?\s*)?#{1,3}(?:\s*\/\s*#{1,3})?$/i;
+  const lineKey = (l, W, H) => `${l.text.replace(/\d+/g, '#')}@${Math.round((l.x / W) * 50)}:${Math.round((l.y / H) * 50)}`;
+  const lineCount = new Map();
+  for (const p of rawPages) {
+    const seen = new Set();
+    for (const l of p.lines || []) {
+      const k = lineKey(l, p.width || 720, p.height || 540);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      lineCount.set(k, (lineCount.get(k) || 0) + 1);
+    }
+  }
+  const isFurniture = (l, W, H) => {
+    if (N < 3) return false;
+    const c = lineCount.get(lineKey(l, W, H)) || 0;
+    if (c < 3) return false;
+    if (/^[*※•]/.test(l.text) || findCode(l.text) || looksLikeMaterial(l.text)) return false;
+    return FURNITURE_HINT.test(l.text.replace(/\d+/g, '#')) || c >= Math.max(3, 0.5 * N);
+  };
+  const anyText = rawPages.some((p) => (p.lines || []).length > 0);
 
   // -------------------------------------------------------------------------
   // 2) 逐页分类 + 视角解析
@@ -206,26 +234,45 @@ export function analyzePages(raw, { fileName } = {}) {
     const W = p.width || 720;
     const H = p.height || 540;
     const PA = W * H;
-    const lines = (p.lines || []).filter((l) => !isNoise(l.text));
+    const lines = (p.lines || []).filter((l) => !isNoise(l.text) && !isFurniture(l, W, H));
     const text = lines.map((l) => l.text).join(' ');
     const imgs = (p.images || [])
       .map((im) => ({ ...clamp(im, W, H), key: im.key, pxW: im.pxW, pxH: im.pxH, raw: im }))
       .filter((im) => area(im) > 0);
-    const isStrip = (im) => im.w >= 0.9 * W && im.h <= 0.5 * H && (im.y + im.h >= 0.95 * H || im.y <= 0.05 * H);
+    // 贴着上 / 下边的通栏横条：细条，或多页重复（标题页 / 楼层页的风景条）才是装饰；只出现一次的宽幅图是效果图
+    const isStrip = (im) =>
+      im.w >= 0.9 * W && im.h <= 0.5 * H && (im.y + im.h >= 0.95 * H || im.y <= 0.05 * H) && (im.h <= 0.15 * H || (pagesWith.get(im.key) || 0) >= 2);
     const content = imgs.filter((im) => !decor.has(im.key) && !isStrip(im)).sort((a, b) => area(b) - area(a));
-    const big = content[0] && area(content[0]) / PA >= 0.18 ? content[0] : null;
+    let big = content[0] && area(content[0]) / PA >= 0.18 ? content[0] : null;
+    // 最大的图若是阴影 / 低清底图：另一张图盖住它 70% 以上、像素更多 → 那张才是效果图
+    const px = (im) => (im.pxW || 0) * (im.pxH || 0);
+    for (let guard = 0; big && guard < 3; guard++) {
+      const cur = big;
+      const better = content.find(
+        (im) => im !== cur && im.key !== cur.key && overlapArea(im, cur) >= 0.7 * area(cur) && px(im) > 1.5 * px(cur) && area(im) / PA >= 0.18
+      );
+      if (!better) break;
+      big = better;
+    }
     const fullBleed = imgs.some((im) => area(im) / PA >= 0.85);
     const seenView = views.length > 0;
 
     // —— 尾页（联系方式）
-    if (p.n >= N - 1 && CONTACT_RE.test(text) && lines.length >= 2) {
+    const contactLines = lines.filter((l) => CONTACT_RE.test(l.text)).length;
+    if (p.n >= N - 1 && (contactLines >= 2 || (!big && CONTACT_RE.test(text) && lines.length >= 2))) {
       pages.push({ n: p.n, kind: 'end', title: '联系页' });
       report(p.n, 'end', '联系页');
       continue;
     }
 
     // —— 楼层章节页
-    const floorLabel = lines.length && lines.length <= 6 && text.length <= 60 ? parseFloorLabel(text) : null;
+    let floorLabel = lines.length && lines.length <= 6 && text.length <= 60 ? parseFloorLabel(text) : null;
+    if (!floorLabel && !big && lines.length && lines.length <= 12) {
+      // 章节页上还列了本层空间（'主人房 · 中厅 · 客房'）：字号最大的几行里有一行是纯楼层标签就算
+      const maxFs = Math.max(...lines.map((l) => l.fs));
+      const cand = lines.filter((l) => l.fs >= 0.8 * maxFs && l.text.length <= 30).map((l) => parseFloorLabel(l.text)).find(Boolean);
+      if (cand) floorLabel = cand;
+    }
     if (floorLabel && (!big || area(big) / PA >= 0.85)) {
       curFloor = floorFor(floorLabel);
       if (pendingPlan && !curFloor.planKey) curFloor.planKey = pendingPlan;
@@ -236,7 +283,9 @@ export function analyzePages(raw, { fileName } = {}) {
     }
 
     // —— 封面（第一页，满版图、几乎没字）
-    if (p.n === 1 && (fullBleed || (big && area(big) / PA >= 0.6)) && lines.length <= 3) {
+    const roomTitled = lines.some((l) => l.fs >= 13 && parseRoomTitle(l.text).known);
+    const labelled = lines.some((l) => looksLikeMaterial(l.text));
+    if (p.n === 1 && N > 1 && anyText && (fullBleed || (big && area(big) / PA >= 0.6)) && lines.length <= 3 && !roomTitled && !labelled) {
       pages.push({ n: p.n, kind: 'cover', title: '封面' });
       report(p.n, 'cover', '封面');
       continue;
@@ -281,14 +330,37 @@ export function analyzePages(raw, { fileName } = {}) {
     }
     const swatchOf = (l) => swatches.find((s) => contains(s, center(l), 0.5)) || null;
 
-    // 标题：页面上方 18% 内、最大字号（≥ 13pt）、不在色板上、不含材料编号
-    const topCands = lines.filter((l) => l.y < 0.18 * H && l.fs >= 13 && !swatchOf(l) && !findCode(l.text));
-    let titleSet = [];
-    if (topCands.length) {
-      const maxFs = Math.max(...topCands.map((l) => l.fs));
-      const big1 = topCands.filter((l) => l.fs >= 0.85 * maxFs);
+    // 标题：页面上方 18% 内、最大字号（≥ 13pt）、不在色板上、不含材料编号；上方没有 → 找页面底部（效果图下方）
+    const inRenderBox = (l) => contains({ x: render.x + 1, y: render.y + 1, w: render.w - 2, h: render.h - 2 }, center(l));
+    const pickTitle = (cands) => {
+      if (!cands.length) return [];
+      const maxFs = Math.max(...cands.map((l) => l.fs));
+      const big1 = cands.filter((l) => l.fs >= 0.85 * maxFs);
       const y0 = Math.min(...big1.map((l) => l.y));
-      titleSet = big1.filter((l) => l.y <= y0 + 1.6 * maxFs).sort((a, b) => a.y - b.y || a.x - b.x);
+      return big1.filter((l) => l.y <= y0 + 1.6 * maxFs).sort((a, b) => a.y - b.y || a.x - b.x);
+    };
+    let titleSet = pickTitle(lines.filter((l) => l.y < 0.18 * H && l.fs >= 13 && !swatchOf(l) && !findCode(l.text)));
+    const titleable = (l) => !swatchOf(l) && !findCode(l.text) && !inRenderBox(l) && !/^[*※•]/.test(l.text);
+    if (!titleSet.length) titleSet = pickTitle(lines.filter((l) => l.y > 0.78 * H && l.fs >= 13 && titleable(l)));
+    // 竖版 / 杂志式排版：标题在效果图下方的中间位置 → 效果图外字号明显偏大（≥ 16pt）的那行
+    if (!titleSet.length) titleSet = pickTitle(lines.filter((l) => l.fs >= 16 && titleable(l)));
+    if (titleSet.length) {
+      // 中文大标题下面紧跟一行小字英文名（'客厅' / 'LIVING AREA'）：也是标题
+      const maxFs = Math.max(...titleSet.map((l) => l.fs));
+      const bottom = Math.max(...titleSet.map((l) => l.y + l.h));
+      const left = Math.min(...titleSet.map((l) => l.x));
+      const right = Math.max(...titleSet.map((l) => l.x + l.w));
+      const en = lines.find(
+        (l) =>
+          !titleSet.includes(l) &&
+          /^[A-Za-z][A-Za-z0-9 &'’.\-]{2,}$/.test(l.text) &&
+          l.y >= bottom - 0.3 * maxFs &&
+          l.y - bottom <= 1.2 * maxFs &&
+          (Math.abs(l.x - left) <= 1.5 * maxFs || (l.x < right && l.x + l.w > left)) &&
+          !swatchOf(l) &&
+          !findCode(l.text)
+      );
+      if (en && titleSet.every((l) => hasHan(l.text))) titleSet = [...titleSet, en];
     }
     const titleText = joinLines(titleSet.map((l) => l.text));
 
@@ -397,9 +469,10 @@ export function analyzePages(raw, { fileName } = {}) {
 
     // 空间标题
     let parsedTitle = titleText ? parseRoomTitle(titleText) : null;
-    if (parsedTitle && !parsedTitle.room) parsedTitle = null;
+    if (parsedTitle && !parsedTitle.room && !parsedTitle.roomEn) parsedTitle = null;
     const prev = views[views.length - 1];
-    if (parsedTitle?.floor && !curFloor) curFloor = floorFor(parsedTitle.floor);
+    // 标题里写了楼层（'二楼 主人房'、'GF Living Room'）→ 以标题为准
+    if (parsedTitle?.floor) curFloor = floorFor(parsedTitle.floor);
     const v = {
       page: p.n,
       floorKey: curFloor ? curFloor.key : null,
