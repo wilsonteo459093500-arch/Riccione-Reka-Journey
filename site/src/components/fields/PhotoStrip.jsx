@@ -62,7 +62,8 @@ function Viewer({ id, index, total, onClose, onDelete, onMove }) {
 }
 
 /**
- * @param {{ ids: string[], onChange: (ids)=>void, reportId: string, max?: number,
+ * onChange 收到的是 updater：(prevIds) => nextIds（基于最新状态，避免异步回写旧数据）
+ * @param {{ ids: string[], onChange: (updater)=>void, reportId: string, max?: number,
  *           compact?: boolean, label?: string }} props
  */
 export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, compact = false, label }) {
@@ -90,14 +91,15 @@ export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, com
       }
       setBusy((b) => b - 1);
     }
-    if (added.length) onChange([...list, ...added]);
+    // 用最新列表追加（处理期间用户可能改了别的东西）
+    if (added.length) onChange((prev) => [...(prev || []), ...added]);
   };
 
   const del = async (i) => {
     const ok = await confirm({ title: '删除这张照片？', message: '删除后无法恢复。', okText: '删除', danger: true });
     if (!ok) return;
     const id = list[i];
-    onChange(list.filter((_, j) => j !== i));
+    onChange((prev) => (prev || []).filter((x) => x !== id));
     forgetMedia(id);
     removeMedia([id]);
     setOpen(-1);
@@ -106,9 +108,15 @@ export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, com
   const move = (i, d) => {
     const j = i + d;
     if (j < 0 || j >= list.length) return;
-    const next = list.slice();
-    [next[i], next[j]] = [next[j], next[i]];
-    onChange(next);
+    const id = list[i];
+    onChange((prev) => {
+      const next = (prev || []).slice();
+      const a = next.indexOf(id);
+      const b = a + d;
+      if (a < 0 || b < 0 || b >= next.length) return next;
+      [next[a], next[b]] = [next[b], next[a]];
+      return next;
+    });
     setOpen(j);
   };
 

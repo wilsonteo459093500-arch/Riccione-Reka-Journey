@@ -1,6 +1,6 @@
 // 全局数据：项目 / 报告 / 设置（IndexedDB 持久化）+ 照片入库
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { db, getSetting, setSetting, putMedia, deleteMedia, requestPersist } from './db.js';
+import { db, getSetting, setSetting, putMedia, deleteMedia, mediaForReport, requestPersist } from './db.js';
 import { compressImage, processVideo } from './images.js';
 import { uid, mediaIds } from './report.js';
 
@@ -12,6 +12,17 @@ export const DEFAULT_SETTINGS = {
 };
 
 const StoreCtx = createContext(null);
+
+// 正在处理（压缩 / 截封面 / 入库）的照片与视频：离开编辑页前要等它们写完
+const pending = new Set();
+function track(promise) {
+  pending.add(promise);
+  const done = () => pending.delete(promise);
+  promise.then(done, done);
+  return promise;
+}
+const waitMedia = () => Promise.allSettled([...pending]);
+const pendingMedia = () => pending.size;
 
 export function StoreProvider({ children }) {
   const [ready, setReady] = useState(false);
@@ -75,7 +86,10 @@ export function StoreProvider({ children }) {
   const deleteReport = useCallback(async (id) => {
     const r = reportsRef.current.find((x) => x.id === id) || (await db.get('reports', id));
     await db.del('reports', id);
-    if (r) await deleteMedia(mediaIds(r)).catch(() => {});
+    // 报告引用的 + 所有挂在这份报告名下的（含中途丢失引用的）媒体一起清掉
+    const byIndex = await mediaForReport(id).catch(() => []);
+    const ids = new Set([...(r ? mediaIds(r) : []), ...byIndex.map((m) => m.id)]);
+    await deleteMedia([...ids]).catch(() => {});
     setReports((list) => list.filter((x) => x.id !== id));
   }, []);
 
@@ -89,25 +103,37 @@ export function StoreProvider({ children }) {
   }, []);
 
   /** 照片 / 视频入库，返回 media id */
-  const addMediaFile = useCallback(async (reportId, file, kind = 'photo') => {
-    const id = uid('m_');
-    const base = { id, reportId, kind, name: file.name || '', createdAt: Date.now(), caption: '' };
-    if (kind === 'video') {
-      const v = await processVideo(file);
-      await putMedia({ ...base, ...v });
-    } else {
-      const img = await compressImage(file);
-      await putMedia({ ...base, ...img });
-    }
-    return id;
-  }, []);
+  const addMediaFile = useCallback(
+    (reportId, file, kind = 'photo') =>
+      track(
+        (async () => {
+          const id = uid('m_');
+          const base = { id, reportId, kind, name: file.name || '', createdAt: Date.now(), caption: '' };
+          if (kind === 'video') {
+            const v = await processVideo(file);
+            await putMedia({ ...base, ...v });
+          } else {
+            const img = await compressImage(file);
+            await putMedia({ ...base, ...img });
+          }
+          return id;
+        })(),
+      ),
+    [],
+  );
 
   /** 签名（canvas 导出的 PNG blob）入库 */
-  const addSignature = useCallback(async (reportId, blob, w, h) => {
-    const id = uid('m_');
-    await putMedia({ id, reportId, kind: 'signature', blob, thumb: blob, w, h, createdAt: Date.now() });
-    return id;
-  }, []);
+  const addSignature = useCallback(
+    (reportId, blob, w, h) =>
+      track(
+        (async () => {
+          const id = uid('m_');
+          await putMedia({ id, reportId, kind: 'signature', blob, thumb: blob, w, h, createdAt: Date.now() });
+          return id;
+        })(),
+      ),
+    [],
+  );
 
   const removeMedia = useCallback((ids) => deleteMedia((ids || []).filter(Boolean)).catch(() => {}), []);
 
@@ -122,7 +148,7 @@ export function StoreProvider({ children }) {
     () => ({
       ready, error, projects, reports, settings,
       saveProject, deleteProject, saveReport, deleteReport, updateSettings,
-      addMediaFile, addSignature, removeMedia, reload,
+      addMediaFile, addSignature, removeMedia, reload, waitMedia, pendingMedia, track,
       projectById: (id) => projects.find((p) => p.id === id) || null,
     }),
     [ready, error, projects, reports, settings, saveProject, deleteProject, saveReport, deleteReport,

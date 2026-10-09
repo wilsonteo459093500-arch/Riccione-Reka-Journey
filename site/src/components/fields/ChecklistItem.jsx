@@ -33,8 +33,9 @@ function ChecklistItem({ section, item, answer, onChange, reportId, flagged }) {
   const [showPhotos, setShowPhotos] = useState(false);
   const photosOpen = showPhotos || photos.length > 0 || item.media;
 
-  const set = (patch) => onChange(item.id, { ...a, ...patch });
-  const pick = (v) => set({ r: a.r === v ? '' : v });
+  // 只传补丁，由编辑页合并进「最新」的答案（照片处理完时不会覆盖刚点的判定 / 备注）
+  const set = (patch) => onChange(item.id, patch);
+  const pick = (v) => set((prev) => ({ r: prev.r === v ? '' : v }));
 
   const hasMore = item.desc?.en || item.method || (item.desc?.zh || '').length > 46;
 
@@ -108,7 +109,7 @@ function ChecklistItem({ section, item, answer, onChange, reportId, flagged }) {
         {/* 判定 / 填写 */}
         {item.input ? (
           <div className="mt-3">
-            <FieldInput field={item.input} value={a.value} onChange={(v) => set({ value: v })} reportId={reportId} />
+            <FieldInput field={item.input} value={a.value} onChange={(v) => set((prev) => ({ value: typeof v === 'function' ? v(prev.value) : v }))} reportId={reportId} />
           </div>
         ) : (
           !ticks && (
@@ -150,7 +151,7 @@ function ChecklistItem({ section, item, answer, onChange, reportId, flagged }) {
         {/* 照片 */}
         {photosOpen && (
           <div className="mt-3">
-            <PhotoStrip ids={photos} onChange={(ids) => set({ photos: ids })} reportId={reportId} compact max={12} />
+            <PhotoStrip ids={photos} onChange={(fn) => set((prev) => ({ photos: fn(prev.photos || []) }))} reportId={reportId} compact max={12} />
           </div>
         )}
 

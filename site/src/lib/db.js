@@ -30,7 +30,17 @@ function open() {
     };
     req.onsuccess = () => {
       const db = req.result;
-      db.onversionchange = () => db.close();
+      // 连接被关闭（另一个标签页升级 / iOS 后台回收）→ 下次重新打开
+      const reset = () => {
+        try {
+          db.close();
+        } catch {
+          /* ignore */
+        }
+        dbPromise = null;
+      };
+      db.onversionchange = reset;
+      db.onclose = reset;
       resolve(db);
     };
     req.onerror = () => reject(req.error);
@@ -42,11 +52,20 @@ function open() {
   return dbPromise;
 }
 
-function tx(store, mode, fn) {
+function tx(store, mode, fn, retried = false) {
   return open().then(
     (db) =>
       new Promise((resolve, reject) => {
-        const t = db.transaction(store, mode);
+        let t;
+        try {
+          t = db.transaction(store, mode);
+        } catch (e) {
+          // 连接已失效（iOS 从后台回来常见）：丢掉缓存的连接，重开一次再试
+          dbPromise = null;
+          if (!retried) tx(store, mode, fn, true).then(resolve, reject);
+          else reject(e);
+          return;
+        }
         const s = t.objectStore(store);
         let result;
         Promise.resolve(fn(s)).then((r) => {

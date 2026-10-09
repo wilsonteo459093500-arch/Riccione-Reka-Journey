@@ -65,16 +65,18 @@ export default function Home() {
   const [picking, setPicking] = useState(null); // template
   const [menu, setMenu] = useState(null); // report
   const [filter, setFilter] = useState('all');
+  const [limit, setLimit] = useState(40);
 
-  const recent = useMemo(
+  const matching = useMemo(
     () =>
       store.reports
         .filter((r) => getTemplate(r.templateId))
-        .filter((r) => filter === 'all' || r.projectId === filter)
-        .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
-        .slice(0, 40),
-    [store.reports, filter],
+        .filter((r) => filter === 'all' || (filter === 'none' ? !r.projectId || !store.projectById(r.projectId) : r.projectId === filter))
+        .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)),
+    [store.reports, filter, store.projectById],
   );
+  const recent = matching.slice(0, limit);
+  const hasLoose = useMemo(() => store.reports.some((r) => !r.projectId || !store.projectById(r.projectId)), [store.reports, store.projectById]);
   const usedProjects = useMemo(() => {
     const ids = new Set(store.reports.map((r) => r.projectId).filter(Boolean));
     return store.projects.filter((p) => ids.has(p.id));
@@ -157,9 +159,13 @@ export default function Home() {
             <div className="text-[15px] font-bold text-ink">最近报告</div>
             <div className="text-[12px] text-ink-mute">{store.reports.length} 份 · 只存在这台手机</div>
           </div>
-          {usedProjects.length > 1 && (
+          {(usedProjects.length > 1 || (hasLoose && usedProjects.length > 0)) && (
             <div className="no-scrollbar -mx-3 mb-2 flex gap-1.5 overflow-x-auto px-3">
-              {[{ id: 'all', label: '全部' }, ...usedProjects.map((p) => ({ id: p.id, label: siteLabel(p) }))].map((c) => (
+              {[
+                { id: 'all', label: '全部' },
+                ...usedProjects.map((p) => ({ id: p.id, label: siteLabel(p) })),
+                ...(hasLoose ? [{ id: 'none', label: '未关联项目' }] : []),
+              ].map((c) => (
                 <button
                   key={c.id}
                   className={`chip shrink-0 ${filter === c.id ? 'bg-pine text-white ring-pine' : 'bg-white text-ink-soft ring-line'}`}
@@ -175,6 +181,11 @@ export default function Home() {
               <ReportRow key={r.id} r={r} onMenu={setMenu} />
             ))}
           </div>
+          {matching.length > recent.length && (
+            <button className="btn-ghost mt-2 w-full text-[14px]" onClick={() => setLimit((n) => n + 40)}>
+              显示更多（还有 {matching.length - recent.length} 份）
+            </button>
+          )}
           {recent.length === 0 && <Empty icon="ClipboardList" title="还没有报告" hint="点上面任意一种报告开始填写。草稿会自动保存。" />}
         </section>
       </main>

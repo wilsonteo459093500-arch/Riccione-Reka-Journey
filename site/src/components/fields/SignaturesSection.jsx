@@ -17,14 +17,19 @@ export default function SignaturesSection({ section, signatures = {}, onChange, 
   const { confirm } = useUI();
   const [padFor, setPadFor] = useState(null);
 
-  const set = (roleId, patch) => onChange({ ...signatures, [roleId]: { ...(signatures[roleId] || {}), ...patch } });
+  // 基于最新签名数据合并（签名图入库是异步的）
+  const set = (roleId, patch) =>
+    onChange((prev) => {
+      const cur = prev[roleId] || {};
+      return { ...prev, [roleId]: { ...cur, ...(typeof patch === 'function' ? patch(cur) : patch) } };
+    });
 
   const save = async (blob, w, h) => {
     const role = padFor;
     setPadFor(null);
     const old = signatures[role]?.image;
     const id = await addSignature(reportId, blob, w, h);
-    set(role, { image: id, date: signatures[role]?.date || todayISO() });
+    set(role, (cur) => ({ image: id, date: cur.date || todayISO() }));
     if (old) {
       forgetMedia(old);
       removeMedia([old]);

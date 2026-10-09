@@ -23,9 +23,26 @@ export default function Settings() {
   const [est, setEst] = useState(null);
   const [persisted, setPersisted] = useState(null);
   const [busy, setBusy] = useState('');
+  const [noVideo, setNoVideo] = useState(false);
+  const [savedTick, setSavedTick] = useState(false);
   const fileRef = useRef(null);
+  const editing = useRef(false);
 
-  useEffect(() => setForm(store.settings), [store.settings]);
+  useEffect(() => {
+    if (!editing.current) setForm(store.settings);
+  }, [store.settings]);
+
+  // 我的资料：改了就自动保存（停手 0.6 秒）
+  useEffect(() => {
+    if (!editing.current) return undefined;
+    const t = setTimeout(async () => {
+      await store.updateSettings(form);
+      editing.current = false;
+      setSavedTick(true);
+      setTimeout(() => setSavedTick(false), 1500);
+    }, 600);
+    return () => clearTimeout(t);
+  }, [form]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     storageEstimate().then(setEst);
     navigator.storage?.persisted?.().then(setPersisted).catch(() => {});
@@ -34,17 +51,27 @@ export default function Settings() {
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
   const standalone = window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone;
 
-  const save = async () => {
-    await store.updateSettings(form);
-    toast('已保存');
+  const formRef = useRef(form);
+  formRef.current = form;
+  // 离开设置页时还有没保存的改动 → 立刻保存
+  useEffect(
+    () => () => {
+      if (editing.current) store.updateSettings(formRef.current);
+    },
+    [], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  const change = (key, v) => {
+    editing.current = true;
+    setForm((x) => ({ ...x, [key]: v }));
   };
 
   const backup = async () => {
     setBusy('backup');
     try {
-      const blob = await exportBackup();
-      downloadBlob(blob, `溪岸SITE备份_${todayISO()}.json`);
-      toast('备份文件已下载，请存到云盘');
+      const blob = await exportBackup({ includeVideos: !noVideo });
+      downloadBlob(blob, `溪岸SITE备份_${todayISO()}${noVideo ? '_无视频' : ''}.jsonl`);
+      toast(`备份文件已下载（${fmtBytes(blob.size)}），请存到云盘`);
     } catch (e) {
       toast(`备份失败：${e.message}`, 'error');
     } finally {
@@ -54,13 +81,17 @@ export default function Settings() {
 
   const restore = async (file) => {
     if (!file) return;
-    const ok = await confirm({ title: '从备份恢复？', message: '会把备份里的项目 / 报告 / 照片合并进这台手机（同一份报告以备份为准）。', okText: '恢复' });
+    const ok = await confirm({
+      title: '从备份恢复？',
+      message: '会把备份里的项目 / 报告 / 照片合并进这台手机。\n同一份报告，本机较新的版本会保留；你在本机填的名字电话不会被覆盖。',
+      okText: '恢复',
+    });
     if (!ok) return;
     setBusy('restore');
     try {
       const r = await importBackup(file);
       await store.reload();
-      toast(`已恢复：${r.projects} 个项目，${r.reports} 份报告，${r.media} 个照片/视频`);
+      toast(`已恢复：${r.projects} 个项目，${r.reports} 份报告，${r.media} 个照片/视频${r.skipped ? `（${r.skipped} 份本机较新，保留本机）` : ''}`);
     } catch (e) {
       toast(e.message || '恢复失败', 'error');
     } finally {
@@ -74,16 +105,17 @@ export default function Settings() {
       <main className="mx-auto max-w-lg space-y-4 px-3 pt-3">
         <section className="card space-y-4 p-4">
           <div className="text-[15px] font-bold text-ink">我的资料</div>
+          <div className="-mt-2 text-[12px] text-ink-mute">新建报告时自动带入（已建的报告不受影响）</div>
           {ME.map((f) => (
             <div key={f.key}>
               <label className="label">{f.label}</label>
-              <input className="input" type={f.type || 'text'} value={form[f.key] || ''} placeholder={f.placeholder} onChange={(e) => setForm((x) => ({ ...x, [f.key]: e.target.value }))} />
+              <input className="input" type={f.type || 'text'} value={form[f.key] || ''} placeholder={f.placeholder} onChange={(e) => change(f.key, e.target.value)} />
               {f.hint && <div className="mt-1 text-[12px] text-ink-mute">{f.hint}</div>}
             </div>
           ))}
-          <button className="btn-primary w-full" onClick={save}>
-            <Icon name="Check" size={18} /> 保存
-          </button>
+          <div className={`flex items-center gap-1.5 text-[12px] ${savedTick ? 'text-pass' : 'text-ink-mute'}`}>
+            <Icon name="CircleCheck" size={14} /> {savedTick ? '已保存' : '改动会自动保存'}
+          </div>
         </section>
 
         {!standalone && (
@@ -137,7 +169,11 @@ export default function Settings() {
               {busy === 'restore' ? <Spinner /> : <Icon name="Upload" size={17} />} 从备份恢复
             </button>
           </div>
-          <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={(e) => { restore(e.target.files?.[0]); e.target.value = ''; }} />
+          <label className="flex items-center gap-2 text-[13px] text-ink-soft">
+            <input type="checkbox" className="h-4 w-4 accent-terra" checked={noVideo} onChange={(e) => setNoVideo(e.target.checked)} />
+            备份时不含视频（文件小很多；视频建议另存云盘）
+          </label>
+          <input ref={fileRef} type="file" className="hidden" onChange={(e) => { restore(e.target.files?.[0]); e.target.value = ''; }} />
         </section>
 
         <section className="px-2 pb-4 text-center text-[12px] leading-relaxed text-ink-mute">

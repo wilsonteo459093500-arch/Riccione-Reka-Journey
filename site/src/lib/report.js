@@ -71,7 +71,11 @@ export function createReport(template, { project, settings, previous } = {}) {
     signatures: {},
   };
   const ctx = makeCtx({ template, report, project, settings, previous });
-  for (const f of allFields(template)) report.values[f.key] = fieldDefault(f, ctx);
+  report.autofill = {};
+  for (const f of allFields(template)) {
+    report.values[f.key] = fieldDefault(f, ctx);
+    if (isAuto(f) && !isEmpty(report.values[f.key])) report.autofill[f.key] = clone(report.values[f.key]);
+  }
   for (const { item } of allItems(template)) {
     if (item.input) {
       report.items[item.id] = { value: fieldDefault(item.input, ctx), photos: [] };
@@ -92,21 +96,37 @@ export function createReport(template, { project, settings, previous } = {}) {
   return report;
 }
 
+/** 会随项目变化的字段：绑定了项目资料，或默认值是函数（如预计工期） */
+const isAuto = (f) => (f.bind && f.bind.startsWith('project.')) || typeof f.default === 'function';
+const same = (a, b) => JSON.stringify(a ?? '') === JSON.stringify(b ?? '');
+
+function safeDefault(f, ctx) {
+  try {
+    return fieldDefault(f, ctx);
+  } catch {
+    return '';
+  }
+}
+
 /**
- * 换项目：只覆盖「空的」或「仍是旧项目带入值」的 bind 字段，用户手改过的不动。
+ * 换项目：只覆盖「空的」或「仍是自动带入值」的字段，用户手改过的不动。
+ * 自动带入值记录在 report.autofill 里（旧报告没有记录时，与旧项目推算的值比较）。
  */
-export function applyProject(template, report, project, settings, oldProject) {
+export function applyProject(template, report, project, settings, oldProject, previous = []) {
   const next = clone(report);
   next.projectId = project?.id || null;
-  const ctxNew = makeCtx({ template, report: next, project, settings });
-  const ctxOld = makeCtx({ template, report: next, project: oldProject, settings });
+  next.autofill = { ...(report.autofill || {}) };
+  const ctxNew = makeCtx({ template, report: next, project, settings, previous });
+  const ctxOld = makeCtx({ template, report: next, project: oldProject, settings, previous });
   for (const f of allFields(template)) {
-    if (!f.bind || !f.bind.startsWith('project.')) continue;
+    if (!isAuto(f)) continue;
     const cur = next.values[f.key];
-    const oldVal = resolveBind(f.bind, ctxOld);
-    if (isEmpty(cur) || cur === oldVal) {
-      const v = resolveBind(f.bind, ctxNew);
+    const auto = f.key in next.autofill ? same(cur, next.autofill[f.key]) : same(cur, safeDefault(f, ctxOld));
+    if (isEmpty(cur) || auto) {
+      const v = safeDefault(f, ctxNew);
       next.values[f.key] = v == null ? '' : clone(v);
+      if (isEmpty(v)) delete next.autofill[f.key];
+      else next.autofill[f.key] = clone(v);
     }
   }
   next.title = reportTitle(template, next, project);

@@ -5,6 +5,7 @@ import FieldInput, { FieldLabel } from './FieldInput.jsx';
 import PhotoStrip from './PhotoStrip.jsx';
 import { tablePhotoSlots } from '../../lib/docmodel.js';
 import { resolveScale, L } from '../../templates/schema.js';
+import { useState } from 'react';
 import { useStore } from '../../lib/store.jsx';
 import { getMedia, putMedia } from '../../lib/db.js';
 import { uid } from '../../lib/report.js';
@@ -23,7 +24,7 @@ async function cloneMedia(ids, reportId) {
 }
 
 function emptyRow(section) {
-  const row = {};
+  const row = { _id: uid('row_') };
   for (const s of tablePhotoSlots(section)) row[s.key] = [];
   return row;
 }
@@ -57,33 +58,46 @@ export default function TableSection({ template, section, report, rows = [], onC
   const slots = tablePhotoSlots(section);
   const max = section.maxRows || 50;
 
-  const setRow = (i, patch) => onChange(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
-  const add = () => onChange([...rows, emptyRow(section)]);
-  const del = async (i) => {
+  const [seeding, setSeeding] = useState(false);
+  // 行用稳定的 _id 定位（旧数据没有 _id 时退回按下标），所有修改基于最新行数据
+  const same = (row, i) => (r, j) => (row._id ? r._id === row._id : j === i);
+  const setRow = (row, i, patch) =>
+    onChange((prev) => prev.map((r, j) => (same(row, i)(r, j) ? { ...r, ...(typeof patch === 'function' ? patch(r) : patch) } : r)));
+  const add = () => onChange((prev) => [...prev, emptyRow(section)]);
+  const del = async (row, i) => {
     const ok = await confirm({ title: `删除第 ${i + 1} 行？`, okText: '删除', danger: true });
     if (!ok) return;
-    const r = rows[i];
-    removeMedia(slots.flatMap((s) => r[s.key] || []));
-    onChange(rows.filter((_, j) => j !== i));
+    removeMedia(slots.flatMap((s) => row[s.key] || []));
+    onChange((prev) => prev.filter((r, j) => !same(row, i)(r, j)));
   };
   const seed = async () => {
+    if (seeding) return;
     const extra = rowsFromFails(template, report, section);
     if (!extra.length) {
       toast('没有新的不合格项需要记入', 'warn');
       return;
     }
-    const first = slots[0]?.key;
-    if (first) {
-      for (const row of extra) row[first] = await cloneMedia(row[first], reportId);
+    setSeeding(true);
+    try {
+      const first = slots[0]?.key;
+      if (first) {
+        for (const row of extra) row[first] = await cloneMedia(row[first], reportId);
+      }
+      onChange((prev) => {
+        const have = new Set(prev.map((r) => r._from).filter(Boolean));
+        const keep = prev.filter((r) => Object.entries(r).some(([k, v]) => k !== '_from' && k !== '_id' && (Array.isArray(v) ? v.length : v)));
+        return [...keep, ...extra.filter((r) => !have.has(r._from))];
+      });
+      toast(`已生成 ${extra.length} 条整改记录`);
+    } finally {
+      setSeeding(false);
     }
-    onChange([...rows.filter((r) => Object.entries(r).some(([k, v]) => k !== '_from' && (Array.isArray(v) ? v.length : v))), ...extra]);
-    toast(`已生成 ${extra.length} 条整改记录`);
   };
 
   return (
     <div className="space-y-3">
       {section.seedFromFails && (
-        <button type="button" className="btn-soft w-full text-[14px]" onClick={seed}>
+        <button type="button" className="btn-soft w-full text-[14px]" disabled={seeding} onClick={seed}>
           <Icon name="Wand2" size={17} /> 从「不合格」项自动生成
         </button>
       )}
@@ -93,10 +107,10 @@ export default function TableSection({ template, section, report, rows = [], onC
         </div>
       )}
       {rows.map((row, i) => (
-        <div key={i} className="card p-3.5">
+        <div key={row._id || i} className="card p-3.5">
           <div className="mb-2 flex items-center justify-between">
             <div className="text-[14px] font-bold text-ink">#{i + 1}</div>
-            <button type="button" className="rounded-full p-1.5 text-ink-faint active:bg-fail/10 active:text-fail" onClick={() => del(i)} aria-label="删除这一行">
+            <button type="button" className="rounded-full p-1.5 text-ink-faint active:bg-fail/10 active:text-fail" onClick={() => del(row, i)} aria-label="删除这一行">
               <Icon name="Trash2" size={17} />
             </button>
           </div>
@@ -104,13 +118,13 @@ export default function TableSection({ template, section, report, rows = [], onC
             {section.columns.map((c) => (
               <div key={c.key}>
                 <FieldLabel field={c} />
-                <FieldInput field={c} value={row[c.key]} onChange={(v) => setRow(i, { [c.key]: v })} reportId={reportId} />
+                <FieldInput field={c} value={row[c.key]} onChange={(v) => setRow(row, i, (r) => ({ [c.key]: typeof v === 'function' ? v(r[c.key]) : v }))} reportId={reportId} />
               </div>
             ))}
             {slots.map((s) => (
               <div key={s.key}>
                 <FieldLabel field={{ label: s.label }} />
-                <PhotoStrip ids={row[s.key] || []} onChange={(ids) => setRow(i, { [s.key]: ids })} reportId={reportId} compact max={12} />
+                <PhotoStrip ids={row[s.key] || []} onChange={(fn) => setRow(row, i, (r) => ({ [s.key]: fn(r[s.key] || []) }))} reportId={reportId} compact max={12} />
               </div>
             ))}
           </div>

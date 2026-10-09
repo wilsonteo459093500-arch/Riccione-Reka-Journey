@@ -58,8 +58,7 @@ try {
   await page.getByRole('button', { name: '设置', exact: true }).click();
   await page.getByPlaceholder('例：Wilson').fill('Wilson');
   await page.getByPlaceholder('例：016-3881819').fill('016-3881819');
-  await page.getByRole('button', { name: '保存', exact: true }).click();
-  await page.getByText('已保存').first().waitFor();
+  await page.getByText('已保存', { exact: true }).first().waitFor(); // 自动保存
 
   // 项目
   await page.getByRole('button', { name: '项目', exact: true }).click();
@@ -183,6 +182,41 @@ try {
     await page.getByText('已自动保存').first().waitFor();
     await shot('20-duplicated');
   }
+  // ---- 回归：模拟手机上照片处理慢（每张 1.5 秒）----
+  await page.goto(`${BASE}/#/`);
+  await page.getByText('今天做哪份').waitFor();
+  await page.evaluate(() => {
+    const orig = HTMLCanvasElement.prototype.toBlob;
+    HTMLCanvasElement.prototype.toBlob = function slow(cb, ...a) {
+      setTimeout(() => orig.call(this, cb, ...a), 1500);
+    };
+  });
+  await page.getByRole('button', { name: /^安装质检清单/ }).first().click();
+  await page.getByRole('dialog').getByText('Tuai Timur Residence 17-3（Hailey）').first().click();
+  await page.getByText('已自动保存').first().waitFor();
+  const card1 = page.locator('[id^="item-"]').nth(0);
+  // ① 照片处理中点「不合格」并写备注 → 照片处理完不能把判定 / 备注冲掉
+  await card1.getByRole('button', { name: '照片' }).click();
+  await card1.locator('input[type="file"][multiple]').setInputFiles([join(ASSETS, 'photo4.jpg')]);
+  await card1.locator('div.mt-3.flex.gap-2 > button').nth(1).click();
+  await card1.locator('textarea').first().fill('门板缝隙过大，明天整改');
+  await page.waitForTimeout(4000);
+  assert.equal(await card1.locator('textarea').first().inputValue(), '门板缝隙过大，明天整改', '照片回写冲掉了备注');
+  assert.match(await card1.locator('div.mt-3.flex.gap-2 > button').nth(1).getAttribute('class'), /bg-fail/, '照片回写冲掉了「不合格」');
+  assert.ok((await card1.locator('img').count()) >= 1, '照片没加上');
+  // ② 照片处理中直接返回 → 照片仍要存进报告
+  const card2 = page.locator('[id^="item-"]').nth(1);
+  await card2.getByRole('button', { name: '照片' }).click();
+  await card2.locator('input[type="file"][multiple]').setInputFiles([join(ASSETS, 'photo5.jpg')]);
+  await page.getByRole('button', { name: '返回' }).click();
+  await page.getByText('今天做哪份').waitFor({ timeout: 15000 });
+  await page.waitForTimeout(800);
+  await page.locator('main button', { hasText: '安装质检清单' }).filter({ hasText: '草稿' }).first().click();
+  await page.getByText('已自动保存').first().waitFor();
+  assert.ok((await page.locator('[id^="item-"]').nth(1).locator('img').count()) >= 1, '处理中离开，照片丢了');
+  assert.equal(await page.locator('[id^="item-"]').nth(0).locator('textarea').first().inputValue(), '门板缝隙过大，明天整改');
+  await shot('30-regression-slow-photo');
+  console.log('✓ 回归：照片处理慢时判定 / 备注 / 照片都不丢');
 } finally {
   writeFileSync(join(OUT, 'results.json'), JSON.stringify({ results, errors }, null, 2));
   await browser.close();

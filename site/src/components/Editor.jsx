@@ -1,7 +1,7 @@
 // 报告填写页：按节渲染，自动保存，底部「预览 / 导出」
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './ui/Icon.jsx';
-import { TopBar, Sheet, Empty } from './ui/UI.jsx';
+import { TopBar, Sheet, Empty, useUI } from './ui/UI.jsx';
 import FieldInput, { FieldLabel } from './fields/FieldInput.jsx';
 import ChecklistItem from './fields/ChecklistItem.jsx';
 import TableSection from './fields/TableSection.jsx';
@@ -73,20 +73,26 @@ function Note({ note, tone }) {
 
 export default function Editor({ reportId }) {
   const store = useStore();
+  const { toast, confirm } = useUI();
   const stored = store.reports.find((r) => r.id === reportId);
   const [report, setReport] = useState(stored || null);
   const [saved, setSaved] = useState(true);
+  const [saveError, setSaveError] = useState(false);
   const [picking, setPicking] = useState(false);
   const dirty = useRef(false);
-  const latest = useRef(report);
-  latest.current = report;
+  const version = useRef(0); // 每次修改 +1；只有保存的快照仍是最新版本时才清 dirty
+  const latest = useRef(stored || null); // 始终是最新状态（同步更新，组件卸载后迟到的照片也能写进来）
+  const retryTimer = useRef(null);
 
   const template = report ? getTemplate(report.templateId) : null;
   const project = report?.projectId ? store.projectById(report.projectId) : null;
 
   // 首次从 store 拿到报告（深链接打开时 store 可能晚一步就绪）
   useEffect(() => {
-    if (!report && stored) setReport(stored);
+    if (!report && stored) {
+      latest.current = stored;
+      setReport(stored);
+    }
   }, [stored, report]);
 
   // 从导出页的「填写提醒」跳回来：滚到对应项目
@@ -100,15 +106,34 @@ export default function Editor({ reportId }) {
     }, 120);
   }, [report?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /** 写入本机；返回 true = 已保存（或无需保存），false = 失败 */
   const flush = useCallback(async () => {
-    if (!dirty.current || !latest.current) return;
-    dirty.current = false;
+    if (!dirty.current || !latest.current) return true;
+    const ver = version.current;
     const r = latest.current;
     const t = getTemplate(r.templateId);
     const p = r.projectId ? store.projectById(r.projectId) : null;
-    await store.saveReport({ ...r, title: reportTitle(t, r, p) });
-    setSaved(true);
-  }, [store]);
+    try {
+      await store.saveReport({ ...r, title: reportTitle(t, r, p) });
+      if (version.current === ver) {
+        dirty.current = false;
+        setSaved(true);
+      }
+      setSaveError(false);
+      clearTimeout(retryTimer.current);
+      return true;
+    } catch (e) {
+      console.error(e);
+      setSaved(false);
+      setSaveError(true);
+      toast('保存失败：手机存储空间不足或存储出错。请先别离开本页，清理空间后会自动重试', 'error');
+      clearTimeout(retryTimer.current);
+      retryTimer.current = setTimeout(() => flushRef.current?.(), 8000);
+      return false;
+    }
+  }, [store, toast]);
+  const flushRef = useRef(flush);
+  flushRef.current = flush;
 
   // 自动保存（停手 0.5 秒后写入）
   useEffect(() => {
@@ -118,29 +143,72 @@ export default function Editor({ reportId }) {
   }, [report, flush]);
 
   useEffect(() => {
-    const onHide = () => document.visibilityState === 'hidden' && flush();
+    const onHide = () => document.visibilityState === 'hidden' && flushRef.current();
+    const onPageHide = () => flushRef.current();
     document.addEventListener('visibilitychange', onHide);
-    window.addEventListener('pagehide', flush);
+    window.addEventListener('pagehide', onPageHide);
     return () => {
       document.removeEventListener('visibilitychange', onHide);
-      window.removeEventListener('pagehide', flush);
-      flush();
+      window.removeEventListener('pagehide', onPageHide);
+      clearTimeout(retryTimer.current);
+      // 离开时：等处理中的照片 / 视频写完再存一次
+      store.waitMedia().then(() => flushRef.current());
     };
-  }, [flush]);
+  }, [store]);
 
+  /** 所有修改都走这里：基于最新状态计算（避免照片处理完回写旧数据） */
   const update = useCallback((fn) => {
+    const cur = latest.current;
+    if (!cur) return;
+    const n = fn(cur);
+    const next = n.status === 'done' ? { ...n, status: 'draft' } : n;
+    latest.current = next;
+    version.current += 1;
     dirty.current = true;
     setSaved(false);
-    setReport((r) => {
-      const next = fn(r);
-      return next.status === 'done' ? { ...next, status: 'draft' } : next;
-    });
+    setReport(next);
   }, []);
 
-  const setValue = useCallback((key, v) => update((r) => ({ ...r, values: { ...r.values, [key]: v } })), [update]);
-  const setItem = useCallback((id, a) => update((r) => ({ ...r, items: { ...r.items, [id]: a } })), [update]);
-  const setTable = useCallback((sid, rows) => update((r) => ({ ...r, tables: { ...r.tables, [sid]: rows } })), [update]);
-  const setSigs = useCallback((sigs) => update((r) => ({ ...r, signatures: sigs })), [update]);
+  const resolve = (v, prev) => (typeof v === 'function' ? v(prev) : v);
+  const setValue = useCallback(
+    (key, v) => update((r) => ({ ...r, values: { ...r.values, [key]: resolve(v, r.values?.[key]) } })),
+    [update],
+  );
+  /** patch 可以是对象或 (prevAnswer) => 对象；合并进最新的答案 */
+  const setItem = useCallback(
+    (id, patch) =>
+      update((r) => {
+        const prev = r.items?.[id] || {};
+        return { ...r, items: { ...r.items, [id]: { ...prev, ...resolve(patch, prev) } } };
+      }),
+    [update],
+  );
+  const setTable = useCallback(
+    (sid, rows) => update((r) => ({ ...r, tables: { ...r.tables, [sid]: resolve(rows, r.tables?.[sid] || []) } })),
+    [update],
+  );
+  const setSigs = useCallback((sigs) => update((r) => ({ ...r, signatures: resolve(sigs, r.signatures || {}) })), [update]);
+
+  /** 离开编辑页前：等照片处理完 + 保存成功；失败时让用户决定 */
+  const leave = useCallback(
+    async (go) => {
+      if (store.pendingMedia() > 0) toast('照片 / 视频处理中，请稍候…', 'warn');
+      await store.waitMedia();
+      const ok = await flushRef.current();
+      if (!ok) {
+        const yes = await confirm({
+          title: '这份报告还没保存成功',
+          message: '手机存储可能已满。现在离开，最近的修改会丢失。\n建议先清理手机空间，留在本页等待自动重试。',
+          okText: '仍然离开',
+          cancelText: '留在本页',
+          danger: true,
+        });
+        if (!yes) return;
+      }
+      go();
+    },
+    [store, toast, confirm],
+  );
 
   const ctx = useMemo(
     () => (template && report ? makeCtx({ template, report, project, settings: store.settings }) : null),
@@ -171,20 +239,16 @@ export default function Editor({ reportId }) {
 
   const changeProject = (p) => {
     setPicking(false);
-    dirty.current = true;
-    setSaved(false);
-    setReport((r) => applyProject(template, r, p, store.settings, project));
+    const previous = store.reports.filter((x) => x.id !== report.id && x.templateId === template.id && (x.projectId || null) === (p?.id || null));
+    update((r) => applyProject(template, r, p, store.settings, project, previous));
   };
 
   return (
     <div className="min-h-[100dvh] pb-32">
       <TopBar
         title={template.name.zh}
-        sub={`${project ? siteLabel(project) : '未选项目'} · ${saved ? '已自动保存' : '保存中…'}`}
-        onBack={async () => {
-          await flush();
-          goBack('/');
-        }}
+        sub={`${project ? siteLabel(project) : '未选项目'} · ${saveError ? '⚠ 保存失败，自动重试中' : saved ? '已自动保存' : '保存中…'}`}
+        onBack={() => leave(() => goBack('/'))}
         right={
           <div className="mr-1 flex items-center gap-1.5">
             <div className="relative h-9 w-9">
@@ -285,10 +349,7 @@ export default function Editor({ reportId }) {
         <div className="mx-auto flex max-w-lg gap-2">
           <button
             className="btn-accent flex-1 py-3.5 text-[16px]"
-            onClick={async () => {
-              await flush();
-              navigate(`/r/${report.id}/export`);
-            }}
+            onClick={() => leave(() => navigate(`/r/${report.id}/export`))}
           >
             <Icon name={template.kind === 'message' ? 'Send' : 'FileDown'} size={19} />
             {template.kind === 'message' ? '生成文案 / 分享' : '预览 & 导出'}

@@ -1,5 +1,5 @@
 // 项目页：项目列表 / 新建 / 编辑；项目下的报告一览
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import Icon from './ui/Icon.jsx';
 import { TopBar, Empty, useUI } from './ui/UI.jsx';
 import ProjectForm from './ProjectForm.jsx';
@@ -64,6 +64,7 @@ export function ProjectEdit({ projectId }) {
   const store = useStore();
   const { confirm, toast } = useUI();
   const isNew = projectId === 'new';
+  const dirty = useRef(false);
   const p = isNew ? {} : store.projectById(projectId);
   const projReports = useMemo(
     () => store.reports.filter((r) => r.projectId === projectId).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)),
@@ -80,13 +81,26 @@ export function ProjectEdit({ projectId }) {
   }
   return (
     <div className="pb-16">
-      <TopBar title={isNew ? '新建项目' : siteLabel(p)} onBack={() => goBack('/projects')} />
+      <TopBar
+        title={isNew ? '新建项目' : siteLabel(p)}
+        onBack={async () => {
+          if (dirty.current) {
+            const ok = await confirm({ title: '有修改还没保存', message: '离开后这次的修改会丢失。', okText: '不保存，离开', cancelText: '继续编辑', danger: true });
+            if (!ok) return;
+          }
+          goBack('/projects');
+        }}
+      />
       <main className="mx-auto max-w-lg px-3 pt-3">
         <div className="card p-4">
           <ProjectForm
             key={projectId}
             initial={p}
+            onDirty={(v) => {
+              dirty.current = v;
+            }}
             onSave={async (data) => {
+              dirty.current = false;
               await store.saveProject(data);
               toast('项目已保存');
               goBack('/projects');

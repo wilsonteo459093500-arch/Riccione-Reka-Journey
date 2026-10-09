@@ -27,6 +27,16 @@ export const tests = [
     assert.equal(n.values.so, '手改的 SO');
     assert.match(n.values.project, /Other Condo/);
   }],
+  ['项目资料改过后再换项目：旧项目的自动带入值仍会被替换', () => {
+    const a0 = { ...SAMPLE_PROJECT, client: '', so: '' };
+    const r = createReport(qualityCheck, { project: a0, settings: SAMPLE_SETTINGS });
+    const aEdited = { ...a0, client: 'Hailey', so: 'SO-1' }; // 之后在项目页补了资料
+    const b = { ...SAMPLE_PROJECT, id: 'p_b', name: 'Other Condo', unit: '9-9', client: 'Ali', so: 'SO-B' };
+    const n = applyProject(qualityCheck, r, b, SAMPLE_SETTINGS, aEdited);
+    assert.match(n.values.project, /Other Condo/);
+    assert.equal(n.values.so, 'SO-B');
+    assert.equal(n.autofill.so, 'SO-B');
+  }],
   ['不合格必须写备注', () => {
     const r = createReport(qualityCheck, { project: SAMPLE_PROJECT, settings: SAMPLE_SETTINGS });
     r.items.qc3 = { r: 'F', note: '', photos: [] };
