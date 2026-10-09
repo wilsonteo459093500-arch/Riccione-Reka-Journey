@@ -1,5 +1,5 @@
 // 设计师上传图片：校验能否打开、超大图先缩小，再存进 IndexedDB → 'asset:<id>'
-import { storeBlob, measureBlob, toJpegBlob } from '../../store/assets.js';
+import { storeBlob, measureBlob, toJpegBlob, exifOrientation } from '../../store/assets.js';
 
 const MAX_BYTES = 60 * 1024 * 1024;
 
@@ -17,9 +17,10 @@ export async function uploadImage(file, { projectId, maxEdge = 3840 } = {}) {
   let blob = file;
   let { w, h } = size;
   const big = Math.max(w, h) > maxEdge;
-  const odd = !/^image\/(jpeg|jpg|png)$/i.test(file.type || '');
+  // webp / gif 等转成 JPEG（PPT 只认 JPEG / PNG）；手机竖拍带 EXIF 旋转的 JPEG 先转正（PPT 不一定按 EXIF 显示）
+  const odd = !/^image\/(jpeg|jpg|png)$/i.test(file.type || '') || (await exifOrientation(file)) > 1;
   if (big || odd) {
-    // 超大图缩到 maxEdge；webp / gif 等转成 JPEG（PPT 只认 JPEG / PNG）
+    // 超大图缩到 maxEdge
     blob = await toJpegBlob(file, { maxEdge: big ? maxEdge : 0, quality: 0.9 });
     const scale = big ? maxEdge / Math.max(w, h) : 1;
     w = Math.max(1, Math.round(w * scale));

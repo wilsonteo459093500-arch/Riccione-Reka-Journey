@@ -12,7 +12,8 @@ import ExportDialog from './ExportDialog.jsx';
 import DollhousePanel from './DollhousePanel.jsx';
 import MoodBoard from '../moodboard/MoodBoard.jsx';
 import { getProject } from '../store/db.js';
-import { preloadProjectAssets, onAssetsChanged, storeBlob } from '../store/assets.js';
+import { preloadProjectAssets, onAssetsChanged, storeBlob, metaOf } from '../store/assets.js';
+import { uploadImage } from './editor/upload.js';
 import { useProjectState, waitForSaves } from '../lib/useProjectState.js';
 import { designCoverSlideId, coverLayoutFor, projectStats, ensureDesignCoverSlide } from '../lib/project.js';
 import { cls } from '../lib/ui.jsx';
@@ -149,12 +150,18 @@ function Workspace({ initial, settings, notify, onOpenSettings, onExit }) {
   /** Material Board → 方案封面（MoodBoard 自己弹成功 / 失败提示；这里出错直接抛出） */
   const onUseAsCover = useCallback(
     async (blob, meta) => {
-      const src = await storeBlob(blob, { projectId });
+      // 设计师上传的现成图：校验格式、手机照片转正、超大图缩小；画板 / 实拍图直接存
+      const src = meta?.source === 'upload' ? await uploadImage(blob, { projectId, maxEdge: 3840 }) : await storeBlob(blob, { projectId });
+      let orientation = meta?.orientation;
+      if (!orientation) {
+        const m = metaOf(src);
+        if (m?.w && m?.h) orientation = m.w > m.h * 1.05 ? 'landscape' : m.h > m.w * 1.05 ? 'portrait' : 'square';
+      }
       let id = null;
       onChange((p) => {
         const withSlide = ensureDesignCoverSlide(p); // 方案封面页被删掉了就补回来
         id = designCoverSlideId(withSlide);
-        return { ...withSlide, cover: { ...withSlide.cover, image: src, layout: coverLayoutFor(withSlide.cover?.layout, meta?.orientation) } };
+        return { ...withSlide, cover: { ...withSlide.cover, image: src, layout: coverLayoutFor(withSlide.cover?.layout, orientation) } };
       });
       if (!id) return;
       if (tabRef.current === 'pages') focusSlide(id);

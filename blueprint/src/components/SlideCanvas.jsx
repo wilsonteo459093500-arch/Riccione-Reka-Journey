@@ -76,6 +76,8 @@ function TextEl({ el }) {
               whiteSpace: el.nowrap ? 'pre' : 'pre-wrap',
               wordBreak: 'normal',
               overflowWrap: 'anywhere',
+              // 单行框：真放不下时和 PowerPoint 一样按对齐方式向两边 / 向左长，而不是只往右溢出
+              ...(el.nowrap ? { display: 'flex', justifyContent: p.align === 'ctr' ? 'center' : p.align === 'r' ? 'flex-end' : 'flex-start' } : {}),
             }}
           >
             {(p.runs || []).map((r, j) => (

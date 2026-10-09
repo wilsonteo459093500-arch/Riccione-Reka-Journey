@@ -2,7 +2,7 @@
 // 编辑器预览、缩略图、PPT 导出都只认这一份输出。
 
 import { COMPANY_SLIDES } from './companyTemplate.js';
-import { fillTokens } from './spec.js';
+import { fillTokens, fitText } from './spec.js';
 import { PX_PER_PT } from '../theme.js';
 import { clientLine, floorsLine, findFloor } from './model.js';
 import {
@@ -30,6 +30,9 @@ export function projectTokens(project) {
   };
 }
 
+// 定稿 PPT 里这些位置写的是什么（模板文字框就是按这些字量出来的）：缩字号以它为基准，原文永远不缩
+const APPROVED_TOKENS = { clientLine: 'Muar · Mr Lau', dateLine: '2026 · 08', proposalTitle: '全屋定制设计方案', floorsLine: '一楼与二楼' };
+
 /** 公司固定页：填 token + 套用单页文字改写（overrides[元素序号] = 整段文字，\n 分段） */
 export function renderCompany(key, tokens, overrides = {}) {
   const tpl = COMPANY_BY_KEY[key];
@@ -48,7 +51,17 @@ export function renderCompany(key, tokens, overrides = {}) {
     // 定稿里的文字框是按字量贴身量出来的：沿用「超框自动缩小」，单行框预览时不折行
     const first = el.paras[0]?.runs?.[0];
     const singleLine = el.paras.length === 1 && first && el.h < first.size * PX_PER_PT * 1.2 * 1.6;
-    return { ...el, paras, autofit: 'shrink', ...(singleLine ? { nowrap: true } : {}), edit: { field: `overrides.${idx}` } };
+    // 缩字号的基准：定稿原文（填上定稿当时的客户 / 日期）—— 只有比原文更长时才缩
+    const refParas = el.paras.map((p) => ({ ...p, runs: p.runs.map((r) => ({ ...r, text: fillTokens(r.text, APPROVED_TOKENS) })) }));
+    return {
+      ...el,
+      paras,
+      autofit: 'shrink',
+      ...(singleLine ? { nowrap: true } : {}),
+      ...(typeof override === 'string' ? { fitWrap: true } : {}),
+      fitRef: refParas,
+      edit: { field: `overrides.${idx}` },
+    };
   });
   return { bg: tpl.bg, els, warnings: [] };
 }
@@ -154,7 +167,7 @@ export function renderDeck(project, { meta = () => null } = {}) {
       default:
         pages = [{ bg: 'F5F0E6', els: [], warnings: [`未知页面类型：${slide.kind}`] }];
     }
-    pages.forEach((pg, i) => out.push({ ...base, key: i ? `${slide.id}#${i + 1}` : slide.id, ...pg }));
+    pages.forEach((pg, i) => out.push({ ...base, key: i ? `${slide.id}#${i + 1}` : slide.id, ...pg, els: (pg.els || []).map((el) => fitText(el)) }));
   }
   return out;
 }

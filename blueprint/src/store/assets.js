@@ -140,13 +140,58 @@ export function canvasToBlob(canvas, mime = 'image/jpeg', quality = 0.9) {
   );
 }
 
-/** PPT 导出取图：返回 { data:ArrayBuffer, mime }（仅 JPEG / PNG） */
+/**
+ * JPEG 的 EXIF 方向（1 = 正常；手机竖拍常见 6 / 8）。读不到 / 不是 JPEG → 1。
+ * 浏览器显示时会按它转正，但 PPT 里的图片不一定会 —— 方向不是 1 的要先转正再用。
+ */
+export function exifOrientationOf(buf) {
+  const v = new DataView(buf instanceof ArrayBuffer ? buf : buf.buffer, buf.byteOffset || 0, buf.byteLength);
+  if (v.byteLength < 4 || v.getUint16(0) !== 0xffd8) return 1;
+  let off = 2;
+  while (off + 4 <= v.byteLength) {
+    const marker = v.getUint16(off);
+    const len = v.getUint16(off + 2);
+    if ((marker & 0xff00) !== 0xff00 || len < 2) return 1;
+    if (marker === 0xffe1 && off + 10 <= v.byteLength && v.getUint32(off + 4) === 0x45786966) {
+      const tiff = off + 10;
+      if (tiff + 8 > v.byteLength) return 1;
+      const little = v.getUint16(tiff) === 0x4949;
+      const ifd = tiff + v.getUint32(tiff + 4, little);
+      if (ifd + 2 > v.byteLength) return 1;
+      const n = v.getUint16(ifd, little);
+      for (let i = 0; i < n; i++) {
+        const e = ifd + 2 + i * 12;
+        if (e + 12 > v.byteLength) return 1;
+        if (v.getUint16(e, little) === 0x0112) {
+          const o = v.getUint16(e + 8, little);
+          return o >= 1 && o <= 8 ? o : 1;
+        }
+      }
+      return 1;
+    }
+    if (marker === 0xffda) return 1; // 图像数据开始，后面没有 EXIF 了
+    off += 2 + len;
+  }
+  return 1;
+}
+
+export async function exifOrientation(blob) {
+  try {
+    const type = (blob?.type || '').toLowerCase();
+    if (type && !/jpe?g/.test(type)) return 1;
+    return exifOrientationOf(await blob.slice(0, 128 * 1024).arrayBuffer());
+  } catch {
+    return 1;
+  }
+}
+
+/** PPT 导出取图：返回 { data:ArrayBuffer, mime }（仅 JPEG / PNG；带 EXIF 旋转的手机照片先转正） */
 export async function loadForPptx(src) {
   let blob = await getBlob(src);
   if (!blob) return null;
   let mime = (blob.type || '').toLowerCase();
   if (mime === 'image/jpg') mime = 'image/jpeg';
-  if (mime !== 'image/jpeg' && mime !== 'image/png') {
+  if ((mime !== 'image/jpeg' && mime !== 'image/png') || (mime === 'image/jpeg' && (await exifOrientation(blob)) > 1)) {
     blob = await toJpegBlob(blob);
     mime = 'image/jpeg';
   }

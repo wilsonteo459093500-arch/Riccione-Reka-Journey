@@ -84,6 +84,41 @@ export function countLines(str, font, sizePt, spacingPt, boxW) {
 /** 一行文字的行高（px）：PowerPoint 单倍行距 ≈ 1.2 × 字号 */
 export const lineHeightPx = (sizePt, lineSpacingPct = 100) => sizePt * PX_PER_PT * 1.2 * (lineSpacingPct / 100);
 
+/**
+ * autofit:'shrink' 的文字框：在引擎里先把字号缩到放得下，网页预览和 PPT（PowerPoint / WPS / Keynote / LibreOffice）结果一致，
+ * 不依赖各软件各自的「自动缩小」。
+ *   nowrap（单行框）：最宽的一段放得进宽度；fitWrap（设计师改过字的多行框）：总行高放得进高度。
+ *   定稿模板原文不动（它们本来就是按字量贴身量好的）。最小缩到 50%。
+ */
+export function fitText(el, minScale = 0.5) {
+  if (!el || el.t !== 'text' || el.autofit !== 'shrink' || (!el.nowrap && !el.fitWrap)) return el;
+  const paras = el.paras || [];
+  const paraW = (p, k) => p.runs.reduce((w, r) => w + measureText(r.text, r.font, (r.size || 18) * k, (r.spacing || 0) * k), 0);
+  const parasH = (ps, k) =>
+    ps.reduce((total, p) => {
+      const r0 = p.runs[0] || {};
+      const size = (r0.size || 18) * k;
+      return total + countLines(p.runs.map((r) => r.text).join(''), r0.font, size, (r0.spacing || 0) * k, el.w) * lineHeightPx(size, p.lineSpacing || 100);
+    }, 0);
+  // fitRef = 定稿原文：原文放得下（定稿就是这么排的），所以可用空间至少是原文的量
+  const ref = el.fitRef;
+  const availW = Math.max((el.w - 6) * 0.97, ref ? Math.max(0, ...ref.map((p) => paraW(p, 1))) : 0);
+  const availH = Math.max(el.h + 2, ref ? parasH(ref, 1) : 0);
+  const fits = (k) => (el.nowrap ? paras.every((p) => paraW(p, k) <= availW + 0.01) : parasH(paras, k) <= availH + 0.01);
+  if (fits(1)) return el;
+  let k = 1;
+  while (k > minScale + 1e-9 && !fits(k)) k = Math.round((k - 0.04) * 100) / 100;
+  k = Math.max(minScale, k);
+  return {
+    ...el,
+    paras: paras.map((p) => ({
+      ...p,
+      runs: p.runs.map((r) => ({ ...r, size: Math.round((r.size || 18) * k * 2) / 2, ...(r.spacing ? { spacing: Math.round(r.spacing * k * 100) / 100 } : {}) })),
+    })),
+    shrunk: k,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // 图片摆放：cover = 裁满；contain = 完整放进框（按 ax/ay 对齐）；stretch = 拉伸
 // 返回 { x,y,w,h, crop:{l,t,r,b} }（crop 为裁掉的比例，PPT srcRect / 网页预览共用）

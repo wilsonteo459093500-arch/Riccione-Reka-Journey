@@ -7,7 +7,8 @@ import {
 import SlideCanvas from './SlideCanvas.jsx';
 import { renderDeck } from '../engine/deck.js';
 import { findFloor } from '../engine/model.js';
-import { storeBlob, resolveUrl, metaOf } from '../store/assets.js';
+import { resolveUrl, metaOf } from '../store/assets.js';
+import { uploadImage } from './editor/upload.js';
 import {
   materialUsage, addMaterial, updateMaterial, moveMaterial, mergeMaterials, deleteMaterials,
 } from '../lib/materials.js';
@@ -106,7 +107,7 @@ export default function MaterialsPanel({ project, onChange, notify, onGoTab, ass
     }
     setUploading(id);
     try {
-      const src = await storeBlob(file, { projectId: project.id });
+      const src = await uploadImage(file, { projectId: project.id, maxEdge: 1600 });
       patch(id, { image: src });
     } catch (e) {
       notify?.({ type: 'error', text: `换图失败：${e?.message || e}` });

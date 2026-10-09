@@ -18,9 +18,10 @@ const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
 const emu = (px) => Math.round(px * EMU_PER_PX);
 const pct = (v) => Math.round(v * 100000); // 0–1 → OOXML 1/1000 %
 
-/** XML 转义 + 去掉 XML 1.0 不允许的控制字符 */
+/** XML 转义 + 去掉 XML 1.0 不允许的控制字符；落单的 UTF-16 代理项（坏掉的 PDF 文字）换成 �，否则浏览器里会写出非法 UTF-8 */
 export function esc(s) {
   return String(s ?? '')
+    .replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]|[\uD800-\uDFFF]/g, (m) => (m.length === 2 ? m : '\uFFFD'))
     // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g, '')
     .replace(/&/g, '&amp;')
@@ -95,7 +96,7 @@ function textXml(el, id) {
   return (
     `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${esc(el.name || `Text ${id}`)}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>` +
     `<p:spPr>${xfrm(el.x, el.y, el.w, el.h)}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>` +
-    `<p:txBody><a:bodyPr wrap="square" lIns="25400" tIns="25400" rIns="25400" bIns="25400" rtlCol="0" anchor="${anchor}">` +
+    `<p:txBody><a:bodyPr wrap="${el.nowrap ? 'none' : 'square'}" lIns="25400" tIns="25400" rIns="25400" bIns="25400" rtlCol="0" anchor="${anchor}">` +
     `${el.autofit === 'shrink' ? '<a:normAutofit/>' : '<a:noAutofit/>'}</a:bodyPr>` +
     `<a:lstStyle/>${paras}</p:txBody></p:sp>`
   );

@@ -98,8 +98,15 @@ function layoutMaterialsRegular(materials, ctx, { page = 1, pages = 1 } = {}) {
   const cellW = 261.3;
   const cellH = 190;
   const step = 293.33;
-  const rows = [300, 620.1];
-  materials.slice(0, 12).forEach((m, i) => {
+  const list = materials.slice(0, 12);
+  const nameOf = (m) => (m.name || '').trim() || m.code || '未命名材料';
+  // 名称最多两行（再长就缩字号）；第一排有两行的名称时，第二排整体下移（编号不会被下一排的色板盖住），
+  // 这时第二排名称限一行，免得编号压到页脚线
+  const wantLines = (m) => Math.min(2, countLines(nameOf(m), 'serif', 21, 0, 287.5));
+  const row1Extra = Math.max(0, ...list.slice(0, 6).map((m) => wantLines(m) - 1)) * 40.2;
+  const rows = [300, 620.1 + row1Extra];
+  const maxLinesAt = (i) => (i >= 6 && row1Extra ? 1 : 2);
+  list.forEach((m, i) => {
     const x = 96 + (i % 6) * step;
     const y = rows[Math.floor(i / 6)];
     if (m.image) {
@@ -107,10 +114,14 @@ function layoutMaterialsRegular(materials, ctx, { page = 1, pages = 1 } = {}) {
     } else {
       els.push(rect(x, y, cellW, cellH, C.placeholder));
     }
-    const name = (m.name || '').trim() || m.code || '未命名材料';
+    const name = nameOf(m);
     const code = m.name ? (m.code || '').trim() : '';
-    const lines = Math.min(3, countLines(name, 'serif', 21, 0, 287.5));
-    els.push(text(x, y + 208, 287.5, 44.2 + (lines - 1) * 40.2, name, { font: 'serif', size: 21, color: C.ink }, { edit: { field: `material:${m.id}` } }));
+    const lines = Math.min(maxLinesAt(i), wantLines(m));
+    els.push({
+      ...text(x, y + 208, 287.5, 44.2 + (lines - 1) * 40.2, name, { font: 'serif', size: 21, color: C.ink }, { edit: { field: `material:${m.id}` } }),
+      autofit: 'shrink',
+      ...(maxLinesAt(i) === 1 ? { nowrap: true } : { fitWrap: true }),
+    });
     if (code) els.push(text(x, y + 254.2 + (lines - 1) * 40.2, 287.5, 33.9, code, { font: 'sans', size: 18, spacing: 2.52, color: C.faint }));
   });
   if (!materials.length) {
@@ -137,7 +148,7 @@ export function roomsLines(rooms, maxW = 720) {
     }
   }
   if (cur) lines.push(cur);
-  return lines.slice(0, 3);
+  return lines.slice(0, 4);
 }
 
 export function layoutFloor(floor, rooms, image, ctx) {
@@ -151,10 +162,13 @@ export function layoutFloor(floor, rooms, image, ctx) {
   els.push(text(96, 813.3, 1100, 35.8, `${floor?.en || 'DESIGN'} · 设计图`, TS.eyebrowDark, { edit: { field: 'floor.en' } }));
   els.push(text(96, 869, 1100, 119, floor?.zh || '方案', { font: 'serif', size: 60, spacing: 14.4, color: C.light }, { edit: { field: 'floor.zh' } }));
   const lines = roomsLines(rooms);
+  const shown = lines.join(' · ').split(' · ').filter(Boolean).length;
+  const floorWarnings = [];
+  if (shown < rooms.length) floorWarnings.push(`本层空间太多，楼层页只显示了 ${shown} / ${rooms.length} 个`);
   if (lines.length) {
     els.push({ ...text(824, 760, 1002.7, 228, lines.join('\n'), { font: 'serif', size: 22.5, spacing: 2.25, color: C.light }, { align: 'r', valign: 'b', lineSpacing: 139.57 }), nowrap: true });
   }
-  return { bg: C.dark, els, warnings: image ? [] : ['楼层章节页没有背景图'] };
+  return { bg: C.dark, els, warnings: [...(image ? [] : ['楼层章节页没有背景图']), ...floorWarnings] };
 }
 
 // ---------------------------------------------------------------------------
@@ -207,6 +221,9 @@ export function layoutViewFull(view, floor, ctx) {
   if (hidden) warnings.push(`满版页右下放不下全部 ${cols.length} 项（隐藏了 ${hidden} 项）—— 建议切换成「框图」版式`);
   for (const col of cols) {
     if (col.kind === 'mat' && !col.mat) warnings.push(col.materialId ? `第 ${col.i + 1} 项材料已被删除` : `第 ${col.i + 1} 项还没选材料`);
+    if (col.kind === 'note' && countLines(col.text, 'serif', 22.5, 0, col.w) > 3) {
+      warnings.push(`备注「${col.label}」太长，满版页只放得下三行 —— 建议精简，或切换成「框图」版式`);
+    }
   }
   let bottom = 1012;
   shown.forEach((row) => {
@@ -436,7 +453,12 @@ export function layoutTeam(team) {
     if (i) els.push(rect(x, 520, 1, 267.8, C.line));
     els.push(text(x + pad, 560.9, w, 33.9, (m.en || '').toUpperCase(), { font: 'sans', size: 18, spacing: 5.4, color: C.eyebrow }, { edit: { field: `team.${m.idx}.en` } }));
     const name = (m.name || '').trim() || '—';
-    els.push(text(x + pad, 618.8, w, 70, name, { font: hasCJK(name) ? 'serif' : 'display', size: 45, color: C.ink }, { lineSpacing: 72, edit: { field: `team.${m.idx}.name` } }));
+    const nameFont = hasCJK(name) ? 'serif' : 'display';
+    // 名字一行放下：放不下就把字号缩小（最小 28pt），还放不下给提示
+    const nameW = measureText(name, nameFont, 45);
+    const nameSize = nameW > (w - 6) * 0.97 ? Math.max(28, Math.floor((45 * (w - 6) * 0.97) / nameW * 2) / 2) : 45;
+    if (measureText(name, nameFont, nameSize) > (w - 6) * 0.97) warnings.push(`「${name}」太长，名字会折成两行 —— 可以只写名字或英文名`);
+    els.push({ ...text(x + pad, 618.8, w, 70, name, { font: nameFont, size: nameSize, color: C.ink }, { lineSpacing: 72, valign: 'b', edit: { field: `team.${m.idx}.name` } }), nowrap: true });
     els.push(text(x + pad, 704.8, w, 47, m.role || '', { font: 'serif', size: 22.5, color: C.ink }, { edit: { field: `team.${m.idx}.role` } }));
   });
   els.push(...footer(false, 'SERVICE · 04'));
