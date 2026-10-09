@@ -1,6 +1,6 @@
 import React from 'react';
 import { Type, LayoutTemplate, Image as ImageIcon, Palette, StickyNote, ArrowUp, ArrowDown, X, Plus, Sparkles, CopyCheck, MoveRight, Box } from 'lucide-react';
-import { findFloor } from '../../../engine/model.js';
+import { findFloor, uid } from '../../../engine/model.js';
 import { inferRole } from '../../../import/labels.js';
 import {
   updateSlide, updateViewList, listMove, listRemove, listUpdate, assignMaterial, addMaterialAndAssign, sameRoomViews,
@@ -113,7 +113,7 @@ export default function ViewInspector({ project, slide, change, notify, openPoli
           </select>
         </Field>
         {misplaced && (
-          <button type="button" className={`${btnGhost} mt-2 w-full !justify-start`} onClick={() => change((p) => moveToFloorEnd(p, id), NOW)}>
+          <button type="button" className={`${btnGhost} mt-2 w-full !justify-start`} onClick={() => { const fid = uid('s'); change((p) => moveToFloorEnd(p, id, fid), NOW); }}>
             <MoveRight className="w-3.5 h-3.5" />
             这一页现在排在别的楼层章节里 —— 移到「{floor.zh}」章节末尾
           </button>

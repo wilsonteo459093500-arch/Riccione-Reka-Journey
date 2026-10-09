@@ -54,10 +54,48 @@ export async function listProjects() {
 
 export const getProject = (id) => run('projects', 'readonly', (s) => s.get(id));
 
-export async function saveProject(project) {
-  const rec = { ...project, updatedAt: Date.now() };
-  await run('projects', 'readwrite', (s) => s.put(rec));
-  return rec;
+/** 保存冲突：库里的项目在别处（另一个标签页）改过，或已被删除 —— 不覆盖 */
+export class ProjectConflictError extends Error {
+  constructor(kind) {
+    super(kind === 'deleted' ? '这个项目已经被删除了' : '这个项目在另一个窗口里改过');
+    this.name = 'ProjectConflictError';
+    this.conflict = kind;
+  }
+}
+
+/**
+ * 保存项目（版本号 rev 每次 +1）。
+ * expectedRev（编辑器自动保存时传）：库里的版本不是它 / 项目已被删除 → 抛 ProjectConflictError，不覆盖别人的修改。
+ * 不传 = 新建 / 导入 / 复制（直接写）。
+ */
+export async function saveProject(project, expectedRev) {
+  const db = await openDb();
+  return await new Promise((resolve, reject) => {
+    const t = db.transaction('projects', 'readwrite');
+    const s = t.objectStore('projects');
+    let out = null;
+    let conflict = null;
+    let failure = null;
+    const g = s.get(project.id);
+    g.onsuccess = () => {
+      const cur = g.result;
+      if (expectedRev !== undefined) {
+        if (!cur) conflict = 'deleted';
+        else if ((cur.rev || 0) !== expectedRev) conflict = 'changed';
+      }
+      if (conflict) return;
+      out = { ...project, rev: (cur?.rev || 0) + 1, updatedAt: Date.now() };
+      try {
+        s.put(out);
+      } catch (err) {
+        failure = err; // 例如存储空间不足：中止事务，交给 onabort 报错
+        t.abort();
+      }
+    };
+    t.oncomplete = () => (conflict ? reject(new ProjectConflictError(conflict)) : resolve(out));
+    t.onerror = () => reject(failure || t.error);
+    t.onabort = () => reject(failure || t.error || new Error('IndexedDB 事务中止（可能是浏览器存储空间不足）'));
+  });
 }
 
 export async function deleteProject(id) {

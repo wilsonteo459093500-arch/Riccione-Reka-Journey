@@ -136,7 +136,7 @@ export default function DollhousePanel({ project, settings, notify, onOpenSettin
       let info = null;
       const blob = await renderPlanToImage(file, { page, onInfo: (i) => (info = i) });
       const src = await storeBlob(blob, { projectId: project.id });
-      onChange((p) => setFloorPlan(p, target, src));
+      onChange((p) => setFloorPlan(p, target, src), { history: false }); // 上传的平面图 / 生成的立体图不进撤销历史
       setPdfSource(info && info.pages > 1 ? { floorId: target, file, pages: info.pages, page: info.page } : null);
     } catch (e) {
       notify?.({ type: 'error', text: `平面图读取失败：${e.message || e}` });
@@ -194,7 +194,7 @@ export default function DollhousePanel({ project, settings, notify, onOpenSettin
         onFallback: (model) => setJob(target, { ...jobs.get(target), msg: `高级 3D 模型暂不可用，改用 ${model} 再试一次…` }),
       });
       const src = await storeBlob(blob, { projectId: project.id });
-      onChange((p) => addRender3d(p, target, src));
+      onChange((p) => addRender3d(p, target, src), { history: false });
       notify?.({ type: 'ok', text: `${targetFloor.zh || '全屋'}立体图生成好了，可以插入提案` });
     } catch (e) {
       notify?.({ type: 'error', text: `立体图生成失败：${e.message || e}` });
@@ -231,7 +231,7 @@ export default function DollhousePanel({ project, settings, notify, onOpenSettin
 
   function remove(src) {
     if (!window.confirm('从生成记录里删除这张立体图？（已插入提案的页面不受影响）')) return;
-    onChange((p) => removeRender3d(p, fid, src));
+    onChange((p) => removeRender3d(p, fid, src), { history: false });
   }
 
   async function download(src, i) {
@@ -279,7 +279,7 @@ export default function DollhousePanel({ project, settings, notify, onOpenSettin
               <div className={sectionLabel}>
                 <span>① 平面布置图 · {floorLabel}</span>
                 {floor?.plan && (
-                  <button type="button" className="text-bp-faint hover:text-bp-danger font-normal" onClick={() => onChange((p) => setFloorPlan(p, fid, null))}>
+                  <button type="button" className="text-bp-faint hover:text-bp-danger font-normal" onClick={() => onChange((p) => setFloorPlan(p, fid, null), { history: false })}>
                     移除
                   </button>
                 )}

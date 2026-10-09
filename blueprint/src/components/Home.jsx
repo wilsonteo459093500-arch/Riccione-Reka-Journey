@@ -11,7 +11,7 @@ import { preloadProjectAssets, resolveUrl } from '../store/assets.js';
 import { clientLine } from '../engine/model.js';
 import { projectThumbSrc, projectStats } from '../lib/project.js';
 import { duplicateProject, removeProjectEverywhere } from '../lib/projectOps.js';
-import { importBundle } from '../lib/bundle.js';
+import { importBundle, discardProjectData } from '../lib/bundle.js';
 import { waitForSaves } from '../lib/useProjectState.js';
 import { timeAgo, formatBytes } from '../lib/format.js';
 import { ConfirmDialog, cls } from '../lib/ui.jsx';
@@ -71,7 +71,13 @@ export default function Home({ notify, onOpenProject, onOpenBoards, onOpenSettin
         const { project, missing } = await importBundle(file, {
           onProgress: (_s, done, total) => setRestoring(`${done} / ${total}`),
         });
-        const saved = await saveProject(project);
+        let saved;
+        try {
+          saved = await saveProject(project);
+        } catch (err) {
+          await discardProjectData(project.id); // 项目没存进去：刚写进去的图片 / 画板别留着占空间
+          throw err;
+        }
         notify({ type: 'ok', text: `已恢复「${saved.name || '未命名方案'}」` });
         if (missing) notify({ type: 'warn', text: `备份里少了 ${missing} 张图片，对应位置会显示灰块。` });
         onOpenProject(saved.id);

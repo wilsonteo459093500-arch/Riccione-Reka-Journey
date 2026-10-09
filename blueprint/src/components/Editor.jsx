@@ -28,6 +28,25 @@ export const TABS = [
 const TAB_IDS = TABS.map((t) => t.id);
 
 /** 载入项目 + 预加载图片，之后交给 Workspace */
+/** 正在输入框里打的字（如项目名草稿）先提交，再保存 / 离开 */
+function commitDrafts() {
+  const el = document.activeElement;
+  if (el && /^(INPUT|TEXTAREA)$/.test(el.tagName)) el.blur();
+}
+
+/** 撤销 / 重做时保留 AI 生成的立体图历史与平面图（它们不进撤销历史，花了钱的结果不能被一次 ⌘Z 撤掉） */
+function keepGenerated(current, restored) {
+  const byId = new Map((current.floors || []).map((f) => [f.id, f]));
+  let changed = false;
+  const floors = (restored.floors || []).map((f) => {
+    const cur = byId.get(f.id);
+    if (!cur || (cur.renders3d === f.renders3d && cur.plan === f.plan)) return f;
+    changed = true;
+    return { ...f, renders3d: cur.renders3d, plan: cur.plan };
+  });
+  return changed ? { ...restored, floors } : restored;
+}
+
 export default function Editor({ projectId, settings, notify, onOpenSettings, onExit }) {
   const [loaded, setLoaded] = useState(null); // null | { project } | { missing:true } | { error }
 
@@ -99,10 +118,21 @@ const Pane = memo(
 function Workspace({ initial, settings, notify, onOpenSettings, onExit }) {
   const projectId = initial.id;
   const onSaveError = useCallback(
-    (e) => notify({ type: 'error', text: `保存失败：${e?.message || '浏览器存储出错'} —— 空间不足时可先删掉旧项目。` }),
+    (e) =>
+      notify(
+        e?.conflict
+          ? {
+              type: 'error',
+              text:
+                e.conflict === 'deleted'
+                  ? '这个项目已经在别的窗口里被删除了 —— 这里的修改不会再保存。需要的话先「导出 PPT → 下载项目备份」留底。'
+                  : '这个项目在另一个窗口里改过 —— 为了不互相覆盖，这里暂停保存。请刷新页面载入最新版本（需要的话先下载项目备份）。',
+            }
+          : { type: 'error', text: `保存失败：${e?.message || '浏览器存储出错'} —— 浏览器存储空间可能不足。先别关掉这个页面：可以「导出 PPT → 下载项目备份」留底，再去首页删掉旧项目腾出空间。` }
+      ),
     [notify]
   );
-  const { project, onChange, undo, redo, canUndo, canRedo, saveState, flush } = useProjectState(initial, { onSaveError });
+  const { project, onChange, undo, redo, canUndo, canRedo, saveState, flush, hasUnsaved } = useProjectState(initial, { onSaveError, preserve: keepGenerated });
 
   const [tab, setTab] = useState('pages');
   const [visited, setVisited] = useState(() => new Set(['pages']));
@@ -155,7 +185,7 @@ function Workspace({ initial, settings, notify, onOpenSettings, onExit }) {
       let orientation = meta?.orientation;
       if (!orientation) {
         const m = metaOf(src);
-        if (m?.w && m?.h) orientation = m.w > m.h * 1.05 ? 'landscape' : m.h > m.w * 1.05 ? 'portrait' : 'square';
+        if (m?.w && m?.h) orientation = m.w / m.h > 1.2 ? 'landscape' : m.w / m.h < 0.9 ? 'portrait' : 'square';
       }
       let id = null;
       onChange((p) => {
@@ -175,9 +205,11 @@ function Workspace({ initial, settings, notify, onOpenSettings, onExit }) {
   );
 
   const handleBack = useCallback(async () => {
-    await flush();
+    commitDrafts();
+    const ok = await flush();
+    if (!ok && hasUnsaved() && !window.confirm('最近的修改没能保存（浏览器存储空间可能不足，或项目在别的窗口改过）。现在离开，这些修改会丢失。确定离开？')) return;
     onExit();
-  }, [flush, onExit]);
+  }, [flush, onExit, hasUnsaved]);
 
   // 键盘：⌘Z 撤销 / ⇧⌘Z（Ctrl+Y）重做 / ⌘S 立即保存
   useEffect(() => {
@@ -186,7 +218,10 @@ function Workspace({ initial, settings, notify, onOpenSettings, onExit }) {
       const k = (e.key || '').toLowerCase();
       if (k === 's') {
         e.preventDefault();
-        flush().then(() => notify({ type: 'ok', text: '已保存到本机' }));
+        commitDrafts();
+        flush().then((ok) => {
+          if (ok) notify({ type: 'ok', text: '已保存到本机' });
+        });
         return;
       }
       const isUndo = k === 'z';

@@ -129,6 +129,7 @@ export const designCoverSlideId = (project) => (project?.slides || []).find((s) 
 /** 设封面后自动挑版式：横图 → 满版；竖图且当前是满版 → 左文右图 */
 export function coverLayoutFor(current, orientation) {
   if (orientation === 'landscape' && current !== 'full') return 'full';
-  if (orientation === 'portrait' && current === 'full') return 'split-light';
+  // 方形画板放进满版（16:9）会被裁掉近一半 → 左文右图
+  if ((orientation === 'portrait' || orientation === 'square') && current === 'full') return 'split-light';
   return current || 'split-light';
 }

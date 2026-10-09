@@ -57,7 +57,9 @@ const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);
 function walk(a, b, path, out, depth) {
   if (a === b) return true;
   if (typeof a === 'string' && typeof b === 'string') {
-    if (!isTypingEdit(a, b)) return false;
+    // 换图（asset 引用）永远单独一步；同一字段的文字改动都算「打字」——
+    // 中文输入法上屏时是把拼音整段替换成汉字（"麻坡ma'po" → '麻坡码坡'），也要和前面的输入合成一步
+    if (a.startsWith('asset:') || b.startsWith('asset:')) return false;
     out.push(path);
     return true;
   }

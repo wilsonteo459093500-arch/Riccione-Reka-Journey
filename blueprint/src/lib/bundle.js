@@ -1,11 +1,12 @@
-// 项目备份（.blueprint.zip）：project.json + assets/<id>.<ext>
+// 项目备份（.blueprint.zip）：project.json + assets/<id>.<ext> + boards.json（Material Board 画板与 AI 实拍历史）
 // 导出：把项目 JSON 和它引用的所有图片打包；导入：图片重新入库（新 id）、项目换新 id，原项目不受影响。
 // 纯函数（清单生成 / 解析 / 引用改写）在 Node 可测；读写 IndexedDB 的部分只在浏览器里调用。
 
 import JSZip from 'jszip';
 import { uid } from '../engine/model.js';
 import { collectAssetSrcs, assetIdOf, isAssetSrc, storeBlob } from '../store/assets.js';
-import { getAssetRecord } from '../store/db.js';
+import { getAssetRecord, deleteAssetsOf } from '../store/db.js';
+import { exportBoardsOf, importBoardsTo, removeBoardsOf } from '../moodboard/store.js';
 
 export const BUNDLE_FORMAT = 'dreamhouse-blueprint';
 export const BUNDLE_VERSION = 1;
@@ -111,6 +112,12 @@ export async function exportBundle(project, { onProgress } = {}) {
   const byId = new Map(records.filter(Boolean).map((r) => [r.id, r]));
   const zip = new JSZip();
   zip.file('project.json', JSON.stringify(manifest, null, 1));
+  try {
+    const boards = await exportBoardsOf(project.id);
+    if (boards.boards.length) zip.file('boards.json', JSON.stringify(boards));
+  } catch {
+    /* 画板库读不了：项目照样备份 */
+  }
   for (const f of files) zip.file(f.path, byId.get(f.id).blob, { binary: true, compression: 'STORE' });
   const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/zip', compression: 'DEFLATE', compressionOptions: { level: 6 } }, (meta) =>
     onProgress?.('zip', Math.round(meta.percent), 100)
@@ -132,17 +139,39 @@ export async function importBundle(file, { onProgress } = {}) {
   const id = uid('p');
   const srcMap = new Map();
   let missing = 0;
-  for (let i = 0; i < assets.length; i++) {
-    const a = assets[i];
-    const f = a?.file ? zip.file(a.file) : null;
-    if (!f) {
-      missing += 1;
-      continue;
+  try {
+    for (let i = 0; i < assets.length; i++) {
+      const a = assets[i];
+      const f = a?.file ? zip.file(a.file) : null;
+      if (!f) {
+        missing += 1;
+        continue;
+      }
+      const data = await f.async('arraybuffer');
+      const blob = new Blob([data], { type: a.mime || 'image/jpeg' });
+      srcMap.set(`asset:${a.id}`, await storeBlob(blob, { projectId: id, w: a.w || undefined, h: a.h || undefined }));
+      onProgress?.('assets', i + 1, assets.length);
     }
-    const data = await f.async('arraybuffer');
-    const blob = new Blob([data], { type: a.mime || 'image/jpeg' });
-    srcMap.set(`asset:${a.id}`, await storeBlob(blob, { projectId: id, w: a.w || undefined, h: a.h || undefined }));
-    onProgress?.('assets', i + 1, assets.length);
+    const boardsEntry = zip.file('boards.json');
+    if (boardsEntry) {
+      let boards = null;
+      try {
+        boards = JSON.parse(await boardsEntry.async('string'));
+      } catch {
+        boards = null; // 画板数据坏了：项目照样恢复
+      }
+      if (boards) await importBoardsTo(id, boards, uid);
+    }
+  } catch (err) {
+    // 中途失败（多半是存储空间不足）：已经写进去的图片 / 画板清掉，不留孤儿
+    await discardProjectData(id);
+    throw err;
   }
   return { project: restoreProject(project, srcMap, { id }), missing };
+}
+
+/** 清掉某个（还没保存成功的）项目的图片与画板 */
+export async function discardProjectData(id) {
+  await deleteAssetsOf(id).catch(() => {});
+  await removeBoardsOf(id).catch(() => {});
 }

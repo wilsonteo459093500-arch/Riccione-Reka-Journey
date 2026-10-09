@@ -24,6 +24,24 @@ function NameField({ value, onCommit }) {
     if (!editing.current) setDraft(value || '');
   }, [value]);
   const skip = useRef(false);
+  // 没按 Enter 就关标签页 / 浏览器后退 / 离开编辑器：草稿照样存下（读最新值，不受闭包影响）
+  const latest = useRef({ draft, value, onCommit });
+  latest.current = { draft, value, onCommit };
+  useEffect(() => {
+    const flushDraft = () => {
+      const { draft: d, value: v, onCommit: c } = latest.current;
+      const t = (d || '').trim();
+      if (editing.current && !skip.current && t && t !== v) {
+        editing.current = false;
+        c(t);
+      }
+    };
+    window.addEventListener('pagehide', flushDraft);
+    return () => {
+      window.removeEventListener('pagehide', flushDraft);
+      flushDraft();
+    };
+  }, []);
   const commit = () => {
     editing.current = false;
     if (skip.current) {
@@ -62,6 +80,13 @@ function NameField({ value, onCommit }) {
 }
 
 function SaveStatus({ state, onRetry }) {
+  if (state === 'conflict') {
+    return (
+      <button type="button" onClick={() => window.location.reload()} className="inline-flex items-center gap-1 text-xs text-bp-danger hover:underline whitespace-nowrap" title="项目在别的窗口改过或已删除：刷新载入最新版本">
+        <AlertTriangle size={13} /> 已暂停保存 · 刷新
+      </button>
+    );
+  }
   if (state === 'error') {
     return (
       <button type="button" onClick={onRetry} className="inline-flex items-center gap-1 text-xs text-bp-danger hover:underline whitespace-nowrap" title="点一下重新保存">

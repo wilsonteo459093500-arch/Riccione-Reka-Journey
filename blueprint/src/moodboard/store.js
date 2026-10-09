@@ -141,3 +141,35 @@ export async function removeShot(id) {
     /* ignore */
   }
 }
+
+// ---------------- 项目备份 / 复制项目 ----------------
+
+/** 某项目的全部画板（含 AI 实拍历史）+ 当前画板 —— 项目备份 / 复制项目时一起带走 */
+export async function exportBoardsOf(projectId) {
+  const boards = [];
+  for (const b of await listBoards(projectId)) boards.push({ ...b, shots: await listShots(b.id) });
+  return { boards, active: await getActiveBoardId(projectId) };
+}
+
+/**
+ * 把画板接到（新）项目上：画板、实拍图都换新 id。写不进去（存储空间不足）就抛错，由调用方清理。
+ * @param {{ boards?:object[], active?:string }} data  exportBoardsOf 的结果
+ * @param {(prefix:string)=>string} makeId
+ * @returns {Promise<number>} 接上的画板数
+ */
+export async function importBoardsTo(projectId, data, makeId) {
+  const idMap = new Map();
+  for (const b of data?.boards || []) {
+    if (!b || !b.id) continue;
+    const { shots = [], ...rec } = b;
+    const id = makeId('b');
+    idMap.set(b.id, id);
+    if (!(await putBoard({ ...rec, id, projectId }))) throw new Error('画板没能保存（浏览器存储空间可能不足）');
+    for (const s of [...shots].reverse()) {
+      if (!s?.dataUrl) continue;
+      if (!(await putShot({ ...s, id: makeId('shot'), boardId: id, projectId }))) throw new Error('实拍图没能保存（浏览器存储空间可能不足）');
+    }
+  }
+  if (data?.active && idMap.has(data.active)) await setActiveBoardId(projectId, idMap.get(data.active));
+  return idMap.size;
+}

@@ -26,7 +26,8 @@ export const KIND_LABELS = {
 // ---------------------------------------------------------------------------
 
 /** 只有方案页（效果图 / 楼层 / AI 立体图）能删；公司页、方案封面、本案材料、服务团队只能隐藏 */
-export const canDelete = (slide) => !!slide && (slide.kind === 'view' || slide.kind === 'floor');
+// 楼层章节页只能隐藏不能删（删掉后该层的效果图会挤进上一层章节，且没法再加回来）
+export const canDelete = (slide) => !!slide && slide.kind === 'view';
 export const canDuplicate = (slide) => !!slide && (slide.kind === 'view' || slide.kind === 'floor');
 /** 哪些页后面可以「新增效果图页」（方案章节里的页） */
 export const canInsertViewAfter = (slide) => !!slide && ['view', 'floor', 'designCover', 'materials'].includes(slide.kind);
@@ -180,10 +181,18 @@ export function insertViewsAfter(project, afterId, items) {
   return { ...project, slides: [...slides.slice(0, i + 1), ...added, ...slides.slice(i + 1)] };
 }
 
-/** 改了楼层后：移到该楼层章节的末尾（最后一张同楼层页之后） */
-export function moveToFloorEnd(project, id) {
+/**
+ * 改了楼层后：移到该楼层章节的末尾（最后一张同楼层页之后）。
+ * 该楼层没有章节页（旧项目里被删过）→ 用 floorSlideId 在这一页前面补一张章节页。
+ */
+export function moveToFloorEnd(project, id, floorSlideId = null) {
   const s = findSlide(project, id);
   if (!s || !s.floorId) return project;
+  if (floorSlideId && !(project.slides || []).some((x) => x.kind === 'floor' && x.floorId === s.floorId)) {
+    const i = project.slides.findIndex((x) => x.id === id);
+    const floorSlide = { id: floorSlideId, kind: 'floor', floorId: s.floorId, enabled: true };
+    return { ...project, slides: [...project.slides.slice(0, i), floorSlide, ...project.slides.slice(i)] };
+  }
   const slides = project.slides;
   let last = -1;
   slides.forEach((x, k) => {

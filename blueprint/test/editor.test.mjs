@@ -102,7 +102,7 @@ test('能力：只有效果图 / 楼层 / 立体图页能删和复制', () => {
     assert.equal(canDuplicate(byKind(k)), false, k);
   }
   assert.equal(canDelete(byKind('view')), true);
-  assert.equal(canDelete(byKind('floor')), true);
+  assert.equal(canDelete(byKind('floor')), false, '楼层章节页只能隐藏');
   assert.equal(canDelete({ kind: 'view', tag: '3d' }), true);
   assert.equal(canInsertViewAfter(byKind('materials')), true);
   assert.equal(canInsertViewAfter(byKind('company')), false);
@@ -195,7 +195,17 @@ test('deleteSlide：方案页可删；公司页 / 封面 / 材料 / 团队不能
     const s = p.slides.find((x) => x.kind === k);
     assert.equal(deleteSlide(p, s.id), p, k);
   }
-  assert.equal(deleteSlide(p, 'F2').slides.length, p.slides.length - 1);
+  assert.equal(deleteSlide(p, 'F2'), p, '楼层章节页只能隐藏，不能删');
+});
+
+test('moveToFloorEnd：该楼层没有章节页（旧项目里删过）→ 在这一页前补一张章节页', () => {
+  const p = smallProject();
+  const noF2 = { ...p, slides: p.slides.filter((s) => s.id !== 'F2') };
+  const v = noF2.slides.find((s) => s.kind === 'view' && s.floorId === p.slides.find((x) => x.id === 'F2').floorId);
+  const q = moveToFloorEnd(noF2, v.id, 'F2-new');
+  const i = q.slides.findIndex((s) => s.id === 'F2-new');
+  assert.equal(q.slides[i].kind, 'floor');
+  assert.equal(q.slides[i + 1].id, v.id);
 });
 
 test('insertViewsAfter：同楼层、沿用房间名、版式自动；材料页后面新增 = 无楼层', () => {

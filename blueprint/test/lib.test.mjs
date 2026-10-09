@@ -386,3 +386,18 @@ test('ensureDesignCoverSlide：方案封面页被删时补回到第一张方案�
   assert.equal(f2.slides[j + 1].key, 'service-divider');
   assert.equal(ensureDesignCoverSlide({ slides: [] }).slides[0].kind, 'designCover');
 });
+
+test('中文输入法：拼音上屏（整段替换）和前面的输入合成一步撤销；换图仍单独一步', () => {
+  const a = { info: { location: '麻坡' } };
+  const b = { info: { location: "麻坡ma'po" } };
+  const c = { info: { location: '麻坡码坡' } };
+  assert.equal(changeSignature(a, b), changeSignature(b, c));
+  assert.equal(changeSignature({ cover: { image: 'asset:a' } }, { cover: { image: 'asset:b' } }), null);
+});
+
+test('coverLayoutFor：竖版 → 左文右图，横版 → 满版，方形 + 满版 → 左文右图', () => {
+  assert.equal(coverLayoutFor('full', 'portrait'), 'split-light');
+  assert.equal(coverLayoutFor('split-dark', 'landscape'), 'full');
+  assert.equal(coverLayoutFor('full', 'square'), 'split-light');
+  assert.equal(coverLayoutFor('split-dark', 'square'), 'split-dark');
+});

@@ -3,8 +3,8 @@
 import { uid } from '../engine/model.js';
 import { saveProject, deleteProject, getAssetRecord } from '../store/db.js';
 import { collectAssetSrcs, assetIdOf, storeBlob } from '../store/assets.js';
-import { removeBoardsOf } from '../moodboard/store.js';
-import { remapAssetSrcs } from './bundle.js';
+import { removeBoardsOf, exportBoardsOf, importBoardsTo } from '../moodboard/store.js';
+import { remapAssetSrcs, discardProjectData } from './bundle.js';
 import { copyName } from './project.js';
 
 /**
@@ -15,20 +15,28 @@ export async function duplicateProject(project, { existingNames = [], onProgress
   const id = uid('p');
   const srcs = [...collectAssetSrcs(project)];
   const map = new Map();
-  for (let i = 0; i < srcs.length; i++) {
-    const rec = await getAssetRecord(assetIdOf(srcs[i]));
-    if (rec?.blob) map.set(srcs[i], await storeBlob(rec.blob, { projectId: id, w: rec.w, h: rec.h }));
-    onProgress?.(i + 1, srcs.length);
+  try {
+    for (let i = 0; i < srcs.length; i++) {
+      const rec = await getAssetRecord(assetIdOf(srcs[i]));
+      if (rec?.blob) map.set(srcs[i], await storeBlob(rec.blob, { projectId: id, w: rec.w, h: rec.h }));
+      onProgress?.(i + 1, srcs.length);
+    }
+    // Material Board 画板（含 AI 实拍历史）一起复制
+    await importBoardsTo(id, await exportBoardsOf(project.id), uid);
+    const now = Date.now();
+    const copy = {
+      ...remapAssetSrcs(project, map),
+      id,
+      name: copyName(project.name, existingNames),
+      createdAt: now,
+      updatedAt: now,
+    };
+    return await saveProject(copy);
+  } catch (err) {
+    // 中途失败（多半是存储空间不足）：已复制的图片 / 画板清掉，不留下没人能删的孤儿
+    await discardProjectData(id);
+    throw err;
   }
-  const now = Date.now();
-  const copy = {
-    ...remapAssetSrcs(project, map),
-    id,
-    name: copyName(project.name, existingNames),
-    createdAt: now,
-    updatedAt: now,
-  };
-  return await saveProject(copy);
 }
 
 /** 删除项目：项目 JSON + 全部图片 + 它的 Material Board 画板 */
