@@ -1,0 +1,15 @@
+{
+  "name": "溪岸 SITE · 现场报告",
+  "short_name": "溪岸 SITE",
+  "description": "现场主管手机填报告，一键出 PDF / Word / Excel / WhatsApp 文案",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F8F4EB",
+  "theme_color": "#2F4A3C",
+  "lang": "zh-CN",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

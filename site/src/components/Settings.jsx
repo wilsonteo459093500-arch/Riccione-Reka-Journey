@@ -1,0 +1,151 @@
+// 设置：我的资料（自动带入报告）、存储空间、备份 / 恢复、安装到主屏幕
+import { useEffect, useRef, useState } from 'react';
+import Icon from './ui/Icon.jsx';
+import { TopBar, Spinner, useUI } from './ui/UI.jsx';
+import { useStore } from '../lib/store.jsx';
+import { storageEstimate, requestPersist } from '../lib/db.js';
+import { exportBackup, importBackup } from '../lib/backup.js';
+import { downloadBlob } from '../lib/share.js';
+import { fmtBytes } from '../lib/images.js';
+import { todayISO } from '../lib/format.js';
+
+const ME = [
+  { key: 'name', label: '我的名字', placeholder: '例：Wilson', hint: '进场通知「现场负责人」、检查人、签名人' },
+  { key: 'phone', label: '我的电话', placeholder: '例：016-3881819', type: 'tel' },
+  { key: 'dept', label: '部门落款', placeholder: '安装部', hint: '每日汇报最后的落款' },
+  { key: 'company', label: '公司名称', placeholder: '溪岸 Sail by Riccione Reka', hint: '印在文件页脚' },
+];
+
+export default function Settings() {
+  const store = useStore();
+  const { toast, confirm } = useUI();
+  const [form, setForm] = useState(store.settings);
+  const [est, setEst] = useState(null);
+  const [persisted, setPersisted] = useState(null);
+  const [busy, setBusy] = useState('');
+  const fileRef = useRef(null);
+
+  useEffect(() => setForm(store.settings), [store.settings]);
+  useEffect(() => {
+    storageEstimate().then(setEst);
+    navigator.storage?.persisted?.().then(setPersisted).catch(() => {});
+  }, [store.reports.length]);
+
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const standalone = window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone;
+
+  const save = async () => {
+    await store.updateSettings(form);
+    toast('已保存');
+  };
+
+  const backup = async () => {
+    setBusy('backup');
+    try {
+      const blob = await exportBackup();
+      downloadBlob(blob, `溪岸SITE备份_${todayISO()}.json`);
+      toast('备份文件已下载，请存到云盘');
+    } catch (e) {
+      toast(`备份失败：${e.message}`, 'error');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const restore = async (file) => {
+    if (!file) return;
+    const ok = await confirm({ title: '从备份恢复？', message: '会把备份里的项目 / 报告 / 照片合并进这台手机（同一份报告以备份为准）。', okText: '恢复' });
+    if (!ok) return;
+    setBusy('restore');
+    try {
+      const r = await importBackup(file);
+      await store.reload();
+      toast(`已恢复：${r.projects} 个项目，${r.reports} 份报告，${r.media} 个照片/视频`);
+    } catch (e) {
+      toast(e.message || '恢复失败', 'error');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  return (
+    <div className="pb-28">
+      <TopBar title="设置" sub="资料只存在这台手机" />
+      <main className="mx-auto max-w-lg space-y-4 px-3 pt-3">
+        <section className="card space-y-4 p-4">
+          <div className="text-[15px] font-bold text-ink">我的资料</div>
+          {ME.map((f) => (
+            <div key={f.key}>
+              <label className="label">{f.label}</label>
+              <input className="input" type={f.type || 'text'} value={form[f.key] || ''} placeholder={f.placeholder} onChange={(e) => setForm((x) => ({ ...x, [f.key]: e.target.value }))} />
+              {f.hint && <div className="mt-1 text-[12px] text-ink-mute">{f.hint}</div>}
+            </div>
+          ))}
+          <button className="btn-primary w-full" onClick={save}>
+            <Icon name="Check" size={18} /> 保存
+          </button>
+        </section>
+
+        {!standalone && (
+          <section className="card border-l-4 border-l-terra p-4">
+            <div className="flex items-center gap-2 text-[15px] font-bold text-ink">
+              <Icon name="Smartphone" size={18} className="text-terra" /> 加到手机主屏幕（强烈建议）
+            </div>
+            <div className="mt-2 text-[13px] leading-relaxed text-ink-soft">
+              {isIOS ? (
+                <>用 <b>Safari</b> 打开本网址 → 点底部「分享」按钮 → 「添加到主屏幕」。</>
+              ) : (
+                <>用 <b>Chrome</b> 打开 → 右上角「⋮」→「添加到主屏幕 / 安装应用」。</>
+              )}
+              <br />
+              像 App 一样一键打开，没信号也能填写；iPhone 上还能避免浏览器 7 天不用自动清掉资料。
+            </div>
+          </section>
+        )}
+
+        <section className="card space-y-3 p-4">
+          <div className="flex items-center gap-2 text-[15px] font-bold text-ink">
+            <Icon name="HardDrive" size={18} className="text-pine" /> 存储与备份
+          </div>
+          <div className="text-[13px] leading-relaxed text-ink-soft">
+            报告和照片<b>只存在这台手机的浏览器里</b>，不会上传。换手机、清理浏览器之前，请先备份。
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-xl bg-cream-deep/70 p-2.5">
+              <div className="text-[17px] font-bold text-ink">{store.projects.length}</div>
+              <div className="text-[11px] text-ink-mute">项目</div>
+            </div>
+            <div className="rounded-xl bg-cream-deep/70 p-2.5">
+              <div className="text-[17px] font-bold text-ink">{store.reports.length}</div>
+              <div className="text-[11px] text-ink-mute">报告</div>
+            </div>
+            <div className="rounded-xl bg-cream-deep/70 p-2.5">
+              <div className="text-[17px] font-bold text-ink">{est?.usage != null ? fmtBytes(est.usage) : '—'}</div>
+              <div className="text-[11px] text-ink-mute">已用空间</div>
+            </div>
+          </div>
+          {persisted === false && (
+            <button className="w-full text-left text-[12px] text-terra underline" onClick={async () => setPersisted(await requestPersist())}>
+              系统可能在空间不足时清理数据，点此申请「持久保存」
+            </button>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            <button className="btn-ghost text-[14px]" disabled={!!busy} onClick={backup}>
+              {busy === 'backup' ? <Spinner /> : <Icon name="Download" size={17} />} 导出备份
+            </button>
+            <button className="btn-ghost text-[14px]" disabled={!!busy} onClick={() => fileRef.current?.click()}>
+              {busy === 'restore' ? <Spinner /> : <Icon name="Upload" size={17} />} 从备份恢复
+            </button>
+          </div>
+          <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={(e) => { restore(e.target.files?.[0]); e.target.value = ''; }} />
+        </section>
+
+        <section className="px-2 pb-4 text-center text-[12px] leading-relaxed text-ink-mute">
+          溪岸 SITE · 现场报告 v1
+          <br />
+          {store.settings.company || '溪岸 Sail by Riccione Reka'}
+        </section>
+      </main>
+    </div>
+  );
+}
