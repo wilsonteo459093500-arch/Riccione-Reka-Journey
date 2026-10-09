@@ -124,7 +124,7 @@ function layoutMaterialsRegular(materials, ctx, { page = 1, pages = 1 } = {}) {
 // 楼层章节页（定稿第 16 / 44 页）：满版效果图 + 压暗 + 左下楼层名 + 右下空间清单
 // ---------------------------------------------------------------------------
 
-export function roomsLines(rooms, maxW = 780) {
+export function roomsLines(rooms, maxW = 720) {
   const lines = [];
   let cur = '';
   for (const r of rooms) {
@@ -152,7 +152,7 @@ export function layoutFloor(floor, rooms, image, ctx) {
   els.push(text(96, 869, 1100, 119, floor?.zh || '方案', { font: 'serif', size: 60, spacing: 14.4, color: C.light }, { edit: { field: 'floor.zh' } }));
   const lines = roomsLines(rooms);
   if (lines.length) {
-    els.push(text(1024, 760, 802.7, 228, lines.join('\n'), { font: 'serif', size: 22.5, spacing: 2.25, color: C.light }, { align: 'r', valign: 'b', lineSpacing: 139.57 }));
+    els.push({ ...text(824, 760, 1002.7, 228, lines.join('\n'), { font: 'serif', size: 22.5, spacing: 2.25, color: C.light }, { align: 'r', valign: 'b', lineSpacing: 139.57 }), nowrap: true });
   }
   return { bg: C.dark, els, warnings: image ? [] : ['楼层章节页没有背景图'] };
 }
@@ -172,35 +172,65 @@ export function layoutViewFull(view, floor, ctx) {
     { pos: 60, color: C.overlay, alpha: 0 },
   ]));
 
-  // 右下：材料 / 备注列（从右往左排）
+  // 右下：材料 / 备注列。先量左下标题区要多宽，剩下的宽度给右侧列；一行放不下就往上叠第二行（最多 2 行）
+  const eyebrow = viewEyebrow(view, floor);
+  const title = viewTitle(view);
+  const leftNeed = Math.min(1180, 96 + Math.max(measureText(eyebrow, 'sans', 18, 7.56), measureText(title, 'serif', 42)) + 72);
+  const colsMinX = Math.max(leftNeed, 760);
+  const avail = 1824 - colsMinX;
+  const GAP = 64;
   const cols = [
-    ...(view.notes || []).filter((n) => (n.text || n.label || '').trim()).map((n, i) => ({ kind: 'note', i, label: (n.label || '备注').trim(), text: (n.text || '').trim() })),
+    ...(view.notes || []).map((n, i) => ({ n, i })).filter(({ n }) => (n.text || n.label || '').trim())
+      .map(({ n, i }) => ({ kind: 'note', i, label: (n.label || '备注').trim(), text: (n.text || '').trim() })),
     ...(view.materials || []).map((r, i) => ({ kind: 'mat', i, label: (r.role || '材料').trim(), mat: ctx.project ? (ctx.project.materials || []).find((m) => m.id === r.materialId) : null })),
-  ];
-  if (cols.length > 3) warnings.push(`满版页右下最多放 3 项，现有 ${cols.length} 项 —— 建议切换成「框图」版式`);
-  let right = 1824;
-  let leftmost = 1824;
-  for (const col of cols.slice(0, 3).reverse()) {
+  ].map((col) => {
     const labelW = measureText(col.label, 'sans', 18, 3.6);
     const valueW = col.kind === 'mat' ? materialValueWidth(col.mat) : measureText(col.text, 'serif', 22.5);
-    const w = Math.min(520, Math.max(labelW, valueW) + 10);
-    const x = right - w;
-    const valueLines = col.kind === 'mat' ? 1 : Math.min(3, countLines(col.text, 'serif', 22.5, 0, w));
-    const valueH = valueLines * 36 + 11;
-    const valueY = 1012 - valueH;
-    els.push(text(x, valueY - 39.8, w + 40, 35.8, col.label, TS.labelDark, { edit: { field: col.kind === 'mat' ? `materials.${col.i}.role` : `notes.${col.i}.label` } }));
-    if (col.kind === 'mat') {
-      els.push(richText(x, valueY, w + 40, valueH, [{ runs: materialRuns(col.mat, true) }], { edit: { field: `materials.${col.i}` } }));
-    } else {
-      els.push(text(x, valueY, w, valueH, col.text, TS.valueDark, { edit: { field: `notes.${col.i}.text` } }));
+    const w = Math.min(avail, 520, Math.max(labelW, valueW) * 1.06 + 12);
+    const valueLines = col.kind === 'mat' ? Math.min(2, countLines(`${col.mat?.name || ''} ${col.mat?.code || ''}`, 'serif', 22.5, 0, w)) : Math.min(3, countLines(col.text, 'serif', 22.5, 0, w));
+    return { ...col, w, valueH: valueLines * 36 + 11 };
+  });
+  // 按阅读顺序装行：第 1 行（最靠下）放前几项，放不下的进第 2 行
+  const rowsOfCols = [[]];
+  let used = 0;
+  for (const col of cols) {
+    const need = (rowsOfCols[rowsOfCols.length - 1].length ? GAP : 0) + col.w;
+    if (used + need > avail && rowsOfCols[rowsOfCols.length - 1].length) {
+      rowsOfCols.push([]);
+      used = 0;
     }
-    leftmost = x;
-    right = x - 64;
+    rowsOfCols[rowsOfCols.length - 1].push(col);
+    used += (rowsOfCols[rowsOfCols.length - 1].length > 1 ? GAP : 0) + col.w;
   }
+  const shown = rowsOfCols.slice(0, 2);
+  const hidden = rowsOfCols.slice(2).reduce((n, r) => n + r.length, 0);
+  if (hidden) warnings.push(`满版页右下放不下全部 ${cols.length} 项（隐藏了 ${hidden} 项）—— 建议切换成「框图」版式`);
+  let bottom = 1012;
+  shown.forEach((row) => {
+    const rowValueH = Math.max(...row.map((c) => c.valueH));
+    let right = 1824;
+    for (const col of [...row].reverse()) {
+      const x = right - col.w;
+      const valueY = bottom - col.valueH;
+      els.push(text(x, valueY - 39.8, col.w + 24, 35.8, col.label, TS.labelDark, { edit: { field: col.kind === 'mat' ? `materials.${col.i}.role` : `notes.${col.i}.label` } }));
+      if (col.kind === 'mat') {
+        els.push(richText(x, valueY, col.w + 24, col.valueH, [{ runs: materialRuns(col.mat, true) }], { edit: { field: `materials.${col.i}` } }));
+      } else {
+        els.push(text(x, valueY, col.w, col.valueH, col.text, TS.valueDark, { edit: { field: `notes.${col.i}.text` } }));
+      }
+      right = x - GAP;
+    }
+    bottom -= rowValueH + 39.8 + 28;
+  });
 
-  const titleW = Math.max(600, Math.min(1100, leftmost - 96 - 56));
-  els.push(text(96, 890.9, titleW, 33.9, viewEyebrow(view, floor), TS.eyebrowDark, { edit: { field: 'roomEn' } }));
-  els.push(text(96, 940.8, titleW, 71.2, viewTitle(view), { font: 'serif', size: 42, color: C.light }, { lineSpacing: 83.61, edit: { field: 'title' } }));
+  // 左下：英文小标题 + 标题，底边对齐 1012，标题折行时往上长
+  const titleW = colsMinX - 96 - 48;
+  const tSize = countLines(title, 'serif', 42, 0, titleW) > 1 ? 34 : 42;
+  const tLines = Math.min(3, countLines(title, 'serif', tSize, 0, titleW));
+  const tH = tSize * 1.7 + (tLines - 1) * lineHeightPx(tSize, 83.61);
+  const tY = 1012 - tH;
+  els.push({ ...text(96, tY - 49.9, titleW, 33.9, eyebrow, TS.eyebrowDark, { edit: { field: 'roomEn' } }), nowrap: true, autofit: 'shrink' });
+  els.push(text(96, tY, titleW, tH, title, { font: 'serif', size: tSize, color: C.light }, { lineSpacing: 83.61, edit: { field: 'title' } }));
   return { bg: C.dark, els, warnings };
 }
 
@@ -222,9 +252,11 @@ export function layoutViewFramed(view, floor, ctx) {
   els.push(text(X, 96, 540, 63.8, viewEyebrow(view, floor), TS.eyebrow, { edit: { field: 'roomEn' } }));
   els.push(rect(X, 179.8, 56, 1, C.rule));
   const title = viewTitle(view);
-  const tLines = Math.min(3, countLines(title, 'serif', 42, 0, W));
-  const tLineH = lineHeightPx(42, 90.58);
-  els.push(text(X, 212.8, W, Math.max(76.8, tLines * tLineH + 16), title, { font: 'serif', size: 42, color: C.ink }, { lineSpacing: 90.58, edit: { field: 'title' } }));
+  // 标题超过两行时降到 34pt，避免第三行只剩一两个字
+  const tSize = countLines(title, 'serif', 42, 0, W) > 2 ? 34 : 42;
+  const tLines = Math.min(3, countLines(title, 'serif', tSize, 0, W));
+  const tLineH = lineHeightPx(tSize, 90.58);
+  els.push(text(X, 212.8, W, Math.max(76.8, tLines * tLineH + 16), title, { font: 'serif', size: tSize, color: C.ink }, { lineSpacing: 90.58, edit: { field: 'title' } }));
 
   const notes = (view.notes || []).filter((n) => (n.text || n.label || '').trim());
   const mats = view.materials || [];

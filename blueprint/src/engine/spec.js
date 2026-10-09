@@ -40,8 +40,10 @@ const CJK = /[⺀-鿿豈-﫿︰-﹏＀-￯　-〿]/;
 
 function charEm(ch, font) {
   if (CJK.test(ch)) return 1.0;
-  if (ch === ' ') return 0.28;
-  if (ch === '·' || ch === '.' || ch === ',' || ch === ':' || ch === ';' || ch === '\'' || ch === '|') return 0.3;
+  if (ch === ' ') return 0.3;
+  // 中点在中文字体里常按全角渲染（PowerPoint / WPS / LibreOffice 都会），按 0.7em 估，宁宽勿窄
+  if (ch === '·' || ch === '•') return 0.7;
+  if (ch === '.' || ch === ',' || ch === ':' || ch === ';' || ch === '\'' || ch === '|') return 0.32;
   if (/[0-9]/.test(ch)) return 0.58;
   if (/[A-Z]/.test(ch)) return font === 'display' ? 0.7 : ch === 'M' || ch === 'W' ? 0.86 : 0.66;
   if (/[a-z]/.test(ch)) return ch === 'm' || ch === 'w' ? 0.8 : ch === 'i' || ch === 'l' || ch === 'j' ? 0.28 : 0.54;
@@ -58,7 +60,8 @@ export function measureText(str, font = 'sans', sizePt = 18, spacingPt = 0) {
 
 /** 估算在给定宽度内折成几行（按字符贪心折行，英文单词不拆） */
 export function countLines(str, font, sizePt, spacingPt, boxW) {
-  const avail = Math.max(10, boxW - 6);
+  // 不同软件 / 回退字体的字宽有出入：可用宽度打 94 折，宁可多估一行也不让下一块内容被压住
+  const avail = Math.max(10, (boxW - 6) * 0.94);
   let lines = 0;
   for (const para of String(str ?? '').split('\n')) {
     lines += 1;
