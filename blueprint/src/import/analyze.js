@@ -367,8 +367,8 @@ export function analyzePages(raw, { fileName } = {}) {
 
     const viewMats = [];
     const notes = [];
-    const pushNote = (n, free) => {
-      if (n && !notes.some((x) => x.text === n.text)) notes.push({ ...n, free });
+    const pushNote = (n, free, y) => {
+      if (n && !notes.some((x) => x.text === n.text)) notes.push({ ...n, free, y });
     };
     matsHere.sort((a, b) => a.swatch.y - b.swatch.y || a.swatch.x - b.swatch.x);
     for (const { swatch, lines: ls } of matsHere) {
@@ -387,12 +387,13 @@ export function analyzePages(raw, { fileName } = {}) {
         if (key && !viewMats.some((m) => m.materialKey === key)) viewMats.push({ role: parsedNote.role, materialKey: key, explicit: !!parsedNote.role });
         continue;
       }
-      for (const item of splitItems(blk)) pushNote(parseNoteText(item.map((l) => l.text)), true);
+      for (const item of splitItems(blk)) pushNote(parseNoteText(item.map((l) => l.text)), true, item[0].y);
     }
     // 效果图上的标注
     for (const blk of groupBlocks(annoLines)) {
-      for (const item of splitItems(blk)) pushNote(parseNoteText(item.map((l) => l.text)), false);
+      for (const item of splitItems(blk)) pushNote(parseNoteText(item.map((l) => l.text)), false, item[0].y);
     }
+    notes.sort((a, b) => a.y - b.y);
 
     // 空间标题
     let parsedTitle = titleText ? parseRoomTitle(titleText) : null;
