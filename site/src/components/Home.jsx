@@ -8,6 +8,7 @@ import { TEMPLATES, GROUPS, getTemplate } from '../templates/index.js';
 import { createReport, duplicateReport, progress, siteLabel } from '../lib/report.js';
 import { fmtStamp } from '../lib/format.js';
 import { navigate } from '../lib/router.js';
+import { useInstallPrompt } from '../lib/install.js';
 
 function TemplateCard({ t, onClick, wide }) {
   return (
@@ -67,7 +68,9 @@ export default function Home() {
   const [filter, setFilter] = useState('all');
   const [limit, setLimit] = useState(40);
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isAndroid = /android/i.test(navigator.userAgent);
   const standalone = window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone;
+  const install = useInstallPrompt();
   const [hideInstall, setHideInstall] = useState(() => {
     try {
       return localStorage.getItem('site.hideInstall') === '1';
@@ -150,6 +153,29 @@ export default function Home() {
                 <b className="text-ink">建议先加到主屏幕再开始用</b>：Safari 底部「分享」→「添加到主屏幕」。
                 <br />
                 iPhone 上主屏幕 App 和 Safari 的资料是<b>分开存的</b>；在 Safari 里填的报告不会自动出现在主屏幕 App 里（可用「设置 → 备份 / 恢复」搬过去）。
+              </div>
+              <button className="shrink-0 rounded-full p-1 text-ink-faint" onClick={dismissInstall} aria-label="不再提示">
+                <Icon name="X" size={16} />
+              </button>
+            </div>
+          </div>
+        )}
+        {isAndroid && !standalone && !hideInstall && (
+          <div className="card mb-3 border-l-4 border-l-pine p-3">
+            <div className="flex items-start gap-3">
+              <Icon name="Smartphone" size={20} className="mt-0.5 shrink-0 text-pine" />
+              <div className="flex-1 text-[13px] leading-relaxed text-ink-soft">
+                <b className="text-ink">建议装到主屏幕再用</b>：像 App 一样打开，没信号也能填。
+                {install ? (
+                  <button className="btn-primary mt-2 w-full py-2 text-[14px]" onClick={() => install().then((o) => o === 'accepted' && dismissInstall())}>
+                    <Icon name="Download" size={16} /> 安装到主屏幕
+                  </button>
+                ) : (
+                  <>
+                    <br />
+                    在 WhatsApp 里打开的：点右上角「⋮」→「在 Chrome 中打开」，再点 Chrome 右上角「⋮」→「添加到主屏幕」。
+                  </>
+                )}
               </div>
               <button className="shrink-0 rounded-full p-1 text-ink-faint" onClick={dismissInstall} aria-label="不再提示">
                 <Icon name="X" size={16} />

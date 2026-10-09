@@ -5,6 +5,7 @@ import { Spinner, useUI } from '../ui/UI.jsx';
 import { useStore } from '../../lib/store.jsx';
 import { useMediaUrl, useMediaRecord, forgetMedia } from './media.js';
 import { fmtDuration, fmtBytes } from '../../lib/images.js';
+import { markPicker, clearPicker, anchorOf } from '../../lib/pickerGuard.js';
 
 const BIG = 150 * 1024 * 1024;
 
@@ -71,16 +72,16 @@ export default function VideoField({ value, onChange, reportId }) {
         </div>
       ) : (
         <div className="flex gap-2">
-          <button type="button" className="btn-soft flex-1 py-2.5 text-[14px]" disabled={busy} onClick={() => recRef.current?.click()}>
+          <button type="button" className="btn-soft flex-1 py-2.5 text-[14px]" disabled={busy} onClick={(e) => { markPicker(recRef.current, { reportId, anchor: anchorOf(e.currentTarget), kind: 'video' }); recRef.current?.click(); }}>
             {busy ? <Spinner /> : <Icon name="Video" size={18} />} 录视频
           </button>
-          <button type="button" className="btn-ghost flex-1 py-2.5 text-[14px]" disabled={busy} onClick={() => pickRef.current?.click()}>
+          <button type="button" className="btn-ghost flex-1 py-2.5 text-[14px]" disabled={busy} onClick={(e) => { markPicker(pickRef.current, { reportId, anchor: anchorOf(e.currentTarget), kind: 'video' }); pickRef.current?.click(); }}>
             <Icon name="FolderOpen" size={18} /> 选择视频
           </button>
         </div>
       )}
-      <input ref={recRef} type="file" accept="video/*" capture="environment" className="hidden" onChange={(e) => { add(e.target.files?.[0]); e.target.value = ''; }} />
-      <input ref={pickRef} type="file" accept="video/*" className="hidden" onChange={(e) => { add(e.target.files?.[0]); e.target.value = ''; }} />
+      <input ref={recRef} type="file" accept="video/*" capture="environment" className="hidden" onChange={(e) => { clearPicker(); add(e.target.files?.[0]); e.target.value = ''; }} />
+      <input ref={pickRef} type="file" accept="video/*" className="hidden" onChange={(e) => { clearPicker(); add(e.target.files?.[0]); e.target.value = ''; }} />
     </div>
   );
 }

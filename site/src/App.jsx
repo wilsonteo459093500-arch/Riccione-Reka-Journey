@@ -1,14 +1,44 @@
 // TORA by Riccione Reka · 现场报告 —— 路由 + 底部导航
 import Icon from './components/ui/Icon.jsx';
-import { UIProvider, Spinner } from './components/ui/UI.jsx';
 import ErrorBoundary from './components/ui/ErrorBoundary.jsx';
 import Home from './components/Home.jsx';
 import Editor from './components/Editor.jsx';
 import ExportScreen from './components/ExportScreen.jsx';
 import { ProjectList, ProjectEdit } from './components/Projects.jsx';
 import Settings from './components/Settings.jsx';
+import { useEffect } from 'react';
+import { UIProvider, Spinner, useUI } from './components/ui/UI.jsx';
 import { StoreProvider, useStore } from './lib/store.jsx';
 import { useRoute, match, navigate } from './lib/router.js';
+import { takeInterrupted } from './lib/pickerGuard.js';
+import './lib/install.js';
+
+// 拍照时被系统关掉、整页重新加载：在任何页面渲染前取出记录，编辑页打开后滚回原来的检查项
+let interrupted = takeInterrupted();
+if (interrupted?.anchor) window.__siteScrollTo = interrupted.anchor;
+
+function InterruptNotice() {
+  const { confirm } = useUI();
+  useEffect(() => {
+    const info = interrupted;
+    interrupted = null;
+    if (!info) return;
+    const what = info.kind === 'video' ? '视频' : '照片';
+    const act = info.kind === 'video' ? '录像' : info.kind === 'library' ? '选照片' : '拍照';
+    confirm({
+      title: `刚才的${what}没收到`,
+      message:
+        `${act}时手机运行内存不够，浏览器被系统暂时关掉了，所以这次的${what}没传回来。报告已自动保存，填过的内容都在。\n\n` +
+        '这样做就不会再丢：\n' +
+        '• 先用手机相机拍好，再点「相册」一次选多张（最稳）\n' +
+        '• 拍照前把后台其他 App 关掉\n' +
+        '• 用 Chrome 打开并加到主屏幕使用，不要在 WhatsApp 里直接打开',
+      okText: '知道了',
+      alert: true,
+    });
+  }, [confirm]);
+  return null;
+}
 
 const TABS = [
   { path: '/', label: '报告', icon: 'ClipboardList' },
@@ -85,6 +115,7 @@ export default function App() {
       <UIProvider>
         <ErrorBoundary>
           <Screens />
+          <InterruptNotice />
         </ErrorBoundary>
       </UIProvider>
     </StoreProvider>

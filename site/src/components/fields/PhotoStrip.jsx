@@ -4,6 +4,7 @@ import Icon from '../ui/Icon.jsx';
 import { Sheet, Spinner, useUI } from '../ui/UI.jsx';
 import { useStore } from '../../lib/store.jsx';
 import { useMediaUrl, useMediaRecord, setCaption, forgetMedia } from './media.js';
+import { markPicker, clearPicker, anchorOf } from '../../lib/pickerGuard.js';
 
 function Thumb({ id, onClick, size = 'md' }) {
   const url = useMediaUrl(id, 'thumb');
@@ -179,7 +180,11 @@ export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, com
             <button
               type="button"
               className={`${compact ? 'h-14 w-14' : 'h-[76px] w-[76px]'} flex flex-col items-center justify-center gap-0.5 rounded-xl border-2 border-dashed border-terra/40 bg-terra-soft/50 text-terra active:scale-95`}
-              onClick={() => camRef.current?.click()}
+              onClick={(e) => {
+                markPicker(camRef.current, { reportId, anchor: anchorOf(e.currentTarget), kind: 'camera' });
+                camRef.current?.click();
+              }}
+              aria-label="拍照"
             >
               <Icon name="Camera" size={compact ? 18 : 22} />
               {!compact && <span className="text-[11px] font-semibold">拍照</span>}
@@ -187,7 +192,11 @@ export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, com
             <button
               type="button"
               className={`${compact ? 'h-14 w-14' : 'h-[76px] w-[76px]'} flex flex-col items-center justify-center gap-0.5 rounded-xl border-2 border-dashed border-line bg-white text-ink-mute active:scale-95`}
-              onClick={() => libRef.current?.click()}
+              onClick={(e) => {
+                markPicker(libRef.current, { reportId, anchor: anchorOf(e.currentTarget), kind: 'library' });
+                libRef.current?.click();
+              }}
+              aria-label={acceptVideo ? '相册/视频' : '相册'}
             >
               <Icon name="ImagePlus" size={compact ? 18 : 22} />
               {!compact && <span className="text-[11px] font-semibold">{acceptVideo ? '相册/视频' : '相册'}</span>}
@@ -202,6 +211,7 @@ export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, com
         capture="environment"
         className="hidden"
         onChange={(e) => {
+          clearPicker();
           addFiles(e.target.files);
           e.target.value = '';
         }}
@@ -213,6 +223,7 @@ export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, com
         multiple
         className="hidden"
         onChange={(e) => {
+          clearPicker();
           addFiles(e.target.files);
           e.target.value = '';
         }}

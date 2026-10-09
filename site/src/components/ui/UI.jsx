@@ -54,9 +54,11 @@ export function UIProvider({ children }) {
             <div className="text-[17px] font-bold text-ink">{dialog.title}</div>
             {dialog.message && <div className="mt-2 whitespace-pre-line text-[15px] leading-relaxed text-ink-soft">{dialog.message}</div>}
             <div className="mt-5 flex gap-2">
-              <button className="btn-ghost flex-1" onClick={() => close(false)}>
-                {dialog.cancelText}
-              </button>
+              {!dialog.alert && (
+                <button className="btn-ghost flex-1" onClick={() => close(false)}>
+                  {dialog.cancelText}
+                </button>
+              )}
               <button className={`${dialog.danger ? 'btn bg-fail text-white' : 'btn-primary'} flex-1`} onClick={() => close(true)}>
                 {dialog.okText}
               </button>

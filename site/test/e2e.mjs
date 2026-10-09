@@ -217,6 +217,30 @@ try {
   assert.equal(await page.locator('[id^="item-"]').nth(0).locator('textarea').first().inputValue(), '门板缝隙过大，明天整改');
   await shot('30-regression-slow-photo');
   console.log('✓ 回归：照片处理慢时判定 / 备注 / 照片都不丢');
+
+  // ---- 回归：安卓拍照时内存不够、浏览器被系统关掉（模拟：点「拍照」后不选，直接重新加载）----
+  const card6 = page.locator('[id^="item-"]').nth(6);
+  const itemId = await card6.getAttribute('id');
+  await card6.getByRole('button', { name: '照片' }).click();
+  await Promise.all([page.waitForEvent('filechooser'), card6.getByRole('button', { name: '拍照', exact: true }).click()]);
+  await page.reload();
+  await page.getByText('刚才的照片没收到').waitFor();
+  await shot('31-regression-camera-killed');
+  await page.getByRole('button', { name: '知道了' }).click();
+  await page.waitForTimeout(900);
+  const box6 = await page.locator(`#${itemId}`).boundingBox();
+  assert.ok(box6 && box6.y > 0 && box6.y < 844, `没有滚回原来的检查项（y=${box6?.y}）`);
+  // 正常选好照片 → 重新加载不应误报
+  await page.locator(`#${itemId}`).getByRole('button', { name: '照片' }).click();
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.locator(`#${itemId}`).getByRole('button', { name: '相册', exact: true }).click()]);
+  await chooser.setFiles([join(ASSETS, 'photo1.jpg')]);
+  await page.locator(`#${itemId} img`).first().waitFor();
+  await page.waitForTimeout(800);
+  await page.reload();
+  await page.getByText('已自动保存').first().waitFor();
+  await page.waitForTimeout(600);
+  assert.equal(await page.getByText('刚才的照片没收到').count(), 0, '正常选了照片，重新加载后却提示没收到');
+  console.log('✓ 回归：拍照时页面被系统关掉会提示并滚回原处；正常选照片不误报');
 } finally {
   writeFileSync(join(OUT, 'results.json'), JSON.stringify({ results, errors }, null, 2));
   await browser.close();
