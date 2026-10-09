@@ -21,7 +21,7 @@ function FormatRow({ fmt, state, onGenerate, onShare, onDownload, primary }) {
   const busy = state?.status === 'busy';
   const ready = state?.status === 'ready';
   return (
-    <div className={`card p-3 ${primary ? 'ring-2 ring-terra/40' : ''}`}>
+    <div data-format={fmt} className={`card p-3 ${primary ? 'ring-2 ring-terra/40' : ''}`}>
       <div className="flex items-center gap-3">
         <div className={`rounded-xl p-2 ${fmt === 'pdf' ? 'bg-fail/10 text-fail' : fmt === 'docx' ? 'bg-[#2B579A]/10 text-[#2B579A]' : 'bg-pass/10 text-pass'}`}>
           <Icon name={f.icon} size={22} />

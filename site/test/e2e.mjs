@@ -55,14 +55,14 @@ try {
   await shot('00-home-empty');
 
   // 设置
-  await page.getByRole('button', { name: '设置' }).click();
+  await page.getByRole('button', { name: '设置', exact: true }).click();
   await page.getByPlaceholder('例：Wilson').fill('Wilson');
   await page.getByPlaceholder('例：016-3881819').fill('016-3881819');
   await page.getByRole('button', { name: '保存', exact: true }).click();
   await page.getByText('已保存').first().waitFor();
 
   // 项目
-  await page.getByRole('button', { name: '项目' }).click();
+  await page.getByRole('button', { name: '项目', exact: true }).click();
   await page.getByRole('button', { name: '新项目' }).click();
   await page.getByPlaceholder('例：Tuai Timur Residence').fill('Tuai Timur Residence');
   await page.getByPlaceholder('例：17-3').fill('17-3');
@@ -75,7 +75,7 @@ try {
   await page.getByText('Tuai Timur Residence 17-3（Hailey）').first().waitFor();
   await shot('01-projects');
 
-  await page.getByRole('button', { name: '报告' }).click();
+  await page.getByRole('button', { name: '报告', exact: true }).click();
   await page.getByText('今天做哪份').waitFor();
   await shot('02-home');
 
@@ -87,7 +87,7 @@ try {
     if (only && !name.includes(only)) continue;
     const tag = name.replace(/\s+/g, '');
     await page.getByRole('button', { name: new RegExp(`^${name}`) }).first().click();
-    await page.getByText('Tuai Timur Residence 17-3（Hailey）').first().click(); // 选项目
+    await page.getByRole('dialog').getByText('Tuai Timur Residence 17-3（Hailey）').first().click(); // 选项目
     await page.getByText('已自动保存').first().waitFor();
 
     // 判定：每个检查项点第一个选项（「完成」型则点勾）
@@ -140,7 +140,7 @@ try {
         await page.mouse.move(box.x + 30 + k * 11, box.y + box.height * (0.6 + 0.2 * Math.sin(k / 2)));
       }
       await page.mouse.up();
-      await page.getByRole('button', { name: '确认签名' }).click();
+      await page.getByRole('dialog').getByRole('button', { name: '确认签名', exact: true }).click();
       await page.waitForTimeout(400);
     }
 
@@ -158,8 +158,8 @@ try {
       row.text = await page.locator('div.whitespace-pre-wrap').first().textContent();
       writeFileSync(join(OUT, `${tag}.txt`), row.text);
     }
-    for (const [label, ext] of [['PDF', 'pdf'], ['Word', 'docx'], ['Excel', 'xlsx']]) {
-      const card = page.locator('div.card', { has: page.getByText(label, { exact: true }) }).filter({ hasText: `.${ext}` }).first();
+    for (const ext of ['pdf', 'docx', 'xlsx']) {
+      const card = page.locator(`[data-format="${ext}"]`);
       await card.getByRole('button', { name: /生成/ }).click();
       await card.getByRole('button', { name: /下载/ }).waitFor({ timeout: 90_000 });
       const [dl] = await Promise.all([page.waitForEvent('download'), card.getByRole('button', { name: /下载/ }).click()]);
