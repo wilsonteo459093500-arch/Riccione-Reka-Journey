@@ -1,12 +1,13 @@
-# DREAMHOUSE BLUEPRINT · 架构说明
+# UKIR STUDIO · 架构说明
 
 > 设计师把自己的方案 PDF（WPS / PowerPoint 导出）丢进来 → 自动生成「Dreamhouse Blueprint」品牌提案 PPT（可编辑）。
 > 公司封面 / 品牌 / 公司 / 服务页沿用定稿模板；方案章节封面用 Material Board；全部在浏览器本机完成。
+> Material Board 也能单独用（首页 → `#/boards`），接替旧版 UKIR STUDIO（`/render`）的同名功能。
 
 ## 数据流
 
 ```
-PDF ──import/pdfExtract.js──▶ rawPages（文字行 + 图片框 + 缩略图）
+PDF ──import/pdfExtract.js──▶ rawPages（文字行 + 图片框（按裁切 / 旋转后的样子）+ 缩略图）
         ──import/analyze.js──▶ analysis（楼层 / 空间 / 视角 / 材料，纯函数，可在 Node 测）
         ──import/importPdf.js──▶ Project（engine/model.js，图片存进 IndexedDB → 'asset:<id>'）
 Project ──engine/deck.js renderDeck()──▶ 渲染页 [{ bg, els }]（engine/spec.js 元素规格）
@@ -29,14 +30,18 @@ Project ──engine/deck.js renderDeck()──▶ 渲染页 [{ bg, els }]（eng
 | `src/store/assets.js` | `'asset:<id>'` ↔ Blob / object URL / 尺寸；`storeBlob`、`preloadProjectAssets`、`resolveUrl`、`metaOf`、`loadForPptx`、`toInlineImage` |
 | `src/ai/` | Gemini 客户端（`gemini.js`）、设置（`settings.js`）、标题润色（`polish.js`）、3D 全屋立体图（`dollhouse.js`） |
 | `src/import/` | PDF 解析：`pdfExtract.js`（pdf.js）、`analyze.js`（纯函数）、`labels.js`（词典与文字解析）、`importPdf.js`（编排） |
-| `src/moodboard/` | Material Board（移植自 UKIR STUDIO，只保留 material board 功能） |
-| `src/components/` | 界面：首页 / 编辑器 / 检查器 / 材料清单 / 导出 / 设置 |
+| `src/moodboard/` | Material Board（移植自旧版 UKIR STUDIO，只保留 material board 功能）；`migrate.js` = 同网址时把旧版材质库 / 画板搬过来 |
+| `src/components/` | 界面：首页 / 编辑器 / 检查器 / 材料清单 / 导出 / 设置 / 独立画板（`BoardsPage.jsx`） |
+| `src/lib/` | 编辑器状态（`useProjectState.js`：撤销重做、带版本号的自动保存）、项目备份（`bundle.js`，含画板）、复制 / 删除项目 |
 | `public/template/` | 公司固定页图片（自动生成） |
 | `test/` | `npm test`：纯函数与导出结构测试（Node，无需浏览器） |
 
 ## 模块间约定（接口）
 
-- **改项目**：编辑器持有 `project` state，子组件拿到 `onChange(updater)`，`updater = (project) => newProject`（不可变更新）。
+- **改项目**：编辑器持有 `project` state，子组件拿到 `onChange(updater, { history?, coalesce? })`，`updater = (project) => newProject`（不可变更新）。
+  AI 生成的结果（立体图、平面图）用 `history: false`，不进撤销历史。
+- **保存**：`saveProject(project, expectedRev)` 带版本号，库里版本不同 / 已删除 → `ProjectConflictError`（不覆盖）；编辑器暂停保存并提示刷新。
+- **文字放不下**：`autofit: 'shrink'` 的单行框（及设计师改过字的多行框）由 `spec.js fitText()` 在引擎里先缩好字号，预览与各家 PPT 软件一致。
 - **存图**：`storeBlob(blob, { projectId })` → `'asset:<id>'`；同步读：`resolveUrl(src)`（预览）、`metaOf(src)`（尺寸）。
 - **提示**：`notify({ type: 'ok' | 'warn' | 'error', text })`。
 - **AI 设置**：`settings`（`ai/settings.js`）；没 key 时调用 `onOpenSettings()`。

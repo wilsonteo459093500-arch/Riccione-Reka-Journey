@@ -1,4 +1,4 @@
-# DREAMHOUSE BLUEPRINT · 方案 PPT 生成器
+# UKIR STUDIO · 设计师提案工作台
 
 > by RICCIONE REKA · 溪岸 SAIL
 
@@ -9,8 +9,9 @@
 
 目的：**缩短做提案的时间，同时让提案更好看、更好讲。**
 
-> 独立 app，与 Delivery OS / CRM / UKIR STUDIO / CIPTA STUDIO 共用 repo、各自部署。上线见 [`DEPLOY.md`](./DEPLOY.md)，
-> 代码结构见 [`ARCHITECTURE.md`](./ARCHITECTURE.md)。
+> 新版 UKIR STUDIO 接替旧版（`/render`：AI 效果图 / 设计顾问 / Material Board）。旧版的 **Material Board 功能完整搬到这里**，
+> 不做提案也能单独用；部署在旧版同一个网址时，设计师本机的材质库、画板、登录与 API key 会自动搬过来。
+> 上线见 [`DEPLOY.md`](./DEPLOY.md)，代码结构见 [`ARCHITECTURE.md`](./ARCHITECTURE.md)。
 
 ## 设计师怎么用
 
@@ -18,26 +19,34 @@
 2. **检查与修改** —— 左边整套页面，中间所见即所得，右边改字 / 换图 / 换版式（满版 ↔ 框图）/ 调材料；点画布上的字直接跳到对应输入框。
    材料在「材料清单」里改一次，所有页面同步。可开「对照原稿」逐页核对。有 API key 时可一键「AI 润色标题」。
 3. **Material Board 封面** —— 本案材料自动导入画板，可再加道具（客户故事），AI 实拍排版出图 → 「设为方案封面」。
-   也可以直接上传在 UKIR STUDIO 做好的 Material Board。
+   也可以直接上传现成的 Material Board 图片。
 4. **3D 全屋立体图（可选）** —— 上传平面布置图（图片或 PDF），选几张本层效果图做参考，AI 生成「像 The Sims 但写实」的整层立体剖切图，
    一键插进提案（或当楼层章节页背景），讲方案时客户一眼看懂整层动线。
-5. **导出 PPT** —— 一键下载 `.pptx`；还可以下载项目备份发给同事。
+5. **导出 PPT** —— 一键下载 `.pptx`；还可以下载项目备份（含 Material Board 画板）发给同事。
+
+### 只做 Material Board（不做提案）
+
+首页「Material Board · 材质排版图」：和旧版 UKIR STUDIO 一样 —— 我的材质库（上传 / AI 生成无缝样片）、多块画板、拖拽 / 缩放 / 旋转、
+整齐网格 / 杂志拼贴、AI 抠图、编号图例、标题、AI 实拍排版，下载高清 PNG（带 logo 水印）发 WhatsApp / 社媒 / 打印。
 
 ## 原稿怎么做，识别最准
 
 | 原稿习惯 | 生成结果 |
 |---|---|
-| 每页左上角写「空间名 + 英文」，如 `客厅 LIVING AREA`、`主人房U形衣橱+化妆台（白天）` | 标题「客厅」「主人房 · U形衣橱 · 化妆台 · 白天」+ 英文小标题 |
-| 楼层分隔页写 `GROUND FLOOR 一楼设计图` | 楼层章节页「一楼」+ 本层空间清单 |
+| 每页左上角写「空间名 + 英文」，如 `客厅 LIVING AREA`、`主人房U形衣橱+化妆台（白天）` | 标题「客厅」「主人房 · U 形衣橱 · 化妆台 · 白天」+ 英文小标题 |
+| 楼层分隔页写 `GROUND FLOOR 一楼设计图`（`1st Floor`、`1/F`、`二楼` 也认得） | 楼层章节页「一楼」+ 本层空间清单 |
 | 材料样板图旁边 / 上面写「柜体 & 柜门 / 浅川橡 AG273 /（待确认）」 | 材料行：样板 + 用途 + 名称 + 编号；待确认会在编辑器里标出 |
 | 效果图上的箭头标注文字 | 变成页面上的「设计说明」 |
 | 文件名 `2026.8.6 Muar - Mr Lau - GF L1.pdf` | 客户 Mr Lau、地点 Muar、日期 2026 · 08 |
 
+也认得：标题写在页面底部 / 效果图下方、竖版 A4、16:9、旋转 / 裁切过的图片、每页都有的页脚（网址、品牌、页码会自动忽略）。
+「导出为图片」或扫描的 PDF 读不到文字，效果图照样导入，空间名和材料需要手填（会提示）。
+
 ## 数据与费用
 
 - **全部在浏览器本机完成**：PDF 不上传任何服务器；项目与图片存在本机 IndexedDB。
-- **AI 是可选的**：不填 key 也能完整「上传 → 编辑 → 导出」。AI 润色 / Material Board 实拍排版 / 3D 立体图用 Google Gemini（与 UKIR STUDIO 同一种 key），按量计费。
-- 登录用 UKIR STUDIO 同一组账号密码。
+- **AI 是可选的**：不填 key 也能完整「上传 → 编辑 → 导出」。AI 润色 / Material Board 实拍排版 / 3D 立体图用 Google Gemini（与旧版 UKIR STUDIO 同一种 key），按量计费。
+- 登录用旧版 UKIR STUDIO 同一组账号密码。
 
 ## 公司固定页改版
 
@@ -54,7 +63,7 @@
 ```bash
 cd blueprint
 npm install
-npm run dev      # 本地开发
+npm run dev      # 本地开发（会先把 pdf.js 的中文 CMap 复制到 public/pdfjs/）
 npm test         # 纯函数 + 导出结构测试（Node）
 npm run build    # 生产构建到 dist/
 ```
