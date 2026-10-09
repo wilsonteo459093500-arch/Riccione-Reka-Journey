@@ -73,7 +73,8 @@ function notice() {
 }
 
 function daily(previous = []) {
-  const r = createReport(dailyReport, { project: P, settings: S, previous });
+  // 不带开工日期：否则「第几天」会按真实的今天推算，逐字比对随日期变化
+  const r = createReport(dailyReport, { project: { ...P, startDate: '' }, settings: S, previous });
   Object.assign(r.values, {
     date: '2026-10-08',
     todayWork: '鞋柜、主卧衣柜柜体安装完成',

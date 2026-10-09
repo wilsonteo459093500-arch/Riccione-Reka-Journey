@@ -6,6 +6,7 @@ import Editor from './components/Editor.jsx';
 import ExportScreen from './components/ExportScreen.jsx';
 import { ProjectList, ProjectEdit } from './components/Projects.jsx';
 import Settings from './components/Settings.jsx';
+import CrewLink from './components/CrewLink.jsx';
 import { useEffect } from 'react';
 import { UIProvider, Spinner, useUI } from './components/ui/UI.jsx';
 import { StoreProvider, useStore } from './lib/store.jsx';
@@ -93,6 +94,7 @@ function Screens() {
   }
 
   let m;
+  if ((m = match('/crew/:payload', path))) return <CrewLink key={m.payload} payload={m.payload} />;
   if ((m = match('/r/:id/export', path))) return <ExportScreen reportId={m.id} />;
   if ((m = match('/r/:id', path))) return <Editor key={m.id} reportId={m.id} />;
   if ((m = match('/projects/:id', path))) return <ProjectEdit key={m.id} projectId={m.id} />;

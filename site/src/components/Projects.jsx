@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import Icon from './ui/Icon.jsx';
 import { TopBar, Empty, useUI } from './ui/UI.jsx';
 import ProjectForm from './ProjectForm.jsx';
+import { CrewShare } from './CrewLink.jsx';
 import { useStore } from '../lib/store.jsx';
 import { siteLabel } from '../lib/report.js';
 import { getTemplate } from '../templates/index.js';
@@ -139,6 +140,17 @@ export function ProjectEdit({ projectId }) {
             }
           />
         </div>
+        {!isNew && !p.shared && (
+          <CrewShare
+            project={p}
+            ensureSaved={async () => {
+              const d = draft.current;
+              if (!dirty.current || !d || !(d.name || '').trim()) return null;
+              dirty.current = false;
+              return store.saveProject({ ...d, name: d.name.trim() });
+            }}
+          />
+        )}
         {!isNew && projReports.length > 0 && (
           <section className="mt-6">
             <div className="mb-2 px-1 text-[15px] font-bold text-ink">这个项目的报告</div>

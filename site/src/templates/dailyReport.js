@@ -3,7 +3,7 @@
 // 主输出 = text()（WhatsApp 文案）；字段标签带编号，PDF 读起来和文案一致。
 import { val } from './helpers.js';
 import { siteLabel } from '../lib/report.js';
-import { fmtDate, fmtDateDot } from '../lib/format.js';
+import { fmtDate, fmtDateDot, daysBetween } from '../lib/format.js';
 
 const ID = 'daily-report';
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
@@ -48,8 +48,11 @@ export function dayNumber(previous, date, { projectId, reportId } = {}) {
 
 /** 新建时自动带出预计工期（报告日期未定时按今天算） */
 export function autoDuration(ctx) {
-  const date = ctx.report?.values?.date || ctx.today;
-  const n = dayNumber(ctx.previous, date, { projectId: ctx.project?.id, reportId: ctx.report?.id });
+  const date = fmtDate(ctx.report?.values?.date || ctx.today);
+  let n = dayNumber(ctx.previous, date, { projectId: ctx.project?.id, reportId: ctx.report?.id });
+  // 这台手机上没有之前的汇报（如师傅换了手机 / 浏览器）：按项目开工日期推算第几天
+  const start = fmtDate(ctx.project?.startDate);
+  if (n === 1 && ISO.test(start) && ISO.test(date) && date > start) n = daysBetween(start, date) + 1;
   return durationText(ctx.project?.plannedDays, n);
 }
 

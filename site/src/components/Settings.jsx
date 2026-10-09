@@ -28,6 +28,8 @@ export default function Settings() {
   const [savedTick, setSavedTick] = useState(false);
   const fileRef = useRef(null);
   const editing = useRef(false);
+  // 只保存「我的资料」这几项：其他设置（如师傅模式）在别处改，不能被这里的旧快照盖回去
+  const mine = (f) => Object.fromEntries(ME.filter((x) => x.key in f).map((x) => [x.key, f[x.key]]));
 
   useEffect(() => {
     if (!editing.current) setForm(store.settings);
@@ -37,7 +39,7 @@ export default function Settings() {
   useEffect(() => {
     if (!editing.current) return undefined;
     const t = setTimeout(async () => {
-      await store.updateSettings(form);
+      await store.updateSettings(mine(form));
       editing.current = false;
       setSavedTick(true);
       setTimeout(() => setSavedTick(false), 1500);
@@ -57,7 +59,7 @@ export default function Settings() {
   // 离开设置页时还有没保存的改动 → 立刻保存
   useEffect(
     () => () => {
-      if (editing.current) store.updateSettings(formRef.current);
+      if (editing.current) store.updateSettings(mine(formRef.current));
     },
     [], // eslint-disable-line react-hooks/exhaustive-deps
   );
@@ -141,6 +143,23 @@ export default function Settings() {
                 </>
               )}
             </div>
+          </section>
+        )}
+
+        {(store.settings.crew || store.projects.some((p) => p.shared)) && (
+          <section className="card p-4">
+            <label className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                className="h-5 w-5 accent-terra"
+                checked={!!store.settings.crew}
+                onChange={(e) => store.updateSettings({ crew: e.target.checked })}
+              />
+              <span className="flex-1">
+                <span className="block text-[15px] font-bold text-ink">安装师傅模式</span>
+                <span className="block text-[12px] text-ink-mute">首页只显示每日汇报（用主管发的链接打开时自动开启）</span>
+              </span>
+            </label>
           </section>
         )}
 

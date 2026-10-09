@@ -9,6 +9,8 @@ import { createReport, duplicateReport, progress, siteLabel } from '../lib/repor
 import { fmtStamp } from '../lib/format.js';
 import { navigate } from '../lib/router.js';
 import { useInstallPrompt } from '../lib/install.js';
+import { CREW_TEMPLATE } from '../lib/crew.js';
+import { openCrewToday, CrewPaste } from './CrewLink.jsx';
 
 function TemplateCard({ t, onClick, wide }) {
   return (
@@ -71,6 +73,9 @@ export default function Home() {
   const isAndroid = /android/i.test(navigator.userAgent);
   const standalone = window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone;
   const install = useInstallPrompt();
+  const crew = !!store.settings.crew;
+  const sharedProjects = store.projects.filter((p) => p.shared);
+  const sharedBy = sharedProjects.find((p) => p.shared?.by?.name)?.shared.by;
   const [hideInstall, setHideInstall] = useState(() => {
     try {
       return localStorage.getItem('site.hideInstall') === '1';
@@ -183,7 +188,26 @@ export default function Home() {
             </div>
           </div>
         )}
-        {!store.settings.name && (
+        {crew && (
+          <div className="card mb-3 border-l-4 border-l-terra p-3">
+            <div className="text-[13px] leading-relaxed text-ink-soft">
+              <b className="text-ink">安装师傅</b>：每天收工前填好每日汇报，点「分享文案 + 照片」发到群里。
+            </div>
+            {sharedProjects.map((p) => (
+              <button key={p.id} className="btn-primary mt-2 w-full justify-start py-2.5 text-[14px]" onClick={() => openCrewToday(store, p)}>
+                <Icon name="CalendarCheck" size={17} className="shrink-0" />
+                <span className="truncate">填今天的汇报 · {siteLabel(p)}</span>
+              </button>
+            ))}
+            <div className="mt-2 flex items-center justify-between gap-2 text-[12px] text-ink-mute">
+              <span className="truncate">{sharedBy ? `项目由 ${[sharedBy.name, sharedBy.phone].filter(Boolean).join(' ')} 分享` : ''}</span>
+              <button className="shrink-0 font-semibold text-terra" onClick={() => store.updateSettings({ crew: false })}>
+                显示全部报告
+              </button>
+            </div>
+          </div>
+        )}
+        {!crew && !store.settings.name && (
           <button className="card mb-3 flex w-full items-center gap-3 border-l-4 border-l-terra p-3 text-left" onClick={() => navigate('/settings')}>
             <Icon name="Info" size={20} className="shrink-0 text-terra" />
             <div className="flex-1 text-[13px] leading-snug text-ink-soft">
@@ -194,7 +218,7 @@ export default function Home() {
         )}
 
         {GROUPS.map((g) => {
-          const ts = TEMPLATES.filter((t) => g.kinds.includes(t.kind));
+          const ts = TEMPLATES.filter((t) => g.kinds.includes(t.kind) && (!crew || t.id === CREW_TEMPLATE));
           if (!ts.length) return null;
           return (
             <section key={g.id} className="mb-5">
@@ -245,6 +269,7 @@ export default function Home() {
           )}
           {recent.length === 0 && <Empty icon="ClipboardList" title="还没有报告" hint="点上面任意一种报告开始填写。草稿会自动保存。" />}
         </section>
+        {store.projects.length === 0 && store.reports.length === 0 && <CrewPaste />}
       </main>
 
       <Sheet open={!!picking} onClose={() => setPicking(null)} title={picking ? `新建：${picking.name.zh}` : ''} tall>

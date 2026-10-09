@@ -241,6 +241,60 @@ try {
   await page.waitForTimeout(600);
   assert.equal(await page.getByText('刚才的照片没收到').count(), 0, '正常选了照片，重新加载后却提示没收到');
   console.log('✓ 回归：拍照时页面被系统关掉会提示并滚回原处；正常选照片不误报');
+
+  // ---- 师傅链接：主管在项目页复制链接 → 师傅新手机打开 → 直接进入今天的每日汇报 ----
+  await page.goto(`${BASE}/#/projects`);
+  await page.getByText('Tuai Timur Residence 17-3（Hailey）').first().click();
+  await page.getByText('发给安装师傅填每日汇报').waitFor();
+  await page.getByRole('button', { name: '复制链接' }).click();
+  await page.getByText(/链接已复制/).waitFor();
+  const crewUrl = (await page.evaluate(() => navigator.clipboard.readText())).replace(/^https?:\/\/[^/]+/, BASE);
+  assert.match(crewUrl, /#\/crew\/[A-Za-z0-9_-]+$/);
+  await shot('40-crew-share');
+  // 主管自己点开：打开自己项目的汇报，不切换成师傅模式
+  await page.goto(crewUrl);
+  await page.getByText('每日安装汇报').first().waitFor();
+  await page.goto(`${BASE}/#/`);
+  assert.ok((await page.locator('main button.card div.text-\\[15px\\]').count()) >= 7, '主管点自己的链接后首页报告变少了');
+
+  const crewCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'zh-CN' });
+  const crewPage = await crewCtx.newPage();
+  crewPage.on('pageerror', (e) => errors.push(`crew pageerror: ${e.message}`));
+  await crewPage.goto(crewUrl);
+  await crewPage.getByText('每日安装汇报').first().waitFor();
+  assert.match(await crewPage.locator('textarea').first().inputValue(), /Tuai Timur Residence/, '地址没有带入');
+  assert.equal(await crewPage.getByPlaceholder('例：预计 5 天（今天第 1 天）').inputValue(), '预计 5 天（今天第 1 天）');
+  await crewPage.getByPlaceholder(/当天工作内容/).fill('鞋柜、主卧衣柜柜体安装完成');
+  await crewPage.waitForTimeout(900);
+  await crewPage.screenshot({ path: join(OUT, '41-crew-editor.png') });
+  // 首页：师傅模式只显示每日汇报 + 一键「填今天的汇报」
+  await crewPage.goto(`${BASE}/#/`);
+  await crewPage.getByText('安装师傅').first().waitFor();
+  assert.equal(await crewPage.locator('main button.card div.text-\\[15px\\]').count(), 1, '师傅模式应只显示每日汇报');
+  await crewPage.screenshot({ path: join(OUT, '42-crew-home.png') });
+  await crewPage.getByRole('button', { name: /填今天的汇报/ }).click();
+  assert.equal(await crewPage.getByPlaceholder(/当天工作内容/).inputValue(), '鞋柜、主卧衣柜柜体安装完成', '应打开同一份汇报');
+  // 再点一次链接：还是同一份，不会多出一份
+  await crewPage.goto(crewUrl);
+  await crewPage.getByText('每日安装汇报').first().waitFor();
+  assert.equal(await crewPage.getByPlaceholder(/当天工作内容/).inputValue(), '鞋柜、主卧衣柜柜体安装完成');
+  const crewReports = await crewPage.evaluate(
+    () =>
+      new Promise((res) => {
+        const rq = indexedDB.open('sail-site');
+        rq.onsuccess = () => {
+          const g = rq.result.transaction('reports').objectStore('reports').getAll();
+          g.onsuccess = () => res(g.result.length);
+        };
+      }),
+  );
+  assert.equal(crewReports, 1, `师傅手机上应只有 1 份汇报，实际 ${crewReports}`);
+  // 文案可以发群
+  await crewPage.getByRole('button', { name: /生成文案/ }).click();
+  await crewPage.getByText('WhatsApp 文案').waitFor();
+  assert.match(await crewPage.locator('div.whitespace-pre-wrap').first().textContent(), /鞋柜、主卧衣柜柜体安装完成/);
+  await crewCtx.close();
+  console.log('✓ 师傅链接：主管复制 → 师傅新手机打开直达今天的汇报，再点不重复，师傅模式只显示每日汇报');
 } finally {
   writeFileSync(join(OUT, 'results.json'), JSON.stringify({ results, errors }, null, 2));
   await browser.close();
