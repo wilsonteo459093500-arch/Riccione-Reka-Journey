@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" data-lang="zh">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>股东名册 · DUDU 干爹干妈召集会</title>
+<meta name="robots" content="noindex, nofollow" />
+<meta name="theme-color" content="#14110F" />
+<link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;900&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/css/host.css" />
+</head>
+<body>
+
+<header class="h-top">
+  <div class="h-brand">
+    <span class="h-seal" aria-hidden="true">DUDU</span>
+    <div>
+      <p class="h-kicker">主人专用 · HOST ONLY</p>
+      <h1>股东名册</h1>
+    </div>
+  </div>
+  <div class="h-actions">
+    <button type="button" class="h-btn ghost" id="refreshBtn" hidden>刷新</button>
+    <button type="button" class="h-btn ghost" id="logoutBtn" hidden>登出</button>
+  </div>
+</header>
+
+<main class="h-main">
+
+  <!-- 登入 -->
+  <section class="h-card h-login" id="loginCard">
+    <h2>请输入主人密码</h2>
+    <p class="muted">密码就是 Vercel 里设定的 <code>PARTY_HOST_KEY</code>。这台手机会记住，下次不用再输。</p>
+    <form id="loginForm" autocomplete="off">
+      <input type="password" id="keyInput" inputmode="text" placeholder="主人密码" required />
+      <button type="submit" class="h-btn">打开名册</button>
+    </form>
+    <p class="h-msg" id="loginMsg" role="alert"></p>
+  </section>
+
+  <!-- 名册 -->
+  <div id="board" hidden>
+
+    <!-- 密码对了、但还没接存储：先让主人进来，告诉他怎么接 -->
+    <section class="h-card h-setup" id="setupCard" hidden>
+      <h2>名册还没接上存储</h2>
+      <p>密码对了 👍 只是 Vercel 还没帮名册开「仓库」，所以这里暂时看不到名单。</p>
+      <p><b>回复不会漏掉：</b>现在客人按「确认」，手机会自动打开 WhatsApp，把回复发给你。</p>
+      <p class="muted">想让名单自动出现在这里（大约 2 分钟）：</p>
+      <ol class="h-steps">
+        <li>按下面的按钮，打开 Vercel 的 <b>Storage</b> 页（要先登入 Vercel）</li>
+        <li><b>Create Database</b> → 选 <b>Blob</b> → Access 选 <b>Private</b> → <b>Create</b></li>
+        <li>问你连哪个项目时，选 <b>dudu-party</b> → <b>Connect</b></li>
+        <li>回到 <b>Deployments</b>，最新那条右边 <b>⋯</b> → <b>Redeploy</b>，再回来按「刷新」</li>
+      </ol>
+      <a class="h-btn" href="https://vercel.com/wilsonteo459093500-3777s-projects/dudu-party/stores" target="_blank" rel="noopener">打开 Vercel Storage</a>
+    </section>
+
+    <section class="h-stats needs-store" aria-label="人数">
+      <div class="stat big">
+        <span class="n" id="sPeople">0</span>
+        <span class="l">总人数<br /><small>大人 + 小孩</small></span>
+      </div>
+      <div class="stat">
+        <span class="n" id="sAdults">0</span>
+        <span class="l">大人<br /><small>大股东</small></span>
+      </div>
+      <div class="stat">
+        <span class="n" id="sKids">0</span>
+        <span class="l">小孩<br /><small>小股东</small></span>
+      </div>
+      <div class="stat">
+        <span class="n" id="sGroups">0</span>
+        <span class="l">出席户数<br /><small>几家人</small></span>
+      </div>
+      <div class="stat">
+        <span class="n" id="sDeclined">0</span>
+        <span class="l">来不了<br /><small>精神股东</small></span>
+      </div>
+      <div class="stat gold">
+        <span class="n" id="sPortions">0</span>
+        <span class="l">建议餐量<br /><small>小孩算半份</small></span>
+      </div>
+    </section>
+
+    <section class="h-card needs-store">
+      <h2>饮食需求 <small class="muted">订餐时注意</small></h2>
+      <ul class="h-diet" id="dietList"></ul>
+    </section>
+
+    <section class="h-card needs-store">
+      <div class="h-row">
+        <h2>名单 <small class="muted" id="listCount"></small></h2>
+        <div class="h-tools">
+          <button type="button" class="h-btn small" id="copyBtn">复制名单到 WhatsApp</button>
+          <button type="button" class="h-btn small ghost" id="csvBtn">下载 Excel (CSV)</button>
+        </div>
+      </div>
+      <div class="h-filter" role="group" aria-label="筛选">
+        <button type="button" data-filter="all" aria-pressed="true">全部</button>
+        <button type="button" data-filter="yes" aria-pressed="false">会来</button>
+        <button type="button" data-filter="no" aria-pressed="false">来不了</button>
+      </div>
+      <input type="search" id="searchInput" class="h-search" placeholder="搜名字…" />
+      <ol class="h-list" id="guestList"></ol>
+      <p class="muted center" id="emptyMsg" hidden>还没有人入股，先去群里转发吧！</p>
+    </section>
+
+    <section class="h-card">
+      <h2>发专属邀请 <small class="muted">封面会写上对方的名字</small></h2>
+      <div class="h-gen">
+        <input type="text" id="toInput" placeholder="朋友的名字，例：Ah Meng" maxlength="40" />
+        <label class="h-check"><input type="checkbox" id="enInput" /> 英文版</label>
+      </div>
+      <textarea id="genText" class="h-gen-text" rows="6" readonly></textarea>
+      <div class="h-tools">
+        <button type="button" class="h-btn small" id="genWa">用 WhatsApp 发</button>
+        <button type="button" class="h-btn small ghost" id="genCopy">复制文字</button>
+      </div>
+    </section>
+
+    <p class="muted center small" id="storageNote"></p>
+  </div>
+</main>
+
+<div class="h-toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="assets/js/config.js"></script>
+<script src="assets/js/core.js"></script>
+<script src="assets/js/host.js"></script>
+</body>
+</html>
