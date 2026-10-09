@@ -1,12 +1,15 @@
 // A4 分页渲染器：预览和 PDF 共用（所见即所得）
 // 流程：渲染隐藏测量层 → 读每个原子的高度 → paginate() 装页 → 渲染页面
-//       → 等所有 <img> 加载 / 解码完 → onLayout({ pages })
+//       → 等所有 <img> 加载 / 解码完 → onLayout({ pages, clipped })
+// 长文字按估算切块；实测仍有原子超过一页 → 把那段文字切得更小再测一次（最多 MAX_REFIT 次），
+// 还是放不下（不能切的内容）→ console.warn + clipped 计数，绝不静默裁掉。
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { buildAtoms, paginate } from './paginate.js';
+import { buildAtoms, paginate, overTall } from './paginate.js';
 import { Atom, ContHeader, Footer } from './blocks.jsx';
 import { C, FONT, PAGE_W, PAGE_H, PAD_X, PAD_TOP, FOOT_H, CONT_HEAD_H, CONTENT_W } from './theme.js';
 
 export const PAGE_GAP = 20; // 预览里页与页之间的间距（文档 px）
+const MAX_REFIT = 3;
 
 const NOPOS = { first: false, last: false };
 const EMPTY = {};
@@ -77,6 +80,7 @@ function Page({ items, atoms, heads, index, total, ctx, preview }) {
         </div>
       )}
       <div
+        data-page-body=""
         style={{
           position: 'absolute',
           left: PAD_X,
@@ -117,15 +121,20 @@ function Page({ items, atoms, heads, index, total, ctx, preview }) {
  *   model: DocModel,
  *   urls?: { [mediaId]: string },          // objectURL（照片 / 签名 / 视频封面）
  *   info?: { [mediaId]: { kind, caption, duration, w, h } },  // 可选：说明 / 时长 / 尺寸
- *   onLayout?: ({ pages, page }) => void,  // 排版完成且图片加载完后调用
+ *   onLayout?: ({ pages, page, clipped, refit }) => void,  // 排版完成且图片加载完后调用；
+ *                                          // clipped = 超过一页、被裁切的原子数（正常 0）；refit = 实测后重切了几轮
  *   preview?: boolean,                     // 预览：页间距 + 阴影
  *   only?: number,                         // 只渲染第 N 页（1 起；PDF 逐页截图省内存）
  * }} props
  */
 export default function DocPages({ model, urls = EMPTY, info = EMPTY, onLayout, preview = false, only = null }) {
-  const { atoms, heads } = useMemo(() => buildAtoms(model), [model]);
+  // 重切状态跟着 model 走：换了报告从头估算
+  const [refit, setRefit] = useState({ model: null, fit: EMPTY, pass: 0 });
+  const fit = refit.model === model ? refit.fit : EMPTY;
+  const pass = refit.model === model ? refit.pass : 0;
+  const { atoms, heads } = useMemo(() => buildAtoms(model, { fit }), [model, fit]);
   const headKeys = useMemo(() => Object.keys(heads), [heads]);
-  const [layout, setLayout] = useState(null); // { atoms, heads, info, pages }
+  const [layout, setLayout] = useState(null); // { atoms, heads, info, pages, clipped, refit }
   const measureRef = useRef(null);
   const rootRef = useRef(null);
   const cbRef = useRef(onLayout);
@@ -146,15 +155,40 @@ export default function DocPages({ model, urls = EMPTY, info = EMPTY, onLayout, 
     const run = () => {
       const el = measureRef.current;
       if (cancelled || !el) return;
-      const k = el.getBoundingClientRect().width / (el.offsetWidth || 1) || 1;
-      const hOf = (node) => (node ? node.getBoundingClientRect().height / k : 0);
+      // 读排版高度（getComputedStyle），不读 getBoundingClientRect：预览外面套了 transform: scale(390/794)，
+      // 缩放后读出的高度带浮点误差（离顶部越远越大），正好装满一页的原子会被挤到下一页 → 预览和 PDF 页数不一样。
+      // 取到 1/64px（浏览器排版单位），抵掉 computed style 只有 6 位有效数字的误差；宁多勿少
+      const hOf = (node) => (node ? Math.ceil((parseFloat(getComputedStyle(node).height) || 0) * 64 - 0.1) / 64 : 0);
       const heights = atoms.map((_, i) => hOf(el.querySelector(`[data-m="${i}"]`)));
       const headHeights = {};
       headKeys.forEach((g, i) => {
         headHeights[g] = hOf(el.querySelector(`[data-mh="${i}"]`));
       });
+      const over = overTall(atoms, heights, headHeights);
+      if (over.length && pass < MAX_REFIT) {
+        // 估算偏小（字体 / 换行和预想不同）：按实测比例把这段文字切小，再测一次
+        const next = { ...fit };
+        let changed = false;
+        for (const { i, room } of over) {
+          const k = Math.min(0.8, (room / heights[i]) * 0.85);
+          for (const key of [].concat(atoms[i].fit || [])) {
+            next[key] = Math.min(next[key] ?? 1, (fit[key] ?? 1) * k);
+            changed = true;
+          }
+        }
+        if (changed) {
+          setRefit({ model, fit: next, pass: pass + 1 });
+          return;
+        }
+      }
+      if (over.length) {
+        console.warn(
+          `[doc] ${over.length} 处内容超过一页高度，页面里会被截断：`,
+          over.map(({ i }) => `${atoms[i].kind}#${i} ${Math.round(heights[i])}px`).join(', '),
+        );
+      }
       const pages = paginate(atoms, heights, headHeights);
-      setLayout({ atoms, heads, info, pages });
+      setLayout({ atoms, heads, info, pages, clipped: over.length, refit: pass });
     };
     const ready = typeof document !== 'undefined' && document.fonts?.ready ? document.fonts.ready : Promise.resolve();
     ready.then(
@@ -164,7 +198,7 @@ export default function DocPages({ model, urls = EMPTY, info = EMPTY, onLayout, 
     return () => {
       cancelled = true;
     };
-  }, [stale, atoms, heads, headKeys, info]);
+  }, [stale, atoms, heads, headKeys, info, fit, pass, model]);
 
   // 页面渲染完 + 图片加载完 → onLayout
   useEffect(() => {
@@ -173,7 +207,7 @@ export default function DocPages({ model, urls = EMPTY, info = EMPTY, onLayout, 
     const root = rootRef.current;
     const imgs = root ? [...root.querySelectorAll('[data-page] img')] : [];
     Promise.all(imgs.map((img) => waitImage(img))).then(() => {
-      if (alive && cbRef.current) cbRef.current({ pages: layout.pages.length, page: only || null });
+      if (alive && cbRef.current) cbRef.current({ pages: layout.pages.length, page: only || null, clipped: layout.clipped || 0, refit: layout.refit || 0 });
     });
     return () => {
       alive = false;

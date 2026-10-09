@@ -60,8 +60,9 @@ const C = {
   photoBg: 'FCFAF6',
   terracotta: 'B5623A',
 };
-const TONE = { pass: '3F7A4F', fail: 'B8452F', na: '8A857C', warn: 'B5623A', neutral: '55524B' };
-const TINT = { pass: 'EAF2EC', fail: 'F8E5E0', na: 'F1EFEA', warn: 'F8EDE4', neutral: 'F8F4EB' };
+// warn 用 PDF（components/doc/theme.js）的琥珀色：与 fail 的红区分开（有条件开工 ≠ NO-GO）
+const TONE = { pass: '3F7A4F', fail: 'B8452F', na: '8A857C', warn: 'B7791F', neutral: '55524B' };
+const TINT = { pass: 'EAF2EC', fail: 'F8E5E0', na: 'F1EFEA', warn: 'FBF3E1', neutral: 'F8F4EB' };
 
 const FONT = { ascii: 'Arial', hAnsi: 'Arial', eastAsia: 'Microsoft YaHei', cs: 'Arial' };
 // ☑ ☐ ★ ▶ 用符号字体：Windows Word 显示为单色字形，可按结果着色（缺字体时由系统替换）
@@ -242,6 +243,26 @@ function TC(children, o = {}) {
     margins: o.margins,
   });
 }
+
+// 「行不可跨页」只给不太高的行：Word 里不可拆分的行若比一页还高，超出页底的部分直接被裁掉
+// （LibreOffice 有时也会裁），所以长备注 / 长文本所在的行按估算高度改成允许跨页拆开。
+const LONG_MM = 100; // 约 25 行 8pt 文字；整页正文约 270mm，估算偏小一倍也不会超页
+
+/** 估算文字在 width（DXA）宽的格子里排出来的高度（mm）：显式换行 + 按字宽折行 */
+function textH(text, pt, width) {
+  const s = clean(text);
+  if (!s.trim()) return 0;
+  const per = Math.max(5, width / MM);
+  let n = 0;
+  for (const ln of s.replace(/\r\n?/g, '\n').split('\n')) n += Math.max(1, Math.ceil(textMm(ln, pt) / per));
+  return n * pt * 0.3528 * 1.4;
+}
+
+/** 双语文字（中文一段 + 英文一段）的估算高度 */
+const biH = (x, width, zhPt = 8, enPt = 7) => {
+  const l = lab(x);
+  return textH(l.zh, zhPt, width) + textH(l.en, enPt, width);
+};
 
 function TR(cells, o = {}) {
   return new TableRow({
@@ -583,11 +604,11 @@ function sectionHead(b, A, counts) {
   return kids ? [box(kids, { fill: C.cream2, left: line(A, 24), margins: HEAD_MARGINS }), gap(80, true)] : [];
 }
 
-/** 整块不分页：单格无框表格 + 行不可拆分（统计 / 签名这类短块） */
-function keepTogether(children) {
+/** 整块不分页：单格无框表格 + 行不可拆分（统计 / 签名这类短块）；split = 内容很长，允许跨页 */
+function keepTogether(children, split = false) {
   const kids = [...children];
   if (!(kids[kids.length - 1] instanceof Paragraph)) kids.push(gap(20));
-  return TBL([TW], [TR([TC(kids, { w: TW, top: true, borders: { top: NIL, bottom: NIL, left: NIL, right: NIL } })])], {
+  return TBL([TW], [TR([TC(kids, { w: TW, top: true, borders: { top: NIL, bottom: NIL, left: NIL, right: NIL } })], { cantSplit: !split })], {
     borders: NO_BORDERS,
     margins: { top: 0, bottom: 0, left: 0, right: 0 },
   });
@@ -614,6 +635,13 @@ function fieldValue(f, M, width, A, o = {}) {
 
 /** 照片超过两行（> 8 张）的字段：所在行允许跨页拆开 */
 const manyPhotos = (f, M) => f.kind === 'photos' && avail(f.photos, M).length > 8;
+
+/** 字段值文字的估算高度（mm）；照片 / 视频按张数另算（manyPhotos） */
+function fieldH(f, width, size = 9) {
+  if (f.kind === 'list') return sum((f.lines || []).map((ln) => textH(ln, size, width - 220)));
+  if (f.kind === 'photos' || f.kind === 'video') return 0;
+  return textH(f.value, size, width);
+}
 
 /** 网格信息栏：奶油底标签格 + 值格，按 columns / span 排 */
 function fieldsGrid(b, M, A) {
@@ -644,15 +672,17 @@ function fieldsGrid(b, M, A) {
     if (u < cols) r[r.length - 1].span += cols - u;
     const cells = [];
     let gi = 0;
+    let h = 0;
     for (const { f, span } of r) {
       const vw = sum(widths.slice(2 * gi + 1, 2 * (gi + span)));
       const isMedia = (f.kind === 'photos' || f.kind === 'video') && !f.empty;
       cells.push(TC(P(bi(f.label, { zhSize: 8, bold: true, enSize: 6.5 }), { before: isMedia ? 40 : 0 }), { w: widths[2 * gi], fill: C.cream, top: isMedia }));
       cells.push(TC(fieldValue(f, M, vw - 2 * PAD, A), { w: vw, span: 2 * span - 1, top: isMedia }));
+      h = Math.max(h, fieldH(f, vw - 2 * PAD));
       gi += span;
     }
-    // 照片很多的行允许跨页拆开，其余行不拆
-    return TR(cells, { minH: 440, cantSplit: !r.some((x) => manyPhotos(x.f, M)) });
+    // 照片很多 / 文字很长的行允许跨页拆开，其余行不拆
+    return TR(cells, { minH: 440, cantSplit: !(h > LONG_MM || r.some((x) => manyPhotos(x.f, M))) });
   });
   return TBL(widths, [...headRows(b, A, { span: widths.length }), ...trs]);
 }
@@ -665,7 +695,8 @@ function fieldsList(b, M, A) {
     const kids = [P(bi(f.label, { zhSize: 9.5, bold: true, enSize: 7.5 }), { before: i ? 140 : 60, after: 40 })];
     const vals = fieldValue(f, M, TW, A, { size: 10 });
     kids.push(...(vals.length ? vals : [P(T('—', { size: 10, color: C.faint }))]));
-    rows.push(TR([TC(kids, { w: TW, top: true, margins: { top: 0, bottom: 0, left: 0, right: 0 } })], { cantSplit: !manyPhotos(f, M) }));
+    const long = manyPhotos(f, M) || fieldH(f, TW, 10) > LONG_MM;
+    rows.push(TR([TC(kids, { w: TW, top: true, margins: { top: 0, bottom: 0, left: 0, right: 0 } })], { cantSplit: !long }));
   });
   return TBL([TW], rows, { borders: NO_BORDERS });
 }
@@ -832,18 +863,28 @@ function checklistTable(b, M, A) {
     const keep = avail(r.photos, M).length > 0; // 有照片：本行与照片行同页
     const failed = r.result?.tone === 'fail';
     const cells = [];
+    let h = 0; // 本行最高一格的估算高度（mm）
     for (const c of cols.slice(0, resIdx)) {
       if (c.k === 'no') {
         cells.push(TC(P(T(r.no ?? '', { size: 8, bold: true, color: C.muted }), { align: AlignmentType.CENTER, keep }), { w: c.w }));
-      } else if (c.k === 'item') cells.push(TC(itemParas(r, b, A, keep), { w: c.w }));
-      else if (c.k === 'std') cells.push(TC(biParas(r.desc, { keep }), { w: c.w }));
-      else if (c.k === 'method') cells.push(TC(biParas(r.method, { keep }), { w: c.w }));
+      } else if (c.k === 'item') {
+        cells.push(TC(itemParas(r, b, A, keep), { w: c.w }));
+        h = Math.max(h, biH(r.title, c.w - 2 * PAD, 9, 7.5) + (b.showStandard ? 0 : biH(r.desc, c.w - 2 * PAD)));
+      } else if (c.k === 'std') {
+        cells.push(TC(biParas(r.desc, { keep }), { w: c.w }));
+        h = Math.max(h, biH(r.desc, c.w - 2 * PAD));
+      } else if (c.k === 'method') {
+        cells.push(TC(biParas(r.method, { keep }), { w: c.w }));
+        h = Math.max(h, biH(r.method, c.w - 2 * PAD));
+      }
     }
     if (r.input) {
       // 填写型：值横跨「结果 + 备注」
       const kids = [...inputParas(r, keep)];
       if (r.remark) kids.push(P([T('备注 ', { size: 7, color: C.muted }), ...TL(r.remark, { size: 8, color: C.body })], { keep, before: 30 }));
       cells.push(TC(kids, { w: resW + remW, span: nRes + 1 }));
+      const vw = resW + remW - 2 * PAD;
+      h = Math.max(h, textH(r.lines?.length ? r.lines.join('\n') : r.value, 8.5, vw) + textH(r.remark, 8, vw));
     } else {
       if (b.resultLayout === 'columns' && sameOptions(r.options, b.options)) {
         cols.slice(resIdx, resIdx + nRes).forEach((c) => {
@@ -862,8 +903,10 @@ function checklistTable(b, M, A) {
         cells.push(TC(inlineOptions(r, keep, { width: resW - 2 * PAD, align }), { w: resW, span: nRes, fill: failed ? TINT.fail : undefined }));
       }
       cells.push(TC(remarkParas(r.remark, keep), { w: remW }));
+      h = Math.max(h, textH(r.remark, 8, remW - 2 * PAD));
     }
-    rows.push(TR(cells));
+    // 备注 / 填写内容很长的行允许跨页拆开（否则 Word 裁掉超出一页的部分）
+    rows.push(TR(cells, { cantSplit: h <= LONG_MM }));
     const pr = photoRow(r, M, cols.length);
     if (pr) rows.push(pr);
   }
@@ -885,14 +928,19 @@ function ticksTable(b, M, A) {
       kids.push(P([T('备注 Remarks：', { size: 7, bold: true, color: C.muted }), ...TL(r.remark, { size: 8, color: C.body })], { keep, before: 30 }));
     }
     const mark = r.input || r.options.length > 1 ? '' : sel ? BOX_ON : BOX_OFF;
+    const vw = widths[1] - 2 * PAD;
+    const h = biH(r.title, vw, 9, 7.5) + biH(r.desc, vw) + (r.input ? textH(r.lines?.length ? r.lines.join('\n') : r.value, 8.5, vw) : 0) + textH(r.remark, 8, vw);
     rows.push(
-      TR([
-        TC(P(T(mark, { size: 11, bold: !!sel, color: tone, font: SYM }), { align: AlignmentType.CENTER, keep }), {
-          w: widths[0],
-          fill: sel?.tone === 'fail' ? TINT.fail : C.cream,
-        }),
-        TC(kids, { w: widths[1] }),
-      ]),
+      TR(
+        [
+          TC(P(T(mark, { size: 11, bold: !!sel, color: tone, font: SYM }), { align: AlignmentType.CENTER, keep }), {
+            w: widths[0],
+            fill: sel?.tone === 'fail' ? TINT.fail : C.cream,
+          }),
+          TC(kids, { w: widths[1] }),
+        ],
+        { cantSplit: h <= LONG_MM },
+      ),
     );
     const pr = photoRow(r, M, 2);
     if (pr) rows.push(pr);
@@ -944,11 +992,16 @@ function tableBlock(b, M, A) {
     b.rows.forEach((r, i) => {
       const photos = photoGroupsContent(r, M);
       const keep = !!photos;
+      // 单元格文字很长（如 1800 字问题描述）的行允许跨页拆开
+      const h = Math.max(0, ...b.columns.map((c, j) => textH(r.cells?.[c.key] ?? '', 8, widths[j + 1] - 2 * PAD)));
       rows.push(
-        TR([
-          TC(P(T(String(i + 1), { size: 8, bold: true, color: C.muted }), { align: AlignmentType.CENTER, keep }), { w: noW }),
-          ...b.columns.map((c, j) => TC(P(TL(r.cells?.[c.key] ?? '', { size: 8 }), { keep }), { w: widths[j + 1] })),
-        ]),
+        TR(
+          [
+            TC(P(T(String(i + 1), { size: 8, bold: true, color: C.muted }), { align: AlignmentType.CENTER, keep }), { w: noW }),
+            ...b.columns.map((c, j) => TC(P(TL(r.cells?.[c.key] ?? '', { size: 8 }), { keep }), { w: widths[j + 1] })),
+          ],
+          { cantSplit: h <= LONG_MM },
+        ),
       );
       if (photos) {
         const n = avail(r.photos, M).length;
@@ -993,6 +1046,8 @@ function summaryBlock(b, A) {
     if (ti) out.push(gap(20));
     out.push(TBL(ws, [TR(cells, { minH: 680 })], { borders: tileBorders, margins: { top: 70, bottom: 70, left: 80, right: 80 } }));
   });
+  // 长清单（如复尺「待处理」带用户备注）可能很长：估算高度，太高时行 / 整块都允许跨页
+  let longH = 0;
   if (longs.length) {
     if (tiers.length) out.push(gap(60));
     const ws = [2500, TW - 2500];
@@ -1001,10 +1056,15 @@ function summaryBlock(b, A) {
         ws,
         longs.map((it) => {
           const tone = TONE[it.tone] ? it.tone : 'neutral';
-          return TR([
-            TC(P(bi(it.label, { zhSize: 8, bold: true, zhColor: C.body, enSize: 6.5 })), { w: ws[0], fill: TINT[tone], borders: { left: line(TONE[tone], 18) } }),
-            TC(P(TL(it.value ?? '', { size: 8.5, color: TONE[tone] })), { w: ws[1] }),
-          ]);
+          const h = textH(it.value ?? '', 8.5, ws[1] - 2 * PAD);
+          longH += h;
+          return TR(
+            [
+              TC(P(bi(it.label, { zhSize: 8, bold: true, zhColor: C.body, enSize: 6.5 })), { w: ws[0], fill: TINT[tone], borders: { left: line(TONE[tone], 18) } }),
+              TC(P(TL(it.value ?? '', { size: 8.5, color: TONE[tone] })), { w: ws[1] }),
+            ],
+            { cantSplit: h <= LONG_MM },
+          );
         }),
       ),
     );
@@ -1016,9 +1076,10 @@ function summaryBlock(b, A) {
     const head = c.label ? bi(c.label, { zhSize: 9, bold: true, enSize: 7.5 }) : [T('结论 ', { size: 9, bold: true }), T('Conclusion', { size: 7.5, color: C.muted })];
     const kids = [P([...head, T('：', { size: 9 }), T(clean(c.value), { size: 11, bold: true, color: TONE[tone] })])];
     if (c.note) kids.push(P(TL(c.note, { size: 8, color: C.body }), { before: 40 }));
+    longH += textH(c.note, 8, TW - 360);
     out.push(gap(80), box(kids, { fill: TINT[tone], left: line(TONE[tone], 24), margins: { top: 90, bottom: 90, left: 180, right: 180 } }));
   }
-  return [keepTogether(out)];
+  return [keepTogether(out, longH > LONG_MM)];
 }
 
 // ---------- 说明 note ----------

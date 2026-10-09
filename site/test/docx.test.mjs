@@ -317,6 +317,102 @@ tests.push([
   },
 ]);
 
+// ---------- 长内容：行可跨页 ----------
+/** document.xml 里每个 <w:tr>（含嵌套表）→ { cant: 本行 trPr 有 cantSplit, text } */
+function rowsOf(xml) {
+  const out = [];
+  const st = [];
+  for (const m of xml.matchAll(/<w:tr\b[^>]*>|<\/w:tr>/g)) {
+    if (m[0] !== '</w:tr>') {
+      st.push(m.index + m[0].length);
+      continue;
+    }
+    const body = xml.slice(st.pop(), m.index);
+    const own = /^\s*(?:<w:tblPrEx>.*?<\/w:tblPrEx>)?\s*<w:trPr>(.*?)<\/w:trPr>/s.exec(body);
+    const t = [...body.matchAll(/<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>/g)].map((x) => x[1]).join('');
+    out.push({ cant: !!own && /<w:cantSplit\/>/.test(own[1]), text: t });
+  }
+  return out;
+}
+
+const longText = (n) => '现场检查发现柜门铰链松动需要重新调整并复检确认安装位置正确。'.repeat(Math.ceil(n / 30)).slice(0, n) + '【END】';
+const firstItem = (t, pred = (it) => !it.input) => t.sections.filter((s) => s.type === 'checklist').flatMap((s) => s.items).find(pred);
+
+tests.push([
+  '长备注 / 长文本所在的行允许跨页（Word 会裁掉比一页还高的不可拆分行），短行仍不拆',
+  async () => {
+    const cases = [
+      ['qualityCheck', '质检备注 1225 字', (t, r) => { r.items[firstItem(t).id] = { r: 'F', note: longText(1225) }; }],
+      ['qualityCheck', '信息栏字段 1500 字', (t, r) => { r.values.installer = longText(1500); }],
+      ['finalInspection', '整改描述 1800 字', (t, r) => { r.tables.rectification = [{ desc: longText(1800) }]; }],
+      ['preInstall', '填写项 2400 字', (t, r) => { r.items[firstItem(t, (x) => x.input?.type === 'textarea').id] = { value: longText(2400) }; }],
+      ['preInstall', '填写项 90 行', (t, r) => {
+        r.items[firstItem(t, (x) => x.input?.type === 'textarea').id] = { value: Array.from({ length: 90 }, (_, i) => `${i + 1}. 已完成`).join('\n') + '\n【END】' };
+      }],
+      ['dailyReport', '今日内容 120 行短句', (t, r) => { r.values.todayWork = Array.from({ length: 120 }, (_, i) => `${i + 1}号柜OK`).join('\n') + '\n【END】'; }],
+      ['siteNotice', '14 条长规定', (t, r) => {
+        r.values.rules = Array.from({ length: 14 }, (_, i) => `第 ${i + 1} 条：` + '走廊、电梯、单位地面先铺保护垫再搬运；垃圾当天清走；'.repeat(8) + (i === 13 ? '【END】' : ''));
+      }],
+      ['handover', '打勾清单备注 1500 字', (t, r) => { r.items[firstItem(t).id] = { r: 'Y', note: longText(1500) }; }],
+      ['measurement', '补充记录 3000 字', (t, r) => { r.values.notes = longText(3000); }],
+      // 统计「待处理」会把 6 条备注原文列出来：统计块本身超过一页
+      ['measurement', '6 条长备注（统计块）', (t, r) => {
+        const its = t.sections.filter((s) => s.type === 'checklist').flatMap((s) => s.items.filter((i) => !i.input)).slice(0, 6);
+        for (const it of its) r.items[it.id] = { r: 'N', note: longText(1500) };
+      }],
+    ];
+    for (const [file, what, fill] of cases) {
+      const t = await loadTemplate(file);
+      if (!t) continue;
+      const { files, doc } = await exportAndOpen(t, 'empty', {
+        mutate(r) {
+          r.items = r.items || {};
+          r.tables = r.tables || {};
+          r.values = r.values || {};
+          fill(t, r);
+        },
+      });
+      checkPackage(files, `long ${file} ${what}`);
+      const rows = rowsOf(doc);
+      const hold = rows.filter((x) => x.text.includes('【END】'));
+      assert.ok(hold.length >= 1, `${what}：document.xml 里找不到长文字`);
+      assert.deepEqual(hold.filter((x) => x.cant).length, 0, `${what}：长文字所在的行（含外层）不应设 cantSplit`);
+      // 其余短行（空白报告里没有 > 8 张照片的行）保持不拆
+      const loose = rows.filter((x) => !x.cant && !x.text.includes('【END】'));
+      assert.deepEqual(loose.map((x) => x.text.slice(0, 40)), [], `${what}：短行应保持 cantSplit`);
+    }
+  },
+]);
+
+tests.push([
+  '有条件开工（warn）用琥珀色，与 NO-GO（fail）区分',
+  async () => {
+    const t = await loadTemplate('preInstall');
+    if (!t) return;
+    const items = t.sections.filter((s) => s.type === 'checklist' && s.id !== 'decision').flatMap((s) => s.items.filter((i) => !i.input));
+    const box = async (failKey) => {
+      const { model, doc } = await exportAndOpen(t, 'full', {
+        mutate(r) {
+          for (const it of items) r.items[it.id] = { r: 'P' };
+          r.items[items.find((i) => !!i.key === failKey).id] = { r: 'F', note: '异常' };
+        },
+      });
+      const c = model.blocks.find((b) => b.type === 'summary').conclusion;
+      const at = doc.indexOf(`>${c.value}<`);
+      assert.ok(at > 0, `找不到结论「${c.value}」`);
+      const tcPr = doc.slice(doc.lastIndexOf('<w:tc>', at), at);
+      return { tone: c.tone, fill: /w:fill="([0-9A-F]{6})"/.exec(tcPr)?.[1], bar: /<w:left [^>]*w:color="([0-9A-F]{6})"/.exec(tcPr)?.[1] };
+    };
+    const cond = await box(false);
+    const nogo = await box(true);
+    assert.equal(cond.tone, 'warn');
+    assert.equal(nogo.tone, 'fail');
+    // 与 PDF（components/doc/theme.js）的 warn 一致
+    assert.deepEqual({ fill: cond.fill, bar: cond.bar }, { fill: 'FBF3E1', bar: 'B7791F' });
+    assert.deepEqual({ fill: nogo.fill, bar: nogo.bar }, { fill: 'F8E5E0', bar: 'B8452F' });
+  },
+]);
+
 tests.push([
   '模型缺字段（无 blocks / 空 meta）→ 不抛错',
   async () => {

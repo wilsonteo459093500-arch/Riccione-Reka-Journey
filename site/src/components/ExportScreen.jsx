@@ -175,6 +175,8 @@ export default function ExportScreen({ reportId }) {
       });
       genAt.current[fmt] = report.updatedAt;
       setFiles((f) => ({ ...f, [fmt]: { status: 'ready', ...out } }));
+      // 极端长的内容（一格就超过一页又切不开）PDF 里会显示不全：明确告诉用户，不静默裁掉
+      if (out.blob?.clipped > 0) toast(`有 ${out.blob.clipped} 处内容太长，PDF 里显示不全，请把那段文字分开写`, 'warn');
     } catch (e) {
       console.error(e);
       setFiles((f) => ({ ...f, [fmt]: { status: 'error', error: e.message || String(e) } }));

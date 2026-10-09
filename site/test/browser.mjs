@@ -1,4 +1,6 @@
-// 浏览器测试：每个模板 × full / empty → 生成 PDF + 手机宽度预览截图（npm run test:browser）
+// 浏览器测试：每个模板 × full / empty / long → 生成 PDF + 手机宽度预览截图（npm run test:browser）
+// 每页内容都不能溢出（溢出 = 被裁掉）；long（超长备注 / 填写 / 单元格 / 多行文字）另查每段末尾标记都看得到、
+// 手机预览缩放后分页和 PDF 一样。
 // 产物：test/out/<id>-<variant>.pdf、test/out/<id>-preview.png
 // 用法：node test/browser.mjs [模板 id 子串]
 import { createServer } from 'vite';
@@ -12,7 +14,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'test', 'out');
 mkdirSync(OUT, { recursive: true });
 const only = process.argv[2];
-const VARIANTS = (process.env.VARIANTS || 'full,empty').split(',');
+const VARIANTS = (process.env.VARIANTS || 'full,empty,long').split(',');
 
 async function loadPlaywright() {
   try {
@@ -48,6 +50,37 @@ async function templateIds() {
 
 const pdfPages = (buf) => (buf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length;
 
+/** 预览里每页内容框的溢出（scrollHeight > clientHeight = 有内容被裁掉） */
+const overflowed = (page) =>
+  page.evaluate(() =>
+    [...document.querySelectorAll('[data-page-body]')]
+      .map((b, i) => ({ page: i + 1, over: b.scrollHeight - b.clientHeight }))
+      .filter((x) => x.over > 0),
+  );
+
+/** 标记文字是否在某页内容框的可见区域里（DOM 里有但被裁掉的不算） */
+const invisibleMarkers = (page) =>
+  page.evaluate(() =>
+    (window.__longMarkers || []).filter(
+      (mk) =>
+        ![...document.querySelectorAll('[data-page-body]')].some((box) => {
+          const cb = box.getBoundingClientRect();
+          const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT);
+          let n;
+          while ((n = walker.nextNode())) {
+            const at = n.data.indexOf(mk);
+            if (at < 0) continue;
+            const rg = document.createRange();
+            rg.setStart(n, at);
+            rg.setEnd(n, at + mk.length);
+            const r = rg.getBoundingClientRect();
+            if (r.height > 0 && r.top >= cb.top - 1 && r.bottom <= cb.bottom + 1) return true;
+          }
+          return false;
+        }),
+    ),
+  );
+
 const ids = (await templateIds()).filter((id) => !only || id.includes(only));
 const { chromium } = await loadPlaywright();
 const server = await createServer({ root: ROOT, logLevel: 'error', server: { port: 0, host: '127.0.0.1' } });
@@ -73,6 +106,22 @@ try {
         await page.getByText('与导出的 PDF 一致').waitFor({ timeout: 60000 });
         const previewPages = await page.locator('[data-page]').count();
         assert.ok(previewPages >= 1, '预览没有页面');
+        const over = await overflowed(page);
+        assert.deepEqual(over, [], `内容超出页面被裁掉：${JSON.stringify(over)}`);
+        if (variant === 'long') {
+          const marks = await page.evaluate(() => window.__longMarkers.length);
+          assert.ok(marks > 0, 'long 变体没有标记');
+          const missing = await invisibleMarkers(page);
+          assert.deepEqual(missing, [], `长内容末尾看不到（被裁掉 / 丢了）：${missing.join(' ')}`);
+          // 没封面的视频显示「视频 Video」占位、0 字节照片显示「照片缺失」占位（不是坏图）
+          if (await page.evaluate(() => window.__model.blocks.some((b) => b.type === 'checklist'))) {
+            assert.ok((await page.getByText('视频 Video', { exact: true }).count()) >= 1, '没封面的视频没有显示占位');
+            assert.ok((await page.getByText('照片缺失 Missing', { exact: true }).count()) >= 1, '0 字节照片没有显示「缺失」');
+          }
+          // 手机预览缩放（343 / 366 / 390px 宽）和 PDF（不缩放）每页内容一样，包括几十页的全部超长报告
+          const diffs = await page.evaluate(() => window.__scaleCheck());
+          assert.deepEqual(diffs, [], `预览缩放后分页和 PDF 不一样：${diffs.join('；')}`);
+        }
         if (variant === 'full') {
           await page.waitForTimeout(150);
           await page.screenshot({ path: join(OUT, `${id}-preview.png`), fullPage: true });
@@ -84,6 +133,7 @@ try {
         assert.ok(n >= 1, 'PDF 没有页面');
         assert.equal(n, previewPages, `PDF 页数 ${n} ≠ 预览页数 ${previewPages}`);
         const ms = await page.evaluate(() => window.__exportMs);
+        assert.equal(await page.evaluate(() => window.__exportClipped), 0, 'PDF 里有内容被截断（clipped > 0）');
         writeFileSync(join(OUT, `${id}-${variant}.pdf`), buf);
         // 每页一张图（发群用）：只抽第一个模板测，省时间
         if (id === ids[0] && variant === VARIANTS[0]) {
@@ -91,6 +141,13 @@ try {
           assert.equal(imgs.length, n, '图片张数 ≠ 页数');
           for (const b of imgs) assert.ok(b.startsWith('/9j/'), '不是 JPEG');
           writeFileSync(join(OUT, `${id}-page1.jpg`), Buffer.from(imgs[0], 'base64'));
+          // 截图失败：中文提示、不漏 html2canvas 克隆 iframe；偶发失败降分辨率重试成功
+          const f = await page.evaluate(() => window.__exportFailures());
+          assert.match(f.permanent, /内存不足/, `截图失败的提示不对：${f.permanent}`);
+          assert.equal(f.leakedAfterPermanent, 0, '截图失败后留下了 html2canvas iframe');
+          assert.equal(f.transient, 'ok', '偶发截图失败没有重试成功');
+          assert.ok(f.transientRetried, '偶发截图失败没有走重试');
+          assert.equal(f.leakedAfterTransient, 0, '重试后留下了 html2canvas iframe');
         }
         assert.deepEqual(errors, [], errors.join('\n'));
         pass += 1;

@@ -1,6 +1,10 @@
 // 文档原子渲染（A4 页面里的每一小块）。全部用内联样式 + 整数 px 行高：
 // html2canvas 截图稳定，测量高度 = 实际高度。
 import { C, TONE, tone, PHOTO, CONTENT_W, LOGO_SRC, LOGO_RATIO } from './theme.js';
+import { clLayout, tblLayout, GRID_LABEL_W, LONG_VALUE } from './paginate.js';
+
+// 列宽和分页切块共用（paginate.js 按同样的列宽估算长文字折行）
+export { clLayout, tblLayout };
 
 // ---------- 小工具 ----------
 const zhOf = (l) => (l == null ? '' : typeof l === 'string' ? l : l.zh || '');
@@ -118,7 +122,8 @@ function Bi({ v, zh = 10, en = 8.5, zhLh = 14, enLh = 12, bold = true, color = C
   );
 }
 
-function Bullets({ lines, size = 11, lh = 17, color = C.ink, dot = C.terra }) {
+/** 逐行圆点列表；contFirst = 第一行是上一块那条的后半截（不画圆点，缩进照旧） */
+function Bullets({ lines, size = 11, lh = 17, color = C.ink, dot = C.terra, contFirst = false }) {
   return (
     <div>
       {lines.map((s, i) => (
@@ -129,7 +134,7 @@ function Bullets({ lines, size = 11, lh = 17, color = C.ink, dot = C.terra }) {
               width: 4,
               height: 4,
               borderRadius: 2,
-              background: dot,
+              background: contFirst && i === 0 ? 'transparent' : dot,
               marginTop: Math.round(lh / 2 - 2),
               marginRight: 8,
             }}
@@ -506,19 +511,6 @@ function SecHead({ atom, ctx }) {
 
 // ---------- 检查表 ----------
 
-/** 检查表列宽 */
-export function clLayout(b) {
-  const NO = 34;
-  const std = b.showStandard ? 160 : 0;
-  const meth = b.showMethod ? 122 : 0;
-  const n = (b.options || []).length || 1;
-  const optW = n <= 2 ? 54 : 46;
-  const res = b.resultLayout === 'columns' ? optW * n : 104;
-  const rem = std && meth ? 128 : std || meth ? 140 : 150;
-  const item = CONTENT_W - NO - std - meth - res - rem;
-  return { NO, item, std, meth, res, optW, rem };
-}
-
 const cellBase = (w, extra = {}) => ({
   width: w,
   flex: 'none',
@@ -631,7 +623,7 @@ function SmallBi({ v }) {
 }
 
 function InputValue({ row }) {
-  if (row.lines && row.lines.length) return <Bullets lines={row.lines} size={10.5} lh={16} />;
+  if (row.lines && row.lines.length) return <Bullets lines={row.lines} size={10.5} lh={16} contFirst={row.contLine} />;
   if (has(row.value)) {
     return <div style={{ fontSize: 10.5, lineHeight: '16px', color: C.ink, whiteSpace: 'pre-wrap', ...WRAP }}>{row.value}</div>;
   }
@@ -640,13 +632,20 @@ function InputValue({ row }) {
 
 const sameOpts = (a, b) => a.length === b.length && a.every((o, i) => o.v === b[i]?.v);
 
-function ClRow({ atom, ctx }) {
+// 长备注 / 长填写内容切出来的续行（atom.cont）：只写那一列，其余格留空；
+// 续行之间不画横线、上下内边距收小，看起来是同一格。页末那段照常收边（边框始终 1px，测量高度与位置无关）
+const contPad = (atom) => [atom.cont ? 2 : 6, atom.contNext ? 2 : 6];
+const contBottom = (atom, pos) => `1px solid ${atom.contNext && !pos.last ? 'transparent' : atom.hasPhotos ? C.lineSoft : C.line}`;
+
+function ClRow({ atom, ctx, pos }) {
   const b = atom.block;
   const r = atom.row;
   const Lc = clLayout(b);
   const failed = r.result?.tone === 'fail';
-  const bb = `1px solid ${atom.hasPhotos ? C.lineSoft : C.line}`;
-  const cell = (w, extra) => cellBase(w, { borderBottom: bb, ...extra });
+  const cont = !!atom.cont;
+  const [pt, pb] = contPad(atom);
+  const bb = contBottom(atom, pos);
+  const cell = (w, extra) => cellBase(w, { borderBottom: bb, padding: `${pt}px 7px ${pb}px`, ...extra });
   const columnsOk = b.resultLayout === 'columns' && sameOpts(r.options, b.options);
   return (
     <div style={{ display: 'flex', background: failed ? TONE.fail.bg : '#fff' }}>
@@ -658,22 +657,22 @@ function ClRow({ atom, ctx }) {
           fontWeight: 700,
           color: failed ? C.fail : C.mute,
           lineHeight: '16px',
-          padding: '6px 2px',
+          padding: `${pt}px 2px ${pb}px`,
         })}
       >
-        {r.no}
+        {!cont && r.no}
       </div>
       <div style={cell(Lc.item)}>
-        <ItemText row={r} b={b} accent={ctx.accent} />
+        {!cont && <ItemText row={r} b={b} accent={ctx.accent} />}
       </div>
       {Lc.std > 0 && (
         <div style={cell(Lc.std)}>
-          <SmallBi v={r.desc} />
+          {!cont && <SmallBi v={r.desc} />}
         </div>
       )}
       {Lc.meth > 0 && (
         <div style={cell(Lc.meth)}>
-          <SmallBi v={r.method} />
+          {!cont && <SmallBi v={r.method} />}
         </div>
       )}
       {r.input ? (
@@ -686,14 +685,14 @@ function ClRow({ atom, ctx }) {
             r.options.map((o) => {
               const on = r.result?.v === o.v;
               return (
-                <div key={o.v} style={cell(Lc.optW, { display: 'flex', justifyContent: 'center', alignItems: 'flex-start', paddingTop: 9 })}>
-                  <Box on={on} toneKey={o.tone} size={12} faded={!!r.result && !on} />
+                <div key={o.v} style={cell(Lc.optW, { display: 'flex', justifyContent: 'center', alignItems: 'flex-start', padding: `${cont ? pt : 9}px 7px ${pb}px` })}>
+                  {!cont && <Box on={on} toneKey={o.tone} size={12} faded={!!r.result && !on} />}
                 </div>
               );
             })
           ) : (
             <div style={cell(Lc.res)}>
-              <InlineOpts row={r} />
+              {!cont && <InlineOpts row={r} />}
             </div>
           )}
           <div style={cell(Lc.rem)}>
@@ -711,6 +710,8 @@ function ClRow({ atom, ctx }) {
 function Tick({ atom, ctx, pos }) {
   const r = atom.row;
   const on = !!r.result;
+  const cont = !!atom.cont; // 续行：不画勾选框 / 标题，接着写填写内容或备注
+  const [pt, pb] = contPad(atom);
   const top = atom.firstInBlock || pos.first ? C.line : 'transparent';
   return (
     <div
@@ -720,34 +721,36 @@ function Tick({ atom, ctx, pos }) {
         borderLeft: LINE,
         borderRight: LINE,
         borderTop: `1px solid ${top}`,
-        borderBottom: `1px solid ${atom.hasPhotos ? C.lineSoft : C.line}`,
+        borderBottom: contBottom(atom, pos),
         background: '#fff',
       }}
     >
       <div style={{ width: 30, flex: 'none', display: 'flex', justifyContent: 'center', paddingTop: 8 }}>
-        <Box on={on} toneKey={r.result?.tone || 'pass'} size={12} />
+        {!cont && <Box on={on} toneKey={r.result?.tone || 'pass'} size={12} />}
       </div>
-      <div style={{ flex: 1, minWidth: 0, padding: '6px 10px 6px 0' }}>
-        <div style={{ fontSize: 11, lineHeight: '17px', color: C.ink, ...WRAP }}>
-          {r.key && <span style={{ color: ctx.accent, marginRight: 3 }}>★</span>}
-          <span style={{ fontWeight: 600 }}>{zhOf(r.title)}</span>
-          {has(enOf(r.title)) && <span style={{ color: C.mute, fontSize: 9.5, marginLeft: 8 }}>{enOf(r.title)}</span>}
-          {r.media && <MediaTag accent={ctx.accent} />}
-        </div>
-        {r.desc && (has(zhOf(r.desc)) || has(enOf(r.desc))) && (
+      <div style={{ flex: 1, minWidth: 0, padding: `${pt}px 10px ${pb}px 0` }}>
+        {!cont && (
+          <div style={{ fontSize: 11, lineHeight: '17px', color: C.ink, ...WRAP }}>
+            {r.key && <span style={{ color: ctx.accent, marginRight: 3 }}>★</span>}
+            <span style={{ fontWeight: 600 }}>{zhOf(r.title)}</span>
+            {has(enOf(r.title)) && <span style={{ color: C.mute, fontSize: 9.5, marginLeft: 8 }}>{enOf(r.title)}</span>}
+            {r.media && <MediaTag accent={ctx.accent} />}
+          </div>
+        )}
+        {!cont && r.desc && (has(zhOf(r.desc)) || has(enOf(r.desc))) && (
           <div style={{ fontSize: 9.5, lineHeight: '14px', color: C.body, ...WRAP }}>
             {zhOf(r.desc)}
             {has(enOf(r.desc)) && <span style={{ color: C.mute, fontStyle: 'italic', marginLeft: 6 }}>{enOf(r.desc)}</span>}
           </div>
         )}
         {r.input && (
-          <div style={{ paddingTop: 2 }}>
+          <div style={{ paddingTop: cont ? 0 : 2 }}>
             <InputValue row={r} />
           </div>
         )}
         {has(r.remark) && (
-          <div style={{ fontSize: 10, lineHeight: '15px', color: C.body, paddingTop: 2, whiteSpace: 'pre-wrap', ...WRAP }}>
-            <span style={{ color: C.mute }}>备注 Remark：</span>
+          <div style={{ fontSize: 10, lineHeight: '15px', color: C.body, paddingTop: cont && !r.input ? 0 : 2, whiteSpace: 'pre-wrap', ...WRAP }}>
+            {!atom.remarkCont && <span style={{ color: C.mute }}>备注 Remark：</span>}
             {r.remark}
           </div>
         )}
@@ -757,20 +760,6 @@ function Tick({ atom, ctx, pos }) {
 }
 
 // ---------- 表格 ----------
-
-export function tblLayout(b) {
-  const NO = 28;
-  const avail = CONTENT_W - NO;
-  const total = b.columns.reduce((s, c) => s + (c.width || 1), 0) || 1;
-  let acc = 0;
-  const ws = b.columns.map((c, i) => {
-    if (i === b.columns.length - 1) return avail - acc;
-    const w = Math.floor((avail * (c.width || 1)) / total);
-    acc += w;
-    return w;
-  });
-  return { NO, ws };
-}
 
 function TblHead({ block: b }) {
   const T = tblLayout(b);
@@ -784,17 +773,18 @@ function TblHead({ block: b }) {
   );
 }
 
-function TblRow({ atom }) {
+function TblRow({ atom, pos }) {
   const b = atom.block;
   const T = tblLayout(b);
-  const bb = `1px solid ${atom.hasPhotos ? C.lineSoft : C.line}`;
+  const [pt, pb] = contPad(atom); // 续行（单元格太长切出来的）：序号留空，同一列接着写
+  const bb = contBottom(atom, pos);
   return (
     <div style={{ display: 'flex', background: '#fff' }}>
-      <div style={cellBase(T.NO, { borderLeft: LINE, borderBottom: bb, textAlign: 'center', fontSize: 10, fontWeight: 700, color: C.mute, lineHeight: '15px', padding: '6px 2px' })}>
-        {atom.ri + 1}
+      <div style={cellBase(T.NO, { borderLeft: LINE, borderBottom: bb, textAlign: 'center', fontSize: 10, fontWeight: 700, color: C.mute, lineHeight: '15px', padding: `${pt}px 2px ${pb}px` })}>
+        {!atom.cont && atom.ri + 1}
       </div>
       {b.columns.map((c, i) => (
-        <div key={c.key} style={cellBase(T.ws[i], { borderBottom: bb, fontSize: 10, lineHeight: '15px', color: C.ink, whiteSpace: 'pre-wrap', padding: '6px 6px', ...WRAP })}>
+        <div key={c.key} style={cellBase(T.ws[i], { borderBottom: bb, fontSize: 10, lineHeight: '15px', color: C.ink, whiteSpace: 'pre-wrap', padding: `${pt}px 6px ${pb}px`, ...WRAP })}>
           {atom.row.cells[c.key] || ''}
         </div>
       ))}
@@ -837,7 +827,7 @@ function FieldValue({ f, ctx, size = 11, lh = 17, list }) {
   }
   if (f.kind === 'list') {
     if (!f.lines || !f.lines.length) return list ? <BlankLines n={2} /> : null;
-    return <Bullets lines={f.lines} size={size} lh={lh} dot={ctx.accent} />;
+    return <Bullets lines={f.lines} size={size} lh={lh} dot={ctx.accent} contFirst={f.contLine} />;
   }
   if (f.kind === 'photos') {
     return list ? <div style={{ fontSize: 10, lineHeight: '16px', color: C.faint }}>未附照片 No photos</div> : null;
@@ -849,8 +839,6 @@ function FieldValue({ f, ctx, size = 11, lh = 17, list }) {
     </div>
   );
 }
-
-const GRID_LABEL_W = { 1: 140, 2: 104, 3: 86 };
 
 function GridRow({ atom, ctx, pos }) {
   const cols = atom.cols;
@@ -872,12 +860,12 @@ function GridRow({ atom, ctx, pos }) {
               borderTop: top,
               borderBottom: bottom,
               borderLeft: k === 0 ? LINE : 'none',
-              padding: '6px 8px',
+              padding: `${c.cont ? 2 : 6}px 8px ${atom.contNext ? 2 : 6}px`,
             })}
           >
             {!c.cont && <Bi v={f.label} zh={10} en={8} zhLh={14} enLh={11} />}
           </div>,
-          <div key={`v${k}`} style={cellBase(vw, { borderTop: top, borderBottom: bottom, padding: '6px 9px', minHeight: 28 })}>
+          <div key={`v${k}`} style={cellBase(vw, { borderTop: top, borderBottom: bottom, padding: `${c.cont ? 2 : 6}px 9px ${atom.contNext ? 2 : 6}px`, minHeight: 28 })}>
             {atom.mediaHead ? (
               <div style={{ fontSize: 9.5, lineHeight: '14px', color: C.mute }}>
                 共 {n} 张 · {n} photo{n > 1 ? 's' : ''}
@@ -928,17 +916,20 @@ function ListRow({ atom, ctx }) {
 
 // ---------- 统计 / 备注 / 签名 ----------
 
-const LONG_VALUE = 22; // 超过这个长度的统计值不放小卡片，改成整行
-
-function Summary({ block: b }) {
+// 统计值超过 LONG_VALUE 字不放小卡片，改成整行
+function Summary({ block: b, atom = {} }) {
   const all = b.items || [];
-  const items = all.filter((it) => String(it.value ?? '').length <= LONG_VALUE);
-  const longs = all.filter((it) => String(it.value ?? '').length > LONG_VALUE);
+  // 拆开排版时（paginate.js summaryAtoms）：part = 'cards' 卡片 | 'long' 一条长值的一块 | 'conclusion' 结论
+  const part = atom.part;
+  const items = !part || part === 'cards' ? all.filter((it) => String(it.value ?? '').length <= LONG_VALUE) : [];
+  const longs = !part ? all.filter((it) => String(it.value ?? '').length > LONG_VALUE) : part === 'long' ? [atom.item] : [];
   const n = items.length;
   const per = n <= 5 ? Math.max(1, n) : n <= 8 ? Math.ceil(n / 2) : 5;
   const gap = 8;
   const w = Math.floor((CONTENT_W - gap * (per - 1)) / per);
-  const c = b.conclusion;
+  const c = !part || part === 'conclusion' ? b.conclusion : null;
+  // 长值的续块：不写标签、上下内边距收小，和上一块连成一条
+  const [pt, pb] = contPad(atom);
   const ct = c ? tone(c.tone) : null;
   return (
     <div>
@@ -964,11 +955,11 @@ function Summary({ block: b }) {
         const t = tone(it.tone);
         return (
           <div key={`l${i}`} style={{ display: 'flex', marginTop: n || i ? gap : 0, background: t.bg, borderLeft: `3px solid ${t.bar || t.fg}` }}>
-            <div style={{ width: 150, flex: 'none', boxSizing: 'border-box', padding: '7px 10px' }}>
-              <div style={{ fontSize: 9.5, lineHeight: '13px', fontWeight: 700, color: C.ink }}>{zhOf(it.label)}</div>
-              {has(enOf(it.label)) && <div style={{ fontSize: 7.5, lineHeight: '11px', color: C.mute, letterSpacing: 0.6 }}>{upper(enOf(it.label))}</div>}
+            <div style={{ width: 150, flex: 'none', boxSizing: 'border-box', padding: `${pt + 1}px 10px ${pb + 1}px` }}>
+              {!atom.cont && <div style={{ fontSize: 9.5, lineHeight: '13px', fontWeight: 700, color: C.ink }}>{zhOf(it.label)}</div>}
+              {!atom.cont && has(enOf(it.label)) && <div style={{ fontSize: 7.5, lineHeight: '11px', color: C.mute, letterSpacing: 0.6 }}>{upper(enOf(it.label))}</div>}
             </div>
-            <div style={{ flex: 1, minWidth: 0, padding: '7px 12px 7px 0', fontSize: 10.5, lineHeight: '16px', fontWeight: 600, color: t.fg, ...WRAP }}>
+            <div style={{ flex: 1, minWidth: 0, padding: `${pt + 1}px 12px ${pb + 1}px 0`, fontSize: 10.5, lineHeight: '16px', fontWeight: 600, color: t.fg, ...WRAP }}>
               {String(it.value ?? '')}
             </div>
           </div>
@@ -977,7 +968,7 @@ function Summary({ block: b }) {
       {c && (
         <div
           style={{
-            marginTop: all.length ? 10 : 0,
+            marginTop: n || longs.length ? 10 : 0,
             border: `1.5px solid ${ct.fg}`,
             background: ct.bg,
             padding: '10px 16px',
@@ -1125,19 +1116,19 @@ export function Atom({ atom, ctx, pos }) {
     case 'clHead':
       return <ClHead block={atom.block} />;
     case 'clRow':
-      return <ClRow atom={atom} ctx={ctx} />;
+      return <ClRow atom={atom} ctx={ctx} pos={pos} />;
     case 'tick':
       return <Tick atom={atom} ctx={ctx} pos={pos} />;
     case 'tblHead':
       return <TblHead block={atom.block} />;
     case 'tblRow':
-      return <TblRow atom={atom} />;
+      return <TblRow atom={atom} pos={pos} />;
     case 'tblEmpty':
       return <TblEmpty block={atom.block} />;
     case 'contHead':
       return <ContHead block={atom.block} ctx={ctx} />;
     case 'summary':
-      return <Summary block={atom.block} />;
+      return <Summary block={atom.block} atom={atom} />;
     case 'note':
       return <Note block={atom.block} ctx={ctx} />;
     case 'sig':

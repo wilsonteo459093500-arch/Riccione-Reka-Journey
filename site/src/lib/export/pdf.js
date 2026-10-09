@@ -1,6 +1,8 @@
 // PDF 导出：DocPages（与预览同一套 HTML 页面）→ html2canvas-pro 逐页截图 → jsPDF A4
 // 图片型 PDF：任何手机打开中文都不会乱码，不用嵌入几十 MB 的中文字体。
 // 省内存（iPhone）：排版一次后只挂载当前这一页的图片，截完立即释放 canvas。
+// 截图失败（iOS canvas 内存用完时 getContext('2d') 返回 null）：清掉这次留下的克隆 iframe，
+// 降低分辨率重试这一页一次，还不行就给中文提示。
 import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import html2canvas from 'html2canvas-pro';
@@ -12,10 +14,31 @@ import { PAGE_W, PAGE_H } from '../../components/doc/theme.js';
 const nextFrame = () =>
   new Promise((r) => (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(() => r()) : setTimeout(r, 16)));
 
+const MEM_MSG = '页面图片生成失败（内存不足？）请关闭其他 App 后重试';
+const isMemError = (e) => /2D rendering context|getContext|toBlob|内存不足/i.test(String(e?.message || e));
+
 function canvasToBlob(canvas, type, quality) {
   return new Promise((resolve, reject) => {
-    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('页面图片生成失败（内存不足？）'))), type, quality);
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error(MEM_MSG))), type, quality);
   });
+}
+
+const CLONE_SEL = 'iframe.html2canvas-container';
+
+/**
+ * html2canvas 截一页。html2canvas-pro 只在成功时移除它的克隆 iframe（整份文档的副本）：
+ * 失败时把这次新加的 iframe 删掉（别人的不动），否则每重试一次就多漏一份。
+ */
+async function snapshot(el, opts) {
+  const before = new Set(document.querySelectorAll(CLONE_SEL));
+  try {
+    return await html2canvas(el, opts);
+  } catch (e) {
+    document.querySelectorAll(CLONE_SEL).forEach((f) => {
+      if (!before.has(f)) f.remove();
+    });
+    throw e;
+  }
 }
 
 /**
@@ -69,7 +92,7 @@ async function renderPages(model, media, { scale = 2, onPage, onProgress, timeou
       await nextFrame();
       const el = host.querySelector(`[data-page="${i}"]`);
       if (!el) throw new Error(`找不到第 ${i} 页`);
-      const canvas = await html2canvas(el, {
+      const opts = {
         scale,
         useCORS: true,
         backgroundColor: '#ffffff',
@@ -83,7 +106,20 @@ async function renderPages(model, media, { scale = 2, onPage, onProgress, timeou
         ignoreElements: (node) =>
           node.id === 'root' ||
           (node.hasAttribute && (node.hasAttribute('data-doc-measure') || (node.hasAttribute('data-page') && node !== el))),
-      });
+      };
+      let canvas;
+      try {
+        canvas = await snapshot(el, opts);
+      } catch (e) {
+        if (!isMemError(e)) throw e;
+        // 内存紧张：等一帧让浏览器回收，再用较低分辨率截这一页（PDF 页面尺寸不变）
+        await nextFrame();
+        try {
+          canvas = await snapshot(el, { ...opts, scale: Math.max(1, scale * 0.6) });
+        } catch (e2) {
+          throw isMemError(e2) ? new Error(MEM_MSG) : e2;
+        }
+      }
       try {
         await onPage(canvas, i - 1, total);
       } finally {
@@ -92,7 +128,7 @@ async function renderPages(model, media, { scale = 2, onPage, onProgress, timeou
       }
       if (onProgress) onProgress(i, total);
     }
-    return total;
+    return { pages: total, clipped: first.clipped || 0 };
   } finally {
     if (root) root.unmount();
     host.remove();
@@ -103,13 +139,13 @@ async function renderPages(model, media, { scale = 2, onPage, onProgress, timeou
 /**
  * @param {DocModel} model  buildDocModel() 的输出
  * @param {{ get(id), url?(id, which) }} media  媒体加载器
- * @returns {Promise<Blob>} application/pdf
+ * @returns {Promise<Blob>} application/pdf；blob.clipped = 超过一页、被截断的内容块数（正常 0，> 0 时界面应提示）
  */
 export async function exportPdf(model, media, { onProgress, quality = 0.88, scale = 2 } = {}) {
   const pdf = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait', compress: true });
   const W = pdf.internal.pageSize.getWidth();
   const H = pdf.internal.pageSize.getHeight();
-  await renderPages(model, media, {
+  const { clipped } = await renderPages(model, media, {
     scale,
     onProgress,
     onPage: async (canvas, i) => {
@@ -126,21 +162,24 @@ export async function exportPdf(model, media, { onProgress, quality = 0.88, scal
     author: 'Sail by Riccione Reka',
     creator: 'TORA by Riccione Reka',
   });
-  return pdf.output('blob');
+  const blob = pdf.output('blob');
+  blob.clipped = clipped;
+  return blob;
 }
 
 /**
  * 每页一张图（发 WhatsApp 用）。
- * @returns {Promise<Blob[]>}
+ * @returns {Promise<Blob[]>}  数组上的 .clipped 同 exportPdf
  */
 export async function renderPagesToImages(model, media, { onProgress, scale = 2, type = 'image/jpeg', quality = 0.9 } = {}) {
   const out = [];
-  await renderPages(model, media, {
+  const { clipped } = await renderPages(model, media, {
     scale,
     onProgress,
     onPage: async (canvas) => {
       out.push(await canvasToBlob(canvas, type, quality));
     },
   });
+  out.clipped = clipped;
   return out;
 }

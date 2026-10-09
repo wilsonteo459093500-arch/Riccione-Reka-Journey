@@ -2,6 +2,9 @@
 // 只撤销自己创建的 objectURL；加载器 url() 返回的交给加载器自己 dispose。
 import { modelMedia } from '../../lib/docmodel.js';
 
+// 第一个能当图片用的 Blob（0 字节的跳过 → 显示「照片缺失」占位）
+const pick = (...xs) => xs.find((b) => typeof Blob !== 'undefined' && b instanceof Blob && b.size > 0) || null;
+
 async function resolveOne(media, ref, quality) {
   let rec = null;
   try {
@@ -17,19 +20,20 @@ async function resolveOne(media, ref, quality) {
     w: rec?.w || 0,
     h: rec?.h || 0,
   };
-  // 视频用封面；照片 / 签名：PDF 用原图（清晰），手机预览用缩略图（省内存）
+  // 视频用封面（没抓到封面就是 null → 「视频 Video」占位，视频文件本身不能当 <img>）；
+  // 照片 / 签名：PDF 用原图（清晰），手机预览用缩略图（省内存）
   const blob =
     kind === 'video'
-      ? rec?.poster || rec?.thumb
+      ? pick(rec?.poster, rec?.thumb)
       : quality === 'thumb' && kind !== 'signature'
-        ? rec?.thumb || rec?.blob
-        : rec?.blob || rec?.thumb;
-  if (typeof Blob !== 'undefined' && blob instanceof Blob) {
+        ? pick(rec?.thumb, rec?.blob)
+        : pick(rec?.blob, rec?.thumb);
+  if (blob) {
     return { url: URL.createObjectURL(blob), owned: true, info };
   }
   if (media && typeof media.url === 'function') {
     try {
-      const u = await media.url(ref.id, kind === 'video' || quality === 'thumb' ? 'thumb' : 'blob');
+      const u = await media.url(ref.id, kind === 'video' ? 'poster' : quality === 'thumb' ? 'thumb' : 'blob');
       if (u) return { url: u, owned: false, info };
     } catch {
       /* 读不到就显示占位 */
