@@ -434,7 +434,8 @@ export function analyzePages(raw, { fileName } = {}) {
       const role = top ? top[0] : inferRole(m?.name);
       vm.role = role && explicitRoles.has(role) ? '搭配' : role;
     }
-    const rank = (vm) => (vm.role === '搭配' ? 2 : vm.explicit ? 0 : 1);
+    // 柜体 / 柜门（主材）在前 → 其它写明部位的 → 推断部位的 → 「搭配」
+    const rank = (vm) => (vm.role === '搭配' ? 3 : !vm.explicit ? 2 : /柜体|柜门|柜身/.test(vm.role) ? 0 : 1);
     v.materials = v.materials
       .map((vm, i) => ({ vm, i }))
       .sort((a, b) => rank(a.vm) - rank(b.vm) || a.i - b.i)
@@ -490,6 +491,16 @@ export function analyzePages(raw, { fileName } = {}) {
     v.notes = v.notes
       .filter((n) => !(n.text.replace(/\s+/g, '').length <= 7 && titleText.includes(n.text.replace(/\s+/g, ''))))
       .map((n) => (bilingual.has(n.label) ? { ...n, label: bilingual.get(n.label) } : n));
+    // 两条以上的短标注（'推拉玻璃柜'、'5 × 抽屉柜'）合并成一条「设计亮点」，免得右侧说明挤爆
+    const isCallout = (n) => ['keyword', 'generic'].includes(n.via) && n.text.replace(/\s+/g, '').length <= 9 && !/[，,。；;]/.test(n.text) && !/是|会|能|可|有|要|让|做|加|配|用|放|避免|建议/.test(n.text);
+    const callouts = v.notes.filter(isCallout);
+    if (callouts.length >= 2) {
+      const merged = { label: '设计亮点', text: callouts.map((n) => n.text).join(' · '), via: 'merged', free: callouts.every((n) => n.free) };
+      const firstIdx = v.notes.indexOf(callouts[0]);
+      const restNotes = v.notes.filter((n) => !callouts.includes(n));
+      restNotes.splice(Math.min(firstIdx, restNotes.length), 0, merged);
+      v.notes = restNotes;
+    }
   }
 
   // -------------------------------------------------------------------------
