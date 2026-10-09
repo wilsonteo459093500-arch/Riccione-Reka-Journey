@@ -18,10 +18,11 @@ window.SAIL = {
     township:  'Setia Alam'         // 客户楼盘也在这个镇区时，邀约页才会写「就在你们新家同一个镇区」
   },
 
-  /* 选填：正式网址（例 'https://riccione-reka-journey.vercel.app'）。
-     VISI 方案里的二维码 / 邀请函链接会用它；留空则用当前网址。
-     在自己电脑上（localhost）做方案时，填了它，二维码才扫得开。 */
-  publicBase: '',
+  /* 邀请函与需求卡的正式网址 —— 发给客户的每一条链接、VISI 方案里的二维码都用它。
+     销售端（create）和 VISI 在哪个网址打开都一样（包括 visi-riccione-reka.vercel.app
+     和自己的电脑）：客户收到的永远是这个网址。换了邀请函的域名，只改这一行。
+     留空 = 用当前网址（只适合邀请函与销售端放在同一个网站时）。 */
+  publicBase: 'https://wilson-pidc.vercel.app/invite',
 
   /* 默认邀请人 · fallback host（链接里没带 by 参数时用这个） */
   host: {

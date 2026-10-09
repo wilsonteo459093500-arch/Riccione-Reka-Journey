@@ -35,6 +35,9 @@
 
 ## VISI by RICCIONE REKA（`visi.html`）
 
+**网址：<https://visi-riccione-reka.vercel.app>**（同 TORA 的做法：独立的 Vercel 项目，打开就是 VISI）。
+手机上「加入主画面」会出现 V 图标与「VISI」。
+
 把「做一份 proposal」从几个小时缩到十分钟。整套在浏览器里跑，没有后端。
 
 **销售的做法**
@@ -61,7 +64,8 @@
 **要改的东西都在 `assets/js/visi/data.js`**：空间与卖点（`MB.ROOMS`）、五个风格的配色与材质（`MB.DIRECTIONS`）、
 需求卡选项对应的说法（`MB.NEEDS`）、内置图库（`MB.BUILTIN`）。文案写法：标题说「得到什么」，理由用「少一个麻烦」的说法，不编数字。
 
-**二维码**：邀约页的二维码就是邀请函链接。在自己电脑（localhost）上做方案时，先在 `config.js` 填 `publicBase`（正式网址），不然客户扫不开 —— 体检会提醒。
+**二维码**：邀约页的二维码就是邀请函链接，网址取自 `config.js` 的 `publicBase`（邀请函的正式网址）。
+所以不管 VISI 在哪里打开（visi-riccione-reka.vercel.app、自己的电脑），客户扫到的都是正式邀请函。
 
 `assets/vendor/` 里是 pdf.js（Apache-2.0，只在导入 PDF 时才载入）与 qrcode-generator（MIT）。
 
@@ -167,6 +171,16 @@ riccione-reka-journey.vercel.app/create                         销售端
 
 有自己的域名之后，在 Vercel 的 Domains 里接上去（例如 `journey.riccione.com.my`）就更干净。
 `invite/vercel.json` 已经开了 `cleanUrls`，所以路径里不会出现 `.html`。
+
+**VISI 的独立网址（已开）**
+
+Vercel 项目 `visi-riccione-reka`：Root Directory = `invite`，Framework = Other，没有 Build Command；
+Ignored Build Step = `git diff --quiet HEAD^ HEAD -- .`（`invite/` 没改就不部署，省每天的部署额度）。
+`invite/vercel.json` 里有一条只对 `visi-riccione-reka.vercel.app` 生效的 rewrite：首页 `/` 直接打开 VISI；
+同一个项目开其它网址（例如上面的 `riccione-reka-journey`）时，首页仍然是邀请函。
+
+> 因为 VISI 的网址首页就是 VISI，客户的链接**不能**用这个网址 —— 所以 `create.js` 与 VISI 生成链接时都用
+> `config.js` 的 `publicBase`（现在是 `https://wilson-pidc.vercel.app/invite`）。换邀请函的域名，只改这一行。
 
 其它选择：Netlify（publish directory 填 `invite`）、GitHub Pages、自己的服务器 —— 整个目录丢进去就行。
 
