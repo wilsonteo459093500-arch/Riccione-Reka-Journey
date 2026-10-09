@@ -1,5 +1,5 @@
 // 照片：拍照 / 相册多选 → 本地压缩入库；点缩略图看大图、写说明、删除、调顺序
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Icon from '../ui/Icon.jsx';
 import { Sheet, Spinner, useUI } from '../ui/UI.jsx';
 import { useStore } from '../../lib/store.jsx';
@@ -24,6 +24,16 @@ function Viewer({ id, index, total, onClose, onDelete, onMove }) {
   const [m] = useMediaRecord(id);
   const [cap, setCap] = useState(null);
   const caption = cap ?? m?.caption ?? '';
+  // 弹层被返回键关掉时也保存说明
+  const capRef = useRef({ cap, orig: m?.caption || '' });
+  capRef.current = { cap, orig: m?.caption || '' };
+  useEffect(
+    () => () => {
+      const { cap: c, orig } = capRef.current;
+      if (c != null && c.trim() !== orig) setCaption(id, c.trim());
+    },
+    [id],
+  );
   return (
     <Sheet
       open
@@ -67,7 +77,14 @@ function Viewer({ id, index, total, onClose, onDelete, onMove }) {
  *           compact?: boolean, label?: string }} props
  */
 export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, compact = false, label }) {
-  const { addMediaFile, removeMedia } = useStore();
+  const { addMediaFile, removeMedia, track } = useStore();
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
   const { toast, confirm } = useUI();
   const camRef = useRef(null);
   const libRef = useRef(null);
@@ -76,23 +93,27 @@ export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, com
   const list = ids || [];
   const left = Math.max(0, max - list.length);
 
-  const addFiles = async (fileList) => {
+  const addFiles = (fileList) => {
     const files = [...(fileList || [])].filter((f) => f.type.startsWith('image/') || /\.(heic|heif|jpe?g|png|webp)$/i.test(f.name));
     if (!files.length) return;
     const take = files.slice(0, left);
     if (files.length > left) toast(`最多 ${max} 张，已加入前 ${take.length} 张`, 'warn');
-    setBusy(take.length);
-    const added = [];
-    for (const f of take) {
-      try {
-        added.push(await addMediaFile(reportId, f, 'photo'));
-      } catch (e) {
-        toast(e.message || '照片处理失败', 'error');
-      }
-      setBusy((b) => b - 1);
-    }
-    // 用最新列表追加（处理期间用户可能改了别的东西）
-    if (added.length) onChange((prev) => [...(prev || []), ...added]);
+    setBusy((b) => b + take.length);
+    // 整批作为一个任务登记：离开编辑页时会等整批处理完；每张处理好就立刻挂上（基于最新列表）
+    track(
+      (async () => {
+        for (const f of take) {
+          try {
+            const id = await addMediaFile(reportId, f, 'photo');
+            onChange((prev) => [...(prev || []), id]);
+          } catch (e) {
+            toast(e.message || '照片处理失败', 'error');
+          } finally {
+            if (alive.current) setBusy((b) => Math.max(0, b - 1));
+          }
+        }
+      })(),
+    );
   };
 
   const del = async (i) => {

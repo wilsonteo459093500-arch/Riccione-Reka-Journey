@@ -40,20 +40,41 @@ export default function SignaturePad({ open, title = '签名', onClose, onSave }
   const last = useRef(null);
   const [dirty, setDirty] = useState(false);
 
+  // 画布尺寸跟随显示尺寸（打开时 + 转屏 / 窗口变化时重设；尺寸变了就清空，避免笔迹错位变形）
   useEffect(() => {
-    if (!open) return;
+    if (!open) return undefined;
     setDirty(false);
     const c = canvasRef.current;
-    if (!c) return;
-    const rect = c.getBoundingClientRect();
-    const dpr = Math.min(window.devicePixelRatio || 1, 3);
-    c.width = Math.round(rect.width * dpr);
-    c.height = Math.round(rect.height * dpr);
-    const g = c.getContext('2d');
-    g.scale(dpr, dpr);
-    g.lineCap = 'round';
-    g.lineJoin = 'round';
-    g.strokeStyle = '#1f1e1c';
+    if (!c) return undefined;
+    let lastW = 0;
+    let lastH = 0;
+    const setup = () => {
+      const rect = c.getBoundingClientRect();
+      const w = Math.round(rect.width);
+      const h = Math.round(rect.height);
+      if (!w || !h || (w === lastW && h === lastH)) return;
+      const hadInk = lastW > 0;
+      lastW = w;
+      lastH = h;
+      const dpr = Math.min(window.devicePixelRatio || 1, 3);
+      c.width = Math.round(w * dpr);
+      c.height = Math.round(h * dpr);
+      const g = c.getContext('2d');
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      g.lineCap = 'round';
+      g.lineJoin = 'round';
+      g.strokeStyle = '#1f1e1c';
+      drawing.current = false;
+      if (hadInk) setDirty(false);
+    };
+    setup();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(setup) : null;
+    ro?.observe(c);
+    window.addEventListener('orientationchange', setup);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener('orientationchange', setup);
+    };
   }, [open]);
 
   const pos = (e) => {
@@ -114,7 +135,7 @@ export default function SignaturePad({ open, title = '签名', onClose, onSave }
         </div>
       }
     >
-      <div className="text-[13px] text-ink-mute">请在框内用手指签名（可横屏签更舒服）</div>
+      <div className="text-[13px] text-ink-mute">请在框内用手指签名（签名中途转屏会清空，需要重签）</div>
       <div className="relative mt-3 rounded-2xl bg-white ring-1 ring-line">
         <canvas
           ref={canvasRef}

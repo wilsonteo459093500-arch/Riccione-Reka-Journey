@@ -131,6 +131,12 @@ export default function Settings() {
               )}
               <br />
               像 App 一样一键打开，没信号也能填写；iPhone 上还能避免浏览器 7 天不用自动清掉资料。
+              {isIOS && (store.reports.length > 0 || store.projects.length > 0) && (
+                <>
+                  <br />
+                  <b className="text-terra">注意：</b>主屏幕 App 和 Safari 的资料是分开的。已在这里填的资料，请先点下面「导出备份」，再到主屏幕 App 里「从备份恢复」。
+                </>
+              )}
             </div>
           </section>
         )}

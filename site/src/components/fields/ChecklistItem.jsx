@@ -138,7 +138,7 @@ function ChecklistItem({ section, item, answer, onChange, reportId, flagged }) {
         {noteOpen && !item.input && (
           <div className="mt-3">
             <textarea
-              className={`input min-h-[44px] resize-none py-2.5 text-[15px] leading-snug ${need ? 'border-fail ring-2 ring-fail/15' : ''}`}
+              className={`input min-h-[44px] resize-none py-2.5 text-[16px] leading-snug ${need ? 'border-fail ring-2 ring-fail/15' : ''}`}
               rows={2}
               value={a.note || ''}
               placeholder={need ? `必填：${section.remark?.label?.zh || '处理方案 / 负责人'}` : section.remark?.label?.zh || '备注'}

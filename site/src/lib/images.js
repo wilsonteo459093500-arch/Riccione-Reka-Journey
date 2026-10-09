@@ -60,53 +60,70 @@ export async function compressImage(file) {
 }
 
 /**
- * 视频：保留原文件（分享用），截一帧做封面（文档里显示）。
+ * 视频：保留原文件（分享用），尽量截一帧做报告封面。
+ * 封面只是装饰：读不到元数据 / 解不了码 / 截图失败都不影响保存视频。
  * @returns {Promise<{ blob, thumb, poster, w, h, duration }>}
  */
 export async function processVideo(file) {
   const url = URL.createObjectURL(file);
+  const video = document.createElement('video');
+  const wait = (event, ms) =>
+    new Promise((resolve) => {
+      const t = setTimeout(() => resolve(false), ms);
+      video.addEventListener(event, () => {
+        clearTimeout(t);
+        resolve(true);
+      }, { once: true });
+      video.addEventListener('error', () => {
+        clearTimeout(t);
+        resolve(false);
+      }, { once: true });
+    });
+  let poster = null;
+  let w = 0;
+  let h = 0;
+  let duration = 0;
   try {
-    const video = document.createElement('video');
     video.muted = true;
     video.playsInline = true;
-    video.preload = 'auto';
+    video.setAttribute('playsinline', '');
+    video.preload = 'metadata';
     video.src = url;
-    await new Promise((resolve, reject) => {
-      const t = setTimeout(() => reject(new Error('视频读取超时')), 15000);
-      video.onloadeddata = () => {
-        clearTimeout(t);
-        resolve();
-      };
-      video.onerror = () => {
-        clearTimeout(t);
-        reject(new Error('无法读取这个视频'));
-      };
-    });
-    const duration = Number.isFinite(video.duration) ? video.duration : 0;
-    try {
-      await new Promise((resolve) => {
-        const done = () => resolve();
-        video.onseeked = done;
-        video.currentTime = Math.min(1, duration / 2 || 0);
-        setTimeout(done, 2500);
-      });
-    } catch {
-      /* 某些机型不能 seek，用第一帧 */
+    video.load();
+    if (await wait('loadedmetadata', 8000)) {
+      duration = Number.isFinite(video.duration) ? video.duration : 0;
+      w = video.videoWidth || 0;
+      h = video.videoHeight || 0;
+      const seeked = wait('seeked', 4000);
+      try {
+        video.currentTime = Math.min(1, duration / 2 || 0.1);
+      } catch {
+        /* 某些机型不能 seek */
+      }
+      await seeked;
+      if (video.readyState < 2) await wait('loadeddata', 3000);
+      if (video.videoWidth) {
+        try {
+          const c = drawScaled(video, video.videoWidth, video.videoHeight, 1000);
+          poster = await canvasToBlob(c, 'image/jpeg', 0.8);
+          c.width = c.height = 0;
+        } catch {
+          poster = null;
+        }
+      }
     }
-    const w = video.videoWidth || 640;
-    const h = video.videoHeight || 360;
-    let poster = null;
-    try {
-      const c = drawScaled(video, w, h, 1000);
-      poster = await canvasToBlob(c, 'image/jpeg', 0.8);
-      c.width = c.height = 0;
-    } catch {
-      poster = null;
-    }
-    return { blob: file, thumb: poster, poster, w, h, duration };
+  } catch {
+    /* 封面失败不影响视频本身 */
   } finally {
+    video.removeAttribute('src');
+    try {
+      video.load();
+    } catch {
+      /* ignore */
+    }
     URL.revokeObjectURL(url);
   }
+  return { blob: file, thumb: poster, poster, w: w || 640, h: h || 360, duration };
 }
 
 /** Blob → dataURL（Word / Excel 嵌图用） */

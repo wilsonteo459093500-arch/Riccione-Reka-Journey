@@ -346,7 +346,8 @@ async function loadMedia(model, media) {
         if (!m) return;
         const kind = m.kind || ref.kind || 'photo';
         // 照片用原图（长边 1600），不认识的格式退回缩略图；视频用封面
-        const cands = kind === 'video' ? [m.poster, m.thumb] : [m.blob, m.thumb];
+        // 照片在 Word 里最大约 42mm 宽：360px 缩略图已有 ~218dpi，文件小很多；签名用原图
+        const cands = kind === 'video' ? [m.poster, m.thumb] : kind === 'signature' ? [m.blob, m.thumb] : [m.thumb, m.blob];
         let img = null;
         for (const c of cands) {
           img = await toImage(c, m.w, m.h);

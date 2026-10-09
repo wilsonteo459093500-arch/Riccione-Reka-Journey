@@ -70,26 +70,44 @@ export function UIProvider({ children }) {
 
 export const useUI = () => useContext(UICtx);
 
-/** 底部弹层 */
+/** 底部弹层：打开时占一条历史记录，安卓返回键 / 手势只关闭弹层，不会退出整页 */
 export function Sheet({ open, onClose, title, children, footer, tall = false }) {
-  const ref = useRef(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
     if (!open) return undefined;
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    const onKey = (e) => e.key === 'Escape' && onClose?.();
+    const onKey = (e) => e.key === 'Escape' && closeRef.current?.();
     window.addEventListener('keydown', onKey);
+    // 同一网址压一条记录（不触发 hashchange）；按返回 → popstate → 关闭
+    const token = Math.random().toString(36).slice(2);
+    const hashAtOpen = window.location.hash;
+    let poppedByBack = false;
+    window.history.pushState({ ...(window.history.state || {}), sheet: token }, '');
+    const onPop = () => {
+      poppedByBack = true;
+      closeRef.current?.();
+    };
+    window.addEventListener('popstate', onPop);
     return () => {
       document.body.style.overflow = prev;
       window.removeEventListener('keydown', onKey);
+      window.removeEventListener('popstate', onPop);
+      // 从界面关闭（不是按返回）：稍后把刚压的那条记录退掉；
+      // 如果关闭后紧接着跳了页面（navigate 会替换掉这条记录），就不退
+      if (!poppedByBack) {
+        setTimeout(() => {
+          if (window.history.state?.sheet === token && window.location.hash === hashAtOpen) window.history.back();
+        }, 300);
+      }
     };
-  }, [open, onClose]);
+  }, [open]);
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/40" onClick={onClose}>
       <div
-        ref={ref}
-        className={`flex w-full max-w-lg flex-col rounded-t-3xl bg-cream shadow-2xl ${tall ? 'h-[92dvh]' : 'max-h-[88dvh]'}`}
+        className={`relative flex w-full max-w-lg flex-col rounded-t-3xl bg-cream shadow-2xl ${tall ? 'h-[92dvh]' : 'max-h-[88dvh]'}`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -101,7 +119,7 @@ export function Sheet({ open, onClose, title, children, footer, tall = false }) 
             <Icon name="X" size={20} />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-5 pb-4">{children}</div>
+        <div className={`flex-1 overflow-y-auto px-5 ${footer ? 'pb-4' : 'pb-[calc(var(--safe-bottom)+1rem)]'}`}>{children}</div>
         {footer && <div className="border-t border-line bg-cream px-5 pb-safe pt-3">{footer}</div>}
       </div>
     </div>

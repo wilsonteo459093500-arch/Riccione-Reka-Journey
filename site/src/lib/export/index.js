@@ -19,6 +19,15 @@ export const FORMATS = {
   },
 };
 
+const ENGINE_MSG = '导出组件还没下载到手机上：请连上网络再点一次「生成」（之后离线也能用）';
+const load = (fn) =>
+  fn().catch((e) => {
+    if (/dynamically imported module|Importing a module script failed|Failed to fetch|Loading chunk/i.test(String(e?.message || e))) {
+      throw new Error(ENGINE_MSG);
+    }
+    throw e;
+  });
+
 let logoPromise = null;
 function loadLogo() {
   if (!logoPromise) {
@@ -38,13 +47,13 @@ export async function exportReport(format, { template, report, project, settings
   const f = FORMATS[format];
   let blob;
   if (format === 'pdf') {
-    const { exportPdf } = await import('./pdf.js');
+    const { exportPdf } = await load(() => import('./pdf.js'));
     blob = await exportPdf(model, media, { onProgress });
   } else if (format === 'docx') {
-    const [{ exportDocx }, logo] = await Promise.all([import('./docx.js'), loadLogo()]);
+    const [{ exportDocx }, logo] = await Promise.all([load(() => import('./docx.js')), loadLogo()]);
     blob = await exportDocx(model, media, { logo });
   } else if (format === 'xlsx') {
-    const [{ exportXlsx }, logo] = await Promise.all([import('./xlsx.js'), loadLogo()]);
+    const [{ exportXlsx }, logo] = await Promise.all([load(() => import('./xlsx.js')), loadLogo()]);
     blob = await exportXlsx(model, media, { logo });
   } else {
     throw new Error(`未知格式：${format}`);

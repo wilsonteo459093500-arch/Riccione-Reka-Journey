@@ -21,7 +21,10 @@ function track(promise) {
   promise.then(done, done);
   return promise;
 }
-const waitMedia = () => Promise.allSettled([...pending]);
+// 一直等到没有处理中的任务（处理过程中可能又登记了新的）
+async function waitMedia() {
+  while (pending.size) await Promise.allSettled([...pending]);
+}
 const pendingMedia = () => pending.size;
 
 export function StoreProvider({ children }) {

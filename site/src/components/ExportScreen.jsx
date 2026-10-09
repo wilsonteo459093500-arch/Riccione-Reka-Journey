@@ -3,6 +3,7 @@ import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './ui/Icon.jsx';
 import { TopBar, Spinner, useUI, Empty } from './ui/UI.jsx';
 import SummaryCard from './SummaryCard.jsx';
+import ErrorBoundary from './ui/ErrorBoundary.jsx';
 import { useStore } from '../lib/store.jsx';
 import { getTemplate } from '../templates/index.js';
 import { issues as listIssues, makeCtx, siteLabel } from '../lib/report.js';
@@ -15,6 +16,29 @@ import { fmtBytes } from '../lib/images.js';
 import { navigate, goBack } from '../lib/router.js';
 
 const DocPreview = lazy(() => import('./doc/DocPreview.jsx'));
+
+// 安卓 Chrome 一次最多分享 10 个文件、总共 50MB；超过会被系统拒绝。这里提前分好组。
+const MAX_FILES = 10;
+const MAX_BYTES = 45 * 1024 * 1024;
+function shareBatches(files) {
+  const images = files.filter((f) => !f.type.startsWith('video/'));
+  const videos = files.filter((f) => f.type.startsWith('video/'));
+  const out = [];
+  let cur = [];
+  let bytes = 0;
+  for (const f of images) {
+    if (cur.length && (cur.length >= MAX_FILES || bytes + f.size > MAX_BYTES)) {
+      out.push({ files: cur, kind: 'photos' });
+      cur = [];
+      bytes = 0;
+    }
+    cur.push(f);
+    bytes += f.size;
+  }
+  if (cur.length) out.push({ files: cur, kind: 'photos' });
+  for (const v of videos) out.push({ files: [v], kind: 'video', tooBig: v.size > MAX_BYTES });
+  return out;
+}
 
 function FormatRow({ fmt, state, onGenerate, onShare, onDownload, primary }) {
   const f = FORMATS[fmt];
@@ -77,6 +101,7 @@ export default function ExportScreen({ reportId }) {
   const project = report?.projectId ? store.projectById(report.projectId) : null;
   const [files, setFiles] = useState({});
   const [shareMedia, setShareMedia] = useState(null);
+  const [sent, setSent] = useState({});
   const [showPreview, setShowPreview] = useState(template?.kind !== 'message');
   const loader = useMemo(() => createMediaLoader(), []);
   const genAt = useRef({});
@@ -174,6 +199,7 @@ export default function ExportScreen({ reportId }) {
   const warns = problems.filter((p) => p.level !== 'error');
   const isMsg = template.kind === 'message';
   const photosCount = shareMedia?.length || 0;
+  const batches = shareMedia ? shareBatches(shareMedia) : [];
 
   const jumpTo = (p) => {
     window.__siteScrollTo = [p.target && `item-${p.target}`, p.target && `field-${p.target}`, p.sectionId && `sec-${p.sectionId}`].filter(Boolean);
@@ -237,18 +263,37 @@ export default function ExportScreen({ reportId }) {
             </div>
             {photosCount > 0 && (
               <div className="mt-2 grid grid-cols-1 gap-2">
-                <button
-                  className="btn-accent py-3 text-[14px]"
-                  onClick={async () => {
-                    const res = await shareFiles(shareMedia, { text });
-                    if (res === 'unsupported') {
-                      toast('这台设备不支持直接分享照片，请先复制文案，再在 WhatsApp 里选照片', 'warn');
-                    }
-                  }}
-                >
-                  <Icon name="Share2" size={17} /> 分享文案 + {photosCount} 个照片 / 视频
-                </button>
+                {batches.map((b, i) => {
+                  const from = batches.slice(0, i).filter((x) => x.kind === 'photos').reduce((n, x) => n + x.files.length, 0);
+                  const label =
+                    b.kind === 'video'
+                      ? `分享视频（${fmtBytes(b.files[0].size)}）`
+                      : batches.length === 1
+                        ? `分享文案 + ${b.files.length} 张照片`
+                        : i === 0
+                          ? `① 分享文案 + 照片 1–${b.files.length}`
+                          : `${'①②③④⑤⑥⑦⑧⑨⑩'[i] || i + 1} 分享照片 ${from + 1}–${from + b.files.length}`;
+                  return (
+                    <button
+                      key={i}
+                      className={`${i === 0 ? 'btn-accent' : 'btn-ghost'} py-3 text-[14px] ${sent[i] ? 'opacity-60' : ''}`}
+                      onClick={async () => {
+                        if (b.tooBig) {
+                          toast('视频超过 45MB，系统不让直接分享：请在 WhatsApp 里从相册选这段视频', 'warn');
+                          return;
+                        }
+                        const res = await shareFiles(b.files, i === 0 && b.kind === 'photos' ? { text } : {});
+                        if (res === 'shared') setSent((x) => ({ ...x, [i]: true }));
+                        else if (res === 'unsupported') toast('这台设备不支持直接分享照片：请先复制文案，再在 WhatsApp 里选照片', 'warn');
+                        else if (res === 'failed') toast('系统拒绝了这次分享（文件太多或太大）：请复制文案后在 WhatsApp 里直接选照片', 'error');
+                      }}
+                    >
+                      <Icon name={sent[i] ? 'Check' : b.kind === 'video' ? 'Video' : 'Share2'} size={17} /> {label}
+                    </button>
+                  );
+                })}
                 <div className="text-center text-[12px] leading-snug text-ink-mute">
+                  {batches.length > 1 ? '照片较多，按顺序一组一组发（系统一次最多 10 个文件）。' : ''}
                   iPhone 上 WhatsApp 有时只收照片不收文字：先点「复制文案」，分享照片后在对话里粘贴即可。
                 </div>
               </div>
@@ -286,9 +331,22 @@ export default function ExportScreen({ reportId }) {
           </button>
           {showPreview && model && (
             <div className="-mx-3 rounded-none bg-[#E9E3D6] px-3 py-4">
-              <Suspense fallback={<div className="flex justify-center py-10"><Spinner /></div>}>
-                <DocPreview model={model} media={loader} />
-              </Suspense>
+              <ErrorBoundary
+                fallback={({ offline, retry }) => (
+                  <div className="py-8 text-center text-[13px] leading-relaxed text-ink-soft">
+                    {offline ? '预览需要联网加载一次（之后离线也能用）' : '预览出错了'}
+                    <div className="mt-3">
+                      <button className="btn-ghost px-4 py-2 text-[13px]" onClick={retry}>
+                        重试
+                      </button>
+                    </div>
+                  </div>
+                )}
+              >
+                <Suspense fallback={<div className="flex justify-center py-10"><Spinner /></div>}>
+                  <DocPreview model={model} media={loader} />
+                </Suspense>
+              </ErrorBoundary>
             </div>
           )}
         </div>

@@ -26,6 +26,6 @@
     }
   ],
   "rewrites": [
-    { "source": "/((?!assets|icon\\.svg|robots\\.txt|sw\\.js|manifest\\.webmanifest|sail-logo\\.png).*)", "destination": "/index.html" }
+    { "source": "/((?!assets|icon\\.svg|robots\\.txt|sw\\.js|manifest\\.webmanifest|sail-logo\\.png|apple-touch-icon\\.png|icon-.*\\.png).*)", "destination": "/index.html" }
   ]
 }

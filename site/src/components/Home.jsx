@@ -66,6 +66,23 @@ export default function Home() {
   const [menu, setMenu] = useState(null); // report
   const [filter, setFilter] = useState('all');
   const [limit, setLimit] = useState(40);
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const standalone = window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone;
+  const [hideInstall, setHideInstall] = useState(() => {
+    try {
+      return localStorage.getItem('site.hideInstall') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const dismissInstall = () => {
+    setHideInstall(true);
+    try {
+      localStorage.setItem('site.hideInstall', '1');
+    } catch {
+      /* ignore */
+    }
+  };
 
   const matching = useMemo(
     () =>
@@ -126,6 +143,21 @@ export default function Home() {
       </header>
 
       <main className="mx-auto -mt-3 max-w-lg px-3">
+        {isIOS && !standalone && !hideInstall && (
+          <div className="card mb-3 border-l-4 border-l-pine p-3">
+            <div className="flex items-start gap-3">
+              <Icon name="Smartphone" size={20} className="mt-0.5 shrink-0 text-pine" />
+              <div className="flex-1 text-[13px] leading-relaxed text-ink-soft">
+                <b className="text-ink">建议先加到主屏幕再开始用</b>：Safari 底部「分享」→「添加到主屏幕」。
+                <br />
+                iPhone 上主屏幕 App 和 Safari 的资料是<b>分开存的</b>；在 Safari 里填的报告不会自动出现在主屏幕 App 里（可用「设置 → 备份 / 恢复」搬过去）。
+              </div>
+              <button className="shrink-0 rounded-full p-1 text-ink-faint" onClick={dismissInstall} aria-label="不再提示">
+                <Icon name="X" size={16} />
+              </button>
+            </div>
+          </div>
+        )}
         {!store.settings.name && (
           <button className="card mb-3 flex w-full items-center gap-3 border-l-4 border-l-terra p-3 text-left" onClick={() => navigate('/settings')}>
             <Icon name="Info" size={20} className="shrink-0 text-terra" />

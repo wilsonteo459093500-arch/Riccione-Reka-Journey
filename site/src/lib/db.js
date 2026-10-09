@@ -129,7 +129,14 @@ export function createMediaLoader() {
     },
     async url(id, which = 'blob') {
       const m = await this.get(id);
-      const b = m && (which === 'thumb' ? m.thumb || m.blob : m.blob || m.thumb);
+      // which: 'blob' 原图 | 'thumb' 缩略图 | 'poster' 视频封面（视频的 blob 是视频文件本身，不能当图片）
+      const b =
+        m &&
+        (which === 'thumb'
+          ? m.thumb || m.blob
+          : which === 'poster' || m.kind === 'video'
+            ? m.poster || m.thumb
+            : m.blob || m.thumb);
       if (!b) return null;
       const u = URL.createObjectURL(b);
       urls.push(u);

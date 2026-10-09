@@ -1,6 +1,7 @@
 // 溪岸 SITE · 现场报告 —— 路由 + 底部导航
 import Icon from './components/ui/Icon.jsx';
 import { UIProvider, Spinner } from './components/ui/UI.jsx';
+import ErrorBoundary from './components/ui/ErrorBoundary.jsx';
 import Home from './components/Home.jsx';
 import Editor from './components/Editor.jsx';
 import ExportScreen from './components/ExportScreen.jsx';
@@ -82,7 +83,9 @@ export default function App() {
   return (
     <StoreProvider>
       <UIProvider>
-        <Screens />
+        <ErrorBoundary>
+          <Screens />
+        </ErrorBoundary>
       </UIProvider>
     </StoreProvider>
   );

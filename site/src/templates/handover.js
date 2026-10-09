@@ -30,7 +30,7 @@ export default {
   doc: {
     brand: 'sail',
     // 原表右上角：INTERNAL · 内部文件 / 无需出示客户 not for client
-    badge: { zh: '内部文件', en: 'INTERNAL', sub: { zh: '无需出示客户', en: 'not for client' } },
+    badge: { zh: 'INTERNAL · 内部文件', en: '无需出示客户 not for client' },
     title: { zh: '交付执行清单', en: 'HANDOVER CHECKLIST' },
     subtitle: { zh: '五个 H 一条线，按顺序执行。', en: 'Five H, one run — tick in order.' },
   },

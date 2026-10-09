@@ -137,7 +137,7 @@ export function applyProject(template, report, project, settings, oldProject, pr
 export function reportTitle(template, report, project) {
   const v = report.values || {};
   const date = v.date || '';
-  const where = project ? siteLabel(project) : v.project || v.address || '';
+  const where = project ? siteLabel(project) : v.project || v.client || v.customer || v.address || '';
   return [template.name.zh, where, date].filter(Boolean).join(' · ');
 }
 

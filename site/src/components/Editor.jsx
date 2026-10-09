@@ -83,6 +83,7 @@ export default function Editor({ reportId }) {
   const version = useRef(0); // 每次修改 +1；只有保存的快照仍是最新版本时才清 dirty
   const latest = useRef(stored || null); // 始终是最新状态（同步更新，组件卸载后迟到的照片也能写进来）
   const retryTimer = useRef(null);
+  const mounted = useRef(true);
 
   const template = report ? getTemplate(report.templateId) : null;
   const project = report?.projectId ? store.projectById(report.projectId) : null;
@@ -143,6 +144,7 @@ export default function Editor({ reportId }) {
   }, [report, flush]);
 
   useEffect(() => {
+    mounted.current = true;
     const onHide = () => document.visibilityState === 'hidden' && flushRef.current();
     const onPageHide = () => flushRef.current();
     document.addEventListener('visibilitychange', onHide);
@@ -151,6 +153,7 @@ export default function Editor({ reportId }) {
       document.removeEventListener('visibilitychange', onHide);
       window.removeEventListener('pagehide', onPageHide);
       clearTimeout(retryTimer.current);
+      mounted.current = false;
       // 离开时：等处理中的照片 / 视频写完再存一次
       store.waitMedia().then(() => flushRef.current());
     };
@@ -165,6 +168,11 @@ export default function Editor({ reportId }) {
     latest.current = next;
     version.current += 1;
     dirty.current = true;
+    if (!mounted.current) {
+      // 已离开编辑页（如照片晚到）：直接写入本机
+      flushRef.current?.();
+      return;
+    }
     setSaved(false);
     setReport(next);
   }, []);

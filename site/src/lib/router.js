@@ -15,8 +15,11 @@ export function useRoute() {
 
 export function navigate(to, { replace = false } = {}) {
   const hash = `#${to}`;
-  if (replace) window.location.replace(hash);
+  // 弹层打开时会压一条占位历史记录：从弹层里跳页面时替换掉它，避免多一次「返回」
+  if (replace || window.history.state?.sheet) window.location.replace(hash);
   else window.location.hash = hash;
+  // 新页面从顶部开始（返回 / 前进保留浏览器恢复的位置）
+  window.scrollTo(0, 0);
 }
 
 /** 返回上一页；如果是直接打开的深链接（没有历史），就回到 fallback */
