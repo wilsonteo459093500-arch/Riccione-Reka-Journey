@@ -12,7 +12,7 @@
 
 import {
   parseRoomTitle, parseFloorLabel, parseMaterialLabel, materialKey, parseFileName, parseClientLine, formatPdfDate,
-  parseNoteText, looksLikeMaterial, inferRole, findCode, joinLines, hasHan, SUBTITLE_KEYWORDS,
+  parseNoteText, looksLikeMaterial, inferRole, findCode, joinLines, hasHan, SUBTITLE_KEYWORDS, ROLE_WORDS,
 } from './labels.js';
 
 // ---------------------------------------------------------------------------
@@ -185,7 +185,13 @@ export function analyzePages(raw, { fileName } = {}) {
     const c = lineCount.get(lineKey(l, W, H)) || 0;
     if (c < 3) return false;
     if (/^[*※•]/.test(l.text) || findCode(l.text) || looksLikeMaterial(l.text)) return false;
-    return FURNITURE_HINT.test(l.text.replace(/\d+/g, '#')) || c >= Math.max(3, 0.5 * N);
+    if (FURNITURE_HINT.test(l.text.replace(/\d+/g, '#'))) return true;
+    // 其它重复文字：只认页边的小字（页眉页脚）；材料部位（'柜体 & 柜门'、'台面：'）和空间 / 楼层标题永远保留
+    // （同一空间连续几页、固定色板栏的版式里，它们本来就会在同一位置重复）
+    const margin = l.y < 0.08 * H || l.y + l.h > 0.92 * H;
+    const roleLike = ROLE_WORDS.some((r) => l.text.startsWith(r)) || /[：:]\s*$/.test(l.text);
+    const titleLike = parseRoomTitle(l.text).known || !!parseFloorLabel(l.text);
+    return c >= Math.max(3, 0.5 * N) && margin && l.fs < 13 && !roleLike && !titleLike;
   };
   const anyText = rawPages.some((p) => (p.lines || []).length > 0);
 
@@ -298,6 +304,11 @@ export function analyzePages(raw, { fileName } = {}) {
       pages.push({ n: p.n, kind: 'title', title: t });
       report(p.n, 'title', t);
       continue;
+    }
+
+    // 页面写着空间标题 / 材料标签，却只有一张通栏横图（同一张横幅效果图用在了两页）→ 它就是效果图
+    if (!big && (roomTitled || labelled)) {
+      big = imgs.filter((im) => isStrip(im) && !decor.has(im.key) && area(im) / PA >= 0.18).sort((a, b) => area(b) - area(a))[0] || null;
     }
 
     if (!big) {

@@ -266,3 +266,21 @@ test('楼层章节页同时列了本层空间：仍认得出', () => {
   assert.equal(a.pages[0].kind, 'floor');
   assert.equal(a.views[0].floorKey, a.floors[0].key);
 });
+
+test('同一空间连续几页（小份 PDF）：重复的空间标题 / 材料部位不当页眉删掉；同一张横幅图用两页仍是效果图', () => {
+  const kitchen = [1, 2, 3].map((n) =>
+    pageOf(n, [L('厨房 KITCHEN', 20, 20, 20), L('柜体 & 柜门', 800, 240), L(`浅川橡 AG27${n}`, 800, 256), L('台面：', 800, 300), L('白色石英石 QZ01', 800, 316)], [
+      I(`k${n}`, 10, 80, 760, 440),
+      I(`sw${n}`, 800, 100, 130, 130, 500, 500),
+    ], 960, 540)
+  );
+  const a = analyzePages({ pages: kitchen });
+  assert.equal(a.views.length, 3);
+  assert.deepEqual(a.views.map((v) => v.room), ['厨房', '厨房', '厨房']);
+  for (const v of a.views) {
+    assert.ok(v.materials.some((m) => /柜体/.test(m.role)), `p${v.page} 丢了「柜体 & 柜门」`);
+  }
+  // 横幅效果图在两页重复使用：仍是效果图，不是装饰条
+  const banner = [1, 2].map((n) => pageOf(n, [L('客厅 LIVING AREA', 20, 400, 20)], [I('banner', 0, 0, 720, 300)]));
+  assert.deepEqual(analyzePages({ pages: banner }).pages.map((p) => p.kind), ['view', 'view']);
+});

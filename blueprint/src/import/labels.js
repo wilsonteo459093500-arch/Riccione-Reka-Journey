@@ -564,7 +564,8 @@ export function parseRoomTitle(str) {
   }
   if (en && number && !/\d$/.test(en)) en = `${en} ${number}`;
   out.roomEn = en;
-  out.feature = pangu(features.join(' · '));
+  // '客厅/电视柜'：去掉段首残留的分隔符
+  out.feature = pangu(features.map((f) => f.replace(/^[/:：·•|｜\-–—\s]+/, '')).filter(Boolean).join(' · '));
   out.subtitle = [out.feature, out.qualifier].filter(Boolean).join(' · ');
   return out;
 }

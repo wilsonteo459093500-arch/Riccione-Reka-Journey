@@ -277,6 +277,7 @@ test('空间标题：分隔符后的视角、词典外英文名、英文楼层�
   assert.deepEqual(t('客厅 - 电视柜'), ['客厅', 'LIVING AREA', '电视柜']);
   assert.deepEqual(t('客厅｜电视柜'), ['客厅', 'LIVING AREA', '电视柜']);
   assert.deepEqual(t('客厅：电视柜'), ['客厅', 'LIVING AREA', '电视柜']);
+  assert.deepEqual(t('客厅/电视柜'), ['客厅', 'LIVING AREA', '电视柜']);
   assert.deepEqual(t('Master Bedroom - Walk-in Wardrobe'), ['主人房', 'MASTER BEDROOM', 'Walk-In Wardrobe']);
   assert.deepEqual(t('GUEST BEDROOM'), ['客房', 'GUEST ROOM', '']);
   assert.deepEqual(t('Laundry Area'), ['洗衣房', 'LAUNDRY', '']);
