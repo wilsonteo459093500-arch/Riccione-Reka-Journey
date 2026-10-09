@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" data-lang="zh">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Moodboard 生成器 · RICCIONE REKA JOURNEY</title>
+<meta name="robots" content="noindex, nofollow" />
+<meta name="theme-color" content="#F4F0E8" />
+<link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,400&family=Jost:wght@300;400;500;600&family=Noto+Sans+SC:wght@300;400;500;600&family=Noto+Serif+SC:wght@300;400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/css/invite.css" />
+<link rel="stylesheet" href="assets/css/form.css" />
+<link rel="stylesheet" href="assets/css/moodboard.css" />
+</head>
+
+<body class="form-body mb-body">
+
+<header class="f-top mb-top">
+  <div class="row">
+    <a href="create.html" title="回到销售端"><img src="assets/img/brand/riccione-reka.png" alt="Riccione Reka" /></a>
+    <div class="proj">
+      <select id="proj-select" aria-label="方案"></select>
+      <button class="mini dark" type="button" id="proj-new">＋ 新方案</button>
+      <button class="mini" type="button" id="proj-dup">复制</button>
+      <button class="mini danger" type="button" id="proj-del">删除</button>
+    </div>
+    <span class="f-count">MOODBOARD · 销售端</span>
+  </div>
+</header>
+
+<main class="mb">
+
+  <!-- ======================== 左：编辑 ======================== -->
+  <div class="mb-edit">
+    <nav class="mb-tabs" role="tablist" id="tabs">
+      <button type="button" data-tab="brief">① 客户</button>
+      <button type="button" data-tab="style">② 风格</button>
+      <button type="button" data-tab="rooms">③ 空间</button>
+      <button type="button" data-tab="plan">④ 平面图</button>
+      <button type="button" data-tab="visit">⑤ 到馆</button>
+      <button type="button" data-tab="copy">⑥ 文案</button>
+      <button type="button" data-tab="library">图库</button>
+    </nav>
+
+    <!-- ① 客户 -->
+    <section class="mb-pane" data-pane="brief">
+      <h3>客户与需求</h3>
+      <p class="hint">最快的做法：把客户填好的<b>需求卡</b>整段贴进来 —— 名字、楼盘、空间、风格、需求会自动带出，图也会自动配好。
+        客户还没填？到 <a href="create.html">销售端</a> 发需求卡链接。</p>
+
+      <div class="panel">
+        <div class="field" style="margin-bottom:10px">
+          <label class="q" for="brief-text">贴需求卡 <i class="muted small">WhatsApp 上收到的整段文字</i></label>
+          <textarea id="brief-text" placeholder="【溪岸 · 客户需求卡】&#10;——————————————&#10;姓名：Mr &amp; Mrs Lim&#10;楼盘 / 单位：楼盘名, Setia Alam&#10;…"></textarea>
+        </div>
+        <button class="mini gold" type="button" id="brief-apply">读取并带入方案</button>
+      </div>
+
+      <div class="panel">
+        <p class="sub-h" style="margin-top:0">客户</p>
+        <div class="row2">
+          <div class="field"><label class="q" for="c-names">称呼 <i class="muted small">印在封面</i></label>
+            <input type="text" id="c-names" data-bind="client.names" placeholder="Mr &amp; Mrs Lim" /></div>
+          <div class="field"><label class="q" for="c-honor">称谓 <i class="muted small">邀请函用</i></label>
+            <select id="c-honor" data-bind="client.honor">
+              <option value="">（不加）</option><option value="mr">先生 Mr</option><option value="ms">女士 Ms</option>
+              <option value="miss">小姐 Miss</option><option value="mrs">太太 Mrs</option>
+            </select></div>
+        </div>
+        <div class="field" style="margin-bottom:0"><label class="q" for="c-wa">客户 WhatsApp <i class="muted small">选填，文案可一键发送</i></label>
+          <input type="tel" id="c-wa" data-bind="client.wa" placeholder="60123456789" /></div>
+
+        <p class="sub-h">房子</p>
+        <div class="row2">
+          <div class="field"><label class="q" for="p-name">楼盘</label>
+            <input type="text" id="p-name" data-bind="property.name" placeholder="楼盘名" /></div>
+          <div class="field"><label class="q" for="p-area">区域</label>
+            <input type="text" id="p-area" data-bind="property.area" placeholder="Setia Alam" /></div>
+        </div>
+        <div class="row2 thirds">
+          <div class="field"><label class="q" for="p-type">房型</label>
+            <input type="text" id="p-type" data-bind="property.type" placeholder="Terrace" /></div>
+          <div class="field"><label class="q" for="p-size">面积 sq ft</label>
+            <input type="text" id="p-size" data-bind="property.size" placeholder="2,400" /></div>
+          <div class="field"><label class="q" for="p-date">方案日期</label>
+            <input type="date" id="p-date" data-bind="date" /></div>
+        </div>
+      </div>
+
+      <div class="panel" id="needs-panel">
+        <p class="sub-h" style="margin-top:0">你们说的 · 我们做的</p>
+        <p class="hint" style="margin-bottom:8px">客户<b>原话</b>放左边，我们的做法放右边。原话比任何形容词都有说服力。</p>
+        <div id="needs-list"></div>
+        <div class="room-add" id="needs-add" style="margin:10px 0 0"></div>
+      </div>
+
+      <div class="panel">
+        <p class="sub-h" style="margin-top:0">我是谁 <i class="muted small" style="text-transform:none;letter-spacing:0">与销售端共用，填一次就记住</i></p>
+        <div class="row2 thirds">
+          <div class="field"><label class="q" for="h-name">姓名</label><input type="text" id="h-name" data-bind="host.name" data-profile="host" /></div>
+          <div class="field"><label class="q" for="h-role">职称</label><input type="text" id="h-role" data-bind="host.role" data-profile="role" /></div>
+          <div class="field"><label class="q" for="h-wa">WhatsApp</label><input type="tel" id="h-wa" data-bind="host.wa" data-profile="wa" /></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ② 风格 -->
+    <section class="mb-pane" data-pane="style">
+      <h3>风格方向</h3>
+      <p class="hint">整份方案只走<b>一个</b>方向。每页风格一致，客户才拼得出一个完整的家（WYSIATI）。</p>
+      <div class="dir-cards" id="dir-cards"></div>
+
+      <div class="panel" style="margin-top:16px">
+        <p class="sub-h" style="margin-top:0">配色 · 5 色 <button class="reset" type="button" id="pal-reset">↺ 恢复这个风格的默认</button></p>
+        <div id="pal-edit"></div>
+        <p class="sub-h">材质 · 换成真实板材色号更可信</p>
+        <div id="mat-edit"></div>
+      </div>
+
+      <div class="panel">
+        <p class="sub-h" style="margin-top:0">住进去的感觉 · 三句话（一页看懂）</p>
+        <div id="prom-edit"></div>
+      </div>
+    </section>
+
+    <!-- ③ 空间 -->
+    <section class="mb-pane" data-pane="rooms">
+      <h3>空间</h3>
+      <p class="hint">点下面加入空间，图和卖点会自动配好。每页 <b>1 张主图 + 最多 2 张辅图</b>；第一张是主图（★）。</p>
+      <div class="room-add" id="room-add"></div>
+      <div class="btn-row" style="margin-bottom:14px">
+        <button class="mini" type="button" id="auto-all">全部重新自动配图</button>
+      </div>
+      <div id="room-list"></div>
+    </section>
+
+    <!-- ④ 平面图 -->
+    <section class="mb-pane" data-pane="plan">
+      <h3>平面图</h3>
+      <p class="hint">上传平面图，再<b>选空间 → 点图上的位置</b>放编号。编号会对上后面每一页的页码。<br />平面图只存在这台电脑，不会上传。</p>
+      <div class="drop" id="plan-drop">拖平面图进来，或 <u>点这里选图</u><input type="file" id="plan-file" accept="image/*" hidden /></div>
+      <div id="plan-lib"></div>
+      <div id="plan-area"></div>
+      <div class="field" style="margin-top:18px">
+        <label class="q" for="x-not">这次没包含的空间 <i class="muted small">印在平面图页下方</i></label>
+        <span class="sub">没提到的房间，客户会以为「溪岸不做」，转头去找别家报价。写出来，再说一句「想加进来跟我们说」。</span>
+        <input type="text" id="x-not" data-bind="extra.notIncluded" placeholder="Studio, Bedroom 1 & 2, Dining" />
+      </div>
+    </section>
+
+    <!-- ⑤ 到馆 -->
+    <section class="mb-pane" data-pane="visit">
+      <h3>到馆邀约 · 最后一页</h3>
+      <p class="hint">峰终定律：客户记住的是<b>高峰</b>和<b>结尾</b>。最后一页给一个已经留好的时段，而不是「欢迎参观」。</p>
+      <div class="panel">
+        <p class="sub-h" style="margin-top:0">为他们留的时段</p>
+        <div class="row2">
+          <div class="field"><label class="q" for="v-date">时段 1 · 日期</label><input type="date" id="v-date" data-bind="visit.date" /></div>
+          <div class="field"><label class="q" for="v-time">时间</label><input type="time" id="v-time" data-bind="visit.time" /></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label class="q" for="v-date2">时段 2 · 备选</label><input type="date" id="v-date2" data-bind="visit.date2" /></div>
+          <div class="field"><label class="q" for="v-time2">时间</label><input type="time" id="v-time2" data-bind="visit.time2" /></div>
+        </div>
+        <div class="field" style="margin-bottom:0;max-width:160px"><label class="q" for="v-mins">时长（分钟）</label>
+          <input type="number" id="v-mins" min="15" step="15" data-bind="visit.mins" /></div>
+      </div>
+
+      <div class="panel">
+        <p class="sub-h" style="margin-top:0">到馆那天，为他们准备好的三样</p>
+        <p class="hint" style="margin-bottom:8px">要具体、要是「他们的」—— 例：「你们厨房那组板材」比「各种板材」有力。写之前确认展厅真的做得到。</p>
+        <div id="prep-edit"></div>
+      </div>
+
+      <div class="panel">
+        <p class="sub-h" style="margin-top:0">工期 · 预算 · 保障 <i class="muted small" style="text-transform:none;letter-spacing:0">只填真实资料；都空着就不出这一页</i></p>
+        <p class="hint" style="margin-bottom:10px">第一个具体数字会变成锚 —— 我们先给，好过让别家的按尺价先给（锚定）。工期写过往项目的真实区间，不写最快那一次（规划谬误）。</p>
+        <div class="field"><label class="q" for="x-time">工期</label>
+          <input type="text" id="x-time" data-bind="extra.timeline" placeholder="例：确认设计后约 8–10 周完成安装（近 10 个马来西亚项目的实际区间）" /></div>
+        <div class="field"><label class="q" for="x-budget">预算</label>
+          <textarea id="x-budget" data-bind="extra.budget" placeholder="例：RM 85k – 110k（按这份方案的空间与板材；量尺后出正式报价）"></textarea></div>
+        <div class="field" style="margin-bottom:0"><label class="q" for="x-built">为马来西亚的家而做 <i class="muted small">一行一条，只写能书面兑现的</i></label>
+          <textarea id="x-built" data-bind="extra.built" placeholder="湿区柜体用防潮板 + 全封边&#10;柜体保修 __ 年，五金保修 __ 年&#10;自有团队量尺与安装"></textarea></div>
+      </div>
+
+      <div class="panel">
+        <p class="sub-h" style="margin-top:0">页面开关</p>
+        <div class="chks" id="page-toggles"></div>
+        <p class="sub-h">封面 / 一页看懂 / 邀约 / 封底 用哪张图</p>
+        <div class="thumbs" id="slot-thumbs"></div>
+      </div>
+
+      <div class="panel">
+        <p class="sub-h" style="margin-top:0">邀请函链接（二维码就是它）</p>
+        <div class="link-out" id="inv-link">—</div>
+        <div class="btn-row">
+          <button class="mini" type="button" id="inv-copy">复制链接</button>
+          <a class="mini" id="inv-open" href="#" target="_blank" rel="noopener">预览邀请函</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- ⑥ 文案 -->
+    <section class="mb-pane" data-pane="copy">
+      <h3>文案 · 照这个顺序发</h3>
+      <p class="hint">根据这份方案自动写好。每则下面标着用了《快思慢想》的哪个原理 —— 点一下看为什么。改过的字可以直接复制。</p>
+      <div class="btn-row" style="margin-bottom:14px;align-items:center">
+        <div class="seg" id="copy-lang">
+          <button type="button" data-v="zh">中文</button><button type="button" data-v="en">English</button>
+        </div>
+        <span class="small muted" id="copy-to"></span>
+      </div>
+      <div id="copy-list"></div>
+    </section>
+
+    <!-- 图库 -->
+    <section class="mb-pane" data-pane="library">
+      <h3>图库</h3>
+      <p class="hint">内置的是溪岸自家的空间实拍。你自己的参考图存在<b>这台电脑的浏览器里</b>（不上传、不进 git）。
+        最快的入库方法：<b>把以前做好的 proposal PDF 拖进来</b>，里面的照片会按页面标题自动分好空间。</p>
+
+      <div class="panel">
+        <p class="sub-h" style="margin-top:0">从旧 proposal PDF 收图</p>
+        <div class="drop" id="pdf-drop">拖 PDF 进来，或 <u>点这里选 PDF</u><input type="file" id="pdf-file" accept="application/pdf" hidden /></div>
+        <div class="progress" id="pdf-prog"><i></i></div>
+        <p class="sub-h">上传照片</p>
+        <div class="row2" style="align-items:end">
+          <div class="field" style="margin-bottom:0"><label class="q" for="up-tag">归到哪个空间</label><select id="up-tag"></select></div>
+          <div class="drop" id="up-drop" style="margin:0">拖照片进来，或 <u>点这里</u><input type="file" id="up-file" accept="image/*" multiple hidden /></div>
+        </div>
+      </div>
+
+      <div class="lib-tools" id="lib-filter"></div>
+      <div class="lib-grid" id="lib-grid"></div>
+
+      <div class="panel" style="margin-top:18px">
+        <p class="sub-h" style="margin-top:0">备份 · 给同事</p>
+        <p class="hint" style="margin-bottom:10px">图库和方案只在这台电脑。换电脑、或把整理好的图库给同事，用下面的文件。</p>
+        <div class="btn-row">
+          <button class="mini" type="button" id="lib-export">导出图库</button>
+          <label class="mini">导入图库<input type="file" id="lib-import" accept="application/json,.json" hidden /></label>
+          <button class="mini" type="button" id="proj-export">导出这份方案</button>
+          <label class="mini">导入方案<input type="file" id="proj-import" accept="application/json,.json" hidden /></label>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ======================== 右：预览 ======================== -->
+  <div class="mb-preview" id="preview">
+    <div class="pv-bar">
+      <button class="score" type="button" id="score"><i></i><span>体检</span></button>
+      <span class="meta" id="pv-meta"></span>
+      <span class="grow"></span>
+      <div class="seg" id="deck-lang" title="方案语言">
+        <button type="button" data-v="en">EN</button><button type="button" data-v="zh">中文</button><button type="button" data-v="bi">双语</button>
+      </div>
+      <button class="mini gold" type="button" id="btn-print">导出 PDF</button>
+    </div>
+    <div class="pv-check" id="pv-check"></div>
+    <div class="deck" id="deck"></div>
+  </div>
+</main>
+
+<!-- 选图 -->
+<div class="mb-modal" id="pick-modal" role="dialog" aria-modal="true" aria-labelledby="pick-title">
+  <div class="box">
+    <header>
+      <h3 id="pick-title">选图</h3>
+      <div class="btn-row">
+        <button class="mini gold" type="button" id="pick-ok">加入所选</button>
+        <button class="mini" type="button" data-close>关闭</button>
+      </div>
+    </header>
+    <div class="lib-tools" id="pick-filter"></div>
+    <div class="lib-grid" id="pick-grid"></div>
+  </div>
+</div>
+
+<!-- PDF 收图确认 -->
+<div class="mb-modal" id="import-modal" role="dialog" aria-modal="true" aria-labelledby="import-title">
+  <div class="box">
+    <header>
+      <h3 id="import-title">从 PDF 收到的图</h3>
+      <div class="btn-row">
+        <button class="mini" type="button" id="imp-all">全选</button>
+        <button class="mini" type="button" id="imp-none">全不选</button>
+        <button class="mini gold" type="button" id="imp-save">存入图库</button>
+        <button class="mini" type="button" data-close>取消</button>
+      </div>
+    </header>
+    <p class="hint" id="imp-hint" style="font-size:13px;color:var(--ink-soft)"></p>
+    <div class="lib-grid" id="imp-grid"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast">已复制</div>
+
+<script src="assets/js/config.js"></script>
+<script src="assets/js/cases.js"></script>
+<script src="assets/vendor/qrcode.js"></script>
+<script src="assets/js/moodboard/data.js"></script>
+<script src="assets/js/moodboard/store.js"></script>
+<script src="assets/js/moodboard/model.js"></script>
+<script src="assets/js/moodboard/brief-parse.js"></script>
+<script src="assets/js/moodboard/pdf-import.js"></script>
+<script src="assets/js/moodboard/deck.js"></script>
+<script src="assets/js/moodboard/copy.js"></script>
+<script src="assets/js/moodboard/check.js"></script>
+<script src="assets/js/moodboard/app.js"></script>
+</body>
+</html>
