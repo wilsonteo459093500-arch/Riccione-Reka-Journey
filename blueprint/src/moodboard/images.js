@@ -155,3 +155,9 @@ export function downloadDataUrl(dataUrl, filename) {
   a.click();
   a.remove();
 }
+
+export function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  downloadDataUrl(url, filename);
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}

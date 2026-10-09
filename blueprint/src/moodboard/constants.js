@@ -95,6 +95,7 @@ export const DEFAULT_BOARD = {
   titleColor: '', // 空 = 跟随底色自动（浅底墨色 / 深底暖白）
   notes: '', // 排版偏好，喂给 AI 实拍排版
   story: '', // 客户故事 / 道具，喂给 AI 实拍排版
+  showLegend: false, // 下载 PNG 时加编号 + 材质图例（方案封面永远不带）
 };
 
 /** 实拍排版最多带几张素材（按图层顺序取前 N 张） */

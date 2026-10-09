@@ -268,6 +268,58 @@ export function titleBlockMetrics(W, H, board, defaultColor) {
 
 /** 文件名里去掉不安全字符 */
 export function safeFileName(s, fallback = 'riccione') {
-  const out = String(s || '').replace(/[\\/:*?"<>|\s]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
+  const out = String(s || '')
+    .replace(/[\\/:*?"<>|\s·•・｜]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 60);
   return out || fallback;
+}
+
+/** 副标题字距（相对字号） */
+export const SUB_TRACKING = 0.16;
+
+/**
+ * 图例清单卡（右上角）与素材编号圆点的几何。measure(text, fontPx) → 文字宽度（画布 / SVG 共用）。
+ * 行数多时自动缩小字号，保证整卡不超过画板高度的 90%。
+ */
+export function legendLayout(W, H, rows, measure) {
+  if (!rows.length) return null;
+  const n = rows.length;
+  const fs = Math.min(W * 0.014, (H * 0.9) / (3.64 + (n - 1) * 1.7));
+  const lh = fs * 1.7;
+  const pad = fs * 1.2;
+  const cr = fs * 0.62;
+  const gap = fs * 0.5;
+  const textW = Math.max(...rows.map((r) => measure(r.label, fs)));
+  const boxW = Math.min(W * 0.34, textW + pad * 2 + cr * 2 + gap);
+  const boxH = pad * 2 + (n - 1) * lh + cr * 2;
+  const bx = W - boxW - W * 0.025;
+  const by = W * 0.025;
+  const maxTextW = boxW - pad * 2 - cr * 2 - gap;
+  return {
+    fs, cr, bx, by, boxW, boxH, radius: fs, maxTextW,
+    rows: rows.map((r, i) => {
+      const cy = by + pad + cr + i * lh;
+      return { ...r, cx: bx + pad + cr, cy, tx: bx + pad + cr * 2 + gap, ty: cy + fs * 0.35 };
+    }),
+  };
+}
+
+/** 素材左上角的编号圆点（不随素材旋转） */
+export function badgeOf(item, W) {
+  const s = W / 100;
+  const r = W * 0.011;
+  return { r, cx: (item.x + 1.2) * s + r, cy: item.y * s + r + W * 0.004 };
+}
+
+/** #RRGGBB 是否浅色（决定标题阴影 / 叠字颜色） */
+export function isLightColor(hex) {
+  const m = String(hex || '').match(/^#?([0-9a-f]{6})$/i);
+  if (!m) return true;
+  const v = parseInt(m[1], 16);
+  const r = (v >> 16) & 255;
+  const g = (v >> 8) & 255;
+  const b = v & 255;
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 150;
 }
