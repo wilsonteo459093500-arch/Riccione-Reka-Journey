@@ -276,6 +276,10 @@ test('convertBoard：旧画板 → 独立画板（设置补齐、去掉 busy、�
   assert.equal(rec.board.titleScale, 1.2);
   assert.equal(rec.board.showLegend, true, '旧版下载默认带图例：有命名素材的画板打开图例');
   assert.equal(rec.board.titleFont, 'fraunces', '旧版 serif = Fraunces');
+  assert.equal(convertBoard({ ...old, board: { titleFont: 'elegant' } }).board.titleFont, 'elegant-ukir', '旧版 elegant 保持旧版字体栈');
+  for (const id of ['fraunces', 'elegant-ukir', 'dmsans']) {
+    assert.match(TITLE_FONTS.find((f) => f.id === id).css, /"Noto Sans SC"/, `${id}：中文和旧版一样落到思源黑体`);
+  }
   assert.equal(rec.board.notes, DB2.notes, '新字段用默认值补齐');
   assert.deepEqual(rec.items.map((it) => it.id), ['i1', 'i3']);
   assert.equal('busy' in rec.items[0], false);

@@ -197,6 +197,12 @@ export default function PolishDialog({ project, settings, notify, onOpenSettings
       if (failed.length) notify?.({ type: 'warn', text: `有 ${failed.length} 组没拿到建议（出错或未处理），可点「再试一次」` });
     } catch (e) {
       if (!alive.current) return;
+      if (append) {
+        // 「再试一次」又失败：留着之前拿到的建议和待重试的那几组，不丢掉已付费的结果
+        setPhase('review');
+        notify?.({ type: 'error', text: `再试一次失败：${e.message || e}` });
+        return;
+      }
       setErrorText(e.message || String(e));
       setPhase('error');
       notify?.({ type: 'error', text: `AI 润色失败：${e.message || e}` });
@@ -345,7 +351,9 @@ export default function PolishDialog({ project, settings, notify, onOpenSettings
               ) : (
                 <div className="text-center text-sm text-bp-faint py-12">
                   <Check size={22} className="mx-auto mb-2 text-bp-green" />
-                  看起来标题都已经很好了，没有需要修改的地方。
+                  {skipped.length
+                    ? '已处理的页没有需要修改的地方；上面这几组还没拿到建议，可点「再试一次」。'
+                    : '看起来标题都已经很好了，没有需要修改的地方。'}
                 </div>
               )}
             </div>

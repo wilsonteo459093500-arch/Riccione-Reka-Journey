@@ -1,7 +1,7 @@
 // UKIR STUDIO 应用外壳：登录门 → 首页（项目列表 / 导入 PDF）↔ 编辑器（#/p/<项目 id>，刷新可回到原项目）
 // ↔ 独立 Material Board（#/boards）。启动时把旧版 UKIR STUDIO 的材质库 / 画板搬过来（同一网址时）。
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import LoginGate from './components/LoginGate.jsx';
 import Home from './components/Home.jsx';
 import Editor from './components/Editor.jsx';
@@ -12,6 +12,7 @@ import { isAuthed, logout } from './store/auth.js';
 import { requestPersistence } from './store/db.js';
 import { loadSettings, saveSettings, SETTINGS_KEY } from './ai/settings.js';
 import { migrateOnce } from './moodboard/migrate.js';
+import { hasUnsavedEdits } from './lib/useProjectState.js';
 
 /** '#/p/<id>' → id */
 function parseHash() {
@@ -47,6 +48,8 @@ function Workspace({ onLogout }) {
   const [showSettings, setShowSettings] = useState(false);
   const [projectId, setProjectId] = useState(parseHash);
   const [boardsOpen, setBoardsOpen] = useState(isBoardsHash);
+  // 当前打开的项目（app 自己切页面时立即更新；浏览器后退只改网址，靠它判断是不是从编辑器离开）
+  const current = useRef(projectId);
   const { toasts, notify, dismiss } = useToasts();
 
   // 申请持久化存储（避免浏览器空间紧张时清掉项目），只问一次
@@ -72,7 +75,15 @@ function Workspace({ onLogout }) {
   // 浏览器前进 / 后退
   useEffect(() => {
     const onHash = () => {
-      setProjectId(parseHash());
+      const next = parseHash();
+      const cur = current.current;
+      // 保存失败 / 冲突时还有没写进去的修改：浏览器后退也先问一句（← 按钮在编辑器里自己问）
+      if (cur && next !== cur && hasUnsavedEdits() && !window.confirm('最近的修改没能保存（浏览器存储空间可能不足，或项目在别的窗口改过）。现在离开，这些修改会丢失。确定离开？')) {
+        window.history.pushState(null, '', `#/p/${encodeURIComponent(cur)}`); // 不触发 hashchange
+        return;
+      }
+      current.current = next;
+      setProjectId(next);
       setBoardsOpen(isBoardsHash());
     };
     window.addEventListener('hashchange', onHash);
@@ -91,17 +102,20 @@ function Workspace({ onLogout }) {
   const openProject = useCallback((id) => {
     if (!id) return;
     const hash = `#/p/${encodeURIComponent(id)}`;
+    current.current = id;
     if (window.location.hash !== hash) window.location.hash = hash;
     setProjectId(id);
   }, []);
 
   const goHome = useCallback(() => {
+    current.current = null;
     if (parseHash() || isBoardsHash()) window.location.hash = '#/';
     setProjectId(null);
     setBoardsOpen(false);
   }, []);
 
   const openBoards = useCallback(() => {
+    current.current = null;
     if (!isBoardsHash()) window.location.hash = '#/boards';
     setProjectId(null);
     setBoardsOpen(true);

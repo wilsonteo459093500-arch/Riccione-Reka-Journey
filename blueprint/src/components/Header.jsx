@@ -16,51 +16,40 @@ function Brand({ compact = false }) {
   );
 }
 
-/** 项目名：看起来像标题，点一下就能改；Enter / 失焦保存，Esc 放弃 */
+/** 项目名：看起来像标题，点一下就能改；边打边存（关标签页 / 刷新 / 后退都不丢），Esc 改回点进来之前的名字 */
 function NameField({ value, onCommit }) {
   const [draft, setDraft] = useState(value || '');
   const editing = useRef(false);
+  const before = useRef(value || '');
   useEffect(() => {
     if (!editing.current) setDraft(value || '');
   }, [value]);
   const skip = useRef(false);
-  // 没按 Enter 就关标签页 / 浏览器后退 / 离开编辑器：草稿照样存下（读最新值，不受闭包影响）
-  const latest = useRef({ draft, value, onCommit });
-  latest.current = { draft, value, onCommit };
-  useEffect(() => {
-    const flushDraft = () => {
-      const { draft: d, value: v, onCommit: c } = latest.current;
-      const t = (d || '').trim();
-      if (editing.current && !skip.current && t && t !== v) {
-        editing.current = false;
-        c(t);
-      }
-    };
-    window.addEventListener('pagehide', flushDraft);
-    return () => {
-      window.removeEventListener('pagehide', flushDraft);
-      flushDraft();
-    };
-  }, []);
   const commit = () => {
     editing.current = false;
     if (skip.current) {
       skip.current = false;
-      setDraft(value || '');
+      if (before.current && before.current !== value) onCommit(before.current);
+      setDraft(before.current || value || '');
       return;
     }
     const v = draft.trim();
     if (v && v !== value) onCommit(v);
-    else setDraft(value || '');
+    else setDraft(value || ''); // 清空了 = 不改名
   };
   return (
     <input
       value={draft}
       onFocus={(e) => {
         editing.current = true;
+        before.current = value || '';
         e.target.select();
       }}
-      onChange={(e) => setDraft(e.target.value)}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        const t = e.target.value.trim();
+        if (t && t !== value) onCommit(t);
+      }}
       onBlur={commit}
       onKeyDown={(e) => {
         if (e.key === 'Enter' && !e.nativeEvent.isComposing) e.currentTarget.blur();

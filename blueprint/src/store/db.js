@@ -76,25 +76,35 @@ export async function saveProject(project, expectedRev) {
     let out = null;
     let conflict = null;
     let failure = null;
-    const g = s.get(project.id);
-    g.onsuccess = () => {
-      const cur = g.result;
-      if (expectedRev !== undefined) {
-        if (!cur) conflict = 'deleted';
-        else if ((cur.rev || 0) !== expectedRev) conflict = 'changed';
-      }
-      if (conflict) return;
-      out = { ...project, rev: (cur?.rev || 0) + 1, updatedAt: Date.now() };
+    const write = (rec) => {
       try {
-        s.put(out);
+        s.put(rec);
       } catch (err) {
         failure = err; // 例如存储空间不足：中止事务，交给 onabort 报错
         t.abort();
       }
     };
-    t.oncomplete = () => (conflict ? reject(new ProjectConflictError(conflict)) : resolve(out));
-    t.onerror = () => reject(failure || t.error);
-    t.onabort = () => reject(failure || t.error || new Error('IndexedDB 事务中止（可能是浏览器存储空间不足）'));
+    if (expectedRev === undefined) {
+      const g = s.get(project.id);
+      g.onsuccess = () => {
+        out = { ...project, rev: (g.result?.rev || 0) + 1, updatedAt: Date.now() };
+        write(out);
+      };
+    } else {
+      // get 和 put 同一刻排进事务：关标签页 / 刷新时这次保存也来得及写进去。
+      // 请求按顺序执行，get 看到的是 put 之前的版本；版本不对 → abort，连同 put 一起回滚
+      out = { ...project, rev: expectedRev + 1, updatedAt: Date.now() };
+      const g = s.get(project.id);
+      g.onsuccess = () => {
+        const cur = g.result;
+        conflict = !cur ? 'deleted' : (cur.rev || 0) !== expectedRev ? 'changed' : null;
+        if (conflict) t.abort();
+      };
+      write(out);
+    }
+    t.oncomplete = () => resolve(out);
+    t.onabort = () =>
+      reject(conflict ? new ProjectConflictError(conflict) : failure || t.error || new Error('IndexedDB 事务中止（可能是浏览器存储空间不足）'));
   });
 }
 

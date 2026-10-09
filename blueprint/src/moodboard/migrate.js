@@ -79,8 +79,9 @@ async function oldDbExists(name) {
   return true; // 不支持 databases()：交给 openExisting 判断
 }
 
-// 旧版的字体 id → 新版（旧版 'serif' 是 Fraunces、'sans' 是 DM Sans；新版同名 id 换成了思源宋体 / Outfit）
-const UKIR_FONTS = { serif: 'fraunces', sans: 'dmsans' };
+// 旧版的字体 id → 新版（旧版 'serif' 是 Fraunces、'sans' 是 DM Sans；新版同名 id 换成了思源宋体 / Outfit；
+// 三款旧版字体的中文都落到思源黑体，新版同名的落到思源宋体）
+const UKIR_FONTS = { serif: 'fraunces', sans: 'dmsans', elegant: 'elegant-ukir' };
 
 /** 旧画板记录 → 新画板记录（独立画板，不属于任何提案） */
 export function convertBoard(rec, now = Date.now()) {

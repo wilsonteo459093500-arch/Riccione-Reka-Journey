@@ -257,7 +257,7 @@ function Workspace({ initial, settings, notify, onOpenSettings, onExit }) {
     };
   }, []);
 
-  const onRename = useCallback((name) => onChange((p) => ({ ...p, name }), { coalesce: false }), [onChange]);
+  const onRename = useCallback((name) => onChange((p) => (p.name === name ? p : { ...p, name }), { coalesce: 'name' }), [onChange]);
 
   const stats = projectStats(project);
   const counts = { pages: stats.slides, materials: stats.materials };

@@ -7,7 +7,7 @@
 //   离开后才回来的异步结果（如 3D 立体图生成完）：交给这个项目当前打开的编辑器；没打开就合并进库里的最新版本
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { saveProject, getProject } from '../store/db.js';
+import { saveProject, getProject, deleteAssetsOf } from '../store/db.js';
 import { emptyHistory, recordChange, undoStep, redoStep, changeSignature, HISTORY_LIMIT, COALESCE_MS } from './history.js';
 
 // 全局：还没写完的保存（回首页前等一等，项目列表才是最新的）
@@ -20,8 +20,10 @@ function track(p) {
 }
 export const waitForSaves = () => Promise.all([...inflight]).then(() => undefined);
 
-// 本页里正在编辑的项目：projectId → { apply(updater, opts) }
+// 本页里正在编辑的项目：projectId → { apply(updater, opts), hasUnsaved() }
 const liveEditors = new Map();
+/** 本页有没有保存失败 / 冲突、还没写进库的修改（浏览器后退离开编辑器前要问一句） */
+export const hasUnsavedEdits = () => [...liveEditors.values()].some((h) => h.hasUnsaved());
 
 /**
  * @param {object} initial  已加载的项目
@@ -134,7 +136,8 @@ export function useProjectState(initial, { save = saveProject, delay = 600, maxW
           st.chain
             .then(() => getProject(st.id))
             .then((rec) => {
-              if (!rec) return null; // 项目已删除：不复活
+              // 项目已删除：不复活；晚到的结果已经存进库的图片（如 3D 立体图）一并清掉
+              if (!rec) return deleteAssetsOf(st.id).then(() => null);
               const next = updater(rec);
               return next && next !== rec ? saveProject(next, rec.rev || 0) : null;
             })
@@ -189,7 +192,7 @@ export function useProjectState(initial, { save = saveProject, delay = 600, maxW
     const st = ref.current;
     st.alive = true;
     st.closed = false;
-    const handle = { apply: (updater, o) => onChange(updater, o) };
+    const handle = { apply: (updater, o) => onChange(updater, o), hasUnsaved: () => st.dirty && (st.failed || !!st.conflict) };
     if (st.id) liveEditors.set(st.id, handle);
     const onHide = () => {
       if (document.visibilityState === 'hidden') flush();
