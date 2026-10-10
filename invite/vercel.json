@@ -2,13 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "cleanUrls": true,
   "trailingSlash": false,
-  "rewrites": [
-    {
-      "source": "/",
-      "has": [{ "type": "host", "value": "visi-riccione-reka.vercel.app" }],
-      "destination": "/visi"
-    }
-  ],
   "headers": [
     {
       "source": "/assets/img/(.*)",

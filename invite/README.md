@@ -150,8 +150,9 @@ https://journey-riccione-reka.vercel.app/create                        销售端
 https://visi-riccione-reka.vercel.app                                  VISI（首页直接打开）
 ```
 
-`invite/vercel.json` 里有一条只对 `visi-riccione-reka.vercel.app` 生效的 rewrite：那个网址的首页 `/` 是 VISI；
-其它网址（journey）的首页仍然是邀请函。`cleanUrls` 已开，路径里不会出现 `.html`。
+`invite/middleware.js`（Vercel Routing Middleware）只在 `visi-riccione-reka.vercel.app` 的首页 `/` 生效：那个网址的首页是 VISI；
+其它网址（journey）的首页仍然是邀请函。（不用 `vercel.json` 的 rewrites：首页已有 `index.html`，Vercel 会先给档案。）
+`cleanUrls` 已开，路径里不会出现 `.html`。
 
 > 因为 VISI 的网址首页就是 VISI，客户的链接**不能**用这个网址 —— 所以 `create.js` 与 VISI 生成链接时都用
 > `config.js` 的 `publicBase`（现在是 `https://journey-riccione-reka.vercel.app`）。换邀请函的域名，只改这一行。
