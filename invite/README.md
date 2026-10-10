@@ -139,48 +139,29 @@ Formspree、Supabase Edge Function、Google Apps Script 都行。送出时会 PO
 
 ## 部署
 
-**现在就能打开的：** 根目录的 `npm run build` 会把整个 `invite/` 原样复制进 `dist/invite/`
-（见 `package.json` 的 build script），所以 root 那个 Vercel 项目每次部署都会带上这套页面：
+整个 `invite/` 由 Vercel 项目 **`visi-riccione-reka`** 部署：Root Directory = `invite`，Framework = Other，
+没有 Build Command；开了「Skip unaffected projects」与 Ignored Build Step `git diff --quiet HEAD^ HEAD -- .`
+—— `invite/` 没改就不部署，省每天 100 次的部署额度。同一份部署挂两个网址：
 
 ```
-<部署网址>/invite/index.html    邀请函
-<部署网址>/invite/brief.html    需求卡
-<部署网址>/invite/create.html   销售端
+https://journey-riccione-reka.vercel.app/?for=Mr%20Tan&on=2026-08-25   邀请函（发给客户）
+https://journey-riccione-reka.vercel.app/brief                         需求卡（发给客户）
+https://journey-riccione-reka.vercel.app/create                        销售端
+https://visi-riccione-reka.vercel.app                                  VISI（首页直接打开）
 ```
 
-不用改 Vercel 任何设置。等要用自己的域名（例如 invite.riccione.com.my）再按下面开独立项目。
-
-**独立部署（推荐，链接才好看）**
-
-在 Vercel 新建一个 project：
-
-| 设置 | 值 |
-|---|---|
-| Project Name | `riccione-reka-journey` |
-| Root Directory | `invite` |
-| Framework Preset | Other |
-| Build Command | 留空 |
-
-出来的网址就是 `riccione-reka-journey.vercel.app`，链接长这样：
-
-```
-riccione-reka-journey.vercel.app/?for=Mr%20Tan&on=2026-08-25    邀请函
-riccione-reka-journey.vercel.app/brief                          需求卡
-riccione-reka-journey.vercel.app/create                         销售端
-```
-
-有自己的域名之后，在 Vercel 的 Domains 里接上去（例如 `journey.riccione.com.my`）就更干净。
-`invite/vercel.json` 已经开了 `cleanUrls`，所以路径里不会出现 `.html`。
-
-**VISI 的独立网址（已开）**
-
-Vercel 项目 `visi-riccione-reka`：Root Directory = `invite`，Framework = Other，没有 Build Command；
-Ignored Build Step = `git diff --quiet HEAD^ HEAD -- .`（`invite/` 没改就不部署，省每天的部署额度）。
-`invite/vercel.json` 里有一条只对 `visi-riccione-reka.vercel.app` 生效的 rewrite：首页 `/` 直接打开 VISI；
-同一个项目开其它网址（例如上面的 `riccione-reka-journey`）时，首页仍然是邀请函。
+`invite/vercel.json` 里有一条只对 `visi-riccione-reka.vercel.app` 生效的 rewrite：那个网址的首页 `/` 是 VISI；
+其它网址（journey）的首页仍然是邀请函。`cleanUrls` 已开，路径里不会出现 `.html`。
 
 > 因为 VISI 的网址首页就是 VISI，客户的链接**不能**用这个网址 —— 所以 `create.js` 与 VISI 生成链接时都用
-> `config.js` 的 `publicBase`（现在是 `https://wilson-pidc.vercel.app/invite`）。换邀请函的域名，只改这一行。
+> `config.js` 的 `publicBase`（现在是 `https://journey-riccione-reka.vercel.app`）。换邀请函的域名，只改这一行。
+> 邀请函与需求卡的 `og:image` 也写成这个网址的绝对路径，WhatsApp 预览才会出图。
+
+**旧网址：** 以前邀请函挂在根目录项目 `wilson-pidc` 底下（`wilson-pidc.vercel.app/invite/…`，build 时把 `invite/`
+复制进 `dist/invite/`）。根目录 `vercel.json` 已设 `git.deploymentEnabled: false`：`wilson-pidc` 不再自动部署、
+不再占额度，但最后一版仍在线 —— 已经发出去的旧邀请函链接和首页的 Delivery OS 都还打得开，只是不会再更新。
+
+有自己的域名之后，在 Vercel 的 Domains 里接上去（例如 `journey.riccione.com.my`），再把 `publicBase` 改成它。
 
 其它选择：Netlify（publish directory 填 `invite`）、GitHub Pages、自己的服务器 —— 整个目录丢进去就行。
 

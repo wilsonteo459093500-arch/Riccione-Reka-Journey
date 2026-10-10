@@ -21,8 +21,9 @@ window.SAIL = {
   /* 邀请函与需求卡的正式网址 —— 发给客户的每一条链接、VISI 方案里的二维码都用它。
      销售端（create）和 VISI 在哪个网址打开都一样（包括 visi-riccione-reka.vercel.app
      和自己的电脑）：客户收到的永远是这个网址。换了邀请函的域名，只改这一行。
-     留空 = 用当前网址（只适合邀请函与销售端放在同一个网站时）。 */
-  publicBase: 'https://wilson-pidc.vercel.app/invite',
+     留空 = 用当前网址（只适合邀请函与销售端放在同一个网站时）。
+     旧网址 wilson-pidc.vercel.app/invite 停在最后一版、不再更新，只为了让已经发出的旧链接还打得开。 */
+  publicBase: 'https://journey-riccione-reka.vercel.app',
 
   /* 默认邀请人 · fallback host（链接里没带 by 参数时用这个） */
   host: {
