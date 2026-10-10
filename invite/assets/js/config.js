@@ -12,8 +12,18 @@ window.SAIL = {
     hoursZh:   '周一至周五 9:00am–6:00pm ／ 周六周日 10:00am–6:00pm',
     hoursEn:   'Mon–Fri 9:00am–6:00pm / Sat–Sun 10:00am–6:00pm',
     phone:     '+60189661919',      // tel: 链接用
-    phoneShow: '018-966 1919'
+    phoneShow: '018-966 1919',
+    website:   'www.saildz.com',    // VISI 方案封底用
+    instagram: '@sail_malaysia',
+    township:  'Setia Alam'         // 客户楼盘也在这个镇区时，邀约页才会写「就在你们新家同一个镇区」
   },
+
+  /* 邀请函与需求卡的正式网址 —— 发给客户的每一条链接、VISI 方案里的二维码都用它。
+     销售端（create）和 VISI 在哪个网址打开都一样（包括 visi-riccione-reka.vercel.app
+     和自己的电脑）：客户收到的永远是这个网址。换了邀请函的域名，只改这一行。
+     留空 = 用当前网址（只适合邀请函与销售端放在同一个网站时）。
+     旧网址 wilson-pidc.vercel.app/invite 停在最后一版、不再更新，只为了让已经发出的旧链接还打得开。 */
+  publicBase: 'https://journey-riccione-reka.vercel.app',
 
   /* 默认邀请人 · fallback host（链接里没带 by 参数时用这个） */
   host: {
