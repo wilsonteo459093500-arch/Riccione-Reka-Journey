@@ -361,12 +361,18 @@ await test('厨房：岛台四周 ≥ 1.05m（爆炒 1.2m），电器高柜前�
   const plan = TEMPLATES.find((t) => t.id === 'terrace').plan;
   const walls = buildWalls(plan);
   for (const [cook, m] of [['light', 1.05], ['heavy', 1.2]]) {
+    // 没有嵌入式电器：岛台不用和电器高柜抢地方
+    const plain = full({ appliances: [] });
+    plain.life.cook = cook;
+    const island = furnish(plan, walls, plain).find((i) => i.kind === 'island');
+    if (cook === 'light') assert.ok(island, '4.2 × 3.8 的厨房应该放得下岛台');
     const p = full();
     p.life.cook = cook;
     const items = furnish(plan, walls, p);
-    const island = items.find((i) => i.kind === 'island');
-    if (cook === 'light') assert.ok(island, '4.2 × 3.8 的厨房应该放得下岛台');
-    if (island) for (const o of items.filter((i) => i.room === island.room && i !== island && !FLAT.has(i.kind))) assert.ok(!ov(footprintOf(island), footprintOf(o), m - 0.03), `岛台离 ${o.kind} 不够 ${m}m`);
+    for (const isl of [island, items.find((i) => i.kind === 'island')].filter(Boolean)) {
+      const its = isl === island ? furnish(plan, walls, plain) : items;
+      for (const o of its.filter((i) => i.room === isl.room && i.kind !== 'island' && !FLAT.has(i.kind))) assert.ok(!ov(footprintOf(isl), footprintOf(o), m - 0.03), `岛台离 ${o.kind} 不够 ${m}m`);
+    }
     const tall = items.find((i) => i.kind === 'tallUnit' && i.room === 'kit');
     assert.ok(tall, '没有电器高柜');
     const f = frontOf(tall, 0.6, 0.6, 1.0);
