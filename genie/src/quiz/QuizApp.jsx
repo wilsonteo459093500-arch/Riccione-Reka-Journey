@@ -222,6 +222,7 @@ function Play({ onDone, onRestart }) {
   const [pangie, setPangie] = useState({ mood: 'idle', line: '' });
   const [resume, setResume] = useState(() => !WISH && !!saved && saved.idx > 0 && Date.now() - (saved.ts || 0) > STALE_MS);
   const [idlePrompt, setIdlePrompt] = useState(false);
+  const [profile, setProfile] = useState(null);
   const reactTimer = useRef(null);
 
   const step = STEPS[idx];
@@ -308,7 +309,6 @@ function Play({ onDone, onRestart }) {
     clearSession();
     setIdx(STEPS.findIndex((s) => s.id === 'reveal'));
   };
-  const [profile, setProfile] = useState(null);
 
   const questions = STEPS.filter((s) => !s.interlude && s.chapter);
   const answered = STEPS.slice(0, idx).filter((s) => !s.interlude && s.chapter).length;

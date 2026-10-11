@@ -5,7 +5,9 @@
 // 金属 f0（真实的金属反射色；base 仍是 UI 色卡 / 情绪计算用的颜色）。
 // warm（-1 冷 … 1 暖）与 light（0 深 … 1 浅）—— 情绪仪表、梦想家配色、雷区替换都靠它们。
 
-/** 可以换材质的「表面」。cats = 这个表面接受哪些类别的材质 */
+import { t, L, isEn } from './i18n.js';
+
+/** 可以换材质的「表面」。cats = 这个表面接受哪些类别的材质；not = 同类别里不接受的质感（tex.type：皮革不做床品、窗帘，藤编不做软包） */
 export const SLOTS = [
   { id: 'floor', zh: '地板', en: 'FLOOR', cats: ['wood', 'stone', 'tile'], weight: 0.2 },
   { id: 'walls', zh: '墙面', en: 'WALLS', cats: ['paint'], weight: 0.2 },
@@ -13,12 +15,12 @@ export const SLOTS = [
   { id: 'cabinetry', zh: '柜体', en: 'CABINETRY', cats: ['wood', 'paint'], weight: 0.12 },
   { id: 'countertop', zh: '台面', en: 'COUNTERTOP', cats: ['stone'], weight: 0.04 },
   { id: 'tile', zh: '厨卫墙地砖', en: 'WET TILE', cats: ['tile', 'stone'], weight: 0.03 },
-  { id: 'upholstery', zh: '沙发软包', en: 'UPHOLSTERY', cats: ['fabric'], weight: 0.1 },
-  { id: 'bedding', zh: '床品', en: 'BEDDING', cats: ['fabric'], weight: 0.04 },
+  { id: 'upholstery', zh: '沙发软包', en: 'UPHOLSTERY', cats: ['fabric'], not: ['rattan'], weight: 0.1 },
+  { id: 'bedding', zh: '床品', en: 'BEDDING', cats: ['fabric'], not: ['leather', 'rattan'], weight: 0.04 },
   { id: 'rugs', zh: '地毯', en: 'RUGS', cats: ['fabric'], weight: 0.06 },
   { id: 'woodwork', zh: '木作家具', en: 'WOODWORK', cats: ['wood', 'paint'], weight: 0.05 },
   { id: 'accents', zh: '点缀', en: 'ACCENTS', cats: ['fabric'], weight: 0.03 },
-  { id: 'curtains', zh: '窗帘', en: 'CURTAINS', cats: ['fabric'], weight: 0.02 },
+  { id: 'curtains', zh: '窗帘', en: 'CURTAINS', cats: ['fabric'], not: ['leather', 'rattan'], weight: 0.02 },
   { id: 'metal', zh: '五金灯具', en: 'METAL', cats: ['metal'], weight: 0.02 },
 ];
 export const SLOT_BY_ID = Object.fromEntries(SLOTS.map((s) => [s.id, s]));
@@ -72,6 +74,11 @@ export const MATERIALS = [
   m('sintered', '岩板灰', 'Sintered stone', 'stone', { type: 'concrete', base: '#5F5E5B', fine: true }, { rough: 0.55 }, [0.1, 0.18, 0.88], -0.2, 0.3),
   m('verde', '绿大理石', 'Verde marble', 'stone', { type: 'marble', base: '#2E4A3E', vein: '#C5D3C8', veins: 0.7, style: 'verde' }, { rough: 0.2, clearcoat: 0.6, ccRough: 0.05 }, [0.32, 0.1, 0.85], -0.2, 0.2),
   m('nero', '黑金花', 'Nero marquina', 'stone', { type: 'marble', base: '#1F1E20', vein: '#E6E0D6', veins: 0.6, style: 'nero' }, { rough: 0.2, clearcoat: 0.6, ccRough: 0.05 }, [0.12, 0, 1], -0.1, 0.06),
+  // 人造石台面：天天爆炒、家里有小孩时，profile.js lifestyleSwaps 把天然石台面换成它们（花色接近，不怕油渍渗色）
+  m('quartz-travertine', '石英石·洞石纹', 'Quartz, travertine look', 'stone', { type: 'travertine', base: '#D6C1A0', vein: '#B79E7A', fill: 1 }, { rough: 0.45 }, [0.78, 0.62, 0.08], 0.55, 0.7),
+  m('quartz-calacatta', '石英石·金线白纹', 'Quartz, Calacatta look', 'stone', { type: 'marble', base: '#F0EBE2', vein: '#B39668', style: 'quartz' }, { rough: 0.3, clearcoat: 0.35, ccRough: 0.08 }, [0.4, 0.86, 0.1], 0.25, 0.9),
+  m('quartz-white', '纯白石英石', 'Pure white quartz', 'stone', { type: 'concrete', base: '#EEECE7', fine: true, quartz: true }, { rough: 0.32, clearcoat: 0.3, ccRough: 0.1 }, [0.2, 0.92, 0.08], -0.05, 0.93),
+  m('sintered-light', '浅色岩板', 'Light sintered stone', 'stone', { type: 'concrete', base: '#D9D6CF', fine: true }, { rough: 0.5 }, [0.25, 0.75, 0.25], -0.05, 0.75),
 
   // ── 砖 Tile ──────────────────────────────────────────────
   m('zellige-white', '手工白砖', 'Zellige white', 'tile', { type: 'tile', base: '#EDE9E0', grout: '#D6D0C4', size: 0.1, vary: 0.07 }, { rough: 0.2, clearcoat: 0.9, ccRough: 0.04 }, [0.42, 0.9, 0.05], 0.15, 0.9),
@@ -133,20 +140,22 @@ export function matOf(id) {
 export function fits(matId, slotId) {
   const mat = MAT_BY_ID[matId];
   const slot = SLOT_BY_ID[slotId];
-  return !!(mat && slot && slot.cats.includes(mat.cat));
+  return !!(mat && slot && slot.cats.includes(mat.cat) && !slot.not?.includes(mat.tex.type));
 }
 
-/** 拖到不合适的表面时，给一句俏皮又有用的提示 */
+/** 拖到不合适的表面时，给一句俏皮又有用的提示（已经按当前语言翻好） */
 export function misfitHint(matId, slotId) {
   const mat = MAT_BY_ID[matId];
   const slot = SLOT_BY_ID[slotId];
   if (!mat || !slot) return '';
-  if (mat.cat === 'fabric' && slotId === 'floor') return '布料不能铺地板哦～试试拖到地毯上';
-  if (mat.cat === 'fabric') return `${mat.zh} 是布料，适合沙发、床品、地毯、窗帘`;
-  if (mat.cat === 'metal') return '金属适合五金把手与灯具';
-  if (mat.cat === 'paint' && slotId === 'floor') return '油漆不能当地板～地板试试木、石或砖';
-  if (mat.cat === 'stone' && slotId === 'walls') return '整面石材请放到「主题墙」';
-  return `${slot.zh}用不了${mat.zh}，换一个试试`;
+  const slotWord = isEn() ? slot.en.toLowerCase() : slot.zh;
+  if (slot.cats.includes(mat.cat) && slot.not?.includes(mat.tex.type)) return t('{0}不适合做{1}，试试亚麻、纯棉或针织', [L(mat), slotWord]);
+  if (mat.cat === 'fabric' && slotId === 'floor') return t('布料不能铺地板哦～试试拖到地毯上');
+  if (mat.cat === 'fabric') return t('{0} 是布料，适合沙发、床品、地毯、窗帘', [L(mat)]);
+  if (mat.cat === 'metal') return t('金属适合五金把手与灯具');
+  if (mat.cat === 'paint' && slotId === 'floor') return t('油漆不能当地板～地板试试木、石或砖');
+  if (mat.cat === 'stone' && slotId === 'walls') return t('整面石材请放到「主题墙」');
+  return t('{0}用不了{1}，换一个试试', [slotWord, L(mat)]);
 }
 
 /** 这个类别默认去哪个表面（点一下色块、又没选表面时用） */

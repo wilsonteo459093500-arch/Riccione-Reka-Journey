@@ -18,8 +18,8 @@ export const SHADES = ['grey', 'black'];
 const FAMILY = {
   pink: ['blush', 'blush-boucle'],
   green: ['sage', 'sage-lacquer', 'sage-linen', 'zellige-sage', 'olive', 'verde', 'emerald-velvet'],
-  beige: ['warm-white', 'oat', 'sand-limewash', 'cream-lacquer', 'cream-tile', 'linen', 'boucle', 'oat-knit', 'travertine', 'calacatta', 'latte'],
-  white: ['gallery-white', 'white-lacquer', 'cotton-white', 'carrara', 'zellige-white'],
+  beige: ['warm-white', 'oat', 'sand-limewash', 'cream-lacquer', 'cream-tile', 'linen', 'boucle', 'oat-knit', 'travertine', 'calacatta', 'latte', 'quartz-travertine', 'quartz-calacatta'],
+  white: ['gallery-white', 'white-lacquer', 'cotton-white', 'carrara', 'zellige-white', 'quartz-white'],
   yellow: ['ochre-velvet', 'brass'],
   red: ['terracotta', 'terracotta-tile', 'rust-wool'],
   blue: ['dusty-blue', 'navy-paint', 'navy-velvet'],
@@ -29,7 +29,7 @@ const FAMILY = {
 /** 登记过、但不属于任何色系的材质（浅色木头、水磨石、灰 / 黑系、皮革、藤编、金属…） */
 const NONE = [
   'white-oak', 'maple', 'light-oak', 'herringbone-oak', 'greige-oak', 'teak',
-  'terrazzo', 'microcement', 'sintered', 'nero',
+  'terrazzo', 'microcement', 'sintered', 'sintered-light', 'nero',
   'grey-tile',
   'charcoal', 'black-matte',
   'grey-wool', 'rattan', 'cognac-leather', 'charcoal-felt', 'black-leather',

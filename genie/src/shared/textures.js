@@ -429,6 +429,8 @@ const MARBLE = {
   carrara: { warp: 0.22, ramp: [2, 4], amp: 0.85, jit: 0.1, w1: 0.0009, w1v: 0.0045, c1: 0.6, soft: 0.85, halo: 0.012, haloK: 0.42, ramp2: [5, 3], amp2: 1.6, jit2: 0.2, w2: 0.0006, c2: 0.7, cloud: 0.05, mask: 0.4 },
   calacatta: { warp: 0.2, ramp: [1, 1], amp: 1.0, jit: 0.07, w1: 0.003, w1v: 0.016, c1: 0.95, soft: 0.5, halo: 0.008, haloK: 0.36, ramp2: [3, 4], amp2: 1.6, jit2: 0.2, w2: 0.0007, c2: 0.5, cloud: 0.03, mask: 0.32 },
   nero: { warp: 0.26, ramp: [2, 1], amp: 0.75, jit: 0.14, w1: 0.0009, w1v: 0.006, c1: 0.95, soft: 0.3, halo: 0.004, haloK: 0.22, ramp2: null, lv2: 4.5, w2: 0.0006, c2: 0.55, cloud: 0.12, mask: 0.32 },
+  // 石英石·金线白纹：人造的，主纹更柔、更规整，几乎没有发丝纹和云雾
+  quartz: { warp: 0.14, ramp: [1, 1], amp: 0.8, jit: 0.03, w1: 0.0035, w1v: 0.012, c1: 0.75, soft: 0.75, halo: 0.01, haloK: 0.3, ramp2: [2, 3], amp2: 1.2, jit2: 0.08, w2: 0.0005, c2: 0.22, cloud: 0.012, mask: 0.36 },
   verde: { warp: 0.4, ramp: null, lv1: 2.6, w1: 0.0008, w1v: 0.0035, c1: 0.85, soft: 0.3, halo: 0.006, haloK: 0.32, ramp2: null, lv2: 5, w2: 0.0005, c2: 0.6, cloud: 0.2, mask: 0.3 },
 };
 
@@ -619,6 +621,9 @@ function travertine(B, t, mat, seed, tiled) {
   const Py = Math.max(4, Math.round(S / Math.max(0.0042, px * 1.6)));
   const Tp = vtable(Px, Py, seed + 5);
   const r0 = mat.rough;
+  // fill = 补孔的比例（天然洞石约一半；石英石·洞石纹 = 1：只有纹路，没有真的孔、也没有针孔）
+  const fillP = t.fill ?? 0.45;
+  const pins = !(t.fill >= 1);
   for (let y = 0; y < R; y++) {
     const v = (y + 0.5) * px;
     for (let x = 0; x < R; x++) {
@@ -646,8 +651,8 @@ function travertine(B, t, mat, seed, tiled) {
       // 孔洞：沿着沉积层拉长（小而密，集中在深色层）
       const pn = vlook(Tp, Px, Py, uu * Px, bvv * Py);
       const pit = smooth(0.8, 0.86, pn * (0.84 + 0.24 * bandK));
-      const filled = hash2(Math.floor(uu * Px), Math.floor(bvv * Py), seed + 6) < 0.45;
-      const pinhole = hash2(x, y, seed + 8) > 0.9975 ? 1 : 0;
+      const filled = hash2(Math.floor(uu * Px), Math.floor(bvv * Py), seed + 6) < fillP;
+      const pinhole = pins && hash2(x, y, seed + 8) > 0.9975 ? 1 : 0;
       const k = tk * (1 + cl * 0.1 + fine * 0.06) * (1 - grout * 0.15);
       let r = lerp(base[0], vein[0], bandK * 0.62) * k;
       let g = lerp(base[1], vein[1], bandK * 0.62) * k;

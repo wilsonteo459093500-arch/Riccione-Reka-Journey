@@ -191,7 +191,7 @@ export function tagsOf(mat) {
   if (mat.clearcoat >= 0.3 || (mat.cat !== 'metal' && mat.rough < 0.35)) tags.add('glossy');
   if (mat.tex.type === 'marble') tags.add('marble');
   if (mat.id === 'brass' || mat.id === 'bronze') tags.add('gold');
-  if (mat.tex.type === 'concrete') tags.add('concrete');
+  if (mat.tex.type === 'concrete' && !mat.tex.quartz) tags.add('concrete'); // 纯白石英石借用细水泥的贴图，但不算「水泥感」
   if (mat.tex.type === 'velvet') tags.add('velvet');
   if (mat.tex.type === 'leather') tags.add('leather');
   if (mat.tex.type === 'rattan') tags.add('rattan');

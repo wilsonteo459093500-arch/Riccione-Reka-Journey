@@ -176,7 +176,8 @@ export const LIFE = [
       { v: 'helper', icon: '🤝', label: '帮佣' },
       { v: 'guests', icon: '🧳', label: '常有客人留宿' },
       { v: 'wfh', icon: '💼', label: '在家办公' },
-      { v: 'altar', icon: '🙏', label: '需要神台 / 佛台' },
+      { v: 'altar', icon: '🙏', label: '需要神台 / 佛台 / 祖先牌位' },
+      { v: 'fengshui', icon: '🧭', label: '有风水师 / 有要遵守的方位' },
     ],
   },
 ];

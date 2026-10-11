@@ -213,12 +213,23 @@ const SNAGS = new Set(['velvet', 'boucle']);
 const PET_SAFE = new Set(['linen', 'leather', 'felt']);
 /** 生活方式替换的原因（中文原文存进档案，显示时过 t()） */
 export const PET_REASON = '有毛孩子：丝绒 / 羊羔绒易勾丝粘毛';
+export const COOK_REASON = '天天爆炒：天然石台面怕油渍渗色，换成同花色的人造石';
+export const KIDS_REASON = '家里有小孩：天然石台面怕果汁、酱油渗色，换成同花色的人造石';
+/** 天然石台面 → 花色最接近的人造石（排在前面的先试；踩到雷区就试下一个） */
+const ENGINEERED = {
+  travertine: ['quartz-travertine', 'quartz-white'],
+  calacatta: ['quartz-calacatta', 'quartz-white'],
+  carrara: ['quartz-white', 'quartz-calacatta'],
+  terrazzo: ['quartz-white', 'sintered-light'],
+  nero: ['sintered', 'quartz-white'],
+};
+const ENGINEERED_IDS = new Set(Object.values(ENGINEERED).flat());
 
 /**
  * 生活方式替换：材质和客人自己的生活答案打架时换掉。在雷区之后做，仍然避开雷区；
  * 不算雷区 —— 客人版不要写进「已按你的雷区避开」，设计师版列出来。
  * 有猫狗 → 沙发软包、点缀的丝绒 / 羊羔绒换成最接近的亚麻、皮革或毛毡。
- * （台面：天天爆炒 / 有小孩时把洞石、大理石换成石英石 —— 要等材质库有石英石，暂不做。）
+ * 天天爆炒 / 家里有小孩 → 洞石、大理石、水磨石台面换成同花色的石英石 / 岩板（卡牌本身的默认材质不变）。
  * → { materials, swaps: [{ slot, from, to, reason, why }] }
  */
 export function lifestyleSwaps(materials, answers = {}) {
@@ -235,6 +246,15 @@ export function lifestyleSwaps(materials, answers = {}) {
         swaps.push({ slot, from: cur.id, to: best.id, reason: PET_REASON, why: 'pets' });
         out[slot] = best.id;
       }
+    }
+  }
+  const cooking = answers.life?.cook === 'heavy';
+  if (cooking || who.has('kids') || who.has('baby')) {
+    const cur = MAT_BY_ID[out.countertop];
+    const to = (ENGINEERED[cur?.id] || []).map((id) => MAT_BY_ID[id]).find((c) => c && ![...tagsOf(c)].some((x) => bad.has(x)));
+    if (to) {
+      swaps.push({ slot: 'countertop', from: cur.id, to: to.id, reason: cooking ? COOK_REASON : KIDS_REASON, why: cooking ? 'cooking' : 'kids' });
+      out.countertop = to.id;
     }
   }
   return { materials: out, swaps };
@@ -282,8 +302,12 @@ export function insights(p, plan) {
     say(soft.length ? 'conflict' : 'note', t('有毛孩子：地板选耐刮表面，{0}柜体底部做踢脚封板，{1}', [sofa, corner]));
   }
   if (who.has('baby') || who.has('kids')) {
-    const porous = ['countertop', 'floor'].some((s) => ['marble', 'travertine'].includes(MAT_BY_ID[mats[s]]?.tex.type));
-    const care = porous ? t('，大理石 / 洞石台面怕酸易渗色（青柠、亚参、酱油），要提前说明保养') : '';
+    // 天然石才怕酸（石英石·洞石纹 / 金线白纹只是花色像）
+    const porous = ['countertop', 'floor'].some((s) => {
+      const m = MAT_BY_ID[mats[s]];
+      return m && ['marble', 'travertine'].includes(m.tex.type) && !ENGINEERED_IDS.has(m.id);
+    });
+    const care = porous ? t('，天然大理石 / 洞石怕酸易渗色（青柠、亚参、酱油），要提前说明保养') : '';
     say('note', t('有小孩：柜体圆角、低位做闭合柜收玩具{0}；孩子身高的开放格可以做成「玩具图书馆」。', [care]));
   }
   if (who.has('teen')) say('note', t('有青少年：衣柜按成人 1.8 m 起、书桌 ≥1.2 m'));
@@ -291,7 +315,9 @@ export function insights(p, plan) {
   if (who.has('helper')) say('note', t('有帮佣：保姆房（单人床＋600 衣柜＋通风）、靠近湿厨房 / 晒衣处、独立厕所；问清楚平时谁下厨'));
   if (who.has('guests')) say('note', t('常有客人留宿：客房或书房做榻榻米 / 沙发床，预留被褥收纳'));
   if (who.has('wfh')) say('note', t('在家办公：书桌 ≥ 1200 宽、桌面照度 500 lx、预留网络与插座；视频背景可以做成展示墙。'));
-  if (who.has('altar')) say('note', t('需要神台：先确认方位与尺寸（通常面向大门 / 不背厕所），预留红灯与插座，台面选耐熏的材质。'));
+  // 风水：系统只避开实际问题（噪音、湿气、油烟），方位交给客人自己的风水师 / 习惯，见面时谈
+  if (who.has('altar')) say('note', t('需要神台 / 祖先牌位：见面时确认尺寸和客人习惯的位置；自动摆放已避开背靠厕所、厨房的墙（湿气、油烟），预留红灯与插座，台面选耐熏的材质。'));
+  if (who.has('fengshui')) say('conflict', t('有风水师 / 有要遵守的方位：定平面前先拿到要求（大门、床、神台、炉头的方位），3D 里的自动摆放只是起点。'));
   if (plan?.shoes >= 60)
     say('note', t('鞋量大（约 {0} 双）：玄关做顶天立地鞋柜约 {1}mm 宽（留中段置物台的话约 {2}mm），底部悬空放常穿的鞋。', [plan.shoes, plan.shoeCabinetMM, plan.shoeNicheMM]));
   if (p.storage?.wardrobeFit === 'full' || p.storage?.wardrobeFit === 'double')

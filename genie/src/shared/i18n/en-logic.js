@@ -6,7 +6,7 @@ export default {
   // ── 逻辑 B：profile.js 生活方式替换 / 设计师谈话提示
   '有毛孩子：丝绒 / 羊羔绒易勾丝粘毛': 'Pets at home: velvet / bouclé snags and collects fur',
   '丝绒 / 羊羔绒已经换掉（{0}），防勾丝、粘毛；': 'velvet / bouclé has already been swapped out ({0}) to avoid snags and fur; ',
-  '，大理石 / 洞石台面怕酸易渗色（青柠、亚参、酱油），要提前说明保养': ', and explain early that marble / travertine tops etch and stain with acids (lime, tamarind, soy sauce) and need care',
+  '，天然大理石 / 洞石怕酸易渗色（青柠、亚参、酱油），要提前说明保养': ', and explain early that natural marble / travertine etches and stains with acids (lime, tamarind, soy sauce) and needs care',
   '有青少年：衣柜按成人 1.8 m 起、书桌 ≥1.2 m': 'Teenager at home: size wardrobes as for an adult (from 1.8 m) and desks ≥ 1.2 m',
   '有帮佣：保姆房（单人床＋600 衣柜＋通风）、靠近湿厨房 / 晒衣处、独立厕所；问清楚平时谁下厨': 'Live-in helper: a helper’s room (single bed + 600 wardrobe + ventilation) near the wet kitchen / laundry area, with its own toilet; ask who usually does the cooking',
   '常有客人留宿：客房或书房做榻榻米 / 沙发床，预留被褥收纳': 'Guests often stay over: a tatami platform / sofa bed in the guest room or study, with storage for spare bedding',
@@ -24,4 +24,9 @@ export default {
   '家电 {0} 件': 'appliances: {0}',
   '大件 {0} 类': 'bulky-item types: {0}',
   '见面要聊': 'To discuss when we meet',
+  '天天爆炒：天然石台面怕油渍渗色，换成同花色的人造石': 'Heavy cooking daily: natural-stone tops stain with oil, so it’s swapped for an engineered stone in the same look',
+  '家里有小孩：天然石台面怕果汁、酱油渗色，换成同花色的人造石': 'Young kids at home: natural-stone tops stain with juice and soy sauce, so it’s swapped for an engineered stone in the same look',
+  '{0}不适合做{1}，试试亚麻、纯棉或针织': '{0} isn’t right for {1} — try linen, cotton or knit',
+  '需要神台 / 祖先牌位：见面时确认尺寸和客人习惯的位置；自动摆放已避开背靠厕所、厨房的墙（湿气、油烟），预留红灯与插座，台面选耐熏的材质。': 'Altar / ancestral tablets: confirm the size and where the client usually places it when we meet; the auto-layout already avoids walls backing a toilet or kitchen (damp, cooking fumes). Plan a socket for the red lamp and a smoke-resistant top.',
+  '有风水师 / 有要遵守的方位：定平面前先拿到要求（大门、床、神台、炉头的方位），3D 里的自动摆放只是起点。': 'Has a feng shui master / directions to follow: get the requirements (main door, bed, altar, hob) before fixing the plan; the 3D auto-layout is only a starting point.',
 };

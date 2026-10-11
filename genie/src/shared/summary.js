@@ -11,7 +11,7 @@ const LIFE_LABEL = {
   home: { drop: '鞋包随手放', tidy: '马上归位', flop: '直接瘫沙发', fridge: '先找吃的' },
   cook: { heavy: '天天爆炒', light: '轻食', coffee: '咖啡吧', rare: '几乎不开火' },
   bell: { shoes: '玄关的鞋', table: '餐桌杂物', clothes: '沙发上的衣服', counter: '厨房台面', toys: '孩子的玩具', nothing: '没什么好藏' },
-  who: { baby: '小宝宝', kids: '小孩', teen: '青少年', elder: '长辈', dog: '狗', cat: '猫', helper: '帮佣', guests: '常有客人留宿', wfh: '在家办公', altar: '神台' },
+  who: { baby: '小宝宝', kids: '小孩', teen: '青少年', elder: '长辈', dog: '狗', cat: '猫', helper: '帮佣', guests: '常有客人留宿', wfh: '在家办公', altar: '神台 / 祖先牌位', fengshui: '有风水要求' },
 };
 export const WISH_LABEL = {
   storage: '收纳多到用不完',

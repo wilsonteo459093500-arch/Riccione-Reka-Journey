@@ -18,6 +18,7 @@ import {
   packJSON,
   unpackJSON,
   PET_REASON,
+  COOK_REASON,
 } from '../src/shared/profile.js';
 import { profileText } from '../src/shared/summary.js';
 import { setLang } from '../src/shared/i18n.js';
@@ -260,7 +261,7 @@ await test('有猫狗：沙发 / 点缀的丝绒、羊羔绒换成亚麻 / 皮�
     }
   const wmrh = lifestyleSwaps(DREAMER_BY_CODE.WMRH.materials, { life: { who: ['cat'] } });
   assert.deepEqual(wmrh.swaps.map((s) => s.slot).sort(), ['accents', 'upholstery']);
-  assert.deepEqual(lifestyleSwaps(DREAMER_BY_CODE.WMRH.materials, { life: { who: ['kids'] } }).swaps, []);
+  assert.ok(lifestyleSwaps(DREAMER_BY_CODE.WMRH.materials, { life: { who: ['kids'] } }).swaps.every((s) => s.slot === 'countertop'), '小孩只换台面，不动软装');
 });
 await test('换的时候仍然避开雷区', () => {
   for (const c of [...NOGO_COLORS, ...NOGO_FINISHES])
@@ -281,8 +282,33 @@ await test('谈话提示：毛孩子提到已经换掉；小孩也认洞石台�
   assert.equal(petTip.level, 'note');
   assert.ok(petTip.text.includes('丝绒 / 羊羔绒已经换掉（沙发软包 → 亚麻、点缀 → 亚麻）'), petTip.text);
   const kids = buildProfile(answers({ life: { who: ['kids'] } }), {}, FLOW);
-  assert.equal(MAT_BY_ID[kids.materials.countertop].tex.type, 'travertine');
+  assert.equal(kids.materials.countertop, 'quartz-travertine');
+  assert.ok(kids.lifeSwaps.some((s) => s.why === 'kids' && s.from === 'travertine'));
+  assert.ok(!insights(kids, plan).some((x) => x.text.includes('天然大理石')), '换成人造石后不再提醒台面怕酸');
+  kids.materials = { ...kids.materials, floor: 'travertine' };
   assert.ok(insights(kids, plan).some((x) => x.text.startsWith('有小孩') && x.text.includes('洞石')));
+});
+await test('天天爆炒 / 有小孩：天然石台面换成同花色的人造石，仍然避开雷区；卡牌默认材质不变', () => {
+  const heavy = { life: { cook: 'heavy', who: [] } };
+  const cases = { travertine: 'quartz-travertine', calacatta: 'quartz-calacatta', carrara: 'quartz-white', terrazzo: 'quartz-white', nero: 'sintered' };
+  for (const [from, to] of Object.entries(cases)) {
+    const r = lifestyleSwaps({ countertop: from }, heavy);
+    assert.equal(r.materials.countertop, to, from);
+    assert.equal(r.swaps[0].why, 'cooking');
+    assert.equal(r.swaps[0].reason, COOK_REASON);
+  }
+  assert.equal(lifestyleSwaps({ countertop: 'carrara' }, { life: { who: ['baby'] } }).swaps[0].why, 'kids');
+  assert.deepEqual(lifestyleSwaps({ countertop: 'microcement' }, heavy).swaps, []);
+  assert.deepEqual(lifestyleSwaps({ countertop: 'travertine' }, { life: { who: ['dog'] } }).swaps, []);
+  assert.equal(lifestyleSwaps({ countertop: 'nero' }, { ...heavy, avoid: ['concrete'] }).materials.countertop, 'quartz-white', '目标踩雷就换下一个');
+  const before = JSON.stringify(DREAMERS.map((d) => d.materials));
+  for (const d of DREAMERS) for (const s of lifestyleSwaps(d.materials, heavy).swaps) assert.ok(fits(s.to, s.slot), `${d.code} ${s.slot} → ${s.to}`);
+  assert.equal(JSON.stringify(DREAMERS.map((d) => d.materials)), before);
+});
+await test('皮革不做床品、窗帘；藤编不做沙发软包（卡牌默认材质都合规）', () => {
+  assert.ok(!fits('black-leather', 'bedding') && !fits('cognac-leather', 'curtains') && !fits('rattan', 'upholstery'));
+  assert.ok(fits('linen', 'bedding') && fits('cognac-leather', 'upholstery') && fits('rattan', 'accents'));
+  for (const d of DREAMERS) for (const s of SLOTS) assert.ok(fits(d.materials[s.id], s.id), `${d.code} ${s.id} = ${d.materials[s.id]}`);
 });
 
 console.log('收纳与其他答案');
