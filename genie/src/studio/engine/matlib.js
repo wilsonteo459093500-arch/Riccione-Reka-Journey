@@ -1,8 +1,8 @@
 // 运行时材质库：每个「表面」一个共享材质（换一次，整屋同一表面一起换）＋ 固定材质（玻璃、电视、灯罩…）。
 //
 // 每个表面材质都是完整的 PBR：底色 + 切线空间法线（来自独立高度场）+ 粗糙度 / 微遮蔽（ORM）贴图，
-// 再按材质类型调好：丝绒 / 羊羔绒的绒面光泽（sheen）、烤漆 / 抛光石材的清漆层（clearcoat）、
-// 拉丝金属的各向异性高光（anisotropy）、金属和亮面在环境里的反射强度。
+// 再按材质类型调好：丝绒 / 羊羔绒的绒面光泽（sheen）、烤漆 / 抛光石材 / 釉面砖的清漆层（clearcoat）、
+// 拉丝金属的条纹粗糙度、金属和亮面在环境里的反射强度。
 //
 // 贴图生成是纯 CPU 的（textures.js）。为了换情绪 / 拖材质时不卡：第一次用到某个材质时先给一张小图
 // （几毫秒），完整分辨率的放到空闲时一张一张生成，生成好再换上（pulse() 通知引擎重画）。
@@ -216,10 +216,7 @@ export class MatLib {
     // 清漆层（烤漆、抛光石材、釉面砖）
     m.clearcoat = mat.clearcoat || 0;
     m.clearcoatRoughness = mat.ccRough ?? 0.08;
-    // 拉丝金属：沿拉丝方向拉长的高光（只在高画质档开）
-    const brushed = type === 'metal' && mat.metal >= 0.5;
-    m.anisotropy = brushed && this.quality === 'high' ? 0.55 : 0;
-    m.anisotropyRotation = Math.PI / 2;
+    // 拉丝金属：拉丝感来自粗糙度 / 法线贴图里的长条纹（不开 anisotropy，少编译一个着色器）
     // 环境反射：金属、亮面更亮一些
     m.userData.envBoost = mat.metal >= 0.5 ? 2.4 : m.clearcoat >= 0.3 ? 1.5 : type === 'leather' ? 1.2 : 1;
     if (sig(m) !== before) m.needsUpdate = true;
@@ -269,14 +266,16 @@ export class MatLib {
       }
       this.fixed[name] = m;
     };
-    F('glass', { color: 0xdbe8ee, roughness: 0.04, metalness: 0, transparent: true, opacity: 0.16, depthWrite: false, clearcoat: 1, clearcoatRoughness: 0.02 }, THREE.MeshPhysicalMaterial, 1.8);
+    // 固定材质保持 MeshStandardMaterial（玻璃除外）：不多编译着色器，iPad 首次打开不卡；
+    // 质感靠更准的粗糙度 / 金属度 + 环境反射倍数（envBoost）
+    F('glass', { color: 0xdbe8ee, roughness: 0.04, metalness: 0, transparent: true, opacity: 0.16, depthWrite: false }, THREE.MeshPhysicalMaterial, 1.8);
     F('frame', { color: 0x2a2a2c, roughness: 0.38, metalness: 0.75 }, THREE.MeshStandardMaterial, 1.6);
-    F('tv', { color: 0x0b0b0d, roughness: 0.12, metalness: 0.3, clearcoat: 1, clearcoatRoughness: 0.04 }, THREE.MeshPhysicalMaterial, 1.6);
-    F('screen', { color: 0x10141c, roughness: 0.06, metalness: 0.1, emissive: 0x24304a, emissiveIntensity: 0.0, clearcoat: 1, clearcoatRoughness: 0.02 }, THREE.MeshPhysicalMaterial, 1.8);
-    F('porcelain', { color: 0xf6f4f0, roughness: 0.22, metalness: 0, clearcoat: 0.8, clearcoatRoughness: 0.05 }, THREE.MeshPhysicalMaterial, 1.4);
-    F('mattress', { color: 0xf3efe8, roughness: 0.92, sheen: 0.4, sheenRoughness: 0.6, sheenColor: 0xffffff }, THREE.MeshPhysicalMaterial);
-    F('leaf', { color: 0x5c7a50, roughness: 0.62, side: THREE.DoubleSide, sheen: 0.25, sheenRoughness: 0.5, sheenColor: 0xb8d0a0 }, THREE.MeshPhysicalMaterial);
-    F('leaf2', { color: 0x7d9966, roughness: 0.62, side: THREE.DoubleSide, sheen: 0.25, sheenRoughness: 0.5, sheenColor: 0xc8dcb0 }, THREE.MeshPhysicalMaterial);
+    F('tv', { color: 0x0b0b0d, roughness: 0.1, metalness: 0.3 }, THREE.MeshStandardMaterial, 1.6);
+    F('screen', { color: 0x10141c, roughness: 0.06, metalness: 0.1, emissive: 0x24304a, emissiveIntensity: 0.0 }, THREE.MeshStandardMaterial, 1.8);
+    F('porcelain', { color: 0xf6f4f0, roughness: 0.14, metalness: 0 }, THREE.MeshStandardMaterial, 1.4);
+    F('mattress', { color: 0xf3efe8, roughness: 0.92 });
+    F('leaf', { color: 0x5c7a50, roughness: 0.62, side: THREE.DoubleSide });
+    F('leaf2', { color: 0x7d9966, roughness: 0.62, side: THREE.DoubleSide });
     F('pot', { color: 0xc9b79d, roughness: 0.78 });
     F('terracotta', { color: 0xb4694a, roughness: 0.85 });
     F('chrome', { color: 0xe4e5e6, roughness: 0.1, metalness: 1 }, THREE.MeshStandardMaterial, 2.6);
@@ -291,7 +290,7 @@ export class MatLib {
     F('plinth', { color: 0x1d1d18, roughness: 0.55, metalness: 0.15 });
     F('water', { color: 0x9fc3cf, roughness: 0.05, transparent: true, opacity: 0.6 }, THREE.MeshStandardMaterial, 1.6);
     F('rail', { color: 0x2a2a2c, roughness: 0.35, metalness: 0.8 }, THREE.MeshStandardMaterial, 1.8);
-    F('altarRed', { color: 0x6e1c18, roughness: 0.4, emissive: 0xff4a2a, emissiveIntensity: 0, clearcoat: 0.6, clearcoatRoughness: 0.1 }, THREE.MeshPhysicalMaterial, 1.2);
+    F('altarRed', { color: 0x6e1c18, roughness: 0.35, emissive: 0xff4a2a, emissiveIntensity: 0 }, THREE.MeshStandardMaterial, 1.2);
     // 会在夜里亮的
     F('lampShade', { color: 0xf3e6cf, roughness: 0.85, emissive: 0xffc27a, emissiveIntensity: 0, side: THREE.DoubleSide });
     F('bulb', { color: 0xfff2d8, emissive: 0xffd7a0, emissiveIntensity: 0.2 });
@@ -323,7 +322,7 @@ export class MatLib {
 
 /** 着色器开关（换了才需要重新编译） */
 function sig(m) {
-  return `${!!m.map}${!!m.normalMap}${!!m.roughnessMap}${!!m.aoMap}${!!m.bumpMap}${m.sheen > 0}${m.clearcoat > 0}${m.anisotropy > 0}`;
+  return `${!!m.map}${!!m.normalMap}${!!m.roughnessMap}${!!m.aoMap}${!!m.bumpMap}${m.sheen > 0}${m.clearcoat > 0}`;
 }
 
 /**

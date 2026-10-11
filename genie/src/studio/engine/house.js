@@ -7,6 +7,7 @@ import { ROOM_TYPES, bounds } from '../plan/model.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { boxGeo, worldUV, cylGeo, sphereGeo } from './geom.js';
 import { rng, fbm } from '../../shared/noise.js';
+import { BRAND } from '../../shared/config.js';
 
 export const CUT_H = 0.35;
 /** 第 1 层：主镜头看不见、但太阳的影子相机看得见 —— 切掉的墙、窗外的树都放这一层（也不会进环境光遮蔽） */
@@ -69,13 +70,13 @@ function kitFor(lib) {
   // 切面 = 建筑剖面的「墨」：哑光、微暖，不反光（像模型的黑色 PVC 切口）
   const cap = tag(new THREE.MeshStandardMaterial({ color: 0x272420, roughness: 0.86, metalness: 0 }), 'cap');
   // 底座：磨砂深色石（SAIL 墨 #24211D 方向），有细微云纹，环境光里有一点缎面光泽
-  const stone = tag(new THREE.MeshPhysicalMaterial({ color: 0x4d4843, map: st.map, roughness: 0.52, roughnessMap: st.rough, metalness: 0, clearcoat: 0.22, clearcoatRoughness: 0.38, specularIntensity: 0.7 }), 'plinth');
+  const stone = tag(new THREE.MeshPhysicalMaterial({ color: 0x4a4744, map: st.map, roughness: 0.52, roughnessMap: st.rough, metalness: 0, clearcoat: 0.22, clearcoatRoughness: 0.38, specularIntensity: 0.7 }), 'plinth');
   const foot = tag(new THREE.MeshStandardMaterial({ color: 0x15130f, roughness: 0.9 }), 'plinth');
   // 拉丝黄铜细线（SAIL 金）
   const brass = tag(new THREE.MeshPhysicalMaterial({ color: 0xd9b26a, metalness: 1, roughness: 0.3, clearcoat: 0.3, clearcoatRoughness: 0.2 }), 'brass');
   // 地面：深色、带一点柔和反光，从底座往外慢慢淡进背景
   const gU = { gCenter: { value: new THREE.Vector2() }, gR0: { value: 8 }, gR1: { value: 24 } };
-  const ground = tag(new THREE.MeshStandardMaterial({ color: 0x3e4041, roughness: 0.36, metalness: 0, transparent: true, depthWrite: true }), 'ground');
+  const ground = tag(new THREE.MeshStandardMaterial({ color: 0x32363a, roughness: 0.44, metalness: 0, transparent: true, depthWrite: true }), 'ground');
   ground.userData.u = gU;
   ground.onBeforeCompile = (s) => {
     Object.assign(s.uniforms, gU);
@@ -245,7 +246,7 @@ function textPlane(text, sub, w, h) {
     ctx.fillStyle = '#E2C17E';
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
-    const fs = Math.round(c.height * 0.34);
+    const fs = Math.round(c.height * (sub ? 0.4 : 0.46));
     const x = c.height * 0.42;
     try {
       ctx.letterSpacing = `${Math.round(fs * 0.14)}px`;
@@ -253,7 +254,7 @@ function textPlane(text, sub, w, h) {
       /* 旧浏览器没有 letterSpacing */
     }
     ctx.font = `600 ${fs}px "Cormorant Garamond","Noto Serif SC",serif`;
-    ctx.fillText(text, x, c.height * (sub ? 0.4 : 0.52));
+    ctx.fillText(text, x, c.height * (sub ? 0.38 : 0.52));
     if (sub) {
       ctx.globalAlpha = 0.72;
       try {
@@ -261,8 +262,8 @@ function textPlane(text, sub, w, h) {
       } catch {
         /* noop */
       }
-      ctx.font = `500 ${Math.round(fs * 0.4)}px "Noto Sans SC",sans-serif`;
-      ctx.fillText(sub, x, c.height * 0.78);
+      ctx.font = `500 ${Math.round(fs * 0.36)}px "Noto Sans SC",sans-serif`;
+      ctx.fillText(sub, x, c.height * 0.8);
       ctx.globalAlpha = 1;
     }
   };
@@ -278,7 +279,7 @@ function textPlane(text, sub, w, h) {
         tex.needsUpdate = true;
       })
       .catch(() => {});
-  const mat = new THREE.MeshPhysicalMaterial({ map: tex, transparent: true, roughness: 0.32, metalness: 0.85, clearcoat: 0.4, clearcoatRoughness: 0.25, emissive: 0x4a3514, emissiveMap: tex, emissiveIntensity: 0.32, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  const mat = new THREE.MeshPhysicalMaterial({ map: tex, transparent: true, roughness: 0.34, metalness: 0.6, clearcoat: 0.4, clearcoatRoughness: 0.25, emissive: 0x6a4d1e, emissiveMap: tex, emissiveIntensity: 0.55, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
   m.userData.noAO = true;
   m.userData.ownMaterial = true;
@@ -288,7 +289,7 @@ function textPlane(text, sub, w, h) {
 /**
  * @returns {{ group, wallSets, windows, rooms, bounds, trees }}
  */
-export function buildHouse(plan, walls, lib, { title = 'GENIE · RICCIONE REKA', subtitle = '溪岸 SAIL', ground = true } = {}) {
+export function buildHouse(plan, walls, lib, { title = BRAND.plinth, subtitle = BRAND.house, ground = true } = {}) {
   const root = new THREE.Group();
   const H = plan.wallH || 2.8;
   const bb = bounds(plan);
@@ -381,7 +382,7 @@ export function buildHouse(plan, walls, lib, { title = 'GENIE · RICCIONE REKA',
   const front = textPlane(title, subtitle, Math.min(pw * 0.8, 9), 0.42);
   front.position.set(bb.cx - pw / 2 + Math.min(pw * 0.8, 9) / 2 + 0.25, y0 + gap + (ph - gap) / 2 - 0.02, bb.cy + pd / 2 + 0.003);
   root.add(front);
-  const side = textPlane('GENIE', 'by RICCIONE REKA', Math.min(pd * 0.7, 4), 0.42);
+  const side = textPlane(BRAND.app, BRAND.by, Math.min(pd * 0.7, 4), 0.42);
   side.position.set(bb.cx + pw / 2 + 0.003, y0 + gap + (ph - gap) / 2 - 0.02, bb.cy);
   side.rotation.y = Math.PI / 2;
   root.add(side);

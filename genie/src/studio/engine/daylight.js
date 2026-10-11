@@ -69,7 +69,7 @@ export function daylight(hour, northDeg = 0) {
   const dir = [Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el)];
   const dayFade = up ? smooth(-0.035, 0.05, f) * (1 - smooth(0.94, 1.03, f)) : 0;
   // 正午不再「曝」：太阳最强 ~2.7，低角度时稍弱、更暖（大气）
-  const sunIntensity = up ? 0.35 + 2.35 * dayFade * (0.6 + 0.4 * arc) : 0.42;
+  const sunIntensity = up ? 0.35 + 2.35 * dayFade * (0.6 + 0.4 * arc) : 0.55;
   const night = clamp01(1 - smooth(0, 1, Math.min((h - 6.2) / 1.1, (19.6 - h) / 1.2)));
   const evening = h > 12 ? smooth(17.4, 18.6, h) : smooth(7.5, 6.6, h);
   // 黄金时段（日出后 / 日落前）：光更暖、更斜，体积光最明显

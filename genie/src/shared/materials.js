@@ -1,6 +1,8 @@
 // 材质库 —— 测试页（蓝图材质板）与 3D 工作室共用一份。
 // 每个材质：名字、类别、程序化贴图参数（textures.js 生成，不用任何图片文件）、
-// 物理参数（粗糙度 / 金属度 / 丝绒光泽），以及「情绪」权重 mood = [cozy, bright, moody]，
+// 物理参数（粗糙度 / 金属度 / 丝绒光泽 / 清漆层），以及「情绪」权重 mood = [cozy, bright, moody]，
+// 贴图参数里：木头 species（橡 / 枫 / 胡桃 / 柚 / 樱桃：年轮、导管、射线斑不同），大理石 style，
+// 金属 f0（真实的金属反射色；base 仍是 UI 色卡 / 情绪计算用的颜色）。
 // warm（-1 冷 … 1 暖）与 light（0 深 … 1 浅）—— 情绪仪表、梦想家配色、雷区替换都靠它们。
 
 /** 可以换材质的「表面」。cats = 这个表面接受哪些类别的材质 */
@@ -41,6 +43,7 @@ const m = (id, zh, en, cat, tex, phys, mood, warm, light) => ({
   metal: phys.metal ?? 0,
   sheen: phys.sheen ?? 0,
   clearcoat: phys.clearcoat ?? 0,
+  ccRough: phys.ccRough ?? 0.08, // 清漆层自己的粗糙度（烤漆、抛光石材、釉面很低）
   color: tex.base,
   mood,
   warm,
@@ -49,30 +52,30 @@ const m = (id, zh, en, cat, tex, phys, mood, warm, light) => ({
 
 export const MATERIALS = [
   // ── 木 Wood ──────────────────────────────────────────────
-  m('white-oak', '白橡', 'White oak', 'wood', { type: 'wood', base: '#D8C2A0', grain: '#B49470' }, { rough: 0.62 }, [0.45, 0.9, 0], 0.2, 0.8),
-  m('maple', '枫木', 'Maple', 'wood', { type: 'wood', base: '#E2CDAA', grain: '#C4A57C' }, { rough: 0.6 }, [0.5, 0.9, 0], 0.35, 0.85),
-  m('light-oak', '浅川橡', 'Natural oak', 'wood', { type: 'wood', base: '#C8A272', grain: '#9F784A' }, { rough: 0.6 }, [0.72, 0.68, 0.05], 0.5, 0.65),
-  m('herringbone-oak', '人字拼橡木', 'Herringbone oak', 'wood', { type: 'wood', base: '#C29866', grain: '#94693D', pattern: 'herringbone' }, { rough: 0.58 }, [0.8, 0.55, 0.1], 0.55, 0.6),
-  m('greige-oak', '灰橡', 'Greige oak', 'wood', { type: 'wood', base: '#B2A491', grain: '#877A69' }, { rough: 0.64 }, [0.35, 0.62, 0.28], 0, 0.6),
-  m('teak', '柚木', 'Teak', 'wood', { type: 'wood', base: '#A66E3D', grain: '#744522' }, { rough: 0.55 }, [0.9, 0.3, 0.25], 0.8, 0.45),
-  m('cherry', '樱桃木', 'Cherry', 'wood', { type: 'wood', base: '#985436', grain: '#68331E' }, { rough: 0.5 }, [0.8, 0.2, 0.42], 0.85, 0.35),
-  m('smoked-oak', '烟熏橡', 'Smoked oak', 'wood', { type: 'wood', base: '#866043', grain: '#583B25' }, { rough: 0.6 }, [0.85, 0.2, 0.38], 0.55, 0.35),
-  m('walnut', '胡桃木', 'Walnut', 'wood', { type: 'wood', base: '#694330', grain: '#3F2618' }, { rough: 0.52 }, [0.7, 0.1, 0.62], 0.6, 0.25),
-  m('ebony-oak', '乌木', 'Ebonized oak', 'wood', { type: 'wood', base: '#2F2723', grain: '#181210' }, { rough: 0.55 }, [0.25, 0, 1], 0.2, 0.08),
+  m('white-oak', '白橡', 'White oak', 'wood', { type: 'wood', base: '#D8C2A0', grain: '#B49470', species: 'oak' }, { rough: 0.62 }, [0.45, 0.9, 0], 0.2, 0.8),
+  m('maple', '枫木', 'Maple', 'wood', { type: 'wood', base: '#E2CDAA', grain: '#C4A57C', species: 'maple' }, { rough: 0.6 }, [0.5, 0.9, 0], 0.35, 0.85),
+  m('light-oak', '浅川橡', 'Natural oak', 'wood', { type: 'wood', base: '#C8A272', grain: '#9F784A', species: 'oak' }, { rough: 0.6 }, [0.72, 0.68, 0.05], 0.5, 0.65),
+  m('herringbone-oak', '人字拼橡木', 'Herringbone oak', 'wood', { type: 'wood', base: '#C29866', grain: '#94693D', pattern: 'herringbone', species: 'oak' }, { rough: 0.58 }, [0.8, 0.55, 0.1], 0.55, 0.6),
+  m('greige-oak', '灰橡', 'Greige oak', 'wood', { type: 'wood', base: '#B2A491', grain: '#877A69', species: 'oak' }, { rough: 0.64 }, [0.35, 0.62, 0.28], 0, 0.6),
+  m('teak', '柚木', 'Teak', 'wood', { type: 'wood', base: '#A66E3D', grain: '#744522', species: 'teak' }, { rough: 0.55 }, [0.9, 0.3, 0.25], 0.8, 0.45),
+  m('cherry', '樱桃木', 'Cherry', 'wood', { type: 'wood', base: '#985436', grain: '#68331E', species: 'cherry' }, { rough: 0.5 }, [0.8, 0.2, 0.42], 0.85, 0.35),
+  m('smoked-oak', '烟熏橡', 'Smoked oak', 'wood', { type: 'wood', base: '#866043', grain: '#583B25', species: 'oak' }, { rough: 0.6 }, [0.85, 0.2, 0.38], 0.55, 0.35),
+  m('walnut', '胡桃木', 'Walnut', 'wood', { type: 'wood', base: '#694330', grain: '#3F2618', species: 'walnut' }, { rough: 0.5 }, [0.7, 0.1, 0.62], 0.6, 0.25),
+  m('ebony-oak', '乌木', 'Ebonized oak', 'wood', { type: 'wood', base: '#2F2723', grain: '#181210', species: 'oak' }, { rough: 0.55 }, [0.25, 0, 1], 0.2, 0.08),
 
   // ── 石 Stone ─────────────────────────────────────────────
-  m('carrara', '卡拉拉白', 'Carrara marble', 'stone', { type: 'marble', base: '#E9E7E2', vein: '#8F9094', veins: 0.55 }, { rough: 0.25, clearcoat: 0.3 }, [0.15, 0.95, 0.15], -0.2, 0.9),
-  m('calacatta', '金线白', 'Calacatta gold', 'stone', { type: 'marble', base: '#EFE9DE', vein: '#AE8F5D', veins: 0.65 }, { rough: 0.22, clearcoat: 0.35 }, [0.42, 0.88, 0.12], 0.3, 0.9),
-  m('travertine', '洞石', 'Travertine', 'stone', { type: 'travertine', base: '#D6C1A0', vein: '#B79E7A' }, { rough: 0.7 }, [0.82, 0.6, 0.1], 0.6, 0.7),
+  m('carrara', '卡拉拉白', 'Carrara marble', 'stone', { type: 'marble', base: '#E9E7E2', vein: '#8F9094', veins: 0.55, style: 'carrara' }, { rough: 0.24, clearcoat: 0.5, ccRough: 0.06 }, [0.15, 0.95, 0.15], -0.2, 0.9),
+  m('calacatta', '金线白', 'Calacatta gold', 'stone', { type: 'marble', base: '#EFE9DE', vein: '#AE8F5D', veins: 0.65, style: 'calacatta' }, { rough: 0.22, clearcoat: 0.55, ccRough: 0.05 }, [0.42, 0.88, 0.12], 0.3, 0.9),
+  m('travertine', '洞石', 'Travertine', 'stone', { type: 'travertine', base: '#D6C1A0', vein: '#B79E7A' }, { rough: 0.58 }, [0.82, 0.6, 0.1], 0.6, 0.7),
   m('terrazzo', '水磨石', 'Terrazzo', 'stone', { type: 'terrazzo', base: '#E8E3D9', chips: ['#B8B1A4', '#8C8478', '#C98A6A', '#6E7F73', '#F6F3EE'] }, { rough: 0.4 }, [0.45, 0.85, 0.05], 0.1, 0.85),
-  m('microcement', '微水泥', 'Microcement', 'stone', { type: 'concrete', base: '#9D9992' }, { rough: 0.75 }, [0.22, 0.4, 0.6], -0.1, 0.5),
+  m('microcement', '微水泥', 'Microcement', 'stone', { type: 'concrete', base: '#9D9992' }, { rough: 0.68 }, [0.22, 0.4, 0.6], -0.1, 0.5),
   m('sintered', '岩板灰', 'Sintered stone', 'stone', { type: 'concrete', base: '#5F5E5B', fine: true }, { rough: 0.55 }, [0.1, 0.18, 0.88], -0.2, 0.3),
-  m('verde', '绿大理石', 'Verde marble', 'stone', { type: 'marble', base: '#2E4A3E', vein: '#C5D3C8', veins: 0.7 }, { rough: 0.2, clearcoat: 0.4 }, [0.32, 0.1, 0.85], -0.2, 0.2),
-  m('nero', '黑金花', 'Nero marquina', 'stone', { type: 'marble', base: '#1F1E20', vein: '#E6E0D6', veins: 0.6 }, { rough: 0.2, clearcoat: 0.4 }, [0.12, 0, 1], -0.1, 0.06),
+  m('verde', '绿大理石', 'Verde marble', 'stone', { type: 'marble', base: '#2E4A3E', vein: '#C5D3C8', veins: 0.7, style: 'verde' }, { rough: 0.2, clearcoat: 0.6, ccRough: 0.05 }, [0.32, 0.1, 0.85], -0.2, 0.2),
+  m('nero', '黑金花', 'Nero marquina', 'stone', { type: 'marble', base: '#1F1E20', vein: '#E6E0D6', veins: 0.6, style: 'nero' }, { rough: 0.2, clearcoat: 0.6, ccRough: 0.05 }, [0.12, 0, 1], -0.1, 0.06),
 
   // ── 砖 Tile ──────────────────────────────────────────────
-  m('zellige-white', '手工白砖', 'Zellige white', 'tile', { type: 'tile', base: '#EDE9E0', grout: '#D6D0C4', size: 0.1, vary: 0.07 }, { rough: 0.22, clearcoat: 0.6 }, [0.42, 0.9, 0.05], 0.15, 0.9),
-  m('zellige-sage', '鼠尾草砖', 'Zellige sage', 'tile', { type: 'tile', base: '#8EA289', grout: '#D4D3C8', size: 0.1, vary: 0.09 }, { rough: 0.22, clearcoat: 0.6 }, [0.58, 0.48, 0.25], 0, 0.55),
+  m('zellige-white', '手工白砖', 'Zellige white', 'tile', { type: 'tile', base: '#EDE9E0', grout: '#D6D0C4', size: 0.1, vary: 0.07 }, { rough: 0.2, clearcoat: 0.9, ccRough: 0.04 }, [0.42, 0.9, 0.05], 0.15, 0.9),
+  m('zellige-sage', '鼠尾草砖', 'Zellige sage', 'tile', { type: 'tile', base: '#8EA289', grout: '#D4D3C8', size: 0.1, vary: 0.09 }, { rough: 0.2, clearcoat: 0.9, ccRough: 0.04 }, [0.58, 0.48, 0.25], 0, 0.55),
   m('grey-tile', '哑光灰砖', 'Matte grey tile', 'tile', { type: 'tile', base: '#A9A59F', grout: '#8F8B85', size: 0.6, vary: 0.025 }, { rough: 0.7 }, [0.2, 0.5, 0.42], -0.1, 0.55),
   m('cream-tile', '奶油大板砖', 'Cream slab tile', 'tile', { type: 'tile', base: '#E4DACB', grout: '#CFC5B5', size: 0.6, rect: true, vary: 0.02 }, { rough: 0.45 }, [0.6, 0.8, 0.05], 0.4, 0.85),
   m('terracotta-tile', '陶土砖', 'Terracotta tile', 'tile', { type: 'tile', base: '#B4694A', grout: '#CDBDAA', size: 0.2, vary: 0.08 }, { rough: 0.8 }, [0.9, 0.3, 0.22], 0.9, 0.4),
@@ -90,34 +93,34 @@ export const MATERIALS = [
   m('olive', '橄榄绿', 'Olive', 'paint', { type: 'paint', base: '#6D6A4A' }, { rough: 0.9 }, [0.5, 0.1, 0.65], 0.3, 0.3),
   m('navy-paint', '午夜蓝', 'Midnight blue', 'paint', { type: 'paint', base: '#29334A' }, { rough: 0.9 }, [0.2, 0, 1], -0.6, 0.12),
   m('charcoal', '炭灰', 'Charcoal', 'paint', { type: 'paint', base: '#3A3938' }, { rough: 0.9 }, [0.2, 0, 1], 0, 0.12),
-  m('white-lacquer', '白色烤漆', 'White lacquer', 'paint', { type: 'paint', base: '#ECEBE7', smooth: true }, { rough: 0.3, clearcoat: 0.4 }, [0.2, 0.95, 0.05], -0.1, 0.93),
-  m('cream-lacquer', '奶油烤漆', 'Cream lacquer', 'paint', { type: 'paint', base: '#EAE0CE', smooth: true }, { rough: 0.32, clearcoat: 0.4 }, [0.55, 0.85, 0], 0.4, 0.88),
-  m('sage-lacquer', '灰绿烤漆', 'Sage lacquer', 'paint', { type: 'paint', base: '#8C9884', smooth: true }, { rough: 0.38, clearcoat: 0.3 }, [0.55, 0.45, 0.3], 0, 0.55),
+  m('white-lacquer', '白色烤漆', 'White lacquer', 'paint', { type: 'paint', base: '#ECEBE7', smooth: true }, { rough: 0.3, clearcoat: 0.8, ccRough: 0.07 }, [0.2, 0.95, 0.05], -0.1, 0.93),
+  m('cream-lacquer', '奶油烤漆', 'Cream lacquer', 'paint', { type: 'paint', base: '#EAE0CE', smooth: true }, { rough: 0.32, clearcoat: 0.8, ccRough: 0.07 }, [0.55, 0.85, 0], 0.4, 0.88),
+  m('sage-lacquer', '灰绿烤漆', 'Sage lacquer', 'paint', { type: 'paint', base: '#8C9884', smooth: true }, { rough: 0.38, clearcoat: 0.7, ccRough: 0.08 }, [0.55, 0.45, 0.3], 0, 0.55),
   m('black-matte', '黑色哑光', 'Matte black', 'paint', { type: 'paint', base: '#272626', smooth: true }, { rough: 0.72 }, [0.15, 0, 1], 0, 0.06),
 
   // ── 布 Fabric ────────────────────────────────────────────
-  m('cotton-white', '纯白棉', 'White cotton', 'fabric', { type: 'linen', base: '#F3F1EC', fine: true }, { rough: 0.9, sheen: 0.3 }, [0.3, 1, 0], 0.05, 0.97),
-  m('linen', '亚麻', 'Linen', 'fabric', { type: 'linen', base: '#E4D9C7' }, { rough: 0.9, sheen: 0.3 }, [0.62, 0.8, 0], 0.4, 0.85),
-  m('boucle', '羊羔绒', 'Bouclé', 'fabric', { type: 'boucle', base: '#EEE8DD' }, { rough: 0.95, sheen: 0.5 }, [0.72, 0.8, 0], 0.3, 0.9),
-  m('blush-boucle', '雾粉羊羔绒', 'Blush bouclé', 'fabric', { type: 'boucle', base: '#E2C4B8' }, { rough: 0.95, sheen: 0.5 }, [0.78, 0.6, 0.05], 0.5, 0.76),
-  m('oat-knit', '燕麦针织', 'Oat knit', 'fabric', { type: 'knit', base: '#D8CBB4' }, { rough: 0.95, sheen: 0.4 }, [0.85, 0.55, 0.05], 0.45, 0.78),
-  m('grey-wool', '灰羊毛', 'Grey wool', 'fabric', { type: 'felt', base: '#A8A6A1' }, { rough: 0.95, sheen: 0.35 }, [0.38, 0.5, 0.35], -0.1, 0.6),
-  m('sage-linen', '鼠尾草亚麻', 'Sage linen', 'fabric', { type: 'linen', base: '#A6B29B' }, { rough: 0.9, sheen: 0.3 }, [0.6, 0.5, 0.15], 0.05, 0.62),
-  m('rattan', '藤编', 'Rattan cane', 'fabric', { type: 'rattan', base: '#C69C60' }, { rough: 0.75 }, [0.85, 0.55, 0.05], 0.7, 0.55),
+  m('cotton-white', '纯白棉', 'White cotton', 'fabric', { type: 'linen', base: '#F3F1EC', fine: true }, { rough: 0.88, sheen: 0.4 }, [0.3, 1, 0], 0.05, 0.97),
+  m('linen', '亚麻', 'Linen', 'fabric', { type: 'linen', base: '#E4D9C7' }, { rough: 0.9, sheen: 0.4 }, [0.62, 0.8, 0], 0.4, 0.85),
+  m('boucle', '羊羔绒', 'Bouclé', 'fabric', { type: 'boucle', base: '#EEE8DD' }, { rough: 0.95, sheen: 0.7 }, [0.72, 0.8, 0], 0.3, 0.9),
+  m('blush-boucle', '雾粉羊羔绒', 'Blush bouclé', 'fabric', { type: 'boucle', base: '#E2C4B8' }, { rough: 0.95, sheen: 0.7 }, [0.78, 0.6, 0.05], 0.5, 0.76),
+  m('oat-knit', '燕麦针织', 'Oat knit', 'fabric', { type: 'knit', base: '#D8CBB4' }, { rough: 0.95, sheen: 0.6 }, [0.85, 0.55, 0.05], 0.45, 0.78),
+  m('grey-wool', '灰羊毛', 'Grey wool', 'fabric', { type: 'felt', base: '#A8A6A1' }, { rough: 0.95, sheen: 0.5 }, [0.38, 0.5, 0.35], -0.1, 0.6),
+  m('sage-linen', '鼠尾草亚麻', 'Sage linen', 'fabric', { type: 'linen', base: '#A6B29B' }, { rough: 0.9, sheen: 0.4 }, [0.6, 0.5, 0.15], 0.05, 0.62),
+  m('rattan', '藤编', 'Rattan cane', 'fabric', { type: 'rattan', base: '#C69C60' }, { rough: 0.5 }, [0.85, 0.55, 0.05], 0.7, 0.55),
   m('ochre-velvet', '赭黄丝绒', 'Ochre velvet', 'fabric', { type: 'velvet', base: '#C6912E' }, { rough: 0.8, sheen: 1 }, [0.85, 0.35, 0.3], 0.9, 0.5),
-  m('rust-wool', '铁锈羊毛', 'Rust wool', 'fabric', { type: 'felt', base: '#B3552E' }, { rough: 0.95, sheen: 0.4 }, [0.9, 0.2, 0.35], 0.95, 0.38),
-  m('cognac-leather', '干邑皮革', 'Cognac leather', 'fabric', { type: 'leather', base: '#8C4D2A' }, { rough: 0.48 }, [0.72, 0.15, 0.55], 0.85, 0.3),
+  m('rust-wool', '铁锈羊毛', 'Rust wool', 'fabric', { type: 'felt', base: '#B3552E' }, { rough: 0.95, sheen: 0.5 }, [0.9, 0.2, 0.35], 0.95, 0.38),
+  m('cognac-leather', '干邑皮革', 'Cognac leather', 'fabric', { type: 'leather', base: '#8C4D2A' }, { rough: 0.42 }, [0.72, 0.15, 0.55], 0.85, 0.3),
   m('emerald-velvet', '祖母绿丝绒', 'Emerald velvet', 'fabric', { type: 'velvet', base: '#1E5345' }, { rough: 0.8, sheen: 1 }, [0.42, 0.05, 0.85], -0.2, 0.18),
   m('navy-velvet', '海军蓝丝绒', 'Navy velvet', 'fabric', { type: 'velvet', base: '#2B3A5E' }, { rough: 0.8, sheen: 1 }, [0.5, 0.05, 0.8], -0.5, 0.15),
-  m('charcoal-felt', '炭灰毛毡', 'Charcoal felt', 'fabric', { type: 'felt', base: '#3D3D40' }, { rough: 0.95, sheen: 0.3 }, [0.3, 0, 0.95], 0, 0.14),
-  m('black-leather', '黑皮革', 'Black leather', 'fabric', { type: 'leather', base: '#252322' }, { rough: 0.45 }, [0.2, 0, 1], 0, 0.06),
+  m('charcoal-felt', '炭灰毛毡', 'Charcoal felt', 'fabric', { type: 'felt', base: '#3D3D40' }, { rough: 0.95, sheen: 0.45 }, [0.3, 0, 0.95], 0, 0.14),
+  m('black-leather', '黑皮革', 'Black leather', 'fabric', { type: 'leather', base: '#252322' }, { rough: 0.4 }, [0.2, 0, 1], 0, 0.06),
 
   // ── 金属 Metal ───────────────────────────────────────────
-  m('brass', '拉丝黄铜', 'Brushed brass', 'metal', { type: 'metal', base: '#B8914A' }, { rough: 0.35, metal: 1 }, [0.75, 0.4, 0.4], 0.8, 0.55),
-  m('bronze', '古铜', 'Bronze', 'metal', { type: 'metal', base: '#6C4B2F' }, { rough: 0.42, metal: 1 }, [0.6, 0.1, 0.7], 0.6, 0.3),
-  m('steel', '不锈钢', 'Stainless', 'metal', { type: 'metal', base: '#B4B6B8' }, { rough: 0.3, metal: 1 }, [0.1, 0.8, 0.3], -0.3, 0.7),
-  m('gunmetal', '枪灰', 'Gunmetal', 'metal', { type: 'metal', base: '#55585C' }, { rough: 0.45, metal: 1 }, [0.15, 0.2, 0.8], -0.2, 0.3),
-  m('matte-black', '哑光黑', 'Matte black metal', 'metal', { type: 'metal', base: '#232323' }, { rough: 0.6, metal: 0.4 }, [0.2, 0.1, 0.9], 0, 0.08),
+  m('brass', '拉丝黄铜', 'Brushed brass', 'metal', { type: 'metal', base: '#B8914A', f0: '#D8B676' }, { rough: 0.32, metal: 1 }, [0.75, 0.4, 0.4], 0.8, 0.55),
+  m('bronze', '古铜', 'Bronze', 'metal', { type: 'metal', base: '#6C4B2F', f0: '#9A7250' }, { rough: 0.4, metal: 1 }, [0.6, 0.1, 0.7], 0.6, 0.3),
+  m('steel', '不锈钢', 'Stainless', 'metal', { type: 'metal', base: '#B4B6B8', f0: '#CDD0D3' }, { rough: 0.28, metal: 1 }, [0.1, 0.8, 0.3], -0.3, 0.7),
+  m('gunmetal', '枪灰', 'Gunmetal', 'metal', { type: 'metal', base: '#55585C', f0: '#73777C' }, { rough: 0.4, metal: 1 }, [0.15, 0.2, 0.8], -0.2, 0.3),
+  m('matte-black', '哑光黑', 'Matte black metal', 'metal', { type: 'metal', base: '#232323' }, { rough: 0.5, metal: 0 }, [0.2, 0.1, 0.9], 0, 0.08),
 ];
 
 export const MAT_BY_ID = Object.fromEntries(MATERIALS.map((x) => [x.id, x]));

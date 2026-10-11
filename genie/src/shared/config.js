@@ -34,6 +34,13 @@ export const CONFIG = {
   // 想用公司自己有版权的曲子：把 mp3 放进 public/music/，这里填 '/music/xxx.mp3'（自然声仍会垫在底下）。
   wishMusic: '',
   wishVolume: 0.7,
+  // 许愿模式的声音层：颂钵、风铃默认关（有些客人会觉得风铃「招阴」，农历七月尤其）；溪水、微风、鸟鸣、铺底一直在
+  wishLayers: { bowl: false, chimes: false },
+  // 揭晓之后音乐渐弱：蓝图页约 50%，进 3D 约 25%（只留溪水和一点风），闲置很久再淡到很小
+  wishDuck: { blueprint: 0.5, studio: 0.25, idle: 0.12 },
+  // 闲置：许愿进行中 3 分钟没人碰 → 潘吉问「还在吗？」；再 30 秒没回应 → 下一位客人。
+  // 蓝图 / 3D 永不自动清空（设计师可能对着讲很久），10 分钟没人碰只把音乐淡到很小。
+  idle: { quizMs: 180000, promptMs: 30000, fadeMs: 600000 },
 };
 
 export function hostFromCode(code) {

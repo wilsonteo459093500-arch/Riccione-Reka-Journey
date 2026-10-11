@@ -36,7 +36,7 @@ export function variantFor(mat, slotId) {
 
 // 一张贴图覆盖多大（米）。3D 用 WORLD；色卡（小方块）用 SWATCH —— 色卡要「凑近看」才认得出质感
 const WORLD = { marble: 1.8, travertine: 1.6, terrazzo: 0.8, concrete: 2.4, limewash: 2.4, paint: 2.4, linen: 0.3, boucle: 0.25, knit: 0.42, velvet: 1, felt: 0.6, leather: 0.4, rattan: 0.192, metal: 0.5 };
-const SWATCH = { marble: 0.42, travertine: 0.36, terrazzo: 0.2, concrete: 0.7, limewash: 0.9, paint: 0.8, linen: 0.06, boucle: 0.07, knit: 0.126, velvet: 0.3, felt: 0.12, leather: 0.1, rattan: 0.064, metal: 0.16 };
+const SWATCH = { marble: 0.42, travertine: 0.36, terrazzo: 0.2, concrete: 0.7, limewash: 0.9, paint: 0.8, linen: 0.06, boucle: 0.07, knit: 0.084, velvet: 0.3, felt: 0.08, leather: 0.06, rattan: 0.064, metal: 0.16 };
 
 function sizeFor(t, variant, swatch) {
   const type = t.type;
@@ -177,6 +177,7 @@ function woodCtx(B, t, mat, seed, kind) {
     r0: mat.rough,
     minRing: B.px * 2.1, // 年轮至少 2 个像素宽，否则远看全糊成一片
     lut: ringLUT(sp.porous),
+    fleckK: Math.min(1, 0.0014 / B.px), // 射线斑只有凑近才看得清；远看（像素粗）就淡一点，免得像斑点
   };
 }
 
@@ -241,7 +242,7 @@ function woodPx(B, i, C, bp, along, across, W, d, pn, rT, rPx, rPy, rx, ry) {
   const pore = smooth(0.52, 0.9, pn) * band * C.sp.pore * C.poreK;
   // 射线斑：径切 / 半径切的橡木才有的「银光」
   let fleck = 0;
-  if (rT && bp.cut > 0) fleck = smooth(0.7, 0.84, vlook(rT, rPx, rPy, rx, ry)) * C.sp.rays * (bp.cut === 2 ? 1 : 0.4);
+  if (rT && bp.cut > 0) fleck = smooth(0.7, 0.84, vlook(rT, rPx, rPy, rx, ry)) * C.sp.rays * (bp.cut === 2 ? 1 : 0.4) * C.fleckK;
   const s = C.fs[i] - 0.5;
   const tone = bp.tone * (1 + s * 2 * C.sp.streak);
   const gk = g * C.k;
@@ -395,13 +396,13 @@ function woodVeneer(B, t, mat, seed) {
   const nL = Math.max(1, Math.round(S / 0.3));
   const Lw = S / nL;
   const b0 = boardParams(7, seed, C, Lw, 'veneer');
-  // 竖向无缝：a·S 必须是年轮间距的整数倍
-  const m = Math.max(3, Math.round(Math.abs(b0.a) * S / b0.spacing));
-  const a = (b0.a < 0 ? -1 : 1) * (m * b0.spacing) / S;
+  // 竖向无缝：a·S 必须是年轮间距的整数倍；每 1.2 米只有 2–3 个山尖（真实木皮的山纹很高很舒展）
   const leaves = [];
   for (let l = 0; l < nL; l++) {
     const hh = (q) => hash2(l, q, seed + 5);
-    leaves.push({ ...b0, a, phase: b0.phase + l * 0.37, c: b0.c + (hh(1) - 0.5) * 0.03, D0: b0.D0 * (0.9 + hh(2) * 0.2), tone: b0.tone * (1 + (hh(3) - 0.5) * 0.05), ox: hh(4) * 50 });
+    const m = Math.max(1, Math.round(((hh(5) < 0.5 ? 2 : 3) * S) / 1.2));
+    const a = (b0.a < 0 ? -1 : 1) * ((m * b0.spacing) / S);
+    leaves.push({ ...b0, a, phase: b0.phase + hh(6) * 7, c: b0.c + (hh(1) - 0.5) * 0.04, D0: b0.D0 * (0.85 + hh(2) * 0.3), tone: b0.tone * (1 + (hh(3) - 0.5) * 0.05), ox: hh(4) * 50 });
   }
   const Pa = Math.max(4, Math.round(S / C.poreL));
   const Pc = Math.max(4, Math.round(S / C.poreW));
@@ -999,6 +1000,9 @@ function linen(B, t, mat, seed) {
   const NW = fieldN(R);
   const cl = up(fbmField(NW, 4, 4, 4, seed + 3), NW, R);
   const slubK = fine ? 0.35 : 1;
+  const th0 = fine ? 0.97 : 0.9; // 纱的粗细（占一格的比例）：棉布织得更密，几乎没有缝
+  const lo = fine ? 0.93 : 0.84; // 纱的起伏造成的明暗
+  const gapT = fine ? 0.86 : 0.74;
   const r0 = mat.rough;
   for (let y = 0; y < R; y++) {
     const v = (y + 0.5) * px;
@@ -1014,8 +1018,8 @@ function linen(B, t, mat, seed) {
       const over = (ii + j) & 1; // 1 = 经线（竖）在上
       const sw = (vlook(Tw1, n, L1, ii + 0.5, (v / S) * L1) - 0.5) * 0.75 + (vlook(Tw2, n, L2, ii + 0.5, (v / S) * L2) - 0.5) * 0.5;
       const sf = (vlook(Tf1, n, L1, j + 0.5, (u / S) * L1) - 0.5) * 0.75 + (vlook(Tf2, n, L2, j + 0.5, (u / S) * L2) - 0.5) * 0.5;
-      const thW = 0.9 + sw * 0.4 * slubK;
-      const thF = 0.9 + sf * 0.4 * slubK;
+      const thW = th0 + sw * 0.4 * slubK;
+      const thF = th0 + sf * 0.4 * slubK;
       const cw = (fx - 0.5) / (0.5 * thW);
       const cf = (fy - 0.5) / (0.5 * thF);
       const pw = 1 - cw * cw;
@@ -1026,17 +1030,17 @@ function linen(B, t, mat, seed) {
       let tint;
       if (zw < 0 && zf < 0) {
         z = 0.05;
-        tint = 0.74;
+        tint = gapT;
       } else if (zw >= zf) {
         z = zw;
-        tint = (0.84 + 0.16 * z) * (1 + sw * 0.2 * slubK) * (1 + (hash2(ii, 3, seed) - 0.5) * 0.03) * 1.012;
+        tint = (lo + (1 - lo) * z) * (1 + sw * 0.2 * slubK) * (1 + (hash2(ii, 3, seed) - 0.5) * 0.03) * 1.012;
       } else {
         z = zf;
-        tint = (0.84 + 0.16 * z) * (1 + sf * 0.2 * slubK) * (1 + (hash2(j, 5, seed) - 0.5) * 0.03) * 0.988;
+        tint = (lo + (1 - lo) * z) * (1 + sf * 0.2 * slubK) * (1 + (hash2(j, 5, seed) - 0.5) * 0.03) * 0.988;
       }
-      const k = tint * (1 + (cl[i] - 0.5) * 0.06) * 1.05;
+      const k = (tint * (1 + (cl[i] - 0.5) * 0.06)) / (lo + (1 - lo) * 0.62);
       put(B, i, base[0] * k, base[1] * k, base[2] * k);
-      B.h[i] = z * pitch * 1000 * 0.3;
+      B.h[i] = z * pitch * 1000 * (fine ? 0.18 : 0.3);
       B.r[i] = r0 + (1 - z) * 0.05;
       B.ao[i] = 0.62 + 0.38 * z;
     }

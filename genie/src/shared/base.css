@@ -4,40 +4,46 @@
 
 :root {
   /* ============================================================
-     溪岸 SAIL × 大自然 —— 全站唯一的一套颜色（改这里就能整体换色）
-     纸张 / 墨色 / 金 来自 SAIL 品牌（invite.css、blueprint）；
-     背景从「午夜靛紫」换成「林间暮色」，紫色点缀换成苔绿 / 鼠尾草 / 溪水。
+     溪岸 SAIL × 大自然 · VI「晨光溪岸 Morning Stream」—— 全站唯一的一套颜色
+     白天：石灰纸、湿石头、溪水的青瓷色（像溪岸的邀请函、需求卡、蓝图）。
+     只有仪式时刻（擦亮神灯、翻牌、揭晓）进入暮色：给那一段加 class="dusk"。
+     3D 工作室的画布保持深色（效果图更出彩），面板和平面图用纸色。
+     文字色在纸上都过 AA：accent 5.5:1 · gold-ink 5.45:1 · ink-soft 4.8:1 · danger 5.3:1。
      ============================================================ */
-  --bg: #24322b; /* 林间暮色（占卜背景上方） */
-  --bg-deep: #17201b; /* 更深的林地 */
-  --bg-rgb: 36, 50, 43;
-  --bg-deep-rgb: 23, 32, 27;
-  --night: var(--bg-deep);
-  --night-2: var(--bg);
-  --night-3: #2f4036;
-
+  --bg: #f3eee4; /* 石灰纸（页面底色） */
+  --bg-deep: #e7e0d2; /* 湿一点的纸 / 分区底色 */
+  --bg-rgb: 243, 238, 228;
+  --bg-deep-rgb: 231, 224, 210;
+  --surface: #fbf8f2; /* 面板 */
+  --card: #fffdf8; /* 卡片、纸牌正面 */
   --paper: #f4f0e8; /* SAIL 纸 */
-  --cream: #fbf7ef;
-  --card: #fbf7ef;
+  --cream: #fbf8f2;
   --ink: #24211d; /* SAIL 墨 */
   --ink-soft: #6e675b;
   --line: #dbd2c1;
+  --line-soft: rgba(36, 33, 29, 0.08);
 
-  --text: #f4f0e8; /* 深色背景上的字 */
-  --text-strong: #fffaf0;
-  --text-rgb: 244, 240, 232;
+  /* 当前底色上的字（纸上 = 墨；.dusk 里会换成暖白） */
+  --text: #24211d;
+  --text-strong: #1b1916;
+  --text-soft: #6e675b;
+  --text-rgb: 36, 33, 29;
 
-  --gold: #cfa65c; /* SAIL 金（在深绿上提亮一点） */
-  --gold-l: #ebd39d;
+  /* 金：装饰用 --gold；纸上的金色文字一律用 --gold-ink */
+  --gold: #c08a3e;
+  --gold-ink: #7a5a2e;
+  --gold-l: #e9d29a;
   --gold-d: #9c6c26;
-  --gold-rgb: 207, 166, 92;
-  --gold-l-rgb: 235, 211, 157;
-  --gold-d-rgb: 192, 138, 62;
+  --gold-rgb: 192, 138, 62;
+  --gold-l-rgb: 233, 210, 154;
+  --gold-d-rgb: 156, 108, 38;
+  --gold-btn: linear-gradient(180deg, #f1dba4, #c08a3e 60%, #9c6c26);
   --amber: #e1913f; /* SAIL 琥珀 */
 
-  --accent: #3d5a4a; /* 苔绿（原紫色的位置） */
+  --accent: #4a6652; /* 苔绿（可当文字色） */
+  --accent-2: #7fa39c; /* 溪水青瓷（装饰） */
   --accent-soft: #7e9b82;
-  --accent-l: #a7c2a5; /* 鼠尾草亮 */
+  --accent-l: #a7c2a5; /* 鼠尾草 */
   --accent-l-rgb: 167, 194, 165;
   --accent-deep-rgb: 31, 46, 38;
   --accent-tint: #edf2e8;
@@ -45,27 +51,59 @@
   --accent-sky: #b9d3c9; /* 溪水 */
   --mist-rgb: 226, 234, 222;
 
-  --card-back: #2b3a31;
-  --card-back-deep: #1b251f;
-  --card-back-l: #3d5a4a;
-
-  --danger: #c4553f; /* 陶土红 */
+  --success: #45693f;
+  --danger: #a3443a; /* 陶土红 */
   --danger-l: #f2a58f;
-  --danger-rgb: 196, 85, 63;
+  --danger-rgb: 163, 68, 58;
+  --seal: #b8373f; /* 印章红 */
 
-  --glass-rgb: 24, 28, 24; /* 工作室玻璃面板 */
-  --shade-rgb: 10, 12, 10;
+  /* 仪式时刻（暮色）——.dusk 用这些 */
+  --ritual-bg: #1e2621;
+  --ritual-bg-2: #2a352d;
+  --ritual-text: #f1ece2;
+  --ritual-gold: #d2a75e;
+  --firefly: #e9d29a;
+
+  --card-back: #2b3a31; /* 纸牌背面 */
+  --card-back-deep: #1b251f;
+  --card-back-l: #4a6652;
+
+  /* 玻璃：纸色的磨砂玻璃（亮底上） */
+  --glass-rgb: 251, 248, 242;
+  --glass: rgba(251, 248, 242, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.65);
+  --shade-rgb: 36, 33, 29;
+  --shadow-1: 0 1px 2px rgba(36, 33, 29, 0.06), 0 4px 14px rgba(36, 33, 29, 0.06);
+  --shadow-2: 0 2px 6px rgba(36, 33, 29, 0.06), 0 18px 48px rgba(36, 33, 29, 0.12);
+
+  /* 3D 工作室：画布深色，面板纸色 */
   --studio-bg: #121611;
-  --studio-modal: #1a1f1a;
+  --studio-panel: rgba(246, 242, 234, 0.86);
+  --studio-panel-text: #24211d;
+  --studio-panel-border: #dbd2c1;
+  --studio-modal: #fbf8f2;
 
-  --gold-legacy: #d7a54a;
-  --lav: var(--accent-l);
-  --rose: var(--danger);
+  /* 情绪色 */
+  --mood-cozy: #e1913f;
+  --mood-bright: #7fa39c;
+  --mood-moody: #4a5a50;
+
+  /* 字体：界面用系统字（iPhone 的感觉），少数大标题用衬线 */
+  --sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', system-ui, sans-serif;
+  --display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif;
   --serif: 'Cormorant Garamond', 'Noto Serif SC', Georgia, serif;
   --zh-serif: 'Noto Serif SC', 'Songti SC', serif;
-  --round: 'Nunito', 'Noto Sans SC', system-ui, sans-serif;
+  --round: var(--sans);
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
   --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* 旧名字（逐步换掉） */
+  --night: var(--bg-deep);
+  --night-2: var(--bg);
+  --night-3: #ded6c6;
+  --gold-legacy: var(--gold);
+  --lav: var(--accent-l);
+  --rose: var(--danger);
 
   /* 许愿模式外壳 */
   --n-bg: var(--bg);
@@ -74,12 +112,91 @@
   --n-gold: var(--gold);
 }
 
+/* 英文模式：大标题换成 Cormorant 衬线 */
+html[lang='en'] {
+  --zh-serif: var(--serif);
+}
+
+/* 暮色（仪式时刻：擦亮神灯、章节翻牌、揭晓）—— 同一套变量换成夜里的值 */
+.dusk {
+  --bg: var(--ritual-bg);
+  --bg-deep: #161b17;
+  --bg-rgb: 30, 38, 33;
+  --bg-deep-rgb: 22, 27, 23;
+  --surface: var(--ritual-bg-2);
+  --text: var(--ritual-text);
+  --text-strong: #fffaf0;
+  --text-soft: #b9b2a3;
+  --text-rgb: 241, 236, 226;
+  --line: #3a463e;
+  --line-soft: rgba(241, 236, 226, 0.1);
+  --gold: var(--ritual-gold);
+  --gold-ink: var(--ritual-gold);
+  --accent: #8fae8b;
+  --glass-rgb: 30, 38, 33;
+  --glass: rgba(30, 38, 33, 0.6);
+  --glass-border: rgba(241, 236, 226, 0.12);
+  --night: #161b17;
+  --night-2: var(--ritual-bg);
+  --night-3: #2f4036;
+  color: var(--text);
+}
+
 html,
 body {
   -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 html {
-  background: var(--night-2);
+  background: var(--bg);
+}
+
+/* 中 / EN 分段控件 */
+.lang-toggle {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border-radius: 999px;
+  background: rgba(var(--text-rgb), 0.08);
+  border: 0.5px solid rgba(var(--text-rgb), 0.1);
+  font: 600 12px/1 var(--sans);
+  letter-spacing: 0.02em;
+}
+.lang-toggle button {
+  min-width: 44px;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(var(--text-rgb), 0.62);
+  cursor: pointer;
+  transition:
+    background 0.25s var(--ease),
+    color 0.25s var(--ease),
+    box-shadow 0.25s var(--ease);
+}
+.lang-toggle button.on {
+  background: var(--card);
+  color: var(--text-strong);
+  box-shadow: 0 1px 3px rgba(36, 33, 29, 0.14);
+}
+.dusk .lang-toggle button.on {
+  background: rgba(241, 236, 226, 0.16);
+  color: var(--text-strong);
+  box-shadow: none;
+}
+.lang-toggle.is-compact button {
+  min-width: 38px;
+  min-height: 26px;
+  padding: 0 9px;
+  font-size: 11px;
+}
+.lang-toggle button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .sr-only {

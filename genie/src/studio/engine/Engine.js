@@ -939,7 +939,7 @@ class EnvStudio {
     u.sunCol.value.set(d.sunColor);
     u.glow.value = d.up ? 0.2 + 0.8 * d.golden : 0.04;
     // 天穹整体亮度：白天的天光 ~0.5（配合太阳，阴影里不死黑、受光面有体积）；夜里是一点月色
-    u.gain.value = 0.62 * day + 0.5 * d.night;
+    u.gain.value = 0.62 * day + 1.6 * d.night;
     const white = new THREE.Color(1, 0.985, 0.96);
     const warmSun = new THREE.Color(d.sunColor);
     const keyC = white.clone().lerp(warmSun, 0.2 * d.golden);
