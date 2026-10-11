@@ -6,7 +6,7 @@ import { SLOTS, MAT_BY_ID } from '../../shared/materials.js';
 import { avoidMaterials } from '../../shared/profile.js';
 import { swatchURL } from '../../shared/textures.js';
 import { t, L, isEn } from '../../shared/i18n.js';
-import { Icon, slotName } from './kit.jsx';
+import { Icon, slotName, chipName } from './kit.jsx';
 import { BRAND } from '../../shared/config.js';
 
 // 情绪色来自 base.css 的 token（--mood-*），不在这里写颜色
@@ -88,13 +88,27 @@ export default function MoodPanel({ project, dreamer, slot, onSlot, onMood, onTo
           <div className="mb-grid">
             {SLOTS.map((s) => {
               const m = MAT_BY_ID[project.materials[s.id]];
+              // 和材质栏一样拆成「系列 + 名字」（石英石 / 洞石纹、Quartz / Travertine）：窄格子里不截断、不留单个字
+              const { fam, name } = chipName(m);
               return (
-                <button key={s.id} type="button" data-slot={s.id} className={`mb-tile ${slot === s.id ? 'on' : ''}`} onClick={() => onSlot(s.id)} aria-pressed={slot === s.id}>
+                <button
+                  key={s.id}
+                  type="button"
+                  data-slot={s.id}
+                  className={`mb-tile ${slot === s.id ? 'on' : ''}`}
+                  onClick={() => onSlot(s.id)}
+                  aria-pressed={slot === s.id}
+                  aria-label={`${slotName(s)} · ${L(m)}`}
+                  title={m ? (isEn() ? L(m) : `${m.zh} · ${m.en}`) : undefined}
+                >
                   <span className="sample sm">
                     <img src={swatchURL(m?.id, 96) || ''} alt="" draggable={false} />
                   </span>
                   <span className="mb-slot">{slotName(s)}</span>
-                  <b>{L(m)}</b>
+                  <span className={`mb-mat ${fam ? 'has-fam' : ''}`}>
+                    {fam && <i>{fam}</i>}
+                    <b>{name}</b>
+                  </span>
                 </button>
               );
             })}

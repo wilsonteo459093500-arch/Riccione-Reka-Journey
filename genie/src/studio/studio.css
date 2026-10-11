@@ -533,16 +533,29 @@
     0 0 0 1.5px var(--ink),
     0 6px 14px rgba(var(--shade-rgb), 0.12);
 }
+/* 色条：近白的色块（画廊白、白橡）放在白卡上也要看得出来 —— 色块之间一条发丝线，外圈的细框画在最上面一层
+   （画在色条自己的背景上会被色块盖掉） */
 .preset-pal {
+  position: relative;
   display: flex;
   width: 100%;
   height: 10px;
   border-radius: 5px;
   overflow: hidden;
-  box-shadow: inset 0 0 0 0.5px rgba(var(--shade-rgb), 0.12);
+}
+.preset-pal::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 0.5px rgba(var(--shade-rgb), 0.18);
+  pointer-events: none;
 }
 .preset-pal i {
   flex: 1;
+}
+.preset-pal i + i {
+  box-shadow: inset 0.5px 0 0 rgba(var(--shade-rgb), 0.14);
 }
 .preset b {
   display: flex;
@@ -688,7 +701,26 @@
   -webkit-box-orient: vertical;
   text-wrap: balance;
 }
-.mb-tile b {
+/* 材质名：和材质栏一样「系列小字 + 名字」（石英石 / 洞石纹 · Quartz / Travertine），不截断、不留单个字。
+   中文整词不拆（keep-all，真放不下才折、折也平均）；英文按词折、必要时加连字符 */
+.mb-mat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 100%;
+  min-width: 0;
+}
+/* 系列小字用墨色细字（不是灰字）：和下面的粗体名字读成一组，和上面灰色的表面名分开 */
+.mb-mat i {
+  max-width: 100%;
+  font: 400 13px/1.25 var(--sans);
+  font-style: normal;
+  color: var(--pt);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mb-mat b {
   max-width: 100%;
   font: 600 13px/1.25 var(--sans);
   text-align: center;
@@ -696,6 +728,19 @@
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+.is-en .mb-mat b {
+  word-break: normal;
+  overflow-wrap: normal;
+  -webkit-hyphens: auto;
+  hyphens: auto;
+}
+/* 英文没有系列小字的长名字（Cream large-format tile）可以用到三行 —— 和「系列 + 两行名字」一样高 */
+.is-en .mb-mat:not(.has-fam) b {
+  -webkit-line-clamp: 3;
 }
 
 /* 收纳对账（设计师） */
@@ -1698,17 +1743,26 @@
   width: min(100%, 880px);
   animation: toast-in 0.3s var(--spring);
 }
+/* 名字那一块吃掉按钮以外的整段宽度；材质名放不下就折成两行（Navy velvet 不再变成 Navy vel…） */
 .selbar.docked .selbar-name {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
 }
 .selbar.docked .selbar-name span {
+  flex: 1 1 auto;
   min-width: 0;
 }
-.selbar.docked .selbar-name b,
-.selbar.docked .selbar-name em {
+.selbar.docked .selbar-name b {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.selbar.docked .selbar-name em {
+  white-space: normal;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  text-wrap: balance;
 }
 .selbar-name {
   display: flex;
@@ -2304,10 +2358,11 @@
   text-transform: uppercase;
   color: var(--pt-soft);
 }
+/* 模板 3 张正好排满一行（不留空着的第四栏）；最近的方案用同样的三栏对齐，一两张时不会被拉成整行宽 */
 .start-templates,
 .start-recent {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 .tpl,
@@ -3010,6 +3065,39 @@
   }
 }
 
+/* iPad 横放（1024–1279）的英文平面图编辑器：英文按钮长，标题栏会折成两行、画布少 55px。
+   改成一行：中间那组按钮（上传 / 整体宽 / AI / 模板）横向滑动，两头淡出；右边的「取消 / 生成 3D」永远看得见 */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .is-en .pe-head {
+    flex-wrap: nowrap;
+  }
+  .is-en .pe-title {
+    flex: none;
+  }
+  .is-en .pe-head-actions {
+    flex: 1 1 0;
+    min-width: 0;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    /* 上下留 4px：按钮的发丝线、阴影、焦点圈不被 overflow 裁掉；左右的内边距就是淡出的那一段 */
+    margin: -4px 0;
+    padding: 4px 28px 4px 8px;
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, black 8px, black calc(100% - 28px), transparent 100%);
+    mask-image: linear-gradient(90deg, transparent 0, black 8px, black calc(100% - 28px), transparent 100%);
+  }
+  .is-en .pe-head-actions::-webkit-scrollbar {
+    display: none;
+  }
+  .is-en .pe-head-actions > * {
+    flex: none;
+  }
+  .is-en .pe-head-right {
+    margin-left: 0;
+  }
+}
+
 /* 宽屏、面板收起时：左下角留一个小字标 */
 @media (min-width: 1280px) {
   .panels-closed .foot {
@@ -3098,9 +3186,13 @@
     flex: 1 0 100%;
     flex-wrap: nowrap;
     overflow-x: auto;
+    overscroll-behavior-x: contain;
     scrollbar-width: none;
     margin: 0 -4px;
-    padding: 2px 4px 4px;
+    /* 右边留一段淡出：还有按钮可以滑出来（不再硬生生切在「用模板…」中间）；滑到底时最后一个按钮不被淡掉 */
+    padding: 2px 28px 4px 4px;
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, black 4px, black calc(100% - 28px), transparent 100%);
+    mask-image: linear-gradient(90deg, transparent 0, black 4px, black calc(100% - 28px), transparent 100%);
   }
   .pe-head-actions::-webkit-scrollbar {
     display: none;
@@ -3232,9 +3324,9 @@
   .selbar-name span em {
     display: none;
   }
-  /* 停在底部的那条有整行宽：材质名放得下 */
+  /* 停在底部的那条有整行宽：材质名放得下（放不下折两行，见 .selbar.docked .selbar-name em） */
   .selbar.docked .selbar-name span em {
-    display: block;
+    display: -webkit-box;
   }
 
   /* 平面图编辑器：工具变成底部一排；属性是平面图底部的抽屉（见上面 .pe-sheet） */
@@ -3255,15 +3347,28 @@
   .pe.narrow .pe-body {
     grid-template-columns: 1fr;
     grid-template-rows: minmax(0, 1fr) auto;
+    /* 底部工具条的底色画在这里：工具条自己两头淡出（mask），底色和发丝线不跟着淡掉 */
+    background: var(--surface);
   }
+  .pe-canvas {
+    border-bottom: 0.5px solid var(--line);
+  }
+  /* 横滑的一排工具：两头像材质栏一样淡出，看得出还能往右滑（不再硬生生切在「落地趟…」） */
   .pe-tools {
     grid-row: 2;
     flex-direction: row;
     overflow-x: auto;
     overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
     border-right: 0;
-    border-top: 0.5px solid var(--line);
-    padding: 6px 8px;
+    background: none;
+    padding: 6px 28px 6px 8px;
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, black 8px, black calc(100% - 28px), transparent 100%);
+    mask-image: linear-gradient(90deg, transparent 0, black 8px, black calc(100% - 28px), transparent 100%);
+  }
+  .pe-tools::-webkit-scrollbar {
+    display: none;
   }
   .pe-tools button {
     flex: none;

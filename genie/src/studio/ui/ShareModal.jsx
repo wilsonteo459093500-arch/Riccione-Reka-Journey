@@ -1,5 +1,9 @@
 // 分享：复制链接 / WhatsApp。链接里就是整份方案（平面图 + 家具 + 材质 + 时间），不经过任何服务器。
 // 打开的人得到的是自己的一份（新 id），不会盖掉你这台设备上的原稿。
+// 两种链接（设计师的东西绝不能到客人手上）：
+//   复制链接、「WhatsApp 发给客人」→ 客人版 studio.html#s=…（打开没有收纳对账、没有见面要聊的）
+//   「发到公司 WhatsApp」→ 设计师自己分享时是员工版 studio.html?staff=1#s=…（同事打开照样有收纳对账）；
+//   客人在客人版里分享时仍是客人版（那条消息也留在客人自己的 WhatsApp 里）。
 
 import { useEffect, useState } from 'react';
 import { Icon, Modal, listSep } from './kit.jsx';
@@ -7,21 +11,30 @@ import { CONFIG } from '../../shared/config.js';
 import { MAT_BY_ID } from '../../shared/materials.js';
 import { t, L, withLang } from '../../shared/i18n.js';
 
-export default function ShareModal({ project, pack, onClose }) {
-  const [link, setLink] = useState('');
+export default function ShareModal({ project, pack, staff = false, onClose }) {
+  const [links, setLinks] = useState({ client: '', staff: '' });
   const [copied, setCopied] = useState(false);
   useEffect(() => {
     let alive = true;
-    pack().then((s) => alive && setLink(withLang(new URL(`studio.html#s=${s}`, location.href).href)));
+    pack().then((s) => {
+      if (!alive) return;
+      setLinks({
+        client: withLang(new URL(`studio.html#s=${s}`, location.href).href),
+        staff: withLang(new URL(`studio.html?staff=1#s=${s}`, location.href).href),
+      });
+    });
     return () => {
       alive = false;
     };
   }, [pack]);
+  const link = links.client;
   const mats = ['floor', 'walls', 'cabinetry', 'upholstery']
     .map((k) => L(MAT_BY_ID[project.materials[k]]))
     .filter(Boolean)
     .join(listSep());
-  const text = [t(project.name), t('3D 概念：{0}', [mats]), t('打开就能转、能换材质：{0}', [link])].join('\n');
+  const message = (url) => [t(project.name), t('3D 概念：{0}', [mats]), t('打开就能转、能换材质：{0}', [url])].join('\n');
+  const toClient = message(link);
+  const toCompany = message(staff ? links.staff : link);
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(link);
@@ -42,11 +55,11 @@ export default function ShareModal({ project, pack, onClose }) {
         </button>
       </div>
       <div className="share-row">
-        <a className="s-btn" href={`https://wa.me/?text=${encodeURIComponent(text)}`} target="_blank" rel="noopener">
+        <a className="s-btn" href={`https://wa.me/?text=${encodeURIComponent(toClient)}`} target="_blank" rel="noopener" aria-disabled={!link || undefined} onClick={(e) => !link && e.preventDefault()}>
           <Icon name="whatsapp" size={17} />
           {t('WhatsApp 发给客人')}
         </a>
-        <a className="s-btn" href={`https://wa.me/${CONFIG.inbox}?text=${encodeURIComponent(text)}`} target="_blank" rel="noopener">
+        <a className="s-btn" href={`https://wa.me/${CONFIG.inbox}?text=${encodeURIComponent(toCompany)}`} target="_blank" rel="noopener" aria-disabled={!link || undefined} onClick={(e) => !link && e.preventDefault()}>
           <Icon name="inbox" size={17} />
           {t('发到公司 WhatsApp')}
         </a>

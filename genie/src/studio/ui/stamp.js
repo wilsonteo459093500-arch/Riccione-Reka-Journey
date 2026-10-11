@@ -92,11 +92,13 @@ export async function stampSnapshot(blob, project) {
   const d = project.profile && DREAMER_BY_CODE[project.profile.code];
   const name = String(project.profile?.name ?? '').trim();
   const title = d ? (name ? `${name} · ${L(d)}` : L(d)) : t(project.name || BRAND.full);
-  const mats = ['floor', 'walls', 'cabinetry', 'upholstery', 'countertop']
+  // 同一种材质用在两处（例如墙面和柜体都是画廊白）只写一次：按显示名去重（不同 id 也可能同名）
+  const matNames = ['floor', 'walls', 'cabinetry', 'upholstery', 'countertop']
     .map((id) => MAT_BY_ID[project.materials?.[id]])
     .filter(Boolean)
-    .map((m) => L(m))
-    .join(' · ');
+    .map((m) => String(L(m) ?? '').trim())
+    .filter(Boolean);
+  const mats = [...new Set(matNames)].join(' · ');
   // 一根很短的金色细线，像杂志的图注
   ctx.fillStyle = PALETTE.gold;
   ctx.fillRect(pad, c.height - pad - 92 * s, 36 * s, Math.max(1, 1.5 * s));

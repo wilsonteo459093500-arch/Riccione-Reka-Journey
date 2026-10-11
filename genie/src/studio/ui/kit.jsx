@@ -222,6 +222,18 @@ export function slotName(s) {
   return e.charAt(0).toUpperCase() + e.slice(1);
 }
 
+/**
+ * 材质名拆成「系列 + 名字」（材质栏的样板、材质板的格子都用）：带「·」或「,」的拆开，窄窄的格子也认得出是哪一片：
+ * 石英石·洞石纹 → 石英石 / 洞石纹；Quartz, travertine look → Quartz / Travertine（完整名字放 title、aria-label）。
+ */
+export function chipName(m) {
+  const full = L(m);
+  const hit = /^(.+?)\s*[·,，、]\s*(.+)$/.exec(full || '');
+  if (!hit) return { name: full };
+  const name = hit[2].replace(/\s+look$/i, '');
+  return { fam: hit[1], name: name.charAt(0).toUpperCase() + name.slice(1) };
+}
+
 /** 房间名：默认名（客厅 / Living…）跟着语言走；模板里的名字（次卧…）查词典；自己改过的名字原样 */
 export function roomLabel(r) {
   if (!r) return '';

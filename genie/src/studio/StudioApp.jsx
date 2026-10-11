@@ -4,9 +4,15 @@
 //       studio.html#s=<方案>       别人分享的方案（打开后存成自己的一份：新 id，不会盖掉原稿）
 //       studio.html?demo=1         展厅大屏：示范户型 + 自动环绕 + 一天的光影循环；只留一个小小的 WISH 字标，不出现客人名字
 //       studio.html?mode=wish      客户许愿模式（外壳 iframe 里）：底座写「示范户型 · 概念示意」，语言跟着外壳
+//       ?staff=1                   员工链接（公司 WhatsApp、员工版蓝图点进来）：一定显示设计师的「收纳对账」
 //       ?lang=en                   英文（中文原文就是 key，见 shared/i18n.js）
+//
+// 谁在看（设计师的东西绝不能给客人看到）：
+//   设计师自己建的方案 → 员工版；别人分享来的（sharedFrom）、从客人版蓝图点进来的（audience: 'client'）→ 客人版；
+//   链接带 ?staff=1，或者从员工版蓝图（quiz.html?staff=1）点进来 → 员工版。许愿模式、展厅永远是客人版。
+//   客人版：没有「收纳对账」、没有「见面时要聊的」，梦想家卡打开的是客人版蓝图（不带 ?staff=1）。
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Engine } from './engine/Engine.js';
 import { buildWalls, templatePlan, uid } from './plan/model.js';
 import * as Furnish from './engine/furnish.js';
@@ -36,7 +42,31 @@ import SettingsModal from './ui/SettingsModal.jsx';
 import PlanEditor from './plan/PlanEditor.jsx';
 
 const WISH = isWishMode();
-const SHOWROOM = !WISH && new URLSearchParams(location.search).get('demo') === '1';
+const QS = new URLSearchParams(location.search);
+const SHOWROOM = !WISH && QS.get('demo') === '1';
+
+/** 从哪一页点进来的：员工版蓝图（quiz.html?staff=1）→ 'staff'；客人版蓝图（quiz.html）→ 'client'；其他 → '' */
+const REF = (() => {
+  try {
+    if (!document.referrer) return '';
+    const r = new URL(document.referrer);
+    if (r.origin !== location.origin || !/\/quiz(\.html)?$/.test(r.pathname)) return '';
+    return r.searchParams.get('staff') === '1' ? 'staff' : 'client';
+  } catch {
+    return '';
+  }
+})();
+/** 这一次是员工打开的（链接带 ?staff=1，或从员工版蓝图点进来）；许愿模式里永远不是 */
+const STAFF_LINK = !WISH && (QS.get('staff') === '1' || REF === 'staff');
+
+/** 这份方案给设计师看（显示收纳对账、见面要聊的、员工版蓝图链接）还是给客人看 */
+function staffFor(p) {
+  if (WISH || !p) return false;
+  if (STAFF_LINK) return true;
+  if (REF === 'client') return false;
+  if (p.audience) return p.audience === 'staff';
+  return !p.sharedFrom;
+}
 
 const HISTORY = 60;
 const snap = (p) => ({ materials: { ...p.materials }, furniture: p.furniture.map((f) => ({ ...f })), time: p.time, mood: p.mood, plan: p.plan, furnEdited: p.furnEdited });
@@ -226,6 +256,8 @@ export default function StudioApp() {
 
   const confirmSheet = (o) => new Promise((res) => setAsk({ ...o, done: (v) => (setAsk(null), res(v)) }));
   const saveNow = () => !showroomRef.current && projRef.current && saveProject(projRef.current);
+  // 分享弹窗打开时打包一次（固定的函数：界面每次重画不会重新压缩整份方案）
+  const packShare = useCallback(() => packProject(projRef.current), []);
 
   // ── 引擎 ──
   useEffect(() => {
@@ -272,10 +304,13 @@ export default function StudioApp() {
             setIncomingProfile(prof);
             const existing = loadProjects().find((x) => x.profile?.id === prof.id);
             p = existing || createProject({ plan: templatePlan('condo3'), profile: prof });
-            // 许愿模式：客人直接看到自己的家（示范户型 + 他的材质），设计师再换成真实平面图
-            if (!existing && !WISH) setModal('start');
+            // 客人在自己的手机上从客人版蓝图点进来：这一份记成客人的（以后直接打开也不显示设计师的东西）
+            if (!existing && !WISH && !STAFF_LINK && REF === 'client') p = { ...p, audience: 'client' };
+            // 许愿模式：客人直接看到自己的家（示范户型 + 他的材质），设计师再换成真实平面图；客人版也不弹「开始一个空间」
+            if (!existing && !WISH && staffFor(p)) setModal('start');
           }
         } else if (h.startsWith('s=')) {
+          // 分享来的：新 id + sharedFrom（store.unpackProject）→ 默认是客人版；员工链接（?staff=1）在下面改成员工版
           p = await unpackProject(h.slice(2));
           flash(t('已打开分享的方案（改动会存成你自己的一份）'), 3400);
         }
@@ -283,6 +318,8 @@ export default function StudioApp() {
         flash(t('链接打不开，先给你看示范户型'));
       }
       if (!p) p = currentProject();
+      // 员工用员工链接打开了一份客人版 / 分享来的方案：这台设备上的这一份从此归员工（直接打开也显示收纳对账）
+      if (p && STAFF_LINK && p.audience !== 'staff' && (p.sharedFrom || p.audience === 'client')) p = { ...p, audience: 'staff' };
       if (!p) {
         p = createProject({ plan: templatePlan('condo3'), mood: 'cozy' });
         setTimeout(() => flash(t('这是示范户型 —— 点右上角「平面图」上传你的平面图'), 4600), 1600);
@@ -293,12 +330,13 @@ export default function StudioApp() {
     tellShell('page', { page: 'studio' });
   }
 
-  /** 底座上的字：客人名字 + 梦想家；许愿模式 / 展厅写明「示范户型 · 概念示意」；展厅从不出现客人名字 */
+  /** 底座上的字：客人名字 + 梦想家；许愿模式 / 展厅写明「示范户型 · 概念示意」；展厅从不出现客人名字。
+   *  梦想家不写罗马数字（「I · The Zen Nester」在概念图上读起来像「我」）：英文只写名字，中文写「暖木禅居 · The Zen Nester」 */
   function plinthOf(p) {
     if (showroomRef.current) return { title: BRAND.plinth, subtitle: t('示范户型 · 概念示意') };
     const d = p.profile && DREAMER_BY_CODE[p.profile.code];
     const title = p.profile?.name ? `${String(p.profile.name).toUpperCase()} · DREAM HOME` : BRAND.plinth;
-    let subtitle = d ? (isEn() ? `${d.num} · ${d.en}` : `${d.num} ${d.zh} · ${d.en}`) : BRAND.full;
+    let subtitle = d ? (isEn() ? d.en : `${d.zh} · ${d.en}`) : BRAND.full;
     if (WISH) subtitle = t('示范户型 · 概念示意');
     return { title, subtitle };
   }
@@ -316,9 +354,6 @@ export default function StudioApp() {
     setSelected(null);
     setReady(true);
     scheduleThumbs();
-    if (p.profile)
-      packJSON(p.profile).then((s) => setBpLink(new URL(`quiz.html${WISH ? '?mode=wish' : '?staff=1'}#bp=${s}`, location.href).href)); // 设计师版只给员工：非许愿模式带 ?staff=1
-    else setBpLink('');
   }
 
   // ── 自动保存（展厅不存：每次都是全新的示范户型） ──
@@ -529,7 +564,8 @@ export default function StudioApp() {
   const newFromTemplate = (tid) => {
     const cur = projRef.current;
     const p = createProject({ plan: templatePlan(tid), profile: incomingProfile || cur?.profile || null, mood: incomingProfile || cur?.profile ? null : 'cozy' });
-    loadProjectIntoEngine(p, true);
+    // 客人版里开的新方案（带着客人的档案）还是客人版：不会因为「新的一份」就露出设计师的东西
+    loadProjectIntoEngine(cur && !staffFor(cur) ? { ...p, audience: 'client' } : p, true);
     setModal(null);
   };
 
@@ -682,6 +718,72 @@ export default function StudioApp() {
     engine.current?.setWallMode(wallMode);
   }, [wallMode]);
 
+  // ── 取景留白：告诉引擎四边各被面板挡住多少（engine.setInsets），模型就在没挡住的那块里居中、放得下 ──
+  //   左：情绪面板（宽屏、展开时；窄屏它是临时盖上来的抽屉，不算）
+  //   右：日光面板（只在它是右上角那张浮卡时）
+  //   上：开着材质标签时是标签那一带的底边（一行或两行），否则是工具条
+  //   下：底部那一列常驻的部分（材质栏、窄屏的日光条、许愿模式的说明）；提示、手机上停靠的选择条是临时的，不算 —— 模型不会跟着跳
+  // 引擎自己会防抖，镜头没被动过时才重新取景；第一次（开机）直接对好，不让人看到一次滑动。
+  const [calloutBottom, setCalloutBottom] = useState(null); // null = 标签还没排好（先按一行估）
+  const insetsBooted = useRef(false);
+  useLayoutEffect(() => {
+    if (!ready) return undefined;
+    let raf = 0;
+    const measure = () => {
+      raf = 0;
+      const e = engine.current;
+      if (!e?.setInsets) return;
+      const W = innerWidth;
+      const H = innerHeight;
+      const box = (el) => {
+        const r = el?.getBoundingClientRect();
+        return r && r.width > 0 && r.height > 0 ? r : null;
+      };
+      const q = (s) => document.querySelector(s);
+      const ins = { left: 0, right: 0, top: 0, bottom: 0 };
+      // 展厅：没有面板（引擎演示时本来就不留白）；退出展厅时这里会重新量
+      if (showroomRef.current) return e.setInsets(ins);
+      const mood = box(q('.mood-panel'));
+      if (mood && panels === 'open' && W > 1023) ins.left = mood.right + 12;
+      const dayEl = q('.day-panel');
+      const day = box(dayEl);
+      const dayFloats = !!day && getComputedStyle(dayEl).position === 'fixed';
+      if (dayFloats) ins.right = W - day.left + 12;
+      const tb = box(q('.toolbar'));
+      ins.top = tb ? tb.bottom + 8 : 0;
+      if (labels && !demoRef.current) {
+        // 标签只在够大的画布上出现（Callouts：≥ 600 × 560）；还没排好时按一行完整的标签估（76 + 样板 50 + 7 + 名牌 44）
+        const band = calloutBottom ?? (W >= 600 && H >= 560 ? 76 + 101 : 0);
+        if (band > 0) ins.top = Math.max(ins.top, band + 8);
+      }
+      let colTop = H;
+      for (const s of ['.dock-wrap > .dock', '.dock-wrap > .wish-caption']) {
+        const r = box(q(s));
+        if (r) colTop = Math.min(colTop, r.top);
+      }
+      if (day && !dayFloats) colTop = Math.min(colTop, day.top);
+      if (colTop < H) ins.bottom = H - colTop + 12;
+      e.setInsets(ins);
+      if (!insetsBooted.current) {
+        insetsBooted.current = true;
+        // 开机：第一帧就按面板取景（不飞一下）；之后的变化交给引擎平滑地挪
+        if (!e.demo && typeof e.frame === 'function' && (e.isFramed?.() ?? true)) e.frame(e.lastView || 'iso', false);
+      }
+    };
+    const schedule = () => {
+      if (!raf) raf = requestAnimationFrame(measure);
+    };
+    measure();
+    const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(schedule) : null;
+    if (ro) for (const s of ['.mood-panel', '.day-panel', '.toolbar', '.dock-wrap']) document.querySelectorAll(s).forEach((el) => ro.observe(el));
+    addEventListener('resize', schedule);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro?.disconnect();
+      removeEventListener('resize', schedule);
+    };
+  }, [ready, panels, phone, labels, calloutBottom, demo, showroom]);
+
   // 'auto' 交给引擎自己判断（引擎的 resolveQuality：触屏 → 流畅，电脑 → 高清）
   const onQuality = (q) => engine.current?.setQuality?.(q || 'auto');
 
@@ -691,24 +793,42 @@ export default function StudioApp() {
 
   const projectsList = useMemo(() => (modal === 'start' ? loadProjects() : []), [modal]);
 
-  // 收纳对账：只给设计师（不在许愿模式、不在展厅、有客人档案）；furnish.js 还没有 furnishReport 时不显示
+  // 设计师在看，还是客人在看（见文件开头）：客人版不出现任何设计师的东西
+  const staffView = !showroom && staffFor(project);
+
+  // 梦想家卡 → 蓝图：员工版带 ?staff=1（有设计师版开关）；客人版、许愿模式不带
+  useEffect(() => {
+    const prof = project?.profile;
+    if (!prof) {
+      setBpLink('');
+      return undefined;
+    }
+    let alive = true;
+    packJSON(prof).then((s) => alive && setBpLink(new URL(`quiz.html${WISH ? '?mode=wish' : staffView ? '?staff=1' : ''}#bp=${s}`, location.href).href));
+    return () => {
+      alive = false;
+    };
+  }, [project?.profile, staffView]);
+
+  // 收纳对账：只给设计师（员工版、有客人档案）；furnish.js 还没有 furnishReport 时不显示
   const report = useMemo(() => {
-    if (WISH || showroom || !project?.profile || typeof Furnish.furnishReport !== 'function') return null;
+    if (!staffView || !project?.profile || typeof Furnish.furnishReport !== 'function') return null;
     try {
       const rows = Furnish.furnishReport(project.plan, buildWalls(project.plan), project.profile, project.furniture);
       return Array.isArray(rows) && rows.length ? rows : null;
     } catch {
       return null;
     }
-  }, [project?.plan, project?.furniture, project?.profile, showroom]);
+  }, [project?.plan, project?.furniture, project?.profile, staffView]);
+  // 见面时要聊的：销售笔记，也只给设计师
   const talk = useMemo(() => {
-    if (WISH || !project?.profile) return [];
+    if (!staffView || !project?.profile) return [];
     try {
       return insights(project.profile, storagePlan(project.profile.storage, APPLIANCES)).filter((x) => x.level !== 'tip');
     } catch {
       return [];
     }
-  }, [project?.profile]);
+  }, [project?.profile, staffView]);
   const pickRow = (r) => {
     const id = r.itemIds?.find((x) => projRef.current?.furniture.some((f) => f.id === x));
     if (id) engine.current?.select(id);
@@ -746,7 +866,8 @@ export default function StudioApp() {
         </span>
         <Icon name="chevron" size={16} className="dc-go" />
       </a>
-    ) : !WISH ? (
+    ) : staffView ? (
+      // 「先让客人走一次许愿之旅」是写给设计师的；客人打开分享来的方案时不出现
       <a className="dreamer-chip ghost" href="quiz.html" target="_blank" rel="noopener">
         <span className="dc-num">
           <Icon name="sparkles" size={17} />
@@ -771,7 +892,7 @@ export default function StudioApp() {
 
       {ready && project && (
         <>
-          {labels && !demo && <Callouts anchors={anchors} materials={project.materials} onPick={(s) => setSlot((cur) => (cur === s ? null : s))} activeSlot={slot} panels={panels} />}
+          {labels && !demo && <Callouts anchors={anchors} materials={project.materials} onPick={(s) => setSlot((cur) => (cur === s ? null : s))} activeSlot={slot} panels={panels} onBand={setCalloutBottom} />}
 
           <MoodPanel
             project={project}
@@ -885,7 +1006,7 @@ export default function StudioApp() {
           onClose={() => setModal(null)}
         />
       )}
-      {modal === 'share' && <ShareModal project={project} pack={() => packProject(project)} onClose={() => setModal(null)} />}
+      {modal === 'share' && <ShareModal project={project} pack={packShare} staff={staffView} onClose={() => setModal(null)} />}
       {modal === 'help' && <HelpModal onClose={() => setModal(null)} />}
       {modal === 'settings' && <SettingsModal onClose={() => setModal(null)} onQuality={onQuality} onLang={switchLang} showLang={!WISH} />}
 

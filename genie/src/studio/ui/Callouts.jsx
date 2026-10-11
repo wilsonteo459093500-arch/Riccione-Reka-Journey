@@ -1,6 +1,7 @@
 // 顶部的材质标签：每个主要表面一片样板，细虚线连到 3D 里的位置。也是拖放目标（data-slot）。
 // 排版：按锚点从左到右排成整齐的一行，只放在两块面板之间空着的那段画布里；标签之间至少 8px。
-// 一行放不下：先去掉表面小字（只留材质名）；还放不下：交错排成两行。
+// 一行放不下：先去掉表面小字（只留材质名）；还放不下：交错排成两行（也只留材质名，标签带矮一点）。
+// onBand(底边 px)：标签这一带的底边告诉 StudioApp（引擎取景时模型放在它下面）；放不下、不显示时报 0。
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { MAT_BY_ID, SLOT_BY_ID } from '../../shared/materials.js';
@@ -48,12 +49,30 @@ function packRow(items, lo, hi, key) {
   });
 }
 
-export default function Callouts({ anchors, materials, onPick, activeSlot, top = 76, panels }) {
+export default function Callouts({ anchors, materials, onPick, activeSlot, top = 76, panels, onBand }) {
   const [size, setSize] = useState({ w: innerWidth, h: innerHeight });
   const [, remeasure] = useState(0);
   const [fontVer, setFontVer] = useState(0);
   const hs = useRef({});
   const root = useRef(null);
+  // 标签带的底边：变了才告诉外面（标签每帧跟着镜头左右挪，但上下不动，所以很少变）
+  const bandRef = useRef(-1);
+  const onBandRef = useRef(onBand);
+  onBandRef.current = onBand;
+  const report = (v) => {
+    const r = Math.round(v);
+    if (r === bandRef.current) return;
+    bandRef.current = r;
+    onBandRef.current?.(r);
+  };
+  // 关掉标签（卸下）：外面回到「没有标签」
+  useEffect(
+    () => () => {
+      bandRef.current = -1;
+      onBandRef.current?.(null);
+    },
+    [],
+  );
 
   useEffect(() => {
     const r = () => setSize({ w: innerWidth, h: innerHeight });
@@ -82,10 +101,14 @@ export default function Callouts({ anchors, materials, onPick, activeSlot, top =
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [materials, vis.map((a) => a.slot).join(','), fontVer]);
 
-  // 画完以后：读真实字体（第一次）+ 每片的高度（虚线从名牌底下出发）
+  // 画完以后：读真实字体（第一次）+ 每片的高度（虚线从名牌底下出发）+ 标签带的底边
   useLayoutEffect(() => {
     const el = root.current;
-    if (!el) return;
+    if (!el) {
+      // 锚点还没来：先不报（外面按一行估）；排不下 / 画布太小：报 0（没有标签带）
+      if (anchors.length) report(0);
+      return;
+    }
     let changed = false;
     let fontChanged = false;
     const b = el.querySelector('.callout-tag b');
@@ -105,14 +128,17 @@ export default function Callouts({ anchors, materials, onPick, activeSlot, top =
       }
     }
     if (fontChanged) setFontVer((v) => v + 1);
+    let bottom = 0;
     el.querySelectorAll('.callout').forEach((n) => {
       const h = n.offsetHeight;
+      bottom = Math.max(bottom, n.offsetTop + h);
       if (Math.abs((hs.current[n.dataset.slot] || 0) - h) > 0.5) {
         hs.current[n.dataset.slot] = h;
         changed = true;
       }
     });
     if (changed) remeasure((n) => n + 1);
+    report(bottom);
   });
 
   if (!vis.length || size.w < 600 || size.h < 560) return null;
@@ -133,7 +159,8 @@ export default function Callouts({ anchors, materials, onPick, activeSlot, top =
     rows = 2;
     const even = items.filter((_, i) => i % 2 === 0);
     const odd = items.filter((_, i) => i % 2 === 1);
-    for (const key of ['full', 'compact']) {
+    // 两行时先用「只留材质名」的矮标签：整条标签带矮 30 多 px，模型（排在标签带下面）能大一点
+    for (const key of ['compact', 'full']) {
       const rowH = estH(key === 'compact') + ROW_GAP;
       const b2 = freeBand(top, top + rowH * 2);
       const a = packRow(even, b2.L, b2.R, key);

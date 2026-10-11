@@ -46,6 +46,11 @@ const VIEWS = {
 
 const ANCHOR_SLOTS = ['upholstery', 'feature', 'walls', 'floor', 'bedding', 'cabinetry'];
 
+// 整面贴墙的墙件（电视墙 / 主题墙）：背面要贴住身后的墙（alignWallItem）；那面墙被切低时墙板一起收起（refreshFeatureMode）。
+// reach / sink：身后多远（或嵌进墙多深）以内算「靠着这面墙」；rest：贴上去后离墙面留 4mm（不和墙面打架）；tol：差这么点就不挪
+const WALL_BACKED = new Set(['tvWall', 'featureWall']);
+const WALL_SNAP = { reach: 0.35, sink: 0.3, rest: 0.004, tol: 0.008 };
+
 /** 每一档画质用到的资源（换档时全部按这张表重建） */
 const QUALITY = {
   high: { pr: 2, shadow: 4096, env: 256, bg: 1024, lights: 10, taps: 16, pcfMax: 10, rect: true, snapLong: 3200 },
@@ -682,6 +687,8 @@ export class Engine {
         this.items.delete(id);
         this.itemData.delete(id);
       }
+    // 墙件贴墙：每次都重算（件可能挪了；换平面图时 setScene 先建好新墙再调这里）
+    for (const [id, g] of this.items) if (WALL_BACKED.has(g.userData.kind)) this.alignWallItem(g, this.itemData.get(id));
     this.refreshFeatureMode();
     this.collectPickables();
     this.computeAnchors();
@@ -691,12 +698,119 @@ export class Engine {
     this.dirty = true;
   }
 
+  /**
+   * 电视墙 / 主题墙贴墙。furniture.js 把它们从背面（局部 z = 0）往前建，而 furnish.js 和界面都按「占地中心」摆 ——
+   * 不处理的话整面墙板离墙 d/2（电视墙 0.23m），默认视角里看得到它黑色的背板，电视柜也比 furnish 算的往房间里多出 0.2m。
+   * 这里只挪组里的子物体（组的位置仍 = 数据里的 x/z：选框、撤销、收纳对账都不受影响）：
+   *   ① 背面对齐占地的背边；② 身后 35cm 内（或嵌进墙 30cm 内）有一道平行的墙 → 贴上去，离墙面 4mm。
+   * 按实际包围盒算：furniture.js 以后自己把原点挪到中心、或 furnish 换了摆法，都不会挪两次、也不会嵌进墙里。
+   * 顺便记下它贴着的那几段墙（墙被切低时墙板跟着收起来，见 refreshFeatureMode）。
+   */
+  alignWallItem(g, it) {
+    if (!g || !it) return;
+    const ud = g.userData;
+    if (ud.backZ == null) {
+      const b = itemBox(g, { local: true });
+      ud.backZ = b.isEmpty() ? 0 : b.min.z;
+      ud.shiftZ = 0;
+    }
+    const d = +(it.d ?? CATALOG[it.kind]?.size?.[1]) || 0;
+    let back = -d / 2;
+    const hit = this.wallBehind(it, back);
+    if (hit && Math.abs(hit.gap - WALL_SNAP.rest) > WALL_SNAP.tol) back += WALL_SNAP.rest - hit.gap;
+    ud.wallSets = hit ? hit.sets : null;
+    const shift = back - ud.backZ;
+    const delta = shift - ud.shiftZ;
+    if (Math.abs(delta) > 1e-4) {
+      for (const c of g.children) c.position.z += delta;
+      ud.shiftZ = shift;
+    }
+  }
+
+  /**
+   * 墙件身后的墙：和背面平行、沿墙方向至少重叠 30cm（或半个件宽）、墙线在件中心的背后。
+   * backZ = 背面在件自己坐标里的 z。返回 { gap: 背面到墙面的距离（< 0 = 嵌进墙里）, sets: 贴着的那几段墙 } 或 null。
+   */
+  wallBehind(it, backZ) {
+    const sets = this.house?.wallSets;
+    if (!sets?.length) return null;
+    const rot = (((it.rot || 0) % 360) + 360) % 360;
+    const q = Math.round(rot / 90);
+    if (Math.abs(rot - q * 90) > 1) return null; // 斜着放的不贴
+    const th = (q * Math.PI) / 2;
+    // 背面朝向（局部 -z 在世界里）：rot 0 → -z，90 → -x，180 → +z，270 → +x
+    const sx = -Math.round(Math.sin(th));
+    const sz = -Math.round(Math.cos(th));
+    const axis = sx ? 'z' : 'x'; // 背朝 ±x → 身后是一道沿 z 走的墙（x = c）
+    const s = sx || sz;
+    const C = axis === 'z' ? it.x : it.z;
+    const along = axis === 'z' ? it.z : it.x;
+    const P = C - s * backZ; // 背面（垂直于墙的那个坐标）
+    const half = (+(it.w ?? CATALOG[it.kind]?.size?.[0]) || 1) / 2;
+    const need = Math.min(0.3, half);
+    const found = [];
+    for (const set of sets) {
+      const w = set.wall;
+      if (!w || w.axis !== axis || (w.c - C) * s <= 0) continue;
+      if (Math.min(w.b, along + half) - Math.max(w.a, along - half) < need) continue;
+      const gap = (w.c - (s * w.t) / 2 - P) * s;
+      if (gap <= WALL_SNAP.reach && gap >= -WALL_SNAP.sink) found.push({ gap, set });
+    }
+    if (!found.length) return null;
+    // 离件最近的那个墙面（厚墙、薄墙接在一条线上时贴厚的那面，不会嵌进去）；同一个面上的几段一起记下
+    const gap = Math.min(...found.map((f) => f.gap));
+    return { gap, sets: found.filter((f) => f.gap - gap < 0.005).map((f) => f.set) };
+  }
+
+  /**
+   * 墙件看得见的部分：主题墙按材质（木 = 格栅，其余 = 大板 + 分缝）；
+   * 贴着的墙被切低（朝镜头的外墙 / 「全切」）时，墙板和挂在上面的电视一起收起来 —— 和墙一样只留投影；
+   * 不然切低的墙上方会立着一块 2.8m 高、背面朝镜头的黑板。电视柜和摆件照常显示。
+   */
   refreshFeatureMode() {
-    const cat = MAT_BY_ID[this.lib.current.feature]?.cat;
-    const slats = cat === 'wood';
-    this.furn.traverse((o) => {
-      if (o.userData.featureMode) o.visible = (o.userData.featureMode === 'slats') === slats;
-    });
+    const slats = MAT_BY_ID[this.lib.current.feature]?.cat === 'wood';
+    const { tv, screen } = this.lib.fixed;
+    for (const g of this.items.values()) {
+      const wallItem = WALL_BACKED.has(g.userData.kind);
+      const low = wallItem && !!g.userData.wallSets?.some((s) => s.lowered);
+      g.userData.wallLowered = low;
+      g.traverse((o) => {
+        if (!o.isMesh) return;
+        const mode = o.userData.featureMode;
+        if (mode) o.visible = (mode === 'slats') === slats;
+        if (wallItem && (mode || o.material === tv || o.material === screen)) o.layers.set(low ? SHADOW_LAYER : 0);
+      });
+    }
+    this.pickFeatureAnchor();
+  }
+
+  /**
+   * 「主题墙」标签点在墙板正面上（电视上方）：电视墙优先，其次主题墙；墙板收起来了就换下一件，都没有就不显示。
+   * 记下墙板正面的朝向：镜头在墙板背后时标签不显示（emitAnchors）—— 不会指着一堵素墙说「胡桃木」。
+   */
+  pickFeatureAnchor() {
+    let p = null;
+    let n = null;
+    for (const [kind, y] of [
+      ['tvWall', 1.9],
+      ['featureWall', 1.6],
+    ]) {
+      for (const [id, it] of this.itemData) {
+        const g = it.kind === kind && this.items.get(id);
+        if (!g || g.userData.wallLowered) continue;
+        g.updateMatrixWorld(true);
+        p = g.localToWorld(new THREE.Vector3(0, y, (g.userData.backZ ?? 0) + (g.userData.shiftZ ?? 0) + 0.05));
+        n = new THREE.Vector3(0, 0, 1).transformDirection(g.matrixWorld);
+        break;
+      }
+      if (p) break;
+    }
+    this.featureFacing = n;
+    const old = this.anchors?.feature || null;
+    if (p ? old && old.distanceToSquared(p) < 1e-6 : !old) return;
+    if (this.anchors) this.anchors.feature = p;
+    this.anchorsDirty = true;
+    this.dirty = true;
   }
 
   collectPickables() {
@@ -1150,7 +1264,6 @@ export class Engine {
       return null;
     };
     A.upholstery = kindPoint('sofa', 0.62) || kindPoint('armchair', 0.6);
-    A.feature = kindPoint('tvWall', 1.9) || kindPoint('featureWall', 1.6);
     A.bedding = kindPoint('bed', 0.62) || kindPoint('kidsBed', 0.6);
     A.cabinetry = kindPoint('wardrobe', 1.9) || kindPoint('kitchenRun', 1.8) || kindPoint('shoeCabinet', 1.8);
     const liv = this.plan?.rooms.find((r) => r.type === 'living') || this.plan?.rooms[0];
@@ -1174,6 +1287,8 @@ export class Engine {
     }
     this.anchors = A;
     this.anchorsDirty = true;
+    // 主题墙：点在墙板上，墙板收起来（墙切低）时不显示 —— 跟着切墙变，见 refreshFeatureMode
+    this.pickFeatureAnchor();
   }
 
   /** 标签的屏幕位置：都没动（< 0.5px、可见性不变）就不打扰 React */
@@ -1185,7 +1300,10 @@ export class Engine {
       const p = this.anchors[slot];
       if (!p) continue;
       const v = p.clone().project(this.camera);
-      out.push({ slot, x: ((v.x + 1) / 2) * rect.width, y: ((1 - v.y) / 2) * rect.height, visible: v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05 });
+      let visible = v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05;
+      // 主题墙：只在看得到墙板正面时标（镜头在它背后 / 几乎平着看时不标）
+      if (visible && slot === 'feature' && this.featureFacing) visible = this.featureFacing.dot(_v.copy(this.camera.position).sub(p).normalize()) > 0.12;
+      out.push({ slot, x: ((v.x + 1) / 2) * rect.width, y: ((1 - v.y) / 2) * rect.height, visible });
     }
     const prev = this._lastAnchors;
     const same =
@@ -1211,7 +1329,9 @@ export class Engine {
   projectItem(id) {
     const g = this.items.get(id);
     if (!g) return null;
-    const b = new THREE.Box3().setFromObject(g);
+    // 只算看得见的部件：墙切低时收起来的墙板 / 电视不算，选择条不会飘在半空
+    let b = itemBox(g, { camera: this.camera });
+    if (b.isEmpty()) b = new THREE.Box3().setFromObject(g);
     const p = new THREE.Vector3((b.min.x + b.max.x) / 2, b.max.y + 0.15, (b.min.z + b.max.z) / 2).project(this.camera);
     const rect = this.renderer.domElement.getBoundingClientRect();
     return { x: ((p.x + 1) / 2) * rect.width, y: ((1 - p.y) / 2) * rect.height };
@@ -1377,7 +1497,11 @@ export class Engine {
     // 墙的切法跟着镜头
     const camDir = this.camera.position.clone().sub(this.controls.target).setY(0).normalize();
     if (this.house && (this.lastCut == null || camDir.distanceTo(this.lastCut) > 0.02)) {
-      if (applyCutaway(this.house.wallSets, camDir, this.wallMode)) this.collectPickables();
+      if (applyCutaway(this.house.wallSets, camDir, this.wallMode)) {
+        // 墙切低 / 立起来：贴着它的墙板、电视跟着收起 / 回来（还有「主题墙」标签）
+        this.refreshFeatureMode();
+        this.collectPickables();
+      }
       this.lastCut = camDir;
     }
     this.renderNow();
@@ -1429,6 +1553,31 @@ function isVisible(o) {
     p = p.parent;
   }
   return true;
+}
+
+/**
+ * 一件家具里网格的包围盒。local：用组自己的坐标（不管放在哪、朝哪；藏起来的部件也算）；
+ * camera：只算这个镜头看得见的部件（墙切低时收起来的墙板 / 电视不算）。
+ */
+function itemBox(g, { local = false, camera = null } = {}) {
+  g.updateMatrixWorld(true);
+  const inv = local ? new THREE.Matrix4().copy(g.matrixWorld).invert() : null;
+  const box = new THREE.Box3();
+  const b = new THREE.Box3();
+  const m = new THREE.Matrix4();
+  g.traverse((o) => {
+    if (!o.isMesh || !o.geometry) return;
+    if (camera && (!o.layers.test(camera.layers) || !isVisible(o))) return;
+    if (o.isInstancedMesh) {
+      if (!o.boundingBox) o.computeBoundingBox();
+      b.copy(o.boundingBox);
+    } else {
+      if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+      b.copy(o.geometry.boundingBox);
+    }
+    if (!b.isEmpty()) box.union(b.applyMatrix4(local ? m.multiplyMatrices(inv, o.matrixWorld) : o.matrixWorld));
+  });
+  return box;
 }
 
 // ───────────────────────── 软阴影：PCF 多采样 ─────────────────────────
@@ -2099,6 +2248,7 @@ function makeRing(color, opacity) {
 }
 
 const _box = new THREE.Box3();
+const _v = new THREE.Vector3();
 function fitRing(ring, obj) {
   _box.setFromObject(obj);
   const r = Math.max(0.35, Math.hypot(_box.max.x - _box.min.x, _box.max.z - _box.min.z) / 2 + 0.08);

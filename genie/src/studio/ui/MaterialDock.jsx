@@ -9,19 +9,10 @@ import { CATEGORIES, MATERIALS, SLOT_BY_ID, fits, misfitHint, MAT_BY_ID } from '
 import { swatchURL } from '../../shared/textures.js';
 import { CATALOG } from '../engine/furniture.js';
 import { t, L, isEn } from '../../shared/i18n.js';
-import { FurnIcon, Icon, slotName } from './kit.jsx';
+import { FurnIcon, Icon, slotName, chipName } from './kit.jsx';
 
-/**
- * 样板下的名字：带「·」或「,」的拆成系列小字 + 名字，窄窄的样板也认得出是哪一片：
- * 石英石·洞石纹 → 石英石 / 洞石纹；Quartz, travertine look → Quartz / Travertine（完整名字在 title、aria-label 里）。
- */
-export function chipName(m) {
-  const full = L(m);
-  const hit = /^(.+?)\s*[·,，、]\s*(.+)$/.exec(full);
-  if (!hit) return { name: full };
-  const name = hit[2].replace(/\s+look$/i, '');
-  return { fam: hit[1], name: name.charAt(0).toUpperCase() + name.slice(1) };
-}
+// 样板下的名字：系列小字 + 名字（chipName 在 kit.jsx，材质板的格子也用它）
+export { chipName };
 
 function ChipName({ fam, name }) {
   return (
