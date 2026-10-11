@@ -75,7 +75,7 @@ export default function Blueprint({ profile, onRestart, fresh = false }) {
     try {
       const blob = await renderPoster(profile, { pangieEl: pangieRef.current?.querySelector('svg'), emblemEl: emblemRef.current?.querySelector('svg') });
       if (blob) {
-        const file = new File([blob], `GENIE-${profile.code}.png`, { type: 'image/png' });
+        const file = new File([blob], `WISH-${profile.code}.png`, { type: 'image/png' });
         if (navigator.canShare?.({ files: [file] })) {
           await navigator.share({ files: [file], title: `我的梦想家牌：${d.zh}` }).catch(() => download(blob, file.name));
         } else download(blob, file.name);
@@ -372,7 +372,7 @@ export default function Blueprint({ profile, onRestart, fresh = false }) {
       {/* 结尾仪式 */}
       <section className="bp-sec bp-end">
         <div className="seal">
-          <span>盼吉</span>
+          <span>潘吉</span>
           <small>认证</small>
         </div>
         <div className="bp-end-pangie">

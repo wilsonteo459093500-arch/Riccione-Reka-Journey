@@ -35,7 +35,7 @@ export function Welcome({ answers, set, next }) {
       <div className="welcome-hero">
         <Pangie mood="happy" size={190} />
       </div>
-      <p className="eyebrow">GENIE · THE DREAM HOME READING</p>
+      <p className="eyebrow">WISH · THE DREAM HOME READING</p>
       <h1 className="h-display">
         嗨，我是{GUIDE.name}
         <small>{GUIDE.nameEn} · 住在神灯里的熊猫</small>
@@ -78,7 +78,7 @@ export function Welcome({ answers, set, next }) {
   );
 }
 
-/** 擦亮神灯：手指在神灯上来回擦（或按住），进度满了盼吉就出来。仪式感 = 承诺的开始。 */
+/** 擦亮神灯：手指在神灯上来回擦（或按住），进度满了潘吉就出来。仪式感 = 承诺的开始。 */
 export function LampRub({ next, name }) {
   const [p, setP] = useState(0);
   const [done, setDone] = useState(false);
@@ -216,7 +216,7 @@ const PAIR_REACT = {
   room: { a: '暖光派！☀️', b: '清爽派！🌊' },
   wall: { a: '少即是多 🤍', b: '越丰富越有你 🖼️' },
   touch: { a: '自然的手感 🌾', b: '精致的触感 💎' },
-  guest: { a: '收纳控，盼吉懂 📦', b: '你的收藏值得被看见 ✨' },
+  guest: { a: '收纳控，潘吉懂 📦', b: '你的收藏值得被看见 ✨' },
   palette: { a: '大地色，有温度 🍂', b: '海风色，好清爽 🌊' },
   sofa: { a: '圆圆的最可爱 ☁️', b: '利落有型 🖤' },
   night: { a: '亮亮的才安心 💡', b: '氛围感拉满 🕯️' },
@@ -523,7 +523,7 @@ export function BulkyStep({ answers, set, next }) {
       <h2 className="h-title">这些「大家伙」，你家有哪些？</h2>
       <p className="lead center">它们最常被忘记，也最常让家变乱。</p>
       <ChipGrid items={BULKY} value={answers.bulky} onChange={(v) => set({ bulky: v })} />
-      <p className="calc">{n >= 4 ? '大家伙不少 —— 盼吉建议留一间储物间，或一组 600 深的通高柜。' : n ? '记下了，会帮它们找好位置。' : '很清爽！'}</p>
+      <p className="calc">{n >= 4 ? '大家伙不少 —— 潘吉建议留一间储物间，或一组 600 深的通高柜。' : n ? '记下了，会帮它们找好位置。' : '很清爽！'}</p>
       <button type="button" className="btn-gold" onClick={next}>
         继续 →
       </button>
@@ -586,13 +586,13 @@ export function WishesStep({ answers, set, next, say }) {
       sfx.wish();
       tellShell('wish');
       set({ wishes: [...sel, v] });
-      if (sel.length === 2) say('happy', '三个愿望，盼吉收到了 ✨');
+      if (sel.length === 2) say('happy', '三个愿望，潘吉收到了 ✨');
     }
   };
   return (
     <div className="step step-wishes">
       <p className="eyebrow">愿望之牌</p>
-      <h2 className="h-title">盼吉只能实现你 3 个愿望</h2>
+      <h2 className="h-title">潘吉只能实现你 3 个愿望</h2>
       <p className="lead center">选最想要的三个（按重要顺序点）。</p>
       <div className="wish-grid">
         {WISHES.map((w) => {
@@ -710,7 +710,7 @@ export function OneWishStep({ answers, set, finish }) {
           finish(text.trim());
         }}
       >
-        交给盼吉 🔮
+        交给潘吉 🔮
       </button>
     </div>
   );

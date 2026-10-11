@@ -126,7 +126,7 @@ export default function StudioApp() {
       materials: p.materials,
       time: p.time,
       title: p.profile?.name ? `${String(p.profile.name).toUpperCase()} · DREAM HOME` : BRAND.plinth,
-      subtitle: d ? `${d.num} ${d.zh} · ${d.en}` : 'GENIE by RICCIONE REKA',
+      subtitle: d ? `${d.num} ${d.zh} · ${d.en}` : 'WISH by RICCIONE REKA',
       frame,
     });
     e.setWallMode(wallMode);
@@ -430,7 +430,7 @@ export default function StudioApp() {
               const out = await stampSnapshot(blob, project);
               const a = document.createElement('a');
               a.href = URL.createObjectURL(out);
-              a.download = `GENIE-${(project.name || 'concept').replace(/\s+/g, '-')}.png`;
+              a.download = `WISH-${(project.name || 'concept').replace(/\s+/g, '-')}.png`;
               a.click();
               setTimeout(() => URL.revokeObjectURL(a.href), 2000);
               flash('概念图已下载 📸');

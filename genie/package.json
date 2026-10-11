@@ -1,9 +1,9 @@
 {
-  "name": "genie-by-riccione-reka",
+  "name": "wish-by-riccione-reka",
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "GENIE by RICCIONE REKA — 熊猫精灵盼吉的梦想家占卜（客人玩）+ 3D 梦想工作室（设计师 / 销售用）",
+  "description": "WISH by RICCIONE REKA — 熊猫精灵盼吉的梦想家占卜（客人玩）+ 3D 梦想工作室（设计师 / 销售用）",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

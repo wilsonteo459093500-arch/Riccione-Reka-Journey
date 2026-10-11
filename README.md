@@ -3,7 +3,7 @@
 全屋定制项目交付管理工具。围绕 **SAIL 方法论**的五个章节（Vision · Blueprint · Craft · Arrival · Signature）组织项目，让 SD / SS / WH / 采购在同一套流程上协作。
 
 > 📁 本 repo 还包含六个独立 app（共用 repo、各自独立部署）：
-> - **WISH**（by RICCIONE REKA）— 客人第一次到展厅：和熊猫精灵「盼吉」玩 5 分钟**梦想家占卜**，得到「专属梦想家概念蓝图」；设计师接着用 **3D 梦想工作室**把平面图 + 客人的答案马上变成可互动的 3D 概念（拖拽换材质、一键情绪、24 小时光影、自动摆家具）。代码在 [`/genie`](./genie)，设计思路（快思慢想 × The Sims）见 [`genie/DESIGN.md`](./genie/DESIGN.md)，上线见 [`genie/DEPLOY.md`](./genie/DEPLOY.md)。
+> - **WISH**（by RICCIONE REKA）— 客人第一次到展厅：和熊猫精灵「潘吉」玩 5 分钟**梦想家占卜**，得到「专属梦想家概念蓝图」；设计师接着用 **3D 梦想工作室**把平面图 + 客人的答案马上变成可互动的 3D 概念（拖拽换材质、一键情绪、24 小时光影、自动摆家具）。代码在 [`/genie`](./genie)，设计思路（快思慢想 × The Sims）见 [`genie/DESIGN.md`](./genie/DESIGN.md)，上线见 [`genie/DEPLOY.md`](./genie/DEPLOY.md)。
 > - **UKIR STUDIO**（by RICCIONE REKA）— 设计师提案工作台：把方案 PDF 丢进去，自动生成「Dreamhouse Blueprint」品牌提案 PPT（可编辑）；Material Board（可单独用，也可当方案封面）；平面布置图 + 效果图 AI 生成「Sims 风」写实 3D 全屋立体图。代码在 [`/blueprint`](./blueprint)，部署指南见 [`blueprint/DEPLOY.md`](./blueprint/DEPLOY.md)。
 > - **Sail CRM** — 销售 / pipeline / 售后管理。代码在 [`/crm`](./crm)，部署指南见 [`crm/DEPLOY.md`](./crm/DEPLOY.md)。
 > - **旧版 UKIR STUDIO**（AI 效果图 / 设计顾问 / Material Board）— 已由上面的新版 UKIR STUDIO 接替（同一网址；Material Board、材质库搬到新版）。代码仍在 [`/render`](./render) 备查 / 回滚。

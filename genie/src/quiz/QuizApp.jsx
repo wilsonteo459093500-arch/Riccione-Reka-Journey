@@ -54,9 +54,9 @@ const INITIAL = {
 };
 
 const ENTER_LINES = {
-  pair: ['别想太多，3 秒！', '第一感觉最准 ✨', '跟着心走～', '不用解释，选就对了', '这题很多人会犹豫哦', '盼吉在看你的直觉 👀'],
-  life: ['想象一个普通的星期六 ☀️', '说真话，盼吉不会笑你', '生活怎么过，家就怎么做'],
-  shoes: '盼吉在数鞋子… 👀 大概就好',
+  pair: ['别想太多，3 秒！', '第一感觉最准 ✨', '跟着心走～', '不用解释，选就对了', '这题很多人会犹豫哦', '潘吉在看你的直觉 👀'],
+  life: ['想象一个普通的星期六 ☀️', '说真话，潘吉不会笑你', '生活怎么过，家就怎么做'],
+  shoes: '潘吉在数鞋子… 👀 大概就好',
   wardrobe: '衣柜是全屋定制的心脏 ❤️',
   books: '书和收藏，都是你的故事 📚',
   appliances: '小家电最爱抢台面了！',
@@ -64,8 +64,8 @@ const ENTER_LINES = {
   ratio: '拖拖看，柜子会变哦 ✨',
   wishes: '只能三个哦，选最想要的 ✨',
   splurge: '钱要花在你最在乎的地方 💛',
-  nogo: '讨厌的东西，盼吉一个都不会放进你的家 💣',
-  onewish: '最后一句，盼吉会抄在蓝图上 ✍️',
+  nogo: '讨厌的东西，潘吉一个都不会放进你的家 💣',
+  onewish: '最后一句，潘吉会抄在蓝图上 ✍️',
 };
 
 function loadSession() {
@@ -176,7 +176,7 @@ function Play({ onDone }) {
     reactTimer.current = setTimeout(() => setPangie((p) => ({ ...p, mood: 'idle' })), ms);
   }, []);
 
-  // 进入每一关时，盼吉说一句
+  // 进入每一关时，潘吉说一句
   useEffect(() => {
     const [kind, sub] = step.id.split(':');
     let line = '';

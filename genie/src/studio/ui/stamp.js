@@ -1,4 +1,4 @@
-// 概念图加品牌角标：左下「为谁定制 · 梦想家牌」，右下 GENIE by RICCIONE REKA
+// 概念图加品牌角标：左下「为谁定制 · 梦想家牌」，右下 WISH by RICCIONE REKA
 
 import { DREAMER_BY_CODE } from '../../shared/dreamers.js';
 import { BRAND } from '../../shared/config.js';

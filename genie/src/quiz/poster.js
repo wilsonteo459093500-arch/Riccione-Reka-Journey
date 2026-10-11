@@ -1,5 +1,5 @@
 // 分享海报（1080×1350，小红书 / IG 竖版）—— 客人愿意晒，就是最好的口碑。
-// 用 canvas 现画：牌面、配色、轴、盼吉（把页面上的 SVG 序列化进来）、品牌。
+// 用 canvas 现画：牌面、配色、轴、潘吉（把页面上的 SVG 序列化进来）、品牌。
 
 import { DREAMER_BY_CODE, AXES } from '../shared/dreamers.js';
 import { BRAND, GUIDE } from '../shared/config.js';
@@ -154,7 +154,7 @@ export async function renderPoster(profile, { pangieEl, emblemEl } = {}) {
   });
   ctx.textAlign = 'center';
 
-  // 盼吉
+  // 潘吉
   const pg = await svgToImage(pangieEl);
   if (pg) ctx.drawImage(pg, W - 330, H - 410, 260, 325);
 

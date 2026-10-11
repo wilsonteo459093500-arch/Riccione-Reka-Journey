@@ -102,7 +102,7 @@ export default function WishShell({ zen, startUrl, onExit }) {
 
   return (
     <div className={`ws ws-${where}`}>
-      <iframe ref={frame} key={src} src={src} title="GENIE 许愿模式" className="ws-frame" onLoad={onLoad} allow="fullscreen; autoplay; clipboard-write; web-share" />
+      <iframe ref={frame} key={src} src={src} title="WISH 许愿模式" className="ws-frame" onLoad={onLoad} allow="fullscreen; autoplay; clipboard-write; web-share" />
 
       <div className={`ws-ctrl ${open ? 'open' : ''}`}>
         <button type="button" className="ws-pill" onClick={() => setOpen((o) => !o)} aria-label="音乐">

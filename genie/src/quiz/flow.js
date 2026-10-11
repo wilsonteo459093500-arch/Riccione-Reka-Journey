@@ -14,8 +14,8 @@ export const CHAPTERS = [
   { id: 'intuition', num: 'I', zh: '直觉之牌', en: 'THE INTUITION', hint: '别想，3 秒内跟着第一感觉选。', mode: 'fast' },
   { id: 'life', num: 'II', zh: '生活之牌', en: 'THE LIFE', hint: '想象一个普通的星期六。', mode: 'fast' },
   { id: 'treasure', num: 'III', zh: '宝藏之牌', en: 'THE TREASURE', hint: '现在请慢下来 —— 数字越准，柜子越合身。', mode: 'slow' },
-  { id: 'wishes', num: 'IV', zh: '愿望之牌', en: 'THE THREE WISHES', hint: '盼吉只能实现三个愿望。', mode: 'slow' },
-  { id: 'nogo', num: 'V', zh: '禁忌之牌', en: 'THE NO-GO', hint: '最后，帮盼吉扫个雷。', mode: 'fast' },
+  { id: 'wishes', num: 'IV', zh: '愿望之牌', en: 'THE THREE WISHES', hint: '潘吉只能实现三个愿望。', mode: 'slow' },
+  { id: 'nogo', num: 'V', zh: '禁忌之牌', en: 'THE NO-GO', hint: '最后，帮潘吉扫个雷。', mode: 'fast' },
 ];
 
 // ───────────────────────── I · 直觉（二选一） ─────────────────────────
@@ -150,7 +150,7 @@ export const LIFE = [
   {
     id: 'bell',
     q: '门铃突然响了！你最想先藏起来的是 ——',
-    whisper: '放心，盼吉不会说出去 🤫',
+    whisper: '放心，潘吉不会说出去 🤫',
     options: [
       { v: 'shoes', icon: '👞', label: '玄关的一堆鞋' },
       { v: 'table', icon: '🗞️', label: '餐桌上的杂物' },

@@ -1,4 +1,4 @@
-// 盼吉 Pangie —— 熊猫 × 神灯精灵 × 塔罗师。原创形象，纯 SVG，可缩放、可换表情。
+// 潘吉 Pangie —— 熊猫 × 神灯精灵 × 塔罗师。原创形象，纯 SVG，可缩放、可换表情。
 // 圆滚滚的大头小身体；下半身是神灯里飘出来的一缕晨雾；苔绿丝绒头巾 + 琥珀宝石；捧着露珠般的翡翠水晶球；月亮吊坠。
 //
 // <Pangie mood="idle|happy|wow|think|wink|mystic|sleepy" prop="ball|cards|magnifier|none" size={160} />
@@ -113,7 +113,7 @@ export default function Pangie({ mood = 'idle', prop = 'ball', size = 160, float
       height={(size * 250) / 200}
       className={`pangie ${float ? 'pg-float' : ''} ${className}`}
       role="img"
-      aria-label={title || '盼吉 Pangie'}
+      aria-label={title || '潘吉 Pangie'}
     >
       <defs>
         <radialGradient id={`${id}-iris`} cx="40%" cy="35%" r="70%">

@@ -16,10 +16,10 @@ export const BRAND = {
 };
 
 // 软件叫 WISH（许愿）；向导是住在神灯里的熊猫精灵：Pan(da) + (Ge)nie。英文念「潘-吉」，尾音和 Genie 一样；
-// 中文「盼」= 许愿，「吉」= 吉祥。想换名字，只改这里。
+// 中文「潘吉」：「潘」取熊猫 Panda 的音（也是常见姓氏，亲切好记），「吉」= 吉祥。想换名字，只改这里。
 // 备选：Jinbao 金宝（Jinn + 宝宝）· Pandini 潘迪尼（Panda + Houdini）· Genda 精达
 export const GUIDE = {
-  name: '盼吉',
+  name: '潘吉',
   nameEn: 'Pangie',
 };
 

@@ -70,7 +70,7 @@ function Launcher() {
             <span className="ln-wish-ico">🪔</span>
             <span>
               <b>客户许愿模式</b>
-              <em>按下就开始：大自然禅意音乐 + 盼吉带客人从占卜一路走到 3D</em>
+              <em>按下就开始：大自然禅意音乐 + 潘吉带客人从占卜一路走到 3D</em>
             </span>
           </button>
           {CONFIG.team.length > 1 && (
@@ -105,7 +105,7 @@ function Launcher() {
           <a className="ln-card studio" href="studio.html">
             <span className="ln-num">II</span>
             <b>3D 梦想工作室</b>
-            <em>Genie Studio</em>
+            <em>WISH Studio</em>
             <p>给设计师 / 销售 · 电脑 / 大屏。上传平面图 → 自动生成 3D；拖拽换材质、一键情绪、24 小时光影；演示模式可当展厅宣传片。</p>
             <span className="ln-go">打开工作室 →</span>
           </a>
