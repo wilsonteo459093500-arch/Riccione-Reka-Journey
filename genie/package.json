@@ -3,12 +3,12 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "WISH by RICCIONE REKA — 熊猫精灵盼吉的梦想家占卜（客人玩）+ 3D 梦想工作室（设计师 / 销售用）",
+  "description": "WISH by RICCIONE REKA — 熊猫精灵潘吉的许愿之旅（客人玩）+ 3D 梦想工作室（设计师 / 销售用），中英双语",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node test/run.mjs"
+    "test": "node test/run.mjs && node test/i18n.test.mjs"
   },
   "dependencies": {
     "pdfjs-dist": "4.10.38",
@@ -17,6 +17,8 @@
     "three": "0.183.2"
   },
   "devDependencies": {
+    "@babel/parser": "^7.29.9",
+    "@babel/traverse": "^7.29.10",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
