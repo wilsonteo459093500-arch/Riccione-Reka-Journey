@@ -43,7 +43,7 @@ export const SCENES = {
     photoSm: '/scenes/intuition-sm.webp',
     photoW: [900, 1500],
     credit: '',
-    focus: '55% 30%',
+    focus: '55% 16%',
     focusPortrait: '55% 40%',
     scrim: { top: 0.42, bottom: 0.32, wash: 0.08, sat: 0.9 },
     palette: ['#D5E2E2', '#F6F3EA', '#F7F8F5', '#C99E55', '#41604C'],

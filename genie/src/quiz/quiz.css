@@ -2645,6 +2645,9 @@ html[lang='en'] .bp-farewell {
   .reveal-card {
     width: min(300px, 46vh);
   }
+  .wish-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
   .reveal-text .axes-mini,
   .reveal-text .because {
     margin-left: 0;
@@ -2756,6 +2759,10 @@ html[lang='en'] .bp-farewell {
   .stone button {
     width: 42px;
     height: 40px;
+  }
+  .stones-stream {
+    left: 0;
+    width: 100%;
   }
   .stone svg {
     width: 34px;

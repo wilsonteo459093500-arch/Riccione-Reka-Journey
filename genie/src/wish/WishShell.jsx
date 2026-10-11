@@ -11,7 +11,7 @@
 //   · 同源 iframe：每次载入都在子页面的 document 上挂监听 —— 客人的任何一下点击都顺便恢复音乐、算作「有人在用」。
 
 import { useEffect, useRef, useState } from 'react';
-import { RotateCcw, PencilRuler, Power, X, Volume1, Volume2, VolumeX } from 'lucide-react';
+import { RotateCcw, PencilRuler, Power, X, Play, Volume1, Volume2, VolumeX } from 'lucide-react';
 import LangToggle from '../shared/LangToggle.jsx';
 import { BRAND, CONFIG } from '../shared/config.js';
 import { t, getLang, setLang, useLang } from '../shared/i18n.js';
@@ -401,8 +401,8 @@ export default function WishShell({ zen, host = '', startLang, onReady, onExit }
   const tone = dusk ? 'dusk' : '';
 
   return (
-    <div className={`ws ws-${where} ${leaving ? 'is-leaving' : ''}`}>
-      <iframe ref={frame} key={src} src={src} title={t('WISH 许愿模式')} className="ws-frame" onLoad={onLoad} allow="fullscreen; autoplay; clipboard-write; web-share" />
+    <div className={`ws ws-${where} ${dusk ? 'is-dusk' : ''} ${leaving ? 'is-leaving' : ''}`}>
+      <iframe ref={frame} key={src} src={src} title={t('WISH 许愿模式')} className="ws-frame" onLoad={onLoad} allow="fullscreen; autoplay; clipboard-write" />
 
       <div className={`ws-dock ${tone}`}>
         <HoldMark label={t('员工区：按住 3 秒')} onDone={() => setPanel('staff')} />
@@ -413,12 +413,16 @@ export default function WishShell({ zen, host = '', startLang, onReady, onExit }
           aria-expanded={panel === 'music'}
           aria-label={stalled ? t('轻触继续音乐') : t('音乐')}
         >
-          <span className={`ws-bars ${playing ? 'on' : ''}`} aria-hidden="true">
-            <i />
-            <i />
-            <i />
-            <i />
-          </span>
+          {stalled ? (
+            <Play size={15} strokeWidth={2.2} className="ws-play" aria-hidden="true" />
+          ) : (
+            <span className={`ws-bars ${playing ? 'on' : ''}`} aria-hidden="true">
+              <i />
+              <i />
+              <i />
+              <i />
+            </span>
+          )}
           <span className="ws-pill-label">{pillLabel}</span>
         </button>
       </div>

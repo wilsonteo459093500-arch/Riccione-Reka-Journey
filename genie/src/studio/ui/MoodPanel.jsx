@@ -1,74 +1,110 @@
-// 左侧：SET THE MOOD —— 一键情绪 + 情绪仪表（像 The Sims 的需求条）+ 一句话 + 材质板（点一个表面）。
+// 左侧：SET THE MOOD —— 一键情绪（客人的梦想家配色 + Cozy / Bright / Moody）＋ 情绪仪表 ＋ 一句话 ＋ 材质板（点一个表面）。
+// 设计师打开客人档案时，底下多一张「收纳对账」（StorageCheck，由 StudioApp 传进来）。
 
 import { MOODS, moodMeter, moodSentence } from '../../shared/moods.js';
 import { SLOTS, MAT_BY_ID } from '../../shared/materials.js';
+import { avoidMaterials } from '../../shared/profile.js';
 import { swatchURL } from '../../shared/textures.js';
-import { Icon } from './kit.jsx';
+import { fmtTime } from '../engine/daylight.js';
+import { t, L } from '../../shared/i18n.js';
+import { Icon, slotName } from './kit.jsx';
 
-const MOOD_TINT = { cozy: '#E1913F', bright: '#9DC3E6', moody: '#8F7FD6' };
-const paletteOf = (m) => ['walls', 'floor', 'upholstery', 'feature', 'accents'].map((s) => MAT_BY_ID[m[s]]?.color || '#999');
+// 情绪色来自 base.css 的 token（--mood-*），不在这里写颜色
+const MOOD_TINT = { cozy: 'var(--mood-cozy)', bright: 'var(--mood-bright)', moody: 'var(--mood-moody)' };
+const MOOD_NAME = { cozy: { zh: '温暖', en: 'Cozy' }, bright: { zh: '明亮', en: 'Bright' }, moody: { zh: '沉浸', en: 'Moody' } };
+const SUB = { 'golden hour': '金色黄昏', midday: '正午', 'after dark': '入夜' };
+const paletteOf = (m) => ['walls', 'floor', 'upholstery', 'feature', 'accents'].map((s) => MAT_BY_ID[m[s]]?.color || 'var(--line)');
 
-export default function MoodPanel({ project, dreamer, slot, onSlot, onMood, onToggle, chip }) {
+export default function MoodPanel({ project, dreamer, slot, onSlot, onMood, onToggle, chip, note, extra }) {
   const meter = moodMeter(project.materials, project.time);
   const sent = moodSentence(project.materials, project.time);
-  const presets = [...MOODS.map((m) => ({ id: m.id, zh: m.zh, en: m.en, sub: m.sub, colors: paletteOf(m.materials) }))];
-  if (dreamer && project.profile) presets.unshift({ id: 'dreamer', zh: dreamer.zh, en: project.profile.name || 'Dreamer', sub: `${dreamer.num} · ${project.profile.code}`, colors: dreamer.palette, dreamer: true });
+  const avoid = project.profile?.avoid || [];
+  const presets = MOODS.map((m) => ({
+    id: m.id,
+    name: L(m),
+    sub: `${t(SUB[m.sub] || m.sub)} · ${fmtTime(m.time)}`,
+    colors: paletteOf(avoid.length ? avoidMaterials(m.materials, avoid).materials : m.materials),
+  }));
+  if (dreamer && project.profile)
+    presets.unshift({ id: 'dreamer', name: L(dreamer), sub: `${dreamer.num} · ${project.profile.code}`, colors: dreamer.palette, dreamer: true });
+
   return (
-    <aside className="panel mood-panel">
-      <button type="button" className="panel-toggle" onClick={onToggle} aria-label="收起 / 展开">
-        <Icon name="menu" />
+    <aside className="glass panel mood-panel" aria-label={t('情绪 · 材质 · 光')}>
+      <button type="button" className="panel-fab" onClick={onToggle} aria-label={t('展开情绪面板')} title={t('情绪 · 材质 · 光')}>
+        <Icon name="palette" size={20} />
       </button>
-      <div className="mood-title">
-        <span>SET THE</span>
-        <b>MOOD</b>
-      </div>
-      <p className="mood-desc">一块会自己长成房间的情绪板：把木、石、布、漆拖到任何表面，挪一挪家具，再把太阳拉过天空。</p>
-      {chip && <div className="mood-chip">{chip}</div>}
-
-      <div className={`presets n${presets.length}`}>
-        {presets.map((p) => (
-          <button key={p.id} type="button" className={`preset ${project.mood === p.id ? 'on' : ''} ${p.dreamer ? 'dreamer' : ''}`} onClick={() => onMood(p.id)}>
-            <span className="preset-pal">
-              {p.colors.map((c, i) => (
-                <i key={i} style={{ background: c }} />
-              ))}
-            </span>
-            <b>{p.dreamer ? `✨ ${p.zh}` : p.en}</b>
-            <em>{p.dreamer ? p.sub : `${p.zh} · ${p.sub}`}</em>
-          </button>
-        ))}
-      </div>
-
-      <div className="meters">
-        {['cozy', 'bright', 'moody'].map((k) => (
-          <div key={k} className={`meter ${sent.top === k ? 'top' : ''}`}>
-            <span>{k.toUpperCase()}</span>
-            <b>{meter[k]}%</b>
-            <i>
-              <em style={{ width: `${meter[k]}%`, background: MOOD_TINT[k] }} />
-            </i>
+      <div className="mp-inner">
+        <header className="mp-head">
+          <div>
+            <p className="eyebrow">{t('情绪 · 材质 · 光')}</p>
+            <h2 className="mp-title">Set the Mood</h2>
           </div>
-        ))}
-      </div>
-      <p className="mood-sentence">{sent.text}</p>
+          <button type="button" className="ibtn sm" onClick={onToggle} aria-label={t('收起面板')} title={t('收起面板')}>
+            <Icon name="panelClose" size={18} />
+          </button>
+        </header>
+        <p className="mp-desc">{t('一块会自己长成房间的情绪板：把木、石、布、漆拖到任何表面，挪一挪家具，再把太阳拉过天空。')}</p>
+        {chip}
+        {note}
 
-      <div className="moodboard">
-        <div className="mb-head">
-          <span>MOODBOARD</span>
-          <em>{slot ? '再点一下取消' : '点一个表面'}</em>
+        <div className={`presets n${presets.length}`} role="radiogroup" aria-label={t('一键情绪')}>
+          {presets.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              role="radio"
+              aria-checked={project.mood === p.id}
+              className={`preset ${project.mood === p.id ? 'on' : ''} ${p.dreamer ? 'dreamer' : ''}`}
+              onClick={() => onMood(p.id)}
+            >
+              <span className="preset-pal" aria-hidden="true">
+                {p.colors.map((c, i) => (
+                  <i key={i} style={{ background: c }} />
+                ))}
+              </span>
+              <b>
+                {p.dreamer && <Icon name="sparkles" size={14} />}
+                {p.name}
+              </b>
+              <em>{p.sub}</em>
+            </button>
+          ))}
         </div>
-        <div className="mb-grid">
-          {SLOTS.map((s) => {
-            const m = MAT_BY_ID[project.materials[s.id]];
-            return (
-              <button key={s.id} type="button" data-slot={s.id} className={`mb-tile ${slot === s.id ? 'on' : ''}`} onClick={() => onSlot(s.id)}>
-                <img src={swatchURL(m?.id, 96) || ''} alt="" draggable={false} />
-                <span>{s.en}</span>
-                <b>{m?.zh}</b>
-              </button>
-            );
-          })}
+
+        <div className="meters" aria-label={t('情绪仪表')}>
+          {['cozy', 'bright', 'moody'].map((k) => (
+            <div key={k} className={`meter ${sent.top === k ? 'top' : ''}`}>
+              <span>{L(MOOD_NAME[k])}</span>
+              <b>{meter[k]}%</b>
+              <i>
+                <em style={{ width: `${meter[k]}%`, background: MOOD_TINT[k] }} />
+              </i>
+            </div>
+          ))}
         </div>
+        <p className="mood-sentence">{sent.text}</p>
+
+        <section className="moodboard">
+          <div className="sec-head">
+            <span>{t('材质板 · MOODBOARD')}</span>
+            <em>{slot ? t('再点一下取消') : t('点一个表面')}</em>
+          </div>
+          <div className="mb-grid">
+            {SLOTS.map((s) => {
+              const m = MAT_BY_ID[project.materials[s.id]];
+              return (
+                <button key={s.id} type="button" data-slot={s.id} className={`mb-tile ${slot === s.id ? 'on' : ''}`} onClick={() => onSlot(s.id)} aria-pressed={slot === s.id}>
+                  <span className="sample sm">
+                    <img src={swatchURL(m?.id, 96) || ''} alt="" draggable={false} />
+                  </span>
+                  <span className="mb-slot">{slotName(s)}</span>
+                  <b>{L(m)}</b>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+        {extra}
       </div>
     </aside>
   );

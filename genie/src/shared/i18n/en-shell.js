@@ -1,4 +1,33 @@
 // 英文词典 · 入口页、客户许愿模式外壳（新加的句子放这里；key = 中文原文，规则见 src/shared/i18n.js）
 
 export default {
+  // ── 入口页 ──
+  '梦想的家，在动工之前': 'The dream home, before it is built',
+  '开始': 'Start',
+  '全屏 · 屏幕常亮 · 长按 WISH 字标 3 秒打开员工区': 'Full screen · the screen stays on · hold the WISH mark for 3 seconds for staff controls',
+  '员工 · 本机蓝图（{0}）': 'Staff · Blueprints on this device ({0})',
+  '只存在这台设备。「蓝图」会打开设计师版 —— 不要在客人面前打开。':
+    'Saved on this device only. “Blueprint” opens the designer view — please don’t open it in front of guests.',
+
+  // ── 许愿模式开场 ──
+  '许一个家的愿': 'Make a wish for your home',
+  '中文开始': '中文开始',
+  '调大一点声音 —— {0}会一路陪着你。': 'Turn the sound up a little — {0} will keep you company.',
+  '{0}和{1}': '{0} and {1}',
+  '溪水': 'Stream',
+  '微风': 'Breeze',
+  '鸟鸣': 'Birdsong',
+  '颂钵': 'Singing bowl',
+  '风铃': 'Wind chimes',
+
+  // ── 许愿模式外壳：音乐胶囊、员工区 ──
+  '轻触继续音乐': 'Tap to resume the music',
+  '员工区：按住 3 秒': 'Staff controls: press and hold for 3 seconds',
+  '员工': 'Staff',
+  '客人看不到这里': 'Guests never see this',
+  '清空进度，回到开头；音乐回到平静': 'Clears this guest’s progress and starts again; the music settles',
+  '在这份蓝图上打开设计师版': 'Opens the designer view of this blueprint',
+  '到了蓝图页才能打开': 'Available once the blueprint is on screen',
+  '音乐淡出，回到入口页': 'Fades the music out and returns to the home page',
+  '语言': 'Language',
 };

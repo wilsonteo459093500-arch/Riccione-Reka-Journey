@@ -1,31 +1,97 @@
-// 右上角工具条
+// 右上角工具条（像 Freeform / Keynote 的浮动工具条）：撤销 · 视角 · 墙 · 标签 · 概念图 · 分享 · 平面图 · 方案 · 更多。
+// 窄屏把次要的按钮收进「更多」菜单（CSS 决定哪些留在条上），菜单里还有演示模式、帮助、设置、中 / EN。
 
-import { IconBtn } from './kit.jsx';
+import { useEffect, useRef, useState } from 'react';
+import { Icon, IconBtn } from './kit.jsx';
+import LangToggle from '../../shared/LangToggle.jsx';
+import { t } from '../../shared/i18n.js';
 
 const WALL_LABEL = { cut: '墙：切开朝向镜头的外墙', down: '墙：全部放低', up: '墙：全部立起' };
 const VIEW_LABEL = { iso: '视角：右前方', iso2: '视角：左前方', top: '视角：俯视平面', low: '视角：低角度', back: '视角：背面' };
 
-export default function Toolbar(p) {
+function MenuItem({ icon, label, hint, onClick, active, className = '' }) {
   return (
-    <div className="toolbar">
-      <div className="tb-group">
-        <IconBtn icon="undo" label="撤销 (Ctrl+Z)" onClick={p.onUndo} disabled={!p.canUndo} />
-        <IconBtn icon="redo" label="重做" onClick={p.onRedo} disabled={!p.canRedo} />
+    <button type="button" role="menuitem" className={`menu-item ${active ? 'on' : ''} ${className}`} onClick={onClick}>
+      <Icon name={icon} size={18} />
+      <span>
+        {label}
+        {hint && <em>{hint}</em>}
+      </span>
+      {active && <Icon name="check" size={16} className="menu-check" />}
+    </button>
+  );
+}
+
+export default function Toolbar(p) {
+  const [menu, setMenu] = useState(false);
+  const wrap = useRef(null);
+  useEffect(() => {
+    if (!menu) return;
+    const close = (e) => !wrap.current?.contains(e.target) && setMenu(false);
+    const esc = (e) => e.key === 'Escape' && setMenu(false);
+    window.addEventListener('pointerdown', close, true);
+    window.addEventListener('keydown', esc);
+    return () => {
+      window.removeEventListener('pointerdown', close, true);
+      window.removeEventListener('keydown', esc);
+    };
+  }, [menu]);
+  const run = (fn) => () => {
+    setMenu(false);
+    fn?.();
+  };
+
+  return (
+    <div className="toolbar" ref={wrap}>
+      <div className="tb-group glass">
+        <IconBtn icon="undo" label={t('撤销 (Ctrl+Z)')} onClick={p.onUndo} disabled={!p.canUndo} />
+        <IconBtn icon="redo" label={t('重做')} onClick={p.onRedo} disabled={!p.canRedo} />
       </div>
-      <div className="tb-group">
-        <IconBtn icon="download" label="下载概念图" onClick={p.onShot} />
-        <IconBtn icon="link" label="分享链接" onClick={p.onShare} />
-        <IconBtn icon={p.labels ? 'eye' : 'eyeOff'} label={p.labels ? '隐藏材质标签' : '显示材质标签'} onClick={p.onLabels} active={p.labels} />
-        <IconBtn icon="camera" label={VIEW_LABEL[p.view]} onClick={p.onView} />
-        <IconBtn icon="walls" label={WALL_LABEL[p.wallMode]} onClick={p.onWalls} active={p.wallMode !== 'cut'} />
-        <IconBtn icon={p.demo ? 'pause' : 'play'} label="演示模式：自动环绕 + 24 小时光影（展厅大屏 / 宣传用）" onClick={p.onDemo} active={p.demo} />
+      <div className="tb-group glass tb-hide-sm">
+        <IconBtn icon="view" label={t(VIEW_LABEL[p.view])} onClick={p.onView} />
+        <IconBtn icon="walls" label={t(WALL_LABEL[p.wallMode])} onClick={p.onWalls} active={p.wallMode !== 'cut'} pressed={p.wallMode !== 'cut'} />
+        <IconBtn icon="labels" label={p.labels ? t('隐藏材质标签') : t('显示材质标签')} onClick={p.onLabels} active={p.labels} pressed={p.labels} />
       </div>
-      <div className="tb-group">
-        <IconBtn icon="pencil" label="平面图：上传 / 修改" onClick={p.onPlan} />
-        {!p.wish && <IconBtn icon="home" label="新方案 / 打开方案" onClick={p.onStart} />}
-        {!p.wish && <IconBtn icon="gear" label="设置" onClick={p.onSettings} />}
-        <IconBtn icon="help" label="怎么用" onClick={p.onHelp} />
+      <div className="tb-group glass">
+        <IconBtn icon="snapshot" label={t('下载概念图')} onClick={p.onShot} className="tb-hide-sm" />
+        <IconBtn icon="share" label={t('分享链接')} onClick={p.onShare} />
       </div>
+      <div className="tb-group glass">
+        <IconBtn icon="plan" label={t('平面图：上传 / 修改')} text={t('平面图')} onClick={p.onPlan} className="tb-plan tb-hide-sm" />
+        {!p.wish && <IconBtn icon="start" label={t('新方案 / 打开方案')} onClick={p.onStart} className="tb-hide-md" />}
+        <IconBtn icon="more" label={t('更多')} onClick={() => setMenu((m) => !m)} active={menu} pressed={menu} />
+      </div>
+
+      {menu && (
+        <div className="menu glass" role="menu">
+          <div className="menu-sec mi-sm">
+            <MenuItem icon="view" label={t(VIEW_LABEL[p.view])} onClick={p.onView} />
+            <MenuItem icon="walls" label={t(WALL_LABEL[p.wallMode])} onClick={p.onWalls} />
+            <MenuItem icon="labels" label={t('材质标签')} active={p.labels} onClick={p.onLabels} />
+            <MenuItem icon="snapshot" label={t('下载概念图')} onClick={run(p.onShot)} />
+            <MenuItem icon="plan" label={t('平面图：上传 / 修改')} onClick={run(p.onPlan)} />
+          </div>
+          {!p.wish && (
+            <div className="menu-sec mi-md">
+              <MenuItem icon="start" label={t('新方案 / 打开方案')} onClick={run(p.onStart)} />
+            </div>
+          )}
+          <div className="menu-sec">
+            <MenuItem icon="showroom" label={t('演示模式')} hint={t('自动环绕 + 24 小时光影')} active={p.demo} onClick={run(p.onDemo)} />
+            <MenuItem icon="help" label={t('怎么用')} onClick={run(p.onHelp)} />
+            {!p.wish && <MenuItem icon="gear" label={t('设置')} onClick={run(p.onSettings)} />}
+          </div>
+          {!p.wish && (
+            <div className="menu-sec menu-lang">
+              <span>
+                <Icon name="lang" size={18} />
+                {t('语言')}
+              </span>
+              <LangToggle compact onPick={p.onLang} />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

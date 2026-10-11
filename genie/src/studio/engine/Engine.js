@@ -9,6 +9,10 @@
 // · 白天几扇大窗各放一块面光源（窗口的天光），夜里是灯具位置上的暖光（平方衰减、柔和）；
 // · 'high'：多重采样 MSAA → GTAO 接触阴影 → 很淡的景深（微缩模型感）→ 只给灯的辉光 → 色调映射 + 暗角 + 抖动；
 //   'fast'（iPad）：直接画到带 MSAA 的画布，不做 GTAO / 景深。
+//
+// 画质档来自设置（自动 / 高清 / 流畅）：自动 = 触屏（iPad / 手机）用 'fast'（大 iPad 也是：省电、不烫、不爆显存），电脑用 'high'。
+// iPad 上的稳定性：贴图按显存预算淘汰（matlib）、截图限制像素、WebGL 上下文丢了会告诉界面并在恢复后重建；
+// 演示模式（展厅电视）：自动环绕 + 一天的光影循环，~30 fps、像素比降一点，跑一整天也不烫。
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -21,9 +25,12 @@ import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUnifo
 import { MatLib } from './matlib.js';
 import { useLib, buildItem, CATALOG } from './furniture.js';
 import { buildHouse, applyCutaway, SHADOW_LAYER } from './house.js';
-import { daylight } from './daylight.js';
+import { daylight, LAMP } from './daylight.js';
 import { Beams } from './beams.js';
 import { MAT_BY_ID } from '../../shared/materials.js';
+import { PALETTE } from '../../shared/palette.js';
+import { ROOM_TYPES } from '../plan/model.js';
+import { loadSettings } from '../store.js';
 
 const VIEWS = {
   iso: { az: 32, el: 50 },
@@ -31,22 +38,65 @@ const VIEWS = {
   back: { az: 150, el: 52 },
   top: { az: 0, el: 88 },
   low: { az: 22, el: 30 },
+  demo: { az: 32, el: 42 },
 };
 
 const ANCHOR_SLOTS = ['upholstery', 'feature', 'walls', 'floor', 'bedding', 'cabinetry'];
+
+/** 每一档画质用到的资源（换档时全部按这张表重建） */
+const QUALITY = {
+  high: { pr: 2, shadow: 4096, env: 256, bg: 1024, lights: 10, taps: 16, pcfMax: 10, rect: true, snapLong: 3200 },
+  fast: { pr: 1.5, shadow: 2048, env: 128, bg: 512, lights: 5, taps: 8, pcfMax: 6, rect: false, snapLong: 2560 },
+};
+
+const DEMO_FPS = 30;
+const DEMO_ORBIT = 0.4; // OrbitControls.autoRotateSpeed：一圈约 150 秒
+
+/** 设置里的画质（'auto' / 没存 = 自动）→ 实际档位 */
+export function resolveQuality(q) {
+  if (q === 'high' || q === 'fast') return q;
+  try {
+    return matchMedia('(pointer: coarse)').matches ? 'fast' : 'high';
+  } catch {
+    return 'high';
+  }
+}
+
+function savedQuality() {
+  try {
+    return loadSettings()?.quality;
+  } catch {
+    return undefined;
+  }
+}
+
+/** 是不是户外（阳台 / 车廊）：不放吸顶灯、不算「室内」 */
+const isOutdoor = (type) => ROOM_TYPES[type]?.outdoor ?? type === 'balcony';
+
+let RECT_READY = false;
+function initRectLights() {
+  if (RECT_READY) return;
+  RectAreaLightUniformsLib.init();
+  RECT_READY = true;
+}
 
 export class Engine {
   constructor(container, cb = {}) {
     this.cb = cb;
     this.container = container;
-    const touch = matchMedia('(pointer: coarse)').matches;
-    this.quality = touch && Math.min(innerWidth, innerHeight) < 900 ? 'fast' : 'high';
-    patchSoftShadows(this.quality === 'high' ? 16 : 8);
+    this.qualityPref = cb.quality ?? savedQuality() ?? 'auto';
+    this.quality = resolveQuality(this.qualityPref);
+    const QP = QUALITY[this.quality];
+    patchSoftShadows(QP.taps);
+    this.demo = false;
+    this._prOverride = 0;
 
-    // 'high' 的抗锯齿在后期链里做（多重采样的渲染目标），画布本身就不必再开 MSAA（省显存）
+    // 'high' 的抗锯齿在后期链里做（多重采样的渲染目标），画布本身就不必再开 MSAA（省显存）。
+    // （画布的 MSAA 建好就改不了：之后换档也没关系 —— 'fast' 没有画布 MSAA 时，后期链里用多重采样的渲染目标补上）
     this.nativeAA = this.quality !== 'high';
     const r = new THREE.WebGLRenderer({ antialias: this.nativeAA, powerPreference: 'high-performance' });
-    r.setPixelRatio(Math.min(this.quality === 'high' ? 2 : 1.5, devicePixelRatio || 1));
+    this.renderer = r;
+    r.setPixelRatio(this.targetPR());
     r.outputColorSpace = THREE.SRGBColorSpace;
     r.toneMapping = THREE.NeutralToneMapping;
     r.toneMappingExposure = 1;
@@ -54,22 +104,32 @@ export class Engine {
     r.shadowMap.type = THREE.PCFShadowMap;
     r.domElement.className = 'studio-canvas';
     container.appendChild(r.domElement);
-    this.renderer = r;
+
+    // WebGL 上下文丢失（iPad 显存吃紧、在后台太久被系统回收）：停画、告诉界面；恢复后把 GPU 上画出来的东西重建。
+    // （three 自己的监听器先注册，所以这里跑的时候它已经重新初始化好了）
+    this.contextLost = false;
+    this._onLost = (ev) => {
+      ev.preventDefault();
+      this.contextLost = true;
+      this.running = false;
+      cancelAnimationFrame(this._raf);
+      this.cb.onContextLost?.();
+    };
+    this._onRestored = () => {
+      this.contextLost = false;
+      this.restoreGPU();
+      this.cb.onContextRestored?.();
+    };
+    r.domElement.addEventListener('webglcontextlost', this._onLost, false);
+    r.domElement.addEventListener('webglcontextrestored', this._onRestored, false);
 
     this.scene = new THREE.Scene();
-    this.env = new EnvStudio(r, this.quality === 'high' ? 256 : 128);
+    this.env = new EnvStudio(r, QP.env);
     this.scene.environmentIntensity = 1;
-    this.rectOK = this.quality === 'high';
-    if (this.rectOK) RectAreaLightUniformsLib.init();
+    this.rectOK = QP.rect;
+    if (this.rectOK) initRectLights();
 
-    const bgW = this.quality === 'high' ? 1024 : 512;
-    this.bgCanvas = document.createElement('canvas');
-    this.bgCanvas.width = bgW;
-    this.bgCanvas.height = bgW / 2;
-    this.bgLayers = makeBackdropLayers(bgW, bgW / 2);
-    this.bgTex = new THREE.CanvasTexture(this.bgCanvas);
-    this.bgTex.colorSpace = THREE.SRGBColorSpace;
-    this.scene.background = this.bgTex;
+    this.buildBackdrop(QP.bg);
 
     this.camera = new THREE.PerspectiveCamera(28, 1, 0.1, 400);
     this.controls = new OrbitControls(this.camera, r.domElement);
@@ -77,19 +137,19 @@ export class Engine {
     this.controls.addEventListener('change', () => (this.dirty = true));
     this.controls.addEventListener('start', () => this.cb.onInteract?.());
 
-    this.sun = new THREE.DirectionalLight(0xffffff, 3);
+    // 颜色都会被 setTime() 按时段改掉，这里只是初值
+    this.sun = new THREE.DirectionalLight(new THREE.Color(1, 1, 1), 3);
     this.sun.castShadow = true;
-    const ss = this.quality === 'high' ? 4096 : 2048;
-    this.sun.shadow.mapSize.set(ss, ss);
+    this.sun.shadow.mapSize.set(QP.shadow, QP.shadow);
     this.sun.shadow.bias = -0.00015;
     this.sun.shadow.normalBias = 0.012;
     this.sun.shadow.radius = 3;
     this.sun.shadow.camera.layers.enable(SHADOW_LAYER);
     this.scene.add(this.sun, this.sun.target);
-    this.hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.2);
+    this.hemi = new THREE.HemisphereLight(new THREE.Color(1, 1, 1), new THREE.Color(0.27, 0.27, 0.27), 0.2);
     this.scene.add(this.hemi);
 
-    this.lib = new MatLib(r);
+    this.lib = new MatLib(r, this.quality);
     useLib(this.lib);
     this.root = new THREE.Group();
     this.furn = new THREE.Group();
@@ -104,8 +164,9 @@ export class Engine {
     this.wallMode = 'cut';
     this.time = 18.4;
     this.anchors = {};
-    this.selBox = makeRing(0xf4d58d, 0.95);
-    this.hovBox = makeRing(0xffffff, 0.55);
+    // 选中 = SAIL 浅金的地面光圈；悬停 = 纸白、更淡
+    this.selBox = makeRing(PALETTE.goldL, 0.95);
+    this.hovBox = makeRing(PALETTE.card, 0.5);
     this.scene.add(this.selBox, this.hovBox);
 
     this.setupComposer();
@@ -119,8 +180,59 @@ export class Engine {
     this.resize();
     this.dirty = true;
     this.running = true;
+    this._lastT = 0;
     this.loop = this.loop.bind(this);
-    requestAnimationFrame(this.loop);
+    this._raf = requestAnimationFrame(this.loop);
+  }
+
+  /** 现在该用的像素比：画质档的上限 × 设备；截图时临时调高；演示模式降一点（长边约 1920 像素就够电视看） */
+  targetPR() {
+    if (this._prOverride) return this._prOverride;
+    const base = Math.min(QUALITY[this.quality].pr, devicePixelRatio || 1);
+    if (!this.demo) return base;
+    const long = Math.max(this.container.clientWidth, this.container.clientHeight) || 1;
+    return Math.max(Math.min(0.75, base), Math.min(base, 1920 / long));
+  }
+
+  applyPixelRatio() {
+    const pr = this.targetPR();
+    if (Math.abs(this.renderer.getPixelRatio() - pr) < 1e-3) return false;
+    this.renderer.setPixelRatio(pr);
+    return true;
+  }
+
+  /** 背景（虚化的室内照片）的画布：按画质档的分辨率 */
+  buildBackdrop(w) {
+    const old = this.bgTex;
+    this.bgCanvas = document.createElement('canvas');
+    this.bgCanvas.width = w;
+    this.bgCanvas.height = w / 2;
+    this.bgLayers = makeBackdropLayers(w, w / 2);
+    this.bgTex = new THREE.CanvasTexture(this.bgCanvas);
+    this.bgTex.colorSpace = THREE.SRGBColorSpace;
+    this.scene.background = this.bgTex;
+    old?.dispose();
+    if (this.day) {
+      drawBackdrop(this.bgCanvas, this.bgLayers, this.day);
+      this.bgTex.needsUpdate = true;
+    }
+  }
+
+  /** WebGL 上下文恢复之后：贴图 / 几何 / 着色器 / 渲染目标 three 会按需重新上传；
+   *  GPU 上「画」出来的环境贴图（PMREM）内容没了，要重画；然后接着跑。 */
+  restoreGPU() {
+    this.env.reset();
+    this.envKey = null;
+    this.scene.environment = null;
+    if (this.plan) this.setTime(this.time);
+    this.lib.upgraded = true;
+    this.lastCut = null;
+    this._lastAnchors = null;
+    this.dirty = true;
+    this.running = true;
+    this._lastT = 0;
+    cancelAnimationFrame(this._raf);
+    this._raf = requestAnimationFrame(this.loop);
   }
 
   setupComposer() {
@@ -176,20 +288,43 @@ export class Engine {
     if (this.day) this.applyPost(this.day);
   }
 
+  /**
+   * 换画质档：'high' | 'fast' | 'auto'（= 触屏 fast、电脑 high）。按 QUALITY 表把每样跟画质有关的东西重建：
+   * 像素比、阴影贴图尺寸 + 软阴影采样数、环境贴图尺寸、窗口面光源、夜灯数量、背景分辨率、材质贴图分辨率 / 各向异性、后期链。
+   * （环境贴图尺寸跟着档位变 → 所有受光材质的着色器键都变了 → 自动用新的软阴影采样数重新编译）
+   */
   setQuality(q) {
-    this.quality = q;
-    this.renderer.setPixelRatio(Math.min(q === 'high' ? 2 : 1.25, devicePixelRatio || 1));
-    this.sun.shadow.mapSize.set(q === 'high' ? 4096 : 2048, q === 'high' ? 4096 : 2048);
+    this.qualityPref = q;
+    const nq = resolveQuality(q);
+    if (nq === this.quality) return;
+    this.quality = nq;
+    const QP = QUALITY[nq];
+    patchSoftShadows(QP.taps);
+    this.applyPixelRatio();
+    this.sun.shadow.mapSize.set(QP.shadow, QP.shadow);
     this.sun.shadow.map?.dispose();
     this.sun.shadow.map = null;
+    this.env.setSize(QP.env);
+    this.envKey = null;
+    this.rectOK = QP.rect;
+    if (this.rectOK) initRectLights();
+    if (this.house) this.setupWindowLights(this.house.windows);
+    if (this.rooms) {
+      this.setupRoomLights(this.rooms, this.wallH);
+      this.placeRoomLights();
+    }
+    this.buildBackdrop(QP.bg);
+    this.lib.setQuality(nq);
     this.setupComposer();
     this.resize();
     if (this.day) this.setTime(this.time);
+    this.dirty = true;
   }
 
   resize() {
     const w = this.container.clientWidth || 1;
     const h = this.container.clientHeight || 1;
+    this.applyPixelRatio();
     this.renderer.setSize(w, h);
     if (this.composer) {
       const pr = this.renderer.getPixelRatio();
@@ -245,9 +380,9 @@ export class Engine {
     this.roomLights = [];
     this.rooms = rooms;
     this.wallH = H;
-    const n = this.quality === 'high' ? 10 : 5;
+    const n = QUALITY[this.quality].lights;
     for (let i = 0; i < n; i++) {
-      const l = new THREE.PointLight(0xffbe7c, 0, 5, 2);
+      const l = new THREE.PointLight(LAMP.pool, 0, 5, 2);
       l.userData.base = 0;
       this.scene.add(l);
       this.roomLights.push(l);
@@ -267,15 +402,16 @@ export class Engine {
     const lamp = (b) => {
       b.used = true;
       const tall = b.pos.y > 1.2;
-      return { pos: b.pos.clone().setY(b.pos.y - 0.04), base: tall ? 2.6 : 1.25, dist: tall ? 5.5 : 3.2, color: 0xffbb76 };
+      return { pos: b.pos.clone().setY(b.pos.y - 0.04), base: tall ? 2.6 : 1.25, dist: tall ? 5.5 : 3.2, color: LAMP.lamp };
     };
     const inRoom = (r, q) => Math.abs(q.x - r.x) <= r.w / 2 + 0.05 && Math.abs(q.z - r.z) <= r.d / 2 + 0.05;
     const list = [];
-    const rooms = [...this.rooms].filter((r) => r.type !== 'balcony').sort((a, b) => b.area - a.area);
+    // 户外（阳台、车廊 / 前院）没有天花板，不放吸顶的柔光
+    const rooms = [...this.rooms].filter((r) => !isOutdoor(r.type)).sort((a, b) => b.area - a.area);
     for (const r of rooms) {
       const mine = bulbs.filter((b) => !b.used && inRoom(r, b.pos)).sort((a, b) => b.pos.y - a.pos.y);
       if (mine[0]) list.push(lamp(mine[0]));
-      else list.push({ pos: new THREE.Vector3(r.x, H - 0.3, r.z), base: 1.1 + Math.min(r.area, 30) * 0.05, dist: Math.max(r.w, r.d) * 1.1 + 1.2, color: 0xffc896 });
+      else list.push({ pos: new THREE.Vector3(r.x, H - 0.3, r.z), base: 1.1 + Math.min(r.area, 30) * 0.05, dist: Math.max(r.w, r.d) * 1.1 + 1.2, color: LAMP.ceiling });
     }
     for (const b of bulbs.filter((b) => !b.used).sort((a, b) => b.pos.y - a.pos.y)) list.push(lamp(b));
     this.roomLights.forEach((l, i) => {
@@ -303,7 +439,7 @@ export class Engine {
     const big = [...windows].sort((a, b) => area(b) - area(a)).slice(0, N);
     for (let i = 0; i < N; i++) {
       const w = big[i];
-      const l = new THREE.RectAreaLight(0xffffff, 0, 1, 1);
+      const l = new THREE.RectAreaLight(new THREE.Color(1, 1, 1), 0, 1, 1);
       l.userData.k = 0;
       if (w) {
         const mid = w.a.clone().add(w.b).multiplyScalar(0.5);
@@ -375,8 +511,8 @@ export class Engine {
     s.far = f + 1;
     s.updateProjectionMatrix();
     const texel = Math.max(s.right - s.left, s.top - s.bottom) / this.sun.shadow.mapSize.x;
-    // 半影 ~2.6cm（比真实太阳略软一点，像柔光的产品照），最多 10 个纹素
-    const radius = Math.min(10, Math.max(1.5, 0.026 / texel));
+    // 半影 ~2.6cm（比真实太阳略软一点，像柔光的产品照），最多 10 个纹素（'fast' 采样少，最多 6 个，不出颗粒）
+    const radius = Math.min(QUALITY[this.quality].pcfMax, Math.max(1.5, 0.026 / texel));
     this.sun.shadow.radius = radius;
     this.sun.shadow.normalBias = texel * (1.1 + radius * 0.45);
     this.sun.shadow.bias = -0.00008;
@@ -463,8 +599,8 @@ export class Engine {
     this.hemi.groundColor.set(d.hemiGround);
     this.hemi.intensity = d.hemiIntensity;
     this.renderer.toneMappingExposure = d.exposure;
-    // IBL：同一档（半小时）只建一次
-    if (this.envKey !== d.envKey || !this.scene.environment) {
+    // IBL：同一档（半小时）只建一次（上下文丢失时先不建，恢复后 restoreGPU 会重画）
+    if (!this.contextLost && (this.envKey !== d.envKey || !this.scene.environment)) {
       this.scene.environment = this.env.get(d);
       this.envKey = d.envKey;
     }
@@ -581,36 +717,72 @@ export class Engine {
     if (g) fitRing(this.selBox, g);
   }
 
+  /**
+   * 指针（鼠标 / 手指 / Apple Pencil）：
+   * · 按在家具上拖 = 搬家具；只关掉 OrbitControls 的「转镜头」（enableRotate），它仍在数手指 →
+   *   第二根手指落下就是双指缩放 / 平移，拖到一半的家具放回原位；
+   * · 只认按下的那一根指针（pointerId），别的手指不会把拖动「接走」；
+   * · pointercancel（系统手势、来电、掌心误触）/ 切走窗口 = 取消，家具回原位，不会卡在「拖动中」。
+   */
   bindEvents() {
     const el = this.renderer.domElement;
+    const ctl = this.controls;
     let down = null;
     let hoverRaf = 0;
+    const release = () => {
+      ctl.enableRotate = true;
+    };
+    /** 拖动被打断：家具回到原位（以 itemData 为准），不算移动 */
+    const cancelDrag = () => {
+      const d = down;
+      down = null;
+      release();
+      if (!d?.moved || !d.id) return;
+      const g = this.items.get(d.id);
+      const it = this.itemData.get(d.id);
+      if (g && it) {
+        g.position.x = it.x;
+        g.position.z = it.z;
+      }
+      this.updateSelBox();
+      this.dirty = true;
+      this.cb.onDragCancel?.(d.id);
+    };
     const onDown = (e) => {
-      if (e.button !== undefined && e.button !== 0) return;
+      if (down) {
+        // 第二根手指（或另一支笔）：交给 OrbitControls 做双指缩放 / 平移
+        if (e.pointerId !== down.pointerId) cancelDrag();
+        return;
+      }
+      if (e.isPrimary === false || (e.button !== undefined && e.button !== 0)) return;
+      // 演示模式：只看不改（不选、不拖）
+      if (this.demo) return;
       const id = this.itemAt(e.clientX, e.clientY);
-      down = { x: e.clientX, y: e.clientY, id, moved: false, t: performance.now() };
-      if (id && CATALOG[this.itemData.get(id)?.kind] && !CATALOG[this.itemData.get(id).kind].wall) {
+      down = { pointerId: e.pointerId, x: e.clientX, y: e.clientY, id, moved: false, t: performance.now() };
+      const it = id && this.itemData.get(id);
+      if (it && CATALOG[it.kind] && !CATALOG[it.kind].wall) {
         const g = this.items.get(id);
         const p = new THREE.Vector3();
-        this.rayAt(e.clientX, e.clientY).ray.intersectPlane(this.dragPlane, p);
-        down.offset = p ? g.position.clone().sub(p) : new THREE.Vector3();
-        down.draggable = true;
-        this.controls.enabled = false;
+        const hit = this.rayAt(e.clientX, e.clientY).ray.intersectPlane(this.dragPlane, p);
+        down.offset = hit && g ? g.position.clone().sub(p) : new THREE.Vector3();
+        down.draggable = !!g;
+        if (g) ctl.enableRotate = false;
       }
     };
     const onMove = (e) => {
-      if (down?.draggable && down.id) {
+      if (down) {
+        if (e.pointerId !== down.pointerId || !down.draggable) return;
         const dx = e.clientX - down.x;
         const dy = e.clientY - down.y;
-        if (!down.moved && Math.hypot(dx, dy) > 6) {
+        if (!down.moved && Math.hypot(dx, dy) > (e.pointerType === 'mouse' ? 5 : 9)) {
           down.moved = true;
           this.select(down.id);
           this.cb.onDragStart?.(down.id);
         }
         if (down.moved) {
           const p = new THREE.Vector3();
-          if (this.rayAt(e.clientX, e.clientY).ray.intersectPlane(this.dragPlane, p)) {
-            const g = this.items.get(down.id);
+          const g = this.items.get(down.id);
+          if (g && this.rayAt(e.clientX, e.clientY).ray.intersectPlane(this.dragPlane, p)) {
             const bb = this.house?.bounds;
             let x = Math.round((p.x + down.offset.x) * 20) / 20;
             let z = Math.round((p.z + down.offset.z) * 20) / 20;
@@ -626,7 +798,7 @@ export class Engine {
         }
         return;
       }
-      if (e.buttons) return;
+      if (e.buttons || e.pointerType === 'touch' || this.demo) return;
       cancelAnimationFrame(hoverRaf);
       hoverRaf = requestAnimationFrame(() => {
         const id = this.itemAt(e.clientX, e.clientY);
@@ -642,34 +814,52 @@ export class Engine {
       });
     };
     const onUp = (e) => {
-      if (!down) return;
-      this.controls.enabled = true;
+      if (!down || e.pointerId !== down.pointerId) return;
       const d = down;
       down = null;
+      release();
       if (d.moved && d.id) {
         const g = this.items.get(d.id);
-        this.cb.onMove?.(d.id, g.position.x, g.position.z);
+        if (g) this.cb.onMove?.(d.id, g.position.x, g.position.z);
         return;
       }
-      const tap = Math.hypot(e.clientX - d.x, e.clientY - d.y) < 6 && performance.now() - d.t < 600;
+      const tap = Math.hypot(e.clientX - d.x, e.clientY - d.y) < (e.pointerType === 'mouse' ? 6 : 12) && performance.now() - d.t < 600;
       if (tap) this.select(d.id || null);
     };
-    // capture：比 OrbitControls 先拿到事件，按住家具时不转镜头
-    this.container.addEventListener('pointerdown', onDown, true);
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-    el.addEventListener('pointerleave', () => {
+    const onCancel = (e) => {
+      if (down && e.pointerId === down.pointerId) cancelDrag();
+    };
+    const onAway = () => {
+      if (down) cancelDrag();
+    };
+    const onLeave = () => {
       this.cb.onHover?.(null);
       if (this.hovered) {
         this.hovered = null;
         this.hovBox.visible = false;
         this.dirty = true;
       }
-    });
+    };
+    const onVis = () => {
+      if (document.hidden) onAway();
+    };
+    // capture：比 OrbitControls 先拿到事件，按住家具时不转镜头
+    this.container.addEventListener('pointerdown', onDown, true);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onCancel);
+    window.addEventListener('blur', onAway);
+    document.addEventListener('visibilitychange', onVis);
+    el.addEventListener('pointerleave', onLeave);
     this._unbind = () => {
+      cancelAnimationFrame(hoverRaf);
       this.container.removeEventListener('pointerdown', onDown, true);
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onCancel);
+      window.removeEventListener('blur', onAway);
+      document.removeEventListener('visibilitychange', onVis);
+      el.removeEventListener('pointerleave', onLeave);
     };
   }
 

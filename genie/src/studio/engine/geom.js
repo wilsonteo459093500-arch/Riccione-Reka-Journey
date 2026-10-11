@@ -130,7 +130,11 @@ export function smoothNormals(geo, angle = 80) {
     else groups.set(k, [i]);
   }
   for (const ids of groups.values()) {
-    if (ids.length < 2) continue;
+    if (ids.length < 2) {
+      const i = ids[0];
+      if (Math.hypot(src[i * 3], src[i * 3 + 1], src[i * 3 + 2]) < 1e-6) out[i * 3 + 1] = 1;
+      continue;
+    }
     for (const i of ids) {
       let sx = 0;
       let sy = 0;
@@ -148,13 +152,44 @@ export function smoothNormals(geo, angle = 80) {
           sz += bz;
         }
       }
-      const l = Math.hypot(sx, sy, sz) || 1;
+      let l = Math.hypot(sx, sy, sz);
+      if (l < 1e-6) {
+        // 退化三角形（零面积）上的顶点：取同一位置所有法线的平均，再不行就朝上
+        sx = sy = sz = 0;
+        for (const j of ids) {
+          sx += src[j * 3];
+          sy += src[j * 3 + 1];
+          sz += src[j * 3 + 2];
+        }
+        l = Math.hypot(sx, sy, sz);
+        if (l < 1e-6) {
+          sx = 0;
+          sy = 1;
+          sz = 0;
+          l = 1;
+        }
+      }
       out[i * 3] = sx / l;
       out[i * 3 + 1] = sy / l;
       out[i * 3 + 2] = sz / l;
     }
   }
   nor.needsUpdate = true;
+  return geo;
+}
+
+/** 法线归一化（LatheGeometry 最后一个点的法线没有归一化；零向量改成朝上） */
+function unitNormals(geo) {
+  const n = geo.attributes.normal;
+  for (let i = 0; i < n.count; i++) {
+    const x = n.getX(i);
+    const y = n.getY(i);
+    const z = n.getZ(i);
+    const l = Math.hypot(x, y, z);
+    if (l < 1e-6) n.setXYZ(i, 0, 1, 0);
+    else n.setXYZ(i, x / l, y / l, z / l);
+  }
+  n.needsUpdate = true;
   return geo;
 }
 
@@ -309,6 +344,7 @@ export function slabGeo(w, d, t, { r = 0, bevel = 0.003, hole = null, seg = 6 } 
     });
     g.rotateX(-Math.PI / 2);
     g.translate(0, b, 0);
+    unitNormals(g);
     worldUV(g);
     return g;
   });
@@ -324,6 +360,7 @@ export function latheGeo(profile, seg = 32, { phi = Math.PI * 2 } = {}) {
       0,
       phi
     );
+    unitNormals(g);
     worldUV(g);
     return g;
   });
@@ -391,7 +428,7 @@ export function leafGeo(type = 'fig', { fold = 0.12, curl = 0.18, wave = 0, nz =
     const idx = [];
     for (let j = 0; j <= nz; j++) {
       const s = j / nz;
-      const half = hw(s);
+      const half = Math.max(hw(s), 0.004);
       for (let i = 0; i < cols; i++) {
         const c = (i - nx) / nx; // -1 … 1
         const x = c * half;
@@ -411,6 +448,7 @@ export function leafGeo(type = 'fig', { fold = 0.12, curl = 0.18, wave = 0, nz =
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     g.setIndex(idx);
     g.computeVertexNormals();
+    unitNormals(g);
     const uv = new Float32Array((pos.length / 3) * 2);
     for (let k = 0; k < pos.length / 3; k++) {
       uv[k * 2] = pos[k * 3];
@@ -643,6 +681,7 @@ export function archGeo(w, h, t, bevel = 0.002) {
     const b = Math.min(bevel, t / 2 - 0.0004);
     const g = new THREE.ExtrudeGeometry(s, { depth: Math.max(0.0004, t - 2 * b), bevelEnabled: b > 0.0004, bevelThickness: b, bevelSize: b, bevelOffset: -b, bevelSegments: 2, curveSegments: 24 });
     g.translate(0, 0, b - t / 2);
+    unitNormals(g);
     worldUV(g);
     return g;
   });

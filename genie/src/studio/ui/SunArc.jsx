@@ -1,26 +1,29 @@
-// 太阳弧（像参考视频那样放在日光面板下方）：日出在左、正午在顶、日落在右。拖太阳 = 拖时间；夜里换月亮。
+// 太阳弧（日光面板里的主视觉，像「天气」App）：日出在左、正午在顶、日落在右；走过的那一段是金色。
+// 拖太阳 = 拖时间（只在日出到日落之间；夜里换成月亮，用下面的滑杆调）。
 
 import { useRef } from 'react';
 import { fmtTime } from '../engine/daylight.js';
+import { t } from '../../shared/i18n.js';
 
-const RISE = 6.6;
-const SET = 19.9;
-const W = 230;
-const H = 140;
+// 和 engine/daylight.js 同一套：马来西亚约 7:09 日出、19:18 日落
+const RISE = 7.15;
+const SET = 19.3;
+const W = 220;
+const H = 104;
 const CX = W / 2;
-const CY = H - 22;
-const R = 96;
+const CY = 80;
+const R = 84;
 
 function posOf(h) {
-  const t = Math.max(0, Math.min(1, (h - RISE) / (SET - RISE)));
-  const a = Math.PI * (1 - t);
+  const k = Math.max(0, Math.min(1, (h - RISE) / (SET - RISE)));
+  const a = Math.PI * (1 - k);
   return [CX + Math.cos(a) * R, CY - Math.sin(a) * R];
 }
 
 export default function SunArc({ time, onTime, onCommit }) {
   const ref = useRef(null);
   const up = time >= RISE && time <= SET;
-  const [x, y] = up ? posOf(time) : [CX + R, CY];
+  const [x, y] = up ? posOf(time) : [CX, CY - R];
   const toHour = (ev) => {
     const r = ref.current.getBoundingClientRect();
     const px = ((ev.clientX - r.left) / r.width) * W - CX;
@@ -29,49 +32,50 @@ export default function SunArc({ time, onTime, onCommit }) {
     return RISE + (1 - a / Math.PI) * (SET - RISE);
   };
   const down = (e) => {
+    if (e.button !== undefined && e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
+    const id = e.pointerId;
     onTime(toHour(e));
-    const move = (ev) => onTime(toHour(ev));
-    const upFn = () => {
+    const move = (ev) => ev.pointerId === id && onTime(toHour(ev));
+    const end = (ev) => {
+      if (ev.pointerId !== id) return;
       window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', upFn);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
       onCommit?.();
     };
     window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', upFn);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
   };
-  const ticks = [7, 10, 13, 16, 19].map((h) => posOf(h));
+  // 走过的弧（日出 → 现在）
+  const [ex, ey] = posOf(Math.min(Math.max(time, RISE), SET));
+  const sweep = up ? `M${CX - R} ${CY} A${R} ${R} 0 0 1 ${ex.toFixed(2)} ${ey.toFixed(2)}` : '';
   return (
-    <svg ref={ref} className="sunarc" viewBox={`0 0 ${W} ${H}`} width={W} height={H} onPointerDown={down}>
+    <svg ref={ref} className={`sunarc ${up ? 'is-day' : 'is-night'}`} viewBox={`0 0 ${W} ${H}`} onPointerDown={down} role="slider" aria-label={t('拖太阳调时间')} aria-valuetext={fmtTime(time)}>
+      <line x1={6} y1={CY} x2={W - 6} y2={CY} className="sunarc-horizon" />
       <path d={`M${CX - R} ${CY} A${R} ${R} 0 0 1 ${CX + R} ${CY}`} className="sunarc-path" />
-      <line x1={CX - R - 10} y1={CY} x2={CX + R + 10} y2={CY} className="sunarc-horizon" />
-      {ticks.map(([tx, ty], i) => (
-        <circle key={i} cx={tx} cy={ty} r="1.6" className="sunarc-tick" />
-      ))}
-      <text x={CX - R} y={CY + 15} className="sunarc-lbl" textAnchor="middle">
-        日出
+      {sweep && <path d={sweep} className="sunarc-done" />}
+      <circle cx={CX - R} cy={CY} r="2.5" className="sunarc-end" />
+      <circle cx={CX + R} cy={CY} r="2.5" className="sunarc-end" />
+      <text x={CX - R} y={CY + 18} className="sunarc-lbl" textAnchor="middle">
+        {t('日出')} {fmtTime(RISE)}
       </text>
-      <text x={CX + R} y={CY + 15} className="sunarc-lbl" textAnchor="middle">
-        日落
+      <text x={CX + R} y={CY + 18} className="sunarc-lbl" textAnchor="middle">
+        {t('日落')} {fmtTime(SET)}
       </text>
-      <g transform={`translate(${x},${y})`} className={`sunarc-sun ${up ? '' : 'moon'}`}>
-        <circle r="20" className="sunarc-hit" />
+      <g transform={`translate(${x.toFixed(2)},${y.toFixed(2)})`} className="sunarc-sun">
+        <circle r="18" className="sunarc-hit" />
         {up ? (
           <>
-            <circle r="8" className="sunarc-core" />
-            {[...Array(8)].map((_, i) => {
-              const a = (i / 8) * Math.PI * 2;
-              return <line key={i} x1={Math.cos(a) * 11.5} y1={Math.sin(a) * 11.5} x2={Math.cos(a) * 16} y2={Math.sin(a) * 16} className="sunarc-ray" />;
-            })}
+            <circle r="12" className="sunarc-halo" />
+            <circle r="6.5" className="sunarc-core" />
           </>
         ) : (
-          <path d="M3 -9 A10 10 0 1 0 9 5 A7.8 7.8 0 1 1 3 -9 Z" className="sunarc-moon" />
+          <path d="M2.6 -7.6 A8 8 0 1 0 7.6 4.2 A6.2 6.2 0 1 1 2.6 -7.6 Z" className="sunarc-moon" />
         )}
       </g>
-      <text x={CX} y={CY - R * 0.42} className="sunarc-time" textAnchor="middle">
-        {fmtTime(time)}
-      </text>
     </svg>
   );
 }

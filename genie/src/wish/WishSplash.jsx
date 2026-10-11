@@ -16,6 +16,7 @@ const TITLE = { zh: '许一个家的愿', en: 'Make a wish for your home' };
 
 export default function WishSplash({ leaving = false, busy = null, onTap, onBegin }) {
   const en = isEn();
+  const sub = t('{0} 会陪你走过五张牌，再把你心里的家变成 3D。', [guideName()]);
   return (
     <div className={`ws-splash ${leaving ? 'is-leaving' : ''}`} onClick={onTap}>
       <Scenery scene="welcome" next="welcome" />
@@ -38,7 +39,7 @@ export default function WishSplash({ leaving = false, busy = null, onTap, onBegi
         <p className="ws-title-alt" lang={en ? 'zh-Hans' : 'en'}>
           {en ? TITLE.zh : TITLE.en}
         </p>
-        <p className="ws-sub">{t('{0} 会陪你走过五张牌，再把你心里的家变成 3D。', [guideName()])}</p>
+        <p className="ws-sub">{en ? sub : sub.replace(/^(\S+)\s+/, '$1') /* 中文：名字和「会」之间不空格 */}</p>
         <p className="ws-sound">
           <Volume2 size={16} strokeWidth={1.8} aria-hidden="true" />
           <span>{soundSentence()}</span>

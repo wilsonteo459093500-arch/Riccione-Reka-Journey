@@ -202,16 +202,17 @@ export async function renderPoster(profile, { pangieEl, emblemEl, sceneEl, scene
   ctx.fillStyle = P.inkSoft;
   ctx.font = `400 28px ${display()}`;
   const tl = wrap(ctx, tagline, cw - 120).slice(0, 2);
-  tl.forEach((ln, i) => ctx.fillText(ln, W / 2, cy + 562 + i * 38));
+  tl.forEach((ln, i) => ctx.fillText(ln, W / 2, cy + 560 + i * 38));
+  let y = cy + 560 + (tl.length - 1) * 38;
 
   // 配色
-  const pw = 54;
+  const pw = 50;
   const gap = 16;
   const total = d.palette.length * pw + (d.palette.length - 1) * gap;
-  const py = cy + 640;
+  y += 58;
   d.palette.forEach((col, i) => {
     ctx.beginPath();
-    ctx.arc(W / 2 - total / 2 + pw / 2 + i * (pw + gap), py, pw / 2, 0, Math.PI * 2);
+    ctx.arc(W / 2 - total / 2 + pw / 2 + i * (pw + gap), y, pw / 2, 0, Math.PI * 2);
     ctx.fillStyle = col;
     ctx.fill();
     ctx.strokeStyle = rgba(P.ink, 0.1);
@@ -219,29 +220,37 @@ export async function renderPoster(profile, { pangieEl, emblemEl, sceneEl, scene
     ctx.stroke();
   });
 
-  // 四条轴（带维度名）
-  const bx = cx + 190;
-  const bw = cw - 300;
+  // 四条轴（维度名 · 左极 · 线 · 右极），宽度按字量出来，英文也不会叠在一起
+  const dims = AXES.map((ax) => L({ zh: ax.zh, en: ax.en }));
+  ctx.font = `500 19px ${SANS}`;
+  const dimW = Math.max(...dims.map((x) => ctx.measureText(x).width));
+  ctx.font = `600 19px ${SANS}`;
+  const poleW = Math.max(...AXES.flatMap((ax) => [L(ax.a), L(ax.b)]).map((x) => ctx.measureText(x).width));
+  const x0 = cx + 54;
+  const x1 = cx + cw - 54;
+  const bx = x0 + dimW + 16 + poleW + 12;
+  const bw = Math.max(80, x1 - poleW - 12 - bx);
+  y += 62;
   AXES.forEach((ax, i) => {
-    const y = cy + 706 + i * 32;
+    const yy = y + i * 32;
     const v = profile.axes[ax.id];
     ctx.textAlign = 'left';
     ctx.font = `500 19px ${SANS}`;
     ctx.fillStyle = P.inkSoft;
-    ctx.fillText(L({ zh: ax.zh, en: ax.en }), cx + 52, y + 7);
+    ctx.fillText(dims[i], x0, yy + 7);
     ctx.font = `600 19px ${SANS}`;
     ctx.textAlign = 'right';
     ctx.fillStyle = v >= 50 ? P.posterInk : rgba(P.ink, 0.45);
-    ctx.fillText(L(ax.a), bx - 12, y + 7);
+    ctx.fillText(L(ax.a), bx - 12, yy + 7);
     ctx.textAlign = 'left';
     ctx.fillStyle = v < 50 ? P.posterInk : rgba(P.ink, 0.45);
-    ctx.fillText(L(ax.b), bx + bw + 12, y + 7);
+    ctx.fillText(L(ax.b), bx + bw + 12, yy + 7);
     ctx.fillStyle = P.line;
-    roundRect(ctx, bx, y, bw, 5, 2.5);
+    roundRect(ctx, bx, yy, bw, 5, 2.5);
     ctx.fill();
     ctx.fillStyle = P.gold;
     ctx.beginPath();
-    ctx.arc(bx + bw * (1 - v / 100), y + 2.5, 8, 0, Math.PI * 2);
+    ctx.arc(bx + bw * (1 - v / 100), yy + 2.5, 8, 0, Math.PI * 2);
     ctx.fill();
   });
 
