@@ -555,9 +555,10 @@
   font: 500 11.5px/1.25 var(--sans);
   font-style: normal;
   color: var(--pt-soft);
-  white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 .preset.dreamer {
   display: grid;
@@ -678,9 +679,10 @@
   max-width: 100%;
   font: 600 12.5px/1.25 var(--sans);
   text-align: center;
-  white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 /* 收纳对账（设计师） */
@@ -761,14 +763,20 @@
   list-style: none;
   margin: 0;
   padding: 0;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 2px;
+  min-width: 0;
+}
+.storage-rows li {
+  min-width: 0;
 }
 .srow {
   display: flex;
   align-items: flex-start;
   gap: 10px;
   width: 100%;
+  min-width: 0;
   min-height: 44px;
   padding: 9px 6px;
   border: 0;
@@ -1378,9 +1386,11 @@
   max-width: 76px;
   font: 600 12.5px/1.2 var(--sans);
   text-align: center;
-  white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
 }
 .chip em {
   max-width: 76px;
@@ -1941,7 +1951,9 @@
   border: 0;
   border-radius: 12px;
   background: var(--card);
-  box-shadow: inset 0 0 0 0.5px var(--hair), inset 0 1px 2px rgba(var(--shade-rgb), 0.05);
+  box-shadow:
+    inset 0 0 0 0.5px var(--hair),
+    inset 0 1px 2px rgba(var(--shade-rgb), 0.05);
   color: var(--pt);
   font: 500 14.5px/1.2 var(--sans);
   outline: none;
@@ -1977,13 +1989,17 @@
   color: var(--pt-soft);
 }
 .share-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  display: grid;
+  gap: 8px;
+}
+.share-row .s-btn {
+  justify-content: flex-start;
+  padding: 0 18px;
+  border-radius: 14px;
 }
 .help-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
   gap: 12px;
 }
 .help-grid section {
@@ -2387,21 +2403,21 @@
   overflow: hidden;
   background: var(--bg);
 }
-.pe-canvas svg {
+.pe-canvas > svg {
   display: block;
   width: 100%;
   height: 100%;
   touch-action: none;
   cursor: grab;
 }
-.pe-canvas svg.tool-room,
-.pe-canvas svg.tool-calibrate {
+.pe-canvas > svg.tool-room,
+.pe-canvas > svg.tool-calibrate {
   cursor: crosshair;
 }
-.pe-canvas svg.tool-door,
-.pe-canvas svg.tool-window,
-.pe-canvas svg.tool-slider,
-.pe-canvas svg.tool-open {
+.pe-canvas > svg.tool-door,
+.pe-canvas > svg.tool-window,
+.pe-canvas > svg.tool-slider,
+.pe-canvas > svg.tool-open {
   cursor: copy;
 }
 .grid .g1 {
@@ -2782,8 +2798,9 @@
     left: var(--safe-l);
   }
   .panels-open .mood-panel {
+    top: calc(var(--safe-t) + 60px);
     width: min(340px, calc(100% - 32px));
-    max-height: calc(100% - var(--safe-t) - var(--safe-b) - 210px);
+    max-height: calc(100% - var(--safe-t) - var(--safe-b) - 340px);
     box-shadow:
       var(--lift),
       var(--inner-hl),
@@ -2791,6 +2808,25 @@
   }
   .pe-body {
     grid-template-columns: 76px minmax(0, 1fr) 268px;
+  }
+  /* 平面图编辑器的标题栏：第一行 标题 + 取消 / 生成；第二行 工具按钮（可以横滑） */
+  .pe-head-right {
+    order: 2;
+  }
+  .pe-head-actions {
+    order: 3;
+    flex: 1 0 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin: 0 -4px;
+    padding: 2px 4px 4px;
+  }
+  .pe-head-actions::-webkit-scrollbar {
+    display: none;
+  }
+  .pe-head-actions > * {
+    flex: none;
   }
   .start-grid {
     grid-template-columns: 1fr 1fr;
@@ -2820,7 +2856,7 @@
     left: var(--safe-l);
     right: var(--safe-r);
     width: auto;
-    max-height: calc(100% - var(--safe-t) - var(--safe-b) - 260px);
+    max-height: calc(100% - var(--safe-t) - var(--safe-b) - 290px);
   }
   .mp-inner {
     padding: 16px 14px 14px;

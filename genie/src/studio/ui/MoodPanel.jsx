@@ -5,7 +5,6 @@ import { MOODS, moodMeter, moodSentence } from '../../shared/moods.js';
 import { SLOTS, MAT_BY_ID } from '../../shared/materials.js';
 import { avoidMaterials } from '../../shared/profile.js';
 import { swatchURL } from '../../shared/textures.js';
-import { fmtTime } from '../engine/daylight.js';
 import { t, L, isEn } from '../../shared/i18n.js';
 import { Icon, slotName } from './kit.jsx';
 import { BRAND } from '../../shared/config.js';
@@ -23,11 +22,10 @@ export default function MoodPanel({ project, dreamer, slot, onSlot, onMood, onTo
   const presets = MOODS.map((m) => ({
     id: m.id,
     name: isEn() ? m.en : m.zh, // Cozy / Bright / Moody 是固定的英文名，不走词典
-    sub: `${t(SUB[m.sub] || m.sub)} · ${fmtTime(m.time)}`,
+    sub: t(SUB[m.sub] || m.sub),
     colors: paletteOf(avoid.length ? avoidMaterials(m.materials, avoid).materials : m.materials),
   }));
-  if (dreamer && project.profile)
-    presets.unshift({ id: 'dreamer', name: L(dreamer), sub: `${dreamer.num} · ${project.profile.code}`, colors: dreamer.palette, dreamer: true });
+  if (dreamer && project.profile) presets.unshift({ id: 'dreamer', name: L(dreamer), sub: `${dreamer.num} · ${project.profile.code}`, colors: dreamer.palette, dreamer: true });
 
   return (
     <aside className="glass panel mood-panel" aria-label={t('情绪 · 材质 · 光')}>
@@ -50,14 +48,7 @@ export default function MoodPanel({ project, dreamer, slot, onSlot, onMood, onTo
 
         <div className={`presets n${presets.length}`} role="radiogroup" aria-label={t('一键情绪')}>
           {presets.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              role="radio"
-              aria-checked={project.mood === p.id}
-              className={`preset ${project.mood === p.id ? 'on' : ''} ${p.dreamer ? 'dreamer' : ''}`}
-              onClick={() => onMood(p.id)}
-            >
+            <button key={p.id} type="button" role="radio" aria-checked={project.mood === p.id} className={`preset ${project.mood === p.id ? 'on' : ''} ${p.dreamer ? 'dreamer' : ''}`} onClick={() => onMood(p.id)}>
               <span className="preset-pal" aria-hidden="true">
                 {p.colors.map((c, i) => (
                   <i key={i} style={{ background: c }} />

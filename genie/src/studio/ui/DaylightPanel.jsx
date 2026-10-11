@@ -3,12 +3,14 @@
 
 import { useMemo } from 'react';
 import { DAY_PRESETS, daylight, fmtTime } from '../engine/daylight.js';
-import { t, L } from '../../shared/i18n.js';
+import { t, isEn } from '../../shared/i18n.js';
 import { Icon } from './kit.jsx';
 import SunArc from './SunArc.jsx';
 
 const ICON = { morning: 'sunrise', midday: 'sun', evening: 'sunset', night: 'moon' };
 const STOPS = [5, 6, 7, 8, 10, 13, 16, 18, 19, 20, 22, 24];
+// 时段名：资料里自带简短的英文（Morning / Night），比词典里的长译名更适合小卡片
+const nameOf = (p) => (isEn() ? p.en : p.zh);
 
 /** 滑杆渐变：05:00 → 24:00 的真实天色 */
 export function skyGradient(north = 0) {
@@ -37,7 +39,7 @@ export default function DaylightPanel({ time, thumbs, onTime, onCommit, north = 
         </div>
         <span className="day-period">
           <Icon name={ICON[near.id]} size={15} />
-          {L(near)}
+          {nameOf(near)}
         </span>
       </header>
 
@@ -50,7 +52,7 @@ export default function DaylightPanel({ time, thumbs, onTime, onCommit, north = 
           <button key={p.id} type="button" className={`day-tile ${isOn(p) ? 'on' : ''}`} onClick={() => pick(p)} aria-pressed={isOn(p)}>
             {thumbs[i] ? <img src={thumbs[i]} alt="" draggable={false} /> : <i />}
             <span>
-              <b>{L(p)}</b>
+              <b>{nameOf(p)}</b>
               <em>{fmtTime(p.hour)}</em>
             </span>
           </button>
@@ -59,7 +61,7 @@ export default function DaylightPanel({ time, thumbs, onTime, onCommit, north = 
 
       <div className="day-chips">
         {DAY_PRESETS.map((p) => (
-          <button key={p.id} type="button" className={isOn(p) ? 'on' : ''} onClick={() => pick(p)} aria-label={`${L(p)} ${fmtTime(p.hour)}`} title={`${L(p)} ${fmtTime(p.hour)}`}>
+          <button key={p.id} type="button" className={isOn(p) ? 'on' : ''} onClick={() => pick(p)} aria-label={`${nameOf(p)} ${fmtTime(p.hour)}`} title={`${nameOf(p)} ${fmtTime(p.hour)}`}>
             <Icon name={ICON[p.id]} size={17} />
           </button>
         ))}

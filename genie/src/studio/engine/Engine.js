@@ -614,7 +614,7 @@ export class Engine {
     this.lib.setNight(d.lamps);
     this.applyPost(d);
     this.beams.update(d.dir, d.beams, d.sunColor);
-    drawBackdrop(this.bgCanvas, this.bgLayers, d);
+    drawBackdrop(this.bgCanvas, this.bgLayers, d, this.demo ? firePulse(performance.now()) : null);
     this.bgTex.needsUpdate = true;
     this.dirty = true;
   }
@@ -1438,73 +1438,218 @@ function makeOutputPass(vignette) {
 }
 
 // ───────────────────────── 背景：一张「虚化的室内照片」 ─────────────────────────
-// 像相机对焦在模型上、背景是失焦的落地窗：窗外白天是天光和树影（溪岸 × 大自然），黄昏是琥珀色的天，
-// 夜里是林间暮色里远处人家的灯斑；下面是地面上窗光的倒影。全部预先画好、模糊好，换时间只是叠色（很快）。
+// 像相机对焦在模型上、背景是失焦的落地窗；下面是地面上窗光的倒影。全部预先画好、模糊好，换时间只是叠色（很快）。
+// 窗外是两处风景（和许愿之旅里的风景同一套）：
+// · 白天 —— 四姑娘山雨后的森林：一层层冷杉和山脊，层与层之间漂着雾；越远越淡，跟着天色变暖 / 变冷（相乘叠色）；
+// · 黄昏到夜里 —— 瓜拉雪兰莪河边的红树林：低低的树冠、水里的倒影，萤火虫一点点亮起来（演示模式里它们一起「呼吸」）。
+
+/** canvas 的 filter（blur）：Safari 18 以前没有 → 用「缩小再放大」做失焦 */
+function canvasFilterOK() {
+  try {
+    const c = document.createElement('canvas');
+    c.width = c.height = 2;
+    return typeof c.getContext('2d').filter === 'string';
+  } catch {
+    return false;
+  }
+}
+
+const rgbOf = (hex) => {
+  const n = parseInt(String(hex).slice(1, 7), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+};
+const rgba = (hex, a) => `rgba(${rgbOf(hex).join(',')},${a})`;
 
 function makeBackdropLayers(W, H) {
-  const mk = () => {
+  const mk = (w = W, h = H) => {
     const c = document.createElement('canvas');
-    c.width = W;
-    c.height = H;
+    c.width = Math.max(1, Math.round(w));
+    c.height = Math.max(1, Math.round(h));
     return c;
   };
   const k = W / 1024;
   let seed = 11;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const filterOK = canvasFilterOK();
+  /** 失焦：新的一张画布 */
+  const soften = (src, px) => {
+    const out = mk();
+    const o = out.getContext('2d');
+    if (filterOK) {
+      o.filter = `blur(${Math.max(1, Math.round(px))}px)`;
+      o.drawImage(src, 0, 0);
+      o.filter = 'none';
+      return out;
+    }
+    const f = Math.max(2, Math.min(16, Math.round(px / 1.5)));
+    const s1 = mk(W / f, H / f);
+    const c1 = s1.getContext('2d');
+    c1.imageSmoothingQuality = 'high';
+    c1.drawImage(src, 0, 0, s1.width, s1.height);
+    const s2 = mk(W / 2, H / 2);
+    const c2 = s2.getContext('2d');
+    c2.imageSmoothingQuality = 'high';
+    c2.drawImage(s1, 0, 0, s2.width, s2.height);
+    o.imageSmoothingQuality = 'high';
+    o.drawImage(s2, 0, 0, W, H);
+    return out;
+  };
+  const maskBy = (canvas, mask) => {
+    const c = canvas.getContext('2d');
+    c.globalCompositeOperation = 'destination-in';
+    c.drawImage(mask, 0, 0);
+    c.globalCompositeOperation = 'source-over';
+    return canvas;
+  };
+
   // 窗（白色遮罩）：一整面落地窗，竖框宽窄交替，上面有一道横档
-  const win = mk();
-  const w = win.getContext('2d');
-  w.filter = `blur(${Math.round(13 * k)}px)`;
-  w.fillStyle = '#fff';
   const top = H * 0.07;
   const bot = H * 0.6;
-  const panes = [];
+  const sharp = mk();
+  const w = sharp.getContext('2d');
+  w.fillStyle = 'white';
   let x = -W * 0.03;
   let i = 0;
   while (x < W * 1.03) {
     const pw = (i % 3 === 2 ? 0.07 : 0.135) * W;
-    panes.push([x, pw]);
     w.fillRect(x, top, pw, bot - top);
     x += pw + 0.018 * W;
     i++;
   }
-  // 横档
   w.globalCompositeOperation = 'destination-out';
   w.fillRect(0, top + (bot - top) * 0.2, W, 0.012 * W);
   w.globalCompositeOperation = 'source-over';
-  // 窗外的树（深鼠尾草绿的一团团，偏下）
-  const leaves = mk();
-  const l = leaves.getContext('2d');
-  l.filter = `blur(${Math.round(16 * k)}px)`;
-  for (let j = 0; j < 46; j++) {
-    const cx = rnd() * W;
-    const cy = H * (0.3 + rnd() * 0.32);
-    const r = (30 + rnd() * 80) * k;
-    l.fillStyle = `rgba(${34 + rnd() * 24},${52 + rnd() * 26},${40 + rnd() * 16},${0.55 + rnd() * 0.35})`;
-    l.beginPath();
-    l.ellipse(cx, cy, r * 1.2, r, 0, 0, Math.PI * 2);
-    l.fill();
-  }
-  l.filter = 'none';
-  l.globalCompositeOperation = 'destination-in';
-  l.drawImage(win, 0, 0);
-  // 夜里的灯斑：远处人家 / 路灯，暖色为主，一点冷色
-  const bokeh = mk();
-  const b = bokeh.getContext('2d');
-  b.filter = `blur(${Math.round(4 * k)}px)`;
+  const win = soften(sharp, 13 * k);
+
+  // ── 白天：雨后的冷杉林（相乘层：白 = 不变；越近越深；雾 = 往白里推，天色就从雾里透出来） ──
+  const moss = (t) => mixHex(PALETTE.card, PALETTE.accent, t);
+  const celadon = (t) => mixHex(PALETTE.card, PALETTE.stream, t);
+  const forestSharp = mk();
+  const f = forestSharp.getContext('2d');
+  f.fillStyle = 'white';
+  f.fillRect(0, 0, W, H);
+  const ridge = (base, amp, color) => {
+    f.fillStyle = color;
+    f.beginPath();
+    f.moveTo(0, H);
+    for (let px = 0; px <= W + 1; px += W / 64) {
+      const u = px / W;
+      const n = Math.sin(u * 5.3 + 1.1) * 0.45 + Math.sin(u * 13.1 + 0.4) * 0.22 + Math.max(0, Math.sin(u * 3.2 + 2.2)) ** 6 * 0.8 + (rnd() - 0.5) * 0.12;
+      f.lineTo(px, base - amp * (0.55 + n));
+    }
+    f.lineTo(W, H);
+    f.closePath();
+    f.fill();
+  };
+  const mist = (y, h, a) => {
+    const g = f.createLinearGradient(0, y - h, 0, y + h);
+    g.addColorStop(0, rgba(PALETTE.card, 0));
+    g.addColorStop(0.5, rgba(PALETTE.card, a));
+    g.addColorStop(1, rgba(PALETTE.card, 0));
+    f.fillStyle = g;
+    f.fillRect(0, y - h, W, h * 2);
+    // 一缕缕的雾
+    for (let j = 0; j < 7; j++) {
+      f.fillStyle = rgba(PALETTE.card, a * (0.35 + rnd() * 0.4));
+      f.beginPath();
+      f.ellipse(rnd() * W, y + (rnd() - 0.5) * h, (0.08 + rnd() * 0.16) * W, h * (0.18 + rnd() * 0.22), 0, 0, Math.PI * 2);
+      f.fill();
+    }
+  };
+  const firs = (base, n, h0, h1, w0, w1, color) => {
+    f.fillStyle = color;
+    f.fillRect(0, base, W, H - base);
+    for (let j = 0; j < n; j++) {
+      const cx = ((j + rnd()) / n) * W * 1.06 - W * 0.03;
+      // 高矮错落：偶尔一棵特别高的
+      const h = (h0 + (h1 - h0) * rnd() ** 1.6 * (rnd() < 0.12 ? 1.35 : 1)) * H;
+      const tw = (w0 + rnd() * (w1 - w0)) * W;
+      const b = base + rnd() * 0.01 * H;
+      f.beginPath();
+      // 冷杉：细高的尖顶，两三层枝（失焦后就是一排「尖尖的」林线）
+      for (let tier = 0; tier < 3; tier++) {
+        const ty = b - h * tier * 0.26;
+        const ww = tw * (1 - tier * 0.27);
+        f.moveTo(cx, ty - h * (0.62 - tier * 0.02) - (tier === 2 ? h * 0.12 : 0));
+        f.lineTo(cx + ww * 0.5, ty);
+        f.lineTo(cx - ww * 0.5, ty);
+        f.closePath();
+      }
+      f.fill();
+    }
+  };
+  // 远山（四姑娘山的山脊）→ 雾 → 远林 → 雾 → 中林 → 薄雾 → 近处的林线
+  ridge(H * 0.3, H * 0.06, celadon(0.26));
+  mist(H * 0.335, H * 0.05, 0.8);
+  firs(H * 0.415, 90, 0.035, 0.08, 0.006, 0.011, celadon(0.42));
+  mist(H * 0.425, H * 0.035, 0.78);
+  firs(H * 0.495, 64, 0.06, 0.13, 0.009, 0.016, moss(0.42));
+  mist(H * 0.505, H * 0.028, 0.62);
+  firs(H * 0.585, 42, 0.1, 0.21, 0.014, 0.026, moss(0.72));
+  mist(H * 0.6, H * 0.02, 0.4);
+  const forest = maskBy(soften(forestSharp, 7 * k), win);
+
+  // ── 黄昏：红树林、河、倒影（相乘层） ──
+  const river = H * 0.505;
+  const crowns = mk();
+  const cr = crowns.getContext('2d');
+  cr.fillStyle = 'black';
+  cr.fillRect(0, river - 0.035 * H, W, 0.035 * H);
   for (let j = 0; j < 70; j++) {
-    const bx = rnd() * W;
-    const by = H * (0.3 + rnd() * 0.26);
-    const r = (3 + rnd() * 9) * k;
-    const warm = rnd() > 0.25;
-    b.fillStyle = warm ? `rgba(255,${176 + rnd() * 50},${104 + rnd() * 40},${0.3 + rnd() * 0.45})` : `rgba(176,206,214,${0.18 + rnd() * 0.3})`;
-    b.beginPath();
-    b.arc(bx, by, r, 0, Math.PI * 2);
-    b.fill();
+    const cx = rnd() * W * 1.06 - W * 0.03;
+    const ry = (0.022 + rnd() * 0.04) * H;
+    cr.beginPath();
+    cr.ellipse(cx, river - 0.03 * H - rnd() * 0.035 * H, (0.025 + rnd() * 0.05) * W, ry, 0, 0, Math.PI * 2);
+    cr.fill();
   }
-  b.filter = 'none';
-  b.globalCompositeOperation = 'destination-in';
-  b.drawImage(win, 0, 0);
+  const duskSharp = mk();
+  const m = duskSharp.getContext('2d');
+  m.fillStyle = 'white';
+  m.fillRect(0, 0, W, H);
+  // 水：比天色略暗一点（倒映着天）
+  m.fillStyle = celadon(0.32);
+  m.fillRect(0, river, W, H - river);
+  // 倒影：翻过来、压扁、淡一点
+  m.save();
+  m.globalAlpha = 0.5;
+  m.translate(0, river * 2);
+  m.scale(1, -1);
+  m.drawImage(crowns, 0, 0);
+  m.restore();
+  // 树冠剪影（用遮罩上色）
+  const tintCrowns = mk();
+  const tc = tintCrowns.getContext('2d');
+  tc.drawImage(crowns, 0, 0);
+  tc.globalCompositeOperation = 'source-in';
+  tc.fillStyle = mixHex(PALETTE.card, PALETTE.dusk, 0.94);
+  tc.fillRect(0, 0, W, H);
+  m.drawImage(tintCrowns, 0, 0);
+  const dusk = maskBy(soften(duskSharp, 6 * k), win);
+
+  // ── 萤火虫：大多在树冠里，少数飞得高一点；水里有淡淡的倒影。分两组，演示时错开一点一起「呼吸」 ──
+  const fireA = mk();
+  const fireB = mk();
+  for (let j = 0; j < 150; j++) {
+    const c = (j % 2 ? fireA : fireB).getContext('2d');
+    const fx = rnd() * W;
+    const high = rnd() < 0.18;
+    const fy = river - (0.012 + rnd() * (high ? 0.16 : 0.075)) * H;
+    const r = (0.8 + rnd() * 1.5) * k;
+    const glow = (cx, cy, rr, a) => {
+      const g = c.createRadialGradient(cx, cy, 0, cx, cy, rr * 4);
+      g.addColorStop(0, rgba(PALETTE.firefly, a));
+      g.addColorStop(0.3, rgba(PALETTE.firefly, a * 0.32));
+      g.addColorStop(1, rgba(PALETTE.firefly, 0));
+      c.fillStyle = g;
+      c.fillRect(cx - rr * 4, cy - rr * 4, rr * 8, rr * 8);
+    };
+    glow(fx, fy, r, 0.95);
+    const ry = river + (river - fy) * 0.85;
+    if (ry < bot) glow(fx, ry, r * 0.9, 0.28);
+  }
+  const fA = maskBy(soften(fireA, 1.2 * k), win);
+  const fB = maskBy(soften(fireB, 1.2 * k), win);
+
   // 暗角
   const vig = mk();
   const v = vig.getContext('2d');
@@ -1523,7 +1668,7 @@ function makeBackdropLayers(W, H) {
     img.data[p + 3] = 255;
   }
   g.putImageData(img, 0, 0);
-  return { win, leaves, bokeh, vig, grain, tint: mk(), top, bot };
+  return { win, forest, dusk, fireA: fA, fireB: fB, vig, grain, tint: mk(), top, bot };
 }
 
 function mixHex(a, b, t) {
@@ -1540,7 +1685,19 @@ function shadeHex(hex, k) {
   return `rgb(${f((n >> 16) & 255)},${f((n >> 8) & 255)},${f(n & 255)})`;
 }
 
-function drawBackdrop(canvas, layers, d) {
+const smooth01 = (a, b, x) => {
+  const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+
+/** 演示模式：两组萤火虫慢慢一起「呼吸」（错开一点相位，约 1.4 秒一次） */
+function firePulse(ms) {
+  const s = ms / 1000;
+  return [0.5 + 0.5 * Math.sin(s * 2.2) ** 2, 0.45 + 0.5 * Math.sin(s * 2.2 + 1.1) ** 2];
+}
+
+/** pulse：萤火虫两组的亮度（0–1，演示模式里随时间变；平时 null = 常亮） */
+function drawBackdrop(canvas, layers, d, pulse = null) {
   const ctx = canvas.getContext('2d');
   const W = canvas.width;
   const H = canvas.height;
@@ -1568,13 +1725,26 @@ function drawBackdrop(canvas, layers, d) {
   t.fillRect(0, 0, W, H);
   ctx.globalAlpha = 0.94 - 0.3 * night;
   ctx.drawImage(layers.tint, 0, 0);
-  // 3 窗外的树影 / 夜里的灯斑
-  ctx.globalAlpha = 0.32 * (1 - night) + 0.4 * night;
-  ctx.drawImage(layers.leaves, 0, 0);
-  if (night > 0.01) {
-    ctx.globalAlpha = night * 0.85;
-    ctx.drawImage(layers.bokeh, 0, 0);
+  // 3 窗外：白天雨后的森林、黄昏的红树林（都是相乘：只会压暗，天色从雾里、水里透出来）
+  ctx.globalCompositeOperation = 'multiply';
+  if (night < 0.99) {
+    ctx.globalAlpha = 0.85 * (1 - night);
+    ctx.drawImage(layers.forest, 0, 0);
   }
+  if (night > 0.01) {
+    ctx.globalAlpha = night;
+    ctx.drawImage(layers.dusk, 0, 0);
+  }
+  // 萤火虫（加法）：天黑下来才亮
+  const ff = smooth01(0.3, 0.9, night);
+  if (ff > 0.01) {
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = ff * (pulse ? pulse[0] : 1);
+    ctx.drawImage(layers.fireA, 0, 0);
+    ctx.globalAlpha = ff * (pulse ? pulse[1] : 0.85);
+    ctx.drawImage(layers.fireB, 0, 0);
+  }
+  ctx.globalCompositeOperation = 'source-over';
   // 4 地面上窗光的倒影（压扁、翻转、很淡）
   ctx.save();
   ctx.globalAlpha = 0.22 - 0.08 * night;

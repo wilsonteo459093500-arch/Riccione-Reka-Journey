@@ -8,12 +8,13 @@
 //
 // 房间只用矩形（L 形房间 = 两个同类型矩形）。概念阶段够用，也让 AI 识别 + 人工校正都很快。
 
+// 房间底色（平面图编辑器用）：VI「晨光溪岸」的柔和纸色系 —— 陶土、鼠尾草、溪水、砂石；不用紫 / 靛蓝
 export const ROOM_TYPES = {
   living: { zh: '客厅', en: 'Living', color: '#E9C9A1', floor: 'floor', open: true },
   dining: { zh: '餐厅', en: 'Dining', color: '#EBD6A8', floor: 'floor', open: true },
   kitchen: { zh: '厨房', en: 'Kitchen', color: '#C9D9C2', floor: 'tile' },
-  master: { zh: '主卧', en: 'Master bedroom', color: '#D8C7E8', floor: 'floor' },
-  bedroom: { zh: '卧室', en: 'Bedroom', color: '#C9D3EC', floor: 'floor' },
+  master: { zh: '主卧', en: 'Master bedroom', color: '#DCC0B0', floor: 'floor' },
+  bedroom: { zh: '卧室', en: 'Bedroom', color: '#C8D2CF', floor: 'floor' },
   kids: { zh: '儿童房', en: 'Kids room', color: '#F2CFC9', floor: 'floor' },
   study: { zh: '书房', en: 'Study', color: '#D9E3C7', floor: 'floor' },
   bath: { zh: '浴室', en: 'Bathroom', color: '#BFDDE6', floor: 'tile', wet: true },
@@ -22,7 +23,7 @@ export const ROOM_TYPES = {
   balcony: { zh: '阳台', en: 'Balcony', color: '#CFE3D3', floor: 'tile', outdoor: true },
   porch: { zh: '车廊 / 前院', en: 'Car porch', color: '#DAD6CC', floor: 'tile', outdoor: true },
   utility: { zh: '晒衣处', en: 'Yard', color: '#D3DADC', floor: 'tile', wet: true },
-  walkin: { zh: '衣帽间', en: 'Walk-in', color: '#E7D3E0', floor: 'floor' },
+  walkin: { zh: '衣帽间', en: 'Walk-in', color: '#E2CFB6', floor: 'floor' },
   store: { zh: '储物间', en: 'Store', color: '#D9D4CC', floor: 'floor' },
 };
 

@@ -60,12 +60,11 @@
   }
 }
 
-/* 照片：调色放在静止的外层（滤镜只算一次），推镜放在里面的图上 */
+/* 照片：调色直接放在图上（图本身不变，只是在推镜 → 滤镜只算一次，之后只是移动这一层） */
 .sc-grade {
   position: absolute;
   inset: 0;
   overflow: hidden;
-  filter: saturate(var(--sat, 0.9)) sepia(0.05);
 }
 .sc-photo {
   position: absolute;
@@ -74,6 +73,7 @@
   height: 100%;
   object-fit: cover;
   object-position: var(--focus, 50% 50%);
+  filter: saturate(var(--sat, 0.9)) sepia(0.05);
   animation: kb 90s ease-in-out infinite alternate;
   will-change: transform;
 }

@@ -271,8 +271,12 @@ html[lang='en'] .h-title {
     0 24px 60px rgba(var(--shade-rgb), 0.14);
   animation: sheet-in 0.62s var(--spring-soft) both;
 }
+/* 换题：标题带一点模糊淡入（blur-fade），其余只淡入 + 轻轻上移（便宜，iPad 上一直 60fps） */
 .step > * {
-  animation: content-in 0.7s var(--ease) both;
+  animation: rise-in 0.6s var(--ease) both;
+}
+.step > .q-head {
+  animation-name: content-in;
 }
 .step > *:nth-child(2) {
   animation-delay: 0.05s;
@@ -303,6 +307,16 @@ html[lang='en'] .h-title {
     filter: none;
   }
 }
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
 
 .q-head {
   text-align: center;
@@ -331,7 +345,8 @@ html[lang='en'] .h-title {
 .on-photo .step-nogo,
 .on-photo .step-onewish,
 .on-photo .cover {
-  background: rgba(var(--glass-rgb), 0.84);
+  /* 照片比画的风景暗、也艳：玻璃实到 0.9，次要文字（--text-soft）在最暗的照片上也有 4.5:1 */
+  background: rgba(var(--glass-rgb), 0.9);
   -webkit-backdrop-filter: blur(30px) saturate(125%);
   backdrop-filter: blur(30px) saturate(125%);
 }
@@ -2258,7 +2273,7 @@ html[lang='en'] .axis {
   margin-top: 8px;
 }
 .mat figcaption span {
-  font: 500 13px/1.3 var(--sans);
+  font: 500 14px/1.3 var(--sans);
   color: var(--text-soft);
 }
 .mat figcaption b {
@@ -3015,13 +3030,23 @@ html[lang='en'] .bp-farewell {
     box-shadow: none;
     animation: none;
   }
-  .bp-sec,
   .store,
   .mat,
   .bp-hero,
-  .tips li {
+  .palette-row,
+  .life-list li,
+  .wish-list li,
+  .dz-grid dl,
+  .tips li,
+  .bp-wish,
+  .bp-end {
     break-inside: avoid;
     page-break-inside: avoid;
+  }
+  .bp-h3,
+  .dz-grid h4 {
+    break-after: avoid;
+    page-break-after: avoid;
   }
   .bp-hero-card .dcard-front {
     box-shadow: 0 0 0 0.5pt rgba(var(--gold-rgb), 0.8);

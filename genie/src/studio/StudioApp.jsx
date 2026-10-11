@@ -129,10 +129,8 @@ function StorageCheck({ rows, plan, talk, onPick }) {
                       <span className="srow-bar">
                         <i style={{ width: `${Math.round(pct * 100)}%` }} />
                       </span>
-                      {r.need != null && r.need > 0 && r.unit !== 'count' && (
-                        <span className="srow-need">{r.unit === 'mm' ? t('客人数的：{0}', [fmtLen(r.need)]) : t('想要 {0} 座', [r.need])}</span>
-                      )}
-                      {!ok && r.hint && <span className="srow-hint">{t('还差 {0}：{1}', [rowGap(r), t(r.hint)])}</span>}
+                      {r.need != null && r.need > 0 && r.unit !== 'count' && <span className="srow-need">{r.unit === 'mm' ? t('客人数的：{0}', [fmtLen(r.need)]) : t('想要 {0} 座', [r.need])}</span>}
+                      {!ok && r.hint && <span className="srow-hint">{t('还差 {0}。{1}', [rowGap(r), t(r.hint)])}</span>}
                     </span>
                   </button>
                 </li>
@@ -377,7 +375,7 @@ export default function StudioApp() {
       commit({ materials: { ...cur.materials, [slotId]: matId }, mood: 'custom' });
       scheduleThumbs();
     },
-    [commit, scheduleThumbs]
+    [commit, scheduleThumbs],
   );
 
   const applyMood = (id) => {
@@ -399,8 +397,7 @@ export default function StudioApp() {
     engine.current.setTime(time);
     commit({ materials, time, mood: id });
     scheduleThumbs();
-    if (safe.swaps.length)
-      flash(t('已按 {0} 的雷区避开：{1}', [who(), safe.swaps.map((s) => `${slotName(SLOT_BY_ID[s.slot])} ${L(MAT_BY_ID[s.from])} → ${L(MAT_BY_ID[s.to])}`).join(listSep())]), 4800);
+    if (safe.swaps.length) flash(t('已按 {0} 的雷区避开：{1}', [who(), safe.swaps.map((s) => `${slotName(SLOT_BY_ID[s.slot])} ${L(MAT_BY_ID[s.from])} → ${L(MAT_BY_ID[s.to])}`).join(listSep())]), 4800);
   };
 
   const timeMsg = useRef(0);
@@ -439,7 +436,7 @@ export default function StudioApp() {
         const vs = CATALOG[f.kind]?.variants;
         if (!vs) return f;
         return { ...f, variant: vs[(vs.indexOf(f.variant || vs[0]) + 1) % vs.length] };
-      })
+      }),
     );
   const addItem = (kind, clientX, clientY) => {
     const e = engine.current;
@@ -853,16 +850,7 @@ export default function StudioApp() {
       {modal === 'help' && <HelpModal onClose={() => setModal(null)} />}
       {modal === 'settings' && <SettingsModal onClose={() => setModal(null)} onQuality={onQuality} onLang={switchLang} showLang={!WISH} />}
 
-      {planDraft && (
-        <PlanEditor
-          initial={planDraft.plan}
-          underlay={planDraft.underlay}
-          autoUpload={planDraft.autoUpload}
-          onCancel={() => setPlanDraft(null)}
-          onApply={applyPlan}
-          onSettings={() => setModal('settings')}
-        />
-      )}
+      {planDraft && <PlanEditor initial={planDraft.plan} underlay={planDraft.underlay} autoUpload={planDraft.autoUpload} onCancel={() => setPlanDraft(null)} onApply={applyPlan} onSettings={() => setModal('settings')} />}
 
       {ask && <ConfirmSheet title={ask.title} body={ask.body} ok={ask.ok} onOk={() => ask.done(true)} onCancel={() => ask.done(false)} />}
 
@@ -885,11 +873,7 @@ export default function StudioApp() {
               <Icon name="refresh" size={22} />
             </span>
             <h2>{t('3D 需要重新载入')}</h2>
-            <p>
-              {ctx === 'restored'
-                ? t('3D 画面恢复了。如果看起来不对，重新载入一下就好 —— 方案已经自动保存。')
-                : t('这台设备暂时收回了图形内存（iPad 上偶尔会这样）。方案已经自动保存，重新载入就能接着做。')}
-            </p>
+            <p>{ctx === 'restored' ? t('3D 画面恢复了。如果看起来不对，重新载入一下就好 —— 方案已经自动保存。') : t('这台设备暂时收回了图形内存（iPad 上偶尔会这样）。方案已经自动保存，重新载入就能接着做。')}</p>
             <div className="m-actions">
               {ctx === 'restored' && (
                 <button type="button" className="s-btn ghost" onClick={() => setCtx(null)}>

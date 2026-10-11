@@ -231,15 +231,7 @@ export function roomLabel(r) {
 
 export function IconBtn({ icon, label, onClick, active, disabled, className = '', text, size = 18, pressed }) {
   return (
-    <button
-      type="button"
-      className={`ibtn ${active ? 'on' : ''} ${text ? 'has-text' : ''} ${className}`}
-      onClick={onClick}
-      disabled={disabled}
-      title={label}
-      aria-label={label}
-      aria-pressed={pressed}
-    >
+    <button type="button" className={`ibtn ${active ? 'on' : ''} ${text ? 'has-text' : ''} ${className}`} onClick={onClick} disabled={disabled} title={label} aria-label={label} aria-pressed={pressed}>
       <Icon name={icon} size={size} />
       {text && <span className="ibtn-text">{text}</span>}
     </button>

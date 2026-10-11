@@ -11,7 +11,34 @@ import { CATALOG } from '../engine/furniture.js';
 import { t, L, isEn } from '../../shared/i18n.js';
 import { FurnIcon, Icon, slotName } from './kit.jsx';
 
-const ADDABLE = ['sofa', 'armchair', 'coffeeTable', 'rug', 'plant', 'floorLamp', 'sideTable', 'art', 'bookshelf', 'displayCabinet', 'diningTable', 'sideboard', 'bed', 'nightstand', 'wardrobe', 'dresser', 'desk', 'island', 'tallUnit', 'shoeCabinet', 'bench', 'altar', 'petBed', 'toyStorage', 'lounger', 'featureWall'];
+const ADDABLE = [
+  'sofa',
+  'armchair',
+  'coffeeTable',
+  'rug',
+  'plant',
+  'floorLamp',
+  'sideTable',
+  'art',
+  'bookshelf',
+  'displayCabinet',
+  'diningTable',
+  'sideboard',
+  'bed',
+  'nightstand',
+  'wardrobe',
+  'dresser',
+  'desk',
+  'island',
+  'tallUnit',
+  'shoeCabinet',
+  'bench',
+  'altar',
+  'petBed',
+  'toyStorage',
+  'lounger',
+  'featureWall',
+];
 
 export default function MaterialDock({ project, slot, engine, onDrop, onAddItem, onClearSlot }) {
   const [tab, setTab] = useState('fabric');
@@ -130,58 +157,58 @@ export default function MaterialDock({ project, slot, engine, onDrop, onAddItem,
   return (
     <>
       <div className="glass dock">
-          <div className="dock-head">
-            <div className="seg seg-dock" role="tablist" aria-label={t('材质类别')}>
-              {tabs.map((c) => (
-                <button key={c.id} type="button" role="tab" aria-selected={tab === c.id} className={`${tab === c.id ? 'on' : ''} ${c.sep ? 'sep' : ''}`} onClick={() => setTab(c.id)}>
-                  <span>{c.label}</span>
-                  {c.sub && <i>{c.sub}</i>}
-                </button>
-              ))}
-            </div>
-            {slot && (
-              <span className="dock-slot">
-                <span>
-                  {t('正在换')} <b>{slotName(SLOT_BY_ID[slot])}</b>
-                </span>
-                <button type="button" onClick={onClearSlot} aria-label={t('取消')}>
-                  <Icon name="close" size={14} />
-                </button>
+        <div className="dock-head">
+          <div className="seg seg-dock" role="tablist" aria-label={t('材质类别')}>
+            {tabs.map((c) => (
+              <button key={c.id} type="button" role="tab" aria-selected={tab === c.id} className={`${tab === c.id ? 'on' : ''} ${c.sep ? 'sep' : ''}`} onClick={() => setTab(c.id)}>
+                <span>{c.label}</span>
+                {c.sub && <i>{c.sub}</i>}
+              </button>
+            ))}
+          </div>
+          {slot && (
+            <span className="dock-slot">
+              <span>
+                {t('正在换')} <b>{slotName(SLOT_BY_ID[slot])}</b>
               </span>
-            )}
-          </div>
-          <div className="dock-row" ref={row}>
-            {tab === 'furniture'
-              ? ADDABLE.filter((k) => CATALOG[k]).map((k) => (
-                  <button key={k} type="button" className="chip fur" onPointerDown={(e) => startDrag(e, { kind: k })} title={t('{0} · 拖进房间或点一下', [L(CATALOG[k])])}>
-                    <span className="sample tile">
-                      <FurnIcon kind={k} size={24} />
+              <button type="button" onClick={onClearSlot} aria-label={t('取消')}>
+                <Icon name="close" size={14} />
+              </button>
+            </span>
+          )}
+        </div>
+        <div className="dock-row" ref={row}>
+          {tab === 'furniture'
+            ? ADDABLE.filter((k) => CATALOG[k]).map((k) => (
+                <button key={k} type="button" className="chip fur" onPointerDown={(e) => startDrag(e, { kind: k })} title={t('{0} · 拖进房间或点一下', [L(CATALOG[k])])}>
+                  <span className="sample tile">
+                    <FurnIcon kind={k} size={24} />
+                  </span>
+                  <b>{L(CATALOG[k])}</b>
+                </button>
+              ))
+            : list.map((m) => {
+                const dim = slot && !fits(m.id, slot);
+                const cur = slot && project.materials[slot] === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    className={`chip sw ${used.has(m.id) ? 'used' : ''} ${cur ? 'cur' : ''} ${dim ? 'dim' : ''}`}
+                    onPointerDown={(e) => startDrag(e, { matId: m.id })}
+                    title={isEn() ? m.en : `${m.zh} · ${m.en}`}
+                    aria-label={L(m)}
+                  >
+                    <span className="sample">
+                      <img src={swatchURL(m.id, 128) || ''} alt="" draggable={false} />
+                      {used.has(m.id) && <i className="used-dot" aria-hidden="true" />}
                     </span>
-                    <b>{L(CATALOG[k])}</b>
+                    <b>{L(m)}</b>
+                    {!isEn() && <em>{m.en}</em>}
                   </button>
-                ))
-              : list.map((m) => {
-                  const dim = slot && !fits(m.id, slot);
-                  const cur = slot && project.materials[slot] === m.id;
-                  return (
-                    <button
-                      key={m.id}
-                      type="button"
-                      className={`chip sw ${used.has(m.id) ? 'used' : ''} ${cur ? 'cur' : ''} ${dim ? 'dim' : ''}`}
-                      onPointerDown={(e) => startDrag(e, { matId: m.id })}
-                      title={isEn() ? m.en : `${m.zh} · ${m.en}`}
-                      aria-label={L(m)}
-                    >
-                      <span className="sample">
-                        <img src={swatchURL(m.id, 128) || ''} alt="" draggable={false} />
-                        {used.has(m.id) && <i className="used-dot" aria-hidden="true" />}
-                      </span>
-                      <b>{L(m)}</b>
-                      {!isEn() && <em>{m.en}</em>}
-                    </button>
-                  );
-                })}
-          </div>
+                );
+              })}
+        </div>
       </div>
       {ghost && (
         <div className={`drag-ghost ${ghost.ok ? 'ok' : 'bad'}`} style={{ left: ghost.x, top: ghost.y }}>

@@ -167,7 +167,7 @@ const PW = (w, h, t, key, x, y, z, o, opt) => M(pillowGeo(w, h, t, { n: Q(12, 8)
 /** 圆角板（可倒角、开孔） */
 const SL = (w, d, t, key, x, y, z, opt = {}, o) => M(slabGeo(w, d, t, opt), key, x, y, z, o);
 /** 旋转体 */
-const LA = (profile, key, x, y, z, o, seg) => M(latheGeo(profile, seg || Q(32, 20)), key, x, y, z, o);
+const LA = (profile, key, x, y, z, o, seg) => M(latheGeo(profile, seg || Q(32, 24)), key, x, y, z, o);
 
 function group(...children) {
   const g = new THREE.Group();
@@ -490,8 +490,8 @@ function upholstered({ L, D, legH = 0.13, armW = 0.16, armH = 0.63, seatTop = 0.
     if (pillows > 1) parts.push(PW(0.42, 0.42, 0.14, 'accents', px, seatTop - 0.012, pz - 0.01, { rx: -0.2, ry: -0.22, rz: -0.06 }));
   }
   if (lumbar) parts.push(PW(0.4, 0.26, 0.12, 'accents', 0, seatTop - 0.01, -D / 2 + backT + 0.28, { rx: -0.2 }));
-  // 贵妃位上搭一条毯子
-  if (cz) parts.push(SB(chW - armW - 0.06, 0.03, 0.5, 'accents', L / 2 - armW - (chW - armW) / 2, seatTop + 0.005, D / 2 + cz - 0.32, { r: 0.012, cy: 0.006 }, { ry: 0.05 }));
+  // 贵妃位上一条叠好的毯子（斜放，一角搭出垫子前沿）
+  if (cz) parts.push(SB(0.46, 0.045, 0.3, 'accents', L / 2 - armW - (chW - armW) / 2 - 0.03, seatTop + 0.004, D / 2 + cz - 0.22, { r: 0.02, cy: 0.008, cx: 0.004, seg: 0.05 }, { ry: 0.38 }));
   // 脚
   const legs = corners(L / 2 - 0.07, D / 2 - 0.07);
   if (cz) legs.push([L / 2 - 0.07, D / 2 + cz - 0.07], [L / 2 - chW + 0.07, D / 2 + cz - 0.07]);
@@ -692,16 +692,16 @@ function shelfBooks(geos, x0, x1, y, zFront, maxH, rand, decor) {
   let x = x0;
   while (x < x1 - 0.04) {
     const k = rand();
-    if (k < 0.1) {
-      x += 0.06 + rand() * 0.1;
+    if (k < 0.14) {
+      x += 0.07 + rand() * 0.12;
       continue;
     }
-    if (k < 0.2 && x1 - x > 0.22) {
+    if (k < 0.27 && x1 - x > 0.22) {
       decor.push({ x: x + 0.1, y, k: rand() });
       x += 0.2 + rand() * 0.04;
       continue;
     }
-    if (k < 0.32 && x1 - x > 0.26) {
+    if (k < 0.39 && x1 - x > 0.26) {
       const n = 2 + Math.floor(rand() * 4);
       const sw = 0.17 + rand() * 0.06;
       let yy = y;
@@ -714,7 +714,7 @@ function shelfBooks(geos, x0, x1, y, zFront, maxH, rand, decor) {
       x += sw + 0.03;
       continue;
     }
-    const n = 4 + Math.floor(rand() * 9);
+    const n = 4 + Math.floor(rand() * 7);
     for (let i = 0; i < n && x < x1 - 0.03; i++) {
       const bw = 0.016 + rand() * 0.03;
       const bh = Math.min(maxH - 0.02, 0.17 + rand() * 0.12);

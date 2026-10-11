@@ -59,10 +59,10 @@ export default function SunArc({ time, onTime, onCommit }) {
       {sweep && <path d={sweep} className="sunarc-done" />}
       <circle cx={CX - R} cy={CY} r="2.5" className="sunarc-end" />
       <circle cx={CX + R} cy={CY} r="2.5" className="sunarc-end" />
-      <text x={CX - R} y={CY + 18} className="sunarc-lbl" textAnchor="middle">
+      <text x={CX - R - 6} y={CY + 18} className="sunarc-lbl" textAnchor="start">
         {t('日出')} {fmtTime(RISE)}
       </text>
-      <text x={CX + R} y={CY + 18} className="sunarc-lbl" textAnchor="middle">
+      <text x={CX + R + 6} y={CY + 18} className="sunarc-lbl" textAnchor="end">
         {t('日落')} {fmtTime(SET)}
       </text>
       <g transform={`translate(${x.toFixed(2)},${y.toFixed(2)})`} className="sunarc-sun">

@@ -52,6 +52,9 @@ function nearestEdge(rooms, p, maxD) {
   return best;
 }
 
+/** 一段字大约几个字宽（中文 1、拉丁字母约 0.58） */
+const emWidth = (str) => Math.max(3, [...String(str)].reduce((w, c) => w + (/[\u2E80-\u9FFF\uFF00-\uFFEF]/.test(c) ? 1 : 0.58), 0));
+
 /** 平面图的基本检查（重叠、太小），用当前语言说 */
 function issuesOf(plan) {
   const out = [];
@@ -107,7 +110,7 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
       const s = Math.max(MIN_S, Math.min(MAX_S, Math.min((W - pad) / (bb.x1 - bb.x0), (H - pad) / (bb.y1 - bb.y0))));
       setView({ s, ox: (W - (bb.x1 - bb.x0) * s) / 2 - bb.x0 * s, oy: (H - (bb.y1 - bb.y0) * s) / 2 - bb.y0 * s });
     },
-    [plan, underlay]
+    [plan, underlay],
   );
 
   useEffect(() => {
@@ -156,6 +159,13 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
     const w = Math.min(k.width, edge.b - edge.a);
     const c = Math.max(edge.a + w / 2, Math.min(edge.b - w / 2, snap(edge.along)));
     return edge.axis === 'x' ? { x1: r2(c - w / 2), x2: r2(c + w / 2), y1: edge.c, y2: edge.c } : { x1: edge.c, x2: edge.c, y1: r2(c - w / 2), y2: r2(c + w / 2) };
+  };
+
+  const addOpening = (op) => {
+    const o = { id: uid('o'), kind: tool, ...op };
+    setPlan((pl) => ({ ...pl, openings: [...pl.openings, o] }));
+    setSel({ type: 'opening', id: o.id });
+    setPreview(null);
   };
 
   // ── 上传 + AI ──
@@ -257,15 +267,14 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
       drag.current = { kind: 'draw', start: { x: snap(p.x), y: snap(p.y) } };
       setPreview({ x: snap(p.x), y: snap(p.y), w: 0, d: 0 });
     } else if (OPENING_TOOLS.includes(tool)) {
-      // 鼠标有悬停预览；手指没有 —— 直接找手指附近的墙（容差大一点）
-      const op = preview?.opening || openingAt(p, e.pointerType === 'mouse' ? 22 : 40);
-      if (op) {
-        const o = { id: uid('o'), kind: tool, ...op };
-        setPlan((pl) => ({ ...pl, openings: [...pl.openings, o] }));
-        setSel({ type: 'opening', id: o.id });
-        setPreview(null);
+      if (e.pointerType === 'mouse') {
+        // 鼠标：悬停时已经有金色预览，按下就放
+        const op = preview?.opening || openingAt(p, 22);
+        if (op) addOpening(op);
+        else drag.current = { kind: 'pan', x: e.clientX, y: e.clientY, ox: v.ox, oy: v.oy };
       } else {
-        drag.current = { kind: 'pan', x: e.clientX, y: e.clientY, ox: v.ox, oy: v.oy };
+        // 手指 / 笔：没有悬停 —— 松手时才放（这期间第二根手指放上来 = 捏合，不放门窗；拖动 = 平移）
+        drag.current = { kind: 'tapOpening', start: p, x: e.clientX, y: e.clientY, ox: v.ox, oy: v.oy };
       }
     } else if (tool === 'calibrate') {
       if (!calib || calib.p2) setCalib({ p1: p, p2: null, len: '' });
@@ -306,6 +315,10 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
       }
       return;
     }
+    if (d.kind === 'tapOpening') {
+      if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 10) drag.current = { ...d, kind: 'pan' };
+      return;
+    }
     if (d.kind === 'pan') setView((v) => ({ ...v, ox: d.ox + e.clientX - d.x, oy: d.oy + e.clientY - d.y }));
     else if (d.kind === 'draw') {
       const x0 = d.start.x;
@@ -317,8 +330,14 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
       let x = snap(d.orig.x + p.x - d.start.x);
       let y = snap(d.orig.y + p.y - d.start.y);
       const others = plan.rooms.filter((r) => r.id !== d.id);
-      x += snapEdges([x, x + d.orig.w], others.flatMap((r) => [r.x, r.x + r.w]));
-      y += snapEdges([y, y + d.orig.d], others.flatMap((r) => [r.y, r.y + r.d]));
+      x += snapEdges(
+        [x, x + d.orig.w],
+        others.flatMap((r) => [r.x, r.x + r.w]),
+      );
+      y += snapEdges(
+        [y, y + d.orig.d],
+        others.flatMap((r) => [r.y, r.y + r.d]),
+      );
       updateRoom(d.id, { x: r2(x), y: r2(y) });
     } else if (d.kind === 'resize') {
       const o = d.orig;
@@ -378,6 +397,11 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
     // 系统打断（来电、手势）：拖到一半的东西复原
     if (e.type === 'pointercancel') {
       revertDrag(d);
+      return;
+    }
+    if (d?.kind === 'tapOpening') {
+      const op = openingAt(d.start, 40);
+      if (op) addOpening(op);
       return;
     }
     if (d?.kind === 'draw' && preview && preview.w >= 0.6 && preview.d >= 0.6) {
@@ -562,23 +586,40 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
             <g transform={`translate(${view.ox},${view.oy}) scale(${view.s})`}>
               <g className="grid">{grid}</g>
               {underlay && <image href={underlay.src} x={underlay.x} y={underlay.y} width={underlay.w} height={underlay.h} opacity={underlay.opacity ?? 0.55} preserveAspectRatio="none" />}
-              {plan.rooms.map((r) => (
-                <g key={r.id}>
-                  <rect data-kind="room" data-id={r.id} x={r.x} y={r.y} width={r.w} height={r.d} fill={ROOM_TYPES[r.type]?.color || 'var(--bg-deep)'} className={`pe-room ${room?.id === r.id ? 'on' : ''}`} strokeWidth={sw * (room?.id === r.id ? 2.5 : 1)} />
-                  <text x={r.x + r.w / 2} y={r.y + r.d / 2} fontSize={Math.min(14 * sw, r.w / 5)} textAnchor="middle" className="pe-label">
-                    {roomLabel(r)}
-                  </text>
-                  <text x={r.x + r.w / 2} y={r.y + r.d / 2 + 16 * sw} fontSize={Math.min(11 * sw, r.w / 6)} textAnchor="middle" className="pe-dim">
-                    {r.w.toFixed(2)} × {r.d.toFixed(2)} m
-                  </text>
-                </g>
-              ))}
+              {plan.rooms.map((r) => {
+                const label = roomLabel(r);
+                const dims = `${r.w.toFixed(2)} × ${r.d.toFixed(2)} m`;
+                // 字号跟着房间宽度走：英文名长，小房间里也要放得下
+                const fs = Math.min(14 * sw, (r.w * 0.86) / emWidth(label), r.d / 3.2);
+                const fd = Math.min(11 * sw, (r.w * 0.86) / emWidth(dims), r.d / 4.5);
+                return (
+                  <g key={r.id}>
+                    <rect
+                      data-kind="room"
+                      data-id={r.id}
+                      x={r.x}
+                      y={r.y}
+                      width={r.w}
+                      height={r.d}
+                      fill={ROOM_TYPES[r.type]?.color || 'var(--bg-deep)'}
+                      className={`pe-room ${room?.id === r.id ? 'on' : ''}`}
+                      strokeWidth={sw * (room?.id === r.id ? 2.5 : 1)}
+                    />
+                    <text x={r.x + r.w / 2} y={r.y + r.d / 2} fontSize={fs} textAnchor="middle" className="pe-label">
+                      {label}
+                    </text>
+                    <text x={r.x + r.w / 2} y={r.y + r.d / 2 + fs * 0.6 + fd * 1.1} fontSize={fd} textAnchor="middle" className="pe-dim">
+                      {dims}
+                    </text>
+                  </g>
+                );
+              })}
               {/* 墙 + 门窗（由房间自动生成） */}
               {walls.map((w) =>
                 w.pieces.map((p, i) => {
                   const [x1, y1, x2, y2] = w.axis === 'x' ? [p.a, w.c, p.b, w.c] : [w.c, p.a, w.c, p.b];
                   return <line key={`${w.id}-${i}`} x1={x1} y1={y1} x2={x2} y2={y2} className={`pe-wall k-${p.kind}`} strokeWidth={p.kind === 'solid' ? w.t : p.kind === 'open' ? 2 * sw : w.t * 0.6} pointerEvents="none" />;
-                })
+                }),
               )}
               {plan.openings.map((o) => (
                 <line key={o.id} data-kind="opening" data-id={o.id} x1={o.x1} y1={o.y1} x2={o.x2} y2={o.y2} className={`pe-open-hit ${opening?.id === o.id ? 'on' : ''}`} strokeWidth={Math.max(0.25, 18 * sw)} />
