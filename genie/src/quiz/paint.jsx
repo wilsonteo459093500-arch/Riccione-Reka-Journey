@@ -594,56 +594,78 @@ function Siguniang({ u }) {
 
 // ───────────────────────── 瓜拉雪兰莪：暮色里的红树林与萤火 ─────────────────────────
 function KualaSelangor({ u }) {
-  const water = 600;
-  const leftTop = [
-    [-60, 330],
-    [80, 300],
-    [220, 330],
-    [360, 380],
-    [470, 450],
-    [540, 560],
-  ];
-  const rightTop = [
-    [920, 560],
-    [1000, 460],
-    [1120, 380],
-    [1260, 330],
-    [1400, 310],
-    [1500, 330],
-  ];
-  const cl = lumps(101, leftTop, { step: 40, r0: 30, r1: 60, lift: 26, x0: -60, x1: 540 });
-  const cr = lumps(102, rightTop, { step: 40, r0: 30, r1: 62, lift: 26, x0: 920, x1: 1500 });
+  const water = 618;
+  // 两岸的红树林：后面一排淡一点，前面一排深一点；树冠是很多小团，顶比较平
+  const bank = (seed, x0, x1, top, slope, rows) => {
+    const r = rng(seed);
+    const out = [];
+    rows.forEach(([lift, rMin, rMax, step], ri) => {
+      for (let x = x0; x <= x1; x += step * (0.6 + r() * 0.7)) {
+        const t = (x - x0) / (x1 - x0);
+        const y = top + slope * t + lift + (r() - 0.5) * 26;
+        out.push([x, y, rMin + r() * (rMax - rMin), ri]);
+      }
+    });
+    return out;
+  };
+  const L1 = bank(101, -80, 560, 330, 230, [
+    [-20, 26, 46, 30],
+    [40, 22, 40, 26],
+    [110, 18, 34, 22],
+  ]);
+  const R1 = bank(102, 1520, 900, 310, 250, [
+    [-20, 26, 48, 30],
+    [40, 22, 40, 26],
+    [110, 18, 34, 22],
+  ]);
   const r = rng(103);
   const ff = [];
-  const sprinkle = (lumpsArr, n) => {
+  const sprinkle = (arr, n) => {
     for (let i = 0; i < n; i++) {
-      const [x, y, rr] = lumpsArr[Math.floor(r() * lumpsArr.length)];
-      ff.push([x + (r() - 0.5) * rr * 1.6, y + (r() - 0.3) * rr * 1.4, 1.2 + r() * 2.2, r()]);
+      const [x, y, rr] = arr[Math.floor(r() * arr.length)];
+      ff.push([x + (r() - 0.5) * rr * 1.6, y + (r() - 0.4) * rr * 1.2, 1.1 + r() * 2, r()]);
     }
   };
-  sprinkle(cl, 70);
-  sprinkle(cr, 70);
-  const stars = [...Array(26)].map(() => [r() * W, r() * 300, 0.6 + r() * 1.2, 0.25 + r() * 0.5]);
+  sprinkle(L1, 80);
+  sprinkle(R1, 80);
+  const stars = [...Array(30)].map(() => [r() * W, r() * 320, 0.6 + r() * 1.1, 0.2 + r() * 0.5]);
   const roots = (x0, x1, seed) => {
     const rr = rng(seed);
-    return [...Array(26)].map(() => {
+    return [...Array(34)].map(() => {
       const x = x0 + rr() * (x1 - x0);
-      return `M${f1(x)} ${f1(water - 70 - rr() * 60)} q${f1((rr() - 0.5) * 40)} ${f1(40 + rr() * 30)} ${f1((rr() - 0.5) * 30)} ${f1(80 + rr() * 30)}`;
+      const y0 = water - 30 - rr() * 70;
+      return `M${f1(x)} ${f1(y0)} q${f1((rr() - 0.5) * 34)} ${f1(26 + rr() * 22)} ${f1((rr() - 0.5) * 26)} ${f1(water - y0 + 6)}`;
     });
   };
+  // 余晖在水面上：一串长短不一的碎光，不是一整块
+  const shimmer = [...Array(26)].map((_, i) => {
+    const y = water + 10 + i * i * 0.62 + i * 6;
+    const w = (40 + r() * 120) * (1 - i / 34);
+    const x = 720 + (r() - 0.5) * 60 * (1 + i / 10) - w / 2;
+    return [x, y, w, 0.25 + 0.5 * (1 - i / 26) * r()];
+  });
+  const canopy = (arr, row, fill) => (
+    <g fill={fill}>
+      {arr
+        .filter((c) => c[3] === row)
+        .map(([x, y, rr], i) => (
+          <ellipse key={i} cx={f1(x)} cy={f1(y)} rx={f1(rr * 1.25)} ry={f1(rr * 0.85)} />
+        ))}
+    </g>
+  );
   return (
     <>
       <defs>
-        <Sky id={`${u}s`} stops={[[0, '#17201C'], [0.38, '#22302A'], [0.52, '#3A4036'], [0.6, '#6E5B40'], [0.64, '#8A6B45']]} />
+        <Sky id={`${u}s`} stops={[[0, '#151D19'], [0.36, '#1F2B25'], [0.5, '#2F3830'], [0.58, '#5A5039'], [0.618, '#7E6443']]} />
         <linearGradient id={`${u}w`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#3C3A2E" />
-          <stop offset=".25" stopColor="#24302A" />
-          <stop offset="1" stopColor="#161E1A" />
+          <stop offset="0" stopColor="#3A3729" />
+          <stop offset=".18" stopColor="#25302A" />
+          <stop offset="1" stopColor="#131B17" />
         </linearGradient>
-        <linearGradient id={`${u}glint`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#C89A5C" stopOpacity=".55" />
+        <radialGradient id={`${u}glow`} cx="50%" cy="0%" r="60%">
+          <stop offset="0" stopColor="#C89A5C" stopOpacity=".45" />
           <stop offset="1" stopColor="#C89A5C" stopOpacity="0" />
-        </linearGradient>
+        </radialGradient>
         <radialGradient id={`${u}ff`}>
           <stop offset="0" stopColor="#FFF6D8" />
           <stop offset=".4" stopColor="#E9D29A" stopOpacity=".9" />
@@ -654,45 +676,45 @@ function KualaSelangor({ u }) {
       {stars.map(([x, y, rr, o], i) => (
         <circle key={i} cx={f1(x)} cy={f1(y)} r={f1(rr)} fill="#F1ECE2" opacity={f1(o)} />
       ))}
-      {/* 远处的林线 */}
-      <path d={fillDown(ridgePts(104, water - 14, 8, 14), water + 4)} fill="#141B17" />
+      {/* 远处低低的林线 */}
+      <path d={fillDown(ridgePts(104, water - 12, 7, 16), water + 2)} fill="#18201B" />
       <rect x="-60" y={water} width={W + 120} height={H - water} fill={`url(#${u}w)`} />
-      {/* 余晖在水面上的一道光 */}
-      <path d={`M640 ${water} L800 ${water} L900 ${H} L540 ${H} Z`} fill={`url(#${u}glint)`} opacity=".7" />
-      <g stroke="#D9AE6E" strokeLinecap="round" opacity=".5">
-        <path d={`M660 ${water + 18} h120 M630 ${water + 52} h170 M600 ${water + 100} h220 M640 ${water + 160} h150 M580 ${water + 230} h260 M620 ${water + 320} h180`} strokeWidth="2" />
-      </g>
-      {/* 红树林 + 气根 */}
-      <g fill="#111915">
-        {cl.map(([x, y, rr], i) => (
-          <circle key={i} cx={f1(x)} cy={f1(y)} r={f1(rr)} />
-        ))}
-        <path d={`${curve(leftTop)} L540 ${water - 40} L-60 ${water - 40} Z`} />
-        {cr.map(([x, y, rr], i) => (
-          <circle key={`r${i}`} cx={f1(x)} cy={f1(y)} r={f1(rr)} />
-        ))}
-        <path d={`${curve(rightTop)} L1500 ${water - 40} L920 ${water - 40} Z`} />
-      </g>
-      <g stroke="#111915" strokeWidth="3" fill="none" strokeLinecap="round">
-        {roots(-40, 520, 105).map((d, i) => (
-          <path key={i} d={d} />
-        ))}
-        {roots(930, 1480, 106).map((d, i) => (
-          <path key={`b${i}`} d={d} />
+      <ellipse cx="720" cy={water} rx="420" ry="160" fill={`url(#${u}glow)`} />
+      <g fill="#D9AE6E">
+        {shimmer.map(([x, y, w, o], i) => (
+          <rect key={i} x={f1(x)} y={f1(y)} width={f1(w)} height={f1(1.4 + i * 0.12)} rx="1" opacity={f1(o)} />
         ))}
       </g>
       {/* 倒影 */}
-      <g transform={`translate(0 ${water * 2}) scale(1 -1)`} opacity=".35" fill="#0E1512">
-        {cl.map(([x, y, rr], i) => (
-          <circle key={i} cx={f1(x)} cy={f1(y)} r={f1(rr)} />
+      <g transform={`translate(0 ${water * 2}) scale(1 -1)`} opacity=".32">
+        {canopy(L1, 0, '#0F1612')}
+        {canopy(R1, 0, '#0F1612')}
+      </g>
+      {/* 红树林：后排 → 前排 */}
+      {canopy(L1, 0, '#1A241E')}
+      {canopy(R1, 0, '#1A241E')}
+      {canopy(L1, 1, '#141C17')}
+      {canopy(R1, 1, '#141C17')}
+      {canopy(L1, 2, '#0F1511')}
+      {canopy(R1, 2, '#0F1511')}
+      <path d={`M-80 ${water - 60} L560 ${water - 30} L560 ${water} L-80 ${water} Z`} fill="#0F1511" />
+      <path d={`M900 ${water - 30} L1520 ${water - 60} L1520 ${water} L900 ${water} Z`} fill="#0F1511" />
+      <g stroke="#0F1511" strokeWidth="2.6" fill="none" strokeLinecap="round">
+        {roots(-40, 560, 105).map((d, i) => (
+          <path key={i} d={d} />
         ))}
-        {cr.map(([x, y, rr], i) => (
-          <circle key={`r${i}`} cx={f1(x)} cy={f1(y)} r={f1(rr)} />
+        {roots(900, 1480, 106).map((d, i) => (
+          <path key={`b${i}`} d={d} />
         ))}
       </g>
-      {/* 小舢舨 */}
-      <path d={`M640 ${water + 150} q60 22 150 0 l-14 14 q-60 12 -122 0 Z`} fill="#0D1310" />
-      <path d={`M712 ${water + 150} l0 -34`} stroke="#0D1310" strokeWidth="3" />
+      {/* 小舢舨和撑篙的人 */}
+      <g fill="#0C110E">
+        <path d={`M600 ${water + 136} q70 16 160 0 q-8 14 -24 18 q-56 9 -112 0 q-16 -4 -24 -18 Z`} />
+        <path d={`M676 ${water + 136} q-2 -16 4 -22 q6 -6 12 0 q4 6 2 22 Z`} />
+        <circle cx="685" cy={water + 106} r="6" />
+      </g>
+      <path d={`M700 ${water + 92} L752 ${water + 196}`} stroke="#0C110E" strokeWidth="2.4" strokeLinecap="round" />
+      <path d={`M612 ${water + 158} q68 10 136 0`} stroke="#C89A5C" strokeWidth="1.2" fill="none" opacity=".35" />
       {/* 停在树上的萤火（两组交替呼吸） */}
       <g className="ff-tree ff-a">
         {ff.filter((_, i) => i % 2 === 0).map(([x, y, rr], i) => (

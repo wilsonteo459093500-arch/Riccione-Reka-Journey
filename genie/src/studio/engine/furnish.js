@@ -708,6 +708,13 @@ function kitchen(L, rc, ctx) {
     break;
   }
   if (!main) return;
+  // 电器高柜：对面墙优先，再其它墙；前面留 1m
+  if (ctx.applianceTall) {
+    const oppo = opposite(sides, main);
+    const order = [oppo, ...sides.filter((s) => s !== main && s !== oppo && s !== legSide)].filter((s) => s?.walled);
+    const h = Math.min(2.4, ctx.wallH - 0.1);
+    for (const s of order) if (s.stretches.some((st) => hug(L, rc, s, st, 'tallUnit', { d: 0.6, minW: 0.6, maxW: 0.6, front: 1.0, prefer: 'a', extra: () => ({ h }) }))) break;
+  }
   // 岛台：四周走道 1.05m（天天爆炒 1.2m），不压门口 / 通道
   if (room.w >= 3.6 && room.d >= 3.6) {
     const m = ctx.cook === 'heavy' ? 1.2 : 1.05;
@@ -718,13 +725,6 @@ function kitchen(L, rc, ctx) {
     for (let dx = -0.6; dx <= 0.6 + 1e-9; dx += 0.1) for (let dz = -0.6; dz <= 0.6 + 1e-9; dz += 0.1) pts.push({ x: cx + dx, z: cz + dz });
     pts.sort((p, q) => Math.hypot(p.x - cx, p.z - cz) - Math.hypot(q.x - cx, q.z - cz));
     for (const p of pts) if (L.try(room, 'island', { ...p, rot: SIDE_ROT[main.side] }, 1.8, 0.9, {}, { margin: m, strict: true })) break;
-  }
-  // 电器高柜：对面墙优先，再其它墙；前面留 1m
-  if (ctx.applianceTall) {
-    const oppo = opposite(sides, main);
-    const order = [oppo, ...sides.filter((s) => s !== main && s !== oppo && s !== legSide)].filter((s) => s?.walled);
-    const h = Math.min(2.4, ctx.wallH - 0.1);
-    for (const s of order) if (s.stretches.some((st) => hug(L, rc, s, st, 'tallUnit', { d: 0.6, minW: 0.6, maxW: 0.6, front: 1.0, prefer: 'a', extra: () => ({ h }) }))) break;
   }
   void inner;
 }
