@@ -1337,8 +1337,8 @@
   overscroll-behavior-x: contain;
   padding: 14px 8px 8px;
   scrollbar-width: none;
-  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 22px), transparent 100%);
-  mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 22px), transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, black 14px, black calc(100% - 22px), transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, black 14px, black calc(100% - 22px), transparent 100%);
 }
 .dock-row::-webkit-scrollbar {
   display: none;
@@ -2715,7 +2715,7 @@
 }
 
 /* 宽屏、面板收起时：左下角留一个小字标 */
-@media (min-width: 1024px) {
+@media (min-width: 1280px) {
   .panels-closed .foot {
     display: block;
   }
