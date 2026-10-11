@@ -21,9 +21,18 @@ Rules:
 - "footprint" = outer boundary of the unit's walls. overall_width_mm / overall_depth_mm = total outside dimensions read from the dimension strings along the plan edges (null if not printed).
 - Room boxes follow wall centre lines, tile the footprint and must not overlap. Split an L-shaped room into two rectangles of the same type.
 - Living and dining usually share one open space: return two adjacent rectangles (living, dining).
-- Mapping: Master / Bedroom 1 → master; other bedrooms → bedroom; WC / toilet / bath → bath; yard / service / laundry → utility; WIR / walk-in → walkin; car porch / balcony / terrace → balcony; store → store; entrance / lobby → foyer; dry / wet kitchen → kitchen.
+- Mapping: Master / Bedroom 1 → master; other bedrooms → bedroom; WC / toilet / bath → bath; yard / service / laundry / drying → utility; WIR / walk-in → walkin; car porch / porch / front yard → porch; balcony / terrace → balcony; store → store; entrance / lobby → foyer; dry / wet kitchen → kitchen.
 - Door box = the opening gap in the wall (not the swing arc). Window box = the window segment on an external wall. full_height = true for sliding / balcony doors.
 - Ignore furniture, text blocks, title blocks, north arrows and dimension lines.`;
+
+/** 模型给的房间类型 → ROOM_TYPES；没给 / 给错的按名字猜（车廊、晒衣处这些马来西亚常见叫法） */
+export function roomTypeOf(type, label = '') {
+  const l = String(label || '').toLowerCase();
+  if (/porch|anjung|car\s*park|front\s*yard|车廊|前院/.test(l)) return 'porch';
+  if (/yard|service|laundry|drying|dobi|晒衣|工作阳台/.test(l)) return 'utility';
+  if (ROOM_TYPES[type]) return type;
+  return 'bedroom';
+}
 
 function friendly(status, msg) {
   if (status === 400 && /api key/i.test(msg || '')) return 'API key 无效，请到设置里检查。';
@@ -122,7 +131,7 @@ export function convertDetection(j, image, hint = {}) {
   const rooms = (j.rooms || [])
     .filter((r) => Array.isArray(r.box) && r.box.length === 4)
     .map((r) => {
-      const t = ROOM_TYPES[r.type] ? r.type : 'bedroom';
+      const t = roomTypeOf(r.type, r.label);
       const m = toM(r.box);
       return { id: uid('r'), type: t, name: (r.label || ROOM_TYPES[t].zh).slice(0, 16), x: m.x, y: m.y, w: Math.max(0.8, m.w), d: Math.max(0.8, m.d) };
     })

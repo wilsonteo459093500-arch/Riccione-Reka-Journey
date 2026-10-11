@@ -7,6 +7,7 @@ const SUNRISE = 7.15;
 const SUNSET = 19.3;
 
 // hour, zenith, horizon, ground(地面反光), sun, bgSky(背景窗外), bgRoom(背景室内暗部)
+// 内容色（光照），不随 VI 换色
 const KEYS = [
   [0, '#1A2A44', '#2E4050', '#141814', '#9FB4D8', '#1E2C33', '#0E1311'],
   [5.6, '#22304C', '#46505E', '#181814', '#A9BCDD', '#2C3640', '#121613'],

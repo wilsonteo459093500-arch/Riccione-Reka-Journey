@@ -1139,6 +1139,7 @@ const HINTS = {
   books: '书墙不够：书房、走廊或电视墙两侧再做一段',
   counter: '台面不够放台面家电：电器做进高柜，或加一个家电收纳柜',
   dining: '椅子后面不够 900mm 通行：先摆小一号的桌，节日用可伸缩圆桌加折叠椅',
+  altar: '没有合适的墙放神台（背后不能是浴室 / 厨房，也不在大门那面墙）：见面再定位置',
 };
 
 /**
@@ -1213,6 +1214,11 @@ export function furnishReport(plan, walls, profile = null, items = null) {
       const want = diningWant(ctx);
       add({ key: 'dining', kind: 'diningTable', room: list[0]?.room ?? ofType('dining')[0]?.id, unit: 'seats', need: profile ? want : null, target: want, placed: list.reduce((t, i) => t + (i.seats || 0), 0), hint: HINTS.dining, items: list });
     }
+  }
+  // 神台（不是收纳，但放不下要让设计师知道）
+  if (ctx.altar) {
+    const list = its.filter((i) => i.kind === 'altar');
+    add({ key: 'altar', kind: 'altar', room: list[0]?.room, unit: 'count', need: 1, target: 1, placed: list.length, hint: HINTS.altar, items: list });
   }
   return rows;
 }

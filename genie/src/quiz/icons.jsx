@@ -15,6 +15,7 @@ import {
   Camera,
   ChefHat,
   Coffee,
+  Compass,
   CookingPot,
   Croissant,
   CupSoda,
@@ -88,7 +89,7 @@ export const ICONS = {
   home: { drop: Footprints, tidy: Archive, flop: Sofa, fridge: Refrigerator },
   cook: { heavy: Flame, light: Salad, coffee: Coffee, rare: ShoppingBag },
   bell: { shoes: Footprints, table: Newspaper, clothes: Shirt, counter: Milk, toys: ToyBrick, nothing: Smile },
-  who: { baby: Baby, kids: Backpack, teen: GraduationCap, elder: HeartHandshake, dog: Dog, cat: Cat, helper: HandHelping, guests: Luggage, wfh: Laptop, altar: Flower2 },
+  who: { baby: Baby, kids: Backpack, teen: GraduationCap, elder: HeartHandshake, dog: Dog, cat: Cat, helper: HandHelping, guests: Luggage, wfh: Laptop, altar: Flower2, fengshui: Compass },
   // 宝藏之牌
   appliances: {
     ricecooker: CookingPot,
