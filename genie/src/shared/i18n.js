@@ -1,4 +1,4 @@
-// 中英双语。中文原文就是 key（像 gettext）：t('开始占卜') 在中文模式原样返回，英文模式查 i18n/en.js。
+// 中英双语。中文原文就是 key（像 gettext）：t('开始许愿') 在中文模式原样返回，英文模式查 i18n/en.js。
 //
 // 换语言 = 存到本机 + 重新载入页面：许愿进度在 sessionStorage、3D 方案在 localStorage，载入后接着来。
 // 这样资料文件（flow.js、dreamers.js…）里的中文也能在载入时一次翻好，不用到处改。
