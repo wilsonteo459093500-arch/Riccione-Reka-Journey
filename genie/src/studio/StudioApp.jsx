@@ -591,6 +591,12 @@ export default function StudioApp() {
   };
   const pressEnd = () => clearTimeout(lp.current);
 
+  // 退出展厅：日光小图在展厅里没画（省电），现在补上
+  useEffect(() => {
+    if (!showroom && ready) scheduleThumbs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showroom]);
+
   // 展厅里画布被收回：几秒后自己重新载入（没人看着大屏）
   useEffect(() => {
     if (!ctx || !showroom) return;

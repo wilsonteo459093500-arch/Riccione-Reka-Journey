@@ -388,7 +388,7 @@ function slippers(x, z, ry = 0, key = 'accents') {
 function panel(w, h, cx, y, zBack, key, { t = 0.018, handle = 'none', side = 0, hy, fluted = false } = {}) {
   const out = [];
   const zc = zBack + t / 2;
-  if (fluted) out.push(M(flutedGeo(w, h, t, 0.022), key, cx, y, zc));
+  if (fluted) out.push(M(flutedGeo(w, h, t, typeof fluted === 'number' ? fluted : 0.022), key, cx, y, zc));
   else out.push(B(w, h, t, key, cx, y, zc, 0.003));
   const zf = zBack + t;
   const hx = cx + side * (w / 2 - 0.045);
@@ -567,7 +567,7 @@ function coffeeTable({ variant = 'round', w = 1.0, d = 0.6 }) {
       LA([[0, 0], [R - 0.012, 0], [R - 0.002, 0.006], [R, 0.016], [R, 0.026], [R - 0.004, 0.036], [R - 0.014, 0.04], [0, 0.04]], 'woodwork', 0, 0.36, 0, {}, Q(64, 40)),
       LA([[0, 0], [0.27, 0], [0.275, 0.008], [0.255, 0.12], [0.24, 0.36], [0, 0.36]], 'woodwork', 0, 0, 0, {}, Q(48, 32)),
       bookStack(0.12, 0.4, -0.08, 2, rand, { w: 0.24, d: 0.17, ry: 0.35 }),
-      vase(-0.16, 0.4, 0.1, { h: 0.12, r: 0.075, key: 'porcelain', style: 'bowl' })
+      vase(-0.17, 0.4, 0.1, { h: 0.065, r: 0.11, key: 'porcelain', style: 'bowl' })
     );
   }
   if (variant === 'stone')
@@ -810,7 +810,7 @@ function plant({ variant = 'tall', seed = 3 }) {
     const list = [];
     if (seed % 2) {
       // 虎尾兰：直立的剑形叶
-      const n = Q(11, 8);
+      const n = Q(13, 10);
       for (let i = 0; i < n; i++) {
         const a = i * 2.39996 + rand() * 0.5;
         const off = 0.015 + rand() * 0.05;
@@ -818,15 +818,15 @@ function plant({ variant = 'tall', seed = 3 }) {
       }
       parts.push(leafMesh('sword', list, 'leaf', { fold: 0.14, curl: 0.03, nz: 8, nx: 1 }));
     } else {
-      // 圆叶椒草：一团小圆叶，几片垂过盆沿
-      const n = Q(28, 18);
+      // 圆叶椒草：叶柄从土里长出、一圈圈张开成一丛（外圈低、里圈高）
+      const n = Q(30, 20);
       for (let i = 0; i < n; i++) {
-        const a = i * 2.39996;
-        const el = 0.15 + rand() * 1.2;
-        const rr = 0.04 + rand() * 0.07;
-        list.push({ x: Math.sin(a) * rr * Math.cos(el), y: pot.top + 0.015 + Math.sin(el) * 0.1, z: Math.cos(a) * rr * Math.cos(el), yaw: a, pitch: el * 0.5 - 0.35, roll: (rand() - 0.5) * 0.6, len: 0.07 + rand() * 0.035, c: tint(rand, LEAF_G, 0.22) });
+        const a = i * 2.39996 + rand() * 0.3;
+        const k = i / n;
+        const off = 0.008 + rand() * 0.02;
+        list.push({ x: Math.sin(a) * off, y: pot.top + 0.004 + (1 - k) * 0.05 * rand(), z: Math.cos(a) * off, yaw: a, pitch: 0.2 + (1 - k) * 0.9 + rand() * 0.25, roll: (rand() - 0.5) * 0.5, len: 0.1 + rand() * 0.05, c: tint(rand, LEAF_G, 0.22) });
       }
-      parts.push(leafMesh('round', list, 'leaf', { fold: 0.08, curl: 0.1, nz: 6 }));
+      parts.push(leafMesh('round', list, 'leaf', { fold: 0.08, curl: 0.16, nz: 7 }));
     }
     return group(parts);
   }
@@ -863,14 +863,15 @@ function plant({ variant = 'tall', seed = 3 }) {
     ];
     parts.push(M(tubeGeo(trunk, 0.016, { seg: 16, radial: 6 }), 'bark', 0, top, 0));
     const list = [];
-    const n = Q(44, 28);
+    const n = Q(58, 42);
     for (let i = 0; i < n; i++) {
-      const t = 0.32 + 0.68 * Math.pow(i / n, 0.8);
+      const t = 0.4 + 0.6 * Math.pow(i / n, 0.85);
       const a = i * 2.39996 + rand() * 0.5;
-      const len = 0.19 + rand() * 0.12;
-      list.push({ x: Math.sin(a) * 0.015, y: top + H * t, z: Math.cos(a) * 0.015, yaw: a, pitch: 0.1 + rand() * 0.6 + (t > 0.92 ? 0.5 : 0), roll: (rand() - 0.5) * 0.9, len, c: tint(rand, [0.78, 0.95, 0.78]) });
+      const len = 0.2 + rand() * 0.1;
+      const off = 0.012 + rand() * 0.02;
+      list.push({ x: Math.sin(a) * off, y: top + H * t, z: Math.cos(a) * off, yaw: a, pitch: -0.1 + rand() * 0.55 + (t > 0.94 ? 0.6 : 0), roll: (rand() - 0.5) * 0.7, len, wid: 1.12, c: tint(rand, [0.74, 0.92, 0.74]) });
     }
-    parts.push(leafMesh('fig', list, 'leaf', { fold: 0.1, curl: 0.16, wave: 0.025 }));
+    parts.push(leafMesh('fig', list, 'leaf', { fold: 0.08, curl: 0.2, wave: 0.03 }));
   } else {
     // 橄榄树：分叉的细干，细长灰绿小叶成团
     const H = 1.15;
@@ -879,24 +880,24 @@ function plant({ variant = 'tall', seed = 3 }) {
       [0.02, H * 0.35, 0.01],
       [-0.01, H * 0.6, 0.02],
     ];
-    parts.push(M(tubeGeo(trunk, 0.018, { seg: 12, radial: 6 }), 'bark', 0, top, 0));
+    parts.push(M(tubeGeo(trunk, 0.013, { seg: 12, radial: 6 }), 'bark', 0, top, 0));
     const tips = [];
     for (let b = 0; b < 3; b++) {
       const a = b * 2.1 + rand() * 0.6;
-      const end = [Math.sin(a) * (0.16 + rand() * 0.08), H * (0.88 + rand() * 0.2), Math.cos(a) * (0.16 + rand() * 0.08)];
+      const end = [Math.sin(a) * (0.12 + rand() * 0.06), H * (0.88 + rand() * 0.2), Math.cos(a) * (0.12 + rand() * 0.06)];
       const pts = [trunk[2], [end[0] * 0.5 + trunk[2][0] * 0.5, (end[1] + trunk[2][1]) / 2 + 0.04, end[2] * 0.5 + trunk[2][2] * 0.5], end];
-      parts.push(M(tubeGeo(pts.map((p) => p.map((v) => +v.toFixed(3))), 0.009, { seg: 10, radial: 5 }), 'bark', 0, top, 0));
+      parts.push(M(tubeGeo(pts.map((p) => p.map((v) => +v.toFixed(3))), 0.007, { seg: 10, radial: 5 }), 'bark', 0, top, 0));
       tips.push(end, pts[1]);
     }
     const list = [];
-    const n = Q(170, 100);
+    const n = Q(280, 170);
     for (let i = 0; i < n; i++) {
       const c = tips[i % tips.length];
       const big = i % tips.length % 2 === 0;
-      const rr = (big ? 0.17 : 0.11) * Math.cbrt(rand());
+      const rr = (big ? 0.17 : 0.11) * (0.5 + 0.5 * Math.cbrt(rand()));
       const u = rand() * Math.PI * 2;
       const v = Math.acos(2 * rand() - 1);
-      list.push({ x: c[0] + rr * Math.sin(v) * Math.cos(u), y: top + c[1] + rr * Math.cos(v) * 0.75, z: c[2] + rr * Math.sin(v) * Math.sin(u), yaw: rand() * Math.PI * 2, pitch: -0.4 + rand() * 1.1, roll: (rand() - 0.5) * 1.2, len: 0.055 + rand() * 0.03, c: tint(rand, [0.74, 0.84, 0.72], 0.2) });
+      list.push({ x: c[0] + rr * Math.sin(v) * Math.cos(u), y: top + c[1] + rr * Math.cos(v) * 0.75, z: c[2] + rr * Math.sin(v) * Math.sin(u), yaw: rand() * Math.PI * 2, pitch: -0.4 + rand() * 1.1, roll: (rand() - 0.5) * 1.2, len: 0.065 + rand() * 0.03, c: tint(rand, [0.74, 0.84, 0.72], 0.2) });
     }
     parts.push(leafMesh('olive', list, 'leaf2', { fold: 0.12, curl: 0.08, nz: 5, nx: 1 }));
   }
@@ -1081,7 +1082,7 @@ function sideboard({ w = 1.8 }) {
   const zF = D / 2 - 0.018;
   return group(
     B(w, H, D - 0.018, 'cabinetry', 0, y0, -0.009, 0.003),
-    doorRow(-w / 2 + 0.006, w / 2 - 0.006, y0 + 0.006, y0 + H - 0.006, zF, 'cabinetry', { maxW: 0.48, fluted: true, handle: 'knob', hy: y0 + H * 0.55 }),
+    doorRow(-w / 2 + 0.006, w / 2 - 0.006, y0 + 0.006, y0 + H - 0.006, zF, 'cabinetry', { maxW: 0.48, fluted: 0.032, t: 0.022, handle: 'knob', hy: y0 + H * 0.55 }),
     squareLegs(corners(w / 2 - 0.06, D / 2 - 0.06), y0, 'metal', 0.026, 0.02),
     vase(-w / 3, y0 + H, 0, { h: 0.34, r: 0.09, key: 'pot', style: 'amphora' }),
     branches(-w / 3, y0 + H + 0.31, 0, rand, { n: 4, h: 0.5, spread: 0.2 }),
@@ -1654,11 +1655,11 @@ function lounger() {
 /** 窗帘：一对拉开的布帘（自然褶、下摆折边、落地微翻）+ 细杆和端头 */
 function curtainPair({ w = 2, h = 2.7 }) {
   const pw = Math.max(0.35, Math.min(0.6, w * 0.22));
-  const folds = Math.max(5, Math.round(pw / 0.075));
+  const folds = Math.max(4, Math.round(pw / 0.1));
   const cm = LIB.slot('curtains');
   cm.side = THREE.DoubleSide;
-  const g1 = M(curtainGeo(pw, h - 0.07, folds, 0.085, 1), 'curtains', -w / 2 - pw / 2 + 0.18, 0.005, 0);
-  const g2 = M(curtainGeo(pw, h - 0.07, folds, 0.085, 2), 'curtains', w / 2 + pw / 2 - 0.18, 0.005, 0);
+  const g1 = M(curtainGeo(pw, h - 0.07, folds, 0.07, 1), 'curtains', -w / 2 - pw / 2 + 0.18, 0.005, 0);
+  const g2 = M(curtainGeo(pw, h - 0.07, folds, 0.07, 2), 'curtains', w / 2 + pw / 2 - 0.18, 0.005, 0);
   const L = w + 0.6;
   return group(g1, g2, C(0.011, 0.011, L, 'metal', -L / 2, h - 0.05, 0, 12, { rz: -Math.PI / 2 }), M(sphereGeo(0.02, 12), 'metal', -L / 2 - 0.01, h - 0.05, 0), M(sphereGeo(0.02, 12), 'metal', L / 2 + 0.01, h - 0.05, 0));
 }
