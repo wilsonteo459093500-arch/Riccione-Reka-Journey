@@ -3,6 +3,13 @@
 // 想换成公司自己有版权的曲子：在 config.js 填 CONFIG.wishMusic（mp3 网址），自然声仍会垫在底下。
 //
 // iPad Safari 的规矩：AudioContext 必须在「手指点下去」的那一刻创建 / resume，所以 start() 一定要在点击事件里调用。
+//
+// 生命周期（锁屏、切去 WhatsApp、分享面板回来）：pause() 停掉所有排程 + 挂起；resume() 恢复（最好在点击里调用）。
+// 挂起期间不排新音符，回来不会「一次全响」。ctx 状态变化会通知 onState(state)；isLive() = 现在真的在出声。
+// 颂钵、风铃是可选层（CONFIG.wishLayers，默认关）；关掉时「点缀」改用拨弦 / 铺底，不会有金属的叮当声。
+// duck(倍数, 秒)：揭晓后渐弱（CONFIG.wishDuck），不改客人自己调的音量。
+
+import { CONFIG } from './config.js';
 
 const PENTA = [0, 2, 4, 7, 9]; // 宫商角徵羽
 const ROOT = 146.83; // D3
@@ -12,6 +19,8 @@ const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 const MOODS = {
   calm: { stream: 0.11, wind: 0.05, pad: 0.05, chime: [5, 11], bowl: [16, 28], bird: [7, 15] },
+  // 12 题限时直觉：只留溪水、风、铺底，不在三秒的选择中间突然叮一声
+  intuition: { stream: 0.09, wind: 0.04, pad: 0.05, chime: [999, 999], bowl: [999, 999], bird: [999, 999] },
   focus: { stream: 0.08, wind: 0.035, pad: 0.065, chime: [11, 19], bowl: [24, 38], bird: [15, 28] },
   bright: { stream: 0.1, wind: 0.04, pad: 0.045, chime: [4, 8], bowl: [20, 32], bird: [4, 9] },
   night: { stream: 0.07, wind: 0.06, pad: 0.06, chime: [9, 16], bowl: [18, 30], bird: [999, 999] },
@@ -55,12 +64,52 @@ function impulse(ctx, seconds = 3.6, decay = 2.6) {
 export class Zen {
   constructor() {
     this.ctx = null;
-    this.running = false;
+    this.running = false; // start() 之后、stop() 之前
+    this.looping = false; // 排程在跑（pause() 会停）
+    this.paused = false;
+    this.gen = 0;
     this.volume = 0.7;
     this.muted = false;
+    this.duckF = 1;
     this.mood = 'calm';
     this.timers = new Set();
     this.track = null;
+    const L = CONFIG.wishLayers || {};
+    this.layers = { bowl: !!L.bowl, chimes: !!L.chimes };
+    this.onState = null; // (state) => {}：'running' | 'suspended' | 'interrupted' | 'closed'
+    this.onStop = null;
+  }
+
+  /** setTimeout，触发后自己从 this.timers 里删掉（timers 不会越积越多） */
+  _later(fn, ms) {
+    const id = setTimeout(() => {
+      this.timers.delete(id);
+      fn();
+    }, ms);
+    this.timers.add(id);
+    return id;
+  }
+
+  _live() {
+    return !!this.ctx && this.ctx.state === 'running';
+  }
+
+  /** 真的在出声吗（开始了、没被系统挂起）。静音也算 live —— 只是音量为 0 */
+  isLive() {
+    return this.running && this._live();
+  }
+
+  _target() {
+    return this.muted ? 0 : this.volume * this.duckF;
+  }
+
+  _ramp(seconds) {
+    if (!this.ctx || !this.master) return;
+    const now = this.ctx.currentTime;
+    const g = this.master.gain;
+    g.cancelScheduledValues(now);
+    g.setValueAtTime(g.value, now);
+    g.linearRampToValueAtTime(this._target(), now + Math.max(0.05, seconds));
   }
 
   /** 必须在点击 / 触摸事件里调用 */
@@ -81,18 +130,71 @@ export class Zen {
     s.start(0);
     if (trackUrl && !this.track) this.attachTrack(trackUrl);
     if (this.track) this.track.el.play().catch(() => {});
-    if (this.running) return;
+    if (this.running) {
+      this.resume();
+      return;
+    }
     this.running = true;
+    this.paused = false;
     this.startBeds();
     this.applyMood(0.1);
-    this.master.gain.cancelScheduledValues(ctx.currentTime);
-    this.master.gain.setValueAtTime(this.master.gain.value, ctx.currentTime);
-    this.master.gain.linearRampToValueAtTime(this.muted ? 0 : this.volume, ctx.currentTime + 3.5);
-    this.loop('chime', () => this.chime());
-    this.loop('bowl', () => this.bowl(hz(pick([-12, -5, 0])), 0.5), 2.5);
+    this._ramp(3.5);
+    this.startLoops(true);
+  }
+
+  startLoops(first = false) {
+    if (this.looping) return;
+    this.looping = true;
+    this.loop('chime', () => this.layers.chimes && this.chime());
+    this.loop('bowl', () => this.layers.bowl && this.bowl(hz(pick([-12, -5, 0])), 0.5), first ? 2.5 : null);
     this.loop('bird', () => this.bird());
     this.padLoop();
     this.babble();
+  }
+
+  /** 锁屏 / 切到别的 app：停掉所有排程、挂起声音。随时可以调用 */
+  pause() {
+    this.gen++;
+    this.paused = true;
+    this.looping = false;
+    for (const t of this.timers) clearTimeout(t);
+    this.timers.clear();
+    if (this.track) this.track.el.pause();
+    if (!this.ctx || !this.running) return Promise.resolve();
+    return Promise.resolve(this.ctx.suspend?.()).catch(() => {});
+  }
+
+  /** 回来：恢复声音、重新排程。随时可以调用（没开始 / 已经在播都没关系）；在点击里调用最稳（iOS） */
+  resume() {
+    if (!this.ctx || !this.running) return Promise.resolve(false);
+    const gen = ++this.gen;
+    this.paused = false;
+    if (this.track) this.track.el.play().catch(() => {});
+    return Promise.resolve(this.ctx.resume?.())
+      .catch(() => {})
+      .then(() => {
+        if (gen !== this.gen || this.paused || !this.running) return false;
+        if (this._live()) {
+          this.applyMood(0.5);
+          this._ramp(1.2);
+          this.startLoops();
+        }
+        return this._live();
+      });
+  }
+
+  /** 颂钵 / 风铃这两层要不要（默认关，见 CONFIG.wishLayers） */
+  setLayers({ bowl, chimes } = {}) {
+    if (bowl != null) this.layers.bowl = !!bowl;
+    if (chimes != null) this.layers.chimes = !!chimes;
+  }
+
+  /** 整体渐弱 / 渐强：factor 0–1，或 CONFIG.wishDuck 的名字（'blueprint' | 'studio' | 'idle'）；1 = 回到原音量。不改客人调的音量 */
+  duck(factor = 1, seconds = 3) {
+    const f = typeof factor === 'string' ? CONFIG.wishDuck?.[factor] ?? 1 : Number(factor);
+    this.duckF = Math.max(0, Math.min(1, Number.isFinite(f) ? f : 1));
+    this._ramp(seconds);
+    if (this.track) this.track.el.volume = this.volume * 0.8 * this.duckF;
   }
 
   build() {
@@ -113,6 +215,7 @@ export class Zen {
     this.verbIn.connect(this.verb).connect(this.master);
     this.pink = noiseBuffer(ctx, 5, 'pink');
     this.brown = noiseBuffer(ctx, 5, 'brown');
+    ctx.onstatechange = () => this.onState?.(ctx.state);
   }
 
   startBeds() {
@@ -180,13 +283,13 @@ export class Zen {
 
   setVolume(v) {
     this.volume = Math.max(0, Math.min(1, v));
-    if (this.ctx && !this.muted) this.master.gain.setTargetAtTime(this.volume, this.ctx.currentTime, 0.3);
-    if (this.track) this.track.el.volume = this.volume * 0.8;
+    if (this.ctx && !this.muted) this._ramp(0.6);
+    if (this.track) this.track.el.volume = this.volume * 0.8 * this.duckF;
   }
 
   setMuted(m) {
     this.muted = !!m;
-    if (this.ctx) this.master.gain.setTargetAtTime(this.muted ? 0 : this.volume, this.ctx.currentTime, 0.4);
+    if (this.ctx) this._ramp(0.8);
     if (this.track) this.track.el.muted = this.muted;
   }
 
@@ -201,24 +304,25 @@ export class Zen {
 
   loop(kind, fn, delayFirst) {
     const tick = () => {
-      if (!this.running) return;
+      if (!this.running || !this.looping) return;
       const [a, b] = (MOODS[this.mood] || MOODS.calm)[kind];
       if (a < 900) fn();
-      const t = setTimeout(tick, rand(a, b) * 1000);
-      this.timers.add(t);
+      // 这个情绪下不响（例如直觉题）：3 秒后再看一眼，换情绪时很快接上
+      this._later(tick, (a < 900 ? rand(a, b) : 3) * 1000);
     };
-    const t = setTimeout(tick, (delayFirst ?? rand(1, 4)) * 1000);
-    this.timers.add(t);
+    this._later(tick, (delayFirst ?? rand(1, 4)) * 1000);
   }
 
   babble() {
     const step = () => {
-      if (!this.running) return;
-      const now = this.ctx.currentTime;
-      for (const { b, f } of this.bands) b.frequency.setTargetAtTime(f * rand(0.75, 1.3), now, 0.25);
-      this.windFilter.frequency.setTargetAtTime(rand(300, 650), now, 2);
-      const t = setTimeout(step, rand(180, 420));
-      this.timers.add(t);
+      if (!this.running || !this.looping) return;
+      // 被系统挂起时 currentTime 不走：不排自动化（不然回来一次全执行），只继续计时
+      if (this._live()) {
+        const now = this.ctx.currentTime;
+        for (const { b, f } of this.bands) b.frequency.setTargetAtTime(f * rand(0.75, 1.3), now, 0.25);
+        this.windFilter.frequency.setTargetAtTime(rand(300, 650), now, 2);
+      }
+      this._later(step, rand(180, 420));
     };
     step();
   }
@@ -232,35 +336,37 @@ export class Zen {
     ];
     let i = 0;
     const play = () => {
-      if (!this.running) return;
+      if (!this.running || !this.looping) return;
       const ctx = this.ctx;
       const now = ctx.currentTime;
       const notes = chords[i++ % chords.length];
-      for (const n of notes) {
-        for (const det of [-4, 4]) {
-          const o = ctx.createOscillator();
-          o.type = 'triangle';
-          o.frequency.value = hz(n);
-          o.detune.value = det;
-          const g = ctx.createGain();
-          g.gain.setValueAtTime(0, now);
-          g.gain.linearRampToValueAtTime(0.12, now + 5);
-          g.gain.setValueAtTime(0.12, now + 13);
-          g.gain.linearRampToValueAtTime(0, now + 19);
-          o.connect(g).connect(this.padBus);
-          o.start(now);
-          o.stop(now + 19.5);
+      // 被系统挂起时不建新音符，但和弦照样往下走、照样排下一次
+      if (this._live()) {
+        for (const n of notes) {
+          for (const det of [-4, 4]) {
+            const o = ctx.createOscillator();
+            o.type = 'triangle';
+            o.frequency.value = hz(n);
+            o.detune.value = det;
+            const g = ctx.createGain();
+            g.gain.setValueAtTime(0, now);
+            g.gain.linearRampToValueAtTime(0.12, now + 5);
+            g.gain.setValueAtTime(0.12, now + 13);
+            g.gain.linearRampToValueAtTime(0, now + 19);
+            o.connect(g).connect(this.padBus);
+            o.start(now);
+            o.stop(now + 19.5);
+          }
         }
       }
-      const t = setTimeout(play, 14000);
-      this.timers.add(t);
+      this._later(play, 14000);
     };
     play();
   }
 
   /** 颂钵：几个不成整数倍的泛音 + 轻微拍频，长长地散开 */
   bowl(freq = hz(-12), amp = 0.5) {
-    if (!this.ctx) return;
+    if (!this._live()) return;
     const ctx = this.ctx;
     const now = ctx.currentTime + 0.02;
     const partials = [
@@ -291,7 +397,7 @@ export class Zen {
   }
 
   chime(semi) {
-    if (!this.ctx) return;
+    if (!this._live()) return;
     const ctx = this.ctx;
     const now = ctx.currentTime + 0.01;
     const n = semi ?? 12 + pick(PENTA) + pick([0, 12]);
@@ -322,7 +428,7 @@ export class Zen {
 
   /** 远处的鸟：两三声快速的上滑音 */
   bird() {
-    if (!this.ctx) return;
+    if (!this._live()) return;
     const ctx = this.ctx;
     let t = ctx.currentTime + 0.05;
     const base = rand(2400, 3600);
@@ -352,20 +458,80 @@ export class Zen {
     }
   }
 
-  /** 关键时刻的点缀：wish 许愿 / reveal 揭晓 / chapter 翻牌 */
+  /** 拨弦：泛音是整数倍（像竖琴 / 卡林巴），不是风铃那种金属声。风铃层关掉时的点缀 */
+  pluck(semi, amp = 0.05) {
+    if (!this._live()) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime + 0.01;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(amp, now + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 1.6);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 2400;
+    g.connect(lp);
+    lp.connect(this.dry);
+    lp.connect(this.verbIn);
+    for (const [mul, a] of [
+      [1, 1],
+      [2, 0.3],
+      [3, 0.12],
+    ]) {
+      const o = ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.value = hz(semi) * mul;
+      const og = ctx.createGain();
+      og.gain.value = a;
+      o.connect(og).connect(g);
+      o.start(now);
+      o.stop(now + 1.7);
+    }
+  }
+
+  /** 铺底轻轻涌起来一下：颂钵层关掉时的点缀 */
+  swell(amp = 0.1) {
+    if (!this._live()) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime + 0.02;
+    for (const n of [-12, -5, 0, 4]) {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = hz(n);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.exponentialRampToValueAtTime(amp, now + 1.2);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 5.5);
+      o.connect(g).connect(this.padBus);
+      o.start(now);
+      o.stop(now + 5.6);
+    }
+  }
+
+  /** 关键时刻的点缀：wish 许愿 / reveal 揭晓 / chapter 翻牌（颂钵 / 风铃层关掉时改用铺底 / 拨弦） */
   accent(kind) {
     if (!this.running) return;
+    const { bowl, chimes } = this.layers;
     if (kind === 'reveal') {
-      this.bowl(hz(-12), 0.9);
-      [0, 4, 7, 12, 16].forEach((s, i) => setTimeout(() => this.chime(12 + PENTA[i % 5] + (i > 2 ? 12 : 0)), 600 + i * 260));
-    } else if (kind === 'wish') this.chime(24 + pick(PENTA));
-    else if (kind === 'chapter') this.bowl(hz(pick([-5, 0])), 0.35);
+      if (bowl) this.bowl(hz(-12), 0.9);
+      else this.swell(0.14);
+      [0, 4, 7, 12, 16].forEach((s, i) => this._later(() => (chimes ? this.chime(12 + PENTA[i % 5] + (i > 2 ? 12 : 0)) : this.pluck(PENTA[i % 5] + (i > 2 ? 12 : 0))), 600 + i * 260));
+    } else if (kind === 'wish') {
+      if (chimes) this.chime(24 + pick(PENTA));
+      else this.pluck(12 + pick(PENTA));
+    } else if (kind === 'chapter') {
+      if (bowl) this.bowl(hz(pick([-5, 0])), 0.35);
+      else this.swell(0.08);
+    }
   }
 
   stop(fade = 2.5) {
+    this.onStop?.();
     if (!this.ctx || !this.running) return Promise.resolve();
     const ctx = this.ctx;
     this.running = false;
+    this.looping = false;
+    this.gen++;
     for (const t of this.timers) clearTimeout(t);
     this.timers.clear();
     this.master.gain.cancelScheduledValues(ctx.currentTime);
