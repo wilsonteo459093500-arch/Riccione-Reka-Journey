@@ -2666,7 +2666,11 @@ html[lang='en'] .bp-farewell {
 
 @media (orientation: landscape) and (min-width: 900px) {
   .stage {
-    max-width: 880px;
+    max-width: 800px;
+  }
+  /* 潘吉的话放在题目卡右边的空白里，不压到卡片 */
+  .bubble {
+    max-width: min(184px, calc((100vw - 800px) / 2 - 22px));
   }
   /* 揭晓：牌在左，字在右，「打开蓝图」不会掉到折线下面 */
   .phase-shown .reveal-grid,

@@ -291,8 +291,6 @@ export default {
   '例：Peggy / 陈小姐': 'e.g. Peggy / Ms Tan',
   '今天谁来许愿？': 'Who’s making a wish today?',
   '我自己': 'Just me',
-  '我们两个': 'The two of us',
-  '一家人': 'The whole family',
   '开始许愿': 'Make a wish',
   '大约 6–8 分钟 · 5 张牌 · 结束时会得到你的「梦想家蓝图」': 'About 6–8 minutes · 5 cards · You’ll leave with your own Dream Home Blueprint',
   '擦亮神灯': 'Rub the lamp',
