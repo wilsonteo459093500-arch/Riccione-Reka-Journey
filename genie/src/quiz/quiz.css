@@ -242,6 +242,9 @@ html[lang='en'] .h-title {
 }
 .dusk .stage {
   --stage-top: clamp(8px, calc(12vh - 60px), 90px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 /* 题目卡：风景上的磨砂玻璃 */
@@ -1341,7 +1344,7 @@ html[lang='en'] .dc-tag {
   text-align: center;
 }
 .step-interlude .flip {
-  width: min(290px, 66vw, 38vh);
+  width: min(320px, 66vw, 40vh);
   aspect-ratio: 5 / 8;
   margin-top: clamp(6px, 3vh, 30px);
 }
@@ -1418,9 +1421,11 @@ html[lang='en'] .dc-tag {
   background: var(--bg-deep);
 }
 .pair-art .vg {
-  display: block;
   width: 100%;
   height: 100%;
+}
+.pair-art svg.vg {
+  display: block;
 }
 .pair-label {
   display: block;
