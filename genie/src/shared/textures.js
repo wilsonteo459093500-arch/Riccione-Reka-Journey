@@ -423,11 +423,12 @@ function woodVeneer(B, t, mat, seed) {
 
 // 主纹宽 w1(+w1v 变化)，颜色强度 c1，晕 halo；细纹（发丝纹）w2 / c2；云雾 cloud；soft = 纹边的柔和程度
 const MARBLE = {
-  // ramp = [每张贴图沿 u、v 各几条主纹]：主纹沿一个大方向流动，amp 让它蜿蜒；ramp2 = 发丝纹也顺着走（null = 网状）
-  carrara: { warp: 0.3, ramp: [1, 2], amp: 2.4, w1: 0.0012, w1v: 0.005, c1: 0.62, soft: 0.85, halo: 0.012, haloK: 0.4, ramp2: [3, 2], amp2: 3.2, w2: 0.0006, c2: 0.36, cloud: 0.05, mask: 0.36 },
-  calacatta: { warp: 0.24, ramp: [1, 1], amp: 1.7, w1: 0.0035, w1v: 0.016, c1: 0.95, soft: 0.5, halo: 0.008, haloK: 0.36, ramp2: [2, 3], amp2: 3, w2: 0.0007, c2: 0.3, cloud: 0.03, mask: 0.3 },
-  nero: { warp: 0.3, ramp: [2, 1], amp: 2.6, w1: 0.001, w1v: 0.006, c1: 0.95, soft: 0.3, halo: 0.004, haloK: 0.2, ramp2: null, lv2: 4.5, w2: 0.0006, c2: 0.55, cloud: 0.12, mask: 0.32 },
-  verde: { warp: 0.42, ramp: null, lv1: 2.6, w1: 0.0008, w1v: 0.0035, c1: 0.85, soft: 0.3, halo: 0.006, haloK: 0.32, ramp2: null, lv2: 5, w2: 0.0005, c2: 0.6, cloud: 0.2, mask: 0.3 },
+  // ramp = 每张贴图沿 u、v 各几条主纹（主纹沿一个大方向流动）；amp = 低频蜿蜒；jit = 高频的锯齿边
+  // ramp2 = 发丝纹也顺着走；null = 网状发丝纹（黑金花、绿大理石）
+  carrara: { warp: 0.22, ramp: [2, 4], amp: 0.85, jit: 0.1, w1: 0.0009, w1v: 0.0045, c1: 0.6, soft: 0.85, halo: 0.012, haloK: 0.42, ramp2: [5, 3], amp2: 1.6, jit2: 0.2, w2: 0.0006, c2: 0.7, cloud: 0.05, mask: 0.4 },
+  calacatta: { warp: 0.2, ramp: [1, 1], amp: 1.0, jit: 0.07, w1: 0.003, w1v: 0.016, c1: 0.95, soft: 0.5, halo: 0.008, haloK: 0.36, ramp2: [3, 4], amp2: 1.6, jit2: 0.2, w2: 0.0007, c2: 0.5, cloud: 0.03, mask: 0.32 },
+  nero: { warp: 0.26, ramp: [2, 1], amp: 0.75, jit: 0.14, w1: 0.0009, w1v: 0.006, c1: 0.95, soft: 0.3, halo: 0.004, haloK: 0.22, ramp2: null, lv2: 4.5, w2: 0.0006, c2: 0.55, cloud: 0.12, mask: 0.32 },
+  verde: { warp: 0.4, ramp: null, lv1: 2.6, w1: 0.0008, w1v: 0.0035, c1: 0.85, soft: 0.3, halo: 0.006, haloK: 0.32, ramp2: null, lv2: 5, w2: 0.0005, c2: 0.6, cloud: 0.2, mask: 0.3 },
 };
 
 function marbleStyle(t) {
@@ -469,8 +470,8 @@ function marble(B, t, mat, seed, tiled) {
   // 只在「一张砖内」坐标连续时，低频场才能放大成逐像素数组；分砖时每块偏移不同，就逐像素取样
   const Wx = fbmField(NW, 2, 2, 4, seed + 1);
   const Wy = fbmField(NW, 2, 2, 4, seed + 2);
-  const V1 = fbmField(N1, 2, 2, 5, seed + 3);
-  const V2 = fbmField(N1, 4, 4, 5, seed + 4);
+  const V1 = fbmField(N1, 2, 2, st.ramp ? 3 : 5, seed + 3);
+  const V2 = fbmField(N1, 6, 6, 5, seed + 4);
   const Cl = fbmField(NW, 3, 3, 6, seed + 5);
   const Mk = fbmField(128, 3, 3, 4, seed + 6);
   const Mk2 = fbmField(128, 2, 2, 4, seed + 7);
@@ -505,21 +506,26 @@ function marble(B, t, mat, seed, tiled) {
       }
       const pu = uu + wx * st.warp;
       const pv = vv + wy * st.warp;
-      // 主纹：一个大方向的斜坡 + 分形扰动的等值线 → 长长的、蜿蜒的纹；用梯度换算成「真实距离」，纹的粗细就能用毫米控制
+      // 主纹：一个大方向的斜坡 + 低频蜿蜒 + 高频锯齿的等值线 → 长长的、蜿蜒的纹；
+      // 用梯度把「离等值线多远」换算成米，纹的粗细就能用毫米控制
       sampG(V1, N1, pu, pv, g);
+      const a0 = g[0];
+      const a1 = g[1];
+      const a2 = g[2];
+      sampG(V2, N1, pu, pv, g);
       let f1;
       let gu;
       let gv;
       if (st.ramp) {
-        f1 = st.ramp[0] * pu + st.ramp[1] * pv + st.amp * g[0];
-        gu = st.ramp[0] + st.amp * g[1];
-        gv = st.ramp[1] + st.amp * g[2];
+        f1 = st.ramp[0] * pu + st.ramp[1] * pv + st.amp * a0 + st.jit * g[0];
+        gu = st.ramp[0] + st.amp * a1 + st.jit * g[1];
+        gv = st.ramp[1] + st.amp * a2 + st.jit * g[2];
       } else {
-        f1 = g[0] * st.lv1;
-        gu = g[1] * st.lv1;
-        gv = g[2] * st.lv1;
+        f1 = a0 * st.lv1;
+        gu = a1 * st.lv1;
+        gv = a2 * st.lv1;
       }
-      const gm1 = Math.max(st.ramp ? 0.6 : 0.45 * st.lv1, Math.sqrt(gu * gu + gv * gv)) / S;
+      const gm1 = Math.max(0.6, Math.sqrt(gu * gu + gv * gv)) / S;
       const d1 = Math.abs(f1 - Math.floor(f1) - 0.5) / gm1;
       const wm = samp(Mk, 128, pu, pv);
       const msk = smooth(st.mask - 0.22, st.mask + 0.22, samp(Mk2, 128, pu, pv));
@@ -527,12 +533,11 @@ function marble(B, t, mat, seed, tiled) {
       const v1c = veinCov(d1, w1, px, st.soft) * st.c1 * msk;
       const v1h = Math.exp(-d1 / st.halo) * st.haloK * (0.3 + 0.7 * msk);
       // 发丝纹
-      sampG(V2, N1, pu + 0.31, pv, g);
       let f2;
       if (st.ramp2) {
-        f2 = st.ramp2[0] * pu + st.ramp2[1] * pv + st.amp2 * g[0];
-        gu = st.ramp2[0] + st.amp2 * g[1];
-        gv = st.ramp2[1] + st.amp2 * g[2];
+        f2 = st.ramp2[0] * pu + st.ramp2[1] * pv + st.amp2 * a0 + st.jit2 * g[0];
+        gu = st.ramp2[0] + st.amp2 * a1 + st.jit2 * g[1];
+        gv = st.ramp2[1] + st.amp2 * a2 + st.jit2 * g[2];
       } else {
         f2 = g[0] * st.lv2;
         gu = g[1] * st.lv2;
