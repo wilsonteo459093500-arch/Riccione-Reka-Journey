@@ -6,7 +6,7 @@
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { boxGeo, cylGeo, sphereGeo, merge, placedBox, curtainGeo, softBoxGeo, pillowGeo, slabGeo, latheGeo, taperBoxGeo, tubeGeo, torusGeo, leafGeo, bendGeo, drapeGeo, derived, flutedGeo, archGeo } from './geom.js';
+import { boxGeo, cylGeo, sphereGeo, merge, placedBox, curtainGeo, softBoxGeo, pillowGeo, slabGeo, edgeBarGeo, latheGeo, taperBoxGeo, tubeGeo, torusGeo, leafGeo, bendGeo, drapeGeo, derived, flutedGeo, archGeo } from './geom.js';
 import { SLOT_BY_ID } from '../../shared/materials.js';
 import { rng } from '../../shared/noise.js';
 
@@ -1174,8 +1174,18 @@ function kitchenRun({ w = 3, h = 2.8, upper = true, sink = 0.3, hob = 0.72, sink
     if (s.type === 'hob') parts.push(...drawerStack(s.a + 0.002, s.b - 0.002, fy0, fy1, zF + 0.002, 'cabinetry', [0.42, 0.36, 0.22], { channel: 0.025 }));
     else parts.push(...doorRow(s.a + 0.002, s.b - 0.002, fy0, fy1, zF + 0.002, 'cabinetry', { maxW: s.type === 'sink' ? 0.42 : 0.6, backer: false }));
   }
-  // 台面：3cm 石材、倒角；水槽处开孔（台下盆）
-  parts.push(SL(w, D + 0.02, ctT, 'countertop', 0, ctY, 0.01, { r: 0.002, bevel: 0.0025, hole: sx != null ? { x: sx, z: sinkZ - 0.01, w: sinkW, d: sinkD, r: 0.022 } : null }));
+  // 台面：3cm 石材、前沿圆角；水槽处开孔（台下盆）——用几段直条围出开孔（不用带孔的形状，三角化不会跨过孔）
+  const zb = 0.01 - (D + 0.02) / 2;
+  const zf = 0.01 + (D + 0.02) / 2;
+  const bar = (x0, x1, z0, z1, e = 0.004) => x1 - x0 > 0.002 && z1 - z0 > 0.002 && parts.push(M(edgeBarGeo(x1 - x0, z0, z1, ctT, e), 'countertop', x0, ctY, 0));
+  if (sx != null) {
+    const hx0 = Math.max(-w / 2, sx - sinkW / 2);
+    const hx1 = Math.min(w / 2, sx + sinkW / 2);
+    bar(-w / 2, hx0, zb, zf);
+    bar(hx1, w / 2, zb, zf);
+    bar(hx0, hx1, zb, sinkZ - sinkD / 2, 0);
+    bar(hx0, hx1, sinkZ + sinkD / 2, zf);
+  } else bar(-w / 2, w / 2, zb, zf);
   // 挡水板：避开窗；灶后面高到抽油烟机
   const free = [];
   let a0 = -w / 2;

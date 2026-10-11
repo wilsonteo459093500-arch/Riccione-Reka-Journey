@@ -55,6 +55,22 @@ function nearestEdge(rooms, p, maxD) {
 /** 一段字大约几个字宽（中文 1、拉丁字母约 0.58） */
 const emWidth = (str) => Math.max(3, [...String(str)].reduce((w, c) => w + (/[\u2E80-\u9FFF\uFF00-\uFFEF]/.test(c) ? 1 : 0.58), 0));
 
+/** 房间名的字号：一行放不下要缩小时，英文按空格折成两行（找最平均的断点），字能大一截就用两行 */
+function fitLabel(label, w, d, sw) {
+  const max = 14 * sw;
+  const one = Math.min(max, (w * 0.86) / emWidth(label), d / 3.2);
+  const words = String(label).split(' ').filter(Boolean);
+  if (one >= max * 0.98 || words.length < 2) return { lines: [label], fs: one };
+  let best = null;
+  for (let i = 1; i < words.length; i++) {
+    const lines = [words.slice(0, i).join(' '), words.slice(i).join(' ')];
+    const wid = Math.max(emWidth(lines[0]), emWidth(lines[1]));
+    if (!best || wid < best.wid) best = { lines, wid };
+  }
+  const two = Math.min(max, (w * 0.86) / best.wid, d / 4.8);
+  return two > one * 1.15 ? { lines: best.lines, fs: two } : { lines: [label], fs: one };
+}
+
 /** 平面图的基本检查（重叠、太小），用当前语言说 */
 function issuesOf(plan) {
   const out = [];
@@ -589,9 +605,13 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
               {plan.rooms.map((r) => {
                 const label = roomLabel(r);
                 const dims = `${r.w.toFixed(2)} × ${r.d.toFixed(2)} m`;
-                // 字号跟着房间宽度走：英文名长，小房间里也要放得下
-                const fs = Math.min(14 * sw, (r.w * 0.86) / emWidth(label), r.d / 3.2);
+                // 字号跟着房间宽度走：英文名长，小房间里也要放得下（必要时折两行）
+                const lab = fitLabel(label, r.w, r.d, sw);
+                const fs = lab.fs;
                 const fd = Math.min(11 * sw, (r.w * 0.86) / emWidth(dims), r.d / 4.5);
+                const cx = r.x + r.w / 2;
+                const lh = fs * 1.12;
+                const y0 = r.y + r.d / 2 - ((lab.lines.length - 1) * lh) / 2;
                 return (
                   <g key={r.id}>
                     <rect
@@ -605,10 +625,14 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
                       className={`pe-room ${room?.id === r.id ? 'on' : ''}`}
                       strokeWidth={sw * (room?.id === r.id ? 2.5 : 1)}
                     />
-                    <text x={r.x + r.w / 2} y={r.y + r.d / 2} fontSize={fs} textAnchor="middle" className="pe-label">
-                      {label}
+                    <text x={cx} y={y0} fontSize={fs} textAnchor="middle" className="pe-label">
+                      {lab.lines.map((ln, i) => (
+                        <tspan key={i} x={cx} dy={i ? lh : 0}>
+                          {ln}
+                        </tspan>
+                      ))}
                     </text>
-                    <text x={r.x + r.w / 2} y={r.y + r.d / 2 + fs * 0.6 + fd * 1.1} fontSize={fd} textAnchor="middle" className="pe-dim">
+                    <text x={cx} y={y0 + (lab.lines.length - 1) * lh + fs * 0.6 + fd * 1.1} fontSize={fd} textAnchor="middle" className="pe-dim">
                       {dims}
                     </text>
                   </g>

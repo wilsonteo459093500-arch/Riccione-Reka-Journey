@@ -323,15 +323,13 @@ function roundRectPath(path, w, d, r, cx = 0, cy = 0) {
 }
 
 /**
- * 板：圆角矩形（平面上的四角 r）、上下边倒角 bevel、可开一个圆角矩形孔（台盆）。底面在 y=0，中心在原点。
- * hole = { x, z, w, d, r }
+ * 板：圆角矩形（平面上的四角 r）、上下边倒角 bevel。底面在 y=0，中心在原点。
+ * （不做开孔：三角化有时会跨过孔；台面开孔用 edgeBarGeo 拼）
  */
-export function slabGeo(w, d, t, { r = 0, bevel = 0.003, hole = null, seg = 6 } = {}) {
-  const hk = hole ? `${f3(hole.x || 0)},${f3(hole.z || 0)},${f3(hole.w)},${f3(hole.d)},${f3(hole.r || 0)}` : '';
-  const key = `sl${f3(w)}|${f3(d)}|${f3(t)}|${f3(r)}|${f3(bevel)}|${hk}|${seg}`;
+export function slabGeo(w, d, t, { r = 0, bevel = 0.003, seg = 6 } = {}) {
+  const key = `sl${f3(w)}|${f3(d)}|${f3(t)}|${f3(r)}|${f3(bevel)}|${seg}`;
   return cached(key, () => {
     const shape = roundRectPath(new THREE.Shape(), w, d, r);
-    if (hole) shape.holes.push(roundRectPath(new THREE.Path(), hole.w, hole.d, hole.r || 0, hole.x || 0, -(hole.z || 0)));
     const b = Math.max(0, Math.min(bevel, t / 2 - 0.0004, r > 0 ? r : 1));
     const g = new THREE.ExtrudeGeometry(shape, {
       depth: Math.max(0.0004, t - 2 * b),
@@ -344,6 +342,43 @@ export function slabGeo(w, d, t, { r = 0, bevel = 0.003, hole = null, seg = 6 } 
     });
     g.rotateX(-Math.PI / 2);
     g.translate(0, b, 0);
+    unitNormals(g);
+    worldUV(g);
+    return g;
+  });
+}
+
+/**
+ * 台面条：沿 x 从 0 到 L 的直条，截面 z 从 zb（后，直角）到 zf（前），高 t（y 0→t），前沿上下两条边圆角 e。
+ * 截面是凸多边形，三角化不会出错；几段拼起来围出水槽开孔，接缝在内部看不见。
+ */
+export function edgeBarGeo(L, zb, zf, t, e = 0.004) {
+  const key = `eb${f3(L)}|${f3(zb)}|${f3(zf)}|${f3(t)}|${f3(e)}`;
+  return cached(key, () => {
+    const s = new THREE.Shape();
+    const ee = Math.max(0, Math.min(e, t / 2 - 0.0005, (zf - zb) / 2 - 0.0005));
+    s.moveTo(zb, 0);
+    if (ee > 0.0005) {
+      s.lineTo(zf - ee, 0);
+      for (let k = 1; k <= 3; k++) {
+        const a = -Math.PI / 2 + (k / 3) * (Math.PI / 2);
+        s.lineTo(zf - ee + Math.cos(a) * ee, ee + Math.sin(a) * ee);
+      }
+      s.lineTo(zf, t - ee);
+      for (let k = 1; k <= 3; k++) {
+        const a = (k / 3) * (Math.PI / 2);
+        s.lineTo(zf - ee + Math.cos(a) * ee, t - ee + Math.sin(a) * ee);
+      }
+    } else {
+      s.lineTo(zf, 0);
+      s.lineTo(zf, t);
+    }
+    s.lineTo(zb, t);
+    s.lineTo(zb, 0);
+    const g = new THREE.ExtrudeGeometry(s, { depth: L, bevelEnabled: false, curveSegments: 1 });
+    // 截面 (z, y) 挤出方向 → x：(sx, sy, e) → (L - e, sy, sx)
+    g.rotateY(-Math.PI / 2);
+    g.translate(L, 0, 0);
     unitNormals(g);
     worldUV(g);
     return g;

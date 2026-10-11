@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { ROOM_TYPES, bounds } from '../plan/model.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { boxGeo, worldUV, cylGeo, sphereGeo } from './geom.js';
+import { boxGeo, worldUV, sphereGeo } from './geom.js';
 import { rng, fbm } from '../../shared/noise.js';
 import { BRAND } from '../../shared/config.js';
 import { PALETTE } from '../../shared/palette.js';
@@ -19,6 +19,11 @@ export const SHADOW_LAYER = 1;
 
 const col = (hex) => new THREE.Color(hex);
 const mixC = (a, b, t) => col(a).lerp(col(b), t);
+/** 只要色相：线性空间里亮度归一成 1 的颜色（乘上去不改明暗） */
+const lumaNormalized = (c) => {
+  const l = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b || 1;
+  return new THREE.Vector3(c.r / l, c.g / l, c.b / l);
+};
 /** 底座 / 地面 / 金线 / 烫金字的颜色（VI「晨光溪岸」：湿石头、墨、SAIL 金 —— 克制、像展台） */
 const VI = {
   cap: () => mixC(PALETTE.ink, PALETTE.plinth, 0.4), // 剖切面：模型的墨色切口
@@ -26,6 +31,7 @@ const VI = {
   foot: () => col(PALETTE.plinth).multiplyScalar(0.6), // 底下内缩的影缝
   brass: () => mixC(PALETTE.gold, PALETTE.goldL, 0.35), // 拉丝黄铜
   ground: () => mixC(PALETTE.ink, PALETTE.plinth, 0.5), // 地面：暖墨，淡进背景
+  groundTint: () => mixC(PALETTE.paper, PALETTE.goldL, 0.3), // 地面反光的色调：纸色偏一点金（只取色相）
   line: () => mixC(PALETTE.gold, PALETTE.goldL, 0.2), // 地上嵌的金线
   foil: PALETTE.goldL, // 烫金字
   foilGlow: () => col(PALETTE.goldInk), // 烫金字自发光（夜里也读得出）
@@ -91,9 +97,11 @@ function kitFor(lib) {
   const foot = tag(new THREE.MeshStandardMaterial({ color: VI.foot(), roughness: 0.9 }), 'plinth');
   // 拉丝黄铜细线（SAIL 金）
   const brass = tag(new THREE.MeshPhysicalMaterial({ color: VI.brass(), metalness: 1, roughness: 0.32, clearcoat: 0.3, clearcoatRoughness: 0.2 }), 'brass');
-  // 地面：暖墨色、带一点柔和反光，从底座往外慢慢淡进背景
-  const gU = { gCenter: { value: new THREE.Vector2() }, gR0: { value: 8 }, gR1: { value: 24 } };
-  const ground = tag(new THREE.MeshStandardMaterial({ color: VI.ground(), roughness: 0.46, metalness: 0, transparent: true, depthWrite: true }), 'ground');
+  // 地面：暖墨色的磨砂石，带一点柔和反光，从底座往外慢慢淡进背景。
+  // 它反射的是天穹：正午是蓝的、黄昏是橙蓝混出来的紫 —— 地面不该跟着变色（VI 是暖石头，不要藏青 / 紫）。
+  // 所以把出射光的色相大部分换成纸色偏暖（亮度不变：影子、早晚的明暗都还在），只留三成原色，黄金时段仍然略暖。
+  const gU = { gCenter: { value: new THREE.Vector2() }, gR0: { value: 8 }, gR1: { value: 24 }, gTint: { value: lumaNormalized(VI.groundTint()) }, gKeep: { value: 0.3 } };
+  const ground = tag(new THREE.MeshStandardMaterial({ color: VI.ground(), roughness: 0.5, metalness: 0, transparent: true, depthWrite: true, dithering: true }), 'ground');
   ground.userData.u = gU;
   ground.onBeforeCompile = (s) => {
     Object.assign(s.uniforms, gU);
@@ -101,10 +109,11 @@ function kitFor(lib) {
       .replace('#include <common>', '#include <common>\nvarying vec2 vGroundXZ;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGroundXZ = (modelMatrix * vec4(transformed, 1.0)).xz;');
     s.fragmentShader = s.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec2 vGroundXZ;\nuniform vec2 gCenter;\nuniform float gR0;\nuniform float gR1;')
+      .replace('#include <common>', '#include <common>\nvarying vec2 vGroundXZ;\nuniform vec2 gCenter;\nuniform float gR0;\nuniform float gR1;\nuniform vec3 gTint;\nuniform float gKeep;')
+      .replace('#include <opaque_fragment>', '{ float gL = dot(outgoingLight, vec3(0.2126, 0.7152, 0.0722)); outgoingLight = mix(gL * gTint, outgoingLight, gKeep); }\n#include <opaque_fragment>')
       .replace('#include <dithering_fragment>', '#include <dithering_fragment>\n{ float gd = length(vGroundXZ - gCenter); float gf = 1.0 - smoothstep(gR0, gR1, gd); gl_FragColor.a *= gf * gf * (3.0 - 2.0 * gf); }');
   };
-  ground.customProgramCacheKey = () => 'genie-ground-fade';
+  ground.customProgramCacheKey = () => 'genie-ground-fade-warm';
   // 地上的金色细线：不受光（夜里也看得见，像嵌在地上的金属线）
   const gold = tag(new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }), 'goldline');
   k = { cap, stone, foot, brass, ground, gold };
@@ -260,6 +269,57 @@ function railing(wall, lib) {
   return g;
 }
 
+// ───────────────────────── 车廊 / 前院（马来西亚排屋） ─────────────────────────
+// 车要开进来：临街那边不放栏杆，只有两根门柱（柱头一盏小门灯，夜里会亮）；
+// 两侧是和邻居之间的矮墙。挨着屋子的那条边就是屋子的墙（有大门），对面那条边临街。
+
+const OPP = { N: 'S', S: 'N', W: 'E', E: 'W' };
+/** 这段墙在房间的哪一边 */
+const sideOf = (room, w) => (w.axis === 'x' ? (Math.abs(w.c - room.y) < 0.05 ? 'N' : 'S') : Math.abs(w.c - room.x) < 0.05 ? 'W' : 'E');
+
+/** 房间哪几条边挨着室内 */
+function houseSides(room, walls) {
+  const s = new Set();
+  for (const w of walls) {
+    const other = w.neg?.id === room.id ? w.pos : w.pos?.id === room.id ? w.neg : null;
+    if (other && !ROOM_TYPES[other.type]?.outdoor) s.add(sideOf(room, w));
+  }
+  return s;
+}
+
+function porchEdge(wall, lib, street) {
+  const g = new THREE.Group();
+  const len = wall.b - wall.a;
+  const geoFor = (w, h, d) => (wall.axis === 'x' ? boxGeo(w, h, d) : boxGeo(d, h, w));
+  const ext = lib.fixed.exterior;
+  const solid = (m) => {
+    m.castShadow = true;
+    m.receiveShadow = true;
+    return m;
+  };
+  if (!street) {
+    // 和邻居之间的矮墙（0.9m，外墙漆）+ 一道薄压顶
+    g.add(placeAlong(wall, solid(new THREE.Mesh(geoFor(len + wall.t, 0.9, wall.t), ext)), (wall.a + wall.b) / 2, 0));
+    g.add(placeAlong(wall, solid(new THREE.Mesh(geoFor(len + wall.t + 0.03, 0.04, wall.t + 0.03), ext)), (wall.a + wall.b) / 2, 0.9));
+    return g;
+  }
+  // 临街：两根门柱 + 柱头小门灯；大门推开着（不画），车道是空的
+  const P = 0.32;
+  const H = 1.35;
+  for (const at of [wall.a, wall.b]) {
+    g.add(placeAlong(wall, solid(new THREE.Mesh(boxGeo(P, H, P), ext)), at, 0));
+    g.add(placeAlong(wall, solid(new THREE.Mesh(boxGeo(P + 0.05, 0.05, P + 0.05), ext)), at, H));
+    const lamp = new THREE.Mesh(boxGeo(0.13, 0.17, 0.13), lib.fixed.lampShade);
+    g.add(placeAlong(wall, lamp, at, H + 0.05));
+    g.add(placeAlong(wall, solid(new THREE.Mesh(boxGeo(0.17, 0.025, 0.17), lib.fixed.rail)), at, H + 0.22));
+  }
+  // 地上一条细细的门轨（深色金属）
+  const track = new THREE.Mesh(geoFor(Math.max(0.1, len - P), 0.012, 0.05), lib.fixed.rail);
+  track.receiveShadow = true;
+  g.add(placeAlong(wall, track, (wall.a + wall.b) / 2, 0));
+  return g;
+}
+
 /** 底座上的烫金字：字距拉开的衬线大写 + 细的无衬线副标，金属金箔材质（会反射环境里的柔光箱）。
  *  字太长（客人名字长、英文副标）就整体缩小，永远不出底座。
  *  分辨率按字牌的长宽比算：长边最多 4096、高最多 256 像素 —— 凑近看副标也是清楚的（一张约 3MB 显存）。 */
@@ -376,7 +436,10 @@ export function buildHouse(plan, walls, lib, { title, subtitle, ground = true } 
   for (const w of walls) {
     const outdoorSide = (w.neg && ROOM_TYPES[w.neg.type]?.outdoor && !w.pos) || (w.pos && ROOM_TYPES[w.pos.type]?.outdoor && !w.neg);
     if (outdoorSide) {
-      root.add(railing(w, lib));
+      // 阳台：玻璃栏杆；车廊 / 前院：两侧矮墙、临街是门柱（车要开得进来）
+      const ref = w.neg || w.pos;
+      const porch = ref.type === 'porch' && plan.rooms.find((r) => r.id === ref.id);
+      root.add(porch ? porchEdge(w, lib, houseSides(porch, walls).has(OPP[sideOf(porch, w)])) : railing(w, lib));
       continue;
     }
     const full = new THREE.Group();
@@ -488,7 +551,8 @@ export function buildHouse(plan, walls, lib, { title, subtitle, ground = true } 
     root.add(lines);
   }
 
-  // 看不见的树：只把树影投进窗里（窗上的树影 = 「时间在流动」的感觉）
+  // 看不见的树：只把树影投进窗里（窗上的树影 = 「时间在流动」的感觉）。
+  // 只有树冠（树干的影子会从空地上一条黑线拉过来，露馅）；哪几棵在投影由引擎按太阳决定（Engine.updateTrees）
   const trees = new THREE.Group();
   const rand = rng(Math.round(bb.w * 100 + bb.d * 7));
   const sides = [
@@ -499,10 +563,6 @@ export function buildHouse(plan, walls, lib, { title, subtitle, ground = true } 
   ];
   for (const [tx, tz] of sides) {
     const tree = new THREE.Group();
-    const trunk = new THREE.Mesh(cylGeo(0.12, 0.16, 2.6, 8), K.cap);
-    trunk.castShadow = true;
-    trunk.layers.set(SHADOW_LAYER);
-    tree.add(trunk);
     // 稀一点的树冠（小团、有空隙）→ 窗里是斑驳的光，而不是一整片黑影
     for (let i = 0; i < 13; i++) {
       const leaf = new THREE.Mesh(sphereGeo(0.28 + rand() * 0.38, 8), K.cap);

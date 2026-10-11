@@ -2733,10 +2733,18 @@
   border-radius: 1px;
   background: var(--danger);
 }
+/* 小提示：和上面的字段左对齐（不要缩进的空白圆点），粗体开头 + 浅一点的说明 */
 .pe-howto {
-  margin: 14px 0;
-  padding-left: 18px;
-  font: 400 13px/1.65 var(--sans);
+  list-style: none;
+  margin: 16px 0 14px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  font: 400 13px/1.55 var(--sans);
+  color: var(--ink-soft);
+}
+.pe-howto b {
+  font-weight: 600;
   color: var(--ink);
 }
 .pe-issues p {

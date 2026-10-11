@@ -132,7 +132,8 @@ function StorageCheck({ rows, plan, talk, onPick }) {
                         <span className="srow-val">{rowValue(r)}</span>
                       </span>
                       {r.need != null && r.need > 0 && r.unit !== 'count' && <span className="srow-need">{r.unit === 'mm' ? t('客人数的：{0}', [fmtLen(r.need)]) : t('想要 {0} 座', [r.need])}</span>}
-                      {!ok && r.hint && <span className="srow-hint">{t('还差 {0}。{1}', [rowGap(r), t(r.hint)])}</span>}
+                      {/* 件数类（储物间、电器高柜、神台）的建议本身就说清楚缺什么，不再加「还差 1」 */}
+                      {!ok && r.hint && <span className="srow-hint">{r.unit === 'count' ? t(r.hint) : t('还差 {0}。{1}', [rowGap(r), t(r.hint)])}</span>}
                     </span>
                   </button>
                 </li>

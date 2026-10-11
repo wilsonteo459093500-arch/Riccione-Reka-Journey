@@ -594,6 +594,7 @@ export class Engine {
     this.sun.position.set(c.x + d.dir[0] * R, d.dir[1] * R, c.z + d.dir[2] * R);
     this.sun.color.set(d.sunColor);
     this.sun.intensity = d.sunIntensity;
+    this.updateTrees(d);
     this.fitShadowToSun();
     this.hemi.color.set(d.hemiSky);
     this.hemi.groundColor.set(d.hemiGround);
@@ -617,6 +618,27 @@ export class Engine {
     drawBackdrop(this.bgCanvas, this.bgLayers, d, this.demo ? firePulse(performance.now()) : null);
     this.bgTex.needsUpdate = true;
     this.dirty = true;
+  }
+
+  /**
+   * 窗外看不见的树：只在影子会落到房子上的时候投影 —— 树在太阳和房子之间（房子在光线前进的方向上），
+   * 而且太阳够低（< 36°：树冠的影子越过 2.6m 的空地，打在墙上 / 窗里）。
+   * 否则（正午、或树在房子背阴的一面）影子会落在空地上：一团找不到是谁投的黑影，不要。
+   */
+  updateTrees(d) {
+    const trees = this.house?.trees;
+    if (!trees) return;
+    const c = this.center || new THREE.Vector3();
+    const lx = -d.dir[0];
+    const lz = -d.dir[2];
+    const ll = Math.hypot(lx, lz);
+    const low = d.elevDeg < 36 && ll > 1e-3;
+    for (const t of trees.children) {
+      const hx = c.x - t.position.x;
+      const hz = c.z - t.position.z;
+      const hl = Math.hypot(hx, hz) || 1;
+      t.visible = low && (hx * lx + hz * lz) / (hl * ll) > 0.35;
+    }
   }
 
   /** 后期参数跟着时段：白天几乎没有辉光，只有夜里的灯会发光 */
