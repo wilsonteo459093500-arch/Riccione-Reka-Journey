@@ -958,4 +958,5 @@ export default {
   '怎么用': 'How to use',
   '关闭': 'Close',
   '{0} · {1} · 概念示意': '{0} · {1} · Concept only',
+  'Language / 语言': 'Language / 语言',
 };
