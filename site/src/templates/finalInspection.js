@@ -1,8 +1,7 @@
 // 完工终检表 FINAL INSPECTION REPORT（内部文件，无需出示客户）
 // 来源：Template_Sail_Final_Inspection_Report_Internal.docx
 // 27 项终检（Ⅰ–Ⅵ）→ 不合格记入整改清单（Ⅶ）→ 复验合格关闭 → 才约客户交付
-import { L } from './schema.js';
-import { countResults, val } from './helpers.js';
+import { countResults, val, langOf, say, pick, plural, fileName, siteLabelIn } from './helpers.js';
 import { fmtDate } from '../lib/format.js';
 
 const I = (no, zhT, enT, zhS, enS) => ({
@@ -14,9 +13,24 @@ const I = (no, zhT, enT, zhS, enS) => ({
 
 const remark = { label: { zh: '备注', en: 'Remarks' } };
 
-// 整改清单下拉选项（与表下图例一致）
-const CATEGORY = ['安装质量', '板件损伤', '缺件', '尺寸偏差', '水电', '硬装损伤', '其他'];
-const OWNER = ['安装班组', '工厂', '物流', '硬装单位', '其他'];
+// 整改清单下拉选项（与表下图例一致）。原表只有中文：存的值不变，enOnly = 纯英文文件显示的文字
+const OPT = (zh, enOnly) => ({ v: zh, zh, enOnly });
+const CATEGORY = [
+  OPT('安装质量', 'Installation quality'),
+  OPT('板件损伤', 'Panel damage'),
+  OPT('缺件', 'Missing parts'),
+  OPT('尺寸偏差', 'Dimension deviation'),
+  OPT('水电', 'M&E (plumbing / electrical)'),
+  OPT('硬装损伤', 'Renovation damage'),
+  OPT('其他', 'Others'),
+];
+const OWNER = [
+  OPT('安装班组', 'Installation crew'),
+  OPT('工厂', 'Factory'),
+  OPT('物流', 'Logistics'),
+  OPT('硬装单位', 'Renovation contractor'),
+  OPT('其他', 'Others'),
+];
 const SEVERITY = [
   { v: '高', zh: '高', en: 'High' },
   { v: '中', zh: '中', en: 'Medium' },
@@ -58,7 +72,8 @@ export default {
   accent: '#B5623A',
   doc: {
     brand: 'sail',
-    badge: { zh: 'INTERNAL · 内部文件', en: '无需出示客户 not for client' },
+    // 原表徽章本身中英混写：单语文件各给一行
+    badge: { zh: 'INTERNAL · 内部文件', en: '无需出示客户 not for client', zhOnly: '内部文件 · 无需出示客户', enOnly: 'INTERNAL · Not for client' },
     title: { zh: '完工终检表', en: 'FINAL INSPECTION REPORT' },
     subtitle: { zh: '终检合格，才约客户交付。', en: 'Pass this gate before booking the handover.' },
   },
@@ -68,8 +83,9 @@ export default {
       type: 'fields',
       columns: 3,
       fields: [
-        { key: 'project', type: 'text', label: { zh: '项目', en: 'Project' }, bind: 'project.siteLabel', required: true },
-        { key: 'so', type: 'text', label: 'SO No.', bind: 'project.so' },
+        { key: 'project', type: 'text', label: { zh: '项目', en: 'Project' }, bind: 'project.siteLabel', required: true, display: siteLabelIn },
+        // 原表标签就是 SO No.（双语 / 英文照旧）；纯中文文件写「SO 编号」，与质检 / 复尺表一致
+        { key: 'so', type: 'text', label: { zh: 'SO No.', zhOnly: 'SO 编号' }, bind: 'project.so' },
         { key: 'date', type: 'date', label: { zh: '终检日期', en: 'Inspection Date' }, bind: 'today', required: true },
       ],
     },
@@ -259,13 +275,28 @@ export default {
       id: 'rectification-legend',
       type: 'note',
       tone: 'info',
+      // 原表图例中英写在一行：zh = 原文整行（双语文件照旧），zhOnly / enOnly = 单语文件用的
       lines: [
-        { zh: '类别 Category：安装质量 / 板件损伤 / 缺件 / 尺寸偏差 / 水电 / 硬装损伤 / 其他' },
-        { zh: '责任方 Owner：安装班组 / 工厂 / 物流 / 硬装单位 / 其他' },
-        { zh: '严重度 Severity：高（影响交付）/ 中 / 低' },
+        {
+          zh: '类别 Category：安装质量 / 板件损伤 / 缺件 / 尺寸偏差 / 水电 / 硬装损伤 / 其他',
+          zhOnly: '类别：安装质量 / 板件损伤 / 缺件 / 尺寸偏差 / 水电 / 硬装损伤 / 其他',
+          enOnly: `Category: ${CATEGORY.map((o) => o.enOnly).join(' / ')}`,
+        },
+        {
+          zh: '责任方 Owner：安装班组 / 工厂 / 物流 / 硬装单位 / 其他',
+          zhOnly: '责任方：安装班组 / 工厂 / 物流 / 硬装单位 / 其他',
+          enOnly: `Owner: ${OWNER.map((o) => o.enOnly).join(' / ')}`,
+        },
+        {
+          zh: '严重度 Severity：高（影响交付）/ 中 / 低',
+          zhOnly: '严重度：高（影响交付）/ 中 / 低',
+          enOnly: 'Severity: High (affects handover) / Medium / Low',
+        },
         {
           zh: '★ 关单规则 Closing Rule：每项须附「问题照片 + 整改后复验照片」；全部整改项须在交付前关闭。',
           en: 'Each item requires an issue photo + a post-fix re-inspection photo; all items must close before handover.',
+          zhOnly: '★ 关单规则：每项须附「问题照片 + 整改后复验照片」；全部整改项须在交付前关闭。',
+          enOnly: '★ Closing rule: each item requires an issue photo + a post-fix re-inspection photo; all items must close before handover.',
         },
       ],
     },
@@ -304,6 +335,7 @@ export default {
     },
   ],
   // 结果统计：合格 / 不合格 / 未检查 / 整改项（已关闭）/ 结论
+  // 文字按文件语言：中文 / English；双语与原来逐字一致（见 helpers.say）
   summary(ctx) {
     const c = countResults(ctx);
     const P = c.P || 0;
@@ -311,23 +343,25 @@ export default {
     const rows = logRows(ctx);
     const closed = rows.filter(isClosed).length;
     const open = rows.length - closed;
+    const lg = langOf(ctx);
 
     const result = val(ctx, 'result');
     const opt = CONCLUSION.find((o) => o.v === result);
     const recheckDate = val(ctx, 'recheckDate');
     const rectifiedDate = val(ctx, 'rectifiedDate');
-    let conclusion = '未选择 Not selected';
+    let conclusion = say(ctx, '未选择', 'Not selected');
     let tone = 'warn';
     if (result === 'pass') {
-      conclusion = L(opt);
+      conclusion = pick(opt, lg);
       tone = F > closed || open || c._empty ? 'warn' : 'pass'; // 还有未检查项时不能显示绿色
     } else if (result === 'rectify') {
-      conclusion = L(opt);
+      conclusion = pick(opt, lg);
+      // 双语沿用原来的中文后缀
       if (filled(recheckDate)) {
-        conclusion += ` · 复验合格 ${fmtDate(recheckDate)}`;
+        conclusion += lg === 'en' ? ` · Re-inspection passed ${fmtDate(recheckDate)}` : ` · 复验合格 ${fmtDate(recheckDate)}`;
         tone = open ? 'warn' : 'pass';
       } else if (filled(rectifiedDate)) {
-        conclusion += ` · 整改完成 ${fmtDate(rectifiedDate)}`;
+        conclusion += lg === 'en' ? ` · Rectified ${fmtDate(rectifiedDate)}` : ` · 整改完成 ${fmtDate(rectifiedDate)}`;
         tone = 'warn';
       } else {
         tone = 'fail';
@@ -336,15 +370,21 @@ export default {
       conclusion = String(result);
     }
 
+    const n = (k) => say(ctx, `${k} 项`, plural(k, 'item'), `${k} 项 items`);
     return {
       title: { zh: '结果统计', en: 'Summary' },
       items: [
-        { label: { zh: '合格', en: 'Pass' }, value: `${P} 项 items`, tone: 'pass' },
-        { label: { zh: '不合格', en: 'Fail' }, value: `${F} 项 items`, tone: F ? 'fail' : 'neutral' },
-        { label: { zh: '未检查', en: 'Not checked' }, value: `${c._empty || 0} 项 items`, tone: c._empty ? 'warn' : 'neutral' },
+        { label: { zh: '合格', en: 'Pass' }, value: n(P), tone: 'pass' },
+        { label: { zh: '不合格', en: 'Fail' }, value: n(F), tone: F ? 'fail' : 'neutral' },
+        { label: { zh: '未检查', en: 'Not checked' }, value: n(c._empty || 0), tone: c._empty ? 'warn' : 'neutral' },
         {
           label: { zh: '整改项', en: 'Rectification' },
-          value: `${rows.length} 项 items · 已关闭 ${closed} closed`,
+          value: say(
+            ctx,
+            `${rows.length} 项 · 已关闭 ${closed}`,
+            `${plural(rows.length, 'item')} · ${closed} closed`,
+            `${rows.length} 项 items · 已关闭 ${closed} closed`,
+          ),
           tone: open ? 'warn' : rows.length ? 'pass' : 'neutral',
         },
         { label: { zh: '结论', en: 'Conclusion' }, value: conclusion, tone },
@@ -380,6 +420,6 @@ export default {
   },
   filename(ctx) {
     const v = ctx.report.values || {};
-    return ['完工终检', v.project, v.date].filter(Boolean).join('_');
+    return fileName(ctx, '完工终检', 'Final_Inspection', v.project, v.date);
   },
 };

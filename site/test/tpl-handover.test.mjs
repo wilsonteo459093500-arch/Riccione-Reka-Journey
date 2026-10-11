@@ -7,9 +7,11 @@ import { buildDocModel, modelMedia } from '../src/lib/docmodel.js';
 import { addDays } from '../src/lib/format.js';
 import { fillReport, SAMPLE_PROJECT, SAMPLE_SETTINGS } from './fixtures.mjs';
 
+const CJK = /[\u2E80-\u9FFF\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFFEF\u3000-\u303F]/;
+
 const lists = handover.sections.filter((s) => s.type === 'checklist');
 const model = (report) => buildDocModel({ template: handover, report, project: SAMPLE_PROJECT, settings: SAMPLE_SETTINGS });
-const ctxOf = (report) => makeCtx({ template: handover, report, project: SAMPLE_PROJECT, settings: SAMPLE_SETTINGS });
+const ctxOf = (report, lang) => makeCtx({ template: handover, report, project: SAMPLE_PROJECT, settings: SAMPLE_SETTINGS, lang });
 
 
 // checks() 可返回字符串或 { text, sectionId, target }：测试只比较文字
@@ -107,5 +109,33 @@ export const tests = [
     assert.equal(s.items[0].value, '1 / 20 项 items');
     assert.equal(L(s.items[4].label, 'zh'), 'Ⅳ 成品保护与收场');
     assert.equal(s.items[4].value, '1 / 5');
+  }],
+  ['summary / 文件名 / 徽章：中文 / English / 双语', () => {
+    const r = createReport(handover, { project: SAMPLE_PROJECT, settings: SAMPLE_SETTINGS });
+    r.values.date = '2026-10-09';
+    r.values.followup30 = '2026-11-08';
+    r.values.followup1y = '';
+    r.items.ho1_1 = { r: 'Y' };
+    const sum = (lang) => handover.summary(ctxOf(r, lang)).items;
+    const [both, zh, en] = [sum('both'), sum('zh'), sum('en')];
+    assert.equal(both[0].value, '1 / 20 项 items');
+    assert.equal(zh[0].value, '1 / 20 项');
+    assert.equal(en[0].value, '1 / 20 items');
+    assert.equal(en[1].label.enOnly, 'Ⅰ HABITABLE');
+    assert.match(both[6].value, /^Ⅰ-2 所有标签贴纸已撕除（板材·五金·玻璃·台面）；.*；等共 19 项$/);
+    assert.equal(zh[6].value, both[6].value);
+    assert.match(en[6].value, /^Ⅰ-2 All stickers & labels peeled off — panels · hardware · glass · worktop; .*; 19 in total$/);
+    assert.equal(both[7].value, '30天 2026-11-08 · 1年 —');
+    assert.equal(en[7].value, '30-day 2026-11-08 · 1-year —');
+    assert.ok(!CJK.test(en.map((i) => i.value).join('\n')));
+    // 全部完成
+    const done = fillReport(handover, 'pass');
+    assert.deepEqual(['both', 'zh', 'en'].map((l) => handover.summary(ctxOf(done, l)).items[6].value), ['无 None', '无', 'None']);
+    assert.equal(handover.filename(ctxOf(r, 'en')), 'Handover_Checklist_Tuai Timur Residence 17-3 (Hailey)_2026-10-09');
+    assert.equal(handover.filename(ctxOf(r, 'zh')), '交付清单_Tuai Timur Residence 17-3（Hailey）_2026-10-09');
+    // 徽章：双语照原表；单语各一行
+    assert.deepEqual([handover.doc.badge.zh, handover.doc.badge.en], ['INTERNAL · 内部文件', '无需出示客户 not for client']);
+    assert.equal(handover.doc.badge.zhOnly, '内部文件 · 无需出示客户');
+    assert.equal(handover.doc.badge.enOnly, 'INTERNAL · Not for client');
   }],
 ];

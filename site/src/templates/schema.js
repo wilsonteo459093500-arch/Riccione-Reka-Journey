@@ -24,6 +24,8 @@
 //     intro?: [{ zh, en }],         // 抬头下的说明段落（目标 / 规则）
 //     legend?: string,              // 图例一行
 //     footer?: string,              // 末页页脚
+//     zhOnly?: { kicker?, legend?, footer? },  // 纯中文 / 纯英文文件改用的整行文字（见下「文件语言」）
+//     enOnly?: { kicker?, legend?, footer? },
 //   },
 //   sections: Section[],
 //   summary?: (ctx) => SummaryBlock | null,  // 文档末尾自动统计 / 结论
@@ -31,6 +33,23 @@
 //   text?: (ctx) => string,                  // WhatsApp 文案；无则用通用摘要
 //   filename?: (ctx) => string,              // 导出文件名（不含扩展名）
 // }
+//
+// 文件语言（lib/lang.js）：生成的文件可选 中文 'zh' / English 'en' / 中英 'both'（默认，= 原来的双语）。
+// 只换固定文字，用户填写的内容原样输出。
+//   - 所有 { zh, en } 标签（标题、说明、字段、检查项、选项、签名、声明、备注行…）由文档模型自动取对应语言。
+//   - 单语覆盖：任何标签都可以再带 zhOnly / enOnly —— 纯中文 / 纯英文文件改用这段文字，双语文件照旧
+//     显示 zh / en。用于：原表只有中文的标签（补 enOnly，如场前审核表）；中英写在同一行的文字
+//     （zh = 原文整行，另给 zhOnly / enOnly，如终检整改图例）；英文行其实是中文的徽章 / 副标题。
+//     选项同理：{ v: '鞋柜', zh: '鞋柜', enOnly: 'Shoe cabinet' }（存的值 v 不变，旧报告照样认得）。
+//   - doc.kicker / legend / footer 是整行字符串（渲染器原样打印），单语版本放 doc.zhOnly / doc.enOnly。
+//   - summary / filename / text 拿到 ctx.lang 与 ctx.t(zh, en)；拼出来的数量 / 结论用 helpers.say(ctx, zh, en, both)，
+//     both 给原来的写法（如 '3 项 items'）保证双语输出逐字不变；文件名用 helpers.fileName(ctx, 中文前缀, 英文前缀, …)。
+//   - WhatsApp 文案：中文 = 原文，English = 同结构的英文版，中英 = 原来的文案（逐字不变；不选语言时就是它）。
+//   - 字段 display(value, ctx, field)：存的值在文件 / 文案里怎么显示（文档模型和 text() 都按它）。只用来把
+//     「新建时自动带入的固定文字」换成文件语言 —— 默认规定 / 默认物料（helpers.defaultTextIn）、预计工期、
+//     进场天数、工地称呼的全角括号（helpers.siteLabelIn）、落款「安装部」（helpers.deptIn）；只换与自动值
+//     完全相同的，用户写 / 改过的照原样；中文 / 双语 = 中文写法（与改版前一致）。存的值不变（「照这份再写一份」
+//     照样保留改过的内容，导出页换语言也立即生效）。
 //
 // Section（type 决定渲染方式）:
 //   { id, type: 'fields', no?, title?, note?, fields: Field[], columns?: 1|2|3,
@@ -58,10 +77,11 @@
 //
 // Field（字段）:
 //   { key, type, label: {zh,en} | string, placeholder?, hint?, required?,
-//     options?: string[] | [{ v, zh, en? }],   // select / radio / chips
+//     options?: string[] | [{ v, zh, en?, zhOnly?, enOnly? }],   // select / radio / chips
 //     multiple?: bool, allowCustom?: bool,     // chips
 //     bind?: BindKey,                          // 新建时自动带入
 //     default?: any | (ctx) => any,
+//     display?: (value, ctx, field) => value,  // 文件里怎么显示（见上「文件语言」）
 //     span?: 1|2|3,                            // 文档信息栏占几格
 //     max?: number,                            // photos 上限
 //     rows?: number }                          // textarea 行数

@@ -1,6 +1,7 @@
 // 报告数据：新建 / 带入项目资料 / 进度 / 填写提醒
 import { allFields, allItems, resolveScale, L } from '../templates/schema.js';
 import { todayISO } from './format.js';
+import { normLang, tx } from './lang.js';
 
 export const uid = (p = '') =>
   p + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -30,8 +31,12 @@ const clone = (v) => (v == null ? v : JSON.parse(JSON.stringify(v)));
 const isEmpty = (v) =>
   v == null || v === '' || (Array.isArray(v) && v.length === 0);
 
-/** 统一的模板上下文（模板里 default / summary / text / filename 都拿到它） */
-export function makeCtx({ template, report, project, settings, previous }) {
+/**
+ * 统一的模板上下文（模板里 default / summary / text / filename 都拿到它）。
+ * lang：生成文件用的语言（'zh' | 'en' | 'both'，见 lib/lang.js）；t(zh, en) 按它取文字。
+ */
+export function makeCtx({ template, report, project, settings, previous, lang }) {
+  const lg = normLang(lang);
   return {
     template,
     report: report || { values: {}, items: {}, tables: {}, signatures: {} },
@@ -39,6 +44,8 @@ export function makeCtx({ template, report, project, settings, previous }) {
     settings: settings || {},
     previous: previous || [],
     today: todayISO(),
+    lang: lg,
+    t: (zh, en, sep) => tx(lg, zh, en, sep),
   };
 }
 
@@ -291,6 +298,7 @@ export function duplicateReport(template, src, { project, settings, previous } =
     const v = src.values?.[f.key];
     if (!isEmpty(v)) fresh.values[f.key] = clone(v);
   }
+  if (src.lang) fresh.lang = src.lang; // 文件语言跟着上一份
   fresh.title = reportTitle(template, fresh, project);
   return fresh;
 }

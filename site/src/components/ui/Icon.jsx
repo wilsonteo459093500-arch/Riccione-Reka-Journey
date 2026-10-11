@@ -6,7 +6,7 @@ import {
   FolderOpen, Building2, House, PenLine, Video, MapPin, Phone, Star, TriangleAlert, Info,
   EllipsisVertical, Download, Upload, Eye, RefreshCw, LoaderCircle, MessageCircle, Send,
   CircleCheck, Pencil, ListChecks, Clock, Smartphone, HardDrive, RotateCcw, CircleAlert,
-  FilePlus2, Play, Link, CopyPlus, FolderPlus, Wand2, Minus,
+  FilePlus2, Play, Link, CopyPlus, FolderPlus, Wand2, Minus, Languages,
 } from 'lucide-react';
 
 const ICONS = {
@@ -16,7 +16,7 @@ const ICONS = {
   FolderOpen, Building2, House, PenLine, Video, MapPin, Phone, Star, TriangleAlert, Info,
   EllipsisVertical, Download, Upload, Eye, RefreshCw, LoaderCircle, MessageCircle, Send,
   CircleCheck, Pencil, ListChecks, Clock, Smartphone, HardDrive, RotateCcw, CircleAlert,
-  FilePlus2, Play, Link, CopyPlus, FolderPlus, Wand2, Minus,
+  FilePlus2, Play, Link, CopyPlus, FolderPlus, Wand2, Minus, Languages,
 };
 
 export default function Icon({ name, size = 18, className = '', strokeWidth = 2, ...rest }) {

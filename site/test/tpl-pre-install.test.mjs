@@ -6,11 +6,15 @@ import { createReport, makeCtx, issues, progress, siteLabel } from '../src/lib/r
 import { buildDocModel, modelMedia } from '../src/lib/docmodel.js';
 import { fillReport, SAMPLE_PROJECT, SAMPLE_SETTINGS } from './fixtures.mjs';
 
+/** 标签的中 / 英两行（双语文件显示的内容）；单语覆盖 zhOnly / enOnly 另测，见 lang.test.mjs */
+const bi = ({ zh, en }) => (en === undefined ? { zh } : { zh, en });
+const CJK = /[\u2E80-\u9FFF\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFFEF\u3000-\u303F]/;
+
 const t = preInstall;
 const lists = t.sections.filter((s) => s.type === 'checklist');
 const oLists = lists.filter((s) => /^O\d$/.test(s.no || ''));
 const model = (report) => buildDocModel({ template: t, report, project: SAMPLE_PROJECT, settings: SAMPLE_SETTINGS });
-const ctxOf = (report) => makeCtx({ template: t, report, project: SAMPLE_PROJECT, settings: SAMPLE_SETTINGS });
+const ctxOf = (report, lang) => makeCtx({ template: t, report, project: SAMPLE_PROJECT, settings: SAMPLE_SETTINGS, lang });
 const byId = Object.fromEntries(allItems(t).map(({ item }) => [item.id, item]));
 
 /** 新建一份「全部关键项 是、判定 GO、项目经理已签」的报告，再按需改 */
@@ -72,21 +76,21 @@ export const tests = [
   ['原文逐字', () => {
     assert.equal(t.doc.kicker, 'V-SMOOTH  ·  5O');
     assert.deepEqual(t.doc.title, { zh: '场前审核表', en: 'Pre-Installation Site Audit' });
-    assert.deepEqual(t.doc.subtitle, { zh: '按 5O 五步核查:订单 · 现场 · 客户 · 运输 · 开场', en: '现场主管填写,项目经理复核' });
+    assert.deepEqual(bi(t.doc.subtitle), { zh: '按 5O 五步核查:订单 · 现场 · 客户 · 运输 · 开场', en: '现场主管填写,项目经理复核' });
     assert.equal(t.doc.legend, '图例:  ★ = 关键项,不通过则不得开工     【影像】= 需拍照或录影存档');
     assert.equal(t.doc.footer, '本表未完成、未判定「可开工」,不得安排送装。');
-    assert.deepEqual(lists[0].note, { zh: '钱和图 — 尾款没到、图纸不是最新版,一律不安排送装' });
-    assert.deepEqual(lists[4].note, { zh: '铺开场地:保护、按图分区落位、垃圾车 — 师傅一到就能开工' });
-    assert.deepEqual(byId.pi2_01.title, { zh: '硬装已全部完成,复尺后现场无改动 (贴砖 / 油漆 / 门槛 / 管线点位都没动)', en: 'HARDSCAPE DONE, NO CHANGES' });
-    assert.deepEqual(byId.pi2_02.title, { zh: '电位 / 水位抽查:与图纸一致,不被柜体挡住', en: 'M&E SPOT-CHECK VS DRAWINGS' });
-    assert.deepEqual(byId.pi2_04.title, { zh: '临时水电可用,够师傅施工' });
-    assert.deepEqual(byId.pi2_07.title, { zh: '全屋一镜到底:每个房间从门口慢慢转一圈,边拍边报房间名', en: 'EVERY ROOM, ONE CONTINUOUS TAKE' });
-    assert.deepEqual(byId.pi4_01.title, { zh: '货梯已预约,轿厢尺寸与载重装得下最大板件', en: 'LIFT BOOKED & FITS LARGEST PANEL' });
-    assert.deepEqual(byId.pi5_02.title, { zh: '物料按 Floor Plan 分区贴标 (厨房 / 卧室 / 客厅),大件不挡通道', en: 'STAGED PER FLOOR PLAN' });
+    assert.deepEqual(bi(lists[0].note), { zh: '钱和图 — 尾款没到、图纸不是最新版,一律不安排送装' });
+    assert.deepEqual(bi(lists[4].note), { zh: '铺开场地:保护、按图分区落位、垃圾车 — 师傅一到就能开工' });
+    assert.deepEqual(bi(byId.pi2_01.title), { zh: '硬装已全部完成,复尺后现场无改动 (贴砖 / 油漆 / 门槛 / 管线点位都没动)', en: 'HARDSCAPE DONE, NO CHANGES' });
+    assert.deepEqual(bi(byId.pi2_02.title), { zh: '电位 / 水位抽查:与图纸一致,不被柜体挡住', en: 'M&E SPOT-CHECK VS DRAWINGS' });
+    assert.deepEqual(bi(byId.pi2_04.title), { zh: '临时水电可用,够师傅施工' });
+    assert.deepEqual(bi(byId.pi2_07.title), { zh: '全屋一镜到底:每个房间从门口慢慢转一圈,边拍边报房间名', en: 'EVERY ROOM, ONE CONTINUOUS TAKE' });
+    assert.deepEqual(bi(byId.pi4_01.title), { zh: '货梯已预约,轿厢尺寸与载重装得下最大板件', en: 'LIFT BOOKED & FITS LARGEST PANEL' });
+    assert.deepEqual(bi(byId.pi5_02.title), { zh: '物料按 Floor Plan 分区贴标 (厨房 / 卧室 / 客厅),大件不挡通道', en: 'STAGED PER FLOOR PLAN' });
     assert.equal(byId.pi4_05.input.placeholder, '填写示例:例: B2 卸货 → 货梯 → 18F → 客厅堆放区');
     assert.equal(byId.pi2_05.input.placeholder, '填写示例:哪里 / 差什么 / 谁负责 / 几时好');
-    assert.deepEqual(byId.pi2_06.title, { zh: '进场视频链接', en: 'VIDEO LINK' });
-    assert.deepEqual(byId.pis_01.title, { zh: '开工判定', en: 'GO / NO-GO DECISION' });
+    assert.deepEqual(bi(byId.pi2_06.title), { zh: '进场视频链接', en: 'VIDEO LINK' });
+    assert.deepEqual(bi(byId.pis_01.title), { zh: '开工判定', en: 'GO / NO-GO DECISION' });
     const rule = t.sections.find((s) => s.type === 'note');
     assert.equal(rule.tone, 'warn');
     assert.equal(rule.lines.at(-1).zh, '规则:任一关键项(★)判定为「否 Fail」,一律不得开工。现场主管无权放行,须由项目经理复核。');
@@ -229,5 +233,69 @@ export const tests = [
     assert.ok(list.some((i) => i.target === 'pi2_07' && /影像/.test(i.text)));
     assert.ok(!list.some((i) => i.target === 'pi2_08'));
     assert.ok(list.some((i) => i.text === '未选择开工判定（GO / 有条件开工 / NO-GO）'));
+  }],
+  ['纯英文：原表只有中文的标签都配了英文（enOnly），中文 / 双语不显示', () => {
+    // 所有中文-only 的标签（节说明、判定项、填写项、信息栏、规则）都有不含中文的英文版
+    // 图例 / 页脚是整行字符串：纯英文文件用 doc.enOnly 里的
+    assert.ok(!CJK.test(t.doc.enOnly.legend) && !CJK.test(t.doc.enOnly.footer));
+    const labels = [
+      t.doc.subtitle,
+      ...allFields(t).map((f) => f.label),
+      ...lists.flatMap((s) => [s.title, s.note].filter(Boolean)),
+      ...allItems(t).map(({ item }) => item.title),
+      ...t.sections.filter((s) => s.type === 'note').flatMap((s) => [s.title, ...s.lines]),
+    ];
+    for (const l of labels) {
+      const en = typeof l.enOnly === 'string' ? l.enOnly : l.en || l.zh;
+      assert.ok(en && !CJK.test(en), `缺英文：${JSON.stringify(l)}`);
+    }
+    // 判定项的英文是整句（原表英文行只是大写短标题）
+    assert.equal(byId.pi1_01.title.enOnly, 'Final payment received; delivery & installation can be scheduled');
+    assert.equal(byId.pi2_04.title.enOnly, 'Temporary water & power available and sufficient for the crew');
+    // 规则最后一行：中文文件不带「Fail」
+    const rule = t.sections.find((s) => s.type === 'note');
+    assert.equal(rule.lines.at(-1).zhOnly, '规则:任一关键项(★)判定为「否」,一律不得开工。现场主管无权放行,须由项目经理复核。');
+  }],
+  ['summary：中文 / English / 双语（双语与原来逐字一致）', () => {
+    const nogo = allPass({ pi3_03: { r: 'F' }, pi1_01: { r: 'F' } });
+    const zh = t.summary(ctxOf(nogo, 'zh'));
+    const both = t.summary(ctxOf(nogo, 'both'));
+    const en = t.summary(ctxOf(nogo, 'en'));
+    // 中文 = 原来的中文写法（双语里本来就只有中文的部分不变）
+    assert.deepEqual(zh.conclusion, both.conclusion);
+    assert.deepEqual(zh.items.slice(0, 6), both.items.slice(0, 6));
+    assert.equal(zh.items[7].value, 'GO 可开工');
+    assert.equal(both.items[6].value, '1 项 items');
+    assert.equal(zh.items[6].value, '1 项');
+    assert.equal(en.items[6].value, '1 item');
+    assert.equal(en.items[0].value, 'Pass 1 · Fail 1');
+    assert.equal(en.items[0].label.enOnly, 'O1 ORDER');
+    assert.equal(en.items[7].value, 'GO — Cleared to start');
+    assert.equal(en.conclusion.value, 'NO-GO — Entry on hold');
+    assert.equal(en.conclusion.note, 'A key item failed. Entry only after rectification and a passed re-check. (O1-01)');
+    const cond = t.summary(ctxOf(allPass({ pi3_03: { r: 'F' }, pi4_02: { r: 'F' } }), 'en'));
+    assert.equal(cond.conclusion.value, 'Conditional start');
+    assert.equal(cond.conclusion.note, '2 general issues (O3-03, O4-02): list the person in charge and deadline; installation not affected');
+    const blank = t.summary(makeCtx({ template: t, report: {}, lang: 'en' }));
+    assert.equal(blank.conclusion.value, 'Incomplete');
+    assert.equal(blank.conclusion.note, '18 key items (★) not yet checked');
+    assert.equal(blank.items[0].value, 'Pass 0 · Fail 0 · Unanswered 2');
+    assert.equal(blank.items[7].value, 'Not selected');
+    assert.equal(t.summary(makeCtx({ template: t, report: {}, lang: 'zh' })).items[7].value, '未选择');
+    for (const s of [en, cond, blank]) {
+      const vals = [...s.items.map((i) => i.value), s.conclusion.value, s.conclusion.note].join('\n');
+      assert.ok(!CJK.test(vals), vals);
+    }
+  }],
+  ['文件名 / 进场天数：按语言', () => {
+    const r = createReport(t, { project: SAMPLE_PROJECT, settings: SAMPLE_SETTINGS });
+    r.values.date = '2026-10-09';
+    assert.equal(t.filename(ctxOf(r)), '场前审核_Tuai Timur Residence 17-3（Hailey）_2026-10-09');
+    assert.equal(t.filename(ctxOf(r, 'zh')), '场前审核_Tuai Timur Residence 17-3（Hailey）_2026-10-09');
+    assert.equal(t.filename(ctxOf(r, 'en')), 'Pre-Install_Audit_Tuai Timur Residence 17-3 (Hailey)_2026-10-09');
+    // 默认文件语言是 English：新建时进场天数写英文
+    const e = createReport(t, { project: SAMPLE_PROJECT, settings: { ...SAMPLE_SETTINGS, docLang: 'en' } });
+    assert.equal(e.values.entry, '2026-10-08 · 5 days');
+    assert.equal(createReport(t, { project: { ...SAMPLE_PROJECT, plannedDays: 1 }, settings: { docLang: 'en' } }).values.entry, '2026-10-08 · 1 day');
   }],
 ];

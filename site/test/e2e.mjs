@@ -242,6 +242,34 @@ try {
   assert.equal(await page.getByText('刚才的照片没收到').count(), 0, '正常选了照片，重新加载后却提示没收到');
   console.log('✓ 回归：拍照时页面被系统关掉会提示并滚回原处；正常选照片不误报');
 
+  // ---- 文件语言：导出页切到 English → 预览 / 文件只剩英文固定文字；切回中文只剩中文 ----
+  await page.goto(`${BASE}/#/`);
+  await page.locator('main button', { hasText: '安装质检清单' }).filter({ hasText: '草稿' }).first().click();
+  await page.getByText('已自动保存').first().waitFor();
+  await page.getByRole('button', { name: /预览 & 导出/ }).click();
+  await page.getByRole('radio', { name: 'English' }).click();
+  await page.locator('[data-page="1"]').first().waitFor();
+  await page.waitForTimeout(800);
+  const pvEn = await page.locator('[data-page="1"]').first().innerText();
+  assert.match(pvEn, /INSTALLATION QUALITY CHECKLIST/, '英文预览没有英文标题');
+  assert.doesNotMatch(pvEn, /检查项目|判定|备注|第 1 \//, '英文预览里还有中文固定文字');
+  await shot('35-lang-en');
+  for (const ext of ['pdf', 'docx', 'xlsx']) {
+    const card = page.locator(`[data-format="${ext}"]`);
+    await card.getByRole('button', { name: /生成/ }).click();
+    await card.getByRole('button', { name: /下载/ }).waitFor({ timeout: 90_000 });
+    const [dl] = await Promise.all([page.waitForEvent('download'), card.getByRole('button', { name: /下载/ }).click()]);
+    assert.match(dl.suggestedFilename(), /^Installation_QC_/, `英文文件名不对：${dl.suggestedFilename()}`);
+    await dl.saveAs(join(OUT, `lang-en.${ext}`));
+  }
+  await page.getByRole('radio', { name: '中文' }).click();
+  await page.waitForTimeout(800);
+  const pvZh = await page.locator('[data-page="1"]').first().innerText();
+  assert.match(pvZh, /安装质检清单/);
+  assert.doesNotMatch(pvZh, /Check Item|Remarks|Page 1 of/, '中文预览里还有英文固定文字');
+  await page.getByRole('radio', { name: '中英' }).click();
+  console.log('✓ 文件语言：English / 中文 / 中英 切换，预览和导出跟着变');
+
   // ---- 师傅链接：主管在项目页复制链接 → 师傅新手机打开 → 直接进入今天的每日汇报 ----
   await page.goto(`${BASE}/#/projects`);
   await page.getByText('Tuai Timur Residence 17-3（Hailey）').first().click();

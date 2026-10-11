@@ -3,6 +3,7 @@ import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './ui/Icon.jsx';
 import { TopBar, Spinner, useUI, Empty } from './ui/UI.jsx';
 import SummaryCard from './SummaryCard.jsx';
+import LangPicker from './LangPicker.jsx';
 import ErrorBoundary from './ui/ErrorBoundary.jsx';
 import { useStore } from '../lib/store.jsx';
 import { getTemplate } from '../templates/index.js';
@@ -14,6 +15,7 @@ import { buildText, photoListForShare } from '../lib/text.js';
 import { copyText, shareFile, shareFiles, downloadBlob, openWhatsApp, mediaToFile } from '../lib/share.js';
 import { fmtBytes } from '../lib/images.js';
 import { navigate, goBack } from '../lib/router.js';
+import { reportLang } from '../lib/lang.js';
 
 const DocPreview = lazy(() => import('./doc/DocPreview.jsx'));
 
@@ -124,6 +126,7 @@ export default function ExportScreen({ reportId }) {
     () => (template && report ? listIssues(template, report, { project, settings: store.settings }) : []),
     [template, report, project, store.settings],
   );
+  const lang = reportLang(report, store.settings);
   const summary = useMemo(() => {
     if (!template?.summary || !report) return null;
     try {
@@ -235,6 +238,17 @@ export default function ExportScreen({ reportId }) {
             </div>
           </details>
         )}
+
+        <LangPicker
+          value={lang}
+          hint={isMsg ? '文案和文件里的固定文字；自己填的内容不翻译' : '文件里的固定文字；自己填的内容不翻译'}
+          onChange={async (v) => {
+            if (v === lang) return;
+            // 换语言不算改内容（不更新修改时间）；已生成的文件作废，按新语言重新生成
+            await store.saveReport({ ...report, lang: v }, { touch: false });
+            setFiles({});
+          }}
+        />
 
         {summary && !isMsg && <SummaryCard summary={summary} />}
 

@@ -29,20 +29,25 @@
 //   { type: 'summary', title, items: [{ label, value, tone }], conclusion? }
 //
 // Opt = { v, zh, en, tone }
+//
+// 语言（lib/lang.js）：meta.lang = 'zh' | 'en' | 'both'。模型里所有 { zh, en } 标签都已按语言规整
+// （zh 模式 en 为空；en 模式 zh 为空），渲染器用 labelParts() 取主 / 副两行，写死的成对文字用 tx()。
 // MediaRef = { id, kind: 'photo'|'video'|'signature', caption? }
 //   渲染器用 media 加载器把 id 换成 blob / url。
 // ============================================================
-import { resolveScale, normOptions, L } from '../templates/schema.js';
+import { resolveScale, normOptions } from '../templates/schema.js';
+import { shownValue } from '../templates/helpers.js';
 import { makeCtx, reportTitle } from './report.js';
 import { fmtDate, fmtTime, safeFilename, todayISO } from './format.js';
+import { labelText, latinOnly, localize, localizeDeep, reportLang, tx } from './lang.js';
 
 const isEmpty = (v) => v == null || v === '' || (Array.isArray(v) && v.length === 0);
 
 const ref = (id, kind = 'photo') => (id ? { id, kind } : null);
 const refs = (ids, kind = 'photo') => (ids || []).filter(Boolean).map((id) => ({ id, kind }));
 
-/** 把一个字段值格式化成文档里显示的字符串 / 行 */
-export function formatFieldValue(field, value) {
+/** 把一个字段值格式化成文档里显示的字符串 / 行（lang 决定是 / 否、选项文字用哪种语言） */
+export function formatFieldValue(field, value, lang = 'both') {
   const t = field.type;
   if (t === 'photos') return { kind: 'photos', value: '', photos: refs(value) };
   if (t === 'video') return { kind: 'video', value: '', video: ref(value, 'video') };
@@ -54,8 +59,8 @@ export function formatFieldValue(field, value) {
   if (t === 'date') return { kind: 'inline', value: value ? fmtDate(value) : '' };
   if (t === 'time') return { kind: 'inline', value: value ? fmtTime(value) : '' };
   if (t === 'yesno') {
-    if (value === true || value === 'Y') return { kind: 'inline', value: '是 Yes' };
-    if (value === false || value === 'N') return { kind: 'inline', value: '否 No' };
+    if (value === true || value === 'Y') return { kind: 'inline', value: tx(lang, '是', 'Yes') };
+    if (value === false || value === 'N') return { kind: 'inline', value: tx(lang, '否', 'No') };
     return { kind: 'inline', value: '' };
   }
   if (t === 'select' || t === 'radio' || t === 'chips') {
@@ -63,14 +68,14 @@ export function formatFieldValue(field, value) {
     const arr = Array.isArray(value) ? value : isEmpty(value) ? [] : [value];
     const labels = arr.map((v) => {
       const o = opts.find((x) => x.v === v);
-      return o ? L(o) : String(v);
+      return o ? labelText(localize(o, lang)) : String(v); // 选项也认单语覆盖（zhOnly / enOnly）
     });
     return { kind: 'inline', value: labels.join(' / ') };
   }
   return { kind: 'inline', value: value == null ? '' : String(value) };
 }
 
-function fieldsBlock(section, template, report) {
+function fieldsBlock(section, template, report, lang, ctx) {
   const layout = section.layout || (template.kind === 'message' ? 'list' : 'grid');
   return {
     type: 'fields',
@@ -83,8 +88,9 @@ function fieldsBlock(section, template, report) {
     fields: section.fields
       .filter((f) => !f.hidden)
       .map((f) => {
-        const v = report.values?.[f.key];
-        const out = formatFieldValue(f, v);
+        // 字段 display：自动带入的固定文字（默认规定、预计工期、工地称呼的括号…）按文件语言显示（见 schema.js）
+        const v = shownValue(f, report.values?.[f.key], ctx);
+        const out = formatFieldValue(f, v, lang);
         return {
           key: f.key,
           label: typeof f.label === 'string' ? { zh: f.label } : f.label,
@@ -96,7 +102,7 @@ function fieldsBlock(section, template, report) {
   };
 }
 
-function checklistBlock(section, report) {
+function checklistBlock(section, report, lang) {
   const scale = resolveScale(section.scale);
   const rows = section.items.map((it) => {
     const a = report.items?.[it.id] || {};
@@ -104,7 +110,7 @@ function checklistBlock(section, report) {
     let value = '';
     let lines;
     if (it.input) {
-      const f = formatFieldValue(it.input, a.value);
+      const f = formatFieldValue(it.input, a.value, lang);
       value = f.value;
       lines = f.lines;
     }
@@ -154,13 +160,13 @@ export function tablePhotoSlots(section) {
   return [];
 }
 
-function tableBlock(section, report) {
+function tableBlock(section, report, lang) {
   const raw = report.tables?.[section.id] || [];
   const slots = tablePhotoSlots(section);
   const rows = raw
     .map((r) => {
       const cells = {};
-      for (const c of section.columns) cells[c.key] = formatFieldValue(c, r[c.key]).value;
+      for (const c of section.columns) cells[c.key] = formatFieldValue(c, r[c.key], lang).value;
       const photoGroups = slots
         .map((s) => ({ key: s.key, label: s.label, photos: refs(r[s.key]) }))
         .filter((g) => g.photos.length);
@@ -204,17 +210,18 @@ function signaturesBlock(section, report) {
 }
 
 /**
- * @param {{ template, report, project?, settings? }} args
+ * @param {{ template, report, project?, settings?, lang? }} args  lang 不给时用 report.lang / settings.docLang / 双语
  * @returns DocModel
  */
-export function buildDocModel({ template, report, project, settings }) {
-  const ctx = makeCtx({ template, report, project, settings });
+export function buildDocModel({ template, report, project, settings, lang }) {
+  const lg = reportLang(lang ? { lang } : report, settings);
+  const ctx = makeCtx({ template, report, project, settings, lang: lg });
   const blocks = [];
   for (const s of template.sections) {
     if (s.hidden) continue;
-    if (s.type === 'fields') blocks.push(fieldsBlock(s, template, report));
-    else if (s.type === 'checklist') blocks.push(checklistBlock(s, report));
-    else if (s.type === 'table') blocks.push(tableBlock(s, report));
+    if (s.type === 'fields') blocks.push(fieldsBlock(s, template, report, lg, ctx));
+    else if (s.type === 'checklist') blocks.push(checklistBlock(s, report, lg));
+    else if (s.type === 'table') blocks.push(tableBlock(s, report, lg));
     else if (s.type === 'signatures') blocks.push(signaturesBlock(s, report));
     else if (s.type === 'note')
       blocks.push({ type: 'note', id: s.id, title: s.title, tone: s.tone || 'info', lines: s.lines || [] });
@@ -234,14 +241,21 @@ export function buildDocModel({ template, report, project, settings }) {
     }
   } else if (slot >= 0) blocks.splice(slot, 1);
 
-  const doc = template.doc || {};
+  // 纯中文 / 纯英文文件：模板 doc.zhOnly / doc.enOnly 里的整行文字（抬头小字 / 图例 / 页脚）替换双语原文
+  const doc0 = template.doc || {};
+  const doc = { ...doc0, ...((lg === 'zh' ? doc0.zhOnly : lg === 'en' ? doc0.enOnly : null) || {}) };
   const fname =
     typeof template.filename === 'function'
       ? template.filename(ctx)
-      : [template.name.zh, report.values?.project, report.values?.date || todayISO()].filter(Boolean).join('_');
+      : [lg === 'en' ? template.name.en : template.name.zh, report.values?.project, report.values?.date || todayISO()]
+          .filter(Boolean)
+          .join('_');
+  const company = settings?.company || '溪岸 Sail by Riccione Reka';
+  const dept = settings?.dept || '安装部';
 
-  return {
+  return localizeDeep({
     meta: {
+      lang: lg,
       templateId: template.id,
       kind: template.kind,
       brand: doc.brand || 'sail',
@@ -257,11 +271,11 @@ export function buildDocModel({ template, report, project, settings }) {
       reportTitle: report.title || reportTitle(template, report, project),
       status: report.status,
       generatedAt: new Date().toISOString(),
-      company: settings?.company || '溪岸 Sail by Riccione Reka',
-      dept: settings?.dept || '安装部',
+      company: lg === 'en' ? latinOnly(company, 'Sail by Riccione Reka') : company,
+      dept: lg === 'en' ? latinOnly(dept === '安装部' ? 'Installation Department' : dept, 'Installation Department') : dept,
     },
     blocks,
-  };
+  }, lg);
 }
 
 /** 文档模型里引用的全部媒体（渲染前预加载用） */

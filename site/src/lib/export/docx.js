@@ -8,6 +8,10 @@
 // 章节条（奶油底 + 赤陶左边线）· 检查表 / 表格 / 照片 / 统计 / 签名 ·
 // 每页页脚「公司 · 报告 · 第 X / Y 页」，第 2 页起有细抬头。
 //
+// 文件语言（model.meta.lang，见 lib/lang.js）：'zh' 只出中文、'en' 只出英文、'both' 中英（与以前逐字一样）。
+// 模型里的标签已按语言规整（单语时另一半为空），这里一律按「主 / 副」两行取（labelParts：主 = zh || en）；
+// 写死的成对文字（表头、页码、签名栏、照片张数…）走 tx() / pair()。用户填写的内容原样输出。
+//
 // exportDocx(model, media, { logo }) → Promise<Blob>
 //   media.get(id) → { kind, blob, thumb, poster?, w, h, duration?, caption? } | null
 //   logo = PNG 的 ArrayBuffer | Uint8Array | Blob（可省略）
@@ -38,6 +42,7 @@ import {
   WidthType,
 } from 'docx';
 import { modelMedia } from '../docmodel.js';
+import { labelParts, labelText, localize, normLang, tx } from '../lang.js';
 
 export const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
@@ -69,6 +74,7 @@ const FONT = { ascii: 'Arial', hAnsi: 'Arial', eastAsia: 'Microsoft YaHei', cs: 
 const SYM = { ascii: 'Segoe UI Symbol', hAnsi: 'Segoe UI Symbol', eastAsia: 'Segoe UI Symbol', cs: 'Segoe UI Symbol' };
 const BOX_ON = '☑';
 const BOX_OFF = '☐';
+const BOX_MM = 9.5 * 0.3528; // 9.5pt 方块符号的宽度（mm）
 const NBSP = String.fromCharCode(0xa0);
 
 // ---------- 小工具 ----------
@@ -102,13 +108,66 @@ function clean(s) {
   return out;
 }
 
-/** 双语标签统一成 { zh, en }（字符串 = 只有 zh） */
-function lab(x) {
+// ---------- 语言 ----------
+const CJK = /[\u2E80-\u9FFF\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFFEF\u3000-\u303F]/;
+const COMPANY = (lg) => (lg === 'en' ? 'Sail by Riccione Reka' : '溪岸 Sail by Riccione Reka');
+/** 冒号：中文全角，英文半角 + 空格 */
+const colon = (lg) => (lg === 'en' ? ': ' : '：');
+/** 渲染器里写死的成对标签 → 按语言规整的 { zh, en }（双语原样） */
+const pair = (lg, zh, en) => localize({ zh, en }, lg);
+
+/** 双语标签 → { zh, en } 两半原样（字符串 = 只有 zh）；「EN · 中文」这种按位置排的地方用 */
+function slot(x) {
   if (x == null || x === '') return { zh: '', en: '' };
   if (typeof x === 'string' || typeof x === 'number') return { zh: clean(x).trim(), en: '' };
   const zh = clean(x.zh || '').trim();
   const en = clean(x.en || '').trim();
   return en === zh ? { zh, en: '' } : { zh, en };
+}
+
+/**
+ * 标签 → { p: 主行, s: 副行 }（labelParts：主 = zh || en，副 = 有中文时的英文）。
+ * 单语文件里另一半是空的：纯英文时英文就是主行（粗 / 大号），不会排成灰色小字的副行。
+ */
+function lab(x) {
+  const { zh, en } = slot(x);
+  const { primary, secondary } = labelParts({ zh, en });
+  return { p: primary, s: secondary };
+}
+
+/** 模板里的一段固定文字（抬头小字 / 图例 / 页尾）：字符串原样；{ zh, en }（已按语言规整）拼成一行 */
+const textOf = (x) => (x == null ? '' : typeof x === 'string' ? x : labelText(x));
+
+/**
+ * 单语文件：模板给了 zhOnly / enOnly（中英写在一行的徽章、原表只有中文的标签配的英文整句…）就用它 ——
+ * zh → { zh: zhOnly, en: '' }，en → { zh: '', en: enOnly }。lib/lang.js 的 localize 已处理过的结果不变（幂等）；
+ * 双语原样返回。
+ */
+function pickOnly(node, lg) {
+  if (lg === 'both' || node == null || typeof node !== 'object') return node;
+  if (Array.isArray(node)) return node.map((x) => pickOnly(x, lg));
+  const out = {};
+  for (const [k, v] of Object.entries(node)) out[k] = pickOnly(v, lg);
+  const only = node[lg === 'zh' ? 'zhOnly' : 'enOnly'];
+  if (typeof only === 'string' && only.trim()) {
+    out.zh = lg === 'zh' ? only : '';
+    out.en = lg === 'en' ? only : '';
+  }
+  return out;
+}
+
+/**
+ * 页脚 / 文档属性里的报告名。自动生成的报告名是「模板中文名 · 项目（客户）· 日期」：纯英文文件里开头那段
+ * 模板名换成英文标题、自动加的全角括号换成半角（项目名 / 客户 / 日期本身原样）。docmodel 已按语言给出的不动。
+ * 没有项目、日期也空着时报告名只剩模板中文名一段，同样换成英文标题（与 PDF footTitle / Excel 一致）。
+ */
+function reportName(meta, lg) {
+  const rt = clean(meta.reportTitle || '');
+  if (lg !== 'en' || !CJK.test(rt)) return rt;
+  const parts = rt.trim().split(' · ');
+  const name = lab(meta.title).p;
+  if (CJK.test(parts[0]) && name) parts[0] = name;
+  return parts.join(' · ').replace(/\s*（([^（）]*)）/g, ' ($1)');
 }
 
 /** 整数列宽，按权重分配，保证总和 = total */
@@ -167,33 +226,33 @@ const gap = (h = 160, keep = false) =>
     keepNext: keep || undefined,
   });
 
-/** 双语 runs：中文主（粗）+ 英文次（小号灰） */
+/** 双语 runs：主行（中文，粗）+ 副行（英文，小号灰）；单语只有主行（zhSize / zhColor… 是主行样式） */
 function bi(label, o = {}) {
   const l = lab(label);
   const runs = [];
-  if (l.zh) runs.push(T(l.zh, { size: o.zhSize ?? 9, bold: o.bold, italic: o.zhItalic, color: o.zhColor ?? C.ink, spacing: o.zhSpacing }));
-  if (l.en) {
-    const sep = l.zh && !o.enBreak ? (o.sep ?? ' ') : '';
+  if (l.p) runs.push(T(l.p, { size: o.zhSize ?? 9, bold: o.bold, italic: o.zhItalic, color: o.zhColor ?? C.ink, spacing: o.zhSpacing }));
+  if (l.s) {
+    const sep = !o.enBreak ? (o.sep ?? ' ') : '';
     runs.push(
-      T(sep + l.en, {
+      T(sep + l.s, {
         size: o.enSize ?? 7.5,
         color: o.enColor ?? C.muted,
         italic: o.enItalic,
         bold: o.enBold,
         spacing: o.enSpacing,
-        br: l.zh && o.enBreak ? 1 : 0,
+        br: o.enBreak ? 1 : 0,
       }),
     );
   }
   return runs;
 }
 
-/** 双语两段：中文一段 + 英文一段（标准 / 方法栏） */
+/** 双语两段：主行一段 + 副行一段（标准 / 方法栏） */
 function biParas(label, o = {}) {
   const l = lab(label);
   const out = [];
-  if (l.zh) out.push(P(T(l.zh, { size: o.zhSize ?? 8, color: o.zhColor ?? C.body }), { keep: o.keep }));
-  if (l.en) out.push(P(T(l.en, { size: o.enSize ?? 7, color: C.muted, italic: o.enItalic }), { keep: o.keep, before: l.zh ? 10 : 0 }));
+  if (l.p) out.push(P(T(l.p, { size: o.zhSize ?? 8, color: o.zhColor ?? C.body }), { keep: o.keep }));
+  if (l.s) out.push(P(T(l.s, { size: o.enSize ?? 7, color: C.muted, italic: o.enItalic }), { keep: o.keep, before: 10 }));
   return out;
 }
 
@@ -258,10 +317,10 @@ function textH(text, pt, width) {
   return n * pt * 0.3528 * 1.4;
 }
 
-/** 双语文字（中文一段 + 英文一段）的估算高度 */
+/** 双语文字（主行一段 + 副行一段）的估算高度 */
 const biH = (x, width, zhPt = 8, enPt = 7) => {
   const l = lab(x);
-  return textH(l.zh, zhPt, width) + textH(l.en, enPt, width);
+  return textH(l.p, zhPt, width) + textH(l.s, enPt, width);
 };
 
 function TR(cells, o = {}) {
@@ -413,10 +472,11 @@ const fmtDur = (sec) => {
   return n > 0 ? `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}` : '';
 };
 
-/** 视频说明：▶ 视频（0:42）请见群组（▶ 用符号字体，避免被显示成彩色 emoji） */
-function videoRuns(sec, o = {}) {
+/** 视频说明：▶ 视频（0:42）请见群组 / ▶ Video (0:42) shared separately（▶ 用符号字体，避免被显示成彩色 emoji） */
+function videoRuns(sec, o = {}, lg = 'both') {
   const d = fmtDur(sec);
-  return [T('▶ ', { ...o, font: SYM }), T(d ? `视频（${d}）请见群组` : '视频 请见群组', o)];
+  const text = lg === 'en' ? (d ? `Video (${d}) shared separately` : 'Video shared separately') : d ? `视频（${d}）请见群组` : '视频 请见群组';
+  return [T('▶ ', { ...o, font: SYM }), T(text, o)];
 }
 
 /** 可用的媒体（过滤掉读不到的） */
@@ -426,7 +486,7 @@ const avail = (refs, M) => (refs || []).filter((r) => r && r.id && M.has(r.id));
  * 照片组 → 无框内嵌表格（统一的相册格子）：每格 ≤ maxW × maxH mm，等比居中，
  * 一行 3–4 张，图说 / 视频说明在图下。width = 可用宽度 DXA。
  */
-function photoBlock(refs, M, { width = TW - 2 * PAD, maxW = 42, maxH = 32 } = {}) {
+function photoBlock(refs, M, { width = TW - 2 * PAD, maxW = 42, maxH = 32, lg = 'both' } = {}) {
   const list = avail(refs, M).map((r) => M.get(r.id));
   if (!list.length) return [];
   const out = [];
@@ -447,7 +507,7 @@ function photoBlock(refs, M, { width = TW - 2 * PAD, maxW = 42, maxH = 32 } = {}
         if (m) {
           kids.push(P(imgRun(m.img, w, maxH), { align: AlignmentType.CENTER }));
           const cap = { size: 7, color: C.muted };
-          if (m.kind === 'video') kids.push(P(videoRuns(m.duration, cap), { align: AlignmentType.CENTER, before: 20 }));
+          if (m.kind === 'video') kids.push(P(videoRuns(m.duration, cap, lg), { align: AlignmentType.CENTER, before: 20 }));
           else if (m.caption) kids.push(P(T(m.caption, cap), { align: AlignmentType.CENTER, before: 20 }));
         }
         cells.push(TC(kids, { w: slot, top: true }));
@@ -457,43 +517,52 @@ function photoBlock(refs, M, { width = TW - 2 * PAD, maxW = 42, maxH = 32 } = {}
     out.push(TBL(Array(cols).fill(slot), rows, { borders: NO_BORDERS, margins: { top: 40, bottom: 40, left: 0, right: 0 } }));
   }
   // 没有封面的视频：只写一行文字
-  for (const m of list.filter((x) => !x.img)) out.push(P(videoRuns(m.duration, { size: 7.5, color: C.muted }), { before: 30 }));
+  for (const m of list.filter((x) => !x.img)) out.push(P(videoRuns(m.duration, { size: 7.5, color: C.muted }, lg), { before: 30 }));
   return out;
 }
 
 // ---------- 抬头 ----------
-function headerBlock(meta, logo, A) {
+/** 纯英文大标题较长（如 FINAL MEASUREMENT & CONFIRMATION CHECKLIST）：字号逐级缩小到一行放得下，最小 16pt */
+function titleSize(text) {
+  for (const pt of [20, 18]) if (textMm(text, pt) <= (TW / MM) * 0.96) return pt;
+  return 16;
+}
+
+function headerBlock(meta, logo, A, lg) {
   const out = [];
   const W = splitWidths(TW, [55, 45]);
   const left = [];
   if (logo && meta.brand !== 'plain') left.push(P(imgRun(logo, 38, 16)));
-  else left.push(P(T(meta.company || '溪岸 Sail by Riccione Reka', { size: 12, bold: true })));
+  else left.push(P(T(meta.company || COMPANY(lg), { size: 12, bold: true })));
   const right = [];
   const b = meta.badge;
+  const kicker = textOf(meta.kicker);
   if (b) {
     const l = lab(b);
     if (b.sub) {
       // { zh: '内部文件', en: 'INTERNAL', sub: {zh,en} } → INTERNAL · 内部文件 / 无需出示客户 not for client
+      // （按位置排：单语时只剩一半，不留「·」）
+      const h = slot(b);
       const s = lab(b.sub);
       right.push(
         P(
           [
-            l.en && T(l.en, { size: 8, bold: true, color: A, spacing: 30 }),
-            l.en && l.zh && T(' · ', { size: 8, color: A }),
-            l.zh && T(l.zh, { size: 8, bold: true }),
+            h.en && T(h.en, { size: 8, bold: true, color: A, spacing: 30 }),
+            h.en && h.zh && T(' · ', { size: 8, color: A }),
+            h.zh && T(h.zh, { size: 8, bold: true }),
           ],
           { align: AlignmentType.RIGHT },
         ),
       );
-      if (s.zh || s.en) {
-        right.push(P(bi(s, { zhSize: 7, zhColor: C.muted, enSize: 7, enItalic: true }), { align: AlignmentType.RIGHT, before: 20 }));
+      if (s.p) {
+        right.push(P(bi(b.sub, { zhSize: 7, zhColor: C.muted, enSize: 7, enItalic: true }), { align: AlignmentType.RIGHT, before: 20 }));
       }
     } else {
-      // { zh: 'INTERNAL · 内部文件', en: '无需出示客户 not for client' }
-      if (l.zh) right.push(P(T(l.zh, { size: 8, bold: true, color: A, spacing: 20 }), { align: AlignmentType.RIGHT }));
-      if (l.en) right.push(P(T(l.en, { size: 7, italic: true, color: C.muted }), { align: AlignmentType.RIGHT, before: 20 }));
+      // { zh: 'INTERNAL · 内部文件', en: '无需出示客户 not for client' }；单语用模板的 zhOnly / enOnly 一行
+      if (l.p) right.push(P(T(l.p, { size: 8, bold: true, color: A, spacing: 20 }), { align: AlignmentType.RIGHT }));
+      if (l.s) right.push(P(T(l.s, { size: 7, italic: true, color: C.muted }), { align: AlignmentType.RIGHT, before: 20 }));
     }
-  } else if (meta.brand === 'vsmooth' && !/V-SMOOTH/i.test(meta.kicker || '')) {
+  } else if (meta.brand === 'vsmooth' && !/V-SMOOTH/i.test(kicker)) {
     right.push(P(T('V-SMOOTH', { size: 9, bold: true, color: A, spacing: 60 }), { align: AlignmentType.RIGHT }));
   }
   out.push(
@@ -503,34 +572,35 @@ function headerBlock(meta, logo, A) {
     }),
   );
 
-  if (meta.kicker) out.push(P(T(meta.kicker, { size: 7.5, bold: true, color: A, spacing: 24 }), { before: 150 }));
+  if (kicker) out.push(P(T(kicker, { size: 7.5, bold: true, color: A, spacing: 24 }), { before: 150 }));
+  // 双语：中文大标题 + 英文（赤陶小号）；单语只有主行（纯英文按长度缩字号，不再排成赤陶副行）
   const t = lab(meta.title);
   out.push(
     P(
       [
-        t.zh && T(t.zh, { size: 20, bold: true }),
-        t.en && T((t.zh ? '   ' : '') + t.en, { size: t.zh ? 10.5 : 18, bold: true, color: A, spacing: t.zh ? 30 : 10 }),
+        t.p && T(t.p, { size: t.s || lg !== 'en' ? 20 : titleSize(t.p), bold: true }),
+        t.s && T(`   ${t.s}`, { size: 10.5, bold: true, color: A, spacing: 30 }),
       ],
-      { before: meta.kicker ? 50 : 170, after: 40 },
+      { before: kicker ? 50 : 170, after: 40 },
     ),
   );
-  // 副标题整体斜体：中文赤陶、英文灰
-  const st = lab(meta.subtitle);
-  if (st.zh || st.en) {
-    out.push(P(bi(st, { zhSize: 9, zhColor: A, zhItalic: true, enSize: 8, enItalic: true, sep: '   ' }), { after: 40 }));
+  // 副标题整体斜体：中文赤陶、英文灰（单语：主行赤陶）
+  if (lab(meta.subtitle).p) {
+    out.push(P(bi(meta.subtitle, { zhSize: 9, zhColor: A, zhItalic: true, enSize: 8, enItalic: true, sep: '   ' }), { after: 40 }));
   }
   if (meta.intro?.length) {
     const kids = [];
     meta.intro.forEach((it, i) => {
       const l = lab(it);
-      if (l.zh) kids.push(P(T(l.zh, { size: 8.5, color: C.body }), { before: i ? 90 : 0 }));
-      if (l.en) kids.push(P(T(l.en, { size: 7.5, color: C.muted }), { before: l.zh ? 20 : i ? 90 : 0 }));
+      if (l.p) kids.push(P(T(l.p, { size: 8.5, color: C.body }), { before: i ? 90 : 0 }));
+      if (l.s) kids.push(P(T(l.s, { size: 7.5, color: C.muted }), { before: 20 }));
     });
     if (kids.length) {
       out.push(gap(100), box(kids, { fill: C.cream, left: line(A, 12), margins: { top: 90, bottom: 90, left: 180, right: 180 } }));
     }
   }
-  if (meta.legend) out.push(P(legendRuns(meta.legend, A), { before: 100 }));
+  const legend = textOf(meta.legend);
+  if (legend) out.push(P(legendRuns(legend, A), { before: 100 }));
   return out;
 }
 
@@ -549,22 +619,29 @@ function legendRuns(text, A) {
 // 章节条做成内容表格的第一行（表头，跨页重复）：Word / LibreOffice 都只在同一张表的行之间
 // 遵守「与下段同页」，单独一张表时标题会孤零零留在页底。
 
-/** 章节条内容：'{no}  {EN} · {zh}' + 说明 + '共 N 项 · 其中关键项 K 项' */
-function headParas(b, A, counts) {
-  const t = lab(b.title);
+/**
+ * 章节条内容：'{no}  {EN} · {zh}' + 说明 + '共 N 项 · 其中关键项 K 项'。
+ * 单语只有一半（不留「·」）：中文照中文位；纯英文放英文位（赤陶大写风格），字号放大到与中文标题一样。
+ */
+function headParas(b, A, counts, lg = 'both') {
+  const t = slot(b.title);
+  if (lg === 'en' && t.zh && !t.en) {
+    t.en = t.zh;
+    t.zh = '';
+  }
   if (!t.zh && !t.en && !b.no) return null;
   const runs = [];
   if (b.no) runs.push(T(String(b.no), { size: 11, bold: true, color: A }), T('   ', { size: 10 }));
-  if (t.en) runs.push(T(t.en, { size: 9.5, bold: true, color: A, spacing: 16 }));
+  if (t.en) runs.push(T(t.en, { size: t.zh || lg !== 'en' ? 9.5 : 10.5, bold: true, color: A, spacing: 16 }));
   if (t.en && t.zh) runs.push(T('  ·  ', { size: 9.5, bold: true, color: A }));
   if (t.zh) runs.push(T(t.zh, { size: 10.5, bold: true }));
   const kids = [P(runs, { keep: true })];
-  const n = lab(b.note);
-  if (n.zh || n.en) {
-    kids.push(P(bi(n, { zhSize: 8, zhColor: C.body, enSize: 7.5, enItalic: true, sep: '   ' }), { keep: true, before: 30 }));
+  if (lab(b.note).p) {
+    kids.push(P(bi(b.note, { zhSize: 8, zhColor: C.body, enSize: 7.5, enItalic: true, sep: '   ' }), { keep: true, before: 30 }));
   }
   if (counts?.key) {
-    kids.push(P(T(`共 ${counts.total} 项 · 其中关键项 ${counts.key} 项`, { size: 7.5, color: C.muted }), { keep: true, before: 30 }));
+    const s = lg === 'en' ? `${counts.total} items · ${counts.key} key items` : `共 ${counts.total} 项 · 其中关键项 ${counts.key} 项`;
+    kids.push(P(T(s, { size: 7.5, color: C.muted }), { keep: true, before: 30 }));
   }
   return kids;
 }
@@ -575,8 +652,8 @@ const HEAD_MARGINS = { top: 70, bottom: 70, left: 150, right: 150 };
  * 表格里的章节条行 + 间隔行。span = 表格网格列数。
  * repeat：跨页重复（与列标题一起）；rule：间隔行下边画一条细线（作为下方第一行的上边框）。
  */
-function headRows(b, A, { counts, span = 1, repeat = true, rule = true } = {}) {
-  const kids = headParas(b, A, counts);
+function headRows(b, A, { counts, span = 1, repeat = true, rule = true, lg = 'both' } = {}) {
+  const kids = headParas(b, A, counts, lg);
   if (!kids) return [];
   const heading = TR(
     [TC(kids, { w: TW, span, fill: C.cream2, margins: HEAD_MARGINS, borders: { top: NIL, right: NIL, bottom: NIL, left: line(A, 24) } })],
@@ -599,8 +676,8 @@ function headRows(b, A, { counts, span = 1, repeat = true, rule = true } = {}) {
 }
 
 /** 独立章节条（放在「整块不分页」容器里用） */
-function sectionHead(b, A, counts) {
-  const kids = headParas(b, A, counts);
+function sectionHead(b, A, counts, lg = 'both') {
+  const kids = headParas(b, A, counts, lg);
   return kids ? [box(kids, { fill: C.cream2, left: line(A, 24), margins: HEAD_MARGINS }), gap(80, true)] : [];
 }
 
@@ -617,8 +694,8 @@ function keepTogether(children, split = false) {
 // ---------- 信息栏 fields ----------
 function fieldValue(f, M, width, A, o = {}) {
   const size = o.size ?? 9;
-  if (f.kind === 'photos') return photoBlock(f.photos, M, { width });
-  if (f.kind === 'video') return photoBlock(f.video ? [f.video] : [], M, { width });
+  if (f.kind === 'photos') return photoBlock(f.photos, M, { width, lg: o.lg });
+  if (f.kind === 'video') return photoBlock(f.video ? [f.video] : [], M, { width, lg: o.lg });
   if (f.kind === 'list') {
     const lines = (f.lines || []).map(clean).filter((s) => s.trim());
     return lines.map((ln, i) =>
@@ -644,7 +721,7 @@ function fieldH(f, width, size = 9) {
 }
 
 /** 网格信息栏：奶油底标签格 + 值格，按 columns / span 排 */
-function fieldsGrid(b, M, A) {
+function fieldsGrid(b, M, A, lg = 'both') {
   const cols = Math.max(1, Math.min(4, Number(b.columns) || 2));
   const labW = { 1: 2300, 2: 1800, 3: 1380, 4: 1150 }[cols];
   const pairs = splitWidths(TW, Array(cols).fill(1));
@@ -677,23 +754,23 @@ function fieldsGrid(b, M, A) {
       const vw = sum(widths.slice(2 * gi + 1, 2 * (gi + span)));
       const isMedia = (f.kind === 'photos' || f.kind === 'video') && !f.empty;
       cells.push(TC(P(bi(f.label, { zhSize: 8, bold: true, enSize: 6.5 }), { before: isMedia ? 40 : 0 }), { w: widths[2 * gi], fill: C.cream, top: isMedia }));
-      cells.push(TC(fieldValue(f, M, vw - 2 * PAD, A), { w: vw, span: 2 * span - 1, top: isMedia }));
+      cells.push(TC(fieldValue(f, M, vw - 2 * PAD, A, { lg }), { w: vw, span: 2 * span - 1, top: isMedia }));
       h = Math.max(h, fieldH(f, vw - 2 * PAD));
       gi += span;
     }
     // 照片很多 / 文字很长的行允许跨页拆开，其余行不拆
     return TR(cells, { minH: 440, cantSplit: !(h > LONG_MM || r.some((x) => manyPhotos(x.f, M))) });
   });
-  return TBL(widths, [...headRows(b, A, { span: widths.length }), ...trs]);
+  return TBL(widths, [...headRows(b, A, { span: widths.length, lg }), ...trs]);
 }
 
 /** 文案式（进场通知 / 每日汇报）：标签一行、值一段，照片在下 */
-function fieldsList(b, M, A) {
-  const rows = headRows(b, A, { repeat: false, rule: false });
+function fieldsList(b, M, A, lg = 'both') {
+  const rows = headRows(b, A, { repeat: false, rule: false, lg });
   b.fields.forEach((f, i) => {
     // 标签不设「与下段同页」：否则整节会被串成一块整体挪页
     const kids = [P(bi(f.label, { zhSize: 9.5, bold: true, enSize: 7.5 }), { before: i ? 140 : 60, after: 40 })];
-    const vals = fieldValue(f, M, TW, A, { size: 10 });
+    const vals = fieldValue(f, M, TW, A, { size: 10, lg });
     kids.push(...(vals.length ? vals : [P(T('—', { size: 10, color: C.faint }))]));
     const long = manyPhotos(f, M) || fieldH(f, TW, 10) > LONG_MM;
     rows.push(TR([TC(kids, { w: TW, top: true, margins: { top: 0, bottom: 0, left: 0, right: 0 } })], { cantSplit: !long }));
@@ -701,31 +778,32 @@ function fieldsList(b, M, A) {
   return TBL([TW], rows, { borders: NO_BORDERS });
 }
 
-function fieldsBlock(b, M, A) {
+function fieldsBlock(b, M, A, lg) {
   if (!b.fields?.length) return [];
-  return [b.layout === 'list' ? fieldsList(b, M, A) : fieldsGrid(b, M, A)];
+  return [b.layout === 'list' ? fieldsList(b, M, A, lg) : fieldsGrid(b, M, A, lg)];
 }
 
 // ---------- 检查表 checklist ----------
 const sameOptions = (a, b) => a.map((o) => o.v).join('|') === b.map((o) => o.v).join('|');
 
-function checklistCols(b) {
-  const cols = [{ k: 'no', w: b.showStandard ? 480 : 560, label: { zh: 'No.' }, center: true }];
+function checklistCols(b, lg = 'both') {
+  // 序号列：中英 / 英文 No.，纯中文 #（与 PDF 一致）
+  const cols = [{ k: 'no', w: b.showStandard ? 480 : 560, label: { zh: lg === 'zh' ? '#' : 'No.' }, center: true }];
   const hasDesc = b.rows.some((r) => r.desc);
   cols.push({
     k: 'item',
     flex: 1,
-    label: !b.showStandard && hasDesc ? { zh: '检查项与标准', en: 'Inspection Item & Standard' } : { zh: '检查项', en: 'Item' },
+    label: !b.showStandard && hasDesc ? pair(lg, '检查项与标准', 'Inspection Item & Standard') : pair(lg, '检查项', 'Item'),
   });
-  if (b.showStandard) cols.push({ k: 'std', flex: 1.25, label: { zh: '标准要求', en: 'Standard' } });
-  if (b.showMethod) cols.push({ k: 'method', flex: 0.95, label: { zh: '检查方法', en: 'Method' } });
+  if (b.showStandard) cols.push({ k: 'std', flex: 1.25, label: pair(lg, '标准要求', 'Standard') });
+  if (b.showMethod) cols.push({ k: 'method', flex: 0.95, label: pair(lg, '检查方法', 'Method') });
   if (b.resultLayout === 'columns') {
     const ow = b.options.length > 3 ? 640 : 740;
     b.options.forEach((o) => cols.push({ k: 'opt', opt: o, w: ow, label: { zh: o.zh, en: o.en }, center: true }));
   } else {
-    cols.push({ k: 'result', w: b.showStandard ? 1750 : 1950, label: { zh: '结果', en: 'Result' } });
+    cols.push({ k: 'result', w: b.showStandard ? 1750 : 1950, label: pair(lg, '结果', 'Result') });
   }
-  cols.push({ k: 'remark', w: b.showStandard ? 1700 : 2100, label: b.remarkLabel || { zh: '备注', en: 'Remarks' } });
+  cols.push({ k: 'remark', w: b.showStandard ? 1700 : 2100, label: b.remarkLabel || pair(lg, '备注', 'Remarks') });
   const fixed = sum(cols.filter((c) => c.w).map((c) => c.w));
   const flex = cols.filter((c) => c.flex);
   const fw = splitWidths(TW - fixed, flex.map((c) => c.flex));
@@ -743,20 +821,20 @@ function headerCell(c, A) {
   });
 }
 
-/** 检查项标题：★ + 中文粗体 + 【影像】，英文一行；无「标准」栏时把说明写在下面 */
-function itemParas(r, b, A, keep, inTicks = false) {
+/** 检查项标题：★ + 主行粗体 + 【影像】，副行（英文）一行；无「标准」栏时把说明写在下面 */
+function itemParas(r, b, A, keep, inTicks = false, lg = 'both') {
   const t = lab(r.title);
   const p1 = [];
   if (r.key) p1.push(T('★ ', { size: 9, bold: true, color: A, font: SYM }));
-  p1.push(T(t.zh || t.en || '', { size: 9, bold: !inTicks }));
-  if (inTicks && t.zh && t.en) p1.push(T(`   ${t.en}`, { size: 7.5, color: C.muted }));
-  if (r.media) p1.push(T('  【影像】', { size: 7, color: C.muted }));
+  p1.push(T(t.p, { size: 9, bold: !inTicks }));
+  if (inTicks && t.s) p1.push(T(`   ${t.s}`, { size: 7.5, color: C.muted }));
+  if (r.media) p1.push(T(lg === 'en' ? '  [PHOTO]' : '  【影像】', { size: 7, color: C.muted }));
   const out = [P(p1, { keep })];
-  if (!inTicks && t.zh && t.en) out.push(P(T(t.en, { size: 7.5, color: C.muted }), { keep, before: 10 }));
+  if (!inTicks && t.s) out.push(P(T(t.s, { size: 7.5, color: C.muted }), { keep, before: 10 }));
   if (!b.showStandard && r.desc) {
     const d = lab(r.desc);
-    if (d.zh) out.push(P(T(d.zh, { size: 8, color: C.body }), { keep, before: 40 }));
-    if (d.en) out.push(P(T(d.en, { size: 7, color: C.muted, italic: true }), { keep, before: 10 }));
+    if (d.p) out.push(P(T(d.p, { size: 8, color: C.body }), { keep, before: 40 }));
+    if (d.s) out.push(P(T(d.s, { size: 7, color: C.muted, italic: true }), { keep, before: 10 }));
   }
   return out;
 }
@@ -785,7 +863,8 @@ function inlineOptions(r, keep, { width, align } = {}) {
     const zh = clean(o.zh || o.en || o.v);
     const en = o.en && o.zh ? clean(o.en) : '';
     return {
-      w: textMm(BOX_ON, 9.5) + textMm(`${NBSP}${zh}`, 8) + (en ? textMm(`${NBSP}${en}`, 6.5) : 0),
+      // ☑ / ☐ 是方块符号，按 1em 宽算（按西文字宽估会偏窄：纯中文时「☐ 不适用」被挤到格子边上拆成两行）
+      w: BOX_MM + textMm(`${NBSP}${zh}`, 8) + (en ? textMm(`${NBSP}${en}`, 6.5) : 0),
       runs: [
         T(on ? BOX_ON : BOX_OFF, { size: 9.5, bold: on, color: on ? tone : C.faint, font: SYM }),
         T(`${NBSP}${zh}`, { size: 8, bold: on, color: on ? tone : C.muted }),
@@ -830,19 +909,20 @@ function remarkParas(text, keep) {
 }
 
 /** 检查项下方的整宽照片行 */
-function photoRow(r, M, span) {
+function photoRow(r, M, span, lg = 'both') {
   const photos = avail(r.photos, M);
   if (!photos.length) return null;
   const t = lab(r.title);
+  const n = photos.length;
   const kids = [
     P(
       [
-        T(`照片 Photos${r.no ? ` · ${r.no}` : ''}`, { size: 7, bold: true, color: C.muted }),
-        T(`  ${t.zh || t.en}  ·  ${photos.length} 张`, { size: 7, color: C.muted }),
+        T(`${tx(lg, '照片', 'Photos')}${r.no ? ` · ${r.no}` : ''}`, { size: 7, bold: true, color: C.muted }),
+        T(`  ${t.p}  ·  ${lg === 'en' ? `${n} photo${n === 1 ? '' : 's'}` : `${n} 张`}`, { size: 7, color: C.muted }),
       ],
       { before: 10 },
     ),
-    ...photoBlock(photos, M, { width: TW - 2 * PAD }),
+    ...photoBlock(photos, M, { width: TW - 2 * PAD, lg }),
   ];
   // 超过两行照片（> 8 张）允许跨页拆开
   return TR([TC(kids, { span, w: TW, fill: C.photoBg, top: true, borders: { top: line(C.line, 4, BorderStyle.DOTTED) } })], {
@@ -850,14 +930,14 @@ function photoRow(r, M, span) {
   });
 }
 
-function checklistTable(b, M, A) {
-  const cols = checklistCols(b);
+function checklistTable(b, M, A, lg = 'both') {
+  const cols = checklistCols(b, lg);
   const widths = cols.map((c) => c.w);
   const resIdx = cols.findIndex((c) => c.k === 'opt' || c.k === 'result');
   const nRes = cols.filter((c) => c.k === 'opt' || c.k === 'result').length;
   const resW = sum(widths.slice(resIdx, resIdx + nRes));
   const remW = widths[widths.length - 1];
-  const rows = [...headRows(b, A, { counts: b.counts, span: cols.length }), TR(cols.map((c) => headerCell(c, A)), { header: true })];
+  const rows = [...headRows(b, A, { counts: b.counts, span: cols.length, lg }), TR(cols.map((c) => headerCell(c, A)), { header: true })];
 
   for (const r of b.rows) {
     const keep = avail(r.photos, M).length > 0; // 有照片：本行与照片行同页
@@ -868,7 +948,7 @@ function checklistTable(b, M, A) {
       if (c.k === 'no') {
         cells.push(TC(P(T(r.no ?? '', { size: 8, bold: true, color: C.muted }), { align: AlignmentType.CENTER, keep }), { w: c.w }));
       } else if (c.k === 'item') {
-        cells.push(TC(itemParas(r, b, A, keep), { w: c.w }));
+        cells.push(TC(itemParas(r, b, A, keep, false, lg), { w: c.w }));
         h = Math.max(h, biH(r.title, c.w - 2 * PAD, 9, 7.5) + (b.showStandard ? 0 : biH(r.desc, c.w - 2 * PAD)));
       } else if (c.k === 'std') {
         cells.push(TC(biParas(r.desc, { keep }), { w: c.w }));
@@ -881,7 +961,7 @@ function checklistTable(b, M, A) {
     if (r.input) {
       // 填写型：值横跨「结果 + 备注」
       const kids = [...inputParas(r, keep)];
-      if (r.remark) kids.push(P([T('备注 ', { size: 7, color: C.muted }), ...TL(r.remark, { size: 8, color: C.body })], { keep, before: 30 }));
+      if (r.remark) kids.push(P([T(lg === 'en' ? 'Remarks: ' : '备注 ', { size: 7, color: C.muted }), ...TL(r.remark, { size: 8, color: C.body })], { keep, before: 30 }));
       cells.push(TC(kids, { w: resW + remW, span: nRes + 1 }));
       const vw = resW + remW - 2 * PAD;
       h = Math.max(h, textH(r.lines?.length ? r.lines.join('\n') : r.value, 8.5, vw) + textH(r.remark, 8, vw));
@@ -907,25 +987,25 @@ function checklistTable(b, M, A) {
     }
     // 备注 / 填写内容很长的行允许跨页拆开（否则 Word 裁掉超出一页的部分）
     rows.push(TR(cells, { cantSplit: h <= LONG_MM }));
-    const pr = photoRow(r, M, cols.length);
+    const pr = photoRow(r, M, cols.length, lg);
     if (pr) rows.push(pr);
   }
   return TBL(widths, rows);
 }
 
 /** 打勾清单（单选项，如交付清单「完成」）：☐ | 中文 + 英文（灰）+ 备注 */
-function ticksTable(b, M, A) {
+function ticksTable(b, M, A, lg = 'both') {
   const widths = [620, TW - 620];
-  const rows = headRows(b, A, { counts: b.counts, span: 2 });
+  const rows = headRows(b, A, { counts: b.counts, span: 2, lg });
   for (const r of b.rows) {
     const keep = avail(r.photos, M).length > 0;
     const sel = r.result;
     const tone = sel ? TONE[sel.tone] || C.ink : C.faint;
-    const kids = itemParas(r, b, A, keep, true);
+    const kids = itemParas(r, b, A, keep, true, lg);
     if (r.input) kids.push(...inputParas(r, keep));
     else if (r.options.length > 1) kids.push(...inlineOptions(r, keep, { width: widths[1] - 2 * PAD }));
     if (r.remark) {
-      kids.push(P([T('备注 Remarks：', { size: 7, bold: true, color: C.muted }), ...TL(r.remark, { size: 8, color: C.body })], { keep, before: 30 }));
+      kids.push(P([T(`${tx(lg, '备注', 'Remarks')}${colon(lg)}`, { size: 7, bold: true, color: C.muted }), ...TL(r.remark, { size: 8, color: C.body })], { keep, before: 30 }));
     }
     const mark = r.input || r.options.length > 1 ? '' : sel ? BOX_ON : BOX_OFF;
     const vw = widths[1] - 2 * PAD;
@@ -942,32 +1022,32 @@ function ticksTable(b, M, A) {
         { cantSplit: h <= LONG_MM },
       ),
     );
-    const pr = photoRow(r, M, 2);
+    const pr = photoRow(r, M, 2, lg);
     if (pr) rows.push(pr);
   }
   return TBL(widths, rows);
 }
 
-function checklistBlock(b, M, A) {
+function checklistBlock(b, M, A, lg) {
   if (!b.rows?.length) {
-    const head = sectionHead(b, A, b.counts);
+    const head = sectionHead(b, A, b.counts, lg);
     return head.length ? [keepTogether(head)] : [];
   }
-  return [b.resultLayout === 'ticks' ? ticksTable(b, M, A) : checklistTable(b, M, A)];
+  return [b.resultLayout === 'ticks' ? ticksTable(b, M, A, lg) : checklistTable(b, M, A, lg)];
 }
 
 // ---------- 表格 table ----------
-function photoGroupsContent(r, M) {
-  const src = r.photoGroups?.length ? r.photoGroups : [{ key: 'photos', label: { zh: '照片', en: 'Photos' }, photos: r.photos }];
+function photoGroupsContent(r, M, lg = 'both') {
+  const src = r.photoGroups?.length ? r.photoGroups : [{ key: 'photos', label: pair(lg, '照片', 'Photos'), photos: r.photos }];
   const groups = src.map((g) => ({ label: g.label, photos: avail(g.photos, M) })).filter((g) => g.photos.length);
   if (!groups.length) return null;
   const labelP = (g) => P(bi(g.label, { zhSize: 7.5, bold: true, zhColor: C.body, enSize: 6.5 }), { before: 10 });
-  if (groups.length === 1) return [labelP(groups[0]), ...photoBlock(groups[0].photos, M, { width: TW - 2 * PAD })];
+  if (groups.length === 1) return [labelP(groups[0]), ...photoBlock(groups[0].photos, M, { width: TW - 2 * PAD, lg })];
   // 多组（问题照片 | 复验照片）并排对照
   const inner = TW - 2 * PAD;
   const ws = splitWidths(inner, groups.map(() => 1));
   const cells = groups.map((g, i) =>
-    TC([labelP(g), ...photoBlock(g.photos, M, { width: ws[i] - 120, maxW: 40 })], {
+    TC([labelP(g), ...photoBlock(g.photos, M, { width: ws[i] - 120, maxW: 40, lg })], {
       w: ws[i],
       top: true,
       borders: i ? { left: line(C.line, 4, BorderStyle.DOTTED) } : undefined,
@@ -976,21 +1056,21 @@ function photoGroupsContent(r, M) {
   return [TBL(ws, [TR(cells)], { borders: NO_BORDERS, margins: { top: 0, bottom: 0, left: 60, right: 60 } })];
 }
 
-function tableBlock(b, M, A) {
+function tableBlock(b, M, A, lg = 'both') {
   const noW = 460;
   const widths = [noW, ...splitWidths(TW - noW, b.columns.map((c) => Number(c.width) || 1))];
   const header = TR(
     [headerCell({ w: noW, label: { zh: '#' }, center: true }, A), ...b.columns.map((c, i) => headerCell({ w: widths[i + 1], label: c.label }, A))],
     { header: true },
   );
-  const rows = [...headRows(b, A, { span: widths.length }), header];
+  const rows = [...headRows(b, A, { span: widths.length, lg }), header];
   if (b.empty || !b.rows.length) {
     const e = lab(b.emptyText);
-    const text = e.zh || e.en ? [e.zh, e.en].filter(Boolean).join(' ') : '无 None';
+    const text = e.p ? [e.p, e.s].filter(Boolean).join(' ') : tx(lg, '无', 'None');
     rows.push(TR([TC(P(T(text, { size: 8, italic: true, color: C.muted }), { align: AlignmentType.CENTER }), { span: widths.length, w: TW })], { minH: 420 }));
   } else {
     b.rows.forEach((r, i) => {
-      const photos = photoGroupsContent(r, M);
+      const photos = photoGroupsContent(r, M, lg);
       const keep = !!photos;
       // 单元格文字很长（如 1800 字问题描述）的行允许跨页拆开
       const h = Math.max(0, ...b.columns.map((c, j) => textH(r.cells?.[c.key] ?? '', 8, widths[j + 1] - 2 * PAD)));
@@ -1017,8 +1097,8 @@ function tableBlock(b, M, A) {
 }
 
 // ---------- 统计 summary ----------
-function summaryBlock(b, A) {
-  const out = [...sectionHead({ title: b.title || { zh: '结果统计', en: 'Summary' } }, A)];
+function summaryBlock(b, A, lg = 'both') {
+  const out = [...sectionHead({ title: b.title || pair(lg, '结果统计', 'Summary') }, A, undefined, lg)];
   const items = b.items || [];
   const short = (it) => clean(it.value ?? '').length <= 24;
   const tiles = items.filter(short);
@@ -1073,8 +1153,13 @@ function summaryBlock(b, A) {
   if (c0) {
     const c = typeof c0 === 'string' ? { value: c0 } : c0.value != null ? c0 : { value: [c0.zh, c0.en].filter(Boolean).join(' ') };
     const tone = TONE[c.tone] ? c.tone : 'neutral';
-    const head = c.label ? bi(c.label, { zhSize: 9, bold: true, enSize: 7.5 }) : [T('结论 ', { size: 9, bold: true }), T('Conclusion', { size: 7.5, color: C.muted })];
-    const kids = [P([...head, T('：', { size: 9 }), T(clean(c.value), { size: 11, bold: true, color: TONE[tone] })])];
+    // 双语「结论 Conclusion：」；单语只有一种
+    const head = c.label
+      ? bi(c.label, { zhSize: 9, bold: true, enSize: 7.5 })
+      : lg === 'both'
+        ? [T('结论 ', { size: 9, bold: true }), T('Conclusion', { size: 7.5, color: C.muted })]
+        : [T(tx(lg, '结论', 'Conclusion'), { size: 9, bold: true })];
+    const kids = [P([...head, T(colon(lg), { size: 9 }), T(clean(c.value), { size: 11, bold: true, color: TONE[tone] })])];
     if (c.note) kids.push(P(TL(c.note, { size: 8, color: C.body }), { before: 40 }));
     longH += textH(c.note, 8, TW - 360);
     out.push(gap(80), box(kids, { fill: TINT[tone], left: line(TONE[tone], 24), margins: { top: 90, bottom: 90, left: 180, right: 180 } }));
@@ -1086,13 +1171,12 @@ function summaryBlock(b, A) {
 function noteBlock(b, A) {
   const warn = b.tone === 'warn';
   const out = [];
-  const t = lab(b.title);
-  if (t.zh || t.en) out.push(P(bi(t, { zhSize: 9, bold: true, zhColor: warn ? A : C.ink, enSize: 7.5, enBold: true }), { keep: true, after: 50 }));
-  const lines = (b.lines || []).map(lab).filter((l) => l.zh || l.en);
+  if (lab(b.title).p) out.push(P(bi(b.title, { zhSize: 9, bold: true, zhColor: warn ? A : C.ink, enSize: 7.5, enBold: true }), { keep: true, after: 50 }));
+  const lines = (b.lines || []).map(lab).filter((l) => l.p);
   lines.forEach((l, i) => {
     out.push(
       P(
-        [l.zh && T(l.zh, { size: 8, color: warn ? A : C.body }), l.en && T((l.zh ? '  ' : '') + l.en, { size: 7.5, italic: true, color: warn ? A : C.muted })],
+        [T(l.p, { size: 8, color: warn ? A : C.body }), l.s && T(`  ${l.s}`, { size: 7.5, italic: true, color: warn ? A : C.muted })],
         { after: 40, keep: i < lines.length - 1 },
       ),
     );
@@ -1101,13 +1185,12 @@ function noteBlock(b, A) {
 }
 
 // ---------- 签名 signatures ----------
-function signaturesBlock(b, M, A) {
-  const out = [...sectionHead(b, A)];
+function signaturesBlock(b, M, A, lg = 'both') {
+  const out = [...sectionHead(b, A, undefined, lg)];
   const d = lab(b.declaration);
-  if (d.zh || d.en) {
-    const kids = [];
-    if (d.zh) kids.push(P(T(d.zh, { size: 8.5, color: C.body })));
-    if (d.en) kids.push(P(T(d.en, { size: 7.5, italic: true, color: C.muted }), { before: d.zh ? 40 : 0 }));
+  if (d.p) {
+    const kids = [P(T(d.p, { size: 8.5, color: C.body }))];
+    if (d.s) kids.push(P(T(d.s, { size: 7.5, italic: true, color: C.muted }), { before: 40 }));
     out.push(box(kids, { fill: C.cream, left: line(A, 12), margins: { top: 90, bottom: 90, left: 180, right: 180 } }), gap(100, true));
   }
   const roles = b.roles || [];
@@ -1134,9 +1217,9 @@ function signaturesBlock(b, M, A) {
           kids.push(gap(Math.round(SIG_H * MM) + 80, true));
         }
         kids.push(P([], { keep: true, border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: C.ink, space: 1 } } }));
-        kids.push(P([T('签名 Signature', { size: 6.5, color: C.faint })], { keep: true, before: 20 }));
-        kids.push(P([T('姓名 Name：', { size: 7.5, color: C.muted }), T(clean(r.name), { size: 9 })], { keep: true, before: 60 }));
-        kids.push(P([T('日期 Date：', { size: 7.5, color: C.muted }), T(clean(r.date), { size: 9 })], { before: 30 }));
+        kids.push(P([T(tx(lg, '签名', 'Signature'), { size: 6.5, color: C.faint })], { keep: true, before: 20 }));
+        kids.push(P([T(`${tx(lg, '姓名', 'Name')}${colon(lg)}`, { size: 7.5, color: C.muted }), T(clean(r.name), { size: 9 })], { keep: true, before: 60 }));
+        kids.push(P([T(`${tx(lg, '日期', 'Date')}${colon(lg)}`, { size: 7.5, color: C.muted }), T(clean(r.date), { size: 9 })], { before: 30 }));
         cells.push(TC(kids, { w: ws[j], top: true }));
       }
       rows.push(TR(cells));
@@ -1147,9 +1230,9 @@ function signaturesBlock(b, M, A) {
 }
 
 // ---------- 页眉 / 页脚 ----------
-function pageHeader(meta, logo, A) {
+function pageHeader(meta, logo, A, lg = 'both') {
   const t = lab(meta.title);
-  const left = logo && meta.brand !== 'plain' ? [imgRun(logo, 17, 7)] : [T('溪岸 Sail', { size: 8, bold: true })];
+  const left = logo && meta.brand !== 'plain' ? [imgRun(logo, 17, 7)] : [T(lg === 'en' ? 'Sail' : '溪岸 Sail', { size: 8, bold: true })];
   return new Header({
     children: [
       new Paragraph({
@@ -1158,25 +1241,81 @@ function pageHeader(meta, logo, A) {
         children: [
           ...left,
           new TextRun({ children: [new Tab()], size: 14 }),
-          T(t.zh, { size: 7.5, bold: true, color: C.body }),
-          t.en ? T(`  ${t.en}`, { size: 6.5, color: A, spacing: 16 }) : null,
+          T(t.p, { size: 7.5, bold: true, color: C.body }),
+          t.s ? T(`  ${t.s}`, { size: 6.5, color: A, spacing: 16 }) : null,
         ].filter(Boolean),
       }),
     ],
   });
 }
 
-function pageFooter(meta) {
-  const left = [meta.company, meta.reportTitle].map((s) => clean(s).trim()).filter(Boolean).join(' · ');
+/**
+ * 一行文字的宽度估算（mm），按 Arial（LibreOffice 里是等宽度的 Liberation Sans）的字宽分几档；中文 1em。
+ * 比 textMm 准（textMm 故意估宽，用来折行）：页脚这种只有一行、要尽量放满的地方用。
+ */
+function lineMm(s, pt) {
+  let u = 0;
+  for (const ch of String(s)) {
+    if (ch.codePointAt(0) >= 0x2e80) u += 1;
+    else if (/[\sfijlrtI.,:;'!|·()[\]\-/]/.test(ch)) u += 0.3;
+    else if (/[mwMW@%]/.test(ch)) u += 0.86;
+    else if (/[A-Z&]/.test(ch)) u += 0.7;
+    else u += 0.55;
+  }
+  return u * pt * 0.3528 * 1.03;
+}
+
+/** 按宽度截断成一行 + 「…」：英文在词间断开（不把 Tan 截成 Ta…），中文逐字；不留结尾的「·」「(」 */
+function fitLine(s, pt, maxMm) {
+  if (lineMm(s, pt) <= maxMm) return s;
+  const chars = [...s];
+  const room = maxMm - lineMm('…', pt);
+  let n = 0;
+  for (let w = 0; n < chars.length; n += 1) {
+    w += lineMm(chars[n], pt);
+    if (w > room) break;
+  }
+  let cut = chars.slice(0, n).join('');
+  if (/[A-Za-z0-9]/.test(chars[n - 1] || '') && /[A-Za-z0-9]/.test(chars[n] || '')) {
+    const sp = cut.lastIndexOf(' ');
+    if (sp > cut.length * 0.6) cut = cut.slice(0, sp);
+  }
+  return `${cut.replace(/[\s·(（\-–—,/]+$/, '')}…`;
+}
+
+const ISO_DATE = /^\d{4}-\d{1,2}-\d{1,2}$/;
+
+/**
+ * 页脚左边「公司 · 报告名」。双语照旧（按字数截到 96 个字）；
+ * 单语按宽度放：放不下先去掉报告名末尾的日期（第一页信息栏里有），仍放不下再按宽度截断。
+ * 纯英文的模板大标题很长（FINAL MEASUREMENT & CONFIRMATION CHECKLIST），按字数截会把客户 / 日期截在词中间。
+ */
+function footerLeft(meta, lg) {
+  const name = reportName(meta, lg);
+  const join = (n) => [meta.company, n].map((s) => clean(s).trim()).filter(Boolean).join(' · ');
+  const left = join(name);
+  if (lg === 'both') return left.length > 96 ? `${left.slice(0, 95)}…` : left;
+  // 右边页码（两位数页码；LibreOffice 里页码数字显示得比 7pt 略大，按 8pt 留位）+ 间隔
+  const maxMm = TW / MM - lineMm(lg === 'en' ? 'Page 88 of 88' : '第 88 / 88 页', 8) - 5;
+  if (lineMm(left, 7) <= maxMm) return left;
+  const parts = name.trim().split(' · ');
+  const short = parts.length > 1 && ISO_DATE.test(parts[parts.length - 1].trim()) ? join(parts.slice(0, -1).join(' · ')) : left;
+  return fitLine(short, 7, maxMm);
+}
+
+function pageFooter(meta, lg = 'both') {
+  const left = footerLeft(meta, lg);
+  // 页码：中文 / 双语「第 X / Y 页」，纯英文「Page X of Y」
+  const num = lg === 'en' ? ['Page ', PageNumber.CURRENT, ' of ', PageNumber.TOTAL_PAGES] : ['第 ', PageNumber.CURRENT, ' / ', PageNumber.TOTAL_PAGES, ' 页'];
   return new Footer({
     children: [
       new Paragraph({
         tabStops: [{ type: TabStopType.RIGHT, position: TW }],
         border: { top: { style: BorderStyle.SINGLE, size: 4, color: C.line, space: 4 } },
         children: [
-          T(left.length > 96 ? `${left.slice(0, 95)}…` : left, { size: 7, color: C.muted }),
+          T(left, { size: 7, color: C.muted }),
           new TextRun({
-            children: [new Tab(), '第 ', PageNumber.CURRENT, ' / ', PageNumber.TOTAL_PAGES, ' 页'],
+            children: [new Tab(), ...num],
             size: 14,
             color: C.muted,
           }),
@@ -1195,30 +1334,32 @@ function fmtGenerated(iso) {
 }
 
 // ---------- 组装 ----------
-function buildChildren(model, M, logo, A) {
+function buildChildren(model, M, logo, A, lg) {
   const meta = model.meta || {};
-  const kids = [...headerBlock(meta, logo, A)];
+  const kids = [...headerBlock(meta, logo, A, lg)];
   for (const b of model.blocks || []) {
     let part = [];
     try {
-      if (b.type === 'fields') part = fieldsBlock(b, M, A);
-      else if (b.type === 'checklist') part = checklistBlock(b, M, A);
-      else if (b.type === 'table') part = tableBlock(b, M, A);
-      else if (b.type === 'summary') part = summaryBlock(b, A);
+      if (b.type === 'fields') part = fieldsBlock(b, M, A, lg);
+      else if (b.type === 'checklist') part = checklistBlock(b, M, A, lg);
+      else if (b.type === 'table') part = tableBlock(b, M, A, lg);
+      else if (b.type === 'summary') part = summaryBlock(b, A, lg);
       else if (b.type === 'note') part = noteBlock(b, A);
-      else if (b.type === 'signatures') part = signaturesBlock(b, M, A);
+      else if (b.type === 'signatures') part = signaturesBlock(b, M, A, lg);
     } catch (e) {
       // 单块出错只写一行提示，不让整份导出失败
-      part = [P(T(`（此部分无法生成：${e?.message || e}）`, { size: 8, italic: true, color: TONE.fail }))];
+      const msg = e?.message || e;
+      part = [P(T(lg === 'en' ? `(This section could not be generated: ${msg})` : `（此部分无法生成：${msg}）`, { size: 8, italic: true, color: TONE.fail }))];
     }
     if (part.length) kids.push(gap(b.type === 'note' ? 120 : 220), ...part);
   }
-  if (meta.footer) kids.push(P(T(meta.footer, { size: 8, bold: true, color: A }), { align: AlignmentType.CENTER, before: 240 }));
+  const footer = textOf(meta.footer);
+  if (footer) kids.push(P(T(footer, { size: 8, bold: true, color: A }), { align: AlignmentType.CENTER, before: 240 }));
   const gen = fmtGenerated(meta.generatedAt);
   kids.push(
-    P(T(`${meta.dept ? `${clean(meta.dept)} · ` : ''}TORA 生成 Generated ${gen}`, { size: 6.5, color: C.faint }), {
+    P(T(`${meta.dept ? `${clean(meta.dept)} · ` : ''}TORA ${tx(lg, '生成', 'Generated')} ${gen}`, { size: 6.5, color: C.faint }), {
       align: AlignmentType.CENTER,
-      before: meta.footer ? 60 : 300,
+      before: footer ? 60 : 300,
     }),
   );
   return kids;
@@ -1232,21 +1373,26 @@ function buildChildren(model, M, logo, A) {
  * @returns {Promise<Blob>}
  */
 export async function exportDocx(model, media, { logo } = {}) {
-  const meta = model?.meta || {};
+  const lg = normLang(model?.meta?.lang);
+  // 单语：模板的 zhOnly / enOnly 写法（双语 = 同一个 model）
+  const src = pickOnly(model || { meta: {}, blocks: [] }, lg);
+  const meta = src.meta || {};
   const A = hex(meta.accent);
-  const [M, logoImg] = await Promise.all([loadMedia(model || { blocks: [] }, media), loadLogo(logo)]);
+  const [M, logoImg] = await Promise.all([loadMedia(src.blocks ? src : { blocks: [] }, media), loadLogo(logo)]);
   const t = lab(meta.title);
+  const name = reportName(meta, lg);
 
   const doc = new Document({
-    creator: clean(meta.company || '溪岸 Sail by Riccione Reka'),
+    creator: clean(meta.company || COMPANY(lg)),
     lastModifiedBy: 'TORA by Riccione Reka',
-    title: clean(meta.reportTitle || t.zh || 'Report'),
-    subject: [t.zh, t.en].filter(Boolean).join(' '),
-    description: clean(meta.reportTitle || ''),
+    title: clean(name || t.p || 'Report'),
+    subject: [t.p, t.s].filter(Boolean).join(' '),
+    description: name,
     styles: {
       default: {
         document: {
-          run: { font: FONT, size: 18, color: C.ink, language: { value: 'en-US', eastAsia: 'zh-CN' } },
+          // 文字语言（拼写检查 / 断行）：纯英文 en-US；中文 / 双语另设东亚文字 zh-CN
+          run: { font: FONT, size: 18, color: C.ink, language: lg === 'en' ? { value: 'en-US' } : { value: 'en-US', eastAsia: 'zh-CN' } },
           paragraph: { spacing: { before: 0, after: 0, line: 252, lineRule: LineRuleType.AUTO } },
         },
       },
@@ -1262,10 +1408,10 @@ export async function exportDocx(model, media, { logo } = {}) {
         },
         headers: {
           first: new Header({ children: [new Paragraph({ children: [] })] }),
-          default: pageHeader(meta, logoImg, A),
+          default: pageHeader(meta, logoImg, A, lg),
         },
-        footers: { first: pageFooter(meta), default: pageFooter(meta) },
-        children: buildChildren(model || { meta: {}, blocks: [] }, M, logoImg, A),
+        footers: { first: pageFooter(meta, lg), default: pageFooter(meta, lg) },
+        children: buildChildren(src, M, logoImg, A, lg),
       },
     ],
   });

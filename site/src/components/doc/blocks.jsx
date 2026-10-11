@@ -1,16 +1,41 @@
 // 文档原子渲染（A4 页面里的每一小块）。全部用内联样式 + 整数 px 行高：
 // html2canvas 截图稳定，测量高度 = 实际高度。
+//
+// 语言（lib/lang.js）：ctx.lang = 'zh' | 'en' | 'both'。模型里的 { zh, en } 标签已按语言规整好
+// （zh 模式 en 为空，en 模式 zh 为空），这里一律用 labelParts() 取「主 / 副」两行 —— 单语时只有主行，
+// 不留空的副行；写死的成对文字（表头、页码、「续」、照片张数…）走 tx() / pair()。
+// 双语（both）的输出必须和以前逐字一样。
 import { C, TONE, tone, PHOTO, CONTENT_W, LOGO_SRC, LOGO_RATIO } from './theme.js';
-import { clLayout, tblLayout, GRID_LABEL_W, LONG_VALUE } from './paginate.js';
+import { clLayout, tblLayout, GRID_LABEL_W, LONG_VALUE, textOf } from './paginate.js';
+import { labelParts, labelText, localize, normLang, tx } from '../../lib/lang.js';
 
 // 列宽和分页切块共用（paginate.js 按同样的列宽估算长文字折行）
 export { clLayout, tblLayout };
 
 // ---------- 小工具 ----------
-const zhOf = (l) => (l == null ? '' : typeof l === 'string' ? l : l.zh || '');
-const enOf = (l) => (l == null || typeof l === 'string' ? '' : l.en || '');
 const upper = (s) => String(s || '').toUpperCase();
 const has = (s) => s != null && String(s).trim() !== '';
+const langOf = (ctx) => normLang(ctx?.lang || ctx?.meta?.lang);
+/** 写死的成对标签 → 按语言规整后的 { zh, en }（和模型里的标签一样交给 labelParts） */
+const pair = (lang, zh, en) => localize({ zh, en }, lang);
+/**
+ * 「中文位 / 英文位」：双语时 = 主 / 副；单语时整段放进对应语言的位置
+ * （节标题、续页小标题这种「EN · 中文」排法用，英文位照旧大写）
+ */
+function slots(label, lang) {
+  const { primary, secondary } = labelParts(label);
+  if (secondary) return { zh: primary, en: secondary };
+  return lang === 'en' ? { zh: '', en: primary } : { zh: primary, en: '' };
+}
+const CJK_CH = /[⺀-鿿豈-﫿＀-￯　-〿]/;
+
+// 写死的成对文字（双语时与以前逐字一样）
+const VIDEO_CAP = '视频请见群组 / video shared separately';
+const videoCap = (lang) => (lang === 'zh' ? '视频请见群组' : lang === 'en' ? 'Video shared separately' : VIDEO_CAP);
+const contLabel = (lang) => (lang === 'zh' ? '（续）' : lang === 'en' ? '(cont.)' : '（续 cont.）');
+const remarkPrefix = (lang) => (lang === 'zh' ? '备注：' : lang === 'en' ? 'Remark: ' : '备注 Remark：');
+/** 照片张数（单语）：共 3 张 / 3 photos */
+const photoCount = (lang, n) => (lang === 'zh' ? `共 ${n} 张` : `${n} photo${n === 1 ? '' : 's'}`);
 // 按估算宽度截断（中文 ≈ 1em，英文 ≈ 0.56em），单行文字不溢出
 const WIDE = /[\u2E80-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF\u3000-\u303F]/;
 export function fitText(s, px, size, spacing = 0) {
@@ -85,7 +110,7 @@ export function Box({ on, toneKey = 'pass', size = 11, faded = false }) {
   );
 }
 
-function MediaTag({ accent }) {
+function MediaTag({ accent, lang }) {
   return (
     <span
       style={{
@@ -103,20 +128,21 @@ function MediaTag({ accent }) {
         letterSpacing: 0.3,
       }}
     >
-      影像 PHOTO
+      {tx(lang, '影像', 'PHOTO')}
     </span>
   );
 }
 
-/** 中文主 + 英文副（两行） */
+/** 中文主 + 英文副（两行）；单语时只有主行 */
 function Bi({ v, zh = 10, en = 8.5, zhLh = 14, enLh = 12, bold = true, color = C.ink, enColor = C.mute, italic = false }) {
+  const { primary, secondary } = labelParts(v);
   return (
     <>
-      {has(zhOf(v)) && (
-        <div style={{ fontSize: zh, lineHeight: `${zhLh}px`, fontWeight: bold ? 700 : 400, color }}>{zhOf(v)}</div>
+      {has(primary) && (
+        <div style={{ fontSize: zh, lineHeight: `${zhLh}px`, fontWeight: bold ? 700 : 400, color }}>{primary}</div>
       )}
-      {has(enOf(v)) && (
-        <div style={{ fontSize: en, lineHeight: `${enLh}px`, color: enColor, fontStyle: italic ? 'italic' : 'normal' }}>{enOf(v)}</div>
+      {has(secondary) && (
+        <div style={{ fontSize: en, lineHeight: `${enLh}px`, color: enColor, fontStyle: italic ? 'italic' : 'normal' }}>{secondary}</div>
       )}
     </>
   );
@@ -222,11 +248,9 @@ function PlayBadge({ duration, big }) {
   );
 }
 
-const VIDEO_CAP = '视频请见群组 / video shared separately';
-
 function capOf(ctx, ref) {
   const inf = ctx.info?.[ref.id];
-  if ((inf?.kind || ref.kind) === 'video') return VIDEO_CAP;
+  if ((inf?.kind || ref.kind) === 'video') return videoCap(langOf(ctx));
   return inf?.caption || ref.caption || '';
 }
 
@@ -235,11 +259,12 @@ export function Tile({ mref, w, h, ctx, cap, tag, showTag }) {
   const url = ctx.measure ? null : ctx.urls?.[mref.id];
   const isVideo = (inf.kind || mref.kind) === 'video';
   const box = containBox(inf, w - 2, h - 2);
+  const lang = langOf(ctx);
   return (
     <div style={{ width: w, flex: 'none' }}>
       {showTag && (
         <div style={{ height: 14, fontSize: 8.5, lineHeight: '13px', color: C.body, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden' }}>
-          {tag ? fitText(`${zhOf(tag)} ${enOf(tag)}`.trim(), w, 8.5) : ''}
+          {tag ? fitText(labelText(tag), w, 8.5) : ''}
         </div>
       )}
       <div
@@ -261,7 +286,7 @@ export function Tile({ mref, w, h, ctx, cap, tag, showTag }) {
           />
         ) : ctx.measure ? null : (
           <div style={{ position: 'absolute', left: 0, right: 0, top: h / 2 - 8, textAlign: 'center', fontSize: 9, lineHeight: '14px', color: C.faint }}>
-            {isVideo ? '视频 Video' : '照片缺失 Missing'}
+            {isVideo ? tx(lang, '视频', 'Video') : tx(lang, '照片缺失', 'Missing')}
           </div>
         )}
         {isVideo && <PlayBadge duration={inf.duration} big={w > 200} />}
@@ -296,6 +321,7 @@ function PhotoLine({ atom, ctx, pos }) {
   }
   const closing = atom.lineEnd || pos.last;
   const indent = atom.indent || 0;
+  const lang = langOf(ctx);
   return (
     <div
       style={{
@@ -313,9 +339,15 @@ function PhotoLine({ atom, ctx, pos }) {
     >
       {atom.label && indent >= 28 && (
         <div style={{ position: 'absolute', left: 0, top: 8, width: indent, textAlign: 'center', fontSize: 8.5, lineHeight: '12px', color: C.mute }}>
-          照片
-          <br />
-          <span style={{ fontSize: 7.5, letterSpacing: 0.3 }}>PHOTOS</span>
+          {lang === 'both' ? (
+            <>
+              照片
+              <br />
+              <span style={{ fontSize: 7.5, letterSpacing: 0.3 }}>PHOTOS</span>
+            </>
+          ) : (
+            tx(lang, '照片', 'Photos')
+          )}
         </div>
       )}
       {tiles}
@@ -325,15 +357,18 @@ function PhotoLine({ atom, ctx, pos }) {
 
 // ---------- 抬头 ----------
 
-function Logo({ brand, height = 57 }) {
+// 纯英文文件里品牌名不带中文（「溪岸 Sail」→「Sail」）
+const brandName = (lang) => (lang === 'en' ? 'Sail' : '溪岸 Sail');
+
+function Logo({ brand, height = 57, lang }) {
   if (brand === 'plain') {
-    return <div style={{ fontSize: 16, fontWeight: 700, lineHeight: '22px', color: C.ink }}>溪岸 Sail</div>;
+    return <div style={{ fontSize: 16, fontWeight: 700, lineHeight: '22px', color: C.ink }}>{brandName(lang)}</div>;
   }
   const w = Math.round(height * LOGO_RATIO);
-  return <img src={LOGO_SRC} alt="Sail 溪岸" style={{ display: 'block', width: w, height }} />;
+  return <img src={LOGO_SRC} alt={lang === 'en' ? 'Sail' : 'Sail 溪岸'} style={{ display: 'block', width: w, height }} />;
 }
 
-function Badge({ meta, accent }) {
+function Badge({ meta, accent, lang }) {
   const b = meta.badge;
   const out = [];
   if (meta.brand === 'vsmooth') {
@@ -344,14 +379,15 @@ function Badge({ meta, accent }) {
         </div>
       </div>,
       <div key="vs2" style={{ fontSize: 8.5, color: C.mute, lineHeight: '13px', marginTop: 4, letterSpacing: 1 }}>
-        交付体系 · DELIVERY SYSTEM
+        {tx(lang, '交付体系', 'DELIVERY SYSTEM', ' · ')}
       </div>,
     );
   }
   if (b) {
     // 两种写法：{ zh:'INTERNAL · 内部文件', en:'not for client' } 或 { zh:'内部文件', en:'INTERNAL', sub:{zh,en} }
+    // （标签已按语言规整：单语时另一半为空，filter 掉就不会留下孤零零的「·」）
     const main = b.sub ? [b.en, b.zh].filter(Boolean).join(' · ') : b.zh || b.en;
-    const small = b.sub ? [zhOf(b.sub), enOf(b.sub)].filter(Boolean).join(' ') : b.zh ? b.en : '';
+    const small = b.sub ? labelText(b.sub) : b.zh ? b.en : '';
     out.push(
       <div key="b" style={{ marginTop: out.length ? 8 : 0 }}>
         <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 2.2, color: accent, lineHeight: '15px' }}>{upper(main)}</div>
@@ -363,36 +399,61 @@ function Badge({ meta, accent }) {
   if (stamp) {
     out.push(
       <div key="g" style={{ fontSize: 8.5, color: C.faint, lineHeight: '12px', marginTop: out.length ? 8 : 0, letterSpacing: 0.3 }}>
-        生成 Generated · {stamp}
+        {/* 一个文字节点 + 时间（双语时 DOM 与以前完全一样：「生成 Generated · 」+ 时间） */}
+        {`${tx(lang, '生成', 'Generated')} · `}
+        {stamp}
       </div>,
     );
   }
   return <div style={{ textAlign: 'right', paddingTop: 4 }}>{out}</div>;
 }
 
+/** 估算一行粗体字宽（中文 1em；英文按大写粗体 0.68em 算，宁宽勿窄） */
+function boldW(s, size, spacing = 0) {
+  let w = 0;
+  for (const ch of String(s || '')) w += (CJK_CH.test(ch) ? size : size * 0.68) + spacing;
+  return w;
+}
+
+/**
+ * 大标题字号：中文标题 / 双语照旧 28px；纯英文标题较长（如 FINAL MEASUREMENT & CONFIRMATION CHECKLIST）
+ * 时逐级缩小到一行放得下，最小 20px（再长就折行，高度照实测）
+ */
+function titleType(text, lang) {
+  if (lang !== 'en') return { size: 28, lh: 36, ls: 2 };
+  for (const size of [28, 26, 24, 22]) {
+    const ls = size >= 26 ? 2 : 1.5;
+    if (boldW(text, size, ls) <= CONTENT_W) return { size, lh: Math.round(size * 1.3), ls };
+  }
+  return { size: 20, lh: 26, ls: 1.2 };
+}
+
 function Header({ ctx }) {
   const { meta, accent } = ctx;
-  const t = meta.title || {};
-  const sub = meta.subtitle;
+  const lang = langOf(ctx);
+  const t = labelParts(meta.title || {});
+  const sub = labelParts(meta.subtitle);
+  const kicker = textOf(meta.kicker);
+  const T = titleType(t.primary, lang);
   return (
     <div style={{ paddingBottom: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', minHeight: 57 }}>
-        <Logo brand={meta.brand} />
-        <Badge meta={meta} accent={accent} />
+        <Logo brand={meta.brand} lang={lang} />
+        <Badge meta={meta} accent={accent} lang={lang} />
       </div>
       <div style={{ paddingTop: 16 }}>
-        {has(meta.kicker) && (
-          <div style={{ fontSize: 9.5, lineHeight: '14px', letterSpacing: 1.6, color: C.mute, paddingBottom: 6, fontWeight: 600 }}>{upper(meta.kicker)}</div>
+        {has(kicker) && (
+          <div style={{ fontSize: 9.5, lineHeight: '14px', letterSpacing: 1.6, color: C.mute, paddingBottom: 6, fontWeight: 600 }}>{upper(kicker)}</div>
         )}
-        <div style={{ fontSize: 28, lineHeight: '36px', fontWeight: 800, color: C.ink, letterSpacing: 2 }}>{zhOf(t) || enOf(t)}</div>
-        {has(enOf(t)) && has(zhOf(t)) && (
-          <div style={{ fontSize: 12, lineHeight: '18px', fontWeight: 700, color: accent, letterSpacing: 2.6, paddingTop: 2 }}>{upper(enOf(t))}</div>
+        <div style={{ fontSize: T.size, lineHeight: `${T.lh}px`, fontWeight: 800, color: C.ink, letterSpacing: T.ls }}>{t.primary}</div>
+        {has(t.secondary) && (
+          <div style={{ fontSize: 12, lineHeight: '18px', fontWeight: 700, color: accent, letterSpacing: 2.6, paddingTop: 2 }}>{upper(t.secondary)}</div>
         )}
-        {sub && (has(zhOf(sub)) || has(enOf(sub))) && (
+        {has(sub.primary) && (
           <div style={{ fontSize: 11, lineHeight: '17px', color: accent, paddingTop: 6 }}>
-            {zhOf(sub)}
-            {has(enOf(sub)) && (
-              <span style={{ fontStyle: 'italic', color: C.mute, marginLeft: has(zhOf(sub)) ? 8 : 0 }}>{enOf(sub)}</span>
+            {sub.primary}
+            {has(sub.secondary) && (
+              <span style={{ fontStyle: 'italic', color: C.mute, marginLeft: 8 }}>{sub.secondary}</span>
             )}
           </div>
         )}
@@ -406,11 +467,11 @@ function Header({ ctx }) {
 }
 
 function Intro({ atom }) {
-  const p = atom.p || {};
+  const p = labelParts(atom.p || {});
   return (
     <div>
-      {has(zhOf(p)) && <div style={{ fontSize: 11, lineHeight: '18px', color: C.ink }}>{zhOf(p)}</div>}
-      {has(enOf(p)) && <div style={{ fontSize: 9.5, lineHeight: '14px', color: C.mute, paddingTop: 2 }}>{enOf(p)}</div>}
+      {has(p.primary) && <div style={{ fontSize: 11, lineHeight: '18px', color: C.ink }}>{p.primary}</div>}
+      {has(p.secondary) && <div style={{ fontSize: 9.5, lineHeight: '14px', color: C.mute, paddingTop: 2 }}>{p.secondary}</div>}
     </div>
   );
 }
@@ -418,7 +479,7 @@ function Intro({ atom }) {
 function Legend({ atom, ctx }) {
   return (
     <div style={{ background: C.cream, borderRadius: 3, padding: '6px 10px', fontSize: 10, lineHeight: '15px', color: C.body, whiteSpace: 'pre-wrap' }}>
-      <Stars text={atom.text} color={ctx.accent} />
+      <Stars text={textOf(atom.text)} color={ctx.accent} />
     </div>
   );
 }
@@ -426,23 +487,27 @@ function Legend({ atom, ctx }) {
 /** 续页抬头（每页 2+ 顶部，固定高度） */
 export function ContHeader({ ctx, height = 30 }) {
   const { meta, accent } = ctx;
-  const t = meta.title || {};
-  // 粗估宽度：logo 57 + 分隔 21 + 中文标题 + 项目名，剩下给英文标题
+  const lang = langOf(ctx);
+  const t = labelParts(meta.title || {});
+  // 粗估宽度：logo 57 + 分隔 21 + 标题 + 项目名，剩下给英文副标题
   const proj = fitText(ctx.project || '', 260, 9);
   const projW = Math.min(260, proj.length * 7);
-  const enW = CONTENT_W - 57 - 21 - zhOf(t).length * 11.5 - 8 - projW - 20;
+  // 主标题：中文按 11.5px / 字（与以前一样）；纯英文时是英文粗体，按字宽估算并截断，不挤掉项目名
+  const title = lang === 'en' ? fitText(t.primary, CONTENT_W - 57 - 21 - projW - 20, 11 * 1.2) : t.primary;
+  const titleW = lang === 'en' ? boldW(title, 11) : title.length * 11.5;
+  const enW = CONTENT_W - 57 - 21 - titleW - 8 - projW - 20;
   return (
     <div style={{ height, boxSizing: 'border-box', display: 'flex', alignItems: 'center', borderBottom: LINE, paddingBottom: 6 }}>
       {meta.brand === 'plain' ? (
-        <div style={{ fontSize: 11, fontWeight: 700 }}>溪岸 Sail</div>
+        <div style={{ fontSize: 11, fontWeight: 700 }}>{brandName(lang)}</div>
       ) : (
         <img src={LOGO_SRC} alt="" style={{ display: 'block', width: Math.round(22 * LOGO_RATIO), height: 22 }} />
       )}
       <div style={{ width: 1, height: 16, background: C.line, margin: '0 10px' }} />
-      <div style={{ fontSize: 11, fontWeight: 700, color: C.ink, lineHeight: '16px', whiteSpace: 'nowrap' }}>{zhOf(t)}</div>
-      {has(enOf(t)) && enW > 60 && (
+      <div style={{ fontSize: 11, fontWeight: 700, color: C.ink, lineHeight: '16px', whiteSpace: 'nowrap' }}>{title}</div>
+      {has(t.secondary) && enW > 60 && (
         <div style={{ fontSize: 8.5, fontWeight: 700, color: accent, letterSpacing: 1.4, lineHeight: '16px', marginLeft: 8, whiteSpace: 'nowrap', overflow: 'hidden' }}>
-          {fitText(upper(enOf(t)), enW, 8.5 * 1.15, 1.4)}
+          {fitText(upper(t.secondary), enW, 8.5 * 1.15, 1.4)}
         </div>
       )}
       <div style={{ flex: 1 }} />
@@ -455,15 +520,46 @@ export function ContHeader({ ctx, height = 30 }) {
   );
 }
 
+/**
+ * 纯英文文件：「项目（客户）」自动加的全角括号换成半角（页脚报告名、续页抬头项目名共用，两处写法一致）。
+ * 中文 / 双语原样。
+ */
+export function halfBrackets(s, lang) {
+  const t = String(s || '');
+  return lang === 'en' ? t.replace(/\s*（([^（）]*)）/g, ' ($1)') : t;
+}
+
+/**
+ * 页脚左边的报告名。报告名是自动生成的「模板中文名 · 项目（客户）· 日期」：纯英文文件里开头那段模板名
+ * 换成英文标题，自动加的全角括号换成半角（项目名 / 客户 / 日期本身原样）。docmodel 若已按语言给出报告名，这里什么都不改。
+ */
+function footTitle(meta, lang) {
+  const rt = String(meta.reportTitle || '');
+  if (lang !== 'en' || !CJK_CH.test(rt)) return rt;
+  const parts = rt.split(' · ');
+  const name = labelText(meta.title);
+  if (CJK_CH.test(parts[0]) && has(name)) parts[0] = name;
+  return halfBrackets(parts.join(' · '), lang);
+}
+
 /** 页脚 */
 export function Footer({ ctx, page, total }) {
-  const left = [ctx.meta.company, ctx.meta.reportTitle].filter(Boolean).join('  ·  ');
+  const lang = langOf(ctx);
+  const left = [ctx.meta.company, footTitle(ctx.meta, lang)].filter(Boolean).join('  ·  ');
+  // 右边页码：双语「第 n / N 页 Page n of N」留 190px；单语只有一半，左边多给些
+  const right = lang === 'both' ? 190 : 110;
   return (
     <div style={{ height: 18, boxSizing: 'border-box', borderTop: LINE, paddingTop: 5, display: 'flex', fontSize: 8.5, lineHeight: '12px', color: C.mute }}>
-      <div style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden' }}>{fitText(left, CONTENT_W - 190, 8.5)}</div>
-      <div style={{ flex: 'none', marginLeft: 16, color: C.body }}>
-        第 {page} / {total} 页<span style={{ color: C.faint, marginLeft: 6 }}>Page {page} of {total}</span>
-      </div>
+      <div style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden' }}>{fitText(left, CONTENT_W - right, 8.5)}</div>
+      {lang === 'both' ? (
+        <div style={{ flex: 'none', marginLeft: 16, color: C.body }}>
+          第 {page} / {total} 页<span style={{ color: C.faint, marginLeft: 6 }}>Page {page} of {total}</span>
+        </div>
+      ) : (
+        <div style={{ flex: 'none', marginLeft: 16, color: C.body, whiteSpace: 'nowrap' }}>
+          {lang === 'zh' ? `第 ${page} / ${total} 页` : `Page ${page} of ${total}`}
+        </div>
+      )}
     </div>
   );
 }
@@ -473,14 +569,17 @@ export function Footer({ ctx, page, total }) {
 function SecHead({ atom, ctx }) {
   const b = atom.block;
   const { accent } = ctx;
-  const t = b.title || {};
-  const zh = zhOf(t);
-  const en = enOf(t);
+  const lang = langOf(ctx);
+  // 双语：EN · 中文；单语只有一种（不留「·」）
+  const { zh, en } = slots(b.title || {}, lang);
   let counts = '';
   if (b.type === 'checklist' && b.counts) {
-    counts = `共 ${b.counts.total} 项${b.counts.key ? ` · 其中关键项 ${b.counts.key} 项` : ''}`;
+    counts =
+      lang === 'en'
+        ? `${b.counts.total} items${b.counts.key ? ` · ${b.counts.key} key` : ''}`
+        : `共 ${b.counts.total} 项${b.counts.key ? ` · 其中关键项 ${b.counts.key} 项` : ''}`;
   }
-  const note = b.note;
+  const note = labelParts(b.note);
   return (
     <div style={{ paddingBottom: 8 }}>
       <div
@@ -493,16 +592,19 @@ function SecHead({ atom, ctx }) {
         }}
       >
         {has(b.no) && <span style={{ fontSize: 13, fontWeight: 800, color: accent, marginRight: 10, lineHeight: '20px' }}>{b.no}</span>}
-        {has(en) && <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1.6, color: accent, lineHeight: '20px' }}>{upper(en)}</span>}
+        {has(en) && (
+          // 纯英文时英文就是标题本身：字号放大到 12px（行高不变）
+          <span style={{ fontSize: has(zh) ? 10.5 : 12, fontWeight: 700, letterSpacing: 1.6, color: accent, lineHeight: '20px' }}>{upper(en)}</span>
+        )}
         {has(en) && has(zh) && <span style={{ color: C.faint, margin: '0 7px', lineHeight: '20px', fontSize: 11 }}>·</span>}
         {has(zh) && <span style={{ fontSize: 13, fontWeight: 700, color: C.ink, lineHeight: '20px' }}>{zh}</span>}
         <span style={{ flex: 1 }} />
         {counts && <span style={{ fontSize: 9.5, color: C.mute, lineHeight: '20px', whiteSpace: 'nowrap', marginLeft: 12 }}>{counts}</span>}
       </div>
-      {note && (has(zhOf(note)) || has(enOf(note))) && (
+      {has(note.primary) && (
         <div style={{ fontSize: 10, lineHeight: '15px', color: C.body, padding: '5px 2px 0' }}>
-          {zhOf(note)}
-          {has(enOf(note)) && <span style={{ fontStyle: 'italic', color: C.mute, marginLeft: 6, fontSize: 9.5 }}>{enOf(note)}</span>}
+          {note.primary}
+          {has(note.secondary) && <span style={{ fontStyle: 'italic', color: C.mute, marginLeft: 6, fontSize: 9.5 }}>{note.secondary}</span>}
         </div>
       )}
     </div>
@@ -521,6 +623,7 @@ const cellBase = (w, extra = {}) => ({
 });
 
 function HeadCell({ w, v, first, center, extra }) {
+  const { primary, secondary } = labelParts(v);
   return (
     <div
       style={cellBase(w, {
@@ -536,27 +639,28 @@ function HeadCell({ w, v, first, center, extra }) {
         ...extra,
       })}
     >
-      <div style={{ fontSize: 9.5, lineHeight: '13px', fontWeight: 700, color: C.ink }}>{zhOf(v)}</div>
-      {has(enOf(v)) && <div style={{ fontSize: 8, lineHeight: '11px', color: C.mute, letterSpacing: 0.2 }}>{enOf(v)}</div>}
+      <div style={{ fontSize: 9.5, lineHeight: '13px', fontWeight: 700, color: C.ink }}>{primary}</div>
+      {has(secondary) && <div style={{ fontSize: 8, lineHeight: '11px', color: C.mute, letterSpacing: 0.2 }}>{secondary}</div>}
     </div>
   );
 }
 
-function ClHead({ block: b }) {
+function ClHead({ block: b, ctx }) {
   const Lc = clLayout(b);
+  const lang = langOf(ctx);
   const itemLabel = !b.showStandard && b.rows.some((r) => r.desc)
-    ? { zh: '检查项与标准', en: 'Check Item & Standard' }
-    : { zh: '检查项目', en: 'Check Item' };
+    ? pair(lang, '检查项与标准', 'Check Item & Standard')
+    : pair(lang, '检查项目', 'Check Item');
   return (
     <div style={{ display: 'flex', background: C.cream }}>
-      <HeadCell w={Lc.NO} v={{ zh: '#', en: 'No.' }} first center />
+      <HeadCell w={Lc.NO} v={pair(lang, '#', 'No.')} first center />
       <HeadCell w={Lc.item} v={itemLabel} />
-      {Lc.std > 0 && <HeadCell w={Lc.std} v={{ zh: '标准要求', en: 'Standard' }} />}
-      {Lc.meth > 0 && <HeadCell w={Lc.meth} v={{ zh: '检查方法', en: 'Method' }} />}
+      {Lc.std > 0 && <HeadCell w={Lc.std} v={pair(lang, '标准要求', 'Standard')} />}
+      {Lc.meth > 0 && <HeadCell w={Lc.meth} v={pair(lang, '检查方法', 'Method')} />}
       {b.resultLayout === 'columns' ? (
         b.options.map((o) => <HeadCell key={o.v} w={Lc.optW} v={o} center />)
       ) : (
-        <HeadCell w={Lc.res} v={{ zh: '判定', en: 'Result' }} />
+        <HeadCell w={Lc.res} v={pair(lang, '判定', 'Result')} />
       )}
       <HeadCell w={Lc.rem} v={b.remarkLabel} />
     </div>
@@ -570,6 +674,8 @@ function InlineOpts({ row }) {
       {row.options.map((o) => {
         const on = row.result?.v === o.v;
         const t = tone(o.tone);
+        // 选项文字已按语言规整：单语时只有一种
+        const { primary, secondary } = labelParts(o);
         return (
           <div
             key={o.v}
@@ -584,8 +690,8 @@ function InlineOpts({ row }) {
             }}
           >
             <Box on={on} toneKey={o.tone} faded={answered && !on} />
-            <span style={{ marginLeft: 5 }}>{o.zh}</span>
-            {has(o.en) && <span style={{ marginLeft: 4, fontSize: 8.5, fontWeight: on ? 700 : 400 }}>{o.en}</span>}
+            <span style={{ marginLeft: 5 }}>{primary}</span>
+            {has(secondary) && <span style={{ marginLeft: 4, fontSize: 8.5, fontWeight: on ? 700 : 400 }}>{secondary}</span>}
           </div>
         );
       })}
@@ -593,19 +699,21 @@ function InlineOpts({ row }) {
   );
 }
 
-function ItemText({ row, b, accent }) {
+function ItemText({ row, b, accent, lang }) {
+  const t = labelParts(row.title);
+  const d = labelParts(row.desc);
   return (
     <div>
       <div style={{ fontSize: 11, lineHeight: '16px', fontWeight: 700, color: C.ink, ...WRAP }}>
         {row.key && <span style={{ color: accent, marginRight: 3 }}>★</span>}
-        {zhOf(row.title)}
-        {row.media && <MediaTag accent={accent} />}
+        {t.primary}
+        {row.media && <MediaTag accent={accent} lang={lang} />}
       </div>
-      {has(enOf(row.title)) && <div style={{ fontSize: 9, lineHeight: '13px', color: C.mute }}>{enOf(row.title)}</div>}
-      {!b.showStandard && row.desc && (has(zhOf(row.desc)) || has(enOf(row.desc))) && (
+      {has(t.secondary) && <div style={{ fontSize: 9, lineHeight: '13px', color: C.mute }}>{t.secondary}</div>}
+      {!b.showStandard && row.desc && has(d.primary) && (
         <div style={{ paddingTop: 3 }}>
-          {has(zhOf(row.desc)) && <div style={{ fontSize: 10, lineHeight: '15px', color: C.body, ...WRAP }}>{zhOf(row.desc)}</div>}
-          {has(enOf(row.desc)) && <div style={{ fontSize: 8.5, lineHeight: '12px', color: C.mute, fontStyle: 'italic', ...WRAP }}>{enOf(row.desc)}</div>}
+          <div style={{ fontSize: 10, lineHeight: '15px', color: C.body, ...WRAP }}>{d.primary}</div>
+          {has(d.secondary) && <div style={{ fontSize: 8.5, lineHeight: '12px', color: C.mute, fontStyle: 'italic', ...WRAP }}>{d.secondary}</div>}
         </div>
       )}
     </div>
@@ -614,10 +722,11 @@ function ItemText({ row, b, accent }) {
 
 function SmallBi({ v }) {
   if (!v) return null;
+  const { primary, secondary } = labelParts(v);
   return (
     <>
-      {has(zhOf(v)) && <div style={{ fontSize: 10, lineHeight: '15px', color: C.body, ...WRAP }}>{zhOf(v)}</div>}
-      {has(enOf(v)) && <div style={{ fontSize: 8.5, lineHeight: '12px', color: C.mute, ...WRAP }}>{enOf(v)}</div>}
+      {has(primary) && <div style={{ fontSize: 10, lineHeight: '15px', color: C.body, ...WRAP }}>{primary}</div>}
+      {has(secondary) && <div style={{ fontSize: 8.5, lineHeight: '12px', color: C.mute, ...WRAP }}>{secondary}</div>}
     </>
   );
 }
@@ -663,7 +772,7 @@ function ClRow({ atom, ctx, pos }) {
         {!cont && r.no}
       </div>
       <div style={cell(Lc.item)}>
-        {!cont && <ItemText row={r} b={b} accent={ctx.accent} />}
+        {!cont && <ItemText row={r} b={b} accent={ctx.accent} lang={langOf(ctx)} />}
       </div>
       {Lc.std > 0 && (
         <div style={cell(Lc.std)}>
@@ -713,6 +822,9 @@ function Tick({ atom, ctx, pos }) {
   const cont = !!atom.cont; // 续行：不画勾选框 / 标题，接着写填写内容或备注
   const [pt, pb] = contPad(atom);
   const top = atom.firstInBlock || pos.first ? C.line : 'transparent';
+  const lang = langOf(ctx);
+  const t = labelParts(r.title);
+  const d = labelParts(r.desc);
   return (
     <div
       style={{
@@ -732,15 +844,15 @@ function Tick({ atom, ctx, pos }) {
         {!cont && (
           <div style={{ fontSize: 11, lineHeight: '17px', color: C.ink, ...WRAP }}>
             {r.key && <span style={{ color: ctx.accent, marginRight: 3 }}>★</span>}
-            <span style={{ fontWeight: 600 }}>{zhOf(r.title)}</span>
-            {has(enOf(r.title)) && <span style={{ color: C.mute, fontSize: 9.5, marginLeft: 8 }}>{enOf(r.title)}</span>}
-            {r.media && <MediaTag accent={ctx.accent} />}
+            <span style={{ fontWeight: 600 }}>{t.primary}</span>
+            {has(t.secondary) && <span style={{ color: C.mute, fontSize: 9.5, marginLeft: 8 }}>{t.secondary}</span>}
+            {r.media && <MediaTag accent={ctx.accent} lang={lang} />}
           </div>
         )}
-        {!cont && r.desc && (has(zhOf(r.desc)) || has(enOf(r.desc))) && (
+        {!cont && r.desc && has(d.primary) && (
           <div style={{ fontSize: 9.5, lineHeight: '14px', color: C.body, ...WRAP }}>
-            {zhOf(r.desc)}
-            {has(enOf(r.desc)) && <span style={{ color: C.mute, fontStyle: 'italic', marginLeft: 6 }}>{enOf(r.desc)}</span>}
+            {d.primary}
+            {has(d.secondary) && <span style={{ color: C.mute, fontStyle: 'italic', marginLeft: 6 }}>{d.secondary}</span>}
           </div>
         )}
         {r.input && (
@@ -750,7 +862,7 @@ function Tick({ atom, ctx, pos }) {
         )}
         {has(r.remark) && (
           <div style={{ fontSize: 10, lineHeight: '15px', color: C.body, paddingTop: cont && !r.input ? 0 : 2, whiteSpace: 'pre-wrap', ...WRAP }}>
-            {!atom.remarkCont && <span style={{ color: C.mute }}>备注 Remark：</span>}
+            {!atom.remarkCont && <span style={{ color: C.mute }}>{remarkPrefix(lang)}</span>}
             {r.remark}
           </div>
         )}
@@ -761,11 +873,11 @@ function Tick({ atom, ctx, pos }) {
 
 // ---------- 表格 ----------
 
-function TblHead({ block: b }) {
+function TblHead({ block: b, ctx }) {
   const T = tblLayout(b);
   return (
     <div style={{ display: 'flex', background: C.cream }}>
-      <HeadCell w={T.NO} v={{ zh: '#', en: 'No.' }} first center extra={{ padding: '5px 2px' }} />
+      <HeadCell w={T.NO} v={pair(langOf(ctx), '#', 'No.')} first center extra={{ padding: '5px 2px' }} />
       {b.columns.map((c, i) => (
         <HeadCell key={c.key} w={T.ws[i]} v={c.label} />
       ))}
@@ -793,26 +905,28 @@ function TblRow({ atom, pos }) {
 }
 
 function TblEmpty({ block: b }) {
+  const { primary, secondary } = labelParts(b.emptyText);
   return (
     <div style={{ borderLeft: LINE, borderRight: LINE, borderBottom: LINE, padding: '9px 10px', textAlign: 'center', fontSize: 10.5, lineHeight: '15px', color: C.mute }}>
-      {zhOf(b.emptyText)}
-      {has(enOf(b.emptyText)) && <span style={{ color: C.faint, marginLeft: 6 }}>{enOf(b.emptyText)}</span>}
+      {primary}
+      {has(secondary) && <span style={{ color: C.faint, marginLeft: 6 }}>{secondary}</span>}
     </div>
   );
 }
 
 /** 续页：小字「续」+ 重复表头 */
 function ContHead({ block: b, ctx }) {
-  const t = b.title || {};
+  const lang = langOf(ctx);
+  const { zh, en } = slots(b.title || {}, lang);
   return (
     <div>
       <div style={{ fontSize: 9, lineHeight: '13px', color: C.mute, paddingBottom: 4 }}>
         {has(b.no) && <span style={{ color: ctx.accent, fontWeight: 700, marginRight: 6 }}>{b.no}</span>}
-        {zhOf(t)}
-        {has(enOf(t)) && <span style={{ marginLeft: 6, letterSpacing: 0.8 }}>{upper(enOf(t))}</span>}
-        <span style={{ marginLeft: 6, color: C.faint }}>（续 cont.）</span>
+        {zh}
+        {has(en) && <span style={{ marginLeft: has(zh) ? 6 : 0, letterSpacing: 0.8 }}>{upper(en)}</span>}
+        <span style={{ marginLeft: 6, color: C.faint }}>{contLabel(lang)}</span>
       </div>
-      {b.type === 'table' ? <TblHead block={b} /> : <ClHead block={b} />}
+      {b.type === 'table' ? <TblHead block={b} ctx={ctx} /> : <ClHead block={b} ctx={ctx} />}
     </div>
   );
 }
@@ -820,17 +934,18 @@ function ContHead({ block: b, ctx }) {
 // ---------- 信息栏 ----------
 
 function FieldValue({ f, ctx, size = 11, lh = 17, list }) {
+  const lang = langOf(ctx);
   if (f.kind === 'video') {
     if (!f.video) return list ? <BlankLines /> : null;
     const P = list ? PHOTO.lg : PHOTO.sm;
-    return <Tile mref={f.video} w={P.w} h={P.h} ctx={ctx} cap={VIDEO_CAP} />;
+    return <Tile mref={f.video} w={P.w} h={P.h} ctx={ctx} cap={videoCap(lang)} />;
   }
   if (f.kind === 'list') {
     if (!f.lines || !f.lines.length) return list ? <BlankLines n={2} /> : null;
     return <Bullets lines={f.lines} size={size} lh={lh} dot={ctx.accent} contFirst={f.contLine} />;
   }
   if (f.kind === 'photos') {
-    return list ? <div style={{ fontSize: 10, lineHeight: '16px', color: C.faint }}>未附照片 No photos</div> : null;
+    return list ? <div style={{ fontSize: 10, lineHeight: '16px', color: C.faint }}>{tx(lang, '未附照片', 'No photos')}</div> : null;
   }
   if (!has(f.value)) return list ? <BlankLines /> : null;
   return (
@@ -842,15 +957,16 @@ function FieldValue({ f, ctx, size = 11, lh = 17, list }) {
 
 function GridRow({ atom, ctx, pos }) {
   const cols = atom.cols;
-  const pair = CONTENT_W / cols;
+  const colW = CONTENT_W / cols;
   const LW = GRID_LABEL_W[cols] || 80;
+  const lang = langOf(ctx);
   const top = `1px solid ${atom.firstInBlock || pos.first ? C.line : 'transparent'}`;
   const bottom = `1px solid ${atom.contNext && !pos.last ? 'transparent' : atom.mediaHead ? C.lineSoft : C.line}`;
   return (
     <div style={{ display: 'flex' }}>
       {atom.cells.map((c, k) => {
         const f = c.field;
-        const vw = Math.round(c.span * pair) - LW;
+        const vw = Math.round(c.span * colW) - LW;
         const n = (f.photos || []).length;
         return [
           <div
@@ -868,7 +984,7 @@ function GridRow({ atom, ctx, pos }) {
           <div key={`v${k}`} style={cellBase(vw, { borderTop: top, borderBottom: bottom, padding: `${c.cont ? 2 : 6}px 9px ${atom.contNext ? 2 : 6}px`, minHeight: 28 })}>
             {atom.mediaHead ? (
               <div style={{ fontSize: 9.5, lineHeight: '14px', color: C.mute }}>
-                共 {n} 张 · {n} photo{n > 1 ? 's' : ''}
+                {lang === 'both' ? <>共 {n} 张 · {n} photo{n > 1 ? 's' : ''}</> : photoCount(lang, n)}
               </div>
             ) : (
               <FieldValue f={f} ctx={ctx} size={11} lh={16} />
@@ -882,6 +998,7 @@ function GridRow({ atom, ctx, pos }) {
 
 function ListRow({ atom, ctx }) {
   const cells = atom.cells;
+  const lang = langOf(ctx);
   return (
     <div
       style={{
@@ -892,24 +1009,32 @@ function ListRow({ atom, ctx }) {
         alignItems: 'flex-start',
       }}
     >
-      {cells.map((f, k) => (
-        <div key={f.key || k} style={{ flex: 1, minWidth: 0 }}>
-          {!atom.cont && (
-            <div style={{ display: 'flex', alignItems: 'baseline', paddingBottom: 2 }}>
-              <span style={{ fontSize: 10.5, lineHeight: '15px', fontWeight: 700, color: C.ink }}>{zhOf(f.label)}</span>
-              {has(enOf(f.label)) && (
-                <span style={{ fontSize: 8, lineHeight: '15px', color: C.faint, letterSpacing: 1.2, marginLeft: 8, fontWeight: 600 }}>{upper(enOf(f.label))}</span>
-              )}
-              {atom.mediaHead && (
-                <span style={{ marginLeft: 'auto', fontSize: 9, color: C.mute, lineHeight: '15px' }}>
-                  共 {(f.photos || []).length} 张 · {(f.photos || []).length} photos
-                </span>
-              )}
-            </div>
-          )}
-          {!atom.mediaHead && <FieldValue f={f} ctx={ctx} size={12} lh={18} list />}
-        </div>
-      ))}
+      {cells.map((f, k) => {
+        const lp = labelParts(f.label);
+        const n = (f.photos || []).length;
+        return (
+          <div key={f.key || k} style={{ flex: 1, minWidth: 0 }}>
+            {!atom.cont && (
+              <div style={{ display: 'flex', alignItems: 'baseline', paddingBottom: 2 }}>
+                <span style={{ fontSize: 10.5, lineHeight: '15px', fontWeight: 700, color: C.ink }}>{lp.primary}</span>
+                {has(lp.secondary) && (
+                  <span style={{ fontSize: 8, lineHeight: '15px', color: C.faint, letterSpacing: 1.2, marginLeft: 8, fontWeight: 600 }}>{upper(lp.secondary)}</span>
+                )}
+                {atom.mediaHead && (
+                  lang === 'both' ? (
+                    <span style={{ marginLeft: 'auto', fontSize: 9, color: C.mute, lineHeight: '15px' }}>
+                      共 {n} 张 · {n} photos
+                    </span>
+                  ) : (
+                    <span style={{ marginLeft: 'auto', paddingLeft: 8, fontSize: 9, color: C.mute, lineHeight: '15px', whiteSpace: 'nowrap' }}>{photoCount(lang, n)}</span>
+                  )
+                )}
+              </div>
+            )}
+            {!atom.mediaHead && <FieldValue f={f} ctx={ctx} size={12} lh={18} list />}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -917,7 +1042,8 @@ function ListRow({ atom, ctx }) {
 // ---------- 统计 / 备注 / 签名 ----------
 
 // 统计值超过 LONG_VALUE 字不放小卡片，改成整行
-function Summary({ block: b, atom = {} }) {
+function Summary({ block: b, atom = {}, ctx }) {
+  const lang = langOf(ctx);
   const all = b.items || [];
   // 拆开排版时（paginate.js summaryAtoms）：part = 'cards' 卡片 | 'long' 一条长值的一块 | 'conclusion' 结论
   const part = atom.part;
@@ -931,6 +1057,15 @@ function Summary({ block: b, atom = {} }) {
   // 长值的续块：不写标签、上下内边距收小，和上一块连成一条
   const [pt, pb] = contPad(atom);
   const ct = c ? tone(c.tone) : null;
+  // 结论标签：双语照旧（缺了就补「结论 / CONCLUSION」）；单语只写一种
+  let cl = null;
+  if (c) {
+    const raw = typeof c.label === 'string' ? { zh: c.label } : c.label || {};
+    cl =
+      lang === 'both'
+        ? { primary: raw.zh || '结论', secondary: upper(raw.en || 'Conclusion') }
+        : labelParts(has(raw.zh) || has(raw.en) ? raw : pair(lang, '结论', 'Conclusion'));
+  }
   return (
     <div>
       {n > 0 && (
@@ -938,13 +1073,19 @@ function Summary({ block: b, atom = {} }) {
           {items.map((it, i) => {
             const t = tone(it.tone);
             const v = String(it.value ?? '');
-            const big = v.length <= 10;
+            // 大字（15px）：双语照旧按字数（≤ 10 字）；单语另按估算宽度，放不进卡片一行就用 12px
+            // （中文 10 个字 ≈ 150px，五张一行的卡片只有 118px，「合格 — 可安排交付」会剩一个字折到第二行）
+            const big = v.length <= 10 && (lang === 'both' || boldW(v, 15) <= w - 18);
+            const lp = labelParts(it.label);
             return (
               <div key={i} style={{ width: w, boxSizing: 'border-box', background: t.bg, borderTop: `3px solid ${t.bar || t.fg}`, padding: '6px 9px 8px' }}>
-                <div style={{ fontSize: 9.5, lineHeight: '13px', fontWeight: 700, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden' }}>{fitText(zhOf(it.label), w - 18, 9.5)}</div>
-                <div style={{ fontSize: 7.5, lineHeight: '11px', color: C.mute, letterSpacing: 0.6, whiteSpace: 'nowrap', overflow: 'hidden' }}>
-                  {fitText(upper(enOf(it.label)), w - 18, 7.5 * 1.15, 0.6) || '\u00a0'}
-                </div>
+                <div style={{ fontSize: 9.5, lineHeight: '13px', fontWeight: 700, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden' }}>{fitText(lp.primary, w - 18, 9.5)}</div>
+                {/* 双语卡片第二行是英文小字（缺了用空格占位，卡片等高）；单语没有这一行 */}
+                {lang === 'both' && (
+                  <div style={{ fontSize: 7.5, lineHeight: '11px', color: C.mute, letterSpacing: 0.6, whiteSpace: 'nowrap', overflow: 'hidden' }}>
+                    {fitText(upper(lp.secondary), w - 18, 7.5 * 1.15, 0.6) || '\u00a0'}
+                  </div>
+                )}
                 <div style={{ fontSize: big ? 15 : 12, lineHeight: big ? '20px' : '16px', fontWeight: 800, color: t.fg, paddingTop: big ? 3 : 4, ...WRAP }}>{v}</div>
               </div>
             );
@@ -953,11 +1094,12 @@ function Summary({ block: b, atom = {} }) {
       )}
       {longs.map((it, i) => {
         const t = tone(it.tone);
+        const lp = labelParts(it.label);
         return (
           <div key={`l${i}`} style={{ display: 'flex', marginTop: n || i ? gap : 0, background: t.bg, borderLeft: `3px solid ${t.bar || t.fg}` }}>
             <div style={{ width: 150, flex: 'none', boxSizing: 'border-box', padding: `${pt + 1}px 10px ${pb + 1}px` }}>
-              {!atom.cont && <div style={{ fontSize: 9.5, lineHeight: '13px', fontWeight: 700, color: C.ink }}>{zhOf(it.label)}</div>}
-              {!atom.cont && has(enOf(it.label)) && <div style={{ fontSize: 7.5, lineHeight: '11px', color: C.mute, letterSpacing: 0.6 }}>{upper(enOf(it.label))}</div>}
+              {!atom.cont && <div style={{ fontSize: 9.5, lineHeight: '13px', fontWeight: 700, color: C.ink }}>{lp.primary}</div>}
+              {!atom.cont && has(lp.secondary) && <div style={{ fontSize: 7.5, lineHeight: '11px', color: C.mute, letterSpacing: 0.6 }}>{upper(lp.secondary)}</div>}
             </div>
             <div style={{ flex: 1, minWidth: 0, padding: `${pt + 1}px 12px ${pb + 1}px 0`, fontSize: 10.5, lineHeight: '16px', fontWeight: 600, color: t.fg, ...WRAP }}>
               {String(it.value ?? '')}
@@ -978,8 +1120,8 @@ function Summary({ block: b, atom = {} }) {
           }}
         >
           <div style={{ flex: 'none' }}>
-            <div style={{ fontSize: 10.5, lineHeight: '15px', fontWeight: 700, color: C.ink }}>{zhOf(c.label) || '结论'}</div>
-            <div style={{ fontSize: 8, lineHeight: '11px', color: C.mute, letterSpacing: 1 }}>{upper(enOf(c.label) || 'Conclusion')}</div>
+            <div style={{ fontSize: 10.5, lineHeight: '15px', fontWeight: 700, color: C.ink }}>{cl.primary}</div>
+            {has(cl.secondary) && <div style={{ fontSize: 8, lineHeight: '11px', color: C.mute, letterSpacing: 1 }}>{cl.secondary}</div>}
           </div>
           <div style={{ width: 1, alignSelf: 'stretch', background: ct.bd }} />
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -997,6 +1139,7 @@ function Note({ block: b, ctx }) {
   const lines = b.lines || [];
   const color = warn ? C.terraDark : C.body;
   const boxed = warn;
+  const title = labelParts(b.title);
   return (
     <div
       style={
@@ -1005,24 +1148,27 @@ function Note({ block: b, ctx }) {
           : { padding: '0 2px' }
       }
     >
-      {b.title && (has(zhOf(b.title)) || has(enOf(b.title))) && (
+      {b.title && has(title.primary) && (
         <div style={{ fontSize: 10.5, lineHeight: '16px', fontWeight: 700, color: C.ink, paddingBottom: 3 }}>
-          {zhOf(b.title)}
-          {has(enOf(b.title)) && <span style={{ fontSize: 8.5, color: ctx.accent, letterSpacing: 1.2, marginLeft: 8 }}>{upper(enOf(b.title))}</span>}
+          {title.primary}
+          {has(title.secondary) && <span style={{ fontSize: 8.5, color: ctx.accent, letterSpacing: 1.2, marginLeft: 8 }}>{upper(title.secondary)}</span>}
         </div>
       )}
-      {lines.map((l, i) => (
-        <div key={i} style={{ paddingTop: i ? 3 : 0 }}>
-          {has(zhOf(l)) && (
-            <div style={{ fontSize: warn ? 10.5 : 9.5, lineHeight: warn ? '16px' : '14px', color, whiteSpace: 'pre-wrap', ...WRAP }}>
-              <Stars text={zhOf(l)} color={ctx.accent} />
-            </div>
-          )}
-          {has(enOf(l)) && (
-            <div style={{ fontSize: 8.5, lineHeight: '12px', color: warn ? C.terra : C.mute, fontStyle: 'italic', ...WRAP }}>{enOf(l)}</div>
-          )}
-        </div>
-      ))}
+      {lines.map((l, i) => {
+        const lp = labelParts(l);
+        return (
+          <div key={i} style={{ paddingTop: i ? 3 : 0 }}>
+            {has(lp.primary) && (
+              <div style={{ fontSize: warn ? 10.5 : 9.5, lineHeight: warn ? '16px' : '14px', color, whiteSpace: 'pre-wrap', ...WRAP }}>
+                <Stars text={lp.primary} color={ctx.accent} />
+              </div>
+            )}
+            {has(lp.secondary) && (
+              <div style={{ fontSize: 8.5, lineHeight: '12px', color: warn ? C.terra : C.mute, fontStyle: 'italic', ...WRAP }}>{lp.secondary}</div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1047,38 +1193,44 @@ function Signatures({ block: b, ctx }) {
   const n = Math.max(1, roles.length);
   const gap = 22;
   const w = Math.floor((CONTENT_W - gap * (n - 1)) / n);
-  const d = b.declaration;
+  const lang = langOf(ctx);
+  const d = labelParts(b.declaration);
+  // 「姓名 / 日期」标签列：双语 74px；单语字少，收窄
+  const kw = lang === 'both' ? 74 : 48;
   return (
     <div>
-      {d && (has(zhOf(d)) || has(enOf(d))) && (
+      {b.declaration && has(d.primary) && (
         <div style={{ background: C.cream, padding: '9px 14px 10px', marginBottom: 16, borderLeft: `3px solid ${C.line}` }}>
-          {has(zhOf(d)) && <div style={{ fontSize: 10.5, lineHeight: '17px', color: C.ink, ...WRAP }}>{zhOf(d)}</div>}
-          {has(enOf(d)) && <div style={{ fontSize: 8.5, lineHeight: '13px', color: C.mute, fontStyle: 'italic', paddingTop: 3, ...WRAP }}>{enOf(d)}</div>}
+          <div style={{ fontSize: 10.5, lineHeight: '17px', color: C.ink, ...WRAP }}>{d.primary}</div>
+          {has(d.secondary) && <div style={{ fontSize: 8.5, lineHeight: '13px', color: C.mute, fontStyle: 'italic', paddingTop: 3, ...WRAP }}>{d.secondary}</div>}
         </div>
       )}
       <div style={{ display: 'flex', gap }}>
-        {roles.map((r) => (
-          <div key={r.id} style={{ width: w, flex: 'none' }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 10.5, lineHeight: '15px', fontWeight: 700, color: C.ink, marginRight: 6 }}>{zhOf(r.label)}</span>
-              {has(enOf(r.label)) && (
-                <span style={{ fontSize: 8, lineHeight: '15px', color: C.mute, letterSpacing: 1.2 }}>{upper(enOf(r.label))}</span>
-              )}
+        {roles.map((r) => {
+          const lp = labelParts(r.label);
+          return (
+            <div key={r.id} style={{ width: w, flex: 'none' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 10.5, lineHeight: '15px', fontWeight: 700, color: C.ink, marginRight: 6 }}>{lp.primary}</span>
+                {has(lp.secondary) && (
+                  <span style={{ fontSize: 8, lineHeight: '15px', color: C.mute, letterSpacing: 1.2 }}>{upper(lp.secondary)}</span>
+                )}
+              </div>
+              <div style={{ height: 64, display: 'flex', alignItems: 'flex-end', paddingBottom: 3, boxSizing: 'border-box' }}>
+                <SigImage mref={r.image} ctx={ctx} w={Math.min(w, 200)} h={58} />
+              </div>
+              <div style={{ borderTop: `1px solid ${C.ink}` }} />
+              <div style={{ display: 'flex', fontSize: 9.5, lineHeight: '18px', color: C.mute, paddingTop: 3 }}>
+                <span style={{ flex: 'none', width: kw }}>{tx(lang, '姓名', 'Name')}</span>
+                <span style={{ color: C.ink, fontWeight: 600, flex: 1, minWidth: 0, ...WRAP }}>{r.name}</span>
+              </div>
+              <div style={{ display: 'flex', fontSize: 9.5, lineHeight: '18px', color: C.mute, borderTop: `1px dashed ${C.line}` }}>
+                <span style={{ flex: 'none', width: kw }}>{tx(lang, '日期', 'Date')}</span>
+                <span style={{ color: C.ink, flex: 1 }}>{r.date}</span>
+              </div>
             </div>
-            <div style={{ height: 64, display: 'flex', alignItems: 'flex-end', paddingBottom: 3, boxSizing: 'border-box' }}>
-              <SigImage mref={r.image} ctx={ctx} w={Math.min(w, 200)} h={58} />
-            </div>
-            <div style={{ borderTop: `1px solid ${C.ink}` }} />
-            <div style={{ display: 'flex', fontSize: 9.5, lineHeight: '18px', color: C.mute, paddingTop: 3 }}>
-              <span style={{ flex: 'none', width: 74 }}>姓名 Name</span>
-              <span style={{ color: C.ink, fontWeight: 600, flex: 1, minWidth: 0, ...WRAP }}>{r.name}</span>
-            </div>
-            <div style={{ display: 'flex', fontSize: 9.5, lineHeight: '18px', color: C.mute, borderTop: `1px dashed ${C.line}` }}>
-              <span style={{ flex: 'none', width: 74 }}>日期 Date</span>
-              <span style={{ color: C.ink, flex: 1 }}>{r.date}</span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -1087,7 +1239,7 @@ function Signatures({ block: b, ctx }) {
 function EndNote({ atom, ctx }) {
   return (
     <div style={{ borderTop: LINE, paddingTop: 8, textAlign: 'center', fontSize: 9.5, lineHeight: '15px', color: C.mute, letterSpacing: 0.4 }}>
-      <Stars text={atom.text} color={ctx.accent} />
+      <Stars text={textOf(atom.text)} color={ctx.accent} />
     </div>
   );
 }
@@ -1095,7 +1247,7 @@ function EndNote({ atom, ctx }) {
 // ---------- 分发 ----------
 
 /**
- * @param {{ atom, ctx: { meta, accent, urls, info, project, measure? }, pos: { first, last } }} props
+ * @param {{ atom, ctx: { meta, lang, accent, urls, info, project, measure? }, pos: { first, last } }} props
  */
 export function Atom({ atom, ctx, pos }) {
   switch (atom.kind) {
@@ -1114,13 +1266,13 @@ export function Atom({ atom, ctx, pos }) {
     case 'photoLine':
       return <PhotoLine atom={atom} ctx={ctx} pos={pos} />;
     case 'clHead':
-      return <ClHead block={atom.block} />;
+      return <ClHead block={atom.block} ctx={ctx} />;
     case 'clRow':
       return <ClRow atom={atom} ctx={ctx} pos={pos} />;
     case 'tick':
       return <Tick atom={atom} ctx={ctx} pos={pos} />;
     case 'tblHead':
-      return <TblHead block={atom.block} />;
+      return <TblHead block={atom.block} ctx={ctx} />;
     case 'tblRow':
       return <TblRow atom={atom} pos={pos} />;
     case 'tblEmpty':
@@ -1128,7 +1280,7 @@ export function Atom({ atom, ctx, pos }) {
     case 'contHead':
       return <ContHead block={atom.block} ctx={ctx} />;
     case 'summary':
-      return <Summary block={atom.block} atom={atom} />;
+      return <Summary block={atom.block} atom={atom} ctx={ctx} />;
     case 'note':
       return <Note block={atom.block} ctx={ctx} />;
     case 'sig':

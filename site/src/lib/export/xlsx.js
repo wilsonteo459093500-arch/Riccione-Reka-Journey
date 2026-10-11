@@ -10,8 +10,15 @@
 //
 // exportXlsx(model, media, { logo }) → Promise<Blob>
 //   media.get(id) → { kind, blob, thumb, poster?, w, h, duration?, caption? } | null
+//
+// 语言（lib/lang.js）：model.meta.lang = 'zh' | 'en' | 'both'（没有 = 双语）。模型里的 { zh, en } 标签已按语言规整
+// （zh 模式 en 为空，en 模式 zh 为空），这里一律经 lab() → labelParts() 取「主 / 副」两行：单语时只有主行，不留空的副行。
+// 写死的成对文字（表头、「续」、照片占位、页脚页码、生成时间、表名、数据页表头…）走 say() / tx()；
+// 纯英文文件里不用全角标点（：（）　），连主题里的字体名也换成英文名（latinTheme）。双语（both）的输出必须和以前逐字节一样。
+// 单语排版：表头只有一行粗体主行，窄格放不下长英文单词时降字号（headSize）；数据页 8 列，表格列按需要合并（dataSpans）。
 // ============================================================
 import { modelMedia } from '../docmodel.js';
+import { labelParts, localize, normLang, tx } from '../lang.js';
 
 export const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
@@ -49,17 +56,94 @@ const GAP = 8;
 const BAD = /[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g;
 const clean = (s) => (s == null ? '' : String(s).replace(BAD, ''));
 
+/**
+ * 标签 → { main, sub }：主行 / 副行（labelParts：主 = 中文，没有中文就是英文；副 = 有中文时的英文）。
+ * 双语时 = 中文 / 英文；纯中文 / 纯英文文件只有主行。
+ */
 function lab(x) {
-  if (x == null || x === '') return { zh: '', en: '' };
-  if (typeof x === 'string' || typeof x === 'number') return { zh: clean(x).trim(), en: '' };
-  const zh = clean(x.zh || '').trim();
-  const en = clean(x.en || '').trim();
-  return en === zh ? { zh, en: '' } : { zh, en };
+  if (x == null || x === '') return { main: '', sub: '' };
+  if (typeof x === 'string' || typeof x === 'number') return { main: clean(x).trim(), sub: '' };
+  const { primary, secondary } = labelParts({ zh: clean(x.zh || '').trim(), en: clean(x.en || '').trim() });
+  return secondary === primary ? { main: primary, sub: '' } : { main: primary, sub: secondary };
 }
-const both = (x, sep = ' ') => {
+/** 标签拼成一段（双语「中文 English」，sep 可换成换行） */
+const oneLine = (x, sep = ' ') => {
   const l = lab(x);
-  return [l.zh, l.en].filter(Boolean).join(sep);
+  return [l.main, l.sub].filter(Boolean).join(sep);
 };
+/**
+ * 抬头小字 / 图例 / 页脚（meta.kicker / legend / footer）：一般是字符串（原样写，双语逐字节不变）；
+ * 核心按语言规整后也可能是 { zh, en }（PDF / Word 的 textOf 同样接受）→ 拼成一行，不会把对象当文字写出来
+ */
+const metaText = (x) => (x == null ? '' : typeof x === 'string' ? x : oneLine(x));
+/**
+ * 「中文位 / 英文位」：双语 = 主 / 副；单语时整段放进对应语言的位置
+ * （节标题「EN · 中文」这种排法用：英文位照旧大写，纯英文文件的节标题也大写）
+ */
+function slots(x, lang) {
+  const l = lab(x);
+  if (l.sub) return { zh: l.main, en: l.sub };
+  return lang === 'en' ? { zh: '', en: l.main } : { zh: l.main, en: '' };
+}
+/**
+ * 写死的文字按语言取：zh / en 各一种；双语给 both（不给 = 「中文 English」）。
+ * 双语文件里原来只写中文的（如「（续）」「共 n 项」「生成于」）用 both 保持逐字不变。
+ */
+const say = (lang, zh, en, both) => (lang === 'both' && both != null ? both : tx(lang, zh, en));
+/** 全角 / 半角标点：纯英文文件不出现全角（：（）　） */
+const colonOf = (lang) => (lang === 'en' ? ': ' : '：');
+const sepOf = (lang) => (lang === 'en' ? '  ·  ' : '　·　');
+const contOf = (lang) => (lang === 'en' ? '(cont.)' : '（续）');
+const parens = (lang, s) => (lang === 'en' ? `(${s})` : `（${s}）`);
+const mediaTag = (lang) => (lang === 'en' ? '[PHOTO]' : '【影像】');
+const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+const CJK = /[⺀-鿿豈-﫿＀-￯　-〿]/;
+
+/**
+ * 单语文件：模板给了 zhOnly / enOnly（原表只有中文的标签配的英文整句、「中英写在一行」的图例行、
+ * 「厨房 Kitchen」这种选项的单语写法）就用它 —— zh → { zh: zhOnly, en: '' }，en → { zh: '', en: enOnly }。
+ * lib/lang.js 的 localize 已经处理过的，这里结果不变（幂等）；双语原样返回同一个对象。
+ */
+function pickOnly(model, lang) {
+  if (lang === 'both' || !model) return model;
+  const key = lang === 'zh' ? 'zhOnly' : 'enOnly';
+  const walk = (n) => {
+    if (n == null || typeof n !== 'object') return n;
+    if (Array.isArray(n)) {
+      const arr = n.map(walk);
+      return arr.some((x, i) => x !== n[i]) ? arr : n;
+    }
+    let out = n;
+    for (const [k, v] of Object.entries(n)) {
+      const w = walk(v);
+      if (w !== v) {
+        if (out === n) out = { ...n };
+        out[k] = w;
+      }
+    }
+    const only = n[key];
+    if (typeof only === 'string' && only.trim()) {
+      const zh = lang === 'zh' ? only : '';
+      const en = lang === 'en' ? only : '';
+      if (out.zh !== zh || out.en !== en) out = { ...out, zh, en };
+    }
+    return out;
+  };
+  return walk(model);
+}
+
+/**
+ * 页脚 / 文件属性里的报告名。自动生成的是「模板中文名 · 项目（客户）· 日期」：纯英文文件里开头的模板名
+ * 换成英文标题，自动加的全角括号换成半角（项目名 / 客户 / 日期本身原样）。与 PDF 页脚同一规则。
+ */
+function reportName(meta, lang) {
+  const rt = clean(metaText(meta.reportTitle));
+  if (lang !== 'en' || !CJK.test(rt)) return rt;
+  const parts = rt.split(' · ');
+  const name = oneLine(meta.title);
+  if (CJK.test(parts[0]) && name) parts[0] = name;
+  return parts.join(' · ').replace(/\s*（([^（）]*)）/g, ' ($1)');
+}
 
 // ---------- 行数估算 ----------
 // 字宽单位：1 ≈ 1/1.1 个 Excel 列宽字符。中文 2；大写字母、数字、m / w 这类宽字母更宽
@@ -117,6 +201,33 @@ function lines(text, widthChars, fontPt = 10) {
 }
 const spanWidth = (c1, c2) => COLS.slice(c1 - 1, c2).reduce((s, w) => s + w, 0);
 
+/** 最长的一个英文「词」有多宽（单位同上）：空格、中文字前后、连字符后都能换行（「Re-inspection」= Re- + inspection） */
+function longestWord(text) {
+  let best = 0;
+  for (const seg of String(text || '').split(/\s+|(?<=-)/)) {
+    let u = 0;
+    for (const ch of seg) {
+      if (wide(ch)) {
+        best = Math.max(best, u);
+        u = 0;
+      } else u += unitsOf(ch);
+    }
+    best = Math.max(best, u);
+  }
+  return best;
+}
+/**
+ * 单语表头只有一行粗体主行（双语时英文是 7.5pt 的副行）：窄格放不下最长的英文单词时（如终检整改表 G 列的
+ * 「Re-inspection」），字号往下降到放得下为止，免得 Excel / LibreOffice 把单词从中间断开（inspectio / n）。
+ * 粗体按宽 8% 算。返回 { pt, lh }：字号和每行高度（pt）。
+ */
+const BOLD_W = 1.08;
+function headSize(text, widthChars, pt = 9) {
+  const u = longestWord(text) * BOLD_W;
+  const size = [pt, 8, 7.5, 7].find((p) => u <= capOf(widthChars, p)) || 7;
+  return { pt: size, lh: Math.round((size * 4) / 3) };
+}
+
 // Excel 行高上限 409pt（≈ 28 行 10pt 字）：更长的文字切成几段，每段一行（续行），不会被截掉
 const MAX_LINES = 26;
 
@@ -153,8 +264,28 @@ function chunks(text, widthChars, fontPt = 10, max = MAX_LINES, first = max) {
   return out;
 }
 
+/** 按宽度截断（中文算 2、其余算 1），尽量断在空格处，末尾加「…」（单语文件的页脚报告名用） */
+function clip(s, max) {
+  const chars = [...String(s || '')];
+  let u = 0;
+  for (let i = 0; i < chars.length; i += 1) {
+    u += wide(chars[i]) ? 2 : 1;
+    if (u > max) {
+      let cut = chars.slice(0, i).join('');
+      const sp = cut.lastIndexOf(' ');
+      if (sp > cut.length * 0.6) cut = cut.slice(0, sp);
+      return `${cut.replace(/[\s·]+$/, '')}…`;
+    }
+  }
+  return chars.join('');
+}
+
 function sheetName(s, fallback) {
-  const n = clean(s).replace(/[[\]:*?/\\]/g, ' ').trim().slice(0, 31);
+  const full = clean(s).replace(/[[\]:*?/\\]/g, ' ').trim();
+  let n = full.slice(0, 31);
+  // 表名最多 31 个字：英文标题（如 FINAL MEASUREMENT & CONFIRMATION CHECKLIST）断在单词之间，不留半个词 / 落单的 &
+  if (full.length > 31 && /[A-Za-z]/.test(full[31] || '') && n.lastIndexOf(' ') > 12) n = n.slice(0, n.lastIndexOf(' '));
+  n = full.length > 31 ? n.replace(/[\s&·\-–—,;]+$/, '') : n;
   return n || fallback;
 }
 
@@ -232,10 +363,16 @@ function fmtDur(sec) {
   const s = Math.round(sec);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
-const videoText = (m) => `▶ 视频${m.duration ? `（${fmtDur(m.duration)}）` : ''}请见群组`;
+// 视频没封面：▶ 视频（0:42）请见群组 / ▶ Video (0:42) shared separately
+const videoText = (m, lang) =>
+  lang === 'en'
+    ? `▶ Video${m.duration ? ` (${fmtDur(m.duration)})` : ''} shared separately`
+    : `▶ 视频${m.duration ? `（${fmtDur(m.duration)}）` : ''}请见群组`;
+// 照片行下方的视频说明
+const videoCaption = (m, lang) => (lang === 'en' ? `▶ Video ${fmtDur(m.duration)} (shared separately)` : `▶ 视频 ${fmtDur(m.duration)}（请见群组）`);
 
 // ---------- 写表 ----------
-function createWriter(wb, ws, M, accent) {
+function createWriter(wb, ws, M, accent, lang = 'both') {
   let r = 0; // 当前行号（1 起；r = 最后写过的行）
   const imageIds = new Map();
   const thin = { style: 'thin', color: { argb: C.line } };
@@ -307,20 +444,23 @@ function createWriter(wb, ws, M, accent) {
    * 照片行：从第 startCol 列开始横排，放不下自动换行。
    * label 写在 startCol 之前的单元格里。返回写了几行。
    */
-  function photos(ids, { label = '照片 Photos', startCol = 2, labelFill = C.cream } = {}) {
+  function photos(ids, { label = say(lang, '照片', 'Photos'), startCol = 2, labelFill = C.cream } = {}) {
     const all = (ids || []).map((ref) => ({ ref, m: M.get(ref.id) }));
     const items = all.filter((x) => x.m && x.m.data);
     // 放不进图的（视频没封面 / 照片已删除）也要写一句，不能整行消失（PDF 显示 Missing，Word 保留文字）
     const lost = all.filter((x) => !(x.m && x.m.data));
-    const lostTxt = lost.filter((x) => x.m).map((x) => videoText(x.m));
+    const lostTxt = lost.filter((x) => x.m).map((x) => videoText(x.m, lang));
     const nPhoto = lost.filter((x) => !x.m && x.ref.kind !== 'video').length;
-    if (nPhoto) lostTxt.push(nPhoto > 1 ? `照片缺失 ×${nPhoto}` : '照片缺失');
-    if (lost.some((x) => !x.m && x.ref.kind === 'video')) lostTxt.push('视频缺失');
+    if (nPhoto) {
+      lostTxt.push(lang === 'en' ? (nPhoto > 1 ? `${nPhoto} photos missing` : 'Photo missing') : nPhoto > 1 ? `照片缺失 ×${nPhoto}` : '照片缺失');
+    }
+    if (lost.some((x) => !x.m && x.ref.kind === 'video')) lostTxt.push(say(lang, '视频缺失', 'Video missing', '视频缺失'));
+    const sep = sepOf(lang);
     if (!items.length) {
       if (!lostTxt.length) return 0;
       const rr = row(Math.max(startCol > 1 ? lines(label, spanWidth(1, startCol - 1), 8) * 11 + 6 : 0, 20));
       if (startCol > 1) cell(rr, 1, startCol - 1, label, { size: 8, color: C.muted, fill: labelFill, border: true });
-      cell(rr, startCol, NCOL, lostTxt.join('　·　'), { size: 9, color: C.muted, valign: 'middle', border: true, fill: 'FFFCFAF6' });
+      cell(rr, startCol, NCOL, lostTxt.join(sep), { size: 9, color: C.muted, valign: 'middle', border: true, fill: 'FFFCFAF6' });
       return 1;
     }
     const x0 = COL_X[startCol - 1] + 6;
@@ -346,19 +486,19 @@ function createWriter(wb, ws, M, accent) {
 
     rowsOf.forEach((list, i) => {
       const caps = list
-        .map((it) => (it.m.kind === 'video' ? `▶ 视频 ${fmtDur(it.m.duration)}（请见群组）` : it.m.caption))
+        .map((it) => (it.m.kind === 'video' ? videoCaption(it.m, lang) : it.m.caption))
         .filter(Boolean);
       if (i === 0) caps.push(...lostTxt);
-      const hPx = PHOTO_H + 10 + (caps.length ? 4 + lines(caps.join('　·　'), spanWidth(startCol, NCOL), 8) * 12 : 0);
+      const hPx = PHOTO_H + 10 + (caps.length ? 4 + lines(caps.join(sep), spanWidth(startCol, NCOL), 8) * 12 : 0);
       const rr = row(hPx * 0.75);
       if (startCol > 1) cell(rr, 1, startCol - 1, i === 0 ? label : '', { size: 8, color: C.muted, fill: labelFill, border: true });
-      cell(rr, startCol, NCOL, caps.join('　·　'), { size: 8, color: C.muted, valign: 'bottom', border: true, fill: 'FFFCFAF6' });
+      cell(rr, startCol, NCOL, caps.join(sep), { size: 8, color: C.muted, valign: 'bottom', border: true, fill: 'FFFCFAF6' });
       for (const it of list) placeImage(it.m, rr, it.x, 5, it.w, it.h);
     });
     return rowsOf.length;
   }
 
-  return { row, cell, rich, photos, placeImage, font, fill, get r() { return r; }, set r(v) { r = v; } };
+  return { lang, row, cell, rich, photos, placeImage, font, fill, get r() { return r; }, set r(v) { r = v; } };
 }
 
 // ---------- 各块 ----------
@@ -373,49 +513,50 @@ function writeHeader(w, ws, model, logoImg) {
     const h = 54;
     w.placeImage(logoImg, r1, 4, 6, (logoImg.w / logoImg.h) * h, h);
   }
-  const badge = meta.badge ? lab(meta.badge) : meta.brand === 'vsmooth' ? { zh: 'V-SMOOTH', en: '' } : null;
-  if (badge) {
+  const badge = meta.badge ? lab(meta.badge) : meta.brand === 'vsmooth' ? { main: 'V-SMOOTH', sub: '' } : null;
+  if (badge && badge.main) {
     w.cell(r1, 6, 8, w.rich([
-      { text: badge.zh, bold: true, color: accent, size: 9 },
-      badge.en ? { text: `\n${badge.en}`, italic: true, color: C.muted, size: 8 } : null,
+      { text: badge.main, bold: true, color: accent, size: 9 },
+      badge.sub ? { text: `\n${badge.sub}`, italic: true, color: C.muted, size: 8 } : null,
     ]), { align: 'right', valign: 'middle' });
   }
-  if (meta.kicker) {
+  const kicker = metaText(meta.kicker);
+  if (kicker) {
     const rr = w.row(16);
-    w.cell(rr, 1, NCOL, meta.kicker, { size: 8, color: C.muted });
+    w.cell(rr, 1, NCOL, kicker, { size: 8, color: C.muted });
   }
-  // 标题
+  // 标题（双语：中文大字 + 英文大写小字；单语只有一行大字）
   const rt = w.row(30);
   w.cell(rt, 1, NCOL, w.rich([
-    { text: title.zh || title.en, bold: true, size: 18 },
-    title.en && title.zh ? { text: `   ${title.en.toUpperCase()}`, bold: true, size: 10, color: accent } : null,
+    { text: title.main, bold: true, size: 18 },
+    title.sub ? { text: `   ${title.sub.toUpperCase()}`, bold: true, size: 10, color: accent } : null,
   ]), { valign: 'middle' });
   if (meta.subtitle) {
-    const s = lab(meta.subtitle);
-    const txt = [s.zh, s.en].filter(Boolean).join('   ');
+    const txt = oneLine(meta.subtitle, '   ');
     const rr = w.row(lines(txt, spanWidth(1, NCOL), 9) * 13 + 4);
     w.cell(rr, 1, NCOL, txt, { italic: true, size: 9, color: accent });
   }
   for (const p of meta.intro || []) {
     const l = lab(p);
     const width = spanWidth(1, NCOL);
-    const h = lines(l.zh, width, 9.5) * 14 + (l.en ? lines(l.en, width * 1.15, 8.5) * 12 : 0) + 6;
+    const h = lines(l.main, width, 9.5) * 14 + (l.sub ? lines(l.sub, width * 1.15, 8.5) * 12 : 0) + 6;
     const rr = w.row(h);
     w.cell(rr, 1, NCOL, w.rich([
-      { text: l.zh, size: 9.5, color: C.body },
-      l.en ? { text: `\n${l.en}`, size: 8.5, color: C.muted, italic: true } : null,
+      { text: l.main, size: 9.5, color: C.body },
+      l.sub ? { text: `\n${l.sub}`, size: 8.5, color: C.muted, italic: true } : null,
     ]));
   }
-  if (meta.legend) {
+  const legend = metaText(meta.legend);
+  if (legend) {
     const rr = w.row(18);
-    w.cell(rr, 1, NCOL, meta.legend, { size: 9, color: C.body, fill: C.cream, valign: 'middle', indent: 1 });
+    w.cell(rr, 1, NCOL, legend, { size: 9, color: C.body, fill: C.cream, valign: 'middle', indent: 1 });
   }
   w.row(8);
   return accent;
 }
 
 function writeHeading(w, block, accent, extra) {
-  const t = lab(block.title);
+  const t = slots(block.title, w.lang);
   if (!t.zh && !t.en && !block.no) return;
   const name = [t.en ? t.en.toUpperCase() : '', t.zh].filter(Boolean).join(' · ');
   const head = [block.no, name].filter(Boolean).join('   ');
@@ -425,10 +566,11 @@ function writeHeading(w, block, accent, extra) {
   if (block.note) {
     const notes = Array.isArray(block.note) ? block.note : [block.note];
     for (const n of notes) {
-      const l = lab(n);
-      const txt = [l.zh, l.en].filter(Boolean).join('\n');
+      const txt = oneLine(n, '\n');
       const rr2 = w.row(lines(txt, spanWidth(1, NCOL), 9) * 13 + 4);
-      w.cell(rr2, 1, NCOL, txt, { size: 9, color: C.body, italic: !l.zh });
+      // 双语文件里没有中文的说明用斜体（照旧）；单语文件的说明就是主行，不斜
+      const zh = n && typeof n === 'object' ? clean(n.zh || '').trim() : clean(n).trim();
+      w.cell(rr2, 1, NCOL, txt, { size: 9, color: C.body, italic: w.lang === 'both' && !zh });
     }
   }
 }
@@ -438,18 +580,20 @@ function writeFields(w, block, accent) {
   const grid = block.layout === 'grid' && (block.columns || 2) >= 2;
   const labelCell = (rr, c1, c2, f) => {
     const l = lab(f.label);
-    w.cell(rr, c1, c2, w.rich([{ text: l.zh || l.en, bold: true, size: 9, color: C.body }, l.zh && l.en ? { text: `\n${l.en}`, size: 7.5, color: C.muted } : null]), {
+    w.cell(rr, c1, c2, w.rich([{ text: l.main, bold: true, size: 9, color: C.body }, l.sub ? { text: `\n${l.sub}`, size: 7.5, color: C.muted } : null]), {
       fill: C.cream,
       border: true,
     });
   };
-  // 标签（中文 9pt 粗 + 英文 7.5pt）的高度也算进行高，窄格（E:F）里的长标签不会被截
+  // 标签（主行 9pt 粗 + 副行 7.5pt）的高度也算进行高，窄格（E:F）里的长标签不会被截
   const labelH = (f, c1, c2) => {
     const l = lab(f.label);
     const width = spanWidth(c1, c2);
-    return lines(l.zh || l.en, width, 9) * 12 + (l.zh && l.en ? lines(l.en, width, 7.5) * 10 : 0) + 6;
+    return lines(l.main, width, 9) * 12 + (l.sub ? lines(l.sub, width, 7.5) * 10 : 0) + 6;
   };
   const valueOf = (f) => (f.kind === 'list' ? (f.lines || []).map((s) => `• ${s}`).join('\n') : f.value || '');
+  // 行高下限：双语标签两行（中文 + 英文）→ 32pt；单语标签只有一行 → 20pt（不留空的第二行）
+  const minRow = w.lang === 'both' ? 32 : 20;
   const pending = [];
   const flushPair = () => {
     if (!pending.length) return;
@@ -457,9 +601,10 @@ function writeFields(w, block, accent) {
     const va = valueOf(a);
     const vb = b ? valueOf(b) : '';
     const h = Math.max(
-      Math.max(lines(va, spanWidth(3, 4), 10), b ? lines(vb, spanWidth(7, 8), 10) : 1, 2) * 14 + 4,
+      Math.max(lines(va, spanWidth(3, 4), 10), b ? lines(vb, spanWidth(7, 8), 10) : 1) * 14 + 4,
       labelH(a, 1, 2),
       b ? labelH(b, 5, 6) : 0,
+      minRow,
     );
     const rr = w.row(h);
     labelCell(rr, 1, 2, a);
@@ -475,14 +620,13 @@ function writeFields(w, block, accent) {
     if (f.kind === 'photos' || f.kind === 'video') {
       flushPair();
       const refs = f.kind === 'video' ? (f.video ? [f.video] : []) : f.photos || [];
-      const l = lab(f.label);
       if (!refs.length) {
         const rr = w.row(Math.max(labelH(f, 1, 2), 18));
         labelCell(rr, 1, 2, f);
         w.cell(rr, 3, NCOL, '—', { border: true, color: C.faint });
         continue;
       }
-      w.photos(refs, { label: [l.zh, l.en].filter(Boolean).join('\n'), startCol: 3 });
+      w.photos(refs, { label: oneLine(f.label, '\n'), startCol: 3 });
       continue;
     }
     const long = f.kind === 'block' || f.kind === 'list' || !grid || (f.value || '').length > 40;
@@ -490,8 +634,8 @@ function writeFields(w, block, accent) {
       flushPair();
       // 太长的值切成几行（续行），每行不超过 Excel 行高上限
       chunks(valueOf(f), spanWidth(3, NCOL), 10).forEach((v, i) => {
-        const rr = w.row(Math.max(lines(v, spanWidth(3, NCOL), 10) * 14 + 4, i ? 0 : Math.max(labelH(f, 1, 2), 32)));
-        if (i) w.cell(rr, 1, 2, '（续）', { size: 8, color: C.faint, fill: C.cream, border: true });
+        const rr = w.row(Math.max(lines(v, spanWidth(3, NCOL), 10) * 14 + 4, i ? 0 : Math.max(labelH(f, 1, 2), minRow)));
+        if (i) w.cell(rr, 1, 2, contOf(w.lang), { size: 8, color: C.faint, fill: C.cream, border: true });
         else labelCell(rr, 1, 2, f);
         w.cell(rr, 3, NCOL, v, { border: true });
       });
@@ -509,47 +653,54 @@ function itemRich(w, row) {
   const d = row.desc ? lab(row.desc) : null;
   return w.rich([
     row.key ? { text: '★ ', bold: true, color: C.terra } : null,
-    { text: t.zh || t.en, bold: true, size: 10 },
-    row.media ? { text: ' 【影像】', size: 8, color: C.terra } : null,
-    t.zh && t.en ? { text: `\n${t.en}`, size: 8, color: C.muted } : null,
-    d && d.zh ? { text: `\n${d.zh}`, size: 9, color: C.body } : null,
-    d && d.en ? { text: `\n${d.en}`, size: 8, color: C.muted, italic: true } : null,
+    { text: t.main, bold: true, size: 10 },
+    row.media ? { text: ` ${mediaTag(w.lang)}`, size: 8, color: C.terra } : null,
+    t.sub ? { text: `\n${t.sub}`, size: 8, color: C.muted } : null,
+    d && d.main ? { text: `\n${d.main}`, size: 9, color: C.body } : null,
+    d && d.sub ? { text: `\n${d.sub}`, size: 8, color: C.muted, italic: true } : null,
   ]);
 }
 /** 富文本格的行数：每段按自己的字号估（英文 8pt 按 10pt 估会多出好几行空白）。parts = [[文字, 字号], …] */
 const richLines = (parts, width) => parts.reduce((n, [text, pt]) => n + (text ? lines(text, width, pt) : 0), 0);
 // 与 itemRich 对应（desc = false 时只有标题）
-const itemParts = (row, desc = true) => {
+const itemParts = (row, lang, desc = true) => {
   const t = lab(row.title);
   const d = desc && row.desc ? lab(row.desc) : {};
-  return [[`${row.key ? '★ ' : ''}${t.zh || t.en}${row.media ? ' 【影像】' : ''}`, 10], [t.zh && t.en ? t.en : '', 8], [d.zh, 9], [d.en, 8]];
+  return [[`${row.key ? '★ ' : ''}${t.main}${row.media ? ` ${mediaTag(lang)}` : ''}`, 10], [t.sub, 8], [d.main, 9], [d.sub, 8]];
 };
 const labParts = (x) => {
   const l = lab(x);
-  return [[l.zh, 9], [l.en, 8]];
+  return [[l.main, 9], [l.sub, 8]];
 };
 
 function writeChecklist(w, block, accent) {
-  const extra = block.counts?.key ? `共 ${block.counts.total} 项 · 其中关键项 ${block.counts.key} 项` : `共 ${block.counts?.total ?? block.rows.length} 项`;
+  const { lang } = w;
+  const total = block.counts?.total ?? block.rows.length;
+  const extra = block.counts?.key
+    ? say(lang, `共 ${block.counts.total} 项 · 其中关键项 ${block.counts.key} 项`, `${plural(block.counts.total, 'item')} · ${plural(block.counts.key, 'key item')}`, `共 ${block.counts.total} 项 · 其中关键项 ${block.counts.key} 项`)
+    : say(lang, `共 ${total} 项`, plural(total, 'item'), `共 ${total} 项`);
   writeHeading(w, block, accent, extra);
   const opts = block.options || [];
   const layout = block.resultLayout;
+  const cont = contOf(lang);
 
   if (layout === 'ticks') {
     const width = spanWidth(2, NCOL);
     for (const row of block.rows) {
       const on = !!row.result;
       const t = lab(row.title);
-      // 备注太长切成续行；第一段和标题同一格，少放几行
-      const head = lines([t.zh, t.en].filter(Boolean).join('\n'), width, 10);
-      const rem = row.remark ? chunks(`备注：${row.remark}`, width, 10, MAX_LINES, MAX_LINES - head) : [];
-      const txt = [t.zh, t.en, rem[0] || ''].filter(Boolean).join('\n');
+      // 纯英文：「[PHOTO] 标题」中间空一格；中文 / 双语照旧「【影像】标题」
+      const tag = row.media ? (lang === 'en' ? `${mediaTag(lang)} ` : mediaTag(lang)) : '';
+      // 备注太长切成续行；第一段和标题同一格，少放几行（行数按实际写进去的文字算，含影像标记）
+      const head = lines([`${tag}${t.main}`, t.sub].filter(Boolean).join('\n'), width, 10);
+      const rem = row.remark ? chunks(`${say(lang, '备注', 'Remarks', '备注')}${colonOf(lang)}${row.remark}`, width, 10, MAX_LINES, MAX_LINES - head) : [];
+      const txt = [`${tag}${t.main}`, t.sub, rem[0] || ''].filter(Boolean).join('\n');
       const rr = w.row(Math.max(lines(txt, width, 10), 1) * 14 + 6);
       w.cell(rr, 1, 1, on ? '☑' : '☐', { align: 'center', bold: on, size: 12, color: on ? TONE.pass : C.faint, border: true });
       w.cell(rr, 2, NCOL, w.rich([
-        row.media ? { text: '【影像】', size: 8, color: C.terra } : null,
-        { text: t.zh || t.en, size: 10 },
-        t.zh && t.en ? { text: `\n${t.en}`, size: 8, color: C.muted } : null,
+        tag ? { text: tag, size: 8, color: C.terra } : null,
+        { text: t.main, size: 10 },
+        t.sub ? { text: `\n${t.sub}`, size: 8, color: C.muted } : null,
         rem[0] ? { text: `\n${rem[0]}`, size: 9, color: C.body, italic: true } : null,
       ]), { border: true });
       for (const part of rem.slice(1)) {
@@ -569,18 +720,23 @@ function writeChecklist(w, block, accent) {
   const methodCols = block.showMethod ? [4, 4] : null;
   const resCols = layout === 'columns' && opts.length <= 3 ? opts.map((_, i) => 5 + i) : null;
 
-  // 表头（行高按最高的表头文字算）
-  const heads = [[1, 1, '序号', 'No.', 'center'], [2, itemEnd, '检查项', 'Check Item']];
-  if (stdCols) heads.push([stdCols[0], stdCols[1], '标准要求', 'Standard']);
-  if (methodCols) heads.push([4, 4, '检查方法', 'Method']);
+  // 表头（行高按最高的表头文字算）。写死的表头按语言规整成主 / 副两行（单语只有一行）
+  const hd = (zh, en) => lab(localize({ zh, en }, lang));
+  const heads = [[1, 1, hd('序号', 'No.'), 'center'], [2, itemEnd, hd('检查项', 'Check Item')]];
+  if (stdCols) heads.push([stdCols[0], stdCols[1], hd('标准要求', 'Standard')]);
+  if (methodCols) heads.push([4, 4, hd('检查方法', 'Method')]);
   if (resCols) {
-    resCols.forEach((c, i) => heads.push([c, c, opts[i].zh, opts[i].en, 'center']));
-    for (let c = 5 + resCols.length; c <= 7; c += 1) heads.push([c, c, '', '']);
-  } else heads.push([5, 7, '结果', 'Result', 'center']);
-  heads.push([8, 8, lab(block.remarkLabel).zh || '备注', lab(block.remarkLabel).en || 'Remarks']);
-  const hr = w.row(Math.max(28, ...heads.map(([c1, c2, zh, en]) => lines(zh, spanWidth(c1, c2), 9) * 12 + (en ? lines(en, spanWidth(c1, c2), 7.5) * 10 : 0) + 6)));
-  for (const [c1, c2, zh, en, align = 'left'] of heads) {
-    w.cell(hr, c1, c2, w.rich([{ text: zh, bold: true, size: 9 }, en ? { text: `\n${en}`, size: 7.5, color: C.muted } : null]), {
+    resCols.forEach((c, i) => heads.push([c, c, lab(opts[i]), 'center']));
+    for (let c = 5 + resCols.length; c <= 7; c += 1) heads.push([c, c, lab('')]);
+  } else heads.push([5, 7, hd('结果', 'Result'), 'center']);
+  // 备注列名：模板给的（已按语言规整）；双语缺哪半边照旧补「备注」/「Remarks」
+  const rl = lab(block.remarkLabel);
+  heads.push([8, 8, lang === 'both' ? { main: rl.main || '备注', sub: rl.sub || 'Remarks' } : rl.main ? rl : hd('备注', 'Remarks')]);
+  // 主行字号：双语照旧 9pt；单语窄格放不下长单词时降字号（headSize）
+  const fs = heads.map(([c1, c2, l]) => (lang === 'both' ? { pt: 9, lh: 12 } : headSize(l.main, spanWidth(c1, c2))));
+  const hr = w.row(Math.max(28, ...heads.map(([c1, c2, l], i) => lines(l.main, spanWidth(c1, c2), fs[i].pt) * fs[i].lh + (l.sub ? lines(l.sub, spanWidth(c1, c2), 7.5) * 10 : 0) + 6)));
+  for (const [i, [c1, c2, l, align = 'left']] of heads.entries()) {
+    w.cell(hr, c1, c2, w.rich([{ text: l.main, bold: true, size: fs[i].pt }, l.sub ? { text: `\n${l.sub}`, size: 7.5, color: C.muted } : null]), {
       fill: C.cream,
       border: true,
       align,
@@ -597,15 +753,16 @@ function writeChecklist(w, block, accent) {
     const vc = row.input ? chunks(valueTxt, spanWidth(5, 8), 10) : [''];
     const h = Math.max(
       Math.max(
-        richLines(itemParts(row, !block.showStandard), spanWidth(2, itemEnd)),
+        richLines(itemParts(row, lang, !block.showStandard), spanWidth(2, itemEnd)),
         row.desc && stdCols ? richLines(labParts(row.desc), spanWidth(stdCols[0], stdCols[1])) : 1,
         row.method && methodCols ? richLines(labParts(row.method), 15) : 1,
         lines(rc[0], 24, 9),
         resCols ? 1 : opts.length,
-        2,
       ) *
         13 +
         8,
+      // 下限：双语检查项至少两行（中文 + 英文）→ 34pt；单语一行 → 21pt
+      lang === 'both' ? 34 : 21,
       row.input ? lines(vc[0], spanWidth(5, 8), 10) * 14 + 6 : 0,
     );
     const rr = w.row(h);
@@ -614,12 +771,12 @@ function writeChecklist(w, block, accent) {
       const t = lab(row.title);
       w.cell(rr, 2, itemEnd, w.rich([
         row.key ? { text: '★ ', bold: true, color: C.terra } : null,
-        { text: t.zh || t.en, bold: true },
-        row.media ? { text: ' 【影像】', size: 8, color: C.terra } : null,
-        t.zh && t.en ? { text: `\n${t.en}`, size: 8, color: C.muted } : null,
+        { text: t.main, bold: true },
+        row.media ? { text: ` ${mediaTag(lang)}`, size: 8, color: C.terra } : null,
+        t.sub ? { text: `\n${t.sub}`, size: 8, color: C.muted } : null,
       ]), { border: true, fill: tint });
       const d = lab(row.desc);
-      w.cell(rr, stdCols[0], stdCols[1], w.rich([{ text: d.zh, size: 9, color: C.body }, d.en ? { text: `\n${d.en}`, size: 8, color: C.muted, italic: true } : null]), {
+      w.cell(rr, stdCols[0], stdCols[1], w.rich([{ text: d.main, size: 9, color: C.body }, d.sub ? { text: `\n${d.sub}`, size: 8, color: C.muted, italic: true } : null]), {
         border: true,
         fill: tint,
       });
@@ -628,7 +785,7 @@ function writeChecklist(w, block, accent) {
     }
     if (methodCols) {
       const m = lab(row.method);
-      w.cell(rr, 4, 4, w.rich([{ text: m.zh, size: 9, color: C.body }, m.en ? { text: `\n${m.en}`, size: 8, color: C.muted, italic: true } : null]), {
+      w.cell(rr, 4, 4, w.rich([{ text: m.main, size: 9, color: C.body }, m.sub ? { text: `\n${m.sub}`, size: 8, color: C.muted, italic: true } : null]), {
         border: true,
         fill: tint,
       });
@@ -637,7 +794,7 @@ function writeChecklist(w, block, accent) {
     const ticks = resCols && rOpts.length <= resCols.length;
     if (row.input) {
       const il = lab(row.inputLabel);
-      w.cell(rr, 5, 8, vc[0] || (il.zh ? `（${il.zh}）` : ''), { border: true, color: valueTxt ? C.ink : C.faint, fill: tint });
+      w.cell(rr, 5, 8, vc[0] || (il.main ? parens(lang, il.main) : ''), { border: true, color: valueTxt ? C.ink : C.faint, fill: tint });
     } else {
       if (ticks) {
         resCols.forEach((c, i) => {
@@ -658,7 +815,7 @@ function writeChecklist(w, block, accent) {
         w.cell(rr, 5, 7, w.rich(
           rOpts.map((o, i) => {
             const on = row.result?.v === o.v;
-            return { text: `${i ? '\n' : ''}${on ? '☑' : '☐'} ${o.zh}${o.en ? ` ${o.en}` : ''}`, bold: on, size: 9, color: on ? TONE[o.tone] || C.ink : C.faint };
+            return { text: `${i ? '\n' : ''}${on ? '☑' : '☐'} ${oneLine(o)}`, bold: on, size: 9, color: on ? TONE[o.tone] || C.ink : C.faint };
           }),
         ), { border: true, fill: row.result ? TINT[row.result.tone] || tint : tint, valign: 'middle' });
       }
@@ -668,7 +825,7 @@ function writeChecklist(w, block, accent) {
     for (let k = 1; k < Math.max(rc.length, vc.length); k += 1) {
       const r2 = w.row(Math.max(lines(rc[k] || '', 24, 9) * 13 + 8, row.input ? lines(vc[k] || '', spanWidth(5, 8), 10) * 14 + 6 : 0));
       w.cell(r2, 1, 1, '', { border: true, fill: tint });
-      w.cell(r2, 2, itemEnd, '（续）', { size: 8, color: C.faint, border: true, fill: tint });
+      w.cell(r2, 2, itemEnd, cont, { size: 8, color: C.faint, border: true, fill: tint });
       if (stdCols) w.cell(r2, stdCols[0], stdCols[1], '', { border: true, fill: tint });
       if (methodCols) w.cell(r2, 4, 4, '', { border: true, fill: tint });
       if (row.input) {
@@ -727,18 +884,24 @@ function fitColumns(cols, c0 = 2) {
 }
 
 function writeTable(w, block, accent) {
+  const { lang } = w;
   writeHeading(w, block, accent);
   const cols = block.columns || [];
   // A 列 = 行号 #（与 PDF / Word 一致，填写提醒里的「整改第 n 项」才对得上）；表格列从 B 起
   const groups = fitColumns(cols, 2);
   const ranges = groups.map((g) => [g.a, g.b]);
+  // 合并格的表头：主行 / 副行各自用「 / 」连起来（单语只有主行）
   const join = (g, k) => g.cols.map((x) => lab(x.label)[k]).filter(Boolean).join(' / ');
-  const heads = groups.map((g) => ({ a: g.a, b: g.b, zh: join(g, 'zh'), en: join(g, 'en') }));
+  // 主行字号：双语照旧 9pt；单语窄格放不下长单词（如 G 列「Re-inspection」）时降字号（headSize）
+  const heads = groups.map((g) => {
+    const main = join(g, 'main');
+    return { a: g.a, b: g.b, main, sub: join(g, 'sub'), ...(lang === 'both' ? { pt: 9, lh: 12 } : headSize(main, spanWidth(g.a, g.b))) };
+  });
   // 表头行高按最高的表头文字算（窄列里的长表头不会被截）
-  const hr = w.row(Math.max(28, ...heads.map((x) => lines(x.zh, spanWidth(x.a, x.b), 9) * 12 + (x.en ? lines(x.en, spanWidth(x.a, x.b), 7.5) * 10 : 0) + 6)));
+  const hr = w.row(Math.max(28, ...heads.map((x) => lines(x.main, spanWidth(x.a, x.b), x.pt) * x.lh + (x.sub ? lines(x.sub, spanWidth(x.a, x.b), 7.5) * 10 : 0) + 6)));
   w.cell(hr, 1, 1, '#', { bold: true, size: 9, fill: C.cream, border: true, align: 'center', valign: 'middle' });
   for (const x of heads) {
-    w.cell(hr, x.a, x.b, w.rich([{ text: x.zh, bold: true, size: 9 }, x.en ? { text: `\n${x.en}`, size: 7.5, color: C.muted } : null]), {
+    w.cell(hr, x.a, x.b, w.rich([{ text: x.main, bold: true, size: x.pt }, x.sub ? { text: `\n${x.sub}`, size: 7.5, color: C.muted } : null]), {
       fill: C.cream,
       border: true,
       valign: 'middle',
@@ -746,13 +909,13 @@ function writeTable(w, block, accent) {
   }
   if (block.empty) {
     const rr = w.row(20);
-    w.cell(rr, 1, NCOL, both(block.emptyText) || '无', { color: C.muted, border: true, align: 'center', valign: 'middle' });
+    w.cell(rr, 1, NCOL, oneLine(block.emptyText) || say(lang, '无', 'None', '无'), { color: C.muted, border: true, align: 'center', valign: 'middle' });
     w.row(6);
     return;
   }
   block.rows.forEach((r, ri) => {
     const texts = groups.map((g) => {
-      if (g.cols.length > 1) return g.cols.map((x) => `${lab(x.label).zh || lab(x.label).en}：${r.cells[x.key] || '—'}`).join('\n');
+      if (g.cols.length > 1) return g.cols.map((x) => `${lab(x.label).main}${colonOf(lang)}${r.cells[x.key] || '—'}`).join('\n');
       return r.cells[g.cols[0].key] || '';
     });
     // 太长的格子切成续行（行号只写在第一行）
@@ -763,7 +926,7 @@ function writeTable(w, block, accent) {
       ranges.forEach(([a, b], i) => w.cell(rr, a, b, parts[i][k] || '', { border: true, size: 9.5 }));
     }
     // 照片组标签放 A:B（A 列太窄，「复验照片 Re-inspection photo」会被截）
-    for (const g of r.photoGroups || []) w.photos(g.photos, { label: both(g.label, '\n'), startCol: 3 });
+    for (const g of r.photoGroups || []) w.photos(g.photos, { label: oneLine(g.label, '\n'), startCol: 3 });
   });
   w.row(6);
 }
@@ -787,9 +950,10 @@ function splitCols(k) {
 }
 
 function writeSummary(w, block, accent) {
-  writeHeading(w, { title: block.title || { zh: '结果统计', en: 'Summary' } }, accent);
+  const { lang } = w;
+  writeHeading(w, { title: block.title || localize({ zh: '结果统计', en: 'Summary' }, lang) }, accent);
   const items = block.items || [];
-  const valueOf = (it) => clean(typeof it.value === 'string' ? it.value : both(it.value));
+  const valueOf = (it) => clean(typeof it.value === 'string' ? it.value : oneLine(it.value));
   const tiles = items.filter((it) => valueOf(it).length <= LONG_VALUE);
   const longs = items.filter((it) => valueOf(it).length > LONG_VALUE);
   // 小卡片：每行最多 4 张、各行张数尽量平均；行高按最高的一张（标签 + 值）算
@@ -797,10 +961,7 @@ function writeSummary(w, block, accent) {
   for (let i = 0; i < tiles.length; i += per) {
     const chunk = tiles.slice(i, i + per);
     const ranges = splitCols(chunk.length);
-    const texts = chunk.map((it) => {
-      const l = lab(it.label);
-      return [`${l.zh}${l.en ? ` ${l.en}` : ''}`, valueOf(it)];
-    });
+    const texts = chunk.map((it) => [oneLine(it.label), valueOf(it)]);
     const rr = w.row(Math.max(34, ...texts.map(([lt, v], k) => lines(lt, spanWidth(...ranges[k]), 8) * 11 + lines(v, spanWidth(...ranges[k]), 11) * 15 + 8)));
     chunk.forEach((it, k) => {
       w.cell(rr, ranges[k][0], ranges[k][1], w.rich([
@@ -813,23 +974,23 @@ function writeSummary(w, block, accent) {
   for (const it of longs) {
     const l = lab(it.label);
     const tone = TONE[it.tone] ? it.tone : 'neutral';
-    const lh = lines(l.zh || l.en, spanWidth(1, 2), 9) * 12 + (l.zh && l.en ? lines(l.en, spanWidth(1, 2), 7.5) * 10 : 0) + 6;
+    const lh = lines(l.main, spanWidth(1, 2), 9) * 12 + (l.sub ? lines(l.sub, spanWidth(1, 2), 7.5) * 10 : 0) + 6;
     chunks(valueOf(it), spanWidth(3, NCOL), 10).forEach((v, k) => {
       const rr = w.row(Math.max(lines(v, spanWidth(3, NCOL), 10) * 14 + 6, k ? 0 : lh));
-      const head = w.rich([{ text: l.zh || l.en, bold: true, size: 9, color: C.body }, l.zh && l.en ? { text: `\n${l.en}`, size: 7.5, color: C.muted } : null]);
-      w.cell(rr, 1, 2, k ? '（续）' : head, { size: 8, color: C.faint, fill: TINT[tone], border: true, leftBar: TONE[tone] });
+      const head = w.rich([{ text: l.main, bold: true, size: 9, color: C.body }, l.sub ? { text: `\n${l.sub}`, size: 7.5, color: C.muted } : null]);
+      w.cell(rr, 1, 2, k ? contOf(lang) : head, { size: 8, color: C.faint, fill: TINT[tone], border: true, leftBar: TONE[tone] });
       w.cell(rr, 3, NCOL, v, { color: TONE[tone], fill: TINT[tone], border: true });
     });
   }
   if (block.conclusion) {
     const cn = block.conclusion;
-    const value = typeof cn.value === 'string' ? cn.value : both(cn.value);
-    const note = cn.note ? (typeof cn.note === 'string' ? cn.note : both(cn.note, '\n')) : '';
-    const label = both(cn.label) || '结论 Conclusion';
+    const value = typeof cn.value === 'string' ? cn.value : oneLine(cn.value);
+    const note = cn.note ? (typeof cn.note === 'string' ? cn.note : oneLine(cn.note, '\n')) : '';
+    const label = oneLine(cn.label) || say(lang, '结论', 'Conclusion');
     const width = spanWidth(1, NCOL) - 2;
-    const rr = w.row(Math.max(26, lines(`${label}：${value}`, width, 12) * 17 + (note ? lines(note, width, 9) * 12 : 0) + 8));
+    const rr = w.row(Math.max(26, lines(`${label}${colonOf(lang)}${value}`, width, 12) * 17 + (note ? lines(note, width, 9) * 12 : 0) + 8));
     w.cell(rr, 1, NCOL, w.rich([
-      { text: `${label}：`, size: 9, color: C.white },
+      { text: `${label}${colonOf(lang)}`, size: 9, color: C.white },
       { text: clean(value), bold: true, size: 12, color: C.white },
       note ? { text: `\n${note}`, size: 9, color: C.white } : null,
     ]), { fill: TONE[cn.tone] || TONE.neutral, valign: 'middle', indent: 1 });
@@ -842,22 +1003,23 @@ function writeNote(w, block, accent) {
   for (const ln of block.lines || []) {
     const l = lab(ln);
     const width = spanWidth(1, NCOL);
-    const rr = w.row(lines(l.zh, width, 9) * 13 + (l.en ? lines(l.en, width * 1.15, 8) * 11 : 0) + 4);
+    const rr = w.row(lines(l.main, width, 9) * 13 + (l.sub ? lines(l.sub, width * 1.15, 8) * 11 : 0) + 4);
     w.cell(rr, 1, NCOL, w.rich([
-      { text: l.zh, size: 9, color: block.tone === 'warn' ? C.terra : C.body },
-      l.en ? { text: `${l.zh ? '\n' : ''}${l.en}`, size: 8, color: C.muted, italic: true } : null,
+      { text: l.main, size: 9, color: block.tone === 'warn' ? C.terra : C.body },
+      l.sub ? { text: `\n${l.sub}`, size: 8, color: C.muted, italic: true } : null,
     ]));
   }
   w.row(4);
 }
 
 function writeSignatures(w, block, accent, M) {
-  writeHeading(w, { title: block.title || { zh: '签名确认', en: 'SIGN-OFF' } }, accent);
+  const { lang } = w;
+  writeHeading(w, { title: block.title || localize({ zh: '签名确认', en: 'SIGN-OFF' }, lang) }, accent);
   if (block.declaration) {
     const l = lab(block.declaration);
     const width = spanWidth(1, NCOL);
-    const rr = w.row(lines(l.zh, width, 9) * 13 + (l.en ? lines(l.en, width * 1.15, 8) * 11 : 0) + 6);
-    w.cell(rr, 1, NCOL, w.rich([{ text: l.zh, size: 9, color: C.body }, l.en ? { text: `\n${l.en}`, size: 8, color: C.muted, italic: true } : null]), {
+    const rr = w.row(lines(l.main, width, 9) * 13 + (l.sub ? lines(l.sub, width * 1.15, 8) * 11 : 0) + 6);
+    w.cell(rr, 1, NCOL, w.rich([{ text: l.main, size: 9, color: C.body }, l.sub ? { text: `\n${l.sub}`, size: 8, color: C.muted, italic: true } : null]), {
       fill: C.cream,
     });
   }
@@ -869,7 +1031,7 @@ function writeSignatures(w, block, accent, M) {
   const r1 = w.row(28);
   roles.forEach((ro, i) => {
     const l = lab(ro.label);
-    w.cell(r1, ranges[i][0], ranges[i][1], w.rich([{ text: l.zh, bold: true, size: 9.5 }, l.en ? { text: `\n${l.en}`, size: 7.5, color: C.muted } : null]), {
+    w.cell(r1, ranges[i][0], ranges[i][1], w.rich([{ text: l.main, bold: true, size: 9.5 }, l.sub ? { text: `\n${l.sub}`, size: 7.5, color: C.muted } : null]), {
       fill: C.cream,
       border: true,
       valign: 'middle',
@@ -888,24 +1050,57 @@ function writeSignatures(w, block, accent, M) {
   const r3 = w.row(30);
   roles.forEach((ro, i) => {
     w.cell(r3, ranges[i][0], ranges[i][1], w.rich([
-      { text: `姓名 Name：${ro.name || ''}`, size: 9 },
-      { text: `\n日期 Date：${ro.date || ''}`, size: 9, color: C.body },
+      { text: `${say(lang, '姓名', 'Name')}${colonOf(lang)}${ro.name || ''}`, size: 9 },
+      { text: `\n${say(lang, '日期', 'Date')}${colonOf(lang)}${ro.date || ''}`, size: 9, color: C.body },
     ]), { border: true });
   });
   w.row(6);
 }
 
 // ---------- 数据表 ----------
-function writeData(ws, model, M) {
+const EXTRA_W = 14; // 单语表格不够分时在右边加的列宽
+
+/**
+ * 单语数据页的表格：A 列是行号 #，表格的 k 列 → B 列起 k 段连续的列（每段合并成一格）；列不够分时右边再加几列。
+ * 和 fitColumns 一样：每列分到的宽度 ÷ 权重（width）从窄到宽比，越宽越好。返回含 # 的 [[起列, 止列], …]（1 起）
+ */
+function dataSpans(weights, widths) {
+  const k = weights.length;
+  const all = [...widths, ...Array(Math.max(0, k + 5 - widths.length)).fill(EXTRA_W)];
+  const m = all.length;
+  const better = (x, y) => {
+    for (let i = 0; i < x.length; i += 1) if (x[i] !== y[i]) return x[i] > y[i];
+    return false;
+  };
+  let best = null;
+  const walk = (i, start, acc) => {
+    if (i === k) {
+      if (start !== m) return;
+      const score = acc.map(([a, b], j) => all.slice(a, b + 1).reduce((s, w) => s + w, 0) / weights[j]).sort((p, q) => p - q);
+      if (!best || better(score, best.score)) best = { score, ranges: acc.map(([a, b]) => [a + 1, b + 1]) };
+      return;
+    }
+    for (let end = start; end <= m - (k - i); end += 1) walk(i + 1, end + 1, [...acc, [start, end]]);
+  };
+  walk(0, 1, []);
+  return [[1, 1], ...(best ? best.ranges : weights.map((_, i) => [i + 2, i + 2]))];
+}
+
+// 双语：检查项 / 结果各有中文、英文两列（10 列，与以前一样）；纯中文 / 纯英文各只要一列（8 列），表头也只写一种语言
+function writeData(ws, model, M, lang = 'both') {
   const thin = { style: 'thin', color: { argb: C.line } };
   const border = { top: thin, left: thin, bottom: thin, right: thin };
   const headFont = { name: FONT, size: 10, bold: true, color: { argb: C.ink } };
   const bodyFont = { name: FONT, size: 10, color: { argb: C.ink } };
   const headFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.cream2 } };
-  ws.columns = [
-    { width: 18 }, { width: 8 }, { width: 34 }, { width: 30 }, { width: 7 }, { width: 7 },
-    { width: 12 }, { width: 12 }, { width: 36 }, { width: 9 },
-  ];
+  const bi = lang === 'both';
+  const NC = bi ? 10 : 8; // 检查项表的列数（字段 / 签名也合并到这一列）
+  const RES = bi ? 7 : 6; // 结果列（按结果上色）
+  // 纯英文：节名是大写英文（如「Ⅵ PROTECTION & CLOSING」），A 列 18 会折成两行、每个检查项都变两倍高 → 放宽到 28
+  const widths = bi ? [18, 8, 34, 30, 7, 7, 12, 12, 36, 9] : [lang === 'en' ? 28 : 18, 8, lang === 'en' ? 40 : 34, 7, 7, 14, 36, 9, 14, 14];
+  ws.columns = widths.map((width) => ({ width }));
+  const hd = (zh, en) => tx(lang, zh, en);
+  const pad = (values) => [...values, ...Array(Math.max(0, NC - values.length)).fill('')];
   let r = 0;
   const put = (values, { head = false } = {}) => {
     r += 1;
@@ -925,25 +1120,34 @@ function writeData(ws, model, M) {
   let itemStart = 0;
   let itemEnd = 0;
   if (checklists.length) {
-    itemStart = put(['节 Section', '序号 No.', '检查项 Item', 'Item (EN)', '关键 Key', '影像 Media', '结果 Result', 'Result (EN)', '备注 Remarks', '照片数 Photos'], { head: true });
+    itemStart = put(
+      bi
+        ? ['节 Section', '序号 No.', '检查项 Item', 'Item (EN)', '关键 Key', '影像 Media', '结果 Result', 'Result (EN)', '备注 Remarks', '照片数 Photos']
+        : [hd('节', 'Section'), hd('序号', 'No.'), hd('检查项', 'Item'), hd('关键', 'Key'), hd('影像', 'Media'), hd('结果', 'Result'), hd('备注', 'Remarks'), hd('照片数', 'Photos')],
+      { head: true },
+    );
     for (const b of checklists) {
-      const sec = [b.no, lab(b.title).zh || lab(b.title).en].filter(Boolean).join(' ');
+      const sec = [b.no, lab(b.title).main].filter(Boolean).join(' ');
       for (const row of b.rows) {
         const t = lab(row.title);
-        const res = row.input
-          ? [row.lines?.length ? row.lines.join(' / ') : row.value || '', '']
-          : row.result
-            ? [row.result.zh || row.result.v, row.result.en || '']
-            : ['', ''];
-        const rr = put([sec, String(row.no ?? ''), t.zh, t.en, row.key ? '★' : '', row.media ? '✓' : '', res[0], res[1], row.remark || '', row.photos.filter((p) => M.has(p.id)).length]);
+        const value = row.lines?.length ? row.lines.join(' / ') : row.value || '';
+        const nPhotos = row.photos.filter((p) => M.has(p.id)).length;
+        let rr;
+        if (bi) {
+          const res = row.input ? [value, ''] : row.result ? [row.result.zh || row.result.v, row.result.en || ''] : ['', ''];
+          rr = put([sec, String(row.no ?? ''), t.main, t.sub, row.key ? '★' : '', row.media ? '✓' : '', res[0], res[1], row.remark || '', nPhotos]);
+        } else {
+          const res = row.input ? value : row.result ? oneLine(row.result) || row.result.v : '';
+          rr = put([sec, String(row.no ?? ''), t.main, row.key ? '★' : '', row.media ? '✓' : '', res, row.remark || '', nPhotos]);
+        }
         if (row.result) {
           const tone = row.result.tone;
-          ws.getCell(rr, 7).font = { ...bodyFont, bold: true, color: { argb: TONE[tone] || C.ink } };
+          ws.getCell(rr, RES).font = { ...bodyFont, bold: true, color: { argb: TONE[tone] || C.ink } };
         }
       }
     }
     itemEnd = r;
-    ws.autoFilter = { from: { row: itemStart, column: 1 }, to: { row: itemEnd, column: 10 } };
+    ws.autoFilter = { from: { row: itemStart, column: 1 }, to: { row: itemEnd, column: NC } };
     ws.views = [{ state: 'frozen', ySplit: itemStart, showGridLines: true }];
     r += 1;
   }
@@ -951,38 +1155,76 @@ function writeData(ws, model, M) {
   const fieldBlocks = model.blocks.filter((b) => b.type === 'fields');
   if (fieldBlocks.length) {
     r += 1;
-    put(['字段 Field', '', '内容 Value', '', '', '', '', '', '', ''], { head: true });
+    put(pad([hd('字段', 'Field'), '', hd('内容', 'Value')]), { head: true });
     ws.mergeCells(r, 1, r, 2);
-    ws.mergeCells(r, 3, r, 10);
+    ws.mergeCells(r, 3, r, NC);
     for (const b of fieldBlocks) {
       for (const f of b.fields) {
-        const l = lab(f.label);
         let v = f.kind === 'list' ? (f.lines || []).join('\n') : f.value || '';
-        if (f.kind === 'photos') v = `${(f.photos || []).filter((p) => M.has(p.id)).length} 张照片`;
-        if (f.kind === 'video') v = f.video ? '已附视频' : '';
-        put([[l.zh, l.en].filter(Boolean).join(' '), '', v, '', '', '', '', '', '', '']);
+        if (f.kind === 'photos') {
+          const n = (f.photos || []).filter((p) => M.has(p.id)).length;
+          v = say(lang, `${n} 张照片`, plural(n, 'photo'), `${n} 张照片`);
+        }
+        if (f.kind === 'video') v = f.video ? say(lang, '已附视频', 'Video attached', '已附视频') : '';
+        put(pad([oneLine(f.label), '', v]));
         ws.mergeCells(r, 1, r, 2);
-        ws.mergeCells(r, 3, r, 10);
+        ws.mergeCells(r, 3, r, NC);
       }
     }
   }
 
   for (const b of model.blocks.filter((x) => x.type === 'table')) {
     r += 2;
-    const t = lab(b.title);
-    ws.getCell(r, 1).value = clean([b.no, t.zh, t.en].filter(Boolean).join(' '));
+    ws.getCell(r, 1).value = clean([b.no, oneLine(b.title)].filter(Boolean).join(' '));
     ws.getCell(r, 1).font = { ...headFont, size: 11 };
     const cols = b.columns.slice(0, 9);
-    put(['#', ...cols.map((c) => lab(c.label).zh || lab(c.label).en)], { head: true });
-    b.rows.forEach((row, i) => put([String(i + 1), ...cols.map((c) => row.cells[c.key] || '')]));
-    if (b.empty) put(['', both(b.emptyText) || '无']);
+    const empty = oneLine(b.emptyText) || say(lang, '无', 'None', '无');
+    if (bi) {
+      put(['#', ...cols.map((c) => lab(c.label).main)], { head: true });
+      b.rows.forEach((row, i) => put([String(i + 1), ...cols.map((c) => row.cells[c.key] || '')]));
+      if (b.empty) put(['', empty]);
+      continue;
+    }
+    // 单语：数据页的列宽是按检查项表定的（D / E 列只有 7 宽），表格直接一列对一列会把「问题描述」挤进 7 宽的格、
+    // 英文表头从单词中间断开 → 每个表格列按需要合并几列（不够时在右边加几列），主要内容列（width 2）分得宽些
+    const ranges = dataSpans(cols.map((c) => c.width || 1), widths);
+    for (let c = widths.length + 1; c <= ranges[ranges.length - 1][1]; c += 1) ws.getColumn(c).width = EXTRA_W;
+    const putSpans = (values, head = false) => {
+      r += 1;
+      values.forEach((v, i) => {
+        const [a, z] = ranges[i];
+        for (let c = a; c <= z; c += 1) {
+          const x = ws.getCell(r, c);
+          x.font = head ? headFont : bodyFont;
+          x.alignment = { vertical: 'top', wrapText: true };
+          x.border = border;
+          if (head) x.fill = headFill;
+        }
+        ws.getCell(r, a).value = clean(v);
+        if (z > a) ws.mergeCells(r, a, r, z);
+      });
+    };
+    putSpans(['#', ...cols.map((c) => lab(c.label).main)], true);
+    b.rows.forEach((row, i) => putSpans([String(i + 1), ...cols.map((c) => row.cells[c.key] || '')]));
+    if (b.empty) putSpans(['', empty, ...cols.slice(1).map(() => '')]);
   }
 
   const sig = model.blocks.find((x) => x.type === 'signatures');
   if (sig) {
     r += 2;
-    put(['签名 Sign-off', '', '姓名 Name', '', '日期 Date', '', '已签 Signed', '', '', ''], { head: true });
-    for (const ro of sig.roles) put([both(ro.label), '', ro.name || '', '', ro.date || '', '', ro.image && M.has(ro.image.id) ? '✓' : '', '', '', '']);
+    if (bi) {
+      put(pad([hd('签名', 'Sign-off'), '', hd('姓名', 'Name'), '', hd('日期', 'Date'), '', hd('已签', 'Signed')]), { head: true });
+      for (const ro of sig.roles) put(pad([oneLine(ro.label), '', ro.name || '', '', ro.date || '', '', ro.image && M.has(ro.image.id) ? '✓' : '']));
+    } else {
+      // 单语：签名 A:B、姓名 C:E、日期放 F 列（E 列只有 7 宽，「2026-10-09」会折行）、已签 G
+      const sigRow = (values, o) => {
+        put(pad(values), o);
+        ws.mergeCells(r, 1, r, 2);
+        ws.mergeCells(r, 3, r, 5);
+      };
+      sigRow([hd('签名', 'Sign-off'), '', hd('姓名', 'Name'), '', '', hd('日期', 'Date'), hd('已签', 'Signed')], { head: true });
+      for (const ro of sig.roles) sigRow([oneLine(ro.label), '', ro.name || '', '', '', ro.date || '', ro.image && M.has(ro.image.id) ? '✓' : '']);
+    }
   }
 }
 
@@ -995,15 +1237,43 @@ async function loadExcel() {
   return Workbook;
 }
 
+// exceljs 自带的主题（xl/theme/theme1.xml）里写着日 / 中 / 韩文字体名（ＭＳ Ｐゴシック、宋体、新細明體、맑은 고딕）：
+// 看不见，但纯英文文件里不该有一个中文字 → 换成这几种字体的英文名（Excel 认得，效果一样）。
+// 主题原文取自 exceljs 本身：写一个空工作簿再读回来（只做一次，缓存）；拿不到就照旧用默认主题。
+const THEME_FONTS = { 'ＭＳ Ｐゴシック': 'MS PGothic', '宋体': 'SimSun', '新細明體': 'PMingLiU', '맑은 고딕': 'Malgun Gothic' };
+const NON_LATIN = /[^\x00-\u024f]/; // 拉丁字母以外（中日韩、谚文…）
+let latinThemeP = null;
+function latinTheme(Workbook) {
+  if (!latinThemeP) {
+    latinThemeP = (async () => {
+      const tmp = new Workbook();
+      tmp.addWorksheet('x');
+      const back = new Workbook();
+      await back.xlsx.load(await tmp.xlsx.writeBuffer());
+      const xml = back._themes && back._themes.theme1;
+      if (typeof xml !== 'string' || !xml.includes('<a:theme')) return null;
+      // 认识的换成英文名；不认识的非拉丁字体名（新版 exceljs 若多了）整条去掉（a:font 是可选的按文种字体）
+      return xml
+        .replace(/<a:font script="[^"]*" typeface="([^"]*)"\s*\/>/g, (m, name) => (THEME_FONTS[name] ? m.replace(name, THEME_FONTS[name]) : NON_LATIN.test(name) ? '' : m))
+        .replace(/typeface="([^"]*)"/g, (m, name) => (NON_LATIN.test(name) ? `typeface="${THEME_FONTS[name] || 'Arial'}"` : m));
+    })().catch(() => null);
+  }
+  return latinThemeP;
+}
+
 /**
- * @param {DocModel} model
+ * @param {DocModel} input  文档模型；input.meta.lang = 'zh' | 'en' | 'both'（没有 = 双语）决定固定文字的语言
  * @param {{ get(id): Promise<Media|null> }} media
  * @param {{ logo?: ArrayBuffer|Uint8Array|Blob }} opts
  * @returns {Promise<Blob>}
  */
-export async function exportXlsx(model, media, { logo } = {}) {
+export async function exportXlsx(input, media, { logo } = {}) {
   const Workbook = await loadExcel();
+  const lang = normLang(input?.meta?.lang);
+  const model = pickOnly(input, lang);
   const meta = model.meta || {};
+  const company = meta.company || (lang === 'en' ? 'Sail by Riccione Reka' : '溪岸 Sail by Riccione Reka');
+  const rname = reportName(meta, lang);
   const [M, logoImg] = await Promise.all([
     loadMedia(model, media),
     (async () => {
@@ -1014,12 +1284,12 @@ export async function exportXlsx(model, media, { logo } = {}) {
   ]);
 
   const wb = new Workbook();
-  wb.creator = meta.company || '溪岸 Sail by Riccione Reka';
+  wb.creator = company;
   wb.created = new Date();
-  wb.title = clean(meta.reportTitle || '');
+  wb.title = rname;
 
   const title = lab(meta.title);
-  const ws = wb.addWorksheet(sheetName(title.zh || title.en, '报告'), {
+  const ws = wb.addWorksheet(sheetName(title.main, say(lang, '报告', 'Report', '报告')), {
     views: [{ showGridLines: false }],
     pageSetup: {
       paperSize: 9,
@@ -1031,13 +1301,14 @@ export async function exportXlsx(model, media, { logo } = {}) {
       margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.6, header: 0.2, footer: 0.25 },
     },
     headerFooter: {
-      oddFooter: `&L&8${clean(meta.company || '溪岸 Sail by Riccione Reka').replace(/&/g, '&&')} · ${clean(meta.reportTitle || '').replace(/&/g, '&&').slice(0, 60)}&R&8第 &P / &N 页`,
+      // 报告名：双语照旧截前 60 个字；单语按宽度截、断在空格处（英文标题长，60 个字会把「(Mr Tan)」切成半个括号）
+      oddFooter: `&L&8${clean(company).replace(/&/g, '&&')} · ${lang === 'both' ? rname.replace(/&/g, '&&').slice(0, 60) : clip(rname, 96).replace(/&/g, '&&')}&R&8${say(lang, '第 &P / &N 页', 'Page &P of &N', '第 &P / &N 页')}`,
     },
     properties: { defaultRowHeight: 16 },
   });
   ws.columns = COLS.map((width) => ({ width }));
 
-  const w = createWriter(wb, ws, M, `FF${String(meta.accent || '#B5623A').replace('#', '').toUpperCase()}`);
+  const w = createWriter(wb, ws, M, `FF${String(meta.accent || '#B5623A').replace('#', '').toUpperCase()}`, lang);
   const accent = writeHeader(w, ws, model, logoImg);
   for (const b of model.blocks) {
     if (b.type === 'fields') writeFields(w, b, accent);
@@ -1047,20 +1318,27 @@ export async function exportXlsx(model, media, { logo } = {}) {
     else if (b.type === 'note') writeNote(w, b, accent);
     else if (b.type === 'signatures') writeSignatures(w, b, accent, M);
   }
-  if (meta.footer) {
+  const footer = metaText(meta.footer);
+  if (footer) {
     const rr = w.row(18);
-    w.cell(rr, 1, NCOL, meta.footer, { size: 8, color: C.muted, align: 'center' });
+    w.cell(rr, 1, NCOL, footer, { size: 8, color: C.muted, align: 'center' });
   }
   const rr = w.row(16);
-  w.cell(rr, 1, NCOL, `${clean(meta.company || '溪岸 Sail by Riccione Reka')} · 生成于 ${String(meta.generatedAt || '').slice(0, 16).replace('T', ' ')}`, {
+  const stamp = String(meta.generatedAt || '').slice(0, 16).replace('T', ' ');
+  w.cell(rr, 1, NCOL, `${clean(company)} · ${say(lang, '生成于', 'Generated', '生成于')} ${stamp}`, {
     size: 7.5,
     color: C.faint,
     align: 'right',
   });
   ws.pageSetup.printArea = `A1:H${w.r}`;
 
-  writeData(wb.addWorksheet('数据 Data'), model, M);
+  writeData(wb.addWorksheet(tx(lang, '数据', 'Data')), model, M, lang);
 
+  // 纯英文：主题里的字体名也不带中日韩文字（中文 / 双语照旧用 exceljs 默认主题）
+  if (lang === 'en') {
+    const theme = await latinTheme(Workbook);
+    if (theme) wb._themes = { theme1: theme };
+  }
   const buf = await wb.xlsx.writeBuffer();
   return new Blob([buf], { type: XLSX_MIME });
 }

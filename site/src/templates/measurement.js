@@ -1,7 +1,6 @@
 // 复尺确认表 FINAL MEASUREMENT & CONFIRMATION CHECKLIST
 // 来源：Final_Measurement_Checklist（Final Version）.xlsx —— 复尺 4 步，客户到场确认后签字下单
-import { L } from './schema.js';
-import { countResults, allFails } from './helpers.js';
+import { countResults, allFails, langOf, say, pick, plural, fileName } from './helpers.js';
 
 // 检查项：id = fm{节}{序号}，no = 原表序号（A1…D6）；原表一格「中文\nEnglish」拆成 {zh, en}
 const I = (sec, n, zh, en) => ({
@@ -50,6 +49,12 @@ export default {
       },
     ],
     footer: '溪岸 Sail by Riccione Reka  ·  自然主义生活体验馆  ·  V-SMOOTH 交付体系',
+    // 单语文件的抬头小字 / 页脚（中文页脚照原表，品牌名本来就带英文）
+    zhOnly: { kicker: '溪岸 · V-SMOOTH' },
+    enOnly: {
+      kicker: 'SAIL BY RICCIONE REKA · V-SMOOTH',
+      footer: 'Sail by Riccione Reka  ·  Naturalist Living Experience Centre  ·  V-SMOOTH Delivery System',
+    },
   },
   sections: [
     {
@@ -151,23 +156,26 @@ export default {
     const N = c.N || 0;
     const NA = c.NA || 0;
     const empty = c._empty || 0;
+    const en = langOf(ctx) === 'en';
+    // 双语沿用原来的中文清单
     const todo = allFails(ctx).map(({ item, answer }) => {
       const note = (answer?.note || '').trim();
-      return `${item.no} ${L(item.title, 'zh')}${note ? `（${note}）` : '（未写处理方案）'}`;
+      if (en) return `${item.no} ${pick(item.title, 'en')}${note ? ` (${note})` : ' (no action stated)'}`;
+      return `${item.no} ${pick(item.title, 'zh')}${note ? `（${note}）` : '（未写处理方案）'}`;
     });
     const MAX = 6;
+    const n = (k) => say(ctx, `${k} 项`, plural(k, 'item'), `${k} 项 items`);
+    const more = todo.length > MAX ? say(ctx, `；等共 ${todo.length} 项`, `; ${todo.length} in total`, `；等共 ${todo.length} 项`) : '';
     return {
       title: { zh: '结果统计', en: 'Summary' },
       items: [
-        { label: { zh: '是', en: 'Yes' }, value: `${Y} 项 items`, tone: 'pass' },
-        { label: { zh: '否', en: 'No' }, value: `${N} 项 items`, tone: N ? 'fail' : 'neutral' },
-        { label: { zh: '不适用', en: 'N/A' }, value: `${NA} 项 items`, tone: 'na' },
-        { label: { zh: '未勾选', en: 'Not checked' }, value: `${empty} 项 items`, tone: empty ? 'warn' : 'neutral' },
+        { label: { zh: '是', en: 'Yes' }, value: n(Y), tone: 'pass' },
+        { label: { zh: '否', en: 'No' }, value: n(N), tone: N ? 'fail' : 'neutral' },
+        { label: { zh: '不适用', en: 'N/A' }, value: n(NA), tone: 'na' },
+        { label: { zh: '未勾选', en: 'Not checked' }, value: n(empty), tone: empty ? 'warn' : 'neutral' },
         {
           label: { zh: '待处理', en: 'Action needed' },
-          value: todo.length
-            ? todo.slice(0, MAX).join('；') + (todo.length > MAX ? `；等共 ${todo.length} 项` : '')
-            : '无 None',
+          value: todo.length ? todo.slice(0, MAX).join(en ? '; ' : '；') + more : say(ctx, '无', 'None'),
           tone: todo.length ? 'fail' : 'neutral',
         },
       ],
@@ -183,6 +191,6 @@ export default {
   },
   filename(ctx) {
     const v = ctx.report?.values || {};
-    return ['复尺确认', v.customer, v.date].filter(Boolean).join('_');
+    return fileName(ctx, '复尺确认', 'Final_Measurement', v.customer, v.date);
   },
 };

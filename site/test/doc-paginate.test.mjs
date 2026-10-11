@@ -1,19 +1,23 @@
-// 文档分页（纯函数）：原子拆分 / 装页 / 续页表头 / 超高原子 / 长文字切续块 / 确定性；文档媒体取图
+// 文档分页（纯函数）：原子拆分 / 装页 / 续页表头 / 超高原子 / 长文字切续块 / 确定性；文档媒体取图；
+// 文件语言（zh / en / both）：原子结构不随语言变，渲染器（Vite SSR 在 Node 里渲染每个原子）单语时不夹另一种语言
 import assert from 'node:assert/strict';
 import { readdirSync } from 'node:fs';
 import { resolveObjectURL } from 'node:buffer';
+import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import { fillReport, sampleMedia, SAMPLE_PROJECT, SAMPLE_SETTINGS } from './fixtures.mjs';
 import { buildDocModel } from '../src/lib/docmodel.js';
 import {
-  buildAtoms, paginate, splitText, gridRows, textLines, overTall, clLayout, tblLayout, GRID_LABEL_W,
+  buildAtoms, paginate, splitText, gridRows, textLines, overTall, clLayout, tblLayout, GRID_LABEL_W, LONG_VALUE, pickOnly,
 } from '../src/components/doc/paginate.js';
 import { createUrlPool } from '../src/components/doc/media.js';
 import { createMediaLoader } from '../src/lib/db.js';
 import { FIRST_AVAIL, CONT_AVAIL, CONTENT_W } from '../src/components/doc/theme.js';
 
-const DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'templates');
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const DIR = join(ROOT, 'src', 'templates');
 
 // 模板逐个加载，未写完的跳过
 const templates = [];
@@ -135,6 +139,120 @@ function checkLong(m, kinds) {
   check(atoms, heights, hh, pages);
   const pieces = atoms.filter((a) => kinds.includes(a.kind) && (a.cont || a.contNext));
   return { atoms, pieces };
+}
+
+// ---- 文件语言 ----
+
+const CJK = /[\u2E80-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF\u3000-\u303F]/;
+const CJK_G = new RegExp(CJK.source, 'g');
+const modelOf = (t, report, lang, extra = {}) =>
+  buildDocModel({ template: t, report, project: SAMPLE_PROJECT, settings: SAMPLE_SETTINGS, ...extra, ...(lang ? { lang } : {}) });
+
+// 英文内容夹具（与 test/harness.jsx englishReport 同一套规则）：用户填写的内容全换成英文，选项类字段（模板固定文字）不动
+const EN_LINES = [
+  'Checked against the drawings, no issues',
+  'Left door gap 3mm too wide, adjusted on site',
+  'Punch #12 - factory notified for a replacement panel',
+  'Client asked for an additional sensor light',
+];
+const EN_BLOCK = 'Shoe cabinet and master wardrobe carcasses installed; doors arrive tomorrow.\nSite cleaned, protective film intact.';
+const halfWidth = (v) => v.replace(/\s*（/g, ' (').replace(/）/g, ')').replace(/，/g, ', ').replace(/：/g, ': ');
+const enStr = (v, i = 0) => {
+  if (typeof v !== 'string' || !CJK.test(v)) return v;
+  const h = halfWidth(v);
+  return CJK.test(h) ? EN_LINES[i % EN_LINES.length] : h;
+};
+const enVal = (v, type, i = 0) => {
+  if (Array.isArray(v)) return v.map((x, k) => enStr(x, i + k));
+  if (type === 'textarea' && typeof v === 'string' && CJK.test(v)) return EN_BLOCK;
+  return enStr(v, i);
+};
+const isChoice = (f) => !!f && ['select', 'radio', 'chips'].includes(f.type);
+const EN_PROJECT = { ...SAMPLE_PROJECT, entryNote: 'Register at the guard house, bring your passport', parking: 'Visitor car park' };
+const EN_SETTINGS = { ...SAMPLE_SETTINGS, dept: 'Installation', company: 'Sail by Riccione Reka' };
+function englishReport(template) {
+  const report = fillReport(template, 'full');
+  let k = 0;
+  for (const s of template.sections) {
+    if (s.type === 'fields') for (const f of s.fields) if (!isChoice(f)) report.values[f.key] = enVal(report.values[f.key], f.type, k++);
+    if (s.type === 'checklist') {
+      for (const it of s.items) {
+        const a = report.items[it.id];
+        if (!a) continue;
+        a.note = enStr(a.note, k++);
+        if (it.input && !isChoice(it.input)) a.value = enVal(a.value, it.input.type, k++);
+      }
+    }
+    if (s.type === 'table') for (const row of report.tables[s.id] || []) for (const c of s.columns) if (!isChoice(c)) row[c.key] = enVal(row[c.key], c.type, k++);
+    if (s.type === 'signatures') for (const sg of Object.values(report.signatures || {})) sg.name = enStr(sg.name, k++);
+  }
+  return report;
+}
+
+/** 模型里所有字符串的中文字换成 x（模板固定文字还没改成按语言出时，剩下的中文就只可能是渲染器自己加的） */
+const scrub = (n) =>
+  typeof n === 'string' ? n.replace(CJK_G, 'x')
+    : Array.isArray(n) ? n.map(scrub)
+      : n && typeof n === 'object' ? Object.fromEntries(Object.entries(n).map(([k, v]) => [k, scrub(v)])) : n;
+
+/** 模型里出现过的全部字符串（含大写形式） */
+const allStrings = (n, out = []) => {
+  if (typeof n === 'string') out.push(n, n.toUpperCase());
+  else if (Array.isArray(n)) n.forEach((x) => allStrings(x, out));
+  else if (n && typeof n === 'object') Object.values(n).forEach((x) => allStrings(x, out));
+  return out;
+};
+
+// 渲染器写死的英文（中文文件里一个都不能有）
+const RENDER_EN = /\b(No\.|Check Item|Standard|Method|Result|Remarks?|Page \d+ of|cont\.|photos?|PHOTOS?|Video|Missing|video shared separately|No photos|Name|Date|Generated|DELIVERY SYSTEM|Conclusion|CONCLUSION|\d+ items?)(?![\w-])/;
+
+/** Vite SSR 加载渲染器（blocks.jsx / DocPages.jsx），renderToStaticMarkup 渲染每个原子 + 续页抬头 + 页脚 */
+async function openRenderer() {
+  const { createServer } = await import('vite');
+  const server = await createServer({
+    root: ROOT,
+    logLevel: 'silent',
+    appType: 'custom',
+    cacheDir: join(tmpdir(), 'tora-doc-ssr-cache'),
+    server: { middlewareMode: true, hmr: false, watch: null },
+    optimizeDeps: { noDiscovery: true, include: [] },
+  });
+  const require = createRequire(import.meta.url);
+  const { createElement } = require('react');
+  const { renderToStaticMarkup, renderToString } = require('react-dom/server');
+  const blocks = await server.ssrLoadModule('/src/components/doc/blocks.jsx');
+  const pages = await server.ssrLoadModule('/src/components/doc/DocPages.jsx');
+  const html = (el, props) => renderToStaticMarkup(createElement(el, props));
+  // renderToString 在相邻文字节点之间插 <!-- -->：用来比较 DOM 文字节点怎么分（双语必须和以前一样）
+  const dom = (el, props) => renderToString(createElement(el, props));
+  /** 整份文档的 HTML 片段（每个原子 / 表头 / 续页抬头 / 页脚一段）；没有照片 URL → 照片 / 视频显示占位字 */
+  const render = (raw) => {
+    const model = pickOnly(raw); // 与 DocPages 一样
+    const ctx = pages.docCtx(model, {}, { m_video: { kind: 'video', duration: 42 } });
+    const { atoms, heads } = buildAtoms(model);
+    const pos = { first: true, last: true };
+    return [
+      ...[...atoms, ...Object.values(heads)].map((atom) => html(blocks.Atom, { atom, ctx, pos })),
+      html(blocks.ContHeader, { ctx }),
+      html(blocks.Footer, { ctx, page: 2, total: 7 }),
+    ];
+  };
+  return { server, render, blocks, pages, html, dom };
+}
+
+const decode = (s) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&amp;/g, '&');
+/** HTML → 每个元素里的文字（一段一段，相邻元素不粘在一起） */
+const segments = (parts) => parts.join('').split(/<[^>]+>/).map(decode).filter((x) => x.trim());
+
+/** 每个模板一份「长备注」报告：备注切成续行、续页表头都会出现 */
+function longNoteReport(t) {
+  const r = fillReport(t, 'full');
+  for (const s of t.sections) {
+    if (s.type !== 'checklist') continue;
+    const it = s.items.find((x) => !x.input);
+    if (it) r.items[it.id] = { ...(r.items[it.id] || {}), note: longText(1500) };
+  }
+  return r;
 }
 
 export const tests = [
@@ -493,5 +611,213 @@ export const tests = [
       }
     }
     real.dispose();
+  }],
+  ['语言：pickOnly 用模板的 zhOnly / enOnly（单语写法）；双语原样同一个对象；幂等', () => {
+    const label = { zh: '溪岸 Sail · 每个单位填写一份 One form per unit', zhOnly: '溪岸 Sail · 每个单位填写一份', enOnly: 'Sail · One form per unit' };
+    const opt = { v: 'K', zh: '厨房 Kitchen', zhOnly: '厨房', enOnly: 'Kitchen', tone: 'pass' };
+    const base = (lang) => ({ meta: { lang, kicker: label, title: { zh: '标题', en: 'TITLE' } }, blocks: [{ type: 'checklist', id: 'c', options: [opt], rows: [] }] });
+    const both = base('both');
+    assert.equal(pickOnly(both), both, '双语应原样返回');
+    const plain = { meta: { lang: 'zh', title: { zh: '标题', en: '' } }, blocks: [] };
+    assert.equal(pickOnly(plain), plain, '没有 zhOnly / enOnly 时不复制');
+    const zh = pickOnly(base('zh'));
+    assert.deepEqual([zh.meta.kicker.zh, zh.meta.kicker.en], ['溪岸 Sail · 每个单位填写一份', '']);
+    assert.deepEqual([zh.blocks[0].options[0].zh, zh.blocks[0].options[0].en, zh.blocks[0].options[0].v], ['厨房', '', 'K']);
+    const en = pickOnly(base('en'));
+    assert.deepEqual([en.meta.kicker.zh, en.meta.kicker.en], ['', 'Sail · One form per unit']);
+    assert.deepEqual([en.blocks[0].options[0].zh, en.blocks[0].options[0].en, en.blocks[0].options[0].tone], ['', 'Kitchen', 'pass']);
+    assert.deepEqual(en.meta.title, { zh: '标题', en: 'TITLE' }, '没有 enOnly 的标签不动');
+    assert.equal(pickOnly(en), en, '幂等：第二次不再改');
+    // 真实模板：单语模型 pickOnly 之后原子结构不变
+    for (const t of templates) {
+      for (const lang of ['zh', 'en']) {
+        const m = modelOf(t, fillReport(t, 'full'), lang);
+        assert.deepEqual(buildAtoms(pickOnly(m)).atoms.map((a) => a.kind), buildAtoms(m).atoms.map((a) => a.kind), `${t.id}/${lang}`);
+      }
+    }
+  }],
+  ['语言 zh / en：模型带语言；原子结构（切块 / 续块 / keep / 分组）与双语完全一样', () => {
+    for (const t of templates) {
+      for (const v of ['full', 'empty', 'pass']) {
+        const r = fillReport(t, v);
+        const sig = (m) => buildAtoms(m).atoms.map((a) => [a.kind, a.space, !!a.keep, a.group || '', !!a.cont, !!a.contNext, a.part || ''].join('|'));
+        const both = sig(modelOf(t, r));
+        for (const lang of ['zh', 'en']) {
+          const m = modelOf(t, r, lang);
+          assert.equal(m.meta.lang, lang, `${t.id}/${v}: meta.lang`);
+          assert.deepEqual(sig(m), both, `${t.id}/${v}/${lang}: 原子结构和双语不一样`);
+        }
+      }
+      // 长备注：切出的续块也一样
+      const r = longNoteReport(t);
+      const cut = (m) => buildAtoms(m).atoms.filter((a) => a.cont).map((a) => `${a.kind}:${a.row?.remark?.length ?? ''}`);
+      assert.deepEqual(cut(modelOf(t, r, 'zh')), cut(modelOf(t, r)), `${t.id}: zh 长备注切法不同`);
+      assert.deepEqual(cut(modelOf(t, r, 'en')), cut(modelOf(t, r)), `${t.id}: en 长备注切法不同`);
+    }
+  }],
+  ['语言：渲染器单语时不夹另一种语言（en 无中文、zh 无渲染器写死的英文），不留空副行 / 孤立的「·」，双语照旧', async () => {
+    const { server, render } = await openRenderer();
+    try {
+      for (const t of templates) {
+        const reports = { full: fillReport(t, 'full'), empty: fillReport(t, 'empty'), long: longNoteReport(t) };
+        for (const [v, r] of Object.entries(reports)) {
+          // en：模型里的中文先换成 x —— 渲染出来还有中文，就是渲染器自己写死的
+          const en = segments(render(scrub(modelOf(t, r, 'en'))));
+          const enCJK = en.filter((x) => CJK.test(x));
+          assert.deepEqual(enCJK, [], `${t.id}/${v}: 英文文件里渲染器加了中文：${enCJK.slice(0, 6).join(' | ')}`);
+          // zh：渲染器写死的英文（不在模型字符串里的）一个都不能有
+          const zm = modelOf(t, r, 'zh');
+          const own = allStrings(zm);
+          const zh = segments(render(zm));
+          const zhEn = zh.filter((x) => RENDER_EN.test(x) && !own.some((o) => o.includes(x.trim())));
+          assert.deepEqual(zhEn, [], `${t.id}/${v}: 中文文件里有渲染器的英文：${zhEn.slice(0, 6).join(' | ')}`);
+          // 判定选项：中文文件里不出现 Pass / Fail 这种英文选项字，英文文件里不出现「合格」
+          const opts = (m) => m.blocks.filter((b) => b.type === 'checklist').flatMap((b) => [...b.options, ...b.rows.flatMap((x) => x.options)]);
+          const enOpts = new Set(opts(modelOf(t, r)).map((o) => o.en).filter(Boolean));
+          const zhOpts = new Set(opts(modelOf(t, r)).map((o) => o.zh).filter(Boolean));
+          assert.deepEqual(zh.filter((x) => enOpts.has(x.trim())), [], `${t.id}/${v}: 中文文件里有英文选项`);
+          assert.deepEqual(segments(render(modelOf(t, r, 'en'))).filter((x) => zhOpts.has(x.trim())), [], `${t.id}/${v}: 英文文件里有中文选项`);
+          // 单语：没有空的副行占位（统计卡片的 \u00a0）、没有落单的「·」
+          for (const [lang, segs] of [['en', en], ['zh', zh]]) {
+            const bad = segs.filter((x) => x.trim() === '·' || x === '\u00a0' || /^\s*·|·\s*$/.test(x));
+            assert.deepEqual(bad, [], `${t.id}/${v}/${lang}: 有空副行或落单的「·」：${JSON.stringify(bad.slice(0, 4))}`);
+          }
+        }
+        // 双语：和以前一样两种语言都在
+        const both = segments(render(modelOf(t, reports.long))).join('\n');
+        assert.ok(both.includes('第 2 / 7 页') && both.includes('Page 2 of 7'), `${t.id}: 双语页码`);
+        assert.ok(/生成 Generated · \d{4}-/.test(both), `${t.id}: 双语生成时间`);
+        if (t.sections.some((s) => s.type === 'checklist' && !(s.scale === 'done'))) {
+          assert.ok(both.includes('（续 cont.）'), `${t.id}: 双语续页「（续 cont.）」`);
+        }
+      }
+      // 写死的成对文字逐个看：页码 / 续 / 生成 / 照片占位 / 签名
+      const t = byId('final-inspection');
+      const r = fillReport(t, 'full');
+      const txt = (lang) => segments(render(modelOf(t, r, lang))).join('\n');
+      const zhT = txt('zh');
+      const enT = txt('en');
+      for (const w of ['第 2 / 7 页', '（续）', '照片缺失', '姓名', '日期']) assert.ok(zhT.includes(w), `zh 缺「${w}」`);
+      assert.match(zhT, /生成 · \d{4}-/);
+      for (const w of ['Page 2 of 7', '(cont.)', 'Missing', 'Name', 'Date', 'No.']) assert.ok(enT.includes(w), `en 缺「${w}」`);
+      assert.match(enT, /Generated · \d{4}-/);
+      for (const w of ['Page 2 of 7', 'cont.', 'Missing', 'Generated']) assert.ok(!zhT.includes(w), `zh 里有「${w}」`);
+    } finally {
+      await server.close();
+    }
+  }],
+  ['语言 en：英文内容的报告整份不带中文（页脚报告名换英文标题、全角括号变半角；公司名去中文）', async () => {
+    const { server, render } = await openRenderer();
+    try {
+      for (const t of templates) {
+        const m = buildDocModel({ template: t, report: englishReport(t), project: EN_PROJECT, settings: EN_SETTINGS, lang: 'en' });
+        // 页脚 / 续页抬头：渲染器自己处理的部分，不依赖模板
+        const parts = render(m);
+        const foot = segments(parts.slice(-1)).join(' ');
+        assert.ok(!CJK.test(foot), `${t.id}: 页脚有中文：${foot}`);
+        assert.ok(foot.includes('Page 2 of 7'), `${t.id}: 页脚页码`);
+        const head = segments(parts.slice(-2, -1)).join(' ');
+        assert.ok(!CJK.test(head), `${t.id}: 续页抬头有中文：${head}`);
+        // 其余中文只能出自模型（模板固定文字）
+        const strs = allStrings(m);
+        const stray = segments(parts).filter((x) => CJK.test(x) && !strs.some((s) => s.includes(x.trim())));
+        assert.deepEqual(stray, [], `${t.id}: 渲染器加了中文：${stray.slice(0, 6).join(' | ')}`);
+      }
+      // 中文模型报告名：开头模板中文名换成英文标题
+      const t = byId('quality-check');
+      const m = modelOf(t, fillReport(t, 'full'), 'en');
+      const foot = segments(render(m).slice(-1)).join(' ');
+      assert.match(foot, /INSTALLATION QUALITY CHECKLIST · Tuai Timur Residence 17-3 \(Hailey\) · \d{4}-\d{2}-\d{2}/);
+      assert.ok(!foot.includes('安装质检清单'));
+    } finally {
+      await server.close();
+    }
+  }],
+  ['语言：统计卡片单语按宽度选大字（放不进一行用 12px）、双语照旧按字数；续页抬头项目名与页脚同为半角括号；「生成」戳的文字节点与以前一样', async () => {
+    const { server, blocks, pages, html, dom } = await openRenderer();
+    try {
+      const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      /** 统计卡片里某个值的字号（px） */
+      const valueFont = (markup, v) => {
+        const m = new RegExp(`<div style="font-size:([\\d.]+)px;[^"]*">${esc(v)}</div>`).exec(markup);
+        return m ? Number(m[1]) : null;
+      };
+      const summaryHtml = (m) => {
+        const doc = pickOnly(m);
+        const ctx = pages.docCtx(doc);
+        return buildAtoms(doc).atoms.filter((a) => a.kind === 'summary').map((atom) => html(blocks.Atom, { atom, ctx, pos: { first: true, last: true } })).join('');
+      };
+      // 五张一行的卡片（内容宽 118px）：中文 10 个字放不下 15px 一行 → 12px；短的中文 / 10 个英文字母照旧 15px
+      const synth = (lang) => ({
+        meta: { lang },
+        blocks: [{
+          type: 'summary',
+          id: 's',
+          items: [
+            { label: 'A', value: '合格 — 可安排交付', tone: 'pass' },
+            { label: 'B', value: '有条件开工', tone: 'warn' },
+            { label: 'C', value: 'ABCDEFGHIJ', tone: 'na' },
+            { label: 'D', value: '3 / 21', tone: 'pass' },
+            { label: 'E', value: 'Not selected', tone: 'na' },
+          ],
+        }],
+      });
+      const fonts = (lang) => ['合格 — 可安排交付', '有条件开工', 'ABCDEFGHIJ', '3 / 21', 'Not selected'].map((v) => valueFont(summaryHtml(synth(lang)), v));
+      assert.deepEqual(fonts('both'), [15, 15, 15, 15, 12], '双语：照旧按字数（≤ 10 字大字）');
+      assert.deepEqual(fonts('zh'), [12, 15, 15, 15, 12], 'zh：中文 10 字放不下一行 → 12px');
+      assert.deepEqual(fonts('en'), [12, 15, 15, 15, 12], 'en：同样按宽度');
+      // 真实模板：终检中文结论「合格 — 可安排交付」不再剩一个字折到第二行；双语里它本来就是整行（> 22 字）
+      const fi = byId('final-inspection');
+      const r = fillReport(fi, 'full');
+      assert.equal(valueFont(summaryHtml(modelOf(fi, r, 'zh')), '合格 — 可安排交付'), 12);
+      assert.equal(valueFont(summaryHtml(modelOf(fi, r, 'zh')), '24 项'), 15);
+      assert.equal(valueFont(summaryHtml(modelOf(fi, r, 'en')), '24 items'), 15);
+      // 单语每张卡片：大字时估算宽度放得进卡片一行（中文 1em，其余按粗体 0.68em 宁宽勿窄；卡片宽与 blocks.jsx 同算法）
+      const estW = (s) => [...s].reduce((w, ch) => w + (CJK.test(ch) ? 15 : 15 * 0.68), 0);
+      for (const t of templates) {
+        for (const v of ['full', 'pass', 'empty']) {
+          for (const lang of ['zh', 'en']) {
+            const m = modelOf(t, fillReport(t, v), lang);
+            const s = m.blocks.find((b) => b.type === 'summary');
+            if (!s) continue;
+            const cards = s.items.filter((it) => String(it.value ?? '').length <= LONG_VALUE);
+            const n = cards.length;
+            const per = n <= 5 ? Math.max(1, n) : n <= 8 ? Math.ceil(n / 2) : 5;
+            const room = Math.floor((CONTENT_W - 8 * (per - 1)) / per) - 18;
+            const markup = summaryHtml(m);
+            for (const it of cards) {
+              const val = String(it.value ?? '');
+              if (valueFont(markup, val) === 15) assert.ok(estW(val) <= room, `${t.id}/${v}/${lang}: 「${val}」15px 放不进卡片一行（${room}px）`);
+            }
+          }
+        }
+      }
+
+      // 续页抬头的项目名：纯英文文件自动带入的「项目（客户）」换成半角括号，和页脚一致；中文 / 双语原样
+      const qc = byId('quality-check');
+      const qr = fillReport(qc, 'full');
+      assert.equal(pages.projectLabel(modelOf(qc, qr, 'en')), 'Tuai Timur Residence 17-3 (Hailey)');
+      assert.equal(pages.projectLabel(modelOf(qc, qr, 'zh')), 'Tuai Timur Residence 17-3（Hailey）');
+      assert.equal(pages.projectLabel(modelOf(qc, qr)), 'Tuai Timur Residence 17-3（Hailey）');
+      for (const t of templates) {
+        const m = pickOnly(modelOf(t, fillReport(t, 'full'), 'en'));
+        const ctx = pages.docCtx(m);
+        const head = segments([html(blocks.ContHeader, { ctx })]).join(' ');
+        const foot = segments([html(blocks.Footer, { ctx, page: 2, total: 3 })]).join(' ');
+        assert.ok(!/[（）]/.test(head) && !/[（）]/.test(foot), `${t.id}: en 续页抬头 / 页脚有全角括号：${head} | ${foot}`);
+        if (ctx.project.includes('(Hailey)')) assert.ok(head.includes('(Hailey)'), `${t.id}: 续页抬头 ${head}`);
+      }
+
+      // 「生成」戳：双语 DOM 文字节点和以前一样（「生成 Generated · 」+ 时间 两个节点）；单语同样两个节点
+      const stamp = (lang) => {
+        const m = modelOf(qc, qr, lang);
+        return dom(blocks.Atom, { atom: { kind: 'header' }, ctx: pages.docCtx(m), pos: { first: true, last: true } });
+      };
+      assert.match(stamp(), /生成 Generated · <!-- -->\d{4}-\d{2}-\d{2} \d{2}:\d{2}</);
+      assert.match(stamp('zh'), /生成 · <!-- -->\d{4}-/);
+      assert.match(stamp('en'), /Generated · <!-- -->\d{4}-/);
+    } finally {
+      await server.close();
+    }
   }],
 ];

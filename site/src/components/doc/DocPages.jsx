@@ -4,9 +4,10 @@
 // 长文字按估算切块；实测仍有原子超过一页 → 把那段文字切得更小再测一次（最多 MAX_REFIT 次），
 // 还是放不下（不能切的内容）→ console.warn + clipped 计数，绝不静默裁掉。
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { buildAtoms, paginate, overTall } from './paginate.js';
-import { Atom, ContHeader, Footer } from './blocks.jsx';
+import { buildAtoms, paginate, overTall, pickOnly } from './paginate.js';
+import { Atom, ContHeader, Footer, halfBrackets } from './blocks.jsx';
 import { C, FONT, PAGE_W, PAGE_H, PAD_X, PAD_TOP, FOOT_H, CONT_HEAD_H, CONTENT_W } from './theme.js';
+import { normLang } from '../../lib/lang.js';
 
 export const PAGE_GAP = 20; // 预览里页与页之间的间距（文档 px）
 const MAX_REFIT = 3;
@@ -27,7 +28,22 @@ export function projectLabel(model) {
     return '';
   };
   const parts = String(model.meta?.reportTitle || '').split(' · ');
-  return find(['project', 'site']) || (parts.length > 2 ? parts[1] : '') || find(['address', 'location']);
+  // 报告名是自动生成的「模板名 · 项目（客户）· 日期」
+  const fromTitle = parts.length > 2 ? parts[1] : '';
+  // 纯英文文件：自动带入的「项目（客户）」全角括号换成半角 —— 不管取自字段还是报告名，都和页脚（footTitle）写法一致
+  return halfBrackets(find(['project', 'site']) || fromTitle || find(['address', 'location']), normLang(model.meta?.lang));
+}
+
+/** 渲染上下文（预览 / PDF / 测试共用）：meta、文件语言、强调色、媒体 URL / 元数据、续页抬头的项目名 */
+export function docCtx(model, urls = EMPTY, info = EMPTY) {
+  return {
+    meta: model.meta || {},
+    lang: normLang(model.meta?.lang), // 文件语言：zh / en / both（没有 = 双语）
+    accent: model.meta?.accent || C.terra,
+    urls,
+    info,
+    project: projectLabel(model),
+  };
 }
 
 function waitImage(img, timeout = 20000) {
@@ -132,7 +148,9 @@ export default function DocPages({ model, urls = EMPTY, info = EMPTY, onLayout, 
   const [refit, setRefit] = useState({ model: null, fit: EMPTY, pass: 0 });
   const fit = refit.model === model ? refit.fit : EMPTY;
   const pass = refit.model === model ? refit.pass : 0;
-  const { atoms, heads } = useMemo(() => buildAtoms(model, { fit }), [model, fit]);
+  // 单语文件：模板的 zhOnly / enOnly 写法（双语 = 同一个 model）
+  const doc = useMemo(() => pickOnly(model), [model]);
+  const { atoms, heads } = useMemo(() => buildAtoms(doc, { fit }), [doc, fit]);
   const headKeys = useMemo(() => Object.keys(heads), [heads]);
   const [layout, setLayout] = useState(null); // { atoms, heads, info, pages, clipped, refit }
   const measureRef = useRef(null);
@@ -142,10 +160,7 @@ export default function DocPages({ model, urls = EMPTY, info = EMPTY, onLayout, 
 
   const stale = !layout || layout.atoms !== atoms || layout.info !== info;
 
-  const ctx = useMemo(
-    () => ({ meta: model.meta || {}, accent: model.meta?.accent || C.terra, urls, info, project: projectLabel(model) }),
-    [model, urls, info],
-  );
+  const ctx = useMemo(() => docCtx(doc, urls, info), [doc, urls, info]);
   const mctx = useMemo(() => ({ ...ctx, measure: true }), [ctx]);
 
   // 测量 → 分页

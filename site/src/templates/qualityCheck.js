@@ -1,6 +1,6 @@
 // 安装质检清单 INSTALLATION QUALITY CHECKLIST
 // 来源：Sail-Installation-Quality-Checklist-CN-EN.docx（与 Lark 内部表同步）
-import { countResults } from './helpers.js';
+import { countResults, say, plural, fileName, siteLabelIn } from './helpers.js';
 
 const scale = {
   id: 'qc-pfna',
@@ -10,6 +10,16 @@ const scale = {
     { v: 'NA', zh: '不适用', en: 'N/A', tone: 'na' },
   ],
 };
+
+// 区域选项：存的值仍是原来的「厨房 Kitchen」；单语文件只显示一半
+const AREA = (zh, en) => ({ v: `${zh} ${en}`, zh: `${zh} ${en}`, zhOnly: zh, enOnly: en });
+const AREAS = [
+  AREA('厨房', 'Kitchen'),
+  AREA('衣柜', 'Wardrobe'),
+  AREA('鞋柜', 'Shoe Cabinet'),
+  AREA('电视柜', 'TV Cabinet'),
+  AREA('浴室柜', 'Vanity'),
+];
 
 const I = (no, zhT, enT, zhS, enS, zhM, enM, key = false) => ({
   id: `qc${no}`,
@@ -34,7 +44,8 @@ export default {
     brand: 'sail',
     kicker: '溪岸 Sail · 每个单位 / 区域填写一份 One form per unit / area',
     title: { zh: '安装质检清单', en: 'INSTALLATION QUALITY CHECKLIST' },
-    subtitle: { zh: '质检 21 项 · 重点抽查 Audit', en: '21-Item Inspection & Spot-Check Audit' },
+    // 原表中文副标题带了英文「Audit」：纯中文文件去掉
+    subtitle: { zh: '质检 21 项 · 重点抽查 Audit', zhOnly: '质检 21 项 · 重点抽查', en: '21-Item Inspection & Spot-Check Audit' },
     intro: [
       {
         zh: '安装工人按以下标准施工；SS 每日抽查 3–5 项 × 2–3 个柜体并拍照。吊柜固定、台面接缝、打胶收口（★）为必查项。不合格 → 拍照 → 登记 Punch List → 整改后复查；Punch 编号填入本表备注栏。',
@@ -46,6 +57,15 @@ export default {
       },
     ],
     legend: '★ 必查 Mandatory　·　P 合格 Pass　·　F 不合格 Fail　·　NA 不适用 N/A',
+    // 中英写在一行的抬头小字 / 图例：单语文件各用一半
+    zhOnly: {
+      kicker: '溪岸 Sail · 每个单位 / 区域填写一份',
+      legend: '★ 必查　·　P 合格　·　F 不合格　·　NA 不适用',
+    },
+    enOnly: {
+      kicker: 'Sail · One form per unit / area',
+      legend: '★ Mandatory  ·  P Pass  ·  F Fail  ·  NA N/A',
+    },
   },
   sections: [
     {
@@ -54,14 +74,14 @@ export default {
       title: { zh: '基本信息', en: 'PROJECT INFO' },
       columns: 3,
       fields: [
-        { key: 'project', type: 'text', label: { zh: '项目名称', en: 'Project' }, bind: 'project.siteLabel', required: true },
+        { key: 'project', type: 'text', label: { zh: '项目名称', en: 'Project' }, bind: 'project.siteLabel', required: true, display: siteLabelIn },
         { key: 'so', type: 'text', label: { zh: 'SO 编号', en: 'SO No.' }, bind: 'project.so' },
         { key: 'date', type: 'date', label: { zh: '检查日期', en: 'Date' }, bind: 'today', required: true },
         {
           key: 'area',
           type: 'chips',
           label: { zh: '区域（厨房 / 衣柜 / 其他）', en: 'Area (Kitchen / Wardrobe / Other)' },
-          options: ['厨房 Kitchen', '衣柜 Wardrobe', '鞋柜 Shoe Cabinet', '电视柜 TV Cabinet', '浴室柜 Vanity'],
+          options: AREAS,
           multiple: true,
           allowCustom: true,
           required: true,
@@ -119,19 +139,20 @@ export default {
     const punch = Object.values(ctx.report.items || {}).filter(
       (a) => a && a.r === 'F' && (a.note || '').trim(),
     ).length;
+    const n = (k) => say(ctx, `${k} 项`, plural(k, 'item'), `${k} 项 items`);
     return {
       title: { zh: '结果统计', en: 'Summary' },
       items: [
-        { label: { zh: '合格', en: 'Pass' }, value: `${c.P || 0} 项 items`, tone: 'pass' },
-        { label: { zh: '不合格', en: 'Fail' }, value: `${c.F || 0} 项 items`, tone: c.F ? 'fail' : 'neutral' },
-        { label: { zh: '登记 Punch', en: 'Punch' }, value: `${punch} 项 items`, tone: punch ? 'warn' : 'neutral' },
-        { label: { zh: '不适用', en: 'N/A' }, value: `${c.NA || 0} 项 items`, tone: 'na' },
-        { label: { zh: '未检查', en: 'Not checked' }, value: `${c._empty || 0} 项 items`, tone: c._empty ? 'warn' : 'neutral' },
+        { label: { zh: '合格', en: 'Pass' }, value: n(c.P || 0), tone: 'pass' },
+        { label: { zh: '不合格', en: 'Fail' }, value: n(c.F || 0), tone: c.F ? 'fail' : 'neutral' },
+        { label: { zh: '登记 Punch', en: 'Punch' }, value: n(punch), tone: punch ? 'warn' : 'neutral' },
+        { label: { zh: '不适用', en: 'N/A' }, value: n(c.NA || 0), tone: 'na' },
+        { label: { zh: '未检查', en: 'Not checked' }, value: n(c._empty || 0), tone: c._empty ? 'warn' : 'neutral' },
       ],
     };
   },
   filename(ctx) {
     const v = ctx.report.values || {};
-    return ['安装质检', v.project, v.date].filter(Boolean).join('_');
+    return fileName(ctx, '安装质检', 'Installation_QC', v.project, v.date);
   },
 };

@@ -1,7 +1,6 @@
 // 交付执行清单 HANDOVER CHECKLIST（Sail 内部文件，无需出示客户）
 // 来源：Template_Sail_Handover_Checklist_Internal.docx —— 五个 H 一条线，交付当天按顺序打勾
-import { L } from './schema.js';
-import { countResults, val } from './helpers.js';
+import { countResults, val, langOf, say, pick, plural, fileName, siteLabelIn } from './helpers.js';
 import { addDays, daysBetween, fmtDate } from '../lib/format.js';
 
 // 检查项：id = ho{节}_{序号}，no = 节内序号（原表无编号）
@@ -29,8 +28,8 @@ export default {
   accent: '#2F4A3C',
   doc: {
     brand: 'sail',
-    // 原表右上角：INTERNAL · 内部文件 / 无需出示客户 not for client
-    badge: { zh: 'INTERNAL · 内部文件', en: '无需出示客户 not for client' },
+    // 原表右上角：INTERNAL · 内部文件 / 无需出示客户 not for client（中英混写：单语文件各给一行）
+    badge: { zh: 'INTERNAL · 内部文件', en: '无需出示客户 not for client', zhOnly: '内部文件 · 无需出示客户', enOnly: 'INTERNAL · Not for client' },
     title: { zh: '交付执行清单', en: 'HANDOVER CHECKLIST' },
     subtitle: { zh: '五个 H 一条线，按顺序执行。', en: 'Five H, one run — tick in order.' },
   },
@@ -40,8 +39,9 @@ export default {
       type: 'fields',
       columns: 2,
       fields: [
-        { key: 'project', type: 'text', label: { zh: '项目', en: 'Project' }, bind: 'project.siteLabel', required: true },
-        { key: 'so', type: 'text', label: 'SO No.', bind: 'project.so' },
+        { key: 'project', type: 'text', label: { zh: '项目', en: 'Project' }, bind: 'project.siteLabel', required: true, display: siteLabelIn },
+        // 原表标签就是 SO No.（双语 / 英文照旧）；纯中文文件写「SO 编号」，与质检 / 复尺表一致
+        { key: 'so', type: 'text', label: { zh: 'SO No.', zhOnly: 'SO 编号' }, bind: 'project.so' },
         { key: 'date', type: 'date', label: { zh: '日期', en: 'Date' }, bind: 'today', required: true },
         { key: 'pic', type: 'text', label: 'PIC', bind: 'settings.name' },
       ],
@@ -151,15 +151,17 @@ export default {
     },
   ],
   // 完成统计：总数 + 每个 H + 未完成项 + 回访日期
+  // 文字按文件语言：中文 / English；双语与原来逐字一致（见 helpers.say）
   summary(ctx) {
     const lists = (ctx.template.sections || []).filter((s) => s.type === 'checklist');
     const all = countResults(ctx);
     const done = all.Y || 0;
     const total = all._total || 0;
+    const en = langOf(ctx) === 'en';
     const items = [
       {
         label: { zh: '已完成', en: 'Done' },
-        value: `${done} / ${total} 项 items`,
+        value: say(ctx, `${done} / ${total} 项`, `${done} / ${total} items`, `${done} / ${total} 项 items`),
         tone: total && done === total ? 'pass' : done ? 'warn' : 'neutral',
       },
     ];
@@ -168,27 +170,29 @@ export default {
       const c = countResults(ctx, s.id);
       const d = c.Y || 0;
       items.push({
-        label: { zh: `${s.no} ${s.title.zh}`, en: s.title.en },
+        label: { zh: `${s.no} ${s.title.zh}`, en: s.title.en, enOnly: `${s.no} ${s.title.en}` },
         value: `${d} / ${c._total}`,
         tone: d === c._total ? 'pass' : d ? 'warn' : 'neutral',
       });
+      // 双语沿用原来的中文清单
       for (const it of s.items) {
-        if (ctx.report.items?.[it.id]?.r !== 'Y') left.push(`${s.no}-${it.no} ${L(it.title, 'zh')}`);
+        if (ctx.report.items?.[it.id]?.r !== 'Y') left.push(`${s.no}-${it.no} ${pick(it.title, en ? 'en' : 'zh')}`);
       }
     }
     const MAX = 6;
+    const more = left.length > MAX ? (en ? `; ${left.length} in total` : `；等共 ${left.length} 项`) : '';
     items.push({
       label: { zh: '未完成', en: 'Remaining' },
-      value: left.length
-        ? left.slice(0, MAX).join('；') + (left.length > MAX ? `；等共 ${left.length} 项` : '')
-        : '无 None',
+      value: left.length ? left.slice(0, MAX).join(en ? '; ' : '；') + more : say(ctx, '无', 'None'),
       tone: left.length ? 'warn' : 'pass',
     });
     const f30 = val(ctx, 'followup30');
     const f1y = val(ctx, 'followup1y');
+    const d30 = f30 ? fmtDate(f30) : '—';
+    const d1y = f1y ? fmtDate(f1y) : '—';
     items.push({
       label: { zh: '回访日期', en: 'Follow-up' },
-      value: `30天 ${f30 ? fmtDate(f30) : '—'} · 1年 ${f1y ? fmtDate(f1y) : '—'}`,
+      value: en ? `30-day ${d30} · 1-year ${d1y}` : `30天 ${d30} · 1年 ${d1y}`,
       tone: f30 && f1y ? 'neutral' : 'warn',
     });
     return { title: { zh: '交付统计', en: 'Summary' }, items };
@@ -210,6 +214,6 @@ export default {
   },
   filename(ctx) {
     const v = ctx.report.values || {};
-    return ['交付清单', v.project, v.date].filter(Boolean).join('_');
+    return fileName(ctx, '交付清单', 'Handover_Checklist', v.project, v.date);
   },
 };

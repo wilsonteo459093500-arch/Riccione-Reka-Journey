@@ -3,11 +3,14 @@ import assert from 'node:assert/strict';
 import { createReport, makeCtx, issues, progress, siteLabel } from '../src/lib/report.js';
 import { buildDocModel, modelMedia } from '../src/lib/docmodel.js';
 import { allItems } from '../src/templates/schema.js';
+import { labelText } from '../src/lib/lang.js';
 import { fillReport, SAMPLE_PROJECT, SAMPLE_SETTINGS } from './fixtures.mjs';
+
+const CJK = /[\u2E80-\u9FFF\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFFEF\u3000-\u303F]/;
 
 const t = (await import('../src/templates/finalInspection.js')).default;
 
-const ctxOf = (report) => makeCtx({ template: t, report, project: SAMPLE_PROJECT, settings: SAMPLE_SETTINGS });
+const ctxOf = (report, lang) => makeCtx({ template: t, report, project: SAMPLE_PROJECT, settings: SAMPLE_SETTINGS, lang });
 const model = (report) => buildDocModel({ template: t, report, project: SAMPLE_PROJECT, settings: SAMPLE_SETTINGS });
 const blank = () => createReport(t, { project: SAMPLE_PROJECT, settings: SAMPLE_SETTINGS });
 
@@ -172,5 +175,43 @@ export const tests = [
     assert.equal(s.items[1].value, '0 项 items');
     assert.equal(s.items[4].value, '合格 — 可安排交付 Passed — Ready for Handover');
     assert.equal(s.items[4].tone, 'pass');
+  }],
+  ['summary / 文件名 / 图例：中文 / English / 双语', () => {
+    const r = blank();
+    r.values.date = '2026-10-09';
+    mark(r, [1, 2], 'F');
+    r.tables.rectification = [
+      { loc: 'Master wardrobe', recheck: 'P', closed: '2026-10-12', before: ['m_photo1'], after: ['m_photo2'] },
+      { loc: 'Shoe cabinet', desc: 'Door scratch', before: ['m_photo3'] },
+    ];
+    r.values.result = 'rectify';
+    r.values.rectifiedDate = '2026-10-11';
+    const by = (lang) => Object.fromEntries(t.summary(ctxOf(r, lang)).items.map((i) => [i.label.en, i.value]));
+    const [both, zh, en] = [by('both'), by('zh'), by('en')];
+    assert.equal(both.Rectification, '2 项 items · 已关闭 1 closed');
+    assert.equal(zh.Rectification, '2 项 · 已关闭 1');
+    assert.equal(en.Rectification, '2 items · 1 closed');
+    assert.equal(both.Conclusion, '需整改 Rectification Needed · 整改完成 2026-10-11');
+    assert.equal(zh.Conclusion, '需整改 · 整改完成 2026-10-11');
+    assert.equal(en.Conclusion, 'Rectification Needed · Rectified 2026-10-11');
+    r.values.recheckDate = '2026-10-13';
+    assert.equal(by('en').Conclusion, 'Rectification Needed · Re-inspection passed 2026-10-13');
+    assert.equal(by('both').Conclusion, '需整改 Rectification Needed · 复验合格 2026-10-13');
+    assert.equal(by('en')['Not checked'], '25 items');
+    assert.ok(!CJK.test(Object.values(by('en')).join('\n')));
+    const none = (lang) => t.summary(makeCtx({ template: t, report: {}, lang })).items[4].value;
+    assert.deepEqual([none('both'), none('zh'), none('en')], ['未选择 Not selected', '未选择', 'Not selected']);
+    assert.equal(t.filename(ctxOf(r, 'en')), 'Final_Inspection_Tuai Timur Residence 17-3 (Hailey)_2026-10-09');
+    assert.equal(t.filename(ctxOf(r)), '完工终检_Tuai Timur Residence 17-3（Hailey）_2026-10-09');
+    // 整改清单图例：双语照原表一行；单语各一行
+    const legend = t.sections.find((s) => s.id === 'rectification-legend');
+    assert.equal(labelText(legend.lines[0]), '类别 Category：安装质量 / 板件损伤 / 缺件 / 尺寸偏差 / 水电 / 硬装损伤 / 其他');
+    assert.equal(legend.lines[0].zhOnly, '类别：安装质量 / 板件损伤 / 缺件 / 尺寸偏差 / 水电 / 硬装损伤 / 其他');
+    assert.equal(legend.lines[0].enOnly, 'Category: Installation quality / Panel damage / Missing parts / Dimension deviation / M&E (plumbing / electrical) / Renovation damage / Others');
+    for (const l of legend.lines) assert.ok(!CJK.test(l.enOnly) && !/[A-Za-z]{3,}/.test(l.zhOnly), JSON.stringify(l));
+    // 下拉选项：存的值不变（旧报告照样认得）
+    const col = (k) => t.sections.find((s) => s.id === 'rectification').columns.find((c) => c.key === k);
+    assert.deepEqual(col('category').options.map((o) => o.v), ['安装质量', '板件损伤', '缺件', '尺寸偏差', '水电', '硬装损伤', '其他']);
+    assert.deepEqual(col('owner').options.map((o) => o.v), ['安装班组', '工厂', '物流', '硬装单位', '其他']);
   }],
 ];

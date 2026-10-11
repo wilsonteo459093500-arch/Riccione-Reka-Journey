@@ -6,11 +6,13 @@ import { createReport, makeCtx, issues, progress } from '../src/lib/report.js';
 import { buildDocModel, modelMedia } from '../src/lib/docmodel.js';
 import { fillReport, SAMPLE_PROJECT, SAMPLE_SETTINGS } from './fixtures.mjs';
 
+const CJK = /[\u2E80-\u9FFF\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFFEF\u3000-\u303F]/;
+
 const t = measurement;
 const lists = t.sections.filter((s) => s.type === 'checklist');
 const opts = { project: SAMPLE_PROJECT, settings: SAMPLE_SETTINGS };
 const model = (report) => buildDocModel({ template: t, report, ...opts });
-const ctxOf = (report) => makeCtx({ template: t, report, ...opts });
+const ctxOf = (report, lang) => makeCtx({ template: t, report, ...opts, lang });
 const byId = () => Object.fromEntries(allItems(t).map(({ item }) => [item.id, item]));
 
 
@@ -59,6 +61,9 @@ export const tests = [
     assert.equal(t.doc.intro[0].zh, '填写说明 逐项勾选;凡勾「否」必须在右栏写明处理方案与负责人;不适用项勾 N/A。');
     assert.equal(t.doc.intro[0].en, 'Tick item by item. Any “No” must state the corrective action & person-in-charge in the remarks column. Tick N/A if not applicable.');
     assert.equal(t.doc.footer, '溪岸 Sail by Riccione Reka  ·  自然主义生活体验馆  ·  V-SMOOTH 交付体系');
+    assert.equal(t.doc.kicker, '溪岸 SAIL BY RICCIONE REKA · V-SMOOTH');
+    // 纯英文文件用的抬头小字 / 页脚
+    assert.ok(!CJK.test(t.doc.enOnly.kicker) && !CJK.test(t.doc.enOnly.footer));
     const sig = t.sections.find((s) => s.type === 'signatures');
     assert.match(sig.declaration.zh, /^客户确认声明 {2}本人已到场参与复尺,.*下单后图纸与规格不再更改。$/);
     assert.match(sig.declaration.en, /^I was present at the final measurement .* after order placement\.$/);
@@ -153,5 +158,35 @@ export const tests = [
     r.signatures.customer.image = 'm_sig';
     assert.deepEqual(checksText(ctxOf(r)), ['复尺人员还未签名']);
     assert.ok(issues(t, r, opts).some((i) => i.text === '复尺人员还未签名'));
+  }],
+  ['summary / 文件名：中文 / English / 双语', () => {
+    const r = createReport(t, opts);
+    r.values.date = '2026-10-09';
+    r.items.fmB3 = { r: 'N', note: 'Add backing panel / PIC Wilson', photos: [] };
+    r.items.fmA1 = { r: 'Y', note: '', photos: [] };
+    r.items.fmC2 = { r: 'N', note: '', photos: [] };
+    const val = (lang) => Object.fromEntries(t.summary(ctxOf(r, lang)).items.map((i) => [i.label.en, i.value]));
+    const both = val('both');
+    const zh = val('zh');
+    const en = val('en');
+    assert.equal(both.Yes, '1 项 items');
+    assert.equal(zh.Yes, '1 项');
+    assert.equal(en.Yes, '1 item');
+    assert.equal(en.No, '2 items');
+    assert.equal(en['Not checked'], '19 items');
+    // 待处理：双语 / 中文沿用中文清单，英文用英文标题；用户写的处理方案原样
+    assert.equal(both['Action needed'], 'B3 吊柜墙面可承重,墙面无造型物阻碍安装（Add backing panel / PIC Wilson）；C2 各柜体深度不阻碍过道通行;电视柜对正沙发,贵妃位不挡道（未写处理方案）');
+    assert.equal(zh['Action needed'], both['Action needed']);
+    assert.equal(en['Action needed'], 'B3 Hanging-cabinet wall can bear load; no wall features obstruct installation (Add backing panel / PIC Wilson); C2 Cabinet depths keep walkways clear; TV unit centred to sofa, chaise unobstructed (no action stated)');
+    assert.ok(!CJK.test(Object.values(en).join('\n')));
+    const blank = (lang) => t.summary(makeCtx({ template: t, report: {}, lang })).items.find((i) => i.label.en === 'Action needed').value;
+    assert.deepEqual([blank('both'), blank('zh'), blank('en')], ['无 None', '无', 'None']);
+    // 超过 6 项：等共 N 项 / N in total（前 8 项 + 之前的 C2）
+    for (const it of allItems(t).slice(0, 8)) r.items[it.item.id] = { r: 'N', note: 'x', photos: [] };
+    assert.match(val('en')['Action needed'], /; 9 in total$/);
+    assert.match(val('both')['Action needed'], /；等共 9 项$/);
+    assert.equal(t.filename(ctxOf(r)), '复尺确认_Hailey_2026-10-09');
+    assert.equal(t.filename(ctxOf(r, 'zh')), '复尺确认_Hailey_2026-10-09');
+    assert.equal(t.filename(ctxOf(r, 'en')), 'Final_Measurement_Hailey_2026-10-09');
   }],
 ];

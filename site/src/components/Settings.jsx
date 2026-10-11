@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import Icon from './ui/Icon.jsx';
 import { TopBar, Spinner, useUI } from './ui/UI.jsx';
 import { useStore } from '../lib/store.jsx';
+import LangPicker from './LangPicker.jsx';
+import { normLang } from '../lib/lang.js';
 import { storageEstimate, requestPersist } from '../lib/db.js';
 import { exportBackup, importBackup } from '../lib/backup.js';
 import { downloadBlob } from '../lib/share.js';
@@ -122,6 +124,13 @@ export default function Settings() {
             <Icon name="CircleCheck" size={14} /> {savedTick ? '已保存' : '改动会自动保存'}
           </div>
         </section>
+
+        <LangPicker
+          title="文件默认语言"
+          hint="新导出的 PDF / Word / Excel / 文案默认用这个；每份报告导出时还可以单独改"
+          value={normLang(store.settings.docLang)}
+          onChange={(v) => store.updateSettings({ docLang: v })}
+        />
 
         {!standalone && (
           <section className="card border-l-4 border-l-terra p-4">

@@ -7,7 +7,12 @@
 //   cont   长文字切出来的续块（检查表 / 表格续行：序号、项目、判定格留空，同一列接着写）
 //   fit    可重切的文字 key：实测仍超过一页时，DocPages 按 fit[key] 缩小切块再排一次
 // 纯函数、无 DOM：同样的输入永远得到同样的分页。
+//
+// 语言（zh / en / both）：原子的高度全部是 DocPages 在测量层里按当前语言实际渲染后量出来的
+// （英文标签比中文长、折行多，量出来就高），这里不估算标签高度；这里只估算用户填写的长文字怎么切块，
+// 只跟列宽 / 字号有关，与语言无关 —— 所以同一份填报在三种语言下切出的原子完全一样。
 import { PHOTO, FIRST_AVAIL, CONT_AVAIL, CONTENT_W } from './theme.js';
+import { labelText, normLang } from '../../lib/lang.js';
 
 const chunk = (arr, n) => {
   const out = [];
@@ -16,6 +21,43 @@ const chunk = (arr, n) => {
 };
 
 const isText = (s) => s != null && String(s).trim() !== '';
+
+/** 模板里的一段固定文字（图例 / 页尾 / 标题上方小字）：字符串原样；{ zh, en }（已按语言规整）拼成一行 */
+export const textOf = (x) => (x == null ? '' : typeof x === 'string' ? x : labelText(x));
+
+/**
+ * 单语文件：模板给了 zhOnly / enOnly（「双语写在一行」的文字、原表只有中文的标签配的英文整句、
+ * 「厨房 Kitchen」这种选项的单语写法）就用它 —— zh 文件 → { zh: zhOnly, en: '' }，en 文件 → { zh: '', en: enOnly }。
+ * 双语原样返回同一个对象；lib/lang.js 的 localize 已经处理过的，这里结果不变（幂等）。
+ */
+export function pickOnly(model) {
+  const lang = normLang(model?.meta?.lang);
+  if (lang === 'both' || !model) return model;
+  const key = lang === 'zh' ? 'zhOnly' : 'enOnly';
+  const walk = (n) => {
+    if (n == null || typeof n !== 'object') return n;
+    if (Array.isArray(n)) {
+      const arr = n.map(walk);
+      return arr.some((x, i) => x !== n[i]) ? arr : n;
+    }
+    let out = n;
+    for (const [k, v] of Object.entries(n)) {
+      const w = walk(v);
+      if (w !== v) {
+        if (out === n) out = { ...n };
+        out[k] = w;
+      }
+    }
+    const only = n[key];
+    if (typeof only === 'string' && only.trim()) {
+      const zh = lang === 'zh' ? only : '';
+      const en = lang === 'en' ? only : '';
+      if (out.zh !== zh || out.en !== en) out = { ...out, zh, en };
+    }
+    return out;
+  };
+  return walk(model);
+}
 
 // ---- 列宽（blocks.jsx 渲染和这里切块共用一份） ----
 
@@ -507,7 +549,7 @@ export function buildAtoms(model, { fit = {} } = {}) {
   const meta = model.meta || {};
   push({ kind: 'header', space: 0 });
   (meta.intro || []).forEach((p, k) => push({ kind: 'intro', p, space: k ? 6 : 4 }));
-  if (isText(meta.legend)) push({ kind: 'legend', text: meta.legend, space: 10 });
+  if (isText(textOf(meta.legend))) push({ kind: 'legend', text: meta.legend, space: 10 });
 
   for (const b of model.blocks || []) {
     if (b.type === 'fields') fieldsAtoms(push, b, fit);
@@ -527,7 +569,7 @@ export function buildAtoms(model, { fit = {} } = {}) {
       push({ kind: 'sig', block: b, space: hasHead ? 0 : 24 });
     }
   }
-  if (isText(meta.footer)) push({ kind: 'endNote', text: meta.footer, space: 20 });
+  if (isText(textOf(meta.footer))) push({ kind: 'endNote', text: meta.footer, space: 20 });
 
   // 备注紧跟上一个块（「★ 不合格须记入…」不单独落到下一页）
   for (let i = 1; i < atoms.length; i += 1) {
