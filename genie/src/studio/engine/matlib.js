@@ -124,10 +124,10 @@ export class MatLib {
     F('art2', { color: 0xd8c3a0, roughness: 0.9 });
     F('exterior', { color: 0xe8e2d8, roughness: 0.95 });
     F('cap', { color: 0x2a2523, roughness: 0.9 });
-    F('plinth', { color: 0x1f1c22, roughness: 0.55, metalness: 0.15 });
+    F('plinth', { color: 0x1d1d18, roughness: 0.55, metalness: 0.15 });
     F('water', { color: 0x9fc3cf, roughness: 0.05, transparent: true, opacity: 0.6 });
     F('rail', { color: 0x2a2a2c, roughness: 0.4, metalness: 0.7 });
-    F('altarRed', { color: 0x7a1e1e, roughness: 0.5, emissive: 0xff3a2a, emissiveIntensity: 0 });
+    F('altarRed', { color: 0x6e1c18, roughness: 0.55, emissive: 0xff4a2a, emissiveIntensity: 0 });
     // 会在夜里亮的
     F('lampShade', { color: 0xf3e6cf, roughness: 0.85, emissive: 0xffc27a, emissiveIntensity: 0, side: THREE.DoubleSide });
     F('bulb', { color: 0xfff2d8, emissive: 0xffd7a0, emissiveIntensity: 0.2 });
@@ -140,7 +140,7 @@ export class MatLib {
     this.fixed.lampShade.emissiveIntensity = 1.6 * k;
     this.fixed.bulb.emissiveIntensity = 0.3 + 3 * k;
     this.fixed.led.emissiveIntensity = 3.2 * k;
-    this.fixed.altarRed.emissiveIntensity = 0.4 + 1.6 * k;
+    this.fixed.altarRed.emissiveIntensity = 0.08 + 0.55 * k;
     this.fixed.screen.emissiveIntensity = 0;
   }
 

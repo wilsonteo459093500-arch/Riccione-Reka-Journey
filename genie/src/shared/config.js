@@ -28,6 +28,10 @@ export const CONFIG = {
   // 留空 = 只存本机 + WhatsApp。失败不会打断客人。
   endpoint: '',
   team: [{ code: 'wilson', name: 'Wilson Teo', role: '溪岸 Sail by Riccione Reka', wa: '60189661919' }],
+  // 客户许愿模式的音乐：默认是现场合成的大自然禅意声景（溪水、微风、颂钵、风铃、鸟）。
+  // 想用公司自己有版权的曲子：把 mp3 放进 public/music/，这里填 '/music/xxx.mp3'（自然声仍会垫在底下）。
+  wishMusic: '',
+  wishVolume: 0.7,
 };
 
 export function hostFromCode(code) {

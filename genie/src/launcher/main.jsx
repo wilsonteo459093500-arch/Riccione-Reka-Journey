@@ -5,13 +5,31 @@ import { createRoot } from 'react-dom/client';
 import '../shared/base.css';
 import '../quiz/quiz.css';
 import './launcher.css';
+import '../wish/wish.css';
 import Pangie from '../shared/Pangie.jsx';
-import { BRAND, GUIDE } from '../shared/config.js';
+import { BRAND, GUIDE, CONFIG } from '../shared/config.js';
+import WishShell from '../wish/WishShell.jsx';
+import { zen, startWish, wishStartUrl, savedHost, saveHost, exitFullscreen } from '../wish/start.js';
 import { loadArchive, removeFromArchive } from '../shared/profile.js';
 import { DREAMER_BY_CODE } from '../shared/dreamers.js';
 
 function Launcher() {
   const [list, setList] = useState(loadArchive);
+  const [wish, setWish] = useState(false);
+  const [host, setHost] = useState(savedHost);
+  if (wish)
+    return (
+      <WishShell
+        zen={zen}
+        startUrl={wishStartUrl(host)}
+        onExit={async () => {
+          await zen.stop(1.5);
+          exitFullscreen();
+          setWish(false);
+          setList(loadArchive());
+        }}
+      />
+    );
   return (
     <div className="ln">
       <header className="ln-head">
@@ -38,6 +56,42 @@ function Launcher() {
               设计师接着打开 3D 工作室，把平面图和他的答案，马上变成看得见的概念。
             </p>
           </div>
+        </section>
+
+        <section className="ln-wish">
+          <button
+            type="button"
+            className="ln-wish-btn"
+            onClick={() => {
+              startWish(); // 声音必须在这一下点击里开启
+              setWish(true);
+            }}
+          >
+            <span className="ln-wish-ico">🪔</span>
+            <span>
+              <b>客户许愿模式</b>
+              <em>按下就开始：大自然禅意音乐 + 盼吉带客人从占卜一路走到 3D</em>
+            </span>
+          </button>
+          {CONFIG.team.length > 1 && (
+            <label className="ln-host">
+              陪同人
+              <select
+                value={host}
+                onChange={(e) => {
+                  setHost(e.target.value);
+                  saveHost(e.target.value);
+                }}
+              >
+                <option value="">（不指定）</option>
+                {CONFIG.team.map((t) => (
+                  <option key={t.code} value={t.code}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </section>
 
         <div className="ln-cards">

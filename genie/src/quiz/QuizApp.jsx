@@ -11,6 +11,7 @@ import { CHAPTERS, STEPS, PAIRS, LIFE, APPLIANCES } from './flow.js';
 import { buildProfile, saveToArchive, unpackJSON, findInArchive, storagePlan } from '../shared/profile.js';
 import { profileText, postProfile } from '../shared/summary.js';
 import { isMuted, setMuted, sfx } from '../shared/sound.js';
+import { isWishMode, tellShell } from '../shared/zen.js';
 import {
   Welcome,
   LampRub,
@@ -98,6 +99,8 @@ function Constellation({ chapter }) {
   );
 }
 
+const WISH = isWishMode();
+
 function TopBar({ chapter, onBack, canBack, progress }) {
   const [mute, setMute] = useState(isMuted());
   return (
@@ -113,17 +116,21 @@ function TopBar({ chapter, onBack, canBack, progress }) {
       <div className="progress-pct" title="蓝图完成度">
         蓝图 {Math.round(progress * 100)}%
       </div>
-      <button
-        type="button"
-        className="icon-btn"
-        onClick={() => {
-          setMuted(!mute);
-          setMute(!mute);
-        }}
-        aria-label={mute ? '打开声音' : '静音'}
-      >
-        {mute ? '🔇' : '🔊'}
-      </button>
+      {WISH ? (
+        <span className="icon-btn-ph" />
+      ) : (
+        <button
+          type="button"
+          className="icon-btn"
+          onClick={() => {
+            setMuted(!mute);
+            setMute(!mute);
+          }}
+          aria-label={mute ? '打开声音' : '静音'}
+        >
+          {mute ? '🔇' : '🔊'}
+        </button>
+      )}
     </header>
   );
 }
@@ -181,7 +188,9 @@ function Play({ onDone }) {
     const ch = CHAPTERS.find((c) => c.id === step.chapter);
     setPangie({ mood: ch?.mode === 'slow' ? 'think' : 'idle', line });
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [step.id, step.chapter]);
+    if (step.interlude) tellShell('chapter', { chapter: step.chapter });
+    if (step.id === 'welcome') tellShell('page', { page: 'quiz' });
+  }, [step.id, step.chapter, step.interlude]);
 
   const finish = async (oneWish) => {
     const full = { ...answers, oneWish };
@@ -272,7 +281,15 @@ export default function QuizApp() {
   useEffect(() => {
     const onHash = () => setRoute(parseRoute());
     window.addEventListener('hashchange', onHash);
-    return () => window.removeEventListener('hashchange', onHash);
+    // 许愿模式外壳可以关掉音效
+    const onMsg = (e) => {
+      if (e.origin === location.origin && e.data?.source === 'genie-shell' && e.data.type === 'sfx') setMuted(!!e.data.muted);
+    };
+    window.addEventListener('message', onMsg);
+    return () => {
+      window.removeEventListener('hashchange', onHash);
+      window.removeEventListener('message', onMsg);
+    };
   }, []);
 
   useEffect(() => {

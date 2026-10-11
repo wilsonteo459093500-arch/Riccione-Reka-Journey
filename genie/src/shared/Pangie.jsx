@@ -1,13 +1,13 @@
 // 盼吉 Pangie —— 熊猫 × 神灯精灵 × 塔罗师。原创形象，纯 SVG，可缩放、可换表情。
-// 圆滚滚的大头小身体；下半身是神灯里飘出来的一缕烟；靛蓝丝绒头巾 + 金边宝石；捧着水晶球；月亮吊坠。
+// 圆滚滚的大头小身体；下半身是神灯里飘出来的一缕晨雾；苔绿丝绒头巾 + 琥珀宝石；捧着露珠般的翡翠水晶球；月亮吊坠。
 //
 // <Pangie mood="idle|happy|wow|think|wink|mystic|sleepy" prop="ball|cards|magnifier|none" size={160} />
 
 import { useId } from 'react';
 
-const INK = '#262130';
+const INK = '#25241f'; // 暖炭黑（SAIL 墨）
 const FUR = '#FFFDF8';
-const GOLD = '#D7A54A';
+const GOLD = '#CFA65C'; // SAIL 金
 
 function Eyes({ mood, id }) {
   // 眼罩（黑色泪滴，向外下垂）
@@ -49,14 +49,14 @@ function Mouth({ mood }) {
   if (mood === 'wow')
     return (
       <g>
-        <ellipse cx="100" cy="125" rx="4.6" ry="5.6" fill="#3A2232" />
+        <ellipse cx="100" cy="125" rx="4.6" ry="5.6" fill="#3A2A22" />
         <ellipse cx="100" cy="127.6" rx="2.8" ry="2" fill="#F08F98" />
       </g>
     );
   if (mood === 'happy')
     return (
       <g>
-        <path d="M90.5 120.5 Q100 133 109.5 120.5 Z" fill="#3A2232" />
+        <path d="M90.5 120.5 Q100 133 109.5 120.5 Z" fill="#3A2A22" />
         <ellipse cx="100" cy="126.6" rx="4" ry="2.4" fill="#F08F98" />
       </g>
     );
@@ -82,7 +82,7 @@ function Cards() {
   return (
     <g>
       <g transform="rotate(-14 92 186)">
-        <rect x="80" y="166" width="22" height="34" rx="3" fill="#2E2556" stroke={GOLD} strokeWidth="1.4" />
+        <rect x="80" y="166" width="22" height="34" rx="3" fill="#2B3A31" stroke={GOLD} strokeWidth="1.4" />
         <circle cx="91" cy="183" r="5" fill="none" stroke={GOLD} strokeWidth="1" />
       </g>
       <g transform="rotate(10 108 186)">
@@ -117,19 +117,19 @@ export default function Pangie({ mood = 'idle', prop = 'ball', size = 160, float
     >
       <defs>
         <radialGradient id={`${id}-iris`} cx="40%" cy="35%" r="70%">
-          <stop offset="0" stopColor="#5B4A86" />
-          <stop offset=".55" stopColor="#231B33" />
-          <stop offset="1" stopColor="#120E1A" />
+          <stop offset="0" stopColor="#5E7A5C" />
+          <stop offset=".55" stopColor="#1F2A21" />
+          <stop offset="1" stopColor="#11170F" />
         </radialGradient>
         <radialGradient id={`${id}-ball`} cx="38%" cy="32%" r="75%">
-          <stop offset="0" stopColor="#F3ECFF" />
-          <stop offset=".35" stopColor="#B7A3F2" />
-          <stop offset=".75" stopColor="#6550B8" />
-          <stop offset="1" stopColor="#35296E" />
+          <stop offset="0" stopColor="#F4FAF0" />
+          <stop offset=".35" stopColor="#B6D6BC" />
+          <stop offset=".75" stopColor="#5E8F72" />
+          <stop offset="1" stopColor="#2C5442" />
         </radialGradient>
         <radialGradient id={`${id}-halo`}>
-          <stop offset=".55" stopColor="#B9A6FF" stopOpacity=".55" />
-          <stop offset="1" stopColor="#B9A6FF" stopOpacity="0" />
+          <stop offset=".55" stopColor="#CFE6C8" stopOpacity=".55" />
+          <stop offset="1" stopColor="#CFE6C8" stopOpacity="0" />
         </radialGradient>
         <linearGradient id={`${id}-gold`} x1="0" y1="0" x2="1" y2="1">
           <stop offset="0" stopColor="#F4D58D" />
@@ -137,22 +137,22 @@ export default function Pangie({ mood = 'idle', prop = 'ball', size = 160, float
           <stop offset="1" stopColor="#9C6C26" />
         </linearGradient>
         <linearGradient id={`${id}-turban`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#5A4A9C" />
-          <stop offset="1" stopColor="#2C2257" />
+          <stop offset="0" stopColor="#557A60" />
+          <stop offset="1" stopColor="#2A3F33" />
         </linearGradient>
         <linearGradient id={`${id}-smoke`} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="#FFFDF8" />
-          <stop offset=".45" stopColor="#E6DDF7" />
-          <stop offset="1" stopColor="#B9A6FF" stopOpacity=".05" />
+          <stop offset=".45" stopColor="#E4EDDF" />
+          <stop offset="1" stopColor="#A7C2A5" stopOpacity=".05" />
         </linearGradient>
         <radialGradient id={`${id}-belly`} cx="45%" cy="35%" r="70%">
           <stop offset="0" stopColor="#FFFFFF" />
-          <stop offset="1" stopColor="#EFE9F4" />
+          <stop offset="1" stopColor="#EFEBE1" />
         </radialGradient>
         <radialGradient id={`${id}-head`} cx="42%" cy="30%" r="75%">
           <stop offset="0" stopColor="#FFFFFF" />
           <stop offset=".8" stopColor={FUR} />
-          <stop offset="1" stopColor="#ECE6EF" />
+          <stop offset="1" stopColor="#ECE7DD" />
         </radialGradient>
       </defs>
 
@@ -162,8 +162,8 @@ export default function Pangie({ mood = 'idle', prop = 'ball', size = 160, float
           d="M64 178 C 58 214, 92 226, 112 224 C 134 222, 142 236, 128 244 C 118 249, 106 243, 114 237 C 120 233, 124 236, 122 240 C 128 232, 116 228, 104 231 C 80 236, 56 222, 64 178 Z"
           fill={`url(#${id}-smoke)`}
         />
-        <circle cx="140" cy="232" r="3.2" fill="#E6DDF7" opacity=".7" className="pg-puff" />
-        <circle cx="150" cy="222" r="2.2" fill="#E6DDF7" opacity=".55" className="pg-puff pg-d2" />
+        <circle cx="140" cy="232" r="3.2" fill="#E4EDDF" opacity=".7" className="pg-puff" />
+        <circle cx="150" cy="222" r="2.2" fill="#E4EDDF" opacity=".55" className="pg-puff pg-d2" />
       </g>
 
       {/* 身体 */}
@@ -187,16 +187,16 @@ export default function Pangie({ mood = 'idle', prop = 'ball', size = 160, float
         <>
           <ellipse cx="80" cy="185" rx="9.5" ry="10.5" fill={INK} />
           <ellipse cx="120" cy="185" rx="9.5" ry="10.5" fill={INK} />
-          <circle cx="80" cy="188" r="2.6" fill="#4A3F57" />
-          <circle cx="120" cy="188" r="2.6" fill="#4A3F57" />
+          <circle cx="80" cy="188" r="2.6" fill="#4A483E" />
+          <circle cx="120" cy="188" r="2.6" fill="#4A483E" />
         </>
       )}
 
       {/* 耳朵 */}
       <circle cx="49" cy="56" r="17.5" fill={INK} />
       <circle cx="151" cy="56" r="17.5" fill={INK} />
-      <circle cx="51" cy="58" r="8" fill="#43394F" />
-      <circle cx="149" cy="58" r="8" fill="#43394F" />
+      <circle cx="51" cy="58" r="8" fill="#45443B" />
+      <circle cx="149" cy="58" r="8" fill="#45443B" />
       {/* 金耳环 */}
       <circle cx="140" cy="70" r="4.4" fill="none" stroke={GOLD} strokeWidth="1.8" />
 
@@ -205,14 +205,14 @@ export default function Pangie({ mood = 'idle', prop = 'ball', size = 160, float
 
       {/* 丝绒头巾 */}
       <path d="M58 70 C 54 36, 80 22, 100 22 C 120 22, 146 36, 142 70 C 128 60, 112 57, 100 57 C 88 57, 72 60, 58 70 Z" fill={`url(#${id}-turban)`} />
-      <path d="M66 52 C 84 40, 116 40, 134 52" stroke="#6E5DB3" strokeWidth="1.6" fill="none" opacity=".7" />
-      <path d="M62 62 C 82 50, 118 50, 138 62" stroke="#6E5DB3" strokeWidth="1.6" fill="none" opacity=".55" />
+      <path d="M66 52 C 84 40, 116 40, 134 52" stroke="#7FA287" strokeWidth="1.6" fill="none" opacity=".7" />
+      <path d="M62 62 C 82 50, 118 50, 138 62" stroke="#7FA287" strokeWidth="1.6" fill="none" opacity=".55" />
       {/* 羽毛 */}
       <path d="M100 26 C 104 12, 118 6, 128 8 C 120 12, 112 20, 104 28 Z" fill="#FBF6EC" />
       <path d="M104 27 C 112 18, 120 12, 127 9" stroke={GOLD} strokeWidth="1" fill="none" />
       {/* 金边 + 宝石 */}
       <path d="M58 69 C 72 59, 88 56, 100 56 C 112 56, 128 59, 142 69" stroke={`url(#${id}-gold)`} strokeWidth="5" fill="none" strokeLinecap="round" />
-      <path d="M100 46 C 106 52, 106 58, 100 62 C 94 58, 94 52, 100 46 Z" fill="#E3576C" stroke={`url(#${id}-gold)`} strokeWidth="2" className={mood === 'mystic' ? 'pg-gem-glow' : ''} />
+      <path d="M100 46 C 106 52, 106 58, 100 62 C 94 58, 94 52, 100 46 Z" fill="#E1913F" stroke={`url(#${id}-gold)`} strokeWidth="2" className={mood === 'mystic' ? 'pg-gem-glow' : ''} />
       <ellipse cx="98.4" cy="51.5" rx="1.4" ry="2.4" fill="#fff" opacity=".8" />
 
       <Eyes mood={mood} id={id} />

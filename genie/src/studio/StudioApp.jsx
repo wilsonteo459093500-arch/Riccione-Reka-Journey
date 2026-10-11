@@ -27,6 +27,9 @@ import ShareModal from './ui/ShareModal.jsx';
 import HelpModal from './ui/HelpModal.jsx';
 import SettingsModal from './ui/SettingsModal.jsx';
 import PlanEditor from './plan/PlanEditor.jsx';
+import { isWishMode, tellShell } from '../shared/zen.js';
+
+const WISH = isWishMode();
 
 const HISTORY = 60;
 const snap = (p) => ({ materials: { ...p.materials }, furniture: p.furniture.map((f) => ({ ...f })), time: p.time, mood: p.mood });
@@ -92,7 +95,8 @@ export default function StudioApp() {
           setIncomingProfile(prof);
           const existing = loadProjects().find((x) => x.profile?.id === prof.id);
           p = existing || createProject({ plan: templatePlan('condo3'), profile: prof });
-          if (!existing) setModal('start');
+          // 许愿模式：客人直接看到自己的家（示范户型 + 他的材质），设计师再用 ✏️ 换成真实平面图
+          if (!existing && !WISH) setModal('start');
         }
       } else if (h.startsWith('s=')) {
         p = await unpackProject(h.slice(2));
@@ -108,6 +112,7 @@ export default function StudioApp() {
     }
     history.replaceState(null, '', location.pathname + location.search);
     loadProjectIntoEngine(p, true);
+    tellShell('page', { page: 'studio' });
   }
 
   function loadProjectIntoEngine(p, frame = true) {
@@ -131,7 +136,7 @@ export default function StudioApp() {
     setSelected(null);
     setReady(true);
     scheduleThumbs();
-    if (p.profile) packJSON(p.profile).then((s) => setBpLink(new URL(`quiz.html#bp=${s}`, location.href).href));
+    if (p.profile) packJSON(p.profile).then((s) => setBpLink(new URL(`quiz.html${WISH ? '?mode=wish' : ''}#bp=${s}`, location.href).href));
     else setBpLink('');
   }
 
@@ -217,10 +222,12 @@ export default function StudioApp() {
     scheduleThumbs();
   };
 
-  const setTime = (h, final = false) => {
+  const timeMsg = useRef(0);
+  const setTime = (h) => {
     engine.current.setTime(h);
     setProject((p) => ({ ...p, time: h }));
-    void final;
+    clearTimeout(timeMsg.current);
+    timeMsg.current = setTimeout(() => tellShell('time', { hour: h }), 300);
   };
 
   function updateFurniture(fn, fromEngine = false) {
@@ -370,7 +377,7 @@ export default function StudioApp() {
   const projectsList = useMemo(() => (modal === 'start' ? loadProjects() : []), [modal]);
 
   return (
-    <div className={`studio panels-${panels} ${demo ? 'is-demo' : ''}`}>
+    <div className={`studio panels-${panels} ${demo ? 'is-demo' : ''} ${WISH ? 'is-wish' : ''}`}>
       <div className="stage3d" ref={host} />
       {!ready && (
         <div className="boot">
@@ -397,7 +404,7 @@ export default function StudioApp() {
             onToggle={() => setPanels((p) => (p === 'open' ? 'closed' : 'open'))}
             chip={
               profile && dreamer ? (
-                <a className="dreamer-chip" href={bpLink || '#'} target="_blank" rel="noopener" title="打开梦想家蓝图">
+                <a className="dreamer-chip" href={bpLink || '#'} target={WISH ? '_self' : '_blank'} rel="noopener" title="打开梦想家蓝图">
                   <b>{dreamer.num}</b>
                   <span>
                     为 {profile.name || '贵宾'} 定制 · {dreamer.zh}
@@ -446,6 +453,7 @@ export default function StudioApp() {
             onStart={() => setModal('start')}
             onHelp={() => setModal('help')}
             onSettings={() => setModal('settings')}
+            wish={WISH}
           />
 
           <DaylightPanel time={project.time} thumbs={thumbs} onTime={setTime} onCommit={() => saveProject(projRef.current)} />

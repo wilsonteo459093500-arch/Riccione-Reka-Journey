@@ -22,8 +22,8 @@ export default function Toolbar(p) {
       </div>
       <div className="tb-group">
         <IconBtn icon="pencil" label="平面图：上传 / 修改" onClick={p.onPlan} />
-        <IconBtn icon="home" label="新方案 / 打开方案" onClick={p.onStart} />
-        <IconBtn icon="gear" label="设置" onClick={p.onSettings} />
+        {!p.wish && <IconBtn icon="home" label="新方案 / 打开方案" onClick={p.onStart} />}
+        {!p.wish && <IconBtn icon="gear" label="设置" onClick={p.onSettings} />}
         <IconBtn icon="help" label="怎么用" onClick={p.onHelp} />
       </div>
     </div>

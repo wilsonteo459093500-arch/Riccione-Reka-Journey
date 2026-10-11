@@ -6,17 +6,17 @@ const SUNSET = 19.3;
 
 const KEYS = [
   // hour, bgTop, bgBottom, hemiSky, hemiGround, sunColor
-  [0, '#0B0E1C', '#1A1730', '#25305A', '#1A1512', '#8FA6FF'],
-  [5.6, '#141A33', '#2A2440', '#33406E', '#231C18', '#9FB2FF'],
-  [6.6, '#3B3F6A', '#B98A86', '#8A90B8', '#4A3A30', '#FFB08A'],
+  [0, '#0C1411', '#1A231D', '#2A3A4A', '#1A1512', '#9FB4D8'],
+  [5.6, '#13201B', '#2A2E28', '#344A58', '#231C18', '#A9BCDD'],
+  [6.6, '#3A4A4A', '#B9937A', '#8FA0AA', '#4A3A30', '#FFB08A'],
   [7.6, '#3E5070', '#A88E7A', '#B9C8E4', '#6E5A48', '#FFC89A'],
   [10, '#3F5577', '#7F8C9A', '#CFE0F2', '#8A7A66', '#FFF1DE'],
   [13, '#42587A', '#87939F', '#D8E6F5', '#94826C', '#FFF6E8'],
-  [16.4, '#3E5274', '#98897A', '#D6DCEB', '#8E7A62', '#FFE2BC'],
-  [18.2, '#3F4A7A', '#E8A274', '#C9A99A', '#6E5040', '#FF9F5E'],
-  [19.2, '#272A55', '#B86A5E', '#6A6488', '#3A2C26', '#FF7E4A'],
-  [20.2, '#141834', '#3A2D48', '#36406C', '#221B17', '#8FA6FF'],
-  [24, '#0B0E1C', '#1A1730', '#25305A', '#1A1512', '#8FA6FF'],
+  [16.4, '#3E5266', '#9A8B78', '#D6DCE4', '#8E7A62', '#FFE2BC'],
+  [18.2, '#3C4A5C', '#E2A06E', '#C9AE98', '#6E5040', '#FF9F5E'],
+  [19.2, '#25332F', '#B86A4E', '#6A7480', '#3A2C26', '#FF7E4A'],
+  [20.2, '#122019', '#2E2E2A', '#344A58', '#221B17', '#9FB4D8'],
+  [24, '#0C1411', '#1A231D', '#2A3A4A', '#1A1512', '#9FB4D8'],
 ];
 
 function hexToRgb(h) {
@@ -72,7 +72,7 @@ export function daylight(hour, northDeg = 0) {
     dir,
     up,
     elevDeg,
-    sunColor: up ? sunColor : '#8FA6FF',
+    sunColor: up ? sunColor : '#9FB4D8',
     sunIntensity,
     hemiSky,
     hemiGround,

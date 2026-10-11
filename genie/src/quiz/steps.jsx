@@ -7,6 +7,7 @@ import { GUIDE } from '../shared/config.js';
 import { CHAPTERS, PAIRS, LIFE, APPLIANCES, BULKY, WISHES, SPLURGE, NOGO_COLORS, NOGO_FINISHES, ONE_WISH_CHIPS } from './flow.js';
 import { storagePlan } from '../shared/profile.js';
 import { sfx } from '../shared/sound.js';
+import { tellShell } from '../shared/zen.js';
 
 const fmt = (n) => Number(n || 0).toLocaleString('en-US');
 
@@ -583,6 +584,7 @@ export function WishesStep({ answers, set, next, say }) {
       say('think', '只能三个哦！先放掉一个 🙏');
     } else {
       sfx.wish();
+      tellShell('wish');
       set({ wishes: [...sel, v] });
       if (sel.length === 2) say('happy', '三个愿望，盼吉收到了 ✨');
     }

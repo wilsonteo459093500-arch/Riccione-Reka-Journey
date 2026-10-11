@@ -13,6 +13,9 @@ import { profileText, waLink, lifeLabel, WISH_LABEL, AVOID_LABEL } from '../shar
 import { BRAND, GUIDE, hostFromCode } from '../shared/config.js';
 import { APPLIANCES, PAIRS, SPLURGE } from './flow.js';
 import { renderPoster } from './poster.js';
+import { isWishMode, tellShell } from '../shared/zen.js';
+
+const WISH = isWishMode();
 
 const fmt = (n) => Number(n || 0).toLocaleString('en-US');
 const BOARD_SLOTS = ['floor', 'walls', 'feature', 'cabinetry', 'countertop', 'upholstery', 'rugs', 'accents'];
@@ -46,13 +49,17 @@ export default function Blueprint({ profile, onRestart, fresh = false }) {
       if (!alive) return;
       setLinks({
         bp: new URL(`quiz.html#bp=${packed}`, location.href).href,
-        studio: new URL(`studio.html#p=${packed}`, location.href).href,
+        studio: new URL(`studio.html${WISH ? '?mode=wish' : ''}#p=${packed}`, location.href).href,
       });
     });
     return () => {
       alive = false;
     };
   }, [profile]);
+
+  useEffect(() => {
+    tellShell('page', { page: 'blueprint' });
+  }, []);
 
   const flash = (t) => {
     setToast(t);
@@ -108,7 +115,7 @@ export default function Blueprint({ profile, onRestart, fresh = false }) {
             {host ? ` · 陪同：${host.name}` : ''}
           </p>
         </div>
-        <div className="seg no-print" role="tablist">
+        <div className="seg no-print" role="tablist" hidden={WISH}>
           <button type="button" className={mode === 'client' ? 'on' : ''} onClick={() => setMode('client')}>
             客人版
           </button>
@@ -397,7 +404,7 @@ export default function Blueprint({ profile, onRestart, fresh = false }) {
         <button type="button" className="btn-line" onClick={() => copy(mode === 'designer' ? text : links.bp, mode === 'designer' ? '整份文字已复制' : '链接已复制')}>
           🔗 {mode === 'designer' ? '复制全文' : '复制链接'}
         </button>
-        {onRestart && (
+        {onRestart && !WISH && (
           <button type="button" className="btn-ghost" onClick={onRestart}>
             ↺ 下一位
           </button>

@@ -49,12 +49,12 @@ export async function renderPoster(profile, { pangieEl, emblemEl } = {}) {
 
   // 夜空
   const bg = ctx.createLinearGradient(0, 0, 0, H);
-  bg.addColorStop(0, '#191433');
-  bg.addColorStop(1, '#2C2357');
+  bg.addColorStop(0, '#17201b');
+  bg.addColorStop(1, '#2b3a31');
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
   for (let i = 0; i < 140; i++) {
-    ctx.fillStyle = `rgba(255,240,210,${Math.random() * 0.6})`;
+    ctx.fillStyle = Math.random() > 0.6 ? `rgba(200,225,195,${Math.random() * 0.6})` : `rgba(240,215,160,${Math.random() * 0.7})`;
     const r = Math.random() * 2.2;
     ctx.beginPath();
     ctx.arc(Math.random() * W, Math.random() * H, r, 0, Math.PI * 2);
@@ -104,7 +104,7 @@ export async function renderPoster(profile, { pangieEl, emblemEl } = {}) {
   if (em) ctx.drawImage(em, W / 2 - 80, cy + 120, 160, 160);
 
   ctx.font = `700 40px ${SANS}`;
-  ctx.fillStyle = '#6E5DB3';
+  ctx.fillStyle = '#3D5A4A';
   ctx.fillText(profile.code.split('').join('  '), W / 2, cy + 330);
 
   ctx.fillStyle = '#241C12';

@@ -8,6 +8,7 @@ import { DREAMER_BY_CODE, AXES } from '../shared/dreamers.js';
 import { GUIDE } from '../shared/config.js';
 import { TarotFrame } from './steps.jsx';
 import { sfx } from '../shared/sound.js';
+import { tellShell } from '../shared/zen.js';
 
 export function DreamerCard({ profile, big = false }) {
   const d = DREAMER_BY_CODE[profile.code];
@@ -62,6 +63,7 @@ export default function Reveal({ profile, onOpen }) {
     const t2 = setTimeout(() => {
       setPhase('shown');
       sfx.chime();
+      tellShell('reveal');
       if (navigator.vibrate) navigator.vibrate([20, 30, 20, 30, 80]);
     }, 3700);
     return () => {
