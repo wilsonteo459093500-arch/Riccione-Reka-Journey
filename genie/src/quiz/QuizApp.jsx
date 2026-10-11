@@ -1,17 +1,26 @@
-// 梦想家占卜 —— 主流程（状态机）。
+// 许愿之旅 —— 主流程（状态机）。
 // 路由：
 //   quiz.html                    从头开始（?from=wilson&for=Peggy 预填陪同人 / 称呼）
-//   quiz.html#bp=<编码档案>       打开一份分享出去的蓝图
+//   quiz.html#bp=<编码档案>       打开一份分享出去的蓝图（?staff=1 才有设计师版）
 //   quiz.html#id=<档案号>         打开本机存档里的蓝图
+//   ?mode=wish                   在许愿模式外壳里（外壳管音乐、员工区、语言）
+//
+// 视觉：白天的纸 + 风景（每一章一个地方）；擦神灯、章节翻牌、揭晓进入暮色（.dusk）。
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronLeft, Volume2, VolumeX, RotateCcw, Play as PlayIcon } from 'lucide-react';
 import Pangie from '../shared/Pangie.jsx';
-import { BRAND, GUIDE } from '../shared/config.js';
-import { CHAPTERS, STEPS, PAIRS, LIFE, APPLIANCES } from './flow.js';
+import LangToggle from '../shared/LangToggle.jsx';
+import { BRAND, CONFIG } from '../shared/config.js';
+import { CHAPTERS, STEPS, PAIRS, LIFE, APPLIANCES, WISHES } from './flow.js';
 import { buildProfile, saveToArchive, unpackJSON, findInArchive, storagePlan } from '../shared/profile.js';
 import { profileText, postProfile } from '../shared/summary.js';
 import { isMuted, setMuted, sfx } from '../shared/sound.js';
 import { isWishMode, tellShell } from '../shared/zen.js';
+import { t, guideName, setLang } from '../shared/i18n.js';
+import Scenery from './Scenery.jsx';
+import { sceneFor } from './scenes.js';
+import Stones from './Stones.jsx';
 import {
   Welcome,
   LampRub,
@@ -28,14 +37,18 @@ import {
   SplurgeStep,
   NogoStep,
   OneWishStep,
+  shuffled,
 } from './steps.jsx';
 import Reveal from './Reveal.jsx';
 import Blueprint from './Blueprint.jsx';
 
 const SESSION_KEY = 'genie.session.v1';
+const STALE_MS = 10 * 60 * 1000;
+const WISH = isWishMode();
+const DUSK_STEPS = new Set(['lamp', 'reveal']);
 
-const INITIAL = {
-  name: '',
+const initialAnswers = (name = '') => ({
+  name,
   players: 'solo',
   pairs: {},
   life: {},
@@ -47,14 +60,17 @@ const INITIAL = {
   appliances: [],
   bulky: [],
   ratio: 25,
+  ratioTouched: false,
+  touched: {},
   wishes: [],
+  wishOrder: shuffled(WISHES.map((w) => w.v)),
   splurge: '',
   avoid: [],
   oneWish: '',
-};
+});
 
 const ENTER_LINES = {
-  pair: ['别想太多，3 秒！', '第一感觉最准 ✨', '跟着心走～', '不用解释，选就对了', '这题很多人会犹豫哦', '潘吉在看你的直觉 👀'],
+  pair: ['第一眼喜欢哪个？', '第一感觉最准 ✨', '跟着心走～', '不用解释，选就对了', '看图就好，没有对错 🌿', '潘吉在看你的直觉 👀'],
   life: ['想象一个普通的星期六 ☀️', '说真话，潘吉不会笑你', '生活怎么过，家就怎么做'],
   shoes: '潘吉在数鞋子… 👀 大概就好',
   wardrobe: '衣柜是全屋定制的心脏 ❤️',
@@ -68,6 +84,13 @@ const ENTER_LINES = {
   onewish: '最后一句，潘吉会抄在蓝图上 ✍️',
 };
 
+/** 潘吉的对话泡泡里不放 emoji（安静一点、精致一点） */
+const plain = (s) =>
+  String(s || '')
+    .replace(/[\p{Extended_Pictographic}️‍]/gu, '')
+    .replace(/\s+([！？。，])/g, '$1')
+    .trim();
+
 function loadSession() {
   try {
     const s = JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null');
@@ -78,6 +101,14 @@ function loadSession() {
   return null;
 }
 
+function clearSession() {
+  try {
+    sessionStorage.removeItem(SESSION_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 function parseRoute() {
   const h = location.hash.slice(1);
   if (h.startsWith('bp=')) return { kind: 'bp', packed: h.slice(3) };
@@ -85,74 +116,112 @@ function parseRoute() {
   return { kind: 'play' };
 }
 
-function Constellation({ chapter }) {
-  const idx = CHAPTERS.findIndex((c) => c.id === chapter);
-  return (
-    <div className="constellation" aria-label="进度">
-      {CHAPTERS.map((c, i) => (
-        <span key={c.id} className={`star ${i < idx ? 'done' : i === idx ? 'now' : ''}`} title={c.zh}>
-          <i>✦</i>
-          <em>{c.num}</em>
-        </span>
-      ))}
-    </div>
-  );
-}
-
-const WISH = isWishMode();
-
-function TopBar({ chapter, onBack, canBack, progress }) {
+function TopBar({ chapter, sub, onBack, canBack, progress, done }) {
   const [mute, setMute] = useState(isMuted());
   return (
     <header className="topbar">
-      <button type="button" className="icon-btn" onClick={onBack} disabled={!canBack} aria-label="上一步">
-        ←
-      </button>
-      <div className="brand">
-        <b>{BRAND.app}</b>
-        <span>{BRAND.by}</span>
-      </div>
-      {chapter ? <Constellation chapter={chapter} /> : <div className="constellation-ph" />}
-      <div className="progress-pct" title="蓝图完成度">
-        蓝图 {Math.round(progress * 100)}%
-      </div>
-      {WISH ? (
-        <span className="icon-btn-ph" />
-      ) : (
-        <button
-          type="button"
-          className="icon-btn"
-          onClick={() => {
-            setMuted(!mute);
-            setMute(!mute);
-          }}
-          aria-label={mute ? '打开声音' : '静音'}
-        >
-          {mute ? '🔇' : '🔊'}
+      <div className="tb-left">
+        <button type="button" className="nav-back" onClick={onBack} disabled={!canBack} aria-label={t('上一题')}>
+          <ChevronLeft size={22} strokeWidth={2} aria-hidden="true" />
+          <span>{t('上一题')}</span>
         </button>
-      )}
+        <div className="brand tb-brand">
+          <b>{BRAND.app}</b>
+          <span>{BRAND.by}</span>
+        </div>
+      </div>
+      <div className="tb-mid">
+        <Stones chapter={chapter} sub={sub} done={done} />
+      </div>
+      <div className="tb-right">
+        <span className="progress-pct" title={t('蓝图完成度')}>
+          {t('蓝图 {0}%', [Math.round(progress * 100)])}
+        </span>
+        <LangToggle compact />
+        {!WISH && (
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={() => {
+              setMuted(!mute);
+              setMute(!mute);
+            }}
+            aria-label={mute ? t('打开声音') : t('静音')}
+            aria-pressed={mute}
+          >
+            {mute ? <VolumeX size={20} strokeWidth={1.8} /> : <Volume2 size={20} strokeWidth={1.8} />}
+          </button>
+        )}
+      </div>
     </header>
   );
 }
 
 function Companion({ mood, line, prop }) {
+  const text = plain(line);
   return (
     <aside className="companion" aria-live="polite">
-      <div className="bubble" key={line}>
-        {line}
-      </div>
-      <Pangie mood={mood} prop={prop} size={118} />
+      {text && (
+        <div className="bubble" key={text}>
+          {text}
+        </div>
+      )}
+      <Pangie mood={mood} prop={prop} size={112} />
     </aside>
   );
 }
 
-function Play({ onDone }) {
+/** 一张安静的小卡片：潘吉 + 一句话 + 两个大按钮（闲置提示 / 继续上次的进度） */
+function Prompt({ title, body, primary, secondary }) {
+  return (
+    <div className="prompt-veil" role="dialog" aria-modal="true" aria-label={title}>
+      <div className="prompt">
+        <Pangie mood="think" prop="none" size={104} float={false} />
+        <h2 className="h-title">{title}</h2>
+        {body && <p className="lead">{body}</p>}
+        <div className="prompt-actions">
+          {secondary}
+          {primary}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Countdown({ ms }) {
+  const [left, setLeft] = useState(Math.ceil(ms / 1000));
+  useEffect(() => {
+    const end = Date.now() + ms;
+    const id = setInterval(() => setLeft(Math.max(0, Math.ceil((end - Date.now()) / 1000))), 500);
+    return () => clearInterval(id);
+  }, [ms]);
+  return <>{t('{0} 秒后，潘吉会为下一位客人重新开始。', [left])}</>;
+}
+
+function Play({ onDone, onRestart }) {
   const params = useMemo(() => new URLSearchParams(location.search), []);
-  const saved = useMemo(loadSession, []);
+  const saved = useMemo(() => {
+    const s = loadSession();
+    if (!s) return null;
+    // 许愿模式：超过 10 分钟的旧进度 = 上一位客人留下的，直接重新开始
+    if (WISH && s.idx > 0 && Date.now() - (s.ts || 0) > STALE_MS) {
+      clearSession();
+      return null;
+    }
+    return s;
+  }, []);
   const [idx, setIdx] = useState(saved?.idx ?? 0);
-  const [answers, setAnswers] = useState(() => saved?.answers || { ...INITIAL, name: params.get('for') || '' });
+  const [answers, setAnswers] = useState(() => {
+    if (!saved?.answers) return initialAnswers(params.get('for') || '');
+    const restored = { ...initialAnswers(), ...saved.answers };
+    // 旧版本存下的进度没有这两个字段：保持 undefined（= 当作动过），不要替客人补成「没动过」
+    if (saved.answers.ratioTouched === undefined) delete restored.ratioTouched;
+    if (saved.answers.touched === undefined) delete restored.touched;
+    return restored;
+  });
   const [pangie, setPangie] = useState({ mood: 'idle', line: '' });
-  const [profile, setProfile] = useState(null);
+  const [resume, setResume] = useState(() => !WISH && !!saved && saved.idx > 0 && Date.now() - (saved.ts || 0) > STALE_MS);
+  const [idlePrompt, setIdlePrompt] = useState(false);
   const reactTimer = useRef(null);
 
   const step = STEPS[idx];
@@ -161,20 +230,22 @@ function Play({ onDone }) {
   useEffect(() => {
     if (step.id === 'reveal') return;
     try {
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify({ idx, answers }));
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify({ idx, answers, ts: Date.now() }));
     } catch {
       /* ignore */
     }
   }, [idx, answers, step.id]);
 
   const set = useCallback((patch) => setAnswers((a) => ({ ...a, ...patch })), []);
-  const next = useCallback(() => setIdx((i) => Math.min(STEPS.length - 1, i + 1)), []);
-  const back = useCallback(() => setIdx((i) => Math.max(0, i - 1)), []);
+  // 只在「还是同一题」时前进 / 后退：连点、过期的计时器都不会多跳一题
+  const next = useCallback(() => setIdx((i) => (i === idx ? Math.min(STEPS.length - 1, i + 1) : i)), [idx]);
+  const back = useCallback(() => setIdx((i) => (i === idx ? Math.max(0, i - 1) : i)), [idx]);
   const say = useCallback((mood, line, ms = 1600) => {
     clearTimeout(reactTimer.current);
     setPangie({ mood, line });
     reactTimer.current = setTimeout(() => setPangie((p) => ({ ...p, mood: 'idle' })), ms);
   }, []);
+  useEffect(() => () => clearTimeout(reactTimer.current), []);
 
   // 进入每一关时，潘吉说一句
   useEffect(() => {
@@ -186,11 +257,47 @@ function Play({ onDone }) {
     } else if (kind === 'life') line = LIFE.find((l) => l.id === sub)?.whisper || ENTER_LINES.life[LIFE.findIndex((l) => l.id === sub) % 3];
     else line = ENTER_LINES[kind] || '';
     const ch = CHAPTERS.find((c) => c.id === step.chapter);
-    setPangie({ mood: ch?.mode === 'slow' ? 'think' : 'idle', line });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setPangie({ mood: ch?.mode === 'slow' ? 'think' : 'idle', line: line ? t(line) : '' });
+    window.scrollTo(0, 0);
     if (step.interlude) tellShell('chapter', { chapter: step.chapter });
     if (step.id === 'welcome') tellShell('page', { page: 'quiz' });
   }, [step.id, step.chapter, step.interlude]);
+
+  // 许愿模式：一题停了 3 分钟没人碰 → 「还在吗？」；再 30 秒没回应 → 告诉外壳换下一位客人
+  useEffect(() => {
+    if (!WISH || idx === 0 || step.id === 'reveal') return undefined;
+    const { quizMs = 180000, promptMs = 30000 } = CONFIG.idle || {};
+    let t1;
+    let t2;
+    let t3;
+    const fire = () => {
+      tellShell('idle-reset');
+      // 没有外壳（直接打开 ?mode=wish）或外壳没回应：自己重新开始
+      t3 = setTimeout(onRestart, window.parent === window ? 0 : 2500);
+    };
+    const arm = () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      t1 = setTimeout(() => {
+        setIdlePrompt(true);
+        t2 = setTimeout(fire, promptMs);
+      }, quizMs);
+    };
+    const onAct = () => {
+      setIdlePrompt(false);
+      arm();
+    };
+    arm();
+    window.addEventListener('pointerdown', onAct, true);
+    window.addEventListener('keydown', onAct, true);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      window.removeEventListener('pointerdown', onAct, true);
+      window.removeEventListener('keydown', onAct, true);
+    };
+  }, [idx, step.id, onRestart]);
 
   const finish = async (oneWish) => {
     const full = { ...answers, oneWish };
@@ -198,17 +305,16 @@ function Play({ onDone }) {
     saveToArchive(p);
     postProfile(p, profileText(p, storagePlan(p.storage, APPLIANCES)));
     setProfile(p);
-    try {
-      sessionStorage.removeItem(SESSION_KEY);
-    } catch {
-      /* ignore */
-    }
+    clearSession();
     setIdx(STEPS.findIndex((s) => s.id === 'reveal'));
   };
+  const [profile, setProfile] = useState(null);
 
+  const questions = STEPS.filter((s) => !s.interlude && s.chapter);
   const answered = STEPS.slice(0, idx).filter((s) => !s.interlude && s.chapter).length;
-  const totalQ = STEPS.filter((s) => !s.interlude && s.chapter).length;
-  const progress = answered / totalQ;
+  const progress = step.id === 'reveal' ? 1 : answered / questions.length;
+  const chQs = questions.filter((s) => s.chapter === step.chapter);
+  const subProgress = chQs.length ? (chQs.findIndex((s) => s.id === step.id) + 1) / chQs.length : 0;
 
   let body = null;
   const [kind, sub] = step.id.split(':');
@@ -226,9 +332,10 @@ function Play({ onDone }) {
         pair={PAIRS[pairIdx]}
         index={pairIdx}
         total={PAIRS.length}
-        onPick={(pick, ms, reaction) => {
-          setAnswers((a) => ({ ...a, pairs: { ...a.pairs, [sub]: { pick, ms } } }));
-          say(ms < 1600 ? 'wow' : 'happy', ms < 1600 ? `秒选！${reaction || ''}` : reaction || '收到 ✨', 900);
+        timed={(answers.players || 'solo') === 'solo'}
+        onPick={(pick, ms, reaction, left) => {
+          setAnswers((a) => ({ ...a, pairs: { ...a.pairs, [sub]: { pick, ms, left } } }));
+          say('happy', reaction ? t(reaction) : t('收到 ✨'), 900);
           setTimeout(next, 650);
         }}
       />
@@ -257,16 +364,70 @@ function Play({ onDone }) {
   else if (step.id === 'onewish') body = <OneWishStep {...props} finish={finish} />;
   else if (step.id === 'reveal' && profile) body = <Reveal profile={profile} onOpen={() => onDone(profile)} />;
 
+  const dusk = DUSK_STEPS.has(step.id) || !!step.interlude;
+  const scene = sceneFor(step);
+  const nextScene = sceneFor(STEPS[idx + 1]);
   const showCompanion = !['welcome', 'lamp', 'reveal'].includes(step.id) && !step.interlude;
   const chapter = CHAPTERS.find((c) => c.id === step.chapter);
 
+  useEffect(() => {
+    document.body.classList.toggle('is-dusk', dusk);
+    return () => document.body.classList.remove('is-dusk');
+  }, [dusk]);
+
   return (
-    <div className={`play chapter-${step.chapter || 'none'} mode-${chapter?.mode || 'none'}`}>
-      <TopBar chapter={step.chapter} onBack={back} canBack={idx > 0 && step.id !== 'reveal'} progress={step.id === 'reveal' ? 1 : progress} />
-      <main className="stage" key={step.id}>
+    <div className={`qz ${dusk ? 'dusk' : 'morning'} step-${kind} mode-${chapter?.mode || 'none'} ${step.id === 'welcome' ? 'is-cover' : ''}`}>
+      <Scenery scene={scene} next={nextScene} />
+      {step.id !== 'welcome' && (
+        <TopBar
+          chapter={step.chapter}
+          sub={subProgress}
+          onBack={back}
+          canBack={idx > 0 && step.id !== 'reveal'}
+          progress={progress}
+          done={step.id === 'reveal'}
+        />
+      )}
+      <main className={`stage ${showCompanion ? 'has-companion' : ''}`} key={step.id}>
         {body}
       </main>
       {showCompanion && <Companion mood={pangie.mood} line={pangie.line} prop={step.chapter === 'treasure' ? 'magnifier' : 'ball'} />}
+      {idlePrompt && (
+        <Prompt
+          title={t('还在吗？')}
+          body={<Countdown ms={(CONFIG.idle || {}).promptMs || 30000} />}
+          secondary={
+            <button type="button" className="btn btn-line big" onClick={onRestart}>
+              <RotateCcw size={18} strokeWidth={1.8} aria-hidden="true" />
+              <span>{t('重新开始')}</span>
+            </button>
+          }
+          primary={
+            <button type="button" className="btn btn-primary big" onClick={() => setIdlePrompt(false)}>
+              <PlayIcon size={18} strokeWidth={1.8} aria-hidden="true" />
+              <span>{t('继续')}</span>
+            </button>
+          }
+        />
+      )}
+      {resume && (
+        <Prompt
+          title={answers.name ? t('继续 {0} 上次的进度？', [answers.name]) : t('继续上次的进度？')}
+          body={t('也可以从头开始，给下一位客人。')}
+          secondary={
+            <button type="button" className="btn btn-line big" onClick={onRestart}>
+              <RotateCcw size={18} strokeWidth={1.8} aria-hidden="true" />
+              <span>{t('重新开始')}</span>
+            </button>
+          }
+          primary={
+            <button type="button" className="btn btn-primary big" onClick={() => setResume(false)}>
+              <PlayIcon size={18} strokeWidth={1.8} aria-hidden="true" />
+              <span>{t('继续')}</span>
+            </button>
+          }
+        />
+      )}
     </div>
   );
 }
@@ -279,11 +440,40 @@ export default function QuizApp() {
   const [round, setRound] = useState(0);
 
   useEffect(() => {
+    document.title = t('许愿之旅 · WISH by Riccione Reka');
+  }, []);
+
+  const restart = useCallback(() => {
+    setProfile(null);
+    setFresh(false);
+    setError('');
+    clearSession();
+    try {
+      // 下一位客人：不要带着上一位的称呼（?for=）
+      const u = new URL(location.href);
+      u.searchParams.delete('for');
+      history.replaceState(null, '', u.pathname + u.search);
+    } catch {
+      /* ignore */
+    }
+    setMuted(false, { persist: false });
+    setRoute({ kind: 'play' });
+    setRound((r) => r + 1);
+    window.scrollTo(0, 0);
+  }, []);
+  const restartRef = useRef(restart);
+  restartRef.current = restart;
+
+  useEffect(() => {
     const onHash = () => setRoute(parseRoute());
     window.addEventListener('hashchange', onHash);
-    // 许愿模式外壳可以关掉音效
+    // 许愿模式外壳 → 这一页
     const onMsg = (e) => {
-      if (e.origin === location.origin && e.data?.source === 'genie-shell' && e.data.type === 'sfx') setMuted(!!e.data.muted);
+      if (e.origin !== location.origin || e.data?.source !== 'genie-shell') return;
+      const { type } = e.data;
+      if (type === 'sfx') setMuted(!!e.data.muted, { persist: false });
+      else if (type === 'restart') restartRef.current();
+      else if (type === 'lang') setLang(e.data.lang);
     };
     window.addEventListener('message', onMsg);
     return () => {
@@ -296,55 +486,40 @@ export default function QuizApp() {
     let alive = true;
     if (route.kind === 'bp') {
       unpackJSON(route.packed)
-        .then((p) => alive && (p?.code ? setProfile(p) : setError('这条蓝图链接打不开，可能复制时少了一截。')))
-        .catch(() => alive && setError('这条蓝图链接打不开，可能复制时少了一截。'));
+        .then((p) => alive && (p?.code ? setProfile(p) : setError(t('这条蓝图链接打不开，可能复制时少了一截。'))))
+        .catch(() => alive && setError(t('这条蓝图链接打不开，可能复制时少了一截。')));
     } else if (route.kind === 'id') {
       const p = findInArchive(route.id);
-      p ? setProfile(p) : setError('这台设备上找不到这份蓝图。');
+      p ? setProfile(p) : setError(t('这台设备上找不到这份蓝图。'));
     }
     return () => {
       alive = false;
     };
   }, [route]);
 
-  const restart = () => {
-    setProfile(null);
-    setFresh(false);
-    setError('');
-    try {
-      sessionStorage.removeItem(SESSION_KEY);
-    } catch {
-      /* ignore */
-    }
-    history.replaceState(null, '', location.pathname + location.search);
-    setRoute({ kind: 'play' });
-    setRound((r) => r + 1);
-    sfx.tap();
-  };
-
   if (error)
     return (
-      <div className="play">
+      <div className="qz morning is-plain">
         <main className="stage">
-          <div className="step center">
-            <Pangie mood="think" size={170} />
+          <div className="step step-note">
+            <Pangie mood="think" size={150} />
             <h2 className="h-title">{error}</h2>
-            <button type="button" className="btn-gold" onClick={restart}>
-              重新许愿
+            <button type="button" className="btn btn-gold big" onClick={restart}>
+              <span>{t('重新许愿')}</span>
             </button>
           </div>
         </main>
       </div>
     );
 
-  if (profile) return <Blueprint profile={profile} fresh={fresh} onRestart={restart} />;
+  if (profile) return <Blueprint key={profile.id} profile={profile} fresh={fresh} onRestart={restart} />;
   if (route.kind !== 'play')
     return (
-      <div className="play">
+      <div className="qz morning is-plain">
         <main className="stage">
-          <div className="step center">
-            <Pangie mood="mystic" size={150} />
-            <p className="lead center">{GUIDE.name}正在打开蓝图…</p>
+          <div className="step step-note">
+            <Pangie mood="mystic" size={140} />
+            <p className="lead center">{t('{0}正在打开蓝图…', [guideName()])}</p>
           </div>
         </main>
       </div>
@@ -352,12 +527,18 @@ export default function QuizApp() {
   return (
     <Play
       key={round}
+      onRestart={restart}
       onDone={(p) => {
         setFresh(true);
         setProfile(p);
+        // 留住做好的蓝图：返回 / 重新整理 / iPad 收掉分页后还在（Blueprint 打包好后会换成 #bp=…）
+        try {
+          history.replaceState(null, '', `${location.pathname}${location.search}#id=${encodeURIComponent(p.id)}`);
+        } catch {
+          /* ignore */
+        }
         window.scrollTo(0, 0);
       }}
     />
   );
 }
-
