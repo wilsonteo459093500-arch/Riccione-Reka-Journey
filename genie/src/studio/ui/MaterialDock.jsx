@@ -129,8 +129,7 @@ export default function MaterialDock({ project, slot, engine, onDrop, onAddItem,
 
   return (
     <>
-      <div className="dock-wrap">
-        <div className="glass dock">
+      <div className="glass dock">
           <div className="dock-head">
             <div className="seg seg-dock" role="tablist" aria-label={t('材质类别')}>
               {tabs.map((c) => (
@@ -183,7 +182,6 @@ export default function MaterialDock({ project, slot, engine, onDrop, onAddItem,
                   );
                 })}
           </div>
-        </div>
       </div>
       {ghost && (
         <div className={`drag-ghost ${ghost.ok ? 'ok' : 'bad'}`} style={{ left: ghost.x, top: ghost.y }}>

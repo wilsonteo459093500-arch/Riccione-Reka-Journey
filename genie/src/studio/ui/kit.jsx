@@ -96,6 +96,7 @@ import {
   Boxes,
 } from 'lucide-react';
 import { t, L, isEn } from '../../shared/i18n.js';
+import { ROOM_TYPES } from '../plan/model.js';
 
 const ICONS = {
   undo: Undo2,
@@ -220,8 +221,13 @@ export function slotName(s) {
   return e.charAt(0).toUpperCase() + e.slice(1);
 }
 
-/** 家具 / 房间类型 / 模板这类 {zh, en} 的名字 */
-export const nameOf = (o) => L(o);
+/** 房间名：默认名（客厅 / Living…）跟着语言走；模板里的名字（次卧…）查词典；自己改过的名字原样 */
+export function roomLabel(r) {
+  if (!r) return '';
+  const type = ROOM_TYPES[r.type];
+  if (!r.name || (type && (r.name === type.zh || r.name === type.en))) return L(type) || r.name || '';
+  return t(r.name);
+}
 
 export function IconBtn({ icon, label, onClick, active, disabled, className = '', text, size = 18, pressed }) {
   return (

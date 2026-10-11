@@ -128,7 +128,7 @@ function Launcher() {
             }}
           >
             <span className="ln-lamp" aria-hidden="true">
-              <Lamp size={76} glow={1} />
+              <Lamp size={86} glow={1} />
             </span>
             <span className="ln-wish-text">
               <b id="ln-wish-title">{wishName.main}</b>

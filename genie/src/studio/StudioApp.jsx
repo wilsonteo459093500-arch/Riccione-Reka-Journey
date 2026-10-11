@@ -1,38 +1,167 @@
-// 3D 梦想工作室 —— 主界面。
-// 路由：studio.html                上次的方案（第一次来：直接打开示范户型，3 秒内看到东西 = 系统 1 的「哇」）
-//       studio.html#p=<档案>       从占卜蓝图进来：套用客人的材质、收纳、生活习惯
-//       studio.html#s=<方案>       别人分享的方案（打开后存成自己的一份）
+// 3D 梦想工作室（WISH Studio）—— 主界面，给设计师 / 销售用。深色画布 + 纸色磨砂玻璃面板（VI「晨光溪岸」）。
+// 路由：studio.html                上次的方案（第一次来：直接打开示范户型，3 秒内看到东西）
+//       studio.html#p=<档案>       从许愿之旅的蓝图进来：套用客人的材质、收纳、生活习惯（客人的雷区一律避开）
+//       studio.html#s=<方案>       别人分享的方案（打开后存成自己的一份：新 id，不会盖掉原稿）
+//       studio.html?demo=1         展厅大屏：示范户型 + 自动环绕 + 一天的光影循环；只留一个小小的 WISH 字标，不出现客人名字
+//       studio.html?mode=wish      客户许愿模式（外壳 iframe 里）：底座写「示范户型 · 概念示意」，语言跟着外壳
+//       ?lang=en                   英文（中文原文就是 key，见 shared/i18n.js）
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Engine } from './engine/Engine.js';
 import { buildWalls, templatePlan, uid } from './plan/model.js';
-import { furnish } from './engine/furnish.js';
+import * as Furnish from './engine/furnish.js';
 import { CATALOG } from './engine/furniture.js';
-import { createProject, loadProjects, saveProject, currentProject, packProject, unpackProject, getUnderlay, putUnderlay } from './store.js';
-import { unpackJSON, packJSON } from '../shared/profile.js';
-import { MOOD_BY_ID } from '../shared/moods.js';
+import { DAY_PRESETS } from './engine/daylight.js';
+import { createProject, loadProjects, saveProject, currentProject, packProject, unpackProject, getUnderlay, putUnderlay, loadSettings, safeMaterials } from './store.js';
+import { unpackJSON, packJSON, storagePlan, insights } from '../shared/profile.js';
+import { APPLIANCES } from '../quiz/flow.js';
+import { MOOD_BY_ID, tagsOf } from '../shared/moods.js';
+import { AVOID_LABEL } from '../shared/summary.js';
 import { DREAMER_BY_CODE } from '../shared/dreamers.js';
 import { MAT_BY_ID, fits, misfitHint, DEFAULT_SLOT_FOR_CAT, SLOT_BY_ID } from '../shared/materials.js';
 import { BRAND } from '../shared/config.js';
-import { DAY_PRESETS } from './engine/daylight.js';
+import { t, L, isEn, setLang } from '../shared/i18n.js';
+import { isWishMode, tellShell } from '../shared/zen.js';
 import MoodPanel from './ui/MoodPanel.jsx';
 import DaylightPanel from './ui/DaylightPanel.jsx';
 import MaterialDock from './ui/MaterialDock.jsx';
 import Callouts from './ui/Callouts.jsx';
-import SunArc from './ui/SunArc.jsx';
 import Toolbar from './ui/Toolbar.jsx';
 import { HoverTip, SelectionBar } from './ui/ItemUI.jsx';
+import { Icon, FurnIcon, ConfirmSheet, slotName, listSep, roomLabel } from './ui/kit.jsx';
 import StartModal from './ui/StartModal.jsx';
 import ShareModal from './ui/ShareModal.jsx';
 import HelpModal from './ui/HelpModal.jsx';
 import SettingsModal from './ui/SettingsModal.jsx';
 import PlanEditor from './plan/PlanEditor.jsx';
-import { isWishMode, tellShell } from '../shared/zen.js';
 
 const WISH = isWishMode();
+const SHOWROOM = !WISH && new URLSearchParams(location.search).get('demo') === '1';
 
 const HISTORY = 60;
-const snap = (p) => ({ materials: { ...p.materials }, furniture: p.furniture.map((f) => ({ ...f })), time: p.time, mood: p.mood });
+const snap = (p) => ({ materials: { ...p.materials }, furniture: p.furniture.map((f) => ({ ...f })), time: p.time, mood: p.mood, plan: p.plan, furnEdited: p.furnEdited });
+
+/** 自动画质：电脑高清，iPad / 手机流畅（引擎有自己的判断就用引擎的） */
+const autoQuality = (e) => e?.autoQuality?.() || (matchMedia('(pointer: coarse)').matches ? 'fast' : 'high');
+
+/** 锚点几乎没动（< 0.5px）就不重画整个界面 */
+function anchorsSame(a, b) {
+  if (a === b) return true;
+  if (!a || !b || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const p = a[i];
+    const q = b[i];
+    if (p.slot !== q.slot || p.visible !== q.visible || Math.abs(p.x - q.x) > 0.5 || Math.abs(p.y - q.y) > 0.5) return false;
+  }
+  return true;
+}
+
+// ───────────────────────── 收纳对账（只给设计师看） ─────────────────────────
+
+const ROW_LABEL = { 'wardrobe:master': '主卧衣柜', shoe: '鞋柜', tall: '电器高柜', store: '储物间', books: '书墙', counter: '台面家电区', dining: '餐位', altar: '神台' };
+const ROW_ICON = { wardrobe: 'wardrobe', shoeCabinet: 'shoeCabinet', tallUnit: 'tallUnit', store: 'store', bookshelf: 'bookshelf', kitchenRun: 'kitchenRun', diningTable: 'diningTable', altar: 'altar' };
+const fmtLen = (mm) => `${Math.round((Number(mm) || 0) / 10) / 100} m`;
+
+function rowLabel(r, plan) {
+  if (ROW_LABEL[r.key]) return t(ROW_LABEL[r.key]);
+  if (r.key.startsWith('wardrobe:')) return t('{0}衣柜', [roomLabel(plan.rooms.find((x) => x.id === r.room))]);
+  return r.key;
+}
+function rowValue(r) {
+  if (r.unit === 'mm') return `${fmtLen(r.placed)} / ${fmtLen(r.target)}`;
+  if (r.unit === 'seats') return t('{0} / {1} 座', [r.placed, r.target]);
+  return `${r.placed} / ${r.target}`;
+}
+function rowGap(r) {
+  if (r.unit === 'mm') return fmtLen(r.gap);
+  if (r.unit === 'seats') return t('{0} 座', [r.gap]);
+  return String(r.gap);
+}
+
+function StorageCheck({ rows, plan, talk, onPick }) {
+  const [open, setOpen] = useState(() => {
+    try {
+      return localStorage.getItem('genie.studio.storageOpen') !== '0';
+    } catch {
+      return true;
+    }
+  });
+  const toggle = () => {
+    setOpen((o) => {
+      try {
+        localStorage.setItem('genie.studio.storageOpen', o ? '0' : '1');
+      } catch {
+        /* ignore */
+      }
+      return !o;
+    });
+  };
+  const short = rows.filter((r) => r.gap > 0).length;
+  return (
+    <section className={`storage ${open ? 'open' : ''}`}>
+      <button type="button" className="storage-head" onClick={toggle} aria-expanded={open}>
+        <span className="storage-ico">
+          <Icon name="storage" size={17} />
+        </span>
+        <span className="storage-title">
+          <b>{t('收纳对账')}</b>
+          <em>{short ? t('{0} 项还差一点', [short]) : t('客人数的收纳都放进去了')}</em>
+        </span>
+        <span className="tag-staff">{t('设计师')}</span>
+        <Icon name="down" size={16} className="storage-chev" />
+      </button>
+      {open && (
+        <div className="storage-body">
+          <p className="storage-note">{t('客人许愿时数的量 vs 3D 里自动摆进去的。点一行，选中那件家具。')}</p>
+          <ul className="storage-rows">
+            {rows.map((r) => {
+              const pct = r.target > 0 ? Math.min(1, r.placed / r.target) : 1;
+              const ok = r.gap <= 0;
+              return (
+                <li key={r.key}>
+                  <button type="button" className={`srow ${ok ? 'ok' : 'short'}`} onClick={() => onPick(r)}>
+                    <span className="srow-ico">
+                      <FurnIcon kind={ROW_ICON[r.kind] || r.kind} size={17} stroke={1.6} />
+                    </span>
+                    <span className="srow-main">
+                      <span className="srow-top">
+                        <b>{rowLabel(r, plan)}</b>
+                        <span className="srow-val">{rowValue(r)}</span>
+                        <Icon name={ok ? 'ok' : 'warn'} size={16} className="srow-state" />
+                      </span>
+                      <span className="srow-bar">
+                        <i style={{ width: `${Math.round(pct * 100)}%` }} />
+                      </span>
+                      {r.need != null && r.need > 0 && r.unit !== 'count' && (
+                        <span className="srow-need">{r.unit === 'mm' ? t('客人数的：{0}', [fmtLen(r.need)]) : t('想要 {0} 座', [r.need])}</span>
+                      )}
+                      {!ok && r.hint && <span className="srow-hint">{t('还差 {0}：{1}', [rowGap(r), t(r.hint)])}</span>}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          {talk.length > 0 && (
+            <details className="storage-talk">
+              <summary>{t('见面时要聊的（{0}）', [talk.length])}</summary>
+              <ul>
+                {talk.map((x, i) => (
+                  <li key={i} className={x.level}>
+                    <Icon name={x.level === 'conflict' ? 'warn' : 'info'} size={15} />
+                    <span>{x.text}</span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ───────────────────────── 主界面 ─────────────────────────
 
 export default function StudioApp() {
   const host = useRef(null);
@@ -55,109 +184,143 @@ export default function StudioApp() {
   const [thumbs, setThumbs] = useState([]);
   const [modal, setModal] = useState(null);
   const [toast, setToast] = useState('');
-  const [demo, setDemo] = useState(false);
+  const [demo, setDemo] = useState(SHOWROOM);
+  const [showroom, setShowroom] = useState(SHOWROOM);
+  const showroomRef = useRef(SHOWROOM);
+  showroomRef.current = showroom;
   const [panels, setPanels] = useState(() => (innerWidth > 900 ? 'open' : 'closed'));
   const [planDraft, setPlanDraft] = useState(null);
   const [incomingProfile, setIncomingProfile] = useState(null);
   const [bpLink, setBpLink] = useState('');
+  const [ctx, setCtx] = useState(null); // WebGL：null | 'lost' | 'restored'
+  const [ask, setAsk] = useState(null); // 纸色确认框
   const toastTimer = useRef(0);
 
-  const flash = useCallback((t, ms = 2200) => {
-    setToast(t);
+  const flash = useCallback((msg, ms = 2600) => {
+    if (showroomRef.current) return;
+    setToast(msg);
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(''), ms);
   }, []);
 
+  const confirmSheet = (o) => new Promise((res) => setAsk({ ...o, done: (v) => (setAsk(null), res(v)) }));
+  const saveNow = () => !showroomRef.current && projRef.current && saveProject(projRef.current);
+
   // ── 引擎 ──
   useEffect(() => {
     const e = new Engine(host.current, {
-      onAnchors: (a) => setAnchors(a),
+      onAnchors: (a) => setAnchors((prev) => (anchorsSame(prev, a) ? prev : a)),
       onHover: (h) => setHover(h),
       onSelect: (id) => setSelected(id),
-      onSelMove: (p) => setSelPos(p),
-      onMove: (id, x, z) => updateFurniture((list) => list.map((f) => (f.id === id ? { ...f, x: +x.toFixed(3), z: +z.toFixed(3) } : f)), true),
-      onInteract: () => setDemo(false),
+      onSelMove: (p) => setSelPos((prev) => (p && prev && Math.abs(prev.x - p.x) < 0.5 && Math.abs(prev.y - p.y) < 0.5 ? prev : p)),
+      onMove: (id, x, z) => updateFurniture((list) => list.map((f) => (f.id === id ? { ...f, x: +x.toFixed(3), z: +z.toFixed(3) } : f))),
+      onInteract: () => !showroomRef.current && setDemo(false),
+      onContextLost: () => setCtx('lost'),
+      onContextRestored: () => setCtx('restored'),
     });
     engine.current = e;
     window.__genie = e;
+    // 画布被系统收回（iPad 显存紧张）：引擎还没接这个回调时，界面自己也听一下
+    const cv = e.renderer?.domElement;
+    const lost = () => setCtx((c) => c || 'lost');
+    cv?.addEventListener('webglcontextlost', lost);
+    // 本机选过的画质（设置里存的）：引擎还没读设置的话，这里补上
+    const q = loadSettings().quality;
+    if (q && e.quality !== q) e.setQuality?.(q);
     boot();
-    return () => e.dispose();
+    return () => {
+      cv?.removeEventListener('webglcontextlost', lost);
+      e.dispose();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function boot() {
-    const h = location.hash.slice(1);
     let p = null;
-    try {
-      if (h.startsWith('p=')) {
-        const prof = await unpackJSON(h.slice(2));
-        if (prof?.code) {
-          setIncomingProfile(prof);
-          const existing = loadProjects().find((x) => x.profile?.id === prof.id);
-          p = existing || createProject({ plan: templatePlan('condo3'), profile: prof });
-          // 许愿模式：客人直接看到自己的家（示范户型 + 他的材质），设计师再用 ✏️ 换成真实平面图
-          if (!existing && !WISH) setModal('start');
-        }
-      } else if (h.startsWith('s=')) {
-        p = await unpackProject(h.slice(2));
-        flash('已打开分享的方案（改动会存成你自己的一份）', 3200);
-      }
-    } catch {
-      flash('链接打不开，先给你看示范户型');
-    }
-    if (!p) p = currentProject();
-    if (!p) {
+    if (SHOWROOM) {
+      // 展厅：永远是示范户型，不读本机方案、不读链接 → 底座上只会是品牌字样
       p = createProject({ plan: templatePlan('condo3'), mood: 'cozy' });
-      setTimeout(() => flash('这是示范户型 —— 点右上角 ✏️ 上传你的平面图', 4200), 1600);
+    } else {
+      const h = location.hash.slice(1);
+      try {
+        if (h.startsWith('p=')) {
+          const prof = await unpackJSON(h.slice(2));
+          if (prof?.code) {
+            setIncomingProfile(prof);
+            const existing = loadProjects().find((x) => x.profile?.id === prof.id);
+            p = existing || createProject({ plan: templatePlan('condo3'), profile: prof });
+            // 许愿模式：客人直接看到自己的家（示范户型 + 他的材质），设计师再换成真实平面图
+            if (!existing && !WISH) setModal('start');
+          }
+        } else if (h.startsWith('s=')) {
+          p = await unpackProject(h.slice(2));
+          flash(t('已打开分享的方案（改动会存成你自己的一份）'), 3400);
+        }
+      } catch {
+        flash(t('链接打不开，先给你看示范户型'));
+      }
+      if (!p) p = currentProject();
+      if (!p) {
+        p = createProject({ plan: templatePlan('condo3'), mood: 'cozy' });
+        setTimeout(() => flash(t('这是示范户型 —— 点右上角「平面图」上传你的平面图'), 4600), 1600);
+      }
     }
     history.replaceState(null, '', location.pathname + location.search);
     loadProjectIntoEngine(p, true);
     tellShell('page', { page: 'studio' });
   }
 
-  function loadProjectIntoEngine(p, frame = true) {
+  /** 底座上的字：客人名字 + 梦想家；许愿模式 / 展厅写明「示范户型 · 概念示意」；展厅从不出现客人名字 */
+  function plinthOf(p) {
+    if (showroomRef.current) return { title: BRAND.plinth, subtitle: t('示范户型 · 概念示意') };
+    const d = p.profile && DREAMER_BY_CODE[p.profile.code];
+    const title = p.profile?.name ? `${String(p.profile.name).toUpperCase()} · DREAM HOME` : BRAND.plinth;
+    let subtitle = d ? (isEn() ? `${d.num} · ${d.en}` : `${d.num} ${d.zh} · ${d.en}`) : BRAND.full;
+    if (WISH) subtitle = t('示范户型 · 概念示意');
+    return { title, subtitle };
+  }
+
+  function loadProjectIntoEngine(p, frame = true, { keepHistory = false } = {}) {
     const e = engine.current;
     const walls = buildWalls(p.plan);
-    const d = p.profile && DREAMER_BY_CODE[p.profile.code];
-    e.setScene({
-      plan: p.plan,
-      walls,
-      furniture: p.furniture,
-      materials: p.materials,
-      time: p.time,
-      title: p.profile?.name ? `${String(p.profile.name).toUpperCase()} · DREAM HOME` : BRAND.plinth,
-      subtitle: d ? `${d.num} ${d.zh} · ${d.en}` : 'WISH by RICCIONE REKA',
-      frame,
-    });
+    e.setScene({ plan: p.plan, walls, furniture: p.furniture, materials: p.materials, time: p.time, ...plinthOf(p), frame });
     e.setWallMode(wallMode);
-    past.current = [];
-    future.current = [];
+    if (!keepHistory) {
+      past.current = [];
+      future.current = [];
+    }
     setProject(p);
     setSelected(null);
     setReady(true);
     scheduleThumbs();
-    if (p.profile) packJSON(p.profile).then((s) => setBpLink(new URL(`quiz.html${WISH ? '?mode=wish' : ''}#bp=${s}`, location.href).href));
+    if (p.profile)
+      packJSON(p.profile).then((s) => setBpLink(new URL(`quiz.html${WISH ? '?mode=wish' : '?staff=1'}#bp=${s}`, location.href).href)); // 设计师版只给员工：非许愿模式带 ?staff=1
     else setBpLink('');
   }
 
-  // ── 自动保存 ──
+  // ── 自动保存（展厅不存：每次都是全新的示范户型） ──
   useEffect(() => {
-    if (!project) return;
-    const t = setTimeout(() => saveProject(project), 500);
-    return () => clearTimeout(t);
-  }, [project]);
+    if (!project || showroom) return;
+    const tm = setTimeout(() => saveProject(project), 500);
+    return () => clearTimeout(tm);
+  }, [project, showroom]);
 
   // ── 日光小图（材质变了就重画，防抖） ──
   const thumbTimer = useRef(0);
   const scheduleThumbs = useCallback(() => {
     clearTimeout(thumbTimer.current);
+    if (showroomRef.current) return;
     thumbTimer.current = setTimeout(() => {
-      if (!engine.current) return;
-      setThumbs(engine.current.thumbs(DAY_PRESETS.map((d) => d.hour)));
+      if (!engine.current || showroomRef.current) return;
+      try {
+        setThumbs(engine.current.thumbs(DAY_PRESETS.map((d) => d.hour)));
+      } catch {
+        /* 画布不在了（context lost） */
+      }
     }, 900);
   }, []);
 
-  // ── 历史 ──
+  // ── 历史（撤销 / 重做；换平面图也能撤回） ──
   const commit = useCallback((next) => {
     const cur = projRef.current;
     if (!cur) return;
@@ -171,10 +334,14 @@ export default function StudioApp() {
   const restore = (s) => {
     const cur = projRef.current;
     const e = engine.current;
-    e.setMaterials(s.materials);
-    e.setFurniture(s.furniture);
-    e.setTime(s.time);
-    setProject({ ...cur, ...s });
+    if (s.plan && s.plan !== cur.plan) {
+      loadProjectIntoEngine({ ...cur, ...s }, false, { keepHistory: true });
+    } else {
+      e.setMaterials(s.materials);
+      e.setFurniture(s.furniture);
+      e.setTime(s.time);
+      setProject({ ...cur, ...s });
+    }
     scheduleThumbs();
   };
   const undo = () => {
@@ -193,6 +360,14 @@ export default function StudioApp() {
   };
 
   // ── 命令 ──
+  const who = () => projRef.current?.profile?.name || t('客人');
+  const avoidHits = (mat) => {
+    const avoid = projRef.current?.profile?.avoid || [];
+    if (!avoid.length || !mat) return [];
+    const tags = tagsOf(mat);
+    return avoid.filter((k) => tags.has(k));
+  };
+
   const applyMaterial = useCallback(
     (slotId, matId) => {
       const cur = projRef.current;
@@ -216,10 +391,15 @@ export default function StudioApp() {
       materials = { ...MOOD_BY_ID[id].materials };
       time = MOOD_BY_ID[id].time;
     }
+    // 客人说过不要的（雷区），一键情绪也不能带回来
+    const safe = safeMaterials(materials, cur.profile);
+    materials = safe.materials;
     engine.current.setMaterials(materials);
     engine.current.setTime(time);
     commit({ materials, time, mood: id });
     scheduleThumbs();
+    if (safe.swaps.length)
+      flash(t('已按 {0} 的雷区避开：{1}', [who(), safe.swaps.map((s) => `${slotName(SLOT_BY_ID[s.slot])} ${L(MAT_BY_ID[s.from])} → ${L(MAT_BY_ID[s.to])}`).join(listSep())]), 4800);
   };
 
   const timeMsg = useRef(0);
@@ -230,13 +410,12 @@ export default function StudioApp() {
     timeMsg.current = setTimeout(() => tellShell('time', { hour: h }), 300);
   };
 
-  function updateFurniture(fn, fromEngine = false) {
+  function updateFurniture(fn) {
     const cur = projRef.current;
     if (!cur) return;
     const furniture = fn(cur.furniture);
     engine.current.setFurniture(furniture);
-    void fromEngine;
-    commit({ furniture });
+    commit({ furniture, furnEdited: true });
   }
 
   const rotateItem = (id) => updateFurniture((l) => l.map((f) => (f.id === id ? { ...f, rot: ((f.rot || 0) + 90) % 360 } : f)));
@@ -263,48 +442,66 @@ export default function StudioApp() {
     );
   const addItem = (kind, clientX, clientY) => {
     const e = engine.current;
+    const def = CATALOG[kind];
+    if (!def) return;
     const rect = host.current.getBoundingClientRect();
     const x = clientX ?? rect.left + rect.width / 2;
     const y = clientY ?? rect.top + rect.height / 2;
     const ray = e.rayAt(x, y).ray;
-    const p = { x: e.center.x, z: e.center.z };
-    const t = -ray.origin.y / ray.direction.y;
-    if (t > 0) {
-      p.x = ray.origin.x + ray.direction.x * t;
-      p.z = ray.origin.z + ray.direction.z * t;
+    const p = { x: e.center?.x ?? 0, z: e.center?.z ?? 0 };
+    const k = -ray.origin.y / ray.direction.y;
+    if (k > 0) {
+      p.x = ray.origin.x + ray.direction.x * k;
+      p.z = ray.origin.z + ray.direction.z * k;
     }
     const room = projRef.current.plan.rooms.find((r) => p.x >= r.x && p.x <= r.x + r.w && p.z >= r.y && p.z <= r.y + r.d);
-    const [w, d] = CATALOG[kind].size;
+    const [w, d] = def.size;
     const id = uid('f');
     const item = { id, kind, room: room?.id || null, x: +p.x.toFixed(2), z: +p.z.toFixed(2), rot: 0, w, d, h: projRef.current.plan.wallH };
     if (kind === 'art') item.y = 1.4;
     updateFurniture((l) => [...l, item]);
     setTimeout(() => e.select(id), 30);
-    flash(`${CATALOG[kind].zh} 已放进来 —— 拖一拖换位置`);
+    flash(t('{0} 已放进来 —— 拖一拖换位置', [L(def)]));
   };
 
   const dropMaterial = (matId, targetSlot) => {
     const mat = MAT_BY_ID[matId];
+    if (!mat) return false;
     const s = targetSlot || (slot && fits(matId, slot) ? slot : DEFAULT_SLOT_FOR_CAT[mat.cat]);
     if (!fits(matId, s)) {
-      flash(misfitHint(matId, s));
+      flash(misfitHint(matId, s)); // 已经按当前语言翻好了
       return false;
     }
     applyMaterial(s, matId);
-    flash(`${SLOT_BY_ID[s].zh} → ${mat.zh}`);
+    const hit = avoidHits(mat);
+    if (hit.length) flash(t('{0} 说过不要「{1}」—— 想试试也可以，按撤销就能还原', [who(), hit.map((k) => t(AVOID_LABEL[k] || k)).join(listSep())]), 4800);
+    else flash(`${slotName(SLOT_BY_ID[s])} → ${L(mat)}`);
     return true;
   };
 
   // ── 平面图 ──
   const applyPlan = async (plan, underlay) => {
     const cur = projRef.current;
+    const moved = cur.furnEdited || (cur.furnEdited === undefined && past.current.length > 0);
+    if (moved) {
+      const ok = await confirmSheet({
+        title: t('重新生成 3D？'),
+        body: t('重新生成会按新平面图自动摆家具，你手动调整过的家具位置会被覆盖。之后可以按撤销找回。'),
+        ok: t('重新生成'),
+      });
+      if (!ok) return false;
+    }
     const walls = buildWalls(plan);
-    const furniture = furnish(plan, walls, cur.profile);
-    const next = { ...cur, plan, furniture };
+    const furniture = Furnish.furnish(plan, walls, cur.profile);
     if (underlay) await putUnderlay(cur.id, underlay);
+    past.current.push(snap(cur));
+    if (past.current.length > HISTORY) past.current.shift();
+    future.current = [];
     setPlanDraft(null);
-    loadProjectIntoEngine(next, true);
-    flash('3D 已生成 ✨ 家具是按设计师的规则自动摆的，拖一拖就能改');
+    loadProjectIntoEngine({ ...cur, plan, furniture, furnEdited: false }, true, { keepHistory: true });
+    bump((n) => n + 1);
+    flash(t('3D 已生成 ✨ 家具是按设计师的规则自动摆的，拖一拖就能改'), 3600);
+    return true;
   };
 
   const newFromTemplate = (tid) => {
@@ -321,54 +518,143 @@ export default function StudioApp() {
     setModal(null);
   };
 
-  // ── 演示模式：自动环绕 + 时间流动 ──
+  // ── 演示模式：自动环绕 + 时间流动（引擎有 setDemo 就交给它：节流到 ~30fps、降分辨率） ──
   useEffect(() => {
     const e = engine.current;
-    if (!e) return;
+    if (!e || !ready) return;
+    if (typeof e.setDemo === 'function') {
+      e.setDemo(demo);
+      if (!demo && Number.isFinite(e.time)) setProject((p) => (p ? { ...p, time: e.time } : p));
+      return;
+    }
+    // 旧引擎：界面自己转时间，但每 100ms 才动一次光，界面不跟着每帧重画
     e.setAutoRotate(demo);
     if (!demo) {
       e.onTick = null;
+      if (Number.isFinite(e.time)) setProject((p) => (p ? { ...p, time: e.time } : p));
       return;
     }
     let last = performance.now();
-    e.onTick = (t) => {
-      const dt = (t - last) / 1000;
-      last = t;
-      const h = (e.time + dt * 0.9) % 24;
+    let lastSet = 0;
+    let h = e.time ?? 18;
+    e.onTick = (now) => {
+      h = (h + ((now - last) / 1000) * 0.9) % 24;
+      last = now;
+      if (now - lastSet < 100) return false;
+      lastSet = now;
       e.setTime(h);
-      setProject((p) => (p ? { ...p, time: h } : p));
       return true;
     };
     return () => {
       e.onTick = null;
     };
-  }, [demo]);
+  }, [demo, ready]);
 
-  // ── 键盘 ──
+  // 展厅大屏：不让屏幕睡着
   useEffect(() => {
-    const onKey = (ev) => {
-      if (ev.target.closest('input,textarea,select') || planDraft) return;
-      const mod = ev.metaKey || ev.ctrlKey;
-      if (mod && ev.key.toLowerCase() === 'z') {
-        ev.preventDefault();
-        ev.shiftKey ? redo() : undo();
-      } else if (mod && ev.key.toLowerCase() === 'y') {
-        ev.preventDefault();
-        redo();
-      } else if (selected && (ev.key === 'Delete' || ev.key === 'Backspace')) removeItem(selected);
-      else if (selected && ev.key.toLowerCase() === 'r') rotateItem(selected);
-      else if (ev.key === 'Escape') {
-        engine.current.select(null);
-        setSlot(null);
+    if (!showroom || !demo || !navigator.wakeLock) return;
+    let lock = null;
+    let alive = true;
+    const req = async () => {
+      try {
+        const l = await navigator.wakeLock.request('screen');
+        if (alive) lock = l;
+        else l.release();
+      } catch {
+        /* 不支持 / 没权限：不影响 */
       }
     };
+    req();
+    const onVis = () => document.visibilityState === 'visible' && req();
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      alive = false;
+      document.removeEventListener('visibilitychange', onVis);
+      lock?.release?.().catch?.(() => {});
+    };
+  }, [showroom, demo]);
+
+  const exitShowroom = () => {
+    setShowroom(false);
+    setDemo(false);
+    try {
+      const u = new URL(location.href);
+      u.searchParams.delete('demo');
+      history.replaceState(null, '', u.pathname + u.search);
+    } catch {
+      /* ignore */
+    }
+  };
+  // 展厅字标：长按 1.5 秒退出（大屏前的人随手碰到不会误退）
+  const lp = useRef(0);
+  const pressStart = () => {
+    clearTimeout(lp.current);
+    lp.current = setTimeout(exitShowroom, 1500);
+  };
+  const pressEnd = () => clearTimeout(lp.current);
+
+  // 展厅里画布被收回：几秒后自己重新载入（没人看着大屏）
+  useEffect(() => {
+    if (!ctx || !showroom) return;
+    const tm = setTimeout(() => location.reload(), 4000);
+    return () => clearTimeout(tm);
+  }, [ctx, showroom]);
+
+  // ── 键盘（读最新的状态，监听只装一次） ──
+  const keyRef = useRef(null);
+  keyRef.current = (ev) => {
+    if (ev.target.closest?.('input,textarea,select') || planDraft || modal || ask) return;
+    const mod = ev.metaKey || ev.ctrlKey;
+    if (showroom) {
+      if (ev.key === 'Escape') exitShowroom();
+      return;
+    }
+    if (mod && ev.key.toLowerCase() === 'z') {
+      ev.preventDefault();
+      ev.shiftKey ? redo() : undo();
+    } else if (mod && ev.key.toLowerCase() === 'y') {
+      ev.preventDefault();
+      redo();
+    } else if (selected && (ev.key === 'Delete' || ev.key === 'Backspace')) removeItem(selected);
+    else if (selected && !mod && ev.key.toLowerCase() === 'r') rotateItem(selected);
+    else if (ev.key === 'Escape') {
+      if (demo) setDemo(false);
+      engine.current?.select(null);
+      setSlot(null);
+    }
+  };
+  useEffect(() => {
+    const onKey = (ev) => keyRef.current?.(ev);
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  });
+  }, []);
+
+  // ── 语言：自己切换、或许愿模式外壳叫我们换（外壳不重新载入，只重载这一页） ──
+  const switchLang = (l) => {
+    saveNow();
+    setLang(l);
+  };
+  useEffect(() => {
+    const onMsg = (ev) => {
+      if (ev.origin !== location.origin || ev.data?.source !== 'genie-shell') return;
+      if (ev.data.type === 'lang' && (ev.data.lang === 'zh' || ev.data.lang === 'en')) {
+        saveNow();
+        setLang(ev.data.lang);
+      }
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    document.title = SHOWROOM ? BRAND.full : t('3D 梦想工作室 · WISH by Riccione Reka');
+  }, []);
 
   useEffect(() => {
     engine.current?.setWallMode(wallMode);
   }, [wallMode]);
+
+  const onQuality = (q) => engine.current?.setQuality?.(q === 'auto' ? autoQuality(engine.current) : q);
 
   const selItem = selected && project?.furniture.find((f) => f.id === selected);
   const profile = project?.profile;
@@ -376,20 +662,68 @@ export default function StudioApp() {
 
   const projectsList = useMemo(() => (modal === 'start' ? loadProjects() : []), [modal]);
 
+  // 收纳对账：只给设计师（不在许愿模式、不在展厅、有客人档案）；furnish.js 还没有 furnishReport 时不显示
+  const report = useMemo(() => {
+    if (WISH || showroom || !project?.profile || typeof Furnish.furnishReport !== 'function') return null;
+    try {
+      const rows = Furnish.furnishReport(project.plan, buildWalls(project.plan), project.profile, project.furniture);
+      return Array.isArray(rows) && rows.length ? rows : null;
+    } catch {
+      return null;
+    }
+  }, [project?.plan, project?.furniture, project?.profile, showroom]);
+  const talk = useMemo(() => {
+    if (WISH || !project?.profile) return [];
+    try {
+      return insights(project.profile, storagePlan(project.profile.storage, APPLIANCES)).filter((x) => x.level !== 'tip');
+    } catch {
+      return [];
+    }
+  }, [project?.profile]);
+  const pickRow = (r) => {
+    const id = r.itemIds?.find((x) => projRef.current?.furniture.some((f) => f.id === x));
+    if (id) engine.current?.select(id);
+    else flash(r.hint ? t(r.hint) : t('3D 里还没有这一件'), 4200);
+  };
+
+  const chip =
+    profile && dreamer ? (
+      <a className="dreamer-chip" href={bpLink || '#'} target={WISH ? '_self' : '_blank'} rel="noopener" title={t('打开梦想家蓝图')}>
+        <span className="dc-num">{dreamer.num}</span>
+        <span className="dc-text">
+          <b>{t('为 {0} 定制', [profile.name || t('贵宾')])}</b>
+          <em>
+            {L(dreamer)} · {profile.code}
+          </em>
+        </span>
+        <Icon name="chevron" size={16} className="dc-go" />
+      </a>
+    ) : !WISH ? (
+      <a className="dreamer-chip ghost" href="quiz.html" target="_blank" rel="noopener">
+        <span className="dc-num">
+          <Icon name="sparkles" size={17} />
+        </span>
+        <span className="dc-text">
+          <b>{t('先让客人走一次许愿之旅')}</b>
+          <em>{t('客人的材质、收纳、雷区会自动带进 3D')}</em>
+        </span>
+        <Icon name="chevron" size={16} className="dc-go" />
+      </a>
+    ) : null;
+
   return (
-    <div className={`studio panels-${panels} ${demo ? 'is-demo' : ''} ${WISH ? 'is-wish' : ''}`}>
+    <div className={`studio panels-${panels} ${demo ? 'is-demo' : ''} ${showroom ? 'is-showroom' : ''} ${WISH ? 'is-wish' : ''} ${isEn() ? 'is-en' : ''}`}>
       <div className="stage3d" ref={host} />
       {!ready && (
-        <div className="boot">
+        <div className="boot" role="status">
           <div className="boot-ring" />
-          <p>正在搭建你的家…</p>
+          <p>{t('正在搭建你的家…')}</p>
         </div>
       )}
 
       {ready && project && (
         <>
-          <SunArc time={project.time} onTime={setTime} onCommit={() => saveProject(projRef.current)} />
-          {labels && !demo && <Callouts anchors={anchors} materials={project.materials} onPick={(s) => setSlot(s)} activeSlot={slot} />}
+          {labels && !demo && <Callouts anchors={anchors} materials={project.materials} onPick={(s) => setSlot((cur) => (cur === s ? null : s))} activeSlot={slot} />}
 
           <MoodPanel
             project={project}
@@ -398,25 +732,12 @@ export default function StudioApp() {
             onSlot={(s) => {
               setSlot(s === slot ? null : s);
               engine.current.highlightSlot(s === slot ? null : s);
-              setTimeout(() => engine.current.highlightSlot(null), 900);
+              setTimeout(() => engine.current?.highlightSlot(null), 900);
             }}
             onMood={applyMood}
             onToggle={() => setPanels((p) => (p === 'open' ? 'closed' : 'open'))}
-            chip={
-              profile && dreamer ? (
-                <a className="dreamer-chip" href={bpLink || '#'} target={WISH ? '_self' : '_blank'} rel="noopener" title="打开梦想家蓝图">
-                  <b>{dreamer.num}</b>
-                  <span>
-                    为 {profile.name || '贵宾'} 定制 · {dreamer.zh}
-                    <em>{profile.code}</em>
-                  </span>
-                </a>
-              ) : (
-                <a className="dreamer-chip ghost" href="quiz.html" target="_blank" rel="noopener">
-                  🔮 先让客人走一次许愿之旅 →
-                </a>
-              )
-            }
+            chip={chip}
+            extra={report && <StorageCheck rows={report} plan={project.plan} talk={talk} onPick={pickRow} />}
           />
 
           <Toolbar
@@ -425,15 +746,19 @@ export default function StudioApp() {
             onUndo={undo}
             onRedo={redo}
             onShot={async () => {
-              const blob = await engine.current.snapshot(2);
-              const { stampSnapshot } = await import('./ui/stamp.js');
-              const out = await stampSnapshot(blob, project);
-              const a = document.createElement('a');
-              a.href = URL.createObjectURL(out);
-              a.download = `WISH-${(project.name || 'concept').replace(/\s+/g, '-')}.png`;
-              a.click();
-              setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-              flash('概念图已下载 📸');
+              try {
+                const blob = await engine.current.snapshot(2);
+                const { stampSnapshot } = await import('./ui/stamp.js');
+                const out = await stampSnapshot(blob, project);
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(out);
+                a.download = `WISH-${String(t(project.name) || 'concept').replace(/[\s/\\:*?"<>|]+/g, '-')}.png`;
+                a.click();
+                setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+                flash(t('概念图已下载'));
+              } catch {
+                flash(t('这台设备暂时存不了高清图，换「流畅」画质再试一次'), 4200);
+              }
             }}
             onShare={() => setModal('share')}
             labels={labels}
@@ -453,19 +778,26 @@ export default function StudioApp() {
             onStart={() => setModal('start')}
             onHelp={() => setModal('help')}
             onSettings={() => setModal('settings')}
+            onLang={switchLang}
             wish={WISH}
           />
 
-          <DaylightPanel time={project.time} thumbs={thumbs} onTime={setTime} onCommit={() => saveProject(projRef.current)} />
-
-          <MaterialDock
-            project={project}
-            slot={slot}
-            engine={engine}
-            onDrop={dropMaterial}
-            onAddItem={addItem}
-            onClearSlot={() => setSlot(null)}
-          />
+          {/* 底部这一列（从下往上）：材质栏 · 窄屏时的日光条 · 许愿模式说明 · 提示；宽屏时日光面板固定在右上 */}
+          <div className="dock-wrap">
+            {toast && (
+              <div className="glass s-toast" role="status" aria-live="polite">
+                {toast}
+              </div>
+            )}
+            {WISH && !demo && (
+              <div className="glass wish-caption" role="note">
+                <Icon name="info" size={15} />
+                <span>{t('示范户型 · 设计师会换成你家的平面图')}</span>
+              </div>
+            )}
+            <DaylightPanel time={project.time} thumbs={thumbs} onTime={setTime} onCommit={saveNow} north={project.plan.north || 0} />
+            <MaterialDock project={project} slot={slot} engine={engine} onDrop={dropMaterial} onAddItem={addItem} onClearSlot={() => setSlot(null)} />
+          </div>
 
           {hover && !selected && !demo && <HoverTip hover={hover} materials={project.materials} />}
           {selItem && selPos && !demo && (
@@ -482,9 +814,21 @@ export default function StudioApp() {
           )}
 
           <footer className="foot">
-            <div className="brand-foot">
-              <b>{BRAND.app}</b> {BRAND.by}
-            </div>
+            <button
+              type="button"
+              className="wordmark"
+              tabIndex={showroom ? 0 : -1}
+              onPointerDown={showroom ? pressStart : undefined}
+              onPointerUp={pressEnd}
+              onPointerLeave={pressEnd}
+              onPointerCancel={pressEnd}
+              onContextMenu={(e) => e.preventDefault()}
+              aria-label={showroom ? t('长按退出演示') : BRAND.full}
+              title={showroom ? t('长按退出演示') : undefined}
+            >
+              <b>{BRAND.app}</b>
+              <span>{BRAND.by}</span>
+            </button>
           </footer>
         </>
       )}
@@ -503,9 +847,9 @@ export default function StudioApp() {
           onClose={() => setModal(null)}
         />
       )}
-      {modal === 'share' && <ShareModal project={project} pack={() => packProject(project)} onShot={() => setModal(null)} onClose={() => setModal(null)} />}
+      {modal === 'share' && <ShareModal project={project} pack={() => packProject(project)} onClose={() => setModal(null)} />}
       {modal === 'help' && <HelpModal onClose={() => setModal(null)} />}
-      {modal === 'settings' && <SettingsModal onClose={() => setModal(null)} quality={engine.current?.quality} onQuality={(q) => engine.current.setQuality(q)} />}
+      {modal === 'settings' && <SettingsModal onClose={() => setModal(null)} onQuality={onQuality} onLang={switchLang} showLang={!WISH} />}
 
       {planDraft && (
         <PlanEditor
@@ -518,11 +862,52 @@ export default function StudioApp() {
         />
       )}
 
-      {toast && <div className="s-toast">{toast}</div>}
-      {demo && (
-        <button type="button" className="demo-exit" onClick={() => setDemo(false)}>
-          演示中 · 点任意处退出
+      {ask && <ConfirmSheet title={ask.title} body={ask.body} ok={ask.ok} onOk={() => ask.done(true)} onCancel={() => ask.done(false)} />}
+
+      {toast && (!ready || planDraft) && (
+        <div className="glass s-toast floating" role="status" aria-live="polite">
+          {toast}
+        </div>
+      )}
+      {demo && !showroom && (
+        <button type="button" className="glass demo-exit" onClick={() => setDemo(false)}>
+          <Icon name="pause" size={15} />
+          {t('演示中 · 点任意处退出')}
         </button>
+      )}
+
+      {ctx && (
+        <div className="ctx-lost" role="alertdialog" aria-modal="true" aria-label={t('3D 需要重新载入')}>
+          <div className="glass ctx-card">
+            <span className="ctx-ico">
+              <Icon name="refresh" size={22} />
+            </span>
+            <h2>{t('3D 需要重新载入')}</h2>
+            <p>
+              {ctx === 'restored'
+                ? t('3D 画面恢复了。如果看起来不对，重新载入一下就好 —— 方案已经自动保存。')
+                : t('这台设备暂时收回了图形内存（iPad 上偶尔会这样）。方案已经自动保存，重新载入就能接着做。')}
+            </p>
+            <div className="m-actions">
+              {ctx === 'restored' && (
+                <button type="button" className="s-btn ghost" onClick={() => setCtx(null)}>
+                  {t('继续')}
+                </button>
+              )}
+              <button
+                type="button"
+                className="s-btn primary"
+                onClick={() => {
+                  saveNow();
+                  location.reload();
+                }}
+              >
+                <Icon name="refresh" size={16} />
+                {t('重新载入')}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

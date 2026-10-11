@@ -8,6 +8,7 @@ import { swatchURL } from '../../shared/textures.js';
 import { fmtTime } from '../engine/daylight.js';
 import { t, L } from '../../shared/i18n.js';
 import { Icon, slotName } from './kit.jsx';
+import { BRAND } from '../../shared/config.js';
 
 // 情绪色来自 base.css 的 token（--mood-*），不在这里写颜色
 const MOOD_TINT = { cozy: 'var(--mood-cozy)', bright: 'var(--mood-bright)', moody: 'var(--mood-moody)' };
@@ -105,6 +106,10 @@ export default function MoodPanel({ project, dreamer, slot, onSlot, onMood, onTo
           </div>
         </section>
         {extra}
+        <footer className="mp-brand" aria-hidden="true">
+          <b>{BRAND.app}</b>
+          <span>{BRAND.by}</span>
+        </footer>
       </div>
     </aside>
   );

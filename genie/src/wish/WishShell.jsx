@@ -33,11 +33,26 @@ const duck = (zen, level, seconds) => zen.duck?.(level, seconds);
 function HoldMark({ onDone, label }) {
   const [p, setP] = useState(0);
   const raf = useRef(0);
+  const timer = useRef(0);
   const t0 = useRef(0);
+  const down = useRef(false);
   const fired = useRef(false);
-  const stop = () => {
+  const fire = () => {
+    if (fired.current || !down.current) return;
+    fired.current = true;
     cancelAnimationFrame(raf.current);
-    raf.current = 0;
+    clearTimeout(timer.current);
+    setP(1);
+    onDone();
+    setTimeout(() => setP(0), 450);
+  };
+  const stop = () => {
+    if (!down.current) return;
+    // 3D 很忙时画面一帧可能很久：按够 3 秒就算数，不靠动画走完
+    if (!fired.current && performance.now() - t0.current >= HOLD_MS) fire();
+    down.current = false;
+    cancelAnimationFrame(raf.current);
+    clearTimeout(timer.current);
     if (!fired.current) setP(0);
   };
   const start = (e) => {
@@ -47,24 +62,26 @@ function HoldMark({ onDone, label }) {
     } catch {
       /* ignore */
     }
+    down.current = true;
     fired.current = false;
     t0.current = performance.now();
     cancelAnimationFrame(raf.current);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(fire, HOLD_MS);
     const tick = (now) => {
-      const k = Math.min(1, Math.max(0, (now - t0.current) / HOLD_MS));
-      setP(k);
-      if (k >= 1) {
-        fired.current = true;
-        raf.current = 0;
-        onDone();
-        setTimeout(() => setP(0), 450);
-        return;
-      }
+      if (!down.current || fired.current) return;
+      setP(Math.min(1, Math.max(0, (now - t0.current) / HOLD_MS)));
       raf.current = requestAnimationFrame(tick);
     };
     raf.current = requestAnimationFrame(tick);
   };
-  useEffect(() => () => cancelAnimationFrame(raf.current), []);
+  useEffect(
+    () => () => {
+      cancelAnimationFrame(raf.current);
+      clearTimeout(timer.current);
+    },
+    []
+  );
   return (
     <button
       type="button"

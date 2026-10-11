@@ -486,6 +486,12 @@
   top: max(14px, env(safe-area-inset-top));
   right: max(16px, env(safe-area-inset-right));
 }
+.ws-splash-top .lang-toggle {
+  background: rgba(var(--glass-rgb), 0.66);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  backdrop-filter: blur(18px) saturate(160%);
+  border-color: var(--glass-border);
+}
 .ws-card {
   position: relative;
   z-index: 1;

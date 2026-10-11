@@ -8,13 +8,30 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { boxGeo, worldUV, cylGeo, sphereGeo } from './geom.js';
 import { rng, fbm } from '../../shared/noise.js';
 import { BRAND } from '../../shared/config.js';
+import { PALETTE } from '../../shared/palette.js';
 
 export const CUT_H = 0.35;
 /** 第 1 层：主镜头看不见、但太阳的影子相机看得见 —— 切掉的墙、窗外的树都放这一层（也不会进环境光遮蔽） */
 export const SHADOW_LAYER = 1;
 
-// ───────────────────────── 建筑模型的「外观件」：墨色切面、磨砂深石底座、黄铜细线、会淡出的地面 ─────────────────────────
-// 每个材质库一套（换平面图时复用，不会越建越多）
+// ───────────────────────── 建筑模型的「外观件」：墨色切面、磨砂暖石底座、黄铜细线、会淡出的地面 ─────────────────────────
+// 颜色全部从 VI（palette.js）来：SAIL 墨、暖灰石、SAIL 金。每个材质库一套（换平面图时复用，不会越建越多）
+
+const col = (hex) => new THREE.Color(hex);
+const mixC = (a, b, t) => col(a).lerp(col(b), t);
+/** 底座 / 地面 / 金线 / 烫金字的颜色（VI「晨光溪岸」：湿石头、墨、SAIL 金 —— 克制、像展台） */
+const VI = {
+  cap: () => mixC(PALETTE.ink, PALETTE.plinth, 0.4), // 剖切面：模型的墨色切口
+  stone: () => mixC(PALETTE.ink, PALETTE.inkSoft, 0.42), // 磨砂暖灰石（底色，乘石纹）
+  foot: () => col(PALETTE.plinth).multiplyScalar(0.6), // 底下内缩的影缝
+  brass: () => mixC(PALETTE.gold, PALETTE.goldL, 0.35), // 拉丝黄铜
+  ground: () => mixC(PALETTE.ink, PALETTE.plinth, 0.5), // 地面：暖墨，淡进背景
+  line: () => mixC(PALETTE.gold, PALETTE.goldL, 0.2), // 地上嵌的金线
+  foil: PALETTE.goldL, // 烫金字
+  foilGlow: () => col(PALETTE.goldInk), // 烫金字自发光（夜里也读得出）
+};
+const SERIF = '"Cormorant Garamond","Noto Serif SC",Georgia,serif';
+const SANS = '-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Noto Sans SC",system-ui,sans-serif';
 
 const KITS = new WeakMap();
 let STONE = null;
@@ -68,15 +85,15 @@ function kitFor(lib) {
   const st = stoneTextures();
   const tag = (m, name) => ((m.userData.fixed = name), m);
   // 切面 = 建筑剖面的「墨」：哑光、微暖，不反光（像模型的黑色 PVC 切口）
-  const cap = tag(new THREE.MeshStandardMaterial({ color: 0x272420, roughness: 0.86, metalness: 0 }), 'cap');
-  // 底座：磨砂深色石（SAIL 墨 #24211D 方向），有细微云纹，环境光里有一点缎面光泽
-  const stone = tag(new THREE.MeshPhysicalMaterial({ color: 0x4a4744, map: st.map, roughness: 0.52, roughnessMap: st.rough, metalness: 0, clearcoat: 0.22, clearcoatRoughness: 0.38, specularIntensity: 0.7 }), 'plinth');
-  const foot = tag(new THREE.MeshStandardMaterial({ color: 0x15130f, roughness: 0.9 }), 'plinth');
+  const cap = tag(new THREE.MeshStandardMaterial({ color: VI.cap(), roughness: 0.86, metalness: 0 }), 'cap');
+  // 底座：磨砂暖灰石（SAIL 墨往湿石头的方向），有细微云纹，环境光里有一点缎面光泽
+  const stone = tag(new THREE.MeshPhysicalMaterial({ color: VI.stone(), map: st.map, roughness: 0.56, roughnessMap: st.rough, metalness: 0, clearcoat: 0.18, clearcoatRoughness: 0.42, specularIntensity: 0.65 }), 'plinth');
+  const foot = tag(new THREE.MeshStandardMaterial({ color: VI.foot(), roughness: 0.9 }), 'plinth');
   // 拉丝黄铜细线（SAIL 金）
-  const brass = tag(new THREE.MeshPhysicalMaterial({ color: 0xd9b26a, metalness: 1, roughness: 0.3, clearcoat: 0.3, clearcoatRoughness: 0.2 }), 'brass');
-  // 地面：深色、带一点柔和反光，从底座往外慢慢淡进背景
+  const brass = tag(new THREE.MeshPhysicalMaterial({ color: VI.brass(), metalness: 1, roughness: 0.32, clearcoat: 0.3, clearcoatRoughness: 0.2 }), 'brass');
+  // 地面：暖墨色、带一点柔和反光，从底座往外慢慢淡进背景
   const gU = { gCenter: { value: new THREE.Vector2() }, gR0: { value: 8 }, gR1: { value: 24 } };
-  const ground = tag(new THREE.MeshStandardMaterial({ color: 0x32363a, roughness: 0.44, metalness: 0, transparent: true, depthWrite: true }), 'ground');
+  const ground = tag(new THREE.MeshStandardMaterial({ color: VI.ground(), roughness: 0.46, metalness: 0, transparent: true, depthWrite: true }), 'ground');
   ground.userData.u = gU;
   ground.onBeforeCompile = (s) => {
     Object.assign(s.uniforms, gU);
@@ -100,7 +117,7 @@ function goldRibbons(segs, y, width = 0.022) {
   const pos = [];
   const col = [];
   const idx = [];
-  const c = new THREE.Color(0xcfa65c);
+  const c = VI.line();
   for (const [x1, z1, x2, z2, a1 = 1, a2 = 1] of segs) {
     const dx = x2 - x1;
     const dz = z2 - z1;
@@ -235,34 +252,48 @@ function railing(wall, lib) {
   return g;
 }
 
-/** 底座上的烫金字：字距拉开的衬线大写 + 细的无衬线副标，金属金箔材质（会反射环境里的柔光箱） */
+/** 底座上的烫金字：字距拉开的衬线大写 + 细的无衬线副标，金属金箔材质（会反射环境里的柔光箱）。
+ *  字太长（客人名字长、英文副标）就整体缩小，永远不出底座。 */
 function textPlane(text, sub, w, h) {
   const c = document.createElement('canvas');
   c.width = 2048;
   c.height = Math.round((2048 * h) / w);
   const ctx = c.getContext('2d');
-  const draw = () => {
-    ctx.clearRect(0, 0, c.width, c.height);
-    ctx.fillStyle = '#E2C17E';
-    ctx.textBaseline = 'middle';
-    ctx.textAlign = 'left';
-    const fs = Math.round(c.height * (sub ? 0.4 : 0.46));
-    const x = c.height * 0.42;
+  const track = (k) => {
     try {
-      ctx.letterSpacing = `${Math.round(fs * 0.14)}px`;
+      ctx.letterSpacing = `${Math.round(k)}px`;
     } catch {
       /* 旧浏览器没有 letterSpacing */
     }
-    ctx.font = `600 ${fs}px "Cormorant Garamond","Noto Serif SC",serif`;
+  };
+  const draw = () => {
+    ctx.clearRect(0, 0, c.width, c.height);
+    ctx.fillStyle = VI.foil;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    const x = c.height * 0.42;
+    const room = c.width - x * 2;
+    let fs = Math.round(c.height * (sub ? 0.4 : 0.46));
+    track(fs * 0.14);
+    ctx.font = `600 ${fs}px ${SERIF}`;
+    const tw = ctx.measureText(text).width;
+    if (tw > room) {
+      fs = Math.floor((fs * room) / tw);
+      track(fs * 0.14);
+      ctx.font = `600 ${fs}px ${SERIF}`;
+    }
     ctx.fillText(text, x, c.height * (sub ? 0.38 : 0.52));
     if (sub) {
-      ctx.globalAlpha = 0.72;
-      try {
-        ctx.letterSpacing = `${Math.round(fs * 0.12)}px`;
-      } catch {
-        /* noop */
+      ctx.globalAlpha = 0.74;
+      let ss = Math.round(c.height * 0.4 * 0.36);
+      track(ss * 0.34);
+      ctx.font = `500 ${ss}px ${SANS}`;
+      const sw = ctx.measureText(sub).width;
+      if (sw > room) {
+        ss = Math.floor((ss * room) / sw);
+        track(ss * 0.34);
+        ctx.font = `500 ${ss}px ${SANS}`;
       }
-      ctx.font = `500 ${Math.round(fs * 0.36)}px "Noto Sans SC",sans-serif`;
       ctx.fillText(sub, x, c.height * 0.8);
       ctx.globalAlpha = 1;
     }
@@ -279,17 +310,27 @@ function textPlane(text, sub, w, h) {
         tex.needsUpdate = true;
       })
       .catch(() => {});
-  const mat = new THREE.MeshPhysicalMaterial({ map: tex, transparent: true, roughness: 0.34, metalness: 0.6, clearcoat: 0.4, clearcoatRoughness: 0.25, emissive: 0x6a4d1e, emissiveMap: tex, emissiveIntensity: 0.55, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  const mat = new THREE.MeshPhysicalMaterial({ map: tex, transparent: true, roughness: 0.34, metalness: 0.6, clearcoat: 0.4, clearcoatRoughness: 0.25, emissive: VI.foilGlow(), emissiveMap: tex, emissiveIntensity: 0.55, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
   m.userData.noAO = true;
   m.userData.ownMaterial = true;
   return m;
 }
 
+/** 底座正面的标题：没给就用品牌（WISH · RICCIONE REKA · 溪岸 SAIL）；旧方案里存着的 GENIE 一律换成 WISH */
+export function plinthTitle(title) {
+  const s = title == null ? '' : String(title).trim();
+  return s ? s.replace(/\bGENIE\b/g, BRAND.app) : BRAND.plinth;
+}
+
 /**
+ * opts.title / opts.subtitle：底座正面的两行字（界面给的是当前语言的文字，这里原样画；副标没给 = 溪岸 SAIL）。
+ * 侧面永远是品牌：WISH · by RICCIONE REKA。
  * @returns {{ group, wallSets, windows, rooms, bounds, trees }}
  */
-export function buildHouse(plan, walls, lib, { title = BRAND.plinth, subtitle = BRAND.house, ground = true } = {}) {
+export function buildHouse(plan, walls, lib, { title, subtitle, ground = true } = {}) {
+  title = plinthTitle(title);
+  subtitle = subtitle == null ? BRAND.house : String(subtitle).replace(/\bGENIE\b/g, BRAND.app);
   const root = new THREE.Group();
   const H = plan.wallH || 2.8;
   const bb = bounds(plan);

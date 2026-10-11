@@ -1083,6 +1083,7 @@ export class Engine {
       this.lastCut = camDir;
     }
     this.renderNow();
+    this._frames = (this._frames || 0) + 1;
     if (!this.demo) {
       this.emitAnchors();
       this.emitSelMove();
