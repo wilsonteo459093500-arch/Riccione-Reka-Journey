@@ -44,7 +44,7 @@ export const PAIRS = [
     q: '闭上眼睛摸一摸 —— 你更想摸到？',
     a: { label: '粗粗的、有温度', visual: { kind: 'swatches', ids: ['linen', 'light-oak', 'rattan'] } },
     b: { label: '滑滑的、凉凉的', visual: { kind: 'swatches', ids: ['carrara', 'brass', 'cream-lacquer'] } },
-    fx: { a: { texture: 2, temp: 0.5 }, b: { texture: -2 } },
+    fx: { a: { texture: 2, temp: 0.5 }, b: { texture: -2, temp: -0.5 } },
   },
   {
     id: 'guest',
@@ -79,7 +79,7 @@ export const PAIRS = [
     q: '光着脚，你想踩在 ——',
     a: { label: '温润的木地板', visual: { kind: 'swatches', ids: ['light-oak', 'smoked-oak', 'herringbone-oak'] } },
     b: { label: '冰凉的石材', visual: { kind: 'swatches', ids: ['travertine', 'carrara', 'microcement'] } },
-    fx: { a: { texture: 1.4, temp: 1 }, b: { texture: -1.4, temp: -0.6 } },
+    fx: { a: { texture: 1.4, temp: 1 }, b: { texture: -1.4, temp: -1 } },
   },
   {
     id: 'kitchen',
@@ -150,7 +150,7 @@ export const LIFE = [
   {
     id: 'bell',
     q: '门铃突然响了！你最想先藏起来的是 ——',
-    whisper: '放心，潘吉不会说出去 🤫',
+    whisper: '放心，只有你和你的设计师会看到 🤫',
     options: [
       { v: 'shoes', icon: '👞', label: '玄关的一堆鞋' },
       { v: 'table', icon: '🗞️', label: '餐桌上的杂物' },

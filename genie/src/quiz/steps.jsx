@@ -1,79 +1,112 @@
-// 占卜的每一关（UI 组件）。每个组件只管自己的输入，答案通过 set(patch) 写回，next() 前进。
+// 许愿之旅的每一关（UI 组件）。每个组件只管自己的输入，答案通过 set(patch) 写回，next() 前进。
+// 文字一律经过 t() / tj()：中文原文就是 key，英文在 src/shared/i18n/en-*.js。
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowRight, Check, X, Sparkle } from 'lucide-react';
 import Pangie, { Lamp } from '../shared/Pangie.jsx';
+import LangToggle from '../shared/LangToggle.jsx';
 import Vignette from './Vignette.jsx';
-import { GUIDE } from '../shared/config.js';
+import { CardFrame, CardBack, Segmented, Slider } from './ui.jsx';
+import { Ico } from './icons.jsx';
+import { BRAND } from '../shared/config.js';
 import { CHAPTERS, PAIRS, LIFE, APPLIANCES, BULKY, WISHES, SPLURGE, NOGO_COLORS, NOGO_FINISHES, ONE_WISH_CHIPS } from './flow.js';
 import { storagePlan } from '../shared/profile.js';
 import { sfx } from '../shared/sound.js';
-import { tellShell } from '../shared/zen.js';
+import { isWishMode, tellShell } from '../shared/zen.js';
+import { t, tj, guideName, isEn } from '../shared/i18n.js';
+import { fmt, ftNote } from '../shared/units.js';
 
-const fmt = (n) => Number(n || 0).toLocaleString('en-US');
+const WISH = isWishMode();
 
-/** 塔罗牌框 */
-export function TarotFrame({ num, title, children, className = '', onClick, selected, as: As = 'div', ...rest }) {
+/** 洗牌（愿望每次进来顺序都不一样：不让「收纳」永远排第一） */
+export function shuffled(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/** 前进按钮：普通一步用墨色胶囊，仪式时刻用金色 */
+function Next({ onClick, children, gold = false, big = false, disabled = false, icon = true }) {
   return (
-    <As className={`tarot ${selected ? 'is-selected' : ''} ${className}`} onClick={onClick} {...rest}>
-      <span className="tarot-corner tl" />
-      <span className="tarot-corner tr" />
-      <span className="tarot-corner bl" />
-      <span className="tarot-corner br" />
-      {num && <span className="tarot-num">{num}</span>}
-      <div className="tarot-body">{children}</div>
-      {title && <span className="tarot-title">{title}</span>}
-    </As>
+    <button type="button" className={`btn ${gold ? 'btn-gold' : 'btn-primary'} ${big ? 'big' : ''}`} onClick={onClick} disabled={disabled}>
+      <span>{children}</span>
+      {icon && <ArrowRight size={18} strokeWidth={2} aria-hidden="true" />}
+    </button>
+  );
+}
+
+function Head({ eyebrow, title, lead }) {
+  return (
+    <header className="q-head">
+      {eyebrow && <p className="eyebrow">{eyebrow}</p>}
+      <h2 className="h-title">{title}</h2>
+      {lead && <p className="lead">{lead}</p>}
+    </header>
   );
 }
 
 // ───────────────────────── 开场 ─────────────────────────
 
 export function Welcome({ answers, set, next }) {
-  const [name, setName] = useState(answers.name || '');
+  const players = [
+    { v: 'solo', label: t('我自己'), icon: <Ico set="players" v="solo" size={17} /> },
+    { v: 'couple', label: t('我们两个'), icon: <Ico set="players" v="couple" size={17} /> },
+    { v: 'family', label: t('一家人'), icon: <Ico set="players" v="family" size={17} /> },
+  ];
   return (
     <div className="step step-welcome">
-      <div className="welcome-hero">
-        <Pangie mood="happy" size={190} />
-      </div>
-      <p className="eyebrow">WISH · THE DREAM HOME JOURNEY</p>
-      <h1 className="h-display">
-        嗨，我是{GUIDE.name}
-        <small>{GUIDE.nameEn} · 住在神灯里的熊猫</small>
-      </h1>
-      <p className="lead">
-        接下来几分钟，我会用几张牌，读懂你心里的那个家。
-        <br />
-        不用懂设计，也不用想太久 —— 跟着第一感觉走就好。
-      </p>
-      <label className="field">
-        <span>怎么称呼你？</span>
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="例：Peggy / 陈小姐" maxLength={30} />
-      </label>
-      <div className="field">
-        <span>今天谁来许愿？</span>
-        <div className="chips">
-          {[
-            ['solo', '🙋 我自己'],
-            ['couple', '💑 我们两个'],
-            ['family', '👨‍👩‍👧 一家人'],
-          ].map(([v, label]) => (
-            <button key={v} type="button" className={`chip ${answers.players === v ? 'on' : ''}`} onClick={() => (sfx.tap(), set({ players: v }))}>
-              {label}
-            </button>
-          ))}
+      <div className="cover">
+        <div className="cover-mark">
+          <b>{BRAND.app}</b>
+          <span>{BRAND.by}</span>
         </div>
+        <div className="cover-hero">
+          <Pangie mood="happy" size={168} />
+        </div>
+        <p className="eyebrow">{t('许愿之旅')}</p>
+        <h1 className="h-display">{t('嗨，我是{0}', [guideName()])}</h1>
+        <p className="cover-sub">{t('住在神灯里的熊猫')}</p>
+        <p className="lead">{t('接下来几分钟，我会用五张牌，读懂你心里的那个家。不用懂设计，也不用想太久 —— 跟着第一感觉走就好。')}</p>
+
+        <div className="cover-form">
+          <div className="field">
+            <span className="field-label">{t('语言 · Language')}</span>
+            <LangToggle className="is-big" />
+          </div>
+          <label className="field">
+            <span className="field-label">{t('怎么称呼你？')}</span>
+            <input
+              className="text-in"
+              value={answers.name || ''}
+              onChange={(e) => set({ name: e.target.value })}
+              placeholder={t('例：Peggy / 陈小姐 / Peggy & Ken')}
+              maxLength={30}
+              autoComplete="off"
+              enterKeyHint="go"
+            />
+          </label>
+          <div className="field">
+            <span className="field-label">{t('今天谁来许愿？')}</span>
+            <Segmented options={players} value={answers.players} label={t('今天谁来许愿？')} onChange={(v) => (sfx.tap(), set({ players: v }))} />
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className="btn btn-gold big cover-go"
+          onClick={() => {
+            set({ name: (answers.name || '').trim() });
+            next();
+          }}
+        >
+          <Sparkle size={18} strokeWidth={1.8} aria-hidden="true" />
+          <span>{t('开始许愿')}</span>
+        </button>
+        <p className="fine">{t('大约 6–8 分钟 · 5 张牌 · 结束时会得到你的「梦想家蓝图」')}</p>
       </div>
-      <button
-        type="button"
-        className="btn-gold big"
-        onClick={() => {
-          set({ name: name.trim() });
-          next();
-        }}
-      >
-        开始许愿 ✨
-      </button>
-      <p className="fine">大约 6–8 分钟 · 5 张牌 · 结束时会得到你的「梦想家蓝图」</p>
     </div>
   );
 }
@@ -88,7 +121,13 @@ export function LampRub({ next, name }) {
   const progress = useRef(0);
   const doneRef = useRef(false);
   const timer = useRef(null);
-  useEffect(() => () => clearTimeout(timer.current), []);
+  useEffect(
+    () => () => {
+      clearTimeout(timer.current);
+      clearInterval(holding.current);
+    },
+    []
+  );
 
   const bump = (amt) => {
     if (doneRef.current) return;
@@ -100,7 +139,7 @@ export function LampRub({ next, name }) {
       setDone(true);
       sfx.summon();
       if (navigator.vibrate) navigator.vibrate([30, 40, 60]);
-      timer.current = setTimeout(next, 1900);
+      timer.current = setTimeout(next, 2100);
       return;
     }
     const now = performance.now();
@@ -109,8 +148,6 @@ export function LampRub({ next, name }) {
       sfx.rub();
     }
   };
-
-  useEffect(() => () => clearInterval(holding.current), []);
 
   const onDown = (e) => {
     if (done) return;
@@ -133,14 +170,16 @@ export function LampRub({ next, name }) {
 
   return (
     <div className="step step-lamp">
-      <p className="eyebrow">THE LAMP</p>
-      <h2 className="h-title">{name ? `${name}，` : ''}擦亮神灯</h2>
-      <p className="lead">用手指在神灯上来回擦一擦（按住也可以），把{GUIDE.name}叫出来。</p>
-      <div className={`lamp-stage ${done ? 'is-done' : ''}`}>
-        <div className="lamp-smoke" style={{ opacity: p, transform: `scale(${0.4 + p * 0.8})` }} />
+      <Head eyebrow={t('神灯')} title={name ? t('{0}，擦亮神灯', [name]) : t('擦亮神灯')} lead={t('用手指在神灯上来回擦一擦（按住也可以），把{0}叫出来。', [guideName()])} />
+      <div className={`lamp-stage ${done ? 'is-done' : ''}`} style={{ '--p': p }}>
+        <div className="lamp-mist" />
         <div className={`lamp-genie ${done ? 'out' : ''}`}>
-          <Pangie mood="wow" size={170} />
+          <Pangie mood="wow" size={176} aura />
         </div>
+        <svg className="lamp-ring" viewBox="0 0 100 100" aria-hidden="true">
+          <circle cx="50" cy="50" r="47" />
+          <circle cx="50" cy="50" r="47" className="fill" pathLength="100" style={{ strokeDashoffset: 100 * (1 - p) }} />
+        </svg>
         <div
           className="lamp-touch"
           onPointerDown={onDown}
@@ -149,18 +188,16 @@ export function LampRub({ next, name }) {
           onPointerCancel={onUp}
           onPointerLeave={onUp}
           role="button"
-          aria-label="擦亮神灯"
+          aria-label={t('擦亮神灯')}
           tabIndex={0}
           onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && bump(0.2)}
         >
-          <Lamp size={300} glow={p} className={p > 0 && !done ? 'lamp-shake' : ''} />
+          <Lamp size={280} glow={p} className={p > 0 && !done ? 'lamp-shake' : ''} />
         </div>
-        <svg className="lamp-ring" viewBox="0 0 100 100">
-          <circle cx="50" cy="50" r="46" />
-          <circle cx="50" cy="50" r="46" className="fill" style={{ strokeDashoffset: 289 * (1 - p) }} />
-        </svg>
       </div>
-      <p className="fine">{done ? `${GUIDE.name}来啦！` : p > 0 ? `${Math.round(p * 100)}%` : '轻轻擦一擦 ✨'}</p>
+      <p className="lamp-status" aria-live="polite">
+        {done ? t('{0}来啦！', [guideName()]) : p > 0 ? `${Math.round(p * 100)}%` : t('轻轻擦一擦')}
+      </p>
     </div>
   );
 }
@@ -170,42 +207,38 @@ export function LampRub({ next, name }) {
 export function Interlude({ chapter, next }) {
   const ch = CHAPTERS.find((c) => c.id === chapter);
   const [flipped, setFlipped] = useState(false);
+  const [ready, setReady] = useState(false);
   useEffect(() => {
-    const t = setTimeout(() => {
+    const a = setTimeout(() => {
       setFlipped(true);
       sfx.flip();
-    }, 350);
-    return () => clearTimeout(t);
+    }, 420);
+    const b = setTimeout(() => setReady(true), 1150); // 翻完才能点：防止上一页的连点直接跳过
+    return () => {
+      clearTimeout(a);
+      clearTimeout(b);
+    };
   }, []);
+  const prop = chapter === 'treasure' ? 'magnifier' : chapter === 'wishes' ? 'ball' : 'cards';
   return (
-    <div className="step step-interlude" onClick={() => flipped && next()}>
+    <div className="step step-interlude">
       <div className={`flip ${flipped ? 'is-flipped' : ''}`}>
         <div className="flip-inner">
           <div className="flip-back">
-            <TarotFrame className="tarot-back">
-              <div className="back-pattern" />
-            </TarotFrame>
+            <CardBack />
           </div>
           <div className="flip-front">
-            <TarotFrame num={ch.num} title={ch.en}>
-              <h2 className="chapter-zh">{ch.zh}</h2>
-              <Pangie mood={ch.mode === 'slow' ? 'think' : 'mystic'} prop={chapter === 'treasure' ? 'magnifier' : chapter === 'wishes' ? 'ball' : 'cards'} size={150} float={false} />
-            </TarotFrame>
+            <CardFrame num={ch.num} foot={isEn() ? ch.zh : ch.en} className="chapter-card">
+              <h2 className="chapter-name">{t(ch.zh)}</h2>
+              <Pangie mood={ch.mode === 'slow' ? 'think' : 'mystic'} prop={prop} size={132} float={false} />
+            </CardFrame>
           </div>
         </div>
       </div>
-      <p className="lead center">{ch.hint}</p>
-      <button
-        type="button"
-        className="btn-gold"
-        onClick={(e) => {
-          e.stopPropagation();
-          next();
-        }}
-        disabled={!flipped}
-      >
-        翻开这一张 →
-      </button>
+      <p className="lead center interlude-hint">{t(ch.hint)}</p>
+      <Next gold onClick={next} disabled={!ready}>
+        {t('翻开这一张')}
+      </Next>
     </div>
   );
 }
@@ -227,41 +260,47 @@ const PAIR_REACT = {
   weekend: { a: '热闹最好 🥳', b: '独处最好 🍵' },
 };
 
-export function PairStep({ pair, onPick, index, total }) {
+export function PairStep({ pair, onPick, index, total, timed = true }) {
+  // 左右随机：不让「a 永远在左边」替客人做选择（左撇子 / 习惯点左边的人会被带偏）
+  const order = useMemo(() => (Math.random() < 0.5 ? ['a', 'b'] : ['b', 'a']), [pair.id]);
   const [picked, setPicked] = useState(null);
-  const t0 = useRef(performance.now());
-  useEffect(() => {
-    t0.current = performance.now();
-    setPicked(null);
-  }, [pair.id]);
+  const mountAt = useRef(performance.now());
+  // 画面淡入约 0.45 秒：从卡片看得见才开始计时
+  const t0 = useRef(performance.now() + 450);
   const pick = (side) => {
     if (picked) return;
-    const ms = Math.round(performance.now() - t0.current);
+    const now = performance.now();
+    if (now - mountAt.current < 250) return; // 上一题的连点不算
+    const ms = Math.max(0, Math.round(now - t0.current));
     setPicked(side);
     sfx.pick();
-    onPick(side, ms, PAIR_REACT[pair.id]?.[side]);
+    onPick(side, ms, PAIR_REACT[pair.id]?.[side], order[0]);
   };
   return (
     <div className="step step-pair">
-      <p className="eyebrow">
-        直觉之牌 · {index + 1} / {total}
-      </p>
-      <h2 className="h-title">{pair.q}</h2>
-      <div className="timer" key={pair.id}>
-        <i />
-      </div>
+      <Head eyebrow={t('直觉之牌 · {0} / {1}', [index + 1, total])} title={t(pair.q)} />
+      {timed && (
+        <div className="breath" key={pair.id} aria-hidden="true">
+          <i />
+        </div>
+      )}
       <div className="pair">
-        {['a', 'b'].map((side) => (
-          <TarotFrame
+        {order.map((side) => (
+          <button
             key={side}
-            as="button"
             type="button"
             className={`pair-card ${picked === side ? 'is-picked' : picked ? 'is-dropped' : ''}`}
-            title={pair[side].label}
             onClick={() => pick(side)}
+            aria-label={t(pair[side].label)}
           >
-            <Vignette visual={pair[side].visual} />
-          </TarotFrame>
+            <span className="pair-art">
+              <Vignette visual={pair[side].visual} />
+            </span>
+            <span className="pair-label">{t(pair[side].label)}</span>
+            <span className="pair-check" aria-hidden="true">
+              <Check size={16} strokeWidth={2.4} />
+            </span>
+          </button>
         ))}
       </div>
     </div>
@@ -269,6 +308,23 @@ export function PairStep({ pair, onPick, index, total }) {
 }
 
 // ───────────────────────── II · 生活 ─────────────────────────
+
+function Opt({ on, onClick, set, v, label, sub, small = false, x = false }) {
+  return (
+    <button type="button" className={`opt ${small ? 'small' : ''} ${on ? 'on' : ''} ${x ? 'is-x' : ''}`} onClick={onClick} aria-pressed={on}>
+      <span className="opt-icon">
+        <Ico set={set} v={v} size={small ? 22 : 26} />
+      </span>
+      <span className="opt-text">
+        <span className="opt-label">{label}</span>
+        {sub && <span className="opt-sub">{sub}</span>}
+      </span>
+      <span className="opt-tick" aria-hidden="true">
+        {x ? <X size={14} strokeWidth={2.6} /> : <Check size={14} strokeWidth={2.6} />}
+      </span>
+    </button>
+  );
+}
 
 export function LifeStep({ item, value, onChange, next, index, total }) {
   const multi = !!item.multi;
@@ -281,32 +337,21 @@ export function LifeStep({ item, value, onChange, next, index, total }) {
       onChange([...s]);
     } else {
       onChange(v);
-      setTimeout(next, 380);
+      setTimeout(next, 380); // next() 自己会挡掉重复 / 过期的调用
     }
   };
   return (
     <div className="step step-life">
-      <p className="eyebrow">
-        生活之牌 · {index + 1} / {total}
-      </p>
-      <h2 className="h-title">{item.q}</h2>
-      {item.sub && <p className="lead center">{item.sub}</p>}
+      <Head eyebrow={t('生活之牌 · {0} / {1}', [index + 1, total])} title={t(item.q)} lead={item.sub ? t(item.sub) : null} />
       <div className={`opts ${item.options.length > 6 ? 'opts-many' : ''}`}>
-        {item.options.map((o) => {
-          const on = multi ? sel.has(o.v) : sel === o.v;
-          return (
-            <button key={o.v} type="button" className={`opt ${on ? 'on' : ''}`} onClick={() => choose(o.v)}>
-              <span className="opt-icon">{o.icon}</span>
-              <span className="opt-label">{o.label}</span>
-              {o.sub && <span className="opt-sub">{o.sub}</span>}
-            </button>
-          );
-        })}
+        {item.options.map((o) => (
+          <Opt key={o.v} set={item.id} v={o.v} on={multi ? sel.has(o.v) : sel === o.v} onClick={() => choose(o.v)} label={t(o.label)} sub={o.sub ? t(o.sub) : null} small={item.options.length > 6} />
+        ))}
       </div>
       {multi && (
-        <button type="button" className="btn-gold" onClick={next}>
-          {sel.size ? `就是这些（${sel.size}）→` : '都没有 →'}
-        </button>
+        <div className="q-actions">
+          <Next onClick={next}>{sel.size ? t('就是这些（{0}）', [sel.size]) : t('都没有')}</Next>
+        </div>
       )}
     </div>
   );
@@ -314,16 +359,18 @@ export function LifeStep({ item, value, onChange, next, index, total }) {
 
 // ───────────────────────── III · 宝藏（慢想） ─────────────────────────
 
-function Slider({ min, max, step = 1, value, onChange, unit = '' }) {
+const touch = (answers, ...keys) => ({ touched: { ...(answers.touched || {}), ...Object.fromEntries(keys.map((k) => [k, true])) } });
+
+function Calc({ children, mm }) {
   return (
-    <div className="slider">
-      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} />
-      <div className="slider-val">
-        <b>{fmt(value)}</b> {unit}
-      </div>
-    </div>
+    <p className="calc">
+      <span>{children}</span>
+      {mm ? <em>{ftNote(mm)}</em> : null}
+    </p>
   );
 }
+
+const SHOE_COLORS = ['#3B3A36', '#B3552E', '#8C9884', '#D9CBB4', '#5E4632', '#2E4057', '#C8A272'];
 
 /** 鞋子数量 → 鞋柜宽度，画出来 */
 export function ShoesStep({ answers, set, next }) {
@@ -334,34 +381,39 @@ export function ShoesStep({ answers, set, next }) {
   let left = answers.shoes;
   return (
     <div className="step step-treasure">
-      <p className="eyebrow">宝藏之牌 · 1 / 6</p>
-      <h2 className="h-title">全家大概有几双鞋？</h2>
-      <p className="lead center">连拖鞋、运动鞋、高跟鞋一起数。</p>
+      <Head eyebrow={t('宝藏之牌 · {0} / 6', [1])} title={t('全家大概有几双鞋？')} lead={t('连拖鞋、运动鞋、高跟鞋一起数。')} />
       <div className="viz viz-cabinet">
-        <svg viewBox={`0 0 ${cols * 60 + 20} 230`} preserveAspectRatio="xMidYMax meet">
-          <rect x="6" y="6" width={cols * 60 + 8} height="214" rx="3" fill="#C8A272" />
+        <svg viewBox={`0 0 ${cols * 60 + 20} 232`} preserveAspectRatio="xMidYMax meet" aria-hidden="true">
+          <rect x="4" y="4" width={cols * 60 + 12} height="222" rx="6" fill="#C8A272" />
+          <rect x="4" y="220" width={cols * 60 + 12} height="6" rx="3" fill="#A8834F" />
           {[...Array(cols)].map((_, c) =>
             [...Array(shelves)].map((_, r) => {
               const n = Math.max(0, Math.min(perCell, left));
               left -= perCell;
               const filled = n > 0.5;
+              const x = 10 + c * 60;
+              const y = 10 + r * 30;
+              const col = SHOE_COLORS[(c * 3 + r) % SHOE_COLORS.length];
               return (
                 <g key={`${c}-${r}`}>
-                  <rect x={10 + c * 60} y={10 + r * 30} width="56" height="26" fill="#F4EEE4" />
-                  {filled && <text x={38 + c * 60} y={29 + r * 30} textAnchor="middle" fontSize="15">👟</text>}
+                  <rect x={x} y={y} width="56" height="26" rx="2" fill="#F6F1E8" />
+                  {filled && (
+                    <g fill={col}>
+                      <path d={`M${x + 8} ${y + 21} c0 -6 4 -8 8 -7 l6 3 c3 1 8 1 10 3 l0 3 z`} />
+                      <path d={`M${x + 30} ${y + 21} c0 -6 4 -8 8 -7 l6 3 c3 1 8 1 10 3 l0 3 z`} opacity=".85" />
+                    </g>
+                  )}
                 </g>
               );
             })
           )}
         </svg>
       </div>
-      <Slider min={0} max={150} step={5} value={answers.shoes} onChange={(v) => set({ shoes: v })} unit="双" />
-      <p className="calc">
-        ≈ 鞋柜 <b>{fmt(plan.shoeCabinetMM)} mm</b> 宽（通高 2100 · 深 350）
-      </p>
-      <button type="button" className="btn-gold" onClick={next}>
-        数好了 →
-      </button>
+      <Slider min={0} max={150} step={5} value={answers.shoes} label={t('全家大概有几双鞋？')} onChange={(v) => set({ shoes: v, ...touch(answers, 'shoes') })} unit={t('双')} />
+      <Calc mm={plan.shoeCabinetMM}>{tj('鞋柜 {0} 宽（通高 2100 · 深 350）', [<b key="b">{fmt(plan.shoeCabinetMM)} mm</b>])}</Calc>
+      <div className="q-actions">
+        <Next onClick={next}>{t('数好了')}</Next>
+      </div>
     </div>
   );
 }
@@ -370,121 +422,112 @@ export function WardrobeStep({ answers, set, next }) {
   const plan = storagePlan({ wardrobeDoors: answers.wardrobeDoors, wardrobeFit: answers.wardrobeFit, longHang: answers.longHang });
   const doors = answers.wardrobeDoors;
   const targetDoors = Math.max(doors, Math.round(plan.wardrobeMM / 450));
+  const chip = (field, v, label) => (
+    <button key={String(v)} type="button" className={`chip ${answers[field] === v ? 'on' : ''}`} aria-pressed={answers[field] === v} onClick={() => (sfx.tap(), set({ [field]: v, ...touch(answers, field) }))}>
+      {label}
+    </button>
+  );
   return (
     <div className="step step-treasure">
-      <p className="eyebrow">宝藏之牌 · 2 / 6</p>
-      <h2 className="h-title">主卧现在的衣柜，大概几门？</h2>
-      <p className="lead center">一扇门约 450mm 宽。没有衣柜的话，想想你的衣服大概能塞满几门。</p>
+      <Head eyebrow={t('宝藏之牌 · {0} / 6', [2])} title={t('主卧现在的衣柜，大概几门？')} lead={t('一扇门约 450mm 宽。没有衣柜的话，想想你的衣服大概能塞满几门。')} />
       <div className="viz viz-wardrobe">
-        <svg viewBox={`0 0 ${targetDoors * 40 + 12} 150`} preserveAspectRatio="xMidYMax meet">
-          {[...Array(targetDoors)].map((_, i) => (
-            <rect key={i} x={6 + i * 40} y="6" width="38" height="138" rx="2" fill={i < doors ? '#C8A272' : 'none'} stroke={i < doors ? '#8E6A4E' : '#D7A54A'} strokeDasharray={i < doors ? '0' : '5 4'} strokeWidth="2" />
-          ))}
+        <svg viewBox={`0 0 ${targetDoors * 40 + 12} 152`} preserveAspectRatio="xMidYMax meet" aria-hidden="true">
+          {[...Array(targetDoors)].map((_, i) => {
+            const have = i < doors;
+            return (
+              <g key={i}>
+                <rect x={6 + i * 40} y="6" width="38" height="138" rx="3" fill={have ? '#C8A272' : 'none'} stroke={have ? '#9E7A4E' : '#B98A3B'} strokeDasharray={have ? '0' : '5 4'} strokeWidth="1.6" />
+                {have && <rect x={i % 2 ? 9 + i * 40 : 37 + i * 40} y="66" width="2.4" height="20" rx="1.2" fill="#7A5A2E" />}
+              </g>
+            );
+          })}
         </svg>
       </div>
-      <div className="chips center">
-        {[2, 3, 4, 5, 6, 8].map((n) => (
-          <button key={n} type="button" className={`chip ${doors === n ? 'on' : ''}`} onClick={() => (sfx.tap(), set({ wardrobeDoors: n }))}>
-            {n === 8 ? '6 门以上' : `${n} 门`}
-          </button>
-        ))}
-      </div>
+      <div className="chips center">{[2, 3, 4, 5, 6, 8].map((n) => chip('wardrobeDoors', n, n === 8 ? t('6 门以上') : t('{0} 门', [n])))}</div>
       <div className="field center">
-        <span>现在够用吗？</span>
+        <span className="field-label">{t('现在够用吗？')}</span>
         <div className="chips center">
           {[
             ['roomy', '还有空位'],
             ['ok', '刚刚好'],
             ['full', '挤爆了'],
             ['double', '要两倍'],
-          ].map(([v, l]) => (
-            <button key={v} type="button" className={`chip ${answers.wardrobeFit === v ? 'on' : ''}`} onClick={() => (sfx.tap(), set({ wardrobeFit: v }))}>
-              {l}
-            </button>
-          ))}
+          ].map(([v, l]) => chip('wardrobeFit', v, t(l)))}
         </div>
       </div>
       <div className="field center">
-        <span>长衣服（大衣、长裙、礼服）</span>
+        <span className="field-label">{t('长衣服（大衣、长裙、礼服）')}</span>
         <div className="chips center">
           {[
             ['few', '很少'],
             ['some', '一些'],
             ['many', '很多'],
-          ].map(([v, l]) => (
-            <button key={v} type="button" className={`chip ${answers.longHang === v ? 'on' : ''}`} onClick={() => (sfx.tap(), set({ longHang: v }))}>
-              {l}
-            </button>
-          ))}
+          ].map(([v, l]) => chip('longHang', v, t(l)))}
         </div>
       </div>
-      <p className="calc">
-        ≈ 目标衣柜 <b>{fmt(plan.wardrobeMM)} mm</b>（长挂 {fmt(plan.longHangMM)} · 短挂 {fmt(plan.shortHangMM)} · 叠放 {fmt(plan.foldMM)}）
-      </p>
-      <button type="button" className="btn-gold" onClick={next}>
-        下一个宝藏 →
-      </button>
+      <Calc mm={plan.wardrobeMM}>{tj('目标衣柜 {0}（长挂 {1} · 短挂 {2} · 叠放 {3}）', [<b key="b">{fmt(plan.wardrobeMM)} mm</b>, fmt(plan.longHangMM), fmt(plan.shortHangMM), fmt(plan.foldMM)])}</Calc>
+      <div className="q-actions">
+        <Next onClick={next}>{t('下一个宝藏')}</Next>
+      </div>
     </div>
   );
 }
+
+const BOOK_COLORS = ['#A65A3A', '#4A6652', '#C6912E', '#7C9A6D', '#B3552E', '#6B4B2F', '#D9CBB4'];
 
 export function BooksStep({ answers, set, next }) {
   const n = answers.books;
   return (
     <div className="step step-treasure">
-      <p className="eyebrow">宝藏之牌 · 3 / 6</p>
-      <h2 className="h-title">书和收藏品，大概能摆满几层书架？</h2>
-      <p className="lead center">一层约 800mm 宽。漫画、唱片、模型、酒，都算。</p>
+      <Head eyebrow={t('宝藏之牌 · {0} / 6', [3])} title={t('书和收藏品，大概能摆满几层书架？')} lead={t('一层约 800mm 宽。漫画、唱片、模型、酒，都算。')} />
       <div className="viz viz-books">
-        <svg viewBox="0 0 320 170" preserveAspectRatio="xMidYMax meet">
-          <rect x="4" y="4" width="312" height="162" fill="#8E6A4E" />
+        <svg viewBox="0 0 320 172" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
+          <rect x="4" y="4" width="312" height="164" rx="5" fill="#8E6A4E" />
           {[...Array(15)].map((_, i) => {
             const c = i % 5;
             const r = Math.floor(i / 5);
             const on = i < Math.min(15, n);
             return (
               <g key={i}>
-                <rect x={10 + c * 61.5} y={10 + r * 52} width="56" height="46" fill="#F4EEE4" />
+                <rect x={10 + c * 61.5} y={10 + r * 52} width="56" height="46" rx="1.5" fill="#F6F1E8" />
                 {on &&
                   [...Array(6)].map((_, k) => (
-                    <rect key={k} x={14 + c * 61.5 + k * 8.5} y={18 + r * 52 + (k % 3) * 2} width="7" height={36 - (k % 3) * 2} fill={['#A65A3A', '#2E4057', '#C6912E', '#7C9A6D', '#B3552E', '#6B4B2F'][(k + i) % 6]} />
+                    <rect key={k} x={14 + c * 61.5 + k * 8.5} y={18 + r * 52 + (k % 3) * 2} width="7" height={36 - (k % 3) * 2} rx="1" fill={BOOK_COLORS[(k + i) % BOOK_COLORS.length]} />
                   ))}
               </g>
             );
           })}
         </svg>
-        {n > 15 && <span className="viz-more">+{n - 15} 层</span>}
+        {n > 15 && <span className="viz-more">{t('+{0} 层', [n - 15])}</span>}
       </div>
-      <Slider min={0} max={30} value={n} onChange={(v) => set({ books: v })} unit="层" />
-      <p className="calc">
-        ≈ 书墙 <b>{fmt(n * 800)} mm</b> 长的层板
-      </p>
-      <button type="button" className="btn-gold" onClick={next}>
-        继续 →
-      </button>
+      <Slider min={0} max={30} value={n} label={t('书和收藏品，大概能摆满几层书架？')} onChange={(v) => set({ books: v, ...touch(answers, 'books') })} unit={t('层')} />
+      <Calc mm={n * 800}>{tj('书墙 {0} 长的层板', [<b key="b">{fmt(n * 800)} mm</b>])}</Calc>
+      <div className="q-actions">
+        <Next onClick={next}>{t('继续')}</Next>
+      </div>
     </div>
   );
 }
 
-function ChipGrid({ items, value, onChange }) {
+function ChipGrid({ items, set: iconSet, value, onChange }) {
   const sel = new Set(value || []);
   return (
     <div className="opts opts-many">
       {items.map((o) => (
-        <button
+        <Opt
           key={o.v}
-          type="button"
-          className={`opt small ${sel.has(o.v) ? 'on' : ''}`}
+          small
+          set={iconSet}
+          v={o.v}
+          on={sel.has(o.v)}
+          label={t(o.label)}
           onClick={() => {
             sfx.tap();
             const s = new Set(sel);
             s.has(o.v) ? s.delete(o.v) : s.add(o.v);
             onChange([...s]);
           }}
-        >
-          <span className="opt-icon">{o.icon}</span>
-          <span className="opt-label">{o.label}</span>
-        </button>
+        />
       ))}
     </div>
   );
@@ -494,23 +537,19 @@ export function AppliancesStep({ answers, set, next }) {
   const plan = storagePlan({ appliances: answers.appliances }, APPLIANCES);
   return (
     <div className="step step-treasure">
-      <p className="eyebrow">宝藏之牌 · 4 / 6</p>
-      <h2 className="h-title">厨房里有哪些小家电？</h2>
-      <p className="lead center">点一点你有的（或打算买的）。</p>
-      <ChipGrid items={APPLIANCES} value={answers.appliances} onChange={(v) => set({ appliances: v })} />
-      <p className="calc">
-        {plan.applianceCount ? (
-          <>
-            台面家电区 ≈ <b>{fmt(plan.counterMM)} mm</b>
-            {plan.tallUnits ? ` · 嵌入式 ${plan.tallUnits} 台${plan.applianceTallCabinet ? '（建议一组电器高柜）' : ''}` : ''}
-          </>
-        ) : (
-          '一样都没有？那台面可以很清爽 ✨'
-        )}
-      </p>
-      <button type="button" className="btn-gold" onClick={next}>
-        继续 →
-      </button>
+      <Head eyebrow={t('宝藏之牌 · {0} / 6', [4])} title={t('厨房里有哪些小家电？')} lead={t('点一点你有的（或打算买的）。')} />
+      <ChipGrid items={APPLIANCES} set="appliances" value={answers.appliances} onChange={(v) => set({ appliances: v })} />
+      {plan.applianceCount ? (
+        <Calc mm={plan.counterMM}>
+          {tj('台面家电区 ≈ {0}', [<b key="b">{fmt(plan.counterMM)} mm</b>])}
+          {plan.tallUnits ? ` · ${t('嵌入式 {0} 台', [plan.tallUnits])}${plan.applianceTallCabinet ? t('（建议一组电器高柜）') : ''}` : ''}
+        </Calc>
+      ) : (
+        <p className="calc">{t('一样都没有？那台面可以很清爽')}</p>
+      )}
+      <div className="q-actions">
+        <Next onClick={next}>{t('继续')}</Next>
+      </div>
     </div>
   );
 }
@@ -519,14 +558,12 @@ export function BulkyStep({ answers, set, next }) {
   const n = (answers.bulky || []).length;
   return (
     <div className="step step-treasure">
-      <p className="eyebrow">宝藏之牌 · 5 / 6</p>
-      <h2 className="h-title">这些「大家伙」，你家有哪些？</h2>
-      <p className="lead center">它们最常被忘记，也最常让家变乱。</p>
-      <ChipGrid items={BULKY} value={answers.bulky} onChange={(v) => set({ bulky: v })} />
-      <p className="calc">{n >= 4 ? '大家伙不少 —— 潘吉建议留一间储物间，或一组 600 深的通高柜。' : n ? '记下了，会帮它们找好位置。' : '很清爽！'}</p>
-      <button type="button" className="btn-gold" onClick={next}>
-        继续 →
-      </button>
+      <Head eyebrow={t('宝藏之牌 · {0} / 6', [5])} title={t('这些「大家伙」，你家有哪些？')} lead={t('它们最常被忘记，也最常让家变乱。')} />
+      <ChipGrid items={BULKY} set="bulky" value={answers.bulky} onChange={(v) => set({ bulky: v })} />
+      <p className="calc">{n >= 4 ? t('大家伙不少 —— 潘吉建议留一间储物间，或一组 600 深的通高柜。') : n ? t('记下了，会帮它们找好位置。') : t('很清爽！')}</p>
+      <div className="q-actions">
+        <Next onClick={next}>{t('继续')}</Next>
+      </div>
     </div>
   );
 }
@@ -539,12 +576,10 @@ export function RatioStep({ answers, set, next }) {
   const openSet = new Set(order.slice(0, open));
   return (
     <div className="step step-treasure">
-      <p className="eyebrow">宝藏之牌 · 6 / 6</p>
-      <h2 className="h-title">家里「看得见」的东西，要占多少？</h2>
-      <p className="lead center">往左：全部藏起来；往右：大方展示。</p>
+      <Head eyebrow={t('宝藏之牌 · {0} / 6', [6])} title={t('家里「看得见」的东西，要占多少？')} lead={t('往左：全部藏起来；往右：大方展示。')} />
       <div className="viz viz-ratio">
-        <svg viewBox="0 0 320 170" preserveAspectRatio="xMidYMax meet">
-          <rect x="4" y="4" width="312" height="162" fill="#C8A272" />
+        <svg viewBox="0 0 320 172" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
+          <rect x="4" y="4" width="312" height="164" rx="5" fill="#C8A272" />
           {[...Array(12)].map((_, i) => {
             const c = i % 4;
             const row = Math.floor(i / 4);
@@ -553,20 +588,28 @@ export function RatioStep({ answers, set, next }) {
             const o = openSet.has(i);
             return (
               <g key={i}>
-                <rect x={x} y={y} width="73" height="48.6" fill={o ? '#F4EEE4' : '#D9BC92'} stroke={o ? 'none' : '#B48C5F'} />
-                {o && (i % 3 === 0 ? <path d={`M${x + 30} ${y + 46} Q${x + 24} ${y + 30} ${x + 34} ${y + 18} L${x + 40} ${y + 18} Q${x + 50} ${y + 30} ${x + 44} ${y + 46} Z`} fill="#B3552E" /> : i % 3 === 1 ? [...Array(5)].map((_, k) => <rect key={k} x={x + 12 + k * 9} y={y + 12 + (k % 2) * 3} width="7" height={34 - (k % 2) * 3} fill={['#2E4057', '#C6912E', '#7C9A6D', '#A65A3A', '#6B4B2F'][k]} />) : <circle cx={x + 36} cy={y + 30} r="12" fill="#7C9A6D" />)}
+                <rect x={x} y={y} width="73" height="48.6" rx="1.5" fill={o ? '#F6F1E8' : '#DCC197'} stroke={o ? 'none' : '#B48C5F'} strokeWidth=".8" />
+                {!o && <rect x={x + 33} y={y + 20} width="7" height="2" rx="1" fill="#9E7A4E" />}
+                {o &&
+                  (i % 3 === 0 ? (
+                    <path d={`M${x + 30} ${y + 46} Q${x + 24} ${y + 30} ${x + 34} ${y + 18} L${x + 40} ${y + 18} Q${x + 50} ${y + 30} ${x + 44} ${y + 46} Z`} fill="#B3552E" />
+                  ) : i % 3 === 1 ? (
+                    [...Array(5)].map((_, k) => <rect key={k} x={x + 12 + k * 9} y={y + 12 + (k % 2) * 3} width="7" height={34 - (k % 2) * 3} rx="1" fill={['#4A6652', '#C6912E', '#7C9A6D', '#A65A3A', '#6B4B2F'][k]} />)
+                  ) : (
+                    <circle cx={x + 36} cy={y + 30} r="12" fill="#7C9A6D" />
+                  ))}
               </g>
             );
           })}
         </svg>
       </div>
-      <Slider min={0} max={100} step={5} value={r} onChange={(v) => set({ ratio: v })} unit="% 看得见" />
+      <Slider min={0} max={100} step={5} value={r} label={t('家里「看得见」的东西，要占多少？')} onChange={(v) => set({ ratio: v, ratioTouched: true })} unit={t('% 看得见')} />
       <p className="calc">
-        藏 <b>{100 - r}</b> : 展 <b>{r}</b>
+        <span>{tj('藏 {0} : 展 {1}', [<b key="h">{100 - r}</b>, <b key="d">{r}</b>])}</span>
       </p>
-      <button type="button" className="btn-gold" onClick={next}>
-        宝藏清点完毕 →
-      </button>
+      <div className="q-actions">
+        <Next onClick={next}>{t('宝藏清点完毕')}</Next>
+      </div>
     </div>
   );
 }
@@ -575,47 +618,59 @@ export function RatioStep({ answers, set, next }) {
 
 export function WishesStep({ answers, set, next, say }) {
   const sel = answers.wishes || [];
+  const ok = Array.isArray(answers.wishOrder) && answers.wishOrder.length === WISHES.length;
+  const fallback = useMemo(() => shuffled(WISHES.map((w) => w.v)), []);
+  const order = ok ? answers.wishOrder : fallback;
+  useEffect(() => {
+    if (!ok) set({ wishOrder: fallback });
+  }, [ok, fallback, set]);
   const toggle = (v) => {
     if (sel.includes(v)) {
       sfx.tap();
       set({ wishes: sel.filter((x) => x !== v) });
     } else if (sel.length >= 3) {
       sfx.nope();
-      say('think', '只能三个哦！先放掉一个 🙏');
+      say('think', t('只能三个哦！先放掉一个 🙏'));
     } else {
-      sfx.wish();
+      if (!WISH) sfx.wish(); // 许愿模式里外壳会响一声风铃，不要叠两次
       tellShell('wish');
       set({ wishes: [...sel, v] });
-      if (sel.length === 2) say('happy', '三个愿望，潘吉收到了 ✨');
+      if (sel.length === 2) say('happy', t('三个愿望，潘吉收到了 ✨'));
     }
   };
   return (
     <div className="step step-wishes">
-      <p className="eyebrow">愿望之牌</p>
-      <h2 className="h-title">潘吉只能实现你 3 个愿望</h2>
-      <p className="lead center">选最想要的三个（按重要顺序点）。</p>
+      <Head eyebrow={t('愿望之牌')} title={t('潘吉只能实现你 3 个愿望')} lead={t('选最想要的三个')} />
       <div className="wish-grid">
-        {WISHES.map((w) => {
-          const i = sel.indexOf(w.v);
+        {order.map((v) => {
+          const w = WISHES.find((x) => x.v === v);
+          if (!w) return null;
+          const on = sel.includes(v);
           return (
-            <button key={w.v} type="button" className={`wish ${i >= 0 ? 'on' : ''}`} onClick={() => toggle(w.v)}>
-              {i >= 0 && <span className="wish-badge">{i + 1}</span>}
-              <span className="wish-icon">{w.icon}</span>
-              <span className="wish-label">{w.label}</span>
+            <button key={v} type="button" className={`wish ${on ? 'on' : ''}`} onClick={() => toggle(v)} aria-pressed={on}>
+              <span className="wish-icon">
+                <Ico set="wishes" v={v} size={26} />
+              </span>
+              <span className="wish-label">{t(w.label)}</span>
+              <span className="wish-tick" aria-hidden="true">
+                <Check size={14} strokeWidth={2.6} />
+              </span>
             </button>
           );
         })}
       </div>
-      <div className="wish-lamps">
+      <div className="wish-lamps" aria-label={t('还差 {0} 个', [3 - sel.length])}>
         {[0, 1, 2].map((i) => (
           <span key={i} className={i < sel.length ? 'lit' : ''}>
-            🪔
+            <Lamp size={52} glow={i < sel.length ? 1 : 0} />
           </span>
         ))}
       </div>
-      <button type="button" className="btn-gold" onClick={next} disabled={sel.length !== 3}>
-        {sel.length === 3 ? '许愿 ✨' : `还差 ${3 - sel.length} 个`}
-      </button>
+      <div className="q-actions">
+        <Next gold onClick={next} disabled={sel.length !== 3} icon={sel.length === 3}>
+          {sel.length === 3 ? t('许愿') : t('还差 {0} 个', [3 - sel.length])}
+        </Next>
+      </div>
     </div>
   );
 }
@@ -623,30 +678,28 @@ export function WishesStep({ answers, set, next, say }) {
 export function SplurgeStep({ answers, set, next }) {
   return (
     <div className="step step-life">
-      <p className="eyebrow">愿望之牌 · 附加题</p>
-      <h2 className="h-title">如果只能在一个地方「舍得花」，你选 ——</h2>
+      <Head eyebrow={t('愿望之牌 · 附加题')} title={t('如果只能在一个地方「舍得花」，你选 ——')} />
       <div className="opts">
         {SPLURGE.map((o) => (
-          <button
+          <Opt
             key={o.v}
-            type="button"
-            className={`opt ${answers.splurge === o.v ? 'on' : ''}`}
+            set="splurge"
+            v={o.v}
+            on={answers.splurge === o.v}
+            label={t(o.label)}
             onClick={() => {
               sfx.tap();
               set({ splurge: o.v });
               setTimeout(next, 380);
             }}
-          >
-            <span className="opt-icon">{o.icon}</span>
-            <span className="opt-label">{o.label}</span>
-          </button>
+          />
         ))}
       </div>
     </div>
   );
 }
 
-// ───────────────────────── V · 禁忌 ─────────────────────────
+// ───────────────────────── V · 雷区 ─────────────────────────
 
 export function NogoStep({ answers, set, next }) {
   const sel = new Set(answers.avoid || []);
@@ -663,55 +716,59 @@ export function NogoStep({ answers, set, next }) {
   };
   return (
     <div className="step step-nogo">
-      <p className="eyebrow">雷区之牌</p>
-      <h2 className="h-title">点一下你「绝对不要」的</h2>
-      <p className="lead center">讨厌的东西，往往比喜欢的更确定。</p>
+      <Head eyebrow={t('雷区之牌')} title={t('点一下你「绝对不要」的')} lead={t('讨厌的东西，往往比喜欢的更确定。')} />
       <div className="nogo-colors">
         {NOGO_COLORS.map((c) => (
-          <button key={c.v} type="button" className={`nogo-color ${sel.has(c.v) ? 'x' : ''}`} onClick={() => toggle(c.v)}>
-            <i style={{ background: c.sw }} />
-            <span>{c.label}</span>
+          <button key={c.v} type="button" className={`nogo-color ${sel.has(c.v) ? 'x' : ''}`} onClick={() => toggle(c.v)} aria-pressed={sel.has(c.v)}>
+            <i style={{ background: c.sw }}>
+              <X size={18} strokeWidth={2.4} aria-hidden="true" />
+            </i>
+            <span>{t(c.label)}</span>
           </button>
         ))}
       </div>
-      <div className="chips center">
+      <div className="opts opts-many">
         {NOGO_FINISHES.map((f) => (
-          <button key={f.v} type="button" className={`chip ${sel.has(f.v) ? 'x' : ''}`} onClick={() => toggle(f.v)}>
-            {f.label}
-          </button>
+          <Opt key={f.v} small x set="finishes" v={f.v} on={sel.has(f.v)} label={t(f.label)} onClick={() => toggle(f.v)} />
         ))}
       </div>
-      <button type="button" className="btn-gold" onClick={next}>
-        {sel.size ? `扫雷完成（${sel.size}）→` : '没有雷区，我都 OK →'}
-      </button>
+      <div className="q-actions">
+        <Next onClick={next}>{sel.size ? t('扫雷完成（{0}）', [sel.size]) : t('没有雷区，我都 OK')}</Next>
+      </div>
     </div>
   );
 }
 
 export function OneWishStep({ answers, set, finish }) {
   const [text, setText] = useState(answers.oneWish || '');
+  const [sent, setSent] = useState(false);
   return (
     <div className="step step-onewish">
-      <p className="eyebrow">最后一句</p>
-      <h2 className="h-title">如果这个家只能实现一件事，那会是 ——</h2>
+      <Head eyebrow={t('最后一句')} title={t('如果这个家只能实现一件事，那会是 ——')} />
       <div className="chips center">
         {ONE_WISH_CHIPS.map((c) => (
-          <button key={c} type="button" className="chip" onClick={() => (sfx.tap(), setText(c))}>
-            {c}
+          <button key={c} type="button" className={`chip ${text === t(c) ? 'on' : ''}`} onClick={() => (sfx.tap(), setText(t(c)))}>
+            {t(c)}
           </button>
         ))}
       </div>
-      <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="一句话就好（可以跳过）" maxLength={140} rows={3} />
-      <button
-        type="button"
-        className="btn-gold big"
-        onClick={() => {
-          set({ oneWish: text.trim() });
-          finish(text.trim());
-        }}
-      >
-        交给潘吉 🔮
-      </button>
+      <textarea className="text-in" value={text} onChange={(e) => setText(e.target.value)} placeholder={t('一句话就好（可以跳过）')} maxLength={140} rows={3} />
+      <div className="q-actions">
+        <button
+          type="button"
+          className="btn btn-gold big"
+          disabled={sent}
+          onClick={() => {
+            if (sent) return;
+            setSent(true);
+            set({ oneWish: text.trim() });
+            finish(text.trim());
+          }}
+        >
+          <Sparkle size={18} strokeWidth={1.8} aria-hidden="true" />
+          <span>{t('交给潘吉')}</span>
+        </button>
+      </div>
     </div>
   );
 }

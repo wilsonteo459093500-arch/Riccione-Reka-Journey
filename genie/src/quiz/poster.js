@@ -1,11 +1,20 @@
 // 分享海报（1080×1350，小红书 / IG 竖版）—— 客人愿意晒，就是最好的口碑。
-// 用 canvas 现画：牌面、配色、轴、潘吉（把页面上的 SVG 序列化进来）、品牌。
+// VI「晨光溪岸」：上半是风景（和蓝图同一张），纸色底，中间一张印刷感的梦想家卡牌，潘吉在右下角。
+// 跟着当前语言出中文或英文。颜色全部来自 palette.js（canvas 读不到 CSS 变量）。
 
 import { DREAMER_BY_CODE, AXES } from '../shared/dreamers.js';
-import { BRAND, GUIDE } from '../shared/config.js';
+import { BRAND } from '../shared/config.js';
+import { PALETTE as P } from '../shared/palette.js';
+import { SCENES } from './scenes.js';
+import { t, L, isEn, guideName } from '../shared/i18n.js';
 
 const W = 1080;
 const H = 1350;
+
+const SANS = '-apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", "Noto Sans SC", Arial, sans-serif';
+const SERIF_EN = '"Cormorant Garamond", Georgia, serif';
+const SERIF_ZH = '"Noto Serif SC", "Songti SC", serif';
+const display = () => (isEn() ? SERIF_EN : SERIF_ZH);
 
 function svgToImage(svgEl) {
   return new Promise((resolve) => {
@@ -21,8 +30,14 @@ function svgToImage(svgEl) {
   });
 }
 
-function emblemImage(svgEl) {
-  return svgToImage(svgEl);
+function photoImage(src) {
+  return new Promise((resolve) => {
+    if (!src) return resolve(null);
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
 }
 
 function roundRect(ctx, x, y, w, h, r) {
@@ -35,139 +50,225 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-const SERIF = '"Cormorant Garamond","Noto Serif SC",Georgia,serif';
-const ZH = '"Noto Serif SC","Songti SC",serif';
-const SANS = '"Nunito","Noto Sans SC",system-ui,sans-serif';
+/** 图片铺满一块区域（像 CSS object-fit: cover），fy = 竖直方向的焦点 0–1 */
+function cover(ctx, img, dx, dy, dw, dh, fy = 0.5) {
+  const iw = img.naturalWidth || img.width;
+  const ih = img.naturalHeight || img.height;
+  const s = Math.max(dw / iw, dh / ih);
+  const sw = dw / s;
+  const sh = dh / s;
+  ctx.drawImage(img, (iw - sw) / 2, (ih - sh) * fy, sw, sh, dx, dy, dw, dh);
+}
 
-export async function renderPoster(profile, { pangieEl, emblemEl } = {}) {
-  await document.fonts?.ready;
+/** 字太长就缩小，直到放得下 */
+function fitFont(ctx, text, weight, size, family, maxW, min = 18) {
+  let s = size;
+  ctx.font = `${weight} ${s}px ${family}`;
+  while (s > min && ctx.measureText(text).width > maxW) {
+    s -= 2;
+    ctx.font = `${weight} ${s}px ${family}`;
+  }
+  return s;
+}
+
+/** 按宽度断行（中文按字，英文按词） */
+function wrap(ctx, text, maxW) {
+  const words = isEn() ? text.split(/(\s+)/) : [...text];
+  const lines = [];
+  let cur = '';
+  for (const w of words) {
+    const next = cur + w;
+    if (ctx.measureText(next).width > maxW && cur.trim()) {
+      lines.push(cur.trim());
+      cur = w.trimStart();
+    } else cur = next;
+  }
+  if (cur.trim()) lines.push(cur.trim());
+  return lines;
+}
+
+const rgba = (hex, a) => {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+};
+
+export async function renderPoster(profile, { pangieEl, emblemEl, sceneEl, sceneId } = {}) {
   const d = DREAMER_BY_CODE[profile.code];
+  if (!d) return null;
+  const name = L({ zh: d.zh, en: d.en });
+  const other = isEn() ? d.zh : d.en;
+  const title = profile.name ? t('{0} 的梦想家卡牌', [profile.name]) : t('我的梦想家卡牌');
+  const tagline = t(d.tagline);
+  const scene = SCENES[sceneId] || SCENES.welcome;
+  try {
+    await Promise.all([
+      document.fonts?.load(`600 64px ${SERIF_ZH}`, `${d.zh}${title}${tagline}`),
+      document.fonts?.load(`600 64px ${SERIF_EN}`, `${d.en} ${d.num}`),
+      document.fonts?.load(`italic 500 32px ${SERIF_EN}`, d.en),
+    ]);
+    await document.fonts?.ready;
+  } catch {
+    /* 字体没载到就用系统字 */
+  }
+
   const c = document.createElement('canvas');
   c.width = W;
   c.height = H;
   const ctx = c.getContext('2d');
+  ctx.textBaseline = 'alphabetic';
 
-  // 夜空
+  // 纸
   const bg = ctx.createLinearGradient(0, 0, 0, H);
-  bg.addColorStop(0, '#17201b');
-  bg.addColorStop(1, '#2b3a31');
+  bg.addColorStop(0, P.posterBg[0]);
+  bg.addColorStop(1, P.posterBg[1]);
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
-  for (let i = 0; i < 140; i++) {
-    ctx.fillStyle = Math.random() > 0.6 ? `rgba(200,225,195,${Math.random() * 0.6})` : `rgba(240,215,160,${Math.random() * 0.7})`;
-    const r = Math.random() * 2.2;
-    ctx.beginPath();
-    ctx.arc(Math.random() * W, Math.random() * H, r, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.strokeStyle = 'rgba(215,165,74,.25)';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.arc(W / 2, 560, 470, 0, Math.PI * 2);
-  ctx.stroke();
 
-  // 顶部
-  ctx.fillStyle = '#E9D3A1';
+  // 上半：风景（照片优先，没有就用代码画的）
+  const bandH = 560;
+  const img = (await photoImage(scene.photo)) || (await svgToImage(sceneEl));
+  if (img) cover(ctx, img, 0, 0, W, bandH, 0.55);
+  const fade = ctx.createLinearGradient(0, bandH * 0.45, 0, bandH);
+  fade.addColorStop(0, rgba(P.posterBg[0], 0));
+  fade.addColorStop(1, P.posterBg[0]);
+  ctx.fillStyle = fade;
+  ctx.fillRect(0, 0, W, bandH + 2);
+  const top = ctx.createLinearGradient(0, 0, 0, 200);
+  top.addColorStop(0, rgba(P.paper, 0.75));
+  top.addColorStop(1, rgba(P.paper, 0));
+  ctx.fillStyle = top;
+  ctx.fillRect(0, 0, W, 200);
+
+  // 顶部文字
   ctx.textAlign = 'center';
-  ctx.font = `600 30px ${SERIF}`;
-  ctx.fillText('THE DREAM HOME JOURNEY', W / 2, 90);
-  ctx.font = `500 34px ${ZH}`;
-  ctx.fillStyle = '#F5EDE0';
-  ctx.fillText(profile.name ? `${profile.name} 的梦想家牌` : '我的梦想家牌', W / 2, 142);
+  ctx.fillStyle = P.posterGold;
+  ctx.font = `600 24px ${SANS}`;
+  if ('letterSpacing' in ctx) ctx.letterSpacing = '6px';
+  ctx.fillText(`${BRAND.app} · ${t('许愿之旅').toUpperCase()}`, W / 2, 78);
+  if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+  ctx.fillStyle = P.posterInk;
+  fitFont(ctx, title, 600, 46, display(), W - 160);
+  ctx.fillText(title, W / 2, 140);
 
-  // 牌
-  const cw = 560;
-  const ch = 820;
+  // 卡牌
+  const cw = 540;
+  const ch = 860;
   const cx = (W - cw) / 2;
-  const cy = 190;
+  const cy = 196;
   ctx.save();
-  ctx.shadowColor = 'rgba(0,0,0,.45)';
-  ctx.shadowBlur = 50;
-  ctx.shadowOffsetY = 20;
-  roundRect(ctx, cx, cy, cw, ch, 26);
-  ctx.fillStyle = '#FBF6EC';
+  ctx.shadowColor = rgba(P.shade, 0.22);
+  ctx.shadowBlur = 60;
+  ctx.shadowOffsetY = 24;
+  roundRect(ctx, cx, cy, cw, ch, 28);
+  ctx.fillStyle = P.card;
   ctx.fill();
   ctx.restore();
-  ctx.strokeStyle = '#C79A4A';
-  ctx.lineWidth = 4;
-  roundRect(ctx, cx + 18, cy + 18, cw - 36, ch - 36, 16);
+  // 金色细线框（两道）
+  ctx.strokeStyle = rgba(P.gold, 0.85);
+  ctx.lineWidth = 2;
+  roundRect(ctx, cx + 20, cy + 20, cw - 40, ch - 40, 16);
   ctx.stroke();
-  ctx.lineWidth = 1.5;
-  roundRect(ctx, cx + 30, cy + 30, cw - 60, ch - 60, 10);
+  ctx.strokeStyle = rgba(P.gold, 0.45);
+  ctx.lineWidth = 1;
+  roundRect(ctx, cx + 28, cy + 28, cw - 56, ch - 56, 11);
   ctx.stroke();
 
-  ctx.fillStyle = '#9A7232';
-  ctx.font = `600 44px ${SERIF}`;
-  ctx.fillText(d.num, W / 2, cy + 92);
+  // 压印的罗马数字
+  ctx.textAlign = 'center';
+  ctx.font = `600 52px ${SERIF_EN}`;
+  ctx.fillStyle = 'rgba(255,255,255,0.95)';
+  ctx.fillText(d.num, W / 2 + 1, cy + 104 + 1.5);
+  ctx.fillStyle = rgba(P.ink, 0.42);
+  ctx.fillText(d.num, W / 2, cy + 104);
 
-  const em = await emblemImage(emblemEl);
-  if (em) ctx.drawImage(em, W / 2 - 80, cy + 120, 160, 160);
+  // 图腾
+  const em = await svgToImage(emblemEl);
+  if (em) ctx.drawImage(em, W / 2 - 92, cy + 132, 184, 184);
 
-  ctx.font = `700 40px ${SANS}`;
-  ctx.fillStyle = '#3D5A4A';
-  ctx.fillText(profile.code.split('').join('  '), W / 2, cy + 330);
+  // 四个字母
+  ctx.font = `600 30px ${SANS}`;
+  ctx.fillStyle = P.accent;
+  if ('letterSpacing' in ctx) ctx.letterSpacing = '18px';
+  ctx.fillText(profile.code, W / 2 + 9, cy + 368);
+  if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
 
-  ctx.fillStyle = '#241C12';
-  ctx.font = `600 76px ${ZH}`;
-  ctx.fillText(d.zh, W / 2, cy + 430);
-  ctx.fillStyle = '#8A6844';
-  ctx.font = `italic 500 38px ${SERIF}`;
-  ctx.fillText(d.en, W / 2, cy + 482);
-  ctx.fillStyle = '#4A3F33';
-  ctx.font = `400 32px ${ZH}`;
-  ctx.fillText(d.tagline, W / 2, cy + 548);
+  // 名字 + 另一种语言 + 一句话
+  ctx.fillStyle = P.posterInk;
+  fitFont(ctx, name, 600, isEn() ? 64 : 68, display(), cw - 110, 30);
+  ctx.fillText(name, W / 2, cy + 452);
+  ctx.fillStyle = P.posterGold;
+  ctx.font = isEn() ? `500 30px ${SERIF_ZH}` : `italic 500 34px ${SERIF_EN}`;
+  ctx.fillText(other, W / 2, cy + 500);
+  ctx.fillStyle = P.inkSoft;
+  ctx.font = `400 28px ${display()}`;
+  const tl = wrap(ctx, tagline, cw - 120).slice(0, 2);
+  tl.forEach((ln, i) => ctx.fillText(ln, W / 2, cy + 562 + i * 38));
 
   // 配色
-  const pw = 64;
-  const gap = 18;
+  const pw = 54;
+  const gap = 16;
   const total = d.palette.length * pw + (d.palette.length - 1) * gap;
+  const py = cy + 640;
   d.palette.forEach((col, i) => {
     ctx.beginPath();
-    ctx.arc(W / 2 - total / 2 + pw / 2 + i * (pw + gap), cy + 620, pw / 2, 0, Math.PI * 2);
+    ctx.arc(W / 2 - total / 2 + pw / 2 + i * (pw + gap), py, pw / 2, 0, Math.PI * 2);
     ctx.fillStyle = col;
     ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,.12)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = rgba(P.ink, 0.1);
+    ctx.lineWidth = 1.5;
     ctx.stroke();
   });
 
-  // 轴
-  ctx.font = `600 24px ${SANS}`;
+  // 四条轴（带维度名）
+  const bx = cx + 190;
+  const bw = cw - 300;
   AXES.forEach((ax, i) => {
-    const y = cy + 690 + i * 30;
+    const y = cy + 706 + i * 32;
     const v = profile.axes[ax.id];
-    const bx = cx + 150;
-    const bw = cw - 300;
-    ctx.fillStyle = v >= 50 ? '#241C12' : '#B3A78F';
-    ctx.textAlign = 'right';
-    ctx.fillText(ax.a.zh, bx - 16, y + 8);
-    ctx.fillStyle = v < 50 ? '#241C12' : '#B3A78F';
     ctx.textAlign = 'left';
-    ctx.fillText(ax.b.zh, bx + bw + 16, y + 8);
-    ctx.fillStyle = '#E8DFD0';
-    roundRect(ctx, bx, y, bw, 8, 4);
+    ctx.font = `500 19px ${SANS}`;
+    ctx.fillStyle = P.inkSoft;
+    ctx.fillText(L({ zh: ax.zh, en: ax.en }), cx + 52, y + 7);
+    ctx.font = `600 19px ${SANS}`;
+    ctx.textAlign = 'right';
+    ctx.fillStyle = v >= 50 ? P.posterInk : rgba(P.ink, 0.45);
+    ctx.fillText(L(ax.a), bx - 12, y + 7);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = v < 50 ? P.posterInk : rgba(P.ink, 0.45);
+    ctx.fillText(L(ax.b), bx + bw + 12, y + 7);
+    ctx.fillStyle = P.line;
+    roundRect(ctx, bx, y, bw, 5, 2.5);
     ctx.fill();
-    ctx.fillStyle = '#C79A4A';
+    ctx.fillStyle = P.gold;
     ctx.beginPath();
-    ctx.arc(bx + bw * (1 - v / 100), y + 4, 9, 0, Math.PI * 2);
+    ctx.arc(bx + bw * (1 - v / 100), y + 2.5, 8, 0, Math.PI * 2);
     ctx.fill();
   });
-  ctx.textAlign = 'center';
 
   // 潘吉
   const pg = await svgToImage(pangieEl);
-  if (pg) ctx.drawImage(pg, W - 330, H - 410, 260, 325);
+  if (pg) ctx.drawImage(pg, W - 300, H - 330, 236, 295);
 
-  ctx.fillStyle = '#F5EDE0';
+  // 品牌
   ctx.textAlign = 'left';
-  ctx.font = `600 46px ${SERIF}`;
-  ctx.fillText(BRAND.app, 80, H - 150);
-  ctx.font = `500 26px ${SANS}`;
-  ctx.fillStyle = '#E9D3A1';
-  ctx.fillText(`${BRAND.by} · ${BRAND.house}`, 80, H - 110);
-  ctx.fillStyle = 'rgba(245,237,224,.7)';
-  ctx.font = `400 24px ${ZH}`;
-  ctx.fillText(`和熊猫精灵${GUIDE.name}一起，读懂你心里的家`, 80, H - 70);
+  ctx.fillStyle = P.posterInk;
+  ctx.font = `600 50px ${SERIF_EN}`;
+  if ('letterSpacing' in ctx) ctx.letterSpacing = '8px';
+  ctx.fillText(BRAND.app, 76, H - 168);
+  if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+  ctx.font = `500 22px ${SANS}`;
+  ctx.fillStyle = P.posterGold;
+  ctx.fillText(`${BRAND.by} · ${BRAND.house}`, 78, H - 128);
+  ctx.fillStyle = P.inkSoft;
+  ctx.font = `400 24px ${display()}`;
+  wrap(ctx, t('和熊猫精灵{0}一起，读懂你心里的家', [guideName()]), 640)
+    .slice(0, 2)
+    .forEach((ln, i) => ctx.fillText(ln, 78, H - 84 + i * 32));
+  // 风景的出处
+  ctx.font = `500 18px ${SANS}`;
+  ctx.fillStyle = rgba(P.ink, 0.62);
+  ctx.textAlign = 'left';
+  ctx.fillText(`${L(scene.place)} · ${L(scene.area)}${scene.credit ? ` · ${scene.credit}` : ''}`, 40, 36);
 
   return new Promise((resolve) => c.toBlob((b) => resolve(b), 'image/png'));
 }

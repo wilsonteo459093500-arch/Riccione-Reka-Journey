@@ -1,9 +1,11 @@
 // 直觉牌上的小插画 —— 全部 SVG，参数化（墙色 / 地板 / 沙发形状 / 光线 / 密度 / 收纳）。
 // 系统 1 认图比认字快得多：客人不需要知道「侘寂」「Japandi」，只要知道哪一张让他想躺下。
+// 内容色（测验刺激）：墙、地板、沙发的颜色来自 flow.js，不随 VI 换色；天空、夜色、线条按「晨光溪岸」调过。
 
 import { useId } from 'react';
 import { swatchURL } from '../shared/textures.js';
 import { MAT_BY_ID } from '../shared/materials.js';
+import { L } from '../shared/i18n.js';
 
 const shadeHex = (hex, k) => {
   const n = parseInt(hex.slice(1), 16);
@@ -22,14 +24,14 @@ function Sky({ light, id }) {
   if (light === 'bright-night' || light === 'lamp-night')
     return (
       <linearGradient id={`${id}-sky`} x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stopColor="#141A33" />
-        <stop offset="1" stopColor="#2B3561" />
+        <stop offset="0" stopColor="#17201C" />
+        <stop offset="1" stopColor="#2C3B35" />
       </linearGradient>
     );
   return (
     <linearGradient id={`${id}-sky`} x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stopColor="#BFDDF2" />
-      <stop offset="1" stopColor="#EAF4FA" />
+      <stop offset="0" stopColor="#C9DFDA" />
+      <stop offset="1" stopColor="#EEF4EE" />
     </linearGradient>
   );
 }
@@ -145,7 +147,7 @@ function RoomScene(p) {
         <radialGradient id={`${id}-lampnight`} cx="94%" cy="38%" r="95%">
           <stop offset="0" stopColor="#FFC27A" stopOpacity=".35" />
           <stop offset=".35" stopColor="#3A2A20" stopOpacity=".25" />
-          <stop offset="1" stopColor="#0E0D18" stopOpacity=".72" />
+          <stop offset="1" stopColor="#10140F" stopOpacity=".72" />
         </radialGradient>
         <radialGradient id={`${id}-ceiling`} cx="50%" cy="0%" r="90%">
           <stop offset="0" stopColor="#FFFFFF" stopOpacity=".25" />
@@ -164,8 +166,8 @@ function RoomScene(p) {
       ) : (
         <>
           {/* 窗 */}
-          <rect x="22" y="26" width="64" height="96" fill={`url(#${id}-sky)`} stroke="#fff" strokeWidth="4" />
-          <line x1="54" y1="26" x2="54" y2="122" stroke="#fff" strokeWidth="3" />
+          <rect x="22" y="26" width="64" height="96" rx="1.5" fill={`url(#${id}-sky)`} stroke="#FBF8F2" strokeWidth="4" />
+          <line x1="54" y1="26" x2="54" y2="122" stroke="#FBF8F2" strokeWidth="3" />
           {night && <circle cx="72" cy="44" r="6" fill="#F5EBC8" />}
           {light === 'day' && <polygon points="22,186 86,186 112,240 30,240" fill="#fff" opacity=".22" />}
           {light === 'evening' && <polygon points="40,176 100,176 170,240 70,240" fill="#FFB36B" opacity=".28" />}
@@ -290,6 +292,101 @@ function ShelfScene({ full }) {
   );
 }
 
+/** 一屋子朋友打边炉：圆桌、冒着热气的锅、围着的碗筷和人影 */
+function HotpotScene({ bg }) {
+  const seats = [
+    [100, 150],
+    [160, 128],
+    [220, 150],
+    [242, 196],
+    [78, 196],
+  ];
+  return (
+    <svg viewBox="0 0 320 240" className="vg">
+      <rect width="320" height="240" fill={bg} />
+      <rect y="0" width="320" height="120" fill="#F6DDBF" opacity=".55" />
+      {/* 吊灯 */}
+      <line x1="160" y1="0" x2="160" y2="40" stroke="#6B4B2F" strokeWidth="1.5" />
+      <path d="M140 58 Q160 30 180 58 Z" fill="#E1913F" />
+      <ellipse cx="160" cy="120" rx="120" ry="60" fill="#FFE2B0" opacity=".35" />
+      {/* 人（圆圆的剪影） */}
+      {seats.map(([x, y], i) => (
+        <g key={i} fill={['#B3552E', '#6E8C63', '#8C4D2A', '#4A6652', '#C8A272'][i]}>
+          <circle cx={x} cy={y - 44} r="13" />
+          <path d={`M${x - 20} ${y} Q${x} ${y - 40} ${x + 20} ${y} Z`} />
+        </g>
+      ))}
+      {/* 圆桌 */}
+      <ellipse cx="160" cy="176" rx="104" ry="34" fill="#8C5A35" />
+      <ellipse cx="160" cy="171" rx="104" ry="32" fill="#B07A4C" />
+      {/* 碗筷 */}
+      {[
+        [96, 172],
+        [130, 192],
+        [190, 192],
+        [224, 172],
+        [160, 150],
+      ].map(([x, y], i) => (
+        <g key={i}>
+          <ellipse cx={x} cy={y} rx="12" ry="5" fill="#FBF8F2" />
+          <line x1={x + 6} y1={y - 2} x2={x + 22} y2={y - 10} stroke="#6B4B2F" strokeWidth="1.6" strokeLinecap="round" />
+        </g>
+      ))}
+      {/* 锅 + 热气 */}
+      <ellipse cx="160" cy="170" rx="34" ry="12" fill="#3B3A36" />
+      <ellipse cx="160" cy="167" rx="30" ry="9" fill="#C0532E" />
+      <path d="M160 167 v-9" stroke="#3B3A36" strokeWidth="2" />
+      <g stroke="#FFFFFF" strokeWidth="2.2" fill="none" strokeLinecap="round" opacity=".85">
+        <path d="M146 150 q-6 -10 0 -18 q6 -8 0 -16" />
+        <path d="M160 146 q-6 -10 0 -18 q6 -8 0 -16" />
+        <path d="M174 150 q-6 -10 0 -18 q6 -8 0 -16" />
+      </g>
+    </svg>
+  );
+}
+
+/** 一个人，一本书，一杯茶：窗边的单人椅、落地灯、植物 */
+function ReadingScene({ bg }) {
+  return (
+    <svg viewBox="0 0 320 240" className="vg">
+      <rect width="320" height="240" fill={bg} />
+      <rect y="176" width="320" height="64" fill="#B9C2AE" />
+      {/* 窗 */}
+      <rect x="196" y="24" width="90" height="112" rx="2" fill="#EEF4EE" stroke="#FBF8F2" strokeWidth="5" />
+      <line x1="241" y1="24" x2="241" y2="136" stroke="#FBF8F2" strokeWidth="3" />
+      <polygon points="196,180 286,180 300,240 170,240" fill="#FFFFFF" opacity=".25" />
+      {/* 植物 */}
+      <path d="M262 176 L282 176 L279 196 L265 196 Z" fill="#C9B79D" />
+      {[
+        [-8, -26, -25],
+        [6, -32, 20],
+        [-1, -42, 0],
+        [12, -20, 40],
+      ].map(([dx, dy, r], i) => (
+        <ellipse key={i} cx={272 + dx} cy={176 + dy} rx="6" ry="15" fill={i % 2 ? '#5F7D5A' : '#7C9A6D'} transform={`rotate(${r} ${272 + dx} ${176 + dy})`} />
+      ))}
+      {/* 落地灯 */}
+      <line x1="58" y1="70" x2="58" y2="196" stroke="#5A4634" strokeWidth="2.4" />
+      <path d="M40 70 L76 70 L68 48 L48 48 Z" fill="#F3E3C3" />
+      <ellipse cx="58" cy="200" rx="14" ry="3" fill="#5A4634" />
+      <ellipse cx="96" cy="140" rx="70" ry="54" fill="#FFE8BE" opacity=".35" />
+      {/* 单人椅 */}
+      <rect x="84" y="112" width="78" height="62" rx="18" fill="#8C9884" />
+      <rect x="78" y="146" width="92" height="34" rx="12" fill="#A3AE9A" />
+      <rect x="88" y="178" width="4" height="16" fill="#5A4634" />
+      <rect x="156" y="178" width="4" height="16" fill="#5A4634" />
+      {/* 书 */}
+      <path d="M106 150 l22 -6 l22 6 l0 4 l-22 -6 l-22 6 Z" fill="#FBF8F2" stroke="#A65A3A" strokeWidth="1.5" />
+      {/* 边几 + 茶 */}
+      <rect x="176" y="168" width="34" height="5" rx="2" fill="#6B4B2F" />
+      <rect x="191" y="173" width="4" height="22" fill="#6B4B2F" />
+      <path d="M184 156 h16 v8 q0 6 -8 6 q-8 0 -8 -6 Z" fill="#FBF8F2" />
+      <path d="M200 159 q6 0 4 5 q-2 3 -4 2" stroke="#FBF8F2" strokeWidth="2" fill="none" />
+      <path d="M189 150 q-3 -5 0 -9 M195 150 q-3 -5 0 -9" stroke="#FFFFFF" strokeWidth="1.6" fill="none" strokeLinecap="round" opacity=".9" />
+    </svg>
+  );
+}
+
 export default function Vignette({ visual }) {
   if (!visual) return null;
   if (visual.kind === 'room') return <RoomScene {...visual} />;
@@ -309,16 +406,16 @@ export default function Vignette({ visual }) {
         {visual.ids.map((mid) => (
           <figure key={mid}>
             <img src={swatchURL(mid, 192) || ''} alt="" />
-            <figcaption>{MAT_BY_ID[mid]?.zh}</figcaption>
+            <figcaption>{L(MAT_BY_ID[mid])}</figcaption>
           </figure>
         ))}
       </div>
     );
-  if (visual.kind === 'scene')
-    return (
-      <div className="vg vg-scene" style={{ background: visual.bg }}>
-        <span>{visual.emoji}</span>
-      </div>
-    );
+  if (visual.kind === 'scene') {
+    // 以前是一个大 emoji；现在画成小场景（flow.js 里还是 emoji 当记号）
+    if (visual.emoji === '🍲') return <HotpotScene bg={visual.bg} />;
+    if (visual.emoji === '📖') return <ReadingScene bg={visual.bg} />;
+    return <div className="vg vg-scene" style={{ background: visual.bg }} />;
+  }
   return null;
 }

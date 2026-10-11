@@ -1,8 +1,10 @@
-// 档案 → 一段排好版的文字（WhatsApp 给设计师 / 复制到 CRM）。
+// 档案 → 一段排好版的文字（WhatsApp 给设计师 / 复制到 CRM），跟着当前语言出中文或英文。
 
 import { DREAMER_BY_CODE, AXES } from './dreamers.js';
 import { MAT_BY_ID, SLOT_BY_ID } from './materials.js';
 import { BRAND, CONFIG, hostFromCode } from './config.js';
+import { insights } from './profile.js';
+import { t, L, isEn } from './i18n.js';
 
 const LIFE_LABEL = {
   saturday: { sofa: '沙发追剧', kitchen: '厨房做早午餐', window: '窗边看书', workout: '在家运动', bed: '赖床' },
@@ -49,33 +51,62 @@ export const AVOID_LABEL = {
   wallpaper: '花纹墙纸',
 };
 
-export const lifeLabel = (k, v) => LIFE_LABEL[k]?.[v] || v;
+export const lifeLabel = (k, v) => t(LIFE_LABEL[k]?.[v] || v);
 
 const mm = (x) => (x ? `${Number(x).toLocaleString('en-US')}mm` : '—');
+const listSep = () => (isEn() ? ', ' : '、');
+const LEVEL_ICON = { conflict: '⚠️', note: '📐' };
 
+/**
+ * 档案 → WhatsApp / CRM 文字（跟着当前语言：中文原样，英文查词典）。
+ * 客人看得到 WhatsApp 输入框，所以「见面要聊」只放 conflict / note，不放 tip（沟通建议、报价话术）。
+ */
 export function profileText(p, plan, link = '') {
   const d = DREAMER_BY_CODE[p.code];
   const host = hostFromCode(p.host);
-  const L = [];
-  L.push(`✨ ${BRAND.app} 梦想家蓝图 · ${p.name || '贵宾'}`);
-  L.push(`牌：${d?.num} ${d?.zh}（${d?.en}）· ${p.code}`);
-  L.push(AXES.map((ax) => `${ax.a.zh}${p.axes[ax.id]}%/${ax.b.zh}${100 - p.axes[ax.id]}%`).join('  '));
-  L.push('');
-  L.push(`🏠 生活：周六${lifeLabel('saturday', p.life.saturday) || '—'}；回家${lifeLabel('home', p.life.home) || '—'}；厨房${lifeLabel('cook', p.life.cook) || '—'}；最想藏${lifeLabel('bell', p.life.bell) || '—'}`);
-  if (p.life.who?.length) L.push(`👨‍👩‍👧 同住：${p.life.who.map((v) => lifeLabel('who', v)).join('、')}`);
-  L.push(`📦 收纳：鞋 ${plan.shoes} 双 → 鞋柜 ${mm(plan.shoeCabinetMM)}；衣柜目标 ${mm(plan.wardrobeMM)}（长挂 ${mm(plan.longHangMM)}）；书墙 ${mm(plan.bookshelfMM)}；家电 ${plan.applianceCount} 件；大件 ${plan.bulky} 类；藏 ${100 - plan.displayPct} : 展 ${plan.displayPct}`);
-  L.push(`🪔 三个愿望：${(p.wishes || []).map((w, i) => `${i + 1}.${WISH_LABEL[w] || w}`).join(' ')}`);
-  if (p.avoid?.length) L.push(`🚫 雷区：${p.avoid.map((a) => AVOID_LABEL[a] || a).join('、')}`);
-  if (p.wish) L.push(`💬 一个愿望：「${p.wish}」`);
-  L.push('');
-  L.push(`🎨 材质：${['floor', 'walls', 'cabinetry', 'countertop', 'upholstery'].map((s) => `${SLOT_BY_ID[s].zh} ${MAT_BY_ID[p.materials[s]]?.zh || '—'}`).join(' · ')}`);
-  if (d?.design) L.push(`📐 设计语言：${d.design.style}；${d.design.kelvin}；${d.design.doors}`);
-  if (link) {
-    L.push('');
-    L.push(`🔗 打开蓝图 / 3D：${link}`);
+  const touched = p.storage?.touched;
+  // 宝藏那几题客人没动过 → 标出来（只在新答案里有 touched 时才标）
+  const unsure = (k) => (touched && !touched[k] ? t('（默认值，未确认）') : '');
+  const gap = isEn() ? ' ' : '';
+  const out = [];
+  out.push(`✨ ${t('{0} 梦想家蓝图 · {1}', [BRAND.app, p.name || t('贵宾')])}`);
+  out.push(t('牌：{0} {1}（{2}）· {3}', [d?.num, isEn() ? d?.en : d?.zh, isEn() ? d?.zh : d?.en, p.code]));
+  out.push(AXES.map((ax) => `${L(ax.a)}${gap}${p.axes[ax.id]}%/${L(ax.b)}${gap}${100 - p.axes[ax.id]}%`).join('  '));
+  out.push('');
+  const life = p.life || {};
+  out.push(`🏠 ${t('生活：周六{0}；回家{1}；厨房{2}；最想藏{3}', [lifeLabel('saturday', life.saturday) || '—', lifeLabel('home', life.home) || '—', lifeLabel('cook', life.cook) || '—', lifeLabel('bell', life.bell) || '—'])}`);
+  if (life.who?.length) out.push(`👨‍👩‍👧 ${t('同住：{0}', [life.who.map((v) => lifeLabel('who', v)).join(listSep())])}`);
+  const store = [
+    t('鞋 {0} 双 → 鞋柜 {1}', [plan.shoes, mm(plan.shoeCabinetMM)]) + unsure('shoes'),
+    t('衣柜目标 {0}（长挂 {1}）', [mm(plan.wardrobeMM), mm(plan.longHangMM)]) + unsure('wardrobe'),
+    t('书墙 {0}', [mm(plan.bookshelfMM)]) + unsure('books'),
+    t('家电 {0} 件', [plan.applianceCount]),
+    t('大件 {0} 类', [plan.bulky]),
+    t('藏 {0} : 展 {1}', [100 - plan.displayPct, plan.displayPct]) + unsure('ratio'),
+  ];
+  out.push(`📦 ${t('收纳：{0}', [store.join(isEn() ? '; ' : '；')])}`);
+  out.push(`🪔 ${t('三个愿望：{0}', [(p.wishes || []).map((w, i) => `${i + 1}.${t(WISH_LABEL[w] || w)}`).join(' ')])}`);
+  if (p.avoid?.length) out.push(`🚫 ${t('雷区：{0}', [p.avoid.map((a) => t(AVOID_LABEL[a] || a)).join(listSep())])}`);
+  if (p.wish) out.push(`💬 ${t('一个愿望：「{0}」', [p.wish])}`);
+  out.push('');
+  const mats = ['floor', 'walls', 'cabinetry', 'countertop', 'upholstery'].map((s) => `${L(SLOT_BY_ID[s])} ${L(MAT_BY_ID[p.materials?.[s]]) || '—'}`);
+  out.push(`🎨 ${t('材质：{0}', [mats.join(' · ')])}`);
+  if (d?.design) out.push(`📐 ${t('设计语言：{0}；{1}；{2}', [t(d.design.style), t(d.design.kelvin), t(d.design.doors)])}`);
+  const talk = insights(p, plan)
+    .filter((x) => x.level !== 'tip')
+    .sort((x, y) => (x.level === 'conflict' ? 0 : 1) - (y.level === 'conflict' ? 0 : 1))
+    .slice(0, 6);
+  if (talk.length) {
+    out.push('');
+    out.push(`🗣 ${t('见面要聊')}`);
+    for (const x of talk) out.push(`${LEVEL_ICON[x.level] || '•'} ${x.text}`);
   }
-  if (host) L.push(`— 由 ${host.name} 陪同`);
-  return L.join('\n');
+  if (link) {
+    out.push('');
+    out.push(`🔗 ${t('打开蓝图 / 3D：{0}', [link])}`);
+  }
+  if (host) out.push(t('— 由 {0} 陪同', [host.name]));
+  return out.join('\n');
 }
 
 export function waLink(text, to = CONFIG.inbox) {

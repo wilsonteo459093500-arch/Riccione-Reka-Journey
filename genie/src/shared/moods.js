@@ -2,6 +2,8 @@
 // 仪表像 The Sims 的需求条：每换一次材质、每拖一下时间，数字马上动 —— 即时反馈让人停不下来。
 
 import { SLOTS, MAT_BY_ID, hexToRgb } from './materials.js';
+import { COLOR_TAGS } from './colorTags.js';
+import { t, L, isEn } from './i18n.js';
 
 export const MOODS = [
   {
@@ -121,18 +123,18 @@ const FEEL = {
   moody: { adj: '深邃有态度', word: '很沉浸' },
 };
 
-/** 「砂洗石灰墙、烟熏橡木地板，加上低垂的金色夕阳：温暖而柔和。整体读起来 —— 很 cozy。」 */
+/** 「砂洗石灰墙面、烟熏橡地板，加上低垂的金色夕阳：温暖而柔和。整体读起来 —— 很 cozy。」（跟着当前语言） */
 export function moodSentence(materials, hour) {
   const meter = moodMeter(materials, hour);
   const top = Object.entries(meter).sort((a, b) => b[1] - a[1])[0][0];
   const wall = MAT_BY_ID[materials?.walls];
   const floor = MAT_BY_ID[materials?.floor];
   const parts = [];
-  if (wall) parts.push(`${wall.zh}墙面`);
-  if (floor) parts.push(`${floor.zh}地板`);
+  if (wall) parts.push(t('{0}墙面', [L(wall)]));
+  if (floor) parts.push(t('{0}地板', [L(floor)]));
   return {
     top,
-    text: `${parts.join('、')}，加上${LIGHT_PHRASE(hour)}：${FEEL[top].adj}。整体读起来 —— ${FEEL[top].word}。`,
+    text: t('{0}，加上{1}：{2}。整体读起来 —— {3}。', [parts.join(isEn() ? ', ' : '、'), t(LIGHT_PHRASE(hour)), t(FEEL[top].adj), t(FEEL[top].word)]),
   };
 }
 
@@ -159,23 +161,32 @@ function hsl(hex) {
   return { h, s, l };
 }
 
-/** 材质 → 一组标签，雷区选项按标签排除 */
+/**
+ * 材质 → 一组标签，雷区选项按标签排除。
+ * 色系（白 / 米黄 / 粉 / 绿 / 黄 / 红 / 蓝 / 深木色）以 colorTags.js 的登记为准；灰、黑仍按明度算。
+ * 没登记的材质才按颜色猜（木头只看深浅，不分色系）。
+ */
 export function tagsOf(mat) {
   const tags = new Set();
   if (!mat) return tags;
   const { h, s, l } = hsl(mat.color);
-  if (l > 0.88 && s < 0.25) tags.add('white');
   if (l < 0.2) tags.add('black');
   if (s < 0.12 && l >= 0.2 && l <= 0.88) tags.add('grey');
-  if (mat.cat === 'wood' && mat.light < 0.4) tags.add('darkwood');
-  if (s >= 0.12 && l >= 0.2) {
-    if ((h >= 330 || h < 15) && l > 0.6) tags.add('pink');
-    else if (h < 25 || h >= 330) tags.add('red');
-    else if (h < 50 && l > 0.62 && s < 0.45) tags.add('beige');
-    else if (h < 50) tags.add(l < 0.45 ? 'red' : 'yellow');
-    else if (h < 70) tags.add('yellow');
-    else if (h < 170) tags.add('green');
-    else if (h < 260) tags.add('blue');
+  const known = COLOR_TAGS[mat.id];
+  if (known) for (const tag of known) tags.add(tag);
+  else if (mat.cat === 'wood') {
+    if (mat.light < 0.4) tags.add('darkwood');
+  } else {
+    if (l > 0.88 && s < 0.25) tags.add('white');
+    if (s >= 0.12 && l >= 0.2) {
+      if ((h >= 330 || h < 15) && l > 0.6) tags.add('pink');
+      else if (h < 25 || h >= 330) tags.add('red');
+      else if (h < 50 && l > 0.62 && s < 0.45) tags.add('beige');
+      else if (h < 50) tags.add(l < 0.45 ? 'red' : 'yellow');
+      else if (h < 70) tags.add('yellow');
+      else if (h < 170) tags.add('green');
+      else if (h < 260) tags.add('blue');
+    }
   }
   if (mat.clearcoat >= 0.3 || (mat.cat !== 'metal' && mat.rough < 0.35)) tags.add('glossy');
   if (mat.tex.type === 'marble') tags.add('marble');

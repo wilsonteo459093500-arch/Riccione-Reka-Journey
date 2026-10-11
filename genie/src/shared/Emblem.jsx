@@ -1,4 +1,5 @@
-// 梦想家牌的牌面图腾 —— 金色线描，塔罗风。16 张牌各一个。
+// 梦想家卡牌的牌面图腾 —— 金色细线描（像烫金的线稿）。16 张牌各一个。
+// frame：外面再加一圈双细线圆框（牌面、海报用）。
 
 const P = {
   cup: (
@@ -112,9 +113,27 @@ const P = {
   ),
 };
 
-export default function Emblem({ name, size = 64, color = 'currentColor', stroke = 2.4 }) {
+export default function Emblem({ name, size = 64, color = 'currentColor', stroke = 1.9, frame = false, className = '' }) {
   return (
-    <svg viewBox="0 0 100 100" width={size} height={size} fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg
+      viewBox={frame ? '-14 -14 128 128' : '0 0 100 100'}
+      width={size}
+      height={size}
+      fill="none"
+      stroke={color}
+      strokeWidth={stroke}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      {frame && (
+        <g strokeWidth={stroke * 0.5}>
+          <circle cx="50" cy="50" r="61" />
+          <circle cx="50" cy="50" r="57.5" opacity=".6" />
+          <path d="M50 -11 v5 M50 106 v5 M-11 50 h5 M106 50 h5" />
+        </g>
+      )}
       {P[name] || P.star}
     </svg>
   );

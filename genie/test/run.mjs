@@ -82,11 +82,16 @@ await test('全选 b 侧 + 高展示 → CLRD', () => {
   const { axes } = scoreAxes(answers({ pairs, ratio: 80 }), { PAIRS, LIFE });
   assert.equal(codeOf(axes), 'CLRD');
 });
-await test('秒选比犹豫的权重高', () => {
-  const fast = answers();
-  const slow = answers();
+await test('秒选比犹豫的权重高（只在单人玩时）', () => {
+  const fast = answers({ players: 'solo' });
+  const slow = answers({ players: 'solo' });
   for (const k of Object.keys(slow.pairs)) slow.pairs[k] = { pick: 'a', ms: 5000 };
   assert.ok(scoreAxes(fast, { PAIRS, LIFE }).axes.temp > scoreAxes(slow, { PAIRS, LIFE }).axes.temp);
+  // 两个人一起玩：反应时间是在商量，不加权
+  const cFast = answers({ players: 'couple' });
+  const cSlow = answers({ players: 'couple' });
+  for (const k of Object.keys(cSlow.pairs)) cSlow.pairs[k] = { pick: 'a', ms: 5000 };
+  assert.deepEqual(scoreAxes(cFast, { PAIRS, LIFE }).axes, scoreAxes(cSlow, { PAIRS, LIFE }).axes);
 });
 await test('没有答案也不会出错（各 51%）', () => {
   const { axes } = scoreAxes({}, { PAIRS, LIFE });
