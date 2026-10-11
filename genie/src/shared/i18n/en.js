@@ -4,5 +4,6 @@ import quiz from './en-quiz.js';
 import studio from './en-studio.js';
 import shell from './en-shell.js';
 import logic from './en-logic.js';
+import engine from './en-engine.js';
 
-export default { ...base, ...quiz, ...studio, ...shell, ...logic };
+export default { ...base, ...quiz, ...studio, ...shell, ...logic, ...engine };

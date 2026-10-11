@@ -18,7 +18,7 @@ import { profileText, postProfile } from '../shared/summary.js';
 import { isMuted, setMuted, sfx } from '../shared/sound.js';
 import { isWishMode, tellShell } from '../shared/zen.js';
 import { t, guideName, setLang } from '../shared/i18n.js';
-import Scenery from './Scenery.jsx';
+import Scenery, { usesPhoto } from './Scenery.jsx';
 import { sceneFor } from './scenes.js';
 import Stones from './Stones.jsx';
 import {
@@ -376,7 +376,7 @@ function Play({ onDone, onRestart }) {
   }, [dusk]);
 
   return (
-    <div className={`qz ${dusk ? 'dusk' : 'morning'} qz-${kind} mode-${chapter?.mode || 'none'} ${step.id === 'welcome' ? 'is-cover' : ''}`}>
+    <div className={`qz ${dusk ? 'dusk' : 'morning'} qz-${kind} mode-${chapter?.mode || 'none'} ${step.id === 'welcome' ? 'is-cover' : ''} ${usesPhoto(scene) ? 'on-photo' : ''}`}>
       <Scenery scene={scene} next={nextScene} />
       {step.id !== 'welcome' && (
         <TopBar

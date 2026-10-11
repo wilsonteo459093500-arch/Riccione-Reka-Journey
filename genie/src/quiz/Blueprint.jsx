@@ -34,7 +34,7 @@ import { DreamerCard } from './Reveal.jsx';
 import { Segmented } from './ui.jsx';
 import { Ico } from './icons.jsx';
 import { Painting } from './paint.jsx';
-import { SceneCaption } from './Scenery.jsx';
+import { SceneCaption, SceneImage } from './Scenery.jsx';
 import { sceneForProfile } from './scenes.js';
 import { DREAMER_BY_CODE, AXES, HIDDEN_AXES } from '../shared/dreamers.js';
 import { MAT_BY_ID, SLOT_BY_ID } from '../shared/materials.js';
@@ -221,7 +221,7 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
       </div>
 
       <div className="bp-band no-print" aria-hidden="true">
-        <Painting id={sceneId} className="bp-band-paint" />
+        <SceneImage id={sceneId} still />
         <SceneCaption id={sceneId} />
       </div>
 
