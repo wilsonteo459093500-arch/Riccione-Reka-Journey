@@ -898,6 +898,7 @@ export class Engine {
     this.anchorsDirty = true;
   }
 
+  /** 标签的屏幕位置：都没动（< 0.5px、可见性不变）就不打扰 React */
   emitAnchors() {
     if (!this.cb.onAnchors) return;
     const rect = this.renderer.domElement.getBoundingClientRect();
@@ -908,7 +909,25 @@ export class Engine {
       const v = p.clone().project(this.camera);
       out.push({ slot, x: ((v.x + 1) / 2) * rect.width, y: ((1 - v.y) / 2) * rect.height, visible: v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05 });
     }
+    const prev = this._lastAnchors;
+    const same =
+      prev &&
+      prev.length === out.length &&
+      out.every((a, i) => a.slot === prev[i].slot && a.visible === prev[i].visible && Math.abs(a.x - prev[i].x) < 0.5 && Math.abs(a.y - prev[i].y) < 0.5);
+    if (same) return;
+    this._lastAnchors = out;
     this.cb.onAnchors(out);
+  }
+
+  /** 选中家具上方的屏幕点（选择条跟着它）：没动就不发 */
+  emitSelMove() {
+    if (!this.cb.onSelMove) return;
+    const p = this.selected ? this.projectItem(this.selected) : null;
+    const q = this._lastSel;
+    if (p && q && Math.abs(p.x - q.x) < 0.5 && Math.abs(p.y - q.y) < 0.5) return;
+    if (!p && !q) return;
+    this._lastSel = p;
+    this.cb.onSelMove(p);
   }
 
   projectItem(id) {
@@ -929,26 +948,39 @@ export class Engine {
     } else this.renderer.render(this.scene, this.camera);
   }
 
-  /** 高清截图（隐藏选框） */
+  /**
+   * 高清截图（隐藏选框）。像素比有上限：长边最多 3200（'fast' 2560）像素、也不超过显卡的最大尺寸 ——
+   * 大 iPad 上 3× 的后期链要好几百 MB 显存，会直接把 WebGL 上下文挤掉。
+   */
   async snapshot(scale = 2) {
+    if (this.contextLost) throw new Error('webgl-context-lost');
     const sel = this.selBox.visible;
     const hov = this.hovBox.visible;
     this.selBox.visible = this.hovBox.visible = false;
-    const pr = this.renderer.getPixelRatio();
-    this.renderer.setPixelRatio(Math.min(3, pr * scale));
-    this.resize();
-    this.renderNow();
-    const blob = await new Promise((res) => this.renderer.domElement.toBlob(res, 'image/png'));
-    this.renderer.setPixelRatio(pr);
-    this.resize();
-    this.selBox.visible = sel;
-    this.hovBox.visible = hov;
-    this.dirty = true;
+    const base = this.renderer.getPixelRatio();
+    const w = this.container.clientWidth || 1;
+    const h = this.container.clientHeight || 1;
+    const caps = this.renderer.capabilities;
+    const long = Math.min(QUALITY[this.quality].snapLong, caps.maxTextureSize || 4096, caps.maxRenderbufferSize || 4096);
+    this._prOverride = Math.max(Math.min(base, long / Math.max(w, h)), Math.min(3, base * scale, long / Math.max(w, h)));
+    let blob = null;
+    try {
+      this.resize();
+      this.renderNow();
+      blob = await new Promise((res) => this.renderer.domElement.toBlob(res, 'image/png'));
+    } finally {
+      this._prOverride = 0;
+      this.resize();
+      this.selBox.visible = sel;
+      this.hovBox.visible = hov;
+      this.dirty = true;
+    }
     return blob;
   }
 
   /** 四个时段的小图（日光面板用）：在同一帧里渲染、截取、复原，不会闪 */
   thumbs(hours, w = 168, h = 104) {
+    if (this.contextLost) return [];
     const keep = this.time;
     const size = this.renderer.getSize(new THREE.Vector2());
     const pr = this.renderer.getPixelRatio();
