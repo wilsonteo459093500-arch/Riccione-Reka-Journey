@@ -2,7 +2,7 @@
 
 import { DREAMER_BY_CODE, AXES } from './dreamers.js';
 import { MAT_BY_ID, SLOT_BY_ID } from './materials.js';
-import { CONFIG, hostFromCode } from './config.js';
+import { BRAND, CONFIG, hostFromCode } from './config.js';
 
 const LIFE_LABEL = {
   saturday: { sofa: '沙发追剧', kitchen: '厨房做早午餐', window: '窗边看书', workout: '在家运动', bed: '赖床' },
@@ -57,7 +57,7 @@ export function profileText(p, plan, link = '') {
   const d = DREAMER_BY_CODE[p.code];
   const host = hostFromCode(p.host);
   const L = [];
-  L.push(`✨ GENIE 梦想家蓝图 · ${p.name || '贵宾'}`);
+  L.push(`✨ ${BRAND.app} 梦想家蓝图 · ${p.name || '贵宾'}`);
   L.push(`牌：${d?.num} ${d?.zh}（${d?.en}）· ${p.code}`);
   L.push(AXES.map((ax) => `${ax.a.zh}${p.axes[ax.id]}%/${ax.b.zh}${100 - p.axes[ax.id]}%`).join('  '));
   L.push('');

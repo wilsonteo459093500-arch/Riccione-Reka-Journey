@@ -1,19 +1,21 @@
-// GENIE by RICCIONE REKA · 全局配置 —— 改这一份就能换精灵名字、收件 WhatsApp、团队成员。
+// WISH by RICCIONE REKA · 全局配置 —— 改这一份就能换软件名、精灵名字、收件 WhatsApp、团队成员。
 // 与 invite/assets/js/config.js 同一套号码与团队；新同事两边各加一行。
+// （代码文件夹仍叫 genie/、本机存储键仍是 genie.*：改了会丢掉已存的客人档案，所以内部名不动。）
 
 export const BRAND = {
-  app: 'GENIE',
+  app: 'WISH',
   by: 'by RICCIONE REKA',
+  full: 'WISH by RICCIONE REKA',
   house: '溪岸 SAIL',
   reading: '梦想家占卜',
   readingEn: 'The Dream Home Reading',
   studio: '3D 梦想工作室',
-  studioEn: 'Genie Studio',
-  plinth: 'GENIE · RICCIONE REKA · 溪岸 SAIL',
+  studioEn: 'WISH Studio',
+  plinth: 'WISH · RICCIONE REKA · 溪岸 SAIL',
   venue: 'RICCIONE Malaysia · Setia Alam',
 };
 
-// 熊猫精灵向导：Pan(da) + (Ge)nie。英文念「潘-吉」，尾音和 Genie 一样；
+// 软件叫 WISH（许愿）；向导是住在神灯里的熊猫精灵：Pan(da) + (Ge)nie。英文念「潘-吉」，尾音和 Genie 一样；
 // 中文「盼」= 许愿，「吉」= 吉祥。想换名字，只改这里。
 // 备选：Jinbao 金宝（Jinn + 宝宝）· Pandini 潘迪尼（Panda + Houdini）· Genda 精达
 export const GUIDE = {

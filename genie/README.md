@@ -1,7 +1,8 @@
-# GENIE · by RICCIONE REKA
+# WISH · by RICCIONE REKA
 
 > 熊猫精灵「盼吉 Pangie」的**梦想家占卜**（客人玩）＋ **3D 梦想工作室**（设计师 / 销售用）。
 > 先读懂一个家，再把它变出来。设计思路（快思慢想 × The Sims）见 [`DESIGN.md`](./DESIGN.md)，上线见 [`DEPLOY.md`](./DEPLOY.md)。
+> 软件名 **WISH**（许愿）；向导是住在神灯里的熊猫精灵盼吉。代码文件夹和本机存储键沿用早期代号 `genie`（改了会丢已存档案）。
 
 | 网址 | 是什么 |
 |---|---|

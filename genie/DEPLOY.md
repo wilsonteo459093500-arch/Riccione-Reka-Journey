@@ -1,4 +1,4 @@
-# GENIE 上线
+# WISH 上线
 
 纯前端（Vite + React + three.js），没有后端、没有环境变量。
 
@@ -8,7 +8,7 @@
 
 | 设置 | 值 |
 |---|---|
-| Project Name | `genie-riccione-reka`（随意） |
+| Project Name | `wish-riccione-reka`（随意） |
 | Root Directory | `genie` |
 | Framework Preset | Vite |
 | Build Command | `npm run build` |
