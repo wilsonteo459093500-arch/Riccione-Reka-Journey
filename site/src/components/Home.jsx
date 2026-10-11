@@ -2,6 +2,7 @@
 import { useMemo, useState } from 'react';
 import Icon from './ui/Icon.jsx';
 import { Sheet, useUI, Empty } from './ui/UI.jsx';
+import LangSwitch from './ui/LangSwitch.jsx';
 import ProjectPicker from './ProjectPicker.jsx';
 import { useStore } from '../lib/store.jsx';
 import { TEMPLATES, GROUPS, getTemplate } from '../templates/index.js';
@@ -143,6 +144,9 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <div className="text-[24px] font-bold leading-none tracking-[0.3em]">TORA</div>
             <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/70">by Riccione Reka</div>
+            <div className="ml-auto">
+              <LangSwitch dark />
+            </div>
           </div>
           <div className="mt-4 text-[22px] font-bold leading-tight">{hello}</div>
           <div className="mt-1 text-[13px] text-white/70">手机填写 · 逐项拍照 · 一键出 PDF / Word / Excel / WhatsApp 文案</div>

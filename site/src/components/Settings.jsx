@@ -4,6 +4,7 @@ import Icon from './ui/Icon.jsx';
 import { TopBar, Spinner, useUI } from './ui/UI.jsx';
 import { useStore } from '../lib/store.jsx';
 import LangPicker from './LangPicker.jsx';
+import LangSwitch from './ui/LangSwitch.jsx';
 import { normLang } from '../lib/lang.js';
 import { storageEstimate, requestPersist } from '../lib/db.js';
 import { exportBackup, importBackup } from '../lib/backup.js';
@@ -108,7 +109,7 @@ export default function Settings() {
 
   return (
     <div className="pb-28">
-      <TopBar title="设置" sub="资料只存在这台手机" />
+      <TopBar title="设置" sub="资料只存在这台手机" right={<div className="mr-1"><LangSwitch /></div>} />
       <main className="mx-auto max-w-lg space-y-4 px-3 pt-3">
         <section className="card space-y-4 p-4">
           <div className="text-[15px] font-bold text-ink">我的资料</div>

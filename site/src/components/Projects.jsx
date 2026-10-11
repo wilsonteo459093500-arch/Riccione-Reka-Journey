@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import Icon from './ui/Icon.jsx';
 import { TopBar, Empty, useUI } from './ui/UI.jsx';
+import LangSwitch from './ui/LangSwitch.jsx';
 import ProjectForm from './ProjectForm.jsx';
 import { CrewShare } from './CrewLink.jsx';
 import { useStore } from '../lib/store.jsx';
@@ -23,9 +24,12 @@ export function ProjectList() {
         title="项目"
         sub="项目资料填一次，所有报告自动带入"
         right={
-          <button className="btn-primary mr-1 px-3 py-2 text-[14px]" onClick={() => navigate('/projects/new')}>
-            <Icon name="Plus" size={17} /> 新项目
-          </button>
+          <div className="mr-1 flex shrink-0 items-center gap-1.5">
+            <LangSwitch />
+            <button className="btn-primary px-3 py-2 text-[14px]" onClick={() => navigate('/projects/new')}>
+              <Icon name="Plus" size={17} /> 新项目
+            </button>
+          </div>
         }
       />
       <main className="mx-auto max-w-lg space-y-2 px-3 pt-3">

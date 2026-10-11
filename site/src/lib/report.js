@@ -2,6 +2,7 @@
 import { allFields, allItems, resolveScale, L } from '../templates/schema.js';
 import { todayISO } from './format.js';
 import { normLang, tx } from './lang.js';
+import { getUiLang } from './i18n.js';
 
 export const uid = (p = '') =>
   p + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -11,6 +12,12 @@ export function siteLabel(project) {
   if (!project) return '';
   const base = [project.name, project.unit].filter(Boolean).join(' ');
   return project.client ? `${base}（${project.client}）` : base;
+}
+
+/** 界面上显示的工地称呼：English 用半角括号「Tuai Timur Residence 17-3 (Hailey)」，中文 / 中英照旧 */
+export function siteLabelUi(project) {
+  const s = siteLabel(project);
+  return getUiLang() === 'en' ? s.replace(/（/g, ' (').replace(/）/g, ')').replace(/\s+\(/g, ' (') : s;
 }
 
 /** 解析 bind 键 → 值 */
@@ -214,13 +221,18 @@ export function progress(template, report) {
  * 导出前的填写提醒（不阻止导出，只提示）。
  * 返回 [{ level: 'error'|'warn', text, sectionId, target }]
  */
-export function issues(template, report, { project, settings } = {}) {
+export function issues(template, report, { project, settings, lang = getUiLang() } = {}) {
   const out = [];
+  // 提醒文字跟界面语言；中英时「中文 / English」
+  const lg = normLang(lang);
+  const say = (zh, en) => (lg === 'zh' ? zh : lg === 'en' ? en : `${zh} / ${en}`);
+  const zhOf = (label) => L(label, 'zh');
+  const enOf = (label) => L(label, 'en');
   for (const s of template.sections) {
     if (s.type === 'fields') {
       for (const f of s.fields) {
         if (f.required && isEmpty(report.values?.[f.key])) {
-          out.push({ level: 'warn', text: `未填写：${L(f.label, 'zh')}`, sectionId: s.id, target: f.key });
+          out.push({ level: 'warn', text: say(`未填写：${zhOf(f.label)}`, `Not filled in: ${enOf(f.label)}`), sectionId: s.id, target: f.key });
         }
       }
     }
@@ -239,7 +251,10 @@ export function issues(template, report, { project, settings } = {}) {
         if (need.includes(a.r) && !(a.note || '').trim()) {
           out.push({
             level: 'error',
-            text: `第 ${it.no} 项「${L(it.title, 'zh')}」判定为${opt?.zh || a.r}，需写明${L(s.remark?.label, 'zh') || '备注'}`,
+            text: say(
+              `第 ${it.no} 项「${zhOf(it.title)}」判定为${opt?.zh || a.r}，需写明${zhOf(s.remark?.label) || '备注'}`,
+              `Item ${it.no} "${enOf(it.title)}" is marked ${opt?.en || opt?.zh || a.r} — please write the ${(enOf(s.remark?.label) || 'remarks').toLowerCase()}`,
+            ),
             sectionId: s.id,
             target: it.id,
           });
@@ -247,19 +262,27 @@ export function issues(template, report, { project, settings } = {}) {
         if (it.media && (!a.photos || a.photos.length === 0) && opt?.tone !== 'na') {
           out.push({
             level: 'warn',
-            text: `第 ${it.no} 项「${L(it.title, 'zh')}」需要影像存档，还没有照片 / 视频`,
+            text: say(
+              `第 ${it.no} 项「${zhOf(it.title)}」需要影像存档，还没有照片 / 视频`,
+              `Item ${it.no} "${enOf(it.title)}" needs photo / video records — none added yet`,
+            ),
             sectionId: s.id,
             target: it.id,
           });
         }
       }
       if (empty) {
-        out.push({ level: 'warn', text: `${L(s.title, 'zh')}：还有 ${empty} 项未填`, sectionId: s.id });
+        out.push({
+          level: 'warn',
+          text: say(`${zhOf(s.title)}：还有 ${empty} 项未填`, `${enOf(s.title)}: ${empty} item${empty > 1 ? 's' : ''} not filled in`),
+          sectionId: s.id,
+        });
       }
     }
   }
   if (typeof template.checks === 'function') {
-    const ctx = makeCtx({ template, report, project, settings });
+    // 模板的 checks() 用 ctx.t(zh, en) 写提醒，这里按界面语言
+    const ctx = makeCtx({ template, report, project, settings, lang: lg });
     // checks() 可返回字符串，或 { text, sectionId?, target? }（导出页点一下可跳到对应位置）
     for (const t of template.checks(ctx) || []) {
       if (!t) continue;

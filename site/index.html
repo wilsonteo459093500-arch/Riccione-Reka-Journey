@@ -20,10 +20,16 @@
       setTimeout(function () {
         var r = document.getElementById('root');
         if (r && !r.firstChild) {
+          var lang = 'zh';
+          try { lang = localStorage.getItem('tora.lang') || (/^zh/i.test(navigator.language || '') ? 'zh' : 'en'); } catch (e) {}
+          var zh = '信号太差，TORA 还没下载完。<br>请到信号好一点的地方再打开。';
+          var en = 'The signal is too weak — TORA has not finished downloading.<br>Please open it again where the signal is better.';
+          var btn = lang === 'en' ? 'Open again' : lang === 'both' ? '重新打开 Open again' : '重新打开';
+          var msg = lang === 'en' ? en : lang === 'both' ? zh + '<br><br>' + en : zh;
           r.innerHTML =
             '<div style="max-width:22rem;margin:30vh auto 0;padding:0 24px;text-align:center;font:15px/1.6 system-ui,sans-serif;color:#4a4a44">' +
-            '信号太差，TORA 还没下载完。<br>请到信号好一点的地方再打开。' +
-            '<br><button onclick="location.reload()" style="margin-top:16px;padding:10px 22px;border:0;border-radius:12px;background:#2F4A3C;color:#fff;font:inherit">重新打开</button></div>';
+            msg +
+            '<br><button onclick="location.reload()" style="margin-top:16px;padding:10px 22px;border:0;border-radius:12px;background:#2F4A3C;color:#fff;font:inherit">' + btn + '</button></div>';
         }
       }, 12000);
     </script>

@@ -1,4 +1,5 @@
 // 日期 / 时间格式化（全部按本地时区，避免 toISOString 的时差坑）
+import { getUiLang } from './i18n.js';
 
 const WEEK = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 
@@ -25,6 +26,17 @@ export function fmtDateCN(iso) {
   const d = parseISODate(iso);
   if (!d) return iso || '';
   return `${d.getMonth() + 1}月${d.getDate()}日 ${WEEK[d.getDay()]}`;
+}
+
+const WEEK_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTH_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** 界面上显示的日期（跟界面语言）：中文 / 中英 '10月9日 周五'；English 'Fri, 9 Oct' */
+export function fmtDateUi(iso) {
+  const d = parseISODate(iso);
+  if (!d) return iso || '';
+  if (getUiLang() !== 'en') return fmtDateCN(iso);
+  return `${WEEK_EN[d.getDay()]}, ${d.getDate()} ${MONTH_EN[d.getMonth()]}`;
 }
 
 /** '2026-10-08' → '2026.10.8' */

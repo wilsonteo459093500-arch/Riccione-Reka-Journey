@@ -1,6 +1,7 @@
 // 轻量 UI：Toast 提示、确认框、底部弹层、页头
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import Icon from './Icon.jsx';
+import { t } from '../../lib/i18n.js';
 
 const UICtx = createContext(null);
 
@@ -18,9 +19,9 @@ export function UIProvider({ children }) {
     (opts) =>
       new Promise((resolve) => {
         setDialog({
-          title: '确认',
-          okText: '确定',
-          cancelText: '取消',
+          title: t('确认', 'Confirm'),
+          okText: t('确定', 'OK'),
+          cancelText: t('取消', 'Cancel'),
           ...(typeof opts === 'string' ? { message: opts } : opts),
           resolve,
         });
@@ -117,7 +118,7 @@ export function Sheet({ open, onClose, title, children, footer, tall = false }) 
         <div className="flex items-center gap-3 px-5 pb-2 pt-3">
           <div className="absolute left-1/2 top-2 h-1 w-10 -translate-x-1/2 rounded-full bg-ink-faint/50" />
           <div className="flex-1 pt-2 text-[17px] font-bold text-ink">{title}</div>
-          <button className="mt-2 rounded-full p-2 text-ink-mute active:bg-cream-deep" onClick={onClose} aria-label="关闭">
+          <button className="mt-2 rounded-full p-2 text-ink-mute active:bg-cream-deep" onClick={onClose} aria-label={t('关闭', 'Close')}>
             <Icon name="X" size={20} />
           </button>
         </div>
@@ -139,7 +140,7 @@ export function TopBar({ title, sub, onBack, right, tone = 'light' }) {
     >
       <div className="mx-auto flex h-14 max-w-lg items-center gap-1 px-2">
         {onBack ? (
-          <button className={`rounded-full p-2 ${dark ? 'active:bg-white/10' : 'active:bg-cream-deep'}`} onClick={onBack} aria-label="返回">
+          <button className={`rounded-full p-2 ${dark ? 'active:bg-white/10' : 'active:bg-cream-deep'}`} onClick={onBack} aria-label={t('返回', 'Back')}>
             <Icon name="ChevronLeft" size={24} />
           </button>
         ) : (

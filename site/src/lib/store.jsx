@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { db, getSetting, setSetting, putMedia, deleteMedia, mediaForReport, requestPersist } from './db.js';
 import { compressImage, processVideo } from './images.js';
 import { uid, mediaIds } from './report.js';
+import { applyUiLang, detectUiLang } from './i18n.js';
 
 export const DEFAULT_SETTINGS = {
   name: '',
@@ -12,6 +13,15 @@ export const DEFAULT_SETTINGS = {
 };
 
 const StoreCtx = createContext(null);
+
+// 读出的设置 + 界面语言：存过就用存的；老用户（有设置但没选过）= 中文；新手机按系统语言猜。
+// 猜出来的值放进 settings，第一次保存任何设置时一起存下（以后不会再变）。
+function withUiLang(s) {
+  const merged = { ...DEFAULT_SETTINGS, ...(s || {}) };
+  if (!['zh', 'en', 'both'].includes(merged.uiLang)) merged.uiLang = s ? 'zh' : detectUiLang();
+  applyUiLang(merged.uiLang);
+  return merged;
+}
 
 // 正在处理（压缩 / 截封面 / 入库）的照片与视频：离开编辑页前要等它们写完
 const pending = new Set();
@@ -48,7 +58,7 @@ export function StoreProvider({ children }) {
         if (!alive) return;
         setProjects(p.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)));
         setReports(r);
-        setSettings({ ...DEFAULT_SETTINGS, ...(s || {}) });
+        setSettings(withUiLang(s));
         setReady(true);
         requestPersist();
       } catch (e) {
@@ -100,6 +110,7 @@ export function StoreProvider({ children }) {
   settingsRef.current = settings;
   const updateSettings = useCallback(async (patch) => {
     const merged = { ...settingsRef.current, ...patch };
+    if ('uiLang' in patch) applyUiLang(merged.uiLang);
     settingsRef.current = merged;
     setSettings(merged);
     await setSetting('settings', merged);
@@ -144,7 +155,7 @@ export function StoreProvider({ children }) {
     const [p, r, s] = await Promise.all([db.getAll('projects'), db.getAll('reports'), getSetting('settings', null)]);
     setProjects(p.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)));
     setReports(r);
-    setSettings({ ...DEFAULT_SETTINGS, ...(s || {}) });
+    setSettings(withUiLang(s));
   }, []);
 
   const value = useMemo(

@@ -96,6 +96,7 @@ export default function DocPreview({ model, media }) {
           }}
         >
           <div
+            data-doc-lang
             style={{
               position: 'absolute',
               left: 0,
