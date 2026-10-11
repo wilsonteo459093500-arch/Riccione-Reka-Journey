@@ -59,6 +59,7 @@ const STAFF = (() => {
   }
 })();
 
+const UNSURE_KEYS = new Set(['shoes', 'wardrobe', 'books', 'ratio']);
 const BOARD_SLOTS = ['floor', 'walls', 'feature', 'cabinetry', 'countertop', 'upholstery', 'rugs', 'accents'];
 const LEVEL = { conflict: { Icon: AlertTriangle, zh: '要聊清楚' }, note: { Icon: Ruler, zh: '设计要点' }, tip: { Icon: Lightbulb, zh: '沟通建议' } };
 
@@ -157,7 +158,8 @@ export default function Blueprint({ profile, onRestart, fresh = false }) {
   const date = new Date(profile.createdAt);
   const name = L({ zh: d.zh, en: d.en });
   const touched = profile.storage?.touched || null;
-  const unsure = (k) => designer && touched && !touched[k];
+  // 只有「数出来」的几项会是默认值（多选题空着 = 诚实的「没有」，不标）
+  const unsure = (k) => designer && !!touched && UNSURE_KEYS.has(k) && !touched[k];
   const quick = profile.players && profile.players !== 'solo' ? [] : quickPicksOf(profile);
   const curve = profile.hidden?.curve ?? 50;
 
