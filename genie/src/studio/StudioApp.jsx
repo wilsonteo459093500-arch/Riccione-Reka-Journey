@@ -41,9 +41,6 @@ const SHOWROOM = !WISH && new URLSearchParams(location.search).get('demo') === '
 const HISTORY = 60;
 const snap = (p) => ({ materials: { ...p.materials }, furniture: p.furniture.map((f) => ({ ...f })), time: p.time, mood: p.mood, plan: p.plan, furnEdited: p.furnEdited });
 
-/** 自动画质：电脑高清，iPad / 手机流畅（引擎有自己的判断就用引擎的） */
-const autoQuality = (e) => e?.autoQuality?.() || (matchMedia('(pointer: coarse)').matches ? 'fast' : 'high');
-
 /** 锚点几乎没动（< 0.5px）就不重画整个界面 */
 function anchorsSame(a, b) {
   if (a === b) return true;
@@ -185,6 +182,8 @@ export default function StudioApp() {
   const [modal, setModal] = useState(null);
   const [toast, setToast] = useState('');
   const [demo, setDemo] = useState(SHOWROOM);
+  const demoRef = useRef(SHOWROOM);
+  demoRef.current = demo;
   const [showroom, setShowroom] = useState(SHOWROOM);
   const showroomRef = useRef(SHOWROOM);
   showroomRef.current = showroom;
@@ -217,6 +216,8 @@ export default function StudioApp() {
       onInteract: () => !showroomRef.current && setDemo(false),
       onContextLost: () => setCtx('lost'),
       onContextRestored: () => setCtx('restored'),
+      // 演示时引擎每 250ms 报一次时间：演示中界面是藏起来的，不跟着重画；退出时再同步
+      onTime: (h) => !demoRef.current && Number.isFinite(h) && setProject((p) => (p && p.time !== h ? { ...p, time: h } : p)),
     });
     engine.current = e;
     window.__genie = e;
@@ -360,7 +361,7 @@ export default function StudioApp() {
   };
 
   // ── 命令 ──
-  const who = () => projRef.current?.profile?.name || t('客人');
+  const who = () => projRef.current?.profile?.name || t('这位客人');
   const avoidHits = (mat) => {
     const avoid = projRef.current?.profile?.avoid || [];
     if (!avoid.length || !mat) return [];
@@ -500,7 +501,7 @@ export default function StudioApp() {
     setPlanDraft(null);
     loadProjectIntoEngine({ ...cur, plan, furniture, furnEdited: false }, true, { keepHistory: true });
     bump((n) => n + 1);
-    flash(t('3D 已生成 ✨ 家具是按设计师的规则自动摆的，拖一拖就能改'), 3600);
+    flash(t('3D 已生成。家具是按设计师的规则自动摆的，拖一拖就能改。'), 3600);
     return true;
   };
 
@@ -654,7 +655,8 @@ export default function StudioApp() {
     engine.current?.setWallMode(wallMode);
   }, [wallMode]);
 
-  const onQuality = (q) => engine.current?.setQuality?.(q === 'auto' ? autoQuality(engine.current) : q);
+  // 'auto' 交给引擎自己判断（引擎的 resolveQuality：触屏 → 流畅，电脑 → 高清）
+  const onQuality = (q) => engine.current?.setQuality?.(q || 'auto');
 
   const selItem = selected && project?.furniture.find((f) => f.id === selected);
   const profile = project?.profile;

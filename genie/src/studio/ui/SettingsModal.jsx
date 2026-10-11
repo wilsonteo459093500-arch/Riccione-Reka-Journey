@@ -1,10 +1,11 @@
 // 设置：画质（自动 / 高清 / 流畅，存在本机，许愿模式也会用这台设备的选择）+ 语言 + AI 识别平面图用的 Google Gemini key（只存本机浏览器）
 
 import { useState } from 'react';
+import { BRAND } from '../../shared/config.js';
 import { Modal, Seg } from './kit.jsx';
 import { loadSettings, saveSettings } from '../store.js';
 import LangToggle from '../../shared/LangToggle.jsx';
-import { t } from '../../shared/i18n.js';
+import { t, isEn } from '../../shared/i18n.js';
 
 export default function SettingsModal({ onClose, onQuality, onLang, showLang = true }) {
   const [s, setS] = useState(loadSettings);
@@ -21,7 +22,7 @@ export default function SettingsModal({ onClose, onQuality, onLang, showLang = t
     fast: '画面稍简单，但更顺、更省电。iPad 用久了发烫时选它。',
   };
   return (
-    <Modal eyebrow={t('3D 梦想工作室')} title={t('设置')} onClose={onClose}>
+    <Modal eyebrow={isEn() ? BRAND.studioEn : BRAND.studio} title={t('设置')} onClose={onClose}>
       <section className="set-sec">
         <h4 className="m-h">{t('画质')}</h4>
         <Seg

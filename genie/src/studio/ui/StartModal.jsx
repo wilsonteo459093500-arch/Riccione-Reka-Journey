@@ -4,6 +4,7 @@ import { TEMPLATES, ROOM_TYPES, bounds } from '../plan/model.js';
 import { DREAMER_BY_CODE } from '../../shared/dreamers.js';
 import { t, L, isEn } from '../../shared/i18n.js';
 import { Icon, Modal } from './kit.jsx';
+import { BRAND } from '../../shared/config.js';
 
 function MiniPlan({ plan }) {
   const b = bounds(plan);
@@ -27,7 +28,7 @@ const when = (iso) => {
 export default function StartModal({ profile, projects, onTemplate, onUpload, onDraw, onOpen, onClose }) {
   const d = profile && DREAMER_BY_CODE[profile.code];
   return (
-    <Modal eyebrow={t('3D 梦想工作室')} title={t('开始一个空间')} onClose={onClose} wide>
+    <Modal eyebrow={isEn() ? BRAND.studioEn : BRAND.studio} title={t('开始一个空间')} onClose={onClose} wide>
       {d && (
         <div className="start-profile">
           <span className="sp-num">{d.num}</span>

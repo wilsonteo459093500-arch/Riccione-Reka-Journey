@@ -484,12 +484,12 @@ function upholstered({ L, D, legH = 0.13, armW = 0.16, armH = 0.63, seatTop = 0.
   }
   // 抱枕
   if (pillows) {
-    const pz = -D / 2 + backT + 0.2;
+    const pz = -D / 2 + backT + 0.3;
     const px = L / 2 - armW - Math.min(0.3, inner * 0.22);
-    parts.push(PW(0.46, 0.46, 0.15, 'accents', -px, seatTop - 0.01, pz, { rx: -0.34, ry: 0.22, rz: 0.05 }));
-    if (pillows > 1) parts.push(PW(0.42, 0.42, 0.14, 'accents', px, seatTop - 0.01, pz, { rx: -0.32, ry: -0.24, rz: -0.06 }));
+    parts.push(PW(0.46, 0.46, 0.15, 'accents', -px, seatTop - 0.012, pz, { rx: -0.22, ry: 0.2, rz: 0.05 }));
+    if (pillows > 1) parts.push(PW(0.42, 0.42, 0.14, 'accents', px, seatTop - 0.012, pz - 0.01, { rx: -0.2, ry: -0.22, rz: -0.06 }));
   }
-  if (lumbar) parts.push(PW(0.4, 0.26, 0.12, 'accents', 0, seatTop - 0.01, -D / 2 + backT + 0.2, { rx: -0.3 }));
+  if (lumbar) parts.push(PW(0.4, 0.26, 0.12, 'accents', 0, seatTop - 0.01, -D / 2 + backT + 0.28, { rx: -0.2 }));
   // 贵妃位上搭一条毯子
   if (cz) parts.push(SB(chW - armW - 0.06, 0.03, 0.5, 'accents', L / 2 - armW - (chW - armW) / 2, seatTop + 0.005, D / 2 + cz - 0.32, { r: 0.012, cy: 0.006 }, { ry: 0.05 }));
   // 脚
@@ -518,8 +518,8 @@ function curvySofa(w, d) {
     SB(L - 0.5, 0.12, D2 - 0.27, 'upholstery', 0, 0.335, 0.125, { r: 0.055, cy: 0.018, cz: 0.02, ...seg }),
     SB(L, 0.42, 0.3, 'upholstery', 0, 0.33, -D2 / 2 + 0.15, { r: 0.14, cz: 0.03, cy: 0.022, ...seg }),
     ...[-1, 1].map((s) => SB(0.27, 0.24, D2 - 0.18, 'upholstery', s * (L / 2 - 0.135), 0.33, 0.06, { r: 0.11, cy: 0.016, ...seg })),
-    PW(0.46, 0.46, 0.16, 'accents', -L / 2 + 0.6, 0.44, -D2 / 2 + 0.38, { rx: -0.36, ry: 0.18, rz: 0.06 }),
-    PW(0.42, 0.42, 0.15, 'bedding', L / 2 - 0.6, 0.44, -D2 / 2 + 0.38, { rx: -0.34, ry: -0.2, rz: -0.05 }),
+    PW(0.42, 0.42, 0.15, 'accents', -L / 2 + 0.62, 0.45, -D2 / 2 + 0.44, { rx: -0.26, ry: 0.18, rz: 0.06 }),
+    PW(0.38, 0.38, 0.14, 'bedding', L / 2 - 0.62, 0.45, -D2 / 2 + 0.43, { rx: -0.24, ry: -0.2, rz: -0.05 }),
   ];
   const g = compact(group(parts), { clone: true });
   g.traverse((o) => {

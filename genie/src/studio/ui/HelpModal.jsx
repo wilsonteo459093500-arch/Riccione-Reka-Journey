@@ -1,7 +1,8 @@
 // 怎么用：八张小卡，一张一件事。
 
+import { BRAND } from '../../shared/config.js';
 import { Modal, Icon } from './kit.jsx';
-import { t, tj, guideName } from '../../shared/i18n.js';
+import { t, tj, guideName, isEn } from '../../shared/i18n.js';
 
 const CARDS = [
   { icon: 'palette', h: '换材质', p: () => tj('把底部的色块{0}（地板、墙、柜子、沙发…），那一组表面会发金光，放手就换上。也可以先在左边材质板点一个表面，再点色块。', [<b key="b">{t('拖到房间里任何表面')}</b>]) },
@@ -16,7 +17,7 @@ const CARDS = [
 
 export default function HelpModal({ onClose }) {
   return (
-    <Modal eyebrow={t('3D 梦想工作室')} title={t('怎么玩')} onClose={onClose} wide>
+    <Modal eyebrow={isEn() ? BRAND.studioEn : BRAND.studio} title={t('怎么玩')} onClose={onClose} wide>
       <div className="help-grid">
         {CARDS.map((c) => (
           <section key={c.h}>

@@ -206,7 +206,7 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
   );
 
   return (
-    <div className={`bp-page mode-${designer ? 'designer' : 'client'}`}>
+    <div className={`bp-page mode-${designer ? 'designer' : 'client'} ${WISH ? 'is-wish' : ''}`}>
       {/* 隐藏的素材：海报用 */}
       <div className="sr-only" aria-hidden="true">
         <div ref={pangieRef}>

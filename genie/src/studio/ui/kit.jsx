@@ -263,12 +263,15 @@ export function Seg({ value, options, onChange, className = '', size = 'md', lab
 
 export function Modal({ title, eyebrow, children, onClose, wide = false, className = '', footer }) {
   const box = useRef(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  // 只在打开时装一次（父组件每次重画都会给新的 onClose；不能每次都把焦点抢回弹窗）
   useEffect(() => {
-    const onKey = (e) => e.key === 'Escape' && onClose?.();
+    const onKey = (e) => e.key === 'Escape' && closeRef.current?.();
     window.addEventListener('keydown', onKey);
-    box.current?.focus({ preventScroll: true });
+    if (!box.current?.contains(document.activeElement)) box.current?.focus({ preventScroll: true });
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, []);
   return (
     <div className="s-modal-wrap" onPointerDown={(e) => e.target === e.currentTarget && onClose?.()}>
       <div ref={box} tabIndex={-1} className={`s-modal ${wide ? 'wide' : ''} ${className}`} role="dialog" aria-modal="true" aria-label={title}>

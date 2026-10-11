@@ -6,7 +6,7 @@ import { SLOTS, MAT_BY_ID } from '../../shared/materials.js';
 import { avoidMaterials } from '../../shared/profile.js';
 import { swatchURL } from '../../shared/textures.js';
 import { fmtTime } from '../engine/daylight.js';
-import { t, L } from '../../shared/i18n.js';
+import { t, L, isEn } from '../../shared/i18n.js';
 import { Icon, slotName } from './kit.jsx';
 import { BRAND } from '../../shared/config.js';
 
@@ -22,7 +22,7 @@ export default function MoodPanel({ project, dreamer, slot, onSlot, onMood, onTo
   const avoid = project.profile?.avoid || [];
   const presets = MOODS.map((m) => ({
     id: m.id,
-    name: L(m),
+    name: isEn() ? m.en : m.zh, // Cozy / Bright / Moody 是固定的英文名，不走词典
     sub: `${t(SUB[m.sub] || m.sub)} · ${fmtTime(m.time)}`,
     colors: paletteOf(avoid.length ? avoidMaterials(m.materials, avoid).materials : m.materials),
   }));
@@ -75,7 +75,7 @@ export default function MoodPanel({ project, dreamer, slot, onSlot, onMood, onTo
         <div className="meters" aria-label={t('情绪仪表')}>
           {['cozy', 'bright', 'moody'].map((k) => (
             <div key={k} className={`meter ${sent.top === k ? 'top' : ''}`}>
-              <span>{L(MOOD_NAME[k])}</span>
+              <span>{isEn() ? MOOD_NAME[k].en : MOOD_NAME[k].zh}</span>
               <b>{meter[k]}%</b>
               <i>
                 <em style={{ width: `${meter[k]}%`, background: MOOD_TINT[k] }} />

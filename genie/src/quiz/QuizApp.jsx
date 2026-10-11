@@ -376,7 +376,7 @@ function Play({ onDone, onRestart }) {
   }, [dusk]);
 
   return (
-    <div className={`qz ${dusk ? 'dusk' : 'morning'} qz-${kind} mode-${chapter?.mode || 'none'} ${step.id === 'welcome' ? 'is-cover' : ''} ${usesPhoto(scene) ? 'on-photo' : ''}`}>
+    <div className={`qz ${dusk ? 'dusk' : 'morning'} qz-${kind} mode-${chapter?.mode || 'none'} ${step.id === 'welcome' ? 'is-cover' : ''} ${usesPhoto(scene) ? 'on-photo' : ''} ${WISH ? 'is-wish' : ''}`}>
       <Scenery scene={scene} next={nextScene} />
       {step.id !== 'welcome' && (
         <TopBar

@@ -7,7 +7,8 @@ import { ROOM_TYPES, OPENING_KINDS, TEMPLATES, buildWalls, bounds, snapPlan, tem
 import { planFileToImage } from './planImage.js';
 import { detectPlan } from './ai.js';
 import { loadSettings } from '../store.js';
-import { t, L } from '../../shared/i18n.js';
+import { t, tj, L, isEn } from '../../shared/i18n.js';
+import { BRAND } from '../../shared/config.js';
 import { Icon, roomLabel } from '../ui/kit.jsx';
 
 const SNAP = 0.05;
@@ -478,7 +479,7 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
     <div className="pe" role="dialog" aria-modal="true" aria-label={t('平面图')}>
       <header className="pe-head">
         <div className="pe-title">
-          <p className="eyebrow">{t('3D 梦想工作室')}</p>
+          <p className="eyebrow">{isEn() ? BRAND.studioEn : BRAND.studio}</p>
           <b>{t('平面图')}</b>
         </div>
         <div className="pe-head-actions">
@@ -742,26 +743,11 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
                 </label>
               )}
               <ul className="pe-howto">
-                <li>
-                  <b>{t('画房间')}</b>
-                  {t('：按住拖出方块；边会自动吸到旁边房间的边上。')}
-                </li>
-                <li>
-                  <b>{t('门 / 窗')}</b>
-                  {t('：选工具后点一下墙（鼠标会先出现金色预览）。')}
-                </li>
-                <li>
-                  <b>{t('打通')}</b>
-                  {t('：两个空间之间不要墙（开放式厨房）。客厅 / 餐厅 / 玄关 / 走廊之间默认已打通。')}
-                </li>
-                <li>
-                  <b>{t('北方')}</b>
-                  {t('：决定阳光从哪边进来（西晒看得出来）。')}
-                </li>
-                <li>
-                  <b>{t('双指')}</b>
-                  {t('：捏合缩放、拖动平移。')}
-                </li>
+                <li>{tj('{0}：按住拖出方块；边会自动吸到旁边房间的边上。', [<b key="b">{t('画房间')}</b>])}</li>
+                <li>{tj('{0}：选工具后点一下墙（鼠标会先出现金色预览）。', [<b key="b">{t('门 / 窗')}</b>])}</li>
+                <li>{tj('{0}：两个空间之间不要墙（开放式厨房）。客厅 / 餐厅 / 玄关 / 走廊之间默认已打通。', [<b key="b">{t('打通')}</b>])}</li>
+                <li>{tj('{0}：决定阳光从哪边进来（西晒看得出来）。', [<b key="b">{t('北方')}</b>])}</li>
+                <li>{tj('{0}：捏合缩放、拖动平移。', [<b key="b">{t('双指')}</b>])}</li>
               </ul>
               {issues.length > 0 && (
                 <div className="pe-issues">
