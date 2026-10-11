@@ -51,7 +51,7 @@ function Launcher() {
               再把它变出来。
             </h1>
             <p className="lead">
-              客人第一次到展厅：先和熊猫精灵{GUIDE.name}玩 5 分钟占卜，说出他心里的家；
+              客人第一次到展厅：先和熊猫精灵{GUIDE.name}花几分钟许个愿，说出他心里的家；
               <br />
               设计师接着打开 3D 工作室，把平面图和他的答案，马上变成看得见的概念。
             </p>
@@ -70,7 +70,7 @@ function Launcher() {
             <span className="ln-wish-ico">🪔</span>
             <span>
               <b>客户许愿模式</b>
-              <em>按下就开始：大自然禅意音乐 + 潘吉带客人从占卜一路走到 3D</em>
+              <em>按下就开始：大自然禅意音乐 + 潘吉带客人从许愿一路走到 3D</em>
             </span>
           </button>
           {CONFIG.team.length > 1 && (
@@ -97,10 +97,10 @@ function Launcher() {
         <div className="ln-cards">
           <a className="ln-card reading" href="quiz.html">
             <span className="ln-num">I</span>
-            <b>梦想家占卜</b>
-            <em>The Dream Home Reading</em>
-            <p>给客人玩 · iPad / 手机 · 约 5 分钟。五张牌：直觉、生活、宝藏、三个愿望、禁忌 → 得到一份「专属梦想家概念蓝图」。</p>
-            <span className="ln-go">开始占卜 →</span>
+            <b>许愿之旅</b>
+            <em>The Wish Journey</em>
+            <p>给客人玩 · iPad / 手机 · 约 6–8 分钟。五张牌：直觉、生活、宝藏、三个愿望、雷区 → 得到一份「专属梦想家概念蓝图」。</p>
+            <span className="ln-go">开始许愿 →</span>
           </a>
           <a className="ln-card studio" href="studio.html">
             <span className="ln-num">II</span>
@@ -113,7 +113,7 @@ function Launcher() {
 
         <section className="ln-archive">
           <h2>这台设备上的梦想家蓝图（{list.length}）</h2>
-          {list.length === 0 && <p className="fine">还没有。客人占卜完会自动存在这里（只存在这台设备）。</p>}
+          {list.length === 0 && <p className="fine">还没有。客人许完愿会自动存在这里（只存在这台设备）。</p>}
           <div className="ln-list">
             {list.map((p) => {
               const d = DREAMER_BY_CODE[p.code];

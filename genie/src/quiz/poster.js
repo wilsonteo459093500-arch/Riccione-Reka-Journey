@@ -70,7 +70,7 @@ export async function renderPoster(profile, { pangieEl, emblemEl } = {}) {
   ctx.fillStyle = '#E9D3A1';
   ctx.textAlign = 'center';
   ctx.font = `600 30px ${SERIF}`;
-  ctx.fillText('THE DREAM HOME READING', W / 2, 90);
+  ctx.fillText('THE DREAM HOME JOURNEY', W / 2, 90);
   ctx.font = `500 34px ${ZH}`;
   ctx.fillStyle = '#F5EDE0';
   ctx.fillText(profile.name ? `${profile.name} 的梦想家牌` : '我的梦想家牌', W / 2, 142);
@@ -167,7 +167,7 @@ export async function renderPoster(profile, { pangieEl, emblemEl } = {}) {
   ctx.fillText(`${BRAND.by} · ${BRAND.house}`, 80, H - 110);
   ctx.fillStyle = 'rgba(245,237,224,.7)';
   ctx.font = `400 24px ${ZH}`;
-  ctx.fillText(`和熊猫精灵${GUIDE.name}一起，读出你心里的家`, 80, H - 70);
+  ctx.fillText(`和熊猫精灵${GUIDE.name}一起，读懂你心里的家`, 80, H - 70);
 
   return new Promise((resolve) => c.toBlob((b) => resolve(b), 'image/png'));
 }

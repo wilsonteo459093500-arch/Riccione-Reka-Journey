@@ -35,13 +35,13 @@ export function Welcome({ answers, set, next }) {
       <div className="welcome-hero">
         <Pangie mood="happy" size={190} />
       </div>
-      <p className="eyebrow">WISH · THE DREAM HOME READING</p>
+      <p className="eyebrow">WISH · THE DREAM HOME JOURNEY</p>
       <h1 className="h-display">
         嗨，我是{GUIDE.name}
         <small>{GUIDE.nameEn} · 住在神灯里的熊猫</small>
       </h1>
       <p className="lead">
-        接下来 5 分钟，我会用几副牌读出你心里的那个家。
+        接下来几分钟，我会用几张牌，读懂你心里的那个家。
         <br />
         不用懂设计，也不用想太久 —— 跟着第一感觉走就好。
       </p>
@@ -50,7 +50,7 @@ export function Welcome({ answers, set, next }) {
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="例：Peggy / 陈小姐" maxLength={30} />
       </label>
       <div className="field">
-        <span>今天谁来占卜？</span>
+        <span>今天谁来许愿？</span>
         <div className="chips">
           {[
             ['solo', '🙋 我自己'],
@@ -71,9 +71,9 @@ export function Welcome({ answers, set, next }) {
           next();
         }}
       >
-        开始占卜 ✨
+        开始许愿 ✨
       </button>
-      <p className="fine">大约 5 分钟 · 5 张牌 · 结束时会得到你的「梦想家蓝图」</p>
+      <p className="fine">大约 6–8 分钟 · 5 张牌 · 结束时会得到你的「梦想家蓝图」</p>
     </div>
   );
 }
@@ -133,7 +133,7 @@ export function LampRub({ next, name }) {
 
   return (
     <div className="step step-lamp">
-      <p className="eyebrow">THE SUMMONING</p>
+      <p className="eyebrow">THE LAMP</p>
       <h2 className="h-title">{name ? `${name}，` : ''}擦亮神灯</h2>
       <p className="lead">用手指在神灯上来回擦一擦（按住也可以），把{GUIDE.name}叫出来。</p>
       <div className={`lamp-stage ${done ? 'is-done' : ''}`}>
@@ -663,7 +663,7 @@ export function NogoStep({ answers, set, next }) {
   };
   return (
     <div className="step step-nogo">
-      <p className="eyebrow">禁忌之牌</p>
+      <p className="eyebrow">雷区之牌</p>
       <h2 className="h-title">点一下你「绝对不要」的</h2>
       <p className="lead center">讨厌的东西，往往比喜欢的更确定。</p>
       <div className="nogo-colors">

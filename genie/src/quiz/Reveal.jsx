@@ -76,7 +76,7 @@ export default function Reveal({ profile, onOpen }) {
     <div className={`step step-reveal phase-${phase}`}>
       {phase === 'reading' && (
         <>
-          <p className="eyebrow">THE READING</p>
+          <p className="eyebrow">THE REVEAL</p>
           <h2 className="h-title">{GUIDE.name}正在读取你的梦想…</h2>
           <div className="deck">
             {[...Array(16)].map((_, i) => (

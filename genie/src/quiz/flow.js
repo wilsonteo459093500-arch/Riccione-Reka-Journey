@@ -15,7 +15,7 @@ export const CHAPTERS = [
   { id: 'life', num: 'II', zh: '生活之牌', en: 'THE LIFE', hint: '想象一个普通的星期六。', mode: 'fast' },
   { id: 'treasure', num: 'III', zh: '宝藏之牌', en: 'THE TREASURE', hint: '现在请慢下来 —— 数字越准，柜子越合身。', mode: 'slow' },
   { id: 'wishes', num: 'IV', zh: '愿望之牌', en: 'THE THREE WISHES', hint: '潘吉只能实现三个愿望。', mode: 'slow' },
-  { id: 'nogo', num: 'V', zh: '禁忌之牌', en: 'THE NO-GO', hint: '最后，帮潘吉扫个雷。', mode: 'fast' },
+  { id: 'nogo', num: 'V', zh: '雷区之牌', en: 'THE NO-GO', hint: '最后，帮潘吉扫个雷。', mode: 'fast' },
 ];
 
 // ───────────────────────── I · 直觉（二选一） ─────────────────────────

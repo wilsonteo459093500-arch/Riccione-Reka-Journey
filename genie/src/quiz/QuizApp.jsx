@@ -330,7 +330,7 @@ export default function QuizApp() {
             <Pangie mood="think" size={170} />
             <h2 className="h-title">{error}</h2>
             <button type="button" className="btn-gold" onClick={restart}>
-              重新占卜
+              重新许愿
             </button>
           </div>
         </main>

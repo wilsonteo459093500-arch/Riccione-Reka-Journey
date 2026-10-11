@@ -27,7 +27,7 @@ export default function StartModal({ profile, projects, onTemplate, onUpload, on
             <b>
               为 {profile.name || '贵宾'} 定制 · {d.zh}
             </b>
-            <p>占卜里选的材质、收纳量、生活习惯（神台、宠物、在家办公…）会自动套进 3D。选一个起点 ↓</p>
+            <p>许愿时选的材质、收纳量、生活习惯（神台、宠物、在家办公…）会自动套进 3D。选一个起点 ↓</p>
           </div>
         </div>
       )}

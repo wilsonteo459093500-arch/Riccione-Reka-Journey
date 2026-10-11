@@ -413,7 +413,7 @@ export default function StudioApp() {
                 </a>
               ) : (
                 <a className="dreamer-chip ghost" href="quiz.html" target="_blank" rel="noopener">
-                  🔮 先让客人做一次梦想家占卜 →
+                  🔮 先让客人走一次许愿之旅 →
                 </a>
               )
             }
