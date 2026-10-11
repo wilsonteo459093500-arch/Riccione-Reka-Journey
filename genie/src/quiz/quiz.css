@@ -339,6 +339,28 @@ html[lang='en'] .h-title {
   background: rgba(var(--glass-rgb), 0.95);
 }
 
+/* 暮色照片上：浅色的字加一圈很软的暗光；揭晓的文字放在一块暗色磨砂玻璃上 */
+.dusk.on-photo .q-head,
+.dusk.on-photo .lamp-status,
+.dusk.on-photo .interlude-hint,
+.dusk.on-photo .reading .h-title,
+.dusk.on-photo .reading .eyebrow {
+  text-shadow:
+    0 1px 2px rgba(var(--accent-deep-rgb), 0.6),
+    0 2px 22px rgba(var(--accent-deep-rgb), 0.85);
+}
+.dusk.on-photo .reveal-text {
+  padding: clamp(18px, 3vw, 28px);
+  border-radius: 26px;
+  background: rgba(var(--accent-deep-rgb), 0.5);
+  -webkit-backdrop-filter: blur(24px) saturate(120%);
+  backdrop-filter: blur(24px) saturate(120%);
+  box-shadow: inset 0 0 0 0.5px rgba(var(--gold-l-rgb), 0.18);
+}
+.dusk.on-photo .topbar {
+  background: rgba(var(--accent-deep-rgb), 0.55);
+}
+
 /* ───────────────────────── 顶栏（iOS 导航栏） ───────────────────────── */
 
 .topbar {

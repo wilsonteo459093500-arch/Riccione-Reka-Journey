@@ -4,6 +4,7 @@
 // 再加一点点抖动噪声，暗处不出色带。
 
 import * as THREE from 'three';
+import { LAMP } from './daylight.js';
 
 const vert = /* glsl */ `
   attribute float t;
@@ -40,7 +41,7 @@ export class Beams {
     this.group = new THREE.Group();
     this.group.userData.noAO = true;
     this.material = new THREE.ShaderMaterial({
-      uniforms: { color: { value: new THREE.Color(0xffc88a) }, strength: { value: 0 } },
+      uniforms: { color: { value: new THREE.Color(LAMP.beam) }, strength: { value: 0 } },
       vertexShader: vert,
       fragmentShader: frag,
       transparent: true,

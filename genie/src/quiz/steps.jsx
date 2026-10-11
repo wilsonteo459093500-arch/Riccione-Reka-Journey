@@ -212,6 +212,7 @@ export function Interlude({ chapter, next }) {
   const ch = CHAPTERS.find((c) => c.id === chapter);
   const [flipped, setFlipped] = useState(false);
   const [ready, setReady] = useState(false);
+  const armed = useRef(false);
   useEffect(() => {
     const a = setTimeout(() => {
       setFlipped(true);
@@ -240,9 +241,21 @@ export function Interlude({ chapter, next }) {
         </div>
       </div>
       <p className="lead center interlude-hint">{t(ch.hint)}</p>
-      <Next gold onClick={next} disabled={!ready}>
-        {t('翻开这一张')}
-      </Next>
+      <div
+        className="q-actions"
+        onPointerDown={() => (armed.current = true)}
+        onClickCapture={(e) => {
+          // 擦神灯时按着的手指 / 鼠标在这里放开，会「点」到这个按钮：只认在按钮上按下去的那一下（键盘的 Enter 也算）
+          if (!armed.current && e.detail !== 0) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }}
+      >
+        <Next gold onClick={next} disabled={!ready}>
+          {t('翻开这一张')}
+        </Next>
+      </div>
     </div>
   );
 }

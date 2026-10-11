@@ -6,6 +6,14 @@
 const SUNRISE = 7.15;
 const SUNSET = 19.3;
 
+// 室内灯（约 2700K 的暖光）—— 内容色（光照），不随 VI 换色
+export const LAMP = {
+  pool: '#FFBE7C', // 灯池的初值
+  lamp: '#FFBB76', // 落地灯 / 吊灯 / 台灯的位置
+  ceiling: '#FFC896', // 没有灯具的房间：吸顶的柔光
+  beam: '#FFC88A', // 光柱的初值（之后跟着太阳的颜色）
+};
+
 // hour, zenith, horizon, ground(地面反光), sun, bgSky(背景窗外), bgRoom(背景室内暗部)
 // 内容色（光照），不随 VI 换色
 const KEYS = [

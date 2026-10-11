@@ -106,6 +106,8 @@ export function SceneImage({ id, still = false, className = '' }) {
           <i className="sc-mist sc-mist-b" />
         </>
       )}
+      <i className="sc-scrim" />
+      {/* 萤火在遮罩上面、界面下面：照片上也一样亮 */}
       {!still && s.id === 'dusk' && (
         <div className="sc-fireflies">
           {FIREFLIES.map(([x, y, d, t], i) => (
@@ -113,7 +115,6 @@ export function SceneImage({ id, still = false, className = '' }) {
           ))}
         </div>
       )}
-      <i className="sc-scrim" />
     </div>
   );
 }

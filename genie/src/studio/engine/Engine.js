@@ -1120,13 +1120,16 @@ function isVisible(o) {
 // three r183 的 PCF 只取 5 个 Vogel 点（加大半径就会出颗粒）。改成 N 个点（每个点硬件双线性 = 4 tap），
 // 半影变得平滑。只改字符串、找不到就不改（升级 three 也不会坏）。
 
-let SOFT_PATCHED = false;
+// 换画质档时会用新的采样数重新改一次（从原始的那份改）；之后新编译的着色器就用新的采样数。
+let SOFT_SRC = null;
+let SOFT_TAPS = 0;
 function patchSoftShadows(taps) {
-  if (SOFT_PATCHED) return;
-  SOFT_PATCHED = true;
-  const chunk = THREE.ShaderChunk.shadowmap_pars_fragment;
+  if (taps === SOFT_TAPS) return;
+  SOFT_SRC ??= THREE.ShaderChunk.shadowmap_pars_fragment;
+  const chunk = SOFT_SRC;
   const re = /shadow = \(\s*texture\( shadowMap, vec3\( shadowCoord\.xy \+ vogelDiskSample\( 0, 5, phi \)[\s\S]*?\) \* 0\.2;/;
   if (!re.test(chunk)) return;
+  SOFT_TAPS = taps;
   THREE.ShaderChunk.shadowmap_pars_fragment = chunk.replace(
     re,
     `shadow = 0.0;
@@ -1194,7 +1197,7 @@ class EnvStudio {
     this.dome = new THREE.Mesh(new THREE.SphereGeometry(60, 64, 32), new THREE.ShaderMaterial({ uniforms: this.u, vertexShader: DOME_VERT, fragmentShader: DOME_FRAG, side: THREE.BackSide, depthWrite: false }));
     scene.add(this.dome);
     const panel = (w, h, x, y, z, look = [0, 4, 0]) => {
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide, toneMapped: false }));
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: new THREE.Color(0, 0, 0), side: THREE.DoubleSide, toneMapped: false }));
       m.position.set(x, y, z);
       m.lookAt(...look);
       scene.add(m);

@@ -6,10 +6,15 @@
 //
 // 贴图生成是纯 CPU 的（textures.js）。为了换情绪 / 拖材质时不卡：第一次用到某个材质时先给一张小图
 // （几毫秒），完整分辨率的放到空闲时一张一张生成，生成好再换上（pulse() 通知引擎重画）。
+//
+// 显存（大 iPad 上 WebGL 上下文被挤掉的主因之一）：同一材质 + 变体 + 分辨率的一套贴图所有表面共用；
+// 缓存按「显存预算」淘汰 —— 正在用的永远留着，其余按最久没用的先释放（GPU 上的贴图一起 dispose）。
+// 只是路过的材质（拖着经过、换情绪时一闪而过）不会去生成完整分辨率。
 
 import * as THREE from 'three';
 import { MAT_BY_ID, SLOTS } from '../../shared/materials.js';
 import { generateMaps, variantFor } from '../../shared/textures.js';
+import { PALETTE } from '../../shared/palette.js';
 
 // 完整分辨率：地面 / 主题墙 / 台面 1024，其余 512；触屏设备（fast）主题墙、台面降到 512
 const RES = {
@@ -17,7 +22,11 @@ const RES = {
   fast: { floor: 1024, feature: 512, countertop: 512 },
 };
 const PREVIEW = 128; // 先顶上的小图
-const KEEP = 28; // 最多缓存多少套贴图（不在用的按最久没用的先扔）
+// 贴图显存预算（字节；一套 = 底色 + 法线 + ORM 三张 RGBA，含 mipmap）：正在用的大约 'high' 90MB、'fast' 65MB，
+// 预算里多出来的留给「刚换掉、可能马上换回来」的
+const BUDGET = { high: 176e6, fast: 104e6 };
+const MAX_SETS = 20; // 套数上限（小图也算）
+const setBytes = (e) => ((e.R * e.R * 4 * 4) / 3) * 3;
 
 // 法线强度（按贴图类型）—— 高度场是按毫米算的物理值，这里只做一点「看得见」的放大
 const NORMAL = {
@@ -60,9 +69,9 @@ const quality0 = () => {
 const idle = (fn) => (typeof requestIdleCallback === 'function' ? requestIdleCallback(fn, { timeout: 120 }) : setTimeout(fn, 16));
 
 export class MatLib {
-  constructor(renderer) {
+  constructor(renderer, quality) {
     this.maxAniso = renderer.capabilities.getMaxAnisotropy();
-    this.quality = quality0();
+    this.quality = quality === 'high' || quality === 'fast' ? quality : quality0();
     this.aniso = this.quality === 'high' ? this.maxAniso : Math.min(4, this.maxAniso);
     this.slots = {};
     this.current = {};
@@ -87,10 +96,26 @@ export class MatLib {
     return this.slots[id];
   }
 
-  /** 引擎换画质档时调用（可选） */
+  /** 引擎换画质档：各向异性跟着换（已有的贴图重新上传一次）；分辨率不同的表面重新套一次（先小图、空闲时补完整的） */
   setQuality(q) {
-    this.quality = q === 'fast' ? 'fast' : 'high';
-    this.aniso = this.quality === 'high' ? this.maxAniso : Math.min(4, this.maxAniso);
+    const nq = q === 'fast' ? 'fast' : 'high';
+    if (nq === this.quality) return;
+    this.quality = nq;
+    this.aniso = nq === 'high' ? this.maxAniso : Math.min(4, this.maxAniso);
+    for (const e of this.tex.values())
+      for (const t of [e.map, e.normal, e.orm])
+        if (t.anisotropy !== this.aniso) {
+          t.anisotropy = this.aniso;
+          t.needsUpdate = true;
+        }
+    for (const [slotId, matId] of Object.entries(this.current)) this.apply(slotId, matId);
+    this.upgraded = true;
+  }
+
+  /** 这一套贴图现在有没有表面在用 */
+  inUse(key) {
+    for (const m of Object.values(this.slots)) if (m.userData.texKey === key) return true;
+    return false;
   }
 
   resFor(mat, slotId) {
@@ -133,6 +158,8 @@ export class MatLib {
     if (!e) {
       e = { ...this.build(matId, variant, PREVIEW), full: false, key, matId, variant, res };
       this.tex.set(key, e);
+    }
+    if (!e.full && !this.queue.includes(e)) {
       this.queue.push(e);
       this.pump();
     }
@@ -140,13 +167,14 @@ export class MatLib {
     return e;
   }
 
-  /** 空闲时一张一张把完整分辨率的贴图做出来 */
+  /** 空闲时一张一张把完整分辨率的贴图做出来（已经没有表面在用的跳过 —— 下次用到会再排队） */
   pump() {
     if (this.pumping) return;
     this.pumping = true;
     idle(() => {
       this.pumping = false;
-      const e = this.queue.shift();
+      let e = this.queue.shift();
+      while (e && !this.inUse(e.key)) e = this.queue.shift();
       if (!e) return;
       if (this.tex.get(e.key) === e && !e.full) {
         const hi = this.build(e.matId, e.variant, e.res);
@@ -168,13 +196,17 @@ export class MatLib {
     });
   }
 
-  /** 缓存太多时，扔掉最久没用、也没有表面在用的 */
+  /** 超出显存预算（或套数上限）时，释放最久没用、也没有表面在用的 */
   trim() {
-    if (this.tex.size <= KEEP) return;
+    let total = 0;
+    for (const e of this.tex.values()) total += setBytes(e);
+    const budget = BUDGET[this.quality];
+    if (total <= budget && this.tex.size <= MAX_SETS) return;
     const inUse = new Set(Object.values(this.slots).map((m) => m.userData.texKey));
     const old = [...this.tex.values()].filter((e) => !inUse.has(e.key)).sort((a, b) => a.used - b.used);
-    while (this.tex.size > KEEP && old.length) {
+    while ((total > budget || this.tex.size > MAX_SETS) && old.length) {
       const e = old.shift();
+      total -= setBytes(e);
       e.map.dispose();
       e.normal.dispose();
       e.orm.dispose();
@@ -182,6 +214,13 @@ export class MatLib {
       const qi = this.queue.indexOf(e);
       if (qi >= 0) this.queue.splice(qi, 1);
     }
+  }
+
+  /** 现在缓存了多少（调试 / 测试用） */
+  stats() {
+    let bytes = 0;
+    for (const e of this.tex.values()) bytes += setBytes(e);
+    return { sets: this.tex.size, mb: Math.round(bytes / 1e6), queued: this.queue.length };
   }
 
   /** 把材质 matId 套到表面 slotId */
@@ -238,7 +277,7 @@ export class MatLib {
     }
     this.highlighted = slotId || null;
     if (slotId && this.slots[slotId]) {
-      this.slots[slotId].emissive.set(0xd7a54a);
+      this.slots[slotId].emissive.set(PALETTE.gold);
       this.slots[slotId].emissiveIntensity = 0.35;
     }
   }
