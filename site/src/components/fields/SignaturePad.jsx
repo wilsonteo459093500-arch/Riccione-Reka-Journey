@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Sheet } from '../ui/UI.jsx';
 import Icon from '../ui/Icon.jsx';
+import { t, tb, getUiLang } from '../../lib/i18n.js';
 
 function trimCanvas(src) {
   const g = src.getContext('2d');
@@ -34,7 +35,7 @@ function trimCanvas(src) {
   return out;
 }
 
-export default function SignaturePad({ open, title = '签名', onClose, onSave }) {
+export default function SignaturePad({ open, title, onClose, onSave }) {
   const canvasRef = useRef(null);
   const drawing = useRef(false);
   const last = useRef(null);
@@ -124,19 +125,24 @@ export default function SignaturePad({ open, title = '签名', onClose, onSave }
     <Sheet
       open={open}
       onClose={onClose}
-      title={title}
+      title={title || t('签名', 'Signature')}
       footer={
         <div className="flex gap-2">
           <button className="btn-ghost flex-1" onClick={clear}>
-            <Icon name="RotateCcw" size={18} /> 重签
+            <Icon name="RotateCcw" size={18} /> {t('重签', 'Clear')}
           </button>
           <button className="btn-primary flex-[2]" disabled={!dirty} onClick={save}>
-            <Icon name="Check" size={18} /> 确认签名
+            <Icon name="Check" size={18} /> {t('确认签名', 'Done')}
           </button>
         </div>
       }
     >
-      <div className="text-[13px] text-ink-mute">请在框内用手指签名（签名中途转屏会清空，需要重签）</div>
+      <div className="whitespace-pre-line text-[13px] text-ink-mute">
+        {tb(
+          '请在框内用手指签名（签名中途转屏会清空，需要重签）',
+          'Sign in the box with your finger. Rotating the phone while signing clears it.',
+        )}
+      </div>
       <div className="relative mt-3 rounded-2xl bg-white ring-1 ring-line">
         <canvas
           ref={canvasRef}
@@ -148,7 +154,10 @@ export default function SignaturePad({ open, title = '签名', onClose, onSave }
           onPointerLeave={up}
         />
         <div className="pointer-events-none absolute inset-x-6 bottom-10 border-b border-dashed border-ink-faint" />
-        <div className="pointer-events-none absolute bottom-3 left-6 text-[12px] text-ink-faint">签名 Signature</div>
+        <div className="pointer-events-none absolute bottom-3 left-6 text-[12px] text-ink-faint">
+          {/* 签名线下的小字本来就是中英（中文 / 中英界面照旧）；English 界面只留英文 */}
+          {getUiLang() === 'en' ? 'Sign here' : '签名 Signature'}
+        </div>
       </div>
     </Sheet>
   );

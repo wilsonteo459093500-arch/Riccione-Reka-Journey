@@ -37,7 +37,8 @@ export default {
   stage: 5,
   name: { zh: '安装质检清单', en: 'Installation Quality Checklist' },
   short: 'QC',
-  desc: '21 项质检 · SS 每日抽查 3–5 项 × 2–3 个柜体并拍照',
+  // 首页卡片一句话（只在 App 界面显示，跟界面语言）
+  desc: { zh: '21 项质检 · SS 每日抽查 3–5 项 × 2–3 个柜体并拍照', en: '21-item QC · SS spot-checks 3–5 items × 2–3 cabinets daily, with photos' },
   icon: 'ShieldCheck',
   accent: '#B75A47',
   doc: {

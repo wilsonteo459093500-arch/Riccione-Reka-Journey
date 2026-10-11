@@ -1,4 +1,5 @@
 // 照片压缩 / 缩略图 / 视频封面（全部在手机本地完成，不上传）
+import { t } from './i18n.js';
 
 const MAX_SIDE = 1600; // 报告用图：长边 1600px 足够 A4 打印
 const THUMB_SIDE = 360;
@@ -9,14 +10,14 @@ function loadImage(src) {
     const img = new Image();
     img.decoding = 'async';
     img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('无法读取这张图片（格式不支持？）'));
+    img.onerror = () => reject(new Error(t('无法读取这张图片（格式不支持？）', "Can't read this image (unsupported format?)")));
     img.src = src;
   });
 }
 
 function canvasToBlob(canvas, type = 'image/jpeg', quality = QUALITY) {
   return new Promise((resolve, reject) => {
-    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('图片压缩失败'))), type, quality);
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error(t('图片压缩失败', 'Could not compress the image')))), type, quality);
   });
 }
 

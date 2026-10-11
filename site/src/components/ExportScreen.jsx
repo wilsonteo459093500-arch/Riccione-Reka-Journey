@@ -1,5 +1,5 @@
 // 预览 & 导出：PDF / Word / Excel / WhatsApp 文案 + 照片
-import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './ui/Icon.jsx';
 import { TopBar, Spinner, useUI, Empty } from './ui/UI.jsx';
 import SummaryCard from './SummaryCard.jsx';
@@ -7,7 +7,7 @@ import LangPicker from './LangPicker.jsx';
 import ErrorBoundary from './ui/ErrorBoundary.jsx';
 import { useStore } from '../lib/store.jsx';
 import { getTemplate } from '../templates/index.js';
-import { issues as listIssues, makeCtx, siteLabel } from '../lib/report.js';
+import { issues as listIssues, makeCtx, siteLabelUi } from '../lib/report.js';
 import { buildDocModel } from '../lib/docmodel.js';
 import { createMediaLoader, getMedia } from '../lib/db.js';
 import { exportReport, FORMATS } from '../lib/export/index.js';
@@ -16,6 +16,7 @@ import { copyText, shareFile, shareFiles, downloadBlob, openWhatsApp, mediaToFil
 import { fmtBytes } from '../lib/images.js';
 import { navigate, goBack } from '../lib/router.js';
 import { reportLang } from '../lib/lang.js';
+import { t, tb, uiText, getUiLang } from '../lib/i18n.js';
 
 const DocPreview = lazy(() => import('./doc/DocPreview.jsx'));
 
@@ -42,10 +43,70 @@ function shareBatches(files) {
   return out;
 }
 
+// 导出 / 预览抛出的已知错误（lib/export、lib/db 里写的是中文）：界面不是中文时换成英文。
+// 只在调用时取字（模块顶层只放成对文字）
+const KNOWN_ERRORS = [
+  { re: /^导出组件还没下载到手机上/, en: () => 'The export engine isn’t on this phone yet: connect to the internet and tap “Generate” again (it works offline after that)' },
+  { re: /^页面图片生成失败/, en: () => 'Couldn’t render the page images (out of memory?). Close other apps and try again' },
+  { re: /^排版超时/, en: () => 'Layout timed out, please try again' },
+  { re: /^找不到第 (\d+) 页/, en: (m) => `Page ${m[1]} not found` },
+  { re: /^Excel 引擎加载失败/, en: () => 'Couldn’t load the Excel engine' },
+  { re: /^未知格式：(.*)$/, en: (m) => `Unknown format: ${m[1]}` },
+  { re: /^数据库被另一个标签页占用/, en: () => 'The data is open in another tab: close other tabs and try again' },
+  { re: /^事务中止/, en: () => 'Saving was interrupted (the phone may be out of storage)' },
+];
+
+/** 错误信息 → { zh, en }（不认识的原样，两种都一样） */
+function errorParts(e) {
+  const msg = String(e?.message || e || '');
+  for (const k of KNOWN_ERRORS) {
+    const m = msg.match(k.re);
+    if (m) return { zh: msg, en: k.en(m) };
+  }
+  return { zh: msg, en: msg };
+}
+
+/** 「前缀：错误信息」按界面语言拼；中英时同一条信息不重复两遍（sep = 中英两段之间，换行用 '\n'） */
+function withError(zhPrefix, enPrefix, e, sep = ' ') {
+  const { zh, en } = errorParts(e);
+  if (zh === en && getUiLang() === 'both') return `${zhPrefix} ${enPrefix}: ${zh}`;
+  return tb(`${zhPrefix}：${zh}`, `${enPrefix}: ${en}`, sep);
+}
+
+// 各格式的一句话说明（成对存，渲染时取字）
+const FORMAT_HINT = {
+  pdf: { zh: '发客户 / 发群 / 打印', en: 'Send to clients or print' },
+  docx: { zh: '可再编辑的 Word 文档', en: 'Editable Word document' },
+  xlsx: { zh: '表格版，方便统计 / 导入 Lark', en: 'For stats / Lark import' },
+};
+
+// 「a · b」一行：每段不从中间折断，要折就在「·」处折
+const dotLine = (parts) =>
+  parts.map((s, i) => (
+    <Fragment key={i}>
+      {i ? ' · ' : ''}
+      <span className="whitespace-nowrap">{s}</span>
+    </Fragment>
+  ));
+
 function FormatRow({ fmt, state, onGenerate, onShare, onDownload, primary }) {
   const f = FORMATS[fmt];
   const busy = state?.status === 'busy';
   const ready = state?.status === 'ready';
+  const hint = FORMAT_HINT[fmt] || FORMAT_HINT.xlsx;
+  const both = getUiLang() === 'both';
+  let status;
+  if (busy) {
+    const p = state.progress;
+    status = p ? tb(`生成中… ${p.done}/${p.total} 页`, `Generating… page ${p.done}/${p.total}`) : tb('生成中…', 'Generating…');
+  } else if (ready) {
+    const size = fmtBytes(state.blob.size);
+    status = tb(`${size} · 已生成，可分享`, `${size} · Ready to share`);
+  } else if (state?.status === 'error') {
+    status = withError('失败', 'Failed', state.error, '\n');
+  } else {
+    status = tb(hint.zh, hint.en);
+  }
   return (
     <div data-format={fmt} className={`card p-3 ${primary ? 'ring-2 ring-terra/40' : ''}`}>
       <div className="flex items-center gap-3">
@@ -54,39 +115,26 @@ function FormatRow({ fmt, state, onGenerate, onShare, onDownload, primary }) {
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-[15px] font-bold text-ink">
-            {f.zh} <span className="text-[12px] font-normal text-ink-mute">.{f.ext}</span>
+            {t(f.zh, f.en)} <span className="text-[12px] font-normal text-ink-mute">.{f.ext}</span>
           </div>
-          <div className="truncate text-[12px] text-ink-mute">
-            {busy
-              ? state.progress
-                ? `生成中… ${state.progress}`
-                : '生成中…'
-              : ready
-                ? `${fmtBytes(state.blob.size)} · 已生成，可分享`
-                : state?.status === 'error'
-                  ? `失败：${state.error}`
-                  : fmt === 'pdf'
-                    ? '发客户 / 发群 / 打印'
-                    : fmt === 'docx'
-                      ? '可再编辑的 Word 文档'
-                      : '表格版，方便统计 / 导入 Lark'}
-          </div>
+          {/* 中英时中文、英文各一行（不截断）；单语照旧一行截断 */}
+          <div className={`text-[12px] text-ink-mute ${both ? 'whitespace-pre-line leading-snug' : 'truncate'}`}>{status}</div>
         </div>
         {!ready && (
           <button className={`${primary ? 'btn-accent' : 'btn-soft'} shrink-0 px-4 py-2.5 text-[14px]`} disabled={busy} onClick={onGenerate}>
-            {busy ? <Spinner /> : <Icon name="Wand2" size={16} />} 生成
+            {busy ? <Spinner /> : <Icon name="Wand2" size={16} />} {t('生成', 'Generate')}
           </button>
         )}
       </div>
       {ready && (
         <div className="mt-3 flex gap-2">
           <button className="btn-accent flex-[2] py-2.5 text-[14px]" onClick={onShare}>
-            <Icon name="Share2" size={17} /> 分享 / 发送
+            <Icon name="Share2" size={17} /> {t('分享 / 发送', 'Share / Send')}
           </button>
           <button className="btn-ghost flex-1 py-2.5 text-[14px]" onClick={onDownload}>
-            <Icon name="Download" size={17} /> 下载
+            <Icon name="Download" size={17} /> {t('下载', 'Download')}
           </button>
-          <button className="btn-ghost shrink-0 px-3 py-2.5" onClick={onGenerate} aria-label="重新生成">
+          <button className="btn-ghost shrink-0 px-3 py-2.5" onClick={onGenerate} aria-label={t('重新生成', 'Regenerate')}>
             <Icon name="RefreshCw" size={17} />
           </button>
         </div>
@@ -119,7 +167,8 @@ export default function ExportScreen({ reportId }) {
     try {
       return buildText({ template, report, project, settings: store.settings });
     } catch (e) {
-      return `（文案生成失败：${e.message}）`;
+      const { zh, en } = errorParts(e);
+      return t(`（文案生成失败：${zh}）`, `(Couldn’t build the message: ${en})`);
     }
   }, [template, report, project, store.settings]);
   const problems = useMemo(
@@ -127,10 +176,11 @@ export default function ExportScreen({ reportId }) {
     [template, report, project, store.settings],
   );
   const lang = reportLang(report, store.settings);
+  // 页面上的统计卡片跟界面语言（下面的文档预览 / 导出文件里的统计按文件语言）
   const summary = useMemo(() => {
     if (!template?.summary || !report) return null;
     try {
-      return template.summary(makeCtx({ template, report, project, settings: store.settings }));
+      return template.summary(makeCtx({ template, report, project, settings: store.settings, lang: getUiLang() }));
     } catch {
       return null;
     }
@@ -159,8 +209,8 @@ export default function ExportScreen({ reportId }) {
   if (!report || !template) {
     return (
       <>
-        <TopBar title="导出" onBack={() => navigate('/', { replace: true })} />
-        <Empty icon="CircleAlert" title="找不到这份报告" />
+        <TopBar title={t('导出', 'Export')} onBack={() => navigate('/', { replace: true })} />
+        <Empty icon="CircleAlert" title={t('找不到这份报告', 'Report not found')} />
       </>
     );
   }
@@ -174,16 +224,27 @@ export default function ExportScreen({ reportId }) {
         project,
         settings: store.settings,
         media: loader,
-        onProgress: (done, total) => setFiles((f) => ({ ...f, [fmt]: { status: 'busy', progress: `${done}/${total} 页` } })),
+        onProgress: (done, total) => setFiles((f) => ({ ...f, [fmt]: { status: 'busy', progress: { done, total } } })),
       });
       genAt.current[fmt] = report.updatedAt;
       setFiles((f) => ({ ...f, [fmt]: { status: 'ready', ...out } }));
       // 极端长的内容（一格就超过一页又切不开）PDF 里会显示不全：明确告诉用户，不静默裁掉
-      if (out.blob?.clipped > 0) toast(`有 ${out.blob.clipped} 处内容太长，PDF 里显示不全，请把那段文字分开写`, 'warn');
+      const clipped = out.blob?.clipped || 0;
+      if (clipped > 0) {
+        toast(
+          t(
+            `有 ${clipped} 处内容太长，PDF 里显示不全，请把那段文字分开写`,
+            clipped === 1
+              ? 'One entry is too long to show in full in the PDF — please split that text up'
+              : `${clipped} entries are too long to show in full in the PDF — please split those texts up`,
+          ),
+          'warn',
+        );
+      }
     } catch (e) {
       console.error(e);
       setFiles((f) => ({ ...f, [fmt]: { status: 'error', error: e.message || String(e) } }));
-      toast(`生成失败：${e.message || e}`, 'error');
+      toast(withError('生成失败', 'Couldn’t generate the file', e), 'error');
     }
   };
 
@@ -191,17 +252,21 @@ export default function ExportScreen({ reportId }) {
     const st = files[fmt];
     if (!st?.file) return;
     const res = await shareFile(st.file, { title: st.filename });
-    if (res === 'downloaded') toast('这台设备不支持直接分享，已下载文件');
+    if (res === 'downloaded') toast(t('这台设备不支持直接分享，已下载文件', 'Sharing isn’t supported on this device — the file was downloaded instead'));
   };
 
   const markDone = async () => {
     const next = { ...report, status: report.status === 'done' ? 'draft' : 'done' };
     await store.saveReport(next);
-    toast(next.status === 'done' ? '已标记为完成' : '已改回草稿');
+    toast(next.status === 'done' ? t('已标记为完成', 'Marked as done') : t('已改回草稿', 'Changed back to draft'));
   };
 
   const errors = problems.filter((p) => p.level === 'error');
   const warns = problems.filter((p) => p.level !== 'error');
+  const counts = [
+    errors.length && { zh: `${errors.length} 处必须补充`, en: `${errors.length} required ${errors.length === 1 ? 'item' : 'items'} missing` },
+    warns.length && { zh: `${warns.length} 条提醒`, en: `${warns.length} ${warns.length === 1 ? 'reminder' : 'reminders'}` },
+  ].filter(Boolean);
   const isMsg = template.kind === 'message';
   const photosCount = shareMedia?.length || 0;
   const batches = shareMedia ? shareBatches(shareMedia) : [];
@@ -214,18 +279,27 @@ export default function ExportScreen({ reportId }) {
 
   return (
     <div className="min-h-[100dvh] pb-10">
-      <TopBar title={isMsg ? '文案 & 分享' : '预览 & 导出'} sub={project ? siteLabel(project) : template.name.zh} onBack={() => goBack(`/r/${report.id}`)} />
+      <TopBar
+        title={isMsg ? t('文案 & 分享', 'Message & Share') : t('预览 & 导出', 'Preview & Export')}
+        sub={project ? siteLabelUi(project) : uiText(template.name)}
+        onBack={() => goBack(`/r/${report.id}`)}
+      />
       <main className="mx-auto max-w-lg space-y-3 px-3 pt-3">
         {(errors.length > 0 || warns.length > 0) && (
           <details className="card overflow-hidden" open={errors.length > 0}>
             <summary className="flex cursor-pointer list-none items-center gap-2 p-3">
               <Icon name="TriangleAlert" size={18} className={errors.length ? 'text-fail' : 'text-[#C98A1B]'} />
               <div className="flex-1 text-[14px] font-semibold text-ink">
-                {errors.length ? `${errors.length} 处必须补充` : ''}
-                {errors.length && warns.length ? ' · ' : ''}
-                {warns.length ? `${warns.length} 条提醒` : ''}
+                {getUiLang() === 'both' ? (
+                  <>
+                    <div>{dotLine(counts.map((c) => c.zh))}</div>
+                    <div>{dotLine(counts.map((c) => c.en))}</div>
+                  </>
+                ) : (
+                  dotLine(counts.map((c) => t(c.zh, c.en)))
+                )}
               </div>
-              <span className="text-[12px] text-ink-mute">不影响导出</span>
+              <span className="whitespace-pre-line text-right text-[12px] text-ink-mute">{tb('不影响导出', 'Won’t block export')}</span>
             </summary>
             <div className="space-y-1 border-t border-line px-3 pb-3 pt-2">
               {[...errors, ...warns].map((p, i) => (
@@ -241,7 +315,12 @@ export default function ExportScreen({ reportId }) {
 
         <LangPicker
           value={lang}
-          hint={isMsg ? '文案和文件里的固定文字；自己填的内容不翻译' : '文件里的固定文字；自己填的内容不翻译'}
+          title={t('文件语言', 'Document language')}
+          hint={
+            isMsg
+              ? tb('文案和文件里的固定文字；自己填的内容不翻译', 'Fixed wording in the message and files; what you typed is not translated')
+              : tb('文件里的固定文字；自己填的内容不翻译', 'Fixed wording in the files; what you typed is not translated')
+          }
           onChange={async (v) => {
             if (v === lang) return;
             // 换语言不算改内容（不更新修改时间）；已生成的文件作废，按新语言重新生成
@@ -256,12 +335,16 @@ export default function ExportScreen({ reportId }) {
           <div className="card p-3.5">
             <div className="mb-2 flex items-center gap-2">
               <Icon name="MessageCircle" size={18} className="text-pass" />
-              <div className="flex-1 text-[15px] font-bold text-ink">WhatsApp 文案</div>
+              <div className="flex-1 text-[15px] font-bold text-ink">{t('WhatsApp 文案', 'WhatsApp message')}</div>
               <button className="text-[13px] font-semibold text-terra" onClick={() => navigate(`/r/${report.id}`)}>
-                修改内容
+                {t('修改内容', 'Edit')}
               </button>
             </div>
-            <div className="max-h-[46dvh] overflow-y-auto whitespace-pre-wrap break-words rounded-xl bg-[#E7F3E2] px-3.5 py-3 font-sans text-[14px] leading-relaxed text-ink">
+            {/* 文案内容跟文件语言（不跟界面语言） */}
+            <div
+              data-doc-lang
+              className="max-h-[46dvh] overflow-y-auto whitespace-pre-wrap break-words rounded-xl bg-[#E7F3E2] px-3.5 py-3 font-sans text-[14px] leading-relaxed text-ink"
+            >
               {text}
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2">
@@ -269,58 +352,79 @@ export default function ExportScreen({ reportId }) {
                 className="btn-primary py-3 text-[14px]"
                 onClick={async () => {
                   const ok = await copyText(text);
-                  toast(ok ? '已复制，去 WhatsApp 粘贴' : '复制失败，请长按文字手动复制', ok ? 'ok' : 'error');
+                  toast(
+                    ok ? t('已复制，去 WhatsApp 粘贴', 'Copied — paste it in WhatsApp') : t('复制失败，请长按文字手动复制', 'Couldn’t copy — long-press the text to copy it'),
+                    ok ? 'ok' : 'error',
+                  );
                 }}
               >
-                <Icon name="Copy" size={17} /> 复制文案
+                <Icon name="Copy" size={17} /> {t('复制文案', 'Copy message')}
               </button>
               <button className="btn btn-ghost py-3 text-[14px]" onClick={() => openWhatsApp(text)}>
-                <Icon name="Send" size={17} /> 打开 WhatsApp
+                <Icon name="Send" size={17} /> {t('打开 WhatsApp', 'Open WhatsApp')}
               </button>
             </div>
             {photosCount > 0 && (
               <div className="mt-2 grid grid-cols-1 gap-2">
                 {batches.map((b, i) => {
                   const from = batches.slice(0, i).filter((x) => x.kind === 'photos').reduce((n, x) => n + x.files.length, 0);
+                  const n = b.files.length;
+                  const mark = '①②③④⑤⑥⑦⑧⑨⑩'[i] || i + 1;
                   const label =
                     b.kind === 'video'
-                      ? `分享视频（${fmtBytes(b.files[0].size)}）`
+                      ? t(`分享视频（${fmtBytes(b.files[0].size)}）`, `Share video (${fmtBytes(b.files[0].size)})`)
                       : batches.length === 1
-                        ? `分享文案 + ${b.files.length} 张照片`
+                        ? t(`分享文案 + ${n} 张照片`, `Share message + ${n} ${n === 1 ? 'photo' : 'photos'}`)
                         : i === 0
-                          ? `① 分享文案 + 照片 1–${b.files.length}`
-                          : `${'①②③④⑤⑥⑦⑧⑨⑩'[i] || i + 1} 分享照片 ${from + 1}–${from + b.files.length}`;
+                          ? t(`① 分享文案 + 照片 1–${n}`, `① Share message + photos 1–${n}`)
+                          : t(`${mark} 分享照片 ${from + 1}–${from + n}`, `${mark} Share photos ${from + 1}–${from + n}`);
                   return (
                     <button
                       key={i}
                       className={`${i === 0 ? 'btn-accent' : 'btn-ghost'} py-3 text-[14px] ${sent[i] ? 'opacity-60' : ''}`}
                       onClick={async () => {
                         if (b.tooBig) {
-                          toast('视频超过 45MB，系统不让直接分享：请在 WhatsApp 里从相册选这段视频', 'warn');
+                          toast(
+                            t('视频超过 45MB，系统不让直接分享：请在 WhatsApp 里从相册选这段视频', 'This video is over 45MB, too big to share directly: pick it from your gallery in WhatsApp'),
+                            'warn',
+                          );
                           return;
                         }
                         const res = await shareFiles(b.files, i === 0 && b.kind === 'photos' ? { text } : {});
                         if (res === 'shared') setSent((x) => ({ ...x, [i]: true }));
-                        else if (res === 'unsupported') toast('这台设备不支持直接分享照片：请先复制文案，再在 WhatsApp 里选照片', 'warn');
-                        else if (res === 'failed') toast('系统拒绝了这次分享（文件太多或太大）：请复制文案后在 WhatsApp 里直接选照片', 'error');
+                        else if (res === 'unsupported') {
+                          toast(
+                            t('这台设备不支持直接分享照片：请先复制文案，再在 WhatsApp 里选照片', 'This device can’t share photos directly: copy the message first, then pick the photos in WhatsApp'),
+                            'warn',
+                          );
+                        } else if (res === 'failed') {
+                          toast(
+                            t('系统拒绝了这次分享（文件太多或太大）：请复制文案后在 WhatsApp 里直接选照片', 'The phone refused to share (too many or too large files): copy the message, then pick the photos in WhatsApp'),
+                            'error',
+                          );
+                        }
                       }}
                     >
                       <Icon name={sent[i] ? 'Check' : b.kind === 'video' ? 'Video' : 'Share2'} size={17} /> {label}
                     </button>
                   );
                 })}
-                <div className="text-center text-[12px] leading-snug text-ink-mute">
-                  {batches.length > 1 ? '照片较多，按顺序一组一组发（系统一次最多 10 个文件）。' : ''}
-                  iPhone 上 WhatsApp 有时只收照片不收文字：先点「复制文案」，分享照片后在对话里粘贴即可。
+                <div className="whitespace-pre-line text-center text-[12px] leading-snug text-ink-mute">
+                  {tb(
+                    `${batches.length > 1 ? '照片较多，按顺序一组一组发（系统一次最多 10 个文件）。' : ''}iPhone 上 WhatsApp 有时只收照片不收文字：先点「复制文案」，分享照片后在对话里粘贴即可。`,
+                    `${batches.length > 1 ? 'Lots of photos: send them group by group, in order (max 10 files at a time). ' : ''}On iPhone, WhatsApp sometimes takes the photos but drops the text: tap “Copy message” first, then paste it into the chat after sharing the photos.`,
+                  )}
                 </div>
               </div>
             )}
-            {shareMedia === null && <div className="mt-2 text-center text-[12px] text-ink-mute">正在准备照片…</div>}
+            {shareMedia === null && <div className="mt-2 text-center text-[12px] text-ink-mute">{t('正在准备照片…', 'Preparing photos…')}</div>}
           </div>
         )}
 
         <div className="pt-1">
-          <div className="mb-2 px-1 text-[13px] font-semibold text-ink-soft">{isMsg ? '也可以出一份文件存档' : '导出文件'}</div>
+          <div className="mb-2 px-1 text-[13px] font-semibold text-ink-soft">
+            {isMsg ? t('也可以出一份文件存档', 'You can also export a file for your records') : t('导出文件', 'Export files')}
+          </div>
           <div className="space-y-2">
             {['pdf', 'docx', 'xlsx'].map((fmt) => (
               <FormatRow
@@ -337,24 +441,26 @@ export default function ExportScreen({ reportId }) {
         </div>
 
         <button className={`btn w-full ${report.status === 'done' ? 'bg-pass/10 text-pass' : 'btn-ghost'}`} onClick={markDone}>
-          <Icon name="CircleCheck" size={18} /> {report.status === 'done' ? '已完成（点此改回草稿）' : '标记为已完成'}
+          <Icon name="CircleCheck" size={18} /> {report.status === 'done' ? t('已完成（点此改回草稿）', 'Done (tap to change back to draft)') : t('标记为已完成', 'Mark as done')}
         </button>
 
         <div className="pt-2">
           <button className="flex w-full items-center gap-2 px-1 py-2 text-left" onClick={() => setShowPreview((s) => !s)}>
             <Icon name="Eye" size={18} className="text-ink-mute" />
-            <span className="flex-1 text-[14px] font-semibold text-ink">文档预览（与 PDF 一致）</span>
+            <span className="flex-1 text-[14px] font-semibold text-ink">{t('文档预览（与 PDF 一致）', 'Document preview (same as PDF)')}</span>
             <Icon name={showPreview ? 'ChevronUp' : 'ChevronDown'} size={18} className="text-ink-mute" />
           </button>
           {showPreview && model && (
             <div className="-mx-3 rounded-none bg-[#E9E3D6] px-3 py-4">
               <ErrorBoundary
                 fallback={({ offline, retry }) => (
-                  <div className="py-8 text-center text-[13px] leading-relaxed text-ink-soft">
-                    {offline ? '预览需要联网加载一次（之后离线也能用）' : '预览出错了'}
+                  <div className="whitespace-pre-line py-8 text-center text-[13px] leading-relaxed text-ink-soft">
+                    {offline
+                      ? tb('预览需要联网加载一次（之后离线也能用）', 'The preview needs the internet once to load (then it works offline)')
+                      : t('预览出错了', 'The preview failed to load')}
                     <div className="mt-3">
                       <button className="btn-ghost px-4 py-2 text-[13px]" onClick={retry}>
-                        重试
+                        {t('重试', 'Retry')}
                       </button>
                     </div>
                   </div>

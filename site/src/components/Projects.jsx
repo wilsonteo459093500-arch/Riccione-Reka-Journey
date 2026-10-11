@@ -6,10 +6,14 @@ import LangSwitch from './ui/LangSwitch.jsx';
 import ProjectForm from './ProjectForm.jsx';
 import { CrewShare } from './CrewLink.jsx';
 import { useStore } from '../lib/store.jsx';
-import { siteLabel } from '../lib/report.js';
+import { siteLabelUi } from '../lib/report.js';
 import { getTemplate } from '../templates/index.js';
 import { navigate, goBack } from '../lib/router.js';
 import { fmtStamp } from '../lib/format.js';
+import { t, tb, uiLabel } from '../lib/i18n.js';
+
+/** 「n 份报告」的单位（数字另外显示）：English 分单复数；中英分两行（列很窄） */
+const reportsUnit = (n) => tb('份报告', n === 1 ? 'report' : 'reports');
 
 export function ProjectList() {
   const { projects, reports } = useStore();
@@ -21,13 +25,13 @@ export function ProjectList() {
   return (
     <div className="pb-28">
       <TopBar
-        title="项目"
-        sub="项目资料填一次，所有报告自动带入"
+        title={t('项目', 'Projects')}
+        sub={t('项目资料填一次，所有报告自动带入', 'Auto-fills every report')}
         right={
           <div className="mr-1 flex shrink-0 items-center gap-1.5">
             <LangSwitch />
             <button className="btn-primary px-3 py-2 text-[14px]" onClick={() => navigate('/projects/new')}>
-              <Icon name="Plus" size={17} /> 新项目
+              <Icon name="Plus" size={17} /> {t('新项目', 'New')}
             </button>
           </div>
         }
@@ -39,23 +43,30 @@ export function ProjectList() {
               <Icon name="Building2" size={20} />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="truncate text-[15px] font-semibold text-ink">{siteLabel(p)}</div>
+              <div className="truncate text-[15px] font-semibold text-ink">{siteLabelUi(p)}</div>
               <div className="truncate text-[12px] text-ink-mute">{[p.so, p.address].filter(Boolean).join(' · ') || '—'}</div>
             </div>
             <div className="shrink-0 text-right">
               <div className="text-[15px] font-bold text-ink">{counts[p.id] || 0}</div>
-              <div className="text-[10px] text-ink-mute">份报告</div>
+              <div className="whitespace-pre-line text-[10px] text-ink-mute">{reportsUnit(counts[p.id] || 0)}</div>
             </div>
           </button>
         ))}
         {projects.length === 0 && (
           <Empty
             icon="Building2"
-            title="还没有项目"
-            hint="建一个项目：楼盘、单位、客户、SO、地址、导航链接、预计安装天数。之后所有报告一键带入。"
+            title={t('还没有项目', 'No projects yet')}
+            hint={
+              <span className="whitespace-pre-line">
+                {tb(
+                  '建一个项目：楼盘、单位、客户、SO、地址、导航链接、预计安装天数。之后所有报告一键带入。',
+                  'Create a project with the development, unit, client, SO, address, map link and planned installation days. Every report then fills them in with one tap.',
+                )}
+              </span>
+            }
             action={
               <button className="btn-primary" onClick={() => navigate('/projects/new')}>
-                <Icon name="Plus" size={18} /> 新建项目
+                <Icon name="Plus" size={18} /> {t('新建项目', 'New project')}
               </button>
             }
           />
@@ -91,18 +102,24 @@ export function ProjectEdit({ projectId }) {
   if (!isNew && !p) {
     return (
       <>
-        <TopBar title="项目" onBack={() => navigate('/projects', { replace: true })} />
-        <Empty icon="CircleAlert" title="找不到这个项目" />
+        <TopBar title={t('项目', 'Project')} onBack={() => navigate('/projects', { replace: true })} />
+        <Empty icon="CircleAlert" title={t('找不到这个项目', 'Project not found')} />
       </>
     );
   }
   return (
     <div className="pb-16">
       <TopBar
-        title={isNew ? '新建项目' : siteLabel(p)}
+        title={isNew ? t('新建项目', 'New project') : siteLabelUi(p)}
         onBack={async () => {
           if (dirty.current && isNew) {
-            const ok = await confirm({ title: '新项目还没保存', message: '离开后填写的内容会丢失。', okText: '不保存，离开', cancelText: '继续编辑', danger: true });
+            const ok = await confirm({
+              title: t('新项目还没保存', 'New project not saved'),
+              message: tb('离开后填写的内容会丢失。', "What you've entered will be lost if you leave."),
+              okText: t('不保存，离开', 'Leave without saving'),
+              cancelText: t('继续编辑', 'Keep editing'),
+              danger: true,
+            });
             if (!ok) return;
             discard.current = true;
           }
@@ -123,7 +140,7 @@ export function ProjectEdit({ projectId }) {
             onSave={async (data) => {
               dirty.current = false;
               await store.saveProject(data);
-              toast('项目已保存');
+              toast(t('项目已保存', 'Project saved'));
               goBack('/projects');
             }}
             onDelete={
@@ -131,9 +148,16 @@ export function ProjectEdit({ projectId }) {
                 ? undefined
                 : async () => {
                     const ok = await confirm({
-                      title: '删除这个项目？',
-                      message: projReports.length ? `项目下的 ${projReports.length} 份报告会保留，但不再关联项目。` : '',
-                      okText: '删除',
+                      title: t('删除这个项目？', 'Delete this project?'),
+                      message: projReports.length
+                        ? tb(
+                            `项目下的 ${projReports.length} 份报告会保留，但不再关联项目。`,
+                            projReports.length === 1
+                              ? 'Its 1 report will be kept, but no longer linked to a project.'
+                              : `Its ${projReports.length} reports will be kept, but no longer linked to a project.`,
+                          )
+                        : '',
+                      okText: t('删除', 'Delete'),
                       danger: true,
                     });
                     if (!ok) return;
@@ -160,18 +184,22 @@ export function ProjectEdit({ projectId }) {
         )}
         {!isNew && projReports.length > 0 && (
           <section className="mt-6">
-            <div className="mb-2 px-1 text-[15px] font-bold text-ink">这个项目的报告</div>
+            <div className="mb-2 px-1 text-[15px] font-bold text-ink">{t('这个项目的报告', 'Reports in this project')}</div>
             <div className="space-y-2">
               {projReports.map((r) => {
-                const t = getTemplate(r.templateId);
-                if (!t) return null;
+                const tpl = getTemplate(r.templateId);
+                if (!tpl) return null;
+                const name = uiLabel(tpl.name);
                 return (
                   <button key={r.id} className="card flex w-full items-center gap-3 p-3 text-left active:bg-cream" onClick={() => navigate(`/r/${r.id}`)}>
-                    <div className="rounded-xl p-2 text-white" style={{ background: t.accent }}>
-                      <Icon name={t.icon} size={16} />
+                    <div className="rounded-xl p-2 text-white" style={{ background: tpl.accent }}>
+                      <Icon name={tpl.icon} size={16} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-[14px] font-semibold text-ink">{t.name.zh}</div>
+                      <div className="truncate text-[14px] font-semibold text-ink">
+                        {name.primary}
+                        {name.secondary && <span className="ml-1.5 text-[11px] font-normal text-ink-mute">{name.secondary}</span>}
+                      </div>
                       <div className="text-[12px] text-ink-mute">{r.values?.date || ''}</div>
                     </div>
                     <div className="text-[11px] text-ink-faint">{fmtStamp(r.updatedAt)}</div>

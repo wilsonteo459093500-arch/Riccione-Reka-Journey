@@ -4,6 +4,16 @@ import Icon from '../ui/Icon.jsx';
 import PhotoStrip from './PhotoStrip.jsx';
 import FieldInput from './FieldInput.jsx';
 import { resolveScale } from '../../templates/schema.js';
+import { localize } from '../../lib/lang.js';
+import { t, tb, uiLabel, uiText, getUiLang } from '../../lib/i18n.js';
+
+// 标签按某一种语言取一行（拼进 t(zh, en) 两边用）
+const inLang = (label, lang) => {
+  if (label == null) return '';
+  if (typeof label === 'string') return label;
+  const l = localize(label, lang) || {};
+  return (lang === 'en' ? l.en : l.zh) || '';
+};
 
 const TONE_ON = {
   pass: 'bg-pass text-white ring-pass',
@@ -37,7 +47,13 @@ function ChecklistItem({ section, item, answer, onChange, reportId, flagged }) {
   const set = (patch) => onChange(item.id, patch);
   const pick = (v) => set((prev) => ({ r: prev.r === v ? '' : v }));
 
-  const hasMore = item.desc?.en || item.method || (item.desc?.zh || '').length > 46;
+  // 中文 → 只显示中文说明；English → 英文（没有就中文）；中英 → 中文 + 展开后英文小字（原来的样子）
+  const lang = getUiLang();
+  const title = uiLabel(item.title);
+  const desc = uiLabel(item.desc);
+  const method = uiLabel(item.method);
+  const hasMore = !!(desc.secondary || method.primary || desc.primary.length > (lang === 'en' ? 80 : 46));
+  const remarkLabel = section.remark?.label;
 
   return (
     <div
@@ -56,7 +72,7 @@ function ChecklistItem({ section, item, answer, onChange, reportId, flagged }) {
               className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ring-2 transition active:scale-90 ${
                 a.r ? 'bg-pass text-white ring-pass' : 'bg-white ring-line'
               }`}
-              aria-label="完成"
+              aria-label={t('完成', 'Done')}
             >
               {a.r && <Icon name="Check" size={18} strokeWidth={3} />}
             </button>
@@ -68,25 +84,25 @@ function ChecklistItem({ section, item, answer, onChange, reportId, flagged }) {
           <div className="min-w-0 flex-1" onClick={ticks ? () => pick('Y') : undefined}>
             <div className="text-[15px] font-semibold leading-snug text-ink">
               {item.key && <span className="mr-1 text-terra">★</span>}
-              {item.title?.zh || item.title?.en}
+              {title.primary}
               {item.media && (
-                <span className="ml-1.5 inline-flex translate-y-[-1px] items-center gap-0.5 rounded-md bg-terra-soft px-1.5 py-0.5 align-middle text-[11px] font-semibold text-terra">
-                  <Icon name="Camera" size={11} /> 影像
+                <span className="ml-1.5 inline-flex translate-y-[-1px] items-center gap-0.5 whitespace-nowrap rounded-md bg-terra-soft px-1.5 py-0.5 align-middle text-[11px] font-semibold text-terra">
+                  <Icon name="Camera" size={11} /> {t('影像', 'Photo record')}
                 </span>
               )}
             </div>
-            {item.title?.zh && item.title?.en && <div className="mt-0.5 text-[12px] leading-snug text-ink-mute">{item.title.en}</div>}
-            {item.desc?.zh && (
-              <div className={`mt-1.5 text-[13px] leading-relaxed text-ink-soft ${showMore ? '' : 'line-clamp-2'}`}>{item.desc.zh}</div>
+            {title.secondary && <div className="mt-0.5 text-[12px] leading-snug text-ink-mute">{title.secondary}</div>}
+            {desc.primary && (
+              <div className={`mt-1.5 text-[13px] leading-relaxed text-ink-soft ${showMore ? '' : 'line-clamp-2'}`}>{desc.primary}</div>
             )}
             {showMore && (
               <div className="mt-1 space-y-1 text-[12px] leading-relaxed text-ink-mute">
-                {item.desc?.en && <div className="italic">{item.desc.en}</div>}
-                {item.method && (
+                {desc.secondary && <div className="italic">{desc.secondary}</div>}
+                {method.primary && (
                   <div>
-                    <span className="font-semibold text-ink-soft">检查方法：</span>
-                    {item.method.zh}
-                    {item.method.en && <span className="italic"> · {item.method.en}</span>}
+                    <span className="font-semibold text-ink-soft">{t('检查方法', 'Method')}{lang === 'en' ? ': ' : '：'}</span>
+                    {method.primary}
+                    {method.secondary && <span className="italic"> · {method.secondary}</span>}
                   </div>
                 )}
               </div>
@@ -100,7 +116,7 @@ function ChecklistItem({ section, item, answer, onChange, reportId, flagged }) {
                   setShowMore((s) => !s);
                 }}
               >
-                {showMore ? '收起' : '标准 / 方法'}
+                {showMore ? t('收起', 'Show less') : t('标准 / 方法', 'Standard / method')}
               </button>
             )}
           </div>
@@ -116,6 +132,7 @@ function ChecklistItem({ section, item, answer, onChange, reportId, flagged }) {
             <div className="mt-3 flex gap-2">
               {scale.options.map((o) => {
                 const on = a.r === o.v;
+                const lb = uiLabel(o);
                 return (
                   <button
                     type="button"
@@ -125,8 +142,8 @@ function ChecklistItem({ section, item, answer, onChange, reportId, flagged }) {
                       on ? TONE_ON[o.tone] || TONE_ON.neutral : 'bg-white text-ink-soft ring-line'
                     }`}
                   >
-                    <div className="leading-tight">{o.zh}</div>
-                    <div className={`text-[10px] font-medium leading-tight ${on ? 'text-white/80' : 'text-ink-faint'}`}>{o.en}</div>
+                    <div className="leading-tight">{lb.primary}</div>
+                    {lb.secondary && <div className={`text-[10px] font-medium leading-tight ${on ? 'text-white/80' : 'text-ink-faint'}`}>{lb.secondary}</div>}
                   </button>
                 );
               })}
@@ -141,10 +158,21 @@ function ChecklistItem({ section, item, answer, onChange, reportId, flagged }) {
               className={`input min-h-[44px] resize-none py-2.5 text-[16px] leading-snug ${need ? 'border-fail ring-2 ring-fail/15' : ''}`}
               rows={2}
               value={a.note || ''}
-              placeholder={need ? `必填：${section.remark?.label?.zh || '处理方案 / 负责人'}` : section.remark?.label?.zh || '备注'}
+              placeholder={
+                need
+                  ? t(`必填：${inLang(remarkLabel, 'zh') || '处理方案 / 负责人'}`, `Required: ${inLang(remarkLabel, 'en') || 'Action / person in charge'}`)
+                  : uiText(remarkLabel) || t('备注', 'Remarks')
+              }
               onChange={(e) => set({ note: e.target.value })}
             />
-            {need && <div className="mt-1 text-[12px] font-medium text-fail">判定为「{opt?.zh}」时要写明{section.remark?.label?.zh || '备注'}</div>}
+            {need && (
+              <div className="mt-1 whitespace-pre-line text-[12px] font-medium text-fail">
+                {tb(
+                  `判定为「${inLang(opt, 'zh')}」时要写明${inLang(remarkLabel, 'zh') || '备注'}`,
+                  `Required when marked "${inLang(opt, 'en')}": ${inLang(remarkLabel, 'en') || 'Remarks'}`,
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -159,12 +187,12 @@ function ChecklistItem({ section, item, answer, onChange, reportId, flagged }) {
           <div className="mt-2.5 flex gap-4 text-[13px] font-semibold text-ink-mute">
             {!noteOpen && !item.input && (
               <button type="button" className="flex items-center gap-1 py-1 active:text-ink" onClick={() => setShowNote(true)}>
-                <Icon name="PenLine" size={15} /> 备注
+                <Icon name="PenLine" size={15} /> {t('备注', 'Remarks')}
               </button>
             )}
             {!photosOpen && (
               <button type="button" className="flex items-center gap-1 py-1 active:text-ink" onClick={() => setShowPhotos(true)}>
-                <Icon name="Camera" size={15} /> 照片
+                <Icon name="Camera" size={15} /> {t('照片', 'Photos')}
               </button>
             )}
           </div>

@@ -5,6 +5,7 @@ import FieldInput, { FieldLabel } from './FieldInput.jsx';
 import PhotoStrip from './PhotoStrip.jsx';
 import { tablePhotoSlots } from '../../lib/docmodel.js';
 import { resolveScale, L } from '../../templates/schema.js';
+import { t, uiText, getUiLang } from '../../lib/i18n.js';
 import { useState } from 'react';
 import { useStore } from '../../lib/store.jsx';
 import { getMedia, putMedia } from '../../lib/db.js';
@@ -43,7 +44,13 @@ function rowsFromFails(template, report, section) {
       const row = emptyRow(section);
       row._from = it.id;
       const descKey = section.columns.find((c) => c.type === 'textarea')?.key || section.columns[0]?.key;
-      if (descKey) row[descKey] = `#${it.no} ${L(it.title, 'zh')}${a.note ? `：${a.note}` : ''}`;
+      // 生成的问题描述（之后可改）：English 界面用英文检查项名，中文 / 中英照旧
+      if (descKey) {
+        row[descKey] =
+          getUiLang() === 'en'
+            ? `#${it.no} ${uiText(it.title)}${a.note ? `: ${a.note}` : ''}`
+            : `#${it.no} ${L(it.title, 'zh')}${a.note ? `：${a.note}` : ''}`;
+      }
       const slots = tablePhotoSlots(section);
       if (slots[0]) row[slots[0].key] = [...(a.photos || [])]; // 先放原 id，seed() 里再复制成独立记录
       out.push(row);
@@ -65,7 +72,7 @@ export default function TableSection({ template, section, report, rows = [], onC
     onChange((prev) => prev.map((r, j) => (same(row, i)(r, j) ? { ...r, ...(typeof patch === 'function' ? patch(r) : patch) } : r)));
   const add = () => onChange((prev) => [...prev, emptyRow(section)]);
   const del = async (row, i) => {
-    const ok = await confirm({ title: `删除第 ${i + 1} 行？`, okText: '删除', danger: true });
+    const ok = await confirm({ title: t(`删除第 ${i + 1} 行？`, `Delete row ${i + 1}?`), okText: t('删除', 'Delete'), danger: true });
     if (!ok) return;
     removeMedia(slots.flatMap((s) => row[s.key] || []));
     onChange((prev) => prev.filter((r, j) => !same(row, i)(r, j)));
@@ -74,7 +81,7 @@ export default function TableSection({ template, section, report, rows = [], onC
     if (seeding) return;
     const extra = rowsFromFails(template, report, section);
     if (!extra.length) {
-      toast('没有新的不合格项需要记入', 'warn');
+      toast(t('没有新的不合格项需要记入', 'No new failed items to add'), 'warn');
       return;
     }
     setSeeding(true);
@@ -88,7 +95,7 @@ export default function TableSection({ template, section, report, rows = [], onC
         const keep = prev.filter((r) => Object.entries(r).some(([k, v]) => k !== '_from' && k !== '_id' && (Array.isArray(v) ? v.length : v)));
         return [...keep, ...extra.filter((r) => !have.has(r._from))];
       });
-      toast(`已生成 ${extra.length} 条整改记录`);
+      toast(t(`已生成 ${extra.length} 条整改记录`, `Added ${extra.length} rectification ${extra.length === 1 ? 'item' : 'items'}`));
     } finally {
       setSeeding(false);
     }
@@ -98,19 +105,19 @@ export default function TableSection({ template, section, report, rows = [], onC
     <div className="space-y-3">
       {section.seedFromFails && (
         <button type="button" className="btn-soft w-full text-[14px]" disabled={seeding} onClick={seed}>
-          <Icon name="Wand2" size={17} /> 从「不合格」项自动生成
+          <Icon name="Wand2" size={17} /> {t('从「不合格」项自动生成', 'Generate from "Fail" items')}
         </button>
       )}
       {rows.length === 0 && (
-        <div className="rounded-xl border border-dashed border-line bg-white/60 px-4 py-5 text-center text-[13px] text-ink-mute">
-          {L(section.emptyText, 'zh') || '还没有记录'}
+        <div className="whitespace-pre-line rounded-xl border border-dashed border-line bg-white/60 px-4 py-5 text-center text-[13px] text-ink-mute">
+          {uiText(section.emptyText, '\n') || t('还没有记录', 'No records yet')}
         </div>
       )}
       {rows.map((row, i) => (
         <div key={row._id || i} className="card p-3.5">
           <div className="mb-2 flex items-center justify-between">
             <div className="text-[14px] font-bold text-ink">#{i + 1}</div>
-            <button type="button" className="rounded-full p-1.5 text-ink-faint active:bg-fail/10 active:text-fail" onClick={() => del(row, i)} aria-label="删除这一行">
+            <button type="button" className="rounded-full p-1.5 text-ink-faint active:bg-fail/10 active:text-fail" onClick={() => del(row, i)} aria-label={t('删除这一行', 'Delete this row')}>
               <Icon name="Trash2" size={17} />
             </button>
           </div>
@@ -132,7 +139,7 @@ export default function TableSection({ template, section, report, rows = [], onC
       ))}
       {rows.length < max && (
         <button type="button" className="btn-ghost w-full text-[14px]" onClick={add}>
-          <Icon name="Plus" size={17} /> {section.addLabel || '添加一行'}
+          <Icon name="Plus" size={17} /> {uiText(section.addLabel) || t('添加一行', 'Add row')}
         </button>
       )}
     </div>

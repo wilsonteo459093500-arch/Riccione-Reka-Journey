@@ -162,7 +162,8 @@ export default {
   stage: 4,
   name: { zh: '每日安装汇报', en: 'Daily Installation Report' },
   short: '日报',
-  desc: '每天收工发群：进度、卫生、水电门窗、退场视频',
+  // 首页卡片一句话、输入框提示（placeholder）、字段说明（hint）只在 App 界面显示，跟界面语言：{ zh, en }
+  desc: { zh: '每天收工发群：进度、卫生、水电门窗、退场视频', en: 'Post to the group after work: progress, cleanliness, utilities, exit video' },
   icon: 'CalendarCheck',
   accent: '#B5623A',
   doc: {
@@ -185,7 +186,7 @@ export default {
           bind: 'project.address',
           default: (ctx) => ctx.project?.address || siteLabel(ctx.project),
           display: siteLabelIn, // 项目没地址时带入的是工地称呼：英文文件里换半角括号
-          placeholder: '项目地址',
+          placeholder: { zh: '项目地址', en: 'Project address' },
         },
         {
           key: 'duration',
@@ -193,8 +194,11 @@ export default {
           label: { zh: '2、预计工期', en: 'Planned duration', enOnly: '2. Planned duration' },
           default: autoDuration,
           display: durationShown,
-          placeholder: '例：预计 5 天（今天第 1 天）',
-          hint: '按项目「预计安装天数」自动倒数：第一天发总工期，往后依次递减（可手改）',
+          placeholder: { zh: '例：预计 5 天（今天第 1 天）', en: 'e.g. Est. 5 days (today is day 1)' },
+          hint: {
+            zh: '按项目「预计安装天数」自动倒数：第一天发总工期，往后依次递减（可手改）',
+            en: "Counts down from the project's planned installation days: day 1 shows the total, then one less each day (editable)",
+          },
         },
       ],
     },
@@ -209,10 +213,10 @@ export default {
           label: { zh: '3、今日内容', en: "Today's work", enOnly: "3. Today's work" },
           rows: 3,
           required: true,
-          placeholder: '当天工作内容，例：鞋柜、主卧衣柜柜体安装完成',
+          placeholder: { zh: '当天工作内容，例：鞋柜、主卧衣柜柜体安装完成', en: "Today's work, e.g. shoe cabinet and master wardrobe carcasses installed" },
           keepOnDuplicate: false,
         },
-        { key: 'progressPhotos', type: 'photos', label: { zh: '今日进度照', en: 'Progress photos' }, max: 30, hint: '每柜每日进度照' },
+        { key: 'progressPhotos', type: 'photos', label: { zh: '今日进度照', en: 'Progress photos' }, max: 30, hint: { zh: '每柜每日进度照', en: 'Daily progress photos of every cabinet' } },
         { key: 'continueTomorrow', type: 'radio', label: { zh: '4、明天是否继续', en: 'Continue tomorrow', enOnly: '4. Continue tomorrow' }, options: YES_NO, default: '是' },
       ],
     },
@@ -225,7 +229,7 @@ export default {
         { key: 'hygienePhotos', type: 'photos', label: { zh: '卫生照片', en: 'Cleanliness photos' }, max: 20 },
         { key: 'utilities', type: 'radio', label: { zh: '6、水电门窗', en: 'Water / power / doors & windows', enOnly: '6. Water / power / doors & windows' }, options: UTILITIES, default: '已关闭' },
         { key: 'utilitiesPhotos', type: 'photos', label: { zh: '水电门窗照片', en: 'Water / power / doors & windows photos' }, max: 20 },
-        { key: 'exitVideo', type: 'video', label: { zh: '退场视频', en: 'Exit walkthrough video' }, hint: '收工前全场巡一遍拍视频' },
+        { key: 'exitVideo', type: 'video', label: { zh: '退场视频', en: 'Exit walkthrough video' }, hint: { zh: '收工前全场巡一遍拍视频', en: 'Walk the whole site and record a video before leaving' } },
       ],
     },
     {
@@ -238,23 +242,25 @@ export default {
           type: 'textarea',
           label: { zh: '7、下一步计划', en: 'Next plan', enOnly: '7. Next plan' },
           rows: 2,
-          placeholder: '安装计划',
+          placeholder: { zh: '安装计划', en: 'Installation plan' },
           keepOnDuplicate: false,
         },
-        { key: 'tips', type: 'textarea', label: { zh: '8、温馨提示', en: 'Reminders', enOnly: '8. Reminders' }, rows: 2, placeholder: '日常小提示或工种协调配合' },
+        { key: 'tips', type: 'textarea', label: { zh: '8、温馨提示', en: 'Reminders', enOnly: '8. Reminders' }, rows: 2, placeholder: { zh: '日常小提示或工种协调配合', en: 'Daily tips or coordination with other trades' } },
         { key: 'dept', type: 'text', label: { zh: '落款', en: 'Signed by' }, bind: 'settings.dept', default: '安装部', display: deptIn },
       ],
     },
   ],
   // 「3、今日内容」是必填字段，未填已由通用提醒提示，这里不重复
+  // 提醒文字跟界面语言（ctx.lang）；中英时与通用提醒一样「中文 / English」
   checks(ctx) {
     const out = [];
-    if (!has(val(ctx, 'progressPhotos'))) out.push('还没有今日进度照');
-    if (!has(val(ctx, 'hygienePhotos'))) out.push('「5、施工现场卫生」还没有照片');
-    if (!has(val(ctx, 'utilitiesPhotos'))) out.push('「6、水电门窗」还没有照片');
-    if (!has(val(ctx, 'exitVideo'))) out.push('还没有退场视频（收工前全场巡一遍拍视频）');
-    if (val(ctx, 'hygiene') === '未清理') out.push('施工现场卫生为「未清理」');
-    if (val(ctx, 'utilities') === '未关闭') out.push('水电门窗为「未关闭」，离场前请确认');
+    const tt = (zh, en) => ctx.t(zh, en, ' / ');
+    if (!has(val(ctx, 'progressPhotos'))) out.push(tt('还没有今日进度照', 'No progress photos for today yet'));
+    if (!has(val(ctx, 'hygienePhotos'))) out.push(tt('「5、施工现场卫生」还没有照片', '"5. Site cleanliness" has no photos yet'));
+    if (!has(val(ctx, 'utilitiesPhotos'))) out.push(tt('「6、水电门窗」还没有照片', '"6. Water / power / doors & windows" has no photos yet'));
+    if (!has(val(ctx, 'exitVideo'))) out.push(tt('还没有退场视频（收工前全场巡一遍拍视频）', 'No exit video yet (walk the whole site and record a video before leaving)'));
+    if (val(ctx, 'hygiene') === '未清理') out.push(tt('施工现场卫生为「未清理」', 'Site cleanliness is marked "Not cleaned"'));
+    if (val(ctx, 'utilities') === '未关闭') out.push(tt('水电门窗为「未关闭」，离场前请确认', 'Water / power / doors & windows marked "Not yet off & locked" — please check before leaving'));
     return out;
   },
   // WhatsApp 文案：标题 2 行 + 1–8 项 + 落款（安装部 / 2026.10.8 靠右）。English = 同结构的英文版；中英 = 原来的中文文案

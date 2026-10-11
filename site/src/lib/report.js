@@ -2,7 +2,7 @@
 import { allFields, allItems, resolveScale, L } from '../templates/schema.js';
 import { todayISO } from './format.js';
 import { normLang, tx } from './lang.js';
-import { getUiLang } from './i18n.js';
+import { getUiLang, tidyCaps } from './i18n.js';
 
 export const uid = (p = '') =>
   p + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -227,7 +227,8 @@ export function issues(template, report, { project, settings, lang = getUiLang()
   const lg = normLang(lang);
   const say = (zh, en) => (lg === 'zh' ? zh : lg === 'en' ? en : `${zh} / ${en}`);
   const zhOf = (label) => L(label, 'zh');
-  const enOf = (label) => L(label, 'en');
+  // 原表只有中文的标签带 enOnly（英文写法）
+  const enOf = (label) => tidyCaps(label && typeof label === 'object' && typeof label.enOnly === 'string' ? label.enOnly : L(label, 'en'));
   for (const s of template.sections) {
     if (s.type === 'fields') {
       for (const f of s.fields) {
@@ -253,7 +254,7 @@ export function issues(template, report, { project, settings, lang = getUiLang()
             level: 'error',
             text: say(
               `第 ${it.no} 项「${zhOf(it.title)}」判定为${opt?.zh || a.r}，需写明${zhOf(s.remark?.label) || '备注'}`,
-              `Item ${it.no} "${enOf(it.title)}" is marked ${opt?.en || opt?.zh || a.r} — please write the ${(enOf(s.remark?.label) || 'remarks').toLowerCase()}`,
+              `Item ${it.no} "${enOf(it.title)}" is marked ${opt?.enOnly || opt?.en || opt?.zh || a.r} — please fill in "${enOf(s.remark?.label) || 'Remarks'}"`,
             ),
             sectionId: s.id,
             target: it.id,

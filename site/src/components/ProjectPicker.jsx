@@ -3,7 +3,8 @@ import { useState } from 'react';
 import Icon from './ui/Icon.jsx';
 import ProjectForm from './ProjectForm.jsx';
 import { useStore } from '../lib/store.jsx';
-import { siteLabel } from '../lib/report.js';
+import { siteLabel, siteLabelUi } from '../lib/report.js';
+import { t, tb } from '../lib/i18n.js';
 
 export default function ProjectPicker({ currentId, onPick, allowNone = true }) {
   const { projects, saveProject } = useStore();
@@ -14,7 +15,12 @@ export default function ProjectPicker({ currentId, onPick, allowNone = true }) {
   if (creating) {
     return (
       <div>
-        <div className="mb-3 text-[13px] leading-relaxed text-ink-mute">新项目：先填基本资料，之后可在「项目」页补充导航、进场须知、预计天数等。</div>
+        <div className="mb-3 whitespace-pre-line text-[13px] leading-relaxed text-ink-mute">
+          {tb(
+            '新项目：先填基本资料，之后可在「项目」页补充导航、进场须知、预计天数等。',
+            'New project: fill in the basics now. Map link, entry notes, planned days etc. can be added later on the Projects page.',
+          )}
+        </div>
         <ProjectForm
           compact
           onCancel={projects.length ? () => setCreating(false) : undefined}
@@ -30,10 +36,10 @@ export default function ProjectPicker({ currentId, onPick, allowNone = true }) {
   return (
     <div className="space-y-2">
       {projects.length > 5 && (
-        <input className="input" placeholder="搜索项目 / 单位 / SO" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="input" placeholder={t('搜索项目 / 单位 / SO', 'Search project / unit / SO')} value={q} onChange={(e) => setQ(e.target.value)} />
       )}
       <button className="btn-soft w-full justify-start" onClick={() => setCreating(true)}>
-        <Icon name="FolderPlus" size={18} /> 新建项目
+        <Icon name="FolderPlus" size={18} /> {t('新建项目', 'New project')}
       </button>
       {list.map((p) => (
         <button
@@ -45,7 +51,7 @@ export default function ProjectPicker({ currentId, onPick, allowNone = true }) {
             <Icon name="Building2" size={18} />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="truncate text-[15px] font-semibold text-ink">{siteLabel(p)}</div>
+            <div className="truncate text-[15px] font-semibold text-ink">{siteLabelUi(p)}</div>
             <div className="truncate text-[12px] text-ink-mute">{[p.so, p.address].filter(Boolean).join(' · ') || '—'}</div>
           </div>
           {p.id === currentId && <Icon name="Check" size={18} className="text-terra" />}
@@ -53,7 +59,7 @@ export default function ProjectPicker({ currentId, onPick, allowNone = true }) {
       ))}
       {allowNone && (
         <button className="w-full py-3 text-center text-[14px] font-semibold text-ink-mute" onClick={() => onPick(null)}>
-          不选项目，手动填写
+          {t('不选项目，手动填写', 'No project, fill in manually')}
         </button>
       )}
     </div>

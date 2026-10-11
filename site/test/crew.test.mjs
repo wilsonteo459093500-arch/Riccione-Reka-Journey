@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import dailyReport, { autoDuration } from '../src/templates/dailyReport.js';
 import { addDays, todayISO } from '../src/lib/format.js';
 import {
-  crewLink, crewPayload, crewPayloadOf, parseCrew, mergeCrewProject, hasOwnWork, todayReport, crewMessage,
+  crewLink, crewPayload, crewPayloadOf, parseCrew, mergeCrewProject, hasOwnWork, todayReport, crewMessage, CREW_FIELDS, CREW_FIELD_LABELS,
 } from '../src/lib/crew.js';
+import { applyUiLang, getUiLang } from '../src/lib/i18n.js';
 
 const PROJECT = {
   id: 'p_tuai',
@@ -44,6 +45,44 @@ export const tests = [
     assert.equal(parseCrew(`  ${crewPayload(PROJECT, SETTINGS)} `).project.name, 'Tuai Timur Residence');
     assert.equal(parseCrew(crewMessage('x', link)).project.unit, '17-3');
     assert.equal(crewPayloadOf(link), crewPayload(PROJECT, SETTINGS));
+  }],
+  ['发给师傅的文案：跟界面语言走（中文原文不变 / English / 中英各一段、链接只出现一次）', () => {
+    const link = crewLink(PROJECT, SETTINGS, ORIGIN);
+    const label = 'Tuai Timur Residence 17-3（Hailey）';
+    const before = getUiLang();
+    try {
+      applyUiLang('zh');
+      const zh = crewMessage(label, link);
+      assert.equal(
+        zh,
+        [
+          `【TORA 每日安装汇报】${label}`,
+          '师傅好，每天收工前点下面的链接填写当天汇报（进度照 / 卫生 / 水电门窗 / 退场视频），填好点「分享文案 + 照片」发到群里。',
+          link,
+          '（每天点同一个链接就行，建议用 Chrome / Safari 打开）',
+        ].join('\n'),
+      );
+      applyUiLang('en');
+      const en = crewMessage('Tuai Timur Residence 17-3 (Hailey)', link);
+      assert.ok(en.startsWith('[TORA Daily Installation Report] Tuai Timur Residence 17-3 (Hailey)\n'), en);
+      assert.match(en, /Share message \+ photos/);
+      assert.match(en, /Chrome or Safari/);
+      assert.doesNotMatch(en, /[\u3000-\u303f\u3400-\u9fff\uff00-\uffef]/, 'English 文案里不应有中文');
+      assert.equal(en.split(link).length, 2, '链接出现一次');
+      assert.equal(parseCrew(en).project.id, 'p_tuai', 'English 文案里的链接也能直接粘贴');
+      applyUiLang('both');
+      const both = crewMessage(label, link);
+      assert.ok(both.startsWith(`【TORA 每日安装汇报】${label}\n`));
+      assert.ok(both.indexOf('[TORA Daily Installation Report]') > both.indexOf('师傅好'), '中文在前、英文在后');
+      assert.equal(both.split(link).length, 2, '链接只出现一次');
+      assert.ok(both.trimEnd().endsWith(link));
+      // 显式指定语言优先
+      assert.equal(crewMessage(label, link, 'zh'), zh);
+    } finally {
+      applyUiLang(before);
+    }
+    // 链接里带的字段名：每个都有中英
+    for (const k of CREW_FIELDS) assert.ok(CREW_FIELD_LABELS[k]?.zh && CREW_FIELD_LABELS[k]?.en, k);
   }],
   ['坏链接 / 被改过的链接返回 null，不信任里面的多余字段', () => {
     assert.equal(parseCrew(''), null);

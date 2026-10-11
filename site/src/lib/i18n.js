@@ -77,13 +77,26 @@ const asLabel = (label) => (label == null ? null : typeof label === 'string' ? {
 export function uiLabel(label) {
   const l = asLabel(label);
   if (!l) return { primary: '', secondary: '' };
-  return labelParts(localize(l, current));
+  const parts = labelParts(localize(l, current));
+  // 中英：原表只有中文的标签（只有 enOnly、没有 en）也给一行英文小字，方便看不懂中文的师傅；
+  // 中文那行本身已经带英文的（同一行中英）就不重复
+  if (current === 'both' && !parts.secondary && typeof l.enOnly === 'string' && l.enOnly && !/[A-Za-z]{2,}/.test(parts.primary)) {
+    return { primary: parts.primary, secondary: l.enOnly };
+  }
+  return parts;
 }
 
 /** 模板标签拼成一行（中英时「中文 English」） */
 export function uiText(label, sep = ' ') {
   const { primary, secondary } = uiLabel(label);
   return secondary && secondary !== primary ? `${primary}${sep}${secondary}` : primary;
+}
+
+/** 英文全大写的标题（文件里的小标题写法，如「21-ITEM INSPECTION」）在界面句子里改成首字母大写「21-Item Inspection」；
+ *  两个字母以内的词（SS、QC、O1）照旧 */
+export function tidyCaps(s) {
+  if (typeof s !== 'string' || /[a-z]/.test(s) || !/[A-Z]{3}/.test(s) || !/\s/.test(s.trim())) return s;
+  return s.replace(/[A-Za-z][A-Za-z']*/g, (w) => (w.length <= 2 ? w : w[0] + w.slice(1).toLowerCase()));
 }
 
 /** 选项文字（{ v, zh, en } 或字符串） */

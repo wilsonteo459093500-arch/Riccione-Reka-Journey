@@ -15,7 +15,8 @@ const ctxOf = (report, lang) => makeCtx({ template: handover, report, project: S
 
 
 // checks() 可返回字符串或 { text, sectionId, target }：测试只比较文字
-const checksText = (ctx) => (handover.checks(ctx) || []).map((x) => (typeof x === 'string' ? x : x.text));
+// 提醒文字跟界面语言（ctx.lang）：默认按中文界面比对（与原来逐字一致），English / 中英另测
+const checksText = (ctx, lang = 'zh') => (handover.checks(makeCtx({ ...ctx, lang })) || []).map((x) => (typeof x === 'string' ? x : x.text));
 
 export const tests = [
   ['结构：5 个 H，共 20 项', () => {

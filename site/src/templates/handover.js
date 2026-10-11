@@ -23,7 +23,8 @@ export default {
   stage: 7,
   name: { zh: '交付执行清单', en: 'Handover Checklist' },
   short: 'HO',
-  desc: '五个 H 一条线 · 交付当天按顺序打勾拍照',
+  // 首页卡片一句话（只在 App 界面显示，跟界面语言）
+  desc: { zh: '五个 H 一条线 · 交付当天按顺序打勾拍照', en: 'Five H in one run · Tick & photograph in order on handover day' },
   icon: 'KeyRound',
   accent: '#2F4A3C',
   doc: {
@@ -197,19 +198,21 @@ export default {
     });
     return { title: { zh: '交付统计', en: 'Summary' }, items };
   },
+  // 提醒文字跟界面语言（ctx.lang）；中英时与通用提醒一样「中文 / English」
   checks(ctx) {
     const out = [];
+    const tt = (zh, en) => ctx.t(zh, en, ' / ');
     const date = val(ctx, 'date');
     const f30 = val(ctx, 'followup30');
     const f1y = val(ctx, 'followup1y');
-    if (!f30) out.push({ text: '未填写 30天回访日期', sectionId: 'followup' });
-    if (!f1y) out.push({ text: '未填写 1年回访日期', sectionId: 'followup' });
+    if (!f30) out.push({ text: tt('未填写 30天回访日期', '30-day follow-up date not filled in'), sectionId: 'followup' });
+    if (!f1y) out.push({ text: tt('未填写 1年回访日期', '1-year follow-up date not filled in'), sectionId: 'followup' });
     const early = (d) => {
       const n = date && d ? daysBetween(date, d) : null;
       return n != null && n <= 0;
     };
-    if (early(f30)) out.push({ text: '30天回访日期不晚于交付日期，请核对', sectionId: 'followup' });
-    if (early(f1y)) out.push({ text: '1年回访日期不晚于交付日期，请核对', sectionId: 'followup' });
+    if (early(f30)) out.push({ text: tt('30天回访日期不晚于交付日期，请核对', '30-day follow-up date is not after the handover date — please check'), sectionId: 'followup' });
+    if (early(f1y)) out.push({ text: tt('1年回访日期不晚于交付日期，请核对', '1-year follow-up date is not after the handover date — please check'), sectionId: 'followup' });
     return out;
   },
   filename(ctx) {

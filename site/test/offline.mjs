@@ -19,7 +19,8 @@ const { chromium } = await loadPlaywright();
 const server = await preview({ root: ROOT, preview: { port: 4183, strictPort: false }, logLevel: 'error' });
 const BASE = server.resolvedUrls.local[0].replace(/\/$/, '');
 const browser = await chromium.launch();
-const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, acceptDownloads: true });
+// 系统语言中文 → 新手机默认中文界面（下面按中文文字找按钮）
+const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, acceptDownloads: true, locale: 'zh-CN' });
 const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));

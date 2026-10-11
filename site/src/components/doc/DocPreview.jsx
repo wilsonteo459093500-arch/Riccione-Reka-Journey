@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import DocPages, { PAGE_GAP } from './DocPages.jsx';
 import { createUrlPool } from './media.js';
 import { PAGE_W, PAGE_H } from './theme.js';
+import { t } from '../../lib/i18n.js';
 
 function Loading({ text }) {
   return (
@@ -83,8 +84,12 @@ export default function DocPreview({ model, media }) {
 
   return (
     <div ref={boxRef} className="relative w-full">
-      {error && <div className="mb-2 rounded-lg bg-fail/10 px-3 py-2 text-[12px] text-fail">部分照片读取失败：{error}</div>}
-      {!ready && <Loading text="正在排版预览…" />}
+      {error && (
+        <div className="mb-2 rounded-lg bg-fail/10 px-3 py-2 text-[12px] text-fail">
+          {t(`部分照片读取失败：${error}`, `Some photos couldn't be read: ${error}`)}
+        </div>
+      )}
+      {!ready && <Loading text={t('正在排版预览…', 'Preparing preview…')} />}
       {assets && scale > 0 && (
         <div
           style={{
@@ -112,12 +117,12 @@ export default function DocPreview({ model, media }) {
       )}
       {ready && busy && (
         <div className="pointer-events-none absolute right-2 top-2 rounded-full bg-white/90 px-2.5 py-1 text-[11px] text-ink-mute shadow-sm ring-1 ring-line">
-          更新中…
+          {t('更新中…', 'Updating…')}
         </div>
       )}
       {ready && (
         <div className="mt-2 text-center text-[11px] text-ink-faint">
-          共 {pages} 页 · A4 · 与导出的 PDF 一致
+          {t(`共 ${pages} 页 · A4 · 与导出的 PDF 一致`, `${pages} ${pages === 1 ? 'page' : 'pages'} · A4 · same as the exported PDF`)}
         </div>
       )}
     </div>

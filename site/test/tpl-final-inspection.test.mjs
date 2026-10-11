@@ -19,7 +19,8 @@ const mark = (report, nos, r) => nos.forEach((no) => { report.items[`fi${no}`] =
 
 
 // checks() 可返回字符串或 { text, sectionId, target }：测试只比较文字
-const checksText = (ctx) => (t.checks(ctx) || []).map((x) => (typeof x === 'string' ? x : x.text));
+// 提醒文字跟界面语言（ctx.lang）：默认按中文界面比对（与原来逐字一致），English / 中英另测
+const checksText = (ctx, lang = 'zh') => (t.checks(makeCtx({ ...ctx, lang })) || []).map((x) => (typeof x === 'string' ? x : x.text));
 
 export const tests = [
   ['基本信息', () => {
@@ -213,5 +214,42 @@ export const tests = [
     const col = (k) => t.sections.find((s) => s.id === 'rectification').columns.find((c) => c.key === k);
     assert.deepEqual(col('category').options.map((o) => o.v), ['安装质量', '板件损伤', '缺件', '尺寸偏差', '水电', '硬装损伤', '其他']);
     assert.deepEqual(col('owner').options.map((o) => o.v), ['安装班组', '工厂', '物流', '硬装单位', '其他']);
+  }],
+  ['界面语言：提醒文字 English / 中英；首页说明 / 添加按钮', () => {
+    const r = blank();
+    mark(r, [3, 9, 18], 'F');
+    assert.ok(checksText(ctxOf(r), 'en').includes('3 failed items not yet logged in the rectification log'));
+    r.tables.rectification = [{ loc: 'Kitchen', desc: 'Countertop seam lippage', before: ['m_photo1'] }];
+    r.values.result = 'pass';
+    assert.deepEqual(checksText(ctxOf(r), 'en'), [
+      'Conclusion is "Passed — Ready for Handover", but some items are not checked yet',
+      '2 failed items not yet logged in the rectification log',
+      'Conclusion is "Passed — Ready for Handover", but 1 rectification item still open',
+      'Conclusion is "Passed — Ready for Handover", but 3 failed items not yet re-inspected and closed',
+    ]);
+    r.tables.rectification = [
+      { loc: 'Kitchen', recheck: 'P', closed: '2026-10-12' },
+      { loc: 'Shoe cabinet', closed: '2026-10-12', before: ['m_photo1'] },
+    ];
+    let c = checksText(ctxOf(r), 'en');
+    assert.ok(c.includes('Rectification item 1: issue photo missing'), c.join(' | '));
+    assert.ok(c.includes('Rectification item 1 is closed but has no re-inspection photo'));
+    assert.ok(c.includes('Rectification item 2 has a closed date, but re-inspection is not "Pass"'));
+    r.values.result = 'rectify';
+    r.values.recheckDate = '2026-10-13';
+    c = checksText(ctxOf(r), 'en');
+    assert.ok(c.includes('Re-inspection pass date is filled in, but 1 rectification item still open'), c.join(' | '));
+    // 中文界面照旧；中英 =「中文 / English」；English 不含中文
+    const zh = checksText(ctxOf(r));
+    assert.ok(zh.includes('已填复验合格日期，但还有 1 项整改未关闭'));
+    assert.equal(zh.length, c.length);
+    assert.deepEqual(checksText(ctxOf(r), 'both'), zh.map((z, i) => `${z} / ${c[i]}`));
+    assert.ok(!CJK.test(c.join('\n')));
+    // issues() 按界面语言取模板提醒
+    assert.ok(issues(t, r, { project: SAMPLE_PROJECT, settings: SAMPLE_SETTINGS, lang: 'en' }).some((i) => i.text === 'Rectification item 1: issue photo missing'));
+    // 首页卡片一句话 / 整改清单「添加」按钮（只在 App 里显示）：{ zh, en }，中文照旧
+    assert.equal(t.desc.zh, '27 项终检 · 整改复验 · 合格才约客户交付');
+    assert.ok(t.desc.en && !CJK.test(t.desc.en));
+    assert.deepEqual(t.sections.find((s) => s.id === 'rectification').addLabel, { zh: '添加整改项', en: 'Add rectification item' });
   }],
 ];

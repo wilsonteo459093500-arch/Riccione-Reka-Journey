@@ -11,7 +11,7 @@
 //   kind: 'checklist' | 'message',  // message = 以 WhatsApp 文案为主（进场通知 / 每日汇报）
 //   name: { zh, en },               // 选择页卡片标题
 //   short: 'QC',                    // 卡片角标（2–4 字符）
-//   desc: '一句话说明（中文）',
+//   desc: { zh, en },               // 首页卡片一句话（只在 App 界面显示，跟界面语言，见下「界面语言」）
 //   icon: 'ClipboardCheck',         // lucide-react 图标名，见 components/ui/Icon.jsx
 //   accent: '#B5623A',              // 卡片 / 文档强调色
 //   stage: 1..7,                    // 项目流程顺序（选择页排序）
@@ -29,7 +29,7 @@
 //   },
 //   sections: Section[],
 //   summary?: (ctx) => SummaryBlock | null,  // 文档末尾自动统计 / 结论
-//   checks?: (ctx) => string[],              // 额外的填写提醒（导出前提示）
+//   checks?: (ctx) => (string | { text, sectionId?, target? })[],  // 额外的填写提醒（编辑 / 导出页），跟界面语言
 //   text?: (ctx) => string,                  // WhatsApp 文案；无则用通用摘要
 //   filename?: (ctx) => string,              // 导出文件名（不含扩展名）
 // }
@@ -51,6 +51,21 @@
 //     完全相同的，用户写 / 改过的照原样；中文 / 双语 = 中文写法（与改版前一致）。存的值不变（「照这份再写一份」
 //     照样保留改过的内容，导出页换语言也立即生效）。
 //
+// 界面语言（lib/i18n.js，settings.uiLang：App 界面 中文 / English / 中英；和上面的文件语言是两个设置）。
+// 表单页、首页卡片、填写提醒跟界面语言；生成的文件仍只跟文件语言。
+//   - 界面取字（uiLabel / uiText / uiOption）：中文 = zhOnly || zh；English = enOnly || en || zh；
+//     中英 = 中文主行 + 英文小字（与原来的双语界面一样）。所以 App 里显示的每段文字都要有英文，English 界面才完整：
+//   - 只在 App 里显示、文件不读的文字写成 { zh, en }（字符串 = 只有中文）：template.desc、字段 placeholder / hint、
+//     表格 addLabel、选择页分组的 hint（index.js GROUPS）。新加这类属性前先确认 lib/docmodel.js、lib/text.js、
+//     lib/export/*、components/doc/* 不读它；文件也读的就保持原来的形状。
+//   - 文件也用的标签（字段 / 检查项 / 选项 / 节标题 / 签名…）原表只有中文时补 enOnly，不要补 en：补 en 会改变双语文件；
+//     enOnly 同时就是 English 界面显示的文字。选项同理 { v, zh, enOnly }，存的值 v 不变。
+//   - checks(ctx)：issues() 传进来的 ctx.lang = 界面语言，提醒写成 ctx.t('中文原文', 'English', ' / ')
+//     （中文界面与原文逐字一致；中英 =「中文 / English」，与通用提醒一致）。
+//   - summary(ctx) 在文件里按文件语言；编辑页的统计卡片用界面语言调用它。text / filename 只按文件语言。
+//   - 字段 display：English 界面的输入框也按它显示自动带入的固定文字（components/fields/FieldInput.jsx uiShownValue），
+//     存的值不变。
+//
 // Section（type 决定渲染方式）:
 //   { id, type: 'fields', no?, title?, note?, fields: Field[], columns?: 1|2|3,
 //       layout?: 'grid' | 'list' }   // 默认 checklist 模板用 grid，message 模板用 list
@@ -60,7 +75,7 @@
 //       remark?: { label: {zh,en}, requiredWhen?: ['F'] },
 //       items: Item[] }
 //   { id, type: 'table', no?, title, note?, columns: Field[], minRows?: number,
-//       maxRows?: number, addLabel?: string, emptyText?: {zh,en},
+//       maxRows?: number, addLabel?: {zh,en} | string, emptyText?: {zh,en},   // addLabel 只在 App 里显示
 //       photos?: { label:{zh,en} }                      // 每行一组照片 → row.photos
 //       photoSlots?: [{ key, label:{zh,en} }],          // 每行多组照片 → row[key]（如 before / after）
 //       seedFromFails?: true }                          // 编辑页出现「从不合格项生成」按钮
@@ -76,7 +91,8 @@
 //     scale?: Scale }    // 覆盖本节的判定选项（如「开工判定」GO / NO-GO）
 //
 // Field（字段）:
-//   { key, type, label: {zh,en} | string, placeholder?, hint?, required?,
+//   { key, type, label: {zh,en} | string, required?,
+//     placeholder?: {zh,en} | string, hint?: {zh,en} | string,   // 输入框提示 / 字段下方说明：只在 App 里显示
 //     options?: string[] | [{ v, zh, en?, zhOnly?, enOnly? }],   // select / radio / chips
 //     multiple?: bool, allowCustom?: bool,     // chips
 //     bind?: BindKey,                          // 新建时自动带入

@@ -1,6 +1,8 @@
 // 本机存储（IndexedDB）：项目 / 报告 / 照片视频签名 / 设置
 // 全部数据只存在这台手机的浏览器里；换手机请用「设置 → 备份」。
 
+import { t } from './i18n.js';
+
 const DB_NAME = 'sail-site';
 const DB_VERSION = 1;
 
@@ -44,7 +46,8 @@ function open() {
       resolve(db);
     };
     req.onerror = () => reject(req.error);
-    req.onblocked = () => reject(new Error('数据库被另一个标签页占用，请关闭其他标签页后重试'));
+    req.onblocked = () =>
+      reject(new Error(t('数据库被另一个标签页占用，请关闭其他标签页后重试', 'The database is in use by another tab. Close other tabs and try again.')));
   });
   dbPromise.catch(() => {
     dbPromise = null;
@@ -56,9 +59,9 @@ function tx(store, mode, fn, retried = false) {
   return open().then(
     (db) =>
       new Promise((resolve, reject) => {
-        let t;
+        let trx;
         try {
-          t = db.transaction(store, mode);
+          trx = db.transaction(store, mode);
         } catch (e) {
           // 连接已失效（iOS 从后台回来常见）：丢掉缓存的连接，重开一次再试
           dbPromise = null;
@@ -66,14 +69,14 @@ function tx(store, mode, fn, retried = false) {
           else reject(e);
           return;
         }
-        const s = t.objectStore(store);
+        const s = trx.objectStore(store);
         let result;
         Promise.resolve(fn(s)).then((r) => {
           result = r;
         });
-        t.oncomplete = () => resolve(result);
-        t.onerror = () => reject(t.error);
-        t.onabort = () => reject(t.error || new Error('事务中止（可能是手机存储空间不足）'));
+        trx.oncomplete = () => resolve(result);
+        trx.onerror = () => reject(trx.error);
+        trx.onabort = () => reject(trx.error || new Error(t('事务中止（可能是手机存储空间不足）', 'Storage operation aborted (phone storage may be full)')));
       }),
   );
 }

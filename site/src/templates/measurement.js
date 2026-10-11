@@ -35,7 +35,8 @@ export default {
   stage: 1,
   name: { zh: '复尺确认表', en: 'Final Measurement Checklist' },
   short: 'FM',
-  desc: '复尺 4 步 · 客户现场确认 · 签字下单',
+  // 首页卡片一句话（只在 App 界面显示，跟界面语言）
+  desc: { zh: '复尺 4 步 · 客户现场确认 · 签字下单', en: 'Final measure in 4 steps · Customer confirms on site · Sign to order' },
   icon: 'Ruler',
   accent: '#A98B57',
   doc: {
@@ -182,11 +183,18 @@ export default {
     };
   },
   // 勾「否」未写处理方案 → 已由 remark.requiredWhen 报错；这里只提醒签名
+  // 提醒文字跟界面语言（ctx.lang）；中英时与通用提醒一样「中文 / English」
   checks(ctx) {
     const out = [];
+    const tt = (zh, en) => ctx.t(zh, en, ' / ');
     const sig = ctx.report?.signatures || {};
-    if (!sig.customer?.image) out.push({ text: '客户还未签名：请客户阅读「客户确认声明」后签名', sectionId: 'signoff' });
-    if (!sig.supervisor?.image) out.push({ text: '复尺人员还未签名', sectionId: 'signoff' });
+    if (!sig.customer?.image) {
+      out.push({
+        text: tt('客户还未签名：请客户阅读「客户确认声明」后签名', 'Customer has not signed: ask the customer to read the confirmation statement, then sign'),
+        sectionId: 'signoff',
+      });
+    }
+    if (!sig.supervisor?.image) out.push({ text: tt('复尺人员还未签名', 'Site supervisor has not signed yet'), sectionId: 'signoff' });
     return out;
   },
   filename(ctx) {

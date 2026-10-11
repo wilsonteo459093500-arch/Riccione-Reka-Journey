@@ -67,7 +67,8 @@ export default {
   stage: 6,
   name: { zh: '完工终检表', en: 'Final Inspection Report' },
   short: 'FIR',
-  desc: '27 项终检 · 整改复验 · 合格才约客户交付',
+  // 首页卡片一句话（只在 App 界面显示，跟界面语言）
+  desc: { zh: '27 项终检 · 整改复验 · 合格才约客户交付', en: '27-point final check · Fix & re-inspect · Pass before handover' },
   icon: 'BadgeCheck',
   accent: '#B5623A',
   doc: {
@@ -254,7 +255,7 @@ export default {
       title: { zh: '整改与复验记录', en: 'RECTIFICATION LOG' },
       minRows: 0,
       seedFromFails: true,
-      addLabel: '添加整改项',
+      addLabel: { zh: '添加整改项', en: 'Add rectification item' }, // 编辑页按钮（不进文件）
       emptyText: { zh: '无整改项', en: 'No rectification items' },
       columns: [
         { key: 'loc', type: 'text', label: { zh: '位置（柜体/区域）', en: 'Location' } },
@@ -391,8 +392,10 @@ export default {
       ],
     };
   },
+  // 提醒文字跟界面语言（ctx.lang）；中英时与通用提醒一样「中文 / English」
   checks(ctx) {
     const out = [];
+    const tt = (zh, en) => ctx.t(zh, en, ' / ');
     const c = countResults(ctx);
     const F = c.F || 0;
     const rows = logRows(ctx);
@@ -400,21 +403,50 @@ export default {
     const open = rows.length - closed;
     const result = val(ctx, 'result');
 
-    if (val(ctx, 'result') === 'pass' && countResults(ctx)._empty) out.push({ text: '结论为「合格 — 可安排交付」，但还有检查项未检查', sectionId: 'conclusion' });
-    if (F > rows.length) out.push({ text: `有 ${F - rows.length} 项不合格还没记入整改清单`, sectionId: 'rectification' });
+    if (val(ctx, 'result') === 'pass' && countResults(ctx)._empty) {
+      out.push({
+        text: tt('结论为「合格 — 可安排交付」，但还有检查项未检查', 'Conclusion is "Passed — Ready for Handover", but some items are not checked yet'),
+        sectionId: 'conclusion',
+      });
+    }
+    if (F > rows.length) {
+      const k = F - rows.length;
+      out.push({ text: tt(`有 ${k} 项不合格还没记入整改清单`, `${plural(k, 'failed item')} not yet logged in the rectification log`), sectionId: 'rectification' });
+    }
     if (result === 'pass') {
-      if (open) out.push({ text: `结论为「合格 — 可安排交付」，但还有 ${open} 项整改未关闭`, sectionId: 'conclusion' });
-      if (F > closed) out.push({ text: `结论为「合格 — 可安排交付」，但还有 ${F - closed} 项不合格未复验关闭`, sectionId: 'conclusion' });
+      if (open) {
+        out.push({
+          text: tt(`结论为「合格 — 可安排交付」，但还有 ${open} 项整改未关闭`, `Conclusion is "Passed — Ready for Handover", but ${plural(open, 'rectification item')} still open`),
+          sectionId: 'conclusion',
+        });
+      }
+      if (F > closed) {
+        const k = F - closed;
+        out.push({
+          text: tt(`结论为「合格 — 可安排交付」，但还有 ${k} 项不合格未复验关闭`, `Conclusion is "Passed — Ready for Handover", but ${plural(k, 'failed item')} not yet re-inspected and closed`),
+          sectionId: 'conclusion',
+        });
+      }
     }
     if (result === 'rectify' && filled(val(ctx, 'recheckDate')) && open) {
-      out.push({ text: `已填复验合格日期，但还有 ${open} 项整改未关闭`, sectionId: 'conclusion' });
+      out.push({
+        text: tt(`已填复验合格日期，但还有 ${open} 项整改未关闭`, `Re-inspection pass date is filled in, but ${plural(open, 'rectification item')} still open`),
+        sectionId: 'conclusion',
+      });
     }
     // ★ 关单规则：每项须附「问题照片 + 整改后复验照片」
     rows.forEach((r) => {
       const { n } = r;
-      if (!filled(r.before)) out.push({ text: `整改第 ${n} 项缺少问题照片`, sectionId: 'rectification' });
-      if (isClosed(r) && !filled(r.after)) out.push({ text: `整改第 ${n} 项已关闭，但缺少复验照片`, sectionId: 'rectification' });
-      if (filled(r.closed) && r.recheck !== 'P') out.push({ text: `整改第 ${n} 项填了关闭日，但复验未选「合格」`, sectionId: 'rectification' });
+      if (!filled(r.before)) out.push({ text: tt(`整改第 ${n} 项缺少问题照片`, `Rectification item ${n}: issue photo missing`), sectionId: 'rectification' });
+      if (isClosed(r) && !filled(r.after)) {
+        out.push({ text: tt(`整改第 ${n} 项已关闭，但缺少复验照片`, `Rectification item ${n} is closed but has no re-inspection photo`), sectionId: 'rectification' });
+      }
+      if (filled(r.closed) && r.recheck !== 'P') {
+        out.push({
+          text: tt(`整改第 ${n} 项填了关闭日，但复验未选「合格」`, `Rectification item ${n} has a closed date, but re-inspection is not "Pass"`),
+          sectionId: 'rectification',
+        });
+      }
     });
     return out;
   },

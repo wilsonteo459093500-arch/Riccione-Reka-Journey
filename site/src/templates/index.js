@@ -21,8 +21,20 @@ const BY_ID = Object.fromEntries(TEMPLATES.map((t) => [t.id, t]));
 
 export const getTemplate = (id) => BY_ID[id] || null;
 
-/** 选择页分组 */
+/** 选择页分组：标签 { zh, en } 与说明 hint { zh, en } 按界面语言显示（首页用 uiText） */
 export const GROUPS = [
-  { id: 'message', zh: '发群 / 发师傅', en: 'Messages', hint: '一键出 WhatsApp 文案 + 照片', kinds: ['message'] },
-  { id: 'checklist', zh: '检查表 / 报告', en: 'Checklists', hint: '逐项打勾拍照 → PDF / Word / Excel', kinds: ['checklist'] },
+  {
+    id: 'message',
+    zh: '发群 / 发师傅',
+    en: 'Messages',
+    hint: { zh: '一键出 WhatsApp 文案 + 照片', en: 'WhatsApp message + photos in one tap' },
+    kinds: ['message'],
+  },
+  {
+    id: 'checklist',
+    zh: '检查表 / 报告',
+    en: 'Checklists',
+    hint: { zh: '逐项打勾拍照 → PDF / Word / Excel', en: 'Tick & photo each item → PDF / Word / Excel' },
+    kinds: ['checklist'],
+  },
 ];

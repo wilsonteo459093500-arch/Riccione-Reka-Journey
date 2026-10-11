@@ -31,7 +31,8 @@ function allPass(patch = {}) {
 
 
 // checks() 可返回字符串或 { text, sectionId, target }：测试只比较文字
-const checksText = (ctx) => (t.checks(ctx) || []).map((x) => (typeof x === 'string' ? x : x.text));
+// 提醒文字跟界面语言（ctx.lang）：默认按中文界面比对（与原来逐字一致），English / 中英另测
+const checksText = (ctx, lang = 'zh') => (t.checks(makeCtx({ ...ctx, lang })) || []).map((x) => (typeof x === 'string' ? x : x.text));
 
 export const tests = [
   ['结构：O1–O5 + 签核，共 27 项', () => {
@@ -87,8 +88,8 @@ export const tests = [
     assert.deepEqual(bi(byId.pi2_07.title), { zh: '全屋一镜到底:每个房间从门口慢慢转一圈,边拍边报房间名', en: 'EVERY ROOM, ONE CONTINUOUS TAKE' });
     assert.deepEqual(bi(byId.pi4_01.title), { zh: '货梯已预约,轿厢尺寸与载重装得下最大板件', en: 'LIFT BOOKED & FITS LARGEST PANEL' });
     assert.deepEqual(bi(byId.pi5_02.title), { zh: '物料按 Floor Plan 分区贴标 (厨房 / 卧室 / 客厅),大件不挡通道', en: 'STAGED PER FLOOR PLAN' });
-    assert.equal(byId.pi4_05.input.placeholder, '填写示例:例: B2 卸货 → 货梯 → 18F → 客厅堆放区');
-    assert.equal(byId.pi2_05.input.placeholder, '填写示例:哪里 / 差什么 / 谁负责 / 几时好');
+    assert.equal(byId.pi4_05.input.placeholder.zh, '填写示例:例: B2 卸货 → 货梯 → 18F → 客厅堆放区');
+    assert.equal(byId.pi2_05.input.placeholder.zh, '填写示例:哪里 / 差什么 / 谁负责 / 几时好');
     assert.deepEqual(bi(byId.pi2_06.title), { zh: '进场视频链接', en: 'VIDEO LINK' });
     assert.deepEqual(bi(byId.pis_01.title), { zh: '开工判定', en: 'GO / NO-GO DECISION' });
     const rule = t.sections.find((s) => s.type === 'note');
@@ -297,5 +298,38 @@ export const tests = [
     const e = createReport(t, { project: SAMPLE_PROJECT, settings: { ...SAMPLE_SETTINGS, docLang: 'en' } });
     assert.equal(e.values.entry, '2026-10-08 · 5 days');
     assert.equal(createReport(t, { project: { ...SAMPLE_PROJECT, plannedDays: 1 }, settings: { docLang: 'en' } }).values.entry, '2026-10-08 · 1 day');
+  }],
+  ['界面语言：提醒文字 English / 中英；输入框提示 / 首页说明', () => {
+    const en = (r) => checksText(ctxOf(r), 'en');
+    assert.deepEqual(en({}), ['No start decision selected (GO / Conditional / NO-GO)']);
+    assert.deepEqual(checksText(ctxOf({}), 'both'), ['未选择开工判定（GO / 有条件开工 / NO-GO） / No start decision selected (GO / Conditional / NO-GO)']);
+    assert.deepEqual(en(allPass()), []);
+    assert.deepEqual(en(allPass({ pi2_03: { r: 'F', note: 'Damp' } })), ['A key item failed — cannot choose GO']);
+    assert.deepEqual(en(allPass({ pi2_03: { r: 'F', note: 'Damp' }, pis_01: { r: 'COND' } })), [
+      'A key item failed — cannot choose "Conditional"',
+      'Conditional start: list the issue / person in charge / deadline under "Remarks / person in charge & deadline"',
+    ]);
+    assert.deepEqual(en(allPass({ pi4_02: { r: 'F' } })), ['1 general issue still open — choose "Conditional"']);
+    assert.deepEqual(en(allPass({ pi4_02: { r: 'F' }, pi3_03: { r: 'F' } })), ['2 general issues still open — choose "Conditional"']);
+    assert.deepEqual(en(allPass({ pi1_02: { r: '' }, pi2_01: { r: '' } })), ['2 key items (★) not checked yet — cannot give clearance']);
+    const r = allPass();
+    r.signatures.pm = { name: '', date: '', image: null };
+    assert.deepEqual(en(r), ['The site supervisor cannot give clearance — the project manager must review and sign']);
+    // 中文界面照旧；中英 =「中文 / English」；English 不含中文
+    for (const rep of [{}, allPass({ pi2_03: { r: 'F' }, pis_01: { r: 'COND' } }), allPass({ pi4_02: { r: 'F' } }), r]) {
+      const zh = checksText(ctxOf(rep));
+      const e = en(rep);
+      assert.equal(zh.length, e.length);
+      assert.deepEqual(checksText(ctxOf(rep), 'both'), zh.map((z, i) => `${z} / ${e[i]}`));
+      assert.ok(!CJK.test(e.join('\n')), e.join('\n'));
+    }
+    // issues() 按界面语言取模板提醒
+    assert.ok(issues(t, createReport(t, {}), { lang: 'en' }).some((i) => i.text === 'No start decision selected (GO / Conditional / NO-GO)'));
+    // 输入框提示（只在 App 里显示）：{ zh, en }，中文 = 原表「填写示例」
+    const phs = [...allFields(t).map((f) => f.placeholder), ...allItems(t).map(({ item }) => item.input?.placeholder)].filter(Boolean);
+    assert.equal(phs.length, 7);
+    for (const ph of phs) assert.ok(CJK.test(ph.zh) && ph.en && !CJK.test(ph.en), JSON.stringify(ph));
+    assert.equal(byId.pi4_05.input.placeholder.en, 'e.g. Unload at B2 → service lift → 18F → living room staging area');
+    assert.deepEqual(t.desc, { zh: '5O 五步核查 · ★ 关键项不过不得开工', en: '5O five-step check · No start if any ★ key item fails' });
   }],
 ];

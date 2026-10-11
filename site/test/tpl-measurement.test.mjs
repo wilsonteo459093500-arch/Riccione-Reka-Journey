@@ -17,7 +17,8 @@ const byId = () => Object.fromEntries(allItems(t).map(({ item }) => [item.id, it
 
 
 // checks() 可返回字符串或 { text, sectionId, target }：测试只比较文字
-const checksText = (ctx) => (t.checks(ctx) || []).map((x) => (typeof x === 'string' ? x : x.text));
+// 提醒文字跟界面语言（ctx.lang）：默认按中文界面比对（与原来逐字一致），English / 中英另测
+const checksText = (ctx, lang = 'zh') => (t.checks(makeCtx({ ...ctx, lang })) || []).map((x) => (typeof x === 'string' ? x : x.text));
 
 export const tests = [
   ['结构：A–D 四节，共 22 项', () => {
@@ -188,5 +189,20 @@ export const tests = [
     assert.equal(t.filename(ctxOf(r)), '复尺确认_Hailey_2026-10-09');
     assert.equal(t.filename(ctxOf(r, 'zh')), '复尺确认_Hailey_2026-10-09');
     assert.equal(t.filename(ctxOf(r, 'en')), 'Final_Measurement_Hailey_2026-10-09');
+  }],
+  ['界面语言：提醒文字 中文 / English / 中英；首页说明', () => {
+    const ctx = makeCtx({ template: t, report: {} });
+    const zh = ['客户还未签名：请客户阅读「客户确认声明」后签名', '复尺人员还未签名'];
+    const en = ['Customer has not signed: ask the customer to read the confirmation statement, then sign', 'Site supervisor has not signed yet'];
+    assert.deepEqual(checksText(ctx), zh);
+    assert.deepEqual(checksText(ctx, 'en'), en);
+    // 中英：与通用提醒一样「中文 / English」
+    assert.deepEqual(checksText(ctx, 'both'), zh.map((z, i) => `${z} / ${en[i]}`));
+    // issues() 按界面语言取模板提醒
+    const r = createReport(t, opts);
+    assert.ok(issues(t, r, { ...opts, lang: 'en' }).some((i) => i.text === en[1]));
+    assert.ok(issues(t, r, { ...opts, lang: 'zh' }).some((i) => i.text === zh[1]));
+    // 首页卡片一句话：{ zh, en }，中文照旧
+    assert.deepEqual(t.desc, { zh: '复尺 4 步 · 客户现场确认 · 签字下单', en: 'Final measure in 4 steps · Customer confirms on site · Sign to order' });
   }],
 ];

@@ -3,21 +3,23 @@
 // 填好照常「分享文案 + 照片」发到群里。每天点同一个链接即可。
 import { createReport, duplicateReport } from './report.js';
 import { todayISO } from './format.js';
+import { getUiLang } from './i18n.js';
 
 export const CREW_TEMPLATE = 'daily-report';
 
 // 发给师傅的项目资料（不含 SO、设计师、备注等内部资料）
 export const CREW_FIELDS = ['name', 'unit', 'client', 'address', 'mapLink', 'startDate', 'plannedDays', 'entryNote', 'parking'];
+// 界面上显示的字段名（{ zh, en }，显示时按界面语言取）
 export const CREW_FIELD_LABELS = {
-  name: '项目名称',
-  unit: '单位',
-  client: '客户称呼',
-  address: '地址',
-  mapLink: '导航',
-  startDate: '开工日期',
-  plannedDays: '预计天数',
-  entryNote: '进场须知',
-  parking: '停车',
+  name: { zh: '项目名称', en: 'Project name' },
+  unit: { zh: '单位', en: 'Unit' },
+  client: { zh: '客户称呼', en: 'Customer' },
+  address: { zh: '地址', en: 'Address' },
+  mapLink: { zh: '导航', en: 'Map link' },
+  startDate: { zh: '开工日期', en: 'Start date' },
+  plannedDays: { zh: '预计天数', en: 'Planned days' },
+  entryNote: { zh: '进场须知', en: 'Entry notes' },
+  parking: { zh: '停车', en: 'Parking' },
 };
 
 function b64urlEncode(str) {
@@ -116,12 +118,22 @@ export function todayReport(template, project, reports, settings, today = todayI
   return { report, created: true };
 }
 
-/** 发给师傅的 WhatsApp 文案 */
-export function crewMessage(label, link) {
-  return [
+/**
+ * 发给师傅的 WhatsApp 文案（跟主管的界面语言走）：
+ * 中文 = 原文；English = 英文；中英 = 中文一段、英文一段，链接放最后只出现一次
+ */
+export function crewMessage(label, link, lang = getUiLang()) {
+  const zh = [
     `【TORA 每日安装汇报】${label}`,
     '师傅好，每天收工前点下面的链接填写当天汇报（进度照 / 卫生 / 水电门窗 / 退场视频），填好点「分享文案 + 照片」发到群里。',
-    link,
-    '（每天点同一个链接就行，建议用 Chrome / Safari 打开）',
-  ].join('\n');
+  ];
+  const zhNote = '（每天点同一个链接就行，建议用 Chrome / Safari 打开）';
+  const en = [
+    `[TORA Daily Installation Report] ${label}`,
+    'Hi! Before you finish work each day, tap the link below to fill in today\'s report (progress photos / cleanliness / utilities, doors & windows / exit video), then tap "Share message + photos" to send it to the group.',
+  ];
+  const enNote = '(Use the same link every day. Best opened in Chrome or Safari.)';
+  if (lang === 'en') return [...en, link, enNote].join('\n');
+  if (lang === 'both') return [...zh, zhNote, '', ...en, enNote, '', link].join('\n');
+  return [...zh, link, zhNote].join('\n');
 }

@@ -47,6 +47,7 @@ const I = (sec, no, zh, en, enOnly, flags = {}) => ({
 });
 
 // 填写项（差异 / 视频链接 / 带队人 / 搬运动线 / 备注）：placeholder = 原表「填写示例」
+// placeholder 只在 App 输入框里显示（不进文件）：{ zh, en } 跟界面语言
 const W = (sec, no, title, input) => ({
   id: `pi${sec}_${no}`,
   no,
@@ -112,7 +113,8 @@ export default {
   stage: 2,
   name: { zh: '场前审核表', en: 'Pre-Installation Site Audit' },
   short: '5O',
-  desc: '5O 五步核查 · ★ 关键项不过不得开工',
+  // 首页卡片一句话（只在 App 界面显示，跟界面语言）
+  desc: { zh: '5O 五步核查 · ★ 关键项不过不得开工', en: '5O five-step check · No start if any ★ key item fails' },
   icon: 'ClipboardList',
   accent: '#AE4E37',
   doc: {
@@ -154,7 +156,7 @@ export default {
           key: 'entry',
           type: 'text',
           label: { zh: '进场日期 · 天数', enOnly: 'Entry date · Days' },
-          placeholder: '例：2026-10-08 · 5 天',
+          placeholder: { zh: '例：2026-10-08 · 5 天', en: 'e.g. 2026-10-08 · 5 days' },
           // 项目有开工日期 / 预计天数时自动带入：2026-10-08 · 5 天（默认文件语言是 English 时写 5 days）
           default: (ctx) => {
             const p = ctx.project;
@@ -165,7 +167,7 @@ export default {
           },
           display: entryShown,
         },
-        { key: 'hours', type: 'text', label: { zh: '授权施工时段', enOnly: 'Permitted working hours' }, placeholder: '例：9:00–17:00' },
+        { key: 'hours', type: 'text', label: { zh: '授权施工时段', enOnly: 'Permitted working hours' }, placeholder: { zh: '例：9:00–17:00', en: 'e.g. 9:00–17:00' } },
       ],
     },
     O(1, { zh: '订单就位', en: 'ORDER' }, {
@@ -193,12 +195,12 @@ export default {
         key: 'diffs',
         optional: true, // 没有差异时留空即可
         type: 'textarea',
-        placeholder: '填写示例:哪里 / 差什么 / 谁负责 / 几时好',
+        placeholder: { zh: '填写示例:哪里 / 差什么 / 谁负责 / 几时好', en: 'e.g. Where / what is outstanding / who is responsible / when done' },
       }),
       W(2, '06', { zh: '进场视频链接', en: 'VIDEO LINK', enOnly: 'Site video link' }, {
         key: 'videoLink',
         type: 'url',
-        placeholder: '填写示例:Google Drive / Dropbox 链接',
+        placeholder: { zh: '填写示例:Google Drive / Dropbox 链接', en: 'e.g. Google Drive / Dropbox link' },
       }),
       I(2, '07', '全屋一镜到底:每个房间从门口慢慢转一圈,边拍边报房间名', 'EVERY ROOM, ONE CONTINUOUS TAKE',
         'Whole unit in one continuous take: in every room, pan slowly from the doorway and call out the room name', KEY_MEDIA),
@@ -222,7 +224,7 @@ export default {
       W(3, '04', { zh: '带队人 / 电话', enOnly: 'Team leader / Phone' }, {
         key: 'leader',
         type: 'text',
-        placeholder: '填写示例:姓名 + 联络号码',
+        placeholder: { zh: '填写示例:姓名 + 联络号码', en: 'e.g. Name + contact number' },
         default: () => '',
       }),
     ]),
@@ -241,7 +243,7 @@ export default {
       W(4, '05', { zh: '搬运动线', enOnly: 'Carrying route' }, {
         key: 'route',
         type: 'textarea',
-        placeholder: '填写示例:例: B2 卸货 → 货梯 → 18F → 客厅堆放区',
+        placeholder: { zh: '填写示例:例: B2 卸货 → 货梯 → 18F → 客厅堆放区', en: 'e.g. Unload at B2 → service lift → 18F → living room staging area' },
       }),
     ]),
     O(5, { zh: '开场就位', en: 'OPEN' }, {
@@ -274,7 +276,7 @@ export default {
           key: 'remarks',
           optional: true, // 只有「有条件开工」时必填（见 checks）
           type: 'textarea',
-          placeholder: '填写示例:事项 / 负责人 / 完成期限',
+          placeholder: { zh: '填写示例:事项 / 负责人 / 完成期限', en: 'e.g. Issue / person in charge / deadline' },
         }),
       ],
     },
@@ -372,29 +374,46 @@ export default {
     };
   },
   // 导出前提醒：判定与 ★ 结果矛盾、未判定、有条件开工未列责任人、未经项目经理复核
+  // 提醒文字跟界面语言（ctx.lang）；中英时与通用提醒一样「中文 / English」
   checks(ctx) {
     const out = [];
+    const tt = (zh, en) => ctx.t(zh, en, ' / ');
     const a = audit(ctx);
     const items = ctx.report?.items || {};
     const d = items[DECISION_ID]?.r;
     if (!d) {
-      out.push({ text: '未选择开工判定（GO / 有条件开工 / NO-GO）', target: DECISION_ID });
+      out.push({ text: tt('未选择开工判定（GO / 有条件开工 / NO-GO）', 'No start decision selected (GO / Conditional / NO-GO)'), target: DECISION_ID });
       return out;
     }
-    if (d === 'GO' && a.keyFails.length) out.push({ text: '有关键项不通过，不能判定 GO', target: DECISION_ID });
-    if (d === 'COND' && a.keyFails.length) out.push({ text: '有关键项不通过，不能判定「有条件开工」', target: DECISION_ID });
+    if (d === 'GO' && a.keyFails.length) out.push({ text: tt('有关键项不通过，不能判定 GO', 'A key item failed — cannot choose GO'), target: DECISION_ID });
+    if (d === 'COND' && a.keyFails.length) {
+      out.push({ text: tt('有关键项不通过，不能判定「有条件开工」', 'A key item failed — cannot choose "Conditional"'), target: DECISION_ID });
+    }
     if ((d === 'GO' || d === 'COND') && !a.keyFails.length && a.keyDone < a.keyTotal) {
-      out.push(`还有 ${a.keyTotal - a.keyDone} 个关键项(★)未判定，不能放行`);
+      const n = a.keyTotal - a.keyDone;
+      out.push(tt(`还有 ${n} 个关键项(★)未判定，不能放行`, `${plural(n, 'key item')} (★) not checked yet — cannot give clearance`));
     }
     if (d === 'GO' && !a.keyFails.length && a.generalFails.length) {
-      out.push(`有 ${a.generalFails.length} 项一般异常未结，应判定「有条件开工」`);
+      const n = a.generalFails.length;
+      out.push(tt(`有 ${n} 项一般异常未结，应判定「有条件开工」`, `${plural(n, 'general issue')} still open — choose "Conditional"`));
     }
     if (d === 'COND' && !String(items[REMARK_ID]?.value || '').trim()) {
-      out.push({ text: '有条件开工须在「备注 / 整改责任人与期限」列明事项 / 负责人 / 完成期限', target: 'pis_04' });
+      out.push({
+        text: tt(
+          '有条件开工须在「备注 / 整改责任人与期限」列明事项 / 负责人 / 完成期限',
+          'Conditional start: list the issue / person in charge / deadline under "Remarks / person in charge & deadline"',
+        ),
+        target: 'pis_04',
+      });
     }
     if (d === 'GO' || d === 'COND') {
       const pm = ctx.report?.signatures?.pm;
-      if (!pm || (!String(pm.name || '').trim() && !pm.image)) out.push({ text: '现场主管无权放行，须由项目经理复核签名', sectionId: 'signoff' });
+      if (!pm || (!String(pm.name || '').trim() && !pm.image)) {
+        out.push({
+          text: tt('现场主管无权放行，须由项目经理复核签名', 'The site supervisor cannot give clearance — the project manager must review and sign'),
+          sectionId: 'signoff',
+        });
+      }
     }
     return out;
   },

@@ -83,7 +83,8 @@ export default {
   stage: 3,
   name: { zh: '进场通知', en: 'Site Entry Notice' },
   short: '进场',
-  desc: '发给 subcon：几点到、怎么进、做什么、收工前做什么',
+  // 首页卡片一句话、输入框提示（placeholder）、字段说明（hint）只在 App 界面显示，跟界面语言：{ zh, en }
+  desc: { zh: '发给 subcon：几点到、怎么进、做什么、收工前做什么', en: "For subcons: arrival time, site entry, today's tasks, before-leaving checks" },
   icon: 'Megaphone',
   accent: '#2F4A3C',
   doc: {
@@ -99,8 +100,8 @@ export default {
       layout: 'grid',
       columns: 2,
       fields: [
-        { key: 'project', type: 'text', label: { zh: '项目', en: 'Project' }, bind: 'project.name', required: true, placeholder: '例：Tuai Timur Residence' },
-        { key: 'client', type: 'text', label: { zh: '客户', en: 'Client' }, bind: 'project.client', placeholder: '例：Hailey' },
+        { key: 'project', type: 'text', label: { zh: '项目', en: 'Project' }, bind: 'project.name', required: true, placeholder: { zh: '例：Tuai Timur Residence', en: 'e.g. Tuai Timur Residence' } },
+        { key: 'client', type: 'text', label: { zh: '客户', en: 'Client' }, bind: 'project.client', placeholder: { zh: '例：Hailey', en: 'e.g. Hailey' } },
         {
           key: 'workType',
           type: 'chips',
@@ -115,10 +116,10 @@ export default {
           label: { zh: '日期', en: 'Date' },
           // 以「建报告那天」为准的明天：之后换项目 / 隔天再改，不会自动跳到新的明天
           default: (ctx) => addDays(ctx.report?.createdAt ? toISODate(new Date(ctx.report.createdAt)) : ctx.today, 1),
-          hint: '默认明天',
+          hint: { zh: '默认明天', en: 'Defaults to tomorrow' },
         },
-        { key: 'location', type: 'text', label: { zh: '地点', en: 'Location' }, bind: 'project.name', hint: '默认 = 项目名，可改成楼盘 / 栋别' },
-        { key: 'unit', type: 'text', label: { zh: '单位', en: 'Unit' }, bind: 'project.unit', placeholder: '例：17-3' },
+        { key: 'location', type: 'text', label: { zh: '地点', en: 'Location' }, bind: 'project.name', hint: { zh: '默认 = 项目名，可改成楼盘 / 栋别', en: 'Defaults to the project name; can be changed to the development / block' } },
+        { key: 'unit', type: 'text', label: { zh: '单位', en: 'Unit' }, bind: 'project.unit', placeholder: { zh: '例：17-3', en: 'e.g. 17-3' } },
         { key: 'mapLink', type: 'url', label: { zh: '导航', en: 'Map link' }, bind: 'project.mapLink', placeholder: 'https://maps.app.goo.gl/…', span: 2 },
       ],
     },
@@ -133,7 +134,7 @@ export default {
         { key: 'start', type: 'time', label: { zh: '开工', en: 'Start work' }, default: '09:00' },
         { key: 'pack', type: 'time', label: { zh: '开始收拾', en: 'Start pack-up' }, default: '16:30' },
         { key: 'leave', type: 'time', label: { zh: '离场', en: 'Leave site' }, default: '17:00' },
-        { key: 'lunch', type: 'text', label: { zh: '午休', en: 'Lunch break' }, default: '12:00–13:00', placeholder: '12:00–13:00', hint: '留空 = 不写午休' },
+        { key: 'lunch', type: 'text', label: { zh: '午休', en: 'Lunch break' }, default: '12:00–13:00', placeholder: '12:00–13:00', hint: { zh: '留空 = 不写午休', en: 'Leave blank to leave out the lunch break' } },
       ],
     },
     {
@@ -144,7 +145,7 @@ export default {
         { key: 'entryNote', type: 'text', label: { zh: '登记', en: 'Registration' }, bind: 'project.entryNote', default: ENTRY_NOTE, display: defaultIn },
         { key: 'parking', type: 'text', label: { zh: '停车', en: 'Parking' }, bind: 'project.parking', default: PARKING, display: defaultIn },
         { key: 'picName', type: 'text', label: { zh: '现场负责人', en: 'Person in charge' }, bind: 'settings.name' },
-        { key: 'picPhone', type: 'tel', label: { zh: '负责人电话', en: 'PIC phone' }, bind: 'settings.phone', placeholder: '例：016-3881819' },
+        { key: 'picPhone', type: 'tel', label: { zh: '负责人电话', en: 'PIC phone' }, bind: 'settings.phone', placeholder: { zh: '例：016-3881819', en: 'e.g. 016-3881819' } },
       ],
     },
     {
@@ -158,8 +159,8 @@ export default {
           label: { zh: '施工规定', en: 'Site rules' },
           default: RULES,
           display: defaultIn,
-          placeholder: '一条规定',
-          hint: '每条一行，按物业规定增删（如 Hacking 时段）',
+          placeholder: { zh: '一条规定', en: 'A site rule' },
+          hint: { zh: '每条一行，按物业规定增删（如 Hacking 时段）', en: 'One rule per line; add or remove to match building rules (e.g. hacking hours)' },
         },
       ],
     },
@@ -180,7 +181,7 @@ export default {
           key: 'drawingVersion',
           type: 'date',
           label: { zh: '深化图纸版本', en: 'Shop-drawing version' },
-          hint: '按此版深化图纸施工，开工前逐柜核对位置再动工',
+          hint: { zh: '按此版深化图纸施工，开工前逐柜核对位置再动工', en: "Work to this shop-drawing version; check each cabinet's position before starting" },
         },
         { key: 'materials', type: 'text', label: { zh: '物料', en: 'Materials' }, default: MATERIALS, display: defaultIn },
       ],
@@ -196,7 +197,7 @@ export default {
           label: { zh: '收工前', en: 'Before leaving' },
           default: BEFORE_LEAVE,
           display: defaultIn,
-          placeholder: '收工前要做的事',
+          placeholder: { zh: '收工前要做的事', en: 'Something to do before leaving' },
         },
       ],
     },
@@ -210,7 +211,7 @@ export default {
           type: 'textarea',
           label: { zh: '备注', en: 'Notes' },
           rows: 3,
-          placeholder: '其他要交代的（钥匙、货梯预约、配合工种…）',
+          placeholder: { zh: '其他要交代的（钥匙、货梯预约、配合工种…）', en: 'Anything else to pass on (keys, service-lift booking, other trades…)' },
           keepOnDuplicate: false,
         },
         {
@@ -218,17 +219,19 @@ export default {
           type: 'photos',
           label: { zh: '附图 / 现场照片', en: 'Drawings & site photos' },
           max: 20,
-          hint: '图纸截图、现场照片 —— 分享文案时一起发',
+          hint: { zh: '图纸截图、现场照片 —— 分享文案时一起发', en: 'Drawing screenshots and site photos — sent along with the message' },
         },
       ],
     },
   ],
+  // 提醒文字跟界面语言（ctx.lang）；中英时与通用提醒一样「中文 / English」
   checks(ctx) {
     const out = [];
-    if (!str(val(ctx, 'date'))) out.push('还没选进场日期');
-    if (!arr(val(ctx, 'areas')).length) out.push('还没选「当日任务」的施工区域');
-    if (!str(val(ctx, 'picPhone'))) out.push('现场负责人电话未填（可在「设置」里填一次）');
-    if (!str(val(ctx, 'mapLink'))) out.push('没有导航链接，师傅可能找不到工地');
+    const tt = (zh, en) => ctx.t(zh, en, ' / ');
+    if (!str(val(ctx, 'date'))) out.push(tt('还没选进场日期', 'No site entry date selected yet'));
+    if (!arr(val(ctx, 'areas')).length) out.push(tt('还没选「当日任务」的施工区域', `No work areas selected under "Today's tasks"`));
+    if (!str(val(ctx, 'picPhone'))) out.push(tt('现场负责人电话未填（可在「设置」里填一次）', 'Person-in-charge phone not filled in (set it once in Settings)'));
+    if (!str(val(ctx, 'mapLink'))) out.push(tt('没有导航链接，师傅可能找不到工地', 'No map link — installers may not find the site'));
     return out;
   },
   // WhatsApp 文案：中文逐行对齐原文；值为空的行自动省略。English = 同结构的英文版；中英 = 原来的中文文案（逐字不变）

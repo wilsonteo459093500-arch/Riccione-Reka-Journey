@@ -10,9 +10,20 @@ import SummaryCard from './SummaryCard.jsx';
 import ProjectPicker from './ProjectPicker.jsx';
 import { useStore } from '../lib/store.jsx';
 import { getTemplate } from '../templates/index.js';
-import { L, resolveScale } from '../templates/schema.js';
-import { applyProject, isOptionalItem, makeCtx, progress, refreshAuto, reportTitle, siteLabel } from '../lib/report.js';
+import { resolveScale } from '../templates/schema.js';
+import { applyProject, isOptionalItem, makeCtx, progress, refreshAuto, reportTitle, siteLabelUi } from '../lib/report.js';
 import { navigate, goBack } from '../lib/router.js';
+import { t, tb, uiLabel, uiText, getUiLang } from '../lib/i18n.js';
+
+// 没有标题的节（如基本信息）在界面上的叫法
+const UNTITLED = { zh: '基本信息', en: 'Basic info' };
+const UNTITLED_NAV = { zh: '信息', en: 'Info' };
+// 没有标题的签名节
+const UNTITLED_SIGN = { zh: '签名', en: 'Signatures' };
+const untitled = (section, nav = false) => (section.type === 'signatures' ? UNTITLED_SIGN : nav ? UNTITLED_NAV : UNTITLED);
+
+/** 节标题的主行：English 界面里模板的全大写英文标题（BASICS）用小一号 + 字距，免得太抢眼 */
+const capsTitle = (s) => getUiLang() === 'en' && /[A-Z]/.test(s) && s === s.toUpperCase();
 
 function sectionCount(section, report) {
   if (section.type === 'checklist') {
@@ -41,17 +52,28 @@ function sectionFails(section, report) {
 }
 
 function SectionHeader({ section, count, fails }) {
+  const { primary, secondary } = uiLabel(section.title || untitled(section));
   return (
     <div className="mb-3 mt-7 flex items-end gap-2 px-1">
       {section.no && (
         <span className="rounded-md bg-terra px-1.5 py-0.5 text-[12px] font-bold text-white">{section.no}</span>
       )}
       <div className="min-w-0 flex-1">
-        <div className="text-[17px] font-bold leading-tight text-ink">{L(section.title, 'zh') || '基本信息'}</div>
-        {section.title?.en && section.title?.zh && <div className="truncate text-[11px] uppercase tracking-wider text-ink-mute">{section.title.en}</div>}
+        <div className={`font-bold leading-tight text-ink ${capsTitle(primary) ? 'text-[15px] tracking-wide' : 'text-[17px]'}`}>{primary || uiText(untitled(section))}</div>
+        {secondary && <div className="truncate text-[11px] uppercase tracking-wider text-ink-mute">{secondary}</div>}
       </div>
-      {fails > 0 && <span className="rounded-full bg-fail/10 px-2 py-0.5 text-[12px] font-semibold text-fail">{fails} 不合格</span>}
+      {fails > 0 && <span className="shrink-0 rounded-full bg-fail/10 px-2 py-0.5 text-[12px] font-semibold text-fail">{fails} {t('不合格', 'failed')}</span>}
       {count && <span className="rounded-full bg-cream-deep px-2 py-0.5 text-[12px] font-semibold text-ink-soft">{count}</span>}
+    </div>
+  );
+}
+
+function NoteTitle({ title }) {
+  const { primary, secondary } = uiLabel(title);
+  return (
+    <div className="mb-1.5 px-1 text-[14px] font-bold text-ink">
+      {primary}
+      {secondary && <span className="ml-1.5 text-[11px] font-normal text-ink-mute">{secondary}</span>}
     </div>
   );
 }
@@ -61,13 +83,16 @@ function Note({ note, tone }) {
   const lines = Array.isArray(note) ? note : [note];
   return (
     <div className={`mb-3 rounded-xl px-3.5 py-2.5 text-[13px] leading-relaxed ${tone === 'warn' ? 'bg-terra-soft text-terra-dark' : 'bg-cream-deep/70 text-ink-soft'}`}>
-      {lines.map((n, i) => (
-        <div key={i} className={i ? 'mt-1.5' : ''}>
-          {typeof n === 'string' ? n : n.zh}
-          {typeof n !== 'string' && n.en && n.zh && <div className="mt-0.5 text-[12px] italic opacity-75">{n.en}</div>}
-          {typeof n !== 'string' && !n.zh && n.en}
-        </div>
-      ))}
+      {lines.map((n, i) => {
+        // 中文 / English 只显示一种；中英 = 中文一行 + 英文斜体小字
+        const { primary, secondary } = uiLabel(n);
+        return (
+          <div key={i} className={i ? 'mt-1.5' : ''}>
+            {primary}
+            {secondary && <div className="mt-0.5 text-[12px] italic opacity-75">{secondary}</div>}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -128,10 +153,10 @@ export default function Editor({ reportId }) {
     if (!dirty.current || !latest.current) return true;
     const ver = version.current;
     const r = latest.current;
-    const t = getTemplate(r.templateId);
+    const tpl = getTemplate(r.templateId);
     const p = r.projectId ? store.projectById(r.projectId) : null;
     try {
-      await store.saveReport({ ...r, title: reportTitle(t, r, p) });
+      await store.saveReport({ ...r, title: reportTitle(tpl, r, p) });
       if (version.current === ver) {
         dirty.current = false;
         setSaved(true);
@@ -143,7 +168,13 @@ export default function Editor({ reportId }) {
       console.error(e);
       setSaved(false);
       setSaveError(true);
-      toast('保存失败：手机存储空间不足或存储出错。请先别离开本页，清理空间后会自动重试', 'error');
+      toast(
+        t(
+          '保存失败：手机存储空间不足或存储出错。请先别离开本页，清理空间后会自动重试',
+          "Couldn't save: phone storage is full or failed. Stay on this page; it retries automatically once space is freed.",
+        ),
+        'error',
+      );
       clearTimeout(retryTimer.current);
       retryTimer.current = setTimeout(() => flushRef.current?.(), 8000);
       return false;
@@ -155,8 +186,8 @@ export default function Editor({ reportId }) {
   // 自动保存（停手 0.5 秒后写入）
   useEffect(() => {
     if (!dirty.current) return undefined;
-    const t = setTimeout(flush, 500);
-    return () => clearTimeout(t);
+    const timer = setTimeout(flush, 500);
+    return () => clearTimeout(timer);
   }, [report, flush]);
 
   useEffect(() => {
@@ -200,9 +231,9 @@ export default function Editor({ reportId }) {
         const next = { ...r, values: { ...r.values, [key]: resolve(v, r.values?.[key]) } };
         if (key !== 'date') return next;
         // 改了日期：回访日期 / 预计工期等按新日期重算（用户手改过的不动）
-        const t = getTemplate(r.templateId);
+        const tpl = getTemplate(r.templateId);
         const p = r.projectId ? storeRef.current.projectById(r.projectId) : null;
-        return refreshAuto(t, next, { project: p, settings: storeRef.current.settings, previous: previousFor(r) });
+        return refreshAuto(tpl, next, { project: p, settings: storeRef.current.settings, previous: previousFor(r) });
       }),
     [update],
   );
@@ -237,15 +268,19 @@ export default function Editor({ reportId }) {
   );
   const doLeave = useCallback(
     async (go) => {
-      if (store.pendingMedia() > 0) toast('照片 / 视频处理中，请稍候…', 'warn');
+      if (store.pendingMedia() > 0) toast(t('照片 / 视频处理中，请稍候…', 'Processing photos / videos, please wait…'), 'warn');
       await store.waitMedia();
       const ok = await flushRef.current();
       if (!ok) {
         const yes = await confirm({
-          title: '这份报告还没保存成功',
-          message: '手机存储可能已满。现在离开，最近的修改会丢失。\n建议先清理手机空间，留在本页等待自动重试。',
-          okText: '仍然离开',
-          cancelText: '留在本页',
+          title: t('这份报告还没保存成功', "This report hasn't been saved"),
+          message: tb(
+            '手机存储可能已满。现在离开，最近的修改会丢失。\n建议先清理手机空间，留在本页等待自动重试。',
+            'Phone storage may be full. If you leave now, your latest changes will be lost.\nFree up some space and stay on this page while it retries.',
+            '\n\n',
+          ),
+          okText: t('仍然离开', 'Leave anyway'),
+          cancelText: t('留在本页', 'Stay here'),
           danger: true,
         });
         if (!yes) return;
@@ -255,10 +290,13 @@ export default function Editor({ reportId }) {
     [store, toast, confirm],
   );
 
+  // 上下文按界面语言：自动统计（template.summary）的文字跟界面走；English 界面时也给输入框用 ——
+  // 自动带入的中文固定文字（默认规定、预计工期、落款…）按字段 display 显示成英文（存的值不变，见 FieldInput uiShownValue）
   const ctx = useMemo(
-    () => (template && report ? makeCtx({ template, report, project, settings: store.settings }) : null),
+    () => (template && report ? makeCtx({ template, report, project, settings: store.settings, lang: getUiLang() }) : null),
     [template, report, project, store.settings],
   );
+  const displayCtx = getUiLang() === 'en' ? ctx : null;
   const summary = useMemo(() => {
     if (!ctx || typeof template.summary !== 'function') return null;
     try {
@@ -272,8 +310,13 @@ export default function Editor({ reportId }) {
   if (!report || !template) {
     return (
       <>
-        <TopBar title="报告" onBack={() => navigate('/', { replace: true })} />
-        <Empty icon="CircleAlert" title="找不到这份报告" hint="可能已被删除。" action={<button className="btn-primary" onClick={() => navigate('/', { replace: true })}>回首页</button>} />
+        <TopBar title={t('报告', 'Report')} onBack={() => navigate('/', { replace: true })} />
+        <Empty
+          icon="CircleAlert"
+          title={t('找不到这份报告', 'Report not found')}
+          hint={t('可能已被删除。', 'It may have been deleted.')}
+          action={<button className="btn-primary" onClick={() => navigate('/', { replace: true })}>{t('回首页', 'Back to home')}</button>}
+        />
       </>
     );
   }
@@ -291,8 +334,16 @@ export default function Editor({ reportId }) {
   return (
     <div className="min-h-[100dvh] pb-32">
       <TopBar
-        title={template.name.zh}
-        sub={`${project ? siteLabel(project) : '未选项目'} · ${saveError ? '⚠ 保存失败，自动重试中' : saved ? '已自动保存' : '保存中…'}`}
+        title={uiText(template.name)}
+        sub={
+          // 项目名太长时截断项目名，保存状态始终看得到
+          <span className="flex min-w-0">
+            <span className="truncate">{project ? siteLabelUi(project) : t('未选项目', 'No project')}</span>
+            <span className="shrink-0 whitespace-pre">
+              {` · ${saveError ? `⚠ ${t('保存失败，自动重试中', 'Save failed, retrying')}` : saved ? t('已自动保存', 'Auto-saved') : t('保存中…', 'Saving…')}`}
+            </span>
+          </span>
+        }
         onBack={() => leave(() => goBack('/'))}
         right={
           <div className="mr-1 flex items-center gap-1.5">
@@ -311,10 +362,11 @@ export default function Editor({ reportId }) {
         <div className="no-scrollbar sticky top-[calc(var(--safe-top)+56px)] z-30 flex gap-1.5 overflow-x-auto border-b border-line/60 bg-cream/95 px-3 py-2 backdrop-blur">
           {navSections.map((s) => {
             const c = sectionCount(s, report);
+            const name = uiLabel(s.title).primary || uiText(untitled(s, true));
             return (
               <button key={s.id} className="shrink-0 rounded-full bg-white px-3 py-1.5 text-[13px] font-semibold text-ink-soft ring-1 ring-line active:bg-cream-deep" onClick={() => jump(s.id)}>
                 {s.no ? `${s.no} ` : ''}
-                {L(s.title, 'zh') || '信息'}
+                {name}
                 {c && <span className="ml-1 text-ink-faint">{c}</span>}
               </button>
             );
@@ -329,10 +381,10 @@ export default function Editor({ reportId }) {
             <Icon name="Building2" size={20} />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-[12px] text-ink-mute">项目（自动带入地址 / SO / 客户）</div>
-            <div className="truncate text-[15px] font-semibold text-ink">{project ? siteLabel(project) : '点此选择项目'}</div>
+            <div className="text-[12px] text-ink-mute">{t('项目（自动带入地址 / SO / 客户）', 'Project (fills in address / SO / client)')}</div>
+            <div className="truncate text-[15px] font-semibold text-ink">{project ? siteLabelUi(project) : t('点此选择项目', 'Tap to choose a project')}</div>
           </div>
-          <span className="text-[13px] font-semibold text-terra">更换</span>
+          <span className="shrink-0 text-[13px] font-semibold text-terra">{t('更换', 'Change')}</span>
         </button>
 
         {template.sections.map((s) => {
@@ -347,7 +399,7 @@ export default function Editor({ reportId }) {
           if (s.type === 'note') {
             return (
               <div key={s.id} id={`sec-${s.id}`} className="mt-4 scroll-mt-32">
-                {s.title && <div className="mb-1.5 px-1 text-[14px] font-bold text-ink">{L(s.title, 'zh')}{s.title.en && s.title.zh && <span className="ml-1.5 text-[11px] font-normal text-ink-mute">{s.title.en}</span>}</div>}
+                {s.title && <NoteTitle title={s.title} />}
                 <Note note={s.lines} tone={s.tone} />
               </div>
             );
@@ -361,8 +413,8 @@ export default function Editor({ reportId }) {
                   {s.fields.filter((f) => !f.hidden).map((f) => (
                     <div key={f.key} id={`field-${f.key}`} className="scroll-mt-32">
                       <FieldLabel field={f} />
-                      <FieldInput field={f} value={report.values?.[f.key]} onChange={(v) => setValue(f.key, v)} reportId={report.id} />
-                      {f.hint && <div className="mt-1 text-[12px] text-ink-mute">{f.hint}</div>}
+                      <FieldInput field={f} value={report.values?.[f.key]} onChange={(v) => setValue(f.key, v)} reportId={report.id} displayCtx={displayCtx} />
+                      {f.hint && <div className="mt-1 whitespace-pre-line text-[12px] text-ink-mute">{uiText(f.hint, '\n')}</div>}
                     </div>
                   ))}
                 </div>
@@ -405,12 +457,12 @@ export default function Editor({ reportId }) {
             onClick={() => leave(() => navigate(`/r/${report.id}/export`))}
           >
             <Icon name={template.kind === 'message' ? 'Send' : 'FileDown'} size={19} />
-            {template.kind === 'message' ? '生成文案 / 分享' : '预览 & 导出'}
+            {template.kind === 'message' ? t('生成文案 / 分享', 'Create message / Share') : t('预览 & 导出', 'Preview & Export')}
           </button>
         </div>
       </div>
 
-      <Sheet open={picking} onClose={() => setPicking(false)} title="选择项目" tall>
+      <Sheet open={picking} onClose={() => setPicking(false)} title={t('选择项目', 'Choose project')} tall>
         <ProjectPicker currentId={report.projectId} onPick={changeProject} />
       </Sheet>
     </div>

@@ -5,6 +5,13 @@ import { Sheet, Spinner, useUI } from '../ui/UI.jsx';
 import { useStore } from '../../lib/store.jsx';
 import { useMediaUrl, useMediaRecord, setCaption, forgetMedia } from './media.js';
 import { markPicker, clearPicker, anchorOf } from '../../lib/pickerGuard.js';
+import { t, tb, uiText, getUiLang } from '../../lib/i18n.js';
+
+// 「照片 2 / 5」：中英时名称合在一起，序号只写一次
+function counter(zh, en, n) {
+  const l = getUiLang();
+  return `${l === 'en' ? en : l === 'both' ? `${zh} ${en}` : zh} ${n}`;
+}
 
 function Thumb({ id, onClick, size = 'md' }) {
   const url = useMediaUrl(id, 'thumb');
@@ -54,17 +61,17 @@ function Viewer({ id, index, total, onClose, onDelete, onMove }) {
         if (cap != null && cap !== (m?.caption || '')) await setCaption(id, cap.trim());
         onClose();
       }}
-      title={`照片 ${index + 1} / ${total}`}
+      title={counter('照片', m?.kind === 'video' ? 'Video' : 'Photo', `${index + 1} / ${total}`)}
       footer={
         <div className="flex gap-2">
-          <button className="btn-ghost px-3" disabled={index === 0} onClick={() => onMove(-1)} aria-label="前移">
+          <button className="btn-ghost px-3" disabled={index === 0} onClick={() => onMove(-1)} aria-label={t('前移', 'Move earlier')}>
             <Icon name="ChevronLeft" />
           </button>
-          <button className="btn-ghost px-3" disabled={index === total - 1} onClick={() => onMove(1)} aria-label="后移">
+          <button className="btn-ghost px-3" disabled={index === total - 1} onClick={() => onMove(1)} aria-label={t('后移', 'Move later')}>
             <Icon name="ChevronRight" />
           </button>
-          <button className="btn flex-1 bg-fail/10 text-fail" onClick={onDelete}>
-            <Icon name="Trash2" size={18} /> 删除照片
+          <button className="btn flex-1 bg-fail/10 text-fail" onClick={() => onDelete(m?.kind)}>
+            <Icon name="Trash2" size={18} /> {t('删除照片', m?.kind === 'video' ? 'Delete video' : 'Delete photo')}
           </button>
         </div>
       }
@@ -75,14 +82,14 @@ function Viewer({ id, index, total, onClose, onDelete, onMove }) {
         ) : url ? (
           <img src={url} alt="" className="mx-auto max-h-[52dvh] w-auto object-contain" />
         ) : (
-          <div className="flex h-60 items-center justify-center">{url === null ? '无法预览' : <Spinner />}</div>
+          <div className="flex h-60 items-center justify-center">{url === null ? t('无法预览', 'Preview not available') : <Spinner />}</div>
         )}
       </div>
-      <label className="label mt-4">照片说明（可选，会印在报告上）</label>
+      <label className="label mt-4">{t('照片说明（可选，会印在报告上）', 'Caption (optional, printed on the report)')}</label>
       <input
         className="input"
         value={caption}
-        placeholder="例：主卧衣柜左门板缝隙"
+        placeholder={t('例：主卧衣柜左门板缝隙', 'e.g. Gap at wardrobe left door')}
         onChange={(e) => setCap(e.target.value)}
         onBlur={() => cap != null && setCaption(id, cap.trim())}
       />
@@ -111,6 +118,8 @@ export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, com
   const [open, setOpen] = useState(-1);
   const list = ids || [];
   const left = Math.max(0, max - list.length);
+  // 中英时按钮文字分两行（中文 / English）
+  const tileText = `whitespace-pre-line text-center text-[11px] font-semibold${getUiLang() === 'both' ? ' leading-tight' : ''}`;
 
   const addFiles = (fileList) => {
     const isVideo = (f) => f.type.startsWith('video/') || /\.(mp4|mov|m4v|webm)$/i.test(f.name);
@@ -119,17 +128,18 @@ export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, com
     );
     if (!files.length) return;
     const take = files.slice(0, left);
-    if (files.length > left) toast(`最多 ${max} 张，已加入前 ${take.length} 张`, 'warn');
+    if (files.length > left) toast(t(`最多 ${max} 张，已加入前 ${take.length} 张`, `Max ${max} photos: added ${take.length} of ${files.length}`), 'warn');
     setBusy((b) => b + take.length);
     // 整批作为一个任务登记：离开编辑页时会等整批处理完；每张处理好就立刻挂上（基于最新列表）
     track(
       (async () => {
         for (const f of take) {
+          const kind = acceptVideo && isVideo(f) ? 'video' : 'photo';
           try {
-            const id = await addMediaFile(reportId, f, acceptVideo && isVideo(f) ? 'video' : 'photo');
+            const id = await addMediaFile(reportId, f, kind);
             onChange((prev) => [...(prev || []), id]);
           } catch (e) {
-            toast(e.message || '照片处理失败', 'error');
+            toast(e.message || t('照片处理失败', kind === 'video' ? 'Could not process this video' : 'Could not process this photo'), 'error');
           } finally {
             if (alive.current) setBusy((b) => Math.max(0, b - 1));
           }
@@ -138,8 +148,13 @@ export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, com
     );
   };
 
-  const del = async (i) => {
-    const ok = await confirm({ title: '删除这张照片？', message: '删除后无法恢复。', okText: '删除', danger: true });
+  const del = async (i, kind) => {
+    const ok = await confirm({
+      title: t('删除这张照片？', kind === 'video' ? 'Delete this video?' : 'Delete this photo?'),
+      message: tb('删除后无法恢复。', 'This cannot be undone.'),
+      okText: t('删除', 'Delete'),
+      danger: true,
+    });
     if (!ok) return;
     const id = list[i];
     onChange((prev) => (prev || []).filter((x) => x !== id));
@@ -165,7 +180,7 @@ export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, com
 
   return (
     <div>
-      {label && <div className="label">{label}</div>}
+      {label && <div className="label">{uiText(label)}</div>}
       <div className="flex flex-wrap items-center gap-2">
         {list.map((id, i) => (
           <Thumb key={id} id={id} size={compact ? 'sm' : 'md'} onClick={() => setOpen(i)} />
@@ -184,10 +199,10 @@ export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, com
                 markPicker(camRef.current, { reportId, anchor: anchorOf(e.currentTarget), kind: 'camera' });
                 camRef.current?.click();
               }}
-              aria-label="拍照"
+              aria-label={t('拍照', 'Take photo')}
             >
               <Icon name="Camera" size={compact ? 18 : 22} />
-              {!compact && <span className="text-[11px] font-semibold">拍照</span>}
+              {!compact && <span className={tileText}>{tb('拍照', 'Camera')}</span>}
             </button>
             <button
               type="button"
@@ -196,10 +211,14 @@ export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, com
                 markPicker(libRef.current, { reportId, anchor: anchorOf(e.currentTarget), kind: 'library' });
                 libRef.current?.click();
               }}
-              aria-label={acceptVideo ? '相册/视频' : '相册'}
+              aria-label={acceptVideo ? t('相册/视频', 'Gallery / Video') : t('相册', 'Gallery')}
             >
               <Icon name="ImagePlus" size={compact ? 18 : 22} />
-              {!compact && <span className="text-[11px] font-semibold">{acceptVideo ? '相册/视频' : '相册'}</span>}
+              {!compact && (
+                <span className={tileText}>
+                  {acceptVideo ? tb('相册/视频', 'Gallery / Video') : tb('相册', 'Gallery')}
+                </span>
+              )}
             </button>
           </>
         )}
@@ -234,7 +253,7 @@ export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, com
           index={open}
           total={list.length}
           onClose={() => setOpen(-1)}
-          onDelete={() => del(open)}
+          onDelete={(kind) => del(open, kind)}
           onMove={(d) => move(open, d)}
         />
       )}

@@ -5,6 +5,7 @@
 // 仍兼容 v1（整份一个 JSON）。
 import { db } from './db.js';
 import { blobToDataURL } from './images.js';
+import { t, getUiLang } from './i18n.js';
 
 const FORMAT = 'sail-site-backup';
 
@@ -92,10 +93,10 @@ export async function importBackup(file, { onProgress } = {}) {
   try {
     head = JSON.parse(first.value || '');
   } catch (e) {
-    if (e instanceof RangeError) throw new Error('备份文件太大，这台设备读不了');
-    throw new Error('不是有效的备份文件');
+    if (e instanceof RangeError) throw new Error(t('备份文件太大，这台设备读不了', 'The backup file is too large for this device to read'));
+    throw new Error(t('不是有效的备份文件', 'Not a valid backup file'));
   }
-  if (head?.format !== FORMAT) throw new Error('不是 TORA 的备份文件');
+  if (head?.format !== FORMAT) throw new Error(t('不是 TORA 的备份文件', 'Not a TORA backup file'));
 
   const stats = { projects: 0, reports: 0, media: 0, skipped: 0 };
   const newer = async (store, row) => {
@@ -124,6 +125,8 @@ export async function importBackup(file, { onProgress } = {}) {
       const local = (await db.get('kv', 'settings'))?.value || {};
       const merged = { ...local };
       for (const [key, v] of Object.entries(k.value || {})) if (!local[key]) merged[key] = v;
+      // 界面语言是这台手机自己的选择，不跟备份走（还没存过设置的新手机：记下现在用的语言）
+      merged.uiLang = local.uiLang || getUiLang();
       await db.put('kv', { key: 'settings', value: merged });
     } else if (!(await db.get('kv', k.key))) {
       await db.put('kv', k);
