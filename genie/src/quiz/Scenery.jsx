@@ -2,7 +2,7 @@
 // 有真照片（scenes.js 的 photo）就用照片 + 上下渐变遮罩；没有就用 paint.jsx 画的风景。
 // 暮色那一张（擦神灯、翻牌、揭晓）才有萤火虫。prefers-reduced-motion = 全部静止。
 
-import { memo, useEffect, useState } from 'react';
+import { Component, memo, useEffect, useState } from 'react';
 import { SCENES } from './scenes.js';
 import { Painting } from './paint.jsx';
 import { L } from '../shared/i18n.js';
@@ -20,6 +20,23 @@ const FIREFLIES = [
   [90, 70, 1.9, 8],
 ];
 
+/** 风景只是背景：画坏了也不能把许愿之旅拖垮 —— 出错就安静地留一块纸色 */
+class Safe extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { bad: false };
+  }
+  static getDerivedStateFromError() {
+    return { bad: true };
+  }
+  componentDidCatch(err) {
+    if (import.meta.env?.DEV) console.error('[scenery]', err);
+  }
+  render() {
+    return this.state.bad ? null : this.props.children;
+  }
+}
+
 const Layer = memo(function Layer({ id }) {
   const s = SCENES[id] || SCENES.welcome;
   return (
@@ -28,7 +45,9 @@ const Layer = memo(function Layer({ id }) {
         <img className="sc-photo" src={s.photo} alt="" style={{ objectPosition: s.focus || '50% 50%' }} decoding="async" />
       ) : (
         <div className="sc-kb">
-          <Painting id={s.id} className="sc-paint" />
+          <Safe>
+            <Painting id={s.id} className="sc-paint" />
+          </Safe>
         </div>
       )}
       {!s.photo && (

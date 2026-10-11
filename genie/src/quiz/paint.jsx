@@ -613,7 +613,7 @@ function KualaSelangor({ u }) {
     [40, 22, 40, 26],
     [110, 18, 34, 22],
   ]);
-  const R1 = bank(102, 1520, 900, 310, 250, [
+  const R1 = bank(102, 900, 1520, 560, -250, [
     [-20, 26, 48, 30],
     [40, 22, 40, 26],
     [110, 18, 34, 22],
@@ -621,6 +621,7 @@ function KualaSelangor({ u }) {
   const r = rng(103);
   const ff = [];
   const sprinkle = (arr, n) => {
+    if (!arr.length) return;
     for (let i = 0; i < n; i++) {
       const [x, y, rr] = arr[Math.floor(r() * arr.length)];
       ff.push([x + (r() - 0.5) * rr * 1.6, y + (r() - 0.4) * rr * 1.2, 1.1 + r() * 2, r()]);
