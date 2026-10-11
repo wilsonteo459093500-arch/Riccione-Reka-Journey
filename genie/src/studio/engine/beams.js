@@ -1,22 +1,36 @@
 // 「体积光」：清晨 / 傍晚，阳光从窗口斜斜地打进来的光柱。
 // 做法：把窗洞四个角沿光线方向投到地面，拼成一个半透明、加法混合、越往地面越淡的棱柱。
+// 棱柱的侧面在「侧着看」时淡出（用屏幕导数求面法线），所以光柱没有硬边，像真的空气里的光；
+// 再加一点点抖动噪声，暗处不出色带。
 
 import * as THREE from 'three';
 
 const vert = /* glsl */ `
   attribute float t;
   varying float vT;
+  varying vec3 vView;
   void main() {
     vT = t;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    vView = mv.xyz;
+    gl_Position = projectionMatrix * mv;
   }
 `;
 const frag = /* glsl */ `
   uniform vec3 color;
   uniform float strength;
   varying float vT;
+  varying vec3 vView;
+  float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
   void main() {
-    float a = strength * pow(1.0 - vT, 0.9) * 0.16;
+    vec3 n = normalize(cross(dFdx(vView), dFdy(vView)));
+    vec3 v = normalize(-vView);
+    float facing = abs(dot(n, v));
+    float edge = smoothstep(0.05, 0.75, facing);           // 侧面淡出 → 柔边
+    float along = pow(1.0 - vT, 1.35) * smoothstep(0.0, 0.04, vT + 0.01);
+    float a = strength * along * edge * 0.2;
+    a += (hash(gl_FragCoord.xy) - 0.5) / 255.0;            // 抖动，防色带
+    a = max(a, 0.0);
     gl_FragColor = vec4(color * a, a);
   }
 `;
@@ -24,6 +38,7 @@ const frag = /* glsl */ `
 export class Beams {
   constructor() {
     this.group = new THREE.Group();
+    this.group.userData.noAO = true;
     this.material = new THREE.ShaderMaterial({
       uniforms: { color: { value: new THREE.Color(0xffc88a) }, strength: { value: 0 } },
       vertexShader: vert,
