@@ -319,7 +319,8 @@ export class MatLib {
     F('terracotta', { color: 0xb4694a, roughness: 0.85 });
     F('chrome', { color: 0xe4e5e6, roughness: 0.1, metalness: 1 }, THREE.MeshStandardMaterial, 2.6);
     F('black', { color: 0x1a1a1a, roughness: 0.55 });
-    F('steel', { color: 0xc8cacc, roughness: 0.3, metalness: 1 }, THREE.MeshStandardMaterial, 2.2);
+    // 拉丝不锈钢：比镜面粗一点（反射的是糊开的柔光箱和房间，不是一整块白 / 天空的颜色），本色是中性的钢灰
+    F('steel', { color: 0xc4c4c2, roughness: 0.4, metalness: 1 }, THREE.MeshStandardMaterial, 1.35);
     F('mirror', { color: 0xeef2f4, roughness: 0.02, metalness: 1 }, THREE.MeshStandardMaterial, 2.6);
     F('books', { vertexColors: true, roughness: 0.8 });
     F('art', { color: 0xb3552e, roughness: 0.9 });

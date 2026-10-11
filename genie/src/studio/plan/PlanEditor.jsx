@@ -1,6 +1,8 @@
 // 平面图编辑器（纸色图纸）：上传底图（图片 / PDF）→ AI 识别（选填）→ 拉方块画房间、点墙放门窗 → 生成 3D。
 // 单位：米。0.05m 吸附；房间边会吸到附近房间的边上（墙线才干净）。
 // iPad：手指点墙就能放门窗（不靠鼠标悬停预览）；双指捏合缩放、平移；＋ / － 以画面中心缩放；系统打断（pointercancel）会复原。
+// 「全图」给右下的缩放按钮、底部的提示留出位置；≤ 900px（iPad 竖放、手机）属性面板变成可以收起的底部抽屉，平面图用满整个宽度。
+// 许愿模式（onSettings 没给）：客人碰不到设置 / API key —— 这台设备没有 key 时不显示「AI 识别」。
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ROOM_TYPES, OPENING_KINDS, TEMPLATES, buildWalls, bounds, snapPlan, templatePlan, uid } from './model.js';
@@ -9,13 +11,17 @@ import { detectPlan } from './ai.js';
 import { loadSettings } from '../store.js';
 import { t, tj, L, isEn } from '../../shared/i18n.js';
 import { BRAND } from '../../shared/config.js';
-import { Icon, roomLabel } from '../ui/kit.jsx';
+import { Icon, roomLabel, useMedia } from '../ui/kit.jsx';
 
 const SNAP = 0.05;
 const snap = (v) => Math.round(v / SNAP) * SNAP;
 const r2 = (v) => Math.round(v * 100) / 100;
 const MIN_S = 8;
 const MAX_S = 400;
+const ZOOM_INSET = 72; // 右边：缩放按钮那一条
+const HINT_INSET = 60; // 底部：工具提示（可以折两行）
+const SHEET_INSET = 68; // 窄屏：收起的属性抽屉
+const DIM_MIN_PX = 70; // 房间在屏幕上小于这个就不写尺寸（走廊、浴室的字会压到墙上）
 
 const TOOLS = [
   { id: 'select', zh: '选择 / 移动', key: 'v', icon: 'pointer' },
@@ -99,16 +105,29 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState('');
   const [widthHint, setWidthHint] = useState('');
+  const [sheet, setSheet] = useState(false); // 窄屏：属性抽屉拉开了没有
+  const [hasKey] = useState(() => !!loadSettings().apiKey);
+  const narrow = useMedia('(max-width: 900px)');
+  const phone = useMedia('(max-width: 599px)');
+  const canAI = !!onSettings || hasKey; // 许愿模式没有 key：不显示 AI 识别（客人到不了设置）
   const svgRef = useRef(null);
+  const zoomRef = useRef(null);
   const fileRef = useRef(null);
   const drag = useRef(null);
   const imageRef = useRef(null);
   const pointers = useRef(new Map());
   const viewRef = useRef(view);
   viewRef.current = view;
+  const layoutRef = useRef({ narrow, phone });
+  layoutRef.current = { narrow, phone };
 
   const walls = useMemo(() => buildWalls(plan), [plan]);
   const issues = useMemo(() => issuesOf(plan), [plan]);
+
+  // 有新消息（AI 结果、读图失败…）：窄屏把抽屉拉开，免得没看到
+  useEffect(() => {
+    if (msg) setSheet(true);
+  }, [msg]);
 
   const fit = useCallback(
     (p = plan, u = underlay) => {
@@ -122,9 +141,28 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
         bb = bb ? { x0: Math.min(bb.x0, ub.x0), y0: Math.min(bb.y0, ub.y0), x1: Math.max(bb.x1, ub.x1), y1: Math.max(bb.y1, ub.y1) } : ub;
       }
       if (!bb) bb = { x0: 0, y0: 0, x1: 12, y1: 9 };
-      const pad = W < 520 ? 32 : 72;
-      const s = Math.max(MIN_S, Math.min(MAX_S, Math.min((W - pad) / (bb.x1 - bb.x0), (H - pad) / (bb.y1 - bb.y0))));
-      setView({ s, ox: (W - (bb.x1 - bb.x0) * s) / 2 - bb.x0 * s, oy: (H - (bb.y1 - bb.y0) * s) / 2 - bb.y0 * s });
+      // 留白：四周一圈 + 底部提示（手机上不显示提示）+ 窄屏收起的抽屉 + 右下的缩放按钮。
+      // 缩放按钮只占右下一角：试两种 —— 放在它左边（右边留一条）或放在它上面（底部多留一段），哪个平面图大用哪个
+      const { narrow: nw, phone: ph } = layoutRef.current;
+      const pad = W < 520 ? 16 : 32;
+      const cr = el.getBoundingClientRect();
+      const zr = zoomRef.current?.getBoundingClientRect();
+      const zoomW = zr?.width ? cr.right - zr.left + 8 - pad : ZOOM_INSET;
+      const zoomH = zr?.height ? cr.bottom - zr.top + 8 - pad : 190;
+      const base = (ph ? 0 : HINT_INSET) + (nw ? SHEET_INSET : 0);
+      const bw = bb.x1 - bb.x0;
+      const bh = bb.y1 - bb.y0;
+      let best = null;
+      for (const [right, bottom] of [
+        [Math.max(0, zoomW), base],
+        [0, Math.max(base, zoomH)],
+      ]) {
+        const aw = Math.max(80, W - right - pad * 2);
+        const ah = Math.max(80, H - bottom - pad * 2);
+        const s = Math.max(MIN_S, Math.min(MAX_S, Math.min(aw / bw, ah / bh)));
+        if (!best || s > best.s) best = { s, ox: pad + (aw - bw * s) / 2 - bb.x0 * s, oy: pad + (ah - bh * s) / 2 - bb.y0 * s };
+      }
+      setView(best);
     },
     [plan, underlay],
   );
@@ -134,6 +172,17 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
     if (autoUpload) setTimeout(() => fileRef.current?.click(), 250);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // iPad 转了方向（宽 ↔ 窄的版式）：重新放到画面中间
+  const firstLayout = useRef(true);
+  useEffect(() => {
+    if (firstLayout.current) {
+      firstLayout.current = false;
+      return undefined;
+    }
+    const tm = setTimeout(() => fit(), 60);
+    return () => clearTimeout(tm);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [narrow, phone]);
 
   const toM = (e) => {
     const r = svgRef.current.getBoundingClientRect();
@@ -198,7 +247,9 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
       setTimeout(() => fit(plan, u), 30);
       const s = loadSettings();
       if (s.apiKey && !plan.rooms.length) await runAI(img);
-      else setMsg(s.apiKey ? t('底图已放好。可以按「AI 识别」，或直接拉方块描房间。') : t('底图已放好。用「画房间」沿着墙描一遍；先用量尺校准比例会更准。（设置里填 Gemini key 就能 AI 自动识别）'));
+      else if (s.apiKey) setMsg(t('底图已放好。可以按「AI 识别」，或直接拉方块描房间。'));
+      // 许愿模式（没有设置入口）不提「设置里填 key」
+      else setMsg(onSettings ? t('底图已放好。用「画房间」沿着墙描一遍；先用量尺校准比例会更准。（设置里填 Gemini key 就能 AI 自动识别）') : t('底图已放好。用「画房间」沿着墙描一遍；先用量尺校准比例会更准。'));
     } catch (e) {
       const m = String(e?.message || e);
       // 旧 iPadOS（< 17.4）读 PDF 会缺函数：给一句能照着做的话
@@ -215,6 +266,7 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
     if (!im) return setMsg(t('先上传一张平面图。'));
     const s = loadSettings();
     if (!s.apiKey) {
+      // 许愿模式没有 onSettings：只说一句，不打开设置（客人不该看到 API key）
       setMsg(t('需要先在设置里填 Gemini API key。'));
       onSettings?.();
       return;
@@ -253,7 +305,12 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
 
   const onDown = (e) => {
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    svgRef.current.setPointerCapture?.(e.pointerId);
+    // 指针已经被系统收回（iPad 上偶尔会这样）时 setPointerCapture 会抛错：不能因此整个按下都不算
+    try {
+      svgRef.current.setPointerCapture?.(e.pointerId);
+    } catch {
+      /* ignore */
+    }
     if (pointers.current.size === 2) return startPinch();
     if (pointers.current.size > 2) return;
     const v = viewRef.current;
@@ -515,8 +572,152 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
     underlay: t('拖动底图对齐房间'),
   }[tool];
 
+  // 属性：宽屏是右边一栏；≤ 900px 是平面图底部可以收起的抽屉（标题行写着现在选中的是什么）
+  const sheetTitle = room ? t('房间') : opening ? t('门窗') : t('整体');
+  const sheetSummary = room
+    ? `${roomLabel(room)} · ${room.w.toFixed(2)} × ${room.d.toFixed(2)} m`
+    : opening
+      ? `${L(OPENING_KINDS[opening.kind])} · ${Math.hypot(opening.x2 - opening.x1, opening.y2 - opening.y1).toFixed(2)} m`
+      : t('{0} 个房间 · {1} 个门窗 · {2} 段墙', [plan.rooms.length, plan.openings.length, walls.length]);
+  const side = (
+    <>
+      {msg && <p className="pe-msg">{msg}</p>}
+      {room ? (
+        <div className="pe-insp">
+          <h4>{t('房间')}</h4>
+          <div className="pe-types">
+            {Object.entries(ROOM_TYPES).map(([k, rt]) => (
+              <button
+                key={k}
+                type="button"
+                className={room.type === k ? 'on' : ''}
+                style={{ '--c': rt.color }}
+                onClick={() => {
+                  const cur = ROOM_TYPES[room.type];
+                  const isDefault = !room.name || room.name === cur?.zh || room.name === cur?.en || room.name === L(cur);
+                  updateRoom(room.id, { type: k, name: isDefault ? rt.zh : room.name });
+                }}
+              >
+                <i />
+                {L(rt)}
+              </button>
+            ))}
+          </div>
+          <label>
+            {t('名字')}
+            <input value={room.name === '' ? '' : roomLabel(room)} onChange={(e) => updateRoom(room.id, { name: e.target.value })} />
+          </label>
+          <div className="pe-nums">
+            {[
+              ['x', 'X'],
+              ['y', 'Y'],
+              ['w', t('宽')],
+              ['d', t('深')],
+            ].map(([k, l]) => (
+              <label key={k}>
+                {l}
+                <input type="number" step="0.05" inputMode="decimal" value={room[k]} onChange={(e) => updateRoom(room.id, { [k]: Math.max(k === 'w' || k === 'd' ? 0.6 : -99, Number(e.target.value)) })} />
+              </label>
+            ))}
+          </div>
+          <button type="button" className="pe-btn danger" onClick={removeSel}>
+            <Icon name="trash" size={16} />
+            {t('删除房间')}
+          </button>
+        </div>
+      ) : opening ? (
+        <div className="pe-insp">
+          <h4>{t('门窗')}</h4>
+          <div className="pe-types">
+            {Object.entries(OPENING_KINDS).map(([k, ok]) => (
+              <button key={k} type="button" className={opening.kind === k ? 'on' : ''} onClick={() => updateOpening(opening.id, { kind: k })}>
+                {L(ok)}
+              </button>
+            ))}
+          </div>
+          <label>
+            {t('宽度（m）')}
+            <input
+              type="number"
+              step="0.05"
+              inputMode="decimal"
+              value={r2(Math.hypot(opening.x2 - opening.x1, opening.y2 - opening.y1))}
+              onChange={(e) => {
+                const w = Math.max(0.3, Number(e.target.value));
+                const horiz = Math.abs(opening.y1 - opening.y2) < 0.01;
+                const c = horiz ? (opening.x1 + opening.x2) / 2 : (opening.y1 + opening.y2) / 2;
+                updateOpening(opening.id, horiz ? { x1: r2(c - w / 2), x2: r2(c + w / 2) } : { y1: r2(c - w / 2), y2: r2(c + w / 2) });
+              }}
+            />
+          </label>
+          {(opening.kind === 'window' || opening.kind === 'slider') && (
+            <div className="pe-nums">
+              <label>
+                {t('窗台高')}
+                <input type="number" step="0.05" inputMode="decimal" value={opening.sill ?? OPENING_KINDS[opening.kind].sill} onChange={(e) => updateOpening(opening.id, { sill: Number(e.target.value) })} />
+              </label>
+              <label>
+                {t('窗顶高')}
+                <input type="number" step="0.05" inputMode="decimal" value={opening.head ?? OPENING_KINDS[opening.kind].head} onChange={(e) => updateOpening(opening.id, { head: Number(e.target.value) })} />
+              </label>
+            </div>
+          )}
+          <button type="button" className="pe-btn danger" onClick={removeSel}>
+            <Icon name="trash" size={16} />
+            {t('删除')}
+          </button>
+        </div>
+      ) : (
+        <div className="pe-insp">
+          <h4>{t('整体')}</h4>
+          <label>
+            {t('方案名')}
+            <input value={t(plan.name || '')} onChange={(e) => setPlan({ ...plan, name: e.target.value })} />
+          </label>
+          <div className="pe-nums">
+            <label>
+              {t('层高（m）')}
+              <input type="number" step="0.05" min="2.4" max="4" inputMode="decimal" value={plan.wallH} onChange={(e) => setPlan({ ...plan, wallH: Math.max(2.4, Math.min(4, Number(e.target.value))) })} />
+            </label>
+            <label title={t('平面图上方是北 = 0°；顺时针转')}>
+              {t('北方（°）')}
+              <input type="number" step="15" inputMode="numeric" value={plan.north || 0} onChange={(e) => setPlan({ ...plan, north: ((Number(e.target.value) % 360) + 360) % 360 })} />
+            </label>
+          </div>
+          <div className="pe-compass" style={{ transform: `rotate(${plan.north || 0}deg)` }} aria-hidden="true">
+            <span>N</span>
+          </div>
+          {underlay && (
+            <label>
+              {t('底图透明度')}
+              <input type="range" min="0" max="1" step="0.05" value={underlay.opacity ?? 0.55} onChange={(e) => setUnderlay({ ...underlay, opacity: Number(e.target.value) })} />
+            </label>
+          )}
+          <ul className="pe-howto">
+            <li>{tj('{0}：按住拖出方块；边会自动吸到旁边房间的边上。', [<b key="b">{t('画房间')}</b>])}</li>
+            <li>{tj('{0}：选工具后点一下墙（鼠标会先出现金色预览）。', [<b key="b">{t('门 / 窗')}</b>])}</li>
+            <li>{tj('{0}：两个空间之间不要墙（开放式厨房）。客厅 / 餐厅 / 玄关 / 走廊之间默认已打通。', [<b key="b">{t('打通')}</b>])}</li>
+            <li>{tj('{0}：决定阳光从哪边进来（西晒看得出来）。', [<b key="b">{t('北方')}</b>])}</li>
+            <li>{tj('{0}：捏合缩放、拖动平移。', [<b key="b">{t('双指')}</b>])}</li>
+          </ul>
+          {issues.length > 0 && (
+            <div className="pe-issues">
+              {issues.map((x, i) => (
+                <p key={i}>
+                  <Icon name="alert" size={15} />
+                  {x}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      <p className="pe-stat">{t('{0} 个房间 · {1} 个门窗 · {2} 段墙', [plan.rooms.length, plan.openings.length, walls.length])}</p>
+    </>
+  );
+
   return (
-    <div className="pe" role="dialog" aria-modal="true" aria-label={t('平面图')}>
+    <div className={`pe ${narrow ? 'narrow' : ''}`} role="dialog" aria-modal="true" aria-label={t('平面图')}>
       <header className="pe-head">
         <div className="pe-title">
           <p className="eyebrow">{isEn() ? BRAND.studioEn : BRAND.studio}</p>
@@ -524,7 +725,7 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
         </div>
         <div className="pe-head-actions">
           <input ref={fileRef} type="file" accept="image/*,application/pdf" hidden onChange={(e) => onFile(e.target.files?.[0])} />
-          <button type="button" className="pe-btn" onClick={() => fileRef.current?.click()}>
+          <button type="button" className="pe-btn" onClick={() => fileRef.current?.click()} title={t('上传平面图')} aria-label={t('上传平面图')}>
             <Icon name="upload" size={17} />
             <span>{t('上传平面图')}</span>
           </button>
@@ -533,10 +734,12 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
             <input value={widthHint} onChange={(e) => setWidthHint(e.target.value.replace(/[^\d.]/g, ''))} placeholder="12" inputMode="decimal" />
             <span>m</span>
           </label>
-          <button type="button" className="pe-btn ai" onClick={() => runAI()} disabled={!!busy}>
-            <Icon name="wand" size={17} />
-            <span>{t('AI 识别')}</span>
-          </button>
+          {canAI && (
+            <button type="button" className="pe-btn ai" onClick={() => runAI()} disabled={!!busy} title={t('AI 识别')} aria-label={t('AI 识别')}>
+              <Icon name="wand" size={17} />
+              <span>{t('AI 识别')}</span>
+            </button>
+          )}
           <label className="pe-select">
             <Icon name="start" size={16} />
             <select
@@ -611,7 +814,9 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
                 const fd = Math.min(11 * sw, (r.w * 0.86) / emWidth(dims), r.d / 4.5);
                 const cx = r.x + r.w / 2;
                 const lh = fs * 1.12;
-                const y0 = r.y + r.d / 2 - ((lab.lines.length - 1) * lh) / 2;
+                // 房间在屏幕上太小（< 70px）：只写名字，尺寸点开房间看
+                const showDims = Math.min(r.w, r.d) * view.s >= DIM_MIN_PX;
+                const y0 = r.y + r.d / 2 - ((lab.lines.length - 1) * lh) / 2 + (showDims ? 0 : fs * 0.35);
                 return (
                   <g key={r.id}>
                     <rect
@@ -632,9 +837,11 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
                         </tspan>
                       ))}
                     </text>
-                    <text x={cx} y={y0 + (lab.lines.length - 1) * lh + fs * 0.6 + fd * 1.1} fontSize={fd} textAnchor="middle" className="pe-dim">
-                      {dims}
-                    </text>
+                    {showDims && (
+                      <text x={cx} y={y0 + (lab.lines.length - 1) * lh + fs * 0.6 + fd * 1.1} fontSize={fd} textAnchor="middle" className="pe-dim">
+                        {dims}
+                      </text>
+                    )}
                   </g>
                 );
               })}
@@ -665,7 +872,7 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
             </g>
           </svg>
           {toolHint && !busy && !calib?.p2 && <p className="pe-toolhint">{toolHint}</p>}
-          <div className="pe-zoom">
+          <div className="pe-zoom" ref={zoomRef}>
             <button type="button" onClick={() => zoomCenter(1.25)} aria-label={t('放大')}>
               <Icon name="plus" size={18} />
             </button>
@@ -692,142 +899,20 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
               </button>
             </div>
           )}
+          {narrow && (
+            <aside className={`pe-side pe-sheet ${sheet ? 'open' : ''}`} aria-label={sheetTitle}>
+              <button type="button" className="pe-sheet-head" onClick={() => setSheet((v) => !v)} aria-expanded={sheet}>
+                <span className="pe-sheet-grab" aria-hidden="true" />
+                <b>{sheetTitle}</b>
+                <em>{sheetSummary}</em>
+                <Icon name="down" size={18} className="pe-sheet-chev" />
+              </button>
+              {sheet && <div className="pe-sheet-body">{side}</div>}
+            </aside>
+          )}
         </div>
 
-        <aside className="pe-side">
-          {msg && <p className="pe-msg">{msg}</p>}
-          {room ? (
-            <div className="pe-insp">
-              <h4>{t('房间')}</h4>
-              <div className="pe-types">
-                {Object.entries(ROOM_TYPES).map(([k, rt]) => (
-                  <button
-                    key={k}
-                    type="button"
-                    className={room.type === k ? 'on' : ''}
-                    style={{ '--c': rt.color }}
-                    onClick={() => {
-                      const cur = ROOM_TYPES[room.type];
-                      const isDefault = !room.name || room.name === cur?.zh || room.name === cur?.en || room.name === L(cur);
-                      updateRoom(room.id, { type: k, name: isDefault ? rt.zh : room.name });
-                    }}
-                  >
-                    <i />
-                    {L(rt)}
-                  </button>
-                ))}
-              </div>
-              <label>
-                {t('名字')}
-                <input value={room.name === '' ? '' : roomLabel(room)} onChange={(e) => updateRoom(room.id, { name: e.target.value })} />
-              </label>
-              <div className="pe-nums">
-                {[
-                  ['x', 'X'],
-                  ['y', 'Y'],
-                  ['w', t('宽')],
-                  ['d', t('深')],
-                ].map(([k, l]) => (
-                  <label key={k}>
-                    {l}
-                    <input type="number" step="0.05" inputMode="decimal" value={room[k]} onChange={(e) => updateRoom(room.id, { [k]: Math.max(k === 'w' || k === 'd' ? 0.6 : -99, Number(e.target.value)) })} />
-                  </label>
-                ))}
-              </div>
-              <button type="button" className="pe-btn danger" onClick={removeSel}>
-                <Icon name="trash" size={16} />
-                {t('删除房间')}
-              </button>
-            </div>
-          ) : opening ? (
-            <div className="pe-insp">
-              <h4>{t('门窗')}</h4>
-              <div className="pe-types">
-                {Object.entries(OPENING_KINDS).map(([k, ok]) => (
-                  <button key={k} type="button" className={opening.kind === k ? 'on' : ''} onClick={() => updateOpening(opening.id, { kind: k })}>
-                    {L(ok)}
-                  </button>
-                ))}
-              </div>
-              <label>
-                {t('宽度（m）')}
-                <input
-                  type="number"
-                  step="0.05"
-                  inputMode="decimal"
-                  value={r2(Math.hypot(opening.x2 - opening.x1, opening.y2 - opening.y1))}
-                  onChange={(e) => {
-                    const w = Math.max(0.3, Number(e.target.value));
-                    const horiz = Math.abs(opening.y1 - opening.y2) < 0.01;
-                    const c = horiz ? (opening.x1 + opening.x2) / 2 : (opening.y1 + opening.y2) / 2;
-                    updateOpening(opening.id, horiz ? { x1: r2(c - w / 2), x2: r2(c + w / 2) } : { y1: r2(c - w / 2), y2: r2(c + w / 2) });
-                  }}
-                />
-              </label>
-              {(opening.kind === 'window' || opening.kind === 'slider') && (
-                <div className="pe-nums">
-                  <label>
-                    {t('窗台高')}
-                    <input type="number" step="0.05" inputMode="decimal" value={opening.sill ?? OPENING_KINDS[opening.kind].sill} onChange={(e) => updateOpening(opening.id, { sill: Number(e.target.value) })} />
-                  </label>
-                  <label>
-                    {t('窗顶高')}
-                    <input type="number" step="0.05" inputMode="decimal" value={opening.head ?? OPENING_KINDS[opening.kind].head} onChange={(e) => updateOpening(opening.id, { head: Number(e.target.value) })} />
-                  </label>
-                </div>
-              )}
-              <button type="button" className="pe-btn danger" onClick={removeSel}>
-                <Icon name="trash" size={16} />
-                {t('删除')}
-              </button>
-            </div>
-          ) : (
-            <div className="pe-insp">
-              <h4>{t('整体')}</h4>
-              <label>
-                {t('方案名')}
-                <input value={t(plan.name || '')} onChange={(e) => setPlan({ ...plan, name: e.target.value })} />
-              </label>
-              <div className="pe-nums">
-                <label>
-                  {t('层高（m）')}
-                  <input type="number" step="0.05" min="2.4" max="4" inputMode="decimal" value={plan.wallH} onChange={(e) => setPlan({ ...plan, wallH: Math.max(2.4, Math.min(4, Number(e.target.value))) })} />
-                </label>
-                <label title={t('平面图上方是北 = 0°；顺时针转')}>
-                  {t('北方（°）')}
-                  <input type="number" step="15" inputMode="numeric" value={plan.north || 0} onChange={(e) => setPlan({ ...plan, north: ((Number(e.target.value) % 360) + 360) % 360 })} />
-                </label>
-              </div>
-              <div className="pe-compass" style={{ transform: `rotate(${plan.north || 0}deg)` }} aria-hidden="true">
-                <span>N</span>
-              </div>
-              {underlay && (
-                <label>
-                  {t('底图透明度')}
-                  <input type="range" min="0" max="1" step="0.05" value={underlay.opacity ?? 0.55} onChange={(e) => setUnderlay({ ...underlay, opacity: Number(e.target.value) })} />
-                </label>
-              )}
-              <ul className="pe-howto">
-                <li>{tj('{0}：按住拖出方块；边会自动吸到旁边房间的边上。', [<b key="b">{t('画房间')}</b>])}</li>
-                <li>{tj('{0}：选工具后点一下墙（鼠标会先出现金色预览）。', [<b key="b">{t('门 / 窗')}</b>])}</li>
-                <li>{tj('{0}：两个空间之间不要墙（开放式厨房）。客厅 / 餐厅 / 玄关 / 走廊之间默认已打通。', [<b key="b">{t('打通')}</b>])}</li>
-                <li>{tj('{0}：决定阳光从哪边进来（西晒看得出来）。', [<b key="b">{t('北方')}</b>])}</li>
-                <li>{tj('{0}：捏合缩放、拖动平移。', [<b key="b">{t('双指')}</b>])}</li>
-              </ul>
-              {issues.length > 0 && (
-                <div className="pe-issues">
-                  {issues.map((x, i) => (
-                    <p key={i}>
-                      <Icon name="alert" size={15} />
-                      {x}
-                    </p>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-          <p className="pe-stat">{t('{0} 个房间 · {1} 个门窗 · {2} 段墙', [plan.rooms.length, plan.openings.length, walls.length])}</p>
-        </aside>
+        {!narrow && <aside className="pe-side">{side}</aside>}
       </div>
     </div>
   );

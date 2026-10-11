@@ -3,8 +3,11 @@
 //
 // 画质（像产品渲染那样「贵」）：
 // · 色调映射用 Khronos PBR Neutral —— 为产品渲染设计，材质的颜色几乎不偏（ACES 会把橙色推饱和、AgX 偏灰）；
-// · 环境光 IBL：自己搭的「摄影棚 + 天穹」（顶上一块大柔光箱、两侧灯条、跟着时段变色的天空），
-//   漆面 / 石材 / 金属 / 玻璃都有可信的反射；每半小时一档，缓存最近几档；
+//   它的暗部「脚」改成按比例压暗（阴影里的颜色不会被推得更饱和：海军蓝不变靛蓝、橡木不变橙）；
+// · 环境光 IBL：自己搭的「摄影棚 + 天穹」（顶上一块大柔光箱、两侧灯条、跟着时段的天空），
+//   天色中和成 VI 的暖灰（只留两成）—— 金属 / 亮面石材反射暖灰，不是蓝 / 薰衣草色；每半小时一档，缓存最近几档；
+// · 白平衡像室内摄影：太阳、室内灯各自往白校正（黄昏、灯仍然暖，材质保持本色）；夜里一盏很弱的苔绿补光 + 曝光 +0.3EV；
+// · 取景：界面用 setInsets 告诉引擎哪几边被面板挡住，模型在没挡住的那块里居中、放得下（主点偏移，旋转中心不变）；
 // · 太阳影子：按房子在光空间里收紧视锥（贴图密度最大）+ 更多 PCF 采样的柔边，按纹素自动算偏移（不脱影、不出麻点）；
 // · 白天几扇大窗各放一块面光源（窗口的天光），夜里是灯具位置上的暖光（平方衰减、柔和）；
 // · 'high'：多重采样 MSAA → GTAO 接触阴影 → 很淡的景深（微缩模型感）→ 只给灯的辉光 → 色调映射 + 暗角 + 抖动；
@@ -51,6 +54,44 @@ const QUALITY = {
 
 const DEMO_FPS = 30;
 const DEMO_ORBIT = 0.4; // OrbitControls.autoRotateSpeed：一圈约 150 秒
+const BASE_FOV = 28;
+
+// ───────────────────────── 光的颜色：中性的摄影棚 + 相机白平衡 ─────────────────────────
+// 环境光（IBL）和半球光用 VI 的暖灰（纸色的色相）打底，天色最多只占两成 ——
+// 金属、亮面石材反射的是暖灰，不是蓝 / 薰衣草色；海军蓝丝绒不会被天光推成靛紫。
+const SKY_TINT = 0.2;
+const _lum = (c) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+/** PALETTE 色的「色相」（线性、亮度归一成 1） */
+const chromaOf = (hex) => {
+  const c = new THREE.Color(hex);
+  const l = _lum(c) || 1;
+  return new THREE.Color().setRGB(c.r / l, c.g / l, c.b / l);
+};
+const NEUTRAL = chromaOf(PALETTE.paper); // 暖灰（纸）
+const STUDIO_WHITE = chromaOf(PALETTE.card); // 柔光箱：几乎是白，带一点纸的暖
+/** 把一个天色中和成同样亮度的暖灰，只留 keep 那么多原来的色彩 */
+function neutralColor(hex, keep, out = new THREE.Color()) {
+  out.set(hex);
+  const l = _lum(out);
+  return out.setRGB(l * NEUTRAL.r + (out.r - l * NEUTRAL.r) * keep, l * NEUTRAL.g + (out.g - l * NEUTRAL.g) * keep, l * NEUTRAL.b + (out.b - l * NEUTRAL.b) * keep);
+}
+/** daylight().wb / .wbLamp → 线性增益（太阳天光一组、室内灯一组） */
+const wbColor = (d, out = new THREE.Color(), key = 'wb') => (d?.[key] ? out.setRGB(d[key][0], d[key][1], d[key][2]) : out.setRGB(1, 1, 1));
+
+/**
+ * 色调映射的「脚」：Khronos PBR Neutral 在暗部给三个通道减同一个数（加对比），这会把暗处的颜色推得很饱和
+ * （阴影里的海军蓝变成纯靛蓝、橡木变成橙）。改成按比例压暗：对比一样，色相和饱和度不变。只改字符串，找不到就不改。
+ */
+let TONE_PATCHED = false;
+function patchToneMapping() {
+  if (TONE_PATCHED) return;
+  const chunk = THREE.ShaderChunk.tonemapping_pars_fragment;
+  const at = chunk.indexOf('vec3 NeutralToneMapping');
+  const re = /color -= offset;/;
+  if (at < 0 || !re.test(chunk.slice(at))) return;
+  THREE.ShaderChunk.tonemapping_pars_fragment = chunk.slice(0, at) + chunk.slice(at).replace(re, 'color *= max( 0.0, 1.0 - offset / max( max( color.r, max( color.g, color.b ) ), 1e-5 ) );');
+  TONE_PATCHED = true;
+}
 
 /** 设置里的画质（'auto' / 没存 = 自动）→ 实际档位 */
 export function resolveQuality(q) {
@@ -88,8 +129,17 @@ export class Engine {
     this.quality = resolveQuality(this.qualityPref);
     const QP = QUALITY[this.quality];
     patchSoftShadows(QP.taps);
+    patchToneMapping();
     this.demo = false;
     this._prOverride = 0;
+    // 界面面板挡住的边（CSS 像素）：模型在没被挡住的那块里居中、放得下（setInsets）
+    this.insets = { left: 0, right: 0, top: 0, bottom: 0 };
+    this.vo = { x: 0, y: 0 }; // 现在的主点偏移（像素，+ = 往右 / 往下）
+    this.voTo = { x: 0, y: 0 };
+    this.lastView = 'iso';
+    this._framed = null;
+    this._wb = new THREE.Color(1, 1, 1);
+    this._wbLamp = new THREE.Color(1, 1, 1);
 
     // 'high' 的抗锯齿在后期链里做（多重采样的渲染目标），画布本身就不必再开 MSAA（省显存）。
     // （画布的 MSAA 建好就改不了：之后换档也没关系 —— 'fast' 没有画布 MSAA 时，后期链里用多重采样的渲染目标补上）
@@ -131,7 +181,7 @@ export class Engine {
 
     this.buildBackdrop(QP.bg);
 
-    this.camera = new THREE.PerspectiveCamera(28, 1, 0.1, 400);
+    this.camera = new THREE.PerspectiveCamera(BASE_FOV, 1, 0.1, 400);
     this.controls = new OrbitControls(this.camera, r.domElement);
     Object.assign(this.controls, { enableDamping: true, dampingFactor: 0.08, maxPolarAngle: 1.36, minPolarAngle: 0.02, rotateSpeed: 0.55, zoomSpeed: 0.8, screenSpacePanning: false });
     this.controls.addEventListener('change', () => (this.dirty = true));
@@ -148,6 +198,10 @@ export class Engine {
     this.scene.add(this.sun, this.sun.target);
     this.hemi = new THREE.HemisphereLight(new THREE.Color(1, 1, 1), new THREE.Color(0.27, 0.27, 0.27), 0.2);
     this.scene.add(this.hemi);
+    // 夜里的补光：苔绿石板色、很弱、不投影，从镜头左上方来（跟着镜头）—— 墙头、底座、地面的轮廓读得出来
+    this.fill = new THREE.DirectionalLight(new THREE.Color(1, 1, 1), 0);
+    this.fill.castShadow = false;
+    this.scene.add(this.fill, this.fill.target);
 
     this.lib = new MatLib(r, this.quality);
     useLib(this.lib);
@@ -324,6 +378,10 @@ export class Engine {
   resize() {
     const w = this.container.clientWidth || 1;
     const h = this.container.clientHeight || 1;
+    // 画布真的变了尺寸（iPad 转屏、窗口拉伸）：镜头还停在对好的位置就按新尺寸重新对（截图时的 resize 尺寸不变，不会触发）
+    const changed = this._size && (this._size.w !== w || this._size.h !== h);
+    const refit = changed && this.center && !this.demo && this.isFramed();
+    this._size = { w, h };
     this.applyPixelRatio();
     this.renderer.setSize(w, h);
     if (this.composer) {
@@ -332,9 +390,86 @@ export class Engine {
       this.composer.setSize(w, h);
       if (this.dof) this.dof.setPixelRatio(pr);
     }
-    this.camera.aspect = w / h;
-    this.camera.updateProjectionMatrix();
+    if (changed) this.updateViewTarget(true);
+    this.applyView();
+    if (refit) this.frame(this.lastView, false);
     this.dirty = true;
+  }
+
+  // ───────────────────────── 面板留白（主点偏移） ─────────────────────────
+
+  /**
+   * 界面告诉引擎：四边各有多少像素被面板挡住（情绪面板、材质栏、工具条、日光面板）。
+   * 模型就在没被挡住的那一块里居中、放得下：用 camera.setViewOffset 把画面的主点挪到那一块的中心 ——
+   * 旋转的中心还是模型，转起来不会甩出去。镜头还停在上次「对好」的位置时，顺便按新的空间重新对一次；
+   * 用户自己转过 / 缩放过就只挪主点（平滑过去），不打断他。演示模式没有面板，不留白。
+   */
+  setInsets(ins = {}) {
+    const n = (v) => Math.max(0, Math.round(Number(v) || 0));
+    const next = { left: n(ins.left), right: n(ins.right), top: n(ins.top), bottom: n(ins.bottom) };
+    const cur = this.insets;
+    if (['left', 'right', 'top', 'bottom'].every((k) => Math.abs(next[k] - cur[k]) < 2)) return;
+    const framed = this.isFramed();
+    this._insetsSet = true;
+    this.insets = next;
+    this.updateViewTarget();
+    // 面板开合动画时界面可能一秒调好多次：主点马上跟（平滑），重新取景等停下来 120ms 再做一次
+    if (framed && this.center && !this.demo) {
+      clearTimeout(this._refitT);
+      this._refitT = setTimeout(() => {
+        this._refitT = 0;
+        if (this.running && this.center && !this.demo && this.isFramed()) this.frame(this.lastView, true);
+      }, 120);
+    }
+    this.dirty = true;
+  }
+
+  /** 真正用的留白：演示模式是 0；面板太大时按比例缩，没被挡住的那块至少留一半 */
+  effInsets() {
+    if (this.demo) return { left: 0, right: 0, top: 0, bottom: 0 };
+    const W = this.container.clientWidth || 1;
+    const H = this.container.clientHeight || 1;
+    const { left, right, top, bottom } = this.insets;
+    const kx = Math.min(1, (W * 0.5) / Math.max(1, left + right));
+    const ky = Math.min(1, (H * 0.5) / Math.max(1, top + bottom));
+    return { left: left * kx, right: right * kx, top: top * ky, bottom: bottom * ky };
+  }
+
+  /** 主点要去的地方（没被挡住那块的中心，相对画布中心） */
+  updateViewTarget(snap = false) {
+    const e = this.effInsets();
+    this.voTo = { x: (e.left - e.right) / 2, y: (e.top - e.bottom) / 2 };
+    if (snap) {
+      this.vo = { ...this.voTo };
+      this.applyView();
+    }
+  }
+
+  /** 把主点偏移 this.vo 套到相机上：画布是一张更大的虚拟画面里的一扇窗，焦距（像素）不变 */
+  applyView() {
+    const W = this.container.clientWidth || 1;
+    const H = this.container.clientHeight || 1;
+    const cam = this.camera;
+    const ox = this.vo.x;
+    const oy = this.vo.y;
+    if (Math.abs(ox) < 0.25 && Math.abs(oy) < 0.25) {
+      cam.fov = BASE_FOV;
+      cam.aspect = W / H;
+      cam.clearViewOffset();
+      return;
+    }
+    const fw = W + 2 * Math.abs(ox);
+    const fh = H + 2 * Math.abs(oy);
+    cam.fov = THREE.MathUtils.radToDeg(2 * Math.atan((Math.tan(THREE.MathUtils.degToRad(BASE_FOV) / 2) * fh) / H));
+    cam.setViewOffset(fw, fh, Math.abs(ox) - ox, Math.abs(oy) - oy, W, H);
+  }
+
+  /** 镜头是不是还停在上次 frame() 对好的位置（或正在飞过去） */
+  isFramed() {
+    if (this.tween) return true;
+    const f = this._framed;
+    if (!f) return false;
+    return this.camera.position.distanceTo(f.pos) < 0.05 && this.controls.target.distanceTo(f.target) < 0.05;
   }
 
   // ───────────────────────── 场景 ─────────────────────────
@@ -423,7 +558,8 @@ export class Engine {
       }
       l.position.copy(s.pos);
       l.distance = s.dist;
-      l.color.set(s.color);
+      l.userData.color = s.color;
+      l.color.set(s.color).multiply(this._wbLamp);
       l.userData.base = s.base;
       l.intensity = s.base * (this.day?.lamps ?? 0);
     });
@@ -591,14 +727,22 @@ export class Engine {
     this.day = d;
     const c = this.center || new THREE.Vector3();
     const R = (this.radius || 8) + 14;
+    // 白平衡（像室内摄影）：太阳一组、室内灯一组，各自往白校正 —— 黄昏仍然暖、灯罩仍然暖，但材质保持本色
+    // （天光 / 环境光 / 半球光 / 窗光已经中和成暖灰，不再乘）
+    const wb = wbColor(d, this._wb);
+    const wbLamp = wbColor(d, this._wbLamp, 'wbLamp');
     this.sun.position.set(c.x + d.dir[0] * R, d.dir[1] * R, c.z + d.dir[2] * R);
-    this.sun.color.set(d.sunColor);
+    this.sun.color.set(d.sunColor).multiply(wb);
     this.sun.intensity = d.sunIntensity;
     this.updateTrees(d);
     this.fitShadowToSun();
-    this.hemi.color.set(d.hemiSky);
-    this.hemi.groundColor.set(d.hemiGround);
+    // 半球光：天色中和成暖灰（只留两成），地面反光留一半的暖意（已经是中性的，不再乘白平衡）
+    neutralColor(d.hemiSky, SKY_TINT, this.hemi.color);
+    neutralColor(d.hemiGround, 0.5, this.hemi.groundColor);
     this.hemi.intensity = d.hemiIntensity;
+    this.fill.color.set(d.fillColor || PALETTE.stream);
+    this.fill.intensity = d.fillIntensity || 0;
+    this.placeFill();
     this.renderer.toneMappingExposure = d.exposure;
     // IBL：同一档（半小时）只建一次（上下文丢失时先不建，恢复后 restoreGPU 会重画）
     if (!this.contextLost && (this.envKey !== d.envKey || !this.scene.environment)) {
@@ -606,15 +750,21 @@ export class Engine {
       this.envKey = d.envKey;
     }
     this.scene.environmentIntensity = d.envIntensity;
-    for (const l of this.roomLights) l.intensity = l.userData.base * d.lamps;
-    const wc = new THREE.Color(d.windowColor);
+    for (const l of this.roomLights) {
+      l.color.set(l.userData.color || LAMP.pool).multiply(wbLamp);
+      l.intensity = l.userData.base * d.lamps;
+    }
+    // 窗光是「天光」不是太阳：和环境光一样中和（黄金时段留一点暖）
+    const wc = neutralColor(d.windowColor, 0.4);
     for (const l of this.windowLights) {
       l.color.copy(wc);
       l.intensity = l.userData.k * d.windowLight * 2.4;
     }
     this.lib.setNight(d.lamps);
+    // 底座的烫金字：白天亮一点（和受光的石头拉开），夜里收一点（不像霓虹灯）
+    for (const m of this.house?.plaques || []) m.material.emissiveIntensity = 0.8 - 0.3 * d.night;
     this.applyPost(d);
-    this.beams.update(d.dir, d.beams, d.sunColor);
+    this.beams.update(d.dir, d.beams, new THREE.Color(d.sunColor).multiply(wb));
     drawBackdrop(this.bgCanvas, this.bgLayers, d, this.demo ? firePulse(performance.now()) : null);
     this.bgTex.needsUpdate = true;
     this.dirty = true;
@@ -641,6 +791,17 @@ export class Engine {
     }
   }
 
+  /** 夜里的补光跟着镜头：从镜头左边 ~20°、抬高 ~43° 打过来（照得到底座正面和墙头，又有一点体积） */
+  placeFill() {
+    if (!this.fill.intensity) return;
+    const t = this.controls.target;
+    const v = this.camera.position.clone().sub(t);
+    const az = Math.atan2(v.x, v.z) - 0.35;
+    const el = 0.75;
+    this.fill.position.set(t.x + Math.sin(az) * Math.cos(el) * 20, t.y + Math.sin(el) * 20, t.z + Math.cos(az) * Math.cos(el) * 20);
+    this.fill.target.position.copy(t);
+  }
+
   /** 后期参数跟着时段：白天几乎没有辉光，只有夜里的灯会发光 */
   applyPost(d) {
     if (this.bloom) {
@@ -659,27 +820,122 @@ export class Engine {
 
   // ───────────────────────── 相机 ─────────────────────────
 
+  /**
+   * 对好镜头：按模型（房子 + 底座）的八个角精确算距离，让它刚好放进「没被面板挡住」的那一块（留一点呼吸），
+   * 再把目标点挪一挪，让投影出来的模型在那一块里居中。
+   * 演示模式（展厅电视）：没有面板；镜头会一直绕着转，所以按一整圈里最占地方的那个角度来算 ——
+   * 房子大约占满电视画面的 65%（最宽的角度 ~80%）。
+   */
   frame(view = 'iso', animate = true) {
+    if (view !== 'demo') this.lastView = view;
     const v = VIEWS[view] || VIEWS.iso;
-    const c = this.center || new THREE.Vector3();
-    const vf = THREE.MathUtils.degToRad(this.camera.fov);
-    const hf = 2 * Math.atan(Math.tan(vf / 2) * this.camera.aspect);
-    const wide = this.container.clientWidth > 900;
-    const dist = ((this.radius || 8) / Math.sin(Math.min(vf, hf) / 2)) * (wide ? 1.42 : 1.12);
-    const az = THREE.MathUtils.degToRad(v.az);
-    const el = THREE.MathUtils.degToRad(v.el);
-    const target = c.clone().add(new THREE.Vector3(0, -0.2, 0));
-    const pos = target.clone().add(new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)).multiplyScalar(dist));
+    this.updateViewTarget(!animate);
+    const fit = this.fitView(v.az, v.el, view === 'demo' || this.demo);
+    const { pos, target, dist } = fit;
     this.controls.minDistance = (this.radius || 8) * 0.35;
-    this.controls.maxDistance = dist * 2.2;
+    this.controls.maxDistance = Math.max(dist * 2.2, (this.radius || 8) * 3);
+    this._framed = { pos: pos.clone(), target: target.clone() };
+    // 清掉 OrbitControls 的惯性（演示时自动环绕、手指甩出去的余量），否则取景结束后镜头还会自己滑一点
+    this.controls._sphericalDelta?.set(0, 0, 0);
+    this.controls._panOffset?.set(0, 0, 0);
     if (!animate) {
+      this.tween = null;
       this.camera.position.copy(pos);
       this.controls.target.copy(target);
       this.controls.update();
+      this.placeFill();
       this.dirty = true;
       return;
     }
     this.tween = { t0: performance.now(), dur: 900, fromP: this.camera.position.clone(), fromT: this.controls.target.clone(), toP: pos, toT: target };
+  }
+
+  /** 模型的八个角（房子 + 底座；墙按全高算 —— 'cut' 模式下远处的墙还是立着的） */
+  modelCorners() {
+    const bb = this.house?.bounds;
+    if (!bb) {
+      const c = this.center || new THREE.Vector3();
+      const r = this.radius || 8;
+      return [-1, 1].flatMap((sx) => [-1, 1].flatMap((sz) => [-0.66, 2.8].map((y) => new THREE.Vector3(c.x + (sx * r) / 1.5, y, c.z + (sz * r) / 1.5))));
+    }
+    const m = 0.36;
+    const H = this.house.wallH || 2.8;
+    const pts = [];
+    for (const x of [bb.x0 - m, bb.x1 + m]) for (const z of [bb.y0 - m, bb.y1 + m]) for (const y of [-0.66, H]) pts.push(new THREE.Vector3(x, y, z));
+    return pts;
+  }
+
+  /**
+   * 针孔相机的精确取景：镜头沿 D 往后退到 dist，点 p 的屏幕坐标 u = f·(p·R)/(dist − p·D)。
+   * 要 |u| ≤ 半宽、|v| ≤ 半高 → dist ≥ p·D + f·max(|p·R|/半宽, |p·U|/半高)，取所有角的最大值（闭式解）。
+   * 然后把目标点在屏幕平面里挪到投影的中心，再算一遍（两三轮就收敛）。
+   */
+  fitView(azDeg, elDeg, demo = false) {
+    const W = this.container.clientWidth || 1;
+    const H = this.container.clientHeight || 1;
+    const ins = demo ? { left: 0, right: 0, top: 0, bottom: 0 } : this.effInsets();
+    const f = H / 2 / Math.tan(THREE.MathUtils.degToRad(BASE_FOV) / 2);
+    // 留白：大屏多留一点；窄屏（竖屏 iPad / 手机）少留一点，模型不要太小。
+    // 界面还没告诉过面板在哪（setInsets 没调用过）：按以前的经验多留白，别钻到面板底下
+    const narrow = W - ins.left - ins.right < 560;
+    const margin = demo ? 0.8 : !this._insetsSet ? (W > 900 ? 0.62 : 0.84) : narrow ? 0.94 : 0.9;
+    const hw = ((W - ins.left - ins.right) / 2) * margin;
+    const hh = ((H - ins.top - ins.bottom) / 2) * margin;
+    const corners = this.modelCorners();
+    const c0 = this.center || new THREE.Vector3();
+    const el = THREE.MathUtils.degToRad(elDeg);
+    const up = new THREE.Vector3(0, 1, 0);
+    const basis = (az) => {
+      const D = new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el));
+      const R = new THREE.Vector3().crossVectors(D.clone().negate(), up).normalize();
+      const U = new THREE.Vector3().crossVectors(R, D.clone().negate()).normalize();
+      return { D, R, U };
+    };
+    const distFor = (T, { D, R, U }) => {
+      let dist = 0;
+      const q = new THREE.Vector3();
+      for (const p of corners) {
+        q.copy(p).sub(T);
+        dist = Math.max(dist, q.dot(D) + f * Math.max(Math.abs(q.dot(R)) / hw, Math.abs(q.dot(U)) / hh));
+      }
+      return dist;
+    };
+    const azs = demo ? Array.from({ length: 16 }, (_, i) => (i / 16) * Math.PI * 2) : [THREE.MathUtils.degToRad(azDeg)];
+    // 目标点：演示时就是模型中心（一直在转，不按某一个角度居中）；平时按投影居中
+    const mid = new THREE.Vector3(c0.x, 1.05, c0.z);
+    let T = mid.clone();
+    const B = basis(THREE.MathUtils.degToRad(azDeg));
+    let dist = 0;
+    if (demo) {
+      for (const az of azs) dist = Math.max(dist, distFor(T, basis(az)));
+    } else {
+      for (let it = 0; it < 3; it++) {
+        dist = distFor(T, B);
+        let u0 = Infinity;
+        let u1 = -Infinity;
+        let v0 = Infinity;
+        let v1 = -Infinity;
+        const q = new THREE.Vector3();
+        for (const p of corners) {
+          q.copy(p).sub(T);
+          const z = dist - q.dot(B.D);
+          const u = (f * q.dot(B.R)) / z;
+          const w = (f * q.dot(B.U)) / z;
+          u0 = Math.min(u0, u);
+          u1 = Math.max(u1, u);
+          v0 = Math.min(v0, w);
+          v1 = Math.max(v1, w);
+        }
+        const du = (u0 + u1) / 2;
+        const dv = (v0 + v1) / 2;
+        if (Math.abs(du) < 0.5 && Math.abs(dv) < 0.5) break;
+        T = T.clone().addScaledVector(B.R, (du * dist) / f).addScaledVector(B.U, (dv * dist) / f);
+      }
+      dist = distFor(T, B);
+    }
+    const dir = demo ? basis(THREE.MathUtils.degToRad(azDeg)).D : B.D;
+    const pos = T.clone().addScaledVector(dir, dist);
+    return { pos, target: T, dist };
   }
 
   setAutoRotate(on) {
@@ -985,6 +1241,9 @@ export class Engine {
     const caps = this.renderer.capabilities;
     const long = Math.min(QUALITY[this.quality].snapLong, caps.maxTextureSize || 4096, caps.maxRenderbufferSize || 4096);
     this._prOverride = Math.max(Math.min(base, long / Math.max(w, h)), Math.min(3, base * scale, long / Math.max(w, h)));
+    // 交给客人的图里没有面板：模型回到画面正中（主点偏移先拿掉，截完再放回去）
+    const vo = this.vo;
+    this.vo = { x: 0, y: 0 };
     let blob = null;
     try {
       this.resize();
@@ -992,6 +1251,7 @@ export class Engine {
       blob = await new Promise((res) => this.renderer.domElement.toBlob(res, 'image/png'));
     } finally {
       this._prOverride = 0;
+      this.vo = vo;
       this.resize();
       this.selBox.visible = sel;
       this.hovBox.visible = hov;
@@ -1009,8 +1269,9 @@ export class Engine {
     const sel = this.selBox.visible;
     this.selBox.visible = this.hovBox.visible = false;
     const cam = this.camera.clone();
+    cam.fov = BASE_FOV;
     cam.aspect = w / h;
-    cam.updateProjectionMatrix();
+    cam.clearViewOffset();
     this.renderer.setPixelRatio(1);
     this.renderer.setSize(w * 2, h * 2, false);
     const out = hours.map((hr) => {
@@ -1052,10 +1313,15 @@ export class Engine {
       this._demoHour = this.time;
       this._demoSunT = 0;
       this._demoTellT = 0;
+      // 演示：没有面板（主点回到画面中心），镜头靠近一点，按一整圈里最占地方的角度取景
       if (this.center) this.frame('demo');
+      else this.updateViewTarget();
     } else {
       this.cb.onTime?.(this.time);
       this._lastAnchors = null;
+      // 退出：回到演示前的视角，面板留白也回来
+      if (this.center) this.frame(this.lastView || 'iso');
+      else this.updateViewTarget();
     }
     if (this.applyPixelRatio()) this.resize();
     this.dirty = true;
@@ -1093,11 +1359,21 @@ export class Engine {
       this.dirty = true;
     }
     if (this.onTick?.(t)) this.dirty = true;
+    // 面板开合：主点平滑地挪到新的中心（~0.3 秒）
+    const vx = this.voTo.x - this.vo.x;
+    const vy = this.voTo.y - this.vo.y;
+    if (Math.abs(vx) > 0.25 || Math.abs(vy) > 0.25) {
+      const k = 1 - Math.exp(-dt * 9);
+      this.vo = Math.abs(vx) + Math.abs(vy) < 1 ? { ...this.voTo } : { x: this.vo.x + vx * k, y: this.vo.y + vy * k };
+      this.applyView();
+      this.dirty = true;
+    }
     // 传 dt：自动环绕按真实时间转，帧率高低都一样快
     const moved = this.controls.update(dt);
     if (this.lib.pulse(t)) this.dirty = true;
     if (moved) this.dirty = true;
     if (!this.dirty) return;
+    if (moved || this.tween) this.placeFill();
     // 墙的切法跟着镜头
     const camDir = this.camera.position.clone().sub(this.controls.target).setY(0).normalize();
     if (this.house && (this.lastCut == null || camDir.distanceTo(this.lastCut) > 0.02)) {
@@ -1115,6 +1391,7 @@ export class Engine {
 
   dispose() {
     this.running = false;
+    clearTimeout(this._refitT);
     cancelAnimationFrame(this._raf);
     this._unbind?.();
     this.ro.disconnect();
@@ -1250,24 +1527,31 @@ class EnvStudio {
     this.warm = [panel(4, 4, -26, 3, 22), panel(3, 3, 30, 2.5, -20), panel(5, 3, 8, 3, -34)];
   }
 
+  /**
+   * 天穹按 VI 的暖灰打底：天顶 / 地平线只留两成天色（SKY_TINT），地面反光留一半（已经是中性的，不乘白平衡）；
+   * 太阳方向的那团暖晕保留（黄昏时亮面上的高光是金色的），它和太阳一样乘白平衡；几块暖灯面乘室内灯的白平衡。
+   */
   configure(d) {
     const u = this.u;
     const day = 1 - d.night;
-    u.zenith.value.set(d.skyZenith);
-    u.horizon.value.set(d.skyHorizon);
-    u.ground.value.set(d.skyGround);
+    const wb = wbColor(d);
+    neutralColor(d.skyZenith, SKY_TINT, u.zenith.value);
+    neutralColor(d.skyHorizon, SKY_TINT, u.horizon.value);
+    neutralColor(d.skyGround, 0.5, u.ground.value);
     u.sunDir.value.set(d.dir[0], Math.max(0.02, d.dir[1]), d.dir[2]);
-    u.sunCol.value.set(d.sunColor);
+    u.sunCol.value.set(d.sunColor).multiply(wb);
     u.glow.value = d.up ? 0.2 + 0.8 * d.golden : 0.04;
     // 天穹整体亮度：白天的天光 ~0.5（配合太阳，阴影里不死黑、受光面有体积）；夜里是一点月色
     u.gain.value = 0.62 * day + 1.6 * d.night;
-    const white = new THREE.Color(1, 0.985, 0.96);
-    const warmSun = new THREE.Color(d.sunColor);
+    const white = STUDIO_WHITE.clone();
+    const warmSun = new THREE.Color(d.sunColor).multiply(wb);
     const keyC = white.clone().lerp(warmSun, 0.2 * d.golden);
-    this.key.material.color.copy(keyC).multiplyScalar(1.9 * day);
+    // 夜里顶上这块柔光箱变成「被灯照亮的天花板」：很暗的暖白（金属 / 亮面里看得到房间，而不是一片黑）
+    const ceil = new THREE.Color(LAMP.ceiling).multiply(wbColor(d, undefined, 'wbLamp'));
+    this.key.material.color.copy(keyC).multiplyScalar(1.9 * day).add(ceil.multiplyScalar(0.16 * d.lamps));
     this.stripA.material.color.copy(white).multiplyScalar(1.5 * day + 0.06);
     this.stripB.material.color.copy(white).multiplyScalar(1.1 * day + 0.04);
-    const lampC = new THREE.Color(1.0, 0.62, 0.3);
+    const lampC = new THREE.Color(LAMP.lamp).multiply(wbColor(d, undefined, 'wbLamp'));
     for (const w of this.warm) w.material.color.copy(lampC).multiplyScalar(2.2 * d.lamps);
   }
 

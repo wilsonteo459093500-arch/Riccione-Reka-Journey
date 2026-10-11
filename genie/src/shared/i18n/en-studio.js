@@ -2,7 +2,11 @@
 // 英式英语（colour、metre），界面字短；「客人」在工作室里是设计师口中的 client。
 
 export default {
+  // ── 页面标题（品牌一律 BRAND.full 的写法） ──
+  '3D 梦想工作室 · WISH by RICCIONE REKA': '3D Dream Studio · WISH by RICCIONE REKA',
+
   // ── 面板、工具条 ──
+  定个情绪: 'Set the Mood',
   '情绪 · 材质 · 光': 'Mood · Material · Light',
   展开情绪面板: 'Open the mood panel',
   收起面板: 'Hide panel',
@@ -40,6 +44,7 @@ export default {
   '{0} / {1} 座': '{0} / {1} seats',
   '{0} 座': '{0} seats',
   '3D 里还没有这一件': 'Not in the 3D yet',
+  客人没数: 'Not counted',
 
   // ── 示范户型、许愿模式、展厅 ──
   '这是示范户型 —— 点右上角「平面图」上传你的平面图': 'This is a demo layout — tap “Floor plan” at the top right to upload your own',
@@ -60,6 +65,9 @@ export default {
   '柔和阴影、环境光遮蔽、景深都打开。适合电脑和展厅大屏。': 'Soft shadows, ambient occlusion and depth of field, all on. Best for computers and the showroom screen.',
   '画面稍简单，但更顺、更省电。iPad 用久了发烫时选它。': 'A little simpler, but smoother and lighter on power. Choose it if an iPad starts to feel warm.',
   '切换后会重新载入这一页，方案已经自动保存。': 'Switching reloads this page — your project is already saved.',
+  完成: 'Done',
+  '识别模型、接口地址': 'Detection model and endpoint',
+  '改动会自动保存在这台设备上。': 'Changes save automatically on this device.',
 
   // ── 重新生成、分享 ──
   '重新生成 3D？': 'Rebuild the 3D?',
@@ -78,16 +86,20 @@ export default {
     'Drag a swatch from the bottom bar {0} (floor, walls, cabinets, sofa…). That group of surfaces glows gold — let go to apply it. Or tap a surface in the moodboard on the left first, then tap a swatch.',
   '左上角 Cozy / Bright / Moody 一键换整套材质和时间；有许愿档案时，第一个按钮就是客人自己的梦想家配色。客人的雷区会自动避开。':
     'Cozy, Bright and Moody at the top left swap every material and the time of day in one tap. With a Wish Journey profile, the first button is the client’s own Dreamer palette — and their deal-breakers are always kept out.',
-  '右边拖太阳或时间滑杆，太阳从清晨走到深夜；窗上的树影、斜进来的光柱、夜里的灯都会跟着变。':
-    'Drag the sun or the time slider on the right to go from early morning to late night — tree shadows on the windows, slanting shafts of light and the evening lamps all follow.',
+  // 不说「右边」：iPad 竖放、手机上时间滑杆在底部
+  '拖太阳或时间滑杆，太阳从清晨走到深夜；窗上的树影、斜进来的光柱、夜里的灯都会跟着变。':
+    'Drag the sun or the time slider to go from early morning to late night — tree shadows on the windows, slanting shafts of light and the evening lamps all follow.',
   '拖动家具换位置；点一下出现小工具条：旋转、换款、复制、移走。底部「家具」可以加家具（键盘：R 旋转、Delete 移走）。':
     'Drag furniture to move it; tap a piece for a small toolbar: rotate, change style, duplicate, remove. Add pieces from “Furniture” in the bottom bar (keyboard: R rotates, Delete removes).',
   '单指 / 左键拖：转；双指 / 滚轮：缩放；右键 / 三指：平移。视角按钮换角度，墙按钮切换墙的高低。':
     'One finger / left-drag: orbit. Two fingers / scroll: zoom. Right-drag / three fingers: pan. The view button changes the angle; the wall button raises or lowers the walls.',
   '按「平面图」上传图片或 PDF，AI 先认出房间和门窗，你拖一拖校正，按「生成 3D」—— 家具按设计师规则自动摆好，衣柜、鞋柜长度按客人许愿时数出来的量。':
     'Tap “Floor plan” to upload an image or PDF. AI finds the rooms, doors and windows; drag to correct them, then tap “Generate 3D” — furniture is placed by our designers’ rules, with wardrobes and shoe cabinets sized from what the client counted on their Wish Journey.',
-  '「更多」里的演示模式：自动环绕 + 一天的光影循环。展厅大屏直接打开 studio.html?demo=1（只显示示范户型，不会出现客人名字）。相机按钮下载带品牌的高清概念图。':
-    'Demo mode (under “More”) orbits slowly through a full day of light. For the showroom screen, open studio.html?demo=1 — it only ever shows the demo layout, never a client’s name. The camera button saves a branded high-res concept image.',
+  '「更多」里的演示模式：自动环绕 + 一天的光影循环。展厅大屏直接打开 studio.html?demo=1（只显示示范户型，不会出现客人名字；长按左下角 WISH 字标 1.5 秒或按 Esc 退出）。相机按钮下载带品牌的高清概念图。':
+    'Demo mode (under “More”) orbits slowly through a full day of light. For the showroom screen, open studio.html?demo=1 — it only ever shows the demo layout, never a client’s name; press and hold the WISH wordmark (bottom left) for 1.5 s, or press Esc, to exit. The camera button saves a branded high-res concept image.',
+
+  // ── 开始一个空间 ──
+  '图片或 PDF。填了 AI key 会自动识别房间，校正 30 秒就能生成 3D。': 'An image or PDF. With an AI key, the rooms are found for you — check them for 30 seconds and you have 3D.',
 
   // ── 平面图编辑器 ──
   工具: 'Tools',
@@ -110,4 +122,5 @@ export default {
   '底图已放好。用「画房间」沿着墙描一遍；先用量尺校准比例会更准。（设置里填 Gemini key 就能 AI 自动识别）':
     'Underlay in place. Trace the walls with “Draw room” — calibrating the scale with the ruler first makes it more accurate. (Add a Gemini key in Settings for automatic AI detection.)',
   '这台设备读不了 PDF：请更新 iPadOS，或把平面图截图成 JPG / PNG 再上传': 'This device can’t read PDFs — update iPadOS, or upload a JPG / PNG screenshot of the plan instead',
+  '底图已放好。用「画房间」沿着墙描一遍；先用量尺校准比例会更准。': 'Underlay in place. Trace the walls with “Draw room” — calibrating the scale with the ruler first makes it more accurate.',
 };

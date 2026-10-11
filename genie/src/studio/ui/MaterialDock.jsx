@@ -11,6 +11,27 @@ import { CATALOG } from '../engine/furniture.js';
 import { t, L, isEn } from '../../shared/i18n.js';
 import { FurnIcon, Icon, slotName } from './kit.jsx';
 
+/**
+ * 样板下的名字：带「·」或「,」的拆成系列小字 + 名字，窄窄的样板也认得出是哪一片：
+ * 石英石·洞石纹 → 石英石 / 洞石纹；Quartz, travertine look → Quartz / Travertine（完整名字在 title、aria-label 里）。
+ */
+export function chipName(m) {
+  const full = L(m);
+  const hit = /^(.+?)\s*[·,，、]\s*(.+)$/.exec(full);
+  if (!hit) return { name: full };
+  const name = hit[2].replace(/\s+look$/i, '');
+  return { fam: hit[1], name: name.charAt(0).toUpperCase() + name.slice(1) };
+}
+
+function ChipName({ fam, name }) {
+  return (
+    <span className={`chip-name ${fam ? 'has-fam' : ''}`}>
+      {fam && <i>{fam}</i>}
+      <b>{name}</b>
+    </span>
+  );
+}
+
 const ADDABLE = [
   'sofa',
   'armchair',
@@ -171,7 +192,7 @@ export default function MaterialDock({ project, slot, engine, onDrop, onAddItem,
               <span>
                 {t('正在换')} <b>{slotName(SLOT_BY_ID[slot])}</b>
               </span>
-              <button type="button" onClick={onClearSlot} aria-label={t('取消')}>
+              <button type="button" onClick={onClearSlot} aria-label={t('取消')} title={t('取消')}>
                 <Icon name="close" size={14} />
               </button>
             </span>
@@ -180,11 +201,11 @@ export default function MaterialDock({ project, slot, engine, onDrop, onAddItem,
         <div className="dock-row" ref={row}>
           {tab === 'furniture'
             ? ADDABLE.filter((k) => CATALOG[k]).map((k) => (
-                <button key={k} type="button" className="chip fur" onPointerDown={(e) => startDrag(e, { kind: k })} title={t('{0} · 拖进房间或点一下', [L(CATALOG[k])])}>
+                <button key={k} type="button" className="chip fur" onPointerDown={(e) => startDrag(e, { kind: k })} title={t('{0} · 拖进房间或点一下', [L(CATALOG[k])])} aria-label={L(CATALOG[k])}>
                   <span className="sample tile">
                     <FurnIcon kind={k} size={24} />
                   </span>
-                  <b>{L(CATALOG[k])}</b>
+                  <ChipName name={L(CATALOG[k])} />
                 </button>
               ))
             : list.map((m) => {
@@ -196,15 +217,14 @@ export default function MaterialDock({ project, slot, engine, onDrop, onAddItem,
                     type="button"
                     className={`chip sw ${used.has(m.id) ? 'used' : ''} ${cur ? 'cur' : ''} ${dim ? 'dim' : ''}`}
                     onPointerDown={(e) => startDrag(e, { matId: m.id })}
-                    title={isEn() ? m.en : `${m.zh} · ${m.en}`}
+                    title={isEn() ? L(m) : `${m.zh} · ${m.en}`}
                     aria-label={L(m)}
                   >
                     <span className="sample">
                       <img src={swatchURL(m.id, 128) || ''} alt="" draggable={false} />
                       {used.has(m.id) && <i className="used-dot" aria-hidden="true" />}
                     </span>
-                    <b>{L(m)}</b>
-                    {!isEn() && <em>{m.en}</em>}
+                    <ChipName {...chipName(m)} />
                   </button>
                 );
               })}

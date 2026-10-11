@@ -49,11 +49,11 @@ export default function DaylightPanel({ time, thumbs, onTime, onCommit, north = 
 
       <div className="day-grid">
         {DAY_PRESETS.map((p, i) => (
-          <button key={p.id} type="button" className={`day-tile ${isOn(p) ? 'on' : ''}`} onClick={() => pick(p)} aria-pressed={isOn(p)}>
+          <button key={p.id} type="button" className={`day-tile ${isOn(p) ? 'on' : ''}`} onClick={() => pick(p)} aria-pressed={isOn(p)} aria-label={`${nameOf(p)} ${fmtTime(p.hour)}`} title={`${nameOf(p)} · ${fmtTime(p.hour)}`}>
             {thumbs[i] ? <img src={thumbs[i]} alt="" draggable={false} /> : <i />}
+            {/* 小卡片只写时段名（13px 放得下）；准确时间在大字和滑杆上 */}
             <span>
               <b>{nameOf(p)}</b>
-              <em>{fmtTime(p.hour)}</em>
             </span>
           </button>
         ))}

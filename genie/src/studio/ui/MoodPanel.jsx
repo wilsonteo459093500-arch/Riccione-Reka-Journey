@@ -25,7 +25,11 @@ export default function MoodPanel({ project, dreamer, slot, onSlot, onMood, onTo
     sub: t(SUB[m.sub] || m.sub),
     colors: paletteOf(avoid.length ? avoidMaterials(m.materials, avoid).materials : m.materials),
   }));
-  if (dreamer && project.profile) presets.unshift({ id: 'dreamer', name: L(dreamer), sub: `${dreamer.num} · ${project.profile.code}`, colors: dreamer.palette, dreamer: true });
+  if (dreamer && project.profile) {
+    // 和 StudioApp.applyMood('dreamer') 套上去的是同一套：温暖做底 + 客人的材质，再避开雷区 —— 预览和点下去的一样
+    const dm = { ...(MOODS.find((m) => m.id === 'cozy')?.materials || {}), ...(project.profile.materials || {}) };
+    presets.unshift({ id: 'dreamer', name: L(dreamer), sub: `${dreamer.num} · ${project.profile.code}`, colors: avoid.length ? paletteOf(avoidMaterials(dm, avoid).materials) : dreamer.palette, dreamer: true });
+  }
 
   return (
     <aside className="glass panel mood-panel" aria-label={t('情绪 · 材质 · 光')}>
@@ -36,7 +40,7 @@ export default function MoodPanel({ project, dreamer, slot, onSlot, onMood, onTo
         <header className="mp-head">
           <div>
             <p className="eyebrow">{t('情绪 · 材质 · 光')}</p>
-            <h2 className="mp-title">Set the Mood</h2>
+            <h2 className="mp-title">{t('定个情绪')}</h2>
           </div>
           <button type="button" className="ibtn sm" onClick={onToggle} aria-label={t('收起面板')} title={t('收起面板')}>
             <Icon name="panelClose" size={18} />

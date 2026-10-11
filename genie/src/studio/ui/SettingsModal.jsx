@@ -1,25 +1,31 @@
-// 设置：画质（自动 / 高清 / 流畅，存在本机，许愿模式也会用这台设备的选择）+ 语言 + AI 识别平面图用的 Google Gemini key（只存本机浏览器）
+// 设置：画质（自动 / 高清 / 流畅，存在本机，许愿模式也会用这台设备的选择）+ 语言 + AI 识别平面图用的 Google Gemini key（只存本机浏览器）。
+// 一种保存方式：改了就存（像 iOS 的「设置」），底部只有一个「完成」。
 
 import { useState } from 'react';
 import { BRAND } from '../../shared/config.js';
-import { Modal, Seg } from './kit.jsx';
+import { Icon, Modal, Seg } from './kit.jsx';
 import { loadSettings, saveSettings } from '../store.js';
 import LangToggle from '../../shared/LangToggle.jsx';
 import { t, isEn } from '../../shared/i18n.js';
 
+const QUALITY_NOTE = {
+  auto: '电脑、大屏用高清；iPad、手机用流畅（省电、不发烫）。',
+  high: '柔和阴影、环境光遮蔽、景深都打开。适合电脑和展厅大屏。',
+  fast: '画面稍简单，但更顺、更省电。iPad 用久了发烫时选它。',
+};
+
 export default function SettingsModal({ onClose, onQuality, onLang, showLang = true }) {
   const [s, setS] = useState(loadSettings);
-  const [q, setQ] = useState(() => loadSettings().quality || 'auto');
-  const pickQuality = (v) => {
-    setQ(v);
-    // 画质马上存（不用等「保存」），下次打开、许愿模式都沿用
-    saveSettings({ ...loadSettings(), quality: v === 'auto' ? '' : v });
-    onQuality?.(v);
+  const q = s.quality || 'auto';
+  // 每一项改了马上存（key 也是）：没有「取消 / 保存」两套规矩
+  const patch = (p) => {
+    const next = { ...s, ...p };
+    setS(next);
+    saveSettings({ ...loadSettings(), ...next });
   };
-  const QUALITY_NOTE = {
-    auto: '电脑、大屏用高清；iPad、手机用流畅（省电、不发烫）。',
-    high: '柔和阴影、环境光遮蔽、景深都打开。适合电脑和展厅大屏。',
-    fast: '画面稍简单，但更顺、更省电。iPad 用久了发烫时选它。',
+  const pickQuality = (v) => {
+    patch({ quality: v === 'auto' ? '' : v });
+    onQuality?.(v);
   };
   return (
     <Modal eyebrow={isEn() ? BRAND.studioEn : BRAND.studio} title={t('设置')} onClose={onClose}>
@@ -56,33 +62,31 @@ export default function SettingsModal({ onClose, onQuality, onLang, showLang = t
         </p>
         <label className="m-field">
           <span>API key</span>
-          <input type="password" value={s.apiKey} onChange={(e) => setS({ ...s, apiKey: e.target.value.trim() })} placeholder="AIza…" autoComplete="off" spellCheck={false} />
+          <input type="password" value={s.apiKey} onChange={(e) => patch({ apiKey: e.target.value.trim() })} placeholder="AIza…" autoComplete="off" spellCheck={false} />
         </label>
         <details className="m-adv">
-          <summary>{t('高级')}</summary>
+          <summary>
+            <span>{t('高级')}</span>
+            <em>{t('识别模型、接口地址')}</em>
+            <Icon name="down" size={16} className="m-adv-chev" />
+          </summary>
           <label className="m-field">
             <span>{t('识别模型')}</span>
-            <input value={s.visionModel} onChange={(e) => setS({ ...s, visionModel: e.target.value.trim() })} spellCheck={false} />
+            <input value={s.visionModel} onChange={(e) => patch({ visionModel: e.target.value.trim() })} spellCheck={false} />
           </label>
           <label className="m-field">
             <span>{t('接口地址')}</span>
-            <input value={s.baseUrl} onChange={(e) => setS({ ...s, baseUrl: e.target.value.trim() })} spellCheck={false} />
+            <input value={s.baseUrl} onChange={(e) => patch({ baseUrl: e.target.value.trim() })} spellCheck={false} />
           </label>
         </details>
       </section>
-      <div className="m-actions">
-        <button type="button" className="s-btn ghost" onClick={onClose}>
-          {t('取消')}
-        </button>
-        <button
-          type="button"
-          className="s-btn primary"
-          onClick={() => {
-            saveSettings({ ...loadSettings(), ...s, quality: q === 'auto' ? '' : q });
-            onClose();
-          }}
-        >
-          {t('保存')}
+      <div className="m-actions set-foot">
+        <p className="m-fine">
+          <Icon name="check" size={14} />
+          {t('改动会自动保存在这台设备上。')}
+        </p>
+        <button type="button" className="s-btn primary" onClick={onClose}>
+          {t('完成')}
         </button>
       </div>
     </Modal>

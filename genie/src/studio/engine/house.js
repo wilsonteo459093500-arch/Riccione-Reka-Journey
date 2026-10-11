@@ -33,8 +33,7 @@ const VI = {
   ground: () => mixC(PALETTE.ink, PALETTE.plinth, 0.5), // 地面：暖墨，淡进背景
   groundTint: () => mixC(PALETTE.paper, PALETTE.goldL, 0.3), // 地面反光的色调：纸色偏一点金（只取色相）
   line: () => mixC(PALETTE.gold, PALETTE.goldL, 0.2), // 地上嵌的金线
-  foil: PALETTE.goldL, // 烫金字
-  foilGlow: () => col(PALETTE.goldInk), // 烫金字自发光（夜里也读得出）
+  foil: PALETTE.goldL, // 烫金字（浅金箔：底色和自发光都用它，和深色石头拉开对比）
 };
 const SERIF = '"Cormorant Garamond","Noto Serif SC",Georgia,serif';
 const SANS = '-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Noto Sans SC",system-ui,sans-serif';
@@ -114,8 +113,18 @@ function kitFor(lib) {
       .replace('#include <dithering_fragment>', '#include <dithering_fragment>\n{ float gd = length(vGroundXZ - gCenter); float gf = 1.0 - smoothstep(gR0, gR1, gd); gl_FragColor.a *= gf * gf * (3.0 - 2.0 * gf); }');
   };
   ground.customProgramCacheKey = () => 'genie-ground-fade-warm';
-  // 地上的金色细线：不受光（夜里也看得见，像嵌在地上的金属线）
+  // 地上的金色细线：不受光（夜里也看得见，像嵌在地上的金属线）；和地面同一条衰减（gR0 → gR1）一起淡进背景
   const gold = tag(new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }), 'goldline');
+  gold.onBeforeCompile = (s) => {
+    Object.assign(s.uniforms, { gCenter: gU.gCenter, gR0: gU.gR0, gR1: gU.gR1 });
+    s.vertexShader = s.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vGroundXZ;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGroundXZ = (modelMatrix * vec4(transformed, 1.0)).xz;');
+    s.fragmentShader = s.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vGroundXZ;\nuniform vec2 gCenter;\nuniform float gR0;\nuniform float gR1;')
+      .replace('#include <dithering_fragment>', '#include <dithering_fragment>\n{ float gd = length(vGroundXZ - gCenter); float gf = 1.0 - smoothstep(gR0, gR1, gd); gl_FragColor.a *= gf * gf * (3.0 - 2.0 * gf); }');
+  };
+  gold.customProgramCacheKey = () => 'genie-goldline-fade';
   k = { cap, stone, foot, brass, ground, gold };
   KITS.set(lib, k);
   return k;
@@ -320,70 +329,147 @@ function porchEdge(wall, lib, street) {
   return g;
 }
 
-/** 底座上的烫金字：字距拉开的衬线大写 + 细的无衬线副标，金属金箔材质（会反射环境里的柔光箱）。
- *  字太长（客人名字长、英文副标）就整体缩小，永远不出底座。
- *  分辨率按字牌的长宽比算：长边最多 4096、高最多 256 像素 —— 凑近看副标也是清楚的（一张约 3MB 显存）。 */
-function textPlane(text, sub, w, h) {
-  const pxm = Math.min(4096 / w, 256 / h);
+/**
+ * 底座上的烫金字牌：字距拉开的衬线大写（字高 ≈ 底座高的 45%，在 1440 宽的默认视角里读得出来）
+ * + 下面一行无衬线副标（许愿模式里是「示范户型 · 概念示意」）。
+ * 字牌按字的实际宽度裁（不是一整条 9 米的长牌），由调用方放在这一面的正中；字太长就整体缩小，永远不出底座。
+ * 贴图只画白字（当遮罩），颜色和自发光都在材质上：浅金箔（PALETTE.goldL）+ 一点自发光，和深色石头拉开对比。
+ * @param {number} maxW 这一面最多能用多宽（米）
+ * @param {number} faceH 这一面的高度（米）
+ * @returns {THREE.Mesh}（geometry 宽 = 字牌宽；userData.plaque = true，引擎按时段调自发光）
+ */
+function plaque(title, sub, maxW, faceH) {
   const c = document.createElement('canvas');
-  c.width = Math.max(64, Math.round(w * pxm));
-  c.height = Math.max(16, Math.round(h * pxm));
   const ctx = c.getContext('2d');
-  const track = (k) => {
+  const track = (px) => {
     try {
-      ctx.letterSpacing = `${Math.round(k)}px`;
+      ctx.letterSpacing = `${px.toFixed(2)}px`;
     } catch {
       /* 旧浏览器没有 letterSpacing */
     }
   };
+  // 以「米」排版：标题字高（cap height）= 45% 底座高；副标字高 = 24%；行距按副标字高
+  const CAP_T = 0.45;
+  const CAP_S = 0.24;
+  const TRACK_T = 0.14; // em
+  // 副标：大写 / 中文拉开字距；有小写字母的英文句子只微微拉开（小写字距太大会散）
+  const TRACK_S = /[a-z]/.test(sub || '') ? 0.06 : 0.22;
+  const PAD = 0.24; // 字牌左右留白（米）
+  /** 量一种字体的 cap height / em（字体还没到时用常见衬线 / 无衬线的比例） */
+  const capRatio = (font, probe, fallback) => {
+    ctx.font = `${font.replace('{S}', '100px')}`;
+    const m = ctx.measureText(probe);
+    const a = m.actualBoundingBoxAscent;
+    return Number.isFinite(a) && a > 20 && a < 100 ? a / 100 : fallback;
+  };
+  const FT = `600 {S} ${SERIF}`;
+  const FS = `500 {S} ${SANS}`;
+  let layout = null;
+  /** 一行字真正的墨迹高度（em）：中文字比大写字母高、副标的 y / p 有下伸 —— 按真的字排，不会被字牌边裁掉 */
+  const inkBox = (font, text, fallbackA, fallbackD) => {
+    if (!text) return { a: 0, d: 0 };
+    ctx.font = font.replace('{S}', '100px');
+    const m = ctx.measureText(text);
+    const a = m.actualBoundingBoxAscent;
+    const d = m.actualBoundingBoxDescent;
+    return { a: Number.isFinite(a) && a > 0 ? a / 100 : fallbackA, d: Number.isFinite(d) && d >= 0 ? d / 100 : fallbackD };
+  };
+  /** 排版（单位：米）。widthCap：字牌最多多宽 */
+  const measure = (widthCap) => {
+    track(0);
+    const kT = capRatio(FT, 'HWE', 0.64);
+    const kS = capRatio(FS, 'HDE', 0.71);
+    const bT = inkBox(FT, title, 0.9, 0.12);
+    const bS = inkBox(FS, sub, 0.9, 0.22);
+    let fsT = (CAP_T * faceH) / kT; // 米
+    let fsS = (CAP_S * faceH) / kS;
+    let gap = sub ? Math.max(CAP_S * faceH * 0.65, faceH * 0.06) : 0;
+    // 宽度：用 100px 的字量，再按比例换成米（字距是 em 的倍数，跟着一起缩放）
+    const widthAt = (font, text, trackEm) => {
+      if (!text) return 0;
+      ctx.font = font.replace('{S}', '100px');
+      track(100 * trackEm);
+      const w = ctx.measureText(text).width - 100 * trackEm; // 去掉最后一个字后面多出来的字距
+      track(0);
+      return w / 100;
+    };
+    const wT = widthAt(FT, title, TRACK_T);
+    const wS = widthAt(FS, sub, TRACK_S);
+    // 放不下就整体缩：横向不出这一面，纵向墨迹最多占这一面的 90%
+    let k = 1;
+    const need = Math.max(wT * fsT, wS * fsS);
+    if (need + PAD * 2 > widthCap) k = Math.max(0.05, (widthCap - PAD * 2) / need);
+    const block = (bT.a + bT.d) * fsT + (sub ? gap + (bS.a + bS.d) * fsS : 0);
+    if (block * k > faceH * 0.9) k = (faceH * 0.9) / block;
+    fsT *= k;
+    fsS *= k;
+    gap *= k;
+    const w = Math.min(widthCap, Math.max(wT * fsT, wS * fsS) + PAD * 2);
+    // 整块（按墨迹）在这一面上垂直居中
+    const top = (faceH - block * k) / 2;
+    const baseT = top + bT.a * fsT;
+    const baseS = baseT + bT.d * fsT + gap + bS.a * fsS;
+    return { w, fsT, fsS, wT: wT * fsT, wS: wS * fsS, baseT, baseS };
+  };
+  layout = measure(maxW);
+  // 分辨率：每米 ~420 像素（长边最多 4096）—— 2× 截图里副标也清楚
+  const pxm = Math.min(420, 4096 / layout.w);
+  c.width = Math.max(64, Math.round(layout.w * pxm));
+  c.height = Math.max(16, Math.round(faceH * pxm));
   const draw = () => {
+    const L = layout;
     ctx.clearRect(0, 0, c.width, c.height);
-    ctx.fillStyle = VI.foil;
-    ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'white'; // 只是遮罩：颜色在材质上（PALETTE.goldL）
+    ctx.textBaseline = 'alphabetic';
     ctx.textAlign = 'left';
-    const x = c.height * 0.42;
-    const room = c.width - x * 2;
-    let fs = Math.round(c.height * (sub ? 0.4 : 0.46));
-    track(fs * 0.14);
-    ctx.font = `600 ${fs}px ${SERIF}`;
-    const tw = ctx.measureText(text).width;
-    if (tw > room) {
-      fs = Math.floor((fs * room) / tw);
-      track(fs * 0.14);
-      ctx.font = `600 ${fs}px ${SERIF}`;
-    }
-    ctx.fillText(text, x, c.height * (sub ? 0.38 : 0.52));
+    const px = (m) => m * pxm;
+    ctx.font = FT.replace('{S}', `${px(L.fsT).toFixed(2)}px`);
+    track(px(L.fsT) * TRACK_T);
+    ctx.fillText(title, (c.width - px(L.wT)) / 2, px(L.baseT));
     if (sub) {
-      ctx.globalAlpha = 0.74;
-      let ss = Math.round(c.height * 0.4 * 0.36);
-      track(ss * 0.34);
-      ctx.font = `500 ${ss}px ${SANS}`;
-      const sw = ctx.measureText(sub).width;
-      if (sw > room) {
-        ss = Math.floor((ss * room) / sw);
-        track(ss * 0.34);
-        ctx.font = `500 ${ss}px ${SANS}`;
-      }
-      ctx.fillText(sub, x, c.height * 0.8);
+      ctx.globalAlpha = 0.86;
+      ctx.font = FS.replace('{S}', `${px(L.fsS).toFixed(2)}px`);
+      track(px(L.fsS) * TRACK_S);
+      ctx.fillText(sub, (c.width - px(L.wS)) / 2, px(L.baseS));
       ctx.globalAlpha = 1;
     }
+    track(0);
   };
   draw();
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 8;
-  // 网页字体可能晚到：到了就重画一次
+  // 网页字体可能晚到：到了就按真字体重新量、重画一次（字牌宽度不变：只在原来的宽度里重新排）
   if (typeof document !== 'undefined' && document.fonts?.load)
     Promise.all([document.fonts.load('600 40px "Cormorant Garamond"'), document.fonts.load('500 20px "Noto Sans SC"')])
       .then(() => {
+        const w0 = layout.w;
+        layout = { ...measure(w0), w: w0 };
         draw();
         tex.needsUpdate = true;
       })
       .catch(() => {});
-  const mat = new THREE.MeshPhysicalMaterial({ map: tex, transparent: true, roughness: 0.34, metalness: 0.6, clearcoat: 0.4, clearcoatRoughness: 0.25, emissive: VI.foilGlow(), emissiveMap: tex, emissiveIntensity: 0.55, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+  const foil = col(VI.foil);
+  const mat = new THREE.MeshPhysicalMaterial({
+    color: foil,
+    map: tex,
+    transparent: true,
+    roughness: 0.3,
+    metalness: 0.55,
+    clearcoat: 0.4,
+    clearcoatRoughness: 0.22,
+    emissive: foil,
+    emissiveMap: tex,
+    emissiveIntensity: 0.8,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+  });
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(layout.w, faceH), mat);
   m.userData.noAO = true;
   m.userData.ownMaterial = true;
+  m.userData.plaque = true;
   return m;
 }
 
@@ -507,15 +593,19 @@ export function buildHouse(plan, walls, lib, { title, subtitle, ground = true } 
   brass.position.set(bb.cx, top - 0.042, bb.cy);
   brass.userData.noAO = true;
   root.add(brass);
-  const front = textPlane(title, subtitle, Math.min(pw * 0.8, 9), 0.42);
-  front.position.set(bb.cx - pw / 2 + Math.min(pw * 0.8, 9) / 2 + 0.25, y0 + gap + (ph - gap) / 2 - 0.02, bb.cy + pd / 2 + 0.003);
+  // 字牌：正面（+z，默认镜头看着的那一面）居中写标题 + 副标；右侧面（+x）居中写品牌。字高 ≈ 底座高的 45%
+  const faceH = ph - gap;
+  const faceY = y0 + gap + faceH / 2;
+  const front = plaque(title, subtitle, pw * 0.9, faceH);
+  front.position.set(bb.cx, faceY, bb.cy + pd / 2 + 0.003);
   root.add(front);
-  const side = textPlane(BRAND.app, BRAND.by, Math.min(pd * 0.7, 4), 0.42);
-  side.position.set(bb.cx + pw / 2 + 0.003, y0 + gap + (ph - gap) / 2 - 0.02, bb.cy);
+  const side = plaque(BRAND.app, BRAND.by, pd * 0.9, faceH);
+  side.position.set(bb.cx + pw / 2 + 0.003, faceY, bb.cy);
   side.rotation.y = Math.PI / 2;
   root.add(side);
+  const plaques = [front, side];
 
-  // 地面：深色、柔和反光、接影子，离底座越远越淡进背景；上面嵌金色细线
+  // 地面：深色、柔和反光、接影子，离底座越远越淡进背景；上面嵌一道金色细线（离底座 0.4m，跟地面一起淡出）
   if (ground) {
     const R = Math.hypot(pw, pd) / 2;
     const u = K.ground.userData.u;
@@ -528,24 +618,20 @@ export function buildHouse(plan, walls, lib, { title, subtitle, ground = true } 
     g.receiveShadow = true;
     g.renderOrder = -1;
     root.add(g);
-    const pad = 1.4;
-    const X0 = bb.x0 - m - pad;
-    const X1 = bb.x1 + m + pad;
-    const Z0 = bb.y0 - m - pad;
-    const Z1 = bb.y1 + m + pad;
-    const t = 0.011; // 线宽的一半：外框四边互相压住转角，转角是干净的直角
+    const inset = 0.4;
+    const X0 = bb.x0 - m - inset;
+    const X1 = bb.x1 + m + inset;
+    const Z0 = bb.y0 - m - inset;
+    const Z1 = bb.y1 + m + inset;
+    const t = 0.008; // 线宽的一半：四边互相压住转角，转角是干净的直角
+    const a = 0.8;
     const segs = [
-      [X0 - t, Z0, X1 + t, Z0, 0.85, 0.85],
-      [X1, Z0, X1, Z1, 0.85, 0.85],
-      [X1 + t, Z1, X0 - t, Z1, 0.85, 0.85],
-      [X0, Z1, X0, Z0, 0.85, 0.85],
-      // 从转角往外的透视线：越远越淡
-      [X1, Z1, X1 + 3.2, Z1 + 3.2, 0.8, 0],
-      [X0, Z1, X0 - 3.2, Z1 + 3.2, 0.8, 0],
-      [X1, Z0, X1 + 3.2, Z0 - 3.2, 0.8, 0],
-      [X0, Z0, X0 - 3.2, Z0 - 3.2, 0.5, 0],
+      [X0 - t, Z0, X1 + t, Z0, a, a],
+      [X1, Z0, X1, Z1, a, a],
+      [X1 + t, Z1, X0 - t, Z1, a, a],
+      [X0, Z1, X0, Z0, a, a],
     ];
-    const lines = new THREE.Mesh(goldRibbons(segs, y0 + 0.004), K.gold);
+    const lines = new THREE.Mesh(goldRibbons(segs, y0 + 0.004, 0.016), K.gold);
     lines.renderOrder = 1;
     lines.userData.noAO = true;
     root.add(lines);
@@ -578,7 +664,7 @@ export function buildHouse(plan, walls, lib, { title, subtitle, ground = true } 
   root.add(trees);
 
   const rooms = plan.rooms.map((r) => ({ id: r.id, type: r.type, x: r.x + r.w / 2, z: r.y + r.d / 2, area: r.w * r.d, w: r.w, d: r.d }));
-  return { group: root, wallSets, windows, rooms, bounds: bb, wallH: H, trees };
+  return { group: root, wallSets, windows, rooms, bounds: bb, wallH: H, trees, plaques };
 }
 
 /** 墙的切法：'cut' 朝镜头的外墙切低；'down' 全切；'up' 全立 */

@@ -28,7 +28,7 @@ import MaterialDock from './ui/MaterialDock.jsx';
 import Callouts from './ui/Callouts.jsx';
 import Toolbar from './ui/Toolbar.jsx';
 import { HoverTip, SelectionBar } from './ui/ItemUI.jsx';
-import { Icon, FurnIcon, ConfirmSheet, slotName, listSep, roomLabel } from './ui/kit.jsx';
+import { Icon, FurnIcon, ConfirmSheet, slotName, listSep, roomLabel, useMedia } from './ui/kit.jsx';
 import StartModal from './ui/StartModal.jsx';
 import ShareModal from './ui/ShareModal.jsx';
 import HelpModal from './ui/HelpModal.jsx';
@@ -64,7 +64,14 @@ function rowLabel(r, plan) {
   if (r.key.startsWith('wardrobe:')) return t('{0}衣柜', [roomLabel(plan.rooms.find((x) => x.id === r.room))]);
   return r.key;
 }
+/** 客人许愿时没数这一项（target ≤ 0）：不画「x / 0」和满格绿条，只写摆了多少 + 「客人没数」 */
+const notCounted = (r) => !(r.target > 0);
 function rowValue(r) {
+  if (notCounted(r)) {
+    if (r.unit === 'mm') return fmtLen(r.placed);
+    if (r.unit === 'seats') return t('{0} 座', [r.placed]);
+    return String(r.placed);
+  }
   if (r.unit === 'mm') return `${fmtLen(r.placed)} / ${fmtLen(r.target)}`;
   if (r.unit === 'seats') return t('{0} / {1} 座', [r.placed, r.target]);
   return `${r.placed} / ${r.target}`;
@@ -112,26 +119,31 @@ function StorageCheck({ rows, plan, talk, onPick }) {
           <p className="storage-note">{t('客人许愿时数的量 vs 3D 里自动摆进去的。点一行，选中那件家具。')}</p>
           <ul className="storage-rows">
             {rows.map((r) => {
-              const pct = r.target > 0 ? Math.min(1, r.placed / r.target) : 1;
+              const free = notCounted(r);
+              const pct = free ? 0 : Math.min(1, r.placed / r.target);
               const ok = r.gap <= 0;
+              const state = free && ok ? 'free' : ok ? 'ok' : 'short';
               return (
                 <li key={r.key}>
-                  <button type="button" className={`srow ${ok ? 'ok' : 'short'}`} onClick={() => onPick(r)}>
+                  <button type="button" className={`srow ${state}`} onClick={() => onPick(r)}>
                     <span className="srow-ico">
                       <FurnIcon kind={ROW_ICON[r.kind] || r.kind} size={17} stroke={1.6} />
                     </span>
                     <span className="srow-main">
                       <span className="srow-top">
                         <b>{rowLabel(r, plan)}</b>
-                        <Icon name={ok ? 'ok' : 'warn'} size={16} className="srow-state" />
+                        <Icon name={state === 'free' ? 'info' : ok ? 'ok' : 'warn'} size={16} className="srow-state" />
                       </span>
                       <span className="srow-meter">
-                        <span className="srow-bar">
-                          <i style={{ width: `${Math.round(pct * 100)}%` }} />
-                        </span>
+                        {!free && (
+                          <span className="srow-bar">
+                            <i style={{ width: `${Math.round(pct * 100)}%` }} />
+                          </span>
+                        )}
                         <span className="srow-val">{rowValue(r)}</span>
                       </span>
-                      {r.need != null && r.need > 0 && r.unit !== 'count' && <span className="srow-need">{r.unit === 'mm' ? t('客人数的：{0}', [fmtLen(r.need)]) : t('想要 {0} 座', [r.need])}</span>}
+                      {free && <span className="srow-need">{t('客人没数')}</span>}
+                      {!free && r.need != null && r.need > 0 && r.unit !== 'count' && <span className="srow-need">{r.unit === 'mm' ? t('客人数的：{0}', [fmtLen(r.need)]) : t('想要 {0} 座', [r.need])}</span>}
                       {/* 件数类（储物间、电器高柜、神台）的建议本身就说清楚缺什么，不再加「还差 1」 */}
                       {!ok && r.hint && <span className="srow-hint">{r.unit === 'count' ? t(r.hint) : t('还差 {0}。{1}', [rowGap(r), t(r.hint)])}</span>}
                     </span>
@@ -194,6 +206,7 @@ export default function StudioApp() {
   const [bpLink, setBpLink] = useState('');
   const [ctx, setCtx] = useState(null); // WebGL：null | 'lost' | 'restored'
   const [ask, setAsk] = useState(null); // 纸色确认框
+  const phone = useMedia('(max-width: 600px)'); // 手机：选择条停在底部（时间滑杆上面），不浮在模型中间
   const toastTimer = useRef(0);
   const toastRaf = useRef(0);
 
@@ -662,7 +675,7 @@ export default function StudioApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
-    document.title = SHOWROOM ? BRAND.full : t('3D 梦想工作室 · WISH by Riccione Reka');
+    document.title = SHOWROOM ? BRAND.full : `${t('3D 梦想工作室')} · ${BRAND.full}`;
   }, []);
 
   useEffect(() => {
@@ -702,6 +715,25 @@ export default function StudioApp() {
     else flash(r.hint ? t(r.hint) : t('3D 里还没有这一件'), 4200);
   };
 
+  // 选择条：宽屏浮在家具上方（只在两块面板之间）；手机停在底部那一列、时间滑杆正上方
+  const selBar = (docked) =>
+    selItem &&
+    (docked || selPos) &&
+    !demo && (
+      <SelectionBar
+        key={docked ? 'dock' : 'float'}
+        docked={docked}
+        item={selItem}
+        pos={selPos}
+        materials={project.materials}
+        onRotate={() => rotateItem(selItem.id)}
+        onRemove={() => removeItem(selItem.id)}
+        onDuplicate={() => duplicateItem(selItem.id)}
+        onVariant={CATALOG[selItem.kind]?.variants ? () => variantItem(selItem.id) : null}
+        onClose={() => engine.current.select(null)}
+      />
+    );
+
   const chip =
     profile && dreamer ? (
       <a className="dreamer-chip" href={bpLink || '#'} target={WISH ? '_self' : '_blank'} rel="noopener" title={t('打开梦想家蓝图')}>
@@ -739,7 +771,7 @@ export default function StudioApp() {
 
       {ready && project && (
         <>
-          {labels && !demo && <Callouts anchors={anchors} materials={project.materials} onPick={(s) => setSlot((cur) => (cur === s ? null : s))} activeSlot={slot} />}
+          {labels && !demo && <Callouts anchors={anchors} materials={project.materials} onPick={(s) => setSlot((cur) => (cur === s ? null : s))} activeSlot={slot} panels={panels} />}
 
           <MoodPanel
             project={project}
@@ -811,23 +843,13 @@ export default function StudioApp() {
                 <span>{t('示范户型 · 设计师会换成你家的平面图')}</span>
               </div>
             )}
+            {phone && selBar(true)}
             <DaylightPanel time={project.time} thumbs={thumbs} onTime={setTime} onCommit={saveNow} north={project.plan.north || 0} />
             <MaterialDock project={project} slot={slot} engine={engine} onDrop={dropMaterial} onAddItem={addItem} onClearSlot={() => setSlot(null)} />
           </div>
 
-          {hover && !selected && !demo && <HoverTip hover={hover} materials={project.materials} />}
-          {selItem && selPos && !demo && (
-            <SelectionBar
-              item={selItem}
-              pos={selPos}
-              materials={project.materials}
-              onRotate={() => rotateItem(selItem.id)}
-              onRemove={() => removeItem(selItem.id)}
-              onDuplicate={() => duplicateItem(selItem.id)}
-              onVariant={CATALOG[selItem.kind]?.variants ? () => variantItem(selItem.id) : null}
-              onClose={() => engine.current.select(null)}
-            />
-          )}
+          {hover && !selected && !demo && !phone && <HoverTip hover={hover} materials={project.materials} />}
+          {!phone && selBar(false)}
 
           <footer className="foot">
             <button
@@ -867,7 +889,8 @@ export default function StudioApp() {
       {modal === 'help' && <HelpModal onClose={() => setModal(null)} />}
       {modal === 'settings' && <SettingsModal onClose={() => setModal(null)} onQuality={onQuality} onLang={switchLang} showLang={!WISH} />}
 
-      {planDraft && <PlanEditor initial={planDraft.plan} underlay={planDraft.underlay} autoUpload={planDraft.autoUpload} onCancel={() => setPlanDraft(null)} onApply={applyPlan} onSettings={() => setModal('settings')} />}
+      {/* 许愿模式不给设置入口：客人不能从「平面图 → AI 识别」走到 API key（工具条在许愿模式也藏了「设置」） */}
+      {planDraft && <PlanEditor initial={planDraft.plan} underlay={planDraft.underlay} autoUpload={planDraft.autoUpload} onCancel={() => setPlanDraft(null)} onApply={applyPlan} onSettings={WISH ? undefined : () => setModal('settings')} />}
 
       {ask && <ConfirmSheet title={ask.title} body={ask.body} ok={ask.ok} onOk={() => ask.done(true)} onCancel={() => ask.done(false)} />}
 

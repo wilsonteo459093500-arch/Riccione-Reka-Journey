@@ -17,6 +17,19 @@ function MiniPlan({ plan }) {
   );
 }
 
+/**
+ * 模板卡片的第二行：中文模式放英文全名（Condo · 3R2B · ~1,100 sqft）；
+ * 英文模式标题已经是英文了，就只放标题里还没说的那几段（3R2B · ~1,100 sqft），两种语言都看得到面积。
+ */
+function tplSub(tp) {
+  if (!isEn()) return tp.en || '';
+  const title = L(tp).toLowerCase();
+  return String(tp.en || '')
+    .split(' · ')
+    .filter((seg) => seg && !title.includes(seg.toLowerCase()))
+    .join(' · ');
+}
+
 const when = (iso) => {
   try {
     return new Date(iso).toLocaleString(isEn() ? 'en-GB' : 'zh-CN', { month: isEn() ? 'short' : 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -44,7 +57,7 @@ export default function StartModal({ profile, projects, onTemplate, onUpload, on
             <Icon name="upload" size={22} />
           </span>
           <b>{t('上传平面图')}</b>
-          <em>{t('图片 / PDF · AI 自动识别房间（有 key 时），30 秒校正后生成 3D')}</em>
+          <em>{t('图片或 PDF。填了 AI key 会自动识别房间，校正 30 秒就能生成 3D。')}</em>
         </button>
         <button type="button" className="start-card" onClick={onDraw}>
           <span className="start-ico">
@@ -56,15 +69,18 @@ export default function StartModal({ profile, projects, onTemplate, onUpload, on
       </div>
       <h3 className="start-h">{t('户型模板（马上就有）')}</h3>
       <div className="start-templates">
-        {TEMPLATES.map((tp) => (
-          <button key={tp.id} type="button" className="tpl" onClick={() => onTemplate(tp.id)}>
-            <MiniPlan plan={tp.plan} />
-            <span>
-              <b>{L(tp)}</b>
-              {!isEn() && <em>{tp.en}</em>}
-            </span>
-          </button>
-        ))}
+        {TEMPLATES.map((tp) => {
+          const sub = tplSub(tp);
+          return (
+            <button key={tp.id} type="button" className="tpl" onClick={() => onTemplate(tp.id)}>
+              <MiniPlan plan={tp.plan} />
+              <span>
+                <b>{L(tp)}</b>
+                {sub && <em>{sub}</em>}
+              </span>
+            </button>
+          );
+        })}
       </div>
       {projects.length > 0 && (
         <>

@@ -1,17 +1,47 @@
-// 家具的悬停提示 + 选中后的小工具条（纸色玻璃胶囊，按钮 44px）
+// 家具的悬停提示 + 选中后的小工具条（纸色玻璃胶囊，按钮 ≥ 44px）。
+// 浮在画布上时：量自己的真实宽度，只在「两块面板之间」那段空着的画布里移动（不钻到情绪面板 / 日光面板下面）。
+// 手机（≤ 600px）：工具条不浮在模型中间，而是停在底部、时间滑杆正上方（docked，由 StudioApp 放进底部那一列）。
 
+import { useLayoutEffect, useRef, useState } from 'react';
 import { CATALOG } from '../engine/furniture.js';
 import { MAT_BY_ID } from '../../shared/materials.js';
 import { t, L } from '../../shared/i18n.js';
-import { FurnIcon, Icon } from './kit.jsx';
+import { FurnIcon, Icon, freeBand, toolbarBottom } from './kit.jsx';
+
+/** 量元素的宽高（语言、内容变了会变）；只在真的变了时才重画 */
+function useBox(initial) {
+  const ref = useRef(null);
+  const [box, setBox] = useState(initial);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const measure = () => {
+      const w = el.offsetWidth;
+      const h = el.offsetHeight;
+      setBox((b) => (Math.abs(b.w - w) > 0.5 || Math.abs(b.h - h) > 0.5 ? { w, h } : b));
+    };
+    measure();
+    if (typeof ResizeObserver !== 'function') return undefined;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, box];
+}
 
 export function HoverTip({ hover, materials }) {
+  const [ref, box] = useBox({ w: 220, h: 46 });
   const def = CATALOG[hover.item?.kind];
   if (!def) return null;
   const m = MAT_BY_ID[materials[def.slot]];
-  const x = Math.min(hover.x + 16, innerWidth - 240);
+  const top = hover.y - 10;
+  const { L: lo, R: hi } = freeBand(top, top + box.h);
+  // 默认在光标右边；右边放不下就翻到左边，再夹在空着的那段里
+  let x = hover.x + 16;
+  if (x + box.w > hi) x = hover.x - 16 - box.w;
+  x = Math.max(lo, Math.min(hi - box.w, x));
   return (
-    <div className="glass hovertip" style={{ left: x, top: hover.y - 10 }}>
+    <div ref={ref} className="glass hovertip" style={{ left: x, top }}>
       <span className="hovertip-ico">
         <FurnIcon kind={hover.item.kind} size={18} stroke={1.6} />
       </span>
@@ -26,13 +56,20 @@ export function HoverTip({ hover, materials }) {
   );
 }
 
-export function SelectionBar({ item, pos, materials, onRotate, onRemove, onDuplicate, onVariant, onClose }) {
+export function SelectionBar({ item, pos, materials, onRotate, onRemove, onDuplicate, onVariant, onClose, docked = false }) {
+  const [ref, box] = useBox({ w: 380, h: 60 });
   const def = CATALOG[item.kind];
   const m = MAT_BY_ID[materials[def?.slot]];
-  const w = 360;
-  const left = Math.max(w / 2 + 8, Math.min(innerWidth - w / 2 - 8, pos.x));
+  let style;
+  if (!docked && pos) {
+    // 条在家具上方 14px；不高过工具条；左右只在两块面板之间
+    const top = Math.max(toolbarBottom() + 10, pos.y - 14 - box.h);
+    const { L: lo, R: hi } = freeBand(top, top + box.h);
+    const left = Math.max(lo, Math.min(hi - box.w, pos.x - box.w / 2));
+    style = { left, top };
+  }
   return (
-    <div className="glass selbar" style={{ left, top: Math.max(132, pos.y) }} role="toolbar" aria-label={L(def)}>
+    <div ref={ref} className={`glass selbar ${docked ? 'docked' : ''}`} style={style} role="toolbar" aria-label={L(def)}>
       <div className="selbar-name">
         <FurnIcon kind={item.kind} size={18} stroke={1.6} />
         <span>
@@ -42,26 +79,26 @@ export function SelectionBar({ item, pos, materials, onRotate, onRemove, onDupli
       </div>
       <span className="selbar-sep" />
       {!def?.wall && (
-        <button type="button" onClick={onRotate} title={t('旋转 90° (R)')}>
+        <button type="button" onClick={onRotate} title={t('旋转 90° (R)')} aria-label={t('旋转')}>
           <Icon name="rotate" size={18} />
           <span>{t('旋转')}</span>
         </button>
       )}
       {onVariant && (
-        <button type="button" onClick={onVariant} title={t('换一款')}>
+        <button type="button" onClick={onVariant} title={t('换一款')} aria-label={t('换款')}>
           <Icon name="swap" size={18} />
           <span>{t('换款')}</span>
         </button>
       )}
-      <button type="button" onClick={onDuplicate} title={t('复制')}>
+      <button type="button" onClick={onDuplicate} title={t('复制')} aria-label={t('复制')}>
         <Icon name="copy" size={18} />
         <span>{t('复制')}</span>
       </button>
-      <button type="button" className="danger" onClick={onRemove} title={t('移走 (Delete)')}>
+      <button type="button" className="danger" onClick={onRemove} title={t('移走 (Delete)')} aria-label={t('移走')}>
         <Icon name="trash" size={18} />
         <span>{t('移走')}</span>
       </button>
-      <button type="button" className="x" onClick={onClose} aria-label={t('取消选中')}>
+      <button type="button" className="x" onClick={onClose} aria-label={t('取消选中')} title={t('取消选中')}>
         <Icon name="close" size={16} />
       </button>
     </div>

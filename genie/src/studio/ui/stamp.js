@@ -85,12 +85,13 @@ export async function stampSnapshot(blob, project) {
   ctx.fillText(BRAND.app, c.width - pad, c.height - pad - 30 * s);
   const right = Math.max(subW, ctx.measureText(BRAND.app).width);
 
-  // 左下：为谁定制 · 梦想家牌（当前语言），下面一行是主要材质
+  // 左下：为谁定制 · 梦想家牌（当前语言），下面一行是主要材质。
+  // 梦想家的罗马数字不放进标题（英文里「Peggy · I The Zen Nester」的 I 读起来像「我」）
   ctx.textAlign = 'left';
   const maxW = c.width - pad * 3 - right;
   const d = project.profile && DREAMER_BY_CODE[project.profile.code];
-  const who = project.profile?.name ? `${project.profile.name} · ` : '';
-  const title = d ? `${who}${d.num} ${L(d)}` : t(project.name || BRAND.full);
+  const name = String(project.profile?.name ?? '').trim();
+  const title = d ? (name ? `${name} · ${L(d)}` : L(d)) : t(project.name || BRAND.full);
   const mats = ['floor', 'walls', 'cabinetry', 'upholstery', 'countertop']
     .map((id) => MAT_BY_ID[project.materials?.[id]])
     .filter(Boolean)

@@ -1,6 +1,7 @@
-// 3D 梦想工作室的小零件：线性图标（lucide，统一 1.75 线宽 —— 不用表情当图标）、图标按钮、分段控件、弹窗、确认框、名字。
+// 3D 梦想工作室的小零件：线性图标（lucide，统一 1.75 线宽 —— 不用表情当图标）、图标按钮、分段控件、弹窗、确认框、名字，
+// 还有「画布上还空着哪一段」（浮在 3D 上的标签、选择条要躲开左右两块面板）。
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Archive,
   Armchair,
@@ -304,3 +305,51 @@ export function ConfirmSheet({ title, body, ok, cancel, danger, onOk, onCancel }
 
 /** 列表分隔：中文「、」英文「, 」 */
 export const listSep = () => (isEn() ? ', ' : '、');
+
+/** 媒体查询（窄屏换布局用）；旧 Safari 只有 addListener */
+export function useMedia(query) {
+  const get = () => (typeof matchMedia === 'function' ? matchMedia(query).matches : false);
+  const [hit, setHit] = useState(get);
+  useEffect(() => {
+    if (typeof matchMedia !== 'function') return undefined;
+    const mq = matchMedia(query);
+    const on = () => setHit(mq.matches);
+    on();
+    if (mq.addEventListener) mq.addEventListener('change', on);
+    else mq.addListener?.(on);
+    return () => (mq.removeEventListener ? mq.removeEventListener('change', on) : mq.removeListener?.(on));
+  }, [query]);
+  return hit;
+}
+
+// 浮在画布上的面板：左边情绪面板、右上日光面板（宽屏）、右上工具条。横跨半个屏幕以上的（窄屏底部那一列）不算 ——
+// 那种由上下方向的限制处理。
+const OBSTACLES = ['.mood-panel', '.day-panel', '.toolbar'];
+
+/**
+ * 画布上 [y0, y1] 这一条横带里，左右还空着的范围 { L, R }（离面板至少 pad）。
+ * 只看和这条带子上下重叠的面板；面板收起、在别处时自然不挡。
+ */
+export function freeBand(y0, y1, pad = 12) {
+  const W = typeof innerWidth === 'number' ? innerWidth : 1440;
+  let L = pad;
+  let R = W - pad;
+  if (typeof document === 'undefined') return { L, R };
+  for (const sel of OBSTACLES) {
+    const el = document.querySelector(sel);
+    if (!el) continue;
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height || r.width > W * 0.5 || r.bottom <= y0 || r.top >= y1) continue;
+    if (getComputedStyle(el).opacity === '0') continue;
+    if (r.left + r.width / 2 < W / 2) L = Math.max(L, r.right + pad);
+    else R = Math.min(R, r.left - pad);
+  }
+  return { L, R };
+}
+
+/** 工具条底边（选择条不能钻到它下面）；没有工具条时按 16 + 52 算 */
+export function toolbarBottom() {
+  if (typeof document === 'undefined') return 68;
+  const r = document.querySelector('.toolbar')?.getBoundingClientRect();
+  return r && r.height ? r.bottom : 68;
+}

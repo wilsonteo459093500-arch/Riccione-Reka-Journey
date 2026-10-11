@@ -1,7 +1,8 @@
 // 24 小时光影（马来西亚：约 7:10 日出、19:20 日落，太阳几乎从头顶划过）。纯函数。
 // 输出：太阳方向（考虑房子朝向 north）、颜色、强度；天空（环境光 IBL 的天穹：天顶 / 地平线 / 地面反光）；
-// 窗口进来的天光；背景（虚化的室内照片：窗外的天色 + 房间暗部）；室内灯（0 白天 → 1 深夜）；曝光。
-// 色调跟着溪岸 SAIL × 大自然：白天中性偏暖、黄昏琥珀、夜里林间暮色（深绿蓝）+ 暖灯。
+// 窗口进来的天光；背景（虚化的室内照片：窗外的天色 + 房间暗部）；室内灯（0 白天 → 1 深夜）；曝光；
+// 白平衡（像相机：按主光部分校正，材质不被染色）；夜里的补光（苔绿石板色，房子的轮廓不沉进黑背景）。
+// 色调跟着 VI「晨光溪岸」：白天中性偏暖、黄昏琥珀 + 暖灰天顶、夜里苔绿石板色（不是藏青 / 紫）+ 暖灯。
 
 const SUNRISE = 7.15;
 const SUNSET = 19.3;
@@ -14,20 +15,27 @@ export const LAMP = {
   beam: '#FFC88A', // 光柱的初值（之后跟着太阳的颜色）
 };
 
+// 月光：银灰里带一点苔绿（VI 的夜色），不是蓝 —— 内容色（光照），不随 VI 换色
+export const MOON = '#BCC5BF';
+// 夜里的补光（像展台上方一盏很弱的冷白灯）：苔绿石板色，只为了让墙头、底座、地面的轮廓读得出来
+export const NIGHT_FILL = '#9DB0A8';
+
 // hour, zenith, horizon, ground(地面反光), sun, bgSky(背景窗外), bgRoom(背景室内暗部)
-// 内容色（光照），不随 VI 换色
+// 内容色（光照），不随 VI 换色。
+// 黄昏 / 夜里 / 月亮都是 VI 的低饱和色（饱和度 ≤ .25）：夜 = 苔绿石板 #1E2621–#2E3A36，黄昏天顶 = 暖灰（不是蓝紫）。
+// 白天天顶还是天空的蓝 —— 只用在背景窗外的渐变上；环境光 / 半球光里天色最多占 20%（Engine 里中和成暖灰）。
 const KEYS = [
-  [0, '#1A2A44', '#2E4050', '#141814', '#9FB4D8', '#1E2C33', '#0E1311'],
-  [5.6, '#22304C', '#46505E', '#181814', '#A9BCDD', '#2C3640', '#121613'],
-  [6.6, '#4A6488', '#E6B694', '#3C342C', '#FFB890', '#C9A48E', '#2A2824'],
+  [0, '#1E2621', '#2B3430', '#141814', MOON, '#1F2723', '#0E1311'],
+  [5.6, '#262E2A', '#4A4A45', '#181814', MOON, '#2C3330', '#121613'],
+  [6.6, '#59625E', '#E2BC9E', '#3C342C', '#FFB890', '#C9A48E', '#2A2824'],
   [7.6, '#6486AE', '#F0DCC8', '#5C5446', '#FFD9B4', '#DCD2C4', '#383632'],
   [10, '#6E91BA', '#E4E9EC', '#686052', '#FFF0DC', '#E1E4E0', '#45443F'],
   [13, '#7297C0', '#ECEFF0', '#6C6456', '#FFF6EA', '#E9EBE7', '#4A4945'],
   [16.4, '#6C8CB4', '#EEDFCC', '#685C4C', '#FFE3C0', '#E4D8C6', '#44403A'],
-  [18.2, '#56709A', '#F0B07C', '#544636', '#FFAA6A', '#E4B288', '#33302C'],
-  [19.2, '#34446A', '#C47C66', '#2E2822', '#FF8A58', '#9C6E62', '#23201D'],
-  [20.2, '#1C2A44', '#3A4656', '#151713', '#9FB4D8', '#26323C', '#111512'],
-  [24, '#1A2A44', '#2E4050', '#141814', '#9FB4D8', '#1E2C33', '#0E1311'],
+  [18.2, '#6A675F', '#F0B07C', '#544636', '#FFAA6A', '#E4B288', '#33302C'],
+  [19.2, '#3D403B', '#B4876A', '#2E2822', '#FF8A58', '#8E7362', '#23201D'],
+  [20.2, '#222B27', '#363E3A', '#151713', MOON, '#26302B', '#111512'],
+  [24, '#1E2621', '#2B3430', '#141814', MOON, '#1F2723', '#0E1311'],
 ];
 
 function hexToRgb(h) {
@@ -40,6 +48,28 @@ function mixHex(a, b, t) {
   const c = A.map((v, i) => Math.round(v + (B[i] - v) * t));
   return '#' + c.map((v) => v.toString(16).padStart(2, '0')).join('');
 }
+const toLin = (v) => {
+  const c = v / 255;
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+};
+/** 线性空间、亮度归一成 1 的色度（只要「什么颜色」，不要「多亮」） */
+function chroma(hex) {
+  const c = hexToRgb(hex).map(toLin);
+  const l = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2] || 1;
+  return c.map((v) => v / l);
+}
+
+/**
+ * 白平衡增益（线性 RGB）：把光源的颜色往白校正 adapt 那么多（0 = 不校正，1 = 完全变白），按亮度归一（明暗不变）。
+ */
+function gains(hex, adapt) {
+  const ill = chroma(hex);
+  const g = ill.map((v) => 1 / Math.max(0.2, 1 + (v - 1) * adapt));
+  const l = 0.2126 * g[0] + 0.7152 * g[1] + 0.0722 * g[2] || 1;
+  return g.map((v) => +(v / l).toFixed(4));
+}
+// 室内灯按 ~2700K 校正八成：灯罩、灯泡本身（自发光）还是暖的，照到的材质接近本色（海军蓝不会变紫、亚麻不会变橙）
+const WB_LAMP = gains(LAMP.lamp, 0.8);
 
 function keyAt(h) {
   for (let i = 0; i < KEYS.length - 1; i++) {
@@ -84,13 +114,23 @@ export function daylight(hour, northDeg = 0) {
   // 黄金时段（日出后 / 日落前）：光更暖、更斜，体积光最明显
   const golden = up ? Math.max(1 - smooth(0.0, 0.16, f), smooth(0.8, 0.98, f)) * dayFade : 0;
   const lamps = Math.max(night, evening * 0.55);
+  const sunC = up ? sunColor : MOON;
   return {
     hour: h,
     dir,
     up,
     elevDeg,
-    sunColor: up ? sunColor : '#9FB4D8',
+    sunColor: sunC,
     sunIntensity,
+    // 白平衡（像室内摄影，线性 RGB 增益）。按光源分两组，各自校正：
+    // wb —— 太阳（和它在环境光里的暖晕、光柱）：白天几乎不动；黄金时段校正一半（阳光照到的地方仍是金色，但材质不被染橙、不发紫）；
+    //       夜里不校正（月光、夜色本来就是 VI 的苔绿石板色，校正反而会变蓝）。
+    // wbLamp —— 室内灯（和环境光里的几块暖灯面）：按灯的颜色校正八成。
+    wb: up ? gains(sunC, (0.42 + 0.08 * golden) * dayFade) : [1, 1, 1],
+    wbLamp: WB_LAMP,
+    // 夜里的补光：苔绿石板色、很弱、不投影（墙头 / 底座 / 地面的轮廓读得出来；灯仍然是主角）
+    fillColor: NIGHT_FILL,
+    fillIntensity: 0.22 * night,
     // 半球光只留一点「地面反光」的暖意，主要的填充光交给 IBL（有方向，体积感更好）
     hemiSky: zenith,
     hemiGround: ground,
@@ -111,8 +151,8 @@ export function daylight(hour, northDeg = 0) {
     golden,
     night,
     lamps,
-    // 曝光跟着时段：白天略收、夜里略提（PBR Neutral 色调映射下颜色基本不偏）
-    exposure: 1.0 + 0.14 * night - 0.06 * dayFade * arc + 0.14 * golden,
+    // 曝光跟着时段：白天略收、黄金时段略提；夜里再提 ~0.3 EV（房子和底座不沉进黑背景，灯仍然最亮）
+    exposure: (1.0 + 0.14 * night - 0.06 * dayFade * arc + 0.2 * golden) * 2 ** (0.3 * night),
     beams: up ? dayFade * (1 - smooth(25, 55, elevDeg)) : 0,
     // 环境贴图缓存键：每半小时一档（只有跨档才重建 PMREM）
     envKey: `${Math.round(h * 2) / 2}|${Math.round(northDeg)}`,
