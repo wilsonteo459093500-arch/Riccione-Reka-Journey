@@ -605,6 +605,11 @@ html[lang='en'] .h-title {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+.nav-back span,
+.brand span,
+.brand b {
+  white-space: nowrap;
+}
 .nav-back:disabled {
   visibility: hidden;
 }
@@ -2854,6 +2859,12 @@ html[lang='en'] .bp-farewell {
   }
   .wish {
     min-height: 92px;
+  }
+}
+
+@media (max-width: 960px) {
+  .tb-brand {
+    display: none;
   }
 }
 

@@ -376,7 +376,7 @@ function Play({ onDone, onRestart }) {
   }, [dusk]);
 
   return (
-    <div className={`qz ${dusk ? 'dusk' : 'morning'} step-${kind} mode-${chapter?.mode || 'none'} ${step.id === 'welcome' ? 'is-cover' : ''}`}>
+    <div className={`qz ${dusk ? 'dusk' : 'morning'} qz-${kind} mode-${chapter?.mode || 'none'} ${step.id === 'welcome' ? 'is-cover' : ''}`}>
       <Scenery scene={scene} next={nextScene} />
       {step.id !== 'welcome' && (
         <TopBar
