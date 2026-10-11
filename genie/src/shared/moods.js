@@ -118,12 +118,16 @@ const LIGHT_PHRASE = (h) => {
 };
 
 const FEEL = {
-  cozy: { adj: '温暖而柔和', word: '很 cozy' },
+  cozy: { adj: '温暖而柔和', word: '很温馨' },
   bright: { adj: '通透又清爽', word: '很明亮' },
   moody: { adj: '深邃有态度', word: '很沉浸' },
 };
 
-/** 「砂洗石灰墙面、烟熏橡地板，加上低垂的金色夕阳：温暖而柔和。整体读起来 —— 很 cozy。」（跟着当前语言） */
+// 英文句子中间的材质名小写（"smoked oak floors"）；专有名词（Carrara、Nero Marquina…）不动
+const PROPER = /^(Carrara|Calacatta|Nero|Verde|Zellige)\b/;
+const midSentence = (s) => (isEn() && !PROPER.test(s) && !/\s[A-Z]/.test(s) ? s.charAt(0).toLowerCase() + s.slice(1) : s);
+
+/** 「砂洗石灰墙面、烟熏橡地板，加上低垂的金色夕阳：温暖而柔和。整体读起来 —— 很温馨。」（跟着当前语言） */
 export function moodSentence(materials, hour) {
   const meter = moodMeter(materials, hour);
   const top = Object.entries(meter).sort((a, b) => b[1] - a[1])[0][0];
@@ -131,10 +135,10 @@ export function moodSentence(materials, hour) {
   const floor = MAT_BY_ID[materials?.floor];
   const parts = [];
   if (wall) parts.push(t('{0}墙面', [L(wall)]));
-  if (floor) parts.push(t('{0}地板', [L(floor)]));
+  if (floor) parts.push(t('{0}地板', [parts.length ? midSentence(L(floor)) : L(floor)]));
   return {
     top,
-    text: t('{0}，加上{1}：{2}。整体读起来 —— {3}。', [parts.join(isEn() ? ', ' : '、'), t(LIGHT_PHRASE(hour)), t(FEEL[top].adj), t(FEEL[top].word)]),
+    text: t('{0}，加上{1}：{2}。整体读起来 —— {3}。', [parts.join(isEn() ? ' and ' : '、'), t(LIGHT_PHRASE(hour)), t(FEEL[top].adj), t(FEEL[top].word)]),
   };
 }
 

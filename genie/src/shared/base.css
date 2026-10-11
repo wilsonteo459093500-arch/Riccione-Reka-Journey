@@ -80,7 +80,7 @@
 
   /* 3D 工作室：画布深色，面板纸色 */
   --studio-bg: #121611;
-  --studio-panel: rgba(246, 242, 234, 0.86);
+  --studio-panel: rgba(var(--glass-rgb), 0.93); /* 工作室的纸色毛玻璃面板（studio.css 另加 blur） */
   --studio-panel-text: #24211d;
   --studio-panel-border: #dbd2c1;
   --studio-modal: #fbf8f2;
@@ -163,10 +163,11 @@ html {
   border-radius: 999px;
   background: rgba(var(--text-rgb), 0.08);
   border: 0.5px solid rgba(var(--text-rgb), 0.1);
-  font: 600 12px/1 var(--sans);
+  font: 600 13px/1 var(--sans);
   letter-spacing: 0.02em;
 }
 .lang-toggle button {
+  position: relative;
   min-width: 44px;
   min-height: 30px;
   padding: 0 12px;
@@ -194,7 +195,12 @@ html {
   min-width: 38px;
   min-height: 26px;
   padding: 0 9px;
-  font-size: 11px;
+}
+/* 看起来是小胶囊，手指能按的范围上下各多 8px（≈ 44px） */
+.lang-toggle button::after {
+  content: '';
+  position: absolute;
+  inset: -8px -1px;
 }
 .lang-toggle button:focus-visible {
   outline: 2px solid var(--accent);

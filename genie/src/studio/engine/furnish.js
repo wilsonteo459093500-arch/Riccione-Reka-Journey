@@ -1003,13 +1003,20 @@ function porch(L, rc, ctx) {
   const px = me ? me.x : room.x + room.w / 2;
   const pz = me ? me.z : room.y;
   const dSide = (s) => (s.axis === 'x' ? Math.hypot(px - clamp(px, s.a, s.b), pz - s.c) : Math.hypot(px - s.c, pz - clamp(pz, s.a, s.b)));
-  const ws = sides.filter((s) => s.walled).sort((p, q) => dSide(p) - dSide(q));
+  // 3D 里车廊朝外的边是 0.9m 的矮墙：先靠「后面是屋子」的墙；只能靠矮墙时，高柜改成 1m 高
+  const houseSide = (s) => behind(ctx.plan, room, s).some((r) => !ROOM_TYPES[r.type]?.outdoor && r.type !== 'balcony');
+  const ws = sides.filter((s) => s.walled).sort((p, q) => houseSide(q) - houseSide(p) || dSide(p) - dSide(q));
   const h = Math.min(2.6, ctx.wallH - 0.1);
   const put = (kind, o) => {
     for (const s of ws) {
       const t = s.axis === 'x' ? px : pz;
+      const low = !houseSide(s);
+      const extra = (w) => {
+        const e = o.extra(w);
+        return low && e.h > 1 ? { ...e, h: 1.0 } : e;
+      };
       for (const st of [...s.stretches].sort(byNear(t))) {
-        const it = hug(L, rc, s, st, kind, { ...o, prefer: t, rank: 'near' });
+        const it = hug(L, rc, s, st, kind, { ...o, extra, prefer: t, rank: 'near' });
         if (it) return it;
       }
     }
