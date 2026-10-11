@@ -73,6 +73,12 @@ export class Beams {
     });
   }
 
+  dispose() {
+    for (const m of this.meshes) m.geometry.dispose();
+    this.meshes = [];
+    this.material.dispose();
+  }
+
   /** sunDir：指向太阳的单位向量；strength 0–1 */
   update(sunDir, strength, color) {
     this.material.uniforms.strength.value = strength;

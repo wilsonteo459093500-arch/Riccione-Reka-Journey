@@ -57,10 +57,10 @@ const SHEEN = {
   linen: { rough: 0.7, lift: 0.45, spec: 0.55 },
 };
 
+// 引擎总会传画质档进来；这里只是兜底，规则和 Engine.resolveQuality 一样：触屏（含大 iPad）= 'fast'
 const quality0 = () => {
   try {
-    const touch = matchMedia('(pointer: coarse)').matches;
-    return touch && Math.min(innerWidth, innerHeight) < 900 ? 'fast' : 'high';
+    return matchMedia('(pointer: coarse)').matches ? 'fast' : 'high';
   } catch {
     return 'high';
   }

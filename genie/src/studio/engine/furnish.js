@@ -594,12 +594,13 @@ function placeTable(L, rc, ctx, long, cx, cz) {
   moves.sort((p, q) => Math.hypot(...p) - Math.hypot(...q));
   let tbl = null;
   for (const o of tableOptions(room, ctx).opts) {
+    const ends = o.w < 1.2 && o.seats >= 4 ? 0.7 : 0; // 0.9m 方桌四边各一张椅子：两头也要留出椅子的位置
     for (const [dx, dz] of moves) {
       const pos = { x: cx + dx, z: cz + dz };
       tbl =
         o.variant === 'round'
           ? L.try(room, 'diningTable', { ...pos, rot: 0 }, o.w + 0.7, o.w + 0.7, { variant: 'round', w: o.w, seats: o.seats })
-          : L.try(room, 'diningTable', { ...pos, rot: long === 'x' ? 0 : 90 }, o.w, o.d + 0.9, { variant: 'rect', w: o.w, d: o.d, seats: o.seats });
+          : L.try(room, 'diningTable', { ...pos, rot: long === 'x' ? 0 : 90 }, o.w + ends, o.d + 0.9, { variant: 'rect', w: o.w, d: o.d, seats: o.seats });
       if (tbl) break;
     }
     if (tbl) break;

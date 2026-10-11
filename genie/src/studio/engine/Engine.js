@@ -24,7 +24,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
 import { MatLib } from './matlib.js';
 import { useLib, buildItem, CATALOG } from './furniture.js';
-import { buildHouse, applyCutaway, SHADOW_LAYER } from './house.js';
+import { buildHouse, applyCutaway, disposeHouseKit, SHADOW_LAYER } from './house.js';
 import { daylight, LAMP } from './daylight.js';
 import { Beams } from './beams.js';
 import { MAT_BY_ID } from '../../shared/materials.js';
@@ -1099,10 +1099,25 @@ export class Engine {
     this.renderer.domElement.removeEventListener('webglcontextlost', this._onLost, false);
     this.renderer.domElement.removeEventListener('webglcontextrestored', this._onRestored, false);
     this.controls.dispose();
+    this.disposeRoot();
+    disposeHouseKit(this.lib);
     this.lib.dispose();
     this.env.dispose();
     this.bgTex?.dispose();
-    if (this.composer) for (const p of this.composer.passes) p.dispose?.();
+    this.beams.dispose?.();
+    for (const ring of [this.selBox, this.hovBox])
+      ring.traverse((o) => {
+        if (o.isMesh) {
+          o.geometry.dispose();
+          o.material.dispose();
+        }
+      });
+    if (this.composer) {
+      for (const p of this.composer.passes) p.dispose?.();
+      this.composer.renderTarget1.dispose();
+      this.composer.renderTarget2.dispose();
+    }
+    this.sun.shadow.map?.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }

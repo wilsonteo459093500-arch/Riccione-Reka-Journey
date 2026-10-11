@@ -112,6 +112,14 @@ function kitFor(lib) {
   return k;
 }
 
+/** 引擎销毁时：这一套外观件的材质一起释放（石纹贴图是全局共用的，留着给下一个引擎） */
+export function disposeHouseKit(lib) {
+  const k = KITS.get(lib);
+  if (!k) return;
+  for (const m of Object.values(k)) m.dispose();
+  KITS.delete(lib);
+}
+
 /** 地面金线：一条条很细的带子（有真实宽度 → 抗锯齿干净），两端可以淡出 */
 function goldRibbons(segs, y, width = 0.022) {
   const pos = [];
@@ -253,11 +261,13 @@ function railing(wall, lib) {
 }
 
 /** 底座上的烫金字：字距拉开的衬线大写 + 细的无衬线副标，金属金箔材质（会反射环境里的柔光箱）。
- *  字太长（客人名字长、英文副标）就整体缩小，永远不出底座。 */
+ *  字太长（客人名字长、英文副标）就整体缩小，永远不出底座。
+ *  分辨率按字牌的长宽比算：长边最多 4096、高最多 256 像素 —— 凑近看副标也是清楚的（一张约 3MB 显存）。 */
 function textPlane(text, sub, w, h) {
+  const pxm = Math.min(4096 / w, 256 / h);
   const c = document.createElement('canvas');
-  c.width = 2048;
-  c.height = Math.round((2048 * h) / w);
+  c.width = Math.max(64, Math.round(w * pxm));
+  c.height = Math.max(16, Math.round(h * pxm));
   const ctx = c.getContext('2d');
   const track = (k) => {
     try {
@@ -320,7 +330,21 @@ function textPlane(text, sub, w, h) {
 /** 底座正面的标题：没给就用品牌（WISH · RICCIONE REKA · 溪岸 SAIL）；旧方案里存着的 GENIE 一律换成 WISH */
 export function plinthTitle(title) {
   const s = title == null ? '' : String(title).trim();
-  return s ? s.replace(/\bGENIE\b/g, BRAND.app) : BRAND.plinth;
+  return s ? s.replace(/\bGENIE\b/gi, BRAND.app) : BRAND.plinth;
+}
+
+/** 副标：界面给什么画什么（已经是当前语言）；没给 = 溪岸 SAIL。
+ *  只有一种情况不画：副标里的词标题里全都有（比如两行都是品牌）—— 品牌不在底座上印两遍。 */
+export function plinthSubtitle(subtitle, title) {
+  const s = subtitle == null ? BRAND.house : String(subtitle).trim().replace(/\bGENIE\b/gi, BRAND.app);
+  const words = (x) =>
+    String(x)
+      .toUpperCase()
+      .split(/[^A-Z0-9㐀-鿿]+/)
+      .filter((w) => w && w !== 'BY');
+  const inTitle = new Set(words(title));
+  const mine = words(s);
+  return mine.length && mine.every((w) => inTitle.has(w)) ? '' : s;
 }
 
 /**
@@ -330,7 +354,7 @@ export function plinthTitle(title) {
  */
 export function buildHouse(plan, walls, lib, { title, subtitle, ground = true } = {}) {
   title = plinthTitle(title);
-  subtitle = subtitle == null ? BRAND.house : String(subtitle).replace(/\bGENIE\b/g, BRAND.app);
+  subtitle = plinthSubtitle(subtitle, title);
   const root = new THREE.Group();
   const H = plan.wallH || 2.8;
   const bb = bounds(plan);

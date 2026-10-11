@@ -101,10 +101,10 @@ function StorageCheck({ rows, plan, talk, onPick }) {
           <Icon name="storage" size={17} />
         </span>
         <span className="storage-title">
+          <span className="tag-staff">{t('设计师')}</span>
           <b>{t('收纳对账')}</b>
           <em>{short ? t('{0} 项还差一点', [short]) : t('客人数的收纳都放进去了')}</em>
         </span>
-        <span className="tag-staff">{t('设计师')}</span>
         <Icon name="down" size={16} className="storage-chev" />
       </button>
       {open && (
@@ -123,11 +123,13 @@ function StorageCheck({ rows, plan, talk, onPick }) {
                     <span className="srow-main">
                       <span className="srow-top">
                         <b>{rowLabel(r, plan)}</b>
-                        <span className="srow-val">{rowValue(r)}</span>
                         <Icon name={ok ? 'ok' : 'warn'} size={16} className="srow-state" />
                       </span>
-                      <span className="srow-bar">
-                        <i style={{ width: `${Math.round(pct * 100)}%` }} />
+                      <span className="srow-meter">
+                        <span className="srow-bar">
+                          <i style={{ width: `${Math.round(pct * 100)}%` }} />
+                        </span>
+                        <span className="srow-val">{rowValue(r)}</span>
                       </span>
                       {r.need != null && r.need > 0 && r.unit !== 'count' && <span className="srow-need">{r.unit === 'mm' ? t('客人数的：{0}', [fmtLen(r.need)]) : t('想要 {0} 座', [r.need])}</span>}
                       {!ok && r.hint && <span className="srow-hint">{t('还差 {0}。{1}', [rowGap(r), t(r.hint)])}</span>}
@@ -192,12 +194,20 @@ export default function StudioApp() {
   const [ctx, setCtx] = useState(null); // WebGL：null | 'lost' | 'restored'
   const [ask, setAsk] = useState(null); // 纸色确认框
   const toastTimer = useRef(0);
+  const toastRaf = useRef(0);
 
+  // 提示停留的时间从「真正画出来」那一刻算起：换一整套材质时，下一帧要编译着色器，慢设备上会卡一下，
+  // 计时要是从点击就开始，提示还没画出来就过期了。
   const flash = useCallback((msg, ms = 2600) => {
     if (showroomRef.current) return;
     setToast(msg);
     clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(''), ms);
+    cancelAnimationFrame(toastRaf.current);
+    toastRaf.current = requestAnimationFrame(() => {
+      toastRaf.current = requestAnimationFrame(() => {
+        toastTimer.current = setTimeout(() => setToast(''), ms);
+      });
+    });
   }, []);
 
   const confirmSheet = (o) => new Promise((res) => setAsk({ ...o, done: (v) => (setAsk(null), res(v)) }));
