@@ -438,6 +438,10 @@ export default function QuizApp() {
   const [fresh, setFresh] = useState(false);
   const [error, setError] = useState('');
   const [round, setRound] = useState(0);
+  // 许愿模式：员工区按了「设计师版」，蓝图还在打开中时先记着（客人正在玩的时候不记，免得结束时漏给客人）
+  const [designerReq, setDesignerReq] = useState(false);
+  const live = useRef({ profile: null, kind: route.kind });
+  live.current = { profile, kind: route.kind };
 
   useEffect(() => {
     document.title = t('许愿之旅 · WISH by Riccione Reka');
@@ -457,6 +461,7 @@ export default function QuizApp() {
       /* ignore */
     }
     setMuted(false, { persist: false });
+    setDesignerReq(false);
     setRoute({ kind: 'play' });
     setRound((r) => r + 1);
     window.scrollTo(0, 0);
@@ -474,6 +479,7 @@ export default function QuizApp() {
       if (type === 'sfx') setMuted(!!e.data.muted, { persist: false });
       else if (type === 'restart') restartRef.current();
       else if (type === 'lang') setLang(e.data.lang);
+      else if (type === 'designer' && (live.current.profile || live.current.kind !== 'play')) setDesignerReq(true);
     };
     window.addEventListener('message', onMsg);
     return () => {
@@ -512,7 +518,7 @@ export default function QuizApp() {
       </div>
     );
 
-  if (profile) return <Blueprint key={profile.id} profile={profile} fresh={fresh} onRestart={restart} />;
+  if (profile) return <Blueprint key={profile.id} profile={profile} fresh={fresh} onRestart={restart} designerOpen={designerReq} />;
   if (route.kind !== 'play')
     return (
       <div className="qz morning is-plain">
@@ -530,6 +536,7 @@ export default function QuizApp() {
       onRestart={restart}
       onDone={(p) => {
         setFresh(true);
+        setDesignerReq(false);
         setProfile(p);
         // 留住做好的蓝图：返回 / 重新整理 / iPad 收掉分页后还在（Blueprint 打包好后会换成 #bp=…）
         try {

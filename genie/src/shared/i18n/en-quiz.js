@@ -7,6 +7,8 @@ export default {
   '语言 · Language': '语言 · Language',
   '例：Peggy / 陈小姐 / Peggy & Ken': 'e.g. Peggy / Ms Tan / Peggy & Ken',
   '上一题': 'Back',
+  '我们俩': 'Two of us',
+  '一家大小': 'Family',
   '蓝图 {0}%': 'Blueprint {0}%',
   '神灯': 'The Lamp',
 

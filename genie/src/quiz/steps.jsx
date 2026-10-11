@@ -53,24 +53,27 @@ function Head({ eyebrow, title, lead }) {
 export function Welcome({ answers, set, next }) {
   const players = [
     { v: 'solo', label: t('我自己'), icon: <Ico set="players" v="solo" size={17} /> },
-    { v: 'couple', label: t('我们两个'), icon: <Ico set="players" v="couple" size={17} /> },
-    { v: 'family', label: t('一家人'), icon: <Ico set="players" v="family" size={17} /> },
+    { v: 'couple', label: t('我们俩'), icon: <Ico set="players" v="couple" size={17} /> },
+    { v: 'family', label: t('一家大小'), icon: <Ico set="players" v="family" size={17} /> },
   ];
   return (
     <div className="step step-welcome">
       <div className="cover">
-        <div className="cover-mark">
-          <b>{BRAND.app}</b>
-          <span>{BRAND.by}</span>
+        <div className="cover-intro">
+          <div className="cover-mark">
+            <b>{BRAND.app}</b>
+            <span>{BRAND.by}</span>
+          </div>
+          <div className="cover-hero">
+            <Pangie mood="happy" size={168} />
+          </div>
+          <p className="eyebrow">{t('许愿之旅')}</p>
+          <h1 className="h-display">{t('嗨，我是{0}', [guideName()])}</h1>
+          <p className="cover-sub">{t('住在神灯里的熊猫')}</p>
+          <p className="lead">{t('接下来几分钟，我会用五张牌，读懂你心里的那个家。不用懂设计，也不用想太久 —— 跟着第一感觉走就好。')}</p>
         </div>
-        <div className="cover-hero">
-          <Pangie mood="happy" size={168} />
-        </div>
-        <p className="eyebrow">{t('许愿之旅')}</p>
-        <h1 className="h-display">{t('嗨，我是{0}', [guideName()])}</h1>
-        <p className="cover-sub">{t('住在神灯里的熊猫')}</p>
-        <p className="lead">{t('接下来几分钟，我会用五张牌，读懂你心里的那个家。不用懂设计，也不用想太久 —— 跟着第一感觉走就好。')}</p>
 
+        <div className="cover-act">
         <div className="cover-form">
           <div className="field">
             <span className="field-label">{t('语言 · Language')}</span>
@@ -106,6 +109,7 @@ export function Welcome({ answers, set, next }) {
           <span>{t('开始许愿')}</span>
         </button>
         <p className="fine">{t('大约 6–8 分钟 · 5 张牌 · 结束时会得到你的「梦想家蓝图」')}</p>
+        </div>
       </div>
     </div>
   );

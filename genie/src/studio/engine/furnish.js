@@ -199,7 +199,12 @@ function frame(room, walls, plan, main) {
 /** 给测试 / 设计师叠图用：房间的内墙面框 + 门前禁区 */
 export function roomFrame(plan, walls, room) {
   const f = frame(room, walls, plan, mainEntrance(plan, walls));
-  return { inner: f.inner, keep: f.keep.map(({ blocked, ...k }) => k), mainSide: f.mainSide };
+  const keep = f.keep.map((k) => {
+    const o = { ...k };
+    delete o.blocked;
+    return o;
+  });
+  return { inner: f.inner, keep, mainSide: f.mainSide };
 }
 
 /** 家具实际占的地（含床头 / 椅子这些看不见的余量） */
@@ -388,15 +393,6 @@ const opposite = (sides, s) => sides.find((x) => x.side === { N: 'S', S: 'N', W:
 const depthOf = (room, s) => (s.axis === 'x' ? room.d : room.w);
 const mid = (st) => (st.a + st.b) / 2;
 
-function windowsOn(side, walls) {
-  const out = [];
-  for (const w of walls) {
-    if (w.axis !== side.axis || Math.abs(w.c - side.c) > 0.03) continue;
-    for (const p of w.pieces) if ((p.kind === 'window' || p.kind === 'slider') && p.b > side.a && p.a < side.b) out.push({ a: Math.max(p.a, side.a), b: Math.min(p.b, side.b), kind: p.kind });
-  }
-  return out;
-}
-
 // ───────────────────────── 目标（摆家具和收纳对账共用） ─────────────────────────
 
 function wardrobeTarget(kind, ctx) {
@@ -438,7 +434,7 @@ function placeAltar(L, rc, ctx, s, st, margin = 0.02, front = 0.8) {
 
 /** 电视墙 + 沙发 + 茶几：沙发挡到门 / 通道就沿墙挪一点、换小一号，最后才离墙 */
 function sofaGroup(L, rc, ctx, tvSide) {
-  const { room, sides } = rc;
+  const { room } = rc;
   const st = tvSide.stretches[0];
   const tvW = Math.min(st.len - 0.1, 3.2);
   const tv = L.try(room, 'tvWall', at(room, tvSide, mid(st), tvSide.thick + 0.23), tvW, 0.45, { h: ctx.wallH }, { force: true, span: [st.a, st.b] });
@@ -470,7 +466,6 @@ function sofaGroup(L, rc, ctx, tvSide) {
         return { st, along, w, sd, ctDist, back: back && sd === dists[0] };
       }
   }
-  void sides;
   return { st, along: tvAlong, w: 0, sd: 0, back: false, none: true };
 }
 
@@ -692,7 +687,7 @@ function sinkHob({ len, corner, fridge, wins, leg }) {
 }
 
 function kitchen(L, rc, ctx) {
-  const { room, sides, walls, inner } = rc;
+  const { room, sides, walls } = rc;
   const cands = sides
     .filter((s) => s.walled)
     .map((s) => ({ s, st: counterRuns(s, walls)[0] }))
@@ -726,7 +721,6 @@ function kitchen(L, rc, ctx) {
     pts.sort((p, q) => Math.hypot(p.x - cx, p.z - cz) - Math.hypot(q.x - cx, q.z - cz));
     for (const p of pts) if (L.try(room, 'island', { ...p, rot: SIDE_ROT[main.side] }, 1.8, 0.9, {}, { margin: m, strict: true })) break;
   }
-  void inner;
 }
 
 /** 主台面 + 冰箱 + L 形 + 水槽 / 灶台。返回 L 那一面墙（没有就 null） */
@@ -764,26 +758,40 @@ function buildKitchen(L, rc, ctx, main, st, R) {
     leg = legB;
     corner = 'b';
   }
-  // 冰箱：放在不是转角的那一头；主台面不够就放 L 的尽头
+  // 冰箱：放在不是转角的那一头（不挡窗，压到窗边 20cm 以内算了）；主台面不够就放 L 的尽头
+  const winHit = (a, b, wins) => wins.reduce((t, w) => t + Math.max(0, Math.min(b, w.b) - Math.max(a, w.a)), 0);
   let ra = R.a;
   let rb = R.b;
   let fridge = null;
-  const fEnd = corner === 'b' ? 'a' : 'b';
+  let fEnd = corner === 'b' ? 'a' : 'b';
   if (R.len >= 2.4) {
-    fridge = L.try(room, 'fridge', at(room, main, fEnd === 'b' ? rb - 0.45 : ra + 0.45, main.thick + 0.36), 0.86, 0.7, {});
-    if (fridge) {
-      if (fEnd === 'b') rb -= 0.9;
-      else ra += 0.9;
+    const ends = [fEnd, ...(corner ? [] : [fEnd === 'b' ? 'a' : 'b'])].filter((e) => winHit(e === 'b' ? rb - 0.9 : ra, e === 'b' ? rb : ra + 0.9, st.wins) <= 0.2);
+    for (const e of ends) {
+      fridge = L.try(room, 'fridge', at(room, main, e === 'b' ? rb - 0.45 : ra + 0.45, main.thick + 0.36), 0.86, 0.7, {});
+      if (fridge) {
+        fEnd = e;
+        if (e === 'b') rb -= 0.9;
+        else ra += 0.9;
+        break;
+      }
     }
   }
   let fridgeOnLeg = false;
-  if (!fridge && leg && leg.len >= 2.0) {
+  if (!fridge && leg && leg.len >= 2.0 && winHit(near ? leg.b - 0.9 : leg.a, near ? leg.b : leg.a + 0.9, leg.st.wins) <= 0.2) {
     const c = near ? leg.b - 0.45 : leg.a + 0.45;
     if (L.try(room, 'fridge', at(room, leg.s, c, leg.s.thick + 0.36), 0.86, 0.7, {})) {
       fridgeOnLeg = true;
       if (near) leg.b -= 0.9;
       else leg.a += 0.9;
       leg.len -= 0.9;
+    }
+  }
+  // 实在没别的地方：还是放在主台面那一头（挡一点窗也比没有冰箱好）
+  if (!fridge && !fridgeOnLeg && R.len >= 2.4) {
+    fridge = L.try(room, 'fridge', at(room, main, fEnd === 'b' ? rb - 0.45 : ra + 0.45, main.thick + 0.36), 0.86, 0.7, {});
+    if (fridge) {
+      if (fEnd === 'b') rb -= 0.9;
+      else ra += 0.9;
     }
   }
   const len = rb - ra;
@@ -825,16 +833,20 @@ function bedCands(rc, ctx, bw, bd, isKids) {
       const lo = Math.max(st.a, ax ? inner.x0 : inner.z0);
       const hi = Math.min(st.b, ax ? inner.x1 : inner.z1);
       if (hi - lo < fw + 0.04) continue;
-      const pen = backsWet(ctx.plan, room, s, st.a, st.b) ? WET_BEHIND : 0;
-      const sc = score(s, { noWindow: 4, noDoor: 1.5 }) - pen - (hi - lo >= fw + (isKids ? 0.2 : 0.9) ? 0 : 0.5);
       const raw = isKids
         ? [lo + fw / 2 + 0.02, hi - fw / 2 - 0.02]
         : [clamp(roomMid, lo + bw / 2 + 0.55, hi - bw / 2 - 0.55), lo + bw / 2 + 0.55, hi - bw / 2 - 0.55, lo + fw / 2 + 0.02, hi - fw / 2 - 0.02];
       const alongs = [];
-      for (const c of raw) if (c - fw / 2 >= lo - 0.02 && c + fw / 2 <= hi + 0.02 && !alongs.some((x) => Math.abs(x - c) < 0.05)) alongs.push(c);
-      if (alongs.length) out.push({ s, st, sc, alongs });
+      for (const c of raw) if (c - fw / 2 >= lo - 0.02 && c + fw / 2 <= hi + 0.02 && !alongs.some((x) => Math.abs(x.c - c) < 0.05)) alongs.push({ c, pen: backsWet(ctx.plan, room, s, c - fw / 2, c + fw / 2) ? WET_BEHIND : 0 });
+      if (!alongs.length) continue;
+      // 床头背后是浴室 / 厨房 / 晒衣处的位置往后排（按床实际占的那一段算）
+      alongs.sort((p, q) => p.pen - q.pen);
+      const sc = score(s, { noWindow: 4, noDoor: 1.5 }) - alongs[0].pen - (hi - lo >= fw + (isKids ? 0.2 : 0.9) ? 0 : 0.5);
+      out.push({ s, st, sc, alongs: alongs.filter((a) => a.pen === alongs[0].pen).map((a) => a.c), wet: alongs.filter((a) => a.pen !== alongs[0].pen).map((a) => a.c) });
     }
   }
+  // 同一段墙上背靠湿区的床位，单独当一个（重罚过的）候选
+  for (const c of [...out]) if (c.wet.length) out.push({ ...c, sc: c.sc - WET_BEHIND, alongs: c.wet, wet: [] });
   return out.sort((p, q) => q.sc - p.sc);
 }
 

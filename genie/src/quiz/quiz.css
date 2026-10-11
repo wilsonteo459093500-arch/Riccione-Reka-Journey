@@ -244,7 +244,11 @@ html[lang='en'] .h-title {
   --stage-top: clamp(8px, calc(12vh - 60px), 90px);
   display: flex;
   flex-direction: column;
-  justify-content: center;
+}
+/* 仪式画面放在中间（内容太高时不会被顶栏切掉：用 auto 边距，不用 justify-content） */
+.dusk .stage > .step {
+  margin-top: auto;
+  margin-bottom: auto;
 }
 
 /* 题目卡：风景上的磨砂玻璃 */
@@ -2028,7 +2032,7 @@ html[lang='en'] .dc-tag {
 }
 .reveal-card {
   position: relative;
-  width: min(320px, 72vw, 44vh);
+  width: min(300px, 70vw, 40vh);
 }
 .reveal-flip {
   position: relative;
@@ -2201,6 +2205,7 @@ html[lang='en'] .axis-mini {
 
 .bp-page {
   position: relative;
+  display: flow-root; /* 不让 .bp-doc 的上边距穿出去（风景带要贴在最上面） */
   min-height: 100dvh;
   padding-bottom: calc(120px + env(safe-area-inset-bottom));
   background: var(--bg);
@@ -2212,7 +2217,7 @@ html[lang='en'] .axis-mini {
   top: 0;
   left: 0;
   right: 0;
-  height: 380px;
+  height: 460px;
   overflow: hidden;
 }
 .bp-band-paint {
@@ -2234,7 +2239,7 @@ html[lang='en'] .axis-mini {
   z-index: 1;
   box-sizing: border-box;
   max-width: 1000px;
-  margin: 150px auto 0;
+  margin: 230px auto 0;
   padding: clamp(24px, 5vw, 60px) clamp(20px, 5vw, 60px) clamp(28px, 4vw, 48px);
   border-radius: 30px;
   background: var(--grain), var(--card);
@@ -2858,6 +2863,31 @@ html[lang='en'] .bp-farewell {
   }
 }
 
+@media (orientation: landscape) and (min-width: 900px) {
+  /* 横屏的封面：左边是潘吉和一句话，右边是表单 —— 一页看完，不用往下滑 */
+  .cover {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: center;
+    column-gap: clamp(32px, 4vw, 56px);
+    width: min(980px, 100%);
+    padding: clamp(28px, 4vh, 44px) clamp(28px, 4vw, 52px);
+  }
+  .cover-intro {
+    text-align: center;
+  }
+  .cover-act {
+    padding-left: clamp(24px, 3vw, 44px);
+    border-left: 0.5px solid rgba(var(--text-rgb), 0.12);
+  }
+  .cover-form {
+    margin-top: 0;
+  }
+  .cover-act .fine {
+    text-align: center;
+  }
+}
+
 @media (max-height: 860px) {
   .viz svg {
     max-height: 150px;
@@ -3029,17 +3059,55 @@ html[lang='en'] .bp-farewell {
     grid-template-columns: 82px 58px 1fr 58px 38px;
   }
   .bp-doc {
-    margin-top: 120px;
+    margin-top: 170px;
     border-radius: 24px;
   }
   .bp-band {
-    height: 300px;
+    height: 360px;
   }
   .bp-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     padding: 0 16px;
+  }
+  .bp-actions .btn {
+    min-width: 0;
+    padding: 0 12px;
+    white-space: normal;
+    text-align: center;
+    line-height: 1.2;
+  }
+  .mat-board {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  .pal i {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
   }
   .prompt-actions {
     grid-template-columns: 1fr;
+  }
+  /* 手机上潘吉的话说完就收起来，不要挡住按钮 */
+  .bubble {
+    max-width: 62vw;
+    animation:
+      bubble-in 0.5s var(--spring) both,
+      bubble-out 0.6s var(--ease) 4.2s forwards;
+  }
+  .seg button svg {
+    display: none;
+  }
+  .seg button {
+    padding: 0 6px;
+    font-size: 14px;
+  }
+}
+@keyframes bubble-out {
+  to {
+    opacity: 0;
+    transform: translateY(4px) scale(0.96);
+    visibility: hidden;
   }
 }
 

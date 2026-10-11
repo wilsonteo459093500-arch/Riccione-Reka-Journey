@@ -86,9 +86,9 @@ function Sec({ num, title, note, children, className = '' }) {
   );
 }
 
-export default function Blueprint({ profile, onRestart, fresh = false }) {
-  const [staffOn, setStaffOn] = useState(STAFF);
-  const [mode, setMode] = useState('client');
+export default function Blueprint({ profile, onRestart, fresh = false, designerOpen = false }) {
+  const [staffOn, setStaffOn] = useState(STAFF || designerOpen);
+  const [mode, setMode] = useState(designerOpen ? 'designer' : 'client');
   const [links, setLinks] = useState({ bp: '', bpStaff: '', studio: '' });
   const [toast, setToast] = useState('');
   const [busy, setBusy] = useState(false);
@@ -228,7 +228,9 @@ export default function Blueprint({ profile, onRestart, fresh = false }) {
       <article className="bp-doc">
         <header className="bp-head">
           <div className="bp-head-text">
-            <p className="eyebrow">{t('梦想家概念蓝图')}</p>
+            <p className="eyebrow">
+              {BRAND.app} {BRAND.by}
+            </p>
             <h1 className="bp-title">{t('专属梦想家概念蓝图')}</h1>
             <p className="bp-meta">
               {tj('为 {0} 绘制', [<b key="n">{profile.name || t('贵宾')}</b>])}

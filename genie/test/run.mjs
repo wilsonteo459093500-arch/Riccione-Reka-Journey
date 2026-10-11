@@ -327,6 +327,7 @@ await test('厨房：灶台离冰箱 / 台面尽头 ≥ 0.75m、不进 L 转角�
       const items = furnish(t.plan, buildWalls(t.plan), p);
       const runs = items.filter((i) => i.kind === 'kitchenRun');
       const fridge = items.find((i) => i.kind === 'fridge');
+      assert.ok(fridge, `${t.id} 厨房没有冰箱`);
       const withSink = runs.filter((r) => r.sinkAt != null);
       const withHob = runs.filter((r) => r.hobAt != null);
       assert.equal(withSink.length, 1, `${t.id} 水槽应该只有一个`);

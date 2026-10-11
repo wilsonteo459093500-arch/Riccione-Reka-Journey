@@ -47,9 +47,11 @@ export function exitFullscreen() {
 let wake = null;
 let wantWake = false;
 let wakeBound = false;
+let asking = false;
 
 async function requestWake() {
-  if (!wantWake || wake || typeof document === 'undefined' || document.visibilityState !== 'visible') return;
+  if (!wantWake || wake || asking || typeof document === 'undefined' || document.visibilityState !== 'visible') return;
+  asking = true;
   try {
     const w = await navigator.wakeLock?.request('screen');
     if (!w) return;
@@ -63,6 +65,8 @@ async function requestWake() {
     });
   } catch {
     wake = null; // 不支持 / 省电模式 / 没在前台：不影响使用
+  } finally {
+    asking = false;
   }
 }
 
