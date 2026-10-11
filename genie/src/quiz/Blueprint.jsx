@@ -138,7 +138,8 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
       }
     };
     window.addEventListener('message', onMsg);
-    if (STAFF) tellShell('staff-ready');
+    // 告诉外壳：蓝图已经在画面上，员工区现在可以发 {type:'designer'} 打开设计师版
+    tellShell('staff-ready');
     return () => {
       window.removeEventListener('message', onMsg);
       clearTimeout(toastTimer.current);

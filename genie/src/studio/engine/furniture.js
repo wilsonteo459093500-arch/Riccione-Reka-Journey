@@ -890,14 +890,14 @@ function plant({ variant = 'tall', seed = 3 }) {
       tips.push(end, pts[1]);
     }
     const list = [];
-    const n = Q(280, 170);
+    const n = Q(330, 210);
     for (let i = 0; i < n; i++) {
       const c = tips[i % tips.length];
       const big = i % tips.length % 2 === 0;
       const rr = (big ? 0.17 : 0.11) * (0.5 + 0.5 * Math.cbrt(rand()));
       const u = rand() * Math.PI * 2;
       const v = Math.acos(2 * rand() - 1);
-      list.push({ x: c[0] + rr * Math.sin(v) * Math.cos(u), y: top + c[1] + rr * Math.cos(v) * 0.75, z: c[2] + rr * Math.sin(v) * Math.sin(u), yaw: rand() * Math.PI * 2, pitch: -0.4 + rand() * 1.1, roll: (rand() - 0.5) * 1.2, len: 0.065 + rand() * 0.03, c: tint(rand, [0.74, 0.84, 0.72], 0.2) });
+      list.push({ x: c[0] + rr * Math.sin(v) * Math.cos(u), y: top + c[1] + rr * Math.cos(v) * 0.75, z: c[2] + rr * Math.sin(v) * Math.sin(u), yaw: rand() * Math.PI * 2, pitch: -0.4 + rand() * 1.1, roll: (rand() - 0.5) * 1.2, len: 0.07 + rand() * 0.03, wid: 1.5, c: tint(rand, [0.74, 0.84, 0.72], 0.2) });
     }
     parts.push(leafMesh('olive', list, 'leaf2', { fold: 0.12, curl: 0.08, nz: 5, nx: 1 }));
   }
@@ -1082,7 +1082,7 @@ function sideboard({ w = 1.8 }) {
   const zF = D / 2 - 0.018;
   return group(
     B(w, H, D - 0.018, 'cabinetry', 0, y0, -0.009, 0.003),
-    doorRow(-w / 2 + 0.006, w / 2 - 0.006, y0 + 0.006, y0 + H - 0.006, zF, 'cabinetry', { maxW: 0.48, fluted: 0.032, t: 0.022, handle: 'knob', hy: y0 + H * 0.55 }),
+    doorRow(-w / 2 + 0.006, w / 2 - 0.006, y0 + 0.006, y0 + H - 0.006, zF, 'cabinetry', { maxW: 0.48, fluted: 0.03, t: 0.026, handle: 'knob', hy: y0 + H * 0.55 }),
     squareLegs(corners(w / 2 - 0.06, D / 2 - 0.06), y0, 'metal', 0.026, 0.02),
     vase(-w / 3, y0 + H, 0, { h: 0.34, r: 0.09, key: 'pot', style: 'amphora' }),
     branches(-w / 3, y0 + H + 0.31, 0, rand, { n: 4, h: 0.5, spread: 0.2 }),
