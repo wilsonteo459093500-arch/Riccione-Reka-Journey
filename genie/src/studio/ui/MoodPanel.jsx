@@ -1,6 +1,8 @@
 // 左侧：SET THE MOOD —— 一键情绪（客人的梦想家配色 + Cozy / Bright / Moody）＋ 情绪仪表 ＋ 一句话 ＋ 材质板（点一个表面）。
 // 设计师打开客人档案时，底下多一张「收纳对账」（StorageCheck，由 StudioApp 传进来）。
+// 面板放不下时里面可以滚：下面还有东西就在底边淡出（上面滚过去了就在顶边淡出），不会硬生生切在一格材质板中间。
 
+import { useLayoutEffect, useRef } from 'react';
 import { MOODS, moodMeter, moodSentence } from '../../shared/moods.js';
 import { SLOTS, MAT_BY_ID } from '../../shared/materials.js';
 import { avoidMaterials } from '../../shared/profile.js';
@@ -15,7 +17,37 @@ const MOOD_NAME = { cozy: { zh: '温暖', en: 'Cozy' }, bright: { zh: '明亮', 
 const SUB = { 'golden hour': '金色黄昏', midday: '正午', 'after dark': '入夜' };
 const paletteOf = (m) => ['walls', 'floor', 'upholstery', 'feature', 'accents'].map((s) => MAT_BY_ID[m[s]]?.color || 'var(--line)');
 
+/** 滚动区的边缘淡出：data-fade = top | bottom | both | ''（只改 DOM 属性，滚动时不重画 React） */
+function useEdgeFade(ref, deps) {
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const update = () => {
+      const rest = el.scrollHeight - el.clientHeight - el.scrollTop;
+      const top = el.scrollTop > 2;
+      const bottom = rest > 2;
+      const v = top && bottom ? 'both' : bottom ? 'bottom' : top ? 'top' : '';
+      if ((el.dataset.fade || '') !== v) el.dataset.fade = v;
+    };
+    update();
+    el.addEventListener('scroll', update, { passive: true });
+    // 面板自己变高变矮、里面任何一块变高（收纳对账展开、「见面时要聊的」打开、一句话换行）都重新量
+    const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(update) : null;
+    if (ro) {
+      ro.observe(el);
+      for (const c of el.children) ro.observe(c);
+    }
+    return () => {
+      el.removeEventListener('scroll', update);
+      ro?.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+}
+
 export default function MoodPanel({ project, dreamer, slot, onSlot, onMood, onToggle, chip, note, extra }) {
+  const inner = useRef(null);
+  useEdgeFade(inner, [!!chip, !!note, !!extra]);
   const meter = moodMeter(project.materials, project.time);
   const sent = moodSentence(project.materials, project.time);
   const avoid = project.profile?.avoid || [];
@@ -36,7 +68,7 @@ export default function MoodPanel({ project, dreamer, slot, onSlot, onMood, onTo
       <button type="button" className="panel-fab" onClick={onToggle} aria-label={t('展开情绪面板')} title={t('情绪 · 材质 · 光')}>
         <Icon name="palette" size={20} />
       </button>
-      <div className="mp-inner">
+      <div className="mp-inner" ref={inner}>
         <header className="mp-head">
           <div>
             <p className="eyebrow">{t('情绪 · 材质 · 光')}</p>

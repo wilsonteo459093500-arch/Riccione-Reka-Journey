@@ -1,8 +1,10 @@
 // 右上角工具条（像 Freeform / Keynote 的浮动工具条）：撤销 · 视角 · 墙 · 标签 · 概念图 · 分享 · 平面图 · 方案 · 更多。
 // 窄屏把次要的按钮收进「更多」菜单（CSS 决定哪些留在条上），菜单里还有演示模式、帮助、设置、中 / EN。
+// 「新方案 / 打开方案」只给设计师（onStart 为空 = 客人版、许愿模式：不出现，展厅 iPad 上别的客人的方案打不开）。
+// 「材质标签」开关只在标签真的画得出来的画布上出现（Callouts：≥ 600 × 560；手机上从来不画）。
 
 import { useEffect, useRef, useState } from 'react';
-import { Icon, IconBtn } from './kit.jsx';
+import { Icon, IconBtn, useMedia } from './kit.jsx';
 import LangToggle from '../../shared/LangToggle.jsx';
 import { t } from '../../shared/i18n.js';
 
@@ -25,6 +27,7 @@ function MenuItem({ icon, label, hint, onClick, active, className = '' }) {
 export default function Toolbar(p) {
   const [menu, setMenu] = useState(false);
   const wrap = useRef(null);
+  const canLabel = useMedia('(min-width: 600px) and (min-height: 560px)');
   useEffect(() => {
     if (!menu) return;
     const close = (e) => !wrap.current?.contains(e.target) && setMenu(false);
@@ -50,7 +53,7 @@ export default function Toolbar(p) {
       <div className="tb-group glass tb-hide-sm">
         <IconBtn icon="view" label={t(VIEW_LABEL[p.view])} onClick={p.onView} />
         <IconBtn icon="walls" label={t(WALL_LABEL[p.wallMode])} onClick={p.onWalls} active={p.wallMode !== 'cut'} pressed={p.wallMode !== 'cut'} />
-        <IconBtn icon="labels" label={p.labels ? t('隐藏材质标签') : t('显示材质标签')} onClick={p.onLabels} active={p.labels} pressed={p.labels} />
+        {canLabel && <IconBtn icon="labels" label={p.labels ? t('隐藏材质标签') : t('显示材质标签')} onClick={p.onLabels} active={p.labels} pressed={p.labels} />}
       </div>
       <div className="tb-group glass">
         <IconBtn icon="snapshot" label={t('下载概念图')} onClick={p.onShot} className="tb-hide-sm" />
@@ -58,7 +61,7 @@ export default function Toolbar(p) {
       </div>
       <div className="tb-group glass">
         <IconBtn icon="plan" label={t('平面图：上传 / 修改')} text={t('平面图')} onClick={p.onPlan} className="tb-plan tb-hide-sm" />
-        {!p.wish && <IconBtn icon="start" label={t('新方案 / 打开方案')} onClick={p.onStart} className="tb-hide-md" />}
+        {p.onStart && <IconBtn icon="start" label={t('新方案 / 打开方案')} onClick={p.onStart} className="tb-hide-md" />}
         <IconBtn icon="more" label={t('更多')} onClick={() => setMenu((m) => !m)} active={menu} pressed={menu} />
       </div>
 
@@ -67,11 +70,11 @@ export default function Toolbar(p) {
           <div className="menu-sec mi-sm">
             <MenuItem icon="view" label={t(VIEW_LABEL[p.view])} onClick={p.onView} />
             <MenuItem icon="walls" label={t(WALL_LABEL[p.wallMode])} onClick={p.onWalls} />
-            <MenuItem icon="labels" label={t('材质标签')} active={p.labels} onClick={p.onLabels} />
+            {canLabel && <MenuItem icon="labels" label={t('材质标签')} active={p.labels} onClick={p.onLabels} />}
             <MenuItem icon="snapshot" label={t('下载概念图')} onClick={run(p.onShot)} />
             <MenuItem icon="plan" label={t('平面图：上传 / 修改')} onClick={run(p.onPlan)} />
           </div>
-          {!p.wish && (
+          {p.onStart && (
             <div className="menu-sec mi-md">
               <MenuItem icon="start" label={t('新方案 / 打开方案')} onClick={run(p.onStart)} />
             </div>

@@ -3,8 +3,11 @@
 // 触屏、鼠标都用 pointer 事件自己做拖拽（HTML5 拖放在 iPad 上不能用）：
 //   触屏：横着滑 = 滚动这一排（touch-action: pan-x 交给浏览器）；往上拖 = 拿起样板；
 //   pointercancel（浏览器接手去滚动了）什么都不做；鼠标滚轮竖着滚 = 横向滚动。
+// 拖着的样板（drag-ghost）用 portal 画在整个工作室的最上层：材质栏所在的 .dock-wrap 自己是一层（z-index 11），
+// 留在里面的话，拖到情绪面板的材质板、日光面板、工具条上时样板和提示会被盖住。
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { CATEGORIES, MATERIALS, SLOT_BY_ID, fits, misfitHint, MAT_BY_ID } from '../../shared/materials.js';
 import { swatchURL } from '../../shared/textures.js';
 import { CATALOG } from '../engine/furniture.js';
@@ -221,20 +224,23 @@ export default function MaterialDock({ project, slot, engine, onDrop, onAddItem,
               })}
         </div>
       </div>
-      {ghost && (
-        <div className={`drag-ghost ${ghost.ok ? 'ok' : 'bad'}`} style={{ left: ghost.x, top: ghost.y }}>
-          {ghost.matId ? (
-            <span className="sample lg">
-              <img src={swatchURL(ghost.matId, 128) || ''} alt="" />
-            </span>
-          ) : (
-            <span className="sample tile lg">
-              <FurnIcon kind={ghost.kind} size={28} />
-            </span>
-          )}
-          <em>{ghost.hint || L(MAT_BY_ID[ghost.matId])}</em>
-        </div>
-      )}
+      {ghost &&
+        createPortal(
+          <div className={`drag-ghost ${ghost.ok ? 'ok' : 'bad'}`} style={{ left: ghost.x, top: ghost.y }} aria-hidden="true">
+            {ghost.matId ? (
+              <span className="sample lg">
+                <img src={swatchURL(ghost.matId, 128) || ''} alt="" />
+              </span>
+            ) : (
+              <span className="sample tile lg">
+                <FurnIcon kind={ghost.kind} size={28} />
+              </span>
+            )}
+            <em>{ghost.hint || L(MAT_BY_ID[ghost.matId])}</em>
+          </div>,
+          // 工作室的根（.studio 的局部颜色 token 都在上面）；万一找不到就挂在 body 上
+          row.current?.closest('.studio') || document.body,
+        )}
     </>
   );
 }

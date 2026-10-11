@@ -4,7 +4,7 @@
 // 「全图」给右下的缩放按钮、底部的提示留出位置；≤ 900px（iPad 竖放、手机）属性面板变成可以收起的底部抽屉，平面图用满整个宽度。
 // 许愿模式（onSettings 没给）：客人碰不到设置 / API key —— 这台设备没有 key 时不显示「AI 识别」。
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ROOM_TYPES, OPENING_KINDS, TEMPLATES, buildWalls, bounds, snapPlan, templatePlan, uid } from './model.js';
 import { planFileToImage } from './planImage.js';
 import { detectPlan } from './ai.js';
@@ -113,6 +113,7 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
   const svgRef = useRef(null);
   const zoomRef = useRef(null);
   const fileRef = useRef(null);
+  const actsRef = useRef(null);
   const drag = useRef(null);
   const imageRef = useRef(null);
   const pointers = useRef(new Map());
@@ -123,6 +124,22 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
 
   const walls = useMemo(() => buildWalls(plan), [plan]);
   const issues = useMemo(() => issuesOf(plan), [plan]);
+
+  // 标题栏中间那组按钮：真的放不下时才横滑 + 两头淡出（data-overflow）；放得下就是一排干净的按钮，最后一个不会被淡掉
+  useLayoutEffect(() => {
+    const el = actsRef.current;
+    if (!el) return undefined;
+    const update = () => {
+      const v = el.scrollWidth > el.clientWidth + 1 ? '1' : '';
+      if ((el.dataset.overflow || '') !== v) el.dataset.overflow = v;
+    };
+    update();
+    if (typeof ResizeObserver !== 'function') return undefined;
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    for (const c of el.children) ro.observe(c);
+    return () => ro.disconnect();
+  }, [canAI]);
 
   // 有新消息（AI 结果、读图失败…）：窄屏把抽屉拉开，免得没看到
   useEffect(() => {
@@ -723,15 +740,19 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
           <p className="eyebrow">{isEn() ? BRAND.studioEn : BRAND.studio}</p>
           <b>{t('平面图')}</b>
         </div>
-        <div className="pe-head-actions">
+        {/* 英文在 iPad 横放（1024–1279）和手机上换短的字（lbl-short：Width、Template…），整排放得下，不用横滑 */}
+        <div className="pe-head-actions" ref={actsRef}>
           <input ref={fileRef} type="file" accept="image/*,application/pdf" hidden onChange={(e) => onFile(e.target.files?.[0])} />
           <button type="button" className="pe-btn" onClick={() => fileRef.current?.click()} title={t('上传平面图')} aria-label={t('上传平面图')}>
             <Icon name="upload" size={17} />
             <span>{t('上传平面图')}</span>
           </button>
           <label className="pe-hint-in" title={t('平面图的整体外墙宽度（米），AI 读不到尺寸时用')}>
-            <span>{t('整体宽')}</span>
-            <input value={widthHint} onChange={(e) => setWidthHint(e.target.value.replace(/[^\d.]/g, ''))} placeholder="12" inputMode="decimal" />
+            <span className="pe-hint-cap">
+              <span className="lbl-long">{t('整体宽')}</span>
+              {isEn() && <span className="lbl-short">{t('宽')}</span>}
+            </span>
+            <input value={widthHint} onChange={(e) => setWidthHint(e.target.value.replace(/[^\d.]/g, ''))} placeholder="12" inputMode="decimal" aria-label={t('整体宽')} />
             <span>m</span>
           </label>
           {canAI && (
@@ -740,8 +761,15 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
               <span>{t('AI 识别')}</span>
             </button>
           )}
+          {/* 原生下拉（iPad 上是系统的选择器）叠在一颗胶囊上、透明：胶囊只有「用模板…」那么宽，
+              不会被最长的模板名撑到 300px；箭头是自己画的，淡出、横滑都不会把它切掉 */}
           <label className="pe-select">
             <Icon name="start" size={16} />
+            <span className="pe-select-label" aria-hidden="true">
+              <span className="lbl-long">{t('用模板…')}</span>
+              {isEn() && <span className="lbl-short">{t('模板…')}</span>}
+            </span>
+            <Icon name="down" size={14} className="pe-select-chev" />
             <select
               value=""
               aria-label={t('用模板…')}

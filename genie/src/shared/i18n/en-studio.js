@@ -40,6 +40,8 @@ export default {
   '想要 {0} 座': 'Wants {0} seats',
   '还差 {0}。{1}': 'Short by {0}. {1}',
   餐位: 'Dining seats',
+  // 一个词，和建议（No storeroom: …）、房间类型一致（en-base 里旧的 'Store room' 由这里盖过去）
+  储物间: 'Storeroom',
   '{0}衣柜': '{0} wardrobe',
   '{0} / {1} 座': '{0} / {1} seats',
   '{0} 座': '{0} seats',
@@ -84,7 +86,8 @@ export default {
   // ── 怎么玩 ──
   '把底部的色块{0}（地板、墙、柜子、沙发…），那一组表面会发金光，放手就换上。也可以先在左边材质板点一个表面，再点色块。':
     'Drag a swatch from the bottom bar {0} (floor, walls, cabinets, sofa…). That group of surfaces glows gold — let go to apply it. Or tap a surface in the moodboard on the left first, then tap a swatch.',
-  '左上角 Cozy / Bright / Moody 一键换整套材质和时间；有许愿档案时，第一个按钮就是客人自己的梦想家配色。客人的雷区会自动避开。':
+  // 中文用面板上的中文名（温暖 / 明亮 / 沉浸）；英文的按钮本来就叫 Cozy / Bright / Moody
+  '左上角「温暖 / 明亮 / 沉浸」一键换整套材质和时间；有许愿档案时，第一个按钮就是客人自己的梦想家配色。客人的雷区会自动避开。':
     'Cozy, Bright and Moody at the top left swap every material and the time of day in one tap. With a Wish Journey profile, the first button is the client’s own Dreamer palette — and their deal-breakers are always kept out.',
   // 不说「右边」：iPad 竖放、手机上时间滑杆在底部
   '拖太阳或时间滑杆，太阳从清晨走到深夜；窗上的树影、斜进来的光柱、夜里的灯都会跟着变。':
@@ -102,6 +105,8 @@ export default {
   '图片或 PDF。填了 AI key 会自动识别房间，校正 30 秒就能生成 3D。': 'An image or PDF. With an AI key, the rooms are found for you — check them for 30 seconds and you have 3D.',
 
   // ── 平面图编辑器 ──
+  // 标题栏的短标签：只在英文、iPad 横放（1024–1279）和手机上用（「用模板…」= Use a template…）
+  模板: 'Template',
   工具: 'Tools',
   放大: 'Zoom in',
   缩小: 'Zoom out',

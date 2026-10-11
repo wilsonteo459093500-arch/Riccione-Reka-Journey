@@ -8,13 +8,16 @@
 //       ?lang=en                   英文（中文原文就是 key，见 shared/i18n.js）
 //
 // 谁在看（设计师的东西绝不能给客人看到）：
-//   设计师自己建的方案 → 员工版；别人分享来的（sharedFrom）、从客人版蓝图点进来的（audience: 'client'）→ 客人版；
-//   链接带 ?staff=1，或者从员工版蓝图（quiz.html?staff=1）点进来 → 员工版。许愿模式、展厅永远是客人版。
-//   客人版：没有「收纳对账」、没有「见面时要聊的」，梦想家卡打开的是客人版蓝图（不带 ?staff=1）。
+//   设计师自己建的方案 → 员工版；别人分享来的（sharedFrom）→ 客人版；
+//   带客人档案进来的（#p=，蓝图页的「在 3D 里看见它」）一律是客人版（audience: 'client'）—— 客人把链接复制到别处打开、
+//   转给家人（没有 referrer）也一样；只有链接带 ?staff=1，或者从员工版蓝图（quiz.html?staff=1）点进来，才是员工版。
+//   许愿模式、展厅永远是客人版。
+//   客人版：没有「收纳对账」、没有「见面时要聊的」、没有「新方案 / 打开方案」（展厅 iPad 上别的客人的方案一个都不列），
+//   梦想家卡打开的是客人版蓝图（不带 ?staff=1）。
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Engine } from './engine/Engine.js';
-import { buildWalls, templatePlan, uid } from './plan/model.js';
+import { buildWalls, templatePlan, uid, roomSides } from './plan/model.js';
 import * as Furnish from './engine/furnish.js';
 import { CATALOG } from './engine/furniture.js';
 import { DAY_PRESETS } from './engine/daylight.js';
@@ -66,6 +69,50 @@ function staffFor(p) {
   if (REF === 'client') return false;
   if (p.audience) return p.audience === 'staff';
   return !p.sharedFrom;
+}
+
+/**
+ * 从材质栏加进来的墙件（主题墙：贴墙、不能拖）和挂画：放到离落点最近、够长的那段实墙上（避开门窗、打通），背朝墙。
+ * 朝向和 furnish.js 的 at() 一样：北墙 0 · 南墙 180 · 西墙 90 · 东墙 270；主题墙的背面由引擎再贴紧墙面（alignWallItem）。
+ * 找不到合适的墙 → null（照旧放在落点）。
+ */
+function wallSpot(plan, kind, pt, room) {
+  const def = CATALOG[kind];
+  if (!def || !plan?.rooms?.length) return null;
+  const [w0, d] = def.size;
+  const need = Math.min(w0, 1.2) + 0.1;
+  const walls = buildWalls(plan);
+  let best = null;
+  for (const r of room ? [room] : plan.rooms) {
+    for (const s of roomSides(r, walls)) {
+      const alongX = s.axis === 'x'; // 北 / 南墙沿 x 走（z = s.c）；西 / 东墙沿 z 走（x = s.c）
+      const along = alongX ? pt.x : pt.z;
+      const off = (alongX ? pt.z : pt.x) - s.c;
+      // 落点在这道墙的哪一边：房间里面那一边才算（落在房间外时，背对落点的墙不选）
+      const facing = off * (alongX ? s.inward[1] : s.inward[0]) >= -0.05;
+      for (const st of s.stretches) {
+        if (st.len < need) continue;
+        const out = Math.max(0, st.a - along, along - st.b);
+        const dist = Math.hypot(Math.abs(off), out) + (facing ? 0 : 50);
+        if (!best || dist < best.dist) best = { dist, r, s, st, along };
+      }
+    }
+  }
+  if (!best) return null;
+  const { r, s, st } = best;
+  const w = +Math.min(w0, st.len - 0.1).toFixed(2);
+  const along = Math.min(Math.max(best.along, st.a + w / 2 + 0.05), st.b - w / 2 - 0.05);
+  // 主题墙：中心离墙面 d/2（背面正好贴墙）；挂画：和 furnish 一样离墙面 3cm
+  const dist = s.thick + (def.wall ? d / 2 : 0.03);
+  const pos =
+    s.side === 'N'
+      ? { x: along, z: r.y + dist, rot: 0 }
+      : s.side === 'S'
+        ? { x: along, z: r.y + r.d - dist, rot: 180 }
+        : s.side === 'W'
+          ? { x: r.x + dist, z: along, rot: 90 }
+          : { x: r.x + r.w - dist, z: along, rot: 270 };
+  return { room: r.id, x: +pos.x.toFixed(3), z: +pos.z.toFixed(3), rot: pos.rot, w };
 }
 
 const HISTORY = 60;
@@ -304,8 +351,10 @@ export default function StudioApp() {
             setIncomingProfile(prof);
             const existing = loadProjects().find((x) => x.profile?.id === prof.id);
             p = existing || createProject({ plan: templatePlan('condo3'), profile: prof });
-            // 客人在自己的手机上从客人版蓝图点进来：这一份记成客人的（以后直接打开也不显示设计师的东西）
-            if (!existing && !WISH && !STAFF_LINK && REF === 'client') p = { ...p, audience: 'client' };
+            // 档案链接默认是客人的：从客人版蓝图点进来、或者链接被复制到别处打开 / 转给家人（没有 referrer）都一样。
+            // 记在方案上（这台设备上已有的那一份也改成客人版）：重新整理、以后直接打开 studio.html 也不会露出设计师的东西。
+            // 设计师一定是从员工版蓝图或 ?staff=1 进来的（STAFF_LINK），员工链接会再把它改回员工版（见下面）。
+            if (!WISH && !STAFF_LINK) p = { ...p, audience: 'client' };
             // 许愿模式：客人直接看到自己的家（示范户型 + 他的材质），设计师再换成真实平面图；客人版也不弹「开始一个空间」
             if (!existing && !WISH && staffFor(p)) setModal('start');
           }
@@ -511,11 +560,17 @@ export default function StudioApp() {
       p.x = ray.origin.x + ray.direction.x * k;
       p.z = ray.origin.z + ray.direction.z * k;
     }
-    const room = projRef.current.plan.rooms.find((r) => p.x >= r.x && p.x <= r.x + r.w && p.z >= r.y && p.z <= r.y + r.d);
+    const plan = projRef.current.plan;
+    const room = plan.rooms.find((r) => p.x >= r.x && p.x <= r.x + r.w && p.z >= r.y && p.z <= r.y + r.d);
     const [w, d] = def.size;
     const id = uid('f');
-    const item = { id, kind, room: room?.id || null, x: +p.x.toFixed(2), z: +p.z.toFixed(2), rot: 0, w, d, h: projRef.current.plan.wallH };
+    const item = { id, kind, room: room?.id || null, x: +p.x.toFixed(2), z: +p.z.toFixed(2), rot: 0, w, d, h: plan.wallH };
     if (kind === 'art') item.y = 1.4;
+    // 主题墙（不能拖）、挂画：直接挂到最近的那道墙上
+    if (def.wall || def.wallMounted) {
+      const spot = wallSpot(plan, kind, p, room) || (room ? wallSpot(plan, kind, p, null) : null);
+      if (spot) Object.assign(item, spot);
+    }
     updateFurniture((l) => [...l, item]);
     setTimeout(() => e.select(id), 30);
     flash(t('{0} 已放进来 —— 拖一拖换位置', [L(def)]));
@@ -791,10 +846,18 @@ export default function StudioApp() {
   const profile = project?.profile;
   const dreamer = profile && DREAMER_BY_CODE[profile.code];
 
-  const projectsList = useMemo(() => (modal === 'start' ? loadProjects() : []), [modal]);
-
   // 设计师在看，还是客人在看（见文件开头）：客人版不出现任何设计师的东西
   const staffView = !showroom && staffFor(project);
+
+  // 「最近的方案」：设计师看到这台设备上的全部；客人版（万一打开了开始弹窗）最多只列这位客人自己的那一份 ——
+  // 展厅 iPad 上别的客人的名字、梦想家、材质一个都不能出现
+  const projectsList = useMemo(() => {
+    if (modal !== 'start') return [];
+    const all = loadProjects();
+    if (staffView) return all;
+    const pid = projRef.current?.profile?.id;
+    return pid ? all.filter((x) => x.profile?.id === pid) : [];
+  }, [modal, staffView]);
 
   // 梦想家卡 → 蓝图：员工版带 ?staff=1（有设计师版开关）；客人版、许愿模式不带
   useEffect(() => {
@@ -944,7 +1007,7 @@ export default function StudioApp() {
             demo={demo}
             onDemo={() => setDemo((d) => !d)}
             onPlan={() => openPlanEditor('current')}
-            onStart={() => setModal('start')}
+            onStart={staffView && !WISH ? () => setModal('start') : null}
             onHelp={() => setModal('help')}
             onSettings={() => setModal('settings')}
             onLang={switchLang}
@@ -992,7 +1055,7 @@ export default function StudioApp() {
         </>
       )}
 
-      {modal === 'start' && (
+      {modal === 'start' && staffView && (
         <StartModal
           profile={incomingProfile || profile}
           projects={projectsList}

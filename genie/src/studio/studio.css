@@ -383,6 +383,19 @@
   scrollbar-width: thin;
   scrollbar-color: rgba(var(--shade-rgb), 0.18) transparent;
 }
+/* 放不下、可以滚：下面还有东西 → 底边淡出（像材质栏两头那样），滚过去了 → 顶边也淡出；data-fade 由 MoodPanel 量好 */
+.mp-inner[data-fade='bottom'] {
+  -webkit-mask-image: linear-gradient(180deg, black calc(100% - 44px), transparent 100%);
+  mask-image: linear-gradient(180deg, black calc(100% - 44px), transparent 100%);
+}
+.mp-inner[data-fade='top'] {
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, black 26px);
+  mask-image: linear-gradient(180deg, transparent 0, black 26px);
+}
+.mp-inner[data-fade='both'] {
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, black 26px, black calc(100% - 44px), transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0, black 26px, black calc(100% - 44px), transparent 100%);
+}
 .panel-fab {
   display: none;
 }
@@ -2553,26 +2566,61 @@
   -webkit-user-select: text;
   user-select: text;
 }
+/* 「用模板…」：一颗胶囊（图标 + 字 + 自己画的箭头），原生下拉透明地盖在上面 —— 点哪里都打开系统的选择器；
+   胶囊的宽度只跟着字走，不会被最长的模板名撑开 */
 .pe-select {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   min-height: 44px;
-  padding: 0 4px 0 14px;
+  padding: 0 12px 0 14px;
   border-radius: 999px;
   background: var(--card);
-  box-shadow: 0 0 0 0.5px var(--line);
+  box-shadow:
+    0 0 0 0.5px var(--line),
+    0 1px 2px rgba(var(--shade-rgb), 0.06);
   color: var(--ink);
+  cursor: pointer;
+  transition: transform 0.16s var(--ease);
+}
+.pe-select:active {
+  transform: scale(0.97);
+}
+.pe-select-label {
+  font: 600 14px/1 var(--sans);
+  white-space: nowrap;
+}
+.pe-select-chev {
+  flex: none;
+  margin-left: 1px;
+  color: var(--ink-soft);
 }
 .pe-select select {
-  min-height: 42px;
-  padding: 0 10px 0 0;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
   border: 0;
-  background: transparent;
-  color: inherit;
-  font: 600 14px/1 var(--sans);
+  border-radius: inherit;
+  opacity: 0;
+  /* iOS：小于 16px 的下拉一点就整页放大 */
+  font-size: 16px;
   cursor: pointer;
-  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.pe-select:has(select:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.pe-hint-cap {
+  white-space: nowrap;
+}
+/* 短标签默认不出现（只有英文才渲染；英文的 iPad 横放、手机见下面的 @media） */
+.lbl-short {
+  display: none;
 }
 .pe-body {
   flex: 1;
@@ -3065,14 +3113,21 @@
   }
 }
 
-/* iPad 横放（1024–1279）的英文平面图编辑器：英文按钮长，标题栏会折成两行、画布少 55px。
-   改成一行：中间那组按钮（上传 / 整体宽 / AI / 模板）横向滑动，两头淡出；右边的「取消 / 生成 3D」永远看得见 */
+/* iPad 横放（1024–1279）的英文平面图编辑器：英文字长，标题栏会折成两行、画布少 55px。
+   改成一行：中间那组换成短标签（Width、Template…），整排放得下；右边的「取消 / 生成 3D」永远看得见。
+   万一还是放不下（系统字放大…）才横滑 + 两头淡出（data-overflow，PlanEditor 量） */
 @media (min-width: 1024px) and (max-width: 1279px) {
   .is-en .pe-head {
     flex-wrap: nowrap;
   }
   .is-en .pe-title {
     flex: none;
+  }
+  .is-en .pe-head .lbl-long {
+    display: none;
+  }
+  .is-en .pe-head .lbl-short {
+    display: inline;
   }
   .is-en .pe-head-actions {
     flex: 1 1 0;
@@ -3081,8 +3136,12 @@
     overflow-x: auto;
     overscroll-behavior-x: contain;
     scrollbar-width: none;
-    /* 上下留 4px：按钮的发丝线、阴影、焦点圈不被 overflow 裁掉；左右的内边距就是淡出的那一段 */
+    /* 上下留 4px：按钮的发丝线、阴影、焦点圈不被 overflow 裁掉 */
     margin: -4px 0;
+    padding: 4px 2px;
+  }
+  /* 放不下时的退路：左右的内边距就是淡出的那一段，滑到底时最后一个按钮不被淡掉 */
+  .is-en .pe-head-actions[data-overflow='1'] {
     padding: 4px 28px 4px 8px;
     -webkit-mask-image: linear-gradient(90deg, transparent 0, black 8px, black calc(100% - 28px), transparent 100%);
     mask-image: linear-gradient(90deg, transparent 0, black 8px, black calc(100% - 28px), transparent 100%);
@@ -3189,7 +3248,10 @@
     overscroll-behavior-x: contain;
     scrollbar-width: none;
     margin: 0 -4px;
-    /* 右边留一段淡出：还有按钮可以滑出来（不再硬生生切在「用模板…」中间）；滑到底时最后一个按钮不被淡掉 */
+    padding: 2px 4px 4px;
+  }
+  /* 真的放不下（窄手机的英文）才横滑：右边留一段淡出，看得出还有按钮可以滑出来；滑到底时最后一个按钮不被淡掉 */
+  .pe-head-actions[data-overflow='1'] {
     padding: 2px 28px 4px 4px;
     -webkit-mask-image: linear-gradient(90deg, transparent 0, black 4px, black calc(100% - 28px), transparent 100%);
     mask-image: linear-gradient(90deg, transparent 0, black 4px, black calc(100% - 28px), transparent 100%);
@@ -3336,6 +3398,13 @@
   .pe-btn span,
   .pe-hint-in > span:first-child {
     display: none;
+  }
+  /* 英文：模板下拉也换成短的「Template…」，整排放得下 */
+  .is-en .pe-head .lbl-long {
+    display: none;
+  }
+  .is-en .pe-head .lbl-short {
+    display: inline;
   }
   .pe-btn {
     padding: 0 13px;
