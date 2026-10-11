@@ -1,7 +1,7 @@
 import { createPortal } from 'react-dom';
 import { Printer, X } from 'lucide-react';
 import { T } from '../../theme.js';
-import { fmtMYR, fmtNum, tr, pickLang, capColor, cabTypeById, RLBL, QUOTE_TERMS, discountChainRate, discountChainLabel } from '../../constants/pricing.js';
+import { fmtMYR, fmtNum, tr, pickLang, capColor, cabTypeById, RLBL, QUOTE_TERMS, LOOSE_TERMS, discountChainRate, discountChainLabel } from '../../constants/pricing.js';
 import { fmt } from '../../utils/helpers.js';
 
 // 报价单（可打印 / 另存 PDF）。lang：'en' | 'zh' | 'both'。
@@ -414,7 +414,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
 
               <NoteBlock text={looseNote} />
               {/* Loose Furniture 只放 Validity 条款 */}
-              <Terms terms={QUOTE_TERMS.slice(0, 1)} />
+              <Terms terms={LOOSE_TERMS} />
               {!hasSummary && <Signatures />}
             </div>
           )}

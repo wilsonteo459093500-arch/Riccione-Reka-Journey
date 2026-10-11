@@ -1,4 +1,4 @@
-import { tr, pickLang, capColor, cabTypeById, RLBL, QUOTE_TERMS, discountChainRate, discountChainLabel } from '../../constants/pricing.js';
+import { tr, pickLang, capColor, cabTypeById, RLBL, QUOTE_TERMS, LOOSE_TERMS, discountChainRate, discountChainLabel } from '../../constants/pricing.js';
 import { fmt } from '../../utils/helpers.js';
 
 const round0 = (n) => Math.round(Number(n) || 0);
@@ -141,7 +141,7 @@ export async function exportExcel(meta, computed, loose, notes = {}, lang = 'bot
     }
     row([]);
     if (notes.looseNote) { row([t(RLBL.notes), notes.looseNote]); row([]); }
-    termLines(QUOTE_TERMS.slice(0, 1), aoa); // 只放 Validity
+    termLines(LOOSE_TERMS, aoa); // 有效期 + 家具付款条件
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     ws['!cols'] = [{ wch: 22 }, { wch: 16 }, { wch: 14 }, { wch: 10 }, { wch: 16 }, { wch: 14 }];
     XLSX.utils.book_append_sheet(wb, ws, 'Loose Furniture');

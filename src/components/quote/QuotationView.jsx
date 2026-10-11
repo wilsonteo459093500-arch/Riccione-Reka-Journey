@@ -3,7 +3,7 @@ import { Plus, Copy, Trash2, GripVertical, Sofa, ChevronUp, ChevronDown, Chevron
 import { T } from '../../theme.js';
 import { newId, copyToClipboard } from '../../utils/helpers.js';
 import { useToast } from '../ui/UIProvider.jsx';
-import { computeQuote, computeLoose, CATEGORIES, ROOMS, CUSTOM_ROOM, OUTPUT_LANGS, tr, pickLang, RLBL, QUOTE_TERMS, cabTypeById, fmtMYR, discountChainRate, discountChainLabel } from '../../constants/pricing.js';
+import { computeQuote, computeLoose, CATEGORIES, ROOMS, CUSTOM_ROOM, OUTPUT_LANGS, tr, pickLang, RLBL, QUOTE_TERMS, LOOSE_TERMS, cabTypeById, fmtMYR, discountChainRate, discountChainLabel } from '../../constants/pricing.js';
 import QuoteLineItem from './QuoteLineItem.jsx';
 import QuotePrint from './QuotePrint.jsx';
 import CatalogPicker from './CatalogPicker.jsx';
@@ -772,12 +772,18 @@ function buildTextQuote(meta, computed, loose, notes = {}, lang = 'both') {
     if (notes.looseNote) L.push(`${t(RLBL.notes)}：${notes.looseNote}`);
   }
   L.push('━━━━━━━━━━━━━━━');
-  QUOTE_TERMS.forEach((sec) => {
+  const pushTerms = (terms) => terms.forEach((sec) => {
     L.push(t(sec.title));
     sec.lines.forEach((ln) => {
       L.push((sec.bullet ? '• ' : '') + (lang === 'both' ? `${ln.en}　${ln.zh}` : t(ln)));
     });
     if (sec.note) L.push(lang === 'both' ? `${sec.note.en}　${sec.note.zh}` : t(sec.note));
   });
+  const hasCabTerms = computed.zoneResults.some((zr) => zr.zone.items.length);
+  if (hasCabTerms) pushTerms(QUOTE_TERMS);
+  if ((loose?.rows || []).length) {
+    L.push(`[${t(RLBL.looseSection)}]`);
+    pushTerms(hasCabTerms ? LOOSE_TERMS.slice(1) : LOOSE_TERMS); // 有效期已在上方就不重复
+  }
   return L.join('\n');
 }

@@ -264,6 +264,24 @@ export const RLBL = {
   printBtn:  { en: 'Print / Save PDF', zh: '打印 / 存 PDF' },
 };
 
+// Loose Furniture 家具页条款：有效期 + 家具付款条件
+export const LOOSE_TERMS = [
+  {
+    title: { en: 'Validity', zh: '报价有效期' },
+    lines: [
+      { en: 'Quotation is valid for 30 days from the date of quotation.', zh: '报价自出具日期起 30 天内有效。' },
+    ],
+  },
+  {
+    title: { en: 'Payment Terms', zh: '付款条件' },
+    bullet: true,
+    lines: [
+      { en: '30% non-refundable deposit for stock reservation', zh: '30% 不可退还订金：预留库存' },
+      { en: '70% balance to be paid 1 week before delivery', zh: '余款 70%：送货前一周支付' },
+    ],
+  },
+];
+
 // 报价单条款（有效期 / 声明 / 产品规格 / 标准材质与五金）
 export const QUOTE_TERMS = [
   {
@@ -277,6 +295,15 @@ export const QUOTE_TERMS = [
     lines: [
       { en: 'Prices are subject to change based on final design confirmation, material selection, and site conditions.', zh: '最终价格将根据设计确认、材质选择及现场状况进行调整。' },
       { en: 'Sintered stone is quoted at net price and is not subject to any discount or promotion.', zh: '岩板按净价报价，不参与任何折扣或促销。' },
+    ],
+  },
+  {
+    title: { en: 'Payment Terms', zh: '付款条件' },
+    bullet: true,
+    lines: [
+      { en: '20% payment for site visit, 2D and 3D drawings', zh: '20% 款项：现场测量、2D 及 3D 图纸' },
+      { en: '40% payment to commence production', zh: '40% 款项：开始生产' },
+      { en: 'Balance 40% payment to be made 1 week before installation', zh: '余款 40%：安装前一周支付' },
     ],
   },
   {
