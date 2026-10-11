@@ -1,0 +1,143 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --night: #17122c;
+  --night-2: #241c45;
+  --night-3: #2f2560;
+  --cream: #fbf6ec;
+  --paper: #f5f0e6;
+  --ink: #241c12;
+  --ink-soft: #6e6353;
+  --gold: #d7a54a;
+  --gold-l: #f4d58d;
+  --gold-d: #9c6c26;
+  --lav: #b9a6ff;
+  --rose: #e3576c;
+  --serif: 'Cormorant Garamond', 'Noto Serif SC', Georgia, serif;
+  --zh-serif: 'Noto Serif SC', 'Songti SC', serif;
+  --round: 'Nunito', 'Noto Sans SC', system-ui, sans-serif;
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+html,
+body {
+  -webkit-tap-highlight-color: transparent;
+}
+html {
+  background: var(--night-2);
+}
+
+.sr-only {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* 盼吉的小动作 */
+.pg-float {
+  animation: pg-float 3.6s ease-in-out infinite;
+}
+@keyframes pg-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+.pg-blink {
+  animation: pg-blink 4.8s infinite;
+}
+@keyframes pg-blink {
+  0%,
+  92%,
+  100% {
+    transform: scaleY(1);
+  }
+  95% {
+    transform: scaleY(0.1);
+  }
+}
+.pg-smoke {
+  transform-origin: 100px 190px;
+  animation: pg-sway 4s ease-in-out infinite;
+}
+@keyframes pg-sway {
+  0%,
+  100% {
+    transform: skewX(0deg);
+  }
+  50% {
+    transform: skewX(-5deg);
+  }
+}
+.pg-puff {
+  animation: pg-puff 2.4s ease-out infinite;
+}
+@keyframes pg-puff {
+  0% {
+    transform: translate(0, 0);
+    opacity: 0.7;
+  }
+  100% {
+    transform: translate(8px, -16px);
+    opacity: 0;
+  }
+}
+.pg-halo {
+  transform-origin: 100px 182px;
+  animation: pg-halo 2.6s ease-in-out infinite;
+}
+@keyframes pg-halo {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+}
+.pg-twinkle {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pg-twinkle 2.2s ease-in-out infinite;
+}
+.pg-d2 {
+  animation-delay: 0.7s;
+}
+.pg-d3 {
+  animation-delay: 1.4s;
+}
+@keyframes pg-twinkle {
+  0%,
+  100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+}
+.pg-gem-glow {
+  filter: drop-shadow(0 0 4px #ff9fb0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
