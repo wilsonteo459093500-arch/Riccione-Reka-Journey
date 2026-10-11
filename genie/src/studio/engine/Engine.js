@@ -1009,9 +1009,59 @@ export class Engine {
     return out;
   }
 
+  // ───────────────────────── 演示模式（展厅电视） ─────────────────────────
+
+  /**
+   * 演示：镜头慢慢环绕 + 一天的光影循环（白天慢、黄金时段更慢、深夜很快带过，一圈约 80 秒）。
+   * ~30 fps、像素比降一点；太阳 / 天光每 100ms 动一次；标签不更新（界面在演示时也不显示）。
+   * 时间每 250ms 通过 cb.onTime(hour) 告诉界面（可选），退出时再报一次。
+   */
+  setDemo(on) {
+    on = !!on;
+    if (on === this.demo) return;
+    this.demo = on;
+    this.controls.autoRotate = on;
+    this.controls.autoRotateSpeed = on ? DEMO_ORBIT : 0.7;
+    if (on) {
+      this.select(null);
+      this.hovered = null;
+      this.hovBox.visible = false;
+      this.cb.onHover?.(null);
+      this._demoHour = this.time;
+      this._demoSunT = 0;
+      this._demoTellT = 0;
+      if (this.center) this.frame('demo');
+    } else {
+      this.cb.onTime?.(this.time);
+      this._lastAnchors = null;
+    }
+    if (this.applyPixelRatio()) this.resize();
+    this.dirty = true;
+  }
+
+  demoStep(t, dt) {
+    const d = this.day || daylight(this.time, this.plan?.north || 0);
+    const rate = 0.22 * (1 - 0.45 * d.golden) * (1 - d.night) + 1.4 * d.night;
+    this._demoHour = ((this._demoHour ?? this.time) + rate * dt) % 24;
+    if (t - this._demoSunT >= 100) {
+      this._demoSunT = t;
+      this.setTime(this._demoHour);
+    }
+    if (t - this._demoTellT >= 250) {
+      this._demoTellT = t;
+      this.cb.onTime?.(this.time);
+    }
+    this.dirty = true;
+  }
+
   loop(t) {
     if (!this.running) return;
-    requestAnimationFrame(this.loop);
+    this._raf = requestAnimationFrame(this.loop);
+    // 演示：~30 fps 就够（大屏电视跑一整天也不烫）
+    if (this.demo && t - this._lastT < 1000 / DEMO_FPS - 4) return;
+    const dt = this._lastT ? Math.min(0.25, (t - this._lastT) / 1000) : 1 / 60;
+    this._lastT = t;
+    if (this.demo) this.demoStep(t, dt);
     if (this.tween) {
       const k = Math.min(1, (t - this.tween.t0) / this.tween.dur);
       const e = k < 0.5 ? 4 * k * k * k : 1 - (-2 * k + 2) ** 3 / 2;
@@ -1021,7 +1071,8 @@ export class Engine {
       this.dirty = true;
     }
     if (this.onTick?.(t)) this.dirty = true;
-    const moved = this.controls.update();
+    // 传 dt：自动环绕按真实时间转，帧率高低都一样快
+    const moved = this.controls.update(dt);
     if (this.lib.pulse(t)) this.dirty = true;
     if (moved) this.dirty = true;
     if (!this.dirty) return;
@@ -1032,18 +1083,24 @@ export class Engine {
       this.lastCut = camDir;
     }
     this.renderNow();
-    this.emitAnchors();
-    if (this.selected) this.cb.onSelMove?.(this.projectItem(this.selected));
+    if (!this.demo) {
+      this.emitAnchors();
+      this.emitSelMove();
+    }
     this.dirty = false;
   }
 
   dispose() {
     this.running = false;
+    cancelAnimationFrame(this._raf);
     this._unbind?.();
     this.ro.disconnect();
+    this.renderer.domElement.removeEventListener('webglcontextlost', this._onLost, false);
+    this.renderer.domElement.removeEventListener('webglcontextrestored', this._onRestored, false);
     this.controls.dispose();
     this.lib.dispose();
     this.env.dispose();
+    this.bgTex?.dispose();
     if (this.composer) for (const p of this.composer.passes) p.dispose?.();
     this.renderer.dispose();
     this.renderer.domElement.remove();
@@ -1120,6 +1177,7 @@ const DOME_FRAG = /* glsl */ `
 class EnvStudio {
   constructor(renderer, size) {
     this.size = size;
+    this.renderer = renderer;
     this.pmrem = new THREE.PMREMGenerator(renderer);
     this.cache = new Map();
     const scene = new THREE.Scene();
@@ -1192,6 +1250,20 @@ class EnvStudio {
       this.cache.delete(k0);
     }
     return rt.texture;
+  }
+
+  /** 换画质档：环境贴图换尺寸，旧的全部释放 */
+  setSize(size) {
+    if (size === this.size) return;
+    this.size = size;
+    for (const rt of this.cache.values()) rt.dispose();
+    this.cache.clear();
+  }
+
+  /** WebGL 上下文恢复后：旧的环境贴图内容已经没了（也不必去删已失效的 GL 对象），换一个新的预滤波器重画 */
+  reset() {
+    this.cache.clear();
+    this.pmrem = new THREE.PMREMGenerator(this.renderer);
   }
 
   dispose() {
