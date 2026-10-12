@@ -1,4 +1,4 @@
-// 左侧：SET THE MOOD —— 一键情绪（客人的梦想家配色 + Cozy / Bright / Moody）＋ 情绪仪表 ＋ 一句话 ＋ 材质板（点一个表面）。
+// 左侧：SET THE MOOD —— 一键情绪（客人的梦想家配色 + Cosy / Bright / Moody）＋ 情绪仪表 ＋ 一句话 ＋ 材质板（点一个表面）。
 // 设计师打开客人档案时，底下多一张「收纳对账」（StorageCheck，由 StudioApp 传进来）。
 // 面板放不下时里面可以滚：下面还有东西就在底边淡出（上面滚过去了就在顶边淡出），不会硬生生切在一格材质板中间。
 
@@ -13,7 +13,7 @@ import { BRAND } from '../../shared/config.js';
 
 // 情绪色来自 base.css 的 token（--mood-*），不在这里写颜色
 const MOOD_TINT = { cozy: 'var(--mood-cozy)', bright: 'var(--mood-bright)', moody: 'var(--mood-moody)' };
-const MOOD_NAME = { cozy: { zh: '温暖', en: 'Cozy' }, bright: { zh: '明亮', en: 'Bright' }, moody: { zh: '沉浸', en: 'Moody' } };
+const MOOD_NAME = { cozy: { zh: '温暖', en: 'Cosy' }, bright: { zh: '明亮', en: 'Bright' }, moody: { zh: '沉浸', en: 'Moody' } };
 const SUB = { 'golden hour': '金色黄昏', midday: '正午', 'after dark': '入夜' };
 const paletteOf = (m) => ['walls', 'floor', 'upholstery', 'feature', 'accents'].map((s) => MAT_BY_ID[m[s]]?.color || 'var(--line)');
 
@@ -53,7 +53,7 @@ export default function MoodPanel({ project, dreamer, staff = false, slot, onSlo
   const avoid = project.profile?.avoid || [];
   const presets = MOODS.map((m) => ({
     id: m.id,
-    name: isEn() ? m.en : m.zh, // Cozy / Bright / Moody 是固定的英文名，不走词典
+    name: isEn() ? m.en : m.zh, // Cosy / Bright / Moody 是固定的英文名，不走词典
     sub: t(SUB[m.sub] || m.sub),
     colors: paletteOf(avoid.length ? avoidMaterials(m.materials, avoid).materials : m.materials),
   }));

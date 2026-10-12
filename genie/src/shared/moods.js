@@ -1,4 +1,4 @@
-// 情绪：三个一键预设（Cozy / Bright / Moody）＋ 情绪仪表的计算 ＋ 一句话描述。
+// 情绪：三个一键预设（Cosy / Bright / Moody）＋ 情绪仪表的计算 ＋ 一句话描述。
 // 仪表像 The Sims 的需求条：每换一次材质、每拖一下时间，数字马上动 —— 即时反馈让人停不下来。
 
 import { SLOTS, MAT_BY_ID, hexToRgb } from './materials.js';
@@ -9,7 +9,7 @@ export const MOODS = [
   {
     id: 'cozy',
     zh: '温暖',
-    en: 'Cozy',
+    en: 'Cosy',
     sub: 'golden hour',
     time: 18.4,
     materials: {

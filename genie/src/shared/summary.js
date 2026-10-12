@@ -59,14 +59,16 @@ const LEVEL_ICON = { conflict: '⚠️', note: '📐' };
 
 /**
  * 档案 → WhatsApp / CRM 文字（跟着当前语言：中文原样，英文查词典）。
- * 客人看得到 WhatsApp 输入框，所以「见面要聊」只放 conflict / note，不放 tip（沟通建议、报价话术）。
+ * 「见面要聊」只放 conflict / note，不放 tip（沟通建议、报价话术）。
+ * client = 客人自己按「发给设计师」：文字就在客人的 WhatsApp 输入框里，所以只放客人版蓝图上本来就有的东西 ——
+ * 不放「最想藏」、设计语言、见面要聊、「默认值，未确认」（DESIGN.md §6：这些只在员工入口出现）。员工版（CRM、复制全文）不变。
  */
-export function profileText(p, plan, link = '') {
+export function profileText(p, plan, link = '', { client = false } = {}) {
   const d = DREAMER_BY_CODE[p.code];
   const host = hostFromCode(p.host);
   const touched = p.storage?.touched;
-  // 宝藏那几题客人没动过 → 标出来（只在新答案里有 touched 时才标）
-  const unsure = (k) => (touched && !touched[k] ? t('（默认值，未确认）') : '');
+  // 宝藏那几题客人没动过 → 标出来（只在新答案里有 touched 时才标；客人版不标）
+  const unsure = (k) => (!client && touched && !touched[k] ? t('（默认值，未确认）') : '');
   const gap = isEn() ? ' ' : '';
   const out = [];
   out.push(`✨ ${t('{0} 梦想家蓝图 · {1}', [BRAND.app, p.name || t('贵宾')])}`);
@@ -74,7 +76,8 @@ export function profileText(p, plan, link = '') {
   out.push(AXES.map((ax) => `${L(ax.a)}${gap}${p.axes[ax.id]}%/${L(ax.b)}${gap}${100 - p.axes[ax.id]}%`).join('  '));
   out.push('');
   const life = p.life || {};
-  out.push(`🏠 ${t('生活：周六{0}；回家{1}；厨房{2}；最想藏{3}', [lifeLabel('saturday', life.saturday) || '—', lifeLabel('home', life.home) || '—', lifeLabel('cook', life.cook) || '—', lifeLabel('bell', life.bell) || '—'])}`);
+  const lifeVals = [lifeLabel('saturday', life.saturday) || '—', lifeLabel('home', life.home) || '—', lifeLabel('cook', life.cook) || '—'];
+  out.push(`🏠 ${client ? t('生活：周六{0}；回家{1}；厨房{2}', lifeVals) : t('生活：周六{0}；回家{1}；厨房{2}；最想藏{3}', [...lifeVals, lifeLabel('bell', life.bell) || '—'])}`);
   if (life.who?.length) out.push(`👨‍👩‍👧 ${t('同住：{0}', [life.who.map((v) => lifeLabel('who', v)).join(listSep())])}`);
   const store = [
     t('鞋 {0} 双 → 鞋柜 {1}', [plan.shoes, mm(plan.shoeCabinetMM)]) + unsure('shoes'),
@@ -91,11 +94,13 @@ export function profileText(p, plan, link = '') {
   out.push('');
   const mats = ['floor', 'walls', 'cabinetry', 'countertop', 'upholstery'].map((s) => `${L(SLOT_BY_ID[s])} ${L(MAT_BY_ID[p.materials?.[s]]) || '—'}`);
   out.push(`🎨 ${t('材质：{0}', [mats.join(' · ')])}`);
-  if (d?.design) out.push(`📐 ${t('设计语言：{0}；{1}；{2}', [t(d.design.style), t(d.design.kelvin), t(d.design.doors)])}`);
-  const talk = insights(p, plan)
-    .filter((x) => x.level !== 'tip')
-    .sort((x, y) => (x.level === 'conflict' ? 0 : 1) - (y.level === 'conflict' ? 0 : 1))
-    .slice(0, 6);
+  if (!client && d?.design) out.push(`📐 ${t('设计语言：{0}；{1}；{2}', [t(d.design.style), t(d.design.kelvin), t(d.design.doors)])}`);
+  const talk = client
+    ? []
+    : insights(p, plan)
+        .filter((x) => x.level !== 'tip')
+        .sort((x, y) => (x.level === 'conflict' ? 0 : 1) - (y.level === 'conflict' ? 0 : 1))
+        .slice(0, 6);
   if (talk.length) {
     out.push('');
     out.push(`🗣 ${t('见面要聊')}`);

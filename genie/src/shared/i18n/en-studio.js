@@ -89,9 +89,9 @@ export default {
   // ── 怎么用（帮助） ──
   '把底部的色块{0}（地板、墙、柜子、沙发…），那一组表面会发金光，放手就换上。也可以先在左边材质板点一个表面，再点色块。':
     'Drag a swatch from the bottom bar {0} (floor, walls, cabinets, sofa…). That group of surfaces glows gold — let go to apply it. Or tap a surface in the moodboard on the left first, then tap a swatch.',
-  // 中文用面板上的中文名（温暖 / 明亮 / 沉浸）；英文的按钮本来就叫 Cozy / Bright / Moody
+  // 中文用面板上的中文名（温暖 / 明亮 / 沉浸）；英文的按钮本来就叫 Cosy / Bright / Moody
   '左上角「温暖 / 明亮 / 沉浸」一键换整套材质和时间；有许愿档案时，第一个按钮就是客人自己的梦想家配色。客人的雷区会自动避开。':
-    'Cozy, Bright and Moody at the top left swap every material and the time of day in one tap. With a Wish Journey profile, the first button is the client’s own Dreamer palette — and their deal-breakers are always kept out.',
+    'Cosy, Bright and Moody at the top left swap every material and the time of day in one tap. With a Wish Journey profile, the first button is the client’s own Dreamer palette — and their deal-breakers are always kept out.',
   // 不说「右边」：iPad 竖放、手机上时间滑杆在底部
   '拖太阳或时间滑杆，太阳从清晨走到深夜；窗上的树影、斜进来的光柱、夜里的灯都会跟着变。':
     'Drag the sun or the time slider to go from early morning to late night — tree shadows on the windows, slanting shafts of light and the evening lamps all follow.',

@@ -75,7 +75,7 @@ export const DREAMERS = [
     M('herringbone-oak', 'warm-white', 'walnut', 'walnut', 'calacatta', 'zellige-white', 'ochre-velvet', 'linen', 'oat-knit', 'walnut', 'cognac-leather', 'linen', 'brass'),
     'bright',
     { style: 'Mid-century gallery · 中古画廊', kelvin: '3000K + 重点射灯 15–24°', doors: '胡桃木饰面 + 玻璃展示柜（内置灯带）', ratio: [60, 40], en: 'mid-century modern, walnut, herringbone oak, ochre velvet, glass display cabinets with lighting, art spotlights' }),
-  T('WLNH', 'V', '暖巢守护者', 'The Cozy Keeper', '热闹在心里，整洁在眼前。',
+  T('WLNH', 'V', '暖巢守护者', 'The Cosy Keeper', '热闹在心里，整洁在眼前。',
     '你的家要软、要暖、要有很多抱枕和毯子 —— 但杂物一定要藏好。一家人窝在一起的时候，眼前是舒服，不是凌乱。',
     'sun', ['#D6C0A0', '#866043', '#D8CBB4', '#B3552E', '#2B3A5E'],
     M('smoked-oak', 'sand-limewash', 'walnut', 'light-oak', 'travertine', 'zellige-white', 'navy-velvet', 'linen', 'oat-knit', 'walnut', 'rust-wool', 'linen', 'brass'),

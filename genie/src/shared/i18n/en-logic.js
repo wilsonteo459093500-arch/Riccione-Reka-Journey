@@ -13,8 +13,8 @@ export default {
   '鞋量大（约 {0} 双）：玄关做顶天立地鞋柜约 {1}mm 宽（留中段置物台的话约 {2}mm），底部悬空放常穿的鞋。': 'Lots of shoes (about {0} pairs): a floor-to-ceiling shoe cabinet about {1} mm wide in the entrance (about {2} mm if it keeps an open mid-height niche as a drop zone), with a raised base for everyday shoes.',
   '年货 / 柑 / 节庆装饰预留一组 600 深通高柜；团圆饭 8–10 人建议可伸缩圆桌＋折叠椅收纳': 'Festive goodies / mandarin oranges / decorations: plan a run of 600-deep full-height cabinets; for reunion dinners of 8–10, suggest an extendable round table plus folding-chair storage',
   '重视性价比：用「好 / 更好 / 最好」三档报价，让客人自己选，而不是一次给一个大数字。': 'Values good value for money: quote in three tiers — good / better / best — and let the guest choose, rather than presenting one big number.',
-  '参考：偏好快速决定（{0}/{1} 题比自己平常快很多）：提案给 2 个方向就好，选项太多反而会犹豫。': 'For reference: prefers deciding quickly ({0}/{1} picks much faster than their own usual pace): present just 2 directions — too many options can slow them down.',
-  '参考：喜欢对比再决定（{0}/{1} 题比自己平常想得久）：准备材质实样、尺寸和价格对比表，让 TA 慢慢看。': 'For reference: likes to compare before deciding (took longer than their own usual pace on {0}/{1}): prepare physical samples, dimensions and a price comparison, and give them time.',
+  '参考：偏好快速决定（{0}/{1} 题比自己平常快很多）：提案给 2 个方向就好，选项太多反而会犹豫。': 'For reference: prefers deciding quickly ({0} of {1} picks much faster than their own usual pace): present just 2 directions — too many options can slow them down.',
+  '参考：喜欢对比再决定（{0}/{1} 题比自己平常想得久）：准备材质实样、尺寸和价格对比表，让 TA 慢慢看。': 'For reference: likes to compare before deciding (took longer than their own usual pace on {0} of {1} picks): prepare physical samples, dimensions and a price comparison, and give them time.',
   // ── 逻辑 B：summary.js WhatsApp 摘要
   '（默认值，未确认）': ' (default — not confirmed)',
   '收纳：{0}': 'Storage: {0}',
@@ -38,6 +38,6 @@ export default {
   '没有储物间：做一组 600 深的通高柜放行李箱、棉被': 'No storeroom: add a 600-deep full-height cabinet for luggage and quilts',
   '书墙不够：书房、走廊或电视墙两侧再做一段': 'Not enough bookshelf: add more in the study, the corridor or beside the TV wall',
   '台面不够放台面家电：电器做进高柜，或加一个家电收纳柜': 'Not enough counter for countertop appliances: build them into a tall unit, or add an appliance cabinet',
-  '椅子后面不够 900mm 通行：先摆小一号的桌，节日用可伸缩圆桌加折叠椅': 'Less than 900mm behind the chairs: use a smaller table for now; for festive dinners, an extendable round table with folding chairs',
+  '椅子后面不够 900mm 通行：先摆小一号的桌，节日用可伸缩圆桌加折叠椅': 'Less than 900 mm behind the chairs: use a smaller table for now; for festive dinners, an extendable round table with folding chairs',
   '没有合适的墙放神台（背后不能是浴室 / 厨房，也不在大门那面墙）：见面再定位置': 'No suitable wall for the altar (it can’t back onto a bathroom or kitchen, or sit on the main-door wall): decide the spot at the meeting',
 };

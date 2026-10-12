@@ -10,7 +10,7 @@ export const BRAND = {
   reading: '许愿之旅',
   readingEn: 'The Wish Journey',
   studio: '3D 梦想工作室',
-  studioEn: 'WISH Studio',
+  studioEn: '3D Dream Studio',
   plinth: 'WISH · RICCIONE REKA · 溪岸 SAIL',
   venue: 'RICCIONE Malaysia · Setia Alam',
 };
