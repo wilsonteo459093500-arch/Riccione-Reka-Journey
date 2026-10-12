@@ -1230,7 +1230,16 @@ export class Engine {
    */
   markCovered() {
     const HOLE = 2.0; // 离楼板上的洞 2m 以内的照常画（3m 层高、35° 俯角，从洞口斜着看进去大约这么远）
+    const WIN = 2.0; // 离外墙的窗 / 落地玻璃 2m 以内的照常画（≥ 40° 俯角透过窗看得见的那一段）
     const STEP = 0.25;
+    const segGap = (w, x0, y0, x1, y1) => {
+      // 窗（一段沿 x 或 z 的线段，这一层的坐标）到占地矩形的距离
+      const ax = Math.min(w.a.x, w.b.x);
+      const bx = Math.max(w.a.x, w.b.x);
+      const az = Math.min(w.a.z, w.b.z);
+      const bz = Math.max(w.a.z, w.b.z);
+      return Math.hypot(Math.max(0, ax - x1, x0 - bx), Math.max(0, az - y1, y0 - bz));
+    };
     const inPlates = (plates, x, y) => plates.some((p) => x >= p.x0 - 1e-3 && x <= p.x1 + 1e-3 && y >= p.y0 - 1e-3 && y <= p.y1 + 1e-3);
     const gap = (h, x0, y0, x1, y1) => Math.hypot(Math.max(0, h.x0 - x1, x0 - h.x1), Math.max(0, h.y0 - y1, y0 - h.y1));
     for (const [id, g] of this.items) {
@@ -1250,7 +1259,7 @@ export class Engine {
         const x1 = it.x + hw;
         const y0 = it.z - hd;
         const y1 = it.z + hd;
-        if (!(above.holes || []).some((h) => gap(h, x0, y0, x1, y1) < HOLE)) {
+        if (it.kind !== 'curtains' && !(above.holes || []).some((h) => gap(h, x0, y0, x1, y1) < HOLE) && !(F.windows || []).some((w) => segGap(w, x0, y0, x1, y1) < WIN)) {
           covered = true;
           const nx = Math.max(1, Math.ceil((x1 - x0) / STEP));
           const ny = Math.max(1, Math.ceil((y1 - y0) / STEP));
@@ -1277,11 +1286,17 @@ export class Engine {
     if (n) this.dirty = true;
   }
 
-  /** 镜头拉近了（< 0.6 × 上一次取景的距离）：凑近看，楼下被盖住的家具也画（隔着窗看得见） */
+  /**
+   * 镜头拉近了（< 0.6 × 上一次取景的距离）或压得很低（俯角 < 40°：透过窗看得进屋里很深）：
+   * 楼下被盖住的家具也画（applyCovered）
+   */
   isNear() {
     const f = this._framed;
     if (!f) return false;
-    return this.camera.position.distanceTo(this.controls.target) < 0.6 * f.pos.distanceTo(f.target);
+    const d = this.camera.position.distanceTo(this.controls.target);
+    if (d < 1e-6) return true;
+    const el = Math.asin(Math.max(-1, Math.min(1, (this.camera.position.y - this.controls.target.y) / d)));
+    return d < 0.6 * f.pos.distanceTo(f.target) || el < (40 * Math.PI) / 180;
   }
 
   /** 这件家具在哪一层（floorId） */

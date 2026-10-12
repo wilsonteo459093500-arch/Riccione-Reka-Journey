@@ -1260,7 +1260,8 @@ function findGaps(segs, ctx, hints) {
   const { pm } = ctx;
   ctx.wallMask = wallMaskOf(segs, ctx);
   const gaps = [];
-  // 1. 同线相邻
+  // 1. 同线相邻（空着的开口最后再定：要两边的墙段「站得住」）
+  const pendingOpen = [];
   for (const o of ['h', 'v']) {
     const lines = new Map();
     for (const s of segs) if (s.o === o) {
@@ -1279,12 +1280,9 @@ function findGaps(segs, ctx, hints) {
         const t = (A.t + Bs.t) / 2;
         const probe = { o, c: A.c, t };
         const cl = classifyGap(ctx, probe, A.b, Bs.a, hints);
-        // 空着的开口（没有门弧 / 玻璃）：两边都要是像样的墙段（≥ 0.25 m，或另一头接在墙上）—— 尺寸线的短斜杠、轴线圆圈不算
-        const solidPiece = (q, far) => segLen(q) >= pm || (q[far] >= 0 && segLen(q) >= 0.05 * pm);
-        if (cl && cl.kind === 'opening' && !(solidPiece(A, 'endA') && solidPiece(Bs, 'endB'))) continue;
-        if (cl) {
-          A.joinNext = { seg: Bs, ...cl, a: cl.a ?? A.b, b: cl.b ?? Bs.a };
-        }
+        if (!cl) continue;
+        if (cl.kind === 'opening') pendingOpen.push({ A, Bs, cl });
+        else A.joinNext = { seg: Bs, ...cl, a: cl.a ?? A.b, b: cl.b ?? Bs.a };
       }
     }
   }
@@ -1320,6 +1318,14 @@ function findGaps(segs, ctx, hints) {
       }
     }
   });
+  // 1b. 空着的开口（没有门弧 / 玻璃）：两边都要是像样的墙段 —— 够长（≥ 1 m），或者另一头接在墙上 / 接着门窗；
+  //     尺寸线的短斜杠、轴线圆圈两头悬空 → 不连
+  const joinedPrev = (q) => segs.some((x) => x.joinNext && x.joinNext.seg === q);
+  const stands = (q, far) => segLen(q) >= pm || (segLen(q) >= 0.05 * pm && (q[far === 'a' ? 'endA' : 'endB'] >= 0 || q.virt?.[far] || (far === 'a' ? joinedPrev(q) : !!q.joinNext)));
+  for (const { A, Bs, cl } of pendingOpen) {
+    if (A.joinNext) continue;
+    if (stands(A, 'a') && stands(Bs, 'b')) A.joinNext = { seg: Bs, ...cl, a: cl.a ?? A.b, b: cl.b ?? Bs.a };
+  }
   // 3. 合并：一条线上用开口连起来的几段 → 一段墙
   const out = [];
   const absorbed = new Set();
