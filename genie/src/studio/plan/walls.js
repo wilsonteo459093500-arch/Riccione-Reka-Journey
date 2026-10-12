@@ -827,15 +827,9 @@ function interior(s, ctx) {
     for (let v = v0; v < v1; v++) if (M[r + v] && !skipRow[v - v0]) k++;
     occ[u - a] = k;
   }
-  let busy = 0;
-  const win = Math.max(2, Math.round(0.05 * pm));
-  for (let i = 0; i < n; i++) {
-    let any = 0;
-    for (let j = Math.max(0, i - win); j <= Math.min(n - 1, i + win) && !any; j++) any = occ[j];
-    if (any) busy++;
-  }
-  // 每一行（平行于墙）上的墨段数 / 米：斜线填充每行都有很多段（≥ 5 / m）；家具的弧线、字、地砖格（0.3 m）少
-  let runs = 0;
+  // 每一行（平行于墙）上的墨段数 / 米：斜线填充每行都有很多段（≥ 5 / m）；家具的弧线、字、地砖格（0.3 m）少。
+  // 按位置算（±0.2 m 里）：窗那一截没有填充，不拖累整段
+  const starts = new Uint16Array(n + 1);
   let usedRows = 0;
   for (let v = v0; v < v1; v++) {
     if (skipRow[v - v0]) continue;
@@ -843,12 +837,25 @@ function interior(s, ctx) {
     let prev = 0;
     for (let u = a; u < b; u++) {
       const x = M[u * Wd + v];
-      if (x && !prev) runs++;
+      if (x && !prev) starts[u - a]++;
       prev = x;
     }
   }
-  const density = usedRows ? runs / usedRows / (n / pm) : 0;
-  return { filled: filled / n, hatched: density >= 5 ? busy / n : 0, density };
+  let hatched = 0;
+  let total = 0;
+  if (usedRows) {
+    const W2 = Math.max(4, Math.round(0.2 * pm));
+    const pre = new Uint32Array(n + 1);
+    for (let i = 0; i < n; i++) pre[i + 1] = pre[i] + starts[i];
+    for (let i = 0; i < n; i++) {
+      const lo = Math.max(0, i - W2);
+      const hi = Math.min(n, i + W2 + 1);
+      const d = (pre[hi] - pre[lo]) / usedRows / ((hi - lo) / pm);
+      if (d >= 5) hatched++;
+    }
+    total = pre[n];
+  }
+  return { filled: filled / n, hatched: hatched / n, density: usedRows ? total / usedRows / (n / pm) : 0 };
 }
 
 /**

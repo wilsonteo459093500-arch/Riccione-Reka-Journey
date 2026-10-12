@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node test/run.mjs && node test/floors.test.mjs && node test/ai.test.mjs && node test/profile.test.mjs && node test/i18n.test.mjs && node test/palette.test.mjs"
+    "test": "node test/run.mjs && node test/floors.test.mjs && node test/ai.test.mjs && node -e \"require('fs').existsSync('test/walls.test.mjs') && import('./test/walls.test.mjs')\" && node test/profile.test.mjs && node test/i18n.test.mjs && node test/palette.test.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.456.0",
