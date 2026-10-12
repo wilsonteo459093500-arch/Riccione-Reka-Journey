@@ -13,6 +13,9 @@ export default {
   '客人自己的手机 · 分享链接 · 约 6–8 分钟。五张牌：直觉、生活、宝藏、三个愿望、雷区 → 得到一份「专属梦想家概念蓝图」。':
     'For the guest’s own phone or a shared link · about 6–8 minutes. Five cards — Intuition, Life, Treasure, Three Wishes, Deal-Breakers — lead to a personal Dream Home Blueprint.',
   '展厅 iPad 请用上面的「客户许愿模式」。': 'On the showroom iPad, use Wish Mode above.',
+  '建好超过 {0} 天的蓝图会自动删掉（客人手上的链接还能打开）。': 'Blueprints older than {0} days are deleted automatically (guests can still open their own links).',
+  '清空本机全部蓝图': 'Delete all blueprints on this device',
+  '删除这台设备上全部 {0} 份蓝图？删了就找不回来。': 'Delete all {0} blueprints on this device? This can’t be undone.',
 
   // ── 许愿模式开场 ──
   '许一个家的愿': 'Make a wish for your home',

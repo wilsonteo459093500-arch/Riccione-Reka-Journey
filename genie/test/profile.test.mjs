@@ -19,6 +19,7 @@ import {
   unpackJSON,
   PET_REASON,
   COOK_REASON,
+  expired,
 } from '../src/shared/profile.js';
 import { profileText } from '../src/shared/summary.js';
 import { setLang } from '../src/shared/i18n.js';
@@ -400,6 +401,28 @@ await test('英文模式：摘要和谈话提示都是英文', () => {
   } finally {
     setLang('zh', { reload: false });
   }
+});
+
+await test('客人版 WhatsApp 摘要：没有最想藏、设计语言、见面要聊、未确认标记；员工版照旧', () => {
+  const p = buildProfile(
+    { name: 'Peggy', pairs: Object.fromEntries(PAIRS.map((x) => [x.id, { pick: 'a', ms: 1500 }])), life: { saturday: 'sofa', home: 'drop', cook: 'heavy', bell: 'shoes', who: ['kids', 'cat'] }, shoes: 70, books: 3, wishes: ['storage', 'light', 'kitchen'], avoid: ['red'], storage: { touched: { shoes: true } } },
+    {},
+  );
+  const plan = storagePlan(p.storage, APPLIANCES);
+  const staff = profileText(p, plan, 'https://x/quiz.html?staff=1#bp=1');
+  const client = profileText(p, plan, 'https://x/quiz.html#bp=1', { client: true });
+  assert.ok(staff.includes('最想藏') && staff.includes('设计语言') && staff.includes('见面要聊'), staff);
+  for (const s of ['最想藏', '设计语言', '见面要聊', '未确认', 'staff=1']) assert.ok(!client.includes(s), `${s}\n${client}`);
+  assert.ok(client.includes('生活：周六') && client.includes('收纳：') && client.includes('三个愿望'), client);
+});
+
+await test('本机蓝图放多久：超过 keepDays 天的过期，没有日期的留着，0 = 不删', () => {
+  const now = Date.parse('2026-10-12T00:00:00Z');
+  const ago = (d) => ({ createdAt: new Date(now - d * 86400000).toISOString() });
+  assert.equal(expired(ago(91), now, 90), true);
+  assert.equal(expired(ago(89), now, 90), false);
+  assert.equal(expired({}, now, 90), false);
+  assert.equal(expired(ago(400), now, 0), false);
 });
 
 console.log(`\n${n - failed}/${n} 通过`);

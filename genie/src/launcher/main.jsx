@@ -19,7 +19,7 @@ import { t, tj, L, isEn, guideName, useLang } from '../shared/i18n.js';
 import WishMode from '../wish/WishMode.jsx';
 import { startWish, savedHost, saveHost } from '../wish/start.js';
 import { useHold } from '../wish/useHold.js';
-import { loadArchive, removeFromArchive } from '../shared/profile.js';
+import { loadArchive, removeFromArchive, clearArchive } from '../shared/profile.js';
 import { DREAMER_BY_CODE } from '../shared/dreamers.js';
 
 // 这个分页正在客户许愿模式里（sessionStorage：关掉分页就没了）
@@ -74,7 +74,7 @@ function ArchiveRow({ p, onRemove }) {
 }
 
 /** 员工 · 本机蓝图：锁着。按住 3 秒（一圈金线画满）才打开；打开后轻触就锁上 */
-function Archive({ list, onRemove }) {
+function Archive({ list, onRemove, onClear }) {
   const [open, setOpen] = useState(false);
   const swallow = useRef(false); // 刚按住打开：松手那一下的 click 不要又把它锁上
   const { p, bind } = useHold(
@@ -151,6 +151,15 @@ function Archive({ list, onRemove }) {
               ))}
             </ul>
           )}
+          <div className="ln-archive-foot">
+            {CONFIG.keepDays > 0 && <p className="ln-note">{t('建好超过 {0} 天的蓝图会自动删掉（客人手上的链接还能打开）。', [CONFIG.keepDays])}</p>}
+            {list.length > 0 && (
+              <button type="button" className="ln-clear" onClick={onClear}>
+                <Trash2 size={16} strokeWidth={1.8} aria-hidden="true" />
+                <span>{t('清空本机全部蓝图')}</span>
+              </button>
+            )}
+          </div>
         </div>
       )}
     </section>
@@ -196,6 +205,11 @@ function Launcher() {
   const remove = (p) => {
     if (!confirm(t('删除 {0} 的蓝图？', [p.name || t('这位贵宾')]))) return;
     removeFromArchive(p.id);
+    setList(loadArchive());
+  };
+  const clear = () => {
+    if (!confirm(t('删除这台设备上全部 {0} 份蓝图？删了就找不回来。', [list.length]))) return;
+    clearArchive();
     setList(loadArchive());
   };
 
@@ -329,7 +343,7 @@ function Launcher() {
           </a>
         </div>
 
-        <Archive list={list} onRemove={remove} />
+        <Archive list={list} onRemove={remove} onClear={clear} />
       </main>
 
       <footer className="ln-foot">

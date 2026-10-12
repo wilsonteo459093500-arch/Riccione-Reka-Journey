@@ -7,6 +7,7 @@ import { MATERIALS, MAT_BY_ID, SLOTS, SLOT_BY_ID, fits } from './materials.js';
 import { tagsOf } from './moods.js';
 import { COLOR_FAMILIES, CHROMATIC, SHADES } from './colorTags.js';
 import { t, L, isEn } from './i18n.js';
+import { CONFIG } from './config.js';
 
 export const PROFILE_VERSION = 1;
 
@@ -473,12 +474,32 @@ export function slimProfile(p) {
 
 const ARCHIVE_KEY = 'genie.profiles.v1';
 
+/** 建好超过 CONFIG.keepDays 天的档案（没有日期的旧档案留着，看不出几天） */
+export function expired(p, now = Date.now(), days = CONFIG.keepDays) {
+  const at = Date.parse(p?.createdAt || '');
+  return days > 0 && Number.isFinite(at) && now - at > days * 86400000;
+}
+
 export function loadArchive() {
   try {
     const list = JSON.parse(localStorage.getItem(ARCHIVE_KEY) || '[]');
-    return Array.isArray(list) ? list : [];
+    if (!Array.isArray(list)) return [];
+    // 过期的这一次就真的删掉（不只是不显示）
+    const now = Date.now();
+    const kept = list.filter((p) => !expired(p, now));
+    if (kept.length !== list.length) localStorage.setItem(ARCHIVE_KEY, JSON.stringify(kept));
+    return kept;
   } catch {
     return [];
+  }
+}
+
+/** 员工区「清空本机全部蓝图」 */
+export function clearArchive() {
+  try {
+    localStorage.removeItem(ARCHIVE_KEY);
+  } catch {
+    /* ignore */
   }
 }
 
