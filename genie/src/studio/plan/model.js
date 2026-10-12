@@ -980,7 +980,34 @@ export function flightRails(plan0, stairId, wallsByFloor) {
   return out;
 }
 
-/** 从一层的房间里挖掉一个矩形（放楼梯时让出位置）：被挖的房间切成最多 4 块，太窄的（< 0.35m）丢掉 */
+const SLIVER = 0.35; // 比这个窄的一条不算房间
+
+/**
+ * 楼梯的矩形贴到它压到的房间的边上：差不到 tol（默认 0.35m —— 挖出来会是一条太窄、只好丢掉的缝，墙会变成两道）就对齐过去。
+ * rooms = 上下两层的房间（楼梯间自己不算）。
+ */
+export function fitRectToRooms(rooms, rect, tol = SLIVER) {
+  let x0 = rect.x;
+  let y0 = rect.y;
+  let x1 = rect.x + rect.w;
+  let y1 = rect.y + rect.d;
+  for (const r of rooms || []) {
+    if (r.stairId) continue;
+    const ox = Math.min(r.x + r.w, x1) - Math.max(r.x, x0);
+    const oy = Math.min(r.y + r.d, y1) - Math.max(r.y, y0);
+    if (ox <= 0.05 || oy <= 0.05) continue;
+    if (y0 > r.y + 1e-6 && y0 - r.y < tol) y0 = r.y;
+    if (y1 < r.y + r.d - 1e-6 && r.y + r.d - y1 < tol) y1 = r.y + r.d;
+    if (x0 > r.x + 1e-6 && x0 - r.x < tol) x0 = r.x;
+    if (x1 < r.x + r.w - 1e-6 && r.x + r.w - x1 < tol) x1 = r.x + r.w;
+  }
+  return { ...rect, x: r2(x0), y: r2(y0), w: r2(x1 - x0), d: r2(y1 - y0) };
+}
+
+/**
+ * 从一层的房间里挖掉一个矩形（放楼梯时让出位置）：被挖的房间切成最多 4 块（上、下整条，左右两块夹在中间），
+ * 太窄的（< 0.35m）不要：上 / 下那一条太窄时，左右两块就一直长到房间的边（不会多出一道墙）。
+ */
 export function carveFloor(floor, rect, { keep = [] } = {}) {
   const keepIds = new Set(keep);
   const rooms = [];
@@ -997,13 +1024,13 @@ export function carveFloor(floor, rect, { keep = [] } = {}) {
     const bot = r.y + r.d - (rect.y + rect.d);
     const lft = rect.x - r.x;
     const rgt = r.x + r.w - (rect.x + rect.w);
-    const yy0 = Math.max(r.y, rect.y);
-    const yy1 = Math.min(r.y + r.d, rect.y + rect.d);
-    if (top > 0.05) pieces.push({ x: r.x, y: r.y, w: r.w, d: top });
-    if (bot > 0.05) pieces.push({ x: r.x, y: rect.y + rect.d, w: r.w, d: bot });
+    const yy0 = top >= SLIVER ? rect.y : r.y;
+    const yy1 = bot >= SLIVER ? rect.y + rect.d : r.y + r.d;
+    if (top >= SLIVER) pieces.push({ x: r.x, y: r.y, w: r.w, d: top });
+    if (bot >= SLIVER) pieces.push({ x: r.x, y: rect.y + rect.d, w: r.w, d: bot });
     if (lft > 0.05) pieces.push({ x: r.x, y: yy0, w: lft, d: yy1 - yy0 });
     if (rgt > 0.05) pieces.push({ x: rect.x + rect.w, y: yy0, w: rgt, d: yy1 - yy0 });
-    const ok = pieces.filter((p) => p.w >= 0.35 && p.d >= 0.35).sort((p, q) => q.w * q.d - p.w * p.d);
+    const ok = pieces.filter((p) => p.w >= SLIVER && p.d >= SLIVER).sort((p, q) => q.w * q.d - p.w * p.d);
     ok.forEach((p, i) => {
       let id = r.id;
       if (i) {
@@ -1124,8 +1151,10 @@ export function checkPlan(raw) {
     if (g.width < 0.85 - 1e-9) out.push(issue('stairNarrow', 'warn', s.from, [`${s.id}-${s.from}`], '楼梯太窄：{0} m', [r2(g.width)]));
     const lo = floorById(plan, s.from);
     const hi = floorById(plan, s.to);
-    if (mouthBlocked(plan, lo, wallsOf(lo), g.entry.seg, g.entry.edge, `${s.id}-${lo.id}`)) out.push(issue('stairBlocked', 'error', lo.id, [`${s.id}-${lo.id}`], '{0}的楼梯口被墙挡住了', [{ floor: lo.id }]));
-    if (mouthBlocked(plan, hi, wallsOf(hi), g.exit.seg, g.exit.edge, `${s.id}-${hi.id}`)) out.push(issue('stairBlocked', 'error', hi.id, [`${s.id}-${hi.id}`], '{0}的楼梯口被墙挡住了', [{ floor: hi.id }]));
+    // 还没画房间的一层（刚加的空白二楼）不算「被墙挡住」：编辑器会提示沿着虚线画
+    const drawn = (f) => f.rooms.some((r) => !r.stairId && r.type !== 'stair');
+    if (drawn(lo) && mouthBlocked(plan, lo, wallsOf(lo), g.entry.seg, g.entry.edge, `${s.id}-${lo.id}`)) out.push(issue('stairBlocked', 'error', lo.id, [`${s.id}-${lo.id}`], '{0}的楼梯口被墙挡住了', [{ floor: lo.id }]));
+    if (drawn(hi) && mouthBlocked(plan, hi, wallsOf(hi), g.exit.seg, g.exit.edge, `${s.id}-${hi.id}`)) out.push(issue('stairBlocked', 'error', hi.id, [`${s.id}-${hi.id}`], '{0}的楼梯口被墙挡住了', [{ floor: hi.id }]));
   }
   return out;
 }

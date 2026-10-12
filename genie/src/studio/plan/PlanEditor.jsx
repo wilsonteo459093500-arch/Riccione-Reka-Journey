@@ -1723,7 +1723,7 @@ const PE_FLOORS_CSS = `
 .pe-stair-label { font-family: var(--sans); font-weight: 700; fill: var(--gold-ink); paint-order: stroke; stroke: var(--card); stroke-width: 0.06; }
 .pe-preview.is-stair { fill: rgba(var(--gold-rgb), 0.28); }
 .pe-ask { position: absolute; inset: 0; z-index: 8; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 16px; background: rgba(var(--bg-rgb), 0.55); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
-.pe-ask-card { width: min(380px, 100%); padding: 20px; border-radius: 22px; background: var(--card); box-shadow: var(--shadow-2), 0 0 0 0.5px var(--line); }
+.pe-ask-card { box-sizing: border-box; width: min(380px, 100%); padding: 20px; border-radius: 22px; background: var(--card); box-shadow: var(--shadow-2), 0 0 0 0.5px var(--line); }
 .pe-ask-card p { margin: 0 0 16px; font: 600 16px/1.45 var(--sans); color: var(--ink); }
 .pe-ask-card > div { display: flex; justify-content: flex-end; gap: 8px; }
 .pe-btn.danger-solid { background: var(--danger); color: var(--card); }
