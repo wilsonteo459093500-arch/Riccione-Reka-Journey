@@ -337,6 +337,9 @@ export default function StudioApp() {
       onInteract: () => !showroomRef.current && setDemo(false),
       onContextLost: () => setCtx('lost'),
       onContextRestored: () => setCtx('restored'),
+      // 着色器编译失败（有些 Windows 显卡）：引擎已经自动降了一档；降到底还是不行就请他开硬件加速 / 更新驱动
+      onRenderProblem: (p) =>
+        flash(p.degradedTo ? t('这台电脑的显卡跑不动高画质，已自动换成兼容画质。') : t('这台电脑的浏览器画不出 3D：请在浏览器设置里打开「硬件加速」，或更新显卡驱动后再试。'), 8000),
       // 演示时引擎每 250ms 报一次时间：演示中界面是藏起来的，不跟着重画；退出时再同步
       onTime: (h) => !demoRef.current && Number.isFinite(h) && setProject((p) => (p && p.time !== h ? { ...p, time: h } : p)),
     });

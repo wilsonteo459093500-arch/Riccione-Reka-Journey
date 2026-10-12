@@ -26,6 +26,7 @@ const CONTENT = [
   'src/quiz/scenes.js', // 风景的天空 / 遮罩色
   'src/quiz/flow.js', // 直觉题的小房间配色
   'src/quiz/vignettes/', // 直觉题照片的离线渲染
+  'src/studio/diag.js', // 开发用的诊断面板（?diag=1），不是给客人看的界面
 ];
 
 // 界面文件里允许写死的个别值（小写）

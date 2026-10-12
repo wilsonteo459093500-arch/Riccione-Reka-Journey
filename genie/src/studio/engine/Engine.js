@@ -59,6 +59,8 @@ const WALL_SNAP = { reach: 0.35, sink: 0.3, rest: 0.004, tol: 0.008 };
 const QUALITY = {
   high: { pr: 2, shadow: 4096, env: 256, bg: 1024, lights: 10, taps: 16, pcfMax: 10, rect: true, snapLong: 3200 },
   fast: { pr: 1.5, shadow: 2048, env: 128, bg: 512, lights: 5, taps: 8, pcfMax: 6, rect: false, snapLong: 2560 },
+  // 兼容档：只在着色器编译失败时自动换过来（某些 Windows 显卡 / 驱动）。three 原版阴影、灯少、不走后期链 —— 先保证画得出来
+  safe: { pr: 1, shadow: 1024, env: 64, bg: 512, lights: 3, taps: 0, pcfMax: 4, rect: false, snapLong: 2048 },
 };
 
 const DEMO_FPS = 30;
@@ -109,7 +111,7 @@ function patchToneMapping() {
 
 /** 设置里的画质（'auto' / 没存 = 自动）→ 实际档位 */
 export function resolveQuality(q) {
-  if (q === 'high' || q === 'fast') return q;
+  if (q === 'high' || q === 'fast' || q === 'safe') return q;
   try {
     return matchMedia('(pointer: coarse)').matches ? 'fast' : 'high';
   } catch {
@@ -186,6 +188,9 @@ export class Engine {
     r.shadowMap.type = THREE.PCFShadowMap;
     r.domElement.className = 'studio-canvas';
     container.appendChild(r.domElement);
+    // 着色器编译失败（有些 Windows 显卡 / 驱动吃不下高画质的着色器）：整栋房子会画不出来、只剩背景 →
+    // 自动降一档（high → fast → safe）重新编译；原因记在 window.__genieDiag，界面提示一句
+    r.debug.onShaderError = (gl, program, vs, fs) => this.onShaderError(gl, program, vs, fs);
 
     // WebGL 上下文丢失（iPad 显存吃紧、在后台太久被系统回收）：停画、告诉界面；恢复后把 GPU 上画出来的东西重建。
     // （three 自己的监听器先注册，所以这里跑的时候它已经重新初始化好了）
@@ -329,8 +334,8 @@ export class Engine {
     }
     this.composer = this.gtao = this.bloom = this.dof = this.output = null;
     const full = this.quality === 'high';
-    // iPad（'fast'）且画布自带 MSAA：直接画，最省
-    if (!full && this.nativeAA) return;
+    // iPad（'fast'）且画布自带 MSAA：直接画，最省；兼容档也直接画（不用半精度多重采样的渲染目标）
+    if (!full && (this.nativeAA || this.quality === 'safe')) return;
     const r = this.renderer;
     const pr = r.getPixelRatio();
     const size = r.getSize(new THREE.Vector2());
@@ -379,6 +384,37 @@ export class Engine {
    * 像素比、阴影贴图尺寸 + 软阴影采样数、环境贴图尺寸、窗口面光源、夜灯数量、背景分辨率、材质贴图分辨率 / 各向异性、后期链。
    * （环境贴图尺寸跟着档位变 → 所有受光材质的着色器键都变了 → 自动用新的软阴影采样数重新编译）
    */
+  /** 着色器编译失败：记下原因，降一档重新编译（high → fast → safe）；已经是兼容档就告诉界面 */
+  onShaderError(gl, program, vs, fs) {
+    const log = (sh) => {
+      try {
+        return (sh && gl.getShaderInfoLog(sh)) || '';
+      } catch {
+        return '';
+      }
+    };
+    const info = { gpu: gpuName(gl), quality: this.quality, program: (gl.getProgramInfoLog(program) || '').slice(0, 600), vertex: log(vs).slice(0, 600), fragment: log(fs).slice(0, 600) };
+    console.error('[WISH studio] shader failed to compile', info);
+    try {
+      (window.__genieDiag ||= []).push(info);
+    } catch {
+      /* ignore */
+    }
+    const next = this.quality === 'high' ? 'fast' : this.quality === 'fast' ? 'safe' : null;
+    if (!next) {
+      this.cb.onRenderProblem?.({ ...info, degradedTo: null });
+      return;
+    }
+    if (this._degrading) return;
+    this._degrading = true;
+    // 等这一帧画完再换档（换档会重建阴影、环境贴图、后期链）
+    setTimeout(() => {
+      this._degrading = false;
+      if (this.quality === info.quality) this.setQuality(next);
+      this.cb.onRenderProblem?.({ ...info, degradedTo: next });
+    }, 0);
+  }
+
   setQuality(q) {
     this.qualityPref = q;
     const nq = resolveQuality(q);
@@ -399,7 +435,7 @@ export class Engine {
     this.buildBackdrop(QP.bg);
     // 材质库（贴图分辨率 / 各向异性）和家具的细节（分段数、叶子数：furniture.js 看 lib.quality）都跟着手动换的档位走：
     // 先换材质库的档，再把每件家具按新档重建（旧的几何体释放）；夜灯池也在这里重新摆好
-    this.lib.setQuality?.(nq);
+    this.lib.setQuality?.(nq === 'safe' ? 'fast' : nq);
     this.rebuildFurniture();
     if (this.rooms) this.placeRoomLights();
     this.setupComposer();
@@ -1747,17 +1783,29 @@ function patchSoftShadows(taps) {
   if (taps === SOFT_TAPS) return;
   SOFT_SRC ??= THREE.ShaderChunk.shadowmap_pars_fragment;
   const chunk = SOFT_SRC;
+  // 0 = 用 three 原版（兼容档）
+  if (!taps) {
+    THREE.ShaderChunk.shadowmap_pars_fragment = chunk;
+    SOFT_TAPS = 0;
+    return;
+  }
   const re = /shadow = \(\s*texture\( shadowMap, vec3\( shadowCoord\.xy \+ vogelDiskSample\( 0, 5, phi \)[\s\S]*?\) \* 0\.2;/;
   if (!re.test(chunk)) return;
   SOFT_TAPS = taps;
-  THREE.ShaderChunk.shadowmap_pars_fragment = chunk.replace(
-    re,
-    `shadow = 0.0;
-				for ( int i = 0; i < ${taps}; i ++ ) {
-					shadow += texture( shadowMap, vec3( shadowCoord.xy + vogelDiskSample( i, ${taps}, phi ) * radius, shadowCoord.z ) );
-				}
-				shadow /= float( ${taps} );`
-  );
+  // 一行一个采样点（不用 for 循环）：Windows 的 Chrome 走 ANGLE → Direct3D，循环里的阴影比较采样（SampleCmp）
+  // 在一些显卡 / 驱动上编译不过，整栋房子就画不出来。three 原版也是这样一行一行写的。
+  const taps_ = Array.from({ length: taps }, (_, i) => `shadow += texture( shadowMap, vec3( shadowCoord.xy + vogelDiskSample( ${i}, ${taps}, phi ) * radius, shadowCoord.z ) );`);
+  THREE.ShaderChunk.shadowmap_pars_fragment = chunk.replace(re, `shadow = 0.0;\n\t\t\t\t${taps_.join('\n\t\t\t\t')}\n\t\t\t\tshadow /= float( ${taps} );`);
+}
+
+/** 显卡名字（给出错时的提示 / 诊断用；拿不到就空字符串） */
+function gpuName(gl) {
+  try {
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    return String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER) || '');
+  } catch {
+    return '';
+  }
 }
 
 // ───────────────────────── 环境光 IBL：摄影棚 + 天穹 ─────────────────────────

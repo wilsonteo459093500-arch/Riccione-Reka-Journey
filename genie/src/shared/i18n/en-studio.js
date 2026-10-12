@@ -136,4 +136,12 @@ export default {
     'Underlay in place. Trace the walls with “Draw room” — calibrating the scale with the ruler first makes it more accurate. (Add a Gemini key in Settings for automatic AI detection.)',
   '这台设备读不了 PDF：请更新 iPadOS，或把平面图截图成 JPG / PNG 再上传': 'This device can’t read PDFs — update iPadOS, or upload a JPG / PNG screenshot of the plan instead',
   '底图已放好。用「画房间」沿着墙描一遍；先用量尺校准比例会更准。': 'Underlay in place. Trace the walls with “Draw room” — calibrating the scale with the ruler first makes it more accurate.',
+  // ── 3D 画不出来时的提示（着色器编译失败 → 自动降画质） ──
+  '这台电脑的显卡跑不动高画质，已自动换成兼容画质。': 'This computer’s graphics can’t handle the high-quality mode, so the studio switched to compatible quality.',
+  '这台电脑的浏览器画不出 3D：请在浏览器设置里打开「硬件加速」，或更新显卡驱动后再试。': 'This browser can’t draw the 3D view. Turn on hardware acceleration in the browser settings, or update the graphics driver, then try again.',
+  // ── 诊断面板（studio.html?diag=1，按钮本来就中英并列） ──
+  '复制 Copy': 'Copy',
+  '流畅画质 Fast': 'Fast quality',
+  '兼容画质 Safe': 'Safe quality',
+  '清除本机方案 Reset': 'Reset this device’s projects',
 };
