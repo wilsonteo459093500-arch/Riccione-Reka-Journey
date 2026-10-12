@@ -820,19 +820,19 @@ function interior(s, ctx) {
     diag[u - a] = d;
   }
   let filled = 0;
-  let hatched = 0;
-  let crossings = 0;
+  let busy = 0;
+  let clusters = 0;
   const win = Math.max(2, Math.round(0.05 * pm));
   for (let i = 0; i < n; i++) {
     if (occ[i] >= 0.6 * rows) filled++;
     let any = 0;
-    for (let j = Math.max(0, i - win); j <= Math.min(n - 1, i + win) && !any; j++) any = diag[j];
-    if (any) hatched++;
-    if (diag[i] && (i === 0 || !diag[i - 1])) crossings++;
+    for (let j = Math.max(0, i - win); j <= Math.min(n - 1, i + win) && !any; j++) any = occ[j];
+    if (any) busy++;
+    if (occ[i] && (i === 0 || !occ[i - 1])) clusters++;
   }
-  // 斜线填充：整段都有、而且一米里有好几条（家具的弧线、字只有一两处）
-  const density = crossings / (n / pm);
-  return { filled: filled / n, hatched: density >= 4 ? hatched / n : 0, density };
+  // 填充（斜线 / 砖纹）：墙带里面到处都有墨、而且一米里有好几处（家具的弧线、字、地砖线只有一两处）
+  const density = clusters / (n / pm);
+  return { filled: filled / n, hatched: density >= 5 ? busy / n : 0, density };
 }
 
 /**
@@ -1350,8 +1350,8 @@ function findGaps(segs, ctx, hints) {
 }
 
 /**
- * 一段墙中间的窗：墙带里面（去掉两边的线）有一条「贯通」的细线（玻璃），≥ 0.35 m 长，那一截墙不是实心的，
- * 两头有窗框（横穿墙厚的线 / 实心墙的断面）。斜线填充、轴线的虚线没有窗框 → 不算。
+ * 一段墙中间的窗：墙带里面（去掉两边的线）有一条「贯通」的细线（玻璃）≥ 0.35 m，那一截墙不是实心的，
+ * 两头有窗框（横穿墙厚的线 / 实心墙的断面）。斜线填充（每行只有零星的点）、轴线的虚线（两头没有窗框）不算。
  */
 function findWindows(segs, ctx) {
   const { pm, raw, rawT, w, h } = ctx;
@@ -1370,44 +1370,44 @@ function findWindows(segs, ctx) {
     const b = clamp(Math.round(s.b), a + 1, Hd);
     const rows = v1 - v0;
     if (rows < 1 || b - a < minLen) return;
-    // 每个沿墙位置：里面有几个墨点
-    const occ = new Uint16Array(b - a);
+    const n = b - a;
+    const filled = new Uint8Array(n);
     for (let u = a; u < b; u++) {
       let k = 0;
       for (let v = v0; v < v1; v++) k += M[u * Wd + v];
-      occ[u - a] = k;
+      filled[u - a] = k >= 0.6 * rows ? 1 : 0;
     }
-    // 每一行里面的长墨段（允许 1 像素断）
+    // 每一行：不实心的位置上的长墨段（允许 1 像素断）= 玻璃线
     const cand = [];
     for (let v = v0; v < v1; v++) {
       let u = a;
       while (u < b) {
-        if (!M[u * Wd + v]) {
+        if (!M[u * Wd + v] || filled[u - a]) {
           u++;
           continue;
         }
         const st = u;
-        let miss = 0;
-        while (u < b && (M[u * Wd + v] || (miss < 1 && u + 1 < b && M[(u + 1) * Wd + v]))) {
-          miss = M[u * Wd + v] ? 0 : miss + 1;
+        let last = u;
+        while (u < b && !filled[u - a] && (M[u * Wd + v] || u - last <= 1)) {
+          if (M[u * Wd + v]) last = u;
           u++;
         }
-        if (u - st >= minLen) cand.push([st, u]);
+        if (last + 1 - st >= minLen) cand.push([st, last + 1]);
       }
     }
     if (!cand.length) return;
     cand.sort((p, q) => p[0] - q[0]);
     const merged = [];
     for (const c of cand) {
-      const last = merged[merged.length - 1];
-      if (last && c[0] <= last[1] + 2) last[1] = Math.max(last[1], c[1]);
+      const lst = merged[merged.length - 1];
+      if (lst && c[0] <= lst[1] + 2) lst[1] = Math.max(lst[1], c[1]);
       else merged.push([...c]);
     }
     const busy = (s.ops || []).map((g) => [g.a, g.b]);
-    // 横截面被墨盖住的比例（窗框 / 实心墙断面）
+    // 横截面被墨盖住的比例（窗框 / 实心墙断面），在 u 附近 ±3 像素找最大的
     const cross = (u) => {
       let best = 0;
-      for (let du = -2; du <= 2; du++) {
+      for (let du = -3; du <= 3; du++) {
         const uu = u + du;
         if (uu < 0 || uu >= Hd) continue;
         let k = 0;
@@ -1417,22 +1417,9 @@ function findWindows(segs, ctx) {
       return best;
     };
     for (const [p, q] of merged) {
-      // 窗里面不是实心
-      let filled = 0;
-      for (let u = p; u < q; u++) if (occ[u - a] >= 0.6 * rows) filled++;
-      if (filled > 0.3 * (q - p)) continue;
-      // 实心 / 填充墙中间的窗：把两头收到实心开始的地方
-      let p2 = p;
-      let q2 = q;
-      while (p2 < q2 && occ[p2 - a] >= 0.6 * rows) p2++;
-      while (q2 > p2 && occ[q2 - 1 - a] >= 0.6 * rows) q2--;
-      if (q2 - p2 < minLen) continue;
-      if (busy.some(([x0, x1]) => overlap(p2, q2, x0, x1) > 0.3 * (q2 - p2))) continue;
-      // 两头的窗框
-      const atA = p2 - a < 3 ? 1 : cross(p2);
-      const atB = b - q2 < 3 ? 1 : cross(q2 - 1);
-      if (atA < 0.75 || atB < 0.75) continue;
-      out.push({ seg: si, a: p2, b: q2, kind: 'window', arc: false });
+      if (busy.some(([x0, x1]) => overlap(p, q, x0, x1) > 0.3 * (q - p))) continue;
+      if (cross(p) < 0.75 || cross(q - 1) < 0.75) continue;
+      out.push({ seg: si, a: p, b: q, kind: 'window', arc: false });
     }
   });
   return out;
