@@ -570,19 +570,26 @@
 .preset-pal i + i {
   box-shadow: inset 0.5px 0 0 rgba(var(--shade-rgb), 0.14);
 }
+/* b 是 flex（图标 + 名字）：省略号要写在装名字的那个盒子上（.preset-name），写在 b 上不会生效 */
 .preset b {
   display: flex;
   align-items: center;
   gap: 5px;
+  min-width: 0;
   max-width: 100%;
   font: 600 14px/1.2 var(--sans);
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 .preset b svg {
   flex: none;
   color: var(--gold);
+}
+.preset-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .preset em {
   max-width: 100%;
@@ -594,14 +601,20 @@
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
+/* 客人的梦想家：占一整行。色条在上，名字在左、牌号在右；
+   一行放不下时（设计师版：英文长名 + 牌号 · 代号）牌号自己换到名字下面 —— 名字不被切，只有窄到连名字都放不下才出省略号 */
 .preset.dreamer {
-  display: grid;
-  grid-template-columns: 1fr auto;
+  flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
-  column-gap: 10px;
+  justify-content: space-between;
+  gap: 6px 10px;
 }
 .preset.dreamer .preset-pal {
-  grid-column: 1 / -1;
+  flex: 0 0 100%;
+}
+.preset.dreamer em {
+  flex: none;
 }
 
 /* 情绪仪表 */
@@ -3132,10 +3145,11 @@
   .is-en .pe-title {
     flex: none;
   }
-  .is-en .pe-head .lbl-long {
+  /* 许愿模式（draw-only：没有上传、整体宽、AI）中间只剩模板一颗，放得下完整的「Use a template…」 */
+  .is-en .pe:not(.draw-only) .pe-head .lbl-long {
     display: none;
   }
-  .is-en .pe-head .lbl-short {
+  .is-en .pe:not(.draw-only) .pe-head .lbl-short {
     display: inline;
   }
   .is-en .pe-head-actions {

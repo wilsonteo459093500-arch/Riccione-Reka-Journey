@@ -86,7 +86,7 @@ export default {
   分享的方案: 'Shared project',
   分享来的: 'Shared with you',
 
-  // ── 怎么玩 ──
+  // ── 怎么用（帮助） ──
   '把底部的色块{0}（地板、墙、柜子、沙发…），那一组表面会发金光，放手就换上。也可以先在左边材质板点一个表面，再点色块。':
     'Drag a swatch from the bottom bar {0} (floor, walls, cabinets, sofa…). That group of surfaces glows gold — let go to apply it. Or tap a surface in the moodboard on the left first, then tap a swatch.',
   // 中文用面板上的中文名（温暖 / 明亮 / 沉浸）；英文的按钮本来就叫 Cozy / Bright / Moody
@@ -103,6 +103,11 @@ export default {
     'Tap “Floor plan” to upload an image or PDF. AI finds the rooms, doors and windows; drag to correct them, then tap “Generate 3D” — furniture is placed by our designers’ rules, with wardrobes and shoe cabinets sized from what the client counted on their Wish Journey.',
   '「更多」里的演示模式：自动环绕 + 一天的光影循环。展厅大屏直接打开 studio.html?demo=1（只显示示范户型，不会出现客人名字；长按左下角 WISH 字标 1.5 秒或按 Esc 退出）。相机按钮下载带品牌的高清概念图。':
     'Demo mode (under “More”) orbits slowly through a full day of light. For the showroom screen, open studio.html?demo=1 — it only ever shows the demo layout, never a client’s name; press and hold the WISH wordmark (bottom left) for 1.5 s, or press Esc, to exit. The camera button saves a branded high-res concept image.',
+  // 许愿模式（客人在展厅 iPad 上）：平面图只能画、没有相机按钮
+  '按「平面图」拉方块画房间、点墙放门窗，再按「生成 3D」—— 家具按设计师规则自动摆好。你家真正的平面图，设计师之后会换上去。':
+    'Tap “Floor plan”, drag out a box for each room and tap a wall to add doors and windows, then tap “Generate 3D” — furniture is placed by our designers’ rules. Your designer will swap in your home’s real floor plan afterwards.',
+  '「更多」里的演示模式：自动环绕 + 一天的光影循环；点任意处退出。': 'Demo mode (under “More”) orbits slowly through a full day of light — tap anywhere to exit.',
+  '平面图：画 / 修改': 'Floor plan: draw / edit',
 
   // ── 开始一个空间 ──
   '图片或 PDF。填了 AI key 会自动识别房间，校正 30 秒就能生成 3D。': 'An image or PDF. With an AI key, the rooms are found for you — check them for 30 seconds and you have 3D.',

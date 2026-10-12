@@ -45,6 +45,14 @@ import Blueprint from './Blueprint.jsx';
 const SESSION_KEY = 'genie.session.v1';
 const STALE_MS = 10 * 60 * 1000;
 const WISH = isWishMode();
+/** 网址带 ?staff=1（员工打开存档的蓝图）。Blueprint.jsx 在载入时就定下了员工身份 → 换下一位客人时要整页重新载入 */
+const STAFF_URL = (() => {
+  try {
+    return new URLSearchParams(location.search).get('staff') === '1';
+  } catch {
+    return false;
+  }
+})();
 const DUSK_STEPS = new Set(['lamp', 'reveal']);
 
 const initialAnswers = (name = '') => ({
@@ -122,9 +130,10 @@ function TopBar({ chapter, sub, onBack, canBack, progress, done }) {
   return (
     <header className="topbar">
       <div className="tb-left">
-        <button type="button" className="nav-back" onClick={onBack} disabled={!canBack} aria-label={t('上一题')}>
+        {/* 神灯、章节牌上也有这个按钮，那里没有「题」：叫「返回」 */}
+        <button type="button" className="nav-back" onClick={onBack} disabled={!canBack} aria-label={t('返回')}>
           <ChevronLeft size={22} strokeWidth={2} aria-hidden="true" />
-          <span>{t('上一题')}</span>
+          <span>{t('返回')}</span>
         </button>
         <div className="brand tb-brand">
           <b>{BRAND.app}</b>
@@ -170,18 +179,33 @@ function TopBar({ chapter, sub, onBack, canBack, progress, done }) {
 }
 
 const SMALL = '(max-width: 560px)';
-const TAPPABLE = '.stage button, .stage input, .stage textarea, .stage a[href], .stage [role="button"], .stage [role="slider"]';
+// 潘吉和他的话泡泡不能盖住的东西：能点的，还有算出来的结果（.calc）、小标题（.field-label）
+const TAPPABLE =
+  '.stage button, .stage input, .stage textarea, .stage a[href], .stage [role="button"], .stage [role="slider"], .stage .calc, .stage .field-label';
 const overlaps = (a, b) => a.left < b.right - 2 && a.right > b.left + 2 && a.top < b.bottom - 2 && a.bottom > b.top + 2;
+/** 「探头」时往下缩掉的比例（和 quiz.css 的 .companion.is-peek 一致） */
+const PEEK = 0.58;
+
+/** 每次量的时候现拿一次（题目卡里的东西会变：选了答案、结果多一行） */
+function tappableRects() {
+  const out = [];
+  for (const el of document.querySelectorAll(TAPPABLE)) {
+    const q = el.getBoundingClientRect();
+    if (q.width && q.height) out.push(q);
+  }
+  return out;
+}
 
 /**
- * 潘吉陪在右下角。他的话泡泡绝不盖住能点的东西：
- * 每次说话前先量一下（题目卡刚换上来时等它落定），撞到按钮 / 输入框就不说；滚动时再量；
+ * 潘吉陪在右下角。他的话泡泡绝不盖住能点的东西、也不盖住算出来的结果：
+ * 每次说话前先量一下（题目卡刚换上来时等它落定），撞到就不说；滚动、题目卡变高（选了答案、结果多一行）时再量；
  * 手机上第一下点击就收起、几秒后也自己收起。
+ * 他自己也一样：身子挡到 → 往下缩成「探头」；连头都挡到 → 整个躲到下面，滚到空的地方再出来。
  */
 function Companion({ mood, line, prop, stepId }) {
   const text = plain(line);
   const [show, setShow] = useState(false);
-  const [peek, setPeek] = useState(false);
+  const [pose, setPose] = useState('up'); // up | peek | away
   const bubble = useRef(null);
   const body = useRef(null);
   const enteredAt = useRef(performance.now());
@@ -189,24 +213,26 @@ function Companion({ mood, line, prop, stepId }) {
     if (!el) return false;
     const r = el.getBoundingClientRect();
     if (!r.width) return false;
-    for (const b of document.querySelectorAll(TAPPABLE)) {
-      const q = b.getBoundingClientRect();
-      if (q.width && q.height && overlaps(q, r)) return true;
-    }
-    return false;
+    return tappableRects().some((q) => overlaps(q, r));
   };
-  // 潘吉自己：身子挡到能点的东西时，往下缩成「探头」，滚到空的地方再站起来
   useEffect(() => {
     enteredAt.current = performance.now();
     let raf = 0;
     const measure = () => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
+        // 站着时的位置：offset* 不受 transform 影响（探头 / 躲下去的动画进行中也量得准）
         const el = body.current;
-        if (!el) return;
-        el.style.transform = 'none';
-        setPeek(hits(el));
-        el.style.transform = '';
+        const box = el?.offsetParent?.getBoundingClientRect();
+        if (!el || !box || !el.offsetWidth) return;
+        const left = box.left + el.offsetLeft;
+        const top = box.top + el.offsetTop;
+        const r = { left, top, right: left + el.offsetWidth, bottom: top + el.offsetHeight, height: el.offsetHeight };
+        const rects = tappableRects();
+        if (!rects.some((q) => overlaps(q, r))) return setPose('up');
+        // 探头时只露出上面那一截（头）：头也挡到 → 整个躲下去
+        const head = { left: r.left, right: r.right, top: r.top + r.height * PEEK, bottom: Math.min(innerHeight, r.bottom + r.height * PEEK) };
+        setPose(rects.some((q) => overlaps(q, head)) ? 'away' : 'peek');
       });
     };
     // 卡片落定后量一次；字体 / 图片晚到可能把卡片撑高，再量一次
@@ -215,10 +241,15 @@ function Companion({ mood, line, prop, stepId }) {
     document.fonts?.ready.then(measure).catch(() => {});
     window.addEventListener('scroll', measure, { passive: true });
     window.addEventListener('resize', measure);
+    // 题目卡变高 / 变矮（选了「6 门以上」，结果那一行变成两行）：再量
+    const card = document.querySelector('.stage > .step');
+    const ro = typeof ResizeObserver === 'function' && card ? new ResizeObserver(measure) : null;
+    ro?.observe(card);
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
       cancelAnimationFrame(raf);
+      ro?.disconnect();
       window.removeEventListener('scroll', measure);
       window.removeEventListener('resize', measure);
     };
@@ -232,28 +263,33 @@ function Companion({ mood, line, prop, stepId }) {
     // 题目卡换上来要 ~0.65 秒：等它落定再量
     const wait = Math.max(0, enteredAt.current + 680 - performance.now());
     const t1 = setTimeout(() => (raf = requestAnimationFrame(check)), wait);
-    const onScroll = () => {
+    // 之后只会收起（滚动、题目卡变高后撞到了），不会自己又冒出来
+    const recheck = () => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => hits(bubble.current) && setShow(false));
     };
     const hide = () => setShow(false);
-    window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('resize', onScroll);
+    window.addEventListener('scroll', recheck, { passive: true });
+    window.addEventListener('resize', recheck);
+    const card = document.querySelector('.stage > .step');
+    const ro = typeof ResizeObserver === 'function' && card ? new ResizeObserver(recheck) : null;
+    ro?.observe(card);
     if (small) window.addEventListener('pointerdown', hide, true);
     const t2 = small ? setTimeout(hide, wait + 3200) : 0;
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
       cancelAnimationFrame(raf);
-      window.removeEventListener('scroll', onScroll);
-      window.removeEventListener('resize', onScroll);
+      ro?.disconnect();
+      window.removeEventListener('scroll', recheck);
+      window.removeEventListener('resize', recheck);
       window.removeEventListener('pointerdown', hide, true);
     };
   }, [text, stepId]);
   return (
-    <aside className={`companion ${peek ? 'is-peek' : ''}`} aria-live="polite">
+    <aside className={`companion ${pose !== 'up' ? `is-${pose}` : ''}`} aria-live="polite">
       {text && (
-        <div className={`bubble ${show && !peek ? 'is-shown' : ''}`} key={text} ref={bubble}>
+        <div className={`bubble ${show && pose === 'up' ? 'is-shown' : ''}`} key={text} ref={bubble}>
           {text}
         </div>
       )}
@@ -357,9 +393,11 @@ function Play({ onDone, onRestart }) {
     if (step.id === 'welcome') tellShell('page', { page: 'quiz' });
   }, [step.id, step.chapter, step.interlude]);
 
-  // 许愿模式：一题停了 3 分钟没人碰 → 「还在吗？」；再 30 秒没回应 → 告诉外壳换下一位客人
+  // 许愿模式：一题停了 3 分钟没人碰 → 「还在吗？」；再 30 秒没回应 → 告诉外壳换下一位客人。
+  // 开场也一样，只要已经填了称呼 / 选了谁来许愿：客人走开了，名字不能留在框里等下一位客人。
+  const welcomeDirty = idx === 0 && (!!String(answers.name || '').trim() || (answers.players || 'solo') !== 'solo');
   useEffect(() => {
-    if (!WISH || idx === 0 || step.id === 'reveal') return undefined;
+    if (!WISH || (idx === 0 && !welcomeDirty) || step.id === 'reveal') return undefined;
     const { quizMs = 180000, promptMs = 30000 } = CONFIG.idle || {};
     let t1;
     let t2;
@@ -391,7 +429,7 @@ function Play({ onDone, onRestart }) {
       window.removeEventListener('pointerdown', onAct, true);
       window.removeEventListener('keydown', onAct, true);
     };
-  }, [idx, step.id, onRestart]);
+  }, [idx, step.id, onRestart, welcomeDirty]);
 
   const finish = async (oneWish) => {
     const full = { ...answers, oneWish };
@@ -541,18 +579,25 @@ export default function QuizApp() {
   }, []);
 
   const restart = useCallback(() => {
-    setProfile(null);
-    setFresh(false);
-    setError('');
     clearSession();
     try {
-      // 下一位客人：不要带着上一位的称呼（?for=）
+      // 下一位客人：不要带着上一位的称呼（?for=），也不能带着员工身份（?staff=1）和上一份蓝图（#…）
       const u = new URL(location.href);
+      const staff = STAFF_URL || u.searchParams.has('staff');
       u.searchParams.delete('for');
+      u.searchParams.delete('staff');
+      if (staff) {
+        // 员工身份在载入时就定下了（Blueprint 的 STAFF）：整页重新载入，下一位客人从干净的网址开始
+        location.replace(u.pathname + u.search);
+        return;
+      }
       history.replaceState(null, '', u.pathname + u.search);
     } catch {
       /* ignore */
     }
+    setProfile(null);
+    setFresh(false);
+    setError('');
     setMuted(false, { persist: false });
     setDesignerReq(false);
     setRoute({ kind: 'play' });
@@ -611,7 +656,11 @@ export default function QuizApp() {
       </div>
     );
 
-  if (profile) return <Blueprint key={profile.id} profile={profile} fresh={fresh} onRestart={restart} designerOpen={designerReq} />;
+  if (profile) {
+    // 展厅里打开的蓝图（刚做完 / 本机存档 / 员工 / 带陪同人 ?from=）：结尾的按钮是「下一位」；客人在家打开分享的链接则是「重新许愿」
+    const showroom = fresh || route.kind === 'id' || STAFF_URL || !!new URLSearchParams(location.search).get('from');
+    return <Blueprint key={profile.id} profile={profile} fresh={fresh} onRestart={restart} designerOpen={designerReq} showroom={showroom} />;
+  }
   if (route.kind !== 'play')
     return (
       <div className="qz morning is-plain">

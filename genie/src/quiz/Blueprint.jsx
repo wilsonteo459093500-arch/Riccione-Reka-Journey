@@ -3,8 +3,9 @@
 //
 // 设计师版绝不能漏给客人：
 //   · 只有网址带 ?staff=1（而且不在许愿模式里）才出现「客人版 / 设计师版」切换；
-//   · 许愿模式里，只能由外壳的员工区发 {type:'designer'} 打开；
-//   · 给客人的链接 / 海报 / 二维码都是普通链接；只有发到公司 WhatsApp 的那条带 ?staff=1。
+//   · 许愿模式里，只能由外壳的员工区发 {type:'designer'} 打开；切回客人版就又锁上（切换也收起来）；
+//   · 给客人的链接 / 海报 / 二维码都是普通链接；「发给设计师」的那条只在员工打开时才带 ?staff=1；
+//   · 许愿模式（展厅共用的 iPad）不发 WhatsApp、不走系统分享面板：海报配一个二维码，客人用自己的手机带走。
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -28,6 +29,7 @@ import {
   CookingPot,
   Rows3,
   ChevronDown,
+  ScanLine,
 } from 'lucide-react';
 import Pangie, { Lamp } from '../shared/Pangie.jsx';
 import Emblem from '../shared/Emblem.jsx';
@@ -49,6 +51,8 @@ import { renderPoster } from './poster.js';
 import { isWishMode, tellShell } from '../shared/zen.js';
 import { t, tj, L, isEn, guideName, withLang } from '../shared/i18n.js';
 import { fmt, ftNote } from '../shared/units.js';
+import { renderKeywords, doorNotes } from './keywords.js';
+import { qrMatrix, qrPath } from './qr.js';
 
 const WISH = isWishMode();
 /** 员工视角：网址带 ?staff=1，而且不在许愿模式里（许愿模式只认外壳的 designer 消息） */
@@ -117,6 +121,68 @@ function download(blob, name) {
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 
+/**
+ * 一条轴：和揭晓页、海报同一种画法 —— 金色的小圆点停在赢的那一边（left = 100 − v，v = 左边那一极的比例），
+ * 加粗的是赢的那一极，百分比也是它的。
+ */
+function Axis({ dim, a, b, v, hidden = false }) {
+  return (
+    <div className={`axis ${hidden ? 'hidden-axis' : ''}`}>
+      <span className="axis-dim">{dim}</span>
+      <span className={`axis-l ${v >= 50 ? 'win' : ''}`}>{a}</span>
+      <div className="axis-track" aria-hidden="true">
+        <i className="axis-knob" style={{ left: `${100 - v}%` }} />
+      </div>
+      <span className={`axis-r ${v < 50 ? 'win' : ''}`}>{b}</span>
+      <b className="axis-pct">{v >= 50 ? v : 100 - v}%</b>
+    </div>
+  );
+}
+
+/** 许愿模式的「分享海报」：海报 + 二维码（普通的客人链接）。客人用自己的手机扫，在那里存图、分享。 */
+function TakeHome({ poster, link, title, onClose }) {
+  const qr = useMemo(() => (link ? qrMatrix(link) : null), [link]);
+  const n = qr ? qr.length + 8 : 0;
+  const closeRef = useRef(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  useEffect(() => {
+    closeRef.current?.focus({ preventScroll: true });
+    const onKey = (e) => e.key === 'Escape' && onCloseRef.current();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  return (
+    <div className="take-veil no-print" role="dialog" aria-modal="true" aria-label={t('用手机扫一扫，把蓝图带回家')} onClick={onClose}>
+      <div className="take-sheet" onClick={(e) => e.stopPropagation()}>
+        <figure className="take-poster">
+          <img src={poster} alt={title} />
+        </figure>
+        <div className="take-side">
+          <p className="eyebrow">{t('分享海报')}</p>
+          <h2 className="h-title">{t('用手机扫一扫，把蓝图带回家')}</h2>
+          <p className="take-lead">{t('海报和蓝图会在你自己的手机上打开，在那里就能存图、分享。')}</p>
+          {qr && (
+            <div className="take-qr">
+              <svg viewBox={`0 0 ${n} ${n}`} role="img" aria-label={t('蓝图链接的二维码')} shapeRendering="crispEdges">
+                <rect width={n} height={n} fill="#FFFFFF" />
+                <path d={qrPath(qr)} fill={PALETTE.ink} />
+              </svg>
+              <span className="take-scan">
+                <ScanLine size={16} strokeWidth={1.8} aria-hidden="true" />
+                {t('打开相机，对准这里')}
+              </span>
+            </div>
+          )}
+          <button ref={closeRef} type="button" className="btn btn-primary take-done" onClick={onClose}>
+            {t('关闭')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Sec({ num, title, note, children, className = '' }) {
   return (
     <section className={`bp-sec ${className}`}>
@@ -130,15 +196,20 @@ function Sec({ num, title, note, children, className = '' }) {
   );
 }
 
-export default function Blueprint({ profile, onRestart, fresh = false, designerOpen = false }) {
+export default function Blueprint({ profile, onRestart, fresh = false, designerOpen = false, showroom = false }) {
   const [staffOn, setStaffOn] = useState(STAFF || designerOpen);
   const [mode, setMode] = useState(designerOpen ? 'designer' : 'client');
   const [links, setLinks] = useState({ bp: '', bpStaff: '', studio: '' });
   const [toast, setToast] = useState('');
   const [busy, setBusy] = useState(false);
+  // 许愿模式的海报：画好的图（object URL），和二维码一起放在一张小卡上
+  const [take, setTake] = useState('');
   const d = DREAMER_BY_CODE[profile.code];
   const plan = useMemo(() => storagePlan(profile.storage, APPLIANCES), [profile]);
   const tips = useMemo(() => insights(profile, plan), [profile, plan]);
+  // 出图关键词：按这位客人的雷区 / 生活方式换过的材质改写，再加上 avoid: …（复制的也是这一段）
+  const keywords = useMemo(() => (d?.design?.en ? renderKeywords(d.design.en, profile) : ''), [d, profile]);
+  const doors = useMemo(() => (d?.design?.doors ? doorNotes(d.design.doors, profile) : []), [d, profile]);
   // 谈话提示：先「要聊清楚」、再「设计要点」、最后「沟通建议」；最重要的三条放前面，其余收在「其余 n 条」里
   const ranked = useMemo(() => tips.map((tp, i) => ({ ...tp, i })).sort((a, b) => LEVEL_ORDER.indexOf(a.level) - LEVEL_ORDER.indexOf(b.level) || a.i - b.i), [tips]);
   const [moreTips, setMoreTips] = useState(false);
@@ -194,6 +265,9 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
     };
   }, []);
 
+  // 海报图用完就放掉
+  useEffect(() => () => take && URL.revokeObjectURL(take), [take]);
+
   if (!d) return null;
 
   const flash = (msg) => {
@@ -202,8 +276,9 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
     toastTimer.current = setTimeout(() => setToast(''), 2200);
   };
 
-  // 发到公司 WhatsApp 的那条带 ?staff=1（设计师点开直接是设计师版）
-  const text = profileText(profile, plan, links.bpStaff);
+  // 「发给设计师」的文字：客人自己发出去的是普通链接（客人版）；只有员工打开的蓝图（?staff=1 / 员工区）才带设计师链接。
+  // { client } 让 summary.js 把只给设计师看的内容拿掉（summary.js 还没支持时，多传的参数不影响）。
+  const text = profileText(profile, plan, staffOn ? links.bpStaff : links.bp, { client: !staffOn });
   const date = new Date(profile.createdAt);
   const name = L({ zh: d.zh, en: d.en });
   const touched = profile.storage?.touched || null;
@@ -221,7 +296,11 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
         sceneEl: sceneRef.current?.querySelector('svg'),
         sceneId,
       });
-      if (blob) {
+      if (blob && WISH) {
+        // 展厅共用的 iPad：不走系统分享面板（会露出最近的联系人、AirDrop 名字），也不存进相簿。
+        // 海报放在一张小卡上，旁边一个二维码：客人用自己的手机扫，蓝图在他手机上打开，在那里分享。
+        setTake(URL.createObjectURL(blob));
+      } else if (blob) {
         const file = new File([blob], `WISH-${profile.code}.png`, { type: 'image/png' });
         if (navigator.canShare?.({ files: [file] })) {
           await navigator.share({ files: [file], title: t('我的梦想家牌：{0}', [name]) }).catch(() => download(blob, file.name));
@@ -301,7 +380,11 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
               size="sm"
               label={t('设计师版')}
               value={mode}
-              onChange={setMode}
+              onChange={(v) => {
+                setMode(v);
+                // 许愿模式：员工看完切回客人版 = 交还给客人，切换也一起收起来（只有员工区能再打开）
+                if (WISH && v === 'client') setStaffOn(false);
+              }}
               options={[
                 { v: 'client', label: t('客人版') },
                 { v: 'designer', label: t('设计师版') },
@@ -323,35 +406,11 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
             <p className="bp-quote">{t(d.tagline)}</p>
             <p className="bp-desc">{t(d.desc)}</p>
             <div className="axes">
-              {AXES.map((ax) => {
-                const v = profile.axes[ax.id];
-                return (
-                  <div key={ax.id} className="axis">
-                    <span className="axis-dim">{L({ zh: ax.zh, en: ax.en })}</span>
-                    <span className={`axis-l ${v >= 50 ? 'win' : ''}`}>{L(ax.a)}</span>
-                    <div className="axis-track">
-                      <div className="axis-fill" style={{ width: `${v}%` }} />
-                    </div>
-                    <span className={`axis-r ${v < 50 ? 'win' : ''}`}>{L(ax.b)}</span>
-                    <b className="axis-pct">{v >= 50 ? v : 100 - v}%</b>
-                  </div>
-                );
-              })}
+              {AXES.map((ax) => (
+                <Axis key={ax.id} dim={L({ zh: ax.zh, en: ax.en })} a={L(ax.a)} b={L(ax.b)} v={profile.axes[ax.id]} />
+              ))}
               {designer &&
-                HIDDEN_AXES.map((ax) => {
-                  const v = profile.hidden?.[ax.id] ?? 50;
-                  return (
-                    <div key={ax.id} className="axis hidden-axis">
-                      <span className="axis-dim">{t(ax.zh)}</span>
-                      <span className={`axis-l ${v >= 50 ? 'win' : ''}`}>{L(ax.a)}</span>
-                      <div className="axis-track">
-                        <div className="axis-fill" style={{ width: `${v}%` }} />
-                      </div>
-                      <span className={`axis-r ${v < 50 ? 'win' : ''}`}>{L(ax.b)}</span>
-                      <b className="axis-pct">{v >= 50 ? v : 100 - v}%</b>
-                    </div>
-                  );
-                })}
+                HIDDEN_AXES.map((ax) => <Axis key={ax.id} hidden dim={t(ax.zh)} a={L(ax.a)} b={L(ax.b)} v={profile.hidden?.[ax.id] ?? 50} />)}
             </div>
           </div>
         </section>
@@ -385,7 +444,8 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
               <Check size={16} strokeWidth={2} aria-hidden="true" />
               <span>
                 {t('已按你的雷区避开：')}
-                {profile.swaps.map((s) => `${L(MAT_BY_ID[s.from])} → ${L(MAT_BY_ID[s.to])}`).join(isEn() ? '; ' : '；')}
+                {/* 同一种材质在两个表面都换了，只写一次 */}
+                {[...new Set(profile.swaps.map((s) => `${L(MAT_BY_ID[s.from])} → ${L(MAT_BY_ID[s.to])}`))].join(isEn() ? '; ' : '；')}
               </span>
             </p>
           )}
@@ -465,11 +525,14 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
               </p>
             )}
             {profile.avoid?.length > 0 && (
-              <div className="nogo-list">
-                {profile.avoid.map((a) => (
-                  <span key={a}>{t(AVOID_LABEL[a] || a)}</span>
-                ))}
-              </div>
+              <>
+                <p className="bp-sub">{t('雷区')}</p>
+                <div className="nogo-list">
+                  {profile.avoid.map((a) => (
+                    <span key={a}>{t(AVOID_LABEL[a] || a)}</span>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         </section>
@@ -525,7 +588,16 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
                   <dt>{t('色温')}</dt>
                   <dd>{t(d.design.kelvin)}</dd>
                   <dt>{t('柜门')}</dt>
-                  <dd>{t(d.design.doors)}</dd>
+                  <dd>
+                    {t(d.design.doors)}
+                    {doors.map((n, i) => (
+                      <span key={i} className="dz-amend">
+                        {n.kind === 'swap'
+                          ? t('按雷区改为：{0}（原为{1}）', [L(MAT_BY_ID[n.to]), L(MAT_BY_ID[n.from])])
+                          : t('客人不要：{0}', [t(AVOID_LABEL[n.tag] || n.tag)])}
+                      </span>
+                    ))}
+                  </dd>
                   <dt>{t('藏:展（牌面）')}</dt>
                   <dd>
                     {d.design.ratio[0]} : {d.design.ratio[1]}
@@ -536,8 +608,8 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
                   <dd>{curve >= 55 ? t('偏圆润（沙发那题选了圆的）：弧形沙发 / 圆几；柜体要不要圆角，见面再问') : curve <= 45 ? t('偏利落：直线、薄边、方正') : t('中性')}</dd>
                 </dl>
                 <h4>{t('出图关键词（英文，可贴给 AI 出图）')}</h4>
-                <p className="kw">{d.design.en}</p>
-                <button type="button" className="btn btn-line small no-print" onClick={() => copy(d.design.en)}>
+                <p className="kw">{keywords}</p>
+                <button type="button" className="btn btn-line small no-print" onClick={() => copy(keywords)}>
                   <Copy size={16} strokeWidth={1.8} aria-hidden="true" />
                   <span>{t('复制关键词')}</span>
                 </button>
@@ -621,10 +693,13 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
           <House size={18} strokeWidth={1.8} aria-hidden="true" />
           <span>{t('在 3D 里看见它')}</span>
         </a>
-        <a className="btn btn-line" href={waLink(text)} target="_blank" rel="noopener">
-          <MessageCircle size={18} strokeWidth={1.8} aria-hidden="true" />
-          <span>{t('发给设计师')}</span>
-        </a>
+        {/* 许愿模式（展厅共用的 iPad）不发 WhatsApp：wa.me 会跳出 kiosk，开一个新窗口 */}
+        {!WISH && (
+          <a className="btn btn-line" href={waLink(text)} target="_blank" rel="noopener">
+            <MessageCircle size={18} strokeWidth={1.8} aria-hidden="true" />
+            <span>{t('发给设计师')}</span>
+          </a>
+        )}
         <button type="button" className="btn btn-line" onClick={savePoster} disabled={busy}>
           {busy ? <Download size={18} strokeWidth={1.8} aria-hidden="true" /> : <ImageIcon size={18} strokeWidth={1.8} aria-hidden="true" />}
           <span>{busy ? t('画海报中…') : t('分享海报')}</span>
@@ -637,13 +712,15 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
           {designer ? <Copy size={18} strokeWidth={1.8} aria-hidden="true" /> : <Link2 size={18} strokeWidth={1.8} aria-hidden="true" />}
           <span>{designer ? t('复制全文') : t('复制链接')}</span>
         </button>
+        {/* 展厅里（刚做完 / 本机存档 / 员工 / 带陪同人）才是「下一位」；客人在家打开分享的蓝图 = 「重新许愿」 */}
         {onRestart && !WISH && (
           <button type="button" className="btn btn-ghost" onClick={onRestart}>
             <RotateCcw size={18} strokeWidth={1.8} aria-hidden="true" />
-            <span>{t('下一位')}</span>
+            <span>{showroom || STAFF ? t('下一位') : t('重新许愿')}</span>
           </button>
         )}
       </nav>
+      {take && <TakeHome poster={take} link={links.bp} title={t('我的梦想家牌：{0}', [name])} onClose={() => setTake('')} />}
       {toast && (
         <div className="toast" role="status">
           {toast}

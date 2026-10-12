@@ -10,6 +10,7 @@ import { Icon, Modal, listSep } from './kit.jsx';
 import { CONFIG } from '../../shared/config.js';
 import { MAT_BY_ID } from '../../shared/materials.js';
 import { t, L, withLang } from '../../shared/i18n.js';
+import { fmt } from '../../shared/units.js'; // 千分位：3,267
 
 export default function ShareModal({ project, pack, staff = false, onClose }) {
   const [links, setLinks] = useState({ client: '', staff: '' });
@@ -65,7 +66,7 @@ export default function ShareModal({ project, pack, staff = false, onClose }) {
           {t('发到公司 WhatsApp')}
         </a>
       </div>
-      <p className="m-fine">{t('链接长度约 {0} 字。平面图底图（原图）不会放进链接。', [link.length])}</p>
+      <p className="m-fine">{t('链接长度约 {0} 字。平面图底图（原图）不会放进链接。', [fmt(link.length)])}</p>
     </Modal>
   );
 }

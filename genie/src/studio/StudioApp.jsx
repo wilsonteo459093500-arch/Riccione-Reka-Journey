@@ -14,7 +14,8 @@
 //   转给家人（没有 referrer）也一样；只有链接带 ?staff=1，或者从员工版蓝图（quiz.html?staff=1）点进来，才是员工版。
 //   许愿模式、展厅永远是客人版。
 //   客人版：没有「收纳对账」、没有「见面时要聊的」、没有「新方案 / 打开方案」（展厅 iPad 上别的客人的方案一个都不列），
-//   梦想家卡打开的是客人版蓝图（不带 ?staff=1）。
+//   没有「设置」（公司的 AI key、接口地址），梦想家卡打开的是客人版蓝图（不带 ?staff=1）。
+//   许愿模式再少两样：不能上传平面图（只能画）、不能下载概念图 —— 都会碰到展厅 iPad 的相册 / 文件，里面有前面客人的图。
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Engine } from './engine/Engine.js';
@@ -31,6 +32,7 @@ import { DREAMER_BY_CODE } from '../shared/dreamers.js';
 import { MAT_BY_ID, fits, misfitHint, DEFAULT_SLOT_FOR_CAT, SLOT_BY_ID } from '../shared/materials.js';
 import { BRAND } from '../shared/config.js';
 import { t, L, isEn, setLang } from '../shared/i18n.js';
+import { fmt } from '../shared/units.js';
 import { isWishMode, tellShell } from '../shared/zen.js';
 import MoodPanel from './ui/MoodPanel.jsx';
 import DaylightPanel from './ui/DaylightPanel.jsx';
@@ -149,7 +151,9 @@ function anchorsSame(a, b) {
 
 const ROW_LABEL = { 'wardrobe:master': '主卧衣柜', shoe: '鞋柜', tall: '电器高柜', store: '储物间', books: '书墙', counter: '台面家电区', dining: '餐位', altar: '神台' };
 const ROW_ICON = { wardrobe: 'wardrobe', shoeCabinet: 'shoeCabinet', tallUnit: 'tallUnit', store: 'store', bookshelf: 'bookshelf', kitchenRun: 'kitchenRun', diningTable: 'diningTable', altar: 'altar' };
-const fmtLen = (mm) => `${Math.round((Number(mm) || 0) / 10) / 100} m`;
+// 和蓝图、许愿之旅同一种写法：毫米 + 千分位，取到 10 mm（2,100 mm），见面时三样东西对得上
+const mmNum = (mm) => fmt(Math.round((Number(mm) || 0) / 10) * 10);
+const fmtLen = (mm) => `${mmNum(mm)} mm`;
 
 function rowLabel(r, plan) {
   if (ROW_LABEL[r.key]) return t(ROW_LABEL[r.key]);
@@ -164,7 +168,8 @@ function rowValue(r) {
     if (r.unit === 'seats') return t('{0} 座', [r.placed]);
     return String(r.placed);
   }
-  if (r.unit === 'mm') return `${fmtLen(r.placed)} / ${fmtLen(r.target)}`;
+  // 单位只写一次：1,360 / 2,100 mm
+  if (r.unit === 'mm') return `${mmNum(r.placed)} / ${fmtLen(r.target)}`;
   if (r.unit === 'seats') return t('{0} / {1} 座', [r.placed, r.target]);
   return `${r.placed} / ${r.target}`;
 }
@@ -977,6 +982,7 @@ export default function StudioApp() {
           <MoodPanel
             project={project}
             dreamer={dreamer}
+            staff={staffView}
             slot={slot}
             onSlot={(s) => {
               setSlot(s === slot ? null : s);
@@ -994,7 +1000,8 @@ export default function StudioApp() {
             canRedo={future.current.length > 0}
             onUndo={undo}
             onRedo={redo}
-            onShot={async () => {
+            // 许愿模式不下载概念图：存下来的图（底座写着客人名字）会留在展厅 iPad 的相册里，下一位客人一开相册就看得到
+            onShot={WISH ? null : async () => {
               try {
                 const blob = await engine.current.snapshot(2);
                 const { stampSnapshot } = await import('./ui/stamp.js');
@@ -1026,7 +1033,8 @@ export default function StudioApp() {
             onPlan={() => openPlanEditor('current')}
             onStart={staffView && !WISH ? () => setModal('start') : null}
             onHelp={() => setModal('help')}
-            onSettings={() => setModal('settings')}
+            // 设置里是公司的 AI key、识别模型、接口地址：只给设计师（客人版、许愿模式都没有这一项；「语言」那一行照样在）
+            onSettings={staffView ? () => setModal('settings') : null}
             onLang={switchLang}
             wish={WISH}
           />
@@ -1087,11 +1095,22 @@ export default function StudioApp() {
         />
       )}
       {modal === 'share' && <ShareModal project={project} pack={packShare} staff={staffView} onClose={() => setModal(null)} />}
-      {modal === 'help' && <HelpModal onClose={() => setModal(null)} />}
-      {modal === 'settings' && <SettingsModal onClose={() => setModal(null)} onQuality={onQuality} onLang={switchLang} showLang={!WISH} />}
+      {modal === 'help' && <HelpModal wish={WISH} onClose={() => setModal(null)} />}
+      {modal === 'settings' && staffView && <SettingsModal onClose={() => setModal(null)} onQuality={onQuality} onLang={switchLang} />}
 
-      {/* 许愿模式不给设置入口：客人不能从「平面图 → AI 识别」走到 API key（工具条在许愿模式也藏了「设置」） */}
-      {planDraft && <PlanEditor initial={planDraft.plan} underlay={planDraft.underlay} autoUpload={planDraft.autoUpload} onCancel={() => setPlanDraft(null)} onApply={applyPlan} onSettings={WISH ? undefined : () => setModal('settings')} />}
+      {/* 设置（AI key）只给设计师：客人版、许愿模式从「平面图 → AI 识别」也走不到设置。
+          许愿模式的平面图只能画、不能上传：选文件会打开展厅 iPad 的相册和「文件」，里面有前面客人的图 */}
+      {planDraft && (
+        <PlanEditor
+          initial={planDraft.plan}
+          underlay={planDraft.underlay}
+          autoUpload={planDraft.autoUpload}
+          upload={!WISH}
+          onCancel={() => setPlanDraft(null)}
+          onApply={applyPlan}
+          onSettings={staffView ? () => setModal('settings') : undefined}
+        />
+      )}
 
       {ask && <ConfirmSheet title={ask.title} body={ask.body} ok={ask.ok} onOk={() => ask.done(true)} onCancel={() => ask.done(false)} />}
 

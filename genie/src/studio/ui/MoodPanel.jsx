@@ -45,7 +45,7 @@ function useEdgeFade(ref, deps) {
   }, deps);
 }
 
-export default function MoodPanel({ project, dreamer, slot, onSlot, onMood, onToggle, chip, note, extra }) {
+export default function MoodPanel({ project, dreamer, staff = false, slot, onSlot, onMood, onToggle, chip, note, extra }) {
   const inner = useRef(null);
   useEdgeFade(inner, [!!chip, !!note, !!extra]);
   const meter = moodMeter(project.materials, project.time);
@@ -60,7 +60,9 @@ export default function MoodPanel({ project, dreamer, slot, onSlot, onMood, onTo
   if (dreamer && project.profile) {
     // 和 StudioApp.applyMood('dreamer') 套上去的是同一套：温暖做底 + 客人的材质，再避开雷区 —— 预览和点下去的一样
     const dm = { ...(MOODS.find((m) => m.id === 'cozy')?.materials || {}), ...(project.profile.materials || {}) };
-    presets.unshift({ id: 'dreamer', name: L(dreamer), sub: `${dreamer.num} · ${project.profile.code}`, colors: avoid.length ? paletteOf(avoidMaterials(dm, avoid).materials) : dreamer.palette, dreamer: true });
+    // 牌号（XI）；四个字母的代号（CMRH）只在设计师版再标一次（上面的梦想家卡本来就写着）—— 客人版把位置留给名字（The Urban Minimalist）
+    const sub = staff ? `${dreamer.num} · ${project.profile.code}` : dreamer.num;
+    presets.unshift({ id: 'dreamer', name: L(dreamer), sub, colors: avoid.length ? paletteOf(avoidMaterials(dm, avoid).materials) : dreamer.palette, dreamer: true });
   }
 
   return (
@@ -92,7 +94,8 @@ export default function MoodPanel({ project, dreamer, slot, onSlot, onMood, onTo
               </span>
               <b>
                 {p.dreamer && <Icon name="sparkles" size={14} />}
-                {p.name}
+                {/* 名字自己一个盒子：b 是 flex，省略号只对盒子里的字生效 */}
+                <span className="preset-name">{p.name}</span>
               </b>
               <em>{p.sub}</em>
             </button>

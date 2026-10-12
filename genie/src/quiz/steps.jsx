@@ -1,7 +1,7 @@
 // 许愿之旅的每一关（UI 组件）。每个组件只管自己的输入，答案通过 set(patch) 写回，next() 前进。
 // 文字一律经过 t() / tj()：中文原文就是 key，英文在 src/shared/i18n/en-*.js。
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, Check, X, Sparkle } from 'lucide-react';
 import Pangie, { Lamp } from '../shared/Pangie.jsx';
 import LangToggle from '../shared/LangToggle.jsx';
@@ -39,11 +39,52 @@ function Next({ onClick, children, gold = false, big = false, disabled = false, 
   );
 }
 
+/**
+ * 标题按「词组」断行：中文在逗号 / 顿号 / 冒号后面才换行（不会断成「衣 / 柜」）；
+ * 英文里带连字号的词（Deal-Breaker）不从连字号断开。
+ */
+export function phrased(s, phrase = /[^，、：；]+[，、：；]*/g) {
+  const str = String(s ?? '');
+  if (isEn()) {
+    const parts = str.split(/(\S+-\S+)/);
+    if (parts.length === 1) return str;
+    return parts.map((p, i) =>
+      i % 2 ? (
+        <span key={i} className="nobr">
+          {p}
+        </span>
+      ) : (
+        p
+      )
+    );
+  }
+  // 不用 (?<=…) 反向断言：旧一点的 iPad Safari（16.4 以前）不认识，整个页面会载不起来
+  const parts = str.match(phrase) || [];
+  if (parts.length < 2) return str;
+  return parts.map((p, i) => (
+    <span key={i} className="ph">
+      {p}
+    </span>
+  ));
+}
+
+/** 「甲 · 乙 · 丙」这样的一行小字：中文只在「·」处换行（「梦想家蓝图」不会被拆开）；英文照常断 */
+function dotted(s) {
+  if (isEn()) return s;
+  const parts = String(s).split(/\s*·\s*/);
+  return parts.map((p, i) => (
+    <Fragment key={i}>
+      {i > 0 && ' · '}
+      <span className="ph">{p}</span>
+    </Fragment>
+  ));
+}
+
 function Head({ eyebrow, title, lead }) {
   return (
     <header className="q-head">
       {eyebrow && <p className="eyebrow">{eyebrow}</p>}
-      <h2 className="h-title">{title}</h2>
+      <h2 className="h-title">{phrased(title)}</h2>
       {lead && <p className="lead">{lead}</p>}
     </header>
   );
@@ -111,7 +152,7 @@ export function Welcome({ answers, set, next }) {
           <Sparkle size={18} strokeWidth={1.8} aria-hidden="true" />
           <span>{t('开始许愿')}</span>
         </button>
-        <p className="fine">{t('大约 6–8 分钟 · 5 张牌 · 结束时会得到你的「梦想家蓝图」')}</p>
+        <p className="fine">{dotted(t('大约 6–8 分钟 · 5 张牌 · 结束时会得到你的「梦想家蓝图」'))}</p>
         </div>
       </div>
     </div>
@@ -215,6 +256,8 @@ export function Interlude({ chapter, next }) {
   const ch = CHAPTERS.find((c) => c.id === chapter);
   const [flipped, setFlipped] = useState(false);
   const [ready, setReady] = useState(false);
+  // 翻面落定后把牌「放平」（不再是 3D 图层）：Chromium 有时会把翻牌的 3D 图层残影留在下一题的画面上
+  const [flat, setFlat] = useState(false);
   const armed = useRef(false);
   useEffect(() => {
     const a = setTimeout(() => {
@@ -222,9 +265,11 @@ export function Interlude({ chapter, next }) {
       sfx.flip();
     }, 420);
     const b = setTimeout(() => setReady(true), 1150); // 翻完才能点：防止上一页的连点直接跳过
+    const c = setTimeout(() => setFlat(true), 420 + 1050 + 120); // 翻牌动画 1.05 秒
     return () => {
       clearTimeout(a);
       clearTimeout(b);
+      clearTimeout(c);
     };
   }, []);
   const prop = chapter === 'treasure' ? 'magnifier' : chapter === 'wishes' ? 'ball' : 'cards';
@@ -233,14 +278,14 @@ export function Interlude({ chapter, next }) {
   }, [chapter]);
   return (
     <div className="step step-interlude">
-      <div className={`flip ${flipped ? 'is-flipped' : ''}`}>
+      <div className={`flip ${flipped ? 'is-flipped' : ''} ${flat ? 'is-flat' : ''}`}>
         <div className="flip-inner">
           <div className="flip-back">
             <CardBack />
           </div>
           <div className="flip-front">
             <CardFrame num={ch.num} foot={isEn() ? ch.zh : ch.en} className="chapter-card">
-              <h2 className="chapter-name">{t(ch.zh)}</h2>
+              <h2 className="chapter-name">{phrased(t(ch.zh))}</h2>
               <Pangie mood={ch.mode === 'slow' ? 'think' : 'mystic'} prop={prop} size={132} float={false} />
             </CardFrame>
           </div>

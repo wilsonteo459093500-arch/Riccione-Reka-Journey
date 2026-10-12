@@ -2,7 +2,9 @@
 // 单位：米。0.05m 吸附；房间边会吸到附近房间的边上（墙线才干净）。
 // iPad：手指点墙就能放门窗（不靠鼠标悬停预览）；双指捏合缩放、平移；＋ / － 以画面中心缩放；系统打断（pointercancel）会复原。
 // 「全图」给右下的缩放按钮、底部的提示留出位置；≤ 900px（iPad 竖放、手机）属性面板变成可以收起的底部抽屉，平面图用满整个宽度。
-// 许愿模式（onSettings 没给）：客人碰不到设置 / API key —— 这台设备没有 key 时不显示「AI 识别」。
+// 客人版、许愿模式（onSettings 没给）：客人碰不到设置 / API key —— 这台设备没有 key 时不显示「AI 识别」。
+// 许愿模式（upload = false）：只能画。没有「上传平面图」（选文件会打开展厅 iPad 的相册和「文件」，里面有前面客人的图）、
+// 没有整体宽（只给上传 / AI 用）、没有「AI 识别」；没有底图时，量尺校准、移动底图两个工具也不出现。设计师之后在员工入口上传真的平面图。
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ROOM_TYPES, OPENING_KINDS, TEMPLATES, buildWalls, bounds, snapPlan, templatePlan, uid } from './model.js';
@@ -34,6 +36,7 @@ const TOOLS = [
   { id: 'underlay', zh: '移动底图', key: 'u', icon: 'hand' },
 ];
 const OPENING_TOOLS = ['door', 'window', 'slider', 'open'];
+const UNDERLAY_TOOLS = ['calibrate', 'underlay']; // 只对底图有用：许愿模式（不能上传）又没有底图时不出现
 
 function edgesOf(rooms) {
   const out = [];
@@ -94,7 +97,7 @@ function issuesOf(plan) {
   return out;
 }
 
-export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpload, onCancel, onApply, onSettings }) {
+export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpload, upload = true, onCancel, onApply, onSettings }) {
   const [plan, setPlan] = useState(() => initial);
   const [underlay, setUnderlay] = useState(initialUnderlay || null);
   const [tool, setTool] = useState(initial.rooms.length ? 'select' : 'room');
@@ -109,7 +112,8 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
   const [hasKey] = useState(() => !!loadSettings().apiKey);
   const narrow = useMedia('(max-width: 900px)');
   const phone = useMedia('(max-width: 599px)');
-  const canAI = !!onSettings || hasKey; // 许愿模式没有 key：不显示 AI 识别（客人到不了设置）
+  // 客人版没有 key：不显示 AI 识别（客人到不了设置）；许愿模式一律没有（不能上传，就没有图可认）
+  const canAI = upload && (!!onSettings || hasKey);
   const svgRef = useRef(null);
   const zoomRef = useRef(null);
   const fileRef = useRef(null);
@@ -186,7 +190,7 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
 
   useEffect(() => {
     fit();
-    if (autoUpload) setTimeout(() => fileRef.current?.click(), 250);
+    if (autoUpload && upload) setTimeout(() => fileRef.current?.click(), 250);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   // iPad 转了方向（宽 ↔ 窄的版式）：重新放到画面中间
@@ -536,12 +540,13 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
         setPreview(null);
       } else {
         const tl = TOOLS.find((x) => x.key === e.key.toLowerCase());
-        if (tl) setTool(tl.id);
+        // 和工具栏一样：没有底图时量尺、移动底图用不了（按钮是灰的 / 许愿模式里不出现），快捷键也不切过去
+        if (tl && (underlay || !UNDERLAY_TOOLS.includes(tl.id))) setTool(tl.id);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [removeSel]);
+  }, [removeSel, underlay]);
 
   const applyCalibration = () => {
     if (!calib?.p1 || !calib?.p2 || !underlay) return;
@@ -734,7 +739,7 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
   );
 
   return (
-    <div className={`pe ${narrow ? 'narrow' : ''}`} role="dialog" aria-modal="true" aria-label={t('平面图')}>
+    <div className={`pe ${narrow ? 'narrow' : ''} ${upload ? '' : 'draw-only'}`} role="dialog" aria-modal="true" aria-label={t('平面图')}>
       <header className="pe-head">
         <div className="pe-title">
           <p className="eyebrow">{isEn() ? BRAND.studioEn : BRAND.studio}</p>
@@ -742,19 +747,24 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
         </div>
         {/* 英文在 iPad 横放（1024–1279）和手机上换短的字（lbl-short：Width、Template…），整排放得下，不用横滑 */}
         <div className="pe-head-actions" ref={actsRef}>
-          <input ref={fileRef} type="file" accept="image/*,application/pdf" hidden onChange={(e) => onFile(e.target.files?.[0])} />
-          <button type="button" className="pe-btn" onClick={() => fileRef.current?.click()} title={t('上传平面图')} aria-label={t('上传平面图')}>
-            <Icon name="upload" size={17} />
-            <span>{t('上传平面图')}</span>
-          </button>
-          <label className="pe-hint-in" title={t('平面图的整体外墙宽度（米），AI 读不到尺寸时用')}>
-            <span className="pe-hint-cap">
-              <span className="lbl-long">{t('整体宽')}</span>
-              {isEn() && <span className="lbl-short">{t('宽')}</span>}
-            </span>
-            <input value={widthHint} onChange={(e) => setWidthHint(e.target.value.replace(/[^\d.]/g, ''))} placeholder="12" inputMode="decimal" aria-label={t('整体宽')} />
-            <span>m</span>
-          </label>
+          {/* 许愿模式不放文件选择：连隐藏的 <input type=file> 都不渲染 */}
+          {upload && (
+            <>
+              <input ref={fileRef} type="file" accept="image/*,application/pdf" hidden onChange={(e) => onFile(e.target.files?.[0])} />
+              <button type="button" className="pe-btn" onClick={() => fileRef.current?.click()} title={t('上传平面图')} aria-label={t('上传平面图')}>
+                <Icon name="upload" size={17} />
+                <span>{t('上传平面图')}</span>
+              </button>
+              <label className="pe-hint-in" title={t('平面图的整体外墙宽度（米），AI 读不到尺寸时用')}>
+                <span className="pe-hint-cap">
+                  <span className="lbl-long">{t('整体宽')}</span>
+                  {isEn() && <span className="lbl-short">{t('宽')}</span>}
+                </span>
+                <input value={widthHint} onChange={(e) => setWidthHint(e.target.value.replace(/[^\d.]/g, ''))} placeholder="12" inputMode="decimal" aria-label={t('整体宽')} />
+                <span>m</span>
+              </label>
+            </>
+          )}
           {canAI && (
             <button type="button" className="pe-btn ai" onClick={() => runAI()} disabled={!!busy} title={t('AI 识别')} aria-label={t('AI 识别')}>
               <Icon name="wand" size={17} />
@@ -803,7 +813,7 @@ export default function PlanEditor({ initial, underlay: initialUnderlay, autoUpl
 
       <div className="pe-body">
         <nav className="pe-tools" aria-label={t('工具')}>
-          {TOOLS.map((tl) => (
+          {TOOLS.filter((tl) => upload || underlay || !UNDERLAY_TOOLS.includes(tl.id)).map((tl) => (
             <button
               key={tl.id}
               type="button"

@@ -70,6 +70,8 @@ export function becauseLines(profile) {
 
 export default function Reveal({ profile, onOpen }) {
   const [phase, setPhase] = useState('reading');
+  // 翻面落定后把牌「放平」：不留 3D 图层（Chromium 偶尔会把它的残影留在下一页上）
+  const [flat, setFlat] = useState(false);
   const d = DREAMER_BY_CODE[profile.code];
   const ctaRef = useRef(null);
   const because = useMemo(() => becauseLines(profile), [profile]);
@@ -92,16 +94,22 @@ export default function Reveal({ profile, onOpen }) {
     };
   }, []);
 
-  // 翻面 1.2 秒后，把「打开蓝图」滚进画面（iPad 横屏时它可能在折线以下）
+  // 翻面 1.2 秒后，把「打开蓝图」滚进画面（iPad 横屏时它可能在折线以下）。
+  // 手机不自动滚：滚到按钮就会把刚翻开的牌切掉一半（停在一张被顶栏切掉的牌上）——牌完整地留在画面上，
+  // 下面露出名字和说明，客人自己往下滑。
   useEffect(() => {
     if (phase !== 'shown') return undefined;
     const tm = setTimeout(() => {
       const el = ctaRef.current;
-      if (!el) return;
+      if (!el || window.matchMedia?.('(max-width: 560px)').matches) return;
       const r = el.getBoundingClientRect();
       if (r.bottom > window.innerHeight - 12 || r.top < 0) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 1200);
-    return () => clearTimeout(tm);
+    const tf = setTimeout(() => setFlat(true), 1250);
+    return () => {
+      clearTimeout(tm);
+      clearTimeout(tf);
+    };
   }, [phase]);
 
   if (!d) return null;
@@ -113,7 +121,10 @@ export default function Reveal({ profile, onOpen }) {
       {phase === 'reading' && (
         <div className="reading">
           <p className="eyebrow">{t('揭晓')}</p>
-          <h2 className="h-title">{t('{0}正在读取你的梦想…', [guideName()])}</h2>
+          <h2 className="h-title">
+            {t('{0}正在读懂你的梦想', [guideName()])}
+            {isEn() ? '…' : '……'}
+          </h2>
           <div className="deck" aria-hidden="true">
             {[...Array(16)].map((_, i) => (
               <span key={i} className="deck-card" style={{ '--i': i, '--k': i - 7.5 }} />
@@ -126,7 +137,7 @@ export default function Reveal({ profile, onOpen }) {
         <div className="reveal-grid">
           <div className="reveal-card">
             <span className="reveal-bloom" aria-hidden="true" />
-            <div className={`flip reveal-flip ${phase === 'shown' ? 'is-flipped' : ''}`}>
+            <div className={`flip reveal-flip ${phase === 'shown' ? 'is-flipped' : ''} ${flat ? 'is-flat' : ''}`}>
               <div className="flip-inner">
                 <div className="flip-back">
                   <CardBack className="big" />
