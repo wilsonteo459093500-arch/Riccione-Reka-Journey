@@ -1,5 +1,5 @@
 // 视频（如退场视频）：录像 / 选择 → 保留原文件供分享，截一帧做报告封面
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Icon from '../ui/Icon.jsx';
 import { Spinner, useUI } from '../ui/UI.jsx';
 import { useStore } from '../../lib/store.jsx';
@@ -7,15 +7,43 @@ import { useMediaUrl, useMediaRecord, forgetMedia } from './media.js';
 import { fmtDuration, fmtBytes } from '../../lib/images.js';
 import { markPicker, clearPicker, anchorOf } from '../../lib/pickerGuard.js';
 import { t, tb, getUiLang } from '../../lib/i18n.js';
+import { watchPicker, offerWebCamera, canWebVideo } from '../../lib/camera.js';
+import PickerButton from './PickerButton.jsx';
+import WebCamera from './WebCamera.jsx';
+import { NoShowCard } from './CameraHelp.jsx';
 
 const BIG = 150 * 1024 * 1024;
 
 export default function VideoField({ value, onChange, reportId }) {
   const { addMediaFile, removeMedia } = useStore();
   const { toast, confirm } = useUI();
-  const recRef = useRef(null);
-  const pickRef = useRef(null);
   const [busy, setBusy] = useState(false);
+  const [cam, setCam] = useState(false); // 网页相机录像
+  const [noShow, setNoShow] = useState(false); // 点了却没弹出录像 / 选视频
+  const webCam = offerWebCamera() && canWebVideo();
+  const stopWatch = useRef(null);
+  const alive = useRef(true);
+  useEffect(
+    () => () => {
+      alive.current = false;
+      stopWatch.current?.();
+    },
+    [],
+  );
+  const picked = (input, btn) => {
+    markPicker(input, { reportId, anchor: anchorOf(btn), kind: 'video' });
+    setNoShow(false);
+    stopWatch.current?.();
+    stopWatch.current = watchPicker(input, () => {
+      clearPicker();
+      if (alive.current) setNoShow(true);
+    });
+  };
+  const gotFiles = (files) => {
+    clearPicker();
+    setNoShow(false);
+    add(files?.[0]);
+  };
   const poster = useMediaUrl(value, 'poster');
   const [m] = useMediaRecord(value);
   // 中英时按钮文字中文 / English 各一行（不然「录视频 Record」「video」折得很难看）
@@ -82,16 +110,39 @@ export default function VideoField({ value, onChange, reportId }) {
         </div>
       ) : (
         <div className="flex gap-2">
-          <button type="button" className="btn-soft flex-1 py-2.5 text-[14px]" disabled={busy} onClick={(e) => { markPicker(recRef.current, { reportId, anchor: anchorOf(e.currentTarget), kind: 'video' }); recRef.current?.click(); }}>
+          <PickerButton
+            label={t('录视频', 'Record video')}
+            accept="video/*"
+            capture="environment"
+            disabled={busy}
+            onPick={picked}
+            onFiles={gotFiles}
+            className="btn-soft flex-1 py-2.5 text-[14px]"
+          >
             {busy ? <Spinner /> : <Icon name="Video" size={18} />} <span className={stack}>{tb('录视频', 'Record video')}</span>
-          </button>
-          <button type="button" className="btn-ghost flex-1 py-2.5 text-[14px]" disabled={busy} onClick={(e) => { markPicker(pickRef.current, { reportId, anchor: anchorOf(e.currentTarget), kind: 'video' }); pickRef.current?.click(); }}>
+          </PickerButton>
+          <PickerButton
+            label={t('选择视频', 'Choose video')}
+            accept="video/*"
+            disabled={busy}
+            onPick={picked}
+            onFiles={gotFiles}
+            className="btn-ghost flex-1 py-2.5 text-[14px]"
+          >
             <Icon name="FolderOpen" size={18} /> <span className={stack}>{tb('选择视频', 'Choose video')}</span>
-          </button>
+          </PickerButton>
         </div>
       )}
-      <input ref={recRef} type="file" accept="video/*" capture="environment" className="hidden" onChange={(e) => { clearPicker(); add(e.target.files?.[0]); e.target.value = ''; }} />
-      <input ref={pickRef} type="file" accept="video/*" className="hidden" onChange={(e) => { clearPicker(); add(e.target.files?.[0]); e.target.value = ''; }} />
+      {/* 华为 / App 内置浏览器：多给一个「网页相机录像」 */}
+      {!value && webCam && (
+        <button type="button" className="btn-ghost mt-2 w-full py-2 text-[13px] text-pine" disabled={busy} onClick={() => setCam(true)}>
+          <Icon name="Smartphone" size={16} /> <span className={stack}>{tb('用网页相机录像', 'Record with web camera')}</span>
+        </button>
+      )}
+      {!value && noShow && (
+        <NoShowCard video onWebCamera={canWebVideo() ? () => { setNoShow(false); setCam(true); } : null} onClose={() => setNoShow(false)} />
+      )}
+      {cam && <WebCamera open mode="video" onClose={() => setCam(false)} onVideo={(file) => add(file)} />}
     </div>
   );
 }

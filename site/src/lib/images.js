@@ -92,7 +92,8 @@ export async function processVideo(file) {
     video.src = url;
     video.load();
     if (await wait('loadedmetadata', 8000)) {
-      duration = Number.isFinite(video.duration) ? video.duration : 0;
+      // 网页相机录的 webm 没写时长（Infinity），用录的秒数
+      duration = Number.isFinite(video.duration) ? video.duration : Number(file.durationHint) || 0;
       w = video.videoWidth || 0;
       h = video.videoHeight || 0;
       const seeked = wait('seeked', 4000);
@@ -124,6 +125,7 @@ export async function processVideo(file) {
     }
     URL.revokeObjectURL(url);
   }
+  if (!duration && Number(file.durationHint) > 0) duration = Number(file.durationHint);
   return { blob: file, thumb: poster, poster, w: w || 640, h: h || 360, duration };
 }
 

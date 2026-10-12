@@ -1,10 +1,14 @@
-// 照片：拍照 / 相册多选 → 本地压缩入库；点缩略图看大图、写说明、删除、调顺序
+// 照片：拍照 / 相册多选 / 网页相机 → 本地压缩入库；点缩略图看大图、写说明、删除、调顺序
 import { useEffect, useRef, useState } from 'react';
 import Icon from '../ui/Icon.jsx';
 import { Sheet, Spinner, useUI } from '../ui/UI.jsx';
 import { useStore } from '../../lib/store.jsx';
 import { useMediaUrl, useMediaRecord, setCaption, forgetMedia } from './media.js';
 import { markPicker, clearPicker, anchorOf } from '../../lib/pickerGuard.js';
+import { watchPicker, offerWebCamera, canWebCamera } from '../../lib/camera.js';
+import PickerButton from './PickerButton.jsx';
+import WebCamera from './WebCamera.jsx';
+import { NoShowCard } from './CameraHelp.jsx';
 import { t, tb, uiText, getUiLang } from '../../lib/i18n.js';
 
 // 「照片 2 / 5」：中英时名称合在一起，序号只写一次
@@ -112,8 +116,11 @@ export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, com
     };
   }, []);
   const { toast, confirm } = useUI();
-  const camRef = useRef(null);
-  const libRef = useRef(null);
+  const [cam, setCam] = useState(false); // 网页相机
+  const [noShow, setNoShow] = useState(false); // 点了却没弹出相机 / 相册
+  const webCam = offerWebCamera();
+  const stopWatch = useRef(null);
+  useEffect(() => () => stopWatch.current?.(), []);
   const [busy, setBusy] = useState(0);
   const [open, setOpen] = useState(-1);
   const list = ids || [];
@@ -123,8 +130,10 @@ export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, com
 
   const addFiles = (fileList) => {
     const isVideo = (f) => f.type.startsWith('video/') || /\.(mp4|mov|m4v|webm)$/i.test(f.name);
+    // 有的手机相册给的文件没有类型也没有扩展名：也收下，交给压缩去认（认不出会提示）
+    const unknown = (f) => !f.type && !/\.[a-z0-9]{2,5}$/i.test(f.name || '');
     const files = [...(fileList || [])].filter(
-      (f) => f.type.startsWith('image/') || /\.(heic|heif|jpe?g|png|webp)$/i.test(f.name) || (acceptVideo && isVideo(f)),
+      (f) => f.type.startsWith('image/') || /\.(heic|heif|jpe?g|png|webp)$/i.test(f.name) || (acceptVideo && isVideo(f)) || unknown(f),
     );
     if (!files.length) return;
     const take = files.slice(0, left);
@@ -146,6 +155,22 @@ export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, com
         }
       })(),
     );
+  };
+
+  // 点了「拍照 / 相册」：记一笔（被系统关掉时回来能提示）；看一会儿有没有弹出东西，没有就提示用网页相机
+  const picked = (input, btn, kind) => {
+    markPicker(input, { reportId, anchor: anchorOf(btn), kind });
+    setNoShow(false);
+    stopWatch.current?.();
+    stopWatch.current = watchPicker(input, () => {
+      clearPicker();
+      if (alive.current) setNoShow(true);
+    });
+  };
+  const gotFiles = (files) => {
+    clearPicker();
+    setNoShow(false);
+    addFiles(files);
   };
 
   const del = async (i, kind) => {
@@ -192,26 +217,24 @@ export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, com
         ))}
         {left > 0 && (
           <>
-            <button
-              type="button"
+            <PickerButton
+              label={t('拍照', 'Take photo')}
+              accept="image/*"
+              capture="environment"
+              onPick={(input, btn) => picked(input, btn, 'camera')}
+              onFiles={gotFiles}
               className={`${compact ? 'h-14 w-14' : 'h-[76px] w-[76px]'} flex flex-col items-center justify-center gap-0.5 rounded-xl border-2 border-dashed border-terra/40 bg-terra-soft/50 text-terra active:scale-95`}
-              onClick={(e) => {
-                markPicker(camRef.current, { reportId, anchor: anchorOf(e.currentTarget), kind: 'camera' });
-                camRef.current?.click();
-              }}
-              aria-label={t('拍照', 'Take photo')}
             >
               <Icon name="Camera" size={compact ? 18 : 22} />
               {!compact && <span className={tileText}>{tb('拍照', 'Camera')}</span>}
-            </button>
-            <button
-              type="button"
+            </PickerButton>
+            <PickerButton
+              label={acceptVideo ? t('相册/视频', 'Gallery / Video') : t('相册', 'Gallery')}
+              accept={acceptVideo ? 'image/*,video/*' : 'image/*'}
+              multiple
+              onPick={(input, btn) => picked(input, btn, 'library')}
+              onFiles={gotFiles}
               className={`${compact ? 'h-14 w-14' : 'h-[76px] w-[76px]'} flex flex-col items-center justify-center gap-0.5 rounded-xl border-2 border-dashed border-line bg-white text-ink-mute active:scale-95`}
-              onClick={(e) => {
-                markPicker(libRef.current, { reportId, anchor: anchorOf(e.currentTarget), kind: 'library' });
-                libRef.current?.click();
-              }}
-              aria-label={acceptVideo ? t('相册/视频', 'Gallery / Video') : t('相册', 'Gallery')}
             >
               <Icon name="ImagePlus" size={compact ? 18 : 22} />
               {!compact && (
@@ -219,34 +242,34 @@ export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, com
                   {acceptVideo ? tb('相册/视频', 'Gallery / Video') : tb('相册', 'Gallery')}
                 </span>
               )}
-            </button>
+            </PickerButton>
+            {/* 华为 / App 内置浏览器：多给一个「网页相机」（在页面里直接拍，不经过系统相机） */}
+            {webCam && (
+              <button
+                type="button"
+                className={`${compact ? 'h-14 w-14' : 'h-[76px] w-[76px]'} flex flex-col items-center justify-center gap-0.5 rounded-xl border-2 border-dashed border-pine/40 bg-pine/5 text-pine active:scale-95`}
+                onClick={() => setCam(true)}
+                aria-label={t('网页相机', 'Web camera')}
+              >
+                <Icon name="Smartphone" size={compact ? 16 : 22} />
+                {/* 小格子也写字：只有图标看不出是什么 */}
+                <span className={compact ? 'whitespace-pre-line text-center text-[9px] font-semibold leading-[1.1]' : tileText}>{tb('网页相机', 'Web cam')}</span>
+              </button>
+            )}
           </>
         )}
       </div>
-      <input
-        ref={camRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        onChange={(e) => {
-          clearPicker();
-          addFiles(e.target.files);
-          e.target.value = '';
-        }}
-      />
-      <input
-        ref={libRef}
-        type="file"
-        accept={acceptVideo ? 'image/*,video/*' : 'image/*'}
-        multiple
-        className="hidden"
-        onChange={(e) => {
-          clearPicker();
-          addFiles(e.target.files);
-          e.target.value = '';
-        }}
-      />
+      {noShow && left > 0 && (
+        <NoShowCard onWebCamera={canWebCamera() ? () => { setNoShow(false); setCam(true); } : null} onClose={() => setNoShow(false)} />
+      )}
+      {cam && (
+        <WebCamera
+          open
+          left={left}
+          onClose={() => setCam(false)}
+          onPhoto={(file) => addFiles([file])}
+        />
+      )}
       {open >= 0 && list[open] && (
         <Viewer
           id={list[open]}

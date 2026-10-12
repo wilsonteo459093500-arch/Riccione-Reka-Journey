@@ -12,6 +12,7 @@ import { exportBackup, importBackup } from '../lib/backup.js';
 import { downloadBlob } from '../lib/share.js';
 import { fmtBytes } from '../lib/images.js';
 import { todayISO } from '../lib/format.js';
+import { CameraHelpSheet } from './fields/CameraHelp.jsx';
 
 // 「设置」的默认值（lib/store.jsx DEFAULT_SETTINGS）：English 界面下显示成英文，存的值不变
 // （文件里按文件语言换写法；一打字就存打的内容）
@@ -69,6 +70,7 @@ export default function Settings() {
   const [prog, setProg] = useState('');
   const [noVideo, setNoVideo] = useState(false);
   const [savedTick, setSavedTick] = useState(false);
+  const [camHelp, setCamHelp] = useState(false);
   const fileRef = useRef(null);
   const editing = useRef(false);
   // 只保存「我的资料」这几项：其他设置（如师傅模式）在别处改，不能被这里的旧快照盖回去
@@ -211,6 +213,18 @@ export default function Settings() {
           value={normLang(store.settings.docLang)}
           onChange={(v) => store.updateSettings({ docLang: v })}
         />
+
+        <button type="button" className="card flex w-full items-center gap-3 p-4 text-left active:bg-cream" onClick={() => setCamHelp(true)}>
+          <Icon name="Camera" size={18} className="shrink-0 text-terra" />
+          <span className="min-w-0 flex-1">
+            <span className="block text-[15px] font-bold text-ink">{t('拍照 / 相册打不开？', 'Camera or gallery not opening?')}</span>
+            <span className="block whitespace-pre-line text-[12px] text-ink-mute">
+              {tb('华为手机（没有谷歌 Chrome）、在 WhatsApp 里直接打开时看这里', 'For Huawei phones (no Google Chrome) or when opened inside WhatsApp')}
+            </span>
+          </span>
+          <Icon name="ChevronRight" size={18} className="shrink-0 text-ink-faint" />
+        </button>
+        <CameraHelpSheet open={camHelp} onClose={() => setCamHelp(false)} />
 
         {!standalone && (
           <section className="card border-l-4 border-l-terra p-4">

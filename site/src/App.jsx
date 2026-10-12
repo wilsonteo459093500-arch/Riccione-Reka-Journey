@@ -7,7 +7,8 @@ import ExportScreen from './components/ExportScreen.jsx';
 import { ProjectList, ProjectEdit } from './components/Projects.jsx';
 import Settings from './components/Settings.jsx';
 import CrewLink from './components/CrewLink.jsx';
-import { useEffect } from 'react';
+import { InAppBanner } from './components/fields/CameraHelp.jsx';
+import { Fragment, useEffect } from 'react';
 import { UIProvider, Spinner, useUI } from './components/ui/UI.jsx';
 import { StoreProvider, useStore } from './lib/store.jsx';
 import { useRoute, match, navigate } from './lib/router.js';
@@ -138,7 +139,12 @@ function Screens() {
 // 换界面语言时整页重新挂载，所有文字按新语言重画（语言开关只放在首页 / 项目 / 设置这些列表页，不会打断正在填的报告）
 function LangScreens() {
   const { settings } = useStore();
-  return <Screens key={settings.uiLang || 'zh'} />;
+  return (
+    <Fragment key={settings.uiLang || 'zh'}>
+      <InAppBanner />
+      <Screens />
+    </Fragment>
+  );
 }
 
 export default function App() {
