@@ -5,6 +5,7 @@ import { COMPANY_SLIDES } from './companyTemplate.js';
 import { fillTokens, fitText } from './spec.js';
 import { PX_PER_PT } from '../theme.js';
 import { clientLine, floorsLine, findFloor } from './model.js';
+import { makeTranslator, missWarning, roomEnOf, langOf, floorsLineEn } from './lang.js';
 import {
   layoutMaterials, layoutFloor, layoutViewFull, layoutViewFramed, layoutDesignCover, layoutTeam,
   autoLayout, MATERIALS_PER_PAGE, coverTexts,
@@ -71,17 +72,27 @@ export const elementText = (el) => (el?.paras || []).map((p) => p.runs.map((r) =
 
 /** 某层楼的空间清单（按出现顺序去重） */
 export function floorRooms(project, floorId) {
+  return floorRoomSlides(project, floorId).map((s) => s.room.trim());
+}
+
+/** 某层楼每个空间第一次出现的那一页（英文名从页面的「英文小标题」取） */
+function floorRoomSlides(project, floorId) {
   const seen = new Set();
-  const rooms = [];
+  const out = [];
   for (const s of project.slides || []) {
     if (s.kind !== 'view' || s.floorId !== floorId || s.enabled === false || s.tag === '3d') continue;
     const r = (s.room || '').trim();
     if (r && !seen.has(r)) {
       seen.add(r);
-      rooms.push(r);
+      out.push(s);
     }
   }
-  return rooms;
+  return out;
+}
+
+/** 某层楼的空间英文名（与 floorRooms 一一对应；缺英文 = ''） */
+export function floorRoomsEn(project, floorId, tr) {
+  return floorRoomSlides(project, floorId).map((s) => (tr ? tr.room(s) : roomEnOf(project, s).text) || '');
 }
 
 function floorImage(project, slide, floor) {
@@ -121,10 +132,13 @@ function sectionFor(slide) {
  * @param {{ meta?: (src:string)=>({w:number,h:number}|null) }} opts  meta：素材原始尺寸（cover/contain 裁切要用）
  */
 export function renderDeck(project, { meta = () => null } = {}) {
-  const ctx = { meta, project };
   const tokens = projectTokens(project);
+  const lang = langOf(project);
   const out = [];
   for (const slide of project.slides || []) {
+    // 每页一个翻译器：记下这一页缺英文的地方，放进这一页的提醒
+    const tr = makeTranslator(project);
+    const ctx = { meta, project, tr };
     const base = {
       slideId: slide.id,
       kind: slide.kind,
@@ -152,7 +166,8 @@ export function renderDeck(project, { meta = () => null } = {}) {
       }
       case 'floor': {
         const floor = findFloor(project, slide.floorId);
-        pages = [layoutFloor(floor, floorRooms(project, slide.floorId), floorImage(project, slide, floor), ctx)];
+        const roomsEn = lang === 'zh' ? [] : floorRoomsEn(project, slide.floorId, tr);
+        pages = [layoutFloor(floor, floorRooms(project, slide.floorId), floorImage(project, slide, floor), ctx, roomsEn)];
         break;
       }
       case 'view': {
@@ -162,12 +177,21 @@ export function renderDeck(project, { meta = () => null } = {}) {
         break;
       }
       case 'team':
-        pages = [layoutTeam(project.info?.team)];
+        pages = [layoutTeam(project.info?.team, ctx)];
         break;
       default:
         pages = [{ bg: 'F5F0E6', els: [], warnings: [`未知页面类型：${slide.kind}`] }];
     }
-    pages.forEach((pg, i) => out.push({ ...base, key: i ? `${slide.id}#${i + 1}` : slide.id, ...pg, els: (pg.els || []).map((el) => fitText(el)) }));
+    const miss = missWarning(lang, tr.misses);
+    pages.forEach((pg, i) =>
+      out.push({
+        ...base,
+        key: i ? `${slide.id}#${i + 1}` : slide.id,
+        ...pg,
+        els: (pg.els || []).map((el) => fitText(el)),
+        ...(miss ? { warnings: [...(pg.warnings || []), miss], missing: tr.misses } : {}),
+      })
+    );
   }
   return out;
 }
