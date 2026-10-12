@@ -7,7 +7,7 @@
 //
 // 视觉：白天的纸 + 风景（每一章一个地方）；擦神灯、章节翻牌、揭晓进入暮色（.dusk）。
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, Volume2, VolumeX, RotateCcw, Play as PlayIcon } from 'lucide-react';
 import Pangie from '../shared/Pangie.jsx';
 import LangToggle from '../shared/LangToggle.jsx';
@@ -21,6 +21,7 @@ import { t, guideName, setLang } from '../shared/i18n.js';
 import Scenery, { usesPhoto } from './Scenery.jsx';
 import { sceneFor } from './scenes.js';
 import Stones from './Stones.jsx';
+import { keepWords } from './typo.jsx';
 import {
   Welcome,
   LampRub,
@@ -186,6 +187,29 @@ const overlaps = (a, b) => a.left < b.right - 2 && a.right > b.left + 2 && a.top
 /** 「探头」时往下缩掉的比例（和 quiz.css 的 .companion.is-peek 一致） */
 const PEEK = 0.58;
 
+/**
+ * 话泡泡收窄到「刚好」：先按最大宽度排，再找出行数不变的最窄宽度 —— 两行一样长，
+ * 不会有一个字孤零零掉在第二行（「心 / 脏」），泡泡也不会右边空一大块。
+ */
+function fitBubble(el) {
+  if (!el) return;
+  el.style.width = '';
+  const cs = getComputedStyle(el);
+  const pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+  const lh = parseFloat(cs.lineHeight) || 21;
+  const h = el.offsetHeight;
+  if (h - pad < lh * 1.5) return; // 一行：本来就刚好
+  let lo = el.offsetWidth / 2;
+  let hi = el.offsetWidth;
+  for (let k = 0; k < 9 && hi - lo > 1; k++) {
+    const mid = (lo + hi) / 2;
+    el.style.width = `${mid}px`;
+    if (el.offsetHeight > h) lo = mid;
+    else hi = mid;
+  }
+  el.style.width = `${Math.ceil(hi)}px`;
+}
+
 /** 每次量的时候现拿一次（题目卡里的东西会变：选了答案、结果多一行） */
 function tappableRects() {
   const out = [];
@@ -215,6 +239,15 @@ function Companion({ mood, line, prop, stepId }) {
     if (!r.width) return false;
     return tappableRects().some((q) => overlaps(q, r));
   };
+  // 话泡泡排好后、量会不会撞到东西之前，先收窄到刚好（字体晚到 / 转屏时再收一次）
+  useLayoutEffect(() => {
+    if (!text) return undefined;
+    const fit = () => fitBubble(bubble.current);
+    fit();
+    document.fonts?.ready.then(fit).catch(() => {});
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, [text]);
   useEffect(() => {
     enteredAt.current = performance.now();
     let raf = 0;
@@ -290,7 +323,7 @@ function Companion({ mood, line, prop, stepId }) {
     <aside className={`companion ${pose !== 'up' ? `is-${pose}` : ''}`} aria-live="polite">
       {text && (
         <div className={`bubble ${show && pose === 'up' ? 'is-shown' : ''}`} key={text} ref={bubble}>
-          {text}
+          {keepWords(text)}
         </div>
       )}
       <span className="companion-body" ref={body}>

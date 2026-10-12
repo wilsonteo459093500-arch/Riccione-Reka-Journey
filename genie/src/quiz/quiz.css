@@ -1187,6 +1187,9 @@ textarea.text-in {
   letter-spacing: 0.5em;
   color: rgba(var(--gold-l-rgb), 0.85);
 }
+.chapter-card {
+  container-type: inline-size;
+}
 .chapter-card .dcard-body {
   justify-content: space-evenly;
 }
@@ -1199,6 +1202,11 @@ textarea.text-in {
 html[lang='en'] .chapter-name {
   font-size: clamp(30px, 4.4vw, 40px);
   line-height: 1.05;
+}
+/* 「The Deal-Breaker Card」：Deal-Breaker 不能从连字号断（.nobr），字小一点，让「The Deal-Breaker」放得进一行
+   （13.4cqi ≈ 牌面内容宽 ÷ 7.4；不支持 container query 的浏览器照旧用上面的字号，三行也不会断词） */
+html[lang='en'] .chapter-name:has(.nobr) {
+  font-size: min(clamp(30px, 4.4vw, 40px), 13.4cqi);
 }
 .dc-emblem {
   display: block;

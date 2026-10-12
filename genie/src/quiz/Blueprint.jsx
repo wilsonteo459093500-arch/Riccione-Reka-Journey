@@ -53,6 +53,7 @@ import { t, tj, L, isEn, guideName, withLang } from '../shared/i18n.js';
 import { fmt, ftNote } from '../shared/units.js';
 import { renderKeywords, doorNotes } from './keywords.js';
 import { qrMatrix, qrPath } from './qr.js';
+import { phrased, segmented } from './typo.jsx';
 
 const WISH = isWishMode();
 /** 员工视角：网址带 ?staff=1，而且不在许愿模式里（许愿模式只认外壳的 designer 消息） */
@@ -161,7 +162,7 @@ function TakeHome({ poster, link, title, onClose }) {
         <div className="take-side">
           <p className="eyebrow">{t('分享海报')}</p>
           <h2 className="h-title">{t('用手机扫一扫，把蓝图带回家')}</h2>
-          <p className="take-lead">{t('海报和蓝图会在你自己的手机上打开，在那里就能存图、分享。')}</p>
+          <p className="take-lead">{phrased(t('海报和蓝图会在你自己的手机上打开，在那里就能存图、分享。'), { sentences: false })}</p>
           {qr && (
             <div className="take-qr">
               <svg className="take-code" viewBox={`0 0 ${n} ${n}`} role="img" aria-label={t('蓝图链接的二维码')} shapeRendering="crispEdges">
@@ -328,7 +329,8 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
       <span className="store-label">{label}</span>
       <b className="store-num">{mm ? `${fmt(mm)} mm` : extra || '—'}</b>
       {!designer && mm ? <span className="store-ft">{ftNote(mm)}</span> : null}
-      {sub && <em>{sub}</em>}
+      {/* 「长挂 650 · 短挂 1,500」：只在「·」后面换行（英文不会剩一个「1,500」掉到下一行） */}
+      {sub && <em>{segmented(sub, '·', { zhOnly: false })}</em>}
       {unsure(key) && <span className="store-flag">{t('（默认值，未确认）')}</span>}
     </div>
   );
@@ -403,7 +405,7 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
               {d.num} · {isEn() ? d.zh : d.en}
             </p>
             <h2 className="bp-h2">{name}</h2>
-            <p className="bp-quote">{t(d.tagline)}</p>
+            <p className="bp-quote">{phrased(t(d.tagline), { sentences: false })}</p>
             <p className="bp-desc">{t(d.desc)}</p>
             <div className="axes">
               {AXES.map((ax) => (
@@ -708,10 +710,13 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
           <Printer size={18} strokeWidth={1.8} aria-hidden="true" />
           <span>{t('打印 / PDF')}</span>
         </button>
-        <button type="button" className="btn btn-line" onClick={() => (designer ? copy(text, t('整份文字已复制')) : copy(links.bp, t('链接已复制')))}>
-          {designer ? <Copy size={18} strokeWidth={1.8} aria-hidden="true" /> : <Link2 size={18} strokeWidth={1.8} aria-hidden="true" />}
-          <span>{designer ? t('复制全文') : t('复制链接')}</span>
-        </button>
+        {/* 许愿模式的客人版不放「复制链接」：展厅共用 iPad 的剪贴板不该留着上一位客人的蓝图（带走用海报旁的二维码） */}
+        {(!WISH || designer) && (
+          <button type="button" className="btn btn-line" onClick={() => (designer ? copy(text, t('整份文字已复制')) : copy(links.bp, t('链接已复制')))}>
+            {designer ? <Copy size={18} strokeWidth={1.8} aria-hidden="true" /> : <Link2 size={18} strokeWidth={1.8} aria-hidden="true" />}
+            <span>{designer ? t('复制全文') : t('复制链接')}</span>
+          </button>
+        )}
         {/* 展厅里（刚做完 / 本机存档 / 员工 / 带陪同人）才是「下一位」；客人在家打开分享的蓝图 = 「重新许愿」 */}
         {onRestart && !WISH && (
           <button type="button" className="btn btn-ghost" onClick={onRestart}>

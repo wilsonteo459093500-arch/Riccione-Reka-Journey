@@ -1,7 +1,7 @@
 // 许愿之旅的每一关（UI 组件）。每个组件只管自己的输入，答案通过 set(patch) 写回，next() 前进。
 // 文字一律经过 t() / tj()：中文原文就是 key，英文在 src/shared/i18n/en-*.js。
 
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, Check, X, Sparkle } from 'lucide-react';
 import Pangie, { Lamp } from '../shared/Pangie.jsx';
 import LangToggle from '../shared/LangToggle.jsx';
@@ -16,6 +16,7 @@ import { sfx } from '../shared/sound.js';
 import { isWishMode, tellShell } from '../shared/zen.js';
 import { t, tj, guideName, isEn } from '../shared/i18n.js';
 import { fmt, ftNote } from '../shared/units.js';
+import { phrased, segmented } from './typo.jsx';
 
 const WISH = isWishMode();
 
@@ -39,60 +40,15 @@ function Next({ onClick, children, gold = false, big = false, disabled = false, 
   );
 }
 
-/**
- * 标题按「词组」断行：中文在逗号 / 顿号 / 冒号后面才换行（不会断成「衣 / 柜」）；
- * 英文里带连字号的词（Deal-Breaker）不从连字号断开。
- */
-export function phrased(s, phrase = /[^，、：；]+[，、：；]*/g) {
-  const str = String(s ?? '');
-  if (isEn()) {
-    const parts = str.split(/(\S+-\S+)/);
-    if (parts.length === 1) return str;
-    return parts.map((p, i) =>
-      i % 2 ? (
-        <span key={i} className="nobr">
-          {p}
-        </span>
-      ) : (
-        p
-      )
-    );
-  }
-  // 不用 (?<=…) 反向断言：旧一点的 iPad Safari（16.4 以前）不认识，整个页面会载不起来
-  const parts = str.match(phrase) || [];
-  if (parts.length < 2) return str;
-  return parts.map((p, i) => (
-    <span key={i} className="ph">
-      {p}
-    </span>
-  ));
-}
-
-/**
- * 「甲 · 乙 · 丙」这样的一行小字：中文只在「·」后面换行（「梦想家蓝图」不会被拆开，下一行也不会以「·」开头）；
- * 英文照常断。
- */
-function dotted(s) {
-  if (isEn()) return s;
-  const parts = String(s).split(/\s*·\s*/);
-  const last = parts.length - 1;
-  return parts.map((p, i) => (
-    <Fragment key={i}>
-      <span className="ph">
-        {p}
-        {i < last ? ' ·' : ''}
-      </span>
-      {i < last ? ' ' : ''}
-    </Fragment>
-  ));
-}
+// 断行（不在词的中间换行）：标题按词组 / 句子，正文按词组，「甲 · 乙」「甲 / 乙」只在分隔号后面换行（typo.jsx）
+export { phrased };
 
 function Head({ eyebrow, title, lead }) {
   return (
     <header className="q-head">
       {eyebrow && <p className="eyebrow">{eyebrow}</p>}
       <h2 className="h-title">{phrased(title)}</h2>
-      {lead && <p className="lead">{lead}</p>}
+      {lead && <p className="lead">{phrased(lead, { sentences: false })}</p>}
     </header>
   );
 }
@@ -121,7 +77,7 @@ export function Welcome({ answers, set, next }) {
           <p className="eyebrow">{t('许愿之旅')}</p>
           <h1 className="h-display">{t('嗨，我是{0}', [guideName()])}</h1>
           <p className="cover-sub">{t('住在神灯里的熊猫')}</p>
-          <p className="lead">{t('接下来几分钟，我会用五张牌，读懂你心里的那个家。不用懂设计，也不用想太久 —— 跟着第一感觉走就好。')}</p>
+          <p className="lead">{phrased(t('接下来几分钟，我会用五张牌，读懂你心里的那个家。不用懂设计，也不用想太久 —— 跟着第一感觉走就好。'), { sentences: false })}</p>
         </div>
 
         <div className="cover-act">
@@ -159,7 +115,7 @@ export function Welcome({ answers, set, next }) {
           <Sparkle size={18} strokeWidth={1.8} aria-hidden="true" />
           <span>{t('开始许愿')}</span>
         </button>
-        <p className="fine">{dotted(t('大约 6–8 分钟 · 5 张牌 · 结束时会得到你的「梦想家蓝图」'))}</p>
+        <p className="fine">{segmented(t('大约 6–8 分钟 · 5 张牌 · 结束时会得到你的「梦想家蓝图」'))}</p>
         </div>
       </div>
     </div>
@@ -396,7 +352,7 @@ function Opt({ on, onClick, set, v, label, sub, small = false, x = false }) {
         <Ico set={set} v={v} size={small ? 22 : 26} />
       </span>
       <span className="opt-text">
-        <span className="opt-label">{label}</span>
+        <span className="opt-label">{segmented(label, '/')}</span>
         {sub && <span className="opt-sub">{sub}</span>}
       </span>
       <span className="opt-tick" aria-hidden="true">

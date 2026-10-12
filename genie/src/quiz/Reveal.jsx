@@ -12,6 +12,7 @@ import { PAIRS } from './flow.js';
 import { sfx } from '../shared/sound.js';
 import { isWishMode, tellShell } from '../shared/zen.js';
 import { t, L, isEn, guideName } from '../shared/i18n.js';
+import { phrased } from './typo.jsx';
 
 const WISH = isWishMode();
 
@@ -30,7 +31,7 @@ export function DreamerCard({ profile, big = false }) {
         ))}
       </div>
       <h3 className="dc-name">{L({ zh: d.zh, en: d.en })}</h3>
-      <p className="dc-tag">{t(d.tagline)}</p>
+      <p className="dc-tag">{phrased(t(d.tagline), { sentences: false })}</p>
       <div className="dc-palette">
         {d.palette.map((c) => (
           <i key={c} style={{ background: c }} />
