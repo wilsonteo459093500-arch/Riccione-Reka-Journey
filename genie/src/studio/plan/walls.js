@@ -14,9 +14,10 @@
 
 import { ROOM_TYPES } from './model.js';
 
-export const WALL_T = { min: 0.065, max: 0.3 }; // 墙厚范围（m）：100–230 mm 的砖墙 + 余量
+export const WALL_T = { min: 0.065, max: 0.27 }; // 墙厚范围（m）：100–230 mm 的砖墙 + 余量（300 mm 的地砖格不能算）
 export const DOOR_W = { min: 0.5, max: 1.35, double: 2.1 }; // 门洞宽（m）
 export const OPENING_MAX = 3.2; // 两段同一条线上的墙之间，空着不超过这么宽 = 一个开口（打通 / 拱门）
+export const GLAZING_MAX = 7; // 中间有平行细线（推拉门 / 落地窗）时可以这么宽
 
 const now = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -287,33 +288,27 @@ function bandSlices(M, W, H, P, pat) {
     while (c0 < m) {
       let c1 = c0;
       while (c1 + 1 < m && rs[idx[c1 + 1]] - re[idx[c1]] <= tmax) c1++;
-      let lastSolid = -1;
+      // 组里每一个总宽在 [tmin, tmax] 的连续窗口都报（墙旁边贴着家具线时，墙自己那一段也在里面）；单独一段细线不算
       for (let p = c0; p <= c1; p++) {
         const sp = rs[idx[p]];
-        let q = p;
-        while (q + 1 <= c1 && re[idx[q + 1]] - sp <= tmax) q++;
-        if (re[idx[q]] - sp > tmax) continue; // 这一段自己就太长（顺着看的墙 / 大块）
-        const span = re[idx[q]] - sp;
-        const leftMax = p === c0 || re[idx[q]] - rs[idx[p - 1]] > tmax;
-        if (leftMax && span >= tmin) {
+        let ink = 0;
+        let thick = 0;
+        for (let q = p; q <= c1; q++) {
+          const L = re[idx[q]] - rs[idx[q]];
+          const span = re[idx[q]] - sp;
+          if (span > tmax) break;
+          ink += L;
+          if (L > lw) thick++;
+          if (span < tmin) continue;
           if (p === q) {
-            if (span > lw) {
-              out.r.push(r);
-              out.s.push(sp);
-              out.e.push(re[idx[q]]);
-              out.k.push(0);
-              out.nl.push(1);
-              out.ink.push(span);
-              lastSolid = p;
-            }
+            if (L <= lw) continue;
+            out.r.push(r);
+            out.s.push(sp);
+            out.e.push(re[idx[q]]);
+            out.k.push(0);
+            out.nl.push(1);
+            out.ink.push(L);
           } else {
-            let ink = 0;
-            let thick = 0;
-            for (let k = p; k <= q; k++) {
-              const L = re[idx[k]] - rs[idx[k]];
-              ink += L;
-              if (L > lw) thick++;
-            }
             out.r.push(r);
             out.s.push(sp);
             out.e.push(re[idx[q]]);
@@ -322,20 +317,6 @@ function bandSlices(M, W, H, P, pat) {
             out.ink.push(ink);
           }
         }
-        // 窗口里的单独一段实心（墙旁边贴着一条细线时，墙自己也报一次）
-        if (p !== q || !leftMax)
-          for (let k = p; k <= q; k++) {
-            const L = re[idx[k]] - rs[idx[k]];
-            if (k > lastSolid && L > lw && L >= tmin && L <= tmax) {
-              out.r.push(r);
-              out.s.push(rs[idx[k]]);
-              out.e.push(re[idx[k]]);
-              out.k.push(0);
-              out.nl.push(1);
-              out.ink.push(L);
-              lastSolid = k;
-            }
-          }
       }
       c0 = c1 + 1;
     }
@@ -408,13 +389,20 @@ function chainToSeg(ch, sl, o) {
   const ts = [];
   let multi = 0;
   let solid = 0;
+  let pair = 0;
   for (const k of ch.ids) {
     cs.push((sl.s.a[k] + sl.e.a[k]) / 2);
     ts.push(sl.e.a[k] - sl.s.a[k]);
-    if (sl.k.a[k] === 0) solid++;
-    else if (sl.k.a[k] === 1) multi++;
+    const kind = sl.k.a[k];
+    if (kind === 0) solid++;
+    else if (kind === 1) {
+      multi++;
+      if (sl.nl.a[k] === 2) pair++;
+    }
   }
-  return { o, c: median(cs), t: median(ts), a: ch.first, b: ch.last + 1, n: ch.ids.length, multi: multi / ch.ids.length, solid: solid / ch.ids.length, ids: ch.ids, sl };
+  const n = ch.ids.length;
+  // solid = 实心一段；pair = 两条细线（空心墙 / 家具）；filled = 实心 + 填充（≥ 3 段或粗细混合）
+  return { o, c: median(cs), t: median(ts), a: ch.first, b: ch.last + 1, n, multi: multi / n, solid: solid / n, pair: pair / n, ids: ch.ids, sl };
 }
 
 // ───────────── 5. 尺度：不知道每米几像素时，从墙厚 / 线距估 ─────────────
@@ -587,10 +575,11 @@ export function extractWalls(img, opts = {}) {
     ...track(slH, P).filter((c) => c.ids.length >= minN).map((c) => chainToSeg(c, slH, 'h')),
     ...track(slV, P).filter((c) => c.ids.length >= minN).map((c) => chainToSeg(c, slV, 'v')),
   ];
-  const ctx = { P, w, h, raw, rawT, mask, maskT, pm, f };
+  const ctx = { P, w, h, raw, rawT, mask, maskT, pm, f, debug: opts.debug };
   segs = nms(segs, ctx);
   segs = mergeCollinear(segs, ctx);
   segs = nms(segs, ctx);
+  if (opts.debug) opts.debug.beforeFurniture = segs.map((s) => ({ o: s.o, c: s.c * f, a: s.a * f, b: s.b * f, t: s.t * f, n: s.n, solid: +s.solid.toFixed(2), multi: +s.multi.toFixed(2), pair: +s.pair.toFixed(2), ...interior(s, ctx) }));
   segs = dropFurniture(segs, ctx);
   snapEnds(segs, ctx);
   segs = keepNetwork(segs, ctx);
@@ -772,6 +761,7 @@ function mergeCollinear(segs, ctx) {
       n,
       multi: g.reduce((v, s) => v + s.multi * s.n, 0) / n,
       solid: g.reduce((v, s) => v + s.solid * s.n, 0) / n,
+      pair: g.reduce((v, s) => v + s.pair * s.n, 0) / n,
       parts: g.flatMap((s) => s.parts || [s]),
     });
   }
@@ -783,25 +773,80 @@ function mergeCollinear(segs, ctx) {
  * - 图上的墙主要是实心 / 填充的 → 整段都是细线的段（不是夹在墙中间的窗）不要；
  * - 细线画墙的图 → 线比墙的线明显细的不要（家具一般用细笔）。
  */
+/** 墙带「里面」（去掉两边各一条线宽）每个沿墙位置有几个墨点 → { filled: 实心位置的比例, hatched: 附近有墨的位置的比例 } */
+function interior(s, ctx) {
+  const { raw, rawT, w, h, pm } = ctx;
+  const M = s.o === 'h' ? rawT : raw;
+  const Wd = s.o === 'h' ? h : w;
+  const Hd = s.o === 'h' ? w : h;
+  const m = Math.max(1, Math.round(0.035 * pm));
+  let v0 = Math.round(s.c - s.t / 2 + m);
+  let v1 = Math.round(s.c + s.t / 2 - m);
+  if (v1 <= v0) {
+    v0 = Math.round(s.c - 0.5);
+    v1 = v0 + 1;
+  }
+  v0 = clamp(v0, 0, Wd - 1);
+  v1 = clamp(v1, v0 + 1, Wd);
+  const rows = v1 - v0;
+  const a = clamp(Math.round(s.a), 0, Hd);
+  const b = clamp(Math.round(s.b), a, Hd);
+  const n = b - a;
+  if (n <= 0) return { filled: 0, hatched: 0 };
+  const occ = new Uint16Array(n);
+  const diag = new Uint16Array(n); // 斜线：这一点往下一个位置斜着还连着墨（不是直着连）
+  for (let u = a; u < b; u++) {
+    const r = u * Wd;
+    const r2 = u + 1 < Hd ? r + Wd : r;
+    let k = 0;
+    let d = 0;
+    for (let v = v0; v < v1; v++) {
+      if (!M[r + v]) continue;
+      k++;
+      if (!M[r2 + v] && (M[r2 + v + 1] || M[r2 + v - 1])) d++;
+    }
+    occ[u - a] = k;
+    diag[u - a] = d;
+  }
+  let filled = 0;
+  let hatched = 0;
+  const win = Math.max(2, Math.round(0.05 * pm));
+  for (let i = 0; i < n; i++) {
+    if (occ[i] >= 0.6 * rows) filled++;
+    let any = 0;
+    for (let j = Math.max(0, i - win); j <= Math.min(n - 1, i + win) && !any; j++) any = diag[j];
+    if (any) hatched++;
+  }
+  return { filled: filled / n, hatched: hatched / n };
+}
+
+/**
+ * 家具 / 地砖 / 符号常常也是「两条细线挨着」。先看长墙（≥ 1.5 m，按长度² 加权）是怎么画的：
+ * 实心（墙带里面全黑）/ 填充（里面有斜线）/ 空心（里面是空的）。实心 / 填充的图：里面空着的带不是墙（窗夹在墙中间的除外）。
+ */
 function dropFurniture(segs, ctx) {
-  const { P } = ctx;
-  let solidLen = 0;
-  let multiLen = 0;
+  const { P, pm } = ctx;
+  for (const s of segs) Object.assign(s, interior(s, ctx));
+  let wS = 0;
+  let wF = 0;
+  let wP = 0;
   for (const s of segs) {
     const L = segLen(s);
-    solidLen += L * (1 - s.multi);
-    multiLen += L * s.multi;
+    if (L < 1.5 * pm) continue;
+    wS += L * L * s.filled;
+    wF += L * L * Math.max(0, s.hatched - s.filled);
+    wP += L * L * (1 - Math.max(s.filled, s.hatched));
   }
-  const solidDrawing = solidLen > 1.5 * multiLen;
-  ctx.style = solidDrawing ? 'solid' : 'lines';
-  if (solidDrawing) {
-    return segs.filter((s) => {
-      if (s.multi < 0.8) return true;
-      // 窗：夹在两段实心墙之间、在同一条线上
-      return segs.some((q) => q !== s && q.o === s.o && q.multi < 0.5 && Math.abs(q.c - s.c) <= Math.max(2, 0.3 * q.t) && (Math.abs(q.b - s.a) <= P.tmax || Math.abs(s.b - q.a) <= P.tmax));
-    });
-  }
-  return segs;
+  const style = wS >= wF && wS >= wP ? 'solid' : wF >= wP ? 'hatched' : 'hollow';
+  ctx.style = style;
+  if (style === 'hollow') return segs;
+  const val = (s) => (style === 'solid' ? s.filled : s.hatched);
+  const ok = (s) => val(s) >= 0.5 || val(s) * segLen(s) >= Math.max(0.6 * pm, 0.25 * segLen(s));
+  return segs.filter((s) => {
+    if (ok(s)) return true;
+    // 窗：夹在墙之间、在同一条线上
+    return segs.some((q) => q !== s && q.o === s.o && ok(q) && Math.abs(q.c - s.c) <= Math.max(2, 0.3 * q.t) && (Math.abs(q.b - s.a) <= P.tmax || Math.abs(s.b - q.a) <= P.tmax));
+  });
 }
 
 /** 端点吸到垂直的墙的中线上（L / T 角）；记下每个端点接在哪 */
@@ -811,6 +856,8 @@ function snapEnds(segs, ctx) {
   for (const s of segs) {
     s.endA = -1;
     s.endB = -1;
+    s.rawA = s.a;
+    s.rawB = s.b;
   }
   segs.forEach((s, i) => {
     for (const end of ['a', 'b']) {
@@ -827,6 +874,9 @@ function snapEnds(segs, ctx) {
         }
       });
       if (best >= 0) {
+        const other = end === 'a' ? s.b : s.a;
+        // 两头吸到同一面墙 / 吸完太短 → 不吸
+        if (Math.abs(other - segs[best].c) < Math.max(2, s.t)) continue;
         s[end === 'a' ? 'endA' : 'endB'] = best;
         s[end] = segs[best].c;
       }
@@ -864,6 +914,10 @@ function keepNetwork(segs, ctx) {
       } else if (Math.abs(s.c - q.c) <= Math.max(2, 0.3 * Math.max(s.t, q.t))) {
         const gap = Math.max(q.a - s.b, s.a - q.b);
         if (gap <= OPENING_MAX * pm) uni(i, j);
+        else if (gap <= GLAZING_MAX * pm) {
+          const [p0, p1] = q.a > s.b ? [s.b, q.a] : [q.b, s.a];
+          if (glazing(ctx, { o: s.o, c: (s.c + q.c) / 2, t: (s.t + q.t) / 2 }, p0, p1)) uni(i, j);
+        }
       }
     }
   }
@@ -897,8 +951,8 @@ function unifyLines(segs) {
       while (j + 1 < L.length && L[j + 1].c - L[j].c <= Math.max(2, 0.3 * Math.max(L[j].t, L[j + 1].t))) j++;
       if (j > i) {
         const g = L.slice(i, j + 1);
-        const tot = g.reduce((v, s) => v + segLen(s), 0);
-        const c = g.reduce((v, s) => v + s.c * segLen(s), 0) / tot;
+        const tot = g.reduce((v, s) => v + Math.max(1, segLen(s)), 0);
+        const c = g.reduce((v, s) => v + s.c * Math.max(1, segLen(s)), 0) / tot;
         for (const s of g) s.c = c;
       }
       i = j + 1;
@@ -907,6 +961,22 @@ function unifyLines(segs) {
 }
 
 // ───────────── 7. 门洞 / 开口 / 推拉门 / 窗 ─────────────
+
+/** 墙段的矩形（工作图像素）→ 掩膜：门弧检查时，落在墙里的采样点不算 */
+function wallMaskOf(segs, ctx) {
+  const { w, h } = ctx;
+  const M = new Uint8Array(w * h);
+  for (const s of segs) {
+    const half = s.t / 2 + 1;
+    const [x0, x1, y0, y1] = s.o === 'h' ? [s.a, s.b, s.c - half, s.c + half] : [s.c - half, s.c + half, s.a, s.b];
+    const i0 = clamp(Math.floor(x0), 0, w - 1);
+    const i1 = clamp(Math.ceil(x1), 0, w);
+    const j0 = clamp(Math.floor(y0), 0, h - 1);
+    const j1 = clamp(Math.ceil(y1), 0, h);
+    for (let j = j0; j < j1; j++) M.fill(1, j * w + i0, j * w + i1);
+  }
+  return M;
+}
 
 /** 原始二值图上某点附近（半径 rad）有没有墨 */
 function inkNear(ctx, x, y, rad = 1) {
@@ -924,37 +994,67 @@ function inkNear(ctx, x, y, rad = 1) {
   return false;
 }
 
-/** 门弧：铰链在 hinge（沿墙坐标），往 side 一侧开，半径 R。返回 { arc, leaf } 两个命中率 */
+/** 门弧：铰链在 hinge（沿墙坐标），往 side 一侧开，半径 ≈ R。返回 { arc, leaf } 两个命中率（弧：每个角度上沿半径 0.8–1.08 R 找墨） */
 function arcScore(ctx, s, hinge, other, side, R) {
   const face = s.c + (side * s.t) / 2;
   const P = (u, v) => (s.o === 'h' ? [u, v] : [v, u]); // (沿墙, 横截面) → (x, y)
   let hit = 0;
   let tot = 0;
-  const N = Math.max(12, Math.round(R * 0.6));
+  const N = Math.max(12, Math.round(R * 0.5));
   const dir = Math.sign(other - hinge);
+  const r0 = 0.8 * R;
+  const r1 = 1.08 * R;
+  const dr = 1;
+  const WM = ctx.wallMask;
+  const inWall = (x, y) => {
+    const xi = Math.round(x);
+    const yi = Math.round(y);
+    return !WM || xi < 0 || yi < 0 || xi >= ctx.w || yi >= ctx.h ? false : WM[yi * ctx.w + xi] === 1;
+  };
   for (let i = 2; i < N - 1; i++) {
     const th = (i / N) * (Math.PI / 2);
-    // 从门扇（垂直于墙）转到对面的门框
-    const u = hinge + dir * R * Math.sin(th);
-    const v = face + side * R * Math.cos(th);
-    const [x, y] = P(u, v);
+    const sn = Math.sin(th);
+    const cs = Math.cos(th);
+    let wall = 0;
+    let found = false;
+    for (let r = r0; r <= r1; r += dr) {
+      const [x, y] = P(hinge + dir * r * sn, face + side * r * cs);
+      if (inWall(x, y)) {
+        wall++;
+        continue;
+      }
+      if (inkNear(ctx, x, y, 0)) {
+        found = true;
+        break;
+      }
+    }
+    if (!found && wall > 0) continue; // 这个角度上全在墙里 / 一部分在墙里又没找到 → 不算
     tot++;
-    if (inkNear(ctx, x, y, 1)) hit++;
+    if (found) hit++;
   }
+  if (tot < 0.6 * (N - 3)) return { arc: 0, leaf: 0 };
   let lh = 0;
   let lt = 0;
-  for (let i = 2; i < N; i++) {
-    const v = face + side * R * (i / N) * 0.95;
-    for (const du of [0]) {
+  for (let i = 3; i < N; i++) {
+    const v = face + side * R * (i / N) * 0.9;
+    const [cx0, cy0] = P(hinge + dir, v);
+    if (inWall(cx0, cy0)) continue;
+    lt++;
+    for (const du of [0, 1, 2, -1, 3]) {
       const [x, y] = P(hinge + dir * du, v);
-      lt++;
-      if (inkNear(ctx, x, y, 2)) lh++;
+      if (inkNear(ctx, x, y, 0)) {
+        lh++;
+        break;
+      }
     }
   }
-  return { arc: hit / tot, leaf: lh / lt };
+  return { arc: tot ? hit / tot : 0, leaf: lt ? lh / lt : 0 };
 }
 
-/** 门洞里平行于墙的细线：每个位置有几条、覆盖了多少 */
+/**
+ * 门洞里平行于墙的细线：横截面上每一行（离墙中线的距离）沿门洞方向被墨盖住多少 → 一条条「线」。
+ * 返回 { cover: 至少一条线盖住的比例, lines: 盖住 ≥ 85 % 的线数, mid: 在墙厚中间 70 % 里、盖住 ≥ 30 % 的线数 }
+ */
 function linesInGap(ctx, s, a, b) {
   const { raw, rawT, w, h } = ctx;
   const M = s.o === 'h' ? rawT : raw; // 行 = 沿墙位置
@@ -963,53 +1063,134 @@ function linesInGap(ctx, s, a, b) {
   const y1 = Math.min(Wd, Math.round(s.c + s.t / 2 + 1));
   const ua = Math.round(a + 1);
   const ub = Math.round(b - 1);
+  const tot = Math.max(1, ub - ua);
+  const rowCov = new Float64Array(Math.max(0, y1 - y0));
   let covered = 0;
-  const counts = [];
   for (let u = ua; u < ub; u++) {
     const r = u * Wd;
-    let n = 0;
-    let inRun = false;
-    for (let v = y0; v < y1; v++) {
+    let any = 0;
+    for (let v = y0; v < y1; v++)
       if (M[r + v]) {
-        if (!inRun) n++;
-        inRun = true;
-      } else inRun = false;
-    }
-    if (n) covered++;
-    counts.push(n);
+        rowCov[v - y0]++;
+        any = 1;
+      }
+    covered += any;
   }
-  const tot = Math.max(1, ub - ua);
-  return { cover: covered / tot, lines: median(counts) };
+  // 相邻的行并成一条线，取最大覆盖
+  let full = 0;
+  let mid = 0;
+  for (let i = 0; i < rowCov.length; ) {
+    if (rowCov[i] / tot < 0.3) {
+      i++;
+      continue;
+    }
+    let j = i;
+    let best = 0;
+    while (j < rowCov.length && rowCov[j] / tot >= 0.3) {
+      best = Math.max(best, rowCov[j] / tot);
+      j++;
+    }
+    const centre = y0 + (i + j) / 2;
+    if (best >= 0.85) full++;
+    if (Math.abs(centre - s.c) <= 0.35 * s.t) mid++;
+    i = j;
+  }
+  return { cover: covered / tot, lines: full, mid };
 }
 
-function classifyGap(ctx, s, a, b, hints) {
+/** 门洞里是玻璃（推拉门 / 窗）：窗 = ≥ 3 条贯通的线；推拉门 = 墙厚中间有 ≥ 2 条线（两扇）、整体盖住 ≥ 80 % */
+function glazing(ctx, s, a, b) {
+  const L = linesInGap(ctx, s, a, b);
+  if (L.lines >= 3) return 'window';
+  if (L.mid >= 2 && L.cover >= 0.8) return 'slider';
+  return null;
+}
+
+/** 门扇：从墙面（铰链处）垂直出去的一条线有多长（允许 2 像素的断） */
+function leafRun(ctx, s, h, side) {
+  const face = s.c + (side * s.t) / 2;
+  const P = (u, v) => (s.o === 'h' ? [u, v] : [v, u]);
+  const WM = ctx.wallMask;
+  const maxL = DOOR_W.max * 1.25 * ctx.pm;
+  let best = 0;
+  for (const du of [0, -1, 1]) {
+    let last = 0;
+    let miss = 0;
+    for (let k = 1; k <= maxL; k++) {
+      const [x, y] = P(h + du, face + side * k);
+      const xi = Math.round(x);
+      const yi = Math.round(y);
+      if (xi < 0 || yi < 0 || xi >= ctx.w || yi >= ctx.h) break;
+      const i = yi * ctx.w + xi;
+      if (ctx.raw[i] || (WM && WM[i] && k < 3)) {
+        last = k;
+        miss = 0;
+      } else if (++miss > 2) break;
+    }
+    if (last > best) best = last;
+  }
+  return best;
+}
+
+/** 门：找门扇（从墙面垂直出去、长 ≈ 门宽的线）+ 四分之一圆弧；铰链可以离开口的端点一小段（门边的短墙垛没认出来时） */
+function findDoor(ctx, s, a, b, hints) {
   const { pm } = ctx;
-  const g = b - a;
-  const gm = g / pm;
-  const dmin = hints.doorMin || DOOR_W.min;
-  const dmax = hints.doorMax || DOOR_W.max;
+  const span = b - a;
+  const dmin = (hints.doorMin || DOOR_W.min) * pm;
+  const dmax = (hints.doorMax || DOOR_W.max) * pm;
+  const maxShift = Math.min(0.25 * pm, span * 0.35);
   let best = null;
-  if (gm >= dmin * 0.9 && gm <= dmax * 1.1) {
+  for (const side of [-1, 1])
+    for (const end of ['a', 'b'])
+      for (let d = 0; d <= maxShift; d += 1) {
+        const h = end === 'a' ? a + d : b - d;
+        const L = leafRun(ctx, s, h, side);
+        if (L < dmin * 0.85 || L > dmax * 1.1) continue;
+        const other = end === 'a' ? h + L : h - L;
+        if (other > b + 0.15 * pm || other < a - 0.15 * pm) continue;
+        const sc = arcScore(ctx, s, h, other, side, L);
+        const v = sc.arc + 0.5 * sc.leaf - d / pm;
+        if (!best || v > best.v) best = { v, ...sc, h, other, side, end };
+      }
+  if (ctx.debug) (ctx.debug.gapLog = ctx.debug.gapLog || []).push({ o: s.o, c: s.c * ctx.f, a: a * ctx.f, b: b * ctx.f, best });
+  if (best && best.arc >= 0.6 && best.leaf >= 0.6) {
+    const p = Math.max(a, Math.min(best.h, best.other));
+    const q = Math.min(b, Math.max(best.h, best.other));
+    return { kind: 'door', arc: true, a: p, b: q, swing: { hinge: best.h < best.other ? 'a' : 'b', side: best.side } };
+  }
+  // 没画门扇（只有弧）：铰链在开口两端、半径 = 开口宽
+  if (span >= dmin * 0.9 && span <= dmax * 1.1) {
+    let b2 = null;
     for (const [hinge, other] of [
       [a, b],
       [b, a],
     ])
       for (const side of [-1, 1]) {
-        const sc = arcScore(ctx, s, hinge, other, side, g);
-        const v = sc.arc + 0.5 * sc.leaf;
-        if (!best || v > best.v) best = { v, ...sc, hinge: hinge === a ? 'a' : 'b', side };
+        const sc = arcScore(ctx, s, hinge, other, side, span);
+        if (!b2 || sc.arc > b2.arc) b2 = { ...sc, hinge: hinge === a ? 'a' : 'b', side };
       }
-    if (best && best.arc >= 0.6 && (best.leaf >= 0.45 || best.arc >= 0.85)) return { kind: 'door', arc: true, swing: { hinge: best.hinge, side: best.side } };
+    if (b2 && b2.arc >= 0.85) return { kind: 'door', arc: true, swing: { hinge: b2.hinge, side: b2.side } };
   }
-  if (gm >= 2 * dmin * 0.9 && gm <= (hints.doorDouble || DOOR_W.double)) {
+  // 双开门：两边各一扇，各半宽
+  if (span >= 2 * dmin * 0.9 && span <= (hints.doorDouble || DOOR_W.double) * pm) {
     for (const side of [-1, 1]) {
-      const s1 = arcScore(ctx, s, a, b, side, g / 2);
-      const s2 = arcScore(ctx, s, b, a, side, g / 2);
-      if (s1.arc >= 0.6 && s2.arc >= 0.6) return { kind: 'door', arc: true, double: true, swing: { hinge: 'ab', side } };
+      const s1 = arcScore(ctx, s, a, b, side, span / 2);
+      const s2 = arcScore(ctx, s, b, a, side, span / 2);
+      if (s1.arc >= 0.6 && s2.arc >= 0.6 && s1.leaf >= 0.5 && s2.leaf >= 0.5) return { kind: 'door', arc: true, double: true, swing: { hinge: 'ab', side } };
     }
   }
-  const L = linesInGap(ctx, s, a, b);
-  if (L.cover >= 0.7 && gm >= 0.5) return { kind: L.lines >= 3 ? 'window' : 'slider', arc: false };
+  return null;
+}
+
+function classifyGap(ctx, s, a, b, hints) {
+  const { pm } = ctx;
+  const gm = (b - a) / pm;
+  if (gm >= (hints.doorMin || DOOR_W.min) * 0.8 && gm <= (hints.doorDouble || DOOR_W.double) * 1.1) {
+    const d = findDoor(ctx, s, a, b, hints);
+    if (d) return d;
+  }
+  const gl = gm >= 0.4 && gm <= GLAZING_MAX ? glazing(ctx, s, a, b) : null;
+  if (gl) return { kind: gl, arc: false };
   if (gm >= 0.45 && gm <= OPENING_MAX) return { kind: 'opening', arc: false };
   return null;
 }
@@ -1020,6 +1201,7 @@ function classifyGap(ctx, s, a, b, hints) {
  */
 function findGaps(segs, ctx, hints) {
   const { pm } = ctx;
+  ctx.wallMask = wallMaskOf(segs, ctx);
   const gaps = [];
   // 1. 同线相邻
   for (const o of ['h', 'v']) {
@@ -1036,45 +1218,48 @@ function findGaps(segs, ctx, hints) {
         const A = arr[i];
         const Bs = arr[i + 1];
         const g = Bs.a - A.b;
-        if (g <= 0 || g > OPENING_MAX * pm) continue;
+        if (g <= 0 || g > GLAZING_MAX * pm) continue;
         const t = (A.t + Bs.t) / 2;
         const probe = { o, c: A.c, t };
         const cl = classifyGap(ctx, probe, A.b, Bs.a, hints);
         if (cl) {
-          A.joinNext = { seg: Bs, a: A.b, b: Bs.a, ...cl };
+          A.joinNext = { seg: Bs, ...cl, a: cl.a ?? A.b, b: cl.b ?? Bs.a };
         }
       }
     }
   }
-  // 2. 自由端 → 垂直墙的墙面（门在墙角）
+  // 2. 端点 → 前面垂直墙的墙面（门挨着墙角 / T 口）：用吸附前的端点
   const tol = Math.max(2, 0.06 * pm);
-  for (const s of segs) {
+  segs.forEach((s) => {
     for (const end of ['a', 'b']) {
-      if ((end === 'a' ? s.endA : s.endB) >= 0) continue;
       if (end === 'b' && s.joinNext) continue;
       if (end === 'a' && segs.some((q) => q.joinNext && q.joinNext.seg === s)) continue;
-      const e = s[end];
+      let e = end === 'a' ? s.rawA : s.rawB;
       const dir = end === 'a' ? -1 : 1;
+      const crosses = (p) => p.o !== s.o && s.c >= p.a - p.t / 2 - tol && s.c <= p.b + p.t / 2 + tol;
+      // 端点在一面垂直墙里（T 口）→ 从那面墙的另一边算起
+      for (const p of segs) if (crosses(p) && Math.abs(e - p.c) <= p.t / 2 + tol) e = dir > 0 ? Math.max(e, p.c + p.t / 2) : Math.min(e, p.c - p.t / 2);
       let best = null;
-      for (const p of segs) {
-        if (p.o === s.o) continue;
-        if (s.c < p.a - tol || s.c > p.b + tol) continue;
+      segs.forEach((p, pi) => {
+        if (!crosses(p)) return;
         const face = p.c - (dir * p.t) / 2;
         const g = (face - e) * dir;
-        if (g < DOOR_W.min * 0.85 * pm || g > DOOR_W.max * 1.1 * pm) continue;
-        if (!best || g < best.g) best = { p, face, g };
-      }
-      if (!best) continue;
-      // 中间不能还有别的同线的墙段
+        if (g < -1) return; // 在端点后面
+        if (!best || g < best.g) best = { p, pi, face, g };
+      });
+      // 前面第一面垂直的墙，离得正好一个门宽
+      if (!best || best.g < DOOR_W.min * 0.85 * pm || best.g > DOOR_W.max * 1.1 * pm) continue;
+      // 中间不能有别的同线墙段
       const a = Math.min(e, best.face);
       const b = Math.max(e, best.face);
+      if (segs.some((q) => q !== s && q.o === s.o && Math.abs(q.c - s.c) <= Math.max(2, 0.3 * q.t) && overlap(q.a, q.b, a, b) > 2)) continue;
       const cl = classifyGap(ctx, s, a, b, hints);
       if (cl && (cl.kind === 'door' || cl.kind === 'slider' || cl.kind === 'window')) {
         s.virt = s.virt || {};
-        s.virt[end] = { a, b, to: best.p.c, ...cl };
+        s.virt[end] = { to: best.p.c, pi: best.pi, ...cl, a: cl.a ?? a, b: cl.b ?? b };
       }
     }
-  }
+  });
   // 3. 合并：一条线上用开口连起来的几段 → 一段墙
   const out = [];
   const absorbed = new Set();
@@ -1101,9 +1286,11 @@ function findGaps(segs, ctx, hints) {
       t: median(parts.flatMap((p) => Array(Math.max(1, Math.round(p.n / 8))).fill(p.t))),
       multi: parts.reduce((v, p) => v + p.multi * p.n, 0) / tot,
       solid: parts.reduce((v, p) => v + p.solid * p.n, 0) / tot,
+      pair: parts.reduce((v, p) => v + p.pair * p.n, 0) / tot,
       endA: parts[0].endA,
       endB: parts[parts.length - 1].endB,
       parts: parts.flatMap((p) => p.parts || [p]),
+      direct: parts,
       ops: ops.map((g) => ({ a: g.a, b: g.b, kind: g.kind, arc: g.arc, double: g.double, swing: g.swing })),
     };
     const first = parts[0];
@@ -1111,18 +1298,19 @@ function findGaps(segs, ctx, hints) {
     if (first.virt?.a) {
       m.ops.unshift({ a: first.virt.a.a, b: first.virt.a.b, kind: first.virt.a.kind, arc: first.virt.a.arc, double: first.virt.a.double, swing: first.virt.a.swing });
       m.a = first.virt.a.to;
+      m.endA = first.virt.a.pi;
     }
     if (last.virt?.b) {
       m.ops.push({ a: last.virt.b.a, b: last.virt.b.b, kind: last.virt.b.kind, arc: last.virt.b.arc, double: last.virt.b.double, swing: last.virt.b.swing });
       m.b = last.virt.b.to;
+      m.endB = last.virt.b.pi;
     }
     merged.push(m);
   }
   // 端点编号：原来指向的段 → 合并后的段
   const where = new Map();
   merged.forEach((m, i) => {
-    for (const p of m.parts || [m]) where.set(p, i);
-    where.set(m, i);
+    for (const p of m.direct || [m]) where.set(p, i);
   });
   const origIdx = segs;
   for (const m of merged) {

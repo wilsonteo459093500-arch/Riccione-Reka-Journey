@@ -874,6 +874,8 @@ export class Engine {
       }
     // 墙件贴墙：每次都重算（件可能挪了；换平面图时 setScene 先建好新墙再调这里）
     for (const [id, g] of this.items) if (WALL_BACKED.has(g.userData.kind)) this.alignWallItem(g, this.itemData.get(id));
+    this.markCovered();
+    this.applyCovered();
     this.refreshFeatureMode();
     this.collectPickables();
     this.computeAnchors();
@@ -1171,6 +1173,7 @@ export class Engine {
       }
       F.furn.visible = !hide;
     });
+    this.applyCovered();
     const F = this.floors[idx];
     this.dragPlane.constant = -F.elev;
     if (this.house) {
@@ -1217,6 +1220,66 @@ export class Engine {
   /** 现在「这一层」（'all' = 最上面一层）：{ id, level, elev, ceil, height, group, furn, bounds, … } */
   interactiveFloor() {
     return this.floors[this.activeIdx] || null;
+  }
+
+  /**
+   * 楼下「被楼板盖住」的家具（看楼上 / 全部的时候）：上面是整块楼板、四周是整面的墙，从镜头那里根本看不见 ——
+   * 不画（三角形省一大半：半独立 5 房 'all' 38 万 → 约 25 万）。不算被盖住的：户外（车廊、院子、阳台）、
+   * 楼梯口 / 挑空 2m 以内（斜着往下看得见）、伸出楼板边的（靠外墙、窗边的）。
+   * 镜头拉近（< 0.6 × 取景距离：凑到窗前看屋里）、截图时全部画回来。只是 visible 开关（不重建、不重编着色器）。
+   */
+  markCovered() {
+    const M = 0.25; // 家具外接圆再往外让 25cm
+    const HOLE = 2.0; // 离楼板上的洞 2m 以内的照常画
+    const STEP = 0.25;
+    const inPlates = (plates, x, y) => plates.some((p) => x >= p.x0 - 1e-3 && x <= p.x1 + 1e-3 && y >= p.y0 - 1e-3 && y <= p.y1 + 1e-3);
+    const gap = (h, x0, y0, x1, y1) => Math.hypot(Math.max(0, h.x0 - x1, x0 - h.x1), Math.max(0, h.y0 - y1, y0 - h.y1));
+    for (const [id, g] of this.items) {
+      const it = this.itemData.get(id);
+      const F = this.floorRec(it);
+      const above = F && this.floors[F.level + 1];
+      let covered = false;
+      const room = above && it?.room ? this.plan?.floors?.[F.level]?.rooms.find((r) => r.id === it.room) : null;
+      const T = room && ROOM_TYPES[room.type];
+      if (room && !isOutdoor(room.type) && !T?.void && !T?.stair && above.plates?.length) {
+        const [w0, d0] = CATALOG[it.kind]?.size || [1, 1];
+        const r = Math.hypot(it.w || w0, it.d || d0) / 2 + M;
+        const x0 = it.x - r;
+        const x1 = it.x + r;
+        const y0 = it.z - r;
+        const y1 = it.z + r;
+        if (!(above.holes || []).some((h) => gap(h, x0, y0, x1, y1) < HOLE)) {
+          covered = true;
+          const nx = Math.max(1, Math.ceil((x1 - x0) / STEP));
+          const ny = Math.max(1, Math.ceil((y1 - y0) / STEP));
+          for (let i = 0; i <= nx && covered; i++)
+            for (let j = 0; j <= ny && covered; j++) if (!inPlates(above.plates, x0 + ((x1 - x0) * i) / nx, y0 + ((y1 - y0) * j) / ny)) covered = false;
+        }
+      }
+      g.userData.covered = covered;
+    }
+  }
+
+  /** 按现在看的楼层 + 镜头远近，开关楼下被盖住的家具（markCovered） */
+  applyCovered() {
+    const far = !this._showAll && !this._near;
+    let n = 0;
+    for (const [id, g] of this.items) {
+      const F = this.floorRec(this.itemData.get(id));
+      const hide = far && !!g.userData.covered && !!F && F.level < this.activeIdx;
+      if (g.visible === hide) {
+        g.visible = !hide;
+        n++;
+      }
+    }
+    if (n) this.dirty = true;
+  }
+
+  /** 镜头拉近了（< 0.6 × 上一次取景的距离）：凑近看，楼下被盖住的家具也画（隔着窗看得见） */
+  isNear() {
+    const f = this._framed;
+    if (!f) return false;
+    return this.camera.position.distanceTo(this.controls.target) < 0.6 * f.pos.distanceTo(f.target);
   }
 
   /** 这件家具在哪一层（floorId） */
@@ -1723,6 +1786,9 @@ export class Engine {
     const blob = new Promise((res) => (done = res));
     this._prOverride = Math.max(Math.min(base, long / Math.max(w, h)), Math.min(3, base * scale, long / Math.max(w, h)));
     try {
+      // 截图（概念图）：楼下被盖住的家具也画（只画这一张，不在乎快慢）
+      this._showAll = true;
+      this.applyCovered();
       this.vo = { x: 0, y: 0 };
       this.voTo = { x: 0, y: 0 };
       if (refit) {
@@ -1753,6 +1819,8 @@ export class Engine {
       this.resize();
       this.selBox.visible = sel;
       this.hovBox.visible = hov;
+      this._showAll = false;
+      this.applyCovered();
       this.dirty = true;
     }
     return blob;
@@ -1894,6 +1962,14 @@ export class Engine {
     const moved = this.controls.update(dt);
     if (this.lib.pulse(t)) this.dirty = true;
     if (moved) this.dirty = true;
+    // 镜头拉近 / 拉远：楼下被盖住的家具开 / 关（多层才有）
+    if ((moved || this.tween) && this.floors.length > 1) {
+      const near = this.isNear();
+      if (near !== this._near) {
+        this._near = near;
+        this.applyCovered();
+      }
+    }
     if (!this.dirty) return;
     if (moved || this.tween) this.placeFill();
     // 墙的切法跟着镜头：「这一层」照墙的切法，下面的楼层墙全立，上面的楼层藏着（setFloorView）

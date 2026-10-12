@@ -245,7 +245,8 @@ function ceilingMesh(rects, ceil, lib) {
 /**
  * 整栋楼。plan：v2（v1 也行，先迁移）。opts：{ title, subtitle, ground, walls（{ floorId: walls }，不给就自己算） }。
  * @returns {{ group, floors, stairs, plinth, trees, plaques, pane, bounds, top, walls }}
- *   floors[i] = { id, level, elev, ceil, height, group, shell, plate, porchRoof, ceiling, furn, bounds, rooms, windows, wallSets, cover }
+ *   floors[i] = { id, level, elev, ceil, height, group, shell, plate, porchRoof, ceiling, furn, plates, holes, bounds, rooms, windows, wallSets, cover }
+ *   plates / holes = 这一层楼板的矩形 / 楼板上的洞（{ x0, y0, x1, y1 }，平面米）
  *   cover = 这一层被楼上盖住的比例（0–1，室内面积；引擎的曝光补偿用）
  */
 export function buildStack(plan0, lib, { title, subtitle, ground = true, walls } = {}) {
@@ -300,6 +301,8 @@ export function buildStack(plan0, lib, { title, subtitle, ground = true, walls }
       ceiling,
       furn,
       plates,
+      // 楼板上的洞（挑空、到这一层的楼梯间）：从上面往下看得见下一层的地方
+      holes: f.rooms.filter((r) => holes.has(r.id)).map(rectOf),
       bounds: bounds(f),
       rooms: shell.rooms,
       windows: shell.windows,
