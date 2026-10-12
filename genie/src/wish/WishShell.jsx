@@ -69,7 +69,8 @@ export default function WishShell({ zen, host = '', startLang, onReady, onExit }
   const detachChild = useRef(null);
   const readySent = useRef(false);
   const leavingRef = useRef(false);
-  const loads = useRef({ src: '', n: 0 }); // 现在这个 <iframe> 载入过几个页面（重建 = 换 src / key 就从 0 算起）
+  // 现在这个 <iframe> 载入过几个页面（重建 = 换 src / key 就从 0 算起）；len = 第一页载好时整个分页的浏览记录有几条
+  const loads = useRef({ src: '', n: 0, len: 0 });
 
   const post = (msg) => {
     try {
@@ -142,7 +143,8 @@ export default function WishShell({ zen, host = '', startLang, onReady, onExit }
       /* ignore */
     }
     // 一直没离开过第一个页面 = iframe 没有浏览记录可以「返回 / 前进」到上一位客人的蓝图或 3D
-    const firstPage = loads.current.src === src && loads.current.n <= 1;
+    // （浏览记录变长了 = 页面里也加过记录，例如 #… 锚点：一样重建）
+    const firstPage = loads.current.src === src && loads.current.n <= 1 && history.length <= loads.current.len;
     if (whereRef.current !== 'studio' && quizChild && firstPage) {
       post({ type: 'restart' });
       // 子页面回到欢迎页会报 page:'quiz'；2.5 秒还没回音（旧版本 / 卡住）才重新载入
@@ -300,8 +302,9 @@ export default function WishShell({ zen, host = '', startLang, onReady, onExit }
   const onLoad = () => {
     const f = frame.current;
     if (!f) return;
-    if (loads.current.src !== src) loads.current = { src, n: 0 };
+    if (loads.current.src !== src) loads.current = { src, n: 0, len: 0 };
     loads.current.n += 1;
+    if (loads.current.n === 1) loads.current.len = history.length;
     detachChild.current?.();
     detachChild.current = null;
     let win = null;

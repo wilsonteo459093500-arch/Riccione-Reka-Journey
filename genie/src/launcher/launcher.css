@@ -87,6 +87,7 @@ html[lang='en'] .ln-h1 {
 }
 .ln-lead {
   max-width: 36em;
+  text-wrap: pretty;
   margin: 18px 0 0;
   font: 400 17px/1.7 var(--sans);
   color: var(--text-soft);
@@ -165,6 +166,7 @@ html[lang='en'] .ln-wish-text b {
 }
 .ln-wish-text > span {
   margin-top: 10px;
+  text-wrap: pretty;
   font: 400 16px/1.55 var(--sans);
   color: var(--text);
   opacity: 0.88;
@@ -324,6 +326,7 @@ html[lang='en'] .ln-card-title {
 }
 .ln-desc {
   margin: 14px 0 22px;
+  text-wrap: pretty;
   font: 400 15px/1.65 var(--sans);
   color: var(--text-soft);
 }
@@ -340,6 +343,9 @@ html[lang='en'] .ln-card-title {
   flex: none;
   margin-top: 1px;
   color: var(--accent);
+}
+.ln-tip span {
+  text-wrap: balance;
 }
 .ln-go {
   display: inline-flex;

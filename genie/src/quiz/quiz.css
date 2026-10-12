@@ -705,9 +705,16 @@ html[lang='en'] .h-title {
   border-radius: 50%;
   background: radial-gradient(closest-side, rgba(var(--shade-rgb), 0.18), rgba(var(--shade-rgb), 0));
 }
+/* 泡泡不占位置（absolute）：潘吉那一块的大小、位置永远不变。
+   泡泡出现 / 换句话时如果把整块撑大，Chromium 在许愿模式的 iframe 里会把潘吉身上会动的部分（眨眼、漂浮）
+   画到旧的位置上，留下一块块残影（宝藏那一章最明显） */
 .bubble {
+  position: absolute;
+  right: 8px;
+  bottom: calc(100% - 4px);
+  width: max-content;
   max-width: min(290px, 66vw);
-  margin: 0 8px -4px 0;
+  margin: 0;
   padding: 12px 16px;
   border-radius: 18px 18px 6px 18px;
   background: rgba(var(--glass-rgb), 0.9);
@@ -3156,6 +3163,10 @@ html[lang='en'] .bp-farewell {
   .tb-brand {
     display: none;
   }
+  /* 揭晓：竖放时牌在正中间，往下滚一点（把「打开蓝图」滚进来）牌就会盖住左上角的地名 → 这一页不放地名 */
+  .qz-reveal .sc-caption {
+    display: none;
+  }
   /* iPad 竖放：「Blueprint 67%」那一行字会把中 / EN 挤成两行 → 换成手机上那个小圆环 */
   .pct-ring {
     display: block;
@@ -3525,8 +3536,10 @@ html[lang='en'] .bp-farewell {
     align-items: flex-end;
   }
   .bubble {
+    right: calc(100% - 4px);
+    bottom: 46px;
     max-width: min(230px, calc(100vw - 120px));
-    margin: 0 -4px 46px 0;
+    margin: 0;
     border-radius: 18px 18px 6px 18px;
   }
   .seg button svg {
