@@ -281,7 +281,10 @@ export const TEMPLATES = [
   {
     id: 'terrace',
     zh: '排屋一楼 · 22×70',
-    en: 'Terrace house · Ground floor',
+    // 规格段和另外两张卡一样（房 / 卫 + 面积）：一楼 6.6 × 14.2m（含车廊）≈ 94㎡ ≈ 1,000 sqft；
+    // 标题里的 22×70 是地皮尺寸（英尺，1,540 sqft），不是一楼的建筑面积
+    // （中文卡片的第二行就是这一串英文全名，所以中英两边都看得到规格）
+    en: 'Terrace house · Ground floor · 1R1B · ~1,000 sqft',
     plan: {
       v: 1,
       name: '排屋一楼',

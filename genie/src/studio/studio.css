@@ -2104,6 +2104,15 @@
   justify-content: space-between;
   gap: 16px;
 }
+/* 中 / EN：base.css 的 13px 胶囊（点按范围上下各多 8px）原样用，这里不改字号、不改高度；
+   只是不许被旁边的长说明挤窄 —— 英文时「中文」会被挤成两行（中 / 文） */
+.set-row .lang-toggle,
+.menu-lang .lang-toggle {
+  flex: none;
+}
+.studio .lang-toggle button {
+  white-space: nowrap;
+}
 .set-row .m-h {
   margin-bottom: 4px;
 }

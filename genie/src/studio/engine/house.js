@@ -1,4 +1,4 @@
-// 建筑：地板、墙（门窗开洞）、窗框玻璃、门扇、阳台栏杆、品牌底座、看不见的树（只投影子）。
+// 建筑：地板、墙（门窗开洞）、窗框玻璃、窗外的天光卡、门扇、阳台栏杆、品牌底座、看不见的树（只投影子）。
 // 墙有两个版本：full（完整高度）/ cut（像 The Sims 一样切到 35cm）。切掉时 full 版移到「只投影」图层 ——
 // 看不见，但阳光照进来的窗影还在。
 
@@ -125,7 +125,11 @@ function kitFor(lib) {
       .replace('#include <dithering_fragment>', '#include <dithering_fragment>\n{ float gd = length(vGroundXZ - gCenter); float gf = 1.0 - smoothstep(gR0, gR1, gd); gl_FragColor.a *= gf * gf * (3.0 - 2.0 * gf); }');
   };
   gold.customProgramCacheKey = () => 'genie-goldline-fade';
-  k = { cap, stone, foot, brass, ground, gold };
+  // 窗外的天光卡：外墙窗洞外侧一块朝屋里的板 —— 只从屋里看得见（背面剔除：从外面看还是透过玻璃看进屋里）。
+  // 不受光、不投影（阳光照进来的窗影照旧）、不进 AO、点不中；颜色由引擎按时段设（白天浅浅的天色、黄昏琥珀、夜里深苔绿），
+  // 顶点色是一道很淡的竖向渐变（上面是天，下面略深、略绿 —— 远处的树）。没有它，16% 的玻璃后面是黑背景，白天的窗像一块黑板。
+  const pane = tag(new THREE.MeshBasicMaterial({ color: col(PALETTE.paper), vertexColors: true, side: THREE.FrontSide, fog: false }), 'pane');
+  k = { cap, stone, foot, brass, ground, gold, pane };
   KITS.set(lib, k);
   return k;
 }
@@ -171,8 +175,11 @@ function sideMat(lib, room) {
   return lib.slot('walls');
 }
 
-/** 一段墙体盒子（四面不同材质） */
-function wallBox(wall, a, b, y0, y1, lib, { extendA = 0, extendB = 0 } = {}) {
+/**
+ * 一段墙体盒子（四面不同材质）。顶面默认是墨色切口（墙头、切低的墙）；
+ * capTop: false = 顶面是墙面材质（窗台：从上面透过窗看得到它，不该是一条黑边）
+ */
+function wallBox(wall, a, b, y0, y1, lib, { extendA = 0, extendB = 0, capTop = true } = {}) {
   const len = b - a + extendA + extendB;
   const h = y1 - y0;
   const t = wall.t;
@@ -186,8 +193,9 @@ function wallBox(wall, a, b, y0, y1, lib, { extendA = 0, extendB = 0 } = {}) {
   const pos = sideMat(lib, wall.pos);
   const end = lib.slot('walls');
   const cap = kitFor(lib).cap;
+  const top = capTop ? cap : end;
   // BoxGeometry 的材质顺序：+x, -x, +y, -y, +z, -z
-  const mats = wall.axis === 'x' ? [end, end, cap, cap, pos, neg] : [pos, neg, cap, cap, end, end];
+  const mats = wall.axis === 'x' ? [end, end, top, cap, pos, neg] : [pos, neg, top, cap, end, end];
   const m = new THREE.Mesh(geo, mats);
   if (wall.axis === 'x') m.position.set(along, y0, wall.c);
   else m.position.set(wall.c, y0, along);
@@ -229,6 +237,50 @@ function windowFrame(wall, p, lib, H) {
   for (let i = 1; i < n; i++) add(0.035, fh, 0.06, 'frame', p.a + (len / n) * i, sill);
   if (p.kind === 'window' && fh > 1.3) add(len, 0.03, 0.05, 'frame', mid, sill + fh * 0.72);
   return g;
+}
+
+/**
+ * 外墙窗外的天光卡（见 kitFor 的 pane）：贴在外墙外面 2cm，正面朝屋里；比窗洞四周各大 15cm（斜着看也看不到边），
+ * 但不超出这段墙的两端、不高过墙顶、不钻进底座 —— 从外面、从切低的墙角都看不到它。
+ */
+function windowCard(wall, p, lib, H) {
+  const sill = p.sill ?? 0.9;
+  const head = Math.min(p.head ?? 2.2, H - 0.05);
+  const a = Math.max(wall.a, p.a - 0.15);
+  const b = Math.min(wall.b, p.b + 0.15);
+  const y0 = Math.max(-0.03, sill - 0.15);
+  const y1 = Math.min(H - 0.02, head + 0.15);
+  const cw = b - a;
+  const ch = y1 - y0;
+  if (cw < 0.05 || ch < 0.05) return null;
+  const geo = new THREE.PlaneGeometry(cw, ch, 1, 2);
+  // 三排顶点：上（天）1.0 → 中 0.95 → 下 0.8、略偏绿（线性空间，乘在材质颜色上）
+  const rows = { top: [1, 1, 1], mid: [0.95, 0.955, 0.95], bottom: [0.78, 0.81, 0.78] };
+  const pos = geo.attributes.position;
+  const cols = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i);
+    const c = y > 1e-4 ? rows.top : y < -1e-4 ? rows.bottom : rows.mid;
+    cols.set(c, i * 3);
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+  const m = new THREE.Mesh(geo, kitFor(lib).pane);
+  const off = wall.outward * (wall.t / 2 + 0.02);
+  const inward = -wall.outward;
+  const mid = (a + b) / 2;
+  // PlaneGeometry 的正面朝本地 +z：转成朝屋里
+  if (wall.axis === 'x') {
+    m.position.set(mid, (y0 + y1) / 2, wall.c + off);
+    m.rotation.y = inward > 0 ? 0 : Math.PI;
+  } else {
+    m.position.set(wall.c + off, (y0 + y1) / 2, mid);
+    m.rotation.y = inward > 0 ? Math.PI / 2 : -Math.PI / 2;
+  }
+  m.castShadow = false;
+  m.receiveShadow = false;
+  m.userData.noAO = true;
+  m.userData.pane = true;
+  return m;
 }
 
 function doorLeaf(wall, p, lib) {
@@ -540,9 +592,15 @@ export function buildHouse(plan, walls, lib, { title, subtitle, ground = true } 
       } else if (p.kind === 'window' || p.kind === 'slider') {
         const sill = p.sill ?? 0.9;
         const head = Math.min(p.head ?? 2.2, H - 0.05);
-        if (sill > 0.01) full.add(wallBox(w, p.a, p.b, 0, sill, lib, ends(p)));
+        // 窗台的顶面是墙面材质（不是墨色切口）：从上往下透过窗看得到它
+        if (sill > 0.01) full.add(wallBox(w, p.a, p.b, 0, sill, lib, { ...ends(p), capTop: false }));
         full.add(wallBox(w, p.a, p.b, head, H, lib, ends(p)));
         full.add(windowFrame(w, p, lib, H));
+        // 外墙的窗：窗外放一块天光卡（和窗框一起：墙切低时一起收起来）
+        if (w.exterior && w.outward) {
+          const card = windowCard(w, p, lib, H);
+          if (card) full.add(card);
+        }
         if (sill > 0.01) {
           const c = wallBox(w, p.a, p.b, 0, Math.min(sill, CUT_H), lib, ends(p));
           c.castShadow = false;
@@ -664,7 +722,7 @@ export function buildHouse(plan, walls, lib, { title, subtitle, ground = true } 
   root.add(trees);
 
   const rooms = plan.rooms.map((r) => ({ id: r.id, type: r.type, x: r.x + r.w / 2, z: r.y + r.d / 2, area: r.w * r.d, w: r.w, d: r.d }));
-  return { group: root, wallSets, windows, rooms, bounds: bb, wallH: H, trees, plaques };
+  return { group: root, wallSets, windows, rooms, bounds: bb, wallH: H, trees, plaques, pane: K.pane };
 }
 
 /** 墙的切法：'cut' 朝镜头的外墙切低；'down' 全切；'up' 全立 */

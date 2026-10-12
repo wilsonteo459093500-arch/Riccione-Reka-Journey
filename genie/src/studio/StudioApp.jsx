@@ -1,6 +1,7 @@
 // 3D 梦想工作室（WISH Studio）—— 主界面，给设计师 / 销售用。深色画布 + 纸色磨砂玻璃面板（VI「晨光溪岸」）。
 // 路由：studio.html                上次的方案（第一次来：直接打开示范户型，3 秒内看到东西）
-//       studio.html#p=<档案>       从许愿之旅的蓝图进来：套用客人的材质、收纳、生活习惯（客人的雷区一律避开）
+//       studio.html#p=<档案>       从许愿之旅的蓝图进来：套用客人的材质、收纳、生活习惯（客人的雷区一律避开）；
+//                                  客人版 —— 只有加 ?staff=1、或从员工版蓝图点进来才是设计师版
 //       studio.html#s=<方案>       别人分享的方案（打开后存成自己的一份：新 id，不会盖掉原稿）
 //       studio.html?demo=1         展厅大屏：示范户型 + 自动环绕 + 一天的光影循环；只留一个小小的 WISH 字标，不出现客人名字
 //       studio.html?mode=wish      客户许愿模式（外壳 iframe 里）：底座写「示范户型 · 概念示意」，语言跟着外壳
@@ -73,15 +74,27 @@ function staffFor(p) {
 
 /**
  * 从材质栏加进来的墙件（主题墙：贴墙、不能拖）和挂画：放到离落点最近、够长的那段实墙上（避开门窗、打通），背朝墙。
+ * 已经有电视墙 / 主题墙的那一段墙往后排（不叠在电视墙上），别的墙都不合适时才用。
  * 朝向和 furnish.js 的 at() 一样：北墙 0 · 南墙 180 · 西墙 90 · 东墙 270；主题墙的背面由引擎再贴紧墙面（alignWallItem）。
  * 找不到合适的墙 → null（照旧放在落点）。
  */
-function wallSpot(plan, kind, pt, room) {
+const SIDE_ROT = { N: 0, S: 180, W: 90, E: 270 };
+function wallSpot(plan, furniture, kind, pt, room) {
   const def = CATALOG[kind];
   if (!def || !plan?.rooms?.length) return null;
   const [w0, d] = def.size;
   const need = Math.min(w0, 1.2) + 0.1;
   const walls = buildWalls(plan);
+  // 已经贴着墙板的地方：{ rot, perp（离墙的那个坐标）, a, b（沿墙的范围） }
+  const panels = (furniture || [])
+    .filter((f) => f.kind === 'tvWall' || f.kind === 'featureWall')
+    .map((f) => {
+      const rot = (((Math.round((f.rot || 0) / 90) * 90) % 360) + 360) % 360;
+      const ax = rot === 0 || rot === 180; // 背靠北 / 南墙：沿 x 走
+      const half = (+(f.w ?? CATALOG[f.kind]?.size?.[0]) || 1) / 2;
+      const along = ax ? f.x : f.z;
+      return { rot, perp: ax ? f.z : f.x, a: along - half, b: along + half };
+    });
   let best = null;
   for (const r of room ? [room] : plan.rooms) {
     for (const s of roomSides(r, walls)) {
@@ -92,27 +105,29 @@ function wallSpot(plan, kind, pt, room) {
       const facing = off * (alongX ? s.inward[1] : s.inward[0]) >= -0.05;
       for (const st of s.stretches) {
         if (st.len < need) continue;
+        const w = Math.min(w0, st.len - 0.1);
+        const at = Math.min(Math.max(along, st.a + w / 2 + 0.05), st.b - w / 2 - 0.05);
         const out = Math.max(0, st.a - along, along - st.b);
-        const dist = Math.hypot(Math.abs(off), out) + (facing ? 0 : 50);
-        if (!best || dist < best.dist) best = { dist, r, s, st, along };
+        const busy = panels.some((q) => q.rot === SIDE_ROT[s.side] && Math.abs(q.perp - s.c) < 0.7 && Math.min(q.b, at + w / 2) - Math.max(q.a, at - w / 2) > 0.3);
+        const dist = Math.hypot(Math.abs(off), out) + (facing ? 0 : 50) + (busy ? 25 : 0);
+        if (!best || dist < best.dist) best = { dist, r, s, w, at };
       }
     }
   }
   if (!best) return null;
-  const { r, s, st } = best;
-  const w = +Math.min(w0, st.len - 0.1).toFixed(2);
-  const along = Math.min(Math.max(best.along, st.a + w / 2 + 0.05), st.b - w / 2 - 0.05);
+  const { r, s, at } = best;
+  const w = +best.w.toFixed(2);
   // 主题墙：中心离墙面 d/2（背面正好贴墙）；挂画：和 furnish 一样离墙面 3cm
   const dist = s.thick + (def.wall ? d / 2 : 0.03);
   const pos =
     s.side === 'N'
-      ? { x: along, z: r.y + dist, rot: 0 }
+      ? { x: at, z: r.y + dist }
       : s.side === 'S'
-        ? { x: along, z: r.y + r.d - dist, rot: 180 }
+        ? { x: at, z: r.y + r.d - dist }
         : s.side === 'W'
-          ? { x: r.x + dist, z: along, rot: 90 }
-          : { x: r.x + r.w - dist, z: along, rot: 270 };
-  return { room: r.id, x: +pos.x.toFixed(3), z: +pos.z.toFixed(3), rot: pos.rot, w };
+          ? { x: r.x + dist, z: at }
+          : { x: r.x + r.w - dist, z: at };
+  return { room: r.id, x: +pos.x.toFixed(3), z: +pos.z.toFixed(3), rot: SIDE_ROT[s.side], w };
 }
 
 const HISTORY = 60;
@@ -568,12 +583,14 @@ export default function StudioApp() {
     if (kind === 'art') item.y = 1.4;
     // 主题墙（不能拖）、挂画：直接挂到最近的那道墙上
     if (def.wall || def.wallMounted) {
-      const spot = wallSpot(plan, kind, p, room) || (room ? wallSpot(plan, kind, p, null) : null);
+      const list = projRef.current.furniture;
+      const spot = wallSpot(plan, list, kind, p, room) || (room ? wallSpot(plan, list, kind, p, null) : null);
       if (spot) Object.assign(item, spot);
     }
     updateFurniture((l) => [...l, item]);
     setTimeout(() => e.select(id), 30);
-    flash(t('{0} 已放进来 —— 拖一拖换位置', [L(def)]));
+    // 主题墙贴着墙、拖不动：不说「拖一拖」
+    flash(def.wall ? t('{0} 已贴到最近的那面墙上', [L(def)]) : t('{0} 已放进来 —— 拖一拖换位置', [L(def)]));
   };
 
   const dropMaterial = (matId, targetSlot) => {

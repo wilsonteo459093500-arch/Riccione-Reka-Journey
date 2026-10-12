@@ -71,6 +71,9 @@ export default {
   '识别模型、接口地址': 'Detection model and endpoint',
   '改动会自动保存在这台设备上。': 'Changes save automatically on this device.',
 
+  // ── 加家具 ──
+  '{0} 已贴到最近的那面墙上': '{0} added to the nearest wall',
+
   // ── 重新生成、分享 ──
   '重新生成 3D？': 'Rebuild the 3D?',
   '重新生成会按新平面图自动摆家具，你手动调整过的家具位置会被覆盖。之后可以按撤销找回。': 'Rebuilding furnishes the floor plan afresh and replaces the furniture you moved by hand. You can still bring it back with Undo.',

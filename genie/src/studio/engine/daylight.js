@@ -115,6 +115,8 @@ export function daylight(hour, northDeg = 0) {
   const golden = up ? Math.max(1 - smooth(0.0, 0.16, f), smooth(0.8, 0.98, f)) * dayFade : 0;
   const lamps = Math.max(night, evening * 0.55);
   const sunC = up ? sunColor : MOON;
+  // 窗外（天光卡）的颜色：跟背景照片里窗外的天色一致；白天按日光强度再提亮一点（窗是屋里最亮的地方），夜里就是深苔绿的夜色
+  const paneSky = mixHex(bgSky, '#FFFFFF', 0.18 * dayFade);
   return {
     hour: h,
     dir,
@@ -128,9 +130,13 @@ export function daylight(hour, northDeg = 0) {
     // wbLamp —— 室内灯（和环境光里的几块暖灯面）：按灯的颜色校正八成。
     wb: up ? gains(sunC, (0.42 + 0.08 * golden) * dayFade) : [1, 1, 1],
     wbLamp: WB_LAMP,
-    // 夜里的补光：苔绿石板色、很弱、不投影（墙头 / 底座 / 地面的轮廓读得出来；灯仍然是主角）
+    // 夜里的补光：苔绿石板色、柔和、不投影 —— 像展台上方一盏弱灯，墙头 / 底座 / 地面的轮廓读得出来；灯仍然是主角。
+    // （深色方案在引擎里再按「房间测光」加一点：炭灰墙 + 胡桃木的「沉浸」不会沉成一片黑，浅色方案也不会被照成白天）
     fillColor: NIGHT_FILL,
-    fillIntensity: 0.22 * night,
+    fillIntensity: 0.3 * night,
+    // 夜里的灯：亮一点、照得远一点（暖光的灯池铺到墙和地板上），乘在每盏灯自己的强度 / 照射距离上
+    lampPower: 1 + 0.5 * night,
+    lampReach: 1 + 0.35 * night,
     // 半球光只留一点「地面反光」的暖意，主要的填充光交给 IBL（有方向，体积感更好）
     hemiSky: zenith,
     hemiGround: ground,
@@ -139,7 +145,8 @@ export function daylight(hour, northDeg = 0) {
     skyZenith: zenith,
     skyHorizon: horizon,
     skyGround: ground,
-    envIntensity: 0.3 + 0.7 * dayFade + 0.25 * night,
+    // 夜里的环境光主要是「被灯照亮的天花板」反下来的暖光（EnvStudio），所以夜里也要有一定强度
+    envIntensity: 0.3 + 0.7 * dayFade + 0.5 * night,
     // 窗口进来的天光（RectAreaLight）：白天 1，黄金时段略暖，夜里 0
     windowColor: mixHex(horizon, '#FFFFFF', 0.35),
     windowLight: dayFade * (0.75 + 0.25 * arc),
@@ -148,11 +155,13 @@ export function daylight(hour, northDeg = 0) {
     bgBottom: bgRoom,
     bgSky,
     bgRoom,
+    paneSky,
     golden,
     night,
     lamps,
-    // 曝光跟着时段：白天略收、黄金时段略提；夜里再提 ~0.3 EV（房子和底座不沉进黑背景，灯仍然最亮）
-    exposure: (1.0 + 0.14 * night - 0.06 * dayFade * arc + 0.2 * golden) * 2 ** (0.3 * night),
+    // 曝光跟着时段：白天略收、黄金时段略提；夜里像室内夜景摄影那样按房间曝光，再提 ~0.45 EV
+    // （房子和底座不沉进黑背景，夜色背景仍然很暗，灯仍然最亮）
+    exposure: (1.0 + 0.14 * night - 0.06 * dayFade * arc + 0.2 * golden) * 2 ** (0.45 * night),
     beams: up ? dayFade * (1 - smooth(25, 55, elevDeg)) : 0,
     // 环境贴图缓存键：每半小时一档（只有跨档才重建 PMREM）
     envKey: `${Math.round(h * 2) / 2}|${Math.round(northDeg)}`,

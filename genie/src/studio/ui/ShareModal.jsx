@@ -20,13 +20,14 @@ export default function ShareModal({ project, pack, staff = false, onClose }) {
       if (!alive) return;
       setLinks({
         client: withLang(new URL(`studio.html#s=${s}`, location.href).href),
-        staff: withLang(new URL(`studio.html?staff=1#s=${s}`, location.href).href),
+        // 员工链接只在设计师版里做出来：客人版连算都不算
+        staff: staff ? withLang(new URL(`studio.html?staff=1#s=${s}`, location.href).href) : '',
       });
     });
     return () => {
       alive = false;
     };
-  }, [pack]);
+  }, [pack, staff]);
   const link = links.client;
   const mats = ['floor', 'walls', 'cabinetry', 'upholstery']
     .map((k) => L(MAT_BY_ID[project.materials[k]]))
