@@ -647,7 +647,18 @@ const overlap = (a0, a1, b0, b1) => Math.min(a1, b1) - Math.max(a0, b0);
 /** 平行、重叠、横截面挨着的两段：留证据多的（同一面墙的几种读法里挑一种） */
 function nms(segs, ctx) {
   const out = [];
-  const order = segs.map((s, i) => i).sort((i, j) => segs[j].n - segs[i].n);
+  // 证据 = 自己的长度 + 同一条线上（3 m 以内）别的段的一半：贴着墙的家具带比不过墙线
+  const reach = 3 * ctx.pm;
+  const score = segs.map((s) => {
+    let v = s.n;
+    for (const q of segs) {
+      if (q === s || q.o !== s.o || Math.abs(q.c - s.c) > Math.max(2, 0.2 * s.t) || Math.abs(q.t - s.t) > Math.max(2, 0.3 * s.t)) continue;
+      const gap = Math.max(q.a - s.b, s.a - q.b);
+      if (gap > 0 && gap <= reach) v += 0.5 * q.n;
+    }
+    return v;
+  });
+  const order = segs.map((s, i) => i).sort((i, j) => score[j] - score[i]);
   const kept = [];
   for (const i of order) {
     const s = segs[i];
@@ -913,7 +924,8 @@ function keepNetwork(segs, ctx) {
         if (vv.c >= hh.a - vv.t / 2 - tol && vv.c <= hh.b + vv.t / 2 + tol && hh.c >= vv.a - hh.t / 2 - tol && hh.c <= vv.b + hh.t / 2 + tol) uni(i, j);
       } else if (Math.abs(s.c - q.c) <= Math.max(2, 0.3 * Math.max(s.t, q.t))) {
         const gap = Math.max(q.a - s.b, s.a - q.b);
-        if (gap <= OPENING_MAX * pm) uni(i, j);
+        // 隔着一个门宽 → 连；更宽的空（开口）只连够长的段（轴线的小圆圈、字不算）
+        if (gap <= DOOR_W.max * 1.1 * pm || (gap <= OPENING_MAX * pm && Math.min(segLen(s), segLen(q)) >= 0.3 * pm)) uni(i, j);
         else if (gap <= GLAZING_MAX * pm) {
           const [p0, p1] = q.a > s.b ? [s.b, q.a] : [q.b, s.a];
           if (glazing(ctx, { o: s.o, c: (s.c + q.c) / 2, t: (s.t + q.t) / 2 }, p0, p1)) uni(i, j);
@@ -927,8 +939,11 @@ function keepNetwork(segs, ctx) {
   const keep = segs.filter((s, i) => {
     const L = len.get(find(i));
     if (L < Math.max(3.5 * pm, 0.15 * maxL) && L < maxL) return false;
-    // 太短又两头都没接上
-    if (segLen(s) < 0.3 * pm && s.endA < 0 && s.endB < 0) return false;
+    // 两头都没接上、又短、旁边一个门宽以内也没有同线的墙 → 不要（轴线圆圈、字、符号）
+    if (s.endA < 0 && s.endB < 0 && segLen(s) < 0.8 * pm) {
+      const near = segs.some((q) => q !== s && q.o === s.o && Math.abs(q.c - s.c) <= Math.max(2, 0.3 * Math.max(s.t, q.t)) && Math.max(q.a - s.b, s.a - q.b) <= DOOR_W.max * 1.1 * pm);
+      if (!near) return false;
+    }
     return true;
   });
   // 端点编号要重排
