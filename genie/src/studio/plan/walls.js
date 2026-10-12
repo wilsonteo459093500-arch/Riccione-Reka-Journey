@@ -805,26 +805,32 @@ function interior(s, ctx) {
   const n = b - a;
   if (n <= 0) return { filled: 0, hatched: 0 };
   const occ = new Uint16Array(n);
-  const diag = new Uint16Array(n); // 斜线：这一点往下一个位置斜着还连着墨（不是直着连）
+  const rowCov = new Uint32Array(rows);
   for (let u = a; u < b; u++) {
     const r = u * Wd;
-    const r2 = u + 1 < Hd ? r + Wd : r;
     let k = 0;
-    let d = 0;
     for (let v = v0; v < v1; v++) {
       if (!M[r + v]) continue;
       k++;
-      if (!M[r2 + v] && (M[r2 + v + 1] || M[r2 + v - 1])) d++;
+      rowCov[v - v0]++;
     }
     occ[u - a] = k;
-    diag[u - a] = d;
   }
   let filled = 0;
+  for (let i = 0; i < n; i++) if (occ[i] >= 0.6 * rows) filled++;
+  // 平行于墙的长线（玻璃、轴线的虚线）不算填充：去掉覆盖 ≥ 40 % 的行再数
+  const skipRow = new Uint8Array(rows);
+  for (let v = 0; v < rows; v++) skipRow[v] = rowCov[v] >= 0.4 * n ? 1 : 0;
+  for (let u = a; u < b; u++) {
+    const r = u * Wd;
+    let k = 0;
+    for (let v = v0; v < v1; v++) if (M[r + v] && !skipRow[v - v0]) k++;
+    occ[u - a] = k;
+  }
   let busy = 0;
   let clusters = 0;
   const win = Math.max(2, Math.round(0.05 * pm));
   for (let i = 0; i < n; i++) {
-    if (occ[i] >= 0.6 * rows) filled++;
     let any = 0;
     for (let j = Math.max(0, i - win); j <= Math.min(n - 1, i + win) && !any; j++) any = occ[j];
     if (any) busy++;
