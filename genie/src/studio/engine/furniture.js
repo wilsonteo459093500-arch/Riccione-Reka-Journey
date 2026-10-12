@@ -1674,6 +1674,240 @@ function curtainPair({ w = 2, h = 2.7 }) {
   return group(g1, g2, C(0.011, 0.011, L, 'metal', -L / 2, h - 0.05, 0, 12, { rz: -Math.PI / 2 }), M(sphereGeo(0.02, 12), 'metal', -L / 2 - 0.01, h - 0.05, 0), M(sphereGeo(0.02, 12), 'metal', L / 2 + 0.01, h - 0.05, 0));
 }
 
+// ───────────────────────── 楼梯、护栏（建筑件：不进目录，引擎按平面图建） ─────────────────────────
+// 材质按「表面」走：踏步板 = 地板，踢面 / 斜梯板 / 平台 = 墙面，扶手 = 木作，立杆 = 金属 —— 换材质时一起换。
+// 一部楼梯 4 个网格（结构、踏步、扶手、立杆），立杆合并成一个网格（不用实例：少一个着色器变体，draw call 一样是 1）。
+
+const STAIR_DIR = { N: [0, -1], S: [0, 1], E: [1, 0], W: [-1, 0] };
+const UP = new THREE.Vector3(0, 1, 0);
+/** {x0,y0,x1,y1} 或 {x,y,w,d} → {x0,y0,x1,y1} */
+const rectXY = (r) => (r.x0 != null ? r : { x0: r.x, y0: r.y, x1: r.x + r.w, y1: r.y + r.d });
+
+/** 合并成一个网格（按世界坐标投 UV：木纹 / 石纹不会被拉长） */
+function mergedMesh(geos, material, slot) {
+  if (!geos.length) return null;
+  const g = mergeGeometries(geos.map((x) => prep(x, false)), false);
+  geos.forEach((x) => x.dispose());
+  if (!g) return null;
+  worldUVs(g);
+  const m = new THREE.Mesh(g, material);
+  m.castShadow = true;
+  m.receiveShadow = true;
+  if (slot) m.userData.slot = slot;
+  return m;
+}
+
+/** 世界坐标的盒状投影 UV（和 geom.worldUV 一样，合并之后再算一次） */
+function worldUVs(geo) {
+  const pos = geo.attributes.position;
+  const nor = geo.attributes.normal;
+  const uv = geo.attributes.uv;
+  for (let i = 0; i < pos.count; i++) {
+    const ax = Math.abs(nor.getX(i));
+    const ay = Math.abs(nor.getY(i));
+    const az = Math.abs(nor.getZ(i));
+    if (ay >= ax && ay >= az) uv.setXY(i, pos.getX(i), pos.getZ(i));
+    else if (ax >= az) uv.setXY(i, pos.getZ(i), pos.getY(i));
+    else uv.setXY(i, pos.getX(i), pos.getY(i));
+  }
+  uv.needsUpdate = true;
+}
+
+/** 一根沿任意方向的方料（截面 w × h，不会「翻滚」：截面的上边永远朝上） */
+function barGeo(p, q, w, h) {
+  const d = new THREE.Vector3().subVectors(q, p);
+  const L = d.length();
+  if (L < 1e-4) return null;
+  const X = d.clone().normalize();
+  let Z = new THREE.Vector3().crossVectors(X, UP);
+  if (Z.lengthSq() < 1e-8) Z = new THREE.Vector3(0, 0, 1);
+  Z.normalize();
+  const Y = new THREE.Vector3().crossVectors(Z, X).normalize();
+  const g = new THREE.BoxGeometry(L, h, w);
+  const mid = p.clone().add(q).multiplyScalar(0.5);
+  g.applyMatrix4(new THREE.Matrix4().makeBasis(X, Y, Z).setPosition(mid));
+  return g;
+}
+
+/**
+ * 护栏：扶手（木作）+ 细方立杆（金属，净空 ≤ 100mm）+ 底下一道细扁钢；posts = 两端立一根粗一点的柱（挑空的护栏）。
+ * lines：[{ x1, y1, z1, x2, y2, z2 }] 平面米；z = 这一端「脚下」的高度（楼梯 = 踏步前缘连线，挑空 = 0）。
+ * h：扶手顶离脚下多高（楼梯 0.9m，挑空 1.0m）。
+ */
+export function balustrade(lines, lib, { h = 0.9, posts = false, shoe = true, base = null } = {}) {
+  const wood = [];
+  const metal = [];
+  const RAIL_W = 0.05;
+  const RAIL_H = 0.045;
+  const BAL = 0.018;
+  const PITCH = 0.112; // 立杆中心距：净空 ≈ 94mm
+  const seen = new Set();
+  for (const ln of lines) {
+    const a = new THREE.Vector3(ln.x1, ln.z1 || 0, ln.y1);
+    const b = new THREE.Vector3(ln.x2, ln.z2 || 0, ln.y2);
+    const flat = Math.hypot(b.x - a.x, b.z - a.z);
+    if (flat < 0.05) continue;
+    // 扶手：顶面在 h
+    const top = new THREE.Vector3(0, h - RAIL_H / 2, 0);
+    const rail = barGeo(a.clone().add(top), b.clone().add(top), RAIL_W, RAIL_H);
+    if (rail) wood.push(rail);
+    // 底下的细扁钢（离脚下 6cm；楼梯没有，立杆直接站在踏步上）
+    if (shoe) {
+      const low = new THREE.Vector3(0, 0.06, 0);
+      const bar = barGeo(a.clone().add(low), b.clone().add(low), 0.02, 0.02);
+      if (bar) metal.push(bar);
+    }
+    // 立杆：两端各让 3cm（端柱 / 墙），中间均分；base(x, y) = 这一点脚下真正的高度（楼梯：那一级踏步的面）
+    const n = Math.max(1, Math.ceil((flat - 0.06) / PITCH));
+    for (let i = 0; i <= n; i++) {
+      const k = 0.03 / flat + ((flat - 0.06) / flat) * (i / n);
+      const p = a.clone().lerp(b, k);
+      const y0 = base ? base(p.x, p.z) : p.y;
+      const len = p.y + h - RAIL_H - y0;
+      if (len < 0.05) continue;
+      const g = new THREE.BoxGeometry(BAL, len, BAL);
+      g.translate(p.x, y0 + len / 2, p.z);
+      metal.push(g);
+    }
+    if (posts)
+      for (const p of [a, b]) {
+        const key = `${p.x.toFixed(2)}|${p.y.toFixed(2)}|${p.z.toFixed(2)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const g = new THREE.BoxGeometry(0.06, h + 0.02, 0.06);
+        g.translate(p.x, p.y + (h + 0.02) / 2, p.z);
+        wood.push(g);
+      }
+  }
+  const out = new THREE.Group();
+  const w = mergedMesh(wood, lib.slot('woodwork'), 'woodwork');
+  const m = mergedMesh(metal, lib.slot('metal'), 'metal');
+  if (w) out.add(w);
+  if (m) out.add(m);
+  return out;
+}
+
+/**
+ * 楼梯（直跑 / L 形 / U 形，来自 model.stairFlights）：
+ *  · 结构（墙面）：每一跑是一块「锯齿」实体 —— 踢面一级级上去，底下是一道斜梯板（厚 13cm），侧面就是楼梯的剖面；平台板 15cm；
+ *  · 踏步板（地板）：4cm 厚，往前出 2cm 的前缘；平台上也铺一层；
+ *  · 开放的一侧（model.flightRails）：0.9m 扶手 + 细立杆。
+ * 平面 x → 世界 x、平面 y → 世界 z、z（相对下层地面）→ 世界 y；整组放进下层的楼层组里。
+ * 最上面一级踢面往里收 5mm，不和上层楼板的切面打架。
+ */
+export function stairsMesh(flights, landings, rails, lib) {
+  const FIN = 0.04;
+  const NOSE = 0.02;
+  const WAIST = 0.13;
+  const struct = [];
+  const treads = [];
+  const frames = [];
+  for (const fl of flights || []) {
+    const dv = STAIR_DIR[fl.dir];
+    if (!dv) continue;
+    const r0 = rectXY(fl.rect);
+    const along = new THREE.Vector3(dv[0], 0, dv[1]);
+    const across = new THREE.Vector3(-dv[1], 0, dv[0]);
+    const L = dv[0] ? r0.x1 - r0.x0 : r0.y1 - r0.y0;
+    const W = dv[0] ? r0.y1 - r0.y0 : r0.x1 - r0.x0;
+    const n = Math.max(1, fl.risers | 0);
+    if (L <= 0.05 || W <= 0.05) continue;
+    const rise = (fl.z1 - fl.z0) / n;
+    const t = n > 1 ? L / (n - 1) : L;
+    const cx = (r0.x0 + r0.x1) / 2;
+    const cz = (r0.y0 + r0.y1) / 2;
+    // 原点：起步那条边、跨度方向最小的那个角
+    const O = new THREE.Vector3(cx - (along.x * L) / 2 - (across.x * W) / 2, 0, cz - (along.z * L) / 2 - (across.z * W) / 2);
+    const basis = new THREE.Matrix4().makeBasis(along, UP, across).setPosition(O);
+    frames.push({ fl, O, along, cx, cz, n, rise, t, L });
+    const aEnd = Math.max(0.01, L - 0.005);
+    const top = (k) => fl.z0 + k * rise - FIN;
+    const Wv = WAIST * Math.sqrt(1 + (rise / Math.max(0.05, t)) ** 2);
+    const soffit = (a) => fl.z0 - FIN - Wv + (a * rise) / Math.max(0.05, t);
+    const onFloor = fl.z0 < 0.02;
+    const pts = [[0, onFloor ? fl.z0 : soffit(0)]];
+    for (let k = 1; k <= n; k++) {
+      const a = Math.min((k - 1) * t, aEnd);
+      pts.push([a, top(k)]);
+      if (k < n) pts.push([Math.min(k * t, aEnd), top(k)]);
+    }
+    const backZ = Math.min(top(n) - 0.05, soffit(aEnd));
+    if (onFloor) {
+      // 斜梯板落到地上的那一点；很短的一跑（梯板到不了地）就是一块实心台阶
+      if (backZ > fl.z0 + 1e-3) {
+        pts.push([aEnd, backZ]);
+        const aFloor = ((FIN + Wv) * t) / Math.max(0.05, rise);
+        if (aFloor < aEnd - 1e-3) pts.push([aFloor, fl.z0]);
+      } else pts.push([aEnd, fl.z0]);
+    } else pts.push([aEnd, backZ]);
+    const shape = new THREE.Shape(pts.map(([a, z]) => new THREE.Vector2(a, z)));
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: W, bevelEnabled: false, steps: 1, curveSegments: 1 });
+    geo.applyMatrix4(basis);
+    struct.push(geo);
+    for (let k = 1; k < n; k++) {
+      const a0 = (k - 1) * t - NOSE;
+      const a1 = Math.min(k * t, aEnd);
+      const g = new THREE.BoxGeometry(a1 - a0, FIN, W);
+      g.translate((a0 + a1) / 2, top(k) + FIN / 2, W / 2);
+      g.applyMatrix4(basis);
+      treads.push(g);
+    }
+  }
+  for (const ld of landings || []) {
+    const r = rectXY(ld.rect);
+    const w = r.x1 - r.x0;
+    const d = r.y1 - r.y0;
+    if (w < 0.05 || d < 0.05) continue;
+    const slab = new THREE.BoxGeometry(w, 0.15, d);
+    slab.translate((r.x0 + r.x1) / 2, ld.z - FIN - 0.075, (r.y0 + r.y1) / 2);
+    struct.push(slab);
+    const fin = new THREE.BoxGeometry(w, FIN, d);
+    fin.translate((r.x0 + r.x1) / 2, ld.z - FIN / 2, (r.y0 + r.y1) / 2);
+    treads.push(fin);
+  }
+  const g = new THREE.Group();
+  const s = mergedMesh(struct, lib.slot('walls'), 'walls');
+  const tr = mergedMesh(treads, lib.slot('floor'), 'floor');
+  if (s) g.add(s);
+  if (tr) g.add(tr);
+  // 扶手：model.flightRails 给的是每一跑开放那一边的直线（起步的地面 → 顶上一级）；
+  // 扶手要跟踏步前缘的连线平行（每一级上方都是 0.9m），立杆站在各自那一级踏步上，整排往梯段里收 4cm
+  if (rails?.length) {
+    const lines = [];
+    for (const ln of rails) {
+      const F = frames.find((x) => x.fl === flights[ln.flight]) || frames[0];
+      if (!F) continue;
+      const aOf = (x, y) => (x - F.O.x) * F.along.x + (y - F.O.z) * F.along.z;
+      const nose = (x, y) => Math.min(F.fl.z1, F.fl.z0 + F.rise + (Math.max(0, aOf(x, y)) * F.rise) / Math.max(0.05, F.t));
+      // 往梯段中心收 4cm（垂直于走向）
+      const ox = Math.abs(F.along.x) > 0.5 ? 0 : Math.sign(F.cx - ln.x1) * 0.04;
+      const oy = Math.abs(F.along.x) > 0.5 ? Math.sign(F.cz - ln.y1) * 0.04 : 0;
+      const x1 = ln.x1 + ox;
+      const y1 = ln.y1 + oy;
+      const x2 = ln.x2 + ox;
+      const y2 = ln.y2 + oy;
+      lines.push({ x1, y1, x2, y2, z1: nose(x1, y1), z2: nose(x2, y2), F });
+    }
+    const base = (x, y) => {
+      // 这一点在哪一跑的哪一级踏步上
+      for (const F of frames) {
+        const a = (x - F.O.x) * F.along.x + (y - F.O.z) * F.along.z;
+        if (a < -0.05 || a > F.L + 0.05) continue;
+        const across = Math.abs(F.along.x) > 0.5 ? Math.abs(y - F.cz) : Math.abs(x - F.cx);
+        const r = rectXY(F.fl.rect);
+        const half = (Math.abs(F.along.x) > 0.5 ? r.y1 - r.y0 : r.x1 - r.x0) / 2;
+        if (across > half + 0.05) continue;
+        const k = Math.min(F.n - 1, Math.max(1, Math.floor(Math.max(0, a) / Math.max(0.05, F.t)) + 1));
+        return a >= F.L ? F.fl.z1 : F.fl.z0 + k * F.rise;
+      }
+      return 0;
+    };
+    g.add(balustrade(lines, lib, { h: 0.9, shoe: false, base }));
+  }
+  g.userData.stair = true;
+  return g;
+}
+
 // ───────────────────────── 目录 ─────────────────────────
 
 export const CATALOG = {

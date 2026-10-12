@@ -1,5 +1,5 @@
 // 「体积光」：清晨 / 傍晚，阳光从窗口斜斜地打进来的光柱。
-// 做法：把窗洞四个角沿光线方向投到地面，拼成一个半透明、加法混合、越往地面越淡的棱柱。
+// 做法：把窗洞四个角沿光线方向投到（那一层的）地面，拼成一个半透明、加法混合、越往地面越淡的棱柱。
 // 棱柱的侧面在「侧着看」时淡出（用屏幕导数求面法线），所以光柱没有硬边，像真的空气里的光；
 // 再加一点点抖动噪声，暗处不出色带。
 
@@ -92,18 +92,20 @@ export class Beams {
       mesh.visible = visible;
       if (!visible) return;
       const inset = 0.08;
+      // 楼上的窗：w.elev = 那一层的标高；光柱落在那一层的地面上
+      const el = w.elev || 0;
       const corners = [
-        w.a.clone().setY(w.sill + inset),
-        w.b.clone().setY(w.sill + inset),
-        w.b.clone().setY(w.head - inset),
-        w.a.clone().setY(w.head - inset),
+        w.a.clone().setY(el + w.sill + inset),
+        w.b.clone().setY(el + w.sill + inset),
+        w.b.clone().setY(el + w.head - inset),
+        w.a.clone().setY(el + w.head - inset),
       ];
       const arr = mesh.geometry.attributes.position.array;
       corners.forEach((c, k) => {
-        const t = Math.min(12, c.y / -L.y);
+        const t = Math.min(12, (c.y - el) / -L.y);
         const e = c.clone().addScaledVector(L, t);
         arr.set([c.x, c.y, c.z], k * 3);
-        arr.set([e.x, Math.max(0.005, e.y), e.z], (k + 4) * 3);
+        arr.set([e.x, Math.max(el + 0.005, e.y), e.z], (k + 4) * 3);
       });
       mesh.geometry.attributes.position.needsUpdate = true;
     });

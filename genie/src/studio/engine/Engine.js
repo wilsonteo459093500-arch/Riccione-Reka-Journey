@@ -20,6 +20,11 @@
 // 画质档来自设置（自动 / 高清 / 流畅）：自动 = 触屏（iPad / 手机）用 'fast'（大 iPad 也是：省电、不烫、不爆显存），电脑用 'high'。
 // iPad 上的稳定性：贴图按显存预算淘汰（matlib）、截图限制像素、WebGL 上下文丢了会告诉界面并在恢复后重建；
 // 演示模式（展厅电视）：自动环绕 + 一天的光影循环，~30 fps、像素比降一点，跑一整天也不烫。
+//
+// 多层（floors.js）：一层一个组。setFloorView('all' | floorId) 像 The Sims：看的那一层以上的楼层只留影子
+// （HIDDEN_LAYER：镜头看不见、太阳照样被挡住），它们的家具藏起来；看的那一层照墙的切法；下面的楼层墙全立。
+// 只换图层 / 可见性：不重建、不重新编译着色器。点选、拖动、加家具、材质标签、夜灯、窗光、光柱都只看「这一层」
+// （interactiveFloor；'all' = 最上面一层）。被楼上盖住的那一层白天环境光补一点（楼上挡掉了天光，见 COVER）。
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -31,12 +36,13 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
 import { MatLib } from './matlib.js';
 import { useLib, buildItem, CATALOG } from './furniture.js';
-import { buildHouse, applyCutaway, disposeHouseKit, SHADOW_LAYER } from './house.js';
+import { applyCutaway, disposeHouseKit, SHADOW_LAYER, HIDDEN_LAYER } from './house.js';
+import { buildStack } from './floors.js';
 import { daylight, LAMP } from './daylight.js';
 import { Beams } from './beams.js';
 import { MAT_BY_ID } from '../../shared/materials.js';
 import { PALETTE } from '../../shared/palette.js';
-import { ROOM_TYPES } from '../plan/model.js';
+import { ROOM_TYPES, migratePlan, stairPath } from '../plan/model.js';
 import { loadSettings } from '../store.js';
 
 const VIEWS = {
@@ -62,6 +68,11 @@ const QUALITY = {
   // 兼容档：只在着色器编译失败时自动换过来（某些 Windows 显卡 / 驱动）。three 原版阴影、灯少、不走后期链 —— 先保证画得出来
   safe: { pr: 1, shadow: 1024, env: 64, bg: 512, lights: 3, taps: 0, pcfMax: 4, rect: false, snapLong: 2048 },
 };
+
+// 被楼上盖住的那一层（楼上藏起来、但还在挡太阳）：白天环境光最多 +35%、半球光 +50%（× 被盖住的比例）
+const COVER = { env: 0.35, hemi: 0.5 };
+// 换楼层时镜头目标点平移的时间
+const FLOOR_TWEEN = 700;
 
 const DEMO_FPS = 30;
 const DEMO_ORBIT = 0.4; // OrbitControls.autoRotateSpeed：一圈约 150 秒
@@ -186,6 +197,18 @@ export class Engine {
     r.toneMappingExposure = 1;
     r.shadowMap.enabled = true;
     r.shadowMap.type = THREE.PCFShadowMap;
+    // 藏起来的楼层（HIDDEN_LAYER）只进影子：three 画影子时按主镜头的图层筛选，画影子的那一下临时把这一层打开
+    // （画面的渲染列表在这之前就排好了，主画面里照样看不见它）
+    const smRender = r.shadowMap.render.bind(r.shadowMap);
+    r.shadowMap.render = (lights, scene, camera) => {
+      const mask = camera.layers.mask;
+      camera.layers.enable(HIDDEN_LAYER);
+      try {
+        smRender(lights, scene, camera);
+      } finally {
+        camera.layers.mask = mask;
+      }
+    };
     r.domElement.className = 'studio-canvas';
     container.appendChild(r.domElement);
     // 着色器编译失败（有些 Windows 显卡 / 驱动吃不下高画质的着色器）：整栋房子会画不出来、只剩背景 →
@@ -232,6 +255,7 @@ export class Engine {
     this.sun.shadow.normalBias = 0.012;
     this.sun.shadow.radius = 3;
     this.sun.shadow.camera.layers.enable(SHADOW_LAYER);
+    this.sun.shadow.camera.layers.enable(HIDDEN_LAYER);
     this.scene.add(this.sun, this.sun.target);
     this.hemi = new THREE.HemisphereLight(new THREE.Color(1, 1, 1), new THREE.Color(0.27, 0.27, 0.27), 0.2);
     this.scene.add(this.hemi);
@@ -252,6 +276,15 @@ export class Engine {
     this.items = new Map();
     this.itemData = new Map();
     this.pickables = [];
+    // 楼层（setScene 里由 floors.buildStack 建好）
+    this.floors = [];
+    this.floorMap = new Map();
+    this.roomFloor = new Map();
+    this.floorView = 'all';
+    this.activeIdx = 0;
+    this.coverFrac = 0;
+    this.ceilingsOn = false;
+    this.stackTop = 2.8;
     this.wallMode = 'cut';
     this.time = 18.4;
     this.anchors = {};
@@ -540,27 +573,43 @@ export class Engine {
 
   // ───────────────────────── 场景 ─────────────────────────
 
-  /** 整个场景重建（换平面图时） */
-  setScene({ plan, walls, furniture, materials, time, title, subtitle, frame = true }) {
+  /**
+   * 整个场景重建（换平面图时）。plan：v2（v1 也行，这里先迁移）；墙按楼层自己算（model.buildAllWalls，在 buildStack 里）。
+   * floorView：打开时看哪一层（'all' | floorId；无效 / 单层 = 'all'）。
+   */
+  setScene({ plan, furniture, materials, time, title, subtitle, frame = true, floorView }) {
     this.disposeRoot();
+    plan = migratePlan(plan);
     this.plan = plan;
     this.lib.applyAll(materials);
     this.updateRoomKey(true);
-    const house = buildHouse(plan, walls, this.lib, { title, subtitle });
-    this.house = house;
-    this.root.add(house.group);
-    this.beams.setWindows(house.windows);
-    this.setupRoomLights(house.rooms, house.wallH);
-    this.setupWindowLights(house.windows);
-    this.fitShadow(house.bounds);
+    const stack = buildStack(plan, this.lib, { title, subtitle });
+    this.stack = stack;
+    this.floors = stack.floors;
+    this.floorMap = new Map(stack.floors.map((F) => [F.id, F]));
+    this.roomFloor = new Map(plan.floors.flatMap((f) => f.rooms.map((r) => [r.id, f.id])));
+    this.wallsBy = stack.walls;
+    this.stackTop = stack.top;
+    this.root.add(stack.group);
+    // this.house：老接口（诊断面板、测试脚本、走进去的工具都读它）—— 整栋楼的外框、树、字牌；windows / rooms / wallH = 现在这一层
+    const top = stack.floors[stack.floors.length - 1];
+    this.house = { group: stack.group, wallSets: stack.floors.flatMap((F) => F.wallSets), windows: top.windows, rooms: top.rooms, bounds: stack.bounds, wallH: top.ceil, trees: stack.trees, plaques: stack.plaques, pane: stack.pane, floors: stack.floors, stack };
+    if (this.ceilingsOn) this.setCeilings(true);
+    this.setupRoomLights(top.rooms, top.ceil);
+    this.fitShadow(stack.bounds);
+    const view = floorView && floorView !== 'all' && this.floorMap.has(floorView) && stack.floors.length > 1 ? floorView : 'all';
+    this.setFloorView(view, { instant: true, quiet: true });
     this.setFurniture(furniture);
     this.setTime(time ?? this.time);
     if (frame) this.frame('iso', false);
     this.lastCut = null;
     this.dirty = true;
+    this.cb.onFloorView?.(this.floorView);
   }
 
   disposeRoot() {
+    // 家具组挂在楼层组里：先摘下来（不跟着楼层一起释放；setFurniture 会把没变的那些挂回新的楼层）
+    for (const g of this.items.values()) g.removeFromParent();
     this.root.traverse((o) => {
       if ((o.isMesh || o.isLine) && o.geometry && !o.geometry.userData?.cached) o.geometry.dispose();
       // 底座上的字是每次新建的材质 / 贴图
@@ -591,16 +640,18 @@ export class Engine {
     }
   }
 
-  /** 把灯池放到：每个房间里最高的那盏灯（落地灯 / 吊灯优先）→ 没有灯的房间放一盏吸顶的柔光 → 剩下的灯具 */
+  /** 把灯池放到（只在「这一层」）：每个房间里最高的那盏灯（落地灯 / 吊灯优先）→ 没有灯的房间放一盏吸顶的柔光 → 剩下的灯具 */
   placeRoomLights() {
     if (!this.roomLights.length || !this.rooms) return;
     const bulbMat = this.lib.fixed.bulb;
     const bulbs = [];
-    this.furn.updateMatrixWorld(true);
-    this.furn.traverse((o) => {
+    const F = this.floors[this.activeIdx];
+    const furn = F?.furn || this.furn;
+    furn.updateMatrixWorld(true);
+    furn.traverse((o) => {
       if (o.isMesh && o.material === bulbMat && isVisible(o)) bulbs.push({ pos: o.getWorldPosition(new THREE.Vector3()), used: false });
     });
-    const H = this.wallH || 2.8;
+    const H = (F?.elev || 0) + (this.wallH || 2.8);
     const lamp = (b) => {
       b.used = true;
       const tall = b.pos.y > 1.2;
@@ -657,25 +708,38 @@ export class Engine {
     const k = 1 + (this.roomKey.now - 1) * d.night;
     const kLamp = 1 + (k - 1) * 0.5;
     this.fill.intensity = (d.fillIntensity || 0) * k;
-    this.scene.environmentIntensity = d.envIntensity * k;
+    // 被楼上盖住（楼上藏着、还在挡太阳）：白天环境光补一点
+    this.scene.environmentIntensity = d.envIntensity * k * (1 + COVER.env * this.coverFrac * (1 - d.night));
+    this.hemi.intensity = d.hemiIntensity * (1 + COVER.hemi * this.coverFrac * (1 - d.night));
     for (const l of this.roomLights) l.intensity = (l.userData.base || 0) * d.lamps * (d.lampPower ?? 1) * kLamp;
   }
 
-  /** 白天：最大的几扇外窗各放一块面光源，朝屋里打「窗口的天光」（只在 'high'） */
+  /**
+   * 白天：「这一层」最大的几扇外窗各放一块面光源，朝屋里打「窗口的天光」（只在 'high'）。
+   * 数量固定（4 块）：换楼层只是挪位置，不会让材质重新编译。
+   */
   setupWindowLights(windows) {
-    for (const l of this.windowLights) this.scene.remove(l);
-    this.windowLights = [];
-    if (!this.rectOK) return;
+    if (!this.rectOK) {
+      for (const l of this.windowLights) this.scene.remove(l);
+      this.windowLights = [];
+      return;
+    }
     const N = 4;
+    while (this.windowLights.length < N) {
+      const l = new THREE.RectAreaLight(new THREE.Color(1, 1, 1), 0, 1, 1);
+      this.scene.add(l);
+      this.windowLights.push(l);
+    }
     const area = (w) => w.a.distanceTo(w.b) * (w.head - w.sill);
-    const big = [...windows].sort((a, b) => area(b) - area(a)).slice(0, N);
+    const big = [...(windows || [])].sort((a, b) => area(b) - area(a)).slice(0, N);
     for (let i = 0; i < N; i++) {
       const w = big[i];
-      const l = new THREE.RectAreaLight(new THREE.Color(1, 1, 1), 0, 1, 1);
+      const l = this.windowLights[i];
       l.userData.k = 0;
+      l.intensity = 0;
       if (w) {
         const mid = w.a.clone().add(w.b).multiplyScalar(0.5);
-        mid.y = (w.sill + w.head) / 2;
+        mid.y = (w.elev || 0) + (w.sill + w.head) / 2;
         mid.addScaledVector(w.inward, 0.08);
         l.position.copy(mid);
         l.width = Math.max(0.3, w.a.distanceTo(w.b) - 0.1);
@@ -683,8 +747,6 @@ export class Engine {
         l.lookAt(mid.clone().add(w.inward));
         l.userData.k = 1;
       } else l.position.set(0, -50, 0);
-      this.scene.add(l);
-      this.windowLights.push(l);
     }
   }
 
@@ -692,8 +754,8 @@ export class Engine {
     this.center = new THREE.Vector3(bb.cx, 0, bb.cy);
     this.radius = Math.hypot(bb.w, bb.d) / 2;
     this.sun.target.position.copy(this.center);
-    // 投影的东西：房子 + 底座 + 窗外看不见的树（只在影子层）
-    const H = (this.house?.wallH || 2.8) + 0.2;
+    // 投影的东西：整栋楼（藏起来的楼层也在挡太阳）+ 底座 + 窗外看不见的树（只在影子层）
+    const H = (this.stackTop || this.house?.wallH || 2.8) + 0.2;
     const pts = [];
     for (const x of [bb.x0 - 0.4, bb.x1 + 0.4]) for (const z of [bb.y0 - 0.4, bb.y1 + 0.4]) for (const y of [-0.7, H]) pts.push(new THREE.Vector3(x, y, z));
     const tb = new THREE.Box3();
@@ -755,7 +817,7 @@ export class Engine {
     if (!this.items.size) return;
     const list = [...this.itemData.values()];
     for (const g of this.items.values()) {
-      this.furn.remove(g);
+      g.removeFromParent();
       disposeItem(g);
     }
     this.items.clear();
@@ -763,41 +825,49 @@ export class Engine {
     this.setFurniture(list);
   }
 
-  /** 家具：按 id 增量更新（只重建变了的那件；拿掉 / 重建的那件，它自己的几何体释放掉） */
+  /** 一件家具在哪一层（item.floor → 它的房间在哪一层 → 一楼） */
+  floorRec(it) {
+    return (it && (this.floorMap.get(it.floor) || this.floorMap.get(this.roomFloor.get(it.room)))) || this.floors[0] || null;
+  }
+
+  /** 家具：按 id 增量更新（只重建变了的那件；拿掉 / 重建的那件，它自己的几何体释放掉）。每件放进它那一层的家具组（item.floor） */
   setFurniture(items) {
-    const ctx = { wallH: this.plan?.wallH || 2.8 };
     const keep = new Set();
     for (const it of items) {
       keep.add(it.id);
+      const F = this.floorRec(it);
+      const parent = F?.furn || this.furn;
       const prev = this.itemData.get(it.id);
       const same = prev && JSON.stringify({ ...prev, x: 0, z: 0, rot: 0 }) === JSON.stringify({ ...it, x: 0, z: 0, rot: 0 });
       if (same) {
         const g = this.items.get(it.id);
         g.position.set(it.x, it.y || 0, it.z);
         g.rotation.y = ((it.rot || 0) * Math.PI) / 180;
+        if (g.parent !== parent) parent.add(g);
       } else {
         // 变了的那件重建：旧的从场景拿掉，它自己的几何体释放（材质是共用的，不动）
         const old = this.items.get(it.id);
         if (old) {
-          this.furn.remove(old);
+          old.removeFromParent();
           disposeItem(old);
           this.items.delete(it.id);
         }
-        const g = buildItem(it, ctx);
+        const g = buildItem(it, { wallH: F?.ceil || this.plan?.floors?.[0]?.ceil || 2.8 });
         if (!g) {
           this.itemData.delete(it.id);
           continue;
         }
         if (CATALOG[it.kind]?.ceiling) g.position.y = 0;
         this.items.set(it.id, g);
-        this.furn.add(g);
+        parent.add(g);
       }
+      this.items.get(it.id).userData.elev = F?.elev || 0;
       this.itemData.set(it.id, it);
     }
     for (const id of [...this.items.keys()])
       if (!keep.has(id)) {
         const old = this.items.get(id);
-        this.furn.remove(old);
+        old.removeFromParent();
         disposeItem(old);
         this.items.delete(id);
         this.itemData.delete(id);
@@ -847,7 +917,7 @@ export class Engine {
    * backZ = 背面在件自己坐标里的 z。返回 { gap: 背面到墙面的距离（< 0 = 嵌进墙里）, sets: 贴着的那几段墙 } 或 null。
    */
   wallBehind(it, backZ) {
-    const sets = this.house?.wallSets;
+    const sets = this.floorRec(it)?.wallSets;
     if (!sets?.length) return null;
     const rot = (((it.rot || 0) % 360) + 360) % 360;
     const q = Math.round(rot / 90);
@@ -906,11 +976,13 @@ export class Engine {
   pickFeatureAnchor() {
     let p = null;
     let n = null;
+    const F = this.floors[this.activeIdx];
     for (const [kind, y] of [
       ['tvWall', 1.9],
       ['featureWall', 1.6],
     ]) {
       for (const [id, it] of this.itemData) {
+        if (F && this.floorRec(it) !== F) continue;
         const g = it.kind === kind && this.items.get(id);
         if (!g || g.userData.wallLowered) continue;
         g.updateMatrixWorld(true);
@@ -928,13 +1000,17 @@ export class Engine {
     this.dirty = true;
   }
 
+  /** 点得到的东西：所有楼层的建筑（藏起来的楼层在影子层，射线本来就碰不到）+ 只有「这一层」的家具 */
   collectPickables() {
     const list = [];
-    const add = (o) => {
+    const F = this.floors[this.activeIdx];
+    const walk = (o) => {
+      if (o.userData.floorFurniture && o !== F?.furn) return;
       if (o.isMesh && o.visible !== false) list.push(o);
+      for (const c of o.children) walk(c);
     };
-    this.root.traverse(add);
-    this.furn.traverse(add);
+    walk(this.root);
+    this.furn.traverse((o) => o.isMesh && o.visible !== false && list.push(o));
     this.pickables = list;
   }
 
@@ -987,20 +1063,31 @@ export class Engine {
     this.placeFill();
     // 窗外的天光卡：白天浅浅的天色、黄昏琥珀、夜里深苔绿（和背景照片里的窗一致）
     this.house?.pane?.color.set(d.paneSky || d.bgSky);
-    // 窗光是「天光」不是太阳：和环境光一样中和（黄金时段留一点暖）
+    this.applyWindowLights(d);
+    this.lib.setNight(d.lamps);
+    // 底座的烫金字：白天亮一点（和受光的石头拉开），夜里收一点（不像霓虹灯；夜里曝光提了 ~0.45 EV，这里收回来）
+    for (const m of this.house?.plaques || []) m.material.emissiveIntensity = 0.8 - 0.35 * d.night;
+    this.applyPost(d);
+    this.applyBeams(d);
+    drawBackdrop(this.bgCanvas, this.bgLayers, d, this.demo ? firePulse(performance.now()) : null);
+    this.bgTex.needsUpdate = true;
+    this.dirty = true;
+  }
+
+  /** 窗光是「天光」不是太阳：和环境光一样中和（黄金时段留一点暖） */
+  applyWindowLights(d = this.day) {
+    if (!d) return;
     const wc = neutralColor(d.windowColor, 0.4);
     for (const l of this.windowLights) {
       l.color.copy(wc);
       l.intensity = l.userData.k * d.windowLight * 2.4;
     }
-    this.lib.setNight(d.lamps);
-    // 底座的烫金字：白天亮一点（和受光的石头拉开），夜里收一点（不像霓虹灯；夜里曝光提了 ~0.45 EV，这里收回来）
-    for (const m of this.house?.plaques || []) m.material.emissiveIntensity = 0.8 - 0.35 * d.night;
-    this.applyPost(d);
-    this.beams.update(d.dir, d.beams, new THREE.Color(d.sunColor).multiply(wb));
-    drawBackdrop(this.bgCanvas, this.bgLayers, d, this.demo ? firePulse(performance.now()) : null);
-    this.bgTex.needsUpdate = true;
-    this.dirty = true;
+  }
+
+  /** 光柱（「这一层」的外窗） */
+  applyBeams(d = this.day) {
+    if (!d) return;
+    this.beams.update(d.dir, d.beams, new THREE.Color(d.sunColor).multiply(this._wb));
   }
 
   /**
@@ -1051,6 +1138,127 @@ export class Engine {
     this.dirty = true;
   }
 
+  // ───────────────────────── 楼层 ─────────────────────────
+
+  /**
+   * 看哪一层：'all' | floorId。像 The Sims / Matterport：
+   *  · 上面的楼层：所有网格换到影子层（镜头看不见、照样挡太阳），家具藏起来（也不进影子）；
+   *  · 这一层：墙照墙的切法（cut / down / up）；下面的楼层：墙全立、家具照常；
+   *  · 'all' = 全部看得见，最上面一层是「这一层」。
+   * 只换图层 / 可见性（不重建、不重新编译着色器）；镜头的目标点平移到这一层（700ms）。
+   * 点选、拖动（拖动平面在这一层的地面）、加家具（groundAt）、材质标签、夜灯、窗光、光柱都跟着「这一层」。
+   * opts.instant：镜头不动（setScene / 演示用）；opts.quiet：不通知界面（cb.onFloorView）。
+   */
+  setFloorView(view = 'all', { instant = false, quiet = false } = {}) {
+    const n = this.floors.length;
+    if (!n) return;
+    let idx = view === 'all' ? n - 1 : this.floors.findIndex((F) => F.id === view);
+    if (idx < 0 || n < 2) {
+      view = 'all';
+      idx = n - 1;
+    }
+    const framed = !instant && this.isFramed();
+    const y0 = this.targetY();
+    this.floorView = view;
+    this.activeIdx = idx;
+    this.floors.forEach((F, i) => {
+      const hide = i > idx;
+      if (hide !== F.hidden) {
+        // 藏起来的楼层：墙先全部立起来（影子是整面墙的），再整层换到「只投影」的那一层（HIDDEN_LAYER）
+        if (hide) applyCutaway(F.wallSets, null, 'up');
+        setLayer(F.group, hide ? HIDDEN_LAYER : 0, F.furn);
+        F.hidden = hide;
+      }
+      F.furn.visible = !hide;
+    });
+    const F = this.floors[idx];
+    this.dragPlane.constant = -F.elev;
+    if (this.house) {
+      this.house.windows = F.windows;
+      this.house.rooms = F.rooms;
+      this.house.wallH = F.ceil;
+    }
+    this.rooms = F.rooms;
+    this.wallH = F.ceil;
+    this.beams.setWindows(F.windows);
+    this.setupWindowLights(F.windows);
+    // 楼上藏起来、还在挡太阳：这一层被盖住多少，白天的环境光就补多少（COVER）
+    this.coverFrac = idx < n - 1 ? F.cover || 0 : 0;
+    this.applyNightKey();
+    this.applyWindowLights();
+    this.applyBeams();
+    this.lastCut = null;
+    if (this.selected && this.floorRec(this.itemData.get(this.selected)) !== F) this.select(null);
+    if (this.hovered) {
+      this.hovered = null;
+      this.hovBox.visible = false;
+      this.cb.onHover?.(null);
+    }
+    this.refreshFeatureMode();
+    this.collectPickables();
+    this.computeAnchors();
+    this.placeRoomLights();
+    if (!instant && this.center && !this.demo) {
+      if (framed) this.frame(this.lastView, true, FLOOR_TWEEN);
+      else {
+        // 用户自己转过 / 缩放过：角度和远近不变，只把镜头和目标点一起平移到这一层的高度
+        const dy = this.targetY() - y0;
+        if (Math.abs(dy) > 1e-3) {
+          const fromP = this.camera.position.clone();
+          const fromT = this.controls.target.clone();
+          this.tween = { t0: performance.now(), dur: FLOOR_TWEEN, fromP, fromT, toP: fromP.clone().setY(fromP.y + dy), toT: fromT.clone().setY(fromT.y + dy) };
+        }
+      }
+    }
+    this.dirty = true;
+    if (!quiet) this.cb.onFloorView?.(view);
+  }
+
+  /** 现在「这一层」（'all' = 最上面一层）：{ id, level, elev, ceil, height, group, furn, bounds, … } */
+  interactiveFloor() {
+    return this.floors[this.activeIdx] || null;
+  }
+
+  /** 这件家具在哪一层（floorId） */
+  floorOf(itemId) {
+    const it = this.itemData.get(itemId);
+    return it ? this.floorRec(it)?.id ?? null : null;
+  }
+
+  /** 屏幕上这一点落在「这一层」地面的哪里（加家具用）→ { x, z, floorId }；点到天上 = 这一层的中心 */
+  groundAt(clientX, clientY) {
+    const F = this.floors[this.activeIdx];
+    const p = new THREE.Vector3();
+    const hit = this.rayAt(clientX, clientY).ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -(F?.elev || 0)), p);
+    const bb = F?.bounds || this.house?.bounds;
+    if (!hit) return { x: bb ? bb.cx : (this.center?.x ?? 0), z: bb ? bb.cy : (this.center?.z ?? 0), floorId: F?.id ?? null };
+    return { x: p.x, z: p.z, floorId: F?.id ?? null };
+  }
+
+  /** 天花：模型平时是掀了顶的；走进去的时候盖上（看得见、也挡太阳） */
+  setCeilings(on) {
+    this.ceilingsOn = !!on;
+    for (const F of this.floors)
+      if (F.ceiling) {
+        F.ceiling.visible = this.ceilingsOn;
+        F.ceiling.castShadow = this.ceilingsOn;
+      }
+    this.dirty = true;
+  }
+
+  /**
+   * 走进去模式用的导航数据（平面图米；elev 加上去就是世界的 y）：
+   * { floors:[{ id, level, elev, ceil, height, rooms, walls, openings }], stairs:[ model.stairPath(…) ] }
+   */
+  navData() {
+    const plan = this.plan;
+    if (!plan?.floors) return { floors: [], stairs: [] };
+    return {
+      floors: this.floors.map((F, i) => ({ id: F.id, level: F.level, elev: F.elev, ceil: F.ceil, height: F.height, rooms: plan.floors[i].rooms, walls: this.wallsBy?.[F.id] || [], openings: plan.floors[i].openings })),
+      stairs: (plan.stairs || []).map((s) => stairPath(plan, s.id)).filter(Boolean),
+    };
+  }
+
   // ───────────────────────── 相机 ─────────────────────────
 
   /**
@@ -1059,7 +1267,7 @@ export class Engine {
    * 演示模式（展厅电视）：没有面板；镜头会一直绕着转，所以按一整圈里最占地方的那个角度来算 ——
    * 房子大约占满电视画面的 65%（最宽的角度 ~80%）。
    */
-  frame(view = 'iso', animate = true) {
+  frame(view = 'iso', animate = true, dur = 900) {
     if (view !== 'demo') this.lastView = view;
     const v = VIEWS[view] || VIEWS.iso;
     this.updateViewTarget(!animate);
@@ -1080,7 +1288,26 @@ export class Engine {
       this.dirty = true;
       return;
     }
-    this.tween = { t0: performance.now(), dur: 900, fromP: this.camera.position.clone(), fromT: this.controls.target.clone(), toP: pos, toT: target };
+    this.tween = { t0: performance.now(), dur, fromP: this.camera.position.clone(), fromT: this.controls.target.clone(), toP: pos, toT: target };
+  }
+
+  /**
+   * 取景的上下范围：单层 / 「全部」= 底座到整栋楼最高的天花；看某一层 = 下面那层露出 1.2m 到这一层的天花
+   * （看二楼时底座可以出画）。
+   */
+  frameYRange() {
+    const F = this.floors[this.activeIdx];
+    if (!F) return [-0.66, this.house?.wallH || 2.8];
+    if (this.floorView === 'all' || this.floors.length < 2) return [-0.66, this.stackTop];
+    return [Math.max(-0.66, F.elev - 1.2), F.elev + F.ceil];
+  }
+
+  /** 镜头目标点的高度：单层 1.05m（和以前一样）；看某一层 = 那一层地面 + 1.05；「全部」= 整栋楼的中间 */
+  targetY() {
+    const F = this.floors[this.activeIdx];
+    if (!F || this.floors.length < 2) return 1.05;
+    if (this.floorView === 'all') return Math.max(1.05, (this.stackTop - 0.66) / 2);
+    return F.elev + 1.05;
   }
 
   /** 模型的八个角（房子 + 底座；墙按全高算 —— 'cut' 模式下远处的墙还是立着的） */
@@ -1092,9 +1319,9 @@ export class Engine {
       return [-1, 1].flatMap((sx) => [-1, 1].flatMap((sz) => [-0.66, 2.8].map((y) => new THREE.Vector3(c.x + (sx * r) / 1.5, y, c.z + (sz * r) / 1.5))));
     }
     const m = 0.36;
-    const H = this.house.wallH || 2.8;
+    const ys = this.frameYRange();
     const pts = [];
-    for (const x of [bb.x0 - m, bb.x1 + m]) for (const z of [bb.y0 - m, bb.y1 + m]) for (const y of [-0.66, H]) pts.push(new THREE.Vector3(x, y, z));
+    for (const x of [bb.x0 - m, bb.x1 + m]) for (const z of [bb.y0 - m, bb.y1 + m]) for (const y of ys) pts.push(new THREE.Vector3(x, y, z));
     return pts;
   }
 
@@ -1136,7 +1363,7 @@ export class Engine {
     };
     const azs = demo ? Array.from({ length: 16 }, (_, i) => (i / 16) * Math.PI * 2) : [THREE.MathUtils.degToRad(azDeg)];
     // 目标点：演示时就是模型中心（一直在转，不按某一个角度居中）；平时按投影居中
-    const mid = new THREE.Vector3(c0.x, 1.05, c0.z);
+    const mid = new THREE.Vector3(c0.x, this.targetY(), c0.z);
     let T = mid.clone();
     const B = basis(THREE.MathUtils.degToRad(azDeg));
     let dist = 0;
@@ -1227,7 +1454,7 @@ export class Engine {
   updateSelBox() {
     const g = this.selected && this.items.get(this.selected);
     this.selBox.visible = !!g;
-    if (g) fitRing(this.selBox, g);
+    if (g) fitRing(this.selBox, g, g.userData.elev || 0);
   }
 
   /**
@@ -1296,7 +1523,8 @@ export class Engine {
           const p = new THREE.Vector3();
           const g = this.items.get(down.id);
           if (g && this.rayAt(e.clientX, e.clientY).ray.intersectPlane(this.dragPlane, p)) {
-            const bb = this.house?.bounds;
+            // 拖动平面在这件家具那一层的地面上（dragPlane.constant = −标高）；只能拖到这一层的范围里
+            const bb = this.floorRec(this.itemData.get(down.id))?.bounds || this.house?.bounds;
             let x = Math.round((p.x + down.offset.x) * 20) / 20;
             let z = Math.round((p.z + down.offset.z) * 20) / 20;
             if (bb) {
@@ -1319,7 +1547,7 @@ export class Engine {
           this.hovered = id;
           const g = id && this.items.get(id);
           this.hovBox.visible = !!g && id !== this.selected;
-          if (g) fitRing(this.hovBox, g);
+          if (g) fitRing(this.hovBox, g, g.userData.elev || 0);
           this.dirty = true;
         }
         this.cb.onHover?.(id ? { id, item: this.itemData.get(id), x: e.clientX, y: e.clientY } : null);
@@ -1378,22 +1606,27 @@ export class Engine {
 
   // ───────────────────────── 标签锚点 ─────────────────────────
 
+  /** 材质标签的锚点：只在「这一层」（'all' = 最上面一层）找沙发、床、柜子、地板、外墙 */
   computeAnchors() {
     const A = {};
+    const F = this.floors[this.activeIdx];
+    const elev = F?.elev || 0;
     const kindPoint = (kind, y) => {
-      for (const [id, it] of this.itemData) if (it.kind === kind) return new THREE.Vector3(it.x, y, it.z);
+      for (const [, it] of this.itemData) if (it.kind === kind && (!F || this.floorRec(it) === F)) return new THREE.Vector3(it.x, elev + y, it.z);
       return null;
     };
     A.upholstery = kindPoint('sofa', 0.62) || kindPoint('armchair', 0.6);
     A.bedding = kindPoint('bed', 0.62) || kindPoint('kidsBed', 0.6);
     A.cabinetry = kindPoint('wardrobe', 1.9) || kindPoint('kitchenRun', 1.8) || kindPoint('shoeCabinet', 1.8);
-    const liv = this.plan?.rooms.find((r) => r.type === 'living') || this.plan?.rooms[0];
-    if (liv) A.floor = new THREE.Vector3(liv.x + liv.w * 0.3, 0.02, liv.y + liv.d * 0.75);
+    const rooms = (this.plan?.floors?.[this.activeIdx]?.rooms || []).filter((r) => !ROOM_TYPES[r.type]?.void && !ROOM_TYPES[r.type]?.stair);
+    const biggest = [...rooms].filter((r) => !isOutdoor(r.type)).sort((a, b) => b.w * b.d - a.w * a.d)[0];
+    const liv = rooms.find((r) => r.type === 'living') || rooms.find((r) => r.type === 'family') || biggest || rooms[0];
+    if (liv) A.floor = new THREE.Vector3(liv.x + liv.w * 0.3, elev + 0.02, liv.y + liv.d * 0.75);
     // 墙：离默认镜头最远的一面外墙
     let best = null;
     let bestD = Infinity;
     const camDir = new THREE.Vector3(Math.sin(0.56), 0, Math.cos(0.56));
-    for (const s of this.house?.wallSets || []) {
+    for (const s of F?.wallSets || this.house?.wallSets || []) {
       if (!s.outward) continue;
       const w = s.wall;
       const d = s.outward.dot(camDir);
@@ -1404,7 +1637,7 @@ export class Engine {
     }
     if (best) {
       const m = (best.a + best.b) / 2;
-      A.walls = best.axis === 'x' ? new THREE.Vector3(m, 2.0, best.c) : new THREE.Vector3(best.c, 2.0, m);
+      A.walls = best.axis === 'x' ? new THREE.Vector3(m, elev + 2.0, best.c) : new THREE.Vector3(best.c, elev + 2.0, m);
     }
     this.anchors = A;
     this.anchorsDirty = true;
@@ -1590,12 +1823,17 @@ export class Engine {
       this._demoHour = this.time;
       this._demoSunT = 0;
       this._demoTellT = 0;
+      // 多层：演示时看整栋（退出时回到原来那一层）
+      this._preDemoView = this.floors.length > 1 && this.floorView !== 'all' ? this.floorView : null;
+      if (this._preDemoView) this.setFloorView('all', { instant: true });
       // 演示：没有面板（主点回到画面中心），镜头靠近一点，按一整圈里最占地方的角度取景
       if (this.center) this.frame('demo');
       else this.updateViewTarget();
     } else {
       this.cb.onTime?.(this.time);
       this._lastAnchors = null;
+      if (this._preDemoView && this.floorMap.has(this._preDemoView)) this.setFloorView(this._preDemoView, { instant: true });
+      this._preDemoView = null;
       // 退出：回到演示前的视角，面板留白也回来
       if (this.center) this.frame(this.lastView || 'iso');
       else this.updateViewTarget();
@@ -1658,10 +1896,15 @@ export class Engine {
     if (moved) this.dirty = true;
     if (!this.dirty) return;
     if (moved || this.tween) this.placeFill();
-    // 墙的切法跟着镜头
+    // 墙的切法跟着镜头：「这一层」照墙的切法，下面的楼层墙全立，上面的楼层藏着（setFloorView）
     const camDir = this.camera.position.clone().sub(this.controls.target).setY(0).normalize();
-    if (this.house && (this.lastCut == null || camDir.distanceTo(this.lastCut) > 0.02)) {
-      if (applyCutaway(this.house.wallSets, camDir, this.wallMode)) {
+    if (this.floors.length && (this.lastCut == null || camDir.distanceTo(this.lastCut) > 0.02)) {
+      let changed = false;
+      this.floors.forEach((F, i) => {
+        if (i > this.activeIdx) return;
+        if (applyCutaway(F.wallSets, camDir, i === this.activeIdx ? this.wallMode : 'up')) changed = true;
+      });
+      if (changed) {
         // 墙切低 / 立起来：贴着它的墙板、电视跟着收起 / 回来（还有「主题墙」标签）
         this.refreshFeatureMode();
         this.collectPickables();
@@ -1708,6 +1951,13 @@ export class Engine {
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }
+}
+
+/** 一整组（跳过 skip 那一支：家具组自己管可见性）换图层 */
+function setLayer(o, layer, skip) {
+  if (o === skip) return;
+  if (o.isMesh || o.isLine || o.isPoints) o.layers.set(layer);
+  for (const c of o.children) setLayer(c, layer, skip);
 }
 
 function isVisible(o) {
@@ -2454,9 +2704,10 @@ function makeRing(color, opacity) {
 
 const _box = new THREE.Box3();
 const _v = new THREE.Vector3();
-function fitRing(ring, obj) {
+/** 地面光圈：放在这件家具那一层的地面上（elev） */
+function fitRing(ring, obj, elev = 0) {
   _box.setFromObject(obj);
   const r = Math.max(0.35, Math.hypot(_box.max.x - _box.min.x, _box.max.z - _box.min.z) / 2 + 0.08);
-  ring.position.set((_box.min.x + _box.max.x) / 2, 0.015, (_box.min.z + _box.max.z) / 2);
+  ring.position.set((_box.min.x + _box.max.x) / 2, elev + 0.015, (_box.min.z + _box.max.z) / 2);
   ring.scale.setScalar(r);
 }

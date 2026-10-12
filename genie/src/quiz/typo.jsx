@@ -2,8 +2,8 @@
 // 做法都一样：把不能拆开的一段包成 inline-block（.ph）或 nowrap（.nobr），浏览器只会在段与段之间换行。
 // 不用 (?<=…) 反向断言：旧一点的 iPad Safari（16.4 以前）不认识，整个页面会载不起来。
 
-import { Fragment } from 'react';
-import { isEn, guideName } from '../shared/i18n.js';
+import { Fragment, createElement } from 'react';
+import { t, isEn, guideName } from '../shared/i18n.js';
 
 /** 英文里带连字号的词（Deal-Breaker、know-how）不从连字号断开 */
 export function keepHyphens(str, key = 'h') {
@@ -66,6 +66,35 @@ export function segmented(s, sep = '·', { zhOnly = true } = {}) {
       {i < last ? ' ' : ''}
     </Fragment>
   ));
+}
+
+/**
+ * tj() 的「一串」版：「目标衣柜 {0}（长挂 {1} · 短挂 {2} · 叠放 {3}）」按「 · 」分成几块，第一块之后每块是一个 .ph（inline-block）——
+ * 只在「·」后面换行：下一行不会以「·」开头，「短挂 1,500」「short hanging 1,500」也不会被拆开。
+ */
+const NBSP = '\u00a0';
+export function tjDots(zh, nodes = []) {
+  const parts = t(zh).split(' · ');
+  const last = parts.length - 1;
+  return parts.map((part, i) => {
+    const out = [];
+    let at = 0;
+    part.replace(/\{(\d+)\}/g, (all, k, idx) => {
+      if (idx > at) out.push(part.slice(at, idx));
+      out.push(nodes[+k]);
+      at = idx + all.length;
+      return all;
+    });
+    if (at < part.length) out.push(part.slice(at));
+    // 「·」和前面的字之间是不断行的空格；第一块照常排（它的最后一行可以和后面几块排在同一行）
+    const dot = i < last ? `${NBSP}·` : '';
+    return (
+      <Fragment key={i}>
+        {i === 0 ? createElement(Fragment, null, ...out, dot) : createElement('span', { className: 'ph' }, ...out, dot)}
+        {i < last ? ' ' : ''}
+      </Fragment>
+    );
+  });
 }
 
 const zhWords = (() => {

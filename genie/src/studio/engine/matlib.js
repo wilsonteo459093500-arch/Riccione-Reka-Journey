@@ -326,6 +326,8 @@ export class MatLib {
     F('art', { color: 0xb3552e, roughness: 0.9 });
     F('art2', { color: 0xd8c3a0, roughness: 0.9 });
     F('exterior', { color: 0xe8e2d8, roughness: 0.95 });
+    // 天花（批荡 + 白漆）：平时看不见（模型是掀了顶的），走进去的时候盖上（Engine.setCeilings）
+    F('ceiling', { color: new THREE.Color(PALETTE.card), roughness: 0.92 });
     F('cap', { color: 0x2a2523, roughness: 0.9 });
     F('plinth', { color: 0x1d1d18, roughness: 0.55, metalness: 0.15 });
     F('water', { color: 0x9fc3cf, roughness: 0.05, transparent: true, opacity: 0.6 }, THREE.MeshStandardMaterial, 1.6);

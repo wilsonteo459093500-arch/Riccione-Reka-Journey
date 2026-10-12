@@ -16,7 +16,7 @@ import { sfx } from '../shared/sound.js';
 import { isWishMode, tellShell } from '../shared/zen.js';
 import { t, tj, guideName, isEn } from '../shared/i18n.js';
 import { fmt, ftNote } from '../shared/units.js';
-import { phrased, segmented, keepHyphens } from './typo.jsx';
+import { phrased, segmented, keepHyphens, tjDots } from './typo.jsx';
 
 const WISH = isWishMode();
 
@@ -417,7 +417,7 @@ export function ShoesStep({ answers, set, next }) {
         <ShoeCabinet cols={cols} shoes={answers.shoes} shelves={7} />
       </div>
       <Slider min={0} max={150} step={5} value={answers.shoes} label={t('全家大概有几双鞋？')} onChange={(v) => set({ shoes: v, ...touch(answers, 'shoes') })} unit={t('双')} />
-      <Calc mm={plan.shoeCabinetMM}>{tj('鞋柜 {0} 宽（通高 2100 · 深 350）', [<b key="b">{fmt(plan.shoeCabinetMM)} mm</b>])}</Calc>
+      <Calc mm={plan.shoeCabinetMM}>{tjDots('鞋柜 {0} 宽（通高 2100 · 深 350）', [<b key="b">{fmt(plan.shoeCabinetMM)} mm</b>])}</Calc>
       <div className="q-actions">
         <Next onClick={next}>{t('数好了')}</Next>
       </div>
@@ -462,7 +462,7 @@ export function WardrobeStep({ answers, set, next }) {
           ].map(([v, l]) => chip('longHang', v, t(l)))}
         </div>
       </div>
-      <Calc mm={plan.wardrobeMM}>{tj('目标衣柜 {0}（长挂 {1} · 短挂 {2} · 叠放 {3}）', [<b key="b">{fmt(plan.wardrobeMM)} mm</b>, fmt(plan.longHangMM), fmt(plan.shortHangMM), fmt(plan.foldMM)])}</Calc>
+      <Calc mm={plan.wardrobeMM}>{tjDots('目标衣柜 {0}（长挂 {1} · 短挂 {2} · 叠放 {3}）', [<b key="b">{fmt(plan.wardrobeMM)} mm</b>, fmt(plan.longHangMM), fmt(plan.shortHangMM), fmt(plan.foldMM)])}</Calc>
       <div className="q-actions">
         <Next onClick={next}>{t('下一个宝藏')}</Next>
       </div>

@@ -19,11 +19,11 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Engine } from './engine/Engine.js';
-import { buildWalls, templatePlan, uid, roomSides } from './plan/model.js';
+import { buildWalls, buildAllWalls, templatePlan, emptyPlan, migratePlan, isMultiFloor, floorById, floorName, uid, roomSides } from './plan/model.js';
 import * as Furnish from './engine/furnish.js';
 import { CATALOG } from './engine/furniture.js';
 import { DAY_PRESETS } from './engine/daylight.js';
-import { createProject, loadProjects, saveProject, currentProject, packProject, unpackProject, getUnderlay, putUnderlay, loadSettings, safeMaterials } from './store.js';
+import { createProject, loadProjects, saveProject, currentProject, packProject, unpackProject, getUnderlays, putUnderlays, migrateProject, loadSettings, safeMaterials } from './store.js';
 import { unpackJSON, packJSON, storagePlan, insights } from '../shared/profile.js';
 import { APPLIANCES } from '../quiz/flow.js';
 import { MOOD_BY_ID, tagsOf } from '../shared/moods.js';
@@ -44,6 +44,7 @@ import { Icon, FurnIcon, ConfirmSheet, slotName, listSep, roomLabel, useMedia } 
 import StartModal from './ui/StartModal.jsx';
 import ShareModal from './ui/ShareModal.jsx';
 import HelpModal from './ui/HelpModal.jsx';
+import FloorSwitch from './ui/FloorSwitch.jsx';
 import SettingsModal from './ui/SettingsModal.jsx';
 import PlanEditor from './plan/PlanEditor.jsx';
 
@@ -74,6 +75,19 @@ function staffFor(p) {
   return !p.sharedFrom;
 }
 
+// ───────────────────────── 楼层（v2 平面图） ─────────────────────────
+
+/** 存着的方案 → v2（store 已经迁移过；再保险一次很便宜：旧的单层方案、没带 floor 的家具） */
+const asV2 = (p) => migrateProject(p);
+/** 每一层的底图 { floorId: underlay }（这台设备的 IndexedDB；旧的只有一张 → 一楼的） */
+const loadUnderlays = async (id, plan) => (await getUnderlays(id, plan.floors[0].id)) || {};
+async function saveUnderlays(id, map) {
+  if (map && Object.keys(map).length) await putUnderlays(id, map);
+}
+const allRooms = (plan) => (plan?.floors || []).flatMap((f) => f.rooms);
+/** 生成 / 打开多层方案时的那一句 */
+const floorsToast = (plan) => (plan.floors.length === 2 ? t('两层都生成好了 —— 点「一楼 / 二楼」看每一层') : t('{0} 层都生成好了 —— 点右边的楼层按钮看每一层', [plan.floors.length]));
+
 /**
  * 从材质栏加进来的墙件（主题墙：贴墙、不能拖）和挂画：放到离落点最近、够长的那段实墙上（避开门窗、打通），背朝墙。
  * 已经有电视墙 / 主题墙的那一段墙往后排（不叠在电视墙上），别的墙都不合适时才用。
@@ -81,12 +95,13 @@ function staffFor(p) {
  * 找不到合适的墙 → null（照旧放在落点）。
  */
 const SIDE_ROT = { N: 0, S: 180, W: 90, E: 270 };
-function wallSpot(plan, furniture, kind, pt, room) {
+/** floor：放进去的那一层（{ rooms, openings }）；furniture：那一层的家具 */
+function wallSpot(floor, furniture, kind, pt, room) {
   const def = CATALOG[kind];
-  if (!def || !plan?.rooms?.length) return null;
+  if (!def || !floor?.rooms?.length) return null;
   const [w0, d] = def.size;
   const need = Math.min(w0, 1.2) + 0.1;
-  const walls = buildWalls(plan);
+  const walls = buildWalls(floor);
   // 已经贴着墙板的地方：{ rot, perp（离墙的那个坐标）, a, b（沿墙的范围） }
   const panels = (furniture || [])
     .filter((f) => f.kind === 'tvWall' || f.kind === 'featureWall')
@@ -98,7 +113,7 @@ function wallSpot(plan, furniture, kind, pt, room) {
       return { rot, perp: ax ? f.z : f.x, a: along - half, b: along + half };
     });
   let best = null;
-  for (const r of room ? [room] : plan.rooms) {
+  for (const r of room ? [room] : floor.rooms) {
     for (const s of roomSides(r, walls)) {
       const alongX = s.axis === 'x'; // 北 / 南墙沿 x 走（z = s.c）；西 / 东墙沿 z 走（x = s.c）
       const along = alongX ? pt.x : pt.z;
@@ -157,7 +172,7 @@ const fmtLen = (mm) => `${mmNum(mm)} mm`;
 
 function rowLabel(r, plan) {
   if (ROW_LABEL[r.key]) return t(ROW_LABEL[r.key]);
-  if (r.key.startsWith('wardrobe:')) return t('{0}衣柜', [roomLabel(plan.rooms.find((x) => x.id === r.room))]);
+  if (r.key.startsWith('wardrobe:')) return t('{0}衣柜', [roomLabel(allRooms(plan).find((x) => x.id === r.room))]);
   return r.key;
 }
 /** 客人许愿时没数这一项（target ≤ 0）：不画「x / 0」和满格绿条，只写摆了多少 + 「客人没数」 */
@@ -287,6 +302,8 @@ export default function StudioApp() {
   const [slot, setSlot] = useState(null);
   const [labels, setLabels] = useState(true);
   const [wallMode, setWallMode] = useState('cut');
+  // 看哪一层（'all' | floorId）：引擎说了算（cb.onFloorView），这里只是跟着画楼层按钮
+  const [floorView, setFloorView] = useState('all');
   const [view, setView] = useState('iso');
   const [thumbs, setThumbs] = useState([]);
   const [modal, setModal] = useState(null);
@@ -342,6 +359,11 @@ export default function StudioApp() {
         flash(p.degradedTo ? t('这台电脑的显卡跑不动高画质，已自动换成兼容画质。') : t('这台电脑的浏览器画不出 3D：请在浏览器设置里打开「硬件加速」，或更新显卡驱动后再试。'), 8000),
       // 演示时引擎每 250ms 报一次时间：演示中界面是藏起来的，不跟着重画；退出时再同步
       onTime: (h) => !demoRef.current && Number.isFinite(h) && setProject((p) => (p && p.time !== h ? { ...p, time: h } : p)),
+      // 换了楼层：记在方案上（这台设备下次打开还在这一层；分享链接里不带）
+      onFloorView: (v) => {
+        setFloorView(v);
+        setProject((p) => (p && (p.floorView || 'all') !== v ? { ...p, floorView: v } : p));
+      },
     });
     engine.current = e;
     window.__genie = e;
@@ -413,10 +435,11 @@ export default function StudioApp() {
     return { title, subtitle };
   }
 
-  function loadProjectIntoEngine(p, frame = true, { keepHistory = false } = {}) {
+  /** floorView：打开在哪一层（不给 = 方案上记着的那一层；单层 / 无效 = 全部） */
+  function loadProjectIntoEngine(p0, frame = true, { keepHistory = false, floorView } = {}) {
     const e = engine.current;
-    const walls = buildWalls(p.plan);
-    e.setScene({ plan: p.plan, walls, furniture: p.furniture, materials: p.materials, time: p.time, ...plinthOf(p), frame });
+    const p = asV2(p0);
+    e.setScene({ plan: p.plan, furniture: p.furniture, materials: p.materials, time: p.time, ...plinthOf(p), frame, floorView: floorView ?? p.floorView });
     e.setWallMode(wallMode);
     if (!keepHistory) {
       past.current = [];
@@ -465,7 +488,8 @@ export default function StudioApp() {
     const cur = projRef.current;
     const e = engine.current;
     if (s.plan && s.plan !== cur.plan) {
-      loadProjectIntoEngine({ ...cur, ...s }, false, { keepHistory: true });
+      // 撤销 / 重做换回另一版平面图：还在看的那一层不变（那一层还在的话）
+      loadProjectIntoEngine({ ...cur, ...s }, false, { keepHistory: true, floorView: e.floorView });
     } else {
       e.setMaterials(s.materials);
       e.setFurniture(s.furniture);
@@ -576,23 +600,20 @@ export default function StudioApp() {
     const rect = host.current.getBoundingClientRect();
     const x = clientX ?? rect.left + rect.width / 2;
     const y = clientY ?? rect.top + rect.height / 2;
-    const ray = e.rayAt(x, y).ray;
-    const p = { x: e.center?.x ?? 0, z: e.center?.z ?? 0 };
-    const k = -ray.origin.y / ray.direction.y;
-    if (k > 0) {
-      p.x = ray.origin.x + ray.direction.x * k;
-      p.z = ray.origin.z + ray.direction.z * k;
-    }
+    // 落在「这一层」的地面上（看二楼时就放在二楼）
+    const p = e.groundAt(x, y);
     const plan = projRef.current.plan;
-    const room = plan.rooms.find((r) => p.x >= r.x && p.x <= r.x + r.w && p.z >= r.y && p.z <= r.y + r.d);
+    const floor = floorById(plan, p.floorId) || plan.floors[0];
+    const room = floor.rooms.find((r) => p.x >= r.x && p.x <= r.x + r.w && p.z >= r.y && p.z <= r.y + r.d);
     const [w, d] = def.size;
     const id = uid('f');
-    const item = { id, kind, room: room?.id || null, x: +p.x.toFixed(2), z: +p.z.toFixed(2), rot: 0, w, d, h: plan.wallH };
+    const item = { id, kind, room: room?.id || null, floor: floor.id, x: +p.x.toFixed(2), z: +p.z.toFixed(2), rot: 0, w, d, h: floor.ceil };
     if (kind === 'art') item.y = 1.4;
-    // 主题墙（不能拖）、挂画：直接挂到最近的那道墙上
+    // 主题墙（不能拖）、挂画：直接挂到最近的那道墙上（这一层的墙）
     if (def.wall || def.wallMounted) {
-      const list = projRef.current.furniture;
-      const spot = wallSpot(plan, list, kind, p, room) || (room ? wallSpot(plan, list, kind, p, null) : null);
+      const first = plan.floors[0].id;
+      const list = projRef.current.furniture.filter((f) => (f.floor || first) === floor.id);
+      const spot = wallSpot(floor, list, kind, p, room) || (room ? wallSpot(floor, list, kind, p, null) : null);
       if (spot) Object.assign(item, spot);
     }
     updateFurniture((l) => [...l, item]);
@@ -617,7 +638,9 @@ export default function StudioApp() {
   };
 
   // ── 平面图 ──
-  const applyPlan = async (plan, underlay) => {
+  /** 编辑器「生成 3D」：plan = v2；underlays = { floorId: 底图 }（旧编辑器给的是一张） */
+  const applyPlan = async (plan0, underlays) => {
+    const plan = migratePlan(plan0);
     const cur = projRef.current;
     const moved = cur.furnEdited || (cur.furnEdited === undefined && past.current.length > 0);
     if (moved) {
@@ -628,16 +651,17 @@ export default function StudioApp() {
       });
       if (!ok) return false;
     }
-    const walls = buildWalls(plan);
-    const furniture = Furnish.furnish(plan, walls, cur.profile);
-    if (underlay) await putUnderlay(cur.id, underlay);
+    const furniture = Furnish.furnish(plan, buildAllWalls(plan), cur.profile);
+    await saveUnderlays(cur.id, underlays);
     past.current.push(snap(cur));
     if (past.current.length > HISTORY) past.current.shift();
     future.current = [];
     setPlanDraft(null);
-    loadProjectIntoEngine({ ...cur, plan, furniture, furnEdited: false }, true, { keepHistory: true });
+    // 多层：生成完先看整栋（「全部」），再提示可以一层层看
+    const multi = isMultiFloor(plan);
+    loadProjectIntoEngine({ ...cur, plan, furniture, furnEdited: false, floorView: 'all' }, true, { keepHistory: true, floorView: 'all' });
     bump((n) => n + 1);
-    flash(t('3D 已生成。家具是按设计师的规则自动摆的，拖一拖就能改。'), 3600);
+    flash(multi ? floorsToast(plan) : t('3D 已生成。家具是按设计师的规则自动摆的，拖一拖就能改。'), multi ? 4600 : 3600);
     return true;
   };
 
@@ -647,12 +671,18 @@ export default function StudioApp() {
     // 客人版里开的新方案（带着客人的档案）还是客人版：不会因为「新的一份」就露出设计师的东西
     loadProjectIntoEngine(cur && !staffFor(cur) ? { ...p, audience: 'client' } : p, true);
     setModal(null);
+    if (isMultiFloor(p.plan)) flash(floorsToast(p.plan), 4600);
   };
 
   const openPlanEditor = async (start = 'current') => {
     const cur = projRef.current;
-    const underlay = start === 'current' ? await getUnderlay(cur.id) : null;
-    setPlanDraft({ plan: start === 'blank' ? { ...cur.plan, rooms: [], openings: [] } : JSON.parse(JSON.stringify(cur.plan)), underlay, autoUpload: start === 'upload' });
+    const base = migratePlan(cur.plan);
+    const underlays = start === 'current' ? await loadUnderlays(cur.id, base) : {};
+    // 「自己画」：一张空白的单层（方案名、北方留着）
+    const plan = start === 'blank' ? { ...emptyPlan(), name: base.name, north: base.north } : JSON.parse(JSON.stringify(base));
+    // 编辑器打开在 3D 里正在看的那一层（「全部」= 一楼）
+    const fv = engine.current?.floorView;
+    setPlanDraft({ plan, underlays, autoUpload: start === 'upload', startFloor: start === 'current' && fv && fv !== 'all' && floorById(plan, fv) ? fv : undefined });
     setModal(null);
   };
 
@@ -759,6 +789,14 @@ export default function StudioApp() {
     } else if (mod && ev.key.toLowerCase() === 'y') {
       ev.preventDefault();
       redo();
+    } else if ((ev.key === 'PageUp' || ev.key === 'PageDown') && engine.current?.floors?.length > 1) {
+      // 楼层：PageUp 往上一层、PageDown 往下一层（「全部」在最上面）
+      ev.preventDefault();
+      const e = engine.current;
+      const ids = [...e.floors.map((F) => F.id), 'all'];
+      const i = ids.indexOf(e.floorView);
+      const j = Math.max(0, Math.min(ids.length - 1, i + (ev.key === 'PageUp' ? 1 : -1)));
+      if (j !== i) e.setFloorView(ids[j]);
     } else if (selected && (ev.key === 'Delete' || ev.key === 'Backspace')) removeItem(selected);
     else if (selected && !mod && ev.key.toLowerCase() === 'r') rotateItem(selected);
     else if (ev.key === 'Escape') {
@@ -843,6 +881,12 @@ export default function StudioApp() {
       }
       if (day && !dayFloats) colTop = Math.min(colTop, day.top);
       if (colTop < H) ins.bottom = H - colTop + 12;
+      // 楼层按钮：竖的占右边；横的在日光浮卡下面（那一栏本来就留给日光面板了）不用再让，手机上工具条下面那条占上边
+      const fs = box(q('.floor-switch'));
+      if (fs) {
+        if (fs.height > fs.width) ins.right = Math.max(ins.right, W - fs.left + 12);
+        else if (!(dayFloats && fs.left >= day.left - 8)) ins.top = Math.max(ins.top, fs.bottom + 8);
+      }
       e.setInsets(ins);
       if (!insetsBooted.current) {
         insetsBooted.current = true;
@@ -855,14 +899,14 @@ export default function StudioApp() {
     };
     measure();
     const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(schedule) : null;
-    if (ro) for (const s of ['.mood-panel', '.day-panel', '.toolbar', '.dock-wrap']) document.querySelectorAll(s).forEach((el) => ro.observe(el));
+    if (ro) for (const s of ['.mood-panel', '.day-panel', '.toolbar', '.dock-wrap', '.floor-switch']) document.querySelectorAll(s).forEach((el) => ro.observe(el));
     addEventListener('resize', schedule);
     return () => {
       cancelAnimationFrame(raf);
       ro?.disconnect();
       removeEventListener('resize', schedule);
     };
-  }, [ready, panels, phone, labels, calloutBottom, demo, showroom]);
+  }, [ready, panels, phone, labels, calloutBottom, demo, showroom, project?.plan?.floors?.length]);
 
   // 'auto' 交给引擎自己判断（引擎的 resolveQuality：触屏 → 流畅，电脑 → 高清）
   const onQuality = (q) => engine.current?.setQuality?.(q || 'auto');
@@ -902,7 +946,7 @@ export default function StudioApp() {
   const report = useMemo(() => {
     if (!staffView || !project?.profile || typeof Furnish.furnishReport !== 'function') return null;
     try {
-      const rows = Furnish.furnishReport(project.plan, buildWalls(project.plan), project.profile, project.furniture);
+      const rows = Furnish.furnishReport(project.plan, buildAllWalls(project.plan), project.profile, project.furniture);
       return Array.isArray(rows) && rows.length ? rows : null;
     } catch {
       return null;
@@ -918,9 +962,14 @@ export default function StudioApp() {
     }
   }, [project?.profile, staffView]);
   const pickRow = (r) => {
+    const e = engine.current;
     const id = r.itemIds?.find((x) => projRef.current?.furniture.some((f) => f.id === x));
-    if (id) engine.current?.select(id);
-    else flash(r.hint ? t(r.hint) : t('3D 里还没有这一件'), 4200);
+    if (id && e) {
+      // 那件家具在别的楼层：先换到那一层，再选中
+      const fid = e.floorOf(id) || r.floor;
+      if (fid && e.floors?.length > 1 && e.interactiveFloor()?.id !== fid) e.setFloorView(fid);
+      e.select(id);
+    } else flash(r.hint ? t(r.hint) : t('3D 里还没有这一件'), 4200);
   };
 
   // 选择条：宽屏浮在家具上方（只在两块面板之间）；手机停在底部那一列、时间滑杆正上方
@@ -1008,7 +1057,10 @@ export default function StudioApp() {
               try {
                 const blob = await engine.current.snapshot(2);
                 const { stampSnapshot } = await import('./ui/stamp.js');
-                const out = await stampSnapshot(blob, project);
+                // 多层、只看某一层时：图注写上是哪一层
+                const fv = engine.current.floorView;
+                const floor = isMultiFloor(project.plan) && fv && fv !== 'all' && floorById(project.plan, fv) ? t(floorName(project.plan, fv)) : '';
+                const out = await stampSnapshot(blob, project, { floor });
                 const a = document.createElement('a');
                 a.href = URL.createObjectURL(out);
                 a.download = `WISH-${String(t(project.name) || 'concept').replace(/[\s/\\:*?"<>|]+/g, '-')}.png`;
@@ -1060,6 +1112,8 @@ export default function StudioApp() {
             <MaterialDock project={project} slot={slot} engine={engine} onDrop={dropMaterial} onAddItem={addItem} onClearSlot={() => setSlot(null)} />
           </div>
 
+          {!demo && isMultiFloor(project.plan) && <FloorSwitch plan={project.plan} view={floorView} onView={(v) => engine.current?.setFloorView(v)} />}
+
           {hover && !selected && !demo && !phone && <HoverTip hover={hover} materials={project.materials} />}
           {!phone && selBar(false)}
 
@@ -1106,7 +1160,8 @@ export default function StudioApp() {
       {planDraft && (
         <PlanEditor
           initial={planDraft.plan}
-          underlay={planDraft.underlay}
+          underlays={planDraft.underlays}
+          startFloor={planDraft.startFloor}
           autoUpload={planDraft.autoUpload}
           upload={!WISH}
           onCancel={() => setPlanDraft(null)}

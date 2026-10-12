@@ -1,0 +1,116 @@
+// 英文词典 · 上传平面图 / AI 识别（ImportFlow、ai.js、sheet.js）。key = 中文原文，规则见 src/shared/i18n.js。
+// 马来西亚英语：一楼 = Ground floor，二楼 = First floor（楼层名在 en-floors.js）。
+
+export default {
+  // ── 楼层（读图卡片的选项） ──
+  '夹层': 'Mezzanine',
+  '屋顶': 'Roof',
+  '其他': 'Other',
+  '楼层': 'Floor',
+  '不要': 'Leave out',
+  '往下一层': 'One floor down',
+  '往上一层': 'One floor up',
+
+  // ── 步骤 ──
+  '步骤': 'Steps',
+  '选页': 'Page',
+  '找图': 'Find',
+  '读图': 'Read',
+  '框图': 'Box',
+  '完成': 'Done',
+
+  // ── 打开 / 选页 ──
+  '正在打开文件': 'Opening the file',
+  '正在打开第 {0} 页': 'Opening page {0}',
+  '这份 PDF 有 {0} 页 —— 选有平面图的那一页': 'This PDF has {0} pages — pick the one with the floor plans',
+  '第 {0} 页': 'Page {0}',
+  '像是平面图': 'Looks like a plan',
+  '只看可能的页': 'Only likely pages',
+  '让 AI 找': 'Let AI find it',
+  'AI 正在看每一页': 'AI is looking at every page',
+  'AI 没找到平面图的页：自己点那一页': 'AI found no floor-plan page — tap the right page yourself',
+  '正在看哪几页像平面图': 'Checking which pages look like floor plans',
+  '这份 PDF 是扫描的，认不出字：让 AI 找，或者自己点有平面图的那一页。': 'This PDF is a scan with no text — let AI find the page, or tap the page with the floor plans.',
+  '这份 PDF 是扫描的，认不出字：自己点有平面图的那一页。': 'This PDF is a scan with no text — tap the page with the floor plans.',
+  '用第 {0} 页': 'Use page {0}',
+  '填了 Gemini API key，AI 就能帮你读平面图。': 'Add a Gemini API key and AI can read the plan for you.',
+  '去设置': 'Open settings',
+
+  // ── 找图 ──
+  '正在找图上的平面图': 'Finding the floor plans on the page',
+  '{0} 秒': '{0} s',
+  '自己框': 'Draw boxes myself',
+  '重试': 'Retry',
+  '换一页': 'Choose another page',
+  '找到 {0} 张平面图：{1}': 'Found {0} floor plans: {1}',
+  '这一页没找到平面图': 'No floor plan found on this page',
+  '这是手机截图：每层平面图只有约 {0} 像素宽，图上的尺寸读不清。最好上传原本的 PDF（例如从 HIMS 下载的那份），选那一页 —— 会准很多。':
+    'This is a phone screenshot: each floor plan is only about {0} pixels wide, too small to read the dimensions. Upload the original PDF (e.g. the one downloaded from HIMS) and pick that page — it will be far more accurate.',
+  '拍照时手机和纸要平行': 'When photographing a plan, hold the phone parallel to the paper',
+  '继续用截图': 'Continue with the screenshot',
+  '换一个文件': 'Choose another file',
+  '这一页有 {0} 种户型：选一种': 'This page has {0} house types — pick one',
+  '自己框的': 'Drawn by hand',
+  '两张图都是{0}：改一张，或者不要其中一张': 'Two plans are both {0} — change one, or leave one out',
+  '在图上拖一个框': 'Drag a box on the page',
+  '加一张（自己框）': 'Add one (draw a box)',
+  '读这 {0} 层（约 {1} 秒）': 'Read {0} floors (about {1} s)',
+
+  // ── 读图 ──
+  '正在裁出每一层': 'Cropping each floor',
+  'Pro 模型的额度用完了，已改用 Flash（可能没那么准）': 'The Pro model quota ran out — switched to Flash (may be less accurate)',
+  '排队中': 'Waiting',
+  'AI 正在读{0}（{1} / {2}）… {3} 秒': 'AI is reading the {0} ({1} / {2})… {3} s',
+  '读好了：{0} 个房间': 'Done: {0} rooms',
+  '不要这一层': 'Floor left out',
+  '只放底图，自己描': 'Underlay only — trace it yourself',
+  '跳过': 'Skip',
+  '自己描': 'Trace it myself',
+  'AI 暂时用不了 —— 可以自己框出每一层': 'AI is not available right now — you can box each floor yourself',
+
+  // ── 自己框（没有 AI） ──
+  '框出{0}': 'Box the {0}',
+  '框好了': 'All boxed',
+  '沿着外墙拖一个框（不要包括尺寸线）。每一层框一个，放进编辑器当底图，再沿着墙描。':
+    'Drag a box along the outer walls (without the dimension lines). One box per floor — each becomes an underlay in the editor to trace over.',
+  '整体宽（选填）': 'Overall width (optional)',
+
+  // ── 完成 ──
+  '只有底图': 'Underlay only',
+  '{0} 个房间 · {1} 个门窗': '{0} rooms · {1} doors & windows',
+  '比例：读自图上 {0} 条尺寸（误差约 {1}%）': 'Scale: read from {0} dimension strings on the drawing (±{1}%)',
+  '比例：按你填的尺寸': 'Scale: from the dimension you entered',
+  '比例是按门宽估的 —— 请填一个已知尺寸': 'The scale was estimated from door widths — please enter one known dimension',
+  '比例是猜的（排屋常见 20 尺 = 6.1 m）—— 请填一个已知尺寸': 'The scale is a guess (terraces are often 20 ft = 6.1 m) — please enter one known dimension',
+  '现在：一楼外墙宽 {0} m、深 {1} m': 'Now: ground floor {0} m wide, {1} m deep (outer walls)',
+  '已知尺寸': 'Known dimension',
+  '{0} · {1} 的宽': '{0} · width of {1}',
+  '套用': 'Apply',
+  "看不懂这个尺寸：可以填 6.1、6100、20' 或 20 ft": "Couldn't read that — try 6.1, 6100, 20' or 20 ft",
+  '自动修正：{0} 处重叠、{1} 处空隙': 'Auto-fixed: {0} overlaps, {1} gaps',
+  '两层已对齐（按楼梯）': 'Floors aligned (by the stairs)',
+  '两层已对齐（按外墙）': 'Floors aligned (by the outer walls)',
+  '这是截图读的：尺寸可能不准，最好上传原本的 PDF。': 'Read from a screenshot — sizes may be off; the original PDF works best.',
+  '每一层只有底图：在编辑器里沿着墙描，用「量尺校准」对一下比例。': 'Each floor is an underlay only: trace the walls in the editor and use “Calibrate” to check the scale.',
+  '放进': 'Into',
+  '只放进{0}': 'Only into {0}',
+  '替换全部楼层': 'Replace all floors',
+  '放进编辑器': 'Open in the editor',
+
+  // ── sheet.js 的提醒 ──
+  '没有读到任何一层': 'No floor could be read',
+  '没认出楼梯：请在编辑器里用「楼梯」工具画上': 'No stairs recognised — draw them with the Stairs tool in the editor',
+  '楼梯往哪边上是猜的：请在编辑器里点楼梯看一下': 'The stair direction is a guess — tap the stairs in the editor to check',
+  '{0}没有读到房间：用底图自己描': 'No rooms read on the {0} — trace the underlay yourself',
+
+  // ── ai.js 的错误 ──
+  '已取消': 'Cancelled',
+  'AI 读太久了（超过 {0} 秒），请重试；或者换一张更清楚的图。': 'The AI took too long (over {0} s) — try again, or use a clearer image.',
+  '连不上 AI 服务：请检查网络再试。': 'Can’t reach the AI service — check the connection and try again.',
+  'API key 无效或没有权限，请到设置里检查。': 'The API key is invalid or has no access — check it in Settings.',
+  'AI 额度或频率到上限了，稍后再试。': 'The AI quota or rate limit was reached — try again later.',
+  'AI 请求失败：{0}': 'AI request failed: {0}',
+  'AI 请求失败（HTTP {0}）': 'AI request failed (HTTP {0})',
+  'AI 在这一层没有找到房间：换一张更清楚的图，或者自己描。': 'The AI found no rooms on this floor — use a clearer image, or trace it yourself.',
+  '底图读不出来，请重新上传平面图。': 'The underlay could not be read — please upload the plan again.',
+};

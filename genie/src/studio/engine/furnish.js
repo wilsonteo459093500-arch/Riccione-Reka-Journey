@@ -10,9 +10,13 @@
 //   餐厅：椅子后面要 0.9m；放不下就退到 4 人 / 0.9m 桌；年货节庆 → 放得下就摆 8 人圆桌。
 //   神台：不靠浴室 / 厨房那面墙（湿气、油烟），也不放在大门那面墙。朝向不在这里定。
 //   玄关 / 车廊：鞋柜长度 = 许愿之旅里数出来的鞋子换算；没有玄关也没有车廊，鞋柜放在客厅大门边。
-// 纯函数（只读 plan / walls / profile），Node 里可测。furnishReport() 给设计师「收纳对账」。
+//   多层：每一层照样摆；只摆一次的（神台、鞋柜 + 换鞋凳、宠物窝）只在一楼；大门只在一楼找。
+//         起居厅 = 小一号的客厅（两人沙发、电视墙或书架、地毯、植物）；有小孩的玩具柜、在家上班的书桌（没有书房时）放这里。
+//         楼梯间 / 挑空不放东西；楼梯上下口外面 1m 整段留空（下层的起步、上层的出口）。
+// 纯函数（只读 plan / walls / profile），Node 里可测。plan 可以是 v1 或 v2；walls 可以是一层的数组、{ floorId: walls } 或不给。
+// furnishReport() 给设计师「收纳对账」。
 
-import { roomSides, uid, ROOM_TYPES, EXT_T } from '../plan/model.js';
+import { roomSides, uid, ROOM_TYPES, EXT_T, migratePlan, buildWalls, stairFlights } from '../plan/model.js';
 import { storagePlan } from '../../shared/profile.js';
 import { APPLIANCES } from '../../quiz/flow.js';
 
@@ -98,10 +102,17 @@ function innerRect(room, sides, walls) {
   return { x0: room.x + t.W, x1: room.x + room.w - t.E, z0: room.y + t.N, z1: room.y + room.d - t.S };
 }
 
-/** 隔着某面墙（墙线两侧 EXT_T 以内）的房间 */
+/** 某房间所在那一层的房间（plan 是一层 / v1 → 它自己的 rooms；v2 → 找房间在哪一层） */
+function roomsAround(src, room) {
+  if (Array.isArray(src?.rooms)) return src.rooms;
+  for (const f of src?.floors || []) if (f.rooms.some((r) => r.id === room.id)) return f.rooms;
+  return [];
+}
+
+/** 隔着某面墙（墙线两侧 EXT_T 以内）的房间（同一层） */
 export function behind(plan, room, side, a = side.a, b = side.b) {
   const out = [];
-  for (const r of plan.rooms || []) {
+  for (const r of roomsAround(plan, room)) {
     if (r.id === room.id) continue;
     let lo;
     let hi;
@@ -126,9 +137,17 @@ function backsWet(plan, room, side, a, b) {
   return behind(plan, room, side, a, b).some((r) => ROOM_TYPES[r.type]?.wet || r.type === 'kitchen' || r.type === 'utility');
 }
 
-/** 大门：模板里叫 d-main；AI 识别的图按「玄关外墙 > 车廊进屋 > 客厅外墙 > 走廊外墙」猜 */
-export function mainEntrance(plan, walls) {
-  const ops = plan.openings || [];
+/** 大门（只在一楼）：模板里叫 d-main；AI 识别的图按「玄关外墙 > 车廊进屋 > 客厅外墙 > 走廊外墙」猜。plan 传一层（或 v2 → 一楼） */
+export function mainEntrance(src, walls0) {
+  let fl = src;
+  let walls = walls0;
+  if (fl && Array.isArray(fl.floors) && !Array.isArray(fl.rooms)) {
+    fl = fl.floors[0];
+    walls = Array.isArray(walls0) ? walls0 : walls0?.[fl?.id];
+  }
+  if (!fl) return null;
+  if (!Array.isArray(walls)) walls = buildWalls(fl);
+  const ops = fl.openings || [];
   const wallOf = (o) => walls.find((w) => w.pieces.some((p) => p.openingId === o.id));
   let o = ops.find((x) => x.id === 'd-main' && wallOf(x));
   if (!o) {
@@ -187,18 +206,57 @@ function keepOuts(room, sides, walls, plan, main) {
   return out;
 }
 
-function frame(room, walls, plan, main) {
+const STAIR_KEEP = 1.0; // 楼梯口外面整段留空的深度
+
+/**
+ * 楼梯上下口的禁区：{ [floorId]: [keep…] } —— 下层起步那一段、上层出口那一段，往外 1m（full：一点都不能压）
+ */
+function stairKeeps(plan) {
+  const out = {};
+  for (const s of plan.stairs || []) {
+    const g = stairFlights(plan, s.id);
+    if (!g) continue;
+    for (const [fid, mouth] of [
+      [s.from, g.entry],
+      [s.to, g.exit],
+    ]) {
+      const { seg, edge } = mouth;
+      const horiz = Math.abs(seg.y0 - seg.y1) < EPS;
+      const k = STAIR_KEEP;
+      const box = horiz
+        ? { x0: seg.x0, x1: seg.x1, z0: edge === 'N' ? seg.y0 - k : seg.y0, z1: edge === 'N' ? seg.y0 : seg.y0 + k }
+        : { x0: edge === 'W' ? seg.x0 - k : seg.x0, x1: edge === 'W' ? seg.x0 : seg.x0 + k, z0: seg.y0, z1: seg.y1 };
+      (out[fid] ||= []).push({ box, full: true, axis: horiz ? 'x' : 'z', a: horiz ? seg.x0 : seg.y0, b: horiz ? seg.x1 : seg.y1, kind: 'stair', id: `${s.id}-${fid}`, side: null, main: false, blocked: [] });
+    }
+  }
+  return out;
+}
+
+function frame(room, walls, plan, main, extraKeep = []) {
   const sides = roomSides(room, walls);
   const inner = innerRect(room, sides, walls);
   const keep = keepOuts(room, sides, walls, plan, main);
+  const r = { x0: room.x, x1: room.x + room.w, z0: room.y, z1: room.y + room.d };
+  for (const k of extraKeep) if (overlap(k.box, r, -0.05)) keep.push({ ...k, blocked: [] });
   let mainSide = null;
   if (main && main.rooms.includes(room.id)) mainSide = sides.find((s) => s.axis === main.axis && Math.abs(s.c - main.c) < EPS)?.side || null;
   return { room, sides, inner, keep, walls, mainSide };
 }
 
-/** 给测试 / 设计师叠图用：房间的内墙面框 + 门前禁区 */
-export function roomFrame(plan, walls, room) {
-  const f = frame(room, walls, plan, mainEntrance(plan, walls));
+/** 给测试 / 设计师叠图用：房间的内墙面框 + 门前禁区（v2 plan：含楼梯口；walls = 这个房间那一层的墙） */
+export function roomFrame(src, walls0, room) {
+  let fl = src;
+  let walls = walls0;
+  let main;
+  let extra = [];
+  if (fl && Array.isArray(fl.floors) && !Array.isArray(fl.rooms)) {
+    const v2 = migratePlan(src);
+    fl = v2.floors.find((x) => x.rooms.some((r) => r.id === room.id)) || v2.floors[0];
+    if (!Array.isArray(walls)) walls = walls0?.[fl.id] || buildWalls(fl);
+    main = fl.level === 0 ? mainEntrance(fl, walls) : null;
+    extra = stairKeeps(v2)[fl.id] || [];
+  } else main = mainEntrance(fl, walls);
+  const f = frame(room, walls, fl, main, extra);
   const keep = f.keep.map((k) => {
     const o = { ...k };
     delete o.blocked;
@@ -228,6 +286,7 @@ class Layout {
     this.items = [];
     this.boxes = [];
     this.rooms = new Map();
+    this.floor = null; // 现在摆的是哪一层（每件家具都记下来）
   }
   room(room, rc) {
     this.rooms.set(room.id, rc);
@@ -282,7 +341,7 @@ class Layout {
       }
     }
     if (!ok) return null;
-    const item = { id: uid('f'), kind, room: room.id, x: +p.x.toFixed(3), z: +p.z.toFixed(3), rot: p.rot, w, d, ...extra };
+    const item = { id: uid('f'), kind, room: room.id, floor: this.floor, x: +p.x.toFixed(3), z: +p.z.toFixed(3), rot: p.rot, w, d, ...extra };
     Object.defineProperty(item, '_box', { value: ok.core, enumerable: false });
     const i = this.items.length;
     this.items.push(item);
@@ -292,7 +351,7 @@ class Layout {
   }
   /** 地毯这种可以压在家具下的 */
   flat(room, kind, pos, w, d, extra = {}) {
-    const item = { id: uid('f'), kind, room: room.id, x: +pos.x.toFixed(3), z: +pos.z.toFixed(3), rot: pos.rot, w, d, ...extra };
+    const item = { id: uid('f'), kind, room: room.id, floor: this.floor, x: +pos.x.toFixed(3), z: +pos.z.toFixed(3), rot: pos.rot, w, d, ...extra };
     this.items.push(item);
     this.boxes.push({ room: room.id, flat: true });
     return item;
@@ -432,26 +491,26 @@ function placeAltar(L, rc, ctx, s, st, margin = 0.02, front = 0.8) {
   return it;
 }
 
-/** 电视墙 + 沙发 + 茶几：沙发挡到门 / 通道就沿墙挪一点、换小一号，最后才离墙 */
-function sofaGroup(L, rc, ctx, tvSide) {
+/** 电视墙 + 沙发 + 茶几：沙发挡到门 / 通道就沿墙挪一点、换小一号，最后才离墙。compact = 起居厅（小电视墙、两人沙发） */
+function sofaGroup(L, rc, ctx, tvSide, compact = false) {
   const { room } = rc;
   const st = tvSide.stretches[0];
-  const tvW = Math.min(st.len - 0.1, 3.2);
+  const tvW = Math.min(st.len - 0.1, compact ? 2.4 : 3.2);
   const tv = L.try(room, 'tvWall', at(room, tvSide, mid(st), tvSide.thick + 0.23), tvW, 0.45, { h: ctx.wallH }, { force: true, span: [st.a, st.b] });
   const tvAlong = tv ? (tvSide.axis === 'x' ? tv.x : tv.z) : mid(st);
   const D = depthOf(room, tvSide);
   const R = reach(rc, tvSide);
-  const variant0 = ctx.curve > 62 ? 'curvy' : ctx.social > 65 && D > 3.8 && st.len > 3 ? 'lshape' : 'classic';
-  const sofaW0 = Math.min(variant0 === 'lshape' ? 2.6 : 2.3, Math.max(1.8, tvW));
+  const variant0 = compact ? (ctx.curve > 62 ? 'curvy' : 'classic') : ctx.curve > 62 ? 'curvy' : ctx.social > 65 && D > 3.8 && st.len > 3 ? 'lshape' : 'classic';
+  const sofaW0 = compact ? 1.7 : Math.min(variant0 === 'lshape' ? 2.6 : 2.3, Math.max(1.8, tvW));
   const sofaD = 0.92;
-  const back = D - tvSide.thick * 2 - 0.05 <= 4.6;
-  const far = Math.min(3.3, D - 1.2) + 0.45;
+  const back = D - tvSide.thick * 2 - 0.05 <= (compact ? 3.8 : 4.6);
+  const far = Math.min(compact ? 2.6 : 3.3, D - 1.2) + 0.45;
   const dists = back ? [R - sofaD / 2, R - sofaD / 2 - 0.9] : [far, far - 0.3];
   const tvFace = tvSide.thick + 0.455;
   const rot = (SIDE_ROT[tvSide.side] + 180) % 360;
-  const widths = [...new Set([sofaW0, Math.min(sofaW0, 2.0), 1.8])];
+  const widths = compact ? [1.7, 1.5] : [...new Set([sofaW0, Math.min(sofaW0, 2.0), 1.8])];
   for (const sd of dists) {
-    if (sd - sofaD / 2 - tvFace < 1.9) continue;
+    if (sd - sofaD / 2 - tvFace < (compact ? 1.5 : 1.9)) continue;
     for (const w of widths)
       for (const sh of [0, 0.15, -0.15, 0.3, -0.3, 0.45, -0.45, 0.6, -0.6, 0.75, -0.75]) {
         const along = tvAlong + sh;
@@ -460,7 +519,7 @@ function sofaGroup(L, rc, ctx, tvSide) {
         if (!sofa) continue;
         const ctDist = sd - sofaD / 2 - 0.4 - 0.3;
         const ctVar = ctx.refined ? 'stone' : ctx.curve > 55 ? 'round' : 'rect';
-        L.try(room, 'coffeeTable', at(room, tvSide, along, ctDist), 1.0, 0.6, { variant: ctVar }) || L.try(room, 'coffeeTable', at(room, tvSide, along, ctDist + 0.05), 0.8, 0.5, { variant: ctVar });
+        (!compact && L.try(room, 'coffeeTable', at(room, tvSide, along, ctDist), 1.0, 0.6, { variant: ctVar })) || L.try(room, 'coffeeTable', at(room, tvSide, along, ctDist + 0.05), 0.8, 0.5, { variant: ctVar });
         const rugD = Math.max(1.6, sd - tvSide.thick - 0.7);
         L.flat(room, 'rug', at(room, tvSide, along, sd - rugD / 2 + 0.25), w + 0.6, rugD, { variant: ctx.curve > 90 ? 'round' : 'rect' });
         return { st, along, w, sd, ctDist, back: back && sd === dists[0] };
@@ -491,7 +550,7 @@ function living(L, rc, ctx) {
   if (ctx.shoeInLiving && rc.mainSide && !ctx.placedShoe) shoeByDoor(L, rc, ctx);
   // 神台比单椅、展示柜重要：先找墙
   const oppo0 = tvSide ? opposite(sides, tvSide) : null;
-  if (ctx.altar && !ctx.placedAltar)
+  if (ctx.altar && ctx.ground && !ctx.placedAltar)
     for (const s of sides.filter((x) => x !== tvSide && x !== oppo0 && (x.stretches[0]?.len || 0) >= 1.3).sort((a, b) => score(b) - score(a))) if (placeAltar(L, rc, ctx, s, s.stretches[0])) break;
   if (grp && !grp.none) {
     // 单椅斜放、面向茶几；另一侧落地灯
@@ -520,7 +579,7 @@ function living(L, rc, ctx) {
     }
     L.try(room, 'plant', at(room, s, sst.a + 0.35 > sst.b ? mid(sst) : sst.b - 0.35, s.thick + 0.3), 0.45, 0.45, { variant: 'tall', seed: 7 });
   }
-  if (ctx.pets && !ctx.placedPet) {
+  if (ctx.pets && ctx.ground && !ctx.placedPet) {
     // 沙发两端、电视墙两角、房间四角，哪里空放哪里
     const tries = [];
     if (grp && !grp.none) {
@@ -534,12 +593,49 @@ function living(L, rc, ctx) {
         break;
       }
   }
-  if (ctx.kids && !ctx.hasKidsRoom && others[0]?.stretches[0]?.len > 1.4) {
+  if (ctx.kids && !ctx.hasKidsRoom && !ctx.hasFamily && others[0]?.stretches[0]?.len > 1.4) {
     const s = others[others.length - 1];
     const sst = s?.stretches[0];
     if (sst) hug(L, rc, s, sst, 'toyStorage', { d: 0.38, minW: 0.8, maxW: Math.min(1.4, sst.len - 0.2) });
   }
   if (grp?.back && oppo?.walled) L.flat(room, 'art', { ...at(room, oppo, grp.along, oppo.thick + 0.03), rot: (SIDE_ROT[tvSide.side] + 180) % 360 }, 1.2, 0.04, { y: 1.35, w: 1.2, h: 0.75 });
+}
+
+/** 起居厅（楼上的家庭厅）：小一号的客厅 —— 电视墙 + 两人沙发 + 小茶几 + 地毯；没有像样的电视墙就沙发靠墙（窗下也行）；
+ *  玩具柜（有小孩）、书桌（在家上班、没有书房）、书架（书多、没有书房）、植物。不放神台、鞋柜、宠物窝。 */
+function family(L, rc, ctx) {
+  const { room, sides } = rc;
+  const cands = sides.filter((s) => s.walled && (s.stretches[0]?.len || 0) >= 1.6).sort((a, b) => score(b, { noWindow: 2 }) - score(a, { noWindow: 2 }));
+  const tvSide = cands[0];
+  const grp = tvSide ? sofaGroup(L, rc, ctx, tvSide, true) : null;
+  let sofaSide = null;
+  if (!grp || grp.none) {
+    const ws = roomSides(room, rc.walls, { allowWindow: true })
+      .filter((s) => s.walled)
+      .sort((a, b) => (b.stretches[0]?.len || 0) - (a.stretches[0]?.len || 0));
+    for (const s of ws) {
+      const st = s.stretches[0];
+      if (!st || st.len < 1.6) continue;
+      const sofa = hug(L, rc, s, st, 'sofa', { d: 0.92, minW: 1.4, maxW: 1.7, front: 0.9, extra: () => ({ variant: ctx.curve > 62 ? 'curvy' : 'classic' }) });
+      if (!sofa) continue;
+      sofaSide = sides.find((x) => x.side === s.side);
+      const c = s.axis === 'x' ? sofa.x : sofa.z;
+      L.try(room, 'coffeeTable', at(room, s, c, s.thick + 0.92 + 0.4 + 0.25), 0.8, 0.5, { variant: ctx.curve > 55 ? 'round' : 'rect' });
+      L.flat(room, 'rug', at(room, s, c, s.thick + 0.92), sofa.w + 0.6, 1.6, { variant: 'rect' });
+      break;
+    }
+  }
+  const others = sides
+    .filter((s) => s !== tvSide && s !== sofaSide && s.walled)
+    .flatMap((s) => s.stretches.map((x) => ({ s, x })))
+    .filter((o) => o.x.len >= 1.0)
+    .sort((p, q) => q.x.len - p.x.len);
+  const want = [];
+  if (ctx.kids) want.push(['toyStorage', { d: 0.38, minW: 0.8, maxW: 1.4, front: 0.6, extra: () => ({}) }]);
+  if (ctx.wfh && !ctx.hasStudy) want.push(['desk', { d: 0.6, minW: 1.2, maxW: 1.2, front: 0.6, extra: () => ({ w: 1.2, d: 0.6 }) }]);
+  if (ctx.books >= 6 && !ctx.hasStudy && !ctx.avoid.has('openshelf')) want.push(['bookshelf', { d: 0.34, minW: 1.0, maxW: Math.min(2.0, Math.max(1.2, ctx.books * 0.16)), front: 0.6, extra: () => ({ h: Math.min(2.4, ctx.wallH - 0.2), key: 'woodwork' }) }]);
+  for (const [kind, o] of want) for (const { s, x } of others) if (x.len >= o.minW + 0.05 && hug(L, rc, s, x, kind, o)) break;
+  for (const { s, x } of [...others].reverse()) if (L.try(room, 'plant', at(room, s, x.b - 0.35 > x.a ? x.b - 0.35 : mid(x), s.thick + 0.3), 0.45, 0.45, { variant: 'tall', seed: 13 })) break;
 }
 
 /** 餐桌实在放不下：靠墙放一张两人桌 */
@@ -571,7 +667,7 @@ function dining(L, rc, ctx) {
   const walls = sides.filter((x) => x.stretches[0]?.len >= 1.3).sort((a, b) => score(b) - score(a));
   // 客厅放不下神台的话，放餐厅：神台先占墙（前面留 0.6m），餐桌再让位 / 退小一号；连桌子都放不下就先放桌子
   const m0 = L.mark();
-  const altarFirst = ctx.altar && !ctx.placedAltar;
+  const altarFirst = ctx.altar && ctx.ground && !ctx.placedAltar;
   if (altarFirst) for (const s of walls) if (placeAltar(L, rc, ctx, s, s.stretches[0], 0.3, 0.6)) break;
   let tbl = placeTable(L, rc, ctx, long, cx, cz);
   if (!tbl && altarFirst && ctx.placedAltar) {
@@ -662,6 +758,8 @@ function sinkHob({ len, corner, fridge, wins, leg }) {
       if (between < 0.6) p += 80;
       if (endGap(uh, 'a') < (corner === 'a' ? 0.95 : 0.75)) p += 80;
       if (endGap(uh, 'b') < (corner === 'b' ? 0.95 : 0.75)) p += 80;
+      // 短台面两头都不够 0.75 时：至少一头留 0.45（灶台半宽 0.35 + 0.1 台面），不然锅柄伸出台面
+      if (Math.min(endGap(uh, 'a'), endGap(uh, 'b')) < H + 0.1 - 1e-9) p += 40;
       if (under(uh, 0.45, wins)) p += 70;
       if (leg && len < 2.4) p += 30;
       if (fridge) {
@@ -703,7 +801,13 @@ function kitchen(L, rc, ctx) {
     legSide = buildKitchen(L, rc, ctx, c.s, c.st, R);
     break;
   }
+  ctx.kitchensLeft--;
   if (!main) return;
+  const hasFridge = () => L.items.some((i) => i.kind === 'fridge' && i.room === room.id);
+  // 最后一间厨房还没有冰箱（前面的湿厨房让出来了、或台面不够长）：靠另一面墙单独放，前面留 0.9m
+  if (!hasFridge() && !ctx.placedFridge && ctx.kitchensLeft <= 0)
+    for (const s of sides.filter((x) => x.walled && x !== main && x !== legSide)) if (s.stretches.some((st) => st.len >= 0.95 && hug(L, rc, s, st, 'fridge', { d: 0.7, minW: 0.86, maxW: 0.86, front: 0.9, prefer: 'a', extra: () => ({}) }))) break;
+  if (hasFridge()) ctx.placedFridge = true;
   // 电器高柜：对面墙优先，再其它墙；前面留 1m
   if (ctx.applianceTall) {
     const oppo = opposite(sides, main);
@@ -765,7 +869,9 @@ function buildKitchen(L, rc, ctx, main, st, R) {
   let rb = R.b;
   let fridge = null;
   let fEnd = corner === 'b' ? 'a' : 'b';
-  if (R.len >= 2.4) {
+  // 一间屋子一台冰箱；有两间厨房（干 / 湿）时，放了冰箱就摆不下水槽 + 灶台（中间 0.6m，至少要 2.05m 台面）的那一间让给后面的厨房
+  const wantFridge = !ctx.placedFridge && !(ctx.kitchensLeft > 1 && !leg && R.len - 0.9 < 2.05);
+  if (wantFridge && R.len >= 2.4) {
     const ends = [fEnd, ...(corner ? [] : [fEnd === 'b' ? 'a' : 'b'])].filter((e) => winHit(e === 'b' ? rb - 0.9 : ra, e === 'b' ? rb : ra + 0.9, st.wins) <= 0.2);
     for (const e of ends) {
       fridge = L.try(room, 'fridge', at(room, main, e === 'b' ? rb - 0.45 : ra + 0.45, main.thick + 0.36), 0.86, 0.7, {});
@@ -778,7 +884,7 @@ function buildKitchen(L, rc, ctx, main, st, R) {
     }
   }
   let fridgeOnLeg = false;
-  if (!fridge && leg && leg.len >= 2.0 && winHit(near ? leg.b - 0.9 : leg.a, near ? leg.b : leg.a + 0.9, leg.st.wins) <= 0.2) {
+  if (wantFridge && !fridge && leg && leg.len >= 2.0 && winHit(near ? leg.b - 0.9 : leg.a, near ? leg.b : leg.a + 0.9, leg.st.wins) <= 0.2) {
     const c = near ? leg.b - 0.45 : leg.a + 0.45;
     if (L.try(room, 'fridge', at(room, leg.s, c, leg.s.thick + 0.36), 0.86, 0.7, {})) {
       fridgeOnLeg = true;
@@ -788,7 +894,7 @@ function buildKitchen(L, rc, ctx, main, st, R) {
     }
   }
   // 实在没别的地方：还是放在主台面那一头（挡一点窗也比没有冰箱好）
-  if (!fridge && !fridgeOnLeg && R.len >= 2.4) {
+  if (wantFridge && !fridge && !fridgeOnLeg && R.len >= 2.4) {
     fridge = L.try(room, 'fridge', at(room, main, fEnd === 'b' ? rb - 0.45 : ra + 0.45, main.thick + 0.36), 0.86, 0.7, {});
     if (fridge) {
       if (fEnd === 'b') rb -= 0.9;
@@ -910,7 +1016,7 @@ function bedroomExtras(L, rc, ctx, kind, bedSide) {
     .filter((s) => s.walled)
     .flatMap((s) => s.stretches.map((x) => ({ s, x })))
     .sort((p, q) => (p.s === bedSide) - (q.s === bedSide) || q.x.len - p.x.len);
-  const list = isKids ? ['toyStorage', 'desk'] : isMaster ? (ctx.wfh && !ctx.hasStudy ? ['desk', 'plant'] : ['dresser', 'plant']) : ['desk'];
+  const list = isKids ? ['toyStorage', 'desk'] : isMaster ? (ctx.wfh && !ctx.hasStudy && !ctx.hasFamily ? ['desk', 'plant'] : ['dresser', 'plant']) : ['desk'];
   for (const k of list) {
     const [w, d] = { desk: [isKids ? (ctx.teen ? 1.2 : 1.0) : 1.2, 0.6], dresser: [1.1, 0.45], toyStorage: [1.2, 0.38], plant: [0.45, 0.45] }[k];
     const extra = () => (k === 'desk' ? { w, d } : k === 'plant' ? { variant: 'tall', seed: 11 } : {});
@@ -989,6 +1095,7 @@ function bath(L, rc) {
 }
 
 function foyer(L, rc, ctx) {
+  if (!ctx.ground) return; // 鞋柜 + 换鞋凳只在一楼（楼上的「玄关」是楼梯口的过道）
   const ws = rc.sides.filter((s) => s.walled && s.stretches[0]?.len >= 0.9);
   const h = Math.min(2.6, ctx.wallH - 0.1);
   const cab = bestHug(L, rc, ws, 'shoeCabinet', { d: 0.38, minW: 0.6, maxW: Math.max(1.2, ctx.shoeMM / 1000), front: 0.5, prefer: 'a', extra: (w) => ({ w, h }) });
@@ -998,6 +1105,7 @@ function foyer(L, rc, ctx) {
 
 /** 车廊 / 前院：鞋柜 + 换鞋凳，放在离大门最近、有墙的那一边；不放躺椅（要停车） */
 function porch(L, rc, ctx) {
+  if (!ctx.ground) return;
   const { room, sides } = rc;
   const me = ctx.main;
   const px = me ? me.x : room.x + room.w / 2;
@@ -1070,7 +1178,7 @@ function store(L, rc, ctx) {
 /** 窗帘：每扇窗 / 落地趟门（卫浴、厨房、阳台除外） */
 function curtains(L, room, sides, walls, ctx) {
   const t = ROOM_TYPES[room.type];
-  if (t?.wet || room.type === 'kitchen' || t?.outdoor || room.type === 'corridor' || room.type === 'foyer') return;
+  if (t?.wet || t?.nofurn || room.type === 'kitchen' || t?.outdoor || room.type === 'corridor' || room.type === 'foyer') return;
   for (const s of sides) {
     for (const w of walls) {
       if (w.axis !== s.axis || Math.abs(w.c - s.c) > 0.03 || !w.exterior) continue;
@@ -1085,14 +1193,30 @@ function curtains(L, room, sides, walls, ctx) {
   }
 }
 
+/** plan（v1 / v2 / 一层）+ walls（一层的数组 / { floorId: walls } / 不给）→ { plan: v2, walls: { floorId: walls } } */
+function prep(plan0, walls0) {
+  const plan = migratePlan(plan0);
+  const walls = {};
+  plan.floors.forEach((f, i) => {
+    if (Array.isArray(walls0) && i === 0) walls[f.id] = walls0;
+    else if (walls0 && !Array.isArray(walls0) && Array.isArray(walls0[f.id])) walls[f.id] = walls0[f.id];
+    else walls[f.id] = buildWalls(f);
+  });
+  return { plan, walls };
+}
+
 function context(plan, walls, profile) {
   const who = new Set(profile?.life?.who || []);
   const sp = profile ? storagePlan(profile.storage || {}, APPLIANCES) : null;
-  const types = new Set(plan.rooms.map((r) => r.type));
+  const g = plan.floors[0];
+  const types = new Set(plan.floors.flatMap((f) => f.rooms.map((r) => r.type)));
+  const gTypes = new Set(g.rooms.map((r) => r.type));
   return {
-    plan,
+    plan: g,
+    v2: plan,
     sp,
-    wallH: plan.wallH || 2.8,
+    wallH: g.ceil || 2.8,
+    ground: true,
     curve: profile?.hidden?.curve ?? 45,
     social: profile?.hidden?.social ?? 50,
     refined: (profile?.axes?.texture ?? 60) < 50,
@@ -1115,23 +1239,35 @@ function context(plan, walls, profile) {
     hasStudy: types.has('study'),
     hasKidsRoom: types.has('kids'),
     hasWalkin: types.has('walkin'),
-    shoeInLiving: !types.has('foyer') && !types.has('porch'),
-    main: mainEntrance(plan, walls),
+    hasFamily: types.has('family'),
+    shoeInLiving: !gTypes.has('foyer') && !gTypes.has('porch'),
+    kitchensLeft: plan.floors.reduce((t, f) => t + f.rooms.filter((r) => r.type === 'kitchen').length, 0),
+    placedFridge: false,
+    main: mainEntrance(g, walls[g.id]),
   };
 }
 
-/** 主入口：plan + walls + 档案 → 家具清单 */
-export function furnish(plan, walls, profile = null) {
+/** 主入口：plan（v1 / v2）+ walls + 档案 → 家具清单（每件都有 floor） */
+export function furnish(plan0, walls0, profile = null) {
+  const { plan, walls } = prep(plan0, walls0);
   const L = new Layout();
   const ctx = context(plan, walls, profile);
-  // 先摆大房间（客厅、主卧），神台 / 宠物窝这种只摆一次的优先给它们
-  const order = ['living', 'master', 'dining', 'kitchen', 'bedroom', 'kids', 'study', 'foyer', 'porch', 'bath', 'walkin', 'utility', 'store', 'balcony', 'corridor'];
-  const rooms = [...plan.rooms].sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type));
-  for (const room of rooms) {
-    const rc = frame(room, walls, plan, ctx.main);
+  const keeps = stairKeeps(plan);
+  // 先摆大房间（客厅、主卧），神台 / 宠物窝这种只摆一次的优先给它们；同一种房间一楼先摆
+  const order = ['living', 'master', 'dining', 'family', 'kitchen', 'bedroom', 'kids', 'study', 'foyer', 'porch', 'bath', 'walkin', 'utility', 'store', 'balcony', 'corridor'];
+  const rank = (t) => (order.includes(t) ? order.indexOf(t) : order.length);
+  const rooms = plan.floors.flatMap((f) => f.rooms.map((room) => ({ room, f }))).sort((a, b) => rank(a.room.type) - rank(b.room.type));
+  for (const { room, f } of rooms) {
+    if (ROOM_TYPES[room.type]?.nofurn) continue; // 楼梯间、挑空
+    ctx.plan = f;
+    ctx.wallH = f.ceil || 2.8;
+    ctx.ground = f.level === 0;
+    L.floor = f.id;
+    const rc = frame(room, walls[f.id], f, ctx.ground ? ctx.main : null, keeps[f.id]);
     L.room(room, rc);
     const t = room.type;
     if (t === 'living') living(L, rc, ctx);
+    else if (t === 'family') family(L, rc, ctx);
     else if (t === 'dining') dining(L, rc, ctx);
     else if (t === 'kitchen') kitchen(L, rc, ctx);
     else if (t === 'master' || t === 'bedroom' || t === 'kids') bedroom(L, rc, ctx, t);
@@ -1143,7 +1279,7 @@ export function furnish(plan, walls, profile = null) {
     else if (t === 'walkin') walkin(L, rc, ctx);
     else if (t === 'utility') utility(L, rc, ctx);
     else if (t === 'store') store(L, rc, ctx);
-    curtains(L, room, rc.sides, walls, ctx);
+    curtains(L, room, rc.sides, walls[f.id], ctx);
   }
   return L.items;
 }
@@ -1169,17 +1305,21 @@ const HINTS = {
  *   gap = max(0, target − placed)；hint = 差了的话给设计师的建议（中文，界面用 t() 翻）；itemIds = 算进去的家具。
  * items 可以是设计师改过的清单（拖动、删除后再对账）。
  */
-export function furnishReport(plan, walls, profile = null, items = null) {
+export function furnishReport(plan0, walls0, profile = null, items = null) {
+  const { plan, walls } = prep(plan0, walls0);
   const its = items || furnish(plan, walls, profile);
   const ctx = context(plan, walls, profile);
   const sp = ctx.sp;
   const rows = [];
   const mm = (m) => Math.round(m * 1000);
+  const allRooms = plan.floors.flatMap((f) => f.rooms.map((r) => ({ r, f: f.id })));
+  const floorOf = (roomId) => allRooms.find((x) => x.r.id === roomId)?.f ?? null;
   const add = (r) => {
     const gap = Math.max(0, r.target - r.placed);
-    rows.push({ key: r.key, kind: r.kind, room: r.room ?? null, unit: r.unit, need: r.need ?? null, target: r.target, placed: r.placed, gap, hint: gap > 0 ? r.hint : null, itemIds: r.items.map((i) => i.id) });
+    const room = r.room ?? null;
+    rows.push({ key: r.key, kind: r.kind, room, floor: room ? floorOf(room) : null, unit: r.unit, need: r.need ?? null, target: r.target, placed: r.placed, gap, hint: gap > 0 ? r.hint : null, itemIds: r.items.map((i) => i.id) });
   };
-  const ofType = (...types) => plan.rooms.filter((r) => types.includes(r.type));
+  const ofType = (...types) => allRooms.filter((x) => types.includes(x.r.type)).map((x) => x.r);
   const pick = (rooms, pred) => {
     const ids = new Set(rooms.map((r) => r.id));
     return its.filter((i) => ids.has(i.room) && pred(i));
@@ -1199,7 +1339,9 @@ export function furnishReport(plan, walls, profile = null, items = null) {
   }
   // 鞋柜
   {
-    const list = its.filter((i) => i.kind === 'shoeCabinet');
+    // 鞋柜只算一楼的（楼上的柜子不是放鞋的）
+    const g = new Set(plan.floors[0].rooms.map((r) => r.id));
+    const list = its.filter((i) => i.kind === 'shoeCabinet' && g.has(i.room));
     add({ key: 'shoe', kind: 'shoeCabinet', room: list[0]?.room, unit: 'mm', need: sp ? sp.shoeCabinetMM : null, target: ctx.shoeMM, placed: sumW(list), hint: HINTS.shoe, items: list });
   }
   // 电器高柜（厨房里）

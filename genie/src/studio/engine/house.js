@@ -1,11 +1,17 @@
 // 建筑：地板、墙（门窗开洞）、窗框玻璃、窗外的天光卡、门扇、阳台栏杆、品牌底座、看不见的树（只投影子）。
 // 墙有两个版本：full（完整高度）/ cut（像 The Sims 一样切到 35cm）。切掉时 full 版移到「只投影」图层 ——
 // 看不见，但阳光照进来的窗影还在。
+//
+// 多层（floors.js 叠起来）：一层一个「壳」（buildFloorShell：这一层的地板、墙、窗、门、栏杆、挑空 / 楼梯口的护栏），
+// 坐标都是这一层自己的（y = 0 是这一层的地面），由调用方整组抬到这一层的标高；
+// 底座、地面、金线、树只有一份（buildPlinth），垫在所有楼层合起来的外框下面。
+// buildHouse 仍然是单层的老入口（一个壳 + 底座）。
 
 import * as THREE from 'three';
 import { ROOM_TYPES, bounds } from '../plan/model.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { boxGeo, worldUV, sphereGeo } from './geom.js';
+import { balustrade } from './furniture.js';
 import { rng, fbm } from '../../shared/noise.js';
 import { BRAND } from '../../shared/config.js';
 import { PALETTE } from '../../shared/palette.js';
@@ -13,6 +19,12 @@ import { PALETTE } from '../../shared/palette.js';
 export const CUT_H = 0.35;
 /** 第 1 层：主镜头看不见、但太阳的影子相机看得见 —— 切掉的墙、窗外的树都放这一层（也不会进环境光遮蔽） */
 export const SHADOW_LAYER = 1;
+/**
+ * 第 2 层：藏起来的楼层（看一楼时的二楼）—— 主镜头看不见，太阳的影子照样挡（Engine 在画影子的时候临时打开这一层）。
+ * 注：three r183 画平行光影子时按「主镜头」的图层筛选（WebGLShadowMap.renderObject），所以第 1 层其实不投影；
+ * 藏起来的楼层一定要投影（楼下的窗光、长长的两层楼影子），单独用这一层，单层方案的画面一点不变。
+ */
+export const HIDDEN_LAYER = 2;
 
 // ───────────────────────── 建筑模型的「外观件」：墨色切面、磨砂暖石底座、黄铜细线、会淡出的地面 ─────────────────────────
 // 颜色全部从 VI（palette.js）来：SAIL 墨、暖灰石、SAIL 金。每个材质库一套（换平面图时复用，不会越建越多）
@@ -134,6 +146,9 @@ function kitFor(lib) {
   return k;
 }
 
+/** 这个材质库的外观件（墨色切面、石头、黄铜、地面、天光卡）：floors.js 的楼板切面也用墨色 cap */
+export const houseKit = (lib) => kitFor(lib);
+
 /** 引擎销毁时：这一套外观件的材质一起释放（石纹贴图是全局共用的，留着给下一个引擎） */
 export function disposeHouseKit(lib) {
   const k = KITS.get(lib);
@@ -204,6 +219,90 @@ function wallBox(wall, a, b, y0, y1, lib, { extendA = 0, extendB = 0, capTop = t
   m.userData.slot = 'walls';
   m.userData.mats = mats;
   return m;
+}
+
+/**
+ * 按材质合并：一堆（多材质的）网格 → 一个网格、每种材质一个 group（draw call 少很多：以前每块墙 6 个）。
+ * UV 保留每块原来的（贴图的位置和以前一模一样），位置 / 法线换算到合并后的坐标（相对 build 时的父组）。
+ */
+const _v = new THREE.Vector3();
+const _n = new THREE.Vector3();
+const _nm = new THREE.Matrix3();
+class Merger {
+  constructor() {
+    this.buckets = new Map();
+    this.temp = [];
+  }
+  /** mesh 的位置 / 旋转按它自己的 matrix（或给 matrix，例如门扇的世界矩阵）；用完的非缓存几何体在 build 时释放 */
+  add(mesh, matrix) {
+    if (!matrix) {
+      mesh.updateMatrix();
+      matrix = mesh.matrix;
+    }
+    const geo = mesh.geometry;
+    const mats = mesh.material;
+    const pos = geo.attributes.position;
+    const nor = geo.attributes.normal;
+    const uv = geo.attributes.uv;
+    const idx = geo.index;
+    _nm.getNormalMatrix(matrix);
+    const groups = geo.groups.length ? geo.groups : [{ start: 0, count: idx ? idx.count : pos.count, materialIndex: 0 }];
+    for (const g of groups) {
+      const m = Array.isArray(mats) ? mats[g.materialIndex] : mats;
+      if (!m) continue;
+      let b = this.buckets.get(m);
+      if (!b) this.buckets.set(m, (b = { pos: [], nor: [], uv: [] }));
+      const end = Math.min(g.start + g.count, idx ? idx.count : pos.count);
+      for (let i = g.start; i < end; i++) {
+        const k = idx ? idx.getX(i) : i;
+        _v.fromBufferAttribute(pos, k).applyMatrix4(matrix);
+        _n.fromBufferAttribute(nor, k).applyMatrix3(_nm).normalize();
+        b.pos.push(_v.x, _v.y, _v.z);
+        b.nor.push(_n.x, _n.y, _n.z);
+        b.uv.push(uv ? uv.getX(k) : 0, uv ? uv.getY(k) : 0);
+      }
+    }
+    if (!geo.userData?.cached) this.temp.push(geo);
+  }
+  /** → 一个 Mesh（或 null）：groups 按材质，材质数组只放用到的 */
+  build({ castShadow = true, receiveShadow = true, slot } = {}) {
+    for (const g of this.temp) g.dispose();
+    this.temp = [];
+    if (!this.buckets.size) return null;
+    const pos = [];
+    const nor = [];
+    const uv = [];
+    const mats = [];
+    const geo = new THREE.BufferGeometry();
+    let at = 0;
+    for (const [m, b] of this.buckets) {
+      const n = b.pos.length / 3;
+      if (!n) continue;
+      for (let i = 0; i < b.pos.length; i++) pos.push(b.pos[i]);
+      for (let i = 0; i < b.nor.length; i++) nor.push(b.nor[i]);
+      for (let i = 0; i < b.uv.length; i++) uv.push(b.uv[i]);
+      geo.addGroup(at, n, mats.length);
+      mats.push(m);
+      at += n;
+    }
+    this.buckets.clear();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    geo.computeBoundingBox();
+    geo.computeBoundingSphere();
+    let material = mats;
+    if (mats.length === 1) {
+      material = mats[0];
+      geo.clearGroups();
+    }
+    const mesh = new THREE.Mesh(geo, material);
+    mesh.castShadow = castShadow;
+    mesh.receiveShadow = receiveShadow;
+    if (slot) mesh.userData.slot = slot;
+    if (Array.isArray(material)) mesh.userData.mats = material;
+    return mesh;
+  }
 }
 
 function placeAlong(wall, mesh, along, y, offset = 0) {
@@ -546,94 +645,158 @@ export function plinthSubtitle(subtitle, title) {
 }
 
 /**
- * opts.title / opts.subtitle：底座正面的两行字（界面给的是当前语言的文字，这里原样画；副标没给 = 溪岸 SAIL）。
- * 侧面永远是品牌：WISH · by RICCIONE REKA。
- * @returns {{ group, wallSets, windows, rooms, bounds, trees }}
+ * 一层的「壳」：地板、墙（full + cut 两套）、窗框玻璃、窗外天光卡、门扇、阳台栏杆、车廊矮墙 / 门柱、挑空 / 楼梯口的护栏。
+ * 坐标是这一层自己的（y = 0 = 这一层的地面）；调用方把 group 放到这一层的标高。
+ * floor：{ rooms, openings, ceil }（v2 的一层；旧的单层方案传 { rooms, openings, ceil: wallH }）。
+ * opts.elev：这一层的标高（只写进 windows[].elev / rooms[].y，给窗光、光柱、夜灯换算成世界坐标）；
+ * opts.holes：这一层「没有楼板」的房间 id（往下走的楼梯井、挑空）—— 不铺地板，挨着它的墙往下接到下一层的天花（opts.below 米），
+ *             楼板那一段不会露出一条缝；
+ * opts.voidEdges：挑空 / 楼梯口没有墙的边（model.voidEdges），立 1.0m 的护栏。
+ * @returns {{ group, wallSets, windows, rooms, wallH }}
  */
-export function buildHouse(plan, walls, lib, { title, subtitle, ground = true } = {}) {
-  title = plinthTitle(title);
-  subtitle = plinthSubtitle(subtitle, title);
+export function buildFloorShell(floor, walls, lib, { elev = 0, voidEdges = [], holes = null, below = 0 } = {}) {
   const root = new THREE.Group();
-  const H = plan.wallH || 2.8;
-  const bb = bounds(plan);
+  const H = floor.ceil || floor.wallH || 2.8;
+  const isHole = (id) => !!id && !!holes?.has(id);
+  const rooms0 = floor.rooms || [];
 
-  // 地板
-  for (const r of plan.rooms) {
+  // 地板（楼梯井 / 挑空没有地板）：同一种表面的合成一个网格
+  const fin = { floor: new Merger(), tile: new Merger() };
+  for (const r of rooms0) {
+    if (isHole(r.id) || ROOM_TYPES[r.type]?.void) continue;
     const slot = ROOM_TYPES[r.type]?.floor === 'tile' ? 'tile' : 'floor';
-    const m = new THREE.Mesh(boxGeo(r.w, 0.04, r.d), lib.slot(slot === 'tile' ? 'tile' : 'floor'));
+    const m = new THREE.Mesh(boxGeo(r.w, 0.04, r.d), lib.slot(slot));
     m.position.set(r.x + r.w / 2, -0.04, r.y + r.d / 2);
-    m.receiveShadow = true;
-    m.userData.slot = slot === 'tile' ? 'tile' : 'floor';
-    m.userData.roomId = r.id;
-    root.add(m);
+    fin[slot].add(m);
+  }
+  for (const slot of ['floor', 'tile']) {
+    const m = fin[slot].build({ castShadow: false, slot });
+    if (m) root.add(m);
   }
 
-  // 墙
+  // 墙：每一段外墙一套（切法跟着镜头，一段一段地切）；内墙整层合成一套（只有「全切」时才一起放低）。
+  // 每一套里同一种材质合成一个网格：墙体、窗框、玻璃各一个（以前每块墙 6 个 draw call）
   const wallSets = [];
   const windows = [];
+  const mkTarget = () => ({ full: new THREE.Group(), cut: new THREE.Group(), body: new Merger(), cutBody: new Merger(), frames: new Merger(), glass: new Merger() });
+  const finish = (T) => {
+    const body = T.body.build({ slot: 'walls' });
+    if (body) T.full.add(body);
+    const frames = T.frames.build();
+    if (frames) T.full.add(frames);
+    const glass = T.glass.build({ castShadow: false, receiveShadow: false });
+    if (glass) {
+      glass.renderOrder = 2;
+      T.full.add(glass);
+    }
+    const cut = T.cutBody.build({ castShadow: false, slot: 'walls' });
+    if (cut) T.cut.add(cut);
+    T.cut.visible = false;
+    root.add(T.full, T.cut);
+  };
+  const inner = mkTarget();
+  const doors = { leaf: new Merger(), handle: new Merger() };
   for (const w of walls) {
     const outdoorSide = (w.neg && ROOM_TYPES[w.neg.type]?.outdoor && !w.pos) || (w.pos && ROOM_TYPES[w.pos.type]?.outdoor && !w.neg);
     if (outdoorSide) {
       // 阳台：玻璃栏杆；车廊 / 前院：两侧矮墙、临街是门柱（车要开得进来）
       const ref = w.neg || w.pos;
-      const porch = ref.type === 'porch' && plan.rooms.find((r) => r.id === ref.id);
+      const porch = ref.type === 'porch' && rooms0.find((r) => r.id === ref.id);
       root.add(porch ? porchEdge(w, lib, houseSides(porch, walls).has(OPP[sideOf(porch, w)])) : railing(w, lib));
       continue;
     }
-    const full = new THREE.Group();
-    const cut = new THREE.Group();
+    // 挨着楼梯井 / 挑空的墙：往下接到下一层的天花（楼板那一段不留缝）
+    const y0 = below > 0 && (isHole(w.neg?.id) || isHole(w.pos?.id)) ? -below : 0;
+    const T = w.exterior ? mkTarget() : inner;
     const ends = (p) => ({ extendA: Math.abs(p.a - w.a) < 0.01 ? w.t / 2 : 0, extendB: Math.abs(p.b - w.b) < 0.01 ? w.t / 2 : 0 });
     for (const p of w.pieces) {
+      // 往下接的那一段（楼板的厚度）：两端不外伸（不和旁边楼板的切面重叠）
+      if (y0 < 0 && p.kind !== 'door') {
+        T.body.add(wallBox(w, p.a, p.b, y0, 0, lib));
+        T.cutBody.add(wallBox(w, p.a, p.b, y0, 0, lib));
+      }
       if (p.kind === 'solid') {
-        full.add(wallBox(w, p.a, p.b, 0, H, lib, ends(p)));
-        const c = wallBox(w, p.a, p.b, 0, CUT_H, lib, ends(p));
-        c.castShadow = false;
-        cut.add(c);
+        T.body.add(wallBox(w, p.a, p.b, 0, H, lib, ends(p)));
+        T.cutBody.add(wallBox(w, p.a, p.b, 0, CUT_H, lib, ends(p)));
       } else if (p.kind === 'window' || p.kind === 'slider') {
         const sill = p.sill ?? 0.9;
         const head = Math.min(p.head ?? 2.2, H - 0.05);
         // 窗台的顶面是墙面材质（不是墨色切口）：从上往下透过窗看得到它
-        if (sill > 0.01) full.add(wallBox(w, p.a, p.b, 0, sill, lib, { ...ends(p), capTop: false }));
-        full.add(wallBox(w, p.a, p.b, head, H, lib, ends(p)));
-        full.add(windowFrame(w, p, lib, H));
+        if (sill > 0.01) T.body.add(wallBox(w, p.a, p.b, 0, sill, lib, { ...ends(p), capTop: false }));
+        T.body.add(wallBox(w, p.a, p.b, head, H, lib, ends(p)));
+        for (const m of windowFrame(w, p, lib, H).children) (m.material === lib.fixed.glass ? T.glass : T.frames).add(m);
         // 外墙的窗：窗外放一块天光卡（和窗框一起：墙切低时一起收起来）
         if (w.exterior && w.outward) {
           const card = windowCard(w, p, lib, H);
-          if (card) full.add(card);
+          if (card) T.full.add(card);
         }
-        if (sill > 0.01) {
-          const c = wallBox(w, p.a, p.b, 0, Math.min(sill, CUT_H), lib, ends(p));
-          c.castShadow = false;
-          cut.add(c);
-        }
+        if (sill > 0.01) T.cutBody.add(wallBox(w, p.a, p.b, 0, Math.min(sill, CUT_H), lib, ends(p)));
         if (w.exterior) {
           const inward = w.outward * -1;
           const a3 = w.axis === 'x' ? new THREE.Vector3(p.a, 0, w.c) : new THREE.Vector3(w.c, 0, p.a);
           const b3 = w.axis === 'x' ? new THREE.Vector3(p.b, 0, w.c) : new THREE.Vector3(w.c, 0, p.b);
           const n = w.axis === 'x' ? new THREE.Vector3(0, 0, inward) : new THREE.Vector3(inward, 0, 0);
-          windows.push({ a: a3, b: b3, sill, head, inward: n });
+          // a / b 在这一层自己的坐标里（y = 0）；elev = 这一层的标高（光柱、窗光换算成世界坐标用）
+          windows.push({ a: a3, b: b3, sill, head, inward: n, elev });
         }
       } else if (p.kind === 'door') {
         const head = Math.min(p.head ?? 2.1, H - 0.05);
-        full.add(wallBox(w, p.a, p.b, head, H, lib, ends(p)));
+        T.body.add(wallBox(w, p.a, p.b, head, H, lib, ends(p)));
         const leaf = doorLeaf(w, p, lib);
-        if (leaf) root.add(leaf);
+        if (leaf) {
+          leaf.updateMatrixWorld(true);
+          for (const m of leaf.children) (m.userData.slot === 'metal' ? doors.handle : doors.leaf).add(m, m.matrixWorld);
+        }
       }
     }
     const outward = w.exterior ? (w.axis === 'x' ? new THREE.Vector3(0, 0, w.outward) : new THREE.Vector3(w.outward, 0, 0)) : null;
-    cut.visible = false;
-    root.add(full, cut);
-    wallSets.push({ wall: w, full, cut, outward, lowered: false });
+    if (T !== inner) finish(T);
+    // 内墙的每一段共用整层的那一套（切法永远一样：只有「全切」时一起放低）
+    wallSets.push({ wall: w, full: T.full, cut: T.cut, outward, lowered: false });
+  }
+  finish(inner);
+  const leaves = doors.leaf.build({ slot: 'cabinetry' });
+  if (leaves) root.add(leaves);
+  const handles = doors.handle.build({ slot: 'metal' });
+  if (handles) root.add(handles);
+
+  // 挑空 / 楼梯口：没有墙的那几条边立护栏（1.0m，扶手 + 细立杆）
+  if (voidEdges?.length) {
+    const lines = voidEdges.map((e) => {
+      // 护栏立在楼板这一边、离边 5cm（不悬在洞口上）；model.voidEdges 的 inward = 洞在线的哪一边（±1）
+      const k = -(e.inward || 0) * 0.05;
+      return e.axis === 'x' ? { x1: e.a, y1: e.c + k, x2: e.b, y2: e.c + k, z1: 0, z2: 0 } : { x1: e.c + k, y1: e.a, x2: e.c + k, y2: e.b, z1: 0, z2: 0 };
+    });
+    const rail = balustrade(lines, lib, { h: 1.0, posts: true });
+    rail.userData.voidRail = true;
+    root.add(rail);
   }
 
+  const rooms = rooms0
+    .filter((r) => !isHole(r.id) && !ROOM_TYPES[r.type]?.void)
+    .map((r) => ({ id: r.id, type: r.type, x: r.x + r.w / 2, z: r.y + r.d / 2, area: r.w * r.d, w: r.w, d: r.d, y: elev }));
+  return { group: root, wallSets, windows, rooms, wallH: H };
+}
+
+/**
+ * 品牌底座（磨砂深石 + 黄铜细线 + 影缝）、两块烫金字牌、会淡出的地面 + 金线、窗外看不见的树。
+ * bb：所有楼层合起来的外框（model.bounds）；top：整栋楼最高的天花（树冠跟着它长高）。
+ * opts.title / opts.subtitle：底座正面的两行字（界面给的是当前语言的文字，这里原样画；副标没给 = 溪岸 SAIL）。
+ * 侧面永远是品牌：WISH · by RICCIONE REKA。
+ * @returns {{ group, plaques, trees }}
+ */
+export function buildPlinth(bb, lib, { title, subtitle, ground = true, top = 2.8 } = {}) {
+  title = plinthTitle(title);
+  subtitle = plinthSubtitle(subtitle, title);
+  const root = new THREE.Group();
   // 底座：像建筑模型的展示台 —— 磨砂深石 + 细倒角，顶边一圈拉丝黄铜细线，底下内缩一道「影缝」让它像浮起来
   const K = kitFor(lib);
   const m = 0.35;
   const pw = bb.w + m * 2;
   const pd = bb.d + m * 2;
   const ph = 0.62;
-  const top = -0.04;
-  const y0 = top - ph;
+  const topY = -0.04;
+  const y0 = topY - ph;
   const gap = 0.045;
   const bodyGeo = new RoundedBoxGeometry(pw, ph - gap, pd, 2, 0.014);
   bodyGeo.translate(0, (ph - gap) / 2, 0);
@@ -648,7 +811,7 @@ export function buildHouse(plan, walls, lib, { title, subtitle, ground = true } 
   foot.receiveShadow = true;
   root.add(foot);
   const brass = new THREE.Mesh(boxGeo(pw + 0.006, 0.012, pd + 0.006), K.brass);
-  brass.position.set(bb.cx, top - 0.042, bb.cy);
+  brass.position.set(bb.cx, topY - 0.042, bb.cy);
   brass.userData.noAO = true;
   root.add(brass);
   // 字牌：正面（+z，默认镜头看着的那一面）居中写标题 + 副标；右侧面（+x）居中写品牌。字高 ≈ 底座高的 45%
@@ -696,9 +859,11 @@ export function buildHouse(plan, walls, lib, { title, subtitle, ground = true } 
   }
 
   // 看不见的树：只把树影投进窗里（窗上的树影 = 「时间在流动」的感觉）。
-  // 只有树冠（树干的影子会从空地上一条黑线拉过来，露馅）；哪几棵在投影由引擎按太阳决定（Engine.updateTrees）
+  // 只有树冠（树干的影子会从空地上一条黑线拉过来，露馅）；哪几棵在投影由引擎按太阳决定（Engine.updateTrees）。
+  // 两三层的楼：树冠跟着长高（最高到整栋楼的 3/4），二楼的窗上也有树影；单层（≤ 4.2m 的树冠）照旧。
   const trees = new THREE.Group();
   const rand = rng(Math.round(bb.w * 100 + bb.d * 7));
+  const grow = Math.max(1, (0.75 * top) / 4.2);
   const sides = [
     [bb.x0 - 2.6, bb.cy - bb.d * 0.25],
     [bb.x1 + 2.6, bb.cy + bb.d * 0.2],
@@ -710,7 +875,7 @@ export function buildHouse(plan, walls, lib, { title, subtitle, ground = true } 
     // 稀一点的树冠（小团、有空隙）→ 窗里是斑驳的光，而不是一整片黑影
     for (let i = 0; i < 13; i++) {
       const leaf = new THREE.Mesh(sphereGeo(0.28 + rand() * 0.38, 8), K.cap);
-      leaf.position.set((rand() - 0.5) * 3.0, 2.3 + rand() * 1.9, (rand() - 0.5) * 3.0);
+      leaf.position.set((rand() - 0.5) * 3.0, (2.3 + rand() * 1.9) * grow, (rand() - 0.5) * 3.0);
       leaf.scale.y = 0.55;
       leaf.castShadow = true;
       leaf.layers.set(SHADOW_LAYER);
@@ -720,9 +885,22 @@ export function buildHouse(plan, walls, lib, { title, subtitle, ground = true } 
     trees.add(tree);
   }
   root.add(trees);
+  return { group: root, plaques, trees };
+}
 
-  const rooms = plan.rooms.map((r) => ({ id: r.id, type: r.type, x: r.x + r.w / 2, z: r.y + r.d / 2, area: r.w * r.d, w: r.w, d: r.d }));
-  return { group: root, wallSets, windows, rooms, bounds: bb, wallH: H, trees, plaques, pane: K.pane };
+/**
+ * 单层的老入口（v1 方案 / 一层的 floor）：一个壳 + 底座。
+ * opts.title / opts.subtitle：底座正面的两行字（界面给的是当前语言的文字，这里原样画；副标没给 = 溪岸 SAIL）。
+ * @returns {{ group, wallSets, windows, rooms, bounds, wallH, trees, plaques, pane }}
+ */
+export function buildHouse(single, walls, lib, { title, subtitle, ground = true } = {}) {
+  const floor = { rooms: single.rooms || [], openings: single.openings || [], ceil: single.ceil || single.wallH || 2.8 };
+  const shell = buildFloorShell(floor, walls, lib);
+  const bb = bounds({ rooms: floor.rooms });
+  const base = buildPlinth(bb, lib, { title, subtitle, ground, top: shell.wallH });
+  const root = new THREE.Group();
+  root.add(shell.group, base.group);
+  return { group: root, wallSets: shell.wallSets, windows: shell.windows, rooms: shell.rooms, bounds: bb, wallH: shell.wallH, trees: base.trees, plaques: base.plaques, pane: kitFor(lib).pane };
 }
 
 /** 墙的切法：'cut' 朝镜头的外墙切低；'down' 全切；'up' 全立 */

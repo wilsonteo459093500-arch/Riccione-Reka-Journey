@@ -1,4 +1,4 @@
-// 概念图加品牌角标（当前语言）：左下「为谁定制 · 梦想家牌」+ 这一版的主要材质，右下 WISH by RICCIONE REKA。
+// 概念图加品牌角标（当前语言）：左下「为谁定制 · 梦想家牌」（多层只看一层时再加「· 二楼」）+ 这一版的主要材质，右下 WISH by RICCIONE REKA。
 // 颜色全部来自 palette.js（canvas 读不到 CSS 变量）。
 
 import { DREAMER_BY_CODE } from '../../shared/dreamers.js';
@@ -49,7 +49,8 @@ function fitFont(ctx, text, weight, size, family, maxW, spacing = 0) {
   return fs;
 }
 
-export async function stampSnapshot(blob, project) {
+/** opts.floor：多层方案只看某一层时，那一层的名字（已经是当前语言），写在标题后面 */
+export async function stampSnapshot(blob, project, { floor = '' } = {}) {
   const img = await createImageBitmap(blob);
   const c = document.createElement('canvas');
   c.width = img.width;
@@ -91,7 +92,8 @@ export async function stampSnapshot(blob, project) {
   const maxW = c.width - pad * 3 - right;
   const d = project.profile && DREAMER_BY_CODE[project.profile.code];
   const name = String(project.profile?.name ?? '').trim();
-  const title = d ? (name ? `${name} · ${L(d)}` : L(d)) : t(project.name || BRAND.full);
+  const base = d ? (name ? `${name} · ${L(d)}` : L(d)) : t(project.name || BRAND.full);
+  const title = floor ? `${base} · ${floor}` : base;
   // 同一种材质用在两处（例如墙面和柜体都是画廊白）只写一次：按显示名去重（不同 id 也可能同名）
   const matNames = ['floor', 'walls', 'cabinetry', 'upholstery', 'countertop']
     .map((id) => MAT_BY_ID[project.materials?.[id]])

@@ -1,19 +1,42 @@
 // 开始一个空间：上传平面图 / 自己画 / 户型模板 / 打开以前的方案。有梦想家档案时，顶部显示「为谁定制」。
+// 模板、最近的方案都画一张小平面图：多层的各层并排，带「双层」小章。
 
-import { TEMPLATES, ROOM_TYPES, bounds } from '../plan/model.js';
+import { TEMPLATES, ROOM_TYPES, bounds, migratePlan } from '../plan/model.js';
 import { DREAMER_BY_CODE } from '../../shared/dreamers.js';
 import { t, L, isEn } from '../../shared/i18n.js';
 import { Icon, Modal } from './kit.jsx';
 import { BRAND } from '../../shared/config.js';
 
-function MiniPlan({ plan }) {
-  const b = bounds(plan);
+/** 小平面图：多层的方案各层并排（一楼在左），右上角一个「双层 / 三层」的小章 */
+const LAYERS = { 2: '双层', 3: '三层', 4: '四层' };
+function MiniPlan({ plan: raw }) {
+  const plan = migratePlan(raw);
+  const floors = plan.floors.filter((f) => f.rooms.length);
+  const list = floors.length ? floors : plan.floors.slice(0, 1);
+  const GAP = 1.2;
+  let x = 0;
+  const placed = list.map((f) => {
+    const b = bounds(f);
+    const at = { f, b, dx: x - b.x0 };
+    x += b.w + GAP;
+    return at;
+  });
+  const W = Math.max(1, x - GAP);
+  const D = Math.max(1, ...placed.map((p) => p.b.d));
+  const y0 = Math.min(...placed.map((p) => p.b.y0));
   return (
-    <svg viewBox={`${b.x0 - 0.3} ${b.y0 - 0.3} ${b.w + 0.6} ${b.d + 0.6}`} className="miniplan" aria-hidden="true">
-      {plan.rooms.map((r) => (
-        <rect key={r.id} x={r.x} y={r.y} width={r.w} height={r.d} fill={ROOM_TYPES[r.type]?.color || 'var(--bg-deep)'} className="miniplan-room" />
-      ))}
-    </svg>
+    <span className="miniplan-wrap">
+      <svg viewBox={`${-0.3} ${y0 - 0.3} ${W + 0.6} ${D + 0.6}`} className="miniplan" aria-hidden="true">
+        {placed.map(({ f, dx }) => (
+          <g key={f.id} transform={`translate(${dx} 0)`}>
+            {f.rooms.map((r) => (
+              <rect key={r.id} x={r.x} y={r.y} width={r.w} height={r.d} fill={ROOM_TYPES[r.type]?.color || 'var(--bg-deep)'} className="miniplan-room" />
+            ))}
+          </g>
+        ))}
+      </svg>
+      {list.length > 1 && <i className="miniplan-badge">{t(LAYERS[list.length] || '多层')}</i>}
+    </span>
   );
 }
 
@@ -69,7 +92,7 @@ export default function StartModal({ profile, projects, onTemplate, onUpload, on
       </div>
       <h3 className="start-h">{t('户型模板（马上就有）')}</h3>
       <div className="start-templates">
-        {TEMPLATES.map((tp) => {
+        {TEMPLATES.filter((tp) => !tp.hidden).map((tp) => {
           const sub = tplSub(tp);
           return (
             <button key={tp.id} type="button" className="tpl" onClick={() => onTemplate(tp.id)}>

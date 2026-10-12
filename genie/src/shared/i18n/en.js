@@ -5,5 +5,7 @@ import studio from './en-studio.js';
 import shell from './en-shell.js';
 import logic from './en-logic.js';
 import engine from './en-engine.js';
+import floors from './en-floors.js';
+import imp from './en-import.js';
 
-export default { ...base, ...quiz, ...studio, ...shell, ...logic, ...engine };
+export default { ...base, ...quiz, ...studio, ...shell, ...logic, ...engine, ...floors, ...imp };
