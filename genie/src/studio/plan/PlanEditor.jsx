@@ -20,6 +20,7 @@ import {
   templatePlan,
   uid,
   migratePlan,
+  emptyPlan,
   floorById,
   floorName,
   addFloor,
@@ -34,6 +35,7 @@ import {
   stairPath,
   checkPlan,
   carveFloor,
+  fitRectToRooms,
 } from './model.js';
 import { planFileToImage } from './planImage.js';
 import * as AI from './ai.js';
@@ -272,6 +274,13 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
   // 量完第二点：长度输入框要拿到焦点（点在画布上的那一下会把 autoFocus 的焦点抢走）
   useEffect(() => {
     if (!calib?.p2) return undefined;
+    // 量的那一段在画面顶上（常常是沿着最上面的尺寸线量）会被长度输入框盖住：平面图往下挪一点，看得到量的是哪一段
+    const v = viewRef.current;
+    const topY = Math.min(calib.p1.y, calib.p2.y) * v.s + v.oy;
+    const box = calibRef.current?.closest('.pe-calib-box')?.getBoundingClientRect();
+    const top = svgRef.current?.getBoundingClientRect().top || 0;
+    const clear = box ? box.bottom - top + 28 : (floorsRef.current?.offsetHeight || 48) + 96;
+    if (topY < clear) setView((w) => ({ ...w, oy: w.oy + (clear - topY) }));
     const tm = setTimeout(() => calibRef.current?.focus(), 0);
     return () => clearTimeout(tm);
   }, [calib?.p2]);
@@ -387,6 +396,17 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
     const rs = [...floor.rooms.filter((r) => r.id !== exceptId && !(exceptStair && r.stairId === exceptStair)), ...(below ? below.rooms.filter((r) => !(exceptStair && r.stairId === exceptStair)) : [])];
     return { xs: rs.flatMap((r) => [r.x, r.x + r.w]), ys: rs.flatMap((r) => [r.y, r.y + r.d]) };
   };
+  /** 画房间 / 楼梯的角：靠近房间的边（这一层或下面那层的虚线，屏幕上 10px 内、最多 15cm）就贴上去，否则吸 5cm 格 */
+  const snapPoint = (p) => {
+    const { xs, ys } = snapTargets(null, null);
+    const tol = Math.min(0.15, 10 / viewRef.current.s);
+    const near = (v, arr) => {
+      let best = null;
+      for (const o of arr) if (Math.abs(o - v) <= tol && (best == null || Math.abs(o - v) < Math.abs(best - v))) best = o;
+      return best == null ? snap(v) : r2(best);
+    };
+    return { x: near(p.x, xs), y: near(p.y, ys) };
+  };
 
   /** 这一点附近的墙上，按当前工具放一扇门 / 窗（tolPx：手指要宽松一点） */
   const openingAt = (p, tolPx, kind = tool) => {
@@ -460,7 +480,9 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
   /** 画好一个楼梯间：有上一层 → 从这一层上去；这一层是最上面、下面那层还没有楼梯上来 → 从下面上到这一层；都没有 → 问要不要加一层 */
   const placeStair = (rect) => {
     const make = (p0, from, to) => {
-      let { plan: np, stairId } = addStair(p0, { from, to, ...rect });
+      // 离墙不到 35cm 的缝：楼梯直接贴过去（不然挖出来是一条丢掉的窄缝、墙变两道）
+      const near = [...(floorById(p0, from)?.rooms || []), ...(floorById(p0, to)?.rooms || [])];
+      let { plan: np, stairId } = addStair(p0, { from, to, ...fitRectToRooms(near, rect) });
       if (!stairId) return;
       // 楼梯占的地方，从上下两层的房间里挖掉（客厅变成 L 形的两块），免得重叠
       const st = stairById(np, stairId);
@@ -483,6 +505,7 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
     setAsk({
       text: t('加{0}并连上楼梯？', [nextName]),
       ok: t('加{0}', [nextName]),
+      rect, // 问的时候楼梯间还画在图上（金色虚框）
       run: () => {
         remember();
         const { plan: np, floorId } = addFloor(plan, { copy: 'blank' });
@@ -536,7 +559,10 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
       if (u) setUnderlays((m) => ({ ...m, [floorId]: u }));
       target = floorId;
     } else {
-      next = { ...np, name: plan.name || np.name, north: plan.north };
+      // 方案名：设计师自己取过名字 → 留着；默认的「新方案」或模板的名字（例如「公寓 · 3 房 2 卫」，换成读进来的排屋就不对了）
+      // → 用读出来的名字（户型标签），没有就是「新方案」
+      const deflt = !plan.name || plan.name === emptyPlan().name || TEMPLATES.some((tp) => tp.plan.name === plan.name);
+      next = { ...np, name: deflt ? np.name || emptyPlan().name : plan.name, north: plan.north };
       setUnderlays({ ...u2 });
       target = next.floors[0].id;
     }
@@ -641,8 +667,9 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
         drag.current = { kind: 'pan', x: e.clientX, y: e.clientY, ox: v.ox, oy: v.oy };
       }
     } else if (tool === 'room' || tool === 'stair') {
-      drag.current = { kind: tool === 'room' ? 'draw' : 'drawStair', start: { x: snap(p.x), y: snap(p.y) } };
-      setPreview({ x: snap(p.x), y: snap(p.y), w: 0, d: 0 });
+      const s0 = snapPoint(p);
+      drag.current = { kind: tool === 'room' ? 'draw' : 'drawStair', start: s0 };
+      setPreview({ x: s0.x, y: s0.y, w: 0, d: 0 });
     } else if (OPENING_TOOLS.includes(tool)) {
       if (e.pointerType === 'mouse') {
         // 鼠标：悬停时已经有金色预览，按下就放
@@ -700,9 +727,8 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
     else if (d.kind === 'draw' || d.kind === 'drawStair') {
       const x0 = d.start.x;
       const y0 = d.start.y;
-      const x1 = snap(p.x);
-      const y1 = snap(p.y);
-      setPreview({ x: Math.min(x0, x1), y: Math.min(y0, y1), w: Math.abs(x1 - x0), d: Math.abs(y1 - y0), stair: d.kind === 'drawStair' });
+      const { x: x1, y: y1 } = snapPoint(p);
+      setPreview({ x: Math.min(x0, x1), y: Math.min(y0, y1), w: r2(Math.abs(x1 - x0)), d: r2(Math.abs(y1 - y0)), stair: d.kind === 'drawStair' });
     } else if (d.kind === 'moveRoom') {
       let x = snap(d.orig.x + p.x - d.start.x);
       let y = snap(d.orig.y + p.y - d.start.y);
@@ -942,7 +968,7 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
     underlay: t('拖动底图对齐房间'),
   }[tool];
   // 楼上空着：提示虚线是下面那一层
-  const emptyUpper = below && !floor.rooms.some((r) => !r.stairId) && !preview;
+  const emptyUpper = below && below.rooms.some((r) => !r.stairId) && !floor.rooms.some((r) => !r.stairId) && !preview;
   const upperHint = emptyUpper ? (stairsHere.length ? t('虚线是{0}：沿着外墙拉方块；楼梯已经在了', [floorLabel(below)]) : t('虚线是{0}：沿着外墙拉方块；用「楼梯」工具连上下两层', [floorLabel(below)])) : '';
 
   const roomCount = floor.rooms.filter((r) => !r.stairId).length;
@@ -1460,11 +1486,17 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
                     const [x1, y1, x2, y2] = w.axis === 'x' ? [w.a, w.c, w.b, w.c] : [w.c, w.a, w.c, w.b];
                     return <line key={w.id} x1={x1} y1={y1} x2={x2} y2={y2} className="pe-ghost-wall" strokeWidth={1.5 * sw} strokeDasharray={`${6 * sw} ${4 * sw}`} />;
                   })}
+                  {/* 下面那层的房间名：只写在这一层还没画到的地方（画好的房间上面会和这一层的名字叠在一起） */}
                   {below.rooms
                     .filter((r) => !r.stairId && Math.min(r.w, r.d) * view.s >= 60)
                     .map((r) => {
                       const lab = roomLabel(r);
                       const fs = Math.min(11 * sw, (r.w * 0.8) / emWidth(lab));
+                      const lx0 = r.x + 0.12;
+                      const ly0 = r.y + 0.12;
+                      const lx1 = lx0 + emWidth(lab) * fs;
+                      const ly1 = ly0 + fs * 1.3;
+                      if (floor.rooms.some((o) => Math.min(o.x + o.w, lx1) > Math.max(o.x, lx0) && Math.min(o.y + o.d, ly1) > Math.max(o.y, ly0))) return null;
                       return (
                         <text key={`gl-${r.id}`} x={r.x + 0.12} y={r.y + 0.12 + fs} fontSize={fs} className="pe-ghost-label">
                           {lab}
@@ -1544,6 +1576,7 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
                   );
                 })}
               {preview && preview.w != null && <rect x={preview.x} y={preview.y} width={preview.w} height={preview.d} className={`pe-preview ${preview.stair ? 'is-stair' : ''}`} strokeWidth={sw * 2} />}
+              {ask?.rect && <rect x={ask.rect.x} y={ask.rect.y} width={ask.rect.w} height={ask.rect.d} className="pe-preview is-stair" strokeWidth={sw * 2} />}
               {preview?.opening && <line x1={preview.opening.x1} y1={preview.opening.y1} x2={preview.opening.x2} y2={preview.opening.y2} className={`pe-open-prev k-${tool}`} strokeWidth={10 * sw} />}
               {calib?.p1 && <line x1={calib.p1.x} y1={calib.p1.y} x2={(calib.p2 || preview?.calibTo || calib.p1).x} y2={(calib.p2 || preview?.calibTo || calib.p1).y} className="pe-calib" strokeWidth={3 * sw} />}
             </g>
@@ -1669,6 +1702,10 @@ const PE_FLOORS_CSS = `
 .pe-fl-empty { position: absolute; top: 72px; left: 50%; transform: translateX(-50%); width: max-content; max-width: min(520px, calc(100% - 32px)); margin: 0; padding: 9px 16px; border-radius: 16px; background: rgba(var(--gold-l-rgb), 0.55); color: var(--gold-ink); font: 600 14px/1.4 var(--sans); text-align: center; pointer-events: none; }
 .pe.narrow .pe-fl-empty { top: 64px; }
 .pe .pe-calib-box { top: 66px; }
+@media (max-width: 599px) {
+  .pe .pe-calib-box { width: calc(100% - 24px); box-sizing: border-box; flex-wrap: wrap; justify-content: center; row-gap: 8px; padding: 10px 12px; border-radius: 22px; white-space: normal; }
+  .pe .pe-calib-box > span:first-child { flex-basis: 100%; text-align: center; }
+}
 .pe-calib-all { display: inline-flex; align-items: center; gap: 6px; font: 500 13px/1 var(--sans); color: var(--ink-soft); cursor: pointer; }
 .pe-calib-all input { width: 18px; height: 18px; accent-color: var(--accent); }
 .pe-ghost-room { fill: rgba(var(--shade-rgb), 0.045); }
@@ -1685,7 +1722,7 @@ const PE_FLOORS_CSS = `
 .pe-stair-mouth { stroke: var(--gold); opacity: 0.55; stroke-linecap: round; }
 .pe-stair-label { font-family: var(--sans); font-weight: 700; fill: var(--gold-ink); paint-order: stroke; stroke: var(--card); stroke-width: 0.06; }
 .pe-preview.is-stair { fill: rgba(var(--gold-rgb), 0.28); }
-.pe-ask { position: absolute; inset: 0; z-index: 8; display: grid; place-items: center; padding: 16px; background: rgba(var(--bg-rgb), 0.55); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+.pe-ask { position: absolute; inset: 0; z-index: 8; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 16px; background: rgba(var(--bg-rgb), 0.55); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
 .pe-ask-card { width: min(380px, 100%); padding: 20px; border-radius: 22px; background: var(--card); box-shadow: var(--shadow-2), 0 0 0 0.5px var(--line); }
 .pe-ask-card p { margin: 0 0 16px; font: 600 16px/1.45 var(--sans); color: var(--ink); }
 .pe-ask-card > div { display: flex; justify-content: flex-end; gap: 8px; }

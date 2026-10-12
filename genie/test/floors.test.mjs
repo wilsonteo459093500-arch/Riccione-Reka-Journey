@@ -242,6 +242,24 @@ await test('挖掉楼梯的位置：被压到的房间切开，楼梯间不动',
   assert.ok(Math.abs(area - (25 - 3)) < 1e-6, area);
   for (const r of out.rooms) assert.ok(!(r.x < 5 && r.x + r.w > 4 && r.y < 4 && r.y + r.d > 1), J(r));
   assert.equal(new Set(out.rooms.map((r) => r.id)).size, out.rooms.length);
+  // 上面只剩 0.2m（太窄）：不切出一条窄缝，左边那块一直长到房间的上缘（不会多一道墙）
+  const out2 = M.carveFloor({ id: 'x', rooms: [{ id: 'liv', type: 'living', name: '', x: 0, y: 3, w: 6.6, d: 4.5 }], openings: [] }, { x: 5.45, y: 3.2, w: 1, d: 4.3 });
+  assert.deepEqual(out2.rooms.map((r) => [r.x, r.y, r.w, r.d]), [[0, 3, 5.45, 4.5]]);
+});
+
+await test('楼梯贴墙：离房间的边不到 35cm 就对齐过去（挖出来不会剩一条窄缝）', () => {
+  const rooms = [
+    { id: 'liv', type: 'living', name: '', x: 0, y: 3, w: 6.6, d: 4.5 },
+    { id: 'kit', type: 'kitchen', name: '', x: 0, y: 0, w: 3, d: 3 },
+    { id: 's1-gf', type: 'stair', stairId: 's1', name: '', x: 9, y: 9, w: 1, d: 3 },
+  ];
+  // 画在客厅里：上面差 0.2、右边差 0.15 → 贴到客厅的上缘和右缘；左边差 5.45（够宽）→ 不动；厨房没压到 → 不管
+  assert.deepEqual(M.fitRectToRooms(rooms, { x: 5.45, y: 3.2, w: 1, d: 4.3 }), { x: 5.45, y: 3, w: 1.15, d: 4.5 });
+  // 离得够远（≥ 35cm）→ 原样
+  assert.deepEqual(M.fitRectToRooms(rooms, { x: 2, y: 4, w: 1, d: 3 }), { x: 2, y: 4, w: 1, d: 3 });
+  // 挖完：客厅只剩一块，没有窄缝
+  const out = M.carveFloor({ id: 'x', rooms, openings: [] }, M.fitRectToRooms(rooms, { x: 5.45, y: 3.2, w: 1, d: 4.3 }));
+  assert.deepEqual(out.rooms.find((r) => r.id === 'liv'), { ...rooms[0], w: 5.45 });
 });
 
 console.log('楼板 / 天花 / 栏杆（给 3D）');
@@ -326,6 +344,10 @@ await test('坏方案：noStairs / stairBlocked / overhang / voidLow / stairShor
   // 一楼入口那边什么都没有（楼梯推到最外面）→ 被挡
   const out = M.updateFloor(T('terrace2'), 'gf', (f) => ({ ...f, rooms: f.rooms.filter((r) => r.id !== 'g-foy') }));
   assert.ok(checkPlan(out).some((i) => i.code === 'stairBlocked' && i.floor === 'gf'));
+  // 刚加的空白二楼（只有楼梯间、还没画房间）：不报「被墙挡住」（编辑器提示沿着虚线画）
+  const { plan: c2, floorId: up } = M.addFloor(T('condo3'), { copy: 'blank' });
+  const { plan: c3, stairId } = M.addStair(c2, { from: 'f0', to: up, x: 5.45, y: 3, w: 1.15, d: 4.5 });
+  assert.ok(stairId && !checkPlan(c3).some((i) => i.code === 'stairBlocked' && i.floor === up), J(checkPlan(c3)));
   // 二楼多一间卧室在一楼外面 → 悬空
   const over = M.updateFloor(T('terrace2'), 'ff', (f) => ({ ...f, rooms: [...f.rooms, { id: 'f-x', type: 'bedroom', name: '', x: 0, y: 21, w: 3, d: 3 }] }));
   const oh = checkPlan(over).find((i) => i.code === 'overhang');
@@ -605,8 +627,8 @@ await test('底图：每层一张；旧版存的一张 = 一楼；旧接口 getU
 
 console.log('静态守门');
 await test('src 里除了 model.js / store.js，不直接读 plan.rooms / plan.openings / plan.wallH', () => {
-  // 其他人还在改的文件先列在这里（跑的时候提醒；改完了这里会提示可以拿掉）
-  const PENDING = new Set(['src/studio/plan/ai.js']);
+  // 其他人还在改的文件先列在这里（跑的时候提醒）；现在都改完了
+  const PENDING = new Set([]);
   const OK = new Set(['src/studio/plan/model.js', 'src/studio/store.js']);
   const RE = /\bplan\??\.(rooms|openings|wallH)\b/;
   const walk = (d, acc = []) => {

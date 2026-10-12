@@ -18,24 +18,36 @@ export function installDiag() {
     };
   }
 
+  // 放在顶部工具列下面、可收起：不要挡住底部的时间滑杆和工具列。按钮在最上面，文字太长就在框里滑。
   const box = document.createElement('div');
   box.setAttribute('role', 'status');
   Object.assign(box.style, {
-    position: 'fixed', left: '8px', right: '8px', bottom: '8px', zIndex: 99999, maxHeight: '62vh', overflow: 'auto',
-    padding: '10px 12px', borderRadius: '12px', font: '11px/1.45 ui-monospace, Menlo, Consolas, monospace',
-    background: 'rgba(0,0,0,0.82)', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+    position: 'fixed', left: '8px', top: 'calc(env(safe-area-inset-top, 0px) + 72px)', zIndex: 99999,
+    width: 'min(440px, calc(100vw - 16px))', maxHeight: '38vh', overflow: 'auto',
+    padding: '8px 10px', borderRadius: '12px', font: '10px/1.4 ui-monospace, Menlo, Consolas, monospace',
+    background: 'rgba(0,0,0,0.72)', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
   });
   const text = document.createElement('div');
   const bar = document.createElement('div');
-  Object.assign(bar.style, { display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' });
+  Object.assign(bar.style, { display: 'flex', gap: '6px', flexWrap: 'wrap' });
   const btn = (label, fn) => {
     const b = document.createElement('button');
     b.type = 'button';
     b.textContent = label;
-    Object.assign(b.style, { font: 'inherit', padding: '6px 10px', borderRadius: '8px', border: '1px solid #fff6', background: '#ffffff1a', color: '#fff' });
+    Object.assign(b.style, { font: 'inherit', padding: '5px 9px', borderRadius: '8px', border: '1px solid #fff6', background: '#ffffff1a', color: '#fff' });
     b.onclick = fn;
     bar.appendChild(b);
+    return b;
   };
+  let open = true;
+  const fold = btn('收起 Hide', () => {
+    open = !open;
+    text.style.display = open ? '' : 'none';
+    for (const b of bar.children) if (b !== fold) b.style.display = open ? '' : 'none';
+    fold.textContent = open ? '收起 Hide' : '诊断 Diag';
+    box.style.width = open ? 'min(440px, calc(100vw - 16px))' : 'auto';
+    box.style.background = open ? 'rgba(0,0,0,0.72)' : 'rgba(0,0,0,0.45)';
+  });
   btn('复制 Copy', () => navigator.clipboard?.writeText(text.textContent).catch(() => {}));
   btn('流畅画质 Fast', () => window.__genie?.setQuality?.('fast'));
   btn('兼容画质 Safe', () => window.__genie?.setQuality?.('safe'));
@@ -47,7 +59,8 @@ export function installDiag() {
     }
     location.replace(location.pathname + '?diag=1');
   });
-  box.append(text, bar);
+  text.style.marginTop = '6px';
+  box.append(bar, text);
   document.body.appendChild(box);
 
   // 每一帧画完马上读画面中间一个像素（不开 preserveDrawingBuffer 也读得到）：看画布上到底有没有东西

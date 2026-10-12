@@ -153,6 +153,8 @@ export default {
     'Two storeys or more: use “All / First / Ground” on the right to look floor by floor (upstairs folds away but its shadow stays; PageUp / PageDown on a keyboard).',
   '双层、三层的房子：编辑器上面有楼层标签，楼梯工具把上下层连起来。': 'Two- and three-storey houses: the editor has floor tabs, and the stairs tool links the floors.',
   // ── 诊断面板（studio.html?diag=1，按钮本来就中英并列） ──
+  '收起 Hide': 'Hide',
+  '诊断 Diag': 'Diag',
   '复制 Copy': 'Copy',
   '流畅画质 Fast': 'Fast quality',
   '兼容画质 Safe': 'Safe quality',
