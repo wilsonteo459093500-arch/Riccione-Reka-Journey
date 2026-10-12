@@ -658,27 +658,36 @@ function nms(segs, ctx) {
     }
     return v;
   });
-  const order = segs.map((s, i) => i).sort((i, j) => score[j] - score[i]);
-  const kept = [];
-  for (const i of order) {
+  // 两两比：横截面挨着 / 重叠、沿墙方向重叠 ≥ 60 % 的两段只留一段。
+  // 一段的横截面包住另一段（墙带里面的一条线和一面墙面也成一带）→ 留宽的那段（只要它不比窄的短太多）；否则留证据多的。
+  const dead = new Uint8Array(segs.length);
+  const lo = (q) => q.c - q.t / 2;
+  const hi = (q) => q.c + q.t / 2;
+  for (let i = 0; i < segs.length; i++) {
     const s = segs[i];
-    let dead = false;
-    for (const k of kept) {
-      if (k.o !== s.o) continue;
+    for (let j = i + 1; j < segs.length; j++) {
+      const k = segs[j];
+      if (k.o !== s.o || dead[i] || dead[j]) continue;
       const ov = overlap(s.a, s.b, k.a, k.b);
-      if (ov <= 0.6 * segLen(s)) continue;
-      const touch = Math.abs(s.c - k.c) < (s.t + k.t) / 2 + 1;
-      if (!touch) continue;
-      // 同一条线上（几乎同心）→ 交给合并；横截面错开（挨着）→ 弱的那个是假的
-      if (Math.abs(s.c - k.c) <= Math.max(2, 0.3 * Math.max(s.t, k.t)) && ov < segLen(s) - 1) continue;
-      dead = true;
-      break;
-    }
-    if (!dead) {
-      kept.push(s);
-      out.push(s);
+      if (ov <= 0.6 * Math.min(segLen(s), segLen(k))) continue;
+      if (Math.abs(s.c - k.c) >= (s.t + k.t) / 2 + 1) continue;
+      const ratio = Math.max(s.t, k.t) / Math.max(1, Math.min(s.t, k.t));
+      // 同心、差不多厚 → 交给合并
+      if (Math.abs(s.c - k.c) <= Math.max(2, 0.3 * Math.max(s.t, k.t)) && ratio <= 1.4) continue;
+      const sIn = lo(s) >= lo(k) - 1 && hi(s) <= hi(k) + 1;
+      const kIn = lo(k) >= lo(s) - 1 && hi(k) <= hi(s) + 1;
+      let loser;
+      if (kIn && !sIn && segLen(s) >= 0.8 * segLen(k)) loser = j;
+      else if (sIn && !kIn && segLen(k) >= 0.8 * segLen(s)) loser = i;
+      else loser = score[i] >= score[j] ? j : i;
+      const L = segs[loser];
+      const W = segs[loser === i ? j : i];
+      if (overlap(L.a, L.b, W.a, W.b) >= 0.6 * segLen(L)) dead[loser] = 1;
     }
   }
+  segs.forEach((s, i) => {
+    if (!dead[i]) out.push(s);
+  });
   return out;
 }
 
@@ -954,7 +963,10 @@ function keepNetwork(segs, ctx) {
         const gap = Math.max(q.a - s.b, s.a - q.b);
         // 隔着一个门宽 → 连；更宽的空（开口）只连够长的段（轴线的小圆圈、字不算）
         const short = Math.min(segLen(s), segLen(q));
-        if ((gap <= DOOR_W.max * 1.1 * pm && short >= 0.12 * pm) || (gap <= OPENING_MAX * pm && short >= 0.3 * pm)) uni(i, j);
+        // 比门宽的空（开口）：两段都要「像墙」—— 够长（≥ 1 m）或者另一头接在墙上（轴线圆圈、字两头都悬空）
+        const [A, B] = s.a < q.a ? [s, q] : [q, s];
+        const anchored = (segLen(A) >= pm || A.endA >= 0) && (segLen(B) >= pm || B.endB >= 0);
+        if ((gap <= DOOR_W.max * 1.1 * pm && short >= 0.12 * pm) || (gap <= OPENING_MAX * pm && short >= 0.2 * pm && anchored)) uni(i, j);
         else if (gap <= GLAZING_MAX * pm) {
           const [p0, p1] = q.a > s.b ? [s.b, q.a] : [q.b, s.a];
           if (glazing(ctx, { o: s.o, c: (s.c + q.c) / 2, t: (s.t + q.t) / 2 }, p0, p1)) uni(i, j);
@@ -1268,7 +1280,7 @@ function findGaps(segs, ctx, hints) {
         const probe = { o, c: A.c, t };
         const cl = classifyGap(ctx, probe, A.b, Bs.a, hints);
         // 空着的开口（没有门弧 / 玻璃）：两边都要是像样的墙段（≥ 0.25 m，或另一头接在墙上）—— 尺寸线的短斜杠、轴线圆圈不算
-        const solidPiece = (q, far) => segLen(q) >= 0.25 * pm || q[far] >= 0;
+        const solidPiece = (q, far) => segLen(q) >= pm || (q[far] >= 0 && segLen(q) >= 0.05 * pm);
         if (cl && cl.kind === 'opening' && !(solidPiece(A, 'endA') && solidPiece(Bs, 'endB'))) continue;
         if (cl) {
           A.joinNext = { seg: Bs, ...cl, a: cl.a ?? A.b, b: cl.b ?? Bs.a };
