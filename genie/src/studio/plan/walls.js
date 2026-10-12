@@ -821,14 +821,18 @@ function interior(s, ctx) {
   }
   let filled = 0;
   let hatched = 0;
+  let crossings = 0;
   const win = Math.max(2, Math.round(0.05 * pm));
   for (let i = 0; i < n; i++) {
     if (occ[i] >= 0.6 * rows) filled++;
     let any = 0;
     for (let j = Math.max(0, i - win); j <= Math.min(n - 1, i + win) && !any; j++) any = diag[j];
     if (any) hatched++;
+    if (diag[i] && (i === 0 || !diag[i - 1])) crossings++;
   }
-  return { filled: filled / n, hatched: hatched / n };
+  // 斜线填充：整段都有、而且一米里有好几条（家具的弧线、字只有一两处）
+  const density = crossings / (n / pm);
+  return { filled: filled / n, hatched: density >= 4 ? hatched / n : 0, density };
 }
 
 /**
@@ -925,7 +929,8 @@ function keepNetwork(segs, ctx) {
       } else if (Math.abs(s.c - q.c) <= Math.max(2, 0.3 * Math.max(s.t, q.t))) {
         const gap = Math.max(q.a - s.b, s.a - q.b);
         // 隔着一个门宽 → 连；更宽的空（开口）只连够长的段（轴线的小圆圈、字不算）
-        if (gap <= DOOR_W.max * 1.1 * pm || (gap <= OPENING_MAX * pm && Math.min(segLen(s), segLen(q)) >= 0.3 * pm)) uni(i, j);
+        const short = Math.min(segLen(s), segLen(q));
+        if ((gap <= DOOR_W.max * 1.1 * pm && short >= 0.12 * pm) || (gap <= OPENING_MAX * pm && short >= 0.3 * pm)) uni(i, j);
         else if (gap <= GLAZING_MAX * pm) {
           const [p0, p1] = q.a > s.b ? [s.b, q.a] : [q.b, s.a];
           if (glazing(ctx, { o: s.o, c: (s.c + q.c) / 2, t: (s.t + q.t) / 2 }, p0, p1)) uni(i, j);
@@ -1238,6 +1243,9 @@ function findGaps(segs, ctx, hints) {
         const t = (A.t + Bs.t) / 2;
         const probe = { o, c: A.c, t };
         const cl = classifyGap(ctx, probe, A.b, Bs.a, hints);
+        // 空着的开口（没有门弧 / 玻璃）：两边都要是像样的墙段（≥ 0.25 m，或另一头接在墙上）—— 尺寸线的短斜杠、轴线圆圈不算
+        const solidPiece = (q, far) => segLen(q) >= 0.25 * pm || q[far] >= 0;
+        if (cl && cl.kind === 'opening' && !(solidPiece(A, 'endA') && solidPiece(Bs, 'endB'))) continue;
         if (cl) {
           A.joinNext = { seg: Bs, ...cl, a: cl.a ?? A.b, b: cl.b ?? Bs.a };
         }
@@ -1341,57 +1349,90 @@ function findGaps(segs, ctx, hints) {
   return out;
 }
 
-/** 一段墙中间：横截面变成几条平行细线（和墙本身的画法不一样）的一截 = 窗 */
+/**
+ * 一段墙中间的窗：墙带里面（去掉两边的线）有一条「贯通」的细线（玻璃），≥ 0.35 m 长，那一截墙不是实心的，
+ * 两头有窗框（横穿墙厚的线 / 实心墙的断面）。斜线填充、轴线的虚线没有窗框 → 不算。
+ */
 function findWindows(segs, ctx) {
   const { pm, raw, rawT, w, h } = ctx;
   const out = [];
+  const m = Math.max(1, Math.round(0.035 * pm));
+  const minLen = 0.35 * pm;
   segs.forEach((s, si) => {
-    const parts = s.parts || [s];
-    // 每个沿墙位置的横截面
-    const prof = new Map();
-    for (const p of parts) {
-      if (!p.ids) continue;
-      for (const k of p.ids) {
-        const r = p.sl.r.a[k];
-        prof.set(r, { k: p.sl.k.a[k], nl: p.sl.nl.a[k], ink: p.sl.ink.a[k] / Math.max(1, p.sl.e.a[k] - p.sl.s.a[k]), s: p.sl.s.a[k], e: p.sl.e.a[k] });
+    const M = s.o === 'h' ? rawT : raw;
+    const Wd = s.o === 'h' ? h : w;
+    const Hd = s.o === 'h' ? w : h;
+    const v0 = clamp(Math.round(s.c - s.t / 2 + m), 0, Wd - 1);
+    const v1 = clamp(Math.round(s.c + s.t / 2 - m), v0 + 1, Wd);
+    const b0 = clamp(Math.round(s.c - s.t / 2), 0, Wd - 1);
+    const b1 = clamp(Math.round(s.c + s.t / 2), b0 + 1, Wd);
+    const a = clamp(Math.round(s.a), 0, Hd - 1);
+    const b = clamp(Math.round(s.b), a + 1, Hd);
+    const rows = v1 - v0;
+    if (rows < 1 || b - a < minLen) return;
+    // 每个沿墙位置：里面有几个墨点
+    const occ = new Uint16Array(b - a);
+    for (let u = a; u < b; u++) {
+      let k = 0;
+      for (let v = v0; v < v1; v++) k += M[u * Wd + v];
+      occ[u - a] = k;
+    }
+    // 每一行里面的长墨段（允许 1 像素断）
+    const cand = [];
+    for (let v = v0; v < v1; v++) {
+      let u = a;
+      while (u < b) {
+        if (!M[u * Wd + v]) {
+          u++;
+          continue;
+        }
+        const st = u;
+        let miss = 0;
+        while (u < b && (M[u * Wd + v] || (miss < 1 && u + 1 < b && M[(u + 1) * Wd + v]))) {
+          miss = M[u * Wd + v] ? 0 : miss + 1;
+          u++;
+        }
+        if (u - st >= minLen) cand.push([st, u]);
       }
     }
-    if (prof.size < 4) return;
-    const solidWall = s.solid >= 0.6;
-    const isGlass = (q) => q && q.k === 1 && q.ink <= 0.6 && (q.nl >= 3 || (solidWall && q.nl >= 2));
+    if (!cand.length) return;
+    cand.sort((p, q) => p[0] - q[0]);
+    const merged = [];
+    for (const c of cand) {
+      const last = merged[merged.length - 1];
+      if (last && c[0] <= last[1] + 2) last[1] = Math.max(last[1], c[1]);
+      else merged.push([...c]);
+    }
     const busy = (s.ops || []).map((g) => [g.a, g.b]);
-    let u = Math.ceil(s.a);
-    const end = Math.floor(s.b);
-    while (u < end) {
-      if (!isGlass(prof.get(u))) {
-        u++;
-        continue;
+    // 横截面被墨盖住的比例（窗框 / 实心墙断面）
+    const cross = (u) => {
+      let best = 0;
+      for (let du = -2; du <= 2; du++) {
+        const uu = u + du;
+        if (uu < 0 || uu >= Hd) continue;
+        let k = 0;
+        for (let v = b0; v < b1; v++) k += M[uu * Wd + v];
+        best = Math.max(best, k / (b1 - b0));
       }
-      let v = u;
-      let miss = 0;
-      while (v + 1 < end && (isGlass(prof.get(v + 1)) || (miss < ctx.P.skip && !prof.has(v + 1)))) {
-        v++;
-        if (!prof.has(v)) miss++;
-        else miss = 0;
-      }
-      const a = u;
-      const b = v + 1;
-      u = v + 1;
-      if ((b - a) / pm < 0.35) continue;
-      if (busy.some(([p, q]) => overlap(a, b, p, q) > 0)) continue;
-      // 真的玻璃线：横截面里至少有一条「贯通」的线（斜线填充的交点是错开的）
-      const M = s.o === 'h' ? rawT : raw;
-      const Wd = s.o === 'h' ? h : w;
-      const v0 = Math.round(s.c - s.t / 2 + 2);
-      const v1 = Math.round(s.c + s.t / 2 - 2);
-      let through = 0;
-      for (let vv = v0; vv <= v1; vv++) {
-        let n = 0;
-        for (let uu = a; uu < b; uu++) n += M[uu * Wd + vv] || 0;
-        if (n >= 0.8 * (b - a)) through++;
-      }
-      if (!through) continue;
-      out.push({ seg: si, a, b, kind: 'window', arc: false });
+      return best;
+    };
+    for (const [p, q] of merged) {
+      // 窗里面不是实心
+      let filled = 0;
+      for (let u = p; u < q; u++) if (occ[u - a] >= 0.6 * rows) filled++;
+      if (filled > 0.3 * (q - p)) continue;
+      // 实心 / 填充墙中间的窗：把两头收到实心开始的地方
+      let p2 = p;
+      let q2 = q;
+      while (p2 < q2 && occ[p2 - a] >= 0.6 * rows) p2++;
+      while (q2 > p2 && occ[q2 - 1 - a] >= 0.6 * rows) q2--;
+      if (q2 - p2 < minLen) continue;
+      if (busy.some(([x0, x1]) => overlap(p2, q2, x0, x1) > 0.3 * (q2 - p2))) continue;
+      // 两头的窗框
+      const atA = p2 - a < 3 ? 1 : cross(p2);
+      const atB = b - q2 < 3 ? 1 : cross(q2 - 1);
+      if (atA < 0.75 || atB < 0.75) continue;
+      out.push({ seg: si, a: p2, b: q2, kind: 'window', arc: false });
     }
   });
   return out;
