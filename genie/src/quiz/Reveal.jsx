@@ -184,9 +184,11 @@ export default function Reveal({ profile, onOpen }) {
                   );
                 })}
               </div>
-              <button ref={ctaRef} type="button" className="btn btn-gold big" onClick={onOpen}>
+              <button ref={ctaRef} type="button" className="btn btn-gold big" onClick={onOpen} aria-label={t('打开我的梦想家蓝图')}>
                 <ScrollText size={18} strokeWidth={1.8} aria-hidden="true" />
-                <span>{t('打开我的梦想家蓝图')}</span>
+                <span className="cta-long">{t('打开我的梦想家蓝图')}</span>
+                {/* 英文手机：全名太长、会挤出一行 → 短一点的说法 */}
+                {isEn() && <span className="cta-short">{t('打开我的蓝图')}</span>}
               </button>
             </div>
           )}

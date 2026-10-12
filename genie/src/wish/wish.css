@@ -161,8 +161,22 @@
   background: var(--ritual-text);
   color: var(--ritual-bg);
 }
-.ws-pill.is-muted .ws-pill-label {
+.ws-pill.is-muted .ws-pill-label,
+.ws-muted-ico {
   color: var(--text-soft);
+}
+.ws-muted-ico {
+  flex: none;
+}
+/* 英文的「Sounds of nature」比「自然之声」宽很多，会盖住子页面左下角的按钮（雷区的选项、揭晓的金色按钮）：
+   英文一律只留图标（和手机一样，音量条 / 静音图标）；「Tap to resume the music」照样写出来，客人才知道要点 */
+html[lang='en'] .ws-pill:not(.is-stalled) {
+  width: 44px;
+  padding: 0;
+  justify-content: center;
+}
+html[lang='en'] .ws-pill:not(.is-stalled) .ws-pill-label {
+  display: none;
 }
 .ws-bars {
   display: inline-flex;

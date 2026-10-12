@@ -6,8 +6,13 @@ export default {
   '开始': 'Start',
   '全屏 · 屏幕常亮 · 长按 WISH 字标 3 秒打开员工区': 'Full screen · the screen stays on · hold the WISH mark for 3 seconds for staff controls',
   '员工 · 本机蓝图（{0}）': 'Staff · Blueprints on this device ({0})',
+  '按住 3 秒打开': 'Hold for 3 seconds to open',
+  '轻触锁上': 'Tap to lock',
   '只存在这台设备。「蓝图」会打开设计师版 —— 不要在客人面前打开。':
     'Saved on this device only. “Blueprint” opens the designer view — please don’t open it in front of guests.',
+  '客人自己的手机 · 分享链接 · 约 6–8 分钟。五张牌：直觉、生活、宝藏、三个愿望、雷区 → 得到一份「专属梦想家概念蓝图」。':
+    'For the guest’s own phone or a shared link · about 6–8 minutes. Five cards — Intuition, Life, Treasure, Three Wishes, Deal-Breakers — lead to a personal Dream Home Blueprint.',
+  '展厅 iPad 请用上面的「客户许愿模式」。': 'On the showroom iPad, use Wish Mode above.',
 
   // ── 许愿模式开场 ──
   '许一个家的愿': 'Make a wish for your home',

@@ -327,6 +327,20 @@ html[lang='en'] .ln-card-title {
   font: 400 15px/1.65 var(--sans);
   color: var(--text-soft);
 }
+/* 「展厅 iPad 请用上面的客户许愿模式」：一行小字提示，苔绿色的小图标 */
+.ln-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: -10px 0 22px;
+  font: 500 14px/1.45 var(--sans);
+  color: var(--text);
+}
+.ln-tip svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--accent);
+}
 .ln-go {
   display: inline-flex;
   align-items: center;
@@ -342,43 +356,120 @@ html[lang='en'] .ln-card-title {
   transition: transform 0.25s var(--ease);
 }
 
-/* ── 员工 · 本机蓝图（默认折叠） ── */
+/* ── 员工 · 本机蓝图：锁着，按住 3 秒（一圈金线画满）才打开；轻触锁上 ── */
 .ln-archive {
   margin-top: 36px;
   border-radius: 20px;
   background: rgba(var(--bg-deep-rgb), 0.5);
   border: 0.5px solid var(--line);
 }
-.ln-archive > summary {
+.ln-archive-head {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 56px;
-  padding: 0 18px;
-  list-style: none;
-  cursor: pointer;
+  gap: 14px;
+  width: 100%;
+  min-height: 68px;
+  padding: 12px 18px 12px 14px;
+  border: 0;
   border-radius: 20px;
-  font: 600 15px/1.3 var(--sans);
+  background: transparent;
   color: var(--text-soft);
+  font-family: var(--sans);
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
+  transition: transform 0.25s var(--ease);
 }
-.ln-archive > summary::-webkit-details-marker {
-  display: none;
+.ln-archive:not(.is-open) .ln-archive-head {
+  cursor: default;
 }
-.ln-archive > summary:focus-visible {
+.ln-archive-head.is-holding {
+  transform: scale(0.985);
+}
+.ln-archive-head:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+.ln-lock {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  color: var(--text-soft);
+  transition: color 0.3s var(--ease);
+}
+.ln-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  transform: rotate(-90deg);
+}
+.ln-ring circle {
+  fill: none;
+  stroke-width: 1.6;
+}
+.ln-lock-track {
+  stroke: var(--line);
+}
+.ln-lock-fill {
+  stroke: var(--gold);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+}
+.ln-archive.is-open .ln-lock {
+  color: var(--accent);
+}
+.ln-archive.is-open .ln-lock-fill {
+  stroke: var(--accent);
+  stroke-width: 1.6;
+  transition: stroke 0.3s var(--ease);
+}
+.ln-archive-text {
+  flex: 1;
+  min-width: 0;
+}
+.ln-archive-text b {
+  display: block;
+  font: 600 16px/1.3 var(--sans);
+  color: var(--text-strong);
+}
+.ln-archive-text span {
+  display: block;
+  margin-top: 3px;
+  font: 400 14px/1.35 var(--sans);
+  color: var(--text-soft);
+}
 .ln-chev {
-  margin-left: auto;
+  flex: none;
+  color: var(--text-soft);
   transition: transform 0.3s var(--ease);
 }
-.ln-archive[open] .ln-chev {
+.ln-archive.is-open .ln-chev {
   transform: rotate(180deg);
 }
 .ln-archive-body {
   padding: 0 14px 14px;
+  animation: ln-reveal 0.32s var(--ease) both;
+}
+@keyframes ln-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ln-archive-body {
+    animation: none;
+  }
 }
 .ln-note,
 .ln-empty {

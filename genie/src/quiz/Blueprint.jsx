@@ -164,7 +164,7 @@ function TakeHome({ poster, link, title, onClose }) {
           <p className="take-lead">{t('海报和蓝图会在你自己的手机上打开，在那里就能存图、分享。')}</p>
           {qr && (
             <div className="take-qr">
-              <svg viewBox={`0 0 ${n} ${n}`} role="img" aria-label={t('蓝图链接的二维码')} shapeRendering="crispEdges">
+              <svg className="take-code" viewBox={`0 0 ${n} ${n}`} role="img" aria-label={t('蓝图链接的二维码')} shapeRendering="crispEdges">
                 <rect width={n} height={n} fill="#FFFFFF" />
                 <path d={qrPath(qr)} fill={PALETTE.ink} />
               </svg>

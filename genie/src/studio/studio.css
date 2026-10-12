@@ -3290,6 +3290,18 @@
   }
 }
 
+/* 许愿模式的平面图（draw-only：没有上传、整体宽、AI）：中间只剩「用模板…」一颗，
+   iPad 竖放时和标题、取消 / 生成放得下同一行 —— 不用为它单独占一行，画布多出一行的高度（手机上仍是两行） */
+@media (min-width: 600px) and (max-width: 1023px) {
+  .pe.draw-only .pe-head-actions {
+    order: 0;
+    flex: 0 1 auto;
+    margin: 0;
+    padding: 0;
+    overflow: visible;
+  }
+}
+
 /* 手机 */
 @media (max-width: 599px) {
   .studio {

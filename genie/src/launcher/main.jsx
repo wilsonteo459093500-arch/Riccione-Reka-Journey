@@ -1,12 +1,15 @@
 // 入口页（员工用）：
 //   · 客户许愿模式 —— 大按钮。就在这一页里打开（同一个 Zen 实例）：声音必须在「按下按钮」的这一下开启，
 //     所以欢迎画面出现时就已经有音乐；客人在欢迎画面选「中文开始 / Begin in English」。
-//   · 两个分开的功能：许愿之旅（客人玩）/ 3D 梦想工作室（设计师、销售用）。
-//   · 本机的梦想家蓝图：收在「员工 · 本机蓝图」里，默认折叠；每一行用 ?staff=1 打开（才有设计师版）。
+//     许愿模式开着的时候这一页被重新载入（下拉刷新、Safari 把分页收掉再打开）：回到许愿模式的开场，不会露出这一页。
+//   · 两个分开的功能：许愿之旅（客人自己的手机 / 分享链接；展厅 iPad 用许愿模式）/ 3D 梦想工作室（设计师、销售用）。
+//     许愿之旅用 location.replace 打开：客人在里面按「返回」，回不到这一页。3D 工作室带 ?staff=1（设计师版、方案列表）。
+//   · 本机的梦想家蓝图：收在「员工 · 本机蓝图」里，锁着 —— 和许愿模式的员工区一样要按住 3 秒才打开；
+//     离开这一页、切去别的 app、锁屏、按「返回」回来，都会自己锁上。每一行用 ?staff=1 打开（才有设计师版）。
 
-import { StrictMode, useEffect, useState } from 'react';
+import { StrictMode, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ArrowRight, ChevronDown, Cuboid, Footprints, LockKeyhole, Trash2 } from 'lucide-react';
+import { ArrowRight, ChevronDown, Cuboid, Footprints, LockKeyhole, LockKeyholeOpen, Tablet, Trash2 } from 'lucide-react';
 import '../shared/base.css';
 import './launcher.css';
 import Pangie, { Lamp } from '../shared/Pangie.jsx';
@@ -15,8 +18,27 @@ import { BRAND, CONFIG } from '../shared/config.js';
 import { t, tj, L, isEn, guideName, useLang } from '../shared/i18n.js';
 import WishMode from '../wish/WishMode.jsx';
 import { startWish, savedHost, saveHost } from '../wish/start.js';
+import { useHold } from '../wish/useHold.js';
 import { loadArchive, removeFromArchive } from '../shared/profile.js';
 import { DREAMER_BY_CODE } from '../shared/dreamers.js';
+
+// 这个分页正在客户许愿模式里（sessionStorage：关掉分页就没了）
+const WISH_ON = 'genie.wish.on';
+const wishOn = () => {
+  try {
+    return sessionStorage.getItem(WISH_ON) === '1';
+  } catch {
+    return false;
+  }
+};
+const markWish = (on) => {
+  try {
+    if (on) sessionStorage.setItem(WISH_ON, '1');
+    else sessionStorage.removeItem(WISH_ON);
+  } catch {
+    /* ignore */
+  }
+};
 
 // 中文模式：英文做装饰小字；英文模式：中文做那一行小字（像精品店的双语名牌）
 const pair = (zh, en) => (isEn() ? { main: t(zh), alt: zh, altLang: 'zh-Hans' } : { main: zh, alt: en, altLang: 'en' });
@@ -51,23 +73,117 @@ function ArchiveRow({ p, onRemove }) {
   );
 }
 
+/** 员工 · 本机蓝图：锁着。按住 3 秒（一圈金线画满）才打开；打开后轻触就锁上 */
+function Archive({ list, onRemove }) {
+  const [open, setOpen] = useState(false);
+  const swallow = useRef(false); // 刚按住打开：松手那一下的 click 不要又把它锁上
+  const { p, bind } = useHold(
+    () => {
+      swallow.current = true;
+      setOpen(true);
+    },
+    { enabled: !open }
+  );
+
+  // 离开这一页（打开一份蓝图、切去别的 app、锁屏）或按「返回」回到这一页：一律锁上
+  useEffect(() => {
+    const lock = () => setOpen(false);
+    const onVis = () => {
+      if (document.visibilityState === 'hidden') lock();
+    };
+    window.addEventListener('pagehide', lock);
+    window.addEventListener('pageshow', lock);
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      window.removeEventListener('pagehide', lock);
+      window.removeEventListener('pageshow', lock);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, []);
+
+  const ring = open ? 1 : p;
+  return (
+    <section className={`ln-archive ${open ? 'is-open' : ''}`}>
+      <button
+        type="button"
+        className={`ln-archive-head ${p > 0 && !open ? 'is-holding' : ''}`}
+        aria-expanded={open}
+        aria-controls="ln-archive-body"
+        {...bind}
+        onPointerDown={(e) => {
+          if (open) swallow.current = false;
+          bind.onPointerDown(e);
+        }}
+        onKeyDown={(e) => {
+          if (open) swallow.current = false;
+          bind.onKeyDown(e);
+        }}
+        onClick={() => {
+          if (swallow.current) {
+            swallow.current = false;
+            return;
+          }
+          if (open) setOpen(false);
+        }}
+      >
+        <span className="ln-lock" aria-hidden="true">
+          <svg className="ln-ring" viewBox="0 0 40 40">
+            <circle className="ln-lock-track" cx="20" cy="20" r="18.5" />
+            <circle className="ln-lock-fill" cx="20" cy="20" r="18.5" pathLength="100" style={{ strokeDashoffset: 100 - ring * 100 }} />
+          </svg>
+          {open ? <LockKeyholeOpen size={17} strokeWidth={1.8} /> : <LockKeyhole size={17} strokeWidth={1.8} />}
+        </span>
+        <span className="ln-archive-text">
+          <b>{t('员工 · 本机蓝图（{0}）', [list.length])}</b>
+          <span>{open ? t('轻触锁上') : t('按住 3 秒打开')}</span>
+        </span>
+        <ChevronDown className="ln-chev" size={18} strokeWidth={1.8} aria-hidden="true" />
+      </button>
+      {open && (
+        <div className="ln-archive-body" id="ln-archive-body">
+          <p className="ln-note">{t('只存在这台设备。「蓝图」会打开设计师版 —— 不要在客人面前打开。')}</p>
+          {list.length === 0 ? (
+            <p className="ln-empty">{t('还没有。客人许完愿会自动存在这里（只存在这台设备）。')}</p>
+          ) : (
+            <ul className="ln-list">
+              {list.map((x) => (
+                <ArchiveRow key={x.id} p={x} onRemove={onRemove} />
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function Launcher() {
   const lang = useLang();
   const [list, setList] = useState(loadArchive);
-  const [wish, setWish] = useState(false);
+  const [wish, setWish] = useState(wishOn); // 许愿模式开着时被重新载入：回到许愿模式的开场
+  const [primed, setPrimed] = useState(false);
   const [host, setHost] = useState(savedHost);
 
   useEffect(() => {
     if (!wish) document.title = 'WISH · by Riccione Reka';
   }, [wish, lang]);
 
+  // 从别的页面「返回」到这一页（bfcache）：本机蓝图可能多了几份
+  useEffect(() => {
+    const f = () => setList(loadArchive());
+    window.addEventListener('pageshow', f);
+    return () => window.removeEventListener('pageshow', f);
+  }, []);
+
   if (wish)
     return (
       <WishMode
-        primed
+        primed={primed}
         host={host}
         onExit={() => {
+          markWish(false);
           setWish(false);
+          setPrimed(false);
           setList(loadArchive());
           window.scrollTo(0, 0);
         }}
@@ -124,6 +240,8 @@ function Launcher() {
             className="ln-wish-go"
             onClick={() => {
               startWish(); // 声音、全屏、屏幕常亮都必须在这一下点击里开启
+              markWish(true);
+              setPrimed(true);
               setWish(true);
             }}
           >
@@ -163,7 +281,15 @@ function Launcher() {
         </section>
 
         <div className="ln-cards">
-          <a className="ln-card" href="quiz.html">
+          <a
+            className="ln-card"
+            href="quiz.html"
+            onClick={(e) => {
+              if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; // 在新分页打开：照旧
+              e.preventDefault();
+              location.replace('quiz.html'); // 不留下这一页的记录：客人在许愿之旅里按「返回」，回不到员工的入口页
+            }}
+          >
             <span className="ln-card-top">
               <span className="ln-num">I</span>
               <span className="ln-ico" aria-hidden="true">
@@ -174,13 +300,17 @@ function Launcher() {
             <em className="ln-alt" lang={journey.altLang}>
               {journey.alt}
             </em>
-            <span className="ln-desc">{t('给客人玩 · iPad / 手机 · 约 6–8 分钟。五张牌：直觉、生活、宝藏、三个愿望、雷区 → 得到一份「专属梦想家概念蓝图」。')}</span>
+            <span className="ln-desc">{t('客人自己的手机 · 分享链接 · 约 6–8 分钟。五张牌：直觉、生活、宝藏、三个愿望、雷区 → 得到一份「专属梦想家概念蓝图」。')}</span>
+            <span className="ln-tip">
+              <Tablet size={16} strokeWidth={1.8} aria-hidden="true" />
+              <span>{t('展厅 iPad 请用上面的「客户许愿模式」。')}</span>
+            </span>
             <span className="ln-go">
               {t('开始许愿')}
               <ArrowRight size={17} strokeWidth={2} aria-hidden="true" />
             </span>
           </a>
-          <a className="ln-card" href="studio.html">
+          <a className="ln-card" href="studio.html?staff=1">
             <span className="ln-card-top">
               <span className="ln-num">II</span>
               <span className="ln-ico" aria-hidden="true">
@@ -199,25 +329,7 @@ function Launcher() {
           </a>
         </div>
 
-        <details className="ln-archive">
-          <summary>
-            <LockKeyhole size={17} strokeWidth={1.8} aria-hidden="true" />
-            <span>{t('员工 · 本机蓝图（{0}）', [list.length])}</span>
-            <ChevronDown className="ln-chev" size={18} strokeWidth={1.8} aria-hidden="true" />
-          </summary>
-          <div className="ln-archive-body">
-            <p className="ln-note">{t('只存在这台设备。「蓝图」会打开设计师版 —— 不要在客人面前打开。')}</p>
-            {list.length === 0 ? (
-              <p className="ln-empty">{t('还没有。客人许完愿会自动存在这里（只存在这台设备）。')}</p>
-            ) : (
-              <ul className="ln-list">
-                {list.map((p) => (
-                  <ArchiveRow key={p.id} p={p} onRemove={remove} />
-                ))}
-              </ul>
-            )}
-          </div>
-        </details>
+        <Archive list={list} onRemove={remove} />
       </main>
 
       <footer className="ln-foot">

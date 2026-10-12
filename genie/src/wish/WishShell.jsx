@@ -7,7 +7,9 @@
 //   · 一个音乐小胶囊：只有音量和静音（静音同时关掉音效；只对这一位客人有效）。
 //     声音被系统暂停（锁屏、来电、切去 WhatsApp）时显示「轻触继续音乐」，那一下轻触先恢复声音。
 //   · 员工区：长按 WISH 字标约 3 秒（有进度圈）→ 下一位客人 · 设计师版 · 结束许愿模式 · 语言。客人不会误触。
-//   · 下一位客人：在许愿之旅 / 蓝图时只发 {type:'restart'}，不重新载入（展厅断网也能用）；只有在 3D 时才重新载入。
+//   · 下一位客人：iframe 自己的「返回 / 前进」记录里不能留着上一位客人的页面（3D 会打开他的方案、底座写着他的名字）。
+//     所以客人只要离开过第一个页面（进过 3D、从 3D 回到蓝图、换过语言 …），就把整个 <iframe> 重建（换 key），
+//     连同它的浏览记录一起丢掉；只有一直停在第一个许愿之旅页面里的，才只发 {type:'restart'} 原地重新开始（展厅断网也能用）。
 //   · 同源 iframe：每次载入都在子页面的 document 上挂监听 —— 客人的任何一下点击都顺便恢复音乐、算作「有人在用」。
 
 import { useEffect, useRef, useState } from 'react';
@@ -17,8 +19,8 @@ import { BRAND, CONFIG } from '../shared/config.js';
 import { t, getLang, setLang, useLang } from '../shared/i18n.js';
 import { bindZenLifecycle, releaseWake, exitFullscreen, startWish, wishStartUrl } from './start.js';
 import { layersLabel } from './sounds.js';
+import { useHold } from './useHold.js';
 
-const HOLD_MS = 3000; // 员工区：按住 3 秒
 const PANEL_MS = 25000; // 面板开着没人碰，自己收起来
 const SESSION_KEY = 'genie.session.v1';
 const PAGES = ['quiz', 'blueprint', 'studio'];
@@ -31,68 +33,9 @@ const duck = (zen, level, seconds) => zen.duck?.(level, seconds);
 
 /** 员工区的入口：长按 WISH 字标，一圈细线慢慢画满（3 秒）才打开；短按什么都不会发生 */
 function HoldMark({ onDone, label }) {
-  const [p, setP] = useState(0);
-  const raf = useRef(0);
-  const timer = useRef(0);
-  const t0 = useRef(0);
-  const down = useRef(false);
-  const fired = useRef(false);
-  const fire = () => {
-    if (fired.current || !down.current) return;
-    fired.current = true;
-    cancelAnimationFrame(raf.current);
-    clearTimeout(timer.current);
-    setP(1);
-    onDone();
-    setTimeout(() => setP(0), 450);
-  };
-  const stop = () => {
-    if (!down.current) return;
-    // 3D 很忙时画面一帧可能很久：按够 3 秒就算数，不靠动画走完
-    if (!fired.current && performance.now() - t0.current >= HOLD_MS) fire();
-    down.current = false;
-    cancelAnimationFrame(raf.current);
-    clearTimeout(timer.current);
-    if (!fired.current) setP(0);
-  };
-  const start = (e) => {
-    if (e.pointerType === 'mouse' && e.button !== 0) return;
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {
-      /* ignore */
-    }
-    down.current = true;
-    fired.current = false;
-    t0.current = performance.now();
-    cancelAnimationFrame(raf.current);
-    clearTimeout(timer.current);
-    timer.current = setTimeout(fire, HOLD_MS);
-    const tick = (now) => {
-      if (!down.current || fired.current) return;
-      setP(Math.min(1, Math.max(0, (now - t0.current) / HOLD_MS)));
-      raf.current = requestAnimationFrame(tick);
-    };
-    raf.current = requestAnimationFrame(tick);
-  };
-  useEffect(
-    () => () => {
-      cancelAnimationFrame(raf.current);
-      clearTimeout(timer.current);
-    },
-    []
-  );
+  const { p, bind } = useHold(onDone);
   return (
-    <button
-      type="button"
-      className={`ws-mark ${p > 0 ? 'is-holding' : ''} ${p >= 1 ? 'is-done' : ''}`}
-      aria-label={label}
-      onPointerDown={start}
-      onPointerUp={stop}
-      onPointerCancel={stop}
-      onLostPointerCapture={stop}
-      onContextMenu={(e) => e.preventDefault()}
-    >
+    <button type="button" className={`ws-mark ${p > 0 ? 'is-holding' : ''} ${p >= 1 ? 'is-done' : ''}`} aria-label={label} {...bind}>
       <svg className="ws-ring" viewBox="0 0 88 44" aria-hidden="true">
         <path d="M44 1.5H66.5A20.5 20.5 0 0 1 66.5 42.5H21.5A20.5 20.5 0 0 1 21.5 1.5Z" pathLength="100" style={{ strokeDashoffset: 100 - p * 100 }} />
       </svg>
@@ -126,6 +69,7 @@ export default function WishShell({ zen, host = '', startLang, onReady, onExit }
   const detachChild = useRef(null);
   const readySent = useRef(false);
   const leavingRef = useRef(false);
+  const loads = useRef({ src: '', n: 0 }); // 现在这个 <iframe> 载入过几个页面（重建 = 换 src / key 就从 0 算起）
 
   const post = (msg) => {
     try {
@@ -197,11 +141,13 @@ export default function WishShell({ zen, host = '', startLang, onReady, onExit }
     } catch {
       /* ignore */
     }
-    if (whereRef.current !== 'studio' && quizChild) {
+    // 一直没离开过第一个页面 = iframe 没有浏览记录可以「返回 / 前进」到上一位客人的蓝图或 3D
+    const firstPage = loads.current.src === src && loads.current.n <= 1;
+    if (whereRef.current !== 'studio' && quizChild && firstPage) {
       post({ type: 'restart' });
       // 子页面回到欢迎页会报 page:'quiz'；2.5 秒还没回音（旧版本 / 卡住）才重新载入
       restartFallback.current = setTimeout(reloadFrame, 2500);
-    } else reloadFrame();
+    } else reloadFrame(); // 新的 <iframe>：上一位客人的浏览记录跟着旧的那个一起丢掉
     whereRef.current = 'quiz';
     setWhere('quiz');
     idleDucked.current = false;
@@ -354,6 +300,8 @@ export default function WishShell({ zen, host = '', startLang, onReady, onExit }
   const onLoad = () => {
     const f = frame.current;
     if (!f) return;
+    if (loads.current.src !== src) loads.current = { src, n: 0 };
+    loads.current.n += 1;
     detachChild.current?.();
     detachChild.current = null;
     let win = null;
@@ -432,6 +380,8 @@ export default function WishShell({ zen, host = '', startLang, onReady, onExit }
         >
           {stalled ? (
             <Play size={15} strokeWidth={2.2} className="ws-play" aria-hidden="true" />
+          ) : muted ? (
+            <VolumeX size={18} strokeWidth={1.9} className="ws-muted-ico" aria-hidden="true" />
           ) : (
             <span className={`ws-bars ${playing ? 'on' : ''}`} aria-hidden="true">
               <i />

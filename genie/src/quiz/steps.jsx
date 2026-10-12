@@ -68,14 +68,21 @@ export function phrased(s, phrase = /[^，、：；]+[，、：；]*/g) {
   ));
 }
 
-/** 「甲 · 乙 · 丙」这样的一行小字：中文只在「·」处换行（「梦想家蓝图」不会被拆开）；英文照常断 */
+/**
+ * 「甲 · 乙 · 丙」这样的一行小字：中文只在「·」后面换行（「梦想家蓝图」不会被拆开，下一行也不会以「·」开头）；
+ * 英文照常断。
+ */
 function dotted(s) {
   if (isEn()) return s;
   const parts = String(s).split(/\s*·\s*/);
+  const last = parts.length - 1;
   return parts.map((p, i) => (
     <Fragment key={i}>
-      {i > 0 && ' · '}
-      <span className="ph">{p}</span>
+      <span className="ph">
+        {p}
+        {i < last ? ' ·' : ''}
+      </span>
+      {i < last ? ' ' : ''}
     </Fragment>
   ));
 }

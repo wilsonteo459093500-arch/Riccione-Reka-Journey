@@ -6,7 +6,7 @@ export default {
     'Over the next few minutes, I’ll use five cards to read the home you carry in your heart. No design know-how needed, and no need to think for long — just follow your first feeling.',
   '语言 · Language': '语言 · Language',
   '例：Peggy / 陈小姐 / Peggy & Ken': 'e.g. Peggy / Ms Tan / Peggy & Ken',
-  '上一题': 'Back',
+  '返回': 'Back',
   '我们俩': 'Two of us',
   '一家大小': 'Family',
   '蓝图 {0}%': 'Blueprint {0}%',
@@ -34,7 +34,8 @@ export default {
 
   // ── 揭晓 ──
   '揭晓': 'The Reveal',
-  '{0}正在读取你的梦想': '{0} is reading your dream',
+  '{0}正在读懂你的梦想': '{0} is reading your dream',
+  '打开我的蓝图': 'Open my Blueprint',
   '{0} 的梦想家卡牌': '{0}’s Dreamer Card',
   '你的梦想家卡牌': 'Your Dreamer Card',
   '我的梦想家卡牌': 'My Dreamer Card',
@@ -45,7 +46,16 @@ export default {
   // ── 蓝图 ──
   '梦想家概念蓝图': 'Dream Home Blueprint',
   '生活方式替换': 'Swapped to suit daily life',
-  '长挂 {0} · 短挂 {1}': 'Long hang {0} · short hang {1}',
+  '长挂 {0} · 短挂 {1}': 'Long hanging {0} · short hanging {1}',
+  '雷区': 'Deal-breakers',
+  '按雷区改为：{0}（原为{1}）': 'Changed for the deal-breakers: {0} (was {1})',
+  '客人不要：{0}': 'Guest said no to: {0}',
+
+  // ── 许愿模式的「分享海报」：海报 + 二维码 ──
+  '用手机扫一扫，把蓝图带回家': 'Scan with your phone to take your blueprint home',
+  '海报和蓝图会在你自己的手机上打开，在那里就能存图、分享。': 'Your poster and blueprint open on your own phone, where you can save and share them.',
+  '蓝图链接的二维码': 'QR code for your blueprint link',
+  '打开相机，对准这里': 'Open your camera and point it here',
   '台面 {0} mm': 'Counter {0} mm',
   '偏圆润（沙发那题选了圆的）：弧形沙发 / 圆几；柜体要不要圆角，见面再问':
     'Leans curved (picked the rounded sofa): curved sofa / round coffee table; ask in person whether the cabinetry should have rounded edges',
