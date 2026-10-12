@@ -385,10 +385,11 @@
     if (v.date || !prefs || !prefs.length) return;
     var picks = [], from = Date.now() + SOON;
     prefs.forEach(function (pr) {
-      if (/周六/.test(pr)) picks.push([nextDow(6, from), '14:00']);
-      else if (/周日/.test(pr)) picks.push([nextDow(0, from), '11:00']);
-      else if (/平日白天/.test(pr)) picks.push([nextWeekday(from), '11:00']);
-      else if (/平日傍晚/.test(pr)) picks.push([nextWeekday(from), '17:00']);
+      var k = MB.visitPrefKind(pr);   // 华文「周六」、英文「Saturday」、中英文都认
+      if (k === 'sat') picks.push([nextDow(6, from), '14:00']);
+      else if (k === 'sun') picks.push([nextDow(0, from), '11:00']);
+      else if (k === 'day') picks.push([nextWeekday(from), '11:00']);
+      else if (k === 'eve') picks.push([nextWeekday(from), '17:00']);
     });
     picks.sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; });   // 时段 1 永远是比较近的那个
     if (picks[0]) { v.date = picks[0][0]; v.time = picks[0][1]; v.auto = true; }

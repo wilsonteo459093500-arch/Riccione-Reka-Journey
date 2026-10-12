@@ -348,48 +348,48 @@
   MB.DIRECTIONS.forEach(function (d) { MB.DIRECTION[d.key] = d; });
 
   /* ---------- 需求卡 → 「你说的 · 我们做的」 -------------------
-     match     对应需求卡里的哪个选项（brief.html 的 value 前缀）
+     match     对应需求卡里的哪个选项（正则；华文、英文、中英文的需求卡都要认得）
      room/feats 对上之后，自动勾选哪个空间的哪些卖点
      note      房间页上「为你」那一句                                */
   MB.NEEDS = {
     cook_daily: {
-      field: 'cook', match: '天天开火', room: 'kitchen', feats: ['pantry', 'wetkitchen'],
+      field: 'cook', match: /天天开火|daily|every ?day/i, room: 'kitchen', feats: ['pantry', 'wetkitchen'],
       quote: { en: 'We cook almost every day.', zh: '我们几乎天天开火。' },
       answer: { en: 'Tall pull-out pantry and a moisture-resistant wet kitchen — heavy cooking without the mess.', zh: '高柜拉篮 + 湿厨房防潮柜体，天天开火也不乱。' },
       note: { en: 'You cook almost every day, so pots and jars live in pull-outs at hip height — no kneeling in front of a deep corner cabinet.', zh: '你们几乎天天开火 —— 锅具瓶罐放在腰部高度的拉篮，不用再跪在深柜前翻找。' }
     },
     cook_rare: {
-      field: 'cook', match: '几乎不开火', room: 'kitchen', feats: ['openshelf'],
+      field: 'cook', match: /几乎不开火|rarely|hardly/i, room: 'kitchen', feats: ['openshelf'],
       quote: { en: 'We rarely cook.', zh: '我们很少开火。' },
       answer: { en: 'Open shelving and a coffee corner instead of heavy-duty cabinets — a lighter kitchen.', zh: '用开放层架和咖啡角取代重型柜体，厨房更轻盈。' },
       note: { en: 'You rarely cook, so the kitchen can be lighter: open shelves for the cups you love, closed storage only where it counts.', zh: '你们很少开火，厨房可以轻一点：开放层架放喜欢的杯子，只在需要的地方做封闭收纳。' }
     },
     appliances: {
-      field: 'storage', match: '厨房锅具', room: 'kitchen', feats: ['appliance'],
+      field: 'storage', match: /厨房锅具|cookware|pots|appliance/i, room: 'kitchen', feats: ['appliance'],
       quote: { en: 'We have lots of pots and appliances.', zh: '我们锅具和电器特别多。' },
       answer: { en: 'A built-in appliance tower and a sideboard with pull-out shelf — counters stay clear.', zh: '嵌入式电器高柜 + 餐边柜拉板，台面保持清爽。' },
       note: { en: 'Lots of appliances, so each one gets a fixed, powered place — the counter is for cooking, not storage.', zh: '电器多，所以每一台都有固定、有插座的位置 —— 台面用来做饭，不是用来堆东西。' }
     },
     clothes: {
-      field: 'storage', match: '衣物特别多', room: 'master', feats: ['fullheight', 'drawers'],
+      field: 'storage', match: /衣物|clothes|clothing/i, room: 'master', feats: ['fullheight', 'drawers'],
       quote: { en: 'We have a lot of clothes.', zh: '我们衣服特别多。' },
       answer: { en: 'Full-height wardrobes with inner drawers — the top section takes luggage and seasonal clothes.', zh: '通顶衣柜 + 内抽，最上层放行李箱与换季衣物。' },
       note: { en: 'You have a lot of clothes, so the wardrobe runs to the ceiling — the top section is for luggage and the off-season.', zh: '你们衣服多，所以衣柜做到天花 —— 最上层留给行李箱与换季衣物。' }
     },
     kids: {
-      field: 'storage', match: '孩子', room: 'bedroom', feats: ['toy'],
+      field: 'storage', match: /孩子|kid|child|toy/i, room: 'bedroom', feats: ['toy'],
       quote: { en: 'The kids’ things are everywhere.', zh: '孩子的东西到处都是。' },
       answer: { en: 'Low open storage the kids can reach — so they can tidy up themselves.', zh: '孩子够得着的低位开放收纳，让他们自己收。' },
       note: { en: 'Low, open storage at the kids’ height — if they can reach it, they can put it back.', zh: '收纳做在孩子的高度 —— 够得着，就放得回去。' }
     },
     books: {
-      field: 'storage', match: '书籍', room: 'living', feats: ['display'],
+      field: 'storage', match: /书籍|book|collection/i, room: 'living', feats: ['display'],
       quote: { en: 'We have books and collections to show.', zh: '我们有很多书和收藏想展示。' },
       answer: { en: 'Lit display shelving in the living room — a proper home for the things you love.', zh: '客厅灯光展示格，给喜欢的东西一个像样的位置。' },
       note: { en: 'Your books and collections get lit display shelves — they stop living in boxes.', zh: '你们的书和收藏有了带灯的展示格，不再一直放在箱子里。' }
     },
     luggage: {
-      field: 'storage', match: '行李箱', room: 'foyer', feats: ['understair'],
+      field: 'storage', match: /行李箱|luggage|suitcase|bulky/i, room: 'foyer', feats: ['understair'],
       condo: {
         room: 'master', feats: ['fullheight'],
         answer: { en: 'Wardrobes run to the ceiling — the top section takes luggage and bulky items, so nothing sits on top collecting dust.', zh: '衣柜做到天花，最上层放行李箱与大件，柜顶不再堆杂物积灰。' },
@@ -400,31 +400,31 @@
       note: { en: 'The space under the stairs takes the luggage and bulky items, so they never reach the bedrooms.', zh: '楼梯底收下行李箱与大件杂物，不再挤进卧室。' }
     },
     shoes: {
-      field: 'storage', match: '鞋子', room: 'foyer', feats: ['fullheight', 'ventilated'],
+      field: 'storage', match: /鞋子|shoe/i, room: 'foyer', feats: ['fullheight', 'ventilated'],
       quote: { en: 'We have a lot of shoes.', zh: '我们鞋子很多。' },
       answer: { en: 'A full-height, ventilated shoe wall at the entrance — no odour, no pile at the door.', zh: '玄关通顶透气鞋柜，没有异味，门口不再堆鞋。' },
       note: { en: 'Lots of shoes, so the whole foyer wall becomes a ventilated shoe cabinet — nothing left at the door.', zh: '鞋子多，所以整面玄关墙都是透气鞋柜 —— 门口什么都不留。' }
     },
     elderly: {
-      field: 'household', match: '长辈', room: 'foyer', feats: ['bench'],
+      field: 'household', match: /长辈|elder|parent/i, room: 'foyer', feats: ['bench'],
       quote: { en: 'Our parents live with us.', zh: '长辈和我们同住。' },
       answer: { en: 'A shoe-changing bench at the door and easy-reach storage — comfortable for every age.', zh: '门口换鞋凳与顺手的收纳高度，每个年龄都舒服。' },
       note: { en: 'Your parents live with you, so there is a bench to sit and change shoes, and the daily pairs sit at an easy height.', zh: '长辈同住，所以门口有换鞋凳，常穿的鞋放在不用弯腰的高度。' }
     },
     pets: {
-      field: 'household', match: '宠物', room: 'living', feats: ['floatingconsole'],
+      field: 'household', match: /宠物|\bpets?\b/i, room: 'living', feats: ['floatingconsole'],
       quote: { en: 'We have pets.', zh: '我们有宠物。' },
       answer: { en: 'Floating units with no dark gap to hide under, and low-level finishes that wipe clean.', zh: '悬空柜体没有藏毛的死角，低处饰面好擦。' },
       note: { en: 'With pets at home, the TV console floats — no dark gap for fur to collect, and the vacuum passes right under.', zh: '家里有宠物，所以电视柜悬空 —— 没有积毛的死角，吸尘器直接扫过去。' }
     },
     helper: {
-      field: 'household', match: '帮佣', room: 'laundry', feats: ['tallbroom'],
+      field: 'household', match: /帮佣|helper|maid/i, room: 'laundry', feats: ['tallbroom'],
       quote: { en: 'We have a helper at home.', zh: '家里有帮佣。' },
       answer: { en: 'A tall utility cupboard in the laundry — every cleaning tool in one place.', zh: '洗衣房清洁高柜，清洁工具一次拿齐。' },
       note: { en: 'With a helper at home, every cleaning tool has one tall cupboard — nothing borrowed from other rooms.', zh: '家里有帮佣，所以清洁工具集中在一个高柜里，不用到处借位置。' }
     },
     guests: {
-      field: 'household', match: '客人', room: 'dining', feats: ['sideboard'],
+      field: 'household', match: /客人|guest/i, room: 'dining', feats: ['sideboard'],
       quote: { en: 'We often have guests over.', zh: '家里常有客人。' },
       answer: { en: 'A sideboard for glasses and serving ware — hosting without running to the kitchen.', zh: '餐边柜放酒杯与餐具，招待客人不用一直跑厨房。' },
       note: { en: 'You host often, so glasses and serving ware live in the sideboard — dinner is served without leaving the table.', zh: '你们常请客，酒杯与餐具都在餐边柜里 —— 上菜不用离开餐桌。' }
@@ -453,25 +453,25 @@
 
   /* 需求卡「定制范围」→ 空间 */
   MB.SCOPE_ROOMS = [
-    { match: '全屋', rooms: ['foyer', 'living', 'kitchen', 'laundry', 'master', 'bathroom'] },
-    { match: '厨房', rooms: ['kitchen'] },
-    { match: '衣柜', rooms: ['master'] },
-    { match: '鞋柜', rooms: ['foyer'] },
-    { match: '电视柜', rooms: ['living'] },
-    { match: '书房', rooms: ['study'] },
-    { match: '浴室柜', rooms: ['bathroom'] },
-    { match: '墙板', rooms: ['living'] }
+    { match: /全屋|whole (house|home)/i, rooms: ['foyer', 'living', 'kitchen', 'laundry', 'master', 'bathroom'] },
+    { match: /厨房|kitchen/i, rooms: ['kitchen'] },
+    { match: /衣柜|wardrobe/i, rooms: ['master'] },
+    { match: /鞋柜|shoe/i, rooms: ['foyer'] },
+    { match: /电视柜|\bTV\b/i, rooms: ['living'] },
+    { match: /书房|study/i, rooms: ['study'] },
+    { match: /浴室柜|vanity|bathroom/i, rooms: ['bathroom'] },
+    { match: /墙板|wall panel/i, rooms: ['living'] }
   ];
 
   /* 需求卡「风格倾向」→ 方向（取第一个对上的） */
   MB.STYLE_DIRECTION = [
-    { match: '侘寂', dir: 'wabi' },
-    { match: '日式', dir: 'misty' },
-    { match: '自然原木', dir: 'misty' },
-    { match: '北欧', dir: 'misty' },
-    { match: '现代简约', dir: 'skeleton' },
-    { match: '轻奢', dir: 'mountain' },
-    { match: '中古', dir: 'weaving' }
+    { match: /侘寂|wabi/i, dir: 'wabi' },
+    { match: /日式|japandi|japanese/i, dir: 'misty' },
+    { match: /自然原木|natural wood/i, dir: 'misty' },
+    { match: /北欧|nordic|scandi/i, dir: 'misty' },
+    { match: /现代简约|modern minimal|minimalist/i, dir: 'skeleton' },
+    { match: /轻奢|luxe|luxury/i, dir: 'mountain' },
+    { match: /中古|mid-century|vintage/i, dir: 'weaving' }
   ];
 
   /* ---------- 内置图库 ----------------------------------------

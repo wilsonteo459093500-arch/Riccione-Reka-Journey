@@ -173,9 +173,11 @@
   var PREP_HARDWARE = { en: 'Hinges, runners and handles to try by hand', zh: '铰链、滑轨与把手，现场亲手试',
     short: { en: 'the hinges, runners and handles', zh: '铰链与滑轨样品' } };
 
-  /** 有平面图才答应「打印大图」—— 客户在需求卡写了「没有平面图」，就别这样承诺 */
+  /** 有平面图才答应「打印大图」—— 客户在需求卡写了「没有平面图」，就别这样承诺
+      （三种语言的需求卡都认：brief-parse.js 的 MB.briefSaysPlan） */
   MB.hasPlan = function (p) {
-    return !!p.plan.src || /平面图[:：]\s*有/.test(p.brief || '');
+    if (p.plan.src) return true;
+    return MB.briefSaysPlan ? MB.briefSaysPlan(p.brief) : /平面图[:：]\s*有/.test(p.brief || '');
   };
 
   function autoPrepared(p) {
@@ -505,6 +507,8 @@
     }
     var q = new URLSearchParams();
     if (p.client.names) q.set('for', p.client.names.trim());
+    // 邀请函跟方案同一种语言打开（华文 / 英文 / 中英文）；客户在邀请函上自己切换，网址会跟着改
+    if (['zh', 'en', 'bi'].indexOf(p.lang) > -1) q.set('lang', p.lang);
     if (p.client.honor) q.set('title', p.client.honor);
     if (p.visit.date) q.set('on', p.visit.date);
     if (p.visit.time && p.visit.time !== '14:00') q.set('at', p.visit.time);
