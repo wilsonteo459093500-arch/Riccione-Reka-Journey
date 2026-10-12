@@ -16,7 +16,7 @@ import { sfx } from '../shared/sound.js';
 import { isWishMode, tellShell } from '../shared/zen.js';
 import { t, tj, guideName, isEn } from '../shared/i18n.js';
 import { fmt, ftNote } from '../shared/units.js';
-import { phrased, segmented } from './typo.jsx';
+import { phrased, segmented, keepHyphens } from './typo.jsx';
 
 const WISH = isWishMode();
 
@@ -521,7 +521,8 @@ export function AppliancesStep({ answers, set, next }) {
       {plan.applianceCount ? (
         <Calc mm={plan.counterMM}>
           {tj('台面家电区 ≈ {0}', [<b key="b">{fmt(plan.counterMM)} mm</b>])}
-          {plan.tallUnits ? ` · ${t('嵌入式 {0} 台', [plan.tallUnits])}${plan.applianceTallCabinet ? t('（建议一组电器高柜）') : ''}` : ''}
+          {/* 英文的「built-in」不从连字号断开 */}
+          {plan.tallUnits ? keepHyphens(` · ${t('嵌入式 {0} 台', [plan.tallUnits])}${plan.applianceTallCabinet ? t('（建议一组电器高柜）') : ''}`) : ''}
         </Calc>
       ) : (
         <p className="calc">{t('一样都没有？那台面可以很清爽')}</p>
@@ -539,7 +540,8 @@ export function BulkyStep({ answers, set, next }) {
     <div className="step step-treasure">
       <Head eyebrow={t('宝藏之牌 · {0} / 6', [5])} title={t('这些「大家伙」，你家有哪些？')} lead={t('它们最常被忘记，也最常让家变乱。')} />
       <ChipGrid items={BULKY} set="bulky" value={answers.bulky} onChange={(v) => set({ bulky: v })} />
-      <p className="calc">{n >= 4 ? t('大家伙不少 —— 潘吉建议留一间储物间，或一组 600 深的通高柜。') : n ? t('记下了，会帮它们找好位置。') : t('很清爽！')}</p>
+      {/* 英文的「600-deep」「full-height」不从连字号断开 */}
+      <p className="calc">{keepHyphens(n >= 4 ? t('大家伙不少 —— 潘吉建议留一间储物间，或一组 600 深的通高柜。') : n ? t('记下了，会帮它们找好位置。') : t('很清爽！'))}</p>
       <div className="q-actions">
         <Next onClick={next}>{t('继续')}</Next>
       </div>

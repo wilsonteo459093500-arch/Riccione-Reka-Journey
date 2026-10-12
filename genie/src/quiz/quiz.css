@@ -1791,6 +1791,7 @@ html[lang='en'] .dc-tag {
   font: 400 16px/1.5 var(--sans);
   color: var(--text-soft);
   text-align: center;
+  text-wrap: pretty;
 }
 .calc b {
   font-weight: 650;
@@ -2352,6 +2353,7 @@ html[lang='en'] .bp-quote {
   margin: 12px 0 0;
   font: 400 16px/1.7 var(--sans);
   color: var(--text);
+  text-wrap: pretty;
 }
 .axes {
   display: grid;
@@ -2877,6 +2879,11 @@ html[lang='en'] .seal span {
   font: 500 18px/1.65 var(--zh-serif);
   color: var(--text-strong);
 }
+/* 两句各自一行起头、各自排匀：英文的第二句不会剩一个「through.」掉到第三行 */
+.bp-farewell > span {
+  display: block;
+  text-wrap: balance;
+}
 html[lang='en'] .bp-farewell {
   font-size: 21px;
   line-height: 1.4;
@@ -3076,6 +3083,10 @@ html[lang='en'] .bp-farewell {
 @media (orientation: landscape) and (min-width: 900px) {
   .stage {
     max-width: 800px;
+  }
+  /* 揭晓：牌 + 文字并排，文字那一栏要放得下英文的「Open my Dream Home Blueprint」（不顶到暗色玻璃的边） */
+  .qz-reveal .stage {
+    max-width: 920px;
   }
   /* 潘吉的话放在题目卡右边的空白里，不压到卡片 */
   .bubble {

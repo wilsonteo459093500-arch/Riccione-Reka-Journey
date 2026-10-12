@@ -12,7 +12,7 @@ import { PAIRS } from './flow.js';
 import { sfx } from '../shared/sound.js';
 import { isWishMode, tellShell } from '../shared/zen.js';
 import { t, L, isEn, guideName } from '../shared/i18n.js';
-import { phrased } from './typo.jsx';
+import { phrased, keepWords } from './typo.jsx';
 
 const WISH = isWishMode();
 
@@ -158,7 +158,8 @@ export default function Reveal({ profile, onOpen }) {
               <p className="rv-other" lang={isEn() ? 'zh-Hans' : 'en'}>
                 {other}
               </p>
-              <p className="lead">{t(d.desc)}</p>
+              {/* 词不拆开：不会断成「包 / 包」「陈 / 列」（英文原样） */}
+              <p className="lead">{isEn() ? t(d.desc) : keepWords(t(d.desc))}</p>
               {because.length > 0 && (
                 <ul className="because">
                   {because.map((b) => (

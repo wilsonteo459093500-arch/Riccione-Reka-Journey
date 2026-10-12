@@ -53,7 +53,7 @@ import { t, tj, L, isEn, guideName, withLang } from '../shared/i18n.js';
 import { fmt, ftNote } from '../shared/units.js';
 import { renderKeywords, doorNotes } from './keywords.js';
 import { qrMatrix, qrPath } from './qr.js';
-import { phrased, segmented } from './typo.jsx';
+import { phrased, segmented, keepWords } from './typo.jsx';
 
 const WISH = isWishMode();
 /** 员工视角：网址带 ?staff=1，而且不在许愿模式里（许愿模式只认外壳的 designer 消息） */
@@ -406,7 +406,8 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
             </p>
             <h2 className="bp-h2">{name}</h2>
             <p className="bp-quote">{phrased(t(d.tagline), { sentences: false })}</p>
-            <p className="bp-desc">{t(d.desc)}</p>
+            {/* 词不拆开（不会断成「陈 / 列」），英文原样 */}
+            <p className="bp-desc">{isEn() ? t(d.desc) : keepWords(t(d.desc))}</p>
             <div className="axes">
               {AXES.map((ax) => (
                 <Axis key={ax.id} dim={L({ zh: ax.zh, en: ax.en })} a={L(ax.a)} b={L(ax.b)} v={profile.axes[ax.id]} />
@@ -679,10 +680,10 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
           <div className="bp-end-pangie">
             <Pangie mood="wink" prop="ball" size={120} />
           </div>
+          {/* 两句各占一块、各自排匀（英文第二句不会剩一个「through.」掉到第三行） */}
           <p className="bp-farewell">
-            {fresh ? t('你的梦想，{0}记住了。', [guideName()]) : t('{0}一直帮你记着。', [guideName()])}
-            <br />
-            {t('接下来，我们会把它变成你看得见、走得进的 3D 家。')}
+            <span>{fresh ? t('你的梦想，{0}记住了。', [guideName()]) : t('{0}一直帮你记着。', [guideName()])}</span>
+            <span>{phrased(t('接下来，我们会把它变成你看得见、走得进的 3D 家。'), { sentences: false })}</span>
           </p>
           <p className="fine">
             {BRAND.app} {BRAND.by} · {BRAND.house} · {BRAND.venue}
