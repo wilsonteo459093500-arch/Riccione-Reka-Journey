@@ -140,6 +140,8 @@ export default {
   '这台电脑的显卡跑不动高画质，已自动换成兼容画质。': 'This computer’s graphics can’t handle the high-quality mode, so the studio switched to compatible quality.',
   '这台电脑的浏览器画不出 3D：请在浏览器设置里打开「硬件加速」，或更新显卡驱动后再试。': 'This browser can’t draw the 3D view. Turn on hardware acceleration in the browser settings, or update the graphics driver, then try again.',
   // ── 诊断面板（studio.html?diag=1，按钮本来就中英并列） ──
+  '收起 Hide': 'Hide',
+  '诊断 Diag': 'Diag',
   '复制 Copy': 'Copy',
   '流畅画质 Fast': 'Fast quality',
   '兼容画质 Safe': 'Safe quality',
