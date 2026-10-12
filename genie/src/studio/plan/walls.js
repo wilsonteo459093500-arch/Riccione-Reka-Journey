@@ -934,16 +934,17 @@ function keepNetwork(segs, ctx) {
     }
   }
   const len = new Map();
-  for (let i = 0; i < n; i++) len.set(find(i), (len.get(find(i)) || 0) + segLen(segs[i]));
+  const cnt = new Map();
+  for (let i = 0; i < n; i++) {
+    len.set(find(i), (len.get(find(i)) || 0) + segLen(segs[i]));
+    cnt.set(find(i), (cnt.get(find(i)) || 0) + 1);
+  }
   const maxL = Math.max(0, ...len.values());
   const keep = segs.filter((s, i) => {
     const L = len.get(find(i));
     if (L < Math.max(3.5 * pm, 0.15 * maxL) && L < maxL) return false;
     // 两头都没接上、又短、旁边一个门宽以内也没有同线的墙 → 不要（轴线圆圈、字、符号）
-    if (s.endA < 0 && s.endB < 0 && segLen(s) < 0.8 * pm) {
-      const near = segs.some((q) => q !== s && q.o === s.o && Math.abs(q.c - s.c) <= Math.max(2, 0.3 * Math.max(s.t, q.t)) && Math.max(q.a - s.b, s.a - q.b) <= DOOR_W.max * 1.1 * pm);
-      if (!near) return false;
-    }
+    if (s.endA < 0 && s.endB < 0 && segLen(s) < 0.8 * pm && cnt.get(find(i)) === 1) return false;
     return true;
   });
   // 端点编号要重排
