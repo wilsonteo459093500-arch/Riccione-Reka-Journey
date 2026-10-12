@@ -598,7 +598,7 @@ export function extractWalls(img, opts = {}) {
     }
   }
   markExterior(segs, gaps, ctx);
-  const stairs = findStairs(patH, patV, segs, ctx);
+  const stairs = findStairs(segs, ctx);
   const faceOut = findFaces(segs, stairs, ctx, hints);
   const quality = scoreQuality(segs, gaps, faceOut, ctx, { W, H, pxPerM, scaleSource, f });
   // 输出：裁图像素
@@ -1496,90 +1496,106 @@ function markExterior(segs, gaps, ctx) {
 
 // ───────────── 9. 楼梯（一个方向的等间距细线 = 踏步） ─────────────
 
-function findStairs(patH, patV, segs, ctx) {
-  const { pm, w, h } = ctx;
-  const cell = Math.max(2, Math.round(0.25 * pm));
-  const gw = Math.ceil(w / cell);
-  const gh = Math.ceil(h / cell);
-  // patH 来自扫列（横的踏步线）：r = x，s..e = y 范围；patV 来自扫行：r = y，s..e = x 范围
-  const cntH = new Float32Array(gw * gh);
-  const cntV = new Float32Array(gw * gh);
-  const add = (pat, cnt, vertical) => {
-    for (let i = 0; i < pat.r.n; i++) {
-      const pitch = pat.g.a[i] / pm;
-      if (pitch < 0.17 || pitch > 0.36) continue;
-      const r = pat.r.a[i];
-      for (let v = pat.s.a[i]; v < pat.e.a[i]; v += cell / 2) {
-        const [x, y] = vertical ? [r, v] : [v, r];
-        const k = Math.floor(y / cell) * gw + Math.floor(x / cell);
-        if (k >= 0 && k < cnt.length) cnt[k] += 1;
-      }
-    }
-  };
-  add(patH, cntH, true);
-  add(patV, cntV, false);
+/**
+ * 楼梯 = 一串等间距（0.2–0.34 m）、长 0.6–2.2 m、互相对齐的细线（踏步），≥ 6 条；里面没有另一个方向的等间距线（那是地砖）。
+ * 在原始二值图上找：横的踏步（上下走的楼梯）和竖的踏步（左右走的楼梯）。
+ */
+function findStairs(segs, ctx) {
+  const { raw, rawT, w, h, pm } = ctx;
   const out = [];
-  for (const [A, Bc, dir] of [
-    [cntH, cntV, 'ns'],
-    [cntV, cntH, 'ew'],
-  ]) {
-    const on = new Uint8Array(gw * gh);
-    for (let k = 0; k < gw * gh; k++) if (A[k] >= cell * 0.6 && Bc[k] < A[k] * 0.15) on[k] = 1;
-    // 连通的块 → 外框
-    const seen = new Uint8Array(gw * gh);
-    for (let k = 0; k < gw * gh; k++) {
-      if (!on[k] || seen[k]) continue;
-      const st = [k];
-      seen[k] = 1;
-      let x0 = 1e9;
-      let x1 = -1;
-      let y0 = 1e9;
-      let y1 = -1;
-      let n = 0;
-      while (st.length) {
-        const c = st.pop();
-        n++;
-        const x = c % gw;
-        const y = (c - x) / gw;
-        if (x < x0) x0 = x;
-        if (x > x1) x1 = x;
-        if (y < y0) y0 = y;
-        if (y > y1) y1 = y;
-        for (const d of [-1, 1, -gw, gw]) {
-          const nk = c + d;
-          if (nk < 0 || nk >= gw * gh || seen[nk] || !on[nk]) continue;
-          if ((d === -1 && x === 0) || (d === 1 && x === gw - 1)) continue;
-          seen[nk] = 1;
-          st.push(nk);
+  const lmin = 0.6 * pm;
+  const lmax = 2.2 * pm;
+  const pmin = 0.19 * pm;
+  const pmax = 0.35 * pm;
+  for (const dir of ['ns', 'ew']) {
+    // 'ns'：横线（原图的行）；'ew'：竖线（转置图的行）
+    const M = dir === 'ns' ? raw : rawT;
+    const W = dir === 'ns' ? w : h;
+    const H = dir === 'ns' ? h : w;
+    const runs = [];
+    for (let y = 0; y < H; y++) {
+      const r = y * W;
+      let x = 0;
+      while (x < W) {
+        if (!M[r + x]) {
+          x++;
+          continue;
+        }
+        const s0 = x;
+        while (x < W && M[r + x]) x++;
+        const L = x - s0;
+        if (L >= lmin && L <= lmax) {
+          // 细线：上下两行（隔一个线宽）在同一段上没有这么长的墨
+          const prev = runs.length ? runs[runs.length - 1] : null;
+          if (prev && prev.y >= y - 2 && Math.min(prev.x1, x) - Math.max(prev.x0, s0) > 0.8 * L) {
+            prev.thick = (prev.thick || 1) + 1;
+            prev.y1 = y;
+            continue;
+          }
+          runs.push({ y, y1: y, x0: s0, x1: x });
         }
       }
-      const rw = ((x1 - x0 + 1) * cell) / pm;
-      const rh = ((y1 - y0 + 1) * cell) / pm;
-      const long = dir === 'ns' ? rh : rw;
-      const short = dir === 'ns' ? rw : rh;
-      if (long < 1.5 || short < 0.6 || n < 6) continue;
-      // 精确外框：图案的起止
-      let ex0 = 1e9;
-      let ex1 = -1;
-      let ey0 = 1e9;
-      let ey1 = -1;
-      const pat = dir === 'ns' ? patH : patV;
-      for (let i = 0; i < pat.r.n; i++) {
-        const r = pat.r.a[i];
-        const s = pat.s.a[i];
-        const e = pat.e.a[i];
-        const [px0, px1, py0, py1] = dir === 'ns' ? [r, r + 1, s, e] : [s, e, r, r + 1];
-        if (px1 < x0 * cell || px0 > (x1 + 1) * cell || py1 < y0 * cell || py0 > (y1 + 1) * cell) continue;
-        ex0 = Math.min(ex0, px0);
-        ex1 = Math.max(ex1, px1);
-        ey0 = Math.min(ey0, py0);
-        ey1 = Math.max(ey1, py1);
+    }
+    const thin = runs.filter((q) => (q.thick || 1) <= Math.max(3, 0.05 * pm));
+    // 链：同样的间距、横向重叠 ≥ 70 %
+    const best = new Array(thin.length).fill(null);
+    let top = null;
+    for (let i = 0; i < thin.length; i++) {
+      const q = thin[i];
+      const yc = (q.y + q.y1) / 2;
+      for (let j = i - 1; j >= 0; j--) {
+        const p = thin[j];
+        const dy = yc - (p.y + p.y1) / 2;
+        if (dy > pmax) break;
+        if (dy < pmin) continue;
+        const ov = Math.min(p.x1, q.x1) - Math.max(p.x0, q.x0);
+        if (ov < 0.7 * Math.min(p.x1 - p.x0, q.x1 - q.x0)) continue;
+        const bp = best[j];
+        let n = 2;
+        let pitch = dy;
+        if (bp && Math.abs(bp.pitch - dy) <= Math.max(2, 0.2 * bp.pitch)) {
+          n = bp.n + 1;
+          pitch = bp.pitch;
+        }
+        if (!best[i] || n > best[i].n) best[i] = { n, pitch, prev: j, x0: Math.min(bp && n > 2 ? bp.x0 : p.x0, q.x0), x1: Math.max(bp && n > 2 ? bp.x1 : p.x1, q.x1), y0: bp && n > 2 ? bp.y0 : p.y };
       }
-      if (ex1 < 0) continue;
-      out.push(snapRect({ x: ex0, y: ey0, w: ex1 - ex0, h: ey1 - ey0, dir }, segs, ctx));
+      if (best[i] && best[i].n >= 6 && (!top || best[i].n > top.n)) top = { ...best[i], y1: q.y1 };
+      if (best[i] && best[i].n >= 6) {
+        const c = { ...best[i], y1: q.y1 };
+        // 同一个楼梯只留最长的链
+        const same = out.find((o) => o.dir === dir && o._y0 === c.y0 && Math.abs(o._x0 - c.x0) < 0.3 * pm);
+        if (same) {
+          if (c.n > same.n) Object.assign(same, { n: c.n, _y1: c.y1, _x1: Math.max(same._x1, c.x1) });
+        } else out.push({ dir, n: c.n, pitch: c.pitch, _x0: c.x0, _x1: c.x1, _y0: c.y0, _y1: c.y1 });
+      }
     }
   }
-  return out;
+  // 去掉里面还有另一个方向等间距线的（地砖）
+  const res = [];
+  for (const o of out) {
+    const rect = o.dir === 'ns' ? { x: o._x0, y: o._y0, w: o._x1 - o._x0, h: o._y1 - o._y0 } : { x: o._y0, y: o._x0, w: o._y1 - o._y0, h: o._x1 - o._x0 };
+    if (rect.w < 0.55 * pm || rect.h < 0.55 * pm) continue;
+    const along = o.dir === 'ns' ? rect.h : rect.w;
+    if (along < 1.2 * pm) continue;
+    // 另一方向：在矩形里横穿的长细线（≥ 60 % 长）的条数
+    const M = o.dir === 'ns' ? rawT : raw;
+    const W = o.dir === 'ns' ? h : w;
+    const [c0, c1, l0, l1] = o.dir === 'ns' ? [rect.x, rect.x + rect.w, rect.y, rect.y + rect.h] : [rect.y, rect.y + rect.h, rect.x, rect.x + rect.w];
+    let cross = 0;
+    let lastHit = -10;
+    for (let c = Math.round(c0) + 2; c < Math.round(c1) - 2; c++) {
+      let n = 0;
+      for (let l = Math.round(l0); l < Math.round(l1); l++) n += M[c * W + l];
+      if (n >= 0.6 * (l1 - l0)) {
+        if (c - lastHit > 2) cross++;
+        lastHit = c;
+      }
+    }
+    if (cross >= 4) continue;
+    if (res.some((r) => overlap(r.x, r.x + r.w, rect.x, rect.x + rect.w) > 0 && overlap(r.y, r.y + r.h, rect.y, rect.y + rect.h) > 0)) continue;
+    res.push(snapRect({ ...rect, dir: o.dir, treads: o.n }, segs, ctx));
+  }
+  return res;
 }
 
 /** 矩形的边吸到附近的墙中线（≤ 墙厚 + 0.15 m） */
