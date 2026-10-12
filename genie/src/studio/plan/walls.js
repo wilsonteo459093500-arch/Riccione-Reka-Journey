@@ -860,6 +860,7 @@ function dropFurniture(segs, ctx) {
   }
   const style = wS >= wF && wS >= wP ? 'solid' : wF >= wP ? 'hatched' : 'hollow';
   ctx.style = style;
+  if (ctx.debug) ctx.debug.style = { style, wS, wF, wP };
   if (style === 'hollow') return segs;
   const val = (s) => (style === 'solid' ? s.filled : s.hatched);
   const ok = (s) => val(s) >= 0.5 || val(s) * segLen(s) >= Math.max(0.6 * pm, 0.25 * segLen(s));
