@@ -13,10 +13,13 @@
      挂在主站底下时是 '/invite/'，两种都自动算对。 */
   var local = /^(localhost|127\.|0\.0\.0\.0|\[?::1)/.test(location.hostname);
   var dir   = location.pathname.replace(/[^/]*$/, '');
-  var BASE  = location.origin + dir.replace(/\/$/, '');
+  // config.js 的 publicBase = 邀请函的正式网址：销售端在哪里打开（本机、VISI 的网址），
+  // 客户收到的链接都指向它。没填才用当前网址。
+  var PUB   = String(CFG.publicBase || '').replace(/\/$/, '');
+  var BASE  = PUB || location.origin + dir.replace(/\/$/, '');
   // 结尾的斜线不能省：少了它，浏览器会把 /invite 当档案，相对路径的样式与图片全部 404
-  var PATH_INVITE = local ? BASE + '/index.html' : BASE + '/';
-  var PATH_BRIEF  = local ? BASE + '/brief.html' : BASE + '/brief';
+  var PATH_INVITE = local && !PUB ? BASE + '/index.html' : BASE + '/';
+  var PATH_BRIEF  = local && !PUB ? BASE + '/brief.html' : BASE + '/brief';
 
   var F = {
     host: $('#g-host'), role: $('#g-role'), wa: $('#g-wa'),
