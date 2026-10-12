@@ -49,7 +49,7 @@ export default function CrewLink({ payload }) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="mx-auto flex min-h-[100dvh] max-w-md flex-col items-center justify-center p-6 text-center">
+    <div className="mx-auto flex min-h-screen supports-[height:1dvh]:min-h-[100dvh] max-w-md flex-col items-center justify-center p-6 text-center">
       {error ? (
         <>
           <Icon name="CircleAlert" size={32} className="text-fail" />

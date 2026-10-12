@@ -8,6 +8,15 @@
 
 const ua = () => (typeof navigator === 'undefined' ? '' : navigator.userAgent || '');
 
+// 师傅点主管发的链接（#/crew/…）进来：先记下这个链接。进来后马上会跳到报告页，地址就变了；
+// 「复制链接到浏览器打开」要给的是这个师傅链接（换个浏览器打开才能重新导入项目），不是本机的报告地址。
+const CREW_ENTRY = 'tora.crewEntry';
+try {
+  if (typeof location !== 'undefined' && location.hash.startsWith('#/crew/')) localStorage.setItem(CREW_ENTRY, location.href);
+} catch {
+  /* 隐私模式等 */
+}
+
 /** 华为 / 鸿蒙手机（荣耀新机有谷歌服务，不算） */
 export const isHuawei = () => /HUAWEI|HarmonyOS|OpenHarmony|ArkWeb|HuaweiBrowser|HMSCore/i.test(ua());
 
@@ -23,14 +32,34 @@ export const canWebCamera = () =>
 /** 能不能用网页相机录像 */
 export const canWebVideo = () => canWebCamera() && typeof globalThis.MediaRecorder !== 'undefined';
 
-/** 这台手机默认就多给一个「网页相机」按钮（华为 / App 内置浏览器）；其他手机打不开时再提示 */
-export const offerWebCamera = () => canWebCamera() && (isHuawei() || inAppBrowser());
+const ALWAYS = 'tora.webcam';
+/** 「设置」里打开了「总是显示网页相机按钮」 */
+export function webCamAlways() {
+  try {
+    return localStorage.getItem(ALWAYS) === '1';
+  } catch {
+    return false;
+  }
+}
+export function setWebCamAlways(on) {
+  try {
+    if (on) localStorage.setItem(ALWAYS, '1');
+    else localStorage.removeItem(ALWAYS);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 照片区默认多给一个「网页相机」按钮：华为 / 鸿蒙手机，或设置里打开了；其他手机打不开时再提示。
+ *  App 内置浏览器一般不让网页用相机，不默认给（打不开时的提示里仍可试） */
+export const offerWebCamera = () => canWebCamera() && (isHuawei() || webCamAlways());
 
 /** 录像格式：优先 mp4（WhatsApp / iPhone 都能播），没有就 webm */
 export function pickVideoType() {
   const R = globalThis.MediaRecorder;
   if (!R?.isTypeSupported) return '';
-  for (const t of ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']) {
+  // vp8 在 vp9 前面：老手机 vp9 是软件编码，录起来卡
+  for (const t of ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp8', 'video/webm;codecs=vp9', 'video/webm']) {
     try {
       if (R.isTypeSupported(t)) return t;
     } catch {
@@ -45,7 +74,7 @@ export function pickVideoType() {
  * 选好了有 change，取消了有 cancel。这些都没有 → 说明什么都没弹出来 → onNoShow()。
  * 返回取消函数。
  */
-export function watchPicker(input, onNoShow, ms = 1800) {
+export function watchPicker(input, onNoShow, { ms = 1800, onLate } = {}) {
   if (typeof window === 'undefined' || !input) return () => {};
   // 只看安卓 / 鸿蒙：iPhone 的选照片菜单弹出时页面不会失焦，会误报；而且 iPhone 没有这个问题
   if (!isAndroid() && !isHuawei()) return () => {};
@@ -76,7 +105,10 @@ export function watchPicker(input, onNoShow, ms = 1800) {
   input.addEventListener('cancel', onCancel);
   const timer = setTimeout(() => {
     stop();
-    if (!done && document.visibilityState === 'visible' && document.hasFocus()) onNoShow();
+    if (!done && document.visibilityState === 'visible' && document.hasFocus()) {
+      onNoShow();
+      if (onLate) watchLate(onLate);
+    }
   }, ms);
   function stop() {
     clearTimeout(timer);
@@ -88,12 +120,49 @@ export function watchPicker(input, onNoShow, ms = 1800) {
   return stop;
 }
 
-/** 当前网址（复制给用户粘贴到浏览器） */
-export const pageUrl = () => (typeof location === 'undefined' ? '' : location.href);
+// 慢手机：提示出来后选择器才弹出（之后 15 秒内页面失焦）→ onLate（收起提示、重新记一笔）
+function watchLate(onLate) {
+  let off = null;
+  const hit = () => {
+    off();
+    onLate();
+  };
+  const onVis = () => document.visibilityState === 'hidden' && hit();
+  const timer = setTimeout(() => off(), 15000);
+  // 刷新 / 离开页面也会让页面「被盖住」，那不是选择器弹出来，不能算（不然回来会误报「照片没收到」）
+  const leaving = () => off();
+  off = () => {
+    clearTimeout(timer);
+    window.removeEventListener('blur', hit);
+    document.removeEventListener('visibilitychange', onVis);
+    window.removeEventListener('beforeunload', leaving);
+    window.removeEventListener('pagehide', leaving);
+  };
+  window.addEventListener('beforeunload', leaving);
+  window.addEventListener('pagehide', leaving);
+  window.addEventListener('blur', hit);
+  document.addEventListener('visibilitychange', onVis);
+}
 
-/** 安卓：试着用系统浏览器打开当前网址（App 内置浏览器不一定放行，打不开时用户可以复制链接） */
-export function openInBrowserUrl() {
+/** 复制给用户、到浏览器里打开的网址：师傅链接进来的给师傅链接；否则给首页（本机报告地址换个浏览器打不开） */
+export function pageUrl() {
   if (typeof location === 'undefined') return '';
-  const { host, pathname, search, hash } = location;
-  return `intent://${host}${pathname}${search}${hash}#Intent;scheme=https;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end`;
+  try {
+    const crew = localStorage.getItem(CREW_ENTRY);
+    if (crew) return crew;
+  } catch {
+    /* ignore */
+  }
+  return `${location.origin}/#/`;
+}
+
+/** 这些 App 会把 intent:// 交给系统打开浏览器；其他 WebView 可能直接显示「网页无法打开」，就不给这个按钮 */
+export const canOpenIntent = () => isAndroid() && /FBAN|FBAV|Instagram|Messenger|Line\//i.test(ua());
+
+/** 安卓：用系统浏览器打开（只在 canOpenIntent() 时用） */
+export function openInBrowserUrl() {
+  const url = pageUrl();
+  if (!url) return '';
+  const u = new URL(url);
+  return `intent://${u.host}${u.pathname}${u.search}${u.hash}#Intent;scheme=https;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end`;
 }

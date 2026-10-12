@@ -19,6 +19,7 @@ body {
 
 body {
   margin: 0;
+  min-height: 100vh; /* 老内核不认 dvh */
   min-height: 100dvh;
 }
 

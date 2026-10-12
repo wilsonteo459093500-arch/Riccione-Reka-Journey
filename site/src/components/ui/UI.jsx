@@ -110,7 +110,10 @@ export function Sheet({ open, onClose, title, children, footer, tall = false }) 
   return (
     <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/40" onClick={onClose}>
       <div
-        className={`relative flex w-full max-w-lg flex-col rounded-t-3xl bg-cream shadow-2xl ${tall ? 'h-[92dvh]' : 'max-h-[88dvh]'}`}
+        className={`relative flex w-full max-w-lg flex-col rounded-t-3xl bg-cream shadow-2xl ${
+          // dvh：老内核（Chromium < 108，旧版华为浏览器）不认，先给 vh 兜底，不然弹层没有高度
+          tall ? 'h-[92vh] supports-[height:1dvh]:h-[92dvh]' : 'max-h-[88vh] supports-[height:1dvh]:max-h-[88dvh]'
+        }`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"

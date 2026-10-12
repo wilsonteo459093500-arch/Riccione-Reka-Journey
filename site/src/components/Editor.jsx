@@ -332,7 +332,7 @@ export default function Editor({ reportId }) {
   };
 
   return (
-    <div className="min-h-[100dvh] pb-32">
+    <div className="min-h-screen supports-[height:1dvh]:min-h-[100dvh] pb-32">
       <TopBar
         title={uiText(template.name)}
         sub={

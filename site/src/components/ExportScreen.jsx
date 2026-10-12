@@ -278,7 +278,7 @@ export default function ExportScreen({ reportId }) {
   };
 
   return (
-    <div className="min-h-[100dvh] pb-10">
+    <div className="min-h-screen supports-[height:1dvh]:min-h-[100dvh] pb-10">
       <TopBar
         title={isMsg ? t('文案 & 分享', 'Message & Share') : t('预览 & 导出', 'Preview & Export')}
         sub={project ? siteLabelUi(project) : uiText(template.name)}
@@ -343,7 +343,7 @@ export default function ExportScreen({ reportId }) {
             {/* 文案内容跟文件语言（不跟界面语言） */}
             <div
               data-doc-lang
-              className="max-h-[46dvh] overflow-y-auto whitespace-pre-wrap break-words rounded-xl bg-[#E7F3E2] px-3.5 py-3 font-sans text-[14px] leading-relaxed text-ink"
+              className="max-h-[46vh] supports-[height:1dvh]:max-h-[46dvh] overflow-y-auto whitespace-pre-wrap break-words rounded-xl bg-[#E7F3E2] px-3.5 py-3 font-sans text-[14px] leading-relaxed text-ink"
             >
               {text}
             </div>

@@ -11,6 +11,9 @@ import WebCamera from './WebCamera.jsx';
 import { NoShowCard } from './CameraHelp.jsx';
 import { t, tb, uiText, getUiLang } from '../../lib/i18n.js';
 
+// 有的手机相册给的文件没有类型也没有扩展名：也收下，交给压缩去认（认不出会提示）
+const unknown = (f) => !f.type && !/\.[a-z0-9]{2,5}$/i.test(f.name || '');
+
 // 「照片 2 / 5」：中英时名称合在一起，序号只写一次
 function counter(zh, en, n) {
   const l = getUiLang();
@@ -82,9 +85,9 @@ function Viewer({ id, index, total, onClose, onDelete, onMove }) {
     >
       <div className="overflow-hidden rounded-2xl bg-black/5">
         {url && m?.kind === 'video' ? (
-          <video src={url} controls playsInline className="mx-auto max-h-[52dvh] w-full bg-black" />
+          <video src={url} controls playsInline className="mx-auto max-h-[52vh] supports-[height:1dvh]:max-h-[52dvh] w-full bg-black" />
         ) : url ? (
-          <img src={url} alt="" className="mx-auto max-h-[52dvh] w-auto object-contain" />
+          <img src={url} alt="" className="mx-auto max-h-[52vh] supports-[height:1dvh]:max-h-[52dvh] w-auto object-contain" />
         ) : (
           <div className="flex h-60 items-center justify-center">{url === null ? t('无法预览', 'Preview not available') : <Spinner />}</div>
         )}
@@ -116,7 +119,7 @@ export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, com
     };
   }, []);
   const { toast, confirm } = useUI();
-  const [cam, setCam] = useState(false); // 网页相机
+  const [cam, setCam] = useState(false); // 网页相机：打开时还能拍几张（false = 没开）
   const [noShow, setNoShow] = useState(false); // 点了却没弹出相机 / 相册
   const webCam = offerWebCamera();
   const stopWatch = useRef(null);
@@ -130,8 +133,6 @@ export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, com
 
   const addFiles = (fileList) => {
     const isVideo = (f) => f.type.startsWith('video/') || /\.(mp4|mov|m4v|webm)$/i.test(f.name);
-    // 有的手机相册给的文件没有类型也没有扩展名：也收下，交给压缩去认（认不出会提示）
-    const unknown = (f) => !f.type && !/\.[a-z0-9]{2,5}$/i.test(f.name || '');
     const files = [...(fileList || [])].filter(
       (f) => f.type.startsWith('image/') || /\.(heic|heif|jpe?g|png|webp)$/i.test(f.name) || (acceptVideo && isVideo(f)) || unknown(f),
     );
@@ -145,7 +146,14 @@ export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, com
         for (const f of take) {
           const kind = acceptVideo && isVideo(f) ? 'video' : 'photo';
           try {
-            const id = await addMediaFile(reportId, f, kind);
+            let id;
+            try {
+              id = await addMediaFile(reportId, f, kind);
+            } catch (e) {
+              // 没类型没扩展名的文件当照片认不出：能收视频的地方再按视频试一次
+              if (kind === 'photo' && acceptVideo && unknown(f)) id = await addMediaFile(reportId, f, 'video');
+              else throw e;
+            }
             onChange((prev) => [...(prev || []), id]);
           } catch (e) {
             toast(e.message || t('照片处理失败', kind === 'video' ? 'Could not process this video' : 'Could not process this photo'), 'error');
@@ -162,10 +170,24 @@ export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, com
     markPicker(input, { reportId, anchor: anchorOf(btn), kind });
     setNoShow(false);
     stopWatch.current?.();
-    stopWatch.current = watchPicker(input, () => {
-      clearPicker();
-      if (alive.current) setNoShow(true);
-    });
+    stopWatch.current = watchPicker(
+      input,
+      () => {
+        clearPicker();
+        if (alive.current) setNoShow(true);
+      },
+      {
+        // 慢手机：提示出来后选择器才弹出 → 收起提示，重新记一笔（被系统关掉回来仍能提示）
+        onLate: () => {
+          markPicker(input, { reportId, anchor: anchorOf(btn), kind });
+          if (alive.current) setNoShow(false);
+        },
+      },
+    );
+  };
+  const openCam = () => {
+    setNoShow(false);
+    setCam(Math.max(0, max - list.length - busy));
   };
   const gotFiles = (files) => {
     clearPicker();
@@ -248,7 +270,7 @@ export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, com
               <button
                 type="button"
                 className={`${compact ? 'h-14 w-14' : 'h-[76px] w-[76px]'} flex flex-col items-center justify-center gap-0.5 rounded-xl border-2 border-dashed border-pine/40 bg-pine/5 text-pine active:scale-95`}
-                onClick={() => setCam(true)}
+                onClick={openCam}
                 aria-label={t('网页相机', 'Web camera')}
               >
                 <Icon name="Smartphone" size={compact ? 16 : 22} />
@@ -260,16 +282,9 @@ export default function PhotoStrip({ ids = [], onChange, reportId, max = 30, com
         )}
       </div>
       {noShow && left > 0 && (
-        <NoShowCard onWebCamera={canWebCamera() ? () => { setNoShow(false); setCam(true); } : null} onClose={() => setNoShow(false)} />
+        <NoShowCard onWebCamera={canWebCamera() ? openCam : null} onClose={() => setNoShow(false)} />
       )}
-      {cam && (
-        <WebCamera
-          open
-          left={left}
-          onClose={() => setCam(false)}
-          onPhoto={(file) => addFiles([file])}
-        />
-      )}
+      {cam !== false && <WebCamera left={cam} onClose={() => setCam(false)} onPhoto={(file) => addFiles([file])} />}
       {open >= 0 && list[open] && (
         <Viewer
           id={list[open]}

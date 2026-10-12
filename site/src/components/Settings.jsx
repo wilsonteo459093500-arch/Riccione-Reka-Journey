@@ -13,6 +13,7 @@ import { downloadBlob } from '../lib/share.js';
 import { fmtBytes } from '../lib/images.js';
 import { todayISO } from '../lib/format.js';
 import { CameraHelpSheet } from './fields/CameraHelp.jsx';
+import { isHuawei } from '../lib/camera.js';
 
 // 「设置」的默认值（lib/store.jsx DEFAULT_SETTINGS）：English 界面下显示成英文，存的值不变
 // （文件里按文件语言换写法；一打字就存打的内容）
@@ -238,10 +239,17 @@ export default function Settings() {
                   en={<>Open this page in <b>Safari</b> → tap the Share button at the bottom → “Add to Home Screen”.</>}
                 />
               ) : (
-                <Both
-                  zh={<>用 <b>Chrome</b> 打开 → 右上角「⋮」→「添加到主屏幕 / 安装应用」。</>}
-                  en={<>Open in <b>Chrome</b> → “⋮” at the top right → “Add to Home screen / Install app”.</>}
-                />
+                isHuawei() ? (
+                  <Both
+                    zh={<>用 <b>华为浏览器</b> 打开 → 菜单 →「添加到桌面」。</>}
+                    en={<>Open in <b>Huawei Browser</b> → menu → “Add to home screen”.</>}
+                  />
+                ) : (
+                  <Both
+                    zh={<>用 <b>Chrome</b> 打开 → 右上角「⋮」→「添加到主屏幕 / 安装应用」。</>}
+                    en={<>Open in <b>Chrome</b> → “⋮” at the top right → “Add to Home screen / Install app”.</>}
+                  />
+                )
               )}
               <br />
               {tb(

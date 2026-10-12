@@ -8,6 +8,7 @@ import { ProjectList, ProjectEdit } from './components/Projects.jsx';
 import Settings from './components/Settings.jsx';
 import CrewLink from './components/CrewLink.jsx';
 import { InAppBanner } from './components/fields/CameraHelp.jsx';
+import { isHuawei } from './lib/camera.js';
 import { Fragment, useEffect } from 'react';
 import { UIProvider, Spinner, useUI } from './components/ui/UI.jsx';
 import { StoreProvider, useStore } from './lib/store.jsx';
@@ -33,18 +34,19 @@ function InterruptNotice() {
     const actEn = video ? 'recording' : info.kind === 'library' ? 'picking photos' : 'taking the photo';
     // iPhone 的主屏幕 App / Chrome 和 Safari 资料分开，不建议换地方；安卓 Chrome 与主屏幕 App 共用资料
     const android = /android/i.test(navigator.userAgent);
+    const huawei = isHuawei();
     const zh =
       `${act}时手机运行内存不够，浏览器被系统暂时关掉了，所以这次的${what}没传回来。报告已自动保存，填过的内容都在。\n\n` +
       '这样做就不会再丢：\n' +
       '• 先用手机相机拍好，再点「相册」一次选多张（最稳）\n' +
       '• 拍照前把后台其他 App 关掉' +
-      (android ? '\n• 用 Chrome 打开并加到主屏幕使用，不要在 WhatsApp 里直接打开' : '');
+      (android ? (huawei ? '\n• 用华为浏览器打开并加到桌面使用，不要在 WhatsApp 里直接打开' : '\n• 用 Chrome 打开并加到主屏幕使用，不要在 WhatsApp 里直接打开') : '');
     const en =
       `The phone ran low on memory while ${actEn}, so the system briefly closed the browser and this ${whatEn} didn't come back. The report was saved automatically — everything you filled in is still there.\n\n` +
       'To avoid losing it again:\n' +
       '• Take the photos with the phone camera first, then tap "Gallery" and pick several at once (most reliable)\n' +
       '• Close other apps running in the background before taking photos' +
-      (android ? '\n• Open in Chrome and add it to the home screen — don\'t open it inside WhatsApp' : '');
+      (android ? (huawei ? '\n• Open in Huawei Browser and add it to the home screen — don\'t open it inside WhatsApp' : '\n• Open in Chrome and add it to the home screen — don\'t open it inside WhatsApp') : '');
     confirm({
       title: t(`刚才的${what}没收到`, `The ${whatEn} didn't come through`),
       message: tb(zh, en, '\n\n'),

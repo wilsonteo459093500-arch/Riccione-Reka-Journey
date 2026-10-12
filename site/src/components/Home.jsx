@@ -13,6 +13,7 @@ import { navigate } from '../lib/router.js';
 import { useInstallPrompt } from '../lib/install.js';
 import { CREW_TEMPLATE } from '../lib/crew.js';
 import { openCrewToday, CrewPaste } from './CrewLink.jsx';
+import { isHuawei } from '../lib/camera.js';
 
 // 中 / EN / 中英：带粗体等格式的一段话（中英 = 中文一段 + 英文另起一段）
 function Bi({ zh, en, className = 'mt-1.5' }) {
@@ -128,6 +129,7 @@ export default function Home() {
   const [limit, setLimit] = useState(40);
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
   const isAndroid = /android/i.test(navigator.userAgent);
+  const huawei = isHuawei(); // 华为没有谷歌 Chrome：说华为浏览器
   const standalone = window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone;
   const install = useInstallPrompt();
   const crew = !!store.settings.crew;
@@ -271,7 +273,9 @@ export default function Home() {
                       {!install && (
                         <>
                           <br />
-                          在 WhatsApp 里打开的：点右上角「⋮」→「在 Chrome 中打开」，再点 Chrome 右上角「⋮」→「添加到主屏幕」。
+                          {huawei
+                            ? '在 WhatsApp 里打开的：点右上角「⋮」→「在浏览器中打开」，再点华为浏览器的菜单 →「添加到桌面」。'
+                            : '在 WhatsApp 里打开的：点右上角「⋮」→「在 Chrome 中打开」，再点 Chrome 右上角「⋮」→「添加到主屏幕」。'}
                         </>
                       )}
                     </>
@@ -282,7 +286,9 @@ export default function Home() {
                       {!install && (
                         <>
                           <br />
-                          Opened from WhatsApp? Tap "⋮" (top right) → "Open in Chrome", then tap Chrome's "⋮" → "Add to Home screen".
+                          {huawei
+                            ? 'Opened from WhatsApp? Tap "⋮" (top right) → "Open in browser", then open Huawei Browser\'s menu → "Add to home screen".'
+                            : 'Opened from WhatsApp? Tap "⋮" (top right) → "Open in Chrome", then tap Chrome\'s "⋮" → "Add to Home screen".'}
                         </>
                       )}
                     </>

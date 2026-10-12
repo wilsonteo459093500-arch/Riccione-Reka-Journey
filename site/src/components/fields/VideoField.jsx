@@ -23,21 +23,30 @@ export default function VideoField({ value, onChange, reportId }) {
   const webCam = offerWebCamera() && canWebVideo();
   const stopWatch = useRef(null);
   const alive = useRef(true);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    alive.current = true; // StrictMode 会卸载再挂载一次，要设回来
+    return () => {
       alive.current = false;
       stopWatch.current?.();
-    },
-    [],
-  );
+    };
+  }, []);
   const picked = (input, btn) => {
     markPicker(input, { reportId, anchor: anchorOf(btn), kind: 'video' });
     setNoShow(false);
     stopWatch.current?.();
-    stopWatch.current = watchPicker(input, () => {
-      clearPicker();
-      if (alive.current) setNoShow(true);
-    });
+    stopWatch.current = watchPicker(
+      input,
+      () => {
+        clearPicker();
+        if (alive.current) setNoShow(true);
+      },
+      {
+        onLate: () => {
+          markPicker(input, { reportId, anchor: anchorOf(btn), kind: 'video' });
+          if (alive.current) setNoShow(false);
+        },
+      },
+    );
   };
   const gotFiles = (files) => {
     clearPicker();
@@ -103,6 +112,11 @@ export default function VideoField({ value, onChange, reportId }) {
             <div className="whitespace-pre-line text-[12px] text-ink-mute">
               {tb('分享时会一起发出；报告里显示封面', 'Sent along when you share; the report shows a still frame')}
             </div>
+            {/webm/i.test(m?.blob?.type || '') && (
+              <div className="whitespace-pre-line text-[12px] text-terra">
+                {tb('WebM 格式：WhatsApp 里可能要当文件打开，iPhone 可能放不了', 'WebM format: WhatsApp may open it only as a file; iPhones may not play it')}
+              </div>
+            )}
           </div>
           <button className="rounded-full p-2 text-fail active:bg-fail/10" onClick={del} aria-label={t('删除视频', 'Delete video')}>
             <Icon name="Trash2" size={18} />
@@ -142,7 +156,7 @@ export default function VideoField({ value, onChange, reportId }) {
       {!value && noShow && (
         <NoShowCard video onWebCamera={canWebVideo() ? () => { setNoShow(false); setCam(true); } : null} onClose={() => setNoShow(false)} />
       )}
-      {cam && <WebCamera open mode="video" onClose={() => setCam(false)} onVideo={(file) => add(file)} />}
+      {cam && <WebCamera mode="video" onClose={() => setCam(false)} onVideo={(file) => add(file)} />}
     </div>
   );
 }
