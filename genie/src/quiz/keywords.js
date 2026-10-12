@@ -103,6 +103,27 @@ const RECOLOUR = {
 const kwName = (id) => KW_NAME[id] || String(MAT_BY_ID[id]?.en || id).toLowerCase();
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const SLOT = '\u0000';
+const wordRe = (phrase) => new RegExp(`(^|[^a-z\\u00c0-\\u024f])(${esc(phrase)})(?=[^a-z\\u00c0-\\u024f]|$)`, 'gi');
+
+/** 一种材质的所有说法：[说法, 换成的模板]（ALIAS 里的 + 英文名本身） */
+function aliasesOf(id) {
+  const out = (ALIAS[id] || []).map((a) => (Array.isArray(a) ? a : [a, '{to}']));
+  const name = String(MAT_BY_ID[id]?.en || '').toLowerCase();
+  if (name && !out.some(([from]) => from === name)) out.push([name, '{to}']);
+  return out;
+}
+
+/**
+ * 关键词 / 柜门那一句里，每一个材质说法 —— 长的先认（「sage green lacquer」是柜体的灰绿烤漆，
+ * 不是墙面的「sage」）。没换的材质也先认出来、原样保留，换掉的短名才不会改到别的材质说法的中间。
+ * → [{ id, from, tpl, swapTo }]，swapTo 为空 = 原样保留
+ */
+function phrases(swapTo) {
+  const out = [];
+  for (const id of Object.keys(MAT_BY_ID)) for (const [from, tpl] of aliasesOf(id)) out.push({ id, from, tpl, swapTo: swapTo.get(id) || '' });
+  // 一样长的：换掉的优先（terracotta 同时是地砖和墙漆的说法）
+  return out.sort((a, b) => b.from.length - a.from.length || !!b.swapTo - !!a.swapTo);
+}
 
 /** 客人的雷区 → 英文短语（「Yellow / gold」→「yellow, gold」） */
 export function avoidWords(avoid = []) {
@@ -118,20 +139,17 @@ export function renderKeywords(base, profile = {}) {
     const k = sw.slot || `${sw.from}>${sw.to}`;
     chain.set(k, { from: chain.get(k)?.from || sw.from, to: sw.to });
   }
-  const swaps = [...chain.values()].filter((s) => s.from !== s.to);
-  // 先把要换的说法换成占位符，最后再填回去：新词不会再被下一条替换改到（walnut → smoked oak → teak）
+  // 同一种材质在两个表面换成了不同的东西：第一条为准
+  const swapTo = new Map();
+  for (const sw of chain.values()) if (sw.from !== sw.to && !swapTo.has(sw.from)) swapTo.set(sw.from, sw.to);
+  // 先把每个材质说法换成占位符（长的先认），最后再填回去：新词不会再被下一条替换改到（walnut → smoked oak → teak）
   const fills = [];
   let s = String(base || '');
-  for (const sw of swaps) {
-    const to = kwName(sw.to);
-    for (const a of ALIAS[sw.from] || [String(MAT_BY_ID[sw.from]?.en || '').toLowerCase()].filter(Boolean)) {
-      const [from, tpl] = Array.isArray(a) ? a : [a, '{to}'];
-      const re = new RegExp(`(^|[^a-z\\u00c0-\\u024f])(${esc(from)})(?=[^a-z\\u00c0-\\u024f]|$)`, 'gi');
-      s = s.replace(re, (all, pre) => {
-        fills.push(tpl.replace('{to}', to));
-        return `${pre}${SLOT}${fills.length - 1}${SLOT}`;
-      });
-    }
+  for (const ph of phrases(swapTo)) {
+    s = s.replace(wordRe(ph.from), (all, pre, hit) => {
+      fills.push(ph.swapTo ? { text: ph.tpl.replace('{to}', kwName(ph.swapTo)), swapped: true } : { text: hit, swapped: false });
+      return `${pre}${SLOT}${fills.length - 1}${SLOT}`;
+    });
   }
   const avoid = profile.avoid || [];
   for (const a of avoid) for (const [re, to] of RECOLOUR[a] || []) s = s.replace(re, to);
@@ -139,10 +157,11 @@ export function renderKeywords(base, profile = {}) {
   const terms = s
     .split(/\s*,\s*/)
     .filter((term) => {
-      const original = term.replace(new RegExp(`${SLOT}\\d+${SLOT}`, 'g'), ' ');
+      // 雷区只看原文：换进来的新词不算（换掉的那一段当作空白），原样保留的材质照常检查
+      const original = term.replace(new RegExp(`${SLOT}(\\d+)${SLOT}`, 'g'), (all, i) => (fills[+i].swapped ? ' ' : fills[+i].text));
       return term.trim() && !avoid.some((a) => RULED_OUT[a]?.test(original));
     })
-    .map((term) => term.replace(new RegExp(`${SLOT}(\\d+)${SLOT}`, 'g'), (all, i) => fills[+i]).trim())
+    .map((term) => term.replace(new RegExp(`${SLOT}(\\d+)${SLOT}`, 'g'), (all, i) => fills[+i].text).trim())
     .filter((term) => {
       const k = term.toLowerCase();
       if (seen.has(k)) return false;
@@ -162,11 +181,20 @@ export function doorNotes(doorsZh, profile = {}) {
   const doorsEn = String(EN[doorsZh] || '').toLowerCase();
   const out = [];
   const seen = new Set();
+  // 柜门那一句里说到了哪些材质：长的先认（「sage lacquer」是柜体的灰绿烤漆，不算墙面的「sage」）
+  const named = new Set();
+  let rest = doorsEn;
+  for (const ph of phrases(new Map())) {
+    const from = ph.from.replace(/ cabinetry$/, '');
+    rest = rest.replace(wordRe(from), (all, pre) => {
+      named.add(ph.id);
+      return `${pre}${SLOT}`;
+    });
+  }
   // 同一种材质在几个表面都换了：柜体那一条优先（柜门说的就是柜体）
   const swaps = (profile.swaps || []).filter((sw) => sw?.from && sw?.to).sort((a, b) => (b.slot === 'cabinetry') - (a.slot === 'cabinetry'));
   for (const sw of swaps) {
-    const names = (ALIAS[sw.from] || [String(MAT_BY_ID[sw.from]?.en || '').toLowerCase()]).map((a) => (Array.isArray(a) ? a[0] : a));
-    const inDoors = names.some((n) => n && doorsEn.includes(n.replace(/ cabinetry$/, '')));
+    const inDoors = named.has(sw.from);
     if ((sw.slot === 'cabinetry' || inDoors) && !seen.has(sw.from)) {
       seen.add(sw.from);
       out.push({ kind: 'swap', from: sw.from, to: sw.to });
