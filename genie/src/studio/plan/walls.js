@@ -828,16 +828,26 @@ function interior(s, ctx) {
     occ[u - a] = k;
   }
   let busy = 0;
-  let clusters = 0;
   const win = Math.max(2, Math.round(0.05 * pm));
   for (let i = 0; i < n; i++) {
     let any = 0;
     for (let j = Math.max(0, i - win); j <= Math.min(n - 1, i + win) && !any; j++) any = occ[j];
     if (any) busy++;
-    if (occ[i] && (i === 0 || !occ[i - 1])) clusters++;
   }
-  // 填充（斜线 / 砖纹）：墙带里面到处都有墨、而且一米里有好几处（家具的弧线、字、地砖线只有一两处）
-  const density = clusters / (n / pm);
+  // 每一行（平行于墙）上的墨段数 / 米：斜线填充每行都有很多段（≥ 5 / m）；家具的弧线、字、地砖格（0.3 m）少
+  let runs = 0;
+  let usedRows = 0;
+  for (let v = v0; v < v1; v++) {
+    if (skipRow[v - v0]) continue;
+    usedRows++;
+    let prev = 0;
+    for (let u = a; u < b; u++) {
+      const x = M[u * Wd + v];
+      if (x && !prev) runs++;
+      prev = x;
+    }
+  }
+  const density = usedRows ? runs / usedRows / (n / pm) : 0;
   return { filled: filled / n, hatched: density >= 5 ? busy / n : 0, density };
 }
 
