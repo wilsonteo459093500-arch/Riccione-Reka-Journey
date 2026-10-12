@@ -16,6 +16,14 @@ const SERIF_EN = '"Cormorant Garamond", Georgia, serif';
 const SERIF_ZH = '"Noto Serif SC", "Songti SC", serif';
 const display = () => (isEn() ? SERIF_EN : SERIF_ZH);
 
+/** 两个 #RRGGBB 之间插值 */
+function mixHex(a, b, k) {
+  const pa = parseInt(a.slice(1), 16);
+  const pb = parseInt(b.slice(1), 16);
+  const ch = (sh) => Math.round(((pa >> sh) & 255) + (((pb >> sh) & 255) - ((pa >> sh) & 255)) * k);
+  return `#${[16, 8, 0].map((sh) => ch(sh).toString(16).padStart(2, '0')).join('')}`;
+}
+
 function svgToImage(svgEl) {
   return new Promise((resolve) => {
     if (!svgEl) return resolve(null);
@@ -128,9 +136,12 @@ export async function renderPoster(profile, { pangieEl, emblemEl, sceneEl, scene
   const bandH = 560;
   const img = (await photoImage(scene.photo)) || (await svgToImage(sceneEl));
   if (img) cover(ctx, img, 0, 0, W, bandH, 0.55);
-  const fade = ctx.createLinearGradient(0, bandH * 0.45, 0, bandH);
-  fade.addColorStop(0, rgba(P.posterBg[0], 0));
-  fade.addColorStop(1, P.posterBg[0]);
+  // 淡到「纸在 bandH 那一行的颜色」（纸本身是上下渐变）—— 否则照片下缘会有一条看得见的接缝
+  const paperAt = mixHex(P.posterBg[0], P.posterBg[1], bandH / H);
+  const fade = ctx.createLinearGradient(0, bandH * 0.42, 0, bandH);
+  fade.addColorStop(0, rgba(paperAt, 0));
+  fade.addColorStop(0.55, rgba(paperAt, 0.62));
+  fade.addColorStop(1, paperAt);
   ctx.fillStyle = fade;
   ctx.fillRect(0, 0, W, bandH + 2);
   const top = ctx.createLinearGradient(0, 0, 0, 200);
@@ -144,7 +155,8 @@ export async function renderPoster(profile, { pangieEl, emblemEl, sceneEl, scene
   ctx.fillStyle = P.posterGold;
   ctx.font = `600 24px ${SANS}`;
   if ('letterSpacing' in ctx) ctx.letterSpacing = '6px';
-  ctx.fillText(`${BRAND.app} · ${t('许愿之旅').toUpperCase()}`, W / 2, 78);
+  // 英文本身就是 THE WISH JOURNEY，不再重复 WISH
+  ctx.fillText(isEn() ? t('许愿之旅').toUpperCase() : `${BRAND.app} · ${t('许愿之旅')}`, W / 2, 78);
   if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
   ctx.fillStyle = P.posterInk;
   fitFont(ctx, title, 600, 46, display(), W - 160);

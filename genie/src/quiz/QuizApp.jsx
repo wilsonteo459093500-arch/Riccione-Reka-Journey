@@ -118,6 +118,7 @@ function parseRoute() {
 
 function TopBar({ chapter, sub, onBack, canBack, progress, done }) {
   const [mute, setMute] = useState(isMuted());
+  const pct = Math.round(progress * 100);
   return (
     <header className="topbar">
       <div className="tb-left">
@@ -134,8 +135,19 @@ function TopBar({ chapter, sub, onBack, canBack, progress, done }) {
         <Stones chapter={chapter} sub={sub} done={done} />
       </div>
       <div className="tb-right">
-        <span className="progress-pct" title={t('蓝图完成度')}>
-          {t('蓝图 {0}%', [Math.round(progress * 100)])}
+        <span className="progress-pct" title={t('蓝图完成度')} role="img" aria-label={t('蓝图 {0}%', [pct])}>
+          {/* 宽屏：一行字；手机：一个小圆环（中间是百分比），省一整行 */}
+          <svg className="pct-ring" viewBox="0 0 36 36" aria-hidden="true">
+            <circle cx="18" cy="18" r="15.5" className="pct-track" />
+            <circle cx="18" cy="18" r="15.5" className="pct-fill" pathLength="100" style={{ strokeDashoffset: 100 - pct }} />
+          </svg>
+          <span className="pct-num" aria-hidden="true">
+            {pct}
+            <small>%</small>
+          </span>
+          <span className="pct-text" aria-hidden="true">
+            {t('蓝图 {0}%', [pct])}
+          </span>
         </span>
         <LangToggle compact />
         {!WISH && (
@@ -157,16 +169,97 @@ function TopBar({ chapter, sub, onBack, canBack, progress, done }) {
   );
 }
 
-function Companion({ mood, line, prop }) {
+const SMALL = '(max-width: 560px)';
+const TAPPABLE = '.stage button, .stage input, .stage textarea, .stage a[href], .stage [role="button"], .stage [role="slider"]';
+const overlaps = (a, b) => a.left < b.right - 2 && a.right > b.left + 2 && a.top < b.bottom - 2 && a.bottom > b.top + 2;
+
+/**
+ * 潘吉陪在右下角。他的话泡泡绝不盖住能点的东西：
+ * 每次说话前先量一下（题目卡刚换上来时等它落定），撞到按钮 / 输入框就不说；滚动时再量；
+ * 手机上第一下点击就收起、几秒后也自己收起。
+ */
+function Companion({ mood, line, prop, stepId }) {
   const text = plain(line);
+  const [show, setShow] = useState(false);
+  const [peek, setPeek] = useState(false);
+  const bubble = useRef(null);
+  const body = useRef(null);
+  const enteredAt = useRef(performance.now());
+  const hits = (el) => {
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    if (!r.width) return false;
+    for (const b of document.querySelectorAll(TAPPABLE)) {
+      const q = b.getBoundingClientRect();
+      if (q.width && q.height && overlaps(q, r)) return true;
+    }
+    return false;
+  };
+  // 潘吉自己：身子挡到能点的东西时，往下缩成「探头」，滚到空的地方再站起来
+  useEffect(() => {
+    enteredAt.current = performance.now();
+    let raf = 0;
+    const measure = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const el = body.current;
+        if (!el) return;
+        el.style.transform = 'none';
+        setPeek(hits(el));
+        el.style.transform = '';
+      });
+    };
+    // 卡片落定后量一次；字体 / 图片晚到可能把卡片撑高，再量一次
+    const t1 = setTimeout(measure, 700);
+    const t2 = setTimeout(measure, 1600);
+    document.fonts?.ready.then(measure).catch(() => {});
+    window.addEventListener('scroll', measure, { passive: true });
+    window.addEventListener('resize', measure);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      cancelAnimationFrame(raf);
+      window.removeEventListener('scroll', measure);
+      window.removeEventListener('resize', measure);
+    };
+  }, [stepId]);
+  useEffect(() => {
+    setShow(false);
+    if (!text) return undefined;
+    const small = window.matchMedia?.(SMALL).matches;
+    let raf = 0;
+    const check = () => setShow(!hits(bubble.current) && !hits(body.current));
+    // 题目卡换上来要 ~0.65 秒：等它落定再量
+    const wait = Math.max(0, enteredAt.current + 680 - performance.now());
+    const t1 = setTimeout(() => (raf = requestAnimationFrame(check)), wait);
+    const onScroll = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => hits(bubble.current) && setShow(false));
+    };
+    const hide = () => setShow(false);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    if (small) window.addEventListener('pointerdown', hide, true);
+    const t2 = small ? setTimeout(hide, wait + 3200) : 0;
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      cancelAnimationFrame(raf);
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+      window.removeEventListener('pointerdown', hide, true);
+    };
+  }, [text, stepId]);
   return (
-    <aside className="companion" aria-live="polite">
+    <aside className={`companion ${peek ? 'is-peek' : ''}`} aria-live="polite">
       {text && (
-        <div className="bubble" key={text}>
+        <div className={`bubble ${show && !peek ? 'is-shown' : ''}`} key={text} ref={bubble}>
           {text}
         </div>
       )}
-      <Pangie mood={mood} prop={prop} size={112} />
+      <span className="companion-body" ref={body}>
+        <Pangie mood={mood} prop={prop} size={112} />
+      </span>
     </aside>
   );
 }
@@ -391,7 +484,7 @@ function Play({ onDone, onRestart }) {
       <main className={`stage ${showCompanion ? 'has-companion' : ''}`} key={step.id}>
         {body}
       </main>
-      {showCompanion && <Companion mood={pangie.mood} line={pangie.line} prop={step.chapter === 'treasure' ? 'magnifier' : 'ball'} />}
+      {showCompanion && <Companion mood={pangie.mood} line={pangie.line} stepId={step.id} prop={step.chapter === 'treasure' ? 'magnifier' : 'ball'} />}
       {idlePrompt && (
         <Prompt
           title={t('还在吗？')}

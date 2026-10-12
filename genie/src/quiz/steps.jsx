@@ -5,7 +5,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, Check, X, Sparkle } from 'lucide-react';
 import Pangie, { Lamp } from '../shared/Pangie.jsx';
 import LangToggle from '../shared/LangToggle.jsx';
-import Vignette from './Vignette.jsx';
+import Vignette, { preloadVignettes } from './Vignette.jsx';
+import { ShoeCabinet, BookWall, RatioWall, Wardrobe } from './Cabinet.jsx';
 import { CardFrame, CardBack, Segmented, Slider } from './ui.jsx';
 import { Ico } from './icons.jsx';
 import { BRAND } from '../shared/config.js';
@@ -59,6 +60,8 @@ export function Welcome({ answers, set, next }) {
   return (
     <div className="step step-welcome">
       <div className="cover">
+        {/* 手机：语言放在封面右上角（省下一整行，「开始许愿」不用往下滑） */}
+        <LangToggle compact className="cover-lang" />
         <div className="cover-intro">
           <div className="cover-mark">
             <b>{BRAND.app}</b>
@@ -75,7 +78,7 @@ export function Welcome({ answers, set, next }) {
 
         <div className="cover-act">
         <div className="cover-form">
-          <div className="field">
+          <div className="field field-lang">
             <span className="field-label">{t('语言 · Language')}</span>
             <LangToggle className="is-big" />
           </div>
@@ -225,6 +228,9 @@ export function Interlude({ chapter, next }) {
     };
   }, []);
   const prop = chapter === 'treasure' ? 'magnifier' : chapter === 'wishes' ? 'ball' : 'cards';
+  useEffect(() => {
+    if (chapter === 'intuition') preloadVignettes(PAIRS[0]);
+  }, [chapter]);
   return (
     <div className="step step-interlude">
       <div className={`flip ${flipped ? 'is-flipped' : ''}`}>
@@ -284,6 +290,11 @@ export function PairStep({ pair, onPick, index, total, timed = true }) {
   const mountAt = useRef(performance.now());
   // 画面淡入约 0.45 秒：从卡片看得见才开始计时
   const t0 = useRef(performance.now() + 450);
+  // 下一题的两张图先拿下来，换题时不闪
+  useEffect(() => {
+    const id = setTimeout(() => preloadVignettes(PAIRS[index + 1]), 600);
+    return () => clearTimeout(id);
+  }, [index]);
   const pick = (side) => {
     if (picked) return;
     const now = performance.now();
@@ -311,7 +322,7 @@ export function PairStep({ pair, onPick, index, total, timed = true }) {
             aria-label={t(pair[side].label)}
           >
             <span className="pair-art">
-              <Vignette visual={pair[side].visual} />
+              <Vignette visual={pair[side].visual} id={`${pair.id}-${side}`} />
             </span>
             <span className="pair-label">{t(pair[side].label)}</span>
             <span className="pair-check" aria-hidden="true">
@@ -387,44 +398,15 @@ function Calc({ children, mm }) {
   );
 }
 
-const SHOE_COLORS = ['#3B3A36', '#B3552E', '#8C9884', '#D9CBB4', '#5E4632', '#2E4057', '#C8A272'];
-
 /** 鞋子数量 → 鞋柜宽度，画出来 */
 export function ShoesStep({ answers, set, next }) {
   const plan = storagePlan({ shoes: answers.shoes });
-  const cols = Math.max(2, plan.shoeCabinetMM / 300);
-  const shelves = 7;
-  const perCell = 10 / shelves;
-  let left = answers.shoes;
+  const cols = Math.max(2, Math.round(plan.shoeCabinetMM / 300));
   return (
     <div className="step step-treasure">
       <Head eyebrow={t('宝藏之牌 · {0} / 6', [1])} title={t('全家大概有几双鞋？')} lead={t('连拖鞋、运动鞋、高跟鞋一起数。')} />
       <div className="viz viz-cabinet">
-        <svg viewBox={`0 0 ${cols * 60 + 20} 232`} preserveAspectRatio="xMidYMax meet" aria-hidden="true">
-          <rect x="4" y="4" width={cols * 60 + 12} height="222" rx="6" fill="#C8A272" />
-          <rect x="4" y="220" width={cols * 60 + 12} height="6" rx="3" fill="#A8834F" />
-          {[...Array(cols)].map((_, c) =>
-            [...Array(shelves)].map((_, r) => {
-              const n = Math.max(0, Math.min(perCell, left));
-              left -= perCell;
-              const filled = n > 0.5;
-              const x = 10 + c * 60;
-              const y = 10 + r * 30;
-              const col = SHOE_COLORS[(c * 3 + r) % SHOE_COLORS.length];
-              return (
-                <g key={`${c}-${r}`}>
-                  <rect x={x} y={y} width="56" height="26" rx="2" fill="#F6F1E8" />
-                  {filled && (
-                    <g fill={col}>
-                      <path d={`M${x + 8} ${y + 21} c0 -6 4 -8 8 -7 l6 3 c3 1 8 1 10 3 l0 3 z`} />
-                      <path d={`M${x + 30} ${y + 21} c0 -6 4 -8 8 -7 l6 3 c3 1 8 1 10 3 l0 3 z`} opacity=".85" />
-                    </g>
-                  )}
-                </g>
-              );
-            })
-          )}
-        </svg>
+        <ShoeCabinet cols={cols} shoes={answers.shoes} shelves={7} />
       </div>
       <Slider min={0} max={150} step={5} value={answers.shoes} label={t('全家大概有几双鞋？')} onChange={(v) => set({ shoes: v, ...touch(answers, 'shoes') })} unit={t('双')} />
       <Calc mm={plan.shoeCabinetMM}>{tj('鞋柜 {0} 宽（通高 2100 · 深 350）', [<b key="b">{fmt(plan.shoeCabinetMM)} mm</b>])}</Calc>
@@ -448,17 +430,7 @@ export function WardrobeStep({ answers, set, next }) {
     <div className="step step-treasure">
       <Head eyebrow={t('宝藏之牌 · {0} / 6', [2])} title={t('主卧现在的衣柜，大概几门？')} lead={t('一扇门约 450mm 宽。没有衣柜的话，想想你的衣服大概能塞满几门。')} />
       <div className="viz viz-wardrobe">
-        <svg viewBox={`0 0 ${targetDoors * 40 + 12} 152`} preserveAspectRatio="xMidYMax meet" aria-hidden="true">
-          {[...Array(targetDoors)].map((_, i) => {
-            const have = i < doors;
-            return (
-              <g key={i}>
-                <rect x={6 + i * 40} y="6" width="38" height="138" rx="3" fill={have ? '#C8A272' : 'none'} stroke={have ? '#9E7A4E' : '#B98A3B'} strokeDasharray={have ? '0' : '5 4'} strokeWidth="1.6" />
-                {have && <rect x={i % 2 ? 9 + i * 40 : 37 + i * 40} y="66" width="2.4" height="20" rx="1.2" fill="#7A5A2E" />}
-              </g>
-            );
-          })}
-        </svg>
+        <Wardrobe have={doors} target={targetDoors} />
       </div>
       <div className="chips center">{[2, 3, 4, 5, 6, 8].map((n) => chip('wardrobeDoors', n, n === 8 ? t('6 门以上') : t('{0} 门', [n])))}</div>
       <div className="field center">
@@ -490,31 +462,13 @@ export function WardrobeStep({ answers, set, next }) {
   );
 }
 
-const BOOK_COLORS = ['#A65A3A', '#4A6652', '#C6912E', '#7C9A6D', '#B3552E', '#6B4B2F', '#D9CBB4'];
-
 export function BooksStep({ answers, set, next }) {
   const n = answers.books;
   return (
     <div className="step step-treasure">
       <Head eyebrow={t('宝藏之牌 · {0} / 6', [3])} title={t('书和收藏品，大概能摆满几层书架？')} lead={t('一层约 800mm 宽。漫画、唱片、模型、酒，都算。')} />
       <div className="viz viz-books">
-        <svg viewBox="0 0 320 172" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
-          <rect x="4" y="4" width="312" height="164" rx="5" fill="#8E6A4E" />
-          {[...Array(15)].map((_, i) => {
-            const c = i % 5;
-            const r = Math.floor(i / 5);
-            const on = i < Math.min(15, n);
-            return (
-              <g key={i}>
-                <rect x={10 + c * 61.5} y={10 + r * 52} width="56" height="46" rx="1.5" fill="#F6F1E8" />
-                {on &&
-                  [...Array(6)].map((_, k) => (
-                    <rect key={k} x={14 + c * 61.5 + k * 8.5} y={18 + r * 52 + (k % 3) * 2} width="7" height={36 - (k % 3) * 2} rx="1" fill={BOOK_COLORS[(k + i) % BOOK_COLORS.length]} />
-                  ))}
-              </g>
-            );
-          })}
-        </svg>
+        <BookWall n={n} />
         {n > 15 && <span className="viz-more">{t('+{0} 层', [n - 15])}</span>}
       </div>
       <Slider min={0} max={30} value={n} label={t('书和收藏品，大概能摆满几层书架？')} onChange={(v) => set({ books: v, ...touch(answers, 'books') })} unit={t('层')} />
@@ -595,30 +549,7 @@ export function RatioStep({ answers, set, next }) {
     <div className="step step-treasure">
       <Head eyebrow={t('宝藏之牌 · {0} / 6', [6])} title={t('家里「看得见」的东西，要占多少？')} lead={t('往左：全部藏起来；往右：大方展示。')} />
       <div className="viz viz-ratio">
-        <svg viewBox="0 0 320 172" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
-          <rect x="4" y="4" width="312" height="164" rx="5" fill="#C8A272" />
-          {[...Array(12)].map((_, i) => {
-            const c = i % 4;
-            const row = Math.floor(i / 4);
-            const x = 8 + c * 77;
-            const y = 8 + row * 52.6;
-            const o = openSet.has(i);
-            return (
-              <g key={i}>
-                <rect x={x} y={y} width="73" height="48.6" rx="1.5" fill={o ? '#F6F1E8' : '#DCC197'} stroke={o ? 'none' : '#B48C5F'} strokeWidth=".8" />
-                {!o && <rect x={x + 33} y={y + 20} width="7" height="2" rx="1" fill="#9E7A4E" />}
-                {o &&
-                  (i % 3 === 0 ? (
-                    <path d={`M${x + 30} ${y + 46} Q${x + 24} ${y + 30} ${x + 34} ${y + 18} L${x + 40} ${y + 18} Q${x + 50} ${y + 30} ${x + 44} ${y + 46} Z`} fill="#B3552E" />
-                  ) : i % 3 === 1 ? (
-                    [...Array(5)].map((_, k) => <rect key={k} x={x + 12 + k * 9} y={y + 12 + (k % 2) * 3} width="7" height={34 - (k % 2) * 3} rx="1" fill={['#4A6652', '#C6912E', '#7C9A6D', '#A65A3A', '#6B4B2F'][k]} />)
-                  ) : (
-                    <circle cx={x + 36} cy={y + 30} r="12" fill="#7C9A6D" />
-                  ))}
-              </g>
-            );
-          })}
-        </svg>
+        <RatioWall open={openSet} />
       </div>
       <Slider min={0} max={100} step={5} value={r} label={t('家里「看得见」的东西，要占多少？')} onChange={(v) => set({ ratio: v, ratioTouched: true })} unit={t('% 看得见')} />
       <p className="calc">

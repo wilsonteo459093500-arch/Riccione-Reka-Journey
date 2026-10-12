@@ -27,6 +27,7 @@ import {
   Ruler,
   CookingPot,
   Rows3,
+  ChevronDown,
 } from 'lucide-react';
 import Pangie, { Lamp } from '../shared/Pangie.jsx';
 import Emblem from '../shared/Emblem.jsx';
@@ -62,6 +63,49 @@ const STAFF = (() => {
 const UNSURE_KEYS = new Set(['shoes', 'wardrobe', 'books', 'ratio']);
 const BOARD_SLOTS = ['floor', 'walls', 'feature', 'cabinetry', 'countertop', 'upholstery', 'rugs', 'accents'];
 const LEVEL = { conflict: { Icon: AlertTriangle, zh: '要聊清楚' }, note: { Icon: Ruler, zh: '设计要点' }, tip: { Icon: Lightbulb, zh: '沟通建议' } };
+const LEVEL_ORDER = ['conflict', 'note', 'tip'];
+const TOP_TIPS = 3;
+
+/** 「主题：内容」→ 主题加粗（扫一眼就知道这条讲什么） */
+function tipText(text) {
+  const s = String(text || '');
+  const m = /^(.{2,56}?)(：|: )/.exec(s);
+  if (!m) return s;
+  return (
+    <>
+      <b>{m[1]}</b>
+      {m[2]}
+      {s.slice(m[0].length)}
+    </>
+  );
+}
+
+function TipKind({ level, count }) {
+  const lv = LEVEL[level] || LEVEL.note;
+  return (
+    <span className="tip-kind">
+      <lv.Icon size={14} strokeWidth={2} aria-hidden="true" />
+      {t(lv.zh)}
+      {count != null && <em>{count}</em>}
+    </span>
+  );
+}
+
+function TipItem({ tp, n }) {
+  return (
+    <li className={`tip-${tp.level}`}>
+      {n != null && (
+        <span className="tip-n" aria-hidden="true">
+          {n}
+        </span>
+      )}
+      <span className="tip-body">
+        {n != null && <TipKind level={tp.level} />}
+        <span className="tip-text">{tipText(tp.text)}</span>
+      </span>
+    </li>
+  );
+}
 
 function download(blob, name) {
   const a = document.createElement('a');
@@ -95,6 +139,9 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
   const d = DREAMER_BY_CODE[profile.code];
   const plan = useMemo(() => storagePlan(profile.storage, APPLIANCES), [profile]);
   const tips = useMemo(() => insights(profile, plan), [profile, plan]);
+  // 谈话提示：先「要聊清楚」、再「设计要点」、最后「沟通建议」；最重要的三条放前面，其余收在「其余 n 条」里
+  const ranked = useMemo(() => tips.map((tp, i) => ({ ...tp, i })).sort((a, b) => LEVEL_ORDER.indexOf(a.level) - LEVEL_ORDER.indexOf(b.level) || a.i - b.i), [tips]);
+  const [moreTips, setMoreTips] = useState(false);
   const host = hostFromCode(profile.host);
   const pangieRef = useRef(null);
   const emblemRef = useRef(null);
@@ -110,7 +157,8 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
       setLinks({
         bp: withLang(new URL(`quiz.html#bp=${packed}`, location.href).href),
         bpStaff: withLang(new URL(`quiz.html?staff=1#bp=${packed}`, location.href).href),
-        studio: withLang(new URL(`studio.html${WISH ? '?mode=wish' : ''}#p=${packed}`, location.href).href),
+        // 3D 链接自己带上身份（许愿模式 / 员工），不只靠 document.referrer：客人版永远不会变成设计师版
+        studio: withLang(new URL(`studio.html${WISH ? '?mode=wish' : STAFF ? '?staff=1' : ''}#p=${packed}`, location.href).href),
       });
       // 刚做完的蓝图：网址换成 #bp=…，返回 / 重新整理 / iPad 把分页收掉，都还在
       if (fresh) {
@@ -481,6 +529,7 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
                   <dt>{t('藏:展（牌面）')}</dt>
                   <dd>
                     {d.design.ratio[0]} : {d.design.ratio[1]}
+                    {isEn() ? ' ' : ''}
                     {t('（客人自评 {0}）', [`${100 - plan.displayPct} : ${plan.displayPct}`])}
                   </dd>
                   <dt>{t('线条')}</dt>
@@ -495,20 +544,37 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
               </div>
               <div>
                 <h4>{t('见面时要聊的（{0}）', [tips.length])}</h4>
-                <ul className="tips">
-                  {tips.map((tp, i) => {
-                    const lv = LEVEL[tp.level] || LEVEL.note;
-                    return (
-                      <li key={i} className={`tip-${tp.level}`}>
-                        <span className="tip-kind">
-                          <lv.Icon size={14} strokeWidth={2} aria-hidden="true" />
-                          {t(lv.zh)}
-                        </span>
-                        {tp.text}
-                      </li>
-                    );
-                  })}
-                </ul>
+                <ol className="tips tips-top">
+                  {ranked.slice(0, TOP_TIPS).map((tp, k) => (
+                    <TipItem key={tp.i} tp={tp} n={k + 1} />
+                  ))}
+                </ol>
+                {ranked.length > TOP_TIPS && (
+                  <div className={`tips-more ${moreTips ? 'is-open' : ''}`}>
+                    <button type="button" className="tips-toggle no-print" aria-expanded={moreTips} aria-controls="bp-tips-rest" onClick={() => setMoreTips((v) => !v)}>
+                      <span>{moreTips ? t('收起') : t('其余 {0} 条', [ranked.length - TOP_TIPS])}</span>
+                      <ChevronDown size={16} strokeWidth={2} aria-hidden="true" />
+                    </button>
+                    <div className="tips-rest" id="bp-tips-rest">
+                      {LEVEL_ORDER.map((lv) => {
+                        const group = ranked.slice(TOP_TIPS).filter((tp) => tp.level === lv);
+                        if (!group.length) return null;
+                        return (
+                          <div key={lv} className={`tips-group-wrap tip-${lv}`}>
+                            <p className="tips-head">
+                              <TipKind level={lv} count={group.length} />
+                            </p>
+                            <ul className="tips tips-group">
+                              {group.map((tp) => (
+                                <TipItem key={tp.i} tp={tp} />
+                              ))}
+                            </ul>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 {quick.length > 0 && (
                   <>
                     <h4>{t('选得最快的几题（参考）')}</h4>

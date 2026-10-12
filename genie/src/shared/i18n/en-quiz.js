@@ -50,6 +50,8 @@ export default {
   '偏圆润（沙发那题选了圆的）：弧形沙发 / 圆几；柜体要不要圆角，见面再问':
     'Leans curved (picked the rounded sofa): curved sofa / round coffee table; ask in person whether the cabinetry should have rounded edges',
   '选得最快的几题（参考）': 'Fastest picks (for reference)',
+  '其余 {0} 条': 'Show {0} more',
+  '收起': 'Show less',
 
   // ── 风景（杂志式的地名） ──
   '金马伦高原': 'Cameron Highlands',
