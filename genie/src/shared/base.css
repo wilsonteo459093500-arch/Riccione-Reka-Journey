@@ -308,6 +308,78 @@ html {
 .pg-gem-glow {
   filter: drop-shadow(0 0 5px #f6c27a);
 }
+/* 落地的漂浮：潘吉上下浮，地上的影子留在原地、跟着一缩一放（pangieArt.js 的 .pg-figure / .pg-shadow） */
+.pangie.pg-float {
+  animation: none;
+}
+.pangie.pg-float .pg-figure {
+  animation: pg-float 3.6s ease-in-out infinite;
+}
+.pangie.pg-float .pg-shadow {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pg-shadow 3.6s ease-in-out infinite;
+}
+@keyframes pg-shadow {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.86);
+    opacity: 0.7;
+  }
+}
+/* 暮色画面里潘吉身后的暖光（quiz.css 也有；入口页 / 许愿模式开场也要） */
+.dusk .pg-aura {
+  opacity: 1;
+}
+
+/* 神灯（lampArt.js）：烟轻轻摆、小烟团升起、壶嘴星光闪。
+   transform-origin 由每个元素的行内 style 给（viewBox 坐标，同 .pg-blink 的写法），这里不用 transform-box。 */
+.lamp-smoke {
+  animation: lamp-drift 6.4s ease-in-out infinite;
+}
+@keyframes lamp-drift {
+  0%,
+  100% {
+    transform: rotate(0deg) skewX(0deg);
+  }
+  50% {
+    transform: rotate(-3deg) skewX(2deg);
+  }
+}
+.lamp-puff {
+  animation: lamp-puff 4.2s ease-out infinite;
+}
+@keyframes lamp-puff {
+  0% {
+    transform: translate(0, 3px) scale(0.6);
+    opacity: 0;
+  }
+  25% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: translate(-3px, -9px) scale(1.15);
+    opacity: 0;
+  }
+}
+.lamp-spark {
+  animation: lamp-spark 2.8s ease-in-out infinite;
+}
+@keyframes lamp-spark {
+  0%,
+  100% {
+    transform: scale(0.8);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
   *,

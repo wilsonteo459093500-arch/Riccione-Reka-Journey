@@ -199,7 +199,7 @@ export function LampRub({ next, name }) {
           tabIndex={0}
           onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && bump(0.2)}
         >
-          <Lamp size={280} glow={p} className={p > 0 && !done ? 'lamp-shake' : ''} />
+          <Lamp size={280} glow={p} smoke="glow" className={p > 0 && !done ? 'lamp-shake' : ''} />
         </div>
       </div>
       <p className="lamp-status" aria-live="polite">

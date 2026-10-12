@@ -27,7 +27,7 @@ export default function WishSplash({ leaving = false, busy = null, onTap, onBegi
 
       <main className="ws-card" aria-labelledby="ws-title">
         <div className="ws-lamp" aria-hidden="true">
-          <Lamp size={156} glow={0.5} />
+          <Lamp size={156} glow={0.5} smoke />
         </div>
         <div className="ws-lockup">
           <b>{BRAND.app}</b>
