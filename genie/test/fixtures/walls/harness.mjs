@@ -438,21 +438,122 @@ export function truthSolid(T) {
   return out;
 }
 
-/** 一层的 plan（米，原点可以有平移 dx / dy）和真值比：model.buildWalls 生成的墙（扣掉打通）P/R（±0.15 m）、门 P/R、开放式空间里凭空多出来的墙 */
-export function planMetrics(floor, T, buildWalls, { dx = 0, dy = 0 } = {}) {
-  const det = [];
-  for (const w of buildWalls(floor)) {
-    const axis = w.axis === 'x' ? 'h' : 'v';
-    const c = w.c + (axis === 'h' ? dy : dx);
-    const sh = axis === 'h' ? dx : dy;
-    for (const p of w.pieces) if (p.kind !== 'open') det.push({ axis, c, a: p.a + sh, b: p.b + sh });
+/** 实测墙段里离参照 > tol 的长度（1 cm 采样）；≥ 0.3 m 的一截记一段，classify(s, u) 给这一截贴标签（栏杆 / 房子外面 / 屋里） */
+export function offRuns(det, ref, tol = 0.15, classify = null) {
+  const near = (axis, c, u) => ref.some((s) => s.axis === axis && Math.abs(s.c - c) <= tol && u >= s.a - tol && u <= s.b + tol);
+  const out = { m: 0, pieces: [] };
+  for (const s of det) {
+    let run = null;
+    const flush = () => {
+      if (run && run.n * 0.01 >= 0.3) out.pieces.push({ axis: s.axis, c: +s.c.toFixed(2), a: +run.a.toFixed(2), b: +(run.a + run.n * 0.01).toFixed(2), what: run.what });
+      run = null;
+    };
+    for (let u = s.a; u <= s.b + 1e-9; u += 0.01) {
+      if (near(s.axis, s.c, u)) {
+        flush();
+        continue;
+      }
+      out.m += 0.01;
+      const what = classify ? classify(s, u) : '';
+      if (run && run.what !== what) flush();
+      if (!run) run = { a: u, n: 0, what };
+      run.n++;
+    }
+    flush();
   }
-  const wp = wallPR(det, truthSolid(T), 0.15);
+  out.m = +out.m.toFixed(2);
+  return out;
+}
+
+/** 真值墙的外框（米） */
+function houseBox(T) {
+  const xs = [];
+  const ys = [];
+  for (const w of T.walls) {
+    if (w.axis === 'h') xs.push(w.a, w.b), ys.push(w.c);
+    else ys.push(w.a, w.b), xs.push(w.c);
+  }
+  return { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
+}
+
+/**
+ * 一层的 plan（米，原点可以有平移 dx / dy）和真值比：model.buildWalls 生成的墙（扣掉打通）P/R（±0.15 m）、门 P/R、开放式空间里凭空多出来的墙。
+ * register > 0：在 (dx, dy) 周围 ±register m（5 cm 一步）找 P + R 最高的整体平移再比 —— AI 房间框整体偏了不算两次错（IMPORT 的
+ * 比例 / 原点来自 AI 的尺寸链，和真值差几厘米到几十厘米是常事）。另外给：shift（找到的平移）、invented（多出来的墙，按 栏杆 / 房子外面 /
+ * 打通的地方 / 屋里 分段）、missing（漏掉的墙）、extraDoors（多出来的门：落在哪：真值的窗 / 推拉门 / 实墙 / 栏杆 / 没墙）、missedDoors、
+ * window / slider 的 P / R。
+ */
+export function planMetrics(floor, T, buildWalls, { dx = 0, dy = 0, register = 0 } = {}) {
+  const built = buildWalls(floor);
+  const wallsAt = (sh) => {
+    const det = [];
+    for (const w of built) {
+      const axis = w.axis === 'x' ? 'h' : 'v';
+      const c = w.c + (axis === 'h' ? sh.dy : sh.dx);
+      const o = axis === 'h' ? sh.dx : sh.dy;
+      for (const p of w.pieces) if (p.kind !== 'open') det.push({ axis, c, a: p.a + o, b: p.b + o });
+    }
+    return det;
+  };
+  const solid = truthSolid(T);
+  let sh = { dx, dy };
+  if (register > 0) {
+    const n = Math.round(register / 0.05);
+    let best = null;
+    for (let ix = -n; ix <= n; ix++)
+      for (let iy = -n; iy <= n; iy++) {
+        const s = { dx: dx + ix * 0.05, dy: dy + iy * 0.05 };
+        const wp = wallPR(wallsAt(s), solid, 0.15);
+        // 一样好就要离 (dx, dy) 近的
+        const v = wp.precision + wp.recall - 1e-4 * (Math.abs(ix) + Math.abs(iy));
+        if (!best || v > best.v) best = { v, s };
+      }
+    sh = best.s;
+  }
+  const det = wallsAt(sh);
+  const wp = wallPR(det, solid, 0.15);
   const gaps = floor.openings.map((o) => {
     const h = Math.abs(o.y1 - o.y2) < Math.abs(o.x1 - o.x2);
-    return { kind: o.kind === 'open' ? 'opening' : o.kind, axis: h ? 'h' : 'v', c: h ? (o.y1 + o.y2) / 2 + dy : (o.x1 + o.x2) / 2 + dx, a: h ? Math.min(o.x1, o.x2) + dx : Math.min(o.y1, o.y2) + dy, b: h ? Math.max(o.x1, o.x2) + dx : Math.max(o.y1, o.y2) + dy };
+    return { kind: o.kind === 'open' ? 'opening' : o.kind, axis: h ? 'h' : 'v', c: h ? (o.y1 + o.y2) / 2 + sh.dy : (o.x1 + o.x2) / 2 + sh.dx, a: h ? Math.min(o.x1, o.x2) + sh.dx : Math.min(o.y1, o.y2) + sh.dy, b: h ? Math.max(o.x1, o.x2) + sh.dx : Math.max(o.y1, o.y2) + sh.dy };
   });
   const dp = openingPR(gaps, T.openings, ['door']);
   const inv = inventedOpenPlan(det, [], T);
-  return { wallP: wp.precision, wallR: wp.recall, doorP: dp.precision, doorR: dp.recall, doors: dp.det, invented: inv.pieces, inventedM: inv.metres, rooms: floor.rooms.length, fps: wp.fps, misses: wp.misses, doorFP: dp.fp };
+  const rails = T.rails || [];
+  const hb = houseBox(T);
+  const near = (segs, axis, c, u) => segs.some((s) => s.axis === axis && Math.abs(s.c - c) <= 0.15 && u >= s.a - 0.15 && u <= s.b + 0.15);
+  const invented = offRuns(det, solid, 0.15, (s, u) => {
+    const [x, y] = s.axis === 'h' ? [u, s.c] : [s.c, u];
+    if (near(rails, s.axis, s.c, u)) return 'rail';
+    if (x < hb.x0 - 0.2 || x > hb.x1 + 0.2 || y < hb.y0 - 0.2 || y > hb.y1 + 0.2) return 'outside';
+    return T.openings.some((o) => o.kind === 'open' && o.axis === s.axis && Math.abs(o.c - s.c) <= 0.15 && u >= o.a && u <= o.b) ? 'open-arch' : 'inside';
+  });
+  const missing = offRuns(solid, det, 0.15);
+  const where = (d) => {
+    const iou = (a, b) => Math.max(0, Math.min(a.b, b.b) - Math.max(a.a, b.a)) / (Math.max(a.b, b.b) - Math.min(a.a, b.a));
+    const other = T.openings.find((t) => t.kind !== 'door' && t.axis === d.axis && Math.abs(t.c - d.c) <= 0.15 && iou(d, t) >= 0.3);
+    const mid = (d.a + d.b) / 2;
+    return other ? `truth ${other.kind}` : near(rails, d.axis, d.c, mid) ? 'rail' : near(T.walls, d.axis, d.c, mid) ? 'solid wall' : 'no wall';
+  };
+  const extraDoors = dp.fp.map((d) => `${d.axis}${d.c.toFixed(2)}[${d.a.toFixed(2)},${d.b.toFixed(2)}] on ${where(d)}`);
+  const op = (k) => openingPR(gaps, T.openings, [k]);
+  return {
+    wallP: wp.precision,
+    wallR: wp.recall,
+    doorP: dp.precision,
+    doorR: dp.recall,
+    doors: dp.det,
+    invented: inv.pieces,
+    inventedM: inv.metres,
+    rooms: floor.rooms.length,
+    fps: wp.fps,
+    misses: wp.misses,
+    doorFP: dp.fp,
+    shift: [+(sh.dx - dx).toFixed(2), +(sh.dy - dy).toFixed(2)],
+    inventedAll: invented,
+    missing,
+    extraDoors,
+    missedDoors: dp.fn.map((t) => t.id),
+    window: op('window'),
+    slider: op('slider'),
+  };
 }
