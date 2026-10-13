@@ -26,10 +26,13 @@ export const langOf = (project) => (project?.info?.lang === 'en' || project?.inf
 /** 翻译记忆的键：空白 / 中点规范后的中文原文 */
 export const tmKey = (s) => normSpace(s);
 
+/** 英文里的弯引号换成直的：宋体（思源）里弯引号是全角，「SAIL’s」会显示成「SAIL’ s」 */
+export const straightQuotes = (s) => String(s ?? '').replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"');
+
 /** 翻译记忆里查（没有返回 ''） */
 export function memoryEn(project, zh) {
   const v = project?.translations?.[tmKey(zh)];
-  return typeof v === 'string' ? v.trim() : '';
+  return typeof v === 'string' ? straightQuotes(v.trim()) : '';
 }
 
 /**
@@ -52,7 +55,7 @@ export function setTranslation(project, zh, en) {
   const key = tmKey(zh);
   if (!key) return project;
   const cur = project.translations || {};
-  const val = String(en ?? '').trim();
+  const val = straightQuotes(String(en ?? '').trim());
   if ((cur[key] || '') === val) return project;
   const next = { ...cur };
   if (val) next[key] = val;
@@ -66,7 +69,7 @@ export function addTranslations(project, pairs) {
   let changed = false;
   for (const { zh, en } of pairs || []) {
     const key = tmKey(zh);
-    const val = String(en ?? '').trim();
+    const val = straightQuotes(String(en ?? '').trim());
     if (!key || !val || next[key] === val) continue;
     if (!changed) next = { ...next };
     next[key] = val;

@@ -52,7 +52,7 @@ const VIEW_TERMS = {
   '床视角': 'Bed View',
   '俯视': 'Top View',
   '俯瞰': 'Top View',
-  '鸟瞰': 'Bird’s-Eye View',
+  '鸟瞰': "Bird's-Eye View",
   '近景': 'Close-Up',
   '特写': 'Close-Up',
   '局部': 'Detail',
