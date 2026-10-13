@@ -36,6 +36,11 @@ import {
   rectifyEstimate,
   warpImage,
   applyH,
+  fixStairs,
+  mergeTouching,
+  chainGap,
+  hasEntrance,
+  guessUnnamed,
 } from '../src/studio/plan/sheet.js';
 import * as WALLS from '../src/studio/plan/walls.js';
 import { decodePNG } from './fixtures/walls/harness.mjs';
@@ -513,9 +518,25 @@ await test('房间类型和名字', () => {
   assert.equal(roomTypeOf('', ''), 'corridor');
   assert.equal(cleanLabel('LIVING'), '');
   assert.equal(cleanLabel('MASTER BEDROOM'), '');
-  assert.equal(cleanLabel('BEDROOM 3'), 'Bedroom 3');
-  assert.equal(cleanLabel('WET KITCHEN'), 'Wet Kitchen');
+  // 有编号 / 有说明的名字 → 能翻译的中文名（英文版靠词典）
+  assert.equal(cleanLabel('BEDROOM 3'), '卧室 3');
+  assert.equal(cleanLabel('WET KITCHEN'), '湿厨房');
+  assert.equal(cleanLabel('M. BATH'), '主卧浴室');
   assert.equal(cleanLabel('客厅 A'), '客厅 A');
+  assert.equal(cleanLabel('Prayer Room'), 'Prayer Room');
+  // 马来文：重复类型的不留名字；有编号的 → 卧室 4
+  for (const l of ['RUANG TAMU', 'RUANG MAKAN', 'BILIK AIR', 'TANGGA', 'ANJUNG KERETA', 'KORIDOR', 'BALKONI', 'RUANG KELUARGA', 'RUANG DOBI', 'BILIK TIDUR UTAMA', 'ALMARI PAKAIAN', 'SERAMBI', 'STOR']) assert.equal(cleanLabel(l), '', l);
+  assert.equal(cleanLabel('BILIK TIDUR 4'), '卧室 4');
+  assert.equal(cleanLabel('DAPUR BASAH'), '湿厨房');
+  assert.equal(cleanLabel('DAPUR KERING'), '干厨房');
+  assert.equal(cleanLabel('BILIK AIR UTAMA'), '主卧浴室');
+  // 字比模型的笼统类型清楚 → 用字的
+  assert.equal(roomTypeOf('bedroom', 'BILIK TIDUR UTAMA'), 'master');
+  assert.equal(roomTypeOf('living', 'RUANG KELUARGA'), 'family');
+  assert.equal(roomTypeOf('store', 'ALMARI PAKAIAN'), 'walkin');
+  assert.equal(roomTypeOf('bath', 'BILIK AIR UTAMA'), 'bath');
+  assert.equal(roomTypeOf('bedroom', 'BILIK TIDUR 3'), 'bedroom');
+  assert.equal(roomTypeOf('corridor', 'TANGGA'), 'stair');
 });
 
 // ───────────────────────── 11–12 模型、调用 ─────────────────────────
@@ -898,7 +919,7 @@ await test('18 老板的 TYPE B 端到端：12.5 × 10.15 m、门只在图上有
   assert.ok(mean >= 0.8, `IoU ${mean.toFixed(3)}`);
   for (const name of ['BEDROOM 2', 'BEDROOM 3', 'BATH 1', 'BATH 2', 'YARD']) assert.ok(ious[T.rooms.findIndex((t) => t.label === name)] > 0.9, name);
   assert.ok(fl.rooms.some((r) => r.type === 'corridor'), '漏掉的走廊补上了');
-  assert.equal(fl.rooms.find((r) => /ac ledge/i.test(r.name))?.type, 'balcony', 'AC LEDGE 是室外的');
+  assert.equal(fl.rooms.find((r) => r.name === '空调台')?.type, 'balcony', 'AC LEDGE 是室外的');
   // 门：AI 多加的 3 扇都去掉；真的门至少 7 / 8（大门在厨房框里没有墙线可放）
   const doors = fl.openings.filter((o) => o.kind === 'door' || o.kind === 'slider');
   const fake = T.fakeDoors.filter((q) => doors.some((o) => near1(o, q, dx, dy)));
@@ -1120,6 +1141,166 @@ await test('22 墙优先的细条并给邻居：往图上没有墙的那边伸�
   // restoreDoors 没有像素：原样
   const op = [{ id: 'o', kind: 'door', x1: 1, x2: 2, y1: 2, y2: 2 }];
   assert.deepEqual(restoreDoors(rooms, [], op, null, 0.01), { openings: [], restored: 0 });
+});
+
+// ───────────────────────── 23– 复查（e2e 评审的问题） ─────────────────────────
+console.log('复查：楼梯、比例、L 形房间、大门、名字');
+
+// app 真正送出去的裁图（pdf.js 画的第 12 页，一楼 1067 × 3072 = 129.4 px/m —— walls.js 在这个比例会把楼梯切成两三块）
+let APP = null;
+function appCrops() {
+  if (!APP) {
+    APP = ['gf', 'ff'].map((k) => ({ k, img: decodeJpeg(path.join(FX, `crop-app-${k}.jpg`)) }));
+    const scale = pageScale(APP.map((f) => ({ read: J(`pass2-app-${f.k}.json`), cropW: f.img.width, cropH: f.img.height })));
+    for (const f of APP) {
+      f.ink = inkMask(f.img);
+      try {
+        f.walls = WALLS.extractWalls(f.img, { pxPerM: 1 / scale.mPerPx });
+      } catch {
+        f.walls = null;
+      }
+    }
+  }
+  return APP;
+}
+function appCase(reads, opts = {}) {
+  const crops = appCrops();
+  const floors = crops.map((f, i) => ({ level: i ? 'first' : 'ground', title: '', read: reads[i], cropW: f.img.width, cropH: f.img.height, src: 'x', ink: f.ink, walls: f.walls }));
+  return assemblePlan(floors, { fuse: WALLS.fuseWalls, ...opts });
+}
+
+await test('23 楼梯不被切开：app 的裁图（129.4 px/m）+ 英文 / 马来文回答 → 一座 1.0 × 4.6 m 楼梯、checkPlan 没有问题', () => {
+  for (const tag of ['app', 'malay']) {
+    const { plan, report } = appCase([J(`pass2-${tag}-gf.json`), J(`pass2-${tag}-ff.json`)]);
+    assert.equal(plan.floors.length, 2, tag);
+    assert.equal(plan.stairs.length, 1, `${tag} 楼梯 ${JSON.stringify(plan.stairs)}`);
+    const s = plan.stairs[0];
+    assert.ok(Math.abs(s.w - 1.0) < 0.1 && Math.abs(s.d - 4.6) < 0.12, `${tag} 楼梯 ${s.w} × ${s.d}`);
+    assert.equal(s.up, 'N');
+    assert.deepEqual(checkPlan(plan), [], tag);
+    assert.equal(report.aligned, 'stairs', `${tag} 按楼梯对齐`);
+    for (const f of plan.floors) assert.equal(overlaps(f.rooms), 0);
+    // 每一层只有一个楼梯间
+    for (const f of plan.floors) assert.equal(f.rooms.filter((r) => r.type === 'stair').length, 1, `${tag} ${f.id}`);
+  }
+});
+
+await test('23b fixStairs / stairsFromRooms：切成两块的楼梯 → AI 的框；共边的两块合成一座；跑不下的第二座不要', () => {
+  // walls.js 的样子：楼梯面 1.6 × 2.05（多吃了餐厅 0.6 m），AI 标的楼梯又一块 1.0 × 2.55
+  const rooms = [
+    { id: 'din', type: 'dining', name: '', x: 0, y: 0, w: 4.5, d: 4.6 },
+    { id: 'sa', type: 'stair', name: '', x: 4.5, y: 0, w: 1.6, d: 2.05 },
+    { id: 'sb', type: 'stair', name: '', x: 5.1, y: 2.05, w: 1.0, d: 2.55 },
+    { id: 'din-2', type: 'dining', name: '', x: 4.5, y: 2.05, w: 0.6, d: 2.55 },
+    { id: 'liv', type: 'living', name: '', x: 0, y: 4.6, w: 6.1, d: 5 },
+  ];
+  const ai = [{ x: 5.12, y: 0.05, w: 0.95, d: 4.5, up: 'N', shape: 'straight' }];
+  const fx = fixStairs(rooms, ai, { rise: 3.35 });
+  assert.ok(fx.replaced === 1 && /split|short/.test(fx.why), JSON.stringify(fx.why));
+  const st = fx.rooms.filter((r) => r.type === 'stair');
+  assert.equal(st.length, 1);
+  // 框差几厘米：吸到旧楼梯块的外框 / 餐厅的边
+  assert.deepEqual([st[0].x, st[0].y, st[0].w, st[0].d].map((v) => +v.toFixed(2)), [5.1, 0, 1, 4.6]);
+  assert.equal(overlaps(fx.rooms), 0);
+  assert.ok(Math.abs(area(fx.rooms) - area(rooms)) < 1e-6, '面积不变（让出来的地方给了邻居）');
+  assert.ok(!fx.rooms.some((r) => r.gap), '没有补出来的细条走廊');
+  // 楼梯旁边让出来的地方给了餐厅（同一个房间：din / din-2 …）
+  assert.ok(fx.rooms.filter((r) => r.type === 'dining').every((r) => /^din/.test(r.id)));
+  // 楼梯可信（一块、跑得下、和 AI 的框对得上）→ 不动
+  const good = [{ id: 'd', type: 'dining', x: 0, y: 0, w: 5.1, d: 4.6 }, { id: 's', type: 'stair', x: 5.1, y: 0, w: 1.0, d: 4.6 }];
+  assert.equal(fixStairs(good, [{ x: 5.1, y: 0.1, w: 1, d: 4.4 }], { rise: 3.35 }).replaced, 0);
+  // 共一整条边的两块 → 一座楼梯
+  const lo = [{ id: 'a', type: 'stair', x: 5.1, y: 0, w: 1, d: 2.3 }, { id: 'b', type: 'stair', x: 5.1, y: 2.3, w: 1, d: 2.3 }, { id: 'l', type: 'living', x: 0, y: 0, w: 5.1, d: 6 }];
+  const hi = [{ id: 'c', type: 'stair', x: 5.1, y: 0, w: 1, d: 4.6 }, { id: 'f', type: 'family', x: 0, y: 0, w: 5.1, d: 6 }];
+  const s1 = stairsFromRooms([{ id: 'g', rooms: lo, rise: 3.35 }, { id: 'f', rooms: hi }]);
+  assert.equal(s1.length, 1);
+  assert.deepEqual([s1[0].w, s1[0].d], [1, 4.6]);
+  // 两座不相连：跑不下的那座（1 × 1.2）不要
+  const lo2 = [...lo.slice(2), { id: 'a', type: 'stair', x: 5.1, y: 0, w: 1, d: 4.6 }, { id: 'z', type: 'stair', x: 0, y: 0, w: 1, d: 1.2 }];
+  const s2 = stairsFromRooms([{ id: 'g', rooms: lo2, rise: 3.35 }, { id: 'f', rooms: hi }]);
+  assert.equal(s2.length, 1);
+  assert.equal(s2[0].d, 4.6);
+  assert.equal(mergeTouching(lo.slice(0, 2)).length, 1);
+});
+
+await test('24 两层的尺寸对不上（AI 把二楼的尺寸字配到短 20 % 的线上）→ 不平均：按一楼、提醒、误差含层间差', () => {
+  const sizes = [
+    [1067, 3072],
+    [1085, 2260],
+  ];
+  const mk = (tag) => ['gf', 'ff'].map((k, i) => ({ level: i ? 'first' : 'ground', title: '', read: J(`pass2-${tag}-${k}.json`), cropW: sizes[i][0], cropH: sizes[i][1], src: 'x' }));
+  const bad = mk('ffscale');
+  const one = (i) => pageScale([bad[i]]).mPerPx;
+  const sc = pageScale(bad);
+  assert.ok(Math.abs(sc.mPerPx / one(0) - 1) < 1e-9, `用一楼的比例 ${sc.mPerPx} vs ${one(0)} / ${one(1)}`);
+  assert.ok(sc.floorSpread > 0.2 && sc.floorPick === 0, JSON.stringify(sc));
+  const { plan, report } = assemblePlan(bad, {});
+  assert.ok(Math.abs(report.scale.widthM - 6.1) < 0.15, `宽 ${report.scale.widthM}`);
+  assert.ok(Math.abs(report.scale.depthM - 15.2) < 0.4, `深 ${report.scale.depthM}`);
+  assert.ok(report.scale.errPct >= 20, `误差 ${report.scale.errPct}%`);
+  const w = report.warnings.find((x) => x.code === 'scaleFloors');
+  assert.ok(w, JSON.stringify(report.warnings));
+  assert.deepEqual(w.vars, [Math.round(sc.floorSpread * 100), { floor: plan.floors[0].id }]);
+  // 尺寸对得上的两层：照样平均，不提醒
+  const good = mk('app');
+  const g = assemblePlan(good, {});
+  assert.ok(!g.report.warnings.some((x) => x.code === 'scaleFloors'));
+  assert.ok(g.report.scale.errPct < 2 && g.report.scale.n >= 25, JSON.stringify(g.report.scale));
+  assert.ok(chainGap(J('pass2-ffscale-ff.json').dimensions) > 0.1 && chainGap(J('pass2-app-gf.json').dimensions) < 0.03);
+});
+
+await test('25 老板的 TYPE B：L 形主卧两块之间不砌墙；厨房框盖住门口凹位 → 沿墙线切开、大门留下；没有大门 → 提醒', () => {
+  const { res } = ownerPipeline();
+  const T = J('truth-owner.json');
+  const fl = res.plan.floors[0];
+  const env = (rs) => {
+    const q = rs.filter((x) => !['balcony', 'porch'].includes(x.type));
+    return { x: Math.min(...q.map((x) => x.x)), y: Math.min(...q.map((x) => x.y)) };
+  };
+  const dx = env(fl.rooms).x - env(T.rooms).x;
+  const dy = env(fl.rooms).y - env(T.rooms).y;
+  // L 形房间（id、id-2）之间：没有实墙
+  const W = buildWalls(fl);
+  const base = (id) => id.replace(/-\d+$/, '');
+  let inside = 0;
+  for (const w of W) if (w.neg && w.pos && w.neg.type === w.pos.type && base(w.neg.id) === base(w.pos.id)) inside += w.pieces.filter((p) => p.kind === 'solid').reduce((s, p) => s + p.b - p.a, 0);
+  assert.ok(inside < 0.05, `L 形房间里砌了 ${inside.toFixed(2)} m 墙`);
+  assert.ok(fl.rooms.filter((r) => r.type === 'master').length >= 2, '主卧还是 L 形（两块）');
+  // 大门：在厨房和门口凹位之间的墙线上，凹位不算屋里
+  const doors = fl.openings.filter((o) => o.kind === 'door' || o.kind === 'slider');
+  const main = T.doors.find((q) => q.id === 'd-main');
+  assert.ok(doors.some((o) => near1(o, main, dx, dy)), '大门不见了');
+  assert.equal(T.doors.filter((q) => doors.some((o) => near1(o, q, dx, dy))).length, T.doors.length, '真的门都在');
+  assert.ok(!res.report.warnings.some((w) => w.code === 'noEntrance'));
+  const kit = fl.rooms.filter((r) => r.type === 'kitchen');
+  const kitArea = kit.reduce((s, r) => s + r.w * r.d, 0);
+  assert.ok(Math.abs(kitArea - (3.9 * 1.35 + 2.388 * 1.25)) < 0.6, `厨房 ${kitArea.toFixed(2)} ㎡（真值 8.25）`);
+  assert.ok(!fl.rooms.some((r) => r.type === 'foyer'), '门口凹位不是房间');
+  // 没有大门的一层 → 提醒
+  const rooms = [
+    { label: 'LIVING', type: 'living', box_2d: [0, 0, 500, 1000] },
+    { label: 'BEDROOM', type: 'bedroom', box_2d: [500, 0, 1000, 1000] },
+  ];
+  const r2 = assemblePlan([{ level: 'ground', title: '', read: { rooms, doors: [{ box_2d: [495, 400, 505, 560], kind: 'door' }], dimensions: [{ text: '6000', axis: 'x', box_2d: [0, 0, 10, 1000] }, { text: '8000', axis: 'y', box_2d: [0, 0, 1000, 10] }] }, cropW: 600, cropH: 800, src: 'x' }], {});
+  assert.ok(r2.report.warnings.some((w) => w.code === 'noEntrance'), JSON.stringify(r2.report.warnings));
+  assert.ok(hasEntrance({ rooms: [{ id: 'a', type: 'living', x: 0, y: 0, w: 4, d: 4 }], openings: [{ id: 'd', kind: 'door', x1: 1, x2: 2, y1: 4, y2: 4 }] }));
+});
+
+await test('26 AI 漏了二楼的 BEDROOM 2：图上围出来的 2.8 × 3.6 m、外墙有窗 → 卧室（review），报告里数到 1 个没认出名字的房间', () => {
+  const ff = J('pass2-app-ff.json');
+  const miss = { ...ff, rooms: ff.rooms.filter((r) => r.label !== 'BEDROOM 2') };
+  const { plan, report } = appCase([J('pass2-app-gf.json'), miss]);
+  const f = plan.floors[1];
+  const guess = f.rooms.filter((r) => r.review);
+  assert.equal(guess.length, 1, JSON.stringify(f.rooms.map((r) => [r.type, r.w, r.d])));
+  assert.equal(guess[0].type, 'bedroom');
+  assert.ok(Math.abs(guess[0].w - 2.8) < 0.15 && Math.abs(guess[0].d - 3.6) < 0.15, `${guess[0].w} × ${guess[0].d}`);
+  assert.equal(report.unnamed, 1);
+  assert.ok(!f.rooms.some((r) => r.type === 'store'), '不是储物间');
+  assert.deepEqual(checkPlan(plan), []);
+  // 小的没名字的地方还是储物间（不算卧室）
+  const small = guessUnnamed([{ id: 'a', type: 'store', name: '', gap: true, x: 0, y: 0, w: 1.5, d: 2 }], [{ id: 'w', kind: 'window', x1: 0.2, x2: 1.2, y1: 0, y2: 0 }]);
+  assert.equal(small.rooms[0].type, 'store');
 });
 
 console.log(`\n${n - failed}/${n} 通过`);

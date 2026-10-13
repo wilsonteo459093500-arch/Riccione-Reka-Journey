@@ -36,9 +36,10 @@ import {
   checkPlan,
   carveFloor,
   fitRectToRooms,
+  replaceFloorRooms,
 } from './model.js';
-import { planFileToImage } from './planImage.js';
-import * as AI from './ai.js';
+// ai.js / planImage.js（连同 sheet.js）只有上传、重新识别才用：用到时才载入，和 ImportFlow 同一个按需载入的包 ——
+// 许愿模式的客人、展厅演示打开工作室都不用下载这一大段
 import { loadSettings } from '../store.js';
 import { t, tj, L, isEn } from '../../shared/i18n.js';
 import { BRAND } from '../../shared/config.js';
@@ -56,6 +57,7 @@ const MAX_S = 400;
 const ZOOM_INSET = 72; // 右边：缩放按钮那一条
 const HINT_INSET = 60; // 底部：工具提示（可以折两行）
 const SHEET_INSET = 68; // 窄屏：收起的属性抽屉
+const TOAST_BOTTOM = 78; // 手机：消息那一行在收起的抽屉上面（和 .pe-toast 的 bottom 一样）
 const DIM_MIN_PX = 70; // 房间在屏幕上小于这个就不写尺寸（走廊、浴室的字会压到墙上）
 const HISTORY = 30;
 
@@ -192,6 +194,7 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
   const [msg, setMsg] = useState('');
   const [msgUndo, setMsgUndo] = useState(false);
   const [sheet, setSheet] = useState(false); // 窄屏：属性抽屉拉开了没有
+  const [toast, setToast] = useState(false); // 手机：消息改成抽屉上面的一行（刚导入完：平面图要看得到）
   const [menu, setMenu] = useState(null); // 'floor' | 'add' | null
   const [ask, setAsk] = useState(null); // 确认框 { text, ok, run }
   const [importFile, setImportFile] = useState(null);
@@ -206,6 +209,8 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
   const fileRef = useRef(null);
   const calibRef = useRef(null);
   const actsRef = useRef(null);
+  const toastRef = useRef(null);
+  const peekRef = useRef(false); // 下一条消息不拉开抽屉（手机上导入完）
   const drag = useRef(null);
   const pointers = useRef(new Map());
   const past = useRef([]);
@@ -285,10 +290,27 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
     return () => clearTimeout(tm);
   }, [calib?.p2]);
 
-  // 有新消息（AI 结果、读图失败…）：窄屏把抽屉拉开，免得没看到
+  // 有新消息（AI 结果、读图失败…）：窄屏把抽屉拉开，免得没看到。
+  // 手机上刚导入完是例外：抽屉一拉开就盖掉大半张平面图（正是设计师要对的东西）—— 抽屉收着，消息变成抽屉上面的一行
   useEffect(() => {
-    if (msg) setSheet(true);
+    if (!msg) {
+      setToast(false);
+      return;
+    }
+    if (peekRef.current) {
+      peekRef.current = false;
+      setSheet(false);
+      setToast(true);
+    } else {
+      setToast(false);
+      setSheet(true);
+    }
   }, [msg]);
+  useEffect(() => {
+    if (!toast) return undefined;
+    const tm = setTimeout(() => setToast(false), 9000);
+    return () => clearTimeout(tm);
+  }, [toast]);
 
   const fit = useCallback(
     (p = plan, u = underlay) => {
@@ -313,7 +335,10 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
       const top = fr?.height ? Math.max(0, fr.bottom - cr.top + 6 - pad) : 48;
       const zoomW = zr?.width ? cr.right - zr.left + 8 - pad : ZOOM_INSET;
       const zoomH = zr?.height ? cr.bottom - zr.top + 8 - pad : 190;
-      const base = (ph ? 0 : HINT_INSET) + (nw ? SHEET_INSET : 0);
+      let base = (ph ? 0 : HINT_INSET) + (nw ? SHEET_INSET : 0);
+      // 手机上抽屉上面那一行消息：平面图放在它上面（用排版的位置量，不用 getBoundingClientRect —— 它刚出来时还在往上滑的动画里）
+      const tn = toastRef.current;
+      if (tn?.offsetParent && tn.offsetHeight) base = Math.max(base, cr.bottom - (tn.offsetParent.getBoundingClientRect().top + tn.offsetTop) + 8 - pad);
       const bw = bb.x1 - bb.x0;
       const bh = bb.y1 - bb.y0;
       let best = null;
@@ -336,6 +361,15 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
     if (autoUpload && upload) setTimeout(() => fileRef.current?.click(), 250);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // 手机上导入完、消息那一行出来了：缩放按钮让到它上面，整张平面图放进抽屉和那一行上面的地方
+  const [toastH, setToastH] = useState(0);
+  useLayoutEffect(() => {
+    setToastH(toast ? toastRef.current?.offsetHeight || 0 : 0);
+  }, [toast, msg, sheet]);
+  useLayoutEffect(() => {
+    if (toastH) fit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [toastH]);
   // iPad 转了方向（宽 ↔ 窄的版式）：重新放到画面中间
   const firstLayout = useRef(true);
   useEffect(() => {
@@ -437,15 +471,20 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
   };
   const doAddFloor = (copy) => {
     remember();
-    const { plan: np, floorId } = addFloor(plan, { copy, from: floor.id });
+    const { plan: np, floorId, unstacked } = addFloor(plan, { copy, from: floor.id });
     setMenu(null);
     if (!floorId) return say(t('最多 {0} 层', [MAX_FLOORS]));
     setPlan(np);
     setFid(floorId);
     setSel(null);
     setTool(copy === 'all' ? 'select' : 'room');
+    // 名字要按加好之后的方案算（旧的方案里还没有这一层：会变成「一楼」）
     const nf = floorById(np, floorId);
-    say(t('加好了{0}。', [floorLabel(nf)]), true);
+    const name = (f) => t(floorName(np, f.id));
+    const lower = np.floors[nf.level - 1];
+    // 楼梯没能叠上来（下面那层楼梯尽头是墙）：直接说怎么连
+    if (unstacked && lower && !np.stairs.some((s) => s.to === floorId)) say(t('加好了{0}。它还没有楼梯：用「楼梯」工具拖出楼梯间，会连到{1}。', [name(nf), name(lower)]), true);
+    else say(t('加好了{0}。', [name(nf)]), true);
   };
   const askRemoveFloor = () => {
     setMenu(null);
@@ -508,7 +547,8 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
       rect, // 问的时候楼梯间还画在图上（金色虚框）
       run: () => {
         remember();
-        const { plan: np, floorId } = addFloor(plan, { copy: 'blank' });
+        // 只连设计师画的这一座（不再自动把下面上来的楼梯也叠一座上去）
+        const { plan: np, floorId } = addFloor(plan, { copy: 'blank', stack: false });
         if (floorId) make(np, floor.id, floorId);
       },
     });
@@ -526,6 +566,7 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
     setBusy(t('读取平面图…'));
     say('');
     try {
+      const { planFileToImage } = await import('./planImage.js');
       const img = await planFileToImage(file);
       const w = 12;
       const u = { src: img.src, x: 0, y: 0, w, h: (w * img.height) / img.width, opacity: 0.55, iw: img.width, ih: img.height };
@@ -552,9 +593,8 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
     let target;
     if (mode === 'into' && floorById(plan, floorId)) {
       const src = np.floors[0];
-      const stairs = plan.stairs.filter((s) => s.from === floorId || s.to === floorId);
-      const keep = (r) => !r.stairId && !(r.type === 'stair' && stairs.length);
-      next = migratePlan(updateFloor(plan, floorId, (f) => ({ ...f, rooms: [...f.rooms.filter((r) => r.stairId), ...src.rooms.filter(keep)], openings: src.openings, ...(src.meta ? { meta: src.meta } : {}) })));
+      // 这一层的楼梯留着；新房间贴好楼梯间、让出楼梯的位置（不重叠、不留窄缝）
+      next = replaceFloorRooms(plan, floorId, { rooms: src.rooms, openings: src.openings, meta: src.meta });
       const u = u2[src.id];
       if (u) setUnderlays((m) => ({ ...m, [floorId]: u }));
       target = floorId;
@@ -571,6 +611,8 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
     setSel(null);
     setTool('select');
     const rooms = next.floors.reduce((n, f) => n + f.rooms.filter((r) => !r.stairId).length, 0);
+    // 手机：抽屉收着（只露标题那一行），这句话变成抽屉上面的一行，平面图整张看得到
+    if (layoutRef.current.phone) peekRef.current = true;
     say(t('已放进编辑器：{0} 层、{1} 个房间。请对一下，再按「生成 3D」。', [next.floors.length, rooms]), true);
     setTimeout(() => fit(next, u2[target] || null), 40);
   };
@@ -588,6 +630,7 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
     const f = floor;
     setBusy(t('AI 正在重新读{0}（约 30–90 秒）…', [floorLabel(f)]));
     try {
+      const AI = await import('./ai.js');
       let res;
       if (typeof AI.rereadFloor === 'function') res = await AI.rereadFloor(s, underlay, { floorId: f.id, level: LEVEL_WORDS[f.level] || 'other', title: f.meta?.import?.title || '', floor: f, plan });
       else {
@@ -600,7 +643,8 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
       const stairs = plan.stairs.filter((st) => st.from === f.id || st.to === f.id);
       const rooms = (got.rooms || []).filter((r) => !r.stairId && !(r.type === 'stair' && stairs.length));
       remember();
-      setPlan((p) => migratePlan(updateFloor(p, f.id, (fl) => ({ ...fl, rooms: [...fl.rooms.filter((r) => r.stairId), ...rooms], openings: got.openings || [] }))));
+      // 楼梯留着（上下两层共用）；新房间贴好楼梯间、挖掉楼梯的位置、再吸附 —— 不会多出「楼梯 和 起居厅 重叠了」
+      setPlan((p) => replaceFloorRooms(p, f.id, { rooms, openings: got.openings || [] }));
       if (res?.underlay) setUnderlays((m) => ({ ...m, [f.id]: { ...m[f.id], ...res.underlay } }));
       setTool('select');
       say(t('重新识别了{0}：{1} 个房间、{2} 个门窗。', [floorLabel(f), rooms.length, (got.openings || []).length]), true);
@@ -634,6 +678,7 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
 
   const onDown = (e) => {
     setMenu(null);
+    if (toast) setToast(false);
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     // 指针已经被系统收回（iPad 上偶尔会这样）时 setPointerCapture 会抛错：不能因此整个按下都不算
     try {
@@ -1584,7 +1629,7 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
           {floorBar}
           {upperHint && !busy && <p className="pe-fl-empty">{upperHint}</p>}
           {toolHint && !busy && !calib?.p2 && <p className="pe-toolhint">{toolHint}</p>}
-          <div className="pe-zoom" ref={zoomRef}>
+          <div className="pe-zoom" ref={zoomRef} style={toastH ? { bottom: TOAST_BOTTOM + toastH + 10 } : undefined}>
             <button type="button" onClick={() => zoomCenter(1.25)} aria-label={t('放大')}>
               <Icon name="plus" size={18} />
             </button>
@@ -1639,6 +1684,16 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
                 </div>
               </div>
             </div>
+          )}
+          {narrow && toast && msg && !sheet && (
+            <p className="pe-toast" ref={toastRef} role="status">
+              <span>{msg}</span>
+              {msgUndo && past.current.length > 0 && (
+                <button type="button" className="pe-msg-undo" onClick={undo}>
+                  {t('撤销')}
+                </button>
+              )}
+            </p>
           )}
           {narrow && (
             <aside className={`pe-side pe-sheet ${sheet ? 'open' : ''}`} aria-label={sheetTitle}>
@@ -1727,6 +1782,9 @@ const PE_FLOORS_CSS = `
 .pe-ask-card p { margin: 0 0 16px; font: 600 16px/1.45 var(--sans); color: var(--ink); }
 .pe-ask-card > div { display: flex; justify-content: flex-end; gap: 8px; }
 .pe-btn.danger-solid { background: var(--danger); color: var(--card); }
+.pe-toast { position: absolute; left: 12px; right: 12px; bottom: ${TOAST_BOTTOM}px; z-index: 4; display: flex; align-items: center; gap: 8px; margin: 0; padding: 10px 10px 10px 14px; border-radius: 16px; background: var(--accent-tint); color: var(--ink); font: 500 14px/1.45 var(--sans); box-shadow: var(--shadow-2), 0 0 0 0.5px var(--line); animation: sheet-up 0.3s var(--ease) both; }
+.pe-toast > span { flex: 1; min-width: 0; }
+.pe-toast .pe-msg-undo { flex: none; margin-left: 0; }
 .pe-msg-undo { margin-left: 10px; padding: 4px 10px; min-height: 32px; border: 0; border-radius: 9px; background: var(--card); color: var(--accent); font: 600 13px/1 var(--sans); cursor: pointer; box-shadow: 0 0 0 0.5px var(--line); }
 .pe-fl-h { margin-top: 22px !important; padding-top: 16px; border-top: 0.5px solid var(--line); }
 .pe-sheet .pe-fl-h { display: block !important; }

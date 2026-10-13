@@ -39,6 +39,7 @@ export default {
   '删除{0}？这一层的房间和家具都会删掉（可以撤销）': 'Delete the {0}? Its rooms and furniture go too (you can undo).',
   '已删除{0}。': '{0} deleted.',
   '加好了{0}。': '{0} added.',
+  '加好了{0}。它还没有楼梯：用「楼梯」工具拖出楼梯间，会连到{1}。': '{0} added. It has no stairs yet: drag out a stairwell with the Stairs tool to link it to the {1}.',
   '最多 {0} 层': 'Up to {0} floors',
   楼层名: 'Floor name',
   '天花高（m）': 'Ceiling height (m)',
@@ -94,7 +95,7 @@ export default {
   '楼梯在{0}和{1}的位置不一样': 'The stairs are not in the same place on the {0} and {1}',
   '楼梯太短：{0} 级踏步需要 {1} m，现在只有 {2} m': 'Stairs too short: {0} risers need {1} m, there is only {2} m',
   '楼梯太窄：{0} m': 'Stairs too narrow: {0} m',
-  '{0}的楼梯口被墙挡住了': 'A wall blocks the stairs on the {0}',
+  '{0}的楼梯口被墙挡住了：点楼梯 →「换方向」，或挪开那面墙': 'A wall blocks the stairs on the {0}: tap the stairs → “Turn”, or move that wall',
   '{0}的 {1} 下面是空的（约 {2} ㎡）': '{1} on the {0} has nothing under it (about {2} m²)',
   '{0}的楼层高 {1} m 比天花高 {2} m 加楼板还低': '{0}: floor-to-floor {1} m is less than the {2} m ceiling plus the slab',
 };

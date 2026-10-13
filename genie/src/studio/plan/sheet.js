@@ -4,7 +4,7 @@
 // 坐标：图片用像素（x 向右、y 向下）；plan 用米（x 向右、y 向下）。Gemini 的框：[ymin, xmin, ymax, xmax]，0–1000 归一化。
 // 比例从来不悄悄用 12 m：读图上的尺寸 → 设计师填的一个已知尺寸 → 按门宽估 → 按形状猜；用了哪一种写在 report.scale.source。
 
-import { ROOM_TYPES, migratePlan, defaultStairShape, defaultStairUp, checkPlan } from './model.js';
+import { ROOM_TYPES, migratePlan, defaultStairShape, defaultStairUp, checkPlan, stairFlights, buildWalls } from './model.js';
 
 export const PAD = 0.03; // 裁图 = 第一遍的框四边各多 3 %（尺寸线在图边上）
 export const DOOR_M = 0.85; // 马来西亚平面图的门：750–900（房门）/ 900–1000（大门）
@@ -297,25 +297,66 @@ const LABEL_TYPES = [
   [/bed|bilik|room|卧|房/i, 'bedroom'],
 ];
 
-/** 模型给的类型 + 图上的字 → ROOM_TYPES。车廊、后院这些常见叫法图上的字优先；都对不上 → 卧室（旧行为）/ 没有字 → 走廊 */
+/**
+ * 模型给的类型 + 图上的字 → ROOM_TYPES。车廊、后院这些常见叫法图上的字优先；
+ * 模型给的是笼统的类型（卧室 / 客厅 / 储物 / 走廊）而字说得更清楚（UTAMA / MASTER → 主卧、KELUARGA / FAMILY → 起居厅、
+ * ALMARI PAKAIAN / W.I.R. → 衣帽间）→ 用字的；都对不上 → 卧室（旧行为）/ 没有字 → 走廊
+ */
 export function roomTypeOf(type, label = '') {
   const l = String(label || '');
   if (/porch|anjung|car\s*park|garage|driveway|front\s*yard|车廊|前院/i.test(l)) return 'porch';
   if (/\ba[./]?\s?c\.?\s*(ledge|area|platform)|air[-\s]?con|compressor|planter|冷气|空调/i.test(l)) return 'balcony';
   if (/yard|service|laundry|drying|dobi|晒衣|工作阳台/i.test(l)) return 'utility';
   if (/stair|tangga|楼梯/i.test(l)) return 'stair';
+  if (!ROOM_TYPES[type] || ['bedroom', 'living', 'store', 'corridor'].includes(type)) {
+    const bathy = /\b(bath|toilet|w\.?\s?c|tandas|shower)\b|bilik\s*air|bathroom|浴室|厕所/i.test(l);
+    if (/keluarga|family|起居|家庭厅/i.test(l)) return 'family';
+    if (/almari\s*pakaian|w\.?\s?i\.?\s?r\.?\b|walk[-\s]?in|衣帽/i.test(l)) return 'walkin';
+    if (!bathy && /bilik\s*(tidur\s*)?utama|\bmaster\b|主卧/i.test(l)) return 'master';
+  }
   if (ROOM_TYPES[type]) return type;
   for (const [re, t] of LABEL_TYPES) if (re.test(l)) return t;
   return l.trim() ? 'bedroom' : 'corridor';
 }
 
-// 只是重复类型的字（LIVING、MASTER BEDROOM…）不留名字：界面显示本地化的类型名
-const GENERIC = /^(living( room| hall| area)?|hall|dining( room| area| hall)?|kitchen|master( bed ?room)?|bed ?room|bath ?(room)?|toilet|w\.?\s?c\.?|yard|balcony|car ?porch|porch|corridor|passage|foyer|entrance|store|stor|study|family( hall| area| room)?|stair(s|case)?|void|w\.?\s?i\.?\s?r\.?|walk[- ]?in( wardrobe| closet)?|utility|laundry|landing)$/i;
+// 只是重复类型的字（LIVING、MASTER BEDROOM、RUANG TAMU…）不留名字：界面显示本地化的类型名
+const GENERIC = new RegExp(
+  '^(' +
+    [
+      // 英文
+      'living( room| hall| area)?', 'hall', 'dining( room| area| hall)?', 'kitchen', 'master( bed ?room)?', 'bed ?room', 'bath ?(room)?', 'toilet', 'w\\.?\\s?c\\.?',
+      'yard', 'balcony', 'car ?porch', 'porch', 'corridor', 'passage', 'foyer', 'entrance', 'store( ?room)?', 'stor', 'study', 'family( hall| area| room)?',
+      'stair(s|case)?', 'void', 'w\\.?\\s?i\\.?\\s?r\\.?', 'walk[- ]?in( wardrobe| closet)?', 'utility', 'laundry', 'landing',
+      // 马来文
+      'ruang tamu', 'ruang makan', 'dapur', 'bilik air', 'bilik( tidur)?( utama)?', 'tangga', 'anjung( kereta)?', 'koridor', 'balkoni', 'serambi', 'stor',
+      'ruang keluarga', 'ruang dobi', 'ampaian', 'almari pakaian', 'laman', 'lobi',
+    ].join('|') +
+    ')$',
+  'i',
+);
 
-/** 图上的字 → 房间名：重复类型的不留；全大写的英文改成 Title Case（BEDROOM 3 → Bedroom 3） */
+// 有意思的名字 → 界面上能翻译的中文名（英文版靠词典：湿厨房 → Wet kitchen、卧室 4 → Bedroom 4）
+const NAMED = [
+  [/^(wet kitchen|dapur basah)$/i, '湿厨房'],
+  [/^(dry kitchen|dapur kering)$/i, '干厨房'],
+  [/^(m\.? ?bath(room)?|master (bath(room)?|toilet)|en-?suite|bilik air utama)$/i, '主卧浴室'],
+  [/^(common (bath(room)?|toilet)|c\.? ?bath)$/i, '公共浴室'],
+  [/^(guest ?(bed)?room|bilik tamu)$/i, '客房'],
+  [/^a[./]?\s?c\.?\s*(ledge|area|platform)$/i, '空调台'],
+];
+
+/**
+ * 图上的字 → 房间名：重复类型的不留（英文 / 马来文）；常见的有名字的房间 → 能翻译的中文名；
+ * 「BEDROOM 4」「BILIK TIDUR 4」→「卧室 4」、「BATH 2」「BILIK AIR 2」→「浴室 2」；其他全大写的英文改成 Title Case。
+ */
 export function cleanLabel(label) {
   let s = String(label || '').replace(/\s+/g, ' ').trim();
   if (!s || GENERIC.test(s)) return '';
+  for (const [re, zh] of NAMED) if (re.test(s)) return zh;
+  const num = /^(bed ?room|bedrm|bilik( tidur)?|room|br)\.? ?(\d)$/i.exec(s);
+  if (num) return '卧室 ' + num[3]; // 英文版：词典里有「卧室 1」…「卧室 9」
+  const bn = /^(bath ?(room)?|toilet|bilik air|tandas|w\.?c\.?)\.? ?(\d)$/i.exec(s);
+  if (bn) return '浴室 ' + bn[3];
   if (/^[^a-z]*$/.test(s) && /[A-Z]/.test(s)) s = s.toLowerCase().replace(/(^|[\s(./-])([a-z])/g, (m, a, b) => a + b.toUpperCase());
   return s.slice(0, 24);
 }
@@ -616,6 +657,7 @@ export function snapOpenings(rooms, openings, reach = 0.35) {
   }
   const out = [];
   let dropped = 0;
+  const lost = [];
   for (const o of openings) {
     const horiz = Math.abs(o.x2 - o.x1) >= Math.abs(o.y2 - o.y1);
     const a = horiz ? Math.min(o.x1, o.x2) : Math.min(o.y1, o.y2);
@@ -629,6 +671,7 @@ export function snapOpenings(rooms, openings, reach = 0.35) {
     }
     if (!best) {
       dropped++;
+      lost.push(o);
       continue;
     }
     const same = (horiz ? lines.h : lines.v).filter((l) => Math.abs(l.c - best.c) < 1e-6);
@@ -648,7 +691,7 @@ export function snapOpenings(rooms, openings, reach = 0.35) {
     }
     out.push(horiz ? { ...o, x1: r2(p), x2: r2(q), y1: best.c, y2: best.c } : { ...o, x1: best.c, x2: best.c, y1: r2(p), y2: r2(q) });
   }
-  return { openings: out, dropped };
+  return { openings: out, dropped, lost };
 }
 
 // ───────────── 低清的图（walls.js 没把握时）：按图上的墨迹查一查门和开放空间（DESIGN §2.12 B.5） ─────────────
@@ -736,7 +779,7 @@ export function wallInk(ink, mPerPx, seg, { dx = 0, dy = 0, band = 0.11, search 
  * 两样都要在（同一个铰链、同一个半径）才算真的门 —— 只看弧线会被家具（床、洗碗盆）骗。
  * 门的框不准（± 0.15 m）、门宽不准（± 20 %）、双开门（半径 = 一半）→ 小范围搜一下。→ { arc, leaf, ok }（最好的那个候选）
  */
-export function doorSwing(ink, mPerPx, seg, { dx = 0, dy = 0 } = {}) {
+export function doorSwing(ink, mPerPx, seg, { dx = 0, dy = 0, minLeaf = 0.8, peaks: maxPeaks = 1 } = {}) {
   const { mask, width: W, height: H } = ink;
   const k = 1 / mPerPx;
   const horiz = seg.axis === 'x';
@@ -773,38 +816,42 @@ export function doorSwing(ink, mPerPx, seg, { dx = 0, dy = 0 } = {}) {
       // 1. 门扇：铰链附近（± 0.15 m，逐像素）找一条从墙边垂直伸出去的实线（≥ 0.5 m 长）
       const dir = hingeAtA ? 1 : -1; // 从铰链指向另一头
       const h0 = hingeAtA ? seg.a : seg.b;
-      let leafBest = { leaf: 0, h: h0 };
+      const cands = [];
       for (let off = -0.15; off <= 0.15 + 1e-9; off += fine) {
         const h = h0 + off;
         const pts = [];
         for (let i = 0; i < 14; i++) pts.push([h, seg.c + side * (0.16 + (0.36 * i) / 13)]);
-        const v = frac(pts);
-        if (v > leafBest.leaf) leafBest = { leaf: v, h };
+        cands.push({ leaf: frac(pts), h });
       }
-      if (leafBest.leaf < 0.8) {
-        if (leafBest.leaf > best.leaf && best.arc === 0) best = { ...best, leaf: leafBest.leaf };
+      // 默认只试最强的那条线；peaks > 1（救回房间中间的门时）：铰链旁边常常还有一条垂直的墙线（门洞的边、外墙）→ 最强的几条（相隔 ≥ 4 cm）都试弧线
+      cands.sort((p, q) => q.leaf - p.leaf); // 一样强：先试最左 / 最上那条（稳定排序，和以前一样）
+      const peaks = [];
+      for (const q of cands) if (q.leaf >= minLeaf && peaks.length < maxPeaks && peaks.every((p) => Math.abs(p.h - q.h) >= 0.04)) peaks.push(q);
+      if (!peaks.length) {
+        if (cands[0] && cands[0].leaf > best.leaf && best.arc === 0) best = { ...best, leaf: cands[0].leaf };
         continue;
       }
       // 2. 弧：从这个铰链，半径 = 门宽（± 20 %；双开门 = 一半），角度 0 = 沿着墙，90° = 门扇；两头 12 % 不看
-      const h = leafBest.h;
-      for (const rf of [0.5, 0.8, 0.85, 0.9, 0.95, 1, 1.05, 1.1, 1.15, 1.2]) {
-        const R = len * rf;
-        if (R < 0.35) continue;
-        const arcPts = [];
-        for (let i = 0; i < N; i++) {
-          const t = ((0.12 + (0.76 * i) / (N - 1)) * Math.PI) / 2;
-          arcPts.push([h + dir * R * Math.cos(t), seg.c + side * R * Math.sin(t)]);
+      for (const { h } of peaks) {
+        for (const rf of [0.5, 0.8, 0.85, 0.9, 0.95, 1, 1.05, 1.1, 1.15, 1.2]) {
+          const R = len * rf;
+          if (R < 0.35) continue;
+          const arcPts = [];
+          for (let i = 0; i < N; i++) {
+            const t = ((0.12 + (0.76 * i) / (N - 1)) * Math.PI) / 2;
+            arcPts.push([h + dir * R * Math.cos(t), seg.c + side * R * Math.sin(t)]);
+          }
+          // 弧要整段都有（三段各 ≥ 30 %），不是几个地方碰巧有线
+          const thirds = [0, 1, 2].map((q) => frac(arcPts.slice((q * N) / 3, ((q + 1) * N) / 3)));
+          const arc = Math.min(frac(arcPts), ...thirds.map((v) => Math.min(1, v / 0.6)));
+          if (arc < 0.3) continue;
+          // 门扇要一直伸到弧那里（0.16 m → 0.9 R 都是实线）
+          const lp = [];
+          for (let i = 0; i < 16; i++) lp.push([h, seg.c + side * (0.16 + ((0.9 * R - 0.16) * i) / 15)]);
+          const leaf = frac(lp);
+          const sc = Math.min(arc, leaf);
+          if (sc > best.s) best = { arc, leaf, ok: arc >= 0.45 && leaf >= 0.8, s: sc, r: R, side, hingeAtA };
         }
-        // 弧要整段都有（三段各 ≥ 30 %），不是几个地方碰巧有线
-        const thirds = [0, 1, 2].map((q) => frac(arcPts.slice((q * N) / 3, ((q + 1) * N) / 3)));
-        const arc = Math.min(frac(arcPts), ...thirds.map((v) => Math.min(1, v / 0.6)));
-        if (arc < 0.3) continue;
-        // 门扇要一直伸到弧那里（0.16 m → 0.9 R 都是实线）
-        const lp = [];
-        for (let i = 0; i < 16; i++) lp.push([h, seg.c + side * (0.16 + ((0.9 * R - 0.16) * i) / 15)]);
-        const leaf = frac(lp);
-        const sc = Math.min(arc, leaf);
-        if (sc > best.s) best = { arc, leaf, ok: arc >= 0.45 && leaf >= 0.8, s: sc, r: R };
       }
     }
   return best;
@@ -989,10 +1036,14 @@ export function stairsFromRooms(floors) {
     const lo = floors[i];
     const hi = floors[i + 1];
     const used = new Set();
-    for (const a of lo.rooms.filter((r) => r.type === 'stair')) {
+    // 同一层共一整条边的楼梯块（墙线把一座楼梯切成两段）先合成一块
+    const loStairs = mergeTouching(lo.rooms.filter((r) => r.type === 'stair'));
+    const hiStairs = mergeTouching(hi.rooms.filter((r) => r.type === 'stair'));
+    const cands = [];
+    for (const a of loStairs) {
       // 已经从更下面一层上来、又不往上的楼梯间（顶层的到达口）不算
       let best = null;
-      for (const b of hi.rooms.filter((r) => r.type === 'stair' && !used.has(r))) {
+      for (const b of hiStairs.filter((r) => !used.has(r))) {
         const v = iouRect(a, b);
         if (v >= 0.3 && (!best || v > best.v)) best = { b, v };
       }
@@ -1007,10 +1058,54 @@ export function stairsFromRooms(floors) {
         up = g.up;
         review = !g.sure || shape !== 'straight';
       }
-      out.push({ id: `s${n++}`, from: lo.id, to: hi.id, x: r3(a.x), y: r3(a.y), w: r3(a.w), d: r3(a.d), shape, up, matched: !!best, review });
+      const fits = stairFit(a, { shape, up }, lo.rise > 0 ? lo.rise : 3.2).fits;
+      cands.push({ id: null, from: lo.id, to: hi.id, x: r3(a.x), y: r3(a.y), w: r3(a.w), d: r3(a.d), shape, up, matched: !!best, review, fits });
+    }
+    // 同两层之间两座以上的楼梯：只留跑得下的（马来西亚的排屋 / 半独立只有一座）；都跑不下 → 留最大的那座
+    let keep = cands;
+    if (cands.length > 1) {
+      const ok = cands.filter((c) => c.fits);
+      keep = ok.length ? ok : [[...cands].sort((p, q) => q.w * q.d - p.w * p.d)[0]];
+    }
+    for (const c of keep) {
+      const { fits, ...s } = c;
+      out.push({ ...s, id: `s${n++}`, ...(fits ? {} : { review: true }) });
     }
   }
   return out;
+}
+
+/**
+ * 配好楼梯以后整理每层的楼梯间：几块拼成的楼梯 → 一块（= 楼梯的矩形）；没配上楼梯、又不是到达口的楼梯块 → 走廊（不留没有楼梯的「楼梯间」）。
+ * floors: buildFloors 的楼层（下标 = stairs 的 from / to）。原地改 rooms。
+ */
+function tidyStairRooms(floors, stairs) {
+  floors.forEach((f, i) => {
+    const mine = stairs.filter((s) => s.from === i || s.to === i);
+    if (!f.rooms.some((r) => r.type === 'stair')) return;
+    const covered = (r) => mine.find((s) => {
+      const ix = Math.min(r.x + r.w, s.x + s.w) - Math.max(r.x, s.x);
+      const iy = Math.min(r.y + r.d, s.y + s.d) - Math.max(r.y, s.y);
+      return ix > 0.05 && iy > 0.05 && (ix * iy) / (r.w * r.d) > 0.6;
+    });
+    const out = [];
+    const done = new Set();
+    for (const r of f.rooms) {
+      if (r.type !== 'stair') {
+        out.push(r);
+        continue;
+      }
+      const s = covered(r);
+      if (!s) {
+        out.push(floors.length > 1 ? { ...r, type: 'corridor', name: '' } : r);
+        continue;
+      }
+      if (done.has(s)) continue; // 同一座楼梯的另一块：已经并进去了
+      done.add(s);
+      out.push({ ...r, x: s.x, y: s.y, w: s.w, d: s.d });
+    }
+    f.rooms = out;
+  });
 }
 
 // ───────────── 整页 → v2 plan ─────────────
@@ -1046,12 +1141,82 @@ export function scaleSane(floors) {
  * floors: [{ read, cropW, cropH, photo? }]；photo = 拍的照片（已经拉正）→ 横竖各算一个比例（aspect = 竖 / 横，裁图要在 y 方向拉 aspect 倍才是方的）。
  * → { mPerPx（横向，每个裁图像素几米）, aspect, source: 'dims'|'doors'|'guess'|'known', n, spread?, rejected? }
  */
+/**
+ * 一条尺寸链（同一排的分段尺寸）在图上是不是首尾相接：AI 把尺寸字配错了线（每一段都短一截）→ 段和段之间有空。
+ * → 平均空出来的比例（0 = 接得刚好；没有 ≥ 3 段的链 → null）
+ */
+export function chainGap(dims) {
+  const segs = (dims || [])
+    .filter((d) => parseDimText(d?.text) && okBox(d.box_2d))
+    .map((d) => {
+      const [y0, x0, y1, x1] = d.box_2d.map(Number);
+      const axis = d.axis === 'x' || d.axis === 'y' ? d.axis : y1 - y0 > x1 - x0 ? 'y' : 'x';
+      return axis === 'x' ? { axis, a: x0, b: x1, c: (y0 + y1) / 2 } : { axis, a: y0, b: y1, c: (x0 + x1) / 2 };
+    });
+  const fr = [];
+  for (const axis of ['x', 'y']) {
+    const list = segs.filter((s) => s.axis === axis).sort((p, q) => p.c - q.c);
+    // 同一排（垂直方向差 ≤ 12 / 1000）的分成一条链；最长的那段是总尺寸，不算
+    const rows = [];
+    for (const s of list) {
+      const r = rows.find((q) => Math.abs(q[0].c - s.c) <= 12);
+      if (r) r.push(s);
+      else rows.push([s]);
+    }
+    for (const r of rows) {
+      if (r.length < 3) continue;
+      const ch = r.sort((p, q) => p.a - q.a);
+      const span = ch[ch.length - 1].b - ch[0].a;
+      if (!(span > 0)) continue;
+      let gap = 0;
+      for (let i = 1; i < ch.length; i++) gap += Math.max(0, ch[i].a - ch[i - 1].b);
+      fr.push(gap / span);
+    }
+  }
+  return fr.length ? fr.reduce((s, v) => s + v, 0) / fr.length : null;
+}
+
+/**
+ * 同一页几层的比例：各层只用自己的尺寸算出来差 > 6 % → 不平均。每个候选（某一层自己的比例）打分：
+ * 拿它量每一层 AI 框的外框（footprint）对那一层写的总宽（overall_width_text；外框到外墙皮，比中线多 0–0.4 m 都算对）
+ * + 那一层尺寸链首尾相不相接 + 它自己的 rms；分数最低的用。→ { scale?（选了某一层）, spread（层间差）, idx（选的是第几层） } | null
+ */
+export function pickFloorScale(withRead, per) {
+  const ok = per.map((s, i) => ({ s, f: withRead[i], i })).filter((q) => q.s && q.s.source === 'dims');
+  if (ok.length < 2) return null;
+  const ks = ok.map((q) => q.s.mPerPx);
+  const spread = Math.max(...ks) / Math.min(...ks) - 1;
+  if (spread <= 0.06) return { spread };
+  const fit = (k) => {
+    let err = 0;
+    let n = 0;
+    for (const q of ok) {
+      const W = parseDimText(q.f.read.overall_width_text) / 1000;
+      if (!(W > 2) || !okBox(q.f.read.footprint_box_2d)) continue;
+      const fp = boxPx(q.f.read.footprint_box_2d.map(Number), q.f.cropW, q.f.cropH);
+      // 图可能是横着画的：横、竖两个方向取对得上的那个
+      const e = (px) => Math.max(0, Math.abs(px * k - W - 0.2) - 0.2) / W;
+      err += Math.min(e(fp.x1 - fp.x0), e(fp.y1 - fp.y0));
+      n++;
+    }
+    return n ? err / n : 0;
+  };
+  const scored = ok.map((q) => ({ ...q, v: fit(q.s.mPerPx) + (chainGap(q.f.read.dimensions) ?? 0.05) + (q.s.rms || 0) }));
+  scored.sort((p, q) => p.v - q.v || p.i - q.i);
+  const best = scored[0];
+  const rms = Math.sqrt((best.s.rms || 0) ** 2 + spread ** 2);
+  return { spread, idx: best.i, scale: { ...best.s, rms, floorSpread: spread, floorPick: best.i } };
+}
+
 export function pageScale(floorsIn, opts = {}) {
   const withRead = (floorsIn || []).filter((f) => f && f.read);
   if (opts.scale?.mPerPx > 0) return { n: 0, aspect: 1, ...opts.scale, source: opts.scale.source || 'known' };
   if (!withRead.length) return null;
   const per = withRead.map((f) => scaleFromDims(f.read.dimensions, f.cropW, f.cropH, { aniso: !!f.photo }));
-  let scale = sheetScale(per);
+  // 几层各自的比例差 > 6 %：不平均（AI 把某一层的尺寸字配错了尺寸线），用「自己对得上」的那层，并提醒
+  const pick = pickFloorScale(withRead, per);
+  let scale = pick?.scale || sheetScale(per);
+  if (scale && pick && !pick.scale && pick.spread > 0) scale = { ...scale, rms: Math.sqrt((scale.rms || 0) ** 2 + (pick.spread / 2) ** 2), floorSpread: pick.spread };
   if (!scale) scale = sheetScale(withRead.map((f) => estimateScale(f.read, f.cropW, f.cropH)));
   if (!scale) scale = { mPerPx: 6.1 / Math.max(1, withRead[0].cropW * 0.8), n: 0, source: 'guess', widthM: 6.1 };
   return { aspect: 1, ...scale };
@@ -1104,8 +1269,7 @@ export function assemblePlan(floorsIn, opts = {}) {
   const v2floors = floors.map((f, i) => {
     const id = fid(f.level, i);
     f.id = id;
-    const ceil = multi ? (i === 0 ? 3.0 : 2.9) : 2.8;
-    const height = multi ? (i === 0 ? 3.35 : 3.2) : 3.15;
+    const { ceil, height } = FLOOR_H(i, floors.length);
     return {
       id,
       level: i,
@@ -1147,12 +1311,14 @@ export function assemblePlan(floorsIn, opts = {}) {
     depthM: Number.isFinite(eg.y1 - eg.y0) ? r2(eg.y1 - eg.y0) : null,
     rejected: scale.rejected || [],
     reason: scale.reason || null,
+    floorSpread: scale.floorSpread != null ? r3(scale.floorSpread) : null,
   };
   const overlaps = checkPlan(plan).filter((s) => s.code === 'overlap').length;
   report.overlapsLeft = overlaps;
   floors.forEach((f, i) => {
-    report.floors.push({ id: plan.floors[i].id, level: f.level, title: f.title || '', rooms: plan.floors[i].rooms.filter((r) => !r.stairId).length, openings: plan.floors[i].openings.length, fixes: f.fixes, walls: f.wallsReport || null });
+    report.floors.push({ id: plan.floors[i].id, level: f.level, title: f.title || '', rooms: plan.floors[i].rooms.filter((r) => !r.stairId).length, openings: plan.floors[i].openings.length, fixes: f.fixes, walls: f.wallsReport || null, unnamed: f.unnamed || 0 });
   });
+  report.unnamed = floors.reduce((t, f) => t + (f.unnamed || 0), 0);
   const lr = lowResReport(
     withRead.map((f) => ({ srcPxW: (f.cropW || 0) / (f.srcScale || 1), mPerSrcPx: scale.mPerPx * (f.srcScale || 1) })),
     { screenshot: !!opts.screenshot },
@@ -1162,6 +1328,14 @@ export function assemblePlan(floorsIn, opts = {}) {
   report.planPx = lr.planPx;
   if (multi && !stairs.length) report.warnings.push({ code: 'noStairs', zh: '没认出楼梯：请在编辑器里用「楼梯」工具画上' });
   if (stairs.some((s) => s.review)) report.warnings.push({ code: 'stairDir', zh: '楼梯往哪边上是猜的：请在编辑器里点楼梯看一下' });
+  // 一楼（或单独的一户）没有大门：提醒设计师自己加
+  if (plan.floors[0]?.rooms.some((r) => !r.stairId) && !hasEntrance(plan.floors[0])) report.warnings.push({ code: 'noEntrance', zh: '没找到大门：请在编辑器里用「门」工具加上' });
+  // 几层图上的尺寸对不上：用了其中一层的比例 → 请填一个已知尺寸
+  if (scale.floorSpread > 0.06 && scale.floorPick != null) {
+    const readIdx = input.map((f, i) => (f.read ? i : -1)).filter((i) => i >= 0);
+    const pf = plan.floors[readIdx[scale.floorPick]];
+    if (pf) report.warnings.push({ code: 'scaleFloors', zh: '各层图上的尺寸对不上（差 {0}%）：先按{1}的比例，请填一个已知尺寸核对', vars: [Math.round(scale.floorSpread * 100), { floor: pf.id }] });
+  }
   floors.forEach((f, i) => {
     if (!plan.floors[i].rooms.some((r) => !r.stairId)) report.warnings.push({ code: 'empty', zh: '{0}没有读到房间：用底图自己描', vars: [{ floor: plan.floors[i].id }] });
   });
@@ -1317,10 +1491,599 @@ export function cleanSlivers(rooms, { min = 0.4, locked = () => false, wallAt = 
   return { rooms: out.filter((r) => !r.dead).map(({ dead, ...r }) => r), merged };
 }
 
+// ───────────── 楼梯复查（墙优先之后） ─────────────
+
+/** 楼梯矩形的跑长够不够：rise = 这一层的楼层高（0 = 顶层，不查）。info = AI 读到的 { up, shape } */
+function stairFit(r, info, rise) {
+  if (!(rise > 0)) return { fits: true, need: 0, avail: 0 };
+  const shape = info?.shape || defaultStairShape(r.w, r.d);
+  // AI 的 up 只在和矩形的长边一致时才用（直跑：沿长边上）
+  let up = info?.up || defaultStairUp(r.w, r.d);
+  if (shape === 'straight' && (r.d >= r.w) !== (up === 'N' || up === 'S')) up = defaultStairUp(r.w, r.d);
+  return stairFlights({ x: r.x, y: r.y, w: r.w, d: r.d, shape, up, ...(shape === 'L' ? { width: Math.min(1.0, r.w, r.d) } : {}) }, rise);
+}
+
+/** 共一整条边的矩形（并起来还是矩形）合成一块：楼梯被墙线切成两段时用 → [{ x, y, w, d, parts: [原来的] }] */
+export function mergeTouching(rects, eps = 0.03) {
+  let out = rects.map((r) => ({ x: r.x, y: r.y, w: r.w, d: r.d, parts: [r] }));
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (let i = 0; i < out.length && !changed; i++)
+      for (let j = i + 1; j < out.length && !changed; j++) {
+        const a = out[i];
+        const b = out[j];
+        const sameX = Math.abs(a.x - b.x) < eps && Math.abs(a.w - b.w) < eps;
+        const sameY = Math.abs(a.y - b.y) < eps && Math.abs(a.d - b.d) < eps;
+        let m = null;
+        if (sameX && (Math.abs(a.y + a.d - b.y) < eps || Math.abs(b.y + b.d - a.y) < eps)) m = { x: a.x, y: Math.min(a.y, b.y), w: a.w, d: a.d + b.d };
+        else if (sameY && (Math.abs(a.x + a.w - b.x) < eps || Math.abs(b.x + b.w - a.x) < eps)) m = { x: Math.min(a.x, b.x), y: a.y, w: a.w + b.w, d: a.d };
+        if (!m) continue;
+        out.splice(j, 1);
+        out[i] = { ...m, x: r3(m.x), y: r3(m.y), w: r3(m.w), d: r3(m.d), parts: [...a.parts, ...b.parts] };
+        changed = true;
+      }
+  }
+  return out;
+}
+
+/**
+ * 图上的一条线（墙的中线、楼梯的细边线）：在 c ± search（米）里找沿 [a, b] 有墨的比例最高的平行线；
+ * 实心墙是一片 → 取那一片的中间。比例 < minFrac → null。
+ */
+export function inkLineNear(ink, mPerPx, seg, { dx = 0, dy = 0, search = 0.2, minFrac = 0.75 } = {}) {
+  if (!ink?.mask || !(mPerPx > 0)) return null;
+  const { mask, width: W, height: H } = ink;
+  const k = 1 / mPerPx;
+  const horiz = seg.axis === 'x';
+  const c0 = (seg.c - (horiz ? dy : dx)) * k;
+  const a = (Math.min(seg.a, seg.b) - (horiz ? dx : dy)) * k;
+  const b = (Math.max(seg.a, seg.b) - (horiz ? dx : dy)) * k;
+  const m = (b - a) * 0.1;
+  const lo = Math.max(0, Math.round(a + m));
+  const hi = Math.min((horiz ? W : H) - 1, Math.round(b - m));
+  if (hi - lo < 4) return null;
+  const on = (u, v) => {
+    const x = horiz ? u : v;
+    const y = horiz ? v : u;
+    return x >= 0 && y >= 0 && x < W && y < H && mask[y * W + x] === 1;
+  };
+  const sr = Math.max(2, Math.round(search * k));
+  const fr = [];
+  for (let o = -sr; o <= sr; o++) {
+    const v = Math.round(c0 + o);
+    let n = 0;
+    let t = 0;
+    for (let u = lo; u <= hi; u += 2) {
+      t++;
+      if (on(u, v) || on(u, v - 1) || on(u, v + 1)) n++;
+    }
+    fr.push(t ? n / t : 0);
+  }
+  // 够强的线里离原来最近的那条（楼梯的踏步线也是平行的细线，所以不取「最强」的）；连成一片的取中间
+  let best = -1;
+  for (let i = 0; i < fr.length; i++) if (fr[i] >= minFrac && (best < 0 || Math.abs(i - sr) < Math.abs(best - sr))) best = i;
+  if (best < 0) return null;
+  let i0 = best;
+  let i1 = best;
+  while (i0 > 0 && fr[i0 - 1] >= minFrac) i0--;
+  while (i1 < fr.length - 1 && fr[i1 + 1] >= minFrac) i1++;
+  const v = c0 + (i0 + i1) / 2 - sr;
+  return r3(v / k + (horiz ? dy : dx));
+}
+
+/** extractWalls 的墙（裁图像素）→ 米的中线：{ h: [{ c, a, b }], v: [...] } */
+function wallLinesM(walls, mPerPx, dx = 0, dy = 0) {
+  const out = { h: [], v: [] };
+  for (const w of walls?.walls || []) {
+    const horiz = Math.abs(w.y1 - w.y2) <= Math.abs(w.x1 - w.x2);
+    if (horiz) out.h.push({ c: ((w.y1 + w.y2) / 2) * mPerPx + dy, a: Math.min(w.x1, w.x2) * mPerPx + dx, b: Math.max(w.x1, w.x2) * mPerPx + dx });
+    else out.v.push({ c: ((w.x1 + w.x2) / 2) * mPerPx + dx, a: Math.min(w.y1, w.y2) * mPerPx + dy, b: Math.max(w.y1, w.y2) * mPerPx + dy });
+  }
+  return out;
+}
+
+/**
+ * AI 的楼梯框吸到图上：每条边先找 0.35 m 内平行的墙中线；没有墙 → 0.2 m 内的细线（楼梯的边线 / 栏杆）；
+ * 都没有 → 0.15 m 内的房间边（edges：{ h: [y…], v: [x…] }，旧楼梯块的外框、邻居的边）；再没有 → 不动
+ */
+export function snapStairBox(B, { lines = { h: [], v: [] }, ink = null, mPerPx = 0, dx = 0, dy = 0, edges = { h: [], v: [] } } = {}) {
+  const edge = (horiz, c, a, b) => {
+    let best = null;
+    for (const l of horiz ? lines.h : lines.v) {
+      const ov = Math.min(b, l.b) - Math.max(a, l.a);
+      const d = Math.abs(l.c - c);
+      if (d <= 0.35 && ov >= 0.3 * (b - a) && (!best || d < best.d)) best = { c: l.c, d };
+    }
+    if (best) return best.c;
+    const v = inkLineNear(ink, mPerPx, { axis: horiz ? 'x' : 'y', c, a, b }, { dx, dy });
+    if (v != null) return v;
+    let e = null;
+    for (const q of horiz ? edges.h : edges.v) if (Math.abs(q - c) <= 0.15 && (e == null || Math.abs(q - c) < Math.abs(e - c))) e = q;
+    return e ?? c;
+  };
+  const x0 = edge(false, B.x, B.y, B.y + B.d);
+  const x1 = edge(false, B.x + B.w, B.y, B.y + B.d);
+  const y0 = edge(true, B.y, B.x, B.x + B.w);
+  const y1 = edge(true, B.y + B.d, B.x, B.x + B.w);
+  const out = { x: x0, y: y0, w: x1 - x0, d: y1 - y0 };
+  // 吸歪了（宽 / 深变了 40 % 以上、或者 < 0.6 m）→ 那个方向不吸
+  if (!(out.w >= 0.6 && Math.abs(out.w / B.w - 1) <= 0.4)) Object.assign(out, { x: B.x, w: B.w });
+  if (!(out.d >= 0.6 && Math.abs(out.d / B.d - 1) <= 0.4)) Object.assign(out, { y: B.y, d: B.d });
+  return { ...B, x: r3(out.x), y: r3(out.y), w: r3(out.w), d: r3(out.d) };
+}
+
+/** 房间 id 的「本体」：L 形房间的两块是 id 和 id-2（同类型）→ 同一个房间 */
+export function partBase(r, rooms) {
+  const m = /^(.*)-(\d+)$/.exec(String(r.id || ''));
+  if (m && rooms.some((q) => q.id === m[1] && q.type === r.type)) return m[1];
+  return r.id;
+}
+
+/**
+ * 在一层不重叠的房间里放进新的矩形（楼梯）：盖住的部分从邻居挖掉；remove 里的旧房间（切坏的楼梯块）让出来的、
+ * 新矩形没盖住的地方 → 给共边最长的邻居（开放空间优先）。没碰到的房间原样不动。→ rooms
+ */
+export function carveRects(rooms, boxes, { remove = new Set(), make = (B, i) => ({ id: `stair${i + 1}`, type: 'stair', name: '', ...B }) } = {}) {
+  const keep = rooms.filter((r) => !remove.has(r));
+  const touched = new Set();
+  const inter = (p, q) => Math.min(p.x + p.w, q.x + q.w) - Math.max(p.x, q.x) > 0.01 && Math.min(p.y + p.d, q.y + q.d) - Math.max(p.y, q.y) > 0.01;
+  for (const r of keep) if (boxes.some((B) => inter(r, B))) touched.add(r);
+  // 旧块让出的地方的邻居也要重新分
+  const freed = rooms.filter((r) => remove.has(r));
+  const touch = (p, q) => Math.min(p.x + p.w, q.x + q.w) - Math.max(p.x, q.x) > -0.02 && Math.min(p.y + p.d, q.y + q.d) - Math.max(p.y, q.y) > -0.02;
+  for (const r of keep) if (freed.some((f) => touch(r, f))) touched.add(r);
+  // 同一个房间的几块一起重新分
+  const base = (r) => partBase(r, rooms);
+  for (const r of [...touched]) for (const q of keep) if (base(q) === base(r)) touched.add(q);
+  const work = [...touched];
+  const all = [...work, ...freed, ...boxes];
+  // 差 1 cm 以内的边当成同一条（不然中间多一条 1 mm 的空格，房间被切碎）
+  const lines = (vals) => {
+    const out = [];
+    for (const v of vals.map(r3).sort((a, b) => a - b)) if (!out.length || v - out[out.length - 1] > 0.012) out.push(v);
+    return out;
+  };
+  const xs = lines(all.flatMap((r) => [r.x, r.x + r.w]));
+  const ys = lines(all.flatMap((r) => [r.y, r.y + r.d]));
+  const nx = xs.length - 1;
+  const ny = ys.length - 1;
+  if (nx < 1 || ny < 1) return rooms;
+  const keys = [...new Set(work.map(base))];
+  const protos = keys.map((key) => work.find((r) => r.id === key) || work.find((r) => base(r) === key));
+  const BOX = 1 << 20;
+  // own: 0.. = 房间本体（keys）；BOX + i = 新矩形 i；-3 = 让出来的；-1 = 外面
+  const own = new Int32Array(nx * ny).fill(-1);
+  const at = (i, j) => j * nx + i;
+  const inside = (r, x, y) => x > r.x && x < r.x + r.w && y > r.y && y < r.y + r.d;
+  for (let j = 0; j < ny; j++)
+    for (let i = 0; i < nx; i++) {
+      const cx = (xs[i] + xs[i + 1]) / 2;
+      const cy = (ys[j] + ys[j + 1]) / 2;
+      const bi = boxes.findIndex((B) => inside(B, cx, cy));
+      if (bi >= 0) own[at(i, j)] = BOX + bi;
+      else if (freed.some((r) => inside(r, cx, cy))) own[at(i, j)] = -3;
+      else {
+        const r = work.find((q) => inside(q, cx, cy));
+        if (r) own[at(i, j)] = keys.indexOf(base(r));
+      }
+    }
+  // 让出来的格子：一片一片给共边最长的房间（开放空间稍微优先）；没有邻居 → 走廊
+  const seen = new Uint8Array(nx * ny);
+  for (let j = 0; j < ny; j++)
+    for (let i = 0; i < nx; i++) {
+      if (own[at(i, j)] !== -3 || seen[at(i, j)]) continue;
+      const comp = [];
+      const st = [[i, j]];
+      seen[at(i, j)] = 1;
+      while (st.length) {
+        const [a, b] = st.pop();
+        comp.push([a, b]);
+        for (const [p, q] of [
+          [a + 1, b],
+          [a - 1, b],
+          [a, b + 1],
+          [a, b - 1],
+        ])
+          if (p >= 0 && q >= 0 && p < nx && q < ny && !seen[at(p, q)] && own[at(p, q)] === -3) {
+            seen[at(p, q)] = 1;
+            st.push([p, q]);
+          }
+      }
+      const len = new Map();
+      const set = new Set(comp.map(([a, b]) => at(a, b)));
+      for (const [a, b] of comp)
+        for (const [p, q, l] of [
+          [a + 1, b, ys[b + 1] - ys[b]],
+          [a - 1, b, ys[b + 1] - ys[b]],
+          [a, b + 1, xs[a + 1] - xs[a]],
+          [a, b - 1, xs[a + 1] - xs[a]],
+        ]) {
+          if (p < 0 || q < 0 || p >= nx || q >= ny || set.has(at(p, q))) continue;
+          const o = own[at(p, q)];
+          if (o < 0 || o >= BOX) continue;
+          len.set(o, (len.get(o) || 0) + l + (ROOM_TYPES[protos[o]?.type]?.open ? 0.05 : 0));
+        }
+      let best = -1;
+      for (const [o, l] of len) if (best < 0 || l > len.get(best)) best = o;
+      if (best < 0) {
+        keys.push(`gapc${keys.length}`);
+        protos.push({ type: 'corridor', name: '', gap: true });
+        best = keys.length - 1;
+      }
+      for (const [a, b] of comp) own[at(a, b)] = best;
+    }
+  const rectsOf = (k) => {
+    const runs = [];
+    for (let j = 0; j < ny; j++)
+      for (let i = 0; i < nx; ) {
+        if (own[at(i, j)] !== k) {
+          i++;
+          continue;
+        }
+        let e = i;
+        while (e + 1 < nx && own[at(e + 1, j)] === k) e++;
+        runs.push({ i0: i, i1: e, j0: j, j1: j });
+        i = e + 1;
+      }
+    const out = [];
+    for (const r of runs) {
+      const prev = out.find((q) => q.i0 === r.i0 && q.i1 === r.i1 && q.j1 === r.j0 - 1);
+      if (prev) prev.j1 = r.j1;
+      else out.push({ ...r });
+    }
+    return out.map((q) => ({ x: r3(xs[q.i0]), y: r3(ys[q.j0]), w: r3(xs[q.i1 + 1] - xs[q.i0]), d: r3(ys[q.j1 + 1] - ys[q.j0]) })).sort((p, q) => q.w * q.d - p.w * p.d);
+  };
+  const out = rooms.filter((r) => !touched.has(r) && !remove.has(r));
+  const used = new Set(out.map((r) => r.id));
+  keys.forEach((key, k) => {
+    rectsOf(k).forEach((q, n) => {
+      let id = n ? `${key}-${n + 1}` : key;
+      while (used.has(id)) id = `${id}b`;
+      used.add(id);
+      const { pin, ...room } = protos[k];
+      out.push({ ...room, id, ...q });
+    });
+  });
+  boxes.forEach((B, i) => {
+    const rs = rectsOf(BOX + i);
+    if (rs.length) out.push(make({ ...B, ...rs[0] }, i));
+  });
+  return out;
+}
+
+/**
+ * 墙优先以后的楼梯复查（walls.js 偶尔把一座楼梯切成两三块、或者把楼梯旁边的地方也算进楼梯）：
+ * 这一层没钉住的楼梯块 → 先把共一整条边的合起来；然后只要 (a) 块数比 AI 的楼梯多、(b) 有一块跑不下（编辑器会说「楼梯太短」）、
+ * (c) 和 AI 第二遍的楼梯框重叠 < 0.5 —— 就用 AI 的框（吸到图上的墙 / 细线）换掉，邻居让位置、旧块让出的地方给邻居。
+ * rooms：fuse 之后的房间；ai：AI 的楼梯框 [{ x, y, w, d, up?, shape? }]（米，同一个坐标）；rise：这一层的楼层高（顶层 0）。
+ * → { rooms, replaced, why }
+ */
+export function fixStairs(rooms, ai, { walls = null, ink = null, mPerPx = 0, dx = 0, dy = 0, rise = 0, uid = defaultUid } = {}) {
+  const pins = rooms.filter((r) => r.type === 'stair' && r.pin);
+  const mine = rooms.filter((r) => r.type === 'stair' && !r.pin);
+  const boxes = (ai || []).filter((b) => b && b.w >= 0.5 && b.d >= 0.5 && !pins.some((p) => iouRect(p, b) > 0.3));
+  if (!mine.length) return { rooms, replaced: 0, why: null };
+  const groups = mergeTouching(mine);
+  const why = [];
+  if (groups.length > Math.max(1, boxes.length)) why.push('split');
+  const infoOf = (g) => boxes.map((b) => ({ b, v: iouRect(b, g) })).sort((p, q) => q.v - p.v)[0];
+  for (const g of groups) {
+    const best = infoOf(g);
+    const fit = stairFit(g, best && best.v > 0.3 ? best.b : null, rise);
+    if (!fit.fits) why.push('short');
+    if (boxes.length && (!best || best.v < 0.5)) why.push('offAI');
+  }
+  if (!why.length) {
+    // 都可信：只是被切成两块的合回一块
+    if (groups.every((g) => g.parts.length === 1)) return { rooms, replaced: 0, why: null };
+    const remove = new Set(groups.filter((g) => g.parts.length > 1).flatMap((g) => g.parts));
+    const out = rooms.filter((r) => !remove.has(r));
+    for (const g of groups.filter((q) => q.parts.length > 1)) out.push({ ...g.parts[0], x: g.x, y: g.y, w: g.w, d: g.d });
+    return { rooms: out, replaced: 0, merged: remove.size, why: null };
+  }
+  if (!boxes.length) return { rooms, replaced: 0, why: why.join(',') + ':noAI' };
+  const lines = wallLinesM(walls, mPerPx, dx, dy);
+  // 没有墙 / 线可吸的边：吸到旧楼梯块的外框、邻居的边（AI 的框常常差几厘米，留下一条细缝）
+  const others = rooms.filter((r) => !mine.includes(r));
+  const ux = [Math.min(...mine.map((r) => r.x)), Math.max(...mine.map((r) => r.x + r.w))];
+  const uy = [Math.min(...mine.map((r) => r.y)), Math.max(...mine.map((r) => r.y + r.d))];
+  const edges = { v: [...ux, ...others.flatMap((r) => [r.x, r.x + r.w])], h: [...uy, ...others.flatMap((r) => [r.y, r.y + r.d])] };
+  const snapped = boxes.map((b) => snapStairBox(b, { lines, ink, mPerPx, dx, dy, edges }));
+  // 钉住的楼梯间（楼下上来的）不挖
+  if (snapped.some((B) => pins.some((p) => Math.min(p.x + p.w, B.x + B.w) - Math.max(p.x, B.x) > 0.05 && Math.min(p.y + p.d, B.y + B.d) - Math.max(p.y, B.y) > 0.05))) return { rooms, replaced: 0, why: why.join(',') + ':pinned' };
+  const out = carveRects(rooms, snapped, { remove: new Set(mine), make: (B) => ({ id: uid('r'), type: 'stair', name: '', label: '', ...B, x: B.x, y: B.y, w: B.w, d: B.d, fromAI: true }) });
+  return { rooms: out.map(({ up, shape, fromAI, ...r }) => r), replaced: snapped.length, why: [...new Set(why)].join(',') };
+}
+
+/**
+ * 差不到 3 cm 的房间边对齐成一条（墙优先的面、钉住的楼梯各自取整，会差几毫米 → buildWalls 当成两条墙线，中间多出两道外墙）。
+ * pins 的边（楼梯的矩形，上下层要一样）优先，否则取平均。门窗跟着一起挪。原地不改，→ { rooms, openings }
+ */
+export function snapEdges(rooms, openings = [], { tol = 0.03, pins = [] } = {}) {
+  const mk = (vals, pinVals) => {
+    const all = [...vals.map((v) => ({ v, pin: false })), ...pinVals.map((v) => ({ v, pin: true }))].sort((a, b) => a.v - b.v);
+    const groups = [];
+    for (const e of all) {
+      const g = groups[groups.length - 1];
+      if (g && e.v - g[0].v <= tol) g.push(e);
+      else groups.push([e]);
+    }
+    const map = new Map();
+    for (const g of groups) {
+      if (g.length < 2) continue;
+      const p = g.find((e) => e.pin);
+      const val = p ? p.v : r3(g.reduce((t, e) => t + e.v, 0) / g.length);
+      for (const e of g) map.set(r3(e.v), val);
+    }
+    return (v) => (map.has(r3(v)) ? map.get(r3(v)) : v);
+  };
+  const fx = mk(rooms.flatMap((r) => [r.x, r.x + r.w]), pins.flatMap((p) => [p.x, p.x + p.w]));
+  const fy = mk(rooms.flatMap((r) => [r.y, r.y + r.d]), pins.flatMap((p) => [p.y, p.y + p.d]));
+  const out = rooms.map((r) => {
+    const x0 = fx(r.x);
+    const y0 = fy(r.y);
+    const x1 = fx(r.x + r.w);
+    const y1 = fy(r.y + r.d);
+    return x0 === r.x && y0 === r.y && x1 === r.x + r.w && y1 === r.y + r.d ? r : { ...r, x: x0, y: y0, w: r3(x1 - x0), d: r3(y1 - y0) };
+  });
+  const ops = openings.map((o) => {
+    const horiz = Math.abs(o.y1 - o.y2) < 1e-6;
+    return horiz ? { ...o, y1: fy(o.y1), y2: fy(o.y2) } : { ...o, x1: fx(o.x1), x2: fx(o.x2) };
+  });
+  return { rooms: out, openings: ops };
+}
+
+/**
+ * 开放空间里 L 形房间的细的那一块（< min，常见：AI 的餐厅框画长了一点，客厅剩一条 0.6 m 的边）：
+ * 长边整条贴着另一个开放空间、图上那里没有墙 → 并给那个房间（编辑器就不会说「客厅 太小了」）。→ { rooms, merged }
+ */
+export function absorbThinParts(rooms, { min = 0.8, wallAt = null } = {}) {
+  const out = rooms.map((r) => ({ ...r }));
+  const open = (r) => !!ROOM_TYPES[r?.type]?.open && r.type !== 'stair';
+  let merged = 0;
+  for (const s of out) {
+    if (s.dead || Math.min(s.w, s.d) >= min || !open(s)) continue;
+    const base = partBase(s, out);
+    if (out.filter((q) => !q.dead && partBase(q, out) === base).length < 2) continue;
+    const horiz = s.w >= s.d;
+    const t = horiz ? s.d : s.w;
+    const [a, b] = horiz ? [s.x, s.x + s.w] : [s.y, s.y + s.d];
+    for (const side of [-1, 1]) {
+      const edge = horiz ? (side < 0 ? s.y : s.y + s.d) : side < 0 ? s.x : s.x + s.w;
+      const nb = out.filter((r) => {
+        if (r === s || r.dead) return false;
+        const e = horiz ? (side < 0 ? r.y + r.d : r.y) : side < 0 ? r.x + r.w : r.x;
+        const [ra, rb] = horiz ? [r.x, r.x + r.w] : [r.y, r.y + r.d];
+        return Math.abs(e - edge) < 0.03 && Math.min(b, rb) - Math.max(a, ra) > 0.01;
+      });
+      if (nb.length !== 1) continue;
+      const r = nb[0];
+      const [ra, rb] = horiz ? [r.x, r.x + r.w] : [r.y, r.y + r.d];
+      if (!open(r) || partBase(r, out) === base || Math.abs(ra - a) > 0.03 || Math.abs(rb - b) > 0.03) continue;
+      if (wallAt && wallAt({ axis: horiz ? 'x' : 'y', c: edge, a, b }) > 0.5) continue;
+      if (horiz) {
+        if (side > 0) r.y = r3(r.y - t);
+        r.d = r3(r.d + t);
+      } else {
+        if (side > 0) r.x = r3(r.x - t);
+        r.w = r3(r.w + t);
+      }
+      s.dead = true;
+      merged++;
+      break;
+    }
+  }
+  return { rooms: out.filter((r) => !r.dead).map(({ dead, ...r }) => r), merged };
+}
+
+/**
+ * L 形房间（id 和 id-2，同类型）的两块之间不砌墙：buildWalls 在两个不同 id 的房间之间都会砌墙（两边都是开放类型除外），
+ * 所以在整条共边上放一个「打通」—— 除非图上那里真的有墙（wallInk 的比例 > 0.6）。→ { openings, opened }
+ */
+export function openLParts(rooms, openings, { ink = null, mPerPx = 0, dx = 0, dy = 0, uid = defaultUid } = {}) {
+  const out = [...openings];
+  let opened = 0;
+  const E = 0.02;
+  for (let i = 0; i < rooms.length; i++)
+    for (let j = i + 1; j < rooms.length; j++) {
+      const a = rooms[i];
+      const b = rooms[j];
+      if (a.type !== b.type || partBase(a, rooms) !== partBase(b, rooms)) continue;
+      if (ROOM_TYPES[a.type]?.open) continue; // 开放类型之间本来就不砌墙
+      let e = null;
+      const ox = [Math.max(a.x, b.x), Math.min(a.x + a.w, b.x + b.w)];
+      const oy = [Math.max(a.y, b.y), Math.min(a.y + a.d, b.y + b.d)];
+      if ((Math.abs(a.x + a.w - b.x) < E || Math.abs(b.x + b.w - a.x) < E) && oy[1] - oy[0] > 0.05) e = { axis: 'y', c: Math.abs(a.x + a.w - b.x) < E ? b.x : a.x, a: oy[0], b: oy[1] };
+      else if ((Math.abs(a.y + a.d - b.y) < E || Math.abs(b.y + b.d - a.y) < E) && ox[1] - ox[0] > 0.05) e = { axis: 'x', c: Math.abs(a.y + a.d - b.y) < E ? b.y : a.y, a: ox[0], b: ox[1] };
+      if (!e) continue;
+      if (ink?.mask && mPerPx > 0 && wallInk(ink, mPerPx, e, { dx, dy, search: 0.1 }).frac > 0.6) continue;
+      const horiz = e.axis === 'x';
+      // 那条边上已有的门窗 / 打通：先拿掉（整条都打通）
+      for (let k = out.length - 1; k >= 0; k--) {
+        const o = out[k];
+        const oh = Math.abs(o.y1 - o.y2) < 1e-6;
+        if (oh !== horiz) continue;
+        const c = oh ? o.y1 : o.x1;
+        const [p, q] = oh ? [Math.min(o.x1, o.x2), Math.max(o.x1, o.x2)] : [Math.min(o.y1, o.y2), Math.max(o.y1, o.y2)];
+        if (Math.abs(c - e.c) < 0.03 && Math.min(q, e.b) - Math.max(p, e.a) > 0.05) out.splice(k, 1);
+      }
+      out.push(horiz ? { id: uid('o'), kind: 'open', x1: r3(e.a), x2: r3(e.b), y1: r3(e.c), y2: r3(e.c) } : { id: uid('o'), kind: 'open', x1: r3(e.c), x2: r3(e.c), y1: r3(e.a), y2: r3(e.b) });
+      opened++;
+    }
+  return { openings: out, opened };
+}
+
+/**
+ * 房间框铺法（低清）丢掉的门：AI 的门落在一个房间的中间（房间框画大了，盖住了门口的凹位 —— 老板 TYPE B 的大门在厨房框里）。
+ * 图上门那里有一条墙线、门有开启弧线（doorSwing ok）→ 沿那条墙线把房间切开：门开向的那边是屋里；另一边那一块
+ * （墙线有墨的那一段 × 到房间边）别的边上没有门 = 门口的凹位 → 不要（屋外）；还有门 = 另一个房间（玄关）。门留在墙线上。
+ * 看不到弧线：门吸到最近的墙线（房间边 0.35 m 内），标 review。→ { rooms, openings（救回来的门）, split, review }
+ */
+export function rescueDoors(rooms, lost, ink, mPerPx, { dx = 0, dy = 0, uid = defaultUid, aiOpenings = [] } = {}) {
+  let out = rooms;
+  const kept = [];
+  let split = 0;
+  let review = 0;
+  if (!ink?.mask || !(mPerPx > 0)) return { rooms, openings: kept, split, review };
+  for (const o of lost || []) {
+    if (o.kind !== 'door' && o.kind !== 'slider') continue;
+    const horiz = Math.abs(o.x2 - o.x1) >= Math.abs(o.y2 - o.y1);
+    const axis = horiz ? 'x' : 'y';
+    const c0 = horiz ? (o.y1 + o.y2) / 2 : (o.x1 + o.x2) / 2;
+    const [a, b] = horiz ? [Math.min(o.x1, o.x2), Math.max(o.x1, o.x2)] : [Math.min(o.y1, o.y2), Math.max(o.y1, o.y2)];
+    if (b - a < 0.4) continue;
+    const w = wallInk(ink, mPerPx, { axis, c: c0, a: a - 0.6, b: b + 0.6 }, { dx, dy, search: 0.3 });
+    const beside = Math.max(w.at(a - 0.6, a - 0.05), w.at(b + 0.05, b + 0.6));
+    if (beside < 0.5) continue; // 门旁边没有墙：不是门（或者框歪太多）
+    const c = w.c;
+    const mid = (a + b) / 2;
+    const at = horiz ? { x: mid, y: c } : { x: c, y: mid };
+    const R = out.find((r) => at.x > r.x + 0.05 && at.x < r.x + r.w - 0.05 && at.y > r.y + 0.05 && at.y < r.y + r.d - 0.05);
+    // 照片 / 扫描：门扇的线不一定连得那么好 → 门扇 ≥ 0.6 + 弧线 ≥ 0.3 + 墙上真的有缺口 也算
+    const sw = o.kind === 'door' ? doorSwing(ink, mPerPx, { axis, c, a, b }, { dx, dy, minLeaf: 0.6, peaks: 3 }) : { ok: false };
+    const gapHere = w.at(a + (b - a) * 0.2, b - (b - a) * 0.2) < 0.4;
+    const swing = { ...sw, ok: sw.ok || (sw.arc >= 0.3 && sw.leaf >= 0.6 && gapHere) };
+    if (R && swing.ok) {
+      // 墙线在这个房间里有墨的那一段（从门往两边走）
+      const [lo, hi] = horiz ? [R.x, R.x + R.w] : [R.y, R.y + R.d];
+      const run = wallInk(ink, mPerPx, { axis, c, a: lo, b: hi }, { dx, dy, search: 0.04 });
+      let ra = a;
+      let rb = b;
+      while (ra - 0.1 >= lo - 1e-6 && run.at(ra - 0.1, ra) >= 0.5) ra -= 0.1;
+      while (rb + 0.1 <= hi + 1e-6 && run.at(rb, rb + 0.1) >= 0.5) rb += 0.1;
+      if (ra - lo < 0.2) ra = lo;
+      if (hi - rb < 0.2) rb = hi;
+      // 门开向屋里：弧线那边（side）是屋里，另一边切出去
+      const inSide = swing.side || 1;
+      const [f0, f1] = horiz ? [R.y, R.y + R.d] : [R.x, R.x + R.w];
+      const far = inSide > 0 ? f0 : f1; // 切出去的那块到房间的这条边
+      const P = horiz ? { x: ra, y: Math.min(c, far), w: rb - ra, d: Math.abs(far - c) } : { x: Math.min(c, far), y: ra, w: Math.abs(far - c), d: rb - ra };
+      if (P.w < 0.3 || P.d < 0.3) continue;
+      // 切出去那块：别的边上还有 AI 读到的门 / 开口 → 是一个房间（玄关，真正的大门在外面）；没有 → 门口的凹位（屋外，不要）
+      const onP = (q) => {
+        if (q === o) return false;
+        const qh = Math.abs(q.x2 - q.x1) >= Math.abs(q.y2 - q.y1);
+        const qc = qh ? (q.y1 + q.y2) / 2 : (q.x1 + q.x2) / 2;
+        const [qa, qb] = qh ? [Math.min(q.x1, q.x2), Math.max(q.x1, q.x2)] : [Math.min(q.y1, q.y2), Math.max(q.y1, q.y2)];
+        const edgesP = [
+          [true, P.y, P.x, P.x + P.w],
+          [true, P.y + P.d, P.x, P.x + P.w],
+          [false, P.x, P.y, P.y + P.d],
+          [false, P.x + P.w, P.y, P.y + P.d],
+        ].filter(([h, ec]) => !(h === horiz && Math.abs(ec - c) < 0.05));
+        return edgesP.some(([h, ec, ea, eb]) => h === qh && Math.abs(qc - ec) < 0.3 && Math.min(qb, eb) - Math.max(qa, ea) > 0.2);
+      };
+      const enclosed = (aiOpenings || []).some((q) => q.kind !== 'window' && onP(q));
+      const rest = subtractRect(R, P);
+      const base = R.id;
+      const pieces = rest.sort((p, q) => q.w * q.d - p.w * p.d).map((q, n) => ({ ...R, ...q, x: r3(q.x), y: r3(q.y), w: r3(q.w), d: r3(q.d), id: n ? `${base}-${n + 1}` : base }));
+      if (enclosed) pieces.push({ id: uid('r'), type: 'foyer', name: '', label: '', x: r3(P.x), y: r3(P.y), w: r3(P.w), d: r3(P.d) });
+      out = [...out.filter((r) => r !== R), ...pieces];
+      const da = Math.max(a, ra);
+      const db = Math.min(b, rb);
+      kept.push(horiz ? { ...o, x1: r2(da), x2: r2(db), y1: r3(c), y2: r3(c), arc: true, rescued: true } : { ...o, x1: r3(c), x2: r3(c), y1: r2(da), y2: r2(db), arc: true, rescued: true });
+      split++;
+      continue;
+    }
+    // 没有弧线：墙上真的有门那么宽的缺口 → 吸到最近的墙线（房间边），标出来让设计师看；墙是连着的 = AI 多加的，不要
+    if (!gapHere) continue;
+    const moved = horiz ? { ...o, y1: c, y2: c } : { ...o, x1: c, x2: c };
+    const sn = snapOpenings(out, [moved], 0.35);
+    if (sn.openings.length) {
+      kept.push({ ...sn.openings[0], review: true });
+      review++;
+    }
+  }
+  return { rooms: out, openings: kept, split, review };
+}
+
+/** 矩形 r 减掉 s → 0–4 块矩形（米） */
+function subtractRect(r, s) {
+  const ix0 = Math.max(r.x, s.x);
+  const iy0 = Math.max(r.y, s.y);
+  const ix1 = Math.min(r.x + r.w, s.x + s.w);
+  const iy1 = Math.min(r.y + r.d, s.y + s.d);
+  if (ix1 - ix0 <= 1e-6 || iy1 - iy0 <= 1e-6) return [{ x: r.x, y: r.y, w: r.w, d: r.d }];
+  const out = [];
+  if (iy0 > r.y) out.push({ x: r.x, y: r.y, w: r.w, d: iy0 - r.y });
+  if (iy1 < r.y + r.d) out.push({ x: r.x, y: iy1, w: r.w, d: r.y + r.d - iy1 });
+  if (ix0 > r.x) out.push({ x: r.x, y: iy0, w: ix0 - r.x, d: iy1 - iy0 });
+  if (ix1 < r.x + r.w) out.push({ x: ix1, y: iy0, w: r.x + r.w - ix1, d: iy1 - iy0 });
+  return out.filter((q) => q.w > 0.05 && q.d > 0.05);
+}
+
+/** 一楼（或单独的一户）有没有大门：围合部分的外墙（外面 = 没有房间 / 车廊）上有门或推拉门通进屋里的房间 */
+export function hasEntrance(floor) {
+  const indoor = (r) => r && !ROOM_TYPES[r.type]?.outdoor && r.type !== 'void';
+  const outside = (r) => !r || r.type === 'porch';
+  for (const w of buildWalls(floor)) {
+    const ok = (indoor(w.neg) && outside(w.pos)) || (indoor(w.pos) && outside(w.neg));
+    if (ok && w.pieces.some((p) => p.kind === 'door' || p.kind === 'slider')) return true;
+  }
+  return false;
+}
+
+/**
+ * 图上围出来、AI 却没认出名字的房间（gap）：≥ 6 ㎡、两边都 ≥ 2 m、外墙上有窗 → 多半是卧室（AI 漏了 BEDROOM 2）→ 卧室，标 review；
+ * 小的照旧（储物间 / 走廊）。→ { rooms, unnamed（没认出名字的房间数） }
+ */
+export function guessUnnamed(rooms, openings) {
+  let unnamed = 0;
+  const out = rooms.map((r) => {
+    if (!r.gap || r.type === 'stair') return r;
+    const big = r.w * r.d >= 6 && Math.min(r.w, r.d) >= 2;
+    // 这个房间的边上、另一边没有房间（或是阳台 / 车廊）的窗
+    const winOut = (openings || []).some((o) => {
+      if (o.kind !== 'window') return false;
+      const horiz = Math.abs(o.y1 - o.y2) < 1e-6;
+      const c = horiz ? o.y1 : o.x1;
+      const mid = horiz ? (o.x1 + o.x2) / 2 : (o.y1 + o.y2) / 2;
+      const onEdge = horiz ? (Math.abs(c - r.y) < 0.05 || Math.abs(c - r.y - r.d) < 0.05) && mid > r.x && mid < r.x + r.w : (Math.abs(c - r.x) < 0.05 || Math.abs(c - r.x - r.w) < 0.05) && mid > r.y && mid < r.y + r.d;
+      if (!onEdge) return false;
+      const outSide = horiz ? (Math.abs(c - r.y) < 0.05 ? -1 : 1) : Math.abs(c - r.x) < 0.05 ? -1 : 1;
+      const p = horiz ? { x: mid, y: c + outSide * 0.1 } : { x: c + outSide * 0.1, y: mid };
+      const q = roomAt(rooms, p.x, p.y);
+      return !q || !!ROOM_TYPES[q.type]?.outdoor;
+    });
+    if (big && winOut) {
+      unnamed++;
+      return { ...r, type: 'bedroom', name: '', review: true };
+    }
+    if (r.type === 'store' && !r.name) unnamed++;
+    return r;
+  });
+  return { rooms: out, unnamed };
+}
+
+/** 房间改过以后：门窗只留在还是房间边（或外墙）上的；落在楼梯框里面 / 房间中间的去掉 */
+export function keepOnEdges(rooms, openings) {
+  const E = 0.03;
+  return openings.filter((o) => {
+    const horiz = Math.abs(o.y1 - o.y2) < 1e-6;
+    const c = horiz ? o.y1 : o.x1;
+    const [a, b] = horiz ? [Math.min(o.x1, o.x2), Math.max(o.x1, o.x2)] : [Math.min(o.y1, o.y2), Math.max(o.y1, o.y2)];
+    const mid = (a + b) / 2;
+    // 门窗中点两边（各 0.05 m）是不是同一个房间本体 → 在房间中间
+    const p = horiz ? { x: mid, y: c - 0.05 } : { x: c - 0.05, y: mid };
+    const q = horiz ? { x: mid, y: c + 0.05 } : { x: c + 0.05, y: mid };
+    const rp = roomAt(rooms, p.x, p.y);
+    const rq = roomAt(rooms, q.x, q.y);
+    if (!rp && !rq) return false;
+    if (rp && rq && (rp === rq || partBase(rp, rooms) === partBase(rq, rooms))) return false;
+    // 至少要贴着一个房间的边
+    return rooms.some((r) => (horiz ? Math.abs(r.y - c) < E || Math.abs(r.y + r.d - c) < E : Math.abs(r.x - c) < E || Math.abs(r.x + r.w - c) < E));
+  });
+}
+
+/** 读出来的楼层的天花高 / 楼层高（马来西亚双层排屋：一楼 3.0 / 3.35，楼上 2.9 / 3.2；单层 2.8 / 3.15） */
+const FLOOR_H = (i, n) => (n > 1 ? { ceil: i === 0 ? 3.0 : 2.9, height: i === 0 ? 3.35 : 3.2 } : { ceil: 2.8, height: 3.15 });
+
 /** assemblePlan 的核心：按给定比例把每层变成米、铺好、自下而上对齐、配楼梯 */
 function buildFloors(input, mPerPx, uid, opts) {
   const floors = [];
   let aligned = null;
+  // 楼梯要爬的高度 = 这一层的楼层高（和 assemblePlan 给的一样）；最上一层没有往上的楼梯 → 0
+  const riseOf = (i) => (i + 1 < input.length ? FLOOR_H(i, input.length).height : 0);
   for (let i = 0; i < input.length; i++) {
     const f = input[i];
     if (!f.read) {
@@ -1345,29 +2108,50 @@ function buildFloors(input, mPerPx, uid, opts) {
             const pins = rooms.filter((q) => q.pin);
             const wallAt = f.ink ? (seg) => wallInk(f.ink, mPerPx, seg, { dx, dy, search: 0.05 }).frac : null;
             const cs = cleanSlivers(r.rooms, { locked: (q) => q.type === 'stair' && pins.some((p) => iouRect(p, q) > 0.5), wallAt });
+            // 楼梯复查：墙优先把楼梯切成几块 / 跑不下 / 和 AI 的楼梯框对不上 → 用 AI 的框（吸到图上的墙）
+            const aiStairs = m.stairs.length ? m.stairs : rooms.filter((q) => q.type === 'stair' && !q.pin);
+            const fx = fixStairs(cs.rooms, aiStairs, { walls: f.walls, ink: f.ink, mPerPx, dx, dy, rise: riseOf(i), uid });
+            // 开放空间里 L 形房间细的那一块 → 并给旁边的开放空间
+            const thin = absorbThinParts(fx.rooms, { wallAt });
+            let fusedOpenings = r.openings || [];
+            if (fx.replaced || thin.merged) fusedOpenings = keepOnEdges(thin.rooms, fusedOpenings);
             // AI 说有门、图上也看得到门（开启弧线 + 门扇，或者墙上真的有缺口），墙优先却没放 → 放回去（两个来源都同意的门不丢）
-            const back = f.ink ? restoreDoors(cs.rooms, r.openings || [], m.openings, f.ink, mPerPx, { dx, dy, uid }) : { openings: r.openings || [], restored: 0 };
-            return { ...r, rooms: cs.rooms, openings: back.openings, fused: true, wallsReport: { ...(r.wallsReport || {}), agree: agree.score, slivers: cs.merged, doorsRestored: back.restored, doorsRemoved: Math.max(0, (r.wallsReport?.doorsDropped || 0) - back.restored) } };
+            const back = f.ink ? restoreDoors(thin.rooms, fusedOpenings, m.openings, f.ink, mPerPx, { dx, dy, uid }) : { openings: fusedOpenings, restored: 0 };
+            // L 形房间两块之间：图上没有墙 → 打通
+            const lp = openLParts(thin.rooms, back.openings, { ink: f.ink, mPerPx, dx, dy, uid });
+            return { ...r, rooms: thin.rooms, openings: lp.openings, fused: true, wallsReport: { ...(r.wallsReport || {}), agree: agree.score, slivers: cs.merged + thin.merged, stairFixed: fx.replaced ? fx.why : null, doorsRestored: back.restored, doorsRemoved: Math.max(0, (r.wallsReport?.doorsDropped || 0) - back.restored) } };
           }
           rejected = agree.why;
         } catch {
           rejected = 'error'; // 墙读坏了：退回按房间框铺
         }
       }
-      const so = snapOpenings(t.rooms, m.openings);
+      // 开放空间里 L 形房间细的那一块 → 并给旁边的开放空间（编辑器就不会说「太小了」）
+      const thinT = absorbThinParts(t.rooms, { wallAt: f.ink ? (seg) => wallInk(f.ink, mPerPx, seg, { dx, dy, search: 0.05 }).frac : null });
+      const so = snapOpenings(thinT.rooms, m.openings);
       let openings = so.openings;
+      let tRooms = thinT.rooms;
+      // 落在房间中间、没有墙边可放的门（房间框盖住了门口的凹位）：图上有门 → 沿墙线切开房间，门留下
+      const rescue = f.ink ? rescueDoors(tRooms, so.lost, f.ink, mPerPx, { dx, dy, uid, aiOpenings: m.openings }) : null;
+      if (rescue && (rescue.split || rescue.review)) {
+        tRooms = rescue.rooms;
+        openings = [...(rescue.split ? keepOnEdges(tRooms, openings) : openings), ...rescue.openings];
+      }
       let ink = null;
       if (f.ink) {
-        const ic = inkCheck(t.rooms, openings, f.ink, mPerPx, { dx, dy, srcPxPerM: 1 / (mPerPx * (f.srcScale || 1)) });
+        const ic = inkCheck(tRooms, openings, f.ink, mPerPx, { dx, dy, srcPxPerM: 1 / (mPerPx * (f.srcScale || 1)) });
         openings = ic.openings;
         ink = ic.report;
       } else {
         // 没有图的像素：至少把落在开放空间之间（不会有墙）的门窗去掉
-        const ic = inkCheck(t.rooms, openings, { mask: null }, mPerPx);
+        const ic = inkCheck(tRooms, openings, { mask: null }, mPerPx);
         openings = ic.openings;
       }
-      const wr = ink || rejected ? { wallsDetected: null, openConnections: ink?.openConnections || 0, doorsDropped: ink ? ink.doorsDropped + ink.offWall : 0, doorsAdded: 0, lowQuality: true, quality: f.walls?.quality?.score ?? null, rejected } : null;
-      return { rooms: t.rooms, openings, fixes: { ...t.report, openingsDropped: so.dropped + (ink ? ink.doorsDropped + ink.offWall : 0), ink }, wallsReport: wr };
+      // L 形房间两块之间：图上没有墙 → 打通（没有图：一律打通）
+      const lp = openLParts(tRooms, openings, { ink: f.ink, mPerPx, dx, dy, uid });
+      openings = lp.openings;
+      const wr = ink || rejected ? { wallsDetected: null, openConnections: (ink?.openConnections || 0) + lp.opened, doorsDropped: ink ? ink.doorsDropped + ink.offWall : 0, doorsAdded: 0, doorsRescued: rescue?.split || 0, doorsReview: rescue?.review || 0, lowQuality: true, quality: f.walls?.quality?.score ?? null, rejected } : null;
+      return { rooms: tRooms, openings, fixes: { ...t.report, openingsDropped: so.dropped - (rescue ? rescue.split + rescue.review : 0) + (ink ? ink.doorsDropped + ink.offWall : 0), ink }, wallsReport: wr };
     };
     let dx = 0;
     let dy = 0;
@@ -1405,7 +2189,18 @@ function buildFloors(input, mPerPx, uid, opts) {
     floors.push({ level: f.level, title: f.title, page: f.page, box: f.box, src: f.src, cropW: f.cropW, cropH: f.cropH, imgH: f.imgH, dx, dy, rooms: lay.rooms, openings: lay.openings, fixes: lay.fixes, wallsReport: lay.wallsReport, stairs: m.stairs, arrivals: lay.arrivals || [] });
   }
   // 楼梯：相邻两层配对（钉过的矩形两层完全一样）
-  const st = stairsFromRooms(floors.map((f, i) => ({ id: i, rooms: f.rooms, stairs: f.stairs })));
+  const st = stairsFromRooms(floors.map((f, i) => ({ id: i, rooms: f.rooms, stairs: f.stairs, rise: riseOf(i) })));
+  tidyStairRooms(floors, st);
+  floors.forEach((f, i) => {
+    if (!f.rooms.length) return;
+    const pins = st.filter((s) => s.from === i || s.to === i);
+    const sn = snapEdges(f.rooms, f.openings, { pins });
+    // 图上围出来、AI 没认出名字的房间：大、外墙有窗 → 卧室（标 review）
+    const gu = guessUnnamed(sn.rooms, sn.openings);
+    f.rooms = gu.rooms;
+    f.openings = sn.openings;
+    f.unnamed = gu.unnamed;
+  });
   return { floors, aligned, stairs: st };
 }
 

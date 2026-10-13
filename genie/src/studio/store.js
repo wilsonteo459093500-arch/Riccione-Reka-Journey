@@ -210,7 +210,10 @@ export function saveSettings(s) {
 }
 
 // ───────────────────────── 平面图底图（IndexedDB，每层一张） ─────────────────────────
-// 存的值：{ v: 2, floors: { [floorId]: { src, x, y, w, h, opacity, iw, ih } } }；旧版存的是一张（就是一楼的）
+// 存的值：{ ...一楼那一张（镜像）, v: 2, mirror: floorId, floors: { [floorId]: { src, x, y, w, h, opacity, iw, ih } } }。
+// 顶层的镜像是给旧版 build 看的（旧版存的、读的都是一张：src / x / y / w / h）—— 和 localStorage 存档形的一楼镜像同一个道理：
+// 回滚的版本、这台设备上还开着的旧分页打开编辑器，底图照样在（以前读到 {v, floors} 会算出 NaN，整个编辑器空白）。
+// 旧版改了底图（拖动、校准、透明度）存回来的还是这个对象（顶层改了、floors 原样）→ 读的时候镜像那一层以顶层为准。
 
 function db() {
   return new Promise((res, rej) => {
@@ -257,6 +260,7 @@ function floor0Of(projectId) {
 }
 
 const isUnderlay = (u) => isObj(u) && typeof u.src === 'string';
+const MIRROR_KEYS = ['src', 'x', 'y', 'w', 'h', 'opacity'];
 
 /** 每层的底图：{ [floorId]: underlay }（没有 → {}）。旧版存的一张 → 算一楼的（floor0 不给就查方案） */
 export async function getUnderlays(projectId, floor0) {
@@ -265,17 +269,28 @@ export async function getUnderlays(projectId, floor0) {
   if (raw.v === 2 && isObj(raw.floors)) {
     const out = {};
     for (const [k, u] of Object.entries(raw.floors)) if (isUnderlay(u)) out[k] = u;
+    // 顶层的镜像和它那一层的不一样了 = 旧版 build 改过底图 → 那一层用顶层的（其他楼层照留）
+    if (isUnderlay(raw)) {
+      const key = typeof raw.mirror === 'string' && raw.mirror ? raw.mirror : floor0 || floor0Of(projectId);
+      const { v, floors, mirror, ...top } = raw;
+      const cur = out[key];
+      if (!cur || MIRROR_KEYS.some((k) => top[k] !== cur[k])) out[key] = top;
+    }
     return out;
   }
   if (isUnderlay(raw)) return { [floor0 || floor0Of(projectId)]: raw };
   return {};
 }
 
-/** 存每层的底图（map 里 null / 没有的楼层 = 不要了）；一张都没有就整个删掉 */
-export async function putUnderlays(projectId, map) {
+/** 存每层的底图（map 里 null / 没有的楼层 = 不要了）；一张都没有就整个删掉。顶层放一楼那一张的镜像（一楼没有 → 第一张），旧版读得懂 */
+export async function putUnderlays(projectId, map, floor0) {
   const floors = {};
   for (const [k, u] of Object.entries(isObj(map) ? map : {})) if (isUnderlay(u)) floors[k] = u;
-  await idbPut(projectId, Object.keys(floors).length ? { v: 2, floors } : null);
+  const keys = Object.keys(floors);
+  if (!keys.length) return idbPut(projectId, null);
+  const f0 = floor0 || floor0Of(projectId);
+  const mirror = floors[f0] ? f0 : keys[0];
+  await idbPut(projectId, { ...floors[mirror], v: 2, mirror, floors });
 }
 
 /** 旧的接口：一楼那一张（ENGINE 换成 getUnderlays 之前用） */

@@ -115,24 +115,51 @@ await test('地面高度 = 下面各层的楼层高加起来', () => {
   assert.equal(M.floorElev(p, 'ff'), 3.35);
   assert.ok(M.isMultiFloor(p) && !M.isMultiFloor(T('condo3')));
 });
-await test('加一层（空白）：楼梯在同一个位置叠上去；最多 4 层', () => {
-  const p = T('terrace2');
-  const { plan, floorId } = M.addFloor(p, { copy: 'blank' });
+await test('加一层（空白）：楼梯在同一个位置、同一个方向叠上去；最多 4 层', () => {
+  const p = T('semid2');
+  const { plan, floorId, unstacked } = M.addFloor(p, { copy: 'blank' });
+  assert.equal(unstacked, 0);
   assert.equal(plan.floors.length, 3);
   const nf = M.floorById(plan, floorId);
   assert.equal(nf.level, 2);
   assert.equal(nf.rooms.length, 1);
   assert.equal(nf.rooms[0].type, 'stair');
   const up = plan.stairs.find((s) => s.from === 'ff');
-  assert.ok(up && up.to === floorId && up.x === 5.1 && up.d === 4.6);
-  // 中间那层有两个楼梯间（下来的、上去的），不算重叠
-  assert.ok(!codes(plan).includes('overlap'), J(checkPlan(plan)));
+  const s1 = p.stairs[0];
+  assert.ok(up && up.to === floorId && up.x === s1.x && up.d === s1.d && up.up === s1.up && up.shape === 'U', J(up));
+  // 中间那层有两个楼梯间（下来的、上去的），不算重叠；U 形叠上去起步口就在上来的地方，走得到
+  assert.deepEqual(checkPlan(plan), [], J(checkPlan(plan)));
   let q = plan;
   q = M.addFloor(q).plan;
   assert.equal(q.floors.length, 4);
   const r = M.addFloor(q);
   assert.equal(r.floorId, null);
   assert.equal(r.plan.floors.length, 4);
+});
+await test('加一层：直跑楼梯叠不上去（二楼楼梯尽头是衣帽间）→ 不叠、unstacked = 1、只提醒没有楼梯（不是红色的「被墙挡住」）', () => {
+  for (const copy of ['blank', 'all']) {
+    const { plan, floorId, unstacked } = M.addFloor(T('terrace2'), { copy, from: 'ff' });
+    assert.equal(unstacked, 1, copy);
+    assert.ok(!plan.stairs.some((s) => s.from === 'ff' || s.to === floorId), copy);
+    assert.deepEqual(codes(plan), ['noStairs'], `${copy} ${J(checkPlan(plan))}`);
+    assert.equal(checkPlan(plan)[0].floor, floorId);
+  }
+  // 楼梯尽头那边是走得到的（衣帽间改成走廊）→ 直跑同方向叠上去：上下两跑平行，没有红字
+  const open = M.updateFloor(T('terrace2'), 'ff', (f) => ({ ...f, rooms: f.rooms.map((r) => (r.id === 'f-wir' ? { ...r, type: 'corridor', name: '走廊' } : r)) }));
+  for (const copy of ['blank', 'all']) {
+    const { plan, floorId, unstacked } = M.addFloor(open, { copy, from: 'ff' });
+    assert.equal(unstacked, 0, copy);
+    const st = plan.stairs.find((s) => s.from === 'ff');
+    assert.ok(st && st.to === floorId && st.up === 'N' && st.x === 5.1 && st.y === 6.6, J(st));
+    assert.deepEqual(checkPlan(plan), [], `${copy} ${J(checkPlan(plan))}`);
+    // 走进去模式：从二楼楼梯南头起步，到三楼北头出来
+    const path = M.stairPath(plan, st.id);
+    assert.ok(path.entry.y > 11.2 && path.exit.y < 6.6, J([path.entry, path.exit]));
+  }
+  // 楼梯工具「加三楼并连上楼梯」：stack false → 只有设计师画的那一座
+  const ns = M.addFloor(T('semid2'), { copy: 'blank', stack: false });
+  assert.equal(ns.unstacked, 0);
+  assert.equal(ns.plan.stairs.length, 1);
 });
 await test('加一层（复制这一层）：房间和门窗都复制、新 id、不复制车廊 / 楼梯间', () => {
   const p = T('terrace2');
@@ -145,6 +172,38 @@ await test('加一层（复制这一层）：房间和门窗都复制、新 id�
   const walls = buildWalls(nf);
   for (const o of nf.openings) assert.ok(walls.some((w) => w.pieces.some((x) => x.openingId === o.id)), o.id);
   assert.ok(!nf.openings.some((o) => o.id === 'd-main'));
+});
+await test('重新识别 / 只放进这一层（replaceFloorRooms）：楼梯留着，新房间不和楼梯重叠、不留窄缝', () => {
+  const p = T('terrace2');
+  const ff = p.floors[1];
+  // 「AI 重新读了二楼」：起居厅、走廊压到楼梯上，衣帽间和楼梯之间差 10cm，还带了一个偏了的楼梯间
+  const reread = ff.rooms
+    .filter((r) => !r.stairId)
+    .map((r, i) => {
+      const n = { ...r, id: `rr${i}` };
+      if (r.id === 'f-fam') return { ...n, w: 5.3 };
+      if (r.id === 'f-cor2') return { ...n, d: 1.35 };
+      if (r.id === 'f-wir') return { ...n, y: 11.3, d: 1.9 };
+      return n;
+    });
+  reread.push({ id: 'rr-st', type: 'stair', name: '', x: 5.0, y: 6.5, w: 1.0, d: 4.6 });
+  const before = M.updateFloor(p, 'ff', (f) => ({ ...f, rooms: [...f.rooms.filter((r) => r.stairId), ...reread.filter((r) => r.type !== 'stair')] }));
+  assert.ok(codes(before).includes('overlap'), '旧做法（直接换）会重叠');
+  const out = M.replaceFloorRooms(p, 'ff', { rooms: reread, openings: ff.openings });
+  assert.deepEqual(checkPlan(out), [], J(checkPlan(out)));
+  // 楼梯没动、两层的楼梯间一样；读进来的楼梯间不要
+  assert.deepEqual(out.stairs.map((s) => [s.x, s.y, s.w, s.d]), [[5.1, 6.6, 1, 4.6]]);
+  const nf = M.floorById(out, 'ff');
+  assert.equal(nf.rooms.filter((r) => r.type === 'stair').length, 1);
+  // 起居厅贴着楼梯（不压过去），衣帽间的上边贴到楼梯的下边（没有 10cm 的缝）
+  const fam = nf.rooms.filter((r) => r.type === 'family');
+  assert.deepEqual(fam.map((r) => [r.x, r.y, r.w, r.d]), [[0, 7.6, 5.1, 3.6]]);
+  assert.equal(nf.rooms.find((r) => r.type === 'walkin').y, 11.2);
+  // 一楼没变
+  assert.equal(J(out.floors[0].rooms), J(p.floors[0].rooms));
+  // 这一层还没有楼梯：读进来的楼梯间留着（加一层的时候用它连上去）
+  const one = M.replaceFloorRooms(T('condo3'), 'f0', { rooms: [{ id: 'a', type: 'living', name: '', x: 0, y: 0, w: 4, d: 4 }, { id: 's', type: 'stair', name: '', x: 4, y: 0, w: 1, d: 4 }], openings: [] });
+  assert.deepEqual(one.floors[0].rooms.map((r) => r.type), ['living', 'stair']);
 });
 await test('一层的方案加一层：画了「楼梯」类型的房间 → 用它连上来', () => {
   const p = migratePlan({ ...V1(), rooms: [...V1().rooms, { id: 'st', type: 'stair', name: '', x: 8.2, y: 0, w: 1, d: 4 }] });
@@ -341,6 +400,8 @@ await test('坏方案：noStairs / stairBlocked / overhang / voidLow / stairShor
   const b = checkPlan(blocked).filter((i) => i.code === 'stairBlocked');
   assert.equal(b.length, 1);
   assert.equal(b[0].floor, 'ff');
+  // 说清楚怎么改
+  assert.equal(b[0].zh, '{0}的楼梯口被墙挡住了：点楼梯 →「换方向」，或挪开那面墙');
   // 一楼入口那边什么都没有（楼梯推到最外面）→ 被挡
   const out = M.updateFloor(T('terrace2'), 'gf', (f) => ({ ...f, rooms: f.rooms.filter((r) => r.id !== 'g-foy') }));
   assert.ok(checkPlan(out).some((i) => i.code === 'stairBlocked' && i.floor === 'gf'));
@@ -614,7 +675,8 @@ await test('底图：每层一张；旧版存的一张 = 一楼；旧接口 getU
   idb.set(p.id, u('one'));
   assert.deepEqual(await S.getUnderlays(p.id), { gf: u('one') });
   await S.putUnderlays(p.id, { gf: u('g'), ff: u('f'), x: null });
-  assert.deepEqual(idb.get(p.id), { v: 2, floors: { gf: u('g'), ff: u('f') } });
+  // 顶层是一楼那一张的镜像（旧版读得懂），floors 是每层的
+  assert.deepEqual(idb.get(p.id), { ...u('g'), v: 2, mirror: 'gf', floors: { gf: u('g'), ff: u('f') } });
   assert.deepEqual(await S.getUnderlays(p.id), { gf: u('g'), ff: u('f') });
   assert.deepEqual(await S.getUnderlay(p.id), u('g'));
   await S.putUnderlay(p.id, u('g2'));
@@ -623,6 +685,39 @@ await test('底图：每层一张；旧版存的一张 = 一楼；旧接口 getU
   assert.ok(!idb.has(p.id));
   assert.deepEqual(await S.getUnderlays(p.id), {});
   assert.equal(await S.getUnderlay(p.id), null);
+});
+await test('底图存档旧版也读得懂：顶层有一楼的 src / x / y / w / h；旧版改过（拖动 / 校准 / 透明度）→ 那一层用顶层的', async () => {
+  mem.clear();
+  idb.clear();
+  const u = (k, x = 0) => ({ src: `data:image/png;base64,${k}`, x, y: 0.5, w: 6.1, h: 9, opacity: 0.55, iw: 610, ih: 900 });
+  const p = S.createProject({ plan: T('terrace2') });
+  S.saveProject(p);
+  await S.putUnderlays(p.id, { gf: u('g'), ff: u('f') });
+  // 旧版的 getUnderlay = IndexedDB 里原样的那一条；旧版的编辑器拿 src / x / y / w / h 算画面（以前是 NaN → 编辑器一片空白）
+  const oldRead = structuredClone(idb.get(p.id));
+  for (const k of ['x', 'y', 'w', 'h']) assert.ok(Number.isFinite(oldRead[k]), k);
+  assert.equal(oldRead.src, u('g').src);
+  // 旧版的编辑器拖了底图（{ ...u, x }）、再存回来：floors 原样带着、顶层改了 → 一楼用顶层的，二楼照留
+  idb.set(p.id, { ...oldRead, x: 1.25, opacity: 0.3 });
+  const back = await S.getUnderlays(p.id, 'gf');
+  assert.deepEqual(back.gf, { ...u('g'), x: 1.25, opacity: 0.3 });
+  assert.deepEqual(back.ff, u('f'));
+  // 新版再存一次：镜像和 floors 一致
+  await S.putUnderlays(p.id, back);
+  assert.deepEqual(await S.getUnderlays(p.id), back);
+  // 旧版换了一张新图（没有 v / floors 的一张）→ 一楼的
+  idb.set(p.id, u('new'));
+  assert.deepEqual(await S.getUnderlays(p.id), { gf: u('new') });
+  // 一楼没有底图、只有二楼有：镜像用二楼那一张（旧版至少不会空白），改了就改回二楼
+  await S.putUnderlays(p.id, { ff: u('f') });
+  assert.equal(idb.get(p.id).mirror, 'ff');
+  assert.equal(idb.get(p.id).src, u('f').src);
+  idb.set(p.id, { ...idb.get(p.id), y: 2 });
+  assert.deepEqual(await S.getUnderlays(p.id), { ff: { ...u('f'), y: 2 } });
+  // 导入换了楼层 id（存档里还是旧的一楼 id）：镜像用 map 里的第一层
+  await S.putUnderlays(p.id, { g2: u('a'), f2: u('b') });
+  assert.equal(idb.get(p.id).mirror, 'g2');
+  assert.deepEqual(await S.getUnderlays(p.id, 'g2'), { g2: u('a'), f2: u('b') });
 });
 
 console.log('静态守门');

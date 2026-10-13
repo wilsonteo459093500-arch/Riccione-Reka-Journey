@@ -226,11 +226,15 @@ function newFloorId(plan) {
  * 加一层（放在最上面）：
  *   copy 'blank' —— 空白，只带着楼梯（下面那层有楼梯上来 → 这一层也叠一座；下面那层画了还没连起来的楼梯间 → 用它连上来）；
  *   copy 'all'   —— 复制 from（默认最上一层）的房间和门窗（新 id；楼梯间、车廊不复制），楼梯同上。
- * 返回 { plan, floorId }；已经 MAX_FLOORS 层 → floorId null。
+ *   stack false  —— 不自动叠楼梯（楼梯工具：设计师自己画了要连上去的那一座）。
+ * 叠上去的楼梯 = 同一个位置、同一个方向（上下两跑平行，头顶净空一整层）。它在下面那层的起步口要走得到：
+ * 直跑楼梯上来是在一头、再往上要从另一头起步 —— 那一头被墙挡住（例如排屋二楼楼梯尽头是衣帽间）就不叠，
+ * 让设计师用楼梯工具自己画（反方向在同一个楼梯间里会撞头，不能用）。
+ * 返回 { plan, floorId, unstacked }（unstacked = 没能叠上去的楼梯数）；已经 MAX_FLOORS 层 → floorId null。
  */
-export function addFloor(plan0, { copy = 'blank', from } = {}) {
+export function addFloor(plan0, { copy = 'blank', from, stack = true } = {}) {
   const plan = isV2(plan0) ? plan0 : migratePlan(plan0);
-  if (plan.floors.length >= MAX_FLOORS) return { plan, floorId: null };
+  if (plan.floors.length >= MAX_FLOORS) return { plan, floorId: null, unstacked: 0 };
   const top = plan.floors[plan.floors.length - 1];
   const src = (copy === 'all' && floorById(plan, from)) || top;
   const id = newFloorId(plan);
@@ -255,15 +259,39 @@ export function addFloor(plan0, { copy = 'blank', from } = {}) {
     }
   }
   const stairs = [...plan.stairs];
-  // 楼梯叠上来：到 top 的每一座楼梯，在同一个位置从 top 再上一层
-  for (const s of plan.stairs.filter((x) => x.to === top.id)) stairs.push({ ...s, id: uid('s'), from: top.id, to: id });
-  // top 上画了还没连的楼梯间（AI 识别的、自己选了「楼梯」类型的）：用它连上来
-  if (!plan.stairs.some((x) => x.from === top.id))
-    for (const r of top.rooms.filter((x) => x.type === 'stair' && !x.stairId)) {
-      const shape = defaultStairShape(r.w, r.d);
-      stairs.push(normStair({ id: uid('s'), from: top.id, to: id, x: r.x, y: r.y, w: r.w, d: r.d, shape, up: defaultStairUp(r.w, r.d) }, new Set()));
+  const sids = new Set(stairs.map((s) => s.id));
+  const sid = () => {
+    let k = uid('s');
+    while (sids.has(k)) k = uid('s');
+    sids.add(k);
+    return k;
+  };
+  /** 这一座加进去以后，上下口都走得到吗 */
+  const reachable = (st) => {
+    const trial = sync({ ...plan, floors: [...plan.floors, nf], stairs: [...stairs, st] });
+    return !blockedMouths(trial, stairById(trial, st.id)).length;
+  };
+  let unstacked = 0;
+  if (stack) {
+    // 楼梯叠上来：到 top 的每一座楼梯，在同一个位置、同一个方向从 top 再上一层（起步口走不到 → 不叠）
+    for (const s of plan.stairs.filter((x) => x.to === top.id)) {
+      const { review, ...rest } = s;
+      const st = { ...rest, id: sid(), from: top.id, to: id };
+      if (reachable(st)) stairs.push(st);
+      else unstacked++;
     }
-  return { plan: sync({ ...plan, floors: [...plan.floors, nf], stairs }), floorId: id };
+    // top 上画了还没连的楼梯间（AI 识别的、自己选了「楼梯」类型的）：用它连上来；默认方向的起步口被挡住就试反方向
+    if (!plan.stairs.some((x) => x.from === top.id))
+      for (const r of top.rooms.filter((x) => x.type === 'stair' && !x.stairId)) {
+        const shape = defaultStairShape(r.w, r.d);
+        const up = defaultStairUp(r.w, r.d);
+        const mk = (u) => normStair({ id: sid(), from: top.id, to: id, x: r.x, y: r.y, w: r.w, d: r.d, shape, up: u }, new Set());
+        const a = mk(up);
+        const b = reachable(a) ? null : mk(OPP[up]);
+        stairs.push(b && reachable(b) ? b : a);
+      }
+  }
+  return { plan: sync({ ...plan, floors: [...plan.floors, nf], stairs }), floorId: id, unstacked };
 }
 
 /** 删一层（至少留一层）；连着它的楼梯一起删 */
@@ -1044,6 +1072,64 @@ export function carveFloor(floor, rect, { keep = [] } = {}) {
   return { ...floor, rooms };
 }
 
+/**
+ * 房间的边贴到旁边矩形（楼梯间）的边上：同一条线上、差不到 tol 的就对齐过去（不留窄缝、墙不会变两道）。
+ * 只看和矩形并排（另一个方向有重叠）的边；贴完还要 ≥ 0.6m 才改。
+ */
+export function fitRoomsToRects(rooms, rects, tol = SLIVER) {
+  const pull = (v, cands) => {
+    let best = v;
+    let bd = tol;
+    for (const c of cands) {
+      const d = Math.abs(c - v);
+      if (d < bd) [best, bd] = [c, d];
+    }
+    return best;
+  };
+  return (rooms || []).map((r) => {
+    if (r.stairId) return r;
+    let x0 = r.x;
+    let x1 = r.x + r.w;
+    let y0 = r.y;
+    let y1 = r.y + r.d;
+    for (const s of rects || []) {
+      const xs = [s.x, s.x + s.w];
+      const ys = [s.y, s.y + s.d];
+      const ox = Math.min(r.x + r.w, s.x + s.w) - Math.max(r.x, s.x);
+      const oy = Math.min(r.y + r.d, s.y + s.d) - Math.max(r.y, s.y);
+      if (oy > 0.05) {
+        x0 = pull(x0, xs);
+        x1 = pull(x1, xs);
+      }
+      if (ox > 0.05) {
+        y0 = pull(y0, ys);
+        y1 = pull(y1, ys);
+      }
+    }
+    if (x1 - x0 < 0.6) [x0, x1] = [r.x, r.x + r.w];
+    if (y1 - y0 < 0.6) [y0, y1] = [r.y, r.y + r.d];
+    if (x0 === r.x && y0 === r.y && x1 === r.x + r.w && y1 === r.y + r.d) return r;
+    return { ...r, x: r3(x0), y: r3(y0), w: r3(x1 - x0), d: r3(y1 - y0) };
+  });
+}
+
+/**
+ * 一层换上新读到的房间和门窗（「重新识别这一层」/ 导入「只放进这一层」）。这一层的楼梯留着（楼梯是上下两层共用的，
+ * 不跟着新图跑）；新读到的楼梯间不要（这一层已经有楼梯的话）。新房间贴到楼梯间的边上、再挖掉楼梯占的地方，
+ * 最后整份吸附一遍（snapAll 0.06，和「生成 3D」一样）—— 不会和楼梯重叠，也不会留一条窄缝。→ v2 plan
+ */
+export function replaceFloorRooms(plan0, floorId, { rooms = [], openings = [], meta } = {}) {
+  const plan = isV2(plan0) ? plan0 : migratePlan(plan0);
+  const f = floorById(plan, floorId);
+  if (!f) return plan;
+  const stairs = plan.stairs.filter((s) => s.from === floorId || s.to === floorId);
+  const fresh = (Array.isArray(rooms) ? rooms : []).filter((r) => isObj(r) && !r.stairId && !(r.type === 'stair' && stairs.length)).map(normRoom);
+  let fl = { ...f, rooms: [...f.rooms.filter((r) => r.stairId), ...fitRoomsToRects(fresh, stairs)], openings: (Array.isArray(openings) ? openings : []).filter(isObj) };
+  for (const s of stairs) fl = carveFloor(fl, s);
+  if (isObj(meta)) fl.meta = meta;
+  return snapAll(migratePlan(updateFloor(plan, floorId, fl)), 0.06);
+}
+
 // ───────────────────────── 检查 ─────────────────────────
 
 const issue = (code, level, floor, ids, zh, vars) => ({ code, level, floor, ids, zh, vars });
@@ -1082,6 +1168,21 @@ function mouthBlocked(plan, f, walls, seg, edge, stairRoomId) {
     }
   }
   return pass < Math.min(0.7, (b - a) * 0.6);
+}
+
+/** 还没画房间的一层（刚加的空白二楼）不算「被墙挡住」：编辑器会提示沿着虚线画 */
+const drawnFloor = (f) => f.rooms.some((r) => !r.stairId && r.type !== 'stair');
+
+/** 楼梯的起步口（下层）/ 出口（上层）被挡住的那几层的 id（[] = 两头都走得到） */
+function blockedMouths(plan, s, wallsOf = buildWalls) {
+  const out = [];
+  if (!s) return out;
+  const g = flightsOf(s, riseOf(plan, s));
+  const lo = floorById(plan, s.from);
+  const hi = floorById(plan, s.to);
+  if (lo && drawnFloor(lo) && mouthBlocked(plan, lo, wallsOf(lo), g.entry.seg, g.entry.edge, `${s.id}-${lo.id}`)) out.push(lo.id);
+  if (hi && drawnFloor(hi) && mouthBlocked(plan, hi, wallsOf(hi), g.exit.seg, g.exit.edge, `${s.id}-${hi.id}`)) out.push(hi.id);
+  return out;
 }
 
 /**
@@ -1149,12 +1250,8 @@ export function checkPlan(raw) {
     const g = flightsOf(s, riseOf(plan, s));
     if (g.tread < TREAD_MIN - 1e-9) out.push(issue('stairShort', 'warn', s.from, [`${s.id}-${s.from}`], '楼梯太短：{0} 级踏步需要 {1} m，现在只有 {2} m', [g.risers, g.need, g.avail]));
     if (g.width < 0.85 - 1e-9) out.push(issue('stairNarrow', 'warn', s.from, [`${s.id}-${s.from}`], '楼梯太窄：{0} m', [r2(g.width)]));
-    const lo = floorById(plan, s.from);
-    const hi = floorById(plan, s.to);
-    // 还没画房间的一层（刚加的空白二楼）不算「被墙挡住」：编辑器会提示沿着虚线画
-    const drawn = (f) => f.rooms.some((r) => !r.stairId && r.type !== 'stair');
-    if (drawn(lo) && mouthBlocked(plan, lo, wallsOf(lo), g.entry.seg, g.entry.edge, `${s.id}-${lo.id}`)) out.push(issue('stairBlocked', 'error', lo.id, [`${s.id}-${lo.id}`], '{0}的楼梯口被墙挡住了', [{ floor: lo.id }]));
-    if (drawn(hi) && mouthBlocked(plan, hi, wallsOf(hi), g.exit.seg, g.exit.edge, `${s.id}-${hi.id}`)) out.push(issue('stairBlocked', 'error', hi.id, [`${s.id}-${hi.id}`], '{0}的楼梯口被墙挡住了', [{ floor: hi.id }]));
+    // 上下口被墙挡住：说清楚怎么改（换方向 / 挪墙）
+    for (const fid of blockedMouths(plan, s, wallsOf)) out.push(issue('stairBlocked', 'error', fid, [`${s.id}-${fid}`], '{0}的楼梯口被墙挡住了：点楼梯 →「换方向」，或挪开那面墙', [{ floor: fid }]));
   }
   return out;
 }

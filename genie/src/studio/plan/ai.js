@@ -9,7 +9,7 @@
 import { uid, ROOM_TYPES } from './model.js';
 import { t } from '../../shared/i18n.js';
 import { normalizeFound, readToMetres, tileRooms, snapOpenings, scaleFromDims, estimateScale, roomTypeOf as roomTypeOfSheet, okBox, boxPx, assemblePlan, inkMask } from './sheet.js';
-import { cropPixels } from './planImage.js';
+import { cropPixels, cvWalls } from './planImage.js';
 
 export const roomTypeOf = roomTypeOfSheet;
 
@@ -584,7 +584,10 @@ export async function rereadFloor(settings, underlay, ctx = {}, opts = {}) {
   if (getPixels) {
     try {
       const img = await getPixels({ src: underlay.src, width: iw, height: ih }, aspect);
-      if (img) {
+      if (img && !opts.walls && typeof document !== 'undefined') {
+        // 浏览器：后台线程找墙（界面不卡）
+        ({ ink, walls } = await cvWalls(img, 1 / k, WALLS));
+      } else if (img) {
         ink = inkMask(img);
         try {
           walls = typeof WALLS.extractWalls === 'function' ? WALLS.extractWalls(img, { pxPerM: 1 / k }) : null;

@@ -10,7 +10,7 @@
 // 旧设备自动改用 pdf.js 的「legacy」版本；新版跑到一半缺函数也会退回 legacy 再试一次。读不了 → 一句能照着做的话（已经翻译好）。
 
 import { t } from '../../shared/i18n.js';
-import { trimChrome, enhance, pageTextScore, rectifyEstimate, warpImage } from './sheet.js';
+import { trimChrome, enhance, pageTextScore, rectifyEstimate, warpImage, inkMask } from './sheet.js';
 
 const MAX = 2000; // planFileToImage（旧接口）的最长边
 export const PREVIEW_LONG = 2048;
@@ -20,7 +20,89 @@ const MAX_SIDE = 4096;
 const MAX_PX = 16.7e6;
 const MAX_SRC_PX = 24e6;
 const RECT_EST_LONG = 1600; // 估透视用的小图
-const RECT_MAX_PX = 12e6; // 拉正的那张最多这么大（iPad 内存）
+const RECT_MAX_PX = 8e6; // 拉正的那张最多这么大（iPad 内存 / 时间；裁图最多放大 2 倍，8 Mpx 的 A3 纸 ≈ 每米 85 像素，字读得清）
+const CV_TIMEOUT = 90000; // 后台线程这么久没回 → 主线程自己做
+
+// ───────────── 像素活放后台线程（cv.worker.js），起不来就主线程做 ─────────────
+
+let cvWorker = null;
+let cvBroken = typeof Worker === 'undefined';
+let cvSeq = 0;
+const cvPending = new Map();
+
+function getCvWorker() {
+  if (cvBroken) return null;
+  if (cvWorker) return cvWorker;
+  try {
+    cvWorker = new Worker(new URL('./cv.worker.js', import.meta.url), { type: 'module' });
+    cvWorker.onmessage = (e) => {
+      const p = cvPending.get(e.data?.id);
+      if (!p) return;
+      cvPending.delete(e.data.id);
+      clearTimeout(p.tm);
+      if (e.data.ok) p.ok(e.data.out);
+      else p.no(new Error(e.data.error || 'cv'));
+    };
+    cvWorker.onerror = () => {
+      // 模块 worker 不支持 / 加载失败：以后都在主线程做
+      cvBroken = true;
+      for (const p of cvPending.values()) {
+        clearTimeout(p.tm);
+        p.no(new Error('cv worker'));
+      }
+      cvPending.clear();
+      try {
+        cvWorker.terminate();
+      } catch {
+        /* 已经停了 */
+      }
+      cvWorker = null;
+    };
+  } catch {
+    cvBroken = true;
+    cvWorker = null;
+  }
+  return cvWorker;
+}
+
+/**
+ * 在后台线程跑 op（见 cv.worker.js）；失败 / 超时 → fallback()（主线程，先让出一帧，「正在…」画得出来）。
+ * args 里的 ImageData 是复制过去的（主线程那份还能给 fallback 用）。
+ */
+export async function cvRun(op, args, fallback) {
+  const w = getCvWorker();
+  if (w) {
+    try {
+      return await new Promise((ok, no) => {
+        const id = ++cvSeq;
+        const tm = setTimeout(() => {
+          cvPending.delete(id);
+          no(new Error('cv timeout'));
+        }, CV_TIMEOUT);
+        cvPending.set(id, { ok, no, tm });
+        w.postMessage({ id, op, args });
+      });
+    } catch {
+      /* 退回主线程 */
+    }
+  }
+  await new Promise((r) => setTimeout(r, 0));
+  return fallback();
+}
+
+/** 一层裁图的像素 → { ink, walls }（墨迹 + walls.js 找墙）；walls = null 表示没读出来。WALLS = 主线程用的 walls.js 模块 */
+export async function cvWalls(img, pxPerM, WALLS) {
+  return cvRun('walls', { img, pxPerM }, () => {
+    const ink = inkMask(img);
+    let walls = null;
+    try {
+      walls = typeof WALLS?.extractWalls === 'function' ? WALLS.extractWalls(img, { pxPerM }) : null;
+    } catch {
+      walls = null;
+    }
+    return { ink, walls };
+  });
+}
 
 function canvasToDataURL(c, q = 0.9) {
   return c.toDataURL('image/jpeg', q);
@@ -196,7 +278,7 @@ export async function openPlanFile(file) {
   let rectified = null;
   if (!trim) {
     try {
-      const out = rectifyImage(img, w, h);
+      const out = await rectifyImage(img, w, h);
       if (out) {
         img.close?.();
         img = out.canvas;
@@ -210,14 +292,15 @@ export async function openPlanFile(file) {
   return { kind: 'image', name: file.name || '', pages: 1, img, width: w, height: h, trim, screenshot: !!trim, photo: !!rectified, rectified, thumbs: new Map(), queue: Promise.resolve(), closed: false };
 }
 
-/** 照片的透视：在 ≤ 1600 px 的小图上估，明显才拉正（≤ 12 Mpx）。→ { canvas, info } 或 null */
-function rectifyImage(img, w, h) {
+/** 照片的透视：在 ≤ 1600 px 的小图上估，明显才拉正（≤ 8 Mpx）。估和拉正都在后台线程做。→ { canvas, info } 或 null */
+async function rectifyImage(img, w, h) {
   const k = Math.min(1, RECT_EST_LONG / Math.max(w, h));
   const sc = newCanvas(w * k, h * k);
   const sctx = whiteCtx(sc);
   sctx.drawImage(img, 0, 0, sc.width, sc.height);
-  const est = rectifyEstimate(sctx.getImageData(0, 0, sc.width, sc.height));
+  const small = sctx.getImageData(0, 0, sc.width, sc.height);
   sc.width = sc.height = 0;
+  const est = await cvRun('estimate', { img: small }, () => rectifyEstimate(small));
   if (!est || !est.significant || est.moved > 0.25 * Math.max(w * k, h * k)) return null;
   // 工作比例 g（相对原图）：拉正以后不超过 12 Mpx
   const g = Math.min(1, Math.sqrt(RECT_MAX_PX / ((est.width / k) * (est.height / k))), Math.sqrt(MAX_PX / (w * h)));
@@ -232,7 +315,7 @@ function rectifyImage(img, w, h) {
   const Hinv = [Hi[0], Hi[1], Hi[2] * r, Hi[3], Hi[4], Hi[5] * r, Hi[6] / r, Hi[7] / r, Hi[8]];
   const ow = Math.round(est.width * r);
   const oh = Math.round(est.height * r);
-  const warped = warpImage(id, Hinv, ow, oh);
+  const warped = await cvRun('warp', { img: id, Hinv, w: ow, h: oh }, () => warpImage(id, Hinv, ow, oh));
   const out = newCanvas(ow, oh);
   out.getContext('2d').putImageData(new ImageData(warped.data, ow, oh), 0, 0);
   return { canvas: out, info: { tiltV: est.tiltV, tiltH: est.tiltH, moved: Math.round(est.moved / k), scale: g } };
