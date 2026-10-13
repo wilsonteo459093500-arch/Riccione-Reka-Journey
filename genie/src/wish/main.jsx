@@ -5,6 +5,11 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import '../shared/base.css';
 import WishMode from './WishMode.jsx';
+import { installSfx } from '../shared/sfx.js';
+import fx from '../shared/fx.js';
+
+installSfx({ fx }); // 整页的按钮一按就有声音（WISH 音效，src/shared/sfx.js）；动效的声音也走这里（同一下不响两次）
+fx.install(); // 每个按钮按下去都有光：缩一点 + 指尖一圈暖光（src/shared/fx.js；声音交给上面那一行）
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

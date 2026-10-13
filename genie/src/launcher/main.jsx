@@ -6,9 +6,13 @@
 //     许愿之旅用 location.replace 打开：客人在里面按「返回」，回不到这一页。3D 工作室带 ?staff=1（设计师版、方案列表）。
 //   · 本机的梦想家蓝图：收在「员工 · 本机蓝图」里，锁着 —— 和许愿模式的员工区一样要按住 3 秒才打开；
 //     离开这一页、切去别的 app、锁屏、按「返回」回来，都会自己锁上。每一行用 ?staff=1 打开（才有设计师版）。
+//   · 声音（src/shared/sfx.js）：每个按钮都有自己的声音（确认 / 下一步 / 打开 / 移除 …，WISH_RULES 认 class）。
+//   · 动效（src/shared/fx.js，克制）：按下去缩一点 + 指尖一圈光（大卡片缩得更少）；唯一的金色「开始」每隔几秒被光轻轻扫过；
+//     按「客户许愿模式」= 一道晨光扫过整页，光盖住的那一刻换成许愿模式的开场；删掉的蓝图化成金尘，其余几行顺势补上。
 
 import { StrictMode, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { flushSync } from 'react-dom';
 import { ArrowRight, ChevronDown, Cuboid, Footprints, LockKeyhole, LockKeyholeOpen, Tablet, Trash2 } from 'lucide-react';
 import '../shared/base.css';
 import './launcher.css';
@@ -21,6 +25,8 @@ import { startWish, savedHost, saveHost } from '../wish/start.js';
 import { useHold } from '../wish/useHold.js';
 import { loadArchive, removeFromArchive, clearArchive } from '../shared/profile.js';
 import { DREAMER_BY_CODE } from '../shared/dreamers.js';
+import { installSfx, sfx } from '../shared/sfx.js';
+import fx, { useGleam } from '../shared/fx.js';
 
 // 这个分页正在客户许愿模式里（sessionStorage：关掉分页就没了）
 const WISH_ON = 'genie.wish.on';
@@ -51,11 +57,11 @@ function when(iso) {
   }
 }
 
-function ArchiveRow({ p, onRemove }) {
+function ArchiveRow({ p, i = 0, onRemove }) {
   const d = DREAMER_BY_CODE[p.code];
   const swatch = d?.palette?.length ? `linear-gradient(90deg, ${d.palette.map((c, i, a) => `${c} ${(i / a.length) * 100}% ${((i + 1) / a.length) * 100}%`).join(', ')})` : 'none';
   return (
-    <li className="ln-row">
+    <li className="ln-row fx-blur-in" style={{ '--fx-i': Math.min(i, 8), '--fx-step': '45ms', '--fx-dur': '520ms', '--fx-delay': '80ms' }}>
       <span className="ln-mini" style={{ '--sw': swatch }} aria-hidden="true">
         {d?.num}
       </span>
@@ -66,7 +72,7 @@ function ArchiveRow({ p, onRemove }) {
       <a className="ln-btn" href={`quiz.html?staff=1#id=${encodeURIComponent(p.id)}`}>
         {t('蓝图')}
       </a>
-      <button type="button" className="ln-del" aria-label={t('删除')} title={t('删除')} onClick={() => onRemove(p)}>
+      <button type="button" className="ln-del" aria-label={t('删除')} title={t('删除')} onClick={(e) => onRemove(p, e.currentTarget.closest('li'))}>
         <Trash2 size={18} strokeWidth={1.8} aria-hidden="true" />
       </button>
     </li>
@@ -80,6 +86,7 @@ function Archive({ list, onRemove, onClear }) {
   const { p, bind } = useHold(
     () => {
       swallow.current = true;
+      sfx.play('open'); // 按满 3 秒的那一刻（按下去那一下只是「笃」：短按什么都不会打开）
       setOpen(true);
     },
     { enabled: !open }
@@ -109,6 +116,8 @@ function Archive({ list, onRemove, onClear }) {
         className={`ln-archive-head ${p > 0 && !open ? 'is-holding' : ''}`}
         aria-expanded={open}
         aria-controls="ln-archive-body"
+        data-sfx={open ? undefined : 'tap'}
+        data-fx-ripple="off"
         {...bind}
         onPointerDown={(e) => {
           if (open) swallow.current = false;
@@ -146,15 +155,15 @@ function Archive({ list, onRemove, onClear }) {
             <p className="ln-empty">{t('还没有。客人许完愿会自动存在这里（只存在这台设备）。')}</p>
           ) : (
             <ul className="ln-list">
-              {list.map((x) => (
-                <ArchiveRow key={x.id} p={x} onRemove={onRemove} />
+              {list.map((x, i) => (
+                <ArchiveRow key={x.id} p={x} i={i} onRemove={onRemove} />
               ))}
             </ul>
           )}
           <div className="ln-archive-foot">
             {CONFIG.keepDays > 0 && <p className="ln-note">{t('建好超过 {0} 天的蓝图会自动删掉（客人手上的链接还能打开）。', [CONFIG.keepDays])}</p>}
             {list.length > 0 && (
-              <button type="button" className="ln-clear" onClick={onClear}>
+              <button type="button" className="ln-clear" onClick={(e) => onClear(e.currentTarget.closest('.ln-archive-body')?.querySelectorAll('.ln-row'))}>
                 <Trash2 size={16} strokeWidth={1.8} aria-hidden="true" />
                 <span>{t('清空本机全部蓝图')}</span>
               </button>
@@ -172,6 +181,9 @@ function Launcher() {
   const [wish, setWish] = useState(wishOn); // 许愿模式开着时被重新载入：回到许愿模式的开场
   const [primed, setPrimed] = useState(false);
   const [host, setHost] = useState(savedHost);
+  const cta = useRef(null);
+  const entering = useRef(false);
+  useGleam(cta, !wish, { first: 1400, every: 6400 }); // 唯一的金色「开始」：隔一阵子被光轻轻扫过（不出声）
 
   useEffect(() => {
     if (!wish) document.title = 'WISH · by Riccione Reka';
@@ -202,15 +214,41 @@ function Launcher() {
   const journey = pair('许愿之旅', BRAND.readingEn);
   const studio = pair('3D 梦想工作室', '3D Dream Studio');
   const wishName = pair('客户许愿模式', 'Wish Mode');
-  const remove = (p) => {
+  // 删掉的那一行从右边开始化成金尘；其余几行顺势补上（fx.layout 的弹簧，不跳）
+  const remove = (p, row) => {
     if (!confirm(t('删除 {0} 的蓝图？', [p.name || t('这位贵宾')]))) return;
-    removeFromArchive(p.id);
-    setList(loadArchive());
+    const commit = () => {
+      removeFromArchive(p.id);
+      setList(loadArchive());
+    };
+    if (!row) return commit();
+    fx.dissolve(row, { origin: 'right', duration: 520, delay: 40, tone: 'paper' }).then(() => {
+      const rest = [...(row.parentNode?.children || [])].filter((n) => n !== row);
+      fx.layout(rest, () => flushSync(commit));
+    });
   };
-  const clear = () => {
+  const clear = (rows) => {
     if (!confirm(t('删除这台设备上全部 {0} 份蓝图？删了就找不回来。', [list.length]))) return;
-    clearArchive();
-    setList(loadArchive());
+    const commit = () => {
+      clearArchive();
+      setList(loadArchive());
+    };
+    const els = [...(rows || [])];
+    if (!els.length) return commit();
+    Promise.all(els.map((el, i) => fx.dissolve(el, { origin: 'right', duration: 480, delay: 40 + Math.min(i, 9) * 45, tone: 'paper' }))).then(commit);
+  };
+  // 客户许愿模式：声音、全屏、屏幕常亮都必须在这一下点击里开启；画面由一道晨光换过去
+  const enterWish = () => {
+    if (entering.current) return;
+    entering.current = true;
+    startWish();
+    markWish(true);
+    setPrimed(true);
+    fx.wipe(null, { tone: 'dawn', duration: 1000 }).mid.then(() => {
+      entering.current = false;
+      setWish(true);
+      window.scrollTo(0, 0);
+    });
   };
 
   return (
@@ -249,16 +287,7 @@ function Launcher() {
           <i className="ln-ff" aria-hidden="true" />
           <i className="ln-ff b" aria-hidden="true" />
           <i className="ln-ff c" aria-hidden="true" />
-          <button
-            type="button"
-            className="ln-wish-go"
-            onClick={() => {
-              startWish(); // 声音、全屏、屏幕常亮都必须在这一下点击里开启
-              markWish(true);
-              setPrimed(true);
-              setWish(true);
-            }}
-          >
+          <button type="button" className="ln-wish-go" data-fx-depth="0.985" onClick={enterWish}>
             <span className="ln-lamp" aria-hidden="true">
               <Lamp size={86} glow={1} smoke />
             </span>
@@ -268,7 +297,7 @@ function Launcher() {
               <span>{t('按下就开始：大自然禅意音乐 + 潘吉带客人从许愿一路走到 3D')}</span>
               <small>{t('全屏 · 屏幕常亮 · 长按 WISH 字标 3 秒打开员工区')}</small>
             </span>
-            <span className="ln-wish-cta">
+            <span ref={cta} className="ln-wish-cta">
               {t('开始')}
               <ArrowRight size={18} strokeWidth={2} aria-hidden="true" />
             </span>
@@ -297,6 +326,7 @@ function Launcher() {
         <div className="ln-cards">
           <a
             className="ln-card"
+            data-fx-depth="0.98"
             href="quiz.html"
             onClick={(e) => {
               if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; // 在新分页打开：照旧
@@ -324,7 +354,7 @@ function Launcher() {
               <ArrowRight size={17} strokeWidth={2} aria-hidden="true" />
             </span>
           </a>
-          <a className="ln-card" href="studio.html?staff=1">
+          <a className="ln-card" data-fx-depth="0.98" href="studio.html?staff=1">
             <span className="ln-card-top">
               <span className="ln-num">II</span>
               <span className="ln-ico" aria-hidden="true">
@@ -352,6 +382,9 @@ function Launcher() {
     </div>
   );
 }
+
+installSfx({ fx }); // 整页的按钮一按就有声音（WISH 音效，src/shared/sfx.js）；动效的声音也走这里（同一下不响两次）
+fx.install(); // 每个按钮按下去都有光：缩一点 + 指尖一圈暖光（src/shared/fx.js）
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

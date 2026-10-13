@@ -75,4 +75,7 @@ export default {
   '四姑娘山': 'Siguniang Mountains',
   '瓜拉雪兰莪的萤火虫': 'Fireflies of Kuala Selangor',
   '马来西亚 · 雪兰莪': 'Selangor, Malaysia',
+
+  // ── 潘吉说话（点一下她 = 跳过这一句） ──
+  跳过这一句: 'Skip this line',
 };

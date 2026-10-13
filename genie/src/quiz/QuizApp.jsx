@@ -6,10 +6,12 @@
 //   ?mode=wish                   在许愿模式外壳里（外壳管音乐、员工区、语言）
 //
 // 视觉：白天的纸 + 风景（每一章一个地方）；擦神灯、章节翻牌、揭晓进入暮色（.dusk）。
+// 声音：每一下触碰都有声音（main.jsx 的 installSfx）；潘吉说她的台词（voice.js，对话泡泡 = 她说的那一句）；
+// 单独打开时自己放背景音乐（moments.js 的 zen，跟着每一章换曲子），许愿模式里外壳放，这里只用 tellShell 告诉外壳。
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, Volume2, VolumeX, RotateCcw, Play as PlayIcon } from 'lucide-react';
-import Pangie from '../shared/Pangie.jsx';
+import { ChevronLeft, Volume2, VolumeX, RotateCcw, Play as PlayIcon, MessageCircleMore, MessageCircleOff } from 'lucide-react';
+import Pangie, { useTalking, useVoiceOn } from '../shared/Pangie.jsx';
 import LangToggle from '../shared/LangToggle.jsx';
 import { BRAND, CONFIG } from '../shared/config.js';
 import { CHAPTERS, STEPS, PAIRS, LIFE, APPLIANCES, WISHES } from './flow.js';
@@ -17,7 +19,11 @@ import { buildProfile, saveToArchive, unpackJSON, findInArchive, storagePlan } f
 import { profileText, postProfile } from '../shared/summary.js';
 import { isMuted, setMuted, sfx } from '../shared/sound.js';
 import { isWishMode, tellShell } from '../shared/zen.js';
-import { t, guideName, setLang } from '../shared/i18n.js';
+import { voice, lineText, talkState } from '../shared/voice.js';
+import fx from '../shared/fx.js';
+import { t, tj, guideName, setLang } from '../shared/i18n.js';
+import { cue, zen, startMusic } from './moments.js';
+import { Odo } from './ui.jsx';
 import Scenery, { usesPhoto } from './Scenery.jsx';
 import { sceneFor } from './scenes.js';
 import Stones from './Stones.jsx';
@@ -78,19 +84,27 @@ const initialAnswers = (name = '') => ({
   oneWish: '',
 });
 
+// 只有字、不出声的泡泡（直觉题上她绝不开口；星期六那一题和章节牌重复；愿望页的提示）
 const ENTER_LINES = {
   pair: ['第一眼喜欢哪个？', '第一感觉最准 ✨', '跟着心走～', '不用解释，选就对了', '看图就好，没有对错 🌿', '潘吉在看你的直觉 👀'],
-  life: ['想象一个普通的星期六 ☀️', '说真话，潘吉不会笑你', '生活怎么过，家就怎么做'],
-  shoes: '潘吉在数鞋子… 👀 大概就好',
-  wardrobe: '衣柜是全屋定制的心脏 ❤️',
-  books: '书和收藏，都是你的故事 📚',
-  appliances: '小家电最爱抢台面了！',
-  bulky: '这些大家伙，最常被忘记',
-  ratio: '拖拖看，柜子会变哦 ✨',
+  life: ['想象一个普通的星期六 ☀️'],
   wishes: '只能三个哦，选最想要的 ✨',
-  splurge: '钱要花在你最在乎的地方 💛',
-  nogo: '讨厌的东西，潘吉一个都不会放进你的家 💣',
-  onewish: '最后一句，潘吉会抄在蓝图上 ✍️',
+};
+// 进到这一题，潘吉说的那一句（voice-lines.js）：泡泡里的字 = lineText(id)，和她说的一字不差（声音 SPEC §6.2）
+const ENTER_VOICE = {
+  'life:home': 'life.home',
+  'life:cook': 'life.cook',
+  'life:bell': 'life.bell',
+  'life:who': 'life.who',
+  shoes: 'tr.shoes',
+  wardrobe: 'tr.wardrobe',
+  books: 'tr.books',
+  appliances: 'tr.appliances',
+  bulky: 'tr.bulky',
+  ratio: 'tr.ratio',
+  splurge: 'wishes.splurge',
+  nogo: 'nogo.enter',
+  onewish: 'onewish.enter',
 };
 
 /** 潘吉的对话泡泡里不放 emoji（安静一点、精致一点） */
@@ -127,7 +141,19 @@ function parseRoute() {
 
 function TopBar({ chapter, sub, onBack, canBack, progress, done }) {
   const [mute, setMute] = useState(isMuted());
+  const [voiceOn, setVoiceOn] = useVoiceOn();
   const pct = Math.round(progress * 100);
+  // 一个静音：按钮音效 + 背景音乐 + 潘吉说话一起（单独打开的许愿之旅；许愿模式里外壳管）
+  const toggleMute = () => {
+    const m = !mute;
+    setMuted(m);
+    setMute(m);
+    voice.setMuted(m);
+    if (zen) {
+      zen.setMuted(m);
+      if (!m && !zen.running) startMusic(); // 开始时是静音的：现在在这一下里开音乐（接着这一章的曲子）
+    }
+  };
   return (
     <header className="topbar">
       <div className="tb-left">
@@ -151,26 +177,31 @@ function TopBar({ chapter, sub, onBack, canBack, progress, done }) {
             <circle cx="18" cy="18" r="15.5" className="pct-track" />
             <circle cx="18" cy="18" r="15.5" className="pct-fill" pathLength="100" style={{ strokeDashoffset: 100 - pct }} />
           </svg>
+          {/* 百分比像里程表一样滚上去 */}
           <span className="pct-num" aria-hidden="true">
-            {pct}
+            <Odo value={pct} />
             <small>%</small>
           </span>
           <span className="pct-text" aria-hidden="true">
-            {t('蓝图 {0}%', [pct])}
+            {tj('蓝图 {0}%', [<Odo key="n" value={pct} />])}
           </span>
         </span>
         <LangToggle compact />
+        {/* 潘吉说话（记在这台设备上）：开 / 关 —— 字幕（对话泡泡）照常 */}
         {!WISH && (
           <button
             type="button"
-            className="icon-btn"
-            onClick={() => {
-              setMuted(!mute);
-              setMute(!mute);
-            }}
-            aria-label={mute ? t('打开声音') : t('静音')}
-            aria-pressed={mute}
+            className="icon-btn tb-voice"
+            data-sfx="toggle"
+            onClick={() => setVoiceOn(!voiceOn)}
+            aria-label={t('潘吉说话')}
+            aria-pressed={voiceOn}
           >
+            {voiceOn ? <MessageCircleMore size={20} strokeWidth={1.8} /> : <MessageCircleOff size={20} strokeWidth={1.8} />}
+          </button>
+        )}
+        {!WISH && (
+          <button type="button" className="icon-btn" onClick={toggleMute} aria-label={mute ? t('打开声音') : t('静音')} aria-pressed={mute}>
             {mute ? <VolumeX size={20} strokeWidth={1.8} /> : <Volume2 size={20} strokeWidth={1.8} />}
           </button>
         )}
@@ -226,8 +257,10 @@ function tappableRects() {
  * 手机上第一下点击就收起、几秒后也自己收起。
  * 他自己也一样：身子挡到 → 往下缩成「探头」；连头都挡到 → 整个躲到下面，滚到空的地方再出来。
  */
-function Companion({ mood, line, prop, stepId }) {
+function Companion({ mood, line, prop, stepId, speaker = true }) {
   const text = plain(line);
+  // 她在说话：身子和泡泡可以点（点一下 = 跳过这一句）；手机上说完之前泡泡不自己收起来
+  const talking = useTalking();
   const [show, setShow] = useState(false);
   const [pose, setPose] = useState('up'); // up | peek | away
   const bubble = useRef(null);
@@ -308,7 +341,12 @@ function Companion({ mood, line, prop, stepId }) {
     const ro = typeof ResizeObserver === 'function' && card ? new ResizeObserver(recheck) : null;
     ro?.observe(card);
     if (small) window.addEventListener('pointerdown', hide, true);
-    const t2 = small ? setTimeout(hide, wait + 3200) : 0;
+    let t2 = 0;
+    const autoHide = () => {
+      if (talkState.get() === 'pangie') t2 = setTimeout(autoHide, 600);
+      else hide();
+    };
+    if (small) t2 = setTimeout(autoHide, wait + 3200);
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
@@ -320,25 +358,29 @@ function Companion({ mood, line, prop, stepId }) {
     };
   }, [text, stepId]);
   return (
-    <aside className={`companion ${pose !== 'up' ? `is-${pose}` : ''}`} aria-live="polite">
+    <aside className={`companion ${pose !== 'up' ? `is-${pose}` : ''} ${talking && speaker ? 'is-speaking' : ''}`} aria-live="polite">
       {text && (
-        <div className={`bubble ${show && pose === 'up' ? 'is-shown' : ''}`} key={text} ref={bubble}>
+        <div className={`bubble ${show && pose === 'up' ? 'is-shown' : ''}`} key={text} ref={bubble} data-voice-skip="">
           {keepWords(text)}
         </div>
       )}
-      <span className="companion-body" ref={body}>
-        <Pangie mood={mood} prop={prop} size={112} />
+      <span
+        className="companion-body"
+        ref={body}
+        {...(talking && speaker ? { role: 'button', 'aria-label': t('跳过这一句'), 'data-fx-ripple': 'off', 'data-fx-depth': '0.96' } : {})}
+      >
+        <Pangie mood={mood} prop={prop} size={112} speaker={speaker} />
       </span>
     </aside>
   );
 }
 
 /** 一张安静的小卡片：潘吉 + 一句话 + 两个大按钮（闲置提示 / 继续上次的进度） */
-function Prompt({ title, body, primary, secondary }) {
+function Prompt({ title, body, primary, secondary, speaker = false }) {
   return (
     <div className="prompt-veil" role="dialog" aria-modal="true" aria-label={title}>
       <div className="prompt">
-        <Pangie mood="think" prop="none" size={104} float={false} />
+        <Pangie mood="think" prop="none" size={104} float={false} speaker={speaker} />
         <h2 className="h-title">{title}</h2>
         {body && <p className="lead">{body}</p>}
         <div className="prompt-actions">
@@ -357,7 +399,8 @@ function Countdown({ ms }) {
     const id = setInterval(() => setLeft(Math.max(0, Math.ceil((end - Date.now()) / 1000))), 500);
     return () => clearInterval(id);
   }, [ms]);
-  return <>{t('{0} 秒后，潘吉会为下一位客人重新开始。', [left])}</>;
+  // 倒数的数字像里程表一样滚（不出声）
+  return <>{tj('{0} 秒后，潘吉会为下一位客人重新开始。', [<Odo key="n" value={left} />])}</>;
 }
 
 function Play({ onDone, onRestart }) {
@@ -402,6 +445,17 @@ function Play({ onDone, onRestart }) {
   const set = useCallback((patch) => setAnswers((a) => ({ ...a, ...patch })), []);
   // 只在「还是同一题」时前进 / 后退：连点、过期的计时器都不会多跳一题
   const next = useCallback(() => setIdx((i) => (i === idx ? Math.min(STEPS.length - 1, i + 1) : i)), [idx]);
+  // 走完一章的最后一题（下一页是章节牌）：「达成」—— 古筝的一段琶音（光点落进踏脚石的那一刻）
+  const achieved = useRef(-1);
+  const advance = useCallback(() => {
+    const cur = STEPS[idx];
+    const nx = STEPS[idx + 1];
+    if (achieved.current !== idx && cur?.chapter && !cur.interlude && nx?.interlude) {
+      achieved.current = idx;
+      sfx.play('achievement');
+    }
+    next();
+  }, [idx, next]);
   const back = useCallback(() => setIdx((i) => (i === idx ? Math.max(0, i - 1) : i)), [idx]);
   const say = useCallback((mood, line, ms = 1600) => {
     clearTimeout(reactTimer.current);
@@ -413,18 +467,35 @@ function Play({ onDone, onRestart }) {
   // 进入每一关时，潘吉说一句
   useEffect(() => {
     const [kind, sub] = step.id.split(':');
+    const vid = ENTER_VOICE[step.id];
     let line = '';
-    if (kind === 'pair') {
+    if (vid) line = lineText(vid);
+    else if (kind === 'pair') {
       const n = PAIRS.findIndex((p) => p.id === sub);
-      line = ENTER_LINES.pair[n % ENTER_LINES.pair.length];
-    } else if (kind === 'life') line = LIFE.find((l) => l.id === sub)?.whisper || ENTER_LINES.life[LIFE.findIndex((l) => l.id === sub) % 3];
-    else line = ENTER_LINES[kind] || '';
+      line = t(ENTER_LINES.pair[n % ENTER_LINES.pair.length]);
+    } else if (kind === 'life') {
+      const l = ENTER_LINES.life[LIFE.findIndex((x) => x.id === sub)];
+      line = l ? t(l) : '';
+    } else line = ENTER_LINES[kind] ? t(ENTER_LINES[kind]) : '';
     const ch = CHAPTERS.find((c) => c.id === step.chapter);
-    setPangie({ mood: ch?.mode === 'slow' ? 'think' : 'idle', line: line ? t(line) : '' });
+    setPangie({ mood: ch?.mode === 'slow' ? 'think' : 'idle', line });
     window.scrollTo(0, 0);
-    if (step.interlude) tellShell('chapter', { chapter: step.chapter });
-    if (step.id === 'welcome') tellShell('page', { page: 'quiz' });
+    // 音乐：章节牌 = 这一章的曲子 + 一声点缀；开场 = 《晨光》；神灯 = 《暮色》（许愿模式：告诉外壳；单独打开：自己的音乐）
+    if (step.interlude) cue('chapter', { chapter: step.chapter });
+    if (step.id === 'welcome') cue('page', { page: 'quiz' });
+    if (step.id === 'lamp') cue('mood', { mood: 'dusk' });
+    // 潘吉说这一题的那一句（题目卡落定后 0.7 秒）；离开这一题就停
+    if (!vid) return undefined;
+    voice.say(vid, { delay: 700 });
+    return () => voice.stopIf(vid);
   }, [step.id, step.chapter, step.interlude]);
+
+  // 「还在吗？」：潘吉问一句（在提示卡上的那只潘吉开口；右下角那只这时不说话）
+  useEffect(() => {
+    if (!idlePrompt) return undefined;
+    voice.say('idle.still', { delay: 300 });
+    return () => voice.stopIf('idle.still');
+  }, [idlePrompt]);
 
   // 许愿模式：一题停了 3 分钟没人碰 → 「还在吗？」；再 30 秒没回应 → 告诉外壳换下一位客人。
   // 开场也一样，只要已经填了称呼 / 选了谁来许愿：客人走开了，名字不能留在框里等下一位客人。
@@ -484,11 +555,11 @@ function Play({ onDone, onRestart }) {
   const [kind, sub] = step.id.split(':');
   const pairIdx = PAIRS.findIndex((p) => p.id === sub);
   const lifeIdx = LIFE.findIndex((l) => l.id === sub);
-  const props = { answers, set, next, say };
+  const props = { answers, set, next: advance, say };
 
   if (step.id === 'welcome') body = <Welcome {...props} />;
-  else if (step.id === 'lamp') body = <LampRub next={next} name={answers.name} />;
-  else if (step.interlude) body = <Interlude key={step.id} chapter={step.chapter} next={next} />;
+  else if (step.id === 'lamp') body = <LampRub next={advance} name={answers.name} />;
+  else if (step.interlude) body = <Interlude key={step.id} chapter={step.chapter} next={advance} />;
   else if (kind === 'pair')
     body = (
       <PairStep
@@ -500,8 +571,8 @@ function Play({ onDone, onRestart }) {
         onPick={(pick, ms, reaction, left) => {
           setAnswers((a) => ({ ...a, pairs: { ...a.pairs, [sub]: { pick, ms, left } } }));
           say('happy', reaction ? t(reaction) : t('收到 ✨'), 900);
-          setTimeout(next, 650);
         }}
+        onDone={advance}
       />
     );
   else if (kind === 'life')
@@ -513,7 +584,7 @@ function Play({ onDone, onRestart }) {
         total={LIFE.length}
         value={answers.life[sub]}
         onChange={(v) => setAnswers((a) => ({ ...a, life: { ...a.life, [sub]: v } }))}
-        next={next}
+        next={advance}
       />
     );
   else if (step.id === 'shoes') body = <ShoesStep {...props} />;
@@ -555,13 +626,16 @@ function Play({ onDone, onRestart }) {
       <main className={`stage ${showCompanion ? 'has-companion' : ''}`} key={step.id}>
         {body}
       </main>
-      {showCompanion && <Companion mood={pangie.mood} line={pangie.line} stepId={step.id} prop={step.chapter === 'treasure' ? 'magnifier' : 'ball'} />}
+      {showCompanion && (
+        <Companion mood={pangie.mood} line={pangie.line} stepId={step.id} prop={step.chapter === 'treasure' ? 'magnifier' : 'ball'} speaker={!idlePrompt} />
+      )}
       {idlePrompt && (
         <Prompt
+          speaker
           title={t('还在吗？')}
           body={<Countdown ms={(CONFIG.idle || {}).promptMs || 30000} />}
           secondary={
-            <button type="button" className="btn btn-line big" onClick={onRestart}>
+            <button type="button" className="btn btn-line big" data-sfx="back" onClick={onRestart}>
               <RotateCcw size={18} strokeWidth={1.8} aria-hidden="true" />
               <span>{t('重新开始')}</span>
             </button>
@@ -579,7 +653,7 @@ function Play({ onDone, onRestart }) {
           title={answers.name ? t('继续 {0} 上次的进度？', [answers.name]) : t('继续上次的进度？')}
           body={t('也可以从头开始，给下一位客人。')}
           secondary={
-            <button type="button" className="btn btn-line big" onClick={onRestart}>
+            <button type="button" className="btn btn-line big" data-sfx="back" onClick={onRestart}>
               <RotateCcw size={18} strokeWidth={1.8} aria-hidden="true" />
               <span>{t('重新开始')}</span>
             </button>
@@ -611,7 +685,28 @@ export default function QuizApp() {
     document.title = t('许愿之旅 · WISH by Riccione Reka');
   }, []);
 
+  // 潘吉的声音：页面一打开就准备好（iPad 第一下触碰就能解锁）。单独打开时：她说话的时候背景音乐轻一点；
+  // 切到别的 app / 锁屏 → 音乐停下来，回来接着放（许愿模式里这些都是外壳的事）
+  useEffect(() => {
+    voice.init();
+    if (!zen) return undefined;
+    const offDuck = voice.attachMusic(zen);
+    const onVis = () => {
+      if (!zen.running) return;
+      if (document.hidden) zen.pause();
+      else zen.resume();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      offDuck();
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, []);
+
   const restart = useCallback(() => {
+    // 下一位客人：潘吉的「一位客人一次」的话（招呼、揭晓、蓝图）重新算；画布上的金尘清掉
+    voice.newGuest();
+    fx.reset();
     clearSession();
     try {
       // 下一位客人：不要带着上一位的称呼（?for=），也不能带着员工身份（?staff=1）和上一份蓝图（#…）
@@ -632,6 +727,8 @@ export default function QuizApp() {
     setFresh(false);
     setError('');
     setMuted(false, { persist: false });
+    voice.setMuted(false);
+    zen?.setMuted(false);
     setDesignerReq(false);
     setRoute({ kind: 'play' });
     setRound((r) => r + 1);

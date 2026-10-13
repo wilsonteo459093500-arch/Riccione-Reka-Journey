@@ -4,8 +4,10 @@
 // (the lamp's smoke ends in the same spiral — see MIST_SPIRAL). Pure functions returning SVG strings: no React,
 // no filters, no fonts, no external assets. Every VI colour comes from palette.js; the few colours that belong to
 // the character itself live in CHAR below; every other tint is mixed from those two at load time.
+// She is a little girl (owner, 2026-10): two soft lash flicks at the outer rim of each eye patch (cream flicks on closed
+// lids), a small gold blossom tucked into the turban's left wrap, a slightly warmer blush — and she can talk.
 //
-//   pangieInner({ mood, prop, idPrefix, aura, contour, size, shadow, sparkles })
+//   pangieInner({ mood, prop, idPrefix, aura, contour, size, shadow, sparkles, talk })
 //       INNER markup (defs + groups, no outer <svg>) for <svg viewBox="0 0 200 250">. The React component keeps its
 //       own <svg class="pangie pg-float …"> root and sets this as innerHTML, so poster.js svgToImage(svgEl) still works.
 //     mood     idle | happy | wow | think | wink | mystic | sleepy
@@ -19,6 +21,8 @@
 //     size     optional render width in CSS px (only used by contour 'auto')
 //     shadow   soft ground shadow (.pg-shadow, outside .pg-figure) — default true
 //     sparkles ambient twinkles — default true (mood sparkles always show)
+//     talk     include the talking mouth (.pg-talk, hidden until the root has .is-talking) — default true; false for
+//              static-only uses (poster, OG image) saves ~0.6 KB
 //   pangieSVG({ …same, title, width })  full standalone <svg> (previews, tests, static exports); width also feeds `size`
 //   faceInner({ idPrefix, tile })       INNER markup for <svg viewBox="0 0 64 64">: the head-only mark (favicon / avatar)
 //     tile  false (default, transparent) | true (rounded square, dusk greens) | { from, to } (custom tile gradient)
@@ -34,6 +38,9 @@
 // glow, inline transform-origin), .pg-smoke (mist sway, inline origin), .pg-puff, .pg-twinkle + .pg-d2 / .pg-d3,
 // .pg-gem-glow (the brooch in mystic), .pg-aura. New, optional: .pg-figure (everything except aura + ground
 // shadow) and .pg-shadow — so a float animation can move the figure while the shadow stays on the ground.
+// Talking (base.css): <svg class="pangie is-talking"> hides the mood's own mouth (.pg-mouth) and shows .pg-talk —
+// her "w" lip stays, the jaw (.pg-jaw, inline transform-origin) scales from it: add .is-lipsync and set --mouth 0–1 on
+// .pg-talk from JS (voice.js drives <Pangie speaker />; bindMouthToDom for plain DOM), or leave it to the pg-talk cycle.
 
 import { PALETTE } from './palette.js';
 
@@ -47,7 +54,7 @@ const CHAR = {
   irisGlow: '#B98252', // amber light pooling at the bottom of the glass-bead eyes
   mouth: '#5A2A22', // inside the open mouth
   tongue: '#EE8F8F',
-  blush: '#F2A49B',
+  blush: '#F3978A', // a touch warmer than C's #F2A49B (little-girl pass)
   pad: '#8E5D45', // cocoa paw pads + toe beans
   wood: '#6B4B2F', // magnifier handle
 };
@@ -266,7 +273,7 @@ const linear = (id, attrs, list) => `<linearGradient id="${id}" ${attrs}>${stops
 function defs(P) {
   const k = K;
   return `<defs>
-${radial(`${P}-fur`, 'cx=".42" cy=".32" r=".74" fx=".36" fy=".22"', [[0, k.fur[0]], [0.46, k.fur[1]], [0.78, k.fur[2]], [0.93, k.fur[3]], [1, k.fur[4]]])}${linear(`${P}-rim`, 'x1=".1" y1="0" x2=".9" y2="1"', [[0, k.white, 0.95], [0.3, k.white, 0.5], [0.5, k.white, 0], [0.7, k.furWarm, 0], [1, k.furWarm, 0.5]])}${linear(`${P}-furLow`, 'x1="0" y1="0" x2="0" y2="1"', [[0.52, k.furWarm, 0], [1, k.furWarm, 0.26]])}${radial(`${P}-bloom`, 'cx=".5" cy=".5" r=".5"', [[0, k.white, 0.72], [0.55, k.white, 0.28], [1, k.white, 0]])}${radial(`${P}-blk`, 'cx=".42" cy=".34" r=".76" fx=".33" fy=".22"', [[0, k.blk[0]], [0.36, k.blk[1]], [0.76, k.blk[2]], [0.92, k.blk[3]], [1, k.blk[4]]])}${radial(`${P}-sheen`, 'cx=".5" cy=".5" r=".5"', [[0, k.white, 0.5], [1, k.white, 0]])}${radial(`${P}-innerEar`, 'cx=".45" cy=".4" r=".6"', [[0, k.innerEar[0]], [0.7, k.innerEar[1]], [1, k.innerEar[2]]])}${radial(`${P}-iris`, 'cx=".5" cy=".8" r=".78" fx=".5" fy=".9"', [[0, k.iris[0]], [0.34, k.iris[1]], [0.7, k.iris[2]], [1, k.iris[3]]])}${radial(`${P}-nose`, 'cx=".4" cy=".3" r=".75"', [[0, k.nose[0]], [0.5, k.nose[1]], [1, k.nose[2]]])}${radial(`${P}-mouth`, 'cx=".5" cy=".2" r=".9"', [[0, k.mouth[0]], [0.7, k.mouth[1]], [1, k.mouth[2]]])}${radial(`${P}-tongue`, 'cx=".45" cy=".3" r=".7"', [[0, k.tongue[0]], [1, k.tongue[1]]])}${radial(`${P}-blush`, 'cx=".5" cy=".5" r=".5"', [[0, CHAR.blush, 0.78], [0.6, CHAR.blush, 0.36], [1, CHAR.blush, 0]])}${radial(`${P}-pad`, 'cx=".38" cy=".3" r=".8"', [[0, k.pad[0]], [0.55, k.pad[1]], [1, k.pad[2]]])}${radial(`${P}-turban`, 'cx=".34" cy=".24" r=".9" fx=".3" fy=".16"', [[0, k.turban[0]], [0.3, k.turban[1]], [0.62, k.turban[2]], [0.86, k.turban[3]], [1, k.turban[4]]])}${radial(`${P}-velvet`, 'cx=".5" cy=".62" r=".58"', [[0.66, k.velvet, 0], [0.9, k.velvet, 0.2], [1, k.velvet, 0.4]])}${linear(`${P}-gold`, 'x1="0" y1="0" x2="0" y2="1"', [[0, k.goldHi], [0.45, k.gold[1]], [1, k.gold[2]]])}${linear(`${P}-goldH`, 'x1="0" y1="0" x2="1" y2="1"', [[0, k.goldHi], [0.38, k.goldMid], [0.72, k.gold[1]], [1, k.gold[2]]])}${radial(`${P}-gem`, 'cx=".38" cy=".3" r=".78"', [[0, k.gem[0]], [0.34, k.gem[1]], [0.8, k.gem[2]], [1, k.gem[3]]])}${radial(`${P}-orb`, 'cx=".4" cy=".36" r=".7" fx=".34" fy=".28"', [[0, k.orb[0]], [0.3, k.orb[1]], [0.72, k.orb[2]], [1, k.orb[3]]])}${radial(`${P}-orbCore`, 'cx=".5" cy=".5" r=".5"', [[0, k.orbCore[0], 1], [0.45, k.orbCore[1], 0.75], [1, k.orbCore[2], 0]])}${radial(`${P}-halo`, 'cx=".5" cy=".5" r=".5"', [[0, k.halo[0], 0.95], [0.45, k.halo[1], 0.55], [1, k.halo[1], 0]])}${radial(`${P}-mist`, 'gradientUnits="userSpaceOnUse" cx="96" cy="214" r="72"', [[0, k.mist[0]], [0.38, k.mist[1]], [0.7, k.mist[2]], [1, k.mist[3]]])}${radial(`${P}-aura`, 'cx=".5" cy=".5" r=".5"', [[0, k.firefly, 0.42], [0.55, k.firefly, 0.14], [1, k.firefly, 0]])}${radial(`${P}-shadow`, 'cx=".5" cy=".5" r=".5"', [[0, k.shadow, 0.26], [0.6, k.shadow, 0.1], [1, k.shadow, 0]])}${radial(`${P}-ao`, 'cx=".5" cy=".5" r=".5"', [[0, k.ao, 0.3], [1, k.ao, 0]])}${radial(`${P}-spark`, 'cx=".5" cy=".5" r=".5"', [[0, k.spark, 0.95], [0.4, k.firefly, 0.5], [1, k.firefly, 0]])}${linear(`${P}-sparkFill`, 'x1="0" y1="0" x2="1" y2="1"', [[0, k.sparkFill[0]], [0.55, k.sparkFill[1]], [1, k.sparkFill[2]]])}${linear(`${P}-cardMoss`, 'x1="0" y1="0" x2="1" y2="1"', [[0, k.cardMoss[0]], [1, k.cardMoss[1]]])}${linear(`${P}-cardTeal`, 'x1="0" y1="0" x2="1" y2="1"', [[0, k.cardTeal[0]], [1, k.cardTeal[1]]])}${linear(`${P}-cardCream`, 'x1="0" y1="0" x2="1" y2="1"', [[0, k.cardCream[0]], [1, k.cardCream[1]]])}${radial(`${P}-lens`, 'cx=".4" cy=".35" r=".75"', [[0, k.lens[0], 0.85], [0.6, k.lens[1], 0.55], [1, k.lens[2], 0.55]])}${linear(`${P}-wood`, 'x1="0" y1="0" x2="1" y2="0"', [[0, k.wood[0]], [0.45, k.wood[1]], [1, k.wood[2]]])}</defs>`;
+${radial(`${P}-fur`, 'cx=".42" cy=".32" r=".74" fx=".36" fy=".22"', [[0, k.fur[0]], [0.46, k.fur[1]], [0.78, k.fur[2]], [0.93, k.fur[3]], [1, k.fur[4]]])}${linear(`${P}-rim`, 'x1=".1" y1="0" x2=".9" y2="1"', [[0, k.white, 0.95], [0.3, k.white, 0.5], [0.5, k.white, 0], [0.7, k.furWarm, 0], [1, k.furWarm, 0.5]])}${linear(`${P}-furLow`, 'x1="0" y1="0" x2="0" y2="1"', [[0.52, k.furWarm, 0], [1, k.furWarm, 0.26]])}${radial(`${P}-bloom`, 'cx=".5" cy=".5" r=".5"', [[0, k.white, 0.72], [0.55, k.white, 0.28], [1, k.white, 0]])}${radial(`${P}-blk`, 'cx=".42" cy=".34" r=".76" fx=".33" fy=".22"', [[0, k.blk[0]], [0.36, k.blk[1]], [0.76, k.blk[2]], [0.92, k.blk[3]], [1, k.blk[4]]])}${radial(`${P}-sheen`, 'cx=".5" cy=".5" r=".5"', [[0, k.white, 0.5], [1, k.white, 0]])}${radial(`${P}-innerEar`, 'cx=".45" cy=".4" r=".6"', [[0, k.innerEar[0]], [0.7, k.innerEar[1]], [1, k.innerEar[2]]])}${radial(`${P}-iris`, 'cx=".5" cy=".8" r=".78" fx=".5" fy=".9"', [[0, k.iris[0]], [0.34, k.iris[1]], [0.7, k.iris[2]], [1, k.iris[3]]])}${radial(`${P}-nose`, 'cx=".4" cy=".3" r=".75"', [[0, k.nose[0]], [0.5, k.nose[1]], [1, k.nose[2]]])}${radial(`${P}-mouth`, 'cx=".5" cy=".2" r=".9"', [[0, k.mouth[0]], [0.7, k.mouth[1]], [1, k.mouth[2]]])}${radial(`${P}-tongue`, 'cx=".45" cy=".3" r=".7"', [[0, k.tongue[0]], [1, k.tongue[1]]])}${radial(`${P}-blush`, 'cx=".5" cy=".5" r=".5"', [[0, CHAR.blush, 0.86], [0.58, CHAR.blush, 0.42], [1, CHAR.blush, 0]])}${radial(`${P}-pad`, 'cx=".38" cy=".3" r=".8"', [[0, k.pad[0]], [0.55, k.pad[1]], [1, k.pad[2]]])}${radial(`${P}-turban`, 'cx=".34" cy=".24" r=".9" fx=".3" fy=".16"', [[0, k.turban[0]], [0.3, k.turban[1]], [0.62, k.turban[2]], [0.86, k.turban[3]], [1, k.turban[4]]])}${radial(`${P}-velvet`, 'cx=".5" cy=".62" r=".58"', [[0.66, k.velvet, 0], [0.9, k.velvet, 0.2], [1, k.velvet, 0.4]])}${linear(`${P}-gold`, 'x1="0" y1="0" x2="0" y2="1"', [[0, k.goldHi], [0.45, k.gold[1]], [1, k.gold[2]]])}${linear(`${P}-goldH`, 'x1="0" y1="0" x2="1" y2="1"', [[0, k.goldHi], [0.38, k.goldMid], [0.72, k.gold[1]], [1, k.gold[2]]])}${radial(`${P}-gem`, 'cx=".38" cy=".3" r=".78"', [[0, k.gem[0]], [0.34, k.gem[1]], [0.8, k.gem[2]], [1, k.gem[3]]])}${radial(`${P}-orb`, 'cx=".4" cy=".36" r=".7" fx=".34" fy=".28"', [[0, k.orb[0]], [0.3, k.orb[1]], [0.72, k.orb[2]], [1, k.orb[3]]])}${radial(`${P}-orbCore`, 'cx=".5" cy=".5" r=".5"', [[0, k.orbCore[0], 1], [0.45, k.orbCore[1], 0.75], [1, k.orbCore[2], 0]])}${radial(`${P}-halo`, 'cx=".5" cy=".5" r=".5"', [[0, k.halo[0], 0.95], [0.45, k.halo[1], 0.55], [1, k.halo[1], 0]])}${radial(`${P}-mist`, 'gradientUnits="userSpaceOnUse" cx="96" cy="214" r="72"', [[0, k.mist[0]], [0.38, k.mist[1]], [0.7, k.mist[2]], [1, k.mist[3]]])}${radial(`${P}-aura`, 'cx=".5" cy=".5" r=".5"', [[0, k.firefly, 0.42], [0.55, k.firefly, 0.14], [1, k.firefly, 0]])}${radial(`${P}-shadow`, 'cx=".5" cy=".5" r=".5"', [[0, k.shadow, 0.26], [0.6, k.shadow, 0.1], [1, k.shadow, 0]])}${radial(`${P}-ao`, 'cx=".5" cy=".5" r=".5"', [[0, k.ao, 0.3], [1, k.ao, 0]])}${radial(`${P}-spark`, 'cx=".5" cy=".5" r=".5"', [[0, k.spark, 0.95], [0.4, k.firefly, 0.5], [1, k.firefly, 0]])}${linear(`${P}-sparkFill`, 'x1="0" y1="0" x2="1" y2="1"', [[0, k.sparkFill[0]], [0.55, k.sparkFill[1]], [1, k.sparkFill[2]]])}${linear(`${P}-cardMoss`, 'x1="0" y1="0" x2="1" y2="1"', [[0, k.cardMoss[0]], [1, k.cardMoss[1]]])}${linear(`${P}-cardTeal`, 'x1="0" y1="0" x2="1" y2="1"', [[0, k.cardTeal[0]], [1, k.cardTeal[1]]])}${linear(`${P}-cardCream`, 'x1="0" y1="0" x2="1" y2="1"', [[0, k.cardCream[0]], [1, k.cardCream[1]]])}${radial(`${P}-lens`, 'cx=".4" cy=".35" r=".75"', [[0, k.lens[0], 0.85], [0.6, k.lens[1], 0.55], [1, k.lens[2], 0.55]])}${linear(`${P}-wood`, 'x1="0" y1="0" x2="1" y2="0"', [[0, k.wood[0]], [0.45, k.wood[1]], [1, k.wood[2]]])}</defs>`;
 }
 
 // ───────────────────────────── base shapes ─────────────────────────────
@@ -337,11 +344,105 @@ ${hl}
 </g>`;
 }
 
-function closedEye(cx, cy, kind) {
+/**
+ * Closed eyes. side 'L' | 'R' = which eye (the outer corner is −x for L, +x for R). The outer end of the lid gets two
+ * short lash flicks in the same cream thread (they sit on the black patch, so cream is what reads).
+ */
+function closedEye(cx, cy, kind, side = 'L') {
   const col = K.closedEye;
-  if (kind === 'happy') return `<path d="M${cx - 8} ${cy + 3} Q${cx} ${cy - 7.5} ${cx + 8} ${cy + 3}" stroke="${col}" stroke-width="3.3" fill="none" stroke-linecap="round"/>`;
-  if (kind === 'serene') return `<path d="M${cx - 8} ${cy - 1} Q${cx} ${cy + 6.5} ${cx + 8} ${cy - 1}" stroke="${col}" stroke-width="3" fill="none" stroke-linecap="round"/>`;
-  return `<path d="M${cx - 7.5} ${cy + 2.5} Q${cx} ${cy + 6.5} ${cx + 7.5} ${cy + 2.5}" stroke="${col}" stroke-width="2.8" fill="none" stroke-linecap="round" opacity=".92"/>`;
+  const o = side === 'L' ? -1 : 1;
+  let lid;
+  let w;
+  let flicks = [];
+  if (kind === 'happy') {
+    lid = `M${cx - 8} ${cy + 3} Q${cx} ${cy - 7.5} ${cx + 8} ${cy + 3}`;
+    w = 3.3;
+    // ∩ — flicks leave the outer end going outward, one a little higher
+    flicks = [
+      [[cx + o * 6.4, cy + 0.2], [cx + o * 9.6, cy - 1.6], [cx + o * 11.6, cy - 1.2]],
+      [[cx + o * 7.4, cy + 2.2], [cx + o * 10.4, cy + 1.6], [cx + o * 12.2, cy + 2.8]],
+    ];
+  } else if (kind === 'serene') {
+    lid = `M${cx - 8} ${cy - 1} Q${cx} ${cy + 6.5} ${cx + 8} ${cy - 1}`;
+    w = 3;
+    // ‿ — lashes hang down and out from the outer half of the lid
+    flicks = [
+      [[cx + o * 5.2, cy + 1.6], [cx + o * 6.8, cy + 4.2], [cx + o * 8.6, cy + 5.4]],
+      [[cx + o * 7.2, cy - 0.2], [cx + o * 9.4, cy + 1.6], [cx + o * 11.2, cy + 2.0]],
+    ];
+  } else {
+    lid = `M${cx - 7.5} ${cy + 2.5} Q${cx} ${cy + 6.5} ${cx + 7.5} ${cy + 2.5}`;
+    w = 2.8;
+    flicks = [
+      [[cx + o * 5, cy + 4], [cx + o * 6.6, cy + 6], [cx + o * 8.2, cy + 6.8]],
+      [[cx + o * 6.8, cy + 2.8], [cx + o * 8.8, cy + 4], [cx + o * 10.4, cy + 4.2]],
+    ];
+  }
+  const op = kind === 'sleepy' ? ' opacity=".92"' : '';
+  const lashes = flicks.map((q) => `<path d="${tube(Array.from({ length: 7 }, (_, i) => qbez(q[0], q[1], q[2], i / 6)), (u) => 0.72 - 0.5 * u)}" fill="${col}"${op}/>`).join('');
+  return `<path d="${lid}" stroke="${col}" stroke-width="${w}" fill="none" stroke-linecap="round"${op}/>${lashes}`;
+}
+
+/** sampled outline of a placed eye patch (for the lashes) */
+function patchOutline(x, y, rot) {
+  const pts = [];
+  const segs = [
+    [[0, -22], [6.5, -22], [11.5, -15], [13.8, -6]],
+    [[13.8, -6], [16.4, 4], [16.4, 12.5], [12.6, 17.6]],
+    [[12.6, 17.6], [8.6, 22.6], [-8.6, 22.6], [-12.6, 17.6]],
+    [[-12.6, 17.6], [-16.4, 12.5], [-16.4, 4], [-13.8, -6]],
+    [[-13.8, -6], [-11.5, -15], [-6.5, -22], [0, -22]],
+  ];
+  for (const s of segs) for (let i = 0; i < 24; i++) pts.push(xf(...bez(...s, i / 24), { x, y, rot }));
+  return pts;
+}
+
+/** where a ray from (cx, cy) at angle a (deg) leaves the polygon */
+function rayExit(poly, cx, cy, a) {
+  const dx = Math.cos(a * RAD);
+  const dy = Math.sin(a * RAD);
+  let best = null;
+  for (let i = 0; i < poly.length; i++) {
+    const [x1, y1] = poly[i];
+    const [x2, y2] = poly[(i + 1) % poly.length];
+    const ex = x2 - x1;
+    const ey = y2 - y1;
+    const den = dx * ey - dy * ex;
+    if (Math.abs(den) < 1e-9) continue;
+    const t = ((x1 - cx) * ey - (y1 - cy) * ex) / den;
+    const u = ((x1 - cx) * dy - (y1 - cy) * dx) / den;
+    if (t > 0 && u >= 0 && u <= 1 && (best == null || t > best)) best = t;
+  }
+  return best == null ? [cx, cy] : [cx + dx * best, cy + dy * best];
+}
+
+const PATCH_L = patchOutline(73, 101, 31);
+/**
+ * Open-eye lashes: two soft tapered flicks growing out of the upper-outer rim of each eye patch into the white fur
+ * (ink, like the patch — black lashes on black felt would vanish, so they live where the patch meets the fur).
+ * Thin and curved, never a point on the patch itself (no angular patches). Left eye computed, right eye mirrored.
+ */
+const LASHES = (() => {
+  const cx = 76;
+  const cy = 97;
+  return [
+    { a: -148, len: 5.0, curl: -38, w: 1.0 },
+    { a: -127, len: 4.5, curl: -32, w: 0.92 },
+  ].map(({ a, len, curl, w }) => {
+    const B = rayExit(PATCH_L, cx, cy, a);
+    const d = [Math.cos(a * RAD), Math.sin(a * RAD)];
+    const a2 = (a + curl) * RAD;
+    const S = [B[0] - d[0] * 1.6, B[1] - d[1] * 1.6];
+    const C = [B[0] + d[0] * len * 0.55, B[1] + d[1] * len * 0.55];
+    const E = [C[0] + Math.cos(a2) * len * 0.6, C[1] + Math.sin(a2) * len * 0.6];
+    const cl = Array.from({ length: 9 }, (_, i) => qbez(S, C, E, i / 8));
+    return { cl, w };
+  });
+})();
+
+function lashes(P, side) {
+  const m = side === 'R' ? (p) => [200 - p[0], p[1]] : (p) => p;
+  return LASHES.map(({ cl, w }) => `<path d="${tube(cl.map(m), (u) => w * (1 - 0.78 * u))}" fill="url(#${P}-blk)"/>`).join('');
 }
 
 function eyes(L, P) {
@@ -349,12 +450,12 @@ function eyes(L, P) {
   const rx = 124;
   const y = 97;
   const k = L.eyes;
-  if (k === 'serene') return closedEye(lx, y + 1, 'serene') + closedEye(rx, y + 1, 'serene');
-  if (k === 'sleepy') return closedEye(lx, y + 2, 'sleepy') + closedEye(rx, y + 2, 'sleepy');
-  if (k === 'wink') return beadEye(lx, y, 11.6, P, { look: [0.4, 0.3] }) + closedEye(rx, y + 1, 'happy');
-  if (k === 'wide') return beadEye(lx, y - 1, 13.2, P, { sparkle: true }) + beadEye(rx, y - 1, 13.2, P, { sparkle: true });
-  if (k === 'look') return beadEye(lx, y, 11.6, P, { look: [2.2, -2.4] }) + beadEye(rx, y, 11.6, P, { look: [2.2, -2.4] });
-  return beadEye(lx, y, 11.6, P, { look: [0.5, 0.4] }) + beadEye(rx, y, 11.6, P, { look: [-0.5, 0.4] });
+  if (k === 'serene') return closedEye(lx, y + 1, 'serene', 'L') + closedEye(rx, y + 1, 'serene', 'R');
+  if (k === 'sleepy') return closedEye(lx, y + 2, 'sleepy', 'L') + closedEye(rx, y + 2, 'sleepy', 'R');
+  if (k === 'wink') return lashes(P, 'L') + beadEye(lx, y, 11.6, P, { look: [0.4, 0.3] }) + closedEye(rx, y + 1, 'happy', 'R');
+  if (k === 'wide') return lashes(P, 'L') + lashes(P, 'R') + beadEye(lx, y - 1, 13.2, P, { sparkle: true }) + beadEye(rx, y - 1, 13.2, P, { sparkle: true });
+  if (k === 'look') return lashes(P, 'L') + lashes(P, 'R') + beadEye(lx, y, 11.6, P, { look: [2.2, -2.4] }) + beadEye(rx, y, 11.6, P, { look: [2.2, -2.4] });
+  return lashes(P, 'L') + lashes(P, 'R') + beadEye(lx, y, 11.6, P, { look: [0.5, 0.4] }) + beadEye(rx, y, 11.6, P, { look: [-0.5, 0.4] });
 }
 
 function nose(P) {
@@ -388,6 +489,34 @@ function mouth(kind, P) {
   if (kind === 'serene')
     return `<path d="M92.5 127.6 C95 130.4 98 130.4 100 127.6 C102 130.4 105 130.4 107.5 127.6" stroke="${ink}" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
   return `<ellipse cx="100" cy="131.6" rx="3.2" ry="2.8" fill="url(#${P}-mouth)"/>`;
+}
+
+// ── the talking mouth ──
+// Her own "w" upper lip (the same lip the open mouths share, tucked under the nose) never moves; below it a jaw — the
+// cocoa mouth + tongue — opens and closes. The jaw is one group scaled from the lip line, so CSS can drive it:
+//   .pangie.is-talking            shows .pg-talk and hides the mood's own mouth (.pg-mouth)
+//   --mouth: 0…1 on .pg-talk      JS lip-sync (voice.js onMouth → transform: scaleY(var(--mouth)))
+//   no --mouth                    a soft keyframe cycle (pg-talk) — see base.css
+// It is hidden with display="none" by default (presentation attribute), so static exports (poster, PNG) never show it.
+const TALK = {
+  lip: 'M91.6 127.4 C93.8 130.2 97.6 130.4 100 127 C102.4 130.4 106.2 130.2 108.4 127.4',
+  bowl: 'M91.4 124.6 L108.6 124.6 C108.5 133.8 104.8 139.4 100 139.4 C95.2 139.4 91.5 133.8 91.4 124.6 Z',
+  under: 'M84 127.4 L91.6 127.4 C93.8 130.2 97.6 130.4 100 127 C102.4 130.4 106.2 130.2 108.4 127.4 L116 127.4 L116 152 L84 152 Z',
+  origin: [100, 127.6],
+};
+function talkMouth(P, k = 1) {
+  const [ox, oy] = TALK.origin;
+  // k: a bigger mouth for the excited moods (happy) — scaled about the lip, so it stays tucked under the nose
+  const big = k === 1 ? '' : ` transform="translate(100 127.4) scale(${k}) translate(-100 -127.4)"`;
+  return `<g class="pg-talk" display="none"${big}>
+<clipPath id="${P}-lipclip"><path d="${TALK.under}"/></clipPath>
+<g clip-path="url(#${P}-lipclip)"><g class="pg-jaw" style="transform-origin:${ox}px ${oy}px">
+<clipPath id="${P}-jawclip"><path d="${TALK.bowl}"/></clipPath>
+<path d="${TALK.bowl}" fill="url(#${P}-mouth)"/>
+<g clip-path="url(#${P}-jawclip)"><ellipse cx="100" cy="139.6" rx="6.6" ry="4.2" fill="url(#${P}-tongue)"/></g>
+</g></g>
+<path d="${TALK.lip}" stroke="${V.ink}" stroke-opacity=".9" stroke-width="2.1" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</g>`;
 }
 
 // ── the wrapped velvet turban ──
@@ -432,6 +561,34 @@ ${folds}
 <path d="${BRIM}" stroke="${K.goldHi}" stroke-opacity=".7" stroke-width=".7" fill="none" stroke-linecap="round" transform="translate(0 -.6)"/>
 ${glow ? `<circle cx="${gx}" cy="${gy}" r="16" fill="url(#${P}-spark)" opacity=".95"/>` : ''}
 <g${glow ? ' class="pg-gem-glow"' : ''}>${cabochon(P, gx, gy)}</g>
+${blossom(P, ...BLOSSOM)}
+</g>`;
+}
+
+// little-girl pass: a small gold blossom tucked into the turban's upper-left wrap (turban-local x, y, scale, rot) —
+// it balances the gold earring on the other side and sits in the key light.
+// Five round petals in the same polished gold as the brim, a tiny amber heart that rhymes with the cabochon.
+const BLOSSOM = [65.5, 31.4, 1.18, -14];
+function blossom(P, x, y, s = 1, rot = 0) {
+  const pr = 3.05 * s; // petal centre distance
+  const petals = [0, 1, 2, 3, 4]
+    .map((i) => {
+      const a = rot - 90 + i * 72;
+      const ca = Math.cos(a * RAD);
+      const sa = Math.sin(a * RAD);
+      const c = [x + ca * pr, y + sa * pr];
+      const d = ell(c[0], c[1], 3.15 * s, 2.7 * s, a);
+      // polished petal: gold body, a soft lit lobe on its outer half, a hairline crease toward the heart
+      const hi = ell(x + ca * pr * 1.28 - 0.35 * s, y + sa * pr * 1.28 - 0.45 * s, 1.5 * s, 1.05 * s, a);
+      return `<path d="${d}" fill="url(#${P}-goldH)"/><path d="${hi}" fill="${K.goldHi}" opacity=".5"/><path d="M${R(x + ca * 1.5 * s)} ${R(y + sa * 1.5 * s)} L${R(x + ca * 4.6 * s)} ${R(y + sa * 4.6 * s)}" stroke="${K.gold[2]}" stroke-opacity=".3" stroke-width=".35" stroke-linecap="round"/><path d="${d}" fill="none" stroke="${K.gold[2]}" stroke-opacity=".45" stroke-width=".4"/>`;
+    })
+    .join('');
+  return `<g>
+<path d="${ell(x + 0.7, y + 1.1, 6.6 * s, 5.9 * s)}" fill="url(#${P}-ao)" opacity=".6"/>
+${petals}
+<circle cx="${R(x)}" cy="${R(y)}" r="${R(1.8 * s)}" fill="url(#${P}-goldH)"/>
+<circle cx="${R(x)}" cy="${R(y + 0.1 * s)}" r="${R(1.35 * s)}" fill="url(#${P}-gem)"/>
+<circle cx="${R(x - 0.45 * s)}" cy="${R(y - 0.5 * s)}" r="${R(0.48 * s)}" fill="${K.white}" opacity=".9"/>
 </g>`;
 }
 
@@ -467,11 +624,12 @@ ${earRing(P)}
 ${plush(HEAD, 'hclip', P, C, bloom, HEAD_LOW, 112, 146)}
 ${patches(P)}
 ${eyes(L, P)}
-<ellipse cx="57" cy="${L.blushY || 126}" rx="10.5" ry="6.4" fill="url(#${P}-blush)" opacity="${blushOp}"/>
-<ellipse cx="143" cy="${L.blushY || 126}" rx="10.5" ry="6.4" fill="url(#${P}-blush)" opacity="${blushOp}"/>
+<ellipse cx="58" cy="${L.blushY || 126}" rx="11.2" ry="6.9" fill="url(#${P}-blush)" opacity="${blushOp}"/>
+<ellipse cx="142" cy="${L.blushY || 126}" rx="11.2" ry="6.9" fill="url(#${P}-blush)" opacity="${blushOp}"/>
 <ellipse cx="100" cy="127" rx="21" ry="14" fill="url(#${P}-bloom)" opacity=".42"/>
 ${nose(P)}
-${mouth(L.mouth, P)}
+<g class="pg-mouth">${mouth(L.mouth, P)}</g>
+${L.talk ? talkMouth(P, L.talkScale || 1) : ''}
 <g transform="translate(${L.turban?.dx || 0} ${L.turban?.dy || 0}) rotate(${L.turban?.rot || 0} 100 52)"><g transform="translate(5 2.9) scale(.95)">${turban(P, L.mood)}</g></g>
 </g>`;
 }
@@ -826,6 +984,7 @@ function layout(mood, prop) {
       L.turban = { dx: 0, dy: 1.5, rot: 0 };
       L.eyes = 'sparkle';
       L.mouth = 'laugh';
+      L.talkScale = 1.14;
       L.blushY = 123;
       const up = { sh: [128, 164], el: [150, 154], paw: [160, 127], layer: 'back' };
       const low = { sh: [72, 166], el: [54, 178], paw: [44, 193], layer: 'back', pads: true, padAng: 160 };
@@ -1042,13 +1201,14 @@ function contourOpts(contour, size) {
   return { on: true, op: 0.33, w: 1.5 };
 }
 
-export function pangieInner({ mood = 'idle', prop = 'ball', idPrefix = 'pg', aura = false, contour = 'auto', size, shadow = true, sparkles = true } = {}) {
+export function pangieInner({ mood = 'idle', prop = 'ball', idPrefix = 'pg', aura = false, contour = 'auto', size, shadow = true, sparkles = true, talk = true } = {}) {
   const P = idPrefix;
   SEQ.n = 0;
   SEQ.defs = [];
   const m = MOODS.includes(mood) ? mood : 'idle';
   const pr = PROPS.includes(prop) ? prop : 'ball';
   const L = layout(m, pr);
+  L.talk = talk;
   const C = contourOpts(contour, size);
   const by = (layer) => L.arms.filter((a) => a.layer === layer).map((a) => arm(a, P)).join('');
   const pl = L.prop ? L.prop.layer || 'body' : null;

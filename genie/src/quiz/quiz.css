@@ -144,11 +144,12 @@ html[lang='en'] .h-title {
     box-shadow 0.3s var(--ease),
     opacity 0.3s var(--ease);
 }
-.btn:active,
-.btn-line:active,
-.btn-ghost:active,
-.btn-gold:active,
-.btn-primary:active {
+/* fx.install() 已经让按下去的东西缩一下（弹簧回来）：CSS 的 :active 只留给没接上 fx 的元素，不会缩两次 */
+.btn:not(.fx-pressable):active,
+.btn-line:not(.fx-pressable):active,
+.btn-ghost:not(.fx-pressable):active,
+.btn-gold:not(.fx-pressable):active,
+.btn-primary:not(.fx-pressable):active {
   transform: scale(0.97);
 }
 .btn:focus-visible,
@@ -447,8 +448,10 @@ html[lang='en'] .h-title {
     color 0.9s var(--ease);
 }
 .nav-back:active {
-  transform: scale(0.97);
   background: rgba(var(--text-rgb), 0.07);
+}
+.nav-back:not(.fx-pressable):active {
+  transform: scale(0.97);
 }
 .nav-back:focus-visible,
 .icon-btn:focus-visible {
@@ -529,7 +532,7 @@ html[lang='en'] .h-title {
     transform 0.18s var(--ease),
     background-color 0.3s var(--ease);
 }
-.icon-btn:active {
+.icon-btn:not(.fx-pressable):active {
   transform: scale(0.95);
 }
 
@@ -1378,7 +1381,7 @@ html[lang='en'] .dc-tag {
     box-shadow 0.35s var(--ease),
     opacity 0.35s var(--ease);
 }
-.pair-card:active {
+.pair-card:not(.fx-pressable):active {
   transform: scale(0.97);
 }
 .pair-card:focus-visible {
@@ -1496,7 +1499,7 @@ html[lang='en'] .dc-tag {
     box-shadow 0.3s var(--ease),
     background-color 0.3s var(--ease);
 }
-.opt:active {
+.opt:not(.fx-pressable):active {
   transform: scale(0.97);
 }
 .opt:focus-visible {
@@ -1622,7 +1625,7 @@ html[lang='en'] .dc-tag {
     color 0.25s var(--ease),
     box-shadow 0.25s var(--ease);
 }
-.chip:active {
+.chip:not(.fx-pressable):active {
   transform: scale(0.96);
 }
 .chip:focus-visible {
@@ -1836,7 +1839,7 @@ html[lang='en'] .dc-tag {
     box-shadow 0.3s var(--ease),
     background-color 0.3s var(--ease);
 }
-.wish:active {
+.wish:not(.fx-pressable):active {
   transform: scale(0.97);
 }
 .wish:focus-visible {
@@ -1950,7 +1953,7 @@ html[lang='en'] .dc-tag {
   position: relative;
   z-index: 1;
 }
-.nogo-color:active i {
+.nogo-color:not(.fx-pressable):active i {
   transform: scale(0.94);
 }
 .nogo-color.x i {
@@ -2771,7 +2774,7 @@ html[lang='en'] .bp-wish blockquote {
     background-color 0.2s var(--ease),
     transform 0.18s var(--ease);
 }
-.tips-toggle:active {
+.tips-toggle:not(.fx-pressable):active {
   transform: scale(0.97);
 }
 .tips-toggle:focus-visible {
@@ -3608,6 +3611,220 @@ html[lang='en'] .bp-farewell {
   }
 }
 
+/* ───────────────────────── 光是材质：动效接上以后的小样式（fx.js / scratchpad/motion/SPEC.md §6.1） ───────────────────────── */
+
+/* 潘吉在说话：身子和泡泡可以点（点一下 = 跳过这一句）；平常是点不到的（不挡题目） */
+.companion.is-speaking .companion-body,
+.companion.is-speaking .bubble.is-shown {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* 直觉题的 3 秒：一颗小小的光头跟着金线往回走；选了就淡掉 */
+.breath {
+  position: relative;
+  overflow: visible;
+  transition: opacity 0.2s var(--fx-out);
+}
+.breath::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background: var(--gold-l);
+  box-shadow: 0 0 6px 1px rgba(var(--gold-l-rgb), 0.75);
+  animation: breath-head 3s linear 0.45s both;
+}
+@keyframes breath-head {
+  from {
+    transform: translateX(120px);
+  }
+  92% {
+    opacity: 1;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 0;
+  }
+}
+.step-pair.is-picked .breath {
+  opacity: 0;
+}
+
+/* 神灯的进度圈：一颗发光的头跟着圈走 */
+.lamp-head {
+  transform-origin: 50px 50px;
+  transition: transform 0.2s linear;
+}
+.lamp-head circle {
+  fill: var(--gold-l);
+  filter: drop-shadow(0 0 1.6px var(--gold-l));
+}
+
+/* 章节牌：翻完了，那一句才模糊淡入 */
+.interlude-hint.is-waiting {
+  opacity: 0;
+}
+
+/* 宝藏：鞋柜一列一列（整列聚起来 / 化成金尘）；衣柜的门包一层（才能聚起来） */
+.cab-cols .cab-grid {
+  display: flex;
+}
+.cab-col {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-width: 0;
+}
+.cab-cell {
+  display: block;
+  min-width: 0;
+}
+
+/* 衣柜的单选标签：新颜色从按下去的那一点铺开（圆形 0 → 150 %，260 ms），不是一下子换色 */
+.ink-chips .chip {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+.ink-chips .chip::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--ink);
+  clip-path: circle(0% at var(--tx, 50%) var(--ty, 50%));
+  transition: clip-path 0.26s var(--fx-out);
+}
+.ink-chips .chip.on {
+  background: rgba(var(--glass-rgb), 0.92);
+  transition:
+    background-color 0.25s var(--ease),
+    color 0.2s var(--ease) 0.06s,
+    box-shadow 0.25s var(--ease);
+}
+.ink-chips .chip.on::before {
+  clip-path: circle(150% at var(--tx, 50%) var(--ty, 50%));
+}
+
+/* 三个愿望：三个都选好了，其余的暗下去；许愿 → 三个聚到中间一排 */
+.wish {
+  transition:
+    transform 0.2s var(--ease),
+    box-shadow 0.3s var(--ease),
+    background-color 0.3s var(--ease),
+    opacity 0.4s var(--fx-std);
+}
+.wish.rest {
+  opacity: 0.55;
+}
+.wish-grid.is-gathered {
+  grid-template-columns: repeat(3, minmax(0, 168px));
+  justify-content: center;
+  align-content: center;
+}
+.wish-grid.is-gathered .wish:not(.on) {
+  display: none;
+}
+
+/* 雷区：X 从 1.4 倍盖下来；名字上的那一道线从左划到右（取消 = 倒回去） */
+.nogo-color i svg {
+  opacity: 0;
+  transform: scale(1.4);
+  transition:
+    opacity 0.18s var(--fx-out),
+    transform 0.26s var(--fx-spring-pop);
+}
+.nogo-color.x i svg {
+  opacity: 1;
+  transform: none;
+}
+.nogo-color .nx {
+  font-style: normal;
+  background: linear-gradient(currentColor, currentColor) no-repeat 0 56% / 0% 1.5px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  transition: background-size 0.22s var(--fx-out);
+}
+.nogo-color.x span {
+  text-decoration: none;
+}
+.nogo-color.x .nx {
+  background-size: 100% 1.5px;
+}
+.opt.is-x .opt-label {
+  text-decoration: line-through;
+  text-decoration-color: transparent;
+  transition:
+    text-decoration-color 0.22s var(--fx-out),
+    color 0.3s var(--ease);
+}
+.opt.is-x.on .opt-label {
+  text-decoration-color: rgba(var(--danger-rgb), 0.55);
+}
+
+/* 最后一句：文字框包一层（光扫过、化成金尘往上飘的是这一层） */
+.ow-input {
+  position: relative;
+  margin-top: 18px;
+  border-radius: 14px;
+}
+.ow-input textarea.text-in {
+  margin-top: 0;
+}
+
+/* 揭晓：升起时牌后的暖光先到 .55；文字一块一块模糊淡入（70 ms 错开） */
+.phase-rise .reveal-bloom {
+  opacity: 0.55;
+}
+.reveal-text {
+  animation: fx-fade-in 0.5s var(--fx-out) 0.35s both;
+}
+.reveal-text > * {
+  animation: fx-blur-in 0.7s var(--fx-out) 0.55s both;
+}
+.reveal-text > :nth-child(2) {
+  animation-delay: 0.62s;
+}
+.reveal-text > :nth-child(3) {
+  animation-delay: 0.69s;
+}
+.reveal-text > :nth-child(4) {
+  animation-delay: 0.76s;
+}
+.reveal-text > :nth-child(5) {
+  animation-delay: 0.83s;
+}
+.reveal-text > :nth-child(6) {
+  animation-delay: 0.9s;
+}
+.reveal-text > :nth-child(n + 7) {
+  animation-delay: 0.97s;
+}
+
+/* 蓝图：「潘吉认证」的章滑到了才盖上去（打印 / PDF 永远看得到） */
+.seal.is-waiting {
+  visibility: hidden;
+}
+.count-in {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 手机：顶栏多了「潘吉说话」的开关 —— 踏脚石窄一点、右边的按钮靠紧一点，石头不会钻到百分比圆环下面 */
+@media (max-width: 560px) {
+  .stone button {
+    width: clamp(22px, 6.2vw, 34px);
+  }
+  .tb-right {
+    gap: 3px;
+  }
+}
+
 /* 动作少一点：风景静止、雾不飘、萤火不飞 */
 @media (prefers-reduced-motion: reduce) {
   .sc-kb,
@@ -3699,5 +3916,8 @@ html[lang='en'] .bp-farewell {
   }
   .pangie {
     animation: none !important;
+  }
+  .seal.is-waiting {
+    visibility: visible !important;
   }
 }

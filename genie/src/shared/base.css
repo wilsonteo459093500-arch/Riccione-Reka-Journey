@@ -336,6 +336,48 @@ html {
   opacity: 1;
 }
 
+/* 潘吉说话（pangieArt.js 的 .pg-mouth / .pg-talk / .pg-jaw）：根 <svg class="pangie is-talking"> 时，她自己的嘴藏起来、
+   换成会说话的嘴 —— 上唇的「w」不动，下巴从唇线往下张开（只动 transform，一小块重绘）。
+   JS 口型（voice.js 驱动 <Pangie speaker />）：再加 .is-lipsync，在 .pg-talk 上设 --mouth 0–1（每帧，只重算这一小块）；
+   没有 JS 口型时跑 pg-talk 这一圈柔和的循环。默认 display="none"（属性），海报 / 截图永远不会画出它。 */
+.pangie.is-talking .pg-talk {
+  display: inline;
+}
+.pangie.is-talking .pg-mouth {
+  display: none;
+}
+.pangie.is-talking .pg-jaw {
+  animation: pg-talk 1.05s ease-in-out infinite;
+}
+.pangie.is-lipsync .pg-jaw {
+  animation: none;
+  transform: scaleY(var(--mouth, 0.08));
+}
+@keyframes pg-talk {
+  0%,
+  100% {
+    transform: scaleY(0.12);
+  }
+  14% {
+    transform: scaleY(0.72);
+  }
+  28% {
+    transform: scaleY(0.3);
+  }
+  46% {
+    transform: scaleY(0.9);
+  }
+  60% {
+    transform: scaleY(0.22);
+  }
+  78% {
+    transform: scaleY(0.62);
+  }
+  90% {
+    transform: scaleY(0.18);
+  }
+}
+
 /* 神灯（lampArt.js）：烟轻轻摆、小烟团升起、壶嘴星光闪。
    transform-origin 由每个元素的行内 style 给（viewBox 坐标，同 .pg-blink 的写法），这里不用 transform-box。 */
 .lamp-smoke {
@@ -388,5 +430,10 @@ html {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
+  }
+  /* 潘吉说话：没有 JS 口型就静静地半张着嘴（不循环）；JS 口型在 voice.js 里已经降成「开 / 合」两档、≥ 240 ms 才换 */
+  .pangie.is-talking:not(.is-lipsync) .pg-jaw {
+    animation: none;
+    transform: scaleY(0.45);
   }
 }

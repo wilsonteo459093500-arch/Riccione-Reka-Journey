@@ -6,8 +6,14 @@
 //   · 许愿模式里，只能由外壳的员工区发 {type:'designer'} 打开；切回客人版就又锁上（切换也收起来）；
 //   · 给客人的链接 / 海报 / 二维码都是普通链接；「发给设计师」的那条只在员工打开时才带 ?staff=1；
 //   · 许愿模式（展厅共用的 iPad）不发 WhatsApp、不走系统分享面板：海报配一个二维码，客人用自己的手机带走。
+//
+// 动效 · 声音 · 潘吉（动效 SPEC §6.1 蓝图、音效 SPEC §7.2、声音 SPEC §6.2）：
+//   刚做好的蓝图：「达成」一声 + 潘吉「这是你的梦想家蓝图，慢慢看。」；牌被全息光扫一下（+600 ms）。
+//   往下滑：每一节的罗马数字被光扫一下、内容一块块升起来；数字（毫米、百分比）进到画面时数上去。
+//   滑到最后：「潘吉认证」盖章（弹簧 + 一圈印泥 + 几粒灰 + 盖章声），刚做好的蓝图她再说最后一句。
+//   复制 / 存海报成功：「小提示」一声 + 按钮被光扫一下。在 3D 里看见它：暮色拂过再打开。下一位：晨光拂过，潘吉说再见。
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Check,
@@ -31,7 +37,11 @@ import {
   ChevronDown,
   ScanLine,
 } from 'lucide-react';
-import Pangie, { Lamp } from '../shared/Pangie.jsx';
+import Pangie, { Lamp, useVoiceLine } from '../shared/Pangie.jsx';
+import fx from '../shared/fx.js';
+import { sfx } from '../shared/sfx.js';
+import { voice } from '../shared/voice.js';
+import { cue, settle } from './moments.js';
 import Emblem from '../shared/Emblem.jsx';
 import { DreamerCard } from './Reveal.jsx';
 import { Segmented } from './ui.jsx';
@@ -135,9 +145,43 @@ function Axis({ dim, a, b, v, hidden = false }) {
         <i className="axis-knob" style={{ left: `${100 - v}%` }} />
       </div>
       <span className={`axis-r ${v < 50 ? 'win' : ''}`}>{b}</span>
-      <b className="axis-pct">{v >= 50 ? v : 100 - v}%</b>
+      <b className="axis-pct">
+        <CountIn value={v >= 50 ? v : 100 - v} from={50} format={pctFmt} />
+      </b>
     </div>
   );
+}
+
+const pctFmt = (n) => `${Math.round(n)}%`;
+
+/**
+ * 进到画面（或快要进到画面）时从 from 数到 value，一次（fx.countUp，900 ms）。没进过画面（打印、截图）就一直是最后的数。
+ * 数字由这里自己写（React 不放子节点），父组件重画不会打断它。
+ */
+function CountIn({ value, from = 0, format = fmt, tick = false }) {
+  const ref = useRef(null);
+  const fmtRef = useRef(format);
+  fmtRef.current = format;
+  const ran = useRef(false);
+  useLayoutEffect(() => {
+    if (ref.current && !ran.current) ref.current.textContent = fmtRef.current(value);
+  }, [value]);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver !== 'function') return undefined;
+    const io = new IntersectionObserver(
+      (es) => {
+        if (!es.some((e) => e.isIntersecting)) return;
+        io.disconnect();
+        ran.current = true;
+        fx.countUp(el, value, { from, duration: 900, format: fmtRef.current, tick });
+      },
+      { rootMargin: '0px 0px 6% 0px' }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return <span ref={ref} className="count-in" />;
 }
 
 /** 许愿模式的「分享海报」：海报 + 二维码（普通的客人链接）。客人用自己的手机扫，在那里存图、分享。 */
@@ -145,10 +189,13 @@ function TakeHome({ poster, link, title, onClose }) {
   const qr = useMemo(() => (link ? qrMatrix(link) : null), [link]);
   const n = qr ? qr.length + 8 : 0;
   const closeRef = useRef(null);
+  const figRef = useRef(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   useEffect(() => {
     closeRef.current?.focus({ preventScroll: true });
+    // 海报出来：一道全息光慢慢扫过
+    if (figRef.current) fx.holo(figRef.current, { delay: 320 });
     const onKey = (e) => e.key === 'Escape' && onCloseRef.current();
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -156,7 +203,7 @@ function TakeHome({ poster, link, title, onClose }) {
   return (
     <div className="take-veil no-print" role="dialog" aria-modal="true" aria-label={t('用手机扫一扫，把蓝图带回家')} onClick={onClose}>
       <div className="take-sheet" onClick={(e) => e.stopPropagation()}>
-        <figure className="take-poster">
+        <figure className="take-poster" ref={figRef}>
           <img src={poster} alt={title} />
         </figure>
         <div className="take-side">
@@ -219,8 +266,15 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
   const emblemRef = useRef(null);
   const sceneRef = useRef(null);
   const toastTimer = useRef(null);
+  const docRef = useRef(null);
+  const heroRef = useRef(null);
+  const sealRef = useRef(null);
+  const greeted = useRef(false);
+  const [leaving, setLeaving] = useState(false);
   const sceneId = sceneForProfile(profile);
   const designer = staffOn && mode === 'designer';
+  // 刚做好的蓝图：潘吉把它交到你手上（一位客人一次）
+  useVoiceLine('bp.hello', { when: fresh, delay: 900 });
 
   useEffect(() => {
     let alive = true;
@@ -247,7 +301,19 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
   }, [profile, fresh]);
 
   useEffect(() => {
-    tellShell('page', { page: 'blueprint' });
+    // 音乐：《归家》，轻一点（× 0.5）—— 许愿模式里告诉外壳，单独打开时自己的音乐
+    cue('page', { page: 'blueprint' });
+    // 刚做好的蓝图 = 走完了：「达成」；牌被全息光扫一下（开发时 StrictMode 会跑两次：只要一次）
+    let holoAt = () => {};
+    if (!greeted.current) {
+      greeted.current = true;
+      if (fresh) sfx.play('achievement');
+      const card = heroRef.current?.querySelector('.dcard');
+      holoAt = fx.clock.after(600, () => card && fx.holo(card));
+    }
+    // 从 3D 返回（浏览器的上一页）：页面整个被留着，按钮要能再按
+    const onShow = (e) => e.persisted && setLeaving(false);
+    window.addEventListener('pageshow', onShow);
     // 许愿模式：只有外壳的员工区可以打开设计师版
     const onMsg = (e) => {
       if (e.origin !== location.origin || e.data?.source !== 'genie-shell') return;
@@ -261,10 +327,63 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
     // 告诉外壳：蓝图已经在画面上，员工区现在可以发 {type:'designer'} 打开设计师版
     tellShell('staff-ready');
     return () => {
+      holoAt();
+      window.removeEventListener('pageshow', onShow);
       window.removeEventListener('message', onMsg);
       clearTimeout(toastTimer.current);
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 往下滑：每一节快进到画面时，内容一块块升起来（还没看到就先开始，看不到闪）；罗马数字被光扫一下；
+  // 滑到最后（≥ 35 %）：盖「潘吉认证」的章；刚做好的蓝图（≥ 50 %）潘吉说最后一句（排在前一句后面）
+  useEffect(() => {
+    const root = docRef.current;
+    if (!root || typeof IntersectionObserver !== 'function') return undefined;
+    const secs = [...root.querySelectorAll(':scope > .bp-sec:not(.bp-hero)')];
+    const enter = new IntersectionObserver(
+      (es) => {
+        for (const e of es) {
+          if (!e.isIntersecting) continue;
+          enter.unobserve(e.target);
+          fx.enter([...e.target.children].filter((c) => !c.classList.contains('seal')), { stagger: 50, duration: 600, blur: 4, y: 10 });
+        }
+      },
+      { rootMargin: '0px 0px 10% 0px' }
+    );
+    let spoke = false;
+    const seen = new IntersectionObserver(
+      (es) => {
+        for (const e of es) {
+          if (!e.isIntersecting) continue;
+          const el = e.target;
+          if (el.classList.contains('bp-end')) {
+            if (e.intersectionRatio >= 0.35 && sealRef.current?.classList.contains('is-waiting')) {
+              sealRef.current.classList.remove('is-waiting');
+              fx.stamp(sealRef.current);
+            }
+            if (fresh && !spoke && e.intersectionRatio >= 0.5) {
+              spoke = true;
+              voice.say('bp.end', { mode: 'queue', delay: 300 });
+            }
+            if (!sealRef.current?.classList.contains('is-waiting') && (spoke || !fresh)) seen.unobserve(el);
+          } else {
+            seen.unobserve(el);
+            const num = el.querySelector('.bp-num');
+            if (num) fx.scan(num, { sound: null, duration: 360 });
+          }
+        }
+      },
+      { threshold: [0.35, 0.5] }
+    );
+    for (const sec of secs) {
+      enter.observe(sec);
+      seen.observe(sec);
+    }
+    return () => {
+      enter.disconnect();
+      seen.disconnect();
+    };
+  }, [fresh]);
 
   // 海报图用完就放掉
   useEffect(() => () => take && URL.revokeObjectURL(take), [take]);
@@ -306,16 +425,20 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
         if (navigator.canShare?.({ files: [file] })) {
           await navigator.share({ files: [file], title: t('我的梦想家牌：{0}', [name]) }).catch(() => download(blob, file.name));
         } else download(blob, file.name);
+        sfx.play('toast'); // 海报存好了
       }
     } finally {
       setBusy(false);
     }
   };
 
-  const copy = async (s, msg) => {
+  // 复制成功：「小提示」一声 + 按钮被光扫一下（btn = 按下去的那个按钮，await 之前就拿好）
+  const copy = async (s, msg, btn) => {
     try {
       await navigator.clipboard.writeText(s);
       flash(msg || t('已复制'));
+      sfx.play('toast');
+      if (btn?.isConnected) fx.scan(btn, { duration: 280, sound: null });
     } catch {
       flash(t('复制失败，请手动选取'));
     }
@@ -327,7 +450,15 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
         <Icon size={20} strokeWidth={1.6} aria-hidden="true" />
       </span>
       <span className="store-label">{label}</span>
-      <b className="store-num">{mm ? `${fmt(mm)} mm` : extra || '—'}</b>
+      <b className="store-num">
+        {mm ? (
+          <>
+            <CountIn value={mm} format={fmt} tick={key === 'shoes'} /> mm
+          </>
+        ) : (
+          extra || '—'
+        )}
+      </b>
       {!designer && mm ? <span className="store-ft">{ftNote(mm)}</span> : null}
       {/* 「长挂 650 · 短挂 1,500」：只在「·」后面换行（英文不会剩一个「1,500」掉到下一行） */}
       {sub && <em>{segmented(sub, '·', { zhOnly: false })}</em>}
@@ -355,8 +486,8 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
         <SceneCaption id={sceneId} />
       </div>
 
-      <article className="bp-doc">
-        <header className="bp-head">
+      <article className="bp-doc" ref={docRef}>
+        <header className="bp-head fx-blur-in">
           <div className="bp-head-text">
             <p className="eyebrow">
               {BRAND.app} {BRAND.by}
@@ -397,7 +528,7 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
 
         {/* I · 你的牌 */}
         <section className="bp-sec bp-hero">
-          <div className="bp-hero-card">
+          <div className="bp-hero-card" ref={heroRef}>
             <DreamerCard profile={profile} />
           </div>
           <div className="bp-hero-text">
@@ -612,7 +743,7 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
                 </dl>
                 <h4>{t('出图关键词（英文，可贴给 AI 出图）')}</h4>
                 <p className="kw">{keywords}</p>
-                <button type="button" className="btn btn-line small no-print" onClick={() => copy(keywords)}>
+                <button type="button" className="btn btn-line small no-print" onClick={(e) => copy(keywords, undefined, e.currentTarget)}>
                   <Copy size={16} strokeWidth={1.8} aria-hidden="true" />
                   <span>{t('复制关键词')}</span>
                 </button>
@@ -673,16 +804,17 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
 
         {/* 结尾仪式 */}
         <section className="bp-sec bp-end">
-          <div className="seal" aria-hidden="true">
+          <div className="seal is-waiting" ref={sealRef} aria-hidden="true">
             <span>{guideName()}</span>
             <small>{t('认证')}</small>
           </div>
           <div className="bp-end-pangie">
-            <Pangie mood="wink" prop="ball" size={120} />
+            <Pangie mood="wink" prop="ball" size={120} speaker />
           </div>
           {/* 两句各占一块、各自排匀（英文第二句不会剩一个「through.」掉到第三行） */}
           <p className="bp-farewell">
-            <span>{fresh ? t('你的梦想，{0}记住了。', [guideName()]) : t('{0}一直帮你记着。', [guideName()])}</span>
+            {/* 刚做好的蓝图：她亲口说的那一句（第一人称，和她的声音一字不差） */}
+            <span>{fresh ? t('你的梦想，我记住啦。') : t('{0}一直帮你记着。', [guideName()])}</span>
             <span>{phrased(t('接下来，我们会把它变成你看得见、走得进的 3D 家。'), { sentences: false })}</span>
           </p>
           <p className="fine">
@@ -692,7 +824,22 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
       </article>
 
       <nav className="bp-actions no-print" aria-label={t('蓝图')}>
-        <a className="btn btn-gold" href={links.studio || '#'} onClick={(e) => !links.studio && e.preventDefault()}>
+        <a
+          className="btn btn-gold"
+          href={links.studio || '#'}
+          onClick={(e) => {
+            if (!links.studio) return e.preventDefault();
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button > 0) return; // 员工在电脑上开新分页：照常
+            e.preventDefault();
+            if (leaving) return;
+            setLeaving(true);
+            fx.scan(e.currentTarget);
+            // 一大片暮色拂过，再打开 3D（最暗的那一刻换页，看不到跳）
+            const href = links.studio;
+            const w = fx.wipe(null, { tone: 'dusk', duration: 900 });
+            settle(null, w.mid, () => location.assign(href), 900);
+          }}
+        >
           <House size={18} strokeWidth={1.8} aria-hidden="true" />
           <span>{t('在 3D 里看见它')}</span>
         </a>
@@ -703,7 +850,7 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
             <span>{t('发给设计师')}</span>
           </a>
         )}
-        <button type="button" className="btn btn-line" onClick={savePoster} disabled={busy}>
+        <button type="button" className="btn btn-line" onClick={savePoster} disabled={busy} data-sfx={WISH ? 'open' : undefined}>
           {busy ? <Download size={18} strokeWidth={1.8} aria-hidden="true" /> : <ImageIcon size={18} strokeWidth={1.8} aria-hidden="true" />}
           <span>{busy ? t('画海报中…') : t('分享海报')}</span>
         </button>
@@ -713,14 +860,37 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
         </button>
         {/* 许愿模式的客人版不放「复制链接」：展厅共用 iPad 的剪贴板不该留着上一位客人的蓝图（带走用海报旁的二维码） */}
         {(!WISH || designer) && (
-          <button type="button" className="btn btn-line" onClick={() => (designer ? copy(text, t('整份文字已复制')) : copy(links.bp, t('链接已复制')))}>
+          <button
+            type="button"
+            className="btn btn-line"
+            onClick={(e) => (designer ? copy(text, t('整份文字已复制'), e.currentTarget) : copy(links.bp, t('链接已复制'), e.currentTarget))}
+          >
             {designer ? <Copy size={18} strokeWidth={1.8} aria-hidden="true" /> : <Link2 size={18} strokeWidth={1.8} aria-hidden="true" />}
             <span>{designer ? t('复制全文') : t('复制链接')}</span>
           </button>
         )}
         {/* 展厅里（刚做完 / 本机存档 / 员工 / 带陪同人）才是「下一位」；客人在家打开分享的蓝图 = 「重新许愿」 */}
         {onRestart && !WISH && (
-          <button type="button" className="btn btn-ghost" onClick={onRestart}>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => {
+              if (leaving) return;
+              setLeaving(true);
+              // 一大片晨光拂过 → 下一位客人的开场；展厅里（下一位）潘吉说再见
+              const bye = showroom || STAFF;
+              const w = fx.wipe(null, { tone: 'dawn', duration: 1000 });
+              settle(
+                null,
+                w.mid,
+                () => {
+                  onRestart();
+                  if (bye) voice.say('bye.next');
+                },
+                900
+              );
+            }}
+          >
             <RotateCcw size={18} strokeWidth={1.8} aria-hidden="true" />
             <span>{showroom || STAFF ? t('下一位') : t('重新许愿')}</span>
           </button>

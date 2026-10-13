@@ -1,9 +1,17 @@
 // 许愿模式的启动：同一个 Zen 实例；全屏；屏幕常亮；记住陪同人；锁屏 / 切 app 回来接上音乐。
+// 音乐 = 新的禅意曲子引擎（src/shared/music/，经 zen.js 的 Zen）：和按钮音效共用一个 AudioContext（sfx.js），
+// 展厅 iPad 用 'playback'（不受静音键影响）。曲目 / 自然声 / 公司歌单都从 CONFIG 来（zen.js 的 Zen 会带上）。
 
 import { Zen } from '../shared/zen.js';
 import { CONFIG } from '../shared/config.js';
 
 export const zen = new Zen();
+
+/** 每一位客人开始时的音乐默认值（下一位客人复原到这里） */
+export const MUSIC_DEFAULTS = Object.freeze({
+  volume: CONFIG.wishVolume ?? 0.7,
+  nature: CONFIG.music?.nature !== false,
+});
 
 const HOST_KEY = 'genie.host';
 
@@ -84,9 +92,11 @@ export function releaseWake() {
 
 zen.onStop = releaseWake;
 
-/** 必须在点击事件里调用 */
+/** 必须在点击事件里调用（iOS：AudioContext 只在手指点下去的那一刻能开；同一下也解锁按钮音效） */
 export function startWish() {
-  zen.start({ trackUrl: CONFIG.wishMusic || '', volume: CONFIG.wishVolume ?? 0.7 });
+  // 曲子从《晨光》开始，3.5 秒淡入；歌单（CONFIG.music.playlist）/ 旧的单曲（CONFIG.wishMusic）由 Zen 自己带上
+  zen.setMood('calm');
+  zen.start({ volume: MUSIC_DEFAULTS.volume });
   enterFullscreen();
   wantWake = true;
   requestWake();
