@@ -1333,8 +1333,10 @@ function bed({ w = 1.6, d = 2.05, kids = false }) {
   const dm = zm1 - zm0;
   const mTop = 0.5;
   parts.push(B(w - 0.24, 0.08, d - 0.3, 'black', 0, 0, 0.05));
-  parts.push(SB(w + 0.04, 0.2, d - 0.03, 'woodwork', 0, 0.08, 0.025, { r: 0.012, seg: 0.12 }));
-  parts.push(SB(w, mTop - 0.28, dm, 'mattress', 0, 0.28, (zm0 + zm1) / 2, { r: 0.045, cy: 0.005, cx: 0.004, cz: 0.004, seg: 0.12 }));
+  // 'fast'（iPad）：床架没有鼓起 → 平面不用细分（形状一样）；床垫只鼓 4–5mm → 分段粗一点（一张床 2.2 万 → 1.7 万个三角形，
+  // 双层半独立 5 张床就是 iPad 的三角形预算）
+  parts.push(SB(w + 0.04, 0.2, d - 0.03, 'woodwork', 0, 0.08, 0.025, { r: 0.012, seg: Q(0.12, 0.5) }));
+  parts.push(SB(w, mTop - 0.28, dm, 'mattress', 0, 0.28, (zm0 + zm1) / 2, { r: 0.045, cy: 0.005, cx: 0.004, cz: 0.004, seg: Q(0.12, 0.3) }));
   // 被子
   const Rm = 0.05;
   const T = 0.07;
@@ -1380,7 +1382,7 @@ function bed({ w = 1.6, d = 2.05, kids = false }) {
   const n = Math.max(3, Math.round(hb / (kids ? 0.3 : 0.24)));
   const cw = hb / n;
   const hbH = kids ? 0.82 : 1.0;
-  for (let i = 0; i < n; i++) parts.push(SB(cw - 0.004, hbH, 0.08, 'upholstery', -hb / 2 + cw * (i + 0.5), 0.16, -d / 2, { r: 0.034, cz: 0.012, czb: 0, cx: 0.003, cy: 0.004, seg: 0.1 }));
+  for (let i = 0; i < n; i++) parts.push(SB(cw - 0.004, hbH, 0.08, 'upholstery', -hb / 2 + cw * (i + 0.5), 0.16, -d / 2, { r: 0.034, cz: 0.012, czb: 0, cx: 0.003, cy: 0.004, seg: Q(0.1, 0.2) }));
   return parts;
 }
 

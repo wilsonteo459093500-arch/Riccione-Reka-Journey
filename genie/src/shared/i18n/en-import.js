@@ -42,7 +42,7 @@ export default {
   '自己框': 'Draw boxes myself',
   '重试': 'Retry',
   '换一页': 'Choose another page',
-  '找到 {0} 张平面图：{1}': 'Found {0} floor plans: {1}',
+  '找到 {0} 张平面图：{1}': 'Floor plans found ({0}): {1}',
   '这一页没找到平面图': 'No floor plan found on this page',
   '这是手机截图：每层平面图只有约 {0} 像素宽，图上的尺寸读不清。最好上传原本的 PDF（例如从 HIMS 下载的那份），选那一页 —— 会准很多。':
     'This is a phone screenshot: each floor plan is only about {0} pixels wide, too small to read the dimensions. Upload the original PDF (e.g. the one downloaded from HIMS) and pick that page — it will be far more accurate.',
@@ -54,7 +54,7 @@ export default {
   '两张图都是{0}：改一张，或者不要其中一张': 'Two plans are both {0} — change one, or leave one out',
   '在图上拖一个框': 'Drag a box on the page',
   '加一张（自己框）': 'Add one (draw a box)',
-  '读这 {0} 层（约 {1} 秒）': 'Read {0} floors (about {1} s)',
+  '读这 {0} 层（约 {1} 秒）': 'Read the plans ({0}, about {1} s)',
 
   // ── 读图 ──
   '正在裁出每一层': 'Cropping each floor',
@@ -77,7 +77,7 @@ export default {
 
   // ── 完成 ──
   '只有底图': 'Underlay only',
-  '{0} 个房间 · {1} 个门窗': '{0} rooms · {1} doors & windows',
+  '{0} 个房间 · {1} 个门窗': 'Rooms: {0} · doors & windows: {1}',
   '比例：读自图上 {0} 条尺寸（误差约 {1}%）': 'Scale: read from {0} dimension strings on the drawing (±{1}%)',
   '比例：按你填的尺寸': 'Scale: from the dimension you entered',
   '比例是按门宽估的 —— 请填一个已知尺寸': 'The scale was estimated from door widths — please enter one known dimension',
@@ -87,7 +87,7 @@ export default {
   '{0} · {1} 的宽': '{0} · width of {1}',
   '套用': 'Apply',
   "看不懂这个尺寸：可以填 6.1、6100、20' 或 20 ft": "Couldn't read that — try 6.1, 6100, 20' or 20 ft",
-  '自动修正：{0} 处重叠、{1} 处空隙': 'Auto-fixed: {0} overlaps, {1} gaps',
+  '自动修正：{0} 处重叠、{1} 处空隙': 'Auto-fixed — overlaps: {0}, gaps: {1}',
   '两层已对齐（按楼梯）': 'Floors aligned (by the stairs)',
   '两层已对齐（按外墙）': 'Floors aligned (by the outer walls)',
   '这是截图读的：尺寸可能不准，最好上传原本的 PDF。': 'Read from a screenshot — sizes may be off; the original PDF works best.',
@@ -113,4 +113,19 @@ export default {
   'AI 请求失败（HTTP {0}）': 'AI request failed (HTTP {0})',
   'AI 在这一层没有找到房间：换一张更清楚的图，或者自己描。': 'The AI found no rooms on this floor — use a clearer image, or trace it yourself.',
   '底图读不出来，请重新上传平面图。': 'The underlay could not be read — please upload the plan again.',
+
+  // ── 图上的墙（walls.js / 墨迹）、照片 ──
+  '正在对照图上的墙': 'Checking against the walls on the drawing',
+  '按图上的墙重建：去掉 {0} 个多出来的门': 'Rebuilt from the walls on the drawing — extra doors removed: {0}',
+  '框好了 {0} 层': 'Boxed: {0}',
+  '只有一层？直接放进编辑器。': 'Only one floor? Put it in the editor.',
+  '还有{0}？再拖一个框。': 'Is there a {0} too? Drag one more box.',
+  '房间和门窗按图上的墙重建': 'Rooms, doors and windows rebuilt from the walls on the drawing',
+  '对照图上的墙：去掉 {0} 个图上没有的门': 'Checked against the drawing — doors removed that are not on it: {0}',
+  '{0} 处开放空间图上没有墙，不砌墙': 'Open-plan edges with no wall on the drawing: {0} — left open',
+  '照片是斜着拍的：已经拉正，上下方向按尺寸校正了 {0}%': 'The photo was taken at an angle: straightened, and the depth corrected by {0}% from the dimensions',
+  '这是拍的照片：已经自动拉正。照片读出来的墙和尺寸可能不太准；有原本的 PDF（例如从 HIMS 下载的那份）的话，上传那一页会准很多。':
+    'This is a photo: it has been straightened automatically. Walls and dimensions read from a photo may be a little off — if you have the original PDF (e.g. the one from HIMS), uploading that page is much more accurate.',
+  '继续用照片': 'Continue with the photo',
+  '这是照片读的：尺寸可能不准，最好上传原本的 PDF。': 'Read from a photo: dimensions may be off — the original PDF is better.',
 };

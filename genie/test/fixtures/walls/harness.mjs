@@ -360,3 +360,99 @@ export function inventedOpenPlan(det, detGaps, truth) {
   });
   return { pieces, metres: +metres.toFixed(2) };
 }
+
+// ───────────── 模拟的第二遍 AI 回答（从真值生成，带 AI 常见的错） ─────────────
+
+/** 可重复的随机数 */
+export function rng(seed = 1) {
+  let s = seed >>> 0 || 1;
+  return () => {
+    s ^= s << 13;
+    s ^= s >>> 17;
+    s ^= s << 5;
+    return ((s >>> 0) % 100000) / 100000;
+  };
+}
+
+/**
+ * 真值 → 一份像 Gemini 第二遍那样的回答（READ_SCHEMA 的形状），box_2d 在这张裁图上（0–1000）。
+ * opts: { jitter: 房间框每条边的随机偏差（m）, dropRoom: 漏掉的房间 id, extraDoors: [{ x1, y1, x2, y2 }]（m，AI 多画的门）, seed }
+ */
+export function mockRead(T, cropW, cropH, opts = {}) {
+  const R = rng(opts.seed || 7);
+  const j = opts.jitter ?? 0.25;
+  const pxm = T.pxPerM * (opts.scale || 1);
+  const [ox, oy] = T.origin;
+  const box = (x0, y0, x1, y1) => {
+    const X = (v) => Math.round((((v + ox) * pxm) / cropW) * 1000);
+    const Y = (v) => Math.round((((v + oy) * pxm) / cropH) * 1000);
+    return [Y(Math.min(y0, y1)), X(Math.min(x0, x1)), Y(Math.max(y0, y1)), X(Math.max(x0, x1))];
+  };
+  const jit = () => (R() * 2 - 1) * j;
+  const rooms = T.rooms
+    .filter((r) => r.id !== opts.dropRoom)
+    .map((r) => ({ label: r.label || r.type.toUpperCase(), type: r.type, box_2d: box(r.x + jit(), r.y + jit(), r.x + r.w + jit(), r.y + r.d + jit()) }));
+  const opBox = (o) => (o.axis === 'h' ? box(o.a + jit() * 0.4, o.c - 0.1, o.b + jit() * 0.4, o.c + 0.1) : box(o.c - 0.1, o.a + jit() * 0.4, o.c + 0.1, o.b + jit() * 0.4));
+  const KIND = { door: 'door', slider: 'sliding', open: 'opening' };
+  const doors = T.openings.filter((o) => o.kind !== 'window').map((o) => ({ box_2d: opBox(o), kind: KIND[o.kind] || 'door' }));
+  for (const e of opts.extraDoors || []) doors.push({ box_2d: box(e.x1, e.y1, e.x2, e.y2), kind: 'door' });
+  const windows = T.openings.filter((o) => o.kind === 'window').map((o) => ({ box_2d: opBox(o), full_height: false }));
+  const xs = T.rooms.flatMap((r) => [r.x, r.x + r.w]);
+  const ys = T.rooms.flatMap((r) => [r.y, r.y + r.d]);
+  const inner = T.rooms.filter((r) => !['porch', 'balcony'].includes(r.type));
+  const ix0 = Math.min(...inner.map((r) => r.x));
+  const ix1 = Math.max(...inner.map((r) => r.x + r.w));
+  const iy0 = Math.min(...inner.map((r) => r.y));
+  const iy1 = Math.max(...inner.map((r) => r.y + r.d));
+  const dims = [
+    { text: String(Math.round((ix1 - ix0) * 1000)), axis: 'x', box_2d: box(ix0, iy0 - 1.0, ix1, iy0 - 0.9) },
+    { text: String(Math.round((iy1 - iy0) * 1000)), axis: 'y', box_2d: box(ix0 - 1.0, iy0, ix0 - 0.9, iy1) },
+  ];
+  return {
+    title: T.name,
+    overall_width_text: dims[0].text,
+    overall_depth_text: dims[1].text,
+    dimensions: dims,
+    footprint_box_2d: box(ix0, iy0, ix1, iy1),
+    rooms,
+    stairs: (T.stairs || []).map((s) => ({ box_2d: box(s.x, s.y, s.x + s.w, s.y + s.d), up: 'N', shape: 'straight' })),
+    doors,
+    windows,
+    _xs: xs,
+    _ys: ys,
+  };
+}
+
+/** 真值墙扣掉「打通」开口 → 实际有墙的段 */
+export function truthSolid(T) {
+  const out = [];
+  for (const w of T.walls) {
+    const holes = T.openings.filter((o) => o.kind === 'open' && o.axis === w.axis && Math.abs(o.c - w.c) < 1e-6 && o.a >= w.a - 1e-6 && o.b <= w.b + 1e-6).sort((p, q) => p.a - q.a);
+    let at = w.a;
+    for (const o of holes) {
+      if (o.a > at + 0.01) out.push({ ...w, a: at, b: o.a });
+      at = Math.max(at, o.b);
+    }
+    if (w.b > at + 0.01) out.push({ ...w, a: at, b: w.b });
+  }
+  return out;
+}
+
+/** 一层的 plan（米，原点可以有平移 dx / dy）和真值比：model.buildWalls 生成的墙（扣掉打通）P/R（±0.15 m）、门 P/R、开放式空间里凭空多出来的墙 */
+export function planMetrics(floor, T, buildWalls, { dx = 0, dy = 0 } = {}) {
+  const det = [];
+  for (const w of buildWalls(floor)) {
+    const axis = w.axis === 'x' ? 'h' : 'v';
+    const c = w.c + (axis === 'h' ? dy : dx);
+    const sh = axis === 'h' ? dx : dy;
+    for (const p of w.pieces) if (p.kind !== 'open') det.push({ axis, c, a: p.a + sh, b: p.b + sh });
+  }
+  const wp = wallPR(det, truthSolid(T), 0.15);
+  const gaps = floor.openings.map((o) => {
+    const h = Math.abs(o.y1 - o.y2) < Math.abs(o.x1 - o.x2);
+    return { kind: o.kind === 'open' ? 'opening' : o.kind, axis: h ? 'h' : 'v', c: h ? (o.y1 + o.y2) / 2 + dy : (o.x1 + o.x2) / 2 + dx, a: h ? Math.min(o.x1, o.x2) + dx : Math.min(o.y1, o.y2) + dy, b: h ? Math.max(o.x1, o.x2) + dx : Math.max(o.y1, o.y2) + dy };
+  });
+  const dp = openingPR(gaps, T.openings, ['door']);
+  const inv = inventedOpenPlan(det, [], T);
+  return { wallP: wp.precision, wallR: wp.recall, doorP: dp.precision, doorR: dp.recall, doors: dp.det, invented: inv.pieces, inventedM: inv.metres, rooms: floor.rooms.length, fps: wp.fps, misses: wp.misses, doorFP: dp.fp };
+}

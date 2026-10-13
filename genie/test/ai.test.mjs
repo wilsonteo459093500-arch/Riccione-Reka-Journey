@@ -27,7 +27,19 @@ import {
   houseKind,
   roomTypeOf,
   cleanLabel,
+  pageScale,
+  inkMask,
+  inkCheck,
+  roomsAgree,
+  cleanSlivers,
+  restoreDoors,
+  rectifyEstimate,
+  warpImage,
+  applyH,
 } from '../src/studio/plan/sheet.js';
+import * as WALLS from '../src/studio/plan/walls.js';
+import { decodePNG } from './fixtures/walls/harness.mjs';
+import { JpegImage } from 'pdfjs-dist/image_decoders/pdf.image_decoders.mjs';
 import * as AI from '../src/studio/plan/ai.js';
 import { buildWalls, checkPlan, migratePlan } from '../src/studio/plan/model.js';
 import { furnish } from '../src/studio/engine/furnish.js';
@@ -150,6 +162,23 @@ await test('2 levelOf：图名比模型的 level 可信', () => {
   assert.equal(levelOf('', '二楼平面图'), 'first');
   assert.equal(levelOf('second', ''), 'second');
   assert.equal(levelOf('nonsense', 'SITE PLAN'), 'other');
+  // 老板的真图：「FIRST SCHEDULE · TYPE B (MIRROR) - FLOOR PLAN」—— 附表一，不是二楼
+  assert.equal(levelOf('other', 'FIRST SCHEDULE TYPE B (MIRROR) - FLOOR PLAN'), 'other');
+  assert.equal(levelOf('first', 'FIRST SCHEDULE TYPE B (MIRROR) - FLOOR PLAN'), 'other');
+  assert.equal(levelOf('', 'FIRST SCHEDULE - GROUND FLOOR PLAN'), 'ground');
+  assert.equal(levelOf('', 'JADUAL PERTAMA PELAN LANTAI ATAS'), 'first');
+  assert.equal(levelOf('', '1ST FLR PLAN'), 'first');
+  assert.equal(levelOf('', 'G.F. PLAN'), 'ground');
+  assert.equal(levelOf('other', 'TYPICAL FLOOR PLAN (F.F.L. +3.35)'), 'other');
+  // 一页上只有「其他」的平面图（公寓户型图）→ 当作一楼读，不是「不要」
+  const one = normalizeFound({ plans: [{ title: 'FIRST SCHEDULE TYPE B (MIRROR) - FLOOR PLAN', level: 'first', box_2d: [150, 90, 880, 800], unit_label: 'TYPE B (MIRROR)' }] }, 1279, 1060);
+  assert.equal(one.plans.length, 1);
+  assert.equal(one.plans[0].level, 'ground');
+  assert.equal(one.plans[0].include, true);
+  assert.match(houseKind(one), /residential unit/);
+  // 有真的楼层时，「其他」还是默认不要
+  const two = normalizeFound({ plans: [{ title: 'GROUND FLOOR PLAN', level: 'ground', box_2d: [100, 500, 900, 900] }, { title: 'KEY PLAN', level: 'other', box_2d: [100, 50, 300, 300] }] }, 2048, 1448);
+  assert.deepEqual(two.plans.map((p) => [p.level, p.include]), [['ground', true], ['other', false]]);
 });
 
 // ───────────────────────── 3 第一遍 ─────────────────────────
@@ -764,6 +793,333 @@ await test('15 convertDetection：没有尺寸 → 不是 12 m，scaleSource 是
   const d = AI.convertDetection({ ...j, overall_width_mm: 6100 }, { src: 'x', width: 1000, height: 1000 });
   assert.equal(d.info.scaleSource, 'dims');
   assert.equal(d.info.fromDims, true);
+});
+
+// ───────────────────────── 16–20 图上的墙（DESIGN §2.12）、拍歪的照片（老板的 TYPE B） ─────────────────────────
+console.log('图上的墙、照片');
+const WX = path.join(ROOT, 'test/fixtures/walls');
+function decodeJpeg(file) {
+  const jp = new JpegImage();
+  jp.parse(new Uint8Array(fs.readFileSync(file)));
+  return { width: jp.width, height: jp.height, data: jp.getData({ width: jp.width, height: jp.height, forceRGB: true, isSourcePDF: false }) };
+}
+const near1 = (o, q, dx = 0, dy = 0, tol = 0.3) => {
+  const h1 = Math.abs(o.y1 - o.y2) < 0.01;
+  const h2 = q.axis ? q.axis === 'h' : Math.abs(q.y1 - q.y2) < 0.01;
+  if (h1 !== h2) return false;
+  const qc = q.axis ? q.c : h2 ? q.y1 : q.x1;
+  const [qa, qb] = q.axis ? [q.a, q.b] : h2 ? [Math.min(q.x1, q.x2), Math.max(q.x1, q.x2)] : [Math.min(q.y1, q.y2), Math.max(q.y1, q.y2)];
+  const c = h1 ? o.y1 - dy : o.x1 - dx;
+  if (Math.abs(c - qc) > tol) return false;
+  const [a, b] = h1 ? [Math.min(o.x1, o.x2) - dx, Math.max(o.x1, o.x2) - dx] : [Math.min(o.y1, o.y2) - dy, Math.max(o.y1, o.y2) - dy];
+  return Math.min(b, qb) - Math.max(a, qa) > 0.25;
+};
+
+// 老板的照片（拍歪的纸本）：浏览器里 planImage 会做同样的事 —— 拉正 → 第一遍 → 裁图 ×2 → enhance → 第二遍 → 比例（横竖各算）→ 拉方 → 墨迹 / walls.js → 拼
+let OWNER = null;
+function ownerPipeline({ fuse = WALLS.fuseWalls, fuseMin } = {}) {
+  if (!OWNER) {
+    const img = decodeJpeg(path.join(FX, 'owner-type-b-photo.jpg'));
+    const r = rectifyEstimate(img);
+    const rect = warpImage(img, r.Hinv, r.width, r.height);
+    const found = normalizeFound(J('pass1-owner.json'), rect.width, rect.height);
+    const p = found.plans[0];
+    const f = Math.max(p.crop.x1 - p.crop.x0, p.crop.y1 - p.crop.y0) < 1400 ? 2 : 1;
+    const CW = Math.round((p.crop.x1 - p.crop.x0) * f);
+    const CH = Math.round((p.crop.y1 - p.crop.y0) * f);
+    const crop = enhance(warpImage(rect, [1 / f, 0, p.crop.x0, 0, 1 / f, p.crop.y0, 0, 0, 1], CW, CH));
+    const read = J('pass2-owner.json');
+    const scale = pageScale([{ read, cropW: CW, cropH: CH, photo: true }]);
+    const H2 = Math.round(CH * scale.aspect);
+    const sq = warpImage(crop, [1, 0, 0, 0, CH / H2, 0, 0, 0, 1], CW, H2);
+    let walls = null;
+    try {
+      walls = WALLS.extractWalls(sq, { pxPerM: 1 / scale.mPerPx });
+    } catch {
+      walls = null;
+    }
+    OWNER = { img, r, found, p, f, CW, CH, read, scale, ink: inkMask(sq), walls };
+  }
+  const o = OWNER;
+  const res = assemblePlan([{ level: o.p.level, title: o.p.title, read: o.read, cropW: o.CW, cropH: o.CH, src: 'data:image/jpeg;base64,x', srcScale: o.f, page: 1, photo: true, walls: o.walls, ink: o.ink }], { scale: o.scale, screenshot: o.found.screenshot, fuse, fuseMin });
+  return { ...o, res };
+}
+
+await test('16 照片拉正：老板的 TYPE B —— 12500 的上下两条尺寸线一样长（原本差 13 %）；横平竖直的图 → 不用拉', () => {
+  const { img, r } = ownerPipeline();
+  assert.ok(r && r.significant, '要拉正');
+  assert.ok(r.tiltV > 2 && r.tiltV < 8, `竖线最斜 ${r.tiltV}°`);
+  // 照片上 12500 的两头（上：尺寸线；下：分户墙的轴线）
+  const top = [applyH(r.H, 255, 186), applyH(r.H, 968, 193)];
+  const bot = [applyH(r.H, 213, 748), applyH(r.H, 995, 752)]; // 一楼房间下沿那条墙线：左外墙 → 右外墙
+  const wt = top[1][0] - top[0][0];
+  const wb = bot[1][0] - bot[0][0];
+  assert.ok(Math.abs(wt / wb - 1) < 0.02, `上 ${wt.toFixed(0)} px / 下 ${wb.toFixed(0)} px`);
+  assert.ok(Math.abs(top[0][0] - bot[0][0]) < 8, '左边对齐（竖线拉直了）');
+  // 横平竖直的图（合成的 CAD 图）不拉
+  const flat = decodePNG(fs.readFileSync(path.join(WX, 'terrace-gf-solid.png')));
+  const r2 = rectifyEstimate(flat);
+  assert.ok(!r2 || !r2.significant, '已经是正的');
+  assert.equal(img.width, 1279);
+});
+
+await test('17 比例横竖各算（照片斜着拍会压扁）：aspect ≈ 1.08、读错的 305 不投票；PDF 不分开算', () => {
+  const { scale, read, CW, CH } = ownerPipeline();
+  assert.equal(scale.source, 'dims');
+  assert.ok(Math.abs(scale.aspect - 1.08) < 0.025, `aspect ${scale.aspect}`);
+  assert.ok(scale.rejected.includes('305'));
+  const iso = pageScale([{ read, cropW: CW, cropH: CH }]);
+  assert.equal(iso.aspect, 1);
+  // 设计师填的已知尺寸照样带着 aspect
+  const k = pageScale([{ read, cropW: CW, cropH: CH, photo: true }], { scale: { mPerPx: 0.01, source: 'known', aspect: 1.05 } });
+  assert.deepEqual([k.source, k.aspect], ['known', 1.05]);
+});
+
+await test('18 老板的 TYPE B 端到端：12.5 × 10.15 m、门只在图上有门的地方、开放空间不砌墙、房间 IoU ≥ 0.8', () => {
+  const { res, found } = ownerPipeline();
+  const T = J('truth-owner.json');
+  assert.equal(found.plans.length, 1);
+  assert.equal(found.plans[0].level, 'ground', 'FIRST SCHEDULE 不是二楼');
+  const { plan, report } = res;
+  assert.equal(plan.floors.length, 1);
+  const fl = plan.floors[0];
+  assert.equal(report.scale.source, 'dims');
+  assert.ok(Math.abs(report.scale.widthM - 12.5) < 0.15, `宽 ${report.scale.widthM}`);
+  assert.ok(Math.abs(report.scale.depthM - 10.15) < 0.15, `深 ${report.scale.depthM}（不含阳台）`);
+  // 真值对齐：围合外框的左上角
+  const env = (rs) => {
+    const q = rs.filter((x) => !['balcony', 'porch'].includes(x.type));
+    return { x: Math.min(...q.map((x) => x.x)), y: Math.min(...q.map((x) => x.y)) };
+  };
+  const dx = env(fl.rooms).x - env(T.rooms).x;
+  const dy = env(fl.rooms).y - env(T.rooms).y;
+  const ious = T.rooms.map((t) => Math.max(0, ...fl.rooms.map((g) => IoU({ ...t, x: t.x + dx, y: t.y + dy }, g))));
+  const mean = ious.reduce((s, v) => s + v, 0) / ious.length;
+  assert.ok(mean >= 0.8, `IoU ${mean.toFixed(3)}`);
+  for (const name of ['BEDROOM 2', 'BEDROOM 3', 'BATH 1', 'BATH 2', 'YARD']) assert.ok(ious[T.rooms.findIndex((t) => t.label === name)] > 0.9, name);
+  assert.ok(fl.rooms.some((r) => r.type === 'corridor'), '漏掉的走廊补上了');
+  assert.equal(fl.rooms.find((r) => /ac ledge/i.test(r.name))?.type, 'balcony', 'AC LEDGE 是室外的');
+  // 门：AI 多加的 3 扇都去掉；真的门至少 7 / 8（大门在厨房框里没有墙线可放）
+  const doors = fl.openings.filter((o) => o.kind === 'door' || o.kind === 'slider');
+  const fake = T.fakeDoors.filter((q) => doors.some((o) => near1(o, q, dx, dy)));
+  assert.equal(fake.length, 0, '多出来的门');
+  const found7 = T.doors.filter((q) => doors.some((o) => near1(o, q, dx, dy)));
+  assert.ok(found7.length >= 7, `真的门 ${found7.length} / ${T.doors.length}`);
+  // 开放空间：客厅 | 餐厅 | 走廊 | 厨房 之间没有墙
+  const W = buildWalls(fl);
+  for (const e of T.openEdges) {
+    const axis = e.axis === 'x' ? 'x' : 'z';
+    const c = e.c + (e.axis === 'x' ? dy : dx);
+    const off = e.axis === 'x' ? dx : dy;
+    const solid = W.filter((w) => w.axis === axis && Math.abs(w.c - c) < 0.25).flatMap((w) => w.pieces.filter((pc) => pc.kind === 'solid')).reduce((s, pc) => s + Math.max(0, Math.min(pc.b, e.b + off - 0.15) - Math.max(pc.a, e.a + off + 0.15)), 0);
+    assert.ok(solid < 0.05, `${e.between.join('|')} 砌了 ${solid.toFixed(2)} m 墙`);
+  }
+  assert.deepEqual(checkPlan(plan).filter((i) => i.level === 'error'), []);
+  const wr = report.floors[0].walls;
+  assert.ok(wr && wr.doorsDropped >= 3 && wr.openConnections >= 1, JSON.stringify(wr));
+  assert.equal(report.scale.aspect > 1.05, true);
+  assert.equal(report.lowRes, true, '照片：提示上传 PDF');
+});
+
+// walls.js 的合成图（真值已知）+ 模拟的第二遍回答（框歪、重叠、漏了走廊、2–3 扇多出来的门）
+function synthRead(T, W, H, fakes, seed0 = 7) {
+  let seed = seed0;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647) * 2 - 1;
+  const px = (x) => (x + T.origin[0]) * T.pxPerM;
+  const py = (y) => (y + T.origin[1]) * T.pxPerM;
+  const B = (x0, y0, x1, y1) => [Math.round((py(y0) / H) * 1000), Math.round((px(x0) / W) * 1000), Math.round((py(y1) / H) * 1000), Math.round((px(x1) / W) * 1000)];
+  const j = () => rnd() * 0.1;
+  const xs = T.rooms.flatMap((r) => [r.x, r.x + r.w]);
+  const ys = T.rooms.flatMap((r) => [r.y, r.y + r.d]);
+  const [X0, X1, Y0, Y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  const dims = [
+    { text: String(Math.round((X1 - X0) * 1000)), axis: 'x', box_2d: B(X0, Y0 - 1.2, X1, Y0 - 1.1) },
+    { text: String(Math.round((Y1 - Y0) * 1000)), axis: 'y', box_2d: B(X1 + 1.1, Y0, X1 + 1.2, Y1) },
+    ...T.rooms.slice(0, 3).map((r) => ({ text: String(Math.round(r.w * 1000)), axis: 'x', box_2d: B(r.x, Y0 - 0.7, r.x + r.w, Y0 - 0.6) })),
+  ];
+  const ob = (o) => (o.axis === 'h' ? B(o.a + j() / 2, o.c - 0.06, o.b + j() / 2, o.c + 0.06) : B(o.c - 0.06, o.a + j() / 2, o.c + 0.06, o.b + j() / 2));
+  return {
+    dimensions: dims,
+    footprint_box_2d: B(X0, Y0, X1, Y1),
+    rooms: T.rooms.filter((r) => r.type !== 'corridor').map((r) => ({ label: r.label || r.type.toUpperCase(), type: r.type, box_2d: B(r.x + j(), r.y + j(), r.x + r.w + j(), r.y + r.d + j()) })),
+    stairs: (T.stairs || []).map((s) => ({ box_2d: B(s.x, s.y, s.x + s.w, s.y + s.d), up: 'N', shape: 'straight' })),
+    doors: [...T.openings.filter((o) => o.kind !== 'window').map((o) => ({ box_2d: ob(o), kind: o.kind === 'slider' ? 'sliding' : o.kind === 'open' ? 'opening' : 'door' })), ...fakes.map((f) => ({ box_2d: ob(f), kind: f.kind || 'door' }))],
+    windows: T.openings.filter((o) => o.kind === 'window').map((o) => ({ box_2d: ob(o), full_height: false })),
+  };
+}
+function synthCase(name, style, fakes, fuse) {
+  const T = JSON.parse(fs.readFileSync(path.join(WX, `${name}.truth.json`), 'utf8'));
+  const img = decodePNG(fs.readFileSync(path.join(WX, `${name}-${style}.png`)));
+  const read = synthRead(T, img.width, img.height, fakes);
+  const scale = pageScale([{ read, cropW: img.width, cropH: img.height }]);
+  let walls = null;
+  try {
+    walls = WALLS.extractWalls(img, { pxPerM: 1 / scale.mPerPx });
+  } catch {
+    walls = null;
+  }
+  const res = assemblePlan([{ level: 'ground', title: '', read, cropW: img.width, cropH: img.height, src: 'x', walls, ink: inkMask(img) }], { scale, fuse });
+  const fl = res.plan.floors[0];
+  const env = (rs) => {
+    const q = rs.filter((x) => !['balcony', 'porch'].includes(x.type));
+    return { x: Math.min(...q.map((x) => x.x)), y: Math.min(...q.map((x) => x.y)) };
+  };
+  const dx = env(fl.rooms).x - env(T.rooms).x;
+  const dy = env(fl.rooms).y - env(T.rooms).y;
+  const ious = T.rooms.map((t) => Math.max(0, ...fl.rooms.map((g) => IoU({ ...t, x: t.x + dx, y: t.y + dy }, g))));
+  const doors = fl.openings.filter((o) => o.kind === 'door' || o.kind === 'slider');
+  const tDoors = T.openings.filter((o) => o.kind === 'door' || o.kind === 'slider');
+  // 开放空间里砌了图上没有的墙（扣掉真值里的墙，例如厨房和玄关之间的短墙）
+  const open = T.rooms.filter((r) => (T.openPlan || []).includes(r.id));
+  let invented = 0;
+  for (const w of buildWalls(fl))
+    for (const pc of w.pieces.filter((q) => q.kind === 'solid'))
+      for (let i = 0; i < open.length; i++)
+        for (let k2 = i + 1; k2 < open.length; k2++) {
+          const [p, q] = [open[i], open[k2]];
+          let e = null;
+          if (Math.abs(p.y + p.d - q.y) < 0.01 || Math.abs(q.y + q.d - p.y) < 0.01) e = { axis: 'x', h: 'h', c: Math.abs(p.y + p.d - q.y) < 0.01 ? q.y : p.y, a: Math.max(p.x, q.x), b: Math.min(p.x + p.w, q.x + q.w) };
+          else if (Math.abs(p.x + p.w - q.x) < 0.01 || Math.abs(q.x + q.w - p.x) < 0.01) e = { axis: 'z', h: 'v', c: Math.abs(p.x + p.w - q.x) < 0.01 ? q.x : p.x, a: Math.max(p.y, q.y), b: Math.min(p.y + p.d, q.y + q.d) };
+          if (!e || w.axis !== e.axis) continue;
+          const [oc, oa] = e.axis === 'x' ? [dy, dx] : [dx, dy];
+          if (Math.abs(w.c - (e.c + oc)) > 0.2) continue;
+          const lo = Math.max(pc.a, e.a + oa + 0.1);
+          const hi = Math.min(pc.b, e.b + oa - 0.1);
+          if (hi <= lo) continue;
+          const real = T.walls.filter((tw) => tw.axis === e.h && Math.abs(tw.c - e.c) < 0.15).reduce((s, tw) => s + Math.max(0, Math.min(hi, tw.b + oa) - Math.max(lo, tw.a + oa)), 0);
+          invented += Math.max(0, hi - lo - real);
+        }
+  return {
+    res,
+    mean: ious.reduce((s, v) => s + v, 0) / ious.length,
+    recall: tDoors.filter((t) => doors.some((o) => near1(o, t, dx, dy, 0.25))).length / tDoors.length,
+    fakeKept: fakes.filter((f) => doors.some((o) => near1(o, f, dx, dy, 0.25))).length,
+    invented,
+    walls: res.report.floors[0].walls,
+  };
+}
+const CONDO_FAKES = [
+  { axis: 'v', c: 5.0, a: 7.0, b: 7.9 },
+  { axis: 'h', c: 0, a: 1.0, b: 1.9 },
+  { axis: 'h', c: 5.2, a: 1.5, b: 2.5, kind: 'opening' },
+];
+const TERRACE_FAKES = [
+  { axis: 'v', c: 0, a: 9.0, b: 9.9 },
+  { axis: 'v', c: 6.1, a: 2.5, b: 3.3 },
+];
+
+await test('19 墙优先（walls.js + fuse，清楚的图）：开放空间不砌墙、多出来的门去掉、IoU ≥ 0.85、门 ≥ 85 %', () => {
+  if (typeof WALLS.fuseWalls !== 'function') return console.log('    （walls.js 还没有 fuseWalls：跳过）');
+  for (const [name, style, fakes] of [
+    ['condo', 'hollow', CONDO_FAKES],
+    ['terrace-gf', 'solid', TERRACE_FAKES],
+  ]) {
+    const r = synthCase(name, style, fakes, WALLS.fuseWalls);
+    const tag = `${name}-${style}（${r.walls?.lowQuality ? '退回按房间框' : '墙优先'}）`;
+    assert.ok(r.mean >= 0.85, `${tag} IoU ${r.mean.toFixed(3)}`);
+    assert.ok(r.recall >= 0.85, `${tag} 门 ${r.recall.toFixed(2)}`);
+    assert.equal(r.fakeKept, 0, `${tag} 多出来的门`);
+    assert.ok(r.invented < 0.05, `${tag} 开放空间砌了 ${r.invented.toFixed(2)} m 墙`);
+    assert.equal(overlaps(r.res.plan.floors[0].rooms), 0);
+  }
+});
+
+await test('20 低清 / walls.js 没把握 → 房间框 + 墨迹：多出来的门去掉、开放空间加「打通」；墙优先对不上就不用', () => {
+  for (const [name, style, fakes] of [
+    ['condo', 'hollow', CONDO_FAKES],
+    ['terrace-gf', 'hollow', TERRACE_FAKES],
+  ]) {
+    const r = synthCase(name, style, fakes, null);
+    assert.ok(r.walls?.lowQuality, '没有 fuse = 房间框');
+    assert.ok(r.mean >= 0.85, `${name} IoU ${r.mean.toFixed(3)}`);
+    assert.ok(r.recall >= 0.85, `${name} 门 ${r.recall.toFixed(2)}`);
+    assert.equal(r.fakeKept, 0, `${name} 多出来的门`);
+    assert.ok(r.invented < 0.05, `${name} 开放空间砌了 ${r.invented.toFixed(2)} m 墙`);
+  }
+  // 墙优先的结果和 AI 的房间框对不上（外框差太多）→ 不用，退回房间框
+  const bad = () => ({ rooms: [{ id: 'x', type: 'living', name: '', x: 0, y: 0, w: 3, d: 3 }], openings: [], fixes: {}, wallsReport: { wallsDetected: 4 } });
+  const { res } = ownerPipeline({ fuse: bad, fuseMin: 0 });
+  assert.equal(res.report.floors[0].walls.rejected, 'outline');
+  assert.ok(res.plan.floors[0].rooms.length >= 10);
+  assert.deepEqual(roomsAgree(res.plan.floors[0].rooms, res.plan.floors[0].rooms).ok, true);
+  // inkCheck 没有像素：只去掉落在两个开放空间之间的门（那里不会有墙）
+  const rooms = [
+    { id: 'a', type: 'living', x: 0, y: 0, w: 4, d: 3 },
+    { id: 'b', type: 'dining', x: 0, y: 3, w: 4, d: 3 },
+    { id: 'c', type: 'bedroom', x: 4, y: 0, w: 3, d: 6 },
+  ];
+  const ops = [
+    { id: 'o1', kind: 'door', x1: 1, x2: 2, y1: 3, y2: 3 },
+    { id: 'o2', kind: 'door', x1: 4, x2: 4, y1: 1, y2: 2 },
+  ];
+  const ic = inkCheck(rooms, ops, null, 0.01);
+  assert.deepEqual(ic.openings.map((o) => o.id), ['o2']);
+  assert.equal(ic.report.offWall, 1);
+});
+
+await test('21 图纸 PDF 第 12 页（pdf.js 画的裁图）：墙优先 + 共识 —— 15 个门 / 推拉门 / 打通都在、种类对；IoU ≥ 0.82；一座楼梯', () => {
+  const fl = ['gf', 'ff'].map((k) => ({ k, img: decodeJpeg(path.join(FX, `crop-sheet-${k}.jpg`)), read: J(`pass2-sheet-${k}.json`) }));
+  const floors = fl.map((f) => ({ level: f.k === 'gf' ? 'ground' : 'first', title: '', read: f.read, cropW: f.img.width, cropH: f.img.height, src: 'x' }));
+  const scale = pageScale(floors);
+  fl.forEach((f, i) => {
+    floors[i].ink = inkMask(f.img);
+    try {
+      floors[i].walls = WALLS.extractWalls(f.img, { pxPerM: 1 / scale.mPerPx });
+    } catch {
+      floors[i].walls = null;
+    }
+  });
+  for (const fuse of [typeof WALLS.fuseWalls === 'function' ? WALLS.fuseWalls : null, null]) {
+    const { plan, report } = assemblePlan(floors, { scale, fuse });
+    const tag = fuse ? (report.floors.some((f) => f.walls && !f.walls.lowQuality) ? '墙优先' : '墙优先（没采用）') : '房间框';
+    assert.equal(plan.floors.length, 2);
+    assert.equal(plan.stairs.length, 1, tag);
+    const env = (rs) => {
+      const q = rs.filter((x) => !['porch', 'balcony'].includes(x.type));
+      return { x: Math.min(...q.map((x) => x.x)), y: Math.min(...q.map((x) => x.y)) };
+    };
+    const e0 = env(TRUTH.floors[0].rooms);
+    const g0 = env(plan.floors[0].rooms);
+    const [dx, dy] = [g0.x - e0.x, g0.y - e0.y];
+    plan.floors.forEach((f, i) => {
+      const tr = TRUTH.floors[i];
+      const ious = tr.rooms.map((t) => Math.max(0, ...f.rooms.map((g) => IoU({ ...t, x: t.x + dx, y: t.y + dy }, g))));
+      const mean = ious.reduce((a, b) => a + b, 0) / ious.length;
+      assert.ok(mean >= 0.82, `${tag} ${f.id} IoU ${mean.toFixed(3)}`);
+      for (const t of tr.openings.filter((o) => o.kind !== 'window')) {
+        const hit = f.openings.find((o) => o.kind !== 'window' && near1(o, t, dx, dy));
+        assert.ok(hit, `${tag} ${f.id} ${t.id} 不见了`);
+        assert.equal(hit.kind, t.kind, `${tag} ${f.id} ${t.id} 种类`);
+      }
+    });
+    assert.equal(overlaps(plan.floors[0].rooms) + overlaps(plan.floors[1].rooms), 0);
+  }
+});
+
+await test('22 墙优先的细条并给邻居：往图上没有墙的那边伸；楼上钉住的楼梯间不动', () => {
+  const rooms = [
+    { id: 'a', type: 'kitchen', x: 0, y: 0, w: 6, d: 2 },
+    { id: 's', type: 'dining', x: 0, y: 2, w: 6, d: 0.25 },
+    { id: 'b', type: 'dining', x: 0, y: 2.25, w: 4, d: 3 },
+    { id: 'st', type: 'stair', x: 4, y: 2.25, w: 2, d: 3 },
+  ];
+  // 没有图：先试上面
+  const r0 = cleanSlivers(rooms);
+  assert.equal(r0.merged, 1);
+  assert.equal(r0.rooms.find((r) => r.id === 'a').d, 2.25);
+  // 图上 y = 2 有墙、y = 2.25 没有 → 下面的餐厅和楼梯往上伸到墙
+  const wallAt = (seg) => (Math.abs(seg.c - 2) < 0.01 ? 1 : 0);
+  const r1 = cleanSlivers(rooms, { wallAt });
+  assert.deepEqual(r1.rooms.map((r) => [r.id, r.y, r.d]), [['a', 0, 2], ['b', 2, 3.25], ['st', 2, 3.25]]);
+  // 楼梯锁住：下面那边铺不满 → 改伸上面
+  const r2 = cleanSlivers(rooms, { wallAt, locked: (r) => r.type === 'stair' });
+  assert.equal(r2.rooms.find((r) => r.id === 'a').d, 2.25);
+  assert.equal(r2.rooms.find((r) => r.id === 'st').y, 2.25);
+  // 不是细条：不动
+  assert.equal(cleanSlivers([{ id: 'x', type: 'bath', x: 0, y: 0, w: 1.5, d: 2 }]).merged, 0);
+  // restoreDoors 没有像素：原样
+  const op = [{ id: 'o', kind: 'door', x1: 1, x2: 2, y1: 2, y2: 2 }];
+  assert.deepEqual(restoreDoors(rooms, [], op, null, 0.01), { openings: [], restored: 0 });
 });
 
 console.log(`\n${n - failed}/${n} 通过`);

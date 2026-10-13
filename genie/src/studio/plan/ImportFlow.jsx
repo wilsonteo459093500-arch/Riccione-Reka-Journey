@@ -3,9 +3,10 @@
 // 许愿模式不会打开这里（那里没有上传）。界面颜色只用 base.css 的变量。
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { openPlanFile, pageThumb, findPlanPagesText, renderPage, renderRegion, closePlanFile, contactSheet } from './planImage.js';
+import { openPlanFile, pageThumb, findPlanPagesText, renderPage, renderRegion, closePlanFile, contactSheet, cropPixels } from './planImage.js';
 import * as AI from './ai.js';
-import { assemblePlan, manualPlan, houseKind, knownMetres, lowResReport, cropBox, LEVELS } from './sheet.js';
+import * as WALLS from './walls.js';
+import { assemblePlan, manualPlan, houseKind, knownMetres, lowResReport, cropBox, LEVELS, pageScale, inkMask } from './sheet.js';
 import { floorName } from './model.js';
 import { loadSettings } from '../store.js';
 import { t, isEn } from '../../shared/i18n.js';
@@ -131,9 +132,17 @@ function Thumb({ src, n, on, hit, onPick }) {
 }
 
 /** 读好的一层：小平面图（只用界面变量的颜色） */
-function MiniPlan({ floor }) {
+function MiniPlan({ floor, underlay }) {
   const rooms = floor?.rooms || [];
-  if (!rooms.length) return <div className="imp-mini empty">{t('只有底图')}</div>;
+  if (!rooms.length)
+    return underlay?.src ? (
+      <div className="imp-mini empty pic">
+        <img src={underlay.src} alt="" draggable={false} />
+        <span>{t('只有底图')}</span>
+      </div>
+    ) : (
+      <div className="imp-mini empty">{t('只有底图')}</div>
+    );
   const x0 = Math.min(...rooms.map((r) => r.x));
   const y0 = Math.min(...rooms.map((r) => r.y));
   const x1 = Math.max(...rooms.map((r) => r.x + r.w));
@@ -143,16 +152,22 @@ function MiniPlan({ floor }) {
   const H = y1 - y0 + pad * 2;
   return (
     <svg className="imp-mini" viewBox={`${x0 - pad} ${y0 - pad} ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
-      {rooms.map((r) => (
-        <g key={r.id} className={`imp-mini-room t-${r.type}`}>
-          <rect x={r.x} y={r.y} width={r.w} height={r.d} strokeWidth={Math.max(W, H) / 150} />
-          {r.w > 1.6 && r.d > 1.0 && !r.stairId && (
-            <text x={r.x + r.w / 2} y={r.y + r.d / 2} fontSize={Math.min(0.42, r.w / 6)} textAnchor="middle" dominantBaseline="middle">
-              {roomLabel(r)}
-            </text>
-          )}
-        </g>
-      ))}
+      {rooms.map((r) => {
+        const label = r.stairId ? '' : roomLabel(r);
+        // 字按房间宽缩小（中文一个字 ≈ 1 em、英文 ≈ 0.58 em），太小就不写
+        const em = [...label].reduce((a, ch) => a + (/[\u3000-\u9fff]/.test(ch) ? 1 : 0.58), 0) || 1;
+        const fs = Math.min(0.42, (r.w * 0.86) / em, r.d * 0.45);
+        return (
+          <g key={r.id} className={`imp-mini-room t-${r.type}`}>
+            <rect x={r.x} y={r.y} width={r.w} height={r.d} strokeWidth={Math.max(W, H) / 150} />
+            {label && fs >= 0.16 && (
+              <text x={r.x + r.w / 2} y={r.y + r.d / 2} fontSize={fs} textAnchor="middle" dominantBaseline="middle">
+                {label}
+              </text>
+            )}
+          </g>
+        );
+      })}
       {(floor.openings || []).map((o) => (
         <line key={o.id} className={`imp-mini-open k-${o.kind}`} x1={o.x1} y1={o.y1} x2={o.x2} y2={o.y2} strokeWidth={Math.max(W, H) / 70} />
       ))}
@@ -186,6 +201,7 @@ export default function ImportFlow({ file, ai = false, current = null, onSetting
   const srcRef = useRef(null);
   const abortRef = useRef(null);
   const knownRef = useRef(null);
+  const pixRef = useRef({}); // 卡片 key → { aspect, ink, walls }（图上的墙，读完以后算一次）
   const wide = useMedia('(min-width: 900px)');
   const settings = useMemo(() => loadSettings(), []);
 
@@ -457,12 +473,14 @@ export default function ImportFlow({ file, ai = false, current = null, onSetting
     if (list.every((c) => ['done', 'skip', 'trace'].includes(rs[c.key]?.state))) setTimeout(() => finish(list, map, rs), 0);
   }
 
-  const assembleWith = (list, map, rs, scale) => {
-    const floors = list
+  const floorsFor = (list, map, rs) =>
+    list
       .filter((c) => rs[c.key]?.state !== 'skip')
       .map((c) => {
         const cr = map[c.key];
+        const px = pixRef.current[c.key];
         return {
+          key: c.key,
           level: c.level,
           title: c.title,
           read: rs[c.key]?.state === 'done' ? rs[c.key].read : null,
@@ -470,15 +488,50 @@ export default function ImportFlow({ file, ai = false, current = null, onSetting
           cropH: cr.height,
           src: cr.src,
           srcScale: cr.srcScale,
+          photo: !!srcRef.current?.photo,
+          walls: px?.walls || null,
+          ink: px?.ink || null,
           page: page.page,
           box: [c.crop.x0 / page.width, c.crop.y0 / page.height, c.crop.x1 / page.width, c.crop.y1 / page.height].map((v) => Math.round(v * 1e4) / 1e4),
         };
       });
-    return assemblePlan(floors, { screenshot: !!found?.screenshot, name: unitPick || '', scale });
-  };
 
-  function finish(list, map, rs) {
-    const res = assembleWith(list, map, rs, null);
+  const assembleWith = (list, map, rs, scale) => assemblePlan(floorsFor(list, map, rs), { screenshot: !!found?.screenshot, name: unitPick || '', scale, fuse: typeof WALLS.fuseWalls === 'function' ? WALLS.fuseWalls : null });
+
+  /** 图上的墙：每层的裁图（照片按 aspect 拉方）→ 墨迹 + walls.js。读不出来就算了（退回按房间框铺） */
+  async function readWalls(list, map, rs, scale) {
+    for (const c of list) {
+      if (rs[c.key]?.state !== 'done' || !map[c.key]) continue;
+      const old = pixRef.current[c.key];
+      if (old && Math.abs(old.aspect - scale.aspect) < 1e-6) continue;
+      await new Promise((ok) => setTimeout(ok, 0)); // 让「正在…」先画出来
+      try {
+        const img = await cropPixels(map[c.key], { aspect: scale.aspect });
+        const ink = inkMask(img);
+        let walls = null;
+        try {
+          walls = typeof WALLS.extractWalls === 'function' ? WALLS.extractWalls(img, { pxPerM: 1 / scale.mPerPx }) : null;
+        } catch {
+          walls = null;
+        }
+        pixRef.current[c.key] = { aspect: scale.aspect, ink, walls };
+      } catch {
+        pixRef.current[c.key] = { aspect: scale.aspect, ink: null, walls: null };
+      }
+    }
+  }
+
+  async function finish(list, map, rs) {
+    setBusy(t('正在对照图上的墙…'));
+    let scale = null;
+    try {
+      scale = pageScale(floorsFor(list, map, rs));
+      if (scale) await readWalls(list, map, rs, scale);
+    } catch {
+      scale = null;
+    }
+    setBusy('');
+    const res = assembleWith(list, map, rs, scale && scale.source !== 'guess' ? scale : null);
     res.ctx = { list, map, rs };
     setResult(res);
     setStep('summary');
@@ -513,7 +566,7 @@ export default function ImportFlow({ file, ai = false, current = null, onSetting
       return;
     }
     const k = result.report.scale.mPerPx * (m / cur);
-    const res = assembleWith(result.ctx.list, result.ctx.map, result.ctx.rs, { mPerPx: k, source: 'known' });
+    const res = assembleWith(result.ctx.list, result.ctx.map, result.ctx.rs, { mPerPx: k, source: 'known', aspect: result.report.scale.aspect || 1 });
     res.ctx = result.ctx;
     setResult(res);
   };
@@ -775,11 +828,15 @@ export default function ImportFlow({ file, ai = false, current = null, onSetting
             <div className="imp-tip" role="note">
               <Icon name="info" size={18} />
               <div>
-                <p>{t('这是手机截图：每层平面图只有约 {0} 像素宽，图上的尺寸读不清。最好上传原本的 PDF（例如从 HIMS 下载的那份），选那一页 —— 会准很多。', [lowPre?.planPx || 0])}</p>
+                {src?.photo ? (
+                  <p>{t('这是拍的照片：已经自动拉正。照片读出来的墙和尺寸可能不太准；有原本的 PDF（例如从 HIMS 下载的那份）的话，上传那一页会准很多。')}</p>
+                ) : (
+                  <p>{t('这是手机截图：每层平面图只有约 {0} 像素宽，图上的尺寸读不清。最好上传原本的 PDF（例如从 HIMS 下载的那份），选那一页 —— 会准很多。', [lowPre?.planPx || 0])}</p>
+                )}
                 <p className="imp-tip-sub">{t('拍照时手机和纸要平行')}</p>
                 <div className="imp-tip-acts">
                   <button type="button" className="pe-btn" onClick={() => setTipOk(true)}>
-                    {t('继续用截图')}
+                    {src?.photo ? t('继续用照片') : t('继续用截图')}
                   </button>
                   <button type="button" className="pe-btn ghost" onClick={cancel}>
                     {t('换一个文件')}
@@ -814,8 +871,9 @@ export default function ImportFlow({ file, ai = false, current = null, onSetting
                       <b className="imp-card-title">{c.title || (c.manual ? t('自己框的') : t('平面图'))}</b>
                       {c.unit && <span className="imp-card-unit">{c.unit}</span>}
                       <label className="pe-select imp-level">
-                        <span className="pe-select-label">{t('楼层')}</span>
-                        <select value={c.level} onChange={(e) => setLevel(c.key, e.target.value)}>
+                        <span className="pe-select-label" aria-hidden="true">{c.level ? lvName(c.level) : t('不要')}</span>
+                        <Icon name="down" size={14} className="pe-select-chev" />
+                        <select value={c.level} onChange={(e) => setLevel(c.key, e.target.value)} aria-label={t('楼层')}>
                           {LEVEL_PICK.map((l) => (
                             <option key={l} value={l}>
                               {lvName(l)}
@@ -938,7 +996,9 @@ export default function ImportFlow({ file, ai = false, current = null, onSetting
         <PageView page={page} boxes={boxes} drawing={drawing && !!nextManual} onDraw={addManual} label={t('第 {0} 页', [page?.page || 1])} />
         <aside className="imp-side">
           {errBox}
-          <h2 className="imp-found">{nextManual ? t('框出{0}', [lvName(nextManual)]) : t('框好了')}</h2>
+          <h2 className="imp-found">{manualBoxes.length < 2 && nextManual ? t('框出{0}', [lvName(nextManual)]) : t('框好了 {0} 层', [manualBoxes.length])}</h2>
+          {manualBoxes.length === 1 && <p className="imp-note">{t('只有一层？直接放进编辑器。')}</p>}
+          {manualBoxes.length >= 2 && nextManual && <p className="imp-note">{t('还有{0}？再拖一个框。', [lvName(nextManual)])}</p>}
           <p className="imp-note">{t('沿着外墙拖一个框（不要包括尺寸线）。每一层框一个，放进编辑器当底图，再沿着墙描。')}</p>
           <ul className="imp-cards">
             {manualBoxes
@@ -948,8 +1008,9 @@ export default function ImportFlow({ file, ai = false, current = null, onSetting
                 <li key={c.key} className="imp-card compact" data-level={c.level}>
                   <div className="imp-card-body">
                     <label className="pe-select imp-level">
-                      <span className="pe-select-label">{t('楼层')}</span>
-                      <select value={c.level} onChange={(e) => setLevel(c.key, e.target.value)}>
+                      <span className="pe-select-label" aria-hidden="true">{lvName(c.level)}</span>
+                      <Icon name="down" size={14} className="pe-select-chev" />
+                      <select value={c.level} onChange={(e) => setLevel(c.key, e.target.value)} aria-label={t('楼层')}>
                         {LEVEL_PICK.map((l) => (
                           <option key={l} value={l}>
                             {lvName(l)}
@@ -995,8 +1056,16 @@ export default function ImportFlow({ file, ai = false, current = null, onSetting
     const rep = result.report;
     const sc = rep.scale || {};
     const fixes = (rep.floors || []).reduce((a, f) => ({ o: a.o + (f.fixes?.overlaps || 0), g: a.g + (f.fixes?.filled || 0) + (f.fixes?.absorbed || 0) }), { o: 0, g: 0 });
+    // 图上的墙：墙优先（walls.js 有把握）或者按墨迹查过（低清）
+    const wr = (rep.floors || []).map((f) => f.walls).filter(Boolean);
+    const wallsFirst = wr.some((w) => !w.lowQuality);
+    const doorsDropped = wr.reduce((a, w) => a + (w.doorsRemoved ?? w.doorsDropped ?? 0), 0);
+    const openConn = wr.reduce((a, w) => a + (w.openConnections || 0), 0);
     const hasRooms = (current?.floors || []).some((f) => f.rooms.some((r) => !r.stairId));
-    const roomsForRef = result.plan.floors.flatMap((f) => f.rooms.filter((r) => !r.stairId && !['porch', 'balcony', 'corridor', 'stair', 'void'].includes(r.type)).map((r) => ({ r, f })));
+    // L 形房间的第二块（id 结尾 -2、-3）不重复列
+    const roomsForRef = result.plan.floors.flatMap((f) => f.rooms.filter((r) => !r.stairId && !/-\d+$/.test(r.id) && !['porch', 'balcony', 'corridor', 'stair', 'void'].includes(r.type)).map((r) => ({ r, f })));
+    const refRoom = roomsForRef.find(({ r }) => r.id === known.ref);
+    const refLabel = refRoom ? t('{0} · {1} 的宽', [t(floorName(result.plan, refRoom.f.id)), roomLabel(refRoom.r)]) : t('整体宽');
     const banner =
       sc.source === 'doors'
         ? t('比例是按门宽估的 —— 请填一个已知尺寸')
@@ -1008,7 +1077,7 @@ export default function ImportFlow({ file, ai = false, current = null, onSetting
         <div className="imp-floors">
           {result.plan.floors.map((f) => (
             <figure key={f.id} className="imp-floor">
-              <MiniPlan floor={f} />
+              <MiniPlan floor={f} underlay={result.underlays?.[f.id]} />
               <figcaption>
                 <b>{t(floorName(result.plan, f.id))}</b>
                 <span>{t('{0} 个房间 · {1} 个门窗', [f.rooms.filter((r) => !r.stairId).length, f.openings.length])}</span>
@@ -1027,9 +1096,10 @@ export default function ImportFlow({ file, ai = false, current = null, onSetting
           )}
           {sc.widthM ? <p className="imp-line">{t('现在：一楼外墙宽 {0} m、深 {1} m', [sc.widthM, sc.depthM ?? '—'])}</p> : null}
           <div className="imp-known-row">
-            <label className="pe-select">
-              <span className="pe-select-label">{t('已知尺寸')}</span>
-              <select value={known.ref} onChange={(e) => setKnown((k) => ({ ...k, ref: e.target.value }))}>
+            <label className="pe-select imp-ref">
+              <span className="pe-select-label" aria-hidden="true">{refLabel}</span>
+              <Icon name="down" size={14} className="pe-select-chev" />
+              <select value={known.ref} onChange={(e) => setKnown((k) => ({ ...k, ref: e.target.value }))} aria-label={t('已知尺寸')}>
                 <option value="width">{t('整体宽')}</option>
                 {roomsForRef.map(({ r, f }) => (
                   <option key={r.id} value={r.id}>
@@ -1045,13 +1115,17 @@ export default function ImportFlow({ file, ai = false, current = null, onSetting
           </div>
           {knownErr && <p className="imp-warn">{knownErr}</p>}
           {!rep.manual && (fixes.o > 0 || fixes.g > 0) && <p className="imp-line">{t('自动修正：{0} 处重叠、{1} 处空隙', [fixes.o, fixes.g])}</p>}
+          {!rep.manual && wallsFirst && <p className="imp-line ok">{doorsDropped > 0 ? t('按图上的墙重建：去掉 {0} 个多出来的门', [doorsDropped]) : t('房间和门窗按图上的墙重建')}</p>}
+          {!rep.manual && !wallsFirst && doorsDropped > 0 && <p className="imp-line">{t('对照图上的墙：去掉 {0} 个图上没有的门', [doorsDropped])}</p>}
+          {!rep.manual && openConn > 0 && <p className="imp-line">{t('{0} 处开放空间图上没有墙，不砌墙', [openConn])}</p>}
+          {rep.scale?.aspect && Math.abs(rep.scale.aspect - 1) >= 0.015 && <p className="imp-line">{t('照片是斜着拍的：已经拉正，上下方向按尺寸校正了 {0}%', [Math.round(Math.abs(rep.scale.aspect - 1) * 1000) / 10])}</p>}
           {rep.aligned && result.plan.floors.length > 1 && <p className="imp-line ok">{rep.aligned === 'stairs' ? t('两层已对齐（按楼梯）') : t('两层已对齐（按外墙）')}</p>}
           {(rep.warnings || []).map((w, i) => (
             <p key={i} className="imp-warn">
               {t(w.zh, (w.vars || []).map((v) => (v?.floor ? t(floorName(result.plan, v.floor)) : v)))}
             </p>
           ))}
-          {rep.lowRes && !rep.manual && <p className="imp-note">{t('这是截图读的：尺寸可能不准，最好上传原本的 PDF。')}</p>}
+          {rep.lowRes && !rep.manual && <p className="imp-note">{src?.photo ? t('这是照片读的：尺寸可能不准，最好上传原本的 PDF。') : t('这是截图读的：尺寸可能不准，最好上传原本的 PDF。')}</p>}
           {rep.manual && <p className="imp-note">{t('每一层只有底图：在编辑器里沿着墙描，用「量尺校准」对一下比例。')}</p>}
         </div>
       </div>
@@ -1062,8 +1136,9 @@ export default function ImportFlow({ file, ai = false, current = null, onSetting
           {result.plan.floors.length === 1 && (current?.floors || []).length > 0 && (
             <span className="imp-into">
               <label className="pe-select">
-                <span className="pe-select-label">{t('放进')}</span>
-                <select value={intoFloor} onChange={(e) => setIntoFloor(e.target.value)}>
+                <span className="pe-select-label" aria-hidden="true">{intoFloor ? t(floorName(current, intoFloor)) : t('放进')}</span>
+                <Icon name="down" size={14} className="pe-select-chev" />
+                <select value={intoFloor} onChange={(e) => setIntoFloor(e.target.value)} aria-label={t('放进')}>
                   {(current.floors || []).map((f) => (
                     <option key={f.id} value={f.id}>
                       {t(floorName(current, f.id))}
@@ -1213,6 +1288,9 @@ const IMPORT_CSS = `
 .imp-mini { width: 100%; height: min(52vh, 460px); }
 .imp.narrow .imp-mini { height: 34vh; }
 .imp-mini.empty { display: grid; place-items: center; color: var(--ink-soft); background: var(--paper); border-radius: 10px; }
+.imp-mini.pic { position: relative; display: block; overflow: hidden; }
+.imp-mini.pic img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0.85; }
+.imp-mini.pic span { position: absolute; left: 10px; bottom: 10px; padding: 3px 9px; border-radius: 999px; background: var(--card); box-shadow: 0 0 0 0.5px var(--line); font: 600 12px/1.3 var(--sans); }
 .imp-mini-room rect { fill: var(--paper); stroke: var(--ink); }
 .imp-mini-room.t-stair rect { fill: rgba(var(--gold-l-rgb), 0.6); }
 .imp-mini-room.t-porch rect, .imp-mini-room.t-balcony rect { fill: var(--bg-deep); }
@@ -1232,6 +1310,7 @@ const IMPORT_CSS = `
 .imp-banner svg { flex: none; margin-top: 1px; }
 .imp-known-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .imp-known-row .pe-select { min-height: 44px; max-width: 100%; }
+.imp-ref .pe-select-label { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
 .imp-into { display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-right: auto; }
 @media (max-width: 599px) { .imp-foot .pe-btn { flex: 1 1 auto; } .imp-title b { font-size: 18px; } }
 `;

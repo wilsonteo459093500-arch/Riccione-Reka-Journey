@@ -10,7 +10,7 @@
 // 旧设备自动改用 pdf.js 的「legacy」版本；新版跑到一半缺函数也会退回 legacy 再试一次。读不了 → 一句能照着做的话（已经翻译好）。
 
 import { t } from '../../shared/i18n.js';
-import { trimChrome, enhance, pageTextScore } from './sheet.js';
+import { trimChrome, enhance, pageTextScore, rectifyEstimate, warpImage } from './sheet.js';
 
 const MAX = 2000; // planFileToImage（旧接口）的最长边
 export const PREVIEW_LONG = 2048;
@@ -19,6 +19,8 @@ export const THUMB_LONG = 220;
 const MAX_SIDE = 4096;
 const MAX_PX = 16.7e6;
 const MAX_SRC_PX = 24e6;
+const RECT_EST_LONG = 1600; // 估透视用的小图
+const RECT_MAX_PX = 12e6; // 拉正的那张最多这么大（iPad 内存）
 
 function canvasToDataURL(c, q = 0.9) {
   return c.toDataURL('image/jpeg', q);
@@ -190,7 +192,72 @@ export async function openPlanFile(file) {
   } catch {
     trim = null;
   }
-  return { kind: 'image', name: file.name || '', pages: 1, img, width: w, height: h, trim, screenshot: !!trim, thumbs: new Map(), queue: Promise.resolve(), closed: false };
+  // 拍歪的照片：找横竖线 → 透视矫正（整张拉正一次，之后的预览、裁图都从拉正的图来，墙就横平竖直了）
+  let rectified = null;
+  if (!trim) {
+    try {
+      const out = rectifyImage(img, w, h);
+      if (out) {
+        img.close?.();
+        img = out.canvas;
+        ({ w, h } = { w: out.canvas.width, h: out.canvas.height });
+        rectified = out.info;
+      }
+    } catch {
+      rectified = null; // 拉不正就用原图
+    }
+  }
+  return { kind: 'image', name: file.name || '', pages: 1, img, width: w, height: h, trim, screenshot: !!trim, photo: !!rectified, rectified, thumbs: new Map(), queue: Promise.resolve(), closed: false };
+}
+
+/** 照片的透视：在 ≤ 1600 px 的小图上估，明显才拉正（≤ 12 Mpx）。→ { canvas, info } 或 null */
+function rectifyImage(img, w, h) {
+  const k = Math.min(1, RECT_EST_LONG / Math.max(w, h));
+  const sc = newCanvas(w * k, h * k);
+  const sctx = whiteCtx(sc);
+  sctx.drawImage(img, 0, 0, sc.width, sc.height);
+  const est = rectifyEstimate(sctx.getImageData(0, 0, sc.width, sc.height));
+  sc.width = sc.height = 0;
+  if (!est || !est.significant || est.moved > 0.25 * Math.max(w * k, h * k)) return null;
+  // 工作比例 g（相对原图）：拉正以后不超过 12 Mpx
+  const g = Math.min(1, Math.sqrt(RECT_MAX_PX / ((est.width / k) * (est.height / k))), Math.sqrt(MAX_PX / (w * h)));
+  const src = newCanvas(w * g, h * g);
+  const ctx = whiteCtx(src);
+  ctx.drawImage(img, 0, 0, src.width, src.height);
+  const id = ctx.getImageData(0, 0, src.width, src.height);
+  src.width = src.height = 0;
+  // 小图的 H（小图像素 → 小图拉正像素）换成工作比例：Hg = D(g/k) · H · D(k/g)
+  const r = g / k;
+  const Hi = est.Hinv; // 拉正 → 原图（小图）
+  const Hinv = [Hi[0], Hi[1], Hi[2] * r, Hi[3], Hi[4], Hi[5] * r, Hi[6] / r, Hi[7] / r, Hi[8]];
+  const ow = Math.round(est.width * r);
+  const oh = Math.round(est.height * r);
+  const warped = warpImage(id, Hinv, ow, oh);
+  const out = newCanvas(ow, oh);
+  out.getContext('2d').putImageData(new ImageData(warped.data, ow, oh), 0, 0);
+  return { canvas: out, info: { tiltV: est.tiltV, tiltH: est.tiltH, moved: Math.round(est.moved / k), scale: g } };
+}
+
+/**
+ * 裁好的图（dataURL）→ ImageData，y 方向拉 aspect 倍（照片斜着拍被压扁的那一点）→ 给 walls.js / inkCheck 用。
+ * crop = { src, width, height }。浏览器才有。
+ */
+export async function cropPixels(crop, { aspect = 1 } = {}) {
+  const im = new Image();
+  im.decoding = 'async';
+  await new Promise((ok, no) => {
+    im.onload = ok;
+    im.onerror = () => no(new Error(t('底图读不出来，请重新上传平面图。')));
+    im.src = crop.src;
+  });
+  const W = crop.width || im.naturalWidth;
+  const H = Math.round((crop.height || im.naturalHeight) * (aspect > 0.5 && aspect < 2 ? aspect : 1));
+  const c = newCanvas(W, H);
+  const ctx = whiteCtx(c);
+  ctx.drawImage(im, 0, 0, W, H);
+  const id = ctx.getImageData(0, 0, W, H);
+  c.width = c.height = 0;
+  return id;
 }
 
 /** 一个一个来（iPad 上同时画很多页会卡、会爆内存） */
@@ -307,7 +374,7 @@ export async function renderRegion(src, pageNo, rects, page, { long = CROP_LONG,
   const maxA = Math.max(...orig.map((u) => (u.x1 - u.x0) * (u.y1 - u.y0)));
   let f = Math.max(maxW, maxH) < 1400 ? 2 : 1;
   f = Math.min(f, long / Math.max(maxW, maxH), MAX_SIDE / maxW, MAX_SIDE / maxH, Math.sqrt(MAX_PX / maxA));
-  const doEnhance = clean ?? !!src.screenshot;
+  const doEnhance = clean ?? (!!src.screenshot || !!src.photo);
   return enqueue(src, async () => {
     const out = [];
     for (let i = 0; i < orig.length; i++) {

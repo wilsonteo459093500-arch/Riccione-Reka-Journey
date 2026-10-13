@@ -8,7 +8,8 @@
 
 import { uid, ROOM_TYPES } from './model.js';
 import { t } from '../../shared/i18n.js';
-import { normalizeFound, readToMetres, tileRooms, snapOpenings, scaleFromDims, estimateScale, roomTypeOf as roomTypeOfSheet, okBox, boxPx } from './sheet.js';
+import { normalizeFound, readToMetres, tileRooms, snapOpenings, scaleFromDims, estimateScale, roomTypeOf as roomTypeOfSheet, okBox, boxPx, assemblePlan, inkMask } from './sheet.js';
+import { cropPixels } from './planImage.js';
 
 export const roomTypeOf = roomTypeOfSheet;
 
@@ -555,7 +556,8 @@ function imageSize(src) {
 
 /**
  * 编辑器「重新识别这一层」：用这一层的底图（读图时裁好的那张）再读一遍。
- * 比例沿用底图现在的（设计师可能校准过，这样楼层之间还是对齐的）。
+ * 比例沿用底图现在的（设计师可能校准过，这样楼层之间还是对齐的）；照片压扁的比例（underlay 的 w / h 和像素不成比例）也沿用。
+ * 拼法和上传时一样（assemblePlan：去重叠、图上的墙 / 墨迹查门和开放空间）。浏览器里会读底图的像素（opts.pixels(underlay, aspect) 可以换掉）。
  * → { floor: { rooms, openings }, info }（米，和底图同一个坐标）
  */
 export async function rereadFloor(settings, underlay, ctx = {}, opts = {}) {
@@ -565,22 +567,60 @@ export async function rereadFloor(settings, underlay, ctx = {}, opts = {}) {
   if (!(iw > 0 && ih > 0)) ({ width: iw, height: ih } = await imageSize(underlay.src));
   const level = { ground: 'ground', first: 'first', second: 'second', third: 'third' }[ctx.level] || ctx.level || 'other';
   const { read, model, downgraded } = await readFloor(settings, { src: underlay.src, width: iw, height: ih }, { title: ctx.title || '', level, houseKind: ctx.houseKind || 'house', otherTitles: ctx.otherTitles || '' }, { signal: ctx.signal || opts.signal, fetchImpl: opts.fetchImpl, sleep: opts.sleep, models: opts.models });
-  const k = underlay.w > 0 ? underlay.w / iw : (scaleFromDims(read.dimensions, iw, ih) || estimateScale(read, iw, ih) || { mPerPx: 0.01 }).mPerPx;
   const dims = scaleFromDims(read.dimensions, iw, ih);
-  const prefix = ctx.floorId ? `${ctx.floorId}-` : '';
-  const m = readToMetres(read, iw, ih, k, (p) => `${prefix}${uid(p)}`);
-  const tiled = tileRooms(m.rooms, { footprint: m.footprint });
-  const so = snapOpenings(tiled.rooms, m.openings);
-  const dx = Number(underlay.x) || 0;
-  const dy = Number(underlay.y) || 0;
+  const known = underlay.w > 0;
+  const k = known ? underlay.w / iw : (dims || estimateScale(read, iw, ih) || { mPerPx: 0.01 }).mPerPx;
+  const aspect = known && underlay.h > 0 ? underlay.h / ih / k : 1;
+  // 图上的墙（浏览器）：底图像素 → 墨迹 + walls.js（按需加载，不进主包）
+  let ink = null;
+  let walls = null;
+  let WALLS = {};
+  try {
+    WALLS = opts.walls || (await import('./walls.js'));
+  } catch {
+    WALLS = {};
+  }
+  const getPixels = opts.pixels || (typeof document !== 'undefined' ? defaultPixels : null);
+  if (getPixels) {
+    try {
+      const img = await getPixels({ src: underlay.src, width: iw, height: ih }, aspect);
+      if (img) {
+        ink = inkMask(img);
+        try {
+          walls = typeof WALLS.extractWalls === 'function' ? WALLS.extractWalls(img, { pxPerM: 1 / k }) : null;
+        } catch {
+          walls = null;
+        }
+      }
+    } catch {
+      ink = null;
+    }
+  }
+  // 截图 / 照片放大过的裁图（meta.import.srcScale）：门的墨迹检查按原图的清晰度
+  const srcScale = Number(ctx.floor?.meta?.import?.srcScale) || 1;
+  const res = assemblePlan([{ level: 'ground', title: ctx.title || '', read, cropW: iw, cropH: ih, src: underlay.src, srcScale, walls, ink }], {
+    scale: { mPerPx: k, aspect, source: known ? 'underlay' : dims ? 'dims' : 'estimate' },
+    fuse: typeof WALLS.fuseWalls === 'function' ? WALLS.fuseWalls : null,
+    uid: (p) => uid(p),
+  });
+  const f = res.plan.floors[0];
+  const u = res.underlays[f.id] || { x: 0, y: 0 };
+  // assemblePlan 把围合外框的左上角放在 (0, 0)、底图放在 (u.x, u.y)；搬回编辑器里底图的位置
+  const dx = (Number(underlay.x) || 0) - u.x;
+  const dy = (Number(underlay.y) || 0) - u.y;
   const r3 = (v) => Math.round(v * 1000) / 1000;
-  const rooms = tiled.rooms.map(({ label, gap, ...r }) => ({ ...r, id: r.id.startsWith(prefix) && prefix ? r.id : `${prefix}${uid('r')}`, x: r3(r.x + dx), y: r3(r.y + dy) }));
-  const openings = so.openings.map((o) => ({ ...o, x1: r3(o.x1 + dx), x2: r3(o.x2 + dx), y1: r3(o.y1 + dy), y2: r3(o.y2 + dy) }));
+  const prefix = ctx.floorId ? `${ctx.floorId}-` : '';
+  const rooms = f.rooms.map((r) => ({ ...r, id: `${prefix}${uid('r')}`, x: r3(r.x + dx), y: r3(r.y + dy) }));
+  const openings = f.openings.map((o) => ({ ...o, id: `${prefix}${uid('o')}`, x1: r3(o.x1 + dx), x2: r3(o.x2 + dx), y1: r3(o.y1 + dy), y2: r3(o.y2 + dy) }));
+  const rf = res.report.floors[0] || {};
   return {
     floor: { rooms, openings },
-    info: { scaleSource: underlay.w > 0 ? 'underlay' : 'estimate', dimsRatio: dims ? +(dims.mPerPx / k).toFixed(3) : null, rooms: rooms.length, openings: openings.length, fixes: { ...tiled.report, openingsDropped: so.dropped }, model, downgraded },
+    info: { scaleSource: known ? 'underlay' : 'estimate', dimsRatio: dims ? +(dims.mPerPx / k).toFixed(3) : null, rooms: rooms.length, openings: openings.length, fixes: rf.fixes || null, walls: rf.walls || null, model, downgraded },
   };
 }
+
+/** 底图（dataURL）→ ImageData（y 方向拉 aspect 倍）。只在浏览器里用 */
+const defaultPixels = (crop, aspect) => cropPixels(crop, { aspect });
 
 // ───────────── 旧接口（单层、整张图）：保留给旧的调用和测试 ─────────────
 
