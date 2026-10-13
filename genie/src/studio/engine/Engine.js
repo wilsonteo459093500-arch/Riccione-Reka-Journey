@@ -509,8 +509,11 @@ export class Engine {
   setInsets(ins = {}) {
     const n = (v) => Math.max(0, Math.round(Number(v) || 0));
     const next = { left: n(ins.left), right: n(ins.right), top: n(ins.top), bottom: n(ins.bottom) };
+    // 可选：上 / 下最少要留多少（工具条的底边、材质栏本身的高度）—— 上下加起来太多时 effInsets 缩到这里为止
+    if (ins.minTop != null) next.minTop = Math.min(next.top, n(ins.minTop));
+    if (ins.minBottom != null) next.minBottom = Math.min(next.bottom, n(ins.minBottom));
     const cur = this.insets;
-    if (['left', 'right', 'top', 'bottom'].every((k) => Math.abs(next[k] - cur[k]) < 2)) return;
+    if (['left', 'right', 'top', 'bottom', 'minTop', 'minBottom'].every((k) => Math.abs((next[k] ?? -1) - (cur[k] ?? -1)) < 2)) return;
     const framed = this.isFramed();
     this._insetsSet = true;
     this.insets = next;
@@ -529,8 +532,11 @@ export class Engine {
   /**
    * 真正用的留白：演示模式是 0；面板太大时缩一缩。
    * 左右按比例缩（没被挡住的那块至少留一半宽）。
-   * 上下不按比例：上边是材质标签（字），模型不能钻到它下面 —— 上边照给，挤的是下边的材质栏（磨砂玻璃，挡一点没关系）。
-   * 矮的屏幕（< 800，英文标签常常排成两行）上下合计最多给到 60% 的高度，其余 50%。
+   * 上下合计最多给到 50% 的高度（矮的屏幕 < 800：60%，英文标签常常排成两行）。超了先缩上边（材质标签那一带：
+   * 标签是浮在上面的字和细线，模型顶上被盖住一点还认得出来），最多缩到工具条下面（minTop）；还不够才缩下边，
+   * 但不缩进材质栏本身（minBottom）—— 材质栏是实心的一大块，模型的前面（车廊、一楼）钻到它底下就看不见了。
+   * 两头都缩到底还超预算：照给（模型小一点，但不被挡住）。界面没给 minTop / minBottom（老的调用）：上边可以缩到 0，
+   * 下边最多缩掉留的那 12px 呼吸。
    */
   effInsets() {
     if (this.demo) return { left: 0, right: 0, top: 0, bottom: 0 };
@@ -542,8 +548,10 @@ export class Engine {
     let t = top;
     let b = bottom;
     if (t + b > budget) {
-      t = Math.min(t, budget * 0.8);
-      b = Math.max(0, budget - t);
+      const tMin = Math.min(t, this.insets.minTop ?? 0);
+      const bMin = Math.min(b, this.insets.minBottom ?? Math.max(0, b - 12));
+      t = Math.max(tMin, budget - b);
+      b = Math.max(bMin, budget - t);
     }
     return { left: left * kx, right: right * kx, top: t, bottom: b };
   }
@@ -1140,13 +1148,22 @@ export class Engine {
     this.dirty = true;
   }
 
+  /**
+   * 「这一层」的墙实际怎么切。多层的「全部」= 看整栋：最上面一层的墙也全立（和下面的楼层一样），
+   * 切开朝镜头的外墙留给点了某一层的时候 —— 不然「全部」和「二楼」是同一张图，「全部」像没反应。
+   * 「全部放低」照放低；展厅演示（一直绕着转、没有楼层按钮）照切开，让人看得见楼上屋里。单层：照墙按钮。
+   */
+  activeWallMode() {
+    return this.wallMode === 'cut' && this.floorView === 'all' && this.floors.length > 1 && !this.demo ? 'up' : this.wallMode;
+  }
+
   // ───────────────────────── 楼层 ─────────────────────────
 
   /**
    * 看哪一层：'all' | floorId。像 The Sims / Matterport：
    *  · 上面的楼层：所有网格换到影子层（镜头看不见、照样挡太阳），家具藏起来（也不进影子）；
    *  · 这一层：墙照墙的切法（cut / down / up）；下面的楼层：墙全立、家具照常；
-   *  · 'all' = 全部看得见，最上面一层是「这一层」。
+   *  · 'all' = 全部看得见，最上面一层是「这一层」，它的墙也全立（看整栋；activeWallMode）—— 切开的样子是点了某一层才有。
    * 只换图层 / 可见性（不重建、不重新编译着色器）；镜头的目标点平移到这一层（700ms）。
    * 点选、拖动（拖动平面在这一层的地面）、加家具（groundAt）、材质标签、夜灯、窗光、光柱都跟着「这一层」。
    * opts.instant：镜头不动（setScene / 演示用）；opts.quiet：不通知界面（cb.onFloorView）。
@@ -1299,6 +1316,25 @@ export class Engine {
     return d < 0.6 * f.pos.distanceTo(f.target) || el < (40 * Math.PI) / 180;
   }
 
+  /**
+   * 镜头远近变了没有（isNear）→ 开关楼下被盖住的家具。force：一定重新算、重新开关；否则只在镜头或目标点
+   * 离上次检查的位置挪过（> 1mm）时算，远近真的变了才开关（loop 每帧调用：平时只是两次向量比较）。
+   */
+  checkNear(force = false) {
+    const p = this.camera.position;
+    const tg = this.controls.target;
+    let at = this._nearAt;
+    if (!at) at = this._nearAt = { p: new THREE.Vector3(Infinity, 0, 0), t: new THREE.Vector3() };
+    if (!force && at.p.distanceToSquared(p) < 1e-6 && at.t.distanceToSquared(tg) < 1e-6) return;
+    at.p.copy(p);
+    at.t.copy(tg);
+    const near = this.isNear();
+    if (near !== this._near || force) {
+      this._near = near;
+      this.applyCovered();
+    }
+  }
+
   /** 这件家具在哪一层（floorId） */
   floorOf(itemId) {
     const it = this.itemData.get(itemId);
@@ -1364,6 +1400,8 @@ export class Engine {
       this.camera.position.copy(pos);
       this.controls.target.copy(target);
       this.controls.update();
+      // 一下子对好（生成 3D、撤销 / 重做、开机）：镜头远近变了，楼下被盖住的家具马上重新开关（loop 也会补，这里不等那一帧）
+      if (this.floors.length > 1) this.checkNear(true);
       this.placeFill();
       this.dirty = true;
       return;
@@ -1898,6 +1936,8 @@ export class Engine {
     on = !!on;
     if (on === this.demo) return;
     this.demo = on;
+    // 多层的「全部」：演示时墙照切开，平时全立（activeWallMode）—— 下一帧重新切
+    this.lastCut = null;
     this.controls.autoRotate = on;
     this.controls.autoRotateSpeed = on ? DEMO_ORBIT : 0.7;
     if (on) {
@@ -1979,23 +2019,19 @@ export class Engine {
     const moved = this.controls.update(dt);
     if (this.lib.pulse(t)) this.dirty = true;
     if (moved) this.dirty = true;
-    // 镜头拉近 / 拉远：楼下被盖住的家具开 / 关（多层才有）
-    if ((moved || this.tween) && this.floors.length > 1) {
-      const near = this.isNear();
-      if (near !== this._near) {
-        this._near = near;
-        this.applyCovered();
-      }
-    }
+    // 镜头拉近 / 拉远：楼下被盖住的家具开 / 关（多层才有）。不只看 OrbitControls 说动了没有：
+    // 程序直接摆的镜头（frame 不带动画、走进去模式）也算 —— 镜头和目标点跟上次检查时不一样就重新算
+    if (this.floors.length > 1) this.checkNear();
     if (!this.dirty) return;
     if (moved || this.tween) this.placeFill();
-    // 墙的切法跟着镜头：「这一层」照墙的切法，下面的楼层墙全立，上面的楼层藏着（setFloorView）
+    // 墙的切法跟着镜头：「这一层」照墙的切法，下面的楼层墙全立，上面的楼层藏着（setFloorView）；多层的「全部」= 墙全立
     const camDir = this.camera.position.clone().sub(this.controls.target).setY(0).normalize();
     if (this.floors.length && (this.lastCut == null || camDir.distanceTo(this.lastCut) > 0.02)) {
       let changed = false;
+      const mode = this.activeWallMode();
       this.floors.forEach((F, i) => {
         if (i > this.activeIdx) return;
-        if (applyCutaway(F.wallSets, camDir, i === this.activeIdx ? this.wallMode : 'up')) changed = true;
+        if (applyCutaway(F.wallSets, camDir, i === this.activeIdx ? mode : 'up')) changed = true;
       });
       if (changed) {
         // 墙切低 / 立起来：贴着它的墙板、电视跟着收起 / 回来（还有「主题墙」标签）

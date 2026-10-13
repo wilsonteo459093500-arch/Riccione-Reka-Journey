@@ -3275,6 +3275,41 @@
   width: 1px;
   height: auto;
 }
+/* 横条比它那一栏（日光浮卡 / 手机屏幕）宽时（三层、四层）：图标在上、字在下的窄按钮（FloorSwitch 量了挑） */
+.floor-switch.is-compact .fs-btn {
+  flex-direction: column;
+  gap: 3px;
+  min-width: 52px;
+  min-height: 50px;
+  padding: 5px 6px;
+}
+/* 还放不下：两行 ——「全部」一整行，各层一行 */
+.floor-switch.is-stack2 {
+  display: grid;
+  grid-template-columns: repeat(var(--fs-cols, 4), auto);
+  gap: 2px;
+}
+.floor-switch.is-stack2 .fs-btn {
+  flex-direction: column;
+  gap: 3px;
+  min-width: 52px;
+  min-height: 50px;
+  padding: 5px 6px;
+}
+.floor-switch.is-stack2 .fs-btn.fs-all {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  gap: 6px;
+  min-height: 38px;
+}
+.floor-switch.is-stack2 .fs-all::after {
+  left: 12px;
+  right: 12px;
+  top: auto;
+  bottom: -2px;
+  width: auto;
+  height: 1px;
+}
 .is-demo .floor-switch {
   opacity: 0;
   pointer-events: none;

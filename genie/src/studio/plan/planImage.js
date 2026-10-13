@@ -115,8 +115,12 @@ function newCanvas(w, h) {
   return c;
 }
 
+/**
+ * 这里的画布都不上屏：最后都是 toDataURL / getImageData（读像素）。要 CPU 上的画布（willReadFrequently）——
+ * GPU 画布每次读都要等 GPU 把像素拷回来，3D 场景同时在画的时候会卡好几秒。只在第一次 getContext 时有效。
+ */
 function whiteCtx(c) {
-  const ctx = c.getContext('2d');
+  const ctx = c.getContext('2d', { willReadFrequently: true });
   ctx.fillStyle = 'white';
   ctx.fillRect(0, 0, c.width, c.height);
   ctx.imageSmoothingEnabled = true;
@@ -317,7 +321,7 @@ async function rectifyImage(img, w, h) {
   const oh = Math.round(est.height * r);
   const warped = await cvRun('warp', { img: id, Hinv, w: ow, h: oh }, () => warpImage(id, Hinv, ow, oh));
   const out = newCanvas(ow, oh);
-  out.getContext('2d').putImageData(new ImageData(warped.data, ow, oh), 0, 0);
+  out.getContext('2d', { willReadFrequently: true }).putImageData(new ImageData(warped.data, ow, oh), 0, 0);
   return { canvas: out, info: { tiltV: est.tiltV, tiltH: est.tiltH, moved: Math.round(est.moved / k), scale: g } };
 }
 
@@ -468,7 +472,7 @@ export async function renderRegion(src, pageNo, rects, page, { long = CROP_LONG,
       if (doEnhance) {
         try {
           const id = ctx.getImageData(0, 0, c.width, c.height);
-          const e = enhance(id);
+          const e = await cvRun('enhance', { img: id }, () => enhance(id)); // 后台线程（大裁图要几百毫秒）
           id.data.set(e.data);
           ctx.putImageData(id, 0, 0);
         } catch {

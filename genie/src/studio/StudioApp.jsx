@@ -85,8 +85,8 @@ async function saveUnderlays(id, map) {
   if (map && Object.keys(map).length) await putUnderlays(id, map);
 }
 const allRooms = (plan) => (plan?.floors || []).flatMap((f) => f.rooms);
-/** 生成 / 打开多层方案时的那一句 */
-const floorsToast = (plan) => (plan.floors.length === 2 ? t('两层都生成好了 —— 点「一楼 / 二楼」看每一层') : t('{0} 层都生成好了 —— 点右边的楼层按钮看每一层', [plan.floors.length]));
+/** 生成 / 打开多层方案时的那一句（不说「右边 / 上面」：楼层按钮在电脑、iPad 上是右边，手机上是工具条下面） */
+const floorsToast = (plan) => (plan.floors.length === 2 ? t('两层都生成好了 —— 点「一楼 / 二楼」看每一层') : t('{0} 层都生成好了 —— 点楼层按钮看每一层', [plan.floors.length]));
 
 /**
  * 从材质栏加进来的墙件（主题墙：贴墙、不能拖）和挂画：放到离落点最近、够长的那段实墙上（避开门窗、打通），背朝墙。
@@ -869,6 +869,8 @@ export default function StudioApp() {
       if (dayFloats) ins.right = W - day.left + 12;
       const tb = box(q('.toolbar'));
       ins.top = tb ? tb.bottom + 8 : 0;
+      // 上边最少也要让开工具条（标签带太高、上下加起来超过预算时，引擎先缩上边，但不缩进工具条）
+      ins.minTop = ins.top;
       if (labels && !demoRef.current) {
         // 标签只在够大的画布上出现（Callouts：≥ 600 × 560）；还没排好时按一行完整的标签估（76 + 样板 50 + 7 + 名牌 44）
         const band = calloutBottom ?? (W >= 600 && H >= 560 ? 76 + 101 : 0);
@@ -880,12 +882,18 @@ export default function StudioApp() {
         if (r) colTop = Math.min(colTop, r.top);
       }
       if (day && !dayFloats) colTop = Math.min(colTop, day.top);
-      if (colTop < H) ins.bottom = H - colTop + 12;
-      // 楼层按钮：竖的占右边；横的在日光浮卡下面（那一栏本来就留给日光面板了）不用再让，手机上工具条下面那条占上边
+      if (colTop < H) {
+        ins.bottom = H - colTop + 12;
+        // 底部那一列（材质栏）是实心的：引擎缩下边最多缩到它本身的高度，模型不钻到材质栏底下
+        ins.minBottom = H - colTop;
+      }
+      // 楼层按钮：竖的占右边；横的在右半边（日光浮卡下面那一栏，或横屏手机工具条下面的右边）也只占右边 ——
+      // 它比日光浮卡宽一点时，右边多让一点，不把上边整条推下去（三层楼的那一排比日光卡宽，以前把上边推到 530px，
+      // 模型被挤到材质栏底下）；手机（竖着拿，≤ 600px）上工具条下面那条占上边
       const fs = box(q('.floor-switch'));
       if (fs) {
-        if (fs.height > fs.width) ins.right = Math.max(ins.right, W - fs.left + 12);
-        else if (!(dayFloats && fs.left >= day.left - 8)) ins.top = Math.max(ins.top, fs.bottom + 8);
+        if (fs.height > fs.width || (!phone && fs.left > W / 2)) ins.right = Math.max(ins.right, W - fs.left + 12);
+        else ins.top = Math.max(ins.top, fs.bottom + 8);
       }
       e.setInsets(ins);
       if (!insetsBooted.current) {

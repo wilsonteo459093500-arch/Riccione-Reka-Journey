@@ -144,13 +144,13 @@ export default {
   全部: 'All',
   看整栋: 'Whole house',
   '两层都生成好了 —— 点「一楼 / 二楼」看每一层': 'Both floors are ready — tap “Ground / First” to see each floor',
-  '{0} 层都生成好了 —— 点右边的楼层按钮看每一层': 'All {0} floors are ready — use the floor buttons on the right to see each one',
+  '{0} 层都生成好了 —— 点楼层按钮看每一层': 'All {0} floors are ready — tap a floor button to see each one',
   双层: 'Two-storey',
   三层: 'Three-storey',
   四层: 'Four-storey',
   多层: 'Multi-storey',
-  '两层以上的房子：右边的「全部 / 二楼 / 一楼」一层层看（看一楼时楼上收起来，影子还在；键盘 PageUp / PageDown）。':
-    'Two storeys or more: use “All / First / Ground” on the right to look floor by floor (upstairs folds away but its shadow stays; PageUp / PageDown on a keyboard).',
+  '两层以上的房子：用楼层按钮「全部 / 二楼 / 一楼」一层层看（看一楼时楼上收起来，影子还在；键盘 PageUp / PageDown）。':
+    'Two storeys or more: use the floor buttons “All / First / Ground” to look floor by floor (upstairs folds away but its shadow stays; PageUp / PageDown on a keyboard).',
   '双层、三层的房子：编辑器上面有楼层标签，楼梯工具把上下层连起来。': 'Two- and three-storey houses: the editor has floor tabs, and the stairs tool links the floors.',
   // ── 诊断面板（studio.html?diag=1，按钮本来就中英并列） ──
   '收起 Hide': 'Hide',

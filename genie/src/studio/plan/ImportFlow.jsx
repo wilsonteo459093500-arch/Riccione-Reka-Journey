@@ -373,7 +373,12 @@ export default function ImportFlow({ file, ai = false, current = null, onSetting
   // 读好的方案里的楼层名（只有一户 → 户型名）
   const fdisp = (plan, fid) => (singleCard && plan?.floors?.length === 1 ? unitName(singleCard) : t(floorName(plan, fid)));
   // 读好的方案自己检查一遍（和编辑器一样的提示）
-  const issues = useMemo(() => (result && !result.report?.manual ? checkPlan(result.plan) : []), [result]);
+  const issues = useMemo(() => {
+    if (!result || result.report?.manual) return [];
+    // 「没认出楼梯」已经有一句了：编辑器的「没有楼梯连到…」不再重复
+    const said = new Set((result.report.warnings || []).map((w) => w.code));
+    return checkPlan(result.plan).filter((x) => !(x.code === 'noStairs' && said.has('noStairs')));
+  }, [result]);
 
   // 卡片改了（加框、改层、不要）：后台重新裁
   useEffect(() => {

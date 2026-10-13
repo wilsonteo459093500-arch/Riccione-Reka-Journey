@@ -6,8 +6,9 @@
 //   op 'estimate' args { img }                 → rectifyEstimate(img)
 //   op 'warp'     args { img, Hinv, w, h }     → { width, height, data }（data 的 buffer 转过去，不复制）
 //   op 'walls'    args { img, pxPerM }          → { ink: { width, height, mask }, walls }（extractWalls 的结果）
+//   op 'enhance'  args { img }                  → { width, height, data }（截图 / 照片的裁图去灰、拉对比）
 
-import { rectifyEstimate, warpImage, inkMask } from './sheet.js';
+import { rectifyEstimate, warpImage, inkMask, enhance } from './sheet.js';
 import { extractWalls } from './walls.js';
 
 self.onmessage = (e) => {
@@ -30,6 +31,10 @@ self.onmessage = (e) => {
       }
       out = { ink, walls };
       if (ink?.mask?.buffer) transfer.push(ink.mask.buffer);
+    } else if (op === 'enhance') {
+      const e = enhance(args.img);
+      out = { width: e.width, height: e.height, data: e.data };
+      transfer.push(e.data.buffer);
     } else if (op === 'ping') out = 'pong';
     else throw new Error(`unknown op ${op}`);
     self.postMessage({ id, ok: true, out }, transfer);
