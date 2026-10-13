@@ -136,9 +136,9 @@ export default {
     'Underlay in place. Trace the walls with “Draw room” — calibrating the scale with the ruler first makes it more accurate. (Add a Gemini key in Settings for automatic AI detection.)',
   '这台设备读不了 PDF：请更新 iPadOS，或把平面图截图成 JPG / PNG 再上传': 'This device can’t read PDFs — update iPadOS, or upload a JPG / PNG screenshot of the plan instead',
   '底图已放好。用「画房间」沿着墙描一遍；先用量尺校准比例会更准。': 'Underlay in place. Trace the walls with “Draw room” — calibrating the scale with the ruler first makes it more accurate.',
-  // ── 3D 画不出来时的提示（着色器编译失败 → 自动降画质） ──
-  '这台电脑的显卡跑不动高画质，已自动换成兼容画质。': 'This computer’s graphics can’t handle the high-quality mode, so the studio switched to compatible quality.',
-  '这台电脑的浏览器画不出 3D：请在浏览器设置里打开「硬件加速」，或更新显卡驱动后再试。': 'This browser can’t draw the 3D view. Turn on hardware acceleration in the browser settings, or update the graphics driver, then try again.',
+  // ── 3D 画不出来时的提示（着色器编译失败 / 后期链画出空画面 → 自动降画质；电脑、手机、iPad 都可能） ──
+  '这台设备的显卡跑不动高画质，已自动降低画质。': 'This device’s graphics can’t handle the high-quality mode, so the studio lowered the quality automatically.',
+  '这台设备的浏览器画不出 3D：请在浏览器设置里打开「硬件加速」，或更新浏览器、系统和显卡驱动后再试。': 'This device’s browser can’t draw the 3D view. Turn on hardware acceleration in the browser settings, or update the browser, the system and the graphics driver, then try again.',
   // ── 诊断面板（studio.html?diag=1，按钮本来就中英并列） ──
   '收起 Hide': 'Hide',
   '诊断 Diag': 'Diag',
