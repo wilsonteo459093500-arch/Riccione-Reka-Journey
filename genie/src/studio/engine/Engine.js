@@ -40,6 +40,7 @@ import { applyCutaway, disposeHouseKit, SHADOW_LAYER, HIDDEN_LAYER } from './hou
 import { buildStack } from './floors.js';
 import { daylight, LAMP } from './daylight.js';
 import { Beams } from './beams.js';
+import { HDR_GLSL, HDR_COPY_FRAG, patchHdrChunks, guardFrag, guardOutputShader, guardBloom, BlankWatch, gpuName } from './hdrguard.js';
 import { MAT_BY_ID } from '../../shared/materials.js';
 import { PALETTE } from '../../shared/palette.js';
 import { ROOM_TYPES, migratePlan, stairPath } from '../plan/model.js';
@@ -173,6 +174,8 @@ export class Engine {
     const QP = QUALITY[this.quality];
     patchSoftShadows(QP.taps);
     patchToneMapping();
+    // 出射光进半精度 HDR 缓冲之前先洗干净（NaN / Inf 会让后期链整屏变透明，见 hdrguard.js）
+    patchHdrChunks();
     this.demo = false;
     this._prOverride = 0;
     // 界面面板挡住的边（CSS 像素）：模型在没被挡住的那块里居中、放得下（setInsets）
@@ -293,6 +296,8 @@ export class Engine {
     this.hovBox = makeRing(PALETTE.card, 0.5);
     this.scene.add(this.selBox, this.hovBox);
 
+    // 看门狗：后期链画出来的是空画面（整屏透明 / 全黑）就自动降一档
+    this.blankWatch = new BlankWatch(this);
     this.setupComposer();
     this.raycaster = new THREE.Raycaster();
     this.ndc = new THREE.Vector2();
@@ -404,6 +409,7 @@ export class Engine {
       this.dof = new DOFPass(gtao.depthTexture, this.camera);
       composer.addPass(this.dof);
       this.bloom = new UnrealBloomPass(new THREE.Vector2(W, H), 0.2, 0.45, 1.1);
+      guardBloom(this.bloom);
       composer.addPass(this.bloom);
     }
     this.output = makeOutputPass(full ? 0.2 : 0);
@@ -428,12 +434,16 @@ export class Engine {
     };
     const info = { gpu: gpuName(gl), quality: this.quality, program: (gl.getProgramInfoLog(program) || '').slice(0, 600), vertex: log(vs).slice(0, 600), fragment: log(fs).slice(0, 600) };
     console.error('[WISH studio] shader failed to compile', info);
+    this.lowerQuality(info, this.quality === 'high' ? 'fast' : this.quality === 'fast' ? 'safe' : null);
+  }
+
+  /** 画不出来（着色器编译失败；后期链画出空画面，见 hdrguard.js 的看门狗）：记下原因、降到 next 档；next = null（已经到底）就告诉界面 */
+  lowerQuality(info, next) {
     try {
       (window.__genieDiag ||= []).push(info);
     } catch {
       /* ignore */
     }
-    const next = this.quality === 'high' ? 'fast' : this.quality === 'fast' ? 'safe' : null;
     if (!next) {
       this.cb.onRenderProblem?.({ ...info, degradedTo: null });
       return;
@@ -474,6 +484,7 @@ export class Engine {
     this.setupComposer();
     this.resize();
     if (this.day) this.setTime(this.time);
+    this.blankWatch.poke();
     this.dirty = true;
   }
 
@@ -1028,6 +1039,7 @@ export class Engine {
     this.lib.applyAll(materials);
     this.refreshFeatureMode();
     this.updateRoomKey();
+    this.blankWatch.poke();
     this.dirty = true;
   }
 
@@ -1035,6 +1047,7 @@ export class Engine {
     this.lib.apply(slot, matId);
     if (slot === 'feature') this.refreshFeatureMode();
     this.updateRoomKey();
+    this.blankWatch.poke();
     this.dirty = true;
   }
 
@@ -1063,6 +1076,8 @@ export class Engine {
     if (!this.contextLost && (this.envKey !== d.envKey || !this.scene.environment)) {
       this.scene.environment = this.env.get(d);
       this.envKey = d.envKey;
+      // 新的环境贴图（半小时一档，空画面就是从这里来的）：看门狗限速一过就查一次；同一档里拖时间不查（不让 CPU 等 GPU）
+      this.blankWatch.poke();
     }
     for (const l of this.roomLights) {
       l.color.set(l.userData.color || LAMP.pool).multiply(wbLamp);
@@ -1815,6 +1830,7 @@ export class Engine {
     if (this.composer) {
       if (this.dof) this.dof.focus = this.camera.position.distanceTo(this.controls.target);
       this.composer.render();
+      this.blankWatch.afterFrame();
     } else this.renderer.render(this.scene, this.camera);
   }
 
@@ -2052,6 +2068,7 @@ export class Engine {
   dispose() {
     this.running = false;
     clearTimeout(this._refitT);
+    this.blankWatch.dispose();
     cancelAnimationFrame(this._raf);
     this._unbind?.();
     this.ro.disconnect();
@@ -2177,16 +2194,6 @@ function patchSoftShadows(taps) {
   THREE.ShaderChunk.shadowmap_pars_fragment = chunk.replace(re, `shadow = 0.0;\n\t\t\t\t${taps_.join('\n\t\t\t\t')}\n\t\t\t\tshadow /= float( ${taps} );`);
 }
 
-/** 显卡名字（给出错时的提示 / 诊断用；拿不到就空字符串） */
-function gpuName(gl) {
-  try {
-    const ext = gl.getExtension('WEBGL_debug_renderer_info');
-    return String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER) || '');
-  } catch {
-    return '';
-  }
-}
-
 // ───────────────────────── 环境光 IBL：摄影棚 + 天穹 ─────────────────────────
 // 一个小场景：渐变天穹（天顶 / 地平线 / 地面反光 + 太阳方向的暖晕）+ 顶上一块大柔光箱 + 两侧灯条 + 夜里几块暖色小灯面。
 // 用 PMREM 预滤波成环境贴图。按 daylight().envKey（半小时一档）缓存最近 6 档。
@@ -2207,20 +2214,23 @@ const DOME_FRAG = /* glsl */ `
   uniform float glow;
   uniform float gain;
   varying vec3 vDir;
+  ${HDR_GLSL}
   void main() {
     vec3 d = normalize(vDir);
     float h = d.y;
     // 地平线有方向：朝太阳那边暖，背对太阳那边偏天空的冷色 → 黄昏时阴影是冷的、受光面是暖的
     vec2 sh = normalize(sunDir.xz + vec2(1e-4));
     vec2 dh = normalize(d.xz + vec2(1e-4));
-    float toward = pow(dot(dh, sh) * 0.5 + 0.5, 1.6);
+    // 底数夹到 [0, 1]：正背对太阳的纹素 dot 会舍入成 -1.0000001 → 底数 -6e-8，手机 GPU 上 pow(负数) = NaN，
+    // 整张环境贴图被模糊出一大片 NaN（某些半小时整屏变透明的根源，见 hdrguard.js）
+    float toward = pow(clamp(dot(dh, sh) * 0.5 + 0.5, 0.0, 1.0), 1.6);
     vec3 hor = mix(mix(zenith, horizon, 0.45), horizon, toward);
     vec3 sky = mix(hor, zenith, pow(clamp(h, 0.0, 1.0), 0.55));
     vec3 below = mix(hor * 0.55, ground, smoothstep(0.0, 0.35, -h));
     vec3 c = h >= 0.0 ? sky : below;
     float s = max(dot(d, normalize(sunDir)), 0.0);
     c += sunCol * glow * (pow(s, 6.0) * 0.9 + pow(s, 48.0) * 1.6) * smoothstep(-0.15, 0.1, h);
-    gl_FragColor = vec4(c * gain, 1.0);
+    gl_FragColor = vec4(hdrSafe(c * gain), 1.0);
   }
 `;
 
@@ -2347,7 +2357,8 @@ const QUAD_VERT = /* glsl */ `
   }
 `;
 
-/** 场景画到一个多重采样（MSAA）的 HDR 目标里，再交给后面的 pass —— EffectComposer 默认会丢掉抗锯齿 */
+/** 场景画到一个多重采样（MSAA）的 HDR 目标里，再交给后面的 pass —— EffectComposer 默认会丢掉抗锯齿。
+ *  拷贝时顺便洗干净（NaN → 0、夹到 [0, HDR_MAX]）：GTAO / 景深 / 辉光 / 输出都不会再拿到 NaN / Inf */
 class MSAARenderPass extends Pass {
   constructor(scene, camera, samples) {
     super();
@@ -2359,7 +2370,7 @@ class MSAARenderPass extends Pass {
       new THREE.ShaderMaterial({
         uniforms: { tDiffuse: { value: null } },
         vertexShader: QUAD_VERT,
-        fragmentShader: 'uniform sampler2D tDiffuse; varying vec2 vUv; void main() { gl_FragColor = texture2D(tDiffuse, vUv); }',
+        fragmentShader: HDR_COPY_FRAG,
         blending: THREE.NoBlending,
         depthTest: false,
         depthWrite: false,
@@ -2445,7 +2456,8 @@ class DOFPass extends Pass {
         range: { value: 0.4 },
       },
       vertexShader: QUAD_VERT,
-      fragmentShader: DOF_FRAG,
+      // 出口洗干净：GTAO 里冒出来的 NaN 到这里为止（见 hdrguard.js）
+      fragmentShader: guardFrag(DOF_FRAG),
       depthTest: false,
       depthWrite: false,
     });
@@ -2474,7 +2486,7 @@ class DOFPass extends Pass {
   }
 }
 
-/** 输出：色调映射 + sRGB（three 自带）之后，再加一点暗角和抖动（深色渐变不出色带） */
+/** 输出：色调映射 + sRGB（three 自带）之后，再加一点暗角和抖动（深色渐变不出色带）；色调映射之前先把读进来的颜色洗干净 */
 function makeOutputPass(vignette) {
   const out = new OutputPass();
   out.uniforms.uVignette = { value: vignette };
@@ -2488,6 +2500,7 @@ function makeOutputPass(vignette) {
 			gl_FragColor.rgb *= 1.0 - uVignette * smoothstep(0.12, 0.62, dot(vq, vq) * 2.2);
 			gl_FragColor.rgb += (fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) / 255.0;`
     );
+  out.material.fragmentShader = guardOutputShader(out.material.fragmentShader);
   return out;
 }
 

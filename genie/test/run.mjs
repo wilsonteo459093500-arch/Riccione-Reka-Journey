@@ -531,5 +531,8 @@ await test('白天有太阳、深夜开灯', () => {
 });
 await test('材质库没有重复 id', () => assert.equal(new Set(MATERIALS.map((m) => m.id)).size, MATERIALS.length));
 
+console.log('HDR 守门（升级 three 时先查注入点）');
+for (const [name, fn] of (await import('./hdrguard.test.mjs')).hdrGuardTests) await test(name, fn);
+
 console.log(`\n${n - failed}/${n} 通过`);
 if (failed) process.exit(1);

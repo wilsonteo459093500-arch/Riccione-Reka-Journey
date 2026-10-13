@@ -110,7 +110,10 @@ export function installDiag() {
         s += line('camera', `pos=${[c.position.x, c.position.y, c.position.z].map((v) => v.toFixed(1)).join(',')} near=${c.near} far=${c.far} fov=${c.fov?.toFixed?.(1)} layers=${c.layers.mask}`);
         s += line('scene', `children=${e.scene.children.length} rooms=${e.rooms?.length ?? '-'} bg=${e.scene.background ? 'tex' : 'none'}`);
         s += line('pixel', pixel);
-        for (const d of (window.__genieDiag || []).slice(-3)) s += line('shader', `${d.quality} ${d.gpu} | ${(d.fragment || d.vertex || d.program).slice(0, 200)}`);
+        // 后期链的空画面看门狗（hdrguard.js）：查了几次、几次是空的、直接画核对过几次、降过几次档
+        const w = e.blankWatch?.stats;
+        if (w) s += line('blankwatch', `checks=${w.checks} blank=${w.blank} probes=${w.probes} trips=${w.trips} last=${w.last || '-'}`);
+        for (const d of (window.__genieDiag || []).slice(-3)) s += line(d.reason || 'shader', `${d.quality} ${d.gpu} | ${(d.fragment || d.vertex || d.program || '').slice(0, 200)}`);
       } catch (err) {
         s += line('diag', `failed: ${err.message}`);
       }

@@ -354,9 +354,10 @@ export default function StudioApp() {
       onInteract: () => !showroomRef.current && setDemo(false),
       onContextLost: () => setCtx('lost'),
       onContextRestored: () => setCtx('restored'),
-      // 着色器编译失败（有些 Windows 显卡）：引擎已经自动降了一档；降到底还是不行就请他开硬件加速 / 更新驱动
+      // 着色器编译失败（有些 Windows 显卡）或后期链画出空画面（有些手机显卡，p.reason = 'blank'）：引擎已经自动降了一档；
+      // 降到底还是不行就请他开硬件加速 / 更新浏览器、系统、驱动（电脑、手机、iPad 都可能，用「这台设备」）
       onRenderProblem: (p) =>
-        flash(p.degradedTo ? t('这台电脑的显卡跑不动高画质，已自动换成兼容画质。') : t('这台电脑的浏览器画不出 3D：请在浏览器设置里打开「硬件加速」，或更新显卡驱动后再试。'), 8000),
+        flash(p.degradedTo ? t('这台设备的显卡跑不动高画质，已自动降低画质。') : t('这台设备的浏览器画不出 3D：请在浏览器设置里打开「硬件加速」，或更新浏览器、系统和显卡驱动后再试。'), 8000),
       // 演示时引擎每 250ms 报一次时间：演示中界面是藏起来的，不跟着重画；退出时再同步
       onTime: (h) => !demoRef.current && Number.isFinite(h) && setProject((p) => (p && p.time !== h ? { ...p, time: h } : p)),
       // 换了楼层：记在方案上（这台设备下次打开还在这一层；分享链接里不带）

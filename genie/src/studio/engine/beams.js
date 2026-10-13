@@ -2,9 +2,11 @@
 // 做法：把窗洞四个角沿光线方向投到（那一层的）地面，拼成一个半透明、加法混合、越往地面越淡的棱柱。
 // 棱柱的侧面在「侧着看」时淡出（用屏幕导数求面法线），所以光柱没有硬边，像真的空气里的光；
 // 再加一点点抖动噪声，暗处不出色带。
+// 手机 GPU 上 pow(负数) / normalize(0) = NaN：底数夹好、最后再洗一次（hdrguard.js），一个 NaN 像素就能让高画质整屏变透明。
 
 import * as THREE from 'three';
 import { LAMP } from './daylight.js';
+import { HDR_GLSL } from './hdrguard.js';
 
 const vert = /* glsl */ `
   attribute float t;
@@ -23,15 +25,16 @@ const frag = /* glsl */ `
   varying float vT;
   varying vec3 vView;
   float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+  ${HDR_GLSL}
   void main() {
     vec3 n = normalize(cross(dFdx(vView), dFdy(vView)));
     vec3 v = normalize(-vView);
     float facing = abs(dot(n, v));
     float edge = smoothstep(0.05, 0.75, facing);           // 侧面淡出 → 柔边
-    float along = pow(1.0 - vT, 1.35) * smoothstep(0.0, 0.04, vT + 0.01);
+    float along = pow(clamp(1.0 - vT, 0.0, 1.0), 1.35) * smoothstep(0.0, 0.04, vT + 0.01); // MSAA 边上的像素 vT 会略大于 1
     float a = strength * along * edge * 0.2;
     a += (hash(gl_FragCoord.xy) - 0.5) / 255.0;            // 抖动，防色带
-    a = max(a, 0.0);
+    a = hdrSafe(a);
     gl_FragColor = vec4(color * a, a);
   }
 `;
