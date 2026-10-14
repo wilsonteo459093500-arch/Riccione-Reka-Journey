@@ -11,12 +11,13 @@
 //
 // effects：正数偏向 a 侧（W 暖 / M 简 / N 朴 / H 藏；暗轴 light 明亮 / curve 圆润 / social 相聚）。
 
+// hint = 章节牌上的那一句，也是潘吉翻牌时说的话的字幕（voice-lines.js 的 ch.*）：她用第一人称说
 export const CHAPTERS = [
   { id: 'intuition', num: 'I', zh: '直觉之牌', en: 'THE INTUITION', hint: '别想，3 秒内跟着第一感觉选。', mode: 'fast' },
   { id: 'life', num: 'II', zh: '生活之牌', en: 'THE LIFE', hint: '想象一个普通的星期六。', mode: 'fast' },
   { id: 'treasure', num: 'III', zh: '宝藏之牌', en: 'THE TREASURE', hint: '现在请慢下来 —— 数字越准，柜子越合身。', mode: 'slow' },
-  { id: 'wishes', num: 'IV', zh: '愿望之牌', en: 'THE THREE WISHES', hint: '潘吉只能实现三个愿望。', mode: 'slow' },
-  { id: 'nogo', num: 'V', zh: '雷区之牌', en: 'THE DEAL-BREAKERS', hint: '最后，帮潘吉扫个雷。', mode: 'fast' },
+  { id: 'wishes', num: 'IV', zh: '愿望之牌', en: 'THE THREE WISHES', hint: '我只能实现三个愿望哦。', mode: 'slow' },
+  { id: 'nogo', num: 'V', zh: '雷区之牌', en: 'THE DEAL-BREAKERS', hint: '最后，帮我扫个雷吧。', mode: 'fast' },
 ];
 
 // ───────────────────────── I · 直觉（二选一） ─────────────────────────

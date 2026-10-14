@@ -15,13 +15,18 @@ export default {
   '展厅 iPad 请用上面的「客户许愿模式」。': 'On the showroom iPad, use Wish Mode above.',
   '建好超过 {0} 天的蓝图会自动删掉（客人手上的链接还能打开）。': 'Blueprints older than {0} days are deleted automatically (guests can still open their own links).',
   '清空本机全部蓝图': 'Delete all blueprints on this device',
-  '删除这台设备上全部 {0} 份蓝图？删了就找不回来。': 'Delete all {0} blueprints on this device? This can’t be undone.',
+  // 删除前问一句的小卡片（「删除 {0} 的蓝图？」「删除」「取消」在 en-base.js）
+  '只删掉这台设备上的这一份，客人手上的链接还能打开。': 'Only this device’s copy is deleted — the guest can still open their own link.',
+  '删除这台设备上全部 {0} 份蓝图？': 'Delete all {0} blueprints on this device?',
+  '删了就找不回来（客人手上的链接还能打开）。': 'This can’t be undone (guests can still open their own links).',
+  '全部删除': 'Delete all',
 
   // ── 许愿模式开场 ──
   '许一个家的愿': 'Make a wish for your home',
   '中文开始': '中文开始',
   '调大一点声音 —— {0}会一路陪着你。': 'Turn the sound up a little — {0} will keep you company.',
   '{0}和{1}': '{0} and {1}',
+  '古筝': 'Guzheng',
   '溪水': 'Stream',
   '微风': 'Breeze',
   '鸟鸣': 'Birdsong',
@@ -33,9 +38,12 @@ export default {
   '员工区：按住 3 秒': 'Staff controls: press and hold for 3 seconds',
   '员工': 'Staff',
   '客人看不到这里': 'Guests never see this',
-  '清空进度，回到开头；音乐回到平静': 'Clears this guest’s progress and starts again; the music settles',
+  '清空进度，回到开头；音乐、音量和声音都回到默认': 'Clears this guest’s progress and starts again; music, volume and sounds return to their defaults',
   '在这份蓝图上打开设计师版': 'Opens the designer view of this blueprint',
   '到了蓝图页才能打开': 'Available once the blueprint is on screen',
   '音乐淡出，回到入口页': 'Fades the music out and returns to the home page',
   '语言': 'Language',
+  // 音乐面板的三个开关（「潘吉说话」在 en-voice.js）
+  '按钮音效': 'Touch sounds',
+  '自然声': 'Nature sounds',
 };
