@@ -31,6 +31,73 @@
   border: 0;
   background: var(--bg);
 }
+/* 换文档时接住画面的一层光（WishShell 的 raiseVeil / dropVeil 直接切 class）：
+   iframe 换成新页面、新页面还没画出来的那一段是空的（只看得到纸色）。这层光盖在 iframe 上、胶囊下，
+   子页面的换页光正盖着的时候 140 ms 淡入（或者直接盖上），新页面画好了再 420 ms 淡掉。只动 opacity / transform。
+   暮色 = 和 3D「正在搭建你的家…」同一片深绿 + 神灯的一团暖光（慢慢呼吸）；晨光 = 纸色 + 一大片金色的光晕。 */
+.ws-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  overflow: hidden;
+  pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
+  background: var(--cream);
+  transition:
+    opacity 0.42s var(--ease),
+    visibility 0s linear 0.42s;
+}
+.ws-veil.is-on {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto; /* 盖着的时候点不到底下半载的页面（最多盖几秒，自己会走） */
+  transition:
+    opacity 0.14s var(--ease),
+    visibility 0s;
+}
+.ws-veil.is-on.is-instant {
+  transition: none;
+}
+.ws-veil > i {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: 120vmax;
+  height: 120vmax;
+  margin: -60vmax 0 0 -60vmax;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(var(--gold-l-rgb), 0.62), rgba(var(--gold-l-rgb), 0.24) 46%, rgba(var(--gold-l-rgb), 0) 100%);
+  animation: ws-veil-breathe 3.6s ease-in-out infinite;
+  animation-play-state: paused;
+  will-change: transform, opacity;
+}
+.ws-veil.is-on > i {
+  animation-play-state: running;
+}
+.ws-veil[data-tone='dusk'] {
+  background: radial-gradient(120% 90% at 50% 42%, var(--ritual-bg), var(--studio-bg) 70%);
+}
+.ws-veil[data-tone='dusk'] > i {
+  top: 42%;
+  width: 80vmin;
+  height: 80vmin;
+  margin: -40vmin 0 0 -40vmin;
+  background: radial-gradient(closest-side, rgba(var(--gold-l-rgb), 0.2), rgba(var(--gold-l-rgb), 0.07) 52%, rgba(var(--gold-l-rgb), 0) 100%);
+}
+.ws-veil[data-tone='paper'] > i {
+  background: radial-gradient(closest-side, rgba(var(--gold-l-rgb), 0.22), rgba(var(--gold-l-rgb), 0.08) 46%, rgba(var(--gold-l-rgb), 0) 100%);
+}
+/* 盖着光的时候胶囊先让开（换完页在新的位置淡回来，不会从左下角跳到右下角） */
+.ws-dock {
+  transition: opacity 0.32s var(--ease);
+}
+.ws[data-veil] .ws-dock {
+  opacity: 0;
+  pointer-events: none;
+  transition-duration: 0.14s;
+}
+
 /* 结束许愿模式：整页淡成纸色（和音乐的 1.5 秒淡出一起） */
 .ws.is-leaving::after {
   content: '';
@@ -278,7 +345,8 @@ html[lang='en'] .ws-pill:not(.is-stalled) .ws-pill-label {
   letter-spacing: -0.01em;
   color: var(--text-strong);
 }
-.ws-pop-head span {
+/* > div > span：✕ 按钮里 fx 的效果层也是 <span class="fx-ink">，不要被这条规则往下推 4 px */
+.ws-pop-head > div > span {
   display: block;
   margin-top: 4px;
   font: 400 14px/1.35 var(--sans);
@@ -544,7 +612,7 @@ html[lang='en'] .ws-pill:not(.is-stalled) .ws-pill-label {
   color: var(--gold);
   box-shadow: none;
 }
-.ws-act > span {
+.ws-act > span:not(.fx-ink) {
   min-width: 0;
 }
 .ws-act b {
@@ -752,7 +820,8 @@ html[lang='en'] .ws-title {
   opacity: 0.4;
   transition-duration: 0.2s;
 }
-.ws-go.is-on span::after {
+/* 只认这颗按钮自己的字（.ws-go-label）：fx 往按钮里放的效果层也是 <span class="fx-ink">，不能也长出一个转圈 */
+.ws-go.is-on .ws-go-label::after {
   content: '';
   display: inline-block;
   width: 14px;
@@ -920,5 +989,32 @@ html[lang='en'] .ws-title {
 @keyframes ws-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+@keyframes ws-veil-breathe {
+  0%,
+  100% {
+    opacity: 0.72;
+    transform: scale(0.94);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+}
+
+/* 减少动态：光不呼吸；盖上 / 淡掉照样是淡入淡出（不是一下子切换 —— 所以要压过 base.css 把所有过渡变成 0 的那条 !important） */
+@media (prefers-reduced-motion: reduce) {
+  .ws-veil > i {
+    animation: none;
+  }
+  .ws-veil {
+    transition-timing-function: linear;
+    transition-duration: 0.3s, 0s !important;
+    transition-delay: 0s, 0.3s;
+  }
+  .ws-veil.is-on {
+    transition-duration: 0.2s, 0s !important;
+    transition-delay: 0s, 0s;
   }
 }

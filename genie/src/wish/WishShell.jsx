@@ -12,6 +12,11 @@
 //   · 员工区：长按 WISH 字标约 3 秒（有进度圈）→ 下一位客人 · 设计师版 · 结束许愿模式 · 语言。客人不会误触。
 //   · 下一位客人：一道晨光扫过整个画面（fx.wipe dawn），光盖住的那一刻换成新的欢迎页；声音全部复原（音乐《晨光》、音量、
 //     静音、按钮音效、自然声、潘吉）；潘吉说「谢谢你来许愿，下次见！」（闲置自动重来时不说：没人在）。
+//     她道别的时候音乐留在原来那一页的音量（3D 的 ×0.25），说完才用 3 秒慢慢回到《晨光》—— 不会在她说话时涨上来。
+//   · 换文档的那一下（蓝图 → 3D、下一位客人重建 iframe）：iframe 在新页面画出来之前是空的。外壳在它上面盖一层不动的光
+//     （.ws-veil：暮色 = 深绿 + 神灯的一团暖光；晨光 = 纸色 + 金色的光晕），接住子页面那一道光；新页面画好了再 420 ms 淡掉。
+//     客人看到的是一整段连续的光，不会「暗 → 一下子亮成空白的纸色 → 又暗」。子页面离开前发 {type:'leaving', tone}；
+//     没发的话（旧版本）iframe 的 pagehide 里看到它自己的换页光（.fx-wipe）也一样接住。
 //     iframe 自己的「返回 / 前进」记录里不能留着上一位客人的页面（3D 会打开他的方案、底座写着他的名字）：
 //     客人只要离开过第一个页面（进过 3D、从 3D 回到蓝图、换过语言 …），就把整个 <iframe> 重建（换 key），
 //     连同它的浏览记录一起丢掉；只有一直停在第一个许愿之旅页面里的，才只发 {type:'restart'} 原地重新开始（展厅断网也能用）。
@@ -39,6 +44,9 @@ const SESSION_KEY = 'genie.session.v1';
 const PAGES = ['quiz', 'blueprint', 'studio'];
 const LEVEL = { quiz: 1, blueprint: 'blueprint', studio: 'studio' }; // zen.duck() 认这几个名字（CONFIG.wishDuck）
 const FADE_MS = CONFIG.idle?.fadeMs ?? 600000;
+const VEIL_TONES = ['dusk', 'dawn', 'paper'];
+const VEIL_CAP = { load: 8000, quiz: 2500 }; // 光最多盖多久（新页面一直没报到也不会挡着客人）
+const BYE_CAP_MS = 5000; // 潘吉道别最多等这么久，音乐才回到《晨光》（她没出声 = 马上）
 
 const isLive = (zen) => (typeof zen.isLive === 'function' ? zen.isLive() : !!(zen.running && zen.ctx?.state === 'running'));
 const resume = (zen) => Promise.resolve(typeof zen.resume === 'function' ? zen.resume() : zen.ctx?.resume?.()).catch(() => false);
@@ -128,6 +136,11 @@ export default function WishShell({ zen, host = '', startLang, greet = false, on
   const wiping = useRef(false);
   // 现在这个 <iframe> 载入过几个页面（重建 = 换 src / key 就从 0 算起）；len = 第一页载好时整个分页的浏览记录有几条
   const loads = useRef({ src: '', n: 0, len: 0 });
+  const rootEl = useRef(null);
+  const veilEl = useRef(null);
+  const veil = useRef(null); // 盖着的光：{ tone, until: 'load'（下一个文档载好）| 页面名（子页面报到） }
+  const veilT = useRef(0);
+  const musicHeld = useRef(null); // 潘吉在道别：音乐先别回到《晨光》（{ volTouched }）
 
   const post = (msg) => {
     try {
@@ -178,6 +191,71 @@ export default function WishShell({ zen, host = '', startLang, greet = false, on
     voice.say('welcome.hello', { mode: 'queue', delay: 900 });
   };
 
+  // ── 换文档时盖住 iframe 的那一层光（直接改 DOM：pagehide 里也要在同一帧盖上，不等 React 重画） ──
+  /** 盖上：tone = dusk | dawn | paper；until = 'load' | 页面名；instant = 不淡入（外壳自己的换页光正盖着、或旧页面已经在卸载） */
+  const raiseVeil = (tone, { until = 'load', instant = false } = {}) => {
+    const el = veilEl.current;
+    if (!el) return;
+    veil.current = { tone, until };
+    clearTimeout(veilT.current);
+    el.dataset.tone = VEIL_TONES.includes(tone) ? tone : 'dusk';
+    el.classList.toggle('is-instant', !!instant);
+    el.classList.add('is-on');
+    if (rootEl.current) rootEl.current.dataset.veil = el.dataset.tone;
+    veilT.current = setTimeout(() => dropVeil({ now: true }), VEIL_CAP[until] ?? VEIL_CAP.load);
+  };
+  /** 旧页面正在卸载：还在淡入的光马上盖满 */
+  const solidVeil = () => veilEl.current?.classList.add('is-instant');
+  /** 新页面画出来了（再等两帧，确定已经画上去）→ 420 ms 淡掉 */
+  const dropVeil = ({ now = false } = {}) => {
+    const v = veil.current;
+    if (!v) return;
+    veil.current = null;
+    clearTimeout(veilT.current);
+    const go = () => {
+      if (veil.current) return; // 这期间又盖上了（例如又一次换页）
+      veilEl.current?.classList.remove('is-on', 'is-instant');
+      if (rootEl.current) delete rootEl.current.dataset.veil;
+    };
+    if (now || typeof requestAnimationFrame !== 'function') go();
+    else requestAnimationFrame(() => requestAnimationFrame(go));
+  };
+
+  /** 音乐回到一位新客人的样子：音量回默认、《晨光》、原音量（duckSec 秒涨回来） */
+  const resetMusic = ({ duckSec, volume = true } = {}) => {
+    if (volume) {
+      const v = MUSIC_DEFAULTS.volume;
+      setVol(v);
+      zen.setVolume(v);
+    }
+    const step = musicFor('page', { page: 'quiz' });
+    applyMusic(zen, step && duckSec ? { ...step, duckSec } : step);
+  };
+
+  /** 潘吉道别（bye = say() 的 promise）：说完（最多 BYE_CAP_MS）才让音乐用 3 秒回到《晨光》；没有道别 = 现在就回 */
+  const musicAfterGoodbye = (bye) => {
+    const hold = { volTouched: false };
+    musicHeld.current = hold;
+    const release = () => {
+      if (musicHeld.current !== hold) return;
+      musicHeld.current = null;
+      resetMusic({ duckSec: bye ? 3 : undefined, volume: !hold.volTouched });
+    };
+    if (!bye) return release();
+    let cap = 0;
+    Promise.race([bye, new Promise((r) => (cap = setTimeout(r, BYE_CAP_MS)))]).then(
+      () => {
+        clearTimeout(cap);
+        release();
+      },
+      () => {
+        clearTimeout(cap);
+        release();
+      }
+    );
+    return undefined;
+  };
+
   const goPage = (p) => {
     if (!PAGES.includes(p)) return;
     whereRef.current = p;
@@ -188,7 +266,8 @@ export default function WishShell({ zen, host = '', startLang, greet = false, on
       clearTimeout(restartFallback.current);
       greetIfDue();
     }
-    applyMusic(zen, musicFor('page', { page: p, night: night.current }));
+    if (veil.current?.until === p) dropVeil();
+    if (!musicHeld.current) applyMusic(zen, musicFor('page', { page: p, night: night.current }));
   };
 
   const reloadFrame = () => {
@@ -196,20 +275,16 @@ export default function WishShell({ zen, host = '', startLang, greet = false, on
     setSrc(makeUrl(getLang(), round.current));
   };
 
-  /** 声音全部回到一位新客人的样子（在手指里调用：iOS 上顺便把被暂停的声音接回来） */
-  const resetSound = () => {
+  /** 声音的开关全部回到一位新客人的样子（在手指里调用：iOS 上顺便把被暂停的声音接回来）；音乐本身交给 resetMusic */
+  const resetControls = () => {
     sfxOffRef.current = false;
     setSfxOff(false);
     setMute(false);
-    const v = MUSIC_DEFAULTS.volume;
-    setVol(v);
-    zen.setVolume(v);
     setNatureOn(MUSIC_DEFAULTS.nature);
     if (voice.enabled !== voiceAtGuest.current) setVoiceOn(voiceAtGuest.current);
     night.current = false;
     idleDucked.current = false;
     lastAct.current = Date.now();
-    applyMusic(zen, musicFor('page', { page: 'quiz' })); // 《晨光》、原音量
     if (zen.running && !isLive(zen)) resume(zen).then(() => setLive(isLive(zen)));
   };
 
@@ -245,13 +320,16 @@ export default function WishShell({ zen, host = '', startLang, greet = false, on
     wiping.current = true;
     setPanel(null);
     const wasMuted = mutedRef.current;
-    resetSound();
+    resetControls();
     voice.newGuest();
     greetDue.current = false; // 下一位客人：封面自己在第一下轻触时打招呼
     voiceAtGuest.current = voice.enabled;
-    if (goodbye && !wasMuted) voice.say('bye.next');
+    // 她道别的时候音乐还是原来那一页的音量；说完再用 3 秒回到《晨光》（同一句话里不会涨 17 dB）
+    musicAfterGoodbye(goodbye && !wasMuted ? voice.say('bye.next') : null);
     const w = fx.wipe(null, { tone: 'dawn', duration: 1000 });
     w.mid.then(() => {
+      // 光最厚的那一刻在它底下盖一层晨光：光走过去以后看到的是同一片晨光，新的欢迎页画好了它才淡掉（不是空白的纸色 → 一下子跳出来）
+      raiseVeil('dawn', { until: 'quiz', instant: true });
       fx.reset();
       restartChild();
     });
@@ -333,6 +411,10 @@ export default function WishShell({ zen, host = '', startLang, greet = false, on
   onChild.current = (d) => {
     if (d.type === 'voice') voiceBridge.current?.handle(d);
     else if (d.type === 'page') goPage(d.page);
+    else if (d.type === 'leaving') {
+      // 子页面换页的光正盖着、马上就要 location.assign：外壳接住，盖到新页面载好（蓝图 → 3D：暮色）
+      if (!wiping.current && !leavingRef.current) raiseVeil(VEIL_TONES.includes(d.tone) ? d.tone : 'dusk', { until: 'load' });
+    }
     else if (d.type === 'mood' || d.type === 'chapter' || d.type === 'reveal') applyMusic(zen, musicFor(d.type, d));
     else if (d.type === 'time') {
       night.current = isNightHour(d.hour);
@@ -364,6 +446,8 @@ export default function WishShell({ zen, host = '', startLang, greet = false, on
       unbind?.();
       clearTimeout(g);
       clearTimeout(restartFallback.current);
+      clearTimeout(veilT.current);
+      musicHeld.current = null;
       detachChild.current?.();
     };
   }, [zen]);
@@ -450,6 +534,8 @@ export default function WishShell({ zen, host = '', startLang, greet = false, on
       readySent.current = true;
       onReady?.();
     }
+    // 换文档时盖着的光：新的页面载好了（3D 这时已经是自己的深色「正在搭建你的家…」）→ 两帧后淡掉
+    if (veil.current?.until === 'load') dropVeil();
     if (!win || !doc) return;
     try {
       if (/studio/.test(win.location.pathname)) goPage('studio');
@@ -471,6 +557,22 @@ export default function WishShell({ zen, host = '', startLang, greet = false, on
       markActive();
     };
     const onAct = () => markActive();
+    // 子页面要换文档了（它自己的 location.assign）：已经盖上的光马上盖满；还没盖（旧版本没发 'leaving'）但它的换页光
+    // 正在画面上 → 照那道光的颜色盖上，等新页面载好。外壳自己换 iframe（下一位客人、结束）时不管
+    const onHide = () => {
+      if (wiping.current || leavingRef.current) return;
+      if (veil.current) return solidVeil();
+      let tone = null;
+      try {
+        const band = doc.querySelector('.fx-wipe.is-page');
+        if (band) tone = VEIL_TONES.find((x) => band.classList.contains(`fx-${x}`)) || 'paper';
+      } catch {
+        /* ignore */
+      }
+      if (tone) raiseVeil(tone, { until: 'load', instant: true });
+      return undefined;
+    };
+    win.addEventListener('pagehide', onHide);
     const wheel = { capture: true, passive: true };
     doc.addEventListener('pointerup', onUp, true);
     doc.addEventListener('pointerdown', onAct, true);
@@ -486,6 +588,11 @@ export default function WishShell({ zen, host = '', startLang, greet = false, on
     }
     readDusk();
     detachChild.current = () => {
+      try {
+        win.removeEventListener('pagehide', onHide);
+      } catch {
+        /* 旧的 window 已经没了 */
+      }
       doc.removeEventListener('pointerup', onUp, true);
       doc.removeEventListener('pointerdown', onAct, true);
       doc.removeEventListener('keydown', onAct, true);
@@ -501,8 +608,12 @@ export default function WishShell({ zen, host = '', startLang, greet = false, on
   const popCls = (kind) => `ws-pop ws-${kind} ${tone} ${closing ? 'is-closing' : ''}`;
 
   return (
-    <div className={`ws ws-${where} ${dusk ? 'is-dusk' : ''} ${leaving ? 'is-leaving' : ''}`}>
+    <div ref={rootEl} className={`ws ws-${where} ${dusk ? 'is-dusk' : ''} ${leaving ? 'is-leaving' : ''}`}>
       <iframe ref={frame} key={src} src={src} title={t('WISH 许愿模式')} className="ws-frame" onLoad={onLoad} allow="fullscreen; autoplay; clipboard-write" />
+      {/* 换文档时接住画面的那一层光（raiseVeil / dropVeil 直接改它的 class，不经过 React） */}
+      <div ref={veilEl} className="ws-veil" aria-hidden="true">
+        <i />
+      </div>
 
       <div className={`ws-dock ${tone}`}>
         <HoldMark label={t('员工区：按住 3 秒')} markRef={markRef} onDone={openStaff} />
@@ -557,6 +668,7 @@ export default function WishShell({ zen, host = '', startLang, greet = false, on
                 const v = Number(e.target.value);
                 setVol(v);
                 zen.setVolume(v);
+                if (musicHeld.current) musicHeld.current.volTouched = true; // 潘吉道别时就调了音量：说完不要把它改回默认
                 if (mutedRef.current && v > 0) setMute(false);
               }}
             />

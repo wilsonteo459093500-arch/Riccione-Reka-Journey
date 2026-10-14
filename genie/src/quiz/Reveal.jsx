@@ -90,7 +90,8 @@ export default function Reveal({ profile, onOpen }) {
   const axesRef = useRef(null);
   const because = useMemo(() => becauseLines(profile), [profile]);
   const shown = phase === 'shown';
-  useVoiceLine('reveal.shown', { when: shown, delay: 700 });
+  // 「就是这一张——」：等揭晓的金铃（音乐的刮奏落在主音上 ≈ 翻开后 0.5 秒）响完、余音散开再开口（音效 SPEC §9：先响时刻，≥ 0.6 秒后潘吉才说）
+  useVoiceLine('reveal.shown', { when: shown, delay: 2300 });
   // 「让我读一读你的梦想……」：洗牌一开始说；牌升起来时不打断她（这一页真的走了才停 ——
   // 开发时 StrictMode 假装卸载又马上装回来，那一下不算）
   const live = useRef(true);
@@ -112,11 +113,21 @@ export default function Reveal({ profile, onOpen }) {
     voice.say('reveal.reading', { delay: 500 });
     // 牌堆收拢的那一下：一道暮色的光扫过
     f.after(2150, () => deckRef.current && fx.scan(deckRef.current, { tone: 'dusk', sound: null, duration: 420 }));
-    f.after(2800, () => setPhase('rise'));
-    f.after(4100, () => {
-      setPhase('shown');
-      // 揭晓：音乐的《星灯》（许愿模式里外壳奏这一段；单独打开时自己的音乐）
+    // 牌升起来：音乐的《星灯》从这里开始（许愿模式里外壳奏这一段；单独打开时自己的音乐）——
+    // 铺底在牌升起时涨上来，刮奏的落点正好落在翻面后的那一下爆开（动效 SPEC §1.6：声音 ≙ 动作）
+    let rose = false;
+    const rise = () => {
+      if (rose) return;
+      rose = true;
+      setPhase((ph) => (ph === 'reading' ? 'rise' : ph));
       cue('reveal');
+    };
+    let opened = false;
+    const show = () => {
+      if (opened) return;
+      opened = true;
+      rise();
+      setPhase('shown');
       const inner = innerRef.current;
       settle(
         f,
@@ -130,7 +141,16 @@ export default function Reveal({ profile, onOpen }) {
       // 正面转到正对的那一刻：四边迸出火花 + 暖光亮到 1 + 全息光扫过正面 + 揭晓的声音（许愿模式里音乐负责，这里只响全息光）
       const card = cardRef.current;
       if (card) fx.reveal(card, { front: flipRef.current?.querySelector('.flip-front .dcard') || undefined, bloom: bloomRef.current || undefined, delay: 520 });
-    });
+    };
+    f.after(2800, rise);
+    f.after(4100, show);
+    // 保险用真实时间：很卡的设备上 fx 的时钟会走慢，牌和「打开蓝图」也一定会出来（客人不会卡在洗牌上）。录帧（手动时钟）时不算
+    const guard = () => {
+      if (!f.alive()) return;
+      if (fx.clock.manual) setTimeout(guard, 500);
+      else show();
+    };
+    setTimeout(guard, 6500);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -231,7 +251,11 @@ export default function Reveal({ profile, onOpen }) {
           </div>
           {shown && (
             <div className="reveal-text">
-              <p className="eyebrow">{profile.name ? t('{0} 的梦想家卡牌', [profile.name]) : t('你的梦想家卡牌')}</p>
+              {/* 「就是这一张——」是她亲口说的：画面上有一只小小的潘吉在说（嘴跟着声音动），不是一句没有来处的话 */}
+              <div className="rv-hello">
+                <Pangie mood="happy" prop="none" size={64} float={false} speaker className="rv-pangie" />
+                <p className="eyebrow">{profile.name ? t('{0} 的梦想家卡牌', [profile.name]) : t('你的梦想家卡牌')}</p>
+              </div>
               <h2 className="h-display small">
                 <span className="rv-num">{d.num}</span> {name}
               </h2>

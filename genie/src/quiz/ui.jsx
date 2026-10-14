@@ -83,9 +83,32 @@ export function Odo({ value, format = fmtInt, tick = false, settle = 0, classNam
   return <As ref={ref} className={`odo ${className}`} />;
 }
 
-/** 滑杆：大数字（会滚）+ 干净的圆形拇指；已经走过的一段是苔绿色 */
-export function Slider({ min, max, step = 1, value, onChange, unit = '', label, format = fmtInt }) {
+/**
+ * 滑杆：大数字（会滚）+ 干净的圆形拇指；已经走过的一段是苔绿色。
+ *   onHold(true / false)：手指按在滑杆上 / 放开（拖动中，画出来的柜子安静地变，声音交给滑杆自己的刻度声）
+ */
+export function Slider({ min, max, step = 1, value, onChange, unit = '', label, format = fmtInt, onHold }) {
   const p = ((value - min) / (max - min || 1)) * 100;
+  const holdRef = useRef(onHold);
+  holdRef.current = onHold;
+  const off = useRef(null);
+  useEffect(() => () => off.current?.(), []);
+  const down = () => {
+    if (!holdRef.current || off.current) return;
+    holdRef.current(true);
+    // 放开的那一下可能在滑杆外面（手指拖出去了）：在整页上等
+    const up = () => {
+      off.current?.();
+      holdRef.current?.(false);
+    };
+    window.addEventListener('pointerup', up, true);
+    window.addEventListener('pointercancel', up, true);
+    off.current = () => {
+      window.removeEventListener('pointerup', up, true);
+      window.removeEventListener('pointercancel', up, true);
+      off.current = null;
+    };
+  };
   return (
     <div className="slider">
       <div className="slider-val" aria-hidden="true">
@@ -101,6 +124,7 @@ export function Slider({ min, max, step = 1, value, onChange, unit = '', label, 
         value={value}
         aria-label={label}
         style={{ '--p': `${p}%` }}
+        onPointerDown={onHold ? down : undefined}
         onChange={(e) => onChange(Number(e.target.value))}
       />
     </div>

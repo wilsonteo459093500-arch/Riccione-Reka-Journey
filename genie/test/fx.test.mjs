@@ -164,6 +164,53 @@ test('origins, awayFrom, sprite sizes', () => {
   assert.ok(w >= 20 && w <= 128);
 });
 
+test('sprite origins snap to 8 compass points + centre (a 9-card commit shares 1–3 sprites)', () => {
+  const { snapOrigin } = fxMod;
+  // named origins stay where they were
+  for (const o of ['left', 'right', 'top', 'bottom', 'center']) {
+    const [x, y] = originFor(o, { left: 0, top: 0, width: 200, height: 100 });
+    const [sx, sy] = snapOrigin(x, y);
+    near(sx, x, 1e-9, o);
+    near(sy, y, 1e-9, o);
+  }
+  const pts = new Set();
+  for (let i = 0; i < 400; i++) {
+    const [x, y] = snapOrigin(-0.1 + (i % 20) * 0.06, -0.1 + Math.floor(i / 20) * 0.06);
+    pts.add(`${x.toFixed(2)},${y.toFixed(2)}`);
+  }
+  assert.equal(pts.size, 9, [...pts].join(' '));
+  // 3 × 3 wish tiles above a CTA at the bottom centre, all dissolving away from it → 3 directions
+  const cta = { x: 300, y: 700 };
+  const keys = new Set();
+  for (let c = 0; c < 3; c++)
+    for (let r = 0; r < 3; r++) {
+      const rect = { left: 60 + c * 180, top: 80 + r * 160, width: 160, height: 140 };
+      const [x, y] = originFor({ awayFrom: cta }, rect);
+      keys.add(snapOrigin(x, y).join(','));
+    }
+  assert.ok(keys.size <= 3, `${keys.size} sprites: ${[...keys].join(' ')}`);
+  // the snapped field is the same function: still normalised and starting at its origin
+  const { v, order } = erosionField(64, 40, ...snapOrigin(1.08, 0.12));
+  assert.equal(order.length, v.length);
+});
+
+test('clock: long frames count as real time (≤ 1 s); a hidden-tab gap does not', () => {
+  assert.equal(clock.manual, false);
+  const loop = (raw) => {
+    const t0 = clock.t;
+    clock._last = 1000;
+    clock._loop(1000 + raw);
+    return clock.t - t0;
+  };
+  near(loop(16), 16, 1e-9);
+  near(loop(600), 600, 1e-9, '600 ms jank frame'); // was 16.7: at 2 fps the clock ran at 6 % of real time
+  near(loop(2500), 1000, 1e-9, 'capped at 1 s');
+  near(loop(9000), 16.7, 1e-9, 'a gap this long = the tab was away');
+  clock._skip = true;
+  near(loop(800), 16.7, 1e-9, 'first frame after visibilitychange → visible');
+  near(loop(800), 800, 1e-9, 'skip is one frame only');
+});
+
 // ───────── numbers ─────────
 
 test('odometer carry is mechanical', () => {
@@ -274,7 +321,7 @@ test('every effect is safe without a DOM (SSR / node)', async () => {
   fx.burst(0, 0);
   fx.pulse({ x: 1, y: 1 });
   fx.reset();
-  assert.deepEqual(Object.keys(fx.stats()).sort(), ['canvas', 'cap', 'comets', 'particles', 'rings', 'sleeping']);
+  assert.deepEqual(Object.keys(fx.stats()).sort(), ['building', 'built', 'canvas', 'cap', 'comets', 'fades', 'particles', 'rings', 'sleeping', 'sprites']);
   const props = fx.pressProps;
   assert.equal(props['data-fx'], 'own');
   for (const k of ['onPointerDown', 'onPointerUp', 'onPointerCancel', 'onPointerLeave']) assert.equal(typeof props[k], 'function');

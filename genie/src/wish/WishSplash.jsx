@@ -113,10 +113,10 @@ export default function WishSplash({ leaving = false, busy = null, onTap, onBegi
         </p>
         <div className={`ws-start ${busy ? 'is-busy' : ''}`}>
           <button type="button" className={`ws-go ${busy === 'zh' ? 'is-on' : ''}`} lang="zh-Hans" disabled={!!busy} onClick={(e) => begin('zh', e)}>
-            <span>中文开始</span>
+            <span className="ws-go-label">中文开始</span>
           </button>
           <button type="button" className={`ws-go ${busy === 'en' ? 'is-on' : ''}`} lang="en" disabled={!!busy} onClick={(e) => begin('en', e)}>
-            <span>Begin in English</span>
+            <span className="ws-go-label">Begin in English</span>
           </button>
         </div>
       </main>

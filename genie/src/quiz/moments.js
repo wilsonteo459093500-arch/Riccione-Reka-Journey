@@ -4,6 +4,7 @@
 //   · byDistance(els, from)   离「起因」（按下去的那个）近的先走：错开的离场按这个顺序
 //   · cue(type, data)         告诉外壳（许愿模式）+ 单独打开时自己的背景音乐跟着换（同一张对应表：music/moods.js）
 //   · startMusic(mood)        单独打开的许愿之旅：在「开始许愿」那一下里开音乐（iPad 只认点击里开的声音）
+//   · markMoment / sinceMoment  一个「时刻」的声音刚响过多久（同一刻不叠两段琶音）
 // 音乐 SPEC §11：单独打开（客人自己的手机）用 sessionType 'ambient' —— 手机的静音键说了算；许愿模式里外壳放音乐，这里只发消息。
 
 import fx from '../shared/fx.js';
@@ -43,6 +44,23 @@ export function settle(f, p, fn, max = 2600) {
     else go();
   };
   if (typeof setTimeout === 'function') tid = setTimeout(guard, max * 1.6);
+}
+
+// ───────────────────────── 一次只有一个「时刻」 ─────────────────────────
+// 达成（achievement）的琶音刚响过，紧接着的溪光就不再自己刮一段竖琴（音效 SPEC §9：同一刻只有一个主角）
+
+const marks = {};
+// 动效的时钟（不是墙上的时间）：和溪光、翻牌同一把尺子 —— 录帧（手动时钟）、很卡的设备上也对得上
+const nowMs = () => fx.clock.now();
+
+/** 记下「这个时刻刚响了」 */
+export function markMoment(name) {
+  marks[name] = nowMs();
+}
+
+/** 这个时刻是多少毫秒以前响的（没响过 = Infinity） */
+export function sinceMoment(name) {
+  return marks[name] == null ? Infinity : nowMs() - marks[name];
 }
 
 const centre = (el) => {

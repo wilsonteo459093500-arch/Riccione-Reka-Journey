@@ -558,7 +558,7 @@ html[lang='en'] .ln-card-title {
   white-space: nowrap;
   transition: transform 0.18s var(--ease);
 }
-.ln-btn:active {
+.ln-btn:not(.fx-pressable):active {
   transform: scale(0.97);
 }
 .ln-del {
@@ -622,6 +622,128 @@ html[lang='en'] .ln-card-title {
   color: var(--danger);
   outline: none;
 }
+
+/* 删除前问一句（代替系统的 confirm()）：纱幕 300 ms；卡片从下面 16 px 弹上来（弹簧 360 / 28）；收起 180 ms ease-in */
+.ln-ask-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  padding: 24px max(16px, env(safe-area-inset-right)) 24px max(16px, env(safe-area-inset-left));
+  background: rgba(var(--shade-rgb), 0.28);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  animation: ln-ask-fade 0.3s var(--ease) both;
+}
+.ln-ask {
+  box-sizing: border-box;
+  width: min(400px, 100%);
+  padding: 26px 22px 20px;
+  border-radius: 28px;
+  background: var(--surface);
+  box-shadow: var(--shadow-2);
+  text-align: center;
+  animation: ln-ask-in 0.44s var(--fx-spring-pop, var(--spring)) both;
+}
+.ln-ask-veil.is-out {
+  pointer-events: none;
+  animation: ln-ask-fade-out 0.18s var(--fx-in, var(--ease)) both;
+}
+.ln-ask-veil.is-out .ln-ask {
+  animation: ln-ask-out 0.18s var(--fx-in, var(--ease)) both;
+}
+.ln-ask-ico {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 12px;
+  border-radius: 50%;
+  background: rgba(var(--danger-rgb), 0.08);
+  color: var(--danger);
+}
+.ln-ask h2 {
+  margin: 0;
+  text-wrap: balance;
+  font: 600 19px/1.35 var(--sans);
+  letter-spacing: -0.005em;
+  color: var(--text-strong);
+}
+.ln-ask p {
+  margin: 8px 0 0;
+  text-wrap: balance; /* 两行一样长，不会剩一个「打开。」单独一行 */
+  font: 400 15px/1.5 var(--sans);
+  color: var(--text-soft);
+}
+.ln-ask-acts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 22px;
+}
+.ln-ask-acts button {
+  -webkit-appearance: none;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  font: 600 17px/1.15 var(--sans);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    transform 0.18s var(--ease),
+    background-color 0.25s var(--ease);
+}
+.ln-ask-acts .btn-ghost {
+  background: rgba(var(--text-rgb), 0.07);
+  color: var(--text-strong);
+}
+.ln-ask-acts .btn-gold {
+  background: var(--gold-btn);
+  color: var(--ink);
+  box-shadow:
+    inset 0 1px 0 rgba(var(--glass-rgb), 0.55),
+    inset 0 -1px 0 rgba(var(--gold-d-rgb), 0.35),
+    0 8px 22px rgba(var(--gold-d-rgb), 0.28);
+}
+.ln-ask-acts button:not(.fx-pressable):active {
+  transform: scale(0.97);
+}
+.ln-ask-acts button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+@keyframes ln-ask-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes ln-ask-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes ln-ask-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+@keyframes ln-ask-out {
+  to {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+/* 减少动态：base.css 把所有动画变成瞬间（卡片直接出现 / 消失），AskCard 也不等收起的 180 ms */
 
 .ln-foot {
   max-width: 1080px;

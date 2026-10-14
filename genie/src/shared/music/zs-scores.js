@@ -143,14 +143,17 @@ const xingdeng = {
   mix: { zheng: 1, pan: 0.95, kal: 0.9 },
   form: ['A', 'B', 'A', 'B'],
   sections: {
-    // 揭晓：铺底从 A 挂留慢慢涨起来 → 一把刮奏 → 落在 D（加六加九）上，手碟和卡林巴一起亮
+    // 揭晓：铺底从 A 挂留很快涨起来 → 一把刮奏 → 落在 D（加六加九）上，手碟和卡林巴一起亮。
+    // 落定在 accent('reveal') 之后约 1.85 秒（2⅛ 拍 + 换曲的 0.08 秒）：许愿之旅在牌升起时发 reveal，1.82 秒后
+    // 牌翻正、fx.reveal 迸出金光 —— 声音比画面晚几十毫秒（耳朵觉得「同时」），不是三秒多以后才落。
+    // D 和弦留到第 8 拍（≈ 5 秒）再进旋律：整段揭晓到旋律进来的时间和以前一样，只是「落定」提前到了翻牌上
     I: {
-      pad: { kind: 'pad', v: 0.95, attacks: [3, 0.7], chords: '[a2 e3 a3 b3 e4]:4 [d3 a3 e4 f#4 a4]:4' },
-      gliss: { kind: 'gliss', at: 2.4, v: 0.62, spacing: 0.05, notes: 'd4 e4 f#4 a4 b4 d5 e5 f#5 a5' },
-      land: { inst: 'pan', notes: 'r:4 d3:4' }, // 落定的低音：不加重音（和刮奏、铺底叠在一起已经够亮）
-      land2: { inst: 'pan', notes: 'r:4 a3:4' },
-      land3: { inst: 'zheng', notes: 'r:4 d5:4v' },
-      spark: { inst: 'kal', role: 'spark', notes: 'r:4 d6:.25 f#6:.25 a6:3.5' },
+      pad: { kind: 'pad', v: 0.95, attacks: [1, 0.5], chords: '[a2 e3 a3 b3 e4]:2.125 [d3 a3 e4 f#4 a4]:5.875' },
+      gliss: { kind: 'gliss', at: 1.15, v: 0.62, spacing: 0.05, notes: 'd4 e4 f#4 a4 b4 d5 e5 f#5 a5' },
+      land: { inst: 'pan', notes: 'r:2.125 d3:5.875' }, // 落定的低音：不加重音（和刮奏、铺底叠在一起已经够亮）
+      land2: { inst: 'pan', notes: 'r:2.125 a3:5.875' },
+      land3: { inst: 'zheng', notes: 'r:2.125 d5:5.875v' },
+      spark: { inst: 'kal', role: 'spark', notes: 'r:2.125 d6:.25 f#6:.25 a6:5.375' },
       drone: { kind: 'drone', notes: 'd2:8' },
     },
     A: {
@@ -257,8 +260,11 @@ export const MOODS = {
   calm: { piece: 'chenguang', nature: 'day', en: 'Welcome · Life · Deal-breakers' /* 欢迎 · 生活 · 雷区 */ },
   intuition: { piece: 'xian', nature: 'still', en: 'Intuition' /* 直觉之牌 */ },
   focus: { piece: 'zhuying', nature: 'quiet', en: 'Treasure · Three wishes' /* 宝藏 · 三个愿望 */ },
-  dusk: { piece: 'mose', nature: 'dusk', en: 'Lamp · card flips · before the reveal' /* 神灯 · 翻牌 · 揭晓前 */ },
-  reveal: { piece: 'xingdeng', nature: 'day', intro: true, gap: 0.05, fadeIn: 0.4, fadeOut: 2.5, en: 'The reveal' /* 揭晓 */ },
+  // 换到暮色：旧曲子一停就不再出新音，所以新曲子要早一点接上 —— 0.3 秒后铺底就进来（第一个和弦 1.2 秒起满）、箫只等一拍；
+  // 《晨光》→《暮色》的交接处不再空出两秒（擦神灯、读懂你的那一句正好落在这里；离线实测 1 秒窗口最多低 3 dB）
+  dusk: { piece: 'mose', nature: 'dusk', gap: 0.3, fadeIn: 0.8, fadeOut: 6, pre: 1, attack: 1.2, en: 'Lamp · card flips · before the reveal' /* 神灯 · 翻牌 · 揭晓前 */ },
+  // 《暮色》多留两秒，直到《星灯》的铺底涨上来接手（中间没有 −6 dB 的洞；离线实测 ≤ 3 dB）
+  reveal: { piece: 'xingdeng', nature: 'day', intro: true, gap: 0.05, fadeIn: 0.4, fadeOut: 4.5, en: 'The reveal' /* 揭晓 */ },
   blueprint: { piece: 'guijia', nature: 'day', en: 'Blueprint (50 % level)' /* 梦想家蓝图（音量 50%） */ },
   studio: { piece: 'guijia', nature: 'quiet', en: '3D studio · day' /* 3D 工作室 · 白天 */ },
   night: { piece: 'guijiaNight', nature: 'night', en: '3D studio · night' /* 3D 工作室 · 夜里 */ },

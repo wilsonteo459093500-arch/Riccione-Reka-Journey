@@ -356,7 +356,8 @@ export class ZenSong {
     const old = this.cur;
     old?.end(t + 0.02, M.fadeOut ?? 4);
     const start = t + (old ? M.gap ?? 1.3 : 0.15);
-    this.cur = new Run(this, def, start, { intro: M.intro, fadeIn: old ? M.fadeIn ?? 3 : M.fadeIn ?? 1.5, n: this.nRuns++ });
+    // pre / attack（只在接另一首的时候）：新曲子的旋律早一点进来、第一个和弦起得快一点 —— 旧曲子已经不出新音，交接处不留空
+    this.cur = new Run(this, def, start, { intro: M.intro, fadeIn: old ? M.fadeIn ?? 3 : M.fadeIn ?? 1.5, pre: old ? M.pre : undefined, attack: old ? M.attack : undefined, n: this.nRuns++ });
     this.runs.push(this.cur);
     this.warm(def);
     this.onMood?.(key, def);

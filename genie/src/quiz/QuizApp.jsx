@@ -22,7 +22,7 @@ import { isWishMode, tellShell } from '../shared/zen.js';
 import { voice, lineText, talkState } from '../shared/voice.js';
 import fx from '../shared/fx.js';
 import { t, tj, guideName, setLang } from '../shared/i18n.js';
-import { cue, zen, startMusic } from './moments.js';
+import { cue, zen, startMusic, markMoment } from './moments.js';
 import { Odo } from './ui.jsx';
 import Scenery, { usesPhoto } from './Scenery.jsx';
 import { sceneFor } from './scenes.js';
@@ -432,6 +432,13 @@ function Play({ onDone, onRestart }) {
 
   const step = STEPS[idx];
   const host = params.get('from') || '';
+  // 从哪一页走过来的（换页的那一次渲染里定下来；同一页之后的重画不变）
+  const arrived = useRef({ idx, from: -1 });
+  if (arrived.current.idx !== idx) arrived.current = { idx, from: arrived.current.idx };
+  const cameFrom = STEPS[arrived.current.from];
+  // 刚走完上一章（不是神灯、不是返回）：顶栏的溪光先走到下一块石头（≈ 1.1 秒），章节牌再发下来、翻面，潘吉最后开口 ——
+  // 一次一个主角（动效 SPEC §6.1、音效 SPEC §9）
+  const enterDelay = arrived.current.from === idx - 1 && cameFrom?.chapter && !cameFrom.interlude ? 1100 : 0;
 
   useEffect(() => {
     if (step.id === 'reveal') return;
@@ -453,6 +460,7 @@ function Play({ onDone, onRestart }) {
     if (achieved.current !== idx && cur?.chapter && !cur.interlude && nx?.interlude) {
       achieved.current = idx;
       sfx.play('achievement');
+      markMoment('achievement'); // 紧接着的溪光不再自己刮一段竖琴（Stones.jsx）
     }
     next();
   }, [idx, next]);
@@ -480,8 +488,8 @@ function Play({ onDone, onRestart }) {
     const ch = CHAPTERS.find((c) => c.id === step.chapter);
     setPangie({ mood: ch?.mode === 'slow' ? 'think' : 'idle', line });
     window.scrollTo(0, 0);
-    // 音乐：章节牌 = 这一章的曲子 + 一声点缀；开场 = 《晨光》；神灯 = 《暮色》（许愿模式：告诉外壳；单独打开：自己的音乐）
-    if (step.interlude) cue('chapter', { chapter: step.chapter });
+    // 音乐：开场 = 《晨光》；神灯 = 《暮色》（许愿模式：告诉外壳；单独打开：自己的音乐）。
+    // 章节牌的曲子 + 点缀在牌翻面的那一刻（Interlude 自己发：溪光先走到下一块石头，牌再发下来翻面）
     if (step.id === 'welcome') cue('page', { page: 'quiz' });
     if (step.id === 'lamp') cue('mood', { mood: 'dusk' });
     // 潘吉说这一题的那一句（题目卡落定后 0.7 秒）；离开这一题就停
@@ -559,7 +567,7 @@ function Play({ onDone, onRestart }) {
 
   if (step.id === 'welcome') body = <Welcome {...props} />;
   else if (step.id === 'lamp') body = <LampRub next={advance} name={answers.name} />;
-  else if (step.interlude) body = <Interlude key={step.id} chapter={step.chapter} next={advance} />;
+  else if (step.interlude) body = <Interlude key={step.id} chapter={step.chapter} next={advance} enterDelay={enterDelay} />;
   else if (kind === 'pair')
     body = (
       <PairStep
@@ -744,7 +752,8 @@ export default function QuizApp() {
     const onMsg = (e) => {
       if (e.origin !== location.origin || e.data?.source !== 'genie-shell') return;
       const { type } = e.data;
-      if (type === 'sfx') setMuted(!!e.data.muted, { persist: false });
+      // 外壳自己已经响了那一声「打开」：这里不再响一次（两个 AudioContext 同一下 = 又响又「相位」）
+      if (type === 'sfx') setMuted(!!e.data.muted, { persist: false, confirm: false });
       else if (type === 'restart') restartRef.current();
       else if (type === 'lang') setLang(e.data.lang);
       else if (type === 'designer' && (live.current.profile || live.current.kind !== 'play')) setDesignerReq(true);

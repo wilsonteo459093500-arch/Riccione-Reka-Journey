@@ -9,6 +9,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import fx from '../shared/fx.js';
 import { CHAPTERS } from './flow.js';
 import { t } from '../shared/i18n.js';
+import { sinceMoment } from './moments.js';
 
 // 五块形状不一样的石头（40×28 的框里）
 const STONE = [
@@ -55,7 +56,9 @@ export default function Stones({ chapter, sub = 0, done = false }) {
         fx.sound('land', idx); // 踏上第 idx + 1 块石头：D E F♯ A B
       };
       if (!streamRef.current || !a || !b) return land();
-      fx.streamLight(streamRef.current, { from: a, to: b, duration: 820, onArrive: land });
+      // 刚响过「达成」的琶音（走完一章的最后一题）：溪光安静地走，落地那一声踏石接上 —— 不叠两段琶音
+      const quiet = sinceMoment('achievement') < 1200;
+      fx.streamLight(streamRef.current, { from: a, to: b, duration: 820, onArrive: land, ...(quiet ? { sound: null } : {}) });
     });
     return () => {
       alive = false;

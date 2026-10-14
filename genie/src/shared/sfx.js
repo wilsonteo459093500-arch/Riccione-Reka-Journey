@@ -1146,13 +1146,15 @@ const muteSound = (el) => (attr(el, 'aria-pressed') === 'true' || el.classList?.
 export const WISH_RULES = [
   // 自己出声的东西：不要默认的「轻触」
   { sel: '.lamp-touch', sound: 'none' }, // 擦神灯：代码里 sfx.rub({ progress, speed }) 持续发声
+  // 面板的「关闭 / 好了」排在按钮等级前面：带回家那张单子的「好了」是 .btn-primary.take-done —— 是收起，不是往前走（SPEC §7.2）
+  { sel: '.ws-x, .take-done', sound: 'close' },
+  { sel: '.take-veil, .ws-scrim', sound: 'close', any: 'self' }, // 点面板外的暗色背景收起
   // 按钮的等级（quiz / wish / blueprint 共用的 .btn 体系）
   { sel: '.btn-gold, .ws-go, .cover-go, .ln-wish-go', sound: 'confirm' },
   { sel: '.btn-primary', sound: 'next' },
   { sel: '.nav-back, .btn-ghost, .ws-act.is-end', sound: 'back' },
-  // 面板
-  { sel: '.ws-x, .take-done', sound: 'close' },
-  { sel: '.take-veil, .ws-scrim', sound: 'close', any: 'self' }, // 点面板外的暗色背景收起
+  // 潘吉正在说话：轻点她的话泡泡（或她自己）= 跳过这一句（voice.js 的 data-voice-skip）—— 有反应的触碰都要有声音
+  { sel: '.companion.is-speaking [data-voice-skip], [data-voice-skip].is-talking', sound: 'tap', any: true },
   { sel: '.ws-mute, header .icon-btn[aria-pressed], [data-sfx-role="mute"]', sound: muteSound }, // 许愿模式外壳 / 许愿之旅顶栏的静音
   // 选择
   { sel: '.wish', sound: wishSound },
@@ -1276,7 +1278,25 @@ export class Sfx {
     this.duckF = on ? clamp(+factor || 0, 0, 1) : 1;
     this._applyGain();
   }
+  /**
+   * 离开这一页（pagehide）：音效的总音量在 ms 毫秒里收到 0 —— 文档卸载时 AudioContext 被拆掉，正在响的
+   * 「下一步」「换页」不会被硬切成一声「喀」（iPad 上尤其明显）。回到这一页（bfcache 的 pageshow）自动恢复
+   */
+  fadeOut(ms = 40) {
+    this._leaving = true;
+    if (!this.ctx || !this.R) return;
+    try {
+      const p = this.R.master.gain;
+      const t = this.ctx.currentTime;
+      p.cancelScheduledValues(t);
+      p.setValueAtTime(p.value, t);
+      p.linearRampToValueAtTime(0, t + Math.max(0.005, ms / 1000));
+    } catch {
+      /* ignore */
+    }
+  }
   _applyGain(delay = 0) {
+    this._leaving = false;
     if (!this.ctx || !this.R) return;
     const g = this.muted ? 0 : this.level * this.duckF;
     try {
@@ -1762,6 +1782,34 @@ if (LOG_ON) sfx.enableLog();
 export default sfx;
 
 let INSTALLED = false;
+let LIFECYCLE = false;
+
+/**
+ * 一页一次：
+ *  · 在许愿模式外壳的 iframe 里（quiz、3D 工作室）：外壳的「静音」和员工的「按钮音效」开关（{ source: 'genie-shell', type: 'sfx', muted }）
+ *    直接管这一页的音效 —— 子页面自己不用写（以前只有 quiz 接了，3D 工作室里的按钮照响）。只管这一位客人：不写进本机
+ *  · pagehide：音效淡出（fadeOut），换页不「喀」；pageshow（bfcache 回来）恢复
+ */
+function installLifecycle() {
+  if (LIFECYCLE || !HAS_DOM) return;
+  LIFECYCLE = true;
+  let framed = false;
+  try {
+    framed = window.parent && window.parent !== window;
+  } catch {
+    framed = false;
+  }
+  if (framed)
+    window.addEventListener('message', (e) => {
+      const d = e.data;
+      if (e.origin !== location.origin || e.source !== window.parent || !d || d.source !== 'genie-shell' || d.type !== 'sfx') return;
+      sfx.setMuted(!!d.muted, { persist: false, confirm: false });
+    });
+  window.addEventListener('pagehide', () => sfx.fadeOut(40));
+  window.addEventListener('pageshow', (e) => {
+    if (e.persisted || sfx._leaving) sfx._applyGain();
+  });
+}
 /**
  * 每一页的入口调用一次（quiz / wish / launcher / studio 的 main.jsx）：
  *   installSfx()                          —— 整页的按钮都有声音（WISH_RULES + 语义默认 + 轻触）
@@ -1775,6 +1823,7 @@ export function installSfx({ root, rules = [], fx = null, ctx = null, typing, wi
   if (ctx) sfx.attach(ctx);
   if (INSTALLED) return sfx;
   INSTALLED = true;
+  installLifecycle();
   sfx.bind(root || document, { rules: wishRules ? [...rules, ...WISH_RULES] : rules, typing });
   return sfx;
 }
@@ -1790,6 +1839,11 @@ export function getAudioContext() {
 /** 响一声（= sfx.play）：sound.play('scan') 这种写法也接得住 */
 export function play(name, opts) {
   return sfx.play(name, opts);
+}
+
+/** 离开页面前把音效收掉（= sfx.fadeOut；pagehide 时 installSfx 已经自动做了） */
+export function fadeOut(ms) {
+  sfx.fadeOut(ms);
 }
 
 // 旧 sound.js 的导出名

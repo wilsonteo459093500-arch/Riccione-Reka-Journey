@@ -5,11 +5,14 @@
 // 动效（scratchpad/motion/SPEC.md §6.1 宝藏）：
 //   鞋柜：多出来的列从金尘里聚起来（fx.condense，从下往上），少掉的列化成金尘（fx.dissolve，从上往下），
 //         其余的列弹到新位置（FLIP，弹簧 260 / 24），不跳。
+//         声音（音效 SPEC §7.2：滑杆的手势 = 按下 + 每一格的刻度声）：手指按在滑杆上时，列安静地聚 / 散；
+//         放开时多了列 → 一声「聚起来」。键盘一格一格地按：最多 0.7 秒一声，轻一点。
 //   书墙：新摆上书的格子淡入（160 ms）。藏 vs 展：换了的格子像柜门一样绕着门轴转开 / 关上（rotateY −75°），再换图。
 //   衣柜：多出来的「还差的门」（虚线框）从金尘里聚起来。
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import fx from '../shared/fx.js';
+import { sfx } from '../shared/sfx.js';
 
 const FILES = import.meta.glob('./vignettes/tiles/*.webp', { eager: true, query: '?url', import: 'default' });
 const TILE = {};
@@ -92,8 +95,34 @@ function Grid({ kind, cols, rows, cell, className = '', plinth = true, swap, del
  * 每一列是一个「槽位」（自己的 key）：多出来的插在活着的列后面、从金尘里聚起来；少掉的标成离场、化成金尘，走完再拿掉。
  * 又拖回来的列是新的槽位（新的元素），不会和还在化金尘的那一列抢同一个遮罩。整组柜子的位置变了 → 弹过去（FLIP）。
  */
-export function ShoeCabinet({ cols, shoes, shelves = 7 }) {
+export function ShoeCabinet({ cols, shoes, shelves = 7, holding = false }) {
   const [w, h] = SIZE.shoe;
+  // 拖滑杆的时候不给每一列配一声（刻度声已经在说了）；放开时多了列 → 一声
+  const held = useRef(holding);
+  held.current = holding;
+  const grew = useRef(0);
+  const lastSound = useRef(-1e9);
+  const voiceCols = (name) => {
+    if (held.current) {
+      if (name === 'condense') grew.current++;
+      return;
+    }
+    const now = performance.now();
+    if (now - lastSound.current < 700) return;
+    lastSound.current = now;
+    sfx.play(name, { gain: 0.5 });
+  };
+  useEffect(() => {
+    if (holding) {
+      grew.current = 0;
+      return;
+    }
+    if (grew.current > 0) {
+      grew.current = 0;
+      lastSound.current = performance.now();
+      sfx.play('condense', { gain: 0.7 });
+    }
+  }, [holding]);
   const [slots, setSlots] = useState(() => Array.from({ length: cols }, (_, i) => ({ id: i, gone: false })));
   const seq = useRef(cols);
   const els = useRef(new Map());
@@ -131,18 +160,20 @@ export function ShoeCabinet({ cols, shoes, shelves = 7 }) {
           el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 150, fill: 'forwards' });
           fx.clock.after(160, () => drop(s.id));
         } else {
-          fx.dissolve(el, { origin: 'top', duration: 460, delay: nOut * 60, tone: 'paper', dust: 0.8, sound: nOut ? null : 'dissolve' }).then(() => drop(s.id));
+          fx.dissolve(el, { origin: 'top', duration: 460, delay: nOut * 60, tone: 'paper', dust: 0.8, sound: null }).then(() => drop(s.id));
           nOut++;
         }
       } else if (!s.gone && s.fresh && !st) {
         started.current.set(s.id, 'in');
         const delay = nIn * 70;
         enterEnd.current.set(s.id, fx.clock.now() + delay + 540);
-        fx.condense(el, { origin: 'bottom', duration: 520, delay, tone: 'paper', dust: 0.7, sound: nIn ? null : 'condense' });
+        fx.condense(el, { origin: 'bottom', duration: 520, delay, tone: 'paper', dust: 0.7, sound: null });
         nIn++;
       }
     }
-  }, [slots]);
+    if (nIn) voiceCols('condense');
+    else if (nOut) voiceCols('dissolve');
+  }, [slots]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // FLIP：整组柜子的位置变了（加列 / 拿掉列，柜子居中）→ 从旧位置弹到新位置
   useLayoutEffect(() => {

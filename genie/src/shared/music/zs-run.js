@@ -93,6 +93,9 @@ export class Run {
     this.form = def.form;
     this.first = true;
     this.intro = !!(o.intro && this.P.I);
+    // 接在另一首后面（换情绪）：第一段的旋律可以早一点进来、第一个和弦起得快一点（MOODS 的 pre / attack），交接处不空
+    this.pre0 = Number.isFinite(o.pre) ? o.pre : null;
+    this.attack0 = Number.isFinite(o.attack) ? o.attack : null;
     this.endAt = Infinity;
     this.deadAt = Infinity;
     this.ended = false;
@@ -164,7 +167,8 @@ export class Run {
       this.fi++;
     }
     const S = this.P[name];
-    const pre = this.first ? def.pre || 0 : 0; // 第一段先让铺底和自然声进来，旋律晚一两拍
+    const isFirst = this.first;
+    const pre = isFirst ? this.pre0 ?? def.pre ?? 0 : 0; // 第一段先让铺底和自然声进来，旋律晚一两拍
     this.first = false;
     const total = S.beats + pre;
     const map = this._map(total, def.meter || 4);
@@ -175,7 +179,8 @@ export class Run {
         let b = 0;
         L.chords.forEach((ch, i) => {
           const d = ch.d + (i === 0 ? pre : 0);
-          evs.push({ t: t0 + map(b), kind: 'pad', ms: this._voicing(ch.ms), dur: map(b + d) - map(b), v: L.v ?? 0.7, attack: L.attacks?.[i] });
+          const attack = L.attacks?.[i] ?? (isFirst && i === 0 && this.attack0 != null ? this.attack0 : undefined);
+          evs.push({ t: t0 + map(b), kind: 'pad', ms: this._voicing(ch.ms), dur: map(b + d) - map(b), v: L.v ?? 0.7, attack });
           b += d;
         });
       } else if (L.kind === 'drone') {

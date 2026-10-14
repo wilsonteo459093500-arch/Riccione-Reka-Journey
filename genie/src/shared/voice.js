@@ -29,6 +29,7 @@
 import LINE_TABLE from './i18n/voice-lines.js';
 import { getLang } from './i18n.js';
 import { CONFIG } from './config.js';
+import { sfx, getAudioContext } from './sfx.js';
 
 /* ───────────────────────────── config ───────────────────────────── */
 
@@ -502,6 +503,9 @@ export function rankVoices(voices, want = 'zh', platform = detectPlatform()) {
  * Recommended pitch / rate per voice family. Owner, after the first demo: 「这个声音有点太不可爱了」 → a brighter,
  * bouncier little-girl preset: adult voices only read as a child above ≈ 1.35 pitch, and kids don't drawl
  * (rate ≈ 1). Child voices (Edge's Ana / Maisie / Xiaoyi …) only get a small lift. Staff can override per language.
+ * These numbers are the owner-approved ones and supersede the first-draft table in voice SPEC §4.1 (1.12–1.20, written
+ * before the demo, when ≈ 1.3 was feared to sound like a chipmunk). They change only after the owner listens again on
+ * the iPad (Tingting compact / Enhanced, Serena); per-language prefs (voice.prefs.set) still win over them.
  */
 export function presetFor(v, lang = 'zh', platform = detectPlatform()) {
   const name = `${v?.name || ''} ${v?.voiceURI || ''}`;
@@ -1067,7 +1071,22 @@ export function createVoice(o = {}) {
   let muted = !!o.muted;
   let level = o.level || cfg.level;
   let unlocked = !!o.unlocked;
-  let ctx = o.audioContext || null;
+  // o.audioContext: an AudioContext, or (make) => AudioContext — in the app the page's ONE shared context (sfx.js:
+  // music + button sounds + her voice pack), so an iPad page never runs a second context just for the voice
+  const ctxSource = typeof o.audioContext === 'function' ? o.audioContext : null;
+  let ownCtx = ctxSource ? null : o.audioContext || null;
+  const audio = (make = false) => {
+    if (ctxSource) {
+      try {
+        const c = ctxSource(make);
+        return c && c.state !== 'closed' ? c : null;
+      } catch {
+        return null;
+      }
+    }
+    if (!ownCtx && make && env.AudioCtx) ownCtx = new env.AudioCtx();
+    return ownCtx;
+  };
   let cur = null; // { id, lang, text, tier, token, resolve, chunks, … }
   let pending = null; // a delayed item waiting for its moment
   const queue = [];
@@ -1175,8 +1194,8 @@ export function createVoice(o = {}) {
       /* ignore */
     }
     try {
-      if (env.AudioCtx) {
-        if (!ctx) ctx = new env.AudioCtx();
+      const ctx = env.AudioCtx || ctxSource ? audio(true) : null;
+      if (ctx) {
         if (ctx.state !== 'running') ctx.resume?.()?.catch?.(noop);
         const s = ctx.createBufferSource();
         s.buffer = ctx.createBuffer(1, 1, 22050);
@@ -1250,12 +1269,14 @@ export function createVoice(o = {}) {
     if (line?.once) said.add(item.id);
     emit('line', { id: item.id, lang: item.lang, speaker: line?.speaker || 'pangie' });
     setTalking(true);
-    const tryPack = pack && pack.has(item.id, item.lang, item.text) && ctx && env.AudioCtx;
+    const tryPack = pack && pack.has(item.id, item.lang, item.text) && env.AudioCtx && audio(false);
     if (tryPack) return playPack(item).catch(() => (cur === item && !item.done ? playDevice(item) : null));
     return playDevice(item);
   }
 
   async function playPack(item) {
+    const ctx = audio(false);
+    if (!ctx) throw new Error('no audio context');
     const key = `${pack.keyOf(item.id, item.lang, item.text)}#${pack.version ?? 0}`;
     let clip = clipCache.get(key);
     if (!clip) {
@@ -1582,7 +1603,7 @@ export function createVoice(o = {}) {
     },
     pack,
     get audioContext() {
-      return ctx;
+      return audio(false);
     },
     state,
     on: bus.on,
@@ -1896,6 +1917,8 @@ function wire(v) {
 
 function makeLocal() {
   const v = createVoice({
+    // the page's one AudioContext (sfx.js, shared with the music): created / unlocked by the first tap, never a second one
+    audioContext: (make) => (make ? getAudioContext() : sfx.ctx),
     lines: LINE_TABLE,
     lang: getLang,
     level: voicePrefs.level(),

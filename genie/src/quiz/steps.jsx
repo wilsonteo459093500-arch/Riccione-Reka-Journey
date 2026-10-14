@@ -13,7 +13,7 @@ import { flushSync } from 'react-dom';
 import { ArrowRight, Check, X, Sparkle } from 'lucide-react';
 import Pangie, { Lamp, useVoiceLine } from '../shared/Pangie.jsx';
 import LangToggle from '../shared/LangToggle.jsx';
-import fx, { useFx, useGleam } from '../shared/fx.js';
+import fx, { useFx, useGleam, flightDuration } from '../shared/fx.js';
 import Vignette, { preloadVignettes } from './Vignette.jsx';
 import { ShoeCabinet, BookWall, RatioWall, Wardrobe } from './Cabinet.jsx';
 import { CardFrame, CardBack, Segmented, Slider, Odo } from './ui.jsx';
@@ -22,12 +22,12 @@ import { BRAND } from '../shared/config.js';
 import { CHAPTERS, PAIRS, LIFE, APPLIANCES, BULKY, WISHES, SPLURGE, NOGO_COLORS, NOGO_FINISHES, ONE_WISH_CHIPS } from './flow.js';
 import { storagePlan } from '../shared/profile.js';
 import { sfx } from '../shared/sound.js';
-import { voice, lineText } from '../shared/voice.js';
+import { voice, lineText, talkState } from '../shared/voice.js';
 import { tellShell } from '../shared/zen.js';
 import { t, tj, guideName, isEn } from '../shared/i18n.js';
 import { fmt, ftNote } from '../shared/units.js';
 import { phrased, segmented, keepHyphens, tjDots } from './typo.jsx';
-import { stoneOf, chapterIndex, settle, byDistance, startMusic } from './moments.js';
+import { stoneOf, chapterIndex, settle, byDistance, startMusic, cue } from './moments.js';
 
 /** 洗牌（愿望每次进来顺序都不一样：不让「收纳」永远排第一） */
 export function shuffled(arr) {
@@ -208,6 +208,22 @@ export function LampRub({ next, name }) {
   useVoiceLine('lamp.rub', { delay: 900 });
   useVoiceLine('lamp.hint', { when: hint, mode: 'ifIdle' });
   useVoiceLine('lamp.done', { when: done, delay: 650 });
+  // 她在神灯里说话（lamp.rub / lamp.hint）：神灯的光跟着她的声音一起一伏（直接写 --glow，不重画 React）；
+  // 说完回到擦亮的进度。和许愿模式开场的神灯一样（WishSplash）
+  useEffect(() => {
+    const svg = () => touchRef.current?.querySelector('svg');
+    const offMouth = voice.on('mouth', (v) => {
+      if (talkState.get() !== 'lamp' || doneRef.current) return;
+      svg()?.style.setProperty('--glow', Math.max(progress.current, 0.35 + 0.25 * v).toFixed(3));
+    });
+    const offSpeak = voice.on('speaking', (who) => {
+      if (who !== 'lamp') svg()?.style.setProperty('--glow', String(progress.current));
+    });
+    return () => {
+      offMouth();
+      offSpeak();
+    };
+  }, []);
   const started = p > 0;
   useEffect(() => {
     if (started || done) return undefined;
@@ -232,7 +248,8 @@ export function LampRub({ next, name }) {
         const r = svg.getBoundingClientRect();
         fx.burst(r.left + r.width * 0.5, r.top + r.height * 0.3, { count: 120, tone: 'dusk', stars: 0.2, speed: [50, 200] });
       }
-      f.after(2100, next);
+      // 2.1 秒后翻到第一张牌（settle 另有一道真实时间的保险：很卡的设备上 fx 的时钟走慢，客人也不会卡在神灯上）
+      settle(f, f.wait(2100), next, 2100);
       return;
     }
     // 摩擦声跟着手指（越快越亮），五声音阶跟着进度往上；停手 0.26 秒自己收
@@ -272,7 +289,8 @@ export function LampRub({ next, name }) {
 
   return (
     <div className="step step-lamp">
-      <Head eyebrow={t('神灯')} title={name ? t('{0}，擦亮神灯', [name]) : t('擦亮神灯')} lead={t('用手指在神灯上来回擦一擦（按住也可以），把{0}叫出来。', [guideName()])} />
+      {/* 说明 = 她在神灯里说的那一句（第一人称，一字不差：声音 SPEC 规则 7）；「按住也可以」写在神灯下面 */}
+      <Head eyebrow={t('神灯')} title={name ? t('{0}，擦亮神灯', [name]) : t('擦亮神灯')} lead={lineText('lamp.rub')} />
       <div className={`lamp-stage ${done ? 'is-done' : ''}`} style={{ '--p': p }}>
         <div className="lamp-mist" />
         <div className={`lamp-genie ${done ? 'out' : ''}`}>
@@ -304,7 +322,7 @@ export function LampRub({ next, name }) {
         </div>
       </div>
       <p className="lamp-status" aria-live="polite">
-        {done ? t('{0}来啦！', [guideName()]) : p > 0 ? `${Math.round(p * 100)}%` : t('轻轻擦一擦')}
+        {done ? lineText('lamp.done') : p > 0 ? `${Math.round(p * 100)}%` : t('来回擦一擦，按住也可以')}
       </p>
     </div>
   );
@@ -312,9 +330,14 @@ export function LampRub({ next, name }) {
 
 // ───────────────────────── 章节牌 ─────────────────────────
 
-export function Interlude({ chapter, next }) {
+/**
+ * 章节牌。enterDelay：刚走完上一章时 QuizApp 给 1100 ms —— 顶栏的溪光先走到下一块石头（落地那一声），
+ * 牌再发下来、翻面（这一章的曲子 + 点缀在翻面的那一刻），潘吉在牌落定以后才念（一次一个主角）。
+ */
+export function Interlude({ chapter, next, enterDelay = 0 }) {
   const f = useFx();
   const ch = CHAPTERS.find((c) => c.id === chapter);
+  const wait = useRef(enterDelay).current; // 只认挂上来时的那个值
   const [flipped, setFlipped] = useState(false);
   const [ready, setReady] = useState(false);
   // 翻面落定后把牌「放平」（不再是 3D 图层）：Chromium 有时会把翻牌的 3D 图层残影留在下一题的画面上
@@ -326,8 +349,8 @@ export function Interlude({ chapter, next }) {
   const ctaRef = useRef(null);
   const hintRef = useRef(null);
   const actRef = useRef(null);
-  // 潘吉念这张牌（离开这张牌就停：她绝不会在三秒的直觉题上说话）
-  useVoiceLine(`ch.${chapter}`, { delay: 1150 });
+  // 潘吉念这张牌：牌翻面落定以后（离开这张牌就停：她绝不会在三秒的直觉题上说话）
+  useVoiceLine(`ch.${chapter}`, { delay: 1150 + wait });
   const once = useRef(false);
   useEffect(() => {
     if (once.current) return; // 开发时 StrictMode 会把挂载的 effect 跑两次：翻牌只要一次
@@ -336,18 +359,23 @@ export function Interlude({ chapter, next }) {
     const el = flipRef.current;
     if (el?.animate && !fx.motion.reduced) {
       const sp = fx.springEasing({ stiffness: 180, damping: 18 });
-      el.animate([{ transform: 'translateY(60px) rotate(-4deg) scale(.94)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: sp.duration, easing: sp.easing, fill: 'backwards' });
+      el.animate([{ transform: 'translateY(60px) rotate(-4deg) scale(.94)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: sp.duration, delay: wait, easing: sp.easing, fill: 'backwards' });
+      // 等溪光的那一段：画面上只有顶栏那一束光 —— 按钮跟着牌一起出来（不留一个灰着的按钮在空的暮色里）；
+      // 提示等牌翻好了才模糊淡入（.interlude-hint.is-waiting）
+      if (wait) actRef.current?.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: 420, delay: wait + 120, easing: fx.EASE.out.css, fill: 'backwards' });
     }
+    // 翻面的那一刻：这一章的曲子 + 一声点缀（许愿模式：告诉外壳；单独打开：自己的音乐）
+    f.after(420 + wait, () => cue('chapter', { chapter }));
     // 翻完才能点：防止上一页的连点直接跳过
     settle(
       f,
-      f.flip(innerRef.current, { tone: 'dusk', delay: 420 }),
+      f.flip(innerRef.current, { tone: 'dusk', delay: 420 + wait }),
       () => {
         setFlipped(true);
         setFlat(true);
         setReady(true);
       },
-      2400
+      2400 + wait
     );
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // 主按钮亮起来的那一下被光扫过，之后每 4.2 秒轻轻扫一下
@@ -368,16 +396,23 @@ export function Interlude({ chapter, next }) {
     hintRef.current?.animate?.([{ opacity: 1 }, { opacity: 0 }], { duration: 260, easing: fx.EASE.in.css, fill: 'forwards' });
     actRef.current?.animate?.([{ opacity: 1 }, { opacity: 0 }], { duration: 260, delay: 120, easing: fx.EASE.in.css, fill: 'forwards' });
     const stone = stoneOf(chapter);
-    const fly = stone && flipRef.current ? f.fly(flipRef.current, stone, { delay: 220, tone: 'dusk', arc: 0.22, tilt: 4, landNote: chapterIndex(chapter) }) : f.wait(300);
-    settle(
-      f,
-      fly,
-      () => {
-        const w = fx.wipe(null, { tone: 'dawn', duration: 1000 });
-        settle(null, w.mid, next, 900);
-      },
-      2400
-    );
+    const card = flipRef.current;
+    // 晨光在牌快落进石头时就扫进来（≈ 落地前 0.35 秒）：牌化成一粒光的那一下，光正好拂过 —— 中间没有一段空着的暮色
+    let wiped = false;
+    const dawn = () => {
+      if (wiped) return;
+      wiped = true;
+      const w = fx.wipe(null, { tone: 'dawn', duration: 1000 });
+      settle(null, w.mid, next, 900);
+    };
+    if (stone && card) {
+      const a = card.getBoundingClientRect();
+      const b = stone.getBoundingClientRect();
+      const dist = Math.hypot(b.left + b.width / 2 - (a.left + a.width / 2), b.top + b.height / 2 - (a.top + a.height / 2));
+      f.after(220 + 0.62 * flightDuration(dist), dawn);
+    }
+    const fly = stone && card ? f.fly(card, stone, { delay: 220, tone: 'dusk', arc: 0.22, tilt: 4, landNote: chapterIndex(chapter) }) : f.wait(300);
+    settle(f, fly, dawn, 2400);
   };
   return (
     <div className={`step step-interlude ${leaving ? 'is-leaving' : ''}`}>
@@ -611,13 +646,15 @@ export function ShoesStep({ answers, set, next }) {
   const plan = storagePlan({ shoes: answers.shoes });
   const cols = Math.max(2, Math.round(plan.shoeCabinetMM / 300));
   const advance = useAdvance(next, 'treasure');
+  // 手指按在滑杆上：柜子的列安静地聚 / 散（声音交给滑杆的刻度声），放开时多了列再响一声
+  const [holding, setHolding] = useState(false);
   return (
     <div className="step step-treasure">
       <Head eyebrow={t('宝藏之牌 · {0} / 6', [1])} title={t('全家大概有几双鞋？')} lead={t('连拖鞋、运动鞋、高跟鞋一起数。')} />
       <div className="viz viz-cabinet">
-        <ShoeCabinet cols={cols} shoes={answers.shoes} shelves={7} />
+        <ShoeCabinet cols={cols} shoes={answers.shoes} shelves={7} holding={holding} />
       </div>
-      <Slider min={0} max={150} step={5} value={answers.shoes} label={t('全家大概有几双鞋？')} onChange={(v) => set({ shoes: v, ...touch(answers, 'shoes') })} unit={t('双')} />
+      <Slider min={0} max={150} step={5} value={answers.shoes} label={t('全家大概有几双鞋？')} onChange={(v) => set({ shoes: v, ...touch(answers, 'shoes') })} unit={t('双')} onHold={setHolding} />
       <Calc mm={plan.shoeCabinetMM}>{tjDots('鞋柜 {0} 宽（通高 2100 · 深 350）', [<b key="b">{mmOdo(plan.shoeCabinetMM)} mm</b>])}</Calc>
       <div className="q-actions">
         <Next onClick={(e) => advance(e, calcOf)}>{t('数好了')}</Next>
@@ -835,6 +872,7 @@ export function WishesStep({ answers, set, next, say }) {
   const [leaving, setLeaving] = useState(false);
   const selLen = useRef(sel.length);
   selLen.current = sel.length;
+  const fullSaid = useRef(false); // 泡泡里现在是「只能三个哦！先放掉一个。」
   const full = sel.length === 3;
 
   // 灯的光：从现在的亮度补间到目标（亮 700 ms / 暗 360 ms）；新的一次会接手旧的
@@ -868,9 +906,16 @@ export function WishesStep({ answers, set, next, say }) {
       // 放掉一个：勾收起来、最后一盏灯暗下去（按下去那一下的「取消选中」已经响了）
       set({ wishes: sel.filter((x) => x !== v) });
       setLit((l) => Math.min(l, sel.length - 1));
+      // 刚才说过「只能三个哦！先放掉一个。」：放掉了 → 泡泡回到平常的提示（这句话已经做到了）
+      if (fullSaid.current) {
+        fullSaid.current = false;
+        voice.stopIf('wishes.full');
+        say('idle', t('只能三个哦，选最想要的 ✨'));
+      }
     } else if (sel.length >= 3) {
       // 只能三个：轻轻摇一下（「轻提示」那一声按下去时已经响了）
       fx.nope(tile, { sound: null });
+      fullSaid.current = true;
       say('think', lineText('wishes.full'));
       voice.say('wishes.full');
     } else {
@@ -903,6 +948,10 @@ export function WishesStep({ answers, set, next, say }) {
   const commit = (e) => {
     if (!full || leaving) return;
     setLeaving(true);
+    // 许愿的这一刻：泡泡不再停在「只能三个哦！先放掉一个。」上 —— 回到「三个愿望，我收到啦！」（只有字，她不再说一遍）
+    if (fullSaid.current) voice.stopIf('wishes.full');
+    fullSaid.current = false;
+    say('happy', lineText('wishes.three'), 2400);
     const cta = e.currentTarget;
     fx.scan(cta);
     const tiles = [...(gridRef.current?.querySelectorAll('.wish') || [])];
@@ -1061,17 +1110,25 @@ export function OneWishStep({ answers, set, finish }) {
     const wrap = wrapRef.current;
     if (wrap) fx.dissolve(wrap, { origin: 'bottom', from: wrap, duration: 800, dust: 1.4, hide: false });
     let done = false;
+    let tid = 0;
     const go = () => {
       if (done) return;
       done = true;
+      clearTimeout(tid);
       finish(v);
     };
     f.after(300, () => {
       const w = fx.wipe(null, { tone: 'dusk', duration: 900 });
       settle(null, w.mid, go, 900);
     });
-    // 保险：动效没跑起来也一定交给潘吉（档案、蓝图都在 finish 里）
-    f.after(2400, go);
+    // 保险用真实时间（不是 fx 的时钟：很卡的设备上它会走慢）：动效没跑起来也一定交给潘吉（档案、蓝图都在 finish 里）。
+    // 录帧（手动时钟）时等它
+    const guard = () => {
+      if (done || !f.alive()) return;
+      if (fx.clock.manual) tid = setTimeout(guard, 500);
+      else go();
+    };
+    tid = setTimeout(guard, 3800);
   };
   return (
     <div className="step step-onewish">

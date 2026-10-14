@@ -40,7 +40,7 @@ import {
 import Pangie, { Lamp, useVoiceLine } from '../shared/Pangie.jsx';
 import fx from '../shared/fx.js';
 import { sfx } from '../shared/sfx.js';
-import { voice } from '../shared/voice.js';
+import { voice, lineText } from '../shared/voice.js';
 import { cue, settle } from './moments.js';
 import Emblem from '../shared/Emblem.jsx';
 import { DreamerCard } from './Reveal.jsx';
@@ -153,6 +153,16 @@ function Axis({ dim, a, b, v, hidden = false }) {
 }
 
 const pctFmt = (n) => `${Math.round(n)}%`;
+
+/**
+ * 她在蓝图最后说的那一句（bp.end），拆成两句各占一块（第二句里的词不断开）。
+ * 拆不开（标点变了）就整句一块：一个字都不能丢
+ */
+function farewellLines() {
+  const s = lineText('bp.end');
+  const m = /^(.+?[。！？.!?])\s*(\S.*)$/su.exec(s);
+  return m ? [m[1], m[2]] : [s];
+}
 
 /**
  * 进到画面（或快要进到画面）时从 from 数到 value，一次（fx.countUp，900 ms）。没进过画面（打印、截图）就一直是最后的数。
@@ -359,11 +369,14 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
           if (el.classList.contains('bp-end')) {
             if (e.intersectionRatio >= 0.35 && sealRef.current?.classList.contains('is-waiting')) {
               sealRef.current.classList.remove('is-waiting');
-              fx.stamp(sealRef.current);
+              // 盖章那一声（这里的音乐压在一半：章也轻一点，−3 dB）
+              fx.stamp(sealRef.current, { sound: null });
+              sfx.play('stamp', { gain: 0.7 });
             }
             if (fresh && !spoke && e.intersectionRatio >= 0.5) {
               spoke = true;
-              voice.say('bp.end', { mode: 'queue', delay: 300 });
+              // 章先落下、余音散开，她再说（音效 SPEC §9：时刻先响，≥ 0.6 秒后潘吉才开口）
+              voice.say('bp.end', { mode: 'queue', delay: 1100 });
             }
             if (!sealRef.current?.classList.contains('is-waiting') && (spoke || !fresh)) seen.unobserve(el);
           } else {
@@ -453,7 +466,8 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
       <b className="store-num">
         {mm ? (
           <>
-            <CountIn value={mm} format={fmt} tick={key === 'shoes'} /> mm
+            {/* 数字安静地数上来：蓝图只有一个声音时刻 —— 最后盖下去的「潘吉认证」章 */}
+            <CountIn value={mm} format={fmt} /> mm
           </>
         ) : (
           extra || '—'
@@ -813,9 +827,15 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
           </div>
           {/* 两句各占一块、各自排匀（英文第二句不会剩一个「through.」掉到第三行） */}
           <p className="bp-farewell">
-            {/* 刚做好的蓝图：她亲口说的那一句（第一人称，和她的声音一字不差） */}
-            <span>{fresh ? t('你的梦想，我记住啦。') : t('{0}一直帮你记着。', [guideName()])}</span>
-            <span>{phrased(t('接下来，我们会把它变成你看得见、走得进的 3D 家。'), { sentences: false })}</span>
+            {/* 刚做好的蓝图：她亲口说的那两句（lineText('bp.end')：第一人称，和她的声音一字不差 —— 声音 SPEC 规则 7） */}
+            {fresh ? (
+              farewellLines().map((s, i) => <span key={i}>{i ? phrased(s, { sentences: false }) : s}</span>)
+            ) : (
+              <>
+                <span>{t('{0}一直帮你记着。', [guideName()])}</span>
+                <span>{phrased(t('接下来，我们会把它变成你看得见、走得进的 3D 家。'), { sentences: false })}</span>
+              </>
+            )}
           </p>
           <p className="fine">
             {BRAND.app} {BRAND.by} · {BRAND.house} · {BRAND.venue}
@@ -837,7 +857,10 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
             // 一大片暮色拂过，再打开 3D（最暗的那一刻换页，看不到跳）
             const href = links.studio;
             const w = fx.wipe(null, { tone: 'dusk', duration: 900 });
-            settle(null, w.mid, () => location.assign(href), 900);
+            settle(null, w.mid, () => {
+              tellShell('leaving', { to: 'studio', tone: 'dusk' }); // 许愿模式：外壳先盖一层暮色，换页时不闪米色
+              location.assign(href);
+            }, 900);
           }}
         >
           <House size={18} strokeWidth={1.8} aria-hidden="true" />

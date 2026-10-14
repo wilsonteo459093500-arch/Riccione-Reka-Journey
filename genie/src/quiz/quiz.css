@@ -2082,6 +2082,21 @@ html[lang='en'] .dc-tag {
   max-width: 560px;
   animation: content-in 0.9s var(--ease) 0.55s both;
 }
+/* 小小的潘吉站在「XX 的梦想家卡牌」旁边，说出「就是这一张——」（往上收进玻璃的留白里，不把按钮往下推） */
+.rv-hello {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: -8px 0 4px;
+}
+.rv-hello .eyebrow {
+  margin: 0;
+}
+.rv-pangie {
+  flex: none;
+  margin-bottom: -6px;
+}
 .rv-num {
   margin-right: 0.15em;
   font-family: var(--serif);
@@ -3116,6 +3131,10 @@ html[lang='en'] .bp-farewell {
   .reveal-text .because {
     margin-left: 0;
   }
+  .phase-shown .rv-hello {
+    justify-content: flex-start;
+    margin-left: -6px;
+  }
 }
 
 @media (orientation: landscape) and (min-width: 900px) {
@@ -3666,8 +3685,10 @@ html[lang='en'] .bp-farewell {
 }
 
 /* 章节牌：翻完了，那一句才模糊淡入 */
+/* 牌翻好之前提示不出来（.step > * 的进场动画会把 opacity 盖回 1：这里连动画一起停掉），翻好了再模糊淡入一次 */
 .interlude-hint.is-waiting {
   opacity: 0;
+  animation: none;
 }
 
 /* 宝藏：鞋柜一列一列（整列聚起来 / 化成金尘）；衣柜的门包一层（才能聚起来） */

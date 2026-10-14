@@ -18,6 +18,8 @@
 //      gets the press (scale .97 + spring back) and the ink ripple from the fingertip. sound=false because
 //      installSfx() already plays the right sound for every control. Opt out: data-fx="none" (on it or a
 //      container). Per element: data-fx-ripple="off" · data-fx-depth="0.94" · data-fx-tone="dusk".
+//      rules: [{ sel, depth, ripple, tone, target, skip }] — target = what actually scales inside the control
+//      (the deal-breaker swatch presses its dot: { sel: '.nogo-color', target: ':scope > i', ripple: false }).
 //        import fx from '../shared/fx.js'; fx.install();
 //  <button {...fx.pressProps}>            one-line opt-in for one element (React spread; no hook needed)
 //  <button {...usePress({ depth: .94, ripple: false })}>        same, with options (React hook)
@@ -28,6 +30,8 @@
 //  ── SELECTION LIGHT ──────────────────────────────────────────────────────────────────────────────────────
 //  fx.scan(el, { delay, duration, tone, holo, angle = 20, edge = true, sound = 'scan', reverse }) → Promise
 //      a thin gold-white band crosses el in 280–420 ms (by its diagonal) + a 1 px gilt edge glint.
+//      The 'scan' sound is skipped when el (or its control) was pressed ≤ 450 ms ago: the delegated
+//      select / next / confirm already answered that touch (one choice ≤ 3 sounds, SFX SPEC §4).
 //        fx.scan(card, { delay: 30 });
 //  fx.holo(el, { delay, duration = 1250 }) → Promise          holographic foil scan (dreamer card / poster)
 //        fx.holo(frontRef.current, { delay: 160 });
@@ -41,7 +45,10 @@
 //      origin: 'left'|'right'|'top'|'bottom'|'center'|{x,y}|{ awayFrom: el | point }   (where the erosion starts)
 //        fx.dissolve(loser, { delay: 120, origin: { awayFrom: winner }, from: winner, duration: 640, tone: 'photo' });
 //        fx.dissolve(struck, { tone: 'ash' });          // deal-breakers: grey ash falling down
-//  fx.prepare(el, { origin })             pre-build the erosion sprite (on mount) so a dissolve never waits
+//  fx.prepare(el, { origin }) → Promise   pre-build the erosion sprite on mount, in idle slices (≤ 4 ms each).
+//      Sprites are shared by size + compass direction (8 points + centre), so a 9-card commit needs 1–3. A
+//      dissolve that starts before its sprite is ready waits ≤ 320 ms, then falls back to fade + a pinch of
+//      dust; PNG encoding never runs synchronously on the main thread (except under the manual capture clock).
 //  fx.condense(el, { origin = 'center', duration = 560, delay, tone }) → Promise   reverse: dust gathers, el appears
 //  fx.restore(el)                         undo what fx left on a node (hidden / mask / fades) — for reused nodes
 //
@@ -50,8 +57,12 @@
 //         context = 'auto' }) → Promise
 //      a DOM clone lifts, arcs to target, turns into a mote of light and is caught (pulse + ring + sparks).
 //      The source stays visibility:hidden (fx.restore(el) brings it back).
+//      Sounds: sound = 'fly' (the whoosh at take-off; skipped when el was just pressed) · landSound = 'land'
+//      (+ landNote = the D E F♯ A B step). sound: null = no whoosh, still lands · sound: false = silent.
 //        fx.fly(winner, document.querySelector('.stone.is-now svg'), { delay: 300, landNote: 0 }).then(next);
-//  fx.mote(from, to, { delay, size = 3, tone, onLand, duration, arc = .35 }) → Promise   canvas-only light mote
+//  fx.mote(from, to, { delay, size = 3, tone, onLand, duration, arc = .35, sound = null, landSound, landNote })
+//      → Promise   canvas-only light mote. Silent take-off; landing in a progress stone (.stone / [data-fx-land])
+//      plays that stone's 'land' note, so every step of progress lands on the D E F♯ A B ladder.
 //        fx.mote(optEl, stoneSvg, { delay: 220 }).then(next);
 //  fx.pulse(target, { tone, sparks = 10, ring = true })   "caught": spring scale 1.16 → 1 + ring + sparks
 //
@@ -106,6 +117,8 @@
 //  fx.motion                 { reduced (live prefers-reduced-motion), enabled (kill switch: false = calm) }
 //  fx.haptic(kind)           tap · select · land · nope · stamp · summon · reveal (Android only; iPad has none)
 //  fx.clock                  the one clock: after(ms, fn) → cancel · wait(ms) · tween({…}) · hook(fn) · now()
+//                            real time even on 1 s frames (only a hidden-tab gap is skipped); wipe's mid / done
+//                            also race a real-time timer, so content swaps under the band even when frames are slow
 //  fx.reset() · fx.stats()   clear the canvas · { particles, rings, comets, canvas, sleeping }
 //  window.__fxClock          deterministic capture: .manual = true; .seed(7); .step(1000 / 30) steps every fx
 //                            animation AND every CSS / WAAPI animation on the page; .log = true → .sounds[]
@@ -179,13 +192,39 @@ function autoSink() {
 /** every sound name fx itself reports (sfx.fx maps them: fly → whoosh, wipe → page, nope → error …) */
 export const FX_SOUNDS = ['tap', 'scan', 'holo', 'dissolve', 'condense', 'fly', 'mote', 'land', 'stream', 'flip', 'flipLand', 'tick', 'wipe', 'reveal', 'nope', 'stamp'];
 const SOUND_LOG = { on: false, list: [] };
-/** 一组只响一声（SPEC §4：九张卡一起化成金尘 = 一声，不是九声）：同名的声音在这个间隔内只响第一下 */
-const SOUND_GAP = { dissolve: 220, condense: 220, scan: 90, holo: 300, mote: 70, fly: 200, wipe: 300, flip: 200, stream: 300 };
+/** 一组只响一声（SPEC §4：九张卡一起化成金尘 = 一声，不是九声）：同名的声音在这个间隔内只响第一下。
+ *  dissolve / condense 700 ms：错开离场的一整组（9 张卡 × 45 ms + 本身 0.6 s）也只有一声；land 600 ms：几粒光一起落进同一块石头 = 一声 */
+const SOUND_GAP = { dissolve: 700, condense: 700, scan: 90, holo: 300, mote: 70, fly: 200, wipe: 300, flip: 200, stream: 300, land: 600 };
 const LAST_SOUND = Object.create(null);
+const soundNow = () => (clock.manual ? clock.now() : perfNow());
+/** 最近一次按下（press 盖的章）：这一下已经有委托的「选中 / 下一步 / 确认」声了，跟着它的扫光 / 起飞就不再叠一声 */
+const LAST_PRESS = { ref: null, at: -1e9 }; // WeakRef：不把下一位客人之前那一页的节点留在内存里
+const PRESS_QUIET = 450;
+function markPress(el) {
+  LAST_PRESS.ref = typeof WeakRef === 'function' ? new WeakRef(el) : { deref: () => el };
+  LAST_PRESS.at = soundNow();
+}
+function pressedRecently(el) {
+  const p = LAST_PRESS.ref?.deref();
+  if (!p || !el || soundNow() - LAST_PRESS.at > PRESS_QUIET) return false;
+  try {
+    return p === el || p.contains?.(el) || el.contains?.(p);
+  } catch {
+    return false;
+  }
+}
+/** 计时器排的声音：真实时间已经晚了 400 ms 以上（很卡的帧）就不响了 —— 晚到的声音比没有声音更糟（和画面对不上） */
+function sayAfter(ms, name, arg) {
+  if (!name) return;
+  const due = clock.now() + Math.max(0, ms || 0);
+  clock.after(ms, () => {
+    if (clock.now() - due <= 400) say(name, arg);
+  });
+}
 /** play a UI sound through the same adapter fx uses (dedupes with installSfx's delegated button sounds) */
 export function sound(name, arg) {
   if (!name) return;
-  const now = clock.manual ? clock.now() : perfNow(); // 时钟闲着时不走：这里用真实时间
+  const now = soundNow(); // 时钟闲着时不走：这里用真实时间
   const gap = SOUND_GAP[name];
   if (gap && LAST_SOUND[name] != null && now >= LAST_SOUND[name] && now - LAST_SOUND[name] < gap) return;
   LAST_SOUND[name] = now;
@@ -368,7 +407,12 @@ class Clock {
     this._sleep = 0;
     this._sleepAt = 0;
     this._seen = typeof WeakSet === 'function' ? new WeakSet() : new Set();
+    this._skip = false; // 分页刚从后台回来：下一帧只走一帧的时间（不一下跳过整段动画）
     this._loop = this._loop.bind(this);
+    if (HAS_DOM && document.addEventListener)
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') this._skip = true;
+      });
   }
   /** 现在（时钟时间）。时钟正睡着（只有计时器在等）：先把睡过的真实时间补上、叫醒 */
   now() {
@@ -427,9 +471,12 @@ class Clock {
   }
   _loop(now) {
     this._raf = 0;
-    // 卡顿到 10 fps 也照真实时间走（和合成线程上的 WAAPI 对得上）；切走分页回来（> 250 ms）不要一下跳过整段动画
+    // 很卡的帧（iPad 忙、4× 降速，一帧 0.3 s 甚至 1 s）也照真实时间走：和合成线程上的 WAAPI、音效对得上，
+    // 编排不会越走越慢（以前 > 250 ms 的帧只算 16.7 ms，2 fps 时时钟只有真实时间的 6 %）。
+    // 只有「分页藏起来又回来」才不补（visibilitychange → _skip）：回来时不一下跳过整段动画。
     const raw = now - this._last;
-    const dt = raw > 250 ? 16.7 : clamp(raw, 0, 100);
+    const dt = this._skip || raw > 4000 ? 16.7 : clamp(raw, 0, 1000); // > 4 s = 分页回来的事件还没到（或者机器睡过）：同样不补
+    this._skip = false;
     this._last = now;
     this._tick(dt);
     if (this.manual || !this._busy()) return;
@@ -438,7 +485,8 @@ class Clock {
       for (const tm of this.timers) if (!tm.dead && tm.at < next) next = tm.at;
       const gap = next - this.t;
       if (gap > 120) {
-        this._sleepAt = perfNow();
+        // 从这一帧的时刻开始算睡（t 正好走到这一帧）：同一帧里别的回调占掉的时间（很卡的时候 300 ms）不会丢
+        this._sleepAt = Math.min(now, perfNow());
         this._sleep = setTimeout(() => {
           this._sleep = 0;
           this._unsleep();
@@ -528,10 +576,32 @@ class Clock {
       this._unsleep();
       if (this._raf && HAS_DOM) cancelAnimationFrame(this._raf);
       this._raf = 0;
+      // 页面上已经在的动画（包括早就播完、fill: forwards 停在终点的进场）：就停在现在的位置，之后跟着 step() 往前走；
+      // 只有打开手动之后才出现的动画从 0 开始（以前会把已经停好的卡片倒回 opacity 0 重新进场）
+      if (HAS_DOM && document.getAnimations)
+        for (const a of document.getAnimations()) {
+          this._seen.add(a);
+          try {
+            a.pause();
+          } catch {
+            /* ignore */
+          }
+        }
     }
     this.manual = !!on;
     if (!on) {
-      if (HAS_DOM && document.getAnimations) for (const a of document.getAnimations()) if (a.playState === 'paused') a.play();
+      if (HAS_DOM && document.getAnimations)
+        for (const a of document.getAnimations()) {
+          if (a.playState !== 'paused') continue;
+          try {
+            // 已经走过终点的：直接结束（play() 会把播完的动画倒回开头重播）
+            const end = a.effect?.getComputedTiming?.().endTime;
+            if (Number.isFinite(end) && (a.currentTime ?? 0) >= end) a.finish();
+            else a.play();
+          } catch {
+            /* ignore */
+          }
+        }
       if (this._busy()) this._wake();
     }
   }
@@ -1044,6 +1114,7 @@ export function press(el, e, { tone, depth = 0.97, ripple = true, sound: snd = '
   const T = toneOf(el, tone);
   el.classList?.add('fx-pressable');
   el.__fxDown?.cancel?.();
+  markPress(el);
   const { r, w, h, k } = frameOf(el);
   const big = r.width * r.height > 0.3 * window.innerWidth * window.innerHeight;
   const d = big ? 1 : depth;
@@ -1153,12 +1224,14 @@ export function pressWith(opts) {
 export const pressProps = Object.freeze(pressWith());
 
 const PRESS_SELECTOR = 'button, [role="button"], [role="tab"], [role="option"], [role="switch"], [role="checkbox"], [role="radio"], a[href], summary, .opt, .chip, .pair-card, .wish, [data-fx="press"]';
-/** 默认的按法（SPEC §6）：玻璃小图标不要涟漪；色票按深一点；擦神灯有自己的效果 */
+/** 默认的按法（SPEC §6）：玻璃小图标不要涟漪；色票按深一点；擦神灯有自己的效果。
+ *  target：真正缩下去的是按钮里的哪一个（雷区色票 = 那颗圆点，SPEC §6.1「P on the dot」）；
+ *  雷区色票不要涟漪 —— 没有圆角的整列按钮会被涟漪画出一块灰色方框，打叉、红圈、删除线本身就是回馈 */
 const PRESS_RULES = [
   { sel: '.lamp-touch, [data-fx="none"]', skip: true },
   { sel: '.lang-toggle button, .icon-btn, .nav-back, .stone button, .tb-group button, .menu button, .ws-pill', ripple: false },
   { sel: '.chip.sw', ripple: false, depth: 0.94 },
-  { sel: '.nogo-color', depth: 0.94 },
+  { sel: '.nogo-color', target: ':scope > i', depth: 0.94, ripple: false },
 ];
 
 /**
@@ -1192,8 +1265,19 @@ export function install(root, { selector = PRESS_SELECTOR, rules = [], sound: sn
     if (ds.fxRipple === 'off') o.ripple = false;
     if (ds.fxDepth) o.depth = +ds.fxDepth || o.depth;
     if (ds.fxTone) o.tone = ds.fxTone;
+    let tgt = el;
+    if (o.target) {
+      try {
+        tgt = el.querySelector(o.target) || el;
+      } catch {
+        tgt = el;
+      }
+      // 按钮本身也算「fx 在按」：页面自己的 :not(.fx-pressable):active 后备缩放就不会叠上来
+      el.classList?.add('fx-pressable');
+    }
     held.get(e.pointerId)?.();
-    held.set(e.pointerId, press(el, e, o));
+    held.set(e.pointerId, press(tgt, e, { ...o, target: undefined }));
+    if (tgt !== el) markPress(el); // 「刚按过」记在整个按钮上（扫光 / 起飞的去重看的是按钮）
   };
   const up = (e) => {
     const rel = held.get(e.pointerId);
@@ -1223,7 +1307,8 @@ export function install(root, { selector = PRESS_SELECTOR, rules = [], sound: sn
  */
 export function scan(el, { duration, delay = 0, tone, holo = false, angle = 20, edge = true, width, sound: snd = holo ? 'holo' : 'scan', reverse = false } = {}) {
   if (!el || !HAS_DOM) return Promise.resolve();
-  if (snd) clock.after(delay, () => say(snd, { holo }));
+  // 扫的是刚按下去的那一个（或它里面 / 外面）：委托的「选中 / 下一步」已经响过 —— 光照样扫，不再叠一声（一下选择 ≤ 3 个声音）
+  if (snd && !(snd === 'scan' && pressedRecently(el))) sayAfter(delay, snd, { holo });
   if (!canHost(el)) return clock.wait(delay);
   const T = toneOf(el, tone);
   const { w, h } = frameOf(el);
@@ -1297,6 +1382,8 @@ export function gleam(el, { every = 5200, first = 900, tone, duration = 900 } = 
 
 const SPRITES = new Map(); // key → { W, H, F, v, order, e, url, glowUrl, pending }
 const SPRITE_CAP = 10;
+const SPRITE_WAIT = 320; // 溶解开始时帧图还没好：最多等这么久（同一组错开的离场里，后面的几张多半已经好了），再退回淡出
+const SPRITE_STATS = { built: 0, fades: 0 };
 const ERODE_E = 0.032;
 const ERODE_FRAMES = 24;
 
@@ -1328,8 +1415,11 @@ function fbm(x, y, s) {
   return f / norm;
 }
 
-/** 侵蚀噪声场（纯函数）：{ v: Float32Array 0–1, order: 由先到后被吃掉的格子 } */
-export function erosionField(W, H, ox, oy, seedN = 7) {
+/**
+ * 侵蚀噪声场的生成器：每算 rows 行歇一下（yield），建帧图时可以切成 ≤ 4 ms 的小片，不在一次触碰里卡住主线程。
+ * 算完写进 out.v / out.order
+ */
+function* fieldJob(W, H, ox, oy, seedN, out, rows = 6) {
   const v = new Float32Array(W * H);
   const asp = H / W;
   let maxD = 0;
@@ -1342,7 +1432,7 @@ export function erosionField(W, H, ox, oy, seedN = 7) {
     maxD = Math.max(maxD, Math.hypot(cx - ox, (cy - oy) * asp));
   let lo = Infinity;
   let hi = -Infinity;
-  for (let y = 0; y < H; y++)
+  for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const u = (x + 0.5) / W;
       const w = (y + 0.5) / H;
@@ -1352,6 +1442,8 @@ export function erosionField(W, H, ox, oy, seedN = 7) {
       if (val < lo) lo = val;
       if (val > hi) hi = val;
     }
+    if (y % rows === rows - 1) yield;
+  }
   for (let i = 0; i < v.length; i++) v[i] = (v[i] - lo) / (hi - lo || 1);
   // 被吃掉的先后顺序：计数排序（4096 档，O(n)）—— 比带比较函数的 sort 快一个数量级（iPad 上建一张大卡的帧图 < 10 ms）
   const B = 4096;
@@ -1365,7 +1457,28 @@ export function erosionField(W, H, ox, oy, seedN = 7) {
   for (let b = 0; b < B; b++) count[b + 1] += count[b];
   const order = new Uint32Array(v.length);
   for (let i = 0; i < v.length; i++) order[count[bucket[i]]++] = i;
-  return { v, order };
+  out.v = v;
+  out.order = order;
+}
+
+/** 侵蚀噪声场（纯函数）：{ v: Float32Array 0–1, order: 由先到后被吃掉的格子 } */
+export function erosionField(W, H, ox, oy, seedN = 7) {
+  const out = {};
+  const g = fieldJob(W, H, ox, oy, seedN, out, H);
+  while (!g.next().done);
+  return { v: out.v, order: out.order };
+}
+
+/**
+ * 侵蚀起点归到 9 个点（8 个方位 + 中心）。同样大小、朝差不多方向散开的卡片共用一张帧图：
+ * 一次提交九张愿望卡（都「离开」按钮）= 1–3 张帧图，不是九张（以前起点按 1/8 取整，81 档，每张卡都要现场建一张）
+ */
+export function snapOrigin(ox, oy) {
+  const dx = ox - 0.5;
+  const dy = oy - 0.5;
+  if (Math.hypot(dx, dy) < 0.2) return [0.5, 0.5];
+  const a = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
+  return [0.5 + 0.55 * Math.round(Math.cos(a)), 0.5 + 0.55 * Math.round(Math.sin(a))];
 }
 
 /** 帧 i 的阈值（侵蚀进行到哪里）—— 遮罩图和金尘用同一个函数 */
@@ -1408,65 +1521,249 @@ export function spriteSize(r) {
   return [clamp(Math.round((long * ar) / 4) * 4, 20, long), long];
 }
 
-/** 生成（或拿缓存的）遮罩帧图。sync = true 时用 toDataURL 马上拿到；否则 toBlob 异步（prepare 用） */
-function erosion(W, H, ox, oy, { sync = false, seedN = 7, invert = false } = {}) {
-  const key = `${W}x${H}:${Math.round(ox * 8)}:${Math.round(oy * 8)}:${seedN}${invert ? ':i' : ''}`;
-  let s = SPRITES.get(key);
-  if (s && (s.url || !sync)) {
-    SPRITES.delete(key);
-    SPRITES.set(key, s); // LRU
-    return s;
+// ── 帧图的建造：一张帧图 = 噪声场（切片算）→ 24 帧遮罩 + 金边像素（三帧一片）→ PNG（worker 里编码，异步）。
+// 挂载时的 prepare() 在空闲时间里做（requestIdleCallback，每片 ≤ 4 ms）；真正要溶解了还没好 → 改成「尽快」（setTimeout 0，
+// 每片仍 ≤ 4 ms，中间让出帧）。除了录帧（手动时钟）以外，绝不在主线程上同步编码 PNG（4× 降速时一次 toDataURL 就是几十毫秒）。
+
+const BUILD_SLICE = 4;
+const BUILDS = []; // 还没建好的帧图（急的排前面）
+let buildTimer = null;
+const ric = HAS_DOM && typeof window.requestIdleCallback === 'function' ? window.requestIdleCallback.bind(window) : null;
+const cic = HAS_DOM && typeof window.cancelIdleCallback === 'function' ? window.cancelIdleCallback.bind(window) : null;
+
+function scheduleBuilds() {
+  if (!BUILDS.length) return;
+  const urgent = BUILDS.some((b) => b.urgent);
+  if (buildTimer) {
+    if (!urgent || buildTimer.urgent) return;
+    if (buildTimer.idle != null) cic?.(buildTimer.idle); // 空闲排队中来了急的：改成马上
+    else clearTimeout(buildTimer.t);
+    buildTimer = null;
   }
-  if (!s) {
-    const field = erosionField(W, H, ox, oy, seedN);
-    if (invert) {
-      // condense：离起点近的格子先出现 → 场反过来（倒放时 v 大的先出现）
-      for (let i = 0; i < field.v.length; i++) field.v[i] = 1 - field.v[i];
-      field.order.reverse();
+  if (urgent || !ric) buildTimer = { urgent, t: setTimeout(runBuilds, urgent ? 0 : 32) };
+  else buildTimer = { urgent: false, idle: ric(runBuilds, { timeout: 700 }) };
+}
+
+function runBuilds(deadline) {
+  buildTimer = null;
+  const t0 = perfNow();
+  while (BUILDS.length && perfNow() - t0 < BUILD_SLICE) {
+    const sp = BUILDS[0];
+    if (!sp.urgent && deadline && !deadline.didTimeout && typeof deadline.timeRemaining === 'function' && deadline.timeRemaining() < 1) break;
+    let done = true;
+    try {
+      done = !sp.job || sp.job.next().done;
+    } catch (e) {
+      console.error('[fx]', e);
+      sp.failed = true;
     }
-    s = { W, H, F: ERODE_FRAMES, e: ERODE_E, ...field, url: null, glowUrl: null, pending: null };
-    SPRITES.set(key, s);
+    if (done) {
+      BUILDS.shift();
+      sp.job = null;
+      encodeSprite(sp);
+    }
+  }
+  scheduleBuilds();
+}
+
+/** 噪声场 + 帧图的生成器（一步 = 几行噪声 / 一帧遮罩） */
+function* spriteJob(sp, ox, oy, seedN, invert) {
+  yield* fieldJob(sp.W, sp.H, ox, oy, seedN, sp);
+  if (invert) {
+    // condense：离起点近的格子先出现 → 场反过来（倒放时 v 大的先出现）
+    for (let i = 0; i < sp.v.length; i++) sp.v[i] = 1 - sp.v[i];
+    sp.order.reverse();
+  }
+  yield;
+  if (!HAS_DOM || typeof ImageData === 'undefined') return;
+  yield* paintJob(sp);
+}
+
+// PNG 编码交给一个很小的 worker（OffscreenCanvas.convertToBlob，iPadOS 16.4+ / Chrome）：主线程只算噪声场和像素（切片），
+// 不编码。没有 worker / OffscreenCanvas（旧设备）→ 画布 + toBlob（异步）。
+const ENCODER_SRC =
+  "self.onmessage=function(e){var d=e.data;function enc(buf){var c=new OffscreenCanvas(d.W,d.H);c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(buf),d.W,d.H),0,0);return c.convertToBlob({type:'image/png'});}" +
+  "Promise.all([enc(d.mask),enc(d.glow)]).then(function(r){self.postMessage({id:d.id,a:r[0],b:r[1]});},function(err){self.postMessage({id:d.id,err:String(err)});});};";
+let ENC = null; // null = 还没试 · false = 用不了 · { w, n, cb }
+function encoder() {
+  if (ENC !== null) return ENC;
+  ENC = false;
+  try {
+    if (!HAS_DOM || typeof Worker === 'undefined' || typeof OffscreenCanvas === 'undefined' || typeof ImageData === 'undefined' || !OffscreenCanvas.prototype.convertToBlob) return ENC;
+    const w = new Worker(URL.createObjectURL(new Blob([ENCODER_SRC], { type: 'text/javascript' })));
+    const cb = new Map();
+    const fail = () => {
+      ENC = false;
+      for (const f of cb.values()) f({ err: 'worker' });
+      cb.clear();
+    };
+    w.onmessage = (e) => {
+      const f = cb.get(e.data?.id);
+      cb.delete(e.data?.id);
+      f?.(e.data);
+    };
+    w.onerror = fail;
+    ENC = { w, n: 0, cb };
+  } catch {
+    ENC = false;
+  }
+  return ENC;
+}
+
+/** 像素 → 画布（主线程的编码路线 / 录帧的同步编码用） */
+function toCanvases(sp) {
+  const mk = (img) => {
+    const c = document.createElement('canvas');
+    c.width = sp.W;
+    c.height = sp.H * sp.F;
+    c.getContext('2d')?.putImageData(img, 0, 0);
+    return c;
+  };
+  return { mask: mk(sp.pixels.mask), glow: mk(sp.pixels.glow) };
+}
+
+/** 像素已经交给 worker（或丢了）：用留着的噪声场再画一次（只在 worker 失败 / 录帧中途切手动时发生） */
+function repaint(sp) {
+  sp.pixels = null;
+  const g = paintJob(sp);
+  while (!g.next().done);
+}
+
+/** 画好的帧图 → URL。sync：toDataURL（录帧要确定）；否则 worker 编码，或画布 toBlob（都是异步，主线程不编码） */
+function encodeSprite(sp, sync = false) {
+  if (sp.url || sp.encoding === 'sync') return;
+  if (sp.failed || !sp.v) {
+    sp.resolve(sp);
+    return;
+  }
+  if (sync) {
+    if (!sp.pixels || sp.encoding === 'worker') repaint(sp);
+    if (!sp.pixels) {
+      sp.resolve(sp);
+      return;
+    }
+    sp.encoding = 'sync';
+    const { mask, glow } = toCanvases(sp);
+    sp.url = mask.toDataURL('image/png');
+    sp.glowUrl = glow.toDataURL('image/png');
+    sp.pixels = null;
+    sp.resolve(sp);
+    return;
+  }
+  if (sp.encoding || !sp.pixels) return;
+  const E = encoder();
+  if (E) {
+    sp.encoding = 'worker';
+    const id = ++E.n;
+    const { mask, glow } = sp.pixels;
+    E.cb.set(id, (d) => {
+      if (sp.url || sp.evicted) return sp.resolve(sp);
+      if (d.err || !d.a || !d.b) {
+        // 这台设备的 worker 编不了：以后都走主线程的画布路线；这一张重新画、再编
+        ENC = false;
+        sp.encoding = null;
+        repaint(sp);
+        return encodeSprite(sp);
+      }
+      sp.url = URL.createObjectURL(d.a);
+      sp.glowUrl = URL.createObjectURL(d.b);
+      sp.resolve(sp);
+    });
+    sp.pixels = null;
+    E.w.postMessage({ id, W: sp.W, H: sp.H * sp.F, mask: mask.data.buffer, glow: glow.data.buffer }, [mask.data.buffer, glow.data.buffer]);
+    return;
+  }
+  sp.encoding = 'blob';
+  const { mask, glow } = toCanvases(sp);
+  sp.pixels = null;
+  if (typeof mask.toBlob !== 'function') {
+    sp.url = mask.toDataURL('image/png');
+    sp.glowUrl = glow.toDataURL('image/png');
+    sp.resolve(sp);
+    return;
+  }
+  Promise.all([new Promise((r) => mask.toBlob(r, 'image/png')), new Promise((r) => glow.toBlob(r, 'image/png'))]).then(([a, b]) => {
+    if (!sp.url && a && b && !sp.evicted) {
+      sp.url = URL.createObjectURL(a);
+      sp.glowUrl = URL.createObjectURL(b);
+    }
+    sp.resolve(sp);
+  });
+}
+
+/** 马上要（录帧）：剩下的步骤一口气做完、同步编码（还在路上的 worker / toBlob 不等） */
+function finishSync(sp) {
+  if (sp.url) return sp;
+  if (sp.job) {
+    try {
+      while (!sp.job.next().done);
+    } catch (e) {
+      console.error('[fx]', e);
+      sp.failed = true;
+    }
+    sp.job = null;
+    const i = BUILDS.indexOf(sp);
+    if (i >= 0) BUILDS.splice(i, 1);
+  }
+  if (!sp.url) {
+    if (sp.encoding === 'blob') sp.encoding = null;
+    encodeSprite(sp, true);
+  }
+  return sp;
+}
+
+/**
+ * 拿（或开始建）遮罩帧图：{ W, H, F, v, order, e, url, glowUrl, pending }。
+ *   sync：现在就要（同步做完 + toDataURL）· urgent：尽快（切片，不卡帧）· 默认：空闲时间里建（prepare）
+ * url 还是 null = 还在建：等 pending（resolve 时 url 可能仍是 null = 建不出来，调用的人退回淡出）
+ */
+function erosion(W, H, ox0, oy0, { sync = false, urgent = false, seedN = 7, invert = false } = {}) {
+  const [ox, oy] = snapOrigin(ox0, oy0);
+  const key = `${W}x${H}:${ox}:${oy}:${seedN}${invert ? ':i' : ''}`;
+  let sp = SPRITES.get(key);
+  if (sp) {
+    SPRITES.delete(key);
+    SPRITES.set(key, sp); // LRU
+  } else {
+    sp = { W, H, F: ERODE_FRAMES, e: ERODE_E, v: null, order: null, url: null, glowUrl: null, pixels: null, job: null, urgent: false, encoding: null };
+    sp.pending = new Promise((r) => (sp.resolve = r));
+    sp.job = spriteJob(sp, ox, oy, seedN, invert);
+    SPRITE_STATS.built++;
+    SPRITES.set(key, sp);
     while (SPRITES.size > SPRITE_CAP) {
       const old = SPRITES.keys().next().value;
       const o = SPRITES.get(old);
-      if (o?.url?.startsWith('blob:')) URL.revokeObjectURL(o.url);
-      if (o?.glowUrl?.startsWith('blob:')) URL.revokeObjectURL(o.glowUrl);
       SPRITES.delete(old);
+      if (!o) continue;
+      o.evicted = true;
+      const i = BUILDS.indexOf(o);
+      if (i >= 0) BUILDS.splice(i, 1);
+      o.resolve?.(o);
+      if (o.url?.startsWith('blob:')) URL.revokeObjectURL(o.url);
+      if (o.glowUrl?.startsWith('blob:')) URL.revokeObjectURL(o.glowUrl);
+    }
+    if (!sync) BUILDS.push(sp);
+  }
+  if (sp.url) return sp;
+  if (sync) return finishSync(sp);
+  if (urgent && !sp.urgent) {
+    sp.urgent = true;
+    const i = BUILDS.indexOf(sp);
+    if (i > 0) {
+      BUILDS.splice(i, 1);
+      BUILDS.unshift(sp);
     }
   }
-  if (!s.url && (sync || !s.pending)) {
-    const { mask, glow } = paintFrames(s);
-    if (sync || typeof mask.toBlob !== 'function') {
-      s.url = mask.toDataURL('image/png');
-      s.glowUrl = glow.toDataURL('image/png');
-    } else {
-      s.pending = Promise.all([new Promise((r) => mask.toBlob(r, 'image/png')), new Promise((r) => glow.toBlob(r, 'image/png'))]).then(([a, b]) => {
-        if (!s.url) {
-          s.url = a ? URL.createObjectURL(a) : mask.toDataURL('image/png');
-          s.glowUrl = b ? URL.createObjectURL(b) : glow.toDataURL('image/png');
-        }
-        return s;
-      });
-    }
-  }
-  return s;
+  scheduleBuilds();
+  return sp;
 }
 
-function paintFrames(s) {
-  const { W, H, F, v, e } = s;
-  const mk = () => {
-    const c = document.createElement('canvas');
-    c.width = W;
-    c.height = H * F;
-    return c;
-  };
-  const mask = mk();
-  const glow = mk();
-  const mg = mask.getContext('2d');
-  const gg = glow.getContext('2d');
-  const mi = mg.createImageData(W, H * F);
-  const gi = gg.createImageData(W, H * F);
+/** 24 帧的遮罩 + 金边像素（一步 = 三帧）。只算像素（ImageData），编码另外做 */
+function* paintJob(sp) {
+  const { W, H, F, v, e } = sp;
   const N = W * H;
+  const mi = new ImageData(W, H * F);
+  const gi = new ImageData(W, H * F);
   // 大部分像素在一帧里不是全有就是全无：先整帧填「不透明」（原生 fill），只算前沿附近那一圈
   new Uint32Array(mi.data.buffer).fill(0xff000000);
   const md = mi.data;
@@ -1494,20 +1791,19 @@ function paintFrames(s) {
         gd[o] = Math.round(g * 255);
       }
     }
+    if (f % 3 === 2) yield;
   }
-  mg.putImageData(mi, 0, 0);
-  gg.putImageData(gi, 0, 0);
-  return { mask, glow };
+  sp.pixels = { mask: mi, glow: gi };
 }
 
-/** 提前生成帧图（挂载时 / pointerdown），真正溶解时就不用等 */
-export function prepare(el, { origin } = {}) {
+/** 提前生成帧图（挂载时）：在空闲时间里切片建好，真正溶解时就不用等。返回 pending（建好时 resolve） */
+export function prepare(el, { origin, urgent = false } = {}) {
   if (!el || calm() || !HAS_DOM) return;
   const r = el.getBoundingClientRect();
   if (!r.width || !r.height) return;
   const [W, H] = spriteSize(r);
   const [ox, oy] = originFor(origin, r);
-  erosion(W, H, ox, oy);
+  return erosion(W, H, ox, oy, { urgent }).pending;
 }
 
 function setMask(el, url, F, f) {
@@ -1539,32 +1835,53 @@ export function dissolve(el, opts = {}) {
   const { duration = 600, delay = 0, tone, dust: density = 1, drift, hide = true, glow = true, sound: snd = 'dissolve' } = opts;
   const T = toneOf(el, tone);
   if (calm()) {
-    if (snd) clock.after(delay, () => say(snd, { size: 0 }));
+    sayAfter(delay, snd, { size: 0 });
     keep(el, el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 240, delay, fill: 'forwards' }));
     return clock.wait(delay + 240).then(() => {
       if (hide) el.style.visibility = 'hidden';
     });
   }
+  const up = (drift || (T === 'ash' ? 'down' : 'up')) === 'up';
   return new Promise((resolve) => {
-    // 有 delay（错开的那几张）：现在就在后台准备帧图（PNG 异步编码），开始的时候多半已经好了
-    if (delay >= 32) prepare(el, { origin: opts.origin });
+    // 现在就开始建帧图（切片、不卡帧；同样大小、同一方向的卡共用一张，多半早就在缓存里）：开始的时候多半已经好了
+    prepare(el, { origin: opts.origin, urgent: true });
     const run = () => {
       const r = el.getBoundingClientRect();
       if (!r.width || !r.height || !el.isConnected) return resolve();
       const [W, H] = spriteSize(r);
       const [ox, oy] = originFor(opts.origin, r);
-      const sp = erosion(W, H, ox, oy, { sync: clock.manual }); // 录屏（手动时钟）要确定：同步
-      // 帧图还在编码：等它（几毫秒），不在主线程上同步编码第二遍
+      const sp = erosion(W, H, ox, oy, { sync: clock.manual, urgent: true }); // 录屏（手动时钟）要确定：同步
+      // 帧图还在建 / 编码：等它一会儿；还没好（很卡的设备）就退回「淡出 + 一小撮金尘」—— 绝不在主线程上同步编码
       let started = false;
       const start = () => {
         if (started) return;
         started = true;
-        go(r, sp.url ? sp : erosion(W, H, ox, oy, { sync: true }), ox, oy, W, H);
+        if (sp.url) go(r, sp, ox, oy, W, H);
+        else fade(r);
       };
-      if (!sp.url && sp.pending) {
+      if (sp.url) start();
+      else {
         sp.pending.then(start);
-        clock.after(150, start); // toBlob 一直不回来（后台分页之类）：最多等 150 ms 就同步做
-      } else start();
+        clock.after(SPRITE_WAIT, start);
+      }
+    };
+    /** 帧图来不及：整张淡出、往上飘 5 px，冒一小撮金尘（和正常的溶解同一个方向、同一个声音） */
+    const fade = (r) => {
+      if (!el.isConnected) return resolve();
+      SPRITE_STATS.fades++;
+      if (snd) say(snd, { size: r.width * r.height });
+      const D = Math.min(duration, 420);
+      const n = Math.round(dustBudget(r.width * r.height, density) * 0.45);
+      for (let i = 0; i < n; i++) {
+        const x = r.left + rnd() * r.width;
+        const y = r.top + rnd() * r.height;
+        dust.emit({ x, y, vx: rand(-14, 14), vy: up ? rand(-46, -16) : rand(10, 30), ay: up ? -14 : 40, drag: 1.3, life: rand(620, 1200), size: rand(0.55, 1.25), alpha: rand(0.7, 1), kind: K_DOT, color: pickCol(T, opts.colors), add: TONES[T]?.add, twinkle: rnd() < 0.18, wob: rand(4, 14), delay: rnd() * D * 0.8 });
+      }
+      keep(el, el.animate([{ opacity: 1, translate: '0 0' }, { opacity: 0, translate: `0 ${up ? -5 : 4}px` }], { duration: D, easing: EASE.out.css, fill: 'forwards' }));
+      clock.wait(D).then(() => {
+        if (hide) el.style.visibility = 'hidden';
+        resolve();
+      });
     };
     const go = (r, sp, ox, oy, W, H) => {
       if (!el.isConnected) return resolve();
@@ -1585,7 +1902,6 @@ export function dissolve(el, opts = {}) {
       const total = W * H;
       const prob = want / total;
       const fromPt = opts.from ? centerOf(opts.from) : { x: r.left + ox * r.width, y: r.top + oy * r.height };
-      const up = (drift || (T === 'ash' ? 'down' : 'up')) === 'up';
       let cursor = 0;
       const cw = r.width / W;
       const ch = r.height / H;
@@ -1663,7 +1979,7 @@ export function condense(el, opts = {}) {
   const T = toneOf(el, tone);
   restore(el);
   if (calm()) {
-    if (snd) clock.after(delay, () => say(snd));
+    sayAfter(delay, snd);
     el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 240, delay, fill: 'backwards' });
     return clock.wait(delay + 240);
   }
@@ -1671,11 +1987,45 @@ export function condense(el, opts = {}) {
   if (!r0.width || !r0.height) return Promise.resolve();
   const [W, H] = spriteSize(r0);
   const [ox, oy] = originFor(opts.origin ?? 'center', r0);
-  const sp = erosion(W, H, ox, oy, { sync: true, invert: true });
+  const sp = erosion(W, H, ox, oy, { sync: clock.manual, urgent: true, invert: true });
   const F = sp.F;
-  setMask(el, sp.url, F, F - 1); // 先全透明
+  // 先全透明：帧图好了 = 停在最后一帧的遮罩；还在建（很少：同样的卡多半早就在缓存里）= 先用 opacity 藏着，不同步编码
+  let hold = null;
+  if (sp.url) setMask(el, sp.url, F, F - 1);
+  else hold = el.animate([{ opacity: 0 }, { opacity: 0 }], { duration: 1, fill: 'forwards' });
   return new Promise((resolve) => {
-    clock.after(delay, () => {
+    const fallback = () => {
+      SPRITE_STATS.fades++;
+      const D = Math.min(duration, 360);
+      if (snd) say(snd);
+      el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: D, easing: EASE.out.css, fill: 'backwards' });
+      hold?.cancel();
+      hold = null;
+      clock.wait(D).then(resolve);
+    };
+    const ready = (begin) => {
+      if (sp.url) {
+        if (hold) {
+          setMask(el, sp.url, F, F - 1);
+          hold.cancel();
+          hold = null;
+        }
+        return begin();
+      }
+      let started = false;
+      const go2 = () => {
+        if (started) return;
+        started = true;
+        if (!sp.url) return fallback();
+        setMask(el, sp.url, F, F - 1);
+        hold?.cancel();
+        hold = null;
+        begin();
+      };
+      sp.pending.then(go2);
+      clock.after(SPRITE_WAIT, go2);
+    };
+    clock.after(delay, () => ready(() => {
       const r = el.getBoundingClientRect();
       let ember = null;
       if (glow && canHost(el)) {
@@ -1721,7 +2071,7 @@ export function condense(el, opts = {}) {
           ember?.remove();
           resolve();
         });
-    });
+    }));
   });
 }
 
@@ -1798,14 +2148,18 @@ export function pulse(target, { tone = 'paper', ring: withRing = true, sparks = 
  */
 export function fly(el, target, opts = {}) {
   if (!el || !target || !HAS_DOM) return Promise.resolve();
-  const { delay = 0, arc = 0.32, lift = 1.045, tilt: tiltDeg = 7, tone = toneOf(el), trail = true, hideSource = true, endScale, sound: snd = 'fly', land = true, onLand } = opts;
+  const { delay = 0, arc = 0.32, lift = 1.045, tilt: tiltDeg = 7, tone = toneOf(el), trail = true, hideSource = true, endScale, sound: snd0 = 'fly', land = true, onLand } = opts;
+  // 起飞的「呼」：刚按下去的那一张自己飞走时不响（选中的声音刚响过，SPEC §4：一下选择 = 选中 → 金尘 → 落地）。
+  // 落地的音高（landSound，默认 'land' + landNote）和起飞分开：sound: null 只关掉起飞，sound: false 全部不响
+  const landSnd = snd0 === false ? null : opts.landSound === undefined ? 'land' : opts.landSound;
+  const snd = snd0 && !(snd0 === 'fly' && pressedRecently(el)) ? snd0 : null;
   if (calm()) {
-    if (snd) clock.after(delay, () => say(snd, { distance: 0 }));
+    sayAfter(delay, snd, { distance: 0 });
     if (hideSource) keep(el, el.animate([{ opacity: 1 }, { opacity: 0.25 }], { duration: 200, delay, fill: 'forwards' }));
     return clock.wait(delay + 200).then(() => {
       if (land) {
         pulse(target, { tone, ring: false, sparks: 0 });
-        if (snd) say('land', opts.landNote);
+        if (landSnd) say(landSnd, opts.landNote);
         haptic('land');
       }
       onLand?.();
@@ -1935,7 +2289,7 @@ export function fly(el, target, opts = {}) {
           done: () => {
             if (land) {
               pulse(target, { tone });
-              if (snd) say('land', opts.landNote);
+              if (landSnd) say(landSnd, opts.landNote);
               haptic('land');
             }
             onLand?.();
@@ -1951,14 +2305,38 @@ export function fly(el, target, opts = {}) {
   });
 }
 
-/** 一粒光（只画在画布上）：从 a 飞到 b，带金尘尾巴；到了 → pulse(b)。选项 → 进度石、愿望 → 神灯 */
+/** 进度石的第几块（.stone 在列表里的位置），或目标上写的 data-fx-land="2"：落地的音高 = D E F♯ A B 的第几级。不是进度石 = null */
+function landStep(to) {
+  if (!isEl(to)) return null;
+  const tag = to.closest?.('[data-fx-land]');
+  if (tag) {
+    const n = Number(tag.getAttribute('data-fx-land'));
+    return Number.isFinite(n) ? n : 0;
+  }
+  const li = to.closest?.('.stone');
+  if (!li || !li.parentElement) return null;
+  const i = [...li.parentElement.children].filter((n) => n.classList?.contains('stone')).indexOf(li);
+  return i < 0 ? null : i;
+}
+
+/**
+ * 一粒光（只画在画布上）：从 a 飞到 b，带金尘尾巴；到了 → pulse(b)。选项 → 进度石、愿望 → 神灯。
+ * 声音：出发不响（按下去的那一声已经够了）；落进进度石时响那一块石头的音高（land，D E F♯ A B 一级一级往上 = 进度的旋律）。
+ * sound: 'mote' = 出发也响一声 · landSound / landNote：别的目标也要落地声时自己给
+ */
 export function mote(from, to, opts = {}) {
   if (!HAS_DOM || !from || !to) return Promise.resolve();
-  const { delay = 0, arc = 0.35, size = 3, tone = isEl(from) ? toneOf(from) : 'paper', trail = 2, sound: snd = 'mote', land = true, onLand } = opts;
+  const { delay = 0, arc = 0.35, size = 3, tone = isEl(from) ? toneOf(from) : 'paper', trail = 2, sound: snd = null, land = true, onLand } = opts;
+  const step = opts.landNote ?? landStep(to);
+  const landSnd = snd === false ? null : opts.landSound !== undefined ? opts.landSound : step != null ? 'land' : null;
+  const arrive = () => {
+    if (landSnd) say(landSnd, step ?? undefined);
+  };
   if (calm()) {
-    if (snd) clock.after(delay, () => say(snd));
+    sayAfter(delay, snd);
     return clock.wait(delay + 120).then(() => {
       if (land && isEl(to)) pulse(to, { tone, ring: false, sparks: 0 });
+      arrive();
       onLand?.();
     });
   }
@@ -1978,6 +2356,7 @@ export function mote(from, to, opts = {}) {
         at: (q) => ({ x: quad(a.x, ctl.x, b.x, q), y: quad(a.y, ctl.y, b.y, q) }),
         done: () => {
           if (land) pulse(isEl(to) ? to : b, { tone });
+          arrive();
           onLand?.();
           resolve();
         },
@@ -2601,14 +2980,21 @@ export function wipe(container, { tone = 'paper', duration = 820, angle = 14, so
     band.style.width = '100%';
     band.style.left = '0';
     o.animate([{ opacity: 0 }, { opacity: 1, offset: 0.5 }, { opacity: 0 }], { duration: 420, fill: 'both' });
-    return { mid: clock.wait(210), done: clock.wait(440).then(() => o.remove()) };
+    return { mid: soon(210), done: soon(440).then(() => o.remove()) };
   }
   // 光带比容器宽一半，中间将近一半完全不透明：mid 的时候整个容器都被盖住（边上也有 ≥ 60 % 的光），换内容看不见
   const bw = Math.max(w * 1.5, 640);
   band.style.width = `${bw}px`;
   const skew = Math.tan((angle * Math.PI) / 180) * h;
   band.animate([{ transform: `translate3d(${-bw - skew}px,0,0) skewX(${-angle}deg)` }, { transform: `translate3d(${w + skew}px,0,0) skewX(${-angle}deg)` }], { duration, easing: EASE.inOut.css, fill: 'both' });
-  return { mid: clock.wait(duration * 0.5), done: clock.wait(duration + 20).then(() => o.remove()) };
+  return { mid: soon(duration * 0.5), done: soon(duration + 20).then(() => o.remove()) };
+}
+
+/** fx 时钟的 ms，或者真实时间的 ms + 120（先到的算）：光带是合成线程上的 WAAPI，主线程很卡时 mid 也要落在光最厚的那一刻
+ *  （换内容不能等到光已经扫过去）。录帧（手动时钟）只看时钟 */
+function soon(ms) {
+  if (clock.manual || !HAS_DOM) return clock.wait(ms);
+  return Promise.race([clock.wait(ms), new Promise((r) => setTimeout(r, ms + 120))]);
 }
 
 /** 文字进场：一块一块 5 px 模糊 + 8 px 上浮淡入（stagger 70 ms）。减少动态 = 只淡入 */
@@ -2628,9 +3014,9 @@ export function enter(els, { stagger = 70, delay = 0, duration = 700, blur = 5, 
 export function reset() {
   dust.clear();
 }
-/** 调试 / 性能：画布上有多少粒子、光环、彗星；画布在不在；时钟是不是在睡 */
+/** 调试 / 性能：画布上有多少粒子、光环、彗星；画布在不在；时钟是不是在睡；溶解帧图（缓存几张、还在建几张、退回淡出过几次） */
 export function stats() {
-  return { particles: dust.n, rings: dust.rings.length, comets: dust.comets.length, canvas: !!dust.canvas && dust.running, sleeping: clock.sleeping, cap: dust.N || config.maxParticles };
+  return { particles: dust.n, rings: dust.rings.length, comets: dust.comets.length, canvas: !!dust.canvas && dust.running, sleeping: clock.sleeping, cap: dust.N || config.maxParticles, sprites: SPRITES.size, building: BUILDS.length, fades: SPRITE_STATS.fades, built: SPRITE_STATS.built };
 }
 
 // ───────────────────────────── React (one line each) ─────────────────────────────

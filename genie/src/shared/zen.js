@@ -13,7 +13,8 @@
 //   accent('chapter'|'reveal'|'wish') · duck(倍数 | 'blueprint'|'studio'|'idle', 秒) · setVolume · setMuted · setLayers · attachTrack ·
 //   onState · onStop · mood · volume · running · ctx
 // 新的：talk(on)（潘吉说话：音乐 −7.5 dB、自然声 −2 dB）· duck('voice', 0.35) / unduck('voice')（叠在页面音量上的一层）·
-//   setNature(on) · setMusic(on) · setPlaylist(list) · onMood · onSection · output（喇叭前最后一级：探针 / 分析器接这里）
+//   setNature(on) · setMusic(on) · setPlaylist(list) · onMood · onSection · output（喇叭前最后一级：探针 / 分析器接这里）·
+//   fadeOut(ms)（换页：pagehide 时自动在 40 ms 里收到 0，不「喀」）
 
 import { CONFIG } from './config.js';
 import { ZenSong } from './music/zensong.js';
@@ -38,6 +39,31 @@ export class Zen extends ZenSong {
       ...o,
     });
     this.voiceDuck = M().voiceDuck ?? 0.35;
+    // 换页（pagehide）：音乐在 40 ms 里收到 0，文档卸载时不被硬切成「喀」；bfcache 回来（pageshow）恢复
+    if (typeof window !== 'undefined' && window.addEventListener) {
+      window.addEventListener('pagehide', () => this.fadeOut(40));
+      window.addEventListener('pageshow', (e) => {
+        if (this._leaving && (e.persisted || this.running)) {
+          this._leaving = false;
+          if (this.running && !this.paused) this._ramp(0.6);
+        }
+      });
+    }
+  }
+
+  /** 马上（ms 毫秒）收到 0：离开这一页时用（不停排程，回来 _ramp 就恢复） */
+  fadeOut(ms = 40) {
+    if (!this.master || !this.ctx || this.offline) return;
+    this._leaving = true;
+    try {
+      const g = this.master.gain;
+      const t = this.ctx.currentTime;
+      g.cancelScheduledValues(t);
+      g.setValueAtTime(g.value, t);
+      g.linearRampToValueAtTime(0, t + Math.max(0.005, ms / 1000));
+    } catch {
+      /* ignore */
+    }
   }
 
   /** 必须在点击 / 触摸事件里调用 */

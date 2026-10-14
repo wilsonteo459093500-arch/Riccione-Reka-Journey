@@ -11,6 +11,8 @@ export default {
   '一家大小': 'Family',
   '蓝图 {0}%': 'Blueprint {0}%',
   '神灯': 'The Lamp',
+  // 神灯下面的小字（说明本身 = 她在神灯里说的那一句，lineText('lamp.rub')）
+  '来回擦一擦，按住也可以': 'Rub back and forth — or press and hold',
 
   // ── 潘吉的话 ──
   '第一眼喜欢哪个？': 'Which one catches your eye first?',
