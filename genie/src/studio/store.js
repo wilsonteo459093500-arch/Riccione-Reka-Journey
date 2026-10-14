@@ -203,7 +203,9 @@ export function loadSettings() {
 
 export function saveSettings(s) {
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+    // 'auto' 存成 ''（读回来 withModel 还是 'auto'）：回滚到旧版 build 时，旧版会把 '' 去掉、从 gemini-2.5-flash 开始，
+    // 不会先去请求不存在的 models/auto（404）
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...s, visionModel: s?.visionModel === 'auto' ? '' : s?.visionModel }));
   } catch {
     /* ignore */
   }

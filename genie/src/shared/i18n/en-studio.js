@@ -50,6 +50,7 @@ export default {
 
   // ── 示范户型、许愿模式、展厅 ──
   '这是示范户型 —— 点右上角「平面图」上传你的平面图': 'This is a demo layout — tap “Floor plan” at the top right to upload your own',
+  '这是示范户型 —— 点右上角「⋯」→「平面图」上传你的平面图': 'This is a demo layout — tap ⋯ at the top right → Floor plan to upload your own',
   '示范户型 · 概念示意': 'Demo layout · concept only',
   '示范户型 · 设计师会换成你家的平面图': 'Demo layout · your designer will swap in your own floor plan',
   长按退出演示: 'Press and hold to exit the demo',

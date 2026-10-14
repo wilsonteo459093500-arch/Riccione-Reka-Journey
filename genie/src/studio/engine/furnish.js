@@ -801,13 +801,18 @@ function kitchen(L, rc, ctx) {
     legSide = buildKitchen(L, rc, ctx, c.s, c.st, R);
     break;
   }
-  ctx.kitchensLeft--;
-  if (!main) return;
+  // L 形厨房的几块（id、id-2…）算一间：只在第一次碰到这间厨房时减
+  const base = room.id.replace(/-\d+$/, '');
+  if (!ctx.kitchensSeen.has(base)) {
+    ctx.kitchensSeen.add(base);
+    ctx.kitchensLeft--;
+  }
   const hasFridge = () => L.items.some((i) => i.kind === 'fridge' && i.room === room.id);
-  // 最后一间厨房还没有冰箱（前面的湿厨房让出来了、或台面不够长）：靠另一面墙单独放，前面留 0.9m
+  // 最后一间厨房还没有冰箱（前面的湿厨房让出来了、台面不够长、或这一块根本放不下台面）：靠另一面墙单独放，前面留 0.9m
   if (!hasFridge() && !ctx.placedFridge && ctx.kitchensLeft <= 0)
     for (const s of sides.filter((x) => x.walled && x !== main && x !== legSide)) if (s.stretches.some((st) => st.len >= 0.95 && hug(L, rc, s, st, 'fridge', { d: 0.7, minW: 0.86, maxW: 0.86, front: 0.9, prefer: 'a', extra: () => ({}) }))) break;
   if (hasFridge()) ctx.placedFridge = true;
+  if (!main) return;
   // 电器高柜：对面墙优先，再其它墙；前面留 1m
   if (ctx.applianceTall) {
     const oppo = opposite(sides, main);
@@ -1136,6 +1141,8 @@ function porch(L, rc, ctx) {
 
 function balcony(L, rc) {
   const { room, inner } = rc;
+  // 空调台（AC ledge）：放空调外机的，不是阳台 → 不摆躺椅、花
+  if (/空调台|\ba[./]?\s?c\.?\s*(ledge|platform)\b/i.test(`${room.name || ''} ${room.label || ''}`)) return;
   const cx = room.x + room.w / 2;
   const cz = room.y + room.d / 2;
   // 躺椅先试居中两张；挡到门前通道就从一头开始找位置
@@ -1241,7 +1248,9 @@ function context(plan, walls, profile) {
     hasWalkin: types.has('walkin'),
     hasFamily: types.has('family'),
     shoeInLiving: !gTypes.has('foyer') && !gTypes.has('porch'),
-    kitchensLeft: plan.floors.reduce((t, f) => t + f.rooms.filter((r) => r.type === 'kitchen').length, 0),
+    // L 形厨房的几块（id、id-2…）算一间
+    kitchensLeft: plan.floors.reduce((t, f) => t + new Set(f.rooms.filter((r) => r.type === 'kitchen').map((r) => r.id.replace(/-\d+$/, ''))).size, 0),
+    kitchensSeen: new Set(),
     placedFridge: false,
     main: mainEntrance(g, walls[g.id]),
   };

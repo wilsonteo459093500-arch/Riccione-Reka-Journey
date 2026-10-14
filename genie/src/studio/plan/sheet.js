@@ -2004,12 +2004,25 @@ function subtractRect(r, s) {
   const ix1 = Math.min(r.x + r.w, s.x + s.w);
   const iy1 = Math.min(r.y + r.d, s.y + s.d);
   if (ix1 - ix0 <= 1e-6 || iy1 - iy0 <= 1e-6) return [{ x: r.x, y: r.y, w: r.w, d: r.d }];
-  const out = [];
-  if (iy0 > r.y) out.push({ x: r.x, y: r.y, w: r.w, d: iy0 - r.y });
-  if (iy1 < r.y + r.d) out.push({ x: r.x, y: iy1, w: r.w, d: r.y + r.d - iy1 });
-  if (ix0 > r.x) out.push({ x: r.x, y: iy0, w: ix0 - r.x, d: iy1 - iy0 });
-  if (ix1 < r.x + r.w) out.push({ x: ix1, y: iy0, w: r.x + r.w - ix1, d: iy1 - iy0 });
-  return out.filter((q) => q.w > 0.05 && q.d > 0.05);
+  // 两种切法：先横切（上下整条）/ 先竖切（左右整列）。挑最大那块的短边更长的那种
+  // （例：厨房框盖住门口凹位 → 横切只剩两条 1.3 m 的细条，竖切留一块 2.4 × 2.6 m、放得下台面）
+  const h = [];
+  if (iy0 > r.y) h.push({ x: r.x, y: r.y, w: r.w, d: iy0 - r.y });
+  if (iy1 < r.y + r.d) h.push({ x: r.x, y: iy1, w: r.w, d: r.y + r.d - iy1 });
+  if (ix0 > r.x) h.push({ x: r.x, y: iy0, w: ix0 - r.x, d: iy1 - iy0 });
+  if (ix1 < r.x + r.w) h.push({ x: ix1, y: iy0, w: r.x + r.w - ix1, d: iy1 - iy0 });
+  const v = [];
+  if (ix0 > r.x) v.push({ x: r.x, y: r.y, w: ix0 - r.x, d: r.d });
+  if (ix1 < r.x + r.w) v.push({ x: ix1, y: r.y, w: r.x + r.w - ix1, d: r.d });
+  if (iy0 > r.y) v.push({ x: ix0, y: r.y, w: ix1 - ix0, d: iy0 - r.y });
+  if (iy1 < r.y + r.d) v.push({ x: ix0, y: iy1, w: ix1 - ix0, d: r.y + r.d - iy1 });
+  const ok = (l) => l.filter((q) => q.w > 0.05 && q.d > 0.05);
+  const short = (l) => {
+    const b = l.reduce((m, q) => (!m || q.w * q.d > m.w * m.d ? q : m), null);
+    return b ? Math.min(b.w, b.d) : 0;
+  };
+  const [H, V] = [ok(h), ok(v)];
+  return short(V) > short(H) + 0.05 ? V : H;
 }
 
 /** 一楼（或单独的一户）有没有大门：围合部分的外墙（外面 = 没有房间 / 车廊）上有门或推拉门通进屋里的房间 */

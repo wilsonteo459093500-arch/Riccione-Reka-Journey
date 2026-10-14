@@ -17,6 +17,8 @@ const LEVEL_PICK = ['ground', 'first', 'second', 'third', 'mezzanine'];
 const order = (lv) => (LEVELS.indexOf(lv) < 0 ? 99 : LEVELS.indexOf(lv));
 const SEC_PER_FLOOR = 45; // pro 读一层大约 30–60 秒
 const join = (xs) => xs.join(isEn() ? ', ' : '、');
+// 中文句子里夹英文名字（「TYPE B (MIRROR)」）：后面空一格再接中文
+const spaced = (s) => (!isEn() && /[\x21-\x7e]$/.test(s || '') ? `${s} ` : s);
 const lvName = (lv) => t(LEVEL_ZH[lv] || '其他');
 let seq = 0;
 const key = () => `c${++seq}`;
@@ -1117,7 +1119,7 @@ export default function ImportFlow({ file, ai = false, current = null, onSetting
               {banner}
             </p>
           )}
-          {sc.widthM ? <p className="imp-line">{singleCard ? t('现在：{0}外墙宽 {1} m、深 {2} m', [fdisp(result.plan, result.plan.floors[0].id), sc.widthM, sc.depthM ?? '—']) : t('现在：一楼外墙宽 {0} m、深 {1} m', [sc.widthM, sc.depthM ?? '—'])}</p> : null}
+          {sc.widthM ? <p className="imp-line">{singleCard ? t('现在：{0}外墙宽 {1} m、深 {2} m', [spaced(fdisp(result.plan, result.plan.floors[0].id)), sc.widthM, sc.depthM ?? '—']) : t('现在：一楼外墙宽 {0} m、深 {1} m', [sc.widthM, sc.depthM ?? '—'])}</p> : null}
           <div className="imp-known-row">
             <label className="pe-select imp-ref">
               <span className="pe-select-label" aria-hidden="true">{refLabel}</span>

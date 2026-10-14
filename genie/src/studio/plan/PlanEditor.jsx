@@ -232,15 +232,20 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
   }, [plan, fid]);
 
   /** 记一笔（删除、加楼层、楼梯、模板、校准…之前），⌘Z / Ctrl+Z 撤销 */
-  const remember = useCallback(() => {
-    past.current.push({ plan, underlays });
-    if (past.current.length > HISTORY) past.current.shift();
-  }, [plan, underlays]);
+  // fid：撤销时回到这一层（删掉的楼层撤销回来 → 停在它上面，看得到回来的是什么）
+  const remember = useCallback(
+    (fid = null) => {
+      past.current.push({ plan, underlays, fid: typeof fid === 'string' ? fid : null });
+      if (past.current.length > HISTORY) past.current.shift();
+    },
+    [plan, underlays],
+  );
   const undo = useCallback(() => {
     const prev = past.current.pop();
     if (!prev) return;
     setPlan(prev.plan);
     setUnderlays(prev.underlays);
+    if (prev.fid && floorById(prev.plan, prev.fid)) setFid(prev.fid);
     setSel(null);
     setMsg('');
     setMsgUndo(false);
@@ -482,6 +487,8 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
     const nf = floorById(np, floorId);
     const name = (f) => t(floorName(np, f.id));
     const lower = np.floors[nf.level - 1];
+    // 手机：抽屉收着，这句话变成抽屉上面的一行（新的这一层要看得到）
+    if (layoutRef.current.phone) peekRef.current = true;
     // 楼梯没能叠上来（下面那层楼梯尽头是墙）：直接说怎么连
     if (unstacked && lower && !np.stairs.some((s) => s.to === floorId)) say(t('加好了{0}。它还没有楼梯：用「楼梯」工具拖出楼梯间，会连到{1}。', [name(nf), name(lower)]), true);
     else say(t('加好了{0}。', [name(nf)]), true);
@@ -495,7 +502,7 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
       ok: t('删除'),
       danger: true,
       run: () => {
-        remember();
+        remember(f.id);
         const np = removeFloor(plan, f.id);
         setPlan(np);
         setUnderlays((u) => {
@@ -613,7 +620,8 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
     const rooms = next.floors.reduce((n, f) => n + f.rooms.filter((r) => !r.stairId).length, 0);
     // 手机：抽屉收着（只露标题那一行），这句话变成抽屉上面的一行，平面图整张看得到
     if (layoutRef.current.phone) peekRef.current = true;
-    say(t('已放进编辑器：{0} 层、{1} 个房间。请对一下，再按「生成 3D」。', [next.floors.length, rooms]), true);
+    if (next.floors.length === 1) say(t('已放进编辑器：{0} 个房间。请对一下，再按「生成 3D」。', [rooms]), true);
+    else say(t('已放进编辑器：{0} 层、{1} 个房间。请对一下，再按「生成 3D」。', [next.floors.length, rooms]), true);
     setTimeout(() => fit(next, u2[target] || null), 40);
   };
 
@@ -647,6 +655,8 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
       setPlan((p) => replaceFloorRooms(p, f.id, { rooms, openings: got.openings || [] }));
       if (res?.underlay) setUnderlays((m) => ({ ...m, [f.id]: { ...m[f.id], ...res.underlay } }));
       setTool('select');
+      // 手机：抽屉收着，这句话变成抽屉上面的一行（重新读出来的平面图要看得到）
+      if (layoutRef.current.phone) peekRef.current = true;
       say(t('重新识别了{0}：{1} 个房间、{2} 个门窗。', [floorLabel(f), rooms.length, (got.openings || []).length]), true);
     } catch (e) {
       say(e?.message || String(e));
@@ -1017,7 +1027,7 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
   const upperHint = emptyUpper ? (stairsHere.length ? t('虚线是{0}：沿着外墙拉方块；楼梯已经在了', [floorLabel(below)]) : t('虚线是{0}：沿着外墙拉方块；用「楼梯」工具连上下两层', [floorLabel(below)])) : '';
 
   const roomCount = floor.rooms.filter((r) => !r.stairId).length;
-  const stat = t('{0}：{1} 个房间 · {2} 个门窗 · {3} 段墙', [floorLabel(floor), roomCount, floor.openings.length, walls.length]);
+  const stat = t(roomCount === 1 ? '{0}：1 个房间 · {2} 个门窗 · {3} 段墙' : '{0}：{1} 个房间 · {2} 个门窗 · {3} 段墙', [floorLabel(floor), roomCount, floor.openings.length, walls.length]);
 
   // 楼梯的检查（只看这一座）
   const stairIssues = stair ? issues.filter((i) => i.ids?.some((id) => id.startsWith(`${stair.id}-`)) && i.code.startsWith('stair')) : [];
@@ -1263,15 +1273,20 @@ export default function PlanEditor({ initial, underlays: initialUnderlays, under
           )}
           {issueList.length > 0 && (
             <div className="pe-issues">
-              {issueList.map((x, i) => (
-                <button key={i} type="button" className={`pe-issue ${x.level}`} onClick={() => openIssue(x)}>
-                  <Icon name="alert" size={15} />
-                  <span>
-                    {x.floor && x.floor !== floor.id && <b>{floorLabel(floorById(plan, x.floor))} · </b>}
-                    {fmtIssue(x)}
-                  </span>
-                </button>
-              ))}
+              {issueList.map((x, i) => {
+                const text = fmtIssue(x);
+                // 别的楼层的问题：前面写上是哪一层（句子里已经有这一层的名字就不再写）
+                const fl = x.floor && x.floor !== floor.id ? floorLabel(floorById(plan, x.floor)) : '';
+                return (
+                  <button key={i} type="button" className={`pe-issue ${x.level}`} onClick={() => openIssue(x)}>
+                    <Icon name="alert" size={15} />
+                    <span>
+                      {fl && !text.includes(fl) && <b>{fl} · </b>}
+                      {text}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           )}
           <ul className="pe-howto">

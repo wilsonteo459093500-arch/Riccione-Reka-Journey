@@ -48,6 +48,7 @@ export default {
   '虚线是{0}：沿着外墙拉方块；楼梯已经在了': 'The dashed lines are the {0}: drag boxes along its outer walls — the stairs are already here',
   '虚线是{0}：沿着外墙拉方块；用「楼梯」工具连上下两层': 'The dashed lines are the {0}: drag boxes along its outer walls, then link the floors with the Stairs tool',
   '{0}：{1} 个房间 · {2} 个门窗 · {3} 段墙': '{0}: {1} rooms · {2} openings · {3} walls',
+  '{0}：1 个房间 · {2} 个门窗 · {3} 段墙': '{0}: 1 room · {2} openings · {3} walls',
   '{0}：左上角换楼层；「＋」加一层，楼上会看到下面那层的虚线。': '{0}: switch floors top left; ＋ adds a floor, and upstairs you see the floor below as dashed lines.',
   撤销: 'Undo',
   '比例已校准（×{0}）：这一层的房间、门窗和底图一起缩放了。': 'Scale calibrated (×{0}): this floor’s rooms, openings and underlay were rescaled together.',
@@ -86,6 +87,7 @@ export default {
   'AI 正在重新读{0}（约 30–90 秒）': 'AI is re-reading the {0} (about 30–90 s)',
   '重新识别了{0}：{1} 个房间、{2} 个门窗。': 'Re-read the {0}: {1} rooms, {2} openings.',
   '已放进编辑器：{0} 层、{1} 个房间。请对一下，再按「生成 3D」。': 'In the editor: {0} floors, {1} rooms. Check them, then press “Generate 3D”.',
+  '已放进编辑器：{0} 个房间。请对一下，再按「生成 3D」。': 'In the editor: {0} rooms. Check them, then press “Generate 3D”.',
 
   // ── 检查（checkPlan） ──
   '{0} 太小了': '{0} is too small',

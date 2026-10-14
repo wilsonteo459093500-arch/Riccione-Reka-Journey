@@ -936,6 +936,12 @@ await test('18 老板的 TYPE B 端到端：12.5 × 10.15 m、门只在图上有
     assert.ok(solid < 0.05, `${e.between.join('|')} 砌了 ${solid.toFixed(2)} m 墙`);
   }
   assert.deepEqual(checkPlan(plan).filter((i) => i.level === 'error'), []);
+  // 家具：厨房切掉门口凹位后还放得下台面（不是两条 1.3 m 的细条）；空调台不摆躺椅 / 花
+  const items = furnish(plan, undefined, null);
+  const kits = fl.rooms.filter((r) => r.type === 'kitchen');
+  assert.ok(items.some((i) => i.kind === 'kitchenRun' && kits.some((r) => r.id === i.room)), `厨房没有台面：${kits.map((r) => `${r.w} × ${r.d}`).join('、')}`);
+  const ac = fl.rooms.find((r) => r.name === '空调台');
+  assert.deepEqual(items.filter((i) => i.room === ac.id).map((i) => i.kind), [], '空调台');
   const wr = report.floors[0].walls;
   assert.ok(wr && wr.doorsDropped >= 3 && wr.openConnections >= 1, JSON.stringify(wr));
   assert.equal(report.scale.aspect > 1.05, true);

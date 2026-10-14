@@ -14,6 +14,6 @@ export default defineConfig({
         wish: resolve(import.meta.dirname, 'wish.html'),
       },
     },
-    chunkSizeWarningLimit: 1200,
+    chunkSizeWarningLimit: 1400,
   },
 });

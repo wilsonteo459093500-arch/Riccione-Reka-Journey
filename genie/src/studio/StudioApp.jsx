@@ -19,7 +19,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Engine } from './engine/Engine.js';
-import { buildWalls, buildAllWalls, templatePlan, emptyPlan, migratePlan, isMultiFloor, floorById, floorName, uid, roomSides } from './plan/model.js';
+import { buildWalls, buildAllWalls, templatePlan, emptyPlan, migratePlan, isMultiFloor, floorById, floorName, uid, roomSides, ROOM_TYPES } from './plan/model.js';
 import * as Furnish from './engine/furnish.js';
 import { CATALOG } from './engine/furniture.js';
 import { DAY_PRESETS } from './engine/daylight.js';
@@ -417,7 +417,9 @@ export default function StudioApp() {
       if (p && STAFF_LINK && p.audience !== 'staff' && (p.sharedFrom || p.audience === 'client')) p = { ...p, audience: 'staff' };
       if (!p) {
         p = createProject({ plan: templatePlan('condo3'), mood: 'cozy' });
-        setTimeout(() => flash(t('这是示范户型 —— 点右上角「平面图」上传你的平面图'), 4600), 1600);
+        // 手机（≤ 599px，.tb-hide-sm）：右上角没有「平面图」按钮，它在 ⋯ 菜单里
+        const small = typeof matchMedia === 'function' && matchMedia('(max-width: 599px)').matches;
+        setTimeout(() => flash(small ? t('这是示范户型 —— 点右上角「⋯」→「平面图」上传你的平面图') : t('这是示范户型 —— 点右上角「平面图」上传你的平面图'), 4600), 1600);
       }
     }
     history.replaceState(null, '', location.pathname + location.search);
@@ -602,10 +604,23 @@ export default function StudioApp() {
     const x = clientX ?? rect.left + rect.width / 2;
     const y = clientY ?? rect.top + rect.height / 2;
     // 落在「这一层」的地面上（看二楼时就放在二楼）
-    const p = e.groundAt(x, y);
+    let p = e.groundAt(x, y);
     const plan = projRef.current.plan;
     const floor = floorById(plan, p.floorId) || plan.floors[0];
-    const room = floor.rooms.find((r) => p.x >= r.x && p.x <= r.x + r.w && p.z >= r.y && p.z <= r.y + r.d);
+    let room = floor.rooms.find((r) => p.x >= r.x && p.x <= r.x + r.w && p.z >= r.y && p.z <= r.y + r.d);
+    // 点一下加进来的（放在画面中间）：中间刚好是浴室 / 晒衣处 / 阳台 / 楼梯（或屋外）→ 改放到这一层最近的客厅 / 卧室（没有就最大的房间）
+    // 拖进来的：放在设计师放的地方
+    const dry = (r) => !!r && !r.stairId && !ROOM_TYPES[r.type]?.wet && !ROOM_TYPES[r.type]?.outdoor && !ROOM_TYPES[r.type]?.nofurn;
+    if (clientX == null && !dry(room)) {
+      const mid = (r) => ({ x: r.x + r.w / 2, z: r.y + r.d / 2 });
+      const dist = (r) => Math.hypot(mid(r).x - p.x, mid(r).z - p.z);
+      const lived = floor.rooms.filter((r) => dry(r) && ['living', 'family', 'dining', 'master', 'bedroom', 'kids', 'study'].includes(r.type)).sort((a, b) => dist(a) - dist(b));
+      const to = lived[0] || floor.rooms.filter(dry).sort((a, b) => b.w * b.d - a.w * a.d)[0];
+      if (to) {
+        p = { ...p, ...mid(to) };
+        room = to;
+      }
+    }
     const [w, d] = def.size;
     const id = uid('f');
     const item = { id, kind, room: room?.id || null, floor: floor.id, x: +p.x.toFixed(2), z: +p.z.toFixed(2), rot: 0, w, d, h: floor.ceil };
