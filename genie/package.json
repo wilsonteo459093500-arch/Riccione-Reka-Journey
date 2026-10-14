@@ -1,0 +1,29 @@
+{
+  "name": "wish-by-riccione-reka",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "WISH by RICCIONE REKA — 熊猫精灵潘吉的许愿之旅（客人玩）+ 3D 梦想工作室（设计师 / 销售用），中英双语",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node test/run.mjs && node test/floors.test.mjs && node test/ai.test.mjs && node -e \"require('fs').existsSync('test/walls.test.mjs') && import('./test/walls.test.mjs')\" && node test/profile.test.mjs && node test/i18n.test.mjs && node test/palette.test.mjs && node test/voice.test.mjs && node test/fx.test.mjs && node test/music.test.mjs && node test/sfx.test.mjs"
+  },
+  "dependencies": {
+    "lucide-react": "^0.456.0",
+    "pdfjs-dist": "4.10.38",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "three": "0.183.2"
+  },
+  "devDependencies": {
+    "@babel/parser": "^7.29.9",
+    "@babel/traverse": "^7.29.10",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.15",
+    "vite": "^5.4.11"
+  }
+}

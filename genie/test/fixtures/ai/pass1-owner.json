@@ -1,0 +1,43 @@
+{
+ "_fixture": {
+  "photo": "owner-type-b-photo.jpg",
+  "rectified": [
+   1405,
+   1080
+  ],
+  "note": "normalised over the RECTIFIED page preview"
+ },
+ "page_box_2d": [
+  19,
+  14,
+  981,
+  986
+ ],
+ "is_photo_or_screenshot": true,
+ "plans": [
+  {
+   "title": "FIRST SCHEDULE TYPE B (MIRROR) - FLOOR PLAN",
+   "level": "first",
+   "box_2d": [
+    175,
+    101,
+    921,
+    862
+   ],
+   "units": "mm",
+   "scale_text": null,
+   "unit_label": "TYPE B (MIRROR)"
+  }
+ ],
+ "other_drawings": [
+  {
+   "kind": "title_block",
+   "box_2d": [
+    31,
+    334,
+    135,
+    655
+   ]
+  }
+ ]
+}

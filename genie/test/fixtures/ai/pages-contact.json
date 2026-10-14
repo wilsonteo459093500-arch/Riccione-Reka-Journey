@@ -1,0 +1,20 @@
+{
+ "pages": [
+  {
+   "page": 12,
+   "kind": "floor_plans",
+   "levels": [
+    "first",
+    "ground"
+   ]
+  },
+  {
+   "page": 16,
+   "kind": "other"
+  },
+  {
+   "page": 17,
+   "kind": "other"
+  }
+ ]
+}
