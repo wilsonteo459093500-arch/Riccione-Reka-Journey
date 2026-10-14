@@ -1770,7 +1770,7 @@ export const LOG_ON =
   HAS_DOM &&
   (() => {
     try {
-      return !!(import.meta.env && import.meta.env.DEV) || navigator.webdriver === true || /[?&#]sfxlog\b/.test(location.search + location.hash) || window.__SFX_LOG__ === true;
+      return !!import.meta.env?.DEV || navigator.webdriver === true || /[?&#]sfxlog\b/.test(location.search + location.hash) || window.__SFX_LOG__ === true;
     } catch {
       return false;
     }
