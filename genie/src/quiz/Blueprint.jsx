@@ -168,7 +168,10 @@ function farewellLines() {
  * 进到画面（或快要进到画面）时从 from 数到 value，一次（fx.countUp，900 ms）。没进过画面（打印、截图）就一直是最后的数。
  * 数字由这里自己写（React 不放子节点），父组件重画不会打断它。
  */
-function CountIn({ value, from = 0, format = fmt, tick = false }) {
+// 数的途中 fx.countUp 会给小数（991.764）：mm 一律取整再排版
+const fmtWhole = (n) => fmt(Math.round(n));
+
+function CountIn({ value, from = 0, format = fmtWhole, tick = false }) {
   const ref = useRef(null);
   const fmtRef = useRef(format);
   fmtRef.current = format;
@@ -467,7 +470,7 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
         {mm ? (
           <>
             {/* 数字安静地数上来：蓝图只有一个声音时刻 —— 最后盖下去的「潘吉认证」章 */}
-            <CountIn value={mm} format={fmt} /> mm
+            <CountIn value={mm} /> mm
           </>
         ) : (
           extra || '—'

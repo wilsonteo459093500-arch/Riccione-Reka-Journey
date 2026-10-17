@@ -16,7 +16,7 @@ import { PAIRS } from './flow.js';
 import { sfx } from '../shared/sound.js';
 import fx, { useFx, useGleam } from '../shared/fx.js';
 import { voice } from '../shared/voice.js';
-import { t, L, isEn, guideName } from '../shared/i18n.js';
+import { t, L, isEn } from '../shared/i18n.js';
 import { phrased, keepWords } from './typo.jsx';
 import { cue, settle } from './moments.js';
 
@@ -223,7 +223,7 @@ export default function Reveal({ profile, onOpen }) {
         <div className="reading">
           <p className="eyebrow">{t('揭晓')}</p>
           <h2 className="h-title">
-            {t('{0}正在读懂你的梦想', [guideName()])}
+            {t('让我读一读你的梦想')}
             {isEn() ? '…' : '……'}
           </h2>
           <div className="deck" ref={deckRef} aria-hidden="true">

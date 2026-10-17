@@ -36,7 +36,7 @@ export default {
 
   // ── 揭晓 ──
   '揭晓': 'The Reveal',
-  '{0}正在读懂你的梦想': '{0} is reading your dream',
+  '让我读一读你的梦想': 'Let me read your dream',
   '打开我的蓝图': 'Open my Blueprint',
   '{0} 的梦想家卡牌': '{0}’s Dreamer Card',
   '你的梦想家卡牌': 'Your Dreamer Card',
