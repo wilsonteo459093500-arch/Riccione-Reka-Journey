@@ -94,8 +94,10 @@
 //      each face, gilt card edges, 'flip' + 'flipLand' sounds. Afterwards it HOLDS rotateY(to) inline until the
 //      parent .flip gets .is-flipped / .is-flat (then hands back to CSS by itself) — set your state in .then().
 //        fx.flip(innerRef.current).then(() => { setFlipped(true); setFlat(true); setReady(true); });
-//  fx.wipe(container | null, { tone = 'paper' | 'dawn' | 'dusk', duration = 820 }) → { mid, done }
+//  fx.wipe(container | null, { tone = 'paper' | 'dawn' | 'dusk', duration = 820, hold = false }) → { mid, done }
 //      a wide soft band of light crosses; swap the content at `mid` (fully covered). null / body = whole page.
+//      hold: the page is leaving (location.assign at mid) — the band stops fully covering, on the compositor, until the
+//      document goes (bfcache return removes it; a 12 s cap fades it if the page never left).
 //        const w = fx.wipe(null, { tone: 'dawn', duration: 1000 }); w.mid.then(next);
 //  fx.layout(els | () => els, mutate, { stiffness = 260, damping = 24 }) → Promise   FLIP re-layout on a spring
 //  fx.enter(els, { stagger = 70, delay, duration = 700, blur = 5, y = 8 }) → Promise   copy blur-fades in
@@ -2957,8 +2959,11 @@ export function layout(els, mutate, { stiffness = 260, damping = 24, delay = 0 }
 /**
  * 换页：一大片柔光斜着拂过（像早上的光扫过纸面）。mid = 光最厚、完全盖住的时候（在这里换内容）。
  * container = null / body → 整个屏幕（fixed）；否则盖住这个容器。只移动一层渐变（transform），iPad 上永远 60 fps。
+ * hold = 这一页要走了（location.assign）：光扫到盖满就停住，再在底下铺满同色 —— 两段都是一开始就排好的合成线程动画，
+ * 主线程被换页 / 新页面卡住时也不会扫过去、露出底下的旧页面。光一直留着到文档换掉（done = mid）；
+ * 从上一页回来（bfcache）自己拿掉，12 秒还没换走也自己淡掉（不把页面一直挡着）。
  */
-export function wipe(container, { tone = 'paper', duration = 820, angle = 14, sound: snd = 'wipe', zIndex } = {}) {
+export function wipe(container, { tone = 'paper', duration = 820, angle = 14, sound: snd = 'wipe', zIndex, hold = false } = {}) {
   if (!HAS_DOM) {
     const p = Promise.resolve();
     return { mid: p, done: p };
@@ -2979,15 +2984,47 @@ export function wipe(container, { tone = 'paper', duration = 820, angle = 14, so
     band.style.transform = 'none';
     band.style.width = '100%';
     band.style.left = '0';
-    o.animate([{ opacity: 0 }, { opacity: 1, offset: 0.5 }, { opacity: 0 }], { duration: 420, fill: 'both' });
+    // hold：只淡入、停在全盖住（iterations .5 = 动画停在一半的地方）
+    o.animate([{ opacity: 0 }, { opacity: 1, offset: 0.5 }, { opacity: 0 }], { duration: 420, iterations: hold ? 0.5 : 1, fill: 'both' });
+    if (hold) return holdWipe(o, soon(210));
     return { mid: soon(210), done: soon(440).then(() => o.remove()) };
   }
   // 光带比容器宽一半，中间将近一半完全不透明：mid 的时候整个容器都被盖住（边上也有 ≥ 60 % 的光），换内容看不见
   const bw = Math.max(w * 1.5, 640);
   band.style.width = `${bw}px`;
   const skew = Math.tan((angle * Math.PI) / 180) * h;
-  band.animate([{ transform: `translate3d(${-bw - skew}px,0,0) skewX(${-angle}deg)` }, { transform: `translate3d(${w + skew}px,0,0) skewX(${-angle}deg)` }], { duration, easing: EASE.inOut.css, fill: 'both' });
+  // hold：iterations .5 = 同一段动画（同样的缓动）走到一半就停住（fill forwards）—— 光带正好在正中间、盖满
+  band.animate([{ transform: `translate3d(${-bw - skew}px,0,0) skewX(${-angle}deg)` }, { transform: `translate3d(${w + skew}px,0,0) skewX(${-angle}deg)` }], { duration, easing: EASE.inOut.css, iterations: hold ? 0.5 : 1, fill: 'both' });
+  if (hold) {
+    // 光带边上还透着 ~40 %：盖满的那一刻起，底下再铺一层同色（光带在它上面，中间那团暖光还在）
+    const ground = document.createElement('b');
+    o.insertBefore(ground, band);
+    ground.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, delay: duration * 0.5, easing: 'linear', fill: 'both' });
+    return holdWipe(o, soon(duration * 0.5));
+  }
   return { mid: soon(duration * 0.5), done: soon(duration + 20).then(() => o.remove()) };
+}
+
+/** wipe({ hold }) 的光：留到文档换掉；bfcache 回来（pageshow persisted）马上拿掉；12 秒还在（没换走）就淡掉 */
+function holdWipe(o, mid) {
+  o.classList.add('is-held');
+  let cap = 0;
+  const drop = (fade) => {
+    clearTimeout(cap);
+    window.removeEventListener('pageshow', onShow);
+    if (!o.isConnected) return;
+    if (!fade) return o.remove();
+    o.style.pointerEvents = 'none';
+    const a = o.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 320, fill: 'forwards' });
+    a.finished.then(
+      () => o.remove(),
+      () => o.remove()
+    );
+  };
+  const onShow = (e) => e.persisted && drop(false);
+  window.addEventListener('pageshow', onShow);
+  cap = setTimeout(() => drop(true), 12000);
+  return { mid, done: mid };
 }
 
 /** fx 时钟的 ms，或者真实时间的 ms + 120（先到的算）：光带是合成线程上的 WAAPI，主线程很卡时 mid 也要落在光最厚的那一刻

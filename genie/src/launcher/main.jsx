@@ -322,10 +322,9 @@ function Launcher() {
       ok: t('删除'),
     });
     if (!yes) return;
-    const commit = () => {
-      removeFromArchive(p.id);
-      setList(loadArchive());
-    };
+    // 存档马上删（金尘要半秒以上，很卡时好几秒：这期间换页 / 锁屏也不会「删了又回来」）；画面上的那一行等金尘散完再收
+    removeFromArchive(p.id);
+    const commit = () => setList(loadArchive());
     if (!row?.isConnected) return commit(); // 本机蓝图在卡片开着的时候锁上了：直接删
     fx.dissolve(row, { origin: 'right', duration: 520, delay: 40, tone: 'paper' }).then(() => {
       const rest = [...(row.parentNode?.children || [])].filter((n) => n !== row);
@@ -339,10 +338,8 @@ function Launcher() {
       ok: t('全部删除'),
     });
     if (!yes) return;
-    const commit = () => {
-      clearArchive();
-      setList(loadArchive());
-    };
+    clearArchive(); // 同上：存档马上清，画面等金尘
+    const commit = () => setList(loadArchive());
     const els = [...(rows || [])].filter((el) => el.isConnected);
     if (!els.length) return commit();
     Promise.all(els.map((el, i) => fx.dissolve(el, { origin: 'right', duration: 480, delay: 40 + Math.min(i, 9) * 45, tone: 'paper' }))).then(commit);

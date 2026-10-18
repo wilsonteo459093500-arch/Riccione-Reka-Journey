@@ -267,6 +267,11 @@
   letter-spacing: inherit;
   background: none;
 }
+/* font: inherit 连 line-height 也一起改成继承（例如 1.5）：数字在 1.08em 的格子里就会往下掉，
+   上一格数字的底从遮罩上缘透出来一小横、自己的底被遮罩淡掉。格子的行高要写在它后面 */
+.fx-odo .fx-odo-col {
+  line-height: 1.08em;
+}
 /* 给读屏的最终数字（看不见，不占位置） */
 .fx-odo .fx-odo-sr {
   position: absolute;
@@ -377,6 +382,24 @@
 /* 暮 → 晨：金色的晨光 */
 .fx-wipe.fx-dawn > i {
   background: linear-gradient(90deg, transparent 0%, var(--fx-dawn-a) 26%, var(--card) 40%, var(--fx-dawn-core) 50%, var(--card) 60%, var(--fx-dawn-a) 74%, transparent 100%);
+}
+
+/* wipe({ hold })：这一页要走了，光停在盖满的地方；底下再铺一层同色（光带在它上面）。盖着时点不到底下要走的页面 */
+.fx-wipe > b {
+  position: absolute;
+  inset: 0;
+  display: block;
+  opacity: 0;
+  background: var(--cream);
+}
+.fx-wipe.fx-dusk > b {
+  background: var(--ritual-bg);
+}
+.fx-wipe.fx-dawn > b {
+  background: var(--fx-dawn-a);
+}
+.fx-wipe.is-held {
+  pointer-events: auto;
 }
 
 /* 减少动态：不移动的换页 = 一层均匀的光 */

@@ -857,9 +857,10 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
             if (leaving) return;
             setLeaving(true);
             fx.scan(e.currentTarget);
-            // 一大片暮色拂过，再打开 3D（最暗的那一刻换页，看不到跳）
+            // 一大片暮色拂过，再打开 3D（最暗的那一刻换页，看不到跳）。hold：光停在盖满的地方直到文档换掉 ——
+            // 很卡的 iPad 上换页 / 3D 启动把主线程占住时，光带不会自己扫过去、又露出蓝图（外壳的暮色要等主线程才盖得上）
             const href = links.studio;
-            const w = fx.wipe(null, { tone: 'dusk', duration: 900 });
+            const w = fx.wipe(null, { tone: 'dusk', duration: 900, hold: true });
             settle(null, w.mid, () => {
               tellShell('leaving', { to: 'studio', tone: 'dusk' }); // 许愿模式：外壳先盖一层暮色，换页时不闪米色
               location.assign(href);

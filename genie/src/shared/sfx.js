@@ -1497,7 +1497,11 @@ export class Sfx {
     }
     const L = this.log;
     if (!L) return;
-    L.push({ t: Math.round(now()), name, status, via, el: el ? describeEl(el) : '', node: el || null });
+    const rec = { t: Math.round(now()), name, status, via, el: el ? describeEl(el) : '' };
+    // .node = 那个元素，但只用弱引用（不可枚举的 getter）：记录里留着 2000 条也不会把换掉的整个画面一直留在内存里
+    const ref = el && typeof WeakRef === 'function' ? new WeakRef(el) : null;
+    Object.defineProperty(rec, 'node', { get: () => ref?.deref() || null });
+    L.push(rec);
     if (L.length > 2000) L.splice(0, L.length - 2000);
   }
   /** 开发 / 测试：window.__sfxLog 记下每一下（谁、什么声音、响了没有）。正式环境默认关 */

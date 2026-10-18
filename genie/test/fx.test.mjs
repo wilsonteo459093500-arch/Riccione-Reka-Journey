@@ -306,6 +306,20 @@ test('fx.css uses only base.css variables (no hex, no numeric rgb, no named colo
   assert.match(css, /prefers-reduced-motion:\s*reduce/);
 });
 
+test('odometer cells keep their own line-height after the `font: inherit` reset (no ghost dash, no faded digits)', () => {
+  // `font: inherit` also resets line-height; a cell that inherits the page's 1.5 drops its digit low in the 1.08em window:
+  // the bottom of the digit above shows through the top of the mask (the release check's "dash") and its own foot fades.
+  const rules = [...stripCss(FX_CSS).matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m, i) => ({ i, sel: m[1].split(',').map((s) => s.trim().replace(/\s+/g, ' ')), body: m[2] }));
+  const col = (r) => r.sel.includes('.fx-odo .fx-odo-col');
+  const reset = rules.filter((r) => col(r) && /(^|;|\s)font\s*:/.test(r.body)).pop();
+  assert.ok(reset, 'the .fx-odo .fx-odo-col reset rule is there');
+  const lh = rules.filter((r) => col(r) && r.i > reset.i && /line-height\s*:/.test(r.body)).pop();
+  assert.ok(lh, '.fx-odo .fx-odo-col sets line-height after the font reset');
+  const cellH = /\.fx-odo-col\s*\{[^}]*?height:\s*([\d.]+em)/.exec(stripCss(FX_CSS))?.[1];
+  assert.equal(/line-height\s*:\s*([\d.]+em)/.exec(lh.body)?.[1], cellH, 'cell line-height = cell height');
+  assert.match(stripCss(FX_CSS), new RegExp(`\\.fx-odo-strip > span\\s*\\{[^}]*height:\\s*${cellH.replace('.', '\\.')}`), 'strip digits are as tall as the cell');
+});
+
 // ───────── no-DOM safety ─────────
 
 test('every effect is safe without a DOM (SSR / node)', async () => {
@@ -314,6 +328,9 @@ test('every effect is safe without a DOM (SSR / node)', async () => {
   const w = fx.wipe(null);
   await w.mid;
   await w.done;
+  const held = fx.wipe(null, { tone: 'dusk', hold: true }); // the page-leaving wipe: same contract without a DOM
+  await held.mid;
+  await held.done;
   assert.equal(typeof fx.press(null), 'function');
   assert.equal(typeof fx.install(), 'function');
   assert.equal(typeof fx.gleam(null), 'function');
