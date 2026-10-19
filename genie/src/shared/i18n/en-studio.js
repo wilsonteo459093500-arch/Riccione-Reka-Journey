@@ -160,4 +160,8 @@ export default {
   '流畅画质 Fast': 'Fast quality',
   '兼容画质 Safe': 'Safe quality',
   '清除本机方案 Reset': 'Reset this device’s projects',
+
+  // ── 导出给设计师（⋯ 菜单里的那一项；面板和导出文件里的词在 en-export.js，跟着导出代码懒加载） ──
+  导出给设计师: 'Export for designers',
+  'AutoCAD · SketchUp · 酷家乐': 'AutoCAD · SketchUp · Kujiale',
 };

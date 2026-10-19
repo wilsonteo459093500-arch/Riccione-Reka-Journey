@@ -2,6 +2,7 @@
 // 窄屏把次要的按钮收进「更多」菜单（CSS 决定哪些留在条上），菜单里还有演示模式、帮助、设置、中 / EN。
 // 「新方案 / 打开方案」只给设计师（onStart 为空 = 客人版、许愿模式：不出现，展厅 iPad 上别的客人的方案打不开）。
 // 「设置」也只给设计师（onSettings 为空 = 客人版、许愿模式：里面是公司的 AI key）；「语言」那一行客人版照样有。
+// 「导出给设计师」（DXF / 酷家乐 / SketchUp）也只给设计师（onExport 为空 = 客人版、许愿模式、展厅：不出现）。
 // 「下载概念图」许愿模式没有（onShot 为空）：图会存进展厅 iPad 的相册；平面图在许愿模式只能画、不能上传。
 // 「材质标签」开关只在标签真的画得出来的画布上出现（Callouts：≥ 600 × 560；手机上从来不画）。
 
@@ -13,9 +14,9 @@ import { t } from '../../shared/i18n.js';
 const WALL_LABEL = { cut: '墙：切开朝向镜头的外墙', down: '墙：全部放低', up: '墙：全部立起' };
 const VIEW_LABEL = { iso: '视角：右前方', iso2: '视角：左前方', top: '视角：俯视平面', low: '视角：低角度', back: '视角：背面' };
 
-function MenuItem({ icon, label, hint, onClick, active, className = '' }) {
+function MenuItem({ icon, label, hint, onClick, active, className = '', ...rest }) {
   return (
-    <button type="button" role="menuitem" className={`menu-item ${active ? 'on' : ''} ${className}`} onClick={onClick}>
+    <button type="button" role="menuitem" className={`menu-item ${active ? 'on' : ''} ${className}`} onClick={onClick} {...rest}>
       <Icon name={icon} size={18} />
       <span>
         {label}
@@ -84,6 +85,7 @@ export default function Toolbar(p) {
           )}
           <div className="menu-sec">
             <MenuItem icon="showroom" label={t('演示模式')} hint={t('自动环绕 + 24 小时光影')} active={p.demo} onClick={run(p.onDemo)} />
+            {p.onExport && <MenuItem icon="download" label={t('导出给设计师')} hint={t('AutoCAD · SketchUp · 酷家乐')} onClick={run(p.onExport)} data-export="" />}
             <MenuItem icon="help" label={t('怎么用')} onClick={run(p.onHelp)} />
             {p.onSettings && <MenuItem icon="gear" label={t('设置')} onClick={run(p.onSettings)} />}
           </div>

@@ -27,6 +27,7 @@ const CONTENT = [
   'src/quiz/flow.js', // 直觉题的小房间配色
   'src/quiz/vignettes/', // 直觉题照片的离线渲染
   'src/studio/diag.js', // 开发用的诊断面板（?diag=1），不是给客人看的界面
+  'src/studio/export/palette.js', // 导出的 3D 文件里的固定材质色（玻璃、窗框…），和 matlib 一致
 ];
 
 // 界面文件里允许写死的个别值（小写）
