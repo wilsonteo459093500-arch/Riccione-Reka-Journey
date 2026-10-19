@@ -8,6 +8,8 @@
 > - **旧版 UKIR STUDIO**（AI 效果图 / 设计顾问 / Material Board）— 已由上面的新版 UKIR STUDIO 接替（同一网址；Material Board、材质库搬到新版）。代码仍在 [`/render`](./render) 备查 / 回滚。
 > - **CIPTA STUDIO**（by RICCIONE REKA）— 内容工作台：上传一条参考视频 + 你的原片/案例图，拆出配方、排好剪辑方案、写好发布文案。代码在 [`/studio`](./studio)，部署指南见 [`studio/DEPLOY.md`](./studio/DEPLOY.md)，工具调研见 [`studio/RESEARCH.md`](./studio/RESEARCH.md)。
 > - **RICCIONE REKA JOURNEY** — 客户需求卡 + 展厅邀请函（纯静态，无需构建）。代码在 [`/invite`](./invite)，说明见 [`invite/README.md`](./invite/README.md)。
+>
+> 🧰 **Claude 军火库** — 在这个仓库里开 Claude Code，会自动带上 29 个 skill（室内设计 / 品牌故事 / 内容创作三条线）和一份品牌底稿。地图见 [`.claude/skills/README.md`](./.claude/skills/README.md)，品牌底稿在 [`.agents/product-marketing.md`](./.agents/product-marketing.md)（里面标 [待确认] 的请补齐）。
 
 ## 功能
 
