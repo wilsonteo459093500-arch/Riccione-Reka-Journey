@@ -217,4 +217,7 @@ export default {
   '我们做 · 定制柜、台面、墙板、门': 'We make this · custom cabinets, worktops, wall panels, doors',
   家具示意: 'Furniture for illustration',
   保留你家原有: 'Kept from your home',
+  // ── 导出给设计师（⋯ 菜单里的那一项；面板和导出文件里的词在 en-export.js，跟着导出代码懒加载） ──
+  导出给设计师: 'Export for designers',
+  'AutoCAD · SketchUp · 酷家乐': 'AutoCAD · SketchUp · Kujiale',
 };

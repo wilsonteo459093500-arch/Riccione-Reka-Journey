@@ -22,7 +22,7 @@
 //   没有「设置」（公司的 AI key、接口地址），梦想家卡打开的是客人版蓝图（不带 ?staff=1）。
 //   许愿模式再少两样：不能上传平面图（只能画）、不能下载概念图 —— 都会碰到展厅 iPad 的相册 / 文件，里面有前面客人的图。
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Engine } from './engine/Engine.js';
 import { buildWalls, buildAllWalls, templatePlan, emptyPlan, migratePlan, isMultiFloor, floorById, floorName, uid, roomSides, ROOM_TYPES } from './plan/model.js';
 import * as Furnish from './engine/furnish.js';
@@ -61,6 +61,8 @@ import HelpModal from './ui/HelpModal.jsx';
 import FloorSwitch from './ui/FloorSwitch.jsx';
 import SettingsModal from './ui/SettingsModal.jsx';
 import PlanEditor from './plan/PlanEditor.jsx';
+// 导出给设计师（DXF / 酷家乐 / SketchUp）：只有点了才下载这部分代码
+const ExportSheet = lazy(() => import('./export/ExportSheet.jsx'));
 
 const WISH = isWishMode();
 const QS = new URLSearchParams(location.search);
@@ -1579,6 +1581,8 @@ export default function StudioApp() {
             onDemo={() => setDemo((d) => !d)}
             onPlan={() => openPlanEditor('current')}
             onStart={staffView && !WISH ? () => setModal('start') : null}
+            // 导出 CAD / 3D 文件只给设计师（客人版、许愿模式、展厅都没有）
+            onExport={staffView && !WISH ? () => setModal('export') : null}
             onHelp={() => setModal('help')}
             // 设置里是公司的 AI key、识别模型、接口地址：只给设计师（客人版、许愿模式都没有这一项；「语言」那一行照样在）
             onSettings={staffView ? () => setModal('settings') : null}
@@ -1689,6 +1693,11 @@ export default function StudioApp() {
       {modal === 'share' && <ShareModal project={project} pack={packShare} staff={staffView} guest={!WISH && (FROM_HOME || !!project.homeAt || !!project.profile?.home)} onClose={() => setModal(null)} />}
       {modal === 'help' && <HelpModal wish={WISH} onClose={() => setModal(null)} />}
       {modal === 'settings' && staffView && <SettingsModal onClose={() => setModal(null)} onQuality={onQuality} onLang={switchLang} />}
+      {modal === 'export' && staffView && !WISH && (
+        <Suspense fallback={null}>
+          <ExportSheet project={project} onClose={() => setModal(null)} onToast={flash} />
+        </Suspense>
+      )}
 
       {/* 设置（AI key）只给设计师：客人版、许愿模式从「平面图 → AI 识别」也走不到设置。
           许愿模式的平面图只能画、不能上传：选文件会打开展厅 iPad 的相册和「文件」，里面有前面客人的图 */}

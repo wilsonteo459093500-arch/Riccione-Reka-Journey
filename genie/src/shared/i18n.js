@@ -131,6 +131,11 @@ export function withLang(url) {
   }
 }
 
+/** 懒加载的部分自带的词（例如导出给设计师的 en-export.js）：载入时并进词典，不放进四个页面共用的第一块 */
+export function addWords(d) {
+  Object.assign(EN, d);
+}
+
 /** 测试用：列出某段文字里还没翻译的中文 */
 export function missing(zh) {
   const m = SPLIT.exec(String(zh));

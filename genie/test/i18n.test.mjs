@@ -12,8 +12,13 @@ import { fileURLToPath } from 'url';
 import { parse } from '@babel/parser';
 import traverseMod from '@babel/traverse';
 import EN from '../src/shared/i18n/en.js';
+import EXP from '../src/shared/i18n/en-export.js';
 
 const traverse = traverseMod.default || traverseMod;
+// 导出给设计师（src/studio/export/**）的词在 en-export.js：跟着导出代码懒加载（ExportSheet 用 addWords 并进来），
+// 所以只有那个文件夹里的代码可以查它；别的地方的中文还是要在 en.js 的总表里。
+const EXPORT_DIR = `${path.sep}src${path.sep}studio${path.sep}export${path.sep}`;
+const lookup = (file, key) => EN[key] ?? (file.includes(EXPORT_DIR) ? EXP[key] : undefined);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const HAN = /[一-鿿]/;
 const EDGE_CH = '[\\s\\p{So}\\p{Extended_Pictographic}\\uFE0F\\u200D→←↑↓·•…≈+]';
@@ -41,7 +46,7 @@ for (const file of walk(path.join(ROOT, 'src'))) {
     const key = norm(raw);
     if (!HAN.test(key) || /gl_FragColor|uniform |#include/.test(raw)) return;
     checked++;
-    if (EN[key] == null && !missing.has(key)) missing.set(key, `${rel}:${node.loc.start.line}`);
+    if (lookup(file, key) == null && !missing.has(key)) missing.set(key, `${rel}:${node.loc.start.line}`);
   };
   traverse(ast, {
     StringLiteral(p) {
@@ -82,7 +87,11 @@ for (const f of fs.readdirSync(ROOT).filter((f) => f.endsWith('.html'))) {
 }
 
 const ph = (s) => (s.match(/\{\w+\}/g) || []).sort().join(',');
-const phBad = Object.entries(EN).filter(([k, v]) => v !== '' && ph(k) !== ph(v));
+const phBad = [...Object.entries(EN), ...Object.entries(EXP)].filter(([k, v]) => v !== '' && ph(k) !== ph(v));
+// en-export.js 不能进总表（不然又回到四个页面的第一块里）；和总表重复的词要一样（并进来以后不会把界面上的英文换掉）
+const enIndex = fs.readFileSync(path.join(ROOT, 'src/shared/i18n/en.js'), 'utf8');
+const expLeak = /en-export/.test(enIndex) ? ['src/shared/i18n/en.js imports en-export.js'] : [];
+const expClash = Object.entries(EXP).filter(([k, v]) => EN[k] != null && EN[k] !== v).map(([k, v]) => `${k}: en.js「${EN[k]}」≠ en-export.js「${v}」`);
 
 let fail = 0;
 if (missing.size) {
@@ -100,5 +109,10 @@ if (phBad.length) {
   console.log('✗ 占位符对不上：');
   phBad.forEach(([k, v]) => console.log(`    ${k}  →  ${v}`));
 }
+if (expLeak.length || expClash.length) {
+  fail++;
+  console.log('✗ en-export.js：');
+  [...expLeak, ...expClash].forEach((x) => console.log('    ' + x));
+}
 if (fail) process.exit(1);
-console.log(`✓ 中英双语：${checked} 处中文都有英文（词典 ${Object.keys(EN).length} 句）`);
+console.log(`✓ 中英双语：${checked} 处中文都有英文（词典 ${Object.keys(EN).length} 句 + 导出 ${Object.keys(EXP).length} 句）`);
