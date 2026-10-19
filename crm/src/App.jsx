@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { repo } from './services/repo.js';
 import {
-  STAGE_GATES, ROLE_TABS, WON_STAGES, COMPLETE_STAGE,
+  STAGE_GATES, ROLE_TABS, WON_STAGES, COMPLETE_STAGE, DROPPED_STAGE,
   canSeeDashboard, canSeeAnalytics, canManageUsers, canViewLead,
 } from './constants.js';
 import {
@@ -155,13 +155,33 @@ export default function App() {
 
   const requestStageChange = useCallback((lead, targetStage) => {
     if (targetStage === lead.salesStage) return;
+    // Signed-document gates (Production / Complete) — these open a structured modal.
     const gate = STAGE_GATES[targetStage];
-    const needsConfirm = gate && (!lead[gate.field] || (gate.requireLink && !lead[gate.linkField]));
-    if (needsConfirm) {
+    const needsGate = gate && (!lead[gate.field] || (gate.requireLink && !lead[gate.linkField]));
+    if (needsGate) {
       setGateRequest({ lead, targetStage, gate });
-    } else {
-      updateLead(lead.id, { salesStage: targetStage });
+      return;
     }
+    // Anti-misclick protection: stage moves that are easy to do by accident
+    // and hard to mentally reverse get a confirm dialog.
+    const fromMeta = getStageMeta(lead.salesStage);
+    const toMeta = getStageMeta(targetStage);
+    const goingBackwards = toMeta.order < fromMeta.order && toMeta.order !== 99;
+    if (goingBackwards) {
+      const ok = confirm(
+        `Move ${lead.clientName} BACKWARDS\nfrom "${fromMeta.short}" to "${toMeta.short}"?\n\n` +
+        `This is unusual — make sure you didn't click by accident.`
+      );
+      if (!ok) return;
+    }
+    if (targetStage === DROPPED_STAGE) {
+      const ok = confirm(
+        `Mark ${lead.clientName} as DROPPED?\n\n` +
+        `The lead leaves your active pipeline. You can revive it later from the Leads table.`
+      );
+      if (!ok) return;
+    }
+    updateLead(lead.id, { salesStage: targetStage });
   }, [updateLead]);
 
   const confirmGateMove = useCallback((extra = {}) => {
@@ -303,6 +323,41 @@ export default function App() {
         : `${stepLabel} completed`;
     mutateDesign(leadId, mutator, auditMsg);
   }, [snapshot, currentUser, mutateDesign]);
+
+  // Undo the most recently completed step (so accidental "Mark done" clicks
+  // can be reversed). Reactivates the last done step and resets the currently
+  // active step back to pending.
+  const reopenLastDesignStep = useCallback((leadId) => {
+    if (!snapshot) return;
+    const lead = snapshot.leads.find(l => l.id === leadId);
+    if (!lead?.designFlow) return;
+    const done = lead.designFlow.steps.filter(s => s.status === 'done');
+    if (done.length === 0) return;
+    const lastDone = [...done].sort(
+      (a, b) => new Date(b.completedAt || 0) - new Date(a.completedAt || 0)
+    )[0];
+    const currentlyActive = lead.designFlow.steps.find(s => s.status === 'active');
+    const now = new Date().toISOString();
+    const mutator = (ld) => {
+      const df = ld.designFlow;
+      const steps = df.steps.map(s => {
+        if (s.id === lastDone.id) {
+          return {
+            ...s, status: 'active', completedAt: null, completedBy: null,
+            startedAt: now, dueDate: computeStepDue(s.id, now, ld),
+          };
+        }
+        if (currentlyActive && s.id === currentlyActive.id) {
+          return { ...s, status: 'pending', startedAt: null, dueDate: null,
+            completedAt: null, completedBy: null };
+        }
+        return s;
+      });
+      return { ...df, steps };
+    };
+    const stepLabel = DESIGN_STEP_MAP[lastDone.id]?.label || lastDone.id;
+    mutateDesign(leadId, mutator, `Reopened "${stepLabel}" (undo previous step)`);
+  }, [snapshot, mutateDesign]);
 
   const recomputeInternalDue = (df, ld) => ({
     ...df,
@@ -454,6 +509,7 @@ export default function App() {
           <DesignWorkflowView leads={leads} role={role}
             setViewingLead={setViewingLead}
             onCompleteStep={completeDesignStep}
+            onReopenLastStep={reopenLastDesignStep}
             onAddPresentation={addPresentation}
             onUpdatePresentation={updatePresentation}
             onRemovePresentation={removePresentation} />

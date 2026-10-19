@@ -510,8 +510,11 @@ function AfterSalesCaseCard({ caseItem: c, canEdit, onResolve, onDelete }) {
           )}
         </div>
         {canEdit && (
-          <button type="button" onClick={onDelete}
-            className="text-sail-faint hover:text-sail-danger p-0.5 flex-shrink-0" aria-label="Delete">
+          <button
+            type="button"
+            onClick={() => { if (confirm(`Delete this after-sales case?\n\n${c.category}: ${c.issue}`)) onDelete(); }}
+            className="text-sail-faint hover:text-sail-danger p-0.5 flex-shrink-0" aria-label="Delete"
+          >
             <Trash2 className="w-3 h-3" />
           </button>
         )}
