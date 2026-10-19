@@ -75,6 +75,14 @@ export const CONFIG = {
   // 这台设备上的客人蓝图放多久（PDPA：不需要了就删）：建好超过这么多天的，下次打开入口页 / 存新蓝图时自动删掉；0 = 不自动删。
   // 客人手上的蓝图链接、海报不受影响（资料就在链接里）。
   keepDays: 90,
+  // 案例库（src/shared/cases.js）：照片的网址 = base + manifest 里每张图的 src。
+  // 默认 '/cases/' = public/cases/；真实照片也可以放在外面的公开空间（这个仓库是公开的），例如 'https://photos.example.com/wish-cases/'。
+  // hideConceptsAt：上架的「我们做过的家」达到这么多个以后，3D 风格方案（种子案例）不再推荐给客人（员工仍看得到）。
+  cases: { base: '/cases/', hideConceptsAt: 8 },
+  // 「你的家」几道题（src/shared/home.js）：askBudget = 要不要问客人「心里大概的范围」（业主 2026-10-19：要问，只给员工看）。
+  // 只在员工的设备上出现（许愿模式 / ?staff=1，见 home.js askBudgetOn）；答案只存在这台设备的 genie.staffnotes.v1，
+  // 永远不进客人的档案、牌、蓝图、WhatsApp 文字或任何链接。false = 不问（设计师见面时再谈）。
+  home: { askBudget: true },
 };
 
 export function hostFromCode(code) {

@@ -95,6 +95,12 @@ import {
   X,
   Blinds,
   Boxes,
+  Lock,
+  LockOpen,
+  Images,
+  SquareSplitHorizontal,
+  LoaderCircle,
+  Hammer,
 } from 'lucide-react';
 import { t, L, isEn } from '../../shared/i18n.js';
 import { ROOM_TYPES } from '../plan/model.js';
@@ -159,6 +165,12 @@ const ICONS = {
   palette: Palette,
   film: Clapperboard,
   storage: Boxes,
+  lock: Lock,
+  unlock: LockOpen,
+  images: Images,
+  compare: SquareSplitHorizontal,
+  spinner: LoaderCircle,
+  make: Hammer, // 我们做 · We make this（公司做的定制柜、台面、墙板、门）
 };
 
 export function Icon({ name, size = 18, stroke = 1.75, className = '' }) {
@@ -318,6 +330,25 @@ export function ConfirmSheet({ title, body, ok, cancel, danger, onOk, onCancel }
 /** 列表分隔：中文「、」英文「, 」 */
 export const listSep = () => (isEn() ? ', ' : '、');
 
+/** 客人家里留下来的那几样，放在句子中间（「保留了你家的地板、柜子」/ “kept your floor, cabinetry”：英文小写） */
+const LOCK_WORD = { floor: '地板', walls: '墙面', cabinetry: '柜子', upholstery: '沙发' };
+export function lockWord(slot) {
+  const s = t(LOCK_WORD[slot] || slot);
+  return isEn() ? s.toLowerCase() : s;
+}
+export const lockList = (locked) => Object.keys(locked || {}).map(lockWord).join(listSep());
+/** 一串名字放在句子中间（英文小写）：房间、表面 */
+export const midList = (names) => names.filter(Boolean).map((s) => (isEn() ? s.toLowerCase() : s)).join(listSep());
+
+/** 「我们做」的小记号（金色圆点 + 锤子）：材质板、标签的样板角上（只有定制柜、台面、墙板 —— offer.js）；title 写全称 */
+export function OfferMark({ className = '' }) {
+  return (
+    <span className={`st-make-dot ${className}`} title={t('我们做 · 定制柜、台面、墙板、门')} aria-label={t('我们做')}>
+      <Icon name="make" size={9} stroke={2.2} />
+    </span>
+  );
+}
+
 /** 媒体查询（窄屏换布局用）；旧 Safari 只有 addListener */
 export function useMedia(query) {
   const get = () => (typeof matchMedia === 'function' ? matchMedia(query).matches : false);
@@ -336,7 +367,8 @@ export function useMedia(query) {
 
 // 浮在画布上的面板：左边情绪面板、右上日光面板（宽屏）、右上工具条。横跨半个屏幕以上的（窄屏底部那一列）不算 ——
 // 那种由上下方向的限制处理。
-const OBSTACLES = ['.mood-panel', '.day-panel', '.toolbar'];
+// 对照的照片（横屏左右分开、小卡）也算：标签排在 3D 那一半
+const OBSTACLES = ['.mood-panel', '.day-panel', '.toolbar', '.st-split.land', '.st-pip'];
 
 /**
  * 画布上 [y0, y1] 这一条横带里，左右还空着的范围 { L, R }（离面板至少 pad）。
@@ -351,8 +383,9 @@ export function freeBand(y0, y1, pad = 12) {
     const el = document.querySelector(sel);
     if (!el) continue;
     const r = el.getBoundingClientRect();
-    if (!r.width || !r.height || r.width > W * 0.5 || r.bottom <= y0 || r.top >= y1) continue;
-    if (getComputedStyle(el).opacity === '0') continue;
+    if (!r.width || !r.height || (r.width > W * 0.5 && !sel.startsWith('.st-split')) || r.bottom <= y0 || r.top >= y1) continue;
+    // 收起的面板是透明的（不挡）；对照的照片一出现就算挡（它进场的淡入动画开头也是透明的）
+    if (!sel.startsWith('.st-') && getComputedStyle(el).opacity === '0') continue;
     if (r.left + r.width / 2 < W / 2) L = Math.max(L, r.right + pad);
     else R = Math.min(R, r.left - pad);
   }

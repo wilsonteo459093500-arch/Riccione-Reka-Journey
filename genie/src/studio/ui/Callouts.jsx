@@ -2,12 +2,14 @@
 // 排版：按锚点从左到右排成整齐的一行，只放在两块面板之间空着的那段画布里；标签之间至少 8px。
 // 一行放不下：先去掉表面小字（只留材质名）；还放不下：交错排成两行（也只留材质名，标签带矮一点）。
 // onBand(底边 px)：标签这一带的底边告诉 StudioApp（引擎取景时模型放在它下面）；放不下、不显示时报 0。
+// 公司做的表面（offer.js：柜体 = 定制柜、台面、木 / 石主题墙 = 墙板）样板左上角一个金色小记号；客人家里留下来的右下角一把小锁。
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { MAT_BY_ID, SLOT_BY_ID } from '../../shared/materials.js';
 import { swatchURL } from '../../shared/textures.js';
-import { L } from '../../shared/i18n.js';
-import { slotName, freeBand } from './kit.jsx';
+import { L, t } from '../../shared/i18n.js';
+import { slotName, freeBand, Icon, OfferMark } from './kit.jsx';
+import { isOfferSlot } from '../offer.js';
 
 const SW = 50; // 样板宽
 const PAD_X = 22; // 名牌左右内边距 + 发丝线
@@ -49,7 +51,7 @@ function packRow(items, lo, hi, key) {
   });
 }
 
-export default function Callouts({ anchors, materials, onPick, activeSlot, top = 76, panels, onBand }) {
+export default function Callouts({ anchors, materials, onPick, activeSlot, top = 76, panels, onBand, locked = null }) {
   const [size, setSize] = useState({ w: innerWidth, h: innerHeight });
   const [, remeasure] = useState(0);
   const [fontVer, setFontVer] = useState(0);
@@ -187,19 +189,29 @@ export default function Callouts({ anchors, materials, onPick, activeSlot, top =
       </svg>
       {placed.map((a) => {
         const lb = labels[a.slot] || {};
+        // 客人家里留下来的（锁住的）不是我们要做的
+        const offer = isOfferSlot(a.slot, lb.m?.id) && !locked?.[a.slot];
+        const extra = `${offer ? ` · ${t('我们做')}` : ''}${locked?.[a.slot] ? ` · ${t('保留你家原有')}` : ''}`;
         return (
           <button
             key={a.slot}
             type="button"
             data-slot={a.slot}
-            className={`callout ${activeSlot === a.slot ? 'on' : ''}`}
+            className={`callout ${activeSlot === a.slot ? 'on' : ''} ${locked?.[a.slot] ? 'is-locked' : ''}`}
             style={{ left: a.cx, top: a.cy }}
             onClick={() => onPick(a.slot)}
-            aria-label={`${lb.sub} · ${lb.name}`}
-            title={compact ? `${lb.sub} · ${lb.name}` : undefined}
+            aria-label={`${lb.sub} · ${lb.name}${extra}`}
+            title={compact || extra ? `${lb.sub} · ${lb.name}${extra}` : undefined}
           >
             <span className="sample md">
               <img src={swatchURL(lb.m?.id, 112) || ''} alt="" draggable={false} />
+              {offer && <OfferMark />}
+              {/* 客人家里留下来的（K 屏选了「保留」）：小锁 */}
+              {locked?.[a.slot] && (
+                <span className="st-lock-dot" title={t('你家现有的，锁住了')}>
+                  <Icon name="lock" size={10} />
+                </span>
+              )}
             </span>
             <span className="callout-tag">
               <b>{lb.name}</b>

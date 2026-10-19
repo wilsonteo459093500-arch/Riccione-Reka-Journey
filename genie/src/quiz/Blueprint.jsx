@@ -12,8 +12,13 @@
 //   往下滑：每一节的罗马数字被光扫一下、内容一块块升起来；数字（毫米、百分比）进到画面时数上去。
 //   滑到最后：「潘吉认证」盖章（弹簧 + 一圈印泥 + 几粒灰 + 盖章声），刚做好的蓝图她再说最后一句。
 //   复制 / 存海报成功：「小提示」一声 + 按钮被光扫一下。在 3D 里看见它：暮色拂过再打开。下一位：晨光拂过，潘吉说再见。
+//
+// 带它回家（SPEC §9.2）：VI · 你的家（客人自己答的：房子 · 现在 · 大小 · 房间 · 做哪里 · 什么时候 · 户型图）、
+//   VII · 参考案例（选的案例 → 详情；「更多像你的家」= 最像的几个）、材质板上锁住的表面（🔒 保留 · 你家现有的）。
+//   主按钮：「你的家」走完了 → 在 3D 里看见我的家（studio.html?from=home&case=…）；还没走 → 带它回家（#home=<档案号>）。
+//   设计师版多一块「预算（员工记）」：只存在这台设备的 localStorage 'genie.staffnotes.v1'，永远不进档案、不进链接、不给客人看。
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Check,
@@ -36,6 +41,7 @@ import {
   Rows3,
   ChevronDown,
   ScanLine,
+  Lock,
 } from 'lucide-react';
 import Pangie, { Lamp, useVoiceLine } from '../shared/Pangie.jsx';
 import fx from '../shared/fx.js';
@@ -56,7 +62,8 @@ import { storagePlan, insights, packJSON, slimProfile, quickPicksOf } from '../s
 import { profileText, waLink, lifeLabel, WISH_LABEL, AVOID_LABEL } from '../shared/summary.js';
 import { BRAND, hostFromCode } from '../shared/config.js';
 import { PALETTE } from '../shared/palette.js';
-import { APPLIANCES, PAIRS, SPLURGE } from './flow.js';
+import * as FLOW from './flow.js';
+import { homeSummary, keepLocks, homeDone, BUDGET, lab, staffNoteOf, setStaffNote } from '../shared/home.js';
 import { renderPoster } from './poster.js';
 import { isWishMode, tellShell } from '../shared/zen.js';
 import { t, tj, L, isEn, guideName, withLang } from '../shared/i18n.js';
@@ -64,6 +71,7 @@ import { fmt, ftNote } from '../shared/units.js';
 import { renderKeywords, doorNotes } from './keywords.js';
 import { qrMatrix, qrPath } from './qr.js';
 import { phrased, segmented, keepWords } from './typo.jsx';
+import './home/blueprint.css';
 
 const WISH = isWishMode();
 /** 员工视角：网址带 ?staff=1，而且不在许愿模式里（许愿模式只认外壳的 designer 消息） */
@@ -74,6 +82,22 @@ const STAFF = (() => {
     return false;
   }
 })();
+
+const { APPLIANCES, PAIRS, SPLURGE } = FLOW;
+// 蓝图 VII：案例库读好了再补上（蓝图先出来）
+const BlueprintCases = lazy(() => import('./home/BlueprintCases.jsx'));
+
+/** 快选那一题的标签：新题库的 pickLabel（认得旧的 palette / shelf），没有就退回 PAIRS 里找 */
+const quickLabel = (id, pick) => {
+  if (typeof FLOW.pickLabel === 'function') return FLOW.pickLabel(id, pick) || '';
+  const pr = PAIRS.find((p) => p.id === id);
+  return pr && pr[pick] ? pr[pick].label : '';
+};
+
+// 员工自己记的（预算 —— 客人在「你的家」最后一题选的、或设计师在这里记的）：只在这台设备（home.js 的 staffNoteOf / setStaffNote），
+// 永远不进档案 / 链接 / 客人看得到的任何一屏
+const readNote = staffNoteOf;
+const writeNote = setStaffNote;
 
 const UNSURE_KEYS = new Set(['shoes', 'wardrobe', 'books', 'ratio']);
 const BOARD_SLOTS = ['floor', 'walls', 'feature', 'cabinetry', 'countertop', 'upholstery', 'rugs', 'accents'];
@@ -257,10 +281,11 @@ function Sec({ num, title, note, children, className = '' }) {
   );
 }
 
-export default function Blueprint({ profile, onRestart, fresh = false, designerOpen = false, showroom = false }) {
+export default function Blueprint({ profile, onRestart, fresh = false, designerOpen = false, showroom = false, onHome }) {
   const [staffOn, setStaffOn] = useState(STAFF || designerOpen);
   const [mode, setMode] = useState(designerOpen ? 'designer' : 'client');
-  const [links, setLinks] = useState({ bp: '', bpStaff: '', studio: '' });
+  const [links, setLinks] = useState({ bp: '', bpStaff: '', studio: '', studioHome: '' });
+  const [note, setNote] = useState(() => readNote(profile.id));
   const [toast, setToast] = useState('');
   const [busy, setBusy] = useState(false);
   // 许愿模式的海报：画好的图（object URL），和二维码一起放在一张小卡上
@@ -298,6 +323,10 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
         bpStaff: withLang(new URL(`quiz.html?staff=1#bp=${packed}`, location.href).href),
         // 3D 链接自己带上身份（许愿模式 / 员工），不只靠 document.referrer：客人版永远不会变成设计师版
         studio: withLang(new URL(`studio.html${WISH ? '?mode=wish' : STAFF ? '?staff=1' : ''}#p=${packed}`, location.href).href),
+        // 「你的家」走完了：3D 直接是客人自己的家（同一台设备上读好的户型图 + 选的案例 + 留下来的颜色）
+        studioHome: withLang(
+          new URL(`studio.html?${WISH ? 'mode=wish&' : STAFF ? 'staff=1&' : ''}from=home${profile.caseId ? `&case=${encodeURIComponent(profile.caseId)}` : ''}#p=${packed}`, location.href).href
+        ),
       });
       // 刚做完的蓝图：网址换成 #bp=…，返回 / 重新整理 / iPad 把分页收掉，都还在
       if (fresh) {
@@ -414,7 +443,48 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
 
   // 「发给设计师」的文字：客人自己发出去的是普通链接（客人版）；只有员工打开的蓝图（?staff=1 / 员工区）才带设计师链接。
   // { client } 让 summary.js 把只给设计师看的内容拿掉（summary.js 还没支持时，多传的参数不影响）。
-  const text = profileText(profile, plan, staffOn ? links.bpStaff : links.bp, { client: !staffOn });
+  const text = profileText(profile, plan, staffOn ? links.bpStaff : links.bp, { client: !staffOn, staffNote: staffOn ? note : null });
+  const done = homeDone(profile);
+  const locks = keepLocks(profile.home);
+  // 预算那一行不放这里（下面的员工那一块有自己的档位）
+  const homeRows = homeSummary(profile.home, { designer }).filter((r) => r.id !== 'budget');
+  // 去 3D：一大片暮色拂过，再打开（最暗的那一刻换页，看不到跳）
+  const toStudio = (e, href) => {
+    if (!href) return e.preventDefault();
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button > 0) return; // 员工在电脑上开新分页：照常
+    e.preventDefault();
+    if (leaving) return;
+    setLeaving(true);
+    fx.scan(e.currentTarget);
+    const w = fx.wipe(null, { tone: 'dusk', duration: 900, hold: true });
+    settle(
+      null,
+      w.mid,
+      () => {
+        tellShell('home-done', { id: profile.id }); // 许愿模式的外壳：3D 里的这一位是谁（最后一步「交给设计师」用）
+        tellShell('leaving', { to: 'studio', tone: 'dusk' });
+        location.assign(href);
+      },
+      900
+    );
+  };
+  // 带它回家：晨光拂过 → 你的家 · 案例 · 户型图 · 生成
+  const bringHome = (e) => {
+    if (leaving) return;
+    setLeaving(true);
+    if (e?.currentTarget) fx.scan(e.currentTarget);
+    const w = fx.wipe(null, { tone: 'dawn', duration: 1000 });
+    settle(
+      null,
+      w.mid,
+      () => {
+        if (onHome) onHome();
+        else location.hash = `home=${encodeURIComponent(profile.id)}`;
+        setLeaving(false);
+      },
+      900
+    );
+  };
   const date = new Date(profile.createdAt);
   const name = L({ zh: d.zh, en: d.en });
   const touched = profile.storage?.touched || null;
@@ -578,13 +648,20 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
           </div>
           <div className="mat-board">
             {BOARD_SLOTS.map((s) => {
-              const m = MAT_BY_ID[profile.materials[s]];
+              // 客人家里会留下来的（K 屏锁住的）：板上放的是他家现有的那一样
+              const m = MAT_BY_ID[locks[s] || profile.materials[s]];
               return (
-                <figure key={s} className="mat">
+                <figure key={s} className={`mat ${locks[s] ? 'is-locked' : ''}`}>
                   <img src={swatchURL(m?.id, 192) || ''} alt="" />
                   <figcaption>
                     <span>{L(SLOT_BY_ID[s])}</span>
                     <b>{m ? L(m) : '—'}</b>
+                    {locks[s] && (
+                      <span className="bp-lock">
+                        <Lock size={10} strokeWidth={2.6} aria-hidden="true" />
+                        {t('保留 · 你家现有的')}
+                      </span>
+                    )}
                   </figcaption>
                 </figure>
               );
@@ -714,6 +791,60 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
           </div>
         </Sec>
 
+        {/* VI · 你的家 */}
+        <Sec num="VI" title={t('你的家')}>
+          {homeRows.length ? (
+            <dl className="hj-bp-home">
+              {homeRows.map((r) => (
+                <div key={r.id} className={r.designer ? 'is-designer' : ''}>
+                  <dt>{r.label}</dt>
+                  <dd>{r.value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : (
+            <div className="hj-bp-invite no-print">
+              <p>{t('还没告诉我你的家 —— 带它回家，我会挑最像你的家给你看，再照你的户型图变出来。')}</p>
+              <button type="button" className="btn btn-gold" onClick={bringHome} disabled={leaving}>
+                <House size={18} strokeWidth={1.8} aria-hidden="true" />
+                <span>{t('带它回家')}</span>
+              </button>
+            </div>
+          )}
+          {designer && (
+            <div className="hj-bp-budget dz-only">
+              <p className="bp-sub">
+                {t('预算（员工记，客人看不到）')}
+                {note.budget && note.budgetBy === 'guest' && <span className="hj-bp-by"> · {t('客人在「你的家」里自己选的')}</span>}
+              </p>
+              <div className="chips" data-sfx="radio">
+                {BUDGET.map((b) => (
+                  <button
+                    key={b.v}
+                    type="button"
+                    className={`chip ${note.budget === b.v ? 'on' : ''}`}
+                    aria-pressed={note.budget === b.v}
+                    onClick={() => {
+                      const v = note.budget === b.v ? null : b.v;
+                      setNote(writeNote(profile.id, { budget: v, budgetBy: v ? 'staff' : null }));
+                    }}
+                  >
+                    {lab(b)}
+                  </button>
+                ))}
+              </div>
+              <small>{t('只存在这台设备，不进客人的蓝图、链接和 WhatsApp。')}</small>
+            </div>
+          )}
+        </Sec>
+
+        {/* VII · 参考案例 */}
+        <Sec num="VII" title={t('参考案例')} note={(profile.cases || []).length ? null : t('（和你的牌最像的家）')}>
+          <Suspense fallback={null}>
+            <BlueprintCases profile={profile} />
+          </Suspense>
+        </Sec>
+
         {profile.wish && (
           <section className="bp-sec bp-wish">
             <p className="eyebrow">{t('你说，这个家只要做到一件事 ——')}</p>
@@ -805,9 +936,9 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
                       {quick
                         .map((q) => {
                           const id = typeof q === 'string' ? q : q.id;
-                          const pr = PAIRS.find((p) => p.id === id);
                           const pick = typeof q === 'string' ? profile.answers?.pairs?.[id]?.pick : q.pick;
-                          return pr && pr[pick] ? t(pr[pick].label) : null;
+                          const label = quickLabel(id, pick);
+                          return label ? t(label) : null;
                         })
                         .filter(Boolean)
                         .join(' · ')}
@@ -847,29 +978,25 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
       </article>
 
       <nav className="bp-actions no-print" aria-label={t('蓝图')}>
-        <a
-          className="btn btn-gold"
-          href={links.studio || '#'}
-          onClick={(e) => {
-            if (!links.studio) return e.preventDefault();
-            if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button > 0) return; // 员工在电脑上开新分页：照常
-            e.preventDefault();
-            if (leaving) return;
-            setLeaving(true);
-            fx.scan(e.currentTarget);
-            // 一大片暮色拂过，再打开 3D（最暗的那一刻换页，看不到跳）。hold：光停在盖满的地方直到文档换掉 ——
-            // 很卡的 iPad 上换页 / 3D 启动把主线程占住时，光带不会自己扫过去、又露出蓝图（外壳的暮色要等主线程才盖得上）
-            const href = links.studio;
-            const w = fx.wipe(null, { tone: 'dusk', duration: 900, hold: true });
-            settle(null, w.mid, () => {
-              tellShell('leaving', { to: 'studio', tone: 'dusk' }); // 许愿模式：外壳先盖一层暮色，换页时不闪米色
-              location.assign(href);
-            }, 900);
-          }}
-        >
-          <House size={18} strokeWidth={1.8} aria-hidden="true" />
-          <span>{t('在 3D 里看见它')}</span>
-        </a>
+        {/* 主按钮：「你的家」走完了 → 3D 里就是他自己的家；还没走 → 带它回家。
+            暮色 hold：光停在盖满的地方直到文档换掉（很卡的 iPad 上 3D 启动占住主线程时，不会又露出蓝图） */}
+        {done ? (
+          <a className="btn btn-gold" href={links.studioHome || '#'} onClick={(e) => toStudio(e, links.studioHome)}>
+            <House size={18} strokeWidth={1.8} aria-hidden="true" />
+            <span>{t('在 3D 里看见我的家')}</span>
+          </a>
+        ) : (
+          <>
+            <button type="button" className="btn btn-gold" onClick={bringHome} disabled={leaving} data-sfx="confirm">
+              <House size={18} strokeWidth={1.8} aria-hidden="true" />
+              <span>{t('带它回家')}</span>
+            </button>
+            <a className="btn btn-line" href={links.studio || '#'} onClick={(e) => toStudio(e, links.studio)}>
+              <House size={18} strokeWidth={1.8} aria-hidden="true" />
+              <span>{t('在 3D 里看见它')}</span>
+            </a>
+          </>
+        )}
         {/* 许愿模式（展厅共用的 iPad）不发 WhatsApp：wa.me 会跳出 kiosk，开一个新窗口 */}
         {!WISH && (
           <a className="btn btn-line" href={waLink(text)} target="_blank" rel="noopener">

@@ -671,5 +671,14 @@ async function shoot(id, { n = 32, preview = false } = {}) {
   return { files: out, ms: Math.round(performance.now() - t0) };
 }
 
-window.VG = { shoot, ids: (kind = 'sets') => Object.keys(kind === 'tiles' ? TILES : kind === 'all' ? ALL : SETS), ready: true };
+/**
+ * 别的离线场景表挂进来（案例库的种子图：src/cases/seed/render.html → VG.register(SCENES)）。
+ * 同名的会盖掉；之后 VG.shoot(id) / VG.ids('all') 都认得。→ 挂进来的 id 列表
+ */
+function register(sets = {}) {
+  Object.assign(ALL, sets);
+  return Object.keys(sets);
+}
+
+window.VG = { shoot, register, ids: (kind = 'sets') => Object.keys(kind === 'tiles' ? TILES : kind === 'all' ? ALL : SETS), ready: true };
 log(`ready · ${Object.keys(SETS).length} sets`);

@@ -6,6 +6,8 @@
 //     许愿之旅用 location.replace 打开：客人在里面按「返回」，回不到这一页。3D 工作室带 ?staff=1（设计师版、方案列表）。
 //   · 本机的梦想家蓝图：收在「员工 · 本机蓝图」里，锁着 —— 和许愿模式的员工区一样要按住 3 秒才打开；
 //     离开这一页、切去别的 app、锁屏、按「返回」回来，都会自己锁上。每一行用 ?staff=1 打开（才有设计师版）。
+//   · 员工 · 案例库：和本机蓝图一样锁着（按住 3 秒），打开后才看得到「打开案例库」（cases.html?staff=1，员工给案例打标签、排序、上架）；
+//     离开这一页就锁上。案例库那一页是单独打包的，这里只在开好以后才去数一下有几个案例（不拖慢入口页）。
 //   · 声音（src/shared/sfx.js）：每个按钮都有自己的声音（确认 / 下一步 / 打开 / 移除 …，WISH_RULES 认 class）。
 //   · 动效（src/shared/fx.js，克制）：按下去缩一点 + 指尖一圈光（大卡片缩得更少）；唯一的金色「开始」每隔几秒被光轻轻扫过；
 //     按「客户许愿模式」= 一道晨光扫过整页，光盖住的那一刻换成许愿模式的开场；删掉的蓝图化成金尘，其余几行顺势补上。
@@ -15,7 +17,7 @@
 import { StrictMode, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
-import { ArrowRight, ChevronDown, Cuboid, Footprints, LockKeyhole, LockKeyholeOpen, Tablet, Trash2 } from 'lucide-react';
+import { ArrowRight, ChevronDown, Cuboid, Footprints, Images, LockKeyhole, LockKeyholeOpen, Tablet, Trash2 } from 'lucide-react';
 import '../shared/base.css';
 import './launcher.css';
 import Pangie, { Lamp } from '../shared/Pangie.jsx';
@@ -26,6 +28,7 @@ import WishMode from '../wish/WishMode.jsx';
 import { startWish, savedHost, saveHost } from '../wish/start.js';
 import { useHold } from '../wish/useHold.js';
 import { loadArchive, removeFromArchive, clearArchive } from '../shared/profile.js';
+import { sweepKept, clearStaffNotes, dropStaffNote } from '../shared/keep.js';
 import { DREAMER_BY_CODE } from '../shared/dreamers.js';
 import { installSfx, sfx } from '../shared/sfx.js';
 import fx, { useGleam } from '../shared/fx.js';
@@ -274,6 +277,102 @@ function Archive({ list, onRemove, onClear }) {
   );
 }
 
+/** 员工 · 案例库：锁着（按住 3 秒），打开后一个按钮去 cases.html?staff=1。离开这一页就锁上 */
+function CaseLibrary() {
+  const [open, setOpen] = useState(false);
+  const [count, setCount] = useState(null);
+  const swallow = useRef(false);
+  const { p, bind } = useHold(
+    () => {
+      swallow.current = true;
+      sfx.play('open');
+      setOpen(true);
+    },
+    { enabled: !open }
+  );
+  // 数一下有几个案例（案例库的资料是另外一块，入口页先画好再去拿）
+  useEffect(() => {
+    let alive = true;
+    const id = setTimeout(() => {
+      import('../shared/cases.js')
+        .then((C) => C.listCases({ includeDrafts: true, includeHidden: true }))
+        .then((l) => alive && setCount({ all: l.length, live: l.filter((c) => c.status === 'live').length, draft: l.filter((c) => c.status === 'draft').length }))
+        .catch(() => {});
+    }, 600);
+    return () => {
+      alive = false;
+      clearTimeout(id);
+    };
+  }, [open]);
+  useEffect(() => {
+    const lock = () => setOpen(false);
+    const onVis = () => {
+      if (document.visibilityState === 'hidden') lock();
+    };
+    window.addEventListener('pagehide', lock);
+    window.addEventListener('pageshow', lock);
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      window.removeEventListener('pagehide', lock);
+      window.removeEventListener('pageshow', lock);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, []);
+  const ring = open ? 1 : p;
+  return (
+    <section className={`ln-archive ln-cases ${open ? 'is-open' : ''}`}>
+      <button
+        type="button"
+        className={`ln-archive-head ${p > 0 && !open ? 'is-holding' : ''}`}
+        aria-expanded={open}
+        aria-controls="ln-cases-body"
+        data-sfx={open ? undefined : 'tap'}
+        data-fx-ripple="off"
+        {...bind}
+        onPointerDown={(e) => {
+          if (open) swallow.current = false;
+          bind.onPointerDown(e);
+        }}
+        onKeyDown={(e) => {
+          if (open) swallow.current = false;
+          bind.onKeyDown(e);
+        }}
+        onClick={() => {
+          if (swallow.current) {
+            swallow.current = false;
+            return;
+          }
+          if (open) setOpen(false);
+        }}
+      >
+        <span className="ln-lock" aria-hidden="true">
+          <svg className="ln-ring" viewBox="0 0 40 40">
+            <circle className="ln-lock-track" cx="20" cy="20" r="18.5" />
+            <circle className="ln-lock-fill" cx="20" cy="20" r="18.5" pathLength="100" style={{ strokeDashoffset: 100 - ring * 100 }} />
+          </svg>
+          {open ? <LockKeyholeOpen size={17} strokeWidth={1.8} /> : <LockKeyhole size={17} strokeWidth={1.8} />}
+        </span>
+        <span className="ln-archive-text">
+          <b>{count ? t('员工 · 案例库（{0}）', [count.all]) : t('员工 · 案例库')}</b>
+          <span>{open ? t('轻触锁上') : t('按住 3 秒打开')}</span>
+        </span>
+        <ChevronDown className="ln-chev" size={18} strokeWidth={1.8} aria-hidden="true" />
+      </button>
+      {open && (
+        <div className="ln-archive-body" id="ln-cases-body">
+          <p className="ln-note">{t('公司做过的家 + 3D 风格方案：打标签、排序、上架，客人许完愿就从这里挑最像他的家。只给员工用 —— 不要在客人面前打开。')}</p>
+          {count && <p className="ln-cases-count">{t('上架 {0} · 草稿 {1}', [count.live, count.draft])}</p>}
+          <a className="ln-cases-go" href="cases.html?staff=1" data-sfx="open" data-fx-depth="0.98">
+            <Images size={18} strokeWidth={1.8} aria-hidden="true" />
+            <span>{t('打开案例库')}</span>
+            <ArrowRight size={17} strokeWidth={2} aria-hidden="true" />
+          </a>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function Launcher() {
   const lang = useLang();
   const [list, setList] = useState(loadArchive);
@@ -289,9 +388,13 @@ function Launcher() {
     if (!wish) document.title = 'WISH · by Riccione Reka';
   }, [wish, lang]);
 
-  // 从别的页面「返回」到这一页（bfcache）：本机蓝图可能多了几份
+  // 从别的页面「返回」到这一页（bfcache）：本机蓝图可能多了几份；过了保留期的客人名单 / 员工记录顺手删掉（keep.js）
   useEffect(() => {
-    const f = () => setList(loadArchive());
+    sweepKept();
+    const f = () => {
+      sweepKept();
+      setList(loadArchive());
+    };
     window.addEventListener('pageshow', f);
     return () => window.removeEventListener('pageshow', f);
   }, []);
@@ -324,6 +427,7 @@ function Launcher() {
     if (!yes) return;
     // 存档马上删（金尘要半秒以上，很卡时好几秒：这期间换页 / 锁屏也不会「删了又回来」）；画面上的那一行等金尘散完再收
     removeFromArchive(p.id);
+    dropStaffNote(p.id); // 员工记的预算跟着这份蓝图一起删
     const commit = () => setList(loadArchive());
     if (!row?.isConnected) return commit(); // 本机蓝图在卡片开着的时候锁上了：直接删
     fx.dissolve(row, { origin: 'right', duration: 520, delay: 40, tone: 'paper' }).then(() => {
@@ -339,6 +443,7 @@ function Launcher() {
     });
     if (!yes) return;
     clearArchive(); // 同上：存档马上清，画面等金尘
+    clearStaffNotes(); // 员工记的预算（genie.staffnotes.v1）也一起清，不留没有蓝图的预算
     const commit = () => setList(loadArchive());
     const els = [...(rows || [])].filter((el) => el.isConnected);
     if (!els.length) return commit();
@@ -452,7 +557,7 @@ function Launcher() {
             <em className="ln-alt" lang={journey.altLang}>
               {journey.alt}
             </em>
-            <span className="ln-desc">{t('客人自己的手机 · 分享链接 · 约 6–8 分钟。五张牌：直觉、生活、宝藏、三个愿望、雷区 → 得到一份「专属梦想家概念蓝图」。')}</span>
+            <span className="ln-desc">{t('客人自己的手机 · 分享链接 · 约 10 分钟。五张牌：直觉、生活、宝藏、三个愿望、雷区 → 挑参考案例 → 在 3D 里看见自己的家。')}</span>
             <span className="ln-tip">
               <Tablet size={16} strokeWidth={1.8} aria-hidden="true" />
               <span>{t('展厅 iPad 请用上面的「客户许愿模式」。')}</span>
@@ -482,6 +587,7 @@ function Launcher() {
         </div>
 
         <Archive list={list} onRemove={remove} onClear={clear} />
+        <CaseLibrary />
       </main>
 
       <footer className="ln-foot">

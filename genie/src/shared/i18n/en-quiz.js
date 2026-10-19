@@ -14,6 +14,65 @@ export default {
   // 神灯下面的小字（说明本身 = 她在神灯里说的那一句，lineText('lamp.rub')）
   '来回擦一擦，按住也可以': 'Rub back and forth — or press and hold',
 
+  // ── 直觉之牌 v2：每题 4–6 个选项（v1 的 a / b 在 en-base.js；这里是新加的 c–f 和改了字的两张地板） ──
+  '奶油色的午后': 'A creamy afternoon',
+  '林间的绿': 'Green, like a forest',
+  '夜里的深蓝': 'Midnight blue',
+  '旅行带回来的': 'Souvenirs from travels',
+  '暖暖的木格栅': 'Warm timber slats',
+  '一整面大理石': 'A wall of marble',
+  '会发光的展示墙': 'A glowing display wall',
+  '软软的、绒绒的': 'Soft and plush',
+  '石头和铁，沉沉的': 'Stone and iron, solid',
+  '几件心爱的，放在灯下': 'A few treasures in the light',
+  '玻璃柜里的宝贝': 'Treasures behind glass',
+  // 手机 360 px 宽的两栏卡片上要两行放得下（「Cushions everywhere,」一行放不下 → 三行）
+  '抱枕毯子很多，柜门都关好': 'Cushions galore, cupboards shut',
+  '宽宽的亚麻 L 形': 'A wide linen L-shape',
+  '深深的丝绒': 'Deep velvet',
+  '天花一圈暖暖的光': 'A warm glow around the ceiling',
+  '一束光照着一幅画': 'One beam on a painting',
+  '温润的人字拼': 'Warm herringbone',
+  '冰凉的洞石': 'Cool travertine',
+  '浅浅的白橡': 'Pale white oak',
+  '复古的磨石子': 'Retro terrazzo',
+  '一整片微水泥': 'Seamless microcement',
+  '深深的胡桃木': 'Deep walnut',
+  '玻璃吊柜，看得见杯盘': 'Glass uppers, cups on show',
+  '一张大岛台，大家围着': 'A big island everyone gathers round',
+  '圆木桌配藤椅': 'A round oak table with cane chairs',
+  '黑色长桌，像餐厅': 'A long black table, bistro-style',
+  '一家人窝在沙发看电影': 'The family curled up for a movie',
+  '两个人，一杯酒，一张唱片': 'Two of us, a glass of wine, a record',
+  // 潘吉选完的一句泡泡（PAIR_REACT，只是字，她不开口）
+  '奶油色，好温柔': 'Creamy and gentle',
+  '森林系': 'Forest at heart',
+  '深夜的浪漫': 'Midnight romance',
+  '旅行家': 'A traveller',
+  '石头的质感': 'The feel of stone',
+  '会发光的收藏': 'Your collection, glowing',
+  '软软的最好': 'Soft is best',
+  '沉稳有力': 'Solid and calm',
+  '少而精': 'Few, but treasured',
+  '宝贝要好好保护': 'Treasures, well kept',
+  '软软的、整整齐齐': 'Soft and tidy',
+  '一家人都坐得下': 'Room for everyone',
+  '丝绒的浓郁': 'Rich velvet',
+  '柔柔的光': 'A soft glow',
+  '画廊的光': 'Gallery light',
+  '人字拼，好经典': 'A classic herringbone',
+  '洞石的清凉': 'Cool travertine',
+  '白橡，好清爽': 'Fresh white oak',
+  '复古的味道': 'A retro touch',
+  '利落的现代感': 'Crisp and modern',
+  '深色木头，好沉稳': 'Deep, calm timber',
+  '杯盘也是风景': 'Cups as decor',
+  '围着岛台聊天': 'Gathered round the island',
+  '藤编的轻松': 'Easy cane',
+  '餐厅的味道': 'Bistro style',
+  '窝在一起最幸福': 'Curled up together',
+  '两个人的小时光': 'A quiet night for two',
+
   // ── 潘吉的话 ──
   '第一眼喜欢哪个？': 'Which one catches your eye first?',
   '看图就好，没有对错': 'Just look — there’s no right or wrong',
@@ -80,4 +139,15 @@ export default {
 
   // ── 潘吉说话（点一下她 = 跳过这一句） ──
   跳过这一句: 'Skip this line',
+
+  // ── 封面的小字（POLISHER-GUEST：旅程现在结束在客人自己的 3D 家） ──
+  '约 10 分钟 · 5 张牌 · 最后在 3D 里看见你自己的家': 'About 10 minutes · 5 cards · At the end, see your own home in 3D',
+  // ── X · CMND 改成侘寂 / 素石（之前是「海岸梦想家」） ──
+  清寂素居: 'The Quiet Stone',
+  '安静，是最好的质感。': 'Quiet is the finest texture.',
+  '微水泥、石灰墙、烟熏橡木和亚麻 —— 你喜欢一个不吵的家：粗粗的质感，低低的光。只把几件真正珍惜的小物摆出来，每一件都留够呼吸的空间。':
+    'Microcement, limewash, smoked oak and linen — you love a home that never shouts: raw textures, low light. Only a few truly treasured pieces are on show, each with room to breathe.',
+  'Wabi-sabi · 侘寂素石': 'Wabi-sabi · quiet stone',
+  '2700–3000K，低位的光（落地灯 + 层板灯带）': '2700–3000K, low light (floor lamps + shelf LED strips)',
+  '烟熏橡木平板门 + 少量开放层板（展示约 30%）': 'Smoked-oak flat doors + a few open shelves (about 30% on display)',
 };

@@ -3,19 +3,22 @@
 //   quiz.html                    从头开始（?from=wilson&for=Peggy 预填陪同人 / 称呼）
 //   quiz.html#bp=<编码档案>       打开一份分享出去的蓝图（?staff=1 才有设计师版）
 //   quiz.html#id=<档案号>         打开本机存档里的蓝图
+//   quiz.html#home=<档案号>       「带它回家」：你的家 → 案例 → 户型图 → 生成（接着上次走到的那一步，src/quiz/home/）
+//   quiz.html#plan=<档案号>       之后再给户型图（3D 里「上传户型图」从这里回来）
 //   ?mode=wish                   在许愿模式外壳里（外壳管音乐、员工区、语言）
 //
 // 视觉：白天的纸 + 风景（每一章一个地方）；擦神灯、章节翻牌、揭晓进入暮色（.dusk）。
 // 声音：每一下触碰都有声音（main.jsx 的 installSfx）；潘吉说她的台词（voice.js，对话泡泡 = 她说的那一句）；
 // 单独打开时自己放背景音乐（moments.js 的 zen，跟着每一章换曲子），许愿模式里外壳放，这里只用 tellShell 告诉外壳。
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, Volume2, VolumeX, RotateCcw, Play as PlayIcon, MessageCircleMore, MessageCircleOff } from 'lucide-react';
 import Pangie, { useTalking, useVoiceOn } from '../shared/Pangie.jsx';
 import LangToggle from '../shared/LangToggle.jsx';
 import { BRAND, CONFIG } from '../shared/config.js';
 import { CHAPTERS, STEPS, PAIRS, LIFE, APPLIANCES, WISHES } from './flow.js';
 import { buildProfile, saveToArchive, unpackJSON, findInArchive, storagePlan } from '../shared/profile.js';
+import { QUIZ_V } from './flow.js';
 import { profileText, postProfile } from '../shared/summary.js';
 import { isMuted, setMuted, sfx } from '../shared/sound.js';
 import { isWishMode, tellShell } from '../shared/zen.js';
@@ -48,6 +51,9 @@ import {
 } from './steps.jsx';
 import Reveal from './Reveal.jsx';
 import Blueprint from './Blueprint.jsx';
+
+// 「带它回家」整段（你的家 · 案例 · 户型图 · 生成）：揭晓之后才载入（许愿之旅开头不用等它）
+const HomeJourney = lazy(() => import('./home/HomeJourney.jsx'));
 
 const SESSION_KEY = 'genie.session.v1';
 const STALE_MS = 10 * 60 * 1000;
@@ -117,6 +123,11 @@ const plain = (s) =>
 function loadSession() {
   try {
     const s = JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null');
+    // 题库换过版本（v1 十二题的进度：题号对不上）→ 丢掉，从头来
+    if (s && s.qv !== QUIZ_V) {
+      sessionStorage.removeItem(SESSION_KEY);
+      return null;
+    }
     if (s && Array.isArray(s.answers?.wishes)) return s;
   } catch {
     /* ignore */
@@ -136,10 +147,12 @@ function parseRoute() {
   const h = location.hash.slice(1);
   if (h.startsWith('bp=')) return { kind: 'bp', packed: h.slice(3) };
   if (h.startsWith('id=')) return { kind: 'id', id: decodeURIComponent(h.slice(3)) };
+  if (h.startsWith('home=')) return { kind: 'home', id: decodeURIComponent(h.slice(5)) };
+  if (h.startsWith('plan=')) return { kind: 'home', id: decodeURIComponent(h.slice(5)), start: 'plan' };
   return { kind: 'play' };
 }
 
-function TopBar({ chapter, sub, onBack, canBack, progress, done }) {
+function TopBar({ chapter, sub, onBack, canBack, progress = 0, done, mid = null, pct: showPct = true }) {
   const [mute, setMute] = useState(isMuted());
   const [voiceOn, setVoiceOn] = useVoiceOn();
   const pct = Math.round(progress * 100);
@@ -167,10 +180,9 @@ function TopBar({ chapter, sub, onBack, canBack, progress, done }) {
           <span>{BRAND.by}</span>
         </div>
       </div>
-      <div className="tb-mid">
-        <Stones chapter={chapter} sub={sub} done={done} />
-      </div>
+      <div className="tb-mid">{mid || <Stones chapter={chapter} sub={sub} done={done} />}</div>
       <div className="tb-right">
+        {showPct && (
         <span className="progress-pct" title={t('蓝图完成度')} role="img" aria-label={t('蓝图 {0}%', [pct])}>
           {/* 宽屏：一行字；手机：一个小圆环（中间是百分比），省一整行 */}
           <svg className="pct-ring" viewBox="0 0 36 36" aria-hidden="true">
@@ -186,6 +198,7 @@ function TopBar({ chapter, sub, onBack, canBack, progress, done }) {
             {tj('蓝图 {0}%', [<Odo key="n" value={pct} />])}
           </span>
         </span>
+        )}
         <LangToggle compact />
         {/* 潘吉说话（记在这台设备上）：开 / 关 —— 字幕（对话泡泡）照常 */}
         {!WISH && (
@@ -403,7 +416,7 @@ function Countdown({ ms }) {
   return <>{tj('{0} 秒后，潘吉会为下一位客人重新开始。', [<Odo key="n" value={left} />])}</>;
 }
 
-function Play({ onDone, onRestart }) {
+function Play({ onDone, onHome, onRestart }) {
   const params = useMemo(() => new URLSearchParams(location.search), []);
   const saved = useMemo(() => {
     const s = loadSession();
@@ -443,7 +456,7 @@ function Play({ onDone, onRestart }) {
   useEffect(() => {
     if (step.id === 'reveal') return;
     try {
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify({ idx, answers, ts: Date.now() }));
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify({ qv: QUIZ_V, idx, answers, ts: Date.now() }));
     } catch {
       /* ignore */
     }
@@ -605,7 +618,7 @@ function Play({ onDone, onRestart }) {
   else if (step.id === 'splurge') body = <SplurgeStep {...props} />;
   else if (step.id === 'nogo') body = <NogoStep {...props} />;
   else if (step.id === 'onewish') body = <OneWishStep {...props} finish={finish} />;
-  else if (step.id === 'reveal' && profile) body = <Reveal profile={profile} onOpen={() => onDone(profile)} />;
+  else if (step.id === 'reveal' && profile) body = <Reveal profile={profile} onOpen={() => onDone(profile)} onHome={() => onHome(profile)} />;
 
   const dusk = DUSK_STEPS.has(step.id) || !!step.interlude;
   const scene = sceneFor(step);
@@ -678,16 +691,70 @@ function Play({ onDone, onRestart }) {
   );
 }
 
+/** 「带它回家」用的同一套外框（顶栏、右下角的潘吉、提示卡、倒数）：HomeJourney 是懒载入的，从这里拿 */
+const HOME_UI = { TopBar, Companion, Prompt, Countdown };
+
+function Loading() {
+  return (
+    <div className="qz morning is-plain">
+      <main className="stage">
+        <div className="step step-note">
+          <Pangie mood="mystic" size={140} />
+          <p className="lead center">{t('{0}正在准备…', [guideName()])}</p>
+        </div>
+      </main>
+    </div>
+  );
+}
+
 export default function QuizApp() {
   const [route, setRoute] = useState(parseRoute);
   const [profile, setProfile] = useState(null);
   const [fresh, setFresh] = useState(false);
+  // 蓝图是不是「刚做好」的那一次（达成音、潘吉把它交到你手上）：每次打开蓝图时定一次，之后不变
+  const [bpFresh, setBpFresh] = useState(false);
+  const bpSeen = useRef(false);
+  // 「带它回家」每走一步存下的最新档案（不重画外面这一层）
+  const homeLatest = useRef(null);
   const [error, setError] = useState('');
   const [round, setRound] = useState(0);
   // 许愿模式：员工区按了「设计师版」，蓝图还在打开中时先记着（客人正在玩的时候不记，免得结束时漏给客人）
   const [designerReq, setDesignerReq] = useState(false);
   const live = useRef({ profile: null, kind: route.kind });
   live.current = { profile, kind: route.kind };
+  const profileRef = useRef(profile);
+  profileRef.current = profile;
+
+  const setHash = (h) => {
+    try {
+      history.replaceState(null, '', `${location.pathname}${location.search}#${h}`);
+    } catch {
+      /* ignore */
+    }
+  };
+  /** 去「带它回家」：档案先存进这台设备（分享出去的蓝图在客人自己的手机上打开也能接着走） */
+  const goHome = useCallback((p) => {
+    if (!p) return;
+    if (!findInArchive(p.id)) saveToArchive(p);
+    homeLatest.current = p;
+    setProfile(p);
+    setHash(`home=${encodeURIComponent(p.id)}`);
+    setRoute({ kind: 'home', id: p.id });
+    window.scrollTo(0, 0);
+  }, []);
+  /** 回到蓝图（「带它回家」第一题的返回、「先看蓝图」） */
+  const goBlueprint = useCallback(
+    (p) => {
+      const cur = p || homeLatest.current || profileRef.current;
+      if (!cur) return;
+      setProfile(cur);
+      setBpFresh(fresh && !bpSeen.current);
+      setHash(`id=${encodeURIComponent(cur.id)}`);
+      setRoute({ kind: 'id', id: cur.id });
+      window.scrollTo(0, 0);
+    },
+    [fresh]
+  );
 
   useEffect(() => {
     document.title = t('许愿之旅 · WISH by Riccione Reka');
@@ -716,6 +783,13 @@ export default function QuizApp() {
     voice.newGuest();
     fx.reset();
     clearSession();
+    homeLatest.current = null;
+    bpSeen.current = false;
+    try {
+      sessionStorage.removeItem('genie.home.v1');
+    } catch {
+      /* ignore */
+    }
     try {
       // 下一位客人：不要带着上一位的称呼（?for=），也不能带着员工身份（?staff=1）和上一份蓝图（#…）
       const u = new URL(location.href);
@@ -733,6 +807,7 @@ export default function QuizApp() {
     }
     setProfile(null);
     setFresh(false);
+    setBpFresh(false);
     setError('');
     setMuted(false, { persist: false });
     voice.setMuted(false);
@@ -772,7 +847,11 @@ export default function QuizApp() {
         .then((p) => alive && (p?.code ? setProfile(p) : setError(t('这条蓝图链接打不开，可能复制时少了一截。'))))
         .catch(() => alive && setError(t('这条蓝图链接打不开，可能复制时少了一截。')));
     } else if (route.kind === 'id') {
-      const p = findInArchive(route.id);
+      const p = (homeLatest.current?.id === route.id && homeLatest.current) || findInArchive(route.id);
+      p ? setProfile(p) : setError(t('这台设备上找不到这份蓝图。'));
+    } else if (route.kind === 'home') {
+      // 同一页里走过来的（揭晓 / 蓝图）就用手上这一份；重新整理、从 3D 回来 → 本机存档
+      const p = (homeLatest.current?.id === route.id && homeLatest.current) || (profileRef.current?.id === route.id && profileRef.current) || findInArchive(route.id);
       p ? setProfile(p) : setError(t('这台设备上找不到这份蓝图。'));
     }
     return () => {
@@ -795,10 +874,38 @@ export default function QuizApp() {
       </div>
     );
 
+  if (route.kind === 'home') {
+    if (!profile || profile.id !== route.id) return <Loading />;
+    return (
+      <Suspense fallback={<Loading />}>
+        <HomeJourney
+          key={`${profile.id}:${route.start || ''}`}
+          profile={profile}
+          start={route.start || null}
+          ui={HOME_UI}
+          onBlueprint={() => goBlueprint()}
+          onRestart={restart}
+          onProfile={(p) => (homeLatest.current = p)}
+        />
+      </Suspense>
+    );
+  }
+
   if (profile) {
     // 展厅里打开的蓝图（刚做完 / 本机存档 / 员工 / 带陪同人 ?from=）：结尾的按钮是「下一位」；客人在家打开分享的链接则是「重新许愿」
     const showroom = fresh || route.kind === 'id' || STAFF_URL || !!new URLSearchParams(location.search).get('from');
-    return <Blueprint key={profile.id} profile={profile} fresh={fresh} onRestart={restart} designerOpen={designerReq} showroom={showroom} />;
+    bpSeen.current = true;
+    return (
+      <Blueprint
+        key={profile.id}
+        profile={profile}
+        fresh={route.kind === 'id' && fresh ? bpFresh : fresh && route.kind === 'play'}
+        onRestart={restart}
+        designerOpen={designerReq}
+        showroom={showroom}
+        onHome={() => goHome(profile)}
+      />
+    );
   }
   if (route.kind !== 'play')
     return (
@@ -815,8 +922,14 @@ export default function QuizApp() {
     <Play
       key={round}
       onRestart={restart}
+      onHome={(p) => {
+        setFresh(true);
+        setDesignerReq(false);
+        goHome(p);
+      }}
       onDone={(p) => {
         setFresh(true);
+        setBpFresh(true);
         setDesignerReq(false);
         setProfile(p);
         // 留住做好的蓝图：返回 / 重新整理 / iPad 收掉分页后还在（Blueprint 打包好后会换成 #bp=…）

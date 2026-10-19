@@ -1047,6 +1047,12 @@ textarea.text-in {
   font-variant-numeric: tabular-nums;
 }
 
+/* 刚出现的一题（steps.jsx useFresh）：前 350 ms 点不到，上一张牌的连点不会落在这一题上 */
+.step.is-fresh,
+.step.is-fresh * {
+  pointer-events: none !important;
+}
+
 /* ───────────────────────── 梦想家卡牌（印刷卡） ───────────────────────── */
 
 .dcard {
@@ -1437,6 +1443,121 @@ html[lang='en'] .dc-tag {
   transform: scale(0.96);
 }
 
+/* 直觉 v2：每题 4–6 张图（SPEC §2.4）。同一张玻璃卡，舞台放宽到 1000；网格按张数和屏幕排：
+   横放 iPad：4 张一排四个（4:3）· 5 张 3 + 2 置中 · 6 张 3 × 2（5 / 6 张的图 3:2，一屏放得下）
+   竖放 iPad：4 张 2 × 2（4:3）· 5 / 6 张两栏三排（3:2，5 张的最后一张置中）
+   手机：两栏（4 张 2 × 2；5 / 6 张两栏三排）；字最多两行、两行等长，同一排的字对齐 */
+.qz-pair .stage {
+  max-width: 1000px;
+  --stage-top: clamp(10px, calc(16vh - 90px), 120px);
+}
+.pair.pick {
+  gap: clamp(10px, 1.4vw, 14px);
+  margin-top: 16px;
+}
+.pair.pick[data-n='4'] {
+  grid-template-columns: repeat(4, 1fr);
+}
+.pair.pick[data-n='5'],
+.pair.pick[data-n='6'] {
+  grid-template-columns: repeat(6, 1fr);
+}
+.pair.pick[data-n='5'] > *,
+.pair.pick[data-n='6'] > * {
+  grid-column: span 2;
+}
+.pair.pick[data-n='5'] > :nth-child(4) {
+  grid-column: 2 / span 2;
+}
+.pair.pick[data-n='5'] .pair-art,
+.pair.pick[data-n='6'] .pair-art {
+  aspect-ratio: 3 / 2;
+}
+.pair.pick .pair-card {
+  padding: 8px 8px 0;
+  border-radius: 20px;
+}
+.pair.pick .pair-art {
+  border-radius: 13px;
+}
+.pair.pick .pair-label {
+  display: grid;
+  place-items: center;
+  min-height: 2.6em;
+  padding: 8px 6px 9px;
+  font-size: 14.5px;
+  line-height: 1.3;
+  text-wrap: balance;
+}
+.pair.pick .pair-label > span {
+  display: block;
+  max-width: 100%;
+}
+.pair.pick .pair-check {
+  top: 14px;
+  right: 14px;
+}
+html[lang='en'] .pair.pick .pair-label {
+  font-size: 14px;
+  letter-spacing: -0.005em;
+}
+
+@media (max-width: 900px) {
+  /* 竖放：三排图要放得下 —— 题目卡往上提一点；两栏的字一行就放得下（最长的英文 ≈ 280 px），不用留两行的高 */
+  .qz-pair .stage {
+    --stage-top: clamp(10px, calc(10vh - 60px), 64px);
+  }
+  .pair.pick .pair-label {
+    min-height: 1.3em;
+  }
+  .pair.pick[data-n='4'] {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .pair.pick[data-n='5'],
+  .pair.pick[data-n='6'] {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .pair.pick[data-n='5'] > :nth-child(4) {
+    grid-column: span 2;
+  }
+  .pair.pick[data-n='5'] > :nth-child(5) {
+    grid-column: 2 / span 2;
+  }
+}
+@media (max-width: 560px) {
+  .qz-pair .stage {
+    --stage-top: 10px;
+  }
+  .pair.pick {
+    gap: 9px;
+    margin-top: 12px;
+  }
+  .pair.pick .pair-card {
+    padding: 6px 6px 0;
+    border-radius: 16px;
+  }
+  .pair.pick .pair-art {
+    border-radius: 11px;
+  }
+  /* 5 / 6 张在手机上照样 3:2（同设计稿）：4:3 三排要 ≈ 700 px 高，iPhone 的 Safari 可见区只有 ≈ 660 px，
+     最后一排得往下滑 —— 三秒的直觉题不能让人滑。裁掉的只是照片上下各一点天花和地面 */
+  .pair.pick .pair-label {
+    min-height: 2.6em;
+    padding: 6px 3px 7px;
+    font-size: 13px;
+  }
+  html[lang='en'] .pair.pick .pair-label {
+    font-size: 12.5px;
+    line-height: 1.25;
+  }
+  .pair.pick .pair-check {
+    top: 10px;
+    right: 10px;
+    width: 24px;
+    height: 24px;
+  }
+}
+
 /* 小照片（Vignette）：同一个画框、同一个圆角；载入时从纸色淡入 */
 .vg {
   display: block;
@@ -1451,6 +1572,46 @@ html[lang='en'] .dc-tag {
 }
 .vg-photo.is-ready {
   opacity: 1;
+}
+/* 还没拍好照片的选项：用它的材质拼四格色卡（Vignette.jsx；底色来自材质库），像摊在桌上的材料小样 */
+.vg.vg-collage {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 2px;
+  background: var(--bg-deep);
+}
+.vg-collage > i {
+  display: block;
+  /* 左上方一点柔光、右下方一点影子：平的色块看起来像一块实物小样 */
+  background-image:
+    radial-gradient(120% 90% at 22% 18%, rgba(var(--glass-rgb), 0.28), transparent 62%),
+    linear-gradient(160deg, transparent 55%, rgba(var(--shade-rgb), 0.12));
+  box-shadow: inset 0 0 0 0.5px rgba(var(--shade-rgb), 0.1);
+}
+.vg-collage > i.cat-metal {
+  background-image:
+    linear-gradient(115deg, transparent 28%, rgba(var(--glass-rgb), 0.55) 46%, transparent 64%),
+    linear-gradient(160deg, transparent 50%, rgba(var(--shade-rgb), 0.2));
+}
+.vg-collage > i.cat-stone {
+  background-image:
+    radial-gradient(140% 100% at 30% 20%, rgba(var(--glass-rgb), 0.32), transparent 60%),
+    repeating-linear-gradient(118deg, transparent 0 22px, rgba(var(--shade-rgb), 0.05) 22px 23px, transparent 23px 51px);
+}
+.vg-collage > i.cat-wood {
+  background-image:
+    repeating-linear-gradient(92deg, rgba(var(--shade-rgb), 0.06) 0 1px, transparent 1px 7px, rgba(var(--glass-rgb), 0.05) 7px 9px, transparent 9px 15px),
+    radial-gradient(120% 90% at 22% 18%, rgba(var(--glass-rgb), 0.22), transparent 62%);
+}
+.vg-collage.n1 > i {
+  grid-area: 1 / 1 / 3 / 3;
+}
+.vg-collage.n2 > i {
+  grid-row: 1 / 3;
+}
+.vg-collage.n3 > i:first-child {
+  grid-row: 1 / 3;
 }
 .pair-art {
   position: relative;
@@ -3672,6 +3833,11 @@ html[lang='en'] .bp-farewell {
 }
 .step-pair.is-picked .breath {
   opacity: 0;
+}
+/* 计时线的长短跟着张数走（PairStep 设 --breath = 2.4 秒 + 0.3 秒 × 张数）；光头和金线一起走完 */
+.breath i,
+.breath::after {
+  animation-duration: var(--breath, 3s);
 }
 
 /* 神灯的进度圈：一颗发光的头跟着圈走 */

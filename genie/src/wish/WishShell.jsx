@@ -9,7 +9,15 @@
 //   · 一个音乐小胶囊 → 面板：音量 · 静音（音乐 + 按钮音效 + 潘吉一起；只对这一位客人有效）·
 //     三个开关：按钮音效 · 自然声 · 潘吉说话（「潘吉说话」记在这台设备上；下一位客人会复原成这一位开始时的样子）。
 //     声音被系统暂停（锁屏、来电、切去 WhatsApp）时显示「轻触继续音乐」，那一下轻触先恢复声音。
-//   · 员工区：长按 WISH 字标约 3 秒（有进度圈）→ 下一位客人 · 设计师版 · 结束许愿模式 · 语言。客人不会误触。
+//   · 员工区：长按 WISH 字标约 3 秒（有进度圈）→ 下一位客人 · 设计师版 · 帮客人上传户型图 · 结束许愿模式 · 语言。客人不会误触。
+//   · 「带它回家」（揭晓之后：你的家 · 案例 · 户型图 · 生成，子页面报 page:'home'）：音乐和蓝图一样《归家》×0.5；
+//     客人按「请员工帮我上传」→ 子页面发 {type:'plan-wait', on}，WISH 字标上亮一颗金色的小点；员工在员工区「帮客人上传户型图」
+//     选文件（文件选择只在员工区里，客人碰不到）→ 外壳发 {type:'plan-file', file} 给子页面（P / K / R 屏或 3D）去读。
+//     iframe 可以用相机（allow camera）：客人在许愿模式里拍户型图用的是页面里的相机，不是文件选择。
+//   · 最后一步（业主 2026-10-19）：客人走完「带它回家」、在 3D 里看见自己的家（studio.html?from=home）几秒以后，胶囊旁边升起一颗
+//     金色的「交给设计师」→ 一张纸：称呼 + WhatsApp + PDPA 同意 →「预约免费量房」·「把我的家发到 WhatsApp」（src/quiz/home/LeadSheet.jsx）。
+//     名单只存在这台 iPad（localStorage 'genie.leads.v1'）；员工区多一行「客人名单」：看名单、一按导出 CSV（Excel 打得开）、
+//     按一下用 WhatsApp 把客人自己的家发给他、清空（按两下）。客人碰不到员工区，所以这里的下载 / WhatsApp 都只有员工用得到。
 //   · 下一位客人：一道晨光扫过整个画面（fx.wipe dawn），光盖住的那一刻换成新的欢迎页；声音全部复原（音乐《晨光》、音量、
 //     静音、按钮音效、自然声、潘吉）；潘吉说「谢谢你来许愿，下次见！」（闲置自动重来时不说：没人在）。
 //     她道别的时候音乐留在原来那一页的音量（3D 的 ×0.25），说完才用 3 秒慢慢回到《晨光》—— 不会在她说话时涨上来。
@@ -24,8 +32,8 @@
 //   · 动效（动效 SPEC §6.2）：每个按钮按下去都有光（main.jsx 的 fx.install）；面板从胶囊那一角弹出、收起时 180 ms 退回；
 //     员工区打开时一道光扫过 WISH 字标；设计师版 = 那一行被光扫过 → 一道纸色的光换页。
 
-import { useEffect, useRef, useState } from 'react';
-import { RotateCcw, PencilRuler, Power, X, Play, Volume1, Volume2, VolumeX, AudioLines, Leaf, MessageCircleMore } from 'lucide-react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import { RotateCcw, PencilRuler, Power, X, Play, Volume1, Volume2, VolumeX, AudioLines, Leaf, MessageCircleMore, FileUp, Users, Check } from 'lucide-react';
 import LangToggle from '../shared/LangToggle.jsx';
 import { BRAND, CONFIG } from '../shared/config.js';
 import { t, getLang, setLang, useLang } from '../shared/i18n.js';
@@ -33,16 +41,32 @@ import { applyMusic, musicFor, isNightHour } from '../shared/zen.js';
 import { sfx } from '../shared/sfx.js';
 import { voice } from '../shared/voice.js';
 import { useVoiceOn } from '../shared/Pangie.jsx';
-import fx from '../shared/fx.js';
+import fx, { useGleam } from '../shared/fx.js';
 import { bindZenLifecycle, releaseWake, exitFullscreen, startWish, wishStartUrl, MUSIC_DEFAULTS } from './start.js';
 import { layersLabel } from './sounds.js';
+import { sweepKept } from '../shared/keep.js';
 import { useHold } from './useHold.js';
+
+// 「交给设计师」那一步 + 员工区的客人名单：用到的时候才载入（外壳一开始要快）
+const loadLead = () => import('../quiz/home/LeadSheet.jsx');
+const LeadSheet = lazy(loadLead);
+const LeadsPanel = lazy(() => loadLead().then((m) => ({ default: m.LeadsPanel })));
+const LEADS_KEY = 'genie.leads.v1';
+const leadCount = () => {
+  try {
+    const l = JSON.parse(localStorage.getItem(LEADS_KEY) || '[]');
+    return Array.isArray(l) ? l.length : 0;
+  } catch {
+    return 0;
+  }
+};
+const CTA_AFTER_MS = 6000; // 进 3D 多久以后才升起「交给设计师」（先让客人看看自己的家）
 
 const PANEL_MS = 25000; // 面板开着没人碰，自己收起来
 const PANEL_OUT_MS = 180; // 面板收起的那一下（动效 SPEC：180 ms ease-in）
 const SESSION_KEY = 'genie.session.v1';
-const PAGES = ['quiz', 'blueprint', 'studio'];
-const LEVEL = { quiz: 1, blueprint: 'blueprint', studio: 'studio' }; // zen.duck() 认这几个名字（CONFIG.wishDuck）
+const PAGES = ['quiz', 'blueprint', 'home', 'studio'];
+const LEVEL = { quiz: 1, blueprint: 'blueprint', home: 'blueprint', studio: 'studio' }; // zen.duck() 认这几个名字（CONFIG.wishDuck）
 const FADE_MS = CONFIG.idle?.fadeMs ?? 600000;
 const VEIL_TONES = ['dusk', 'dawn', 'paper'];
 const VEIL_CAP = { load: 8000, quiz: 2500 }; // 光最多盖多久（新页面一直没报到也不会挡着客人）
@@ -67,14 +91,14 @@ function useLinger(value, ms) {
 }
 
 /** 员工区的入口：长按 WISH 字标，一圈细线慢慢画满（3 秒）才打开；短按什么都不会发生（只有一声轻触） */
-function HoldMark({ onDone, label, markRef }) {
+function HoldMark({ onDone, label, markRef, dot = false }) {
   const { p, bind } = useHold(onDone);
   return (
     <button
       ref={markRef}
       type="button"
       data-fx="none"
-      className={`ws-mark ${p > 0 ? 'is-holding' : ''} ${p >= 1 ? 'is-done' : ''}`}
+      className={`ws-mark ${p > 0 ? 'is-holding' : ''} ${p >= 1 ? 'is-done' : ''} ${dot ? 'has-dot' : ''}`}
       aria-label={label}
       {...bind}
     >
@@ -118,6 +142,21 @@ export default function WishShell({ zen, host = '', startLang, greet = false, on
   const [dusk, setDusk] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [poke, setPoke] = useState(0); // 面板里有人在操作 → 重新计时
+  const [planWait, setPlanWait] = useState(false); // 客人在等员工帮忙上传户型图（WISH 字标上的金点）
+  const planInput = useRef(null);
+  // 最后一步：这一位客人（3D 里是他的家）· 交给设计师的那张纸 · 已经留好的那一条 · 员工区现在是不是在看名单
+  const [guest, setGuest] = useState(null);
+  const [guestLink, setGuestLink] = useState('');
+  const [ctaOn, setCtaOn] = useState(false);
+  const [leadOpen, setLeadOpen] = useState(false);
+  const [leadDone, setLeadDone] = useState(null);
+  const [staffView, setStaffView] = useState('main');
+  const [leads, setLeads] = useState(0);
+  const ctaT = useRef(0);
+  const ctaRef = useRef(null);
+  const guestRound = useRef(0);
+  const guestId = useRef(null); // 子页面说「这一位要去看 3D 里的家了」（home-done）时记下的档案号
+  const armedDoc = useRef(null); // 已经认过客人的那一个 3D 文档（load 和 3D 自己报到，谁先到都只认一次）
 
   const whereRef = useRef('quiz');
   const mutedRef = useRef(false);
@@ -314,6 +353,17 @@ export default function WishShell({ zen, host = '', startLang, greet = false, on
     setWhere('quiz');
   };
 
+  /** 员工帮客人上传户型图：文件选择只在员工区里；选好 → 交给 iframe 里的页面去读，面板收起 */
+  const sendPlan = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    post({ type: 'plan-file', file });
+    setPlanWait(false);
+    sfx.play('confirm');
+    setPanel(null);
+  };
+
   /** 下一位客人。goodbye：员工按的（潘吉道别）；闲置自动重来时没人在，不说 */
   const nextGuest = ({ goodbye = true } = {}) => {
     if (wiping.current || leavingRef.current) return;
@@ -322,6 +372,9 @@ export default function WishShell({ zen, host = '', startLang, greet = false, on
     const wasMuted = mutedRef.current;
     resetControls();
     voice.newGuest();
+    setPlanWait(false);
+    resetLead();
+    sweepKept(); // 展厅 iPad 可能好几天不关：过了保留期的客人名单 / 员工记录在这里按时删掉（keep.js）
     greetDue.current = false; // 下一位客人：封面自己在第一下轻触时打招呼
     voiceAtGuest.current = voice.enabled;
     // 她道别的时候音乐还是原来那一页的音量；说完再用 3 秒回到《晨光》（同一句话里不会涨 17 dB）
@@ -390,7 +443,56 @@ export default function WishShell({ zen, host = '', startLang, greet = false, on
   const openStaff = () => {
     sfx.play('open'); // 按满 3 秒的那一刻（按下去的那一下已经「笃」过了）
     if (markRef.current) fx.scan(markRef.current, { sound: null });
+    setLeads(leadCount());
+    setStaffView('main');
+    setLeadOpen(false);
     setPanel('staff');
+  };
+
+  // ── 最后一步：交给设计师 ──
+  /** 下一位客人 / 结束：这一位的一切都放掉 */
+  const resetLead = () => {
+    guestRound.current += 1;
+    guestId.current = null;
+    armedDoc.current = null;
+    clearTimeout(ctaT.current);
+    setGuest(null);
+    setGuestLink('');
+    setCtaOn(false);
+    setLeadOpen(false);
+    setLeadDone(null);
+  };
+  /**
+   * 3D 页载好了（iframe 的 load，或者 3D 自己先报到 {type:'page', page:'studio'} —— 字体这些外部样式还在读的时候
+   * load 会晚很久）：是「带它回家」生成的那一个家 → 认出这一位客人，几秒后升起「交给设计师」。同一个文档只认一次。
+   */
+  const onStudioLoad = (win) => {
+    let doc = null;
+    try {
+      doc = win?.document || null;
+    } catch {
+      doc = null;
+    }
+    if (!doc || armedDoc.current === doc) return;
+    armedDoc.current = doc;
+    const r = guestRound.current;
+    loadLead()
+      .then(async (m) => {
+        const p = await m.guestFromStudio(win, guestId.current);
+        if (!p || r !== guestRound.current) return;
+        setGuest((g) => (g?.id === p.id ? g : p));
+        setLeadDone(m.leadFor(p.id)); // 这一位已经留过（回到 3D）：直接是 ✓；换了一位：清掉
+        m.homeLinkFor(p).then((l) => r === guestRound.current && setGuestLink(l));
+        clearTimeout(ctaT.current);
+        ctaT.current = setTimeout(() => r === guestRound.current && setCtaOn(true), fx.motion.reduced ? 800 : CTA_AFTER_MS);
+      })
+      .catch(() => {});
+  };
+  const openLead = (e) => {
+    markActive();
+    if (e?.currentTarget) fx.scan(e.currentTarget, { sound: null });
+    setPanel(null);
+    setLeadOpen(true);
   };
 
   const onPill = () => {
@@ -410,8 +512,10 @@ export default function WishShell({ zen, host = '', startLang, greet = false, on
   const onChild = useRef(null);
   onChild.current = (d) => {
     if (d.type === 'voice') voiceBridge.current?.handle(d);
-    else if (d.type === 'page') goPage(d.page);
-    else if (d.type === 'leaving') {
+    else if (d.type === 'page') {
+      goPage(d.page);
+      if (d.page === 'studio') onStudioLoad(frame.current?.contentWindow);
+    } else if (d.type === 'leaving') {
       // 子页面换页的光正盖着、马上就要 location.assign：外壳接住，盖到新页面载好（蓝图 → 3D：暮色）
       if (!wiping.current && !leavingRef.current) raiseVeil(VEIL_TONES.includes(d.tone) ? d.tone : 'dusk', { until: 'load' });
     }
@@ -420,6 +524,12 @@ export default function WishShell({ zen, host = '', startLang, greet = false, on
       night.current = isNightHour(d.hour);
       if (whereRef.current === 'studio') applyMusic(zen, musicFor('time', d));
     } else if (d.type === 'idle-reset') nextGuest({ goodbye: false });
+    else if (d.type === 'plan-wait') setPlanWait(!!d.on);
+    else if (d.type === 'home-done') {
+      // 客人按了「生成我的家」（或蓝图上的「在 3D 里看见」）：记下是哪一位，先把最后一步那一包载进来
+      if (typeof d.id === 'string') guestId.current = d.id;
+      loadLead();
+    }
     // 'wish'：每个愿望的铃声是按钮音效 wishAdd（客人按下去的那一下），音乐不再响自己的铃
   };
 
@@ -538,8 +648,14 @@ export default function WishShell({ zen, host = '', startLang, greet = false, on
     if (veil.current?.until === 'load') dropVeil();
     if (!win || !doc) return;
     try {
-      if (/studio/.test(win.location.pathname)) goPage('studio');
-      else if (!/(^|[#&])(bp|id)=/.test(win.location.hash.slice(1)) && whereRef.current !== 'quiz') goPage('quiz');
+      if (/studio/.test(win.location.pathname)) {
+        goPage('studio');
+        onStudioLoad(win); // 「带它回家」生成的家：几秒后升起「交给设计师」
+      } else {
+        clearTimeout(ctaT.current);
+        setCtaOn(false);
+        if (!/(^|[#&])(bp|id|home|plan)=/.test(win.location.hash.slice(1)) && whereRef.current !== 'quiz') goPage('quiz');
+      }
     } catch {
       /* ignore */
     }
@@ -606,17 +722,19 @@ export default function WishShell({ zen, host = '', startLang, greet = false, on
   const pillLabel = stalled ? t('轻触继续音乐') : muted ? t('已静音') : t('自然之声');
   const tone = dusk ? 'dusk' : '';
   const popCls = (kind) => `ws-pop ws-${kind} ${tone} ${closing ? 'is-closing' : ''}`;
+  // 「交给设计师」升起来以后，每隔一阵被光扫一下（像揭晓的金色按钮）
+  useGleam(ctaRef, where === 'studio' && !!guest && ctaOn && !leadDone && !leadOpen, { first: 1400, every: 7000 });
 
   return (
     <div ref={rootEl} className={`ws ws-${where} ${dusk ? 'is-dusk' : ''} ${leaving ? 'is-leaving' : ''}`}>
-      <iframe ref={frame} key={src} src={src} title={t('WISH 许愿模式')} className="ws-frame" onLoad={onLoad} allow="fullscreen; autoplay; clipboard-write" />
+      <iframe ref={frame} key={src} src={src} title={t('WISH 许愿模式')} className="ws-frame" onLoad={onLoad} allow="fullscreen; autoplay; clipboard-write; camera" />
       {/* 换文档时接住画面的那一层光（raiseVeil / dropVeil 直接改它的 class，不经过 React） */}
       <div ref={veilEl} className="ws-veil" aria-hidden="true">
         <i />
       </div>
 
       <div className={`ws-dock ${tone}`}>
-        <HoldMark label={t('员工区：按住 3 秒')} markRef={markRef} onDone={openStaff} />
+        <HoldMark label={planWait ? t('员工区：按住 3 秒 · 客人在等员工上传户型图') : t('员工区：按住 3 秒')} markRef={markRef} onDone={openStaff} dot={planWait} />
         <button
           type="button"
           className={`ws-pill ${stalled ? 'is-stalled' : ''} ${muted ? 'is-muted' : ''}`}
@@ -639,6 +757,21 @@ export default function WishShell({ zen, host = '', startLang, greet = false, on
           )}
           <span className="ws-pill-label">{pillLabel}</span>
         </button>
+        {/* 最后一步：客人在 3D 里看过自己的家 → 「交给设计师」（留好了 = 安静的一颗 ✓，按了再看一次谢谢卡） */}
+        {/* 面板（声音 / 员工区）打开时先收起来：横放时它浮在胶囊上面，会被面板压住一角 */}
+        {where === 'studio' && guest && ctaOn && !shownPanel && (
+          <button
+            ref={ctaRef}
+            type="button"
+            className={`ws-lead-cta ${leadDone ? 'is-done' : ''}`}
+            onClick={openLead}
+            data-sfx={leadDone ? 'open' : 'confirm'}
+            aria-haspopup="dialog"
+          >
+            {leadDone ? <Check size={16} strokeWidth={2.6} aria-hidden="true" /> : <span aria-hidden="true">✦</span>}
+            <span>{leadDone ? t('已交给设计师') : t('交给设计师')}</span>
+          </button>
+        )}
       </div>
 
       {shownPanel && <div className={`ws-scrim ${shownPanel} ${closing ? 'is-closing' : ''}`} onPointerDown={() => setPanel(null)} />}
@@ -686,7 +819,15 @@ export default function WishShell({ zen, host = '', startLang, greet = false, on
         </div>
       )}
 
-      {shownPanel === 'staff' && (
+      {shownPanel === 'staff' && staffView === 'leads' && (
+        <div className={`${popCls('staff')} ws-pop-leads`} role="dialog" aria-label={t('客人名单')} onPointerDown={() => setPoke((n) => n + 1)}>
+          <Suspense fallback={null}>
+            <LeadsPanel onBack={() => (setStaffView('main'), setLeads(leadCount()))} onPoke={() => setPoke((n) => n + 1)} />
+          </Suspense>
+        </div>
+      )}
+
+      {shownPanel === 'staff' && staffView !== 'leads' && (
         <div className={popCls('staff')} role="dialog" aria-label={t('员工')} onPointerDown={() => setPoke((n) => n + 1)}>
           <header className="ws-pop-head">
             <div>
@@ -716,6 +857,41 @@ export default function WishShell({ zen, host = '', startLang, greet = false, on
                 <em>{where === 'blueprint' ? t('在这份蓝图上打开设计师版') : t('到了蓝图页才能打开')}</em>
               </span>
             </button>
+            {/* 客人说「请员工帮我上传」：员工在这里选文件（客人那一页永远没有文件选择） */}
+            <button
+              type="button"
+              className={`ws-act ${planWait ? 'is-wait' : ''}`}
+              onClick={() => planInput.current?.click()}
+              disabled={where !== 'home' && where !== 'studio'}
+              data-sfx="open"
+            >
+              <i>
+                <FileUp size={20} strokeWidth={1.8} aria-hidden="true" />
+              </i>
+              <span>
+                <b>{t('帮客人上传户型图')}</b>
+                <em>{where === 'home' || where === 'studio' ? (planWait ? t('客人在等：照片、截图、PDF 都可以') : t('照片、截图、PDF 都可以')) : t('到了「户型图」那一步才能上传')}</em>
+              </span>
+            </button>
+            <input ref={planInput} type="file" accept="image/*,application/pdf" className="ws-file" tabIndex={-1} aria-hidden="true" onChange={sendPlan} />
+            {/* 客人留下的联系方式（只在这台 iPad）：看名单、导出 CSV */}
+            <button
+              type="button"
+              className="ws-act"
+              onClick={() => {
+                loadLead();
+                setStaffView('leads');
+              }}
+              data-sfx="open"
+            >
+              <i>
+                <Users size={20} strokeWidth={1.8} aria-hidden="true" />
+              </i>
+              <span>
+                <b>{t('客人名单（{0}）', [leads])}</b>
+                <em>{t('称呼、WhatsApp、预算 · 导出 Excel（CSV）')}</em>
+              </span>
+            </button>
             <button type="button" className="ws-act is-end" onClick={endWish}>
               <i>
                 <Power size={20} strokeWidth={1.8} aria-hidden="true" />
@@ -731,6 +907,23 @@ export default function WishShell({ zen, host = '', startLang, greet = false, on
             <LangToggle onPick={pickLang} />
           </div>
         </div>
+      )}
+
+      {/* 交给我们的设计师：称呼 + WhatsApp + PDPA →「预约免费量房」·「把我的家发到 WhatsApp」 */}
+      {leadOpen && guest && (
+        <Suspense fallback={null}>
+          <LeadSheet
+            key={guest.id}
+            profile={guest}
+            link={guestLink}
+            done={leadDone}
+            onSaved={(l) => setLeadDone(l)}
+            onClose={() => {
+              setLeadOpen(false);
+              markActive();
+            }}
+          />
+        </Suspense>
       )}
     </div>
   );

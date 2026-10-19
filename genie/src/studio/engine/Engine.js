@@ -523,8 +523,10 @@ export class Engine {
     // 可选：上 / 下最少要留多少（工具条的底边、材质栏本身的高度）—— 上下加起来太多时 effInsets 缩到这里为止
     if (ins.minTop != null) next.minTop = Math.min(next.top, n(ins.minTop));
     if (ins.minBottom != null) next.minBottom = Math.min(next.bottom, n(ins.minBottom));
+    // 左边是实心的一块（对照的照片）：左右合计超过一半宽时，先缩右边，左边不缩
+    if (ins.minLeft != null) next.minLeft = Math.min(next.left, n(ins.minLeft));
     const cur = this.insets;
-    if (['left', 'right', 'top', 'bottom', 'minTop', 'minBottom'].every((k) => Math.abs((next[k] ?? -1) - (cur[k] ?? -1)) < 2)) return;
+    if (['left', 'right', 'top', 'bottom', 'minTop', 'minBottom', 'minLeft'].every((k) => Math.abs((next[k] ?? -1) - (cur[k] ?? -1)) < 2)) return;
     const framed = this.isFramed();
     this._insetsSet = true;
     this.insets = next;
@@ -555,6 +557,13 @@ export class Engine {
     const H = this.container.clientHeight || 1;
     const { left, right, top, bottom } = this.insets;
     const kx = Math.min(1, (W * 0.5) / Math.max(1, left + right));
+    let l = left * kx;
+    let r = right * kx;
+    const minL = this.insets.minLeft;
+    if (minL != null && l < minL) {
+      l = Math.min(left, minL);
+      r = Math.max(0, Math.min(right, W * 0.5 - l));
+    }
     const budget = H * (H < 800 ? 0.6 : 0.5);
     let t = top;
     let b = bottom;
@@ -564,7 +573,7 @@ export class Engine {
       t = Math.max(tMin, budget - b);
       b = Math.max(bMin, budget - t);
     }
-    return { left: left * kx, right: right * kx, top: t, bottom: b };
+    return { left: l, right: r, top: t, bottom: b };
   }
 
   /** 主点要去的地方（没被挡住那块的中心，相对画布中心） */

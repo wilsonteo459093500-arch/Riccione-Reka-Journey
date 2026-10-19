@@ -26,9 +26,38 @@ const tanhPct = (sum, k = 4.5) => {
 
 const isSolo = (players) => (players || 'solo') === 'solo';
 
+/** 藏 / 展滑杆的中点：几乎每个人都拉在 20–30 % 看得见（v1 用 50，等于免费送每个人一票「藏」） */
+export const RATIO_NEUTRAL = 30;
+
+/**
+ * 四条轴的「展厅客人平均」：先减掉再算百分比，牌才不会一面倒（v1 三成的人都是 WMNH）。
+ * 怎么来的：设计师的客人模型（test/quiz-v2.test.mjs，马来西亚展厅客人偏暖、偏简、偏藏）模拟两万人，
+ * 每条轴原始分数的中位数 × 0.7，取到 0.1。改了任何一题的 fx，就按同样的办法重算一次。
+ * 按答了几题直觉题按比例减（一题都没答 = 不减：空白档案还是各 51%）。暗轴不减。
+ */
+export const AXIS_CENTER = { temp: 1.1, density: 1.3, texture: 0.8, storage: 2.5 };
+
+/**
+ * 希克定律：n 个选项要想多久 ∝ log2(n + 1)。除以它 = 换算成「二选一」的反应时间，
+ * 这样 6 选 1 慢一点不会被当成犹豫（QUICK_MS / SLOW_MS 是按二选一定的）。hick(2) = 1。
+ */
+export const hick = (n) => Math.log2(Math.max(2, n || 2) + 1) / Math.log2(3);
+
+/** 某题某个选项的计分（v2 的 options[]；v1 的 pair.fx[v] 也认） */
+function fxOf(pair, v) {
+  return pair?.options?.find?.((o) => o.v === v)?.fx ?? pair?.fx?.[v];
+}
+
+/** 这一题当时屏幕上有几个选项：left 是当时的顺序（v2 = 'cadbfe' 这样的字串；v1 = 'a' / 'b' → 2） */
+function shownOf(a, pair) {
+  if (typeof a?.left === 'string') return a.left.length > 1 ? a.left.length : 2;
+  if (Array.isArray(pair?.options)) return pair.options.length;
+  return 2;
+}
+
 /**
  * 把答案算成轴分数。
- * answers.pairs:   { [pairId]: { pick:'a'|'b', ms:number, left? } }
+ * answers.pairs:   { [pairId]: { pick:'a'…'f', ms:number, left?: 当时的排列（v2 字串）/ 左边那个（v1） } }
  * answers.life:    { [id]: v | v[] }
  * answers.ratio:   0–100（看得见的比例）；answers.ratioTouched === false = 滑杆没碰过，不计分
  * answers.players: 'solo' | 'couple' | 'family' —— 反应时间只在一个人玩时加权
@@ -40,11 +69,15 @@ export function scoreAxes(answers, { PAIRS = [], LIFE = [] } = {}) {
   };
   // 两个人 / 一家人边商量边选：慢是在讨论，不是犹豫 —— 不加权
   const solo = isSolo(answers?.players);
+  let answered = 0;
   for (const p of PAIRS) {
     const a = answers?.pairs?.[p.id];
-    if (!a) continue;
-    const w = !solo ? 1 : a.ms < QUICK_MS ? 1.25 : a.ms > SLOW_MS ? 0.8 : 1;
-    add(p.fx[a.pick], w);
+    const fx = a && fxOf(p, a.pick);
+    if (!fx) continue;
+    answered++;
+    const ms = a.ms / hick(shownOf(a, p));
+    const w = !solo ? 1 : ms < QUICK_MS ? 1.25 : ms > SLOW_MS ? 0.8 : 1;
+    add(fx, w);
   }
   for (const l of LIFE) {
     const v = answers?.life?.[l.id];
@@ -52,38 +85,41 @@ export function scoreAxes(answers, { PAIRS = [], LIFE = [] } = {}) {
     for (const one of [].concat(v)) add(l.fx[one]);
   }
   // 藏 / 展滑杆：客人真的拖过才计分（没碰过的默认值不该替客人投「藏」一票）
-  if (typeof answers?.ratio === 'number' && answers.ratioTouched !== false) sum.storage += (50 - answers.ratio) / 22;
+  if (typeof answers?.ratio === 'number' && answers.ratioTouched !== false) sum.storage += (RATIO_NEUTRAL - answers.ratio) / 22;
   const avoid = new Set(answers?.avoid || []);
   if (avoid.has('openshelf')) sum.storage += 1;
   if (avoid.has('glassdoor')) sum.storage += 0.4;
 
+  const k = PAIRS.length ? answered / PAIRS.length : 0;
   const axes = {};
-  for (const ax of AXES) axes[ax.id] = tanhPct(sum[ax.id]);
+  for (const ax of AXES) axes[ax.id] = tanhPct(sum[ax.id] - (AXIS_CENTER[ax.id] || 0) * k);
   const hidden = {};
   for (const ax of HIDDEN_AXES) hidden[ax.id] = tanhPct(sum[ax.id], 2.5);
   return { axes, hidden };
 }
 
 /**
- * 反应时间和客人自己的中位数比（第 1 题还在熟悉玩法，不算）。
+ * 反应时间和客人自己的中位数比（第 1 题还在熟悉玩法，不算）。选项多的题按希克定律换算成二选一再比
+ * （n = 当时的排列 left 的长度；旧答案 / 没有 left = 2）。
  * → { median, n, quick: [{ id, pick, ms }]（最快的在前）, slow: [{ id, pick, ms }]（最慢的在前） }
  */
 export function reactionStats(pairs) {
   const list = Object.entries(pairs || {})
     .slice(1)
-    .filter(([, a]) => a && Number.isFinite(a.ms));
+    .filter(([, a]) => a && Number.isFinite(a.ms))
+    .map(([id, a]) => ({ id, a, rel: a.ms / hick(shownOf(a)) }));
   const n = list.length;
   const none = { median: 0, n, quick: [], slow: [] };
   if (n < 3) return none;
-  const sorted = list.map(([, a]) => a.ms).sort((x, y) => x - y);
+  const sorted = list.map((x) => x.rel).sort((x, y) => x - y);
   const median = n % 2 ? sorted[n >> 1] : (sorted[n / 2 - 1] + sorted[n / 2]) / 2;
   if (!(median > 0)) return none;
-  const row = ([id, a]) => ({ id, pick: a.pick, ms: a.ms });
+  const row = (x) => ({ id: x.id, pick: x.a.pick, ms: x.a.ms });
   return {
     median,
     n,
-    quick: list.filter(([, a]) => a.ms < QUICK_REL * median).map(row).sort((x, y) => x.ms - y.ms),
-    slow: list.filter(([, a]) => a.ms > SLOW_REL * median).map(row).sort((x, y) => y.ms - x.ms),
+    quick: list.filter((x) => x.rel < QUICK_REL * median).sort((x, y) => x.rel - y.rel).map(row),
+    slow: list.filter((x) => x.rel > SLOW_REL * median).sort((x, y) => y.rel - x.rel).map(row),
   };
 }
 
@@ -392,6 +428,8 @@ export function buildProfile(answers, meta = {}, flow = {}) {
   if (touched) storage.touched = touched;
   const profile = {
     v: PROFILE_VERSION,
+    // 题库版本（2 = 十题 4–6 选一）：没有 qv 的旧档案是 v1（十二题二选一），轴分数照存的用，不重算
+    qv: 2,
     id: meta.id || `G${Date.now().toString(36).toUpperCase()}`,
     createdAt: meta.createdAt || new Date().toISOString(),
     name: (answers.name || '').trim(),

@@ -86,10 +86,22 @@ export function pageTextScore(text) {
   const s = String(text || '').toUpperCase().replace(/\s+/g, ' ');
   if (!s.trim()) return 0;
   const count = (re) => (s.match(re) || []).length;
-  let score = 5 * Math.min(2, count(/FLOOR\s+PLAN/g)) + 5 * Math.min(2, count(/PELAN\s+(LANTAI|TINGKAT|ARAS)/g));
+  // 中文图名（正则字面量，不是界面文字）：平面图 / 平面布置图 / 户型图
+  let score = 5 * Math.min(2, count(/FLOOR\s+PLAN/g)) + 5 * Math.min(2, count(/PELAN\s+(LANTAI|TINGKAT|ARAS)/g)) + 5 * Math.min(2, count(/平面图|平面布置图|户型图/g));
   for (const w of ['GROUND', 'FIRST', 'SECOND', 'TINGKAT']) if (new RegExp(`\\b${w}\\b`).test(s)) score += 1;
-  if (/\b(ELECTRICAL|PLUMBING|PAIP|ELEVATIONS?|SECTIONS?|KERATAN|PANDANGAN|ROOF|BUMBUNG|LOKASI|TAPAK|SITE)\b/.test(s)) score -= 2;
+  if (/\b(ELECTRICAL|PLUMBING|PAIP|ELEVATIONS?|SECTIONS?|KERATAN|PANDANGAN|ROOF|BUMBUNG|LOKASI|TAPAK|SITE)\b/.test(s) || /立面|剖面|屋顶|电气|给排水/.test(s)) score -= 2;
   return score;
+}
+
+/** PDF 一页的文字里写到了哪几层（自下而上、不重复）：给多页的户型图排楼层顺序 */
+export function pageLevels(text) {
+  const t = String(text || '').toUpperCase().replace(/\s+/g, ' ').replace(NOT_LEVEL, ' ');
+  const out = [];
+  if (RE_GROUND.test(t)) out.push('ground');
+  if (RE_FIRST.test(t)) out.push('first');
+  if (RE_SECOND.test(t)) out.push('second');
+  if (RE_THIRD.test(t)) out.push('third');
+  return out;
 }
 
 // ───────────── 框 ─────────────

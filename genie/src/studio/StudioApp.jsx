@@ -7,6 +7,11 @@
 //       studio.html?mode=wish      客户许愿模式（外壳 iframe 里）：底座写「示范户型 · 概念示意」，语言跟着外壳
 //       ?staff=1                   员工链接（公司 WhatsApp、员工版蓝图点进来）：一定显示设计师的「收纳对账」
 //       ?lang=en                   英文（中文原文就是 key，见 shared/i18n.js）
+//       studio.html?from=home[&case=<id>]#p=<档案>
+//                                  「带它回家」的『生成我的家』（SPEC §8）：客人自己的户型图（这台设备的 genie-handoff → 链接里的小平面图 →
+//                                  最接近他答的那种房子的示范户型，标「示范户型」）+ 他选的参考案例 + 他家里留下来的颜色（锁住）。
+//                                  这位客人已经有方案：「你的家」没改过就直接打开（他的改动都在），改过（home.at 更新）就重新生成。
+//                                  不弹「开始一个空间」。
 //
 // 谁在看（设计师的东西绝不能给客人看到）：
 //   设计师自己建的方案 → 员工版；别人分享来的（sharedFrom）→ 客人版；
@@ -23,7 +28,12 @@ import { buildWalls, buildAllWalls, templatePlan, emptyPlan, migratePlan, isMult
 import * as Furnish from './engine/furnish.js';
 import { CATALOG } from './engine/furniture.js';
 import { DAY_PRESETS } from './engine/daylight.js';
-import { createProject, loadProjects, saveProject, currentProject, packProject, unpackProject, getUnderlays, putUnderlays, migrateProject, loadSettings, safeMaterials } from './store.js';
+import { createProject, loadProjects, saveProject, currentProject, packProject, unpackProject, getUnderlays, putUnderlays, migrateProject, loadSettings, safeMaterials, profileForStudio } from './store.js';
+import { realiseCase } from '../shared/realise.js';
+import { getHomePlan, expandPlan, putHomePlan, putPlanFile } from '../shared/handoff.js';
+import { templateFor, keepLocks, planHint } from '../shared/home.js';
+import sfx from '../shared/sfx.js';
+import * as FX from '../shared/fx.js';
 import { unpackJSON, packJSON, storagePlan, insights } from '../shared/profile.js';
 import { APPLIANCES } from '../quiz/flow.js';
 import { MOOD_BY_ID, tagsOf } from '../shared/moods.js';
@@ -34,13 +44,17 @@ import { BRAND } from '../shared/config.js';
 import { t, L, isEn, setLang } from '../shared/i18n.js';
 import { fmt } from '../shared/units.js';
 import { isWishMode, tellShell } from '../shared/zen.js';
-import MoodPanel from './ui/MoodPanel.jsx';
+import MoodPanel, { CaseRow } from './ui/MoodPanel.jsx';
+import Compare from './ui/Compare.jsx';
+import SampleBanner from './ui/SampleBanner.jsx';
+import { useCaseLib, loadCase, caseWithImages, roomName } from './ui/caseLib.js';
+import { offerSupply } from './offer.js';
 import DaylightPanel from './ui/DaylightPanel.jsx';
 import MaterialDock from './ui/MaterialDock.jsx';
 import Callouts from './ui/Callouts.jsx';
 import Toolbar from './ui/Toolbar.jsx';
 import { HoverTip, SelectionBar } from './ui/ItemUI.jsx';
-import { Icon, FurnIcon, ConfirmSheet, slotName, listSep, roomLabel, useMedia } from './ui/kit.jsx';
+import { Icon, FurnIcon, ConfirmSheet, slotName, listSep, roomLabel, useMedia, lockList, lockWord, midList } from './ui/kit.jsx';
 import StartModal from './ui/StartModal.jsx';
 import ShareModal from './ui/ShareModal.jsx';
 import HelpModal from './ui/HelpModal.jsx';
@@ -51,6 +65,14 @@ import PlanEditor from './plan/PlanEditor.jsx';
 const WISH = isWishMode();
 const QS = new URLSearchParams(location.search);
 const SHOWROOM = !WISH && QS.get('demo') === '1';
+/** 从「带它回家」的『生成我的家』进来（SPEC §8.1）；case = 先用哪一个参考案例 */
+const FROM_HOME = QS.get('from') === 'home';
+const CASE_Q = QS.get('case') || '';
+/** 锁住的表面叫什么（「保留了你家的地板、柜子」；英文小写） */
+const lockNames = (locked) => lockList(locked);
+const caseTitle = (c) => (c?.title ? (typeof c.title === 'object' ? L(c.title) : t(String(c.title))) : '');
+const caseRefOf = (c) => (c ? { id: c.id, rev: c.rev || 1, title: typeof c.title === 'object' ? { zh: c.title.zh || '', en: c.title.en || '' } : { zh: String(c.title || ''), en: '' } } : null);
+const sameStyle = (a, b) => JSON.stringify(a || {}) === JSON.stringify(b || {});
 
 /** 从哪一页点进来的：员工版蓝图（quiz.html?staff=1）→ 'staff'；客人版蓝图（quiz.html）→ 'client'；其他 → '' */
 const REF = (() => {
@@ -148,7 +170,22 @@ function wallSpot(floor, furniture, kind, pt, room) {
 }
 
 const HISTORY = 60;
-const snap = (p) => ({ materials: { ...p.materials }, furniture: p.furniture.map((f) => ({ ...f })), time: p.time, mood: p.mood, plan: p.plan, furnEdited: p.furnEdited });
+const snap = (p) => ({
+  materials: { ...p.materials },
+  furniture: p.furniture.map((f) => ({ ...f })),
+  time: p.time,
+  mood: p.mood,
+  plan: p.plan,
+  furnEdited: p.furnEdited,
+  // 参考案例：换案例、解锁、套用建议都能撤销
+  caseId: p.caseId ?? null,
+  caseRef: p.caseRef ?? null,
+  locked: p.locked ?? null,
+  caseStyle: p.caseStyle ?? null,
+  softened: p.softened ?? null,
+  suggestions: p.suggestions ?? null,
+  sample: p.sample ?? false,
+});
 
 /** 锚点几乎没动（< 0.5px）就不重画整个界面 */
 function anchorsSame(a, b) {
@@ -321,8 +358,17 @@ export default function StudioApp() {
   const [ctx, setCtx] = useState(null); // WebGL：null | 'lost' | 'restored'
   const [ask, setAsk] = useState(null); // 纸色确认框
   const phone = useMedia('(max-width: 600px)'); // 手机：选择条停在底部（时间滑杆上面），不浮在模型中间
+  // 竖着拿的 iPad（对照：上面照片、下面 3D）
+  const portrait = useMedia('(orientation: portrait) and (min-width: 601px)');
   const toastTimer = useRef(0);
   const toastRaf = useRef(0);
+  // 参考案例（SPEC §8.4）：套用后的那一句（带「还原案例原样」）、对照、示范户型的提示条
+  const [applyNote, setApplyNote] = useState(null); // { text, raw, id }
+  const [cmp, setCmp] = useState({ mode: 'off', split: 0.5, room: 'living' }); // mode：off · pip · split（横屏 / 竖屏）· home | photo（手机）
+  const [cmpCase, setCmpCase] = useState(null); // { c（照片读好了）, release }
+  const panelsBeforeCmp = useRef(null);
+  const [banner, setBanner] = useState({ state: 'idle', pct: 0 });
+  const caseLib = useCaseLib(project?.cases);
 
   // 提示停留的时间从「真正画出来」那一刻算起：换一整套材质时，下一帧要编译着色器，慢设备上会卡一下，
   // 计时要是从点击就开始，提示还没画出来就过期了。
@@ -383,8 +429,79 @@ export default function StudioApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /**
+   * 「带它回家」进来的方案（SPEC §8.1）：平面图按顺序找 —— 这台设备的 genie-handoff（客人在许愿之旅里拍 / 选的、读好的）→
+   * 链接里的小平面图（home.plan.inline）→ 最接近他答的那种房子的示范户型（sample）。
+   * 这位客人已经有方案、「你的家」也没改过（home.at 不比方案新）、平面图也没从示范户型变成真的 → 直接用（他的改动都在）。
+   * 否则：realiseCase（案例 + 锁住留下来的颜色 + 雷区 + 调和）→ 按案例的家具风格自动摆家具。
+   */
+  async function homeProject(prof0) {
+    const prof = profileForStudio(prof0);
+    const home = prof0.home || null;
+    const all = loadProjects();
+    const existing = all.find((x) => x.profile?.id === prof0.id && x.homeAt) || all.find((x) => x.profile?.id === prof0.id) || null;
+    let rec = null;
+    try {
+      rec = await getHomePlan(prof0.id);
+    } catch {
+      rec = null;
+    }
+    let plan = null;
+    let underlays = null;
+    try {
+      if (rec?.plan) {
+        plan = migratePlan(rec.plan);
+        underlays = rec.underlays || null;
+      } else if (home?.plan?.inline) {
+        const ex = expandPlan(home.plan.inline);
+        if (ex) plan = migratePlan(ex);
+      }
+    } catch {
+      plan = null;
+    }
+    if (plan && !plan.floors.some((f) => f.rooms.length)) plan = null;
+    const sample = !plan;
+    if (!plan) plan = templatePlan(templateFor(home || {}));
+    const homeAt = home?.at || null;
+    const newer = (a, b) => (Date.parse(a || '') || 0) > (Date.parse(b || '') || 0);
+    if (existing && existing.homeAt && !newer(homeAt, existing.homeAt) && !(existing.sample && !sample)) {
+      // 选过的案例在蓝图上又改了（cases 变了）：那一排跟着换；正在用的案例不动（下面 ?case= 会换）
+      const cases = prof.cases?.length ? prof.cases : existing.cases || [];
+      return { project: { ...existing, profile: { ...existing.profile, ...prof }, cases }, fresh: false };
+    }
+    const want = CASE_Q || prof0.caseId || prof0.cases?.[0]?.id || null;
+    const caseObj = want ? await loadCase(want) : null;
+    const r = realiseCase({ caseObj, keep: keepLocks(home || {}), profile: prof });
+    const now = new Date().toISOString();
+    const base = existing || { id: uid('p'), name: prof.name ? t('{0} 的家', [prof.name]) : t('我的家'), createdAt: now, updatedAt: now };
+    const project = {
+      ...base,
+      profile: prof,
+      plan,
+      furniture: Furnish.furnish(plan, buildAllWalls(plan), prof, { style: r.style }),
+      furnEdited: false,
+      materials: r.materials,
+      mood: caseObj ? `case:${caseObj.id}` : 'card',
+      time: r.time,
+      caseId: caseObj?.id ?? null,
+      caseRef: caseRefOf(caseObj),
+      cases: prof.cases || [],
+      keep: home?.keep || null,
+      locked: r.locked,
+      caseStyle: r.style,
+      softened: r.softened,
+      suggestions: r.suggestions,
+      homeAt,
+      sample,
+      floorView: 'all',
+    };
+    if (underlays && Object.keys(underlays).length) await saveUnderlays(project.id, underlays);
+    return { project, fresh: true, realised: r, caseObj };
+  }
+
   async function boot() {
     let p = null;
+    let homeBoot = null;
     if (SHOWROOM) {
       // 展厅：永远是示范户型，不读本机方案、不读链接 → 底座上只会是品牌字样
       p = createProject({ plan: templatePlan('condo3'), mood: 'cozy' });
@@ -395,14 +512,21 @@ export default function StudioApp() {
           const prof = await unpackJSON(h.slice(2));
           if (prof?.code) {
             setIncomingProfile(prof);
-            const existing = loadProjects().find((x) => x.profile?.id === prof.id);
-            p = existing || createProject({ plan: templatePlan('condo3'), profile: prof });
+            let existing = null;
+            if (FROM_HOME) {
+              // 「生成我的家」：直接是他的家（不弹「开始一个空间」）
+              homeBoot = await homeProject(prof);
+              p = homeBoot.project;
+            } else {
+              existing = loadProjects().find((x) => x.profile?.id === prof.id);
+              p = existing || createProject({ plan: templatePlan('condo3'), profile: prof });
+            }
             // 档案链接默认是客人的：从客人版蓝图点进来、或者链接被复制到别处打开 / 转给家人（没有 referrer）都一样。
             // 记在方案上（这台设备上已有的那一份也改成客人版）：重新整理、以后直接打开 studio.html 也不会露出设计师的东西。
             // 设计师一定是从员工版蓝图或 ?staff=1 进来的（STAFF_LINK），员工链接会再把它改回员工版（见下面）。
             if (!WISH && !STAFF_LINK) p = { ...p, audience: 'client' };
             // 许愿模式：客人直接看到自己的家（示范户型 + 他的材质），设计师再换成真实平面图；客人版也不弹「开始一个空间」
-            if (!existing && !WISH && staffFor(p)) setModal('start');
+            if (!FROM_HOME && !existing && !WISH && staffFor(p)) setModal('start');
           }
         } else if (h.startsWith('s=')) {
           // 分享来的：新 id + sharedFrom（store.unpackProject）→ 默认是客人版；员工链接（?staff=1）在下面改成员工版
@@ -425,6 +549,10 @@ export default function StudioApp() {
     history.replaceState(null, '', location.pathname + location.search);
     loadProjectIntoEngine(p, true);
     tellShell('page', { page: 'studio' });
+    if (homeBoot?.fresh) setTimeout(() => noteApplied(homeBoot.caseObj, homeBoot.realised, { first: true }), 700);
+    // 同一个家、蓝图上点了另一个参考案例（?case=）：换成那一个（可以撤销）
+    else if (homeBoot && CASE_Q && CASE_Q !== (p.caseId ?? null)) setTimeout(() => applyCase(CASE_Q), 500);
+    else if (homeBoot) setTimeout(() => flash(t('欢迎回来 —— 这是你上次的家'), 3200), 700);
   }
 
   /** 底座上的字：客人名字 + 梦想家；许愿模式 / 展厅写明「示范户型 · 概念示意」；展厅从不出现客人名字。
@@ -434,7 +562,9 @@ export default function StudioApp() {
     const d = p.profile && DREAMER_BY_CODE[p.profile.code];
     const title = p.profile?.name ? `${String(p.profile.name).toUpperCase()} · DREAM HOME` : BRAND.plinth;
     let subtitle = d ? (isEn() ? d.en : `${d.zh} · ${d.en}`) : BRAND.full;
-    if (WISH) subtitle = t('示范户型 · 概念示意');
+    // 示范户型（还没有客人的户型图）一定写清楚；许愿模式里客人自己的户型图：写「概念示意」
+    if (p.sample || (WISH && !p.homeAt)) subtitle = t('示范户型 · 概念示意');
+    else if (WISH) subtitle = d ? `${L(d)} · ${t('概念示意')}` : t('你的家 · 概念示意');
     return { title, subtitle };
   }
 
@@ -526,11 +656,11 @@ export default function StudioApp() {
   };
 
   const applyMaterial = useCallback(
-    (slotId, matId) => {
+    (slotId, matId, extra = {}) => {
       const cur = projRef.current;
       if (!cur || cur.materials[slotId] === matId) return;
       engine.current.setMaterial(slotId, matId);
-      commit({ materials: { ...cur.materials, [slotId]: matId }, mood: 'custom' });
+      commit({ materials: { ...cur.materials, [slotId]: matId }, mood: 'custom', ...extra });
       scheduleThumbs();
     },
     [commit, scheduleThumbs],
@@ -551,6 +681,8 @@ export default function StudioApp() {
     // 客人说过不要的（雷区），一键情绪也不能带回来
     const safe = safeMaterials(materials, cur.profile);
     materials = safe.materials;
+    // 客人家里留下来的（锁住的地板 / 墙 / 柜子 / 沙发）：一键情绪也不换
+    if (cur.locked && Object.keys(cur.locked).length) materials = { ...materials, ...cur.locked };
     engine.current.setMaterials(materials);
     engine.current.setTime(time);
     commit({ materials, time, mood: id });
@@ -646,6 +778,17 @@ export default function StudioApp() {
       flash(misfitHint(matId, s)); // 已经按当前语言翻好了
       return false;
     }
+    // 客人家里现有的（锁住的）：先问一句；换了就不再锁
+    const lk = projRef.current?.locked;
+    if (lk?.[s] && lk[s] !== matId) {
+      confirmSheet({ title: t('这是你家现有的{0}，要换掉吗？', [lockWord(s)]), body: t('换掉以后它就不再锁住，新的颜色也不再跟着它配。按撤销可以还原。'), ok: t('换掉') }).then((ok) => {
+        if (!ok) return;
+        const { [s]: _gone, ...rest } = projRef.current?.locked || {};
+        applyMaterial(s, matId, { locked: rest });
+        flash(`${slotName(SLOT_BY_ID[s])} → ${L(mat)}`);
+      });
+      return true;
+    }
     applyMaterial(s, matId);
     const hit = avoidHits(mat);
     if (hit.length) flash(t('{0} 说过不要「{1}」—— 想试试也可以，按撤销就能还原', [who(), hit.map((k) => t(AVOID_LABEL[k] || k)).join(listSep())]), 4800);
@@ -667,7 +810,8 @@ export default function StudioApp() {
       });
       if (!ok) return false;
     }
-    const furniture = Furnish.furnish(plan, buildAllWalls(plan), cur.profile);
+    // 参考案例的家具风格照样用（L 形沙发、圆餐桌…）
+    const furniture = Furnish.furnish(plan, buildAllWalls(plan), cur.profile, { style: cur.caseStyle || {} });
     await saveUnderlays(cur.id, underlays);
     past.current.push(snap(cur));
     if (past.current.length > HISTORY) past.current.shift();
@@ -675,11 +819,220 @@ export default function StudioApp() {
     setPlanDraft(null);
     // 多层：生成完先看整栋（「全部」），再提示可以一层层看
     const multi = isMultiFloor(plan);
-    loadProjectIntoEngine({ ...cur, plan, furniture, furnEdited: false, floorView: 'all' }, true, { keepHistory: true, floorView: 'all' });
+    // 设计师画 / 上传了真的平面图：不再是示范户型
+    loadProjectIntoEngine({ ...cur, plan, furniture, furnEdited: false, floorView: 'all', ...(cur.sample ? { sample: false } : {}) }, true, { keepHistory: true, floorView: 'all' });
     bump((n) => n + 1);
     flash(multi ? floorsToast(plan) : t('3D 已生成。家具是按设计师的规则自动摆的，拖一拖就能改。'), multi ? 4600 : 3600);
     return true;
   };
+
+  // ── 参考案例（SPEC §8.2–8.4） ──
+  /** 套用以后的那一句：已按「…」布置 · 保留了你家的地板、柜子（+ 为了配你家的…，n 样小东西换了颜色） */
+  const noteTimer = useRef(0);
+  const noteRaf = useRef(0);
+  /** first = 从「带它回家」第一次打开（没有「换回」可言：客人没挑案例 → 「已按你的牌「…」布置」） */
+  const noteApplied = (caseObj, r, { first = false } = {}) => {
+    if (!r || showroomRef.current) return;
+    const locks = lockNames(r.locked);
+    const soft = (r.softened || []).filter((x) => x.why === 'temp').length;
+    let text;
+    if (caseObj?.scope === 'rooms') {
+      const rooms = midList((caseObj.rooms || []).map((id) => (ROOM_TYPES[id] ? L(ROOM_TYPES[id]) : '')));
+      const slots = midList(
+        Object.keys(caseObj.materials || {})
+          .filter((k) => SLOT_BY_ID[k] && !r.locked?.[k])
+          .map((k) => slotName(SLOT_BY_ID[k])),
+      );
+      text = t('这个案例是{0} —— 已用在你家的{1}', [rooms, slots]);
+    } else if (caseObj) text = locks ? t('已按「{0}」布置 · 保留了你家的{1}', [caseTitle(caseObj), locks]) : t('已按「{0}」布置', [caseTitle(caseObj)]);
+    else if (first) {
+      const d = DREAMER_BY_CODE[projRef.current?.profile?.code];
+      const card = d ? L(d) : '';
+      if (card) text = locks ? t('已按你的牌「{0}」布置 · 保留了你家的{1}', [card, locks]) : t('已按你的牌「{0}」布置', [card]);
+      else text = locks ? t('已按你的牌布置 · 保留了你家的{0}', [locks]) : t('已按你的牌布置');
+    } else text = locks ? t('换回你的牌 · 保留了你家的{0}', [locks]) : t('换回你的牌');
+    const extra = soft && locks ? t('为了配你家的{0}，{1} 样小东西换了颜色', [locks, soft]) : '';
+    // 「还原案例原样」只在真的调和过（软装换了色温）时出现 —— 否则按了也看不出差别
+    setApplyNote({ text, extra, raw: !!caseObj && soft > 0, id: Date.now() });
+    clearTimeout(noteTimer.current);
+    cancelAnimationFrame(noteRaf.current);
+    // 和 flash() 一样：停留时间从真正画出来那一刻算（换一整套材质要编译着色器，慢设备上会卡一下）
+    noteRaf.current = requestAnimationFrame(() => {
+      noteRaf.current = requestAnimationFrame(() => {
+        noteTimer.current = setTimeout(() => setApplyNote(null), 9000);
+      });
+    });
+  };
+
+  /** 换一个参考案例（id = null：我的牌）。raw = 还原案例原样（不调和软装；锁照样保留、雷区照样避开）。可以撤销 */
+  const applyCase = async (id, el, { raw = false } = {}) => {
+    const cur = projRef.current;
+    if (!cur) return;
+    const caseObj = id ? caseLib.cases[id] || (await loadCase(id)) : null;
+    if (id && !caseObj) {
+      flash(t('参考案例在展厅 iPad 上'), 3200);
+      return;
+    }
+    const r = realiseCase({ caseObj, keep: cur.locked || {}, profile: cur.profile, raw });
+    const e = engine.current;
+    // 家具风格变了、设计师又没动过家具：按新风格重新摆（一次 furnish）
+    const restyle = !sameStyle(r.style, cur.caseStyle) && !cur.furnEdited;
+    const furniture = restyle ? Furnish.furnish(cur.plan, buildAllWalls(cur.plan), cur.profile, { style: r.style }) : null;
+    e.setMaterials(r.materials);
+    if (furniture) e.setFurniture(furniture);
+    e.setTime(r.time);
+    commit({
+      materials: r.materials,
+      time: r.time,
+      mood: caseObj ? `case:${caseObj.id}` : 'card',
+      caseId: caseObj?.id ?? null,
+      caseRef: caseRefOf(caseObj),
+      locked: r.locked,
+      caseStyle: r.style,
+      softened: r.softened,
+      suggestions: r.suggestions,
+      ...(furniture ? { furniture, furnEdited: false } : {}),
+    });
+    scheduleThumbs();
+    if (el) {
+      try {
+        FX.scan(el);
+      } catch {
+        /* 动效不重要 */
+      }
+    }
+    noteApplied(caseObj, r);
+  };
+
+  /** 明暗建议（让墙面亮一点？）：点了才换，可以撤销 */
+  const applySuggestion = (sg) => {
+    const cur = projRef.current;
+    if (!cur || !MAT_BY_ID[sg.to] || !fits(sg.to, sg.slot)) return;
+    engine.current.setMaterial(sg.slot, sg.to);
+    commit({ materials: { ...cur.materials, [sg.slot]: sg.to }, suggestions: (cur.suggestions || []).filter((x) => x.slot !== sg.slot) });
+    scheduleThumbs();
+    flash(`${slotName(SLOT_BY_ID[sg.slot])} → ${L(MAT_BY_ID[sg.to])}`);
+  };
+
+  /** 客人的户型图到了（许愿模式：员工在员工区上传的）→ 读 → 换成他的家：案例的材质、锁、家具风格都不变 */
+  const applyHomePlan = async (plan0, underlays) => {
+    const plan = migratePlan(plan0);
+    const cur = projRef.current;
+    if (!cur) return;
+    const furniture = Furnish.furnish(plan, buildAllWalls(plan), cur.profile, { style: cur.caseStyle || {} });
+    await saveUnderlays(cur.id, underlays);
+    past.current.push(snap(cur));
+    if (past.current.length > HISTORY) past.current.shift();
+    future.current = [];
+    loadProjectIntoEngine({ ...cur, plan, furniture, furnEdited: false, sample: false, floorView: 'all' }, true, { keepHistory: true, floorView: 'all' });
+    bump((n) => n + 1);
+  };
+  const readingRef = useRef(false);
+  const readGuestPlan = async (file) => {
+    const cur = projRef.current;
+    if (!cur?.profile?.id || !file || readingRef.current) return;
+    readingRef.current = true;
+    tellShell('plan-wait', { on: false });
+    setBanner({ state: 'reading', pct: 3 });
+    const pid = cur.profile.id;
+    try {
+      const { readPlan } = await import('./guest/readPlan.js');
+      const r = await readPlan(file, { hint: planHint(cur.profile.home || {}), onProgress: (pr) => setBanner((b) => (b.state === 'reading' ? { ...b, pct: pr.pct } : b)) });
+      await putPlanFile(pid, file);
+      if ((r.status === 'ok' || r.status === 'rough') && r.plan) {
+        await putHomePlan(pid, { plan: r.plan, underlays: r.underlays, source: r.source, confidence: r.confidence });
+        await applyHomePlan(r.plan, r.underlays);
+        setBanner({ state: 'idle', pct: 0 });
+        sfx.play?.('achievement');
+        flash(r.status === 'rough' ? t('读好了 —— 有几处是猜的，设计师见面时会再对一次') : t('读好了 —— 这就是你的家'), 4600);
+      } else setBanner({ state: 'unreadable', pct: 0 });
+    } catch {
+      setBanner({ state: 'unreadable', pct: 0 });
+    } finally {
+      readingRef.current = false;
+    }
+  };
+
+  // ── 对照：案例照片 vs 你的家 ──
+  const curCase = project?.caseId ? caseLib.cases[project.caseId] || null : null;
+  const canCompare = !!curCase?.images?.length && !demo && !showroom;
+  const cmpLayout = phone ? 'phone' : portrait ? 'port' : 'land';
+  // 对照真的画在画面上（照片读好了）：根节点加 cmp-<排法>-<模式>，材质栏 / 标签跟着让开
+  const cmpOpen = canCompare && cmp.mode !== 'off' && cmp.mode !== 'home' && cmpCase?.c?.id === curCase?.id;
+  /** 镜头最近的那个房间（这一层；浴室、走廊、户外不算） */
+  const nearRoomType = () => {
+    const e = engine.current;
+    const plan = projRef.current?.plan;
+    const cam = e?.camera?.position;
+    if (!plan || !cam) return 'living';
+    const fv = e.floorView;
+    const floor = (fv && fv !== 'all' && floorById(plan, fv)) || plan.floors[0];
+    let best = null;
+    for (const r of floor.rooms) {
+      const T = ROOM_TYPES[r.type];
+      if (!T || r.stairId || T.outdoor || T.nofurn || ['corridor', 'utility', 'store', 'bath', 'porch'].includes(r.type)) continue;
+      const dx = Math.max(r.x - cam.x, 0, cam.x - r.x - r.w);
+      const dz = Math.max(r.y - cam.z, 0, cam.z - r.y - r.d);
+      const d = Math.hypot(dx, dz);
+      if (!best || d < best.d) best = { d, type: r.type };
+    }
+    return best?.type || 'living';
+  };
+  const cmpLoad = useRef(0);
+  const ensureCmpImages = async () => {
+    const c = curCase;
+    if (!c) return;
+    if (cmpCase?.c?.id === c.id) return;
+    const n = ++cmpLoad.current;
+    const out = await caseWithImages(c);
+    if (n !== cmpLoad.current) return out.release();
+    setCmpCase((old) => {
+      old?.release?.();
+      return out;
+    });
+  };
+  const setCmpMode = (mode) => {
+    if (mode !== 'off' && mode !== 'home') ensureCmpImages();
+    setCmp((c0) => {
+      // 左右 / 上下分开：情绪面板先收起来（横屏照片在左边；竖屏面板是浮在上面的一张），关掉对照再放回去
+      if (cmpLayout !== 'phone' && mode === 'split' && c0.mode !== 'split') {
+        panelsBeforeCmp.current = panels;
+        setPanels('closed');
+        cmpReframe.current = true;
+      }
+      if (cmpLayout !== 'phone' && c0.mode === 'split' && mode !== 'split' && panelsBeforeCmp.current) {
+        setPanels(panelsBeforeCmp.current);
+        panelsBeforeCmp.current = null;
+      }
+      const opening = mode !== 'off' && mode !== 'home' && (c0.mode === 'off' || c0.mode === 'home');
+      // 打开时：镜头最近的房间；竖屏照片占上面 45 %，横屏一半
+      return { ...c0, mode, room: opening ? nearRoomType() : c0.room, split: opening ? (cmpLayout === 'port' ? 0.45 : 0.5) : c0.split };
+    });
+  };
+  /** 横屏的小卡放在哪：情绪面板右边、工具条下面 */
+  const pipAt = () => {
+    if (cmpLayout !== 'land' || typeof document === 'undefined') return null;
+    const mp = document.querySelector('.mood-panel')?.getBoundingClientRect();
+    const tb = document.querySelector('.toolbar')?.getBoundingClientRect();
+    const left = mp && panels === 'open' && mp.width > 160 ? mp.right + 16 : 88;
+    return { left, top: (tb ? tb.bottom : 64) + 12 };
+  };
+  const toggleCompare = () => setCmpMode(cmp.mode === 'off' || cmp.mode === 'home' ? (cmpLayout === 'land' ? 'pip' : 'split') : 'off');
+  // 换了案例：对照里的照片跟着换；没有照片的案例 → 关掉对照
+  useEffect(() => {
+    if (!curCase) {
+      if (cmp.mode !== 'off' && cmp.mode !== 'home') setCmpMode('off');
+      return;
+    }
+    if (cmp.mode !== 'off' && cmp.mode !== 'home') ensureCmpImages();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [curCase?.id]);
+  // 换了屏幕方向：对照换成那种排法
+  useEffect(() => {
+    setCmp((c0) => (c0.mode === 'off' ? c0 : { ...c0, split: cmpLayout === 'port' ? 0.45 : 0.5, mode: cmpLayout === 'phone' ? 'home' : cmpLayout === 'port' ? 'split' : c0.mode === 'photo' || c0.mode === 'home' ? 'pip' : c0.mode }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cmpLayout]);
+  useEffect(() => () => cmpCase?.release?.(), [cmpCase]);
 
   const newFromTemplate = (tid) => {
     const cur = projRef.current;
@@ -828,6 +1181,8 @@ export default function StudioApp() {
   }, []);
 
   // ── 语言：自己切换、或许愿模式外壳叫我们换（外壳不重新载入，只重载这一页） ──
+  const readRef = useRef(null);
+  readRef.current = readGuestPlan;
   const switchLang = (l) => {
     saveNow();
     setLang(l);
@@ -839,6 +1194,8 @@ export default function StudioApp() {
         saveNow();
         setLang(ev.data.lang);
       }
+      // 员工在员工区帮客人上传的户型图（许愿模式；SPEC §5.3）
+      if (ev.data.type === 'plan-file' && ev.data.file) readRef.current?.(ev.data.file);
     };
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
@@ -860,6 +1217,8 @@ export default function StudioApp() {
   // 引擎自己会防抖，镜头没被动过时才重新取景；第一次（开机）直接对好，不让人看到一次滑动。
   const [calloutBottom, setCalloutBottom] = useState(null); // null = 标签还没排好（先按一行估）
   const insetsBooted = useRef(false);
+  const cmpReframe = useRef(false); // 刚打开「分开对照」：照片出现、留白定下来以后重新取景一次
+  const cmpReframeT = useRef(0);
   useLayoutEffect(() => {
     if (!ready) return undefined;
     let raf = 0;
@@ -882,7 +1241,11 @@ export default function StudioApp() {
       const dayEl = q('.day-panel');
       const day = box(dayEl);
       const dayFloats = !!day && getComputedStyle(dayEl).position === 'fixed';
-      if (dayFloats) ins.right = W - day.left + 12;
+      const splitEl = box(q('.st-split'));
+      const landSplit = !!splitEl && splitEl.width < W * 0.95;
+      // 横屏分开看：日光卡变矮（只有时间和滑杆），算进上边，不占右边 —— 3D 那一半整个宽度都给模型
+      if (dayFloats && landSplit && day.bottom < H * 0.4) ins.top = Math.max(ins.top, day.bottom + 8);
+      else if (dayFloats) ins.right = W - day.left + 12;
       const tb = box(q('.toolbar'));
       ins.top = tb ? tb.bottom + 8 : 0;
       // 上边最少也要让开工具条（标签带太高、上下加起来超过预算时，引擎先缩上边，但不缩进工具条）
@@ -892,8 +1255,21 @@ export default function StudioApp() {
         const band = calloutBottom ?? (W >= 600 && H >= 560 ? 76 + 101 : 0);
         if (band > 0) ins.top = Math.max(ins.top, band + 8);
       }
+      // 对照（分开看）：照片占了左边（横屏）/ 上面（竖屏）→ 3D 在另一半取景；手机上方的「我的家 | 案例照片」、示范户型提示条也让开
+      const split = splitEl;
+      if (split) {
+        // 竖屏上下分开：照片是实心的一整块，上边不能再被引擎的预算缩回去（minTop）—— 模型小一点，但整个在下半边
+        if (split.width >= W * 0.95) ins.top = ins.minTop = Math.max(ins.top, split.bottom + 8);
+        // 横屏左右分开：照片也是实心的，左边不缩（minLeft）—— 以前左右合计超过一半宽时左边被按比例缩回去，房子的左边钻到照片底下
+        else ins.left = ins.minLeft = Math.max(ins.left, split.right + 12);
+      }
+      // （手机上面那两条是实心的玻璃：引擎缩上边时也不缩进它们底下 —— minTop）
+      for (const s of ['.st-seg', '.st-banner.top']) {
+        const r = box(q(s));
+        if (r && r.top < H / 2) ins.top = ins.minTop = Math.max(ins.top, r.bottom + 8);
+      }
       let colTop = H;
-      for (const s of ['.dock-wrap > .dock', '.dock-wrap > .wish-caption']) {
+      for (const s of ['.dock-wrap > .dock', '.dock-wrap > .wish-caption', '.dock-wrap > .st-banner', '.dock-wrap > .st-cases']) {
         const r = box(q(s));
         if (r) colTop = Math.min(colTop, r.top);
       }
@@ -912,6 +1288,15 @@ export default function StudioApp() {
         else ins.top = Math.max(ins.top, fs.bottom + 8);
       }
       e.setInsets(ins);
+      // 刚分开对照：等留白定下来（引擎 120ms 防抖之后）按新的那一半重新取景 —— 用户先转过镜头也一样，不然房子一半在照片底下
+      if (cmpReframe.current && split) {
+        cmpReframe.current = false;
+        clearTimeout(cmpReframeT.current);
+        cmpReframeT.current = setTimeout(() => {
+          const en = engine.current;
+          if (en && !en.demo && typeof en.frame === 'function') en.frame(en.lastView || 'iso', true);
+        }, 180);
+      }
       if (!insetsBooted.current) {
         insetsBooted.current = true;
         // 开机：第一帧就按面板取景（不飞一下）；之后的变化交给引擎平滑地挪
@@ -923,14 +1308,28 @@ export default function StudioApp() {
     };
     measure();
     const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(schedule) : null;
-    if (ro) for (const s of ['.mood-panel', '.day-panel', '.toolbar', '.dock-wrap', '.floor-switch']) document.querySelectorAll(s).forEach((el) => ro.observe(el));
+    if (ro) for (const s of ['.mood-panel', '.day-panel', '.toolbar', '.dock-wrap', '.floor-switch', '.st-split', '.st-seg', '.st-banner']) document.querySelectorAll(s).forEach((el) => ro.observe(el));
+    // 对照的照片读好才出现（.st-split 比这个 effect 晚出来）：根节点的直接子元素一变就再量一次
+    const root = document.querySelector('.studio');
+    const isSplit = (n) => n?.nodeType === 1 && n.classList.contains('st-split');
+    const mo =
+      root && typeof MutationObserver === 'function'
+        ? new MutationObserver((recs) => {
+            if (!recs.some((r) => [...r.addedNodes, ...r.removedNodes].some(isSplit))) return;
+            const sp = document.querySelector('.st-split');
+            if (sp && ro) ro.observe(sp);
+            schedule();
+          })
+        : null;
+    mo?.observe(root, { childList: true });
     addEventListener('resize', schedule);
     return () => {
       cancelAnimationFrame(raf);
+      mo?.disconnect();
       ro?.disconnect();
       removeEventListener('resize', schedule);
     };
-  }, [ready, panels, phone, labels, calloutBottom, demo, showroom, project?.plan?.floors?.length]);
+  }, [ready, panels, phone, labels, calloutBottom, demo, showroom, project?.plan?.floors?.length, cmp.mode, cmp.split, !!cmpCase, !!project?.sample, banner.state, !!project?.cases?.length]);
 
   // 'auto' 交给引擎自己判断（引擎的 resolveQuality：触屏 → 流畅，电脑 → 高清）
   const onQuality = (q) => engine.current?.setQuality?.(q || 'auto');
@@ -1007,6 +1406,7 @@ export default function StudioApp() {
         item={selItem}
         pos={selPos}
         materials={project.materials}
+        locked={project.locked}
         onRotate={() => rotateItem(selItem.id)}
         onRemove={() => removeItem(selItem.id)}
         onDuplicate={() => duplicateItem(selItem.id)}
@@ -1014,6 +1414,54 @@ export default function StudioApp() {
         onClose={() => engine.current.select(null)}
       />
     );
+
+  // 「参考案例」那一排：选过的案例（封面 + 标题）+ 我的牌
+  const caseItems = useMemo(() => {
+    const refs = project?.cases || [];
+    if (!refs.length) return [];
+    const items = refs.map((r) => {
+      const c = caseLib.cases[r.id];
+      let palette = [];
+      try {
+        palette = c && caseLib.mod?.casePalette ? caseLib.mod.casePalette(c).map((x) => x.color) : [];
+      } catch {
+        palette = [];
+      }
+      // 这个案例里公司做的那几样（定制柜、墙板、门 —— 案例的 supplies.firm 去掉活动家具；地板、灯、窗帘这些背景不列）
+      let make = [];
+      try {
+        const by = caseLib.mod?.SUPPLY_BY_ID || {};
+        make = offerSupply(c?.supplies?.firm).map((id) => (by[id] ? L(by[id]) : '')).filter(Boolean).slice(0, 2);
+      } catch {
+        make = [];
+      }
+      return { id: r.id, title: c ? caseTitle(c) : caseTitle(r), cover: caseLib.cover[r.id] || null, palette, make, missing: caseLib.ready && !c };
+    });
+    if (dreamer) items.push({ id: null, card: true, num: dreamer.num, name: L(dreamer) });
+    return items;
+  }, [project?.cases, caseLib, dreamer]);
+  const caseActive = project?.mood?.startsWith?.('case:') ? project.mood.slice(5) : project?.mood === 'card' ? null : undefined;
+  const pickCase = (id, el) => applyCase(id, el);
+  const rawCase = project?.caseId ? () => applyCase(project.caseId, null, { raw: true }) : null;
+  const showBanner = !!project?.sample && !demo && !showroom;
+  const bannerEl = showBanner && (
+    <SampleBanner
+      wish={WISH}
+      top={phone}
+      // 分享来的方案（别人的手机）：这台设备上没有那份档案 → 只说明是示范户型，不给上传按钮
+      profileId={project.sharedFrom ? null : project.profile?.id}
+      state={banner.state}
+      pct={banner.pct}
+      onStaff={() => {
+        tellShell('plan-wait', { on: true });
+        setBanner({ state: 'waiting', pct: 0 });
+      }}
+      onCancelWait={() => {
+        tellShell('plan-wait', { on: false });
+        setBanner({ state: 'idle', pct: 0 });
+      }}
+    />
+  );
 
   const chip =
     profile && dreamer ? (
@@ -1042,7 +1490,10 @@ export default function StudioApp() {
     ) : null;
 
   return (
-    <div className={`studio panels-${panels} ${demo ? 'is-demo' : ''} ${showroom ? 'is-showroom' : ''} ${WISH ? 'is-wish' : ''} ${isEn() ? 'is-en' : ''}`}>
+    <div
+      className={`studio panels-${panels} ${demo ? 'is-demo' : ''} ${showroom ? 'is-showroom' : ''} ${WISH ? 'is-wish' : ''} ${isEn() ? 'is-en' : ''} ${cmpOpen ? `cmp-${cmpLayout}-${cmp.mode}` : ''} ${phone && canCompare ? 'has-seg' : ''}`}
+      style={cmpOpen && cmpLayout === 'land' && cmp.mode === 'split' ? { '--cmp-x': `${Math.round(cmp.split * 1000) / 10}%` } : undefined}
+    >
       <div className="stage3d" ref={host} />
       {!ready && (
         <div className="boot" role="status">
@@ -1053,7 +1504,18 @@ export default function StudioApp() {
 
       {ready && project && (
         <>
-          {labels && !demo && <Callouts anchors={anchors} materials={project.materials} onPick={(s) => setSlot((cur) => (cur === s ? null : s))} activeSlot={slot} panels={panels} onBand={setCalloutBottom} />}
+          {/* 竖屏上下对照：下面那一半只放 3D（标签挤不下，材质在情绪面板里照样能换） */}
+          {labels && !demo && !(phone && cmp.mode === 'photo') && !(cmpOpen && cmpLayout === 'port' && cmp.mode === 'split') && (
+            <Callouts
+              anchors={anchors}
+              materials={project.materials}
+              locked={project.locked}
+              onPick={(s) => setSlot((cur) => (cur === s ? null : s))}
+              activeSlot={slot}
+              panels={`${panels}-${cmpOpen ? cmp.mode : ''}`}
+              onBand={setCalloutBottom}
+            />
+          )}
 
           <MoodPanel
             project={project}
@@ -1068,6 +1530,10 @@ export default function StudioApp() {
             onMood={applyMood}
             onToggle={() => setPanels((p) => (p === 'open' ? 'closed' : 'open'))}
             chip={chip}
+            cases={caseItems.length ? { items: caseItems, active: caseActive } : null}
+            onCase={pickCase}
+            onSuggest={applySuggestion}
+            onRaw={rawCase}
             extra={report && <StorageCheck rows={report} plan={project.plan} talk={talk} onPick={pickRow} />}
           />
 
@@ -1096,6 +1562,8 @@ export default function StudioApp() {
               }
             }}
             onShare={() => setModal('share')}
+            onCompare={canCompare && !phone ? toggleCompare : null}
+            compareOn={cmp.mode !== 'off' && cmp.mode !== 'home'}
             labels={labels}
             onLabels={() => setLabels((v) => !v)}
             view={view}
@@ -1125,20 +1593,63 @@ export default function StudioApp() {
                 {toast}
               </div>
             )}
-            {WISH && !demo && (
+            {applyNote && !demo && !toast && (
+              <div key={applyNote.id} className="glass s-toast st-apply" role="status" aria-live="polite">
+                <Icon name="sparkles" size={15} />
+                <span className="st-apply-text">
+                  {applyNote.text}
+                  {applyNote.extra && <em>{applyNote.extra}</em>}
+                </span>
+                {applyNote.raw && (
+                  <button
+                    type="button"
+                    className="st-apply-btn"
+                    data-sfx="apply"
+                    onClick={() => {
+                      setApplyNote(null);
+                      rawCase?.();
+                    }}
+                  >
+                    {t('还原案例原样')}
+                  </button>
+                )}
+                <button type="button" className="st-apply-x" aria-label={t('关闭')} data-sfx="close" onClick={() => setApplyNote(null)}>
+                  <Icon name="close" size={14} />
+                </button>
+              </div>
+            )}
+            {WISH && !demo && !project.homeAt && !project.sample && (
               <div className="glass wish-caption" role="note">
                 <Icon name="info" size={15} />
                 <span>{t('示范户型 · 设计师会换成你家的平面图')}</span>
               </div>
             )}
+            {!phone && bannerEl}
             {phone && selBar(true)}
+            {phone && !selItem && caseItems.length > 0 && !demo && <CaseRow compact items={caseItems} active={caseActive} onPick={pickCase} />}
             <DaylightPanel time={project.time} thumbs={thumbs} onTime={setTime} onCommit={saveNow} north={project.plan.north || 0} />
             <MaterialDock project={project} slot={slot} engine={engine} onDrop={dropMaterial} onAddItem={addItem} onClearSlot={() => setSlot(null)} />
           </div>
 
-          {!demo && isMultiFloor(project.plan) && <FloorSwitch plan={project.plan} view={floorView} onView={(v) => engine.current?.setFloorView(v)} />}
+          {!demo && isMultiFloor(project.plan) && <FloorSwitch plan={project.plan} view={floorView} onView={(v) => engine.current?.setFloorView(v)} above={`${phone && canCompare ? 'seg' : ''}${phone && showBanner ? 'banner' : ''}`} />}
 
-          {hover && !selected && !demo && !phone && <HoverTip hover={hover} materials={project.materials} />}
+          {phone && bannerEl}
+          {canCompare && (cmp.mode !== 'off' || phone) && (
+            <Compare
+              c={cmpCase?.c?.id === curCase.id ? cmpCase.c : null}
+              layout={cmpLayout}
+              mode={phone ? (cmp.mode === 'photo' ? 'photo' : 'home') : cmp.mode}
+              split={cmpLayout === 'port' ? Math.min(cmp.split, 0.6) : cmp.split}
+              roomType={cmp.room}
+              roomName={(id) => roomName(caseLib.mod, id)}
+              pipAt={pipAt()}
+              onMode={setCmpMode}
+              onSplit={(v) => setCmp((c0) => ({ ...c0, split: v }))}
+              onClose={() => setCmpMode('off')}
+            />
+          )}
+
+          {hover && !selected && !demo && !phone && <HoverTip hover={hover} materials={project.materials} locked={project.locked} />}
           {!phone && selBar(false)}
 
           <footer className="foot">
@@ -1175,7 +1686,7 @@ export default function StudioApp() {
           onClose={() => setModal(null)}
         />
       )}
-      {modal === 'share' && <ShareModal project={project} pack={packShare} staff={staffView} onClose={() => setModal(null)} />}
+      {modal === 'share' && <ShareModal project={project} pack={packShare} staff={staffView} guest={!WISH && (FROM_HOME || !!project.homeAt || !!project.profile?.home)} onClose={() => setModal(null)} />}
       {modal === 'help' && <HelpModal wish={WISH} onClose={() => setModal(null)} />}
       {modal === 'settings' && staffView && <SettingsModal onClose={() => setModal(null)} onQuality={onQuality} onLang={switchLang} />}
 

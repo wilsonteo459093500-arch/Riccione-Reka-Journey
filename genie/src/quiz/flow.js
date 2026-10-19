@@ -2,14 +2,17 @@
 // 许愿之旅的流程：五张牌（五关）＋ 召唤 ＋ 揭晓。
 //
 // 快思慢想的分工：
-//   第一张牌「直觉」 —— 系统 1：二选一、看图、3 秒内选。问「哪个让你想躺下」，不问「你喜欢什么风格」
-//                      （替代效应：难题换成易题，我们替客人做这一步）。反应时间也记下来 —— 秒选 = 很确定。
+//   第一张牌「直觉」 —— 系统 1：看图、3 秒内选（每题 4–6 张图，选第一眼喜欢的那一张）。问「哪个让你想躺下」，
+//                      不问「你喜欢什么风格」（替代效应：难题换成易题，我们替客人做这一步）。反应时间也记下来 —— 秒选 = 很确定。
 //   第二张牌「生活」 —— 用生活场景提问（框架效应），而不是设计术语。
 //   第三张牌「宝藏」 —— 系统 2：慢下来数东西。每个数字马上变成柜子尺寸（即时反馈，降低思考成本）。
 //   第四张牌「三个愿望」—— 只能选 3 个（对抗聚焦错觉：不取舍时，每样都"很重要"）。
 //   第五张牌「禁忌」 —— 只问不要什么（损失厌恶：人对讨厌的东西比喜欢的更确定）。
 //
 // effects：正数偏向 a 侧（W 暖 / M 简 / N 朴 / H 藏；暗轴 light 明亮 / curve 圆润 / social 相聚）。
+
+/** 题库版本：2 = 十题、每题 4–6 个选项（v1 = 十二题二选一，档案里没有 qv 的就是 v1） */
+export const QUIZ_V = 2;
 
 // hint = 章节牌上的那一句，也是潘吉翻牌时说的话的字幕（voice-lines.js 的 ch.*）：她用第一人称说
 export const CHAPTERS = [
@@ -20,98 +23,113 @@ export const CHAPTERS = [
   { id: 'nogo', num: 'V', zh: '雷区之牌', en: 'THE DEAL-BREAKERS', hint: '最后，帮我扫个雷吧。', mode: 'fast' },
 ];
 
-// ───────────────────────── I · 直觉（二选一） ─────────────────────────
-// visual：{ kind:'room', ...Vignette 参数 } | { kind:'swatches', ids:[…] } | { kind:'palette', colors:[…] }
+// ───────────────────────── I · 直觉（每题 4–6 张图） ─────────────────────────
+// 每个选项：{ v, label（中文 = i18n key）, visual:{ kind:'room', img:'<题目>-<v>' }, fx, mats:[材质 id] }
+//   v：'a' / 'b' 是 v1 的两个选项（意思不变，旧档案照样认得），'c'…'f' 是 v2 新加的；
+//   img：src/quiz/vignettes/img/<img>-480|960.webp（sets.js 里同名的场景离线渲染）；还没渲染的图，Vignette 用 mats 拼一张色卡；
+//   fx：计分（设计师的模拟表 SPEC §2.2，和 test/quiz-v2.test.mjs 的分布测试一起改）；
+//   mats：这个选项「看得见的」材质（案例配对 picksMaterials、没有照片时的色卡）。没有特定材质的选项留空，色卡用这一题的 mats。
+// 每一题还保留 v1 的写法：pair.a … pair.f = 选项本身、pair.fx = { a: fx, … } —— 揭晓的「因为你选了」、蓝图的快选照旧能用。
 
-const WARM_ROOM = { wall: '#E6D3B5', floor: '#C29A6B', sofa: '#D9CBB4', accent: '#B3552E', light: 'evening', plant: true };
-const COOL_ROOM = { wall: '#EEF0EF', floor: '#D8D3CB', sofa: '#A9ADB0', accent: '#5F7A8C', light: 'day', plant: true };
+const opt = (id) => (v, label, fx, mats = []) => ({ v, label, visual: { kind: 'room', img: `${id}-${v}` }, fx, mats });
+
+function question(id, q, mats, make) {
+  const options = make(opt(id));
+  const pair = { id, q, mats, options, fx: {} };
+  for (const o of options) {
+    pair[o.v] = o;
+    pair.fx[o.v] = o.fx;
+  }
+  return pair;
+}
 
 export const PAIRS = [
-  {
-    id: 'room',
-    q: '哪一个房间，让你想马上躺下？',
-    a: { label: '暖暖的傍晚', visual: { kind: 'room', ...WARM_ROOM } },
-    b: { label: '清爽的早晨', visual: { kind: 'room', ...COOL_ROOM } },
-    fx: { a: { temp: 2, light: -0.5 }, b: { temp: -2, light: 1 } },
-  },
-  {
-    id: 'wall',
-    q: '哪一面墙，更像你？',
-    a: { label: '一幅画就够了', visual: { kind: 'room', ...WARM_ROOM, light: 'day', wall: '#EFE8DC', density: 'minimal', plant: false } },
-    b: { label: '挂满了才有味道', visual: { kind: 'room', ...WARM_ROOM, light: 'day', wall: '#EFE8DC', density: 'layered' } },
-    fx: { a: { density: 2 }, b: { density: -2 } },
-  },
-  {
-    id: 'touch',
-    q: '闭上眼睛摸一摸 —— 你更想摸到？',
-    a: { label: '粗粗的、有温度', visual: { kind: 'swatches', ids: ['linen', 'light-oak', 'rattan'] } },
-    b: { label: '滑滑的、凉凉的', visual: { kind: 'swatches', ids: ['carrara', 'brass', 'cream-lacquer'] } },
-    fx: { a: { texture: 2, temp: 0.5 }, b: { texture: -2, temp: -0.5 } },
-  },
-  {
-    id: 'guest',
-    q: '朋友来家里，你希望他们看到？',
-    a: { label: '干干净净，什么都看不见', visual: { kind: 'room', ...COOL_ROOM, wall: '#EAE4DA', light: 'day', storage: 'hidden', plant: false } },
-    b: { label: '我的收藏会说话', visual: { kind: 'room', ...COOL_ROOM, wall: '#EAE4DA', light: 'day', storage: 'open', plant: false } },
-    fx: { a: { storage: 2.2 }, b: { storage: -2.2 } },
-  },
-  {
-    id: 'palette',
-    q: '选一个色盘',
-    a: { label: '大地与阳光', visual: { kind: 'palette', colors: ['#EFE4D2', '#D6C0A0', '#B77250', '#6D6A4A', '#694330'] } },
-    b: { label: '海风与石头', visual: { kind: 'palette', colors: ['#F0EEE9', '#B9BCBC', '#9DAFBC', '#2B3A5E', '#262626'] } },
-    fx: { a: { temp: 1.6 }, b: { temp: -1.6 } },
-  },
-  {
-    id: 'sofa',
-    q: '哪一张沙发，你想陷进去？',
-    a: { label: '圆圆的羊羔绒', visual: { kind: 'room', ...WARM_ROOM, light: 'day', sofa: '#EEE8DD', sofaShape: 'curvy', plant: false } },
-    b: { label: '利落的皮沙发', visual: { kind: 'room', ...WARM_ROOM, light: 'day', sofa: '#8C4D2A', sofaShape: 'linear', plant: false } },
-    fx: { a: { curve: 2, texture: 0.6 }, b: { curve: -2, texture: -0.6 } },
-  },
-  {
-    id: 'night',
-    q: '晚上 10 点，客厅的灯 ——',
-    a: { label: '亮亮的，什么都看得清', visual: { kind: 'room', ...COOL_ROOM, light: 'bright-night' } },
-    b: { label: '几盏小灯，暗暗的', visual: { kind: 'room', ...WARM_ROOM, light: 'lamp-night' } },
-    fx: { a: { light: 2, temp: -0.5 }, b: { light: -2, temp: 0.5 } },
-  },
-  {
-    id: 'floor',
-    q: '光着脚，你想踩在 ——',
-    a: { label: '温润的木地板', visual: { kind: 'swatches', ids: ['light-oak', 'smoked-oak', 'herringbone-oak'] } },
-    b: { label: '冰凉的石材', visual: { kind: 'swatches', ids: ['travertine', 'carrara', 'microcement'] } },
-    fx: { a: { texture: 1.4, temp: 1 }, b: { texture: -1.4, temp: -1 } },
-  },
-  {
-    id: 'kitchen',
-    q: '你的厨房台面 ——',
-    a: { label: '一眼望去，什么都没有', visual: { kind: 'kitchen', open: false } },
-    b: { label: '瓶瓶罐罐都摆出来', visual: { kind: 'kitchen', open: true } },
-    fx: { a: { storage: 1.6, density: 1 }, b: { storage: -1.6, density: -1 } },
-  },
-  {
-    id: 'table',
-    q: '选一张餐桌',
-    a: { label: '原木大板，有疤也好看', visual: { kind: 'swatches', ids: ['teak', 'walnut', 'linen'] } },
-    b: { label: '大理石圆桌，干净利落', visual: { kind: 'swatches', ids: ['calacatta', 'nero', 'steel'] } },
-    fx: { a: { texture: 2 }, b: { texture: -2, curve: 0.4 } },
-  },
-  {
-    id: 'shelf',
-    q: '书架上的东西 ——',
-    a: { label: '整整齐齐，三件就好', visual: { kind: 'shelf', full: false } },
-    b: { label: '满满当当，每格都有故事', visual: { kind: 'shelf', full: true } },
-    fx: { a: { density: 2, storage: 0.5 }, b: { density: -2, storage: -0.5 } },
-  },
-  {
-    id: 'weekend',
-    q: '理想的星期六晚上 ——',
-    a: { label: '一屋子朋友打边炉', visual: { kind: 'scene', emoji: '🍲', bg: '#F2C9A0' } },
-    b: { label: '一个人，一本书，一杯茶', visual: { kind: 'scene', emoji: '📖', bg: '#C9D3C4' } },
-    fx: { a: { social: 2, density: -0.4 }, b: { social: -2 } },
-  },
+  question('room', '哪一个房间，让你想马上躺下？', ['oat', 'light-oak', 'linen', 'walnut'], (o) => [
+    o('a', '暖暖的傍晚', { temp: 2, light: -0.5, density: 0.6, storage: 0.4 }, ['light-oak', 'oat', 'linen']),
+    o('b', '清爽的早晨', { temp: -2, light: 1.2, density: 0.6 }, ['greige-oak', 'gallery-white', 'grey-wool']),
+    o('c', '奶油色的午后', { temp: 1, texture: -1.6, curve: 0.8 }, ['travertine', 'boucle', 'warm-white']),
+    o('d', '林间的绿', { temp: -1, texture: 1.6, density: -0.8, storage: 0.6 }, ['smoked-oak', 'sage', 'linen']),
+    o('e', '夜里的深蓝', { temp: -1, light: -1.6, texture: -0.8, density: -0.4, storage: 0.8 }, ['walnut', 'navy-paint', 'cognac-leather']),
+    o('f', '旅行带回来的', { temp: 1, texture: 0.8, density: -1.2, storage: -0.4 }, ['light-oak', 'terracotta', 'rattan', 'teak']),
+  ]),
+  question('wall', '哪一面墙，更像你？', ['warm-white', 'light-oak', 'linen', 'walnut'], (o) => [
+    o('a', '一幅画就够了', { density: 2, storage: 0.6 }),
+    o('b', '挂满了才有味道', { density: -2, storage: -0.4 }),
+    o('c', '暖暖的木格栅', { texture: 1.4, density: 0.6, temp: 0.6, storage: 0.6 }, ['light-oak']),
+    o('d', '一整面大理石', { texture: -1.6, density: 0.6, light: 0.3, storage: 0.4 }, ['calacatta']),
+    o('e', '会发光的展示墙', { storage: -2, density: -0.6 }),
+  ]),
+  question('touch', '闭上眼睛摸一摸 —— 你更想摸到？', ['linen', 'light-oak', 'carrara', 'brass'], (o) => [
+    o('a', '粗粗的、有温度', { texture: 2, temp: 0.6 }, ['linen', 'light-oak', 'rattan']),
+    o('b', '滑滑的、凉凉的', { texture: -2, temp: -0.6 }, ['carrara', 'brass', 'cream-lacquer']),
+    o('c', '软软的、绒绒的', { texture: -1, temp: 1, curve: 1 }, ['boucle', 'ochre-velvet', 'oat-knit']),
+    o('d', '石头和铁，沉沉的', { texture: 1, temp: -1.2, curve: -0.6 }, ['travertine', 'matte-black', 'grey-wool']),
+  ]),
+  question('guest', '朋友来家里，你希望他们看到？', ['warm-white', 'cream-lacquer', 'oat-knit', 'white-oak'], (o) => [
+    o('a', '干干净净，什么都看不见', { storage: 2.4, density: 0.6 }, ['cream-lacquer']),
+    o('b', '我的收藏会说话', { storage: -1.6, density: -0.8 }),
+    o('c', '几件心爱的，放在灯下', { storage: -0.8, density: 1.4, texture: 0.4 }, ['cream-lacquer']),
+    o('d', '玻璃柜里的宝贝', { storage: -1.2, texture: -0.6, density: 0.2, temp: 0.4 }, ['black-matte']),
+    o('e', '抱枕毯子很多，柜门都关好', { density: -1.6, storage: 1.2, temp: 0.4 }, ['light-oak', 'rust-wool', 'oat-knit']),
+  ]),
+  question('sofa', '哪一张沙发，你想陷进去？', ['warm-white', 'light-oak', 'linen', 'oat-knit'], (o) => [
+    o('a', '圆圆的羊羔绒', { curve: 2, texture: -0.4, temp: 0.4 }, ['boucle']),
+    o('b', '利落的皮沙发', { curve: -1.8, texture: -0.4 }, ['cognac-leather']),
+    o('c', '宽宽的亚麻 L 形', { social: 1.4, texture: 1.4, density: -0.4 }, ['linen']),
+    o('d', '深深的丝绒', { texture: -1, light: -0.8, curve: -0.4, temp: 0.6, density: -0.6, storage: 0.4 }, ['emerald-velvet']),
+  ]),
+  question('night', '晚上 10 点，客厅的灯 ——', ['oat', 'light-oak', 'linen', 'brass'], (o) => [
+    o('a', '亮亮的，什么都看得清', { light: 2, temp: -0.5 }),
+    o('b', '几盏小灯，暗暗的', { light: -2, temp: 0.5, density: -0.4 }),
+    o('c', '天花一圈暖暖的光', { light: 0.6, temp: 1.2, texture: -0.3 }),
+    o('d', '一束光照着一幅画', { light: -1, storage: -0.8, texture: -0.4, density: 0.6, temp: 0.4 }),
+  ]),
+  question('floor', '光着脚，你想踩在 ——', ['warm-white', 'oat-knit', 'linen', 'white-oak'], (o) => [
+    o('a', '温润的人字拼', { texture: 1.4, temp: 1.2 }, ['herringbone-oak']),
+    o('b', '冰凉的洞石', { texture: -1.2, temp: -1 }, ['travertine']),
+    o('c', '浅浅的白橡', { texture: 1, temp: -1, light: 0.6, storage: -0.4 }, ['white-oak']),
+    o('d', '复古的磨石子', { density: -0.8, texture: -0.4, temp: 0.2, curve: 0.4 }, ['terrazzo']),
+    o('e', '一整片微水泥', { temp: -1.2, texture: -1, density: 0.8 }, ['microcement']),
+    o('f', '深深的胡桃木', { temp: 1.2, light: -1.4, texture: -0.2 }, ['walnut']),
+  ]),
+  question('kitchen', '你的厨房台面 ——', ['cream-lacquer', 'quartz-white', 'warm-white', 'light-oak'], (o) => [
+    o('a', '一眼望去，什么都没有', { storage: 2, density: 1 }, ['cream-lacquer']),
+    o('b', '瓶瓶罐罐都摆出来', { storage: -1.6, density: -1 }),
+    o('c', '玻璃吊柜，看得见杯盘', { storage: -1.2, texture: -0.4, density: 0.4 }),
+    o('d', '一张大岛台，大家围着', { social: 1.6, storage: 0.4, density: 0.2 }),
+  ]),
+  question('table', '选一张餐桌', ['sand-limewash', 'light-oak', 'teak', 'calacatta'], (o) => [
+    o('a', '原木大板，有疤也好看', { texture: 2, curve: -0.4 }, ['teak']),
+    o('b', '大理石圆桌，干净利落', { texture: -2, curve: 0.6 }, ['calacatta']),
+    o('c', '圆木桌配藤椅', { texture: 1, curve: 1, temp: 0.8, social: 0.4 }, ['light-oak', 'rattan']),
+    o('d', '黑色长桌，像餐厅', { texture: -1, curve: -1.2, temp: -0.8, social: 0.6 }, ['black-matte']),
+  ]),
+  question('weekend', '理想的星期六晚上 ——', ['warm-white', 'light-oak', 'linen', 'oat-knit'], (o) => [
+    o('a', '一屋子朋友打边炉', { social: 2, density: -0.4, light: 0.6 }),
+    o('b', '一个人，一本书，一杯茶', { social: -2, density: 0.3, light: 0.6 }),
+    o('c', '一家人窝在沙发看电影', { social: 0.8, light: -0.8, density: -0.6, curve: 0.4 }),
+    o('d', '两个人，一杯酒，一张唱片', { social: -0.6, light: -1, texture: -0.4 }),
+  ]),
 ];
+
+/** v1 有、v2 拿掉的两题（只留文字）：旧档案 / 旧链接里的这两题答案，蓝图和案例理由还认得出来 */
+export const LEGACY_PAIRS = [
+  { id: 'palette', q: '选一个色盘', options: [{ v: 'a', label: '大地与阳光' }, { v: 'b', label: '海风与石头' }] },
+  { id: 'shelf', q: '书架上的东西 ——', options: [{ v: 'a', label: '整整齐齐，三件就好' }, { v: 'b', label: '满满当当，每格都有故事' }] },
+].map((p) => ({ ...p, ...Object.fromEntries(p.options.map((o) => [o.v, o])) }));
+
+/** 一题的全部选项（v2 的 options；只有 a / b 的旧写法也认） */
+export function optionsOf(pair) {
+  if (!pair) return [];
+  if (Array.isArray(pair.options)) return pair.options;
+  return ['a', 'b', 'c', 'd', 'e', 'f'].filter((v) => pair[v]).map((v) => ({ v, ...pair[v], fx: pair[v].fx ?? pair.fx?.[v] }));
+}
+
+/** 某题某个选项的中文文字（先找 v2 的十题，再找 v1 拿掉的两题；不认得 → ''） */
+export function pickLabel(pairId, v) {
+  const p = PAIRS.find((x) => x.id === pairId) || LEGACY_PAIRS.find((x) => x.id === pairId);
+  return optionsOf(p).find((o) => o.v === v)?.label || '';
+}
 
 // ───────────────────────── II · 生活（场景单选 / 多选） ─────────────────────────
 

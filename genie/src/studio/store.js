@@ -19,11 +19,22 @@ const KEEP = 40; // 本机最多留几份方案
 
 const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
 
-/** 档案里 3D 用得到的部分（链接短一点） */
+/** 「你的家」里 3D 用得到的部分：不带链接里的小平面图（方案里本来就有平面图） */
+function homeForStudio(h) {
+  if (!isObj(h)) return undefined;
+  const plan = isObj(h.plan) ? (({ inline, ...rest }) => rest)(h.plan) : h.plan;
+  return { ...h, plan };
+}
+
+/** 档案里 3D 用得到的部分（链接短一点）。许愿之旅 v2 多了：home（你的家）、cases（选的参考案例 { id, rev, title }）、caseId */
 export function profileForStudio(p) {
   if (!p) return null;
   const { id, name, code, axes, hidden, life, storage, avoid, materials, wishes, createdAt } = p;
-  return { id, name, code, axes, hidden, life, storage, avoid, materials, wishes, createdAt };
+  const out = { id, name, code, axes, hidden, life, storage, avoid, materials, wishes, createdAt };
+  if (isObj(p.home)) out.home = homeForStudio(p.home);
+  if (Array.isArray(p.cases)) out.cases = p.cases.filter((c) => isObj(c) && c.id).map(({ id: cid, rev, title }) => ({ id: cid, rev: rev || 1, title: isObj(title) ? { zh: title.zh || '', en: title.en || '' } : { zh: String(title || ''), en: '' } })).slice(0, 3);
+  if (p.caseId !== undefined) out.caseId = p.caseId ?? null;
+  return out;
 }
 
 /** 客人的雷区：任何一组材质套进 3D 之前都过一遍（情绪预设、默认材质） */
@@ -156,11 +167,75 @@ export function currentProject() {
   }
 }
 
-/** 分享链接（v: 2，存档形：旧版打开也看得到一楼） */
+/** 方案里「参考案例」那几样（链接里只带 id / rev / 标题、客人家里留下来的颜色；不带照片） */
+export function caseFields(p) {
+  const out = {};
+  if (!isObj(p)) return out;
+  if (p.caseId != null) out.caseId = p.caseId;
+  if (isObj(p.caseRef)) out.caseRef = p.caseRef;
+  if (Array.isArray(p.cases) && p.cases.length) out.cases = p.cases;
+  if (isObj(p.keep)) out.keep = p.keep;
+  if (isObj(p.locked) && Object.keys(p.locked).length) out.locked = p.locked;
+  if (isObj(p.caseStyle) && Object.keys(p.caseStyle).length) out.caseStyle = p.caseStyle;
+  if (p.sample) out.sample = true;
+  if (p.homeAt) out.homeAt = p.homeAt;
+  return out;
+}
+
+/**
+ * 「你的家」里只给员工看的（业主 2026-10-19：预算只给员工看，从不出现在客人的牌、蓝图、WhatsApp、分享链接里；时间表同样只在员工这边）。
+ * 这台设备上存的方案留着（设计师接手要用），分享链接里拿掉。
+ */
+const STAFF_ONLY_HOME = ['budget', 'timeline'];
+export function clientProfile(profile) {
+  if (!isObj(profile) || !isObj(profile.home)) return profile;
+  const home = { ...profile.home };
+  for (const k of STAFF_ONLY_HOME) delete home[k];
+  return { ...profile, home };
+}
+
+/**
+ * 设计师接手要的全部（业主 2026-10-19：设计师在这个概念上深化；下一步的设计师简报 / 导出从这里拿）：
+ * 平面图（每一层）+ 家具布局 + 选的参考案例 + 客人家里留下来的（keep / locked）+ 颜色 + 房子资料（profile.home）；
+ * 预算只在这台设备的员工笔记里（home.js staffNoteOf(profile.id)，由调用的人传进来），时间表在 home 上 —— 两样都只放在 staff 里，
+ * 这个对象只给员工用，不进任何链接。
+ */
+export function designerFacts(p, { staffNote = null } = {}) {
+  if (!isObj(p) || !p.plan) return null;
+  const m = migrateProject(p);
+  const home = isObj(m.profile?.home) ? { ...m.profile.home } : null;
+  const staff = { budget: staffNote?.budget ?? home?.budget ?? null, timeline: home?.timeline ?? null };
+  if (home) {
+    delete home.budget;
+    delete home.timeline;
+  }
+  return {
+    v: 1,
+    projectId: m.id,
+    profileId: m.profile?.id || null,
+    guest: { name: m.profile?.name || '', code: m.profile?.code || '' },
+    plan: m.plan,
+    furniture: m.furniture,
+    materials: { ...m.materials },
+    mood: m.mood,
+    time: m.time,
+    caseId: m.caseId ?? null,
+    caseRef: m.caseRef ?? null,
+    cases: m.cases || [],
+    keep: m.keep || null,
+    locked: m.locked || {},
+    sample: !!m.sample,
+    home,
+    staff,
+  };
+}
+
+/** 分享链接（v: 2，存档形：旧版打开也看得到一楼）。参考案例：caseRef + keep（+ 选过的几个案例的 id / 标题），没有照片；预算、时间表不带 */
 export async function packProject(p) {
   const s = toStoredProject(p);
-  const { id, name, plan, furniture, furnitureUpper, materials, mood, time, profile } = s;
-  return packJSON({ v: 2, id, name, plan, furniture, ...(furnitureUpper ? { furnitureUpper } : {}), materials, mood, time, profile });
+  const { id, name, plan, furniture, furnitureUpper, materials, mood, time } = s;
+  const profile = clientProfile(s.profile);
+  return packJSON({ v: 2, id, name, plan, furniture, ...(furnitureUpper ? { furnitureUpper } : {}), materials, mood, time, profile, ...caseFields(s) });
 }
 
 /** 别人分享的方案（v1 或 v2 的链接）→ 自己的一份：新 id、记下来源、名字标「分享」 */

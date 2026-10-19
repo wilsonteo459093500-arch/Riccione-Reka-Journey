@@ -822,3 +822,31 @@ html[lang='en'] .ln-card-title {
     margin-left: auto;
   }
 }
+
+/* ── 员工 · 案例库：和本机蓝图同一个锁（按住 3 秒）；打开后一个按钮去 cases.html ── */
+.ln-cases {
+  margin-top: 14px;
+}
+.ln-cases-count {
+  margin: -4px 4px 0;
+  font: 600 13px/1.35 var(--sans);
+  color: var(--text-strong);
+}
+.ln-cases-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  margin: 12px 4px 0;
+  padding: 0 20px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--card);
+  font: 600 16px/1 var(--sans);
+  text-decoration: none;
+  box-shadow: 0 6px 18px rgba(var(--shade-rgb), 0.18);
+}
+.ln-cases-go:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}

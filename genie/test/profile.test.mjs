@@ -1,4 +1,5 @@
 // node test/profile.test.mjs —— 档案逻辑：雷区颜色、计分公平、反应时间、生活方式替换、设计师提示、WhatsApp 摘要。
+// 直觉之牌 v2 的牌分布（客人模型模拟）在 test/quiz-v2.test.mjs。
 
 import assert from 'node:assert/strict';
 import { DREAMERS, DREAMER_BY_CODE, AXES, codeOf } from '../src/shared/dreamers.js';
@@ -23,7 +24,7 @@ import {
 } from '../src/shared/profile.js';
 import { profileText } from '../src/shared/summary.js';
 import { setLang } from '../src/shared/i18n.js';
-import { PAIRS, LIFE, APPLIANCES, NOGO_COLORS, NOGO_FINISHES } from '../src/quiz/flow.js';
+import { PAIRS, LIFE, APPLIANCES, NOGO_COLORS, NOGO_FINISHES, optionsOf } from '../src/quiz/flow.js';
 
 let n = 0;
 let failed = 0;
@@ -143,40 +144,56 @@ await test('回归：避开米黄不会变粉；避开粉色 / 绿色真的会�
 });
 
 console.log('计分公平');
-await test('藏 / 展滑杆没碰过就不计分；碰过照算；旧答案（没有 ratioTouched）照算', () => {
-  assert.equal(scoreAxes({ ratio: 25, ratioTouched: false }, FLOW).axes.storage, 51);
-  assert.ok(scoreAxes({ ratio: 25, ratioTouched: true }, FLOW).axes.storage > 55);
-  assert.ok(scoreAxes({ ratio: 25 }, FLOW).axes.storage > 55);
+await test('藏 / 展滑杆没碰过就不计分；碰过照算（中点 30 %）；旧答案（没有 ratioTouched）照算', () => {
+  assert.equal(scoreAxes({ ratio: 10, ratioTouched: false }, FLOW).axes.storage, 51);
+  assert.ok(scoreAxes({ ratio: 10, ratioTouched: true }, FLOW).axes.storage > 55);
+  assert.ok(scoreAxes({ ratio: 10 }, FLOW).axes.storage > 55);
+  assert.ok(scoreAxes({ ratio: 60, ratioTouched: true }, FLOW).axes.storage < 45);
 });
-await test('摸一摸 / 光脚踩：b 侧的温度和 a 侧对称', () => {
-  const fx = Object.fromEntries(PAIRS.map((p) => [p.id, p.fx]));
-  assert.deepEqual(fx.touch.b, { texture: -2, temp: -0.5 });
-  assert.deepEqual(fx.floor.b, { texture: -1.4, temp: -1 });
-  for (const id of ['touch', 'floor']) assert.equal(fx[id].a.temp, -fx[id].b.temp, id);
+await test('摸一摸：a / b 两边的温度对称；每题都有往两个方向推的选项（四条主轴都推得动）', () => {
+  const touch = PAIRS.find((p) => p.id === 'touch');
+  assert.deepEqual(touch.fx.b, { texture: -2, temp: -0.6 });
+  assert.equal(touch.fx.a.temp, -touch.fx.b.temp);
+  for (const p of PAIRS) {
+    const opts = optionsOf(p);
+    assert.ok(opts.length >= 4 && opts.length <= 6, p.id);
+    // 每题至少有一条主轴，选项里正负两边都有（不是「好的 vs 不好的」，而是两种都好）
+    assert.ok(AXES.some((ax) => opts.some((o) => (o.fx[ax.id] || 0) > 0) && opts.some((o) => (o.fx[ax.id] || 0) < 0)), p.id);
+  }
+  for (const ax of AXES) {
+    const push = (sgn) => PAIRS.filter((p) => optionsOf(p).some((o) => sgn * (o.fx[ax.id] || 0) >= 1)).length;
+    assert.ok(push(1) >= 2 && push(-1) >= 2, `${ax.id}：往 a 侧 ${push(1)} 题、往 b 侧 ${push(-1)} 题`);
+  }
 });
-await test('全选 a、滑杆没碰 → 还是 WMNH；没有答案各 51%', () => {
+await test('全选 a、滑杆没碰 → 还是 WMNH；日式原木的人（每题选最像的）→ WMNH；没有答案各 51%', () => {
   const { axes } = scoreAxes(answers({ ratioTouched: false }), FLOW);
   assert.equal(codeOf(axes), 'WMNH');
+  // 一个很「日式原木」的人：暖、简、朴、藏 —— 每题选和这个口味最合的那一个
+  const z = { temp: 1.5, density: 1.5, texture: 1.5, storage: 1.5, light: 0.3, curve: 0, social: 0 };
+  const pairs = {};
+  for (const p of PAIRS) {
+    const best = optionsOf(p).reduce((m, o) => (Object.entries(o.fx).reduce((s, [k, v]) => s + v * (z[k] || 0), 0) > Object.entries(m.fx).reduce((s, [k, v]) => s + v * (z[k] || 0), 0) ? o : m));
+    pairs[p.id] = { pick: best.v, ms: 2500, left: optionsOf(p).map((o) => o.v).join('') };
+  }
+  assert.equal(codeOf(scoreAxes(answers({ pairs, ratio: 20 }), FLOW).axes), 'WMNH');
   for (const ax of AXES) assert.equal(scoreAxes({}, FLOW).axes[ax.id], 51);
 });
-await test('一万次随手乱选（反应时间随机、滑杆没碰）：每条轴 45–55%，没有一张牌超过 12%', () => {
+await test('一万次随手乱选（反应时间随机、滑杆没碰）：牌分散 —— ≥ 12 张，没有一张超过 35%', () => {
   const rand = rng(20261011);
   const RUNS = 10000;
-  const aShare = Object.fromEntries(AXES.map((ax) => [ax.id, 0]));
   const cards = {};
   for (let i = 0; i < RUNS; i++) {
     const pairs = {};
-    for (const p of PAIRS) pairs[p.id] = { pick: rand() < 0.5 ? 'a' : 'b', ms: Math.round(700 + rand() * 5000) };
+    for (const p of PAIRS) {
+      const opts = optionsOf(p);
+      pairs[p.id] = { pick: opts[Math.floor(rand() * opts.length)].v, ms: Math.round(700 + rand() * 5000) };
+    }
     const { axes } = scoreAxes({ players: 'solo', pairs, ratio: 25, ratioTouched: false }, FLOW);
-    for (const ax of AXES) if (axes[ax.id] >= 50) aShare[ax.id]++;
     const code = codeOf(axes);
     cards[code] = (cards[code] || 0) + 1;
   }
-  for (const ax of AXES) {
-    const share = aShare[ax.id] / RUNS;
-    assert.ok(share >= 0.45 && share <= 0.55, `${ax.id} a 侧 ${(share * 100).toFixed(1)}%`);
-  }
-  for (const [code, k] of Object.entries(cards)) assert.ok(k / RUNS <= 0.12, `${code} ${((k / RUNS) * 100).toFixed(1)}%`);
+  assert.ok(Object.keys(cards).length >= 12, `${Object.keys(cards).length} 张`);
+  for (const [code, k] of Object.entries(cards)) assert.ok(k / RUNS <= 0.35, `${code} ${((k / RUNS) * 100).toFixed(1)}%`);
 });
 await test('链接里保留每题的左右（left）', async () => {
   const a = answers();

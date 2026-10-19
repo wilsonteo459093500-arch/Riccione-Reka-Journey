@@ -2,6 +2,7 @@
 // 用同一套对应关系，听起来一样（音乐 SPEC §7）：
 //   欢迎 / 生活 / 雷区 = calm《晨光》· 直觉 = intuition《溪岸》（三秒的选择中间不会突然「叮」）· 宝藏 / 愿望 = focus《竹影》·
 //   神灯 / 读懂你（揭晓前）= dusk《暮色》· 揭晓 = reveal《星灯》（刮奏落在主音上）· 蓝图 = blueprint《归家》× 0.5 ·
+//   带它回家（你的家 · 案例 · 户型图，page 'home'）= 和蓝图一样《归家》× 0.5（「生成」那一刻的暮色由 mood: dusk 负责）·
 //   3D = studio《归家》× 0.25（晚上 = night《归家·夜》）。章节牌翻面 = chapter 点缀；每个愿望 = 音效 wishAdd 负责（音乐不再响铃）。
 //
 // 用法：
@@ -18,13 +19,13 @@ export const isNightHour = (hour) => Number.isFinite(+hour) && (+hour >= 19.6 ||
 
 /**
  * 一条子页面消息 → 一步音乐动作 { mood?, cue?, duck?, duckSec? }；不用动音乐 = null。
- * type：page（data.page = quiz | blueprint | studio；studio 可以带 night: true）· mood（data.mood）· chapter · reveal · wish · time（data.hour）
+ * type：page（data.page = quiz | blueprint | home | studio；studio 可以带 night: true）· mood（data.mood）· chapter · reveal · wish · time（data.hour）
  */
 export function musicFor(type, data = {}) {
   switch (type) {
     case 'page':
       if (data.page === 'quiz') return { mood: 'calm', duck: 1, duckSec: 2 };
-      if (data.page === 'blueprint') return { mood: 'blueprint', duck: 'blueprint', duckSec: 3 };
+      if (data.page === 'blueprint' || data.page === 'home') return { mood: 'blueprint', duck: 'blueprint', duckSec: 3 };
       if (data.page === 'studio') return { mood: data.night ? 'night' : 'studio', duck: 'studio', duckSec: 3 };
       return null;
     case 'mood': {

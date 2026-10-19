@@ -8,5 +8,6 @@ import engine from './en-engine.js';
 import floors from './en-floors.js';
 import imp from './en-import.js';
 import voice from './en-voice.js';
+import cases from './en-cases.js';
 
-export default { ...base, ...quiz, ...studio, ...shell, ...logic, ...engine, ...floors, ...imp, ...voice };
+export default { ...base, ...quiz, ...studio, ...shell, ...logic, ...engine, ...floors, ...imp, ...voice, ...cases };

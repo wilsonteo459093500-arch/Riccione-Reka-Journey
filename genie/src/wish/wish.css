@@ -1018,3 +1018,251 @@ html[lang='en'] .ws-title {
     transition-delay: 0s, 0s;
   }
 }
+
+/* ── 带它回家：客人在等员工上传户型图 → WISH 字标右上角一颗金色的小点（慢慢呼吸）；员工区那一行也亮一点 ── */
+.ws-mark.has-dot::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  right: 9px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--gold-l);
+  box-shadow:
+    0 0 0 2px rgba(var(--gold-rgb), 0.35),
+    0 0 10px rgba(var(--gold-l-rgb), 0.9);
+  animation: ws-dot 2.4s var(--ease) infinite;
+  pointer-events: none;
+}
+@keyframes ws-dot {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.78);
+    opacity: 0.7;
+  }
+}
+.ws-act.is-wait > i {
+  background: var(--gold-btn);
+  color: var(--ink);
+}
+.ws-file {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  opacity: 0;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ws-mark.has-dot::after {
+    animation: none;
+  }
+}
+
+/* ── 最后一步：交给设计师（3D 里，胶囊旁边的一颗金色胶囊；留好了变成安静的 ✓）── */
+.ws-lead-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 20px 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--gold-btn);
+  color: var(--ink);
+  font: 600 15px/1 var(--sans);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow:
+    inset 0 -1px 0 rgba(var(--gold-d-rgb), 0.35),
+    0 1px 2px rgba(var(--shade-rgb), 0.1),
+    0 10px 26px rgba(var(--gold-d-rgb), 0.3);
+  animation: ws-lead-in 0.7s var(--spring) both;
+}
+.ws-lead-cta > span[aria-hidden] {
+  font-size: 14px;
+}
+.ws-lead-cta:not(.fx-pressable):active {
+  transform: scale(0.97);
+}
+.ws-lead-cta:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.ws-lead-cta.is-done {
+  background: rgba(var(--glass-rgb), 0.86);
+  -webkit-backdrop-filter: blur(28px) saturate(170%);
+  backdrop-filter: blur(28px) saturate(170%);
+  border: 0.5px solid var(--glass-border);
+  color: var(--text-strong);
+  box-shadow:
+    0 1px 2px rgba(var(--shade-rgb), 0.08),
+    0 10px 30px rgba(var(--shade-rgb), 0.14);
+  animation: none;
+}
+.ws-lead-cta.is-done svg {
+  color: var(--accent);
+}
+@keyframes ws-lead-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.92);
+  }
+}
+/* 横放的 iPad / 电脑：3D 的材质栏只给外壳的两颗胶囊留了右下角（约 288px）——「交给设计师」浮在两颗胶囊的上面，
+   不往左挤到材质栏上。竖放（材质栏整列抬高 58px，底下一整条是空的）和手机（外壳自己的底栏）照旧排在同一行。 */
+@media (min-width: 1024px) {
+  .ws-studio .ws-lead-cta {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 10px);
+  }
+}
+
+/* ── 员工区：客人名单 ── */
+.ws-pop-leads {
+  width: min(420px, calc(100vw - 32px));
+}
+.ws-leads-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -4px 0 12px -6px;
+}
+.ws-leads-head b {
+  display: block;
+  font: 600 17px/1.25 var(--sans);
+  color: var(--text-strong);
+}
+.ws-leads-head span {
+  display: block;
+  margin-top: 3px;
+  font: 400 13px/1.3 var(--sans);
+  color: var(--text-soft);
+}
+.ws-back {
+  opacity: 0.75;
+}
+.ws-leads-empty {
+  margin: 8px 2px 14px;
+  font: 400 14.5px/1.45 var(--sans);
+  color: var(--text-soft);
+}
+.ws-leads-list {
+  display: grid;
+  gap: 8px;
+  max-height: min(46dvh, 420px);
+  margin: 0 0 12px;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  -webkit-overflow-scrolling: touch;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.ws-leads-list li {
+  padding: 12px 12px 10px 14px;
+  border-radius: 16px;
+  background: rgba(var(--text-rgb), 0.05);
+}
+.ws-lead-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ws-lead-top b {
+  font: 600 16px/1.25 var(--sans);
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ws-lead-top span {
+  flex: 1;
+  font: 500 14px/1.2 var(--sans);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+.ws-lead-wa {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--card);
+  color: var(--accent);
+  box-shadow: 0 1px 2px rgba(var(--shade-rgb), 0.08);
+}
+.ws-lead-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 0;
+}
+.ws-lead-tags em {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(var(--gold-rgb), 0.16);
+  font: 600 12px/1.3 var(--sans);
+  font-style: normal;
+  color: var(--gold-d);
+}
+.ws-lead-tags small {
+  margin-left: auto;
+  font: 400 12px/1.3 var(--sans);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-soft);
+}
+.ws-lead-meta {
+  margin: 6px 0 0;
+  font: 400 13px/1.4 var(--sans);
+  color: var(--text-soft);
+}
+.ws-lead-meta.is-staff {
+  color: var(--text-strong);
+}
+.ws-leads-acts {
+  display: grid;
+  gap: 8px;
+}
+.ws-act-sm {
+  min-height: 60px;
+}
+.ws-act-sm > i {
+  width: 38px;
+  height: 38px;
+}
+.ws-act.is-sure {
+  background: rgba(var(--danger-rgb), 0.12);
+}
+.dusk .ws-leads-list li {
+  background: rgba(var(--text-rgb), 0.08);
+}
+.dusk .ws-lead-wa {
+  background: rgba(var(--text-rgb), 0.1);
+  color: var(--gold);
+}
+@media (max-width: 560px) {
+  .ws-lead-cta {
+    padding: 0 16px 0 14px;
+    font-size: 14px;
+  }
+  .ws-pop-leads {
+    width: calc(100vw - 24px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ws-lead-cta {
+    animation-duration: 0.01s;
+  }
+}

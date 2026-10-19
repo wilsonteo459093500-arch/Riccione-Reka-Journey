@@ -320,6 +320,7 @@ class Layout {
   }
   /** 放一件；front = 前方要留的通道（米）。force = 主件：不管别的家具，但照样不压门、不出房间，挡到就沿墙挪 0.3m 再试 */
   try(room, kind, pos, w, d, extra = {}, opts = {}) {
+    if (kind === 'plant' && this.plantOk && !this.plantOk(room)) return null;
     let ok = this.check(room, pos, w, d, opts);
     let p = pos;
     if (!ok && opts.force) {
@@ -470,7 +471,8 @@ function tableOptions(room, ctx) {
   const shortDim = Math.min(room.w, room.d);
   const longDim = Math.max(room.w, room.d);
   const want = diningWant(ctx);
-  const round = shortDim < 2.7 || ctx.curve > 90;
+  // 案例指定了餐桌形状就照它（尺寸规则优先：房间窄 → 圆桌）
+  const round = shortDim < 2.7 || (ctx.style.diningTable ? ctx.style.diningTable === 'round' : ctx.curve > 90);
   const opts = [];
   if (want >= 8) opts.push({ seats: 8, variant: 'round', w: 1.5 });
   if (want >= 6) opts.push(round ? { seats: 6, variant: 'round', w: 1.3 } : { seats: 6, variant: 'rect', w: 1.8, d: 0.9 });
@@ -491,8 +493,11 @@ function placeAltar(L, rc, ctx, s, st, margin = 0.02, front = 0.8) {
   return it;
 }
 
-/** 电视墙 + 沙发 + 茶几：沙发挡到门 / 通道就沿墙挪一点、换小一号，最后才离墙。compact = 起居厅（小电视墙、两人沙发） */
-function sofaGroup(L, rc, ctx, tvSide, compact = false) {
+/**
+ * 电视墙 + 沙发 + 茶几：沙发挡到门 / 通道就沿墙挪一点、换小一号，最后才离墙。compact = 起居厅（小电视墙、两人沙发）。
+ * relax = 照常放不下时的退路：沙发离开背后的墙（后面留 ≥ 0.6m 的路，让开门前的范围）、沿墙挪得更远、离电视可以近到 1.4m。
+ */
+function sofaGroup(L, rc, ctx, tvSide, compact = false, relax = false) {
   const { room } = rc;
   const st = tvSide.stretches[0];
   const tvW = Math.min(st.len - 0.1, compact ? 2.4 : 3.2);
@@ -500,28 +505,48 @@ function sofaGroup(L, rc, ctx, tvSide, compact = false) {
   const tvAlong = tv ? (tvSide.axis === 'x' ? tv.x : tv.z) : mid(st);
   const D = depthOf(room, tvSide);
   const R = reach(rc, tvSide);
-  const variant0 = compact ? (ctx.curve > 62 ? 'curvy' : 'classic') : ctx.curve > 62 ? 'curvy' : ctx.social > 65 && D > 3.8 && st.len > 3 ? 'lshape' : 'classic';
+  const roomy = D > 3.8 && st.len > 3; // L 形沙发要的空间（案例指定 L 形也得放得下）
+  const want = SOFAS.includes(ctx.style.sofa) ? ctx.style.sofa : null;
+  const variant0 = want
+    ? want === 'lshape' && (compact || !roomy)
+      ? 'classic'
+      : want
+    : compact
+      ? ctx.curve > 62
+        ? 'curvy'
+        : 'classic'
+      : ctx.curve > 62
+        ? 'curvy'
+        : ctx.social > 65 && roomy
+          ? 'lshape'
+          : 'classic';
   const sofaW0 = compact ? 1.7 : Math.min(variant0 === 'lshape' ? 2.6 : 2.3, Math.max(1.8, tvW));
   const sofaD = 0.92;
   const back = D - tvSide.thick * 2 - 0.05 <= (compact ? 3.8 : 4.6);
   const far = Math.min(compact ? 2.6 : 3.3, D - 1.2) + 0.45;
-  const dists = back ? [R - sofaD / 2, R - sofaD / 2 - 0.9] : [far, far - 0.3];
+  const dists = relax ? [0.6, 0.75, 0.9, 1.05, 1.2].map((walk) => R - sofaD / 2 - walk) : back ? [R - sofaD / 2, R - sofaD / 2 - 0.9] : [far, far - 0.3];
   const tvFace = tvSide.thick + 0.455;
   const rot = (SIDE_ROT[tvSide.side] + 180) % 360;
-  const widths = compact ? [1.7, 1.5] : [...new Set([sofaW0, Math.min(sofaW0, 2.0), 1.8])];
+  const widths = compact ? [1.7, 1.5] : relax ? [...new Set([Math.min(sofaW0, 2.0), 1.8, 1.6])] : [...new Set([sofaW0, Math.min(sofaW0, 2.0), 1.8])];
+  const shifts = [0];
+  for (let k = 0.15; k <= (relax ? 1.5 : 0.75) + 1e-9; k += 0.15) shifts.push(+k.toFixed(2), -k.toFixed(2));
   for (const sd of dists) {
-    if (sd - sofaD / 2 - tvFace < (compact ? 1.5 : 1.9)) continue;
+    if (sd - sofaD / 2 - tvFace < (relax ? 1.4 : compact ? 1.5 : 1.9)) continue;
     for (const w of widths)
-      for (const sh of [0, 0.15, -0.15, 0.3, -0.3, 0.45, -0.45, 0.6, -0.6, 0.75, -0.75]) {
+      for (const sh of shifts) {
         const along = tvAlong + sh;
         const variant = variant0 === 'lshape' && w < 2.2 ? 'classic' : variant0;
         const sofa = L.try(room, 'sofa', { ...at(room, tvSide, along, sd), rot }, w, sofaD, { variant });
         if (!sofa) continue;
         const ctDist = sd - sofaD / 2 - 0.4 - 0.3;
-        const ctVar = ctx.refined ? 'stone' : ctx.curve > 55 ? 'round' : 'rect';
+        const ctVar = coffeeOf(ctx);
         (!compact && L.try(room, 'coffeeTable', at(room, tvSide, along, ctDist), 1.0, 0.6, { variant: ctVar })) || L.try(room, 'coffeeTable', at(room, tvSide, along, ctDist + 0.05), 0.8, 0.5, { variant: ctVar });
         const rugD = Math.max(1.6, sd - tvSide.thick - 0.7);
-        L.flat(room, 'rug', at(room, tvSide, along, sd - rugD / 2 + 0.25), w + 0.6, rugD, { variant: ctx.curve > 90 ? 'round' : 'rect' });
+        // 地毯不出房间（沙发沿墙挪得远时，宽度收一点）
+        const lo = tvSide.axis === 'x' ? room.x : room.y;
+        const hi = lo + (tvSide.axis === 'x' ? room.w : room.d);
+        const rugW = Math.max(w, Math.min(w + 0.6, 2 * Math.min(along - lo, hi - along) - 0.1));
+        L.flat(room, 'rug', at(room, tvSide, along, sd - rugD / 2 + 0.25), +rugW.toFixed(3), rugD, { variant: RUGS.includes(ctx.style.rug) ? ctx.style.rug : ctx.curve > 90 ? 'round' : 'rect' });
         return { st, along, w, sd, ctDist, back: back && sd === dists[0] };
       }
   }
@@ -542,11 +567,37 @@ function shoeByDoor(L, rc, ctx) {
     }
 }
 
+/** 电视墙 + 沙发：每面候选的墙先照常试，再放宽试（沙发离墙、后面留路）；都不行 → 沙发靠墙放（不对电视），电视墙不单独放 */
+function livingGroup(L, rc, ctx, cands) {
+  for (const relax of [false, true])
+    for (const s of cands) {
+      const m = L.mark();
+      const g = sofaGroup(L, rc, ctx, s, false, relax);
+      if (!g.none) return { tvSide: s, grp: g };
+      L.reset(m); // 电视墙放了、沙发没放下：拿掉，换一面墙
+    }
+  // 最后：沙发靠最长的墙（窗下也行），前面放茶几、地毯；没有沙发就不放电视墙（客厅不能只有电视没有坐的地方）
+  const { room } = rc;
+  const ws = roomSides(room, rc.walls, { allowWindow: true })
+    .filter((s) => s.walled)
+    .sort((a, b) => (b.stretches[0]?.len || 0) - (a.stretches[0]?.len || 0));
+  for (const s of ws)
+    for (const st of s.stretches) {
+      if (st.len < 1.6) continue;
+      const sofa = hug(L, rc, s, st, 'sofa', { d: 0.92, minW: 1.5, maxW: 2.0, front: 0.9, extra: () => ({ variant: ctx.style.sofa === 'curvy' || ctx.style.sofa === 'classic' ? ctx.style.sofa : ctx.curve > 62 ? 'curvy' : 'classic' }) });
+      if (!sofa) continue;
+      const c = s.axis === 'x' ? sofa.x : sofa.z;
+      L.try(room, 'coffeeTable', at(room, s, c, s.thick + 0.92 + 0.4 + 0.25), 0.8, 0.5, { variant: coffeeOf(ctx) });
+      L.flat(room, 'rug', at(room, s, c, s.thick + 0.92), sofa.w + 0.6, 1.6, { variant: RUGS.includes(ctx.style.rug) ? ctx.style.rug : 'rect' });
+      return { tvSide: null, grp: null, sofaSide: s };
+    }
+  return { tvSide: null, grp: null };
+}
+
 function living(L, rc, ctx) {
   const { room, sides } = rc;
   const cands = sides.filter((s) => s.walled && (s.stretches[0]?.len || 0) >= 1.8).sort((a, b) => score(b, { noWindow: 2 }) - score(a, { noWindow: 2 }));
-  const tvSide = cands[0];
-  const grp = tvSide ? sofaGroup(L, rc, ctx, tvSide) : null;
+  const { tvSide, grp } = livingGroup(L, rc, ctx, cands);
   if (ctx.shoeInLiving && rc.mainSide && !ctx.placedShoe) shoeByDoor(L, rc, ctx);
   // 神台比单椅、展示柜重要：先找墙
   const oppo0 = tvSide ? opposite(sides, tvSide) : null;
@@ -558,7 +609,7 @@ function living(L, rc, ctx) {
     const ct = at(room, tvSide, along, ctDist);
     const p = at(room, tvSide, along + w / 2 + 0.6, ctDist + 0.15);
     const face = Math.round((Math.atan2(ct.x - p.x, ct.z - p.z) * 180) / Math.PI);
-    if (!L.try(room, 'armchair', { ...p, rot: (face + 360) % 360 }, 0.8, 0.8, { variant: ctx.natural ? 'lounge' : 'classic' }))
+    if (!L.try(room, 'armchair', { ...p, rot: (face + 360) % 360 }, 0.8, 0.8, { variant: ARMCHAIRS.includes(ctx.style.armchair) ? ctx.style.armchair : ctx.natural ? 'lounge' : 'classic' }))
       L.try(room, 'floorLamp', at(room, tvSide, along + w / 2 + 0.3, sd), 0.4, 0.4);
     L.try(room, 'floorLamp', at(room, tvSide, along - w / 2 - 0.3, sd), 0.4, 0.4) || L.try(room, 'sideTable', at(room, tvSide, along - w / 2 - 0.3, sd), 0.45, 0.45);
   }
@@ -616,11 +667,11 @@ function family(L, rc, ctx) {
     for (const s of ws) {
       const st = s.stretches[0];
       if (!st || st.len < 1.6) continue;
-      const sofa = hug(L, rc, s, st, 'sofa', { d: 0.92, minW: 1.4, maxW: 1.7, front: 0.9, extra: () => ({ variant: ctx.curve > 62 ? 'curvy' : 'classic' }) });
+      const sofa = hug(L, rc, s, st, 'sofa', { d: 0.92, minW: 1.4, maxW: 1.7, front: 0.9, extra: () => ({ variant: ctx.style.sofa === 'curvy' || ctx.style.sofa === 'classic' ? ctx.style.sofa : ctx.curve > 62 ? 'curvy' : 'classic' }) });
       if (!sofa) continue;
       sofaSide = sides.find((x) => x.side === s.side);
       const c = s.axis === 'x' ? sofa.x : sofa.z;
-      L.try(room, 'coffeeTable', at(room, s, c, s.thick + 0.92 + 0.4 + 0.25), 0.8, 0.5, { variant: ctx.curve > 55 ? 'round' : 'rect' });
+      L.try(room, 'coffeeTable', at(room, s, c, s.thick + 0.92 + 0.4 + 0.25), 0.8, 0.5, { variant: COFFEES.includes(ctx.style.coffeeTable) ? ctx.style.coffeeTable : ctx.curve > 55 ? 'round' : 'rect' });
       L.flat(room, 'rug', at(room, s, c, s.thick + 0.92), sofa.w + 0.6, 1.6, { variant: 'rect' });
       break;
     }
@@ -1200,6 +1251,53 @@ function curtains(L, room, sides, walls, ctx) {
   }
 }
 
+// ───────────────────────── 案例的家具风格 ─────────────────────────
+
+const SOFAS = ['classic', 'curvy', 'lshape'];
+const COFFEES = ['round', 'rect', 'stone'];
+const DINING = ['round', 'rect'];
+const ARMCHAIRS = ['classic', 'lounge'];
+const RUGS = ['rect', 'round'];
+const HANDLES = ['none', 'bar'];
+const PLANTS = ['few', 'some', 'many'];
+const MANY_PLANTS = ['living', 'family', 'dining', 'master', 'study'];
+
+/** 只收认得的值（manifest / 链接里来的，可能缺、可能是旧的） */
+function cleanStyle(s) {
+  const out = {};
+  if (!s || typeof s !== 'object') return out;
+  if (SOFAS.includes(s.sofa)) out.sofa = s.sofa;
+  if (COFFEES.includes(s.coffeeTable)) out.coffeeTable = s.coffeeTable;
+  if (DINING.includes(s.diningTable)) out.diningTable = s.diningTable;
+  if (ARMCHAIRS.includes(s.armchair)) out.armchair = s.armchair;
+  if (RUGS.includes(s.rug)) out.rug = s.rug;
+  if (HANDLES.includes(s.handle)) out.handle = s.handle;
+  if (Number.isFinite(+s.displayPct) && s.displayPct !== null && s.displayPct !== '') out.displayPct = clamp(+s.displayPct, 0, 60);
+  if (PLANTS.includes(s.plants)) out.plants = s.plants;
+  return out;
+}
+
+function coffeeOf(ctx) {
+  if (COFFEES.includes(ctx.style.coffeeTable)) return ctx.style.coffeeTable;
+  return ctx.refined ? 'stone' : ctx.curve > 55 ? 'round' : 'rect';
+}
+
+/** 「很多绿植」：房间空着的角落再放一两盆（不挡门、不压家具） */
+function extraPlants(L, rc) {
+  const { room, inner } = rc;
+  const corners = [
+    { x: inner.x0 + 0.3, z: inner.z0 + 0.3 },
+    { x: inner.x1 - 0.3, z: inner.z1 - 0.3 },
+    { x: inner.x1 - 0.3, z: inner.z0 + 0.3 },
+    { x: inner.x0 + 0.3, z: inner.z1 - 0.3 },
+  ];
+  let n = 0;
+  for (const [i, c] of corners.entries()) {
+    if (n >= 2) break;
+    if (L.try(room, 'plant', { ...c, rot: 0 }, 0.45, 0.45, { variant: i % 2 ? 'small' : 'tall', seed: 31 + i }, { front: 0 })) n++;
+  }
+}
+
 /** plan（v1 / v2 / 一层）+ walls（一层的数组 / { floorId: walls } / 不给）→ { plan: v2, walls: { floorId: walls } } */
 function prep(plan0, walls0) {
   const plan = migratePlan(plan0);
@@ -1212,8 +1310,9 @@ function prep(plan0, walls0) {
   return { plan, walls };
 }
 
-function context(plan, walls, profile) {
+function context(plan, walls, profile, style0 = {}) {
   const who = new Set(profile?.life?.who || []);
+  const style = cleanStyle(style0);
   const sp = profile ? storagePlan(profile.storage || {}, APPLIANCES) : null;
   const g = plan.floors[0];
   const types = new Set(plan.floors.flatMap((f) => f.rooms.map((r) => r.type)));
@@ -1228,7 +1327,8 @@ function context(plan, walls, profile) {
     social: profile?.hidden?.social ?? 50,
     refined: (profile?.axes?.texture ?? 60) < 50,
     natural: (profile?.axes?.texture ?? 60) >= 60,
-    displayPct: sp?.displayPct ?? 20,
+    style,
+    displayPct: style.displayPct ?? sp?.displayPct ?? 20,
     books: profile?.storage?.books ?? 4,
     wardrobeMM: sp?.wardrobeMM || 2400,
     shoeMM: sp?.shoeCabinetMM || 1500,
@@ -1242,7 +1342,7 @@ function context(plan, walls, profile) {
     festive: (profile?.storage?.bulky || []).includes('festive'),
     cook: profile?.life?.cook || '',
     avoid: new Set(profile?.avoid || []),
-    handle: profile && (profile.axes?.texture ?? 60) < 50 && (profile.axes?.temp ?? 50) >= 50 ? 'bar' : 'none',
+    handle: style.handle || (profile && (profile.axes?.texture ?? 60) < 50 && (profile.axes?.temp ?? 50) >= 50 ? 'bar' : 'none'),
     hasStudy: types.has('study'),
     hasKidsRoom: types.has('kids'),
     hasWalkin: types.has('walkin'),
@@ -1256,11 +1356,26 @@ function context(plan, walls, profile) {
   };
 }
 
-/** 主入口：plan（v1 / v2）+ walls + 档案 → 家具清单（每件都有 floor） */
-export function furnish(plan0, walls0, profile = null) {
+/**
+ * 主入口：plan（v1 / v2）+ walls + 档案 → 家具清单（每件都有 floor）。
+ * style（案例的家具风格，SPEC §8.3）：sofa 'classic'|'curvy'|'lshape' · coffeeTable 'round'|'rect'|'stone' · diningTable 'round'|'rect' ·
+ * armchair 'classic'|'lounge' · rug 'rect'|'round' · handle 'none'|'bar' · displayPct 0–60 · plants 'few'|'some'|'many'。
+ * 没写的照今天的规则；尺寸规则永远优先（L 形沙发要放得下、窄餐厅用圆桌）。
+ */
+export function furnish(plan0, walls0, profile = null, { style } = {}) {
   const { plan, walls } = prep(plan0, walls0);
   const L = new Layout();
-  const ctx = context(plan, walls, profile);
+  const ctx = context(plan, walls, profile, style);
+  if (ctx.style.plants === 'few') {
+    // 少量绿植：只在客厅（一盆）和阳台
+    const seen = new Set();
+    L.plantOk = (room) => {
+      if (room.type === 'balcony') return true;
+      if (room.type !== 'living' || seen.has(room.id)) return false;
+      seen.add(room.id);
+      return true;
+    };
+  }
   const keeps = stairKeeps(plan);
   // 先摆大房间（客厅、主卧），神台 / 宠物窝这种只摆一次的优先给它们；同一种房间一楼先摆
   const order = ['living', 'master', 'dining', 'family', 'kitchen', 'bedroom', 'kids', 'study', 'foyer', 'porch', 'bath', 'walkin', 'utility', 'store', 'balcony', 'corridor'];
@@ -1288,6 +1403,7 @@ export function furnish(plan0, walls0, profile = null) {
     else if (t === 'walkin') walkin(L, rc, ctx);
     else if (t === 'utility') utility(L, rc, ctx);
     else if (t === 'store') store(L, rc, ctx);
+    if (ctx.style.plants === 'many' && MANY_PLANTS.includes(t)) extraPlants(L, rc);
     curtains(L, room, rc.sides, walls[f.id], ctx);
   }
   return L.items;
@@ -1314,9 +1430,9 @@ const HINTS = {
  *   gap = max(0, target − placed)；hint = 差了的话给设计师的建议（中文，界面用 t() 翻）；itemIds = 算进去的家具。
  * items 可以是设计师改过的清单（拖动、删除后再对账）。
  */
-export function furnishReport(plan0, walls0, profile = null, items = null) {
+export function furnishReport(plan0, walls0, profile = null, items = null, { style } = {}) {
   const { plan, walls } = prep(plan0, walls0);
-  const its = items || furnish(plan, walls, profile);
+  const its = items || furnish(plan, walls, profile, { style });
   const ctx = context(plan, walls, profile);
   const sp = ctx.sp;
   const rows = [];

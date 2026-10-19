@@ -10,7 +10,7 @@
 // 旧设备自动改用 pdf.js 的「legacy」版本；新版跑到一半缺函数也会退回 legacy 再试一次。读不了 → 一句能照着做的话（已经翻译好）。
 
 import { t } from '../../shared/i18n.js';
-import { trimChrome, enhance, pageTextScore, rectifyEstimate, warpImage, inkMask } from './sheet.js';
+import { trimChrome, enhance, pageTextScore, pageLevels, rectifyEstimate, warpImage, inkMask } from './sheet.js';
 
 const MAX = 2000; // planFileToImage（旧接口）的最长边
 export const PREVIEW_LONG = 2048;
@@ -394,9 +394,9 @@ export async function findPlanPagesText(src) {
       const tc = await pg.getTextContent();
       const text = tc.items.map((it) => it.str || '').join(' ');
       chars += text.replace(/\s+/g, '').length;
-      pages.push({ page: i, score: pageTextScore(text) });
+      pages.push({ page: i, score: pageTextScore(text), levels: pageLevels(text) });
     } catch {
-      pages.push({ page: i, score: 0 });
+      pages.push({ page: i, score: 0, levels: [] });
     }
   }
   return { hasText: chars > src.pages * 4, pages };

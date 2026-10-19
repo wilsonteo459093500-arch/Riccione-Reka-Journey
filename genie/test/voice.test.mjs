@@ -312,7 +312,7 @@ await test('every line: id, zh + en, ≤ 2 sentences, no emoji, known group / le
     assert.ok(!/您|人家|潘吉会|潘吉不|潘吉在|儿[，。！？]|～/.test(l.zh), `${l.id}: ${l.zh}`);
   }
   for (const id of LINES.sequence) assert.ok(ids.has(id), id);
-  assert.equal(LINES.lines.length, 33);
+  assert.equal(LINES.lines.length, 45); // 33 + the 10 「带它回家」 lines (group home, guest journey v2) + 2 lead lines (交给设计师, owner 2026-10-19)
 });
 await test('no line can carry guest data: no {0} placeholders, no 名字 slots', () => {
   for (const l of LINES.lines) assert.ok(!/\{\w+\}/.test(l.zh + l.en + (l.zhSay || '') + (l.enSay || '')), l.id);

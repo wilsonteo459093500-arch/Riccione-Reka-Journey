@@ -113,7 +113,8 @@ CONFIG.idle       // 闲置提示与回到开头的时间
 ## 八、数据与隐私
 
 - 全部在浏览器本机完成：蓝图存在这台设备（localStorage），方案存在这台设备（localStorage + IndexedDB 存平面图底图）；
-- 本机的客人蓝图建好 **90 天**后自动删掉（`CONFIG.keepDays`，0 = 不删）；员工区「员工 · 本机蓝图」底部可以一键清空。客人手上的链接、海报不受影响（资料就在链接里）；
+- 本机的客人蓝图建好 **90 天**后自动删掉（`CONFIG.keepDays`，0 = 不删）；员工区「员工 · 本机蓝图」底部可以一键清空（员工记的预算 `genie.staffnotes.v1` 一起清）。客人手上的链接、海报不受影响（资料就在链接里）；
+- 展厅 iPad 上的客人名单（`genie.leads.v1`：称呼 + WhatsApp + PDPA 同意）和员工记的预算（`genie.staffnotes.v1`）也是 `CONFIG.keepDays` 天：从最后一次留资料 / 改起算，到期自动删（`src/shared/keep.js`，详见 DESIGN.md §6）；名单要留底请在到期前导出 Excel；
 - 分享链接里就是数据本身（压缩编码），不经过任何服务器；给客人的链接 / 海报不带设计师版；
 - AI 识别平面图用 Google Gemini，**key 只存在这台设备的浏览器里**（设置里填），没有 key 也能手动画；
 - 所有材质贴图、风景都是代码画的（没有图片素材），所以没有版权问题；以后放进去的照片要自己确认授权。
@@ -128,6 +129,20 @@ npm test         # 纯函数测试（计分、收纳换算、雷区替换、墙�
 node test/profile.test.mjs   # 计分与配色的细测
 npm run build    # 生产构建到 dist/（四个入口）
 ```
+
+**用无头浏览器量速度的两个坑**（不绕开，数字就是错的）：
+
+1. 无头 Chromium 用软件 3D（SwiftShader）时，canvas 的 `toDataURL` / `getImageData` 要走一次很慢的 GPU 回读：案例详情、K 屏会量到
+   1–3 秒的「长任务」，真机上没有。量许愿之旅、案例、许愿模式这些页面的速度时，启动参数加 `--disable-accelerated-2d-canvas`
+   （3D 工作室本身还是用 `--use-gl=angle --use-angle=swiftshader`）。
+2. Playwright 的 `setInputFiles` 交给 `webkitdirectory`（选文件夹）的是 0 字节的文件：案例整理会把每张照片标成「读不了」，
+   「分析速度」变成假的每秒 80–90 张（真实大约每秒 9–16 张）。在页面里自己造 `File`（带自己的 `webkitRelativePath`），
+   再对真的 `<input webkitdirectory>` 发 `change`；或者在开发服务器上用 `window.__sorterPick(files)`（正式版里没有）。
+3. 另外：Playwright 的点击 / `waitForSelector` 会先量元素位置（`elementsFromPoint`、`computeBox`），这一下会逼浏览器马上排版，
+   CPU 剖析里会算在它们头上。要看「换屏那一下」真正卡多久，用页面里自己的 `el.click()` + Long Animation Frames（`blockingDuration`）。
+4. 量「许愿模式一位接一位，元素会不会越来越多」时：`page.waitForSelector()` 会交回一个 ElementHandle，不 `dispose()` 就一直抓着那块
+   （已经关掉的）员工区 / 名单 / 客人资料单不放；在 iframe 里点东西时 Playwright 也会抓着旧的 `<iframe>`。用 `locator(...).waitFor()`，
+   不要用 CDP 的 `Runtime.queryObjects` 一类会留句柄的查法。不这样，每位客人看起来多出几百个元素，其实是测试工具自己留下的。
 
 ```
 src/

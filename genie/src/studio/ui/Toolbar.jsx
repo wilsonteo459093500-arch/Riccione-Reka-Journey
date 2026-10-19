@@ -1,4 +1,4 @@
-// 右上角工具条（像 Freeform / Keynote 的浮动工具条）：撤销 · 视角 · 墙 · 标签 · 概念图 · 分享 · 平面图 · 方案 · 更多。
+// 右上角工具条（像 Freeform / Keynote 的浮动工具条）：撤销 · 视角 · 墙 · 标签 · 对照 · 概念图 · 分享 · 平面图 · 方案 · 更多。
 // 窄屏把次要的按钮收进「更多」菜单（CSS 决定哪些留在条上），菜单里还有演示模式、帮助、设置、中 / EN。
 // 「新方案 / 打开方案」只给设计师（onStart 为空 = 客人版、许愿模式：不出现，展厅 iPad 上别的客人的方案打不开）。
 // 「设置」也只给设计师（onSettings 为空 = 客人版、许愿模式：里面是公司的 AI key）；「语言」那一行客人版照样有。
@@ -59,6 +59,8 @@ export default function Toolbar(p) {
         {canLabel && <IconBtn icon="labels" label={p.labels ? t('隐藏材质标签') : t('显示材质标签')} onClick={p.onLabels} active={p.labels} pressed={p.labels} />}
       </div>
       <div className="tb-group glass">
+        {/* 对照：案例照片 vs 你的家（选过参考案例、案例有照片时才有；手机上用左上角的「我的家 | 案例照片」） */}
+        {p.onCompare && <IconBtn icon="compare" label={t('对照案例照片')} text={t('对照')} onClick={p.onCompare} active={p.compareOn} pressed={p.compareOn} className="tb-cmp" />}
         {p.onShot && <IconBtn icon="snapshot" label={t('下载概念图')} onClick={p.onShot} className="tb-hide-sm" />}
         <IconBtn icon="share" label={t('分享链接')} onClick={p.onShare} />
       </div>

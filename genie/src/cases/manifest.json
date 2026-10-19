@@ -1,0 +1,1626 @@
+{
+  "kind": "wish-cases",
+  "v": 1,
+  "updatedAt": "2026-10-18T12:17:41.782Z",
+  "cases": [
+    {
+      "id": "seed-zen-condo",
+      "kind": "concept",
+      "v": 1,
+      "rev": 1,
+      "status": "live",
+      "order": 10,
+      "consent": false,
+      "title": {
+        "zh": "晨光里的原木家",
+        "en": "Oak in the Morning Light"
+      },
+      "story": {
+        "zh": "给想一回家就放松的小家庭：杂物全收进顶天立地的白橡木柜，客厅只留光、木头和一张低低的沙发。",
+        "en": "For a small family who wants to unwind the moment they walk in: everything lives behind floor-to-ceiling white-oak doors; the living room keeps only light, timber and a low sofa."
+      },
+      "place": {
+        "zh": "公寓 · 3 房 2 卫 · 约 1,100 sq ft",
+        "en": "Condo · 3 bed 2 bath · ~1,100 sq ft"
+      },
+      "property": {
+        "type": "condo",
+        "sizeSqft": 1100,
+        "bedrooms": 3,
+        "bathrooms": 2,
+        "storeys": 1
+      },
+      "scope": "whole",
+      "rooms": [
+        "living",
+        "dining",
+        "kitchen",
+        "master",
+        "foyer"
+      ],
+      "template": "condo3",
+      "style": {
+        "dreamers": [
+          "WMNH",
+          "WMND"
+        ],
+        "axes": {
+          "temp": 75,
+          "density": 82,
+          "texture": 80,
+          "storage": 88
+        },
+        "hidden": {
+          "light": 62,
+          "curve": 45,
+          "social": 45
+        },
+        "wishes": [
+          "storage",
+          "clean",
+          "health"
+        ],
+        "features": []
+      },
+      "materials": {
+        "floor": "light-oak",
+        "walls": "warm-white",
+        "feature": "sand-limewash",
+        "cabinetry": "white-oak",
+        "countertop": "quartz-travertine",
+        "tile": "zellige-white",
+        "upholstery": "linen",
+        "bedding": "linen",
+        "rugs": "oat-knit",
+        "woodwork": "smoked-oak",
+        "accents": "sage-linen",
+        "curtains": "linen",
+        "metal": "matte-black"
+      },
+      "mood": "cozy",
+      "time": 16.8,
+      "furniture": {
+        "sofa": "classic",
+        "coffeeTable": "round",
+        "diningTable": "rect",
+        "armchair": "lounge",
+        "rug": "rect",
+        "handle": "none",
+        "displayPct": 12,
+        "plants": "some"
+      },
+      "supplies": {
+        "firm": [
+          "kitchen",
+          "wardrobe",
+          "tvWall",
+          "shoeCabinet",
+          "diningSet"
+        ],
+        "context": [
+          "flooring",
+          "lighting",
+          "paint",
+          "curtains"
+        ]
+      },
+      "products": [],
+      "wishNotes": {
+        "storage": {
+          "zh": "整面顶天立地柜，杂物全收进去",
+          "en": "A full wall of floor-to-ceiling storage"
+        },
+        "clean": {
+          "zh": "隐藏拉手、平板门，一抹就干净",
+          "en": "Handle-free flat doors that wipe clean"
+        },
+        "health": {
+          "zh": "E0 级板材、低 VOC 涂料",
+          "en": "E0 boards and low-VOC paint"
+        }
+      },
+      "images": [
+        {
+          "id": "01",
+          "room": "living",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-zen-condo/01-1600.webp",
+          "thumb": "seed-zen-condo/01-480.webp",
+          "alt": {
+            "zh": "「晨光里的原木家」的客厅 · 3D 示意",
+            "en": "Oak in the Morning Light — living room · 3D concept"
+          },
+          "cover": true
+        },
+        {
+          "id": "02",
+          "room": "foyer",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-zen-condo/02-1600.webp",
+          "thumb": "seed-zen-condo/02-480.webp",
+          "alt": {
+            "zh": "「晨光里的原木家」的玄关 · 3D 示意",
+            "en": "Oak in the Morning Light — foyer · 3D concept"
+          },
+          "cover": false
+        },
+        {
+          "id": "03",
+          "room": "plan3d",
+          "kind": "plan3d",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-zen-condo/03-1600.webp",
+          "thumb": "seed-zen-condo/03-480.webp",
+          "alt": {
+            "zh": "「晨光里的原木家」整个家的 3D 鸟瞰 · 示意",
+            "en": "Oak in the Morning Light — the whole home from above · 3D concept"
+          },
+          "cover": false
+        }
+      ],
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "updatedAt": "2026-10-18T12:17:34.685Z"
+    },
+    {
+      "id": "seed-nordic-studio",
+      "kind": "concept",
+      "v": 1,
+      "rev": 1,
+      "status": "live",
+      "order": 20,
+      "consent": false,
+      "title": {
+        "zh": "一个人的北欧小公寓",
+        "en": "A Nordic Studio for One"
+      },
+      "story": {
+        "zh": "给一个人住的小公寓：小小的、亮亮的、好打理。白墙、白橡、一面雾蓝的墙，床下和墙里都是收纳。",
+        "en": "For one person in a small flat — small, bright and easy. White walls, white oak, one dusty-blue wall, and storage under the bed and inside the walls."
+      },
+      "place": {
+        "zh": "小公寓 · 1 房 · 约 650 sq ft",
+        "en": "Studio · 1 bed · ~650 sq ft"
+      },
+      "property": {
+        "type": "condo",
+        "sizeSqft": 650,
+        "bedrooms": 1,
+        "bathrooms": 1,
+        "storeys": 1
+      },
+      "scope": "whole",
+      "rooms": [
+        "living",
+        "kitchen",
+        "bedroom"
+      ],
+      "template": "studio",
+      "style": {
+        "dreamers": [
+          "CMNH",
+          "CMND"
+        ],
+        "axes": {
+          "temp": 30,
+          "density": 80,
+          "texture": 72,
+          "storage": 80
+        },
+        "hidden": {
+          "light": 85,
+          "curve": 50,
+          "social": 35
+        },
+        "wishes": [
+          "light",
+          "clean",
+          "value",
+          "work"
+        ],
+        "features": []
+      },
+      "materials": {
+        "floor": "white-oak",
+        "walls": "gallery-white",
+        "feature": "dusty-blue",
+        "cabinetry": "white-lacquer",
+        "countertop": "quartz-white",
+        "tile": "zellige-white",
+        "upholstery": "grey-wool",
+        "bedding": "cotton-white",
+        "rugs": "grey-wool",
+        "woodwork": "white-oak",
+        "accents": "sage-linen",
+        "curtains": "cotton-white",
+        "metal": "matte-black"
+      },
+      "mood": "bright",
+      "time": 11,
+      "furniture": {
+        "sofa": "classic",
+        "coffeeTable": "round",
+        "diningTable": "round",
+        "armchair": "classic",
+        "rug": "round",
+        "handle": "none",
+        "displayPct": 20,
+        "plants": "some"
+      },
+      "supplies": {
+        "firm": [
+          "kitchen",
+          "wardrobe",
+          "bedStorage",
+          "desk"
+        ],
+        "context": [
+          "flooring",
+          "lighting",
+          "paint"
+        ]
+      },
+      "products": [],
+      "wishNotes": {
+        "light": {
+          "zh": "白墙白柜，把阳光放大",
+          "en": "White walls and doors that double the daylight"
+        },
+        "value": {
+          "zh": "一面墙做到衣柜 + 书桌",
+          "en": "One wall that is wardrobe and desk"
+        },
+        "work": {
+          "zh": "窗边一张 1.2 米书桌",
+          "en": "A 1.2 m desk by the window"
+        }
+      },
+      "images": [
+        {
+          "id": "01",
+          "room": "living",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-nordic-studio/01-1600.webp",
+          "thumb": "seed-nordic-studio/01-480.webp",
+          "alt": {
+            "zh": "「一个人的北欧小公寓」的客厅 · 3D 示意",
+            "en": "A Nordic Studio for One — living room · 3D concept"
+          },
+          "cover": true
+        },
+        {
+          "id": "02",
+          "room": "bedroom",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-nordic-studio/02-1600.webp",
+          "thumb": "seed-nordic-studio/02-480.webp",
+          "alt": {
+            "zh": "「一个人的北欧小公寓」的卧室 · 3D 示意",
+            "en": "A Nordic Studio for One — bedroom · 3D concept"
+          },
+          "cover": false
+        },
+        {
+          "id": "03",
+          "room": "plan3d",
+          "kind": "plan3d",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-nordic-studio/03-1600.webp",
+          "thumb": "seed-nordic-studio/03-480.webp",
+          "alt": {
+            "zh": "「一个人的北欧小公寓」整个家的 3D 鸟瞰 · 示意",
+            "en": "A Nordic Studio for One — the whole home from above · 3D concept"
+          },
+          "cover": false
+        }
+      ],
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "updatedAt": "2026-10-18T12:17:34.984Z"
+    },
+    {
+      "id": "seed-urban-condo",
+      "kind": "concept",
+      "v": 1,
+      "rev": 1,
+      "status": "live",
+      "order": 30,
+      "consent": false,
+      "title": {
+        "zh": "都会里的白色盒子",
+        "en": "The White Box in the City"
+      },
+      "story": {
+        "zh": "给两个人都在家办公的家：无拉手的白色烤漆柜一直做到天花，一面微水泥的墙，什么都不多，下班就能把脑袋清空。",
+        "en": "For two people who both work from home: handle-free white lacquer to the ceiling, one microcement wall, nothing extra — easy to switch off at night."
+      },
+      "place": {
+        "zh": "公寓 · 3 房 2 卫 · 约 1,200 sq ft",
+        "en": "Condo · 3 bed 2 bath · ~1,200 sq ft"
+      },
+      "property": {
+        "type": "condo",
+        "sizeSqft": 1200,
+        "bedrooms": 3,
+        "bathrooms": 2,
+        "storeys": 1
+      },
+      "scope": "whole",
+      "rooms": [
+        "living",
+        "kitchen",
+        "master",
+        "study"
+      ],
+      "template": "condo3",
+      "style": {
+        "dreamers": [
+          "CMRH",
+          "CMRD"
+        ],
+        "axes": {
+          "temp": 25,
+          "density": 88,
+          "texture": 22,
+          "storage": 92
+        },
+        "hidden": {
+          "light": 72,
+          "curve": 25,
+          "social": 30
+        },
+        "wishes": [
+          "clean",
+          "work",
+          "storage"
+        ],
+        "features": []
+      },
+      "materials": {
+        "floor": "greige-oak",
+        "walls": "gallery-white",
+        "feature": "microcement",
+        "cabinetry": "white-lacquer",
+        "countertop": "sintered",
+        "tile": "grey-tile",
+        "upholstery": "grey-wool",
+        "bedding": "cotton-white",
+        "rugs": "charcoal-felt",
+        "woodwork": "greige-oak",
+        "accents": "charcoal-felt",
+        "curtains": "cotton-white",
+        "metal": "matte-black"
+      },
+      "mood": "bright",
+      "time": 13,
+      "furniture": {
+        "sofa": "classic",
+        "coffeeTable": "rect",
+        "diningTable": "rect",
+        "armchair": "classic",
+        "rug": "rect",
+        "handle": "none",
+        "displayPct": 8,
+        "plants": "few"
+      },
+      "supplies": {
+        "firm": [
+          "kitchen",
+          "wardrobe",
+          "tvWall",
+          "study"
+        ],
+        "context": [
+          "flooring",
+          "lighting",
+          "paint"
+        ]
+      },
+      "products": [],
+      "wishNotes": {
+        "clean": {
+          "zh": "顶天立地、无拉手，没有一条积灰的缝",
+          "en": "Ceiling-high, handle-free — no ledges for dust"
+        },
+        "work": {
+          "zh": "书房一整面柜 + 双人书桌",
+          "en": "A full storage wall and a desk for two"
+        },
+        "storage": {
+          "zh": "电器高柜把小家电全收进去",
+          "en": "A tall appliance unit swallows every gadget"
+        }
+      },
+      "images": [
+        {
+          "id": "01",
+          "room": "living",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-urban-condo/01-1600.webp",
+          "thumb": "seed-urban-condo/01-480.webp",
+          "alt": {
+            "zh": "「都会里的白色盒子」的客厅 · 3D 示意",
+            "en": "The White Box in the City — living room · 3D concept"
+          },
+          "cover": true
+        },
+        {
+          "id": "02",
+          "room": "kitchen",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-urban-condo/02-1600.webp",
+          "thumb": "seed-urban-condo/02-480.webp",
+          "alt": {
+            "zh": "「都会里的白色盒子」的厨房 · 3D 示意",
+            "en": "The White Box in the City — kitchen · 3D concept"
+          },
+          "cover": false
+        },
+        {
+          "id": "03",
+          "room": "plan3d",
+          "kind": "plan3d",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-urban-condo/03-1600.webp",
+          "thumb": "seed-urban-condo/03-480.webp",
+          "alt": {
+            "zh": "「都会里的白色盒子」整个家的 3D 鸟瞰 · 示意",
+            "en": "The White Box in the City — the whole home from above · 3D concept"
+          },
+          "cover": false
+        }
+      ],
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "updatedAt": "2026-10-18T12:17:35.041Z"
+    },
+    {
+      "id": "seed-softluxe-semid",
+      "kind": "concept",
+      "v": 1,
+      "rev": 1,
+      "status": "live",
+      "order": 40,
+      "consent": false,
+      "title": {
+        "zh": "奶油色的半独立",
+        "en": "A Semi-D in Cream"
+      },
+      "story": {
+        "zh": "给喜欢「看不出来很贵，但就是很舒服」的家：奶油烤漆柜、洞石地面、细细的黄铜线条，圆圆的羊羔绒沙发。",
+        "en": "For comfort that never shouts: cream lacquer cabinetry, travertine floors, fine brass lines and a round bouclé sofa."
+      },
+      "place": {
+        "zh": "双层半独立 · 5 房 4 卫 · 约 2,980 sq ft",
+        "en": "Double-storey semi-D · 5 bed 4 bath · ~2,980 sq ft"
+      },
+      "property": {
+        "type": "semid",
+        "sizeSqft": 2980,
+        "bedrooms": 5,
+        "bathrooms": 4,
+        "storeys": 2
+      },
+      "scope": "whole",
+      "rooms": [
+        "living",
+        "dining",
+        "kitchen",
+        "master"
+      ],
+      "template": "semid2",
+      "style": {
+        "dreamers": [
+          "WMRH",
+          "WMRD",
+          "WLRH"
+        ],
+        "axes": {
+          "temp": 72,
+          "density": 72,
+          "texture": 22,
+          "storage": 80
+        },
+        "hidden": {
+          "light": 60,
+          "curve": 80,
+          "social": 60
+        },
+        "wishes": [
+          "host",
+          "photo",
+          "clean"
+        ],
+        "features": []
+      },
+      "materials": {
+        "floor": "travertine",
+        "walls": "warm-white",
+        "feature": "sand-limewash",
+        "cabinetry": "cream-lacquer",
+        "countertop": "calacatta",
+        "tile": "cream-tile",
+        "upholstery": "boucle",
+        "bedding": "linen",
+        "rugs": "oat-knit",
+        "woodwork": "walnut",
+        "accents": "blush-boucle",
+        "curtains": "linen",
+        "metal": "brass"
+      },
+      "mood": "cozy",
+      "time": 17.8,
+      "furniture": {
+        "sofa": "curvy",
+        "coffeeTable": "stone",
+        "diningTable": "round",
+        "armchair": "lounge",
+        "rug": "round",
+        "handle": "none",
+        "displayPct": 15,
+        "plants": "few"
+      },
+      "supplies": {
+        "firm": [
+          "kitchen",
+          "wardrobe",
+          "tvWall",
+          "sofa",
+          "diningSet",
+          "walkin"
+        ],
+        "context": [
+          "flooring",
+          "lighting",
+          "paint",
+          "curtains"
+        ]
+      },
+      "products": [],
+      "wishNotes": {
+        "host": {
+          "zh": "八人圆桌，客人来了坐得下",
+          "en": "A round table for eight"
+        },
+        "photo": {
+          "zh": "奶油色 + 黄铜，怎么拍都好看",
+          "en": "Cream and brass — every corner photographs well"
+        },
+        "clean": {
+          "zh": "烤漆柜门一抹就亮",
+          "en": "Lacquer doors that wipe to a shine"
+        }
+      },
+      "images": [
+        {
+          "id": "01",
+          "room": "living",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-softluxe-semid/01-1600.webp",
+          "thumb": "seed-softluxe-semid/01-480.webp",
+          "alt": {
+            "zh": "「奶油色的半独立」的客厅 · 3D 示意",
+            "en": "A Semi-D in Cream — living room · 3D concept"
+          },
+          "cover": true
+        },
+        {
+          "id": "02",
+          "room": "dining",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-softluxe-semid/02-1600.webp",
+          "thumb": "seed-softluxe-semid/02-480.webp",
+          "alt": {
+            "zh": "「奶油色的半独立」的餐厅 · 3D 示意",
+            "en": "A Semi-D in Cream — dining room · 3D concept"
+          },
+          "cover": false
+        },
+        {
+          "id": "03",
+          "room": "plan3d",
+          "kind": "plan3d",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-softluxe-semid/03-1600.webp",
+          "thumb": "seed-softluxe-semid/03-480.webp",
+          "alt": {
+            "zh": "「奶油色的半独立」整个家的 3D 鸟瞰 · 示意",
+            "en": "A Semi-D in Cream — the whole home from above · 3D concept"
+          },
+          "cover": false
+        }
+      ],
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "updatedAt": "2026-10-18T12:17:35.233Z"
+    },
+    {
+      "id": "seed-forest-terrace",
+      "kind": "concept",
+      "v": 1,
+      "rev": 1,
+      "status": "live",
+      "order": 50,
+      "consent": false,
+      "title": {
+        "zh": "把森林搬进排屋",
+        "en": "A Forest in a Terrace House"
+      },
+      "story": {
+        "zh": "给一大家子和毛孩子的排屋：鼠尾草绿的墙、烟熏橡木、亚麻的 L 形大沙发，杂物都收进灰绿色的柜子里。",
+        "en": "For a big family with pets: sage walls, smoked oak, a large linen L-shaped sofa — and the clutter tucked into sage-green cabinets."
+      },
+      "place": {
+        "zh": "双层排屋 · 4 房 3 卫 · 约 1,880 sq ft",
+        "en": "Double-storey terrace · 4 bed 3 bath · ~1,880 sq ft"
+      },
+      "property": {
+        "type": "terrace",
+        "sizeSqft": 1880,
+        "bedrooms": 4,
+        "bathrooms": 3,
+        "storeys": 2
+      },
+      "scope": "whole",
+      "rooms": [
+        "living",
+        "family",
+        "kitchen",
+        "bedroom"
+      ],
+      "template": "terrace2",
+      "style": {
+        "dreamers": [
+          "CLNH",
+          "CLND"
+        ],
+        "axes": {
+          "temp": 35,
+          "density": 30,
+          "texture": 82,
+          "storage": 78
+        },
+        "hidden": {
+          "light": 50,
+          "curve": 55,
+          "social": 70
+        },
+        "wishes": [
+          "pets",
+          "kids",
+          "health"
+        ],
+        "features": []
+      },
+      "materials": {
+        "floor": "smoked-oak",
+        "walls": "sage",
+        "feature": "smoked-oak",
+        "cabinetry": "sage-lacquer",
+        "countertop": "quartz-travertine",
+        "tile": "zellige-sage",
+        "upholstery": "linen",
+        "bedding": "sage-linen",
+        "rugs": "oat-knit",
+        "woodwork": "smoked-oak",
+        "accents": "sage-linen",
+        "curtains": "linen",
+        "metal": "bronze"
+      },
+      "mood": "cozy",
+      "time": 16.5,
+      "furniture": {
+        "sofa": "lshape",
+        "coffeeTable": "round",
+        "diningTable": "rect",
+        "armchair": "lounge",
+        "rug": "rect",
+        "handle": "bar",
+        "displayPct": 20,
+        "plants": "many"
+      },
+      "supplies": {
+        "firm": [
+          "kitchen",
+          "wardrobe",
+          "tvWall",
+          "shoeCabinet",
+          "sofa"
+        ],
+        "context": [
+          "flooring",
+          "lighting",
+          "paint",
+          "plants"
+        ]
+      },
+      "products": [],
+      "wishNotes": {
+        "pets": {
+          "zh": "耐刮地面、亚麻沙发、柜底封板",
+          "en": "Scratch-proof floor, linen sofa, sealed plinths"
+        },
+        "kids": {
+          "zh": "圆角柜体、低位玩具柜",
+          "en": "Rounded cabinet edges and low toy storage"
+        },
+        "health": {
+          "zh": "E0 级板材",
+          "en": "E0 boards"
+        }
+      },
+      "images": [
+        {
+          "id": "01",
+          "room": "living",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-forest-terrace/01-1600.webp",
+          "thumb": "seed-forest-terrace/01-480.webp",
+          "alt": {
+            "zh": "「把森林搬进排屋」的客厅 · 3D 示意",
+            "en": "A Forest in a Terrace House — living room · 3D concept"
+          },
+          "cover": true
+        },
+        {
+          "id": "02",
+          "room": "kitchen",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-forest-terrace/02-1600.webp",
+          "thumb": "seed-forest-terrace/02-480.webp",
+          "alt": {
+            "zh": "「把森林搬进排屋」的厨房 · 3D 示意",
+            "en": "A Forest in a Terrace House — kitchen · 3D concept"
+          },
+          "cover": false
+        },
+        {
+          "id": "03",
+          "room": "plan3d",
+          "kind": "plan3d",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-forest-terrace/03-1600.webp",
+          "thumb": "seed-forest-terrace/03-480.webp",
+          "alt": {
+            "zh": "「把森林搬进排屋」整个家的 3D 鸟瞰 · 示意",
+            "en": "A Forest in a Terrace House — the whole home from above · 3D concept"
+          },
+          "cover": false
+        }
+      ],
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "updatedAt": "2026-10-18T12:17:35.240Z"
+    },
+    {
+      "id": "seed-wander-terrace",
+      "kind": "concept",
+      "v": 1,
+      "rev": 1,
+      "status": "live",
+      "order": 60,
+      "consent": false,
+      "title": {
+        "zh": "旅行带回来的家",
+        "en": "A Home Full of Journeys"
+      },
+      "story": {
+        "zh": "给爱旅行的人：陶土红的墙、藤编柜门，开放层板摆着从各地带回来的小东西，每个角落都是纪念。",
+        "en": "For people who travel: a terracotta wall, cane cabinet doors and open shelves full of finds — every corner a souvenir."
+      },
+      "place": {
+        "zh": "双层排屋 · 4 房 3 卫 · 约 1,800 sq ft",
+        "en": "Double-storey terrace · 4 bed 3 bath · ~1,800 sq ft"
+      },
+      "property": {
+        "type": "terrace",
+        "sizeSqft": 1800,
+        "bedrooms": 4,
+        "bathrooms": 3,
+        "storeys": 2
+      },
+      "scope": "whole",
+      "rooms": [
+        "living",
+        "dining",
+        "kitchen"
+      ],
+      "template": "terrace2",
+      "style": {
+        "dreamers": [
+          "WLND",
+          "WMND",
+          "CLND"
+        ],
+        "axes": {
+          "temp": 82,
+          "density": 25,
+          "texture": 85,
+          "storage": 30
+        },
+        "hidden": {
+          "light": 60,
+          "curve": 65,
+          "social": 75
+        },
+        "wishes": [
+          "host",
+          "photo",
+          "kitchen"
+        ],
+        "features": [
+          "openshelf",
+          "rattan"
+        ]
+      },
+      "materials": {
+        "floor": "light-oak",
+        "walls": "warm-white",
+        "feature": "terracotta",
+        "cabinetry": "light-oak",
+        "countertop": "terrazzo",
+        "tile": "terracotta-tile",
+        "upholstery": "linen",
+        "bedding": "linen",
+        "rugs": "rust-wool",
+        "woodwork": "teak",
+        "accents": "rattan",
+        "curtains": "linen",
+        "metal": "brass"
+      },
+      "mood": "cozy",
+      "time": 17.2,
+      "furniture": {
+        "sofa": "classic",
+        "coffeeTable": "round",
+        "diningTable": "round",
+        "armchair": "lounge",
+        "rug": "rect",
+        "handle": "bar",
+        "displayPct": 45,
+        "plants": "many"
+      },
+      "supplies": {
+        "firm": [
+          "kitchen",
+          "displayShelf",
+          "diningSet",
+          "tvWall"
+        ],
+        "context": [
+          "flooring",
+          "lighting",
+          "paint",
+          "plants"
+        ]
+      },
+      "products": [],
+      "wishNotes": {
+        "host": {
+          "zh": "圆桌 + 长凳，朋友来了挤得下",
+          "en": "A round table and a bench — room for one more"
+        },
+        "photo": {
+          "zh": "陶土墙前，随手一拍都好看",
+          "en": "The terracotta wall makes every photo"
+        },
+        "kitchen": {
+          "zh": "开放层板，常用的锅碗伸手就拿",
+          "en": "Open shelves — every pot within reach"
+        }
+      },
+      "images": [
+        {
+          "id": "01",
+          "room": "living",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-wander-terrace/01-1600.webp",
+          "thumb": "seed-wander-terrace/01-480.webp",
+          "alt": {
+            "zh": "「旅行带回来的家」的客厅 · 3D 示意",
+            "en": "A Home Full of Journeys — living room · 3D concept"
+          },
+          "cover": true
+        },
+        {
+          "id": "02",
+          "room": "kitchen",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-wander-terrace/02-1600.webp",
+          "thumb": "seed-wander-terrace/02-480.webp",
+          "alt": {
+            "zh": "「旅行带回来的家」的厨房 · 3D 示意",
+            "en": "A Home Full of Journeys — kitchen · 3D concept"
+          },
+          "cover": false
+        },
+        {
+          "id": "03",
+          "room": "plan3d",
+          "kind": "plan3d",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-wander-terrace/03-1600.webp",
+          "thumb": "seed-wander-terrace/03-480.webp",
+          "alt": {
+            "zh": "「旅行带回来的家」整个家的 3D 鸟瞰 · 示意",
+            "en": "A Home Full of Journeys — the whole home from above · 3D concept"
+          },
+          "cover": false
+        }
+      ],
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "updatedAt": "2026-10-18T12:17:35.243Z"
+    },
+    {
+      "id": "seed-library-semid",
+      "kind": "concept",
+      "v": 1,
+      "rev": 1,
+      "status": "live",
+      "order": 70,
+      "consent": false,
+      "title": {
+        "zh": "一整面会说故事的书墙",
+        "en": "A Wall of Stories"
+      },
+      "story": {
+        "zh": "给书和唱片很多的人：樱桃木书墙从地板做到天花，午夜蓝的主题墙，干邑色的皮沙发。",
+        "en": "For a house full of books and records: a cherry bookwall from floor to ceiling, a midnight-blue feature wall and a cognac leather sofa."
+      },
+      "place": {
+        "zh": "双层半独立 · 5 房 4 卫 · 约 3,000 sq ft",
+        "en": "Double-storey semi-D · 5 bed 4 bath · ~3,000 sq ft"
+      },
+      "property": {
+        "type": "semid",
+        "sizeSqft": 3000,
+        "bedrooms": 5,
+        "bathrooms": 4,
+        "storeys": 2
+      },
+      "scope": "whole",
+      "rooms": [
+        "living",
+        "study",
+        "dining"
+      ],
+      "template": "semid2",
+      "style": {
+        "dreamers": [
+          "WLRD",
+          "WLRH",
+          "CLRD"
+        ],
+        "axes": {
+          "temp": 72,
+          "density": 22,
+          "texture": 32,
+          "storage": 28
+        },
+        "hidden": {
+          "light": 35,
+          "curve": 40,
+          "social": 45
+        },
+        "wishes": [
+          "work",
+          "host",
+          "storage"
+        ],
+        "features": [
+          "openshelf"
+        ]
+      },
+      "materials": {
+        "floor": "smoked-oak",
+        "walls": "oat",
+        "feature": "navy-paint",
+        "cabinetry": "cherry",
+        "countertop": "travertine",
+        "tile": "terracotta-tile",
+        "upholstery": "cognac-leather",
+        "bedding": "linen",
+        "rugs": "rust-wool",
+        "woodwork": "walnut",
+        "accents": "ochre-velvet",
+        "curtains": "linen",
+        "metal": "bronze"
+      },
+      "mood": "cozy",
+      "time": 19.2,
+      "furniture": {
+        "sofa": "classic",
+        "coffeeTable": "rect",
+        "diningTable": "rect",
+        "armchair": "classic",
+        "rug": "rect",
+        "handle": "bar",
+        "displayPct": 55,
+        "plants": "some"
+      },
+      "supplies": {
+        "firm": [
+          "bookwall",
+          "tvWall",
+          "study",
+          "sofa",
+          "diningSet"
+        ],
+        "context": [
+          "flooring",
+          "lighting",
+          "paint"
+        ]
+      },
+      "products": [],
+      "wishNotes": {
+        "work": {
+          "zh": "书墙前一张大书桌",
+          "en": "A big desk in front of the bookwall"
+        },
+        "storage": {
+          "zh": "28 米长的层板，每层不超过 800mm 跨度",
+          "en": "28 m of shelving, no span over 800 mm"
+        },
+        "host": {
+          "zh": "唱片柜就在客厅",
+          "en": "The record cabinet lives in the lounge"
+        }
+      },
+      "images": [
+        {
+          "id": "01",
+          "room": "living",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-library-semid/01-1600.webp",
+          "thumb": "seed-library-semid/01-480.webp",
+          "alt": {
+            "zh": "「一整面会说故事的书墙」的客厅 · 3D 示意",
+            "en": "A Wall of Stories — living room · 3D concept"
+          },
+          "cover": true
+        },
+        {
+          "id": "02",
+          "room": "study",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-library-semid/02-1600.webp",
+          "thumb": "seed-library-semid/02-480.webp",
+          "alt": {
+            "zh": "「一整面会说故事的书墙」的书房 · 3D 示意",
+            "en": "A Wall of Stories — study · 3D concept"
+          },
+          "cover": false
+        },
+        {
+          "id": "03",
+          "room": "plan3d",
+          "kind": "plan3d",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-library-semid/03-1600.webp",
+          "thumb": "seed-library-semid/03-480.webp",
+          "alt": {
+            "zh": "「一整面会说故事的书墙」整个家的 3D 鸟瞰 · 示意",
+            "en": "A Wall of Stories — the whole home from above · 3D concept"
+          },
+          "cover": false
+        }
+      ],
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "updatedAt": "2026-10-18T12:17:35.245Z"
+    },
+    {
+      "id": "seed-jazz-condo",
+      "kind": "concept",
+      "v": 1,
+      "rev": 1,
+      "status": "live",
+      "order": 80,
+      "consent": false,
+      "title": {
+        "zh": "午夜蓝的公寓",
+        "en": "Midnight Blue, High Up"
+      },
+      "story": {
+        "zh": "给夜猫子：回家通常已经天黑。深蓝的墙、胡桃木、黑金花大理石、一盏暖黄的灯，所有东西都藏在漂亮的柜门后面。",
+        "en": "For a night owl who gets home after dark: deep blue walls, walnut, Nero Marquina and one warm lamp — everything else behind handsome doors."
+      },
+      "place": {
+        "zh": "公寓 · 2 房 2 卫 · 约 950 sq ft",
+        "en": "Condo · 2 bed 2 bath · ~950 sq ft"
+      },
+      "property": {
+        "type": "condo",
+        "sizeSqft": 950,
+        "bedrooms": 2,
+        "bathrooms": 2,
+        "storeys": 1
+      },
+      "scope": "whole",
+      "rooms": [
+        "living",
+        "kitchen",
+        "master"
+      ],
+      "template": "condo3",
+      "style": {
+        "dreamers": [
+          "CLRH",
+          "CLRD",
+          "WLRH"
+        ],
+        "axes": {
+          "temp": 30,
+          "density": 35,
+          "texture": 18,
+          "storage": 85
+        },
+        "hidden": {
+          "light": 15,
+          "curve": 35,
+          "social": 30
+        },
+        "wishes": [
+          "sleep",
+          "photo",
+          "storage"
+        ],
+        "features": []
+      },
+      "materials": {
+        "floor": "walnut",
+        "walls": "navy-paint",
+        "feature": "walnut",
+        "cabinetry": "black-matte",
+        "countertop": "nero",
+        "tile": "nero",
+        "upholstery": "cognac-leather",
+        "bedding": "charcoal-felt",
+        "rugs": "rust-wool",
+        "woodwork": "walnut",
+        "accents": "ochre-velvet",
+        "curtains": "charcoal-felt",
+        "metal": "brass"
+      },
+      "mood": "moody",
+      "time": 21.5,
+      "furniture": {
+        "sofa": "classic",
+        "coffeeTable": "stone",
+        "diningTable": "round",
+        "armchair": "classic",
+        "rug": "rect",
+        "handle": "none",
+        "displayPct": 10,
+        "plants": "few"
+      },
+      "supplies": {
+        "firm": [
+          "kitchen",
+          "wardrobe",
+          "tvWall",
+          "sofa"
+        ],
+        "context": [
+          "flooring",
+          "lighting",
+          "paint",
+          "curtains"
+        ]
+      },
+      "products": [],
+      "wishNotes": {
+        "sleep": {
+          "zh": "遮光窗帘 + 低照度暖灯",
+          "en": "Blackout curtains and low warm light"
+        },
+        "photo": {
+          "zh": "深色墙 + 黄铜，夜里最出片",
+          "en": "Dark walls and brass glow at night"
+        },
+        "storage": {
+          "zh": "黑色哑光柜门把一切收好",
+          "en": "Matte black doors hide it all"
+        }
+      },
+      "images": [
+        {
+          "id": "01",
+          "room": "living",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-jazz-condo/01-1600.webp",
+          "thumb": "seed-jazz-condo/01-480.webp",
+          "alt": {
+            "zh": "「午夜蓝的公寓」的客厅 · 3D 示意",
+            "en": "Midnight Blue, High Up — living room · 3D concept"
+          },
+          "cover": true
+        },
+        {
+          "id": "02",
+          "room": "master",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-jazz-condo/02-1600.webp",
+          "thumb": "seed-jazz-condo/02-480.webp",
+          "alt": {
+            "zh": "「午夜蓝的公寓」的主卧 · 3D 示意",
+            "en": "Midnight Blue, High Up — master bedroom · 3D concept"
+          },
+          "cover": false
+        },
+        {
+          "id": "03",
+          "room": "plan3d",
+          "kind": "plan3d",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-jazz-condo/03-1600.webp",
+          "thumb": "seed-jazz-condo/03-480.webp",
+          "alt": {
+            "zh": "「午夜蓝的公寓」整个家的 3D 鸟瞰 · 示意",
+            "en": "Midnight Blue, High Up — the whole home from above · 3D concept"
+          },
+          "cover": false
+        }
+      ],
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "updatedAt": "2026-10-18T12:17:35.246Z"
+    },
+    {
+      "id": "seed-architect-bungalow",
+      "kind": "concept",
+      "v": 1,
+      "rev": 1,
+      "status": "live",
+      "order": 90,
+      "consent": false,
+      "title": {
+        "zh": "线条利落的独立洋房",
+        "en": "A Bungalow of Clean Lines"
+      },
+      "story": {
+        "zh": "给有收藏的人：黑框玻璃展示柜、微水泥地面、卡拉拉白的切面，少量但有分量的东西被好好地照亮。",
+        "en": "For collectors: black-framed glass cabinets, microcement floors and Carrara edges — a few heavy pieces, beautifully lit."
+      },
+      "place": {
+        "zh": "独立洋房 · 5 房 5 卫 · 约 4,200 sq ft",
+        "en": "Bungalow · 5 bed 5 bath · ~4,200 sq ft"
+      },
+      "property": {
+        "type": "bungalow",
+        "sizeSqft": 4200,
+        "bedrooms": 5,
+        "bathrooms": 5,
+        "storeys": 2
+      },
+      "scope": "whole",
+      "rooms": [
+        "living",
+        "dining",
+        "kitchen",
+        "study"
+      ],
+      "template": "semid2",
+      "style": {
+        "dreamers": [
+          "CMRD",
+          "CLRD",
+          "CMND"
+        ],
+        "axes": {
+          "temp": 22,
+          "density": 70,
+          "texture": 18,
+          "storage": 30
+        },
+        "hidden": {
+          "light": 70,
+          "curve": 20,
+          "social": 55
+        },
+        "wishes": [
+          "host",
+          "photo"
+        ],
+        "features": [
+          "glassdoor"
+        ]
+      },
+      "materials": {
+        "floor": "microcement",
+        "walls": "gallery-white",
+        "feature": "ebony-oak",
+        "cabinetry": "black-matte",
+        "countertop": "carrara",
+        "tile": "grey-tile",
+        "upholstery": "grey-wool",
+        "bedding": "cotton-white",
+        "rugs": "grey-wool",
+        "woodwork": "ebony-oak",
+        "accents": "black-leather",
+        "curtains": "cotton-white",
+        "metal": "gunmetal"
+      },
+      "mood": "bright",
+      "time": 14,
+      "furniture": {
+        "sofa": "lshape",
+        "coffeeTable": "stone",
+        "diningTable": "rect",
+        "armchair": "classic",
+        "rug": "rect",
+        "handle": "none",
+        "displayPct": 40,
+        "plants": "few"
+      },
+      "supplies": {
+        "firm": [
+          "kitchen",
+          "displayCabinet",
+          "tvWall",
+          "wardrobe",
+          "study"
+        ],
+        "context": [
+          "flooring",
+          "lighting",
+          "paint"
+        ]
+      },
+      "products": [],
+      "wishNotes": {
+        "host": {
+          "zh": "岛台 + 长餐桌，派对的主场",
+          "en": "Island plus long table — party central"
+        },
+        "photo": {
+          "zh": "玻璃柜内置灯带，收藏会发光",
+          "en": "Lit glass cabinets make the collection glow"
+        }
+      },
+      "images": [
+        {
+          "id": "01",
+          "room": "living",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-architect-bungalow/01-1600.webp",
+          "thumb": "seed-architect-bungalow/01-480.webp",
+          "alt": {
+            "zh": "「线条利落的独立洋房」的客厅 · 3D 示意",
+            "en": "A Bungalow of Clean Lines — living room · 3D concept"
+          },
+          "cover": true
+        },
+        {
+          "id": "02",
+          "room": "living",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-architect-bungalow/02-1600.webp",
+          "thumb": "seed-architect-bungalow/02-480.webp",
+          "alt": {
+            "zh": "「线条利落的独立洋房」的展示柜 · 3D 示意",
+            "en": "A Bungalow of Clean Lines — display wall · 3D concept"
+          },
+          "cover": false
+        },
+        {
+          "id": "03",
+          "room": "plan3d",
+          "kind": "plan3d",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-architect-bungalow/03-1600.webp",
+          "thumb": "seed-architect-bungalow/03-480.webp",
+          "alt": {
+            "zh": "「线条利落的独立洋房」整个家的 3D 鸟瞰 · 示意",
+            "en": "A Bungalow of Clean Lines — the whole home from above · 3D concept"
+          },
+          "cover": false
+        }
+      ],
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "updatedAt": "2026-10-18T12:17:35.248Z"
+    },
+    {
+      "id": "seed-cosy-townhouse",
+      "kind": "concept",
+      "v": 1,
+      "rev": 1,
+      "status": "live",
+      "order": 100,
+      "consent": false,
+      "title": {
+        "zh": "一家人窝在一起的家",
+        "en": "A Home for Curling Up Together"
+      },
+      "story": {
+        "zh": "给三代同堂、有小孩的家：软软的沙发、很多抱枕和毯子，玩具和杂物都收进木柜里 —— 热闹在心里，整洁在眼前。",
+        "en": "For three generations with young kids: a soft sofa, plenty of cushions and throws, and toys tucked into timber cabinets — lively at heart, tidy to the eye."
+      },
+      "place": {
+        "zh": "联排别墅 · 3 房 3 卫 · 约 1,600 sq ft",
+        "en": "Townhouse · 3 bed 3 bath · ~1,600 sq ft"
+      },
+      "property": {
+        "type": "townhouse",
+        "sizeSqft": 1600,
+        "bedrooms": 3,
+        "bathrooms": 3,
+        "storeys": 2
+      },
+      "scope": "whole",
+      "rooms": [
+        "living",
+        "family",
+        "kids",
+        "kitchen"
+      ],
+      "template": "terrace2",
+      "style": {
+        "dreamers": [
+          "WLNH",
+          "WLRH"
+        ],
+        "axes": {
+          "temp": 80,
+          "density": 25,
+          "texture": 68,
+          "storage": 82
+        },
+        "hidden": {
+          "light": 45,
+          "curve": 70,
+          "social": 80
+        },
+        "wishes": [
+          "kids",
+          "storage",
+          "sleep"
+        ],
+        "features": []
+      },
+      "materials": {
+        "floor": "smoked-oak",
+        "walls": "sand-limewash",
+        "feature": "walnut",
+        "cabinetry": "light-oak",
+        "countertop": "quartz-travertine",
+        "tile": "zellige-white",
+        "upholstery": "navy-velvet",
+        "bedding": "linen",
+        "rugs": "oat-knit",
+        "woodwork": "walnut",
+        "accents": "rust-wool",
+        "curtains": "linen",
+        "metal": "brass"
+      },
+      "mood": "cozy",
+      "time": 18.2,
+      "furniture": {
+        "sofa": "lshape",
+        "coffeeTable": "round",
+        "diningTable": "round",
+        "armchair": "lounge",
+        "rug": "round",
+        "handle": "bar",
+        "displayPct": 18,
+        "plants": "some"
+      },
+      "supplies": {
+        "firm": [
+          "kitchen",
+          "wardrobe",
+          "toyStorage",
+          "tvWall",
+          "shoeCabinet",
+          "sofa"
+        ],
+        "context": [
+          "flooring",
+          "lighting",
+          "paint",
+          "curtains"
+        ]
+      },
+      "products": [],
+      "wishNotes": {
+        "kids": {
+          "zh": "低位玩具柜，孩子自己收",
+          "en": "Low toy cabinets the kids can tidy themselves"
+        },
+        "storage": {
+          "zh": "每个房间都有到顶的柜子",
+          "en": "Ceiling-high cabinets in every room"
+        },
+        "sleep": {
+          "zh": "长辈房靠里，安静",
+          "en": "The grandparent sleeps on the quiet side"
+        }
+      },
+      "images": [
+        {
+          "id": "01",
+          "room": "living",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-cosy-townhouse/01-1600.webp",
+          "thumb": "seed-cosy-townhouse/01-480.webp",
+          "alt": {
+            "zh": "「一家人窝在一起的家」的客厅 · 3D 示意",
+            "en": "A Home for Curling Up Together — living room · 3D concept"
+          },
+          "cover": true
+        },
+        {
+          "id": "02",
+          "room": "kids",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-cosy-townhouse/02-1600.webp",
+          "thumb": "seed-cosy-townhouse/02-480.webp",
+          "alt": {
+            "zh": "「一家人窝在一起的家」的儿童房 · 3D 示意",
+            "en": "A Home for Curling Up Together — kids' room · 3D concept"
+          },
+          "cover": false
+        },
+        {
+          "id": "03",
+          "room": "plan3d",
+          "kind": "plan3d",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-cosy-townhouse/03-1600.webp",
+          "thumb": "seed-cosy-townhouse/03-480.webp",
+          "alt": {
+            "zh": "「一家人窝在一起的家」整个家的 3D 鸟瞰 · 示意",
+            "en": "A Home for Curling Up Together — the whole home from above · 3D concept"
+          },
+          "cover": false
+        }
+      ],
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "updatedAt": "2026-10-18T12:17:35.254Z"
+    }
+  ]
+}

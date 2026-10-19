@@ -1,12 +1,37 @@
 // 家具的悬停提示 + 选中后的小工具条（纸色玻璃胶囊，按钮 ≥ 44px）。
 // 浮在画布上时：量自己的真实宽度，只在「两块面板之间」那段空着的画布里移动（不钻到情绪面板 / 日光面板下面）。
 // 手机（≤ 600px）：工具条不浮在模型中间，而是停在底部、时间滑杆正上方（docked，由 StudioApp 放进底部那一列）。
+// 公司做的（offer.js：定制柜、墙板）名字旁边一个安静的金色「我们做」；活动家具（沙发、桌椅、床）写「家具示意」（通用的样子，
+// 不是公司的产品）；灯、绿植、地毯、家电、窗帘不标。客人家里留下来的（主材质那一面锁住了，例如保留的胡桃木橱柜）写「保留你家原有」，
+// 不写「我们做」（和材质板一样）。
 
 import { useLayoutEffect, useRef, useState } from 'react';
 import { CATALOG } from '../engine/furniture.js';
 import { MAT_BY_ID } from '../../shared/materials.js';
 import { t, L } from '../../shared/i18n.js';
 import { FurnIcon, Icon, freeBand, toolbarBottom } from './kit.jsx';
+import { isOfferItem, isIllustrationItem } from '../offer.js';
+
+/** 我们做（金色）/ 保留你家原有（主材质锁住的定制柜）/ 家具示意（中性）/ 什么都不写 */
+function OfferTag({ kind, locked }) {
+  const slot = CATALOG[kind]?.slot;
+  if (isOfferItem(kind) && slot && locked?.[slot])
+    return (
+      <i className="st-offer-tag kept">
+        <Icon name="lock" size={10} stroke={2.2} />
+        {t('保留你家原有')}
+      </i>
+    );
+  if (isOfferItem(kind))
+    return (
+      <i className="st-offer-tag">
+        <Icon name="make" size={10} stroke={2.2} />
+        {t('我们做')}
+      </i>
+    );
+  if (isIllustrationItem(kind)) return <i className="st-offer-tag illu">{t('家具示意')}</i>;
+  return null;
+}
 
 /** 量元素的宽高（语言、内容变了会变）；只在真的变了时才重画 */
 function useBox(initial) {
@@ -29,7 +54,7 @@ function useBox(initial) {
   return [ref, box];
 }
 
-export function HoverTip({ hover, materials }) {
+export function HoverTip({ hover, materials, locked }) {
   const [ref, box] = useBox({ w: 220, h: 46 });
   const def = CATALOG[hover.item?.kind];
   if (!def) return null;
@@ -49,6 +74,7 @@ export function HoverTip({ hover, materials }) {
         <b>
           {L(def)}
           {m && <i> · {L(m)}</i>}
+          <OfferTag kind={hover.item.kind} locked={locked} />
         </b>
         <em>{def.wall ? t('点一下选中') : t('拖动移动 · 点一下旋转或移走')}</em>
       </span>
@@ -56,7 +82,7 @@ export function HoverTip({ hover, materials }) {
   );
 }
 
-export function SelectionBar({ item, pos, materials, onRotate, onRemove, onDuplicate, onVariant, onClose, docked = false }) {
+export function SelectionBar({ item, pos, materials, locked, onRotate, onRemove, onDuplicate, onVariant, onClose, docked = false }) {
   const [ref, box] = useBox({ w: 380, h: 60 });
   const def = CATALOG[item.kind];
   const m = MAT_BY_ID[materials[def?.slot]];
@@ -73,8 +99,17 @@ export function SelectionBar({ item, pos, materials, onRotate, onRemove, onDupli
       <div className="selbar-name">
         <FurnIcon kind={item.kind} size={18} stroke={1.6} />
         <span>
-          <b>{L(def)}</b>
-          {m && <em>{L(m)}</em>}
+          <b>
+            {L(def)}
+            {!docked && <OfferTag kind={item.kind} locked={locked} />}
+          </b>
+          {/* 手机（停在底部）：名字那一行很窄，「我们做 / 家具示意」放到材质那一行（可以折成两行），名字不被挤成「沙发…」 */}
+          {(m || docked) && (
+            <em>
+              {m && L(m)}
+              {docked && <OfferTag kind={item.kind} locked={locked} />}
+            </em>
+          )}
         </span>
       </div>
       <span className="selbar-sep" />

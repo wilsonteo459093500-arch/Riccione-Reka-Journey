@@ -5,6 +5,7 @@ import { MAT_BY_ID, SLOT_BY_ID } from './materials.js';
 import { BRAND, CONFIG, hostFromCode } from './config.js';
 import { insights } from './profile.js';
 import { t, L, isEn } from './i18n.js';
+import { STATUS_BY_V, TIMELINE_BY_V, BUDGET_BY_V, KEEP_SLOTS, lab, homeLine, keepText, scopeText, whereText, budgetKnown } from './home.js';
 
 const LIFE_LABEL = {
   saturday: { sofa: '沙发追剧', kitchen: '厨房做早午餐', window: '窗边看书', workout: '在家运动', bed: '赖床' },
@@ -54,6 +55,54 @@ export const AVOID_LABEL = {
 export const lifeLabel = (k, v) => t(LIFE_LABEL[k]?.[v] || v);
 
 const mm = (x) => (x ? `${Number(x).toLocaleString('en-US')}mm` : '—');
+
+/**
+ * 「你的家」那几行（SPEC §9.4）—— 客人版只放客人自己答的、自己看到的：房子、在哪里、大小、做哪里、什么时候、选的案例、
+ * 留下来的颜色和大件、户型图有没有。
+ * 设计师版多：预算（只从 staffNote 来 —— 这台设备上的员工记录；业主：预算只给员工看，客人版永远没有）、读图把握、「不在色卡里」的提醒。
+ * 永远不放户型图本身、案例照片。
+ */
+export function homeLines(p, { client = false, staffNote = null } = {}) {
+  const h = p?.home;
+  const out = [];
+  if (!h?.type) return out;
+  const st = STATUS_BY_V[h.status];
+  let line = homeLine(h);
+  if (st) line += isEn() ? ` (${lab(st)})` : `（${lab(st)}）`;
+  const tl = TIMELINE_BY_V[h.timeline];
+  line += `${st && !isEn() ? '' : ' '}· ${t('做：{0}', [scopeText(h)])}`;
+  if (tl) line += ` · ${lab(tl)}`;
+  out.push(`🏡 ${t('你的家：{0}', [line])}`);
+  const wh = whereText(h);
+  if (wh) out.push(`📍 ${t('在哪里：{0}', [wh])}`);
+  const titles = (p.cases || []).map((c) => L(c.title)).filter(Boolean);
+  if (titles.length) out.push(`🖼️ ${t('参考案例：{0}', [titles.join(listSep())])}`);
+  const kept = keepText(h);
+  if (kept) out.push(`🔒 ${t('保留：{0}', [kept])}`);
+  const ps = h.plan?.state;
+  const has = ['read', 'rough', 'unreadable'].includes(ps);
+  const onPad = h.plan?.source === 'camera' || h.plan?.source === 'staff';
+  out.push(`📐 ${t('户型图：{0}', [has ? (onPad ? t('已上传（在展厅 iPad 上）') : t('已上传')) : t('还没有')])}`);
+  if (!client) {
+    const bv = staffNote?.budget;
+    if (budgetKnown(bv)) out.push(`💰 ${t('预算（只给员工看）：{0}', [lab(BUDGET_BY_V[bv])])}`);
+    else if (bv === 'unsure') out.push(`💰 ${t('预算（只给员工看）：{0}', [t('客人还没想好')])}`);
+    if (Number.isFinite(h.plan?.confidence) && has) out.push(`🔎 ${t('读图把握：{0}%', [Math.round(h.plan.confidence * 100)])}`);
+    if (h.keepMode === 'unsure') out.push(`📝 ${t('留下来的颜色：客人还不确定，见面再说')}`);
+    for (const k of KEEP_SLOTS) if (h.keep?.[k.slot] === 'unsure') out.push(`📝 ${t('客人要保留的{0}不在色卡里', [lab(k)])}`);
+  }
+  return out;
+}
+/**
+ * 最后一步的两个动作，客人自己的手机上（没有外壳、名单不存）：直接用 WhatsApp ——
+ *   measure  「预约免费量房」→ waLink(leadText(p, 'measure', link))（发给公司，CONFIG.inbox）
+ *   whatsapp 「把我的家发到 WhatsApp」→ `https://wa.me/?text=${encodeURIComponent(leadText(p, 'whatsapp', link))}`（客人自己选发给谁）
+ * 只放客人看到的（homeLines 客人版）：永远没有预算。
+ */
+export function leadText(p, intent = 'measure', link = '') {
+  const head = intent === 'whatsapp' ? t('这是我在 WISH 许愿出来的家：') : t('你好！我想预约免费量房。这是我在 WISH 许愿出来的家：');
+  return [head, ...homeLines(p, { client: true }), link].filter(Boolean).join('\n');
+}
 const listSep = () => (isEn() ? ', ' : '、');
 const LEVEL_ICON = { conflict: '⚠️', note: '📐' };
 
@@ -63,7 +112,7 @@ const LEVEL_ICON = { conflict: '⚠️', note: '📐' };
  * client = 客人自己按「发给设计师」：文字就在客人的 WhatsApp 输入框里，所以只放客人版蓝图上本来就有的东西 ——
  * 不放「最想藏」、设计语言、见面要聊、「默认值，未确认」（DESIGN.md §6：这些只在员工入口出现）。员工版（CRM、复制全文）不变。
  */
-export function profileText(p, plan, link = '', { client = false } = {}) {
+export function profileText(p, plan, link = '', { client = false, staffNote = null } = {}) {
   const d = DREAMER_BY_CODE[p.code];
   const host = hostFromCode(p.host);
   const touched = p.storage?.touched;
@@ -79,6 +128,7 @@ export function profileText(p, plan, link = '', { client = false } = {}) {
   const lifeVals = [lifeLabel('saturday', life.saturday) || '—', lifeLabel('home', life.home) || '—', lifeLabel('cook', life.cook) || '—'];
   out.push(`🏠 ${client ? t('生活：周六{0}；回家{1}；厨房{2}', lifeVals) : t('生活：周六{0}；回家{1}；厨房{2}；最想藏{3}', [...lifeVals, lifeLabel('bell', life.bell) || '—'])}`);
   if (life.who?.length) out.push(`👨‍👩‍👧 ${t('同住：{0}', [life.who.map((v) => lifeLabel('who', v)).join(listSep())])}`);
+  out.push(...homeLines(p, { client, staffNote }));
   const store = [
     t('鞋 {0} 双 → 鞋柜 {1}', [plan.shoes, mm(plan.shoeCabinetMM)]) + unsure('shoes'),
     t('衣柜目标 {0}（长挂 {1}）', [mm(plan.wardrobeMM), mm(plan.longHangMM)]) + unsure('wardrobe'),

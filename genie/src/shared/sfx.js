@@ -34,6 +34,9 @@ const TAU = Math.PI * 2;
 const HAS_DOM = typeof window !== 'undefined' && typeof document !== 'undefined';
 const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
 const now = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
+// 最近一下按的那个元素只用弱引用记着（只给记录 / 测试钩子看）：强引用会把关掉的员工区、名单这些整块画面一直留在内存里
+const weakEl = (el) => (el && typeof WeakRef === 'function' ? new WeakRef(el) : el || null);
+const elOf = (r) => (r && typeof r.deref === 'function' ? r.deref() : r) || null;
 export const hz = (m) => 440 * Math.pow(2, (m - 69) / 12);
 const cents = (c) => Math.pow(2, c / 1200);
 const dbGain = (db) => Math.pow(10, db / 20);
@@ -1365,7 +1368,7 @@ export class Sfx {
       this._disarm();
       const p = this.pending;
       this.pending = null;
-      if (p && now() - p.at < 700) this._play(p.name, p.opts, 'unlock', p.el);
+      if (p && now() - p.at < 700) this._play(p.name, p.opts, 'unlock', elOf(p.el));
     } else if (this.ctx && this.ctx.state !== 'closed') this._arm();
   }
 
@@ -1413,7 +1416,7 @@ export class Sfx {
       return null;
     }
     if (!this.live()) {
-      this.pending = { name, opts, at: now(), el };
+      this.pending = { name, opts, at: now(), el: weakEl(el) };
       try {
         ctx.resume().catch(() => {});
       } catch {
@@ -1645,7 +1648,7 @@ export class Sfx {
     if (p && now() - p.at < 1500 && !p.used) {
       p.used = true;
       if (p.optOut || p.name !== 'tap' || name === 'tap') {
-        this._emit(name, {}, 'merged', 'legacy', p.el);
+        this._emit(name, {}, 'merged', 'legacy', elOf(p.el));
         return null;
       }
     }
@@ -1665,12 +1668,12 @@ export class Sfx {
       const res = resolveSound(e.target, opt);
       if (!res) return;
       if (!res.name) {
-        this.press = { at: now(), name: null, optOut: true, el: res.el };
+        this.press = { at: now(), name: null, optOut: true, el: weakEl(res.el) };
         this._emit(null, {}, 'optout', 'press', res.el);
         return;
       }
       const voice = this.play(res.name, res.opts || {}, 'press', res.el);
-      this.press = { at: now(), name: res.name, voice, used: false, el: res.el };
+      this.press = { at: now(), name: res.name, voice, used: false, el: weakEl(res.el) };
     };
     const cancel = () => {
       const p = this.press;
@@ -1688,7 +1691,7 @@ export class Sfx {
       const res = resolveSound(t, opt);
       if (!res || !res.name) return;
       const voice = this.play(res.name, res.opts || {}, 'key', res.el);
-      this.press = { at: now(), name: res.name, voice, used: false, el: res.el };
+      this.press = { at: now(), name: res.name, voice, used: false, el: weakEl(res.el) };
     };
     const input = (e) => {
       const t = e.target;

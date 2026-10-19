@@ -53,7 +53,8 @@ function rowLayout(widths, avail) {
   return 'stack2';
 }
 
-export default function FloorSwitch({ plan, view = 'all', onView }) {
+/** above = 手机上工具条下面还有什么（对照的切换、提示条）：变了就重新量 */
+export default function FloorSwitch({ plan, view = 'all', onView, above = '' }) {
   const ref = useRef(null);
   const phone = useMedia('(max-width: 600px)');
   // 'col' 竖条 · 'row' 一排图标 + 字 · 'compact' 一排窄按钮 · 'stack2' 两行（全部 / 各层）
@@ -79,6 +80,10 @@ export default function FloorSwitch({ plan, view = 'all', onView }) {
     if (!el || n < 2) return undefined;
     let raf = 0;
     let alive = true;
+    let ro = null;
+    let tries = 0;
+    let retryT = 0;
+    const seen = new Set();
     const place = () => {
       raf = 0;
       if (!alive) return;
@@ -95,7 +100,26 @@ export default function FloorSwitch({ plan, view = 'all', onView }) {
       if (phone) {
         const next = pickRow(innerWidth - 32);
         if (next !== layout) setLayout(next);
-        el.style.top = `${Math.round((tb?.bottom || 60) + 8)}px`;
+        // 工具条下面已经有「我的家 | 案例照片」、示范户型提示条：排在它们下面（不叠在一起）。
+        // 它们可能比这一条晚一点出来（照片、案例读好才有）：above 说有、却还没量到 → 过一会儿再量
+        let top = tb?.bottom || 60;
+        let missing = false;
+        for (const [key, s] of [
+          ['seg', '.st-seg'],
+          ['banner', '.st-banner.top'],
+        ]) {
+          const node = document.querySelector(s);
+          const r = box(node);
+          if (r && r.top < innerHeight / 2) {
+            top = Math.max(top, r.bottom);
+            if (ro && !seen.has(node)) {
+              seen.add(node);
+              ro.observe(node);
+            }
+          } else if (above.includes(key)) missing = true;
+        }
+        el.style.top = `${Math.round(top + 8)}px`;
+        if (missing && tries++ < 20) retryT = setTimeout(schedule, 150);
         return;
       }
       const dayEl = document.querySelector('.day-panel');
@@ -124,19 +148,20 @@ export default function FloorSwitch({ plan, view = 'all', onView }) {
     const schedule = () => {
       if (!raf) raf = requestAnimationFrame(place);
     };
-    place();
-    const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(schedule) : null;
+    ro = typeof ResizeObserver === 'function' ? new ResizeObserver(schedule) : null;
     if (ro) for (const s of ['.toolbar', '.day-panel', '.dock-wrap']) document.querySelectorAll(s).forEach((node) => ro.observe(node));
+    place();
     addEventListener('resize', schedule);
     // 网页字体晚到：字宽会变
     document.fonts?.ready?.then(schedule);
     return () => {
       alive = false;
       cancelAnimationFrame(raf);
+      clearTimeout(retryT);
       ro?.disconnect();
       removeEventListener('resize', schedule);
     };
-  }, [phone, n, layout, labelKey]);
+  }, [phone, n, layout, labelKey, above]);
 
   if (n < 2) return null;
   const cls = layout === 'col' ? 'is-col' : `is-row${layout === 'compact' ? ' is-compact' : layout === 'stack2' ? ' is-stack2' : ''}`;

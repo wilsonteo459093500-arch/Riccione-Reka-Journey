@@ -3,10 +3,11 @@
 // 动效（动效 SPEC §3h）：洗牌收拢时一道暮色的光扫过牌堆 → 升起 → 弹簧翻面（镜面高光 + 烫金牌边）→ 正面转过来的那一刻
 // 牌的四边迸出火花、牌后的暖光亮到 1、全息光慢慢扫过正面（fx.reveal）→ 文字一块块模糊淡入、四条轴的小圆点从中间弹到位 →
 // 主按钮被光扫一下、之后每 4.8 秒一下。翻开以后手指在牌上 = 牌跟着倾斜、珠光跟着走；点一下 = 再扫一次全息光。
-// 潘吉：洗牌时「让我读一读你的梦想……」，翻开后「就是这一张——你的梦想家卡牌！」，8 秒没人碰再轻轻提醒一句。
+// 潘吉：洗牌时「让我读一读你的梦想……」，翻开后「就是这一张——你的梦想家卡牌！」，8 秒没人碰再轻轻提醒一句（「带它回家吧……」）。
+// 结尾两个按钮（SPEC §9.1）：金色「带它回家」→ 你的家 · 案例 · 户型图 · 生成（src/quiz/home/）；文字按钮「先看蓝图」→ 蓝图（那里也能接着「带它回家」）。
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollText } from 'lucide-react';
+import { House, ScrollText } from 'lucide-react';
 import Pangie, { useVoiceLine } from '../shared/Pangie.jsx';
 import Emblem from '../shared/Emblem.jsx';
 import { DREAMER_BY_CODE, AXES } from '../shared/dreamers.js';
@@ -19,6 +20,7 @@ import { voice } from '../shared/voice.js';
 import { t, L, isEn } from '../shared/i18n.js';
 import { phrased, keepWords } from './typo.jsx';
 import { cue, settle } from './moments.js';
+import './home/reveal.css';
 
 /** 梦想家卡牌（正面）：压印的罗马数字、金线图腾、四个字母、名字、一句话、配色 */
 export function DreamerCard({ profile, big = false }) {
@@ -73,7 +75,7 @@ export function becauseLines(profile) {
   return out.slice(0, 3);
 }
 
-export default function Reveal({ profile, onOpen }) {
+export default function Reveal({ profile, onOpen, onHome }) {
   const f = useFx();
   const [phase, setPhase] = useState('reading');
   // 翻面落定后把牌「放平」：不留 3D 图层（Chromium 偶尔会把它的残影留在下一页上）
@@ -204,14 +206,16 @@ export default function Reveal({ profile, onOpen }) {
     return off;
   }, [flat]);
 
-  // 打开我的梦想家蓝图：按钮被光扫过，一大片晨光拂过，换到蓝图
-  const open = (e) => {
+  // 带它回家 / 先看蓝图：按钮被光扫过，一大片晨光拂过，换页
+  const leave = (e, fn) => {
     if (opening) return;
     setOpening(true);
     fx.scan(e.currentTarget);
     const w = fx.wipe(null, { tone: 'dawn', duration: 1000 });
-    settle(null, w.mid, onOpen, 900);
+    settle(null, w.mid, fn, 900);
   };
+  const open = (e) => leave(e, onOpen);
+  const home = (e) => leave(e, onHome || onOpen);
 
   if (!d) return null;
   const name = L({ zh: d.zh, en: d.en });
@@ -290,12 +294,16 @@ export default function Reveal({ profile, onOpen }) {
                   );
                 })}
               </div>
-              <button ref={ctaRef} type="button" className="btn btn-gold big" onClick={open} disabled={opening} aria-label={t('打开我的梦想家蓝图')}>
-                <ScrollText size={18} strokeWidth={1.8} aria-hidden="true" />
-                <span className="cta-long">{t('打开我的梦想家蓝图')}</span>
-                {/* 英文手机：全名太长、会挤出一行 → 短一点的说法 */}
-                {isEn() && <span className="cta-short">{t('打开我的蓝图')}</span>}
-              </button>
+              <div className="hj-rv-ctas">
+                <button ref={ctaRef} type="button" className="btn btn-gold big" onClick={home} disabled={opening} data-sfx="confirm">
+                  <House size={18} strokeWidth={1.8} aria-hidden="true" />
+                  <span>{t('带它回家')}</span>
+                </button>
+                <button type="button" className="btn btn-ghost hj-rv-bp" onClick={open} disabled={opening} aria-label={t('先看蓝图')}>
+                  <ScrollText size={17} strokeWidth={1.8} aria-hidden="true" />
+                  <span>{t('先看蓝图')}</span>
+                </button>
+              </div>
             </div>
           )}
         </div>

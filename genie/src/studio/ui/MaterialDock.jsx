@@ -6,7 +6,7 @@
 // 拖着的样板（drag-ghost）用 portal 画在整个工作室的最上层：材质栏所在的 .dock-wrap 自己是一层（z-index 11），
 // 留在里面的话，拖到情绪面板的材质板、日光面板、工具条上时样板和提示会被盖住。
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CATEGORIES, MATERIALS, SLOT_BY_ID, fits, misfitHint, MAT_BY_ID } from '../../shared/materials.js';
 import { swatchURL } from '../../shared/textures.js';
@@ -60,6 +60,41 @@ export default function MaterialDock({ project, slot, engine, onDrop, onAddItem,
   const [ghost, setGhost] = useState(null);
   const drag = useRef(null);
   const row = useRef(null);
+  const segRef = useRef(null);
+  // 类别标签放不下（分开对照时材质栏只有右半边那么宽、窄窗口）：先收窄一点（snug）；再去掉英文小字（tight）；
+  // 还放不下就横着滑、右边淡出（over）
+  const [fit, setFit] = useState({ mode: '', over: false });
+  useLayoutEffect(() => {
+    const seg = segRef.current;
+    const dock = seg?.closest('.dock');
+    if (!seg || !dock) return undefined;
+    let raf = 0;
+    const measure = () => {
+      raf = 0;
+      // 从最宽的排法开始量：放得下就停（量完把 class 还原成 React 给的那一个，下一次渲染再按 state 来）
+      const before = seg.className;
+      seg.classList.remove('snug', 'tight', 'over');
+      const tooWide = () => seg.scrollWidth > seg.clientWidth + 1;
+      let mode = '';
+      for (const m of ['', 'snug', 'tight']) {
+        seg.classList.remove('snug', 'tight');
+        if (m) seg.classList.add(m);
+        mode = m;
+        if (!tooWide()) break;
+      }
+      const over = tooWide();
+      seg.className = before;
+      setFit((f) => (f.mode === mode && f.over === over ? f : { mode, over }));
+    };
+    measure();
+    const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => !raf && (raf = requestAnimationFrame(measure))) : null;
+    ro?.observe(dock);
+    document.fonts?.ready?.then(() => !raf && (raf = requestAnimationFrame(measure)));
+    return () => {
+      cancelAnimationFrame(raf);
+      ro?.disconnect();
+    };
+  }, [slot]);
 
   // 选了表面 → 自动切到它能用的类别
   useEffect(() => {
@@ -173,7 +208,7 @@ export default function MaterialDock({ project, slot, engine, onDrop, onAddItem,
     <>
       <div className="glass dock">
         <div className="dock-head">
-          <div className="seg seg-dock" role="tablist" aria-label={t('材质类别')}>
+          <div ref={segRef} className={`seg seg-dock ${fit.mode} ${fit.over ? 'over' : ''}`} role="tablist" aria-label={t('材质类别')}>
             {tabs.map((c) => (
               <button key={c.id} type="button" role="tab" aria-selected={tab === c.id} className={`${tab === c.id ? 'on' : ''} ${c.sep ? 'sep' : ''}`} onClick={() => setTab(c.id)}>
                 <span>{c.label}</span>

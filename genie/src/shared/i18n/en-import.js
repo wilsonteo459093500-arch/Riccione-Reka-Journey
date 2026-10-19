@@ -158,4 +158,13 @@ export default {
   '{0} 个房间没认出名字：放进编辑器后点一下改类型': 'Rooms with no name on the drawing: {0} — tap them in the editor to set the type',
   '{0} —— 放进编辑器后点它修改': '{0} — tap it in the editor to fix it',
   '只放进这一层': 'Only into this floor',
+
+  // ── 客人的户型图（src/studio/guest/readPlan.js；客人看到的话不提 AI / key / 设置） ──
+  这张我读不清: 'I can’t read this one clearly',
+  这张图打不开: 'I can’t open this one',
+  '这张图打不开，换一张试试？（JPG、PNG、PDF 都可以）': 'I can’t open this one — try another (JPG, PNG or PDF)',
+  尺寸是估的: 'The sizes are estimated',
+  '有几处我看不太清，帮我点一下房间的名字': 'A few spots are unclear — tap a room to name it',
+  房间数和你说的不一样: 'The room count differs from what you told me',
+  '你说有 {0} 层，我只读到 {1} 层': 'You said {0} floors — I could only read {1}',
 };

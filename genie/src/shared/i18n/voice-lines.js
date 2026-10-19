@@ -20,6 +20,7 @@ export const GROUPS = [
   { id: 'along', zh: '一路陪着你', en: 'Along the way' },
   { id: 'reveal', zh: '揭晓', en: 'The reveal' },
   { id: 'blueprint', zh: '梦想家蓝图', en: 'The blueprint' },
+  { id: 'home', zh: '带它回家', en: 'Bring it home' },
   { id: 'bye', zh: '闲置与告别', en: 'Idle & goodbye' },
   { id: 'staff', zh: '员工试听', en: 'Staff audition' },
 ];
@@ -193,10 +194,10 @@ export const LINES = [
     note: 'A delighted little gasp, then warm and proud. The peak of the journey — joy, never shouting.',
   },
   {
-    id: 'reveal.nudge', group: 'reveal', level: 'full', speaker: 'pangie', mood: 'wink', prop: 'ball', delay: 8000, mode: 'ifIdle', caption: 'screen', at: 'src/quiz/Reveal.jsx (phase shown)',
-    zh: '打开你的梦想家蓝图看看吧。',
-    en: 'Open your Dream Home Blueprint and have a look.',
-    note: 'A gentle invitation, not pushy.',
+    id: 'reveal.nudge', group: 'reveal', level: 'full', speaker: 'pangie', mood: 'wink', prop: 'ball', delay: 8000, mode: 'ifIdle', caption: 'none', at: 'src/quiz/Reveal.jsx (phase shown, 8 s untouched)',
+    zh: '带它回家吧，我给你挑了几个家。',
+    en: 'Let’s bring it home — I’ve picked a few homes for you.',
+    note: 'A gentle, excited invitation — like a friend who found something for you. Not pushy.',
   },
   {
     id: 'bp.hello', group: 'blueprint', level: 'key', speaker: 'pangie', once: true, mood: 'happy', prop: 'ball', delay: 900, mode: 'interrupt', caption: 'screen', at: 'src/quiz/Blueprint.jsx (fresh only)',
@@ -209,6 +210,82 @@ export const LINES = [
     zh: '你的梦想，我记住啦。接下来，我们把它变成你走得进的 3D 家。',
     en: 'Your dream is safe with me. Next, we’ll turn it into a 3D home you can walk through.',
     note: 'A promise with a wink: warm first, then a little excited on “3D”.',
+  },
+  // ── 带它回家（揭晓之后：你的家 · 案例 · 户型图 · 生成，src/quiz/home/）── 只有固定的话，不带客人的任何资料
+  {
+    id: 'home.enter', group: 'home', level: 'key', speaker: 'pangie', mood: 'happy', prop: 'ball', delay: 700, mode: 'interrupt', caption: 'bubble', at: 'src/quiz/home/HomeJourney.jsx · H1 你的家是 (companion bubble)',
+    zh: '带它回家吧！先告诉我，你的家是什么样的？',
+    en: 'Let’s bring it home! First, tell me about your home.',
+    note: 'Bright and eager, a new little adventure starting; the question warm and curious.',
+  },
+  {
+    id: 'home.size', group: 'home', level: 'full', speaker: 'pangie', mood: 'idle', prop: 'ball', delay: 700, mode: 'interrupt', caption: 'bubble', at: 'src/quiz/home/HomeJourney.jsx · H3 大概多大 (companion bubble)',
+    zh: '大概就好，不确定也没关系。',
+    en: 'Roughly is fine — not sure is fine too.',
+    note: 'Easy-going and reassuring, a small shrug in the voice.',
+  },
+  {
+    id: 'cases.enter', group: 'home', level: 'key', speaker: 'pangie', mood: 'happy', prop: 'ball', delay: 700, mode: 'interrupt', caption: 'none', at: 'src/quiz/home/CasesStep.jsx · C 最像你的家 (the small Pangie in the header speaks)',
+    zh: '这些家和你的牌最像。挑一两个你喜欢的。',
+    en: 'These homes are most like your card. Pick one or two you love.',
+    note: 'Proud to show them, like opening a photo album for a friend; unhurried.',
+  },
+  {
+    id: 'plan.enter', group: 'home', level: 'key', speaker: 'pangie', mood: 'happy', prop: 'ball', delay: 700, mode: 'interrupt', caption: 'bubble', at: 'src/quiz/home/HomeJourney.jsx · P 户型图 (companion bubble)',
+    zh: '最后一步：给我你家的户型图，我就能把它变成你的家。',
+    en: 'Last step: give me your floor plan, and I’ll turn it into your home.',
+    note: 'A little lift on “最后一步 / Last step”, then a warm promise.',
+  },
+  {
+    id: 'plan.staff', group: 'home', level: 'full', speaker: 'pangie', mood: 'happy', prop: 'none', delay: 500, mode: 'interrupt', caption: 'screen', at: 'src/quiz/home/HomeJourney.jsx · waiting card (Wish Mode: 请员工帮我上传)',
+    zh: '好的，请员工帮你上传，我在这里等。',
+    en: 'Sure — our team will add it. I’ll wait right here.',
+    note: 'Calm and patient; no hurry at all.',
+  },
+  {
+    id: 'plan.reading', group: 'home', level: 'full', speaker: 'pangie', mood: 'think', prop: 'magnifier', delay: 500, mode: 'interrupt', caption: 'screen', at: 'src/quiz/home/HomeJourney.jsx · reading card (Pangie with the magnifier)',
+    zh: '我在用放大镜看你的户型图……',
+    zhSay: '我在用放大镜看你的户型图。',
+    en: 'I’m reading your floor plan with my magnifier…',
+    enSay: 'I’m reading your floor plan with my magnifier.',
+    note: 'Concentrating, a little playful — a detective at work. Trailing off softly.',
+  },
+  {
+    id: 'plan.done', group: 'home', level: 'key', speaker: 'pangie', mood: 'happy', prop: 'magnifier', delay: 600, mode: 'interrupt', caption: 'bubble', at: 'src/quiz/home/HomeJourney.jsx · R 这是你的家吗 (companion bubble)',
+    zh: '读好了！看看像不像你的家？',
+    en: 'Done! Does this look like your home?',
+    note: 'Pleased with herself, then a genuinely curious question.',
+  },
+  {
+    id: 'plan.later', group: 'home', level: 'full', speaker: 'pangie', mood: 'idle', prop: 'ball', delay: 0, mode: 'interrupt', caption: 'bubble', at: 'src/quiz/home/HomeJourney.jsx · P 我还没有户型图 (companion bubble while the screen changes)',
+    zh: '没关系，先用示范户型给你看，之后再给我也可以。',
+    en: 'That’s okay — I’ll use a sample layout for now. You can give me the plan later.',
+    note: 'Kind and easy, no disappointment at all.',
+  },
+  {
+    id: 'keep.enter', group: 'home', level: 'full', speaker: 'pangie', mood: 'think', prop: 'magnifier', delay: 700, mode: 'queue', caption: 'bubble', at: 'src/quiz/home/HomeJourney.jsx · K 家里有哪些会留下来 (companion bubble)',
+    zh: '家里有哪些会留下来？我会让新的和旧的配在一起。',
+    en: 'What’s staying? I’ll make the new and the old go together.',
+    note: 'Thoughtful and caring; a gentle promise in the second sentence.',
+  },
+  {
+    id: 'gen.ready', group: 'home', level: 'key', speaker: 'pangie', mood: 'happy', prop: 'ball', delay: 900, mode: 'queue', caption: 'screen', at: 'src/quiz/home/GenerateStep.jsx · G 把它放进你的家 (line under the card)',
+    zh: '准备好了 —— 按一下，去看你的家！',
+    en: 'All set — tap to see your home!',
+    note: 'Excited anticipation, a small breath before “去看你的家 / see your home”.',
+  },
+  // 最后一步（业主 2026-10-19）：3D 里看过自己的家之后，许愿模式的外壳升起「交给设计师」
+  {
+    id: 'lead.enter', group: 'home', level: 'full', speaker: 'pangie', mood: 'happy', prop: 'ball', delay: 500, mode: 'interrupt', caption: 'none', at: 'src/quiz/home/LeadSheet.jsx · 交给我们的设计师 (Wish Mode shell, after the 3D; the sheet shows its own text)',
+    zh: '喜欢的话，留下你的名字，设计师会接着帮你画。',
+    en: 'If you like it, leave your name — our designer will carry on drawing it for you.',
+    note: 'Warm and light, no sales pressure — like a friend offering to pass it on.',
+  },
+  {
+    id: 'lead.thanks', group: 'home', level: 'key', speaker: 'pangie', mood: 'happy', prop: 'ball', delay: 250, mode: 'interrupt', caption: 'screen', at: 'src/quiz/home/LeadSheet.jsx · thank-you card (line under the title)',
+    zh: '谢谢你！接下来，让我们的设计师来帮你。',
+    en: 'Thank you! Now let our designer take it from here.',
+    note: 'Genuinely grateful, then a calm hand-over — proud of what you made together.',
   },
   {
     id: 'idle.still', group: 'bye', level: 'key', speaker: 'pangie', mood: 'think', prop: 'none', delay: 300, mode: 'interrupt', caption: 'screen', at: 'src/quiz/QuizApp.jsx · Prompt (idle, Wish Mode)',

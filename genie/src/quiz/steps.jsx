@@ -6,7 +6,7 @@
 //   选中的被一道光扫过（fx.scan）；没选上的不「滑走」，而是化成金色的细尘（fx.dissolve）；
 //   选中的那一张飞进这一章的踏脚石（fx.fly）/ 一粒光飞过去（fx.mote），落下去才换下一题（不是固定的 setTimeout）。
 //   潘吉的台词：useVoiceLine（离开画面自动停）；对话泡泡 / 画面上的字 = 她说的那一句（lineText）。
-//   三秒的直觉题（PairStep）她一句都不说。
+//   三秒的直觉题（PairStep，每题 4–6 张图）她一句都不说。
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
@@ -14,12 +14,12 @@ import { ArrowRight, Check, X, Sparkle } from 'lucide-react';
 import Pangie, { Lamp, useVoiceLine } from '../shared/Pangie.jsx';
 import LangToggle from '../shared/LangToggle.jsx';
 import fx, { useFx, useGleam, flightDuration } from '../shared/fx.js';
-import Vignette, { preloadVignettes } from './Vignette.jsx';
+import Vignette, { preloadVignettes, collageMats } from './Vignette.jsx';
 import { ShoeCabinet, BookWall, RatioWall, Wardrobe } from './Cabinet.jsx';
 import { CardFrame, CardBack, Segmented, Slider, Odo } from './ui.jsx';
 import { Ico } from './icons.jsx';
 import { BRAND } from '../shared/config.js';
-import { CHAPTERS, PAIRS, LIFE, APPLIANCES, BULKY, WISHES, SPLURGE, NOGO_COLORS, NOGO_FINISHES, ONE_WISH_CHIPS } from './flow.js';
+import { CHAPTERS, PAIRS, LIFE, APPLIANCES, BULKY, WISHES, SPLURGE, NOGO_COLORS, NOGO_FINISHES, ONE_WISH_CHIPS, optionsOf } from './flow.js';
 import { storagePlan } from '../shared/profile.js';
 import { sfx } from '../shared/sound.js';
 import { voice, lineText, talkState } from '../shared/voice.js';
@@ -177,7 +177,7 @@ export function Welcome({ answers, set, next }) {
             <Sparkle size={18} strokeWidth={1.8} aria-hidden="true" />
             <span>{t('开始许愿')}</span>
           </button>
-          <p className="fine">{segmented(t('大约 6–8 分钟 · 5 张牌 · 结束时会得到你的「梦想家蓝图」'))}</p>
+          <p className="fine">{segmented(t('约 10 分钟 · 5 张牌 · 最后在 3D 里看见你自己的家'), '·', { zhOnly: false })}</p>
         </div>
       </div>
     </div>
@@ -454,91 +454,116 @@ export function Interlude({ chapter, next, enterDelay = 0 }) {
 
 // ───────────────────────── I · 直觉 ─────────────────────────
 
+// 选完的那一下，潘吉的泡泡（只是字，她不开口）
 const PAIR_REACT = {
-  room: { a: '暖光派！☀️', b: '清爽派！🌊' },
-  wall: { a: '少即是多 🤍', b: '越丰富越有你 🖼️' },
-  touch: { a: '自然的手感 🌾', b: '精致的触感 💎' },
-  guest: { a: '收纳控，潘吉懂 📦', b: '你的收藏值得被看见 ✨' },
-  palette: { a: '大地色，有温度 🍂', b: '海风色，好清爽 🌊' },
-  sofa: { a: '圆圆的最可爱 ☁️', b: '利落有型 🖤' },
-  night: { a: '亮亮的才安心 💡', b: '氛围感拉满 🕯️' },
-  floor: { a: '木头的温度 🪵', b: '石头的清凉 🪨' },
-  kitchen: { a: '干干净净 ✨', b: '烟火气 🍳' },
-  table: { a: '原木派 🌳', b: '大理石派 🤍' },
-  shelf: { a: '留白的美 🤍', b: '故事满满 📚' },
-  weekend: { a: '热闹最好 🥳', b: '独处最好 🍵' },
+  room: { a: '暖光派！☀️', b: '清爽派！🌊', c: '奶油色，好温柔 🍦', d: '森林系 🌿', e: '深夜的浪漫 🌙', f: '旅行家 ✈️' },
+  wall: { a: '少即是多 🤍', b: '越丰富越有你 🖼️', c: '木头的温度 🪵', d: '石头的质感 🤍', e: '会发光的收藏 ✨' },
+  touch: { a: '自然的手感 🌾', b: '精致的触感 💎', c: '软软的最好 ☁️', d: '沉稳有力 🪨' },
+  guest: { a: '收纳控，潘吉懂 📦', b: '你的收藏值得被看见 ✨', c: '少而精 🕯️', d: '宝贝要好好保护 💎', e: '软软的、整整齐齐 🧺' },
+  sofa: { a: '圆圆的最可爱 ☁️', b: '利落有型 🖤', c: '一家人都坐得下 🛋️', d: '丝绒的浓郁 🍷' },
+  night: { a: '亮亮的才安心 💡', b: '氛围感拉满 🕯️', c: '柔柔的光 🌙', d: '画廊的光 🖼️' },
+  floor: { a: '人字拼，好经典 🪵', b: '洞石的清凉 🪨', c: '白橡，好清爽 🤍', d: '复古的味道 🎞️', e: '利落的现代感 ◽', f: '深色木头，好沉稳 🌰' },
+  kitchen: { a: '干干净净 ✨', b: '烟火气 🍳', c: '杯盘也是风景 🍷', d: '围着岛台聊天 🥂' },
+  table: { a: '原木派 🌳', b: '大理石派 🤍', c: '藤编的轻松 🌴', d: '餐厅的味道 🖤' },
+  weekend: { a: '热闹最好 🥳', b: '独处最好 🍵', c: '窝在一起最幸福 🍿', d: '两个人的小时光 🎶' },
 };
 
 /**
- * 二选一（3 秒）。选中：被光扫过；另一张从远离赢家的一侧化成金尘；赢家抬起、沿弧线飞进第一块踏脚石，
- * 落下去才换下一题（onDone）。答案在按下去的那一刻就记下（onPick：反应时间照旧从卡片出现算）。
+ * 没选上的卡从哪一边开始化成金尘：离赢家最远的那一边（赢家在左 → 从右边开始吃，最后消失的是靠赢家的那一边）。
+ * 只用上下左右：同样大小的卡共用帧图，挂载后的空闲时间就备得齐（fx.prepare）。
+ */
+function awaySide(el, from) {
+  const a = el.getBoundingClientRect();
+  const b = from.getBoundingClientRect();
+  const dx = a.left + a.width / 2 - (b.left + b.width / 2);
+  const dy = a.top + a.height / 2 - (b.top + b.height / 2);
+  return Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'bottom' : 'top';
+}
+
+/** 直觉题的计时线：第一眼的 2.4 秒 + 每多一张图 0.3 秒（4 张 3.6 秒、6 张 4.2 秒）。只在一个人玩时出现，不催 */
+export const breathSec = (n) => 2.4 + 0.3 * n;
+
+/**
+ * 直觉题（每题 4–6 张图，3 秒的第一感觉）。顺序每题重新洗（Fisher–Yates：没有固定「第一个」）。
+ * 选中：被光扫过；其余的从离它最近的开始，一张接一张化成金尘；它抬起、沿弧线飞进第一块踏脚石，
+ * 落下去才换下一题（onDone，整段 ≤ 1.4 秒）。答案在按下去的那一刻就记下：
+ * onPick(v, ms, 泡泡, 当时的排列字串 —— 例如 'cadbfe'，QuizApp 存成 answers.pairs[id].left)。反应时间照旧从卡片出现算。
  */
 export function PairStep({ pair, onPick, onDone, index, total, timed = true }) {
   const f = useFx();
-  // 左右随机：不让「a 永远在左边」替客人做选择（左撇子 / 习惯点左边的人会被带偏）
-  const order = useMemo(() => (Math.random() < 0.5 ? ['a', 'b'] : ['b', 'a']), [pair.id]);
+  const opts = optionsOf(pair);
+  const n = opts.length;
+  // 每题重新洗：不让「a 永远在左上角」替客人做选择（习惯点第一个的人会被带偏）
+  const order = useMemo(() => shuffled(opts.map((o) => o.v)), [pair.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const [picked, setPicked] = useState(null);
   const cards = useRef({});
   const mountAt = useRef(performance.now());
   // 画面淡入约 0.45 秒：从卡片看得见才开始计时
   const t0 = useRef(performance.now() + 450);
-  // 下一题的两张图先拿下来，换题时不闪；两张牌的「化成金尘」帧图先做好（真的选的时候不用等）
+  // 下一题的 n 张图先拿下来，换题时不闪；每张卡「化成金尘」的帧图先在空闲时间里做好（真的选的时候不用等）
   useEffect(() => {
     const id = setTimeout(() => preloadVignettes(PAIRS[index + 1]), 600);
+    // 赢家是谁还不知道：每一种「谁赢、谁走」会用到的方向都先备好。同样大小的卡共用帧图、方向只有上下左右，
+    // 所以 4–6 张也只要 2–4 张帧图（八个方位要 8 张，空闲时间里来不及建，选的那一下会退回普通淡出）
     const prep = fx.clock.after(320, () => {
-      const { a, b } = cards.current;
-      if (a && b) {
-        fx.prepare(a, { origin: { awayFrom: b } });
-        fx.prepare(b, { origin: { awayFrom: a } });
-      }
+      const els = order.map((v) => cards.current[v]).filter(Boolean);
+      const sides = new Set();
+      for (const el of els) for (const other of els) if (other !== el) sides.add(awaySide(el, other));
+      for (const side of sides) fx.prepare(els[0], { origin: side });
     });
     return () => {
       clearTimeout(id);
       prep();
     };
   }, [index]);
-  const pick = (side) => {
+  const pick = (v) => {
     if (picked) return;
     const now = performance.now();
     if (now - mountAt.current < 250) return; // 上一题的连点不算
     const ms = Math.max(0, Math.round(now - t0.current));
-    setPicked(side);
-    onPick(side, ms, PAIR_REACT[pair.id]?.[side], order[0]);
-    const win = cards.current[side];
-    const lose = cards.current[side === 'a' ? 'b' : 'a'];
+    setPicked(v);
+    onPick(v, ms, PAIR_REACT[pair.id]?.[v], order.join(''));
+    const win = cards.current[v];
     if (!win) return settle(f, f.wait(650), onDone);
     fx.scan(win, { delay: 30 });
-    if (lose) fx.dissolve(lose, { delay: 120, origin: { awayFrom: win }, from: win, duration: 640, tone: 'photo' });
+    // 其余的：离赢家最近的先走（一张接一张，像被它的光推开）
+    const others = byDistance(order.filter((x) => x !== v).map((x) => cards.current[x]), win);
+    others.forEach((el, i) => fx.dissolve(el, { delay: 120 + 45 * i, duration: 520, origin: awaySide(el, win), from: win, tone: 'photo' }));
     const stone = stoneOf('intuition');
     settle(f, stone ? f.fly(win, stone, { delay: 300, landNote: 0 }) : f.wait(650), onDone, 2400);
   };
   return (
-    <div className={`step step-pair ${picked ? 'is-picked' : ''}`}>
+    <div className={`step step-pair n${n} ${picked ? 'is-picked' : ''}`}>
       <Head eyebrow={t('直觉之牌 · {0} / {1}', [index + 1, total])} title={t(pair.q)} />
       {timed && (
-        <div className="breath" key={pair.id} aria-hidden="true">
+        <div className="breath" key={pair.id} aria-hidden="true" style={{ '--breath': `${breathSec(n)}s` }}>
           <i />
         </div>
       )}
-      <div className="pair">
-        {order.map((side) => (
-          <button
-            key={side}
-            ref={(el) => (cards.current[side] = el)}
-            type="button"
-            className={`pair-card ${picked === side ? 'is-picked' : ''}`}
-            onClick={() => pick(side)}
-            aria-label={t(pair[side].label)}
-          >
-            <span className="pair-art">
-              <Vignette visual={pair[side].visual} id={`${pair.id}-${side}`} />
-            </span>
-            <span className="pair-label">{t(pair[side].label)}</span>
-            <span className="pair-check" aria-hidden="true">
-              <Check size={16} strokeWidth={2.4} />
-            </span>
-          </button>
-        ))}
+      <div className="pair pick" data-n={n}>
+        {order.map((v) => {
+          const o = pair[v] || opts.find((x) => x.v === v);
+          return (
+            <button
+              key={v}
+              ref={(el) => (cards.current[v] = el)}
+              type="button"
+              className={`pair-card ${picked === v ? 'is-picked' : ''}`}
+              onClick={() => pick(v)}
+              aria-label={t(o.label)}
+            >
+              <span className="pair-art">
+                <Vignette visual={o.visual} id={`${pair.id}-${v}`} mats={collageMats(o.mats, pair.mats)} />
+              </span>
+              <span className="pair-label">
+                <span>{phrased(t(o.label), { sentences: false })}</span>
+              </span>
+              <span className="pair-check" aria-hidden="true">
+                <Check size={16} strokeWidth={2.4} />
+              </span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -563,8 +588,22 @@ function Opt({ on, onClick, set, v, label, sub, small = false, x = false }) {
   );
 }
 
+/**
+ * 刚出现的一题：前 350 ms 不接受点按（.is-fresh = pointer-events: none）。翻开章节牌时的连点、
+ * 上一题的第二下不会直接落在这一题上 —— 雷区是硬性排除，一下误点就会把案例整批藏起来。PairStep 用自己的 250 ms。
+ */
+export function useFresh(ms = 350) {
+  const [fresh, setFresh] = useState(true);
+  useEffect(() => {
+    const id = setTimeout(() => setFresh(false), ms);
+    return () => clearTimeout(id);
+  }, [ms]);
+  return fresh;
+}
+
 export function LifeStep({ item, value, onChange, next, index, total }) {
   const f = useFx();
+  const fresh = useFresh();
   const multi = !!item.multi;
   const sel = multi ? new Set(value || []) : value;
   const { optsRef, pick } = useSinglePick(next, 'life');
@@ -598,7 +637,7 @@ export function LifeStep({ item, value, onChange, next, index, total }) {
     settle(f, Promise.all([f.wait(off.length ? 760 : 420), ...motes]), next, 2400);
   };
   return (
-    <div className="step step-life">
+    <div className={`step step-life ${fresh ? 'is-fresh' : ''}`}>
       <Head eyebrow={t('生活之牌 · {0} / {1}', [index + 1, total])} title={t(item.q)} lead={item.sub ? t(item.sub) : null} />
       {/* 单选题：按已选的那个 = 轻触，换一个 = 选中（音效 SPEC §7.2） */}
       <div ref={optsRef} className={`opts ${item.options.length > 6 ? 'opts-many' : ''}`} data-sfx={multi ? undefined : 'radio'}>
@@ -857,6 +896,7 @@ export function RatioStep({ answers, set, next }) {
  */
 export function WishesStep({ answers, set, next, say }) {
   const f = useFx();
+  const fresh = useFresh();
   const sel = answers.wishes || [];
   const ok = Array.isArray(answers.wishOrder) && answers.wishOrder.length === WISHES.length;
   const fallback = useMemo(() => shuffled(WISHES.map((w) => w.v)), []);
@@ -979,7 +1019,7 @@ export function WishesStep({ answers, set, next, say }) {
   };
 
   return (
-    <div className={`step step-wishes ${leaving ? 'is-leaving' : ''}`}>
+    <div className={`step step-wishes ${leaving ? 'is-leaving' : ''} ${fresh ? 'is-fresh' : ''}`}>
       <Head eyebrow={t('愿望之牌')} title={t('潘吉只能实现你 3 个愿望')} lead={t('选最想要的三个')} />
       <div ref={gridRef} className={`wish-grid ${gathered ? 'is-gathered' : ''}`}>
         {order.map((v) => {
@@ -1017,8 +1057,9 @@ export function WishesStep({ answers, set, next, say }) {
 
 export function SplurgeStep({ answers, set, next }) {
   const { optsRef, pick } = useSinglePick(next, 'wishes');
+  const fresh = useFresh();
   return (
-    <div className="step step-life">
+    <div className={`step step-life ${fresh ? 'is-fresh' : ''}`}>
       <Head eyebrow={t('愿望之牌 · 附加题')} title={t('如果只能在一个地方「舍得花」，你选 ——')} />
       <div ref={optsRef} className="opts" data-sfx="radio">
         {SPLURGE.map((o) => (
@@ -1034,6 +1075,7 @@ export function SplurgeStep({ answers, set, next }) {
 /** 雷区：划掉 = X 盖上去 + 红圈 + 字上一道线从左划到右（金色只给愿望，这里没有扫光）。扫雷完成：划掉的那些化成灰往下落 */
 export function NogoStep({ answers, set, next }) {
   const f = useFx();
+  const fresh = useFresh();
   const sel = new Set(answers.avoid || []);
   const rootRef = useRef(null);
   const busy = useRef(false);
@@ -1051,7 +1093,7 @@ export function NogoStep({ answers, set, next }) {
     settle(f, Promise.all([f.wait(struck.length ? 0 : 240), ...gone]), next, 2400);
   };
   return (
-    <div className="step step-nogo" ref={rootRef}>
+    <div className={`step step-nogo ${fresh ? 'is-fresh' : ''}`} ref={rootRef}>
       <Head eyebrow={t('雷区之牌')} title={t('点一下你「绝对不要」的')} lead={t('讨厌的东西，往往比喜欢的更确定。')} />
       <div className="nogo-colors">
         {NOGO_COLORS.map((c) => (
