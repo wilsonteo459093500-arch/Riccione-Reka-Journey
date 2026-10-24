@@ -10,26 +10,29 @@ import { CATALOG } from '../engine/furniture.js';
 import { MAT_BY_ID } from '../../shared/materials.js';
 import { t, L } from '../../shared/i18n.js';
 import { FurnIcon, Icon, freeBand, toolbarBottom } from './kit.jsx';
-import { isOfferItem, isIllustrationItem } from '../offer.js';
+import { offerTagOf } from '../offer.js';
 
-/** 我们做（金色）/ 保留你家原有（主材质锁住的定制柜）/ 家具示意（中性）/ 什么都不写 */
-function OfferTag({ kind, locked }) {
-  const slot = CATALOG[kind]?.slot;
-  if (isOfferItem(kind) && slot && locked?.[slot])
+/**
+ * 我们做（金色）/ 我们做 · 电视柜（电视墙的墙面不是墙板时）/ 保留你家原有（主材质锁住的定制柜）/ 家具示意（中性）/ 什么都不写。
+ * 主题墙、电视墙看现在的主题墙材质（微水泥、石灰墙、刷漆是背景，不是我们做的墙板）—— offer.js offerTagOf
+ */
+function OfferTag({ kind, materials, locked }) {
+  const tag = offerTagOf(kind, { materials, locked });
+  if (tag === 'kept')
     return (
       <i className="st-offer-tag kept">
         <Icon name="lock" size={10} stroke={2.2} />
         {t('保留你家原有')}
       </i>
     );
-  if (isOfferItem(kind))
+  if (tag === 'make' || tag === 'console')
     return (
       <i className="st-offer-tag">
         <Icon name="make" size={10} stroke={2.2} />
-        {t('我们做')}
+        {tag === 'console' ? t('我们做 · 电视柜') : t('我们做')}
       </i>
     );
-  if (isIllustrationItem(kind)) return <i className="st-offer-tag illu">{t('家具示意')}</i>;
+  if (tag === 'illu') return <i className="st-offer-tag illu">{t('家具示意')}</i>;
   return null;
 }
 
@@ -74,7 +77,7 @@ export function HoverTip({ hover, materials, locked }) {
         <b>
           {L(def)}
           {m && <i> · {L(m)}</i>}
-          <OfferTag kind={hover.item.kind} locked={locked} />
+          <OfferTag kind={hover.item.kind} materials={materials} locked={locked} />
         </b>
         <em>{def.wall ? t('点一下选中') : t('拖动移动 · 点一下旋转或移走')}</em>
       </span>
@@ -101,13 +104,13 @@ export function SelectionBar({ item, pos, materials, locked, onRotate, onRemove,
         <span>
           <b>
             {L(def)}
-            {!docked && <OfferTag kind={item.kind} locked={locked} />}
+            {!docked && <OfferTag kind={item.kind} materials={materials} locked={locked} />}
           </b>
           {/* 手机（停在底部）：名字那一行很窄，「我们做 / 家具示意」放到材质那一行（可以折成两行），名字不被挤成「沙发…」 */}
           {(m || docked) && (
             <em>
               {m && L(m)}
-              {docked && <OfferTag kind={item.kind} locked={locked} />}
+              {docked && <OfferTag kind={item.kind} materials={materials} locked={locked} />}
             </em>
           )}
         </span>

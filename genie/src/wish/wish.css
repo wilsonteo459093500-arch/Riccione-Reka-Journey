@@ -1157,6 +1157,8 @@ html[lang='en'] .ws-title {
 }
 .ws-leads-list {
   display: grid;
+  /* 一个很长的称呼不能把整列撑宽（日期、WhatsApp 按钮会被挤出面板）：名字自己截断 */
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   max-height: min(46dvh, 420px);
   margin: 0 0 12px;
@@ -1178,6 +1180,7 @@ html[lang='en'] .ws-title {
   gap: 10px;
 }
 .ws-lead-top b {
+  min-width: 0;
   font: 600 16px/1.25 var(--sans);
   color: var(--text-strong);
   overflow: hidden;
@@ -1230,6 +1233,12 @@ html[lang='en'] .ws-title {
 }
 .ws-lead-meta.is-staff {
   color: var(--text-strong);
+}
+/* PDPA：名单过了保留期会自动删掉 —— 一行安静的提醒，在导出按钮上面 */
+.ws-leads-keep {
+  margin: -2px 2px 10px;
+  font: 400 12.5px/1.45 var(--sans);
+  color: var(--text-soft);
 }
 .ws-leads-acts {
   display: grid;

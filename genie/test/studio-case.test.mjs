@@ -811,5 +811,37 @@ await test('我们做（业主 + LEAD NOTE 6 / 8）：只标定制柜、台面�
   for (const id of firm) assert.ok(O.OFFER_SUPPLY.includes(id) || ['sofa', 'diningSet', 'bed', 'desk'].includes(id), `SUPPLY.firm ${id} unclassified`);
 });
 
+await test('选中家具的记号：电视墙 / 主题墙看主题墙材质 —— 微水泥、石灰墙、刷漆不是「我们做」（电视墙只标电视柜）', async () => {
+  const O = await import('../src/studio/offer.js');
+  const base = { cabinetry: 'white-lacquer', countertop: 'sintered' };
+  // 业主：微水泥、砂洗石灰墙、刷漆的主题墙是背景 —— 选中电视墙时不能出现单单一个「我们做」
+  for (const feature of ['microcement', 'sand-limewash', 'warm-white']) {
+    assert.ok(MAT_BY_ID[feature], feature);
+    const m = { ...base, feature };
+    assert.notEqual(O.offerTagOf('tvWall', { materials: m }), 'make', `tvWall + ${feature}`);
+    assert.equal(O.offerTagOf('tvWall', { materials: m }), 'console', `tvWall + ${feature}: only the console is ours`);
+    assert.equal(O.offerTagOf('featureWall', { materials: m }), null, `featureWall + ${feature}: no tag`);
+    // 柜子是客人家里留下来的：电视柜也不是我们要做的
+    assert.equal(O.offerTagOf('tvWall', { materials: m, locked: { cabinetry: 'white-lacquer' } }), null);
+  }
+  // 木 / 石纹的墙板：整面电视墙、主题墙都是我们做的
+  for (const feature of ['smoked-oak', 'travertine']) {
+    const m = { ...base, feature };
+    assert.equal(O.offerTagOf('tvWall', { materials: m }), 'make', `tvWall + ${feature}`);
+    assert.equal(O.offerTagOf('featureWall', { materials: m }), 'make', `featureWall + ${feature}`);
+  }
+  // 别的照旧：定制柜 = 我们做（锁住 = 保留你家原有）；活动家具 = 家具示意；灯、绿植不标
+  assert.equal(O.offerTagOf('wardrobe', { materials: base }), 'make');
+  assert.equal(O.offerTagOf('kitchenRun', { materials: base, locked: { cabinetry: 'walnut' } }), 'kept');
+  assert.equal(O.offerTagOf('sofa', { materials: base }), 'illu');
+  assert.equal(O.offerTagOf('plant', { materials: base }), null);
+  // 界面的字：OfferTag 用 offerTagOf；「我们做 · 电视柜」有英文
+  const ui = fs.readFileSync(path.join(ROOT, 'src/studio/ui/ItemUI.jsx'), 'utf8');
+  assert.ok(/offerTagOf\(kind, \{ materials, locked \}\)/.test(ui), 'OfferTag reads the feature material');
+  assert.ok(!/isOfferItem\(kind\)/.test(ui), 'OfferTag no longer marks by kind alone');
+  const EN = (await import('../src/shared/i18n/en.js')).default;
+  assert.equal(EN['我们做 · 电视柜'], 'We make this · TV console');
+});
+
 console.log(`\n${n - failed}/${n} 通过（${((Date.now() - t0) / 1000).toFixed(1)} 秒）`);
 if (failed) process.exit(1);

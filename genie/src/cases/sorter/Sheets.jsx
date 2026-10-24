@@ -410,8 +410,9 @@ export async function runAutoTag(s, pool, targets, { signal, onProg } = {}) {
 export function AiSheet({ s, pool, onClose, onDone, offered = false }) {
   const [phase, setPhase] = useState('ask'); // ask | run | done | nokey | error
   const [prog, setProg] = useState({ i: 0, n: 0, ok: 0, err: '' });
-  // 这台电脑以后自动帮我填（员工同意过一次就记住；随时可以在这里取消）
-  const [auto, setAuto] = useState(() => aiPref() === 'auto' || offered);
+  // 这台电脑以后自动帮我填（员工同意过一次就记住；随时可以在这里取消）—— 一开始不勾（自己弹出来的也一样）：
+  // 以后每一批都自动发给 AI 要员工自己勾（opt-in）
+  const [auto, setAuto] = useState(() => aiPref() === 'auto');
   const ctl = useRef(null);
   const targets = aiTargets(s);
   const photos = targets.reduce((n, g) => n + Math.min(6, s.pickedOf(g).length), 0);

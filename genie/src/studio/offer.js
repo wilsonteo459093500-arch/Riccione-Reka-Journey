@@ -46,6 +46,30 @@ export function isOfferSlot(slot, matId) {
 /** 这件东西是不是公司做的（定制柜、墙板） */
 export const isOfferItem = (kind) => ITEM_SET.has(kind) && !!CATALOG[kind];
 
+/**
+ * 选中 / 悬停一件家具时名字旁边的那个记号：
+ *   'make'    我们做（定制柜、木 / 石墙板）
+ *   'kept'    保留你家原有（主材质那一面锁住了：客人家里留下来的）
+ *   'console' 我们做 · 电视柜 —— 电视墙的墙面是微水泥 / 石灰墙 / 刷漆（背景，不是墙板），只有下面的电视柜是我们做的
+ *   'illu'    家具示意（活动家具）
+ *   null      不标（灯、绿植、地毯、家电、窗帘；墙面不是墙板的主题墙）
+ * 主题墙、电视墙（CATALOG slot 'feature'）看现在的主题墙材质：和材质板、标签用同一条 isOfferSlot 规则。
+ */
+export function offerTagOf(kind, { materials = null, locked = null } = {}) {
+  if (isOfferItem(kind)) {
+    const slot = CATALOG[kind]?.slot;
+    if (slot && locked?.[slot]) return 'kept';
+    if (slot === 'feature' && !isOfferSlot('feature', materials?.feature)) {
+      // 电视柜跟着柜体的材质；柜子是客人家里留下来的 → 那也不是我们要做的
+      if (kind !== 'tvWall' || locked?.cabinetry) return null;
+      return 'console';
+    }
+    return 'make';
+  }
+  if (isIllustrationItem(kind)) return 'illu';
+  return null;
+}
+
 /** 这件是不是只是示意的活动家具 */
 export const isIllustrationItem = (kind) => ILLU_SET.has(kind) && !!CATALOG[kind];
 

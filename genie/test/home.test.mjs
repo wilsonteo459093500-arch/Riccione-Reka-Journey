@@ -363,6 +363,10 @@ await test('withHome: keeps the card and the axes; ≤ 3 case refs { id, rev, ti
   assert.equal(s.home.type, 'terrace', 'home kept when not given');
   assert.equal(H.withHome(null, HOME), null);
 });
+await test('keepText (zh): 地板 奶油大板砖、柜子 胡桃木、床', () => {
+  assert.equal(H.keepText({ ...HOME, keepItems: ['bed'] }), '地板 奶油大板砖、柜子 胡桃木、床');
+});
+
 await test('normalizeHome / homeDone', () => {
   const h = H.normalizeHome({ type: 'condo', scope: ['living', 'nope'], keep: { floor: 'walnut' } });
   assert.deepEqual(h.scope, ['living']);
@@ -528,6 +532,100 @@ await test('retention (POLISHER-REG, PDPA): leads and staff notes older than CON
   assert.match(fs.readFileSync(new URL('../src/wish/WishShell.jsx', import.meta.url), 'utf8'), /sweepKept\(\)/);
 });
 
+await test('lead language (release 3): an English guest\'s lead keeps lang=en — the stored link and the WhatsApp text are English even when staff read the list in Chinese', async () => {
+  LS.clear();
+  const { tIn } = await import('../src/shared/i18n.js');
+  const p = H.withHome(guest(), HOME, []);
+  const link = 'https://x/studio.html?from=home&case=seed-zen-condo#p=zABC';
+  assert.equal(H.linkWithLang(link, 'en'), 'https://x/studio.html?from=home&case=seed-zen-condo&lang=en#p=zABC');
+  assert.equal(H.linkWithLang('https://x/studio.html?from=home&lang=en#p=zABC', 'zh'), 'https://x/studio.html?from=home#p=zABC');
+  assert.equal(H.linkWithLang('', 'en'), '');
+  setLang('en', { reload: false });
+  let lead;
+  try {
+    lead = H.saveLead(H.makeLead({ profile: p, name: 'Ken L.', phone: '0123456789', consent: true, intent: 'whatsapp', link }));
+  } finally {
+    setLang('zh', { reload: false });
+  }
+  assert.equal(lead.lang, 'en');
+  assert.ok(/[?&]lang=en[&#]/.test(lead.link), lead.link);
+  assert.equal(H.leadLang(lead), 'en', 'staff UI is zh now, the lead stays en');
+  assert.equal(H.leadLang({ link: 'https://x/studio.html?from=home&lang=en#p=1' }), 'en', 'an old lead without lang: read it from the link');
+  assert.equal(H.leadLang({ link: 'https://x/studio.html?from=home#p=1' }), 'zh');
+  const zh = H.makeLead({ profile: { ...p, id: 'q_zh' }, name: '小美', phone: '0123456789', consent: true, link: H.linkWithLang(link, 'en') });
+  assert.equal(zh.lang, 'zh');
+  assert.ok(!/lang=/.test(zh.link), 'a Chinese guest\'s link carries no lang');
+  // tIn: one sentence in another language without touching the page language
+  assert.equal(tIn('en', '你好 {0}！这是你在 SAIL BY RICCIONE REKA 展厅许愿出来的家：{1}', ['Ken', 'L']), 'Hi Ken! Here is the home you wished for at the SAIL BY RICCIONE REKA showroom: L');
+  assert.equal(tIn('zh', '你好 {0}！谢谢你来 SAIL BY RICCIONE REKA 展厅许愿。', ['小美']), '你好 小美！谢谢你来 SAIL BY RICCIONE REKA 展厅许愿。');
+  assert.equal(H.homeLine(HOME), '双层排屋 · 4 房 3 卫 · 1,880 sq ft', 'page language unchanged after tIn');
+  // LeadSheet: the WhatsApp text is built in the lead's language, the link for the shell carries the language
+  const sheet = fs.readFileSync(new URL('../src/quiz/home/LeadSheet.jsx', import.meta.url), 'utf8');
+  assert.match(sheet, /tIn\(lang, '你好 \{0\}！这是你在 SAIL BY RICCIONE REKA/);
+  assert.match(sheet, /return linkWithLang\(new URL\(`studio\.html/);
+});
+
+await test('plan added later (release 3): staff upload in the 3D → the stored lead gets the new home + link; name, phone, consent and date stay', () => {
+  LS.clear();
+  const p0 = H.withHome(guest(), { ...HOME, plan: { state: 'later', source: null } }, []);
+  const lead = H.saveLead(H.makeLead({ profile: p0, name: 'Ken', phone: '0123456789', consent: true, intent: 'measure', link: 'https://x/studio.html?from=home#p=old', lang: 'en' }));
+  assert.equal(H.leadFields(lead).find((f) => f.k === 'plan').value, '示范户型（之后可以换成你的）');
+  const p1 = { ...p0, home: { ...p0.home, plan: { state: 'read', source: 'staff', floors: 2, rooms: 9, summary: { bedrooms: 4, bathrooms: 3, areaSqft: 1800 }, inline: { v: 2, f: [] } } } };
+  const up = H.updateLeadHome(p1, 'https://x/studio.html?from=home#p=new');
+  assert.equal(up.id, lead.id);
+  assert.equal(up.at, lead.at, 'retention still counts from when the guest left the details');
+  assert.deepEqual(up.consent, lead.consent);
+  assert.equal(up.phone, lead.phone);
+  assert.equal(up.home.plan.state, 'read');
+  assert.ok(!up.home.plan.inline, 'no inline plan in the list (it is inside the link)');
+  assert.equal(up.link, 'https://x/studio.html?from=home&lang=en#p=new', 'the new link, still in the guest\'s language');
+  assert.equal(H.listLeads().length, 1);
+  assert.equal(H.leadFields(H.listLeads()[0]).find((f) => f.k === 'plan').value, '已读好 · 两层楼 · 9 个房间');
+  assert.equal(H.updateLeadHome({ ...p1, id: 'q_nobody' }, 'x'), null, 'no lead for that guest → nothing written');
+});
+
+await test('next guest (release 3, PDPA): forgetGuests drops the guest\'s profile, 3D projects, plan hand-off and budget note; a guest with a lead keeps only the lead + budget note', async () => {
+  LS.clear();
+  const F = await import('../src/shared/forget.js');
+  const P = await import('../src/shared/profile.js');
+  const HO = await import('../src/shared/handoff.js');
+  const a = { ...guest(), id: 'q_nolead', createdAt: new Date().toISOString() };
+  const b = { ...guest(), id: 'q_lead', createdAt: new Date().toISOString() };
+  const other = { ...guest(), id: 'q_before', createdAt: new Date(Date.now() - 864e5).toISOString() };
+  for (const x of [other, a, b]) P.saveToArchive(x);
+  H.setStaffNote(a.id, { budget: '30-60' });
+  H.setStaffNote(b.id, { budget: '60-100' });
+  H.setStaffNote(other.id, { budget: 'gt250' });
+  H.saveLead(H.makeLead({ profile: b, name: 'Bee', phone: '0123456789', consent: true }));
+  const plan = templatePlan('condo3');
+  for (const x of [a, b]) {
+    await HO.putHomePlan(x.id, { plan });
+    await HO.putPlanFile(x.id, { type: 'image/jpeg', name: 'plan.jpg' });
+  }
+  LS.set('genie.studio.projects.v1', JSON.stringify([{ id: 'p1', profile: { id: a.id } }, { id: 'p2', profile: { id: b.id } }, { id: 'p3', profile: { id: other.id } }, { id: 'p4' }]));
+  LS.set('genie.studio.current', 'p1');
+  const since = Date.now() - 60e3;
+  assert.deepEqual(F.profilesSince(since).sort(), ['q_lead', 'q_nolead'], 'this round = profiles made since the round began');
+  const r = await F.forgetGuests([a.id, b.id]);
+  assert.deepEqual(r, { profiles: 2, projects: 2, keptLeads: 1 });
+  assert.deepEqual(P.loadArchive().map((x) => x.id), ['q_before'], 'only the earlier guest is left in the archive');
+  assert.deepEqual(JSON.parse(LS.get('genie.studio.projects.v1')).map((x) => x.id), ['p3', 'p4']);
+  assert.equal(LS.get('genie.studio.current'), undefined);
+  for (const x of [a, b]) {
+    assert.equal(await HO.getHomePlan(x.id), null, `${x.id}: plan gone`);
+    assert.equal(await HO.getPlanFile(x.id), null, `${x.id}: plan photo gone`);
+  }
+  assert.deepEqual(H.staffNoteOf(a.id), {}, 'no lead → budget note gone');
+  assert.equal(H.staffNoteOf(b.id).budget, '60-100', 'lead → budget note kept for the staff list');
+  assert.equal(H.staffNoteOf(other.id).budget, 'gt250', 'someone else\'s note untouched');
+  assert.deepEqual(H.listLeads().map((l) => l.profileId), [b.id], 'the lead stays');
+  assert.deepEqual(await F.forgetGuests([]), { profiles: 0, projects: 0, keptLeads: 0 });
+  // the shell calls it on 下一位客人 (and once more after the old page is gone)
+  const shell = fs.readFileSync(new URL('../src/wish/WishShell.jsx', import.meta.url), 'utf8');
+  assert.match(shell, /forgetRound\(\); \/\/ 在 resetLead 之前/);
+  assert.match(shell, /m\.forgetGuests\(list\)/);
+});
+
 console.log('WhatsApp');
 await test('client text: the home lines the guest saw, no 门铃 / insights / designer language / budget', () => {
   const p = H.withHome(guest(), HOME, [{ id: 'seed-zen-condo', rev: 1, title: { zh: '晨光里的原木家', en: 'Oak' } }]);
@@ -612,6 +710,9 @@ await test('English', () => {
     assert.equal(H.homeLine({ type: 'terrace', storeys: 1, bedrooms: 3, bathrooms: 2 }), 'Single-storey Terrace · 3 bed 2 bath');
     assert.equal(H.whereText({ state: 'png', area: 'george-town' }), 'Penang · George Town');
     assert.equal(H.leadFields({ intents: ['measure'] })[3].value, 'Book a free site measurement');
+    // keep line (release 3): not 'floor Cream slab tile'
+    assert.equal(H.keepText({ ...HOME, keepItems: ['dining'] }), 'Floor (Cream slab tile), Cabinets (Walnut), Dining table');
+    assert.equal(H.lab(H.KEEP_SLOTS[0].short), 'Floor');
     const lines = homeLines(H.withHome(guest(), HOME, [{ id: 'a', title: { zh: '晨光里的原木家', en: 'Oak in the Morning Light' } }]), { client: true });
     assert.ok(lines[0].startsWith('🏡 Home: Double-storey Terrace · 4 bed 3 bath · 1,880 sq ft (We live here — time to refresh) · Doing: Living, Kitchen, Master bedroom · 3–6 months'), lines[0]);
     assert.ok(!/[一-鿿]/.test(lines.join('')), lines.join('\n'));

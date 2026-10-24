@@ -61,6 +61,17 @@ export function t(zh, vars) {
   return vars == null ? s : fill(s, vars);
 }
 
+/** 用指定的语言说一句（不是界面现在的语言）：员工的界面是中文，发给英文客人的 WhatsApp 还是英文 */
+export function tIn(l, zh, vars) {
+  const prev = lang;
+  lang = l === 'en' ? 'en' : 'zh';
+  try {
+    return t(zh, vars);
+  } finally {
+    lang = prev;
+  }
+}
+
 /** 句子里要夹 JSX（粗体数字、链接…）时用：tj('约 {0} 双', [<b>12</b>]) */
 export function tj(zh, nodes = []) {
   const s = t(zh);

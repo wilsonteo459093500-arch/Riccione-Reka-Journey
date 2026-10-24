@@ -321,7 +321,8 @@ export default function Sorter() {
     const cached = await sess.resume();
     sess.cached = cached;
     sess.resumeMs = performance.now() - t1;
-    window.__sorter = sess; // 只给浏览器检查脚本看进度（不含路径以外的东西）
+    // 只在开发服务器里给浏览器检查脚本看进度：正式版不挂到 window 上（会话里有从文件夹名认出来的人名、完整路径）
+    if (import.meta.env.DEV) window.__sorter = sess;
     // 分项目 + 读缓存是上一段；第一批行等下一帧开头再画（不和它们挤在同一个任务里；分页在后台没有帧 → 最多等 120 ms）
     await new Promise((r) => {
       const tm = setTimeout(r, 120);

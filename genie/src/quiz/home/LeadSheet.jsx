@@ -13,10 +13,11 @@ import Pangie from '../../shared/Pangie.jsx';
 import fx from '../../shared/fx.js';
 import { sfx } from '../../shared/sfx.js';
 import { voice, lineText } from '../../shared/voice.js';
-import { t } from '../../shared/i18n.js';
+import { t, tIn, getLang } from '../../shared/i18n.js';
+import { CONFIG } from '../../shared/config.js';
 import { lifeLabel } from '../../shared/summary.js';
 import { unpackJSON, findInArchive } from '../../shared/profile.js';
-import { makeLead, saveLead, listLeads, clearLeads, leadsCSV, leadsFileName, leadFields, normalizePhone, phoneText, intentsOf, intentText, NAME_MAX, packForStudio, homeLine } from '../../shared/home.js';
+import { makeLead, saveLead, listLeads, clearLeads, leadsCSV, leadsFileName, leadFields, normalizePhone, phoneText, intentsOf, intentText, NAME_MAX, packForStudio, homeLine, linkWithLang, leadLang } from '../../shared/home.js';
 import './lead.css';
 
 /**
@@ -36,17 +37,23 @@ export async function guestFromStudio(win, fallbackId = null) {
   }
 }
 
-/** 客人自己的家（给员工发到客人 WhatsApp 的链接）：普通的 3D 链接，不带许愿模式 / 员工身份，档案里本来就没有预算 */
-export async function homeLinkFor(profile, origin = location.href) {
+/**
+ * 客人自己的家（给员工发到客人 WhatsApp 的链接）：普通的 3D 链接，不带许愿模式 / 员工身份，档案里本来就没有预算。
+ * 英文客人：链接带 ?lang=en（在家里的手机上打开就是英文；lang = 客人用的语言，默认现在的语言）
+ */
+export async function homeLinkFor(profile, origin = location.href, { lang = getLang() } = {}) {
   try {
     const { packed } = await packForStudio(profile);
     const q = new URLSearchParams({ from: 'home' });
     if (profile.caseId) q.set('case', profile.caseId);
-    return new URL(`studio.html?${q.toString()}#p=${packed}`, origin).href;
+    return linkWithLang(new URL(`studio.html?${q.toString()}#p=${packed}`, origin).href, lang);
   } catch {
     return '';
   }
 }
+
+/** 员工在 3D 里帮客人上传了户型图以后：已经留下的那一条名单换成新的家和链接（外壳用；在 home.js） */
+export { updateLeadHome } from '../../shared/home.js';
 
 /** 这一位客人在这台 iPad 上已经留过的那一条（回到 3D 时「交给设计师」直接是 ✓） */
 export const leadFor = (profileId) => (profileId ? listLeads().find((l) => l.profileId === profileId) || null : null);
@@ -250,12 +257,13 @@ export default function LeadSheet({ profile, link = '', done = null, onSaved, on
 }
 const INTENT_ORDER = ['measure', 'whatsapp'];
 
-/** 员工给客人发 WhatsApp 的那一句（客人自己的家的链接；没有预算） */
+/** 员工给客人发 WhatsApp 的那一句（客人自己的家的链接；没有预算）—— 用客人当时的语言（员工的界面可能是中文） */
 export function leadWaLink(lead) {
   const to = String(lead?.phone || '').replace(/\D+/g, '');
+  const lang = leadLang(lead);
   const msg = lead?.link
-    ? t('你好 {0}！这是你在 SAIL BY RICCIONE REKA 展厅许愿出来的家：{1}', [lead.name || '', lead.link])
-    : t('你好 {0}！谢谢你来 SAIL BY RICCIONE REKA 展厅许愿。', [lead?.name || '']);
+    ? tIn(lang, '你好 {0}！这是你在 SAIL BY RICCIONE REKA 展厅许愿出来的家：{1}', [lead.name || '', linkWithLang(lead.link, lang)])
+    : tIn(lang, '你好 {0}！谢谢你来 SAIL BY RICCIONE REKA 展厅许愿。', [lead?.name || '']);
   return `https://wa.me/${to}?text=${encodeURIComponent(msg)}`;
 }
 
@@ -329,6 +337,8 @@ export function LeadsPanel({ onBack, onPoke }) {
           ))}
         </ul>
       )}
+      {/* PDPA：名单过了保留期会自动删掉（keep.js）—— 员工要知道，才会按时导出 */}
+      {CONFIG.keepDays > 0 && <p className="ws-leads-keep">{t('超过 {0} 天的客人名单会自动删除（PDPA），请定期导出 Excel。', [CONFIG.keepDays])}</p>}
       <div className="ws-leads-acts">
         <button type="button" ref={exportRef} className="ws-act ws-act-sm" onClick={exportCSV} disabled={!leads.length} data-sfx="none">
           <i>

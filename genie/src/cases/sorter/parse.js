@@ -237,7 +237,7 @@ export function redact(str, names = []) {
 // ───────────────────────── 一条路径 ─────────────────────────
 
 /**
- * 「顶层/上海/上海-甲乙-极简原木风/效果图/IMG_01.jpg」→
+ * 「顶层/上海/上海-测试甲-极简原木风/效果图/IMG_01.jpg」→
  * { segs, name, dirs, special, city, projectSeg, project, sub:[…], room, view, projDir, flat }
  *   projDir：分组用的文件夹（项目文件夹的路径；没有项目文件夹 = 它所在的「容器」文件夹，flat:true → 按拍摄时间分）
  */
@@ -271,7 +271,7 @@ function classifyDirs(dirs) {
 }
 
 /**
- * 「顶层/上海/上海-甲乙-极简原木风/效果图/IMG_01.jpg」→
+ * 「顶层/上海/上海-测试甲-极简原木风/效果图/IMG_01.jpg」→
  * { segs, name, dirs, special, city, projectSeg, project, sub:[…], room, view, projDir, flat }
  *   projDir：分组用的文件夹（项目文件夹的路径；没有项目文件夹 = 它所在的「容器」文件夹，flat:true → 按拍摄时间分）
  * cache：Map（同一批文件共用，文件夹只分析一次）

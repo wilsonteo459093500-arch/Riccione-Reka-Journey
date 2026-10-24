@@ -59,12 +59,15 @@ export default function Toolbar(p) {
         <IconBtn icon="walls" label={t(WALL_LABEL[p.wallMode])} onClick={p.onWalls} active={p.wallMode !== 'cut'} pressed={p.wallMode !== 'cut'} />
         {canLabel && <IconBtn icon="labels" label={p.labels ? t('隐藏材质标签') : t('显示材质标签')} onClick={p.onLabels} active={p.labels} pressed={p.labels} />}
       </div>
-      <div className="tb-group glass">
-        {/* 对照：案例照片 vs 你的家（选过参考案例、案例有照片时才有；手机上用左上角的「我的家 | 案例照片」） */}
-        {p.onCompare && <IconBtn icon="compare" label={t('对照案例照片')} text={t('对照')} onClick={p.onCompare} active={p.compareOn} pressed={p.compareOn} className="tb-cmp" />}
-        {p.onShot && <IconBtn icon="snapshot" label={t('下载概念图')} onClick={p.onShot} className="tb-hide-sm" />}
-        <IconBtn icon="share" label={t('分享链接')} onClick={p.onShare} />
-      </div>
+      {(p.onCompare || p.onShot || p.onShare) && (
+        <div className="tb-group glass">
+          {/* 对照：案例照片 vs 你的家（选过参考案例、案例有照片时才有；手机上用左上角的「我的家 | 案例照片」） */}
+          {p.onCompare && <IconBtn icon="compare" label={t('对照案例照片')} text={t('对照')} onClick={p.onCompare} active={p.compareOn} pressed={p.compareOn} className="tb-cmp" />}
+          {p.onShot && <IconBtn icon="snapshot" label={t('下载概念图')} onClick={p.onShot} className="tb-hide-sm" />}
+          {/* 许愿模式（展厅 iPad）没有：复制链接、wa.me 都会离开展厅的 iPad —— 客人的家由最后一步「交给设计师」、员工的名单发出去 */}
+          {p.onShare && <IconBtn icon="share" label={t('分享链接')} onClick={p.onShare} />}
+        </div>
+      )}
       <div className="tb-group glass">
         <IconBtn icon="plan" label={planLabel} text={t('平面图')} onClick={p.onPlan} className="tb-plan tb-hide-sm" />
         {p.onStart && <IconBtn icon="start" label={t('新方案 / 打开方案')} onClick={p.onStart} className="tb-hide-md" />}

@@ -30,11 +30,11 @@ import { CATALOG } from './engine/furniture.js';
 import { DAY_PRESETS } from './engine/daylight.js';
 import { createProject, loadProjects, saveProject, currentProject, packProject, unpackProject, getUnderlays, putUnderlays, migrateProject, loadSettings, safeMaterials, profileForStudio } from './store.js';
 import { realiseCase } from '../shared/realise.js';
-import { getHomePlan, expandPlan, putHomePlan, putPlanFile } from '../shared/handoff.js';
+import { getHomePlan, expandPlan, putHomePlan, putPlanFile, compactPlan } from '../shared/handoff.js';
 import { templateFor, keepLocks, planHint } from '../shared/home.js';
 import sfx from '../shared/sfx.js';
-import * as FX from '../shared/fx.js';
-import { unpackJSON, packJSON, storagePlan, insights } from '../shared/profile.js';
+import { unpackJSON, packJSON, storagePlan, insights, findInArchive, saveToArchive } from '../shared/profile.js';
+import { planFacts } from '../quiz/home/planRooms.js';
 import { APPLIANCES } from '../quiz/flow.js';
 import { MOOD_BY_ID, tagsOf } from '../shared/moods.js';
 import { AVOID_LABEL } from '../shared/summary.js';
@@ -896,13 +896,8 @@ export default function StudioApp() {
       ...(furniture ? { furniture, furnEdited: false } : {}),
     });
     scheduleThumbs();
-    if (el) {
-      try {
-        FX.scan(el);
-      } catch {
-        /* 动效不重要 */
-      }
-    }
+    // 光扫过那一张案例：动效那一包（fx.js + fx.css）只在这里用 —— 用到才载入，3D 第一次打开少下载一块
+    if (el) import('../shared/fx.js').then((FX) => FX.scan(el)).catch(() => {});
     noteApplied(caseObj, r);
   };
 
@@ -916,8 +911,9 @@ export default function StudioApp() {
     flash(`${slotName(SLOT_BY_ID[sg.slot])} → ${L(MAT_BY_ID[sg.to])}`);
   };
 
-  /** 客人的户型图到了（许愿模式：员工在员工区上传的）→ 读 → 换成他的家：案例的材质、锁、家具风格都不变 */
-  const applyHomePlan = async (plan0, underlays) => {
+  /** 客人的户型图到了（许愿模式：员工在员工区上传的）→ 读 → 换成他的家：案例的材质、锁、家具风格都不变。
+   *  homePlan = 档案上「你的家」的户型图那一项（不带小平面图）：方案里的档案跟着换（不再是「示范户型」） */
+  const applyHomePlan = async (plan0, underlays, { homePlan = null } = {}) => {
     const plan = migratePlan(plan0);
     const cur = projRef.current;
     if (!cur) return;
@@ -926,8 +922,36 @@ export default function StudioApp() {
     past.current.push(snap(cur));
     if (past.current.length > HISTORY) past.current.shift();
     future.current = [];
-    loadProjectIntoEngine({ ...cur, plan, furniture, furnEdited: false, sample: false, floorView: 'all' }, true, { keepHistory: true, floorView: 'all' });
+    const profile = homePlan && cur.profile?.home ? { ...cur.profile, home: { ...cur.profile.home, plan: homePlan } } : cur.profile;
+    loadProjectIntoEngine({ ...cur, plan, furniture, furnEdited: false, sample: false, floorView: 'all', profile }, true, { keepHistory: true, floorView: 'all' });
     bump((n) => n + 1);
+  };
+  /**
+   * 员工帮客人上传的户型图读好了：记到这台 iPad 上客人的档案（和「带它回家」R 屏的『对，就是它』存的同一个样子：
+   * HomeJourney confirmYes）—— 最后一步「交给设计师」的链接、名单 / CSV 的「户型图」、在客人自己的手机上打开链接，
+   * 都是他的家，不再是「示范户型」。home.at 不动（这一份方案就是他的家，不重新生成）。→ 档案上的 home.plan（不带小平面图）
+   */
+  const rememberGuestPlan = (pid, r) => {
+    let plan = null;
+    let inline = null;
+    try {
+      plan = migratePlan(r.plan);
+      inline = compactPlan(plan);
+    } catch {
+      inline = null;
+    }
+    const facts = planFacts(plan);
+    const homePlan = {
+      state: r.status === 'rough' ? 'rough' : 'read',
+      source: 'staff',
+      floors: facts.floors,
+      rooms: facts.rooms,
+      summary: { bedrooms: facts.bedrooms, bathrooms: facts.bathrooms, areaSqft: facts.areaSqft },
+      ...(Number.isFinite(r.confidence) ? { confidence: Math.round(r.confidence * 100) / 100 } : {}),
+    };
+    const arch = findInArchive(pid);
+    if (arch?.home) saveToArchive({ ...arch, home: { ...arch.home, plan: { ...homePlan, ...(inline ? { inline } : {}) } } });
+    return homePlan;
   };
   const readingRef = useRef(false);
   const readGuestPlan = async (file) => {
@@ -943,7 +967,10 @@ export default function StudioApp() {
       await putPlanFile(pid, file);
       if ((r.status === 'ok' || r.status === 'rough') && r.plan) {
         await putHomePlan(pid, { plan: r.plan, underlays: r.underlays, source: r.source, confidence: r.confidence });
-        await applyHomePlan(r.plan, r.underlays);
+        const homePlan = rememberGuestPlan(pid, r);
+        await applyHomePlan(r.plan, r.underlays, { homePlan });
+        // 许愿模式的外壳：这一位的家变了 →「交给设计师」的链接、已经留下的名单跟着换（WishShell 的 home-done）
+        tellShell('home-done', { id: pid, plan: true });
         setBanner({ state: 'idle', pct: 0 });
         sfx.play?.('achievement');
         flash(r.status === 'rough' ? t('读好了 —— 有几处是猜的，设计师见面时会再对一次') : t('读好了 —— 这就是你的家'), 4600);
@@ -1563,7 +1590,7 @@ export default function StudioApp() {
                 flash(t('这台设备暂时存不了高清图，换「流畅」画质再试一次'), 4200);
               }
             }}
-            onShare={() => setModal('share')}
+            onShare={WISH ? null : () => setModal('share')}
             onCompare={canCompare && !phone ? toggleCompare : null}
             compareOn={cmp.mode !== 'off' && cmp.mode !== 'home'}
             labels={labels}

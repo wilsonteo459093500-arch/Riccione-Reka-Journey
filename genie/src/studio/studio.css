@@ -3271,6 +3271,14 @@
 .is-en .fs-btn {
   font-size: 12px;
 }
+/* 手机（FloorSwitch 的 phone = ≤ 600px）：楼层按钮排在工具条 /「我的家 | 案例照片」/ 示范户型提示条下面。
+   那两条晚一点才出来（案例照片读好才有「我的家 | 案例照片」，提示条跟着往下挪）：按钮直接跳到它们下面，不滑过去 ——
+   慢一点的手机上滑的那一段要好几帧，按钮压在提示条底下，客人按不到楼层 */
+@media (max-width: 600px) {
+  .floor-switch {
+    transition: opacity 0.5s var(--ease);
+  }
+}
 /* 手机：工具条下面一条横的 */
 .floor-switch.is-row {
   flex-direction: row;

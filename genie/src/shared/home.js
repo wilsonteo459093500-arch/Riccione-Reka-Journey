@@ -11,7 +11,7 @@
 //
 // 文字：中文就是 key，英文在 src/shared/i18n/en-shell.js（资料里的 en 是老板改说法时改的那一份）。
 
-import { t, L, isEn } from './i18n.js';
+import { t, L, isEn, getLang } from './i18n.js';
 import { MAT_BY_ID, fits } from './materials.js';
 import { DREAMER_BY_CODE } from './dreamers.js';
 import { packJSON, slimProfile } from './profile.js';
@@ -283,7 +283,7 @@ export const KEEP_SLOTS = [
     slot: 'floor',
     zh: '地板',
     en: 'Floor',
-    short: { zh: '地板', en: 'floor' },
+    short: { zh: '地板', en: 'Floor' },
     swatches: ['cream-tile', 'grey-tile', 'carrara', 'calacatta', 'travertine', 'sintered', 'terrazzo', 'light-oak'],
     labels: {
       'cream-tile': { zh: '奶油大板砖', en: 'Cream slab tile' },
@@ -296,9 +296,9 @@ export const KEEP_SLOTS = [
       'light-oak': { zh: '木地板', en: 'Wood floor' },
     },
   },
-  { id: 'walls', slot: 'walls', zh: '墙面', en: 'Walls', short: { zh: '墙面', en: 'walls' }, swatches: ['gallery-white', 'warm-white', 'oat', 'sand-limewash', 'sage', 'dusty-blue', 'latte'] },
-  { id: 'cabinetry', slot: 'cabinetry', zh: '柜子 · 门', en: 'Cabinets & doors', short: { zh: '柜子', en: 'cabinets' }, swatches: ['white-lacquer', 'cream-lacquer', 'light-oak', 'walnut', 'sage-lacquer', 'black-matte'] },
-  { id: 'sofa', slot: 'upholstery', zh: '沙发', en: 'Sofa', short: { zh: '沙发', en: 'sofa' }, swatches: ['grey-wool', 'linen', 'boucle', 'cognac-leather', 'black-leather', 'navy-velvet'] },
+  { id: 'walls', slot: 'walls', zh: '墙面', en: 'Walls', short: { zh: '墙面', en: 'Walls' }, swatches: ['gallery-white', 'warm-white', 'oat', 'sand-limewash', 'sage', 'dusty-blue', 'latte'] },
+  { id: 'cabinetry', slot: 'cabinetry', zh: '柜子 · 门', en: 'Cabinets & doors', short: { zh: '柜子', en: 'Cabinets' }, swatches: ['white-lacquer', 'cream-lacquer', 'light-oak', 'walnut', 'sage-lacquer', 'black-matte'] },
+  { id: 'sofa', slot: 'upholstery', zh: '沙发', en: 'Sofa', short: { zh: '沙发', en: 'Sofa' }, swatches: ['grey-wool', 'linen', 'boucle', 'cognac-leather', 'black-leather', 'navy-velvet'] },
 ];
 export const KEEP_BY_SLOT = Object.fromEntries(KEEP_SLOTS.map((k) => [k.slot, k]));
 
@@ -566,11 +566,14 @@ export function planText(home, { wish = false } = {}) {
   return t('还没有');
 }
 
-/** 保留的颜色和大件：「地板 奶油大板砖、柜子 胡桃木、床」 */
+/**
+ * 保留的颜色和大件：「地板 奶油大板砖、柜子 胡桃木、床」/ 'Floor (Cream slab tile), Cabinets (Walnut), Bed'
+ * （英文不能把小写的「floor」直接接在材质名前面 —— 读起来像「floor Cream slab tile」；前面常有「Keeping: 」，所以用括号不用冒号）
+ */
 export function keepText(home) {
   const locks = keepLocks(home);
   const sep = isEn() ? ', ' : '、';
-  const mats = KEEP_SLOTS.filter((k) => locks[k.slot]).map((k) => `${lab(k.short)} ${keepLabel(k.slot, locks[k.slot])}`);
+  const mats = KEEP_SLOTS.filter((k) => locks[k.slot]).map((k) => (isEn() ? `${lab(k.short)} (${keepLabel(k.slot, locks[k.slot])})` : `${lab(k.short)} ${keepLabel(k.slot, locks[k.slot])}`));
   const items = home?.keepMode === 'new' ? [] : (home?.keepItems || []).map((v) => lab(KEEP_ITEM_BY_V[v])).filter(Boolean);
   return [...mats, ...items].join(sep);
 }
@@ -753,7 +756,25 @@ export function clearLeads() {
  * link = 客人自己的家（不带预算，员工发到客人的 WhatsApp 用）。
  */
 export const INTENTS = ['measure', 'whatsapp'];
-export function makeLead({ profile, name, phone, consent, intent, link = '', at = new Date().toISOString() }) {
+/** 链接带上客人的语言（英文 → ?lang=en；中文 → 不带）。不是网址就原样返回 */
+export function linkWithLang(link, lang) {
+  if (!link) return link || '';
+  try {
+    const u = new URL(link);
+    if (lang === 'en') u.searchParams.set('lang', 'en');
+    else u.searchParams.delete('lang');
+    return u.href;
+  } catch {
+    return link;
+  }
+}
+/** 这一条名单是用哪种语言留的（旧的没记：看链接有没有 ?lang=en，再不行用现在的语言） */
+export function leadLang(lead) {
+  if (lead?.lang === 'en' || lead?.lang === 'zh') return lead.lang;
+  if (/[?&]lang=en(&|#|$)/.test(String(lead?.link || ''))) return 'en';
+  return getLang();
+}
+export function makeLead({ profile, name, phone, consent, intent, link = '', lang = getLang(), at = new Date().toISOString() }) {
   const ph = normalizePhone(phone);
   const nm = String(name || '').trim().slice(0, NAME_MAX);
   if (!nm || !ph || !consent) return null;
@@ -773,8 +794,24 @@ export function makeLead({ profile, name, phone, consent, intent, link = '', at 
     home,
     cases: (profile?.cases || []).map((c) => c?.title).filter(Boolean),
     budget: profile?.id ? staffNoteOf(profile.id).budget || null : null,
-    link,
+    lang: lang === 'en' ? 'en' : 'zh',
+    link: linkWithLang(link, lang),
   };
+}
+/**
+ * 留了名单以后客人的家又变了（员工在 3D 里帮他上传了户型图）：那一条名单的「家」、参考案例、链接跟着更新；
+ * 称呼、号码、PDPA 同意、时间（保留期从客人最后一次留资料起算）都不动。没有这一位的名单 → null
+ */
+export function updateLeadHome(profile, link) {
+  if (!profile?.id) return null;
+  const all = listLeads();
+  const old = all.find((x) => x.profileId === profile.id);
+  if (!old) return null;
+  const home = profile.home ? normalizeHome(profile.home) : null;
+  if (home?.plan) delete home.plan.inline;
+  const next = { ...old, home, cases: (profile.cases || []).map((c) => c?.title).filter(Boolean), ...(link ? { link: linkWithLang(link, leadLang(old)) } : {}) };
+  lsSet(LEADS_KEY, all.map((x) => (x === old ? next : x)));
+  return next;
 }
 /** 存进这台 iPad（同一位客人再按一次 = 更新那一条：名字 / 号码用新的，想要的两样合在一起，不重复） */
 export function saveLead(lead) {

@@ -20,6 +20,10 @@
 //     按一下用 WhatsApp 把客人自己的家发给他、清空（按两下）。客人碰不到员工区，所以这里的下载 / WhatsApp 都只有员工用得到。
 //   · 下一位客人：一道晨光扫过整个画面（fx.wipe dawn），光盖住的那一刻换成新的欢迎页；声音全部复原（音乐《晨光》、音量、
 //     静音、按钮音效、自然声、潘吉）；潘吉说「谢谢你来许愿，下次见！」（闲置自动重来时不说：没人在）。
+//     上一位客人留在这台 iPad 上的东西同时删掉（src/shared/forget.js）：没留名单的 —— 档案、3D 方案、户型图原图、预算全部删；
+//     留了名单的只留名单和预算（PDPA）。这一位 = 这一轮建的档案 + 子页面报过的（home-done）。
+//   · 员工在 3D 里帮客人上传了户型图（3D 读好以后发 {type:'home-done', id, plan:true}）：「交给设计师」的链接、已经留下的
+//     那一条名单跟着换成他的家（不再是示范户型）。名单记着客人的语言：英文客人的链接带 ?lang=en，WhatsApp 那一句也是英文。
 //     她道别的时候音乐留在原来那一页的音量（3D 的 ×0.25），说完才用 3 秒慢慢回到《晨光》—— 不会在她说话时涨上来。
 //   · 换文档的那一下（蓝图 → 3D、下一位客人重建 iframe）：iframe 在新页面画出来之前是空的。外壳在它上面盖一层不动的光
 //     （.ws-veil：暮色 = 深绿 + 神灯的一团暖光；晨光 = 纸色 + 金色的光晕），接住子页面那一道光；新页面画好了再 420 ms 淡掉。
@@ -156,6 +160,8 @@ export default function WishShell({ zen, host = '', startLang, greet = false, on
   const ctaRef = useRef(null);
   const guestRound = useRef(0);
   const guestId = useRef(null); // 子页面说「这一位要去看 3D 里的家了」（home-done）时记下的档案号
+  const roundStart = useRef(Date.now()); // 这一位客人从什么时候开始（下一位客人时：这之后建的档案都是他的）
+  const roundIds = useRef(new Set()); // 这一轮子页面报过的档案号（home-done）
   const armedDoc = useRef(null); // 已经认过客人的那一个 3D 文档（load 和 3D 自己报到，谁先到都只认一次）
 
   const whereRef = useRef('quiz');
@@ -332,6 +338,7 @@ export default function WishShell({ zen, host = '', startLang, greet = false, on
     clearTimeout(restartFallback.current);
     try {
       sessionStorage.removeItem(SESSION_KEY);
+      sessionStorage.removeItem('genie.home.v1'); // 「带它回家」走到哪一步（HomeJourney 的 SESSION_KEY）
     } catch {
       /* ignore */
     }
@@ -364,11 +371,33 @@ export default function WishShell({ zen, host = '', startLang, greet = false, on
     setPanel(null);
   };
 
+  /**
+   * 上一位客人留在这台 iPad 上的东西删掉（forget.js）：这一轮建的档案 + 子页面报过的。旧的页面在换掉以前可能还会再存一次
+   * （3D 的自动保存、「带它回家」每一步存档）→ 新的欢迎页出来以后再删一次（档案号是唯一的，不会删到下一位客人）
+   */
+  const forgetRound = () => {
+    const ids = new Set(roundIds.current);
+    if (guestId.current) ids.add(guestId.current);
+    if (guest?.id) ids.add(guest.id);
+    const since = roundStart.current;
+    roundStart.current = Date.now();
+    roundIds.current = new Set();
+    import('../shared/forget.js')
+      .then((m) => {
+        for (const id of m.profilesSince(since)) ids.add(id);
+        const list = [...ids];
+        m.forgetGuests(list).catch(() => {});
+        setTimeout(() => m.forgetGuests(list).catch(() => {}), 4000);
+      })
+      .catch(() => {});
+  };
+
   /** 下一位客人。goodbye：员工按的（潘吉道别）；闲置自动重来时没人在，不说 */
   const nextGuest = ({ goodbye = true } = {}) => {
     if (wiping.current || leavingRef.current) return;
     wiping.current = true;
     setPanel(null);
+    forgetRound(); // 在 resetLead 之前（它会清掉 guestId / guest）
     const wasMuted = mutedRef.current;
     resetControls();
     voice.newGuest();
@@ -488,6 +517,22 @@ export default function WishShell({ zen, host = '', startLang, greet = false, on
       })
       .catch(() => {});
   };
+  /** 这一位客人的家变了（3D 里读好了员工上传的户型图）：重新读本机存档 → 新的链接；已经留下的名单也换成新的家和链接 */
+  const refreshGuest = (id) => {
+    const r = guestRound.current;
+    loadLead()
+      .then(async (m) => {
+        const p = await m.guestFromStudio(frame.current?.contentWindow, id);
+        if (!p || p.id !== id || r !== guestRound.current) return;
+        setGuest(p);
+        const link = await m.homeLinkFor(p);
+        if (r !== guestRound.current) return;
+        setGuestLink(link);
+        const l = m.updateLeadHome(p, link);
+        if (l) setLeadDone(l);
+      })
+      .catch(() => {});
+  };
   const openLead = (e) => {
     markActive();
     if (e?.currentTarget) fx.scan(e.currentTarget, { sound: null });
@@ -527,8 +572,13 @@ export default function WishShell({ zen, host = '', startLang, greet = false, on
     else if (d.type === 'plan-wait') setPlanWait(!!d.on);
     else if (d.type === 'home-done') {
       // 客人按了「生成我的家」（或蓝图上的「在 3D 里看见」）：记下是哪一位，先把最后一步那一包载进来
-      if (typeof d.id === 'string') guestId.current = d.id;
+      if (typeof d.id === 'string') {
+        guestId.current = d.id;
+        roundIds.current.add(d.id);
+      }
       loadLead();
+      // 3D 里员工帮他上传的户型图读好了：链接 / 名单换成他的家
+      if (d.plan && typeof d.id === 'string') refreshGuest(d.id);
     }
     // 'wish'：每个愿望的铃声是按钮音效 wishAdd（客人按下去的那一下），音乐不再响自己的铃
   };

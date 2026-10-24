@@ -214,6 +214,8 @@ export default {
   设计师会换成你家的户型图: 'Your designer will swap in your own floor plan',
   // 公司做的 vs 只是背景（业主 2026-10-19）：只标公司做的；客人家里留下来的标「保留你家原有」
   我们做: 'We make this',
+  // 电视墙的墙面是微水泥 / 石灰墙 / 刷漆（背景，不是墙板）：只有下面的电视柜是我们做的
+  '我们做 · 电视柜': 'We make this · TV console',
   '我们做 · 定制柜、台面、墙板、门': 'We make this · custom cabinets, worktops, wall panels, doors',
   家具示意: 'Furniture for illustration',
   保留你家原有: 'Kept from your home',

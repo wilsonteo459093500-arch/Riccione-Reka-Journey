@@ -140,7 +140,7 @@ export default {
   '你的家 · {0} / 4': 'Your home · {0} / 4',
   '你的家是 ——': 'Your home is…',
   '选最接近的就好，我去案例库里挑最像的给你看。': 'Pick the closest — I’ll find the most similar homes in our library.',
-  '它现在是 ——': 'It is…',
+  '它现在是 ——': 'Right now, your home is…',
   '新房、旧房都可以，我会照着它来准备。': 'New or lived-in, either is fine — I’ll plan around it.',
   '新房、旧房都可以': 'New or lived-in — both are fine',
   '一个羽毛球场': 'One badminton court',
@@ -441,6 +441,7 @@ export default {
   清空名单: 'Clear the list',
   '再按一次，清空名单': 'Tap again to clear the list',
   '导出以后再清空（PDPA：不用的资料不要一直留着）': 'Export first, then clear (PDPA: don’t keep data you no longer need)',
+  '超过 {0} 天的客人名单会自动删除（PDPA），请定期导出 Excel。': 'Leads older than {0} days are deleted automatically (PDPA) — export to Excel regularly.',
   '你好 {0}！这是你在 SAIL BY RICCIONE REKA 展厅许愿出来的家：{1}': 'Hi {0}! Here is the home you wished for at the SAIL BY RICCIONE REKA showroom: {1}',
   '你好 {0}！谢谢你来 SAIL BY RICCIONE REKA 展厅许愿。': 'Hi {0}! Thank you for making a wish at the SAIL BY RICCIONE REKA showroom.',
   // CSV 的表头
