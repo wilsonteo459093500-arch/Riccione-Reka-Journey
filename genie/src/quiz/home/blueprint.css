@@ -1,0 +1,138 @@
+/* 蓝图上的 VI · 你的家 · VII · 参考案例（Blueprint.jsx + BlueprintCases.jsx）。只用 base.css 的变量。 */
+.hj-bp-home {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px 18px;
+  margin: 0;
+}
+.hj-bp-home div {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 10px;
+  align-items: baseline;
+  padding: 8px 0;
+  border-bottom: 0.5px solid var(--line);
+}
+.hj-bp-home dt {
+  font: 500 13px/1.35 var(--sans);
+  color: var(--text-soft);
+}
+.hj-bp-home dd {
+  margin: 0;
+  font: 500 14.5px/1.4 var(--sans);
+  color: var(--text-strong);
+}
+.hj-bp-home .is-designer dd {
+  color: var(--gold-ink);
+}
+.hj-bp-invite {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 18px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(var(--gold-rgb), 0.1);
+  box-shadow: inset 0 0 0 0.5px rgba(var(--gold-rgb), 0.45);
+}
+.hj-bp-invite p {
+  flex: 1 1 240px;
+  margin: 0;
+  font: 500 14.5px/1.5 var(--sans);
+  color: var(--text);
+}
+.hj-bp-budget {
+  margin-top: 14px;
+}
+.hj-bp-budget .chips {
+  margin-top: 6px;
+  justify-content: flex-start;
+}
+.hj-bp-budget .chip {
+  min-height: 38px;
+  padding: 0 14px;
+  font-size: 14px;
+}
+.hj-bp-budget small {
+  display: block;
+  margin-top: 6px;
+  font: 400 12px/1.4 var(--sans);
+  color: var(--text-soft);
+}
+.bp-lock {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--gold-l);
+  font: 700 10.5px/1.3 var(--sans);
+}
+.mat.is-locked img {
+  box-shadow: 0 0 0 2px var(--card), 0 0 0 3.5px var(--gold);
+}
+.hj-bp-row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(240px, 280px);
+  gap: 14px;
+  overflow-x: auto;
+  /* 卡片的影子不被这一排裁掉：四周留够空间，再用负的外边距对齐正文 */
+  margin: -10px -18px 0;
+  padding: 10px 18px 34px;
+  scroll-padding-inline: 18px;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.hj-bp-row::-webkit-scrollbar {
+  display: none;
+}
+.hj-bp-row .cs-body {
+  grid-template-columns: 1fr;
+}
+.hj-bp-row .cs-dots {
+  grid-column: 1;
+  grid-row: auto;
+  margin-top: 6px;
+}
+.hj-bp-row .cs-body h3 {
+  font-size: 17px;
+}
+.hj-bp-row .cs-card {
+  box-shadow:
+    inset 0 0 0 0.5px rgba(var(--gold-rgb), 0.4),
+    0 1px 2px rgba(var(--shade-rgb), 0.05),
+    0 10px 22px rgba(var(--shade-rgb), 0.08);
+}
+.hj-bp-row .cs-card.on {
+  box-shadow:
+    inset 0 0 0 2px var(--gold),
+    0 12px 26px rgba(var(--gold-d-rgb), 0.16);
+}
+.hj-bp-row > .cs-card {
+  scroll-snap-align: start;
+}
+.hj-bp-row.is-mine {
+  grid-auto-columns: minmax(260px, 320px);
+}
+@media (max-width: 560px) {
+  .hj-bp-home div {
+    grid-template-columns: 84px 1fr;
+  }
+  .hj-bp-row {
+    grid-auto-columns: 78%;
+  }
+}
+@media print {
+  .hj-bp-row {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(3, 1fr);
+    overflow: visible;
+  }
+  .hj-bp-invite {
+    display: none;
+  }
+}

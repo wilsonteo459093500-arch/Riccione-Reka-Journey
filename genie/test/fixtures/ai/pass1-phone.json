@@ -1,0 +1,57 @@
+{
+ "page_box_2d": [
+  245,
+  17,
+  560,
+  983
+ ],
+ "is_photo_or_screenshot": true,
+ "plans": [
+  {
+   "title": "FIRST FLOOR PLAN",
+   "level": "first",
+   "box_2d": [
+    284,
+    124,
+    461,
+    309
+   ],
+   "units": "mm",
+   "scale_text": null,
+   "unit_label": null
+  },
+  {
+   "title": "GROUND FLOOR PLAN",
+   "level": "ground",
+   "box_2d": [
+    267,
+    392,
+    506,
+    572
+   ],
+   "units": "mm",
+   "scale_text": null,
+   "unit_label": null
+  }
+ ],
+ "other_drawings": [
+  {
+   "kind": "title_block",
+   "box_2d": [
+    253,
+    790,
+    552,
+    965
+   ]
+  },
+  {
+   "kind": "elevation",
+   "box_2d": [
+    378,
+    601,
+    489,
+    778
+   ]
+  }
+ ]
+}

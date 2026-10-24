@@ -1,0 +1,166 @@
+# WISH · by RICCIONE REKA
+
+> 熊猫精灵「潘吉 Pangie」带客人走一趟**许愿之旅**（客人玩），再用 **3D 梦想工作室**（设计师 / 销售用）把愿望变成一个看得见的家。
+> 中文 / English 双语。设计思路（快思慢想 × The Sims）见 [`DESIGN.md`](./DESIGN.md)，上线和展厅设置见 [`DEPLOY.md`](./DEPLOY.md)。
+> 软件名 **WISH**（许愿）；向导是住在神灯里的熊猫精灵潘吉。代码文件夹和本机存储键沿用早期代号 `genie`（改了会丢已存档案）。
+
+| 网址 | 是什么 |
+|---|---|
+| `/` | 入口（员工用）：客户许愿模式、两个功能（许愿之旅用 `location.replace` 打开，客人按「返回」回不到入口页；3D 卡打开 `/studio?staff=1` 设计师版）、这台设备上存的蓝图（「员工 · 本机蓝图」锁着，按住 3 秒打开）；许愿模式开着时这一页被重新载入，会回到许愿模式开场 |
+| `/wish` | **客户许愿模式**：展厅 iPad 全屏 + 大自然禅意音乐，客人从头玩到 3D |
+| `/quiz` | 许愿之旅（约 6–8 分钟）→ 专属梦想家概念蓝图 |
+| `/quiz?from=wilson&for=Peggy` | 预填陪同人和称呼（`from` 取自 `src/shared/config.js` 的 `team[].code`） |
+| `/quiz#bp=…` | 打开一份分享出去的蓝图（客人版） |
+| `/quiz?staff=1#id=…` | 员工打开本机存的蓝图，可以切到**设计师版** |
+| `/studio` | 3D 梦想工作室（第一次打开直接看到示范户型） |
+| `/studio#p=…` | 带着客人的许愿档案进入（蓝图页的「在 3D 里看见它」）：从客人版蓝图进来是**客人版**（没有收纳对账、谈话提示）；从员工蓝图进来，或网址带 `?staff=1`，才是设计师版 |
+| `/studio#s=…` | 打开别人分享的 3D 方案：在你这里**另存一份**（新 id，名字加「（分享）」），不会盖掉你自己的 |
+| `/studio?demo=1` | 展厅大屏演示：自动环绕 + 一天光影，不显示客人名字；长按左下角 WISH 字标 1.5 秒或按 Esc 退出 |
+| `/studio?mode=wish` | 许愿模式外壳里面用的 3D（客人版，底座写「示范户型 · 概念示意」；平面图只能画、不能上传，没有下载概念图，没有设置）；不用自己打开 |
+| 任何网址加 `?lang=en` | 直接用英文打开（也可以点右上角「中 / EN」） |
+
+---
+
+## 一、许愿之旅（客人）
+
+五张牌，约 6–8 分钟：
+
+1. **召唤** —— 擦亮神灯（手指来回擦 / 按住），潘吉出场；欢迎页同时选语言；
+2. **I 直觉之牌** —— 12 组图片二选一，凭第一感觉（左右位置每次随机；反应时间只给设计师参考，不夸「秒选」，两人 / 一家人一起玩时不计时）；
+3. **II 生活之牌** —— 星期六早上、回家第一件事、厨房像什么、门铃响了最想藏什么、家里还有谁（含神台、宠物、在家办公）；
+4. **III 宝藏之牌** —— 慢下来数：鞋（→ 鞋柜宽）、衣柜（→ 目标宽、长挂 / 短挂 / 叠放）、书（→ 书墙）、小家电（→ 台面 / 电器高柜）、大件、藏 vs 展；毫米旁边附「约几尺」；
+5. **IV 愿望之牌** —— 12 个愿望（每次顺序打乱）选最想要的三个 + 最舍得花钱的地方；
+6. **V 雷区之牌** —— 绝对不要的颜色 / 质感 + 一句话愿望；
+7. **揭晓** —— 洗牌、一张牌升起、翻面：16 张「梦想家卡牌」之一（四条轴：暖/清、简/丰、朴/雅、藏/展），下面写「因为你……」最多三句。
+
+每一关背后是一处**马来西亚 / 四川的自然风景**（像旅行杂志的跨页，角落有地名）：
+金马伦高原茶园 · 稻城亚丁雪山 · 大汉山雨林溪流 · 九寨沟 · 京那巴鲁山云海日出 · 四姑娘山雨后森林 · 瓜拉雪兰莪的萤火虫（神灯、翻牌、揭晓这些仪式时刻用暮色）。
+七处都已经是真实照片；要换照片见下面「七」（没有照片时会退回代码画的风景）。
+
+**梦想家蓝图**（可打印 / 存 PDF）：牌面 + 轴、情绪色板、材质板、生活、三个愿望、雷区、收纳蓝图、一句话愿望；
+**设计师版**只有员工看得到（`?staff=1`，或许愿模式的员工区），多出：设计语言、色号、英文出图关键词、谈话提示（矛盾 / 风险 / 沟通建议）、
+选得最快的几题（参考）、按生活方式自动换掉的材质（有猫狗 → 沙发避开丝绒；天天爆炒 / 有小孩 → 台面换成同花色的石英石）、客人没动过的收纳数字。
+
+按钮：在 3D 里看见它 · 发给设计师（WhatsApp，内容已排好）· 分享海报（1080×1350 PNG）· 打印 · 复制链接 · 下一位。
+
+## 二、客户许愿模式（`/wish`）
+
+给展厅 iPad 用（设置方法见 `DEPLOY.md`）：
+
+- 开场两个按钮「中文开始」/「Begin in English」—— 第一下轻触同时开音乐、全屏、保持屏幕常亮；
+- **大自然禅意音乐**（现场合成：溪水、微风、鸟鸣）：许愿时跟着每一关换情绪，揭晓时一个亮音；
+  之后渐弱 —— 蓝图页约 50 %，进 3D 约 25 %，10 分钟没人碰再淡到很小，一碰就回来（`CONFIG.wishDuck`）。
+  颂钵、风铃默认关闭（`CONFIG.wishLayers`）；
+- 左下角（3D 页在右下角，左边是情绪面板）一个 WISH 字标 + 音乐小胶囊：音量 / 静音；声音被系统暂停时显示「轻触继续音乐」；
+- **员工区**：长按 WISH 字标约 3 秒（金色圆环走满）→ 下一位客人 · 设计师版 · 结束许愿模式 · 语言；轻点不会打开；
+- 客人中途走开：3 分钟没人碰，潘吉问「还在吗？」，再 30 秒没回应就回到开头给下一位（`CONFIG.idle`）；蓝图和 3D 不会自动清空。
+
+## 三、3D 梦想工作室（设计师 / 销售）
+
+- **开始一个空间**：上传平面图（图片 / PDF）/ 自己画 / 户型模板（公寓 3 房、排屋一楼、小公寓）/ 最近的方案；
+- **平面图编辑器**：拉方块画房间、点墙放门 / 窗 / 落地趟门 / 打通；边自动吸附；量尺校准底图比例；设北方（日照）；
+  有 Gemini key 时「AI 识别」自动认出房间与门窗，再拖一拖校正 →「生成 3D」；
+- **自动摆家具**：按设计师规则 + 客人档案（鞋柜、衣柜长度、神台、宠物窝、书墙、展示柜、L 形沙发 / 弧形沙发、餐桌座位数；
+  厨房按「冰箱 – 水槽 – 炉头」的工作距离排；车廊放鞋柜和长凳）；
+- **收纳对账**（设计师）：客人要的鞋柜 / 衣柜 / 书墙长度 vs 方案里放下的，差多少、点一下选中那件家具；
+- **SET THE MOOD**：Cosy / Bright / Moody（有档案时多一个客人自己的牌；会避开客人的雷区材质）、情绪仪表、一句话描述、MOODBOARD；
+- **换材质**：底部材质栏拖到任何表面（金光提示 + 「放手 → 地板换成烟熏橡」）；
+- **家具**：拖动移动；点一下 → 旋转 / 换款 / 复制 / 移走；底部 Furniture 加家具；
+- **DAYLIGHT**：四个时段、24 小时滑杆、可直接拖的太阳弧；窗上的树影、斜进来的光柱、夜里的灯；
+- 工具条：撤销 / 重做、下载带品牌概念图、分享链接（整份方案在链接里；打开别人分享的方案会另存一份，不会盖掉自己的）、
+  标签开关、视角、墙的高低、演示模式。
+- **导出给设计师**（「⋯」菜单）：AutoCAD 平面图（DXF）、酷家乐户型（每层一个 DXF）、SketchUp 3D（DAE + OBJ），只在设计师版；
+  一个 zip，里面还有中英 README 和柜子家具清单 CSV；面板上填「文件包名称」（客人名或地址，用在文件名和图名上）。
+  台面跟着柜子走但标「外购」（没有 sAil 板材编号）。全部在这台设备上算，不联网，不带客人档案（`src/studio/export/`；
+  面板和文件里的英文在 `i18n/en-export.js`，跟着导出代码懒加载）。
+
+## 四、中英双语
+
+- 每一页右上角「中 / EN」；网址加 `?lang=en` 直接英文；选择会记在这台设备上。
+- **写法**：界面文字直接写中文，用 `t('中文')` 包起来（带变量：`t('{0} 的梦想家卡牌', [name])`；中间夹组件：`tj()`；
+  `{zh, en}` 这种数据：`L(obj)`；精灵名字：`guideName()`）。英文放在 `src/shared/i18n/en-*.js`，**中文原句就是 key**。
+- `npm test` 会扫描所有源码：任何一句中文没有英文、`{0}` 对不上，测试就不过，并列出是哪一行。
+- 中文用系统字体 + 宋体标题；英文标题用 Cormorant，界面用系统字体（像 iPhone）。
+
+## 五、视觉（VI「晨光溪岸 Morning Stream」）
+
+- 底色是石灰纸、湿石头、溪水；金色只用四种（`--gold`、`--gold-ink` 小字、`--gold-l` 高光、`--gold-btn` 按钮）；
+- 暮色（`.dusk`）只用在仪式时刻：擦神灯、翻牌、揭晓；3D 工作室的画布保持深色，面板是纸色毛玻璃；
+- 颜色只改两个地方：CSS 在 `src/shared/base.css` 的 `:root`，canvas / 3D / 潘吉 SVG 在 `src/shared/palette.js`。
+
+## 六、配置
+
+只改 `src/shared/config.js`：
+
+```js
+BRAND             // 软件名、底座上的字
+GUIDE             // 熊猫名字：潘吉 / Pangie
+CONFIG.inbox      // 蓝图送到哪个 WhatsApp
+CONFIG.endpoint   // 选填：同时 POST 一份 JSON 到你的表单服务
+CONFIG.team       // 团队（code 用在 ?from=）
+CONFIG.wishMusic  // 选填：公司自己有版权的曲子 /music/xxx.mp3
+CONFIG.wishLayers // 颂钵 / 风铃开关（默认关）
+CONFIG.wishDuck   // 揭晓后的音量：蓝图 0.5 · 3D 0.25 · 闲置 0.12
+CONFIG.idle       // 闲置提示与回到开头的时间
+```
+
+材质库在 `src/shared/materials.js`，16 张牌在 `src/shared/dreamers.js`，许愿题目在 `src/quiz/flow.js`，风景在 `src/quiz/scenes.js`，户型模板在 `src/studio/plan/model.js`。
+
+## 七、换风景照片
+
+1. 照片必须有授权：自己拍的、买了授权的，或免费授权（例如 Unsplash，要写上摄影师）；
+2. 放进 `genie/public/scenes/`，文件名用场景 id：`welcome` · `intuition` · `life` · `treasure` · `wishes` · `nogo` · `dusk`（例如 `public/scenes/welcome.webp`），再放一张手机用的小图 `<id>-sm.webp`（约 1200 宽）；
+   建议横幅约 2400×1600、WebP、每张 < 400 KB；
+3. 在 `src/quiz/scenes.js` 对应条目填 `photo: '/scenes/welcome.webp'`、`photoSm: '/scenes/welcome-sm.webp'`、`credit: '摄影：某某 / Unsplash'`、`focus: '50% 40%'`（画面重点，竖屏会裁两边）。
+   有照片就显示照片（自动加渐变遮罩保证字看得清），没有就用代码画的风景。
+
+## 八、数据与隐私
+
+- 全部在浏览器本机完成：蓝图存在这台设备（localStorage），方案存在这台设备（localStorage + IndexedDB 存平面图底图）；
+- 本机的客人蓝图建好 **90 天**后自动删掉（`CONFIG.keepDays`，0 = 不删）；员工区「员工 · 本机蓝图」底部可以一键清空（员工记的预算 `genie.staffnotes.v1` 一起清）。客人手上的链接、海报不受影响（资料就在链接里）；
+- 展厅 iPad 上的客人名单（`genie.leads.v1`：称呼 + WhatsApp + PDPA 同意）和员工记的预算（`genie.staffnotes.v1`）也是 `CONFIG.keepDays` 天：从最后一次留资料 / 改起算，到期自动删（`src/shared/keep.js`，详见 DESIGN.md §6）；名单要留底请在到期前导出 Excel；
+- 分享链接里就是数据本身（压缩编码），不经过任何服务器；给客人的链接 / 海报不带设计师版；
+- AI 识别平面图用 Google Gemini，**key 只存在这台设备的浏览器里**（设置里填），没有 key 也能手动画；
+- 所有材质贴图、风景都是代码画的（没有图片素材），所以没有版权问题；以后放进去的照片要自己确认授权。
+
+## 九、开发
+
+```bash
+cd genie
+npm install
+npm run dev      # http://localhost:5173/  /quiz.html  /studio.html  /wish.html
+npm test         # 纯函数测试（计分、收纳换算、雷区替换、墙体、自动摆家具、AI 识别换算、链接编码）+ 中英词典完整性
+node test/profile.test.mjs   # 计分与配色的细测
+npm run build    # 生产构建到 dist/（四个入口）
+```
+
+**用无头浏览器量速度的两个坑**（不绕开，数字就是错的）：
+
+1. 无头 Chromium 用软件 3D（SwiftShader）时，canvas 的 `toDataURL` / `getImageData` 要走一次很慢的 GPU 回读：案例详情、K 屏会量到
+   1–3 秒的「长任务」，真机上没有。量许愿之旅、案例、许愿模式这些页面的速度时，启动参数加 `--disable-accelerated-2d-canvas`
+   （3D 工作室本身还是用 `--use-gl=angle --use-angle=swiftshader`）。
+2. Playwright 的 `setInputFiles` 交给 `webkitdirectory`（选文件夹）的是 0 字节的文件：案例整理会把每张照片标成「读不了」，
+   「分析速度」变成假的每秒 80–90 张（真实大约每秒 9–16 张）。在页面里自己造 `File`（带自己的 `webkitRelativePath`），
+   再对真的 `<input webkitdirectory>` 发 `change`；或者在开发服务器上用 `window.__sorterPick(files)`（正式版里没有）。
+3. 另外：Playwright 的点击 / `waitForSelector` 会先量元素位置（`elementsFromPoint`、`computeBox`），这一下会逼浏览器马上排版，
+   CPU 剖析里会算在它们头上。要看「换屏那一下」真正卡多久，用页面里自己的 `el.click()` + Long Animation Frames（`blockingDuration`）。
+4. 量「许愿模式一位接一位，元素会不会越来越多」时：`page.waitForSelector()` 会交回一个 ElementHandle，不 `dispose()` 就一直抓着那块
+   （已经关掉的）员工区 / 名单 / 客人资料单不放；在 iframe 里点东西时 Playwright 也会抓着旧的 `<iframe>`。用 `locator(...).waitFor()`，
+   不要用 CDP 的 `Runtime.queryObjects` 一类会留句柄的查法。不这样，每位客人看起来多出几百个元素，其实是测试工具自己留下的。
+
+```
+src/
+  shared/      config · i18n（t / tj / L + i18n/en-*.js 词典）· LangToggle · palette（JS 侧品牌色）·
+               materials（材质库）· textures（程序化贴图）· dreamers（16 张牌）· moods（情绪）· colorTags ·
+               profile（计分 / 收纳 / 谈话提示 / 编码 / 存档）· summary（WhatsApp 文字）· units（毫米 ↔ 尺）·
+               Pangie.jsx · Emblem.jsx · sound · zen（许愿模式音乐）
+  quiz/        flow（题目）· steps.jsx（每一关）· Scenery.jsx + scenes.js（风景）· Stones.jsx（踏脚石进度）·
+               icons.jsx（线条图标）· Vignette.jsx（插画）· Reveal.jsx · Blueprint.jsx · poster.js
+  studio/
+    engine/    Engine（渲染 / 光 / 拾取 / 拖动）· house（墙门窗底座）· furniture（程序化家具）· furnish（自动摆放规则 + 收纳对账）·
+               matlib（表面材质）· daylight（24h）· beams（体积光）· geom
+    plan/      model（平面图 → 墙 + 模板）· PlanEditor.jsx · ai（Gemini 识别）· planImage（图片 / PDF）
+    ui/        MoodPanel · DaylightPanel · SunArc · MaterialDock · Callouts · Toolbar · ItemUI · 各弹窗
+  launcher/    入口页
+  wish/        客户许愿模式外壳（WishShell：音乐、员工区、下一位）· start（全屏 / 常亮 / 音乐生命周期）
+```

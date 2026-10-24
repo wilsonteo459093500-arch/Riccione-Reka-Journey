@@ -1,0 +1,1717 @@
+{
+ "_about": "案例整理（src/cases/sorter）的资料表。老板的访谈还在继续：风格词、城市、特殊文件夹、房间词都在这里改，不用改代码。中文写在 JSON 里（i18n 测试只查 .js），界面用 L({zh,en}) 显示。",
+ "v": 1,
+ "special": [
+  {
+   "id": "event",
+   "zh": "活动",
+   "en": "Events",
+   "words": [
+    "2025活动",
+    "2024活动",
+    "2026活动",
+    "活动"
+   ],
+   "default": "skip"
+  },
+  {
+   "id": "showroom",
+   "zh": "展厅",
+   "en": "Showrooms",
+   "words": [
+    "各地展厅",
+    "展厅"
+   ],
+   "default": "off"
+  },
+  {
+   "id": "collection",
+   "zh": "最新案例集合",
+   "en": "Latest collection",
+   "words": [
+    "最新案例集合",
+    "案例集合",
+    "最新案例"
+   ],
+   "default": "dedupe"
+  }
+ ],
+ "cities": [
+  "上海",
+  "中山",
+  "兰州",
+  "北京",
+  "南京",
+  "南宁",
+  "合肥",
+  "天津",
+  "太原",
+  "宁波",
+  "常州",
+  "广州",
+  "成都",
+  "无锡",
+  "武汉",
+  "苏州",
+  "西安",
+  "重庆",
+  "银川",
+  "长沙",
+  "深圳",
+  "杭州",
+  "郑州",
+  "济南",
+  "青岛",
+  "厦门",
+  "福州",
+  "昆明",
+  "贵阳",
+  "沈阳",
+  "大连",
+  "哈尔滨",
+  "长春",
+  "石家庄",
+  "南昌",
+  "海口",
+  "三亚",
+  "东莞",
+  "佛山",
+  "珠海",
+  "惠州",
+  "温州",
+  "绍兴",
+  "嘉兴",
+  "扬州",
+  "徐州",
+  "南通",
+  "泉州",
+  "昆山",
+  "烟台",
+  "潍坊",
+  "洛阳",
+  "乌鲁木齐",
+  "呼和浩特",
+  "西宁",
+  "拉萨",
+  "台州",
+  "金华",
+  "湖州",
+  "镇江",
+  "盐城",
+  "芜湖",
+  "吉隆坡",
+  "新山",
+  "槟城",
+  "怡保",
+  "马六甲",
+  "新加坡",
+  "Kuala Lumpur",
+  "KL",
+  "Johor Bahru",
+  "Penang"
+ ],
+ "styles": [
+  {
+   "id": "原木",
+   "zh": "原木",
+   "en": "Natural wood",
+   "words": [
+    "原木",
+    "原木风",
+    "日式原木",
+    "极简原木",
+    "原木简约",
+    "原木极简",
+    "简约原木",
+    "北欧原木",
+    "原木系列"
+   ],
+   "chips": {
+    "temp": "a",
+    "density": "a",
+    "texture": "a",
+    "storage": "a",
+    "light": "a",
+    "curve": "mid",
+    "social": "mid"
+   },
+   "dreamers": [
+    "WMNH",
+    "CMNH",
+    "WLNH"
+   ],
+   "mood": "cozy",
+   "mats": {
+    "floor": [
+     "light-oak",
+     "white-oak",
+     "greige-oak",
+     "smoked-oak"
+    ],
+    "walls": [
+     "warm-white",
+     "oat",
+     "gallery-white"
+    ],
+    "cabinetry": [
+     "light-oak",
+     "white-oak",
+     "walnut",
+     "cream-lacquer"
+    ],
+    "countertop": [
+     "quartz-white",
+     "sintered-light",
+     "quartz-travertine"
+    ],
+    "upholstery": [
+     "linen",
+     "oat-knit",
+     "boucle"
+    ]
+   },
+   "famSkip": [
+    "wood"
+   ]
+  },
+  {
+   "id": "侘寂",
+   "zh": "侘寂",
+   "en": "Wabi-sabi",
+   "words": [
+    "侘寂",
+    "侘寂风",
+    "微侘寂",
+    "微侘",
+    "侘寂系列",
+    "微侘寂系列"
+   ],
+   "chips": {
+    "temp": "a",
+    "density": "a",
+    "texture": "a",
+    "storage": "b",
+    "light": "b",
+    "curve": "mid",
+    "social": "b"
+   },
+   "dreamers": [
+    "WMND",
+    "WMNH",
+    "CMND"
+   ],
+   "mood": "cozy",
+   "mats": {
+    "floor": [
+     "microcement",
+     "smoked-oak",
+     "greige-oak",
+     "travertine"
+    ],
+    "walls": [
+     "sand-limewash",
+     "oat",
+     "latte",
+     "warm-white"
+    ],
+    "feature": [
+     "microcement",
+     "travertine",
+     "sand-limewash"
+    ],
+    "cabinetry": [
+     "smoked-oak",
+     "walnut",
+     "greige-oak",
+     "light-oak"
+    ],
+    "countertop": [
+     "microcement",
+     "travertine",
+     "quartz-travertine"
+    ],
+    "upholstery": [
+     "linen",
+     "oat-knit",
+     "grey-wool"
+    ]
+   }
+  },
+  {
+   "id": "极简",
+   "zh": "极简现代",
+   "en": "Minimal modern",
+   "words": [
+    "极简",
+    "简约",
+    "现代",
+    "简约现代",
+    "现代简约",
+    "极简现代",
+    "现代极简",
+    "4.0"
+   ],
+   "chips": {
+    "temp": "b",
+    "density": "a",
+    "texture": "b",
+    "storage": "a",
+    "light": "a",
+    "curve": "b",
+    "social": "mid"
+   },
+   "dreamers": [
+    "CMRH",
+    "CMRD",
+    "CMNH"
+   ],
+   "mood": "bright",
+   "mats": {
+    "floor": [
+     "grey-tile",
+     "cream-tile",
+     "white-oak",
+     "microcement"
+    ],
+    "walls": [
+     "gallery-white",
+     "warm-white"
+    ],
+    "cabinetry": [
+     "white-lacquer",
+     "cream-lacquer",
+     "greige-oak",
+     "black-matte"
+    ],
+    "countertop": [
+     "quartz-white",
+     "sintered-light",
+     "sintered"
+    ],
+    "upholstery": [
+     "grey-wool",
+     "linen",
+     "boucle"
+    ]
+   }
+  },
+  {
+   "id": "奶油",
+   "zh": "奶油",
+   "en": "Cream",
+   "words": [
+    "奶油",
+    "奶油风",
+    "奶油系列",
+    "奶油色"
+   ],
+   "chips": {
+    "temp": "a",
+    "density": "a",
+    "texture": "b",
+    "storage": "a",
+    "light": "a",
+    "curve": "a",
+    "social": "mid"
+   },
+   "dreamers": [
+    "WMRH",
+    "WMNH"
+   ],
+   "mood": "bright",
+   "mats": {
+    "floor": [
+     "cream-tile",
+     "light-oak",
+     "white-oak"
+    ],
+    "walls": [
+     "warm-white",
+     "oat"
+    ],
+    "cabinetry": [
+     "cream-lacquer",
+     "white-lacquer"
+    ],
+    "countertop": [
+     "quartz-calacatta",
+     "quartz-white"
+    ],
+    "upholstery": [
+     "boucle",
+     "linen"
+    ]
+   }
+  },
+  {
+   "id": "法式",
+   "zh": "法式",
+   "en": "French",
+   "words": [
+    "法式",
+    "轻法",
+    "轻法式",
+    "法式风",
+    "法式复古",
+    "轻法式系列"
+   ],
+   "chips": {
+    "temp": "a",
+    "density": "a",
+    "texture": "b",
+    "storage": "a",
+    "light": "a",
+    "curve": "a",
+    "social": "mid"
+   },
+   "dreamers": [
+    "WMRH",
+    "WLRH"
+   ],
+   "mood": "bright",
+   "mats": {
+    "floor": [
+     "herringbone-oak",
+     "light-oak",
+     "cream-tile"
+    ],
+    "walls": [
+     "warm-white",
+     "oat",
+     "blush"
+    ],
+    "cabinetry": [
+     "cream-lacquer",
+     "white-lacquer",
+     "sage-lacquer"
+    ],
+    "countertop": [
+     "calacatta",
+     "quartz-calacatta",
+     "carrara"
+    ],
+    "upholstery": [
+     "boucle",
+     "linen",
+     "blush-boucle"
+    ]
+   }
+  },
+  {
+   "id": "中古",
+   "zh": "中古",
+   "en": "Mid-century",
+   "words": [
+    "中古",
+    "中古风",
+    "自然中古",
+    "法式中古",
+    "中古系列",
+    "复古中古"
+   ],
+   "chips": {
+    "temp": "a",
+    "density": "mid",
+    "texture": "b",
+    "storage": "b",
+    "light": "b",
+    "curve": "a",
+    "social": "mid"
+   },
+   "dreamers": [
+    "WMRD",
+    "WLRD",
+    "WLNH"
+   ],
+   "mood": "cozy",
+   "mats": {
+    "floor": [
+     "herringbone-oak",
+     "light-oak",
+     "terrazzo",
+     "smoked-oak"
+    ],
+    "walls": [
+     "warm-white",
+     "oat",
+     "latte"
+    ],
+    "cabinetry": [
+     "cherry",
+     "walnut",
+     "teak"
+    ],
+    "countertop": [
+     "quartz-white",
+     "terrazzo"
+    ],
+    "upholstery": [
+     "cognac-leather",
+     "ochre-velvet",
+     "linen"
+    ]
+   }
+  },
+  {
+   "id": "南洋",
+   "zh": "南洋",
+   "en": "Nanyang tropical",
+   "words": [
+    "南洋",
+    "南洋风",
+    "东南亚",
+    "热带"
+   ],
+   "chips": {
+    "temp": "a",
+    "density": "b",
+    "texture": "a",
+    "storage": "b",
+    "light": "mid",
+    "curve": "a",
+    "social": "a"
+   },
+   "dreamers": [
+    "WLND",
+    "WMND",
+    "CLND"
+   ],
+   "mood": "cozy",
+   "features": [
+    "rattan"
+   ],
+   "mats": {
+    "floor": [
+     "teak",
+     "light-oak",
+     "terracotta-tile"
+    ],
+    "walls": [
+     "warm-white",
+     "sand-limewash",
+     "oat"
+    ],
+    "cabinetry": [
+     "teak",
+     "light-oak",
+     "walnut"
+    ],
+    "countertop": [
+     "travertine",
+     "terrazzo"
+    ],
+    "upholstery": [
+     "linen",
+     "oat-knit",
+     "rust-wool"
+    ]
+   }
+  },
+  {
+   "id": "美式复古",
+   "zh": "美式复古",
+   "en": "American vintage",
+   "words": [
+    "美式复古",
+    "美式",
+    "美式风",
+    "复古"
+   ],
+   "chips": {
+    "temp": "a",
+    "density": "b",
+    "texture": "b",
+    "storage": "a",
+    "light": "b",
+    "curve": "mid",
+    "social": "a"
+   },
+   "dreamers": [
+    "WLRH",
+    "WLRD"
+   ],
+   "mood": "cozy",
+   "mats": {
+    "floor": [
+     "herringbone-oak",
+     "smoked-oak",
+     "walnut"
+    ],
+    "walls": [
+     "sage",
+     "latte",
+     "oat"
+    ],
+    "cabinetry": [
+     "sage-lacquer",
+     "walnut",
+     "cherry"
+    ],
+    "countertop": [
+     "calacatta",
+     "carrara"
+    ],
+    "upholstery": [
+     "cognac-leather",
+     "emerald-velvet",
+     "linen"
+    ]
+   }
+  },
+  {
+   "id": "混搭",
+   "zh": "混搭",
+   "en": "Eclectic",
+   "words": [
+    "混搭",
+    "混搭风"
+   ],
+   "chips": {
+    "temp": "mid",
+    "density": "b",
+    "texture": "mid",
+    "storage": "b",
+    "light": "mid",
+    "curve": "mid",
+    "social": "a"
+   },
+   "dreamers": [
+    "WLRD",
+    "CLRD",
+    "WLND"
+   ],
+   "mood": "cozy",
+   "mats": {
+    "floor": [
+     "terrazzo",
+     "herringbone-oak",
+     "light-oak"
+    ],
+    "walls": [
+     "warm-white",
+     "terracotta",
+     "sage"
+    ],
+    "cabinetry": [
+     "walnut",
+     "light-oak",
+     "sage-lacquer"
+    ],
+    "countertop": [
+     "terrazzo",
+     "quartz-white"
+    ],
+    "upholstery": [
+     "linen",
+     "rust-wool",
+     "ochre-velvet"
+    ]
+   }
+  }
+ ],
+ "suffixes": [
+  "风格",
+  "系列",
+  "风",
+  "style"
+ ],
+ "series": [
+  {
+   "id": "自然线",
+   "zh": "自然线",
+   "en": "Natural Line",
+   "words": [
+    "自然线"
+   ],
+   "implies": [
+    "原木"
+   ]
+  },
+  {
+   "id": "骨骼线",
+   "zh": "骨骼线",
+   "en": "Skeletal Line",
+   "words": [
+    "骨骼线"
+   ],
+   "implies": [
+    "原木",
+    "中古"
+   ]
+  },
+  {
+   "id": "空山",
+   "zh": "空山",
+   "en": "Kongshan",
+   "words": [
+    "空山"
+   ],
+   "implies": [
+    "侘寂",
+    "原木"
+   ]
+  },
+  {
+   "id": "织",
+   "zh": "织",
+   "en": "Zhi",
+   "words": [
+    "织系列"
+   ],
+   "exact": [
+    "织"
+   ],
+   "boardFamily": "布纹",
+   "implies": [
+    "侘寂",
+    "南洋"
+   ]
+  },
+  {
+   "id": "庭前",
+   "zh": "庭前",
+   "en": "Tingqian",
+   "words": [
+    "庭前"
+   ],
+   "implies": [
+    "原木"
+   ]
+  }
+ ],
+ "rooms": [
+  {
+   "room": "master",
+   "words": [
+    "主卧",
+    "主人房",
+    "master"
+   ]
+  },
+  {
+   "room": "kids",
+   "words": [
+    "儿童房",
+    "儿童",
+    "小孩房",
+    "kids"
+   ]
+  },
+  {
+   "room": "walkin",
+   "words": [
+    "衣帽间",
+    "walk-in",
+    "walkin"
+   ]
+  },
+  {
+   "room": "bedroom",
+   "words": [
+    "次卧",
+    "卧室",
+    "客卧",
+    "老人房",
+    "bedroom"
+   ]
+  },
+  {
+   "room": "living",
+   "words": [
+    "客厅",
+    "起居室",
+    "living"
+   ]
+  },
+  {
+   "room": "dining",
+   "words": [
+    "餐厅",
+    "餐桌",
+    "dining"
+   ]
+  },
+  {
+   "room": "kitchen",
+   "words": [
+    "厨房",
+    "橱柜",
+    "kitchen"
+   ]
+  },
+  {
+   "room": "study",
+   "words": [
+    "书房",
+    "茶室",
+    "study"
+   ]
+  },
+  {
+   "room": "bath",
+   "words": [
+    "卫生间",
+    "浴室",
+    "洗手间",
+    "卫浴",
+    "bath"
+   ]
+  },
+  {
+   "room": "foyer",
+   "words": [
+    "玄关",
+    "门厅",
+    "入户",
+    "foyer"
+   ]
+  },
+  {
+   "room": "balcony",
+   "words": [
+    "阳台",
+    "露台",
+    "balcony"
+   ]
+  },
+  {
+   "room": "family",
+   "words": [
+    "家庭厅",
+    "起居厅",
+    "family"
+   ]
+  },
+  {
+   "room": "plan3d",
+   "words": [
+    "鸟瞰",
+    "轴测",
+    "全屋3D",
+    "3D户型",
+    "户型3D",
+    "3D鸟瞰",
+    "整个家",
+    "overview",
+    "aerial",
+    "dollhouse",
+    "whole"
+   ]
+  }
+ ],
+ "views": [
+  {
+   "view": "photo",
+   "words": [
+    "实景",
+    "实拍",
+    "完工",
+    "竣工",
+    "交付",
+    "拍摄"
+   ]
+  },
+  {
+   "view": "render",
+   "words": [
+    "效果图",
+    "渲染",
+    "render",
+    "鸟瞰",
+    "轴测",
+    "全屋3D",
+    "3D户型",
+    "户型3D",
+    "3D鸟瞰",
+    "overview",
+    "aerial",
+    "dollhouse"
+   ]
+  },
+  {
+   "view": "site",
+   "words": [
+    "工地",
+    "施工",
+    "进度",
+    "水电",
+    "泥工",
+    "木工",
+    "油漆工",
+    "交底",
+    "验收",
+    "安装中"
+   ]
+  },
+  {
+   "view": "plan",
+   "words": [
+    "户型",
+    "平面",
+    "图纸",
+    "CAD",
+    "施工图"
+   ]
+  },
+  {
+   "view": "doc",
+   "words": [
+    "合同",
+    "报价",
+    "发票",
+    "收据",
+    "清单",
+    "receipt",
+    "invoice"
+   ]
+  },
+  {
+   "view": "shot",
+   "words": [
+    "截图",
+    "截屏",
+    "屏幕截图",
+    "Screenshot",
+    "screenshot"
+   ]
+  }
+ ],
+ "families": [
+  {
+   "id": "white",
+   "zh": "白",
+   "en": "white"
+  },
+  {
+   "id": "beige",
+   "zh": "米白",
+   "en": "cream"
+  },
+  {
+   "id": "wood",
+   "zh": "原木色",
+   "en": "oak"
+  },
+  {
+   "id": "darkwood",
+   "zh": "胡桃色",
+   "en": "walnut"
+  },
+  {
+   "id": "grey",
+   "zh": "灰",
+   "en": "grey"
+  },
+  {
+   "id": "black",
+   "zh": "黑",
+   "en": "black"
+  },
+  {
+   "id": "green",
+   "zh": "绿",
+   "en": "green"
+  },
+  {
+   "id": "blue",
+   "zh": "蓝",
+   "en": "blue"
+  },
+  {
+   "id": "yellow",
+   "zh": "黄",
+   "en": "ochre"
+  },
+  {
+   "id": "red",
+   "zh": "陶红",
+   "en": "terracotta"
+  },
+  {
+   "id": "pink",
+   "zh": "粉",
+   "en": "pink"
+  }
+ ],
+ "beds": [
+  {
+   "n": 1,
+   "zh": "一房",
+   "en": "1-bedroom"
+  },
+  {
+   "n": 2,
+   "zh": "两房",
+   "en": "2-bedroom"
+  },
+  {
+   "n": 3,
+   "zh": "三房",
+   "en": "3-bedroom"
+  },
+  {
+   "n": 4,
+   "zh": "四房",
+   "en": "4-bedroom"
+  },
+  {
+   "n": 5,
+   "zh": "五房",
+   "en": "5-bedroom"
+  },
+  {
+   "n": 6,
+   "zh": "六房",
+   "en": "6-bedroom"
+  }
+ ],
+ "supplyByRoom": {
+  "kitchen": [
+   "kitchen"
+  ],
+  "master": [
+   "wardrobe"
+  ],
+  "bedroom": [
+   "wardrobe"
+  ],
+  "kids": [
+   "wardrobe"
+  ],
+  "living": [
+   "tvWall"
+  ],
+  "foyer": [
+   "shoeCabinet"
+  ],
+  "walkin": [
+   "walkin"
+  ],
+  "study": [
+   "study"
+  ],
+  "bath": [
+   "vanity"
+  ]
+ },
+ "contextDefault": [
+  "flooring",
+  "lighting",
+  "paint"
+ ],
+ "boards": [
+  {
+   "name": "归雁胡桃",
+   "code": "AG275A"
+  },
+  {
+   "name": "墨松胡桃",
+   "code": "AG161A"
+  },
+  {
+   "name": "落羽胡桃",
+   "code": "AG281A"
+  },
+  {
+   "name": "林肯胡桃",
+   "code": "AK138A"
+  },
+  {
+   "name": "晚枫胡桃",
+   "code": "AK263A"
+  },
+  {
+   "name": "云岫洞石",
+   "code": "AG318A"
+  },
+  {
+   "name": "隐山洞石",
+   "code": "AG319A"
+  },
+  {
+   "name": "霞谷岩泥",
+   "code": "AG325A"
+  },
+  {
+   "name": "日光浅陶",
+   "code": "AK154A"
+  },
+  {
+   "name": "向晚胡桃",
+   "code": "AGM342"
+  },
+  {
+   "name": "奶油榆木",
+   "code": "AK155"
+  },
+  {
+   "name": "暗影榆木",
+   "code": "AK156A"
+  },
+  {
+   "name": "月弦胡桃",
+   "code": "AG345"
+  },
+  {
+   "name": "松月胡桃",
+   "code": "AG335"
+  },
+  {
+   "name": "松间胡桃",
+   "code": "AG361"
+  },
+  {
+   "name": "栖山胡桃",
+   "code": "AGM341"
+  },
+  {
+   "name": "深原胡桃",
+   "code": "AG359"
+  },
+  {
+   "name": "秋夕胡桃",
+   "code": "AGM229E"
+  },
+  {
+   "name": "科布里奇",
+   "code": "AK200A"
+  },
+  {
+   "name": "苍山榆木",
+   "code": "AG344"
+  },
+  {
+   "name": "苍松胡桃",
+   "code": "AG362"
+  },
+  {
+   "name": "长亭胡桃",
+   "code": "AG346"
+  },
+  {
+   "name": "结疤白橡",
+   "code": "XA-TP-04"
+  },
+  {
+   "name": "白橡直纹",
+   "code": "XA-TP-03"
+  },
+  {
+   "name": "晓山白",
+   "code": "AG294A"
+  },
+  {
+   "name": "归山云",
+   "code": "AK096AL"
+  },
+  {
+   "name": "淡山云",
+   "code": "AK218AL"
+  },
+  {
+   "name": "初晴云",
+   "code": "AK295AL"
+  },
+  {
+   "name": "雪原上",
+   "code": "AG284A"
+  },
+  {
+   "name": "深林间",
+   "code": "AG282A"
+  },
+  {
+   "name": "绿山墙",
+   "code": "AG150A"
+  },
+  {
+   "name": "浅山杏",
+   "code": "AG244A"
+  },
+  {
+   "name": "山月灰",
+   "code": "AG248A"
+  },
+  {
+   "name": "蒹葭灰",
+   "code": "AG249A"
+  },
+  {
+   "name": "浅川橡",
+   "code": "AG273A"
+  },
+  {
+   "name": "望松橡",
+   "code": "AG274A"
+  },
+  {
+   "name": "晚松橡",
+   "code": "AG296A"
+  },
+  {
+   "name": "苍松橡",
+   "code": "AG277A"
+  },
+  {
+   "name": "清云橡",
+   "code": "AG272A"
+  },
+  {
+   "name": "沙棕橡",
+   "code": "AK167A"
+  },
+  {
+   "name": "春日橡",
+   "code": "AK259A"
+  },
+  {
+   "name": "黑松橡",
+   "code": "AK141A"
+  },
+  {
+   "name": "秋杉暮",
+   "code": "AK171A"
+  },
+  {
+   "name": "三秋影",
+   "code": "AK070A"
+  },
+  {
+   "name": "罗维尔",
+   "code": "AK153A"
+  },
+  {
+   "name": "谢尔曼",
+   "code": "AK124A"
+  },
+  {
+   "name": "古山松",
+   "code": "AK266A"
+  },
+  {
+   "name": "查尔斯",
+   "code": "AK102A"
+  },
+  {
+   "name": "轻衫织",
+   "code": "AG270A"
+  },
+  {
+   "name": "云脚织",
+   "code": "AG306A"
+  },
+  {
+   "name": "落雨织",
+   "code": "AG307A"
+  },
+  {
+   "name": "西窗格",
+   "code": "AG308A"
+  },
+  {
+   "name": "桑麻格",
+   "code": "AG309A"
+  },
+  {
+   "name": "素衣织",
+   "code": "AG288A"
+  },
+  {
+   "name": "山衣织",
+   "code": "AG289A"
+  },
+  {
+   "name": "堆云织",
+   "code": "AG310A"
+  },
+  {
+   "name": "疏云织",
+   "code": "AG311A"
+  },
+  {
+   "name": "杏雨织",
+   "code": "AG312A"
+  },
+  {
+   "name": "秋意织",
+   "code": "AG313A"
+  },
+  {
+   "name": "黑古岩",
+   "code": "AG314A"
+  },
+  {
+   "name": "晚照岩",
+   "code": "AG315A"
+  },
+  {
+   "name": "入霜岩",
+   "code": "AG316A"
+  },
+  {
+   "name": "沉云岩",
+   "code": "AG317A"
+  },
+  {
+   "name": "暖陌岩",
+   "code": "AG271A"
+  },
+  {
+   "name": "依云岩",
+   "code": "AG286A"
+  },
+  {
+   "name": "云崖岩",
+   "code": "AG320A"
+  },
+  {
+   "name": "千山岩",
+   "code": "AK261A"
+  },
+  {
+   "name": "云雾岩",
+   "code": "AK151A"
+  },
+  {
+   "name": "溪山岩",
+   "code": "AK262A"
+  },
+  {
+   "name": "抹微云",
+   "code": "AG321A"
+  },
+  {
+   "name": "抹轻山",
+   "code": "AG322A"
+  },
+  {
+   "name": "浅泉陶",
+   "code": "AK158A"
+  },
+  {
+   "name": "沉寂陶",
+   "code": "AK157A"
+  },
+  {
+   "name": "炽山陶",
+   "code": "AK152A"
+  },
+  {
+   "name": "野山蔓",
+   "code": "AG328A"
+  },
+  {
+   "name": "野灰象",
+   "code": "AG247A"
+  },
+  {
+   "name": "黑马厩",
+   "code": "AG329A"
+  },
+  {
+   "name": "锦上书",
+   "code": "AG330A"
+  },
+  {
+   "name": "尽铅华",
+   "code": "AG331A"
+  },
+  {
+   "name": "星云灰",
+   "code": "AG029A"
+  },
+  {
+   "name": "云山杏",
+   "code": "AG371"
+  },
+  {
+   "name": "云岩灰",
+   "code": "AG352A"
+  },
+  {
+   "name": "云松橡",
+   "code": "AG338"
+  },
+  {
+   "name": "南风柚",
+   "code": "AG348"
+  },
+  {
+   "name": "墨白橡",
+   "code": "AG336"
+  },
+  {
+   "name": "寂夜檀",
+   "code": "AG356"
+  },
+  {
+   "name": "寂岩泥",
+   "code": "AG326"
+  },
+  {
+   "name": "晚松柚",
+   "code": "AG349A"
+  },
+  {
+   "name": "晚秋柚",
+   "code": "AG358"
+  },
+  {
+   "name": "晨霜云",
+   "code": "AG363"
+  },
+  {
+   "name": "月胧灰",
+   "code": "AG351A"
+  },
+  {
+   "name": "柔陶白",
+   "code": "AG353A"
+  },
+  {
+   "name": "檀雾橡",
+   "code": "AG337"
+  },
+  {
+   "name": "沙岩杏",
+   "code": "AG368"
+  },
+  {
+   "name": "沙暖杏",
+   "code": "AG350A"
+  },
+  {
+   "name": "流光云",
+   "code": "AG364"
+  },
+  {
+   "name": "炊烟灰",
+   "code": "AG367"
+  },
+  {
+   "name": "烟雨灰",
+   "code": "AG334A"
+  },
+  {
+   "name": "素笺白",
+   "code": "AG354A"
+  },
+  {
+   "name": "草木深",
+   "code": "AK264A"
+  },
+  {
+   "name": "藕花杏",
+   "code": "AG369"
+  },
+  {
+   "name": "行云橡",
+   "code": "AGM343"
+  },
+  {
+   "name": "西山橡",
+   "code": "AG347A"
+  },
+  {
+   "name": "轻烟云",
+   "code": "AG365"
+  },
+  {
+   "name": "野径棕",
+   "code": "AG237A"
+  },
+  {
+   "name": "雪月灰",
+   "code": "AG366"
+  },
+  {
+   "name": "雾隐灰",
+   "code": "AG332"
+  },
+  {
+   "name": "霜降灰",
+   "code": "AG333"
+  },
+  {
+   "name": "麦浪橡",
+   "code": "AG357"
+  },
+  {
+   "name": "海洋板",
+   "code": ""
+  },
+  {
+   "name": "深砚灰",
+   "code": ""
+  },
+  {
+   "name": "杜邦纸",
+   "code": ""
+  },
+  {
+   "name": "黑胡桃",
+   "code": "XA-TP-01"
+  },
+  {
+   "name": "红樱桃",
+   "code": "XA-TP-07"
+  },
+  {
+   "name": "卡斯楠",
+   "code": "XA-TP-11"
+  },
+  {
+   "name": "蒹葭",
+   "code": "AK255A"
+  },
+  {
+   "name": "古道",
+   "code": "AG297A"
+  },
+  {
+   "name": "野径",
+   "code": "AG237A"
+  },
+  {
+   "name": "深篱",
+   "code": "AG298A"
+  },
+  {
+   "name": "秋露",
+   "code": "AG299A"
+  },
+  {
+   "name": "深松",
+   "code": "AG300A"
+  },
+  {
+   "name": "岩茶",
+   "code": "AG301A"
+  },
+  {
+   "name": "望川",
+   "code": "AG302A"
+  },
+  {
+   "name": "璞林",
+   "code": "AG305A"
+  },
+  {
+   "name": "长堤",
+   "code": "AG323A"
+  },
+  {
+   "name": "晚堤",
+   "code": "AG324A"
+  },
+  {
+   "name": "桑榆",
+   "code": "SG-BZ01"
+  },
+  {
+   "name": "墨染",
+   "code": "SG-BZ02"
+  },
+  {
+   "name": "白苎",
+   "code": "SG-BZ03"
+  },
+  {
+   "name": "葛麻",
+   "code": "SG-BZ04"
+  },
+  {
+   "name": "云杉",
+   "code": "AD292"
+  },
+  {
+   "name": "云隐",
+   "code": "AD293"
+  },
+  {
+   "name": "原上",
+   "code": "AG360"
+  },
+  {
+   "name": "寒枝",
+   "code": "AK258A"
+  },
+  {
+   "name": "旧槐",
+   "code": "AK260A"
+  },
+  {
+   "name": "春和",
+   "code": "AK234"
+  },
+  {
+   "name": "晚芦",
+   "code": "AK253A"
+  },
+  {
+   "name": "木隐",
+   "code": "AG355"
+  },
+  {
+   "name": "松晚",
+   "code": "AD290"
+  },
+  {
+   "name": "枕雾",
+   "code": "AD339"
+  },
+  {
+   "name": "深蓠",
+   "code": "AG298"
+  },
+  {
+   "name": "白桦",
+   "code": "AK265A"
+  },
+  {
+   "name": "素岩",
+   "code": "AG285A"
+  },
+  {
+   "name": "苍石",
+   "code": "AK256A"
+  },
+  {
+   "name": "落晖",
+   "code": "AD340"
+  },
+  {
+   "name": "落羽",
+   "code": "AK254A"
+  },
+  {
+   "name": "薄暮",
+   "code": "AD291"
+  },
+  {
+   "name": "寂境",
+   "code": ""
+  },
+  {
+   "name": "寂林",
+   "code": ""
+  },
+  {
+   "name": "白蜡",
+   "code": "XA-TP-05"
+  },
+  {
+   "name": "红橡",
+   "code": "XA-TP-09"
+  },
+  {
+   "name": "欧桦",
+   "code": "XA-TP-13"
+  },
+  {
+   "name": "桦木",
+   "code": "XA-TP-13"
+  }
+ ],
+ "cityEn": {
+  "上海": "Shanghai",
+  "中山": "Zhongshan",
+  "兰州": "Lanzhou",
+  "北京": "Beijing",
+  "南京": "Nanjing",
+  "南宁": "Nanning",
+  "合肥": "Hefei",
+  "天津": "Tianjin",
+  "太原": "Taiyuan",
+  "宁波": "Ningbo",
+  "常州": "Changzhou",
+  "广州": "Guangzhou",
+  "成都": "Chengdu",
+  "无锡": "Wuxi",
+  "武汉": "Wuhan",
+  "苏州": "Suzhou",
+  "西安": "Xi'an",
+  "重庆": "Chongqing",
+  "银川": "Yinchuan",
+  "长沙": "Changsha",
+  "深圳": "Shenzhen",
+  "杭州": "Hangzhou",
+  "郑州": "Zhengzhou",
+  "济南": "Jinan",
+  "青岛": "Qingdao",
+  "厦门": "Xiamen",
+  "福州": "Fuzhou",
+  "昆明": "Kunming",
+  "贵阳": "Guiyang",
+  "沈阳": "Shenyang",
+  "大连": "Dalian",
+  "哈尔滨": "Harbin",
+  "长春": "Changchun",
+  "石家庄": "Shijiazhuang",
+  "南昌": "Nanchang",
+  "海口": "Haikou",
+  "三亚": "Sanya",
+  "东莞": "Dongguan",
+  "佛山": "Foshan",
+  "珠海": "Zhuhai",
+  "惠州": "Huizhou",
+  "温州": "Wenzhou",
+  "绍兴": "Shaoxing",
+  "嘉兴": "Jiaxing",
+  "扬州": "Yangzhou",
+  "徐州": "Xuzhou",
+  "南通": "Nantong",
+  "泉州": "Quanzhou",
+  "昆山": "Kunshan",
+  "烟台": "Yantai",
+  "潍坊": "Weifang",
+  "洛阳": "Luoyang",
+  "乌鲁木齐": "Urumqi",
+  "呼和浩特": "Hohhot",
+  "西宁": "Xining",
+  "拉萨": "Lhasa",
+  "台州": "Taizhou",
+  "金华": "Jinhua",
+  "湖州": "Huzhou",
+  "镇江": "Zhenjiang",
+  "盐城": "Yancheng",
+  "芜湖": "Wuhu",
+  "吉隆坡": "Kuala Lumpur",
+  "新山": "Johor Bahru",
+  "槟城": "Penang",
+  "怡保": "Ipoh",
+  "马六甲": "Melaka",
+  "新加坡": "Singapore"
+ },
+ "story": {
+  "_about": "草稿案例的两句话故事（build.js storyOf）：{style} 风格 · {prop} 房子 · {list} 我们做的几样 · {cab} {top} {wall} 材质。员工在案例库里改。",
+  "zh": {
+   "home": "家",
+   "made": "{style}风格的{prop}，{list}{all}是我们做的。",
+   "plain": "{style}风格的{prop}。",
+   "all": "都",
+   "mats": "{cab}柜体{top}{wall}。",
+   "top": "配{0}台面",
+   "wall": "，墙面是{0}"
+  },
+  "en": {
+   "home": "home",
+   "made": "A {style} {prop} — we made the {list}.",
+   "plain": "A {style} {prop}.",
+   "all": "",
+   "mats": "{cab} cabinetry{top}{wall}.",
+   "top": " with a {0} worktop",
+   "wall": ", {0} walls"
+  }
+ },
+ "join": {
+  "family": {
+   "zh": "与",
+   "en": " & "
+  },
+  "style": {
+   "zh": "",
+   "en": " & "
+  }
+ }
+}

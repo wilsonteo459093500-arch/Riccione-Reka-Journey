@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="robots" content="noindex" />
+    <title>Case seed renderer (dev only)</title>
+    <style>
+      body { margin: 0; background: black; color: silver; font: 13px -apple-system, Helvetica, sans-serif; }
+      #log { position: fixed; left: 8px; bottom: 8px; white-space: pre; opacity: 0.8; }
+      canvas { display: block; max-width: 100vw; height: auto; }
+    </style>
+  </head>
+  <body>
+    <!--
+      Dev-only tool (never part of the build: vite.config.js lists only the five app pages).
+      Renders the seed cases' eye-level "photos" with the quiz's offline stage (src/quiz/vignettes/stage.js),
+      the studio's own procedural furniture and PBR materials. Our own engines only — no outside photos.
+      Run the dev server, open /src/cases/seed/render.html, wait for window.CASES.ready, then
+      await VG.shoot(CASES.ids[0], { n: 20 }) → { files: { '1600': dataURL, '480': dataURL } }.
+      The Playwright driver lives in scratchpad (see the DATA report); the whole-home 3D overview is engine-shot.js.
+    -->
+    <div id="log"></div>
+    <script type="module">
+      await import('/src/quiz/vignettes/stage.js');
+      const { SCENES, SHOTS, ROOM_OF, sceneId } = await import('./scenes.js');
+      const ids = window.VG.register(SCENES);
+      window.CASES = { ids, SHOTS, ROOM_OF, sceneId, ready: true };
+      document.getElementById('log').textContent = `ready · ${ids.length} case scenes`;
+    </script>
+  </body>
+</html>

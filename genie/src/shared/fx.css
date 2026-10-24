@@ -1,0 +1,550 @@
+/* ============================================================
+   WISH 动效 · fx.css —— fx.js 生成的效果层 + 几个纯 CSS 的小效果。光是材质：金、卡片白、暮色里的萤火。
+   颜色只用 base.css 的变量（不写死任何颜色）；「光」的几种透明度用 color-mix 从 --card / --gold-l 推出来，
+   不支持 color-mix 的旧 Safari（< 16.2）退回金色的光（没有白芯），效果照样在，只是暖一点。
+   全部效果层：pointer-events: none；只动 transform / opacity。由 fx.js 引入（import './fx.css'）。
+   ============================================================ */
+
+:root {
+  /* 曲线（和 fx.js 的 EASE 同一组数字；test/fx.test.mjs 会对一遍） */
+  --fx-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --fx-inout: cubic-bezier(0.65, 0, 0.35, 1);
+  --fx-in: cubic-bezier(0.5, 0, 0.75, 0.25);
+  --fx-scan: cubic-bezier(0.42, 0.04, 0.22, 1);
+  --fx-std: cubic-bezier(0.22, 0.61, 0.36, 1);
+  /* 弹簧（260 / 24 版面 · 360 / 28 弹出）：不支持 linear() 时用一条略回弹的贝塞尔 */
+  --fx-spring: cubic-bezier(0.34, 1.36, 0.64, 1);
+  --fx-spring-pop: cubic-bezier(0.34, 1.36, 0.64, 1);
+  /* 时间刻度（ms）：瞬 80 · 微 160 · 小 240 · 中 280–420 · 大 520–700 · 页 820–1000 · 仪式 1050+ */
+  --fx-t-instant: 80ms;
+  --fx-t-micro: 160ms;
+  --fx-t-small: 240ms;
+  --fx-t-medium: 360ms;
+  --fx-t-large: 560ms;
+  --fx-t-page: 820ms;
+
+  /* 光的颜色（后备 = 金色的光；下面 @supports 里换成卡片白的光） */
+  --fx-hot: var(--card);
+  --fx-warm: var(--gold-l);
+  --fx-hot-95: rgba(var(--gold-l-rgb), 0.85);
+  --fx-hot-90: rgba(var(--gold-l-rgb), 0.8);
+  --fx-hot-85: rgba(var(--gold-l-rgb), 0.75);
+  --fx-hot-62: rgba(var(--gold-l-rgb), 0.55);
+  --fx-hot-60: rgba(var(--gold-l-rgb), 0.5);
+  --fx-hot-42: rgba(var(--gold-l-rgb), 0.38);
+  --fx-hot-28: rgba(var(--gold-l-rgb), 0.24);
+  --fx-hot-16: rgba(var(--gold-l-rgb), 0.16);
+  --fx-warm-66: rgba(var(--gold-l-rgb), 0.6);
+  --fx-warm-50: rgba(var(--gold-l-rgb), 0.45);
+  --fx-warm-42: rgba(var(--gold-l-rgb), 0.38);
+  --fx-warm-18: rgba(var(--gold-l-rgb), 0.16);
+  --fx-rgold-24: rgba(var(--gold-l-rgb), 0.2);
+  /* 珠光（全息卡牌）：琥珀 · 金 · 鼠尾草 · 溪水 · 陶土粉 —— 都是 VI 里的颜色，冲淡成珠光 */
+  --fx-iri-1: rgba(var(--gold-l-rgb), 0.34);
+  --fx-iri-2: rgba(var(--gold-l-rgb), 0.3);
+  --fx-iri-3: rgba(var(--accent-l-rgb), 0.34);
+  --fx-iri-4: rgba(var(--accent-l-rgb), 0.3);
+  --fx-iri-5: rgba(var(--gold-l-rgb), 0.3);
+  /* 换页的光 */
+  --fx-dusk-mid: var(--ritual-bg);
+  --fx-dusk-core: var(--card-back);
+  --fx-dawn-a: var(--gold-l);
+  --fx-dawn-core: var(--gold-l);
+}
+@supports (color: color-mix(in srgb, currentColor 50%, transparent)) {
+  :root {
+    --fx-warm: color-mix(in srgb, var(--card) 78%, var(--gold-l));
+    --fx-hot-95: color-mix(in srgb, var(--card) 95%, transparent);
+    --fx-hot-90: color-mix(in srgb, var(--card) 90%, transparent);
+    --fx-hot-85: color-mix(in srgb, var(--card) 85%, transparent);
+    --fx-hot-62: color-mix(in srgb, var(--card) 62%, transparent);
+    --fx-hot-60: color-mix(in srgb, var(--card) 60%, transparent);
+    --fx-hot-42: color-mix(in srgb, var(--card) 42%, transparent);
+    --fx-hot-28: color-mix(in srgb, var(--card) 28%, transparent);
+    --fx-hot-16: color-mix(in srgb, var(--card) 16%, transparent);
+    --fx-warm-66: color-mix(in srgb, color-mix(in srgb, var(--card) 86%, var(--gold-l)) 66%, transparent);
+    --fx-warm-50: color-mix(in srgb, color-mix(in srgb, var(--card) 86%, var(--gold-l)) 50%, transparent);
+    --fx-warm-42: color-mix(in srgb, color-mix(in srgb, var(--card) 60%, var(--gold-l)) 42%, transparent);
+    --fx-warm-18: color-mix(in srgb, color-mix(in srgb, var(--card) 86%, var(--gold-l)) 18%, transparent);
+    --fx-rgold-24: color-mix(in srgb, var(--ritual-gold) 24%, transparent);
+    --fx-iri-1: color-mix(in srgb, color-mix(in srgb, var(--amber) 45%, var(--card)) 36%, transparent);
+    --fx-iri-2: color-mix(in srgb, color-mix(in srgb, var(--gold-l) 70%, var(--card)) 34%, transparent);
+    --fx-iri-3: color-mix(in srgb, color-mix(in srgb, var(--accent-l) 70%, var(--card)) 36%, transparent);
+    --fx-iri-4: color-mix(in srgb, color-mix(in srgb, var(--accent-sky) 80%, var(--card)) 36%, transparent);
+    --fx-iri-5: color-mix(in srgb, color-mix(in srgb, var(--danger-l) 55%, var(--card)) 32%, transparent);
+    --fx-dusk-mid: color-mix(in srgb, var(--ritual-bg) 84%, var(--ritual-gold));
+    --fx-dusk-core: color-mix(in srgb, var(--ritual-bg) 48%, var(--ritual-gold));
+    --fx-dawn-a: color-mix(in srgb, var(--gold-l) 45%, var(--card));
+    --fx-dawn-core: color-mix(in srgb, var(--gold-l) 72%, var(--card));
+  }
+}
+@supports (animation-timing-function: linear(0, 1)) {
+  :root {
+    --fx-spring: linear(0, 0.051, 0.17, 0.319, 0.471, 0.611, 0.731, 0.828, 0.901, 0.954, 0.99, 1.013, 1.025, 1.03, 1.03, 1.027, 1.023, 1.018, 1.014, 1.01, 1.007, 1.004, 1.002, 1.001, 1);
+    --fx-spring-pop: linear(0, 0.052, 0.173, 0.324, 0.478, 0.619, 0.74, 0.837, 0.91, 0.962, 0.996, 1.017, 1.028, 1.032, 1.031, 1.028, 1.023, 1.018, 1.013, 1.009, 1.006, 1.003, 1.002, 1, 1);
+  }
+}
+
+/* 共享画布：一张、最上层、点不到；没有粒子时隐藏（关键样式 fx.js 也写在行内） */
+.fx-canvas {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 2147483000;
+  pointer-events: none;
+  visibility: hidden;
+  contain: strict;
+}
+
+/* 宿主里的效果层：贴着宿主的圆角裁切 */
+.fx-ink {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: inherit;
+  overflow: hidden;
+  pointer-events: none;
+}
+.fx-ink > i {
+  position: absolute;
+  display: block;
+  pointer-events: none;
+}
+
+/* fx.press 碰过的元素：自己的 :active 缩放请用 :not(.fx-pressable) 限定（不然会缩两次） */
+.fx-pressable {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* (a) 轻触：从指尖扩散的一圈暖光（纸上：卡片白的芯 + 金色的晕；暮色里：叠加的萤火色） */
+.fx-ripple {
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--fx-hot-62), rgba(var(--gold-l-rgb), 0.34) 42%, rgba(var(--gold-l-rgb), 0.12) 72%, rgba(var(--gold-l-rgb), 0) 100%);
+  transform-origin: 50% 50%;
+  will-change: transform, opacity;
+}
+.fx-ripple.fx-dusk {
+  background: radial-gradient(closest-side, var(--fx-hot-42), var(--fx-rgold-24) 46%, rgba(var(--gold-l-rgb), 0) 100%);
+  mix-blend-mode: screen;
+}
+
+/* 减少动态时的「扫光」：不移动，只是亮一下 */
+.fx-glow {
+  inset: 0;
+  background: rgba(var(--gold-l-rgb), 0.28);
+}
+.fx-glow.fx-dusk {
+  background: var(--fx-hot-16);
+  mix-blend-mode: screen;
+}
+
+/* (b) 扫光：一道斜的光带。三层：很宽很淡的金光 → 亮一点的暖白 → 中间一条 1.5 px 的白芯 */
+.fx-scan {
+  top: -12%;
+  height: 124%;
+  left: 0;
+  will-change: transform;
+  background:
+    linear-gradient(90deg, transparent 0 calc(50% - 0.75px), var(--fx-hot-95) calc(50% - 0.75px) calc(50% + 0.75px), transparent calc(50% + 0.75px)),
+    linear-gradient(90deg, transparent 30%, var(--fx-warm-50) 46%, var(--fx-warm-66) 50%, var(--fx-warm-50) 54%, transparent 70%),
+    linear-gradient(90deg, rgba(var(--gold-l-rgb), 0) 0%, rgba(var(--gold-l-rgb), 0.24) 26%, rgba(var(--gold-l-rgb), 0.36) 50%, rgba(var(--gold-l-rgb), 0.24) 74%, rgba(var(--gold-l-rgb), 0) 100%);
+}
+.fx-scan.fx-dusk {
+  mix-blend-mode: screen;
+  background:
+    linear-gradient(90deg, transparent 0 calc(50% - 0.75px), var(--fx-hot-90) calc(50% - 0.75px) calc(50% + 0.75px), transparent calc(50% + 0.75px)),
+    linear-gradient(90deg, rgba(var(--gold-l-rgb), 0) 22%, rgba(var(--gold-l-rgb), 0.3) 46%, var(--fx-warm-42) 50%, rgba(var(--gold-l-rgb), 0.3) 54%, rgba(var(--gold-l-rgb), 0) 78%);
+}
+/* 全息（梦想家卡牌）：珠光薄膜 + 细密的箔纹 + 白芯；慢一点、宽一点 */
+.fx-scan.is-holo {
+  mix-blend-mode: normal;
+  background:
+    linear-gradient(90deg, transparent 0 calc(50% - 1px), var(--fx-hot-90) calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)),
+    linear-gradient(90deg, transparent 34%, var(--fx-hot-60) 50%, transparent 66%),
+    repeating-linear-gradient(90deg, transparent 0 5px, var(--fx-hot-28) 5px 6px),
+    linear-gradient(90deg, transparent 0%, var(--fx-iri-1) 12%, var(--fx-iri-3) 28%, var(--fx-iri-4) 42%, var(--fx-iri-2) 56%, var(--fx-iri-5) 70%, var(--fx-iri-1) 86%, transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent, var(--ink) 22%, var(--ink) 78%, transparent);
+  mask-image: linear-gradient(90deg, transparent, var(--ink) 22%, var(--ink) 78%, transparent);
+}
+
+/* 1 px 的金边：一个只有 1 px 宽的圆角环（content-box 挖空），里面一小段金白光跟着光带走 */
+.fx-edge {
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  overflow: hidden;
+  -webkit-mask:
+    linear-gradient(var(--ink) 0 0) content-box,
+    linear-gradient(var(--ink) 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(var(--ink) 0 0) content-box exclude,
+    linear-gradient(var(--ink) 0 0);
+}
+.fx-edge > i {
+  position: absolute;
+  top: -10%;
+  left: 0;
+  height: 120%;
+  background: linear-gradient(90deg, rgba(var(--gold-rgb), 0) 8%, rgba(var(--gold-rgb), 0.85) 38%, var(--fx-warm) 50%, rgba(var(--gold-rgb), 0.85) 62%, rgba(var(--gold-rgb), 0) 92%);
+  will-change: transform;
+}
+.fx-edge.fx-dusk > i {
+  background: linear-gradient(90deg, rgba(var(--gold-l-rgb), 0) 8%, rgba(var(--gold-l-rgb), 0.9) 40%, var(--fx-hot) 50%, rgba(var(--gold-l-rgb), 0.9) 60%, rgba(var(--gold-l-rgb), 0) 92%);
+}
+
+/* (c) 溶解：前沿那一圈细细的金光（遮罩帧图和元素自己的遮罩同步换帧） */
+.fx-ember {
+  position: absolute;
+  display: block;
+  inset: 0;
+  z-index: 4;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(135deg, var(--fx-warm), var(--gold-l) 45%, var(--gold) 100%);
+  opacity: 0.95;
+}
+.fx-ember.fx-dusk {
+  background: linear-gradient(135deg, var(--fx-hot), var(--gold-l) 50%, var(--ritual-gold));
+  mix-blend-mode: screen;
+}
+.fx-ember.fx-ash {
+  background: linear-gradient(135deg, var(--line), var(--ink-soft));
+  opacity: 0.7;
+}
+
+/* (d) 飞行的替身；祖先链的空壳（display: contents：不占位，只让后代选择器和继承的变量照样生效） */
+.fx-ghost {
+  z-index: 2147482000;
+  pointer-events: none !important;
+  transform-origin: 50% 50%;
+  will-change: transform, opacity;
+  contain: layout paint;
+  transition: none !important;
+}
+.fx-ghost-ctx {
+  display: contents !important;
+}
+
+/* (e) 里程表数字 */
+.fx-odo {
+  display: inline-flex;
+  align-items: baseline;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.fx-odo-col {
+  position: relative;
+  display: inline-block;
+  height: 1.08em;
+  line-height: 1.08em;
+  overflow: hidden;
+  vertical-align: baseline;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, var(--ink) 16%, var(--ink) 84%, transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0, var(--ink) 16%, var(--ink) 84%, transparent 100%);
+}
+.fx-odo-strip {
+  display: block;
+  will-change: transform;
+}
+.fx-odo-strip > span {
+  display: block;
+  height: 1.08em;
+  text-align: center;
+}
+.fx-odo-sep {
+  display: inline-block;
+}
+/* 数字条是 fx 自己生成的结构：不让页面上「.xxx span」这类通用选择器改到它 */
+.fx-odo .fx-odo-col,
+.fx-odo .fx-odo-strip,
+.fx-odo .fx-odo-strip > span,
+.fx-odo .fx-odo-sep {
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  background: none;
+}
+/* font: inherit 连 line-height 也一起改成继承（例如 1.5）：数字在 1.08em 的格子里就会往下掉，
+   上一格数字的底从遮罩上缘透出来一小横、自己的底被遮罩淡掉。格子的行高要写在它后面 */
+.fx-odo .fx-odo-col {
+  line-height: 1.08em;
+}
+/* 给读屏的最终数字（看不见，不占位置） */
+.fx-odo .fx-odo-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* (f) 溪光：溪流上亮起来、往前走的一小段 */
+.fx-streamlit {
+  fill: none;
+  stroke: var(--fx-warm);
+  stroke-width: 3.2;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 3px var(--gold-l));
+  pointer-events: none;
+}
+
+/* (g) 翻牌：明暗、镜面高光、烫金牌边 */
+.fx-flipping {
+  transition: none !important;
+}
+.fx-shade,
+.fx-spec {
+  position: absolute;
+  display: block;
+  pointer-events: none;
+}
+.fx-shade {
+  inset: 0;
+  z-index: 5;
+  border-radius: inherit;
+  background: var(--card-back-deep);
+  opacity: 0;
+}
+.fx-spec {
+  top: -20%;
+  height: 140%;
+  left: 0;
+  width: 60%;
+  z-index: 6;
+  opacity: 0;
+  background: linear-gradient(90deg, transparent 0%, var(--fx-warm-18) 30%, var(--fx-hot-62) 48%, var(--fx-hot-85) 50%, var(--fx-hot-62) 52%, var(--fx-warm-18) 70%, transparent 100%);
+  mix-blend-mode: soft-light;
+}
+.fx-spec.fx-dusk {
+  mix-blend-mode: screen;
+  background: linear-gradient(90deg, transparent 0%, rgba(var(--gold-l-rgb), 0.12) 30%, var(--fx-warm-42) 48%, var(--fx-hot-60) 50%, var(--fx-warm-42) 52%, rgba(var(--gold-l-rgb), 0.12) 70%, transparent 100%);
+}
+.fx-edge3d {
+  position: absolute;
+  display: block;
+  top: 2%;
+  height: 96%;
+  width: var(--t, 3px);
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--gold-l) 0%, var(--gold) 28%, var(--fx-warm) 52%, var(--gold-d) 78%, var(--gold-l) 100%);
+  -webkit-backface-visibility: visible;
+  backface-visibility: visible;
+  pointer-events: none;
+}
+.fx-edge3d.is-l {
+  left: calc(var(--t, 3px) / -2);
+  transform: rotateY(90deg);
+}
+.fx-edge3d.is-r {
+  right: calc(var(--t, 3px) / -2);
+  transform: rotateY(90deg);
+}
+
+/* (h) 揭晓后的珠光：跟着手指走（fx.tilt 设 --hx / --hy） */
+.fx-ink > .fx-sheen {
+  inset: 0;
+  opacity: 0;
+  mix-blend-mode: soft-light;
+  background: radial-gradient(circle at var(--hx, 50%) var(--hy, 50%), var(--fx-hot-90), var(--fx-iri-1) 18%, var(--fx-iri-3) 32%, var(--fx-iri-4) 44%, var(--fx-iri-5) 56%, transparent 72%);
+  transition: opacity 0.35s var(--fx-std);
+}
+
+/* (i) 柔光换页：一大片很软的光斜着拂过；中间 48 % 完全不透明（光带 1.5 倍宽：mid 时整个容器都被盖住，在这里换内容） */
+.fx-wipe {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: inherit;
+}
+.fx-wipe.is-page {
+  position: fixed;
+  z-index: 2147481000;
+  border-radius: 0;
+}
+.fx-wipe > i {
+  position: absolute;
+  display: block;
+  top: -40%;
+  left: 0;
+  height: 180%;
+  will-change: transform;
+  background: linear-gradient(90deg, transparent 0%, var(--cream) 26%, var(--card) 40%, var(--fx-warm) 50%, var(--card) 60%, var(--cream) 74%, transparent 100%);
+}
+.fx-wipe.fx-dusk > i {
+  background: linear-gradient(90deg, transparent 0%, var(--ritual-bg) 26%, var(--fx-dusk-mid) 42%, var(--fx-dusk-core) 50%, var(--fx-dusk-mid) 58%, var(--ritual-bg) 74%, transparent 100%);
+}
+/* 暮 → 晨：金色的晨光 */
+.fx-wipe.fx-dawn > i {
+  background: linear-gradient(90deg, transparent 0%, var(--fx-dawn-a) 26%, var(--card) 40%, var(--fx-dawn-core) 50%, var(--card) 60%, var(--fx-dawn-a) 74%, transparent 100%);
+}
+
+/* wipe({ hold })：这一页要走了，光停在盖满的地方；底下再铺一层同色（光带在它上面）。盖着时点不到底下要走的页面 */
+.fx-wipe > b {
+  position: absolute;
+  inset: 0;
+  display: block;
+  opacity: 0;
+  background: var(--cream);
+}
+.fx-wipe.fx-dusk > b {
+  background: var(--ritual-bg);
+}
+.fx-wipe.fx-dawn > b {
+  background: var(--fx-dawn-a);
+}
+.fx-wipe.is-held {
+  pointer-events: auto;
+}
+
+/* 减少动态：不移动的换页 = 一层均匀的光 */
+.fx-wipe.is-still > i {
+  top: 0;
+  height: 100%;
+  background: var(--cream);
+}
+.fx-wipe.fx-dusk.is-still > i {
+  background: var(--ritual-bg);
+}
+.fx-wipe.fx-dawn.is-still > i {
+  background: var(--fx-dawn-a);
+}
+
+/* ───────────── 纯 CSS 的小效果（不需要 JS） ─────────────
+   .fx-blur-in   文字进场：5 px 模糊 + 8 px 上浮淡入（700 ms）；一组里用 style="--fx-i: 2" 错开 70 ms
+   .fx-rise-in   卡片 / 面板升起（16 px，弹簧 260 / 24）
+   .fx-pop-in    小东西弹出（.92 → 1，弹簧 360 / 28）
+   .fx-focus-ring 获得焦点时 1 px 的金色细环收拢上来
+   .fx-rest      暗下去（.55）：没被选中的那些
+   .fx-shake     轻轻摇一下（不行 / 只能三个）*/
+.fx-blur-in,
+.fx-rise-in,
+.fx-pop-in {
+  animation-delay: calc(var(--fx-i, 0) * var(--fx-step, 70ms) + var(--fx-delay, 0ms));
+  animation-fill-mode: both;
+}
+.fx-blur-in {
+  animation-name: fx-blur-in;
+  animation-duration: var(--fx-dur, 700ms);
+  animation-timing-function: var(--fx-out);
+}
+.fx-rise-in {
+  animation-name: fx-rise-in;
+  animation-duration: var(--fx-dur, 520ms);
+  animation-timing-function: var(--fx-spring);
+}
+.fx-pop-in {
+  animation-name: fx-pop-in;
+  animation-duration: var(--fx-dur, 444ms);
+  animation-timing-function: var(--fx-spring-pop);
+}
+@keyframes fx-blur-in {
+  from {
+    opacity: 0;
+    translate: 0 8px;
+    filter: blur(5px);
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+    filter: blur(0);
+  }
+}
+@keyframes fx-rise-in {
+  from {
+    opacity: 0;
+    translate: 0 16px;
+  }
+  40% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+@keyframes fx-pop-in {
+  from {
+    opacity: 0;
+    scale: 0.92;
+  }
+  35% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+@keyframes fx-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.fx-focus-ring {
+  outline: 1px solid transparent;
+  outline-offset: 6px;
+  transition:
+    outline-color var(--fx-t-small) var(--fx-out),
+    outline-offset var(--fx-t-small) var(--fx-out);
+}
+.fx-focus-ring:focus,
+.fx-focus-ring:focus-within {
+  outline-color: var(--gold);
+  outline-offset: 2px;
+}
+.fx-rest {
+  opacity: 0.55;
+  transition: opacity 0.4s var(--fx-std);
+}
+.fx-shake {
+  animation: fx-shake 320ms ease-out;
+}
+@keyframes fx-shake {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  20% {
+    translate: -6px 0;
+  }
+  45% {
+    translate: 5px 0;
+  }
+  70% {
+    translate: -3px 0;
+  }
+  88% {
+    translate: 1px 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fx-scan,
+  .fx-edge,
+  .fx-spec,
+  .fx-edge3d,
+  .fx-ink > .fx-sheen {
+    display: none !important;
+  }
+  .fx-blur-in,
+  .fx-rise-in,
+  .fx-pop-in {
+    animation-name: fx-fade-in;
+    animation-duration: 240ms;
+  }
+  .fx-shake {
+    animation: none;
+  }
+  .fx-focus-ring {
+    transition: none;
+  }
+}
