@@ -321,7 +321,8 @@ export function massing(item, n, ceil = 2.8) {
     case 'wardrobe':
       return [B(W - 0.004, 0.08, D - 0.12, 0, 0, -0.06, fx('black'), { plan: false }), B(W, H - 0.08, D - 0.02, 0, 0.08, -0.01, 'cabinetry')];
     case 'dresser':
-      return [B(W, 0.68, D - 0.02, 0, 0.14, -0.009, 'cabinetry'), ...legs(W, D, 0.14, 'woodwork', { inset: 0.05, t: 0.036 }), B(0.62, 0.92, 0.02, 0, 1.02, -D / 2 + 0.012, fx('mirror'), { extra: true, hi: true })];
+      // 柜身跟着 3D：自动摆的梳妆台是木作（item.key 'woodwork'，R1）；旧方案没有 key = 柜体
+      return [B(W, 0.68, D - 0.02, 0, 0.14, -0.009, item.key || 'cabinetry'), ...legs(W, D, 0.14, 'woodwork', { inset: 0.05, t: 0.036 }), B(0.62, 0.92, 0.02, 0, 1.02, -D / 2 + 0.012, fx('mirror'), { extra: true, hi: true })];
     case 'desk':
       return [
         B(W, 0.028, D, 0, 0.712, 0, 'woodwork'),

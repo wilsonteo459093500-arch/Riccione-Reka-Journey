@@ -223,6 +223,7 @@ export class Engine {
     this.contextLost = false;
     this._onLost = (ev) => {
       ev.preventDefault();
+      this.lib?.boards?.onContextLost(); // 板材照片换回近似色（恢复时 three 不会去上传已经放掉的照片）
       this.contextLost = true;
       this.running = false;
       cancelAnimationFrame(this._raf);
@@ -230,6 +231,7 @@ export class Engine {
     };
     this._onRestored = () => {
       this.contextLost = false;
+      this.lib?.boards?.onContextRestored(); // 板材照片重新读（之后只用 256）
       this.restoreGPU();
       this.cb.onContextRestored?.();
     };
@@ -478,7 +480,7 @@ export class Engine {
     this.buildBackdrop(QP.bg);
     // 材质库（贴图分辨率 / 各向异性）和家具的细节（分段数、叶子数：furniture.js 看 lib.quality）都跟着手动换的档位走：
     // 先换材质库的档，再把每件家具按新档重建（旧的几何体释放）；夜灯池也在这里重新摆好
-    this.lib.setQuality?.(nq === 'safe' ? 'fast' : nq);
+    this.lib.setQuality?.(nq === 'safe' ? 'fast' : nq, { safe: nq === 'safe' });
     this.rebuildFurniture();
     if (this.rooms) this.placeRoomLights();
     this.setupComposer();
@@ -983,7 +985,8 @@ export class Engine {
    * 不然切低的墙上方会立着一块 2.8m 高、背面朝镜头的黑板。电视柜和摆件照常显示。
    */
   refreshFeatureMode() {
-    const slats = MAT_BY_ID[this.lib.current.feature]?.cat === 'wood';
+    const fm = MAT_BY_ID[this.lib.current.feature];
+    const slats = fm?.cat === 'wood' && !fm.board; // 溪岸板材做主题墙 = 大板 + 分缝（和实景里的木饰面墙板一样）
     const { tv, screen } = this.lib.fixed;
     for (const g of this.items.values()) {
       const wallItem = WALL_BACKED.has(g.userData.kind);

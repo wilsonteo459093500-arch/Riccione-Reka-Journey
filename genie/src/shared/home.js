@@ -343,7 +343,8 @@ export function isOfferSlot(slot, matId) {
   if (!OFFER_SLOTS.includes(slot)) return false;
   if (slot === 'feature') {
     const m = MAT_BY_ID[matId];
-    return !!m && (m.cat === 'wood' || m.cat === 'stone') && PANEL_TEX.includes(m.tex?.type);
+    // 溪岸板材放在主题墙上就是墙板（纯色板、石纹板也是）—— 和 studio/offer.js 同一条
+    return !!m && (!!m.board || ((m.cat === 'wood' || m.cat === 'stone') && PANEL_TEX.includes(m.tex?.type)));
   }
   return true;
 }
@@ -634,7 +635,12 @@ export function homeSummary(home, { designer = false, staffNote = null } = {}) {
 export function caseRef(c) {
   if (!c) return null;
   const title = c.title && typeof c.title === 'object' ? { zh: c.title.zh || '', en: c.title.en || '' } : { zh: String(c.title || ''), en: '' };
-  return { id: c.id, rev: c.rev || 1, title };
+  const ref = { id: c.id, rev: c.rev || 1, title };
+  // 案例原板（柜体 · 门 / 墙板 的板材 id）也带上：设计师简报、WhatsApp 才说得出「这个案例用的是 7号 · 黑胡桃」（只有 id，没有图）
+  const boards = {};
+  for (const slot of ['cabinetry', 'feature']) if (typeof c.boards?.[slot] === 'string' && /^sail-[a-z0-9-]{1,40}$/.test(c.boards[slot])) boards[slot] = c.boards[slot];
+  if (Object.keys(boards).length) ref.boards = boards;
+  return ref;
 }
 
 /**

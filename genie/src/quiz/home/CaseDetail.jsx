@@ -10,12 +10,34 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, X, ChevronRight } from 'lucide-react';
 import fx from '../../shared/fx.js';
-import { t, L } from '../../shared/i18n.js';
-import { MAT_BY_ID, SLOT_BY_ID } from '../../shared/materials.js';
+import { t, L, isEn } from '../../shared/i18n.js';
+import { MAT_BY_ID, SLOT_BY_ID, onBoards } from '../../shared/materials.js';
 import * as C from '../../shared/cases.js';
+import { boardsSoon } from '../../shared/boards/soon.js';
 import { isOfferSlot, offerKinds, offersWorktop, splitSupply, lab } from '../../shared/home.js';
 import { SwatchCover, propertyTag, capFirst } from './CaseCard.jsx';
 import { Swatch } from './kit.jsx';
+
+/**
+ * 这些案例用了这台设备还不认得的溪岸板材（随网站的板材库是单独一块、展厅 iPad 的板材包在 IndexedDB）：
+ * 读一次（最多等 400 ms，R11 f），读好了（或者晚一点才读好）→ 返回的数字 +1，用它的界面重算（色卡、名字、理由）。
+ */
+export function useCaseBoards(cases) {
+  const [v, setV] = useState(0);
+  const need = (cases || []).some((c) => c && C.caseBoardList(c).some((b) => !b.known));
+  useEffect(() => {
+    if (!need) return undefined;
+    let alive = true;
+    const bump = () => alive && setV((x) => x + 1);
+    const off = onBoards(bump);
+    boardsSoon(400).then(bump);
+    return () => {
+      alive = false;
+      off();
+    };
+  }, [need]);
+  return v;
+}
 
 export default function CaseDetail({ match, on, onToggle, onNext, onClose, hasNext = true, readOnly = false }) {
   const [res, setRes] = useState(match.case);
@@ -83,10 +105,24 @@ export default function CaseDetail({ match, on, onToggle, onNext, onClose, hasNe
   };
   keys.current = { close, step };
 
+  // 案例原板（柜体 · 门、墙板）：这台设备认得了就是真的板（真的色卡 + 「7号 · 黑胡桃」，客人看不到厂家编号）
+  const bv = useCaseBoards([c]);
   const mats = useMemo(() => {
     const m = C.caseMaterials(c);
     return C.KEY_SLOTS.filter((s) => MAT_BY_ID[m[s]]).map((s) => ({ slot: s, mat: MAT_BY_ID[m[s]] }));
-  }, [c]);
+  }, [c, bv]);
+  // 照片里还用了的溪岸板材（例如织系列编织门：只是资料，3D 不铺）—— 这台设备认得的才写；客人只看序号 + 名字（没有厂家编号）
+  const alsoBoards = useMemo(
+    () =>
+      C.caseBoardList(c)
+        .filter((b) => !b.slot && b.known)
+        .map((b) => {
+          const m = MAT_BY_ID[b.id];
+          const series = m.board.series && !L(m).includes(m.board.series) ? t(m.board.series) : '';
+          return series ? `${series} · ${L(m)}` : L(m);
+        }),
+    [c, bv]
+  );
   const split = splitSupply(c.supplies?.firm || []);
   const firm = split.offer.map((id) => C.SUPPLY_BY_ID[id]).filter(Boolean);
   const illu = split.illustration.map((id) => C.SUPPLY_BY_ID[id]).filter(Boolean);
@@ -182,6 +218,7 @@ export default function CaseDetail({ match, on, onToggle, onNext, onClose, hasNe
                   </figure>
                 ))}
               </div>
+              {alsoBoards.length > 0 && <p className="cs-boards-also">{t('这个家还用了溪岸板材：{0}', [alsoBoards.join(isEn() ? ', ' : '、')])}</p>}
             </>
           )}
           {(firm.length > 0 || illu.length > 0 || ctx.length > 0) && (

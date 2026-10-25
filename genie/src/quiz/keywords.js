@@ -5,7 +5,7 @@
 // 关键词永远是英文（贴给 AI 出图工具用）。复制按钮复制的也是这一段。
 // 柜门那一行：换掉的材质如果正好写在柜门的说法里，或者换的是柜体，给一行小注（doorNotes）。
 
-import { MAT_BY_ID } from '../shared/materials.js';
+import { MATERIALS, MAT_BY_ID } from '../shared/materials.js';
 import { AVOID_LABEL } from '../shared/summary.js';
 import EN from '../shared/i18n/en.js';
 
@@ -120,7 +120,8 @@ function aliasesOf(id) {
  */
 function phrases(swapTo) {
   const out = [];
-  for (const id of Object.keys(MAT_BY_ID)) for (const [from, tpl] of aliasesOf(id)) out.push({ id, from, tpl, swapTo: swapTo.get(id) || '' });
+  // 只认程序化材质的说法（溪岸板材也在 MAT_BY_ID 里：200 块板的英文名不进关键词表，R11 g）
+  for (const { id } of MATERIALS) for (const [from, tpl] of aliasesOf(id)) out.push({ id, from, tpl, swapTo: swapTo.get(id) || '' });
   // 一样长的：换掉的优先（terracotta 同时是地砖和墙漆的说法）
   return out.sort((a, b) => b.from.length - a.from.length || !!b.swapTo - !!a.swapTo);
 }

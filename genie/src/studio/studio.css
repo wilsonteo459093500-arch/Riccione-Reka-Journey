@@ -1568,6 +1568,208 @@
 .chip.fur {
   cursor: copy;
 }
+
+/* ---------- 溪岸板材 · sAil（MaterialDock 的第一个标签；板材库是空的就没有） ---------- */
+.dock {
+  position: relative;
+}
+.seg-dock button.sail span {
+  color: var(--gold-ink);
+}
+.seg-dock button.sail.on span {
+  color: var(--pt);
+}
+.fav-dot {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  z-index: 1;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.92);
+}
+.dock-sub {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  margin: 8px 4px 0;
+  min-width: 0;
+}
+.dock-filters {
+  display: flex;
+  gap: 6px;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.dock-filters::-webkit-scrollbar {
+  display: none;
+}
+.dock-filters button {
+  position: relative;
+  flex: none;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--fill);
+  box-shadow: inset 0 0 0 0.5px var(--hair);
+  color: var(--pt-soft);
+  font: 600 13px/1 var(--sans);
+  cursor: pointer;
+  transition:
+    background 0.18s var(--ease),
+    color 0.18s var(--ease),
+    box-shadow 0.18s var(--ease);
+}
+/* 点的范围上下各多 7px → 44px */
+.dock-filters button::after {
+  content: '';
+  position: absolute;
+  inset: -7px -2px;
+}
+.dock-filters button.on {
+  background: rgba(var(--gold-rgb), 0.14);
+  box-shadow: inset 0 0 0 1px rgba(var(--gold-rgb), 0.55);
+  color: var(--gold-ink);
+}
+.dock-hint {
+  margin-left: auto;
+  font: 500 12.5px/1.3 var(--sans);
+  color: var(--pt-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dock-sample {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 34px;
+  margin-left: auto;
+  padding: 3px 12px 3px 4px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--fill);
+  box-shadow: inset 0 0 0 0.5px var(--hair);
+  color: var(--pt);
+  font: 500 12.5px/1.25 var(--sans);
+  text-align: left;
+  cursor: pointer;
+}
+.dock-sample > span:last-child {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dock-sample .sample.xs {
+  border-radius: 50%;
+}
+/* 板材小卡：浮在材质栏左上（右边是日光面板，iPad 横放时会撞在一起） */
+.dock-info {
+  position: absolute;
+  left: 10px;
+  bottom: calc(100% + 10px);
+  z-index: 2;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  width: min(330px, calc(100% - 20px));
+  padding: 12px 10px 12px 12px;
+  border-radius: 18px;
+  animation: dock-info-in 0.32s var(--spring);
+}
+@keyframes dock-info-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+}
+.dock-info-b {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.dock-info-b > b {
+  font: 600 16px/1.25 var(--sans);
+  color: var(--pt);
+}
+.dock-info-facts {
+  font: 500 12.5px/1.35 var(--sans);
+  color: var(--pt-soft);
+}
+.dock-info-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 3px;
+}
+.dock-info-tags:empty {
+  display: none;
+}
+.dock-info-tags i {
+  padding: 3px 8px;
+  border-radius: 999px;
+  font: 600 11.5px/1.2 var(--sans);
+  font-style: normal;
+}
+.dock-info-tags .is-case {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+.dock-info-tags .is-ours {
+  background: rgba(var(--gold-rgb), 0.16);
+  color: var(--gold-ink);
+}
+.dock-info-weave,
+.dock-info-staff {
+  margin-top: 5px;
+  padding-top: 6px;
+  border-top: 0.5px dashed var(--hair);
+  font: 500 12px/1.4 var(--sans);
+  color: var(--pt-soft);
+}
+.dock-info-x {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--fill-2);
+  color: var(--pt-soft);
+  cursor: pointer;
+}
+.dock-info-x::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dock-info {
+    animation: none;
+  }
+}
+/* iPad 竖放、手机：时间滑杆就在材质栏上面 —— 小卡不浮起来，放进材质栏里（筛选和色卡之间），材质栏暂时高一点 */
+@media (max-width: 1023px) {
+  .dock-info {
+    position: static;
+    width: auto;
+    margin: 8px 2px 2px;
+    box-shadow: inset 0 0 0 0.5px var(--hair);
+    background: var(--card);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
 .drag-ghost {
   position: fixed;
   z-index: 100;
@@ -3580,6 +3782,18 @@
     width: 54px;
     height: 54px;
     border-radius: 13px;
+  }
+  .dock-sub {
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .dock-hint {
+    display: none;
+  }
+  .dock-sample {
+    margin-left: 0;
+    max-width: 100%;
   }
   .day-chips {
     display: none;

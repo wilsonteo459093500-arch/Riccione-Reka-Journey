@@ -222,4 +222,21 @@ export default {
   // ── 导出给设计师（⋯ 菜单里的那一项；面板和导出文件里的词在 en-export.js，跟着导出代码懒加载） ──
   导出给设计师: 'Export for designers',
   'AutoCAD · SketchUp · 酷家乐': 'AutoCAD · SketchUp · Kujiale',
+
+  // boards data ── 溪岸板材 · 材质栏、设计师简报、导出（src/studio/ui/MaterialDock.jsx、src/shared/summary.js、src/studio/export/readme.js；builder C 维护这一段）
+  溪岸板材: 'sAil boards',
+  溪岸: 'sAil',
+  这个案例用的就是它: 'This home uses it',
+  '这个案例的柜门：{0}（3D 里先用柜体的颜色示意）': 'Cabinet doors in this home: {0} (the 3D shows the cabinet colour for now)',
+  '厂家编号 {0}（{1}也是这个编号）': 'Factory code {0} ({1} share this code)',
+  '厂家编号 {0}': 'Factory code {0}',
+  板材筛选: 'Board filter',
+  点一下换成这块溪岸板材: 'Tap to use this sAil board',
+  '示意色 · 最接近的溪岸板材：{0}': 'Sample colour · closest sAil board: {0}',
+  '只显示能放在「{0}」上的': 'Only boards for: {0}',
+  '示意色 {0}（最接近的溪岸板材：{1}）': 'Sample colour {0} (closest sAil board: {1})',
+  '溪岸板材：{0}': 'sAil boards: {0}',
+  '保留客人原有': 'Keep the guest’s own',
+  '溪岸板材：材质编号是板材 id（sail-…），名字 = 序号 + 名字，后面是厂家编号（XA-TP-01 这种，可能几块板共用一个）。下单前和样板核对。':
+    'sAil boards: the material id is the board id (sail-…), the name is number + name, followed by the factory code (like XA-TP-01; several boards can share one). Check against the physical sample before ordering.',
 };

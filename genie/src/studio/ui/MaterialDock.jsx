@@ -5,11 +5,16 @@
 //   pointercancel（浏览器接手去滚动了）什么都不做；鼠标滚轮竖着滚 = 横向滚动。
 // 拖着的样板（drag-ghost）用 portal 画在整个工作室的最上层：材质栏所在的 .dock-wrap 自己是一层（z-index 11），
 // 留在里面的话，拖到情绪面板的材质板、日光面板、工具条上时样板和提示会被盖住。
+// 「溪岸板材 · sAil」（SPEC §4.6 + §8 R1 / R12）：公司能订的真实板材，排第一个；板材库是空的就没有这个标签。
+// 选了柜体 / 主题墙就自动切过来；★ 常用在前；点一下板 → 换上，同时弹一张小卡（序号 + 名字、纹理、表面；员工看得到厂家编号）。
+// 柜体 / 主题墙上现在是程序化的样板色时，标签里一行「示意色 · 最接近的溪岸板材：…」，点一下就换成那块板。
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CATEGORIES, MATERIALS, SLOT_BY_ID, fits, misfitHint, MAT_BY_ID } from '../../shared/materials.js';
+import { CATEGORIES, MATERIALS, SLOT_BY_ID, fits, misfitHint, MAT_BY_ID, BOARD_SLOTS, boardsFor, onBoards } from '../../shared/materials.js';
 import { swatchURL } from '../../shared/textures.js';
+import { boardsOn, nearestBoard, factoryCode, sameCode, codesFor } from '../../shared/boards/match.js';
+import { KIND_BY_V, FINISH_BY_V, GRAINS, USES } from '../../shared/boards/vocab-core.js';
 import { CATALOG } from '../engine/furniture.js';
 import { t, L, isEn } from '../../shared/i18n.js';
 import { FurnIcon, Icon, slotName, chipName } from './kit.jsx';
@@ -55,9 +60,76 @@ const ADDABLE = [
   'featureWall',
 ];
 
-export default function MaterialDock({ project, slot, engine, onDrop, onAddItem, onClearSlot }) {
+/** 板材的小筛选（只显示有的那几类） */
+const SAIL_FILTERS = [
+  ['all', '全部', () => true],
+  ['fav', '★ 常用', (m) => m.board.fav],
+  ['wood', '木纹', (m) => m.board.kind === 'wood'],
+  ['solid', '纯色', (m) => m.board.kind === 'solid'],
+  ['stone', '石纹', (m) => m.board.kind === 'stone'],
+];
+
+/** 板材登记 / 删除 / 本机板材包读好 → 重新画（返回一个每次变化 +1 的数字） */
+function useBoardsVersion() {
+  const [v, setV] = useState(0);
+  useEffect(() => onBoards(() => setV((n) => n + 1)), []);
+  return v;
+}
+
+/** 板材小卡上的那一行：溪岸板材 · 乱纹 · 哑光（纯色 / 石纹板写类别；有系列写系列） */
+function boardFacts(b) {
+  const grain = GRAINS.find((g) => g.v === b.grain);
+  return [t('溪岸板材'), b.series ? t(b.series) : '', b.kind !== 'wood' ? t(KIND_BY_V[b.kind]?.zh || '') : '', grain ? t(grain.zh) : '', FINISH_BY_V[b.finish] ? t(FINISH_BY_V[b.finish].zh) : '']
+    .filter(Boolean)
+    .join(' · ');
+}
+
+/** 点一下板之后浮在材质栏上面的小卡（7 秒后自己收起；点叉也收） */
+function BoardCard({ id, slot, staff, caseObj, onClose }) {
+  const m = MAT_BY_ID[id];
+  if (!m?.board) return null;
+  const b = m.board;
+  const fromCase = !!slot && caseObj?.boards?.[slot] === id;
+  const code = codesFor(staff) ? factoryCode(id) : '';
+  const twins = code ? sameCode(id).map((x) => L(MAT_BY_ID[x])).filter(Boolean) : [];
+  const uses = USES.filter((u) => b.uses.includes(u.v)).map((u) => t(u.zh));
+  // 这个案例的柜门还用了织系列（只是资料，3D 里柜体用的是柜体的颜色）
+  const weave = slot === 'cabinetry' ? (caseObj?.boardsAlso || []).map((x) => MAT_BY_ID[x]).filter((x) => x?.board?.kind === 'weave') : [];
+  return (
+    <div className="glass dock-info" role="status" aria-live="polite">
+      <span className="sample md">
+        <img src={swatchURL(id, 128) || ''} alt="" draggable={false} />
+      </span>
+      <div className="dock-info-b">
+        <b>{L(m)}</b>
+        <span className="dock-info-facts">{boardFacts(b)}</span>
+        <span className="dock-info-tags">
+          {fromCase && <i className="is-case">{t('这个案例用的就是它')}</i>}
+          {slot && BOARD_SLOTS.includes(slot) && <i className="is-ours">{t('我们做')}</i>}
+        </span>
+        {weave.length > 0 && <span className="dock-info-weave">{t('这个案例的柜门：{0}（3D 里先用柜体的颜色示意）', [weave.map((x) => L(x)).join(isEn() ? ', ' : '、')])}</span>}
+        {staff && (
+          <span className="dock-info-staff">
+            {[code && (twins.length ? t('厂家编号 {0}（{1}也是这个编号）', [code, twins.join(isEn() ? ', ' : '、')]) : t('厂家编号 {0}', [code])), uses.join(' / ')].filter(Boolean).join(' · ')}
+          </span>
+        )}
+      </div>
+      <button type="button" className="dock-info-x" aria-label={t('关闭')} title={t('关闭')} data-sfx="close" onClick={onClose}>
+        <Icon name="close" size={13} />
+      </button>
+    </div>
+  );
+}
+
+export default function MaterialDock({ project, slot, engine, onDrop, onAddItem, onClearSlot, staff = false, caseObj = null }) {
   const [tab, setTab] = useState('fabric');
+  const [sf, setSf] = useState('all'); // 板材的小筛选
+  const [info, setInfo] = useState(null); // 小卡：哪块板
   const [ghost, setGhost] = useState(null);
+  const bv = useBoardsVersion();
+  // 能上 3D 的板（隐藏的、织系列不算）；板材库是空的 / 关掉 → 没有这个标签
+  const sailAll = boardsOn() ? boardsFor(null) : [];
+  const sailOn = sailAll.length > 0;
   const drag = useRef(null);
   const row = useRef(null);
   const segRef = useRef(null);
@@ -96,13 +168,29 @@ export default function MaterialDock({ project, slot, engine, onDrop, onAddItem,
     };
   }, [slot]);
 
-  // 选了表面 → 自动切到它能用的类别
+  // 选了表面 → 自动切到它能用的类别（柜体 / 主题墙有放得上的溪岸板材 → 板材标签）
   useEffect(() => {
     if (!slot) return;
+    if (sailOn && BOARD_SLOTS.includes(slot) && sailAll.some((m) => fits(m.id, slot))) {
+      setTab('sail');
+      return;
+    }
     const cats = SLOT_BY_ID[slot]?.cats || [];
     if (!cats.includes(tab)) setTab(cats[0]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slot]);
+  // 板材都删光了（或者还没读好）：不停在一个空的标签上
+  useEffect(() => {
+    if (tab === 'sail' && !sailOn) setTab(SLOT_BY_ID[slot]?.cats?.[0] || 'wood');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sailOn, tab]);
+  // 小卡：7 秒后自己收起；换了标签 / 表面也收起
+  useEffect(() => {
+    if (!info) return undefined;
+    const id = setTimeout(() => setInfo(null), 7000);
+    return () => clearTimeout(id);
+  }, [info]);
+  useEffect(() => setInfo(null), [tab, slot]);
 
   // 换类别 → 这一排回到开头
   useEffect(() => {
@@ -181,7 +269,10 @@ export default function MaterialDock({ project, slot, engine, onDrop, onAddItem,
       if (ev.type === 'pointercancel' || d.dead) return;
       if (d.matId) {
         if (!d.moved) {
-          if (Math.hypot(ev.clientX - d.x0, ev.clientY - d.y0) < 10) onDrop(d.matId, null);
+          if (Math.hypot(ev.clientX - d.x0, ev.clientY - d.y0) < 10) {
+            const ok = onDrop(d.matId, null, d.board ? { quiet: true } : undefined);
+            if (d.board && ok !== false) setInfo(d.matId);
+          }
           return;
         }
         const tgt = targetAt(ev.clientX, ev.clientY);
@@ -201,8 +292,21 @@ export default function MaterialDock({ project, slot, engine, onDrop, onAddItem,
   };
 
   const used = new Set(Object.values(project.materials));
-  const list = MATERIALS.filter((m) => m.cat === tab);
-  const tabs = [...CATEGORIES.map((c) => ({ id: c.id, label: L(c), sub: isEn() ? '' : c.en })), { id: 'furniture', label: t('家具'), sub: isEn() ? '' : 'Furniture', sep: true }];
+  // 板材：只列放得上这个表面的（没选表面 = 全部，拖的时候照样按 fits）；★ 常用在前，其余按类别、序号（BOARDS 本来的顺序）
+  const sailFits = slot ? sailAll.filter((m) => fits(m.id, slot)) : sailAll;
+  const sfOpts = SAIL_FILTERS.filter(([k, , fn]) => k === 'all' || sailFits.some(fn));
+  const sfFn = (sfOpts.find(([k]) => k === sf) || SAIL_FILTERS[0])[2];
+  const sailList = sailFits.filter(sfFn).sort((a, b) => (b.board.fav ? 1 : 0) - (a.board.fav ? 1 : 0));
+  // 柜体 / 主题墙上是程序化的样板色：最接近的溪岸板材（点了才换；远到 2 × matchDE 以外就不提）
+  const curId = slot ? project.materials[slot] : null;
+  const near = sailOn && slot && BOARD_SLOTS.includes(slot) && MAT_BY_ID[curId] && !MAT_BY_ID[curId].board ? nearestBoard(curId, slot, { avoid: project.profile?.avoid || [] }) : null;
+  const sample = near && (near.ok || near.hint) ? near : null;
+  const list = tab === 'sail' ? sailList : MATERIALS.filter((m) => m.cat === tab);
+  const tabs = [
+    ...(sailOn ? [{ id: 'sail', label: t('溪岸板材'), sub: isEn() ? '' : 'sAil', sail: true }] : []),
+    ...CATEGORIES.map((c) => ({ id: c.id, label: L(c), sub: isEn() ? '' : c.en })),
+    { id: 'furniture', label: t('家具'), sub: isEn() ? '' : 'Furniture', sep: true },
+  ];
 
   return (
     <>
@@ -210,7 +314,7 @@ export default function MaterialDock({ project, slot, engine, onDrop, onAddItem,
         <div className="dock-head">
           <div ref={segRef} className={`seg seg-dock ${fit.mode} ${fit.over ? 'over' : ''}`} role="tablist" aria-label={t('材质类别')}>
             {tabs.map((c) => (
-              <button key={c.id} type="button" role="tab" aria-selected={tab === c.id} className={`${tab === c.id ? 'on' : ''} ${c.sep ? 'sep' : ''}`} onClick={() => setTab(c.id)}>
+              <button key={c.id} type="button" role="tab" aria-selected={tab === c.id} className={`${tab === c.id ? 'on' : ''} ${c.sep ? 'sep' : ''} ${c.sail ? 'sail' : ''}`} onClick={() => setTab(c.id)}>
                 <span>{c.label}</span>
                 {c.sub && <i>{c.sub}</i>}
               </button>
@@ -227,6 +331,30 @@ export default function MaterialDock({ project, slot, engine, onDrop, onAddItem,
             </span>
           )}
         </div>
+        {tab === 'sail' && (
+          <div className="dock-sub">
+            {sfOpts.length > 2 && (
+              <div className="dock-filters" role="radiogroup" aria-label={t('板材筛选')}>
+                {sfOpts.map(([k, zh]) => (
+                  <button key={k} type="button" role="radio" aria-checked={sf === k} className={sf === k ? 'on' : ''} onClick={() => setSf(k)}>
+                    {k === 'all' ? `${t(zh)} ${sailFits.length}` : t(zh)}
+                  </button>
+                ))}
+              </div>
+            )}
+            {sample ? (
+              <button type="button" className="dock-sample" data-sfx="apply" onClick={() => onDrop(sample.id, slot, { quiet: true }) !== false && setInfo(sample.id)} title={t('点一下换成这块溪岸板材')}>
+                <span className="sample xs">
+                  <img src={swatchURL(sample.id, 48) || ''} alt="" draggable={false} />
+                </span>
+                <span>{t('示意色 · 最接近的溪岸板材：{0}', [L(MAT_BY_ID[sample.id])])}</span>
+              </button>
+            ) : (
+              slot && <span className="dock-hint">{t('只显示能放在「{0}」上的', [slotName(SLOT_BY_ID[slot])])}</span>
+            )}
+          </div>
+        )}
+        {info && tab === 'sail' && <BoardCard key={`${info}:${bv}`} id={info} slot={slot && fits(info, slot) ? slot : MAT_BY_ID[info]?.board?.uses?.[0] || null} staff={staff} caseObj={caseObj} onClose={() => setInfo(null)} />}
         <div className="dock-row" ref={row}>
           {tab === 'furniture'
             ? ADDABLE.filter((k) => CATALOG[k]).map((k) => (
@@ -245,13 +373,14 @@ export default function MaterialDock({ project, slot, engine, onDrop, onAddItem,
                     key={m.id}
                     type="button"
                     className={`chip sw ${used.has(m.id) ? 'used' : ''} ${cur ? 'cur' : ''} ${dim ? 'dim' : ''}`}
-                    onPointerDown={(e) => startDrag(e, { matId: m.id })}
-                    title={isEn() ? L(m) : `${m.zh} · ${m.en}`}
+                    onPointerDown={(e) => startDrag(e, { matId: m.id, board: !!m.board })}
+                    title={m.board ? L(m) : isEn() ? L(m) : `${m.zh} · ${m.en}`}
                     aria-label={L(m)}
                   >
                     <span className="sample">
-                      <img src={swatchURL(m.id, 128) || ''} alt="" draggable={false} />
+                      <img src={swatchURL(m.id, 128) || ''} alt="" draggable={false} loading={m.board ? 'lazy' : undefined} />
                       {used.has(m.id) && <i className="used-dot" aria-hidden="true" />}
+                      {m.board?.fav && <i className="fav-dot" aria-hidden="true" />}
                     </span>
                     <ChipName {...chipName(m)} />
                   </button>

@@ -113,6 +113,9 @@ export function installDiag() {
         // 后期链的空画面看门狗（hdrguard.js）：查了几次、几次是空的、直接画核对过几次、降过几次档
         const w = e.blankWatch?.stats;
         if (w) s += line('blankwatch', `checks=${w.checks} blank=${w.blank} probes=${w.probes} trips=${w.trips} last=${w.last || '-'}`);
+        // 溪岸板材的照片贴图（boardTex.js）：几块、多清楚、占多少显存、还在读的、没关掉的 ImageBitmap、读不到的原因
+        const bt = e.lib?.boards?.stats();
+        if (bt) s += line('boards', `n=${bt.boards} use=${bt.inUse} full=${bt.full} prev=${bt.preview} twin=${bt.twin} ${bt.mb}MB pend=${bt.pending} lean=${bt.lean} bmp=${bt.bitmaps} fail=${bt.fails}${bt.reason ? ` (${bt.reason})` : ''}`);
         for (const d of (window.__genieDiag || []).slice(-3)) s += line(d.reason || 'shader', `${d.quality} ${d.gpu} | ${(d.fragment || d.vertex || d.program || '').slice(0, 200)}`);
       } catch (err) {
         s += line('diag', `failed: ${err.message}`);

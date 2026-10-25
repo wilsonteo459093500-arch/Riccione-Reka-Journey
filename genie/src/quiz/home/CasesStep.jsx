@@ -14,7 +14,7 @@ import { t, tj, L, isEn } from '../../shared/i18n.js';
 import { DREAMER_BY_CODE } from '../../shared/dreamers.js';
 import * as C from '../../shared/cases.js';
 import CaseCard from './CaseCard.jsx';
-import CaseDetail from './CaseDetail.jsx';
+import CaseDetail, { useCaseBoards } from './CaseDetail.jsx';
 import { phrased } from '../typo.jsx';
 import { Odo } from '../ui.jsx';
 import './home.css';
@@ -47,7 +47,9 @@ export default function CasesStep({ profile, cases: given, preview = false, onDo
     };
   }, [given]);
 
-  const res = useMemo(() => (list ? C.matchCases(profile, list, { limit: 4 }) : null), [profile, list]);
+  // 案例原板读好了再配一次：理由里说得出那块板（「这个家用的就是溪岸 7号 · 黑胡桃」）
+  const bv = useCaseBoards(list);
+  const res = useMemo(() => (list ? C.matchCases(profile, list, { limit: 4 }) : null), [profile, list, bv]);
   const shown = useMemo(() => {
     if (!res) return [];
     return round === 0 ? res.picks : res.rest.slice(0, 4);
@@ -200,7 +202,7 @@ export default function CasesStep({ profile, cases: given, preview = false, onDo
       {detail && (
         <CaseDetail
           key={detail.case.id}
-          match={withUrls(detail)}
+          match={withUrls(shown.find((m) => m.case.id === detail.case.id) || detail)}
           on={isOn(detail.case)}
           hasNext={shown.length > 1}
           onToggle={(e) => toggle(detail.case, e)}

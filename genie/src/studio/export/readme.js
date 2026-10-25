@@ -3,7 +3,8 @@
 // 两份都只从 designerBrief() 生成（v2 换一份更完整的 brief 进来也一样能用）。
 
 import { bi, biFill, both, SAIL_LINE } from './names.js';
-import { catLabel, CATEGORY, UNCERTAIN } from './catalog.js';
+import { catLabel, CATEGORY, UNCERTAIN, boardCode } from './catalog.js';
+import { MAT_BY_ID } from '../../shared/materials.js';
 import { LAYERS } from './plan.js';
 import { CATALOG } from '../engine/furniture.js';
 import { BRAND } from '../../shared/config.js';
@@ -146,7 +147,9 @@ export function readme(brief, { files = [], base = 'WISH', dxf = true, kujiale =
   // ── 材质 ──
   L.push(both(bi('材质'), ' / '));
   L.push(rule());
-  for (const m of brief.materials) L.push(...wrap(`${m.slot.padEnd(11)} ${m.id.padEnd(20)} ${m.slotName.zh}·${m.zh} — ${m.slotName.en} · ${m.en} — ${m.hex}`, ''));
+  for (const m of brief.materials) L.push(...wrap(`${m.slot.padEnd(11)} ${m.id.padEnd(20)} ${m.slotName.zh}·${m.zh} — ${m.slotName.en} · ${m.en} — ${m.hex}${sailTag(m)}`, ''));
+  // 溪岸板材：材质编号就是板材 id（sail-7），名字是序号 + 名字，后面是厂家编号 —— 照它向工厂下单
+  if (brief.materials.some((m) => MAT_BY_ID[m.id]?.board)) say(L, bi('溪岸板材：材质编号是板材 id（sail-…），名字 = 序号 + 名字，后面是厂家编号（XA-TP-01 这种，可能几块板共用一个）。下单前和样板核对。'));
   L.push('');
 
   // ── 清单 ──
@@ -189,8 +192,19 @@ const csvCell = (v) => {
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 
-/** 清单 CSV 的材质一段：表面 id = 材质 id + 表面名 + 材质名（cabinetry=white-oak 柜体 白橡；countertop=quartz-travertine 台面（外购） 石英石·洞石纹） */
-const csvMat = (m) => `${m.slot}=${m.id} ${m.slotZh} ${m.zh}`;
+/** 材质表里溪岸板材那一格的尾巴：「 — 溪岸 sAil XA-TP-01」（没有厂家编号 =「 — 溪岸 sAil」）；不是板材 = '' */
+function sailTag(m) {
+  if (!MAT_BY_ID[m.id]?.board) return '';
+  const code = boardCode(m.slot, m.id);
+  return ` — ${bi('溪岸').zh} sAil${code ? ` ${code}` : ''}`;
+}
+
+/** 清单 CSV 的材质一段：表面 id = 材质 id + 表面名 + 材质名（cabinetry=white-oak 柜体 白橡；countertop=quartz-travertine 台面（外购） 石英石·洞石纹）；
+ *  溪岸板材后面加厂家编号（cabinetry=sail-7 柜体 7号 · 黑胡桃 XA-TP-01） */
+const csvMat = (m) => {
+  const code = boardCode(m.slot, m.id);
+  return `${m.slot}=${m.id} ${m.slotZh} ${m.zh}${code ? ` ${code}` : ''}`;
+};
 
 /** schedule.csv：一行一件（定制柜在前），再是门扇（category = 门） */
 export function scheduleCsv(brief) {

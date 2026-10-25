@@ -115,6 +115,15 @@ function pump() {
 /** 要一张色卡：画好了就马上回（同步），没画好就排队，画好了 cb(url) */
 export function requestSwatch(id, px, cb) {
   if (!id || !MAT_BY_ID[id]) return null;
+  // 溪岸板材有真的色卡图（本机板材包 / 网上）：直接用，不让后台线程画它的近似色
+  const chip = MAT_BY_ID[id].board?.chip;
+  if (chip) {
+    cb?.(chip);
+    return chip;
+  }
+  // 只有资料、没有色卡图的板（--meta-only 合并的）：后台线程不认得板材 id → 画它最接近的程序化材质
+  const near = MAT_BY_ID[id].board?.near;
+  if (MAT_BY_ID[id].board) return near && MAT_BY_ID[near] && !MAT_BY_ID[near].board ? requestSwatch(near, px, cb) : null;
   const key = `${id}@${px}`;
   if (swCache.has(key)) {
     cb?.(swCache.get(key));

@@ -10,8 +10,13 @@
 // 显存（大 iPad 上 WebGL 上下文被挤掉的主因之一）：同一材质 + 变体 + 分辨率的一套贴图所有表面共用；
 // 缓存按「显存预算」淘汰 —— 正在用的永远留着，其余按最久没用的先释放（GPU 上的贴图一起 dispose）。
 // 只是路过的材质（拖着经过、换情绪时一闪而过）不会去生成完整分辨率。
+//
+// 溪岸板材（真实板材的照片贴图）：全部逻辑在 boardTex.js（BoardTextures），这里只有几个小钩子 ——
+// textureFor 第一行、setBytes / apply 的 e.bytes / e.ns、trim / dispose 交给 boards.evict、setQuality 跳过照片、swapEntry
+// （诊断 / 测试看 lib.boards.stats()）。
 
 import * as THREE from 'three';
+import { BoardTextures } from './boardTex.js';
 import { MAT_BY_ID, SLOTS } from '../../shared/materials.js';
 import { generateMaps, variantFor } from '../../shared/textures.js';
 import { PALETTE } from '../../shared/palette.js';
@@ -26,7 +31,7 @@ const PREVIEW = 128; // 先顶上的小图
 // 预算里多出来的留给「刚换掉、可能马上换回来」的
 const BUDGET = { high: 176e6, fast: 104e6 };
 const MAX_SETS = 20; // 套数上限（小图也算）
-const setBytes = (e) => ((e.R * e.R * 4 * 4) / 3) * 3;
+const setBytes = (e) => e.bytes ?? ((e.R * e.R * 4 * 4) / 3) * 3;
 
 // 法线强度（按贴图类型）—— 高度场是按毫米算的物理值，这里只做一点「看得见」的放大
 const NORMAL = {
@@ -73,6 +78,7 @@ export class MatLib {
     this.maxAniso = renderer.capabilities.getMaxAnisotropy();
     this.quality = quality === 'high' || quality === 'fast' ? quality : quality0();
     this.aniso = this.quality === 'high' ? this.maxAniso : Math.min(4, this.maxAniso);
+    this.boards = new BoardTextures(renderer, this, { safe: quality === 'safe' }); // 溪岸板材的照片贴图（兼容档只用 256）
     this.slots = {};
     this.current = {};
     this.tex = new Map(); // key → { map, normal, orm, size, rotation, full, used }
@@ -97,17 +103,20 @@ export class MatLib {
   }
 
   /** 引擎换画质档：各向异性跟着换（已有的贴图重新上传一次）；分辨率不同的表面重新套一次（先小图、空闲时补完整的） */
-  setQuality(q) {
+  setQuality(q, { safe = false } = {}) {
     const nq = q === 'fast' ? 'fast' : 'high';
+    this.boards?.setTier(nq, { safe }); // 板材：兼容档 → 256；照片贴图不在下面重新上传（它们自己重新读）
     if (nq === this.quality) return;
     this.quality = nq;
     this.aniso = nq === 'high' ? this.maxAniso : Math.min(4, this.maxAniso);
-    for (const e of this.tex.values())
+    for (const e of this.tex.values()) {
+      if (e.photo) continue;
       for (const t of [e.map, e.normal, e.orm])
         if (t.anisotropy !== this.aniso) {
           t.anisotropy = this.aniso;
           t.needsUpdate = true;
         }
+    }
     for (const [slotId, matId] of Object.entries(this.current)) this.apply(slotId, matId);
     this.upgraded = true;
   }
@@ -150,6 +159,8 @@ export class MatLib {
 
   /** 某材质在某表面上的一套贴图（第一次先给小图，完整的排队生成） */
   textureFor(matId, slotId) {
+    const board = this.boards?.entryFor(matId, slotId); // 溪岸板材有照片 → 它的那一套（没有照片 = null，往下走近似色的程序化贴图）
+    if (board) return board;
     const mat = MAT_BY_ID[matId];
     const variant = variantFor(mat, slotId);
     const res = this.resFor(mat, slotId);
@@ -196,6 +207,27 @@ export class MatLib {
     });
   }
 
+  /** 原地换掉一套贴图（板材：近似色 → 照片 256 → 1024，和 pump() 换完整分辨率一样）；被换下来的释放（共用的 1×1 不动） */
+  swapEntry(e, next) {
+    const old = [e.map, e.normal, e.orm];
+    Object.assign(e, next);
+    const keep = new Set([e.map, e.normal, e.orm]);
+    const ns = e.ns ?? NORMAL[MAT_BY_ID[e.matId]?.tex?.type] ?? 1;
+    for (const [slotId, m] of Object.entries(this.slots)) {
+      // 走进去（paint-scan）留着做「旧的那一面」的贴图也跟着换 —— 每个表面都要问（和 pump() 一样）：
+      // 客人点了板材、照片还没到又换走了，这个表面已经不显示它，但扫描还钉着它当旧的一面
+      this.scans?.[slotId]?.refreshOld?.(e);
+      if (m.userData.texKey !== e.key) continue;
+      m.map = e.map;
+      m.normalMap = e.normal;
+      m.roughnessMap = e.orm;
+      m.aoMap = e.orm;
+      m.normalScale.set(ns, ns);
+    }
+    for (const t of old) if (t && !keep.has(t) && !t.userData?.shared) t.dispose();
+    this.upgraded = true;
+  }
+
   /** 超出显存预算（或套数上限）时，释放最久没用、也没有表面在用的 */
   trim() {
     let total = 0;
@@ -207,9 +239,13 @@ export class MatLib {
     while ((total > budget || this.tex.size > MAX_SETS) && old.length) {
       const e = old.shift();
       total -= setBytes(e);
-      e.map.dispose();
-      e.normal.dispose();
-      e.orm.dispose();
+      // 板材：共用的平法线 / ORM 不能释放，没上传的 ImageBitmap 要关掉
+      if (e.photo) this.boards.evict(e);
+      else {
+        e.map.dispose();
+        e.normal.dispose();
+        e.orm.dispose();
+      }
       this.tex.delete(e.key);
       const qi = this.queue.indexOf(e);
       if (qi >= 0) this.queue.splice(qi, 1);
@@ -234,7 +270,7 @@ export class MatLib {
     m.userData.texKey = e.key;
     m.map = e.map;
     m.normalMap = e.normal;
-    const ns = NORMAL[type] ?? 1;
+    const ns = e.ns ?? NORMAL[type] ?? 1; // 板材的照片：法线是平的，强度 1
     m.normalScale.set(ns, ns);
     m.roughnessMap = e.orm; // G = 粗糙度（绝对值）
     m.roughness = 1;
@@ -264,7 +300,8 @@ export class MatLib {
   }
 
   applyAll(materials) {
-    for (const s of SLOTS) if (materials[s.id]) this.apply(s.id, materials[s.id]);
+    // 这台设备还没有的溪岸板材（别人分享的方案、还没导入板材包）：不留一块没贴图的灰板 —— 先用近似的，登记好后再套一次就对了
+    for (const s of SLOTS) if (materials[s.id]) this.apply(s.id, this.boards?.stand(materials[s.id], s.id) ?? materials[s.id]);
   }
 
   /** 拖材质经过时，整组表面发金光 */
@@ -350,6 +387,7 @@ export class MatLib {
   }
 
   dispose() {
+    this.boards?.dispose();
     this.queue = [];
     for (const m of Object.values(this.slots)) m.dispose();
     for (const m of Object.values(this.fixed)) m.dispose();

@@ -171,6 +171,7 @@ function hsl(hex) {
  * 没登记的材质才按颜色猜（木头只看深浅，不分色系）。
  */
 export function tagsOf(mat) {
+  if (mat?.board) return new Set(mat.board.tags); // 溪岸板材：导入时按同样的规则算好的（导入器里员工看得到）
   const tags = new Set();
   if (!mat) return tags;
   const { h, s, l } = hsl(mat.color);

@@ -982,6 +982,11 @@
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
 }
+.cs-boards-also {
+  margin: 8px 0 0;
+  font: 500 12.5px/1.45 var(--sans);
+  color: var(--text-soft);
+}
 .cs-mats figure {
   display: flex;
   align-items: center;

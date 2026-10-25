@@ -7,6 +7,11 @@
 // warm（-1 冷 … 1 暖）与 light（0 深 … 1 浅）—— 情绪仪表、梦想家配色、雷区替换都靠它们。
 
 import { t, L, isEn } from './i18n.js';
+import { bindMatTable, boardFits, boardDefaultSlot } from './boards/library-api.js';
+
+// 溪岸板材（src/shared/boards/）：登记表在 library-api.js，这里只是转出去 —— 板材在 MAT_BY_ID 里，不在 MATERIALS 里。
+// 随网站的板材库（library.js）不在这里 import：用到的地方 await boards/bundled.js 的 bundledBoards()（客人的测验不下载它）
+export { BOARD_SLOTS, BOARDS, BOARD_BY_ID, registerBoards, unregisterBoards, boardOf, isBoard, onBoards, boardsVersion, boardsFor, boardInfo } from './boards/library-api.js';
 
 /** 可以换材质的「表面」。cats = 这个表面接受哪些类别的材质；not = 同类别里不接受的质感（tex.type：皮革不做床品、窗帘，藤编不做软包） */
 export const SLOTS = [
@@ -132,6 +137,9 @@ export const MATERIALS = [
 ];
 
 export const MAT_BY_ID = Object.fromEntries(MATERIALS.map((x) => [x.id, x]));
+// 板材排在程序化材质后面进 MAT_BY_ID：随网站的那份由 boards/bundled.js 的 bundledBoards() 登记，
+// 这台设备导入的由 boards/device.js 的 boardsReady() 登记（都是用到的时候才读）
+bindMatTable(MAT_BY_ID);
 
 export function matOf(id) {
   return MAT_BY_ID[id] || null;
@@ -141,6 +149,7 @@ export function matOf(id) {
 export function fits(matId, slotId) {
   const mat = MAT_BY_ID[matId];
   const slot = SLOT_BY_ID[slotId];
+  if (mat?.board) return boardFits(mat, slot); // 溪岸板材：只上柜体（含室内门）和主题墙板，织系列哪里都不放
   return !!(mat && slot && slot.cats.includes(mat.cat) && !slot.not?.includes(mat.tex.type));
 }
 
@@ -150,6 +159,7 @@ export function misfitHint(matId, slotId) {
   const slot = SLOT_BY_ID[slotId];
   if (!mat || !slot) return '';
   const slotWord = isEn() ? slot.en.toLowerCase() : slot.zh;
+  if (mat.board) return mat.board.kind === 'weave' ? t('织系列是柜门的面料，3D 里先用柜体的颜色示意') : t('溪岸板材只用在定制柜、墙板和门上；活动家具是示意');
   if (slot.cats.includes(mat.cat) && slot.not?.includes(mat.tex.type)) return t('{0}不适合做{1}，试试亚麻、纯棉或针织', [L(mat), slotWord]);
   if (mat.cat === 'fabric' && slotId === 'floor') return t('布料不能铺地板哦～试试拖到地毯上');
   if (mat.cat === 'fabric') return t('{0} 是布料，适合沙发、床品、地毯、窗帘', [L(mat)]);
@@ -168,6 +178,13 @@ export const DEFAULT_SLOT_FOR_CAT = {
   paint: 'walls',
   metal: 'metal',
 };
+
+/** 点一下色块、又没选表面时，这个材质去哪个表面（板材 → 柜体，不是木头默认的地板） */
+export function defaultSlotFor(matId) {
+  const mat = MAT_BY_ID[matId];
+  if (!mat) return null;
+  return mat.board ? boardDefaultSlot(mat) : DEFAULT_SLOT_FOR_CAT[mat.cat] || null;
+}
 
 /** 十六进制颜色 → {r,g,b} 0–255 */
 export function hexToRgb(hex) {

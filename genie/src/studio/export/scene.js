@@ -252,7 +252,7 @@ export function buildScene(project, { now = new Date(), name } = {}) {
         continue;
       }
       const slots = [...new Set(parts.map((p) => p.m))];
-      const main0 = it.kind === 'bookshelf' ? it.key || 'woodwork' : MAIN_SLOT[it.kind] || def.slot;
+      const main0 = it.kind === 'bookshelf' ? it.key || 'woodwork' : it.kind === 'dresser' && it.key ? it.key : MAIN_SLOT[it.kind] || def.slot;
       const main = main0.startsWith('fixed__') ? main0 : materials[main0]?.id || main0;
       const mats = slots.filter((s) => !s.startsWith('fixed__')).map((s) => ({ slot: s, id: materials[s].id, zh: materials[s].mat.zh, en: materials[s].mat.en, slotZh: slotShort(s).zh, slotEn: slotShort(s).en, sourced: !!SOURCED[s] }));
       stats.items++;

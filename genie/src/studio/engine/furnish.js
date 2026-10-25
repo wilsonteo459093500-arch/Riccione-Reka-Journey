@@ -626,7 +626,8 @@ function living(L, rc, ctx) {
     }
     if (ctx.books >= 6 && !ctx.hasStudy && !ctx.avoid.has('openshelf')) {
       const maxW = Math.min(2.4, sst.len - 0.2, Math.max(1.2, ctx.books * 0.16));
-      if (hug(L, rc, s, sst, 'bookshelf', { d: 0.34, minW: Math.min(1.0, maxW), maxW, front: 0.6, extra: () => ({ h: Math.min(2.4, ctx.wallH - 0.2), key: 'woodwork' }) })) continue;
+      // 书墙是定制柜（我们做）：用柜体的材质 —— 溪岸板材也会上到书墙（R1）
+      if (hug(L, rc, s, sst, 'bookshelf', { d: 0.34, minW: Math.min(1.0, maxW), maxW, front: 0.6, extra: () => ({ h: Math.min(2.4, ctx.wallH - 0.2), key: 'cabinetry' }) })) continue;
     }
     L.try(room, 'plant', at(room, s, sst.a + 0.35 > sst.b ? mid(sst) : sst.b - 0.35, s.thick + 0.3), 0.45, 0.45, { variant: 'tall', seed: 7 });
   }
@@ -684,7 +685,7 @@ function family(L, rc, ctx) {
   const want = [];
   if (ctx.kids) want.push(['toyStorage', { d: 0.38, minW: 0.8, maxW: 1.4, front: 0.6, extra: () => ({}) }]);
   if (ctx.wfh && !ctx.hasStudy) want.push(['desk', { d: 0.6, minW: 1.2, maxW: 1.2, front: 0.6, extra: () => ({ w: 1.2, d: 0.6 }) }]);
-  if (ctx.books >= 6 && !ctx.hasStudy && !ctx.avoid.has('openshelf')) want.push(['bookshelf', { d: 0.34, minW: 1.0, maxW: Math.min(2.0, Math.max(1.2, ctx.books * 0.16)), front: 0.6, extra: () => ({ h: Math.min(2.4, ctx.wallH - 0.2), key: 'woodwork' }) }]);
+  if (ctx.books >= 6 && !ctx.hasStudy && !ctx.avoid.has('openshelf')) want.push(['bookshelf', { d: 0.34, minW: 1.0, maxW: Math.min(2.0, Math.max(1.2, ctx.books * 0.16)), front: 0.6, extra: () => ({ h: Math.min(2.4, ctx.wallH - 0.2), key: 'cabinetry' }) }]);
   for (const [kind, o] of want) for (const { s, x } of others) if (x.len >= o.minW + 0.05 && hug(L, rc, s, x, kind, o)) break;
   for (const { s, x } of [...others].reverse()) if (L.try(room, 'plant', at(room, s, x.b - 0.35 > x.a ? x.b - 0.35 : mid(x), s.thick + 0.3), 0.45, 0.45, { variant: 'tall', seed: 13 })) break;
 }
@@ -1015,7 +1016,8 @@ function bedCands(rc, ctx, bw, bd, isKids) {
 
 function placeBed(L, rc, s, bw, bd, along, isKids) {
   const { room } = rc;
-  const bed = L.try(room, isKids ? 'kidsBed' : 'bed', at(room, s, along, s.thick + (bd + 0.1) / 2), bw + 0.16, bd + 0.1, { w: bw, d: bd }, { front: 0.6 });
+  // 儿童床边的玩具箱是活动家具：木作的材质（溪岸板材只上定制柜，R1）
+  const bed = L.try(room, isKids ? 'kidsBed' : 'bed', at(room, s, along, s.thick + (bd + 0.1) / 2), bw + 0.16, bd + 0.1, isKids ? { w: bw, d: bd, key: 'woodwork' } : { w: bw, d: bd }, { front: 0.6 });
   if (!bed) return null;
   if (!isKids) for (const sg of [-1, 1]) L.try(room, 'nightstand', at(room, s, along + sg * (bw / 2 + 0.1 + 0.25), s.thick + 0.22), 0.5, 0.42);
   L.flat(room, 'rug', at(room, s, along, s.thick + bd * 0.62), bw + 1.0, 1.5, {});
@@ -1075,7 +1077,8 @@ function bedroomExtras(L, rc, ctx, kind, bedSide) {
   const list = isKids ? ['toyStorage', 'desk'] : isMaster ? (ctx.wfh && !ctx.hasStudy && !ctx.hasFamily ? ['desk', 'plant'] : ['dresser', 'plant']) : ['desk'];
   for (const k of list) {
     const [w, d] = { desk: [isKids ? (ctx.teen ? 1.2 : 1.0) : 1.2, 0.6], dresser: [1.1, 0.45], toyStorage: [1.2, 0.38], plant: [0.45, 0.45] }[k];
-    const extra = () => (k === 'desk' ? { w, d } : k === 'plant' ? { variant: 'tall', seed: 11 } : {});
+    // 梳妆台是活动家具（只是示意）：用木作的材质，不用柜体的（溪岸板材只上定制柜，R1）
+    const extra = () => (k === 'desk' ? { w, d } : k === 'plant' ? { variant: 'tall', seed: 11 } : k === 'dresser' ? { key: 'woodwork' } : {});
     for (const { s, x } of rest) if (x.len >= w + 0.05 && hug(L, rc, s, x, k, { d, minW: w, maxW: w, front: k === 'plant' ? 0 : 0.6, extra })) break;
   }
 }
@@ -1091,7 +1094,7 @@ function study(L, rc, ctx) {
   const want = Math.max(1.2, Math.min(3.2, (ctx.books * 0.8) / 5));
   const kind = ctx.avoid.has('openshelf') ? 'tallUnit' : 'bookshelf';
   const h = Math.min(2.4, ctx.wallH - 0.2);
-  for (const { s, x } of shelfSides) if (hug(L, rc, s, x, kind, { d: 0.34, minW: 0.8, maxW: want, front: 0.6, extra: (w) => ({ w, h, key: 'woodwork', seed: 4 }) })) break;
+  for (const { s, x } of shelfSides) if (hug(L, rc, s, x, kind, { d: 0.34, minW: 0.8, maxW: want, front: 0.6, extra: (w) => ({ w, h, key: 'cabinetry', seed: 4 }) })) break;
   const sp = shelfSides[shelfSides.length - 1];
   if (sp) L.try(room, 'plant', at(room, sp.s, mid(sp.x), sp.s.thick + 0.3), 0.45, 0.45, { variant: 'tall', seed: 21 });
 }
@@ -1481,9 +1484,10 @@ export function furnishReport(plan0, walls0, profile = null, items = null, { sty
     const need = sp?.needsStoreroom ? 1 : 0;
     if (need || rooms.length) add({ key: 'store', kind: 'store', room: rooms[0]?.id, unit: 'count', need: sp ? need : null, target: need, placed: rooms.length, hint: HINTS.store, items: pick(rooms, () => true) });
   }
-  // 书墙（储物间的层架不算）
+  // 书墙（储物间的层架不算：放在储物间里的；旧方案里储物间的层架是 key 'cabinetry' + seed 9）
   {
-    const list = its.filter((i) => i.kind === 'bookshelf' && i.key !== 'cabinetry');
+    const storeIds = new Set(ofType('store').map((r) => r.id));
+    const list = its.filter((i) => i.kind === 'bookshelf' && !storeIds.has(i.room) && !(i.key === 'cabinetry' && i.seed === 9));
     const need = sp?.bookshelfMM || 0;
     if (need || list.length) add({ key: 'books', kind: 'bookshelf', room: list[0]?.room, unit: 'mm', need: sp ? need : null, target: need, placed: sumW(list), hint: HINTS.books, items: list });
   }

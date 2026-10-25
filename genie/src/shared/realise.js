@@ -5,13 +5,16 @@
 //   → 雷区（avoidMaterials）、生活方式（有猫狗 → 沙发不用丝绒；天天爆炒 / 有小孩 → 人造石台面）只换没锁的表面
 //   → 调和（harmonise）：留下来的颜色偏暖、案例偏冷（或反过来）差得多时，只把软装（地毯、窗帘、点缀、床品）换成两者之间的色温
 //   → 明暗建议（只建议、从不自动换）：留下来的深色地板 + 深色墙 → 建议墙亮一点；深色墙 + 深色地板 → 建议浅一点的木地板。
-// → { materials, locked, softened, suggestions, mood, time, style, caseId, rev }
+//   → 溪岸板材（SPEC §4.4 + R11 d / R12）：案例原板（case.boards，这台设备认得的）先盖上去；最后把公司做的表面
+//     （柜体、主题墙板）里还是程序化材质的，换成最接近的真实板材（boards/match.js toBoards）。锁住的从来不换。
+// → { materials, locked, softened, suggestions, boardPicks, mood, time, style, caseId, rev }
 
 import { MATERIALS, MAT_BY_ID, SLOT_BY_ID, fits } from './materials.js';
 import { MOOD_BY_ID, tagsOf } from './moods.js';
 import { DREAMER_BY_CODE } from './dreamers.js';
 import { avoidMaterials, lifestyleSwaps } from './profile.js';
 import { COLOR_TAGS, CHROMATIC } from './colorTags.js';
+import { exactBoards, toBoards } from './boards/match.js';
 
 /** 软装：调和色温时只动这几个 */
 export const SOFT_SLOTS = ['rugs', 'curtains', 'accents', 'bedding'];
@@ -136,12 +139,18 @@ export function caseBase(caseObj, profile) {
  */
 export function realiseCase({ caseObj = null, keep = null, profile = null, base = null, raw = false } = {}) {
   const start = { ...(isObj(base) ? base : caseBase(caseObj, profile)) };
+  // 案例原板（设计师真的用的那几块）先盖上去 —— 在「放不上就退回温暖预设」之前（不认得的 id 不盖：那一面留着 case.materials 的近似材质）
+  const exact = exactBoards(caseObj);
+  Object.assign(start, exact);
   // 不合法的（放不上那个表面）退回温暖预设
   for (const s of ALL) if (start[s] && !fits(start[s], s)) start[s] = MOOD_BY_ID.cozy.materials[s];
   const locked = locksOf(keep);
   const isLocked = (slot) => locked[slot] != null;
   let materials = { ...start, ...locked };
   const softened = [];
+  /** 公司的表面用的是哪块板：{ slot: { id, exact, why, dE?, near?, from? } }（界面：「案例原板」/「最接近」/「示意色」） */
+  const boardPicks = {};
+  for (const [slot, id] of Object.entries(exact)) if (!isLocked(slot)) boardPicks[slot] = { id, exact: true, why: 'case' };
   // 雷区：只换没锁的
   const avoid = Array.isArray(profile?.avoid) ? profile.avoid : [];
   if (avoid.length) {
@@ -150,6 +159,8 @@ export function realiseCase({ caseObj = null, keep = null, profile = null, base 
       if (isLocked(sw.slot)) continue;
       materials[sw.slot] = sw.to;
       softened.push({ slot: sw.slot, from: sw.from, to: sw.to, why: 'avoid' });
+      // 案例原板踩到客人的雷区被换掉了：记下来，员工看得到为什么不是案例那块
+      if (boardPicks[sw.slot]?.exact) boardPicks[sw.slot] = { id: MAT_BY_ID[sw.to]?.board ? sw.to : null, from: sw.from, exact: false, why: 'avoid' };
     }
   }
   // 生活方式：只换没锁的
@@ -166,6 +177,14 @@ export function realiseCase({ caseObj = null, keep = null, profile = null, base 
     softened.push(...h.softened);
     suggestions = h.suggestions;
   }
+  // 公司的表面换成最接近的真实板材（「还原案例原样」= raw：只用案例原板，不再换）
+  if (!raw) {
+    const keepExact = Object.fromEntries(Object.entries(boardPicks).filter(([, p]) => p.exact).map(([s]) => [s, true]));
+    const tb = toBoards(materials, { locked, avoid, exact: keepExact });
+    materials = tb.materials;
+    // 案例原板被雷区换掉的那一面：还是记「为什么不是案例那块」（why 'avoid'），换上的板跟着更新
+    for (const [slot, p] of Object.entries(tb.picks)) boardPicks[slot] = boardPicks[slot]?.why === 'avoid' ? { ...boardPicks[slot], id: p.id ?? boardPicks[slot].id, near: p.near, dE: p.dE } : p;
+  }
   // 锁住的再写一次（保险：上面任何一步都不该动它们）
   Object.assign(materials, locked);
   const d = DREAMER_BY_CODE[profile?.code];
@@ -176,6 +195,7 @@ export function realiseCase({ caseObj = null, keep = null, profile = null, base 
     locked,
     softened,
     suggestions,
+    boardPicks,
     mood,
     time,
     style: isObj(caseObj?.furniture) ? { ...caseObj.furniture } : {},

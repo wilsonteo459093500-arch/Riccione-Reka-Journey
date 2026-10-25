@@ -7,8 +7,10 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { boxGeo, cylGeo, sphereGeo, merge, placedBox, curtainGeo, softBoxGeo, pillowGeo, slabGeo, edgeBarGeo, latheGeo, taperBoxGeo, tubeGeo, torusGeo, leafGeo, bendGeo, drapeGeo, derived, flutedGeo, archGeo } from './geom.js';
-import { SLOT_BY_ID } from '../../shared/materials.js';
+import { SLOT_BY_ID, BOARD_SLOTS } from '../../shared/materials.js';
 import { rng } from '../../shared/noise.js';
+import { CONFIG } from '../../shared/config.js';
+import { shiftPartUV, partSize } from './boardUV.js';
 
 let LIB = null;
 let OWN = {};
@@ -196,6 +198,7 @@ const pick = (arr, r) => arr[Math.floor(r() * arr.length) % arr.length];
 // ───────────────────────── 合并（每件家具按材质合并成几个网格） ─────────────────────────
 
 const KEEP_ATTR = ['position', 'normal', 'uv', 'color'];
+const _wp = new THREE.Vector3();
 function prep(g, color) {
   for (const name of Object.keys(g.attributes)) if (!KEEP_ATTR.includes(name)) g.deleteAttribute(name);
   if (!g.attributes.normal) g.computeVertexNormals();
@@ -217,8 +220,10 @@ function prep(g, color) {
 /**
  * 同一件家具里，同材质（同投影设置）的静态网格合并成一个。
  * 单独保留：实例（叶子）、灯泡、透明（玻璃）、主题墙两种模式、userData.keep。
+ * seed（家具 id）：柜体 / 主题墙这两个能换溪岸板材的表面，每个零件的木纹挪到板上不同的位置（boardUV.js partShift；
+ * 同一块板裁出来的几扇门不会一模一样）。CONFIG.boards.shuffle = false 关掉。
  */
-function compact(root, { clone = false } = {}) {
+function compact(root, { clone = false, seed = null } = {}) {
   root.updateMatrixWorld(true);
   const buckets = new Map();
   const keep = [];
@@ -247,7 +252,15 @@ function compact(root, { clone = false } = {}) {
       continue;
     }
     const color = !!b.m.vertexColors;
-    const geos = b.list.map((o) => prep(o.geometry.clone().applyMatrix4(o.matrixWorld), color));
+    const shuffle = seed != null && CONFIG.boards?.shuffle !== false && BOARD_SLOTS.includes(b.m.userData.slot);
+    const geos = b.list.map((o) => {
+      const g = o.geometry.clone().applyMatrix4(o.matrixWorld);
+      if (shuffle) {
+        const p = o.getWorldPosition(_wp);
+        shiftPartUV(g, `${seed}|${Math.round(p.x * 1000)},${Math.round(p.y * 1000)},${Math.round(p.z * 1000)}`, partSize(o.geometry));
+      }
+      return prep(g, color);
+    });
     const g = mergeGeometries(geos, false);
     geos.forEach((x) => x.dispose());
     for (const o of b.list) if (!o.geometry.userData.cached) o.geometry.dispose();
@@ -1443,19 +1456,19 @@ function wardrobe({ w = 2.4, h = 2.6, handle = 'none' }) {
   return group(parts);
 }
 
-/** 梳妆台 / 斗柜：三排抽屉 + 黄铜横拉手、细脚；墙上一面拱形镜 */
-function dresser({ w = 1.2 }) {
+/** 梳妆台 / 斗柜：三排抽屉 + 黄铜横拉手、细脚；墙上一面拱形镜。key = 柜身用哪个表面（自动摆的是 'woodwork'：活动家具；旧方案没有 key = 柜体） */
+function dresser({ w = 1.2, key = 'cabinetry' }) {
   const D = 0.45;
   const y0 = 0.14;
   const H = 0.68;
   const zF = D / 2 - 0.018;
-  const parts = [B(w, H, D - 0.018, 'cabinetry', 0, y0, -0.009, 0.003)];
+  const parts = [B(w, H, D - 0.018, key, 0, y0, -0.009, 0.003)];
   parts.push(...squareLegs(corners(w / 2 - 0.05, D / 2 - 0.05), y0, 'woodwork', 0.036, 0.026));
   const cols = w > 0.95 ? 2 : 1;
   const cwid = (w - 0.012) / cols;
   for (let c = 0; c < cols; c++) {
     const x0 = -w / 2 + 0.006 + cwid * c;
-    parts.push(...drawerStack(x0, x0 + cwid, y0 + 0.006, y0 + H - 0.006, zF, 'cabinetry', [0.36, 0.34, 0.3], { handle: 'barH' }));
+    parts.push(...drawerStack(x0, x0 + cwid, y0 + 0.006, y0 + H - 0.006, zF, key, [0.36, 0.34, 0.3], { handle: 'barH' }));
   }
   parts.push(M(archGeo(0.62, 0.92, 0.02), 'metal', 0, y0 + H + 0.2, -D / 2 + 0.012));
   parts.push(M(archGeo(0.6, 0.9, 0.01), 'mirror', 0, y0 + H + 0.21, -D / 2 + 0.02));
@@ -1509,10 +1522,10 @@ function officeChair(x = 0, z = 0) {
   return g;
 }
 
-function kidsBed({ w = 1.0, d = 2.0 }) {
+function kidsBed({ w = 1.0, d = 2.0, key = 'cabinetry' }) {
   const parts = bed({ w, d, kids: true });
-  // 床边一个木玩具箱 + 一个布球
-  parts.push(SB(0.6, 0.34, 0.4, 'cabinetry', w / 2 + 0.45, 0, d / 2 - 0.3, { r: 0.02, seg: 0.12 }));
+  // 床边一个木玩具箱 + 一个布球。key = 玩具箱用哪个表面（自动摆的是 'woodwork'：活动家具；旧方案没有 key = 柜体）
+  parts.push(SB(0.6, 0.34, 0.4, key, w / 2 + 0.45, 0, d / 2 - 0.3, { r: 0.02, seg: 0.12 }));
   parts.push(B(0.18, 0.03, 0.006, 'black', w / 2 + 0.45, 0.26, d / 2 - 0.1, 0, { shadow: false }));
   parts.push(M(sphereGeo(0.09, 20), 'accents', w / 2 + 0.3, 0.43, d / 2 - 0.3));
   return group(parts);
@@ -1957,7 +1970,7 @@ export function buildItem(item, ctx = {}) {
   const def = CATALOG[item.kind];
   if (!def) return null;
   const raw = def.build({ ...item, h: item.h || ctx.wallH || 2.8, palette: ctx.palette, key: item.key });
-  const g = compact(raw);
+  const g = compact(raw, { seed: item.id ?? item.kind });
   g.position.set(item.x, item.y || 0, item.z);
   g.rotation.y = ((item.rot || 0) * Math.PI) / 180;
   g.userData = { itemId: item.id, kind: item.kind };

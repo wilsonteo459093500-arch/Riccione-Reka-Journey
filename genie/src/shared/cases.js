@@ -10,10 +10,17 @@
 // 永远不用：门铃那题、反应时间、设计师的谈话提示、预算。理由文字（reasonText）同样只说这些。
 //
 // 没有任何颜色写死：案例的色板从材质 id 推出来（MAT_BY_ID[id].color）。
+//
+// 溪岸板材（SPEC §4.2 + §8 R11）：case.boards = { cabinetry?, feature? } 是设计师真的用的那几块板（板材 id，'sail-7'），
+// case.boardsAlso = [id…] 是照片里还看得到的别的板（例如织系列编织门：只显示、不上 3D）。
+// 板材 id 就算这台设备还不认得也留着（员工可能先填 23号、板材包后来才导入）；case.materials[slot] 永远留一个程序化的
+// 近似材质（板材的 near）—— 旧版本、手机、没导入板材包的设备照样看得懂这个案例。
 
 import { CONFIG } from './config.js';
 import { t, L, isEn } from './i18n.js';
-import { MAT_BY_ID, SLOTS, SLOT_BY_ID, fits } from './materials.js';
+import { MAT_BY_ID, SLOTS, SLOT_BY_ID, fits, BOARD_SLOTS } from './materials.js';
+import { BOARD_ID_RE } from './boards/library-api.js';
+import { exactBoards, idLabel } from './boards/match.js';
 import { tagsOf } from './moods.js';
 import { AXES, HIDDEN_AXES, DREAMERS, DREAMER_BY_CODE, codeOf } from './dreamers.js';
 import * as FLOW from '../quiz/flow.js';
@@ -151,10 +158,45 @@ const txt = (v) => (isObj(v) ? { zh: String(v.zh ?? ''), en: String(v.en ?? '') 
 const num = (v, d = null) => (Number.isFinite(+v) && v !== '' && v != null ? +v : d);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
-/** 案例的「有效材质」：员工没填的表面用主牌的材质补上（真实照片常常只标了几样） */
+/** 案例的「有效材质」：员工没填的表面用主牌的材质补上（真实照片常常只标了几样）；这台设备认得的案例原板盖在上面 */
 export function caseMaterials(c) {
   const d = DREAMER_BY_CODE[c?.style?.dreamers?.[0]];
-  return { ...(d?.materials || {}), ...(c?.materials || {}) };
+  return { ...(d?.materials || {}), ...(c?.materials || {}), ...exactBoards(c) };
+}
+
+/** 板材 id 的样子对不对（'sail-7'、'sail-c2810'…；R8：id 一旦给了就不变） */
+export const isBoardId = (id) => typeof id === 'string' && BOARD_ID_RE.test(id);
+
+/** 这个案例用到的溪岸板材（表面的 + 「还用了」的），去重：[{ id, slot | null, known }]（known = 这台设备的板材库里有） */
+export function caseBoardList(c) {
+  const out = [];
+  const seen = new Set();
+  const add = (id, slot) => {
+    if (!isBoardId(id) || seen.has(id)) return;
+    seen.add(id);
+    out.push({ id, slot, known: !!MAT_BY_ID[id]?.board });
+  };
+  for (const slot of BOARD_SLOTS) add(c?.boards?.[slot], slot);
+  for (const id of c?.boardsAlso || []) add(id, null);
+  return out;
+}
+
+/**
+ * 员工在案例库里给一个表面选板（id = null 清掉）：case.boards[slot] = id，并且 **每次** 把 case.materials[slot] 写成
+ * 这块板最接近的程序化材质（near；R11 a）—— 许愿之旅的配对（不读板材包）、旧版本、手机都和案例原板一致。直接改 c（编辑器的 patch 里用）。
+ */
+export function setCaseBoard(c, slot, id) {
+  if (!BOARD_SLOTS.includes(slot)) return c;
+  c.boards = { ...(isObj(c.boards) ? c.boards : {}) };
+  if (!isBoardId(id)) {
+    delete c.boards[slot];
+    return c;
+  }
+  c.boards[slot] = id;
+  c.boardsAlso = (c.boardsAlso || []).filter((x) => x !== id);
+  const near = MAT_BY_ID[id]?.board?.near;
+  if (near && MAT_BY_ID[near] && !MAT_BY_ID[near].board && fits(near, slot)) c.materials = { ...(c.materials || {}), [slot]: near };
+  return c;
 }
 
 export const isConcept = (c) => c?.kind !== 'project' && c?.kind !== 'showroom';
@@ -210,7 +252,20 @@ export function migrateCase(raw) {
   }
   const rooms = [...new Set((Array.isArray(r.rooms) ? r.rooms : images.map((im) => im.room)).filter((x) => ROOM_BY_ID[x] && x !== 'plan3d'))];
   const materials = {};
-  for (const [slot, id] of Object.entries(isObj(r.materials) ? r.materials : {})) if (SLOT_BY_ID[slot] && MAT_BY_ID[id]) materials[slot] = id;
+  for (const [slot, id] of Object.entries(isObj(r.materials) ? r.materials : {})) if (SLOT_BY_ID[slot] && MAT_BY_ID[id] && !MAT_BY_ID[id].board) materials[slot] = id;
+  // 溪岸板材：只收样子对的 id（不认得的也留着：板材包可能还没导入）；「还用了」去重、最多 8 块
+  const boards = {};
+  for (const slot of BOARD_SLOTS) if (isBoardId(r.boards?.[slot])) boards[slot] = r.boards[slot];
+  // 手写 / 别的工具把板材 id 写进了 materials：挪到 boards，materials 留它的近似材质
+  for (const slot of BOARD_SLOTS) {
+    const id = r.materials?.[slot];
+    if (!isBoardId(id) || boards[slot]) continue;
+    boards[slot] = id;
+    const near = MAT_BY_ID[id]?.board?.near;
+    if (near && MAT_BY_ID[near] && !MAT_BY_ID[near].board && fits(near, slot)) materials[slot] = near;
+  }
+  const onSlots = new Set(Object.values(boards));
+  const boardsAlso = [...new Set((Array.isArray(r.boardsAlso) ? r.boardsAlso : []).filter((id) => isBoardId(id) && !onSlots.has(id)))].slice(0, 8);
   const furniture = isObj(r.furniture) ? { ...r.furniture } : {};
   const supplies = isObj(r.supplies) ? r.supplies : {};
   const status = STATUSES.includes(r.status) ? r.status : kind === 'project' ? 'draft' : 'live';
@@ -244,6 +299,8 @@ export function migrateCase(raw) {
       features: [...new Set(style.features || r.features || r.tags || [])].filter((f) => FEATURES.some((x) => x.id === f)),
     },
     materials,
+    boards,
+    boardsAlso,
     mood: ['cozy', 'bright', 'moody'].includes(r.mood) ? r.mood : 'cozy',
     time: num(r.time, null),
     furniture,
@@ -265,6 +322,8 @@ export function caseWarnings(c) {
   const imgs = (c?.images || []).filter((im) => im.room !== 'plan3d' && im.kind !== 'plan3d');
   const none = imgs.filter((im) => !ROOM_BY_ID[im.room]).length;
   if (imgs.length && none * 2 > imgs.length) out.push({ field: 'images', zh: '{0} / {1} 张照片还没标房间', vars: [none, imgs.length] });
+  // 填了、但这台设备的板材库里还没有的板（不挡上架：导入板材包以后自动显示）
+  for (const b of caseBoardList(c)) if (!b.known) out.push({ field: 'boards', zh: '板号 {0} 还不在板材库里（导入板材包后会自动显示）', vars: [idLabel(b.id)] });
   return out;
 }
 
@@ -278,6 +337,11 @@ export function validateCase(c, { forLive = c?.status === 'live' } = {}) {
   for (const [slot, id] of Object.entries(c.materials || {})) {
     if (!MAT_BY_ID[id]) err('materials', '有不认识的材质');
     else if (!fits(id, slot)) err('materials', '有材质放在了不合适的表面');
+  }
+  // 溪岸板材：认得的板放不上那个表面（例如织系列放在柜体上）= 错；还不认得的只是提醒（caseWarnings）
+  for (const [slot, id] of Object.entries(c.boards || {})) {
+    if (!BOARD_SLOTS.includes(slot) || !isBoardId(id)) err('boards', '有不认识的板号');
+    else if (MAT_BY_ID[id]?.board && !fits(id, slot)) err('boards', '有溪岸板材放在了不合适的表面');
   }
   if (forLive) {
     if (!c.title?.en?.trim()) err('title', '请填英文标题');
@@ -348,12 +412,22 @@ export function caseNoGoSources(c) {
   const out = [];
   for (const f of c?.style?.features || []) out.push({ tag: f, slot: null, soft: false });
   const slots = [...HERO, ...((c?.rooms || []).includes('kitchen') ? ['countertop'] : [])];
+  const boards = exactBoards(c);
   for (const s of slots) {
-    const m = MAT_BY_ID[c?.materials?.[s]];
-    if (!m) continue;
-    const tags = tagsOf(m);
-    if (m.tex?.pattern === 'herringbone') tags.add('herringbone');
-    for (const tag of tags) out.push({ tag, slot: s, soft: tag === 'glossy' && (s === 'countertop' || !isHighGloss(m)) });
+    // 这一面的程序化材质 + 这台设备认得的案例原板（两样的标签合在一起：R11 b —— 不改成主牌补齐的那一套）
+    const seen = new Set();
+    for (const m of [MAT_BY_ID[c?.materials?.[s]], MAT_BY_ID[boards[s]]]) {
+      if (!m) continue;
+      const tags = tagsOf(m);
+      if (m.tex?.pattern === 'herringbone') tags.add('herringbone');
+      for (const tag of tags) {
+        const soft = tag === 'glossy' && (s === 'countertop' || !isHighGloss(m));
+        const key = `${tag}|${soft}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({ tag, slot: s, soft });
+      }
+    }
   }
   return out;
 }
@@ -448,7 +522,9 @@ function scoreOne(p, c, picksMats) {
     const want = h.scope.includes('whole') ? ['living', 'kitchen', 'master'] : h.scope;
     add('scope', W.scope * (want.filter((r) => (c.rooms || []).includes(r)).length / want.length));
   }
-  const hit = [...new Set(Object.values(c.materials || {}).filter((id) => picksMats.has(id)))];
+  // 案例原板的近似材质（near）也算：客人在直觉题里选的是程序化材质
+  const nears = Object.values(exactBoards(c)).map((id) => MAT_BY_ID[id].board.near);
+  const hit = [...new Set([...Object.values(c.materials || {}), ...nears].filter((id) => picksMats.has(id)))];
   add('pick', W.pick * Math.min(3, hit.length));
   if (c.kind === 'project') add('real', W.real);
   return { score: parts.reduce((s, x) => s + x.v, 0), parts, wishes, pickHits: hit };
@@ -465,11 +541,18 @@ function reasonsOf(p, c, m, picks) {
   if (d && ds[0] === p.code) out.push({ kind: 'card', key: '和你的牌一样：{0}', vars: [{ zh: d.zh, en: d.en }] });
   // 你选的图：最多两条，而且是两张不同的图（第一条被别的卡片用掉时，还有第二张可以说）
   const labels = new Set();
+  const exact = exactBoards(c);
+  const boardSlot = (id) => BOARD_SLOTS.find((s) => exact[s] && (c.materials?.[s] === id || MAT_BY_ID[exact[s]].board.near === id));
   for (const id of m.pickHits) {
     const label = picks.get(id);
-    if (!label || labels.has(label) || !HERO.some((s) => c.materials?.[s] === id)) continue;
+    const bs = boardSlot(id);
+    if (!label || labels.has(label) || (!bs && !HERO.some((s) => c.materials?.[s] === id))) continue;
     const mat = MAT_BY_ID[id];
-    out.push({ kind: 'pick', key: '你选了「{0}」—— 这个家也是{1}', vars: [label, { zh: mat.zh, en: mat.en.toLowerCase() }] });
+    // 这一面是案例原板：说出那块板（客人看的名字：序号 + 名字，没有厂家编号）
+    if (bs) {
+      const b = MAT_BY_ID[exact[bs]];
+      out.push({ kind: 'pick', key: '你选了「{0}」—— 这个家用的就是溪岸 {1}', vars: [label, { zh: b.zh, en: b.en }] });
+    } else out.push({ kind: 'pick', key: '你选了「{0}」—— 这个家也是{1}', vars: [label, { zh: mat.zh, en: mat.en.toLowerCase() }] });
     labels.add(label);
     if (labels.size >= 2) break;
   }

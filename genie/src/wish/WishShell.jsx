@@ -339,6 +339,7 @@ export default function WishShell({ zen, host = '', startLang, greet = false, on
     try {
       sessionStorage.removeItem(SESSION_KEY);
       sessionStorage.removeItem('genie.home.v1'); // 「带它回家」走到哪一步（HomeJourney 的 SESSION_KEY）
+      sessionStorage.removeItem('genie.boardsLean'); // 上一位客人时显卡吃紧过（板材只用 256）：新客人从清楚的 1024 开始（boardTex.js）
     } catch {
       /* ignore */
     }

@@ -1,0 +1,330 @@
+{
+ "_about": "MEASURED FEATURES ONLY (numbers from src/cases/boards/analyse.js statsOf + seamsOf), never pixels. real-* = the owner's 5 sample scans (kept in scratch, not in this public repo; R13); synth-* = our own synthetic scans (boards/design/synth.py). s26 border = detectBorder() on the real woven sample.",
+ "rows": [
+  {
+   "id": "real-s22",
+   "truth": "solid",
+   "px": [
+    1024,
+    1024
+   ],
+   "Lstd": 2.46,
+   "LstdFine": 1.65,
+   "cohOverview": 0.047,
+   "cohFine": 0.293,
+   "perRows": 0.159,
+   "perCols": 0.373,
+   "period": 8.5,
+   "grainDeg": 1.1,
+   "hex": "#878480",
+   "seam": {
+    "x": {
+     "seam": 0.0146,
+     "inner": 0.0143,
+     "ok": true
+    },
+    "y": {
+     "seam": 0.0294,
+     "inner": 0.0285,
+     "ok": true
+    }
+   }
+  },
+  {
+   "id": "real-s23",
+   "truth": "wood",
+   "px": [
+    2000,
+    1479
+   ],
+   "Lstd": 1.08,
+   "LstdFine": 1.17,
+   "cohOverview": 0.859,
+   "cohFine": 0.679,
+   "perRows": 0.125,
+   "perCols": 0.091,
+   "period": 15.5,
+   "grainDeg": 0.2,
+   "hex": "#5D524B",
+   "seam": {
+    "x": {
+     "seam": 0.0109,
+     "inner": 0.0077,
+     "ok": true
+    },
+    "y": {
+     "seam": 0.0107,
+     "inner": 0.0073,
+     "ok": true
+    }
+   }
+  },
+  {
+   "id": "real-s24",
+   "truth": "wood",
+   "px": [
+    2000,
+    929
+   ],
+   "Lstd": 1.47,
+   "LstdFine": 1.53,
+   "cohOverview": 0.815,
+   "cohFine": 0.766,
+   "perRows": 0.149,
+   "perCols": 0.114,
+   "period": 15.5,
+   "grainDeg": 179.8,
+   "hex": "#614D3F",
+   "seam": {
+    "x": {
+     "seam": 0.0227,
+     "inner": 0.0046,
+     "ok": false
+    },
+    "y": {
+     "seam": 0.0221,
+     "inner": 0.0211,
+     "ok": true
+    }
+   }
+  },
+  {
+   "id": "real-s25",
+   "truth": "solid",
+   "px": [
+    1000,
+    1000
+   ],
+   "Lstd": 0.44,
+   "LstdFine": 0.25,
+   "cohOverview": 0.02,
+   "cohFine": 0.021,
+   "perRows": 0.107,
+   "perCols": 0.11,
+   "period": 11.5,
+   "grainDeg": 86.3,
+   "hex": "#F9F8F6",
+   "seam": {
+    "x": {
+     "seam": 0.0087,
+     "inner": 0.0084,
+     "ok": true
+    },
+    "y": {
+     "seam": 0.0082,
+     "inner": 0.0078,
+     "ok": true
+    }
+   }
+  },
+  {
+   "id": "real-s26",
+   "truth": "weave",
+   "px": [
+    1153,
+    1620
+   ],
+   "Lstd": 10.04,
+   "LstdFine": 9.57,
+   "cohOverview": 0.302,
+   "cohFine": 0.394,
+   "perRows": 0.892,
+   "perCols": 0.843,
+   "period": 14,
+   "grainDeg": 129.4,
+   "hex": "#5C4E47",
+   "seam": {
+    "x": {
+     "seam": 0.0643,
+     "inner": 0.0769,
+     "ok": true
+    },
+    "y": {
+     "seam": 0.0508,
+     "inner": 0.0402,
+     "ok": true
+    }
+   }
+  },
+  {
+   "id": "synth-15号卡斯楠",
+   "truth": "wood",
+   "px": [
+    1220,
+    2700
+   ],
+   "Lstd": 3.01,
+   "LstdFine": 3.21,
+   "cohOverview": 0.699,
+   "cohFine": 0.888,
+   "perRows": 0.263,
+   "perCols": 0.115,
+   "period": 17,
+   "grainDeg": 91.3,
+   "hex": "#6F4229",
+   "seam": {
+    "x": {
+     "seam": 0.0473,
+     "inner": 0.016,
+     "ok": false
+    },
+    "y": {
+     "seam": 0.0395,
+     "inner": 0.0035,
+     "ok": false
+    }
+   }
+  },
+  {
+   "id": "synth-2810",
+   "truth": "solid",
+   "px": [
+    2000,
+    2000
+   ],
+   "Lstd": 0.07,
+   "LstdFine": 0.06,
+   "cohOverview": 0.034,
+   "cohFine": 0.067,
+   "perRows": 0.146,
+   "perCols": 0.102,
+   "period": 15,
+   "grainDeg": 92.4,
+   "hex": "#2E453D",
+   "seam": {
+    "x": {
+     "seam": 0.0009,
+     "inner": 0.0001,
+     "ok": true
+    },
+    "y": {
+     "seam": 0.0008,
+     "inner": 0.0001,
+     "ok": true
+    }
+   }
+  },
+  {
+   "id": "synth-2号红橡乱纹XA-TP-10",
+   "truth": "wood",
+   "px": [
+    3000,
+    3000
+   ],
+   "Lstd": 2.29,
+   "LstdFine": 2.7,
+   "cohOverview": 0.67,
+   "cohFine": 0.897,
+   "perRows": 0.125,
+   "perCols": 0.229,
+   "period": 17.5,
+   "grainDeg": 178.9,
+   "hex": "#3F3F3F",
+   "seam": {
+    "x": {
+     "seam": 0.0328,
+     "inner": 0.0039,
+     "ok": false
+    },
+    "y": {
+     "seam": 0.0316,
+     "inner": 0.012,
+     "ok": false
+    }
+   }
+  },
+  {
+   "id": "synth-2白橡直纹",
+   "truth": "wood",
+   "px": [
+    4880,
+    2440
+   ],
+   "Lstd": 1.95,
+   "LstdFine": 3.03,
+   "cohOverview": 0.137,
+   "cohFine": 0.861,
+   "perRows": 0.147,
+   "perCols": 0.403,
+   "period": 14,
+   "grainDeg": 0.2,
+   "hex": "#A48D6C",
+   "seam": {
+    "x": {
+     "seam": 0.0477,
+     "inner": 0.0041,
+     "ok": false
+    },
+    "y": {
+     "seam": 0.056,
+     "inner": 0.0304,
+     "ok": false
+    }
+   }
+  },
+  {
+   "id": "synth-6162",
+   "truth": "solid",
+   "px": [
+    2000,
+    2000
+   ],
+   "Lstd": 0.24,
+   "LstdFine": 0.21,
+   "cohOverview": 0.01,
+   "cohFine": 0.006,
+   "perRows": 0.129,
+   "perCols": 0.115,
+   "period": 12.5,
+   "grainDeg": 97.1,
+   "hex": "#ACB095",
+   "seam": {
+    "x": {
+     "seam": 0.0043,
+     "inner": 0.0011,
+     "ok": false
+    },
+    "y": {
+     "seam": 0.0045,
+     "inner": 0.0014,
+     "ok": false
+    }
+   }
+  },
+  {
+   "id": "synth-7号黑胡桃XA-TP-01",
+   "truth": "wood",
+   "px": [
+    4880,
+    2440
+   ],
+   "Lstd": 2.65,
+   "LstdFine": 3.51,
+   "cohOverview": 0.52,
+   "cohFine": 0.94,
+   "perRows": 0.133,
+   "perCols": 0.32,
+   "period": 16.5,
+   "grainDeg": 0.3,
+   "hex": "#5A4133",
+   "seam": {
+    "x": {
+     "seam": 0.0432,
+     "inner": 0.0041,
+     "ok": false
+    },
+    "y": {
+     "seam": 0.0497,
+     "inner": 0.0154,
+     "ok": false
+    }
+   }
+  }
+ ],
+ "s26Border": {
+  "l": 47,
+  "r": 55,
+  "t": 62,
+  "b": 58
+ }
+}

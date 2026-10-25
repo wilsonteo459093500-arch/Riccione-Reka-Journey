@@ -83,6 +83,14 @@ export const CONFIG = {
   // 只在员工的设备上出现（许愿模式 / ?staff=1，见 home.js askBudgetOn）；答案只存在这台设备的 genie.staffnotes.v1，
   // 永远不进客人的档案、牌、蓝图、WhatsApp 文字或任何链接。false = 不问（设计师见面时再谈）。
   home: { askBudget: true },
+  // 溪岸板材（src/shared/boards/）：公司能订的真实板材贴图，只用在柜体（含室内门）和主题墙板上。
+  // 板材库（library.js）默认是空的：员工在案例库「板材 · Boards」导入板材文件夹 / 板材包，或由负责人用 scripts/import-boards.mjs 合进来。
+  // on：false = 所有地方都不显示板材（案例照常用程序化材质）· base：贴图的网址前缀（public/boards/<id>/{256,1024,chip}.webp；
+  //   业主 2026-10-24：压缩后的板材贴图可以公开）· photo：false = 板材一律用「近似色」的程序化贴图（不联网、不读贴图）·
+  // realise：案例 / 梦想家配色在公司的表面上换成最接近的真实板材 · factoryCode：厂家编号只给员工看 ·
+  // matchDE：配色换板材时颜色差多少（ΔE2000）以内算「最接近」，再远就保留示意色 ·
+  // shuffle：同一块板裁出来的几扇门各取板上不同的位置（真实的柜子就是这样；false = 每扇门都取板的正中间）
+  boards: { on: true, base: '/boards/', photo: true, realise: true, factoryCode: 'staff', matchDE: 12, shuffle: true },
 };
 
 export function hostFromCode(code) {

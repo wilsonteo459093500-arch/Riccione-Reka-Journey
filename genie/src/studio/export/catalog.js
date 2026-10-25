@@ -8,6 +8,7 @@
 
 import { CATALOG } from '../engine/furniture.js';
 import { SLOT_BY_ID } from '../../shared/materials.js';
+import { factoryCode } from '../../shared/boards/match.js';
 import { bi } from './names.js';
 
 export const CATEGORY = {
@@ -42,10 +43,11 @@ export const SOURCED = { countertop: { zh: '台面 · 外购', en: 'Worktop (sou
 
 /**
  * sAil 板材编号（以后填：材质 id → 编号，例如 'white-oak': 'SA-xxxx'）。写进 3D 材质名（dae.js materialName）。
+ * 溪岸板材（材质 id 'sail-7'）自己带厂家编号（XA-TP-01）：从板材库读；色号（2810）本来就在名字里，不再重复。
  * 外购的表面（台面）永远没有编号。
  */
 export const BOARD_CODE = {};
-export const boardCode = (slot, id) => (SOURCED[slot] ? null : BOARD_CODE[id] || null);
+export const boardCode = (slot, id) => (SOURCED[slot] ? null : BOARD_CODE[id] || factoryCode(id) || null);
 
 const tight = (s) => s.replace(/\s*·\s*/g, '·');
 
@@ -62,7 +64,10 @@ export function slotShort(slot) {
 }
 
 /** DXF 属性 MATERIALS 的一段：cabinetry=white-oak 白橡；外购的加一个词：countertop=quartz-travertine 外购 石英石·洞石纹 */
-export const matTag = (m) => `${m.slot}=${m.id}${SOURCED[m.slot] ? ` ${SOURCED[m.slot].tag}` : ''} ${m.zh}`;
+export const matTag = (m) => {
+  const code = boardCode(m.slot, m.id);
+  return `${m.slot}=${m.id}${SOURCED[m.slot] ? ` ${SOURCED[m.slot].tag}` : ''} ${m.zh}${code ? ` ${code}` : ''}`;
+};
 export const catLabel = (cat) => bi(CAT_INFO[cat].label);
 
 /** 名义高度（m）：高柜 / 衣柜 / 书墙… 用 item.h（没有就是这一层的天花高） */

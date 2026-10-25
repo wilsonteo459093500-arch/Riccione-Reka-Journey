@@ -1,11 +1,12 @@
 // 档案 → 一段排好版的文字（WhatsApp 给设计师 / 复制到 CRM），跟着当前语言出中文或英文。
 
 import { DREAMER_BY_CODE, AXES } from './dreamers.js';
-import { MAT_BY_ID, SLOT_BY_ID } from './materials.js';
+import { MAT_BY_ID, SLOT_BY_ID, fits } from './materials.js';
 import { BRAND, CONFIG, hostFromCode } from './config.js';
 import { insights } from './profile.js';
 import { t, L, isEn } from './i18n.js';
-import { STATUS_BY_V, TIMELINE_BY_V, BUDGET_BY_V, KEEP_SLOTS, lab, homeLine, keepText, scopeText, whereText, budgetKnown } from './home.js';
+import { STATUS_BY_V, TIMELINE_BY_V, BUDGET_BY_V, KEEP_SLOTS, lab, homeLine, keepText, scopeText, whereText, budgetKnown, keepLocks } from './home.js';
+import { toBoards, boardLine, idLabel } from './boards/match.js';
 
 const LIFE_LABEL = {
   saturday: { sofa: '沙发追剧', kitchen: '厨房做早午餐', window: '窗边看书', workout: '在家运动', bed: '赖床' },
@@ -55,6 +56,57 @@ export const AVOID_LABEL = {
 export const lifeLabel = (k, v) => t(LIFE_LABEL[k]?.[v] || v);
 
 const mm = (x) => (x ? `${Number(x).toLocaleString('en-US')}mm` : '—');
+
+/** 溪岸板材那一行里的表面名（和板材库「用在」的叫法一样） */
+const BOARD_SLOT_NAME = { cabinetry: '柜体 · 门', feature: '墙板' };
+
+/**
+ * 公司做的表面（柜体 · 门、墙板）用哪块溪岸板材 —— 和 3D 一样的次序：
+ *   1. 客人家里留下来的（K 屏锁住的柜子）→「保留客人原有」，不换；
+ *   2. 选的案例的原板（p.cases[…].boards，案例库里员工设的）→ 就是那块板；
+ *   3. 已经是板的（3D 里选的）→ 原样；
+ *   4. 别的按 boards/match.js toBoards 换成最接近的真实板材（太远：设计师版写「示意色」+ 最接近的那块，客人版不写）。
+ * staff（设计师版）：板名后面带厂家编号（7号 · 黑胡桃（溪岸 · XA-TP-01））；客人版：只写板名，没有厂家编号。
+ * src = 档案（{ materials, cases, caseId, home }）或者只是一组材质。什么板都没有 → ''（这一行不出现）。
+ */
+export function boardsText(src, { staff = false, avoid = [] } = {}) {
+  const isProfile = !!src && typeof src === 'object' && ('materials' in src || 'cases' in src || 'home' in src);
+  const materials = { ...((isProfile ? src.materials : src) || {}) };
+  const locked = isProfile ? keepLocks(src.home) : {};
+  const refs = isProfile && Array.isArray(src.cases) ? src.cases : [];
+  const ref = refs.find((c) => c?.id && c.id === src.caseId) || refs[0] || null;
+  const exact = {};
+  for (const slot of ['cabinetry', 'feature']) {
+    const id = ref?.boards?.[slot];
+    if (locked[slot] || typeof id !== 'string') continue;
+    if (MAT_BY_ID[id]?.board ? fits(id, slot) : /^sail-/.test(id)) exact[slot] = id;
+  }
+  const { picks } = toBoards(materials, { avoid, locked, exact });
+  const sep = isEn() ? ': ' : '：';
+  const parts = [];
+  for (const slot of ['cabinetry', 'feature']) {
+    const name = t(BOARD_SLOT_NAME[slot]);
+    if (locked[slot]) {
+      // 只在有别的板可说的时候才提「保留」（不然整行都是「保留」，没意思）
+      parts.push({ keep: true, text: `${name}${sep}${t('保留客人原有')}` });
+      continue;
+    }
+    const id = exact[slot];
+    if (id) {
+      // 案例原板：这台设备还不认得的（板材包没导入），员工看得懂板号（23号），客人只在是序号 / 色号时才写
+      const known = !!MAT_BY_ID[id]?.board;
+      const label = known ? boardLine(id, { staff }) : idLabel(id);
+      if (known || staff || label !== id) parts.push({ text: `${name}${sep}${label}` });
+      continue;
+    }
+    const p = picks[slot];
+    if (!p) continue;
+    if (p.id) parts.push({ text: `${name}${sep}${boardLine(p.id, { staff })}` });
+    else if (staff) parts.push({ text: `${name}${sep}${t('示意色 {0}（最接近的溪岸板材：{1}）', [L(MAT_BY_ID[p.from]), boardLine(p.near, { staff })])}` });
+  }
+  if (!parts.some((x) => !x.keep)) return '';
+  return parts.map((x) => x.text).join(' · ');
+}
 
 /**
  * 「你的家」那几行（SPEC §9.4）—— 客人版只放客人自己答的、自己看到的：房子、在哪里、大小、做哪里、什么时候、选的案例、
@@ -144,6 +196,8 @@ export function profileText(p, plan, link = '', { client = false, staffNote = nu
   out.push('');
   const mats = ['floor', 'walls', 'cabinetry', 'countertop', 'upholstery'].map((s) => `${L(SLOT_BY_ID[s])} ${L(MAT_BY_ID[p.materials?.[s]]) || '—'}`);
   out.push(`🎨 ${t('材质：{0}', [mats.join(' · ')])}`);
+  const boards = boardsText(p, { staff: !client, avoid: p.avoid || [] });
+  if (boards) out.push(`🪵 ${t('溪岸板材：{0}', [boards])}`);
   if (!client && d?.design) out.push(`📐 ${t('设计语言：{0}；{1}；{2}', [t(d.design.style), t(d.design.kelvin), t(d.design.doors)])}`);
   const talk = client
     ? []

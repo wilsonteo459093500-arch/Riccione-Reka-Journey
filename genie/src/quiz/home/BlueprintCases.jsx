@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { t } from '../../shared/i18n.js';
 import * as C from '../../shared/cases.js';
 import CaseCard from './CaseCard.jsx';
-import CaseDetail from './CaseDetail.jsx';
+import CaseDetail, { useCaseBoards } from './CaseDetail.jsx';
 import './home.css';
 import './blueprint.css';
 
@@ -21,7 +21,8 @@ export default function BlueprintCases({ profile }) {
       alive = false;
     };
   }, []);
-  const res = useMemo(() => (all ? C.matchCases(profile, all, { limit: 6 }) : null), [all, profile]);
+  const bv = useCaseBoards(all); // 案例原板读好了再配一次（理由里说得出那块板）
+  const res = useMemo(() => (all ? C.matchCases(profile, all, { limit: 6 }) : null), [all, profile, bv]);
   if (!res) return null;
   const byId = new Map([...res.picks, ...res.rest].map((m) => [m.case.id, m]));
   const mine = (profile.cases || []).map((r) => byId.get(r.id) || (all.find((c) => c.id === r.id) ? { case: all.find((c) => c.id === r.id), reasons: [] } : null)).filter(Boolean);
@@ -52,7 +53,7 @@ export default function BlueprintCases({ profile }) {
       {detail && (
         <CaseDetail
           key={detail.case.id}
-          match={detail}
+          match={list.find((m) => m.case.id === detail.case.id) || detail}
           readOnly
           hasNext={list.length > 1}
           onNext={() => setDetail(list[(idx + 1) % list.length])}

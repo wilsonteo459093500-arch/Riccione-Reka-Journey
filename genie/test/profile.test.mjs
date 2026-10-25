@@ -25,6 +25,10 @@ import {
 import { profileText } from '../src/shared/summary.js';
 import { setLang } from '../src/shared/i18n.js';
 import { PAIRS, LIFE, APPLIANCES, NOGO_COLORS, NOGO_FINISHES, optionsOf } from '../src/quiz/flow.js';
+import { bundledBoards } from '../src/shared/boards/bundled.js';
+
+// 随网站的板材库（出厂是空的）登记进来：合进真实板材以后，WhatsApp 摘要多一行 🪵 溪岸板材，别的照旧
+await bundledBoards();
 
 let n = 0;
 let failed = 0;
@@ -412,7 +416,10 @@ await test('英文模式：摘要和谈话提示都是英文', () => {
     const plan = storagePlan(p.storage, APPLIANCES);
     for (const x of insights(p, plan)) assert.ok(!HAN.test(x.text), x.text);
     const txt = profileText(p, plan, 'https://x');
-    const han = txt.split('\n').filter((l) => HAN.test(l.replace('丝绒古典家', '')));
+    // 🪵 那一行是溪岸板材的产品名（专有名词，可以是中文，例：「海洋板」）—— 标签照样是英文
+    const board = txt.split('\n').find((l) => l.startsWith('🪵'));
+    if (board) assert.ok(/^🪵 sAil boards: (Cabinets & doors|Wall panels): /.test(board) && !/柜体|墙板|示意色|最接近|溪岸|保留/.test(board), board);
+    const han = txt.split('\n').filter((l) => !l.startsWith('🪵') && HAN.test(l.replace('丝绒古典家', '')));
     assert.deepEqual(han, [], han.join('\n'));
     assert.ok(txt.includes('Storage:') && txt.includes('To discuss when we meet') && txt.includes('(default — not confirmed)'), txt);
   } finally {

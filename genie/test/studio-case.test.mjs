@@ -27,6 +27,11 @@ const RP = await import('../src/studio/guest/readPlan.js');
 const S = await import('../src/studio/plan/sheet.js');
 const { decodePNG } = await import('./fixtures/walls/harness.mjs');
 const { JpegImage } = await import('pdfjs-dist/image_decoders/pdf.image_decoders.mjs');
+// 这里测的是程序化材质的 realise / 套用（板材那一侧在 boards-data.test.mjs）：随网站的板材库合进真实板材以后也一样 → 先清空登记表
+const { bundledBoards } = await import('../src/shared/boards/bundled.js');
+const { resetBoards } = await import('../src/shared/boards/library-api.js');
+await bundledBoards();
+resetBoards();
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FX = path.join(ROOT, 'test/fixtures/ai');

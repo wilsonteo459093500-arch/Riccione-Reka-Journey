@@ -1650,6 +1650,7 @@ const swatchCache = new Map();
 
 /** 色卡（小方块）dataURL，带缓存；没有 DOM 时返回 null */
 export function swatchURL(matId, px = 128) {
+  if (MAT_BY_ID[matId]?.board?.chip) return MAT_BY_ID[matId].board.chip; // 溪岸板材：真实板材的色卡图（没有贴图时往下画近似色的）
   if (typeof document === 'undefined') return null;
   const key = `${matId}@${px}`;
   if (swatchCache.has(key)) return swatchCache.get(key);

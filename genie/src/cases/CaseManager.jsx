@@ -10,7 +10,7 @@
 
 import { Component, Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { ArrowDown, ArrowLeft, ArrowUp, Check, ChevronLeft, ChevronRight, Download, Eye, EyeOff, FolderTree, GripVertical, ImagePlus, LockKeyhole, Plus, Sparkles, Star, Trash2, TriangleAlert, Upload, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, Check, ChevronLeft, ChevronRight, Download, Eye, EyeOff, FolderTree, GripVertical, ImagePlus, Layers, LockKeyhole, Plus, Sparkles, Star, Trash2, TriangleAlert, Upload, X } from 'lucide-react';
 import LangToggle from '../shared/LangToggle.jsx';
 import { t, L, isEn } from '../shared/i18n.js';
 import * as C from '../shared/cases.js';
@@ -31,6 +31,8 @@ const loadGuestStep = GUEST_STEP['../quiz/home/CasesStep.jsx'];
 const GuestCasesStep = loadGuestStep ? lazy(loadGuestStep) : null;
 // 案例整理（SORTER）记下的城市 / 系列 / 提到的材料：只给员工看，存在这台电脑（不在案例里）
 const SorterNote = lazy(() => import('./sorter/Note.jsx'));
+// 「这个家用了」下面的溪岸板材（案例原板 + 还用了）：用到才载入
+const BoardRows = lazy(() => import('./boards/BoardPicker.jsx'));
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
 /** 列举用的分隔：中文「、」，英文「, 」 */
@@ -729,6 +731,9 @@ function Editor({ draft, patch, errors, dirty, pending, onSave, onDiscard, onDel
             {t(e.zh)}
           </p>
         ))}
+        <Suspense fallback={null}>
+          <BoardRows draft={draft} patch={patch} errors={errOf('boards')} />
+        </Suspense>
       </Field>
 
       <Field label="情绪 · 时间">
@@ -1189,7 +1194,7 @@ export default function CaseManager() {
       return;
     }
     // 一半以上的照片还没标房间：提醒一下（不挡上架）
-    const warn = status === 'live' ? C.caseWarnings(next)[0] : null;
+    const warn = status === 'live' ? C.caseWarnings(next).find((w) => w.field === 'images') : null;
     if (warn) {
       const yes = await ask({
         title: t('还有照片没标房间'),
@@ -1389,6 +1394,11 @@ export default function CaseManager() {
             <Download size={16} strokeWidth={1.8} aria-hidden="true" />
             <span>{t('导出')}</span>
           </button>
+          {/* 溪岸板材（boards importer）：板材库 + 办公室电脑导入「板材贴图」文件夹 + 店里 iPad 导入板材包 */}
+          <a className="btn-line small mg-sec mg-boards" href={`cases.html?staff=1&boards=1${isEn() ? '&lang=en' : ''}`} data-sfx="open" aria-label={t('板材 · Boards')} title={t('溪岸板材：导入老板电脑上的板材贴图，客人在 3D 里看到真的板')}>
+            <Layers size={16} strokeWidth={1.8} aria-hidden="true" />
+            <span>{t('板材 · Boards')}</span>
+          </a>
           {/* 案例整理（SORTER）：把一整个照片文件夹（几千张）分项目、去重、挑封面，存成草稿案例 */}
           <a className="btn-line small mg-sec" href="cases.html?staff=1&sorter=1" data-sfx="open" aria-label={t('整理照片文件夹')} title={t('整理照片文件夹')}>
             <FolderTree size={16} strokeWidth={1.8} aria-hidden="true" />

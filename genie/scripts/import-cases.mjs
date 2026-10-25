@@ -388,7 +388,7 @@ export async function mergePack(opts) {
   const manifest = fs.existsSync(o.manifest) ? JSON.parse(fs.readFileSync(o.manifest, 'utf8')) : { kind: 'wish-cases', v: 1, updatedAt: '', cases: [] };
   const byId = new Map(manifest.cases.map((c) => [c.id, c]));
   const engine = o.engine === 'auto' ? (havePillow() ? 'pillow' : 'chromium') : o.engine;
-  const report = { engine, added: [], updated: [], skipped: [], errors: [] };
+  const report = { engine, added: [], updated: [], skipped: [], errors: [], warnings: [] };
   const now = new Date().toISOString();
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'wish-pack-'));
   try {
@@ -403,6 +403,13 @@ export async function mergePack(opts) {
         continue;
       }
       const { origin, ...c } = JSON.parse(JSON.stringify(raw));
+      // 溪岸板材（R11 e）：旧版本存过的案例不认得 boards / boardsAlso，存的时候整个丢了 → 留着 manifest 里的那一份，并提醒
+      const had = (x) => (Array.isArray(x) ? x.length > 0 : !!x && typeof x === 'object' && Object.keys(x).length > 0);
+      if (prev && had(prev.boards) && !('boards' in raw)) {
+        c.boards = prev.boards;
+        if (had(prev.boardsAlso) && !('boardsAlso' in raw)) c.boardsAlso = prev.boardsAlso;
+        report.warnings.push({ id: c.id, warning: 'newer rev has no boards (saved by an old build?): kept the boards from the manifest' });
+      }
       const outDir = path.join(o.out, c.id);
       const used = new Set((c.images || []).filter((im) => !im.device).map((im) => im.id));
       let n = 0;
@@ -467,6 +474,7 @@ if (isMain) {
       .then((r) => {
         console.log(`\n✓ ${r.engine}: 案例包 新增 ${r.added.length} · 更新 ${r.updated.length} · 跳过 ${r.skipped.length}${r.errors.length ? ` · 出错 ${r.errors.length}` : ''}`);
         for (const e of r.errors) console.log(`  ✗ ${e.id}${e.file ? '/' + e.file : ''}: ${e.error}`);
+        for (const w of r.warnings || []) console.log(`  ! ${w.id}: ${w.warning}`);
       })
       .catch((e) => {
         console.error('✗', e.message);

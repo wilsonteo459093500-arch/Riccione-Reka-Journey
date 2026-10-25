@@ -39,7 +39,8 @@ import { APPLIANCES } from '../quiz/flow.js';
 import { MOOD_BY_ID, tagsOf } from '../shared/moods.js';
 import { AVOID_LABEL } from '../shared/summary.js';
 import { DREAMER_BY_CODE } from '../shared/dreamers.js';
-import { MAT_BY_ID, fits, misfitHint, DEFAULT_SLOT_FOR_CAT, SLOT_BY_ID } from '../shared/materials.js';
+import { MAT_BY_ID, fits, misfitHint, defaultSlotFor, SLOT_BY_ID, onBoards } from '../shared/materials.js';
+import { toBoards } from '../shared/boards/match.js';
 import { BRAND } from '../shared/config.js';
 import { t, L, isEn, setLang } from '../shared/i18n.js';
 import { fmt } from '../shared/units.js';
@@ -61,6 +62,7 @@ import HelpModal from './ui/HelpModal.jsx';
 import FloorSwitch from './ui/FloorSwitch.jsx';
 import SettingsModal from './ui/SettingsModal.jsx';
 import PlanEditor from './plan/PlanEditor.jsx';
+import { boardsSoon as boardsSoonShared, missingBoardIds } from '../shared/boards/soon.js';
 // 导出给设计师（DXF / 酷家乐 / SketchUp）：只有点了才下载这部分代码
 const ExportSheet = lazy(() => import('./export/ExportSheet.jsx'));
 
@@ -171,6 +173,14 @@ function wallSpot(floor, furniture, kind, pt, room) {
   return { room: r.id, x: +pos.x.toFixed(3), z: +pos.z.toFixed(3), rot: SIDE_ROT[s.side], w };
 }
 
+/**
+ * 溪岸板材：随网站的板材库 + 这台设备导入的板材包（展厅 iPad / 办公室电脑）一起读，最多等 ms（R11 f：400 ms）。
+ * 读好了 onBoards 会通知，界面再把方案里的板材套一次（setMaterials）。两块都是用到才下载（boards/soon.js）。
+ */
+const boardsSoon = (ms = 400) => boardsSoonShared(ms);
+/** 方案里有这台设备还不认得的溪岸板材 id（别的设备做的方案 / 板材包还没读好） */
+const missingBoards = (materials) => missingBoardIds(Object.values(materials || {}));
+
 const HISTORY = 60;
 const snap = (p) => ({
   materials: { ...p.materials },
@@ -186,6 +196,7 @@ const snap = (p) => ({
   caseStyle: p.caseStyle ?? null,
   softened: p.softened ?? null,
   suggestions: p.suggestions ?? null,
+  boardPicks: p.boardPicks ?? null,
   sample: p.sample ?? false,
 });
 
@@ -431,6 +442,26 @@ export default function StudioApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 溪岸板材登记好 / 变了（本机板材包读好、员工在别的分页导入了板材包）：方案里用到板材就再套一次，界面重画（材质栏的板材标签）
+  const boardRaf = useRef(0);
+  useEffect(
+    () =>
+      onBoards(() => {
+        cancelAnimationFrame(boardRaf.current);
+        boardRaf.current = requestAnimationFrame(() => {
+          const cur = projRef.current;
+          const e = engine.current;
+          if (cur && e && Object.values(cur.materials || {}).some((id) => typeof id === 'string' && id.startsWith('sail-'))) {
+            e.setMaterials(cur.materials);
+            scheduleThumbs();
+          }
+          bump((n) => n + 1);
+        });
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
   /**
    * 「带它回家」进来的方案（SPEC §8.1）：平面图按顺序找 —— 这台设备的 genie-handoff（客人在许愿之旅里拍 / 选的、读好的）→
    * 链接里的小平面图（home.plan.inline）→ 最接近他答的那种房子的示范户型（sample）。
@@ -473,6 +504,8 @@ export default function StudioApp() {
     }
     const want = CASE_Q || prof0.caseId || prof0.cases?.[0]?.id || null;
     const caseObj = want ? await loadCase(want) : null;
+    // 第一次把他的家变出来：先让这台设备的板材包登记好（最多 400 ms），案例原板、最接近的真实板材才用得上
+    await boardsSoon();
     const r = realiseCase({ caseObj, keep: keepLocks(home || {}), profile: prof });
     const now = new Date().toISOString();
     const base = existing || { id: uid('p'), name: prof.name ? t('{0} 的家', [prof.name]) : t('我的家'), createdAt: now, updatedAt: now };
@@ -493,6 +526,7 @@ export default function StudioApp() {
       caseStyle: r.style,
       softened: r.softened,
       suggestions: r.suggestions,
+      boardPicks: r.boardPicks,
       homeAt,
       sample,
       floorView: 'all',
@@ -504,6 +538,7 @@ export default function StudioApp() {
   async function boot() {
     let p = null;
     let homeBoot = null;
+    boardsSoon(0); // 开始读这台设备的板材包（不等）
     if (SHOWROOM) {
       // 展厅：永远是示范户型，不读本机方案、不读链接 → 底座上只会是品牌字样
       p = createProject({ plan: templatePlan('condo3'), mood: 'cozy' });
@@ -549,6 +584,8 @@ export default function StudioApp() {
       }
     }
     history.replaceState(null, '', location.pathname + location.search);
+    // 方案里有还不认得的溪岸板材：等本机板材包最多 400 ms（R11 f）；还没好 → 先用近似的，好了再套一次（onBoards）
+    if (missingBoards(p?.materials)) await boardsSoon();
     loadProjectIntoEngine(p, true);
     tellShell('page', { page: 'studio' });
     if (homeBoot?.fresh) setTimeout(() => noteApplied(homeBoot.caseObj, homeBoot.realised, { first: true }), 700);
@@ -685,9 +722,12 @@ export default function StudioApp() {
     materials = safe.materials;
     // 客人家里留下来的（锁住的地板 / 墙 / 柜子 / 沙发）：一键情绪也不换
     if (cur.locked && Object.keys(cur.locked).length) materials = { ...materials, ...cur.locked };
+    // 公司做的表面（柜体、主题墙板）换成最接近的溪岸板材（锁住的不换；太远的留示意色）
+    const tb = toBoards(materials, { locked: cur.locked || {}, avoid: cur.profile?.avoid || [] });
+    materials = tb.materials;
     engine.current.setMaterials(materials);
     engine.current.setTime(time);
-    commit({ materials, time, mood: id });
+    commit({ materials, time, mood: id, boardPicks: tb.picks });
     scheduleThumbs();
     if (safe.swaps.length) flash(t('已按 {0} 的雷区避开：{1}', [who(), safe.swaps.map((s) => `${slotName(SLOT_BY_ID[s.slot])} ${L(MAT_BY_ID[s.from])} → ${L(MAT_BY_ID[s.to])}`).join(listSep())]), 4800);
   };
@@ -759,6 +799,9 @@ export default function StudioApp() {
     const id = uid('f');
     const item = { id, kind, room: room?.id || null, floor: floor.id, x: +p.x.toFixed(2), z: +p.z.toFixed(2), rot: 0, w, d, h: floor.ceil };
     if (kind === 'art') item.y = 1.4;
+    // 书墙是定制柜（柜体的材质，溪岸板材也上得去）；梳妆台是活动家具（木作的材质）—— 和自动摆家具一样（R1）
+    if (kind === 'bookshelf') item.key = 'cabinetry';
+    if (kind === 'dresser') item.key = 'woodwork';
     // 主题墙（不能拖）、挂画：直接挂到最近的那道墙上（这一层的墙）
     if (def.wall || def.wallMounted) {
       const first = plan.floors[0].id;
@@ -772,10 +815,12 @@ export default function StudioApp() {
     flash(def.wall ? t('{0} 已贴到最近的那面墙上', [L(def)]) : t('{0} 已放进来 —— 拖一拖换位置', [L(def)]));
   };
 
-  const dropMaterial = (matId, targetSlot) => {
+  /** quiet：材质栏点了一块溪岸板材（小卡已经说了换成什么）→ 不再弹「柜体 → …」那一句；踩雷区的提醒照样说 */
+  const dropMaterial = (matId, targetSlot, { quiet = false } = {}) => {
     const mat = MAT_BY_ID[matId];
     if (!mat) return false;
-    const s = targetSlot || (slot && fits(matId, slot) ? slot : DEFAULT_SLOT_FOR_CAT[mat.cat]);
+    // 没选表面就点了一下：这种材质默认去哪（溪岸板材 → 柜体，不是木头默认的地板）
+    const s = targetSlot || (slot && fits(matId, slot) ? slot : defaultSlotFor(matId));
     if (!fits(matId, s)) {
       flash(misfitHint(matId, s)); // 已经按当前语言翻好了
       return false;
@@ -794,7 +839,7 @@ export default function StudioApp() {
     applyMaterial(s, matId);
     const hit = avoidHits(mat);
     if (hit.length) flash(t('{0} 说过不要「{1}」—— 想试试也可以，按撤销就能还原', [who(), hit.map((k) => t(AVOID_LABEL[k] || k)).join(listSep())]), 4800);
-    else flash(`${slotName(SLOT_BY_ID[s])} → ${L(mat)}`);
+    else if (!quiet) flash(`${slotName(SLOT_BY_ID[s])} → ${L(mat)}`);
     return true;
   };
 
@@ -875,6 +920,7 @@ export default function StudioApp() {
       flash(t('参考案例在展厅 iPad 上'), 3200);
       return;
     }
+    await boardsSoon();
     const r = realiseCase({ caseObj, keep: cur.locked || {}, profile: cur.profile, raw });
     const e = engine.current;
     // 家具风格变了、设计师又没动过家具：按新风格重新摆（一次 furnish）
@@ -893,6 +939,7 @@ export default function StudioApp() {
       caseStyle: r.style,
       softened: r.softened,
       suggestions: r.suggestions,
+      boardPicks: r.boardPicks,
       ...(furniture ? { furniture, furnEdited: false } : {}),
     });
     scheduleThumbs();
@@ -1659,7 +1706,7 @@ export default function StudioApp() {
             {phone && selBar(true)}
             {phone && !selItem && caseItems.length > 0 && !demo && <CaseRow compact items={caseItems} active={caseActive} onPick={pickCase} />}
             <DaylightPanel time={project.time} thumbs={thumbs} onTime={setTime} onCommit={saveNow} north={project.plan.north || 0} />
-            <MaterialDock project={project} slot={slot} engine={engine} onDrop={dropMaterial} onAddItem={addItem} onClearSlot={() => setSlot(null)} />
+            <MaterialDock project={project} slot={slot} engine={engine} onDrop={dropMaterial} onAddItem={addItem} onClearSlot={() => setSlot(null)} staff={staffView} caseObj={curCase} />
           </div>
 
           {!demo && isMultiFloor(project.plan) && <FloorSwitch plan={project.plan} view={floorView} onView={(v) => engine.current?.setFloorView(v)} above={`${phone && canCompare ? 'seg' : ''}${phone && showBanner ? 'banner' : ''}`} />}

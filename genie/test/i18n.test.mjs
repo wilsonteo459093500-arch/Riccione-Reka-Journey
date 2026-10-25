@@ -13,23 +13,31 @@ import { parse } from '@babel/parser';
 import traverseMod from '@babel/traverse';
 import EN from '../src/shared/i18n/en.js';
 import EXP from '../src/shared/i18n/en-export.js';
+import EB from '../src/shared/i18n/en-boards.js';
 
 const traverse = traverseMod.default || traverseMod;
 // 导出给设计师（src/studio/export/**）的词在 en-export.js：跟着导出代码懒加载（ExportSheet 用 addWords 并进来），
 // 所以只有那个文件夹里的代码可以查它；别的地方的中文还是要在 en.js 的总表里。
 const EXPORT_DIR = `${path.sep}src${path.sep}studio${path.sep}export${path.sep}`;
-const lookup = (file, key) => EN[key] ?? (file.includes(EXPORT_DIR) ? EXP[key] : undefined);
+// 员工 · 板材库 / 板材导入（src/cases/boards/**，BoardsApp 这一块）的词在 en-boards.js：跟着 BoardsApp 懒加载（boards/words.js 用 addWords 并进来）。
+// 案例库里的 BoardPicker.jsx 不在那一块里（案例库自己懒加载它），它的词要在总表；pack.js 的提醒只在板材库里显示。
+const BOARDS_DIR = `${path.sep}src${path.sep}cases${path.sep}boards${path.sep}`;
+const BOARDS_LAZY = (file) => (file.includes(BOARDS_DIR) && !file.endsWith(`${path.sep}BoardPicker.jsx`)) || file.endsWith(`${path.sep}src${path.sep}shared${path.sep}boards${path.sep}pack.js`);
+const lookup = (file, key) => EN[key] ?? (file.includes(EXPORT_DIR) ? EXP[key] : BOARDS_LAZY(file) ? EB[key] : undefined);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const HAN = /[一-鿿]/;
 const EDGE_CH = '[\\s\\p{So}\\p{Extended_Pictographic}\\uFE0F\\u200D→←↑↓·•…≈+]';
 const EDGE = new RegExp(`^${EDGE_CH}+|${EDGE_CH}+$`, 'gu');
 const norm = (s) => s.replace(/\s+/g, ' ').replace(EDGE, '').trim();
 
+// 生成的资料文件（不是界面文字）：溪岸板材库里是产品名字（7号黑胡桃、晓山白……），像 cases/manifest.json 一样原样显示
+const GENERATED = [path.join('src', 'shared', 'boards', 'library.js')];
+
 function walk(dir, acc = []) {
   for (const f of fs.readdirSync(dir)) {
     const p = path.join(dir, f);
     if (fs.statSync(p).isDirectory()) walk(p, acc);
-    else if (/\.(jsx?|mjs)$/.test(f) && !p.includes(`${path.sep}i18n`)) acc.push(p);
+    else if (/\.(jsx?|mjs)$/.test(f) && !p.includes(`${path.sep}i18n`) && !GENERATED.some((g) => p.endsWith(g))) acc.push(p);
   }
   return acc;
 }
@@ -87,11 +95,18 @@ for (const f of fs.readdirSync(ROOT).filter((f) => f.endsWith('.html'))) {
 }
 
 const ph = (s) => (s.match(/\{\w+\}/g) || []).sort().join(',');
-const phBad = [...Object.entries(EN), ...Object.entries(EXP)].filter(([k, v]) => v !== '' && ph(k) !== ph(v));
+const phBad = [...Object.entries(EN), ...Object.entries(EXP), ...Object.entries(EB)].filter(([k, v]) => v !== '' && ph(k) !== ph(v));
 // en-export.js 不能进总表（不然又回到四个页面的第一块里）；和总表重复的词要一样（并进来以后不会把界面上的英文换掉）
 const enIndex = fs.readFileSync(path.join(ROOT, 'src/shared/i18n/en.js'), 'utf8');
 const expLeak = /en-export/.test(enIndex) ? ['src/shared/i18n/en.js imports en-export.js'] : [];
 const expClash = Object.entries(EXP).filter(([k, v]) => EN[k] != null && EN[k] !== v).map(([k, v]) => `${k}: en.js「${EN[k]}」≠ en-export.js「${v}」`);
+// en-boards.js 同理：不能进总表；只有 src/cases/boards/words.js 可以 import 它（BoardsApp 那一块）；和总表重复的词要一样
+const ebLeak = /en-boards/.test(enIndex) ? ['src/shared/i18n/en.js imports en-boards.js'] : [];
+for (const f of walk(path.join(ROOT, 'src'))) {
+  if (f.endsWith(`${path.sep}cases${path.sep}boards${path.sep}words.js`)) continue;
+  if (/['"][^'"]*en-boards(\.js)?['"]/.test(fs.readFileSync(f, 'utf8'))) ebLeak.push(`${path.relative(ROOT, f)} imports en-boards.js (only src/cases/boards/words.js may)`);
+}
+const ebClash = Object.entries(EB).filter(([k, v]) => EN[k] != null && EN[k] !== v).map(([k, v]) => `${k}: en.js「${EN[k]}」≠ en-boards.js「${v}」`);
 
 let fail = 0;
 if (missing.size) {
@@ -114,5 +129,10 @@ if (expLeak.length || expClash.length) {
   console.log('✗ en-export.js：');
   [...expLeak, ...expClash].forEach((x) => console.log('    ' + x));
 }
+if (ebLeak.length || ebClash.length) {
+  fail++;
+  console.log('✗ en-boards.js：');
+  [...ebLeak, ...ebClash].forEach((x) => console.log('    ' + x));
+}
 if (fail) process.exit(1);
-console.log(`✓ 中英双语：${checked} 处中文都有英文（词典 ${Object.keys(EN).length} 句 + 导出 ${Object.keys(EXP).length} 句）`);
+console.log(`✓ 中英双语：${checked} 处中文都有英文（词典 ${Object.keys(EN).length} 句 + 导出 ${Object.keys(EXP).length} 句 + 板材库 ${Object.keys(EB).length} 句）`);

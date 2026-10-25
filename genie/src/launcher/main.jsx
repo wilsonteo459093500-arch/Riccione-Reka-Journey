@@ -6,7 +6,7 @@
 //     许愿之旅用 location.replace 打开：客人在里面按「返回」，回不到这一页。3D 工作室带 ?staff=1（设计师版、方案列表）。
 //   · 本机的梦想家蓝图：收在「员工 · 本机蓝图」里，锁着 —— 和许愿模式的员工区一样要按住 3 秒才打开；
 //     离开这一页、切去别的 app、锁屏、按「返回」回来，都会自己锁上。每一行用 ?staff=1 打开（才有设计师版）。
-//   · 员工 · 案例库：和本机蓝图一样锁着（按住 3 秒），打开后才看得到「打开案例库」（cases.html?staff=1，员工给案例打标签、排序、上架）；
+//   · 员工 · 案例库：和本机蓝图一样锁着（按住 3 秒），打开后才看得到「打开案例库」（cases.html?staff=1，员工给案例打标签、排序、上架）和「板材库 · Boards」（&boards=1：导入溪岸板材贴图）；
 //     离开这一页就锁上。案例库那一页是单独打包的，这里只在开好以后才去数一下有几个案例（不拖慢入口页）。
 //   · 声音（src/shared/sfx.js）：每个按钮都有自己的声音（确认 / 下一步 / 打开 / 移除 …，WISH_RULES 认 class）。
 //   · 动效（src/shared/fx.js，克制）：按下去缩一点 + 指尖一圈光（大卡片缩得更少）；唯一的金色「开始」每隔几秒被光轻轻扫过；
@@ -17,7 +17,7 @@
 import { StrictMode, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
-import { ArrowRight, ChevronDown, Cuboid, Footprints, Images, LockKeyhole, LockKeyholeOpen, Tablet, Trash2 } from 'lucide-react';
+import { ArrowRight, ChevronDown, Cuboid, Footprints, Images, Layers, LockKeyhole, LockKeyholeOpen, Tablet, Trash2 } from 'lucide-react';
 import '../shared/base.css';
 import './launcher.css';
 import Pangie, { Lamp } from '../shared/Pangie.jsx';
@@ -277,7 +277,7 @@ function Archive({ list, onRemove, onClear }) {
   );
 }
 
-/** 员工 · 案例库：锁着（按住 3 秒），打开后一个按钮去 cases.html?staff=1。离开这一页就锁上 */
+/** 员工 · 案例库：锁着（按住 3 秒），打开后两个按钮：案例库（cases.html?staff=1）、板材库（&boards=1）。离开这一页就锁上 */
 function CaseLibrary() {
   const [open, setOpen] = useState(false);
   const [count, setCount] = useState(null);
@@ -360,13 +360,20 @@ function CaseLibrary() {
       </button>
       {open && (
         <div className="ln-archive-body" id="ln-cases-body">
-          <p className="ln-note">{t('公司做过的家 + 3D 风格方案：打标签、排序、上架，客人许完愿就从这里挑最像他的家。只给员工用 —— 不要在客人面前打开。')}</p>
+          <p className="ln-note">{t('公司做过的家 + 3D 风格方案：打标签、排序、上架，客人许完愿就从这里挑最像他的家；溪岸板材的贴图也在这里导入（板材库）。只给员工用 —— 不要在客人面前打开。')}</p>
           {count && <p className="ln-cases-count">{t('上架 {0} · 草稿 {1}', [count.live, count.draft])}</p>}
-          <a className="ln-cases-go" href="cases.html?staff=1" data-sfx="open" data-fx-depth="0.98">
-            <Images size={18} strokeWidth={1.8} aria-hidden="true" />
-            <span>{t('打开案例库')}</span>
-            <ArrowRight size={17} strokeWidth={2} aria-hidden="true" />
-          </a>
+          <div className="ln-cases-acts">
+            <a className="ln-cases-go" href="cases.html?staff=1" data-sfx="open" data-fx-depth="0.98">
+              <Images size={18} strokeWidth={1.8} aria-hidden="true" />
+              <span>{t('打开案例库')}</span>
+              <ArrowRight size={17} strokeWidth={2} aria-hidden="true" />
+            </a>
+            <a className="ln-cases-go is-boards" href="cases.html?staff=1&boards=1" data-sfx="open" data-fx-depth="0.98">
+              <Layers size={18} strokeWidth={1.8} aria-hidden="true" />
+              <span>{t('板材库 · Boards')}</span>
+              <ArrowRight size={17} strokeWidth={2} aria-hidden="true" />
+            </a>
+          </div>
         </div>
       )}
     </section>

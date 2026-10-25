@@ -3,7 +3,7 @@
 // 给人看的句子都过 t()：中文模式原样返回，英文模式查 i18n/en-*.js（有插值的写成 {0} 占位）。
 
 import { AXES, HIDDEN_AXES, DREAMERS, codeOf, dreamerOf } from './dreamers.js';
-import { MATERIALS, MAT_BY_ID, SLOTS, SLOT_BY_ID, fits } from './materials.js';
+import { MATERIALS, MAT_BY_ID, SLOTS, SLOT_BY_ID, fits, boardsFor } from './materials.js';
 import { tagsOf } from './moods.js';
 import { COLOR_FAMILIES, CHROMATIC, SHADES } from './colorTags.js';
 import { t, L, isEn } from './i18n.js';
@@ -201,6 +201,7 @@ const matDist = (a, b) =>
  *   ① 完全没有颜色的材质（浅色木头、水磨石、皮革、藤编、古铜…）不换成有色系的（colorTags.js 里登记的白、米黄、粉…深木色）；
  *      灰 / 黑只是深浅，可以；
  *   ② 换上去的材质不能多出原来没有的色相（避开米黄 → 换成白，不会换成雾粉）。
+ * 原来是溪岸板材的：候选先是能放在这个表面的板材（隐藏的不算），再是程序化材质 —— 有安全的真板就还是真板。
  */
 function nearestSafe(cur, slotId, bad, accept = () => true) {
   const curColors = colorsOf(tagsOf(cur));
@@ -210,10 +211,11 @@ function nearestSafe(cur, slotId, bad, accept = () => true) {
     (cc) => !(plain && hasFamily(cc)),
     () => true,
   ];
+  const pool = cur.board ? [...boardsFor(slotId), ...MATERIALS] : MATERIALS;
   for (const rule of rules) {
     let best = null;
     let bestD = Infinity;
-    for (const cand of MATERIALS) {
+    for (const cand of pool) {
       if (cand.id === cur.id || !fits(cand.id, slotId) || !accept(cand)) continue;
       const tags = tagsOf(cand);
       if ([...tags].some((x) => bad.has(x)) || !rule(colorsOf(tags))) continue;

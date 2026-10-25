@@ -38,7 +38,8 @@ export function isOfferSlot(slot, matId) {
   if (!OFFER_SLOTS.includes(slot)) return false;
   if (slot === 'feature') {
     const m = MAT_BY_ID[matId];
-    return !!m && (m.cat === 'wood' || m.cat === 'stone') && PANEL_TEX.includes(m.tex?.type);
+    // 溪岸板材放在主题墙上就是墙板（纯色板、石纹板也是：公司做的）—— 和 src/shared/home.js 同一条
+    return !!m && (!!m.board || ((m.cat === 'wood' || m.cat === 'stone') && PANEL_TEX.includes(m.tex?.type)));
   }
   return true;
 }
