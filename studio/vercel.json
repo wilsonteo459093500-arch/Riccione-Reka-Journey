@@ -5,6 +5,7 @@
   "installCommand": "npm install",
   "framework": "vite",
   "devCommand": "npm run dev",
+  "git": { "deploymentEnabled": { "claude/**": false } },
   "ignoreCommand": "git diff --quiet HEAD^ HEAD -- .",
   "headers": [
     {

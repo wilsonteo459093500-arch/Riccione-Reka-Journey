@@ -1,0 +1,326 @@
+/* 最后一步：交给我们的设计师（LeadSheet.jsx）—— 许愿模式外壳里、3D 上面的一张纸。颜色只用 base.css 的变量。 */
+
+.hj-ld-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: max(24px, 6vh) 16px 24px;
+  overflow-y: auto;
+  background: rgba(var(--shade-rgb), 0.28);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  animation: hj-ld-fade 0.24s var(--ease) both;
+}
+.hj-ld-veil.is-closing {
+  pointer-events: none;
+  animation: hj-ld-fade-out 0.2s var(--ease) both;
+}
+.hj-ld-sheet {
+  position: relative;
+  box-sizing: border-box;
+  width: min(540px, 100%);
+  padding: 28px 30px 22px;
+  border-radius: 30px;
+  background: rgba(var(--glass-rgb), 0.95);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  backdrop-filter: blur(28px) saturate(160%);
+  box-shadow:
+    inset 0 0 0 0.5px var(--glass-border),
+    0 1px 2px rgba(var(--shade-rgb), 0.08),
+    0 30px 80px rgba(var(--shade-rgb), 0.28);
+  color: var(--text);
+  animation: hj-ld-rise 0.5s var(--spring-soft, var(--ease)) both;
+}
+.hj-ld-veil.is-closing .hj-ld-sheet {
+  animation: hj-ld-sink 0.2s var(--ease) both;
+}
+.hj-ld-x {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(var(--text-rgb), 0.06);
+  color: var(--text-soft);
+  cursor: pointer;
+}
+.hj-ld-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 0 30px 18px 0;
+}
+.hj-ld-head .pangie,
+.hj-ld-head svg {
+  flex: none;
+}
+.hj-ld-eyebrow {
+  margin: 0 0 4px;
+  font: 600 12.5px/1.2 var(--sans);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold-d);
+}
+.hj-ld-sheet h2 {
+  margin: 0;
+  font: 600 25px/1.2 var(--display);
+  letter-spacing: -0.01em;
+  color: var(--text-strong);
+  text-wrap: balance;
+}
+.hj-ld-lead {
+  margin: 6px 0 0;
+  font: 400 15px/1.45 var(--sans);
+  color: var(--text-soft);
+  text-wrap: pretty;
+}
+.hj-ld-field {
+  display: block;
+  margin-top: 12px;
+}
+.hj-ld-field > span {
+  display: block;
+  margin: 0 0 6px 4px;
+  font: 500 13.5px/1.2 var(--sans);
+  color: var(--text-soft);
+}
+.hj-ld-field input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 52px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--card);
+  box-shadow:
+    inset 0 0 0 1px var(--line),
+    0 1px 2px rgba(var(--shade-rgb), 0.04);
+  color: var(--text-strong);
+  font: 500 17px/1.2 var(--sans);
+  -webkit-appearance: none;
+  appearance: none;
+  transition: box-shadow 0.2s var(--ease);
+}
+.hj-ld-field input::placeholder {
+  color: rgba(var(--text-rgb), 0.38);
+}
+.hj-ld-field input:focus {
+  outline: none;
+  box-shadow:
+    inset 0 0 0 2px var(--accent),
+    0 0 0 4px rgba(var(--accent-l-rgb), 0.25);
+}
+.hj-ld-field.is-err input,
+.hj-ld-pdpa.is-err i {
+  box-shadow: inset 0 0 0 2px var(--danger);
+}
+.hj-ld-pdpa {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 16px;
+  background: rgba(var(--gold-rgb), 0.08);
+  color: var(--text);
+  font: 400 13.5px/1.5 var(--sans);
+  text-align: left;
+  cursor: pointer;
+}
+.hj-ld-pdpa i {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin-top: 1px;
+  border-radius: 8px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 1.5px var(--gold-d);
+  color: var(--ink);
+  transition:
+    background-color 0.2s var(--ease),
+    transform 0.25s var(--spring);
+}
+.hj-ld-pdpa.on i {
+  background: var(--gold-btn);
+  box-shadow: inset 0 0 0 1.5px var(--gold-d);
+  transform: scale(1.06);
+}
+.hj-ld-pdpa small {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--text-soft);
+}
+.hj-ld-err {
+  min-height: 18px;
+  margin: 8px 4px 0;
+  font: 500 13px/1.35 var(--sans);
+  color: var(--danger);
+}
+/* 两个动作上下排（各占一整行）：「把我的家发到 WhatsApp」在一半宽里会折成两行，图标和字就分开了 */
+.hj-ld-acts {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin-top: 8px;
+}
+.hj-ld-btn {
+  -webkit-appearance: none;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 56px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  font: 600 16px/1.15 var(--sans);
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    transform 0.18s var(--ease),
+    box-shadow 0.3s var(--ease);
+}
+.hj-ld-btn:not(.fx-pressable):active {
+  transform: scale(0.97);
+}
+.hj-ld-btn:focus-visible,
+.hj-ld-x:focus-visible,
+.hj-ld-pdpa:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.hj-ld-btn.is-gold {
+  background: var(--gold-btn);
+  color: var(--ink);
+  box-shadow:
+    inset 0 -1px 0 rgba(var(--gold-d-rgb), 0.35),
+    0 8px 22px rgba(var(--gold-d-rgb), 0.28);
+}
+.hj-ld-btn.is-line {
+  background: var(--card);
+  color: var(--text-strong);
+  box-shadow: inset 0 0 0 1px rgba(var(--text-rgb), 0.16);
+}
+.hj-ld-fine {
+  margin: 12px 0 0;
+  text-align: center;
+  font: 400 12.5px/1.4 var(--sans);
+  color: var(--text-soft);
+}
+/* 留好了 */
+.hj-ld-thanks {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding-top: 4px;
+}
+.hj-ld-thanks h2 {
+  margin-top: 2px;
+}
+.hj-ld-thanks .hj-ld-eyebrow {
+  margin-top: 10px;
+}
+.hj-ld-say {
+  margin: 8px 0 0;
+  font: 400 15px/1.45 var(--sans);
+  color: var(--text-soft);
+}
+.hj-ld-done {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  margin: 16px 0 6px;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+.hj-ld-done li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(var(--accent-l-rgb), 0.16);
+  font: 500 14.5px/1.45 var(--sans);
+  color: var(--text-strong);
+}
+.hj-ld-done li svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent);
+}
+.hj-ld-thanks .hj-ld-acts {
+  width: 100%;
+}
+
+@media (max-width: 560px) {
+  .hj-ld-veil {
+    padding: 12px 10px 76px;
+  }
+  .hj-ld-sheet {
+    padding: 22px 18px 18px;
+    border-radius: 26px;
+  }
+  .hj-ld-head {
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .hj-ld-sheet h2 {
+    font-size: 22px;
+  }
+  .hj-ld-lead {
+    font-size: 14px;
+  }
+  .hj-ld-acts {
+    grid-template-columns: 1fr;
+  }
+  .hj-ld-btn {
+    min-height: 52px;
+  }
+}
+
+@keyframes hj-ld-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes hj-ld-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes hj-ld-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.98);
+  }
+}
+@keyframes hj-ld-sink {
+  to {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hj-ld-veil,
+  .hj-ld-sheet {
+    animation-duration: 0.01s;
+  }
+}

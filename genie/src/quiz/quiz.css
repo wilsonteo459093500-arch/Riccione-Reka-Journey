@@ -1,0 +1,4110 @@
+/* ============================================================
+   WISH · 许愿之旅 —— VI「晨光溪岸 Morning Stream」
+   白天：石灰纸、风景（马来西亚 + 四川）、磨砂玻璃上的题目卡。
+   仪式时刻（擦神灯、章节翻牌、揭晓）= .dusk：暮色的萤火河。
+   颜色只用 base.css 的变量（金色文字 = --gold-ink；装饰金 = --gold）。
+   ============================================================ */
+
+:root {
+  /* 纸上的原值（.dusk 会把 --text / --gold-ink 等换成夜里的值；纸牌正面永远是纸，用这几个） */
+  --paper-text: var(--text);
+  --paper-text-strong: var(--text-strong);
+  --paper-text-soft: var(--text-soft);
+  --paper-text-rgb: var(--text-rgb);
+  --paper-gold: var(--gold);
+  --paper-gold-ink: var(--gold-ink);
+  --paper-accent: var(--accent);
+  --paper-bg-rgb: var(--bg-rgb);
+  --bar-h: 64px;
+  --spring-soft: cubic-bezier(0.2, 0.9, 0.25, 1.04);
+  /* 纸纹（一次画好、缓存成小图块） */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .14 0 0 0 0 .12 0 0 0 0 .1 0 0 0 .075 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+}
+
+/* ───────────────────────── 共用基础（许愿模式的开场 WishSplash 也载入这份样式） ───────────────────────── */
+
+.quiz-body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  transition: background-color 0.9s var(--ease);
+}
+.quiz-body.is-dusk {
+  background: var(--ritual-bg);
+}
+
+.eyebrow {
+  margin: 0 0 10px;
+  font: 600 14px/1.35 var(--sans);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gold-ink);
+}
+html[lang='en'] .eyebrow {
+  letter-spacing: 0.12em;
+}
+.lead {
+  margin: 12px 0 0;
+  font: 400 17px/1.6 var(--sans);
+  color: var(--text-soft);
+  text-wrap: pretty;
+}
+.lead.center,
+.center {
+  text-align: center;
+}
+.fine {
+  margin: 14px 0 0;
+  font: 400 14px/1.5 var(--sans);
+  color: var(--text-soft);
+}
+.h-display {
+  margin: 6px 0 0;
+  font: 600 clamp(34px, 6vw, 48px) / 1.12 var(--zh-serif);
+  letter-spacing: -0.01em;
+  color: var(--text-strong);
+  text-wrap: balance;
+}
+html[lang='en'] .h-display {
+  font-size: clamp(40px, 7vw, 58px);
+  line-height: 1.02;
+  letter-spacing: -0.015em;
+}
+.h-display.small {
+  font-size: clamp(28px, 4.4vw, 38px);
+}
+html[lang='en'] .h-display.small {
+  font-size: clamp(34px, 5vw, 46px);
+}
+.h-title {
+  margin: 0;
+  font: 600 clamp(25px, 3.6vw, 33px) / 1.24 var(--zh-serif);
+  letter-spacing: -0.005em;
+  color: var(--text-strong);
+  text-wrap: balance;
+}
+html[lang='en'] .h-title {
+  font-size: clamp(29px, 4.2vw, 38px);
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+/* 标题按词组断行（steps.jsx 的 phrased）：中文一个逗号一段，不会断成「衣 / 柜」；英文的 Deal-Breaker 不从连字号断 */
+.ph {
+  display: inline-block;
+}
+.nobr {
+  white-space: nowrap;
+}
+
+.brand {
+  display: flex;
+  flex-direction: column;
+  line-height: 1;
+}
+.brand b {
+  font: 600 19px/1 var(--serif);
+  letter-spacing: 0.3em;
+  color: var(--text-strong);
+}
+.brand span {
+  margin-top: 4px;
+  font: 600 10px/1 var(--sans);
+  letter-spacing: 0.24em;
+  color: var(--text-soft);
+}
+
+/* 按钮：安静的实心胶囊。墨色 = 普通的一步；金色 = 唯一的仪式按钮 */
+.btn,
+.btn-line,
+.btn-ghost,
+.btn-gold,
+.btn-primary {
+  -webkit-appearance: none;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 0 26px;
+  border: 0;
+  border-radius: 999px;
+  font: 600 17px/1.15 var(--sans);
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    transform 0.18s var(--ease),
+    background-color 0.3s var(--ease),
+    color 0.3s var(--ease),
+    box-shadow 0.3s var(--ease),
+    opacity 0.3s var(--ease);
+}
+/* fx.install() 已经让按下去的东西缩一下（弹簧回来）：CSS 的 :active 只留给没接上 fx 的元素，不会缩两次 */
+.btn:not(.fx-pressable):active,
+.btn-line:not(.fx-pressable):active,
+.btn-ghost:not(.fx-pressable):active,
+.btn-gold:not(.fx-pressable):active,
+.btn-primary:not(.fx-pressable):active {
+  transform: scale(0.97);
+}
+.btn:focus-visible,
+.btn-line:focus-visible,
+.btn-ghost:focus-visible,
+.btn-gold:focus-visible,
+.btn-primary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.btn:disabled,
+.btn-line:disabled,
+.btn-gold:disabled,
+.btn-primary:disabled {
+  opacity: 0.42;
+  cursor: default;
+  transform: none;
+  box-shadow: none;
+}
+.btn-primary {
+  background: var(--ink);
+  color: var(--card);
+  box-shadow: 0 6px 18px rgba(var(--shade-rgb), 0.18);
+}
+.dusk .btn-primary {
+  background: var(--ritual-text);
+  color: var(--ritual-bg);
+}
+.btn-gold {
+  background: var(--gold-btn);
+  color: var(--ink);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 0 rgba(var(--gold-d-rgb), 0.35),
+    0 8px 22px rgba(var(--gold-d-rgb), 0.28);
+}
+.btn-line {
+  background: rgba(var(--glass-rgb), 0.66);
+  color: var(--text-strong);
+  box-shadow: inset 0 0 0 1px rgba(var(--text-rgb), 0.16);
+}
+.btn-ghost {
+  background: transparent;
+  color: var(--text-soft);
+}
+.btn.big,
+.btn-gold.big {
+  min-height: 58px;
+  padding: 0 34px;
+  font-size: 18px;
+}
+.btn-line.small {
+  min-height: 44px;
+  padding: 0 18px;
+  font-size: 15px;
+}
+
+/* ───────────────────────── 页面骨架 ───────────────────────── */
+
+.qz {
+  position: relative;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  color: var(--text);
+  /* 游戏画面：擦神灯、长按都不要选中文字 / 弹出放大镜 */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.qz input,
+.qz textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+.qz.is-plain {
+  background: var(--bg);
+}
+
+.stage {
+  --stage-top: clamp(14px, calc(26vh - 128px), 210px);
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: var(--stage-top) max(16px, env(safe-area-inset-right)) calc(40px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+}
+.stage.has-companion {
+  padding-bottom: calc(176px + env(safe-area-inset-bottom));
+}
+.is-cover .stage {
+  max-width: none;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+.dusk .stage {
+  --stage-top: clamp(8px, calc(12vh - 60px), 90px);
+  display: flex;
+  flex-direction: column;
+}
+/* 仪式画面放在中间（内容太高时不会被顶栏切掉：用 auto 边距，不用 justify-content） */
+.dusk .stage > .step {
+  margin-top: auto;
+  margin-bottom: auto;
+}
+
+/* 题目卡：风景上的磨砂玻璃 */
+.step-pair,
+.step-life,
+.step-treasure,
+.step-wishes,
+.step-nogo,
+.step-onewish,
+.step-note {
+  box-sizing: border-box;
+  padding: clamp(22px, 4vw, 40px) clamp(18px, 4vw, 40px) clamp(24px, 4vw, 36px);
+  border-radius: 30px;
+  background: rgba(var(--glass-rgb), 0.78);
+  -webkit-backdrop-filter: blur(28px) saturate(170%);
+  backdrop-filter: blur(28px) saturate(170%);
+  box-shadow:
+    inset 0 0 0 0.5px var(--glass-border),
+    0 1px 2px rgba(var(--shade-rgb), 0.05),
+    0 24px 60px rgba(var(--shade-rgb), 0.14);
+  animation: sheet-in 0.62s var(--spring-soft) both;
+}
+/* 换题：标题带一点模糊淡入（blur-fade），其余只淡入 + 轻轻上移（便宜，iPad 上一直 60fps） */
+.step > * {
+  animation: rise-in 0.6s var(--ease) both;
+}
+.step > .q-head {
+  animation-name: content-in;
+}
+.step > *:nth-child(2) {
+  animation-delay: 0.05s;
+}
+.step > *:nth-child(3) {
+  animation-delay: 0.1s;
+}
+.step > *:nth-child(n + 4) {
+  animation-delay: 0.15s;
+}
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes content-in {
+  from {
+    opacity: 0;
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    filter: none;
+  }
+}
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.q-head {
+  text-align: center;
+  max-width: 600px;
+  margin: 0 auto;
+}
+.q-head .lead {
+  margin-top: 10px;
+}
+.q-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 28px;
+}
+
+/* 风景是照片时：玻璃再实一点、饱和度提得少一点（照片本身就很艳） */
+.on-photo .topbar {
+  background: rgba(var(--glass-rgb), 0.74);
+  -webkit-backdrop-filter: blur(26px) saturate(130%);
+  backdrop-filter: blur(26px) saturate(130%);
+}
+.on-photo .step-pair,
+.on-photo .step-life,
+.on-photo .step-treasure,
+.on-photo .step-wishes,
+.on-photo .step-nogo,
+.on-photo .step-onewish,
+.on-photo .cover {
+  /* 照片比画的风景暗、也艳：玻璃实到 0.9，次要文字（--text-soft）在最暗的照片上也有 4.5:1 */
+  background: rgba(var(--glass-rgb), 0.9);
+  -webkit-backdrop-filter: blur(30px) saturate(125%);
+  backdrop-filter: blur(30px) saturate(125%);
+}
+.on-photo .bubble {
+  background: rgba(var(--glass-rgb), 0.95);
+}
+
+/* 暮色照片上：浅色的字加一圈很软的暗光；揭晓的文字放在一块暗色磨砂玻璃上 */
+.dusk.on-photo .q-head,
+.dusk.on-photo .step-lamp .lead,
+.dusk.on-photo .lamp-status,
+.dusk.on-photo .interlude-hint,
+.dusk.on-photo .reading .h-title,
+.dusk.on-photo .reading .eyebrow {
+  text-shadow:
+    0 1px 2px rgba(var(--accent-deep-rgb), 0.6),
+    0 2px 22px rgba(var(--accent-deep-rgb), 0.85);
+}
+/* 擦神灯的说明就压在夕阳最亮的那一条上：不用暗一档的 --text-soft，用正文的浅色（≥ 4.5:1） */
+.dusk.on-photo .step-lamp .lead {
+  color: var(--ritual-text);
+  opacity: 0.9;
+}
+.dusk.on-photo .reveal-text {
+  padding: clamp(18px, 3vw, 28px);
+  border-radius: 26px;
+  background: rgba(var(--accent-deep-rgb), 0.5);
+  -webkit-backdrop-filter: blur(24px) saturate(120%);
+  backdrop-filter: blur(24px) saturate(120%);
+  box-shadow: inset 0 0 0 0.5px rgba(var(--gold-l-rgb), 0.18);
+}
+.dusk.on-photo .topbar {
+  background: rgba(var(--accent-deep-rgb), 0.55);
+}
+
+/* ───────────────────────── 顶栏（iOS 导航栏） ───────────────────────── */
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--bar-h);
+  box-sizing: border-box;
+  padding: max(6px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 6px max(10px, env(safe-area-inset-left));
+  background: rgba(var(--glass-rgb), 0.55);
+  -webkit-backdrop-filter: blur(24px) saturate(170%);
+  backdrop-filter: blur(24px) saturate(170%);
+  box-shadow: inset 0 -0.5px 0 rgba(var(--text-rgb), 0.1);
+  color: var(--text);
+  transition:
+    background-color 0.9s var(--ease),
+    color 0.9s var(--ease),
+    box-shadow 0.9s var(--ease);
+}
+.tb-left,
+.tb-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.tb-left {
+  justify-self: start;
+}
+.tb-right {
+  justify-self: end;
+  gap: 10px;
+}
+.tb-mid {
+  justify-self: center;
+}
+.nav-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 48px;
+  padding: 0 14px 0 6px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-strong);
+  font: 600 16px/1 var(--sans);
+  cursor: pointer;
+  transition:
+    background-color 0.2s var(--ease),
+    transform 0.18s var(--ease),
+    color 0.9s var(--ease);
+}
+.nav-back:active {
+  background: rgba(var(--text-rgb), 0.07);
+}
+.nav-back:not(.fx-pressable):active {
+  transform: scale(0.97);
+}
+.nav-back:focus-visible,
+.icon-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.nav-back span,
+.brand span,
+.brand b {
+  white-space: nowrap;
+}
+.nav-back:disabled {
+  visibility: hidden;
+}
+.tb-brand b {
+  font-size: 17px;
+}
+.progress-pct {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  font: 500 14px/1 var(--sans);
+  color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pct-ring,
+.pct-num {
+  display: none;
+}
+.pct-ring {
+  width: 34px;
+  height: 34px;
+  transform: rotate(-90deg);
+}
+.pct-track,
+.pct-fill {
+  fill: none;
+  stroke-width: 2.6;
+}
+.pct-track {
+  stroke: rgba(var(--text-rgb), 0.12);
+}
+.pct-fill {
+  stroke: var(--gold);
+  stroke-linecap: round;
+  stroke-dasharray: 100 100;
+  transition: stroke-dashoffset 0.6s var(--ease);
+}
+.pct-num {
+  position: absolute;
+  inset: 0;
+  place-items: center;
+  grid-auto-flow: column;
+  place-content: center;
+  font: 600 11px/1 var(--sans);
+  letter-spacing: -0.02em;
+  color: var(--text-strong);
+}
+.pct-num small {
+  font-size: 7.5px;
+  font-weight: 600;
+  margin-left: 0.5px;
+  opacity: 0.7;
+}
+.icon-btn {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(var(--text-rgb), 0.06);
+  color: var(--text-strong);
+  cursor: pointer;
+  transition:
+    transform 0.18s var(--ease),
+    background-color 0.3s var(--ease);
+}
+.icon-btn:not(.fx-pressable):active {
+  transform: scale(0.95);
+}
+
+/* ───────────────────────── 溪上的五块踏脚石 ───────────────────────── */
+
+.stones {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+}
+.stones-stream {
+  position: absolute;
+  left: -14px;
+  top: 50%;
+  width: calc(100% + 28px);
+  height: 40px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.stream-a {
+  fill: none;
+  stroke: var(--accent-2);
+  stroke-width: 7;
+  stroke-linecap: round;
+  opacity: 0.32;
+}
+.stream-b {
+  fill: none;
+  stroke: var(--accent-sky);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  opacity: 0.85;
+}
+.stones ol {
+  position: relative;
+  display: flex;
+  gap: clamp(2px, 1.2vw, 12px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.stone {
+  position: relative;
+}
+.stone button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+}
+.stone button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.stone svg {
+  overflow: visible;
+}
+.stone-body {
+  fill: rgba(var(--glass-rgb), 0.92);
+  stroke: rgba(var(--text-rgb), 0.26);
+  stroke-width: 1;
+  transition:
+    fill 0.6s var(--ease),
+    stroke 0.6s var(--ease);
+}
+.stone-shine {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.55);
+  stroke-width: 1.3;
+  stroke-linecap: round;
+}
+.is-done .stone-body {
+  fill: var(--accent);
+  stroke: rgba(var(--accent-deep-rgb), 0.4);
+}
+.is-done .stone-shine {
+  stroke: rgba(255, 255, 255, 0.4);
+}
+.is-now .stone-body {
+  fill: var(--card);
+  stroke: rgba(var(--gold-rgb), 0.5);
+}
+.stone-ring {
+  fill: none;
+  stroke: var(--gold);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.6s var(--ease);
+}
+.stone-glow {
+  fill: rgba(var(--gold-l-rgb), 0.55);
+  animation: stone-glow 3.2s ease-in-out infinite;
+}
+@keyframes stone-glow {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+.stone-tip {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  z-index: 5;
+  padding: 7px 11px;
+  border-radius: 10px;
+  background: var(--ink);
+  color: var(--card);
+  font: 500 13px/1 var(--sans);
+  white-space: nowrap;
+  opacity: 0;
+  transform: translate(-50%, -4px);
+  pointer-events: none;
+  transition:
+    opacity 0.2s var(--ease),
+    transform 0.2s var(--ease);
+}
+.dusk .stone-tip {
+  background: var(--ritual-text);
+  color: var(--ritual-bg);
+}
+.stone.show .stone-tip,
+.stone button:focus-visible + .stone-tip {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* ───────────────────────── 潘吉陪在右下角 ───────────────────────── */
+
+.companion {
+  position: fixed;
+  right: max(14px, env(safe-area-inset-right));
+  bottom: max(8px, env(safe-area-inset-bottom));
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  pointer-events: none;
+}
+.companion-body {
+  display: block;
+  transition: transform 0.55s var(--spring-soft);
+}
+/* 身子挡到按钮时：往下缩，只探出头（滚到空的地方再站起来） */
+.companion.is-peek .companion-body {
+  transform: translateY(58%);
+}
+/* 连探出来的头都会挡到选项 / 小标题：整个躲到下面，滚到空的地方再出来 */
+.companion.is-away .companion-body {
+  transform: translateY(115%);
+}
+.companion.is-peek::after,
+.companion.is-away::after {
+  opacity: 0;
+}
+.companion::after {
+  content: '';
+  position: absolute;
+  right: 24px;
+  bottom: -2px;
+  width: 64px;
+  height: 10px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(var(--shade-rgb), 0.18), rgba(var(--shade-rgb), 0));
+}
+/* 泡泡不占位置（absolute）：潘吉那一块的大小、位置永远不变。
+   泡泡出现 / 换句话时如果把整块撑大，Chromium 在许愿模式的 iframe 里会把潘吉身上会动的部分（眨眼、漂浮）
+   画到旧的位置上，留下一块块残影（宝藏那一章最明显） */
+.bubble {
+  position: absolute;
+  right: 8px;
+  bottom: calc(100% - 4px);
+  width: max-content;
+  max-width: min(290px, 66vw);
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: 18px 18px 6px 18px;
+  background: rgba(var(--glass-rgb), 0.9);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(20px) saturate(160%);
+  box-shadow:
+    inset 0 0 0 0.5px rgba(var(--text-rgb), 0.1),
+    0 8px 24px rgba(var(--shade-rgb), 0.12);
+  font: 500 15px/1.45 var(--sans);
+  color: var(--text-strong);
+  transform-origin: 100% 100%;
+  /* 先量过不会盖住按钮，才出来（.is-shown） */
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(6px) scale(0.92);
+  transition:
+    opacity 0.28s var(--ease),
+    transform 0.45s var(--spring),
+    visibility 0s linear 0.28s;
+}
+.bubble.is-shown {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition:
+    opacity 0.28s var(--ease),
+    transform 0.45s var(--spring),
+    visibility 0s;
+}
+.dusk .pg-aura {
+  opacity: 1;
+  transition: opacity 0.9s var(--ease);
+}
+
+/* ───────────────────────── 开场：杂志封面 ───────────────────────── */
+
+.step-welcome {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  box-sizing: border-box;
+  padding: max(56px, env(safe-area-inset-top)) 0 max(28px, env(safe-area-inset-bottom));
+}
+.cover {
+  box-sizing: border-box;
+  width: min(540px, 100%);
+  padding: clamp(26px, 5vw, 44px) clamp(20px, 5vw, 44px) clamp(24px, 4vw, 34px);
+  border-radius: 34px;
+  text-align: center;
+  background: rgba(var(--glass-rgb), 0.74);
+  -webkit-backdrop-filter: blur(30px) saturate(170%);
+  backdrop-filter: blur(30px) saturate(170%);
+  box-shadow:
+    inset 0 0 0 0.5px var(--glass-border),
+    0 30px 80px rgba(var(--shade-rgb), 0.16);
+  animation: sheet-in 0.9s var(--spring-soft) both;
+}
+.cover {
+  position: relative;
+}
+.cover-lang {
+  display: none;
+}
+.cover-mark {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.cover-mark b {
+  padding-left: 0.34em;
+  font: 600 26px/1 var(--serif);
+  letter-spacing: 0.34em;
+  color: var(--text-strong);
+}
+.cover-mark span {
+  font: 600 11px/1 var(--sans);
+  letter-spacing: 0.3em;
+  color: var(--text-soft);
+}
+.cover-hero {
+  display: flex;
+  justify-content: center;
+  margin: 10px auto 4px;
+}
+.cover .h-display {
+  margin-top: 4px;
+}
+.cover-sub {
+  margin: 8px 0 0;
+  font: 500 16px/1.4 var(--sans);
+  color: var(--gold-ink);
+}
+.cover .lead {
+  max-width: 420px;
+  margin: 12px auto 0;
+}
+.cover-form {
+  display: grid;
+  gap: 18px;
+  margin: 26px 0 24px;
+  text-align: left;
+}
+.field {
+  display: grid;
+  gap: 8px;
+}
+.field.center {
+  justify-items: center;
+  margin-top: 18px;
+}
+.field-label {
+  font: 600 14px/1.25 var(--sans);
+  letter-spacing: 0.01em;
+  color: var(--text-soft);
+}
+.cover-go {
+  width: 100%;
+}
+.cover .fine {
+  text-wrap: balance;
+}
+/* 封面没有顶栏：地名放到最上面，不被封面卡片盖住（iPad 竖放的英文卡片从 79px 开始）。手机见下面 ≤560px */
+.qz.is-cover .sc-caption {
+  top: max(16px, env(safe-area-inset-top));
+}
+.lang-toggle.is-big {
+  display: flex;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 3px;
+  border-radius: 13px;
+  font-size: 15px;
+}
+.lang-toggle.is-big button {
+  flex: 1;
+  min-height: 40px;
+  border-radius: 10px;
+}
+
+.text-in {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 52px;
+  padding: 13px 18px;
+  border: 0;
+  border-radius: 14px;
+  background: rgba(var(--glass-rgb), 0.96);
+  box-shadow: inset 0 0 0 1px rgba(var(--text-rgb), 0.14);
+  color: var(--text-strong);
+  font: 400 17px/1.45 var(--sans);
+  outline: none;
+  transition: box-shadow 0.2s var(--ease);
+}
+.text-in:focus {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.text-in::placeholder {
+  color: var(--text-soft);
+  opacity: 1;
+}
+textarea.text-in {
+  display: block;
+  margin-top: 18px;
+  resize: none;
+}
+
+/* iOS 分段控件 */
+.seg {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--n), 1fr);
+  padding: 3px;
+  border-radius: 13px;
+  background: rgba(var(--text-rgb), 0.08);
+  box-shadow: inset 0 0 0 0.5px rgba(var(--text-rgb), 0.06);
+}
+.seg-thumb {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc((100% - 6px) / var(--n));
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow:
+    0 3px 8px rgba(var(--shade-rgb), 0.12),
+    0 0 0 0.5px rgba(var(--shade-rgb), 0.06);
+  transform: translateX(calc(var(--i) * 100%));
+  transition: transform 0.35s var(--spring-soft);
+}
+.seg button {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 42px;
+  padding: 0 10px;
+  border: 0;
+  background: none;
+  color: var(--text-soft);
+  font: 600 15px/1.15 var(--sans);
+  cursor: pointer;
+  transition: color 0.25s var(--ease);
+}
+.seg button.on {
+  color: var(--text-strong);
+}
+.seg button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 10px;
+}
+.seg-sm button {
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 14px;
+}
+
+/* ───────────────────────── 擦亮神灯（暮色） ───────────────────────── */
+
+.step-lamp {
+  text-align: center;
+}
+.step-lamp .q-head {
+  max-width: 560px;
+}
+.lamp-stage {
+  position: relative;
+  width: min(380px, 86vw, 52vh);
+  aspect-ratio: 1;
+  margin: 10px auto 0;
+}
+.lamp-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.lamp-ring circle {
+  fill: none;
+  stroke: rgba(var(--text-rgb), 0.14);
+  stroke-width: 0.6;
+}
+.lamp-ring .fill {
+  stroke: var(--gold);
+  stroke-width: 1.1;
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  transition: stroke-dashoffset 0.2s linear;
+}
+.lamp-mist {
+  position: absolute;
+  left: 50%;
+  top: 12%;
+  width: 74%;
+  height: 62%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(var(--mist-rgb), 0.5), rgba(var(--mist-rgb), 0));
+  opacity: var(--p);
+  transform: translateX(-50%) scale(calc(0.5 + var(--p) * 0.6));
+  transition:
+    opacity 0.3s var(--ease),
+    transform 0.3s var(--ease);
+}
+.lamp-genie {
+  position: absolute;
+  left: 50%;
+  top: 4%;
+  z-index: 1;
+  opacity: 0;
+  transform: translate(-50%, 50px) scale(0.55);
+  transition:
+    opacity 0.9s var(--ease),
+    transform 1.1s var(--spring);
+  pointer-events: none;
+}
+.lamp-genie.out {
+  opacity: 1;
+  transform: translate(-50%, -6px) scale(1);
+}
+.lamp-touch {
+  position: absolute;
+  left: 50%;
+  bottom: 9%;
+  z-index: 2;
+  padding: 18px;
+  transform: translateX(-50%);
+  touch-action: none;
+  cursor: grab;
+  border-radius: 40px;
+}
+.lamp-touch:focus-visible {
+  outline: 2px solid var(--gold);
+}
+.lamp-touch svg {
+  display: block;
+  width: min(280px, 64vw);
+  height: auto;
+}
+.is-done .lamp-touch {
+  cursor: default;
+}
+.lamp-shake {
+  animation: lamp-shake 0.5s ease-in-out infinite;
+}
+@keyframes lamp-shake {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  25% {
+    transform: rotate(-1.6deg);
+  }
+  75% {
+    transform: rotate(1.6deg);
+  }
+}
+.lamp-status {
+  margin: 14px 0 0;
+  font: 500 16px/1.4 var(--sans);
+  color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 刚出现的一题（steps.jsx useFresh）：前 350 ms 点不到，上一张牌的连点不会落在这一题上 */
+.step.is-fresh,
+.step.is-fresh * {
+  pointer-events: none !important;
+}
+
+/* ───────────────────────── 梦想家卡牌（印刷卡） ───────────────────────── */
+
+.dcard {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  border-radius: 20px;
+  overflow: hidden;
+}
+.dcard-front {
+  --text: var(--paper-text);
+  --text-strong: var(--paper-text-strong);
+  --text-soft: var(--paper-text-soft);
+  --gold: var(--paper-gold);
+  --gold-ink: var(--paper-gold-ink);
+  --accent: var(--paper-accent);
+  padding: 13% 9% 10%;
+  color: var(--paper-text);
+  background:
+    var(--grain),
+    radial-gradient(120% 70% at 28% 0%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0) 62%),
+    var(--card);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 0 0 0.5px rgba(var(--gold-rgb), 0.55),
+    0 2px 4px rgba(var(--shade-rgb), 0.08),
+    0 22px 54px rgba(var(--shade-rgb), 0.26);
+}
+.dcard-line {
+  position: absolute;
+  inset: 10px;
+  border: 1px solid rgba(var(--gold-rgb), 0.78);
+  border-radius: 13px;
+  pointer-events: none;
+}
+.dcard-line::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border: 0.5px solid rgba(var(--gold-rgb), 0.5);
+  border-radius: 10px;
+}
+.dcard-corners::before,
+.dcard-corners::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  margin-left: -3.5px;
+  background: var(--card);
+  border: 1px solid rgba(var(--gold-rgb), 0.85);
+  transform: rotate(45deg);
+}
+.dcard-corners::before {
+  top: 6.5px;
+}
+.dcard-corners::after {
+  bottom: 6.5px;
+}
+.dcard-num {
+  font: 600 clamp(22px, 2.6vw, 30px) / 1 var(--serif);
+  letter-spacing: 0.08em;
+  color: rgba(var(--shade-rgb), 0.3);
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, 1),
+    0 -0.5px 0 rgba(var(--shade-rgb), 0.28);
+}
+.dcard-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 0;
+}
+.dcard-foot {
+  font: 600 12px/1.2 var(--sans);
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--paper-gold-ink);
+}
+.dcard-foot:lang(zh-Hans) {
+  font-family: 'Noto Serif SC', 'Songti SC', serif;
+  font-size: 14px;
+  letter-spacing: 0.3em;
+}
+/* 梦想家卡牌的英文名永远一行（THE COLLECTOR’S LOFT 在蓝图的小牌上也不会掉一个字到金框上）：字号跟着牌宽走。
+   cqi = 牌面内容宽（扣掉 8% 的边）：208px 的小牌 ≈ 10.8px，240px 以上 = 12px */
+.dreamer-card .dcard-foot {
+  max-width: 100%;
+  white-space: nowrap;
+  letter-spacing: 0.14em;
+  font-size: 10.5px;
+  font-size: min(12px, 6.2cqi);
+}
+.dreamer-card .dcard-foot:lang(zh-Hans) {
+  letter-spacing: 0.3em;
+  font-size: min(14px, 8cqi);
+}
+.dcard-back {
+  justify-content: center;
+  background:
+    var(--grain),
+    repeating-linear-gradient(135deg, rgba(var(--gold-l-rgb), 0.05) 0 1px, rgba(var(--gold-l-rgb), 0) 1px 10px),
+    radial-gradient(120% 90% at 50% 18%, var(--card-back-l), var(--card-back) 55%, var(--card-back-deep));
+  box-shadow:
+    0 0 0 0.5px rgba(var(--gold-rgb), 0.6),
+    0 2px 4px rgba(0, 0, 0, 0.2),
+    0 22px 54px rgba(0, 0, 0, 0.38);
+}
+.dcard-back .dcard-line {
+  border-color: rgba(var(--gold-l-rgb), 0.55);
+}
+.dcard-back .dcard-line::after {
+  border-color: rgba(var(--gold-l-rgb), 0.3);
+}
+.dcard-medal {
+  width: 56%;
+  height: auto;
+  fill: none;
+  stroke: rgba(var(--gold-l-rgb), 0.85);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.dcard-wm {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 9%;
+  padding-left: 0.5em;
+  font: 600 13px/1 var(--serif);
+  letter-spacing: 0.5em;
+  color: rgba(var(--gold-l-rgb), 0.85);
+}
+.chapter-card {
+  container-type: inline-size;
+}
+.chapter-card .dcard-body {
+  justify-content: space-evenly;
+}
+.chapter-name {
+  margin: 0;
+  font: 600 clamp(28px, 4vw, 36px) / 1.15 var(--zh-serif);
+  letter-spacing: 0.02em;
+  color: var(--paper-text-strong);
+}
+html[lang='en'] .chapter-name {
+  font-size: clamp(30px, 4.4vw, 40px);
+  line-height: 1.05;
+}
+/* 「The Deal-Breaker Card」：Deal-Breaker 不能从连字号断（.nobr），字小一点，让「The Deal-Breaker」放得进一行
+   （13.4cqi ≈ 牌面内容宽 ÷ 7.4；不支持 container query 的浏览器照旧用上面的字号，三行也不会断词） */
+html[lang='en'] .chapter-name:has(.nobr) {
+  font-size: min(clamp(30px, 4.4vw, 40px), 13.4cqi);
+}
+.dc-emblem {
+  display: block;
+  color: var(--paper-gold);
+}
+.dc-emblem svg {
+  display: block;
+  width: clamp(64px, 30cqw, 104px);
+  height: auto;
+}
+.dc-code {
+  display: flex;
+  gap: 0.9em;
+  margin-top: 4px;
+  font: 600 13px/1 var(--sans);
+  letter-spacing: 0.06em;
+  color: var(--paper-accent);
+}
+.dc-name {
+  margin: 6px 0 0;
+  font: 600 clamp(22px, 2.8vw, 28px) / 1.15 var(--zh-serif);
+  color: var(--paper-text-strong);
+}
+html[lang='en'] .dc-name {
+  font-size: clamp(24px, 3vw, 30px);
+  line-height: 1.05;
+}
+.dc-tag {
+  max-width: 92%;
+  margin: 4px 0 0;
+  font: 400 14px/1.5 var(--zh-serif);
+  color: var(--paper-text-soft);
+  text-wrap: balance;
+}
+html[lang='en'] .dc-tag {
+  font-size: 16px;
+  line-height: 1.3;
+  font-style: italic;
+}
+.dc-palette {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.dc-palette i {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 0.5px rgba(var(--shade-rgb), 0.16);
+}
+.dreamer-card {
+  container-type: inline-size;
+  padding: 11% 8% 9%;
+}
+.dreamer-card.big .dc-name {
+  font-size: clamp(26px, 3.6vw, 34px);
+}
+
+/* 翻牌 */
+.flip {
+  perspective: 1500px;
+}
+.flip-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 1.05s var(--spring-soft);
+}
+.flip.is-flipped .flip-inner {
+  transform: rotateY(180deg);
+}
+.flip-back,
+.flip-front {
+  position: absolute;
+  inset: 0;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+.flip-front {
+  transform: rotateY(180deg);
+}
+/* 翻完了：放平成普通的一层（rotateY 180° × 2 = 不转），不留 3D 图层 —— Chromium 有时会把它的残影留在下一页 */
+.flip.is-flat {
+  perspective: none;
+}
+.flip.is-flat .flip-inner {
+  transition: none;
+  transform: none;
+  transform-style: flat;
+}
+.flip.is-flat .flip-back {
+  display: none;
+}
+.flip.is-flat .flip-front {
+  transform: none;
+  -webkit-backface-visibility: visible;
+  backface-visibility: visible;
+}
+
+/* ───────────────────────── 章节翻牌（暮色） ───────────────────────── */
+
+.step-interlude {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.step-interlude .flip {
+  width: min(320px, 66vw, 40vh);
+  aspect-ratio: 5 / 8;
+  margin-top: clamp(6px, 3vh, 30px);
+}
+.interlude-hint {
+  max-width: 460px;
+  margin: 26px auto 22px;
+  color: var(--text);
+  font-size: 18px;
+}
+
+/* ───────────────────────── I · 直觉：两张印刷小卡 ───────────────────────── */
+
+.breath {
+  width: 120px;
+  height: 3px;
+  margin: 16px auto 0;
+  border-radius: 2px;
+  background: rgba(var(--text-rgb), 0.1);
+  overflow: hidden;
+}
+.breath i {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--gold);
+  transform-origin: left center;
+  animation: breath 3s linear 0.45s both;
+}
+@keyframes breath {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: clamp(12px, 2.4vw, 22px);
+  margin-top: 22px;
+}
+.pair-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 10px 0;
+  border: 0;
+  border-radius: 22px;
+  background: var(--grain), var(--card);
+  box-shadow:
+    inset 0 0 0 0.5px rgba(var(--gold-rgb), 0.45),
+    0 1px 2px rgba(var(--shade-rgb), 0.06),
+    0 12px 30px rgba(var(--shade-rgb), 0.12);
+  color: var(--text-strong);
+  cursor: pointer;
+  transition:
+    transform 0.45s var(--spring),
+    box-shadow 0.35s var(--ease),
+    opacity 0.35s var(--ease);
+}
+.pair-card:not(.fx-pressable):active {
+  transform: scale(0.97);
+}
+.pair-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.pair-art {
+  display: block;
+  overflow: hidden;
+  border-radius: 14px;
+  aspect-ratio: 4 / 3;
+  background: var(--bg-deep);
+}
+.pair-art .vg {
+  width: 100%;
+  height: 100%;
+}
+.pair-art svg.vg {
+  display: block;
+}
+.pair-label {
+  display: block;
+  padding: 12px 8px 14px;
+  font: 500 15px/1.35 var(--sans);
+  text-align: center;
+}
+.pair-check {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--gold-btn);
+  color: var(--ink);
+  box-shadow: 0 4px 12px rgba(var(--gold-d-rgb), 0.35);
+  transform: scale(0);
+  transition: transform 0.45s var(--spring);
+}
+.pair-card.is-picked {
+  transform: translateY(-6px);
+  box-shadow:
+    inset 0 0 0 2px var(--gold),
+    0 22px 44px rgba(var(--gold-d-rgb), 0.22);
+}
+.pair-card.is-picked .pair-check {
+  transform: scale(1);
+}
+.pair-card.is-dropped {
+  opacity: 0.38;
+  transform: scale(0.96);
+}
+
+/* 直觉 v2：每题 4–6 张图（SPEC §2.4）。同一张玻璃卡，舞台放宽到 1000；网格按张数和屏幕排：
+   横放 iPad：4 张一排四个（4:3）· 5 张 3 + 2 置中 · 6 张 3 × 2（5 / 6 张的图 3:2，一屏放得下）
+   竖放 iPad：4 张 2 × 2（4:3）· 5 / 6 张两栏三排（3:2，5 张的最后一张置中）
+   手机：两栏（4 张 2 × 2；5 / 6 张两栏三排）；字最多两行、两行等长，同一排的字对齐 */
+.qz-pair .stage {
+  max-width: 1000px;
+  --stage-top: clamp(10px, calc(16vh - 90px), 120px);
+}
+.pair.pick {
+  gap: clamp(10px, 1.4vw, 14px);
+  margin-top: 16px;
+}
+.pair.pick[data-n='4'] {
+  grid-template-columns: repeat(4, 1fr);
+}
+.pair.pick[data-n='5'],
+.pair.pick[data-n='6'] {
+  grid-template-columns: repeat(6, 1fr);
+}
+.pair.pick[data-n='5'] > *,
+.pair.pick[data-n='6'] > * {
+  grid-column: span 2;
+}
+.pair.pick[data-n='5'] > :nth-child(4) {
+  grid-column: 2 / span 2;
+}
+.pair.pick[data-n='5'] .pair-art,
+.pair.pick[data-n='6'] .pair-art {
+  aspect-ratio: 3 / 2;
+}
+.pair.pick .pair-card {
+  padding: 8px 8px 0;
+  border-radius: 20px;
+}
+.pair.pick .pair-art {
+  border-radius: 13px;
+}
+.pair.pick .pair-label {
+  display: grid;
+  place-items: center;
+  min-height: 2.6em;
+  padding: 8px 6px 9px;
+  font-size: 14.5px;
+  line-height: 1.3;
+  text-wrap: balance;
+}
+.pair.pick .pair-label > span {
+  display: block;
+  max-width: 100%;
+}
+.pair.pick .pair-check {
+  top: 14px;
+  right: 14px;
+}
+html[lang='en'] .pair.pick .pair-label {
+  font-size: 14px;
+  letter-spacing: -0.005em;
+}
+
+@media (max-width: 900px) {
+  /* 竖放：三排图要放得下 —— 题目卡往上提一点；两栏的字一行就放得下（最长的英文 ≈ 280 px），不用留两行的高 */
+  .qz-pair .stage {
+    --stage-top: clamp(10px, calc(10vh - 60px), 64px);
+  }
+  .pair.pick .pair-label {
+    min-height: 1.3em;
+  }
+  .pair.pick[data-n='4'] {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .pair.pick[data-n='5'],
+  .pair.pick[data-n='6'] {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .pair.pick[data-n='5'] > :nth-child(4) {
+    grid-column: span 2;
+  }
+  .pair.pick[data-n='5'] > :nth-child(5) {
+    grid-column: 2 / span 2;
+  }
+}
+@media (max-width: 560px) {
+  .qz-pair .stage {
+    --stage-top: 10px;
+  }
+  .pair.pick {
+    gap: 9px;
+    margin-top: 12px;
+  }
+  .pair.pick .pair-card {
+    padding: 6px 6px 0;
+    border-radius: 16px;
+  }
+  .pair.pick .pair-art {
+    border-radius: 11px;
+  }
+  /* 5 / 6 张在手机上照样 3:2（同设计稿）：4:3 三排要 ≈ 700 px 高，iPhone 的 Safari 可见区只有 ≈ 660 px，
+     最后一排得往下滑 —— 三秒的直觉题不能让人滑。裁掉的只是照片上下各一点天花和地面 */
+  .pair.pick .pair-label {
+    min-height: 2.6em;
+    padding: 6px 3px 7px;
+    font-size: 13px;
+  }
+  html[lang='en'] .pair.pick .pair-label {
+    font-size: 12.5px;
+    line-height: 1.25;
+  }
+  .pair.pick .pair-check {
+    top: 10px;
+    right: 10px;
+    width: 24px;
+    height: 24px;
+  }
+}
+
+/* 小照片（Vignette）：同一个画框、同一个圆角；载入时从纸色淡入 */
+.vg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.vg-photo {
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.45s var(--ease);
+  -webkit-user-drag: none;
+}
+.vg-photo.is-ready {
+  opacity: 1;
+}
+/* 还没拍好照片的选项：用它的材质拼四格色卡（Vignette.jsx；底色来自材质库），像摊在桌上的材料小样 */
+.vg.vg-collage {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 2px;
+  background: var(--bg-deep);
+}
+.vg-collage > i {
+  display: block;
+  /* 左上方一点柔光、右下方一点影子：平的色块看起来像一块实物小样 */
+  background-image:
+    radial-gradient(120% 90% at 22% 18%, rgba(var(--glass-rgb), 0.28), transparent 62%),
+    linear-gradient(160deg, transparent 55%, rgba(var(--shade-rgb), 0.12));
+  box-shadow: inset 0 0 0 0.5px rgba(var(--shade-rgb), 0.1);
+}
+.vg-collage > i.cat-metal {
+  background-image:
+    linear-gradient(115deg, transparent 28%, rgba(var(--glass-rgb), 0.55) 46%, transparent 64%),
+    linear-gradient(160deg, transparent 50%, rgba(var(--shade-rgb), 0.2));
+}
+.vg-collage > i.cat-stone {
+  background-image:
+    radial-gradient(140% 100% at 30% 20%, rgba(var(--glass-rgb), 0.32), transparent 60%),
+    repeating-linear-gradient(118deg, transparent 0 22px, rgba(var(--shade-rgb), 0.05) 22px 23px, transparent 23px 51px);
+}
+.vg-collage > i.cat-wood {
+  background-image:
+    repeating-linear-gradient(92deg, rgba(var(--shade-rgb), 0.06) 0 1px, transparent 1px 7px, rgba(var(--glass-rgb), 0.05) 7px 9px, transparent 9px 15px),
+    radial-gradient(120% 90% at 22% 18%, rgba(var(--glass-rgb), 0.22), transparent 62%);
+}
+.vg-collage.n1 > i {
+  grid-area: 1 / 1 / 3 / 3;
+}
+.vg-collage.n2 > i {
+  grid-row: 1 / 3;
+}
+.vg-collage.n3 > i:first-child {
+  grid-row: 1 / 3;
+}
+.pair-art {
+  position: relative;
+}
+/* 照片内侧一圈极细的暗边，像印出来的相片贴在卡上 */
+.pair-art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 0.5px rgba(36, 33, 29, 0.14);
+  pointer-events: none;
+}
+/* ───────────────────────── II · 生活：选项卡 ───────────────────────── */
+
+.opts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr));
+  gap: 12px;
+  margin-top: 24px;
+}
+.opts-many {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 172px), 1fr));
+  gap: 10px;
+}
+.opt {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 74px;
+  /* 右上角留给勾（22px 的小圆，离边 8px）：两行的选项字不会钻到勾下面 */
+  padding: 12px 36px 12px 16px;
+  border: 0;
+  border-radius: 20px;
+  background: rgba(var(--glass-rgb), 0.94);
+  box-shadow:
+    inset 0 0 0 0.5px rgba(var(--text-rgb), 0.1),
+    0 1px 2px rgba(var(--shade-rgb), 0.05),
+    0 6px 16px rgba(var(--shade-rgb), 0.06);
+  color: var(--text-strong);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 0.2s var(--ease),
+    box-shadow 0.3s var(--ease),
+    background-color 0.3s var(--ease);
+}
+.opt:not(.fx-pressable):active {
+  transform: scale(0.97);
+}
+.opt:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.opt-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: rgba(var(--accent-l-rgb), 0.28);
+  color: var(--accent);
+  transition:
+    background-color 0.3s var(--ease),
+    color 0.3s var(--ease);
+}
+.opt-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.opt-label {
+  font: 600 16px/1.3 var(--sans);
+}
+.opt-sub {
+  font: 400 14px/1.3 var(--sans);
+  color: var(--text-soft);
+}
+.opt-tick {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--card);
+  transform: scale(0);
+  transition: transform 0.35s var(--spring);
+}
+.opt.on {
+  background: var(--card);
+  box-shadow:
+    inset 0 0 0 2px var(--accent),
+    0 10px 26px rgba(var(--accent-deep-rgb), 0.14);
+}
+.opt.on .opt-icon {
+  background: var(--accent);
+  color: var(--card);
+}
+.opt.on .opt-tick {
+  transform: scale(1);
+}
+.opt.small {
+  min-height: 62px;
+  gap: 11px;
+  padding: 10px 32px 10px 12px;
+  border-radius: 17px;
+}
+.opt.small .opt-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+}
+.opt.small .opt-label {
+  font-size: 15px;
+}
+.opt.is-x .opt-tick {
+  background: var(--danger);
+}
+.opt.is-x.on {
+  box-shadow:
+    inset 0 0 0 2px var(--danger),
+    0 10px 24px rgba(var(--danger-rgb), 0.12);
+}
+.opt.is-x.on .opt-icon {
+  background: rgba(var(--danger-rgb), 0.12);
+  color: var(--danger);
+}
+.opt.is-x.on .opt-label {
+  color: var(--danger);
+  text-decoration: line-through;
+  text-decoration-color: rgba(var(--danger-rgb), 0.55);
+}
+.ico-dot {
+  display: inline-block;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.2;
+}
+
+/* 胶囊小选项 */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+.chips.center {
+  justify-content: center;
+}
+.field .chips {
+  margin-top: 0;
+}
+.chip {
+  min-height: 46px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(var(--glass-rgb), 0.92);
+  box-shadow: inset 0 0 0 1px rgba(var(--text-rgb), 0.14);
+  color: var(--text-strong);
+  font: 500 16px/1.2 var(--sans);
+  cursor: pointer;
+  transition:
+    transform 0.18s var(--ease),
+    background-color 0.25s var(--ease),
+    color 0.25s var(--ease),
+    box-shadow 0.25s var(--ease);
+}
+.chip:not(.fx-pressable):active {
+  transform: scale(0.96);
+}
+.chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.chip.on {
+  background: var(--ink);
+  color: var(--card);
+  box-shadow: 0 4px 12px rgba(var(--shade-rgb), 0.16);
+}
+
+/* ───────────────────────── III · 宝藏：滑杆 + 画出来的柜子 ───────────────────────── */
+
+.viz {
+  --viz-h: 250px;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  max-width: 560px;
+  margin: 22px auto 0;
+}
+.viz-cabinet {
+  --viz-h: 290px;
+}
+.viz-wardrobe {
+  --viz-h: 220px;
+}
+/* 柜子 = 一格格小照片拼起来（Cabinet.jsx）；高度按 --viz-h 算宽度，格子再多也放得下 */
+.cab {
+  position: relative;
+  width: min(100%, calc(var(--viz-h) * var(--cols) * var(--ar) / var(--rows)));
+  filter: drop-shadow(0 16px 18px rgba(var(--shade-rgb), 0.16)) drop-shadow(0 2px 3px rgba(var(--shade-rgb), 0.08));
+}
+.cab-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  overflow: hidden;
+  border-radius: 3px;
+}
+.cab-tile {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: var(--ar);
+  background: #d8c7a8;
+  -webkit-user-drag: none;
+}
+.cab-door .cab-tile {
+  background: #ece2cf;
+}
+.cab-plinth {
+  display: block;
+  height: 9px;
+  margin: 0 2.5%;
+  border-radius: 0 0 3px 3px;
+  background: linear-gradient(#2c2824, #191613);
+}
+.cab-top {
+  display: block;
+  height: 7px;
+  border-radius: 3px 3px 0 0;
+  background: linear-gradient(#f4ecdc, #e2d6c0);
+  box-shadow: inset 0 -1px 0 rgba(36, 33, 29, 0.18);
+}
+.cab-door .cab-grid {
+  gap: 0;
+  overflow: visible;
+}
+/* 还差的门：金色虚线框 */
+.cab-ghost {
+  display: block;
+  box-sizing: border-box;
+  aspect-ratio: var(--ar);
+  border: 1.5px dashed rgba(var(--gold-rgb), 0.75);
+  border-radius: 3px;
+  background: rgba(var(--gold-l-rgb), 0.1);
+}
+.viz-more {
+  position: absolute;
+  right: 6px;
+  top: -6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--card);
+  font: 600 14px/1 var(--sans);
+}
+.slider {
+  max-width: 520px;
+  margin: 18px auto 0;
+}
+.slider-val {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.slider-val b {
+  font: 600 46px/1 var(--display);
+  letter-spacing: -0.025em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+}
+.slider-val span {
+  font: 500 17px/1 var(--sans);
+  color: var(--text-soft);
+}
+.slider input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 40px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.slider input[type='range']:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 20px;
+}
+.slider input[type='range']::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--accent) 0 var(--p), rgba(var(--text-rgb), 0.13) var(--p) 100%);
+}
+.slider input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 30px;
+  height: 30px;
+  margin-top: -12px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--card);
+  box-shadow:
+    0 0 0 0.5px rgba(var(--shade-rgb), 0.08),
+    0 3px 8px rgba(var(--shade-rgb), 0.22),
+    0 1px 1px rgba(var(--shade-rgb), 0.08);
+  transition: transform 0.2s var(--spring);
+}
+.slider input[type='range']:active::-webkit-slider-thumb {
+  transform: scale(1.12);
+}
+.slider input[type='range']::-moz-range-track {
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--accent) 0 var(--p), rgba(var(--text-rgb), 0.13) var(--p) 100%);
+}
+.slider input[type='range']::-moz-range-thumb {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--card);
+  box-shadow:
+    0 0 0 0.5px rgba(var(--shade-rgb), 0.08),
+    0 3px 8px rgba(var(--shade-rgb), 0.22);
+}
+.calc {
+  margin: 14px auto 0;
+  max-width: 560px;
+  font: 400 16px/1.5 var(--sans);
+  color: var(--text-soft);
+  text-align: center;
+  text-wrap: pretty;
+}
+.calc b {
+  font-weight: 650;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+.calc em {
+  display: block;
+  margin-top: 2px;
+  font: 500 14px/1.4 var(--sans);
+  font-style: normal;
+  color: var(--gold-ink);
+}
+
+/* ───────────────────────── IV · 三个愿望 ───────────────────────── */
+
+.wish-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 22px;
+}
+.wish {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 108px;
+  padding: 16px 10px 14px;
+  border: 0;
+  border-radius: 20px;
+  background: rgba(var(--glass-rgb), 0.94);
+  box-shadow:
+    inset 0 0 0 0.5px rgba(var(--text-rgb), 0.1),
+    0 6px 16px rgba(var(--shade-rgb), 0.06);
+  color: var(--text-strong);
+  cursor: pointer;
+  transition:
+    transform 0.2s var(--ease),
+    box-shadow 0.3s var(--ease),
+    background-color 0.3s var(--ease);
+}
+.wish:not(.fx-pressable):active {
+  transform: scale(0.97);
+}
+.wish:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.wish-icon {
+  color: var(--accent);
+  transition: color 0.3s var(--ease);
+}
+.wish-label {
+  font: 500 15px/1.3 var(--sans);
+  text-align: center;
+}
+.wish-tick {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--gold-btn);
+  color: var(--ink);
+  transform: scale(0);
+  transition: transform 0.35s var(--spring);
+}
+.wish.on {
+  background: var(--card);
+  box-shadow:
+    inset 0 0 0 2px var(--gold),
+    0 10px 26px rgba(var(--gold-d-rgb), 0.18);
+}
+.wish.on .wish-icon {
+  color: var(--gold-ink);
+}
+.wish.on .wish-tick {
+  transform: scale(1);
+}
+.wish-lamps {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  margin-top: 22px;
+}
+.wish-lamps span {
+  opacity: 0.32;
+  filter: saturate(0.4);
+  transition:
+    opacity 0.6s var(--ease),
+    filter 0.6s var(--ease),
+    transform 0.6s var(--spring);
+}
+.wish-lamps span.lit {
+  opacity: 1;
+  filter: none;
+  transform: translateY(-3px);
+}
+
+/* ───────────────────────── V · 雷区 ───────────────────────── */
+
+.nogo-colors {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px 8px;
+  margin: 24px 0 20px;
+}
+.nogo-color {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-strong);
+  font: 500 14px/1.25 var(--sans);
+  text-align: center;
+  cursor: pointer;
+}
+.nogo-color:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: 12px;
+}
+.nogo-color i {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  color: transparent;
+  box-shadow:
+    inset 0 0 0 0.5px rgba(var(--shade-rgb), 0.16),
+    0 4px 12px rgba(var(--shade-rgb), 0.1);
+  transition:
+    transform 0.35s var(--spring),
+    box-shadow 0.3s var(--ease);
+}
+.nogo-color i::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(var(--shade-rgb), 0);
+  transition: background-color 0.3s var(--ease);
+}
+.nogo-color i svg {
+  position: relative;
+  z-index: 1;
+}
+.nogo-color:not(.fx-pressable):active i {
+  transform: scale(0.94);
+}
+.nogo-color.x i {
+  color: var(--card);
+  box-shadow:
+    0 0 0 3px var(--card),
+    0 0 0 5px var(--danger);
+  transform: scale(0.92);
+}
+.nogo-color.x i::after {
+  background: rgba(var(--shade-rgb), 0.38);
+}
+.nogo-color.x span {
+  color: var(--danger);
+  text-decoration: line-through;
+}
+
+/* ───────────────────────── 揭晓（暮色） ───────────────────────── */
+
+.step-reveal {
+  text-align: center;
+}
+/* 牌后面那圈暖光（.reveal-bloom）比画面宽：在整页这一层裁掉，手机上不能左右拖。
+   用 clip 不用 hidden：不会多出一个滚动容器（顶栏的 sticky 照常） */
+.qz-reveal {
+  overflow-x: clip;
+}
+.cta-short {
+  display: none;
+}
+.reading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.deck {
+  position: relative;
+  width: 112px;
+  height: 180px;
+  margin: 40px auto 26px;
+}
+.deck-card {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  background:
+    repeating-linear-gradient(135deg, rgba(var(--gold-l-rgb), 0.06) 0 1px, rgba(var(--gold-l-rgb), 0) 1px 8px),
+    radial-gradient(120% 90% at 50% 18%, var(--card-back-l), var(--card-back) 58%, var(--card-back-deep));
+  box-shadow:
+    inset 0 0 0 0.5px rgba(var(--gold-l-rgb), 0.55),
+    0 8px 20px rgba(0, 0, 0, 0.35);
+  transform-origin: 50% 160%;
+  animation: fan 2.7s var(--ease) both;
+  animation-delay: calc(var(--i) * 18ms);
+}
+.deck-card::after {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  border: 0.5px solid rgba(var(--gold-l-rgb), 0.45);
+  border-radius: 8px;
+}
+@keyframes fan {
+  0% {
+    transform: translateY(14px);
+    opacity: 0;
+  }
+  12% {
+    transform: none;
+    opacity: 1;
+  }
+  42% {
+    transform: rotate(calc(var(--k) * 5.6deg));
+  }
+  62% {
+    transform: rotate(calc(var(--k) * 5.6deg));
+  }
+  86% {
+    transform: rotate(calc(var(--k) * 0.4deg)) translateY(calc(var(--k) * -0.4px));
+  }
+  100% {
+    transform: none;
+  }
+}
+.reveal-grid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 26px;
+}
+.reveal-card {
+  position: relative;
+  width: min(300px, 70vw, 40vh);
+}
+.reveal-flip {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 5 / 8;
+}
+.phase-rise .reveal-flip {
+  animation: rise 1.25s var(--spring-soft) both;
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(90px) scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.reveal-bloom {
+  position: absolute;
+  inset: -36%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(var(--gold-l-rgb), 0.34), rgba(var(--gold-l-rgb), 0.08) 55%, rgba(var(--gold-l-rgb), 0));
+  opacity: 0;
+  transition: opacity 1.8s var(--ease) 0.3s;
+  pointer-events: none;
+}
+.phase-shown .reveal-bloom {
+  opacity: 1;
+}
+.reveal-text {
+  max-width: 560px;
+  animation: content-in 0.9s var(--ease) 0.55s both;
+}
+/* 小小的潘吉站在「XX 的梦想家卡牌」旁边，说出「就是这一张——」（往上收进玻璃的留白里，不把按钮往下推） */
+.rv-hello {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: -8px 0 4px;
+}
+.rv-hello .eyebrow {
+  margin: 0;
+}
+.rv-pangie {
+  flex: none;
+  margin-bottom: -6px;
+}
+.rv-num {
+  margin-right: 0.15em;
+  font-family: var(--serif);
+  color: var(--gold);
+}
+.rv-other {
+  margin: 6px 0 0;
+  font: italic 500 21px/1.3 var(--serif);
+  color: var(--gold-ink);
+}
+.rv-other:lang(zh-Hans) {
+  font: 500 18px/1.4 'Noto Serif SC', 'Songti SC', serif;
+  letter-spacing: 0.2em;
+}
+.because {
+  display: grid;
+  gap: 6px;
+  margin: 16px auto 0;
+  padding: 0;
+  list-style: none;
+}
+.because li {
+  font: 500 15px/1.45 var(--sans);
+  color: var(--text);
+}
+.because li::before {
+  content: '✦';
+  margin-right: 8px;
+  font-size: 11px;
+  color: var(--gold);
+}
+.axes-mini {
+  display: grid;
+  gap: 10px;
+  max-width: 460px;
+  margin: 22px auto 26px;
+}
+.axis-mini {
+  display: grid;
+  grid-template-columns: 86px 46px 1fr 46px;
+  align-items: center;
+  gap: 10px;
+  font: 500 14px/1.2 var(--sans);
+}
+html[lang='en'] .axis-mini {
+  grid-template-columns: 100px 66px 1fr 66px;
+}
+.ax-dim {
+  text-align: left;
+  color: var(--text-soft);
+}
+.ax-dim i {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  font-style: normal;
+  letter-spacing: 0.04em;
+}
+.ax-pole {
+  color: var(--text-soft);
+  text-align: right;
+}
+.ax-pole.r {
+  text-align: left;
+}
+.ax-pole.win {
+  color: var(--text-strong);
+  font-weight: 650;
+}
+.axis-bar {
+  position: relative;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(var(--text-rgb), 0.18);
+}
+.axis-bar i {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 0 4px rgba(var(--gold-rgb), 0.2);
+}
+
+/* ───────────────────────── 小提示卡（还在吗？/ 继续上次） ───────────────────────── */
+
+.prompt-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(var(--shade-rgb), 0.28);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  animation: sc-in 0.3s var(--ease) both;
+}
+.prompt {
+  width: min(440px, 100%);
+  box-sizing: border-box;
+  padding: 26px 24px 22px;
+  border-radius: 28px;
+  background: var(--surface);
+  box-shadow: var(--shadow-2);
+  text-align: center;
+  animation: sheet-in 0.5s var(--spring-soft) both;
+}
+.prompt .pangie {
+  display: block;
+  margin: 0 auto 6px;
+}
+.prompt-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 22px;
+}
+.prompt-actions .btn {
+  padding: 0 14px;
+}
+
+.step-note {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+  margin-top: 8vh;
+}
+
+/* ───────────────────────── 梦想家蓝图（文件页） ───────────────────────── */
+
+.bp-page {
+  position: relative;
+  display: flow-root; /* 不让 .bp-doc 的上边距穿出去（风景带要贴在最上面） */
+  min-height: 100dvh;
+  padding-bottom: calc(120px + env(safe-area-inset-bottom));
+  background: var(--bg);
+  color: var(--text);
+  overscroll-behavior-y: contain;
+}
+.bp-band {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 460px;
+  overflow: hidden;
+}
+.bp-band::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(var(--bg-rgb), 0.2) 0%, rgba(var(--bg-rgb), 0) 36%, rgba(var(--bg-rgb), 0.7) 78%, var(--bg) 100%);
+}
+.bp-band .sc-caption {
+  top: max(18px, env(safe-area-inset-top));
+}
+.bp-doc {
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  max-width: 1000px;
+  margin: 230px auto 0;
+  padding: clamp(24px, 5vw, 60px) clamp(20px, 5vw, 60px) clamp(28px, 4vw, 48px);
+  border-radius: 30px;
+  background: var(--grain), var(--card);
+  box-shadow:
+    inset 0 0 0 0.5px rgba(var(--text-rgb), 0.06),
+    0 2px 6px rgba(var(--shade-rgb), 0.05),
+    0 30px 80px rgba(var(--shade-rgb), 0.12);
+  animation: sheet-in 0.8s var(--spring-soft) both;
+}
+.bp-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding-bottom: 28px;
+}
+.bp-title {
+  margin: 2px 0 0;
+  font: 600 clamp(30px, 4.6vw, 44px) / 1.1 var(--zh-serif);
+  letter-spacing: -0.01em;
+  color: var(--text-strong);
+}
+html[lang='en'] .bp-title {
+  font-size: clamp(36px, 5.4vw, 54px);
+  line-height: 1;
+}
+.bp-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 12px 0 0;
+  font: 400 15px/1.5 var(--sans);
+  color: var(--text-soft);
+}
+.bp-meta b {
+  color: var(--text-strong);
+  font-weight: 600;
+}
+.bp-meta > span {
+  color: var(--line);
+}
+.bp-seg {
+  flex: none;
+  min-width: 220px;
+}
+.bp-sec {
+  padding: 34px 0;
+  border-top: 0.5px solid var(--line);
+}
+.bp-h3 {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin: 0 0 20px;
+  font: 600 22px/1.25 var(--zh-serif);
+  color: var(--text-strong);
+}
+html[lang='en'] .bp-h3 {
+  font-size: 26px;
+  line-height: 1.1;
+}
+.bp-num {
+  display: inline-flex;
+  align-items: center;
+  min-width: 28px;
+  font: 600 16px/1 var(--serif);
+  letter-spacing: 0.08em;
+  color: var(--gold-ink);
+}
+.bp-h3 em {
+  font: 400 14px/1.4 var(--sans);
+  font-style: normal;
+  color: var(--text-soft);
+}
+.bp-hero {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: clamp(24px, 4vw, 48px);
+  align-items: start;
+}
+.bp-hero-card {
+  width: 240px;
+  aspect-ratio: 5 / 8;
+}
+.bp-h2 {
+  margin: 0;
+  font: 600 clamp(30px, 4vw, 40px) / 1.12 var(--zh-serif);
+  color: var(--text-strong);
+}
+html[lang='en'] .bp-h2 {
+  font-size: clamp(34px, 4.6vw, 46px);
+  line-height: 1.02;
+}
+.bp-quote {
+  margin: 10px 0 0;
+  font: 500 19px/1.5 var(--zh-serif);
+  color: var(--gold-ink);
+}
+html[lang='en'] .bp-quote {
+  font-size: 22px;
+  font-style: italic;
+}
+.bp-desc {
+  margin: 12px 0 0;
+  font: 400 16px/1.7 var(--sans);
+  color: var(--text);
+  text-wrap: pretty;
+}
+.axes {
+  display: grid;
+  gap: 12px;
+  margin-top: 24px;
+}
+.axis {
+  display: grid;
+  grid-template-columns: 64px 40px 1fr 40px 44px;
+  align-items: center;
+  gap: 10px;
+  font: 500 15px/1.2 var(--sans);
+}
+html[lang='en'] .axis {
+  grid-template-columns: 96px 66px 1fr 66px 44px;
+  font-size: 14px;
+}
+.axis-dim {
+  color: var(--text-soft);
+  font-size: 14px;
+}
+.axis-l,
+.axis-r {
+  color: var(--text-soft);
+}
+.axis-l {
+  text-align: right;
+}
+.axis-l.win,
+.axis-r.win {
+  color: var(--text-strong);
+  font-weight: 650;
+}
+/* 和揭晓页、海报同一种画法：一条细线 + 停在赢的那一边的金色小圆点（中间一道刻度 = 50 : 50） */
+.axis-track {
+  position: relative;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(var(--text-rgb), 0.12);
+}
+.axis-track::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -3px;
+  bottom: -3px;
+  width: 1px;
+  margin-left: -0.5px;
+  background: rgba(var(--text-rgb), 0.22);
+}
+.axis-knob {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 0 4px rgba(var(--gold-rgb), 0.2);
+  transform: translate(-50%, -50%);
+}
+.axis-pct {
+  font: 600 14px/1 var(--sans);
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+/* 设计师版多出来的三条（明度 / 线条 / 社交）：苔绿的点，和客人也看得到的四条分开 */
+.hidden-axis .axis-knob {
+  background: var(--accent);
+  box-shadow: 0 0 0 4px rgba(var(--accent-l-rgb), 0.35);
+}
+.palette-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.pal {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+}
+.pal i {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  box-shadow: inset 0 0 0 0.5px rgba(var(--shade-rgb), 0.14);
+}
+.pal span {
+  font: 500 13px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text-soft);
+}
+.mat-board {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-top: 24px;
+}
+.mat {
+  margin: 0;
+}
+.mat img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 14px;
+  box-shadow: inset 0 0 0 0.5px rgba(var(--shade-rgb), 0.1);
+  background: var(--bg-deep);
+}
+.mat figcaption {
+  display: grid;
+  gap: 2px;
+  margin-top: 8px;
+}
+.mat figcaption span {
+  font: 500 14px/1.3 var(--sans);
+  color: var(--text-soft);
+}
+.mat figcaption b {
+  font: 600 15px/1.3 var(--sans);
+  color: var(--text-strong);
+}
+.bp-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 18px 0 0;
+  font: 400 15px/1.55 var(--sans);
+  color: var(--text);
+}
+.bp-note svg {
+  flex: none;
+  margin-top: 3px;
+  color: var(--accent);
+}
+.bp-swaps {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0 0;
+  padding: 14px 16px;
+  list-style: none;
+  border-radius: 14px;
+  background: rgba(var(--accent-l-rgb), 0.16);
+}
+.bp-swaps li {
+  display: grid;
+  gap: 2px;
+  font: 400 14px/1.45 var(--sans);
+}
+.bp-swaps b {
+  font-weight: 600;
+  color: var(--accent);
+}
+.bp-sec.two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: clamp(24px, 5vw, 56px);
+}
+.life-list,
+.wish-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.life-list li {
+  display: grid;
+  grid-template-columns: 22px auto 1fr;
+  align-items: baseline;
+  gap: 10px;
+  padding: 11px 0;
+  border-bottom: 0.5px solid var(--line-soft);
+  font: 400 15px/1.45 var(--sans);
+}
+.life-list li > svg {
+  align-self: center;
+  color: var(--accent);
+}
+.life-list span {
+  color: var(--text-soft);
+}
+.life-list b {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.life-list .dz-only svg {
+  color: var(--gold-ink);
+}
+.wish-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  font: 600 17px/1.35 var(--sans);
+  color: var(--text-strong);
+}
+/* 「雷区」这一类的小标题（三个愿望下面） */
+.bp-sub {
+  margin: 20px 0 0;
+  font: 600 14px/1.3 var(--sans);
+  letter-spacing: 0.02em;
+  color: var(--text-soft);
+}
+.nogo-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+.bp-sub + .nogo-list {
+  margin-top: 8px;
+}
+.nogo-list span {
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(var(--danger-rgb), 0.08);
+  color: var(--danger);
+  font: 500 14px/1.2 var(--sans);
+}
+.nogo-list span::before {
+  content: '✕';
+  margin-right: 6px;
+  font-size: 12px;
+}
+.store-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.store {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding: 18px;
+  border-radius: 18px;
+  background: var(--bg);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+}
+.store-ico {
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.store-label {
+  font: 500 14px/1.3 var(--sans);
+  color: var(--text-soft);
+}
+.store-num {
+  font: 600 25px/1.15 var(--display);
+  letter-spacing: -0.015em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+}
+.store-ft {
+  font: 500 14px/1.3 var(--sans);
+  color: var(--gold-ink);
+}
+.store em {
+  font: 400 14px/1.4 var(--sans);
+  font-style: normal;
+  color: var(--text-soft);
+}
+.store.is-unsure {
+  box-shadow: inset 0 0 0 1px rgba(var(--danger-rgb), 0.45);
+}
+.store-flag {
+  font: 600 13px/1.3 var(--sans);
+  color: var(--danger);
+}
+.bp-wish {
+  text-align: center;
+}
+.bp-wish blockquote {
+  max-width: 700px;
+  margin: 10px auto 0;
+  font: 500 clamp(22px, 3vw, 28px) / 1.5 var(--zh-serif);
+  color: var(--text-strong);
+  quotes: '「' '」';
+}
+html[lang='en'] .bp-wish blockquote {
+  font-size: clamp(26px, 3.4vw, 32px);
+  font-style: italic;
+  line-height: 1.3;
+  quotes: '“' '”';
+}
+.bp-wish blockquote::before {
+  content: open-quote;
+  color: var(--gold);
+}
+.bp-wish blockquote::after {
+  content: close-quote;
+  color: var(--gold);
+}
+.bp-designer {
+  margin-top: 6px;
+  padding: 30px clamp(18px, 3vw, 30px);
+  border: 0;
+  border-radius: 22px;
+  background: rgba(var(--accent-l-rgb), 0.14);
+  box-shadow: inset 0 0 0 0.5px rgba(var(--accent-l-rgb), 0.6);
+}
+.bp-designer .bp-num {
+  color: var(--accent);
+}
+.dz-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+}
+.dz-grid h4 {
+  margin: 0 0 10px;
+  font: 600 15px/1.3 var(--sans);
+  letter-spacing: 0.02em;
+  color: var(--text-strong);
+}
+.dz-grid h4:not(:first-child) {
+  margin-top: 24px;
+}
+.dz-grid dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 14px;
+  margin: 0;
+  font: 400 15px/1.5 var(--sans);
+}
+.dz-grid dt {
+  color: var(--text-soft);
+}
+.dz-grid dd {
+  margin: 0;
+  color: var(--text-strong);
+}
+/* 柜门那一行下面的小注：雷区换掉的材质 / 客人不要的做法 */
+.dz-amend {
+  display: block;
+  margin-top: 4px;
+  font: 500 14px/1.45 var(--sans);
+  color: var(--accent);
+}
+.kw {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+  font: 400 14px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text-strong);
+  -webkit-user-select: text;
+  user-select: text;
+}
+.tips {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tips li {
+  font: 400 15px/1.55 var(--sans);
+  color: var(--text-strong);
+}
+.tip-text b {
+  font-weight: 650;
+}
+/* 最重要的三条：编号 + 小卡片，一眼扫得完 */
+.tips-top {
+  gap: 8px;
+}
+.tips-top li {
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  gap: 10px;
+  padding: 12px 14px 12px 12px;
+  border-radius: 16px;
+  background: var(--card);
+  box-shadow:
+    inset 0 0 0 0.5px var(--line),
+    0 1px 2px rgba(var(--shade-rgb), 0.04);
+}
+.tip-n {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(var(--text-rgb), 0.07);
+  font: 600 13px/1 var(--sans);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+}
+.tips-top .tip-conflict .tip-n {
+  background: rgba(var(--danger-rgb), 0.12);
+  color: var(--danger);
+}
+.tips-top .tip-kind {
+  display: flex;
+  width: fit-content;
+  margin: 0 0 6px;
+}
+/* 其余的：收在一个按钮后面，打开后按「要聊清楚 / 设计要点 / 沟通建议」分组 */
+.tips-more {
+  margin-top: 10px;
+}
+.tips-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(var(--text-rgb), 0.06);
+  color: var(--text-strong);
+  font: 600 15px/1 var(--sans);
+  cursor: pointer;
+  transition:
+    background-color 0.2s var(--ease),
+    transform 0.18s var(--ease);
+}
+.tips-toggle:not(.fx-pressable):active {
+  transform: scale(0.97);
+}
+.tips-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.tips-toggle svg {
+  transition: transform 0.3s var(--ease);
+}
+.tips-more.is-open .tips-toggle svg {
+  transform: rotate(180deg);
+}
+.tips-rest {
+  display: none;
+}
+.tips-more.is-open .tips-rest {
+  display: grid;
+  gap: 14px;
+  margin-top: 12px;
+  animation: rise-in 0.4s var(--ease) both;
+}
+.tips-head {
+  margin: 0 0 6px;
+}
+.tip-kind em {
+  margin-left: 2px;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+.tips-group {
+  gap: 0;
+}
+.tips-group li {
+  padding: 9px 2px;
+  box-shadow: inset 0 -0.5px 0 rgba(var(--text-rgb), 0.12);
+}
+.tips-group li:last-child {
+  box-shadow: none;
+}
+.tip-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 8px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font: 600 13px/1.2 var(--sans);
+  vertical-align: 1px;
+}
+.tip-conflict .tip-kind {
+  background: rgba(var(--danger-rgb), 0.1);
+  color: var(--danger);
+}
+.tip-note .tip-kind {
+  background: rgba(var(--accent-l-rgb), 0.3);
+  color: var(--accent);
+}
+.tip-tip .tip-kind {
+  background: rgba(var(--gold-rgb), 0.14);
+  color: var(--gold-ink);
+}
+.quick {
+  margin: 0;
+  font: 400 15px/1.6 var(--sans);
+  color: var(--text-strong);
+}
+.bp-end {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  padding-top: 40px;
+}
+.seal {
+  display: grid;
+  place-content: center;
+  width: 96px;
+  height: 96px;
+  box-sizing: border-box;
+  border: 2px solid var(--seal);
+  border-radius: 18px;
+  color: var(--seal);
+  transform: rotate(-7deg);
+  box-shadow: inset 0 0 0 4px var(--card), inset 0 0 0 5px var(--seal);
+}
+.seal span {
+  font: 700 22px/1.05 var(--zh-serif);
+}
+html[lang='en'] .seal span {
+  font-size: 20px;
+}
+.seal small {
+  margin-top: 3px;
+  font: 600 13px/1 var(--sans);
+  letter-spacing: 0.12em;
+}
+.bp-end-pangie {
+  margin-top: 8px;
+}
+.bp-farewell {
+  max-width: 520px;
+  margin: 4px 0 0;
+  font: 500 18px/1.65 var(--zh-serif);
+  color: var(--text-strong);
+}
+/* 两句各自一行起头、各自排匀：英文的第二句不会剩一个「through.」掉到第三行 */
+.bp-farewell > span {
+  display: block;
+  text-wrap: balance;
+}
+html[lang='en'] .bp-farewell {
+  font-size: 21px;
+  line-height: 1.4;
+}
+
+/* 底部的动作：宽屏是浮在下面的玻璃胶囊，窄屏放在文件后面 */
+.bp-actions {
+  position: fixed;
+  left: 50%;
+  bottom: max(14px, env(safe-area-inset-bottom));
+  z-index: 40;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 999px;
+  background: rgba(var(--glass-rgb), 0.8);
+  -webkit-backdrop-filter: blur(24px) saturate(170%);
+  backdrop-filter: blur(24px) saturate(170%);
+  box-shadow:
+    inset 0 0 0 0.5px rgba(var(--text-rgb), 0.1),
+    0 18px 50px rgba(var(--shade-rgb), 0.18);
+  transform: translateX(-50%);
+  animation: dock-in 0.7s var(--spring-soft) 0.3s both;
+}
+@keyframes dock-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 20px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+.bp-actions .btn {
+  min-height: 48px;
+  padding: 0 18px;
+  font-size: 15px;
+}
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(96px + env(safe-area-inset-bottom));
+  z-index: 50;
+  padding: 12px 20px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--card);
+  font: 500 15px/1.2 var(--sans);
+  transform: translateX(-50%);
+  box-shadow: var(--shadow-2);
+  animation: toast-in 0.35s var(--spring) both;
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* 许愿模式的「分享海报」：海报 + 二维码。客人用自己的手机扫，不碰展厅 iPad 的分享面板和相簿 */
+.take-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  box-sizing: border-box;
+  padding: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: rgba(var(--shade-rgb), 0.4);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  backdrop-filter: blur(12px) saturate(140%);
+  animation: sc-in 0.3s var(--ease) both;
+}
+.take-sheet {
+  display: grid;
+  grid-template-columns: auto minmax(0, 360px);
+  align-items: center;
+  gap: clamp(22px, 3vw, 40px);
+  box-sizing: border-box;
+  max-width: 100%;
+  margin: auto; /* 放得下就置中，放不下就从上面开始、可以滑 */
+  padding: clamp(18px, 2.6vw, 30px);
+  border-radius: 30px;
+  background: var(--surface);
+  box-shadow:
+    inset 0 0 0 0.5px rgba(var(--text-rgb), 0.08),
+    0 30px 80px rgba(var(--shade-rgb), 0.28);
+  animation: sheet-in 0.5s var(--spring-soft) both;
+}
+.take-poster {
+  margin: 0;
+}
+.take-poster img {
+  display: block;
+  height: min(66vh, 540px);
+  width: auto;
+  aspect-ratio: 4 / 5;
+  border-radius: 16px;
+  box-shadow:
+    0 1px 2px rgba(var(--shade-rgb), 0.08),
+    0 16px 40px rgba(var(--shade-rgb), 0.18);
+}
+.take-side {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+}
+.take-side .eyebrow {
+  margin-bottom: 6px;
+}
+.take-lead {
+  max-width: 330px;
+  margin: 10px 0 0;
+  font: 400 16px/1.55 var(--sans);
+  color: var(--text-soft);
+  text-wrap: pretty;
+}
+.take-qr {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 14px 14px 12px;
+  border-radius: 22px;
+  background: #fff;
+  box-shadow:
+    inset 0 0 0 0.5px rgba(var(--text-rgb), 0.12),
+    0 8px 22px rgba(var(--shade-rgb), 0.08);
+}
+.take-code {
+  display: block;
+  width: min(300px, 62vw);
+  height: auto;
+  aspect-ratio: 1;
+}
+.take-scan {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 500 14px/1.2 var(--sans);
+  color: var(--text-soft);
+}
+.take-done {
+  min-width: 168px;
+  margin-top: 20px;
+}
+@media (orientation: portrait), (max-width: 900px) {
+  .take-sheet {
+    grid-template-columns: minmax(0, 420px);
+    justify-items: center;
+    gap: 20px;
+  }
+  .take-poster img {
+    height: min(30vh, 340px);
+  }
+}
+
+/* ───────────────────────── 屏幕尺寸 ───────────────────────── */
+
+@media (max-width: 1060px) {
+  .bp-actions {
+    position: static;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    max-width: 1000px;
+    margin: 18px auto 0;
+    padding: 0 20px;
+    border-radius: 0;
+    background: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: none;
+    transform: none;
+    animation: none;
+    box-sizing: border-box;
+  }
+  .bp-actions .btn {
+    min-height: 52px;
+  }
+  .bp-actions .btn-gold {
+    grid-column: 1 / -1;
+  }
+  .bp-page {
+    padding-bottom: calc(36px + env(safe-area-inset-bottom));
+  }
+  .toast {
+    bottom: calc(24px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (orientation: landscape) and (min-width: 900px) {
+  .stage {
+    max-width: 800px;
+  }
+  /* 揭晓：牌 + 文字并排，文字那一栏要放得下英文的「Open my Dream Home Blueprint」（不顶到暗色玻璃的边） */
+  .qz-reveal .stage {
+    max-width: 920px;
+  }
+  /* 潘吉的话放在题目卡右边的空白里，不压到卡片 */
+  .bubble {
+    max-width: min(184px, calc((100vw - 800px) / 2 - 22px));
+  }
+  /* 揭晓：牌在左，字在右，「打开蓝图」不会掉到折线下面 */
+  .phase-shown .reveal-grid,
+  .phase-rise .reveal-grid {
+    display: grid;
+    grid-template-columns: auto minmax(0, 520px);
+    align-items: center;
+    justify-content: center;
+    gap: clamp(32px, 5vw, 64px);
+    min-height: calc(100dvh - var(--bar-h) - 60px);
+    text-align: left;
+  }
+  .reveal-card {
+    width: min(300px, 46vh);
+  }
+  .wish-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .reveal-text .axes-mini,
+  .reveal-text .because {
+    margin-left: 0;
+  }
+  .phase-shown .rv-hello {
+    justify-content: flex-start;
+    margin-left: -6px;
+  }
+}
+
+@media (orientation: landscape) and (min-width: 900px) {
+  /* 横屏的封面：左边是潘吉和一句话，右边是表单 —— 一页看完，不用往下滑 */
+  .cover {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: center;
+    column-gap: clamp(32px, 4vw, 56px);
+    width: min(980px, 100%);
+    padding: clamp(28px, 4vh, 44px) clamp(28px, 4vw, 52px);
+  }
+  .cover-intro {
+    text-align: center;
+  }
+  .cover-act {
+    padding-left: clamp(24px, 3vw, 44px);
+    border-left: 0.5px solid rgba(var(--text-rgb), 0.12);
+  }
+  .cover-form {
+    margin-top: 0;
+  }
+  .cover-act .fine {
+    text-align: center;
+  }
+}
+
+/* 横放的 iPad（高 ≤ 900）：风景带收窄一点、牌小一点 —— 第一屏就能看完整张牌，不被浮动的动作条挡住 */
+@media (min-width: 1061px) and (max-height: 900px) {
+  .bp-doc {
+    margin-top: 158px;
+    padding-top: 40px;
+  }
+  .bp-head {
+    padding-bottom: 20px;
+  }
+  .bp-sec.bp-hero {
+    padding-top: 26px;
+  }
+  .bp-hero {
+    grid-template-columns: 208px 1fr;
+  }
+  .bp-hero-card {
+    width: 208px;
+  }
+  html[lang='en'] .bp-hero-card .dc-name {
+    font-size: 25px;
+  }
+}
+
+@media (max-height: 860px) {
+  .viz {
+    --viz-h: 190px;
+  }
+  .viz-cabinet {
+    --viz-h: 230px;
+  }
+  .viz-wardrobe {
+    --viz-h: 170px;
+  }
+  .wish {
+    min-height: 92px;
+  }
+}
+
+@media (max-width: 960px) {
+  .tb-brand {
+    display: none;
+  }
+  /* 揭晓：竖放时牌在正中间，往下滚一点（把「打开蓝图」滚进来）牌就会盖住左上角的地名 → 这一页不放地名 */
+  .qz-reveal .sc-caption {
+    display: none;
+  }
+  /* iPad 竖放：「Blueprint 67%」那一行字会把中 / EN 挤成两行 → 换成手机上那个小圆环 */
+  .pct-ring {
+    display: block;
+  }
+  .pct-num {
+    display: grid;
+  }
+  .pct-text {
+    display: none;
+  }
+}
+/* 顶栏的中 / EN 不被挤扁（「中文」不会竖着排） */
+.topbar .lang-toggle {
+  flex: none;
+}
+.topbar .lang-toggle button {
+  white-space: nowrap;
+}
+
+@media (max-width: 700px) {
+  .tb-brand,
+  .progress-pct {
+    display: none;
+  }
+  .bp-hero {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+  }
+  .bp-hero-text {
+    width: 100%;
+  }
+  .bp-hero .axes {
+    text-align: left;
+  }
+  .bp-sec.two,
+  .dz-grid {
+    grid-template-columns: 1fr;
+  }
+  .mat-board {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .store-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .bp-head {
+    flex-direction: column;
+  }
+  .bp-seg {
+    align-self: stretch;
+  }
+  .bp-actions {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  /* 手机：顶栏一行（约 56px）—— 返回只留箭头、踏脚石缩小、蓝图完成度变成小圆环、中 / EN、声音 */
+  :root {
+    --bar-h: 56px;
+  }
+  .topbar {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 4px;
+    padding: max(4px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) 4px max(4px, env(safe-area-inset-left));
+  }
+  .tb-left,
+  .tb-right {
+    gap: 4px;
+  }
+  .tb-mid {
+    justify-self: stretch;
+    min-width: 0;
+  }
+  .nav-back {
+    min-height: 44px;
+    width: 40px;
+    padding: 0;
+    justify-content: center;
+  }
+  .nav-back span {
+    display: none;
+  }
+  .stones {
+    padding: 0;
+  }
+  .stones ol {
+    gap: 0;
+    justify-content: space-between;
+    width: 100%;
+    max-width: 176px;
+  }
+  .stone button {
+    width: clamp(26px, 7.6vw, 34px);
+    height: 44px;
+  }
+  .stones-stream {
+    left: 0;
+    width: 100%;
+  }
+  .stone svg {
+    width: 100%;
+    height: auto;
+  }
+  .stone-tip {
+    top: calc(100% - 2px);
+  }
+  .progress-pct {
+    display: inline-grid;
+  }
+  .pct-ring,
+  .pct-num {
+    display: grid;
+  }
+  .pct-ring {
+    display: block;
+  }
+  .pct-text {
+    display: none;
+  }
+  .topbar .lang-toggle button {
+    min-width: 30px;
+    min-height: 26px;
+    padding: 0 7px;
+    font-size: 12px;
+  }
+  .topbar .icon-btn {
+    width: 38px;
+    height: 38px;
+  }
+  /* 开场封面：一屏放得下，「开始许愿」在折线以上 */
+  .step-welcome {
+    align-items: flex-start;
+    padding: max(12px, env(safe-area-inset-top)) 0 max(14px, env(safe-area-inset-bottom));
+  }
+  .cover {
+    padding: 22px 18px 18px;
+    border-radius: 28px;
+  }
+  .cover-lang {
+    display: inline-flex;
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    z-index: 2;
+  }
+  .cover-lang button {
+    min-width: 30px;
+    min-height: 26px;
+    padding: 0 7px;
+    font-size: 12px;
+  }
+  .field-lang {
+    display: none;
+  }
+  .cover-mark b {
+    font-size: 21px;
+  }
+  .cover-hero {
+    margin: 6px auto 0;
+  }
+  .cover .eyebrow {
+    margin-bottom: 4px;
+  }
+  .cover .h-display {
+    font-size: 30px;
+  }
+  html[lang='en'] .cover .h-display {
+    font-size: 38px;
+  }
+  .cover-sub {
+    margin-top: 4px;
+    font-size: 15px;
+  }
+  .cover .lead {
+    margin-top: 8px;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  .cover-form {
+    gap: 12px;
+    margin: 16px 0 16px;
+  }
+  .cover-form .field {
+    gap: 6px;
+  }
+  .cover-form .text-in {
+    min-height: 46px;
+    padding: 10px 16px;
+  }
+  .cover-form .seg button {
+    min-height: 38px;
+  }
+  .cover .fine {
+    margin-top: 10px;
+    font-size: 13px;
+  }
+  .stage {
+    --stage-top: 14px;
+  }
+  .stage.has-companion {
+    padding-bottom: calc(150px + env(safe-area-inset-bottom));
+  }
+  .companion .pangie {
+    width: 84px;
+    height: 105px;
+  }
+  .bubble {
+    font-size: 14px;
+    padding: 10px 14px;
+  }
+  /* 手机上题目卡几乎占满宽度：地名会从卡片后面探出一截 → 不放（.qz 加一级：scenery.css 比这份晚载入）。
+     封面例外：放到卡片下面、茶园上，像杂志的图片说明 */
+  .qz .sc-caption {
+    display: none;
+  }
+  .qz.is-cover .sc-caption {
+    display: flex;
+    top: auto;
+    bottom: calc(14px + env(safe-area-inset-bottom));
+    left: 50%;
+    max-width: calc(100vw - 32px);
+    white-space: nowrap;
+    transform: translateX(-50%);
+  }
+  .cover-hero .pangie {
+    width: 96px;
+    height: 120px;
+  }
+  .pair-card {
+    padding: 7px 7px 0;
+    border-radius: 18px;
+  }
+  .pair-art {
+    border-radius: 12px;
+  }
+  .pair-label {
+    padding: 10px 4px 12px;
+    font-size: 14px;
+  }
+  .pair-check {
+    top: 12px;
+    right: 12px;
+  }
+  .opts {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .opts-many {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .opt {
+    min-height: 66px;
+  }
+  .opt.small {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    min-height: 92px;
+    padding: 12px;
+  }
+  .wish-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .nogo-colors {
+    gap: 14px 4px;
+  }
+  .nogo-color i {
+    width: 48px;
+    height: 48px;
+  }
+  .chip {
+    padding: 0 15px;
+    font-size: 15px;
+  }
+  .axis-mini {
+    grid-template-columns: 70px 40px 1fr 40px;
+    gap: 8px;
+  }
+  html[lang='en'] .axis-mini {
+    grid-template-columns: 86px 60px 1fr 60px;
+  }
+  /* 揭晓：文字那块不超出画面（英文的长按钮曾把它撑到 414px 宽） */
+  .reveal-text {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    margin-inline: auto;
+  }
+  .dusk.on-photo .reveal-text {
+    padding: 20px 16px 18px;
+  }
+  .reveal-text .btn.big {
+    max-width: 100%;
+    padding: 0 24px;
+    white-space: normal;
+    text-align: center;
+    line-height: 1.2;
+  }
+  html[lang='en'] .reveal-text .cta-long {
+    display: none;
+  }
+  html[lang='en'] .reveal-text .cta-short {
+    display: inline;
+  }
+  /* 擦神灯：说明落在夕阳最亮的那一条上 → 字用正文的浅色（不打折），后面垫一层很软的暮色 */
+  .dusk .step-lamp .lead,
+  .dusk.on-photo .step-lamp .lead {
+    color: var(--text);
+    opacity: 1;
+  }
+  .step-lamp .q-head {
+    position: relative;
+    isolation: isolate;
+  }
+  .step-lamp .q-head::before {
+    content: '';
+    position: absolute;
+    inset: 4px -4px;
+    z-index: -1;
+    border-radius: 40px;
+    background: rgba(var(--accent-deep-rgb), 0.42);
+    filter: blur(18px);
+    pointer-events: none;
+  }
+  .axis {
+    grid-template-columns: 52px 32px 1fr 32px 40px;
+    gap: 8px;
+  }
+  html[lang='en'] .axis {
+    grid-template-columns: 82px 58px 1fr 58px 38px;
+  }
+  .bp-doc {
+    margin-top: 170px;
+    border-radius: 24px;
+  }
+  .bp-band {
+    height: 360px;
+  }
+  .bp-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 0 16px;
+  }
+  .bp-actions .btn {
+    min-width: 0;
+    padding: 0 12px;
+    white-space: normal;
+    text-align: center;
+    line-height: 1.2;
+  }
+  .mat-board {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  .pal i {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+  }
+  .prompt-actions {
+    grid-template-columns: 1fr;
+  }
+  /* 手机上潘吉的话：在他左边、同一高度（不往上叠，少盖住题目卡）；第一下点击 / 3 秒后收起（QuizApp 的 Companion） */
+  .companion {
+    flex-direction: row;
+    align-items: flex-end;
+  }
+  .bubble {
+    right: calc(100% - 4px);
+    bottom: 46px;
+    max-width: min(230px, calc(100vw - 120px));
+    margin: 0;
+    border-radius: 18px 18px 6px 18px;
+  }
+  .seg button svg {
+    display: none;
+  }
+  .seg button {
+    padding: 0 6px;
+    font-size: 14px;
+  }
+}
+
+/* 矮的手机（iPhone SE / 8 Plus）：封面卡片一直到底，地名放不下 → 不放（不要从卡片后面透出来） */
+@media (max-width: 560px) and (max-height: 739px) {
+  .qz.is-cover .sc-caption {
+    display: none;
+  }
+}
+
+/* 许愿模式（iPad 尺寸）：外壳的「WISH · 大自然的声音」小坞在左下角（约 280×60），下面留出空，
+   滚到底的按钮、浮着的动作条都不会被它盖住。手机上外壳自己把画面缩短 64px，不用管。 */
+@media (min-width: 561px) {
+  .qz.is-wish .stage {
+    padding-bottom: calc(104px + env(safe-area-inset-bottom));
+  }
+  .qz.is-wish .stage.has-companion {
+    padding-bottom: calc(176px + env(safe-area-inset-bottom));
+  }
+  .qz.is-wish .step-welcome {
+    padding-bottom: calc(84px + env(safe-area-inset-bottom));
+  }
+  .bp-page.is-wish {
+    padding-bottom: calc(110px + env(safe-area-inset-bottom));
+  }
+  .bp-page.is-wish .toast {
+    bottom: calc(92px + env(safe-area-inset-bottom));
+  }
+}
+@media (min-width: 1061px) {
+  .bp-page.is-wish .bp-actions {
+    bottom: calc(78px + env(safe-area-inset-bottom));
+  }
+  .bp-page.is-wish {
+    padding-bottom: calc(180px + env(safe-area-inset-bottom));
+  }
+  .bp-page.is-wish .toast {
+    bottom: calc(160px + env(safe-area-inset-bottom));
+  }
+}
+
+/* ───────────────────────── 光是材质：动效接上以后的小样式（fx.js / scratchpad/motion/SPEC.md §6.1） ───────────────────────── */
+
+/* 潘吉在说话：身子和泡泡可以点（点一下 = 跳过这一句）；平常是点不到的（不挡题目） */
+.companion.is-speaking .companion-body,
+.companion.is-speaking .bubble.is-shown {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* 直觉题的 3 秒：一颗小小的光头跟着金线往回走；选了就淡掉 */
+.breath {
+  position: relative;
+  overflow: visible;
+  transition: opacity 0.2s var(--fx-out);
+}
+.breath::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background: var(--gold-l);
+  box-shadow: 0 0 6px 1px rgba(var(--gold-l-rgb), 0.75);
+  animation: breath-head 3s linear 0.45s both;
+}
+@keyframes breath-head {
+  from {
+    transform: translateX(120px);
+  }
+  92% {
+    opacity: 1;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 0;
+  }
+}
+.step-pair.is-picked .breath {
+  opacity: 0;
+}
+/* 计时线的长短跟着张数走（PairStep 设 --breath = 2.4 秒 + 0.3 秒 × 张数）；光头和金线一起走完 */
+.breath i,
+.breath::after {
+  animation-duration: var(--breath, 3s);
+}
+
+/* 神灯的进度圈：一颗发光的头跟着圈走 */
+.lamp-head {
+  transform-origin: 50px 50px;
+  transition: transform 0.2s linear;
+}
+.lamp-head circle {
+  fill: var(--gold-l);
+  filter: drop-shadow(0 0 1.6px var(--gold-l));
+}
+
+/* 章节牌：翻完了，那一句才模糊淡入 */
+/* 牌翻好之前提示不出来（.step > * 的进场动画会把 opacity 盖回 1：这里连动画一起停掉），翻好了再模糊淡入一次 */
+.interlude-hint.is-waiting {
+  opacity: 0;
+  animation: none;
+}
+
+/* 宝藏：鞋柜一列一列（整列聚起来 / 化成金尘）；衣柜的门包一层（才能聚起来） */
+.cab-cols .cab-grid {
+  display: flex;
+}
+.cab-col {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-width: 0;
+}
+.cab-cell {
+  display: block;
+  min-width: 0;
+}
+
+/* 衣柜的单选标签：新颜色从按下去的那一点铺开（圆形 0 → 150 %，260 ms），不是一下子换色 */
+.ink-chips .chip {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+.ink-chips .chip::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--ink);
+  clip-path: circle(0% at var(--tx, 50%) var(--ty, 50%));
+  transition: clip-path 0.26s var(--fx-out);
+}
+.ink-chips .chip.on {
+  background: rgba(var(--glass-rgb), 0.92);
+  transition:
+    background-color 0.25s var(--ease),
+    color 0.2s var(--ease) 0.06s,
+    box-shadow 0.25s var(--ease);
+}
+.ink-chips .chip.on::before {
+  clip-path: circle(150% at var(--tx, 50%) var(--ty, 50%));
+}
+
+/* 三个愿望：三个都选好了，其余的暗下去；许愿 → 三个聚到中间一排 */
+.wish {
+  transition:
+    transform 0.2s var(--ease),
+    box-shadow 0.3s var(--ease),
+    background-color 0.3s var(--ease),
+    opacity 0.4s var(--fx-std);
+}
+.wish.rest {
+  opacity: 0.55;
+}
+.wish-grid.is-gathered {
+  grid-template-columns: repeat(3, minmax(0, 168px));
+  justify-content: center;
+  align-content: center;
+}
+.wish-grid.is-gathered .wish:not(.on) {
+  display: none;
+}
+
+/* 雷区：X 从 1.4 倍盖下来；名字上的那一道线从左划到右（取消 = 倒回去） */
+.nogo-color i svg {
+  opacity: 0;
+  transform: scale(1.4);
+  transition:
+    opacity 0.18s var(--fx-out),
+    transform 0.26s var(--fx-spring-pop);
+}
+.nogo-color.x i svg {
+  opacity: 1;
+  transform: none;
+}
+.nogo-color .nx {
+  font-style: normal;
+  background: linear-gradient(currentColor, currentColor) no-repeat 0 56% / 0% 1.5px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  transition: background-size 0.22s var(--fx-out);
+}
+.nogo-color.x span {
+  text-decoration: none;
+}
+.nogo-color.x .nx {
+  background-size: 100% 1.5px;
+}
+.opt.is-x .opt-label {
+  text-decoration: line-through;
+  text-decoration-color: transparent;
+  transition:
+    text-decoration-color 0.22s var(--fx-out),
+    color 0.3s var(--ease);
+}
+.opt.is-x.on .opt-label {
+  text-decoration-color: rgba(var(--danger-rgb), 0.55);
+}
+
+/* 最后一句：文字框包一层（光扫过、化成金尘往上飘的是这一层） */
+.ow-input {
+  position: relative;
+  margin-top: 18px;
+  border-radius: 14px;
+}
+.ow-input textarea.text-in {
+  margin-top: 0;
+}
+
+/* 揭晓：升起时牌后的暖光先到 .55；文字一块一块模糊淡入（70 ms 错开） */
+.phase-rise .reveal-bloom {
+  opacity: 0.55;
+}
+.reveal-text {
+  animation: fx-fade-in 0.5s var(--fx-out) 0.35s both;
+}
+.reveal-text > * {
+  animation: fx-blur-in 0.7s var(--fx-out) 0.55s both;
+}
+.reveal-text > :nth-child(2) {
+  animation-delay: 0.62s;
+}
+.reveal-text > :nth-child(3) {
+  animation-delay: 0.69s;
+}
+.reveal-text > :nth-child(4) {
+  animation-delay: 0.76s;
+}
+.reveal-text > :nth-child(5) {
+  animation-delay: 0.83s;
+}
+.reveal-text > :nth-child(6) {
+  animation-delay: 0.9s;
+}
+.reveal-text > :nth-child(n + 7) {
+  animation-delay: 0.97s;
+}
+
+/* 蓝图：「潘吉认证」的章滑到了才盖上去（打印 / PDF 永远看得到） */
+.seal.is-waiting {
+  visibility: hidden;
+}
+.count-in {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 手机：顶栏多了「潘吉说话」的开关 —— 踏脚石窄一点、右边的按钮靠紧一点，石头不会钻到百分比圆环下面 */
+@media (max-width: 560px) {
+  .stone button {
+    width: clamp(22px, 6.2vw, 34px);
+  }
+  .tb-right {
+    gap: 3px;
+  }
+}
+
+/* 动作少一点：风景静止、雾不飘、萤火不飞 */
+@media (prefers-reduced-motion: reduce) {
+  .sc-kb,
+  .sc-photo,
+  .sc-mist,
+  .sc-fireflies i,
+  .ff-tree,
+  .stone-glow,
+  .lamp-shake,
+  .deck-card {
+    animation: none !important;
+  }
+}
+
+/* ───────────────────────── 打印（蓝图存 PDF） ───────────────────────── */
+
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+  .quiz-body::before,
+  .quiz-body::after,
+  .no-print,
+  .scenery,
+  .topbar,
+  .companion,
+  .bp-band,
+  .bp-actions,
+  .toast,
+  .prompt-veil {
+    display: none !important;
+  }
+  html,
+  body,
+  .quiz-body,
+  .bp-page {
+    background: white !important;
+  }
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .bp-page {
+    min-height: 0;
+    padding: 0;
+  }
+  .bp-doc {
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    border-radius: 0;
+    background: white;
+    box-shadow: none;
+    animation: none;
+  }
+  .store,
+  .mat,
+  .bp-hero,
+  .palette-row,
+  .life-list li,
+  .wish-list li,
+  .dz-grid dl,
+  .tips li,
+  .bp-wish,
+  .bp-end {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .bp-h3,
+  .dz-grid h4 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  .bp-hero-card .dcard-front {
+    box-shadow: 0 0 0 0.5pt rgba(var(--gold-rgb), 0.8);
+  }
+  .bp-designer {
+    background: none;
+    box-shadow: inset 0 0 0 0.5pt var(--line);
+  }
+  .tips-rest {
+    display: grid !important;
+    gap: 10px;
+    margin-top: 10px;
+  }
+  .tips-top li {
+    box-shadow: inset 0 0 0 0.5pt var(--line);
+  }
+  .pangie {
+    animation: none !important;
+  }
+  .seal.is-waiting {
+    visibility: visible !important;
+  }
+}

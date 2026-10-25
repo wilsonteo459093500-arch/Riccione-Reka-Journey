@@ -1,0 +1,208 @@
+// 设计师版的「出图关键词」：牌面的英文关键词（dreamers.js 的 design.en），按这一位客人改写 ——
+//   1. 雷区 / 生活方式换掉的材质，在关键词里也换掉（nero marquina marble → sintered stone）；
+//   2. 换不掉、又踩到雷区的说法（glass display cabinets、open shelving…）整段拿掉；
+//   3. 最后加上「avoid: …」（客人的雷区，英文）。
+// 关键词永远是英文（贴给 AI 出图工具用）。复制按钮复制的也是这一段。
+// 柜门那一行：换掉的材质如果正好写在柜门的说法里，或者换的是柜体，给一行小注（doorNotes）。
+
+import { MATERIALS, MAT_BY_ID } from '../shared/materials.js';
+import { AVOID_LABEL } from '../shared/summary.js';
+import EN from '../shared/i18n/en.js';
+
+/** 关键词里怎么称呼某种材质（长的在前；[说法, 换成] 的「换成」里 {to} = 新材质）。没列的用英文名。 */
+const ALIAS = {
+  'white-oak': ['white oak', ['flat-panel oak cabinetry', 'flat-panel {to} cabinetry']],
+  'light-oak': ['warm natural oak', 'natural oak'],
+  'herringbone-oak': ['herringbone oak', ['herringbone floor', '{to} floor']],
+  'greige-oak': ['greige oak'],
+  teak: ['teak'],
+  cherry: ['cherry wood', 'cherry'],
+  'smoked-oak': ['smoked oak'],
+  walnut: ['walnut'],
+  'ebony-oak': ['ebonized oak'],
+  maple: ['maple'],
+  carrara: ['carrara marble', 'carrara'],
+  calacatta: ['calacatta marble', 'calacatta gold', 'calacatta'],
+  travertine: ['travertine'],
+  terrazzo: ['terrazzo'],
+  microcement: ['microcement'],
+  sintered: ['sintered stone'],
+  verde: ['verde marble'],
+  nero: ['nero marquina marble', 'nero marquina'],
+  'terracotta-tile': ['terracotta'],
+  'gallery-white': [['white walls', '{to} walls']],
+  'sand-limewash': ['sand limewash', 'limewash'],
+  'dusty-blue': ['dusty blue'],
+  terracotta: ['terracotta'],
+  'navy-paint': ['midnight blue', ['navy feature wall', '{to} feature wall']],
+  'white-lacquer': ['white lacquer'],
+  'cream-lacquer': ['cream lacquer'],
+  'sage-lacquer': ['sage green lacquer', 'sage lacquer'],
+  linen: ['linen'],
+  boucle: ['bouclé', 'boucle'],
+  'ochre-velvet': ['ochre velvet'],
+  'navy-velvet': ['navy velvet'],
+  'emerald-velvet': ['emerald velvet'],
+  'rust-wool': ['rust wool'],
+  'cognac-leather': ['cognac leather'],
+  'black-leather': ['black leather'],
+  rattan: ['rattan cane', 'rattan'],
+  'grey-wool': ['light grey wool', 'grey wool'],
+  'sage-linen': ['sage linen'],
+  brass: ['brushed brass', 'brass'],
+  bronze: ['bronze'],
+  gunmetal: ['gunmetal'],
+  steel: ['stainless steel'],
+};
+
+/** 换进来的材质在关键词里的说法（英文名里有逗号、或太像产品名的，改成出图用的说法） */
+const KW_NAME = {
+  nero: 'nero marquina marble',
+  carrara: 'carrara marble',
+  calacatta: 'calacatta marble',
+  verde: 'verde marble',
+  'quartz-travertine': 'travertine-look quartz',
+  'quartz-calacatta': 'calacatta-look quartz',
+  'quartz-white': 'pure white quartz',
+  'sintered-light': 'light sintered stone',
+  'zellige-white': 'white zellige tile',
+  'zellige-sage': 'sage zellige tile',
+  'cream-tile': 'cream slab tile',
+  'grey-tile': 'matte grey tile',
+  'terracotta-tile': 'terracotta tile',
+  steel: 'stainless steel',
+  'black-matte': 'matte black',
+  'matte-black': 'matte black metal',
+  'navy-paint': 'midnight blue',
+  'ebony-oak': 'ebonized oak',
+};
+
+/** 换不掉的材质 / 做法：关键词里出现就整段拿掉（只看原文，不看换进来的新词） */
+const RULED_OUT = {
+  glassdoor: /\bglass\b/i,
+  openshelf: /\bopen (shel|book)|bookshel/i,
+  herringbone: /herringbone/i,
+  wallpaper: /wallpaper/i,
+  marble: /\bmarble\b|calacatta|carrara|marquina/i,
+  velvet: /velvet/i,
+  leather: /leather/i,
+  rattan: /rattan|\bcane\b/i,
+  concrete: /concrete|cement/i,
+  glossy: /lacquer|gloss/i,
+  gold: /brass|\bgold\b|gilded/i,
+};
+
+/** 不是材质、只是颜色的说法（黑框玻璃柜）：踩到颜色雷区时改成中性的说法 */
+const RECOLOUR = {
+  black: [
+    [/\bblack metal frame\b/gi, 'slim metal frame'],
+    [/\bblack[- ]framed\b/gi, 'slim-framed'],
+  ],
+};
+
+const kwName = (id) => KW_NAME[id] || String(MAT_BY_ID[id]?.en || id).toLowerCase();
+const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const SLOT = '\u0000';
+const wordRe = (phrase) => new RegExp(`(^|[^a-z\\u00c0-\\u024f])(${esc(phrase)})(?=[^a-z\\u00c0-\\u024f]|$)`, 'gi');
+
+/** 一种材质的所有说法：[说法, 换成的模板]（ALIAS 里的 + 英文名本身） */
+function aliasesOf(id) {
+  const out = (ALIAS[id] || []).map((a) => (Array.isArray(a) ? a : [a, '{to}']));
+  const name = String(MAT_BY_ID[id]?.en || '').toLowerCase();
+  if (name && !out.some(([from]) => from === name)) out.push([name, '{to}']);
+  return out;
+}
+
+/**
+ * 关键词 / 柜门那一句里，每一个材质说法 —— 长的先认（「sage green lacquer」是柜体的灰绿烤漆，
+ * 不是墙面的「sage」）。没换的材质也先认出来、原样保留，换掉的短名才不会改到别的材质说法的中间。
+ * → [{ id, from, tpl, swapTo }]，swapTo 为空 = 原样保留
+ */
+function phrases(swapTo) {
+  const out = [];
+  // 只认程序化材质的说法（溪岸板材也在 MAT_BY_ID 里：200 块板的英文名不进关键词表，R11 g）
+  for (const { id } of MATERIALS) for (const [from, tpl] of aliasesOf(id)) out.push({ id, from, tpl, swapTo: swapTo.get(id) || '' });
+  // 一样长的：换掉的优先（terracotta 同时是地砖和墙漆的说法）
+  return out.sort((a, b) => b.from.length - a.from.length || !!b.swapTo - !!a.swapTo);
+}
+
+/** 客人的雷区 → 英文短语（「Yellow / gold」→「yellow, gold」） */
+export function avoidWords(avoid = []) {
+  return avoid.map((a) => String(EN[AVOID_LABEL[a]] || a).toLowerCase().replace(/\s*\/\s*/g, ', '));
+}
+
+/** 这一位客人的出图关键词（英文） */
+export function renderKeywords(base, profile = {}) {
+  // 同一个表面先按雷区换、再按生活方式换（岩板 → 黑金花 → 石英石）：只看最初和最后
+  const chain = new Map();
+  for (const sw of [...(profile.swaps || []), ...(profile.lifeSwaps || [])]) {
+    if (!sw?.from || !sw?.to) continue;
+    const k = sw.slot || `${sw.from}>${sw.to}`;
+    chain.set(k, { from: chain.get(k)?.from || sw.from, to: sw.to });
+  }
+  // 同一种材质在两个表面换成了不同的东西：第一条为准
+  const swapTo = new Map();
+  for (const sw of chain.values()) if (sw.from !== sw.to && !swapTo.has(sw.from)) swapTo.set(sw.from, sw.to);
+  // 先把每个材质说法换成占位符（长的先认），最后再填回去：新词不会再被下一条替换改到（walnut → smoked oak → teak）
+  const fills = [];
+  let s = String(base || '');
+  for (const ph of phrases(swapTo)) {
+    s = s.replace(wordRe(ph.from), (all, pre, hit) => {
+      fills.push(ph.swapTo ? { text: ph.tpl.replace('{to}', kwName(ph.swapTo)), swapped: true } : { text: hit, swapped: false });
+      return `${pre}${SLOT}${fills.length - 1}${SLOT}`;
+    });
+  }
+  const avoid = profile.avoid || [];
+  for (const a of avoid) for (const [re, to] of RECOLOUR[a] || []) s = s.replace(re, to);
+  const seen = new Set();
+  const terms = s
+    .split(/\s*,\s*/)
+    .filter((term) => {
+      // 雷区只看原文：换进来的新词不算（换掉的那一段当作空白），原样保留的材质照常检查
+      const original = term.replace(new RegExp(`${SLOT}(\\d+)${SLOT}`, 'g'), (all, i) => (fills[+i].swapped ? ' ' : fills[+i].text));
+      return term.trim() && !avoid.some((a) => RULED_OUT[a]?.test(original));
+    })
+    .map((term) => term.replace(new RegExp(`${SLOT}(\\d+)${SLOT}`, 'g'), (all, i) => fills[+i].text).trim())
+    .filter((term) => {
+      const k = term.toLowerCase();
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  const out = terms.join(', ');
+  const words = avoidWords(avoid);
+  return words.length ? `${out}, avoid: ${words.join(', ')}` : out;
+}
+
+/**
+ * 柜门那一行的小注：雷区换掉的材质正好是柜体，或写在柜门的说法里（黄铜拉手、玻璃展示柜…）。
+ * → [{ kind: 'swap', from, to } | { kind: 'avoid', tag }]（文字在 Blueprint 里按当前语言组）
+ */
+export function doorNotes(doorsZh, profile = {}) {
+  const doorsEn = String(EN[doorsZh] || '').toLowerCase();
+  const out = [];
+  const seen = new Set();
+  // 柜门那一句里说到了哪些材质：长的先认（「sage lacquer」是柜体的灰绿烤漆，不算墙面的「sage」）
+  const named = new Set();
+  let rest = doorsEn;
+  for (const ph of phrases(new Map())) {
+    const from = ph.from.replace(/ cabinetry$/, '');
+    rest = rest.replace(wordRe(from), (all, pre) => {
+      named.add(ph.id);
+      return `${pre}${SLOT}`;
+    });
+  }
+  // 同一种材质在几个表面都换了：柜体那一条优先（柜门说的就是柜体）
+  const swaps = (profile.swaps || []).filter((sw) => sw?.from && sw?.to).sort((a, b) => (b.slot === 'cabinetry') - (a.slot === 'cabinetry'));
+  for (const sw of swaps) {
+    const inDoors = named.has(sw.from);
+    if ((sw.slot === 'cabinetry' || inDoors) && !seen.has(sw.from)) {
+      seen.add(sw.from);
+      out.push({ kind: 'swap', from: sw.from, to: sw.to });
+    }
+  }
+  for (const tag of profile.avoid || []) {
+    if ((tag === 'glassdoor' || tag === 'openshelf') && RULED_OUT[tag].test(doorsEn)) out.push({ kind: 'avoid', tag });
+  }
+  return out;
+}

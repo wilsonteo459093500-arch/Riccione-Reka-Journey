@@ -1,0 +1,238 @@
+{
+ "title": "GROUND FLOOR PLAN",
+ "overall_width_text": null,
+ "overall_depth_text": null,
+ "dimensions": [],
+ "footprint_box_2d": [
+  89,
+  206,
+  734,
+  952
+ ],
+ "rooms": [
+  {
+   "label": "YARD",
+   "type": "utility",
+   "box_2d": [
+    79,
+    212,
+    187,
+    949
+   ]
+  },
+  {
+   "label": "WET KITCHEN",
+   "type": "kitchen",
+   "box_2d": [
+    164,
+    209,
+    276,
+    611
+   ]
+  },
+  {
+   "label": "BATH",
+   "type": "bath",
+   "box_2d": [
+    169,
+    608,
+    225,
+    932
+   ]
+  },
+  {
+   "label": "BEDROOM 4",
+   "type": "bedroom",
+   "box_2d": [
+    234,
+    597,
+    357,
+    934
+   ]
+  },
+  {
+   "label": "DRY KITCHEN",
+   "type": "kitchen",
+   "box_2d": [
+    257,
+    214,
+    370,
+    611
+   ]
+  },
+  {
+   "label": "DINING",
+   "type": "dining",
+   "box_2d": [
+    360,
+    223,
+    513,
+    869
+   ]
+  },
+  {
+   "label": "STAIRCASE",
+   "type": "stair",
+   "box_2d": [
+    366,
+    830,
+    565,
+    942
+   ]
+  },
+  {
+   "label": "LIVING",
+   "type": "living",
+   "box_2d": [
+    491,
+    216,
+    728,
+    828
+   ]
+  },
+  {
+   "label": "CAR PORCH",
+   "type": "porch",
+   "box_2d": [
+    729,
+    212,
+    939,
+    952
+   ]
+  }
+ ],
+ "stairs": [
+  {
+   "box_2d": [
+    370,
+    837,
+    555,
+    935
+   ],
+   "up": "N",
+   "shape": "straight"
+  }
+ ],
+ "doors": [
+  {
+   "box_2d": [
+    710,
+    826,
+    727,
+    944
+   ],
+   "kind": "door"
+  },
+  {
+   "box_2d": [
+    707,
+    261,
+    711,
+    754
+   ],
+   "kind": "sliding"
+  },
+  {
+   "box_2d": [
+    358,
+    250,
+    351,
+    561
+   ],
+   "kind": "opening"
+  },
+  {
+   "box_2d": [
+    263,
+    356,
+    279,
+    453
+   ],
+   "kind": "door"
+  },
+  {
+   "box_2d": [
+    155,
+    355,
+    166,
+    449
+   ],
+   "kind": "door"
+  },
+  {
+   "box_2d": [
+    351,
+    657,
+    356,
+    743
+   ],
+   "kind": "door"
+  },
+  {
+   "box_2d": [
+    222,
+    752,
+    213,
+    851
+   ],
+   "kind": "door"
+  },
+  {
+   "box_2d": [
+    83,
+    773,
+    74,
+    858
+   ],
+   "kind": "door"
+  }
+ ],
+ "windows": [
+  {
+   "box_2d": [
+    86,
+    317,
+    94,
+    661
+   ],
+   "full_height": false
+  },
+  {
+   "box_2d": [
+    157,
+    486,
+    169,
+    594
+   ],
+   "full_height": false
+  },
+  {
+   "box_2d": [
+    146,
+    680,
+    150,
+    796
+   ],
+   "full_height": false
+  }
+ ],
+ "_fixture": {
+  "source": "phone",
+  "crop_mm": [
+   160.686,
+   14.083,
+   243.659,
+   252.5
+  ],
+  "crop_px": [
+   452.3,
+   57.9,
+   675.6,
+   699.3
+  ],
+  "phone_px": [
+   1170,
+   2532
+  ]
+ }
+}
