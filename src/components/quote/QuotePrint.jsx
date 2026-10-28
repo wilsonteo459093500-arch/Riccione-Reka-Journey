@@ -1,7 +1,7 @@
 import { createPortal } from 'react-dom';
 import { Printer, X } from 'lucide-react';
 import { T } from '../../theme.js';
-import { fmtMYR, fmtNum, tr, pickLang, capColor, cabTypeById, RLBL, QUOTE_TERMS, LOOSE_TERMS, discountChainRate, discountChainLabel } from '../../constants/pricing.js';
+import { fmtMYR, fmtNum, tr, pickLang, capColor, cabTypeById, cabDimsLabel, RLBL, QUOTE_TERMS, LOOSE_TERMS, discountChainRate, discountChainLabel } from '../../constants/pricing.js';
 import { fmt } from '../../utils/helpers.js';
 
 // 报价单（可打印 / 另存 PDF）。lang：'en' | 'zh' | 'both'。
@@ -256,9 +256,13 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                           const typeLabel = pickLang(cabTypeById(ir.item.cabType).label, lang);
                           const nm = pickLang(ir.item.name || ir.item.desc || '', lang);
                           const head = [typeLabel, nm].filter(Boolean).join(' · ');
+                          const dims = cabDimsLabel(ir.item, lang === 'zh' ? 'zh' : 'en');
                           return [
                             <tr key={ir.item.id + '-h'} style={{ borderTop: `1px solid ${T.lineSoft}`, breakInside: 'avoid' }}>
-                              <td className="py-1 px-2 font-medium" colSpan={5}>{head}</td>
+                              <td className="py-1 px-2 font-medium" colSpan={5}>
+                                {head}
+                                <span className="font-normal ml-2" style={{ color: T.inkSoft }}>{dims}</span>
+                              </td>
                             </tr>,
                             ...ir.lines.map((ln, i) => (
                               <tr key={ir.item.id + i}>

@@ -95,6 +95,14 @@ export const cabinetQty = (length, h, d) => {
 };
 
 // 支持“a+b+c”式长度输入（对应 Excel 里 (2.86+2.6) 的写法）。
+// 柜体尺寸文字（给客户看的 PDF）：L 3.50m × H 2.40m × D 0.60m；长度是加法式就附上原式
+export function cabDimsLabel(item, lang = 'en') {
+  const L = parseLength(item.length);
+  const expr = String(item.length || '').trim();
+  const lTxt = `${(Number(L) || 0).toFixed(2)}m${/\+/.test(expr) ? ` (${expr})` : ''}`;
+  const h = (Number(item.h) || 0).toFixed(2), d = (Number(item.d) || 0).toFixed(2);
+  return lang === 'zh' ? `长 ${lTxt} × 高 ${h}m × 深 ${d}m` : `L ${lTxt} × H ${h}m × D ${d}m`;
+}
 export const parseLength = (raw) => {
   if (raw == null) return 0;
   if (typeof raw === 'number') return raw;

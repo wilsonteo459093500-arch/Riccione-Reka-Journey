@@ -1,4 +1,4 @@
-import { tr, pickLang, capColor, cabTypeById, RLBL, QUOTE_TERMS, LOOSE_TERMS, discountChainRate, discountChainLabel } from '../../constants/pricing.js';
+import { tr, pickLang, capColor, cabTypeById, cabDimsLabel, RLBL, QUOTE_TERMS, LOOSE_TERMS, discountChainRate, discountChainLabel } from '../../constants/pricing.js';
 import { fmt } from '../../utils/helpers.js';
 
 const round0 = (n) => Math.round(Number(n) || 0);
@@ -75,7 +75,7 @@ export async function exportExcel(meta, computed, loose, notes = {}, lang = 'bot
           // 柜体类型（+名称）作为分组抬头，子项缩进列在下面
           const typeLabel = pickLang(cabTypeById(ir.item.cabType).label, lang);
           const nm = pickLang(ir.item.name || ir.item.desc || '', lang);
-          row([[typeLabel, nm].filter(Boolean).join(' · ')]);
+          row([`${[typeLabel, nm].filter(Boolean).join(' · ')}  —  ${cabDimsLabel(ir.item, lang === 'zh' ? 'zh' : 'en')}`]);
           ir.lines.forEach((ln) => {
             const qty = ln.piece ? round0(ln.qty) : Number(ln.qty.toFixed(2));
             row([`    ${cabLineLabel(ln)}`, qty, lineUom(ln), pxi(ln.unitMyr, ir), pxi(ln.total, ir)]);
