@@ -60,23 +60,36 @@ function rectXml(el, id) {
   );
 }
 
+const CJK_RE = /[\u2E80-\u9FFF\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFFEF\u3000-\u303F]/;
+
+/**
+ * 文字属性：英文 / 数字用 latin 字体，中文用 ea 字体（PowerPoint 按字符自动选）；
+ * lang 标在 run 上（r.lang = 'zh' | 'en'，没写就看有没有中文字），断行、拼写检查跟着语言走
+ */
 function runProps(r, tag = 'a:rPr') {
   const font = FONTS[r.font] || FONTS.sans;
   const sz = Math.round((r.size || 18) * 100);
   const spc = r.spacing ? ` spc="${Math.round(r.spacing * 100)}"` : '';
   const b = r.bold ? ' b="1"' : '';
-  const face = esc(font.pptx);
+  const latin = esc(font.latin || font.pptx);
+  const ea = esc(font.ea || font.pptx);
+  const zh = r.lang ? r.lang === 'zh' : CJK_RE.test(String(r.text ?? ''));
   return (
-    `<${tag} lang="zh-CN" altLang="en-US" sz="${sz}"${b}${spc} kern="0" dirty="0">` +
+    `<${tag} lang="${zh ? 'zh-CN' : 'en-US'}" altLang="${zh ? 'en-US' : 'zh-CN'}" sz="${sz}"${b}${spc} kern="0" dirty="0">` +
     `<a:solidFill>${srgb(r.color || '241C12', r.alpha ?? 1)}</a:solidFill>` +
-    `<a:latin typeface="${face}" pitchFamily="34" charset="0"/><a:ea typeface="${face}" pitchFamily="34" charset="-122"/>` +
-    `<a:cs typeface="${face}" pitchFamily="34" charset="-120"/></${tag}>`
+    `<a:latin typeface="${latin}" pitchFamily="34" charset="0"/><a:ea typeface="${ea}" pitchFamily="34" charset="-122"/>` +
+    `<a:cs typeface="${latin}" pitchFamily="34" charset="0"/></${tag}>`
   );
 }
 
 function paraXml(p) {
   const algn = p.align === 'ctr' || p.align === 'r' || p.align === 'just' ? p.align : 'l';
-  const ln = p.lineSpacing ? `<a:lnSpc><a:spcPct val="${Math.round(p.lineSpacing * 1000)}"/></a:lnSpc>` : '';
+  // 行距：lineHeight = 固定行高（px → 点），各软件、各字体一样高；旧版式的 lineSpacing = 百分比
+  const ln = p.lineHeight
+    ? `<a:lnSpc><a:spcPts val="${Math.round(p.lineHeight * 75)}"/></a:lnSpc>`
+    : p.lineSpacing
+      ? `<a:lnSpc><a:spcPct val="${Math.round(p.lineSpacing * 1000)}"/></a:lnSpc>`
+      : '';
   const runs = (p.runs || []).filter((r) => r.text !== undefined);
   let body = '';
   for (const r of runs) {
