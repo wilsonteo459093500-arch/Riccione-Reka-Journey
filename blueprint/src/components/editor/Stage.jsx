@@ -1,23 +1,65 @@
 import React, { useRef } from 'react';
 import {
   ChevronLeft, ChevronRight, Columns2, Sparkles, LayoutTemplate, TriangleAlert, Wand2, EyeOff, MousePointerClick,
-  RectangleHorizontal, PanelLeft, Shuffle,
+  RectangleHorizontal, PanelLeft, Shuffle, Languages,
 } from 'lucide-react';
 import SlideCanvas from '../SlideCanvas.jsx';
 import { resolveUrl, metaOf } from '../../store/assets.js';
+import { langOf } from '../../engine/lang.js';
+import { LANG_OPTIONS, LANG_VERSION, toolbarCompactWidth } from '../../lib/langUi.js';
 import { fixForWarning } from './ops.js';
 import { useElementSize } from './hooks.js';
-import { Menu, btnGhost } from './ui.jsx';
+import { Menu, Segmented, btnGhost } from './ui.jsx';
 
 // 中间大画布：按可用空间缩放；点画面上的字 / 图 → 右侧检查器定位到对应输入框；
-// 翻页、提醒与一键修复、「对照原稿」、AI 润色、全局版式。
+// 翻页、提醒与一键修复、「对照原稿」、AI 润色、全局版式、提案语言（华文 / English / 中英）与「AI 翻译」。
 
 const PAD = 40; // 画布四周留白（px）
 const GAP = 20;
+// 画布区比 toolbarCompactWidth(…) 窄：顶栏按钮收成图标 / 短字，页名才放得下（English / 中英版多了「AI 翻译 · N」，门槛更宽）
 
-function Toolbar({ page, navIndex, navTotal, pageNo, exportTotal, onPrev, onNext, compare, canCompare, onToggleCompare, isView, onPolish, onGlobalLayout, hasViews }) {
+/** 提案语言 + 缺英文时的「AI 翻译 · N」（整套的设置，放在顶栏最右；窄屏折行时靠右） */
+function LangControls({ lang, onLang, missingCount, onTranslate, compact }) {
+  const missing = lang !== 'zh' && missingCount > 0;
   return (
-    <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-bp-line/70 bg-bp-paper">
+    <div className={`ml-auto flex items-center gap-1.5 ${compact ? '' : 'pl-2.5 border-l border-bp-line'}`}>
+      <Segmented
+        size={compact ? 'xs' : 'sm'}
+        className={compact ? 'h-[30px]' : ''}
+        options={LANG_OPTIONS}
+        value={lang}
+        onChange={(v) => v !== lang && onLang?.(v)}
+      />
+      {missing && (
+        <button
+          type="button"
+          onClick={onTranslate}
+          title={`${LANG_VERSION[lang]}还有 ${missingCount} 处中文没有英文 —— AI 一次翻好，逐条确认后套用`}
+          className={`${btnGhost} !border-bp-warn/40 !bg-bp-warn/10 !text-bp-ink hover:!bg-bp-warn/[0.16] ${compact ? '!px-2' : ''}`}
+        >
+          <Languages className="w-3.5 h-3.5 text-bp-warn" />
+          {compact ? '翻译' : 'AI 翻译'}
+          <span className="tabular-nums text-bp-warn font-medium">· {missingCount}</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+function Toolbar({
+  page, navIndex, navTotal, pageNo, exportTotal, onPrev, onNext, compare, canCompare, onToggleCompare, isView, onPolish, onGlobalLayout, hasViews,
+  lang, onLang, missingCount, onTranslate, compact,
+}) {
+  // 页名：画布区够宽（桌面）时至少留 96px —— 放不下就让语言组折到第二行，不让页名被挤没（窗口变宽页名反而消失）；
+  // 很窄（手机）时页名只是提示（检查器顶上也有），挤得只剩一两个字就干脆不显示，留作空白
+  const barRef = useRef(null);
+  const barSize = useElementSize(barRef);
+  const roomy = barSize.w >= 560;
+  const labelRef = useRef(null);
+  const labelSize = useElementSize(labelRef);
+  const squeezed = !roomy && labelSize.w > 0 && labelSize.w < 84;
+  return (
+    <div ref={barRef} className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-bp-line/70 bg-bp-paper">
       <div className="flex items-center gap-1">
         <button type="button" onClick={onPrev} disabled={navIndex <= 0} className={btnGhost + ' !px-2'} title="上一页（←）">
           <ChevronLeft className="w-4 h-4" />
@@ -35,7 +77,11 @@ function Toolbar({ page, navIndex, navTotal, pageNo, exportTotal, onPrev, onNext
           <ChevronRight className="w-4 h-4" />
         </button>
       </div>
-      <div className="min-w-0 flex-1 truncate text-sm text-bp-ink font-medium" title={page?.label}>
+      <div
+        ref={labelRef}
+        className={`${roomy ? 'min-w-[96px]' : 'min-w-0'} flex-1 basis-0 truncate text-sm text-bp-ink font-medium ${squeezed ? 'invisible' : ''}`}
+        title={page?.label}
+      >
         {page?.label}
       </div>
       <div className="flex items-center gap-1.5">
@@ -45,14 +91,15 @@ function Toolbar({ page, navIndex, navTotal, pageNo, exportTotal, onPrev, onNext
             onClick={onToggleCompare}
             disabled={!canCompare}
             title={canCompare ? '把原稿 PDF 的那一页放在旁边对照' : '这一页没有对应的原稿页'}
-            className={`${btnGhost} ${compare ? '!bg-bp-dark !text-bp-light !border-bp-dark' : ''}`}
+            aria-label="对照原稿"
+            className={`${btnGhost} ${compact ? '!px-2' : ''} ${compare ? '!bg-bp-dark !text-bp-light !border-bp-dark' : ''}`}
           >
             <Columns2 className="w-3.5 h-3.5" />
-            对照原稿
+            {!compact && '对照原稿'}
           </button>
         )}
         <Menu
-          label="AI 润色"
+          label={compact ? '润色' : 'AI 润色'}
           icon={Sparkles}
           width="w-60"
           items={[
@@ -65,12 +112,13 @@ function Toolbar({ page, navIndex, navTotal, pageNo, exportTotal, onPrev, onNext
           icon={LayoutTemplate}
           width="w-60"
           items={[
-            { label: '全部自动排版', icon: Shuffle, disabled: !hasViews, hint: '按图片比例和内容重新选，避免连续 3 页同一版式', onClick: () => onGlobalLayout('auto') },
-            { label: '全部满版', icon: RectangleHorizontal, disabled: !hasViews, hint: '整张效果图铺满，材料放右下角', onClick: () => onGlobalLayout('full') },
-            { label: '全部框图', icon: PanelLeft, disabled: !hasViews, hint: '左图右文，适合材料 / 备注多的页', onClick: () => onGlobalLayout('framed') },
+            { label: '全部自动排版', icon: Shuffle, disabled: !hasViews, hint: '横图又不丢材料 / 说明的页用满版，其余图文；不连续 3 页满版', onClick: () => onGlobalLayout('auto') },
+            { label: '全部满版大图', icon: RectangleHorizontal, disabled: !hasViews, hint: '效果图铺满整页、不放文字（材料、说明不显示）', onClick: () => onGlobalLayout('full') },
+            { label: '全部图文', icon: PanelLeft, disabled: !hasViews, hint: '大图 + 右栏：楼层空间、视角名、材料，说明放在图下', onClick: () => onGlobalLayout('framed') },
           ]}
         />
       </div>
+      {onLang && <LangControls lang={lang} onLang={onLang} missingCount={missingCount} onTranslate={onTranslate} compact={compact} />}
     </div>
   );
 }
@@ -78,15 +126,19 @@ function Toolbar({ page, navIndex, navTotal, pageNo, exportTotal, onPrev, onNext
 /**
  * @param {{ page:object, slide:object, project:object, navIndex:number, navTotal:number, pageNo?:number, exportTotal:number,
  *   onPrev(), onNext(), onPick(field, el), activeField?:string, onClearPick(), compare:boolean, onToggleCompare(),
- *   onFix(fix), onPolish(onlyThis?:boolean), onGlobalLayout(mode), onToggleEnabled() }} props
+ *   onFix(fix), onPolish(onlyThis?:boolean), onGlobalLayout(mode), onToggleEnabled(),
+ *   onLang?(lang:'zh'|'en'|'bi'), missingCount?:number, onTranslate?() }} props
+ *   onLang：顶栏的提案语言切换；missingCount：整套缺英文的条数（English / 中英版时显示「AI 翻译 · N」）
  */
 export default function Stage({
   page, slide, project, navIndex, navTotal, pageNo, exportTotal, onPrev, onNext, onPick, activeField, onClearPick, compare,
-  onToggleCompare, onFix, onPolish, onGlobalLayout, onToggleEnabled,
+  onToggleCompare, onFix, onPolish, onGlobalLayout, onToggleEnabled, onLang, missingCount = 0, onTranslate,
 }) {
   const areaRef = useRef(null);
   const size = useElementSize(areaRef);
   const isView = slide?.kind === 'view';
+  const lang = langOf(project);
+  const compact = size.w > 0 && size.w < toolbarCompactWidth(lang, missingCount);
   const source = isView && slide.sourcePage ? (project.pages || []).find((p) => p.n === slide.sourcePage) : null;
   const sourceUrl = source?.thumb ? resolveUrl(source.thumb) : null;
   const canCompare = !!sourceUrl;
@@ -132,6 +184,11 @@ export default function Stage({
         onPolish={onPolish}
         onGlobalLayout={onGlobalLayout}
         hasViews={hasViews}
+        lang={lang}
+        onLang={onLang}
+        missingCount={missingCount}
+        onTranslate={onTranslate}
+        compact={compact}
       />
 
       <div

@@ -12,10 +12,10 @@ import ExportDialog from './ExportDialog.jsx';
 import DollhousePanel from './DollhousePanel.jsx';
 import MoodBoard from '../moodboard/MoodBoard.jsx';
 import { getProject } from '../store/db.js';
-import { preloadProjectAssets, onAssetsChanged, storeBlob, metaOf } from '../store/assets.js';
+import { preloadProjectAssets, onAssetsChanged, storeBlob } from '../store/assets.js';
 import { uploadImage } from './editor/upload.js';
 import { useProjectState, waitForSaves } from '../lib/useProjectState.js';
-import { designCoverSlideId, coverLayoutFor, projectStats, ensureDesignCoverSlide } from '../lib/project.js';
+import { designCoverSlideId, projectStats, ensureDesignCoverSlide, upgradeProject } from '../lib/project.js';
 import { cls } from '../lib/ui.jsx';
 
 export const TABS = [
@@ -66,7 +66,8 @@ export default function Editor({ projectId, settings, notify, onOpenSettings, on
         if (missing) {
           notify({ type: 'warn', text: `有 ${missing} 张图片在本机找不到了（可能清理过浏览器数据），对应位置会显示灰块。` });
         }
-        setLoaded({ project });
+        // 旧项目升级到现在的版式（效果图版式交还给自动排版，见 lib/project.js upgradeProject）
+        setLoaded({ project: upgradeProject(project) });
       } catch (e) {
         if (alive) setLoaded({ error: e?.message || String(e) });
       }
@@ -182,16 +183,12 @@ function Workspace({ initial, settings, notify, onOpenSettings, onExit }) {
     async (blob, meta) => {
       // 设计师上传的现成图：校验格式、手机照片转正、超大图缩小；画板 / 实拍图直接存
       const src = meta?.source === 'upload' ? await uploadImage(blob, { projectId, maxEdge: 3840 }) : await storeBlob(blob, { projectId });
-      let orientation = meta?.orientation;
-      if (!orientation) {
-        const m = metaOf(src);
-        if (m?.w && m?.h) orientation = m.w / m.h > 1.2 ? 'landscape' : m.w / m.h < 0.9 ? 'portrait' : 'square';
-      }
       let id = null;
       onChange((p) => {
         const withSlide = ensureDesignCoverSlide(p); // 方案封面页被删掉了就补回来
         id = designCoverSlideId(withSlide);
-        return { ...withSlide, cover: { ...withSlide.cover, image: src, layout: coverLayoutFor(withSlide.cover?.layout, orientation) } };
+        // 封面上 Board 整张放在右侧（任何比例都不裁），不用再挑版式
+        return { ...withSlide, cover: { ...withSlide.cover, image: src } };
       });
       if (!id) return;
       if (tabRef.current === 'pages') focusSlide(id);

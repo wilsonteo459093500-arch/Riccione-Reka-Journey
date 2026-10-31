@@ -1,9 +1,23 @@
 // 项目层面的纯函数（Node 可测）：缩略图、统计、章节开关、副本名称等
 
-import { uid } from '../engine/model.js';
-import { COMPANY_SLIDES } from '../engine/companyTemplate.js';
+import { uid, LAYOUT_VERSION } from '../engine/model.js';
+import { COMPANY_PAGES_B } from '../engine/b/company.js';
 
-const SECTION_OF = Object.fromEntries(COMPANY_SLIDES.map((s) => [s.key, s.section]));
+const SECTION_OF = Object.fromEntries(Object.entries(COMPANY_PAGES_B).map(([key, p]) => [key, p.section]));
+
+/**
+ * 打开旧项目时升级到现在的版式（B「格物」，LAYOUT_VERSION = 2）：
+ *   旧项目的效果图版式（满版 / 框图）是旧版自动排版写死的 —— 旧满版页上压着材料和说明；
+ *   B 的满版页只放图，照旧值排会把材料、说明藏起来。所以交还给自动排版（AI 立体图页不动）。
+ *   公司页按元素序号的旧改写（overrides 的数字键）新版式不再读取，留在数据里不影响。
+ */
+export function upgradeProject(project) {
+  if (!project || (project.layoutVersion || 1) >= LAYOUT_VERSION) return project;
+  const slides = (project.slides || []).map((s) =>
+    s.kind === 'view' && s.tag !== '3d' && s.layout && s.layout !== 'auto' ? { ...s, layout: 'auto' } : s
+  );
+  return { ...project, slides, layoutVersion: LAYOUT_VERSION };
+}
 
 /** 首页卡片缩略图：方案封面（Material Board）→ 第一张效果图 → 楼层图 → 原稿第一页 */
 export function projectThumbSrc(project) {
@@ -125,11 +139,3 @@ export function ensureDesignCoverSlide(project) {
 }
 
 export const designCoverSlideId = (project) => (project?.slides || []).find((s) => s.kind === 'designCover')?.id || null;
-
-/** 设封面后自动挑版式：横图 → 满版；竖图且当前是满版 → 左文右图 */
-export function coverLayoutFor(current, orientation) {
-  if (orientation === 'landscape' && current !== 'full') return 'full';
-  // 方形画板放进满版（16:9）会被裁掉近一半 → 左文右图
-  if ((orientation === 'portrait' || orientation === 'square') && current === 'full') return 'split-light';
-  return current || 'split-light';
-}

@@ -73,7 +73,7 @@ ${JSON.stringify(briefs)}
 export const TRANSLATE_KINDS = {
   room: '空间名，Title Case，简短（Master Bedroom / Living Area / Staircase Cabinet）',
   view: '效果图的视角名，Title Case，2–4 个词（TV Cabinet / Overview / Wardrobe & Vanity / Night View）',
-  role: '材料用在哪个部位，Title Case，简短（Doors / Carcass & Doors / Countertop / Wall Panels）',
+  role: '材料用在哪个部位，Title Case，简短，英式英语（Doors / Carcass & Doors / Worktop / Wall Panels）',
   label: '备注的小标签，Title Case，1–3 个词（Hidden Door / Door Opening / Lighting）',
   note: '备注说明，一句简洁的英文，句首大写、不加句号（Hydraulic closer with push-to-open）',
   material: '材料 / 饰面名，Title Case；编号、品牌、已有的英文原样保留（Light Oak Veneer AG273）',

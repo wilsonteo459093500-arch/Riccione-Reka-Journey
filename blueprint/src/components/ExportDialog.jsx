@@ -1,44 +1,44 @@
-// 导出 PPT：体检（逐页提示，可跳到该页）→ 生成 .pptx（第 k / N 页）→ 自动下载；另可下载项目备份（.blueprint.zip）
+// 导出 PPT：选导出语言（华文 / English / 中英，默认 = 提案语言；只影响这次导出，不改项目）→ 体检（逐页提示，可跳到该页；
+// 缺英文汇总成一条）→ 生成 .pptx（第 k / N 页）→ 自动下载；另可下载项目备份（.blueprint.zip）
+// English 版的文件名和 PPT 标题（文件属性）用英文的客户 / 地点（翻译记忆里有的话）
 
 import React, { useMemo, useRef, useState } from 'react';
 import {
-  Download, Loader2, CheckCircle2, AlertTriangle, ArrowUpRight, Archive, Presentation, ExternalLink, Type, Stamp, RotateCcw,
+  Download, Loader2, CheckCircle2, AlertTriangle, ArrowUpRight, Archive, Presentation, ExternalLink, Type, Stamp, RotateCcw, Languages,
 } from 'lucide-react';
 import { renderDeck, exportableSlides } from '../engine/deck.js';
 import { buildPptx } from '../engine/pptx/writer.js';
-import { clientLine } from '../engine/model.js';
+import { langOf } from '../engine/lang.js';
+import { FONT_PACK } from '../theme.js';
 import { metaOf, loadForPptx, resolveUrl, isAssetSrc } from '../store/assets.js';
 import { exportBundle } from '../lib/bundle.js';
 import { downloadBlob } from '../lib/download.js';
 import { pptxFileName, bundleFileName, formatBytes } from '../lib/format.js';
+import {
+  exportHealth, exportInfo, pptxTitle, missingEnText, missingEnHint, langNameInline, LANG_OPTIONS, LANG_HINTS, LANG_VERSION,
+} from '../lib/langUi.js';
 import { Modal, ProgressBar, cls } from '../lib/ui.jsx';
+import { Segmented } from './editor/ui.jsx';
 
-const FONT_LINKS = [
-  { name: '思源宋体 Source Han Serif CN', href: 'https://github.com/adobe-fonts/source-han-serif/releases' },
-  { name: 'Outfit', href: 'https://fonts.google.com/specimen/Outfit' },
-];
-
-/** 逐页体检：版式提示 + 图片缺失 */
-function collectIssues(slides) {
-  const out = [];
-  slides.forEach((s, i) => {
-    const msgs = [...(s.warnings || [])];
-    const missing = (s.els || []).filter((el) => el.t === 'img' && el.src && isAssetSrc(el.src) && !resolveUrl(el.src)).length;
-    if (missing) msgs.push(missing > 1 ? `${missing} 张图片在本机找不到` : '有一张图片在本机找不到');
-    if (msgs.length) out.push({ key: s.key, slideId: s.slideId, page: i + 1, label: s.label, msgs: [...new Set(msgs)] });
-  });
-  return out;
-}
+/** 这一页有几张项目图片在本机找不到 */
+const missingImages = (s) => (s.els || []).filter((el) => el.t === 'img' && el.src && isAssetSrc(el.src) && !resolveUrl(el.src)).length;
 
 /** writer 的提示里带着 'asset:…' 引用，换成更好懂的说法 */
 const friendlyWriterWarning = (w) => String(w).replace(/asset:[\w-]+/g, '项目图片').replace(/\/template\/[\w.-]+/g, '模板图片');
 
 export default function ExportDialog({ project, notify, onClose, onGoTab }) {
-  const rendered = useMemo(() => renderDeck(project, { meta: metaOf }), [project]);
+  const projectLang = langOf(project);
+  const [lang, setLang] = useState(projectLang); // 这次导出的语言（不写回项目）
+  // 按选定的语言渲染：只换 info.lang，项目本身不动
+  const target = useMemo(
+    () => (lang === projectLang ? project : { ...project, info: { ...(project.info || {}), lang } }),
+    [project, lang, projectLang]
+  );
+  const rendered = useMemo(() => renderDeck(target, { meta: metaOf }), [target]);
   const slides = useMemo(() => exportableSlides(rendered), [rendered]);
-  const issues = useMemo(() => collectIssues(slides), [slides]);
+  const { issues, missing } = useMemo(() => exportHealth(slides, { missingImages }), [slides]);
   const hidden = rendered.length - slides.length;
-  const filename = pptxFileName(project);
+  const filename = pptxFileName({ ...project, info: exportInfo(project, lang) }, lang);
 
   const [phase, setPhase] = useState('ready'); // 'ready' | 'building' | 'done' | 'error'
   const [prog, setProg] = useState({ done: 0, total: slides.length });
@@ -54,7 +54,6 @@ export default function ExportDialog({ project, notify, onClose, onGoTab }) {
     setPhase('building');
     setError('');
     setProg({ done: 0, total: slides.length });
-    const info = project.info || {};
     try {
       const { file, warnings } = await buildPptx(slides, {
         loadImage: loadForPptx,
@@ -62,7 +61,7 @@ export default function ExportDialog({ project, notify, onClose, onGoTab }) {
           cancelAnimationFrame(frame.current);
           frame.current = requestAnimationFrame(() => setProg({ done, total }));
         },
-        title: [clientLine(info) || project.name, 'Dreamhouse Blueprint'].filter(Boolean).join(' · '),
+        title: pptxTitle(project, lang),
         author: 'Riccione Reka',
       });
       cancelAnimationFrame(frame.current);
@@ -91,6 +90,17 @@ export default function ExportDialog({ project, notify, onClose, onGoTab }) {
       notify?.({ type: 'error', text: `备份失败：${e?.message || e}` });
     } finally {
       setBackup(null);
+    }
+  }
+
+  /** 换导出语言：导出过 / 出错过就回到「准备」，可以接着导出另一个语言版本 */
+  function chooseLang(v) {
+    if (building || v === lang) return;
+    setLang(v);
+    if (phase !== 'ready') {
+      setPhase('ready');
+      setResult(null);
+      setError('');
     }
   }
 
@@ -136,16 +146,29 @@ export default function ExportDialog({ project, notify, onClose, onGoTab }) {
       }
     >
       <div className="space-y-5">
-        {/* 文件 */}
-        <div className="flex items-center gap-3 rounded-xl bg-bp-tint border border-bp-line px-4 py-3">
-          <Presentation size={22} className="text-bp-eyebrow shrink-0" />
-          <div className="min-w-0 flex-1">
-            <div className="text-sm text-bp-ink truncate" title={filename}>
-              {filename}
-            </div>
-            <div className="text-[11px] text-bp-faint">
-              {slides.length} 页 · 16:9{hidden ? ` · 另有 ${hidden} 页已隐藏（不导出）` : ''}
-              {result ? ` · ${formatBytes(result.blob.size)}` : ''}
+        {/* 语言 + 文件 */}
+        <div className="rounded-xl bg-bp-tint border border-bp-line divide-y divide-bp-line">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
+            <span className="text-xs font-semibold text-bp-faint w-14 shrink-0">导出语言</span>
+            <fieldset disabled={building} className="min-w-0 disabled:opacity-60">
+              <legend className="sr-only">导出语言</legend>
+              <Segmented options={LANG_OPTIONS} value={lang} onChange={chooseLang} />
+            </fieldset>
+            <span className="min-w-0 basis-full sm:basis-0 sm:flex-1 text-[11px] text-bp-muted leading-snug">
+              {LANG_HINTS[lang]}
+              {lang !== projectLang && <span className="block text-bp-faint">只这次导出用；提案本身仍是{langNameInline(projectLang).trimEnd()}</span>}
+            </span>
+          </div>
+          <div className="flex items-center gap-3 px-4 py-3">
+            <Presentation size={22} className="text-bp-eyebrow shrink-0" />
+            <div className="min-w-0 flex-1">
+              <div className="text-sm text-bp-ink truncate" title={filename}>
+                {filename}
+              </div>
+              <div className="text-[11px] text-bp-faint">
+                {slides.length} 页 · 16:9{hidden ? ` · 另有 ${hidden} 页已隐藏（不导出）` : ''}
+                {result ? ` · ${formatBytes(result.blob.size)}` : ''}
+              </div>
             </div>
           </div>
         </div>
@@ -171,11 +194,12 @@ export default function ExportDialog({ project, notify, onClose, onGoTab }) {
         {phase === 'done' && result && (
           <div className="rounded-xl border border-bp-green/30 bg-bp-green/5 p-4 space-y-3">
             <div className="flex items-center gap-2 text-bp-green font-medium">
-              <CheckCircle2 size={18} /> 已导出 {slides.length} 页 · {formatBytes(result.blob.size)}，浏览器已开始下载
+              <CheckCircle2 size={18} /> 已导出{lang === 'en' ? ' ' : ''}
+              {LANG_VERSION[lang]} {slides.length} 页 · {formatBytes(result.blob.size)}，浏览器已开始下载
             </div>
             <ul className="text-sm text-bp-muted space-y-1.5 leading-relaxed list-disc pl-5">
               <li>在 PowerPoint / WPS 里打开即可继续改字、换图 —— 每段文字都是文本框，每张图都能「更改图片」。</li>
-              <li>发给客户前，建议在 PowerPoint 里「文件 → 导出 → PDF」再存一份 PDF，对方电脑没装字体也不会走样。</li>
+              <li>还要别的语言版本？在上面换一种语言，再导出一次。</li>
             </ul>
             {result.warnings.length > 0 && (
               <details className="text-xs text-bp-warn">
@@ -194,10 +218,32 @@ export default function ExportDialog({ project, notify, onClose, onGoTab }) {
         {phase !== 'done' && (
           <div>
             <div className="text-xs font-semibold text-bp-faint mb-2">导出前检查</div>
-            {issues.length === 0 ? (
-              <div className="flex items-center gap-2 text-sm text-bp-green">
-                <CheckCircle2 size={16} /> 每一页都没问题
+            {missing && (
+              <div className="mb-2.5 flex items-start gap-2.5 rounded-xl border border-bp-warn/30 bg-bp-warn/10 px-3.5 py-2.5">
+                <Languages size={15} className="shrink-0 mt-0.5 text-bp-warn" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm text-bp-ink leading-snug">{missingEnText(lang, missing.count)}</div>
+                  <div className="mt-0.5 text-xs text-bp-muted leading-snug">{missingEnHint(lang, projectLang, missing.count)}</div>
+                </div>
+                {/* 导出语言和提案不同：编辑器里那一页不会提示缺英文，跳过去也看不到 —— 提示里已经说了先切语言 */}
+                {missing.firstSlideId && lang === projectLang && (
+                  <button
+                    type="button"
+                    onClick={() => jump(missing.firstSlideId)}
+                    disabled={building}
+                    className="shrink-0 mt-0.5 inline-flex items-center gap-0.5 text-xs text-bp-eyebrow hover:underline disabled:opacity-50"
+                  >
+                    去页面 <ArrowUpRight size={12} />
+                  </button>
+                )}
               </div>
+            )}
+            {issues.length === 0 ? (
+              !missing && (
+                <div className="flex items-center gap-2 text-sm text-bp-green">
+                  <CheckCircle2 size={16} /> 每一页都没问题
+                </div>
+              )
             ) : (
               <ul className="rounded-xl border border-bp-line divide-y divide-bp-line max-h-56 overflow-y-auto thin-scroll">
                 {issues.map((it) => (
@@ -240,19 +286,20 @@ export default function ExportDialog({ project, notify, onClose, onGoTab }) {
         {/* 字体 */}
         <div className="flex items-start gap-2.5 text-xs text-bp-muted leading-relaxed">
           <Type size={15} className="shrink-0 mt-0.5 text-bp-gold" />
-          <div>
-            PPT 用到三款字体：<b className="font-medium text-bp-ink">思源宋体（Source Han Serif CN）</b>、
-            <b className="font-medium text-bp-ink">Outfit</b>、<b className="font-medium text-bp-ink">Ogg</b>。电脑上没装时会用替代字体显示，
-            排版可能略有出入。免费下载：
-            {FONT_LINKS.map((f, i) => (
-              <React.Fragment key={f.href}>
-                {i ? '、' : ''}
-                <a href={f.href} target="_blank" rel="noreferrer" className="text-bp-eyebrow underline underline-offset-2 inline-flex items-center gap-0.5">
-                  {f.name} <ExternalLink size={11} />
-                </a>
-              </React.Fragment>
-            ))}
-            （Ogg 是商用字体，没装时会自动替换）。
+          <div className="space-y-1">
+            <div>
+              PPT 用到三款免费字体，电脑上没装时 PowerPoint 会换成替代字体，排版会走样：
+              {FONT_PACK.map((f, i) => (
+                <React.Fragment key={f.href}>
+                  {i ? '、' : ''}
+                  <a href={f.href} target="_blank" rel="noreferrer" className="text-bp-eyebrow underline underline-offset-2 inline-flex items-center gap-0.5">
+                    {f.name} <ExternalLink size={11} />
+                  </a>
+                </React.Fragment>
+              ))}
+              。
+            </div>
+            <div className="text-bp-ink">发给客户建议另存 PDF（PowerPoint：文件 → 导出 → PDF），对方没装字体也不会走样。</div>
           </div>
         </div>
       </div>

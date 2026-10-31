@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import { Palette, ArrowUpRight, Info } from 'lucide-react';
-import { MATERIALS_PER_PAGE } from '../../../engine/layouts.js';
+import { MATERIALS_PER_PAGE } from '../../../engine/deck.js';
 import { requestThumbs, useThumbsSig } from '../thumbs.js';
 import { Section, btnPrimary } from '../ui.jsx';
 import { Swatch } from '../MaterialPicker.jsx';
@@ -17,11 +17,11 @@ export default function MaterialsInspector({ project, onGoTab }) {
   useEffect(() => requestThumbs(srcs), [srcs]);
   const layoutNote = !mats.length
     ? '还没有材料'
-    : mats.length <= 12
-      ? '两行大色板（与定稿一致）'
+    : mats.length <= 6
+      ? '一行大色板'
       : mats.length <= MATERIALS_PER_PAGE
-        ? '三行紧凑色板'
-        : `自动分成 ${pages} 页`;
+        ? '两行色板'
+        : `均分成 ${pages} 页`;
 
   return (
     <div className="space-y-3">
@@ -42,7 +42,7 @@ export default function MaterialsInspector({ project, onGoTab }) {
         {(pending > 0 || noImage > 0) && (
           <ul className="mb-3 space-y-0.5 text-[11px] text-bp-warn">
             {pending > 0 && <li>· {pending} 种标着「待确认」</li>}
-            {noImage > 0 && <li>· {noImage} 种还没有色板照片（页面上显示灰色块）</li>}
+            {noImage > 0 && <li>· {noImage} 种还没有色板照片（页面上显示浅色空格）</li>}
           </ul>
         )}
         <button type="button" className={`${btnPrimary} w-full`} onClick={() => onGoTab?.('materials')}>

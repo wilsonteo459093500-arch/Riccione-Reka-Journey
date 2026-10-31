@@ -1,17 +1,20 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, FileQuestion } from 'lucide-react';
 import { renderDeck } from '../../engine/deck.js';
+import { planViews } from '../../engine/b/design.js';
 import { uid } from '../../engine/model.js';
+import { missingInPages, addTranslations } from '../../engine/lang.js';
 import { metaOf } from '../../store/assets.js';
 import { applyPolishPatches } from '../../ai/polish.js';
 import PolishDialog from '../PolishDialog.jsx';
+import TranslateDialog from '../TranslateDialog.jsx';
 import SlideList from './SlideList.jsx';
 import Stage from './Stage.jsx';
 import Inspector from './Inspector.jsx';
 import {
   stabilizePages, pageNumbers, warningPageCount, nextWarningIndex, findSlide, toggleSlide, moveSlideRelative, moveSlideBy,
   duplicateSlide, deleteSlide, insertViewsAfter, setAllViewLayouts, countLayoutChanges, applyFix, resolveViewLayout, canDelete,
-  canDuplicate,
+  canDuplicate, setLang, NOW,
 } from './ops.js';
 import { useMediaQuery, useFillViewport, useStableCallback, isTypingTarget } from './hooks.js';
 import { uploadImage, imageFiles } from './upload.js';
@@ -19,7 +22,7 @@ import { uploadImage, imageFiles } from './upload.js';
 // 「页面」标签：左 页面列表 / 中 大画布 / 右 检查器。设计师在这里逐页检查自动生成的提案并修改，所见即所得。
 // props: { project, onChange(updater), settings, notify, onOpenSettings, onGoTab(tab), focusSlideId, assetsVersion }
 
-const LAYOUT_NAMES = { auto: '自动排版', full: '满版', framed: '框图' };
+const LAYOUT_NAMES = { auto: '自动排版', full: '满版大图', framed: '图文' };
 
 const store = {
   get(k) {
@@ -61,12 +64,15 @@ export default function PagesTab({ project, onChange, settings, notify, onOpenSe
   const pageNos = useMemo(() => pageNumbers(pages), [pages]);
   const slidesById = useMemo(() => new Map((project.slides || []).map((s) => [s.id, s])), [project.slides]);
   const warningCount = useMemo(() => warningPageCount(pages), [pages]);
+  // English / 中英版：整套（会导出的页）还缺英文的中文 → 顶栏「AI 翻译 · N」与翻译弹窗
+  const missing = useMemo(() => missingInPages(pages), [pages]);
 
   const [selectedKey, setSelectedKey] = useState(() => focusSlideId || store.get(selKeyStore) || null);
   const [activeField, setActiveField] = useState(null);
   const [pickNonce, setPickNonce] = useState(0);
   const [compare, setCompare] = useState(() => store.get('bp.pages.compare') === '1');
   const [polish, setPolish] = useState(null); // { only?: string[] }
+  const [translate, setTranslate] = useState(null); // { items:[{zh,kind}] }
   const [busy, setBusy] = useState('');
 
   const wide = useMediaQuery('(min-width: 1024px)');
@@ -78,7 +84,9 @@ export default function PagesTab({ project, onChange, settings, notify, onOpenSe
   if (selIndex < 0) selIndex = Math.min(lastIndexRef.current, pages.length - 1);
   const page = selIndex >= 0 ? pages[selIndex] : null;
   const slide = page ? slidesById.get(page.slideId) || null : null;
-  const layout = slide?.kind === 'view' ? resolveViewLayout(slide, metaOf) : null;
+  // 'auto' 的效果图页要看整套才知道是满版还是图文（与 renderDeck 同一个计划）
+  const plan = useMemo(() => planViews(project, metaOf), [project, assetsVersion]); // eslint-disable-line react-hooks/exhaustive-deps
+  const layout = slide?.kind === 'view' ? resolveViewLayout(slide, metaOf, plan) : null;
 
   useEffect(() => {
     if (selIndex >= 0) lastIndexRef.current = selIndex;
@@ -192,6 +200,22 @@ export default function PagesTab({ project, onChange, settings, notify, onOpenSe
     setPickNonce((n) => n + 1);
   };
 
+  // 提案语言：整套一起切（单独一步撤销）
+  const changeLang = useStableCallback((lang) => onChange((p) => setLang(p, lang), NOW));
+
+  // 「AI 翻译」：顶栏按钮（整套会导出的页）/ 缺英文提醒的一键修复（再加上这一页自己的 —— 隐藏页不在整套的统计里）
+  const openTranslate = useStableCallback((extra) => {
+    const items = [...missing, ...(Array.isArray(extra) ? extra : [])];
+    if (items.length) setTranslate({ items });
+    else notify?.({ type: 'ok', text: '英文已经齐了，没有需要翻译的地方' });
+  });
+
+  const applyTranslations = useStableCallback((pairs) => {
+    if (!pairs?.length) return;
+    onChange((p) => addTranslations(p, pairs), NOW);
+    notify?.({ type: 'ok', text: `已套用 ${pairs.length} 条英文 —— 记进了这份提案的翻译记忆，用到的页都已更新（可以撤销）` });
+  });
+
   const onFix = useStableCallback((fix) => {
     if (!slide) return;
     switch (fix.id) {
@@ -208,20 +232,32 @@ export default function PagesTab({ project, onChange, settings, notify, onOpenSe
       case 'gotoMaterials':
         onGoTab?.('materials');
         break;
+      case 'translate':
+        openTranslate(page?.missing);
+        break;
       default:
         if (fix.field) focusInspector(fix.field);
     }
   });
 
   const globalLayout = useStableCallback((mode) => {
-    const next = setAllViewLayouts(project, mode, metaOf);
-    const n = countLayoutChanges(project, next);
-    if (!n) {
-      notify?.({ type: 'ok', text: mode === 'auto' ? '已经是自动排版的结果了' : `效果图页已经全部是${LAYOUT_NAMES[mode]}` });
+    const next = setAllViewLayouts(project, mode);
+    if (next === project) {
+      notify?.({ type: 'ok', text: `效果图页已经全部是${LAYOUT_NAMES[mode]}` });
       return;
     }
-    act((p) => setAllViewLayouts(p, mode, metaOf));
-    notify?.({ type: 'ok', text: mode === 'auto' ? `已重新自动排版，调整了 ${n} 页` : `已把 ${n} 页改成${LAYOUT_NAMES[mode]}（AI 立体图页不变）` });
+    // n = 实际换了版式的页数（'auto' 按整套计划换算成满版 / 图文）
+    const n = countLayoutChanges(project, next, metaOf);
+    act((p) => setAllViewLayouts(p, mode));
+    notify?.({
+      type: 'ok',
+      text:
+        mode === 'auto'
+          ? n
+            ? `已交给自动排版：${n} 页换了版式`
+            : '已交给自动排版（这次排出来的版式没有变化）'
+          : `效果图页已全部设为${LAYOUT_NAMES[mode]}${n ? `（${n} 页有变化）` : ''}，AI 立体图页不变`,
+    });
   });
 
   const openPolish = useStableCallback((only) => setPolish({ only: Array.isArray(only) && only.length ? only : undefined }));
@@ -241,7 +277,7 @@ export default function PagesTab({ project, onChange, settings, notify, onOpenSe
   // 键盘：← → 翻页；Alt + ↑ ↓ 调整顺序；焦点在列表里时 ↑ ↓ 也翻页
   useEffect(() => {
     const onKey = (e) => {
-      if (polish || e.defaultPrevented || e.metaKey || e.ctrlKey) return;
+      if (polish || translate || e.defaultPrevented || e.metaKey || e.ctrlKey) return;
       const root = rootRef.current;
       if (!root || root.offsetParent === null) return; // 标签页被隐藏
       if (isTypingTarget(document.activeElement)) return;
@@ -264,7 +300,7 @@ export default function PagesTab({ project, onChange, settings, notify, onOpenSe
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [polish, slide, go, moveBy]);
+  }, [polish, translate, slide, go, moveBy]);
 
   // 列表获得焦点的项跟随选中（键盘翻页后，焦点留在列表里继续用 ↑ ↓）
   useEffect(() => {
@@ -313,6 +349,9 @@ export default function PagesTab({ project, onChange, settings, notify, onOpenSe
       onPolish={(onlyThis) => openPolish(onlyThis && slide ? [slide.id] : undefined)}
       onGlobalLayout={globalLayout}
       onToggleEnabled={() => slide && toggle(slide.id)}
+      onLang={changeLang}
+      missingCount={missing.length}
+      onTranslate={() => openTranslate()}
     />
   ) : (
     <div className="h-full flex flex-col items-center justify-center gap-2 text-bp-faint">
@@ -386,6 +425,18 @@ export default function PagesTab({ project, onChange, settings, notify, onOpenSe
           onlySlideIds={polish.only}
           onApply={(patches) => act((p) => applyPolishPatches(p, patches))}
           onClose={() => setPolish(null)}
+        />
+      )}
+
+      {translate && (
+        <TranslateDialog
+          project={project}
+          items={translate.items}
+          settings={settings}
+          notify={notify}
+          onOpenSettings={onOpenSettings}
+          onApply={applyTranslations}
+          onClose={() => setTranslate(null)}
         />
       )}
     </div>
