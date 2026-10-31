@@ -3,6 +3,9 @@
 
 import { autoLayout, applyLayoutRhythm } from '../../engine/layouts.js';
 import { SECTION_LABELS, COMPANY_BY_KEY, renderCompany, projectTokens, elementText } from '../../engine/deck.js';
+import { EN as COMPANY_EN, BI as COMPANY_BI } from '../../engine/companyLang.js';
+import { fillTokens } from '../../engine/spec.js';
+import { langOf, isMissWarning } from '../../engine/lang.js';
 import { findFloor } from '../../engine/model.js';
 import { SLIDE_W, PX_PER_PT } from '../../theme.js';
 
@@ -339,6 +342,9 @@ export function setFloorBackground(project, slideId, src) {
 }
 
 export const updateInfo = (project, patch) => ({ ...project, info: { ...(project.info || {}), ...patch } });
+
+/** 提案语言：'zh' 华文 | 'en' English | 'bi' 中英 */
+export const setLang = (project, lang) => updateInfo(project, { lang: lang === 'en' || lang === 'bi' ? lang : 'zh' });
 export const updateCover = (project, patch) => ({ ...project, cover: { ...(project.cover || {}), ...patch } });
 
 const teamOf = (project) => project.info?.team || [];
@@ -426,6 +432,77 @@ export function companyFields(slide, project) {
 }
 
 // ---------------------------------------------------------------------------
+// 公司固定页：English / 中英版的英文（slide.overridesEn[元素序号]）
+// ---------------------------------------------------------------------------
+
+function writeOverrideEn(project, slideId, idx, text) {
+  return updateSlide(project, slideId, (s) => {
+    const overridesEn = { ...(s.overridesEn || {}) };
+    if (typeof text === 'string') overridesEn[idx] = text;
+    else delete overridesEn[idx];
+    const { overridesEn: _old, ...rest } = s;
+    return Object.keys(overridesEn).length ? { ...rest, overridesEn } : rest;
+  });
+}
+
+/** 改英文；与模板英文一致时去掉改写 */
+export const setCompanyEnOverride = (project, slideId, idx, text, original) =>
+  writeOverrideEn(project, slideId, idx, original !== undefined && text === original ? null : String(text ?? ''));
+
+export const clearCompanyEnOverride = (project, slideId, idx) => writeOverrideEn(project, slideId, idx, null);
+
+/**
+ * 模板里这一框在 English / 中英版的英文（已填项目信息）：
+ *   English：null = 没有英文版的字（沿用中文版这一框，本来就是英文 / 品牌名）；'' = English 版不显示
+ *   中英：null = 中英版这一框不加英文
+ */
+function templateEn(key, idx, lang, tokens, zhOverride) {
+  if (lang === 'en') {
+    const s = COMPANY_EN[key]?.[idx];
+    if (s === undefined) return null;
+    if (s === '') return '';
+    const o = typeof s === 'string' ? { text: s } : s;
+    if (o.text === undefined) return null;
+    const derived = typeof zhOverride === 'string' && o.fromZh ? o.fromZh(zhOverride) : null;
+    return fillTokens(derived ?? o.text, tokens);
+  }
+  if (lang === 'bi') {
+    const s = COMPANY_BI[key]?.[idx];
+    if (!s || s.hide || s.en === undefined) return null;
+    return fillTokens(s.en, tokens);
+  }
+  return null;
+}
+
+/**
+ * 公司模板页按当前语言的栏位：companyFields 的每一项再带上
+ *   en: { text, original, overridden, stale } | null   —— 这一框的英文（English 版：页面上显示的字；中英版：中文下面加的英文）
+ *   hidden: true                                       —— English 版不显示这一框
+ *   stale：中文改过、英文还是模板原文（提醒设计师顺手改英文）
+ */
+export function companyLangFields(slide, project) {
+  const lang = langOf(project);
+  const fields = companyFields(slide, project);
+  if (lang === 'zh') return fields.map((f) => ({ ...f, en: null, hidden: false }));
+  const key = companyKeyOf(slide, project);
+  const tokens = projectTokens(project);
+  return fields.map((f) => {
+    const zhOverride = slide.overrides?.[f.idx];
+    const original = templateEn(key, f.idx, lang, tokens, zhOverride);
+    if (original === '') return { ...f, en: null, hidden: true };
+    if (original === null) return { ...f, en: null, hidden: false };
+    const user = slide.overridesEn?.[f.idx];
+    const overridden = typeof user === 'string';
+    const derived = lang === 'en' && typeof zhOverride === 'string' && typeof COMPANY_EN[key]?.[f.idx]?.fromZh === 'function';
+    return {
+      ...f,
+      hidden: false,
+      en: { text: overridden ? user : original, original, overridden, stale: typeof zhOverride === 'string' && !overridden && !derived },
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
 // 渲染结果的整理：页码、分组、缩略图稳定化、提醒
 // ---------------------------------------------------------------------------
 
@@ -490,6 +567,7 @@ export function fixForWarning(text) {
   if (/缺少效果图|没有背景图/.test(s)) return { id: 'pickImage', label: '选一张图', field: 'image' };
   if (/本案材料为空/.test(s)) return { id: 'gotoMaterials', label: '去材料清单' };
   if (/服务团队还没填名字/.test(s)) return { id: 'focus', label: '填写团队名字', field: 'team.0.name' };
+  if (isMissWarning(s)) return { id: 'translate', label: 'AI 翻译' };
   return null;
 }
 

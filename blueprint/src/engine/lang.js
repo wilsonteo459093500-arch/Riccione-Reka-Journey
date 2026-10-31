@@ -144,3 +144,24 @@ export function missWarning(lang, misses) {
     ? `英文版：${sample}${more}还没有英文，现在先显示中文 —— 点「AI 翻译」或在右侧填英文`
     : `中英版：${sample}${more}还没有英文，现在只显示中文 —— 点「AI 翻译」或在右侧填英文`;
 }
+
+/**
+ * 渲染结果里缺英文的中文（只算会导出的页；去重，按出现顺序）：[{ zh, kind }]
+ * @param {Array<{ enabled?:boolean, missing?:Array<{zh:string, kind:string}> }>} pages renderDeck 的输出
+ */
+export function missingInPages(pages) {
+  const out = [];
+  const seen = new Set();
+  for (const pg of pages || []) {
+    if (pg.enabled === false) continue;
+    for (const m of pg.missing || []) {
+      if (!m?.zh || seen.has(m.zh)) continue;
+      seen.add(m.zh);
+      out.push({ zh: m.zh, kind: m.kind || 'text' });
+    }
+  }
+  return out;
+}
+
+/** 缺英文的提醒（missWarning 的文字）→ 一键「AI 翻译」 */
+export const isMissWarning = (text) => /^(英文版|中英版)：.*还没有英文/.test(String(text || ''));

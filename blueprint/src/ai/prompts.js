@@ -66,6 +66,48 @@ ${JSON.stringify(briefs)}
 }
 
 // ---------------------------------------------------------------------------
+// 「AI 翻译」：English / 中英版缺英文的中文（空间名、视角名、部位、备注、材料名、团队职位、标题）
+// ---------------------------------------------------------------------------
+
+/** 每类文字的写法（给模型对齐用） */
+export const TRANSLATE_KINDS = {
+  room: '空间名，Title Case，简短（Master Bedroom / Living Area / Staircase Cabinet）',
+  view: '效果图的视角名，Title Case，2–4 个词（TV Cabinet / Overview / Wardrobe & Vanity / Night View）',
+  role: '材料用在哪个部位，Title Case，简短（Doors / Carcass & Doors / Countertop / Wall Panels）',
+  label: '备注的小标签，Title Case，1–3 个词（Hidden Door / Door Opening / Lighting）',
+  note: '备注说明，一句简洁的英文，句首大写、不加句号（Hydraulic closer with push-to-open）',
+  material: '材料 / 饰面名，Title Case；编号、品牌、已有的英文原样保留（Light Oak Veneer AG273）',
+  team: '职位名，Title Case（Interior Designer / Project Manager）',
+  text: '标题或短句，自然、克制的英文；人名、地名用通行的英文写法（陈先生 → Mr Chen）',
+};
+
+/**
+ * 翻译提示词（一批 ≤ 40 条）
+ * @param {{ items:Array<{ id:string, zh:string, kind:string }>, context?:string }} args
+ *   context：项目背景一句话（客户 / 地点），帮模型选词
+ */
+export function buildTranslatePrompt({ items = [], context = '' }) {
+  const kinds = [...new Set(items.map((it) => it.kind))].filter((k) => TRANSLATE_KINDS[k]);
+  return `你是高端全屋定制品牌「SAIL 溪岸 by Riccione Reka」的英文编辑。我们的设计提案 PPT 要出英文版和中英双语版，请把下面的中文译成自然、简洁、专业的英文（英式拼写：colour / centre / storey）。
+${context ? `项目：${context}\n` : ''}
+每条都标了类别，按类别的写法来：
+${kinds.map((k) => `- ${k}：${TRANSLATE_KINDS[k]}`).join('\n')}
+
+规则：
+- 只翻译，不增删信息，不编造工艺、尺寸、品牌、颜色、数量；
+- 原文里的英文、编号、品牌名、数字原样保留；
+- 中文里写着「· 」分隔的几段，英文也用「 · 」分隔；
+- 引号、撇号用直的 ' 和 "，不要弯引号；
+- 每条都要有译文；实在不确定的专有名词用拼音。
+
+待翻译（JSON）：
+${JSON.stringify(items.map((it) => ({ id: it.id, kind: it.kind, zh: it.zh })))}
+
+只返回严格的 JSON，不要任何解释、不要代码块：
+{"items":[{"id":"${items[0]?.id || 't1'}","en":"…"}]}`;
+}
+
+// ---------------------------------------------------------------------------
 // 「3D 全屋立体图」：平面布置图 + 效果图 → 照片级等轴测剖切鸟瞰（像 The Sims 的建造视图）
 // ---------------------------------------------------------------------------
 
