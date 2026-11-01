@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Loader2, LogIn } from 'lucide-react';
 import { login } from '../store/auth.js';
+import BrandMark from './BrandMark.jsx';
 
 export default function LoginGate({ onSuccess }) {
   const [username, setUsername] = useState('');
@@ -35,7 +36,7 @@ export default function LoginGate({ onSuccess }) {
     <div className="min-h-[100dvh] flex items-center justify-center px-4 bg-bp-paper">
       <form onSubmit={handleSubmit} className="w-full max-w-sm bg-bp-card border border-bp-line rounded-2xl p-8 shadow-sm">
         <div className="text-center mb-7">
-          <div className="w-10 h-[3px] bg-bp-gold mx-auto mb-5" />
+          <BrandMark size={52} className="text-bp-ink mx-auto mb-5" />
           <div className="font-display text-[32px] leading-tight font-semibold text-bp-ink tracking-wide">UKIR STUDIO</div>
           <div className="text-[11px] text-bp-faint mt-2 tracking-[0.3em] uppercase">by Riccione Reka</div>
           <div className="text-xs text-bp-muted mt-4">方案 PDF → 品牌提案 PPT · Material Board</div>
