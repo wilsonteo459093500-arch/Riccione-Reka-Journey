@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="7.5" fill="#211A12" />
-  <text x="16" y="16.4" fill="#F2ECE0" font-family="Georgia,'Times New Roman',serif" font-size="20" font-weight="600"
-        text-anchor="middle" dominant-baseline="central">B</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-40 -40 634 634">
+  <!-- UKIR STUDIO 字标（与 src/components/BrandMark.jsx 同一组形状）；深色模式的标签栏里改成浅色 -->
+  <style>path{fill:#111111}@media (prefers-color-scheme:dark){path{fill:#F2F0EB}}</style>
+  <path d="M0 0H168V336H0Z M0 386H336V554H168Z M386 0H554V386L386 554Z"/>
 </svg>
