@@ -413,9 +413,10 @@ export const COMPANY_PAGES_B = {
       r2: F('每年', 'Every year', '第二项'),
       r2Text: F('一次集中维保调试', 'One scheduled maintenance visit', '第二项内容'),
       r3: F('五金质保', 'Hardware warranty', '第三项'),
-      r3Text: F('＿＿ 年', '____ years', '五金质保年数（设计师填）', { enFrom: 'years' }),
+      // 质保年数的默认值（老板定的）：五金 终身保家 / Lifetime，板材 1 年 / 1 year —— 设计师只在不一样时改数字
+      r3Text: F('终身保家', 'Lifetime', '五金质保年数', { enFrom: 'years' }),
       r4: F('板材质保', 'Panel warranty', '第四项'),
-      r4Text: F('＿＿ 年', '____ years', '板材质保年数（设计师填）', { enFrom: 'years' }),
+      r4Text: F('1 年', '1 year', '板材质保年数', { enFrom: 'years' }),
     },
     images: PHOTO_SLOTS['service-aftersales'],
   },
@@ -518,9 +519,10 @@ function cnNumber(s) {
   return (m[1] ? CN_DIGIT_VAL[m[1]] : 1) * 10 + (m[3] ? CN_DIGIT_VAL[m[3]] : 0);
 }
 
-/** 质保年数：「5 年」「10年」「五年」「3–5 年」→ '5 years'（1 → '1 year'；认不出 = ''） */
+/** 质保年数：「5 年」「10年」「五年」「3–5 年」→ '5 years'（1 → '1 year'）；「终身」「终身保家」「永久」→ 'Lifetime'；认不出 = '' */
 export function yearsEn(zh) {
   const t = clean(zh).replace(/\s+/g, '');
+  if (/^(终身|永久)(保家|质保|保修)?$/.test(t)) return 'Lifetime';
   const m = /^([0-9.]+|[一二两三四五六七八九十]+)(?:[-–~至到]([0-9.]+|[一二两三四五六七八九十]+))?年?$/.exec(t);
   if (!m) return '';
   const a = cnNumber(m[1]);
@@ -1927,7 +1929,8 @@ function layCycle(R) {
 
 // ===========================================================================
 // 售后维保（dirA2 第 7 页）：左栏文字（标题组 → 金句 → 四行表：项名 20pt 棕 | 内容 宋体 26pt）；半版照片贴右 920
-//   白 logo 宽 260 落在挂画的皮面上；签名压在照片上（底部托字）。质保年数是空格（＿＿），设计师填；没填会提醒
+//   白 logo 宽 260 落在挂画的皮面上；签名压在照片上（底部托字）。质保年数有默认值（五金 终身保家、板材 1 年）；
+//   设计师把它改回空格（＿＿）会提醒
 // ===========================================================================
 
 function layAftersales(R) {

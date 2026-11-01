@@ -528,8 +528,17 @@ test('边界：长客户名 + 四层楼、隐藏章节都排得下，不截短�
   }
 });
 
-test('售后维保：质保年数没填（＿＿）会提醒，填了就不提醒', () => {
-  assert.ok(render('service-aftersales', 'zh').warnings.some((w) => /质保年数还没填/.test(w)));
+test('售后维保：质保年数默认 五金 终身保家 / Lifetime、板材 1 年 / 1 year（不提醒）；改回空格（＿＿）会提醒，填了就不提醒', () => {
+  for (const lang of ['zh', 'en', 'bi']) {
+    const def = render('service-aftersales', lang);
+    assert.ok(!def.warnings.some((w) => /质保年数/.test(w)), `${lang}: ${def.warnings.join(' / ')}`);
+    const t = texts(def).map(textOf);
+    if (lang !== 'en') assert.ok(t.includes('终身保家') && t.includes('1 年'), `${lang}: ${t.join(' | ')}`);
+    if (lang !== 'zh') assert.ok(t.includes('Lifetime') && t.includes('1 year'), `${lang}: ${t.join(' | ')}`);
+  }
+  // 设计师把它改回空格：照旧提醒
+  const blank = render('service-aftersales', 'zh', { overrides: { r3Text: '＿＿ 年', r4Text: '＿＿ 年' } });
+  assert.ok(blank.warnings.some((w) => /质保年数还没填/.test(w)), blank.warnings.join(' / '));
   const filled = render('service-aftersales', 'bi', { overrides: { r3Text: '5 年', r4Text: '10 年' }, overridesEn: { r3Text: '5 years', r4Text: '10 years' } });
   assert.deepEqual(filled.warnings, []);
   assert.ok(texts(filled).map(textOf).includes('10 years'));
@@ -772,16 +781,26 @@ test('只改了中文：「5 年」→ 5 years、日期、纯英文（Mr & Mrs L
   assert.equal(yearsEn('十五年'), '15 years');
   assert.equal(yearsEn('3–5 年'), '3–5 years');
   assert.equal(yearsEn('1 年'), '1 year');
-  assert.equal(yearsEn('终身'), '');
+  assert.equal(yearsEn('终身'), 'Lifetime');
+  assert.equal(yearsEn('终身保家'), 'Lifetime');
+  assert.equal(yearsEn('按合同'), '');
   assert.equal(dateEn('二〇二六年九月'), 'September 2026', '封面默认的中文日期写法也认得');
   const bi = render('service-aftersales', 'bi', { overrides: { r3Text: '5 年', r4Text: '10 年' } });
   const all = texts(bi).map(textOf);
   assert.ok(all.includes('5 years') && all.includes('10 years'));
   assert.deepEqual(bi.warnings, [], bi.warnings.join(' / '));
-  // 换不过来的（终身）：英文还是空格 → 说清是英文没填，一键修复去英文栏
+  // 终身 → Lifetime（自动），不提醒
   const life = render('service-aftersales', 'bi', { overrides: { r3Text: '终身', r4Text: '10 年' } });
-  assert.ok(life.warnings.some((w) => /^售后维保：五金质保年数的英文还没填/.test(w)), life.warnings.join(' / '));
-  assert.ok(!life.warnings.some((w) => /板材/.test(w)));
+  assert.ok(texts(life).map(textOf).includes('Lifetime'));
+  assert.deepEqual(life.warnings, [], life.warnings.join(' / '));
+  // 换不过来的（按合同）：英文照默认稿印，提醒「改过的中文还没有对应的英文」，一键修复去英文栏
+  const odd = render('service-aftersales', 'bi', { overrides: { r3Text: '按合同', r4Text: '10 年' } });
+  const ow = odd.warnings.find((w) => /^改过的中文还没有对应的英文/.test(w));
+  assert.ok(ow && ow.includes('「五金质保年数」'), odd.warnings.join(' / '));
+  assert.ok(!odd.warnings.some((w) => /板材/.test(w)));
+  // 改回空格、英文也是空格（中英版）：说清是英文没填
+  const blankEn = render('service-aftersales', 'bi', { overrides: { r3Text: '8 年' }, overridesEn: { r3Text: '____ years' } });
+  assert.ok(blankEn.warnings.some((w) => /^售后维保：五金质保年数的英文还没填/.test(w)), blankEn.warnings.join(' / '));
   // English 版直接填了英文、中文空着：算填好
   assert.ok(!render('service-aftersales', 'en', { overridesEn: { r3Text: '5 years', r4Text: '10 years' } }).warnings.some((w) => /质保年数/.test(w)));
   // 封面日期：改了中文日期，英文跟着
