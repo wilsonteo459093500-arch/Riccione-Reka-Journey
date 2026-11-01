@@ -20,10 +20,42 @@ const TITLE = {
   weight: 300,
 };
 
+// C 安然（参考 Aman 品牌手册，字体是老板发来的同一套）：
+//   中文标题 思源宋体 CN（Source Han Serif CN）· 英文标题 Ogg · 正文 HarmonyOS Sans SC · 英文小字 Outfit
+//   PPT 里的字体名照 Aman 原件写（Windows 上静态字重各是一个字体名：「HarmonyOS Sans SC Medium」「Ogg Medium」…）
+const SONG_CSS = "'Source Han Serif CN','Noto Serif SC','Source Han Serif SC','Songti SC',serif";
+const OGG_CSS = "'Ogg','Source Han Serif CN','Noto Serif SC',serif";
+const HOS_CSS = "'HarmonyOS Sans SC','Noto Sans SC','PingFang SC','Microsoft YaHei',system-ui,sans-serif";
+const OUTFIT_CSS = "'Outfit','HarmonyOS Sans SC','Noto Sans SC',system-ui,sans-serif";
+const song = (w, name) => ({ label: `思源宋体 CN ${name}`, latin: `思源宋体 CN ${name}`, ea: `思源宋体 CN ${name}`, css: SONG_CSS, weight: w });
+const ogg = (w, name) => ({ label: `Ogg ${name}`, latin: name === 'Roman' ? 'Ogg' : `Ogg ${name}`, ea: '思源宋体 CN Light', css: OGG_CSS, weight: w });
+const hos = (w, name) => ({
+  label: `HarmonyOS Sans SC ${name}`,
+  latin: name === 'Regular' ? 'HarmonyOS Sans SC' : `HarmonyOS Sans SC ${name}`,
+  ea: name === 'Regular' ? 'HarmonyOS Sans SC' : `HarmonyOS Sans SC ${name}`,
+  css: HOS_CSS,
+  weight: w,
+});
+const outfit = (w, name) => ({ label: `Outfit ${name}`, latin: name === 'Regular' ? 'Outfit' : `Outfit ${name}`, ea: 'HarmonyOS Sans SC', css: OUTFIT_CSS, weight: w });
+
 export const FONTS = {
   light: LIGHT,
   regular: REGULAR,
   title: TITLE,
+  // C 安然
+  songXL: song(200, 'ExtraLight'),
+  songL: song(300, 'Light'),
+  song: song(400, 'Regular'),
+  songM: song(500, 'Medium'),
+  songSB: song(600, 'SemiBold'),
+  ogg: ogg(400, 'Roman'),
+  oggM: ogg(500, 'Medium'),
+  hosL: hos(300, 'Light'),
+  hos: hos(400, 'Regular'),
+  hosM: hos(500, 'Medium'),
+  outfitL: outfit(300, 'Light'),
+  outfit: outfit(400, 'Regular'),
+  outfitM: outfit(500, 'Medium'),
   // 旧的角色名（旧版式 / 旧测试）：统一落到新字体，整套风格一致
   serif: LIGHT,
   sans: REGULAR,
