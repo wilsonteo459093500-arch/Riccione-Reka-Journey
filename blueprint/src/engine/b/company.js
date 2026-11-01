@@ -54,7 +54,7 @@ export const PHOTOS = {
   coll1: sail('/template/b/coll-1.jpg', 580, 982), // 骨骼线
   coll2: sail('/template/b/coll-2.jpg', 473, 800), // 空山
   coll3: sail('/template/b/coll-3.jpg', 693, 1173), // 织
-  coll4: sail('/template/b/coll-4.jpg', 528, 894), // 雾山
+  coll4: sail('/template/b/coll-4.jpg', 1480, 1110), // 雾山：溪岸手册 p27–28 雾山系列的厨房（白橡木吊柜 + 绿色高柜）
   coll5: sail('/template/b/coll-5.jpg', 610, 1033), // 寂东方
   awards: sail('/template/brand-awards-1.jpg', 1800, 1010), // 奖杯
   // 老板发来的展厅照（2000 px，原样不调色；右上角有白色 sAil 溪岸 logo —— 取景避开它）
@@ -100,7 +100,7 @@ export const PHOTO_SLOTS = {
     c1: slot(PHOTOS.coll1, '系列一照片'),
     c2: slot(PHOTOS.coll2, '系列二照片'),
     c3: slot(PHOTOS.coll3, '系列三照片'),
-    c4: slot(PHOTOS.coll4, '系列四照片'),
+    c4: slot(PHOTOS.coll4, '系列四照片', { ax: 0.55 }), // 竖的小格也同时露出白橡木吊柜和绿色高柜
     c5: slot(PHOTOS.coll5, '系列五照片'),
   },
   // 半版贴左：两块奖牌在照片中间
