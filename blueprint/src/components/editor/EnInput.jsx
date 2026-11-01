@@ -33,12 +33,12 @@ const SIZES = {
 
 /**
  * 英文框的外观（翻译记忆的 EnInput 和效果图页的空间英文名共用）
- * @param {{ value:string, onChange:(text:string)=>void, onBlur?:()=>void, placeholder?:string, badge?:{text,cls,title}|null,
- *   size?:'xs'|'sm'|'md', multiline?:boolean, field?:string, label?:string, className?:string, inputClass?:string,
- *   ariaLabel?:string }} props
+ * @param {{ value:string, onChange:(text:string)=>void, onBlur?:()=>void, onKeyDown?:(e)=>void, placeholder?:string,
+ *   badge?:{text,cls,title}|null, size?:'xs'|'sm'|'md', multiline?:boolean, field?:string, label?:string, className?:string,
+ *   inputClass?:string, ariaLabel?:string }} props
  */
 export function EnBox({
-  value, onChange, onBlur, placeholder = EN_PLACEHOLDER, badge = null, size = 'sm', multiline = false, field, label = 'EN',
+  value, onChange, onBlur, onKeyDown, placeholder = EN_PLACEHOLDER, badge = null, size = 'sm', multiline = false, field, label = 'EN',
   className = '', inputClass = '', ariaLabel,
 }) {
   const wrapRef = useRef(null);
@@ -61,6 +61,7 @@ export function EnBox({
           placeholder={placeholder}
           onChange={onChange}
           onBlur={onBlur}
+          onKeyDown={onKeyDown}
           className={`${size === 'xs' ? '!py-1 text-xs' : ''} ${fieldCls}`}
         />
       ) : (
@@ -72,6 +73,7 @@ export function EnBox({
           placeholder={placeholder}
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
+          onKeyDown={onKeyDown}
         />
       )}
       <span
@@ -135,18 +137,23 @@ export default function EnInput({
 
 /**
  * 中文本来就是英文（「Taj Mahal」「Overview」）时没有 EN 框：画布上点这段英文（字段是 …En）→ 落到这个中文框。
- * 包一层带英文字段名、能拿焦点的 div，拿到焦点就转给里面的输入框。on = false 时原样返回。
+ * 包一层带英文字段名、能拿焦点的 div，拿到焦点就转给里面的输入框。
+ * 这层 div 一直都在（on = false 时只是不带字段名、不能拿焦点）：打字时字从英文变中文（「20 隐框」「刘府」），
+ * on 跟着变 —— 外层的元素不变，React 就不会把里面的输入框拆掉重建，光标和输入法都留在框里
  */
 export function EnAlias({ field, on, children }) {
-  if (!on) return children;
   return (
     <div
-      data-field={field}
-      tabIndex={-1}
+      data-field={on ? field : undefined}
+      tabIndex={on ? -1 : undefined}
       className="outline-none rounded-lg"
-      onFocus={(e) => {
-        if (e.target === e.currentTarget) e.currentTarget.querySelector('input,textarea,select,button')?.focus({ preventScroll: true });
-      }}
+      onFocus={
+        on
+          ? (e) => {
+              if (e.target === e.currentTarget) e.currentTarget.querySelector('input,textarea,select,button')?.focus({ preventScroll: true });
+            }
+          : undefined
+      }
     >
       {children}
     </div>

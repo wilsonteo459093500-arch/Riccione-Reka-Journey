@@ -15,9 +15,13 @@
 // 网格、字级、颜色只用 kit.js；坐标 px（1920×1080）。图不压暗、图上不放字；没有页码、页脚、装饰线（细线只在列表里）。
 // 文字的 x / w 都是「字」的位置与栏宽（框向左右各让出内边距，与样张、公司页一致）。
 
-import { B, GRID, colX, spanW, STACK_GAP, INSET, styleOf, runsOf, lineWidth, block, pick, photo, upscale, hair, page, hasCJK } from './kit.js';
+import { B, GRID, colX, spanW, STACK_GAP, INSET, styleOf, block, pick, photo, upscale, hair, page, hasCJK } from './kit.js';
+import { widthOf, room, balanceText } from './text.js';
 import { findFloor, findMaterial, floorsLine } from '../model.js';
 import { makeTranslator, langOf, floorTitleEn, floorsLineEn, resolveEn, memoryEn } from '../lang.js';
+import { chapterZh, chapterEn } from './company.js';
+
+export { balanceLine } from './text.js';
 
 const W = GRID.W;
 const H = GRID.H;
@@ -52,14 +56,8 @@ export function baseOff(lang, role, lh) {
 /** 拉丁字母写的标题（客户名 Mr Lau、英文人名）用英文的 display / head 字体与字号 */
 const scriptOf = (it, role) => (it.lang === 'zh' && !hasCJK(it.text) && (role === 'display' || role === 'head') ? 'en' : it.lang);
 
-/** 一行（不折行）的宽度 px */
-const widthOf = (text, lang, role) => lineWidth(runsOf(String(text ?? ''), styleOf(lang, role), lang, role));
-
 /** 多行文字（\n 分行）里最宽的一行 */
 const widestLine = (text, lang, role) => Math.max(0, ...String(text ?? '').split('\n').map((l) => widthOf(l, lang, role)));
-
-/** 栏宽 w 里一行实际能排的宽度（与 kit wrapCount 一致：字宽表是实测的，按 98% 算） */
-const room = (w) => w * 0.98;
 
 /**
  * 文字块：x = 字的左边、w = 栏宽（框向左右各让出 INSET，字正好落在网格线上；与公司页 company.js 一致）
@@ -78,117 +76,7 @@ const tidyTitle = (s) =>
     .map((w, i) => (i > 0 && /^[A-Z][a-z]+$/.test(w) && SMALL_WORDS.has(w.toLowerCase()) ? w.toLowerCase() : w))
     .join(' ');
 
-// ---------------------------------------------------------------------------
-// 均衡断行（标题、说明、名称）：折成 2–3 行时各行长短接近，断在好的地方：
-//   最好 = 标点后（，。、；：— 以及「·」—— 行尾的「·」会去掉）；
-//   次好 = 中文连词前（与 和 及 或 跟 并）、「的 / 之」后，中英文之间的空格；
-//   好的断点允许比最均衡的多长 30%，其余只允许 12%；一样均衡时英文断在虚词前（and with of to the …），再一样就第一行长一点。
-// 断点写成换行（每行都比栏窄，预览与 PPT 不会再自己折行）。英文按词，中文按字，标点不放行首。
-// ---------------------------------------------------------------------------
-
-const STICK_PREV = /^[，。、；：！？）」』〉》…,.;:!?)\]·・—]/;
-const STICK_NEXT = /[（「『〈《(\[]$/;
-const PUNCT_END = /[，。、；：！？,.;:!?—·・]$/;
-const ZH_SOFT_BEFORE = /^[与和及或跟并兼暨]/;
-const ZH_SOFT_AFTER = /[的之]$/;
-const EN_SOFT_BEFORE = /^(&|\+|and|or|with|of|for|in|on|at|to|by|from|the|a|an)\s/i;
-const SEP_END = /\s*[·・•]$/u;
-const SEP_START = /^[·・•]\s*/u;
-
-function breakTokens(line) {
-  const raw = String(line).match(/[A-Za-z0-9&'’\-./%]+\s*|\s+|./gu) || [];
-  const out = [];
-  for (const t of raw) {
-    const prev = out[out.length - 1];
-    if (prev !== undefined && (STICK_PREV.test(t) || /^\s+$/.test(t) || STICK_NEXT.test(prev))) out[out.length - 1] = prev + t;
-    else out.push(t);
-  }
-  return out;
-}
-
-/**
- * 在 prev 与 next 两个片段之间断行好不好：2 = 标点后，1 = 中文词与词之间（连词前、「的」后、中英文交界），0 = 其它。
- * 英文本来就只在词间断，虚词前断（Open to / the Garden）只在一样均衡时才优先 —— 不为它牺牲均衡
- * （样张 p6：A dining room / open to the garden，而不是 A dining room open / to the garden）
- */
-function cutQuality(prev, next) {
-  const p = prev.replace(/\s+$/, '');
-  if (/^(the|a|an)$/i.test(p)) return -1; // 行尾不留冠词（…side of the / island）
-  if (PUNCT_END.test(p)) return 2;
-  if (ZH_SOFT_BEFORE.test(next) || ZH_SOFT_AFTER.test(p)) return 1;
-  if (/\s$/.test(prev) && hasCJK(p.slice(-1)) !== hasCJK(next.charAt(0))) return 1;
-  return 0;
-}
-
-export function balanceLine(line, lang, role, w) {
-  const toks = breakTokens(line);
-  if (toks.length < 2) return line;
-  const tw = toks.map((t) => widthOf(t, lang, role));
-  const trail = toks.map((t) => {
-    const sp = /\s+$/.exec(t);
-    return sp ? widthOf(sp[0], lang, role) : 0;
-  });
-  const pre = [0];
-  tw.forEach((x, i) => pre.push(pre[i] + x));
-  const span = (i, j) => pre[j + 1] - pre[i] - trail[j];
-  const avail = room(w);
-  let n = 1;
-  let start = 0;
-  for (let j = 0; j < toks.length; j++) {
-    if (j > start && span(start, j) > avail) {
-      n += 1;
-      start = j;
-    }
-  }
-  if (n < 2 || n > 3) return line;
-  const T = toks.length;
-  const q = toks.map((t, j) => (j === 0 ? 0 : cutQuality(toks[j - 1], t)));
-  const qe = toks.map((t) => (EN_SOFT_BEFORE.test(t) ? 1 : 0));
-  const cands = [];
-  const consider = (cuts) => {
-    const b = [0, ...cuts, T];
-    let mx = 0;
-    for (let k = 0; k < b.length - 1; k++) {
-      const wk = span(b[k], b[k + 1] - 1);
-      if (wk > avail) return;
-      mx = Math.max(mx, wk);
-    }
-    const qs = cuts.map((c) => q[c]);
-    cands.push({
-      cuts,
-      mx: Math.round(mx * 10) / 10,
-      qual: qs.reduce((a, c) => a + c, 0),
-      soft: qs.every((x) => x > 0),
-      en: cuts.reduce((a, c) => a + qe[c], 0),
-      first: span(0, b[1] - 1),
-    });
-  };
-  if (n === 2) for (let a = 1; a < T; a++) consider([a]);
-  else for (let a = 1; a < T - 1; a++) for (let c = a + 1; c < T; c++) consider([a, c]);
-  if (!cands.length) return line;
-  const opt = Math.min(...cands.map((c) => c.mx));
-  const ok = cands.filter((c) => c.mx <= opt * (c.soft ? 1.3 : 1.12) + 0.01);
-  ok.sort((a, b) => b.qual - a.qual || a.mx - b.mx || b.en - a.en || b.first - a.first);
-  const bounds = [0, ...ok[0].cuts, T];
-  return bounds
-    .slice(0, -1)
-    .map((s, k) =>
-      toks
-        .slice(s, bounds[k + 1])
-        .join('')
-        .trim()
-        .replace(SEP_END, '')
-        .replace(SEP_START, ''),
-    )
-    .join('\n');
-}
-
-/** 整段（\n 分段）均衡断行 */
-const balanceText = (text, lang, role, w) =>
-  String(text ?? '')
-    .split('\n')
-    .map((p) => balanceLine(p, lang, role, w))
-    .join('\n');
+// 均衡断行（标题、说明、名称）：b/text.js（公司页也用）
 
 // ---------------------------------------------------------------------------
 // 图：效果图取景（水印不进画面）、缺图、细线框
@@ -205,11 +93,12 @@ const WM_CUT = 0.095;
 
 /**
  * 效果图 / 照片铺满框（cover），水印留在画外
- * @returns {{ el:object, scale:number }} scale = 原图像素放大到页面的倍数（> 1.15 会发虚）
+ * @returns {{ el:object, scale:number, wmShort:boolean }} scale = 原图像素放大到页面的倍数（> 1.15 会发虚）；
+ *   wmShort = 为了不放大超过 1.15 倍，底部没能裁够 9.5%（右下角的水印可能露出来）
  */
 function rendering(x, y, w, h, src, nat, field = 'image') {
   const base = photo(x, y, w, h, src, { nat, ax: 0.5, ay: 0, edit: editOf(field) });
-  if (!nat?.w || !nat?.h) return { el: base, scale: 1 };
+  if (!nat?.w || !nat?.h) return { el: base, scale: 1, wmShort: false };
   const A = w / h;
   const S = nat.w / nat.h;
   let fw = S > A ? A / S : 1; // 看得见的原图宽（占原图的比例）
@@ -223,8 +112,17 @@ function rendering(x, y, w, h, src, nat, field = 'image') {
   const cutV = 1 - fh;
   const b = cutV >= 2 * WM_CUT ? cutV / 2 : Math.min(cutV, WM_CUT);
   const r6 = (v) => Math.round(v * 1e6) / 1e6;
-  return { el: { ...base, crop: { l: r6(side), t: r6(cutV - b), r: r6(side), b: r6(b) } }, scale: cover * z };
+  return { el: { ...base, crop: { l: r6(side), t: r6(cutV - b), r: r6(side), b: r6(b) } }, scale: cover * z, wmShort: b < WM_CUT - 1e-4 };
 }
+
+/** 这张图铺满 w × h 时，底部能不能裁够（水印留在画外）又不放大超过 1.15 倍 */
+const wmFits = (nat, w, h) => !rendering(0, 0, w, h, '', nat).wmShort;
+
+/** 水印提醒：满版页建议换图文（图文的图小一些，裁得开）；图文页 / 楼层页只能换高清图 */
+const WM_WARN = {
+  full: '效果图右下角的水印会露出来（图片像素不够、底部裁不掉）—— 换高清图，或改用「图文」',
+  plate: '效果图右下角的水印会露出来（图片像素不够、底部裁不掉）—— 换一张高清图',
+};
 
 /** 没有图：小样底色块（点它换图） */
 const sampleRect = (x, y, w, h, field) => ({ t: 'rect', x, y, w, h, fill: B.sample, ...(field ? { edit: { field } } : {}) });
@@ -332,13 +230,69 @@ function header(lang, headPair, notePair) {
 // ---------------------------------------------------------------------------
 // 属性列表（与样张 p6 一致）：行 = 细线 + 10 + 中文行 + 英文行 + 10；标签、值、编号同一基线；
 // 编号只印一次，在第一行、靠右；标签栏 96 / 142（整套图文页取同一档；更长的标签在栏里折行）
+// 编号放在名称旁边最多占值栏的 40%（名称至少留 60%）；带品牌前缀的长编号（EGGER H1145 ST10）另起一行，
+// 排在名称下面、仍靠右，过长时在空格 / - / 之后折行 —— 不再挤掉名称那一栏
 // ---------------------------------------------------------------------------
 
 const ROW_PAD = 10;
 const LABEL_GAP = 12;
 const CODE_GAP = 16;
+const CODE_INLINE_MAX = 0.4;
 
 const codeWidth = (code) => Math.ceil(widthOf(code, 'en', 'cap') + 2);
+
+/** 编号在宽 w 的栏里折成几行（在空格、- / _ . 之后折；一段比栏还宽就按字硬折）→ 每行都放得下 */
+function wrapCode(code, w) {
+  const avail = room(w);
+  const fits = (t) => widthOf(t.trimEnd(), 'en', 'cap') + 2 <= avail;
+  const parts = String(code).match(/[^\s\-/_.]+[\s\-/_.]*|[\s\-/_.]+/g) || [String(code)];
+  const lines = [];
+  let cur = '';
+  for (const p of parts) {
+    if (fits(cur + p)) {
+      cur += p;
+      continue;
+    }
+    if (cur.trim()) lines.push(cur.trimEnd());
+    let piece = p;
+    while (!fits(piece) && piece.length > 1) {
+      let k = piece.length - 1;
+      while (k > 1 && !fits(piece.slice(0, k))) k -= 1;
+      lines.push(piece.slice(0, k));
+      piece = piece.slice(k);
+    }
+    cur = piece;
+  }
+  if (cur.trim()) lines.push(cur.trimEnd());
+  // 折成两行时两行长短接近（LAMINAM-CALCE- / BIANCO-12MM，而不是 …BIANCO- / 12MM）
+  if (lines.length === 2 && parts.length > 2) {
+    const width = (t) => widthOf(t.trimEnd(), 'en', 'cap');
+    let best = null;
+    for (let k = 1; k < parts.length; k++) {
+      const a = parts.slice(0, k).join('');
+      const b = parts.slice(k).join('');
+      if (!fits(a) || !fits(b)) continue;
+      const mx = Math.max(width(a), width(b));
+      if (!best || mx < best.mx) best = { mx, lines: [a.trimEnd(), b.trimEnd()] };
+    }
+    if (best) return best.lines;
+  }
+  return lines;
+}
+
+/**
+ * 编号放哪：{ inline:true, cw } = 名称第一行的右边；{ inline:false, lines } = 名称下面另起（靠右）；没有编号 = null
+ * @param {number} colW  名称 + 编号共用的栏宽（图文页 = 值栏；材料页 = 小样宽）
+ */
+function codePlan(code, colW, gap = CODE_GAP) {
+  if (!code) return null;
+  const cw = codeWidth(code);
+  if (cw + gap <= colW * CODE_INLINE_MAX) return { inline: true, cw };
+  return { inline: false, lines: wrapCode(code, colW) };
+}
+
+/** 编号太长（另起一行还要折行）的提醒 */
+const codeWarning = (code, lines) => `材料编号太长：「${code}」折成了 ${lines} 行 —— 建议精简（去材料清单改）`;
 
 /**
  * 正文行里的小字（标签 / 编号）：与正文同一基线；行框收在正文这一行的行框里（不伸进下一行）
@@ -385,14 +339,15 @@ function drawRow(x, top, w, labelW, row, lang) {
   const labels = pick(lang, row.label || {});
   const values = pick(lang, row.value || {});
   const n = Math.max(labels.length, values.length, 1);
+  const cp = codePlan(row.code, w - labelW);
   let y = top + ROW_PAD;
   for (let k = 0; k < n; k++) {
     const lb = labels[k];
     const vl = values[k];
     const lineLang = (vl || lb || { lang: 'zh' }).lang;
     const lh = styleOf(lineLang, 'body').lh;
-    const code = k === 0 && row.code ? row.code : '';
-    const cw = code ? codeWidth(code) : 0;
+    const code = k === 0 && cp?.inline ? row.code : '';
+    const cw = code ? cp.cw : 0;
     let h = lh;
     if (vl) {
       const vw = w - labelW - (code ? cw + CODE_GAP : 0);
@@ -419,6 +374,12 @@ function drawRow(x, top, w, labelW, row, lang) {
     }
     y += h;
   }
+  // 长编号：名称下面另起一行（靠右，与短编号同一条右边线）
+  if (cp && !cp.inline) {
+    const b = blk(x + labelW, y, w - labelW, cp.lines.join('\n'), 'en', 'cap', { align: 'r', edit: editOf(row.codeField) });
+    els.push(b.el);
+    y = b.bottom;
+  }
   return { els, bottom: y + ROW_PAD };
 }
 
@@ -439,7 +400,11 @@ function drawList(x, top, w, rows, lang, labelW) {
 // 方案封面（有 Material Board 时）
 // ---------------------------------------------------------------------------
 
-const CHAPTER = { zh: '第三章　方案', en: 'Chapter Three — Design' };
+/** 方案封面的章节标签：方案是第几章（老客户隐藏了品牌 / 公司章节 → 往前排；ctx.chapters 由 deck.js 给，单独排时 = 第三章） */
+const chapterPair = (ctx) => {
+  const n = ctx?.chapters?.num?.design ?? 3;
+  return { zh: `${chapterZh(n)}　方案`, en: `${chapterEn(n)} — Design` };
+};
 const DEFAULT_TITLE = '全屋定制设计方案';
 
 /** 封面标题：自填的 coverTitle；否则客户与地点（各占一行，像公司封面的名牌）；都没有 = 方案名 */
@@ -479,20 +444,26 @@ export function bDesignCover(ctx) {
   const els = [];
   const warnings = [];
 
-  // Material Board 是排好的拼贴：整张放进右侧面板（第 6–12 栏，上下各留 96），一点不裁。
-  // 竖版贴右、占满高度；横版贴右上（与章节标签同一条顶线）。四周是纸。
-  const box = { x: colX(6), y: TOP, w: RIGHT - colX(6), h: FOOT - TOP };
+  // Material Board 是排好的拼贴：整张放进右侧，一点不裁，四周是纸。
+  //   竖版 / 方形（宽高比 ≤ 970 : 888）：第 6–12 栏的面板里贴右、占满高度（上下各留 96）；
+  //   横版：面板放宽到第 4–12 栏（1254 × 888），贴右、落在 984 —— 与左栏楼层那一行同一条底线；
+  //   A4 横正好占满高度，16:9 约 1254 × 705（不再缩成右上角 970 × 546 的一小块、下面空一大片纸）
   const nat = meta(cover.image);
   const r = nat?.w && nat?.h ? nat.w / nat.h : 3 / 4;
-  const tall = r <= box.w / box.h;
-  const bw = tall ? Math.round(box.h * r) : box.w;
-  const bh = tall ? box.h : Math.round(box.w / r);
+  const narrow = { x: colX(6), w: RIGHT - colX(6) };
+  const landscape = r > narrow.w / (FOOT - TOP);
+  const box = landscape ? { x: colX(4), w: RIGHT - colX(4) } : narrow;
+  const boxH = FOOT - TOP;
+  const tall = r <= box.w / boxH;
+  const bw = tall ? Math.round(boxH * r) : box.w;
+  const bh = tall ? boxH : Math.round(box.w / r);
   const bx = RIGHT - bw;
-  els.push({ t: 'img', x: bx, y: box.y, w: bw, h: bh, src: cover.image, fit: 'contain', ax: 1, ay: 0, ...(nat ? { nat } : {}), edit: { field: 'cover.image' } });
+  const by = FOOT - bh;
+  els.push({ t: 'img', x: bx, y: by, w: bw, h: bh, src: cover.image, fit: 'contain', ax: 1, ay: 1, ...(nat ? { nat } : {}), edit: { field: 'cover.image' } });
   lowRes(warnings, upscale(nat, bw, bh), 'Material Board ');
 
-  // 左栏：右边界离图 54（横版图从第 6 栏起：左栏 = 第 1–5 栏）
-  const textR = bx >= colX(7) ? bx - 54 : colX(6) - GRID.gutter;
+  // 左栏：右边界离图 54（竖版的图从第 6 栏起时：左栏 = 第 1–5 栏）
+  const textR = landscape || bx >= colX(7) ? bx - 54 : colX(6) - GRID.gutter;
   const colW = textR - colX(1);
   const titlePair = coverTitlePair(info, tr, lang);
   const subPair = coverSubPair(project, tr);
@@ -505,6 +476,7 @@ export function bDesignCover(ctx) {
     if (its.length < 2) return true;
     return widestLine(its[0].text, scriptOf(its[0], role), role) <= room(ws[0]) && widestLine(its[1].text, scriptOf(its[1], role), role) <= room(ws[1]);
   };
+  const CHAPTER = chapterPair(ctx);
   const side = lang === 'bi' && fitsSide(CHAPTER, 'cap') && fitsSide(titlePair, 'display') && fitsSide(subPair, 'body');
 
   const put = (y, role, pair) => (side ? sideB(xs, ws, y, role, pair, lang, { singleW: colW }) : stackB(colX(1), y, colW, role, pair, lang, { gap: 0, balance: true }));
@@ -568,14 +540,25 @@ export function bFloor(ctx, slide) {
   const els = [];
   const warnings = [];
 
+  // 这一层的效果图页都隐藏了（或还没有）：章节页后面没有内容 —— 提醒隐藏这一页（一键），不再只说「没有背景图」
+  const floorViews = floor ? (project.slides || []).filter((s) => s?.kind === 'view' && s.floorId === floor.id) : [];
+  const emptyFloor = !!floor && !floorViews.some((s) => s.enabled !== false);
   const { src } = floorPageImage(project, slide, meta);
   if (src) {
     const r = rendering(0, 0, FLOOR_IMG_W, H, src, meta(src));
     els.push(r.el);
     lowRes(warnings, r.scale);
+    if (r.wmShort) warnings.push(WM_WARN.plate);
   } else {
     els.push(...missingImage(0, 0, FLOOR_IMG_W, H));
-    warnings.push('楼层章节页没有背景图');
+    if (!emptyFloor) warnings.push('楼层章节页没有背景图');
+  }
+  if (emptyFloor) {
+    warnings.push(
+      floorViews.length
+        ? '这一层的效果图都隐藏了：楼层章节页后面没有内容 —— 也隐藏这一页，或给楼层选一张图'
+        : '这一层还没有效果图页：楼层章节页后面没有内容 —— 隐藏这一页，或先加效果图',
+    );
   }
 
   // 右栏：楼层名（display，中英上下）挂在 96；本层空间落在 984
@@ -644,7 +627,7 @@ const superset = (big, small) => [...small].every((id) => big.has(id));
 /**
  * 每张效果图页用满版（full）还是图文（plate）
  *   设定了版式就照设定（full → 满版；framed → 图文）
- *   自动（auto）：横图（≥ 1.5）且这一页满版也不丢东西（没有说明、没有材料），
+ *   自动（auto）：横图（≥ 1.5）、像素够裁掉水印，且这一页满版也不丢东西（没有说明、没有材料），
  *     或它是这个空间的第一张、没有说明、紧接着的下一页同楼层同空间且材料覆盖它（下一页是图文）→ 满版；
  *   AI 立体图（tag '3d'）→ 图文；不连续出现 3 页满版；其余图文
  * @param {object} project
@@ -656,8 +639,9 @@ export function planViews(project, metaFn = () => null) {
   const shown = slides.filter((s) => s && s.enabled !== false);
   const plan = new Map();
   const auto = new Set();
+  const natOf = (s) => (s.image ? metaFn(s.image) : null);
   const ratioOf = (s) => {
-    const nat = s.image ? metaFn(s.image) : null;
+    const nat = natOf(s);
     return nat?.w && nat?.h ? nat.w / nat.h : 0;
   };
   const nextShown = (s) => {
@@ -675,7 +659,8 @@ export function planViews(project, metaFn = () => null) {
       plan.set(s.id, forced);
       continue;
     }
-    if (s.tag === '3d' || ratioOf(s) < 1.5 || noteRows(s).length) {
+    // 满版要能把底部的水印裁掉又不放大超过 1.15 倍（16:9 的图约 1845 宽以上）；像素不够的放图文（图小一些，裁得开）
+    if (s.tag === '3d' || ratioOf(s) < 1.5 || noteRows(s).length || !wmFits(natOf(s), W, H)) {
       plan.set(s.id, 'plate');
       continue;
     }
@@ -737,6 +722,7 @@ export function bViewFull(ctx, slide, plan) {
     const r = rendering(0, 0, W, H, slide.image, meta(slide.image));
     els.push(r.el);
     lowRes(warnings, r.scale);
+    if (r.wmShort) warnings.push(WM_WARN.full);
   } else {
     els.push(sampleRect(0, 0, W, H, 'image'));
     warnings.push('缺少效果图');
@@ -964,6 +950,7 @@ export function bViewPlate(ctx, slide) {
     const r = rendering(0, 0, g.iw, g.ih, s.image, nat);
     els.push(r.el);
     lowRes(warnings, r.scale);
+    if (r.wmShort) warnings.push(WM_WARN.plate);
   } else {
     els.push(...missingImage(0, 0, g.iw, g.ih));
     warnings.push('缺少效果图');
@@ -976,8 +963,11 @@ export function bViewPlate(ctx, slide) {
   const sub = clean(s.subtitle);
   const roomEn = roomZh || clean(s.roomEn) ? tidyTitle(tr.room(s)) : '';
   const floorPart = floor ? { zh: clean(floor.zh), en: tidyTitle(floorTitleEn(floor.en)) || (clean(floor.zh) ? tidyTitle(tr.en(floor.zh, 'room')) : '') } : null;
-  const labelParts = [floorPart, sub && roomZh ? { zh: roomZh, en: roomEn } : null].filter(Boolean);
-  const labelPair = { ...joinPair(labelParts, '　', ' — ', lang), field: sub && roomZh ? 'room' : 'floor', fieldEn: sub && roomZh ? 'roomEn' : 'floor' };
+  // AI 立体图页的「空间」就是楼层名（一楼 / 全屋）：标签只写一次，不印成「一楼　一楼」
+  const roomInLabel = sub && roomZh && !(s.tag === '3d' || (floorPart && roomZh === floorPart.zh));
+  const labelParts = [floorPart, roomInLabel ? { zh: roomZh, en: roomEn } : null].filter(Boolean);
+  if (!labelParts.length && s.tag === '3d' && roomZh) labelParts.push({ zh: roomZh, en: roomZh === '全屋' ? 'Whole Home' : roomEn });
+  const labelPair = { ...joinPair(labelParts, '　', ' — ', lang), field: roomInLabel || !floorPart ? 'room' : 'floor', fieldEn: roomInLabel || !floorPart ? 'roomEn' : 'floor' };
   const label = stackB(x, TOP, tw, 'cap', labelPair, lang);
   els.push(...label.els);
   const titlePair = sub
@@ -992,7 +982,13 @@ export function bViewPlate(ctx, slide) {
   const oneLineTitle = pick(lang, titlePair).reduce((h, it) => h + styleOf(scriptOf(it, 'head'), 'head').lh, 0);
   let shownRows = rows;
   while (shownRows.length && FOOT - listH(shownRows) < titleTopMin + oneLineTitle + TITLE_GAP) shownRows = shownRows.slice(0, -1);
-  if (rows.length > 6 || shownRows.length < rows.length) warnings.push('材料太多：建议拆成两页');
+  // 超过 6 行 = 材料多；没超过却放不下（名称、部位很长）= 说清楚是哪几项没印出来
+  if (rows.length > 6) warnings.push('材料太多：建议拆成两页');
+  else if (shownRows.length < rows.length) warnings.push(`材料表放不下：第 ${shownRows.length + 1} 项起没有印出来 —— 建议精简名称或拆成两页`);
+  for (const r of shownRows) {
+    const cp = codePlan(r.code, tw - labelW);
+    if (cp && !cp.inline && cp.lines.length > 1) warnings.push(codeWarning(r.code, cp.lines.length));
+  }
   let listTop = FOOT;
   if (shownRows.length) {
     const list = rest(FOOT, (y) => drawList(x, y, tw, shownRows, lang, labelW));
@@ -1007,10 +1003,16 @@ export function bViewPlate(ctx, slide) {
     const up = titleBlock(x, titleTopMin, tw, titlePair, lang, 'head', 2, limit);
     if (!up.over && up.bottom <= limit) title = up;
     else {
-      // 提醒说清原因：标题本身超过两行 = 太长；标题不长、是材料表占了地方 = 材料多
-      const tooLong = titleBlock(x, titleTopMin, tw, titlePair, lang, 'head', 2).over;
+      // 提醒说清原因：标题本身超过两行 = 太长；标题不长、是材料表占了地方 = 材料多。
+      // 太长的是哪一栏：视角名（没有视角名时标题是空间名）、中文还是英文 —— 编辑器的一键修复跳到那一栏
+      const longIts = pick(lang, titlePair).filter((it) => {
+        const L = scriptOf(it, 'head');
+        return blk(0, 0, tw, balanceText(it.text, L, 'head', tw), L, 'head').lines > 2;
+      });
+      const enLong = longIts.length > 0 && longIts.every((it) => it.lang === 'en');
       title = titleBlock(x, titleTopMin, tw, titlePair, lang, 'body', 3, limit);
-      warnings.push(tooLong ? '视角名太长：已缩小一级，建议精简' : '材料较多，视角名已缩小一级：建议拆成两页');
+      const what = sub ? (enLong ? '视角名的英文' : '视角名') : enLong ? '空间英文名' : '空间名';
+      warnings.push(longIts.length ? `${what}太长：已缩小一级，建议精简` : '材料较多，视角名已缩小一级：建议拆成两页');
     }
   }
   els.push(...title.els);
@@ -1068,8 +1070,12 @@ export function bViewPlate(ctx, slide) {
       dropped.push(group[0]);
       i += 1;
     }
-    // 只有一条说明还放不下 = 说明太长；几条里有放不下的 = 说明太多
-    if (dropped.length) warnings.push(notesOf(project, s, lang, tr).length === 1 ? '说明太长：建议精简或拆页' : '说明太多放不下：建议拆成两页');
+    // 只有一条说明还放不下 = 说明太长（说清是第几条、是不是只有标签 —— 一键修复跳到那一栏）；几条里有放不下的 = 说明太多
+    if (dropped.length) {
+      const d = dropped[0];
+      const which = `第 ${d.i + 1} 条${String(d.text?.field || '').endsWith('.label') ? '的标签' : ''}`;
+      warnings.push(notesOf(project, s, lang, tr).length === 1 ? `说明太长（${which}）：建议精简或拆页` : '说明太多放不下：建议拆成两页');
+    }
   }
   return page(els, [...new Set(warnings)]);
 }
@@ -1110,31 +1116,132 @@ function materialCaption(m, lang, tr) {
   };
 }
 
-/** 小样下面的说明：名称（中英上下），编号与第一行同一基线、靠右 */
+/** 材料名称每种语言最多排几行（再长截短加「…」，并提醒）：说明不至于把小样挤扁 */
+const CAPTION_LINES = 3;
+/**
+ * 两排的小样最矮多少：宽的 0.6 倍，但不超过「说明都只有一行时」小样高度的 0.75 倍
+ * （中英版两排的标准小样本来就只有 228 高，402 宽的那档也照样排两排）。
+ * 名称很长、长编号另起一行把小样挤得比这还矮 → 每页少放几种、排一排（materialSlices）
+ */
+const SWATCH_MIN = 0.6;
+const SWATCH_MIN_STD = 0.75;
+
+/**
+ * 小样下面的说明：名称（中英上下），编号与第一行同一基线、靠右；编号太宽（超过小样宽的 40%）就排在名称下面、仍靠右
+ * @returns {{ els, bottom, cut:boolean, codeLines:number }}  cut = 名称截短了；codeLines = 另起一行的编号折成几行
+ */
 function drawCaption(x, y, w, cap, lang, field) {
   const its = pick(lang, cap.name);
   const els = [];
   let cur = y;
-  const cwid = cap.code ? codeWidth(cap.code) : 0;
+  let cut = false;
+  const cp = codePlan(cap.code, w, 12);
   its.forEach((it, k) => {
-    const bw = w - (k === 0 && cap.code ? cwid + 12 : 0);
-    const b = blk(x, cur, bw, balanceText(it.text, it.lang, 'body', bw), it.lang, 'body', { edit: editOf(it.field) });
+    const bw = w - (k === 0 && cp?.inline ? cp.cw + 12 : 0);
+    let text = balanceText(it.text, it.lang, 'body', bw);
+    if (blk(0, 0, bw, text, it.lang, 'body').lines > CAPTION_LINES) {
+      text = clampText(it.text, it.lang, 'body', bw, CAPTION_LINES);
+      cut = true;
+    }
+    const b = blk(x, cur, bw, text, it.lang, 'body', { edit: editOf(it.field) });
     els.push(b.el);
-    if (k === 0 && cap.code) {
+    if (k === 0 && cp?.inline) {
       const fit = capInLine(cur, it.lang, 'en');
-      els.push(blk(x + w - cwid, fit.top, cwid, cap.code, 'en', 'cap', { align: 'r', over: { lh: fit.lh }, nowrap: true, edit: editOf(field) }).el);
+      els.push(blk(x + w - cp.cw, fit.top, cp.cw, cap.code, 'en', 'cap', { align: 'r', over: { lh: fit.lh }, nowrap: true, edit: editOf(field) }).el);
     }
     cur = b.bottom;
   });
-  return { els, bottom: cur };
+  if (cp && !cp.inline) {
+    const b = blk(x, cur, w, cp.lines.join('\n'), 'en', 'cap', { align: 'r', edit: editOf(field) });
+    els.push(b.el);
+    cur = b.bottom;
+  }
+  return { els, bottom: cur, cut, codeLines: cp && !cp.inline ? cp.lines.length : 0 };
 }
 
 /** 一行名称（中、英各一行）的说明有多高：两排、分页时按它定小样高度（几页的小样一样大） */
 const stdCaptionH = (lang) => langsOf3(lang).reduce((h, L) => h + styleOf(L, 'body').lh, 0);
 const langsOf3 = (lang) => (lang === 'bi' ? ['zh', 'en'] : [lang === 'en' ? 'en' : 'zh']);
 
-export function bMaterials(ctx, mats = [], pageIndex = 0, pageCount = 1, perPage = 0) {
-  const { lang, tr, meta } = env(ctx);
+/** 小样挂在页眉下 64（且离右上的说明至少 32；按第一页的页眉量，续页的小样与第一页同一高度） */
+const matTop = (lang) => {
+  const ref = header(lang, { zh: '本案材料', en: 'Materials' }, MAT_NOTE);
+  return Math.max(ref.headBottom + 64, ref.noteBottom + 32);
+};
+
+/**
+ * 这一页的小样网格：一排 / 两排、每排几块、小样宽高、说明高
+ *   排法：≤ 6 种一排；7–12 种两排、上下均分（7 = 4 + 3，9 = 5 + 4，11 = 6 + 5）；
+ *   分页时每页同一套格子（rows 由 materialSlices 定：两排，或说明太高时一排）
+ */
+function matGrid(e, list, pageCount = 1, perPage = 0, rowsHint = 0) {
+  const { lang, tr, meta } = e;
+  const n = list.length;
+  const paged = pageCount > 1;
+  const rowsN = rowsHint || (paged || n > 6 ? 2 : 1);
+  const perRow = rowsN === 1 ? Math.min(6, Math.max(n, paged ? perPage || 0 : 0)) : Math.min(6, Math.max(4, Math.ceil(Math.max(n, paged ? perPage || 0 : 0) / 2)));
+  let mod = MODULE[perRow];
+  // 1–3 种：小样很大，原图不够清楚就退一档（686 → 544 → 402）—— 只在退了就清楚时才退（本来就太小的图单独提醒）
+  const nats = list.map((m) => (m.image ? meta(m.image) : null));
+  const sharpW = Math.min(...nats.map((nt) => (nt?.w ? nt.w * 1.15 : Infinity)));
+  if (perRow <= 3 && mod.w > sharpW) {
+    const ok = [MODULE[3], MODULE[4]].find((m) => m.w < mod.w && m.w <= sharpW);
+    if (ok) mod = ok;
+  }
+  const size = mod.w;
+  const top = matTop(lang);
+  const caps = list.map((m) => materialCaption(m, lang, tr));
+  const capInfo = caps.map((c) => drawCaption(0, 0, size, c, lang));
+  const rowsOf = Array.from({ length: rowsN }, (_, r) => list.slice(r * perRow, (r + 1) * perRow).map((_, k) => r * perRow + k)).filter((r) => r.length);
+  const rowCapH = rowsOf.map((idx) => Math.max(...idx.map((i) => capInfo[i].bottom)));
+  // 不放大超过 1.15 倍：按「宽度上清楚」的小样算高度上限（本来就不清楚的那张单独提醒，不拖累整页）
+  const sharpH = Math.min(...nats.map((nt) => (nt?.w && nt?.h && nt.w * 1.15 >= size ? nt.h * 1.15 : Infinity)));
+  let capGap;
+  let rowGap = 0;
+  let plateH;
+  let minH = 0;
+  if (rowsN === 1) {
+    capGap = 32;
+    const fitH = FOOT - top - capGap - rowCapH[0];
+    plateH = Math.floor(Math.min(fitH, sharpH, size * SWATCH_MAX));
+  } else {
+    capGap = 24;
+    rowGap = 48;
+    const std = stdCaptionH(lang);
+    const fitStd = (FOOT - top - rowGap - 2 * (capGap + std)) / 2;
+    const fitAct = (FOOT - top - rowGap - 2 * capGap - rowCapH.reduce((a, b) => a + b, 0) - (rowCapH.length < 2 ? std : 0)) / 2;
+    plateH = Math.floor(Math.min(fitStd, fitAct, sharpH));
+    minH = Math.min(size * SWATCH_MIN, Math.floor(Math.min(fitStd, sharpH)) * SWATCH_MIN_STD);
+  }
+  return { mod, size, top, caps, capInfo, nats, rowsOf, rowCapH, plateH, minH, capGap, rowGap };
+}
+
+/**
+ * 本案材料分页：一页最多 maxPer（12）种、均分（14 = 7 + 7）；两排的小样被说明挤得矮过宽的 0.6 倍
+ * （名称很长、长编号另起一行）→ 改成每页最多 6 种、排一排，不把每块小样都压扁
+ * @returns {Array<{ mats:object[], perPage:number, rows:1|2 }>}
+ */
+export function materialSlices(ctx, mats, maxPer = 12) {
+  const e = env(ctx);
+  const list = (Array.isArray(mats) ? mats : []).filter(Boolean);
+  const split = (cap) => {
+    const n = Math.max(1, Math.ceil(list.length / cap));
+    const per = Math.max(1, Math.ceil(list.length / n));
+    return Array.from({ length: n }, (_, p) => ({ mats: list.slice(p * per, (p + 1) * per), perPage: per }));
+  };
+  const two = split(maxPer).map((s, _, all) => ({ ...s, rows: all.length > 1 || s.mats.length > 6 ? 2 : 1 }));
+  const fits = two.every((s) => {
+    if (s.rows === 1 || !s.mats.length) return true;
+    const g = matGrid(e, s.mats, two.length, s.perPage, 2);
+    return g.plateH >= g.minH;
+  });
+  if (fits) return two;
+  return split(6).map((s) => ({ ...s, rows: 1 }));
+}
+
+export function bMaterials(ctx, mats = [], pageIndex = 0, pageCount = 1, perPage = 0, rows = 0) {
+  const e = env(ctx);
+  const { lang } = e;
   const all = Array.isArray(mats) ? mats.filter(Boolean) : [];
   const list = all.slice(0, 12);
   const els = [];
@@ -1149,65 +1256,30 @@ export function bMaterials(ctx, mats = [], pageIndex = 0, pageCount = 1, perPage
     return page(els, ['本案材料为空']);
   }
 
-  // 小样挂在页眉下 64（且离右上的说明至少 32；按第一页的页眉量，续页的小样与第一页同一高度）
-  const ref = cont ? header(lang, { zh: '本案材料', en: 'Materials' }, MAT_NOTE) : head;
-  const top = Math.max(ref.headBottom + 64, ref.noteBottom + 32);
-
-  // 排法：≤ 6 种一排；7–12 种两排、上下均分（7 = 4 + 3，9 = 5 + 4，11 = 6 + 5）；分页时每页都按两排的格子排
-  const n = list.length;
-  const paged = pageCount > 1;
-  const rowsN = paged || n > 6 ? 2 : 1;
-  const perRow = rowsN === 1 ? n : Math.min(6, Math.max(4, Math.ceil(Math.max(n, paged ? perPage || 0 : 0) / 2)));
-  let mod = MODULE[perRow];
-  // 1–3 种：小样很大，原图不够清楚就退一档（686 → 544 → 402）—— 只在退了就清楚时才退（本来就太小的图单独提醒）
-  const nats = list.map((m) => (m.image ? meta(m.image) : null));
-  const sharpW = Math.min(...nats.map((nt) => (nt?.w ? nt.w * 1.15 : Infinity)));
-  if (perRow <= 3 && mod.w > sharpW) {
-    const ok = [MODULE[3], MODULE[4]].find((m) => m.w < mod.w && m.w <= sharpW);
-    if (ok) mod = ok;
-  }
-  const size = mod.w;
-
-  const caps = list.map((m) => materialCaption(m, lang, tr));
-  const capH = (i) => drawCaption(0, 0, size, caps[i], lang).bottom;
-  const rowsOf = Array.from({ length: rowsN }, (_, r) => list.slice(r * perRow, (r + 1) * perRow).map((_, k) => r * perRow + k)).filter((r) => r.length);
-  const rowCapH = rowsOf.map((idx) => Math.max(...idx.map(capH)));
-  // 不放大超过 1.15 倍：按「宽度上清楚」的小样算高度上限（本来就不清楚的那张单独提醒，不拖累整页）
-  const sharpH = Math.min(...nats.map((nt) => (nt?.w && nt?.h && nt.w * 1.15 >= size ? nt.h * 1.15 : Infinity)));
-  let capGap;
-  let rowGap = 0;
-  let plateH;
-  if (rowsN === 1) {
-    capGap = 32;
-    const fitH = FOOT - top - capGap - rowCapH[0];
-    plateH = Math.floor(Math.min(fitH, sharpH, size * SWATCH_MAX));
-  } else {
-    capGap = 24;
-    rowGap = 48;
-    const std = stdCaptionH(lang);
-    const fitStd = (FOOT - top - rowGap - 2 * (capGap + std)) / 2;
-    const fitAct = (FOOT - top - rowGap - 2 * capGap - rowCapH.reduce((a, b) => a + b, 0) - (rowCapH.length < 2 ? std : 0)) / 2;
-    plateH = Math.floor(Math.min(fitStd, fitAct, sharpH));
-  }
-
-  let y = top;
+  const g = matGrid(e, list, pageCount, perPage, rows);
+  const { mod, size, caps, capInfo, nats, rowsOf, rowCapH, capGap, rowGap } = g;
+  const plateH = Math.max(1, g.plateH);
+  let y = g.top;
   rowsOf.forEach((idx, r) => {
     idx.forEach((i, k) => {
       const m = list[i];
       const x = colX(1) + k * mod.step;
       const field = `material:${m.id}`;
+      const what = `材料「${clean(m.name) || clean(m.code) || '未命名'}」的`;
       if (m.image) {
         const nt = nats[i];
         els.push(photo(x, y, size, plateH, m.image, { nat: nt, edit: { field } }));
-        lowRes(warnings, upscale(nt, size, plateH), `材料「${clean(m.name) || clean(m.code) || '未命名'}」的`);
+        lowRes(warnings, upscale(nt, size, plateH), what);
       } else {
         els.push(sampleRect(x, y, size, plateH, field), ...frame(x, y, size, plateH));
       }
       els.push(...drawCaption(x, y + plateH + capGap, size, caps[i], lang, field).els);
+      if (capInfo[i].cut) warnings.push(`${what}名称太长：页面上截短了（末尾「…」）—— 建议精简（去材料清单改）`);
+      if (capInfo[i].codeLines > 1) warnings.push(codeWarning(caps[i].code, capInfo[i].codeLines));
     });
     y += plateH + capGap + rowCapH[r] + rowGap;
   });
-  return page(els, warnings);
+  return page(els, [...new Set(warnings)]);
 }
 
 // ---------------------------------------------------------------------------
@@ -1218,6 +1290,10 @@ const TEAM_NOTE = { zh: '从方案到交付，一个团队全程陪伴。', en: 
 
 /** 团队一排几位 → 每位的栏宽与步距（≤ 4 位 3 栏宽，5 位 = p4 的 312，6 位 2 栏宽） */
 const TEAM_MODULE = (k) => (k <= 4 ? MODULE[4] : MODULE[k]);
+
+/** 团队页最多放几位：6 位以内一排；7–12 位排两排（4 + 3、4 + 4、5 + 4、5 + 5、6 + 5、6 + 6），两排同一套栏 */
+export const TEAM_MAX = 12;
+const TEAM_ROW_GAP = 64; // 上一排名字的底 → 下一排细线
 
 export function bTeam(ctx) {
   const { project, lang, tr } = env(ctx);
@@ -1237,21 +1313,24 @@ export function bTeam(ctx) {
     all = named;
     for (const m of listed) if (!clean(m.name)) warnings.push(`服务团队第 ${m.idx + 1} 位「${clean(m.role)}」还没填名字，团队页上先不放`);
   }
-  if (all.length > 6) warnings.push(`团队一页放 6 位（现在 ${all.length} 位），只显示了前 6 位`);
-  const members = all.slice(0, 6);
+  if (all.length > TEAM_MAX) warnings.push(`团队一页最多放 ${TEAM_MAX} 位（现在 ${all.length} 位），只显示了前 ${TEAM_MAX} 位`);
+  const members = all.slice(0, TEAM_MAX);
   if (!members.length) return page(els, warnings);
 
-  // 一排，落在 984：职位（cap 中英）在上，名字在下；名字都放得进两行就用 display（与封面的客户名同级），否则 head
-  const mod = TEAM_MODULE(members.length);
+  // 6 位以内一排，落在 984；7 位起两排（上排多一位），下排落在 984、上排落在下排细线上方 64。
+  // 职位（cap 中英）在上，名字在下；名字都放得进两行就用 display（与封面的客户名同级），否则 head（两排放不下时也退到 head）
+  const perRow = members.length <= 6 ? members.length : Math.ceil(members.length / 2);
+  const rows = members.length <= 6 ? [members] : [members.slice(0, perRow), members.slice(perRow)];
+  const mod = TEAM_MODULE(perRow);
   const cw = mod.w;
   const xOf = (i) => colX(1) + i * mod.step;
   const langOfName = (m) => (hasCJK(clean(m.name)) ? 'zh' : 'en');
   const nameLines = (m, role) => blk(0, 0, cw, balanceText(clean(m.name), langOfName(m), role, cw), langOfName(m), role).lines;
-  const nameRole = members.every((m) => !clean(m.name) || nameLines(m, 'display') <= 2) ? 'display' : 'head';
-  const build = (y0) => {
+  const build = (list, nameRole) => (y0) => {
     const out = [];
+    const notes = [];
     let roleBottom = y0;
-    members.forEach((m, i) => {
+    list.forEach((m, i) => {
       const role = clean(m.role);
       const s = stackB(xOf(i), y0, cw, 'cap', { zh: role, en: role && lang !== 'zh' ? tidyTitle(tr.en(role, 'team')) : '', field: `team.${m.idx}.role`, fieldEn: `team.${m.idx}.roleEn` }, lang);
       out.push(...s.els);
@@ -1259,21 +1338,36 @@ export function bTeam(ctx) {
     });
     // 名字：中文名、英文名首行同一基线
     const nameTop = roleBottom + (nameRole === 'display' ? 4 : 8);
-    const base = Math.max(...members.map((m) => baseOff(langOfName(m), nameRole)));
+    const base = Math.max(...list.map((m) => baseOff(langOfName(m), nameRole)));
     let bottom = roleBottom;
-    members.forEach((m, i) => {
+    list.forEach((m, i) => {
       const name = clean(m.name);
       if (!name) return;
       const L = langOfName(m);
       const b = blk(xOf(i), nameTop + base - baseOff(L, nameRole), cw, balanceText(name, L, nameRole, cw), L, nameRole, { edit: { field: `team.${m.idx}.name` } });
       out.push(b.el);
       bottom = Math.max(bottom, b.bottom);
-      if (b.lines > 2) warnings.push(`「${name}」太长，名字折成了 ${b.lines} 行 —— 可以只写名字或英文名`);
+      if (b.lines > 2) notes.push(`「${name}」太长，名字折成了 ${b.lines} 行 —— 可以只写名字或英文名`);
     });
-    return { els: out, bottom };
+    return { els: out, bottom, notes };
   };
-  const row = rest(FOOT, build);
-  // 细线在职位上方 16（样张 p3），只跨这几位
-  els.push(hair(colX(1), row.top - 16, members.length * mod.step - (mod.step - cw)), ...row.els);
+  // 从下往上排：每排落在下一排细线上方（细线在职位上方 16，样张 p3）
+  const place = (nameRole) => {
+    const placed = [];
+    let bottomY = FOOT;
+    for (let r = rows.length - 1; r >= 0; r--) {
+      const row = rest(bottomY, build(rows[r], nameRole));
+      placed.unshift({ row, n: rows[r].length });
+      bottomY = row.top - 16 - TEAM_ROW_GAP;
+    }
+    return placed;
+  };
+  let nameRole = members.every((m) => !clean(m.name) || nameLines(m, 'display') <= 2) ? 'display' : 'head';
+  let placed = place(nameRole);
+  if (nameRole === 'display' && placed[0].row.top - 16 < head.bottom + 48) placed = place((nameRole = 'head'));
+  for (const { row, n } of placed) {
+    els.push(hair(colX(1), row.top - 16, n * mod.step - (mod.step - cw)), ...row.els);
+    warnings.push(...row.notes);
+  }
   return page(els, [...new Set(warnings)]);
 }

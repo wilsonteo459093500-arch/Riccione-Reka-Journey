@@ -9,8 +9,9 @@ import ImageField from '../ImageField.jsx';
 import EnInput, { EnAlias } from '../EnInput.jsx';
 import { CompanyTexts, CompanyPhotos } from './CompanyInspector.jsx';
 
-// 方案封面（「03 方案」章节封面）：Material Board 整张放在右侧（不裁切），左栏 章节标签 · 标题 · 副标题。
-// 没有 Board 时这一页退回品牌画册的「方案」章节页（可改字、换照片）。
+// 方案封面（「方案」章节封面）：Material Board 整张放在右侧（不裁切），左栏 章节标签 · 标题 · 副标题。
+// 没有 Board 时这一页退回品牌画册的「方案」章节页（可改字、换照片）—— 这时只显示章节页的栏位，
+// Board 封面的标题 / 副标题（页面上用不到）不显示，免得出现两个「大标题」、还多一个缺英文的 EN 框。
 // English / 中英版：标题 / 副标题写的是中文时，下面多一个英文框（写进翻译记忆）——放在 <label> 外面（点它不会跳回中文框），
 // 「留空 = 自动…」的说明留在中文框下面。
 
@@ -30,7 +31,7 @@ export default function CoverInspector({ project, slide, change, notify, onGoTab
         {!cover.image && (
           <div className="flex items-start gap-1.5 rounded-lg bg-bp-tint px-2.5 py-2 mb-2.5 text-[11px] text-bp-muted leading-snug">
             <Info className="w-3.5 h-3.5 mt-px shrink-0 text-bp-eyebrow" />
-            还没有 Material Board —— 现在这一页是品牌画册里的「方案」章节页。做好 Board 后它会成为方案章节的封面：整张放在右侧，不裁切（公司封面保持原样）。
+            还没有 Material Board —— 现在这一页是品牌画册里的「方案」章节页，下面改的是这一页的字和照片。做好 Board 后它会成为方案章节的封面：整张放在右侧，不裁切；那时这里会出现封面的标题、副标题（公司封面保持原样）。
           </div>
         )}
         <ImageField
@@ -50,32 +51,34 @@ export default function CoverInspector({ project, slide, change, notify, onGoTab
         </button>
       </Section>
 
-      <Section title="封面文字" icon={Type}>
-        <Field label="大标题" hint={cover.image ? '留空 = 自动用客户与地点（分两行）' : '有 Material Board 时生效；留空 = 自动用客户与地点'}>
-          <EnAlias field="coverTitleEn" on={alias(info.coverTitle)}>
-            <input
-              data-field="coverTitle"
-              className={inputCls}
-              value={info.coverTitle || ''}
-              placeholder={auto.title.replace(/\n/g, ' · ')}
-              onChange={(e) => change((p) => updateInfo(p, { coverTitle: e.target.value }))}
-            />
-          </EnAlias>
-        </Field>
-        {enFor(info.coverTitle, 'coverTitleEn')}
-        <Field label="副标题" className="mt-2.5" hint="留空 = 自动用楼层">
-          <EnAlias field="coverSubtitleEn" on={alias(info.coverSubtitle)}>
-            <input
-              data-field="coverSubtitle"
-              className={inputCls}
-              value={info.coverSubtitle || ''}
-              placeholder={auto.subtitle}
-              onChange={(e) => change((p) => updateInfo(p, { coverSubtitle: e.target.value }))}
-            />
-          </EnAlias>
-        </Field>
-        {enFor(info.coverSubtitle, 'coverSubtitleEn')}
-      </Section>
+      {cover.image && (
+        <Section title="封面文字" icon={Type}>
+          <Field label="大标题" hint="留空 = 自动用客户与地点（分两行）">
+            <EnAlias field="coverTitleEn" on={alias(info.coverTitle)}>
+              <input
+                data-field="coverTitle"
+                className={inputCls}
+                value={info.coverTitle || ''}
+                placeholder={auto.title.replace(/\n/g, ' · ')}
+                onChange={(e) => change((p) => updateInfo(p, { coverTitle: e.target.value }))}
+              />
+            </EnAlias>
+          </Field>
+          {enFor(info.coverTitle, 'coverTitleEn')}
+          <Field label="副标题" className="mt-2.5" hint="留空 = 自动用楼层">
+            <EnAlias field="coverSubtitleEn" on={alias(info.coverSubtitle)}>
+              <input
+                data-field="coverSubtitle"
+                className={inputCls}
+                value={info.coverSubtitle || ''}
+                placeholder={auto.subtitle}
+                onChange={(e) => change((p) => updateInfo(p, { coverSubtitle: e.target.value }))}
+              />
+            </EnAlias>
+          </Field>
+          {enFor(info.coverSubtitle, 'coverSubtitleEn')}
+        </Section>
+      )}
 
       {!cover.image && <CompanyTexts project={project} slide={slide} change={change} onGoTab={onGoTab} title="章节页文字" />}
       {!cover.image && <CompanyPhotos project={project} slide={slide} change={change} notify={notify} />}

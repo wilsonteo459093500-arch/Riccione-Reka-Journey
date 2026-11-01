@@ -5,8 +5,8 @@
 import { fitText } from './spec.js';
 import { clientLine, floorsLine, findFloor } from './model.js';
 import { makeTranslator, missWarning, roomEnOf, langOf, floorsLineEn, resolveEn, hasCJKText } from './lang.js';
-import { COMPANY_PAGES_B, renderCompanyB } from './b/company.js';
-import { bDesignCover, bFloor, bMaterials, bTeam, planViews, bViewPage } from './b/design.js';
+import { COMPANY_PAGES_B, renderCompanyB, deckChapters } from './b/company.js';
+import { bDesignCover, bFloor, bMaterials, bTeam, planViews, bViewPage, materialSlices } from './b/design.js';
 
 /** 本案材料每页最多几种（超过就均分成几页） */
 export const MATERIALS_PER_PAGE = 12;
@@ -116,7 +116,10 @@ function sectionFor(slide) {
   return 'design';
 }
 
-/** 材料均分到各页（14 种 → 7 + 7，而不是 12 + 2）：[{ mats, perPage }] */
+/**
+ * 材料均分到各页（14 种 → 7 + 7，而不是 12 + 2）：[{ mats, perPage }]
+ * renderDeck 用的是 b/design.js materialSlices：同样均分，只是名称很长、两排的小样会被挤扁时每页少放（一排 6 种）
+ */
 export function materialPages(mats) {
   const list = mats || [];
   const n = Math.max(1, Math.ceil(list.length / MATERIALS_PER_PAGE));
@@ -133,11 +136,13 @@ export function renderDeck(project, { meta = () => null } = {}) {
   const tokens = projectTokens(project);
   // 效果图页满版 / 图文：整套一起排（节奏：不连续 3 页满版；同空间的下一页能补上材料才用满版）
   const plan = planViews(project, meta);
+  // 看得到的章节（老客户隐藏了品牌 / 公司 / 服务）：目录只列这几章，章节页、方案封面的编号跟着往前排
+  const chapters = deckChapters(project);
   const out = [];
   for (const slide of project.slides || []) {
     // 每页一个翻译器：记下这一页缺英文的地方，放进这一页的提醒
     const tr = makeTranslator(project);
-    const ctx = { meta, project, tr, lang, tokens };
+    const ctx = { meta, project, tr, lang, tokens, chapters };
     const base = {
       slideId: slide.id,
       kind: slide.kind,
@@ -155,8 +160,8 @@ export function renderDeck(project, { meta = () => null } = {}) {
         pages = [bDesignCover(ctx) || renderCompanyB('design-divider', slide, ctx)];
         break;
       case 'materials': {
-        const slices = materialPages(project.materials);
-        pages = slices.map((s, i) => bMaterials(ctx, s.mats, i, slices.length, s.perPage));
+        const slices = materialSlices(ctx, project.materials, MATERIALS_PER_PAGE);
+        pages = slices.map((s, i) => bMaterials(ctx, s.mats, i, slices.length, s.perPage, s.rows));
         break;
       }
       case 'floor':

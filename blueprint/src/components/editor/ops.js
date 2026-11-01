@@ -2,9 +2,9 @@
 // 约定：新 id 一律由调用方生成后传进来（onChange 的 updater 可能被 React 调用两次，必须是纯函数）。
 
 import { SECTION_LABELS } from '../../engine/deck.js';
-import { planViews } from '../../engine/b/design.js';
-import { COMPANY_PAGES_B, companyFieldsB, companyImagesB } from '../../engine/b/company.js';
-import { isMissWarning } from '../../engine/lang.js';
+import { planViews, TEAM_MAX } from '../../engine/b/design.js';
+import { COMPANY_PAGES_B, companyFieldsB, companyImagesB, companyFieldByLabel, legacyOverrides } from '../../engine/b/company.js';
+import { isMissWarning, langOf } from '../../engine/lang.js';
 import { findFloor } from '../../engine/model.js';
 
 /** 材料「部位」常用词（输入框下拉建议） */
@@ -361,7 +361,7 @@ export const moveTeamMember = (project, i, delta) => updateInfo(project, { team:
 
 /**
  * 服务团队页上实际显示的成员 → info.team 里的序号（与 b/design.js bTeam 一致）：
- *   有人填了名字 → 只放填了名字的；一个名字都没有 → 有职位的先排着；最多 6 位
+ *   有人填了名字 → 只放填了名字的；一个名字都没有 → 有职位的先排着；最多 TEAM_MAX（12）位（7 位起排两行）
  */
 export function teamVisibleIndices(team) {
   const listed = [];
@@ -369,7 +369,7 @@ export function teamVisibleIndices(team) {
     if ((m?.name || '').trim() || (m?.role || '').trim()) listed.push(i);
   });
   const named = listed.filter((i) => (team[i]?.name || '').trim());
-  return (named.length ? named : listed).slice(0, 6);
+  return (named.length ? named : listed).slice(0, TEAM_MAX);
 }
 
 // ---------------------------------------------------------------------------
@@ -397,6 +397,25 @@ export const setCompanyField = (project, slideId, field, lang, text, dflt) =>
 
 /** 恢复默认文字 */
 export const clearCompanyField = (project, slideId, field, lang) => writeField(project, slideId, field, lang, null);
+
+/**
+ * 「恢复默认」管哪些栏位（companyFields 的结果）：华文版只算中文改过的 —— 英文的改写在华文版里看不到，
+ * 不替设计师一起丢掉；English / 中英版中文、英文改过的都算
+ */
+export const editedCompanyFields = (fields, lang) => (fields || []).filter((f) => f.overridden?.zh || (lang !== 'zh' && !f.shared && f.overridden?.en));
+
+/** 只改了英文的栏位（华文版里提一句「另有 N 处英文改动」） */
+export const enOnlyEdits = (fields) => (fields || []).filter((f) => !f.shared && f.overridden?.en && !f.overridden?.zh);
+
+/** 恢复默认：华文版只清中文；English / 中英版中文、英文一起清 */
+export const resetCompanyFields = (project, slideId, fieldNames, lang) =>
+  (fieldNames || []).reduce((p, field) => {
+    const q = clearCompanyField(p, slideId, field, 'zh');
+    return lang === 'zh' ? q : clearCompanyField(q, slideId, field, 'en');
+  }, project);
+
+/** 版面上只排一行的栏位（目录、章节名、年份…）：回车、粘贴进来的换行都换成空格（不然页面上会截成「…」） */
+export const singleLine = (text) => String(text ?? '').replace(/[^\S\n]*\n+[^\S\n]*/g, ' ');
 
 /** 换照片：src = 新图；null = 恢复默认 */
 export function setCompanyImage(project, slideId, slot, src) {
@@ -504,16 +523,36 @@ const PHOTO_SLOT_BY_LABEL = (() => {
 
 /**
  * 提醒 → 一键修复（b/design.js、b/company.js 里的中文提示）
- *   { id:'framed'|'split'|'removeMissing'|'pickImage'|'gotoMaterials'|'focus'|'translate', label, field? }
+ *   { id:'framed'|'split'|'removeMissing'|'pickImage'|'gotoMaterials'|'focus'|'translate'|'dismissLegacy'|'hide', label, field? }
  *   pickImage / focus：把右侧对应的输入框（data-field = field）滚出来并聚焦
+ * @param {string} text
+ * @param {{ key?:string|null }} ctx  key = 这一页用的公司页（companyKeyOf）：公司页的提醒说的是栏位名，要它才对得上栏位
  */
-export function fixForWarning(text) {
+export function fixForWarning(text, ctx = {}) {
   const s = String(text || '');
   if (/满版大图不显示/.test(s)) return { id: 'framed', label: '换成图文' };
-  if (/说明太多放不下|材料太多|材料较多，视角名已缩小/.test(s)) return { id: 'split', label: '拆成两页' };
-  if (/说明太长/.test(s)) return { id: 'focus', label: '去精简说明', field: 'notes.0.text' };
-  if (/视角名太长/.test(s)) return { id: 'focus', label: '去改视角名', field: 'title' };
+  if (/水印会露出来/.test(s)) return { id: 'framed', label: '换成图文' };
+  if (/说明太多放不下|材料太多|材料表放不下|材料较多，视角名已缩小/.test(s)) return { id: 'split', label: '拆成两页' };
+  const longNote = s.match(/^说明太长（第 (\d+) 条(的标签)?）/);
+  if (longNote) return { id: 'focus', label: '去精简说明', field: `notes.${Number(longNote[1]) - 1}.${longNote[2] ? 'label' : 'text'}` };
+  if (/^说明太长/.test(s)) return { id: 'focus', label: '去精简说明', field: 'notes.0.text' };
+  if (/^视角名的英文太长/.test(s)) return { id: 'focus', label: '去改英文视角名', field: 'subtitleEn' };
+  if (/^视角名太长/.test(s)) return { id: 'focus', label: '去改视角名', field: 'title' };
+  if (/^空间英文名太长/.test(s)) return { id: 'focus', label: '去改空间英文名', field: 'roomEn' };
+  if (/^空间名太长/.test(s)) return { id: 'focus', label: '去改空间名', field: 'room' };
   if (/封面标题太长/.test(s)) return { id: 'focus', label: '去改标题', field: 'coverTitle' };
+  if (/^这一层的效果图都隐藏了|^这一层还没有效果图页/.test(s)) return { id: 'hide', label: '隐藏这一页' };
+  if (/编号太长/.test(s)) return { id: 'gotoMaterials', label: '去材料清单改编号' };
+  if (/^旧版里改过的字/.test(s)) return { id: 'dismissLegacy', label: '知道了' };
+  // 公司页：提醒里写的是栏位名（「第一章说明」「正文（英文）」）→ 那一栏
+  if (ctx.key) {
+    const cut = s.match(/^文字太长放不下：「(.+?)」/);
+    const cutField = cut && companyFieldByLabel(ctx.key, cut[1]);
+    if (cutField) return { id: 'focus', label: '去删减', field: cutField };
+    const stale = s.match(/^改过的中文还没有对应的英文：「(.+?)」/);
+    const staleField = stale && companyFieldByLabel(ctx.key, stale[1]);
+    if (staleField) return { id: 'focus', label: '去补英文', field: staleField.replace(/^overrides\./, 'overridesEn.') };
+  }
   if (/项材料已被删除/.test(s)) return { id: 'removeMissing', label: '移除失效的材料' };
   const unpicked = s.match(/^第 (\d+) 项还没选材料/);
   if (unpicked) return { id: 'focus', label: '去选材料', field: `materials.${Number(unpicked[1]) - 1}` };
@@ -527,7 +566,12 @@ export function fixForWarning(text) {
   const member = s.match(/服务团队第 (\d+) 位/);
   if (member) return { id: 'focus', label: '填写名字', field: `team.${Number(member[1]) - 1}.name` };
   if (/服务团队还没填名字/.test(s)) return { id: 'focus', label: '填写团队名字', field: 'team.0.name' };
-  if (/质保年数还没填/.test(s)) return { id: 'focus', label: '去填年数', field: /五金/.test(s) ? 'overrides.r3Text' : 'overrides.r4Text' };
+  // 质保年数：中文没填 → 中文栏（英文会自动跟着变成 5 years）；中文填了、英文没跟上 → 英文栏
+  const years = s.match(/质保年数(的英文)?还没填/);
+  if (years) {
+    const row = /^售后维保：五金/.test(s) ? 'r3Text' : 'r4Text';
+    return years[1] ? { id: 'focus', label: '去补英文', field: `overridesEn.${row}` } : { id: 'focus', label: '去填年数', field: `overrides.${row}` };
+  }
   if (isMissWarning(s)) return { id: 'translate', label: 'AI 翻译' };
   return null;
 }
@@ -541,10 +585,36 @@ export function applyFix(project, fixId, slideId, { newId } = {}) {
       return splitView(project, slideId, newId);
     case 'removeMissing':
       return removeMissingMaterials(project, slideId);
+    case 'hide':
+      return setSlideEnabled(project, slideId, false);
+    case 'dismissLegacy':
+      return clearLegacyEdits(project, slideId, langOf(project));
     default:
       return project;
   }
 }
+
+/**
+ * 旧版留下的改写（按元素序号的数字键，新版式没有对应栏位）：设计师对照过了，点「知道了」清掉。
+ * 华文版只清中文的（English / 中英版的英文改写看不到，不替设计师丢掉）
+ */
+export function clearLegacyEdits(project, slideId, lang = 'zh') {
+  const drop = new Set(legacyOverrides(findSlide(project, slideId), lang).map((x) => `${x.bucket}.${x.key}`));
+  if (!drop.size) return project;
+  return updateSlide(project, slideId, (s) => {
+    const next = { ...s };
+    for (const bucket of ['overrides', 'overridesEn']) {
+      if (!s[bucket]) continue;
+      const map = Object.fromEntries(Object.entries(s[bucket]).filter(([k]) => !drop.has(`${bucket}.${k}`)));
+      if (Object.keys(map).length) next[bucket] = map;
+      else delete next[bucket];
+    }
+    return next;
+  });
+}
+
+/** 这一页还留着的旧版改写（检查器里列出来对照）：[{ bucket, key, text }] */
+export const legacyEdits = (slide, project) => legacyOverrides(slide, langOf(project));
 
 // ---------------------------------------------------------------------------
 // 画布点选 → 检查器输入框

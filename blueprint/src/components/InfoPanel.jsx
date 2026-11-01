@@ -1,9 +1,10 @@
-// 项目信息：客户 / 地点 / 日期 / 标题 → 自动填进公司封面、方案封面、页脚；服务团队；楼层名称；方案章节显示开关；
+// 项目信息：客户 / 地点 / 日期 / 方案名 → 自动填进公司封面、方案封面、目录；服务团队；楼层名称；方案章节显示开关；
 // 提案语言（华文 / English / 中英）—— English / 中英版时，标题、客户、地点、团队职位下面多一个英文输入框（写进翻译记忆）
 
 import React, { useEffect, useRef } from 'react';
 import { Plus, Trash2, ChevronUp, ChevronDown, CalendarDays, Users, Layers, ListChecks, FileText, RotateCcw, Languages } from 'lucide-react';
 import { DEFAULT_TEAM } from '../engine/model.js';
+import { TEAM_MAX } from '../engine/b/design.js';
 import { designCoverTexts } from '../engine/deck.js';
 import { langOf } from '../engine/lang.js';
 import { TOGGLE_SECTIONS, sectionState, setSectionEnabled, kindState, setKindEnabled } from '../lib/project.js';
@@ -14,7 +15,7 @@ import { setLang, NOW } from './editor/ops.js';
 import { Segmented } from './editor/ui.jsx';
 import EnInput from './editor/EnInput.jsx';
 
-const MAX_TEAM = 6;
+const MAX_TEAM = TEAM_MAX;
 
 function Card({ icon: Icon, title, hint, children, right }) {
   return (
@@ -140,7 +141,7 @@ export default function InfoPanel({ project, onChange }) {
           <div className={cls.eyebrow}>Project Info</div>
           <h2 className="font-serif text-2xl text-bp-ink mt-1">项目信息</h2>
           <p className="mt-1.5 text-xs text-bp-muted max-w-3xl leading-relaxed">
-            这里填的内容会自动用在公司封面、方案封面、页脚和服务团队页上 —— 改一次，整套同步。
+            这里填的内容会自动用在公司封面、方案封面、目录和服务团队页上 —— 改一次，整套同步。
           </p>
         </div>
 
@@ -159,7 +160,7 @@ export default function InfoPanel({ project, onChange }) {
                 <Field label="地点" en={enFor(info.location)}>
                   <input className={cls.input} value={info.location || ''} onChange={(e) => setInfo({ location: e.target.value })} placeholder="如：Muar" />
                 </Field>
-                <Field label="日期" hint="显示在公司封面右下角">
+                <Field label="日期" hint="显示在公司封面的方案名下面（二〇二六年八月 / August 2026）">
                   <div className="flex gap-2">
                     <input className={cls.input} value={info.date || ''} onChange={(e) => setInfo({ date: e.target.value })} placeholder="2026 · 08" />
                     <button type="button" onClick={() => setInfo({ date: thisMonth() })} className={`${cls.btnGhost} shrink-0 !px-2.5`} title="填入本月">
@@ -167,7 +168,7 @@ export default function InfoPanel({ project, onChange }) {
                     </button>
                   </div>
                 </Field>
-                <Field label="方案标题" hint="公司封面的大标题" en={enFor(info.proposalTitle || '全屋定制设计方案')}>
+                <Field label="方案标题" hint="公司封面大标题（客户与地点）下面的那一行" en={enFor(info.proposalTitle || '全屋定制设计方案')}>
                   <input
                     className={cls.input}
                     value={info.proposalTitle || ''}
@@ -202,7 +203,7 @@ export default function InfoPanel({ project, onChange }) {
             <Card
               icon={Users}
               title="本案服务团队"
-              hint="生成「本案团队」页：有人填了名字时只放填了名字的（一个都没有时先列职位），最多 6 位"
+              hint={`生成「本案团队」页：有人填了名字时只放填了名字的（一个都没有时先列职位），最多 ${MAX_TEAM} 位（7 位起排两排）`}
               right={
                 <div className="flex items-center gap-1.5 shrink-0">
                   {!team.length && (
@@ -304,11 +305,11 @@ export default function InfoPanel({ project, onChange }) {
                   onChange={(on) => onChange((p) => setKindEnabled(p, 'team', on))}
                 />
               </div>
-              <p className="mt-3 text-[11px] text-bp-faint leading-relaxed">隐藏章节后，记得到「页面 → 目录」里把目录文字也改一下。</p>
+              <p className="mt-3 text-[11px] text-bp-faint leading-relaxed">隐藏的章节不进目录，后面章节的编号（目录、章节页、方案封面）自动往前排。</p>
             </Card>
 
             {floors.length > 0 && (
-              <Card icon={Layers} title="楼层" hint="楼层章节页和效果图页角标上的名字">
+              <Card icon={Layers} title="楼层" hint="楼层章节页、效果图页标签（一楼　客厅）、目录和方案封面上的楼层名">
                 <div className="space-y-2">
                   {floors.map((f) => (
                     <div key={f.id} className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] gap-2">

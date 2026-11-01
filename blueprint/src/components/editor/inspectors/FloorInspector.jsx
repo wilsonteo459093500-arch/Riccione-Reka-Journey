@@ -52,7 +52,7 @@ export default function FloorInspector({ project, slide, change, notify }) {
           </Field>
         </div>
         <p className="mt-1.5 text-[11px] text-bp-faint leading-snug">
-          改这里会同步到这一层的 {viewCount} 张效果图页（英文小标题、页脚）以及目录、方案封面。
+          改这里会同步到楼层章节页、这一层 {viewCount} 张效果图页的标签（一楼　客厅），以及目录、方案封面上的楼层；英文名用在 English / 中英版。
         </p>
       </Section>
 

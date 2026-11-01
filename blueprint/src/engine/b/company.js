@@ -7,17 +7,23 @@
 //   中英并重：中文、英文同样大小，左右并排或上下对照
 //
 // 数据：
-//   文字字段 slide.overrides[字段] = 中文、slide.overridesEn[字段] = 英文（字符串才算改过；旧模板的数字键自动忽略）
+//   文字字段 slide.overrides[字段] = 中文、slide.overridesEn[字段] = 英文（字符串才算改过）
+//   只改了中文、没写英文：中文本来就是英文（Mr & Mrs Lau）= 英文也用它；质保年数「5 年」、日期能自动换成英文（5 years / August 2026）；
+//     其余照旧用英文默认稿，并提醒「改过的中文还没有对应的英文」
 //   英文栏清空（overridesEn[字段] = ''）= 英文里不要这一行：English 版不显示（不退回中文），中英版只显示中文
+//   旧模板按元素序号的改写（数字键）新版式不读：打开旧项目时意思一样的几处已搬到新栏位（lib/project.js upgradeProject），
+//     剩下的在页面上提醒设计师对照（legacyOverrides），点「知道了」清掉
 //   照片 slide.images[照片位] = 'asset:…'（换图）；null / '' = 这一页不要这张照片（会提醒）
 //   {{token}} 由 ctx.tokens（deck.js projectTokens）填，另外补上本页要用的：coverName / coverNameEn（客户 + 地点两行）、
-//   dateZh / dateEn（二〇二六年八月 / August 2026）、designTitle / designTitleEn
+//   dateZh / dateEn（二〇二六年八月 / August 2026）、designTitle / designTitleEn、chapterZh / chapterEn（这一页所在章节的编号：
+//   第二章 / Chapter Two —— 老客户隐藏了前面的章节，后面的编号跟着往前排，见 deckChapters）
 //
 // 输出：renderCompanyB(key, slide, ctx) → { bg, els, warnings }；编辑字段 overrides.<字段> / overridesEn.<字段> / image.<照片位>
 
 import {
   B, INSET, STACK_GAP, styleOf, runsOf, lineWidth, wrapCount, block, pick, hair, page, hasCJK,
 } from './kit.js';
+import { balanceText } from './text.js';
 import { PX_PER_PT } from '../../theme.js';
 import { fillTokens } from '../spec.js';
 import { clientLine, floorsLine } from '../model.js';
@@ -96,9 +102,12 @@ export const PHOTO_SLOTS = {
 // ---------------------------------------------------------------------------
 // 19 页：编辑器页名、章节、文字字段（中文 / 英文默认稿）、照片位
 //   字段没有 en = 中英同一段（品牌名、年份、地址），英文版也用它
+//   oneLine = 版面上只排一行（目录、章节名、年份、标签…）：编辑器里按回车不换行
+//   enFrom = 只改了中文时英文怎么自动跟着变（'years'：「5 年」→ 5 years；'date'：「2026 年 9 月」→ September 2026）
 // ---------------------------------------------------------------------------
 
 const F = (zh, en, label, extra = {}) => ({ zh, en, label, ...extra });
+const ONE = { oneLine: true };
 
 export const COMPANY_PAGES_B = {
   cover: {
@@ -107,7 +116,7 @@ export const COMPANY_PAGES_B = {
     fields: {
       name: F('{{coverName}}', '{{coverNameEn}}', '客户与地点（大标题）', { multiline: true }),
       subtitle: F('{{proposalTitle}}', '{{proposalTitleEn}}', '方案名称'),
-      date: F('{{dateZh}}', '{{dateEn}}', '日期'),
+      date: F('{{dateZh}}', '{{dateEn}}', '日期', { ...ONE, enFrom: 'date' }),
     },
     images: PHOTO_SLOTS['cover'],
   },
@@ -115,15 +124,16 @@ export const COMPANY_PAGES_B = {
     title: '目录',
     section: 'opening',
     fields: {
-      title: F('目录', 'Contents', '标题'),
-      ch1: F('品牌', 'Brand', '第一章'),
-      ch1Line: F('自然栖居，生活回归', 'Living naturally, returning to life', '第一章说明'),
-      ch2: F('公司', 'Company', '第二章'),
-      ch2Line: F('十年匠心，中马双市场', 'A decade of craft, in Malaysia and China', '第二章说明'),
-      ch3: F('方案', 'Design', '第三章'),
-      ch3Line: F('{{floorsLine}}，逐个空间的设计', '{{floorsLineEn}}, room by room', '第三章说明'),
-      ch4: F('服务', 'Service', '第四章'),
-      ch4Line: F('团队、流程、周期与维保', 'Team, process, lead times and aftercare', '第四章说明'),
+      // 每一行跟着章节走（ch1 = 品牌 … ch4 = 服务）：隐藏的章节不列，编号按看得到的章节重排（01、02…）
+      title: F('目录', 'Contents', '标题', ONE),
+      ch1: F('品牌', 'Brand', '章名 · 品牌', ONE),
+      ch1Line: F('自然栖居，生活回归', 'Living naturally, returning to life', '说明 · 品牌', ONE),
+      ch2: F('公司', 'Company', '章名 · 公司', ONE),
+      ch2Line: F('十年匠心，中马双市场', 'A decade of craft, in Malaysia and China', '说明 · 公司', ONE),
+      ch3: F('方案', 'Design', '章名 · 方案', ONE),
+      ch3Line: F('{{floorsLine}}，逐个空间的设计', '{{floorsLineEn}}, room by room', '说明 · 方案', ONE),
+      ch4: F('服务', 'Service', '章名 · 服务', ONE),
+      ch4Line: F('团队、流程、周期与维保', 'Team, process, lead times and aftercare', '说明 · 服务', ONE),
     },
     images: PHOTO_SLOTS['contents'],
   },
@@ -131,7 +141,7 @@ export const COMPANY_PAGES_B = {
     title: '品牌 · 章节页',
     section: 'brand',
     fields: {
-      label: F('第一章　品牌', 'Chapter One — Brand', '章节'),
+      label: F('{{chapterZh}}　品牌', '{{chapterEn}} — Brand', '章节', ONE),
       title: F('自然栖居\n生活回归', 'Living naturally,\nreturning to life', '大标题', { multiline: true }),
       lead: F('溪岸，是一处美而朴素的水边。', 'SAIL is the bank of a quiet stream.', '一句话'),
     },
@@ -163,10 +173,10 @@ export const COMPANY_PAGES_B = {
         '正文',
         { multiline: true },
       ),
-      year1: F('2011', undefined, '年份一'),
-      place1: F('成都', 'Chengdu', '地点一'),
-      year2: F('2025', undefined, '年份二'),
-      place2: F('马来西亚', 'Malaysia', '地点二'),
+      year1: F('2011', undefined, '年份一', ONE),
+      place1: F('成都', 'Chengdu', '地点一', ONE),
+      year2: F('2025', undefined, '年份二', ONE),
+      place2: F('马来西亚', 'Malaysia', '地点二', ONE),
     },
     images: PHOTO_SLOTS['brand-story'],
   },
@@ -174,7 +184,7 @@ export const COMPANY_PAGES_B = {
     title: '原创系列',
     section: 'brand',
     fields: {
-      title: F('原创系列', 'Original Collections', '标题'),
+      title: F('原创系列', 'Original Collections', '标题', ONE),
       note: F('每一个系列，都从自然与真实的生活里来。', 'Every collection begins with nature\nand everyday life.', '一句话', { multiline: true }),
       c1: F('骨骼线', 'Skeleton Line', '系列一'),
       c1Line: F('古典与现代的对话', 'Classic meets modern', '系列一说明'),
@@ -194,16 +204,16 @@ export const COMPANY_PAGES_B = {
     section: 'brand',
     fields: {
       title: F('设计奖项', 'Design Awards', '标题'),
-      y1: F('2021', undefined, '年份一'),
+      y1: F('2021', undefined, '年份一', ONE),
       a1: F('美国 MUSE 缪斯设计奖 · 金奖', 'MUSE Design Awards, USA · Gold', '奖项一'),
       a1Note: F('溪岸 4.0 系列 · 从 100 多个国家和地区的 3.8 万件作品中选出', 'SAIL 4.0 Series · chosen from 38,000 entries in 100+ countries', '奖项一说明'),
-      y2: F('2022', undefined, '年份二'),
+      y2: F('2022', undefined, '年份二', ONE),
       a2: F('HCA 高定家居设计奖 · 年度产品设计奖', 'HCA Home Design Awards · Product of the Year', '奖项二'),
       a2Note: F('自然线系列 · 广州设计周', 'Natural Line Series · Guangzhou Design Week', '奖项二说明'),
-      y3: F('2023', undefined, '年份三'),
+      y3: F('2023', undefined, '年份三', ONE),
       a3: F('HCA 高定家居设计奖 · 年度产品设计至尊奖', 'HCA Home Design Awards · Supreme Award', '奖项三'),
       a3Note: F('骨骼线 · 闲庭 · 终评前三', 'Skeleton Line · Leisure Courtyard · top three finalist', '奖项三说明'),
-      y4: F('2024', undefined, '年份四'),
+      y4: F('2024', undefined, '年份四', ONE),
       a4: F('HCA 高定家居设计奖 · 年度产品设计奖', 'HCA Home Design Awards · Product of the Year', '奖项四'),
       a4Note: F('骨骼线 · 山居', 'Skeleton Line · Mountain Dwelling', '奖项四说明'),
     },
@@ -213,7 +223,7 @@ export const COMPANY_PAGES_B = {
     title: '全球供应链',
     section: 'brand',
     fields: {
-      title: F('全球供应链', 'Global Supply Chain', '标题'),
+      title: F('全球供应链', 'Global Supply Chain', '标题', ONE),
       lead: F('与国际品牌直接合作，从源头保证正品品质。', 'We work directly with international brands,\nensuring genuine quality from the source.', '一句话', { multiline: true }),
       s1: F('板材', 'Boards', '类别一'),
       s1Brands: F('Kastamonu · Egger · Skin', undefined, '类别一品牌'),
@@ -228,7 +238,7 @@ export const COMPANY_PAGES_B = {
     title: '公司 · 章节页',
     section: 'company',
     fields: {
-      label: F('第二章　公司', 'Chapter Two — Company', '章节'),
+      label: F('{{chapterZh}}　公司', '{{chapterEn}} — Company', '章节', ONE),
       title: F('瑞吉欧', 'Riccione', '大标题', { multiline: true }),
       lead: F('名字取自意大利的一座海滨小镇。', 'Named after a seaside town in Italy.', '一句话'),
     },
@@ -256,23 +266,23 @@ export const COMPANY_PAGES_B = {
     title: '发展历程',
     section: 'company',
     fields: {
-      title: F('发展历程', 'Our Journey', '标题'),
+      title: F('发展历程', 'Our Journey', '标题', ONE),
       lead: F('从马来西亚到中国，十年匠心。', 'From Malaysia to China, a decade of craft.', '一句话'),
-      y1: F('2015', undefined, '年份一'),
+      y1: F('2015', undefined, '年份一', ONE),
       e1: F('Riccione Furniture 在马来西亚成立，以实木家具起步', 'Riccione Furniture is founded in Malaysia as a solid-wood brand', '大事一'),
-      y2: F('2017', undefined, '年份二'),
+      y2: F('2017', undefined, '年份二', ONE),
       e2: F('进军中国：佛山 21,000 平方尺旗舰展厅\n获 Archidex 最佳展位设计奖', 'Enters China with a 21,000 sq ft flagship showroom in Foshan\nWins Best Booth Design at Archidex', '大事二', { multiline: true }),
-      y3: F('2018', undefined, '年份三'),
+      y3: F('2018', undefined, '年份三', ONE),
       e3: F('出口中国超过 600 个集装箱\n经销商近 1,000 家', 'Ships more than 600 containers to China\nBuilds a network of nearly 1,000 dealers', '大事三', { multiline: true }),
-      y4: F('2019', undefined, '年份四'),
+      y4: F('2019', undefined, '年份四', ONE),
       e4: F('首次亮相 CIFF 广州，产品销往日本与欧洲\n获佛山最佳家具设计奖', 'Debuts at CIFF Guangzhou, with sales to Japan and Europe\nWins Best Furniture Design in Foshan', '大事四', { multiline: true }),
-      y5: F('2020', undefined, '年份五'),
+      y5: F('2020', undefined, '年份五', ONE),
       e5: F('吉隆坡 11,000 平方尺国际工程展厅落成\n受邀参展 CIFF 上海设计馆', 'Opens an 11,000 sq ft project showroom in Kuala Lumpur\nExhibits at the CIFF Shanghai Design Pavilion by invitation', '大事五', { multiline: true }),
-      y6: F('2022', undefined, '年份六'),
+      y6: F('2022', undefined, '年份六', ONE),
       e6: F('拓展工程项目：住宅、酒店与商业空间', 'Expands into projects for homes, hotels and commercial spaces', '大事六'),
-      y7: F('2024', undefined, '年份七'),
+      y7: F('2024', undefined, '年份七', ONE),
       e7: F('中国转为品牌专卖，开到 18 家门店\n马来西亚线上线下一体化零售', 'Grows to 18 brand stores in China\nBrings online and offline retail together in Malaysia', '大事七', { multiline: true }),
-      y8: F('2025', undefined, '年份八'),
+      y8: F('2025', undefined, '年份八', ONE),
       e8: F('Riccione Reka 全屋定制成立，成为溪岸东南亚总代理', "Riccione Reka is founded as SAIL's Southeast Asia distributor", '大事八'),
     },
     images: PHOTO_SLOTS['company-history'],
@@ -315,7 +325,7 @@ export const COMPANY_PAGES_B = {
     title: '方案 · 章节页（无 Material Board 时的封面）',
     section: 'design',
     fields: {
-      label: F('第三章　方案', 'Chapter Three — Design', '章节'),
+      label: F('{{chapterZh}}　方案', '{{chapterEn}} — Design', '章节', ONE),
       title: F('{{designTitle}}', '{{designTitleEn}}', '大标题（客户与地点）', { multiline: true }),
       lead: F('{{floorsLine}}，逐个空间的设计。', '{{floorsLineEn}}, room by room.', '一句话'),
     },
@@ -325,7 +335,7 @@ export const COMPANY_PAGES_B = {
     title: '服务 · 章节页',
     section: 'service',
     fields: {
-      label: F('第四章　服务', 'Chapter Four — Service', '章节'),
+      label: F('{{chapterZh}}　服务', '{{chapterEn}} — Service', '章节', ONE),
       title: F('服务与交付', 'Service & Delivery', '大标题', { multiline: true }),
       lead: F('团队、流程、周期与维保。', 'Team, process, lead times and aftercare.', '一句话'),
     },
@@ -335,7 +345,7 @@ export const COMPANY_PAGES_B = {
     title: '服务流程',
     section: 'service',
     fields: {
-      title: F('服务流程', 'Service Process', '标题'),
+      title: F('服务流程', 'Service Process', '标题', ONE),
       lead: F('五个步骤，从设计交底到交付使用。', 'Five steps, from the design briefing to handover.', '一句话'),
       s1: F('设计与基装交底验收', 'Design and site handover', '步骤一'),
       s1Text: F('与基装方交底，复核现场条件', 'Brief the main contractor and re-check site conditions', '步骤一说明'),
@@ -357,11 +367,11 @@ export const COMPANY_PAGES_B = {
       title: F('订单周期', 'Lead Times', '标题'),
       // 天数是中英共用的一个数字（只印一次）；单位「天 / days」另一个字段
       s1: F('免漆系列', 'Paint-Free Series', '系列一'),
-      s1N: F('60–75', undefined, '系列一天数'),
-      s1Unit: F('天', 'days', '系列一单位'),
+      s1N: F('60–75', undefined, '系列一天数', ONE),
+      s1Unit: F('天', 'days', '系列一单位', ONE),
       s2: F('实木系列', 'Solid Wood Series', '系列二'),
-      s2N: F('75–90', undefined, '系列二天数'),
-      s2Unit: F('天', 'days', '系列二单位'),
+      s2N: F('75–90', undefined, '系列二天数', ONE),
+      s2Unit: F('天', 'days', '系列二单位', ONE),
     },
     images: PHOTO_SLOTS['service-cycle'],
   },
@@ -376,9 +386,9 @@ export const COMPANY_PAGES_B = {
       r2: F('每年', 'Every year', '第二项'),
       r2Text: F('一次集中维保调试', 'One scheduled maintenance visit', '第二项内容'),
       r3: F('五金质保', 'Hardware warranty', '第三项'),
-      r3Text: F('＿＿ 年', '____ years', '五金质保年数（设计师填）'),
+      r3Text: F('＿＿ 年', '____ years', '五金质保年数（设计师填）', { enFrom: 'years' }),
       r4: F('板材质保', 'Panel warranty', '第四项'),
-      r4Text: F('＿＿ 年', '____ years', '板材质保年数（设计师填）'),
+      r4Text: F('＿＿ 年', '____ years', '板材质保年数（设计师填）', { enFrom: 'years' }),
     },
     images: PHOTO_SLOTS['service-aftersales'],
   },
@@ -387,11 +397,11 @@ export const COMPANY_PAGES_B = {
     section: 'service',
     fields: {
       title: F('在溪岸\n回归生活的美好', 'By the stream,\nback to the beauty of everyday life.', '结语', { multiline: true }),
-      l1: F('马来西亚展厅', 'Malaysia Showroom', '联系一'),
+      l1: F('马来西亚展厅', 'Malaysia Showroom', '联系一', ONE),
       v1: F('Seksyen U13, 23-3, Jln Setia Prima SU13/S,\nSetia Alam, 40170 Shah Alam, Selangor', undefined, '展厅地址', { multiline: true }),
-      l2: F('电话', 'Phone', '联系二'),
+      l2: F('电话', 'Phone', '联系二', ONE),
       v2: F('+6011-2233 1919 (WhatsApp)', undefined, '电话号码'),
-      l3: F('线上', 'Online', '联系三'),
+      l3: F('线上', 'Online', '联系三', ONE),
       v3: F('www.saildz.com\nInstagram @sail_malaysia', undefined, '网站与社交', { multiline: true }),
     },
     images: PHOTO_SLOTS['closing'],
@@ -399,6 +409,114 @@ export const COMPANY_PAGES_B = {
 };
 
 export const COMPANY_KEYS_B = Object.keys(COMPANY_PAGES_B);
+
+// ---------------------------------------------------------------------------
+// 章节：老客户可以隐藏品牌 / 公司 / 服务（项目信息 → 方案章节显示）——
+// 目录只列看得到的章节、编号重排；章节页的「第二章」与方案封面的章节标签跟着变
+// ---------------------------------------------------------------------------
+
+/** 四个章节，按目录的顺序（目录里第 n 章的栏位 = ch{n}、ch{n}Line，跟着章节走） */
+export const CHAPTERS = ['brand', 'company', 'design', 'service'];
+const CN_NUM = ['〇', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+const EN_NUM = ['Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
+/** 2 → 「第二章」 */
+export const chapterZh = (n) => `第${CN_NUM[n] ?? n}章`;
+/** 2 → 「Chapter Two」 */
+export const chapterEn = (n) => `Chapter ${EN_NUM[n] ?? n}`;
+
+const ALL_CHAPTERS = { list: [...CHAPTERS], num: { brand: 1, company: 2, design: 3, service: 4 } };
+
+/**
+ * 整套里看得到哪几章（只算会导出的页）：
+ *   品牌 / 公司 / 服务 = 这一章有启用的公司页（封底一直保留，不算服务章的内容）；
+ *   方案 = 方案封面、本案材料、楼层页、效果图页有一页启用
+ * 没有任何页的项目（单独排一页时）= 四章都在
+ * @returns {{ list:string[], num:Record<string,number> }}  num = 每章的编号（隐藏的那章 = 它若显示时排第几）
+ */
+export function deckChapters(project) {
+  const slides = project?.slides || [];
+  if (!slides.length) return ALL_CHAPTERS;
+  const shown = new Set();
+  for (const s of slides) {
+    if (!s || s.enabled === false) continue;
+    if (s.kind === 'company') {
+      const sec = COMPANY_PAGES_B[s.key]?.section;
+      if (CHAPTERS.includes(sec) && s.key !== 'closing') shown.add(sec);
+    } else if (s.kind === 'designCover' || s.kind === 'materials' || s.kind === 'floor' || s.kind === 'view') {
+      shown.add('design');
+    }
+  }
+  const list = CHAPTERS.filter((c) => shown.has(c));
+  const num = Object.fromEntries(CHAPTERS.map((c, i) => [c, 1 + CHAPTERS.slice(0, i).filter((x) => shown.has(x)).length]));
+  return { list, num };
+}
+
+// ---------------------------------------------------------------------------
+// 旧模板的改写（按元素序号的数字键）：新版式不读；还留在数据里的列出来提醒设计师
+// ---------------------------------------------------------------------------
+
+const isLegacyKey = (k) => /^\d+$/.test(k);
+
+/**
+ * 这一页还留着的旧版改写：[{ bucket:'overrides'|'overridesEn', key, text }]（华文只看中文的；English / 中英两种都看）
+ * 意思和新栏位一样的几处（封面、售后维保的质保年数、封底联系方式…）打开旧项目时已经搬走了（lib/project.js upgradeProject）
+ */
+export function legacyOverrides(slide, lang = 'zh') {
+  const out = [];
+  const buckets = lang === 'zh' ? ['overrides'] : ['overrides', 'overridesEn'];
+  for (const bucket of buckets) {
+    for (const [key, v] of Object.entries(slide?.[bucket] || {})) {
+      if (isLegacyKey(key) && typeof v === 'string' && v.trim()) out.push({ bucket, key, text: v.trim() });
+    }
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// 只改了中文时，英文自动跟着变（enFrom）
+// ---------------------------------------------------------------------------
+
+const CN_DIGIT_VAL = { 〇: 0, 零: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+
+/** 「五」「十」「十五」「二十」→ 数字（1–99；认不出 = null） */
+function cnNumber(s) {
+  const t = String(s ?? '').trim();
+  if (/^\d+(?:\.\d+)?$/.test(t)) return Number(t);
+  const m = /^([一二两三四五六七八九])?(十)?([一二三四五六七八九])?$/.exec(t);
+  if (!m || !t) return null;
+  if (!m[2]) return m[1] && !m[3] ? CN_DIGIT_VAL[m[1]] : null;
+  return (m[1] ? CN_DIGIT_VAL[m[1]] : 1) * 10 + (m[3] ? CN_DIGIT_VAL[m[3]] : 0);
+}
+
+/** 质保年数：「5 年」「10年」「五年」「3–5 年」→ '5 years'（1 → '1 year'；认不出 = ''） */
+export function yearsEn(zh) {
+  const t = clean(zh).replace(/\s+/g, '');
+  const m = /^([0-9.]+|[一二两三四五六七八九十]+)(?:[-–~至到]([0-9.]+|[一二两三四五六七八九十]+))?年?$/.exec(t);
+  if (!m) return '';
+  const a = cnNumber(m[1]);
+  const b = m[2] ? cnNumber(m[2]) : null;
+  if (a == null || (m[2] && b == null)) return '';
+  if (b != null) return `${a}–${b} years`;
+  return a === 1 ? '1 year' : `${a} years`;
+}
+
+const EN_FROM = {
+  years: (zh) => yearsEn(zh),
+  // 认得出年月的（2026 · 09、二〇二六年九月）→ September 2026；认不出 = ''（纯英文的 Spring 2026 由下面原样用）
+  date: (zh) => dateEn(zh, () => ''),
+};
+
+/**
+ * 只改了中文、英文没改时英文用什么（'' = 没法自动，用英文默认稿并提醒）：
+ *   能按 enFrom 换算的（「5 年」→ 5 years）→ 换算的英文；中文里一个汉字都没有（Mr & Mrs Lau、电话号码）→ 就用它
+ */
+function autoEnOf(f, zh) {
+  const v = clean(zh);
+  if (!v) return '';
+  const derived = f.enFrom && EN_FROM[f.enFrom] ? EN_FROM[f.enFrom](v) : '';
+  if (derived) return derived;
+  return hasCJKText(v) ? '' : v;
+}
 
 // ---------------------------------------------------------------------------
 // token：客户 / 地点 / 日期
@@ -410,7 +528,11 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 const clean = (s) => String(s ?? '').replace(/\r/g, '').replace(/[ \t]+$/gm, '').replace(/^\n+|\n+$/g, '').trim();
 
 function parseDate(s) {
-  const m = String(s ?? '').match(/(\d{4})\D{0,4}?(\d{1,2})(?!\d)/);
+  // 「二〇二六年九月」（封面默认的写法）先换成数字
+  const t = String(s ?? '')
+    .replace(/([〇零一二三四五六七八九]{4})(?=\s*年)/, (y) => [...y].map((c) => CN_DIGIT_VAL[c]).join(''))
+    .replace(/年\s*(十[一二]?|[一二三四五六七八九])\s*月/, (all, mo) => `年${cnNumber(mo)}月`);
+  const m = t.match(/(\d{4})\D{0,4}?(\d{1,2})(?!\d)/);
   if (!m) return null;
   const mo = Number(m[2]);
   return mo >= 1 && mo <= 12 ? { y: Number(m[1]), mo } : null;
@@ -519,6 +641,8 @@ export function clampLines(text, lg, role, w, maxLines, over) {
 /**
  * 一块文字：x = 文字左边缘（框向左让出内边距，与样张一致），y = 第一行行框的顶
  *   valign:'b' = 落在底线上的字（章节页大标题、一句话、封面客户名…）：框内靠底排，万一引擎多估了一行，最后一行仍落在原来的基线上
+ *   大字（display / head）折成两三行时均衡断行（b/text.js）：行数不变，不留落单的一个词（「… and / Family」）
+ *   截短了的文字框记一笔（_cut，finish() 里收走）：提醒里说得出是哪一栏
  * @returns {{ el, h, lines, bottom, top, lang, cut }}
  */
 function tb(x, y, w, text, lang, role, opts = {}) {
@@ -527,6 +651,8 @@ function tb(x, y, w, text, lang, role, opts = {}) {
   let t = String(text ?? '');
   let cut = false;
   if (opts.maxLines) ({ text: t, cut } = clampLines(t, lg, role, w, opts.maxLines, over));
+  // 截短过的也均衡（每一段的行数不变，「…」仍在最后）
+  if (!opts.nowrap && (role === 'display' || role === 'head')) t = balanceText(t, lg, role, w, over);
   const b = block(x - INSET, y, w + 2 * INSET, t, lg, role, {
     over,
     nowrap: opts.nowrap,
@@ -534,6 +660,7 @@ function tb(x, y, w, text, lang, role, opts = {}) {
     ...(opts.edit ? { edit: opts.edit } : {}),
   });
   if (opts.valign === 'b') b.el.valign = 'b';
+  if (cut) b.el._cut = true;
   return { ...b, top: y, lang: lg, cut };
 }
 
@@ -796,6 +923,13 @@ function makeR(key, slide, ctx) {
   // 真的用到、又没有翻译时，再通过 tr 记下来（touch）
   const peek = (s) => (lang === 'zh' ? '' : resolveEn(project, s, 'text').text);
   const tokens = companyTokensB(project, peek, ctx?.tokens || null);
+  // 这一页所在章节的编号（隐藏了前面的章节就往前排）：章节页的「第二章」/「Chapter Two」
+  const chapters = ctx?.chapters || deckChapters(project);
+  if (CHAPTERS.includes(def.section)) {
+    const n = chapters.num?.[def.section] ?? CHAPTERS.indexOf(def.section) + 1;
+    tokens.chapterZh = chapterZh(n);
+    tokens.chapterEn = chapterEn(n);
+  }
   const info = project.info || {};
   const TOKEN_SRC = {
     coverNameEn: [info.client, info.location],
@@ -820,12 +954,15 @@ function makeR(key, slide, ctx) {
   };
   const fill = (s) => clean(fillTokens(s, tokens));
   const staleEn = [];
+  const areaCuts = []; // 截短了、但说不出是哪一栏的（整组排不下）
+  const cutFields = []; // 明确知道是哪一栏少排了（例如封底地址超过三行）
 
   const R = {
     key,
     def,
     lang,
     tokens,
+    chapters,
     warnings,
     warn,
     /** 一个字段的中英文（含设计师的改写） */
@@ -836,13 +973,15 @@ function makeR(key, slide, ctx) {
       const oe = slide?.overridesEn?.[field];
       const zh = fill(typeof oz === 'string' ? oz : f.zh);
       const shared = f.en === undefined;
-      const en = typeof oe === 'string' ? fill(oe) : shared ? zh : fill(f.en);
+      // 只改了中文：能自动换成英文的（Mr & Mrs Lau、5 年 → 5 years）英文跟着变，不再提醒
+      const auto = !shared && typeof oz === 'string' && typeof oe !== 'string' ? autoEnOf(f, zh) : '';
+      const en = typeof oe === 'string' ? fill(oe) : shared ? zh : auto || fill(f.en);
       const fields = { field: `overrides.${field}`, fieldEn: shared && typeof oe !== 'string' ? `overrides.${field}` : `overridesEn.${field}` };
       // 英文栏清空 = 这一行在英文里不要：English 版不显示（不退回中文），中英版只显示中文
       if (typeof oe === 'string' && !en) return { zh: lang === 'en' ? '' : zh, en: '', ...fields };
       // 这一段的英文用到了还没有翻译的客户 / 地点 / 方案名：现在才记「缺英文」（页面会提醒）
-      touch(typeof oe === 'string' ? oe : f.en);
-      if (lang !== 'zh' && !shared && typeof oz === 'string' && typeof oe !== 'string' && clean(oz) !== clean(fillTokens(f.zh, tokens))) {
+      if (!auto) touch(typeof oe === 'string' ? oe : f.en);
+      if (lang !== 'zh' && !shared && !auto && typeof oz === 'string' && typeof oe !== 'string' && clean(oz) !== clean(fillTokens(f.zh, tokens))) {
         staleEn.push(f.label);
       }
       return { zh, en, ...fields };
@@ -906,17 +1045,65 @@ function makeR(key, slide, ctx) {
       };
     },
     logo: (x, y, w = 224) => ({ t: 'img', x, y, w, h: Math.round((w * LOGO.nat.h) / LOGO.nat.w * 10) / 10, src: LOGO.src, nat: LOGO.nat, fit: 'contain', name: 'logo' }),
+    /** 这一组有截短（说不出是哪一栏时，提醒里用 what 说位置） */
     cutWarn(cut, what) {
-      if (cut) warn(`文字太长放不下：「${what}」已截短（末尾「…」）—— 请删减`);
+      if (cut && !areaCuts.includes(what)) areaCuts.push(what);
+    },
+    /** 这一栏少排了（不是靠「…」截短的，例如封底的地址只排前三行） */
+    cutAt(field) {
+      if (field && !cutFields.includes(field)) cutFields.push(field);
     },
     finish(els) {
+      // 截短提醒：说出是哪几栏（「第一章说明」「正文（英文）」）—— 编辑器的一键修复直接跳到那一栏
+      for (const el of els) {
+        if (!el?._cut) continue;
+        if (el.edit?.field && !cutFields.includes(el.edit.field)) cutFields.push(el.edit.field);
+        delete el._cut;
+      }
+      const named = cutFields.map((f) => fieldLabel(def, f)).filter(Boolean);
+      if (named.length) {
+        warn(`文字太长放不下：${[...new Set(named)].slice(0, 3).map((s) => `「${s}」`).join('')}已截短（末尾「…」）—— 请删减`);
+      } else if (areaCuts.length) {
+        warn(`文字太长放不下：「${areaCuts[0]}」已截短（末尾「…」）—— 请删减`);
+      }
       if (lang !== 'zh' && staleEn.length) {
         warn(`改过的中文还没有对应的英文：${[...new Set(staleEn)].slice(0, 3).map((s) => `「${s}」`).join('')} —— 在右侧英文栏里补上`);
+      }
+      // 旧版留下的改写（新版式没有对应的栏位）：列出来，设计师对照着重新填，再点「知道了」清掉
+      const legacy = legacyOverrides(slide, lang);
+      if (legacy.length) {
+        const sample = legacy
+          .slice(0, 2)
+          .map((x) => `「${x.text.length > 14 ? `${x.text.slice(0, 14)}…` : x.text}」`)
+          .join('');
+        warn(`旧版里改过的字新版式没有沿用（${legacy.length} 处）：${sample} —— 需要的话在右侧重新填，再点「知道了」`);
       }
       return page(els, warnings);
     },
   };
   return R;
+}
+
+/** 编辑字段（overrides.<栏位> / overridesEn.<栏位>）→ 编辑器里的栏位名（英文的加「（英文）」） */
+function fieldLabel(def, editField) {
+  const m = /^(overrides|overridesEn)\.(\w+)$/.exec(String(editField || ''));
+  const f = m && def.fields[m[2]];
+  if (!f) return '';
+  return m[1] === 'overridesEn' ? `${f.label}（英文）` : f.label;
+}
+
+/**
+ * 提醒里的栏位名 → 编辑字段（编辑器的一键修复用）：「第一章说明」→ overrides.ch1Line；「正文（英文）」→ overridesEn.body
+ * @returns {string|null}
+ */
+export function companyFieldByLabel(key, label) {
+  const def = COMPANY_PAGES_B[key];
+  if (!def || !label) return null;
+  const en = /（英文）$/.test(label);
+  const name = label.replace(/（英文）$/, '');
+  const hit = Object.entries(def.fields).find(([, f]) => f.label === name);
+  if (!hit) return null;
+  return `${en ? 'overridesEn' : 'overrides'}.${hit[0]}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -966,16 +1153,21 @@ function layCover(R) {
   return [...els, ...g.els];
 }
 
-/** 目录：标题挂在 96；四章一行一行，细线分隔，落在 984 */
+/**
+ * 目录：标题挂在 96；看得到的几章一行一行，细线分隔，落在 984。
+ * 老客户隐藏了品牌 / 公司 / 服务章节：那一章不列，编号按看得到的章节重排（01、02…）；每行的文字仍是那一章的栏位
+ */
 function layContents(R) {
   const { lang } = R;
   const head = pstack(120, 96, 828, 'head', R.pair('title'), lang, { maxLines: 1 });
   let cut = false;
   const pad = lang === 'bi' ? 26 : 34;
+  const shown = (R.chapters?.list || CHAPTERS).map((c) => CHAPTERS.indexOf(c) + 1).filter((i) => i > 0);
+  if (!shown.length) return head.els;
   const rows = (y0) => {
     const out = [hair(120, y0, 1680)];
     let y = y0;
-    for (let i = 1; i <= 4; i++) {
+    for (const [n, i] of shown.map((idx, k) => [k + 1, idx])) {
       const top = y + pad;
       const t = pstack(404, top, 402, 'head', R.pair(`ch${i}`), lang, { maxLines: 1 });
       const t0 = t.blocks[0];
@@ -991,7 +1183,7 @@ function layContents(R) {
         if (zhLines === 1) gap = Math.max(0, enBase - baseOf(li[1].lg, 'body') - (dTop + 40));
       }
       const d = pstack(972, dTop, 828, 'body', line, lang, { gap, maxLines: 1 });
-      const num = tb(120, firstBase - baseOf('en', 'cap'), 142, `0${i}`, 'en', 'cap', { nowrap: true });
+      const num = tb(120, firstBase - baseOf('en', 'cap'), 142, String(n).padStart(2, '0'), 'en', 'cap', { nowrap: true });
       out.push(num.el, ...t.els, ...d.els);
       cut = cut || t.cut || d.cut;
       y = Math.max(t.bottom, d.bottom) + pad;
@@ -1400,11 +1592,21 @@ function layAftersales(R) {
     build: (k) => listRows(rows, lang, { x: 120, w: 970, labelW: 284, valueX: 404, valueW: 686, valueMax: k }),
   });
   R.cutWarn(cut, '售后维保');
-  const blank = [3, 4].filter((n) => {
+  // 质保年数还是空格（＿＿）：中文没填 → 填中文（「5 年」，英文自动跟着变成 5 years）；
+  // 中文填了、英文自动换不过来（写的不是「几年」）→ 提醒补英文（编辑器跳到英文栏）
+  const BLANK = /[＿_]{2,}/;
+  const name = (n) => (n === 3 ? '五金' : '板材');
+  const todo = [3, 4].map((n) => {
     const p = R.pair(`r${n}Text`);
-    return /[＿_]{2,}/.test(lang === 'en' ? p.en : p.zh) || (lang === 'bi' && /[＿_]{2,}/.test(p.en));
+    const zhOk = !BLANK.test(p.zh);
+    const enOk = lang === 'zh' || !BLANK.test(p.en);
+    // English 版里直接填了英文、中文还空着也算填好（页面上只有英文）
+    return { n, need: !zhOk && (lang !== 'en' || !enOk) ? 'zh' : !enOk ? 'en' : null };
   });
-  if (blank.length) R.warn(`售后维保：${blank.map((n) => (n === 3 ? '五金' : '板材')).join('、')}质保年数还没填 —— 在右侧把「＿＿」改成年数`);
+  const zhTodo = todo.filter((t) => t.need === 'zh').map((t) => name(t.n));
+  const enTodo = todo.filter((t) => t.need === 'en').map((t) => name(t.n));
+  if (zhTodo.length) R.warn(`售后维保：${zhTodo.join('、')}质保年数还没填 —— 在右侧把「＿＿」改成年数`);
+  if (enTodo.length) R.warn(`售后维保：${enTodo.join('、')}质保年数的英文还没填 —— 在右侧英文栏里把「____」改成年数（如 5 years）`);
   return [R.photo('photo', 1256, 0, 544, 984), ...head.els, ...lead.els, ...list.els];
 }
 
@@ -1424,7 +1626,7 @@ function layClosing(R) {
       // 行距：第一行 40（与中文标签同行），之后 36（与英文标签同行）；行高按行数算（样张：两行 = 96）
       const pitches = [40, 36, 36, 36];
       const lines = val ? val.text.split('\n').slice(0, 3) : [];
-      if (val && val.text.split('\n').length > 3) cut = true;
+      if (val && val.text.split('\n').length > 3) R.cutAt(val.field);
       let cur = top;
       lines.forEach((line, i) => {
         const lh = pitches[i];
@@ -1498,12 +1700,18 @@ export function renderCompanyB(key, slide = {}, ctx = {}) {
 
 /**
  * 编辑器右侧的栏位：每个字段的中文 / 英文（当前显示的字、默认稿、是否改过）
- * @returns {Array<{ field, label, zh, en, zhDefault, enDefault, overridden:{zh:boolean,en:boolean}, multiline:boolean, shared:boolean, tokens:boolean }>}
+ * @returns {Array<{ field, label, zh, en, zhDefault, enDefault, overridden:{zh:boolean,en:boolean}, multiline:boolean, oneLine:boolean,
+ *   autoEn:boolean, hidden:boolean, shared:boolean, tokens:boolean, chapter:boolean }>}
  */
 export function companyFieldsB(key, slide = {}, project = {}) {
   const def = COMPANY_PAGES_B[key];
   if (!def) return [];
   const tokens = companyTokensB(project, (s) => resolveEn(project, s, 'text').text);
+  const chapters = deckChapters(project);
+  if (CHAPTERS.includes(def.section)) {
+    tokens.chapterZh = chapterZh(chapters.num[def.section]);
+    tokens.chapterEn = chapterEn(chapters.num[def.section]);
+  }
   const fill = (s) => clean(fillTokens(s, tokens));
   return Object.entries(def.fields).map(([field, f]) => {
     const oz = slide?.overrides?.[field];
@@ -1512,7 +1720,11 @@ export function companyFieldsB(key, slide = {}, project = {}) {
     const zhDefault = fill(f.zh);
     const zh = typeof oz === 'string' ? fill(oz) : zhDefault;
     const enDefault = shared ? zhDefault : fill(f.en);
-    const en = typeof oe === 'string' ? fill(oe) : shared ? zh : enDefault;
+    // 与页面一致：只改了中文时能自动换成英文的（5 年 → 5 years、Mr & Mrs Lau）英文跟着变
+    const autoEn = !shared && typeof oz === 'string' && typeof oe !== 'string' ? autoEnOf(f, zh) : '';
+    const en = typeof oe === 'string' ? fill(oe) : shared ? zh : autoEn || enDefault;
+    // 目录里被隐藏的那一章：栏位还能改，只是页面上不列
+    const ch = key === 'contents' ? /^ch(\d)/.exec(field) : null;
     return {
       field,
       label: f.label,
@@ -1522,8 +1734,13 @@ export function companyFieldsB(key, slide = {}, project = {}) {
       enDefault,
       overridden: { zh: typeof oz === 'string', en: typeof oe === 'string' },
       multiline: !!f.multiline || zhDefault.includes('\n') || enDefault.includes('\n'),
+      oneLine: !!f.oneLine,
+      autoEn: !!autoEn,
+      hidden: !!ch && !chapters.list.includes(CHAPTERS[Number(ch[1]) - 1]),
       shared,
-      tokens: /\{\{\w+\}\}/.test(`${f.zh}${f.en ?? ''}`),
+      // tokens = 跟着「项目信息」的客户 / 地点 / 日期 / 楼层；chapter = 章节编号（隐藏了前面的章节就往前排）
+      tokens: /\{\{(?!chapter)\w+\}\}/.test(`${f.zh}${f.en ?? ''}`),
+      chapter: /\{\{chapter(Zh|En)\}\}/.test(`${f.zh}${f.en ?? ''}`),
     };
   });
 }

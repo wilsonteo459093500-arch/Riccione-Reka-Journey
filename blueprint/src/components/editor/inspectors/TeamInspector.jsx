@@ -19,7 +19,7 @@ export default function TeamInspector({ project, change, onGoTab }) {
   return (
     <Section title="本案服务团队" icon={Users} right={<span className="text-[11px] text-bp-faint">页面显示 {visible.length} 位</span>}>
       <p className="mb-3 text-[11px] text-bp-faint leading-snug">
-        和「项目信息」里的服务团队是同一份名单；有人填了名字时只放填了名字的（一个都没有时先列职位），最多 6 位。
+        和「项目信息」里的服务团队是同一份名单；有人填了名字时只放填了名字的（一个都没有时先列职位），最多 12 位（7 位起排两排）。
         <button type="button" onClick={() => onGoTab?.('info')} className="inline-flex items-center text-bp-eyebrow font-medium hover:underline ml-1">
           去项目信息
           <ArrowUpRight className="w-3 h-3" />

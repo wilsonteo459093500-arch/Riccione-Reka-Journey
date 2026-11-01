@@ -1,5 +1,5 @@
 // 编辑器共用的样式与小部件（与 UKIR STUDIO 同一套圆角卡片 / 按钮风格）
-import React, { useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useDismiss } from './hooks.js';
 
@@ -144,13 +144,56 @@ export function MenuList({ items, className = '', onDone }) {
   );
 }
 
-/** 自动长高的多行输入 */
-export function AutoTextarea({ value, onChange, minRows = 1, maxRows = 8, className = '', ...rest }) {
+/** 页面里在滚动的祖先（量高度时先记下滚动位置，量完放回去 —— 不然框瞬间变 0 高会让检查器跳一下） */
+function scrollPositions(el) {
+  const out = [];
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    if (p.scrollTop > 0) out.push([p, p.scrollTop]);
+  }
+  const se = document.scrollingElement;
+  if (se?.scrollTop > 0) out.push([se, se.scrollTop]);
+  return out;
+}
+
+/**
+ * 自动长高的多行输入：按内容量出真实高度（scrollHeight）—— 检查器再窄，字也不会藏在框外（中文、英文框都一样）。
+ * 内容或宽度变了才重新量；标签页隐藏时量不到（高度是 0），等显示出来（ResizeObserver）再量；量到之前先按「每行 34 字」估行数。
+ * 超过 maxRows 行才在框里滚动。
+ */
+export function AutoTextarea({ value, onChange, minRows = 1, maxRows = 30, className = '', ...rest }) {
+  const ref = useRef(null);
   const lines = String(value ?? '').split('\n').length;
   const rows = Math.max(minRows, Math.min(maxRows, lines + (String(value ?? '').length > 34 * lines ? 1 : 0)));
+  const fit = useCallback(() => {
+    const el = ref.current;
+    if (!el || !el.offsetParent) return;
+    const key = `${el.clientWidth}|${minRows}|${el.value}`;
+    if (el.dataset.fit === key) return;
+    const saved = scrollPositions(el);
+    const cs = window.getComputedStyle(el);
+    const lh = parseFloat(cs.lineHeight) || 20;
+    const pad = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+    const border = (parseFloat(cs.borderTopWidth) || 0) + (parseFloat(cs.borderBottomWidth) || 0);
+    el.style.height = '0px';
+    const content = el.scrollHeight; // 含上下内边距
+    const max = maxRows * lh + pad;
+    el.style.height = `${Math.ceil(Math.min(Math.max(content, minRows * lh + pad), max) + border)}px`;
+    el.style.overflowY = content > max + 1 ? 'auto' : 'hidden';
+    el.dataset.fit = key;
+    for (const [p, top] of saved) p.scrollTop = top;
+  }, [minRows, maxRows]);
+  useLayoutEffect(fit);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(() => fit());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fit]);
   return (
     <textarea
       {...rest}
+      ref={ref}
       rows={rows}
       value={value ?? ''}
       onChange={(e) => onChange(e.target.value)}

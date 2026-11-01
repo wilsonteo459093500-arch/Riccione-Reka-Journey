@@ -53,6 +53,9 @@ const VIEW_TERMS = {
   '俯视': 'Top View',
   '俯瞰': 'Top View',
   '鸟瞰': "Bird's-Eye View",
+  // AI 立体图页的默认标题（ai/dollhouse.js）：楼层页「全屋立体图」配楼层名标签（Ground Floor / 3D Overview），全屋页「立体图」
+  '立体图': '3D View',
+  '全屋立体图': '3D Overview',
   '近景': 'Close-Up',
   '特写': 'Close-Up',
   '局部': 'Detail',

@@ -15,7 +15,7 @@ import { getProject } from '../store/db.js';
 import { preloadProjectAssets, onAssetsChanged, storeBlob } from '../store/assets.js';
 import { uploadImage } from './editor/upload.js';
 import { useProjectState, waitForSaves } from '../lib/useProjectState.js';
-import { designCoverSlideId, projectStats, ensureDesignCoverSlide, upgradeProject } from '../lib/project.js';
+import { designCoverSlideId, projectStats, ensureDesignCoverSlide, upgradeProject, legacyEditPages } from '../lib/project.js';
 import { cls } from '../lib/ui.jsx';
 
 export const TABS = [
@@ -66,8 +66,18 @@ export default function Editor({ projectId, settings, notify, onOpenSettings, on
         if (missing) {
           notify({ type: 'warn', text: `有 ${missing} 张图片在本机找不到了（可能清理过浏览器数据），对应位置会显示灰块。` });
         }
-        // 旧项目升级到现在的版式（效果图版式交还给自动排版，见 lib/project.js upgradeProject）
-        setLoaded({ project: upgradeProject(project) });
+        // 旧项目升级到现在的版式（效果图版式交还给自动排版、旧版改的字搬到新栏位，见 lib/project.js upgradeProject）
+        const upgraded = upgradeProject(project);
+        setLoaded({ project: upgraded });
+        // 旧版改过的字有搬不过来的（新版式没有那个位置）：说一次是哪几页，那几页上有提醒和「知道了」
+        const legacy = upgraded !== project ? legacyEditPages(upgraded) : [];
+        if (legacy.length) {
+          const names = [...new Set(legacy.map((x) => `「${x.title}」`))].slice(0, 4).join('');
+          notify({
+            type: 'warn',
+            text: `这份提案换成了新版式：${names}${legacy.length > 4 ? ' 等页' : ''}在旧版里改过的字，新版式里没有对应的位置，没有沿用 —— 这几页有提醒，请对照着重新填一下。`,
+          });
+        }
       } catch (e) {
         if (alive) setLoaded({ error: e?.message || String(e) });
       }

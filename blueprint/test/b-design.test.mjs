@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { test } from './harness.mjs';
 import {
-  bDesignCover, bFloor, bViewFull, bViewPlate, bMaterials, bTeam, planViews, bViewPage, baseOff, balanceLine, floorPageImage,
+  bDesignCover, bFloor, bViewFull, bViewPlate, bMaterials, bTeam, planViews, bViewPage, baseOff, balanceLine, floorPageImage, materialSlices,
 } from '../src/engine/b/design.js';
 import { B, INSET, GRID, colX, spanW } from '../src/engine/b/kit.js';
 import { makeTranslator } from '../src/engine/lang.js';
@@ -18,6 +18,7 @@ const SIZES = {
   '/kitchen.jpg': [2400, 1526], '/bedroom.jpg': [2400, 1350], '/vanity.jpg': [2400, 1365], '/wine.jpg': [2400, 1907],
   '/tea.jpg': [2400, 1350], '/portrait.jpg': [849, 1279], '/square.jpg': [1753, 1800], '/tiny.jpg': [343, 400],
   '/board.jpg': [1800, 2400], '/board-wide.jpg': [2400, 1350], '/sw-small.jpg': [200, 200], '/sw-400.jpg': [400, 400], '/tiny-wide.jpg': [800, 450],
+  '/r1700.jpg': [1700, 956], '/r1800.jpg': [1800, 1013], '/r1920.jpg': [1920, 1080],
   '/mat-oak.jpg': [600, 600], '/mat-travertine.jpg': [600, 600], '/mat-walnut.jpg': [600, 600],
   '/mat-white.jpg': [600, 600], '/mat-stone.jpg': [600, 600], '/mat-rattan.jpg': [600, 600],
 };
@@ -426,18 +427,26 @@ test('提醒：缺图、像素偏低、材料 / 说明放不下、材料被删�
   const notes = Array.from({ length: 6 }, (_, i) => ({ label: `收纳${i}`, text: '转角拉篮，调味品抽屉，另一侧是两个大抽屉，抽屉里分格放锅具与保鲜盒。' }));
   assert.match(w(bViewPlate(ctx, { ...kitchen, notes })), /说明太多放不下：建议拆成两页/);
   const huge = '餐边柜嵌进墙里，与墙面齐平；开放格里放日常用的器物，下面是两个大抽屉，抽屉里分格放餐具与桌布。'.repeat(4);
-  assert.match(w(bViewPlate(ctx, { ...kitchen, notes: [{ label: '', text: huge }] })), /说明太长：建议精简或拆页/);
+  assert.match(w(bViewPlate(ctx, { ...kitchen, notes: [{ label: '', text: huge }] })), /说明太长（第 1 条）：建议精简或拆页/);
   assert.match(w(bViewPlate(ctx, { ...kitchen, materials: [{ role: '柜体', materialId: 'gone' }, { role: '台面', materialId: null }] })), /第 1 项材料已被删除.*第 2 项还没选材料/);
 
   const floorP = sample('bi');
   floorP.slides = [{ id: 'fx', kind: 'floor', floorId: 'f1', enabled: true }, ...Array.from({ length: 30 }, (_, i) => ({ id: `r${i}`, kind: 'view', enabled: true, floorId: 'f1', image: null, room: `房间${i}`, subtitle: '', materials: [], notes: [] }))];
   assert.match(w(bFloor(ctxOf(floorP, 'bi'), floorP.slides[0])), /本层空间太多，楼层页只显示了 \d+ \/ 30 个/);
   floorP.slides = [floorP.slides[0]];
+  assert.match(w(bFloor(ctxOf(floorP, 'bi'), floorP.slides[0])), /这一层还没有效果图页：楼层章节页后面没有内容/);
+  // 有效果图页、但都没有图：楼层页没有背景图
+  floorP.slides = [floorP.slides[0], { id: 'r0', kind: 'view', enabled: true, floorId: 'f1', image: null, room: '客厅', subtitle: '', materials: [], notes: [] }];
   assert.match(w(bFloor(ctxOf(floorP, 'bi'), floorP.slides[0])), /楼层章节页没有背景图/);
+  // 这一层的效果图都隐藏了：提醒把楼层页也隐藏（不再只说没有背景图）
+  floorP.slides[1] = { ...floorP.slides[1], enabled: false };
+  const hiddenFloor = w(bFloor(ctxOf(floorP, 'bi'), floorP.slides[0]));
+  assert.match(hiddenFloor, /这一层的效果图都隐藏了/);
+  assert.doesNotMatch(hiddenFloor, /没有背景图/);
 
   const teamP = sample('bi');
-  teamP.info.team = Array.from({ length: 7 }, (_, i) => ({ name: `Name ${i}`, role: '设计师' }));
-  assert.match(w(bTeam(ctxOf(teamP, 'bi'))), /只显示了前 6 位/);
+  teamP.info.team = Array.from({ length: 13 }, (_, i) => ({ name: `Name ${i}`, role: '设计师' }));
+  assert.match(w(bTeam(ctxOf(teamP, 'bi'))), /只显示了前 12 位/);
 
   assert.match(w(bMaterials(ctx, [], 0, 1)), /本案材料为空/);
   const lowMat = bMaterials(ctx, [{ id: 'mx', name: '小样', code: 'X1', image: '/sw-small.jpg' }], 0, 1);
@@ -485,11 +494,16 @@ test('方案封面：没有 Material Board 返回 null；有就整张放进右�
   assert.ok(near(base(zh, 'zh'), base(en, 'en')), '并排的中英同一基线');
   assert.ok(near(Math.max(zh.y + zh.h, en.y + en.h) - INSET, 984), '楼层这一行落在 984');
 
+  // 横版 Board（16:9）：面板放宽到第 4–12 栏、落在 984（与楼层那一行同一条底线），不再缩在右上角
   const wide = sample('en');
   wide.cover.image = '/board-wide.jpg';
-  const b2 = imgs(bDesignCover(ctxOf(wide, 'en')))[0];
-  assert.equal(b2.w, 970);
-  assert.equal(b2.y, 96);
+  const wpg = bDesignCover(ctxOf(wide, 'en'));
+  const b2 = imgs(wpg)[0];
+  assert.equal(b2.w, 1254);
+  assert.equal(b2.x, colX(4));
+  assert.equal(b2.y + b2.h, 984);
+  assert.ok(Math.abs(b2.w / b2.h - 2400 / 1350) < 0.01, '横版也一点不裁');
+  for (const el of texts(wpg)) assert.ok(el.x + el.w - INSET <= b2.x - 54 + 0.5, `文字在 Board 左边：${el.paras[0].runs[0].text}`);
 });
 
 test('方案封面：自己改过的方案名没有英文时不拿通用英文顶替（记下缺英文）；默认方案名才配默认英文', () => {
@@ -859,4 +873,141 @@ test('bViewPage：按 plan 分派；没给 plan 时自己算', () => {
   const tv = p.slides.find((s) => s.id === 'v-tv');
   assert.equal(texts(bViewPage(ctx, tv)).length, 0);
   assert.ok(texts(bViewPage(ctx, tv, new Map([[tv.id, 'plate']]))).length > 0);
+});
+
+// ---------------------------------------------------------------------------
+// 复核修正：长编号、材料分页、水印、立体图标签、两排团队、章节编号、提醒说清是哪一栏
+// ---------------------------------------------------------------------------
+
+const LONG = { id: 'm-long', name: '意大利进口超白岩板（哑光）', code: 'LAMINAM-CALCE-BIANCO-12MM', image: '/mat-stone.jpg' };
+
+test('长编号（带品牌前缀）不挤掉名称：另起一行、靠右，所有材料行都印出来；太长才提醒', () => {
+  for (const lang of LANGS) {
+    const p = sample(lang);
+    p.materials = [...p.materials, LONG, { id: 'm-egger', name: '暖白橡', code: 'EGGER H1145 ST10', image: '/mat-oak.jpg' }];
+    p.translations = { ...TRANSLATIONS, [LONG.name]: 'Italian Ultra-White Sintered Stone (Matt)', 暖白橡: 'Warm White Oak' };
+    const kitchen = p.slides.find((s) => s.id === 'v-kitchen');
+    const v = { ...kitchen, notes: [], materials: [{ role: '台面', materialId: 'm-long' }, { role: '柜体', materialId: 'm-egger' }, ...kitchen.materials.slice(0, 2)] };
+    const pg = bViewPlate(ctxOf(p, lang), v);
+    checkPage(`${lang} 长编号图文页`, pg);
+    // 名称一栏（左对齐的字）至少留 60%：不再被编号挤成一个字一行（靠右的是编号，本来就窄）
+    for (const el of texts(pg).filter((e) => e.paras[0].align !== 'r' && /^materials\.\d+(\.nameEn)?$/.test(e.edit?.field || ''))) {
+      assert.ok(el.w - 2 * INSET >= 0.6 * (402 - 142), `${lang}: 「${textOf(el)}」的框只有 ${(el.w - 2 * INSET).toFixed(0)} 宽`);
+    }
+    const rows = new Set(texts(pg).map((e) => e.edit?.field).filter((f) => /^materials\.\d+$/.test(f || '')));
+    assert.equal(rows.size, 4, `${lang}: 4 行材料都印出来`);
+    assert.ok(!pg.warnings.some((w) => /材料太多|材料表放不下/.test(w)), pg.warnings.join(' / '));
+    assert.ok(pg.warnings.some((w) => /^材料编号太长：「LAMINAM-CALCE-BIANCO-12MM」/.test(w)), '26 字的编号要折行：提醒');
+    assert.ok(!pg.warnings.some((w) => /EGGER/.test(w)), '16 字的编号另起一行就放得下：不提醒');
+    // 编号另起一行、靠右（与短编号同一条右边线）
+    const code = texts(pg).find((e) => /EGGER H1145 ST10/.test(textOf(e)));
+    assert.equal(code.paras[0].align, 'r');
+    assert.ok(near(code.x + code.w - INSET, 1800, 0.5));
+    // 中英版 5 行（两行带长编号）确实放不下：说清楚是第几项起没印，而不是「材料太多」
+    if (lang === 'bi') {
+      const five = bViewPlate(ctxOf(p, lang), { ...v, materials: [...v.materials, kitchen.materials[2]] });
+      assert.ok(five.warnings.includes('材料表放不下：第 5 项起没有印出来 —— 建议精简名称或拆成两页'), five.warnings.join(' / '));
+    }
+    // 材料页：小样不被挤扁
+    const mp = bMaterials(ctxOf(p, lang), p.materials, 0, 1);
+    checkPage(`${lang} 长编号材料页`, mp);
+    for (const pl of plates(mp)) assert.ok(pl.h >= 150, `${lang}: 小样只有 ${pl.h} 高`);
+  }
+});
+
+test('材料分页：名称 / 编号正常时和以前一样（12 种一页、两排均分）；说明把两排的小样挤扁时改成一页一排', () => {
+  const mats = (n, long = false) => Array.from({ length: n }, (_, i) => (long && i % 2 ? { ...LONG, id: `L${i}` } : { id: `m${i}`, name: '浅川橡', code: `AG${200 + i}`, image: '/mat-oak.jpg' }));
+  for (const lang of LANGS) {
+    const ctx = ctxOf(sample(lang), lang);
+    assert.deepEqual(materialSlices(ctx, mats(7)).map((s) => [s.mats.length, s.rows]), [[7, 2]]);
+    assert.deepEqual(materialSlices(ctx, mats(14)).map((s) => [s.mats.length, s.rows]), [[7, 2], [7, 2]]);
+    assert.deepEqual(materialSlices(ctx, mats(30)).map((s) => s.mats.length), [10, 10, 10]);
+  }
+  const p = sample('bi');
+  p.translations = { ...TRANSLATIONS, [LONG.name]: 'Italian Ultra-White Sintered Stone (Matt)' };
+  const ctx = ctxOf(p, 'bi');
+  const slices = materialSlices(ctx, mats(12, true));
+  assert.ok(slices.every((s) => s.rows === 1 && s.mats.length <= 6), JSON.stringify(slices.map((s) => [s.mats.length, s.rows])));
+  slices.forEach((s, i) => {
+    const pg = bMaterials(ctx, s.mats, i, slices.length, s.perPage, s.rows);
+    checkPage(`bi 长名称材料页 ${i + 1}`, pg);
+    for (const pl of plates(pg)) assert.ok(pl.h >= 0.6 * pl.w, `小样 ${pl.w}×${pl.h} 被挤扁`);
+  });
+});
+
+test('满版大图要裁得掉右下角的水印：像素不够（16:9 约 1845 宽以下）自动排成图文；设定满版就提醒', () => {
+  const p = sample('zh');
+  const mk = (id, image) => ({ id, kind: 'view', enabled: true, floorId: 'f2', layout: 'auto', image, room: `测试${id}`, roomEn: '', subtitle: '', materials: [], notes: [] });
+  p.slides = [...p.slides, mk('w17', '/r1700.jpg'), { ...mk('sep1', '/entry.jpg'), notes: [{ label: '', text: 'x' }] }, mk('w18', '/r1800.jpg'), { ...mk('sep2', '/entry.jpg'), notes: [{ label: '', text: 'x' }] }, mk('w19', '/r1920.jpg')];
+  const plan = planViews(p, meta);
+  assert.equal(plan.get('w17'), 'plate');
+  assert.equal(plan.get('w18'), 'plate');
+  assert.equal(plan.get('w19'), 'full');
+  const ctx = ctxOf(p, 'zh');
+  const forced = bViewFull(ctx, { ...mk('w18', '/r1800.jpg'), layout: 'full' });
+  assert.ok(forced.warnings.some((w) => /水印会露出来.*改用「图文」/.test(w)), forced.warnings.join(' / '));
+  assert.ok(!bViewFull(ctx, mk('w19', '/r1920.jpg')).warnings.some((w) => /水印/.test(w)));
+  // 图文页的图小一些：1800 宽的图裁得够，不提醒
+  const plate = bViewPlate(ctx, mk('w18', '/r1800.jpg'));
+  assert.ok(!plate.warnings.some((w) => /水印/.test(w)));
+  assert.ok(imgs(plate)[0].crop.b >= 0.095 - 1e-6);
+});
+
+test('AI 立体图页（图文）：标签只写一次楼层，不印「一楼　一楼」；默认标题有英文（3D Overview / 3D View）', () => {
+  for (const lang of LANGS) {
+    const p = sample(lang);
+    p.floors = [...p.floors, { id: 'floor-all', zh: '全屋', en: 'WHOLE HOME' }];
+    const d1 = { id: 'd1', kind: 'view', enabled: true, tag: '3d', floorId: 'f1', layout: 'framed', image: '/living.jpg', room: '一楼', roomEn: '3D OVERVIEW', subtitle: '全屋立体图', materials: [], notes: [] };
+    const d2 = { ...d1, id: 'd2', floorId: 'floor-all', room: '全屋', subtitle: '立体图' };
+    const a = bViewPlate(ctxOf(p, lang), d1);
+    const b = bViewPlate(ctxOf(p, lang), d2);
+    checkPage(`${lang} 立体图`, a);
+    assert.doesNotMatch(allText(a), /一楼　一楼|全屋　全屋/);
+    assert.doesNotMatch(allText(b), /全屋　全屋/);
+    if (lang !== 'zh') {
+      assert.match(allText(a), /Ground Floor\n|Ground Floor$/m);
+      assert.match(allText(a), /3D Overview/);
+      assert.match(allText(b), /3D View/);
+      assert.equal(ctxOf(p, lang).tr.misses.length, 0);
+    }
+  }
+});
+
+test('团队 7–12 位排两排（上排多一位），两排同一套栏、下排落在 984、都不重叠；12 位以上才提醒', () => {
+  for (const lang of LANGS) {
+    for (const n of [7, 9, 12]) {
+      const p = sample(lang);
+      p.info.team = Array.from({ length: n }, (_, i) => ({ name: `Name ${i + 1}`, role: '方案设计师' }));
+      const pg = bTeam(ctxOf(p, lang));
+      checkPage(`${lang} 团队 ${n}`, pg);
+      const names = texts(pg).filter((e) => /^team\.\d+\.name$/.test(e.edit?.field || ''));
+      assert.equal(names.length, n);
+      assert.deepEqual(pg.warnings, []);
+      const xs = [...new Set(names.map((e) => e.x))];
+      assert.equal(xs.length, Math.ceil(n / 2), '两排同一套栏');
+      const lastBottom = Math.max(...names.map((e) => e.y + e.h - INSET));
+      assert.ok(near(lastBottom, 984, 0.5), `下排落在 984：${lastBottom}`);
+    }
+  }
+});
+
+test('方案封面的章节标签跟着整套的章节编号（隐藏了品牌 / 公司 → 第一章）', () => {
+  const p = sample('bi');
+  const pg = bDesignCover({ ...ctxOf(p, 'bi'), chapters: { list: ['design', 'service'], num: { brand: 1, company: 1, design: 1, service: 2 } } });
+  assert.match(allText(pg), /第一章　方案/);
+  assert.match(allText(pg), /Chapter One — Design/);
+});
+
+test('提醒说清是哪一栏：第几条说明（只有标签时是标签）、标题是空间名还是视角名、中文还是英文', () => {
+  const p = sample('bi');
+  const ctx = ctxOf(p, 'bi');
+  const tea = p.slides.find((s) => s.id === 'v-tea');
+  const portrait = { ...tea, image: '/entry.jpg', materials: [] };
+  const long = '这是一段非常非常长的说明，'.repeat(30);
+  assert.ok(bViewPlate(ctx, { ...portrait, notes: [{ label: '', text: '' }, { label: '', text: long }] }).warnings.includes('说明太长（第 2 条）：建议精简或拆页'));
+  assert.ok(bViewPlate(ctx, { ...portrait, notes: [{ label: '说明', text: '' }, { label: long, text: '' }] }).warnings.includes('说明太长（第 2 条的标签）：建议精简或拆页'));
+  const w = (s) => bViewPlate(ctx, { ...portrait, notes: [], ...s }).warnings.join(' | ');
+  assert.match(w({ subtitle: '', room: '主人房衣帽间与化妆区及步入式储物空间连通阳台', roomEn: 'Dressing' }), /^空间名太长/);
+  assert.match(w({ subtitle: '', room: '主人房', roomEn: 'Master Bedroom Walk-In Wardrobe, Dressing Area and Reading Corner by the Window' }), /空间英文名太长/);
+  assert.match(w({ subtitle: '这是一个非常非常长的视角名称用来测试标题过长的情况' }), /视角名太长/);
 });

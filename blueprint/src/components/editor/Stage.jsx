@@ -7,7 +7,7 @@ import SlideCanvas from '../SlideCanvas.jsx';
 import { resolveUrl, metaOf } from '../../store/assets.js';
 import { langOf } from '../../engine/lang.js';
 import { LANG_OPTIONS, LANG_VERSION, toolbarCompactWidth } from '../../lib/langUi.js';
-import { fixForWarning } from './ops.js';
+import { fixForWarning, companyKeyOf } from './ops.js';
 import { useElementSize } from './hooks.js';
 import { Menu, Segmented, btnGhost } from './ui.jsx';
 
@@ -103,7 +103,7 @@ function Toolbar({
           icon={Sparkles}
           width="w-60"
           items={[
-            { label: '润色全部效果图标题…', icon: Sparkles, hint: '看图改写视角名、英文小标题和备注，逐页确认后套用', onClick: () => onPolish() },
+            { label: '润色全部效果图标题…', icon: Sparkles, hint: '看图改写视角名、空间英文名和备注，逐页确认后套用', onClick: () => onPolish() },
             isView && { label: '只润色这一页…', icon: Wand2, onClick: () => onPolish(true) },
           ]}
         />
@@ -166,6 +166,8 @@ export default function Stage({
   }
 
   const warnings = page?.warnings || [];
+  // 公司页的提醒说的是栏位名（「第一章说明」）：一键修复要知道这一页用的是哪张公司页
+  const fixCtx = { key: companyKeyOf(slide, project) };
 
   return (
     <div className="flex flex-col h-full min-h-0 min-w-0">
@@ -240,7 +242,7 @@ export default function Stage({
         {warnings.length > 0 ? (
           <ul className="space-y-1.5">
             {warnings.map((w, i) => {
-              const fix = fixForWarning(w);
+              const fix = fixForWarning(w, fixCtx);
               return (
                 <li key={i} className="flex flex-wrap items-center gap-2 rounded-xl bg-bp-warn/10 border border-bp-warn/25 px-3 py-1.5 text-xs text-bp-ink">
                   <TriangleAlert className="w-3.5 h-3.5 text-bp-warn shrink-0" />

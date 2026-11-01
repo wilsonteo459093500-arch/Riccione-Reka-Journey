@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import React from 'react';
 import { Type, LayoutTemplate, Image as ImageIcon, Palette, StickyNote, ArrowUp, ArrowDown, X, Plus, Sparkles, CopyCheck, MoveRight, Box } from 'lucide-react';
 import { findFloor, uid } from '../../../engine/model.js';
 import { langOf } from '../../../engine/lang.js';
@@ -13,9 +13,9 @@ import ImageField from '../ImageField.jsx';
 import MaterialPicker from '../MaterialPicker.jsx';
 import EnInput, { EnBox, EnAlias, EN_BADGE, EN_PLACEHOLDER } from '../EnInput.jsx';
 
-// 效果图页：标题（房间 · 视角名）、英文小标题、楼层、版式、图片、材料、说明。
+// 效果图页：标题（房间 · 视角名）、空间英文名、楼层、版式、图片、材料、说明。
 // English / 中英版：每个中文栏下面紧跟一个一样大的英文框（EN）—— 视角名、材料部位、材料名、备注写进翻译记忆（整套共用）；
-// 空间英文名是这一页的 roomEn（华文版里它是「英文小标题」）。华文版界面与原来一样。
+// 空间英文名是这一页的 roomEn：华文版的页面上不印英文，这一栏只是先填好、给 English / 中英版用。
 
 const LAYOUT_LABEL = { full: '满版大图', framed: '图文' };
 
@@ -26,51 +26,6 @@ const ROOM_BADGE = {
   glossary: { ...EN_BADGE.glossary, title: '词典自动翻译；在这里填 = 只改这一页' },
   missing: EN_BADGE.missing,
 };
-
-/** 页面在滚动的祖先（量高度时先记下滚动位置，量完放回去 —— 不然多行框瞬间变 0 高会让检查器跳一下） */
-function scrollPositions(el) {
-  const out = [];
-  for (let p = el.parentElement; p; p = p.parentElement) {
-    if (p.scrollTop > 0) out.push([p, p.scrollTop]);
-  }
-  const se = document.scrollingElement;
-  if (se?.scrollTop > 0) out.push([se, se.scrollTop]);
-  return out;
-}
-
-/**
- * 让里面的多行框（中文说明和它的英文）按内容长高：AutoTextarea 按「每行 34 字」估行数，检查器这么窄时会少算、把字藏起来。
- * 内容或宽度变了才重新量；标签页隐藏时量不到（高度是 0），等显示出来（ResizeObserver）再量。
- */
-function GrowWrap({ children, className = '' }) {
-  const ref = useRef(null);
-  const fit = useCallback(() => {
-    const root = ref.current;
-    if (!root || !root.offsetParent) return;
-    const list = [...root.querySelectorAll('textarea')].filter((el) => el.dataset.fit !== `${el.clientWidth}|${el.value}`);
-    if (!list.length) return;
-    const saved = scrollPositions(root);
-    for (const el of list) {
-      el.style.height = '0px';
-      el.style.height = `${el.scrollHeight + 2}px`; // + 上下边框
-      el.dataset.fit = `${el.clientWidth}|${el.value}`;
-    }
-    for (const [p, top] of saved) p.scrollTop = top;
-  }, []);
-  useLayoutEffect(fit);
-  useEffect(() => {
-    const root = ref.current;
-    if (!root || typeof ResizeObserver === 'undefined') return undefined;
-    const ro = new ResizeObserver(() => fit());
-    ro.observe(root);
-    return () => ro.disconnect();
-  }, [fit]);
-  return (
-    <div ref={ref} className={className}>
-      {children}
-    </div>
-  );
-}
 
 /** 空间英文名（English / 中英版）：样子和 EnInput 一样，写这一页的 roomEn */
 function RoomEnInput({ project, slide, onChange, className = '' }) {
@@ -213,7 +168,7 @@ export default function ViewInspector({ project, slide, change, notify, openPoli
           </button>
         </div>
         {!en && (
-          <Field label="英文小标题" className="mt-2.5" hint={`页面上自动转成大写，前面带楼层英文：${[floor?.en, (slide.roomEn || 'LIVING AREA').toUpperCase()].filter(Boolean).join(' · ')}`}>
+          <Field label="空间英文名（English / 中英版用）" className="mt-2.5" hint="华文版页面上不显示；切到 English / 中英时用作空间名的英文（只改这一页）">
             <input data-field="roomEn" className={inputCls} value={slide.roomEn || ''} placeholder="Living Area" onChange={(e) => set({ roomEn: e.target.value })} />
           </Field>
         )}
@@ -349,8 +304,8 @@ export default function ViewInspector({ project, slide, change, notify, openPoli
       </Section>
 
       <Section title="说明 / 备注" icon={StickyNote} right={<span className="text-[11px] text-bp-faint">{notes.length} 条</span>}>
-        {/* 说明的中文、英文多行框都按内容长高（检查器窄，按字数估的行数会把字藏起来） */}
-        <GrowWrap className="space-y-2">
+        {/* 说明的中文、英文多行框都按内容长高（AutoTextarea 自己量高度，检查器再窄也不藏字） */}
+        <div className="space-y-2">
           {notes.map((n, i) => {
             const labelInput = (
               <input
@@ -405,7 +360,7 @@ export default function ViewInspector({ project, slide, change, notify, openPoli
             <Plus className="w-3.5 h-3.5" />
             添加说明
           </button>
-        </GrowWrap>
+        </div>
       </Section>
     </div>
   );

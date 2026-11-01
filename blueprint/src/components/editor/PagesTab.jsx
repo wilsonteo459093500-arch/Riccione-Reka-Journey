@@ -223,6 +223,14 @@ export default function PagesTab({ project, onChange, settings, notify, onOpenSe
       case 'removeMissing':
         act((p) => applyFix(p, fix.id, slide.id));
         break;
+      case 'hide':
+        act((p) => applyFix(p, 'hide', slide.id));
+        notify?.({ type: 'ok', text: '已隐藏这一页（不会导出；可以撤销，或在列表里再打开）' });
+        break;
+      case 'dismissLegacy':
+        act((p) => applyFix(p, 'dismissLegacy', slide.id));
+        notify?.({ type: 'ok', text: '已清掉旧版留下的改写（可以撤销）' });
+        break;
       case 'split': {
         const newId = uid('s');
         act((p) => applyFix(p, 'split', slide.id, { newId }));

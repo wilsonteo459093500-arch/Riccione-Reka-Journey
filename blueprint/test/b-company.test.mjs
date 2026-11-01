@@ -7,7 +7,7 @@ import path from 'node:path';
 import { test } from './harness.mjs';
 import {
   COMPANY_PAGES_B, COMPANY_KEYS_B, renderCompanyB, companyFieldsB, companyImagesB, companyTokensB, dateZh, dateEn,
-  PHOTOS, LOGO, QR, baseOf,
+  PHOTOS, LOGO, QR, baseOf, yearsEn, deckChapters, chapterZh, chapterEn, companyFieldByLabel, legacyOverrides,
 } from '../src/engine/b/company.js';
 import { INSET, B, lineWidth } from '../src/engine/b/kit.js';
 import { makeTranslator } from '../src/engine/lang.js';
@@ -538,4 +538,108 @@ test('未知的页：不报错，返回提醒', () => {
   const bare = renderCompanyB('closing', {}, { project: project('bi') });
   assert.ok(texts(bare).length > 5);
   assertLayout(bare, 'closing 最少参数');
+});
+
+// ---------------------------------------------------------------------------
+// 复核修正：英文跟着中文、栏位名的截短提醒、旧版改写、章节编号、均衡断行
+// ---------------------------------------------------------------------------
+
+test('只改了中文：「5 年」→ 5 years、日期、纯英文（Mr & Mrs Lau）英文自动跟着变，不提醒补英文', () => {
+  assert.equal(yearsEn('5 年'), '5 years');
+  assert.equal(yearsEn('10年'), '10 years');
+  assert.equal(yearsEn('五年'), '5 years');
+  assert.equal(yearsEn('十五年'), '15 years');
+  assert.equal(yearsEn('3–5 年'), '3–5 years');
+  assert.equal(yearsEn('1 年'), '1 year');
+  assert.equal(yearsEn('终身'), '');
+  assert.equal(dateEn('二〇二六年九月'), 'September 2026', '封面默认的中文日期写法也认得');
+  const bi = render('service-aftersales', 'bi', { overrides: { r3Text: '5 年', r4Text: '10 年' } });
+  const all = texts(bi).map(textOf);
+  assert.ok(all.includes('5 years') && all.includes('10 years'));
+  assert.deepEqual(bi.warnings, [], bi.warnings.join(' / '));
+  // 换不过来的（终身）：英文还是空格 → 说清是英文没填，一键修复去英文栏
+  const life = render('service-aftersales', 'bi', { overrides: { r3Text: '终身', r4Text: '10 年' } });
+  assert.ok(life.warnings.some((w) => /^售后维保：五金质保年数的英文还没填/.test(w)), life.warnings.join(' / '));
+  assert.ok(!life.warnings.some((w) => /板材/.test(w)));
+  // English 版直接填了英文、中文空着：算填好
+  assert.ok(!render('service-aftersales', 'en', { overridesEn: { r3Text: '5 years', r4Text: '10 years' } }).warnings.some((w) => /质保年数/.test(w)));
+  // 封面日期：改了中文日期，英文跟着
+  const date = render('cover', 'en', { overrides: { date: '二〇二六年九月' } });
+  assert.ok(texts(date).map(textOf).includes('September 2026'));
+  assert.ok(!date.warnings.some((w) => /改过的中文/.test(w)));
+  // 客户名改成纯英文：中英版只印一次、English 版用新名字，不提醒
+  const name = render('cover', 'bi', { overrides: { name: 'Mr & Mrs Lau\nMuar' } });
+  assert.equal(texts(name).filter((el) => /Lau/.test(textOf(el))).length, 1);
+  assert.ok(!name.warnings.some((w) => /改过的中文/.test(w)));
+  assert.ok(texts(render('cover', 'en', { overrides: { name: 'Mr & Mrs Lau\nMuar' } })).map(textOf).includes('Mr & Mrs Lau\nMuar'));
+  // 栏位给编辑器：英文是自动跟着的
+  const f = companyFieldsB('service-aftersales', { overrides: { r3Text: '5 年' } }, project('bi')).find((x) => x.field === 'r3Text');
+  assert.equal(f.en, '5 years');
+  assert.equal(f.autoEn, true);
+});
+
+test('截短提醒说的是栏位名（中文 / 英文），一键修复用 companyFieldByLabel 找到那一栏；截短的字不再悄悄截掉', () => {
+  const pg = render('contents', 'bi', { overrides: { ch1Line: '自然栖居，生活回归，再加上很长很长很长很长很长很长很长很长很长很长的说明' } });
+  const w = pg.warnings.find((x) => /^文字太长放不下/.test(x));
+  assert.match(w, /^文字太长放不下：「说明 · 品牌」已截短/);
+  assert.equal(companyFieldByLabel('contents', '说明 · 品牌'), 'overrides.ch1Line');
+  assert.equal(companyFieldByLabel('brand-story', '正文（英文）'), 'overridesEn.body');
+  assert.equal(companyFieldByLabel('brand-story', '没有这一栏'), null);
+  assert.ok(!pg.els.some((e) => '_cut' in e), '内部记号不留在元素上');
+  const en = render('brand-story', 'en', { overridesEn: { body: 'a very long sentence, '.repeat(60) } });
+  assert.ok(en.warnings.some((x) => /「正文（英文）」已截短/.test(x)), en.warnings.join(' / '));
+  // 以前不提醒的：年份太长被截成一行
+  const year = render('company-history', 'zh', { overrides: { y1: '2015 年至 2016 年之间的某一个时间点' } });
+  assert.ok(year.warnings.some((x) => /「年份一」已截短/.test(x)), year.warnings.join(' / '));
+});
+
+test('旧模板的数字键：页面不用，但会提醒（华文只看中文的）；legacyOverrides 列出来', () => {
+  const slide = { overrides: { 3: '刘府 · 麻坡（旧版）', subtitle: '新方案名' }, overridesEn: { 2: 'Old English' } };
+  assert.deepEqual(legacyOverrides(slide, 'zh'), [{ bucket: 'overrides', key: '3', text: '刘府 · 麻坡（旧版）' }]);
+  assert.equal(legacyOverrides(slide, 'bi').length, 2);
+  const zh = render('cover', 'zh', slide);
+  assert.ok(zh.warnings.some((w) => /^旧版里改过的字新版式没有沿用（1 处）/.test(w)));
+  assert.ok(!texts(zh).some((el) => textOf(el).includes('旧版')));
+  assert.ok(render('cover', 'en', slide).warnings.some((w) => /（2 处）/.test(w)));
+  assert.ok(!render('cover', 'zh').warnings.some((w) => /旧版/.test(w)));
+});
+
+test('章节：隐藏的章节不进目录、编号重排；章节页的「第几章」跟着往前排（改过的标签不动）', () => {
+  assert.equal(chapterZh(2), '第二章');
+  assert.equal(chapterEn(4), 'Chapter Four');
+  const p = project('bi');
+  const slide = (key, enabled = true) => ({ id: `c-${key}`, kind: 'company', key, enabled });
+  p.slides = [
+    slide('cover'), slide('contents'), slide('brand-divider', false), slide('brand-story', false), slide('company-divider'),
+    { id: 'v', kind: 'view', enabled: true }, slide('service-divider'), slide('closing'),
+  ];
+  const ch = deckChapters(p);
+  assert.deepEqual(ch.list, ['company', 'design', 'service']);
+  assert.deepEqual(ch.num, { brand: 1, company: 1, design: 2, service: 3 });
+  // 只剩封底的服务章节不算
+  assert.deepEqual(deckChapters({ ...p, slides: p.slides.filter((s) => s.key !== 'service-divider') }).list, ['company', 'design']);
+  const tr = makeTranslator(p);
+  const ctx = { project: p, lang: 'bi', tr, tokens: projectTokens(p), chapters: ch };
+  const contents = renderCompanyB('contents', p.slides[1], ctx);
+  const t = texts(contents).map(textOf);
+  assert.deepEqual(t.filter((x) => /^0\d$/.test(x)), ['01', '02', '03']);
+  assert.ok(t.includes('公司') && t.includes('Service') && !t.includes('品牌'));
+  assertLayout(contents, 'contents 3 章');
+  const div = texts(renderCompanyB('service-divider', p.slides[6], ctx)).map(textOf);
+  assert.ok(div.includes('第三章　服务') && div.includes('Chapter Three — Service'));
+  const custom = texts(renderCompanyB('service-divider', { ...p.slides[6], overrides: { label: '第四章　服务' } }, ctx)).map(textOf);
+  assert.ok(custom.includes('第四章　服务'), '设计师改过的标签照用');
+  // 单独排一页（没有整套）= 四章都在
+  assert.ok(texts(render('brand-divider', 'zh')).map(textOf).includes('第一章　品牌'));
+});
+
+test('封面客户名很长：大字均衡断行，不留落单的一个词（与方案封面一致）', () => {
+  const long = project('en', { info: { client: 'Mr & Mrs Lau Chee Keong and Family', location: 'Bandar Baru Seri Petaling, Kuala Lumpur' } });
+  const pg = render('cover', 'en', {}, { project: long });
+  const name = texts(pg).find((el) => /Lau/.test(textOf(el)));
+  const lines = textOf(name).split('\n');
+  assert.ok(lines.length >= 3, textOf(name));
+  for (const line of lines) assert.ok(line.trim().split(/\s+/).length >= 2, `落单的一个词：${JSON.stringify(lines)}`);
+  assert.ok(lines.some((l) => /Petaling,$/.test(l)), '地址在逗号处断开');
+  assertLayout(pg, 'cover 长英文名');
 });
