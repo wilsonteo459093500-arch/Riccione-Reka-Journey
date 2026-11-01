@@ -1,7 +1,7 @@
 // B 格物 · 公司固定页（品牌画册）：19 页 × 华文 / English / 中英 都排得出；字在画布里、文字框互不重叠、不压在照片上；
 // English 版没有中文、中英版两种文字都有且同样大小；编辑字段齐全；缺图 / 像素低 / 字太长 / 质保年数没填会提醒
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { test } from './harness.mjs';
@@ -192,6 +192,21 @@ test('照片位：默认图都在 public/template 里，一个照片位一个常
   // 不用 logo 墙、不用 3D 地图、不用拼起来的两张图
   const all = COMPANY_KEYS_B.flatMap((k) => Object.values(COMPANY_PAGES_B[k].images).map((d) => d.src));
   for (const banned of ['brand-supply-1.jpg', 'company-showrooms-1.jpg', 'company-about-1.jpg']) assert.ok(!all.some((s) => s.endsWith(banned)), banned);
+});
+
+test('品牌分开：「公司 · 瑞吉欧」章节只用瑞吉欧图册的照片，其余页只用溪岸的照片', () => {
+  for (const p of Object.values(PHOTOS)) assert.ok(['sail', 'riccione'].includes(p.brand), `${p.src} 没标品牌`);
+  for (const key of COMPANY_KEYS_B) {
+    const want = COMPANY_PAGES_B[key].section === 'company' ? 'riccione' : 'sail';
+    for (const [slot, d] of Object.entries(COMPANY_PAGES_B[key].images)) {
+      const photo = Object.values(PHOTOS).find((p) => p.src === d.src);
+      assert.equal(photo?.brand, want, `${key}.${slot}（${d.src}）应该用${want === 'riccione' ? '瑞吉欧' : '溪岸'}的照片`);
+    }
+  }
+  // 换下来的图不留在仓库里：public/template 里每张图都有人用
+  const used = new Set([...Object.values(PHOTOS), LOGO, QR].map((p) => p.src));
+  const dir = (sub) => readdirSync(path.join(ROOT, 'public/template', sub)).filter((f) => /\.(jpe?g|png)$/i.test(f)).map((f) => `/template/${sub ? `${sub}/` : ''}${f}`);
+  for (const src of [...dir(''), ...dir('b')]) assert.ok(used.has(src), `没用到的图 ${src}`);
 });
 
 test('改写：overrides / overridesEn 生效；旧模板的数字键被忽略；{{token}} 也能写在改写里', () => {

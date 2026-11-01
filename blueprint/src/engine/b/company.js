@@ -33,52 +33,57 @@ import { makeTranslator, langOf, resolveEn, floorsLineEn, hasCJKText } from '../
 // 照片：默认图（一行一张；换图改这里）。nat = 原图像素（判断裁切、放大倍数用）
 // ---------------------------------------------------------------------------
 
+// brand = 照片属于哪个品牌：'riccione' = 瑞吉欧（只用瑞吉欧图册 RICCIONE Catalogue 2024 Autumn 里的图），
+//   'sail' = 溪岸（溪岸宣传手册、溪岸展厅 / 案例照）。规则：「公司 · 瑞吉欧」章节只放瑞吉欧的照片，其余页只放溪岸的
+//   —— 溪岸的照片不能出现在瑞吉欧的资料里（test/b-company.test.mjs 会检查）
+const sail = (src, w, h) => ({ src, nat: { w, h }, brand: 'sail' });
+const riccione = (src, w, h) => ({ src, nat: { w, h }, brand: 'riccione' });
+
 export const PHOTOS = {
-  aboutDetail: { src: '/template/b/about-detail.jpg', nat: { w: 1079, h: 1348 } }, // 实木抽屉柜（品牌照，已提亮）
-  aboutOlive: { src: '/template/b/about-olive.jpg', nat: { w: 693, h: 1348 } }, // 窗边橄榄树与抽屉柜
-  storyLift: { src: '/template/b/story-lift.jpg', nat: { w: 1800, h: 1036 } }, // 溪岸门头、长墙与石凳
-  walnutLift: { src: '/template/b/walnut-lift.jpg', nat: { w: 849, h: 1279 } }, // 胡桃木柜墙与台灯
-  coll1: { src: '/template/b/coll-1.jpg', nat: { w: 580, h: 982 } }, // 骨骼线
-  coll2: { src: '/template/b/coll-2.jpg', nat: { w: 473, h: 800 } }, // 空山
-  coll3: { src: '/template/b/coll-3.jpg', nat: { w: 693, h: 1173 } }, // 织
-  coll4: { src: '/template/b/coll-4.jpg', nat: { w: 528, h: 894 } }, // 雾山
-  coll5: { src: '/template/b/coll-5.jpg', nat: { w: 610, h: 1033 } }, // 寂东方
-  awards: { src: '/template/brand-awards-1.jpg', nat: { w: 1800, h: 1010 } }, // 奖杯
-  certified: { src: '/template/company-certified-1.jpg', nat: { w: 1753, h: 1800 } }, // 书架上的认证证书
-  bedroom: { src: '/template/service-aftersales-1.jpg', nat: { w: 821, h: 1280 } }, // 藤编柜门的卧室
-  kitchen: { src: '/template/brand-collections-1.jpg', nat: { w: 730, h: 982 } }, // 骨骼线厨房
-  shelves: { src: '/template/brand-collections-2.jpg', nat: { w: 594, h: 800 } }, // 空山书架
-  // 老板发来的展厅照（2000 px，原样不调色；右上角有白色 sAil 溪岸 logo —— 取景都避开它）
-  showroomStill: { src: '/template/b/showroom-still.jpg', nat: { w: 1333, h: 2000 } }, // 木盘里的青苹果与干枝，后面是书格和沙发
-  showroomLiving: { src: '/template/b/showroom-living.jpg', nat: { w: 2000, h: 1125 } }, // 客厅：书格灯带、圆形挂饰、天窗下的蕨（没有 logo）
-  showroomWide: { src: '/template/b/showroom-wide.jpg', nat: { w: 2000, h: 1333 } }, // 展厅全景：厨房、黑色岛台、客厅
-  showroomKitchen: { src: '/template/b/showroom-kitchen.jpg', nat: { w: 2000, h: 1333 } }, // 厨房：木纹岛台、藤编椅、玻璃吊柜
-  showroomShelf: { src: '/template/b/showroom-shelf.jpg', nat: { w: 2000, h: 1162 } }, // 胡桃木格柜特写（偏暗）
+  // —— 溪岸 ——
+  sailCover: sail('/template/b/sail-cover.jpg', 1501, 2000), // 老板发来：胡桃木格柜、白色台面、芦苇
+  sailDining: sail('/template/b/sail-dining.jpg', 1501, 2000), // 老板发来：深色书格墙、长餐桌、两扇磨砂窗
+  sailHills: sail('/template/b/sail-hills.jpg', 889, 1039), // 溪岸手册 p4：草原上行走的五个人与远山
+  sailSkeleton: sail('/template/b/sail-skeleton.jpg', 889, 1037), // 溪岸手册 p23：骨骼线厨房，浅木柜、黑色台面
+  sailBedroom: sail('/template/b/sail-bedroom.jpg', 1016, 1038), // 溪岸手册 p37：卧室，皮革挂画、矮床、长凳
+  sailClosing: sail('/template/b/sail-closing.jpg', 1080, 1440), // 溪岸手册 p38：橡木柜墙、台灯、天光
+  storyLift: sail('/template/b/story-lift.jpg', 1800, 1036), // 溪岸门头、长墙与石凳
+  coll1: sail('/template/b/coll-1.jpg', 580, 982), // 骨骼线
+  coll2: sail('/template/b/coll-2.jpg', 473, 800), // 空山
+  coll3: sail('/template/b/coll-3.jpg', 693, 1173), // 织
+  coll4: sail('/template/b/coll-4.jpg', 528, 894), // 雾山
+  coll5: sail('/template/b/coll-5.jpg', 610, 1033), // 寂东方
+  awards: sail('/template/brand-awards-1.jpg', 1800, 1010), // 奖杯
+  // 老板发来的展厅照（2000 px，原样不调色；右上角有白色 sAil 溪岸 logo —— 取景避开它）
+  showroomStill: sail('/template/b/showroom-still.jpg', 1333, 2000), // 木盘里的青苹果与干枝，后面是书格和沙发
+  // —— 瑞吉欧（RICCIONE Catalogue 2024 Autumn）——
+  aboutDetail: riccione('/template/b/about-detail.jpg', 1079, 1348), // 瑞吉欧竖纹抽屉柜、干花与书（已提亮）
+  riccioneGarden: riccione('/template/b/riccione-garden.jpg', 1212, 1500), // 图册 p41：树下的藤编扶手椅
+  riccioneShowroom: riccione('/template/b/riccione-showroom.jpg', 2049, 961), // 图册 p6：瑞吉欧展厅（床、皮沙发、花砖墙）
+  riccioneForest: riccione('/template/b/riccione-forest.jpg', 2000, 1002), // 图册 p60：阳光穿过的红杉林
 };
 
 export const LOGO = { src: '/template/b/logo-ink.png', nat: { w: 1417, h: 539 } };
 export const QR = { src: '/template/b/qr-instagram.png', nat: { w: 740, h: 740 } };
 
 /** 照片位：默认图 + 取景（ax / ay = 重心 0–1，zoom = 在「刚好铺满」之上再放大多少） */
-const slot = (photo, label, frame = {}) => ({ src: photo.src, nat: photo.nat, label, frame });
+const slot = (photo, label, frame = {}) => ({ src: photo.src, nat: photo.nat, brand: photo.brand, label, frame });
 
 /**
- * 照片位 → 默认图：每个照片位一行。老板发来新照片 → 放进 public/template/b/，在 PHOTOS 里加一行，再把这里对应的一行指过去。
+ * 照片位 → 默认图：每个照片位一行。老板发来新照片 → 放进 public/template/b/，在 PHOTOS 里加一行（标上品牌），
+ * 再把这里对应的一行指过去。
  * frame：ax / ay = 取景重心（0–1），zoom = 在「刚好铺满」之上再放大多少（引擎会提醒超过 1.15 倍原图像素的情况）
  * 设计师在编辑器里换的图存在 slide.images[照片位]，不改这里
  *
- * 2026-11 老板发来第一批展厅照（5 张）：理念、公司章节页、关于我们、展厅、方案章节页都换成了展厅照。
- * 照片右上角有白色 sAil 溪岸 logo：取景（ax / ay / zoom）都避开了它 —— 拿到没有 logo 的原图后可以放宽取景。
- * 还在用旧图、等新照片的照片位（按这个顺序换，每个只改一行）：
- *   1 service-aftersales = 原创系列第四张（雾山卧室）—— 最好是卧室 / 衣柜的竖拍照
- *   2 service-divider    = 原创系列第二张（空山书架；源图 594×800，放大 1.13 倍，偏软）—— 竖拍的细节（五金、拉手、木纹）
- *   3 company-divider    展厅胡桃木格柜特写偏暗：有更亮的竖拍细节照可以换
+ * 品牌分开：「公司 · 瑞吉欧」章节（章节页、关于我们、展厅、认证）只用瑞吉欧图册的照片；
+ *   封面、品牌 · 溪岸、方案、服务、封底只用溪岸的照片（溪岸手册 + 老板发来的溪岸照）
+ * 瑞吉欧图册大多是去底的单品图，能整页用的场景照不多：图册里有更好的场景照（或瑞吉欧自己的展厅照）可以再换
  * 照片位大多是竖的（宽:高 ≈ 0.55–0.9）：竖拍的照片最好用；横拍的会只取中间一段
-  */
+ */
 export const PHOTO_SLOTS = {
-  cover: { photo: slot(PHOTOS.aboutDetail, '封面照片', { ay: 0.337 }) },
+  cover: { photo: slot(PHOTOS.sailCover, '封面照片', { ax: 0.3 }) },
   contents: {},
-  'brand-divider': { photo: slot(PHOTOS.aboutOlive, '章节照片', { ay: 1 }) },
+  'brand-divider': { photo: slot(PHOTOS.sailHills, '章节照片', { ax: 0.3 }) },
   'brand-philosophy': { photo: slot(PHOTOS.showroomStill, '理念照片', { ax: 0.35, ay: 1, zoom: 1.2 }) },
   'brand-story': { photo: slot(PHOTOS.storyLift, '品牌照片', { ax: 0.134 }) },
   'brand-collections': {
@@ -90,17 +95,17 @@ export const PHOTO_SLOTS = {
   },
   'brand-awards': { photo: slot(PHOTOS.awards, '奖项照片', { ax: 1, ay: 0.5, zoom: 1.12 }) },
   'brand-supply': {},
-  'company-divider': { photo: slot(PHOTOS.showroomShelf, '章节照片', { ax: 0.3 }) },
-  'company-about': { photo: slot(PHOTOS.showroomLiving, '公司照片', { ax: 0.6 }) },
+  'company-divider': { photo: slot(PHOTOS.riccioneGarden, '章节照片', { ay: 0.6 }) },
+  'company-about': { photo: slot(PHOTOS.aboutDetail, '公司照片', { ay: 0.4 }) },
   'company-history': {},
-  'company-showrooms': { photo: slot(PHOTOS.showroomWide, '展厅照片', { ax: 0.6, ay: 1, zoom: 1.27 }) },
-  'company-certified': { photo: slot(PHOTOS.certified, '认证照片', { ax: 0.55 }) },
-  'design-divider': { photo: slot(PHOTOS.showroomKitchen, '章节照片', { ax: 0.9, ay: 1, zoom: 1.27 }) },
-  'service-divider': { photo: slot(PHOTOS.shelves, '章节照片', { ax: 0.9 }) },
+  'company-showrooms': { photo: slot(PHOTOS.riccioneShowroom, '展厅照片', { ax: 0.45 }) },
+  'company-certified': { photo: slot(PHOTOS.riccioneForest, '认证照片', { ax: 0.55 }) },
+  'design-divider': { photo: slot(PHOTOS.sailSkeleton, '章节照片') },
+  'service-divider': { photo: slot(PHOTOS.sailDining, '章节照片', { ax: 0.55 }) },
   'service-process': {},
   'service-cycle': {},
-  'service-aftersales': { photo: slot(PHOTOS.bedroom, '维保照片', { ax: 1, ay: 0.74, zoom: 1.266 }) },
-  closing: { photo: slot(PHOTOS.walnutLift, '封底照片', { ax: 0, ay: 0.777, zoom: 1.0958 }) },
+  'service-aftersales': { photo: slot(PHOTOS.sailBedroom, '维保照片', { ax: 0.45 }) },
+  closing: { photo: slot(PHOTOS.sailClosing, '封底照片', { ax: 0.2 }) },
 };
 
 // ---------------------------------------------------------------------------
