@@ -3,7 +3,7 @@
 //
 // Project = {
 //   id, name, createdAt, updatedAt, version: 1,
-//   layoutVersion: 2,            // 版式版本：2 = B「格物」（旧项目打开时由 lib/project.js upgradeProject 升级）
+//   layoutVersion: 2,            // 版式版本：2 = B「格物」起的数据结构（C「安然」只换版式、沿用）；旧项目打开时由 lib/project.js upgradeProject 升级
 //   info: {
 //     client: 'Mr Lau', location: 'Muar', date: '2026 · 08',
 //     proposalTitle: '全屋定制设计方案',
@@ -32,10 +32,10 @@
 //   { kind:'view', floorId, layout:'auto'|'framed'|'full', image:'asset:…', room:'客厅', roomEn:'LIVING AREA',
 //     subtitle:'全景', materials:[{ role:'柜体 & 柜门', materialId }], notes:[{ label:'隐形门 · Hidden door', text:'液压闭门器，配反弹器' }],
 //     sourcePage?: 9, tag?:'3d' }               效果图页（tag:'3d' = AI 全屋立体图）
-//                                                layout：auto = 整套自动排（b/design.js planViews）；full = 满版大图（只有图）；framed = 图文
+//                                                layout：auto = 整套自动排（b/design.js planViews）；full = 满版大图（满版带标题：视角名 + 材料）；framed = 图文
 //   { kind:'team' }                              本案服务团队（按 info.team 生成）
 
-/** 版式版本：2 = B「格物」 */
+/** 版式版本：2 = B「格物」起的数据结构（C「安然」只换版式，数据不变，所以不升版本） */
 export const LAYOUT_VERSION = 2;
 
 export const uid = (p = 'x') => `${p}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;

@@ -6,6 +6,22 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
+/* Ogg（英文大标题，Sharp Type 的付费字体，公司买的是桌面授权）：不托管、不放进网站，只认本机安装的。
+   CSS 栈（src/theme.js）先找本机的 'Ogg' 字体族，再找这里的 'Ogg Local'（按字体全名 / PostScript 名找本机的 Ogg），
+   都没有就退到 Google Fonts 的 Cormorant Garamond。 */
+@font-face {
+  font-family: 'Ogg Local';
+  font-style: normal;
+  font-weight: 400;
+  src: local('Ogg Roman'), local('Ogg-Roman'), local('Ogg Regular'), local('Ogg-Regular');
+}
+@font-face {
+  font-family: 'Ogg Local';
+  font-style: normal;
+  font-weight: 500;
+  src: local('Ogg Medium'), local('Ogg-Medium');
+}
+
 body {
   @apply bg-bp-paper text-bp-ink font-sans antialiased;
 }

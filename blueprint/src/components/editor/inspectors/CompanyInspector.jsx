@@ -2,9 +2,10 @@ import React from 'react';
 import { FileText, RotateCcw, Info, ArrowUpRight, Image as ImageIcon, TriangleAlert, History } from 'lucide-react';
 import {
   companyFields, companyImages, setCompanyField, clearCompanyField, setCompanyImage, editedCompanyFields, enOnlyEdits, resetCompanyFields,
-  singleLine, legacyEdits, clearLegacyEdits, NOW,
+  singleLine, legacyEdits, clearLegacyEdits, NOW, companyKeyOf,
 } from '../ops.js';
 import { langOf } from '../../../engine/lang.js';
+import { COMPANY_PAGES_B, PHOTO_HIDDEN } from '../../../engine/b/company.js';
 import { Section, AutoTextarea } from '../ui.jsx';
 import { EnBox, EN_BADGE } from '../EnInput.jsx';
 import ImageField from '../ImageField.jsx';
@@ -36,13 +37,14 @@ const blockEnter = (e) => {
   if (e.key === 'Enter' && !e.nativeEvent?.isComposing) e.preventDefault();
 };
 
-function FieldBlock({ f, slideId, change, lang }) {
-  const withEn = lang !== 'zh' && !f.shared;
+function FieldBlock({ f, slideId, change, lang, enShown = false }) {
+  // 英文框：English / 中英版每栏都有；华文版只给页面上印着英文的栏位（C 安然的英文大写页眉）—— 画布上点它能落到这里
+  const withEn = (lang !== 'zh' || enShown) && !f.shared;
   const edited = f.overridden?.zh || (withEn && f.overridden?.en);
   const staleEn = withEn && f.overridden?.zh && !f.overridden?.en && !f.autoEn;
   const missingEn = withEn && !f.overridden?.en && !String(f.en || '').trim() && String(f.zh || '').trim();
   const clearedEn = withEn && f.overridden?.en && f.enInput === '';
-  const reset = () => change((p) => resetCompanyFields(p, slideId, [f.field], lang), NOW);
+  const reset = () => change((p) => resetCompanyFields(p, slideId, [f.field], withEn ? 'bi' : lang), NOW);
   // 只恢复英文（去掉英文的改写）：中文的改动不动 —— 中文改过时英文回到默认稿 / 自动换成的英文，并照常提醒补英文
   const restoreEn = () => change((p) => clearCompanyField(p, slideId, f.field, 'en'), NOW);
   const tidy = (t) => (f.oneLine ? singleLine(t) : t);
@@ -167,16 +169,20 @@ function LegacyEdits({ project, slide, change }) {
 }
 
 /** 公司页的全部文字（方案封面没有 Board 时也复用） */
-export function CompanyTexts({ project, slide, change, onGoTab, title = '页面文字' }) {
+export function CompanyTexts({ project, slide, page, change, onGoTab, title = '页面文字' }) {
   const fields = companyFields(slide, project);
   if (!fields.length) return null;
   const lang = langOf(project);
   const hasTokens = fields.some((f) => f.tokens);
   const hasOneLine = fields.some((f) => f.oneLine);
-  // 华文版只算 / 只恢复中文的改动（英文的改写在华文版里看不到，不跟着丢掉）
-  const edited = editedCompanyFields(fields, lang);
-  const enOnly = lang === 'zh' ? enOnlyEdits(fields) : [];
-  const resetAll = () => change((p) => resetCompanyFields(p, slide.id, edited.map((f) => f.field), lang), NOW);
+  // 华文版页面上印着英文的栏位（英文大写页眉）：这一页的元素里有 overridesEn.<栏位>
+  const enOnPage = new Set((page?.els || []).map((e) => /^overridesEn\.(.+)$/.exec(e.edit?.field || '')?.[1]).filter(Boolean));
+  // 再加上华文版也印英文页眉的栏位（f.enHeader）：中文改过、英文没跟上时页面上先不印英文，这里照样给英文框补
+  const enShown = (f) => lang === 'zh' && !f.shared && (enOnPage.has(f.field) || !!f.enHeader);
+  // 华文版只算 / 只恢复中文的改动（英文的改写在华文版里看不到，不跟着丢掉）—— 页面上印着的英文页眉除外
+  const edited = fields.filter((f) => editedCompanyFields([f], lang).length || (enShown(f) && f.overridden?.en));
+  const enOnly = lang === 'zh' ? enOnlyEdits(fields).filter((f) => !enShown(f)) : [];
+  const resetAll = () => change((p) => edited.reduce((q, f) => resetCompanyFields(q, slide.id, [f.field], enShown(f) ? 'bi' : lang), p), NOW);
   return (
     <Section
       title={title}
@@ -187,7 +193,7 @@ export function CompanyTexts({ project, slide, change, onGoTab, title = '页面�
             type="button"
             className="text-[11px] text-bp-muted hover:text-bp-ink inline-flex items-center gap-1"
             onClick={resetAll}
-            title={lang === 'zh' ? '只恢复中文；英文的改动留着（切到 English / 中英 才看得到）' : '中文、英文都恢复成默认稿'}
+            title={lang === 'zh' ? '只恢复中文（页面上印着的英文页眉一起恢复）；其余英文的改动留着（切到 English / 中英 才看得到）' : '中文、英文都恢复成默认稿'}
           >
             <RotateCcw className="w-3 h-3" />
             全部恢复（{edited.length}）
@@ -216,7 +222,7 @@ export function CompanyTexts({ project, slide, change, onGoTab, title = '页面�
       <LegacyEdits project={project} slide={slide} change={change} />
       <div className="space-y-3.5">
         {fields.map((f) => (
-          <FieldBlock key={f.field} f={f} slideId={slide.id} change={change} lang={lang} />
+          <FieldBlock key={f.field} f={f} slideId={slide.id} change={change} lang={lang} enShown={enShown(f)} />
         ))}
       </div>
     </Section>
@@ -227,6 +233,11 @@ export function CompanyTexts({ project, slide, change, onGoTab, title = '页面�
 export function CompanyPhotos({ project, slide, change, notify }) {
   const imgs = companyImages(slide, project);
   if (!imgs.length) return null;
+  // 品牌分开：「公司 · 瑞吉欧」章节的页只用瑞吉欧的照片 —— 不给「本案图片」（溪岸的效果图），只能上传新图 / 恢复默认
+  const key = companyKeyOf(slide, project);
+  const riccione = COMPANY_PAGES_B[key]?.section === 'company';
+  const lang = langOf(project);
+  const hiddenHere = (slot) => (PHOTO_HIDDEN[key]?.[slot] || []).includes(lang);
   return (
     <Section title={imgs.length > 1 ? `照片（${imgs.length} 张）` : '照片'} icon={ImageIcon}>
       <div className="space-y-3">
@@ -243,7 +254,14 @@ export function CompanyPhotos({ project, slide, change, notify }) {
               field={im.field}
               lowResWidth={0}
               onChange={(src) => change((p) => setCompanyImage(p, slide.id, im.slot, src), NOW)}
-              hint="只换这一份提案的照片；照片不压字、不调暗"
+              allowProject={!riccione}
+              hint={
+                hiddenHere(im.slot)
+                  ? '中英版这一页字多，排成纸面两栏年表，不放这张照片（华文 / English 版放）'
+                  : riccione
+                  ? '瑞吉欧的页只用瑞吉欧的照片（不能用本案的效果图）；照片保持原色，压在照片上的白字下面会自动加深色托字'
+                  : '只换这一份提案的照片；照片保持原色，压在照片上的白字下面会自动加深色托字（换了图按最深的托）'
+              }
             />
           </div>
         ))}

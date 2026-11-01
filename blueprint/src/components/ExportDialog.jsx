@@ -288,13 +288,14 @@ export default function ExportDialog({ project, notify, onClose, onGoTab }) {
           <Type size={15} className="shrink-0 mt-0.5 text-bp-gold" />
           <div className="space-y-1">
             <div>
-              PPT 用到三款免费字体，电脑上没装时 PowerPoint 会换成替代字体，排版会走样：
+              PPT 用到这 {FONT_PACK.length} 款字体，电脑上没装时 PowerPoint 会换成替代字体，排版会走样：
               {FONT_PACK.map((f, i) => (
                 <React.Fragment key={f.href}>
                   {i ? '、' : ''}
                   <a href={f.href} target="_blank" rel="noreferrer" className="text-bp-eyebrow underline underline-offset-2 inline-flex items-center gap-0.5">
                     {f.name} <ExternalLink size={11} />
                   </a>
+                  {f.note ? <span className="text-bp-faint">（{f.note}）</span> : null}
                 </React.Fragment>
               ))}
               。

@@ -204,8 +204,9 @@ export function moveToFloorEnd(project, id, floorSlideId = null) {
 }
 
 // ---------------------------------------------------------------------------
-// 版式（B「格物」）：full = 满版大图（只有图，不放字）；framed = 图文（图 + 右栏：楼层空间、标题、材料、说明）
-// 'auto' 交给整套的排版计划（b/design.js planViews：横图、像素够且不丢内容才满版、同空间下一页能补上材料、不连续 3 页满版）
+// 版式（C「安然」）：full = 满版大图（Aman 第 9 页的满版带标题：左上视角名、左下材料）；framed = 图文（页眉 + 效果图 + 规格栏：楼层空间、说明、材料表）
+// 'auto' 交给整套的排版计划（b/design.js planViews：横图、像素够、没有说明、材料 ≤ 2 行才满版，同空间下一页能补上材料也满版，
+//   不连续 3 页满版；连着的图文页一左一右）
 // ---------------------------------------------------------------------------
 
 /**
@@ -584,6 +585,14 @@ export function fixForWarning(text, ctx = {}) {
   if (/^Material Board 图片像素偏低/.test(s)) return { id: 'pickImage', label: '换一张图', field: 'cover.image' };
   if (/缺少效果图|没有背景图|^图片像素偏低：放大/.test(s)) return { id: 'pickImage', label: '换一张图', field: 'image' };
   if (/本案材料为空/.test(s)) return { id: 'gotoMaterials', label: '去材料清单' };
+  // 瑞吉欧的页换上了本案的图 → 那一张照片（栏位名按这一页的照片位找）
+  const ric = s.match(/^瑞吉欧页面只用瑞吉欧的照片：「(.+?)」/);
+  if (ric) {
+    const slot = Object.entries(COMPANY_PAGES_B[ctx.key]?.images || {}).find(([, d]) => d?.label === ric[1])?.[0] || PHOTO_SLOT_BY_LABEL.get(ric[1]) || 'photo';
+    return { id: 'pickImage', label: '换回瑞吉欧的照片', field: `image.${slot}` };
+  }
+  const roster = s.match(/^服务团队名单放不下：第 (\d+) 位/);
+  if (roster) return { id: 'focus', label: '去改名字', field: `team.${Number(roster[1]) - 1}.name` };
   const member = s.match(/服务团队第 (\d+) 位/);
   if (member) return { id: 'focus', label: '填写名字', field: `team.${Number(member[1]) - 1}.name` };
   if (/服务团队还没填名字/.test(s)) return { id: 'focus', label: '填写团队名字', field: 'team.0.name' };
@@ -648,6 +657,23 @@ export const legacyEdits = (slide, project) => legacyOverrides(slide, langOf(pro
 export function inputFieldFor(field) {
   // 版式输出的 edit 字段已经是数据下标（notes.N / materials.N / team.N 都按原始序号），直接对应输入框
   return String(field || '');
+}
+
+/**
+ * 英文栏位 → 同一栏的中文输入框（右栏没有这个英文框时退到这里：比如华文版只摆中文框，
+ * 页面上却印着装饰性的英文大写页眉 —— 点它至少落到同一栏，不会什么都不发生）
+ *   overridesEn.title → overrides.title · subtitleEn → title（效果图页的视角名框）· notes.0.textEn → notes.0.text
+ *   materials.0.nameEn → materials.0 · floor.en → floor.zh · roomEn → room；不是英文栏位 → null
+ */
+export function zhFieldFor(field) {
+  const f = String(field || '');
+  if (f === 'subtitleEn') return 'title';
+  if (f === 'floor.en') return 'floor.zh';
+  const m = /^materials\.(\d+)\.nameEn$/.exec(f);
+  if (m) return `materials.${m[1]}`;
+  if (/^overridesEn\./.test(f)) return f.replace(/^overridesEn\./, 'overrides.');
+  if (/En(?=$|\.)/.test(f)) return f.replace(/En(?=$|\.)/, '');
+  return null;
 }
 
 // ---------------------------------------------------------------------------

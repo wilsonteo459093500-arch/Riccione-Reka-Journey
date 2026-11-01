@@ -86,8 +86,8 @@ test('特殊字符被转义、token 被填充', async () => {
   for (const n of Object.keys(zip.files).filter((n) => /slides\/slide\d+\.xml$/.test(n))) all += await zip.file(n).async('string');
   assert.ok(all.includes('隐形门 &lt;&amp;&gt;'));
   assert.ok(!all.includes('{{'), '残留 {{token}}');
-  // 封面大标题：客户、地点各一行（来自项目信息）
-  assert.ok(all.includes('>Mr Demo<') && all.includes('>Muar<'));
+  // 封面大标题：客户、地点各一行（来自项目信息；C 安然的封面客户名是 Ogg 全大写 —— 大小写不论）
+  assert.ok(/>Mr Demo</i.test(all) && />Muar</i.test(all));
   assert.equal(esc('a\u0001b<'), 'ab&lt;');
   assert.equal(fillTokens('{{a}}-{{zz}}', { a: 1 }), '1-');
 });

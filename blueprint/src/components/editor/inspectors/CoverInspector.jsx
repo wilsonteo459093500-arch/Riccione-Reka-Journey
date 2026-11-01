@@ -15,7 +15,7 @@ import { CompanyTexts, CompanyPhotos } from './CompanyInspector.jsx';
 // English / 中英版：标题 / 副标题写的是中文时，下面多一个英文框（写进翻译记忆）——放在 <label> 外面（点它不会跳回中文框），
 // 「留空 = 自动…」的说明留在中文框下面。
 
-export default function CoverInspector({ project, slide, change, notify, onGoTab }) {
+export default function CoverInspector({ project, slide, page, change, notify, onGoTab }) {
   const cover = project.cover || {};
   const info = project.info || {};
   const auto = designCoverTexts({ ...project, info: { ...info, coverTitle: '', coverSubtitle: '' } });
@@ -80,7 +80,7 @@ export default function CoverInspector({ project, slide, change, notify, onGoTab
         </Section>
       )}
 
-      {!cover.image && <CompanyTexts project={project} slide={slide} change={change} onGoTab={onGoTab} title="章节页文字" />}
+      {!cover.image && <CompanyTexts project={project} slide={slide} page={page} change={change} onGoTab={onGoTab} title="章节页文字" />}
       {!cover.image && <CompanyPhotos project={project} slide={slide} change={change} notify={notify} />}
     </div>
   );

@@ -1,10 +1,13 @@
-// B 格物 · 公司固定页 = 品牌画册（19 页）：封面、目录、四个章节页、品牌 / 公司 / 服务各页、封底。
+// C 安然 · 公司固定页 = 品牌画册（19 页）：封面、目录、四个章节页、品牌 / 公司 / 服务各页、封底。
 //
-// 版式全部用 kit.js 的网格、字级、文字块拼出来，照着定稿的 B 样张（p1 封面、p2 章节页、p3 品牌故事、p4 原创系列、p7 封底）：
-//   大照片、短文字、大量留白；没有页码、页脚、装饰短线、大写小标签；细线只用在列表里
-//   照片永远不压暗、不压字；每张照片是一个「照片位」（PHOTO_SLOTS，一行一个），默认图在 PHOTOS 里一行一张 ——
+// 版式照 Aman 品牌手册（老板选定的 dirA2 样张，规格见 /tmp/claude-0/c/dirA/notes.md「通用规格」），全部用 kit.js 的 C 工具拼：
+//   封面、目录、公司章节页 = 满版 / 大照片，白字直接压在照片上；内容页 = 半版照片（上下贴边）配文字栏；
+//   标题系统 = 英文大写 Ogg 在上、中文思源宋体在下；右下角页脚签名，一个角上放 logo；
+//   照片保持原色（不加色层），白字下面只放局部的 1C1915 托字渐变（kit.shade）；
+//   品牌分开：「公司 · 瑞吉欧」章节只用瑞吉欧的照片、RICCIONE 商标和「瑞吉欧 / RICCIONE」签名，不出现溪岸 logo / 口号；
+//   中英并重：中文、英文同样大小，上下对照，都完整显示（放不下才截短并提醒）
+//   每张照片是一个「照片位」（PHOTO_SLOTS，一行一个），默认图在 PHOTOS 里一行一张 ——
 //   老板以后发来高清图，改那一行即可（取景重心 / 放大写在照片位的 frame 里）
-//   中英并重：中文、英文同样大小，左右并排或上下对照
 //
 // 数据：
 //   文字字段 slide.overrides[字段] = 中文、slide.overridesEn[字段] = 英文（字符串才算改过）
@@ -20,10 +23,8 @@
 //
 // 输出：renderCompanyB(key, slide, ctx) → { bg, els, warnings }；编辑字段 overrides.<字段> / overridesEn.<字段> / image.<照片位>
 
-import {
-  B, INSET, STACK_GAP, styleOf, runsOf, lineWidth, wrapCount, block, pick, hair, page, hasCJK,
-} from './kit.js';
-import { balanceText } from './text.js';
+import * as K from './kit.js';
+import { B, INSET, styleOf, wrapCount, page, hasCJK } from './kit.js';
 import { PX_PER_PT } from '../../theme.js';
 import { fillTokens } from '../spec.js';
 import { clientLine, floorsLine } from '../model.js';
@@ -48,6 +49,8 @@ export const PHOTOS = {
   sailBedroom: sail('/template/b/sail-bedroom.jpg', 1016, 1038), // 溪岸手册 p37：卧室，皮革挂画、矮床、长凳
   sailClosing: sail('/template/b/sail-closing.jpg', 1080, 1440), // 溪岸手册 p38：橡木柜墙、台灯、天光
   storyLift: sail('/template/b/story-lift.jpg', 1800, 1036), // 溪岸门头、长墙与石凳
+  sailLiving: sail('/template/b/sail-living.jpg', 1754, 1039), // 溪岸手册 p30：书格墙、圆镜、绿植的客厅
+  sailCraft: sail('/template/b/sail-craft.jpg', 1755, 1038), // 溪岸手册 p27：木格柜的近景（木纹、层板）
   coll1: sail('/template/b/coll-1.jpg', 580, 982), // 骨骼线
   coll2: sail('/template/b/coll-2.jpg', 473, 800), // 空山
   coll3: sail('/template/b/coll-3.jpg', 693, 1173), // 织
@@ -61,6 +64,7 @@ export const PHOTOS = {
   riccioneGarden: riccione('/template/b/riccione-garden.jpg', 1212, 1500), // 图册 p41：树下的藤编扶手椅
   riccioneShowroom: riccione('/template/b/riccione-showroom.jpg', 2049, 961), // 图册 p6：瑞吉欧展厅（床、皮沙发、花砖墙）
   riccioneForest: riccione('/template/b/riccione-forest.jpg', 2000, 1002), // 图册 p60：阳光穿过的红杉林
+  riccioneWardrobe: riccione('/template/b/riccione-wardrobe.jpg', 1400, 1767), // 图册 p49：深灰墙前的胡桃木衣柜
 };
 
 export const LOGO = { src: '/template/b/logo-ink.png', nat: { w: 1417, h: 539 } };
@@ -76,16 +80,22 @@ const slot = (photo, label, frame = {}) => ({ src: photo.src, nat: photo.nat, br
  * 设计师在编辑器里换的图存在 slide.images[照片位]，不改这里
  *
  * 品牌分开：「公司 · 瑞吉欧」章节（章节页、关于我们、展厅、认证）只用瑞吉欧图册的照片；
- *   封面、品牌 · 溪岸、方案、服务、封底只用溪岸的照片（溪岸手册 + 老板发来的溪岸照）
- * 瑞吉欧图册大多是去底的单品图，能整页用的场景照不多：图册里有更好的场景照（或瑞吉欧自己的展厅照）可以再换
- * 照片位大多是竖的（宽:高 ≈ 0.55–0.9）：竖拍的照片最好用；横拍的会只取中间一段
+ *   封面、目录、品牌 · 溪岸、方案、服务、封底只用溪岸的照片（溪岸手册 + 老板发来的溪岸照）
+ * 瑞吉欧图册大多是去底的单品图，能整页用的场景照只有五张（章节页、关于、历程、展厅、认证各一张，不重复）；
+ *   中英版的「发展历程」字多，排成纸面两栏年表（不放照片）
+ * 取景（frame）按 C 安然的照片框定（dirA2 样张）：照片放大一律 ≤ 1.15 倍
+ *   公司章节页用满版的红杉林（老板选定的 dirA2 第 4 页），所以认证页换成树下的藤编椅（两页不用同一张）
  */
 export const PHOTO_SLOTS = {
-  cover: { photo: slot(PHOTOS.sailCover, '封面照片', { ax: 0.3 }) },
-  contents: {},
-  'brand-divider': { photo: slot(PHOTOS.sailHills, '章节照片', { ax: 0.3 }) },
-  'brand-philosophy': { photo: slot(PHOTOS.showroomStill, '理念照片', { ax: 0.35, ay: 1, zoom: 1.2 }) },
-  'brand-story': { photo: slot(PHOTOS.storyLift, '品牌照片', { ax: 0.134 }) },
+  // 1680×1080 贴左（右边 240 是实色竖带）：1.15 倍，裁掉原图最右边的白色杂物
+  cover: { photo: slot(PHOTOS.sailCover, '封面照片', { ax: 0, ay: 0.47, zoom: 1726 / 1680 }) },
+  // 满版：溪岸门头的清水墙（墙上的 sAil 溪岸 招牌留在两栏中间）
+  contents: { photo: slot(PHOTOS.storyLift, '目录照片', { ay: 0.5 }) },
+  'brand-divider': { photo: slot(PHOTOS.sailHills, '章节照片', { ay: 0.55 }) },
+  // 裁掉原图右上角的白色 sAil logo（原图 y 0.055–0.125）
+  'brand-philosophy': { photo: slot(PHOTOS.showroomStill, '理念照片', { ax: 0.35, ay: 1, zoom: 1.12 }) },
+  // 半版贴右：书格墙、圆镜与绿植（目录页已经是门头那张，这一页不再用它）
+  'brand-story': { photo: slot(PHOTOS.sailLiving, '品牌照片', { ax: 0.3 }) },
   'brand-collections': {
     c1: slot(PHOTOS.coll1, '系列一照片'),
     c2: slot(PHOTOS.coll2, '系列二照片'),
@@ -93,19 +103,24 @@ export const PHOTO_SLOTS = {
     c4: slot(PHOTOS.coll4, '系列四照片'),
     c5: slot(PHOTOS.coll5, '系列五照片'),
   },
-  'brand-awards': { photo: slot(PHOTOS.awards, '奖项照片', { ax: 1, ay: 0.5, zoom: 1.12 }) },
+  // 半版贴左：两块奖牌在照片中间
+  'brand-awards': { photo: slot(PHOTOS.awards, '奖项照片', { ax: 0.91, ay: 0.5 }) },
   'brand-supply': {},
-  'company-divider': { photo: slot(PHOTOS.riccioneGarden, '章节照片', { ay: 0.6 }) },
+  'company-divider': { photo: slot(PHOTOS.riccioneForest, '章节照片', { ax: 0.5 }) },
   'company-about': { photo: slot(PHOTOS.aboutDetail, '公司照片', { ay: 0.4 }) },
-  'company-history': {},
-  'company-showrooms': { photo: slot(PHOTOS.riccioneShowroom, '展厅照片', { ax: 0.45 }) },
-  'company-certified': { photo: slot(PHOTOS.riccioneForest, '认证照片', { ax: 0.55 }) },
-  'design-divider': { photo: slot(PHOTOS.sailSkeleton, '章节照片') },
-  'service-divider': { photo: slot(PHOTOS.sailDining, '章节照片', { ax: 0.55 }) },
+  // 半版贴左 820（dirA2 第 6 页）：深灰墙前的胡桃木衣柜 —— 「以实木家具起步」
+  'company-history': { photo: slot(PHOTOS.riccioneWardrobe, '历程照片', { ay: 0.45 }) },
+  // 半版贴右：床与吊灯在中间
+  'company-showrooms': { photo: slot(PHOTOS.riccioneShowroom, '展厅照片', { ax: 0.5 }) },
+  'company-certified': { photo: slot(PHOTOS.riccioneGarden, '认证照片', { ay: 0.8 }) },
+  'design-divider': { photo: slot(PHOTOS.sailSkeleton, '章节照片', { ay: 0.5 }) },
+  'service-divider': { photo: slot(PHOTOS.sailDining, '章节照片', { ay: 0.92 }) },
   'service-process': {},
-  'service-cycle': {},
-  'service-aftersales': { photo: slot(PHOTOS.sailBedroom, '维保照片', { ax: 0.45 }) },
-  closing: { photo: slot(PHOTOS.sailClosing, '封底照片', { ax: 0.2 }) },
+  // 上半通栏 1920×520（Aman 第 14 页）：木格柜的近景，白字标题压在深色木纹上
+  'service-cycle': { photo: slot(PHOTOS.sailCraft, '周期照片', { ay: 0.5 }) },
+  // 半版贴右：挂画落在照片右上角（白 logo 整块压在皮面上）
+  'service-aftersales': { photo: slot(PHOTOS.sailBedroom, '维保照片', { ax: 0 }) },
+  closing: { photo: slot(PHOTOS.sailClosing, '封底照片', { ax: 0.3, ay: 0.6 }) },
 };
 
 // ---------------------------------------------------------------------------
@@ -419,6 +434,9 @@ export const COMPANY_PAGES_B = {
 
 export const COMPANY_KEYS_B = Object.keys(COMPANY_PAGES_B);
 
+/** 某些语言里版面上不放的照片位（中英版的「发展历程」字多，排成纸面两栏年表）：编辑器在这些语言里注明「这一版不放照片」 */
+export const PHOTO_HIDDEN = { 'company-history': { photo: ['bi'] } };
+
 // ---------------------------------------------------------------------------
 // 章节：老客户可以隐藏品牌 / 公司 / 服务（项目信息 → 方案章节显示）——
 // 目录只列看得到的章节、编号重排；章节页的「第二章」与方案封面的章节标签跟着变
@@ -601,10 +619,10 @@ export function companyTokensB(project, enOf, base = null) {
 }
 
 // ---------------------------------------------------------------------------
-// 排版小工具（在 kit 之上）：文字左边缘正好落在网格线上，基线对齐，放不下时截短并提醒
+// 旧接口（B 格物的基线 / 截短）：页面不再用，外部可能还在引用，保留
 // ---------------------------------------------------------------------------
 
-/** 网页预览里一行的基线位置（离行框顶）：段落按英文字体（Hanken / Ysabeau）的升部、降部算行框，中文字形落在同一条基线上 */
+/** 网页预览里一行的基线位置（离行框顶）：B 格物的英文字体（Hanken / Ysabeau）的升部、降部 */
 const FONT_V = { light: [1.0, 0.303], regular: [1.0, 0.303], title: [1.054, 0.289] };
 export function baseOf(lang, role, over) {
   const st = styleOf(lang, role, over);
@@ -612,12 +630,7 @@ export function baseOf(lang, role, over) {
   return (st.lh - (a + d) * st.px) / 2 + a * st.px;
 }
 
-/** 中文栏里的纯拉丁文字（品牌名、年份、Mr Lau）用英文字级 */
-const L = (text, lang) => (lang === 'zh' && !hasCJK(text) ? 'en' : lang);
-const overFor = (opts, lg) => opts?.over?.[lg] ?? opts?.over?.all;
-const lhOf = (lg, role, over) => styleOf(lg, role, over).lh;
-
-/** 一段文字在宽 w 的栏里排几行（\n 分段） */
+/** 一段文字在宽 w 的栏里排几行（\n 分段；B 格物字级） */
 function nLines(text, lg, role, w, over, nowrap) {
   const st = styleOf(lg, role, over);
   return String(text ?? '')
@@ -625,7 +638,7 @@ function nLines(text, lg, role, w, over, nowrap) {
     .reduce((n, line) => n + (nowrap ? 1 : wrapCount(line, st, lg, role, w + 2 * INSET)), 0);
 }
 
-/** 截到最多 maxLines 行，末尾加「…」 */
+/** 截到最多 maxLines 行，末尾加「…」（B 格物字级；C 版式用 kit.clampText） */
 export function clampLines(text, lg, role, w, maxLines, over) {
   const s = String(text ?? '');
   if (nLines(s, lg, role, w, over) <= maxLines) return { text: s, cut: false };
@@ -647,276 +660,278 @@ export function clampLines(text, lg, role, w, maxLines, over) {
   return { text: `${cut.replace(/[\s,，、;；:：·]+$/u, '')}…`, cut: true };
 }
 
-/**
- * 一块文字：x = 文字左边缘（框向左让出内边距，与样张一致），y = 第一行行框的顶
- *   valign:'b' = 落在底线上的字（章节页大标题、一句话、封面客户名…）：框内靠底排，万一引擎多估了一行，最后一行仍落在原来的基线上
- *   大字（display / head）折成两三行时均衡断行（b/text.js）：行数不变，不留落单的一个词（「… and / Family」）
- *   截短了的文字框记一笔（_cut，finish() 里收走）：提醒里说得出是哪一栏
- * @returns {{ el, h, lines, bottom, top, lang, cut }}
- */
-function tb(x, y, w, text, lang, role, opts = {}) {
-  const lg = L(text, lang);
-  const over = overFor(opts, lg);
-  let t = String(text ?? '');
-  let cut = false;
-  if (opts.maxLines) ({ text: t, cut } = clampLines(t, lg, role, w, opts.maxLines, over));
-  // 截短过的也均衡（每一段的行数不变，「…」仍在最后）
-  if (!opts.nowrap && (role === 'display' || role === 'head')) t = balanceText(t, lg, role, w, over);
-  const b = block(x - INSET, y, w + 2 * INSET, t, lg, role, {
-    over,
-    nowrap: opts.nowrap,
-    align: opts.align,
-    ...(opts.edit ? { edit: opts.edit } : {}),
-  });
-  if (opts.valign === 'b') b.el.valign = 'b';
-  if (cut) b.el._cut = true;
-  return { ...b, top: y, lang: lg, cut };
-}
+// ---------------------------------------------------------------------------
+// C 安然 · 版式小工具（在 kit 之上）
+// ---------------------------------------------------------------------------
 
-const editOf = (it) => (it.field ? { field: it.field } : undefined);
-const itemsOf = (lang, pair) => pick(lang, pair).map((it) => ({ ...it, lg: L(it.text, it.lang) }));
+const { PAGE } = K;
+const sum = (a) => a.reduce((s, v) => s + v, 0);
+const heightOf = (part) => (part ? Math.max(0, part.bottom - part.top) : 0);
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+/** 这一页属于哪个品牌：「公司 · 瑞吉欧」章节 = 瑞吉欧（RICCIONE 商标、「瑞吉欧 / RICCIONE」签名），其余 = 溪岸 */
+const brandOf = (R) => (R.def.section === 'company' ? 'riccione' : 'sail');
+/** 内容排到这里为止（下面是页脚签名，中文行顶 944） */
+const BOTTOM = 900;
 
 /**
- * 上下对照：中文在上、英文在下。maxLines 每种语言最多几行；maxBottom 放不下时从行数多的那种语言减行（截短 + 提醒）
+ * 托字渐变的深浅（默认照片按真实像素量出来的）：键 = 「页:哪一块」，「页:哪一块@语言」优先；没列的 = 最深 0.45
+ *   量法：把托字渐变拿掉渲染，qa-contrast 量每段白字字形下面 90 分位的亮度，换算托到 4.5:1 至少要多深，再加 0.04 余量；
+ *   白 logo 按非文字的 3:1 量。字下面一律至少 0.15（照片原本就够深也托一下，字更稳）
+ *   设计师换的照片看不到像素，一律 0.45（宁可深一点）。换了默认图要重量（/tmp/claude-0/c/company/cal/）
  */
-function pstack(x, y, w, role, pair, lang, opts = {}) {
-  const items = itemsOf(lang, pair);
-  const gap = opts.gap ?? STACK_GAP[role] ?? 0;
-  const lh = (it) => lhOf(it.lg, role, overFor(opts, it.lg));
-  const natural = items.map((it) => nLines(it.text, it.lg, role, w, overFor(opts, it.lg), opts.nowrap));
-  const budget = natural.map((n) => Math.min(n, opts.maxLines ?? Infinity));
-  const height = () => budget.reduce((h, n, i) => h + n * lh(items[i]), 0) + gap * Math.max(0, items.length - 1);
-  if (opts.maxBottom != null) {
-    while (y + height() > opts.maxBottom + 0.5 && budget.some((n) => n > 1)) {
-      let k = -1;
-      budget.forEach((n, i) => {
-        if (n > 1 && (k < 0 || n * lh(items[i]) > budget[k] * lh(items[k]))) k = i;
-      });
-      budget[k] -= 1;
-    }
-  }
-  const els = [];
-  const blocks = [];
-  let cur = y;
-  let cut = false;
-  items.forEach((it, i) => {
-    if (i > 0) cur += gap;
-    const b = tb(x, cur, w, it.text, it.lg, role, {
-      over: opts.over,
-      nowrap: opts.nowrap,
-      valign: opts.valign,
-      edit: editOf(it),
-      maxLines: budget[i] < natural[i] ? budget[i] : undefined,
-    });
-    cut = cut || b.cut;
-    els.push(b.el);
-    blocks.push(b);
-    cur = b.bottom;
-  });
-  return { els, blocks, top: y, bottom: cur, cut, overflow: opts.maxBottom != null && cur > opts.maxBottom + 0.5 };
+const SHADE_A = {
+  'cover:logo': 0.15, // 芦苇后面的灰墙：不托也够 3:1
+  'cover:title': 0.15, // 灰墙：不托也够 4.5:1
+  'contents:left': 0.45, // 门洞两边是清水墙：要托满（「CONTENTS」0.44）
+  'contents:logo': 0.45, // 右上是亮墙和枯枝
+  'brand-divider:label': 0.25, // 深色山体（「BRAND」0.20）
+  'brand-philosophy:logo': 0.2, // 书格：不托也够 3:1
+  'brand-story:logo': 0.45, // 清水墙顶（0.42）
+  'brand-awards:logo': 0.45, // 窗边的亮处（0.41）
+  'company-divider:left': 0.35, // 红杉林左侧（「COMPANY」0.20；细衬线压在高频的蕨叶上，多托一点才好认）
+  'company-divider:left@en': 0.45, // English / 中英的白色 RICCIONE 商标压到亮的树缝（文字版时 0.40）
+  'company-divider:left@bi': 0.45,
+  'company-divider:right': 0.45, // 右上树缝的天光（白色 RICCIONE 商标 0.40）
+  'company-about:logo': 0.3, // 墙上的旧画布（0.23）
+  'company-showrooms:logo': 0.2, // 天花和轨道灯（0.13）
+  'service-divider:label': 0.2, // 深色书格（「SERVICE」0.16）
+  'service-aftersales:logo': 0.2, // 挂画的皮面：不托也够 3:1
+};
+
+/** 不含中文的字（年份、品牌名、Setia Alam、Mr Lau）：华文 / 中英版里也按英文字级排（Ogg / Outfit），编辑字段仍是中文栏 */
+function latinOf(pair, lang) {
+  const zh = clean(pair?.zh);
+  const en = clean(pair?.en);
+  if (lang === 'en' || !zh || hasCJK(zh)) return [pair, lang];
+  if (lang === 'zh' || !en || en === zh) return [{ en: zh, fieldEn: pair.field }, 'en'];
+  return [pair, lang];
 }
 
 /**
- * 左右并排：中英版中文一栏、英文一栏；单语言只用第一栏（宽 singleW）。
- *   默认顶对齐（两栏第一行共用基线）；bottom:true = y 是底线，两栏最后一行共用基线（中文正好落在 y）
+ * 默认稿里的手动换行是照旧版式的栏宽断的：有一行在这一栏里放不下（要折行）时，整段按栏宽重新排
+ *   （英文行与行之间接一个空格，中文直接接上），免得排出「… makes / furniture / that returns …」这种落单的词
  */
-function pside(xs, y, ws, role, pair, lang, opts = {}) {
-  const items = itemsOf(lang, pair);
-  if (!items.length) return { els: [], blocks: [], top: y, bottom: y, lastBase: y, cut: false };
-  const one = items.length === 1;
-  const geo = (i) => (one ? [xs[0], opts.singleW ?? ws[0]] : [xs[i], ws[i]]);
-  const over = (it) => overFor(opts, it.lg);
-  const lines = (it, i) => Math.min(nLines(it.text, it.lg, role, geo(i)[1], over(it), opts.nowrap), opts.maxLines ?? Infinity);
-  const blocks = [];
-  const make = (it, i, top) => {
-    const [x, w] = geo(i);
-    const b = tb(x, top, w, it.text, it.lg, role, {
-      over: opts.over,
-      nowrap: opts.nowrap,
-      maxLines: opts.maxLines,
-      valign: opts.valign ?? (opts.bottom ? 'b' : undefined),
-      edit: editOf(it),
-    });
-    blocks.push(b);
-    return b;
-  };
-  const a = items[0];
-  if (!opts.bottom) {
-    make(a, 0, y);
-    if (!one) {
-      const c = items[1];
-      make(c, 1, y + baseOf(a.lg, role, over(a)) - baseOf(c.lg, role, over(c)));
-    }
-  } else {
-    const ha = lines(a, 0) * lhOf(a.lg, role, over(a));
-    make(a, 0, y - ha);
-    if (!one) {
-      const c = items[1];
-      const lastBaseA = y - lhOf(a.lg, role, over(a)) + baseOf(a.lg, role, over(a));
-      const bottomC = lastBaseA - baseOf(c.lg, role, over(c)) + lhOf(c.lg, role, over(c));
-      make(c, 1, bottomC - lines(c, 1) * lhOf(c.lg, role, over(c)));
-    }
+function reflow(text, st, w) {
+  const t = clean(text);
+  if (!t.includes('\n') || K.wrapText(t, st, w).every((p) => p.length <= 1)) return t;
+  return t
+    .split('\n')
+    .map(clean)
+    .filter(Boolean)
+    .reduce((acc, line) => (!acc ? line : /[A-Za-z0-9,.;:!?)%]$/.test(acc) && /^[A-Za-z0-9(“"]/.test(line) ? `${acc} ${line}` : `${acc}${line}`), '');
+}
+
+/**
+ * 一对中英文（kit.pairBlock）：opts.latin = 纯拉丁字按英文字级排；opts.reflow = 放不下的手动换行按栏宽重排；
+ *   默认均衡断行（2–3 行的段落各行长短接近，不留落单的一个字 / 词），opts.balance = false 关掉
+ */
+function duo(x, y, w, pair, lang, role, opts = {}) {
+  let [p, l] = opts.latin ? latinOf(pair, lang) : [pair, lang];
+  if (opts.reflow) {
+    // 只重排默认稿（它的手动换行是照旧版式的栏宽断的）；设计师改过的字照原样分段（空行、落款都留着）
+    const enRole = opts.enRole || (typeof role === 'string' ? K.EN_ROLE[role] || role : role);
+    const ed = pair?.edited || {};
+    p = { ...p, zh: ed.zh ? p.zh : reflow(p.zh, K.style(role), w), en: ed.en ? p.en : reflow(p.en, K.style(enRole), w) };
   }
-  const b0 = blocks[0];
-  return {
-    els: blocks.map((b) => b.el),
-    blocks,
-    top: Math.min(...blocks.map((b) => b.top)),
-    bottom: Math.max(...blocks.map((b) => b.bottom)),
-    lastBase: b0.bottom - lhOf(b0.lang, role, overFor(opts, b0.lang)) + baseOf(b0.lang, role, overFor(opts, b0.lang)),
-    cut: blocks.some((b) => b.cut),
-  };
+  return K.pairBlock(x, y, w, p, l, role, { balance: true, ...opts });
 }
 
-/** 中英并排放得下吗：每种语言的每一段都不用折行（放不下就改成上下对照，免得中文名被折成「全屋定 / 制设计」） */
-function fitsSide(pair, lang, role, ws, opts = {}) {
-  const items = itemsOf(lang, pair);
-  if (items.length < 2) return true;
-  return items.every((it, i) => it.text.split('\n').every((line) => nLines(line, it.lg, role, ws[i], overFor(opts, it.lg)) === 1));
+/** 页脚签名：English 版只排英文那一行（整页不出现中文），华文 / 中英版中英两行 */
+const sign = (R, brand, opts = {}) => K.signature(brand, { ...opts, enOnly: R.lang === 'en' });
+
+/** 左对齐的页脚签名（右下角压在亮处、托不住时用；字级、行顶同 kit.signature） */
+function signatureLeft(R, x, brand, color = B.foot) {
+  const t = K.SIGNATURE[brand] || K.SIGNATURE.sail;
+  const en = K.textLines(x, PAGE.sigTop + 38, [[t.en]], 'sigEn', { color, name: 'signature' });
+  if (R.lang === 'en') return { els: [en.el], x0: en.x0, x1: en.x1, top: en.top, bottom: en.bottom };
+  const zh = K.textLines(x, PAGE.sigTop, [[t.zh]], 'sigZh', { color, name: 'signature' });
+  return { els: [zh.el, en.el], x0: x, x1: Math.max(zh.x1, en.x1), top: zh.top, bottom: en.bottom };
 }
 
-/** 上下对照时中英之间空多少：每种语言都只有一行 = 紧贴（样张 p6 的说明），多行的正文 = STACK_GAP */
-function stackGap(pair, lang, role, w) {
-  const items = itemsOf(lang, pair);
-  return items.every((it) => nLines(it.text, it.lg, role, w) <= 1) ? 0 : STACK_GAP[role] ?? 0;
-}
+/** 只放一块元素的组（细线、logo…） */
+const solo = (el, h = el.h) => ({ els: [el], top: el.y, bottom: el.y + h, x0: el.x, x1: el.x + el.w });
 
-/** 标题旁的一句话：每种语言的第一行与标题对应语言的第一行共用基线（样张 p4） */
-function besideHead(x, w, head, role, pair, lang, opts = {}) {
-  const items = itemsOf(lang, pair);
-  const els = [];
-  const blocks = [];
-  let cur = -Infinity;
-  items.forEach((it, i) => {
-    const h = head.blocks.find((b) => b.lang === it.lg) || head.blocks[i] || head.blocks[0];
-    let top = h ? h.top + baseOf(h.lang, 'head') - baseOf(it.lg, role) : head.top;
-    if (top < cur) top = cur + (i > 0 ? opts.gap ?? 0 : 0);
-    const b = tb(x, top, w, it.text, it.lg, role, { edit: editOf(it), maxLines: opts.maxLines });
-    els.push(b.el);
-    blocks.push(b);
-    cur = b.bottom;
+/**
+ * 一栏自上而下排几组（标题组、正文、细线、结语、表格…）：
+ *   gap = [理想, 最小]（和上一组之间）。先按理想间距排；放不下就按比例收到最小；还放不下 → flex 那一组按剩下的地方截短（maxBottom）
+ *   opts.align 'center'：整组的中心落在 opts.center（不超出 top / bottom）
+ *   build(y, maxBottom, measuring) → { els, top, bottom }（measuring = 只量高度：表格不往下撑）
+ * @returns {{ parts, els, top, bottom }}
+ */
+function flow(top, bottom, groups, opts = {}) {
+  let gs = groups.filter(Boolean);
+  // 连最紧的排法（flex 组截到每种语言一行、间距最小）都放不下：有 alt 的组（标题组、金句…）换成紧凑版（截短 + 提醒）
+  const gap1 = (g, i) => (i === 0 ? 0 : g.gap?.[1] ?? g.gap?.[0] ?? 40);
+  const tight = gs.reduce((h, g, i) => h + heightOf(g.build(0, g.flex ? 0 : Infinity, 'min')) + gap1(g, i), 0);
+  if (tight > bottom - top) gs = gs.map((g) => (g.alt ? { ...g, build: g.alt } : g));
+  const hs = gs.map((g) => heightOf(g.build(0, Infinity, true)));
+  const ideal = gs.map((g, i) => (i === 0 || !hs[i] ? 0 : g.gap?.[0] ?? 40));
+  const min = gs.map((g, i) => (i === 0 || !hs[i] ? 0 : g.gap?.[1] ?? ideal[i]));
+  const room = bottom - top;
+  const H = sum(hs);
+  let gaps = ideal;
+  if (H + sum(ideal) > room) {
+    const t = clamp((room - H - sum(min)) / Math.max(1, sum(ideal) - sum(min)), 0, 1);
+    gaps = ideal.map((v, i) => Math.round(min[i] + (v - min[i]) * t));
+  }
+  // opts.fill：内容短时把组间距按比例拉开（每组最多到 gap[2]，默认理想的 1.8 倍），让栏底落在 fill 附近、不留大空洞
+  if (opts.fill != null && H + sum(gaps) < opts.fill - top) {
+    const max = gs.map((g, i) => (i === 0 || !hs[i] ? 0 : g.gap?.[2] ?? Math.round(ideal[i] * 1.8)));
+    const want = opts.fill - top - H - sum(gaps);
+    const can = sum(max) - sum(gaps);
+    if (can > 0) gaps = gaps.map((v, i) => Math.round(v + (max[i] - v) * Math.min(1, want / can)));
+  }
+  const total = H + sum(gaps);
+  let y = top;
+  if (opts.align === 'center' && total < room) y = Math.round(clamp(Math.max(opts.center - total / 2, (opts.minBottom ?? -Infinity) - total), top, bottom - total));
+  // 后面几组最少要多高（表格按最小的行距）：flex 那一组只能用剩下的地方；表格放不下先收行距，再减行
+  const mins = gs.map((g) => heightOf(g.build(0, Infinity, 'min')));
+  const parts = [];
+  gs.forEach((g, i) => {
+    y += gaps[i];
+    const rest = sum(mins.slice(i + 1)) + sum(gaps.slice(i + 1));
+    const p = g.build(y, bottom - rest, false);
+    parts.push(p);
+    y = p.bottom;
   });
-  return { els, blocks, top: blocks[0]?.top ?? head.top, bottom: blocks.length ? cur : head.top, cut: blocks.some((b) => b.cut) };
+  return { parts, els: parts.flatMap((p) => p.els), top: parts[0]?.top ?? top, bottom: y };
 }
 
-/** 一行里「中文名　English name」（样张 p4 的系列名）：两块文字共用一条基线；放不下就上下排 */
-function inlinePair(x, y, w, pair, lang, opts = {}) {
-  const items = itemsOf(lang, pair);
-  const over = { all: { lh: opts.lh ?? 40 } };
-  const maxLines = opts.maxLines ?? 2;
-  if (items.length < 2) return pstack(x, y, w, 'body', pair, lang, { over, maxLines });
-  const [a, c] = items;
-  const wa = lineWidth(runsOf(a.text, styleOf(a.lg, 'body'), a.lg, 'body'));
-  const wc = lineWidth(runsOf(c.text, styleOf(c.lg, 'body'), c.lg, 'body'));
-  const space = lineWidth(runsOf('　', styleOf('zh', 'body'), 'zh', 'body'));
-  if (a.text.includes('\n') || c.text.includes('\n') || wa + space + wc > w * 0.98) {
-    return pstack(x, y, w, 'body', pair, lang, { over, gap: 0, maxLines });
-  }
-  const ba = tb(x, y, wa + 4, a.text, a.lg, 'body', { over, nowrap: true, edit: editOf(a) });
-  const bc = tb(x + wa + space, y, w - wa - space, c.text, c.lg, 'body', { over, nowrap: true, edit: editOf(c) });
-  return { els: [ba.el, bc.el], blocks: [ba, bc], top: y, bottom: Math.max(ba.bottom, bc.bottom), cut: false };
-}
-
-/** 一组「先在 y=0 排好、量出高度，再落到底线上」 */
-function restOnLine(bottomY, builder) {
-  const trial = builder(0);
-  return builder(bottomY - trial.bottom);
-}
-
-const MIN_GAP = 48; // 上下两组文字之间至少空这么多
-
-/** 每格最多几行：先不限（地方够就整段排出来），再 3、2、1 行（截短 + 提醒） */
+/** 每格最多几行：先不限，再 3、2、1 行（截短 + 提醒） */
 const CELL_LINES = [Infinity, 3, 2, 1];
 
 /**
- * 落在 984 的表格：每格先按自然行数排；表格顶碰到上面的文字（limit）才一档一档减行。
- * 只有真的少排了行，格子里才会截短（cut 由各格自己报）；减到每格一行还碰到 = cut（上面的标题 / 段落再让地方）
- * @param {(lines:number)=>(y:number)=>{els, bottom, top, cut}} build
- * @returns 放得下的那一版；opts.strict 时放不下返回 null
+ * 表格：细线分隔的几行；每行几格（cell(y, maxLines) → part），行高 = 最高的一格 + 上下各 pad
+ *   pad 在 [min, max] 里取：opts.fill = 能把表撑到哪（不超过 maxBottom）；放不下先收 pad，再一档一档减每格的行数
+ *   opts.rule = 细线样式（默认年表的 C9B9A6）；opts.segments = [[x, w], …] 细线分几段画（左右两栏的年表）；
+ *   opts.rules = false 不画细线；opts.ruleTop / ruleBottom = false 不要最上 / 最下那条
+ * @returns {(y, maxBottom, measuring) => { els, top, bottom, rows, x0, x1 }}
  */
-function restTable(limit, build, opts = {}) {
-  for (const k of CELL_LINES) {
-    const t = restOnLine(984, build(k));
-    if (t.top >= limit - 0.5) return t;
-  }
-  if (opts.strict) return null;
-  return { ...restOnLine(984, build(1)), cut: true };
-}
-
-/** 一段中英文至少要多高（每种语言一行） */
-const minPairH = (lang, role, gap = STACK_GAP[role] ?? 0) =>
-  lang === 'bi' ? lhOf('zh', role) + gap + lhOf('en', role) : lhOf(lang === 'en' ? 'en' : 'zh', role);
-
-/** 页标题挂在 96；下面的东西放不下时标题少排几行（每种语言至少一行） */
-const headAt = (R, x, w, maxLines, maxBottom) =>
-  pstack(x, 96, w, 'head', R.pair('title'), R.lang, { maxLines, ...(maxBottom != null ? { maxBottom } : {}) });
-
-/**
- * 页头（标题 + 中间一段）+ 落在 984 的表格：表格先排，标题与中间那段再按剩下的地方排。
- *   先试「中间那段完整 + 表格」；放不下才让中间那段少排几行（每种语言至少一行）
- */
-function headBodyTable(R, { x, w, maxLines, bodyField, bodyW, build }) {
-  const { lang } = R;
-  const mid = minPairH(lang, 'body');
-  const natural = pstack(x, 0, bodyW, 'body', R.pair(bodyField), lang, { gap: STACK_GAP.body }).bottom;
-  let head = headAt(R, x, w, maxLines);
-  const list = restTable(head.bottom + 56 + Math.max(mid, natural) + MIN_GAP, build, { strict: true })
-    || restTable(head.bottom + 56 + mid + MIN_GAP, build);
-  const room = list.top - MIN_GAP - 56 - mid;
-  if (head.bottom > room) head = headAt(R, x, w, maxLines, room);
-  const body = pstack(x, head.bottom + 56, bodyW, 'body', R.pair(bodyField), lang, { gap: STACK_GAP.body, maxBottom: list.top - MIN_GAP });
-  return { head, body, list, cut: head.cut || body.cut || body.overflow || list.cut };
-}
-
-// ---------------------------------------------------------------------------
-// 列表行（细线分隔）：标签一栏 + 值一栏，标签与值每种语言共用基线（样张 p6 / p7）
-// ---------------------------------------------------------------------------
-
-/**
- * @param {Array<{ label:object, value:object, note?:object }>} rows   label / value / note 都是 pair（{ zh, en, field, fieldEn }）
- * @param {{ x, w, labelW, valueX, valueW, valueRole?, pad?, noteGap?, valueMax? }} g
- * @returns {(y:number)=>{ els, bottom, cut }}
- */
-function listRows(rows, lang, g) {
-  const valueRole = g.valueRole || 'body';
-  const pad = g.pad ?? 10;
-  return (y0) => {
-    const els = [hair(g.x, y0, g.w)];
-    let y = y0;
-    let cut = false;
-    for (const r of rows) {
-      const top = y + pad;
-      const v = pstack(g.valueX, top, g.valueW, valueRole, r.value, lang, { gap: 0, maxLines: g.valueMax ?? 2 });
-      let bottom = v.bottom;
-      cut = cut || v.cut;
-      els.push(...v.els);
-      if (r.note) {
-        const n = pstack(g.valueX, v.bottom + (g.noteGap ?? 4), g.valueW, 'cap', r.note, lang, { gap: 0, maxLines: g.noteMax ?? 2 });
-        els.push(...n.els);
-        bottom = n.bottom;
-        cut = cut || n.cut;
+function table(x, w, rows, opts = {}) {
+  const ruleOpts = opts.rule || { color: B.hair, alpha: 1, h: 1 };
+  const segs = opts.segments || [[x, w]];
+  const rule = (y) => (opts.rules === false ? [] : segs.map(([sx, sw]) => K.rule(sx, y, sw, ruleOpts)));
+  const [padMin, padIdeal, padMax] = opts.pad || [12, 20, 40];
+  return (y0, maxBottom = Infinity, measuring = false) => {
+    const n = rows.length;
+    const measure = (k) => rows.map((r) => Math.max(0, ...r.map((cell) => heightOf(cell(0, k)))));
+    let k = 0;
+    let hs = measure(CELL_LINES[0]);
+    let pad = measuring === 'min' ? padMin : padIdeal;
+    const target = measuring ? null : Math.min(opts.fill ?? -Infinity, maxBottom);
+    if (target != null && Number.isFinite(target) && target > y0) pad = clamp((target - y0 - sum(hs)) / (2 * n), padMin, padMax);
+    while (y0 + sum(hs) + 2 * pad * n > maxBottom + 0.5) {
+      if (pad > padMin) {
+        pad = Math.max(padMin, (maxBottom - y0 - sum(hs)) / (2 * n));
+        continue;
       }
-      // 标签：第 i 种语言对准值的第 i 种语言的第一行（同一行高 → 同一条基线）；
-      // 只有一块的标签（年份、中英一样的名字）对准值的第一行，不按「拉丁字母 = 英文」去对英文那一行
-      let lb = top;
-      const labels = itemsOf(lang, r.label);
-      labels.forEach((it, i) => {
-        const vb = labels.length === 1 ? v.blocks[0] || null : v.blocks.find((b) => b.lang === it.lg) || v.blocks[i] || null;
-        const lh = vb ? lhOf(vb.lang, valueRole) : it.lg === 'zh' ? 40 : 36;
-        const capOver = { [it.lg]: { lh } };
-        let t = vb ? vb.top + baseOf(vb.lang, valueRole) - baseOf(it.lg, 'cap', { lh }) : lb;
-        if (t < lb) t = lb;
-        const b = tb(g.x, t, (g.labelW ?? 260) - 16, it.text, it.lg, 'cap', { over: capOver, edit: editOf(it), maxLines: g.valueMax ?? 2 });
-        els.push(b.el);
-        lb = b.bottom;
-        cut = cut || b.cut;
-      });
-      // 标签为了对齐基线会比值低 1–2px，行高仍按值的行算（样张 p7：每行 96）
-      y = Math.max(bottom, lb - 2) + pad;
-      els.push(hair(g.x, y, g.w));
+      if (k + 1 >= CELL_LINES.length) break;
+      k += 1;
+      hs = measure(CELL_LINES[k]);
     }
-    return { els, top: y0, bottom: y, cut };
+    pad = Math.round(pad);
+    const els = opts.ruleTop === false ? [] : rule(y0);
+    const out = [];
+    let y = y0;
+    rows.forEach((r, i) => {
+      const top = y + pad;
+      for (const cell of r) els.push(...cell(top, CELL_LINES[k]).els);
+      y = top + hs[i] + pad;
+      out.push({ top: top - pad, bottom: y });
+      if (i < n - 1 || opts.ruleBottom !== false) els.push(...rule(y));
+    });
+    return { els, top: y0, bottom: y, rows: out, x0: x, x1: x + w };
   };
+}
+
+/** 一组文字的返回值 → flow 的组 */
+const part = (r) => ({ els: r.els || (r.el ? [r.el] : []), top: r.top, bottom: r.bottom, x0: r.x0, x1: r.x1 });
+
+/** 标题组（flow 的组）：放不下时的紧凑版 = 英文、中文各一行（截短 + 提醒） */
+const titleG = (R, x, w, opts = {}) => ({
+  build: (y) => part(K.titleGroup(x, y, w, R.pair('title'), R.lang, opts)),
+  alt: (y) => part(K.titleGroup(x, y, w, R.pair('title'), R.lang, { ...opts, maxLines: { en: 1, zh: 1 } })),
+});
+
+/** 一行文字里几段（各自的编辑字段），整行居中 / 左对齐：parts = [{ text, field, role }]，段与段之间「 · 」 */
+function inlineRun(x, y, parts, opts = {}) {
+  const ps = parts.filter((p) => clean(p.text));
+  if (!ps.length) return { els: [], top: y, bottom: y, x0: x, x1: x };
+  const sts = ps.map((p) => K.style(p.role, opts));
+  const texts = ps.map((p, i) => {
+    const t = sts[i].caps || (opts.upperLatin && !hasCJK(p.text)) ? clean(p.text).toUpperCase() : clean(p.text);
+    return i < ps.length - 1 ? `${t} · ` : t;
+  });
+  const ws = texts.map((t, i) => K.measure(t, sts[i]));
+  const lastSp = (sts[sts.length - 1].spacing || 0) * PX_PER_PT;
+  const ink = sum(ws) - lastSp;
+  let cx = opts.align === 'ctr' ? x - ink / 2 : x;
+  const els = [];
+  let bottom = y;
+  ps.forEach((p, i) => {
+    const r = K.textLines(cx, y, [[texts[i]]], sts[i], { field: p.field, lh: opts.lh });
+    els.push(r.el);
+    bottom = Math.max(bottom, r.bottom);
+    cx += ws[i];
+  });
+  return { els, top: y, bottom, x0: opts.align === 'ctr' ? x - ink / 2 : x, x1: (opts.align === 'ctr' ? x - ink / 2 : x) + ink, w: ink };
+}
+
+/**
+ * 章节页的栏目名（「BRAND / 第一章　品牌」）：英文页眉 = 英文章节标签「Chapter One — Brand」里破折号后面那一段（样张：去掉 CHAPTER ONE）；
+ *   English 版：章名下面一行小字「CHAPTER ONE」（同一个英文栏位）
+ */
+function chapterLabel(R, x, y, w, color) {
+  const p = R.pair('label');
+  const en = clean(p.en);
+  const m = /^(.*?\S)\s+[—–]\s+(.+)$/u.exec(en);
+  const head = m ? m[2] : en;
+  const chap = m ? m[1] : '';
+  const g = K.titleGroup(x, y, w, { zh: p.zh, en: head, field: p.field, fieldEn: p.fieldEn }, R.lang, { size: 'chapter', color, maxLines: { en: 1, zh: 1 }, label: '章节' });
+  if (R.lang !== 'en' || !chap || !g.en) return g;
+  const c = K.textBlock(x, g.bottom + 8, w, chap, K.style('sigEn', { size: 15, spacing: 6, lh: 28, color }), { field: p.fieldEn, maxLines: 1, label: '章节' });
+  return { ...g, els: [...g.els, ...c.els], bottom: c.bottom, x1: Math.max(g.x1, c.x1) };
+}
+
+/**
+ * 华文版也印英文的栏位（Aman 的做法：英文大写是装饰性的页眉 / 栏目名）：编辑器的华文版给这些栏位英文框；
+ * 中文改过、英文没跟上时页眉的英文先不印并提醒（R.pair）
+ */
+export const ZH_EN_HEADER = {
+  contents: ['title'],
+  'brand-divider': ['label'],
+  'brand-philosophy': ['title'],
+  'brand-story': ['title'],
+  'brand-collections': ['title'],
+  'brand-awards': ['title'],
+  'brand-supply': ['title'],
+  'company-divider': ['label'],
+  'company-about': ['title'],
+  'company-history': ['title'],
+  'company-showrooms': ['title'],
+  'company-certified': ['title'],
+  'design-divider': ['label'],
+  'service-divider': ['label'],
+  'service-process': ['title'],
+  'service-cycle': ['title'],
+  'service-aftersales': ['title'],
+};
+
+/** 项目自己的图（效果图、楼层图、平面图、立体图、Material Board、材料小样）：瑞吉欧的页不能用它们 */
+function projectImageSet(project) {
+  const set = new Set();
+  const add = (s) => {
+    if (typeof s === 'string' && s.trim()) set.add(s.trim());
+  };
+  for (const s of project?.slides || []) add(s?.image);
+  for (const f of project?.floors || []) {
+    add(f?.image);
+    add(f?.plan);
+    (f?.renders3d || []).forEach(add);
+  }
+  add(project?.cover?.image);
+  for (const m of project?.materials || []) add(m?.image);
+  return set;
 }
 
 // ---------------------------------------------------------------------------
@@ -974,7 +989,10 @@ function makeR(key, slide, ctx) {
     chapters,
     warnings,
     warn,
-    /** 一个字段的中英文（含设计师的改写） */
+    /**
+     * 一个字段的中英文（含设计师的改写）
+     *   edited = { zh, en }：设计师改过（英文自动跟着中文换算的也算改过）—— 改过的字照设计师的分段排，不按默认稿的栏宽重排
+     */
     pair(field) {
       const f = def.fields[field];
       if (!f) return { zh: '', en: '' };
@@ -984,16 +1002,22 @@ function makeR(key, slide, ctx) {
       const shared = f.en === undefined;
       // 只改了中文：能自动换成英文的（Mr & Mrs Lau、5 年 → 5 years）英文跟着变，不再提醒
       const auto = !shared && typeof oz === 'string' && typeof oe !== 'string' ? autoEnOf(f, zh) : '';
-      const en = typeof oe === 'string' ? fill(oe) : shared ? zh : auto || fill(f.en);
+      let en = typeof oe === 'string' ? fill(oe) : shared ? zh : auto || fill(f.en);
       const fields = { field: `overrides.${field}`, fieldEn: shared && typeof oe !== 'string' ? `overrides.${field}` : `overridesEn.${field}` };
+      const edited = { zh: typeof oz === 'string', en: typeof oe === 'string' || !!auto || (shared && typeof oz === 'string') };
       // 英文栏清空 = 这一行在英文里不要：English 版不显示（不退回中文），中英版只显示中文
-      if (typeof oe === 'string' && !en) return { zh: lang === 'en' ? '' : zh, en: '', ...fields };
+      if (typeof oe === 'string' && !en) return { zh: lang === 'en' ? '' : zh, en: '', ...fields, edited };
       // 这一段的英文用到了还没有翻译的客户 / 地点 / 方案名：现在才记「缺英文」（页面会提醒）
       if (!auto) touch(typeof oe === 'string' ? oe : f.en);
-      if (lang !== 'zh' && !shared && !auto && typeof oz === 'string' && typeof oe !== 'string' && clean(oz) !== clean(fillTokens(f.zh, tokens))) {
-        staleEn.push(f.label);
+      const stale = !shared && !auto && typeof oz === 'string' && typeof oe !== 'string' && clean(oz) !== clean(fillTokens(f.zh, tokens));
+      if (stale && lang !== 'zh') staleEn.push(f.label);
+      // 华文版：英文只当装饰性的大写页眉印（ZH_EN_HEADER）。中文改过、英文还是默认稿 → 不印这行过期的英文（和中文对不上），
+      // 提醒设计师补英文（补上了就照常印）
+      if (stale && lang === 'zh') {
+        en = '';
+        if ((ZH_EN_HEADER[key] || []).includes(field)) staleEn.push(f.label);
       }
-      return { zh, en, ...fields };
+      return { zh, en, ...fields, edited };
     },
     /** 照片位用哪张图：设计师换过的（slide.images）优先，否则默认图 */
     resolve(name) {
@@ -1018,42 +1042,40 @@ function makeR(key, slide, ctx) {
       const { src, nat } = R.resolve(name);
       return src && nat?.w && nat?.h ? nat.w / nat.h : null;
     },
-    /** 照片位 → 图片元素（cover 裁满 + 取景；不压暗） */
-    photo(name, x, y, w, h) {
-      const edit = { field: `image.${name}` };
-      const { src, nat, frame, label } = R.resolve(name);
-      if (!src) {
-        warn(`缺照片：${label} —— 点这个位置换一张照片`);
-        return { t: 'rect', x, y, w, h, fill: B.sample, edit, name: `photo:${name}` };
-      }
-      if (!nat?.w || !nat?.h) return { t: 'img', x, y, w, h, src, fit: 'cover', ax: 0.5, ay: 0.5, edit, name: `photo:${name}` };
-      const cover = Math.max(w / nat.w, h / nat.h);
-      const s = cover * Math.max(1, frame.zoom || 1);
-      if (s > 1.15) warn(`图片像素偏低：${label}放大 ${s.toFixed(1)} 倍会发虚，建议换高清图`);
-      const dw = nat.w * s;
-      const dh = nat.h * s;
-      const ax = frame.ax ?? 0.5;
-      const ay = frame.ay ?? 0.5;
-      const ox = (dw - w) * ax;
-      const oy = (dh - h) * ay;
-      const r4 = (v) => Math.max(0, Math.round(v * 1e5) / 1e5);
-      return {
-        t: 'img',
-        x,
-        y,
-        w,
-        h,
-        src,
-        nat,
-        fit: 'cover',
-        ax,
-        ay,
-        crop: { l: r4(ox / dw), t: r4(oy / dh), r: r4((dw - w - ox) / dw), b: r4((dh - h - oy) / dh) },
-        edit,
-        name: `photo:${name}`,
-      };
+    /** 设计师换过这个照片位的图（slide.images 里是一张图）：看不到像素，托字一律最深 */
+    customPhoto(name) {
+      const over = slide?.images?.[name];
+      return typeof over === 'string' && !!over.trim();
     },
-    logo: (x, y, w = 224) => ({ t: 'img', x, y, w, h: Math.round((w * LOGO.nat.h) / LOGO.nat.w * 10) / 10, src: LOGO.src, nat: LOGO.nat, fit: 'contain', name: 'logo' }),
+    /**
+     * 照片位 → 图片元素（kit.placePhoto：cover 裁满 + 取景，不加色层；缺图 / 像素偏低记提醒）
+     *   opts.dark = 白字压在这张照片上：缺图时的占位用深色色带（白字照样读得清）
+     * @returns {{ el, scale, win, box:{x,y,w,h}, custom:boolean, has:boolean }}
+     */
+    photo(name, x, y, w, h, opts = {}) {
+      const img = R.resolve(name);
+      const r = K.placePhoto(img, x, y, w, h, { field: `image.${name}`, name: `photo:${name}` });
+      r.warnings.forEach(warn);
+      // 品牌分开：瑞吉欧的页（公司章节）换上了本案的效果图 / 楼层图 → 提醒（一键跳到这张照片）
+      if (brandOf(R) === 'riccione' && R.customPhoto(name) && projectImageSet(project).has(img.src)) {
+        warn(`瑞吉欧页面只用瑞吉欧的照片：「${img.label}」换成了本案的图 —— 恢复默认，或上传瑞吉欧的照片`);
+      }
+      if (!img.src && opts.dark) r.el = { ...r.el, fill: B.band };
+      return { ...r, box: { x, y, w, h }, custom: R.customPhoto(name), has: !!img.src };
+    },
+    /**
+     * 白字 / 白 logo 压在照片上：字下面的局部托字渐变（kit.shade，1C1915，最深 45%）
+     *   默认照片按实测的深浅（SHADE_A「页:哪一块」），换过的照片一律最深；照片缺了（深色占位）就不用托
+     */
+    shade(ph, parts, what, opts = {}) {
+      if (!ph?.has) return null;
+      const ink = K.inkBox(...parts.filter(Boolean));
+      if (!ink) return null;
+      // 量过的深浅只对默认照片 + 默认文案有效：改过这一页的字（字可能排到照片更亮的地方）或换了照片 → 一律最深
+      const edited = ['overrides', 'overridesEn'].some((b) => Object.entries(slide?.[b] || {}).some(([k, v]) => !isLegacyKey(k) && typeof v === 'string'));
+      const alpha = ph.custom || edited ? K.ALPHA.shadeMax : SHADE_A[`${key}:${what}@${lang}`] ?? SHADE_A[`${key}:${what}`] ?? K.ALPHA.shadeMax;
+      return K.shade(ink, ph.box, { ...opts, alpha })?.el || null;
+    },
     /** 这一组有截短（说不出是哪一栏时，提醒里用 what 说位置） */
     cutWarn(cut, what) {
       if (cut && !areaCuts.includes(what)) areaCuts.push(what);
@@ -1062,7 +1084,9 @@ function makeR(key, slide, ctx) {
     cutAt(field) {
       if (field && !cutFields.includes(field)) cutFields.push(field);
     },
-    finish(els) {
+    finish(out) {
+      const els = (Array.isArray(out) ? out : out.els).filter(Boolean);
+      const bg = Array.isArray(out) ? B.paper : out.bg || B.paper;
       // 截短提醒：说出是哪几栏（「第一章说明」「正文（英文）」）—— 编辑器的一键修复直接跳到那一栏
       for (const el of els) {
         if (!el?._cut) continue;
@@ -1077,6 +1101,9 @@ function makeR(key, slide, ctx) {
       }
       if (lang !== 'zh' && staleEn.length) {
         warn(`改过的中文还没有对应的英文：${[...new Set(staleEn)].slice(0, 3).map((s) => `「${s}」`).join('')} —— 在右侧英文栏里补上`);
+      } else if (lang === 'zh' && staleEn.length) {
+        // 华文版只管页眉：英文大写页眉先不印（和改过的中文对不上）
+        warn(`改过的中文还没有对应的英文：${[...new Set(staleEn)].slice(0, 3).map((s) => `「${s}」`).join('')} —— 英文页眉先不印；在右侧英文栏里补上就会印出来`);
       }
       // 旧版留下的改写（新版式没有对应的栏位）：列出来，设计师对照着重新填，再点「知道了」清掉
       const legacy = legacyOverrides(slide, lang);
@@ -1087,7 +1114,7 @@ function makeR(key, slide, ctx) {
           .join('');
         warn(`旧版里改过的字新版式没有沿用（${legacy.length} 处）：${sample} —— 需要的话在右侧重新填，再点「知道了」`);
       }
-      return page(els, warnings);
+      return page(els, warnings, { bg });
     },
   };
   return R;
@@ -1116,491 +1143,796 @@ export function companyFieldByLabel(key, label) {
 }
 
 // ---------------------------------------------------------------------------
-// 各页版式
+// 各页版式（C 安然）
+//   每个 lay* 返回元素数组，或 { els, bg }（满版照片页的底色 = 实色色带 B.band，照片没出来时也不是一片米色）
 // ---------------------------------------------------------------------------
 
-/** 封面（样张 p1）：logo 左上；客户名（大字，中 | 英并排）+ 方案名 + 日期落在 984；右侧照片 */
+// —— 字级（在 kit.SCALE 之上微调：表格、说明的行高收紧一点）——
+const ST = {
+  key: K.style('rowKey', { lh: 36 }), // 表格项名（HarmonyOS Medium 20pt 字距 4，7B593D）
+  keyEn: K.style('rowKeyEn', { lh: 32 }),
+  name: K.style('body', { size: 20, spacing: 1, lh: 34, color: B.table }), // 奖项名、地点名（20pt，333333）
+  nameEn: K.style('bodyEn', { size: 20, spacing: 0.4, lh: 32, color: B.table }),
+  note: K.style('body', { lh: 32 }), // 说明（18pt，464646）
+  noteEn: K.style('bodyEn', { lh: 30 }),
+  year: K.style('year'), // 年份 Ogg 26pt
+  yearBig: K.style('year', { size: 44, spacing: 2, lh: 60 }), // 品牌故事的两个年份
+  brand: K.style('display', { caps: false, spacing: 2, lh: 64, color: B.table }), // 供应链的品牌名（Ogg 42pt）
+  num: K.style('tocNum', { color: B.title, lh: 72 }), // 纸面上的大编号（Ogg Medium 60pt）
+};
+
+/** 名字太长时一档一档缩小（字号 / 字距 / 行高），直到排得下 maxLines 行；最后一档再放不下就截短 */
+function fitText(x, y, w, text, role, variants, opts = {}) {
+  const maxLines = opts.maxLines ?? 2;
+  const lines = (v) => K.wrapText(text, K.style(role, v), w, { balance: true }).flat().length;
+  // 先找一行排得下的那一档（短名字缩一档排一行，比大字折成「MR / & MRS LAU」好），再找 maxLines 行的
+  for (let t = 1; t <= maxLines; t++) {
+    const v = variants.find((vv) => lines(vv) <= t);
+    if (v) return K.textBlock(x, y, w, text, role, { ...opts, ...v, balance: true });
+  }
+  const last = variants[variants.length - 1];
+  return K.textBlock(x, y, w, text, role, { ...opts, ...last, balance: true, maxLines: opts.lastMax ?? maxLines + 1 });
+}
+
+/** 大字的几档（第一档 = 字级表原样） */
+const FIT = {
+  coverName: [{}, { size: 54, spacing: 14, lh: 92 }, { size: 44, spacing: 9, lh: 74 }],
+  coverNameZh: [{}, { size: 44, spacing: 10, lh: 78 }, { size: 36, spacing: 6, lh: 62 }],
+  hero: [{}, { size: 48, spacing: 6, lh: 88 }, { size: 40, spacing: 4, lh: 70 }],
+  heroBi: [{}, { size: 40, spacing: 4, lh: 70 }, { size: 34, spacing: 3, lh: 58 }],
+  heroEn: [{}, { size: 34, spacing: 4, lh: 50 }, { size: 28, spacing: 3, lh: 42 }],
+  name: [{}, { size: 56, spacing: 10, lh: 100 }, { size: 44, spacing: 6, lh: 78 }],
+  nameEn: [{}, { size: 48, spacing: 10, lh: 76 }, { size: 38, spacing: 6, lh: 60 }],
+};
+
+/**
+ * 章节页 / 封底的大字（标题栏位）：华文 = 宋体大字；English = Ogg 大写；中英 = 两种都排（enFirst = 英文在上）；
+ *   纯拉丁字（方案章节页的 Mr Lau / Muar）三种语言都用 Ogg 大写；中英版的中文两行能并成一行就并（「自然栖居　生活回归」）
+ *   太长：一档一档缩小（FIT），英文最多 4 行、中文最多 3 行，再放不下才截短
+ */
+function heroBuilder(R, x, w, color, roles, opts = {}) {
+  const [p0, l] = latinOf(R.pair(opts.field || 'title'), R.lang);
+  return (y, mb = Infinity) => {
+    let p = p0;
+    const zhRole = l === 'bi' ? roles.bi : roles.zh;
+    if (l === 'bi' && p.zh && p.en) {
+      const joined = clean(p.zh).replace(/\n+/g, '　');
+      if (K.wrapText(joined, K.style(zhRole), w).flat().length === 1) p = { ...p, zh: joined };
+    }
+    const items = K.pick(l, p);
+    // 只有英文一块（English 版、Mr Lau / Muar 这种纯拉丁字）：地方宽裕，先试大一号（Ogg 60 / 54pt，最多 4 行）
+    const enOnly = items.length === 1 && items[0].lang === 'en' && roles.en === 'heroEn';
+    const enFit = enOnly ? [{ size: 60, spacing: 8, lh: 80 }, { size: 54, spacing: 8, lh: 74 }, ...FIT.heroEn] : FIT[roles.en];
+    const zhFit = FIT[zhRole];
+    const n = Math.max(enFit.length, zhFit.length);
+    const at = (arr, k) => arr[Math.min(k, arr.length - 1)];
+    const lines = (st, txt) => K.wrapText(txt, st, w, { balance: true }).flat().length;
+    const fits = (k) => {
+      let h = 0;
+      for (const it of items) {
+        const en = it.lang === 'en';
+        const st = K.style(en ? roles.en : zhRole, at(en ? enFit : zhFit, k));
+        const nl = lines(st, it.text);
+        if (nl > (en ? opts.enLines ?? (enOnly ? 4 : 3) : 3)) return false;
+        h += nl * st.lh;
+      }
+      return h + 14 * (items.length - 1) <= (opts.maxH ?? Infinity);
+    };
+    let k = 0;
+    while (k < n - 1 && !fits(k)) k += 1;
+    const zhSt = K.style(zhRole, { ...at(zhFit, k), color });
+    const enSt = K.style(roles.en, { ...at(enFit, k), color });
+    return part(K.pairBlock(x, y, w, p, l, zhSt, { enRole: enSt, enFirst: opts.enFirst !== false, gap: 14, maxLines: 4, balance: true, maxBottom: mb }));
+  };
+}
+
+
+// ===========================================================================
+// 封面：照片贴左 1680（1.15 倍、上下贴边）+ 右侧 240 实色竖带（竖排签名）；客户 Ogg 大写一行、白短线、方案名、「地点 · 日期」一行小字
+// ===========================================================================
+
 function layCover(R) {
   const { lang } = R;
-  const els = [R.photo('photo', 972, 0, 948, 1080), R.logo(120, 96)];
-  const name = R.pair('name');
-  const sub = R.pair('subtitle');
-  const date = R.pair('date');
-  const hasName = pick(lang, name).length > 0;
-  const head = hasName ? name : sub;
-  const xs = [120, 404];
-  const ws = [260, 544];
-  let cut = false;
-  const sideBySide = fitsSide(head, lang, 'display', ws);
-  const subSide = fitsSide(sub, lang, 'body', ws);
-  // 整组（客户名 + 方案名 + 日期）落在 984：上下对照的块靠底排（valign 'b'），多估一行也不会在中间空出一行
-  const g = restOnLine(984, (y0) => {
-    const out = [];
-    const t = sideBySide
-      ? pside(xs, y0, ws, 'display', head, lang, { singleW: 828, maxLines: 5, valign: 'b' })
-      : pstack(120, y0, 828, 'display', head, lang, { gap: 0, maxLines: 3, valign: 'b' });
-    out.push(...t.els);
-    cut = t.cut;
-    let y = t.bottom;
-    if (hasName && pick(lang, sub).length) {
-      // 方案名：中英并排放得下才并排；自定义的长方案名改成中文一行、英文一行，免得中文在半截折行
-      const s = subSide
-        ? pside(xs, y + 16, ws, 'body', sub, lang, { singleW: 828, maxLines: 2 })
-        : pstack(120, y + 16, 828, 'body', sub, lang, { gap: 0, maxLines: 2, valign: 'b' });
-      out.push(...s.els);
-      y = s.bottom;
-      cut = cut || s.cut;
-    }
-    if (pick(lang, date).length) {
-      const d = pside(xs, y + 44, ws, 'cap', date, lang, { singleW: 828, maxLines: 1 });
-      out.push(...d.els);
-      y = d.bottom;
-    }
-    return { els: out, bottom: y };
+  const PW = 1680;
+  const ph = R.photo('photo', 0, 0, PW, PAGE.H, { dark: true });
+  const band = { t: 'rect', x: PW, y: 0, w: PAGE.W - PW, h: PAGE.H, fill: B.band, name: 'band' };
+  const logo = K.cornerLogo('sail', { onPhoto: true, corner: 'tl' });
+  const vsig = K.signatureVertical(PW + (PAGE.W - PW) / 2, 'sail');
+  // English 版：竖带里只留英文两行和竖线（整页不出现中文）
+  if (lang === 'en') vsig.els = vsig.els.slice(1);
+  const CX = 960;
+  // 字组宽 960（x 480–1440）：左边的芦苇穗很亮，长名字 / 长地址不要排过去
+  const W = 960;
+  const white = { color: B.white, align: 'ctr' };
+  // 客户与地点：第一行 = 客户（大字），其余行 = 地点（并进最下面那一行小字「MUAR · 二〇二六年八月」）
+  const items = K.pick(lang, R.pair('name')).map((it) => {
+    const lines = clean(it.text).split('\n').map(clean).filter(Boolean);
+    return { ...it, head: lines[0] || '', rest: lines.slice(1).join(' · ') };
   });
-  R.cutWarn(cut, '客户与地点');
-  return [...els, ...g.els];
+  const subs = K.pick(lang, R.pair('subtitle'));
+  // 没有客户：方案名当大标题
+  const heads = items.length ? items : subs.map((it) => ({ ...it, head: clean(it.text).replace(/\n+/g, ' '), rest: '' }));
+  const groups = heads.map((it, i) => {
+    const role = hasCJK(it.head) ? 'coverNameZh' : 'coverName';
+    const vs = i > 0 ? FIT[role].slice(1) : FIT[role];
+    return {
+      gap: [10, 4],
+      build: (y) => part(fitText(CX, y, W, it.head, role, vs, { ...white, field: it.field, maxLines: 2 })),
+      alt: (y) => part(fitText(CX, y, W, it.head, role, vs, { ...white, field: it.field, maxLines: 1, lastMax: 1 })),
+    };
+  });
+  groups.push({ gap: [28, 18], build: (y) => solo(K.rule(CX - 40, y, 80, { color: B.white, alpha: K.ALPHA.photoRule })) });
+  if (items.length) {
+    subs.forEach((it, i) => {
+      const role = it.lang === 'en' ? 'coverTitleEn' : 'coverTitle';
+      groups.push({
+        gap: [i ? 2 : 30, i ? 0 : 18],
+        build: (y) => part(K.textBlock(CX, y, W, it.text, role, { ...white, field: it.field, maxLines: 2, balance: true })),
+        alt: (y) => part(K.textBlock(CX, y, W, it.text, role, { ...white, field: it.field, maxLines: 1 })),
+      });
+    });
+  }
+  // 地点 · 日期：华文一行；English 一行；中英 = 中文一行 + 英文一行（英文地点和中文一样就不重复）
+  const date = R.pair('date');
+  const zhName = items.find((it) => it.lang === 'zh');
+  const enName = items.find((it) => it.lang === 'en');
+  const dz = K.pick('zh', date)[0];
+  const de = K.pick('en', date)[0];
+  const seg = (it, text) => (it && clean(text) ? { text, field: it.field, role: it.lang === 'en' ? 'coverMetaEn' : 'coverMeta' } : null);
+  const metaLines = [];
+  if (lang === 'zh') metaLines.push([seg(zhName, zhName?.rest), seg(dz, dz?.text)]);
+  else if (lang === 'en') metaLines.push([seg(items[0], items[0]?.rest), seg(de, de?.text)]);
+  else {
+    metaLines.push([seg(zhName || enName, (zhName || enName)?.rest), seg(dz, dz?.text)]);
+    const enLoc = enName && enName.rest !== zhName?.rest ? enName.rest : '';
+    metaLines.push([seg(enName, enLoc), de?.lang === 'en' && clean(de.text) !== clean(dz?.text) ? seg(de, de.text) : null]);
+  }
+  metaLines.forEach((segs, i) => {
+    const ps = segs.filter(Boolean);
+    if (!ps.length) return;
+    const meta = (lines) => (y) => {
+      const one = inlineRun(CX, y, ps, { align: 'ctr', upperLatin: true, color: B.cream });
+      if (one.w <= W) return one;
+      // 太长（地址很长）：每一段各占一行（紧凑版：每段一行，截短）
+      let cur = y;
+      const els = [];
+      for (const p of ps) {
+        const st = K.style(p.role, { color: B.cream, caps: p.role === 'coverMetaEn' || !hasCJK(p.text) });
+        const b = K.textBlock(CX, cur, W, p.text, st, { align: 'ctr', field: p.field, maxLines: lines, balance: true });
+        els.push(...b.els);
+        cur = b.bottom;
+      }
+      return { els, top: y, bottom: cur, x0: CX - W / 2, x1: CX + W / 2 };
+    };
+    groups.push({ gap: [i ? 4 : 26, i ? 2 : 16], build: meta(2), alt: meta(1) });
+  });
+  // 字组在台面（y≈720 起，很亮）上方：最多排到 690
+  const g = flow(232, 690, groups, { align: 'center', center: 444 });
+  const shLogo = R.shade(ph, [logo], 'logo', { dir: 'v' });
+  const shText = R.shade(ph, g.parts, 'title', { dir: 'v' });
+  return { bg: B.band, els: [ph.el, shLogo, shText, band, logo.el, ...g.els, ...vsig.els] };
 }
 
-/**
- * 目录：标题挂在 96；看得到的几章一行一行，细线分隔，落在 984。
- * 老客户隐藏了品牌 / 公司 / 服务章节：那一章不列，编号按看得到的章节重排（01、02…）；每行的文字仍是那一章的栏位
- */
+// ===========================================================================
+// 目录：满版照片；「CONTENTS 目录」一行；栏左一条贯穿到底的白竖线；编号 Ogg Medium 60pt、条目、说明
+//   一栏排在照片左边深色的门洞上（门洞外的清水墙很亮，白字托到 45% 也不够 4.5:1）；签名在左下
+//   隐藏的章节不列，编号按看得到的章节重排（01、02…）
+// ===========================================================================
+
 function layContents(R) {
   const { lang } = R;
-  const head = pstack(120, 96, 828, 'head', R.pair('title'), lang, { maxLines: 1 });
-  let cut = false;
-  const pad = lang === 'bi' ? 26 : 34;
+  const ph = R.photo('photo', 0, 0, PAGE.W, PAGE.H, { dark: true });
+  const title = K.titleGroup(PAGE.left, 96, 1300, R.pair('title'), lang, { color: B.white, inline: true, maxLines: { en: 1, zh: 1 } });
+  const logo = K.cornerLogo('sail', { onPhoto: true });
   const shown = (R.chapters?.list || CHAPTERS).map((c) => CHAPTERS.indexOf(c) + 1).filter((i) => i > 0);
-  if (!shown.length) return head.els;
-  const rows = (y0) => {
-    const out = [hair(120, y0, 1680)];
-    let y = y0;
-    for (const [n, i] of shown.map((idx, k) => [k + 1, idx])) {
-      const top = y + pad;
-      const t = pstack(404, top, 402, 'head', R.pair(`ch${i}`), lang, { maxLines: 1 });
-      const t0 = t.blocks[0];
-      const firstBase = t0 ? t0.top + baseOf(t0.lang, 'head') : top + 47;
-      const line = R.pair(`ch${i}Line`);
-      const li = itemsOf(lang, line);
-      const dTop = firstBase - baseOf(li[0]?.lg || 'zh', 'body');
-      // 两行说明的第二行对准标题英文那一行的基线
-      let gap = STACK_GAP.body;
-      if (t.blocks.length === 2 && li.length === 2 && t.blocks[0].lines === 1) {
-        const enBase = t.blocks[1].top + baseOf(t.blocks[1].lang, 'head');
-        const zhLines = nLines(li[0].text, li[0].lg, 'body', 828);
-        if (zhLines === 1) gap = Math.max(0, enBase - baseOf(li[1].lg, 'body') - (dTop + 40));
-      }
-      const d = pstack(972, dTop, 828, 'body', line, lang, { gap, maxLines: 1 });
-      const num = tb(120, firstBase - baseOf('en', 'cap'), 142, String(n).padStart(2, '0'), 'en', 'cap', { nowrap: true });
-      out.push(num.el, ...t.els, ...d.els);
-      cut = cut || t.cut || d.cut;
-      y = Math.max(t.bottom, d.bottom) + pad;
-      out.push(hair(120, y, 1680));
+  const LX = 200; // 竖线
+  const X = LX + 167; // 条目、说明
+  const W = 540;
+  /** 一章：条目（中英版「品牌　Brand」排一行，放不下就上下排）+ 说明 */
+  const entry = (ch, y, noteMax = 2) => {
+    const it = K.pick(lang, R.pair(`ch${ch}`));
+    const els = [];
+    let bottom = y;
+    const inline = it.length === 2 && K.measure(`${it[0].text}`, K.style('tocItem')) + 28 + K.measure(it[1].text, K.style('tocItemEn')) <= W * 0.98;
+    if (inline) {
+      const a = K.textLines(X, y, [[clean(it[0].text)]], 'tocItem', { field: it[0].field });
+      const b = K.textLines(a.x1 + 28, y, [[clean(it[1].text)]], 'tocItemEn', { field: it[1].field });
+      els.push(a.el, b.el);
+      bottom = a.bottom;
+    } else if (it.length === 2 && noteMax === 1) {
+      // 放不下的紧凑版：中英还是排一行，各自截短
+      const a = K.textBlock(X, y, W * 0.45, it[0].text, 'tocItem', { field: it[0].field, maxLines: 1 });
+      const bx = a.x1 + 28;
+      const b = K.textBlock(bx, y, X + W - bx, it[1].text, 'tocItemEn', { field: it[1].field, maxLines: 1 });
+      els.push(...a.els, ...b.els);
+      bottom = a.bottom;
+    } else {
+      const a = duo(X, y, W, R.pair(`ch${ch}`), lang, 'tocItem', { maxLines: 1 });
+      els.push(...a.els);
+      bottom = a.bottom;
     }
-    return { els: out, bottom: y };
+    // 说明用白色（不是 F5EFDD）：这张照片的门洞外是很亮的清水墙，奶白色托到 45% 只有 4.3:1
+    const note = duo(X, bottom + 6, W, R.pair(`ch${ch}Line`), lang, K.style('tocNote', { color: B.white }), { enRole: K.style('tocNoteEn', { color: B.white }), maxLines: noteMax, gap: 0 });
+    els.push(...note.els);
+    return { els, top: y, bottom: Math.max(note.bottom, y + 80), x0: X, x1: Math.max(X, note.x1 ?? X) };
   };
-  const list = restOnLine(984, rows);
-  R.cutWarn(cut, '目录');
-  return [...head.els, ...list.els];
+  // 一栏（照片左边深色的门洞上）：编号 Ogg Medium 60pt、条目、说明；行距随内容（四章排到 y≈880）
+  //   放不下（中英版、四层楼的长说明、改过的长文字）：说明每种语言减到一行，再把第一章往上提
+  const n = shown.length;
+  let noteMax = 2;
+  let hs = shown.map((ch) => heightOf(entry(ch, 0, noteMax)));
+  if (330 + sum(hs) + 20 * (n - 1) > 880) {
+    noteMax = 1;
+    hs = shown.map((ch) => heightOf(entry(ch, 0, noteMax)));
+  }
+  const gap = n > 1 ? clamp((870 - 330 - sum(hs)) / (n - 1), 20, 90) : 0;
+  const TOP = Math.round(clamp(880 - sum(hs) - gap * (n - 1), Math.max(236, title.bottom + 64), 330));
+  const els = [];
+  const parts = [title];
+  let y = TOP;
+  shown.forEach((ch, k) => {
+    if (k) y = Math.round(y + hs[k - 1] + gap);
+    const num = K.textLines(LX + 27, y - 8, [[String(k + 1).padStart(2, '0')]], 'tocNum', { name: 'num' });
+    const e = entry(ch, y, noteMax);
+    els.push(num.el, ...e.els);
+    parts.push(num, e);
+  });
+  const line = K.vrule(LX, 300, PAGE.H - 300, { color: B.white, alpha: K.ALPHA.photoVline });
+  // 签名在左下（右下是很亮的清水墙和石板，托到 45% 也不够 4.5:1）
+  const sig = signatureLeft(R, LX + 27, 'sail', B.white);
+  parts.push(sig);
+  const shL = R.shade(ph, parts, 'left', { dir: 'h' });
+  const shR = R.shade(ph, [logo], 'logo', { dir: 'v' });
+  return { bg: B.band, els: [ph.el, shL, shR, line, ...title.els, logo.el, ...els, ...sig.els] };
 }
 
-/** 章节页（样张 p2）：左侧竖图从顶边垂下，脚落在大标题最后一行的基线；章节名挂在 96；大标题 + 一句话落在 984 */
+
+// ===========================================================================
+// 章节页
+//   半版（品牌 / 方案 / 服务，以及换了竖图的公司章节页）：照片贴左 1022、上下贴边；照片左上白字栏目名；
+//     右侧纸面：大字（宋体 / Ogg）→ 180 短线 → 一句话，整组在页面中线附近；深色 logo 右上，签名右下
+//   满版（公司 · 瑞吉欧，dirA2 第 4 页）：照片铺满；左上栏目名、左栏「瑞吉欧」+ 白短线 + 一句话；右上白色 RICCIONE 商标
+// ===========================================================================
+
+/** 默认照片左上角太亮、白字托不住的章节页：栏目名放到纸面上（棕色） */
+const LABEL_ON_PAPER = { 'design-divider': true };
+
+/** 照片铺满整页会不会放大超过 1.15 倍（不知道尺寸 = 照常铺满） */
+function fullBleedOK(R, name) {
+  const img = R.resolve(name);
+  if (!img.src || !img.nat?.w || !img.nat?.h) return true;
+  return Math.max(PAGE.W / img.nat.w, PAGE.H / img.nat.h) * Math.max(1, img.frame?.zoom || 1) <= 1.15 + 1e-6;
+}
+
+/** 照片贴右的章节页（镜像）：服务章节页 —— 和后面贴左的团队页一左一右，翻页不重复 */
+const DIVIDER_RIGHT = { 'service-divider': true };
+
 function layDivider(R) {
+  if (R.key === 'company-divider' && fullBleedOK(R, 'photo')) return layDividerFull(R);
   const { lang } = R;
-  const xs = [830, 1256];
-  const ws = [402, 544];
-  const label = pside(xs, 96, ws, 'cap', R.pair('label'), lang, { singleW: 970, maxLines: 1 });
-  // 一句话和大标题一样：中英每种语言都能一行排下才并排（最后一行共用基线 984）；
-  // 放不下（例如三层楼的「一楼、二楼与三楼，逐个空间的设计。」）就中文一行、英文一行上下排，整组落在 984
-  const lp = R.pair('lead');
-  const lead = fitsSide(lp, lang, 'body', ws)
-    ? pside(xs, 984, ws, 'body', lp, lang, { singleW: 970, bottom: true, maxLines: 2 })
-    : restOnLine(984, (y) => pstack(830, y, 970, 'body', lp, lang, { gap: stackGap(lp, lang, 'body', 970), maxLines: 2, valign: 'b' }));
-  const titleBottom = lead.blocks.length ? lead.top - 18 : 984;
-  const tp = R.pair('title');
-  let title;
-  let foot = titleBottom;
-  if (fitsSide(tp, lang, 'display', ws)) {
-    title = pside(xs, titleBottom, ws, 'display', tp, lang, { singleW: 970, bottom: true, maxLines: 4 });
-    if (title.blocks.length) foot = title.lastBase;
-  } else {
-    // 中英放不下并排：中文在上、英文在下，整组落在一句话上面
-    title = restOnLine(titleBottom, (y) => pstack(830, y, 970, 'display', tp, lang, { gap: 0, maxLines: 3, valign: 'b' }));
-    const lb = title.blocks[title.blocks.length - 1];
-    if (lb) foot = lb.bottom - lhOf(lb.lang, 'display') + baseOf(lb.lang, 'display');
-  }
-  R.cutWarn(lead.cut || title.cut || label.cut, '章节页文字');
-  foot = Math.round(foot);
-  return [R.photo('photo', 120, 0, 544, foot), ...label.els, ...title.els, ...lead.els];
+  const brand = brandOf(R);
+  const PW = 1022;
+  const right = !!DIVIDER_RIGHT[R.key];
+  // 贴左：照片 0–1022，纸面栏 x 1110；贴右（镜像）：照片 898–1920，纸面栏 x 120 起、到照片边前 88
+  const PX = right ? PAGE.W - PW : 0;
+  const X = right ? PAGE.leftWide : 1110;
+  const W = right ? PX - 88 - X : PAGE.right - X;
+  const ph = R.photo('photo', PX, 0, PW, PAGE.H, { dark: true });
+  const onPaper = !!LABEL_ON_PAPER[R.key] && !ph.custom;
+  const label = onPaper ? chapterLabel(R, X, PAGE.labelTop, W - 360, B.title) : chapterLabel(R, PX + PAGE.leftWide, PAGE.labelTop, PW - 2 * PAGE.leftWide, B.white);
+  // 瑞吉欧（换了竖图的公司章节页）：English / 中英的品牌名用原色商标图，角上不再放小商标
+  const markHero = brand === 'riccione' ? riccioneMarkHero(R, X, W, false) : null;
+  // 镜像页：深色 logo 在纸面左上，签名在纸面栏右下（照片右下压不住小字）
+  const logo = markHero ? null : right ? K.cornerLogo(brand, { corner: 'tl' }) : K.cornerLogo(brand);
+  const sig = sign(R, brand, right ? { right: X + W } : {});
+  const roles = brand === 'riccione' ? { zh: 'name', bi: 'name', en: 'nameEn' } : { zh: 'hero', bi: 'heroBi', en: 'heroEn' };
+  const hero = markHero || heroBuilder(R, X, W, B.title, roles, { enFirst: brand !== 'riccione' });
+  const top = onPaper ? Math.max(label.bottom + 64, 260) : 250;
+  // 一行的大标题（「服务与交付」）字组矮：组间距拉开一点（最多 1.8 倍），纸面栏上下的空纸不超过 250
+  const g = flow(top, BOTTOM, [
+    { build: (y, mb) => hero(y, mb) },
+    { gap: [lang === 'bi' ? 44 : 34, 24], build: (y) => solo(K.rule(X + 2, y, 180)) },
+    { gap: [38, 26], flex: true, build: (y, mb) => part(duo(X, y, W, R.pair('lead'), lang, 'lead', { maxLines: 3, maxBottom: mb })) },
+  ], { align: 'center', center: Math.round(((logo ? logo.bottom : 192) + sig.top) / 2), fill: top + 262 });
+  const sh = onPaper ? null : R.shade(ph, [label], 'label', { dir: 'v' });
+  return [ph.el, sh, ...label.els, logo?.el, ...g.els, ...sig.els];
 }
 
 /**
- * 品牌理念：右侧照片从顶边垂下，脚落在正文最后一行的基线；标题挂在 96；正文 + 结语落在 984。
- *   横图 = 第 7–12 栏、出血到右边；竖图 = 第 9–12 栏的竖版（像章节页的竖图，左右对调）
+ * 公司章节页的大标题：English / 中英版的英文就是品牌名（Riccione）→ RICCIONE 商标图（宽 520；照片上白色、纸面上原色），
+ * 中英版「瑞吉欧」大字在上、商标在下；点商标落到大标题的英文栏。不是品牌名（设计师改过）/ 华文版 → null（照常排字）
  */
+function riccioneMarkHero(R, X, W, onPhoto) {
+  const tp = R.pair('title');
+  if (R.lang === 'zh' || !/^riccione$/i.test(clean(tp.en))) return null;
+  return (y) => {
+    const els = [];
+    let cur = y;
+    if (R.lang === 'bi' && clean(tp.zh)) {
+      const z = K.textBlock(X, cur, W, tp.zh, K.style('name', { color: onPhoto ? B.white : B.title }), { field: tp.field, maxLines: 2, balance: true });
+      els.push(...z.els);
+      cur = z.bottom + 28;
+    }
+    const mk = { ...K.logo(onPhoto ? 'riccioneWhite' : 'riccioneColor', X, cur, 520), edit: { field: tp.fieldEn } };
+    els.push(mk);
+    return { els, top: y, bottom: cur + mk.h, x0: X, x1: X + 520 };
+  };
+}
+
+function layDividerFull(R) {
+  const { lang } = R;
+  const ph = R.photo('photo', 0, 0, PAGE.W, PAGE.H, { dark: true });
+  const X = PAGE.leftWide;
+  const W = 860;
+  const label = chapterLabel(R, X, PAGE.labelTop, 1000, B.white);
+  const sig = sign(R, 'riccione', { onPhoto: true });
+  // English / 中英：大标题的英文就是品牌名（Riccione）→ 用白色 RICCIONE 商标图（宽 520），不用 Ogg 排一个文字字标；
+  //   中英版「瑞吉欧」72pt 在上、商标在下。这时右上角不再放小商标（一页只出现一次商标，Aman 第 1 页）
+  const markHero = riccioneMarkHero(R, X, W, true);
+  const logo = markHero ? null : K.cornerLogo('riccione', { onPhoto: true });
+  const hero = markHero || heroBuilder(R, X, W, B.white, { zh: 'name', bi: 'name', en: 'nameEn' }, { enFirst: false });
+  const g = flow(300, BOTTOM, [
+    { build: (y, mb) => hero(y, mb) },
+    { gap: [42, 28], build: (y) => solo(K.rule(X + 4, y, 180, { color: B.white, alpha: K.ALPHA.photoRule })) },
+    { gap: [38, 26], flex: true, build: (y, mb) => part(duo(X, y, W, R.pair('lead'), lang, 'lead', { color: B.white, maxLines: 3, maxBottom: mb })) },
+  ], { align: 'center', center: 646 });
+  // 左边一条横向托字（栏目名、大标题、一句话）：蕨叶上的细衬线栏目名也要托住
+  const shL = R.shade(ph, [label, ...g.parts], 'left', { dir: 'h' });
+  const shR = R.shade(ph, [logo, sig], 'right');
+  return { bg: B.band, els: [ph.el, shL, shR, ...label.els, logo?.el, ...g.els, ...sig.els] };
+}
+
+// ===========================================================================
+// 品牌理念（dirA2 第 5 / 9 页）：半版照片贴左 880（白 logo 左上）；右栏：标题组 → 正文 → 360 细线 → 结语（宋体）
+// ===========================================================================
+
 function layPhilosophy(R) {
   const { lang } = R;
-  const wide = (R.ratio('photo') ?? 1.5) >= 1.2;
-  const head = pstack(120, 96, wide ? 828 : 1012, 'head', R.pair('title'), lang, { maxLines: 3 });
-  const closing = restOnLine(984, (y) => pstack(120, y, 1012, 'body', R.pair('closing'), lang, { gap: 0, maxLines: 2, valign: 'b' }));
-  const bodyBottom = closing.els.length ? closing.top - 32 : 984;
-  // 正文按自然行数落在结语上面；碰到标题才从标题下面排、截到底
-  const body = restOnLine(bodyBottom, (y) => pstack(120, y, 760, 'body', R.pair('body'), lang, { gap: STACK_GAP.body, valign: 'b' }));
-  let bodyEls = body.els;
-  let last = body.blocks[body.blocks.length - 1];
-  if (body.top < head.bottom + MIN_GAP) {
-    // 太长：从标题下面开始排，截到底
-    const b2 = pstack(120, head.bottom + MIN_GAP, 760, 'body', R.pair('body'), lang, { gap: STACK_GAP.body, maxBottom: bodyBottom });
-    bodyEls = b2.els;
-    last = b2.blocks[b2.blocks.length - 1];
-    R.cutWarn(b2.cut || b2.overflow, '理念正文');
-  }
-  R.cutWarn(head.cut || closing.cut || body.cut, '理念');
-  const foot = Math.min(904, last ? Math.round(last.bottom - lhOf(last.lang, 'body') + baseOf(last.lang, 'body')) : 904);
-  const pic = wide ? R.photo('photo', 972, 0, 948, foot) : R.photo('photo', 1256, 0, 544, foot);
-  return [pic, ...head.els, ...bodyEls, ...closing.els];
+  const g0 = K.halfPage('left', { photoW: 880, gap: 110 });
+  const ph = R.photo('photo', 0, 0, g0.photo.w, PAGE.H, { dark: true });
+  const logo = K.cornerLogo('sail', { onPhoto: true, corner: 'tl' });
+  const sig = sign(R, 'sail');
+  const { x, w } = g0.col;
+  const bi = lang === 'bi';
+  const g = flow(PAGE.top, BOTTOM, [
+    titleG(R, x, w),
+    { gap: [bi ? 48 : 68, 32], flex: true, build: (y, mb) => part(duo(x, y, w, R.pair('body'), lang, bi ? 'body' : 'bodyL', { reflow: true, maxBottom: mb })) },
+    { gap: [bi ? 36 : 58, 24], build: (y) => solo(K.rule(x, y, 360)) },
+    { gap: [bi ? 36 : 44, 24], build: (y) => part(duo(x, y, w, R.pair('closing'), lang, bi ? 'closeBi' : 'close', { enRole: lang === 'en' ? 'quoteEn' : 'closeEn', maxLines: 2 })), alt: (y) => part(duo(x, y, w, R.pair('closing'), lang, bi ? 'closeBi' : 'close', { enRole: lang === 'en' ? 'quoteEn' : 'closeEn', maxLines: 1 })) },
+  ], { fill: sig.top - 200 }); // 不留大空洞：English 版字少，组间距拉开一点
+  const sh = R.shade(ph, [logo], 'logo', { dir: 'v' });
+  return [ph.el, sh, logo.el, ...g.els, ...sig.els];
 }
 
-/** 品牌故事（样张 p3）：右侧大照片出血；左栏标题 + 正文挂在 96，两个地名落在 984 */
+// ===========================================================================
+// 品牌故事：左栏文字（标题组 → 正文 → 两个年份 / 地名），半版照片贴右 920（白 logo 右上、签名压在照片上）
+// ===========================================================================
+
 function layStory(R) {
   const { lang } = R;
-  const els = [R.photo('photo', 760, 0, 1160, 1080)];
-  const head = pstack(120, 96, 600, 'head', R.pair('title'), lang, { maxLines: 2 });
-  const figs = restOnLine(984, (y0) => {
-    const out = [hair(120, y0, 544)];
-    let bottom = y0;
+  const g0 = K.halfPage('right', { photoW: 920, gap: 100 });
+  const ph = R.photo('photo', g0.photo.x, 0, g0.photo.w, PAGE.H, { dark: true });
+  const logo = K.cornerLogo('sail', { onPhoto: true });
+  // 签名在纸面上（文字栏右下，Aman 第 7 页）：照片右下是很亮的石板路
+  const sig = sign(R, 'sail', { right: g0.col.right });
+  const { x, w } = g0.col;
+  const bi = lang === 'bi';
+  const FW = (w - 64) / 2;
+  const figs = (y) => {
+    const els = [K.rule(x, y, w, { alpha: K.ALPHA.tableRule })];
+    let bottom = y;
     [1, 2].forEach((n, i) => {
-      const x = i ? 404 : 120;
-      const yr = R.pair(`year${n}`);
-      const yi = itemsOf(lang, yr)[0];
-      if (yi) out.push(tb(x, y0 + 16, 260, yi.text, yi.lg, 'cap', { maxLines: 1, edit: editOf(yi) }).el);
-      const pl = pstack(x, y0 + 44, 260, 'body', R.pair(`place${n}`), lang, { gap: 0, maxLines: 1 });
-      out.push(...pl.els);
+      const fx = x + i * (FW + 64);
+      const yr = duo(fx, y + (bi ? 24 : 32), FW, R.pair(`year${n}`), lang, ST.yearBig, { latin: true, enRole: ST.yearBig, maxLines: 1 });
+      const pl = duo(fx, yr.bottom + 6, FW, R.pair(`place${n}`), lang, 'lead', { latin: true, maxLines: 1, gap: 0 });
+      els.push(...yr.els, ...pl.els);
       bottom = Math.max(bottom, pl.bottom);
     });
-    return { els: out, bottom };
-  });
-  const body = pstack(120, head.bottom + 56, 600, 'body', R.pair('body'), lang, { gap: STACK_GAP.body, maxBottom: figs.els[0].y - MIN_GAP });
-  R.cutWarn(body.cut || body.overflow || head.cut, '品牌故事正文');
-  return [...els, ...head.els, ...body.els, ...figs.els];
+    return { els, top: y, bottom, x0: x, x1: x + w };
+  };
+  const g = flow(PAGE.top, BOTTOM, [
+    titleG(R, x, w),
+    { gap: [bi ? 48 : 68, 28, bi ? 64 : 120], flex: true, build: (y, mb) => part(duo(x, y, w, R.pair('body'), lang, bi ? 'body' : 'bodyL', { reflow: true, maxBottom: mb })) },
+    { gap: [bi ? 48 : 76, 28, bi ? 72 : 150], build: figs },
+  ], { fill: 860 });
+  const shTop = R.shade(ph, [logo], 'logo', { dir: 'v' });
+  return [ph.el, shTop, logo.el, ...g.els, ...sig.els];
 }
 
-/** 原创系列（样张 p4）：标题 + 一句话；五张竖图；图下系列名（中　英一行）与说明，最长的一组落在 984 */
+// ===========================================================================
+// 原创系列：标题组 + 一句话；五张竖图一排（高度随说明的多少）；图下系列名（20pt）+ 说明
+// ===========================================================================
+
 function layCollections(R) {
   const { lang } = R;
-  const head = pstack(120, 96, 828, 'head', R.pair('title'), lang, { maxLines: 1 });
-  const note = besideHead(1256, 544, head, 'body', R.pair('note'), lang, { maxLines: 3 });
-  const X = [0, 1, 2, 3, 4].map((i) => 120 + 342 * i);
-  let cut = note.cut;
-  const caption = (i) => (y) => {
-    const nm = inlinePair(X[i], y, 312, R.pair(`c${i + 1}`), lang);
-    const d = pstack(X[i], nm.bottom + 20, 312, 'cap', R.pair(`c${i + 1}Line`), lang, { gap: 0, maxLines: 3 });
-    cut = cut || nm.cut || d.cut;
-    return { els: [...nm.els, ...d.els], bottom: d.bottom };
+  const logo = K.cornerLogo('sail');
+  const sig = sign(R, 'sail');
+  const X = PAGE.left;
+  const W = PAGE.right - X;
+  const N = 5;
+  const GUT = 24;
+  const CW = (W - GUT * (N - 1)) / N;
+  const head = flow(PAGE.top, 420, [
+    titleG(R, X, 1300, { maxLines: { en: 1, zh: 1 } }),
+    { gap: [22, 14], build: (y) => part(duo(X, y, 1300, R.pair('note'), lang, 'lead', { reflow: true, maxLines: 2 })), alt: (y) => part(duo(X, y, 1300, R.pair('note'), lang, 'lead', { reflow: true, maxLines: 1 })) },
+  ]);
+  // 说明的行数：先按自然行数；照片会被挤到 240 以下时一档一档减（系列名每种语言 1 行、说明 2 行 → 1 行，截短 + 提醒）
+  const LEVELS = [[2, 3], [1, 2], [1, 1]];
+  const caption = (i, y, [nmMax, lnMax]) => {
+    const xi = X + i * (CW + GUT);
+    const nm = duo(xi, y, CW, R.pair(`c${i + 1}`), lang, ST.key, { enRole: ST.keyEn, maxLines: nmMax, gap: 0 });
+    const ln = duo(xi, nm.bottom + 8, CW, R.pair(`c${i + 1}Line`), lang, ST.note, { enRole: ST.noteEn, maxLines: lnMax, gap: 4 });
+    return { els: [...nm.els, ...ln.els], top: y, bottom: ln.bottom };
   };
-  const capH = Math.max(...X.map((_, i) => caption(i)(0).bottom));
-  const plateTop = Math.max(280, Math.ceil(head.bottom + 64), Math.ceil(note.bottom + 30));
-  const plateBottom = 984 - capH - 32;
-  const els = [...head.els, ...note.els];
-  X.forEach((x, i) => els.push(R.photo(`c${i + 1}`, x, plateTop, 312, Math.max(120, plateBottom - plateTop))));
-  X.forEach((_, i) => els.push(...caption(i)(plateBottom + 32).els));
-  R.cutWarn(cut, '系列说明');
-  return els;
+  const top = Math.ceil(head.bottom + 52);
+  const capOf = (lv) => Math.max(...[0, 1, 2, 3, 4].map((i) => heightOf(caption(i, 0, lv))));
+  const lv = LEVELS.find((l) => BOTTOM - capOf(l) - 28 - top >= 240) || LEVELS[LEVELS.length - 1];
+  const capTop = BOTTOM - capOf(lv);
+  const bottom = Math.max(top + 160, capTop - 28);
+  const els = [...head.els, logo.el];
+  for (let i = 0; i < N; i++) {
+    els.push(R.photo(`c${i + 1}`, Math.round(X + i * (CW + GUT)), top, Math.round(CW), bottom - top).el);
+    els.push(...caption(i, bottom + 28, lv).els);
+  }
+  return [...els, ...sig.els];
 }
 
-/** 设计奖项：左侧照片从顶边垂到 984（与列表最后一条细线齐）；右栏标题挂在 96，四个奖项落在 984 */
+// ===========================================================================
+// 设计奖项：半版照片贴左 820（白 logo 左上）；右栏标题组 + 四个奖项（年份 Ogg | 奖项名 + 说明），细线分隔、撑满到页脚上方
+// ===========================================================================
+
 function layAwards(R) {
   const { lang } = R;
-  let head = headAt(R, 1114, 686, 2);
-  const rows = [1, 2, 3, 4].map((n) => ({ label: R.pair(`y${n}`), value: R.pair(`a${n}`), note: R.pair(`a${n}Note`) }));
-  const list = restTable(head.bottom + MIN_GAP, (k) =>
-    listRows(rows, lang, { x: 1114, w: 686, labelW: 142, valueX: 1256, valueW: 544, pad: 14, noteGap: 6, valueMax: k, noteMax: k }));
-  if (head.bottom > list.top - MIN_GAP) head = headAt(R, 1114, 686, 2, list.top - MIN_GAP);
-  R.cutWarn(list.cut || head.cut, '奖项');
-  return [R.photo('photo', 0, 0, 948, 984), ...head.els, ...list.els];
+  const g0 = K.halfPage('left', { photoW: 820, gap: 100 });
+  const ph = R.photo('photo', 0, 0, g0.photo.w, PAGE.H, { dark: true });
+  const logo = K.cornerLogo('sail', { onPhoto: true, corner: 'tl' });
+  const sig = sign(R, 'sail');
+  const { x, w } = g0.col;
+  const YW = 136;
+  const rows = [1, 2, 3, 4].map((n) => [
+    (y) => part(duo(x, y - 1, YW - 16, R.pair(`y${n}`), lang, ST.year, { latin: true, enRole: ST.year, maxLines: 1 })),
+    (y, k) => {
+      const a = duo(x + YW, y, w - YW, R.pair(`a${n}`), lang, ST.name, { enRole: ST.nameEn, maxLines: k, gap: 0 });
+      const b = duo(x + YW, a.bottom + 6, w - YW, R.pair(`a${n}Note`), lang, ST.note, { enRole: ST.noteEn, maxLines: k, gap: 0 });
+      return { els: [...a.els, ...b.els], top: y, bottom: b.bottom };
+    },
+  ]);
+  const g = flow(PAGE.top, BOTTOM, [
+    titleG(R, x, w),
+    { gap: [60, 32], flex: true, build: table(x, w, rows, { pad: [12, 24, 46], fill: BOTTOM - 16 }) },
+  ]);
+  const sh = R.shade(ph, [logo], 'logo', { dir: 'v' });
+  return [ph.el, sh, logo.el, ...g.els, ...sig.els];
 }
 
-/** 全球供应链：没有 logo 墙 —— 三类、品牌名用标题字级；一句话与标题共用基线 */
+// ===========================================================================
+// 全球供应链（没有照片位：大字加列表，Aman 第 10 页）：标题组 + 一句话；三行（类别 | 品牌名 Ogg 42pt），细线分隔、撑满
+// ===========================================================================
+
 function laySupply(R) {
   const { lang } = R;
-  const head = pstack(120, 96, 828, 'head', R.pair('title'), lang, { maxLines: 1 });
-  let lead = besideHead(1256, 544, head, 'body', R.pair('lead'), lang, { maxLines: 3 });
-  let cut = false;
-  const rows = (k) => (y0) => {
-    const out = [hair(120, y0, 1680)];
-    let y = y0;
-    for (let n = 1; n <= 3; n++) {
-      const top = y + 30;
-      const v = pstack(404, top, 1396, 'head', R.pair(`s${n}Brands`), lang, { gap: 0, maxLines: k });
-      const v0 = v.blocks[0];
-      const base0 = v0 ? v0.top + baseOf(v0.lang, 'head') : top + 44;
-      let lb = top;
-      itemsOf(lang, R.pair(`s${n}`)).forEach((it, i) => {
-        const t = i === 0 ? base0 - baseOf(it.lg, 'cap') : lb;
-        const b = tb(120, t, 244, it.text, it.lg, 'cap', { edit: editOf(it), maxLines: k });
-        out.push(b.el);
-        lb = b.bottom;
-        cut = cut || b.cut;
-      });
-      out.push(...v.els);
-      cut = cut || v.cut;
-      y = Math.max(v.bottom, lb) + 30;
-      out.push(hair(120, y, 1680));
-    }
-    return { els: out, top: y0, bottom: y, cut };
-  };
-  const list = restTable(Math.max(head.bottom, lead.bottom) + MIN_GAP, rows);
-  if (lead.bottom > list.top - MIN_GAP) lead = besideHead(1256, 544, head, 'body', R.pair('lead'), lang, { maxLines: 1 });
-  R.cutWarn(cut || list.cut || head.cut || lead.cut, '供应链');
-  return [...head.els, ...lead.els, ...list.els];
+  const logo = K.cornerLogo('sail');
+  const sig = sign(R, 'sail');
+  const X = PAGE.left;
+  const W = PAGE.right - X;
+  const KW = 420;
+  const rows = [1, 2, 3].map((n) => [
+    (y, k) => {
+      const num = K.textLines(X, y - 4, [[`0${n}`]], ST.num, { name: 'num' });
+      const c = duo(X + 120, y + 14, KW - 140, R.pair(`s${n}`), lang, ST.key, { enRole: ST.keyEn, maxLines: Math.min(2, k), gap: 0 });
+      return { els: [num.el, ...c.els], top: y, bottom: Math.max(c.bottom, num.bottom, y + 64) };
+    },
+    (y, k) => part(duo(X + KW, y, W - KW, R.pair(`s${n}Brands`), lang, ST.brand, { latin: true, enRole: ST.brand, maxLines: k, gap: 0 })),
+  ]);
+  const g = flow(PAGE.top, BOTTOM, [
+    titleG(R, X, 1300, { maxLines: { en: 1, zh: 1 } }),
+    { gap: [22, 14], build: (y) => part(duo(X, y, 1300, R.pair('lead'), lang, 'lead', { reflow: true, maxLines: 2 })), alt: (y) => part(duo(X, y, 1300, R.pair('lead'), lang, 'lead', { reflow: true, maxLines: 1 })) },
+    { gap: [72, 40], flex: true, build: table(X, W, rows, { pad: [12, 40, 64], fill: BOTTOM - 20, rule: { alpha: K.ALPHA.tableRule } }) },
+  ]);
+  return [logo.el, ...g.els, ...sig.els];
 }
 
-/** 关于瑞吉欧：右侧照片（实木细节）；左栏标题 + 正文挂在 96，两条业务落在 984 */
+// ===========================================================================
+// 关于瑞吉欧：半版照片贴左 880（白色 RICCIONE 商标左上）；右栏标题组 → 正文 → 两条业务并排（项名 + 说明）
+// ===========================================================================
+
 function layAbout(R) {
   const { lang } = R;
-  const rows = [1, 2].map((n) => ({ label: R.pair(`line${n}`), value: R.pair(`line${n}Text`) }));
-  const { head, body, list, cut } = headBodyTable(R, {
-    x: 120, w: 828, maxLines: 3, bodyField: 'body', bodyW: 686,
-    build: (k) => listRows(rows, lang, { x: 120, w: 970, labelW: 284, valueX: 404, valueW: 686, valueMax: k }),
-  });
-  R.cutWarn(cut, '公司介绍');
-  return [R.photo('photo', 1256, 0, 664, 1080), ...head.els, ...body.els, ...list.els];
+  const g0 = K.halfPage('left', { photoW: 880, gap: 110 });
+  const ph = R.photo('photo', 0, 0, g0.photo.w, PAGE.H, { dark: true });
+  const logo = K.cornerLogo('riccione', { onPhoto: true, corner: 'tl' });
+  const sig = sign(R, 'riccione');
+  const { x, w } = g0.col;
+  const bi = lang === 'bi';
+  const KW = lang === 'zh' ? 240 : 280;
+  const rows = [1, 2].map((n) => [
+    (y, k) => part(duo(x, y + 1, KW - 24, R.pair(`line${n}`), lang, ST.key, { enRole: ST.keyEn, maxLines: Math.min(2, k), gap: 0 })),
+    (y, k) => part(duo(x + KW, y, w - KW, R.pair(`line${n}Text`), lang, ST.name, { enRole: ST.nameEn, maxLines: k, gap: 2 })),
+  ]);
+  const g = flow(PAGE.top, BOTTOM, [
+    titleG(R, x, w),
+    { gap: [bi ? 48 : 64, 28, bi ? 64 : 110], flex: true, build: (y, mb) => part(duo(x, y, w, R.pair('body'), lang, bi ? 'body' : 'bodyL', { reflow: true, maxBottom: mb })) },
+    { gap: [bi ? 48 : 72, 28, bi ? 64 : 120], build: table(x, w, rows, { pad: [12, 26, 34], rule: { alpha: K.ALPHA.tableRule } }) },
+  ], { fill: 840 });
+  const sh = R.shade(ph, [logo], 'logo', { dir: 'v' });
+  return [ph.el, sh, logo.el, ...g.els, ...sig.els];
 }
 
-/** 发展历程：标题 + 一句话；八件事分左右两栏（各四行，行高对齐），落在 984 */
+
+// ===========================================================================
+// 发展历程（没有照片位：瑞吉欧图册的四张场景照已经用在章节页、关于、展厅、认证）：
+//   Aman 第 4 页的年表 —— 标题组 + 一句话；八件事分左右两栏（每栏四行，左右的行一样高、细线对齐），撑满到页脚上方
+// ===========================================================================
+
 function layHistory(R) {
   const { lang } = R;
-  const head = pstack(120, 96, 828, 'head', R.pair('title'), lang, { maxLines: 1 });
-  let lead = besideHead(972, 828, head, 'body', R.pair('lead'), lang, { maxLines: 2 });
-  const col = (n) => (n <= 4 ? { x: 120, tx: 262 } : { x: 972, tx: 1114 });
-  const cell = (n, top, k) => {
-    const { x, tx } = col(n);
-    const ev = pstack(tx, top, 686, 'body', R.pair(`e${n}`), lang, { gap: 0, maxLines: k });
-    const e0 = ev.blocks[0];
-    const yi = itemsOf(lang, R.pair(`y${n}`))[0];
-    const yr = yi ? tb(x, (e0 ? e0.top + baseOf(e0.lang, 'body') : top + 27) - baseOf(yi.lg, 'cap'), 120, yi.text, yi.lg, 'cap', { maxLines: 1, edit: editOf(yi) }) : null;
-    return { els: [...(yr ? [yr.el] : []), ...ev.els], h: ev.bottom - top, cut: ev.cut };
-  };
-  const pad = lang === 'bi' ? 12 : 22;
-  // 左右两栏的第 i 行一样高（细线对齐）
-  const table = (k) => (y0) => {
-    const heights = [1, 2, 3, 4].map((i) => Math.max(cell(i, 0, k).h, cell(i + 4, 0, k).h) + 2 * pad);
-    let y = y0;
-    let c = false;
-    const out = [hair(120, y, 828), hair(972, y, 828)];
-    heights.forEach((h, i) => {
-      const a = cell(i + 1, y + pad, k);
-      const b = cell(i + 5, y + pad, k);
-      out.push(...a.els, ...b.els);
-      c = c || a.cut || b.cut;
-      y += h;
-      out.push(hair(120, y, 828), hair(972, y, 828));
-    });
-    return { els: out, top: y0, bottom: y, cut: c };
-  };
-  const list = restTable(Math.max(head.bottom, lead.bottom) + MIN_GAP, table);
-  if (lead.bottom > list.top - MIN_GAP) lead = besideHead(972, 828, head, 'body', R.pair('lead'), lang, { maxLines: 1 });
-  const els = [...head.els, ...lead.els, ...list.els];
-  R.cutWarn(head.cut || lead.cut || list.cut, '发展历程');
-  return els;
+  const logo = K.cornerLogo('riccione');
+  const sig = sign(R, 'riccione');
+  const bi = lang === 'bi';
+  const ev = bi ? K.style('event', { lh: 28 }) : 'event';
+  const evEn = bi ? K.style('eventEn', { lh: 28 }) : 'eventEn';
+  // 华文 / English（dirA2 第 6 页，老板认可的样张）：半版照片贴左 820；文字栏 x 920–1808：标题组 → 一句话（y 248）→
+  //   年表从 y 330 起 8 行（年份 Ogg 26pt @ 920，事件 18pt 行高 30 @ 1060，行间 C9B9A6 细线），撑到 896；右上原色 RICCIONE 商标
+  if (!bi) {
+    const ph = R.photo('photo', 0, 0, 820, PAGE.H);
+    const X = 920;
+    const XR = 1808;
+    const YW = 140;
+    const title = K.titleGroup(X, PAGE.top, logo.x0 - 40 - X, R.pair('title'), lang, { maxLines: { en: 1, zh: 1 } });
+    const lead = duo(X, Math.max(248, Math.ceil(title.bottom + 20)), XR - X, R.pair('lead'), lang, K.style('lead', { size: 19, lh: 36 }), { reflow: true, maxLines: 2 });
+    const rows = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => [
+      (y) => part(duo(X, y - 3, YW - 16, R.pair(`y${n}`), lang, ST.year, { latin: true, enRole: ST.year, maxLines: 1 })),
+      (y, k) => part(duo(X + YW, y, XR - X - YW, R.pair(`e${n}`), lang, ev, { enRole: evEn, maxLines: k, gap: 4, balance: false })),
+    ]);
+    const top = Math.max(330, Math.ceil(lead.bottom + 40));
+    const t = table(X, XR - X, rows, { pad: [6, 11, 24], fill: 896 })(top, BOTTOM);
+    return [ph.el, logo.el, ...title.els, ...lead.els, ...t.els, ...sig.els];
+  }
+  // 中英版字多：纸面两栏年表（Aman 第 4 页）—— 标题组在左上，一句话在标题下（y 248）；两栏各 4 件事，左右的行一样高、细线对齐
+  const X = PAGE.left;
+  const W = PAGE.right - X;
+  const GAP = 64;
+  const CW = (W - GAP) / 2;
+  const X2 = X + CW + GAP;
+  const YW = 110;
+  const cell = (n, cx) => [
+    (y) => part(duo(cx, y - 3, YW - 8, R.pair(`y${n}`), lang, ST.year, { latin: true, enRole: ST.year, maxLines: 1 })),
+    (y, k) => part(duo(cx + YW, y, CW - YW, R.pair(`e${n}`), lang, ev, { enRole: evEn, maxLines: k, gap: 4, balance: false })),
+  ];
+  const rows = [1, 2, 3, 4].map((i) => [...cell(i, X), ...cell(i + 4, X2)]);
+  const title = K.titleGroup(X, PAGE.top, logo.x0 - 40 - X, R.pair('title'), lang, { maxLines: { en: 1, zh: 1 } });
+  const lead = duo(X, Math.max(248, Math.ceil(title.bottom + 20)), 1300, R.pair('lead'), lang, 'lead', { reflow: true, maxLines: 2 });
+  const top = Math.ceil(lead.bottom + 40);
+  // 两栏各一组细线（中间的栏距不画线）
+  const two = table(X, W, rows, { pad: [6, 20, 40], fill: BOTTOM - 14, segments: [[X, CW], [X2, CW]] })(top, BOTTOM);
+  return [logo.el, ...title.els, ...lead.els, ...two.els, ...sig.els];
 }
 
-/** 展厅与仓储：左侧照片出血；右栏标题 + 一句话挂在 96，三个地方落在 984 */
+
+// ===========================================================================
+// 展厅与仓储（Aman 第 7 页）：左栏文字（标题组 → 一句话 → 三个地方：地名 | 说明，细线分隔）；半版照片贴右 920
+//   （展厅照很亮：白字压在上面托到 45% 也不够 4.5:1，所以字都放纸面，照片上只放白色 RICCIONE 商标）
+// ===========================================================================
+
 function layShowrooms(R) {
   const { lang } = R;
-  const rows = (k) => (y0) => {
-    const out = [hair(1114, y0, 686)];
-    let y = y0;
-    let c = false;
-    for (let n = 1; n <= 3; n++) {
-      const nm = inlinePair(1114, y + 14, 686, R.pair(`p${n}`), lang, { maxLines: k });
-      const d = pstack(1114, nm.bottom + 8, 686, 'cap', R.pair(`p${n}Text`), lang, { gap: 0, maxLines: k });
-      out.push(...nm.els, ...d.els);
-      c = c || nm.cut || d.cut;
-      y = d.bottom + 14;
-      out.push(hair(1114, y, 686));
-    }
-    return { els: out, top: y0, bottom: y, cut: c };
-  };
-  const { head, body: lead, list, cut } = headBodyTable(R, { x: 1114, w: 686, maxLines: 2, bodyField: 'lead', bodyW: 686, build: rows });
-  R.cutWarn(cut, '展厅');
-  return [R.photo('photo', 0, 0, 948, 1080), ...head.els, ...lead.els, ...list.els];
+  const bi = lang === 'bi';
+  const g0 = K.halfPage('right', { photoW: 920, gap: 100 });
+  const ph = R.photo('photo', g0.photo.x, 0, g0.photo.w, PAGE.H, { dark: true });
+  const logo = K.cornerLogo('riccione', { onPhoto: true });
+  const sig = sign(R, 'riccione', { right: g0.col.right });
+  const { x, w } = g0.col;
+  const NW = lang === 'zh' ? 200 : 250;
+  const rows = [1, 2, 3].map((n) => [
+    (y, k) => part(duo(x, y, NW - 24, R.pair(`p${n}`), lang, ST.name, { latin: true, enRole: ST.nameEn, maxLines: Math.min(2, k), gap: 0 })),
+    (y, k) => part(duo(x + NW, y + 1, w - NW, R.pair(`p${n}Text`), lang, ST.note, { enRole: ST.noteEn, maxLines: k, gap: 0 })),
+  ]);
+  const g = flow(PAGE.top, BOTTOM, [
+    titleG(R, x, w, { maxLines: { en: 2, zh: 2 } }),
+    { gap: [bi ? 44 : 60, 24, bi ? 60 : 110], flex: true, build: (y, mb) => part(duo(x, y, w, R.pair('lead'), lang, bi ? 'body' : 'bodyL', { reflow: true, maxBottom: mb })) },
+    { gap: [bi ? 44 : 64, 24, bi ? 60 : 110], build: table(x, w, rows, { pad: [8, 22, 30], rule: { color: B.hair, alpha: 1, h: 1 } }) },
+  ], { fill: 880 });
+  const sh = R.shade(ph, [logo], 'logo', { dir: 'v' });
+  return [ph.el, sh, logo.el, ...g.els, ...sig.els];
 }
 
-/** 品质认证：右侧照片出血；标题挂在 96，正文落在 984 */
+
+// ===========================================================================
+// 品质认证（短文字的页，Aman 第 13 页）：半版照片贴左 1022（白色 RICCIONE 商标左上）；
+//   纸面：标题组 → 180 短线 → 正文，整组在页面中线附近
+// ===========================================================================
+
 function layCertified(R) {
   const { lang } = R;
-  const head = pstack(120, 96, 760, 'head', R.pair('title'), lang, { maxLines: 2 });
-  let body = restOnLine(984, (y) => pstack(120, y, 686, 'body', R.pair('body'), lang, { gap: STACK_GAP.body, valign: 'b' }));
-  if (body.top < head.bottom + MIN_GAP) {
-    const b2 = pstack(120, head.bottom + MIN_GAP, 686, 'body', R.pair('body'), lang, { gap: STACK_GAP.body, maxBottom: 984 });
-    R.cutWarn(true, '认证正文');
-    body = b2;
-  }
-  R.cutWarn(body.cut || head.cut, '认证正文');
-  return [R.photo('photo', 972, 0, 948, 1080), ...head.els, ...body.els];
+  const PW = 1022;
+  const X = 1110;
+  const W = PAGE.right - X;
+  const bi = lang === 'bi';
+  const ph = R.photo('photo', 0, 0, PW, PAGE.H);
+  const logo = K.cornerLogo('riccione');
+  const sig = sign(R, 'riccione');
+  // 字少（English 的正文三行）：组间距拉开一点，纸面栏上下的空纸都不超过 250
+  const top = logo.bottom + 64;
+  const g = flow(top, BOTTOM, [
+    titleG(R, X, W),
+    { gap: [48, 28], build: (y) => solo(K.rule(X + 2, y, 180)) },
+    { gap: [40, 26], flex: true, build: (y, mb) => part(duo(X, y, W, R.pair('body'), lang, bi ? 'body' : 'bodyL', { reflow: true, maxBottom: mb })) },
+  ], { align: 'center', center: 560, fill: top + 400 });
+  return [ph.el, logo.el, ...g.els, ...sig.els];
 }
 
-/** 服务流程：标题挂在 96、一句话与标题共用基线（样张 p4 的页头）；五个步骤一行一个（编号 | 步骤 | 说明），落在 984 */
+
+// ===========================================================================
+// 服务流程（没有照片位）：标题组 + 一句话；五个步骤五栏（栏左细竖线、Ogg 大编号、步骤名、说明），整组在剩下的地方居中
+// ===========================================================================
+
 function layProcess(R) {
   const { lang } = R;
-  const head = pstack(120, 96, 828, 'head', R.pair('title'), lang, { maxLines: 1 });
-  let lead = besideHead(972, 828, head, 'body', R.pair('lead'), lang, { maxLines: 2 });
-  const pad = lang === 'bi' ? 20 : 28;
-  const rows = (k) => (y0) => {
-    const out = [hair(120, y0, 1680)];
-    let y = y0;
-    let c = false;
-    for (let n = 1; n <= 5; n++) {
-      const top = y + pad;
-      const t = pstack(404, top, 520, 'body', R.pair(`s${n}`), lang, { gap: 0, maxLines: k });
-      const t0 = t.blocks[0];
-      const base0 = t0 ? t0.top + baseOf(t0.lang, 'body') : top + 27;
-      // 说明（小字）：每种语言对准步骤名对应语言那一行
-      let db = -Infinity;
-      const dEls = [];
-      itemsOf(lang, R.pair(`s${n}Text`)).forEach((it, i) => {
-        const tbk = t.blocks.find((b) => b.lang === it.lg) || t.blocks[i];
-        let top2 = tbk ? tbk.top + baseOf(tbk.lang, 'body') - baseOf(it.lg, 'cap') : base0 - baseOf(it.lg, 'cap');
-        if (top2 < db) top2 = db;
-        const b = tb(972, top2, 828, it.text, it.lg, 'cap', { edit: editOf(it), maxLines: k });
-        dEls.push(b.el);
-        db = b.bottom;
-        c = c || b.cut;
-      });
-      const num = tb(120, base0 - baseOf('en', 'cap'), 120, `0${n}`, 'en', 'cap', { nowrap: true });
-      out.push(num.el, ...t.els, ...dEls);
-      c = c || t.cut;
-      y = Math.max(t.bottom, db) + pad;
-      out.push(hair(120, y, 1680));
-    }
-    return { els: out, top: y0, bottom: y, cut: c };
-  };
-  const list = restTable(Math.max(head.bottom, lead.bottom) + MIN_GAP, rows);
-  if (lead.bottom > list.top - MIN_GAP) lead = besideHead(972, 828, head, 'body', R.pair('lead'), lang, { maxLines: 1 });
-  R.cutWarn(head.cut || lead.cut || list.cut, '服务流程');
-  return [...head.els, ...lead.els, ...list.els];
+  const bi = lang === 'bi';
+  const logo = K.cornerLogo('sail');
+  const sig = sign(R, 'sail');
+  const X = PAGE.left;
+  const W = PAGE.right - X;
+  const NX = X + 150;
+  const NW = 500;
+  const TX = X + 700;
+  const name = bi ? K.style('rowVal', { lh: 38 }) : 'rowVal';
+  const nameEn = bi ? K.style('rowValEn', { size: 22, lh: 34 }) : 'rowValEn';
+  const text = K.style('body', { size: 20, spacing: 1, lh: bi ? 30 : 34 });
+  const textEn = K.style('bodyEn', { size: 20, spacing: 0.4, lh: bi ? 30 : 32 });
+  // 同一行的三样字按步骤名第一行的基线对齐（量过网页渲染：基线离行顶 —— 步骤名 26pt 行高 48 是 38、说明 20pt 行高 34 是 27、
+  //   编号 Ogg Medium 60pt 行高 60 是 50；行高每少 2px，基线上移 1px）
+  const nameLh = K.style(name).lh;
+  const base = 38 + (nameLh - 48) / 2;
+  const textDy = Math.round(base - (27 + (text.lh - 34) / 2));
+  // 中英版每行两行字、行距紧（上下只空十来 px）：大编号改成和步骤名顶对齐，不往上伸出细线
+  const numDy = bi ? -4 : Math.round(base - 50);
+  const NUM = K.style(ST.num, { lh: 60 });
+  const rows = [1, 2, 3, 4, 5].map((n) => [
+    (y) => {
+      const num = K.textLines(X, y + numDy, [[`0${n}`]], NUM, { name: 'num' });
+      return { els: [num.el], top: y, bottom: num.bottom };
+    },
+    (y, k) => part(duo(NX, y, NW, R.pair(`s${n}`), lang, name, { enRole: nameEn, maxLines: Math.min(2, k), gap: 0 })),
+    (y, k) => part(duo(TX, y + textDy, PAGE.right - TX, R.pair(`s${n}Text`), lang, text, { enRole: textEn, maxLines: Math.min(2, k), gap: 2 })),
+  ]);
+  const g = flow(PAGE.top, BOTTOM, [
+    titleG(R, X, 1300, { maxLines: { en: 1, zh: 1 } }),
+    { gap: [22, 14], build: (y) => part(duo(X, y, 1300, R.pair('lead'), lang, 'lead', { reflow: true, maxLines: 2 })), alt: (y) => part(duo(X, y, 1300, R.pair('lead'), lang, 'lead', { reflow: true, maxLines: 1 })) },
+    { gap: [64, 36], flex: true, build: table(X, W, rows, { pad: [Math.max(10, 4 - numDy), 26, 40], fill: BOTTOM - 16, rule: { alpha: K.ALPHA.tableRule } }) },
+  ]);
+  return [logo.el, ...g.els, ...sig.els];
 }
 
-/** 订单周期一行的留白：细线到天数大字顶 / 最后一行基线到下一条细线 */
-const CYCLE_PAD = { top: 48, bottom: 52 };
-/** 天数与单位之间空多少（天数字号的倍数，约一个空格） */
-const CYCLE_GAP_EM = 0.26;
-/** Hanken Grotesk 数字 / 大写字母的高度（em） */
-const CAP_EM = 0.7;
 
-/**
- * 订单周期：两行通栏（第 1 栏系列名 | 第 7 栏天数），落在 984；不做成仪表盘。
- *   天数中英共用、只印一次（标题字级），落在系列名第一行（中文）的基线上；单位用正文字级跟在天数后面：
- *   中英版「天」在中文基线上，「days」在英文系列名那一行的基线上，正好排在「天」下面（同一个 x）
- */
+// ===========================================================================
+// 订单周期（没有照片位：大字页）：标题组；两个系列左右两栏 —— 细线、系列名、Ogg 大字天数 + 单位（同一段、共用基线）
+//   天数中英共用、只印一次；中英版的「days」排在「天」正下方
+// ===========================================================================
+
+/** 天数与单位之间空多少（天数字号的倍数）：加在天数最后一个字的字距上（空格在各家软件里宽窄不一） */
+const CYCLE_GAP_EM = 0.26;
+
 function layCycle(R) {
   const { lang } = R;
-  const head = pstack(120, 96, 828, 'head', R.pair('title'), lang, { maxLines: 2 });
-  let cut = head.cut;
-  const FIG_X = 972;
-  const rows = (y0) => {
-    const out = [hair(120, y0, 1680)];
-    let y = y0;
-    for (let n = 1; n <= 2; n++) {
-      const labelPair = R.pair(`s${n}`);
-      const li = itemsOf(lang, labelPair);
-      const fi = itemsOf(lang, R.pair(`s${n}N`))[0] || null;
-      const units = itemsOf(lang, R.pair(`s${n}Unit`));
-      const lg0 = li[0]?.lg || units[0]?.lg || (lang === 'en' ? 'en' : 'zh');
-      // 第一条基线：细线 + 留白 + 天数大字的高度（没有天数就按正文）
-      const capH = fi ? CAP_EM * styleOf(fi.lg, 'head').px : CAP_EM * styleOf(lg0, 'body').px;
-      const base1 = y + CYCLE_PAD.top + capH;
-      // 系列名：中文在上、英文紧贴在下
-      const lab = pstack(120, base1 - baseOf(lg0, 'body'), 686, 'body', labelPair, lang, { gap: 0, maxLines: 2 });
-      cut = cut || lab.cut;
-      out.push(...lab.els);
-      let lastBase = lab.blocks.length ? lab.bottom - lhOf(lab.blocks.at(-1).lang, 'body') + baseOf(lab.blocks.at(-1).lang, 'body') : base1;
-      let bottom = lab.bottom;
-      // 天数（一次）。紧跟着的单位（华文 / 中英版「天」、English 版「days」）和天数排在同一段里：
-      // 大小两种字号共用一条基线，网页、PowerPoint、WPS 都一样（分成两个框的话，各家排行的方式不同，会差几个像素）
-      let ux = FIG_X;
-      let rest = units;
-      let prev = null;
-      if (fi) {
-        const figSt = styleOf(fi.lg, 'head');
-        const u0 = units[0] || null;
-        let figRuns = runsOf(fi.text.replace(/\n/g, ' '), figSt, fi.lg, 'head');
-        if (u0) {
-          // 天数与单位之间的空：加在天数最后一个字的字距上（空格在各家软件里宽窄不一，字距是一样的）
-          const last = figRuns[figRuns.length - 1];
-          const chars = [...last.text];
-          const gapPt = Math.round(((CYCLE_GAP_EM * figSt.px) / PX_PER_PT + (last.spacing || 0)) * 100) / 100;
-          figRuns = [
-            ...figRuns.slice(0, -1),
-            ...(chars.length > 1 ? [{ ...last, text: chars.slice(0, -1).join('') }] : []),
-            { ...last, text: chars[chars.length - 1], spacing: gapPt },
-          ];
-        }
-        const uRuns = u0 ? runsOf(u0.text.replace(/\n/g, ' '), styleOf(u0.lg, 'body'), u0.lg, 'body') : [];
-        const figW = lineWidth(figRuns);
-        const allW = figW + lineWidth(uRuns);
-        if (!fi.text.includes('\n') && allW <= 828 * 0.9) {
-          const top = base1 - baseOf(fi.lg, 'head');
-          // 不设 nowrap：网页预览里 nowrap 的段落按弹性盒排，两种字号就不在一条基线上了；框一直宽到 1800，不会折行
-          out.push({
-            t: 'text',
-            x: FIG_X - INSET,
-            y: top - INSET,
-            w: 828 + 2 * INSET,
-            h: figSt.lh + 2 * INSET,
-            paras: [{ align: 'l', lineHeight: figSt.lh, runs: [...figRuns, ...uRuns] }],
-            edit: editOf(fi),
-          });
-          bottom = Math.max(bottom, top + figSt.lh);
-          ux = FIG_X + figW;
-          rest = units.slice(1);
-          prev = { bottom: top + figSt.lh };
-        } else {
-          // 太长：天数自己一行（截短 + 提醒），单位另起
-          const f = tb(FIG_X, base1 - baseOf(fi.lg, 'head'), 544, fi.text, fi.lg, 'head', { maxLines: 1, edit: editOf(fi) });
-          out.push(f.el);
-          cut = cut || f.cut;
-          bottom = Math.max(bottom, f.bottom);
-          ux = FIG_X + 544 + Math.round(CYCLE_GAP_EM * figSt.px);
-        }
-      }
-      // 其余的单位（中英版的「days」）：第 i 种语言落在系列名同一种语言第一行的基线，正好排在「天」下面（没有就接着上一行往下）
-      rest.forEach((u) => {
-        const i = units.indexOf(u);
-        const lb = lab.blocks.find((b) => b.lang === u.lg) || lab.blocks[i];
-        let base = lb ? lb.top + baseOf(lb.lang, 'body') : base1;
-        if (prev && base < prev.bottom + baseOf(u.lg, 'body')) base = prev.bottom + baseOf(u.lg, 'body');
-        const t = tb(ux, base - baseOf(u.lg, 'body'), 1800 - ux, u.text, u.lg, 'body', { maxLines: 1, edit: editOf(u) });
-        out.push(t.el);
-        cut = cut || t.cut;
-        bottom = Math.max(bottom, t.bottom);
-        lastBase = Math.max(lastBase, base);
-        prev = t;
+  // Aman 第 14 页：上半一条通栏照片（1920 × 520，贴顶），白字标题压在照片左上、白 logo 在右上（顶部托字）；
+  //   下半两栏（x 112–900 / 1010–1810）：细线、系列名、Ogg 大字天数 + 单位（同一段、共用基线：「60–75 天 days」）
+  const PH = 520;
+  // 照片被拿掉时是一条深色色带（白字照样读得清）
+  const ph = R.photo('photo', 0, 0, PAGE.W, PH, { dark: true });
+  const onPhoto = ph.has;
+  const logo = K.cornerLogo('sail', { onPhoto: true });
+  const sig = sign(R, 'sail');
+  const title = K.titleGroup(PAGE.left, PAGE.top, 1200, R.pair('title'), lang, { maxLines: { en: 1, zh: 1 }, label: '标题', color: B.white });
+  const FIG = K.style('display', { caps: false, size: 116, spacing: 0, lh: 124, color: B.title });
+  const UNIT = { zh: K.style('lead', { size: 22, spacing: 2, color: B.title }), en: K.style('leadEn', { size: 22, spacing: 0.5, color: B.title }) };
+  const run = (text, st, spacing = st.spacing || 0) => ({ text, font: st.font, size: st.size, color: st.color, spacing, lang: st.lang });
+  const COLS = [{ x: PAGE.left, w: 900 - PAGE.left }, { x: 1010, w: PAGE.right - 1010 }];
+  /** 天数（Ogg 大字）+ 单位：同一段、共用基线（空隙加在天数最后一个字的字距上）；中英版「天 days」两个单位排在一起 */
+  const figure = (n, x, w, y) => {
+    const els = [];
+    const fi = K.pick(lang, R.pair(`s${n}N`))[0] || null;
+    const units = K.pick(lang, R.pair(`s${n}Unit`));
+    let bottom = y;
+    const unitText = units.map((u) => clean(u.text).replace(/\s*\n\s*/g, ' ')).filter(Boolean);
+    const unitRuns = units.flatMap((u, i) => {
+      const t = clean(u.text).replace(/\s*\n\s*/g, ' ');
+      if (!t) return [];
+      return i ? [run(' ', UNIT[u.lang]), run(t, UNIT[u.lang])] : [run(t, UNIT[u.lang])];
+    });
+    const unitW = units.reduce((s, u, i) => s + K.measure(`${i ? ' ' : ''}${clean(u.text)}`, UNIT[u.lang]), 0);
+    if (!fi) {
+      units.forEach((u) => {
+        const t = K.textBlock(x, bottom, w, u.text, UNIT[u.lang], { field: u.field, maxLines: 1 });
+        els.push(...t.els);
+        bottom = t.bottom;
       });
-      y = Math.max(lastBase + CYCLE_PAD.bottom, bottom + 8);
-      out.push(hair(120, y, 1680));
+      return { els, top: y, bottom };
     }
-    return { els: out, top: y0, bottom: y };
+    const figText = clean(fi.text).replace(/\s*\n\s*/g, ' ');
+    const gapPx = unitText.length ? CYCLE_GAP_EM * FIG.size * PX_PER_PT : 0;
+    const figW = K.measure(figText, FIG) + gapPx;
+    if (figW + unitW <= w * 0.98) {
+      const chars = [...figText];
+      const gapPt = Math.round((gapPx / PX_PER_PT + (FIG.spacing || 0)) * 100) / 100;
+      const figRuns = unitText.length ? [...(chars.length > 1 ? [run(chars.slice(0, -1).join(''), FIG)] : []), run(chars[chars.length - 1], FIG, gapPt)] : [run(figText, FIG)];
+      // 单位在天数的同一段里（共用基线）：编辑器里点单位那一段落到单位栏（edit.zones）
+      let ux = x + figW;
+      const zones = units.map((u, i) => {
+        const t = `${i ? ' ' : ''}${clean(u.text)}`;
+        const uw = K.measure(t, UNIT[u.lang]);
+        const z = { field: u.field, x: Math.round(ux), y: Math.round(y - INSET), w: Math.ceil(uw + 4), h: Math.round(FIG.lh + 2 * INSET) };
+        ux += uw;
+        return z;
+      });
+      els.push({
+        t: 'text',
+        x: x - INSET,
+        y: y - INSET,
+        w: w + 2 * INSET,
+        h: FIG.lh + 2 * INSET,
+        paras: [{ align: 'l', lineHeight: FIG.lh, runs: [...figRuns, ...unitRuns] }],
+        ...(fi.field ? { edit: { field: fi.field, ...(zones.length ? { zones } : {}) } } : {}),
+      });
+      bottom = y + FIG.lh;
+    } else {
+      // 太长：天数自己截成一行，单位另起一行（「天 days」排一行，截短）
+      const f = K.textBlock(x, y, w, figText, FIG, { field: fi.field, maxLines: 1 });
+      els.push(...f.els);
+      bottom = f.bottom;
+      if (units.length) {
+        const u0 = units[0];
+        const t = K.textBlock(x, bottom, w, unitText.join(' '), UNIT[u0.lang], { field: u0.field, maxLines: 1 });
+        els.push(...t.els);
+        bottom = t.bottom;
+      }
+    }
+    return { els, top: y, bottom };
   };
-  const list = restOnLine(984, rows);
-  R.cutWarn(cut, '订单周期');
-  return [...head.els, ...list.els];
+  const RULE_Y = PH + 56;
+  const els = [];
+  COLS.forEach((c, i) => {
+    const n = i + 1;
+    els.push(K.rule(c.x, RULE_Y, c.w, { alpha: K.ALPHA.tableRule }));
+    // 系列名每种语言最多 2 行（中英版各 1 行）：天数大字 + 单位一定排得进 900 以上
+    const nm = duo(c.x, RULE_Y + 28, c.w, R.pair(`s${n}`), lang, ST.key, { enRole: ST.keyEn, maxLines: lang === 'bi' ? 1 : 2, gap: 0 });
+    els.push(...nm.els);
+    const f = figure(n, c.x, c.w, Math.round(nm.bottom + 14));
+    els.push(...f.els);
+  });
+  const shTop = onPhoto ? R.shade(ph, [title, logo], 'title', { dir: 'v' }) : null;
+  return [ph.el, shTop, ...title.els, logo.el, ...els, ...sig.els];
 }
 
-/**
- * 售后维保：右侧竖图（第 9–12 栏）从顶边垂到 984，与列表最后一条细线齐；左栏标题 + 一句话挂在 96，四项落在 984。
- * 质保年数是空格（＿＿），设计师填；没填会提醒
- */
+
+// ===========================================================================
+// 售后维保（dirA2 第 7 页）：左栏文字（标题组 → 金句 → 四行表：项名 20pt 棕 | 内容 宋体 26pt）；半版照片贴右 920
+//   白 logo 宽 260 落在挂画的皮面上；签名压在照片上（底部托字）。质保年数是空格（＿＿），设计师填；没填会提醒
+// ===========================================================================
+
 function layAftersales(R) {
   const { lang } = R;
-  const rows = [1, 2, 3, 4].map((n) => ({ label: R.pair(`r${n}`), value: R.pair(`r${n}Text`) }));
-  const { head, body: lead, list, cut } = headBodyTable(R, {
-    x: 120, w: 828, maxLines: 2, bodyField: 'lead', bodyW: 686,
-    build: (k) => listRows(rows, lang, { x: 120, w: 970, labelW: 284, valueX: 404, valueW: 686, valueMax: k }),
-  });
-  R.cutWarn(cut, '售后维保');
+  const bi = lang === 'bi';
+  const g0 = K.halfPage('right', { photoW: 920, gap: 108 });
+  const ph = R.photo('photo', g0.photo.x, 0, g0.photo.w, PAGE.H, { dark: true });
+  const logo = K.cornerLogo('sail', { onPhoto: true, w: 260, x: 1550, y: 64 });
+  // 签名在纸面上（文字栏右下）：照片底部是浅色地毯，托到 45% 也不够 4.5:1
+  const sig = sign(R, 'sail', { right: g0.col.right });
+  const x = PAGE.left;
+  const w = g0.col.w - 8;
+  const KW = { zh: 288, en: 300, bi: 280 }[lang];
+  const KEY = bi ? K.style('rowKey', { lh: 38 }) : 'rowKey';
+  const VAL = bi ? K.style('rowVal', { lh: 42 }) : 'rowVal';
+  const rows = [1, 2, 3, 4].map((n) => [
+    (y, k) => part(duo(x, y + 2, KW - 24, R.pair(`r${n}`), lang, KEY, { enRole: bi ? K.style('rowKeyEn', { lh: 34 }) : 'rowKeyEn', maxLines: Math.min(2, k), gap: 0 })),
+    (y, k) => part(duo(x + KW, y, w - KW, R.pair(`r${n}Text`), lang, VAL, { enRole: bi ? K.style('rowValEn', { lh: 38 }) : 'rowValEn', maxLines: Math.min(2, k), gap: 0 })),
+  ]);
+  const g = flow(PAGE.top, BOTTOM - 20, [
+    titleG(R, x, w),
+    { gap: [72, 36], build: (y) => part(duo(x, y, w, R.pair('lead'), lang, 'quote', { maxLines: 2 })), alt: (y) => part(duo(x, y, w, R.pair('lead'), lang, 'quote', { maxLines: 1 })) },
+    { gap: [78, 36], flex: true, build: table(x, w, rows, { pad: [12, 30, 34], fill: 870, rule: { alpha: K.ALPHA.tableRule } }) },
+  ]);
+  const shTop = R.shade(ph, [logo], 'logo', { dir: 'v' });
   // 质保年数还是空格（＿＿）：中文没填 → 填中文（「5 年」，英文自动跟着变成 5 years）；
   // 中文填了、英文自动换不过来（写的不是「几年」）→ 提醒补英文（编辑器跳到英文栏）
   const BLANK = /[＿_]{2,}/;
@@ -1616,55 +1948,36 @@ function layAftersales(R) {
   const enTodo = todo.filter((t) => t.need === 'en').map((t) => name(t.n));
   if (zhTodo.length) R.warn(`售后维保：${zhTodo.join('、')}质保年数还没填 —— 在右侧把「＿＿」改成年数`);
   if (enTodo.length) R.warn(`售后维保：${enTodo.join('、')}质保年数的英文还没填 —— 在右侧英文栏里把「____」改成年数（如 5 years）`);
-  return [R.photo('photo', 1256, 0, 544, 984), ...head.els, ...lead.els, ...list.els];
+  return [ph.el, shTop, logo.el, ...g.els, ...sig.els];
 }
 
-/** 封底（样张 p7）：logo 与结语挂在上方；联系方式三行落在 984（标签中英两行，值的每一行对准标签的行）；二维码；右侧照片 */
+// ===========================================================================
+// 封底：半版照片贴左 1022；纸面：结语（大字）→ 180 短线 → 联系方式三行（项名 | 内容）+ 二维码；深色 logo 右上，签名右下
+// ===========================================================================
+
 function layClosing(R) {
   const { lang } = R;
-  const els = [R.photo('photo', 1256, 0, 664, 1080), R.logo(120, 96)];
-  const enDisplay = lang === 'bi' ? { en: { px: 52, lh: 72 } } : undefined;
-  let cut = false;
-  const rows = (y0) => {
-    const out = [hair(120, y0, 828)];
-    let y = y0;
-    for (let n = 1; n <= 3; n++) {
-      const top = y + 10;
-      const labels = itemsOf(lang, R.pair(`l${n}`));
-      const val = itemsOf(lang, R.pair(`v${n}`))[0];
-      // 行距：第一行 40（与中文标签同行），之后 36（与英文标签同行）；行高按行数算（样张：两行 = 96）
-      const pitches = [40, 36, 36, 36];
-      const lines = val ? val.text.split('\n').slice(0, 3) : [];
-      if (val && val.text.split('\n').length > 3) R.cutAt(val.field);
-      let cur = top;
-      lines.forEach((line, i) => {
-        const lh = pitches[i];
-        const b = tb(404, cur, 544, line, val.lg, 'body', { over: { all: { lh } }, edit: editOf(val), maxLines: 1 });
-        out.push(b.el);
-        cut = cut || b.cut;
-        cur = b.bottom;
-      });
-      let lb = top;
-      labels.forEach((it, i) => {
-        const lh = pitches[i];
-        const valBase = top + pitches.slice(0, i).reduce((a, b) => a + b, 0) + baseOf(val?.lg || 'en', 'body', { lh });
-        let t = valBase - baseOf(it.lg, 'cap', { lh });
-        if (t < lb) t = lb;
-        const b = tb(120, t, 268, it.text, it.lg, 'cap', { over: { [it.lg]: { lh } }, edit: editOf(it), maxLines: 1 });
-        out.push(b.el);
-        lb = b.bottom;
-      });
-      const slots = Math.max(lines.length, labels.length, 1);
-      y = top + pitches.slice(0, slots).reduce((a, b) => a + b, 0) + 10;
-      out.push(hair(120, y, 828));
-    }
-    return { els: out, bottom: y };
-  };
-  const list = restOnLine(984, rows);
-  const sign = pstack(120, 248, 1088, 'display', R.pair('title'), lang, { gap: 16, over: enDisplay, maxLines: 3, maxBottom: list.els[0].y - MIN_GAP });
-  R.cutWarn(sign.cut || sign.overflow, '结语');
-  R.cutWarn(cut, '封底');
-  return [...els, ...sign.els, ...list.els, { t: 'img', x: 952, y: 819, w: 185, h: 185, src: QR.src, nat: QR.nat, fit: 'contain', name: 'qr' }];
+  const PW = 1022;
+  const X = 1110;
+  const W = PAGE.right - X;
+  const ph = R.photo('photo', 0, 0, PW, PAGE.H, { dark: true });
+  const logo = K.cornerLogo('sail');
+  const sig = sign(R, 'sail');
+  const hero = heroBuilder(R, X, W, B.title, { zh: 'hero', bi: 'heroBi', en: 'heroEn' }, { maxH: lang === 'bi' ? 260 : 330 });
+  const KW = 200;
+  const rows = [1, 2, 3].map((n) => [
+    (y, k) => part(duo(X, y + 1, KW - 20, R.pair(`l${n}`), lang, K.style('rowKey', { size: 17, spacing: 3, lh: 30 }), { enRole: K.style('rowKeyEn', { size: 16, spacing: 1, lh: 28 }), maxLines: Math.min(2, k), gap: 0 })),
+    (y, k) => part(duo(X + KW, y, W - KW, R.pair(`v${n}`), lang, K.style('body', { lh: 32, color: B.table }), { latin: true, enRole: K.style('bodyEn', { lh: 32, color: B.table }), maxLines: Math.min(3, k), gap: 0 })),
+  ]);
+  const QR_W = 128;
+  const qr = (y) => solo({ t: 'img', x: X, y, w: QR_W, h: QR_W, src: QR.src, nat: QR.nat, fit: 'contain', name: 'qr' });
+  const g = flow(logo.bottom + 72, 1004, [
+    { build: (y, mb) => hero(y, mb) },
+    { gap: [40, 24], build: (y) => solo(K.rule(X + 2, y, 180)) },
+    { gap: [44, 24], flex: true, build: table(X, W, rows, { pad: [8, 16, 20], rules: false }) },
+    { gap: [36, 20], build: qr },
+  ]);
+  return [ph.el, logo.el, ...g.els, ...sig.els];
 }
 
 const LAYOUTS = {
@@ -1694,7 +2007,7 @@ const LAYOUTS = {
 // ---------------------------------------------------------------------------
 
 /**
- * 公司固定页（B 格物品牌画册）
+ * 公司固定页（C 安然品牌画册；函数名沿用 B 时的 renderCompanyB）
  * @param {string} key   COMPANY_KEYS_B 之一
  * @param {object} slide { overrides?, overridesEn?, images? }
  * @param {{ project:object, lang?:'zh'|'en'|'bi', tr?:object, meta?:(src:string)=>({w,h}|null), tokens?:object }} ctx
@@ -1745,6 +2058,8 @@ export function companyFieldsB(key, slide = {}, project = {}) {
       multiline: !!f.multiline || zhDefault.includes('\n') || enDefault.includes('\n'),
       oneLine: !!f.oneLine,
       autoEn: !!autoEn,
+      // 华文版也印英文（装饰性的大写页眉）：编辑器的华文版给这一栏英文框
+      enHeader: (ZH_EN_HEADER[key] || []).includes(field),
       hidden: !!ch && !chapters.list.includes(CHAPTERS[Number(ch[1]) - 1]),
       shared,
       // tokens = 跟着「项目信息」的客户 / 地点 / 日期 / 楼层；chapter = 章节编号（隐藏了前面的章节就往前排）

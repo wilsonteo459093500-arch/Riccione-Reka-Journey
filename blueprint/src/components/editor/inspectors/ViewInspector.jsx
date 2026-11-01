@@ -15,7 +15,9 @@ import EnInput, { EnBox, EnAlias, EN_BADGE, EN_PLACEHOLDER } from '../EnInput.js
 
 // 效果图页：标题（房间 · 视角名）、空间英文名、楼层、版式、图片、材料、说明。
 // English / 中英版：每个中文栏下面紧跟一个一样大的英文框（EN）—— 视角名、材料部位、材料名、备注写进翻译记忆（整套共用）；
-// 空间英文名是这一页的 roomEn：华文版的页面上不印英文，这一栏只是先填好、给 English / 中英版用。
+// 空间英文名是这一页的 roomEn（English / 中英版的空间名）。
+// 华文版（C 安然）：页眉印「英文大写 + 中文」—— 英文是装饰，用视角名的英文（没有视角名时用空间英文名），
+//   所以华文版也摆出这两个英文框，画布上点英文页眉能落到能改它的框里。
 
 const LAYOUT_LABEL = { full: '满版大图', framed: '图文' };
 
@@ -137,10 +139,22 @@ export default function ViewInspector({ project, slide, change, notify, openPoli
             <p className="text-[11px] text-bp-faint leading-snug">空间英文名只改这一页；视角名等其它英文整套共用，改一处，所有页一起变。</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="房间">{roomInput}</Field>
-            <Field label="视角名">{titleInput}</Field>
-          </div>
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="房间">{roomInput}</Field>
+              <Field label="视角名">
+                {/* 视角名本来就是英文（Overview）：页眉的英文就是它，画布上点英文页眉落到这个框 */}
+                <EnAlias field="subtitleEn" on={!!slide.subtitle?.trim() && isLatinSource(project, slide.subtitle, 'view')}>
+                  {titleInput}
+                </EnAlias>
+              </Field>
+            </div>
+            {slide.subtitle?.trim() && !isLatinSource(project, slide.subtitle, 'view') && (
+              <Field label="视角名的英文（页眉上的英文大写）" className="mt-2.5" hint="华文版只在页眉上印一行英文大写；English / 中英版也用它（整套共用，改一处所有页一起变）">
+                <EnInput project={project} zh={slide.subtitle} kind="view" change={change} field="subtitleEn" />
+              </Field>
+            )}
+          </>
         )}
         <datalist id="bp-room-suggestions">
           {rooms.map((r) => (
@@ -168,7 +182,11 @@ export default function ViewInspector({ project, slide, change, notify, openPoli
           </button>
         </div>
         {!en && (
-          <Field label="空间英文名（English / 中英版用）" className="mt-2.5" hint="华文版页面上不显示；切到 English / 中英时用作空间名的英文（只改这一页）">
+          <Field
+            label="空间英文名"
+            className="mt-2.5"
+            hint={slide.subtitle?.trim() ? 'English / 中英版的空间名（只改这一页）；华文版页面上不显示' : '没有视角名时，华文版页眉上的英文大写就是它；English / 中英版的空间名（只改这一页）'}
+          >
             <input data-field="roomEn" className={inputCls} value={slide.roomEn || ''} placeholder="Living Area" onChange={(e) => set({ roomEn: e.target.value })} />
           </Field>
         )}
@@ -194,9 +212,9 @@ export default function ViewInspector({ project, slide, change, notify, openPoli
       <Section title="版式" icon={LayoutTemplate}>
         <Segmented
           options={[
-            { value: 'auto', label: '自动', title: '整套一起排：横图、像素够又不丢材料 / 说明才用满版' },
-            { value: 'full', label: '满版大图', title: '效果图铺满整页，不放文字' },
-            { value: 'framed', label: '图文', title: '大图 + 右栏文字' },
+            { value: 'auto', label: '自动', title: '整套一起排：横图、像素够、没有说明、材料不超过 2 行才用满版；连着的图文页一左一右' },
+            { value: 'full', label: '满版大图', title: '效果图铺满整页，左上视角名、左下材料（最多 3 行）' },
+            { value: 'framed', label: '图文', title: '大图 + 规格栏' },
           ]}
           value={layoutValue}
           onChange={(v) => setNow({ layout: v })}
@@ -204,8 +222,8 @@ export default function ViewInspector({ project, slide, change, notify, openPoli
         <p className="mt-1.5 text-[11px] text-bp-faint">
           {layoutValue === 'auto' ? `自动：现在是「${LAYOUT_LABEL[layout] || '—'}」。` : ''}
           {layout === 'full'
-            ? '满版大图：效果图铺满整页，图上不放字 —— 这一页的材料、说明不显示（同空间下一页列出来就不算丢）。'
-            : '图文：大图贴页边，右栏放楼层空间、视角名和材料；说明放在图下（放不下进右栏）。'}
+            ? '满版大图：效果图铺满整页，左上是视角名和楼层空间，左下印材料（最多 3 行）；说明不显示 —— 要列出来请换成「图文」。'
+            : '图文：页眉是视角名（英文大写 + 中文），效果图 1180 宽、落到页底，规格栏放楼层空间、说明和材料（1–3 种带材质小样）；连着的图文页一左一右。'}
         </p>
       </Section>
 

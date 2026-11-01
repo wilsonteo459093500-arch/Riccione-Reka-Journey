@@ -81,12 +81,13 @@ function Picker({ project, current, onPick, onClose }) {
 
 /**
  * @param {{ project, src:string|null, onChange(src|null), notify, field?:string, autoSrc?:string|null, autoLabel?:string,
- *   removeLabel?:string, onRemove?:()=>void, hint?:string, lowResWidth?:number, maxEdge?:number }} props
+ *   removeLabel?:string, onRemove?:()=>void, hint?:string, lowResWidth?:number, maxEdge?:number, allowProject?:boolean }} props
  *   autoSrc：src 为空时实际显示的图（楼层页 = 该层第一张效果图），配合 removeLabel = '恢复自动'
+ *   allowProject = false：不给「本案图片」（瑞吉欧的页只用瑞吉欧的照片：只能上传新图 / 恢复默认），点缩略图 = 上传
  */
 export default function ImageField({
   project, src, onChange, notify, field = 'image', autoSrc = null, autoLabel = '', removeLabel, onRemove, hint, lowResWidth = 1600,
-  maxEdge = 3840,
+  maxEdge = 3840, allowProject = true,
 }) {
   const fileRef = useRef(null);
   const [busy, setBusy] = useState(false);
@@ -118,8 +119,8 @@ export default function ImageField({
         <button
           type="button"
           data-field={field}
-          onClick={() => setPicking((p) => !p)}
-          title="点一下从本案图片里换"
+          onClick={() => (allowProject ? setPicking((p) => !p) : fileRef.current?.click())}
+          title={allowProject ? '点一下从本案图片里换' : '点一下上传新图'}
           className="relative w-32 shrink-0 aspect-video rounded-lg overflow-hidden bg-bp-tint border border-bp-line hover:ring-2 hover:ring-bp-gold/60 focus:outline-none focus:ring-2 focus:ring-bp-gold"
         >
           {url ? (
@@ -145,10 +146,12 @@ export default function ImageField({
               <Upload className="w-3.5 h-3.5" />
               上传新图
             </button>
-            <button type="button" className={`${btnGhost} ${picking ? '!border-bp-gold !text-bp-ink' : ''}`} onClick={() => setPicking((p) => !p)}>
-              <Images className="w-3.5 h-3.5" />
-              本案图片
-            </button>
+            {allowProject && (
+              <button type="button" className={`${btnGhost} ${picking ? '!border-bp-gold !text-bp-ink' : ''}`} onClick={() => setPicking((p) => !p)}>
+                <Images className="w-3.5 h-3.5" />
+                本案图片
+              </button>
+            )}
             {removeLabel && src && (
               <button type="button" className={btnGhost} onClick={() => (onRemove ? onRemove() : onChange(null))}>
                 <RotateCcw className="w-3.5 h-3.5" />
@@ -165,7 +168,7 @@ export default function ImageField({
           {hint && <span className="text-[11px] text-bp-faint leading-snug">{hint}</span>}
         </div>
       </div>
-      {picking && (
+      {picking && allowProject && (
         <Picker
           project={project}
           current={src}
