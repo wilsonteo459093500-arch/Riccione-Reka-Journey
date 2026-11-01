@@ -48,6 +48,12 @@ export const PHOTOS = {
   bedroom: { src: '/template/service-aftersales-1.jpg', nat: { w: 821, h: 1280 } }, // 藤编柜门的卧室
   kitchen: { src: '/template/brand-collections-1.jpg', nat: { w: 730, h: 982 } }, // 骨骼线厨房
   shelves: { src: '/template/brand-collections-2.jpg', nat: { w: 594, h: 800 } }, // 空山书架
+  // 老板发来的展厅照（2000 px，原样不调色；右上角有白色 sAil 溪岸 logo —— 取景都避开它）
+  showroomStill: { src: '/template/b/showroom-still.jpg', nat: { w: 1333, h: 2000 } }, // 木盘里的青苹果与干枝，后面是书格和沙发
+  showroomLiving: { src: '/template/b/showroom-living.jpg', nat: { w: 2000, h: 1125 } }, // 客厅：书格灯带、圆形挂饰、天窗下的蕨（没有 logo）
+  showroomWide: { src: '/template/b/showroom-wide.jpg', nat: { w: 2000, h: 1333 } }, // 展厅全景：厨房、黑色岛台、客厅
+  showroomKitchen: { src: '/template/b/showroom-kitchen.jpg', nat: { w: 2000, h: 1333 } }, // 厨房：木纹岛台、藤编椅、玻璃吊柜
+  showroomShelf: { src: '/template/b/showroom-shelf.jpg', nat: { w: 2000, h: 1162 } }, // 胡桃木格柜特写（偏暗）
 };
 
 export const LOGO = { src: '/template/b/logo-ink.png', nat: { w: 1417, h: 539 } };
@@ -61,21 +67,19 @@ const slot = (photo, label, frame = {}) => ({ src: photo.src, nat: photo.nat, la
  * frame：ax / ay = 取景重心（0–1），zoom = 在「刚好铺满」之上再放大多少（引擎会提醒超过 1.15 倍原图像素的情况）
  * 设计师在编辑器里换的图存在 slide.images[照片位]，不改这里
  *
- * 现在能用的照片只有 11 张（另有两张风景没用：cover-1 山丘发灰发闷、closing-1 溪谷像素低又阴天），
- * 所以有几张图在两页里各用了一次（换了取景）。老板的新照片到了，按这个顺序先换（每个只改一行）：
- *   1 company-about      与封面同一个抽屉柜（这里是把手特写）
- *   2 company-showrooms  与品牌故事同一面墙（这里是长墙与石凳）
- *   3 company-divider    与品质认证同一个书架（这里是陶罐特写）
- *   4 design-divider     = 原创系列第一张（骨骼线厨房）
- *   5 service-divider    = 原创系列第二张（空山书架；源图 594×800，放大 1.13 倍，偏软）
- *   6 service-aftersales = 原创系列第四张（雾山卧室）
- *   7 brand-philosophy   与封底同一面胡桃木柜墙（这里是台灯壁龛特写：与封底的「回归生活」首尾呼应）
- */
+ * 2026-11 老板发来第一批展厅照（5 张）：理念、公司章节页、关于我们、展厅、方案章节页都换成了展厅照。
+ * 照片右上角有白色 sAil 溪岸 logo：取景（ax / ay / zoom）都避开了它 —— 拿到没有 logo 的原图后可以放宽取景。
+ * 还在用旧图、等新照片的照片位（按这个顺序换，每个只改一行）：
+ *   1 service-aftersales = 原创系列第四张（雾山卧室）—— 最好是卧室 / 衣柜的竖拍照
+ *   2 service-divider    = 原创系列第二张（空山书架；源图 594×800，放大 1.13 倍，偏软）—— 竖拍的细节（五金、拉手、木纹）
+ *   3 company-divider    展厅胡桃木格柜特写偏暗：有更亮的竖拍细节照可以换
+ * 照片位大多是竖的（宽:高 ≈ 0.55–0.9）：竖拍的照片最好用；横拍的会只取中间一段
+  */
 export const PHOTO_SLOTS = {
   cover: { photo: slot(PHOTOS.aboutDetail, '封面照片', { ay: 0.337 }) },
   contents: {},
   'brand-divider': { photo: slot(PHOTOS.aboutOlive, '章节照片', { ay: 1 }) },
-  'brand-philosophy': { photo: slot(PHOTOS.walnutLift, '理念照片', { ax: 0.05, ay: 0.52, zoom: 1.6 }) },
+  'brand-philosophy': { photo: slot(PHOTOS.showroomStill, '理念照片', { ax: 0.35, ay: 1, zoom: 1.2 }) },
   'brand-story': { photo: slot(PHOTOS.storyLift, '品牌照片', { ax: 0.134 }) },
   'brand-collections': {
     c1: slot(PHOTOS.coll1, '系列一照片'),
@@ -86,12 +90,12 @@ export const PHOTO_SLOTS = {
   },
   'brand-awards': { photo: slot(PHOTOS.awards, '奖项照片', { ax: 1, ay: 0.5, zoom: 1.12 }) },
   'brand-supply': {},
-  'company-divider': { photo: slot(PHOTOS.certified, '章节照片（书架细节）', { ax: 0, ay: 0, zoom: 2 }) },
-  'company-about': { photo: slot(PHOTOS.aboutDetail, '公司照片（细节）', { ax: 1, ay: 1, zoom: 1.37 }) },
+  'company-divider': { photo: slot(PHOTOS.showroomShelf, '章节照片', { ax: 0.3 }) },
+  'company-about': { photo: slot(PHOTOS.showroomLiving, '公司照片', { ax: 0.6 }) },
   'company-history': {},
-  'company-showrooms': { photo: slot(PHOTOS.storyLift, '展厅照片', { ax: 0.88 }) },
+  'company-showrooms': { photo: slot(PHOTOS.showroomWide, '展厅照片', { ax: 0.6, ay: 1, zoom: 1.27 }) },
   'company-certified': { photo: slot(PHOTOS.certified, '认证照片', { ax: 0.55 }) },
-  'design-divider': { photo: slot(PHOTOS.kitchen, '章节照片', { ax: 0.62 }) },
+  'design-divider': { photo: slot(PHOTOS.showroomKitchen, '章节照片', { ax: 0.9, ay: 1, zoom: 1.27 }) },
   'service-divider': { photo: slot(PHOTOS.shelves, '章节照片', { ax: 0.9 }) },
   'service-process': {},
   'service-cycle': {},
