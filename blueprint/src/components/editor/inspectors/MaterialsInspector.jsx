@@ -1,27 +1,27 @@
 import React, { useEffect, useMemo } from 'react';
 import { Palette, ArrowUpRight, Info } from 'lucide-react';
-import { MATERIALS_PER_PAGE } from '../../../engine/deck.js';
+import { metaOf } from '../../../store/assets.js';
 import { requestThumbs, useThumbsSig } from '../thumbs.js';
+import { materialsLayout } from '../ops.js';
 import { Section, btnPrimary } from '../ui.jsx';
 import { Swatch } from '../MaterialPicker.jsx';
 
 // 本案材料页：色板全部来自「材料清单」，这里只做概览 + 跳转。
 
-export default function MaterialsInspector({ project, onGoTab }) {
+export default function MaterialsInspector({ project, page, onGoTab }) {
   const mats = project.materials || [];
   const pending = mats.filter((m) => m.pending).length;
   const noImage = mats.filter((m) => !m.image).length;
-  const pages = Math.max(1, Math.ceil(mats.length / MATERIALS_PER_PAGE));
   const srcs = useMemo(() => mats.map((m) => m.image).filter(Boolean), [mats]);
   useThumbsSig(srcs);
   useEffect(() => requestThumbs(srcs), [srcs]);
-  const layoutNote = !mats.length
-    ? '还没有材料'
-    : mats.length <= 6
-      ? '一行大色板'
-      : mats.length <= MATERIALS_PER_PAGE
-        ? '两行色板'
-        : `均分成 ${pages} 页`;
+  // 几页、每页几排：和页面用同一个分页（按提案语言量名称；长名称会让每页少放、排一排）。
+  // page 换了 = 整套重排过（素材尺寸到了、改了语言 / 英文名）→ 跟着重算
+  const { note: layoutNote } = useMemo(
+    () => materialsLayout(project, metaOf),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [mats, project.info?.lang, project.translations, page],
+  );
 
   return (
     <div className="space-y-3">

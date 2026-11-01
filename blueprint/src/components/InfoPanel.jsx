@@ -5,7 +5,8 @@ import React, { useEffect, useRef } from 'react';
 import { Plus, Trash2, ChevronUp, ChevronDown, CalendarDays, Users, Layers, ListChecks, FileText, RotateCcw, Languages } from 'lucide-react';
 import { DEFAULT_TEAM } from '../engine/model.js';
 import { TEAM_MAX } from '../engine/b/design.js';
-import { designCoverTexts } from '../engine/deck.js';
+import { designCoverTexts, sectionLabel } from '../engine/deck.js';
+import { deckChapters } from '../engine/b/company.js';
 import { langOf } from '../engine/lang.js';
 import { TOGGLE_SECTIONS, sectionState, setSectionEnabled, kindState, setKindEnabled } from '../lib/project.js';
 import { formatDay } from '../lib/format.js';
@@ -110,6 +111,8 @@ export default function InfoPanel({ project, onChange }) {
   const autoCover = designCoverTexts({ ...project, info: { ...info, coverTitle: '', coverSubtitle: '' } });
   const lang = langOf(project);
   const en = needsEnglish(lang);
+  // 章节开关的编号跟着整套走（隐藏了品牌，公司就是 01）；隐藏的那一章不编号
+  const chapters = deckChapters(project);
   // 团队名单的列：名字 · 职位（English / 中英版职位下面多一个英文框，职位那一列放宽）· 排序
   const teamCols = en ? 'sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto]' : 'sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]';
   /** 英文输入框（English / 中英版才有；中文本来就是英文时 EnInput 自己不显示）：和中文框一样大（cls.input） */
@@ -286,7 +289,7 @@ export default function InfoPanel({ project, onChange }) {
                 {TOGGLE_SECTIONS.map((s) => (
                   <TriCheck
                     key={s.id}
-                    label={s.label}
+                    label={sectionLabel(s.id, chapters)}
                     hint={s.hint}
                     state={sectionState(project, s.id)}
                     onChange={(on) => onChange((p) => setSectionEnabled(p, s.id, on))}

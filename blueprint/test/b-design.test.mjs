@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { test } from './harness.mjs';
 import {
-  bDesignCover, bFloor, bViewFull, bViewPlate, bMaterials, bTeam, planViews, bViewPage, baseOff, balanceLine, floorPageImage, materialSlices,
+  bDesignCover, bFloor, bViewFull, bViewPlate, bMaterials, bTeam, planViews, bViewPage, baseOff, balanceLine, floorPageImage, materialSlices, WM_WARN,
 } from '../src/engine/b/design.js';
 import { B, INSET, GRID, colX, spanW } from '../src/engine/b/kit.js';
 import { makeTranslator } from '../src/engine/lang.js';
@@ -329,8 +329,11 @@ test('效果图取景：从顶部起、左右居中，底部至少裁掉 9.5%（
     const im = imgs(bViewPlate(ctx, p.slides.find((s) => s.id === id)))[0];
     assert.ok(im.crop.b >= 0.095 - 1e-6 && im.crop.t <= im.crop.b + 1e-6, `${id}: 底部至少裁 9.5%`);
   }
+  // 楼层页的窄框（1232 × 1080）左右各裁掉约 18%：16:9 的图水印（右下角 88–99% 宽）本来就在画外 —— 不为它放大、不裁底
   const fl = imgs(bFloor(ctx, p.slides.find((s) => s.id === 's-f1')))[0];
-  assert.ok(fl.crop.b >= 0.095 - 1e-6, '楼层页的图也一样');
+  assert.equal(fl.src, '/living.jpg');
+  assert.ok(near(fl.crop.l, fl.crop.r, 1e-6) && 1 - fl.crop.r < 0.84, `楼层页：画面右边在原图的 ${1 - fl.crop.r}`);
+  assert.deepEqual([fl.crop.t, fl.crop.b], [0, 0], '楼层页的 16:9 图不为水印裁底');
   // 原图不够大：不为了躲水印再放大（16:9 的小图原样铺满，不裁）
   const tiny = imgs(bViewFull(ctx, { ...p.slides.find((s) => s.id === 'v-tv'), image: '/tiny-wide.jpg' }))[0];
   assert.deepEqual(tiny.crop, { l: 0, t: 0, r: 0, b: 0 }, '已经放大发虚的图不再放大');
@@ -504,6 +507,30 @@ test('方案封面：没有 Material Board 返回 null；有就整张放进右�
   assert.equal(b2.y + b2.h, 984);
   assert.ok(Math.abs(b2.w / b2.h - 2400 / 1350) < 0.01, '横版也一点不裁');
   for (const el of texts(wpg)) assert.ok(el.x + el.w - INSET <= b2.x - 54 + 0.5, `文字在 Board 左边：${el.paras[0].runs[0].text}`);
+});
+
+test('方案封面 · 横版 Board：客户名长（窄左栏里超过 3 行）就不放宽面板 —— 保持第 6–12 栏、落在 984，标题不沿左边排成一长条、不降字号', () => {
+  const lines = (pg, field) => texts(pg).filter((e) => (e.edit?.field || '').startsWith(field)).map((e) => Math.round((e.h - 2 * INSET) / e.paras[0].lineHeight));
+  for (const lang of LANGS) {
+    for (const [client, location] of [['Mr & Mrs Tan Wei Ming', 'Bukit Jalil, Kuala Lumpur'], ['刘先生与陈女士', '柔佛新山依斯干达公主城'], ['Dato’ Sri Haji Mohd Khairul Anuar', 'Seri Kembangan']]) {
+      const p = sample(lang);
+      p.cover.image = '/board-wide.jpg';
+      Object.assign(p.info, { client, location });
+      p.translations = { ...p.translations, 刘先生与陈女士: 'Mr Lau & Mrs Chen', 柔佛新山依斯干达公主城: 'Puteri Harbour, Iskandar, Johor Bahru' };
+      const pg = bDesignCover(ctxOf(p, lang));
+      checkPage(`${lang} 长客户名 · 横版 Board`, pg);
+      const b = imgs(pg)[0];
+      assert.deepEqual([b.x, b.w, b.y + b.h], [colX(6), 970, 984], `${lang} ${client}：Board 留在第 6–12 栏、落在 984`);
+      assert.ok(!pg.warnings.some((w) => /封面标题太长/.test(w)), `${lang} ${client}：${pg.warnings.join(' / ')}`);
+      for (const n of lines(pg, 'coverTitle')) assert.ok(n <= 4, `${lang} ${client}：标题一种语言折成 ${n} 行`);
+      for (const el of texts(pg)) assert.ok(el.x + el.w - INSET <= b.x - 54 + 0.5, `${lang}：文字在 Board 左边 54 以外`);
+    }
+    // 短名字（Mr Lau / Muar）照旧放宽到第 4–12 栏
+    const s = sample(lang);
+    s.cover.image = '/board-wide.jpg';
+    const b = imgs(bDesignCover(ctxOf(s, lang)))[0];
+    assert.deepEqual([b.x, b.w, b.y + b.h], [colX(4), 1254, 984], `${lang} Mr Lau：放宽`);
+  }
 });
 
 test('方案封面：自己改过的方案名没有英文时不拿通用英文顶替（记下缺英文）；默认方案名才配默认英文', () => {
@@ -951,6 +978,98 @@ test('满版大图要裁得掉右下角的水印：像素不够（16:9 约 1845 
   const plate = bViewPlate(ctx, mk('w18', '/r1800.jpg'));
   assert.ok(!plate.warnings.some((w) => /水印/.test(w)));
   assert.ok(imgs(plate)[0].crop.b >= 0.095 - 1e-6);
+});
+
+test('水印按实际取景（左右、上下）判断：真的进了画面才提醒；楼层页的窄框左右已裁掉它就不放大、不提醒', () => {
+  const sizes = { '/w1600.jpg': [1600, 900], '/w900.jpg': [900, 506], '/w1400.jpg': [1400, 1000], '/w2400.jpg': [2400, 1350] };
+  const m2 = (src) => (sizes[src] ? { w: sizes[src][0], h: sizes[src][1] } : meta(src));
+  const p = sample('zh');
+  const ctx = { ...ctxOf(p, 'zh'), meta: m2 };
+  const floor = (image) => bFloor(ctx, { ...p.slides.find((s) => s.id === 's-f1'), image });
+  const wm = (pg) => pg.warnings.filter((w) => /水印/.test(w));
+  // 原稿里量到的水印：3840×2160 的图离右边 0.206 × 高、离底边 0.094 × 高（只裁掉左边的图照样在右下角）；
+  // 没裁过的图水印大小约为对角线的 10%。画面里真有水印就一定要提醒（引擎的范围留了余量：只会多提醒，不会漏）
+  const realShown = (im) => {
+    const nat = m2(im.src);
+    const l = 1 - Math.max(0.206 * nat.h, 0.101 * Math.hypot(nat.w, nat.h)) / nat.w;
+    return 1 - im.crop.r > l && 1 - im.crop.b > 1 - 0.094;
+  };
+  for (const src of ['/w1600.jpg', '/w900.jpg', '/w2400.jpg']) {
+    const pg = floor(src);
+    const im = imgs(pg)[0];
+    assert.deepEqual(wm(pg), [], `${src}：楼层页的 16:9 图左右裁掉约 18%，水印在画外 —— 不提醒`);
+    assert.ok(!realShown(im) && im.crop.b === 0, `${src}：不为水印放大、裁底 ${JSON.stringify(im.crop)}`);
+  }
+  // 1400 × 1000（1.4）：楼层页左右只裁掉 9%，水印还在画面里；放大到 1.15 倍也裁不掉 → 提醒（一键换图）
+  const mid = floor('/w1400.jpg');
+  assert.ok(realShown(imgs(mid)[0]));
+  assert.deepEqual(wm(mid), [WM_WARN.plate]);
+  // 图文页：900 宽的图放大不了 → 提醒「换一张高清图」；满版页 → 提醒「改用图文」
+  const v = { ...p.slides.find((s) => s.id === 'v-tv'), image: '/w900.jpg' };
+  assert.deepEqual(wm(bViewPlate(ctx, v)), [WM_WARN.plate]);
+  assert.deepEqual(wm(bViewFull(ctx, { ...v, layout: 'full' })), [WM_WARN.full]);
+  // 画面里真有水印的页都提醒了（各种比例、各种像素 × 楼层 / 图文 / 满版）
+  const all = { ...sizes, '/w1200sq.jpg': [1200, 1200], '/w1300.jpg': [1300, 812], '/w2000p.jpg': [2000, 1250], '/w1000t.jpg': [1000, 1333] };
+  const m3 = (src) => (all[src] ? { w: all[src][0], h: all[src][1] } : meta(src));
+  const ctx3 = { ...ctx, meta: m3 };
+  const shown3 = (im) => {
+    const nat = m3(im.src);
+    const l = 1 - Math.max(0.206 * nat.h, 0.101 * Math.hypot(nat.w, nat.h)) / nat.w;
+    return 1 - im.crop.r > l && 1 - im.crop.b > 1 - 0.094;
+  };
+  for (const src of Object.keys(all)) {
+    const vv = { ...v, image: src };
+    for (const pg of [bFloor(ctx3, { ...p.slides.find((s) => s.id === 's-f1'), image: src }), bViewPlate(ctx3, vv), bViewFull(ctx3, { ...vv, layout: 'full' })]) {
+      if (shown3(imgs(pg)[0])) assert.ok(wm(pg).length, `${src}：画面里有水印却没提醒 ${JSON.stringify(imgs(pg)[0].crop)}`);
+    }
+  }
+});
+
+test('自动版式：像素和水印分开看 —— 很宽的全景图左右就裁掉了水印，像素不够（2000×667）照样排图文；像素够的（3000×1000）满版', () => {
+  const sizes = { '/pano2000.jpg': [2000, 667], '/pano1200.jpg': [1200, 400], '/pano3000.jpg': [3000, 1000], '/r1200x800.jpg': [1200, 800] };
+  const m2 = (src) => (sizes[src] ? { w: sizes[src][0], h: sizes[src][1] } : meta(src));
+  const p = sample('zh');
+  const tv = p.slides.find((s) => s.id === 'v-tv'); // 自动、没有说明、没有材料：图没毛病就满版
+  const ctx = { ...ctxOf(p, 'zh'), meta: m2 };
+  const wm = (pg) => pg.warnings.filter((w) => /水印/.test(w));
+  const blurry = (pg) => pg.warnings.filter((w) => /像素偏低/.test(w));
+  // 2000×667：铺满整页时水印左右就裁掉了，可是要放大 1.6 倍 → 图文（1344 × 448，不放大、水印裁掉、没有提醒）
+  tv.image = '/pano2000.jpg';
+  const forced = bViewFull(ctx, { ...tv, layout: 'full' });
+  assert.deepEqual(wm(forced), []);
+  assert.deepEqual(blurry(forced), ['图片像素偏低：放大 1.6 倍会发虚，建议换高清图']);
+  assert.equal(planViews(p, m2).get('v-tv'), 'plate');
+  const pg = bViewPage(ctx, tv);
+  checkPage('2000×667 自动', pg);
+  assert.deepEqual([imgs(pg)[0].w, imgs(pg)[0].h], [1344, 448]);
+  assert.deepEqual(pg.warnings, []);
+  // 1200×400（满版要放大 2.7 倍）、1200×800（3 : 2：满版的底部本来就裁掉了水印，但要放大 1.6 倍）→ 图文
+  for (const src of ['/pano1200.jpg', '/r1200x800.jpg']) {
+    tv.image = src;
+    assert.equal(planViews(p, m2).get('v-tv'), 'plate', src);
+    assert.ok(blurry(bViewFull(ctx, { ...tv, layout: 'full' })).length, src);
+  }
+  assert.deepEqual(bViewPage(ctx, tv).warnings, [], '1200×800 的图文页放大 1.12 倍、水印裁掉：没有提醒');
+  // 像素够的全景图：3000×1000 满版只放大 1.08 倍、水印左右裁掉 → 满版，没有提醒
+  tv.image = '/pano3000.jpg';
+  assert.equal(planViews(p, m2).get('v-tv'), 'full');
+  assert.deepEqual(bViewPage(ctx, tv).warnings, []);
+  // 各种比例 × 各种像素：自动排成满版 ⇔ 满版页没有像素偏低、水印的提醒（16:9 照旧约 1845 宽起满版）
+  const grid = {};
+  for (const w of [700, 1200, 1600, 1800, 1845, 1920, 2400, 3000, 3840]) {
+    for (const a of [1.5, 1.55, 1.6, 1.7, 16 / 9, 2, 2.4, 3, 4]) grid[`/g${w}x${Math.round(w / a)}.jpg`] = [w, Math.round(w / a)];
+  }
+  const m3 = (src) => (grid[src] ? { w: grid[src][0], h: grid[src][1] } : meta(src));
+  const ctx3 = { ...ctx, meta: m3 };
+  for (const src of Object.keys(grid)) {
+    tv.image = src;
+    const clean = bViewFull(ctx3, { ...tv, layout: 'full' }).warnings.length === 0;
+    assert.equal(planViews(p, m3).get('v-tv'), clean ? 'full' : 'plate', src);
+  }
+  for (const [src, want] of [['/g1845x1038.jpg', 'full'], ['/g1800x1013.jpg', 'plate'], ['/g3840x960.jpg', 'full'], ['/g2400x600.jpg', 'plate']]) {
+    tv.image = src;
+    assert.equal(planViews(p, m3).get('v-tv'), want, src);
+  }
 });
 
 test('AI 立体图页（图文）：标签只写一次楼层，不印「一楼　一楼」；默认标题有英文（3D Overview / 3D View）', () => {

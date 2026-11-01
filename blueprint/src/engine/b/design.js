@@ -87,41 +87,64 @@ function lowRes(warnings, scale, what = '') {
   if (scale > 1.15) warnings.push(`${what}图片像素偏低：放大 ${scale.toFixed(1)} 倍会发虚，建议换高清图`);
 }
 
-// 效果图右下角烙着「sAil 溪岸」水印（在原图底部约 8% 以内）。样张 p5 / p6 的取景都把它留在画外：
-// 从顶部起取景，底部至少裁掉 9.5%（不够就略放大，最多放大到 1.15 倍）；左右居中。上下要裁得多时上下平分。
+// 效果图右下角烙着「sAil 溪岸」水印（量过原稿里的效果图）：3840×2160 的图在宽 88.4–98.5%、高 90.6–97.3%，
+// 即离右边 0.206 × 高、离底边 0.094 × 高；水印大小约为对角线的 10%（4000×3000 的图离右边 0.127 × 宽）。
+// 设计师在原稿里只裁掉左边的图，水印照样在右下角、像素大小不变。按原图的比例算它占的范围（都留了余量）：
+//   左边 = 离右边 max(14% 宽, 0.22 × 高)；上边 = 离底边 9.5%
+// 样张 p5 / p6 的取景都把它留在画外：从顶部起取景、左右居中；水印还在画面里就略放大（最多放大到 1.15 倍）——
+// 左右裁到水印的左边、或底部裁掉 9.5%，取放大得少的那个（楼层页的窄框左右本来就裁掉很多，16:9 的图不用再放大）。
+// 上下要裁得多时上下平分。
 const WM_CUT = 0.095;
+const WM_SIDE = { w: 0.14, h: 0.22 };
+
+/** 水印在原图里的范围：左边、上边（占原图的比例；右边、下边就是原图的右边、下边） */
+const wmBox = (nat) => ({ l: 1 - Math.max(WM_SIDE.w, (WM_SIDE.h * nat.h) / nat.w), t: 1 - WM_CUT });
 
 /**
  * 效果图 / 照片铺满框（cover），水印留在画外
- * @returns {{ el:object, scale:number, wmShort:boolean }} scale = 原图像素放大到页面的倍数（> 1.15 会发虚）；
- *   wmShort = 为了不放大超过 1.15 倍，底部没能裁够 9.5%（右下角的水印可能露出来）
+ * @returns {{ el:object, scale:number, wmShown:boolean }} scale = 原图像素放大到页面的倍数（> 1.15 会发虚）；
+ *   wmShown = 裁切后的画面里还有水印（为了不放大超过 1.15 倍，左右、底部都没能裁到它）
  */
 function rendering(x, y, w, h, src, nat, field = 'image') {
   const base = photo(x, y, w, h, src, { nat, ax: 0.5, ay: 0, edit: editOf(field) });
-  if (!nat?.w || !nat?.h) return { el: base, scale: 1, wmShort: false };
+  if (!nat?.w || !nat?.h) return { el: base, scale: 1, wmShown: false };
   const A = w / h;
   const S = nat.w / nat.h;
-  let fw = S > A ? A / S : 1; // 看得见的原图宽（占原图的比例）
-  let fh = S > A ? 1 : S / A; // 看得见的原图高
+  const fw0 = S > A ? A / S : 1; // 刚好铺满时看得见的原图宽（占原图的比例）
+  const fh0 = S > A ? 1 : S / A; // 看得见的原图高
   const cover = Math.max(w / nat.w, h / nat.h);
-  let z = fh > 1 - WM_CUT ? fh / (1 - WM_CUT) : 1;
+  const mark = wmBox(nat);
+  // 放大多少水印才出画：左右居中时看得见的宽 ≤ 2·水印左边 − 1，或看得见的高 ≤ 1 − 9.5%
+  const zx = 2 * mark.l - 1 > 0 ? fw0 / (2 * mark.l - 1) : Infinity;
+  const zy = fh0 / (1 - WM_CUT);
+  let z = Math.max(1, Math.min(zx, zy));
   if (cover * z > 1.15) z = Math.max(1, 1.15 / cover);
-  fw /= z;
-  fh /= z;
+  const fw = fw0 / z;
+  const fh = fh0 / z;
   const side = (1 - fw) / 2;
   const cutV = 1 - fh;
   const b = cutV >= 2 * WM_CUT ? cutV / 2 : Math.min(cutV, WM_CUT);
   const r6 = (v) => Math.round(v * 1e6) / 1e6;
-  return { el: { ...base, crop: { l: r6(side), t: r6(cutV - b), r: r6(side), b: r6(b) } }, scale: cover * z, wmShort: b < WM_CUT - 1e-4 };
+  const crop = { l: r6(side), t: r6(cutV - b), r: r6(side), b: r6(b) };
+  // 画面（裁切后看得见的范围）和水印的范围有重叠 = 水印露出来
+  const wmShown = 1 - crop.r > mark.l + 1e-4 && 1 - crop.b > mark.t + 1e-4;
+  return { el: { ...base, crop }, scale: cover * z, wmShown };
 }
 
-/** 这张图铺满 w × h 时，底部能不能裁够（水印留在画外）又不放大超过 1.15 倍 */
-const wmFits = (nat, w, h) => !rendering(0, 0, w, h, '', nat).wmShort;
+/**
+ * 这张图铺满 w × h 时图片本身没毛病（这一页不会有像素偏低、水印的提醒）：
+ *   像素够 —— 放大不超过 1.15 倍（不发虚）；水印留在画外 —— 为它略放大也不超过 1.15 倍。
+ *   两样分开看：很宽的全景图左右裁掉得多，水印不用放大就出了画，但像素不够照样发虚
+ */
+const fillsClean = (nat, w, h) => {
+  const r = rendering(0, 0, w, h, '', nat);
+  return r.scale <= 1.15 && !r.wmShown;
+};
 
-/** 水印提醒：满版页建议换图文（图文的图小一些，裁得开）；图文页 / 楼层页只能换高清图 */
-const WM_WARN = {
-  full: '效果图右下角的水印会露出来（图片像素不够、底部裁不掉）—— 换高清图，或改用「图文」',
-  plate: '效果图右下角的水印会露出来（图片像素不够、底部裁不掉）—— 换一张高清图',
+/** 水印提醒：满版页建议换图文（图文的图小一些，裁得开）；图文页 / 楼层页只能换高清图（编辑器的一键修复按这两种说法分） */
+export const WM_WARN = {
+  full: '效果图右下角的水印会露出来（图片像素不够，裁不掉）—— 换高清图，或改用「图文」',
+  plate: '效果图右下角的水印会露出来（图片像素不够，裁不掉）—— 换一张高清图',
 };
 
 /** 没有图：小样底色块（点它换图） */
@@ -444,16 +467,28 @@ export function bDesignCover(ctx) {
   const els = [];
   const warnings = [];
 
-  // Material Board 是排好的拼贴：整张放进右侧，一点不裁，四周是纸。
-  //   竖版 / 方形（宽高比 ≤ 970 : 888）：第 6–12 栏的面板里贴右、占满高度（上下各留 96）；
-  //   横版：面板放宽到第 4–12 栏（1254 × 888），贴右、落在 984 —— 与左栏楼层那一行同一条底线；
-  //   A4 横正好占满高度，16:9 约 1254 × 705（不再缩成右上角 970 × 546 的一小块、下面空一大片纸）
+  // Material Board 是排好的拼贴：整张放进右侧，一点不裁，四周是纸；贴右、落在 984 —— 与左栏楼层那一行同一条底线。
+  //   竖版 / 方形（宽高比 ≤ 970 : 888）：第 6–12 栏的面板里占满高度（上下各留 96）；
+  //   横版：标题在窄的左栏里也排得下（每种语言都不超过 3 行）时，面板放宽到第 4–12 栏（1254 × 888）——
+  //     A4 横正好占满高度，16:9 约 1254 × 705（不缩成 970 × 546 的一小块、上面空一大片纸）；
+  //     客户名长的保持第 6–12 栏的面板（左栏 656 宽），不把标题挤成沿着左边的一长条
   const nat = meta(cover.image);
   const r = nat?.w && nat?.h ? nat.w / nat.h : 3 / 4;
-  const narrow = { x: colX(6), w: RIGHT - colX(6) };
-  const landscape = r > narrow.w / (FOOT - TOP);
-  const box = landscape ? { x: colX(4), w: RIGHT - colX(4) } : narrow;
   const boxH = FOOT - TOP;
+  const narrow = { x: colX(6), w: RIGHT - colX(6) };
+  const wide = { x: colX(4), w: RIGHT - colX(4) };
+  const landscape = r > narrow.w / boxH;
+  const titlePair = coverTitlePair(info, tr, lang);
+  const subPair = coverSubPair(project, tr);
+  const WIDE_LINES = 3;
+  const fitsWide = () => {
+    const w = wide.x - 54 - colX(1);
+    return pick(lang, titlePair).every((it) => {
+      const L = scriptOf(it, 'display');
+      return blk(0, 0, w, balanceText(it.text, L, 'display', w), L, 'display').lines <= WIDE_LINES;
+    });
+  };
+  const box = landscape && fitsWide() ? wide : narrow;
   const tall = r <= box.w / boxH;
   const bw = tall ? Math.round(boxH * r) : box.w;
   const bh = tall ? boxH : Math.round(box.w / r);
@@ -462,11 +497,9 @@ export function bDesignCover(ctx) {
   els.push({ t: 'img', x: bx, y: by, w: bw, h: bh, src: cover.image, fit: 'contain', ax: 1, ay: 1, ...(nat ? { nat } : {}), edit: { field: 'cover.image' } });
   lowRes(warnings, upscale(nat, bw, bh), 'Material Board ');
 
-  // 左栏：右边界离图 54（竖版的图从第 6 栏起时：左栏 = 第 1–5 栏）
+  // 左栏：右边界离图 54（竖版 / 方形的图从第 6 栏起时：左栏 = 第 1–5 栏）
   const textR = landscape || bx >= colX(7) ? bx - 54 : colX(6) - GRID.gutter;
   const colW = textR - colX(1);
-  const titlePair = coverTitlePair(info, tr, lang);
-  const subPair = coverSubPair(project, tr);
 
   // 中英版：像公司封面（样张 p1）那样中文第 1 栏、英文第 3 栏并排，同一顶线、同样断行；放不下就上下对照
   const xs = [colX(1), colX(3)];
@@ -548,7 +581,7 @@ export function bFloor(ctx, slide) {
     const r = rendering(0, 0, FLOOR_IMG_W, H, src, meta(src));
     els.push(r.el);
     lowRes(warnings, r.scale);
-    if (r.wmShort) warnings.push(WM_WARN.plate);
+    if (r.wmShown) warnings.push(WM_WARN.plate);
   } else {
     els.push(...missingImage(0, 0, FLOOR_IMG_W, H));
     if (!emptyFloor) warnings.push('楼层章节页没有背景图');
@@ -627,7 +660,7 @@ const superset = (big, small) => [...small].every((id) => big.has(id));
 /**
  * 每张效果图页用满版（full）还是图文（plate）
  *   设定了版式就照设定（full → 满版；framed → 图文）
- *   自动（auto）：横图（≥ 1.5）、像素够裁掉水印，且这一页满版也不丢东西（没有说明、没有材料），
+ *   自动（auto）：横图（≥ 1.5）、像素够（铺满整页不发虚、水印裁得掉），且这一页满版也不丢东西（没有说明、没有材料），
  *     或它是这个空间的第一张、没有说明、紧接着的下一页同楼层同空间且材料覆盖它（下一页是图文）→ 满版；
  *   AI 立体图（tag '3d'）→ 图文；不连续出现 3 页满版；其余图文
  * @param {object} project
@@ -659,8 +692,9 @@ export function planViews(project, metaFn = () => null) {
       plan.set(s.id, forced);
       continue;
     }
-    // 满版要能把底部的水印裁掉又不放大超过 1.15 倍（16:9 的图约 1845 宽以上）；像素不够的放图文（图小一些，裁得开）
-    if (s.tag === '3d' || ratioOf(s) < 1.5 || noteRows(s).length || !wmFits(natOf(s), W, H)) {
+    // 满版要像素够：铺满整页不放大超过 1.15 倍，右下角的水印也裁得掉（16:9 的图约 1845 宽、3 : 1 的全景图约 940 高以上）；
+    // 像素不够的放图文（图小一些：放大得少、裁得开）—— 自动排出来的满版页不会有像素偏低、水印的提醒
+    if (s.tag === '3d' || ratioOf(s) < 1.5 || noteRows(s).length || !fillsClean(natOf(s), W, H)) {
       plan.set(s.id, 'plate');
       continue;
     }
@@ -722,7 +756,7 @@ export function bViewFull(ctx, slide, plan) {
     const r = rendering(0, 0, W, H, slide.image, meta(slide.image));
     els.push(r.el);
     lowRes(warnings, r.scale);
-    if (r.wmShort) warnings.push(WM_WARN.full);
+    if (r.wmShown) warnings.push(WM_WARN.full);
   } else {
     els.push(sampleRect(0, 0, W, H, 'image'));
     warnings.push('缺少效果图');
@@ -950,7 +984,7 @@ export function bViewPlate(ctx, slide) {
     const r = rendering(0, 0, g.iw, g.ih, s.image, nat);
     els.push(r.el);
     lowRes(warnings, r.scale);
-    if (r.wmShort) warnings.push(WM_WARN.plate);
+    if (r.wmShown) warnings.push(WM_WARN.plate);
   } else {
     els.push(...missingImage(0, 0, g.iw, g.ih));
     warnings.push('缺少效果图');

@@ -1,8 +1,8 @@
 // 「页面」编辑器的纯函数 —— 全部是不可变更新（project → 新 project），不碰 DOM / IndexedDB，可在 Node 测试。
 // 约定：新 id 一律由调用方生成后传进来（onChange 的 updater 可能被 React 调用两次，必须是纯函数）。
 
-import { SECTION_LABELS } from '../../engine/deck.js';
-import { planViews, TEAM_MAX } from '../../engine/b/design.js';
+import { sectionLabel, MATERIALS_PER_PAGE } from '../../engine/deck.js';
+import { planViews, TEAM_MAX, materialSlices } from '../../engine/b/design.js';
 import { COMPANY_PAGES_B, companyFieldsB, companyImagesB, companyFieldByLabel, legacyOverrides } from '../../engine/b/company.js';
 import { isMissWarning, langOf } from '../../engine/lang.js';
 import { findFloor } from '../../engine/model.js';
@@ -205,7 +205,7 @@ export function moveToFloorEnd(project, id, floorSlideId = null) {
 
 // ---------------------------------------------------------------------------
 // 版式（B「格物」）：full = 满版大图（只有图，不放字）；framed = 图文（图 + 右栏：楼层空间、标题、材料、说明）
-// 'auto' 交给整套的排版计划（b/design.js planViews：横图且不丢内容才满版、同空间下一页能补上材料、不连续 3 页满版）
+// 'auto' 交给整套的排版计划（b/design.js planViews：横图、像素够且不丢内容才满版、同空间下一页能补上材料、不连续 3 页满版）
 // ---------------------------------------------------------------------------
 
 /**
@@ -320,6 +320,21 @@ export function assignMaterial(project, slideId, row, materialId, role) {
 /** 新建材料并放进某页（一步完成，方便撤销） */
 export const addMaterialAndAssign = (project, slideId, row, mat, role) =>
   assignMaterial(addMaterial(project, mat), slideId, row, mat.id, role);
+
+/**
+ * 「本案材料」页怎么排（检查器的一句说明）：和 renderDeck 用同一个分页（b/design.js materialSlices，按提案语言量名称）——
+ * 名称很长、两排的小样会被挤扁时每页少放几种、排一排，这里的页数、排数跟着变
+ * @returns {{ pages:number, rows:0|1|2, note:string }}
+ */
+export function materialsLayout(project, meta = () => null) {
+  const mats = (project?.materials || []).filter(Boolean);
+  if (!mats.length) return { pages: 0, rows: 0, note: '还没有材料' };
+  const slices = materialSlices({ project, lang: langOf(project), meta }, mats, MATERIALS_PER_PAGE);
+  const rows = slices.some((s) => s.rows === 2) ? 2 : 1;
+  const rowText = rows === 2 ? '两排' : '一排';
+  if (slices.length > 1) return { pages: slices.length, rows, note: `分成 ${slices.length} 页 · 每页${rowText}色板` };
+  return { pages: 1, rows, note: rows === 2 ? '两排色板' : '一排大色板' };
+}
 
 // ---------------------------------------------------------------------------
 // 楼层 / 封面 / 项目信息 / 团队
@@ -473,13 +488,16 @@ export function pageNumbers(rendered) {
   return map;
 }
 
-/** 按章节分组（连续的同章节页一组；公司页被拖到别处时会出现重复的章节标题） */
-export function groupSections(rendered) {
+/**
+ * 按章节分组（连续的同章节页一组；公司页被拖到别处时会出现重复的章节标题）
+ * 标题带整套里的章节编号（chapters = deckChapters(project)：隐藏了品牌 / 公司 / 服务，后面的编号往前排，与导出的目录一致）
+ */
+export function groupSections(rendered, chapters = null) {
   const groups = [];
   (rendered || []).forEach((page, index) => {
     const last = groups[groups.length - 1];
     if (last && last.section === page.section) last.items.push({ page, index });
-    else groups.push({ section: page.section, label: SECTION_LABELS[page.section] || page.section, items: [{ page, index }] });
+    else groups.push({ section: page.section, label: sectionLabel(page.section, chapters), items: [{ page, index }] });
   });
   return groups;
 }
@@ -530,8 +548,12 @@ const PHOTO_SLOT_BY_LABEL = (() => {
  */
 export function fixForWarning(text, ctx = {}) {
   const s = String(text || '');
+  // 本案材料页：提醒以「材料「名称」的…」开头（名称是设计师写的字，先认开头，免得名称里的字被下面的规则认错）
+  if (/^材料「.*」的名称太长/.test(s)) return { id: 'gotoMaterials', label: '去材料清单改名称' };
+  if (/^材料「.*」的图片像素偏低/.test(s)) return { id: 'gotoMaterials', label: '去材料清单换图' };
   if (/满版大图不显示/.test(s)) return { id: 'framed', label: '换成图文' };
-  if (/水印会露出来/.test(s)) return { id: 'framed', label: '换成图文' };
+  // 水印：满版页（说「改用「图文」」）→ 换成图文（图文的图小一些，裁得开）；图文页、楼层页 → 换一张高清图
+  if (/水印会露出来/.test(s)) return /改用「图文」/.test(s) ? { id: 'framed', label: '换成图文' } : { id: 'pickImage', label: '换一张高清图', field: 'image' };
   if (/说明太多放不下|材料太多|材料表放不下|材料较多，视角名已缩小/.test(s)) return { id: 'split', label: '拆成两页' };
   const longNote = s.match(/^说明太长（第 (\d+) 条(的标签)?）/);
   if (longNote) return { id: 'focus', label: '去精简说明', field: `notes.${Number(longNote[1]) - 1}.${longNote[2] ? 'label' : 'text'}` };
@@ -559,7 +581,6 @@ export function fixForWarning(text, ctx = {}) {
   // 公司页的照片：缺照片 / 像素偏低 →「照片」栏里那一张
   const photo = s.match(/^缺照片：(.+?) —— /) || s.match(/^图片像素偏低：(.+?)放大 /);
   if (photo && PHOTO_SLOT_BY_LABEL.has(photo[1])) return { id: 'pickImage', label: '换一张照片', field: `image.${PHOTO_SLOT_BY_LABEL.get(photo[1])}` };
-  if (/^材料「.*」的图片像素偏低/.test(s)) return { id: 'gotoMaterials', label: '去材料清单换图' };
   if (/^Material Board 图片像素偏低/.test(s)) return { id: 'pickImage', label: '换一张图', field: 'cover.image' };
   if (/缺少效果图|没有背景图|^图片像素偏低：放大/.test(s)) return { id: 'pickImage', label: '换一张图', field: 'image' };
   if (/本案材料为空/.test(s)) return { id: 'gotoMaterials', label: '去材料清单' };

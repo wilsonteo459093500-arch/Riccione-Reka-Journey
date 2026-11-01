@@ -16,6 +16,8 @@ import { preloadProjectAssets, onAssetsChanged, storeBlob } from '../store/asset
 import { uploadImage } from './editor/upload.js';
 import { useProjectState, waitForSaves } from '../lib/useProjectState.js';
 import { designCoverSlideId, projectStats, ensureDesignCoverSlide, upgradeProject, legacyEditPages } from '../lib/project.js';
+import { sectionLabel } from '../engine/deck.js';
+import { deckChapters } from '../engine/b/company.js';
 import { cls } from '../lib/ui.jsx';
 
 export const TABS = [
@@ -359,7 +361,7 @@ function Workspace({ initial, settings, notify, onOpenSettings, onExit }) {
                   <div className={cls.eyebrow}>Material Board</div>
                   <h2 className="font-serif text-2xl text-bp-ink mt-1">Material Board 封面</h2>
                   <p className="mt-1.5 text-xs text-bp-muted max-w-3xl leading-relaxed">
-                    把本案材料排成一张大片：手动摆好，或用 AI 拍成实景平铺照。设为方案封面后，它就是「03 方案」章节的第一页 —— 公司封面保持原样。
+                    把本案材料排成一张大片：手动摆好，或用 AI 拍成实景平铺照。设为方案封面后，它就是「{sectionLabel('design', deckChapters(project))}」章节的第一页 —— 公司封面保持原样。
                   </p>
                 </div>
                 <MoodBoard project={project} settings={settings} notify={notify} onOpenSettings={onOpenSettings} onUseAsCover={onUseAsCover} />

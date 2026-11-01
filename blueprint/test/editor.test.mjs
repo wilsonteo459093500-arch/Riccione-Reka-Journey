@@ -1,14 +1,15 @@
 // 「页面」编辑器纯函数（src/components/editor/ops.js）：排序 / 复制 / 删除 / 新增 / 版式 / 材料 / 改字 / 提醒修复
 import assert from 'node:assert/strict';
-import { bTeam, bViewPlate, bViewFull, planViews } from '../src/engine/b/design.js';
-import { upgradeProject, legacyEditPages, setSectionEnabled } from '../src/lib/project.js';
+import { bTeam, bViewPlate, bViewFull, planViews, WM_WARN } from '../src/engine/b/design.js';
+import { upgradeProject, legacyEditPages, setSectionEnabled, TOGGLE_SECTIONS } from '../src/lib/project.js';
+import { deckChapters } from '../src/engine/b/company.js';
 import { floorPageImage } from '../src/engine/b/design.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { test } from './harness.mjs';
 import { newProject, assembleDeck, uid, clientLine } from '../src/engine/model.js';
-import { renderDeck, elementText } from '../src/engine/deck.js';
+import { renderDeck, elementText, sectionLabel } from '../src/engine/deck.js';
 import { analyzePages } from '../src/import/analyze.js';
 import {
   canDelete, canDuplicate, canInsertViewAfter, findSlide, listMove, listRemove, listUpdate, listInsert, updateSlide, applyPatches,
@@ -18,7 +19,7 @@ import {
   updateCover, updateTeamMember, addTeamMember, removeTeamMember, teamVisibleIndices, setCompanyField, clearCompanyField,
   setCompanyImage, companyFields, companyImages, companyKeyOf, pageNumbers, groupSections, stabilizePages, warningPageCount, nextWarningIndex, fixForWarning,
   applyFix, inputFieldFor, projectImages, viewTitleOf, roomSuggestions, updateViewList, clearLegacyEdits, legacyEdits, editedCompanyFields,
-  enOnlyEdits, resetCompanyFields, singleLine,
+  enOnlyEdits, resetCompanyFields, singleLine, materialsLayout,
 } from '../src/components/editor/ops.js';
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
@@ -372,7 +373,15 @@ test('旧版留下的改写：页面提醒 →「知道了」清掉；legacyEdit
   const cover = p.slides.find((s) => s.key === 'cover');
   const story = p.slides.find((s) => s.key === 'brand-story');
   const q = updateSlide(updateSlide(p, cover.id, { overrides: { 3: '刘府 · 麻坡（旧版）', subtitle: '新方案名' } }), story.id, { overridesEn: { 2: 'Old English' } });
-  assert.deepEqual(legacyEditPages(q).map((x) => x.title), ['封面', '品牌故事']);
+  // 打开时的一次性通知与页面提醒、检查器同一个规则：华文版只算中文的改写（品牌故事只改过英文 —— 华文版里没有提醒，通知也不提它）
+  assert.deepEqual(legacyEditPages(q).map((x) => x.title), ['封面']);
+  for (const lang of ['zh', 'en', 'bi']) {
+    const ql = { ...q, info: { ...q.info, lang } };
+    const warned = renderDeck(ql).filter((x) => x.warnings.some((w) => /^旧版里改过的字/.test(w))).map((x) => x.slideId);
+    assert.deepEqual(legacyEditPages(ql).map((x) => x.slideId), warned, `${lang}：通知列的页 = 有提醒的页`);
+    assert.deepEqual(legacyEditPages(ql).map((x) => x.count), warned.map((id) => legacyEdits(findSlide(ql, id), ql).length), `${lang}：处数 = 检查器列出的条数`);
+  }
+  assert.deepEqual(legacyEditPages({ ...q, info: { ...q.info, lang: 'bi' } }).map((x) => x.title), ['封面', '品牌故事']);
   const w = renderDeck(q).find((x) => x.slideId === cover.id).warnings.find((x) => /^旧版里改过的字/.test(x));
   assert.match(w, /（1 处）：「刘府 · 麻坡（旧版）」/);
   assert.deepEqual(fixForWarning(w), { id: 'dismissLegacy', label: '知道了' });
@@ -402,8 +411,14 @@ test('提醒 → 一键修复：第几条说明、空间名 / 视角名（中文
   assert.equal(fixForWarning('改过的中文还没有对应的英文：「一句话」 —— 在右侧英文栏里补上', { key: 'brand-divider' }).field, 'overridesEn.lead');
   assert.equal(fixForWarning('这一层的效果图都隐藏了：楼层章节页后面没有内容 —— 也隐藏这一页，或给楼层选一张图').id, 'hide');
   assert.equal(fixForWarning('这一层还没有效果图页：楼层章节页后面没有内容 —— 隐藏这一页，或先加效果图').id, 'hide');
-  assert.equal(fixForWarning('效果图右下角的水印会露出来（图片像素不够、底部裁不掉）—— 换高清图，或改用「图文」').id, 'framed');
+  // 水印：满版页 → 换成图文；图文页、楼层页（已经是图文 / 没有版式可换）→ 换一张高清图
+  assert.deepEqual(fixForWarning(WM_WARN.full), { id: 'framed', label: '换成图文' });
+  assert.deepEqual(fixForWarning(WM_WARN.plate), { id: 'pickImage', label: '换一张高清图', field: 'image' });
   assert.equal(fixForWarning('材料编号太长：「LAMINAM-CALCE-BIANCO-12MM」折成了 2 行 —— 建议精简（去材料清单改）').id, 'gotoMaterials');
+  // 材料名称截短（本案材料页）：去材料清单改名称；名称里的字不会被别的规则认错
+  assert.deepEqual(fixForWarning('材料「意大利进口超白岩板」的名称太长：页面上截短了（末尾「…」）—— 建议精简（去材料清单改）'), { id: 'gotoMaterials', label: '去材料清单改名称' });
+  assert.equal(fixForWarning('材料「材料太多的水印会露出来」的名称太长：页面上截短了（末尾「…」）—— 建议精简（去材料清单改）').label, '去材料清单改名称');
+  assert.equal(fixForWarning('材料「浅川橡」的图片像素偏低：放大 1.6 倍会发虚，建议换高清图').label, '去材料清单换图');
   assert.equal(fixForWarning('材料表放不下：第 5 项起没有印出来 —— 建议精简名称或拆成两页').id, 'split');
   const p = smallProject();
   assert.equal(findSlide(applyFix(p, 'hide', 'F2'), 'F2').enabled, false);
@@ -440,6 +455,17 @@ test('方案章节显示：隐藏品牌 / 公司后目录只列方案、服务�
   const ct = p.slides.find((s) => s.key === 'contents');
   assert.equal(companyFields(ct, p).find((f) => f.field === 'ch1').hidden, true);
   assert.equal(companyFields(ct, p).find((f) => f.field === 'ch3').hidden, false);
+  // 编辑器里的章节名（页面列表的分组标题、项目信息的章节开关）跟着编号：方案 = 01、服务 = 02；隐藏的那两章不编号
+  const all = renderDeck(p);
+  const labels = Object.fromEntries(groupSections(all, deckChapters(p)).map((g) => [g.section, g.label]));
+  assert.deepEqual(labels, { opening: '开篇', brand: '品牌 · 溪岸', company: '公司 · 瑞吉欧', design: '01 方案 · 设计图', service: '02 服务 · 交付' });
+  assert.deepEqual(TOGGLE_SECTIONS.map((s) => sectionLabel(s.id, deckChapters(p))), ['品牌 · 溪岸', '公司 · 瑞吉欧', '02 服务 · 交付']);
+  // 编号与目录、章节页一样（目录 01 / 02；服务章节页「第二章」）
+  assert.equal(labels.service.slice(0, 2), contents.filter((t) => /^0\d$/.test(t))[1]);
+  // 只隐藏品牌：公司 = 01
+  const q = setSectionEnabled(smallProject(), 'brand', false);
+  assert.deepEqual(TOGGLE_SECTIONS.map((s) => sectionLabel(s.id, deckChapters(q))), ['品牌 · 溪岸', '01 公司 · 瑞吉欧', '03 服务 · 交付']);
+  assert.equal(sectionLabel('design', deckChapters(q)), '02 方案 · 设计图');
 });
 
 // ---------------------------------------------------------------------------
@@ -470,6 +496,37 @@ test('assignMaterial / addMaterialAndAssign / removeMissingMaterials', () => {
   const d = updateViewList(c, 'v2', 'materials', (l) => [...l, { role: 'x', materialId: 'gone' }, { role: 'y', materialId: null }]);
   assert.equal(findSlide(d, 'v2').materials.length, 3);
   assert.deepEqual(findSlide(removeMissingMaterials(d, 'v2'), 'v2').materials, [{ role: '柜门', materialId: 'm9' }]);
+});
+
+test('materialsLayout：「本案材料」检查器说的页数、排数与 renderDeck 实际排出来的一致（长名称每页少放、排一排）', () => {
+  const LONG = { name: '意大利进口超白岩板（哑光）', code: 'LAMINAM-CALCE-BIANCO-12MM', image: 'asset:sw-long' };
+  const meta = (src) => (/^asset:sw/.test(src || '') ? { w: 600, h: 600 } : null);
+  const mats = (n, long = false) => Array.from({ length: n }, (_, i) => (long && i % 2 ? { ...LONG, id: `L${i}` } : { id: `m${i}`, name: '浅川橡', code: `AG${200 + i}`, image: 'asset:sw1' }));
+  /** renderDeck 排出来的材料页：几页、每页几排小样 */
+  const actual = (p) => {
+    const pages = renderDeck(p, { meta }).filter((pg) => pg.kind === 'materials');
+    return { pages: pages.length, rows: Math.max(...pages.map((pg) => new Set(pg.els.filter((e) => e.t === 'img').map((e) => e.y)).size)) };
+  };
+  // 中英版的名称是中文一行 + 英文一行：长名称把两排的小样挤扁 → 每页一排；华文 / English 版同样的材料两排放得下
+  const longNote = (lang) => (lang === 'bi' ? '分成 2 页 · 每页一排色板' : '两排色板');
+  for (const lang of ['zh', 'en', 'bi']) {
+    for (const [n, long, note] of [
+      [3, false, '一排大色板'],
+      [7, false, '两排色板'],
+      [14, false, '分成 2 页 · 每页两排色板'],
+      [8, true, longNote(lang)],
+      [12, true, longNote(lang)],
+    ]) {
+      const p = smallProject();
+      p.info.lang = lang;
+      p.materials = mats(n, long);
+      p.translations = { [LONG.name]: 'Italian Ultra-White Sintered Stone (Matt)', 浅川橡: 'Light Oak' };
+      const lay = materialsLayout(p, meta);
+      assert.equal(lay.note, note, `${lang} ${n}${long ? ' 长名称' : ''}`);
+      assert.deepEqual({ pages: lay.pages, rows: lay.rows }, actual(p), `${lang} ${n}${long ? ' 长名称' : ''}：和页面一致`);
+    }
+  }
+  assert.equal(materialsLayout({ ...smallProject(), materials: [] }).note, '还没有材料');
 });
 
 test('splitView：备注在前、材料在后对半分，两页都用框图，同一张图', () => {
@@ -583,6 +640,29 @@ test('companyFields / setCompanyField：按栏位改中文 / 英文，恢复默�
   assert.ok(!renderDeck(legacy).find((pg) => pg.slideId === cover.id).els.some((e) => e.t === 'text' && elementText(e).includes('旧改写')));
 });
 
+test('清空的英文（不显示）：「恢复英文」只去掉英文的改写，中文的改动留着；「恢复默认」才两种一起清', () => {
+  const p = smallProject();
+  const div = p.slides.find((s) => s.key === 'brand-divider');
+  const field = (q) => companyFields(findSlide(q, div.id), q).find((f) => f.field === 'title');
+  for (const lang of ['en', 'bi']) {
+    const base = { ...p, info: { ...p.info, lang } };
+    const f0 = field(base);
+    // 中文改了、英文清空 = 英文版不印这一行
+    let q = setCompanyField(base, div.id, 'title', 'zh', '新标题', f0.zhDefault);
+    q = setCompanyField(q, div.id, 'title', 'en', '', f0.enDefault);
+    assert.equal(field(q).enInput, '');
+    assert.equal(field(q).overridden.en, true);
+    // 恢复英文：中文的改动还在，英文回到默认稿
+    const r = clearCompanyField(q, div.id, 'title', 'en');
+    assert.deepEqual(findSlide(r, div.id).overrides, { title: '新标题' }, `${lang}：中文的改动留着`);
+    assert.equal('overridesEn' in findSlide(r, div.id), false);
+    assert.equal(field(r).en, f0.enDefault);
+    // 恢复默认（English / 中英版）：中文、英文一起清
+    const all = findSlide(resetCompanyFields(q, div.id, ['title'], lang), div.id);
+    assert.equal('overrides' in all || 'overridesEn' in all, false);
+  }
+});
+
 test('companyImages / setCompanyImage：换照片、恢复默认', () => {
   const p = smallProject();
   const story = p.slides.find((s) => s.kind === 'company' && s.key === 'brand-story');
@@ -616,9 +696,9 @@ test('pageNumbers / groupSections：页码只数启用的页；章节按连续�
   assert.equal(nums.has('v2'), false);
   assert.equal(nums.get(out[0].key), 1);
   assert.equal(Math.max(...nums.values()), out.filter((pg) => pg.enabled).length);
-  const groups = groupSections(out);
+  const groups = groupSections(out, deckChapters(p));
   assert.deepEqual(groups.map((g) => g.section), ['opening', 'brand', 'company', 'design', 'service']);
-  assert.equal(groups[3].label, '03 方案 · 设计图');
+  assert.deepEqual(groups.map((g) => g.label), ['开篇', '01 品牌 · 溪岸', '02 公司 · 瑞吉欧', '03 方案 · 设计图', '04 服务 · 交付']);
   assert.equal(groups.reduce((n, g) => n + g.items.length, 0), out.length);
   // 公司页拖到方案中间 → 章节分成两段
   const moved = moveSlideRelative(p, p.slides.find((s) => s.key === 'brand-awards').id, 'v3', 'after');

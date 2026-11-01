@@ -29,7 +29,7 @@ Project ──engine/deck.js renderDeck()──▶ 渲染页 [{ bg, els }]（eng
 | `src/engine/b/text.js` | 均衡断行（方案页、公司页的大标题 / 名称共用）：折成两三行时各行长短接近，不留落单的一个词 |
 | `src/engine/metrics.js` | 三种字体的实测字宽（估算换行用） |
 | `src/engine/lang.js` · `glossary.js` | 提案语言（华文 / English / 中英）、翻译记忆、词典自动英文、缺英文提醒 |
-| `src/engine/deck.js` | `renderDeck(project, { meta })` → 渲染页（每页的提醒、缺英文清单） |
+| `src/engine/deck.js` | `renderDeck(project, { meta })` → 渲染页（每页的提醒、缺英文清单）；`sectionLabel(section, deckChapters(project))` = 编辑器里的章节名（页面列表、章节开关），编号与目录一致 |
 | `src/engine/pptx/` | `buildPptx(slides, { loadImage })` → .pptx（JSZip，浏览器 / Node 通用） |
 | `src/store/db.js` | IndexedDB：projects / assets |
 | `src/store/assets.js` | `'asset:<id>'` ↔ Blob / object URL / 尺寸；`storeBlob`、`preloadProjectAssets`、`resolveUrl`、`metaOf`、`loadForPptx`、`toInlineImage` |

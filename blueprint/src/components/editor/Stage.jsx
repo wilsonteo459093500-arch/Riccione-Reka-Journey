@@ -112,7 +112,7 @@ function Toolbar({
           icon={LayoutTemplate}
           width="w-60"
           items={[
-            { label: '全部自动排版', icon: Shuffle, disabled: !hasViews, hint: '横图又不丢材料 / 说明的页用满版，其余图文；不连续 3 页满版', onClick: () => onGlobalLayout('auto') },
+            { label: '全部自动排版', icon: Shuffle, disabled: !hasViews, hint: '横图、像素够又不丢材料 / 说明的页用满版，其余图文；不连续 3 页满版', onClick: () => onGlobalLayout('auto') },
             { label: '全部满版大图', icon: RectangleHorizontal, disabled: !hasViews, hint: '效果图铺满整页、不放文字（材料、说明不显示）', onClick: () => onGlobalLayout('full') },
             { label: '全部图文', icon: PanelLeft, disabled: !hasViews, hint: '大图 + 右栏：楼层空间、视角名、材料，说明放在图下', onClick: () => onGlobalLayout('framed') },
           ]}

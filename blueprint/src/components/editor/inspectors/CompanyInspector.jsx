@@ -1,8 +1,8 @@
 import React from 'react';
 import { FileText, RotateCcw, Info, ArrowUpRight, Image as ImageIcon, TriangleAlert, History } from 'lucide-react';
 import {
-  companyFields, companyImages, setCompanyField, setCompanyImage, editedCompanyFields, enOnlyEdits, resetCompanyFields, singleLine,
-  legacyEdits, clearLegacyEdits, NOW,
+  companyFields, companyImages, setCompanyField, clearCompanyField, setCompanyImage, editedCompanyFields, enOnlyEdits, resetCompanyFields,
+  singleLine, legacyEdits, clearLegacyEdits, NOW,
 } from '../ops.js';
 import { langOf } from '../../../engine/lang.js';
 import { Section, AutoTextarea } from '../ui.jsx';
@@ -27,7 +27,8 @@ const Tag = ({ tone, children, title }) => (
 );
 
 const EDITED_EN = { text: '已改', cls: EN_BADGE.memory.cls, title: '用的是你改过的英文' };
-const CLEARED_EN = { text: '不显示', cls: 'bg-bp-line/70 text-bp-muted', title: '英文清空了：English 版不印这一行，中英版只印中文 —— 点「恢复默认」找回英文' };
+// 清空的英文只能用下面的「恢复英文」找回：上面的「恢复默认」在 English / 中英版会连中文的改动一起丢掉
+const CLEARED_EN = { text: '不显示', cls: 'bg-bp-line/70 text-bp-muted', title: '英文清空了：English 版不印这一行，中英版只印中文 —— 点框下面的「恢复英文」只找回英文（中文的改动留着）' };
 const AUTO_EN = { text: '自动', cls: EN_BADGE.glossary.cls, title: '跟着中文自动换成的英文（如「5 年」→ 5 years）；想换说法直接改' };
 
 /** 版面上只排一行的栏位：回车不换行（输入法选字时的回车照常） */
@@ -42,6 +43,8 @@ function FieldBlock({ f, slideId, change, lang }) {
   const missingEn = withEn && !f.overridden?.en && !String(f.en || '').trim() && String(f.zh || '').trim();
   const clearedEn = withEn && f.overridden?.en && f.enInput === '';
   const reset = () => change((p) => resetCompanyFields(p, slideId, [f.field], lang), NOW);
+  // 只恢复英文（去掉英文的改写）：中文的改动不动 —— 中文改过时英文回到默认稿 / 自动换成的英文，并照常提醒补英文
+  const restoreEn = () => change((p) => clearCompanyField(p, slideId, f.field, 'en'), NOW);
   const tidy = (t) => (f.oneLine ? singleLine(t) : t);
   const keyDown = f.oneLine ? blockEnter : undefined;
   return (
@@ -105,6 +108,20 @@ function FieldBlock({ f, slideId, change, lang }) {
           onKeyDown={keyDown}
           onChange={(t) => change((p) => setCompanyField(p, slideId, f.field, 'en', tidy(t), f.enDefault))}
         />
+      )}
+      {clearedEn && (
+        <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-bp-muted leading-snug">
+          <span>英文清空了：English 版不印这一行，中英版只印中文</span>
+          <button
+            type="button"
+            onClick={restoreEn}
+            className="inline-flex items-center gap-1 text-bp-eyebrow font-medium hover:underline"
+            title={f.overridden?.zh ? '只恢复英文（中文的改动留着）' : `只恢复英文：${f.enDefault}`}
+          >
+            <RotateCcw className="w-3 h-3" />
+            恢复英文
+          </button>
+        </p>
       )}
       {staleEn && (
         <p className="mt-1 flex items-start gap-1 text-[11px] text-bp-warn leading-snug">

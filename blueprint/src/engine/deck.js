@@ -11,13 +11,26 @@ import { bDesignCover, bFloor, bMaterials, bTeam, planViews, bViewPage, material
 /** 本案材料每页最多几种（超过就均分成几页） */
 export const MATERIALS_PER_PAGE = 12;
 
-export const SECTION_LABELS = {
+/** 章节名（编辑器：页面列表的分组标题、项目信息的章节开关） */
+export const SECTION_NAMES = {
   opening: '开篇',
-  brand: '01 品牌 · 溪岸',
-  company: '02 公司 · 瑞吉欧',
-  design: '03 方案 · 设计图',
-  service: '04 服务 · 交付',
+  brand: '品牌 · 溪岸',
+  company: '公司 · 瑞吉欧',
+  design: '方案 · 设计图',
+  service: '服务 · 交付',
 };
+
+/**
+ * 章节名带上它在整套里的编号（01 品牌 · 溪岸）—— 与目录的 01 / 02、章节页的「第二章」、方案封面的章节标签一致：
+ * 隐藏了前面的章节就往前排。开篇、整章都隐藏了（目录里没有它）= 不编号
+ * @param {string} section
+ * @param {{ list:string[], num:Record<string,number> }} chapters  deckChapters(project)
+ */
+export function sectionLabel(section, chapters) {
+  const name = SECTION_NAMES[section] || section;
+  const n = chapters?.list?.includes(section) ? chapters.num?.[section] : 0;
+  return n ? `${String(n).padStart(2, '0')} ${name}` : name;
+}
 
 /** 公司页在编辑器里的页名 / 所在章节 */
 export const companyTitle = (key) => COMPANY_PAGES_B[key]?.title || key;

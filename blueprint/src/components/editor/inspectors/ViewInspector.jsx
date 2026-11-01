@@ -194,7 +194,7 @@ export default function ViewInspector({ project, slide, change, notify, openPoli
       <Section title="版式" icon={LayoutTemplate}>
         <Segmented
           options={[
-            { value: 'auto', label: '自动', title: '整套一起排：横图又不丢材料 / 说明才用满版' },
+            { value: 'auto', label: '自动', title: '整套一起排：横图、像素够又不丢材料 / 说明才用满版' },
             { value: 'full', label: '满版大图', title: '效果图铺满整页，不放文字' },
             { value: 'framed', label: '图文', title: '大图 + 右栏文字' },
           ]}

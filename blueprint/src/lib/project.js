@@ -4,6 +4,7 @@ import { uid, LAYOUT_VERSION } from '../engine/model.js';
 import { COMPANY_PAGES_B, legacyOverrides } from '../engine/b/company.js';
 import { balanceText } from '../engine/b/text.js';
 import { hasCJK } from '../engine/b/kit.js';
+import { langOf } from '../engine/lang.js';
 
 const SECTION_OF = Object.fromEntries(Object.entries(COMPANY_PAGES_B).map(([key, p]) => [key, p.section]));
 
@@ -96,13 +97,17 @@ function moveLegacyEdits(slide) {
   return next;
 }
 
-/** 有旧版留下的改写还没对照（新版式没有对应栏位）的公司页：[{ slideId, title, count }] */
+/**
+ * 有旧版留下的改写还没对照（新版式没有对应栏位）的公司页：[{ slideId, title, count }]
+ * 和页面上的提醒、检查器里的「旧版里改过的字」同一个规则（按提案语言：华文版只算中文的改写 —— 英文的在华文版里看不到）
+ */
 export function legacyEditPages(project) {
   const out = [];
+  const lang = langOf(project);
   for (const s of project?.slides || []) {
     // 方案封面有 Material Board 时不用「方案」章节页，那一页的旧改写也就看不到
     if (s?.kind !== 'company' && !(s?.kind === 'designCover' && !project.cover?.image)) continue;
-    const n = legacyOverrides(s, 'en').length;
+    const n = legacyOverrides(s, lang).length;
     if (!n) continue;
     const key = s.kind === 'company' ? s.key : 'design-divider';
     out.push({ slideId: s.id, title: COMPANY_PAGES_B[key]?.title || key, count: n });
@@ -180,11 +185,14 @@ export function copyName(name, existing = []) {
 // 方案章节显示（老客户可隐藏品牌 / 公司介绍）
 // ---------------------------------------------------------------------------
 
-/** 可开关的章节（封底「联系方式」始终保留） */
+/**
+ * 可开关的章节（封底「联系方式」始终保留）。章节名与编号不写死：显示时用 deck.js sectionLabel(id, deckChapters(project))，
+ * 隐藏了前面的章节，后面的编号跟着往前排（与目录、章节页一致）
+ */
 export const TOGGLE_SECTIONS = [
-  { id: 'brand', label: '01 品牌 · 溪岸', hint: '品牌理念、故事、原创系列、奖项、供应链' },
-  { id: 'company', label: '02 公司 · 瑞吉欧', hint: '关于我们、发展历程、展厅、品质认证' },
-  { id: 'service', label: '04 服务 · 交付', hint: '服务流程、订单周期、售后维保（封底保留）' },
+  { id: 'brand', hint: '品牌理念、故事、原创系列、奖项、供应链' },
+  { id: 'company', hint: '关于我们、发展历程、展厅、品质认证' },
+  { id: 'service', hint: '服务流程、订单周期、售后维保（封底保留）' },
 ];
 
 const KEEP_ALWAYS = new Set(['closing']);

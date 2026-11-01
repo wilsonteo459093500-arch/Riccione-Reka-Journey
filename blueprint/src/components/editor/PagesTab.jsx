@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, FileQuestion } from 'lucide-react';
 import { renderDeck } from '../../engine/deck.js';
 import { planViews } from '../../engine/b/design.js';
+import { deckChapters } from '../../engine/b/company.js';
 import { uid } from '../../engine/model.js';
 import { missingInPages, addTranslations } from '../../engine/lang.js';
 import { metaOf } from '../../store/assets.js';
@@ -63,6 +64,8 @@ export default function PagesTab({ project, onChange, settings, notify, onOpenSe
   const pages = useRenderedPages(project, assetsVersion);
   const pageNos = useMemo(() => pageNumbers(pages), [pages]);
   const slidesById = useMemo(() => new Map((project.slides || []).map((s) => [s.id, s])), [project.slides]);
+  // 页面列表的章节标题编号：与导出的目录同一个算法（隐藏了品牌 / 公司 / 服务，后面的编号往前排）
+  const chapters = useMemo(() => deckChapters(project), [project.slides]); // eslint-disable-line react-hooks/exhaustive-deps
   const warningCount = useMemo(() => warningPageCount(pages), [pages]);
   // English / 中英版：整套（会导出的页）还缺英文的中文 → 顶栏「AI 翻译 · N」与翻译弹窗
   const missing = useMemo(() => missingInPages(pages), [pages]);
@@ -324,6 +327,7 @@ export default function PagesTab({ project, onChange, settings, notify, onOpenSe
       pageNos={pageNos}
       selectedKey={page?.key}
       slidesById={slidesById}
+      chapters={chapters}
       horizontal={!wide}
       onSelect={select}
       onToggle={toggle}
