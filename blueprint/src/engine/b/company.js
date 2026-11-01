@@ -42,7 +42,7 @@ const riccione = (src, w, h) => ({ src, nat: { w, h }, brand: 'riccione' });
 
 export const PHOTOS = {
   // —— 溪岸 ——
-  sailCover: sail('/template/b/sail-cover.jpg', 1501, 2000), // 老板发来：胡桃木格柜、白色台面、芦苇
+  sailCover: sail('/template/b/sail-cover-plank.jpg', 1920, 1280), // 老板定的封面：灰泥墙前一块带旧钉的老木板（左半灰墙、右半木板）
   sailDining: sail('/template/b/sail-dining.jpg', 1501, 2000), // 老板发来：深色书格墙、长餐桌、两扇磨砂窗
   sailHills: sail('/template/b/sail-hills.jpg', 889, 1039), // 溪岸手册 p4：草原上行走的五个人与远山
   sailSkeleton: sail('/template/b/sail-skeleton.jpg', 889, 1037), // 溪岸手册 p23：骨骼线厨房，浅木柜、黑色台面
@@ -88,7 +88,10 @@ const slot = (photo, label, frame = {}) => ({ src: photo.src, nat: photo.nat, br
  */
 export const PHOTO_SLOTS = {
   // 1680×1080 贴左（右边 240 是实色竖带）：1.15 倍，裁掉原图最右边的白色杂物
-  cover: { photo: slot(PHOTOS.sailCover, '封面照片', { ax: 0, ay: 0.47, zoom: 1726 / 1680 }) },
+  // 封面：照片宽 1680（右边 240 是深色竖带），1920×1280 的图横向整张放得下（0.875 倍），上下各裁 20
+  //   text = 默认图上字组的位置：木板（x≈796–1610）中间有一列旧钉和裂缝，字组放在左边的灰泥墙上（从 x 100 起，宽 600；内容长才往右放宽）
+  //   设计师换了封面照片：字组回到照片正中（看不到像素，托字一律最深）
+  cover: { photo: slot(PHOTOS.sailCover, '封面照片', { ay: 0.5, text: { left: 100, w: 600 } }) },
   // 满版：溪岸门头的清水墙（墙上的 sAil 溪岸 招牌留在两栏中间）
   contents: { photo: slot(PHOTOS.storyLift, '目录照片', { ay: 0.5 }) },
   'brand-divider': { photo: slot(PHOTOS.sailHills, '章节照片', { ay: 0.55 }) },
@@ -680,8 +683,8 @@ const BOTTOM = 900;
  *   设计师换的照片看不到像素，一律 0.45（宁可深一点）。换了默认图要重量（/tmp/claude-0/c/company/cal/）
  */
 const SHADE_A = {
-  'cover:logo': 0.15, // 芦苇后面的灰墙：不托也够 3:1
-  'cover:title': 0.15, // 灰墙：不托也够 4.5:1
+  'cover:logo': 0.15, // 灰泥墙（中灰）：白 logo 不托也够 3:1
+  'cover:title': 0.34, // 灰泥墙（中灰）：托到 0.30 小字 4.54，加 0.04 余量
   'contents:left': 0.45, // 门洞两边是清水墙：要托满（「CONTENTS」0.44）
   'contents:logo': 0.45, // 右上是亮墙和枯枝
   'brand-divider:label': 0.25, // 深色山体（「BRAND」0.20）
@@ -1240,9 +1243,12 @@ function layCover(R) {
   const vsig = K.signatureVertical(PW + (PAGE.W - PW) / 2, 'sail');
   // English 版：竖带里只留英文两行和竖线（整页不出现中文）
   if (lang === 'en') vsig.els = vsig.els.slice(1);
-  const CX = 960;
-  // 字组宽 960（x 480–1440）：左边的芦苇穗很亮，长名字 / 长地址不要排过去
-  const W = 960;
+  // 字组的位置：默认照片按照片位的 frame.text —— 左边缘固定（灰泥墙上），宽度按内容从 text.w 往右放宽到 960
+  //   （短的客户名 / 方案名整组在灰泥墙上；长的才伸到木板上，木板深色、有托字，照样读得清）
+  //   换过照片 = 照片正中、宽 960（看不到像素，托字一律最深）
+  const at = !R.customPhoto('photo') && PHOTO_SLOTS.cover.photo.frame?.text;
+  let CX = 960;
+  let W = 960;
   const white = { color: B.white, align: 'ctr' };
   // 客户与地点：第一行 = 客户（大字），其余行 = 地点（并进最下面那一行小字「MUAR · 二〇二六年八月」）
   const items = K.pick(lang, R.pair('name')).map((it) => {
@@ -1306,6 +1312,20 @@ function layCover(R) {
     };
     groups.push({ gap: [i ? 4 : 26, i ? 2 : 16], build: meta(2), alt: meta(1) });
   });
+  if (at) {
+    // 每一行不折行要多宽：大字（第一档字级）、方案名、地点 · 日期
+    const lineW = (text, role, v = {}) => {
+      const st = K.style(role, v);
+      return Math.max(0, ...clean(text).split('\n').map((t) => K.measure(st.caps ? t.toUpperCase() : t, st)));
+    };
+    const need = Math.max(
+      ...heads.map((it) => lineW(it.head, hasCJK(it.head) ? 'coverNameZh' : 'coverName')),
+      ...(items.length ? subs.map((it) => lineW(it.text, it.lang === 'en' ? 'coverTitleEn' : 'coverTitle')) : [0]),
+      ...metaLines.map((segs) => inlineRun(0, 0, segs.filter(Boolean), { align: 'ctr', upperLatin: true }).w || 0),
+    );
+    W = Math.round(clamp(Math.ceil(need) + 24, at.w, 960));
+    CX = at.left + W / 2;
+  }
   // 字组在台面（y≈720 起，很亮）上方：最多排到 690
   const g = flow(232, 690, groups, { align: 'center', center: 444 });
   const shLogo = R.shade(ph, [logo], 'logo', { dir: 'v' });
