@@ -54,7 +54,7 @@ export const PHOTOS = {
   coll1: sail('/template/b/coll-1.jpg', 580, 982), // 骨骼线
   coll2: sail('/template/b/coll-2.jpg', 473, 800), // 空山
   coll3: sail('/template/b/coll-3.jpg', 693, 1173), // 织
-  coll4: sail('/template/b/coll-4.jpg', 1480, 1110), // 雾山：溪岸手册 p27–28 雾山系列的厨房（白橡木吊柜 + 绿色高柜）
+  coll4: sail('/template/b/sail-wushan.jpg', 1480, 1110), // 雾山：溪岸手册 p27–28 雾山系列的厨房（白橡木吊柜 + 绿色高柜）
   coll5: sail('/template/b/coll-5.jpg', 610, 1033), // 寂东方
   awards: sail('/template/brand-awards-1.jpg', 1800, 1010), // 奖杯
   // 老板发来的展厅照（2000 px，原样不调色；右上角有白色 sAil 溪岸 logo —— 取景避开它）
