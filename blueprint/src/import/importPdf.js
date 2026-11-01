@@ -7,8 +7,7 @@ import { extractPdf, placementTransform, RENDER_AREA } from './pdfExtract.js';
 import { PDFJS_DOC_OPTIONS } from './pdfjsAssets.js';
 import { analyzePages } from './analyze.js';
 import { newProject, assembleDeck, uid, clientLine } from '../engine/model.js';
-import { applyLayoutRhythm } from '../engine/layouts.js';
-import { storeBlob, metaOf } from '../store/assets.js';
+import { storeBlob } from '../store/assets.js';
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -258,7 +257,7 @@ export async function importPdfFile(file, { onProgress } = {}) {
     return { id, name: m.name, code: m.code, image: srcOf.get(m.imageKey) || null, pending: !!m.pending };
   });
 
-  let views = analysis.views.map((v) => ({
+  const views = analysis.views.map((v) => ({
     id: uid('s'),
     kind: 'view',
     enabled: true,
@@ -272,7 +271,7 @@ export async function importPdfFile(file, { onProgress } = {}) {
     notes: v.notes.map((n) => ({ label: n.label, text: n.text })),
     sourcePage: v.page,
   }));
-  views = applyLayoutRhythm(views, metaOf);
+  // 版式留 'auto'：满版 / 图文由整套的排版计划决定（engine/b/design.js planViews）
 
   // 方案页：没有楼层的视角在前（不加楼层页），然后每层「楼层页 + 该层视角」
   const designSlides = views.filter((v) => !v.floorId);

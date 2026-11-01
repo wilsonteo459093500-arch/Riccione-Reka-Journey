@@ -7,12 +7,14 @@
 //   { t:'img',  x,y,w,h, src, fit?:'cover'|'contain'|'stretch', ax?:0–1, ay?:0–1, nat?:{w,h}, crop?:{l,t,r,b} }
 //       src：'/template/xx.jpg'（静态）或 'asset:<id>'（项目素材，IndexedDB）
 //       crop：显式裁切比例（0–1，可为负 = 留白），给出时忽略 fit
-//   { t:'text', x,y,w,h, valign?:'t'|'ctr'|'b', paras:[{ align?:'l'|'ctr'|'r', lineSpacing?:百分比, runs:[Run] }] }
-//       Run = { text, font:'serif'|'display'|'sans', size, color, alpha?, spacing?, bold? }；text 里的 \n = 段内换行
+//   { t:'text', x,y,w,h, valign?:'t'|'ctr'|'b', paras:[{ align?:'l'|'ctr'|'r', lineHeight?:固定行高 px, lineSpacing?:百分比（旧）, runs:[Run] }] }
+//       Run = { text, font:'light'|'regular'|'title'（旧：'serif'|'display'|'sans'）, size, color, alpha?, spacing?, bold?, lang?:'zh'|'en' }
+//       text 里的 \n = 段内换行
 //       autofit:'shrink' = 文字超框时自动缩小（PPT normAutofit，公司模板页沿用定稿设置）；nowrap = 预览时不折行
 // 所有元素可带 edit:{ field, label } —— 编辑器据此把画布上的字对应回数据字段。
 
 import { FONTS, PX_PER_PT, SLIDE_W, SLIDE_H } from '../theme.js';
+import { ADVANCE } from './metrics.js';
 
 export const rect = (x, y, w, h, fill, alpha = 1, extra = {}) => ({ t: 'rect', x, y, w, h, fill, alpha, ...extra });
 
@@ -50,18 +52,24 @@ function charEm(ch, font) {
   return 0.6;
 }
 
-/** 估算一行文字宽度（px） */
+/** 估算一行文字宽度（px）：新字体（light / regular / title）按实测字宽表逐字相加，旧字体按字符类别粗估 */
 export function measureText(str, font = 'sans', sizePt = 18, spacingPt = 0) {
   const sizePx = sizePt * PX_PER_PT;
+  const table = ADVANCE[font];
   let w = 0;
-  for (const ch of String(str ?? '')) w += charEm(ch, font) * sizePx + spacingPt * PX_PER_PT;
+  for (const ch of String(str ?? '')) {
+    const em = CJK.test(ch) ? 1 : table ? table[ch] ?? 0.6 : charEm(ch, font);
+    w += em * sizePx + spacingPt * PX_PER_PT;
+  }
   return w;
 }
 
-/** 估算在给定宽度内折成几行（按字符贪心折行，英文单词不拆） */
-export function countLines(str, font, sizePt, spacingPt, boxW) {
-  // 不同软件 / 回退字体的字宽有出入：可用宽度打 94 折，宁可多估一行也不让下一块内容被压住
-  const avail = Math.max(10, (boxW - 6) * 0.94);
+/**
+ * 估算在给定宽度内折成几行（按字符贪心折行，英文单词不拆）
+ * @param {number} [fill] 可用宽度打几折：默认 0.94（旧版式：字宽是粗估，宁可多估一行）；新版式字宽是实测的，用 0.98
+ */
+export function countLines(str, font, sizePt, spacingPt, boxW, fill = 0.94) {
+  const avail = Math.max(10, (boxW - 6) * fill);
   let lines = 0;
   for (const para of String(str ?? '').split('\n')) {
     lines += 1;
@@ -159,6 +167,9 @@ export function placeImage(el) {
 export const fillTokens = (str, tokens) => String(str ?? '').replace(/\{\{(\w+)\}\}/g, (_, k) => tokens[k] ?? '');
 
 export const fontCss = (key) => (FONTS[key] || FONTS.sans).css;
+
+/** 网页预览的字重（静态字体在 PPT 里各有名字；网页用同一字族的不同字重） */
+export const fontWeight = (key, bold = false) => (bold ? 600 : (FONTS[key] || FONTS.sans).weight || 400);
 
 export const hexA = (hex, alpha = 1) => {
   const h = String(hex || '000000').replace('#', '');

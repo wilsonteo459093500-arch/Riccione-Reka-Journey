@@ -1,27 +1,27 @@
 import React, { useEffect, useMemo } from 'react';
 import { Palette, ArrowUpRight, Info } from 'lucide-react';
-import { MATERIALS_PER_PAGE } from '../../../engine/layouts.js';
+import { metaOf } from '../../../store/assets.js';
 import { requestThumbs, useThumbsSig } from '../thumbs.js';
+import { materialsLayout } from '../ops.js';
 import { Section, btnPrimary } from '../ui.jsx';
 import { Swatch } from '../MaterialPicker.jsx';
 
 // 本案材料页：色板全部来自「材料清单」，这里只做概览 + 跳转。
 
-export default function MaterialsInspector({ project, onGoTab }) {
+export default function MaterialsInspector({ project, page, onGoTab }) {
   const mats = project.materials || [];
   const pending = mats.filter((m) => m.pending).length;
   const noImage = mats.filter((m) => !m.image).length;
-  const pages = Math.max(1, Math.ceil(mats.length / MATERIALS_PER_PAGE));
   const srcs = useMemo(() => mats.map((m) => m.image).filter(Boolean), [mats]);
   useThumbsSig(srcs);
   useEffect(() => requestThumbs(srcs), [srcs]);
-  const layoutNote = !mats.length
-    ? '还没有材料'
-    : mats.length <= 12
-      ? '两行大色板（与定稿一致）'
-      : mats.length <= MATERIALS_PER_PAGE
-        ? '三行紧凑色板'
-        : `自动分成 ${pages} 页`;
+  // 几页、每页几排：和页面用同一个分页（按提案语言量名称；长名称会让每页少放、排一排）。
+  // page 换了 = 整套重排过（素材尺寸到了、改了语言 / 英文名）→ 跟着重算
+  const { note: layoutNote } = useMemo(
+    () => materialsLayout(project, metaOf),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [mats, project.info?.lang, project.translations, page],
+  );
 
   return (
     <div className="space-y-3">
@@ -42,7 +42,7 @@ export default function MaterialsInspector({ project, onGoTab }) {
         {(pending > 0 || noImage > 0) && (
           <ul className="mb-3 space-y-0.5 text-[11px] text-bp-warn">
             {pending > 0 && <li>· {pending} 种标着「待确认」</li>}
-            {noImage > 0 && <li>· {noImage} 种还没有色板照片（页面上显示灰色块）</li>}
+            {noImage > 0 && <li>· {noImage} 种还没有色板照片（页面上显示浅色空格）</li>}
           </ul>
         )}
         <button type="button" className={`${btnPrimary} w-full`} onClick={() => onGoTab?.('materials')}>

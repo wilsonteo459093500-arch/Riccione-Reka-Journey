@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import { SLIDE_W, SLIDE_H, PX_PER_PT } from '../theme.js';
-import { placeImage, fontCss, hexA } from '../engine/spec.js';
+import { placeImage, fontCss, fontWeight, hexA } from '../engine/spec.js';
 
 // 网页版幻灯片渲染 —— 与 PPT 导出共用同一份元素规格（engine/spec.js），所见即所得。
 // 在 1920×1080 的画布上排版，再整体缩放到 width。
@@ -64,7 +64,11 @@ function TextEl({ el }) {
     >
       {(el.paras || []).map((p, i) => {
         const maxSize = Math.max(...(p.runs || []).map((r) => r.size || 18), 1);
-        const lh = maxSize * PX_PER_PT * 1.2 * ((p.lineSpacing || 100) / 100);
+        // lineHeight = 固定行高（新版式，与 PPT 的「固定值」行距一致）；段落本身用主字体字号，
+        // 免得浏览器按页面默认字体的「支柱」把每行撑高几像素
+        const exact = typeof p.lineHeight === 'number';
+        const lh = exact ? p.lineHeight : maxSize * PX_PER_PT * 1.2 * ((p.lineSpacing || 100) / 100);
+        const main = exact ? (p.runs || []).find((r) => (r.size || 18) === maxSize) || {} : null;
         return (
           <p
             key={i}
@@ -73,6 +77,7 @@ function TextEl({ el }) {
               textAlign: p.align === 'ctr' ? 'center' : p.align === 'r' ? 'right' : 'left',
               lineHeight: `${lh}px`,
               minHeight: lh,
+              ...(exact ? { fontFamily: fontCss(main.font), fontSize: maxSize * PX_PER_PT, fontWeight: fontWeight(main.font, main.bold) } : {}),
               whiteSpace: el.nowrap ? 'pre' : 'pre-wrap',
               wordBreak: 'normal',
               overflowWrap: 'anywhere',
@@ -88,7 +93,7 @@ function TextEl({ el }) {
                   fontSize: (r.size || 18) * PX_PER_PT,
                   color: hexA(r.color || '241C12', r.alpha ?? 1),
                   letterSpacing: (r.spacing || 0) * PX_PER_PT,
-                  fontWeight: r.bold ? 600 : 400,
+                  fontWeight: fontWeight(r.font, r.bold),
                 }}
               >
                 {r.text}
@@ -113,7 +118,12 @@ function SlideCanvas({ slide, width = 960, resolveUrl, onPick, activeField, inte
       className={`relative overflow-hidden select-none ${className}`}
       style={{ width, height, background: `#${slide?.bg || 'F5F0E6'}` }}
     >
-      <div style={{ position: 'absolute', left: 0, top: 0, width: SLIDE_W, height: SLIDE_H, transform: `scale(${scale})`, transformOrigin: '0 0' }}>
+      <div
+        style={{
+          position: 'absolute', left: 0, top: 0, width: SLIDE_W, height: SLIDE_H, transform: `scale(${scale})`, transformOrigin: '0 0',
+          WebkitFontSmoothing: 'antialiased', MozOsxFontSmoothing: 'grayscale',
+        }}
+      >
         {(slide?.els || []).map((el, i) => {
           let node = null;
           if (el.t === 'rect') node = <RectEl el={el} />;

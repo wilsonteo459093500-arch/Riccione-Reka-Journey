@@ -1,4 +1,4 @@
-// Blueprint 设计系统 —— 与已定稿的 Dreamhouse Blueprint PPT 完全一致。
+// Blueprint 设计系统（B 格物）：明亮、精确、以图为主。
 // 画布 1920×1080 px（= PPT 20in × 11.25in，1px = 9525 EMU）；字号与字距沿用 PowerPoint 的 pt。
 
 export const SLIDE_W = 1920;
@@ -6,23 +6,44 @@ export const SLIDE_H = 1080;
 export const EMU_PER_PX = 9525;
 export const PX_PER_PT = 96 / 72;
 
-/** 三套字体：pptx = 写进 PPT 的字体名（与定稿一致）；css = 网页预览用的回退栈 */
+// 字体（B 格物）：中文 思源黑体（Noto Sans SC），英文 Hanken Grotesk，英文标题 Ysabeau Office —— 都是 SIL OFL 免费字体。
+// 每个角色给 PPT 写两种字体：latin（英文、数字、标点）与 ea（中文），PowerPoint 按字符自动选用；
+// css = 网页预览的字体栈（英文字体在前：拉丁字符用它，中文落到思源黑体）；weight = 网页字重（静态字体在 PPT 里各有自己的名字）。
+const SANS_CSS = "'Hanken Grotesk','Noto Sans SC','PingFang SC','Microsoft YaHei',system-ui,sans-serif";
+const LIGHT = { label: '思源黑体 Light · Hanken Grotesk Light', latin: 'Hanken Grotesk Light', ea: 'Noto Sans SC Light', css: SANS_CSS, weight: 300 };
+const REGULAR = { label: '思源黑体 · Hanken Grotesk', latin: 'Hanken Grotesk', ea: 'Noto Sans SC', css: SANS_CSS, weight: 400 };
+const TITLE = {
+  label: 'Ysabeau Office Light（英文标题）',
+  latin: 'Ysabeau Office Light',
+  ea: 'Noto Sans SC Light',
+  css: "'Ysabeau Office','Noto Sans SC','PingFang SC',system-ui,sans-serif",
+  weight: 300,
+};
+
 export const FONTS = {
-  serif: {
-    label: '思源宋体',
-    pptx: 'Source Han Serif CN',
-    css: '"Source Han Serif CN","Source Han Serif SC","Noto Serif SC","Songti SC",serif',
-  },
-  display: {
-    label: 'Ogg 展示衬线',
-    pptx: 'Ogg',
-    css: '"Ogg","Cormorant Garamond","Noto Serif SC",Georgia,serif',
-  },
-  sans: {
-    label: 'Outfit',
-    pptx: 'Outfit',
-    css: 'Outfit,"Noto Sans SC",system-ui,sans-serif',
-  },
+  light: LIGHT,
+  regular: REGULAR,
+  title: TITLE,
+  // 旧的角色名（旧版式 / 旧测试）：统一落到新字体，整套风格一致
+  serif: LIGHT,
+  sans: REGULAR,
+  display: TITLE,
+};
+
+/** 设计师要装的字体（导出对话框里列出下载地址） */
+export const FONT_PACK = [
+  { name: '思源黑体 Noto Sans SC（Light / Regular）', href: 'https://fonts.google.com/noto/specimen/Noto+Sans+SC' },
+  { name: 'Hanken Grotesk（Light / Regular）', href: 'https://fonts.google.com/specimen/Hanken+Grotesk' },
+  { name: 'Ysabeau Office（Light）', href: 'https://fonts.google.com/specimen/Ysabeau+Office' },
+];
+
+/** B 格物的颜色：奶白纸、墨色、灰、细线（不带 #） */
+export const B = {
+  paper: 'F6F2EA',
+  ink: '33302B',
+  grey: '6F6960',
+  hair: 'DAD5CB',
+  sample: 'EFEBE3', // 材料小样的底
 };
 
 /** 颜色（不带 #，与 OOXML srgbClr 一致） */

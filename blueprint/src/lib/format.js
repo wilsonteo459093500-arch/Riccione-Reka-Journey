@@ -63,14 +63,21 @@ export function sanitizeFileName(name, fallback = 'Dreamhouse Blueprint') {
 
 const clean = (s) => String(s || '').trim();
 
-/** 导出 PPT 的文件名：'2026.08 Muar - Mr Lau - Dreamhouse Blueprint.pptx'（缺客户信息时退回项目名） */
-export function pptxFileName(project) {
+const LANG_SUFFIX = { en: ' (EN)', bi: ' (中英)' };
+
+/**
+ * 导出 PPT 的文件名：'2026.08 Muar - Mr Lau - Dreamhouse Blueprint.pptx'（缺客户信息时退回项目名）
+ * English / 中英版在后面标上语言：'… - Dreamhouse Blueprint (EN).pptx'
+ * @param {object} project
+ * @param {'zh'|'en'|'bi'} [lang] 默认 = 项目的提案语言
+ */
+export function pptxFileName(project, lang = project?.info?.lang) {
   const info = project?.info || {};
   const head = [compactDate(info.date), clean(info.location)].filter(Boolean).join(' ');
   const who = [head, clean(info.client)].filter(Boolean);
   const hasWho = !!(clean(info.location) || clean(info.client));
   const base = hasWho ? who.join(' - ') : clean(project?.name);
-  return `${sanitizeFileName(base ? `${base} - Dreamhouse Blueprint` : 'Dreamhouse Blueprint')}.pptx`;
+  return `${sanitizeFileName(`${base ? `${base} - Dreamhouse Blueprint` : 'Dreamhouse Blueprint'}${LANG_SUFFIX[lang] || ''}`)}.pptx`;
 }
 
 /** 项目备份文件名：'Muar · Mr Lau.blueprint.zip' */

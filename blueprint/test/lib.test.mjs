@@ -11,7 +11,7 @@ import {
 import { materialUsage, mergeMaterials, deleteMaterials, moveMaterial, addMaterial, updateMaterial } from '../src/lib/materials.js';
 import {
   projectThumbSrc, projectStats, copyName, sectionState, setSectionEnabled, kindState, setKindEnabled,
-  ensureMaterialsSlide, ensureDesignCoverSlide, designCoverSlideId, coverLayoutFor,
+  ensureMaterialsSlide, ensureDesignCoverSlide, designCoverSlideId,
 } from '../src/lib/project.js';
 import { newProject, assembleDeck } from '../src/engine/model.js';
 
@@ -354,7 +354,7 @@ test('章节开关：品牌 / 公司 / 服务一键隐藏，封底始终保留',
   assert.equal(kindState(setKindEnabled(p, 'team', false), 'team'), 'off');
 });
 
-test('ensureMaterialsSlide / designCoverSlideId / coverLayoutFor', () => {
+test('ensureMaterialsSlide / designCoverSlideId', () => {
   const p = sample();
   assert.equal(ensureMaterialsSlide(p), p);
   const noMat = { ...p, slides: p.slides.filter((s) => s.kind !== 'materials') };
@@ -364,11 +364,6 @@ test('ensureMaterialsSlide / designCoverSlideId / coverLayoutFor', () => {
   assert.equal(fixed.slides.length, p.slides.length);
   assert.equal(designCoverSlideId(p), p.slides[iCover].id);
   assert.equal(designCoverSlideId({ slides: [] }), null);
-  assert.equal(coverLayoutFor('split-light', 'landscape'), 'full');
-  assert.equal(coverLayoutFor('full', 'portrait'), 'split-light');
-  assert.equal(coverLayoutFor('split-dark', 'portrait'), 'split-dark');
-  assert.equal(coverLayoutFor('split-dark', 'square'), 'split-dark');
-  assert.equal(coverLayoutFor(undefined, undefined), 'split-light');
 });
 
 test('ensureDesignCoverSlide：方案封面页被删时补回到第一张方案页之前', () => {
@@ -395,9 +390,3 @@ test('中文输入法：拼音上屏（整段替换）和前面的输入合成�
   assert.equal(changeSignature({ cover: { image: 'asset:a' } }, { cover: { image: 'asset:b' } }), null);
 });
 
-test('coverLayoutFor：竖版 → 左文右图，横版 → 满版，方形 + 满版 → 左文右图', () => {
-  assert.equal(coverLayoutFor('full', 'portrait'), 'split-light');
-  assert.equal(coverLayoutFor('split-dark', 'landscape'), 'full');
-  assert.equal(coverLayoutFor('full', 'square'), 'split-light');
-  assert.equal(coverLayoutFor('split-dark', 'square'), 'split-dark');
-});

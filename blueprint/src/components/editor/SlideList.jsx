@@ -219,13 +219,14 @@ function ItemMenu({ menu, page, slide, actions }) {
 }
 
 /**
- * @param {{ pages:object[], pageNos:Map, selectedKey:string, slidesById:Map, horizontal?:boolean,
+ * @param {{ pages:object[], pageNos:Map, selectedKey:string, slidesById:Map, chapters?:object, horizontal?:boolean,
  *   onSelect(key), onToggle(id), onMove(id, targetId, place), onMoveBy(id, delta), onDuplicate(id), onDelete(id),
  *   onInsertAfter(id), warningCount:number, onNextWarning() }} props
+ *   chapters：deckChapters(project) —— 分组标题的章节编号跟着整套走（隐藏了前面的章节就往前排）
  */
 export default function SlideList({
-  pages, pageNos, selectedKey, slidesById, horizontal = false, onSelect, onToggle, onMove, onMoveBy, onDuplicate, onDelete,
-  onInsertAfter, warningCount = 0, onNextWarning,
+  pages, pageNos, selectedKey, slidesById, chapters = null, horizontal = false, onSelect, onToggle, onMove, onMoveBy, onDuplicate,
+  onDelete, onInsertAfter, warningCount = 0, onNextWarning,
 }) {
   const scrollRef = useRef(null);
   const [menu, setMenu] = useState(null); // { key, x, y, anchorTop }
@@ -310,7 +311,7 @@ export default function SlideList({
   const closeOnScroll = useStableCallback(() => {
     if (menu && Date.now() > autoScrollUntil.current && Math.abs(scrollPos() - (menu.scroll || 0)) > 40) setMenu(null);
   });
-  const groups = useMemo(() => groupSections(pages), [pages]);
+  const groups = useMemo(() => groupSections(pages, chapters), [pages, chapters]);
   const menuPage = menu ? pages.find((p) => p.key === menu.key) : null;
   const thumbW = horizontal ? 150 : 200;
 

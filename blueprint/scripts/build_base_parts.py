@@ -1,12 +1,14 @@
 """一次性工具：从定稿 PPT 抽出 master / layout / theme 等「骨架」XML → src/engine/pptx/baseParts.js。
-主题字体改成品牌字体（Outfit + 思源宋体），设计师在 PowerPoint 里新加的文字框默认就是品牌字体。"""
+主题字体改成品牌字体（B「格物」：Hanken Grotesk Light / Ysabeau Office Light + 思源黑体 Light），
+设计师在 PowerPoint 里新加的文字框默认就是品牌字体；正文颜色 = 墨色 33302B。"""
 import json, re, sys
 src, root = sys.argv[1], sys.argv[2]
 rd = lambda p: re.sub(r'>\s+<', '><', open(f'{src}/{p}', encoding='utf8').read().strip())
 theme = rd('ppt/theme/theme1.xml')
-fs = ('<a:fontScheme name="Blueprint"><a:majorFont><a:latin typeface="Ogg"/><a:ea typeface="Source Han Serif CN"/><a:cs typeface=""/></a:majorFont>'
-      '<a:minorFont><a:latin typeface="Outfit"/><a:ea typeface="Source Han Serif CN"/><a:cs typeface=""/></a:minorFont></a:fontScheme>')
+fs = ('<a:fontScheme name="Blueprint"><a:majorFont><a:latin typeface="Ysabeau Office Light"/><a:ea typeface="Noto Sans SC Light"/><a:cs typeface=""/></a:majorFont>'
+      '<a:minorFont><a:latin typeface="Hanken Grotesk Light"/><a:ea typeface="Noto Sans SC Light"/><a:cs typeface=""/></a:minorFont></a:fontScheme>')
 theme = re.sub(r'<a:fontScheme.*?</a:fontScheme>', fs, theme, flags=re.S).replace('name="Office Theme"', 'name="Blueprint"', 1)
+theme = re.sub(r'<a:dk1>.*?</a:dk1>', '<a:dk1><a:srgbClr val="33302B"/></a:dk1>', theme, count=1, flags=re.S)
 pres = rd('ppt/presentation.xml')
 dts = re.search(r'<p:defaultTextStyle>.*?</p:defaultTextStyle>', pres, re.S).group(0)
 parts = {

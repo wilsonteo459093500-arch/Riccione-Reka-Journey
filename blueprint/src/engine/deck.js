@@ -1,69 +1,65 @@
 // 整套提案渲染：Project → 有序的渲染页 [{ key, slideId, kind, label, section, enabled, bg, els, warnings }]
 // 编辑器预览、缩略图、PPT 导出都只认这一份输出。
+// 版式：B「格物」—— engine/b/kit.js（网格、字级、文字块）、b/design.js（方案页）、b/company.js（公司页 = 品牌画册）。
 
-import { COMPANY_SLIDES } from './companyTemplate.js';
-import { fillTokens, fitText } from './spec.js';
-import { PX_PER_PT } from '../theme.js';
+import { fitText } from './spec.js';
 import { clientLine, floorsLine, findFloor } from './model.js';
-import {
-  layoutMaterials, layoutFloor, layoutViewFull, layoutViewFramed, layoutDesignCover, layoutTeam,
-  autoLayout, MATERIALS_PER_PAGE, coverTexts,
-} from './layouts.js';
+import { makeTranslator, missWarning, roomEnOf, langOf, floorsLineEn, resolveEn, hasCJKText } from './lang.js';
+import { COMPANY_PAGES_B, renderCompanyB, deckChapters } from './b/company.js';
+import { bDesignCover, bFloor, bMaterials, bTeam, planViews, bViewPage, materialSlices } from './b/design.js';
 
-export const COMPANY_BY_KEY = Object.fromEntries(COMPANY_SLIDES.map((s) => [s.key, s]));
+/** 本案材料每页最多几种（超过就均分成几页） */
+export const MATERIALS_PER_PAGE = 12;
 
-export const SECTION_LABELS = {
+/** 章节名（编辑器：页面列表的分组标题、项目信息的章节开关） */
+export const SECTION_NAMES = {
   opening: '开篇',
-  brand: '01 品牌 · 溪岸',
-  company: '02 公司 · 瑞吉欧',
-  design: '03 方案 · 设计图',
-  service: '04 服务 · 交付',
+  brand: '品牌 · 溪岸',
+  company: '公司 · 瑞吉欧',
+  design: '方案 · 设计图',
+  service: '服务 · 交付',
 };
 
-export function projectTokens(project) {
+/**
+ * 章节名带上它在整套里的编号（01 品牌 · 溪岸）—— 与目录的 01 / 02、章节页的「第二章」、方案封面的章节标签一致：
+ * 隐藏了前面的章节就往前排。开篇、整章都隐藏了（目录里没有它）= 不编号
+ * @param {string} section
+ * @param {{ list:string[], num:Record<string,number> }} chapters  deckChapters(project)
+ */
+export function sectionLabel(section, chapters) {
+  const name = SECTION_NAMES[section] || section;
+  const n = chapters?.list?.includes(section) ? chapters.num?.[section] : 0;
+  return n ? `${String(n).padStart(2, '0')} ${name}` : name;
+}
+
+/** 公司页在编辑器里的页名 / 所在章节 */
+export const companyTitle = (key) => COMPANY_PAGES_B[key]?.title || key;
+export const companySection = (key) => COMPANY_PAGES_B[key]?.section || 'opening';
+
+/**
+ * 公司页 / 封面上的 {{token}}。English / 中英版另外给英文 token（tr = 记缺英文的翻译器；不传 = 不记）
+ * 注意：渲染公司页时不要传 tr —— company.js 自己只在用到客户 / 方案名的页（封面、方案章节页）记缺英文
+ */
+export function projectTokens(project, tr = null) {
   const info = project.info || {};
-  return {
+  const tokens = {
     clientLine: clientLine(info),
     dateLine: info.date || '',
     proposalTitle: info.proposalTitle || '全屋定制设计方案',
     floorsLine: floorsLine(project.floors),
   };
-}
-
-// 定稿 PPT 里这些位置写的是什么（模板文字框就是按这些字量出来的）：缩字号以它为基准，原文永远不缩
-const APPROVED_TOKENS = { clientLine: 'Muar · Mr Lau', dateLine: '2026 · 08', proposalTitle: '全屋定制设计方案', floorsLine: '一楼与二楼' };
-
-/** 公司固定页：填 token + 套用单页文字改写（overrides[元素序号] = 整段文字，\n 分段） */
-export function renderCompany(key, tokens, overrides = {}) {
-  const tpl = COMPANY_BY_KEY[key];
-  if (!tpl) return { bg: 'F5F0E6', els: [], warnings: [`未知的公司页：${key}`] };
-  const els = tpl.els.map((el, idx) => {
-    if (el.t !== 'text') return el;
-    const override = overrides?.[idx];
-    let paras = el.paras.map((p) => ({ ...p, runs: p.runs.map((r) => ({ ...r, text: fillTokens(r.text, tokens) })) }));
-    if (typeof override === 'string') {
-      const lines = override.split('\n');
-      paras = lines.map((line, i) => {
-        const src = el.paras[Math.min(i, el.paras.length - 1)];
-        return { ...src, runs: [{ ...src.runs[0], text: line }] };
-      });
-    }
-    // 定稿里的文字框是按字量贴身量出来的：沿用「超框自动缩小」，单行框预览时不折行
-    const first = el.paras[0]?.runs?.[0];
-    const singleLine = el.paras.length === 1 && first && el.h < first.size * PX_PER_PT * 1.2 * 1.6;
-    // 缩字号的基准：定稿原文（填上定稿当时的客户 / 日期）—— 只有比原文更长时才缩
-    const refParas = el.paras.map((p) => ({ ...p, runs: p.runs.map((r) => ({ ...r, text: fillTokens(r.text, APPROVED_TOKENS) })) }));
-    return {
-      ...el,
-      paras,
-      autofit: 'shrink',
-      ...(singleLine ? { nowrap: true } : {}),
-      ...(typeof override === 'string' ? { fitWrap: true } : {}),
-      fitRef: refParas,
-      edit: { field: `overrides.${idx}` },
-    };
-  });
-  return { bg: tpl.bg, els, warnings: [] };
+  const lang = tr?.lang || langOf(project);
+  if (lang === 'zh') return tokens;
+  const en = (s, kind = 'text') => (tr ? tr.en(s, kind) : resolveEn(project, s, kind).text);
+  const latin = (s) => (hasCJKText(s) ? en(s, 'text') || s : s);
+  const floorsEn = floorsLineEn(project.floors);
+  return {
+    ...tokens,
+    clientLineEn: [info.location, info.client].map((x) => (x || '').trim()).filter(Boolean).map(latin).join(' · '),
+    proposalTitleEn: en(info.proposalTitle || '全屋定制设计方案', 'text') || 'Whole-House Design Proposal',
+    floorsLineEn: floorsEn,
+    floorsLineEnUpper: floorsEn.toUpperCase(),
+  };
 }
 
 /** 文字元素的纯文本（编辑器回填输入框用） */
@@ -71,32 +67,49 @@ export const elementText = (el) => (el?.paras || []).map((p) => p.runs.map((r) =
 
 /** 某层楼的空间清单（按出现顺序去重） */
 export function floorRooms(project, floorId) {
+  return floorRoomSlides(project, floorId).map((s) => s.room.trim());
+}
+
+/** 某层楼每个空间第一次出现的那一页（英文名从页面的「英文小标题」取） */
+function floorRoomSlides(project, floorId) {
   const seen = new Set();
-  const rooms = [];
+  const out = [];
   for (const s of project.slides || []) {
     if (s.kind !== 'view' || s.floorId !== floorId || s.enabled === false || s.tag === '3d') continue;
     const r = (s.room || '').trim();
     if (r && !seen.has(r)) {
       seen.add(r);
-      rooms.push(r);
+      out.push(s);
     }
   }
-  return rooms;
+  return out;
 }
 
-function floorImage(project, slide, floor) {
-  if (slide.image) return slide.image;
-  if (floor?.image) return floor.image;
-  const first = (project.slides || []).find((s) => s.kind === 'view' && s.floorId === floor?.id && s.image && s.enabled !== false);
-  return first?.image || null;
+/** 某层楼的空间英文名（与 floorRooms 一一对应；缺英文 = ''） */
+export function floorRoomsEn(project, floorId, tr) {
+  return floorRoomSlides(project, floorId).map((s) => (tr ? tr.room(s) : roomEnOf(project, s).text) || '');
+}
+
+/**
+ * 方案封面（Material Board 页）的标题 / 副标题，留空时自动（与 b/design.js 的封面一致）：
+ *   标题 = 自填的 coverTitle → 客户与地点（两行）→ 方案名；副标题 = 自填的 coverSubtitle → 楼层（一楼与二楼）
+ */
+export function designCoverTexts(project) {
+  const info = project?.info || {};
+  const clean = (s) => String(s ?? '').trim();
+  const parts = [info.client, info.location].map(clean).filter(Boolean);
+  return {
+    title: clean(info.coverTitle) || parts.join('\n') || clean(info.proposalTitle) || '全屋定制设计方案',
+    subtitle: clean(info.coverSubtitle) || floorsLine(project?.floors),
+  };
 }
 
 function labelFor(slide, project) {
   switch (slide.kind) {
     case 'company':
-      return COMPANY_BY_KEY[slide.key]?.title || slide.key;
+      return companyTitle(slide.key);
     case 'designCover':
-      return project.cover?.image ? `方案封面 · ${coverTexts(project).title}` : '方案封面（未设 Material Board）';
+      return project.cover?.image ? `方案封面 · ${designCoverTexts(project).title.replace(/\n/g, ' · ')}` : '方案封面（未设 Material Board）';
     case 'materials':
       return '本案材料';
     case 'floor':
@@ -111,20 +124,38 @@ function labelFor(slide, project) {
 }
 
 function sectionFor(slide) {
-  if (slide.kind === 'company') return COMPANY_BY_KEY[slide.key]?.section || 'opening';
+  if (slide.kind === 'company') return companySection(slide.key);
   if (slide.kind === 'team') return 'service';
   return 'design';
 }
 
 /**
+ * 材料均分到各页（14 种 → 7 + 7，而不是 12 + 2）：[{ mats, perPage }]
+ * renderDeck 用的是 b/design.js materialSlices：同样均分，只是名称很长、两排的小样会被挤扁时每页少放（一排 6 种）
+ */
+export function materialPages(mats) {
+  const list = mats || [];
+  const n = Math.max(1, Math.ceil(list.length / MATERIALS_PER_PAGE));
+  const per = Math.max(1, Math.ceil(list.length / n));
+  return Array.from({ length: n }, (_, p) => ({ mats: list.slice(p * per, (p + 1) * per), perPage: per }));
+}
+
+/**
  * @param {object} project
- * @param {{ meta?: (src:string)=>({w:number,h:number}|null) }} opts  meta：素材原始尺寸（cover/contain 裁切要用）
+ * @param {{ meta?: (src:string)=>({w:number,h:number}|null) }} opts  meta：素材原始尺寸（裁切、放大倍数、版式计划都要用）
  */
 export function renderDeck(project, { meta = () => null } = {}) {
-  const ctx = { meta, project };
+  const lang = langOf(project);
   const tokens = projectTokens(project);
+  // 效果图页满版 / 图文：整套一起排（节奏：不连续 3 页满版；同空间的下一页能补上材料才用满版）
+  const plan = planViews(project, meta);
+  // 看得到的章节（老客户隐藏了品牌 / 公司 / 服务）：目录只列这几章，章节页、方案封面的编号跟着往前排
+  const chapters = deckChapters(project);
   const out = [];
   for (const slide of project.slides || []) {
+    // 每页一个翻译器：记下这一页缺英文的地方，放进这一页的提醒
+    const tr = makeTranslator(project);
+    const ctx = { meta, project, tr, lang, tokens, chapters };
     const base = {
       slideId: slide.id,
       kind: slide.kind,
@@ -135,39 +166,39 @@ export function renderDeck(project, { meta = () => null } = {}) {
     let pages = [];
     switch (slide.kind) {
       case 'company':
-        pages = [renderCompany(slide.key, tokens, slide.overrides)];
+        pages = [renderCompanyB(slide.key, slide, ctx)];
         break;
       case 'designCover':
-        pages = [project.cover?.image ? layoutDesignCover(project, ctx) : renderCompany('design-divider', tokens, slide.overrides)];
+        // 没有 Material Board：退回「方案」章节页（公司页的 design-divider，文字 / 照片照样可改）
+        pages = [bDesignCover(ctx) || renderCompanyB('design-divider', slide, ctx)];
         break;
       case 'materials': {
-        const mats = project.materials || [];
-        // 均分到各页（20 种 → 10 + 10，而不是 18 + 2）
-        const n = Math.max(1, Math.ceil(mats.length / MATERIALS_PER_PAGE));
-        const per = Math.max(1, Math.ceil(mats.length / n));
-        for (let p = 0; p < n; p++) {
-          pages.push(layoutMaterials(mats.slice(p * per, (p + 1) * per), ctx, { page: p + 1, pages: n }));
-        }
+        const slices = materialSlices(ctx, project.materials, MATERIALS_PER_PAGE);
+        pages = slices.map((s, i) => bMaterials(ctx, s.mats, i, slices.length, s.perPage, s.rows));
         break;
       }
-      case 'floor': {
-        const floor = findFloor(project, slide.floorId);
-        pages = [layoutFloor(floor, floorRooms(project, slide.floorId), floorImage(project, slide, floor), ctx)];
+      case 'floor':
+        pages = [bFloor(ctx, slide)];
         break;
-      }
-      case 'view': {
-        const floor = findFloor(project, slide.floorId);
-        const layout = slide.layout && slide.layout !== 'auto' ? slide.layout : autoLayout(slide, slide.image ? meta(slide.image) : null);
-        pages = [layout === 'full' ? layoutViewFull(slide, floor, ctx) : layoutViewFramed(slide, floor, ctx)];
+      case 'view':
+        pages = [bViewPage(ctx, slide, plan)];
         break;
-      }
       case 'team':
-        pages = [layoutTeam(project.info?.team)];
+        pages = [bTeam(ctx)];
         break;
       default:
-        pages = [{ bg: 'F5F0E6', els: [], warnings: [`未知页面类型：${slide.kind}`] }];
+        pages = [{ bg: 'F6F2EA', els: [], warnings: [`未知页面类型：${slide.kind}`] }];
     }
-    pages.forEach((pg, i) => out.push({ ...base, key: i ? `${slide.id}#${i + 1}` : slide.id, ...pg, els: (pg.els || []).map((el) => fitText(el)) }));
+    const miss = missWarning(lang, tr.misses);
+    pages.filter(Boolean).forEach((pg, i) =>
+      out.push({
+        ...base,
+        key: i ? `${slide.id}#${i + 1}` : slide.id,
+        ...pg,
+        els: (pg.els || []).map((el) => fitText(el)),
+        ...(miss ? { warnings: [...(pg.warnings || []), miss], missing: tr.misses } : {}),
+      })
+    );
   }
   return out;
 }

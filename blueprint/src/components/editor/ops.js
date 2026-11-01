@@ -1,10 +1,11 @@
 // 「页面」编辑器的纯函数 —— 全部是不可变更新（project → 新 project），不碰 DOM / IndexedDB，可在 Node 测试。
 // 约定：新 id 一律由调用方生成后传进来（onChange 的 updater 可能被 React 调用两次，必须是纯函数）。
 
-import { autoLayout, applyLayoutRhythm } from '../../engine/layouts.js';
-import { SECTION_LABELS, COMPANY_BY_KEY, renderCompany, projectTokens, elementText } from '../../engine/deck.js';
+import { sectionLabel, MATERIALS_PER_PAGE } from '../../engine/deck.js';
+import { planViews, TEAM_MAX, materialSlices } from '../../engine/b/design.js';
+import { COMPANY_PAGES_B, companyFieldsB, companyImagesB, companyFieldByLabel, legacyOverrides } from '../../engine/b/company.js';
+import { isMissWarning, langOf } from '../../engine/lang.js';
 import { findFloor } from '../../engine/model.js';
-import { SLIDE_W, PX_PER_PT } from '../../theme.js';
 
 /** 材料「部位」常用词（输入框下拉建议） */
 export const ROLE_SUGGESTIONS = ['柜体 & 柜门', '柜门', '柜体', '见光板', '开放柜', '岩板', '台面', '墙板', '玻璃门', '背板', '床头板', '地板', '拉手'];
@@ -203,44 +204,49 @@ export function moveToFloorEnd(project, id, floorSlideId = null) {
 }
 
 // ---------------------------------------------------------------------------
-// 版式
+// 版式（B「格物」）：full = 满版大图（只有图，不放字）；framed = 图文（图 + 右栏：楼层空间、标题、材料、说明）
+// 'auto' 交给整套的排版计划（b/design.js planViews：横图、像素够且不丢内容才满版、同空间下一页能补上材料、不连续 3 页满版）
 // ---------------------------------------------------------------------------
 
-/** 这一页实际用的版式（'auto' 按图片比例 / 内容判断） */
-export function resolveViewLayout(slide, metaFn = () => null) {
+/**
+ * 这一页实际用的版式：'full' | 'framed'
+ * @param {object} slide
+ * @param {(src:string)=>({w,h}|null)} metaFn
+ * @param {object|Map|null} projectOrPlan  整套（或已算好的 planViews 结果）—— 'auto' 要看前后页才知道
+ */
+export function resolveViewLayout(slide, metaFn = () => null, projectOrPlan = null) {
   if (!slide || slide.kind !== 'view') return null;
-  if (slide.layout && slide.layout !== 'auto') return slide.layout;
-  return autoLayout(slide, slide.image ? metaFn(slide.image) : null);
+  if (slide.layout === 'full' || slide.layout === 'framed') return slide.layout;
+  const plan = projectOrPlan instanceof Map ? projectOrPlan : planViews(projectOrPlan || { slides: [slide] }, metaFn);
+  return plan.get(slide.id) === 'full' ? 'full' : 'framed';
 }
 
 export const setViewLayout = (project, id, layout) => updateSlide(project, id, { layout });
 
-/** 全局版式：mode = 'auto'（重新自动排版 + 节奏调整）| 'full' | 'framed'。AI 立体图页保持不动 */
-export function setAllViewLayouts(project, mode, metaFn = () => null) {
-  const slides = project.slides || [];
-  const targets = slides.filter((s) => s.kind === 'view' && s.tag !== '3d');
-  if (!targets.length) return project;
-  const layoutOf = new Map();
-  if (mode === 'auto') {
-    const run = (list) => applyLayoutRhythm(list.map((s) => ({ ...s, layout: 'auto' })), metaFn).forEach((v) => layoutOf.set(v.id, v.layout));
-    run(targets.filter((s) => s.enabled !== false));
-    run(targets.filter((s) => s.enabled === false));
-  } else {
-    targets.forEach((s) => layoutOf.set(s.id, mode));
-  }
+/** 全局版式：mode = 'auto'（全部交还给自动排版）| 'full' | 'framed'。AI 立体图页保持不动 */
+export function setAllViewLayouts(project, mode) {
+  const want = mode === 'full' || mode === 'framed' ? mode : 'auto';
   let changed = false;
-  const next = slides.map((s) => {
-    if (!layoutOf.has(s.id) || s.layout === layoutOf.get(s.id)) return s;
+  const slides = (project.slides || []).map((s) => {
+    if (s.kind !== 'view' || s.tag === '3d' || (s.layout || 'auto') === want) return s;
     changed = true;
-    return { ...s, layout: layoutOf.get(s.id) };
+    return { ...s, layout: want };
   });
-  return changed ? { ...project, slides: next } : project;
+  return changed ? { ...project, slides } : project;
 }
 
-/** 两个版本之间改了几页的版式（提示用） */
-export function countLayoutChanges(before, after) {
-  const prev = new Map((before.slides || []).map((s) => [s.id, s.layout]));
-  return (after.slides || []).filter((s) => s.kind === 'view' && prev.has(s.id) && prev.get(s.id) !== s.layout).length;
+/** 两个版本之间实际改了几页的版式（提示用；metaFn 给了就按实际版式比，'auto' 换算成满版 / 图文） */
+export function countLayoutChanges(before, after, metaFn = null) {
+  if (metaFn) {
+    const a = planViews(before, metaFn);
+    const b = planViews(after, metaFn);
+    const ids = new Set((before.slides || []).filter((s) => s.kind === 'view').map((s) => s.id));
+    const of = (plan, s) => (s.layout === 'full' || s.layout === 'framed' ? (s.layout === 'full' ? 'full' : 'plate') : plan.get(s.id));
+    const prev = new Map((before.slides || []).map((s) => [s.id, of(a, s)]));
+    return (after.slides || []).filter((s) => s.kind === 'view' && ids.has(s.id) && prev.get(s.id) !== of(b, s)).length;
+  }
+  const prev = new Map((before.slides || []).map((s) => [s.id, s.layout || 'auto']));
+  return (after.slides || []).filter((s) => s.kind === 'view' && prev.has(s.id) && prev.get(s.id) !== (s.layout || 'auto')).length;
 }
 
 // ---------------------------------------------------------------------------
@@ -315,6 +321,21 @@ export function assignMaterial(project, slideId, row, materialId, role) {
 export const addMaterialAndAssign = (project, slideId, row, mat, role) =>
   assignMaterial(addMaterial(project, mat), slideId, row, mat.id, role);
 
+/**
+ * 「本案材料」页怎么排（检查器的一句说明）：和 renderDeck 用同一个分页（b/design.js materialSlices，按提案语言量名称）——
+ * 名称很长、两排的小样会被挤扁时每页少放几种、排一排，这里的页数、排数跟着变
+ * @returns {{ pages:number, rows:0|1|2, note:string }}
+ */
+export function materialsLayout(project, meta = () => null) {
+  const mats = (project?.materials || []).filter(Boolean);
+  if (!mats.length) return { pages: 0, rows: 0, note: '还没有材料' };
+  const slices = materialSlices({ project, lang: langOf(project), meta }, mats, MATERIALS_PER_PAGE);
+  const rows = slices.some((s) => s.rows === 2) ? 2 : 1;
+  const rowText = rows === 2 ? '两排' : '一排';
+  if (slices.length > 1) return { pages: slices.length, rows, note: `分成 ${slices.length} 页 · 每页${rowText}色板` };
+  return { pages: 1, rows, note: rows === 2 ? '两排色板' : '一排大色板' };
+}
+
 // ---------------------------------------------------------------------------
 // 楼层 / 封面 / 项目信息 / 团队
 // ---------------------------------------------------------------------------
@@ -324,21 +345,27 @@ export function updateFloor(project, floorId, patch) {
   return { ...project, floors: project.floors.map((f) => (f.id === floorId ? { ...f, ...patch } : f)) };
 }
 
-/** 楼层章节页背景：src = 新图；null = 恢复自动（该层第一张效果图）。写在楼层上，同时清掉单页上的旧设置 */
+/**
+ * 楼层章节页的大图：src = 设计师选的图（写在这一页上，页面一定照用）；
+ * null = 恢复自动（同时清掉导入时从原稿带来的楼层图）→ 由版式从这一层的效果图里挑，不和紧接着的下一页重复
+ */
 export function setFloorBackground(project, slideId, src) {
   const s = findSlide(project, slideId);
   if (!s || s.kind !== 'floor') return project;
+  if (src) return updateSlide(project, slideId, { image: src });
   let p = updateSlide(project, slideId, (x) => {
     if (!('image' in x)) return x;
     const { image, ...rest } = x;
     return rest;
   });
-  if (findFloor(p, s.floorId)) p = updateFloor(p, s.floorId, { image: src || null });
-  else if (src) p = updateSlide(p, slideId, { image: src });
+  if (findFloor(p, s.floorId)?.image) p = updateFloor(p, s.floorId, { image: null });
   return p;
 }
 
 export const updateInfo = (project, patch) => ({ ...project, info: { ...(project.info || {}), ...patch } });
+
+/** 提案语言：'zh' 华文 | 'en' English | 'bi' 中英 */
+export const setLang = (project, lang) => updateInfo(project, { lang: lang === 'en' || lang === 'bi' ? lang : 'zh' });
 export const updateCover = (project, patch) => ({ ...project, cover: { ...(project.cover || {}), ...patch } });
 
 const teamOf = (project) => project.info?.team || [];
@@ -347,82 +374,106 @@ export const addTeamMember = (project, member = { en: '', name: '', role: '' }) 
 export const removeTeamMember = (project, i) => updateInfo(project, { team: listRemove(teamOf(project), i) });
 export const moveTeamMember = (project, i, delta) => updateInfo(project, { team: listMove(teamOf(project), i, delta) });
 
-/** 服务团队页上实际显示的成员 → info.team 里的序号（layoutTeam 只显示有名字或职位的前 6 位） */
+/**
+ * 服务团队页上实际显示的成员 → info.team 里的序号（与 b/design.js bTeam 一致）：
+ *   有人填了名字 → 只放填了名字的；一个名字都没有 → 有职位的先排着；最多 TEAM_MAX（12）位（7 位起排两行）
+ */
 export function teamVisibleIndices(team) {
-  const out = [];
+  const listed = [];
   (team || []).forEach((m, i) => {
-    if (out.length < 6 && ((m?.name || '').trim() || (m?.role || '').trim())) out.push(i);
+    if ((m?.name || '').trim() || (m?.role || '').trim()) listed.push(i);
   });
-  return out;
+  const named = listed.filter((i) => (team[i]?.name || '').trim());
+  return (named.length ? named : listed).slice(0, TEAM_MAX);
 }
 
 // ---------------------------------------------------------------------------
-// 公司固定页：逐段改字
+// 公司固定页（品牌画册，b/company.js）：按栏位改字、换照片
+//   中文 → slide.overrides[栏位]；英文 → slide.overridesEn[栏位]（'' = 英文里不要这一行）；照片 → slide.images[照片位]
+//   旧版按元素序号的改写（数字键）新版式不读，也不会被改写
 // ---------------------------------------------------------------------------
 
-function writeOverride(project, slideId, idx, text) {
+const BUCKET = { zh: 'overrides', en: 'overridesEn' };
+
+function writeField(project, slideId, field, lang, text) {
+  const bucket = BUCKET[lang] || 'overrides';
   return updateSlide(project, slideId, (s) => {
-    const overrides = { ...(s.overrides || {}) };
-    if (typeof text === 'string') overrides[idx] = text;
-    else delete overrides[idx];
-    const { overrides: _old, ...rest } = s;
-    return Object.keys(overrides).length ? { ...rest, overrides } : rest;
+    const map = { ...(s[bucket] || {}) };
+    if (typeof text === 'string') map[field] = text;
+    else delete map[field];
+    const { [bucket]: _old, ...rest } = s;
+    return Object.keys(map).length ? { ...rest, [bucket]: map } : rest;
   });
 }
 
-/** 改字；与原文（已填 token）一致时去掉改写，让 token 继续跟随项目信息 */
-export const setCompanyOverride = (project, slideId, idx, text, original) =>
-  writeOverride(project, slideId, idx, original !== undefined && text === original ? null : String(text ?? ''));
+/** 改一栏（lang = 'zh' | 'en'）；和默认文字一样时去掉改写（带 token 的栏位继续跟随项目信息） */
+export const setCompanyField = (project, slideId, field, lang, text, dflt) =>
+  writeField(project, slideId, field, lang, dflt !== undefined && text === dflt ? null : String(text ?? ''));
 
-/** 恢复原文 */
-export const clearCompanyOverride = (project, slideId, idx) => writeOverride(project, slideId, idx, null);
+/** 恢复默认文字 */
+export const clearCompanyField = (project, slideId, field, lang) => writeField(project, slideId, field, lang, null);
 
-/** 这一页用的是哪张公司模板（方案封面没有 Material Board 时退回「方案 · 章节页」） */
+/**
+ * 「恢复默认」管哪些栏位（companyFields 的结果）：华文版只算中文改过的 —— 英文的改写在华文版里看不到，
+ * 不替设计师一起丢掉；English / 中英版中文、英文改过的都算
+ */
+export const editedCompanyFields = (fields, lang) => (fields || []).filter((f) => f.overridden?.zh || (lang !== 'zh' && !f.shared && f.overridden?.en));
+
+/** 只改了英文的栏位（华文版里提一句「另有 N 处英文改动」） */
+export const enOnlyEdits = (fields) => (fields || []).filter((f) => !f.shared && f.overridden?.en && !f.overridden?.zh);
+
+/** 恢复默认：华文版只清中文；English / 中英版中文、英文一起清 */
+export const resetCompanyFields = (project, slideId, fieldNames, lang) =>
+  (fieldNames || []).reduce((p, field) => {
+    const q = clearCompanyField(p, slideId, field, 'zh');
+    return lang === 'zh' ? q : clearCompanyField(q, slideId, field, 'en');
+  }, project);
+
+/** 版面上只排一行的栏位（目录、章节名、年份…）：回车、粘贴进来的换行都换成空格（不然页面上会截成「…」） */
+export const singleLine = (text) => String(text ?? '').replace(/[^\S\n]*\n+[^\S\n]*/g, ' ');
+
+/** 换照片：src = 新图；null = 恢复默认 */
+export function setCompanyImage(project, slideId, slot, src) {
+  return updateSlide(project, slideId, (s) => {
+    const images = { ...(s.images || {}) };
+    if (src) images[slot] = src;
+    else delete images[slot];
+    const { images: _old, ...rest } = s;
+    return Object.keys(images).length ? { ...rest, images } : rest;
+  });
+}
+
+/** 这一页用的是哪张公司页（方案封面没有 Material Board 时退回「方案」章节页） */
 export function companyKeyOf(slide, project) {
   if (slide?.kind === 'company') return slide.key;
   if (slide?.kind === 'designCover' && !project?.cover?.image) return 'design-divider';
   return null;
 }
 
-function fieldRole(el) {
-  const r = el?.paras?.[0]?.runs?.[0] || {};
-  if (el.y >= 960) return el.x + el.w / 2 < SLIDE_W / 2 ? '左侧' : '右侧';
-  if ((r.size || 0) >= 40) return '大标题';
-  if ((r.size || 0) >= 28) return '标题';
-  const raw = (el.paras || []).map((p) => p.runs.map((x) => x.text).join('')).join('');
-  if (r.font === 'sans' && !/[a-z]/.test(raw.replace(/\{\{\w+\}\}/g, '')) && (r.spacing || 0) >= 3) return '英文小标题';
-  return '正文';
-}
-
 /**
- * 公司模板页的全部文字框：[{ idx, text, original, overridden, tokens, role, footer }]
- *   text = 当前显示的文字；original = 模板原文（已填项目信息）
+ * 检查器用的栏位：[{ field, label, zh, en, zhDefault, enDefault, overridden:{zh,en}, multiline, shared, tokens,
+ *   zhInput, enInput }]
+ *   zh / en = 页面上的字；zhInput / enInput = 输入框里的字（改过的栏位用设计师打的原文：留住行尾空格、换行）
+ *   shared = 中英同一段（品牌名、年份、地址）
  */
 export function companyFields(slide, project) {
   const key = companyKeyOf(slide, project);
-  const tpl = key ? COMPANY_BY_KEY[key] : null;
-  if (!tpl) return [];
-  const tokens = projectTokens(project);
-  const base = renderCompany(key, tokens, {});
-  const cur = renderCompany(key, tokens, slide.overrides || {});
-  const out = [];
-  tpl.els.forEach((el, idx) => {
-    if (el.t !== 'text') return;
-    const raw = (el.paras || []).map((p) => p.runs.map((r) => r.text).join('')).join('\n');
-    const role = fieldRole(el);
-    out.push({
-      idx,
-      text: elementText(cur.els[idx]),
-      original: elementText(base.els[idx]),
-      overridden: typeof slide.overrides?.[idx] === 'string',
-      tokens: /\{\{\w+\}\}/.test(raw),
-      role,
-      footer: el.y >= 960,
-      // 多段，或框高超过两行字 → 多行输入框
-      multiline: (el.paras || []).length > 1 || el.h > (el.paras?.[0]?.runs?.[0]?.size || 18) * PX_PER_PT * 1.2 * 1.8,
-    });
+  if (!key || !COMPANY_PAGES_B[key]) return [];
+  return companyFieldsB(key, slide, project).map((f) => {
+    const oz = slide?.overrides?.[f.field];
+    const oe = slide?.overridesEn?.[f.field];
+    return {
+      ...f,
+      zhInput: typeof oz === 'string' ? oz : f.zh,
+      enInput: typeof oe === 'string' ? oe : f.en,
+    };
   });
-  return out;
+}
+
+/** 照片位：[{ slot, field, label, src, default, custom }]（src = null：这一页不要这张照片） */
+export function companyImages(slide, project) {
+  const key = companyKeyOf(slide, project);
+  return key ? companyImagesB(key, slide) : [];
 }
 
 // ---------------------------------------------------------------------------
@@ -437,13 +488,16 @@ export function pageNumbers(rendered) {
   return map;
 }
 
-/** 按章节分组（连续的同章节页一组；公司页被拖到别处时会出现重复的章节标题） */
-export function groupSections(rendered) {
+/**
+ * 按章节分组（连续的同章节页一组；公司页被拖到别处时会出现重复的章节标题）
+ * 标题带整套里的章节编号（chapters = deckChapters(project)：隐藏了品牌 / 公司 / 服务，后面的编号往前排，与导出的目录一致）
+ */
+export function groupSections(rendered, chapters = null) {
   const groups = [];
   (rendered || []).forEach((page, index) => {
     const last = groups[groups.length - 1];
     if (last && last.section === page.section) last.items.push({ page, index });
-    else groups.push({ section: page.section, label: SECTION_LABELS[page.section] || page.section, items: [{ page, index }] });
+    else groups.push({ section: page.section, label: sectionLabel(page.section, chapters), items: [{ page, index }] });
   });
   return groups;
 }
@@ -478,18 +532,68 @@ export function nextWarningIndex(rendered, fromIndex) {
   return -1;
 }
 
+/** 公司页照片位的名字（提醒里说的是照片位的中文名）→ 照片位 */
+const PHOTO_SLOT_BY_LABEL = (() => {
+  const map = new Map();
+  for (const p of Object.values(COMPANY_PAGES_B)) for (const [slot, d] of Object.entries(p.images || {})) if (d?.label) map.set(d.label, slot);
+  return map;
+})();
+
 /**
- * 提醒 → 一键修复（layouts.js 里的中文提示）
- *   { id:'framed'|'split'|'removeMissing'|'pickImage'|'gotoMaterials'|'focus', label, field? }
+ * 提醒 → 一键修复（b/design.js、b/company.js 里的中文提示）
+ *   { id:'framed'|'split'|'removeMissing'|'pickImage'|'gotoMaterials'|'focus'|'translate'|'dismissLegacy'|'hide', label, field? }
+ *   pickImage / focus：把右侧对应的输入框（data-field = field）滚出来并聚焦
+ * @param {string} text
+ * @param {{ key?:string|null }} ctx  key = 这一页用的公司页（companyKeyOf）：公司页的提醒说的是栏位名，要它才对得上栏位
  */
-export function fixForWarning(text) {
+export function fixForWarning(text, ctx = {}) {
   const s = String(text || '');
-  if (/满版页右下放不下/.test(s)) return { id: 'framed', label: '切换成框图' };
-  if (/右侧说明太多放不下/.test(s)) return { id: 'split', label: '拆成两页' };
+  // 本案材料页：提醒以「材料「名称」的…」开头（名称是设计师写的字，先认开头，免得名称里的字被下面的规则认错）
+  if (/^材料「.*」的名称太长/.test(s)) return { id: 'gotoMaterials', label: '去材料清单改名称' };
+  if (/^材料「.*」的图片像素偏低/.test(s)) return { id: 'gotoMaterials', label: '去材料清单换图' };
+  if (/满版大图不显示/.test(s)) return { id: 'framed', label: '换成图文' };
+  // 水印：满版页（说「改用「图文」」）→ 换成图文（图文的图小一些，裁得开）；图文页、楼层页 → 换一张高清图
+  if (/水印会露出来/.test(s)) return /改用「图文」/.test(s) ? { id: 'framed', label: '换成图文' } : { id: 'pickImage', label: '换一张高清图', field: 'image' };
+  if (/说明太多放不下|材料太多|材料表放不下|材料较多，视角名已缩小/.test(s)) return { id: 'split', label: '拆成两页' };
+  const longNote = s.match(/^说明太长（第 (\d+) 条(的标签)?）/);
+  if (longNote) return { id: 'focus', label: '去精简说明', field: `notes.${Number(longNote[1]) - 1}.${longNote[2] ? 'label' : 'text'}` };
+  if (/^说明太长/.test(s)) return { id: 'focus', label: '去精简说明', field: 'notes.0.text' };
+  if (/^视角名的英文太长/.test(s)) return { id: 'focus', label: '去改英文视角名', field: 'subtitleEn' };
+  if (/^视角名太长/.test(s)) return { id: 'focus', label: '去改视角名', field: 'title' };
+  if (/^空间英文名太长/.test(s)) return { id: 'focus', label: '去改空间英文名', field: 'roomEn' };
+  if (/^空间名太长/.test(s)) return { id: 'focus', label: '去改空间名', field: 'room' };
+  if (/封面标题太长/.test(s)) return { id: 'focus', label: '去改标题', field: 'coverTitle' };
+  if (/^这一层的效果图都隐藏了|^这一层还没有效果图页/.test(s)) return { id: 'hide', label: '隐藏这一页' };
+  if (/编号太长/.test(s)) return { id: 'gotoMaterials', label: '去材料清单改编号' };
+  if (/^旧版里改过的字/.test(s)) return { id: 'dismissLegacy', label: '知道了' };
+  // 公司页：提醒里写的是栏位名（「第一章说明」「正文（英文）」）→ 那一栏
+  if (ctx.key) {
+    const cut = s.match(/^文字太长放不下：「(.+?)」/);
+    const cutField = cut && companyFieldByLabel(ctx.key, cut[1]);
+    if (cutField) return { id: 'focus', label: '去删减', field: cutField };
+    const stale = s.match(/^改过的中文还没有对应的英文：「(.+?)」/);
+    const staleField = stale && companyFieldByLabel(ctx.key, stale[1]);
+    if (staleField) return { id: 'focus', label: '去补英文', field: staleField.replace(/^overrides\./, 'overridesEn.') };
+  }
   if (/项材料已被删除/.test(s)) return { id: 'removeMissing', label: '移除失效的材料' };
-  if (/缺少效果图|没有背景图/.test(s)) return { id: 'pickImage', label: '选一张图', field: 'image' };
+  const unpicked = s.match(/^第 (\d+) 项还没选材料/);
+  if (unpicked) return { id: 'focus', label: '去选材料', field: `materials.${Number(unpicked[1]) - 1}` };
+  // 公司页的照片：缺照片 / 像素偏低 →「照片」栏里那一张
+  const photo = s.match(/^缺照片：(.+?) —— /) || s.match(/^图片像素偏低：(.+?)放大 /);
+  if (photo && PHOTO_SLOT_BY_LABEL.has(photo[1])) return { id: 'pickImage', label: '换一张照片', field: `image.${PHOTO_SLOT_BY_LABEL.get(photo[1])}` };
+  if (/^Material Board 图片像素偏低/.test(s)) return { id: 'pickImage', label: '换一张图', field: 'cover.image' };
+  if (/缺少效果图|没有背景图|^图片像素偏低：放大/.test(s)) return { id: 'pickImage', label: '换一张图', field: 'image' };
   if (/本案材料为空/.test(s)) return { id: 'gotoMaterials', label: '去材料清单' };
+  const member = s.match(/服务团队第 (\d+) 位/);
+  if (member) return { id: 'focus', label: '填写名字', field: `team.${Number(member[1]) - 1}.name` };
   if (/服务团队还没填名字/.test(s)) return { id: 'focus', label: '填写团队名字', field: 'team.0.name' };
+  // 质保年数：中文没填 → 中文栏（英文会自动跟着变成 5 years）；中文填了、英文没跟上 → 英文栏
+  const years = s.match(/质保年数(的英文)?还没填/);
+  if (years) {
+    const row = /^售后维保：五金/.test(s) ? 'r3Text' : 'r4Text';
+    return years[1] ? { id: 'focus', label: '去补英文', field: `overridesEn.${row}` } : { id: 'focus', label: '去填年数', field: `overrides.${row}` };
+  }
+  if (isMissWarning(s)) return { id: 'translate', label: 'AI 翻译' };
   return null;
 }
 
@@ -502,10 +606,36 @@ export function applyFix(project, fixId, slideId, { newId } = {}) {
       return splitView(project, slideId, newId);
     case 'removeMissing':
       return removeMissingMaterials(project, slideId);
+    case 'hide':
+      return setSlideEnabled(project, slideId, false);
+    case 'dismissLegacy':
+      return clearLegacyEdits(project, slideId, langOf(project));
     default:
       return project;
   }
 }
+
+/**
+ * 旧版留下的改写（按元素序号的数字键，新版式没有对应栏位）：设计师对照过了，点「知道了」清掉。
+ * 华文版只清中文的（English / 中英版的英文改写看不到，不替设计师丢掉）
+ */
+export function clearLegacyEdits(project, slideId, lang = 'zh') {
+  const drop = new Set(legacyOverrides(findSlide(project, slideId), lang).map((x) => `${x.bucket}.${x.key}`));
+  if (!drop.size) return project;
+  return updateSlide(project, slideId, (s) => {
+    const next = { ...s };
+    for (const bucket of ['overrides', 'overridesEn']) {
+      if (!s[bucket]) continue;
+      const map = Object.fromEntries(Object.entries(s[bucket]).filter(([k]) => !drop.has(`${bucket}.${k}`)));
+      if (Object.keys(map).length) next[bucket] = map;
+      else delete next[bucket];
+    }
+    return next;
+  });
+}
+
+/** 这一页还留着的旧版改写（检查器里列出来对照）：[{ bucket, key, text }] */
+export const legacyEdits = (slide, project) => legacyOverrides(slide, langOf(project));
 
 // ---------------------------------------------------------------------------
 // 画布点选 → 检查器输入框
@@ -549,7 +679,7 @@ export function projectImages(project) {
   return out;
 }
 
-/** 效果图页的标题预览（与 layouts.js 的 viewTitle 一致） */
+/** 效果图页在编辑器列表里的标题（房间 · 视角名） */
 export const viewTitleOf = (s) => [s?.room, s?.subtitle].map((x) => (x || '').trim()).filter(Boolean).join(' · ') || '未命名';
 
 /** 项目里出现过的房间名（输入建议） */
