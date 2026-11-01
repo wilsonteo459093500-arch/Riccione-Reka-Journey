@@ -130,8 +130,14 @@ function SlideCanvas({ slide, width = 960, resolveUrl, onPick, activeField, inte
           else if (el.t === 'img') node = <ImgEl el={el} url={el.src ? resolveUrl?.(el.src) : null} />;
           else if (el.t === 'text') node = <TextEl el={el} />;
           if (!node) return null;
-          if (!interactive || !el.edit) return <React.Fragment key={i}>{node}</React.Fragment>;
-          const active = activeField && el.edit.field === activeField;
+          if (!interactive) return <React.Fragment key={i}>{node}</React.Fragment>;
+          // 编辑器里：不能编辑的元素（托字渐变、logo、签名…）不接点击，点下去落到下面的照片 / 文字上
+          // （C 安然的托字渐变整片盖在照片上，接了点击就点不到照片了）
+          if (!el.edit) return <div key={i} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>{node}</div>;
+          // edit.zones：同一个文字元素里另一栏的字（订单周期「60–75 天 days」的单位和天数同一段、共用基线）——
+          // 点那一段落到它自己的栏位
+          const zones = Array.isArray(el.edit.zones) ? el.edit.zones : [];
+          const active = activeField && (el.edit.field === activeField || zones.some((z) => z.field === activeField));
           return (
             <div
               key={i}
@@ -148,6 +154,18 @@ function SlideCanvas({ slide, width = 960, resolveUrl, onPick, activeField, inte
                 className="bp-pick-hit"
                 style={{ position: 'absolute', left: el.x, top: el.y, width: el.w, height: el.h, pointerEvents: 'auto', cursor: 'pointer' }}
               />
+              {zones.map((z, k) => (
+                <div
+                  key={k}
+                  className="bp-pick-hit"
+                  data-zone={z.field}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onPick?.(z.field, el);
+                  }}
+                  style={{ position: 'absolute', left: z.x, top: z.y, width: z.w, height: z.h, pointerEvents: 'auto', cursor: 'pointer' }}
+                />
+              ))}
             </div>
           );
         })}

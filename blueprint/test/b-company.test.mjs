@@ -1,5 +1,7 @@
-// B 格物 · 公司固定页（品牌画册）：19 页 × 华文 / English / 中英 都排得出；字在画布里、文字框互不重叠、不压在照片上；
-// English 版没有中文、中英版两种文字都有且同样大小；编辑字段齐全；缺图 / 像素低 / 字太长 / 质保年数没填会提醒
+// C 安然 · 公司固定页（品牌画册 19 页）：19 页 × 华文 / English / 中英 都排得出；字在画布里、文字互不重叠；
+// 白字压在照片上必须有托字渐变（1C1915、最深 45%），照片不加色层；纸面文字栏不留大空洞；半版照片上下贴边；
+// 品牌分开（瑞吉欧的页只用 RICCIONE 商标、瑞吉欧的照片和签名）；English 版没有中文、中英版两种文字都有且同样大小；
+// 编辑字段齐全；缺图 / 像素低 / 字太长 / 质保年数没填会提醒
 import assert from 'node:assert/strict';
 import { existsSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -7,16 +9,18 @@ import path from 'node:path';
 import { test } from './harness.mjs';
 import {
   COMPANY_PAGES_B, COMPANY_KEYS_B, renderCompanyB, companyFieldsB, companyImagesB, companyTokensB, dateZh, dateEn,
-  PHOTOS, LOGO, QR, baseOf, yearsEn, deckChapters, chapterZh, chapterEn, companyFieldByLabel, legacyOverrides,
+  PHOTOS, LOGO, QR, yearsEn, deckChapters, chapterZh, chapterEn, companyFieldByLabel, legacyOverrides, PHOTO_HIDDEN, ZH_EN_HEADER,
 } from '../src/engine/b/company.js';
-import { INSET, B, lineWidth } from '../src/engine/b/kit.js';
+import { INSET, B, LOGOS, ALPHA, measure, SIGNATURE } from '../src/engine/b/kit.js';
 import { makeTranslator } from '../src/engine/lang.js';
+import { fixForWarning } from '../src/components/editor/ops.js';
 import { projectTokens } from '../src/engine/deck.js';
 import { COMPANY_BEFORE_DESIGN, COMPANY_AFTER_DESIGN_HEAD, COMPANY_AFTER_DESIGN_TAIL } from '../src/engine/model.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const LANGS = ['zh', 'en', 'bi'];
 const CJK = /[⺀-鿿豈-﫿︰-﹏＀-￯　-〿]/;
+const PX = 96 / 72;
 
 const project = (lang, extra = {}) => ({
   id: 'p1',
@@ -44,38 +48,115 @@ function render(key, lang, slide = {}, opts = {}) {
 }
 
 const textOf = (el) => (el.paras || []).map((p) => p.runs.map((r) => r.text).join('')).join('\n');
+const flat = (s) => s.replace(/\s*\n\s*/g, ' ');
 const langOfEl = (el) => el.paras?.[0]?.runs?.[0]?.lang;
 const sizeOfEl = (el) => el.paras?.[0]?.runs?.[0]?.size;
+const colorOfEl = (el) => el.paras?.[0]?.runs?.[0]?.color;
 const texts = (pg) => pg.els.filter((e) => e.t === 'text');
-/** 文字框去掉内边距 = 字真正占的地方 */
-const inner = (el) => (el.t === 'text' ? { x: el.x + INSET, y: el.y + INSET, w: el.w - 2 * INSET, h: el.h - 2 * INSET } : el);
+const allText = (pg) => texts(pg).map(textOf).join('\n');
 const area = (a, b) => {
   const w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
   const h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
   return w > 0 && h > 0 ? w * h : 0;
 };
-const isPhoto = (el) => (el.t === 'img' || el.t === 'rect') && el.h > 2 && /^photo:|^logo$|^qr$/.test(el.name || '');
-const isHair = (el) => el.t === 'rect' && el.h === 1;
+const inside = (a, b, tol = 1) => a.x >= b.x - tol && a.y >= b.y - tol && a.x + a.w <= b.x + b.w + tol && a.y + a.h <= b.y + b.h + tol;
+const isPhoto = (el) => /^photo:/.test(el.name || '');
+const isLogo = (el) => el.t === 'img' && ['logo', 'qr'].includes(el.name);
+const isShade = (el) => el.t === 'rect' && !!el.grad;
+const isRule = (el) => el.t === 'rect' && !el.grad && !isPhoto(el) && (el.h <= 2 || el.w <= 2);
+const LIGHT = new Set([B.white, B.cream]);
+
+/**
+ * 文字真正占的地方（字形的可见范围，不是文本框）：每行按实测字宽算，左 / 右 / 居中对齐（和 kit.textLines 的算法一样）；
+ * 上下 = 文本框去掉内边距
+ */
+function inkOf(el) {
+  const top = el.y + INSET;
+  const bottom = el.y + el.h - INSET;
+  let x0 = Infinity;
+  let x1 = -Infinity;
+  for (const p of el.paras) {
+    const runs = p.runs;
+    const lines = runs.length === 1 ? runs[0].text.split('\n') : [runs.map((r) => r.text).join('')];
+    for (const line of lines) {
+      const w = runs.length === 1
+        ? measure(line, runs[0])
+        : runs.reduce((s, r) => s + measure(r.text, r), 0);
+      const sp = (runs[runs.length - 1].spacing || 0) * PX;
+      const ink = Math.max(0, w - sp);
+      const align = p.align || 'l';
+      let a;
+      if (align === 'l') a = el.x + INSET;
+      else if (align === 'r') a = el.x + el.w - INSET - sp - ink;
+      else a = el.x + el.w / 2 - sp / 2 - ink / 2;
+      x0 = Math.min(x0, a);
+      x1 = Math.max(x1, a + ink);
+    }
+  }
+  return { x: x0, y: top, w: Math.max(0, x1 - x0), h: Math.max(0, bottom - top) };
+}
+
+/** 托字渐变盖住的地方最深多少 */
+const shadeMax = (s) => Math.max(...s.grad.stops.map((t) => t.alpha));
 
 function assertLayout(pg, label) {
   for (const el of pg.els) {
     for (const k of ['x', 'y', 'w', 'h']) assert.ok(Number.isFinite(el[k]), `${label}: ${k} 不是数字`);
     assert.ok(el.x >= -0.01 && el.y >= -0.01 && el.x + el.w <= 1920.01 && el.y + el.h <= 1080.01, `${label}: 元素出了画布 ${JSON.stringify({ t: el.t, x: el.x, y: el.y, w: el.w, h: el.h, text: el.t === 'text' ? textOf(el).slice(0, 30) : el.src })}`);
   }
-  const ts = texts(pg).map((el) => ({ el, box: inner(el) }));
+  const ts = texts(pg).map((el) => ({ el, ink: inkOf(el) }));
   for (let i = 0; i < ts.length; i++) {
     for (let j = i + 1; j < ts.length; j++) {
-      const a = area(ts[i].box, ts[j].box);
+      const a = area(ts[i].ink, ts[j].ink);
       assert.ok(a < 0.5, `${label}: 文字重叠「${textOf(ts[i].el).slice(0, 20)}」×「${textOf(ts[j].el).slice(0, 20)}」(${a.toFixed(1)}px²)`);
     }
   }
-  const blockers = pg.els.filter((e) => isPhoto(e) || isHair(e));
-  for (const { el, box } of ts) {
-    for (const o of blockers) {
-      const a = area(box, o);
-      assert.ok(a < 0.5, `${label}: 文字「${textOf(el).slice(0, 20)}」压在${isHair(o) ? '细线' : '照片'}上`);
+  const photos = pg.els.filter(isPhoto);
+  const shades = pg.els.filter(isShade);
+  for (const { el, ink } of ts) {
+    for (const o of pg.els.filter((e) => isRule(e) || isLogo(e))) {
+      assert.ok(area(ink, o) < 0.5, `${label}: 文字「${textOf(el).slice(0, 20)}」压在${isLogo(o) ? ' logo / 二维码' : '细线'}上`);
+    }
+    // 压在照片上的字：只能是白字（FFFFFF / F5EFDD），而且下面有托字渐变
+    for (const ph of photos) {
+      const a = area(ink, ph);
+      if (a < 0.5) continue;
+      assert.ok(LIGHT.has(colorOfEl(el)), `${label}: 深色字「${textOf(el).slice(0, 20)}」压在照片上`);
+      const x = Math.max(ink.x, ph.x);
+      const y = Math.max(ink.y, ph.y);
+      const part = { x, y, w: Math.min(ink.x + ink.w, ph.x + ph.w) - x, h: Math.min(ink.y + ink.h, ph.y + ph.h) - y };
+      if (ph.t === 'rect') continue; // 缺图的深色占位：不用托
+      const s = shades.find((sh) => inside(part, sh));
+      assert.ok(s, `${label}: 白字「${textOf(el).slice(0, 20)}」压在照片上，下面没有托字渐变`);
+      assert.ok(shadeMax(s) >= 0.15, `${label}: 白字「${textOf(el).slice(0, 20)}」下面的托字渐变太浅（${shadeMax(s)}）`);
     }
   }
+}
+
+/**
+ * 纸面文字栏里最大的竖向空洞：照片以外、所有字 / 细线 / logo 的上下范围合起来，从第一块到最后一块（含页脚签名）之间的最大空隙
+ * 满版照片页（没有纸面文字栏）不算
+ */
+function paperGap(pg) {
+  const photos = pg.els.filter(isPhoto);
+  const onPaper = (b) => !photos.some((ph) => ph.h >= 1080 && area(b, ph) > 0.5 * b.w * b.h);
+  // 版心里的照片（原创系列那一排）也是内容；上下贴边的半版 / 满版照片不算文字栏
+  const inset = photos.filter((ph) => ph.h < 1080);
+  const boxes = pg.els
+    .filter((e) => e.t === 'text' || isRule(e) || isLogo(e))
+    .map((e) => (e.t === 'text' ? inkOf(e) : e))
+    .filter((b) => b.h > 0 && onPaper(b))
+    .concat(inset)
+    .map((b) => [b.y, b.y + b.h])
+    .sort((a, b) => a[0] - b[0]);
+  if (!boxes.length) return { gap: 0 };
+  let best = { gap: boxes[0][0], from: 0, to: boxes[0][0] };
+  let cur = boxes[0][1];
+  for (const [a, b] of boxes.slice(1)) {
+    if (a - cur > best.gap) best = { gap: a - cur, from: cur, to: a };
+    cur = Math.max(cur, b);
+  }
+  return best;
 }
 
 test('19 页都在：页名、章节（opening / brand / company / design / service）', () => {
@@ -95,29 +176,88 @@ test('19 页都在：页名、章节（opening / brand / company / design / serv
   assert.equal(COMPANY_PAGES_B.closing.section, 'service');
 });
 
-test('每页三种语言都排得出：奶白纸底、元素都在画布里、文字互不重叠也不压在照片 / 细线上', () => {
+test('每页三种语言都排得出：纸面底（满版页深色底）、元素都在画布里、文字互不重叠、不压细线 / logo；压在照片上的只有白字，下面有托字渐变', () => {
   for (const key of COMPANY_KEYS_B) {
     for (const lang of LANGS) {
       const pg = render(key, lang);
-      assert.equal(pg.bg, B.paper, `${key} ${lang}`);
-      assert.ok(texts(pg).length >= 2, `${key} ${lang}: 没有字`);
+      assert.ok([B.paper, B.band].includes(pg.bg), `${key} ${lang}: 底色 ${pg.bg}`);
+      assert.ok(texts(pg).length >= 3, `${key} ${lang}: 没有字`);
       assertLayout(pg, `${key} ${lang}`);
+    }
+  }
+  // 满版照片页（封面、目录、公司章节页）：照片没出来时底色是深色带，白字照样读得清
+  for (const key of ['cover', 'contents', 'company-divider']) assert.equal(render(key, 'zh').bg, B.band, key);
+});
+
+test('默认稿：没有提醒、照片放大不超过 1.15 倍、照片不加色层；托字渐变 = 1C1915、最深 45%、只在照片里、没有硬边', () => {
+  for (const key of COMPANY_KEYS_B) {
+    for (const lang of LANGS) {
+      const pg = render(key, lang);
+      const label = `${key} ${lang}`;
+      const extra = key === 'service-aftersales' ? pg.warnings.filter((w) => !/质保年数还没填/.test(w)) : pg.warnings;
+      assert.deepEqual(extra, [], `${label}: ${extra.join(' / ')}`);
+      for (const img of pg.els.filter((e) => e.t === 'img' && e.crop && e.nat)) {
+        const visW = img.nat.w * (1 - img.crop.l - img.crop.r);
+        assert.ok(img.w / visW <= 1.15 + 1e-6, `${label}: ${img.src} 放大 ${(img.w / visW).toFixed(2)} 倍`);
+        assert.ok(img.crop.l >= 0 && img.crop.r >= 0 && img.crop.t >= 0 && img.crop.b >= 0, `${label}: 裁切比例为负`);
+      }
+      const photos = pg.els.filter(isPhoto);
+      // 不加色层：照片上面没有半透明的实色块（细线除外）
+      for (const r of pg.els.filter((e) => e.t === 'rect' && !e.grad && !isPhoto(e) && !isRule(e))) {
+        const onPhoto = photos.some((ph) => area(r, ph) > 1);
+        assert.ok(!onPhoto || (r.alpha ?? 1) >= 1, `${label}: 照片上有半透明色层 ${JSON.stringify(r)}`);
+        assert.ok((r.alpha ?? 1) >= 1, `${label}: 半透明色块 ${JSON.stringify(r)}`);
+      }
+      for (const s of pg.els.filter(isShade)) {
+        assert.equal(s.name, 'shade', `${label}: 渐变不是托字渐变`);
+        assert.ok(s.grad.stops.every((t) => t.color === B.shade), `${label}: 托字渐变不是 1C1915`);
+        assert.ok(shadeMax(s) <= ALPHA.shadeMax + 1e-9, `${label}: 托字渐变 ${shadeMax(s)} > 0.45`);
+        const ph = photos.find((p) => inside(s, p));
+        assert.ok(ph, `${label}: 托字渐变出了照片 ${JSON.stringify({ x: s.x, y: s.y, w: s.w, h: s.h })}`);
+        // 没有硬边：两头要么归零，要么贯穿到照片边
+        const [first, last] = [s.grad.stops[0], s.grad.stops[s.grad.stops.length - 1]];
+        const v = s.grad.angle === 90;
+        const [lo, hi, plo, phi] = v ? [s.y, s.y + s.h, ph.y, ph.y + ph.h] : [s.x, s.x + s.w, ph.x, ph.x + ph.w];
+        assert.ok(first.alpha === 0 || Math.abs(lo - plo) < 1, `${label}: 托字渐变的起点有硬边`);
+        assert.ok(last.alpha === 0 || Math.abs(hi - phi) < 1, `${label}: 托字渐变的终点有硬边`);
+      }
     }
   }
 });
 
-test('默认稿：没有提醒、照片不放大超过 1.15 倍、没有压暗（无半透明 / 渐变遮罩）', () => {
-  for (const key of COMPANY_KEYS_B) {
+test('照片：半版照片上下贴边（0–1080）、宽 820–1050；满版照片铺满；原创系列五张图同高并排；订单周期上半一条通栏（Aman 第 14 页）', () => {
+  for (const [key, lang] of [...COMPANY_KEYS_B.map((k) => [k, 'bi']), ['company-history', 'zh'], ['company-history', 'en']]) {
+    const pg = render(key, lang);
+    const photos = pg.els.filter(isPhoto);
+    if (key === 'brand-collections') {
+      assert.equal(photos.length, 5);
+      assert.ok(photos.every((p) => p.h === photos[0].h && p.y === photos[0].y && p.h >= 240), `${key}: 五张图不同高`);
+      continue;
+    }
+    if (key === 'service-cycle') {
+      assert.equal(photos.length, 1, key);
+      assert.deepEqual([photos[0].x, photos[0].y, photos[0].w, photos[0].h], [0, 0, 1920, 520], `${key}: 上半通栏 1920 × 520、贴顶`);
+      continue;
+    }
+    // 中英版的发展历程字多：纸面两栏年表（不放照片）；华文 / English 版半版照片 820（dirA2 第 6 页）
+    const none = /^(brand-supply|service-process)$/.test(key) || (key === 'company-history' && lang === 'bi');
+    assert.equal(photos.length, none ? 0 : 1, `${key} ${lang}`);
+    if (key === 'company-history' && lang !== 'bi') assert.deepEqual([photos[0].x, photos[0].w], [0, 820], `${key} ${lang}: 半版照片贴左 820`);
+    for (const p of photos) {
+      assert.equal(p.y, 0, `${key}: 照片不贴上边`);
+      assert.equal(p.y + p.h, 1080, `${key}: 照片不贴下边`);
+      const full = p.w >= 1680;
+      assert.ok(full || (p.w >= 820 && p.w <= 1050), `${key}: 半版照片宽 ${p.w}`);
+      assert.ok(p.x === 0 || p.x + p.w === 1920, `${key}: 照片没有贴左或贴右`);
+    }
+  }
+});
+
+test('页面撑满：纸面文字栏里没有超过 260px 的空洞（三种语言）', () => {
+  for (const key of COMPANY_KEYS_B.filter((k) => !['cover', 'contents', 'company-divider'].includes(k))) {
     for (const lang of LANGS) {
-      const pg = render(key, lang);
-      const extra = key === 'service-aftersales' ? pg.warnings.filter((w) => !/质保年数还没填/.test(w)) : pg.warnings;
-      assert.deepEqual(extra, [], `${key} ${lang}: ${extra.join(' / ')}`);
-      assert.ok(!pg.els.some((e) => e.t === 'rect' && (e.grad || (e.alpha ?? 1) < 1)), `${key} ${lang}: 有遮罩`);
-      for (const img of pg.els.filter((e) => e.t === 'img' && e.crop && e.nat)) {
-        const visW = img.nat.w * (1 - img.crop.l - img.crop.r);
-        assert.ok(img.w / visW <= 1.15 + 1e-6, `${key} ${lang}: ${img.src} 放大 ${(img.w / visW).toFixed(2)} 倍`);
-        assert.ok(img.crop.l >= 0 && img.crop.r >= 0 && img.crop.t >= 0 && img.crop.b >= 0, `${key}: 裁切比例为负`);
-      }
+      const g = paperGap(render(key, lang));
+      assert.ok(g.gap <= 260, `${key} ${lang}: 空洞 ${Math.round(g.gap)}px（y ${Math.round(g.from)}–${Math.round(g.to)}）`);
     }
   }
 });
@@ -127,10 +267,10 @@ test('English 版没有中文；中英版两种文字都有，而且英文和中
     const en = render(key, 'en');
     for (const el of texts(en)) assert.ok(!CJK.test(textOf(el)), `${key} en: 「${textOf(el)}」`);
     const bi = render(key, 'bi');
-    const all = texts(bi).map(textOf).join('\n');
+    const all = allText(bi);
     assert.ok(CJK.test(all), `${key} bi: 没有中文`);
     assert.ok(texts(bi).some((el) => langOfEl(el) === 'en' && /[A-Za-z]{3}/.test(textOf(el))), `${key} bi: 没有英文`);
-    // 同一字段的中文、英文元素：英文字号不小于中文的 0.8（封底英文结语按样张用 52 / 64）
+    // 同一字段的中文、英文元素：英文字号不小于中文的 0.8
     const byField = new Map();
     for (const el of texts(bi)) {
       const f = el.edit?.field?.replace(/^overrides(En)?\./, '');
@@ -151,7 +291,8 @@ test('编辑字段：中文元素 overrides.<字段>、英文元素 overridesEn.
       for (const el of texts(pg)) {
         const f = el.edit?.field;
         if (!f) {
-          assert.match(textOf(el), /^0\d$/, `${key} ${lang}: 「${textOf(el)}」没有编辑字段`);
+          // 没有编辑字段的只有编号（01…）和页脚签名（品牌的固定元素）
+          assert.ok(/^0\d$/.test(textOf(el)) || el.name === 'signature', `${key} ${lang}: 「${textOf(el)}」没有编辑字段`);
           continue;
         }
         const m = f.match(/^(overrides|overridesEn)\.([A-Za-z0-9]+)$/);
@@ -159,21 +300,31 @@ test('编辑字段：中文元素 overrides.<字段>、英文元素 overridesEn.
         const fd = def.fields[m[2]];
         assert.ok(fd, `${key}: 没有字段 ${m[2]}`);
         seen.add(m[2]);
-        // 中英一样的字（Mr Lau、品牌名）只排一块，归中文字段
+        // 同一段里另一栏的字（订单周期的单位）：edit.zones 指到它自己的栏位，范围在这个元素里
+        for (const z of el.edit.zones || []) {
+          const zm = z.field.match(/^(overrides|overridesEn)\.([A-Za-z0-9]+)$/);
+          assert.ok(zm && def.fields[zm[2]], `${key}: zone ${z.field}`);
+          assert.ok(z.x >= el.x - 0.5 && z.x + z.w <= el.x + el.w + 0.5 && z.y >= el.y - 0.5 && z.y + z.h <= el.y + el.h + 0.5, `${key}: zone ${z.field} 出了元素`);
+          seen.add(zm[2]);
+        }
         const cur = companyFieldsB(key, {}, project(lang)).find((x) => x.field === m[2]);
         const shared = fd.en === undefined || cur.zh === cur.en;
         if (!shared && langOfEl(el) === 'zh' && CJK.test(textOf(el))) assert.equal(m[1], 'overrides', `${key}.${m[2]} 中文元素`);
         if (!shared && langOfEl(el) === 'en' && lang !== 'zh') assert.equal(m[1], 'overridesEn', `${key}.${m[2]} 英文元素`);
       }
-      for (const el of pg.els.filter((e) => /^photo:/.test(e.name || ''))) {
+      for (const el of pg.els.filter(isPhoto)) {
         const slot = el.name.slice(6);
         assert.ok(def.images[slot], `${key}: 照片位 ${slot}`);
         assert.equal(el.edit?.field, `image.${slot}`);
       }
-      for (const el of pg.els.filter((e) => e.t === 'img' && !/^photo:/.test(e.name || ''))) assert.ok(['logo', 'qr'].includes(el.name), `${key}: ${el.src}`);
+      for (const el of pg.els.filter((e) => e.t === 'img' && !isPhoto(e))) assert.ok(['logo', 'qr'].includes(el.name), `${key}: ${el.src}`);
     }
     for (const f of Object.keys(def.fields)) assert.ok(seen.has(f), `${key}.${f} 在页面上点不到`);
-    assert.equal(render(key, 'bi').els.filter((e) => /^photo:/.test(e.name || '')).length, Object.keys(def.images).length, `${key}: 照片位数量`);
+    // 每个照片位都在页面上（只有 PHOTO_HIDDEN 里注明的语言不放：中英版的发展历程）
+    for (const lang of LANGS) {
+      const want = Object.keys(def.images).filter((slot) => !(PHOTO_HIDDEN[key]?.[slot] || []).includes(lang)).length;
+      assert.equal(render(key, lang).els.filter(isPhoto).length, want, `${key} ${lang}: 照片位数量`);
+    }
   }
 });
 
@@ -192,9 +343,12 @@ test('照片位：默认图都在 public/template 里，一个照片位一个常
   // 不用 logo 墙、不用 3D 地图、不用拼起来的两张图
   const all = COMPANY_KEYS_B.flatMap((k) => Object.values(COMPANY_PAGES_B[k].images).map((d) => d.src));
   for (const banned of ['brand-supply-1.jpg', 'company-showrooms-1.jpg', 'company-about-1.jpg']) assert.ok(!all.some((s) => s.endsWith(banned)), banned);
+  // 照片位的名字唯一（编辑器按名字找照片位）：除了各章节页都叫「章节照片」
+  const labels = COMPANY_KEYS_B.flatMap((k) => Object.values(COMPANY_PAGES_B[k].images).map((d) => d.label)).filter((l) => l !== '章节照片');
+  assert.equal(new Set(labels).size, labels.length);
 });
 
-test('品牌分开：「公司 · 瑞吉欧」章节只用瑞吉欧图册的照片，其余页只用溪岸的照片', () => {
+test('品牌分开：「公司 · 瑞吉欧」章节只用瑞吉欧的照片、RICCIONE 商标和「瑞吉欧 / RICCIONE」签名；其余页只用溪岸的', () => {
   for (const p of Object.values(PHOTOS)) assert.ok(['sail', 'riccione'].includes(p.brand), `${p.src} 没标品牌`);
   for (const key of COMPANY_KEYS_B) {
     const want = COMPANY_PAGES_B[key].section === 'company' ? 'riccione' : 'sail';
@@ -202,11 +356,44 @@ test('品牌分开：「公司 · 瑞吉欧」章节只用瑞吉欧图册的照�
       const photo = Object.values(PHOTOS).find((p) => p.src === d.src);
       assert.equal(photo?.brand, want, `${key}.${slot}（${d.src}）应该用${want === 'riccione' ? '瑞吉欧' : '溪岸'}的照片`);
     }
+    for (const lang of LANGS) {
+      const pg = render(key, lang);
+      const label = `${key} ${lang}`;
+      const logos = pg.els.filter((e) => e.t === 'img' && e.name === 'logo').map((e) => e.src);
+      const sig = flat(texts(pg).filter((e) => e.name === 'signature').map(textOf).join(' '));
+      assert.equal(logos.length, 1, `${label}: 角上要有一个 logo`);
+      if (want === 'riccione') {
+        assert.ok(logos.every((s) => /riccione-logo-(color|white|ink)\.png$/.test(s)), `${label}: 瑞吉欧的页用了 ${logos}`);
+        assert.ok(!/自然栖居|LIVING NATURALLY/.test(allText(pg)), `${label}: 瑞吉欧的页出现了溪岸口号`);
+        assert.ok(sig.includes(SIGNATURE.riccione.en) && (lang === 'en' || sig.includes(SIGNATURE.riccione.zh)), `${label}: 签名 ${sig}`);
+      } else {
+        assert.ok(logos.every((s) => /\/logo-(ink|white)\.png$/.test(s)), `${label}: 溪岸的页用了 ${logos}`);
+        assert.ok(!/RICCIONE/.test(sig), `${label}: 溪岸的页签名 ${sig}`);
+        assert.ok(sig.includes(SIGNATURE.sail.en), `${label}: 签名 ${sig}`);
+      }
+    }
   }
-  // 换下来的图不留在仓库里：public/template 里每张图都有人用
-  const used = new Set([...Object.values(PHOTOS), LOGO, QR].map((p) => p.src));
+  // 换下来的图不留在仓库里：public/template 里每张图都有人用（C 安然的 logo 在 kit.LOGOS 里）
+  const used = new Set([...Object.values(PHOTOS), LOGO, QR, ...Object.values(LOGOS)].map((p) => p.src));
   const dir = (sub) => readdirSync(path.join(ROOT, 'public/template', sub)).filter((f) => /\.(jpe?g|png)$/i.test(f)).map((f) => `/template/${sub ? `${sub}/` : ''}${f}`);
   for (const src of [...dir(''), ...dir('b')]) assert.ok(used.has(src), `没用到的图 ${src}`);
+});
+
+test('托字渐变的深浅：默认照片 + 默认文案按实测（浅一点，照片保持明亮）；换了照片或改了字 → 一律最深 45%', () => {
+  const max = (pg) => Math.max(...pg.els.filter(isShade).map(shadeMax));
+  // 封面的灰墙本来就够深：默认只轻轻托一下
+  assert.ok(max(render('cover', 'zh')) < ALPHA.shadeMax, '封面默认托字应该比最深浅');
+  // 换了照片：看不到像素，宁可深一点
+  assert.equal(max(render('cover', 'zh', { images: { photo: 'asset:new' } })), ALPHA.shadeMax);
+  assert.equal(max(render('brand-divider', 'zh', { images: { photo: 'asset:new' } })), ALPHA.shadeMax);
+  // 改了这一页的字（字可能排到更亮的地方）
+  assert.equal(max(render('company-divider', 'zh', { overrides: { lead: '名字取自意大利亚得里亚海边的一座小镇，阳光与海风。' } })), ALPHA.shadeMax);
+  // 缺图：深色占位，白字照样读得清
+  const none = render('company-divider', 'zh', { images: { photo: null } });
+  const ph = none.els.find(isPhoto);
+  assert.equal(ph.t, 'rect');
+  assert.equal(ph.fill, B.band);
+  assertLayout(none, 'company-divider 缺图');
 });
 
 test('改写：overrides / overridesEn 生效；旧模板的数字键被忽略；{{token}} 也能写在改写里', () => {
@@ -216,7 +403,7 @@ test('改写：overrides / overridesEn 生效；旧模板的数字键被忽略�
   });
   const all = texts(pg).map(textOf);
   assert.ok(all.includes('从成都出发'));
-  assert.ok(all.includes('Setting out from Chengdu'));
+  assert.ok(flat(all.join('\n')).includes('SETTING OUT FROM CHENGDU'), '英文标题全大写');
   assert.ok(!all.some((t) => /旧模板|^old$/.test(t)));
   const cover = render('cover', 'zh', { overrides: { subtitle: '{{clientLine}} 的家' } });
   assert.ok(texts(cover).map(textOf).includes('Muar · Mr Lau 的家'));
@@ -226,19 +413,19 @@ test('改写：overrides / overridesEn 生效；旧模板的数字键被忽略�
   assert.equal(render('brand-divider', 'zh', { overrides: { lead: '溪岸，是一条安静的溪。' } }).warnings.length, 0);
 });
 
-test('{{token}}：封面客户 / 地点 / 日期，目录与方案章节页的楼层', () => {
-  const zh = texts(render('cover', 'zh')).map(textOf).join('\n');
-  assert.ok(zh.includes('Mr Lau\nMuar'));
+test('{{token}}：封面客户（大字）/ 地点 · 日期（一行小字）、目录与方案章节页的楼层', () => {
+  const zh = allText(render('cover', 'zh'));
+  assert.ok(zh.includes('MR LAU'), '客户名 Ogg 大写一行');
+  assert.ok(zh.includes('MUAR · ') && zh.includes('二〇二六年八月'), '地点 · 日期');
   assert.ok(zh.includes('全屋定制设计方案'));
-  assert.ok(zh.includes('二〇二六年八月'));
-  const en = texts(render('cover', 'en')).map(textOf).join('\n');
-  assert.ok(en.includes('Whole-House Design Proposal') && en.includes('August 2026'));
-  // 客户名中英一样：中英版只排一栏
-  assert.equal(texts(render('cover', 'bi')).filter((el) => textOf(el) === 'Mr Lau\nMuar').length, 1);
-  const dd = texts(render('design-divider', 'bi')).map(textOf).join('\n');
+  const en = allText(render('cover', 'en'));
+  assert.ok(en.includes('WHOLE-HOUSE DESIGN PROPOSAL') && en.includes('AUGUST 2026'));
+  // 客户名中英一样：中英版只排一次
+  assert.equal(texts(render('cover', 'bi')).filter((el) => textOf(el) === 'MR LAU').length, 1);
+  const dd = allText(render('design-divider', 'bi'));
   assert.ok(dd.includes('一楼与二楼') && dd.includes('Ground & First Floor'));
-  const ct = texts(render('contents', 'en')).map(textOf).join('\n');
-  assert.ok(ct.includes('Ground & First Floor, room by room'));
+  const ct = allText(render('contents', 'en'));
+  assert.ok(flat(ct).includes('Ground & First Floor, room by room'));
   // 没有客户：封面大标题退回方案名
   const none = render('cover', 'bi', {}, { project: project('bi', { info: { client: '', location: '', date: '' } }) });
   assert.ok(texts(none).map(textOf).includes('全屋定制设计方案'));
@@ -264,15 +451,17 @@ test('日期：二〇二六年八月 / August 2026；认不出就原样', () => 
 test('只有中文、没有英文：English 版先显示中文并记下缺英文；中英版只显示中文', () => {
   const cn = project('en', { info: { client: '刘先生', location: '麻坡' } });
   const en = render('cover', 'en', {}, { project: cn });
-  assert.ok(texts(en).map(textOf).includes('刘先生\n麻坡'));
+  const t = texts(en).map(textOf);
+  assert.ok(t.includes('刘先生') && t.some((s) => s.startsWith('麻坡')));
   assert.ok(en.tr.misses.some((m) => m.zh === '刘先生'));
   assertLayout(en, 'cover 中文客户 en');
   const bi = render('cover', 'bi', {}, { project: { ...cn, info: { ...cn.info, lang: 'bi' } } });
   assert.equal(texts(bi).filter((el) => textOf(el).includes('刘先生')).length, 1);
-  // 有翻译：中英并排
+  // 有翻译：两种都排
   const tl = render('cover', 'bi', {}, { project: { ...cn, info: { ...cn.info, lang: 'bi' }, translations: { 刘先生: 'Mr Lau', 麻坡: 'Muar' } } });
-  assert.ok(texts(tl).map(textOf).includes('刘先生\n麻坡') && texts(tl).map(textOf).includes('Mr Lau\nMuar'));
-  assertLayout(tl, 'cover 中英并排');
+  const tt = texts(tl).map(textOf);
+  assert.ok(tt.includes('刘先生') && tt.includes('MR LAU'));
+  assertLayout(tl, 'cover 中英两种客户名');
 });
 
 test('提醒：缺照片、照片像素偏低、字太长（截短加「…」）', () => {
@@ -282,7 +471,7 @@ test('提醒：缺照片、照片像素偏低、字太长（截短加「…」�
   assert.equal(ph.t, 'rect');
   assert.equal(ph.edit.field, 'image.photo');
   const low = render('company-divider', 'bi', { images: { photo: 'asset:small' } }, { meta: (src) => (src === 'asset:small' ? { w: 400, h: 500 } : null) });
-  assert.ok(low.warnings.some((w) => /^图片像素偏低：.*放大 1\.\d 倍/.test(w)), low.warnings.join());
+  assert.ok(low.warnings.some((w) => /^图片像素偏低：.*放大 \d\.\d 倍/.test(w)), low.warnings.join());
   assert.equal(low.els.find((e) => e.name === 'photo:photo').src, 'asset:small');
   // 换了一张不知道尺寸的图：照常铺满，不报错
   const unknown = render('closing', 'bi', { images: { photo: 'asset:new' } });
@@ -291,6 +480,16 @@ test('提醒：缺照片、照片像素偏低、字太长（截短加「…」�
   assert.ok(long.warnings.some((w) => /^文字太长放不下/.test(w)));
   assert.ok(texts(long).some((el) => textOf(el).endsWith('…')));
   assertLayout(long, 'philosophy 长文');
+});
+
+test('公司章节页：换了竖图（铺满会放大超过 1.15 倍）就改成半版，照片不发虚', () => {
+  const meta = (src) => (src === 'asset:portrait' ? { w: 1200, h: 1600 } : null);
+  const pg = render('company-divider', 'bi', { images: { photo: 'asset:portrait' } }, { meta });
+  const ph = pg.els.find(isPhoto);
+  assert.ok(ph.w <= 1050 && ph.x === 0 && ph.h === 1080, JSON.stringify(ph));
+  assert.ok(!pg.warnings.some((w) => /像素偏低/.test(w)), pg.warnings.join());
+  assert.ok(pg.els.some((e) => e.name === 'logo' && /riccione-logo-color/.test(e.src)), '纸面上用原色 RICCIONE 商标');
+  assertLayout(pg, 'company-divider 竖图');
 });
 
 test('压力测试：每个字段都填超长文字，19 页 × 三种语言仍然不重叠、不出画布，并提醒截短', () => {
@@ -306,6 +505,25 @@ test('压力测试：每个字段都填超长文字，19 页 × 三种语言仍�
       const pg = render(key, lang, slide);
       assertLayout(pg, `${key} ${lang} 超长`);
       assert.ok(pg.warnings.some((w) => /文字太长放不下/.test(w)), `${key} ${lang}: 没有提醒截短`);
+      // 文字栏的字不压到页脚签名那一带（签名的行顶 944）
+      for (const el of texts(pg).filter((e) => e.name !== 'signature')) {
+        const ink = inkOf(el);
+        const sig = texts(pg).filter((e) => e.name === 'signature').map(inkOf);
+        for (const s of sig) assert.ok(area(ink, s) < 0.5, `${key} ${lang}: 「${textOf(el).slice(0, 12)}」压到签名`);
+      }
+    }
+  }
+});
+
+test('边界：长客户名 + 四层楼、隐藏章节都排得下，不截短默认稿', () => {
+  const floors = [['一楼', 'GROUND FLOOR'], ['二楼', 'FIRST FLOOR'], ['三楼', 'SECOND FLOOR'], ['四楼', 'THIRD FLOOR']].map(([zh, en], i) => ({ id: `f${i}`, zh, en }));
+  for (const lang of LANGS) {
+    const p = { ...project(lang, { info: { client: 'Mr & Mrs Lau Chee Keong and Family', location: 'Bandar Baru Seri Petaling, Kuala Lumpur' } }), floors };
+    for (const key of ['cover', 'contents', 'design-divider']) {
+      const pg = render(key, lang, {}, { project: p });
+      assertLayout(pg, `${key} ${lang} 长客户名 4 层`);
+      assert.ok(!pg.warnings.some((w) => /文字太长/.test(w)), `${key} ${lang}: ${pg.warnings.join(' / ')}`);
+      assert.ok(!texts(pg).some((el) => /…$/.test(textOf(el))), `${key} ${lang}: 有「…」`);
     }
   }
 });
@@ -340,6 +558,8 @@ test('companyFieldsB / companyImagesB：给编辑器的栏位（默认稿、改�
   assert.equal(imgs.length, 5);
   assert.deepEqual(imgs.find((i) => i.slot === 'c2'), { slot: 'c2', field: 'image.c2', label: '系列二照片', src: 'asset:x', default: PHOTOS.coll2.src, custom: true });
   assert.equal(companyImagesB('cover', { images: { photo: null } })[0].src, null);
+  // 目录新加的照片位
+  assert.deepEqual(companyImagesB('contents').map((i) => i.slot), ['photo']);
 });
 
 test('文案：没有禁用词，英文用直引号，品牌书式短句', () => {
@@ -355,55 +575,53 @@ test('文案：没有禁用词，英文用直引号，品牌书式短句', () =>
 });
 
 // ---------------------------------------------------------------------------
-// 基线：一个文字元素第一行 / 最后一行的基线（框内边距 INSET，行高取段落的固定行高）
+// C 安然的版式细节：标题系统、章节页、表格、订单周期
 // ---------------------------------------------------------------------------
 
-const lhOfEl = (el) => el.paras[0].lineHeight;
-const firstBase = (el, role) => el.y + INSET + baseOf(langOfEl(el), role, { lh: lhOfEl(el), px: sizeOfEl(el) * (96 / 72) });
-const lastBase = (el, role) => el.y + el.h - INSET - lhOfEl(el) + baseOf(langOfEl(el), role, { lh: lhOfEl(el), px: sizeOfEl(el) * (96 / 72) });
 const byField = (pg, f) => texts(pg).filter((el) => el.edit?.field === f);
-const near = (a, b, label, tol = 0.6) => assert.ok(Math.abs(a - b) <= tol, `${label}: ${a.toFixed(2)} ≠ ${b.toFixed(2)}`);
-const floorsOf = (n) => [['一楼', 'GROUND FLOOR'], ['二楼', 'FIRST FLOOR'], ['三楼', 'SECOND FLOOR'], ['四楼', 'THIRD FLOOR']]
-  .slice(0, n).map(([zh, en], i) => ({ id: `f${i}`, zh, en }));
 
-test('章节页：一句话中英并排时两种语言的最后一行共用基线（落在 984）；放不下（三、四层楼）就中文一行英文一行，照片的脚 = 大标题最后一行的基线', () => {
+test('标题系统：英文大写 Ogg 在上、中文思源宋体在下（华文版也有英文页眉）；English 版只有英文', () => {
+  for (const key of ['brand-philosophy', 'brand-awards', 'company-history', 'service-aftersales']) {
+    for (const lang of LANGS) {
+      const pg = render(key, lang);
+      const [en] = byField(pg, 'overridesEn.title');
+      const [zh] = byField(pg, 'overrides.title');
+      assert.ok(en, `${key} ${lang}: 没有英文页眉`);
+      assert.equal(en.paras[0].runs[0].font, 'ogg');
+      assert.equal(textOf(en), textOf(en).toUpperCase(), `${key} ${lang}: 英文页眉要全大写`);
+      assert.equal(colorOfEl(en), B.title);
+      if (lang === 'en') assert.ok(!zh, `${key}: English 版不该有中文标题`);
+      else {
+        assert.equal(zh.paras[0].runs[0].font, 'songSB');
+        assert.ok(zh.y >= en.y + en.h - 2 * INSET - 1, `${key} ${lang}: 中文在英文下面`);
+      }
+    }
+  }
+});
+
+test('章节页：栏目名（BRAND / 第一章　品牌）压在照片左上（有托字）；纸面上大字 → 短线 → 一句话；方案章节页三、四层楼的一句话完整', () => {
+  const pg = render('brand-divider', 'bi');
+  const [head] = byField(pg, 'overridesEn.label');
+  const [zh] = byField(pg, 'overrides.label');
+  assert.equal(textOf(head), 'BRAND');
+  assert.equal(textOf(zh), '第一章　品牌');
+  assert.equal(colorOfEl(head), B.white);
+  // English 版：栏目名下面一行小字「CHAPTER ONE」
+  assert.ok(allText(render('brand-divider', 'en')).includes('CHAPTER ONE'));
+  const floorsOf = (n) => [['一楼', 'GROUND FLOOR'], ['二楼', 'FIRST FLOOR'], ['三楼', 'SECOND FLOOR'], ['四楼', 'THIRD FLOOR']].slice(0, n).map(([z, e], i) => ({ id: `f${i}`, zh: z, en: e }));
   for (const n of [1, 2, 3, 4]) {
     const p = { ...project('bi'), floors: floorsOf(n) };
-    const pg = render('design-divider', 'bi', {}, { project: p });
-    assertLayout(pg, `design-divider ${n} 层`);
-    const [zh] = byField(pg, 'overrides.lead');
-    const [en] = byField(pg, 'overridesEn.lead');
-    assert.ok(zh && en, `${n} 层：一句话中英都要有`);
-    assert.equal(zh.valign, 'b');
-    assert.equal(en.valign, 'b');
-    if (zh.x !== en.x) {
-      // 并排：每种语言都不折行（引擎估成两行、浏览器排成一行 = 中文浮在英文上面）；
-      // 中文最后一行的行框落在 984，英文最后一行和它共用基线
-      for (const el of [zh, en]) assert.equal(el.h - 2 * INSET, lhOfEl(el) * el.paras.length, `${n} 层 并排的一句话不该折行`);
-      near(zh.y + zh.h - INSET, 984, `${n} 层 中文一句话的底`);
-      near(lastBase(en, 'body'), lastBase(zh, 'body'), `${n} 层 中英最后一行基线`);
-      near(lastBase(zh, 'body'), 984 - lhOfEl(zh) + baseOf('zh', 'body'), `${n} 层 中文最后一行基线`);
-    } else {
-      // 上下：英文在下、落在 984，中文紧贴在上面，各一行
-      assert.ok(n >= 3, `${n} 层不该上下排`);
-      near(en.y + en.h - INSET, 984, `${n} 层 英文一句话的底`);
-      near(zh.y + zh.h - INSET, en.y + INSET, `${n} 层 中文紧贴英文`);
-      assert.equal(zh.paras.length, 1);
-      assert.equal(zh.h - 2 * INSET, lhOfEl(zh), `${n} 层 中文一句话应该一行`);
-      assert.equal(en.h - 2 * INSET, lhOfEl(en), `${n} 层 英文一句话应该一行`);
-    }
-    // 大标题（Mr Lau / Muar，中英一样只排一块）：靠底排；照片的脚 = 最后一行基线
-    const titles = texts(pg).filter((el) => /^overrides(En)?\.title$/.test(el.edit?.field || ''));
-    assert.ok(titles.length >= 1);
-    for (const t of titles) assert.equal(t.valign, 'b');
-    const plate = pg.els.find((e) => e.name === 'photo:photo');
-    const foot = Math.max(...titles.map((t) => lastBase(t, 'display')));
-    near(plate.y + plate.h, Math.round(foot), `${n} 层 照片的脚`);
+    const d = render('design-divider', 'bi', {}, { project: p });
+    assertLayout(d, `design-divider ${n} 层`);
+    const [lz] = byField(d, 'overrides.lead');
+    const [le] = byField(d, 'overridesEn.lead');
+    assert.ok(lz && le, `${n} 层：一句话中英都要有`);
+    assert.ok(!/…$/.test(textOf(lz)) && !/…$/.test(textOf(le)), `${n} 层：一句话被截短`);
+    assert.ok(le.y >= lz.y + lz.h - 2 * INSET - 1, `${n} 层：英文在中文下面`);
+    // 大字（Mr Lau / Muar 纯拉丁字：Ogg 大写）在一句话上面、纸面栏里
+    const titles = texts(d).filter((el) => /^overrides(En)?\.title$/.test(el.edit?.field || ''));
+    assert.ok(titles.length >= 1 && titles.every((t) => t.paras[0].runs[0].font === 'ogg' && t.x >= 1100 && t.y < lz.y));
   }
-  // 品牌章节页（样张 p2）：照片的脚落在 904
-  const brand = render('brand-divider', 'bi');
-  const plate = brand.els.find((e) => e.name === 'photo:photo');
-  assert.equal(plate.y + plate.h, 904);
 });
 
 test('表格：地方够就按自然行数排，一格三行不截短、不提醒（发展历程 / 奖项 / 关于 / 展厅，English 版）', () => {
@@ -421,9 +639,9 @@ test('表格：地方够就按自然行数排，一格三行不截短、不提�
     assert.ok(el, `${key}.${field}`);
     assert.ok(!texts(pg).some((t) => textOf(t).includes('…')), `${key}: 有「…」`);
     assert.ok(!pg.warnings.some((w) => /文字太长放不下/.test(w)), `${key}: ${pg.warnings.join(' / ')}`);
-    assert.ok(el.h - 2 * INSET >= 2 * lhOfEl(el), `${key}.${field} 应该排成多行`);
+    assert.ok(textOf(el).split('\n').length >= 2, `${key}.${field} 应该排成多行`);
   }
-  // 理念 / 认证正文 7–8 行：地方够，不再固定截在 6 行
+  // 理念 / 认证正文 7–8 行：地方够，整段排出来
   const body = 'SAIL is the home our founder always imagined.\nThrough design that quiets the mind,\nwe hope to lead you back\nto the home you long for:\na home with a simple beauty\nand the healing power of nature,\nquiet, warm and honest.\nA place to come back to.';
   for (const key of ['brand-philosophy', 'company-certified']) {
     const pg = render(key, 'en', { overridesEn: { body } });
@@ -433,45 +651,53 @@ test('表格：地方够就按自然行数排，一格三行不截短、不提�
   }
 });
 
-test('奖项（中英版）：年份对准奖项第一行（中文）的基线，不去对英文那一行', () => {
-  const pg = render('brand-awards', 'bi');
-  for (const n of [1, 2, 3, 4]) {
-    const [year] = byField(pg, `overrides.y${n}`);
-    const [zh] = byField(pg, `overrides.a${n}`);
-    assert.ok(year && zh, `第 ${n} 行`);
-    near(firstBase(year, 'cap'), firstBase(zh, 'body'), `第 ${n} 行年份基线`);
+test('表格的行：年份 / 项名和同一行的内容顶对齐（奖项、发展历程、售后维保，中英版）', () => {
+  const pairs = [
+    ['brand-awards', (n) => [`overrides.y${n}`, `overrides.a${n}`], 4],
+    ['company-history', (n) => [`overrides.y${n}`, `overrides.e${n}`], 8],
+    ['service-aftersales', (n) => [`overrides.r${n}`, `overrides.r${n}Text`], 4],
+  ];
+  for (const [key, f, count] of pairs) {
+    const pg = render(key, 'bi');
+    for (let n = 1; n <= count; n++) {
+      const [a, b] = f(n).map((x) => byField(pg, x)[0]);
+      assert.ok(a && b, `${key} 第 ${n} 行`);
+      assert.ok(Math.abs(a.y - b.y) <= 6, `${key} 第 ${n} 行：${a.y} / ${b.y}`);
+      assert.ok(a.x < b.x, `${key} 第 ${n} 行：项名在左`);
+    }
   }
 });
 
-test('订单周期：天数只印一次（标题字级）；单位和天数同一段（共用基线）；中英版「days」在英文系列名的基线、正好在「天」下面', () => {
+test('订单周期：上半照片、下半两栏；天数只印一次（Ogg 大字）；单位和天数同一段（共用基线），中英版「天 days」排在一起', () => {
   for (const lang of LANGS) {
     const pg = render('service-cycle', lang);
     assertLayout(pg, `cycle ${lang}`);
     assert.equal(texts(pg).filter((el) => /\d+–\d+/.test(textOf(el))).length, 2, `${lang}: 天数只该出现两次（每个系列一次）`);
+    const figs = [];
     for (const n of [1, 2]) {
       const figure = n === 1 ? '60–75' : '75–90';
       const [fig] = byField(pg, `overrides.s${n}N`);
+      figs.push(fig);
       const runs = fig.paras[0].runs;
-      // 一段两种字号：天数（标题字级）+ 单位（正文字级），共用一条基线；不设 nowrap（网页里 nowrap 的段落是弹性盒，字号不同就不对基线）
       assert.equal(fig.paras.length, 1);
-      assert.ok(!fig.nowrap);
-      assert.equal(runs.slice(0, -1).map((r) => r.text).join(''), figure);
-      assert.equal(runs.at(-1).text, lang === 'en' ? 'days' : '天');
-      assert.ok(runs[0].size > runs.at(-1).size * 1.8, '天数用标题字级，单位用正文字级');
+      assert.ok(!fig.nowrap, '不设 nowrap（网页里 nowrap 的段落是弹性盒，字号不同就不对基线）');
+      const unit = lang === 'en' ? 'days' : lang === 'zh' ? '天' : '天 days';
+      const figRuns = runs.filter((r) => r.font === 'ogg');
+      const unitRuns = runs.filter((r) => r.font !== 'ogg');
+      assert.equal(figRuns.map((r) => r.text).join(''), figure);
+      assert.equal(unitRuns.map((r) => r.text).join(''), unit, `${lang}: 单位跟在天数后面、同一段（共用基线）`);
+      assert.ok(figRuns[0].size > unitRuns[0].size * 3, '天数是大字，单位是正文');
       // 天数和单位之间的空 = 天数最后一个字的字距（约 0.26em），不用空格
-      assert.ok(!runs.some((r) => /\s/.test(r.text)));
-      near(runs.at(-2).spacing * (96 / 72), 0.26 * runs[0].size * (96 / 72), '天数与单位之间的空', 1.5);
+      assert.ok(!/\s/.test(figRuns.map((r) => r.text).join('')) && !/^\s/.test(unitRuns[0].text));
+      assert.ok(Math.abs(figRuns.at(-1).spacing * PX - 0.26 * figRuns[0].size * PX) <= 1.5, '天数与单位之间的空');
+      // 中英版两个单位一样大（中英并重）
+      if (lang === 'bi') assert.equal(new Set(unitRuns.filter((r) => r.text.trim()).map((r) => r.size)).size, 1);
+      // 系列名在天数正上方（同一栏、左边对齐）
       const label = byField(pg, lang === 'en' ? `overridesEn.s${n}` : `overrides.s${n}`)[0];
-      near(firstBase(fig, 'head'), firstBase(label, 'body'), `${lang} 第 ${n} 行 天数 / 系列名基线`);
-      if (lang === 'bi') {
-        const [u] = byField(pg, `overridesEn.s${n}Unit`);
-        assert.equal(textOf(u), 'days');
-        const enLabel = byField(pg, `overridesEn.s${n}`)[0];
-        near(firstBase(u, 'body'), firstBase(enLabel, 'body'), `第 ${n} 行「days」与英文系列名基线`);
-        // 「days」的左边 = 「天」的左边（天数那一段里单位之前的宽度）
-        near(u.x + INSET, fig.x + INSET + lineWidth(runs.slice(0, -1)), `第 ${n} 行「days」在「天」正下方`, 1);
-      }
+      assert.ok(Math.abs(label.x - fig.x) <= 1 && label.y + label.h <= fig.y + INSET + 1, `${lang} 第 ${n} 栏系列名在天数上面`);
+      assert.ok(fig.y >= 520, '天数在照片下面的纸面上');
     }
+    assert.ok(figs[1].x > 1000 && Math.abs(figs[0].y - figs[1].y) < 1, `${lang}: 两栏并排`);
   }
 });
 
@@ -495,15 +721,15 @@ test('自定义的中文方案名没有英文：English 版先显示中文并提
   const en = render('cover', 'en', {}, { project: custom('en') });
   const all = texts(en).map(textOf);
   assert.ok(all.includes('刘府全屋定制方案（第二稿）'));
-  assert.ok(!all.includes('Whole-House Design Proposal'), '不该配上通用的英文方案名');
+  assert.ok(!/whole-house design proposal/i.test(all.join('\n')), '不该配上通用的英文方案名');
   assert.ok(en.tr.misses.some((m) => m.zh === '刘府全屋定制方案（第二稿）'));
   const bi = render('cover', 'bi', {}, { project: custom('bi') });
-  assert.ok(!texts(bi).map(textOf).includes('Whole-House Design Proposal'));
+  assert.ok(!/whole-house design proposal/i.test(allText(bi)));
   assertLayout(bi, 'cover 自定义方案名');
   const sub = companyFieldsB('cover', {}, custom('bi')).find((x) => x.field === 'subtitle');
   assert.equal(sub.en, '');
   const tl = render('cover', 'bi', {}, { project: custom('bi', { '刘府全屋定制方案（第二稿）': 'The Lau Residence, Second Draft' }) });
-  assert.ok(texts(tl).map(textOf).includes('The Lau Residence, Second Draft'));
+  assert.ok(flat(allText(tl)).includes('THE LAU RESIDENCE, SECOND DRAFT'));
   assert.equal(companyFieldsB('cover', {}, custom('bi', { '刘府全屋定制方案（第二稿）': 'The Lau Residence, Second Draft' })).find((x) => x.field === 'subtitle').en, 'The Lau Residence, Second Draft');
 });
 
@@ -522,27 +748,7 @@ test('客户名 / 地点 / 方案名只有中文：只在显示它们的页上�
   // 有翻译就不记
   const tl = render('cover', 'en', {}, { project: { ...cn('en'), translations: { 刘先生: 'Mr Lau', 麻坡: 'Muar', 刘府全屋定制方案: 'The Lau Residence' } } });
   assert.deepEqual(tl.tr.misses, []);
-  assert.ok(texts(tl).map(textOf).includes('Mr Lau\nMuar'));
-});
-
-test('落在底线上的字靠底排（valign b）：封面客户名、章节页、理念正文与结语、认证正文', () => {
-  const check = (key, lang, fields, slide = {}, opts = {}) => {
-    const pg = render(key, lang, slide, opts);
-    for (const f of fields) {
-      const els = texts(pg).filter((el) => (el.edit?.field || '').replace(/^overrides(En)?\./, '') === f);
-      assert.ok(els.length, `${key}.${f}`);
-      for (const el of els) assert.equal(el.valign, 'b', `${key}.${f} ${lang}`);
-    }
-  };
-  for (const lang of LANGS) {
-    check('brand-divider', lang, ['title', 'lead']);
-    check('brand-philosophy', lang, ['body', 'closing']);
-    check('company-certified', lang, ['body']);
-  }
-  // 封面：客户名（并排或放不下时上下排）都靠底
-  for (const lang of LANGS) check('cover', lang, ['name']);
-  check('cover', 'bi', ['name'], { overrides: { name: '麻坡 · 刘先生与刘太太的家\n全屋定制' }, overridesEn: { name: 'The Lau Family Residence\nMuar, Johor, Malaysia' } });
-  check('cover', 'bi', ['name'], { overrides: { name: '刘府\n麻坡' }, overridesEn: { name: 'Lau Residence,\nMuar' } });
+  assert.ok(texts(tl).map(textOf).includes('MR LAU'));
 });
 
 test('未知的页：不报错，返回提醒', () => {
@@ -580,13 +786,13 @@ test('只改了中文：「5 年」→ 5 years、日期、纯英文（Mr & Mrs L
   assert.ok(!render('service-aftersales', 'en', { overridesEn: { r3Text: '5 years', r4Text: '10 years' } }).warnings.some((w) => /质保年数/.test(w)));
   // 封面日期：改了中文日期，英文跟着
   const date = render('cover', 'en', { overrides: { date: '二〇二六年九月' } });
-  assert.ok(texts(date).map(textOf).includes('September 2026'));
+  assert.ok(texts(date).map(textOf).includes('SEPTEMBER 2026'));
   assert.ok(!date.warnings.some((w) => /改过的中文/.test(w)));
   // 客户名改成纯英文：中英版只印一次、English 版用新名字，不提醒
   const name = render('cover', 'bi', { overrides: { name: 'Mr & Mrs Lau\nMuar' } });
-  assert.equal(texts(name).filter((el) => /Lau/.test(textOf(el))).length, 1);
+  assert.equal(texts(name).filter((el) => /^MR & MRS LAU$/.test(textOf(el))).length, 1);
   assert.ok(!name.warnings.some((w) => /改过的中文/.test(w)));
-  assert.ok(texts(render('cover', 'en', { overrides: { name: 'Mr & Mrs Lau\nMuar' } })).map(textOf).includes('Mr & Mrs Lau\nMuar'));
+  assert.ok(texts(render('cover', 'en', { overrides: { name: 'Mr & Mrs Lau\nMuar' } })).map(textOf).includes('MR & MRS LAU'));
   // 栏位给编辑器：英文是自动跟着的
   const f = companyFieldsB('service-aftersales', { overrides: { r3Text: '5 年' } }, project('bi')).find((x) => x.field === 'r3Text');
   assert.equal(f.en, '5 years');
@@ -594,7 +800,7 @@ test('只改了中文：「5 年」→ 5 years、日期、纯英文（Mr & Mrs L
 });
 
 test('截短提醒说的是栏位名（中文 / 英文），一键修复用 companyFieldByLabel 找到那一栏；截短的字不再悄悄截掉', () => {
-  const pg = render('contents', 'bi', { overrides: { ch1Line: '自然栖居，生活回归，再加上很长很长很长很长很长很长很长很长很长很长的说明' } });
+  const pg = render('contents', 'bi', { overrides: { ch1Line: `自然栖居，生活回归，${'再加上很长很长的说明'.repeat(8)}` } });
   const w = pg.warnings.find((x) => /^文字太长放不下/.test(x));
   assert.match(w, /^文字太长放不下：「说明 · 品牌」已截短/);
   assert.equal(companyFieldByLabel('contents', '说明 · 品牌'), 'overrides.ch1Line');
@@ -603,7 +809,7 @@ test('截短提醒说的是栏位名（中文 / 英文），一键修复用 comp
   assert.ok(!pg.els.some((e) => '_cut' in e), '内部记号不留在元素上');
   const en = render('brand-story', 'en', { overridesEn: { body: 'a very long sentence, '.repeat(60) } });
   assert.ok(en.warnings.some((x) => /「正文（英文）」已截短/.test(x)), en.warnings.join(' / '));
-  // 以前不提醒的：年份太长被截成一行
+  // 年份太长被截成一行
   const year = render('company-history', 'zh', { overrides: { y1: '2015 年至 2016 年之间的某一个时间点' } });
   assert.ok(year.warnings.some((x) => /「年份一」已截短/.test(x)), year.warnings.join(' / '));
 });
@@ -641,20 +847,116 @@ test('章节：隐藏的章节不进目录、编号重排；章节页的「第�
   assert.ok(t.includes('公司') && t.includes('Service') && !t.includes('品牌'));
   assertLayout(contents, 'contents 3 章');
   const div = texts(renderCompanyB('service-divider', p.slides[6], ctx)).map(textOf);
-  assert.ok(div.includes('第三章　服务') && div.includes('Chapter Three — Service'));
+  assert.ok(div.includes('第三章　服务') && div.includes('SERVICE'));
+  const en = texts(renderCompanyB('service-divider', p.slides[6], { ...ctx, lang: 'en' })).map(textOf);
+  assert.ok(en.includes('CHAPTER THREE') && en.includes('SERVICE'));
   const custom = texts(renderCompanyB('service-divider', { ...p.slides[6], overrides: { label: '第四章　服务' } }, ctx)).map(textOf);
   assert.ok(custom.includes('第四章　服务'), '设计师改过的标签照用');
   // 单独排一页（没有整套）= 四章都在
   assert.ok(texts(render('brand-divider', 'zh')).map(textOf).includes('第一章　品牌'));
 });
 
-test('封面客户名很长：大字均衡断行，不留落单的一个词（与方案封面一致）', () => {
+test('封面客户名很长：大字缩一档、均衡断行，不留落单的一个词；地点并进「地点 · 日期」那一行', () => {
   const long = project('en', { info: { client: 'Mr & Mrs Lau Chee Keong and Family', location: 'Bandar Baru Seri Petaling, Kuala Lumpur' } });
   const pg = render('cover', 'en', {}, { project: long });
-  const name = texts(pg).find((el) => /Lau/.test(textOf(el)));
+  const name = texts(pg).find((el) => /LAU/.test(textOf(el)));
   const lines = textOf(name).split('\n');
-  assert.ok(lines.length >= 3, textOf(name));
+  assert.ok(lines.length >= 2 && lines.length <= 3, textOf(name));
+  assert.ok(sizeOfEl(name) < 66, '长名字缩一档');
   for (const line of lines) assert.ok(line.trim().split(/\s+/).length >= 2, `落单的一个词：${JSON.stringify(lines)}`);
-  assert.ok(lines.some((l) => /Petaling,$/.test(l)), '地址在逗号处断开');
+  assert.ok(flat(allText(pg)).includes('BANDAR BARU SERI PETALING, KUALA LUMPUR'), '地点完整');
   assertLayout(pg, 'cover 长英文名');
+});
+
+test('华文版：只改了中文标题、英文没跟上 → 英文大写页眉先不印（不印和中文对不上的英文），提醒补英文；补上了照常印', () => {
+  for (const key of Object.keys(ZH_EN_HEADER)) {
+    for (const field of ZH_EN_HEADER[key]) {
+      const pg = render(key, 'zh', { overrides: { [field]: '我们的家' } });
+      assert.equal(byField(pg, `overridesEn.${field}`).length, 0, `${key}.${field}: 过期的英文页眉还在`);
+      assert.ok(texts(pg).some((el) => /我们的家/.test(textOf(el))), `${key}.${field}: 中文没印`);
+      const label = COMPANY_PAGES_B[key].fields[field].label;
+      const w = pg.warnings.find((x) => /^改过的中文还没有对应的英文/.test(x));
+      assert.ok(w && w.includes(`「${label}」`), `${key}.${field}: 没提醒补英文 ${JSON.stringify(pg.warnings)}`);
+      assert.equal(fixForWarning(w, { key }).field, `overridesEn.${field}`, '一键修复跳到英文框');
+      assert.ok(companyFieldsB(key, { overrides: { [field]: '我们的家' } }, project('zh')).find((f) => f.field === field).enHeader, '华文版给这一栏英文框');
+      // 补上英文：照常印，不提醒
+      const ok = render(key, 'zh', { overrides: { [field]: '我们的家' }, overridesEn: { [field]: key.endsWith('divider') ? 'Chapter One — Home' : 'Our Home' } });
+      assert.ok(byField(ok, `overridesEn.${field}`).length > 0, `${key}.${field}: 补了英文却没印`);
+      assert.ok(!ok.warnings.some((x) => /对应的英文/.test(x)), key);
+    }
+  }
+  // 默认稿 / 没改：英文页眉照印，不提醒
+  const def = render('brand-philosophy', 'zh');
+  assert.ok(byField(def, 'overridesEn.title').length > 0);
+  assert.deepEqual(def.warnings, []);
+});
+
+test('设计师改过的正文照原样分段（空行、落款都留着）；只有默认稿按栏宽重排', () => {
+  const body = '溪岸创立于成都。\n\n好的家具，经得起时间。\n\n——溪岸';
+  const bodyEn = 'SAIL began in Chengdu.\n\nGood furniture lasts.\n\n— SAIL';
+  for (const [key, field] of [['brand-philosophy', 'body'], ['brand-story', 'body'], ['company-certified', 'body'], ['company-about', 'body'], ['company-showrooms', 'lead']]) {
+    // 中英版的栏放不下中英各 5 行（会截短并提醒）：中英版只看字少的认证页
+    for (const lang of key === 'company-certified' ? LANGS : ['zh', 'en']) {
+      const pg = render(key, lang, { overrides: { [field]: body }, overridesEn: { [field]: bodyEn } });
+      const zh = byField(pg, `overrides.${field}`)[0];
+      const en = byField(pg, `overridesEn.${field}`)[0];
+      assert.ok(!pg.warnings.some((x) => /截短/.test(x)), `${key} ${lang}: ${pg.warnings}`);
+      if (lang !== 'en') {
+        assert.ok(zh.paras.length >= 4, `${key} ${lang}: 中文的分段被并掉了（${zh.paras.length} 段）`);
+        assert.ok(zh.paras.some((p) => p.runs.every((r) => r.text === '')), `${key} ${lang}: 空行没了`);
+        assert.equal(textOf(zh).split('\n').at(-1), '——溪岸', '落款单独一行');
+      }
+      if (lang !== 'zh') {
+        assert.ok(en.paras.length >= 4, `${key} ${lang}: 英文的分段被并掉了`);
+        assert.equal(textOf(en).split('\n').at(-1), '— SAIL');
+      }
+    }
+  }
+  // 默认稿：按旧版式栏宽断的手动换行照旧重排（不留落单的词）
+  const about = render('company-about', 'en');
+  assert.equal(byField(about, 'overridesEn.body')[0].paras.length, 1);
+});
+
+test('品牌分开：瑞吉欧的页换上了本案的图（效果图 / 楼层图 / Material Board）→ 提醒，一键修复跳到那张照片；上传的瑞吉欧照片不提醒', () => {
+  const p = project('zh');
+  p.slides = [{ id: 'v1', kind: 'view', image: 'asset:render-1', floorId: null, materials: [], notes: [] }];
+  p.floors = [{ id: 'f1', zh: '一楼', image: 'asset:floor-1' }];
+  p.cover = { image: 'asset:board' };
+  for (const key of ['company-divider', 'company-about', 'company-history', 'company-showrooms', 'company-certified']) {
+    for (const src of ['asset:render-1', 'asset:floor-1', 'asset:board']) {
+      const pg = render(key, 'zh', { images: { photo: src } }, { project: p });
+      const w = pg.warnings.find((x) => /^瑞吉欧页面只用瑞吉欧的照片/.test(x));
+      assert.ok(w, `${key} ${src}: 没提醒`);
+      const label = COMPANY_PAGES_B[key].images.photo.label;
+      assert.ok(w.includes(`「${label}」`));
+      assert.deepEqual(fixForWarning(w, { key }), { id: 'pickImage', label: '换回瑞吉欧的照片', field: 'image.photo' });
+    }
+    assert.ok(!render(key, 'zh', { images: { photo: 'asset:riccione-upload' } }, { project: p }).warnings.some((x) => /瑞吉欧页面只用/.test(x)), `${key}: 上传的瑞吉欧照片不提醒`);
+  }
+  // 溪岸的页用本案的图不算（只管瑞吉欧的页）
+  assert.ok(!render('brand-story', 'zh', { images: { photo: 'asset:render-1' } }, { project: p }).warnings.some((x) => /瑞吉欧页面只用/.test(x)));
+});
+
+test('公司章节页：English / 中英的大标题是品牌名 → 用白色 RICCIONE 商标图（不用 Ogg 排文字字标），右上角不再放小商标；华文版照旧「瑞吉欧」大字 + 右上商标', () => {
+  for (const lang of LANGS) {
+    const pg = render('company-divider', lang);
+    const marks = pg.els.filter((e) => e.t === 'img' && /riccione-logo/.test(e.src));
+    assert.equal(marks.length, 1, `${lang}: 一页只出现一次商标`);
+    assert.ok(!texts(pg).some((el) => textOf(el) === 'RICCIONE' && el.name !== 'signature'), `${lang}: 不该用 Ogg 排「RICCIONE」`);
+    if (lang === 'zh') {
+      assert.ok(marks[0].x > 1400 && marks[0].y < 200, '华文版：右上角商标');
+      assert.ok(texts(pg).some((el) => textOf(el) === '瑞吉欧'));
+    } else {
+      const m = marks[0];
+      assert.deepEqual([m.x, m.w, m.src], [120, 520, '/template/b/riccione-logo-white.png'], `${lang}: 大标题位置的白色商标`);
+      assert.equal(m.edit?.field, 'overridesEn.title', '点商标落到大标题的英文栏');
+      if (lang === 'bi') {
+        const zh = texts(pg).find((el) => textOf(el) === '瑞吉欧');
+        assert.ok(zh && zh.y < m.y, '中英：「瑞吉欧」在上、商标在下');
+      }
+    }
+  }
+  // 设计师把英文大标题改成别的字：照常用文字排
+  const custom = render('company-divider', 'en', { overridesEn: { title: 'Riccione Reka' } });
+  assert.ok(texts(custom).some((el) => /RICCIONE REKA/.test(flat(textOf(el)))));
 });

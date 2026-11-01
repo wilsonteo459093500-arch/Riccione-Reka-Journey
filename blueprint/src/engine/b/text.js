@@ -1,4 +1,6 @@
-// B 格物 · 均衡断行（方案页 design.js、公司页 company.js 共用）
+// 均衡断行（B 格物时写的，用 kit.js 后半的旧字级量字宽）
+//   C 安然的页面不用它：kit.wrapText(…, { balance: true }) 有自己的均衡断行（同样的断点规则，用 C 的字级）。
+//   现在只有 lib/project.js 升级旧项目时用 balanceText 给旧稿分行，design.js 转出 balanceLine（旧测试在用）。
 //
 // 折成 2–3 行时各行长短接近，断在好的地方：
 //   最好 = 标点后（，。、；：— 以及「·」—— 行尾的「·」会去掉）；
