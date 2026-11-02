@@ -1,0 +1,518 @@
+{
+ "name": "condo",
+ "pxPerM": 200,
+ "origin": [
+  2.2,
+  2.2
+ ],
+ "walls": [
+  {
+   "axis": "h",
+   "c": 0.0,
+   "a": 0.0,
+   "b": 11.0,
+   "kind": "ext",
+   "ext": true,
+   "t": 0.2
+  },
+  {
+   "axis": "h",
+   "c": 2.2,
+   "a": 5.0,
+   "b": 6.6,
+   "kind": "int",
+   "ext": false,
+   "t": 0.1
+  },
+  {
+   "axis": "h",
+   "c": 3.2,
+   "a": 6.6,
+   "b": 11.0,
+   "kind": "int",
+   "ext": false,
+   "t": 0.1
+  },
+  {
+   "axis": "h",
+   "c": 6.0,
+   "a": 5.0,
+   "b": 11.0,
+   "kind": "int",
+   "ext": false,
+   "t": 0.1
+  },
+  {
+   "axis": "h",
+   "c": 9.4,
+   "a": 0.0,
+   "b": 11.0,
+   "kind": "ext",
+   "ext": true,
+   "t": 0.2
+  },
+  {
+   "axis": "h",
+   "c": 10.8,
+   "a": 0.0,
+   "b": 5.0,
+   "kind": "fence",
+   "ext": true,
+   "t": 0.1
+  },
+  {
+   "axis": "v",
+   "c": 0.0,
+   "a": 0.0,
+   "b": 9.4,
+   "kind": "ext",
+   "ext": true,
+   "t": 0.2
+  },
+  {
+   "axis": "v",
+   "c": 0.0,
+   "a": 9.4,
+   "b": 10.8,
+   "kind": "fence",
+   "ext": true,
+   "t": 0.1
+  },
+  {
+   "axis": "v",
+   "c": 2.8,
+   "a": 0.0,
+   "b": 2.4,
+   "kind": "int",
+   "ext": false,
+   "t": 0.1
+  },
+  {
+   "axis": "v",
+   "c": 5.0,
+   "a": 0.0,
+   "b": 2.2,
+   "kind": "int",
+   "ext": false,
+   "t": 0.1
+  },
+  {
+   "axis": "v",
+   "c": 5.0,
+   "a": 6.0,
+   "b": 9.4,
+   "kind": "int",
+   "ext": false,
+   "t": 0.1
+  },
+  {
+   "axis": "v",
+   "c": 5.0,
+   "a": 9.4,
+   "b": 10.8,
+   "kind": "fence",
+   "ext": true,
+   "t": 0.1
+  },
+  {
+   "axis": "v",
+   "c": 6.6,
+   "a": 0.0,
+   "b": 6.0,
+   "kind": "int",
+   "ext": false,
+   "t": 0.1
+  },
+  {
+   "axis": "v",
+   "c": 9.0,
+   "a": 6.0,
+   "b": 9.4,
+   "kind": "int",
+   "ext": false,
+   "t": 0.1
+  },
+  {
+   "axis": "v",
+   "c": 11.0,
+   "a": 0.0,
+   "b": 9.4,
+   "kind": "ext",
+   "ext": true,
+   "t": 0.2
+  }
+ ],
+ "openings": [
+  {
+   "id": "d-main",
+   "kind": "door",
+   "axis": "h",
+   "c": 0,
+   "a": 3.5,
+   "b": 4.5
+  },
+  {
+   "id": "d-b2b",
+   "kind": "door",
+   "axis": "h",
+   "c": 2.2,
+   "a": 5.3,
+   "b": 6.1
+  },
+  {
+   "id": "d-b2",
+   "kind": "door",
+   "axis": "v",
+   "c": 6.6,
+   "a": 2.3,
+   "b": 3.1
+  },
+  {
+   "id": "d-b3",
+   "kind": "door",
+   "axis": "v",
+   "c": 6.6,
+   "a": 4.6,
+   "b": 5.5
+  },
+  {
+   "id": "d-mb",
+   "kind": "door",
+   "axis": "h",
+   "c": 6.0,
+   "a": 5.5,
+   "b": 6.4
+  },
+  {
+   "id": "d-mbt",
+   "kind": "door",
+   "axis": "v",
+   "c": 9.0,
+   "a": 6.4,
+   "b": 7.2
+  },
+  {
+   "id": "s-liv",
+   "kind": "slider",
+   "axis": "h",
+   "c": 9.4,
+   "a": 0.4,
+   "b": 4.6
+  },
+  {
+   "id": "w-k",
+   "kind": "window",
+   "axis": "v",
+   "c": 0,
+   "a": 0.5,
+   "b": 1.9
+  },
+  {
+   "id": "w-b2b",
+   "kind": "window",
+   "axis": "h",
+   "c": 0,
+   "a": 5.4,
+   "b": 6.2
+  },
+  {
+   "id": "w-b2",
+   "kind": "window",
+   "axis": "h",
+   "c": 0,
+   "a": 7.6,
+   "b": 10.0
+  },
+  {
+   "id": "w-b3",
+   "kind": "window",
+   "axis": "v",
+   "c": 11.0,
+   "a": 3.8,
+   "b": 5.4
+  },
+  {
+   "id": "w-mb",
+   "kind": "window",
+   "axis": "h",
+   "c": 9.4,
+   "a": 5.8,
+   "b": 8.2
+  },
+  {
+   "id": "w-mbt",
+   "kind": "window",
+   "axis": "h",
+   "c": 9.4,
+   "a": 9.6,
+   "b": 10.4
+  },
+  {
+   "id": "w-din",
+   "kind": "window",
+   "axis": "v",
+   "c": 0,
+   "a": 3.0,
+   "b": 4.6
+  },
+  {
+   "id": "w-liv",
+   "kind": "window",
+   "axis": "v",
+   "c": 0,
+   "a": 6.0,
+   "b": 8.4
+  }
+ ],
+ "rooms": [
+  {
+   "id": "k",
+   "type": "kitchen",
+   "label": "KITCHEN",
+   "x": 0,
+   "y": 0,
+   "w": 2.8,
+   "d": 2.4
+  },
+  {
+   "id": "foy",
+   "type": "foyer",
+   "label": "FOYER",
+   "x": 2.8,
+   "y": 0,
+   "w": 2.2,
+   "d": 2.4
+  },
+  {
+   "id": "din",
+   "type": "dining",
+   "label": "DINING",
+   "x": 0,
+   "y": 2.4,
+   "w": 5.0,
+   "d": 2.8
+  },
+  {
+   "id": "liv",
+   "type": "living",
+   "label": "LIVING",
+   "x": 0,
+   "y": 5.2,
+   "w": 5.0,
+   "d": 4.2
+  },
+  {
+   "id": "bal",
+   "type": "balcony",
+   "label": "BALCONY",
+   "x": 0,
+   "y": 9.4,
+   "w": 5.0,
+   "d": 1.4
+  },
+  {
+   "id": "b2b",
+   "type": "bath",
+   "label": "BATH 2",
+   "x": 5.0,
+   "y": 0,
+   "w": 1.6,
+   "d": 2.2
+  },
+  {
+   "id": "b2",
+   "type": "bedroom",
+   "label": "BEDROOM 2",
+   "x": 6.6,
+   "y": 0,
+   "w": 4.4,
+   "d": 3.2
+  },
+  {
+   "id": "cor",
+   "type": "corridor",
+   "label": "",
+   "x": 5.0,
+   "y": 2.2,
+   "w": 1.6,
+   "d": 3.8
+  },
+  {
+   "id": "b3",
+   "type": "bedroom",
+   "label": "BEDROOM 3",
+   "x": 6.6,
+   "y": 3.2,
+   "w": 4.4,
+   "d": 2.8
+  },
+  {
+   "id": "mb",
+   "type": "master",
+   "label": "MASTER BEDROOM",
+   "x": 5.0,
+   "y": 6.0,
+   "w": 4.0,
+   "d": 3.4
+  },
+  {
+   "id": "mbt",
+   "type": "bath",
+   "label": "M. BATH",
+   "x": 9.0,
+   "y": 6.0,
+   "w": 2.0,
+   "d": 3.4
+  }
+ ],
+ "faces": [
+  {
+   "rooms": [
+    "k",
+    "foy",
+    "din",
+    "liv",
+    "cor"
+   ],
+   "rects": [
+    [
+     0,
+     0,
+     2.8,
+     2.4
+    ],
+    [
+     2.8,
+     0,
+     2.2,
+     2.4
+    ],
+    [
+     0,
+     2.4,
+     5.0,
+     2.8
+    ],
+    [
+     0,
+     5.2,
+     5.0,
+     4.2
+    ],
+    [
+     5.0,
+     2.2,
+     1.6,
+     3.8
+    ]
+   ],
+   "stairs": false,
+   "area": 53.08,
+   "open": true
+  },
+  {
+   "rooms": [
+    "bal"
+   ],
+   "rects": [
+    [
+     0,
+     9.4,
+     5.0,
+     1.4
+    ]
+   ],
+   "stairs": false,
+   "area": 7.0,
+   "open": false
+  },
+  {
+   "rooms": [
+    "b2b"
+   ],
+   "rects": [
+    [
+     5.0,
+     0,
+     1.6,
+     2.2
+    ]
+   ],
+   "stairs": false,
+   "area": 3.52,
+   "open": false
+  },
+  {
+   "rooms": [
+    "b2"
+   ],
+   "rects": [
+    [
+     6.6,
+     0,
+     4.4,
+     3.2
+    ]
+   ],
+   "stairs": false,
+   "area": 14.08,
+   "open": false
+  },
+  {
+   "rooms": [
+    "b3"
+   ],
+   "rects": [
+    [
+     6.6,
+     3.2,
+     4.4,
+     2.8
+    ]
+   ],
+   "stairs": false,
+   "area": 12.32,
+   "open": false
+  },
+  {
+   "rooms": [
+    "mb"
+   ],
+   "rects": [
+    [
+     5.0,
+     6.0,
+     4.0,
+     3.4
+    ]
+   ],
+   "stairs": false,
+   "area": 13.6,
+   "open": false
+  },
+  {
+   "rooms": [
+    "mbt"
+   ],
+   "rects": [
+    [
+     9.0,
+     6.0,
+     2.0,
+     3.4
+    ]
+   ],
+   "stairs": false,
+   "area": 6.8,
+   "open": false
+  }
+ ],
+ "stairs": [],
+ "openPlan": [
+  "k",
+  "foy",
+  "din",
+  "liv",
+  "cor"
+ ]
+}

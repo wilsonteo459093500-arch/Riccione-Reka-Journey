@@ -1,0 +1,1515 @@
+{
+ "from": "38b6c25",
+ "profiles": [
+  {
+   "id": "A",
+   "link": "zjVTBihtHEP2VUL72BHlWu9L2bb0W5JIQ8EIgyx5KPSVNMz3ds909GstCYBJj7LAmJhAChuCw7MWXkKwhOMKfY0nrk38hlKQY5eCgW830q9evXlX1BEYgbws4H4FMBegMJJz07p0kRyBAecJI2VEECWkrPUhut5K0fZKmcr8l0_bne_vtb0GAxZJAwvJqdnPx_fz3y3ez2WecXhkckw8gITjjQEDuAlMxs8s45Zsvv_oCBOB9CiAnEKmsQB4eCMjIBh3HIDupgEj3Y-0J5GFHQIjO45BAdg-nAnKdZWQ51-hhHkEedASo2o8IZGdPQHBKowHZ3p8KMHpADFXOFSAhJxyNQUCTO5CnUOgswNl064YJYFUZjVaxvNMzAf3aFON16DFqBzJtTQU0OuQryMdcAcoQWhAbWgGhMrVnVi4fR46dPoUSfd8QnzPH-rDESF6jWVkyMM55kOvyEocFC0bDh9CgL5Mm15HvGxCuTYKANkuMLqnBkLMS7GtL0Y85hdEbGuVqG8lHV4GE8xp9fJBEjyPyUVumjNow3wMyRg_p4011lTsTIq0IjbbEZfYpy7Qdbv3x9ZBFOoxJYXVk3c5ljfPsfShdQdlGCCpFNq7mBIeU_Eugah9R27DFWVLkbrJFkZK-QVUAd6zBatMh7vG9zecEgnE8cFuVChh4V4KE_1bqPmGBJwzOgoT51av51avlk8fL73768PYFx4_-Wr58Pf_xj_e_Xi4e_ry4_nvx5tnizS83T68_vL1YPLtcPHk-f35x88OfN0-vly8evZvN3j_8bfny9WrkxitZrmDPpmcCzmutiq-1KjZ1VGgoRuIZudXr9dp390DArePuUdpJObrbPb5zp81R9_iw211F-732wV7Kw4Q2NKvNm0CFeh14x3VPoNKKO4BsZwCZpq2WAEMDNgr7KmNDecK2sOr_sNHVKt-VeFgTPwG7gYMb4K4q7Hr9dwNvlmo3FYWOKl-_MbvAI_JC7yikISrIZlvw_qfh0-n0Hw",
+   "materials": {
+    "floor": "light-oak",
+    "walls": "warm-white",
+    "feature": "sand-limewash",
+    "cabinetry": "white-oak",
+    "countertop": "quartz-travertine",
+    "tile": "zellige-white",
+    "upholstery": "linen",
+    "bedding": "linen",
+    "rugs": "oat-knit",
+    "woodwork": "smoked-oak",
+    "accents": "sage-linen",
+    "curtains": "linen",
+    "metal": "matte-black"
+   },
+   "profileMaterials": {
+    "floor": "light-oak",
+    "walls": "warm-white",
+    "feature": "sand-limewash",
+    "cabinetry": "white-oak",
+    "countertop": "quartz-travertine",
+    "tile": "zellige-white",
+    "upholstery": "linen",
+    "bedding": "linen",
+    "rugs": "oat-knit",
+    "woodwork": "smoked-oak",
+    "accents": "sage-linen",
+    "curtains": "linen",
+    "metal": "matte-black"
+   }
+  },
+  {
+   "id": "B",
+   "link": "zjZNNbtswEIWvUrxs6cKR7SbmLj_OrkDRZFUjixE1lghRpEJRVgzDq257iqLrHiDnadEeo6BkuH-A4d1I_ObhzRtyizXkucDTGjIR0BkkHhb3D6NrCCjPFDi7CpBIxsmb0fl4lEwfkkTOxjKZvp5Ozj9AwFLFkPjx5eXnp4_fv37-9vLyKrbXhjbsG0g0zjgIFK6JUlHZZbHl5u37WwjQMzeQWwSuasiJQMa20WEDeTEXCPwcWs-9vyY4TzlDzncChc4ytrHR6LwIkPNLAdX6NUPOBBqnNBnI-WQnYPSKI6mcKyH3DQJd4SCXj7s_lLegujaarIqmlo8CaWvKzVB6CtpBTmc7gU43RY8McwnUhQtxzM75Eo8CTW1aHyXjxLR2MdxllAhkI65tj0WdgakosNdk-jBWxjkPiUor7xRXbHvDZOIxcjKG_WbUFTowBFZMQ0jg1NnNyFEZY6ZUWw5-A4nUkCpHFYWeV661gX1wNSQUeU-eIBC0iRq5582orwXaunCmCdyL9AedcwYCKWeZtnnsdyE4e_Di27z5h-2cy_pY_vZHSrENzcGdYQoFe_RrDKRt8796xSFuFXlrhzIur6N6v6y46Pvfn0-tVuU7rcr9d02GYwJyibO78WKxmEPgLLlLLpJJrBbzxcUiidVsNruc3cRqfnt1d30TV0W26fobvUVNeii8c1X_Q6s4XhotNpBJMh4LGF7FG0-pyqLPuL0_2OwYG1yrilOF85bj0zrA6hjcuBWdKmyHl3WA6Ri8v7IHmI_BpQ6qGJ7vKaYDpYZPza5jLtlmp_ne7Xa_AA",
+   "materials": {
+    "floor": "microcement",
+    "walls": "gallery-white",
+    "feature": "ebony-oak",
+    "cabinetry": "black-matte",
+    "countertop": "carrara",
+    "tile": "grey-tile",
+    "upholstery": "grey-wool",
+    "bedding": "cotton-white",
+    "rugs": "grey-wool",
+    "woodwork": "ebony-oak",
+    "accents": "black-leather",
+    "curtains": "cotton-white",
+    "metal": "gunmetal"
+   },
+   "profileMaterials": {
+    "floor": "microcement",
+    "walls": "gallery-white",
+    "feature": "ebony-oak",
+    "cabinetry": "black-matte",
+    "countertop": "carrara",
+    "tile": "grey-tile",
+    "upholstery": "grey-wool",
+    "bedding": "cotton-white",
+    "rugs": "grey-wool",
+    "woodwork": "ebony-oak",
+    "accents": "black-leather",
+    "curtains": "cotton-white",
+    "metal": "gunmetal"
+   }
+  },
+  {
+   "id": "C",
+   "link": "zjVTBihtHEP2V8HxtBXlWllZ9W--KXEIIeCGQZQ-lnpammdb0bHePxlohMMEEO9jEGEzAEGyML74lawiO8edkpfXJvxBqJAclgUW3mplXj_deVc0cU8ibAmdTyETApJA4Htw5bh1CQHlNUacHERJJO-m2brZbSec4SeSttkw6X3a6e99DoKCJhsRXlQ7xC-4rLc20D5AIzjoIZC4wB1O6lLHfff3NEQTorg6Qc0Q9KSH7bYFUF8HEWSMm6rux8hqy3xUI0Xkaa8i9hUBm0lQX3GnNOIuQvZ6AqvxUQ_b2BIJThixkf38hYM1IM1Q5l0Mi0zSdQaDOHOQJFEWcLrb456CytIYKxdpOTgWGlc1n69JTNA6y014I1CZkDWRtTyA3UWW64AB0DDgVCKWtPJOydZo6jvcEY69ZwNCSyiGQks9r51JuYM41ekJRe0O2yWdknfOQa7ctR9xWk-WPqMlPWnVmoobASNM6MkTtPSkXI3HqNDSFjn72Hw7lqiJqH10JibOKfDz_hyoa-2-eVvNGoCozZ0PUG7aicTzUaWqK8dYbX41Znq9CbNXOWZbsXFo7nze0jQBSShexwVGMxH2q8pFMEbaoJjryNDH0FAJ4WDWVm-HwdO9sHucI1vGibfkSGHk3-Wzk_JzXMbr_2_Wagisgcfn6zeXrN6sHP65-ePrpw3Ou7_-xevH28uffPv76annv2fLiz-W7x8t3v1w9vPj04dHy8avlgyeXTx5d_fT71cOL1fP7f71___Hey9WLt82WzRo9Lud0FqcCZ5VR-bdG5RsDJVkdo-bFuDEYDDpHexC4cdjtH3bbXN3u9ZJbTdU96h50DrjaHxwk-31eGCpC3ZzaHCWZdeEdG56jNIqjHnGCATJJ2m0Bq0ecEA1VyknyFm1hh9dho6tUtgWm68Bj_hvsyhzciLaw6jpssb743cCbw9lN8uf73TUOGlq9q5Ba61wX6W5SFovF3w",
+   "materials": {
+    "floor": "light-oak",
+    "walls": "warm-white",
+    "feature": "terracotta",
+    "cabinetry": "light-oak",
+    "countertop": "quartz-white",
+    "tile": "terracotta-tile",
+    "upholstery": "linen",
+    "bedding": "linen",
+    "rugs": "rust-wool",
+    "woodwork": "teak",
+    "accents": "rattan",
+    "curtains": "linen",
+    "metal": "brass"
+   },
+   "profileMaterials": {
+    "floor": "light-oak",
+    "walls": "warm-white",
+    "feature": "terracotta",
+    "cabinetry": "light-oak",
+    "countertop": "quartz-white",
+    "tile": "terracotta-tile",
+    "upholstery": "linen",
+    "bedding": "linen",
+    "rugs": "rust-wool",
+    "woodwork": "teak",
+    "accents": "rattan",
+    "curtains": "linen",
+    "metal": "brass"
+   }
+  },
+  {
+   "id": "D",
+   "link": "zjVNBbtswEPxKMbnShazYjc1bmjg9FSianBrksKbWEiFKVEjKimH478XKRmqkQODbkJwdDneWe2yhpwqvW-hcwRbQeFo9Pk3uoWACU-LiNkEjz_Jvk2k2yWdPea7nmc5nX2eLxR8otNQwNH70HNMXqesc7ThEaETvPBQqH0VDJH0h3Lufv4VIbxyh90jcdNCzhULBbbRpBz2fKyR-S31g6DxXiMkHKhl6ujwoVLYouJVaZ8sqQU8zBdOHLUMvZwrRG0sOepkfFJzdsFCN9zU0AgWGwlB56OeXw5n0HtR1zlJrxNfzi8K6d_XuCAMl66Gvs4PCYGM1Uk7XK0TH3EFhS65nvCjEzvVBROXZtPXSWpGR0uNmQ4mDJTe2YOO8D9BorAnecMOtqA7k5BglOcdhNxkqm8T7hunYGfDat7uJp1qaS2vbcgo7aKwdmXrSUBr5xvdt4pB8Bw1DIVAgKCTrRKMMvJuMWKHvKu9i4lFkPBi8d1BYc1HYtpR6n5Jv372EvowfuIP3xeBD_cEfGcNtiu_uHFOqOGBMLpFt4__qDSfJEWXfHqHkNVB3ykeiffy3fO2tqX9ZU5_WHTmWDuhnXD1kq9VqCYWr_CG_ya8FrZarm1UuaD6fL-Z3gpb3tw_f7yRCauMwzvEeHdkjCN4344Y18jwjFqNMaJYpON7InNPaFOJT0jvj0mfc5HtTnZHXn5FL-Wpn5OIzcvQbutRFe_xMl7k4jexlvahtMtXxx15iOtHa8aWuB-aa2-IyK4fD4S8",
+   "materials": {
+    "floor": "microcement",
+    "walls": "gallery-white",
+    "feature": "ebony-oak",
+    "cabinetry": "black-matte",
+    "countertop": "carrara",
+    "tile": "grey-tile",
+    "upholstery": "grey-wool",
+    "bedding": "cotton-white",
+    "rugs": "grey-wool",
+    "woodwork": "ebony-oak",
+    "accents": "black-leather",
+    "curtains": "cotton-white",
+    "metal": "gunmetal"
+   },
+   "profileMaterials": {
+    "floor": "microcement",
+    "walls": "gallery-white",
+    "feature": "ebony-oak",
+    "cabinetry": "black-matte",
+    "countertop": "carrara",
+    "tile": "grey-tile",
+    "upholstery": "grey-wool",
+    "bedding": "cotton-white",
+    "rugs": "grey-wool",
+    "woodwork": "ebony-oak",
+    "accents": "black-leather",
+    "curtains": "cotton-white",
+    "metal": "gunmetal"
+   }
+  }
+ ],
+ "shares": [
+  {
+   "id": "A",
+   "link": "z7VpJj9zGFf4rgzqzCe7bTQgC-JDkEAswEEGHIllscrhUD1nsZYQ52QKMIFYM-BLkFkFwAsSQbSjOIh8M5Leox86_CGohWSSb02OdZw4z00t933uvvrdUdT8DWxAYCshiEIBNuW3DBgIFVLBEIAA_vnr70x8-Pr5--e7t24tHFz_--ZPbl1_efvzm-PqfQAGbAlYgeNa9-fj8q-PXX1z8918X5sXtpz9cGBfHz_5OsXBNUhBoiqBKCozrBgRPnnHWRAMKKNAWFexNAg0oIEJZAQJD9RSQomydEhCYqm4roMa4lADyjAAFkMMG8QdRiqrBh-OLv91--gNQwJ7BH9jvHQhMBcQgMG8UgRJn1YASZ1VWrQeQ_736_PjiOQcxZRDVmcAU2XaAKbLtCOb4-mUPw20xGYwjYCzV7oFCWAxAISwiXB0kg_705vjHb2QkV7UZlqUaDEuXsBJ8GLASfEC1tMcvPjk-f8OR2FoJy1CtGVYYG5JdKKabMaDdfvWX42d_5WjMq2m8VaNHakg8IDWkjSX_3v3ny37X_BFOZ5OMFOF6QIpwXWcxllz86btvjt__fmyUSV3dgcDuXBwcJKkcePZIkvjzb2-_-8fx9asxnCXgdKrWmFnZA5aNpM8SNkQO_7t_f98HzKO2SGBmLwtvAAvJknUc6pR17O_EuqcKwBtEZS6lUrwqIcuDPKvYY8ziuNepEb6tgIMOAl8Be4NGjj1hgMAfkmjFk3G-3ORrdWoJXW3ypYakrGbFNS8WN0UWo265pgpyJk0GoLocwpUg4hWX55zfUT2BwHZ-zxa6wgFZS_GK63IOoWssnDKErqsnIbiG7rLCGqxwBIQ1guCqmUN4zG8ZgefHHCBcArC6UIqd5M-wf9weYDfeyl1WxXjX74awQeMABqsbBgg0aXksC2m03KTE0nK720p5OS-kJ9m7TRBS0vhiJvImK2gbUS1bghppYgTldrHQukj4c0tGehgt1w2xujNFNzpZWxLAaCtPAtjj5S7N05OulA1Z8sXvfPF7bRpdfj6l6d4QmLHG-_ShhT600IcW-tBCH1roQwt9aKH3bKEK2MGi-ICdSG8UkLR1lZG2RtJJdovcvPEGcLL9CBY0H1mF7zobOwB3B19WYkxdAdd0Ez12uiUgMNyuO-r-6Mdl1Ye6pIBU2NLRX2WOlcrpjxN4jtxgnGNyv2sTpiDzDQVsYZ3BitDu0NbbAxhod5qlx9lAG-EkQegxDAt0jt1StUXXdUHuyNw1bqtY4i5q18v3A3fdru_B6c9c7kgNql5W3n1_xIsiItFmsZnZ5kDLOH4Fy829w21RqY2oNdFGNUn4ybaC-ZWUO_TOhZwncTiJqZqOYOk5bElAg3-E67RBKAbBUMGSBl9Dv5UUjQ8fElzD9dmt1VXDNoQVhj2yQu89NSX1hmtPq3JJRm1NYFY154g01RC7qU_1O04d3xGs-jx1wtwvGaAgD1E88PLiM3NQU-1OR6Y59dARMtKkERJek_iQLIj1PIlt6iMSQ5CMxtTW93b7g1TfYB3XOETniDzVdRiPo5reNI7WkIqp4E1hFRd0ZKpwhaTMSLXtpe4sCnbBS111XO6mp5rTnLyfaPVh_Ey0w1pLw7uktBhtU1jRxUD3uh11x2Ja1hL2D65--R7sbLZkWzCtDYaYOk_yXcYHq7yWBhV28prUXz5KzGuhKIVsCBsJuCOcl0EacUgaEDiS7PJqt4XStqMqHm38z-Rnw2rc_a3xRj5eJDoikR3dFeElOh5gVjLG3mqjH3M52u7VFXalaCd1FsvVkI9885Js-YLampZkr6tLUt3d7y-3-6uBRZzJf9tW55h0VXM7pomT_jSP2YhU5SzMjquAFIcgqNqi4M8_IvIr9BF_bQ03_MADBVjI0emM1G42qAYBqVs0eLM2crM138cb5gTTh2dMq5Kx6A43k3mjqY5D-1DnT_8Sd46_KBxaMr-1MSyshebAJ-Op3a7qmrbYhkk51cXtwrg3pLvmupXqZkU_8GgIrM5SOarniRi5kwluyCLLkIaXsPUvs4U2tOSOL2bUmTvGqcuStd-Wfn5XFzrN46mOxcNmqJ41L8H2_RuRt1s3Db6rRiyZoNsLRcJergqteyBlI9Vg1OQDEz_-nKj3dqduczr8Dj1XCmuipWUtHV5CjPMmRUVyjspXPVMwOcZpOWqqaQm_LAXk6EC3DeN4h-u8b7LSZIpTI945d8V30WtvUvIHpyc99o6ml282lSndEDQpRr-AYVYhqenwS7t5F7C6WWMWC9PpJ9NOYgNn3fj78EquA1WUnmNzVLOfbLypwyfGYN_Won07cmzH7nA61bJ7kXmCer6YHTR_kjea2g0rwy1Tguytv67lwT4r5NAt0fi-OL64urI4pkmNLI2uqq1UbLawysjhPI8mouaoxtyfvg5IubHfhIfLZjlu_C5nTqTzusb_GfXlE1HbaV56cJajtkSiOUICtj1z5lTUissqzaLlqC3x-N0M70-dceYRu8RR4krVpMBttR5Jjd0lzgcMu0-f6dDW3U64Ek1Zl6i5_tk0rHfdn8XY7KrcXDx3nOYwu9P4CZKFM0dTyocOm448JSSozmDR0C9DdBQF7d8rDGntpPdGDe-C5WqXZoT2wQRBfnsEGljFqyIr0Q42NBkiXsZqVoHpuwVMhNuKoJrQYRhctbAm1ytSwy2qSVZRSJKxRniNiiJbo56p3aS4oFfmB2ZXxT7aCVEc0w9Whmfqll5jAwzJKq_YMNaXf-o2zlEsDIFRhCp6AAANXKNVB9B3gAGzRAQW7MqeELQKCxjl4EYBJcasSdYIlkwJJKPX7zq7Rd3UOGGOiK19_MsPH68eLX0phcUlps9_9OvffECN2yO2EQSVGxCwMz-qGpo9gWsogKA9Dzu9SWvEVUbg-TcKSLM4RuwbLQX_tgkdfOllFwKBayqgwVFGvaG3iaDIEmZihDGNT4rglubnLsUgeALyLG7A0xuJ4RmAm02RwSpCYtQM2yI_iE_jIMkwCAztRgFwi6nbT0AJa3qCexDYewhslzUpi3O_AQqICgT5dTrdGwVENYIExfQcAAzNcFa6tjKsx4YR2FpgWKppW78DNzf_Bw",
+   "materials": {
+    "floor": "light-oak",
+    "walls": "warm-white",
+    "feature": "sand-limewash",
+    "cabinetry": "white-oak",
+    "countertop": "quartz-travertine",
+    "tile": "zellige-white",
+    "upholstery": "linen",
+    "bedding": "linen",
+    "rugs": "oat-knit",
+    "woodwork": "smoked-oak",
+    "accents": "sage-linen",
+    "curtains": "linen",
+    "metal": "matte-black"
+   }
+  },
+  {
+   "id": "B",
+   "link": "z7VrLjtzGFf2VQa3ZBFl8NMld7ATIItk4AgLE0KJIFpucZrOoYrEfI8zKFmAEsRIgmyC7CIITIIbiQHEe8sJAvkU9dv4iqAebRbI5LWs9s5D6Vefce-q-qrqfgi2IoAGKFESg9u1269nAABXaYBCB716--f43nxxfvXj75s3VB1ff_fHTuxdf3H3y-vjqn8AAdYkqED3tPnx89uXxb7-_-u-_rpyru8--vYJXx8__yrEIZTmILENRZSUhtAHRx08la2YBA5R4i0vxIYUGDJDgogQRNAMD5LhY5QxEjml7BqCEbDSAdcGAAdihxvJJkuOq9-H4_C93n30LDLAX8Afx7w5EjgFSEDm3hkJJi6pHSYuqqFY9yP9e_u74_JkEcXQQ0x_BlMW2hymL7QDm-OrFCUba4ggYX8G4pncCilHZA8WoTEh10Az6w-vjb7_SkZamJ7BcEwosW8PKyKHHysgBU22Pn396fPZaIom1GhY03QlWnELNLpzyzejR7r780_HzP0s04dVYbxOekBqW9kgNa1PNv7f_-eK0a-EAp7NJR0oI7ZESQmmREs3F77_-6vjNr4dGOdzVHYi8zsXeQZbrwotnWog_-_vd1_84vno5hHMVnM2jNRVWngA3jRafG9QwXf63__7mJFjAbdHAnFNYBD1YzOask1DnrBP_j6x7bABSYx7mWiqliw0SebAuKvGcCB33Njci9AxwsEEUGmAPuXLiBQiisE-ihUzG6XJHrrW5JXy1I5dCLbKahYx5tbgpixR3yy1TkYvQFADmUkIsNYh0IcNzyu-bgUIQO78XC5fKAT2W0oWMyymEbQk5dQjbNs9CyBi6zwq3t8JXEO4AQkbNFCIQfusIMj-mAPEcgNtJqXZSviIeLE8Au-FW7ooqJbvTbigbLAkARd2AILK05akeSIPlDifWlnvdVurLZSE9y95tggolSy4WQd4UJW8jputpUIOYGEAtOy2sTolwaskgHgbLbahWd6bYsAtrVwMYbOVZAG-4fMnz9Kwrm4bN-RJ2voSn2IRdfj7m6d4wVIjG-_ihhT600IcW-tBCH1roQwt9aKHv2EINsENl-VNxIr01QNbSqmAtxfpJtqor99CDs-0vUcnzUVT4rrOJA3B38BUlxrENcMM3MRCnWwYiuOy6ox0O_pai-nCXDJArWzr6fOvmiaOlP8nQJXIoOIfkYdcmfEUWQgNsES1QxThQk6Mag543iDelYFK8CckyjB-huMSX6F3TmvXdVuy-Tt4wUuncq_WO0aznpu3qHTjDic-94FDV9zDUeSlOmEa7b9dL77qnFRw_Q5v6nfV2TTjmtlQjtbTQz64P1vWTG60MFU1dosOHKC4qzC7R2aazlHyOCZeKbzgFWKYLVSzptDA47DbanraUoaJqLhFaXD8hrT2OpmEgh11w2dNAvqk3xNbIY5z2vLIUTBy1TK_bVMfxBp7aKpChaWkDHWtz7MOZyLlM4jn2SE5_OjQmpCxrqlUbRFNKYnyJKDCXvuDxTScY6-j2eZEr3hxVackHmGqYHdc0Xq_9np9f2bGLXtqmr4ImMJ0zQeppNajPECZLXYMxV8HWUrS5hv69oTSrtqOs6DSwg25Hl8Ngmo8lkpVO2rwHu5j0xBa4IwmgmgHP8sE1o9kgX_mAOCqGsrFPC5OqS2IkGgRwRzitSVxxxBoQ-b0N_k1jXWvVqcZVOtj4H8gvRse0-5-SWh_2s6RY-fHuPoXn6KTAomQMvbUGf849agebWtxYd3WYFulKE1oOYNMi7IaK2vVHngZdXernuGxXVVWllQp1Qv6orS4x2aa17JhGTobjPBYDS7UWMvtLA-QkBlHVlqV8_UdMf4c_k--tUC2PH0iBxRKdTyxtXWMKIkZbrGm2Z3HVvo83wgkRHwEcVyU46440U3hjmb7vwd6f01vSOfmmcmjO_Dx5kqNkpjnIOXVs99JcOp7ahlE5tU_9Xu8NeQu97arnqPjXDw1D1UUq3wwCpdFyNE_1WeT2h4zMjUN2s55pQ3PuhGpinLgDz11dJGHq3hzu60LneQLTd6Vs0AzcaQn23r0RkZS4-b1VeM4E25spEt58VXhiJWWiDaQpbtY9kzyMnKn3XhfdzngS7XuuJmsIr-1UG7djQtZNjsvsElVoBo5i8uH5cLRMx-2GMgOs8YFvGyHpjtD1qclq45rnpdme3qfvrNfBqOT3To967D1Nj9Von2rn9SYneDKhyiu0aRdwu1ljooXT1WI-BMkQ6zljuA4TqNeBKskvsfmmc5psgrHDJ7KeZB1kbUMGju3EjUoXteKWYpqgQahmBysc5Y3o4bKX9zRWgFmr6cdIUerSzdGEoTpLLG1jdkzTGlkWkD3WhpMtqgp2uMxjKdV8E079OdUBPTdiL3P387rJm5UpkS3rmnww6MtnVINJwqg_r9ocieWrEPC8iTPnVHP2LKDOvGpzPGE3w4djZ_ypYjee31CvJylJW60GoSZu9qYDhndKn_HQ1t0VLDWabU2s8uYH04je9e4sTrtPYT177jjP4XRH4zMkM2eOZqMfOjw-8mwQw7RAZcN_mtBRbIqEkgRvsLCC3-M0IAIrVJaYHha7vGC8GWYYyQsdgGNSHRYE8VqbyDpGeQmOS5SsFxvExOcT0lYMU8bnYZAgShHlTYcVogOuKD4sxGM-yOSk5LfWh-6NHSHc8BinKf9-g1-aMEaqky20XTWjz57q_9A-lCS44gcAZV2JEcvFjp6awAR9gxkqOXxbyYe3BtgQInolxWgjlrOC34nbYpKrKcmEW2qHH_3kF48WH8z9UkRok_LXP_z5Rz_mNu6x2A-GN7X8HgNXDc-haBkagOG91J1PhoxQtMLiRhzkRZpi8RuTUv7-g_egpKVbLO77GpIU3I3QuTVAWWTCvISQtbid4AsMsMsJnyVvNeSnANV1WaAqwWrOjNtyfVBfjCFWEBDxG0OAtoQ7-zF_kSE-Hdd8oH0IsvcPsl3R5EJ1kBNx7K5zwojgpULZhGLEcMrPAwBa0F_Y1gK6jyCMPCuCruk69q_A7e3_AQ",
+   "materials": {
+    "floor": "microcement",
+    "walls": "gallery-white",
+    "feature": "ebony-oak",
+    "cabinetry": "black-matte",
+    "countertop": "carrara",
+    "tile": "grey-tile",
+    "upholstery": "grey-wool",
+    "bedding": "cotton-white",
+    "rugs": "grey-wool",
+    "woodwork": "ebony-oak",
+    "accents": "black-leather",
+    "curtains": "cotton-white",
+    "metal": "gunmetal"
+   }
+  },
+  {
+   "id": "C",
+   "link": "z7VrLjuS2Ff2VBtcqQaLe2jmTIFkYWSQDGMhgFpREldSlEqspqh496FU8gBHAkwDZGNnFMJwAMSYOJs4DXhjIt7jayV8EfKhESaWuttfdi-6uB8-59_C-yKpXYAtiaIAyAzHY7J19418DA9RojUEMftrihl09u_ruDx_ef_r5_a_fHd_-AxhgU6EaxK-6dx1ff3H86--v_vPPK-fq_qNvruDV8eO_cBBCWQFiy1AceUUIbUD84pWkyy1ggApvcSXepNCAAVJcViCGZmiAApfLgoHYMW3PAJSQtQawKhkwADtssHyQFrjujT---fP9R98AA-wF_EH83oHYMUAGYufOUChZWfcoWVmX9bIH-d9nvzu-eS1BHB3E9EcwVbntYapyO4A5vv30BCNtcQSMr2Bc0zsBJajqgRJUpaQ-aAZ98u742y91pMD0BJZrQoFla1g5OfRYOTlg2iN99-bD4-t3Ekms1bCg6U6wkgxqduGMb0aPdv_FH48f_0miCa_GepvwhNSwrEdqWJtp_n37789PuxYNcDqbdKSU0B4pJZSWGdFc_O9XXx6__s3QKIe7ugOx17nYO8gKXXjxSAvx13-7_-rvx7efDeFcBWfzaM2ElSfAdaPF5xo1TJf_2399fRIs5LZoYM4pLMIeLGFz1kmoc9aJvyPrXhqAbDAPcy2VssUaiTxYlbV4TISOe5sbEXkGONggjgywh1w58QQEcdQn0UIm43S5I9fa3BK-2pFLoRZZzULGvFrcVGWGu-WWqchFaAoAM5AQgQaRLWR4Tvl9M1QIYuf3YmGgHNBjKVvIuJxC2JaQU4ewbfMshIyhh6xweyt8BeEOIGTUTCFC4beOIPNjCpDMAbidlGon5TPin-AEsBtu5a6sM7I77YaywZIAUNQNCGJLW57pgTRY7nBibbnXbaW-XBbSs-zdJqhQsuRiEeRNWfE2YrqeBjWIiQFU0GlhdUpEU0sG8TBYbkO1ujPFhl1YuxrAYCvPAnjD5QHP07OurBs250vU-RKdYhN2-fmSp3vDUCka78unFvrUQp9a6FMLfWqhTy30qYU-soUaYIeq6mfiRHpngLyldclairWTbJTdtNdWD862H6CK56Oo8F1nEwfg7uArSoxjG-CWb2IoTrcMxDDouqMdDX4CUX24SwYolC0dvdsWm5WWNQ3J0SVyKDiH5FHXJhxFFkEDbBEtUc14d2jp9gB6Wm_LVoW2vynJc4yfo6TCl9hd05p13Vbkvs5NSVtnGvcyR7i66blpu3wEZzRxuSOFPHpFeY-iAS9OmUbbrAvoa8klON5H682j5XZ5qA2oLdVGLS3w82JfN9euVoTKZlOhwzOUlDVml9hs05NsjgkDRTccASzThSqQNNb6mkZW0LNuMPsRzi6xOR2ba1regM1STdPSozWogvAm0cKmpQyVdXOJxuI5KXbPHsfrMFUiX5Ha01RpIhogLW4S3T1ZbCZiWp1_nuk4QwdtNWZA09JGxmKNc0RngvMyiefYoz3zp2Opm0Q2XGr1DNGMkgRfIgrNwBc8vumEYx3dPvUKxVugOqv4iFSTGmuZEJLMqfdaqFQ8YS55aZt-IN0MTWecg7K4napcn4RMFtMGY65CP27m5XVUOvZDoTSrtqOs6DSww25Hg2EwzcfS9nZ3HdIfwC5mSbEF41oATwlzLnap3UY7vSbwEXRUb-XoMK19qvSJoWsQwB3htOxxxRFrQOxriiPvplrqFaLOBhv_PfnFcJp1fynZ6MeJ3N3TYo8fUniOTgosSsbQW2vw48yrXdyWS6jVwpyW2VITWo540zrvRora9ce1sKtLgaZnU8NQ01OdwX_R1peYbNMKOqaRk9E4j8VIVK-EzH5ggIIkIK7bqpLPv8f0V_gj-doSbeQBBymwRKLzmajdbDAFMaMt7r3ZoetVWv4Qb4QTIj5COK5KcNYdaabwxjJ934O9P6eXpHPyReXQnPn-Zht6zUxzkJPw2O7ADBxPbcOonNrqNmHYG6rCL2wtrGr-AUfDUH2RyjfDUGkUjCa2Povc_hiT32RFiPKZNjTnTqRm0ok78NzlCN7fYEgf6kLneULTd6Vs0AzdaQn2Ht-I0D4J1ruHasScCbY3UyS8-arg7dPbQj-g4mbVM8njzpl673XR7YyH3b7narJubss81M7zCSGrpsBVfokqMkNHMfnwfDhapuN2k58BVvjAt42QbEfo6tRktZnQ293sbh7ssbNeh6OS3zs96rEPND1E8hW61c42BcGTKVhe0k27gNvNGhMtnK4W8yFIhljPeSjKRNwYnupAnRaX2HzTOU024djhE5nW2xjGPhk4thN3Nl3UinuQaYKGkZodrGiUN5bZDSv9rVIewarYaAMvI2WlSzdHE0VqpA9sY3ZM0xpZAD200s7XW1SX7HCZx1Kq-Sac-nOqA1pu2Deu4yTzusm7mymRLeua_GfQl8-oRleIwWJetTkSy1ch4HkTZ86ptq1K7_owr9ocT9TN8NHYGX-q2H5fhLamWEXaejkINXF3OHuIDE04Htq624hAo_FWy6StvzeN6F2PZ1l6NHXI7LnjPIfTnb7PkMycOZq1fujw-MizRgzTElUN__JDR1Hx_r0giNdOfk_UyC64XuyKkvE-mGMkb4sAw5SilDDGL2dSWcPoYYSRkrZmmDI-CYObFlF2e4JiZTXEWYhn-DRTkIpfjku0WnyIk-As4x-h9M_Qll9YA9o2bLEjhLt3qvwcVhiA0hTXTLwPMYb4ulPJ76HWmKGK601R04A7A6wJEf2QYrQWm85KfrNuiwvSDSW5sF3t4vOf_PL54tnkiybC_Yw_8cH7P_8xt2WPhdgMrzeyeGe4bniG8C-UMLyXyvJsaBihaInF50mgKLMMi--oVPL7I0EgvNhiEAeOARqSltz8iF_oVWUuLEsJ4TIUGG15Bu4KAuIXIEUMvLzT8F8BtNlUJapTrGbJpK1WB_XxGmIlAbFr3RkAbQl39gVYUswBkwqlXOAM0RWXHTyF1MMhtSubQmgMCqKugbsPKDeYNVy_lGLEcMZnfAAt6C9sawHd5xDGnhVD13R951fg7u7_",
+   "materials": {
+    "floor": "light-oak",
+    "walls": "warm-white",
+    "feature": "terracotta",
+    "cabinetry": "light-oak",
+    "countertop": "quartz-white",
+    "tile": "terracotta-tile",
+    "upholstery": "linen",
+    "bedding": "linen",
+    "rugs": "rust-wool",
+    "woodwork": "teak",
+    "accents": "rattan",
+    "curtains": "linen",
+    "metal": "brass"
+   }
+  },
+  {
+   "id": "D",
+   "link": "z7VrLjuPGFf2VRq0pgiy-uQvsIFkkG2eAADFmUSJLYrVIlrpYlFo96FU8gGHAkwDZBNnFMJwAMSYOJs4DXhjIt1jt5C-CelAskmJrPOvuRbdedc69t859VLVegB1IoQVIDlKw5dfRLQmABWpUYZCCn7S44VfvX33_h48ePvvi4ddvjq__ASywLVEN0hfdp44vvzz-9XdX__nnlXf18PG3V_Dq-OlfBAhlvACpY2mOVUkpa0D64QtFt3KABUq8w6X8kEYDFsgwKUEK7dgCBSbrgoPUs93AAozSygDYEA4swA9brJ5kBa5744-v_vzw8bfAArcS_iB_70HqWSAHqXdvaZSc1D1KTmpSr3uQ_33-2-OrlwrEM0HscARTkl0PU5LdAOb4-rMTjLLFkzChhvHt4AS0RGUPtERlRuuDYdDv3xx_85WJFNmBxPJtKLFcA2tFDz3Wih4w65G-f_XR8eUbhSTXGljQ9idYyxwaduFcbEaP9vDlH4-f_kmhSa_G8bbhCanheY_U8DY3_Pvu31-cdi0Z4HQ2mUgZZT1SRhkjOTVc_O_XXx2_-WRolCdc3YM06FzsHeSFGXj5zJD4y789fP334-vPh3C-hnOFWnNp5Qmwagx9VqjhZvi_-9c3p4DFwhYDzDvJIu7BlnzOOgV1zjr5d2TdcwvQLRYyN1IpX1RI5sGG1PI5lXG8dYURSWCBgwvSxAK3UEROvgBBmvRJtFDJOF3uqbWusESs9tRSaCirWSjN68VNSXLcLXdsTS6lKQHsSEFEBkS-UPKc8od2rBHkzt_KhZF2wNRSvlC6nEK4jgynCeG69lkIpaHHrPB7K0IN4Q8glGqmELH020RQ-TEFWM4B-F0o9U6qV-SD6ASwH27lntQ53Z92Q9vgKAAo6wYEqWMsz00hDZZ7gthYHnRbaS5XhfQse7cJWkqOWixF3pBStBHbDwyogSYGUFEXC6eLRDK1ZKCHwXIX6tWdKS7sZO0bAIOtPAsQDJdHIk_PulI1fM6XpPMlOWkTdvn5XKR7wxGRjff5Uwt9aqFPLfSphT610KcW-tRC37KFWmCPyvKn8kR6b4FVy2rCW4aNkyxPiM-3PTjf_RKVIh9lhe86mzwAdwdfWWI81wJ3YhNjebrlIIVR1x3dZPATyeojXLJAoW05tag6prGhmIau0CVyKDmH5EnXJjxNlkAL7BAjqOaiO7RsdwA9bVZsyzvS02Z0tcL4GVqW-BK7bzuzrruaPDS5G05rbHAXLqxq2nOzdv0WnMnE5Y4UCvXK8p4kJi-jbZ0bvKuINGXU80qSn6Fq-9bx9oXWBtyO7qOOofyVx8iNZ2hfXLrwyyShIvFsL9QsJ47AUFDvIFdCbTDOQdqXsNW6wpm3Nja3ZRyRurlkgiMyR8bYHatqKOgk1Pa4U0FnTbi6bnvyJc57XlUSxryuYwfd7npeMHDe1cMAtB1jsKsoa9d4RkKXSQLPHZBATTIcHvfe9b4xqg5iOaNLfIkotqNQ8oS2F4_j6PcJUmjeAtV5KQaZepgmNd0dWndWRTNeunYYKTdj2xtnytspye2HwtXh7lAUN49JaTbanraii4EbdzsaDcU0ryV6x7Y4egd2OfHJLRgnLNSz4Fm-65s2kbNXNz7I89CoKqoGP61QukDJ0WggYFdrK54WJxFyxBuQGtUDrYsoSox9x3U-2PkfaICcIfPuL6Nbc-pfHar4sFw-FuI5OhVhWTMG7sbO4MebDzfe1J57MAoyI_naiLSaxKaF0k80tT8ulHFXmIxqeHMX3rZGNdZH5Q_a-hKTaztRxzRyMhknspxc6o0McxhZoKBLkNZtWarXf8TNd8Qz9d4abdU5BGmwpUIXo0u73WIGUs5a3HsT89UO--_ijXRC6iOG47IEZ91RZkpvHDsMA9j7c3pLOafe1A7NmX_Nm2bpz3QHNbCO7Y7syAv0NozqqasP_cPmEASkdQxZ1eL_EA1H9UWq0I5jHaNoNFj1WeRDo9Nzyhw404fm3En06DhxB567w-BJtFu6j7Wh8zyxHfoqbNCO_WkNDt6-Ezml62-zx2rEnAluMFMkgvmqwMIN4ddGEcbNpmdSp5IzBT_o1O2NZ9K-6ZphhWRNDJEsKd00BS5Xl6gSO_Y0UwjPy9GxPV_75Vtggw9i2yjN95RtTl3WqPhFEYTXzmPxnfU6HpX83ulRk32k66FkF8XGCagpKH4PLUmNjaaj7tKmXcDvho1JLLyuFospSEnMqANVyfDOrAN1VlxiC23vNNrEY4dPZMYElXvoNhs4tpftvVOtvK6YJmic6OHBSUZ549jdtJIY8SvL9c6g4ZSUZujmaJJEHyoi15qd04xG5rQwIsZkvUM14YfLPI6OWmjDqT-nOmDkxmbl8Madj5u6YpkSuaquqQeDvnwmalUWZG0zH7U5EifUEgiCiTPnohbcNJvtej5qczxJN8QnY2fCacSc0o08I4NL2tbrgdTkFd90wAhO6TMe2rpLg8igubm99tDdD6aRvevtWdbQpegwe_A4z-F1Z-QzJDOHjqYyTx2BGHkqxDEjqGzEdxQ6iopkjGa4wtIKcaHTgBSsUVlidljsC8JFM1xhpG52AF7S-rCgSNTaTNUxJkrwskTZZlEhLj-f0bbmmHExD4MMMYaYuHjhRHbANcOHhXwsBpmCluL6-tC9sadUGL7EeS7-0SGuTzin9ckW1q6b0WdP9X9oH8oyXIsDgLauxIgXckdPTWCCXmGOSgHf1urhvQUqSmWvZBhVcjkn4nLclZPcltGVdEvv8LMf_-LZ4v3Jd0VkUHLxwns__0A8Q7dYbgTH1RakvmghuG5E9qRCtxzfqohDMRRyytBaUCb3FihInmP5RZNSfQnEdaRHOwxSMTo3NCPChwTeW6AkK2lbRqkID0NMeLkvqJgj7w3oFwBttyVBdYb1jLlsy81B_3cMcUJB6jn3FkA7Khz98ElR766oPWkKGWa9hRZoSozFmLBDZYvBcwtkDCOOczH-A-jAcOE6C-g_gzANnBT6th_HvwL39_8H",
+   "materials": {
+    "floor": "microcement",
+    "walls": "gallery-white",
+    "feature": "ebony-oak",
+    "cabinetry": "black-matte",
+    "countertop": "carrara",
+    "tile": "grey-tile",
+    "upholstery": "grey-wool",
+    "bedding": "cotton-white",
+    "rugs": "grey-wool",
+    "woodwork": "ebony-oak",
+    "accents": "black-leather",
+    "curtains": "cotton-white",
+    "metal": "gunmetal"
+   }
+  }
+ ],
+ "stored": [
+  {
+   "id": "A",
+   "materials": {
+    "floor": "light-oak",
+    "walls": "warm-white",
+    "feature": "sand-limewash",
+    "cabinetry": "white-oak",
+    "countertop": "quartz-travertine",
+    "tile": "zellige-white",
+    "upholstery": "linen",
+    "bedding": "linen",
+    "rugs": "oat-knit",
+    "woodwork": "smoked-oak",
+    "accents": "sage-linen",
+    "curtains": "linen",
+    "metal": "matte-black"
+   },
+   "mood": "dreamer",
+   "time": 18.4,
+   "keys": [
+    "createdAt",
+    "furniture",
+    "id",
+    "materials",
+    "mood",
+    "name",
+    "plan",
+    "profile",
+    "time",
+    "updatedAt"
+   ]
+  },
+  {
+   "id": "B",
+   "materials": {
+    "floor": "microcement",
+    "walls": "gallery-white",
+    "feature": "ebony-oak",
+    "cabinetry": "black-matte",
+    "countertop": "carrara",
+    "tile": "grey-tile",
+    "upholstery": "grey-wool",
+    "bedding": "cotton-white",
+    "rugs": "grey-wool",
+    "woodwork": "ebony-oak",
+    "accents": "black-leather",
+    "curtains": "cotton-white",
+    "metal": "gunmetal"
+   },
+   "mood": "dreamer",
+   "time": 12.8,
+   "keys": [
+    "createdAt",
+    "furniture",
+    "id",
+    "materials",
+    "mood",
+    "name",
+    "plan",
+    "profile",
+    "time",
+    "updatedAt"
+   ]
+  },
+  {
+   "id": "C",
+   "materials": {
+    "floor": "light-oak",
+    "walls": "warm-white",
+    "feature": "terracotta",
+    "cabinetry": "light-oak",
+    "countertop": "quartz-white",
+    "tile": "terracotta-tile",
+    "upholstery": "linen",
+    "bedding": "linen",
+    "rugs": "rust-wool",
+    "woodwork": "teak",
+    "accents": "rattan",
+    "curtains": "linen",
+    "metal": "brass"
+   },
+   "mood": "dreamer",
+   "time": 18.4,
+   "keys": [
+    "createdAt",
+    "furniture",
+    "id",
+    "materials",
+    "mood",
+    "name",
+    "plan",
+    "profile",
+    "time",
+    "updatedAt"
+   ]
+  },
+  {
+   "id": "D",
+   "materials": {
+    "floor": "microcement",
+    "walls": "gallery-white",
+    "feature": "ebony-oak",
+    "cabinetry": "black-matte",
+    "countertop": "carrara",
+    "tile": "grey-tile",
+    "upholstery": "grey-wool",
+    "bedding": "cotton-white",
+    "rugs": "grey-wool",
+    "woodwork": "ebony-oak",
+    "accents": "black-leather",
+    "curtains": "cotton-white",
+    "metal": "gunmetal"
+   },
+   "mood": "dreamer",
+   "time": 12.8,
+   "keys": [
+    "createdAt",
+    "furniture",
+    "id",
+    "materials",
+    "mood",
+    "name",
+    "plan",
+    "profile",
+    "time",
+    "updatedAt"
+   ]
+  }
+ ],
+ "realise": [
+  {
+   "profile": "A",
+   "caseId": "seed-zen-condo",
+   "keep": null,
+   "materials": {
+    "floor": "light-oak",
+    "walls": "warm-white",
+    "feature": "sand-limewash",
+    "cabinetry": "white-oak",
+    "countertop": "quartz-travertine",
+    "tile": "zellige-white",
+    "upholstery": "linen",
+    "bedding": "linen",
+    "rugs": "oat-knit",
+    "woodwork": "smoked-oak",
+    "accents": "sage-linen",
+    "curtains": "linen",
+    "metal": "matte-black"
+   },
+   "softened": 0
+  },
+  {
+   "profile": "A",
+   "caseId": "seed-zen-condo",
+   "keep": {
+    "cabinetry": "walnut",
+    "floor": "white-oak"
+   },
+   "materials": {
+    "floor": "white-oak",
+    "walls": "warm-white",
+    "feature": "sand-limewash",
+    "cabinetry": "walnut",
+    "countertop": "quartz-travertine",
+    "tile": "zellige-white",
+    "upholstery": "linen",
+    "bedding": "linen",
+    "rugs": "oat-knit",
+    "woodwork": "smoked-oak",
+    "accents": "sage-linen",
+    "curtains": "linen",
+    "metal": "matte-black"
+   },
+   "softened": 0
+  },
+  {
+   "profile": "A",
+   "caseId": "seed-nordic-studio",
+   "keep": null,
+   "materials": {
+    "floor": "white-oak",
+    "walls": "gallery-white",
+    "feature": "dusty-blue",
+    "cabinetry": "white-lacquer",
+    "countertop": "quartz-white",
+    "tile": "zellige-white",
+    "upholstery": "grey-wool",
+    "bedding": "cotton-white",
+    "rugs": "grey-wool",
+    "woodwork": "white-oak",
+    "accents": "sage-linen",
+    "curtains": "cotton-white",
+    "metal": "matte-black"
+   },
+   "softened": 0
+  },
+  {
+   "profile": "A",
+   "caseId": "seed-nordic-studio",
+   "keep": {
+    "cabinetry": "walnut",
+    "floor": "white-oak"
+   },
+   "materials": {
+    "floor": "white-oak",
+    "walls": "gallery-white",
+    "feature": "dusty-blue",
+    "cabinetry": "walnut",
+    "countertop": "quartz-white",
+    "tile": "zellige-white",
+    "upholstery": "grey-wool",
+    "bedding": "cotton-white",
+    "rugs": "grey-wool",
+    "woodwork": "white-oak",
+    "accents": "sage-linen",
+    "curtains": "cotton-white",
+    "metal": "matte-black"
+   },
+   "softened": 0
+  },
+  {
+   "profile": "A",
+   "caseId": "seed-urban-condo",
+   "keep": null,
+   "materials": {
+    "floor": "greige-oak",
+    "walls": "gallery-white",
+    "feature": "microcement",
+    "cabinetry": "white-lacquer",
+    "countertop": "sintered",
+    "tile": "grey-tile",
+    "upholstery": "grey-wool",
+    "bedding": "cotton-white",
+    "rugs": "charcoal-felt",
+    "woodwork": "greige-oak",
+    "accents": "charcoal-felt",
+    "curtains": "cotton-white",
+    "metal": "matte-black"
+   },
+   "softened": 0
+  },
+  {
+   "profile": "A",
+   "caseId": "seed-urban-condo",
+   "keep": {
+    "cabinetry": "walnut",
+    "floor": "white-oak"
+   },
+   "materials": {
+    "floor": "white-oak",
+    "walls": "gallery-white",
+    "feature": "microcement",
+    "cabinetry": "walnut",
+    "countertop": "sintered",
+    "tile": "grey-tile",
+    "upholstery": "grey-wool",
+    "bedding": "cotton-white",
+    "rugs": "charcoal-felt",
+    "woodwork": "greige-oak",
+    "accents": "charcoal-felt",
+    "curtains": "cotton-white",
+    "metal": "matte-black"
+   },
+   "softened": 0
+  },
+  {
+   "profile": "A",
+   "caseId": "seed-softluxe-semid",
+   "keep": null,
+   "materials": {
+    "floor": "travertine",
+    "walls": "warm-white",
+    "feature": "sand-limewash",
+    "cabinetry": "cream-lacquer",
+    "countertop": "quartz-white",
+    "tile": "cream-tile",
+    "upholstery": "boucle",
+    "bedding": "linen",
+    "rugs": "oat-knit",
+    "woodwork": "walnut",
+    "accents": "blush-boucle",
+    "curtains": "linen",
+    "metal": "brass"
+   },
+   "softened": 2
+  },
+  {
+   "profile": "A",
+   "caseId": "seed-softluxe-semid",
+   "keep": {
+    "cabinetry": "walnut",
+    "floor": "white-oak"
+   },
+   "materials": {
+    "floor": "white-oak",
+    "walls": "warm-white",
+    "feature": "sand-limewash",
+    "cabinetry": "walnut",
+    "countertop": "quartz-white",
+    "tile": "cream-tile",
+    "upholstery": "boucle",
+    "bedding": "linen",
+    "rugs": "oat-knit",
+    "woodwork": "walnut",
+    "accents": "blush-boucle",
+    "curtains": "linen",
+    "metal": "brass"
+   },
+   "softened": 2
+  },
+  {
+   "profile": "A",
+   "caseId": "seed-forest-terrace",
+   "keep": null,
+   "materials": {
+    "floor": "smoked-oak",
+    "walls": "sage",
+    "feature": "smoked-oak",
+    "cabinetry": "sage-lacquer",
+    "countertop": "quartz-travertine",
+    "tile": "zellige-sage",
+    "upholstery": "linen",
+    "bedding": "sage-linen",
+    "rugs": "oat-knit",
+    "woodwork": "smoked-oak",
+    "accents": "sage-linen",
+    "curtains": "linen",
+    "metal": "bronze"
+   },
+   "softened": 0
+  },
+  {
+   "profile": "A",
+   "caseId": "seed-forest-terrace",
+   "keep": {
+    "cabinetry": "walnut",
+    "floor": "white-oak"
+   },
+   "materials": {
+    "floor": "white-oak",
+    "walls": "sage",
+    "feature": "smoked-oak",
+    "cabinetry": "walnut",
+    "countertop": "quartz-travertine",
+    "tile": "zellige-sage",
+    "upholstery": "linen",
+    "bedding": "sage-linen",
+    "rugs": "oat-knit",
+    "woodwork": "smoked-oak",
+    "accents": "sage-linen",
+    "curtains": "linen",
+    "metal": "bronze"
+   },
+   "softened": 0
+  },
+  {
+   "profile": "A",
+   "caseId": "seed-wander-terrace",
+   "keep": null,
+   "materials": {
+    "floor": "light-oak",
+    "walls": "warm-white",
+    "feature": "terracotta",
+    "cabinetry": "light-oak",
+    "countertop": "quartz-white",
+    "tile": "terracotta-tile",
+    "upholstery": "linen",
+    "bedding": "linen",
+    "rugs": "rust-wool",
+    "woodwork": "teak",
+    "accents": "rattan",
+    "curtains": "linen",
+    "metal": "brass"
+   },
+   "softened": 1
+  },
+  {
+   "profile": "A",
+   "caseId": "seed-wander-terrace",
+   "keep": {
+    "cabinetry": "walnut",
+    "floor": "white-oak"
+   },
+   "materials": {
+    "floor": "white-oak",
+    "walls": "warm-white",
+    "feature": "terracotta",
+    "cabinetry": "walnut",
+    "countertop": "quartz-white",
+    "tile": "terracotta-tile",
+    "upholstery": "linen",
+    "bedding": "linen",
+    "rugs": "rust-wool",
+    "woodwork": "teak",
+    "accents": "rattan",
+    "curtains": "linen",
+    "metal": "brass"
+   },
+   "softened": 1
+  },
+  {
+   "profile": "A",
+   "caseId": null,
+   "keep": null,
+   "materials": {
+    "floor": "light-oak",
+    "walls": "warm-white",
+    "feature": "sand-limewash",
+    "cabinetry": "white-oak",
+    "countertop": "quartz-travertine",
+    "tile": "zellige-white",
+    "upholstery": "linen",
+    "bedding": "linen",
+    "rugs": "oat-knit",
+    "woodwork": "smoked-oak",
+    "accents": "sage-linen",
+    "curtains": "linen",
+    "metal": "matte-black"
+   },
+   "softened": 0
+  },
+  {
+   "profile": "B",
+   "caseId": "seed-zen-condo",
+   "keep": null,
+   "materials": {
+    "floor": "light-oak",
+    "walls": "warm-white",
+    "feature": "sand-limewash",
+    "cabinetry": "white-oak",
+    "countertop": "quartz-travertine",
+    "tile": "zellige-white",
+    "upholstery": "linen",
+    "bedding": "linen",
+    "rugs": "oat-knit",
+    "woodwork": "smoked-oak",
+    "accents": "sage-linen",
+    "curtains": "linen",
+    "metal": "matte-black"
+   },
+   "softened": 0
+  },
+  {
+   "profile": "B",
+   "caseId": "seed-zen-condo",
+   "keep": {
+    "cabinetry": "walnut",
+    "floor": "white-oak"
+   },
+   "materials": {
+    "floor": "white-oak",
+    "walls": "warm-white",
+    "feature": "sand-limewash",
+    "cabinetry": "walnut",
+    "countertop": "quartz-travertine",
+    "tile": "zellige-white",
+    "upholstery": "linen",
+    "bedding": "linen",
+    "rugs": "oat-knit",
+    "woodwork": "smoked-oak",
+    "accents": "sage-linen",
+    "curtains": "linen",
+    "metal": "matte-black"
+   },
+   "softened": 0
+  },
+  {
+   "profile": "B",
+   "caseId": "seed-nordic-studio",
+   "keep": null,
+   "materials": {
+    "floor": "white-oak",
+    "walls": "gallery-white",
+    "feature": "dusty-blue",
+    "cabinetry": "white-lacquer",
+    "countertop": "quartz-white",
+    "tile": "zellige-white",
+    "upholstery": "grey-wool",
+    "bedding": "cotton-white",
+    "rugs": "grey-wool",
+    "woodwork": "white-oak",
+    "accents": "sage-linen",
+    "curtains": "cotton-white",
+    "metal": "matte-black"
+   },
+   "softened": 0
+  },
+  {
+   "profile": "B",
+   "caseId": "seed-nordic-studio",
+   "keep": {
+    "cabinetry": "walnut",
+    "floor": "white-oak"
+   },
+   "materials": {
+    "floor": "white-oak",
+    "walls": "gallery-white",
+    "feature": "dusty-blue",
+    "cabinetry": "walnut",
+    "countertop": "quartz-white",
+    "tile": "zellige-white",
+    "upholstery": "grey-wool",
+    "bedding": "cotton-white",
+    "rugs": "grey-wool",
+    "woodwork": "white-oak",
+    "accents": "sage-linen",
+    "curtains": "cotton-white",
+    "metal": "matte-black"
+   },
+   "softened": 0
+  },
+  {
+   "profile": "B",
+   "caseId": "seed-urban-condo",
+   "keep": null,
+   "materials": {
+    "floor": "greige-oak",
+    "walls": "gallery-white",
+    "feature": "microcement",
+    "cabinetry": "white-lacquer",
+    "countertop": "sintered",
+    "tile": "grey-tile",
+    "upholstery": "grey-wool",
+    "bedding": "cotton-white",
+    "rugs": "charcoal-felt",
+    "woodwork": "greige-oak",
+    "accents": "charcoal-felt",
+    "curtains": "cotton-white",
+    "metal": "matte-black"
+   },
+   "softened": 0
+  },
+  {
+   "profile": "B",
+   "caseId": "seed-urban-condo",
+   "keep": {
+    "cabinetry": "walnut",
+    "floor": "white-oak"
+   },
+   "materials": {
+    "floor": "white-oak",
+    "walls": "gallery-white",
+    "feature": "microcement",
+    "cabinetry": "walnut",
+    "countertop": "sintered",
+    "tile": "grey-tile",
+    "upholstery": "grey-wool",
+    "bedding": "cotton-white",
+    "rugs": "charcoal-felt",
+    "woodwork": "greige-oak",
+    "accents": "charcoal-felt",
+    "curtains": "cotton-white",
+    "metal": "matte-black"
+   },
+   "softened": 0
+  },
+  {
+   "profile": "B",
+   "caseId": "seed-softluxe-semid",
+   "keep": null,
+   "materials": {
+    "floor": "travertine",
+    "walls": "warm-white",
+    "feature": "sand-limewash",
+    "cabinetry": "cream-lacquer",
+    "countertop": "calacatta",
+    "tile": "cream-tile",
+    "upholstery": "boucle",
+    "bedding": "linen",
+    "rugs": "oat-knit",
+    "woodwork": "walnut",
+    "accents": "oat-knit",
+    "curtains": "linen",
+    "metal": "brass"
+   },
+   "softened": 1
+  },
+  {
+   "profile": "B",
+   "caseId": "seed-softluxe-semid",
+   "keep": {
+    "cabinetry": "walnut",
+    "floor": "white-oak"
+   },
+   "materials": {
+    "floor": "white-oak",
+    "walls": "warm-white",
+    "feature": "sand-limewash",
+    "cabinetry": "walnut",
+    "countertop": "calacatta",
+    "tile": "cream-tile",
+    "upholstery": "boucle",
+    "bedding": "linen",
+    "rugs": "oat-knit",
+    "woodwork": "walnut",
+    "accents": "oat-knit",
+    "curtains": "linen",
+    "metal": "brass"
+   },
+   "softened": 1
+  },
+  {
+   "profile": "B",
+   "caseId": "seed-forest-terrace",
+   "keep": null,
+   "materials": {
+    "floor": "smoked-oak",
+    "walls": "sage",
+    "feature": "smoked-oak",
+    "cabinetry": "sage-lacquer",
+    "countertop": "quartz-travertine",
+    "tile": "zellige-sage",
+    "upholstery": "linen",
+    "bedding": "sage-linen",
+    "rugs": "oat-knit",
+    "woodwork": "smoked-oak",
+    "accents": "sage-linen",
+    "curtains": "linen",
+    "metal": "bronze"
+   },
+   "softened": 0
+  },
+  {
+   "profile": "B",
+   "caseId": "seed-forest-terrace",
+   "keep": {
+    "cabinetry": "walnut",
+    "floor": "white-oak"
+   },
+   "materials": {
+    "floor": "white-oak",
+    "walls": "sage",
+    "feature": "smoked-oak",
+    "cabinetry": "walnut",
+    "countertop": "quartz-travertine",
+    "tile": "zellige-sage",
+    "upholstery": "linen",
+    "bedding": "sage-linen",
+    "rugs": "oat-knit",
+    "woodwork": "smoked-oak",
+    "accents": "sage-linen",
+    "curtains": "linen",
+    "metal": "bronze"
+   },
+   "softened": 0
+  },
+  {
+   "profile": "B",
+   "caseId": "seed-wander-terrace",
+   "keep": null,
+   "materials": {
+    "floor": "light-oak",
+    "walls": "warm-white",
+    "feature": "terracotta",
+    "cabinetry": "light-oak",
+    "countertop": "terrazzo",
+    "tile": "terracotta-tile",
+    "upholstery": "linen",
+    "bedding": "linen",
+    "rugs": "rust-wool",
+    "woodwork": "teak",
+    "accents": "cognac-leather",
+    "curtains": "linen",
+    "metal": "brass"
+   },
+   "softened": 1
+  },
+  {
+   "profile": "B",
+   "caseId": "seed-wander-terrace",
+   "keep": {
+    "cabinetry": "walnut",
+    "floor": "white-oak"
+   },
+   "materials": {
+    "floor": "white-oak",
+    "walls": "warm-white",
+    "feature": "terracotta",
+    "cabinetry": "walnut",
+    "countertop": "terrazzo",
+    "tile": "terracotta-tile",
+    "upholstery": "linen",
+    "bedding": "linen",
+    "rugs": "rust-wool",
+    "woodwork": "teak",
+    "accents": "cognac-leather",
+    "curtains": "linen",
+    "metal": "brass"
+   },
+   "softened": 1
+  },
+  {
+   "profile": "B",
+   "caseId": null,
+   "keep": null,
+   "materials": {
+    "floor": "microcement",
+    "walls": "gallery-white",
+    "feature": "ebony-oak",
+    "cabinetry": "black-matte",
+    "countertop": "carrara",
+    "tile": "grey-tile",
+    "upholstery": "grey-wool",
+    "bedding": "cotton-white",
+    "rugs": "grey-wool",
+    "woodwork": "ebony-oak",
+    "accents": "black-leather",
+    "curtains": "cotton-white",
+    "metal": "gunmetal"
+   },
+   "softened": 0
+  },
+  {
+   "profile": "C",
+   "caseId": "seed-zen-condo",
+   "keep": null,
+   "materials": {
+    "floor": "light-oak",
+    "walls": "warm-white",
+    "feature": "sand-limewash",
+    "cabinetry": "white-oak",
+    "countertop": "quartz-travertine",
+    "tile": "zellige-white",
+    "upholstery": "linen",
+    "bedding": "linen",
+    "rugs": "oat-knit",
+    "woodwork": "teak",
+    "accents": "sage-linen",
+    "curtains": "linen",
+    "metal": "bronze"
+   },
+   "softened": 2
+  },
+  {
+   "profile": "C",
+   "caseId": "seed-zen-condo",
+   "keep": {
+    "cabinetry": "walnut",
+    "floor": "white-oak"
+   },
+   "materials": {
+    "floor": "white-oak",
+    "walls": "warm-white",
+    "feature": "sand-limewash",
+    "cabinetry": "walnut",
+    "countertop": "quartz-travertine",
+    "tile": "zellige-white",
+    "upholstery": "linen",
+    "bedding": "linen",
+    "rugs": "oat-knit",
+    "woodwork": "teak",
+    "accents": "sage-linen",
+    "curtains": "linen",
+    "metal": "bronze"
+   },
+   "softened": 2
+  },
+  {
+   "profile": "C",
+   "caseId": "seed-nordic-studio",
+   "keep": null,
+   "materials": {
+    "floor": "white-oak",
+    "walls": "gallery-white",
+    "feature": "dusty-blue",
+    "cabinetry": "white-lacquer",
+    "countertop": "quartz-white",
+    "tile": "zellige-white",
+    "upholstery": "linen",
+    "bedding": "cotton-white",
+    "rugs": "linen",
+    "woodwork": "white-oak",
+    "accents": "sage-linen",
+    "curtains": "cotton-white",
+    "metal": "bronze"
+   },
+   "softened": 3
+  },
+  {
+   "profile": "C",
+   "caseId": "seed-nordic-studio",
+   "keep": {
+    "cabinetry": "walnut",
+    "floor": "white-oak"
+   },
+   "materials": {
+    "floor": "white-oak",
+    "walls": "gallery-white",
+    "feature": "dusty-blue",
+    "cabinetry": "walnut",
+    "countertop": "quartz-white",
+    "tile": "zellige-white",
+    "upholstery": "linen",
+    "bedding": "cotton-white",
+    "rugs": "linen",
+    "woodwork": "white-oak",
+    "accents": "sage-linen",
+    "curtains": "cotton-white",
+    "metal": "bronze"
+   },
+   "softened": 3
+  },
+  {
+   "profile": "C",
+   "caseId": "seed-urban-condo",
+   "keep": null,
+   "materials": {
+    "floor": "greige-oak",
+    "walls": "gallery-white",
+    "feature": "greige-oak",
+    "cabinetry": "white-lacquer",
+    "countertop": "quartz-white",
+    "tile": "zellige-white",
+    "upholstery": "linen",
+    "bedding": "cotton-white",
+    "rugs": "cognac-leather",
+    "woodwork": "greige-oak",
+    "accents": "cognac-leather",
+    "curtains": "cotton-white",
+    "metal": "bronze"
+   },
+   "softened": 8
+  },
+  {
+   "profile": "C",
+   "caseId": "seed-urban-condo",
+   "keep": {
+    "cabinetry": "walnut",
+    "floor": "white-oak"
+   },
+   "materials": {
+    "floor": "white-oak",
+    "walls": "gallery-white",
+    "feature": "greige-oak",
+    "cabinetry": "walnut",
+    "countertop": "quartz-white",
+    "tile": "zellige-white",
+    "upholstery": "linen",
+    "bedding": "cotton-white",
+    "rugs": "cognac-leather",
+    "woodwork": "greige-oak",
+    "accents": "cognac-leather",
+    "curtains": "cotton-white",
+    "metal": "bronze"
+   },
+   "softened": 8
+  },
+  {
+   "profile": "C",
+   "caseId": "seed-softluxe-semid",
+   "keep": null,
+   "materials": {
+    "floor": "travertine",
+    "walls": "warm-white",
+    "feature": "sand-limewash",
+    "cabinetry": "cream-lacquer",
+    "countertop": "quartz-calacatta",
+    "tile": "cream-tile",
+    "upholstery": "linen",
+    "bedding": "linen",
+    "rugs": "oat-knit",
+    "woodwork": "teak",
+    "accents": "linen",
+    "curtains": "linen",
+    "metal": "brass"
+   },
+   "softened": 4
+  },
+  {
+   "profile": "C",
+   "caseId": "seed-softluxe-semid",
+   "keep": {
+    "cabinetry": "walnut",
+    "floor": "white-oak"
+   },
+   "materials": {
+    "floor": "white-oak",
+    "walls": "warm-white",
+    "feature": "sand-limewash",
+    "cabinetry": "walnut",
+    "countertop": "quartz-calacatta",
+    "tile": "cream-tile",
+    "upholstery": "linen",
+    "bedding": "linen",
+    "rugs": "oat-knit",
+    "woodwork": "teak",
+    "accents": "linen",
+    "curtains": "linen",
+    "metal": "brass"
+   },
+   "softened": 4
+  },
+  {
+   "profile": "C",
+   "caseId": "seed-forest-terrace",
+   "keep": null,
+   "materials": {
+    "floor": "teak",
+    "walls": "sage",
+    "feature": "teak",
+    "cabinetry": "sage",
+    "countertop": "quartz-travertine",
+    "tile": "cream-tile",
+    "upholstery": "linen",
+    "bedding": "sage-linen",
+    "rugs": "oat-knit",
+    "woodwork": "teak",
+    "accents": "sage-linen",
+    "curtains": "linen",
+    "metal": "bronze"
+   },
+   "softened": 5
+  },
+  {
+   "profile": "C",
+   "caseId": "seed-forest-terrace",
+   "keep": {
+    "cabinetry": "walnut",
+    "floor": "white-oak"
+   },
+   "materials": {
+    "floor": "white-oak",
+    "walls": "sage",
+    "feature": "teak",
+    "cabinetry": "walnut",
+    "countertop": "quartz-travertine",
+    "tile": "cream-tile",
+    "upholstery": "linen",
+    "bedding": "sage-linen",
+    "rugs": "oat-knit",
+    "woodwork": "teak",
+    "accents": "sage-linen",
+    "curtains": "linen",
+    "metal": "bronze"
+   },
+   "softened": 3
+  },
+  {
+   "profile": "C",
+   "caseId": "seed-wander-terrace",
+   "keep": null,
+   "materials": {
+    "floor": "light-oak",
+    "walls": "warm-white",
+    "feature": "terracotta",
+    "cabinetry": "light-oak",
+    "countertop": "quartz-white",
+    "tile": "terracotta-tile",
+    "upholstery": "linen",
+    "bedding": "linen",
+    "rugs": "rust-wool",
+    "woodwork": "teak",
+    "accents": "rattan",
+    "curtains": "linen",
+    "metal": "brass"
+   },
+   "softened": 1
+  },
+  {
+   "profile": "C",
+   "caseId": "seed-wander-terrace",
+   "keep": {
+    "cabinetry": "walnut",
+    "floor": "white-oak"
+   },
+   "materials": {
+    "floor": "white-oak",
+    "walls": "warm-white",
+    "feature": "terracotta",
+    "cabinetry": "walnut",
+    "countertop": "quartz-white",
+    "tile": "terracotta-tile",
+    "upholstery": "linen",
+    "bedding": "linen",
+    "rugs": "rust-wool",
+    "woodwork": "teak",
+    "accents": "rattan",
+    "curtains": "linen",
+    "metal": "brass"
+   },
+   "softened": 1
+  },
+  {
+   "profile": "C",
+   "caseId": null,
+   "keep": null,
+   "materials": {
+    "floor": "light-oak",
+    "walls": "warm-white",
+    "feature": "terracotta",
+    "cabinetry": "light-oak",
+    "countertop": "quartz-white",
+    "tile": "terracotta-tile",
+    "upholstery": "linen",
+    "bedding": "linen",
+    "rugs": "rust-wool",
+    "woodwork": "teak",
+    "accents": "rattan",
+    "curtains": "linen",
+    "metal": "brass"
+   },
+   "softened": 0
+  },
+  {
+   "profile": "D",
+   "caseId": "seed-zen-condo",
+   "keep": null,
+   "materials": {
+    "floor": "light-oak",
+    "walls": "warm-white",
+    "feature": "sand-limewash",
+    "cabinetry": "white-oak",
+    "countertop": "quartz-travertine",
+    "tile": "zellige-white",
+    "upholstery": "linen",
+    "bedding": "linen",
+    "rugs": "oat-knit",
+    "woodwork": "smoked-oak",
+    "accents": "sage-linen",
+    "curtains": "linen",
+    "metal": "matte-black"
+   },
+   "softened": 0
+  },
+  {
+   "profile": "D",
+   "caseId": "seed-zen-condo",
+   "keep": {
+    "cabinetry": "walnut",
+    "floor": "white-oak"
+   },
+   "materials": {
+    "floor": "white-oak",
+    "walls": "warm-white",
+    "feature": "sand-limewash",
+    "cabinetry": "walnut",
+    "countertop": "quartz-travertine",
+    "tile": "zellige-white",
+    "upholstery": "linen",
+    "bedding": "linen",
+    "rugs": "oat-knit",
+    "woodwork": "smoked-oak",
+    "accents": "sage-linen",
+    "curtains": "linen",
+    "metal": "matte-black"
+   },
+   "softened": 0
+  },
+  {
+   "profile": "D",
+   "caseId": "seed-nordic-studio",
+   "keep": null,
+   "materials": {
+    "floor": "white-oak",
+    "walls": "gallery-white",
+    "feature": "dusty-blue",
+    "cabinetry": "white-lacquer",
+    "countertop": "quartz-white",
+    "tile": "zellige-white",
+    "upholstery": "grey-wool",
+    "bedding": "cotton-white",
+    "rugs": "grey-wool",
+    "woodwork": "white-oak",
+    "accents": "sage-linen",
+    "curtains": "cotton-white",
+    "metal": "matte-black"
+   },
+   "softened": 0
+  },
+  {
+   "profile": "D",
+   "caseId": "seed-nordic-studio",
+   "keep": {
+    "cabinetry": "walnut",
+    "floor": "white-oak"
+   },
+   "materials": {
+    "floor": "white-oak",
+    "walls": "gallery-white",
+    "feature": "dusty-blue",
+    "cabinetry": "walnut",
+    "countertop": "quartz-white",
+    "tile": "zellige-white",
+    "upholstery": "grey-wool",
+    "bedding": "cotton-white",
+    "rugs": "grey-wool",
+    "woodwork": "white-oak",
+    "accents": "sage-linen",
+    "curtains": "cotton-white",
+    "metal": "matte-black"
+   },
+   "softened": 0
+  },
+  {
+   "profile": "D",
+   "caseId": "seed-urban-condo",
+   "keep": null,
+   "materials": {
+    "floor": "greige-oak",
+    "walls": "gallery-white",
+    "feature": "microcement",
+    "cabinetry": "white-lacquer",
+    "countertop": "sintered",
+    "tile": "grey-tile",
+    "upholstery": "grey-wool",
+    "bedding": "cotton-white",
+    "rugs": "charcoal-felt",
+    "woodwork": "greige-oak",
+    "accents": "charcoal-felt",
+    "curtains": "cotton-white",
+    "metal": "matte-black"
+   },
+   "softened": 0
+  },
+  {
+   "profile": "D",
+   "caseId": "seed-urban-condo",
+   "keep": {
+    "cabinetry": "walnut",
+    "floor": "white-oak"
+   },
+   "materials": {
+    "floor": "white-oak",
+    "walls": "gallery-white",
+    "feature": "microcement",
+    "cabinetry": "walnut",
+    "countertop": "sintered",
+    "tile": "grey-tile",
+    "upholstery": "grey-wool",
+    "bedding": "cotton-white",
+    "rugs": "charcoal-felt",
+    "woodwork": "greige-oak",
+    "accents": "charcoal-felt",
+    "curtains": "cotton-white",
+    "metal": "matte-black"
+   },
+   "softened": 0
+  },
+  {
+   "profile": "D",
+   "caseId": "seed-softluxe-semid",
+   "keep": null,
+   "materials": {
+    "floor": "travertine",
+    "walls": "warm-white",
+    "feature": "sand-limewash",
+    "cabinetry": "cream-lacquer",
+    "countertop": "calacatta",
+    "tile": "cream-tile",
+    "upholstery": "boucle",
+    "bedding": "linen",
+    "rugs": "oat-knit",
+    "woodwork": "walnut",
+    "accents": "blush-boucle",
+    "curtains": "linen",
+    "metal": "brass"
+   },
+   "softened": 0
+  },
+  {
+   "profile": "D",
+   "caseId": "seed-softluxe-semid",
+   "keep": {
+    "cabinetry": "walnut",
+    "floor": "white-oak"
+   },
+   "materials": {
+    "floor": "white-oak",
+    "walls": "warm-white",
+    "feature": "sand-limewash",
+    "cabinetry": "walnut",
+    "countertop": "calacatta",
+    "tile": "cream-tile",
+    "upholstery": "boucle",
+    "bedding": "linen",
+    "rugs": "oat-knit",
+    "woodwork": "walnut",
+    "accents": "blush-boucle",
+    "curtains": "linen",
+    "metal": "brass"
+   },
+   "softened": 0
+  },
+  {
+   "profile": "D",
+   "caseId": "seed-forest-terrace",
+   "keep": null,
+   "materials": {
+    "floor": "smoked-oak",
+    "walls": "sage",
+    "feature": "smoked-oak",
+    "cabinetry": "sage-lacquer",
+    "countertop": "quartz-travertine",
+    "tile": "zellige-sage",
+    "upholstery": "linen",
+    "bedding": "sage-linen",
+    "rugs": "oat-knit",
+    "woodwork": "smoked-oak",
+    "accents": "sage-linen",
+    "curtains": "linen",
+    "metal": "bronze"
+   },
+   "softened": 0
+  },
+  {
+   "profile": "D",
+   "caseId": "seed-forest-terrace",
+   "keep": {
+    "cabinetry": "walnut",
+    "floor": "white-oak"
+   },
+   "materials": {
+    "floor": "white-oak",
+    "walls": "sage",
+    "feature": "smoked-oak",
+    "cabinetry": "walnut",
+    "countertop": "quartz-travertine",
+    "tile": "zellige-sage",
+    "upholstery": "linen",
+    "bedding": "sage-linen",
+    "rugs": "oat-knit",
+    "woodwork": "smoked-oak",
+    "accents": "sage-linen",
+    "curtains": "linen",
+    "metal": "bronze"
+   },
+   "softened": 0
+  },
+  {
+   "profile": "D",
+   "caseId": "seed-wander-terrace",
+   "keep": null,
+   "materials": {
+    "floor": "light-oak",
+    "walls": "warm-white",
+    "feature": "terracotta",
+    "cabinetry": "light-oak",
+    "countertop": "terrazzo",
+    "tile": "terracotta-tile",
+    "upholstery": "linen",
+    "bedding": "linen",
+    "rugs": "rust-wool",
+    "woodwork": "teak",
+    "accents": "rattan",
+    "curtains": "linen",
+    "metal": "brass"
+   },
+   "softened": 0
+  },
+  {
+   "profile": "D",
+   "caseId": "seed-wander-terrace",
+   "keep": {
+    "cabinetry": "walnut",
+    "floor": "white-oak"
+   },
+   "materials": {
+    "floor": "white-oak",
+    "walls": "warm-white",
+    "feature": "terracotta",
+    "cabinetry": "walnut",
+    "countertop": "terrazzo",
+    "tile": "terracotta-tile",
+    "upholstery": "linen",
+    "bedding": "linen",
+    "rugs": "rust-wool",
+    "woodwork": "teak",
+    "accents": "rattan",
+    "curtains": "linen",
+    "metal": "brass"
+   },
+   "softened": 0
+  },
+  {
+   "profile": "D",
+   "caseId": null,
+   "keep": null,
+   "materials": {
+    "floor": "microcement",
+    "walls": "gallery-white",
+    "feature": "ebony-oak",
+    "cabinetry": "black-matte",
+    "countertop": "carrara",
+    "tile": "grey-tile",
+    "upholstery": "grey-wool",
+    "bedding": "cotton-white",
+    "rugs": "grey-wool",
+    "woodwork": "ebony-oak",
+    "accents": "black-leather",
+    "curtains": "cotton-white",
+    "metal": "gunmetal"
+   },
+   "softened": 0
+  }
+ ]
+}

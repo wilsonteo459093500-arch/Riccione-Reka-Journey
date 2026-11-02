@@ -1,0 +1,239 @@
+{
+ "title": "FIRST FLOOR PLAN",
+ "overall_width_text": null,
+ "overall_depth_text": null,
+ "dimensions": [],
+ "footprint_box_2d": [
+  122,
+  206,
+  880,
+  940
+ ],
+ "rooms": [
+  {
+   "label": "BEDROOM 3",
+   "type": "bedroom",
+   "box_2d": [
+    107,
+    215,
+    311,
+    584
+   ]
+  },
+  {
+   "label": "BEDROOM 2",
+   "type": "bedroom",
+   "box_2d": [
+    102,
+    605,
+    310,
+    925
+   ]
+  },
+  {
+   "label": "BATH",
+   "type": "bath",
+   "box_2d": [
+    312,
+    216,
+    457,
+    449
+   ]
+  },
+  {
+   "label": "CORRIDOR",
+   "type": "corridor",
+   "box_2d": [
+    326,
+    444,
+    431,
+    800
+   ]
+  },
+  {
+   "label": "STAIRCASE",
+   "type": "stair",
+   "box_2d": [
+    394,
+    814,
+    653,
+    923
+   ]
+  },
+  {
+   "label": "FAMILY HALL",
+   "type": "family",
+   "box_2d": [
+    446,
+    211,
+    636,
+    807
+   ]
+  },
+  {
+   "label": "MASTER BEDROOM",
+   "type": "master",
+   "box_2d": [
+    624,
+    218,
+    876,
+    686
+   ]
+  },
+  {
+   "label": "W.I.R.",
+   "type": "walkin",
+   "box_2d": [
+    649,
+    695,
+    747,
+    919
+   ]
+  },
+  {
+   "label": "M. BATH",
+   "type": "bath",
+   "box_2d": [
+    764,
+    705,
+    870,
+    912
+   ]
+  },
+  {
+   "label": "BALCONY",
+   "type": "balcony",
+   "box_2d": [
+    864,
+    219,
+    963,
+    930
+   ]
+  }
+ ],
+ "stairs": [
+  {
+   "box_2d": [
+    390,
+    798,
+    660,
+    911
+   ],
+   "up": null,
+   "shape": "straight"
+  }
+ ],
+ "doors": [
+  {
+   "box_2d": [
+    300,
+    482,
+    321,
+    569
+   ],
+   "kind": "door"
+  },
+  {
+   "box_2d": [
+    322,
+    609,
+    320,
+    733
+   ],
+   "kind": "door"
+  },
+  {
+   "box_2d": [
+    340,
+    442,
+    408,
+    457
+   ],
+   "kind": "door"
+  },
+  {
+   "box_2d": [
+    639,
+    549,
+    649,
+    682
+   ],
+   "kind": "door"
+  },
+  {
+   "box_2d": [
+    657,
+    666,
+    715,
+    715
+   ],
+   "kind": "door"
+  },
+  {
+   "box_2d": [
+    812,
+    665,
+    858,
+    712
+   ],
+   "kind": "door"
+  },
+  {
+   "box_2d": [
+    854,
+    262,
+    870,
+    622
+   ],
+   "kind": "sliding"
+  }
+ ],
+ "windows": [
+  {
+   "box_2d": [
+    123,
+    304,
+    125,
+    509
+   ],
+   "full_height": false
+  },
+  {
+   "box_2d": [
+    114,
+    664,
+    116,
+    864
+   ],
+   "full_height": false
+  },
+  {
+   "box_2d": [
+    870,
+    744,
+    889,
+    873
+   ],
+   "full_height": false
+  }
+ ],
+ "_fixture": {
+  "source": "phone",
+  "crop_mm": [
+   44.076,
+   31.832,
+   129.354,
+   208.401
+  ],
+  "crop_px": [
+   138.6,
+   105.6,
+   368.0,
+   580.7
+  ],
+  "phone_px": [
+   1170,
+   2532
+  ]
+ }
+}

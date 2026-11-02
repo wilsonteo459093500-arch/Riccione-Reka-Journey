@@ -1,0 +1,295 @@
+/* ============================================================
+   案例库编辑器 · 溪岸板材（案例原板）—— BoardPicker.jsx。
+   沿用 cases.css 的 .mg-mat / .mg-sw / .mg-sheet / .mg-mats-grid；这里只补 bp- 开头的几样。
+   颜色只用 base.css 的变量（色卡是板材自己的颜色，inline）。
+   ============================================================ */
+
+.bp {
+  margin-top: 14px;
+  padding-top: 4px;
+  box-shadow: 0 -0.5px 0 var(--line);
+}
+.bp .mg-sub:first-child {
+  margin-top: 14px;
+}
+.bp-rows {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.bp-row {
+  position: relative;
+  min-width: 0;
+}
+.bp-mat {
+  width: 100%;
+  min-height: 56px;
+  padding-right: 34px;
+  transition:
+    box-shadow 0.18s var(--ease),
+    transform 0.18s var(--ease);
+}
+.bp-mat:active {
+  transform: scale(0.985);
+}
+.bp-row:not(.is-empty) .bp-mat {
+  box-shadow:
+    inset 0 0 0 0.5px var(--line),
+    inset 3px 0 0 var(--gold);
+}
+.bp-mat .bp-code {
+  color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+.bp-mat .bp-warn {
+  color: var(--gold-d);
+  white-space: normal;
+}
+.bp-sw.is-unknown {
+  background: repeating-linear-gradient(135deg, var(--bg-deep) 0 6px, var(--surface) 6px 12px);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.bp-sw.is-add {
+  display: grid;
+  place-items: center;
+  color: var(--gold-ink);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.bp-clear {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-top: -14px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(var(--text-rgb), 0.06);
+  color: var(--text-soft);
+  cursor: pointer;
+}
+.bp-clear:hover {
+  color: var(--text-strong);
+}
+
+/* 还用了 */
+.bp-also {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+.bp-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 4px 0 6px;
+  border-radius: 999px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px rgba(var(--text-rgb), 0.12);
+  font: 600 13px/1 var(--sans);
+  color: var(--text-strong);
+  animation: bp-in 0.24s var(--spring);
+}
+.bp-pill .bp-sw {
+  border-radius: 50%;
+}
+.bp-pill small {
+  font: 500 11px/1 var(--sans);
+  color: var(--text-soft);
+}
+.bp-pill button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-soft);
+  cursor: pointer;
+}
+@keyframes bp-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+}
+
+/* 文件夹里提到 */
+.bp-mention {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+.bp-mention-row + .bp-mention-row {
+  margin-top: 10px;
+}
+.bp-mention p {
+  margin: 0 0 6px;
+  font: 600 12.5px/1.4 var(--sans);
+  color: var(--text-strong);
+}
+.bp-mention-b {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 10px;
+  font: 600 13px/1.2 var(--sans);
+  color: var(--text-strong);
+}
+.bp-mention-b small {
+  font: 500 11px/1 var(--sans);
+  color: var(--text-soft);
+}
+.bp-mention-acts {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+
+/* 选板的面板 */
+.bp-sheet {
+  width: min(760px, 100%);
+}
+.bp-tools {
+  display: grid;
+  gap: 10px;
+  padding: 0 18px 10px;
+}
+.bp-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px rgba(var(--text-rgb), 0.14);
+  color: var(--text-soft);
+}
+.bp-search:focus-within {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.bp-search input {
+  flex: 1;
+  min-width: 0;
+  height: 42px;
+  border: 0;
+  background: none;
+  color: var(--text-strong);
+  font: 400 15px/1.3 var(--sans);
+  outline: none;
+}
+.bp-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.bp-filters .chip {
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 13.5px;
+}
+.bp-body {
+  min-height: 160px;
+}
+.bp-grid {
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+}
+.bp-grid button {
+  position: relative;
+  align-content: start;
+  min-height: 120px;
+  transition:
+    background 0.18s var(--ease),
+    box-shadow 0.18s var(--ease),
+    transform 0.18s var(--ease);
+}
+.bp-grid button:hover {
+  background: var(--card);
+}
+.bp-grid button:active {
+  transform: scale(0.97);
+}
+.bp-grid button.is-hidden {
+  opacity: 0.55;
+}
+.bp-grid .bp-sw {
+  border-radius: 12px;
+}
+.bp-name {
+  display: block;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.bp-star {
+  margin-right: 3px;
+  vertical-align: -1px;
+  color: var(--gold);
+}
+.bp-meta {
+  font: 500 10.5px/1.25 var(--sans);
+  color: var(--text-soft);
+  overflow-wrap: anywhere;
+}
+.bp-empty {
+  margin: 8px 0 14px;
+  font: 400 13.5px/1.5 var(--sans);
+  color: var(--text-soft);
+}
+.bp-manual {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 46px;
+  margin: 0 0 10px;
+  padding: 0 14px;
+  border: 1px dashed var(--gold);
+  border-radius: 12px;
+  background: rgba(var(--gold-l-rgb), 0.16);
+  color: var(--gold-ink);
+  font: 600 14px/1.3 var(--sans);
+  text-align: left;
+  cursor: pointer;
+}
+.bp-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+.bp-count {
+  margin-right: auto;
+  font: 500 13px/1 var(--sans);
+  color: var(--text-soft);
+}
+
+@media (max-width: 599px) {
+  .bp-rows {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bp-grid {
+    grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bp-pill {
+    animation: none;
+  }
+  .bp-mat,
+  .bp-grid button {
+    transition: none;
+  }
+}

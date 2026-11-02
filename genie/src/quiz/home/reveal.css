@@ -1,0 +1,21 @@
+/* 揭晓页结尾的两个按钮（Reveal.jsx）：金色「带它回家」+ 安静的「先看蓝图」。只用 base.css 的变量。 */
+.hj-rv-ctas {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.hj-rv-bp {
+  min-height: 44px;
+  padding: 0 18px;
+  font-size: 15.5px;
+  color: var(--text-soft);
+}
+.dusk .hj-rv-bp {
+  color: var(--ritual-text);
+  opacity: 0.86;
+}
+.hj-rv-bp:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

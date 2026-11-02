@@ -1,0 +1,57 @@
+{
+ "page_box_2d": [
+  0,
+  0,
+  1000,
+  1000
+ ],
+ "is_photo_or_screenshot": false,
+ "plans": [
+  {
+   "title": "FIRST FLOOR PLAN",
+   "level": "first",
+   "box_2d": [
+    126,
+    110,
+    687,
+    297
+   ],
+   "units": "mm",
+   "scale_text": "1:100",
+   "unit_label": "INTERMEDIATE LOT"
+  },
+  {
+   "title": "GROUND FLOOR PLAN",
+   "level": "ground",
+   "box_2d": [
+    63,
+    386,
+    823,
+    579
+   ],
+   "units": "mm",
+   "scale_text": "1:100",
+   "unit_label": "INTERMEDIATE LOT"
+  }
+ ],
+ "other_drawings": [
+  {
+   "kind": "title_block",
+   "box_2d": [
+    27,
+    800,
+    973,
+    981
+   ]
+  },
+  {
+   "kind": "elevation",
+   "box_2d": [
+    423,
+    605,
+    774,
+    788
+   ]
+  }
+ ]
+}

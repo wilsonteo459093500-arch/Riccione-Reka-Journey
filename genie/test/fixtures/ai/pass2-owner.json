@@ -1,0 +1,515 @@
+{
+ "_fixture": {
+  "photo": "owner-type-b-photo.jpg",
+  "crop": [
+   2267,
+   1708
+  ],
+  "grid": {
+   "X0": 297.5,
+   "KX": 61.1,
+   "Y0": 316,
+   "KY": 56.6
+  },
+  "errors": [
+   "living/dining overlap 0.3 m",
+   "corridor missing",
+   "kitchen box covers the entrance recess",
+   "AC LEDGE typed utility",
+   "3 invented doors (living|bedroom 2 wall, bedroom 1 exterior wall, living|dining)",
+   "\"3050\" misread \"305\""
+  ]
+ },
+ "title": "TYPE B (MIRROR) - FLOOR PLAN",
+ "overall_width_text": "12500",
+ "overall_depth_text": "11150",
+ "dimensions": [
+  {
+   "text": "12500",
+   "axis": "x",
+   "box_2d": [
+    37,
+    166,
+    45,
+    839
+   ]
+  },
+  {
+   "text": "3600",
+   "axis": "x",
+   "box_2d": [
+    70,
+    166,
+    78,
+    360
+   ]
+  },
+  {
+   "text": "3900",
+   "axis": "x",
+   "box_2d": [
+    70,
+    360,
+    78,
+    570
+   ]
+  },
+  {
+   "text": "5000",
+   "axis": "x",
+   "box_2d": [
+    70,
+    570,
+    78,
+    839
+   ]
+  },
+  {
+   "text": "1650",
+   "axis": "x",
+   "box_2d": [
+    952,
+    166,
+    960,
+    255
+   ]
+  },
+  {
+   "text": "1950",
+   "axis": "x",
+   "box_2d": [
+    952,
+    255,
+    960,
+    360
+   ]
+  },
+  {
+   "text": "1512",
+   "axis": "x",
+   "box_2d": [
+    952,
+    360,
+    960,
+    441
+   ]
+  },
+  {
+   "text": "2388",
+   "axis": "x",
+   "box_2d": [
+    952,
+    441,
+    960,
+    570
+   ]
+  },
+  {
+   "text": "2075",
+   "axis": "x",
+   "box_2d": [
+    952,
+    570,
+    960,
+    682
+   ]
+  },
+  {
+   "text": "2925",
+   "axis": "x",
+   "box_2d": [
+    952,
+    682,
+    960,
+    839
+   ]
+  },
+  {
+   "text": "1600",
+   "axis": "y",
+   "box_2d": [
+    177,
+    98,
+    283,
+    104
+   ]
+  },
+  {
+   "text": "4100",
+   "axis": "y",
+   "box_2d": [
+    283,
+    98,
+    555,
+    104
+   ]
+  },
+  {
+   "text": "2850",
+   "axis": "y",
+   "box_2d": [
+    555,
+    98,
+    744,
+    104
+   ]
+  },
+  {
+   "text": "2600",
+   "axis": "y",
+   "box_2d": [
+    744,
+    98,
+    916,
+    104
+   ]
+  },
+  {
+   "text": "1000",
+   "axis": "y",
+   "box_2d": [
+    177,
+    922,
+    243,
+    929
+   ]
+  },
+  {
+   "text": "3150",
+   "axis": "y",
+   "box_2d": [
+    243,
+    922,
+    452,
+    929
+   ]
+  },
+  {
+   "text": "4400",
+   "axis": "y",
+   "box_2d": [
+    452,
+    922,
+    744,
+    929
+   ]
+  },
+  {
+   "text": "2600",
+   "axis": "y",
+   "box_2d": [
+    744,
+    922,
+    916,
+    929
+   ]
+  },
+  {
+   "text": "11150",
+   "axis": "y",
+   "box_2d": [
+    177,
+    956,
+    916,
+    962
+   ]
+  },
+  {
+   "text": "1350",
+   "axis": "y",
+   "box_2d": [
+    452,
+    530,
+    542,
+    537
+   ]
+  },
+  {
+   "text": "305",
+   "axis": "y",
+   "box_2d": [
+    542,
+    530,
+    744,
+    537
+   ]
+  },
+  {
+   "text": "1250",
+   "axis": "y",
+   "box_2d": [
+    833,
+    332,
+    916,
+    339
+   ]
+  }
+ ],
+ "footprint_box_2d": [
+  240,
+  163,
+  919,
+  842
+ ],
+ "rooms": [
+  {
+   "label": "BALCONY",
+   "type": "balcony",
+   "box_2d": [
+    180,
+    360,
+    243,
+    521
+   ]
+  },
+  {
+   "label": "AC LEDGE",
+   "type": "utility",
+   "box_2d": [
+    180,
+    521,
+    243,
+    610
+   ]
+  },
+  {
+   "label": "BEDROOM 1",
+   "type": "master",
+   "box_2d": [
+    283,
+    168,
+    747,
+    360
+   ]
+  },
+  {
+   "label": "LIVING",
+   "type": "living",
+   "box_2d": [
+    247,
+    362,
+    508,
+    567
+   ]
+  },
+  {
+   "label": "BEDROOM 2",
+   "type": "bedroom",
+   "box_2d": [
+    243,
+    573,
+    455,
+    839
+   ]
+  },
+  {
+   "label": "BATH 1",
+   "type": "bath",
+   "box_2d": [
+    558,
+    168,
+    744,
+    257
+   ]
+  },
+  {
+   "label": "DINING",
+   "type": "dining",
+   "box_2d": [
+    489,
+    362,
+    747,
+    567
+   ]
+  },
+  {
+   "label": "BATH 2",
+   "type": "bath",
+   "box_2d": [
+    545,
+    573,
+    740,
+    680
+   ]
+  },
+  {
+   "label": "BEDROOM 3",
+   "type": "bedroom",
+   "box_2d": [
+    455,
+    678,
+    744,
+    837
+   ]
+  },
+  {
+   "label": "KITCHEN",
+   "type": "kitchen",
+   "box_2d": [
+    740,
+    360,
+    919,
+    573
+   ]
+  },
+  {
+   "label": "YARD",
+   "type": "utility",
+   "box_2d": [
+    747,
+    567,
+    913,
+    683
+   ]
+  }
+ ],
+ "stairs": [],
+ "doors": [
+  {
+   "box_2d": [
+    469,
+    357,
+    535,
+    362
+   ],
+   "kind": "door"
+  },
+  {
+   "box_2d": [
+    449,
+    613,
+    455,
+    667
+   ],
+   "kind": "door"
+  },
+  {
+   "box_2d": [
+    462,
+    679,
+    532,
+    684
+   ],
+   "kind": "door"
+  },
+  {
+   "box_2d": [
+    538,
+    616,
+    545,
+    667
+   ],
+   "kind": "door"
+  },
+  {
+   "box_2d": [
+    614,
+    252,
+    664,
+    257
+   ],
+   "kind": "door"
+  },
+  {
+   "box_2d": [
+    830,
+    365,
+    836,
+    422
+   ],
+   "kind": "door"
+  },
+  {
+   "box_2d": [
+    780,
+    567,
+    850,
+    573
+   ],
+   "kind": "door"
+  },
+  {
+   "box_2d": [
+    240,
+    370,
+    247,
+    516
+   ],
+   "kind": "sliding"
+  },
+  {
+   "box_2d": [
+    310,
+    567,
+    369,
+    573
+   ],
+   "kind": "door"
+  },
+  {
+   "box_2d": [
+    376,
+    163,
+    435,
+    168
+   ],
+   "kind": "door"
+  },
+  {
+   "box_2d": [
+    505,
+    408,
+    512,
+    462
+   ],
+   "kind": "opening"
+  }
+ ],
+ "windows": [
+  {
+   "box_2d": [
+    280,
+    214,
+    286,
+    354
+   ],
+   "full_height": false
+  },
+  {
+   "box_2d": [
+    240,
+    621,
+    247,
+    715
+   ],
+   "full_height": false
+  },
+  {
+   "box_2d": [
+    740,
+    723,
+    747,
+    783
+   ],
+   "full_height": false
+  },
+  {
+   "box_2d": [
+    740,
+    203,
+    747,
+    241
+   ],
+   "full_height": false
+  },
+  {
+   "box_2d": [
+    240,
+    516,
+    247,
+    562
+   ],
+   "full_height": false
+  }
+ ]
+}
