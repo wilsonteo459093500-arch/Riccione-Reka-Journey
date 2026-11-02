@@ -3,31 +3,40 @@
 //
 // Project = {
 //   id, name, createdAt, updatedAt, version: 1,
+//   layoutVersion: 2,            // 版式版本：2 = B「格物」起的数据结构（C「安然」只换版式、沿用）；旧项目打开时由 lib/project.js upgradeProject 升级
 //   info: {
 //     client: 'Mr Lau', location: 'Muar', date: '2026 · 08',
 //     proposalTitle: '全屋定制设计方案',
-//     coverTitle: '',            // 方案封面（Material Board 页）大标题，空 = 自动「客户 · 地点」
-//     coverSubtitle: '',         // 方案封面副标题，空 = 'THE DREAM HOUSE JOURNEY'
+//     coverTitle: '',            // 方案封面（Material Board 页）大标题，空 = 自动（客户与地点两行）
+//     coverSubtitle: '',         // 方案封面副标题，空 = 自动（楼层：一楼与二楼）
+//     lang: 'zh'|'en'|'bi',      // 提案语言：华文 / English / 中英（engine/lang.js）
 //     sourceFile: '2026.8.6 Muar - Mr Lau - GF L1.pdf',
 //     team: [{ en:'DESIGN', name:'Sheerly', role:'方案设计师' }, ...],
 //   },
 //   floors:    [{ id, zh:'一楼', en:'GROUND FLOOR', image:'asset:…'|null,      // image = 楼层章节页背景（空 = 取该层第一张效果图）
 //                plan?:'asset:…', renders3d?:['asset:…'] }],                     // plan = 平面布置图；renders3d = AI 全屋立体图历史
 //   materials: [{ id, name:'浅川橡', code:'AG273', image:'asset:…'|null, pending:false }],
-//   cover:     { image:'asset:…'|null, layout:'split-light'|'split-dark'|'full' },   // Material Board → 方案封面
+//   cover:     { image:'asset:…'|null },   // Material Board → 方案封面（整张放进右侧，不裁；旧项目的 layout 字段已不用）
+//   translations: { [中文]: 'English' },  // 翻译记忆：English / 中英版的英文（整套共用，engine/lang.js）
 //   pages:     [{ n, thumb:'asset:…', kind:'cover'|'title'|'floor'|'view'|'end'|'other', title }],  // 原稿页缩略图（编辑器对照用）
 //   slides:    [Slide],          // 有序的整套提案
 // }
 //
 // Slide（共有字段：id, kind, enabled=true）
-//   { kind:'company', key:'cover'|…, overrides?:{ [elementIndex]: '整段文字（\n 分段）' } }   公司固定页（engine/companyTemplate.js）
-//   { kind:'designCover' }                       方案封面：有 cover.image 用 Material Board，否则退回「方案 · 设计图」章节页
-//   { kind:'materials' }                         本案材料（超过 12 种自动分页）
+//   { kind:'company', key:'cover'|…, overrides?:{ [字段]: '中文' }, overridesEn?:{ [字段]: 'English' }, images?:{ [照片位]: 'asset:…' } }
+//                                                公司固定页 = 品牌画册（engine/b/company.js；字段 / 照片位见 COMPANY_PAGES_B）
+//   { kind:'designCover', overrides?, overridesEn?, images? }
+//                                                方案封面：有 cover.image 用 Material Board，否则退回「方案」章节页（design-divider）
+//   { kind:'materials' }                         本案材料（超过 12 种均分成几页）
 //   { kind:'floor', floorId, image?:'asset:…' }  楼层章节页
-//   { kind:'view', floorId, layout:'framed'|'full', image:'asset:…', room:'客厅', roomEn:'LIVING AREA',
+//   { kind:'view', floorId, layout:'auto'|'framed'|'full', image:'asset:…', room:'客厅', roomEn:'LIVING AREA',
 //     subtitle:'全景', materials:[{ role:'柜体 & 柜门', materialId }], notes:[{ label:'隐形门 · Hidden door', text:'液压闭门器，配反弹器' }],
 //     sourcePage?: 9, tag?:'3d' }               效果图页（tag:'3d' = AI 全屋立体图）
+//                                                layout：auto = 整套自动排（b/design.js planViews）；full = 满版大图（满版带标题：视角名 + 材料）；framed = 图文
 //   { kind:'team' }                              本案服务团队（按 info.team 生成）
+
+/** 版式版本：2 = B「格物」起的数据结构（C「安然」只换版式，数据不变，所以不升版本） */
+export const LAYOUT_VERSION = 2;
 
 export const uid = (p = 'x') => `${p}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 
@@ -56,6 +65,7 @@ export function newProject(partial = {}) {
     createdAt: now,
     updatedAt: now,
     version: 1,
+    layoutVersion: LAYOUT_VERSION,
     info: {
       client: '',
       location: '',
@@ -68,7 +78,7 @@ export function newProject(partial = {}) {
     },
     floors: [],
     materials: [],
-    cover: { image: null, layout: 'split-light' },
+    cover: { image: null },
     pages: [],
     slides: [],
   };

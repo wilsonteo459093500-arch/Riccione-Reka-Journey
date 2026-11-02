@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef } from 'react';
 import { Copy, Trash2, ImagePlus, Image as ImageIcon, Layers, BookOpen, Palette, Users, Building2, Box } from 'lucide-react';
-import { KIND_LABELS, canDelete, canDuplicate, canInsertViewAfter, inputFieldFor } from './ops.js';
+import { KIND_LABELS, canDelete, canDuplicate, canInsertViewAfter, inputFieldFor, zhFieldFor } from './ops.js';
 import { Toggle, btnGhost } from './ui.jsx';
 import { isTypingTarget } from './hooks.js';
 import ViewInspector from './inspectors/ViewInspector.jsx';
@@ -53,7 +53,8 @@ export default function Inspector({
   useEffect(() => {
     if (!pickNonce || !activeField || !slide) return;
     const target = inputFieldFor(activeField, slide, project, layout);
-    const raf = requestAnimationFrame(() => focusField(target));
+    // 右栏没有这个英文框（华文版只摆中文框）→ 落到同一栏的中文框
+    const raf = requestAnimationFrame(() => focusField(target) || focusField(zhFieldFor(target)));
     return () => cancelAnimationFrame(raf);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pickNonce]);

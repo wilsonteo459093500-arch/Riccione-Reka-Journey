@@ -3,15 +3,19 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Settings, Download, Undo2, Redo2, Check, Loader2, AlertTriangle } from 'lucide-react';
 import { cls } from '../lib/ui.jsx';
+import BrandMark from './BrandMark.jsx';
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
 export const MOD_KEY = isMac ? '⌘' : 'Ctrl+';
 
 function Brand({ compact = false }) {
   return (
-    <div className="leading-tight whitespace-nowrap select-none">
-      <div className={`font-display font-semibold text-bp-ink tracking-wide ${compact ? 'text-base' : 'text-lg'}`}>UKIR STUDIO</div>
-      <div className="text-[9px] tracking-[0.25em] text-bp-faint uppercase">by Riccione Reka</div>
+    <div className="flex items-center gap-2.5 leading-tight whitespace-nowrap select-none">
+      <BrandMark size={compact ? 22 : 26} className="text-bp-ink" />
+      <div>
+        <div className={`font-display font-semibold text-bp-ink tracking-wide ${compact ? 'text-base' : 'text-lg'}`}>UKIR STUDIO</div>
+        <div className="text-[9px] tracking-[0.25em] text-bp-faint uppercase">by Riccione Reka</div>
+      </div>
     </div>
   );
 }

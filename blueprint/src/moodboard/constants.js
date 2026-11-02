@@ -1,13 +1,16 @@
 // Material Board 常量 —— 移植自 UKIR STUDIO（只保留 material board 功能），换成 Blueprint 的配色与字体。
 // 纯数据，Node 测试也能直接 import。
 
-/** 画幅：默认竖版 3:4 —— 方案封面「左文右图」的图区正好是 810×1080（3:4）；满版封面用 16:9 */
+/**
+ * 画幅：默认竖版 3:4。设为方案封面时 Board 整张放在封面右侧、任何比例都不裁（engine/b/design.js bDesignCover）：
+ *   竖版 / 方形放在第 6–12 栏、占满高度（最饱满）；横版放宽到第 4–12 栏、落在底线上（A4 横正好占满高度，16:9 矮一些）
+ */
 export const RATIOS = [
-  { id: 'p34', label: '竖版 3:4', hint: '左文右图封面', ratio: 3 / 4 },
-  { id: '16:9', label: '横版 16:9', hint: '满版封面', ratio: 16 / 9 },
-  { id: 'a4p', label: 'A4 竖', hint: '打印', ratio: 210 / 297 },
-  { id: 'a4l', label: 'A4 横', hint: '打印', ratio: 297 / 210 },
-  { id: '1:1', label: '方形', hint: '社媒', ratio: 1 },
+  { id: 'p34', label: '竖版 3:4', hint: '当方案封面最饱满：整张放在右侧、占满高度', ratio: 3 / 4 },
+  { id: '16:9', label: '横版 16:9', hint: '当方案封面：放宽在右侧、落在底线上（比竖版矮一些）', ratio: 16 / 9 },
+  { id: 'a4p', label: 'A4 竖', hint: '打印；当方案封面和竖版一样饱满', ratio: 210 / 297 },
+  { id: 'a4l', label: 'A4 横', hint: '打印；当方案封面正好占满右侧的高度', ratio: 297 / 210 },
+  { id: '1:1', label: '方形', hint: '社媒；当方案封面整张放在右侧', ratio: 1 },
 ];
 
 export const DEFAULT_RATIO_ID = 'p34';

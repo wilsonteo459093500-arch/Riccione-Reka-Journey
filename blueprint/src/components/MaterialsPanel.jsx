@@ -1,12 +1,16 @@
 // 材料清单：色板 / 名称 / 编号 / 待确认 / 用在哪几页；拖动排序（= 「本案材料」页顺序）、合并、删除、新增；右侧实时预览「本案材料」页
+// English / 中英版：名称、编号下面多一行英文名（和名称一样大，跨名称 + 编号两栏；写进翻译记忆，所有页一起变；编号另外印，不用写进英文名）
 
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Plus, Trash2, Merge, GripVertical, ChevronUp, ChevronDown, ImagePlus, Loader2, Eye, EyeOff, CircleAlert, ArrowUpRight, X,
 } from 'lucide-react';
 import SlideCanvas from './SlideCanvas.jsx';
+import EnInput from './editor/EnInput.jsx';
 import { renderDeck } from '../engine/deck.js';
 import { findFloor } from '../engine/model.js';
+import { langOf, missingInPages, isMissWarning } from '../engine/lang.js';
+import { needsEnglish, isLatinSource, materialsMissText, LANG_VERSION } from '../lib/langUi.js';
 import { resolveUrl, metaOf } from '../store/assets.js';
 import { uploadImage } from './editor/upload.js';
 import {
@@ -38,6 +42,17 @@ function useWidth(ref) {
   return w;
 }
 
+/** 表格列（宽屏）：English / 中英版的英文名在第二行，跨名称 + 编号两栏，列宽和华文版一样 */
+const COLS = 'md:grid-cols-[28px_24px_64px_minmax(0,1.3fr)_minmax(0,1fr)_88px_92px_76px]';
+/** English / 中英版：宽屏时这些放在第一行（和中文名称那一行对齐）；Tailwind 要看到完整的 class 名，所以逐个写出来 */
+const AT_ROW1 = {
+  4: 'md:col-start-4 md:row-start-1',
+  5: 'md:col-start-5 md:row-start-1',
+  6: 'md:col-start-6 md:row-start-1',
+  7: 'md:col-start-7 md:row-start-1',
+  8: 'md:col-start-8 md:row-start-1',
+};
+
 const FILTERS = [
   { id: 'all', label: '全部' },
   { id: 'pending', label: '待确认' },
@@ -47,6 +62,8 @@ const FILTERS = [
 export default function MaterialsPanel({ project, onChange, notify, onGoTab, assetsVersion }) {
   const materials = project.materials || [];
   const usage = useMemo(() => materialUsage(project), [project]);
+  const lang = langOf(project);
+  const en = needsEnglish(lang);
   const [selected, setSelected] = useState(() => new Set());
   const [filter, setFilter] = useState('all');
   const [openUsage, setOpenUsage] = useState(null); // materialId
@@ -169,6 +186,7 @@ export default function MaterialsPanel({ project, onChange, notify, onGoTab, ass
             <h2 className="font-serif text-2xl text-bp-ink mt-1">材料清单</h2>
             <p className="mt-1.5 text-xs text-bp-muted max-w-3xl leading-relaxed">
               这里的顺序就是「本案材料」页上的顺序（拖动左侧把手调整）；改名称、编号会同步到所有效果图页。同一种材料识别成了两条？勾选后「合并」。
+              {en && ` ${LANG_VERSION[lang]}：名称下面的 EN 是英文名，用简单的英文（如 Light Oak），编号会另外印出来。`}
             </p>
           </div>
 
@@ -219,7 +237,7 @@ export default function MaterialsPanel({ project, onChange, notify, onGoTab, ass
 
           <div className={`${cls.card} overflow-hidden`}>
             {/* 表头 */}
-            <div className="hidden md:grid grid-cols-[28px_24px_64px_minmax(0,1.3fr)_minmax(0,1fr)_88px_92px_76px] gap-3 items-center px-3 py-2 border-b border-bp-line bg-bp-tint/60 text-[11px] text-bp-faint">
+            <div className={`hidden md:grid ${COLS} gap-3 items-center px-3 py-2 border-b border-bp-line bg-bp-tint/60 text-[11px] text-bp-faint`}>
               <span />
               <input
                 type="checkbox"
@@ -278,6 +296,8 @@ export default function MaterialsPanel({ project, onChange, notify, onGoTab, ass
                     onDragStart={onDragStart}
                     onDragOver={onDragOver}
                     onDrop={onDrop}
+                    en={en}
+                    change={onChange}
                   />
                 ))}
               </ul>
@@ -340,7 +360,7 @@ export default function MaterialsPanel({ project, onChange, notify, onGoTab, ass
 
 function MaterialRow({
   m, index, total, project, used, selected, onToggleSel, onPatch, onMove, onDelete, onPickImage, onDropImage, uploading,
-  usageOpen, onToggleUsage, onGoSlide, autoFocus, onFocused, canDrag, dragState, onDragStart, onDragOver, onDrop,
+  usageOpen, onToggleUsage, onGoSlide, autoFocus, onFocused, canDrag, dragState, onDragStart, onDragOver, onDrop, en = false, change,
 }) {
   const rowRef = useRef(null);
   const nameRef = useRef(null);
@@ -356,6 +376,10 @@ function MaterialRow({
 
   const isOver = dragState && dragState.over === index && dragState.from !== index;
   const dragging = dragState && dragState.from === index;
+  // English / 中英版：英文名占第二行（名称本来就是英文 / 还没名称时没有）；宽屏时左边三列跨两行居中，右边三列对齐第一行
+  const showEn = en && !!String(m.name || '').trim() && !isLatinSource(project, m.name, 'material');
+  const span = showEn ? 'md:row-span-2' : '';
+  const at = (col) => (en ? AT_ROW1[col] : '');
 
   return (
     <li
@@ -365,17 +389,17 @@ function MaterialRow({
       className={`relative border-b border-bp-line last:border-b-0 ${selected ? 'bg-bp-gold/5' : 'bg-white'} ${dragging ? 'opacity-40' : ''}`}
     >
       {isOver && <div className={`absolute left-0 right-0 h-0.5 bg-bp-gold z-10 ${dragState.after ? '-bottom-px' : '-top-px'}`} />}
-      <div className="grid grid-cols-[28px_24px_64px_minmax(0,1fr)] md:grid-cols-[28px_24px_64px_minmax(0,1.3fr)_minmax(0,1fr)_88px_92px_76px] gap-x-3 gap-y-2 items-center px-3 py-2.5">
+      <div className={`grid grid-cols-[28px_24px_64px_minmax(0,1fr)] ${COLS} gap-x-3 gap-y-2 items-center px-3 py-2.5`}>
         <span
           draggable={canDrag}
           onDragStart={(e) => onDragStart(e, index, rowRef.current)}
-          className={`flex items-center justify-center h-8 rounded-md text-bp-faint ${canDrag ? 'cursor-grab active:cursor-grabbing hover:bg-bp-tint hover:text-bp-ink' : 'opacity-30'}`}
+          className={`flex items-center justify-center h-8 rounded-md text-bp-faint ${span} ${canDrag ? 'cursor-grab active:cursor-grabbing hover:bg-bp-tint hover:text-bp-ink' : 'opacity-30'}`}
           title={canDrag ? '拖动排序' : '筛选时不能拖动排序'}
           aria-hidden="true"
         >
           <GripVertical size={16} />
         </span>
-        <input type="checkbox" checked={selected} onChange={onToggleSel} className="w-4 h-4 accent-[#B8995A]" aria-label={`选择 ${matLabel(m)}`} />
+        <input type="checkbox" checked={selected} onChange={onToggleSel} className={`w-4 h-4 accent-[#B8995A] ${span}`} aria-label={`选择 ${matLabel(m)}`} />
         <button
           type="button"
           onClick={onPickImage}
@@ -395,7 +419,7 @@ function MaterialRow({
             e.stopPropagation();
             onDropImage(f);
           }}
-          className={`relative w-16 h-16 rounded-lg overflow-hidden border bg-bp-tint group focus:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold ${
+          className={`relative w-16 h-16 rounded-lg overflow-hidden border bg-bp-tint group focus:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold ${span} ${
             fileOver ? 'border-bp-gold ring-2 ring-bp-gold/40' : 'border-bp-line'
           }`}
           title="点击或拖入图片更换色板"
@@ -411,26 +435,31 @@ function MaterialRow({
           </span>
         </button>
 
-        {/* 名称 + （窄屏）编号 */}
+        {/* 名称 +（English / 中英版）英文名 +（窄屏）编号；宽屏时英文名在第二行，跨名称、编号两栏 */}
         <div className="min-w-0 md:contents">
           <input
             ref={nameRef}
             value={m.name || ''}
             onChange={(e) => onPatch({ name: e.target.value })}
             placeholder="材料名称，如：浅川橡"
-            className={`${cls.input} font-serif`}
+            className={`${cls.input} font-serif ${at(4)}`}
             aria-label="材料名称"
           />
+          {showEn && (
+            <div className="mt-1.5 md:mt-0 min-w-0 md:col-start-4 md:col-span-2 md:row-start-2">
+              <EnInput project={project} zh={m.name} kind="material" change={change} size="md" inputClass="font-serif" />
+            </div>
+          )}
           <input
             value={m.code || ''}
             onChange={(e) => onPatch({ code: e.target.value })}
             placeholder="编号，如 AG273"
-            className={`${cls.input} mt-2 md:mt-0 font-mono text-xs uppercase`}
+            className={`${cls.input} mt-2 md:mt-0 font-mono text-xs uppercase ${at(5)}`}
             aria-label="材料编号"
           />
         </div>
 
-        <div className="col-start-4 md:col-start-auto flex md:block items-center gap-2 flex-wrap">
+        <div className={`col-start-4 ${en ? at(6) : 'md:col-start-auto'} flex md:block items-center gap-2 flex-wrap`}>
           <button
             type="button"
             onClick={() => onPatch({ pending: !m.pending })}
@@ -458,7 +487,7 @@ function MaterialRow({
           onClick={onToggleUsage}
           aria-expanded={usageOpen}
           disabled={!used.length}
-          className={`hidden md:inline-flex items-center justify-between gap-1 px-2 py-1 rounded-lg text-xs border transition-colors ${
+          className={`hidden md:inline-flex ${at(7)} items-center justify-between gap-1 px-2 py-1 rounded-lg text-xs border transition-colors ${
             used.length
               ? usageOpen
                 ? 'bg-bp-dark text-bp-light border-bp-dark'
@@ -471,7 +500,7 @@ function MaterialRow({
           {used.length > 0 && (usageOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}
         </button>
 
-        <div className="hidden md:flex items-center justify-end gap-0.5">
+        <div className={`hidden md:flex ${at(8)} items-center justify-end gap-0.5`}>
           <button type="button" onClick={() => onMove(-1)} disabled={index === 0} className={`${cls.iconBtn} !w-6`} aria-label="上移" title="上移">
             <ChevronUp size={15} />
           </button>
@@ -531,10 +560,13 @@ function MaterialsPreview({ project, onChange, onGoTab, assetsVersion }) {
     const slide = (project.slides || []).find((s) => s.kind === 'materials');
     if (!slide) return [];
     return renderDeck({ ...project, slides: [{ ...slide, enabled: true }] }, { meta: metaOf });
-    // assetsVersion：新图入库后重新取尺寸 / URL
+    // translations：English / 中英版改了英文名要马上反映；assetsVersion：新图入库后重新取尺寸 / URL
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project.materials, project.info, project.slides, assetsVersion]);
+  }, [project.materials, project.info, project.slides, project.translations, assetsVersion]);
   const slideId = (project.slides || []).find((s) => s.kind === 'materials')?.id;
+  // 缺英文那条提醒换成这个标签页的说法（引擎那句说「在右侧填」，这里不对）；其余提醒原样
+  const warnings = [...new Set(pages.flatMap((pg) => (pg.warnings || []).filter((w) => !isMissWarning(w))))];
+  const missText = materialsMissText(langOf(project), missingInPages(pages));
 
   return (
     <aside className="min-w-0 xl:sticky xl:top-6 space-y-3">
@@ -571,11 +603,19 @@ function MaterialsPreview({ project, onChange, onGoTab, assetsVersion }) {
                   <SlideCanvas slide={pg} width={width} resolveUrl={resolveUrl} />
                 </div>
               ))}
-            {pages.some((pg) => pg.warnings?.length) && (
-              <ul className="text-[11px] text-bp-warn space-y-0.5">
-                {[...new Set(pages.flatMap((pg) => pg.warnings || []))].map((w) => (
+            {(warnings.length > 0 || missText) && (
+              <ul className="text-[11px] text-bp-warn leading-relaxed space-y-0.5">
+                {warnings.map((w) => (
                   <li key={w}>· {w}</li>
                 ))}
+                {missText && (
+                  <li>
+                    · {missText}
+                    <button type="button" onClick={() => onGoTab?.('pages')} className="ml-1 inline-flex items-center gap-0.5 text-bp-eyebrow hover:underline">
+                      去页面 <ArrowUpRight size={11} />
+                    </button>
+                  </li>
+                )}
               </ul>
             )}
           </>

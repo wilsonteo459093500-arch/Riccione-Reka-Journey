@@ -1,14 +1,22 @@
-// 项目信息：客户 / 地点 / 日期 / 标题 → 自动填进公司封面、方案封面、页脚；服务团队；楼层名称；方案章节显示开关
+// 项目信息：客户 / 地点 / 日期 / 方案名 → 自动填进公司封面、方案封面、目录；服务团队；楼层名称；方案章节显示开关；
+// 提案语言（华文 / English / 中英）—— English / 中英版时，标题、客户、地点、团队职位下面多一个英文输入框（写进翻译记忆）
 
 import React, { useEffect, useRef } from 'react';
-import { Plus, Trash2, ChevronUp, ChevronDown, CalendarDays, Users, Layers, ListChecks, FileText, RotateCcw } from 'lucide-react';
-import { DEFAULT_TEAM, clientLine } from '../engine/model.js';
-import { coverTexts } from '../engine/layouts.js';
+import { Plus, Trash2, ChevronUp, ChevronDown, CalendarDays, Users, Layers, ListChecks, FileText, RotateCcw, Languages } from 'lucide-react';
+import { DEFAULT_TEAM } from '../engine/model.js';
+import { TEAM_MAX } from '../engine/b/design.js';
+import { designCoverTexts, sectionLabel } from '../engine/deck.js';
+import { deckChapters } from '../engine/b/company.js';
+import { langOf } from '../engine/lang.js';
 import { TOGGLE_SECTIONS, sectionState, setSectionEnabled, kindState, setKindEnabled } from '../lib/project.js';
 import { formatDay } from '../lib/format.js';
+import { LANG_OPTIONS, LANG_HINTS, needsEnglish } from '../lib/langUi.js';
 import { cls } from '../lib/ui.jsx';
+import { setLang, NOW } from './editor/ops.js';
+import { Segmented } from './editor/ui.jsx';
+import EnInput from './editor/EnInput.jsx';
 
-const MAX_TEAM = 6;
+const MAX_TEAM = TEAM_MAX;
 
 function Card({ icon: Icon, title, hint, children, right }) {
   return (
@@ -28,13 +36,43 @@ function Card({ icon: Icon, title, hint, children, right }) {
   );
 }
 
-function Field({ label, hint, children }) {
+/** 带标签的一栏；en = 下面跟着的英文输入框（放在 label 外面，点它不会跳回中文框） */
+function Field({ label, hint, children, en }) {
   return (
-    <label className="block">
-      <span className={cls.label}>{label}</span>
-      <div className="mt-1">{children}</div>
+    <div>
+      <label className="block">
+        <span className={cls.label}>{label}</span>
+        <div className="mt-1">{children}</div>
+      </label>
+      {en && <div className="mt-1.5">{en}</div>}
       {hint && <span className="block mt-1 text-[11px] text-bp-faint leading-snug">{hint}</span>}
-    </label>
+    </div>
+  );
+}
+
+/** 提案语言：华文 / English / 中英，每种一句说明 */
+function LangCard({ lang, onLang }) {
+  return (
+    <Card icon={Languages} title="提案语言" hint="整套提案用哪种语言；导出时也可以另选一种语言导出">
+      <Segmented options={LANG_OPTIONS} value={lang} onChange={(v) => v !== lang && onLang(v)} />
+      <dl className="mt-3.5 space-y-1.5">
+        {LANG_OPTIONS.map((o) => {
+          const on = o.value === lang;
+          return (
+            <div key={o.value} className={`flex gap-3 text-xs leading-snug ${on ? 'text-bp-ink' : 'text-bp-faint'}`}>
+              <dt className={`w-14 shrink-0 ${on ? 'font-medium' : ''}`}>{o.label}</dt>
+              <dd className="min-w-0">{LANG_HINTS[o.value]}</dd>
+            </div>
+          );
+        })}
+      </dl>
+      {lang !== 'zh' && (
+        <p className="mt-3.5 pt-3 border-t border-bp-line text-[11px] text-bp-muted leading-relaxed">
+          英文取自翻译记忆和词典：各栏下面的 <span className="text-[9px] font-semibold tracking-[0.12em] text-bp-faint">EN</span>{' '}
+          框可以直接改；整套缺英文的地方，在「页面」顶栏点「AI 翻译」一次补齐。
+        </p>
+      )}
+    </Card>
   );
 }
 
@@ -70,7 +108,16 @@ export default function InfoPanel({ project, onChange }) {
   const info = project.info || {};
   const team = Array.isArray(info.team) ? info.team : [];
   const floors = project.floors || [];
-  const autoCover = coverTexts({ ...project, info: { ...info, coverTitle: '', coverSubtitle: '' } });
+  const autoCover = designCoverTexts({ ...project, info: { ...info, coverTitle: '', coverSubtitle: '' } });
+  const lang = langOf(project);
+  const en = needsEnglish(lang);
+  // 章节开关的编号跟着整套走（隐藏了品牌，公司就是 01）；隐藏的那一章不编号
+  const chapters = deckChapters(project);
+  // 团队名单的列：名字 · 职位（English / 中英版职位下面多一个英文框，职位那一列放宽）· 排序
+  const teamCols = en ? 'sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto]' : 'sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]';
+  /** 英文输入框（English / 中英版才有；中文本来就是英文时 EnInput 自己不显示）：和中文框一样大（cls.input） */
+  const enFor = (zh, kind = 'text', inputClass = '') =>
+    en ? <EnInput project={project} zh={zh} kind={kind} change={onChange} size="md" inputClass={inputClass} /> : null;
 
   const setInfo = (patch) => onChange((p) => ({ ...p, info: { ...p.info, ...patch } }));
   const setTeam = (fn) => onChange((p) => ({ ...p, info: { ...p.info, team: fn(Array.isArray(p.info?.team) ? p.info.team : []) } }));
@@ -97,22 +144,26 @@ export default function InfoPanel({ project, onChange }) {
           <div className={cls.eyebrow}>Project Info</div>
           <h2 className="font-serif text-2xl text-bp-ink mt-1">项目信息</h2>
           <p className="mt-1.5 text-xs text-bp-muted max-w-3xl leading-relaxed">
-            这里填的内容会自动用在公司封面、方案封面、页脚和服务团队页上 —— 改一次，整套同步。
+            这里填的内容会自动用在公司封面、方案封面、目录和服务团队页上 —— 改一次，整套同步。
           </p>
         </div>
 
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px] items-start">
           {/* 左栏 */}
           <div className="space-y-5 min-w-0">
-            <Card icon={FileText} title="客户与方案" hint={`公司封面显示为「${clientLine(info) || '地点 · 客户'}」`}>
+            <Card
+              icon={FileText}
+              title="客户与方案"
+              hint={`封面大标题：${[info.client, info.location].map((x) => (x || '').trim()).filter(Boolean).join(' / ') || '客户 / 地点'}（两行）`}
+            >
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="客户">
+                <Field label="客户" en={enFor(info.client)}>
                   <input className={cls.input} value={info.client || ''} onChange={(e) => setInfo({ client: e.target.value })} placeholder="如：Mr Lau" />
                 </Field>
-                <Field label="地点">
+                <Field label="地点" en={enFor(info.location)}>
                   <input className={cls.input} value={info.location || ''} onChange={(e) => setInfo({ location: e.target.value })} placeholder="如：Muar" />
                 </Field>
-                <Field label="日期" hint="显示在公司封面右下角">
+                <Field label="日期" hint="显示在公司封面的方案名下面（二〇二六年八月 / August 2026）">
                   <div className="flex gap-2">
                     <input className={cls.input} value={info.date || ''} onChange={(e) => setInfo({ date: e.target.value })} placeholder="2026 · 08" />
                     <button type="button" onClick={() => setInfo({ date: thisMonth() })} className={`${cls.btnGhost} shrink-0 !px-2.5`} title="填入本月">
@@ -120,7 +171,7 @@ export default function InfoPanel({ project, onChange }) {
                     </button>
                   </div>
                 </Field>
-                <Field label="方案标题" hint="公司封面的大标题">
+                <Field label="方案标题" hint="公司封面大标题（客户与地点）下面的那一行" en={enFor(info.proposalTitle || '全屋定制设计方案')}>
                   <input
                     className={cls.input}
                     value={info.proposalTitle || ''}
@@ -133,10 +184,15 @@ export default function InfoPanel({ project, onChange }) {
 
             <Card icon={FileText} title="方案封面（Material Board 页）" hint="留空 = 自动生成；设了 Material Board 封面后才会用到">
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="大标题">
-                  <input className={cls.input} value={info.coverTitle || ''} onChange={(e) => setInfo({ coverTitle: e.target.value })} placeholder={autoCover.title} />
+                <Field label="大标题" en={enFor(info.coverTitle)}>
+                  <input
+                    className={cls.input}
+                    value={info.coverTitle || ''}
+                    onChange={(e) => setInfo({ coverTitle: e.target.value })}
+                    placeholder={autoCover.title.replace(/\n/g, ' · ')}
+                  />
                 </Field>
-                <Field label="副标题（英文，自动大写）">
+                <Field label="副标题（留空 = 楼层）" en={enFor(info.coverSubtitle)}>
                   <input
                     className={cls.input}
                     value={info.coverSubtitle || ''}
@@ -150,7 +206,7 @@ export default function InfoPanel({ project, onChange }) {
             <Card
               icon={Users}
               title="本案服务团队"
-              hint="生成「本案服务团队」页；名字和职位都空着的一栏不显示，最多 6 位"
+              hint={`生成「本案团队」页：有人填了名字时只放填了名字的（一个都没有时先列职位），最多 ${MAX_TEAM} 位（7 位起排两排）`}
               right={
                 <div className="flex items-center gap-1.5 shrink-0">
                   {!team.length && (
@@ -171,21 +227,16 @@ export default function InfoPanel({ project, onChange }) {
             >
               {team.length ? (
                 <div className="space-y-2">
-                  <div className="hidden sm:grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)_minmax(0,1fr)_auto] gap-2 px-1 text-[11px] text-bp-faint">
-                    <span>英文职能（页上小字）</span>
+                  <div className={`hidden sm:grid ${teamCols} gap-2 px-1 text-[11px] text-bp-faint`}>
                     <span>名字</span>
-                    <span>中文职位</span>
+                    <span>{en ? '中文职位 · 英文' : '中文职位'}</span>
                     <span className="w-[100px]" />
                   </div>
                   {team.map((m, i) => (
-                    <div key={i} className="grid grid-cols-2 sm:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)_minmax(0,1fr)_auto] gap-2 items-center rounded-xl sm:rounded-none bg-bp-tint/60 sm:bg-transparent p-2 sm:p-0">
-                      <input
-                        className={`${cls.input} uppercase tracking-wider text-xs`}
-                        value={m.en || ''}
-                        onChange={(e) => setMember(i, { en: e.target.value })}
-                        placeholder={DEFAULT_TEAM[i]?.en || 'ROLE'}
-                        aria-label={`第 ${i + 1} 位 · 英文职能`}
-                      />
+                    <div
+                      key={i}
+                      className={`grid grid-cols-2 ${teamCols} gap-2 ${en ? 'items-start' : 'items-center'} rounded-xl sm:rounded-none bg-bp-tint/60 sm:bg-transparent p-2 sm:p-0`}
+                    >
                       <input
                         className={`${cls.input} font-serif`}
                         value={m.name || ''}
@@ -193,14 +244,17 @@ export default function InfoPanel({ project, onChange }) {
                         placeholder="名字"
                         aria-label={`第 ${i + 1} 位 · 名字`}
                       />
-                      <input
-                        className={cls.input}
-                        value={m.role || ''}
-                        onChange={(e) => setMember(i, { role: e.target.value })}
-                        placeholder={DEFAULT_TEAM[i]?.role || '职位'}
-                        aria-label={`第 ${i + 1} 位 · 中文职位`}
-                      />
-                      <div className="flex items-center justify-end gap-0.5 w-full sm:w-[100px]">
+                      <div className="min-w-0 space-y-1.5">
+                        <input
+                          className={cls.input}
+                          value={m.role || ''}
+                          onChange={(e) => setMember(i, { role: e.target.value })}
+                          placeholder={DEFAULT_TEAM[i]?.role || '职位'}
+                          aria-label={`第 ${i + 1} 位 · 中文职位`}
+                        />
+                        {enFor(m.role, 'team')}
+                      </div>
+                      <div className={`col-span-2 sm:col-span-1 flex items-center justify-end gap-0.5 w-full sm:w-[100px] ${en ? 'sm:pt-[3px]' : ''}`}>
                         <button type="button" onClick={() => moveMember(i, -1)} disabled={i === 0} className={cls.iconBtn} aria-label="上移" title="上移">
                           <ChevronUp size={15} />
                         </button>
@@ -228,12 +282,14 @@ export default function InfoPanel({ project, onChange }) {
 
           {/* 右栏 */}
           <div className="space-y-5 min-w-0">
+            <LangCard lang={lang} onLang={(v) => onChange((p) => setLang(p, v), NOW)} />
+
             <Card icon={ListChecks} title="方案章节显示" hint="老客户已经了解品牌和公司时，可以隐藏这些介绍页（不导出，随时可以再打开）">
               <div className="space-y-2">
                 {TOGGLE_SECTIONS.map((s) => (
                   <TriCheck
                     key={s.id}
-                    label={s.label}
+                    label={sectionLabel(s.id, chapters)}
                     hint={s.hint}
                     state={sectionState(project, s.id)}
                     onChange={(on) => onChange((p) => setSectionEnabled(p, s.id, on))}
@@ -252,11 +308,11 @@ export default function InfoPanel({ project, onChange }) {
                   onChange={(on) => onChange((p) => setKindEnabled(p, 'team', on))}
                 />
               </div>
-              <p className="mt-3 text-[11px] text-bp-faint leading-relaxed">隐藏章节后，记得到「页面 → 目录」里把目录文字也改一下。</p>
+              <p className="mt-3 text-[11px] text-bp-faint leading-relaxed">隐藏的章节不进目录，后面章节的编号（目录、章节页、方案封面）自动往前排。</p>
             </Card>
 
             {floors.length > 0 && (
-              <Card icon={Layers} title="楼层" hint="楼层章节页和效果图页角标上的名字">
+              <Card icon={Layers} title="楼层" hint="楼层章节页、效果图页标签（一楼　客厅）、目录和方案封面上的楼层名">
                 <div className="space-y-2">
                   {floors.map((f) => (
                     <div key={f.id} className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] gap-2">

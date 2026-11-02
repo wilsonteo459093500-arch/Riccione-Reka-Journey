@@ -56,7 +56,11 @@ export function BoardPanel({ boards, activeId, boardName, onRename, onSwitch, on
             </button>
           ))}
         </div>
-        <div className="text-[11px] text-bp-faint mt-1.5 leading-relaxed">{standalone ? 'A4 适合打印，方形适合社媒；要当提案封面：左文右图用竖版，满版用 16:9。' : '左文右图封面用竖版，满版封面用 16:9。'}</div>
+        <div className="text-[11px] text-bp-faint mt-1.5 leading-relaxed">
+          {standalone
+            ? 'A4 适合打印，方形适合社媒；当提案的方案封面时任何比例都整张放在右侧、不裁 —— 竖版 3:4 最饱满。'
+            : '设为方案封面时 Board 整张放在右侧、不裁：竖版 3:4 最饱满；横版会放宽、落在底线上，矮一些。'}
+        </div>
       </div>
 
       <div>

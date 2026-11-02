@@ -1,22 +1,25 @@
 // 「页面」编辑器纯函数（src/components/editor/ops.js）：排序 / 复制 / 删除 / 新增 / 版式 / 材料 / 改字 / 提醒修复
 import assert from 'node:assert/strict';
-import { layoutTeam, layoutViewFramed, layoutViewFull } from '../src/engine/layouts.js';
+import { bTeam, bViewPlate, bViewFull, planViews, WM_WARN } from '../src/engine/b/design.js';
+import { upgradeProject, legacyEditPages, setSectionEnabled, TOGGLE_SECTIONS } from '../src/lib/project.js';
+import { deckChapters } from '../src/engine/b/company.js';
+import { floorPageImage } from '../src/engine/b/design.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { test } from './harness.mjs';
 import { newProject, assembleDeck, uid, clientLine } from '../src/engine/model.js';
-import { renderDeck, elementText } from '../src/engine/deck.js';
-import { applyLayoutRhythm } from '../src/engine/layouts.js';
+import { renderDeck, elementText, sectionLabel } from '../src/engine/deck.js';
 import { analyzePages } from '../src/import/analyze.js';
 import {
   canDelete, canDuplicate, canInsertViewAfter, findSlide, listMove, listRemove, listUpdate, listInsert, updateSlide, applyPatches,
   toggleSlide, moveSlideRelative, moveSlide, moveSlideBy, duplicateSlide, deleteSlide, floorContextOf, insertViewsAfter,
   moveToFloorEnd, resolveViewLayout, setViewLayout, setAllViewLayouts, countLayoutChanges, sameRoomViews, copyMaterialsToRoom,
   removeMissingMaterials, splitView, newMaterial, addMaterialAndAssign, assignMaterial, updateFloor, setFloorBackground,
-  updateCover, updateTeamMember, addTeamMember, removeTeamMember, teamVisibleIndices, setCompanyOverride, clearCompanyOverride,
-  companyFields, companyKeyOf, pageNumbers, groupSections, stabilizePages, warningPageCount, nextWarningIndex, fixForWarning,
-  applyFix, inputFieldFor, projectImages, viewTitleOf, roomSuggestions, updateViewList,
+  updateCover, updateTeamMember, addTeamMember, removeTeamMember, teamVisibleIndices, setCompanyField, clearCompanyField,
+  setCompanyImage, companyFields, companyImages, companyKeyOf, pageNumbers, groupSections, stabilizePages, warningPageCount, nextWarningIndex, fixForWarning,
+  applyFix, inputFieldFor, zhFieldFor, projectImages, viewTitleOf, roomSuggestions, updateViewList, clearLegacyEdits, legacyEdits, editedCompanyFields,
+  enOnlyEdits, resetCompanyFields, singleLine, materialsLayout,
 } from '../src/components/editor/ops.js';
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
@@ -46,13 +49,12 @@ function fixtureProject() {
     mid.set(m.key, id);
     return { id, name: m.name, code: m.code, image: src(m.imageKey), pending: !!m.pending };
   });
-  let views = a.views.map((v) => ({
+  const views = a.views.map((v) => ({
     id: uid('s'), kind: 'view', enabled: true, floorId: v.floorKey ? fid.get(v.floorKey) || null : null, layout: 'auto',
     image: src(v.imageKey), room: v.room, roomEn: v.roomEn, subtitle: v.subtitle,
     materials: v.materials.filter((m) => mid.has(m.materialKey)).map((m) => ({ role: m.role, materialId: mid.get(m.materialKey) })),
     notes: v.notes.map((n) => ({ label: n.label, text: n.text })), sourcePage: v.page,
   }));
-  views = applyLayoutRhythm(views, meta);
   const design = views.filter((v) => !v.floorId);
   for (const f of project.floors) {
     design.push({ id: uid('s'), kind: 'floor', floorId: f.id, enabled: true });
@@ -248,16 +250,28 @@ test('floorContextOf / moveToFloorEnd：改楼层后移到该楼层章节末尾'
 // 版式
 // ---------------------------------------------------------------------------
 
-test('resolveViewLayout：auto 按图片比例 / 内容判断', () => {
-  const v = { kind: 'view', layout: 'auto', image: 'asset:a', materials: [], notes: [] };
-  assert.equal(resolveViewLayout(v, () => ({ w: 1920, h: 1080 })), 'full');
-  assert.equal(resolveViewLayout(v, () => ({ w: 1000, h: 1000 })), 'framed');
-  assert.equal(resolveViewLayout({ ...v, notes: [{ label: 'x', text: 'y' }] }, () => ({ w: 1920, h: 1080 })), 'framed');
+test('resolveViewLayout：设定的照用；auto 按整套计划（横图且不丢内容才满版）', () => {
+  const v = { id: 'x', kind: 'view', layout: 'auto', image: 'asset:a', materials: [], notes: [] };
+  assert.equal(resolveViewLayout(v, () => ({ w: 1920, h: 1080 })), 'full', '横图、没有材料说明 → 满版');
+  assert.equal(resolveViewLayout(v, () => ({ w: 1000, h: 1000 })), 'framed', '方图 → 图文');
+  assert.equal(resolveViewLayout({ ...v, notes: [{ label: 'x', text: 'y' }] }, () => ({ w: 1920, h: 1080 })), 'framed', '有说明 → 图文');
+  // 材料不多（≤ 2 行）：满版，材料印在左下角（Aman 第 9 页的满版带标题）；3 行起、没有下一页补上 → 图文
+  assert.equal(resolveViewLayout({ ...v, materials: [{ role: '柜体', materialId: 'm1' }] }, () => ({ w: 1920, h: 1080 })), 'full', '1 行材料 → 满版（印在左下角）');
+  const three = [{ role: '柜体', materialId: 'm1' }, { role: '柜门', materialId: 'm2' }, { role: '台面', materialId: 'm3' }];
+  assert.equal(resolveViewLayout({ ...v, materials: three }, () => ({ w: 1920, h: 1080 })), 'framed', '3 行材料、没有下一页补上 → 图文');
   assert.equal(resolveViewLayout({ ...v, layout: 'framed' }, () => ({ w: 1920, h: 1080 })), 'framed');
+  assert.equal(resolveViewLayout({ ...v, layout: 'full', notes: [{ text: 'y' }] }, () => ({ w: 1000, h: 1000 })), 'full', '设定了满版就照用');
   assert.equal(resolveViewLayout({ kind: 'floor' }), null);
+  // 传整套 / 已算好的计划：与 renderDeck 用的同一个计划
+  const p = setAllViewLayouts(smallProject(), 'auto');
+  const plan = planViews(p, meta169);
+  for (const s of p.slides.filter((x) => x.kind === 'view')) {
+    assert.equal(resolveViewLayout(s, meta169, p), plan.get(s.id) === 'full' ? 'full' : 'framed');
+    assert.equal(resolveViewLayout(s, meta169, plan), resolveViewLayout(s, meta169, p));
+  }
 });
 
-test('setAllViewLayouts：全部满版 / 框图；AI 立体图不动；自动 = 节奏调整（不连续 3 页同版式）', () => {
+test('setAllViewLayouts：全部满版 / 图文；AI 立体图不动；自动 = 全部交还给整套计划（不连续 3 页满版）', () => {
   const p = smallProject();
   p.slides = [...p.slides, { id: 'd3', kind: 'view', tag: '3d', layout: 'full', image: 'asset:d', floorId: 'f1', materials: [], notes: [] }];
   const framed = setAllViewLayouts(p, 'framed');
@@ -265,20 +279,196 @@ test('setAllViewLayouts：全部满版 / 框图；AI 立体图不动；自动 = 
   assert.equal(findSlide(framed, 'd3').layout, 'full');
   assert.equal(countLayoutChanges(p, framed), 5);
   assert.equal(setAllViewLayouts(framed, 'framed'), framed, '没变化返回原对象');
-  const auto = setAllViewLayouts(framed, 'auto', meta169);
-  const seq = auto.slides.filter((s) => s.kind === 'view' && s.tag !== '3d').map((s) => s.layout);
-  assert.ok(seq.every((l) => l === 'full' || l === 'framed'), '自动排版写回具体版式');
-  for (let i = 2; i < seq.length; i++) assert.ok(!(seq[i] === seq[i - 1] && seq[i] === seq[i - 2]), `第 ${i} 页连续三页同版式`);
+  const auto = setAllViewLayouts(framed, 'auto');
+  assert.ok(auto.slides.filter((s) => s.kind === 'view' && s.tag !== '3d').every((s) => s.layout === 'auto'), '自动 = 写回 auto');
+  assert.equal(findSlide(auto, 'd3').layout, 'full', 'AI 立体图不动');
+  // 按实际版式数：smallProject 的效果图都是横图、只有 v1 有材料（同空间下一页 v2 补不上）
+  const plan = planViews(auto, meta169);
+  // 连续满版按整套里相邻的页算（楼层章节页隔开）
+  const seq = auto.slides.filter((s) => s.enabled !== false).map((s) => (s.kind === 'view' ? plan.get(s.id) : s.kind));
+  for (let i = 2; i < seq.length; i++) assert.ok(!(seq[i] === 'full' && seq[i - 1] === 'full' && seq[i - 2] === 'full'), `第 ${i} 页连续三页满版`);
+  const fullAuto = auto.slides.filter((s) => s.kind === 'view' && s.tag !== '3d' && plan.get(s.id) === 'full').length;
+  assert.ok(fullAuto > 0);
+  assert.equal(countLayoutChanges(framed, auto, meta169), fullAuto, '实际变化 = 改成满版的页数');
   assert.equal(setViewLayout(p, 'v1', 'framed').slides.find((s) => s.id === 'v1').layout, 'framed');
 });
 
-test('setAllViewLayouts(auto) 在真实方案（fixture）上：与导入结果一致', () => {
+test('真实方案（fixture）：导入后版式全是 auto；整套计划不连续 3 页满版、满版页不丢材料说明', () => {
   const { project, meta } = fixtureProject();
   const views = project.slides.filter((s) => s.kind === 'view');
   assert.ok(views.length > 40, `效果图页 ${views.length}`);
-  const allFull = setAllViewLayouts(project, 'full');
-  const back = setAllViewLayouts(allFull, 'auto', meta);
-  assert.deepEqual(back.slides.filter((s) => s.kind === 'view').map((s) => s.layout), views.map((s) => s.layout));
+  assert.ok(views.every((s) => s.layout === 'auto'));
+  const plan = planViews(project, meta);
+  const shown = project.slides.filter((s) => s.enabled !== false);
+  let run = 0;
+  for (const s of shown) {
+    run = s.kind === 'view' && plan.get(s.id) === 'full' ? run + 1 : 0;
+    assert.ok(run < 3, '不连续 3 页满版');
+  }
+  const out = renderDeck(project, { meta });
+  const fullPages = out.filter((pg) => pg.kind === 'view' && plan.get(pg.slideId) === 'full');
+  assert.ok(fullPages.length > 0 && fullPages.length < views.length, `满版 ${fullPages.length} / ${views.length}`);
+  assert.ok(fullPages.every((pg) => !(pg.warnings || []).some((w) => /满版大图不显示/.test(w))), '自动的满版页不丢东西');
+});
+
+test('upgradeProject：旧项目的效果图版式交还给自动排版（立体图不动），只升级一次', () => {
+  const p = smallProject();
+  const old = { ...p, layoutVersion: undefined, slides: [...p.slides, { id: 'd3', kind: 'view', tag: '3d', layout: 'full' }] };
+  const up = upgradeProject(old);
+  assert.equal(up.layoutVersion, 2);
+  assert.ok(up.slides.filter((s) => s.kind === 'view' && s.tag !== '3d').every((s) => s.layout === 'auto'));
+  assert.equal(findSlide(up, 'd3').layout, 'full');
+  assert.equal(upgradeProject(up), up, '已经是新版式：原样返回');
+  const fresh = newProject();
+  assert.equal(fresh.layoutVersion, 2);
+  assert.equal(upgradeProject(fresh), fresh);
+});
+
+test('upgradeProject：旧版公司页按元素序号的改写，意思一样的搬到新栏位（质保年数、封面、封底联系方式），其余留着提醒', () => {
+  const p = smallProject();
+  const byKey = (q, k) => q.slides.find((s) => s.kind === 'company' && s.key === k);
+  const old = {
+    ...p,
+    layoutVersion: undefined,
+    slides: p.slides.map((s) => {
+      if (s.key === 'service-aftersales') return { ...s, overrides: { 15: '5 年', 21: '10 年' }, overridesEn: { 15: '5 yrs' } };
+      if (s.key === 'cover') return { ...s, overrides: { 5: '刘府全屋方案', 9: '旧标语' } };
+      if (s.key === 'closing') return { ...s, overrides: { 7: 'www.saildz.com · +6012-345 6789 (WhatsApp)', 6: 'Lot 5, Jalan Ampang, 50450 Kuala Lumpur, Wilayah Persekutuan, Malaysia' } };
+      return s;
+    }),
+  };
+  const up = upgradeProject(old);
+  assert.deepEqual(byKey(up, 'service-aftersales').overrides, { r3Text: '5 年', r4Text: '10 年' });
+  assert.deepEqual(byKey(up, 'service-aftersales').overridesEn, { r3Text: '5 yrs' });
+  assert.deepEqual(byKey(up, 'cover').overrides, { 9: '旧标语', subtitle: '刘府全屋方案' }, '没有对应栏位的留着');
+  const closing = byKey(up, 'closing').overrides;
+  assert.equal(closing.v2, '+6012-345 6789 (WhatsApp)', '电话搬到电话一栏');
+  assert.equal('v3' in closing, false, '网址没变：不写成改写');
+  assert.ok(closing.v1.includes('\n') && closing.v1.replace(/\n/g, ' ').startsWith('Lot 5, Jalan Ampang'), '地址折成几行（新版每行单排）');
+  // 页面上：质保年数照旧显示，不再提醒没填
+  const pg = renderDeck(up).find((x) => x.slideId === byKey(up, 'service-aftersales').id);
+  assert.ok(pg.els.some((e) => e.t === 'text' && elementText(e) === '5 年'));
+  assert.ok(!pg.warnings.some((w) => /质保年数/.test(w)));
+  // 已经是新版式（被上一版打开过）但还留着可搬的数字键：一样搬；搬完再升级 = 原样
+  const v2 = { ...old, layoutVersion: 2 };
+  assert.equal(byKey(upgradeProject(v2), 'service-aftersales').overrides.r3Text, '5 年');
+  assert.equal(upgradeProject(up), up);
+  // 新栏位已经有设计师写的字：不覆盖，旧的留着提醒
+  const both = { ...old, slides: old.slides.map((s) => (s.key === 'service-aftersales' ? { ...s, overrides: { 15: '5 年', r3Text: '7 年' } } : s)) };
+  assert.deepEqual(byKey(upgradeProject(both), 'service-aftersales').overrides, { 15: '5 年', r3Text: '7 年' });
+});
+
+test('upgradeProject：旧版选的楼层大图（存在楼层上）抄到楼层页上，照旧显示（可恢复自动）；新项目的楼层图仍按自动、不和下一页重复', () => {
+  const p = smallProject();
+  const old = { ...p, layoutVersion: undefined, floors: p.floors.map((f) => (f.id === 'f1' ? { ...f, image: 'asset:v1' } : f)) };
+  const up = upgradeProject(old);
+  assert.equal(findSlide(up, 'F1').image, 'asset:v1');
+  assert.deepEqual(floorPageImage(up, findSlide(up, 'F1')), { src: 'asset:v1', auto: false });
+  assert.equal('image' in findSlide(up, 'F2'), false, '楼层上没有图的不动');
+  // 新项目：楼层图 = 导入时取的（自动），正好是下一页的图时换一张
+  const fresh = { ...old, layoutVersion: 2 };
+  assert.equal(upgradeProject(fresh), fresh);
+  assert.notEqual(floorPageImage(fresh, findSlide(fresh, 'F1')).src, 'asset:v1');
+});
+
+test('旧版留下的改写：页面提醒 →「知道了」清掉；legacyEditPages 列出页名；华文只清中文的', () => {
+  const p = smallProject();
+  const cover = p.slides.find((s) => s.key === 'cover');
+  const story = p.slides.find((s) => s.key === 'brand-story');
+  const q = updateSlide(updateSlide(p, cover.id, { overrides: { 3: '刘府 · 麻坡（旧版）', subtitle: '新方案名' } }), story.id, { overridesEn: { 2: 'Old English' } });
+  // 打开时的一次性通知与页面提醒、检查器同一个规则：华文版只算中文的改写（品牌故事只改过英文 —— 华文版里没有提醒，通知也不提它）
+  assert.deepEqual(legacyEditPages(q).map((x) => x.title), ['封面']);
+  for (const lang of ['zh', 'en', 'bi']) {
+    const ql = { ...q, info: { ...q.info, lang } };
+    const warned = renderDeck(ql).filter((x) => x.warnings.some((w) => /^旧版里改过的字/.test(w))).map((x) => x.slideId);
+    assert.deepEqual(legacyEditPages(ql).map((x) => x.slideId), warned, `${lang}：通知列的页 = 有提醒的页`);
+    assert.deepEqual(legacyEditPages(ql).map((x) => x.count), warned.map((id) => legacyEdits(findSlide(ql, id), ql).length), `${lang}：处数 = 检查器列出的条数`);
+  }
+  assert.deepEqual(legacyEditPages({ ...q, info: { ...q.info, lang: 'bi' } }).map((x) => x.title), ['封面', '品牌故事']);
+  const w = renderDeck(q).find((x) => x.slideId === cover.id).warnings.find((x) => /^旧版里改过的字/.test(x));
+  assert.match(w, /（1 处）：「刘府 · 麻坡（旧版）」/);
+  assert.deepEqual(fixForWarning(w), { id: 'dismissLegacy', label: '知道了' });
+  const r = applyFix(q, 'dismissLegacy', cover.id);
+  assert.deepEqual(findSlide(r, cover.id).overrides, { subtitle: '新方案名' }, '只清旧的数字键');
+  assert.deepEqual(legacyEdits(findSlide(q, story.id), q), [], '华文版看不到英文的旧改写');
+  assert.equal(clearLegacyEdits(q, story.id, 'zh'), q, '华文版不清英文的');
+  const en = { ...q, info: { ...q.info, lang: 'en' } };
+  assert.equal(legacyEdits(findSlide(en, story.id), en).length, 1);
+  assert.equal('overridesEn' in findSlide(clearLegacyEdits(en, story.id, 'en'), story.id), false);
+});
+
+test('提醒 → 一键修复：第几条说明、空间名 / 视角名（中文还是英文）、质保年数的英文、公司页的栏位、空楼层、水印、编号太长', () => {
+  assert.equal(fixForWarning('说明太长（第 2 条）：建议精简或拆页').field, 'notes.1.text');
+  assert.equal(fixForWarning('说明太长（第 3 条的标签）：建议精简或拆页').field, 'notes.2.label');
+  assert.equal(fixForWarning('视角名太长：已缩小一级，建议精简').field, 'title');
+  assert.equal(fixForWarning('视角名的英文太长：已缩小一级，建议精简').field, 'subtitleEn');
+  assert.equal(fixForWarning('空间名太长：已缩小一级，建议精简').field, 'room');
+  assert.equal(fixForWarning('空间英文名太长：已缩小一级，建议精简').field, 'roomEn');
+  assert.equal(fixForWarning('售后维保：五金、板材质保年数还没填 —— 在右侧把「＿＿」改成年数').field, 'overrides.r3Text');
+  assert.equal(fixForWarning('售后维保：板材质保年数的英文还没填 —— 在右侧英文栏里把「____」改成年数（如 5 years）').field, 'overridesEn.r4Text');
+  // 公司页的提醒说的是栏位名：要知道是哪张公司页
+  const cut = '文字太长放不下：「说明 · 品牌」「正文（英文）」已截短（末尾「…」）—— 请删减';
+  assert.equal(fixForWarning(cut), null);
+  assert.equal(fixForWarning(cut, { key: 'contents' }).field, 'overrides.ch1Line');
+  assert.equal(fixForWarning('文字太长放不下：「正文（英文）」已截短（末尾「…」）—— 请删减', { key: 'brand-story' }).field, 'overridesEn.body');
+  assert.equal(fixForWarning('改过的中文还没有对应的英文：「一句话」 —— 在右侧英文栏里补上', { key: 'brand-divider' }).field, 'overridesEn.lead');
+  assert.equal(fixForWarning('这一层的效果图都隐藏了：楼层章节页后面没有内容 —— 也隐藏这一页，或给楼层选一张图').id, 'hide');
+  assert.equal(fixForWarning('这一层还没有效果图页：楼层章节页后面没有内容 —— 隐藏这一页，或先加效果图').id, 'hide');
+  // 水印：满版页 → 换成图文；图文页、楼层页（已经是图文 / 没有版式可换）→ 换一张高清图
+  assert.deepEqual(fixForWarning(WM_WARN.full), { id: 'framed', label: '换成图文' });
+  assert.deepEqual(fixForWarning(WM_WARN.plate), { id: 'pickImage', label: '换一张高清图', field: 'image' });
+  assert.equal(fixForWarning('材料编号太长：「LAMINAM-CALCE-BIANCO-12MM」折成了 2 行 —— 建议精简（去材料清单改）').id, 'gotoMaterials');
+  // 材料名称截短（本案材料页）：去材料清单改名称；名称里的字不会被别的规则认错
+  assert.deepEqual(fixForWarning('材料「意大利进口超白岩板」的名称太长：页面上截短了（末尾「…」）—— 建议精简（去材料清单改）'), { id: 'gotoMaterials', label: '去材料清单改名称' });
+  assert.equal(fixForWarning('材料「材料太多的水印会露出来」的名称太长：页面上截短了（末尾「…」）—— 建议精简（去材料清单改）').label, '去材料清单改名称');
+  assert.equal(fixForWarning('材料「浅川橡」的图片像素偏低：放大 1.6 倍会发虚，建议换高清图').label, '去材料清单换图');
+  assert.equal(fixForWarning('材料表放不下：第 5 项起没有印出来 —— 建议精简名称或拆成两页').id, 'split');
+  const p = smallProject();
+  assert.equal(findSlide(applyFix(p, 'hide', 'F2'), 'F2').enabled, false);
+});
+
+test('公司页改字：华文版「恢复默认」只算 / 只恢复中文的改动（英文的留着）；只排一行的栏位换行变空格', () => {
+  const p = smallProject();
+  const div = p.slides.find((s) => s.key === 'brand-divider');
+  const q = updateSlide(p, div.id, { overrides: { title: '新标题' }, overridesEn: { lead: 'Always.', title: 'New title' } });
+  const fields = companyFields(findSlide(q, div.id), q);
+  assert.deepEqual(editedCompanyFields(fields, 'zh').map((f) => f.field), ['title']);
+  assert.deepEqual(editedCompanyFields(fields, 'bi').map((f) => f.field), ['title', 'lead']);
+  assert.deepEqual(enOnlyEdits(fields).map((f) => f.field), ['lead']);
+  const zh = findSlide(resetCompanyFields(q, div.id, ['title'], 'zh'), div.id);
+  assert.equal('overrides' in zh, false);
+  assert.deepEqual(zh.overridesEn, { lead: 'Always.', title: 'New title' }, '华文版不丢英文的改动');
+  const bi = findSlide(resetCompanyFields(q, div.id, ['title', 'lead'], 'bi'), div.id);
+  assert.equal('overrides' in bi || 'overridesEn' in bi, false);
+  assert.equal(singleLine('自然栖居，生活回归 改字\n第二行'), '自然栖居，生活回归 改字 第二行');
+  assert.equal(fields.find((f) => f.field === 'label').oneLine, true);
+  assert.equal(fields.find((f) => f.field === 'title').oneLine, false);
+});
+
+test('方案章节显示：隐藏品牌 / 公司后目录只列方案、服务（编号重排），章节页与方案封面的编号跟着往前排', () => {
+  const p = setSectionEnabled(setSectionEnabled(smallProject(), 'brand', false), 'company', false);
+  const pages = renderDeck(p).filter((x) => x.enabled);
+  const textsOf = (pg) => pg.els.filter((e) => e.t === 'text').map(elementText);
+  const contents = textsOf(pages.find((x) => x.label === '目录'));
+  assert.deepEqual(contents.filter((t) => /^0\d$/.test(t)), ['01', '02']);
+  assert.ok(contents.includes('方案') && contents.includes('服务') && !contents.includes('品牌'));
+  assert.ok(textsOf(pages.find((x) => x.kind === 'designCover')).includes('第一章　方案'));
+  assert.ok(textsOf(pages.find((x) => x.label === '服务 · 章节页')).includes('第二章　服务'));
+  // 栏位：被隐藏的那一章在检查器里标出来
+  const ct = p.slides.find((s) => s.key === 'contents');
+  assert.equal(companyFields(ct, p).find((f) => f.field === 'ch1').hidden, true);
+  assert.equal(companyFields(ct, p).find((f) => f.field === 'ch3').hidden, false);
+  // 编辑器里的章节名（页面列表的分组标题、项目信息的章节开关）跟着编号：方案 = 01、服务 = 02；隐藏的那两章不编号
+  const all = renderDeck(p);
+  const labels = Object.fromEntries(groupSections(all, deckChapters(p)).map((g) => [g.section, g.label]));
+  assert.deepEqual(labels, { opening: '开篇', brand: '品牌 · 溪岸', company: '公司 · 瑞吉欧', design: '01 方案 · 设计图', service: '02 服务 · 交付' });
+  assert.deepEqual(TOGGLE_SECTIONS.map((s) => sectionLabel(s.id, deckChapters(p))), ['品牌 · 溪岸', '公司 · 瑞吉欧', '02 服务 · 交付']);
+  // 编号与目录、章节页一样（目录 01 / 02；服务章节页「第二章」）
+  assert.equal(labels.service.slice(0, 2), contents.filter((t) => /^0\d$/.test(t))[1]);
+  // 只隐藏品牌：公司 = 01
+  const q = setSectionEnabled(smallProject(), 'brand', false);
+  assert.deepEqual(TOGGLE_SECTIONS.map((s) => sectionLabel(s.id, deckChapters(q))), ['品牌 · 溪岸', '01 公司 · 瑞吉欧', '03 服务 · 交付']);
+  assert.equal(sectionLabel('design', deckChapters(q)), '02 方案 · 设计图');
 });
 
 // ---------------------------------------------------------------------------
@@ -311,6 +501,39 @@ test('assignMaterial / addMaterialAndAssign / removeMissingMaterials', () => {
   assert.deepEqual(findSlide(removeMissingMaterials(d, 'v2'), 'v2').materials, [{ role: '柜门', materialId: 'm9' }]);
 });
 
+test('materialsLayout：「本案材料」检查器说的页数、排数与 renderDeck 实际排出来的一致（长名称每页少放、排一排）', () => {
+  const LONG = { name: '意大利进口超白岩板（哑光）', code: 'LAMINAM-CALCE-BIANCO-12MM', image: 'asset:sw-long' };
+  const meta = (src) => (/^asset:sw/.test(src || '') ? { w: 600, h: 600 } : null);
+  const mats = (n, long = false) => Array.from({ length: n }, (_, i) => (long && i % 2 ? { ...LONG, id: `L${i}` } : { id: `m${i}`, name: '浅川橡', code: `AG${200 + i}`, image: 'asset:sw1' }));
+  /** renderDeck 排出来的材料页：几页、每页几排小样 */
+  const actual = (p) => {
+    const pages = renderDeck(p, { meta }).filter((pg) => pg.kind === 'materials');
+    // 小样 = 带 material:<id> 编辑字段的图（页角的溪岸 logo 不算）
+    return { pages: pages.length, rows: Math.max(...pages.map((pg) => new Set(pg.els.filter((e) => e.t === 'img' && /^material:/.test(e.edit?.field || '')).map((e) => e.y)).size)) };
+  };
+  // 中英版的名称是中文一行 + 英文一行：长名称把两排的小样挤扁 → 每页一排；English 版同样的材料两排放得下；
+  // 华文版 8 种两排放得下，12 种（一排 6 块、长名称折两行 + 长编号另起两行）两排就挤扁了 → 每页一排（C 安然的内容排到 900，下面是签名）
+  const longNote = (lang, n) => (lang === 'bi' || (lang === 'zh' && n === 12) ? '分成 2 页 · 每页一排色板' : '两排色板');
+  for (const lang of ['zh', 'en', 'bi']) {
+    for (const [n, long, note] of [
+      [3, false, '一排大色板'],
+      [7, false, '两排色板'],
+      [14, false, '分成 2 页 · 每页两排色板'],
+      [8, true, longNote(lang, 8)],
+      [12, true, longNote(lang, 12)],
+    ]) {
+      const p = smallProject();
+      p.info.lang = lang;
+      p.materials = mats(n, long);
+      p.translations = { [LONG.name]: 'Italian Ultra-White Sintered Stone (Matt)', 浅川橡: 'Light Oak' };
+      const lay = materialsLayout(p, meta);
+      assert.equal(lay.note, note, `${lang} ${n}${long ? ' 长名称' : ''}`);
+      assert.deepEqual({ pages: lay.pages, rows: lay.rows }, actual(p), `${lang} ${n}${long ? ' 长名称' : ''}：和页面一致`);
+    }
+  }
+  assert.equal(materialsLayout({ ...smallProject(), materials: [] }).note, '还没有材料');
+});
+
 test('splitView：备注在前、材料在后对半分，两页都用框图，同一张图', () => {
   const p = smallProject();
   const notes = [{ label: 'A', text: '1' }, { label: 'B', text: '2' }];
@@ -334,20 +557,31 @@ test('splitView：备注在前、材料在后对半分，两页都用框图，�
 // 楼层 / 封面 / 团队
 // ---------------------------------------------------------------------------
 
-test('updateFloor / setFloorBackground：换图写在楼层上；恢复自动 = 该层第一张效果图', () => {
+test('updateFloor / setFloorBackground：设计师选的图写在这一页（一定照用）；恢复自动 = 不和下一页重复', () => {
   const p = smallProject();
   const q = updateFloor(p, 'f1', { zh: '首层' });
   assert.equal(q.floors[0].zh, '首层');
   assert.equal(updateFloor(p, 'nope', { zh: 'x' }), p);
-  const r = setFloorBackground(updateSlide(p, 'F1', { image: 'asset:old' }), 'F1', 'asset:bg');
-  assert.equal(r.floors[0].image, 'asset:bg');
-  assert.equal('image' in findSlide(r, 'F1'), false, '单页旧设置清掉');
-  const out = renderDeck(r, { meta: meta169 });
-  assert.equal(out.find((pg) => pg.slideId === 'F1').els.find((e) => e.t === 'img').src, 'asset:bg');
-  const s = setFloorBackground(r, 'F1', null);
+  const r = setFloorBackground(p, 'F1', 'asset:v1');
+  assert.equal(findSlide(r, 'F1').image, 'asset:v1');
+  const imgOf = (proj) => renderDeck(proj, { meta: meta169 }).find((pg) => pg.slideId === 'F1').els.find((e) => e.t === 'img').src;
+  assert.equal(imgOf(r), 'asset:v1', '自己选的图照用（即使和下一页一样）');
+  // 恢复自动：清掉这一页的设定和原稿带来的楼层图；自动挑的图不和紧接着的下一页（v1）一样
+  const withFloorImg = updateFloor(r, 'f1', { image: 'asset:pdf' });
+  const s = setFloorBackground(withFloorImg, 'F1', null);
+  assert.equal('image' in findSlide(s, 'F1'), false);
   assert.equal(s.floors[0].image, null);
-  const out2 = renderDeck(s, { meta: meta169 });
-  assert.equal(out2.find((pg) => pg.slideId === 'F1').els.find((e) => e.t === 'img').src, 'asset:v1', '第一张效果图');
+  // 这一层的效果图都是满版（v2、v3）、下一页是 v1：没有可用的图 → 纯纸面的排版章节页（只有 logo，不画占位色块）
+  const pageOf = (proj) => renderDeck(proj, { meta: meta169 }).find((pg) => pg.slideId === 'F1');
+  assert.deepEqual(pageOf(s).els.filter((e) => e.t === 'img' && !/logo/.test(e.src)).map((e) => e.src), [], '都做了满版：排版章节页');
+  assert.ok(!pageOf(s).els.some((e) => e.t === 'rect' && e.w > 400 && e.h > 400), '不画占位色块');
+  // v2、v3 是图文：取离楼层页最远的那张的局部（右边一段），不和下一页（v1）、满版页重复
+  const framed = updateSlide(updateSlide(s, 'v2', { layout: 'framed' }), 'v3', { layout: 'framed' });
+  const auto = imgOf(framed);
+  assert.notEqual(auto, 'asset:v1', '不和下一页重复');
+  assert.equal(auto, 'asset:v3', '离楼层页最远的那张');
+  const part = pageOf(framed).els.find((e) => e.t === 'img' && e.src === 'asset:v3');
+  assert.ok(part.crop.l > 0.3 && part.crop.r === 0, `只取右边一段：${JSON.stringify(part.crop)}`);
 });
 
 test('团队：显示序号 ↔ info.team 序号；增删改', () => {
@@ -355,51 +589,106 @@ test('团队：显示序号 ↔ info.team 序号；增删改', () => {
   const team = [{ en: 'A', name: '', role: '' }, { en: 'B', name: 'Sheerly', role: '方案设计师' }, { en: 'C', name: '', role: '销售' }];
   const q = updateCover(p, {});
   const t = { ...q, info: { ...q.info, team } };
-  assert.deepEqual(teamVisibleIndices(team), [1, 2]);
-  // 画布上的 edit 字段就是 info.team 原始序号
-  const teamFields = layoutTeam(team).els.filter((e) => e.edit).map((e) => e.edit.field);
-  assert.deepEqual(teamFields, ['team.1.en', 'team.1.name', 'team.1.role', 'team.2.en', 'team.2.name', 'team.2.role']);
+  // 有人填了名字 → 只放填了名字的（第 3 位只有职位：先不放，页上会提醒）
+  assert.deepEqual(teamVisibleIndices(team), [1]);
+  assert.deepEqual(teamVisibleIndices(team.map((m) => ({ ...m, name: '' }))), [1, 2], '一个名字都没有：有职位的先排着');
+  // 画布上的 edit 字段就是 info.team 原始序号，与 teamVisibleIndices 一致
+  const page = bTeam({ project: { ...t, info: { ...t.info, lang: 'bi' } }, lang: 'bi' });
+  const teamFields = [...new Set(page.els.filter((e) => e.edit && /^team\./.test(e.edit.field)).map((e) => e.edit.field.split('.')[1]))];
+  assert.deepEqual(teamFields, ['1']);
+  assert.ok(page.warnings.some((w) => /服务团队第 3 位「销售」还没填名字/.test(w)));
+  assert.equal(fixForWarning(page.warnings.find((w) => /第 3 位/.test(w))).field, 'team.2.name');
   assert.equal(inputFieldFor('team.1.name'), 'team.1.name');
   const u = updateTeamMember(t, 0, { name: 'Lau' });
   assert.equal(u.info.team[0].name, 'Lau');
   assert.equal(addTeamMember(t).info.team.length, 4);
   assert.deepEqual(removeTeamMember(t, 0).info.team.map((m) => m.en), ['B', 'C']);
-  assert.equal(teamVisibleIndices(Array.from({ length: 9 }, () => ({ name: 'x' }))).length, 6);
+  assert.equal(teamVisibleIndices(Array.from({ length: 9 }, () => ({ name: 'x' }))).length, 9, '7–12 位排两排，都上页');
+  assert.equal(teamVisibleIndices(Array.from({ length: 14 }, () => ({ name: 'x' }))).length, 12);
 });
 
 test('updateCover：只改封面字段', () => {
   const p = smallProject();
-  const q = updateCover(p, { layout: 'full' });
-  assert.deepEqual(q.cover, { image: null, layout: 'full' });
+  const q = updateCover(p, { image: 'asset:board' });
+  assert.deepEqual(q.cover, { image: 'asset:board' });
 });
 
 // ---------------------------------------------------------------------------
 // 公司页改字
 // ---------------------------------------------------------------------------
 
-test('companyFields / setCompanyOverride：改字、恢复原文、与原文相同自动去掉改写', () => {
+test('companyFields / setCompanyField：按栏位改中文 / 英文，恢复默认，与默认相同自动去掉改写', () => {
   const p = smallProject();
   const cover = p.slides.find((s) => s.kind === 'company' && s.key === 'cover');
   const fields = companyFields(cover, p);
-  assert.ok(fields.length >= 4);
-  const client = fields.find((f) => f.tokens && f.text === 'Muar · Mr Lau');
-  assert.ok(client, '客户行来自项目信息');
-  assert.equal(client.overridden, false);
-  const q = setCompanyOverride(p, cover.id, client.idx, 'Muar · Mr & Mrs Lau', client.original);
-  assert.equal(findSlide(q, cover.id).overrides[client.idx], 'Muar · Mr & Mrs Lau');
-  const out = renderDeck(q);
-  const el = out.find((pg) => pg.slideId === cover.id).els[client.idx];
-  assert.equal(elementText(el), 'Muar · Mr & Mrs Lau');
-  assert.equal(companyFields(findSlide(q, cover.id), q).find((f) => f.idx === client.idx).overridden, true);
-  const r = clearCompanyOverride(q, cover.id, client.idx);
+  assert.ok(fields.length >= 3);
+  const name = fields.find((f) => f.field === 'name');
+  assert.ok(name.tokens, '客户与地点来自项目信息');
+  assert.equal(name.zh, 'Mr Lau\nMuar');
+  assert.equal(name.overridden.zh, false);
+  const textOf = (proj, field) =>
+    renderDeck(proj)
+      .find((pg) => pg.slideId === cover.id)
+      .els.filter((e) => e.t === 'text' && e.edit?.field === field)
+      .map(elementText)
+      .join('\n');
+  // 画布上的字按版式排（C 安然：英文大写、客户一行大字、地点并进「地点 · 日期」那一行）：比内容，不比大小写和换行
+  const norm = (t) => String(t).toUpperCase().replace(/[\s·]+/g, ' ').trim();
+  const q = setCompanyField(p, cover.id, 'name', 'zh', 'Mr & Mrs Lau\nMuar', name.zhDefault);
+  assert.equal(findSlide(q, cover.id).overrides.name, 'Mr & Mrs Lau\nMuar');
+  assert.equal(norm(textOf(q, 'overrides.name')), norm('Mr & Mrs Lau\nMuar'));
+  assert.equal(companyFields(findSlide(q, cover.id), q).find((f) => f.field === 'name').overridden.zh, true);
+  const r = clearCompanyField(q, cover.id, 'name', 'zh');
   assert.equal('overrides' in findSlide(r, cover.id), false, '没有改写时去掉 overrides');
-  const s = setCompanyOverride(q, cover.id, client.idx, client.original, client.original);
-  assert.equal('overrides' in findSlide(s, cover.id), false, '改回原文 = 恢复');
-  // 多段文字
-  const t = setCompanyOverride(p, cover.id, client.idx, '第一行\n第二行', client.original);
-  assert.equal(renderDeck(t).find((pg) => pg.slideId === cover.id).els[client.idx].paras.length, 2);
-  // 页脚分组
-  assert.ok(fields.some((f) => f.footer));
+  const s = setCompanyField(q, cover.id, 'name', 'zh', name.zhDefault, name.zhDefault);
+  assert.equal('overrides' in findSlide(s, cover.id), false, '改回默认 = 恢复');
+  // 输入框里的字 = 设计师打的原文（行尾空格、换行都留住）
+  const typing = setCompanyField(p, cover.id, 'subtitle', 'zh', '刘府方案 ', fields.find((f) => f.field === 'subtitle').zhDefault);
+  assert.equal(companyFields(findSlide(typing, cover.id), typing).find((f) => f.field === 'subtitle').zhInput, '刘府方案 ');
+  // 英文：English 版用 overridesEn
+  const en = { ...p, info: { ...p.info, lang: 'en' } };
+  const u = setCompanyField(en, cover.id, 'subtitle', 'en', 'The Lau Residence', fields.find((f) => f.field === 'subtitle').enDefault);
+  assert.equal(findSlide(u, cover.id).overridesEn.subtitle, 'The Lau Residence');
+  assert.equal(norm(textOf(u, 'overridesEn.subtitle')), norm('The Lau Residence'));
+  // 旧版按元素序号的改写不再生效
+  const legacy = updateSlide(p, cover.id, { overrides: { 3: '旧改写' } });
+  assert.ok(!renderDeck(legacy).find((pg) => pg.slideId === cover.id).els.some((e) => e.t === 'text' && elementText(e).includes('旧改写')));
+});
+
+test('清空的英文（不显示）：「恢复英文」只去掉英文的改写，中文的改动留着；「恢复默认」才两种一起清', () => {
+  const p = smallProject();
+  const div = p.slides.find((s) => s.key === 'brand-divider');
+  const field = (q) => companyFields(findSlide(q, div.id), q).find((f) => f.field === 'title');
+  for (const lang of ['en', 'bi']) {
+    const base = { ...p, info: { ...p.info, lang } };
+    const f0 = field(base);
+    // 中文改了、英文清空 = 英文版不印这一行
+    let q = setCompanyField(base, div.id, 'title', 'zh', '新标题', f0.zhDefault);
+    q = setCompanyField(q, div.id, 'title', 'en', '', f0.enDefault);
+    assert.equal(field(q).enInput, '');
+    assert.equal(field(q).overridden.en, true);
+    // 恢复英文：中文的改动还在，英文回到默认稿
+    const r = clearCompanyField(q, div.id, 'title', 'en');
+    assert.deepEqual(findSlide(r, div.id).overrides, { title: '新标题' }, `${lang}：中文的改动留着`);
+    assert.equal('overridesEn' in findSlide(r, div.id), false);
+    assert.equal(field(r).en, f0.enDefault);
+    // 恢复默认（English / 中英版）：中文、英文一起清
+    const all = findSlide(resetCompanyFields(q, div.id, ['title'], lang), div.id);
+    assert.equal('overrides' in all || 'overridesEn' in all, false);
+  }
+});
+
+test('companyImages / setCompanyImage：换照片、恢复默认', () => {
+  const p = smallProject();
+  const story = p.slides.find((s) => s.kind === 'company' && s.key === 'brand-story');
+  const [im] = companyImages(story, p);
+  assert.ok(im && im.field === `image.${im.slot}` && im.custom === false && im.src === im.default);
+  const q = setCompanyImage(p, story.id, im.slot, 'asset:new');
+  assert.equal(findSlide(q, story.id).images[im.slot], 'asset:new');
+  const page = renderDeck(q, { meta: () => ({ w: 2400, h: 1600 }) }).find((pg) => pg.slideId === story.id);
+  assert.ok(page.els.some((e) => e.t === 'img' && e.src === 'asset:new' && e.edit?.field === im.field));
+  const r = setCompanyImage(q, story.id, im.slot, null);
+  assert.equal('images' in findSlide(r, story.id), false);
 });
 
 test('companyKeyOf：方案封面没有 Material Board 时 = 方案章节页模板', () => {
@@ -422,9 +711,9 @@ test('pageNumbers / groupSections：页码只数启用的页；章节按连续�
   assert.equal(nums.has('v2'), false);
   assert.equal(nums.get(out[0].key), 1);
   assert.equal(Math.max(...nums.values()), out.filter((pg) => pg.enabled).length);
-  const groups = groupSections(out);
+  const groups = groupSections(out, deckChapters(p));
   assert.deepEqual(groups.map((g) => g.section), ['opening', 'brand', 'company', 'design', 'service']);
-  assert.equal(groups[3].label, '03 方案 · 设计图');
+  assert.deepEqual(groups.map((g) => g.label), ['开篇', '01 品牌 · 溪岸', '02 公司 · 瑞吉欧', '03 方案 · 设计图', '04 服务 · 交付']);
   assert.equal(groups.reduce((n, g) => n + g.items.length, 0), out.length);
   // 公司页拖到方案中间 → 章节分成两段
   const moved = moveSlideRelative(p, p.slides.find((s) => s.key === 'brand-awards').id, 'v3', 'after');
@@ -445,13 +734,14 @@ test('stabilizePages：内容没变沿用旧对象，改了一页只换那一页
   assert.deepEqual(r3.pages.filter((pg, i) => pg !== r2.pages[i]).map((pg) => pg.key).sort(), ['F1', 'v3']);
 });
 
-test('提醒：一键修复的识别与套用（满版放不下 → 框图；材料被删 → 移除）', () => {
+test('提醒：一键修复的识别与套用（满版藏起材料 → 图文；材料被删 → 移除）', () => {
   const p = smallProject();
   const many = ['m1', 'm2', 'm3', 'm1', 'm2', 'm3', 'm1', 'm2'].map((id, i) => ({ role: `柜体 & 柜门 ${i}`, materialId: id }));
   const q = updateSlide(p, 'v1', { layout: 'full', materials: many });
   const pg = renderDeck(q, { meta: meta169 }).find((x) => x.key === 'v1');
-  assert.ok(pg.warnings.length, '满版放不下应有提醒');
-  const fix = fixForWarning(pg.warnings[0]);
+  const hidden = pg.warnings.find((w) => /满版大图不显示/.test(w));
+  assert.ok(hidden, '满版页藏起了材料应有提醒');
+  const fix = fixForWarning(hidden);
   assert.equal(fix.id, 'framed');
   const r = applyFix(q, fix.id, 'v1');
   const pg2 = renderDeck(r, { meta: meta169 }).find((x) => x.key === 'v1');
@@ -460,14 +750,24 @@ test('提醒：一键修复的识别与套用（满版放不下 → 框图；材
   // 材料被删
   const s = { ...updateSlide(p, 'v3', { layout: 'framed', materials: [{ role: 'x', materialId: 'gone' }] }) };
   const w = renderDeck(s, { meta: meta169 }).find((x) => x.key === 'v3').warnings;
-  assert.equal(fixForWarning(w[0]).id, 'removeMissing');
+  assert.equal(fixForWarning(w.find((x) => /材料已被删除/.test(x))).id, 'removeMissing');
+  assert.ok(pg2.warnings.some((x) => fixForWarning(x)?.id === 'split'), '8 项材料：图文页提醒拆页');
   assert.deepEqual(findSlide(applyFix(s, 'removeMissing', 'v3'), 'v3').materials, []);
   // 其它提醒
   assert.equal(fixForWarning('缺少效果图').id, 'pickImage');
   assert.equal(fixForWarning('楼层章节页没有背景图').field, 'image');
   assert.equal(fixForWarning('本案材料为空').id, 'gotoMaterials');
   assert.equal(fixForWarning('服务团队还没填名字（项目信息 → 服务团队）').field, 'team.0.name');
-  assert.equal(fixForWarning('右侧说明太多放不下 —— 建议拆成两页，或删掉部分备注').id, 'split');
+  assert.equal(fixForWarning('说明太多放不下：建议拆成两页').id, 'split');
+  assert.equal(fixForWarning('材料太多：建议拆成两页').id, 'split');
+  assert.equal(fixForWarning('说明太长：建议精简或拆页').field, 'notes.0.text');
+  assert.equal(fixForWarning('图片像素偏低：放大 1.4 倍会发虚，建议换高清图').field, 'image');
+  assert.equal(fixForWarning('Material Board 图片像素偏低：放大 1.3 倍会发虚，建议换高清图').field, 'cover.image');
+  assert.equal(fixForWarning('材料「浅川橡」的图片像素偏低：放大 1.3 倍会发虚，建议换高清图').id, 'gotoMaterials');
+  assert.equal(fixForWarning('缺照片：封面照片 —— 点这个位置换一张照片').field, 'image.photo');
+  assert.equal(fixForWarning('图片像素偏低：系列一照片放大 1.3 倍会发虚，建议换高清图').field, 'image.c1');
+  assert.equal(fixForWarning('第 2 项还没选材料').field, 'materials.1');
+  assert.equal(fixForWarning('售后维保：板材质保年数还没填 —— 在右侧把「＿＿」改成年数').field, 'overrides.r4Text');
   assert.equal(fixForWarning('未知的公司页：x'), null);
   assert.equal(applyFix(p, 'nope', 'v1'), p);
 });
@@ -486,11 +786,17 @@ test('nextWarningIndex / warningPageCount：只看启用的页，循环查找', 
   assert.equal(nextWarningIndex([{ enabled: true, warnings: [] }], 0), -1);
 });
 
-test('框图 / 满版：备注的 edit 字段是原始序号（空备注跳过但不改号）', () => {
-  const v = { kind: 'view', room: '客厅', layout: 'framed', notes: [{ label: '', text: '' }, { label: 'A', text: '1' }, { label: 'B', text: '2' }], materials: [] };
-  const fields = (els) => els.filter((e) => e.edit && /^notes\./.test(e.edit.field)).map((e) => e.edit.field);
-  assert.deepEqual(fields(layoutViewFramed(v, null, { project: null, meta: () => null }).els), ['notes.1.label', 'notes.1.text', 'notes.2.label', 'notes.2.text']);
-  assert.deepEqual(fields(layoutViewFull(v, null, { project: null, meta: () => null }).els).sort(), ['notes.1.label', 'notes.1.text', 'notes.2.label', 'notes.2.text']);
+test('图文 / 满版：备注的 edit 字段是原始序号（空备注跳过但不改号）；满版页上没有字', () => {
+  const v = { id: 'x', kind: 'view', room: '客厅', layout: 'framed', image: 'asset:x', notes: [{ label: '', text: '' }, { label: '灯光', text: '灯带' }, { label: '收纳', text: '拉篮' }], materials: [] };
+  const ctx = { project: { info: {}, floors: [], materials: [], slides: [v] }, lang: 'zh', meta: () => ({ w: 1920, h: 1080 }) };
+  const fields = (els) => els.filter((e) => e.edit && /^notes\./.test(e.edit.field)).map((e) => e.edit.field).sort();
+  assert.deepEqual(fields(bViewPlate(ctx, v).els), ['notes.1.label', 'notes.1.text', 'notes.2.label', 'notes.2.text']);
+  // 满版（Aman 第 9 页的满版带标题）：照片上只有白字 —— 视角名、左下「楼层　空间」/ 材料、签名；说明不印（提醒换图文）
+  const full = bViewFull(ctx, { ...v, layout: 'full' });
+  assert.deepEqual(fields(full.els), [], '满版不印说明');
+  assert.ok(full.els.filter((e) => e.t === 'text').every((e) => e.paras.every((p) => p.runs.every((r) => ['FFFFFF', 'F5EFDD'].includes(r.color)))), '满版上只有白字');
+  assert.ok(full.warnings.some((w) => /满版大图不显示说明/.test(w)));
+  assert.ok(full.warnings.some((w) => /满版大图不显示说明/.test(w)));
   assert.equal(inputFieldFor('materials.2.role'), 'materials.2.role');
   assert.equal(inputFieldFor('title'), 'title');
 });
@@ -524,4 +830,23 @@ test('真实方案（fixture）：整套操作后仍能渲染', () => {
   assert.ok(out.every((pg) => Array.isArray(pg.els) && pg.els.length));
   const nums = pageNumbers(out);
   assert.equal(nums.size, out.length);
+});
+
+test('zhFieldFor：画布上点英文、右栏没有这个英文框（华文版）→ 落到同一栏的中文框', () => {
+  assert.equal(zhFieldFor('overridesEn.title'), 'overrides.title');
+  assert.equal(zhFieldFor('overridesEn.label'), 'overrides.label');
+  assert.equal(zhFieldFor('subtitleEn'), 'title'); // 效果图页的视角名框 data-field="title"
+  assert.equal(zhFieldFor('roomEn'), 'room');
+  assert.equal(zhFieldFor('notes.0.textEn'), 'notes.0.text');
+  assert.equal(zhFieldFor('notes.2.labelEn'), 'notes.2.label');
+  assert.equal(zhFieldFor('materials.1.roleEn'), 'materials.1.role');
+  assert.equal(zhFieldFor('materials.1.nameEn'), 'materials.1');
+  assert.equal(zhFieldFor('floor.en'), 'floor.zh');
+  // 不是英文栏位：没有可退的
+  for (const f of ['overrides.title', 'title', 'materials.1', 'image.photo', '', null]) assert.equal(zhFieldFor(f), null, String(f));
+  // 华文版页面上真的印着这些英文页眉（C 安然：英文大写 + 中文）
+  const p = smallProject();
+  p.info.lang = 'zh';
+  const fields = new Set(renderDeck(p).flatMap((pg) => pg.els.map((e) => e.edit?.field).filter(Boolean)));
+  assert.ok(fields.has('overridesEn.title') && fields.has('overridesEn.label'), '华文版公司页印着英文页眉');
 });

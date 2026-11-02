@@ -16,14 +16,13 @@ import { generateImage } from '../ai/gemini.js';
 import { CUTOUT_PROMPT, DEFAULT_BOARD, FIRST_BOARD_NAME, EXPORT_LONG_EDGE, STANDALONE_RATIO_ID } from './constants.js';
 import {
   boardHeight, gridLayout, collageLayout, nextSlot, materialLabel, materialsToImport, mergeImported, defaultTitles,
-  newBoardSettings, legendEntries, orientationOf, safeFileName, clampMove, ratioOf, coverSlotRatio, bgOf,
+  newBoardSettings, legendEntries, orientationOf, safeFileName, clampMove, ratioOf,
 } from './layout.js';
 import { listBoards, putBoard, removeBoard, getActiveBoardId, setActiveBoardId } from './store.js';
 import {
   fileToBoardImage, assetToBoardImage, compressForStorage, dataUrlToInput, measureAspect, downloadBlob,
 } from './images.js';
-import { renderBoardCanvas, finishForDownload, canvasToCoverBlob, padToAspect } from './render.js';
-import { coverLayoutFor } from '../lib/project.js';
+import { renderBoardCanvas, finishForDownload, canvasToCoverBlob } from './render.js';
 import BoardStage from './BoardStage.jsx';
 import LibraryPanel from './LibraryPanel.jsx';
 import FlatlayPanel from './FlatlayPanel.jsx';
@@ -394,17 +393,11 @@ export default function MoodBoard({ project, settings, notify, onOpenSettings, o
       return;
     }
     const snapshot = { items: stripBusy(items), board };
-    const orientation = orientationOf(board.ratioId);
-    // 设封面后的版式（竖版 → 左文右图，横版 → 满版…）→ 把画板补到那个位置的比例，四周补底色，材料不会被裁掉
-    const slot = coverSlotRatio(coverLayoutFor(project?.cover?.layout, orientation));
-    runCover(
-      'board',
-      async () => {
-        const canvas = await renderBoardCanvas({ ...snapshot, longEdge: EXPORT_LONG_EDGE, withTitle: false, withLegend: false });
-        return await canvasToCoverBlob(padToAspect(canvas, slot, bgOf(board.bgId).color));
-      },
-      { orientation: slot > 1 ? 'landscape' : 'portrait' }
-    );
+    // 方案封面上 Board 整张放在右侧、任何比例都不裁 —— 按画板本来的比例出图，不补边
+    runCover('board', async () => {
+      const canvas = await renderBoardCanvas({ ...snapshot, longEdge: EXPORT_LONG_EDGE, withTitle: false, withLegend: false });
+      return await canvasToCoverBlob(canvas);
+    }, { orientation: orientationOf(board.ratioId) });
   }
 
   function uploadCover(file) {
@@ -472,7 +465,7 @@ export default function MoodBoard({ project, settings, notify, onOpenSettings, o
       {/* 右侧：封面卡 + 工具条 + 画板 + AI 实拍排版 */}
       <div className="space-y-4 min-w-0 order-1 lg:order-2">
         {!standalone && (
-          <CoverCard project={project} ratioId={board.ratioId} coverBusy={coverBusy} coverDone={coverDone} onUploadCover={uploadCover} />
+          <CoverCard project={project} coverBusy={coverBusy} coverDone={coverDone} onUploadCover={uploadCover} />
         )}
 
         <div className="flex flex-wrap items-center gap-2">
