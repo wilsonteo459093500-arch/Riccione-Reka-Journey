@@ -520,7 +520,9 @@
     { match: /墙板|wall panel/i, rooms: ['living'] }
   ];
 
-  /* 需求卡「风格倾向」→ 方向（取第一个对上的） */
+  /* 需求卡「风格倾向」→ 方向（取第一个对上的）。
+     旧卡的选项（自然原木、侘寂…）一条都不能删：旧卡要读出一样的方向。
+     新卡的选项跟案例库的风格同一套（case-vocab.js 的 MB.CASE_STYLES）：新加的接在后面 */
   MB.STYLE_DIRECTION = [
     { match: /侘寂|wabi/i, dir: 'wabi' },
     { match: /日式|japandi|japanese/i, dir: 'misty' },
@@ -528,8 +530,36 @@
     { match: /北欧|nordic|scandi/i, dir: 'misty' },
     { match: /现代简约|modern minimal|minimalist/i, dir: 'skeleton' },
     { match: /轻奢|luxe|luxury/i, dir: 'mountain' },
-    { match: /中古|mid-century|vintage/i, dir: 'weaving' }
+    { match: /中古|mid-century|vintage/i, dir: 'weaving' },
+    { match: /微侘寂/i, dir: 'wabi' },
+    { match: /奶油|cream/i, dir: 'misty' },
+    { match: /法式|french/i, dir: 'weaving' },
+    { match: /原木/i, dir: 'misty' }
   ];
+
+  /* 空间的卖点 → 案例库的柜类（MB.CASE_CABINETS 的 key）：「帮我挑」看客户要做哪几种柜子。
+     没列的卖点（楼梯底、玩具收纳…）不对应任何柜类 */
+  MB.FEAT_CABINETS = {
+    foyer: { fullheight: ['shoe'], ventilated: ['shoe'], floating: ['shoe'], dropzone: ['shoe'], bench: ['shoe'] },
+    living: { tvwall: ['tvwall', 'tvcab'], display: ['display'], floatingconsole: ['tvcab'], hidden: ['tvcab'], fluted: ['wallpanel'] },
+    dining: { sideboard: ['sideboard'], coffeebar: ['sideboard'], tall: ['sideboard'] },
+    kitchen: { topbase: ['kitchen'], pantry: ['kitchen'], openshelf: ['kitchen'], appliance: ['kitchen'], island: ['island'], wetkitchen: ['kitchen'], skeleton: ['kitchen'] },
+    master: { fullheight: ['wardrobe'], handleless: ['wardrobe'], lighting: ['wardrobe'], drawers: ['wardrobe'], headboard: ['bed'] },
+    walkin: { open: ['wardrobe'], island: ['wardrobe'], 'his-hers': ['wardrobe'] },
+    vanity: { integrated: ['dresser'], mirror: ['dresser'], drawers: ['dresser'] },
+    bathroom: { floating: ['bathvanity'], mirrorcab: ['bathvanity'], moisture: ['bathvanity'] },
+    bedroom: { wardrobe: ['wardrobe'], desk: ['bookcase'], bedstorage: ['bed'] },
+    study: { bookwall: ['bookcase'], desk: ['bookcase'], files: ['bookcase'] },
+    guest: { wardrobe: ['wardrobe'], multi: ['wardrobe'] }
+  };
+  /** 一个空间、几个卖点 → 柜类 key（不重复） */
+  MB.featCabinets = function (roomKey, feats) {
+    var map = MB.FEAT_CABINETS[roomKey] || {}, out = [];
+    (feats || []).forEach(function (f) {
+      (map[f] || []).forEach(function (c) { if (out.indexOf(c) < 0) out.push(c); });
+    });
+    return out;
+  };
 
   /* ---------- 内置图库 ----------------------------------------
      溪岸自家的空间实拍（来自公司手册）。销售自己的参考图另存在浏览器里。

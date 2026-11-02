@@ -182,13 +182,17 @@
     <legend>风格倾向 <i class="muted small">Style direction</i></legend>
     <span class="sub">凭直觉选，最多三个。</span>
     <div class="opts">
-      <label class="opt"><input type="checkbox" name="style" value="自然原木 Natural wood" /><span>自然原木 <em>Natural wood</em></span></label>
+      <!-- 跟案例库的风格同一套（assets/js/visi/case-vocab.js 的 MB.CASE_STYLES）：业务按「帮我挑」才挑得到同风格的案例。
+           值的格式不变（「华文 English」）：VISI 的 brief-parse.js 认得新旧两种卡 -->
+      <label class="opt"><input type="checkbox" name="style" value="原木 Natural wood" /><span>原木 <em>Natural wood</em></span></label>
+      <label class="opt"><input type="checkbox" name="style" value="微侘寂 Subtle wabi-sabi" /><span>微侘寂 <em>Subtle wabi-sabi</em></span></label>
+      <label class="opt"><input type="checkbox" name="style" value="奶油风 Cream style" /><span>奶油风 <em>Cream style</em></span></label>
+      <label class="opt"><input type="checkbox" name="style" value="轻法式 Light French" /><span>轻法式 <em>Light French</em></span></label>
+      <label class="opt"><input type="checkbox" name="style" value="中古 Mid-century" /><span>中古 <em>Mid-century</em></span></label>
       <label class="opt"><input type="checkbox" name="style" value="现代简约 Modern minimal" /><span>现代简约 <em>Modern minimal</em></span></label>
-      <label class="opt"><input type="checkbox" name="style" value="侘寂 Wabi-sabi" /><span>侘寂 <em>Wabi-sabi</em></span></label>
       <label class="opt"><input type="checkbox" name="style" value="日式 Japandi" /><span>日式 <em>Japandi</em></span></label>
       <label class="opt"><input type="checkbox" name="style" value="北欧 Nordic" /><span>北欧 <em>Nordic</em></span></label>
       <label class="opt"><input type="checkbox" name="style" value="轻奢 Modern luxe" /><span>轻奢 <em>Modern luxe</em></span></label>
-      <label class="opt"><input type="checkbox" name="style" value="中古 Mid-century" /><span>中古 <em>Mid-century</em></span></label>
       <label class="opt"><input type="checkbox" name="style" value="还没想好 Not decided" /><span>还没想好 <em>Not decided</em></span></label>
     </div>
   </fieldset>

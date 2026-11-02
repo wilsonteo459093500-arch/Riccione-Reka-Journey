@@ -84,6 +84,10 @@
       team: [{ role: 'sales', name: profile.host || host.name || '' }],
       paletteFrom: 'style',  // 'ref' = 配色取自客户发来的参考图（p.refImages）
       refImages: [],         // [{ src: dataURL ≤ 360px, w, h }]，最多 3
+      // 公司案例库用的（「帮我挑」、自动配图）：客户挑的风格（MB.CASE_STYLES 的 key，空 = 没说），
+      // 要做的柜类（MB.CASE_CABINETS 的 key）—— 需求卡带入时按定制范围、需求填好
+      caseStyle: '',
+      cabinets: [],
       brief: ''
     };
   };
@@ -343,8 +347,35 @@
   ];
   var SHOT = {};
   SAME_SHOT.forEach(function (g) { g.forEach(function (ref) { SHOT[ref] = g[0]; }); });
-  function shot(ref) { return SHOT[ref] || ref; }
+  // 案例库的照片：同一个镜头（连拍、微调角度，dHash 分组）算同一张 —— CASE_SHOT 由 MB.setCases 填
+  function shot(ref) { return SHOT[ref] || CASE_SHOT[ref] || ref; }
   MB.shotKey = shot;
+
+  /* ---------- 公司案例库（cloud.js 给的白名单资料） ------------
+     ref = 'c:<h16>'。只有 cloud.js 的 entries() 会进来：没有项目名（文件夹名）、没有档案路径。
+     隐藏的、不确定（unsure）的照样解析得到 —— 旧方案打开不会少图；只是自动配图、帮我挑不用它们 */
+  var CASES = [], CASE_MAP = {}, CASE_SHOT = {}, CASE_SERIES = {}, CASE_VER = 0;
+  var CASE_ID = /^c:[0-9a-f]{16}$/;
+  function usable(c) { return !!c && !c.hidden && c.status !== 'unsure'; }
+  MB.caseUsable = usable;
+  /** cloud.js 每次载入 / 更新清单后叫一次；之后要重建 resolver（app.js 的 rebuildResolver） */
+  MB.setCases = function (list) {
+    CASES = []; CASE_MAP = {}; CASE_SHOT = {}; CASE_SERIES = {}; CASE_VER++; poolCache = null;
+    (Array.isArray(list) ? list : []).forEach(function (c) {
+      if (!c || typeof c.id !== 'string' || !CASE_ID.test(c.id) || CASE_MAP[c.id]) return;
+      CASES.push(c);
+      CASE_MAP[c.id] = c;
+      // shot 可能是组长的 h16 或 'c:<h16>'：都换成 ref 的样子
+      var lead = typeof c.shot === 'string' ? (c.shot.indexOf('c:') === 0 ? c.shot : 'c:' + c.shot) : '';
+      if (CASE_ID.test(lead) && lead !== c.id) CASE_SHOT[c.id] = lead;
+      // 按系列先分好：3000 张也不用每次排版都整批扫一遍
+      if (usable(c) && c.series) (CASE_SERIES[c.series] = CASE_SERIES[c.series] || []).push(c);
+    });
+    return CASES.length;
+  };
+  /** 全部案例（含隐藏 / 不确定；图库、帮我挑自己筛） */
+  MB.cases = function () { return CASES; };
+  MB.caseOf = function (ref) { return CASE_MAP[ref] || null; };
   /* 不同的照片、同一个地方：开场的「草原上走路的人」（品牌照 letter）和「远山」拍的是同一道雪山山脊、
      同一片草原 —— 同一份方案只用其中一张（老板：「不要完全用一样的」）。只在自动挑图时让开，
      不算「同一张照片」（销售自己两张都选，是他的决定；体检另外提醒） */
@@ -473,11 +504,13 @@
   /** 页面 type → 版位（只有这些页有可以换的图） */
   MB.IMAGE_SLOTS = ['cover', 'letter', 'glance', 'chapter', 'practical', 'language', 'team', 'invite', 'back'];
 
-  /** ref → { src, w, h, series, rooms }；ref 形如 'b:misty-1'（内置）或 'u:xxx'（本机图库） */
+  /** ref → { src, w, h, series, rooms }；ref 形如 'b:misty-1'（内置）、'u:xxx'（本机图库）或 'c:<h16>'（公司案例库） */
   MB.makeResolver = function (userImages) {
     var map = {};
     builtins().forEach(function (b) { map[b.id] = b; });
     (userImages || []).forEach(function (u) { map['u:' + u.id] = u; });
+    // 案例放最后（pool 照插入顺序走，内置 / 本机图的先后跟以前一样）
+    CASES.forEach(function (c) { map[c.id] = c; });
     var fn = function (ref) { return ref ? map[ref] || null : null; };
     fn.map = map;
     // 记住最近一个：MB.pageList(p) 没带 resolve 时（页码、讲稿）也能判断案例图找不找得到
@@ -485,29 +518,66 @@
     return fn;
   };
 
-  /** 所有图（内置 + 品牌照 + 本机），给图库与自动配图用 */
-  MB.allImages = function (userImages) {
+  /** 案例 → 图库 / 自动配图的那一份（跟内置图同一个形状，多了 isCase 与案例自己的标签） */
+  function caseItem(c) {
+    return { ref: c.id, src: c.src, thumb: c.thumb || '', w: +c.w || 0, h: +c.h || 0, rooms: c.rooms || [], series: c.series || '',
+      own: false, isCase: true, label: c.label || '', en: c.en || '', zh: c.zh || '', style: c.style || '', cabinets: c.cabinets || [],
+      hero: !!c.hero, pid: c.pid || '', area: c.area || '', ptype: c.ptype || '', traits: c.traits || [], status: c.status || '', hidden: !!c.hidden };
+  }
+  /** 这份方案能自动用的案例：方案系列的（没隐藏、不是 unsure）。没给方案 = 全部能用的（图库） */
+  function caseList(p) {
+    if (!CASES.length) return [];
+    if (!p) return CASES.filter(usable);
+    return CASE_SERIES[MB.dir(p).series] || [];
+  }
+
+  /** 所有图（内置 + 品牌照 + 本机 + 公司案例），给图库与自动配图用。
+      带了方案（p）：案例只放那个系列的 —— 3000 张案例不会拖慢自动配图。
+      本机图（own）只有 u: 的；案例另外标 isCase，放在最后（同分的轮换顺序跟以前一样） */
+  MB.allImages = function (userImages, p) {
     var list = (userImages || []).map(function (u) {
       return { ref: 'u:' + u.id, src: u.src, w: u.w, h: u.h, rooms: [u.tag], series: u.series || '', own: true, label: u.label || '' };
     });
     builtins().forEach(function (b) {
       list.push({ ref: b.id, src: b.src, w: b.w, h: b.h, rooms: b.rooms, series: b.series, own: false, label: b.zh });
     });
+    caseList(p).forEach(function (c) { list.push(caseItem(c)); });
     return list;
   };
 
-  /** 一个空间能用的图，排好序：自己图库里对得上的 > 同系列内置 > 其他内置；同分的按方案 id 轮换。
+  /** 方案要做的柜类：需求卡带进来的（p.cabinets）+ 空间勾的卖点（MB.FEAT_CABINETS）。room = 只看那一间 */
+  function wantCabinets(p, room) {
+    var out = (p.cabinets || []).slice();
+    (room ? [room] : p.rooms || []).forEach(function (r) {
+      (MB.featCabinets ? MB.featCabinets(r.key, r.feats) : []).forEach(function (c) { if (out.indexOf(c) < 0) out.push(c); });
+    });
+    return out;
+  }
+  MB.wantCabinets = wantCabinets;
+
+  /** 一个空间能用的图，排好序：自己图库里对得上的 > 同系列的案例 > 同系列内置 > 其他内置；同分的按方案 id 轮换。
       list = MB.allImages 的形状；used = 已经用掉的照片（shotKey → 1）。autoPick 与 deckImages 共用 */
   function roomCands(p, room, list, used) {
     var series = MB.dir(p).series;
+    var want = null;
     var cands = list.filter(function (im) {
-      return (im.rooms || []).indexOf(room.key) > -1 && !used[shot(im.ref)];
+      return (im.rooms || []).indexOf(room.key) > -1 && !used[shot(im.ref)] && !im.blocked;
     });
     // 够大、而且不是超宽的全景（放进 720 × 720 的主图位置至少看得到 45%）才加分：
-    // 超宽的（门厅、客厅 2.5 : 1 的全景）会排到辅图（720 × 240 的横条正好）或封面、拼贴
+    // 超宽的（门厅、客厅 2.5 : 1 的全景）会排到辅图（720 × 240 的横条正好）或封面、拼贴。
+    // 分数：自己的 8 · 同系列 4 · 案例 2 · 同风格 1 · 柜类对上 1 · 可当主图 1 · 清楚 1
+    //（以前是 4 / 2 / 1：没有案例时排出来的先后一模一样）
     function score(im) {
       var ok = Math.max(im.w, im.h) >= 900 && keepOf(SLOT_BOX.room, im) >= 0.45;
-      return (im.own ? 4 : 0) + (im.series === series ? 2 : 0) + (ok ? 1 : 0);
+      var s = (im.own ? 8 : 0) + (im.series === series ? 4 : 0) + (ok ? 1 : 0);
+      if (im.isCase) {
+        if (!want) want = wantCabinets(p, room);
+        s += 2;
+        if (p.caseStyle && im.style === p.caseStyle) s += 1;
+        if ((im.cabinets || []).some(function (c) { return want.indexOf(c) > -1; })) s += 1;
+        if (im.hero) s += 1;
+      }
+      return s;
     }
     // 同类的第几间（两间儿童房各自轮换，不会挑到一样的顺序）
     var nth = 0;
@@ -536,11 +606,16 @@
     count = count || 3;
     var used = handPicked(p, MB.makeResolver.last);
     p.rooms.forEach(function (r) { if (r !== room) r.images.forEach(function (ref) { used[shot(ref)] = 1; }); });
-    var cands = roomCands(p, room, MB.allImages(userImages), used);
+    var cands = roomCands(p, room, MB.allImages(userImages, p), used);
     if (!cands.length) return [];
     // 同一页只用同一系列（没标系列的自己的图除外），免得自己挑的图被体检判「混了系列」；同一张照片的裁切不放两次
     var hero = cands[0], seen = {};
     seen[shot(hero.ref)] = 1;
+    // 主图是案例：同一个家的其他照片排前面当辅图（一页讲同一个家，不拼三个客户的厨房）
+    if (hero.isCase && hero.pid) {
+      var same = cands.slice(1).filter(function (im) { return im.isCase && im.pid === hero.pid; });
+      cands = [hero].concat(same, cands.slice(1).filter(function (im) { return same.indexOf(im) < 0; }));
+    }
     var rest = cands.slice(1).filter(function (im) {
       if (seen[shot(im.ref)]) return false;
       // 主图有系列：辅图也要同系列（没标系列的内置图风格不一定对得上；只有自己的图例外）
@@ -551,12 +626,14 @@
     return [hero].concat(rest).slice(0, count).map(function (im) { return im.ref; });
   };
 
-  /** 图库里所有候选：{ ref, w, h, series, rooms, own, mood } */
-  function pool(resolve) {
+  /** 图库里所有候选：{ ref, w, h, series, rooms, own, mood }。
+      案例（c:）不整批扫：只放方案系列的（没隐藏、不是 unsure）+ 方案里已经用到的 —— 3000 张也排得快 */
+  function pool(resolve, p) {
     var map = resolve && resolve.map;
     var out = [];
     if (map) {
       Object.keys(map).forEach(function (ref) {
+        if (ref.charCodeAt(0) === 99 && ref.charAt(1) === ':') return;   // 'c:' 案例另外加
         var b = map[ref];
         var own = ref.indexOf('u:') === 0;
         var rooms = own ? [b.tag] : (b.rooms || []);
@@ -565,11 +642,53 @@
     } else {
       builtins().forEach(function (b) { out.push({ ref: b.id, w: b.w, h: b.h, series: b.series || '', rooms: b.rooms, own: false }); });
     }
+    if (p && CASES.length) {
+      var have = {};
+      var addCase = function (c, blocked) {
+        if (!c || have[c.id] || (resolve && !resolve(c.id))) return;
+        have[c.id] = 1;
+        out.push({ ref: c.id, w: +c.w || 0, h: +c.h || 0, series: c.series || '', rooms: c.rooms || [], own: false,
+          isCase: true, style: c.style || '', cabinets: c.cabinets || [], hero: !!c.hero, pid: c.pid || '', blocked: blocked });
+      };
+      poolCases(p).forEach(function (c) { addCase(c, false); });
+      // 方案里已经用到的案例（销售手选、旧方案）：照样算一张图（隐藏 / 不确定的不再拿去配别页）
+      caseRefsIn(p).forEach(function (ref) { var c = CASE_MAP[ref]; if (c) addCase(c, !usable(c)); });
+    }
     // 同一张照片的不同档案：只留第一个（品牌照的别名本来就指向内置图）
     out.forEach(function (c) {
       c.mood = c.rooms.indexOf('mood') > -1 || !!MOOD_FIT[c.ref];
-      c.room = !c.mood && c.rooms.some(function (k) { return MB.ROOM[k]; });   // 平面图、展厅、其他 都不算空间照
+      // 平面图、展厅、其他 都不算空间照；隐藏 / 不确定的案例也不拿去配图
+      c.room = !c.mood && !c.blocked && c.rooms.some(function (k) { return MB.ROOM[k]; });
     });
+    return out;
+  }
+  /* 排版用的案例：方案系列的几千张里，按方案 id 挑一组（最多 POOL_MAX 张）。
+     封面、拼贴、邀约、情绪页的后备只要「够多、每个客户不一样」；全部丢进去每一页都要排一千多张，3000 张时会慢到 30ms。
+     先挑能当主图的、拍的是方案里有的空间的、清楚的、客户挑的风格；同级的按方案 id 轮换（不同客户拿到不同的一组）。
+     空间页自己的图不受影响（autoPick 看整个系列）。同一组记住，同一份方案重排不用再挑 */
+  var POOL_MAX = 160, poolCache = null;
+  function poolCases(p) {
+    var list = caseList(p);
+    if (list.length <= POOL_MAX) return list;
+    var keys = {};
+    (p.rooms || []).forEach(function (r) { keys[r.key] = 1; });
+    var key = CASE_VER + '|' + (p.id || '') + '|' + MB.dir(p).series + '|' + (p.caseStyle || '') + '|' + Object.keys(keys).sort().join(',');
+    if (poolCache && poolCache.key === key) return poolCache.list;
+    var picked = rankBy(list, function (c) {
+      return (c.hero ? 2 : 0) + (keys[(c.rooms || [])[0]] ? 2 : 0) + (Math.max(+c.w || 0, +c.h || 0) >= 900 ? 1 : 0) +
+        (p.caseStyle && c.style === p.caseStyle ? 1 : 0);
+    }, (p.id || '') + ':casepool').slice(0, POOL_MAX);
+    poolCache = { key: key, list: picked };
+    return picked;
+  }
+  /** 方案里写着的案例 ref（空间、版位、参考空间） */
+  function caseRefsIn(p) {
+    var out = [];
+    function add(ref) { if (typeof ref === 'string' && ref.indexOf('c:') === 0 && out.indexOf(ref) < 0) out.push(ref); }
+    (p.rooms || []).forEach(function (r) { (r.images || []).forEach(add); });
+    var im = p.images || {};
+    Object.keys(im).forEach(function (k) { add(im[k]); });
+    (p.cases || []).forEach(function (c) { if (c) add(c.ref); });
     return out;
   }
   function fits(c, slot) {
@@ -583,7 +702,7 @@
     if (im) return im;
     var b = builtins();
     for (var i = 0; i < b.length; i++) if (b[i].id === ref) return b[i];
-    return null;
+    return CASE_MAP[ref] || null;   // 案例（resolver 比 MB.setCases 早建的时候）
   }
 
   /**
@@ -623,7 +742,7 @@
     var series = MB.dir(p).series;
     var seed = String(p.id || '');
     var images = p.images || {};
-    var all = pool(resolve);
+    var all = pool(resolve, p);
     var byRef = {};
     all.forEach(function (c) { byRef[c.ref] = c; });
     var types = {};
@@ -643,6 +762,8 @@
       if (ROOM_SLOTS[slot] && c.room) {
         if (!mine(c)) return 1;            // 别的风格的实景：排在所有氛围照后面，什么都没有才用
         if (c.own) return 100 + g;         // 客户 / 业务自己的图最优先
+        // 公司做过的案例（真的家，同风格）：清楚的比内置照片高一点（62 > 60），能当主图的再 +1
+        if (g === 2 && c.isCase) return 62 + (c.hero ? 1 : 0);
         if (g) return 60;                  // 好的、可以的同一级（同级按种子轮换）
         // 稍微小一点的风格实景还是比风景好（老板：封面、拼贴要看得到他们的风格）；糊得明显的才让给氛围照。
         // 邀约页不是看风格的页：放大的实景排在清楚的氛围照（40）后面
@@ -966,6 +1087,177 @@
       return true;
     }).slice(0, 3);
   };
+  /* ---------- 帮我挑（规则版）：从公司案例库挑跟这个客户像的 ----------
+     老板：「可以根据对客人的需求了解，挑选合适的案例图片给业务」。
+     只用真的对得上的事实（需求卡 / 方案 × 案例的标签）打分，「为什么」也只拼这几项 —— 不编、不提项目名。
+     不选隐藏的、不确定的；方案里已经用到的那一张（含同一个镜头）也不再挑。
+     之后接 AI 选配（plan 的 M4），回传的形状一样：[{ ref, use, why:{zh,en}, score }] */
+  var LANDED = { landed: 1, terrace: 1, semid: 1, bungalow: 1 };
+  var PTYPE_EN = { condo: 'condo', landed: 'landed home', terrace: 'terrace house', semid: 'semi-D', bungalow: 'bungalow' };
+  var STYLE_EN = { wood: 'natural wood', wabi: 'wabi-sabi', cream: 'cream', french: 'light French', midcentury: 'mid-century',
+    modern: 'modern minimal', japandi: 'Japandi', nordic: 'Nordic', luxe: 'modern luxe' };
+  var TRAIT_WHY = { elderly: ['同样有长辈同住', 'parents at home too'], kids: ['同样有小孩', 'kids at home too'],
+    pets: ['同样养宠物', 'pets too'], helper: ['同样有帮佣', 'a helper too'] };
+  // 柜类说法先挑最具体的（中岛、电视墙），通用的（橱柜、衣柜）排后面
+  var CAB_ORDER = ['island', 'tvwall', 'display', 'sideboard', 'bedend', 'dresser', 'bookcase', 'wallpanel', 'door', 'shoe',
+    'bathvanity', 'tvcab', 'bed', 'wardrobe', 'kitchen'];
+
+  /** 房型文字（「Terrace」「排屋 Terrace」）→ MB.CASE_PTYPES 的 key；认不出来回 '' */
+  function ptypeKey(s) {
+    s = String(s || '');
+    var list = MB.CASE_PTYPES || [];
+    for (var i = 0; i < list.length; i++) if (s && new RegExp(list[i].match, 'i').test(s)) return list[i].key;
+    return '';
+  }
+  MB.ptypeKey = ptypeKey;
+  function findKey(list, key) {
+    for (var i = 0; i < (list || []).length; i++) if (list[i].key === key) return list[i];
+    return null;
+  }
+
+  /** 方案这边的事实（一次算好，几千张案例共用） */
+  function matchCtx(p) {
+    var traits = {};
+    (p.needs || []).forEach(function (n) { if (n && TRAIT_WHY[n.key]) traits[n.key] = 1; });
+    // 需求卡「家庭构成 / 还有谁」写了长辈、小孩：也算（客户自己填的）
+    var b = p.brief && MB.parseBrief ? MB.parseBrief(p.brief) : null;
+    if (b) {
+      var fam = [].concat(b.family || [], b.household || []).join(' ');
+      (MB.CASE_TRAITS || []).forEach(function (t) { if (fam && new RegExp(t.match, 'i').test(fam)) traits[t.key] = 1; });
+    }
+    var byKey = {}, wantBy = {};
+    (p.rooms || []).forEach(function (r) { if (!byKey[r.key]) { byKey[r.key] = r; wantBy[r.key] = wantCabinets(p, r); } });
+    return { traits: traits, ptype: ptypeKey(p.property && p.property.type), area: String((p.property && p.property.area) || '').trim(),
+      series: MB.dir(p).series, style: p.caseStyle || '', rooms: byKey, wantBy: wantBy, want: wantCabinets(p) };
+  }
+
+  /** 一张案例 × 这份方案：{ score, facts:[{zh,en}], room（方案里同类的那一间，或 null） } */
+  function caseFacts(p, c, ctx) {
+    var s = 0, facts = [];
+    // 地方：同一区、同一种房子
+    var area = String(c.area || '').trim();
+    var sameArea = !!(area && ctx.area && area.toLowerCase() === ctx.area.toLowerCase());
+    var sameType = !!(c.ptype && ctx.ptype && c.ptype === ctx.ptype);
+    var bothLanded = !sameType && !!(LANDED[c.ptype] && LANDED[ctx.ptype]);
+    var tp = sameType ? findKey(MB.CASE_PTYPES, c.ptype) : null;
+    var typeZh = sameType && tp ? (c.ptype === 'landed' ? '有地住宅' : tp.zh) : bothLanded ? '有地住宅' : '';
+    var typeEn = sameType ? PTYPE_EN[c.ptype] || '' : bothLanded ? 'landed home' : '';
+    if (sameArea) s += 4;
+    if (sameType) s += 2; else if (bothLanded) s += 1;
+    if (sameArea && typeZh) facts.push({ zh: '一样是 ' + area + ' 的' + typeZh, en: 'also a ' + typeEn + ' in ' + area });
+    else if (sameArea) facts.push({ zh: '一样在 ' + area, en: 'also in ' + area });
+    else if (typeZh) facts.push({ zh: '一样是' + typeZh, en: 'also a ' + typeEn });
+    // 空间 + 柜类：方案里有同一种空间、客户要做的柜子案例里也有
+    var rk = (c.rooms || [])[0] || '';
+    var room = ctx.rooms[rk] || null;
+    var rdef = MB.ROOM[rk];
+    if (room) s += 2;
+    var want = room ? ctx.wantBy[rk] : ctx.want;
+    var hit = (c.cabinets || []).filter(function (k) { return want.indexOf(k) > -1; });
+    hit.sort(function (a, b) { return CAB_ORDER.indexOf(a) - CAB_ORDER.indexOf(b); });
+    var cab = hit.length ? findKey(MB.CASE_CABINETS, hit[0]) : null;
+    if (cab) {
+      s += 2 + (hit.length > 1 ? 1 : 0);
+      // 英文柜名已经带空间名（Kitchen island、Kitchen cabinets）就不再说「in the kitchen」
+      var cabEn = lower1(cab.en), rEn = rdef ? rdef.en.toLowerCase() : '';
+      var said = rdef && cabEn.toLowerCase().indexOf(rEn.split(' ')[0].toLowerCase()) > -1;
+      facts.push(rdef ? { zh: rdef.zh + '有' + cab.zh, en: said ? cabEn : cabEn + ' in the ' + rEn }
+        : { zh: '一样做了' + cab.zh, en: cabEn + ' too' });
+    } else if (room && rdef) {
+      facts.push({ zh: '同样是' + rdef.zh, en: 'also a ' + rdef.en.toLowerCase() });
+    }
+    // 家庭：同样有长辈 / 小孩 / 宠物 / 帮佣
+    (c.traits || []).forEach(function (t) {
+      if (ctx.traits[t] && TRAIT_WHY[t]) { s += 3; facts.push({ zh: TRAIT_WHY[t][0], en: TRAIT_WHY[t][1] }); }
+    });
+    // 风格：客户挑的那一种 > 同一个系列（系列不写进「为什么」：太笼统）
+    var st = ctx.style && c.style === ctx.style ? findKey(MB.CASE_STYLES, c.style) : null;
+    if (st) { s += 4; facts.push({ zh: '同样是' + st.zh + (/风$/.test(st.zh) ? '' : '风格'), en: 'the same ' + (STYLE_EN[st.key] || st.en) + ' style' }); }
+    else if (c.series && c.series === ctx.series) s += 3;
+    if (c.hero) s += 1;
+    if (Math.max(+c.w || 0, +c.h || 0) >= 900) s += 0.5;
+    return { score: s, facts: facts, room: room };
+  }
+  function lower1(s) { s = String(s || ''); return /^[A-Z][a-z]/.test(s) ? s.charAt(0).toLowerCase() + s.slice(1) : s; }
+  function up1(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
+  /** 事实 → 一句「为什么」（最多 3 项；华文用 · 隔开） */
+  function whyOf(facts) {
+    var f = facts.slice(0, 3);
+    return { zh: f.map(function (x) { return x.zh; }).join(' · '), en: up1(f.map(function (x) { return x.en; }).join(' · ')) };
+  }
+
+  /** 方案里已经印出来的照片（shotKey → 1）：空间、版位、拼贴、参考空间。noCases = 参考空间那几张不算（要换掉的时候） */
+  function usedShots(p, resolve, noCases) {
+    var used = {};
+    var q = p;
+    if (noCases) { q = {}; for (var k in p) if (p.hasOwnProperty(k)) q[k] = p[k]; q.cases = []; }
+    var plan = null;
+    try { plan = MB.deckImages(q, resolve); } catch (e) { plan = null; }
+    function add(ref) { if (ref) used[shot(ref)] = 1; }
+    (p.rooms || []).forEach(function (r) { (r.images || []).forEach(add); if (plan) (plan.rooms[r.uid] || []).forEach(add); });
+    if (plan) {
+      if (noCases) { var im = p.images || {}; Object.keys(im).forEach(function (s2) { add(im[s2]); }); }
+      else { Object.keys(plan.slot).forEach(function (s3) { add(plan.slot[s3]); }); (plan.glance || []).forEach(add); }
+    }
+    if (!noCases) (p.cases || []).forEach(function (c) { if (c) add(c.ref); });
+    return used;
+  }
+
+  /**
+   * 帮我挑：6–9 张建议，同一个项目最多 2 张，每张附「为什么适合他们」。
+   * @returns {Array<{ ref:string, use:string, why:{zh,en}, score:number, facts:Array<{zh,en}> }>}
+   *   use = 方案里那一间的 uid（「放进厨房」）或 'cases'（只适合放参考空间）
+   */
+  MB.matchCases = function (p, resolve, max) {
+    resolve = resolve || MB.makeResolver.last;
+    max = max || 9;
+    if (!p || !CASES.length) return [];
+    var used = usedShots(p, resolve);
+    var ctx = matchCtx(p);
+    var list = [];
+    CASES.forEach(function (c) {
+      if (!usable(c) || used[shot(c.id)] || (resolve && !resolve(c.id))) return;
+      var f = caseFacts(p, c, ctx);
+      if (f.facts.length) list.push({ c: c, f: f });
+    });
+    var per = {}, seen = {}, out = [];
+    rankBy(list, function (x) { return x.f.score; }, (p.id || '') + ':match').forEach(function (x) {
+      if (out.length >= max) return;
+      var pid = x.c.pid || x.c.id, k = shot(x.c.id);
+      if ((per[pid] || 0) >= 2 || seen[k]) return;
+      per[pid] = (per[pid] || 0) + 1; seen[k] = 1;
+      out.push({ ref: x.c.id, use: x.f.room ? x.f.room.uid : 'cases', why: whyOf(x.f.facts), score: x.f.score,
+        facts: x.f.facts.slice(0, 3) });
+    });
+    return out;
+  };
+
+  /**
+   * 参考空间「自动挑 3 个」：三个不同的项目、方案的风格（或同一个系列），
+   * 再按空间、柜类、区域 / 房型、家庭特点排；空间页已经用的那一张不挑。回 ref 阵列
+   */
+  MB.suggestCases = function (p, resolve, n) {
+    resolve = resolve || MB.makeResolver.last;
+    n = n || 3;
+    if (!p || !CASES.length) return [];
+    var used = usedShots(p, resolve, true);
+    var ctx = matchCtx(p);
+    var list = [];
+    CASES.forEach(function (c) {
+      if (!usable(c) || used[shot(c.id)] || (resolve && !resolve(c.id))) return;
+      if (c.series !== ctx.series && !(ctx.style && c.style === ctx.style)) return;   // 风格不一样的不放参考空间（体检会提醒）
+      list.push({ c: c, s: caseFacts(p, c, ctx).score });
+    });
+    var per = {}, out = [];
+    rankBy(list, function (x) { return x.s; }, (p.id || '') + ':suggest').forEach(function (x) {
+      var pid = x.c.pid || x.c.id;
+      if (out.length >= n || per[pid]) return;
+      per[pid] = 1;
+      out.push(x.c.id);
+    });
+    return out;
+  };
+
   /** 团队页印的行：有名字的才印；role 是 MB.BRAND.roles 的 key 就换成职称，否则原样（销售自己写的职称） */
   MB.teamRows = function (p) {
     var roles = (MB.BRAND && MB.BRAND.roles) || [];
@@ -988,8 +1280,9 @@
 
   /* ---------- 清洗方案 ----------------------------------------
      读档、导入同事的 .json 都先过这一关：只留认得的字段与格式，
-     旧版存档补上新字段。导入的文件不可信 —— 任何字串都可能被塞进 HTML。 */
-  var REF_RE = /^(b|u):[\w.-]{1,80}$/;
+     旧版存档补上新字段。导入的文件不可信 —— 任何字串都可能被塞进 HTML。
+     ref：b: 内置 · u: 本机图库 · c: 公司案例库（导出 / 导入的方案照样带着 c: ref，同事那边登入后就看得到） */
+  var REF_RE = /^(b|u|c):[\w.-]{1,80}$/;
   function str(v, max) { return typeof v === 'string' ? v.slice(0, max) : ''; }
   function strOrNull(v, max) { return typeof v === 'string' ? v.slice(0, max) : null; }
   function ref(v) { return typeof v === 'string' && REF_RE.test(v) ? v : null; }
@@ -1105,6 +1398,14 @@
         /^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/]+=*$/.test(r.src);
     }).slice(0, 3).map(function (r) {
       return { src: r.src, w: Math.max(1, Math.min(4000, Math.round(+r.w) || 360)), h: Math.max(1, Math.min(4000, Math.round(+r.h) || 360)) };
+    });
+    // 案例库用的风格、柜类：只收词表里有的 key（case-vocab.js 没载入就只收字串格式对的）
+    var styleOk = function (k) { return typeof k === 'string' && /^[a-z]{1,20}$/.test(k) && (!MB.caseStyle || !!MB.caseStyle(k)); };
+    var cabOk = function (k) { return typeof k === 'string' && /^[a-z]{1,20}$/.test(k) && (!MB.caseCabinet || !!MB.caseCabinet(k)); };
+    out.caseStyle = styleOk(p.caseStyle) ? p.caseStyle : '';
+    out.cabinets = [];
+    (Array.isArray(p.cabinets) ? p.cabinets : []).forEach(function (k) {
+      if (cabOk(k) && out.cabinets.indexOf(k) < 0 && out.cabinets.length < 20) out.cabinets.push(k);
     });
     return out;
   };

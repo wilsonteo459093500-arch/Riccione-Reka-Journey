@@ -72,6 +72,11 @@
           <textarea id="brief-text" placeholder="【溪岸 · 客户需求卡】&#10;——————————————&#10;姓名：Mr &amp; Mrs Lim&#10;楼盘 / 单位：楼盘名, Setia Alam&#10;…"></textarea>
         </div>
         <button class="mini gold" type="button" id="brief-apply">读取并带入方案</button>
+        <!-- 贴完需求卡、有公司案例库：提示「帮我挑」（不会自己塞进方案，业务点了才用） -->
+        <div class="brief-match" id="brief-match" hidden>
+          <span>公司案例库里有 <b id="brief-match-n">0</b> 张跟他们对得上的照片（区域、房型、家庭、风格、要做的柜子）。</span>
+          <button class="mini gold" type="button" data-open-match>帮我挑</button>
+        </div>
       </div>
 
       <div class="panel">
@@ -136,6 +141,12 @@
       <p class="hint">整份方案只走<b>一个</b>方向。每页风格一致，客户才拼得出一个完整的家（WYSIATI）。</p>
       <div class="dir-cards" id="dir-cards"></div>
 
+      <!-- 同一个系列里再细分的风格（客户在需求卡选的）：帮我挑、自动配图先挑这种风格的公司案例 -->
+      <div class="panel" id="case-style-panel" style="margin-top:16px" hidden>
+        <p class="sub-h" style="margin-top:0">案例风格 <i class="muted small" style="text-transform:none;letter-spacing:0">帮我挑用 · 需求卡会自动带</i></p>
+        <div class="lib-tools" id="case-style" style="margin:0"></div>
+      </div>
+
       <div class="panel" id="ref-panel" style="margin-top:16px">
         <p class="sub-h" style="margin-top:0">从客户参考图取色 <i class="muted small" style="text-transform:none;letter-spacing:0">最多 3 张</i></p>
         <p class="hint" style="margin-bottom:10px">客户发来的参考照片，取出 5 个颜色放进方案 —— 是他们自己挑的颜色，整份方案一看就是他们的家。照片只存在这台电脑。</p>
@@ -175,12 +186,16 @@
         <p class="sub-h" style="margin-top:0">参考空间（最多 3 张）</p>
         <!-- 现在挑的是溪岸自己的实拍，不是客户的家：页面叫「SAIL spaces · 参考空间」。
              等云端案例库有每个项目的区域 / 房型 / 家庭资料，才改回「像你们这样的家」 -->
-        <p class="hint" style="margin-bottom:10px">挑 1–3 张跟方案同风格的溪岸实拍，让他们看到做出来的样子。每张一句话，
-          <b>只写看得到的事实</b>（系列、空间），不写「和你们很像」—— 这些不是客户的家。空着就用自动的那句。</p>
+        <p class="hint" style="margin-bottom:10px">挑 1–3 张跟方案同风格的实拍（溪岸的空间、公司做过的家），让他们看到做出来的样子。每张一句话，
+          <b>只写看得到、对得上的事实</b>（系列、空间；公司案例可以写「同在 Setia Alam」「也有长辈同住」），不写「和你们很像」。空着就用自动的那句。</p>
         <div id="cases-list"></div>
         <div class="btn-row" style="gap:6px;margin-top:10px">
           <button class="mini" type="button" id="cases-pick">从图库选</button>
+          <!-- 公司案例库（登入后才有）：按需求卡挑 / 一次挑好 3 个不同的家 -->
+          <button class="mini gold" type="button" id="cases-match" hidden>帮我挑</button>
+          <button class="mini" type="button" id="cases-auto" hidden>自动挑 3 个</button>
         </div>
+        <p class="hint" id="cases-cloud" style="margin:10px 0 0" hidden>登入<a href="#" data-goto-lib>公司案例库</a>（图库最上面）之后，「帮我挑」会按需求卡挑公司做过的家。</p>
       </div>
     </section>
 
@@ -282,6 +297,12 @@
       <p class="hint">内置的是溪岸自家的空间实拍。你自己的参考图存在<b>这台电脑的浏览器里</b>（不上传、不进 git）。
         最快的入库方法：<b>把以前做好的 proposal PDF 拖进来</b>，里面的照片会按页面标题自动分好空间。</p>
 
+      <div class="panel" id="cloud-panel">
+        <p class="sub-h" style="margin-top:0">公司案例库</p>
+        <div data-cloud-box></div>
+        <p class="hint" style="margin:8px 0 0">上传新的案例、改风格 / 柜类标签：<a href="caselib.html" target="_blank" rel="noopener">打开案例库管理 →</a></p>
+      </div>
+
       <div class="panel">
         <p class="sub-h" style="margin-top:0">从旧 proposal PDF 收图</p>
         <div class="drop" id="pdf-drop">拖 PDF 进来，或 <u>点这里选 PDF</u><input type="file" id="pdf-file" accept="application/pdf" hidden /></div>
@@ -293,8 +314,13 @@
         </div>
       </div>
 
-      <div class="lib-tools" id="lib-filter"></div>
+      <div class="lib-head">
+        <div class="lib-tools" id="lib-filter"></div>
+        <button class="mini gold" type="button" id="lib-match" hidden>帮我挑</button>
+      </div>
+      <div class="lib-tools lib-cf" id="lib-cfilter" hidden></div>
       <div class="lib-grid" id="lib-grid"></div>
+      <div class="lib-pager" id="lib-pager" hidden></div>
 
       <div class="panel" style="margin-top:18px">
         <p class="sub-h" style="margin-top:0">备份 · 给同事</p>
@@ -337,7 +363,23 @@
       </div>
     </header>
     <div class="lib-tools" id="pick-filter"></div>
+    <div class="lib-tools lib-cf" id="pick-cfilter" hidden></div>
     <div class="lib-grid" id="pick-grid"></div>
+    <div class="lib-pager" id="pick-pager" hidden></div>
+  </div>
+</div>
+
+<!-- 帮我挑：公司案例库按需求卡挑的 6–9 张，每张一句为什么 -->
+<div class="mb-modal" id="match-modal" role="dialog" aria-modal="true" aria-labelledby="match-title">
+  <div class="box">
+    <header>
+      <h3 id="match-title">帮我挑 · 公司案例</h3>
+      <div class="btn-row">
+        <button class="mini" type="button" data-close>关闭</button>
+      </div>
+    </header>
+    <p class="hint" id="match-hint" style="font-size:13px;color:var(--ink-soft)"></p>
+    <div id="match-list"></div>
   </div>
 </div>
 
@@ -364,9 +406,13 @@
 <script src="assets/js/cases.js"></script>
 <script src="assets/vendor/qrcode.js"></script>
 <script src="assets/js/visi/data.js"></script>
+<!-- 案例库词表（风格、柜类、房型…）：跟伺服器的 api/_lib/vocab.js 一模一样 -->
+<script src="assets/js/visi/case-vocab.js"></script>
 <script src="assets/js/visi/photos.js"></script>
 <script src="assets/js/visi/store.js"></script>
 <script src="assets/js/visi/model.js"></script>
+<!-- 公司案例库（MB.cloud）：没登入过就不发请求，静态网站上跟以前一样 -->
+<script src="assets/js/visi/cloud.js"></script>
 <script src="assets/js/brief-card.js"></script>
 <script src="assets/js/visi/brief-parse.js"></script>
 <script src="assets/js/visi/pdf-import.js"></script>

@@ -156,6 +156,20 @@
       }
       return false;
     });
+    // 案例库的风格（「帮我挑」用）：同样取第一个对得上的；case-vocab.js 没载入就不管
+    setup.caseStyle = '';
+    (b.style || []).some(function (s) {
+      var hit = (MB.CASE_STYLES || []).filter(function (cs) { return new RegExp(cs.match, 'i').test(String(s)); })[0];
+      if (hit) setup.caseStyle = hit.key;
+      return !!hit;
+    });
+    // 要做哪几种柜子：定制范围（MB.SCOPE_CABINETS）+ 需求点到的卖点（MB.FEAT_CABINETS）
+    var cabs = MB.scopeCabinets ? MB.scopeCabinets(b.scope || []) : [];
+    setup.needs.forEach(function (n) {
+      var d = n.key ? MB.needDef(probe, n.key) : null;
+      if (d && MB.featCabinets) MB.featCabinets(d.room, d.feats).forEach(function (c) { if (cabs.indexOf(c) < 0) cabs.push(c); });
+    });
+    setup.cabinets = cabs;
 
     setup.visitPref = b.visitPref || [];
     setup.raw = b;

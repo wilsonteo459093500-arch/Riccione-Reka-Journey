@@ -210,6 +210,61 @@ body.mb-body { overflow: hidden; height: 100vh; }
 .lib-item.sel::after { content: "✓"; position: absolute; right: 6px; top: 4px; color: #fff; background: var(--gold); width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; }
 .lib-item select { width: 100%; padding: 4px 22px 4px 6px !important; font-size: 12px !important; border-radius: 0; background-position: right 6px center; }
 .lib-item .del { position: absolute; right: 4px; top: 4px; }
+
+/* ---------- 公司案例库：来源 × 空间筛选、案例的风格 · 柜类 · 项目、分页、帮我挑 ---------- */
+.lib-head { display: flex; align-items: flex-start; gap: 10px; }
+.lib-head .lib-tools { flex: 1; min-width: 0; }
+.lib-row { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
+.lib-row + .lib-row { margin-top: 2px; }
+/* 来源（全部 / 我的 / 内置 / 公司案例）用金色，跟下面的空间筛选分得开 */
+.lib-tools .mini.src[aria-pressed="true"] { background: var(--gold); border-color: var(--gold); color: #FFF9EF; }
+.lib-cf { align-items: center; padding: 10px 12px; background: rgba(255,255,255,.45); border: 1px solid var(--line-soft); }
+.lib-cf .cf { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-soft); min-width: 0; max-width: 100%; }
+.lib-cf .cf select, .mb-pane .lib-cf .cf select { width: auto; max-width: 210px; min-width: 0; font-size: 12.5px; padding: 6px 30px 6px 10px; background-position: right 10px center; }
+.lib-pager { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; margin: 14px 0 4px; font-size: 12.5px; color: var(--ink-soft); }
+.lib-item .img-wait { display: block; width: 100%; aspect-ratio: 1; background: linear-gradient(110deg, var(--paper-2) 30%, #EFE8DC 50%, var(--paper-2) 70%); background-size: 200% 100%; animation: imgwait 1.4s linear infinite; }
+@keyframes imgwait { to { background-position: -200% 0; } }
+.lib-cell { position: relative; min-width: 0; }
+.lib-cell .lib-item { width: 100%; display: block; }
+.same-proj {
+  position: absolute; left: 4px; bottom: 28px; z-index: 1; border: 0; border-radius: 10px; padding: 3px 8px;
+  background: rgba(255,255,255,.88); color: var(--ink); font: 500 10.5px/1.2 var(--sans); cursor: pointer;
+  opacity: 0; transition: opacity .2s;
+}
+.lib-item:hover .same-proj, .lib-cell:hover .same-proj, .same-proj:focus { opacity: 1; }
+@media (hover: none) { .same-proj { opacity: 1; } }
+.thumb .case-tag { position: absolute; right: 4px; top: 4px; background: rgba(27,24,21,.72); color: #fff; font-size: 10px; padding: 1px 6px; border-radius: 10px; }
+.thumb .case-tag.warn { background: #C2553B; }
+.cloud-st { font-size: 13px; line-height: 1.7; color: var(--ink-soft); margin: 0 0 10px; }
+.cloud-st.ok b { color: var(--ink); }
+.cloud-st.warn { color: #8A5E22; }
+.cloud-login { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
+.cloud-login input, .mb-pane .cloud-login input[type="text"] {
+  flex: 1 1 140px; min-width: 0; width: auto; font: 14px var(--sans); padding: 9px 12px; color: var(--ink);
+  background: rgba(255,255,255,.6); border: 1px solid var(--line); border-radius: 2px;
+}
+.cloud-login input:focus { outline: none; border-color: var(--gold); background: #fff; }
+.cloud-msg { font-size: 12.5px; color: #A8402A; margin: 6px 0 0; }
+.cloud-msg:empty { display: none; }
+.brief-match {
+  margin-top: 12px; padding: 10px 12px; font-size: 13px; line-height: 1.6; color: var(--ink-soft);
+  background: rgba(192,138,62,.08); border: 1px solid rgba(192,138,62,.35); display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center;
+}
+.brief-match b { color: var(--ink); }
+.match-row { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 16px; padding: 14px 0; border-top: 1px solid var(--line-soft); }
+.match-row .thumb { width: 132px; height: 132px; }
+.match-txt { min-width: 0; }
+.match-why { font-size: 15px; line-height: 1.6; margin: 0 0 2px; color: var(--ink); }
+.match-en { font-size: 12.5px; line-height: 1.5; margin: 0 0 6px; color: var(--ink-faint); }
+.match-txt .case-cap { margin-bottom: 8px; }
+.match-txt .btn-row { gap: 6px; }
+.match-done { font-size: 12.5px; color: #5E8C61; }
+@media (max-width: 560px) {
+  .match-row { grid-template-columns: 92px minmax(0, 1fr); gap: 12px; }
+  .match-row .thumb { width: 92px; height: 92px; }
+  .match-why { font-size: 14px; }
+  .lib-head { flex-wrap: wrap; }
+}
 .drop {
   border: 1px dashed var(--ink-faint); padding: 18px; text-align: center; color: var(--ink-soft); font-size: 13.5px;
   background: rgba(255,255,255,.4); margin-bottom: 12px; cursor: pointer;

@@ -557,9 +557,12 @@
     var b = resolve(ref);
     if (!b) return null;
     var own = ref.indexOf('u:') === 0;
-    // 跟 MB.allImages 同一个形状，copy.js 的 MB.caseNote 拿得到 rooms / series / label
+    // 跟 MB.allImages 同一个形状，copy.js 的 MB.caseNote 拿得到 rooms / series / label。
+    // 公司案例（c:）多了区域 / 房型 / 家庭特点（「同在 Setia Alam」）；说明只有自动产生的标签或分类写的 desc，
+    // 绝不会有项目名、档名（cloud.js 根本不收）
     return { ref: ref, src: b.src, w: b.w, h: b.h, series: b.series || '', rooms: b.rooms || (b.tag ? [b.tag] : []),
-      own: own, label: own ? (b.label || '') : (b.zh || ''), en: b.en || '', zh: b.zh || '', pos: b.pos || '' };
+      own: own, label: own ? (b.label || '') : (b.zh || ''), en: b.en || '', zh: b.zh || '', pos: b.pos || '',
+      isCase: ref.indexOf('c:') === 0, area: b.area || '', ptype: b.ptype || '', traits: b.traits || [], style: b.style || '' };
   }
   /** 一个案例那一句：销售写的 > copy.js 起草 > 图本身的说明（不编） */
   function caseLine(p, c, im, lang) {

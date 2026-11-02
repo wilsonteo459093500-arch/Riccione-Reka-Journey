@@ -690,8 +690,13 @@
     var area = String(im.area || '').trim(), myArea = String(p.property.area || '').trim();
     if (area && myArea && area.toLowerCase() === myArea.toLowerCase()) facts.push(zh ? '同在 ' + area : 'Also in ' + area);
     if (im.ptype && p.property.type) {
+      // 案例库的房型是 key（terrace、semid…）：跟客户同一种就说那一种（「也是排屋」），否则只分公寓 / 有地
+      var pk = MB.ptypeKey ? MB.ptypeKey(p.property.type) : '';
+      var pt = pk && pk === im.ptype && pk !== 'landed' && pk !== 'condo' ? (MB.CASE_PTYPES || []).filter(function (t) { return t.key === pk; })[0] : null;
+      var PT_EN = { terrace: 'a terrace house', semid: 'a semi-D', bungalow: 'a bungalow' };
       var condo = /condo|公寓|apartment|serviced/i.test(im.ptype);
-      if (condo === MB.isCondo(p)) facts.push(zh ? (condo ? '也是公寓' : '也是有地住宅') : (condo ? 'also a condo' : 'also a landed home'));
+      if (pt) facts.push(zh ? '也是' + pt.zh : 'also ' + (PT_EN[pk] || 'a ' + pt.en.toLowerCase()));
+      else if (condo === MB.isCondo(p)) facts.push(zh ? (condo ? '也是公寓' : '也是有地住宅') : (condo ? 'also a condo' : 'also a landed home'));
     }
     var TRAIT = { elderly: [/长辈|elder|parent/i, '也有长辈同住', 'parents at home too'], kids: [/孩子|小孩|kid|child/i, '也有小孩', 'kids at home too'],
       pets: [/宠物|pet/i, '也养宠物', 'pets too'], helper: [/帮佣|helper|maid/i, '也有帮佣', 'a helper too'] };

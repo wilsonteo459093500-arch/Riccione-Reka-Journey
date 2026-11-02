@@ -370,12 +370,17 @@
       else add('ok', '开场短话是你自己写的', '翻开第一页之后，先读到的是写给他们的话。');
     }
 
-    // 13 · 案例：风格要和方案一样，不然他们会开始比较哪个好，而不是想象自己的家
+    // 13 · 案例：风格要和方案一样，不然他们会开始比较哪个好，而不是想象自己的家。
+    //      公司案例另外有细的风格（原木、奶油风、日式…都是雾山）：方案定了案例风格（p.caseStyle），也要对得上
     if (p.pages.cases && MB.caseRefs) {
       var series = d.series, off = [];
+      var myStyle = p.caseStyle && MB.caseStyle ? MB.caseStyle(p.caseStyle) : null;
       MB.caseRefs(p, resolve).forEach(function (c, i) {
         var im = resolve && resolve(c.ref);
         if (im && im.series && im.series !== series) off.push('第 ' + (i + 1) + ' 个（' + ((MB.DIRECTION[im.series] || {}).zh || im.series) + '）');
+        else if (im && myStyle && im.style && im.style !== myStyle.key && MB.caseStyle(im.style)) {
+          off.push('第 ' + (i + 1) + ' 个（' + MB.caseStyle(im.style).zh + '，方案是' + myStyle.zh + '）');
+        }
       });
       if (off.length) add('warn', '案例和方案风格不一样：' + off.join('、'),
         '这一页是要他们觉得「这就是我们要的」。风格不一样的案例，会让他们开始比较哪个好，而不是想象自己的家。', 'cases');
@@ -423,6 +428,22 @@
       add('tip', '两张照片拍的是同一个地方：' + ptxt.join('；'),
         '同一道山、同一片草原出现两次，客户会觉得是同一张。到 ⑤「用哪张图」把其中一页换成别的照片。', 'visit');
     }
+    // 16b · 印出来的公司案例照片：分类时标了「不确定」、或已经被隐藏（拍到客户、不想再用）—— 发出去之前换掉
+    var shaky = [], gone = [], shakyGo = null, goneGo = null;
+    uses.forEach(function (u) {
+      if (String(u.ref).indexOf('c:') !== 0) return;
+      var im = resolve && resolve(u.ref);
+      if (!im) return;
+      var l = pageLabel(p, u);
+      var go = u.pg.type === 'room' ? 'room:' + u.pg.room.uid : u.pg.type === 'cases' ? 'cases' : 'visit';
+      if (im.hidden) { if (gone.indexOf(l) < 0) gone.push(l); goneGo = goneGo || go; }
+      else if (im.status === 'unsure') { if (shaky.indexOf(l) < 0) shaky.push(l); shakyGo = shakyGo || go; }
+    });
+    if (gone.length) add('warn', '用了已经隐藏的公司案例照片：' + gone.join('、'),
+      '案例库里把它隐藏了（可能拍到客户、或不想再给人看）。换一张 —— 帮我挑、图库都挑得到别的。', goneGo);
+    if (shaky.length) add('warn', '用了还没确认的公司案例照片：' + shaky.join('、'),
+      '这张分类时标了「不确定」（空间、柜类、风格可能标错）。看一眼照片对不对，不对就换一张。', shakyGo);
+
     var offStyle = [];
     uses.forEach(function (u) {
       var t = u.pg.type;

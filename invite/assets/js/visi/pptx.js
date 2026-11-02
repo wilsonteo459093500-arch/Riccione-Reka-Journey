@@ -80,11 +80,12 @@
         return { pg: list[i] || { type: (/\bpg-(\w+)/.exec(el.className) || [])[1] }, plan: collect(el) };
       });
       done();
-      return embed(pages).then(function () { return pages; });
+      return embed(pages).then(function (missing) { pages.missing = missing; return pages; });
     }).then(function (pages) {
       var pres = build(p, pages);
       return pres.write({ outputType: 'arraybuffer', compression: true }).then(polish).then(function (blob) {
-        return { blob: blob, name: fileName(p), slides: pages.length };
+        // missing = 放不进去的公司案例照片张数（图库网址不让浏览器读：没有 CORS）—— app.js 会照实告诉业务
+        return { blob: blob, name: fileName(p), slides: pages.length, missing: pages.missing || 0 };
       });
     }).then(function (out) { done(); return out; }, function (err) { done(); throw err; });
   };
@@ -703,16 +704,24 @@
   function dataOf(src) {
     if (!src) return Promise.resolve(null);
     if (cache[src]) return cache[src];
-    var get = /^data:/.test(src) ? Promise.resolve(src) : fetch(src).then(function (r) {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.blob();
-    }).then(function (b) {
-      return new Promise(function (res, rej) {
-        var fr = new FileReader();
-        fr.onload = function () { res(fr.result); };
-        fr.onerror = rej;
-        fr.readAsDataURL(b);
+    function grab(url) {
+      return fetch(url).then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.blob();
+      }).then(function (b) {
+        return new Promise(function (res, rej) {
+          var fr = new FileReader();
+          fr.onload = function () { res(fr.result); };
+          fr.onerror = rej;
+          fr.readAsDataURL(b);
+        });
       });
+    }
+    // 公司案例的照片在 Blob 的网址：那边没开 CORS 时，改走同网域的 cb/c/…（vercel.json 有那条 rewrite 才有）
+    var get = /^data:/.test(src) ? Promise.resolve(src) : grab(src).catch(function (e) {
+      var alt = MB.cloud && MB.cloud.proxySrc ? MB.cloud.proxySrc(src) : '';
+      if (!alt) throw e;
+      return grab(alt);
     });
     cache[src] = get.then(function (d) {
       // PowerPoint 认得 png / jpeg / gif；webp、svg 之类先转成 jpeg / png
@@ -798,15 +807,16 @@
   }
   function embed(pages) {
     cache = {};   // 每次导出重来：同一份里重复的图只读一次，导出完不一直占着记忆体
-    var jobs = [];
+    var jobs = [], miss = {};
+    var isCase = MB.cloud && MB.cloud.isCaseSrc ? MB.cloud.isCaseSrc : function () { return false; };
     pages.forEach(function (pg) {
       pg.plan.items.forEach(function (it) {
-        if (it.k === 'img') jobs.push(dataOf(it.src).then(function (d) { it.data = d; }));
+        if (it.k === 'img') jobs.push(dataOf(it.src).then(function (d) { it.data = d; if (!d && isCase(it.src)) miss[it.src] = 1; }));
         else if (it.k === 'grad') it.data = gradPng(it.css, it.w, it.h);
         else if (it.k === 'svg') jobs.push(svgPng(it.el, it.w, it.h).then(function (d) { it.data = d; it.el = null; }));
       });
     });
-    return Promise.all(jobs);
+    return Promise.all(jobs).then(function () { return Object.keys(miss).length; });
   }
 
   /* ---------- 4 · 排进 pptxgenjs --------------------------------- */

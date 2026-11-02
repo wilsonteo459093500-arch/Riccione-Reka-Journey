@@ -27,6 +27,8 @@
     picker: null,
     importBatch: [],
     libFilter: 'all',
+    // 图库的筛选：来源（全部 / 我的 / 内置 / 公司案例）× 空间；公司案例再按 风格 × 柜类 × 项目，每页 48 张
+    lib: { src: 'all', room: 'all', style: '', cab: '', pid: '', page: 0 },
     copyEdits: {},      // 销售在 ⑥ 改过的讯息：'方案id:讯息id:语言' → 文字（切页不丢）
     briefDraft: {},     // 贴了还没按「带入」的需求卡（切页不丢）
     lastPin: null,      // 刚放下的编号（放完会跳到下一间，「拿掉」要能撤回它）
@@ -156,6 +158,9 @@
     if (!Array.isArray(p.team)) p.team = [{ role: 'sales', name: (p.host && p.host.name) || '' }];
     if (p.paletteFrom !== 'ref') p.paletteFrom = 'style';
     if (!Array.isArray(p.refImages)) p.refImages = [];
+    // 案例库用的风格、柜类（帮我挑）
+    if (typeof p.caseStyle !== 'string') p.caseStyle = '';
+    if (!Array.isArray(p.cabinets)) p.cabinets = [];
     // moodboard：资讯多的页（工期·保障、团队、章节页）默认关
     var def = { letter: true, chapter: false, cases: true, team: false, practical: false };
     Object.keys(def).forEach(function (k) { if (typeof p.pages[k] !== 'boolean') p.pages[k] = def[k]; });
@@ -289,6 +294,7 @@
     $('#brief-text').value = draft != null ? draft : S.project.brief || '';
     renderLetter();
     renderNeeds();
+    renderBriefMatch(false);
   }
 
   /* ---------- 开场短话（方案第 2 页） ----------------------------
@@ -430,6 +436,10 @@
     ['name', 'area', 'type', 'size'].forEach(function (k) { if (setup.property[k]) p.property[k] = setup.property[k]; });
     // 风格只在第一次贴需求卡时跟着走；之后由销售决定（改过的配色不会被洗掉）
     if (setup.direction && setup.direction !== p.direction && firstBrief) setDirection(setup.direction, true);
+    // 案例库的风格：还没定、而且跟方案同一个系列才带（帮我挑先挑这种风格）；柜类累加
+    var cst = setup.caseStyle && MB.caseStyle ? MB.caseStyle(setup.caseStyle) : null;
+    if (cst && !p.caseStyle && cst.series === MB.dir(p).series) p.caseStyle = cst.key;
+    (setup.cabinets || []).forEach(function (k) { if (p.cabinets.indexOf(k) < 0) p.cabinets.push(k); });
     var newRooms = [];
     setup.rooms.forEach(function (k) { if (!p.rooms.some(function (r) { return r.key === k; })) newRooms.push(addRoom(k, true)); });
     var newNeeds = [];
@@ -443,11 +453,20 @@
     });
     applyNeedFeats(p, newNeeds, p.rooms);
     p.rooms.forEach(function (r) { if (!r.images.length) r.images = MB.autoPick(p, r, S.viewImages); });
+    // 有公司案例库：参考空间还空着就先挑 3 个（三个不同的家、同风格）；销售可以换
+    var autoCases = 0;
+    if (!p.cases.length && hasCases() && MB.suggestCases) {
+      p.cases = MB.suggestCases(p, S.resolve, CASE_MAX).map(function (ref) { return { ref: ref, note: null }; });
+      autoCases = p.cases.length;
+      if (autoCases) yieldToHandPicked(p);
+    }
     suggestSlots(setup.visitPref);
     renderBrief(); changed({ now: true });
+    renderBriefMatch(true);
     var bare = p.rooms.filter(function (r) { return !r.images.length; }).map(function (r) { return MB.t(MB.roomTitle(p, r), 'zh'); });
     ping((fresh ? '已新建方案（' + fresh + '）· ' : '已带入：') +
       [setup.client.names, setup.rooms.length + ' 个空间', setup.needs.length + ' 条需求'].filter(Boolean).join(' · ') +
+      (autoCases ? ' · 参考空间先放了 ' + autoCases + ' 个公司案例' : '') +
       (bare.length ? '。' + bare.join('、') + ' 还没有图 —— 到「图库」导入旧 proposal PDF 或上传' : ''), bare.length ? 5200 : 2800);
   });
 
@@ -492,10 +511,14 @@
       p.palette = MB.clone(nd.palette); p.materials = MB.clone(nd.materials);
       p.paletteFrom = 'style';
     }
-    // 自动配的空间跟着新系列重新配；销售亲手挑过的（r.manual）、用了自己图的都不动
+    // 案例风格（帮我挑用）跟新系列对不上了：清掉，免得挑出另一个系列的案例
+    var cst = p.caseStyle && MB.caseStyle ? MB.caseStyle(p.caseStyle) : null;
+    if (p.caseStyle && (!cst || cst.series !== nd.series)) p.caseStyle = '';
+    // 自动配的空间跟着新系列重新配；销售亲手挑过的（r.manual）、用了自己图（u:）的都不动。
+    // 内置图（b:）、公司案例（c:）都是自动配的：换风格就重配
     p.rooms.forEach(function (r) {
       var live = r.images.filter(function (ref) { return S.resolve(ref); });
-      if (!r.manual && live.every(function (ref) { return ref.indexOf('b:') === 0; })) r.images = MB.autoPick(p, r, S.viewImages);
+      if (!r.manual && !live.some(function (ref) { return ref.indexOf('u:') === 0; })) r.images = MB.autoPick(p, r, S.viewImages);
     });
   }
 
@@ -515,6 +538,7 @@
           '<input type="text" value="' + esc(c.zh) + '" data-f="zh" placeholder="中文" /></div>';
       }).join('');
     }
+    renderCaseStyle();
     $('#pal-edit').innerHTML = swRows(p.palette, 'palette');
     $('#mat-edit').innerHTML = swRows(p.materials, 'materials');
     $('#prom-edit').innerHTML = [0, 1, 2].map(function (i) {
@@ -524,6 +548,23 @@
     }).join('');
     renderRefPalette();
   }
+
+  /* ---------- 案例风格（帮我挑用）：同一个系列里再细分（原木、奶油风、日式、北欧都是雾山） ---------- */
+  function renderCaseStyle() {
+    var box = $('#case-style'), panel = $('#case-style-panel');
+    if (!box || !panel) return;
+    var p = S.project, series = MB.dir(p).series;
+    var list = (MB.CASE_STYLES || []).filter(function (s) { return s.series === series; });
+    panel.hidden = !list.length;
+    box.innerHTML = [{ key: '', zh: '不限' }].concat(list).map(function (s) {
+      return '<button class="mini" type="button" data-case-style="' + esc(s.key) + '" aria-pressed="' + (s.key === (p.caseStyle || '')) + '">' + esc(s.zh) + '</button>';
+    }).join('');
+  }
+  if ($('#case-style')) $('#case-style').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-case-style]'); if (!b) return;
+    S.project.caseStyle = b.getAttribute('data-case-style');
+    renderCaseStyle(); changed();
+  });
 
   /* ---------- 从客户参考图取色 ----------------------------------
      客户自己发来的照片 → 5 个颜色（palette.js）。方案里是他们挑的颜色，
@@ -687,7 +728,7 @@
       var thumbs = r.images.map(function (ref, k) {
         var im = S.resolve(ref);
         if (!im) return '';
-        return '<div class="thumb"><img src="' + esc(im.src) + '" alt="" loading="lazy" />' +
+        return '<div class="thumb"><img src="' + esc(thumbSrc(im)) + '" alt="" loading="lazy" />' + caseFlag(im) +
           (k === 0 ? '<span class="hero">★ 主图</span>' : '') +
           '<div class="ops">' +
             (k ? '<button type="button" data-img-hero="' + k + '" title="设为主图">★</button>' : '') +
@@ -808,8 +849,24 @@
      等云端案例库有每个项目的区域 / 房型 / 家庭资料，才改回「像你们这样的家」。
      p.cases = [{ ref, note }]，note 是 null 就用 copy.js 的自动那句 */
   var CASE_MAX = 3;
+  /** 有公司案例可以用（登入过、清单载入了） */
+  function hasCases() { return !!(MB.cases && MB.cases().some(MB.caseUsable)); }
+  /** 小图：案例用缩图包（320px），载不到用原图 */
+  function thumbSrc(im) { return (im && (im.thumb || (MB.cloud && im.id && MB.cloud.thumb(im.id)))) || (im && im.src) || ''; }
+  /** 案例照片的小标记：公司案例 / 待确认 / 已隐藏（隐藏、不确定的照样印 —— 体检会提醒） */
+  function caseFlag(im) {
+    if (!im || !(im.isCase || /^c:/.test(im.id || im.ref || ''))) return '';
+    var t = im.hidden ? '已隐藏' : im.status === 'unsure' ? '待确认' : '案例';
+    return '<span class="case-tag' + (t === '案例' ? '' : ' warn') + '">' + t + '</span>';
+  }
   /** 图库那一份（有 rooms / series / label），给 MB.caseNote 起草那一句 */
   function libItem(ref) {
+    if (ref && ref.indexOf('c:') === 0) {
+      // 案例：隐藏 / 不确定的不在图库清单里，直接用 resolver 那一份（一样只有白名单栏位）
+      var c = S.resolve(ref);
+      return c ? { ref: ref, src: c.src, w: c.w, h: c.h, rooms: c.rooms || [], series: c.series || '', own: false, isCase: true,
+        label: c.label || '', en: c.en || '', zh: c.zh || '', area: c.area, ptype: c.ptype, traits: c.traits } : null;
+    }
     var all = MB.allImages(S.viewImages);
     for (var i = 0; i < all.length; i++) if (all[i].ref === ref) return all[i];
     return null;
@@ -825,7 +882,8 @@
       if (!im) return '';
       var hint = caseHint(p, item) || '一句话，只写看得到的事实，例：同一个系列的厨房';
       return '<div class="case-row" data-i="' + i + '">' +
-        '<div class="thumb"><img src="' + esc(im.src) + '" alt="" loading="lazy" /><span class="hero">' + (i + 1) + '</span>' +
+        '<div class="thumb"><img src="' + esc(thumbSrc(im)) + '" alt="" loading="lazy" /><span class="hero">' + (i + 1) + '</span>' +
+          caseFlag(im) +
           '<div class="ops">' +
             (i ? '<button type="button" data-case-up title="往前">↑</button>' : '') +
             '<button type="button" data-case-del title="拿掉">×</button>' +
@@ -836,8 +894,28 @@
     }).join('');
     $('#cases-list').innerHTML = rows || '<p class="hint" style="margin:0">还没有。挑 1–3 张跟方案同风格的溪岸实拍；一张都没有就不出这一页。</p>';
     $('#cases-pick').textContent = rows ? '换 / 加案例' : '从图库选';
+    // 公司案例库：帮我挑、自动挑 3 个（有案例才出现）
+    var on = hasCases();
+    $('#cases-match').hidden = !on;
+    $('#cases-auto').hidden = !on;
+    var st = MB.cloud ? MB.cloud.status().status : 'unavailable';
+    $('#cases-cloud').hidden = on || st === 'unavailable';
   }
-  $('#cases-pick').addEventListener('click', function () { openPicker({ mode: 'cases', filter: 'all' }); });
+  $('#cases-pick').addEventListener('click', function () { openPicker({ mode: 'cases', src: hasCases() ? 'cases' : 'all' }); });
+  $('#cases-match').addEventListener('click', function () { openMatch(); });
+  $('#cases-auto').addEventListener('click', function () {
+    var p = S.project;
+    if (p.cases.length && !confirm('换掉现在的 ' + p.cases.length + ' 个参考空间？')) return;
+    var refs = MB.suggestCases ? MB.suggestCases(p, S.resolve, CASE_MAX) : [];
+    if (!refs.length) { ping('公司案例库里还没有「' + MB.dir(p).zh + '」的照片', 2800); return; }
+    p.cases = refs.map(function (ref) { return { ref: ref, note: null }; });
+    if (yieldToHandPicked(p).length) renderRooms();
+    renderCases(); changed({ now: true });
+    ping('挑了 ' + refs.length + ' 个不同的家 —— 那一句是自动写的，可以改');
+  });
+  $('#cases-cloud').addEventListener('click', function (e) {
+    if (e.target.closest('[data-goto-lib]')) { e.preventDefault(); showTab('library'); }
+  });
   $('#cases-list').addEventListener('click', function (e) {
     var row = e.target.closest('.case-row'); if (!row) return;
     var list = S.project.cases, i = +row.getAttribute('data-i');
@@ -1209,19 +1287,28 @@
     }).join('');
   }
 
+  /* ---------- 图库 / 选图共用：来源 × 空间（× 公司案例的 风格 · 柜类 · 项目），案例每页 48 张 ----------
+     f = { src: 'all'|'own'|'builtin'|'cases', room: 'all'|空间 key|'plan', style, cab, pid, page } */
+  var PAGE = 48;
+  var SRC_NAMES = [['all', '全部'], ['own', '我的'], ['builtin', '内置'], ['cases', '公司案例']];
+  function srcOf(im) { return im.isCase ? 'cases' : im.own ? 'own' : 'builtin'; }
   function filterChips(active, counts) {
-    var keys = ['all', 'own'].concat(MB.TAGS.map(function (t) { return t.key; }), ['plan']);
-    return keys.filter(function (k) { return k === 'all' || k === 'own' || counts[k]; }).map(function (k) {
-      var name = k === 'all' ? '全部' : k === 'own' ? '我的图' : tagName(k);
+    var keys = ['all'].concat(MB.TAGS.map(function (t) { return t.key; }), ['plan']);
+    return keys.filter(function (k) { return k === 'all' || counts[k]; }).map(function (k) {
+      var name = k === 'all' ? '全部空间' : tagName(k);
       return '<button class="mini" type="button" data-filter="' + k + '" aria-pressed="' + (k === active) + '">' + esc(name) +
         (counts[k] ? ' ' + counts[k] : '') + '</button>';
     }).join('');
   }
+  function srcChips(active, counts) {
+    return SRC_NAMES.filter(function (x) { return x[0] === 'all' || x[0] === 'own' || counts[x[0]]; }).map(function (x) {
+      return '<button class="mini src" type="button" data-src="' + x[0] + '" aria-pressed="' + (x[0] === active) + '">' + esc(x[1]) +
+        (counts[x[0]] ? ' ' + counts[x[0]] : '') + '</button>';
+    }).join('');
+  }
 
   function libraryItems() {
-    return MB.allImages(S.viewImages).map(function (im) {
-      return im;
-    });
+    return MB.allImages(S.viewImages);
   }
   function countTags(items) {
     var c = { all: items.length, own: 0 };
@@ -1234,12 +1321,110 @@
   function matches(im, f) {
     return f === 'all' || (f === 'own' && im.own) || im.rooms.indexOf(f) > -1;
   }
+  /** 公司案例的筛选（只在来源 = 公司案例时用） */
+  function caseMatch(im, f) {
+    return (!f.style || im.style === f.style) && (!f.cab || (im.cabinets || []).indexOf(f.cab) > -1) && (!f.pid || im.pid === f.pid);
+  }
+  /** 筛好的一页：{ chips, cfilter, items（这一页要画的）, pager, total } */
+  function gallery(f, all) {
+    var srcCount = { all: all.length, own: 0, builtin: 0, cases: 0 };
+    all.forEach(function (im) { srcCount[srcOf(im)]++; });
+    if (f.src !== 'all' && !srcCount[f.src] && f.src !== 'own') f.src = 'all';   // 那个来源没有图了（例：登出）
+    var cases = f.src === 'cases';
+    var list = all.filter(function (im) { return (f.src === 'all' || srcOf(im) === f.src) && (!cases || caseMatch(im, f)); });
+    var counts = countTags(list);
+    if (f.room !== 'all' && !counts[f.room]) f.room = 'all';
+    var items = list.filter(function (im) { return matches(im, f.room); });
+    // 案例几千张：分页（自己的、内置的照旧全部列出）
+    var mine = items.filter(function (im) { return !im.isCase; }), cs = items.filter(function (im) { return im.isCase; });
+    var pages = Math.max(1, Math.ceil(cs.length / PAGE));
+    f.page = Math.max(0, Math.min(pages - 1, f.page || 0));
+    var shown = mine.concat(cs.slice(f.page * PAGE, (f.page + 1) * PAGE));
+    var pager = cs.length > PAGE ? '<button class="mini" type="button" data-page="' + (f.page - 1) + '"' + (f.page ? '' : ' disabled') + '>‹ 上一页</button>' +
+      '<span class="pg-of">公司案例 第 ' + (f.page + 1) + ' / ' + pages + ' 页 · 共 ' + cs.length + ' 张</span>' +
+      '<button class="mini" type="button" data-page="' + (f.page + 1) + '"' + (f.page < pages - 1 ? '' : ' disabled') + '>下一页 ›</button>' : '';
+    var cfilter = '';
+    if (cases) {
+      // 下拉选单的数字：别的条件不变、只换这一项时有几张
+      var base = all.filter(function (im) { return im.isCase && matches(im, f.room); });
+      var cnt = function (key, val) {
+        var g = {}; g.style = f.style; g.cab = f.cab; g.pid = f.pid; g[key] = val;
+        return base.filter(function (im) { return caseMatch(im, g); }).length;
+      };
+      var sel = function (key, label, opts) {
+        return '<label class="cf"><span>' + label + '</span><select data-cf="' + key + '">' +
+          '<option value="">全部</option>' + opts.map(function (o) {
+            var n = cnt(key, o[0]);
+            return n || o[0] === f[key] ? '<option value="' + esc(o[0]) + '"' + (o[0] === f[key] ? ' selected' : '') + '>' + esc(o[1]) + ' · ' + n + '</option>' : '';
+          }).join('') + '</select></label>';
+      };
+      cfilter = sel('style', '风格', (MB.CASE_STYLES || []).map(function (x) { return [x.key, x.zh]; })) +
+        sel('cab', '柜类', (MB.CASE_CABINETS || []).map(function (x) { return [x.key, x.zh]; })) +
+        sel('pid', '项目', (MB.cloud ? MB.cloud.projects() : []).map(function (x) { return [x.pid, x.label]; })) +
+        (f.style || f.cab || f.pid ? '<button class="mini" type="button" data-cf-clear>清除</button>' : '');
+    }
+    return { chips: '<div class="lib-row">' + srcChips(f.src, srcCount) + '</div><div class="lib-row">' + filterChips(f.room, counts) + '</div>',
+      cfilter: cfilter, items: shown, pager: pager, total: items.length };
+  }
+  /** 案例格子的图：缩图到了用缩图；缩图包载不到（没有 CORS / 离线）用原图；还在载就先空着 */
+  function caseImg(im) {
+    var src = im.thumb || (MB.cloud && MB.cloud.thumb(im.ref)) || (MB.cloud && MB.cloud.thumbsFailed(im.pid) ? im.src : '');
+    return src ? '<img src="' + esc(src) + '" alt="" loading="lazy" />' : '<span class="img-wait" aria-hidden="true"></span>';
+  }
+  /** 这一页的案例还没有缩图：载它们的缩图包（载到了 cloud.js 会通知重画） */
+  function needThumbs(items) {
+    if (!MB.cloud) return;
+    var pids = [];
+    items.forEach(function (im) {
+      if (im.isCase && !im.thumb && !MB.cloud.thumb(im.ref) && pids.indexOf(im.pid) < 0 && !MB.cloud.thumbsFailed(im.pid)) pids.push(im.pid);
+    });
+    if (pids.length) MB.cloud.thumbs(pids).then(function (n) {
+      // 载不到（没有 CORS）：改用原图重画一次
+      if (!n && pids.some(function (pid) { return MB.cloud.thumbsFailed(pid); })) galleryRedraw();
+    });
+  }
+  function galleryRedraw() {
+    if (S.tab === 'library') renderLibrary();
+    if (S.picker && $('#pick-modal').classList.contains('on')) renderPicker();
+  }
+  /** 筛选列的点击（图库与选图共用）：回 true = 处理了，要重画 */
+  function galleryClick(f, e) {
+    var b = e.target.closest('[data-filter],[data-src],[data-page],[data-cf-clear],[data-same-proj]');
+    if (!b || b.disabled) return false;
+    if (b.hasAttribute('data-filter')) { f.room = b.getAttribute('data-filter'); f.page = 0; }
+    else if (b.hasAttribute('data-src')) { f.src = b.getAttribute('data-src'); f.page = 0; if (f.src !== 'cases') f.pid = ''; }
+    else if (b.hasAttribute('data-page')) f.page = +b.getAttribute('data-page') || 0;
+    else if (b.hasAttribute('data-cf-clear')) { f.style = f.cab = f.pid = ''; f.page = 0; }
+    else if (b.hasAttribute('data-same-proj')) {
+      // 同项目其他照片：切到公司案例、只看这个家
+      f.src = 'cases'; f.pid = b.getAttribute('data-same-proj'); f.style = f.cab = ''; f.room = 'all'; f.page = 0;
+    }
+    return true;
+  }
+  function galleryChange(f, e) {
+    var k = e.target.getAttribute && e.target.getAttribute('data-cf');
+    if (!k) return false;
+    f[k] = e.target.value; f.page = 0;
+    return true;
+  }
+  function sameProjBtn(im) {
+    return im.isCase && im.pid ? '<button class="same-proj" type="button" data-same-proj="' + esc(im.pid) + '" title="同项目其他照片">同项目</button>' : '';
+  }
 
   function renderLibrary() {
     $('#up-tag').innerHTML = tagOptions($('#up-tag').value || 'kitchen', true);
-    var items = libraryItems();
-    $('#lib-filter').innerHTML = filterChips(S.libFilter, countTags(items));
-    $('#lib-grid').innerHTML = items.filter(function (im) { return matches(im, S.libFilter); }).map(function (im) {
+    renderCloudBox();
+    var g = gallery(S.lib, libraryItems());
+    $('#lib-filter').innerHTML = g.chips;
+    $('#lib-cfilter').innerHTML = g.cfilter;
+    $('#lib-cfilter').hidden = !g.cfilter;
+    $('#lib-match').hidden = !hasCases();
+    $('#lib-grid').innerHTML = g.items.map(function (im) {
+      if (im.isCase) {
+        return '<div class="lib-item case" data-ref="' + esc(im.ref) + '" title="' + esc((MB.cloud && MB.cloud.projectLabel(im.pid)) || '') + '">' +
+          caseImg(im) + '<span class="own">案例</span>' + sameProjBtn(im) +
+          '<span class="cap">' + esc(im.label || '') + '</span></div>';
+      }
       return '<div class="lib-item" data-ref="' + esc(im.ref) + '"><img src="' + esc(im.src) + '" alt="" loading="lazy" />' +
         (im.own
           ? '<span class="own">我的</span><select data-retag aria-label="空间">' + tagOptions(im.rooms[0], true) + '</select>' +
@@ -1247,12 +1432,18 @@
           : '<span class="cap">内置 · ' + esc(im.label || '') + '</span>') +
         '</div>';
     }).join('') || '<p class="hint">这一类还没有图。</p>';
+    $('#lib-pager').innerHTML = g.pager;
+    $('#lib-pager').hidden = !g.pager;
+    needThumbs(g.items);
   }
 
-  $('#lib-filter').addEventListener('click', function (e) {
-    var b = e.target.closest('[data-filter]'); if (!b) return;
-    S.libFilter = b.getAttribute('data-filter'); renderLibrary();
+  $('#lib-filter').addEventListener('click', function (e) { if (galleryClick(S.lib, e)) renderLibrary(); });
+  $('#lib-pager').addEventListener('click', function (e) {
+    if (galleryClick(S.lib, e)) { renderLibrary(); $('#lib-filter').scrollIntoView({ block: 'start' }); }
   });
+  $('#lib-cfilter').addEventListener('change', function (e) { if (galleryChange(S.lib, e)) renderLibrary(); });
+  $('#lib-cfilter').addEventListener('click', function (e) { if (galleryClick(S.lib, e)) renderLibrary(); });
+  $('#lib-match').addEventListener('click', function () { openMatch(); });
   $('#lib-grid').addEventListener('change', function (e) {
     if (!e.target.hasAttribute('data-retag')) return;
     var id = e.target.closest('[data-ref]').getAttribute('data-ref').slice(2);
@@ -1262,6 +1453,7 @@
     storeImgs([u]).then(function () { rebuildResolver(); renderLibrary(); });
   });
   $('#lib-grid').addEventListener('click', function (e) {
+    if (e.target.closest('[data-same-proj]')) { if (galleryClick(S.lib, e)) renderLibrary(); return; }
     if (!e.target.hasAttribute('data-del-img')) return;
     var ref = e.target.closest('[data-ref]').getAttribute('data-ref');
     if (!confirm('从图库删除这张图？（已经用在方案里的位置会空出来）')) return;
@@ -1384,6 +1576,196 @@
     }).catch(function () { ping('存档失败：浏览器存储空间可能满了', 3200); });
   });
 
+  /* ============================================================
+     公司案例库：登入框 · 帮我挑
+     ============================================================ */
+  function fmtTime(ts) {
+    if (!ts) return '';
+    var d = new Date(ts), now = new Date();
+    var hm = MB.pad2(d.getHours()) + ':' + MB.pad2(d.getMinutes());
+    return d.toDateString() === now.toDateString() ? '今天 ' + hm : (d.getMonth() + 1) + '/' + d.getDate() + ' ' + hm;
+  }
+  /** 登入框 / 状态（图库、帮我挑共用）。名字 + 团队密码；密码不存 */
+  function cloudBoxHtml() {
+    if (!MB.cloud) return '';
+    var st = MB.cloud.status(), n = st.count;
+    var name = st.user || (S.project && S.project.host && S.project.host.name) || '';
+    var form = '<form class="cloud-login" data-cloud-login autocomplete="on">' +
+      '<input type="text" name="name" maxlength="30" autocomplete="username" placeholder="你的名字" aria-label="名字" value="' + esc(name) + '" />' +
+      '<input type="password" name="pw" autocomplete="current-password" placeholder="团队密码" aria-label="团队密码" />' +
+      '<button class="mini dark" type="submit">登入</button></form><p class="cloud-msg" data-cloud-msg></p>';
+    var tools = '<div class="btn-row"><button class="mini" type="button" data-cloud-refresh>更新</button>' +
+      (st.user ? '<button class="mini" type="button" data-cloud-logout>登出</button>' : '') + '</div>';
+    var when = st.checked ? ' · ' + fmtTime(st.checked) + ' 更新' : '';
+    if (st.status === 'ok') return '<p class="cloud-st ok">' + (st.user ? '已登入：<b>' + esc(st.user) + '</b> · ' : '') + n + ' 张案例' + when + '</p>' + tools;
+    if (st.status === 'cached') return '<p class="cloud-st">这台电脑存着 ' + n + ' 张案例' + when + ' —— 正在问有没有新的…</p>';
+    if (st.status === 'offline') return '<p class="cloud-st warn">暂时连不上公司案例库' + (st.cached ? '，先用这台电脑存着的 ' + n + ' 张' + when : '') + '。</p>' + tools;
+    if (st.status === 'unavailable') return '<p class="cloud-st">这个网址没有公司案例库（只有正式网站有）' + (st.cached ? '；这台电脑存着的 ' + n + ' 张照样能用' : '') + '。</p>';
+    if (st.status === 'login' && st.cached) return '<p class="cloud-st warn">登入过期了 —— 存着的 ' + n + ' 张照样能用；重新登入才拿得到新的案例。</p>' + form;
+    return '<p class="cloud-st">公司做过的案例（风格、柜类、空间都标好了）。用<b>团队密码</b>登入一次，「帮我挑」就会按需求卡挑给你。</p>' + form;
+  }
+  function renderCloudBox() {
+    $$('[data-cloud-box]').forEach(function (el) { el.innerHTML = cloudBoxHtml(); });
+  }
+  document.addEventListener('submit', function (e) {
+    var f = e.target.closest && e.target.closest('[data-cloud-login]'); if (!f) return;
+    e.preventDefault();
+    var msg = f.parentNode.querySelector('[data-cloud-msg]');
+    var btn = f.querySelector('button');
+    btn.disabled = true;
+    if (msg) msg.textContent = '登入中…';
+    MB.cloud.login(f.elements.name.value, f.elements.pw.value).then(function (r) {
+      btn.disabled = false;
+      if (!r.ok) { if (msg) msg.textContent = r.msg; return; }
+      // 按 Enter 登入时游标还在密码框：背景更新那时没重画，这里补画
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      renderCloudBox();
+      if (S.tab === 'library') renderLibrary();
+      if (S.tab === 'rooms') renderCases();
+      ping('已登入公司案例库：' + MB.cloud.status().count + ' 张案例', 2600);
+    });
+  });
+  document.addEventListener('click', function (e) {
+    if (e.target.closest('[data-cloud-refresh]')) {
+      ping('正在更新公司案例库…', 3000);
+      MB.cloud.refresh(true).then(function (st) {
+        ping(st.status === 'ok' ? '公司案例库已是最新：' + st.count + ' 张' : st.status === 'login' ? '要重新登入' : '暂时连不上，先用存着的', 2400);
+        renderCloudBox();
+      });
+    }
+    if (e.target.closest('[data-cloud-logout]')) {
+      if (!confirm('登出公司案例库？（已经放进方案的案例照片照样看得到）')) return;
+      MB.cloud.logout().then(renderCloudBox);
+    }
+  });
+
+  /** 业务正在左边打字：背景更新不重画编辑区（不然输入框会被换掉、游标不见） */
+  function typing() {
+    var a = document.activeElement;
+    return !!(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.closest && a.closest('.mb-edit'));
+  }
+  /** 案例清单变了（开机、更新、登入）：重建 resolver，画面上用得到的地方重画 */
+  function casesChanged() {
+    rebuildResolver();
+    if (!S.project) return;
+    if (S.tab === 'library' && !typing()) renderLibrary();
+    if (S.tab === 'rooms' && !typing()) { renderRooms(); renderCases(); }
+    if (S.picker && $('#pick-modal').classList.contains('on')) renderPicker();
+    if ($('#match-modal').classList.contains('on')) renderMatch();
+    renderBriefMatch(false);
+    renderPreview();
+  }
+
+  /* ---------- 帮我挑：按需求卡从公司案例库挑 6–9 张，每张一句「为什么」 ----------
+     业务按「放进厨房」「放进参考空间」才会用 —— 不会自己塞进方案。
+     「为什么」只拼真的对得上的事实（model.js 的 MB.matchCases），放进参考空间时变成那一张的说明草稿 */
+  var matchDone = {};   // 这次打开已经放进去的 ref → 放在哪
+  function openMatch() {
+    matchDone = {};
+    renderMatch();
+    $('#match-modal').classList.add('on');
+  }
+  function renderMatch() {
+    var p = S.project, list = [];
+    try { list = hasCases() && MB.matchCases ? MB.matchCases(p, S.resolve) : []; } catch (e) { console.error(e); }
+    // 已经放进去的那几张：matchCases 会跳过（已经在方案里），这次打开还是留在原位，显示「已放进」
+    var keep = Object.keys(matchDone).filter(function (ref) { return !list.some(function (x) { return x.ref === ref; }); });
+    list = list.concat(keep.map(function (ref) { return matchDone[ref].item; }));
+    var hint = $('#match-hint');
+    if (!hasCases()) {
+      hint.innerHTML = '要先登入公司案例库：';
+      $('#match-list').innerHTML = '<div data-cloud-box>' + cloudBoxHtml() + '</div>';
+      return;
+    }
+    var facts = [];
+    if (p.caseStyle && MB.caseStyle(p.caseStyle)) facts.push(MB.caseStyle(p.caseStyle).zh);
+    else facts.push(MB.dir(p).zh);
+    if ((p.property.area || '').trim()) facts.push(p.property.area.trim());
+    if ((p.property.type || '').trim()) facts.push(p.property.type.trim());
+    hint.textContent = list.length
+      ? '按这份方案（' + facts.join(' · ') + '、空间、要做的柜子、家庭）挑的。「为什么」只写真的对得上的 —— 放进去之前看一眼照片。'
+      : '公司案例库里还没有跟这份方案对得上的照片（先贴需求卡、加空间，或到图库按风格找）。';
+    $('#match-list').innerHTML = list.map(function (x) {
+      var im = S.resolve(x.ref);
+      if (!im) return '';
+      var room = x.use !== 'cases' ? p.rooms.filter(function (r) { return r.uid === x.use; })[0] : null;
+      var done = matchDone[x.ref];
+      var rname = room ? MB.t(MB.roomTitle(p, room), 'zh') : '';
+      return '<div class="match-row" data-ref="' + esc(x.ref) + '" data-why-zh="' + esc(x.why.zh) + '" data-why-en="' + esc(x.why.en) + '">' +
+        '<div class="thumb"><img src="' + esc(thumbSrc(im)) + '" alt="" loading="lazy" /></div>' +
+        '<div class="match-txt"><p class="match-why">' + esc(x.why.zh) + '</p><p class="match-en">' + esc(x.why.en) + '</p>' +
+          '<span class="case-cap">' + esc(capOf(im)) + '</span>' +
+          '<div class="btn-row">' +
+            (done ? '<span class="match-done">✓ 已放进' + esc(done.where) + '</span>'
+              : (room ? '<button class="mini" type="button" data-match-room="' + esc(room.uid) + '">放进' + esc(rname) + '</button>' : '') +
+                '<button class="mini" type="button" data-match-case>放进参考空间</button>') +
+          '</div></div></div>';
+    }).join('');
+    // 缩图：这几个项目的缩图包
+    if (MB.cloud) {
+      var pids = [];
+      list.forEach(function (x) { var c = S.resolve(x.ref); if (c && c.pid && !c.thumb && pids.indexOf(c.pid) < 0) pids.push(c.pid); });
+      if (pids.length) MB.cloud.thumbs(pids);
+    }
+    matchList = list;
+  }
+  var matchList = [];
+  /** 帮我挑那一行的小字：照片的标签 + 哪一个家（「原木 · 橱柜 · 厨房 · Setia Alam · #2」，重复的字只留一次） */
+  function capOf(im) {
+    var parts = [];
+    String(im.label || '').split(' · ').concat(String((MB.cloud && MB.cloud.projectLabel(im.pid)) || '').split(' · ')).forEach(function (x) {
+      if (x && parts.indexOf(x) < 0) parts.push(x);
+    });
+    return parts.join(' · ');
+  }
+  $('#match-list').addEventListener('click', function (e) {
+    var row = e.target.closest('.match-row'); if (!row) return;
+    var ref = row.getAttribute('data-ref'), p = S.project;
+    var item = matchList.filter(function (x) { return x.ref === ref; })[0];
+    if (!item) return;
+    var key = MB.shotKey || function (r) { return r; };
+    var b = e.target.closest('[data-match-room]');
+    if (b) {
+      var r = p.rooms.filter(function (x) { return x.uid === b.getAttribute('data-match-room'); })[0];
+      if (!r) return;
+      // 当这一页的主图；原来的图只留同一个系列的当辅图（不混风格）
+      var im = S.resolve(ref) || {};
+      var rest = r.images.filter(function (x) {
+        var o = S.resolve(x);
+        return o && key(x) !== key(ref) && (!im.series || o.series === im.series || (x.indexOf('u:') === 0 && !o.series));
+      });
+      r.images = [ref].concat(rest).slice(0, 3);
+      r.manual = true;
+      matchDone[ref] = { where: MB.t(MB.roomTitle(p, r), 'zh'), item: item };
+      renderMatch(); changed({ now: true });
+      ping('已放进「' + matchDone[ref].where + '」当主图');
+      return;
+    }
+    if (e.target.closest('[data-match-case]')) {
+      if (p.cases.some(function (c) { return c && key(c.ref) === key(ref); })) { ping('参考空间里已经有这一张'); return; }
+      if (p.cases.length >= CASE_MAX) { ping('参考空间最多 ' + CASE_MAX + ' 个 —— 先在「③ 空间 → 参考空间」拿掉一个', 3000); return; }
+      // 「为什么」变成这一张的说明草稿（销售在参考空间可以改）
+      p.cases.push({ ref: ref, note: p.lang === 'en' ? item.why.en : item.why.zh });
+      matchDone[ref] = { where: '参考空间', item: item };
+      if (yieldToHandPicked(p).length && S.tab === 'rooms') renderRooms();
+      if (S.tab === 'rooms') renderCases();
+      renderMatch(); changed({ now: true });
+      ping('已放进参考空间 —— 那一句可以在「③ 空间 → 参考空间」改');
+    }
+  });
+
+  /** 贴完需求卡：有公司案例就在 ① 提示「帮我挑」 */
+  function renderBriefMatch(justApplied) {
+    var box = $('#brief-match'); if (!box) return;
+    var n = 0;
+    if (hasCases() && S.project && (S.project.brief || justApplied)) {
+      try { n = MB.matchCases(S.project, S.resolve).length; } catch (e) { n = 0; }
+    }
+    box.hidden = !n;
+    if (n) $('#brief-match-n').textContent = n;
+  }
+  $('#brief-match').addEventListener('click', function (e) { if (e.target.closest('[data-open-match]')) openMatch(); });
+
   /* 备份 */
   function stamp() { var d = new Date(); return d.getFullYear() + MB.pad2(d.getMonth() + 1) + MB.pad2(d.getDate()); }
   $('#lib-export').addEventListener('click', function () {
@@ -1435,7 +1817,9 @@
      选图弹窗
      ============================================================ */
   function openPicker(opts) {
-    S.picker = { mode: opts.mode, uid: opts.uid, slot: opts.slot, filter: opts.filter || 'all', sel: [] };
+    // f：跟图库同一套筛选（来源 × 空间 × 公司案例的风格 · 柜类 · 项目 · 页）
+    S.picker = { mode: opts.mode, uid: opts.uid, slot: opts.slot, sel: [],
+      f: { src: opts.src || 'all', room: opts.filter || 'all', style: '', cab: '', pid: '', page: 0 } };
     var p = S.project;
     if (opts.mode === 'room') {
       var r = p.rooms.filter(function (x) { return x.uid === opts.uid; })[0];
@@ -1477,22 +1861,30 @@
     return out;
   }
   function renderPicker() {
-    var pk = S.picker, items = libraryItems();
+    var pk = S.picker, g = gallery(pk.f, libraryItems());
     var key = MB.shotKey || function (r) { return r; };
-    $('#pick-filter').innerHTML = filterChips(pk.filter, countTags(items));
-    $('#pick-grid').innerHTML = items.filter(function (im) { return matches(im, pk.filter); }).map(function (im) {
+    $('#pick-filter').innerHTML = g.chips;
+    $('#pick-cfilter').innerHTML = g.cfilter;
+    $('#pick-cfilter').hidden = !g.cfilter;
+    $('#pick-grid').innerHTML = g.items.map(function (im) {
       var n = pk.sel.indexOf(im.ref), used = (pk.usedBy || {})[key(im.ref)];
-      return '<button type="button" class="lib-item' + (n > -1 ? ' sel' : '') + (used && n < 0 ? ' used' : '') + '" data-ref="' + esc(im.ref) + '">' +
-        '<img src="' + esc(im.src) + '" alt="" loading="lazy" />' + (im.own ? '<span class="own">我的</span>' : '') +
+      var btn = '<button type="button" class="lib-item' + (n > -1 ? ' sel' : '') + (used && n < 0 ? ' used' : '') + (im.isCase ? ' case' : '') + '" data-ref="' + esc(im.ref) + '">' +
+        (im.isCase ? caseImg(im) + '<span class="own">案例</span>' : '<img src="' + esc(im.src) + '" alt="" loading="lazy" />' + (im.own ? '<span class="own">我的</span>' : '')) +
         '<span class="cap">' + (n > -1 ? (pk.mode === 'cases' ? '第 ' + (n + 1) + ' 个' : n === 0 ? '★ 主图' : '第 ' + (n + 1) + ' 张')
           : used ? '已用 · ' + esc(used) : esc(im.own ? tagName(im.rooms[0]) : im.label || '')) + '</span></button>';
+      // 案例：格子旁边多一个「同项目」（不能放在按钮里面）
+      return im.isCase ? '<div class="lib-cell">' + btn + sameProjBtn(im) + '</div>' : btn;
     }).join('') || '<p class="hint">这一类还没有图。到「图库」上传，或把旧 proposal PDF 拖进去。</p>';
+    $('#pick-pager').innerHTML = g.pager;
+    $('#pick-pager').hidden = !g.pager;
+    needThumbs(g.items);
   }
-  $('#pick-filter').addEventListener('click', function (e) {
-    var b = e.target.closest('[data-filter]'); if (!b) return;
-    S.picker.filter = b.getAttribute('data-filter'); renderPicker();
-  });
+  $('#pick-filter').addEventListener('click', function (e) { if (galleryClick(S.picker.f, e)) renderPicker(); });
+  $('#pick-cfilter').addEventListener('change', function (e) { if (galleryChange(S.picker.f, e)) renderPicker(); });
+  $('#pick-cfilter').addEventListener('click', function (e) { if (galleryClick(S.picker.f, e)) renderPicker(); });
+  $('#pick-pager').addEventListener('click', function (e) { if (galleryClick(S.picker.f, e)) renderPicker(); });
   $('#pick-grid').addEventListener('click', function (e) {
+    if (e.target.closest('[data-same-proj]')) { if (galleryClick(S.picker.f, e)) renderPicker(); return; }
     var b = e.target.closest('[data-ref]'); if (!b) return;
     var ref = b.getAttribute('data-ref'), pk = S.picker;
     if (pk.mode === 'slot') {
@@ -1737,7 +2129,13 @@
     btn.disabled = true;
     ping('正在做 PPTX…', 8000);
     Promise.resolve().then(function () { return MB.exportPptx(S.project, deckCtx()); })
-      .then(function () { ping('PPTX 已导出'); }, function (err) { console.error(err); ping('PPTX 导出失败：' + (err && err.message || err), 3600); })
+      .then(function (out) {
+        // 公司案例的照片放在另一个网址（Blob）：那边不让浏览器读（没有 CORS）就放不进 PPTX —— 照实说几张
+        var miss = out && out.missing || 0;
+        if (miss) ping('PPTX 已导出，但有 ' + miss + ' 张公司案例照片放不进去（图库网址不让浏览器读取）。' +
+          'PPT 里那几格是空的 —— 改用「导出 PDF」，或请管理员开放图库的跨站读取。', 8000);
+        else ping('PPTX 已导出');
+      }, function (err) { console.error(err); ping('PPTX 导出失败：' + (err && err.message || err), 3600); })
       .then(function () { btn.disabled = false; });
   });
 
@@ -1791,7 +2189,24 @@
      启动
      ============================================================ */
   S.copyLang = lsGet(COPYLANG_KEY) === 'en' ? 'en' : 'zh';
-  Promise.all([MB.store.listImages(), MB.store.listProjects()]).then(function (res) {
+  /* 公司案例库：先读这台电脑存着的清单（不发请求）—— 方案里的 c: 照片在第一次排版前就解析得到；
+     之后背景问伺服器有没有新的（这台电脑没登入过就不问），到了再重画 */
+  var cloudCached = MB.cloud ? MB.cloud.loadCached().catch(function () { return 0; }) : Promise.resolve(0);
+  function startCloud() {
+    if (!MB.cloud) return;
+    MB.cloud.onChange(function (what) {
+      if (what === 'cases') casesChanged();
+      else if (what === 'thumbs') {
+        if (!typing()) galleryRedraw();
+        if ($('#match-modal').classList.contains('on')) renderMatch();
+        if (S.tab === 'rooms' && !typing()) { renderRooms(); renderCases(); }
+      }
+      else if (what === 'status') { if (!typing()) renderCloudBox(); if (S.tab === 'rooms' && !typing()) renderCases(); }
+    });
+    MB.cloud.refresh();
+    setInterval(function () { MB.cloud.refresh(); }, MB.cloud.EVERY);
+  }
+  Promise.all([MB.store.listImages(), MB.store.listProjects(), cloudCached]).then(function (res) {
     S.userImages = res[0].map(MB.normalizeImage).filter(Boolean);
     rebuildResolver();
     S.projects = res[1].map(function (x) { return MB.normalizeProject(x); });
@@ -1805,11 +2220,15 @@
     }
     // 万一某一份方案打不开，换下一份 —— 不要整个页面陪葬
     var order = [first].concat(S.projects.filter(function (x) { return x !== first; }));
-    for (var i = 0; i < order.length; i++) {
-      try { openProject(order[i]); showTab('brief'); return; } catch (e) { console.error(e); }
+    var opened = false;
+    for (var i = 0; i < order.length && !opened; i++) {
+      try { openProject(order[i]); showTab('brief'); opened = true; } catch (e) { console.error(e); }
     }
-    var fresh = MB.newProject(loadProfile());
-    S.projects.push(fresh); openProject(fresh); showTab('brief');
+    if (!opened) {
+      var fresh = MB.newProject(loadProfile());
+      S.projects.push(fresh); openProject(fresh); showTab('brief');
+    }
+    startCloud();
   }, function (err) {
     // 无痕模式 / 存储被关：照样能用，只是不存档
     console.error(err);
@@ -1820,5 +2239,6 @@
     openProject(p);
     showTab('brief');
     ping('这个浏览器不能存档（无痕模式？）—— 可以做，但关掉就没了', 5000);
+    startCloud();
   });
 })();

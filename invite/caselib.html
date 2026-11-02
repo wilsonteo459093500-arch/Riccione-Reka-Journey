@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>案例库 · VISI by Riccione Reka</title>
+<meta name="description" content="VISI 案例库：业务上传、审核公司自家的案例照片（员工专用，要登入）。" />
+<meta name="robots" content="noindex, nofollow" />
+<meta name="theme-color" content="#F4F0E8" />
+<link rel="icon" href="assets/img/visi.svg?v=2" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="assets/img/visi-180.png?v=2" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,400&family=Outfit:wght@300;400;500&family=Noto+Sans+SC:wght@300;400;500;600&family=Noto+Serif+SC:wght@300;400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/css/invite.css" />
+<link rel="stylesheet" href="assets/css/form.css" />
+<link rel="stylesheet" href="assets/css/caselib.css" />
+</head>
+
+<body class="form-body cl-body cl-locked">
+
+<header class="f-top cl-top">
+  <div class="row">
+    <!-- 同 VISI 的字标；这一页是员工后台，副标写「案例库」 -->
+    <a class="visi-mark" href="visi.html" title="回到 VISI">
+      <img src="assets/img/visi.svg?v=2" alt="" width="30" height="30" />
+      <span><b>VISI</b><i>案例库 · CASE LIBRARY</i></span>
+    </a>
+    <nav class="cl-tabs" id="tabs" role="tablist" hidden>
+      <button type="button" role="tab" data-tab="upload" aria-selected="true">上传 <small>Upload</small></button>
+      <button type="button" role="tab" data-tab="review" aria-selected="false">审核 <small>Review</small><i class="dot" id="tab-review-dot" hidden></i></button>
+    </nav>
+    <div class="cl-who" id="who" hidden>
+      <span class="who"><i aria-hidden="true">●</i><span id="who-name"></span></span>
+      <button class="mini" type="button" id="logout">登出</button>
+    </div>
+  </div>
+</header>
+
+<main class="cl">
+
+  <p class="cl-boot" id="boot">载入中…</p>
+
+  <!-- 还没设团队密码（Vercel 的 VISI_TEAM_PASSWORD） -->
+  <section class="cl-login" id="not-config" hidden>
+    <div class="login-card">
+      <img src="assets/img/visi.svg?v=2" alt="" width="44" height="44" />
+      <h2>案例库还没启用</h2>
+      <p class="hint">请老板到 Vercel → visi-riccione-reka → Settings → Environment Variables 加上 <code>VISI_TEAM_PASSWORD</code>（团队密码），再重新部署。</p>
+    </div>
+  </section>
+
+  <!-- 登入：名字 + 团队密码。中途过期时它会变成浮在上面的框，底下的上传 / 修改都还在 -->
+  <section class="cl-login" id="login" hidden>
+    <form class="login-card" id="login-form" autocomplete="on">
+      <img src="assets/img/visi.svg?v=2" alt="" width="44" height="44" />
+      <h2>案例库 · 员工登入</h2>
+      <p class="hint" id="login-why" hidden>登入过期了。重新登入后，刚才的上传和修改会接着进行，不会不见。</p>
+      <p class="hint">全公司用同一组团队密码。名字填你自己的：每次上传、修改都会记下是谁做的。</p>
+      <div class="field">
+        <label class="q" for="login-name">你的名字 <i class="eh">Your name</i></label>
+        <input type="text" id="login-name" name="username" maxlength="30" autocomplete="username" placeholder="例：Ana" />
+      </div>
+      <div class="field">
+        <label class="q" for="login-pass">团队密码 <i class="eh">Team password</i></label>
+        <input type="password" id="login-pass" name="password" autocomplete="current-password" />
+      </div>
+      <button class="btn gold" type="submit" id="login-go">登入</button>
+      <p class="err-line" id="login-err" role="alert"></p>
+    </form>
+  </section>
+
+  <!-- ======================== 上传 ======================== -->
+  <section class="cl-pane" data-pane="upload" hidden>
+    <div class="cl-wrap">
+      <div class="pane-head">
+        <h2>上传案例图 <small>Upload</small></h2>
+        <p class="hint">把整个「案例」总文件夹拖进来：里面<b>每个子文件夹 = 一个项目</b>（文件夹名 = 区域 风格 客户名，例：<i>Setia Alam 原木 陈先生</i>）。
+          照片在这台电脑先压成 1600px、去掉 GPS 资讯再上传，原档不动。客户名字只在「审核」看得到，不会出现在方案里。</p>
+      </div>
+
+      <div class="note-line" id="up-recover" hidden></div>
+
+      <label class="cl-drop" id="drop">
+        <input type="file" id="pick" webkitdirectory directory multiple hidden />
+        <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M6 14a4 4 0 0 1 4-4h9l4 5h15a4 4 0 0 1 4 4v17a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M24 33V21m-5 5 5-5 5 5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+        <b>把文件夹拖到这里</b>
+        <span>或 <u>点这里选择文件夹</u> · <i class="eh">Drop a folder, or click to choose</i></span>
+        <span class="small muted">只收 JPG / PNG / WebP。HEIC、RAW、影片会列出来请你另存成 JPG。</span>
+      </label>
+      <p class="pick-alt">手机 / 只想传几张：<label class="linkish">选照片<input type="file" id="pick-files" accept="image/*" multiple hidden /></label>（之后填项目名）</p>
+
+      <div class="cl-panel" id="plan" hidden>
+        <div id="plan-body"></div>
+        <div class="plan-foot"><button class="mini" type="button" id="replan">取消，重新选</button></div>
+      </div>
+
+      <div class="cl-panel" id="run" hidden>
+        <div id="run-body"></div>
+      </div>
+
+      <div id="sum" hidden>
+        <div id="sum-body"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================== 审核 ======================== -->
+  <section class="cl-pane" data-pane="review" hidden>
+    <div class="cl-wrap wide">
+      <div class="pane-head row">
+        <div>
+          <h2>审核标签 <small>Review</small></h2>
+          <p class="hint">待确认的排最前面。点照片改空间、柜类、风格；改过的会变成「已确认」，记下是谁改的。按「确认 ✓ 下一张」最快（键盘 ← → 换照片）。</p>
+        </div>
+        <div class="head-tools">
+          <span class="muted" id="rv-count"></span>
+          <button class="mini" type="button" id="rv-reload">重新载入</button>
+        </div>
+      </div>
+
+      <div class="rv-filters" id="rv-filters"></div>
+      <div class="rv-proj" id="rv-proj" hidden></div>
+      <div class="rv-grid" id="rv-grid"></div>
+      <div class="rv-pager" id="rv-pager"></div>
+
+      <div class="rv-save" id="rv-save">
+        <div class="msg"></div>
+        <button class="mini" type="button" id="rv-logbtn" aria-expanded="false">最近修改</button>
+        <button class="mini dark" type="button" id="rv-savebtn" disabled>保存</button>
+        <div class="rv-logbox" id="rv-logbox" hidden><ul id="rv-log"></ul></div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- 编辑照片 / 项目资料（桌面在右边，手机整页） -->
+<aside class="cl-drawer" id="drawer" aria-hidden="true" aria-label="编辑">
+  <button class="icon dr-x" type="button" aria-label="关闭">×</button>
+  <div class="dr-body"></div>
+</aside>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- 词表（跟伺服器同一份）、VISI 的空间名；其它 VISI 的程式都不需要 -->
+<script src="assets/js/visi/case-vocab.js"></script>
+<script src="assets/js/visi/data.js"></script>
+<script src="assets/js/caselib/ui.js"></script>
+<script src="assets/js/caselib/scan.js"></script>
+<script src="assets/js/caselib/worker.js"></script>
+<script src="assets/js/caselib/upload.js"></script>
+<script src="assets/js/caselib/review.js"></script>
+</body>
+</html>
