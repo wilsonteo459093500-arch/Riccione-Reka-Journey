@@ -1,7 +1,7 @@
 /* ============================================================
    VISI by RICCIONE REKA —— 方案与文案生成器
    依赖 invite.css（设计变量）与 form.css（输入框 / 面板 / 按钮）
-   上半：销售端工作台；下半：A4 方案页（.pg）与打印
+   销售端工作台。方案页本身（16:9 的 .pg、预览缩放、打印）在 deck.css
    ============================================================ */
 
 /* ---------- 工作台骨架 ------------------------------------ */
@@ -116,7 +116,7 @@ body.mb-body { overflow: hidden; height: 100vh; }
 .room-add { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
 .room-add .mini.on { background: var(--paper-3); }
 .room-card { background: #FBF8F2; border: 1px solid var(--line); margin-bottom: 14px; }
-.room-card.flash { animation: flash 1.2s var(--ease); }
+.room-card.flash, .mb-pane .panel.flash { animation: flash 1.2s var(--ease); }
 @keyframes flash { 0%, 40% { box-shadow: 0 0 0 3px rgba(192,138,62,.55); } 100% { box-shadow: none; } }
 .room-card header {
   display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--line-soft);
@@ -138,7 +138,35 @@ body.mb-body { overflow: hidden; height: 100vh; }
 .thumb:hover .ops, .thumb:focus-within .ops { opacity: 1; }
 .thumb .ops button { width: 22px; height: 22px; border: 0; border-radius: 50%; background: rgba(27,24,21,.78); color: #fff; font-size: 11px; cursor: pointer; padding: 0; }
 @media (hover: none) { .thumb .ops { opacity: 1; } }
+/* ⑤ 每一页用哪张图：关着的页缩图淡一点 */
+.slot { text-align: center; font-size: 11.5px; color: var(--ink-soft); }
+.slot .thumb { padding: 0; border: 0; cursor: pointer; display: block; }
+.slot.off .thumb img { opacity: .4; }
+.slot.off div { color: var(--ink-faint); }
 .thumb.empty { display: grid; place-items: center; color: var(--ink-faint); font-size: 12px; border: 1px dashed var(--line); background: none; }
+
+/* ---------- 方案 2.0 的编辑区 ------------------------------ */
+/* 开场短话：自动草稿用浅色字 —— 一眼看出「还没改过」 */
+.mb-pane #letter-text { min-height: 200px; line-height: 1.75; }
+#letter-text.auto { color: var(--ink-faint); }
+#letter-text.auto:focus { color: var(--ink-soft); }
+.mb-pane .hint.letter-state, .mb-pane .hint.ref-state { font-size: 12px; margin: 8px 0 0; line-height: 1.6; }
+.mb-pane .hint.ref-state { margin: 0 0 10px; }
+
+/* 参考空间：缩图 + 一句话 */
+.case-row { display: grid; grid-template-columns: 86px minmax(0, 1fr); gap: 12px; align-items: start; padding: 12px 0; border-top: 1px solid var(--line-soft); }
+.case-row:first-child { border-top: 0; padding-top: 0; }
+.case-row .thumb { flex: none; }
+.case-txt { min-width: 0; }
+.case-cap { display: block; font-size: 11.5px; color: var(--ink-faint); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 1em; }
+.mb-pane .case-row textarea { min-height: 62px; font-size: 13.5px; line-height: 1.6; }
+
+/* 本案团队：职称 · 名字 · 删除 */
+.team-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 30px; gap: 8px; align-items: start; margin-bottom: 8px; }
+.team-role { display: grid; gap: 6px; min-width: 0; }
+.team-row select, .team-row input { min-width: 0; width: 100%; }
+.team-row .icon { margin-top: 7px; }
+#team-add { margin-top: 4px; }
 
 /* 平面图编辑 */
 .plan-edit { position: relative; display: inline-block; max-width: 100%; cursor: crosshair; user-select: none; }
@@ -176,6 +204,9 @@ body.mb-body { overflow: hidden; height: 100vh; }
 .lib-item .cap { display: block; font-size: 11px; color: var(--ink-soft); padding: 4px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lib-item .own { position: absolute; left: 4px; top: 4px; background: rgba(27,24,21,.75); color: #fff; font-size: 10px; padding: 1px 6px; border-radius: 10px; }
 .lib-item.sel { border-color: var(--gold); }
+/* 这份方案别页已经用了的图：淡一点，选了会在两页出现同一张 */
+.lib-item.used img { opacity: .45; }
+.lib-item.used .cap { color: #8A5E22; }
 .lib-item.sel::after { content: "✓"; position: absolute; right: 6px; top: 4px; color: #fff; background: var(--gold); width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; }
 .lib-item select { width: 100%; padding: 4px 22px 4px 6px !important; font-size: 12px !important; border-radius: 0; background-position: right 6px center; }
 .lib-item .del { position: absolute; right: 4px; top: 4px; }

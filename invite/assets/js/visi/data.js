@@ -1,13 +1,18 @@
 /* ============================================================
    VISI · 资料库
    ------------------------------------------------------------
-   空间 · 功能卖点 · 风格方向 · 需求卡对照 · 内置图库
+   空间 · 功能卖点 · 风格方向 · 需求卡对照 · 常见顾虑 · 内置图库
    全部是纯资料：要改文案、加空间、换配色，只动这一份。
 
-   文案写法（对齐《快思慢想》）：
-   - 标题说「得到什么」，不是「这是什么」（System 1 只读结果）
-   - why 用「避免损失」的说法（损失厌恶：少一个麻烦 > 多一个功能）
-   - 不编数字。要放数字，就由销售填真实的尺寸与数量。
+   这是 moodboard：以图为主、字要少。页面只印短的那一句，细节放讲稿（copy.js 的 MB.pageNotes）。
+   字数上限（华文字 / 英文单词）：
+   - head ≤ 18 / 10 · 卖点名称 ≤ 8 / 4（why 进讲稿，可以多一点）
+   - 需求原话 ≤ 20 / 12 · 我们的做法 ≤ 30 / 18 · 「为 X」那一句 ≤ 40 / 25
+   - 到馆准备 ≤ 16 / 9 · 风格 mood ≤ 24 / 14
+   文案写法（README「文案怎么写」）：
+   - 标题说「得到什么」，不是「这是什么」；why 用「少一个麻烦」的说法
+   - 具体的画面（抽屉的分量、柜门关上的那一声）胜过形容词；不写温馨、高端、奢华、完美
+   - 不批评他们现在的家；不编数字。要放数字，就由销售填真实的尺寸与数量
    ============================================================ */
 (function () {
   'use strict';
@@ -17,13 +22,13 @@
   /* ---------- 空间 ------------------------------------------
      key       内部代号（不可改）
      head      房间页上的一句话「这个空间会变成什么样」
-     feats     可勾选的卖点，def:true 为默认勾选
+     feats     可勾选的卖点，def:true 为默认勾选；页面只印名称，why 在讲稿里说
      prep      到馆那天可以为这个空间准备的东西（销售要确认展厅真的有）；short 用在讲解稿里
      hint      「为你」那一句的填写示范                              */
   MB.ROOMS = [
     {
       key: 'foyer', en: 'Foyer', zh: '玄关',
-      head: { en: 'First impression, zero clutter.', zh: '一进门，就是干净的。' },
+      head: { en: 'Walk in to a clear floor, every shoe put away.', zh: '一进门，地上不见一双鞋。' },
       hint: '例：你们鞋子很多 —— 整面通顶鞋柜，门口不再堆鞋。',
       prep: { en: 'A ventilated shoe-cabinet sample to open and try', zh: '透气鞋柜样板，可以打开亲手试', short: { en: 'the ventilated shoe-cabinet sample', zh: '透气鞋柜样板' } },
       feats: [
@@ -33,8 +38,8 @@
           why: { en: 'The awkward triangle under the stairs stops being dead space.', zh: '楼梯下那块尴尬的三角位，不再是死角。' } },
         { id: 'ventilated', en: 'Ventilated shoe compartments', zh: '透气鞋柜',
           why: { en: 'Closed cabinets trap humidity and odour — vents keep the air moving.', zh: '密封鞋柜在潮湿天气容易闷出味道，透气设计让空气流动。' } },
-        { id: 'floating', en: 'Floating base with night light', zh: '悬空柜 + 底部灯带',
-          why: { en: 'Daily shoes slide underneath and the floor stays easy to mop.', zh: '常穿的鞋直接放底下，地面好拖，柜子也更轻盈。' } },
+        { id: 'floating', en: 'Floating base, night light', zh: '悬空柜 + 底部灯带',
+          why: { en: 'Daily shoes slide underneath, and a strip of light shows the floor when you come home late.', zh: '常穿的鞋直接放底下；晚归时，底部灯带照亮地面。' } },
         { id: 'dropzone', en: 'Key & parcel niche', zh: '钥匙包裹置物格',
           why: { en: 'Keys, mail and parcels stop landing on the dining table.', zh: '钥匙、信件、快递不再堆到餐桌上。' } },
         { id: 'bench', en: 'Shoe-changing bench', zh: '换鞋凳',
@@ -48,21 +53,21 @@
       prep: { en: 'Our full-wall TV cabinetry, at 1:1 scale', zh: '1:1 的整墙电视柜，现场看比例', short: { en: 'the 1:1 TV wall', zh: '1:1 整墙电视柜' } },
       feats: [
         { id: 'tvwall', def: true, en: 'Full-wall TV cabinetry', zh: '整墙电视柜',
-          why: { en: 'Everything hides behind clean doors; the TV becomes part of the wall.', zh: '杂物全收进柜门后面，电视融进墙里，不再是客厅的主角。' } },
+          why: { en: 'Everything hides behind flush doors; the TV becomes part of the wall.', zh: '杂物全收进柜门后面，电视融进墙里，不再是客厅的主角。' } },
         { id: 'display', def: true, en: 'Lit display shelving', zh: '灯光展示格',
-          why: { en: 'Books and the things you love finally leave the boxes.', zh: '书和收藏终于有位置，不再一直放在箱子里。' } },
+          why: { en: 'Books and the things you collect get a lit shelf of their own.', zh: '书和收藏有自己的一格，灯一开就看得见。' } },
         { id: 'floatingconsole', en: 'Floating TV console', zh: '悬空电视柜',
           why: { en: 'The robot vacuum passes underneath; the room reads wider.', zh: '扫地机器人钻得进去，空间看起来更宽。' } },
-        { id: 'hidden', en: 'Hidden wiring & router bay', zh: '隐藏线路柜',
-          why: { en: 'No more tangle of cables and set-top boxes on show.', zh: '路由器、机顶盒、电线全部藏起来，不再一团乱。' } },
+        { id: 'hidden', en: 'Hidden cables & router', zh: '隐藏线路柜',
+          why: { en: 'The router, set-top box and their cables disappear behind one door.', zh: '路由器、机顶盒和电线，收在同一扇柜门后面。' } },
         { id: 'fluted', en: 'Fluted timber accent', zh: '木格栅饰面',
-          why: { en: 'Warmth and texture without adding a single object.', zh: '多一份温度与层次，却不多一件杂物。' } }
+          why: { en: 'Light and shadow across the timber, without adding a single object.', zh: '木格栅上有光有影，却不多一件杂物。' } }
       ]
     },
     {
       key: 'dining', en: 'Dining', zh: '餐厅',
       head: { en: 'Everything for the table, within reach.', zh: '吃饭要用的，伸手就有。' },
-      hint: '例：你们常请朋友来吃饭 —— 餐边柜放酒杯与餐具，开饭不用跑厨房。',
+      hint: '例：你们常请朋友来吃饭 —— 餐边柜放酒杯与餐具，开饭少跑几趟厨房。',
       prep: { en: 'A sideboard with a pull-out appliance shelf to try', zh: '带电器拉板的餐边柜，可以现场拉拉看', short: { en: 'the sideboard with its pull-out shelf', zh: '带拉板的餐边柜' } },
       feats: [
         { id: 'sideboard', def: true, en: 'Sideboard with appliance pull-out', zh: '餐边柜 + 电器拉板',
@@ -75,37 +80,38 @@
     },
     {
       key: 'kitchen', en: 'Kitchen', zh: '厨房',
-      head: { en: 'Easy on a busy weekday, beautiful on Sunday.', zh: '平日好用，周末好看。' },
+      head: { en: 'Every pot within reach, the counter left clear.', zh: '每个锅伸手就拿，台面空出来。' },
       hint: '例：你们天天开火 —— 锅具放在腰部高度的拉篮，不用再跪在深柜前翻找。',
-      prep: { en: 'Your kitchen boards and handles, laid out in daylight', zh: '你们厨房的板材与把手实物，在自然光下摆好', short: { en: 'your kitchen boards and handles', zh: '你们厨房的板材与把手' } },
+      prep: { en: 'Your kitchen boards and handles, laid out together', zh: '你们厨房的板材与把手，摆在一起看', short: { en: 'your kitchen boards and handles', zh: '你们厨房的板材与把手' } },
       feats: [
         { id: 'topbase', def: true, en: 'Top + base cabinets', zh: '吊柜 + 地柜',
-          why: { en: 'Maximum closed storage — what you don’t use daily goes up and out of sight.', zh: '收纳量最大，不常用的放上面，看不见就不乱。' } },
+          why: { en: 'Everything behind doors, top to bottom — what you don’t use daily goes up, out of sight.', zh: '从上到下都收进柜门里，不常用的放上面，看不见就不乱。' } },
         { id: 'pantry', def: true, en: 'Tall pull-out pantry', zh: '高柜拉篮',
           why: { en: 'Every jar in one glance — nothing expires at the back of a deep cabinet.', zh: '瓶瓶罐罐一眼看完，不再有东西卡在深柜里过期。' } },
-        { id: 'openshelf', en: 'Open shelving instead of top cabinets', zh: '开放层架代替吊柜',
-          why: { en: 'Daily bowls within reach; the kitchen feels open, not boxed in.', zh: '每天用的碗杯伸手就拿，厨房通透不压迫。' } },
+        { id: 'openshelf', en: 'Open upper shelving', zh: '开放层架代替吊柜',
+          why: { en: 'The bowls and cups you use every day, one reach away; the kitchen feels open, not boxed in.', zh: '每天用的碗杯伸手就拿，厨房通透不压迫。' } },
         { id: 'appliance', en: 'Built-in appliance tower', zh: '嵌入式电器高柜',
           why: { en: 'Oven and steamer at eye level — no bending, no visual clutter.', zh: '烤箱蒸炉在视线高度，不用弯腰，也不显乱。' } },
-        { id: 'island', en: 'Island with storage', zh: '中岛（带收纳）',
+        { id: 'island', en: 'Island with storage', zh: '收纳中岛',
           why: { en: 'Prep, breakfast and homework in one spot, storage on both sides.', zh: '备菜、早餐、写功课都在这里，两面都能收纳。' } },
         { id: 'wetkitchen', en: 'Moisture-resistant wet kitchen', zh: '湿厨房防潮柜体',
-          why: { en: 'Steam and splashes every day — carcass and edges specified for wet areas, built to take the moisture.', zh: '天天蒸汽水渍，柜体与封边按湿区规格做，更耐潮。' } },
+          why: { en: 'Steam and splashes every day, so the carcass is moisture-resistant board with sealed edges.', zh: '天天有蒸汽水渍，所以柜体用防潮板，封边封好。' } },
         { id: 'skeleton', en: 'Skeleton-line frame detail', zh: '骨骼线框细节',
-          why: { en: 'A fine frame line gives the doors shadow and rhythm — detail without ornament.', zh: '细线框让柜门有光影节奏，有细节但不繁复。' } }
+          why: { en: 'A fine frame line gives each door its own shadow — detail without ornament.', zh: '细线框让每扇柜门都有一道影子，有细节但不繁复。' } }
       ]
     },
     {
       key: 'laundry', en: 'Laundry', zh: '洗衣房',
       head: { en: 'Wash, dry, fold — in one quiet corner.', zh: '洗、晾、叠，一个角落安静完成。' },
       hint: '例：你们有帮佣 —— 高柜放吸尘器和清洁用品，一次拿齐。',
-      prep: { en: 'Floating and base laundry units side by side, to compare', zh: '悬空柜与落地柜并排，现场比较', short: { en: 'the two laundry options side by side', zh: '两种洗衣房柜体' } },
+      prep: { en: 'Floating and floor-standing laundry units, side by side', zh: '悬空柜与落地柜并排，现场比较', short: { en: 'the two laundry options side by side', zh: '两种洗衣房柜体' } },
       feats: [
         { id: 'floating', def: true, en: 'Floating cabinet', zh: '悬空柜',
           why: { en: 'Baskets and the mop live underneath; the floor dries faster.', zh: '洗衣篮和拖把放下面，地面干得更快。' } },
         { id: 'tallbroom', def: true, en: 'Tall utility cupboard', zh: '清洁高柜',
-          why: { en: 'Vacuum, mop and ironing board stand inside, charging, out of sight.', zh: '吸尘器、拖把、烫衣板站在里面充电，看不见。' } },
-        { id: 'base', en: 'Base cabinet with folding counter', zh: '地柜 + 折衣台面',
+          // 充电的只有吸尘器：烫衣板、扫把只是收在里面（拖把在悬空柜底下，不要一个房间说两个地方）
+          why: { en: 'The vacuum charges inside; the ironing board and broom stand beside it, out of sight.', zh: '吸尘器在里面充电，烫衣板、扫把也收在里面，看不见。' } },
+        { id: 'base', en: 'Folding counter', zh: '地柜 + 折衣台',
           why: { en: 'Laundry gets folded where it’s washed — not on the sofa.', zh: '在哪洗就在哪叠，不再堆在沙发上。' } },
         { id: 'dryingrack', en: 'Hidden drying rack', zh: '隐藏晾衣架',
           why: { en: 'Delicates dry indoors, and the rack folds away when not in use.', zh: '贵重衣物室内晾干，不用时收起来。' } }
@@ -123,9 +129,9 @@
           why: { en: 'Nothing to bump into, nothing to dust — just a quiet wall.', zh: '没有把手可撞、可积灰，只留一面安静的墙。' } },
         { id: 'lighting', en: 'Sensor lighting inside', zh: '柜内感应灯',
           why: { en: 'Open the door and the light comes on — no fumbling at 6 a.m.', zh: '开门就亮，早上六点不用摸黑找衣服。' } },
-        { id: 'drawers', en: 'Inner drawers & accessory trays', zh: '内抽 + 饰品格',
+        { id: 'drawers', en: 'Inner drawers & trays', zh: '内抽 + 饰品格',
           why: { en: 'Watches, belts and jewellery each get a place — nothing tangled.', zh: '手表、皮带、首饰各有位置，不再缠成一团。' } },
-        { id: 'headboard', en: 'Built-in headboard & side tables', zh: '床头背板 + 床头柜',
+        { id: 'headboard', en: 'Headboard & side tables', zh: '床头背板 + 床头柜',
           why: { en: 'Reading light, charger and books exactly where the hand goes.', zh: '阅读灯、充电线、书本就在手边。' } }
       ]
     },
@@ -133,10 +139,10 @@
       key: 'walkin', en: 'Walk-in Wardrobe', zh: '衣帽间',
       head: { en: 'Every piece in sight.', zh: '每一件，都看得见。' },
       hint: '例：你们两个人的衣物分左右两边，早上不用互相等。',
-      prep: { en: 'Our walk-in wardrobe set, with open hanging and island drawers', zh: '展厅的衣帽间样板：开放挂衣 + 中岛抽屉', short: { en: 'our walk-in wardrobe set', zh: '衣帽间样板' } },
+      prep: { en: 'Our walk-in wardrobe set: open hanging, island drawers', zh: '展厅的衣帽间样板：开放挂衣 + 中岛抽屉', short: { en: 'our walk-in wardrobe set', zh: '衣帽间样板' } },
       feats: [
         { id: 'open', def: true, en: 'Open hanging, lit', zh: '开放挂衣 + 灯光',
-          why: { en: 'See everything you own — no forgotten clothes at the back.', zh: '拥有的衣服一眼看完，不再有被遗忘在后面的衣服。' } },
+          why: { en: 'See everything you own — nothing forgotten at the back.', zh: '拥有的衣服一眼看完，没有一件被遗忘在后面。' } },
         { id: 'island', en: 'Island with drawers', zh: '中岛抽屉',
           why: { en: 'Folded knits and accessories, at a height you can read.', zh: '叠放的衣物和饰品，放在看得清的高度。' } },
         { id: 'his-hers', en: 'His & hers zones', zh: '两人分区',
@@ -147,7 +153,7 @@
       key: 'vanity', en: 'Vanity', zh: '梳妆台',
       head: { en: 'The morning routine, in one arm’s reach.', zh: '早上的一套流程，伸手就完成。' },
       hint: '例：太太早上护肤步骤多 —— 每一瓶都有固定位置，不用翻抽屉。',
-      prep: { en: 'A vanity with divided drawers and a lit mirror to try', zh: '带分格抽屉与灯镜的梳妆台，现场试用', short: { en: 'the vanity with its lit mirror', zh: '带灯镜的梳妆台' } },
+      prep: { en: 'A vanity with a lit mirror and divided drawers', zh: '带分格抽屉与灯镜的梳妆台，现场试用', short: { en: 'the vanity with its lit mirror', zh: '带灯镜的梳妆台' } },
       feats: [
         { id: 'integrated', def: true, en: 'Vanity with open shelving', zh: '梳妆台 + 开放层架',
           why: { en: 'Everything for the morning in one place, nothing on the bed.', zh: '早上要用的都在一处，不再摊在床上。' } },
@@ -159,16 +165,16 @@
     },
     {
       key: 'bathroom', en: 'Bathroom', zh: '浴室',
-      head: { en: 'Dry, light and easy to clean.', zh: '干爽、轻盈、好打理。' },
+      head: { en: 'A floor that dries fast, bottles off the counter.', zh: '地面干得快，台面不放瓶罐。' },
       hint: '例：家里小孩多 —— 悬空柜底不积水，地面一拖就干净。',
-      prep: { en: 'Moisture-proof board samples, edges and all', zh: '防潮板与封边的实物样板', short: { en: 'the moisture-proof board samples', zh: '防潮板样板' } },
+      prep: { en: 'Moisture-resistant board samples, edges and all', zh: '防潮板与封边的实物样板', short: { en: 'the moisture-resistant board samples', zh: '防潮板样板' } },
       feats: [
         { id: 'floating', def: true, en: 'Floating vanity', zh: '悬空浴室柜',
           why: { en: 'No water pooling at the base; the floor is wiped in one pass.', zh: '柜底不积水，地面一拖就干净。' } },
         { id: 'mirrorcab', def: true, en: 'Mirror cabinet', zh: '镜柜',
           why: { en: 'Toiletries disappear behind the mirror; the counter stays clear.', zh: '瓶瓶罐罐收进镜子后面，台面保持干净。' } },
-        { id: 'moisture', en: 'Moisture-proof board, sealed edges', zh: '防潮板 + 全封边',
-          why: { en: 'Board and edges specified for steam and splashes.', zh: '板材与封边按湿区规格做，更耐蒸汽水汽。' } },
+        { id: 'moisture', en: 'Moisture-resistant board, sealed edges', zh: '防潮板 + 全封边',
+          why: { en: 'Moisture-resistant board with every edge sealed, for the daily steam and splashes.', zh: '用防潮板，每一边都封好，应付每天的蒸汽水汽。' } },
         { id: 'niche', en: 'Recessed shower niche', zh: '淋浴壁龛',
           why: { en: 'Bottles off the floor, nothing to knock over.', zh: '瓶子不再放地上，也不会被碰倒。' } }
       ]
@@ -196,7 +202,7 @@
       prep: { en: 'Our book-wall set, with cable management built in', zh: '展厅书墙样板，看线路怎么藏', short: { en: 'our book-wall set', zh: '书墙样板' } },
       feats: [
         { id: 'bookwall', def: true, en: 'Floor-to-ceiling book wall', zh: '通顶书墙',
-          why: { en: 'Your books become the room’s architecture — and your video-call background.', zh: '书本身就是空间的一部分，也是视频会议最好的背景。' } },
+          why: { en: 'Your books become part of the room — and your video-call background.', zh: '书本身就是空间的一部分，也是视频会议的背景。' } },
         { id: 'desk', def: true, en: 'Built-in desk, cables hidden', zh: '书桌 + 线路管理',
           why: { en: 'Chargers, monitor cables and the printer disappear.', zh: '充电线、屏幕线、打印机全部隐藏。' } },
         { id: 'files', en: 'Closed file storage', zh: '文件收纳',
@@ -210,7 +216,7 @@
       prep: { en: 'Heat-resistant top samples for daily incense', zh: '耐热台面样板（适合每日上香）', short: { en: 'the heat-resistant top samples', zh: '耐热台面样板' } },
       feats: [
         { id: 'altar', def: true, en: 'Built-in altar cabinet', zh: '嵌入式神台柜',
-          why: { en: 'A respectful, dedicated place that fits the room’s design.', zh: '一个端正专属的位置，也和整体设计协调。' } },
+          why: { en: 'A respectful, dedicated place that sits with the rest of the room.', zh: '一个端正专属的位置，也和整体设计协调。' } },
         { id: 'storage', def: true, en: 'Closed storage below', zh: '下方收纳',
           why: { en: 'Joss sticks, candles and offerings stay tidy and out of sight.', zh: '香、烛、供品整齐收好，不外露。' } },
         { id: 'heat', en: 'Heat-resistant top', zh: '耐热台面',
@@ -219,11 +225,11 @@
     },
     {
       key: 'guest', en: 'Guest Room', zh: '客房',
-      head: { en: 'Ready for guests, useful every other day.', zh: '客人来时是客房，平时一样好用。' },
+      head: { en: 'Ready for guests, useful the rest of the time.', zh: '客人来时是客房，平时一样好用。' },
       hint: '例：父母每月来住几天 —— 衣柜留一半给他们放常用衣物。',
       prep: { en: 'A compact wardrobe with luggage space', zh: '带行李位的紧凑衣柜样板', short: { en: 'a compact guest wardrobe', zh: '紧凑衣柜样板' } },
       feats: [
-        { id: 'wardrobe', def: true, en: 'Compact wardrobe with luggage bay', zh: '衣柜 + 行李位',
+        { id: 'wardrobe', def: true, en: 'Wardrobe with luggage bay', zh: '衣柜 + 行李位',
           why: { en: 'Guests unpack properly instead of living out of a suitcase.', zh: '客人可以好好打开行李，不用整天开着行李箱。' } },
         { id: 'multi', en: 'Multi-use storage wall', zh: '多功能收纳墙',
           why: { en: 'Doubles as a study or storeroom on the days without guests.', zh: '没有客人的日子，就是书房或储物间。' } }
@@ -235,11 +241,14 @@
   MB.ROOMS.forEach(function (r) { MB.ROOM[r.key] = r; });
 
   /* ---------- 风格方向 · 对应溪岸五个系列 ---------------------
-     palette / materials 是起手建议 —— 销售可改成真实板材色号。   */
+     palette / materials 是起手建议 —— 销售可改成真实板材色号。
+     mood 的写法固定成「材质，感觉」（英文用 — 隔开）：开场短话只取前半句的材质，
+     具体的木色比一句形容词更像真的。
+     promises 不印在「一页看懂」上了（moodboard 少字），讲稿里会说            */
   MB.DIRECTIONS = [
     {
       key: 'misty', series: 'misty', en: 'Misty Mountain', zh: '雾山',
-      mood: { en: 'Light oak, soft daylight, a quiet home.', zh: '浅橡木、柔和日光、一个安静的家。' },
+      mood: { en: 'Light oak and warm white — soft daylight, a quiet home.', zh: '浅橡木与暖白，柔和的日光，一个安静的家。' },
       palette: [
         { hex: '#F2EDE4', en: 'Warm White', zh: '暖白' },
         { hex: '#D9C3A5', en: 'Light Oak', zh: '浅橡木' },
@@ -253,14 +262,14 @@
         { hex: '#DCD6CC', en: 'Pale sintered stone top', zh: '浅色岩板台面' }
       ],
       promises: [
-        { en: 'One calm palette, room to room.', zh: '从玄关到卧室，一套安静的颜色。' },
-        { en: 'Storage everywhere, clutter nowhere.', zh: '收纳无处不在，杂乱无处可见。' },
-        { en: 'Light that makes the wood glow.', zh: '让木纹在光里发亮。' }
+        { en: 'One palette, from the front door to the bedroom.', zh: '从玄关到卧室，一套颜色。' },
+        { en: 'Everything you use daily, behind a door.', zh: '每天用的东西，都收在柜门后面。' },
+        { en: 'Afternoon sun across pale oak.', zh: '午后的光，落在浅橡木上。' }
       ]
     },
     {
       key: 'skeleton', series: 'skeleton', en: 'Skeleton Line', zh: '骨骼线',
-      mood: { en: 'Natural oak drawn with fine dark lines — detail without ornament.', zh: '原木配细黑线框，有细节但不繁复。' },
+      mood: { en: 'Natural oak and fine charcoal lines — detail without ornament.', zh: '原木与细黑线框，有细节，不繁复。' },
       palette: [
         { hex: '#EBE5DA', en: 'Plaster', zh: '灰泥白' },
         { hex: '#B99B77', en: 'Natural Oak', zh: '原橡木' },
@@ -274,14 +283,14 @@
         { hex: '#8F8A83', en: 'Dark sintered stone top', zh: '深色岩板台面' }
       ],
       promises: [
-        { en: 'Lines that catch the light.', zh: '线条在光里有影子。' },
+        { en: 'Lines that cast a shadow.', zh: '线条在光里有影子。' },
         { en: 'Storage that reads as architecture.', zh: '收纳本身就是建筑感。' },
-        { en: 'Classic lines that won’t date quickly.', zh: '经典线条，不容易过时。' }
+        { en: 'Straight lines that won’t date quickly.', zh: '直线条，不容易过时。' }
       ]
     },
     {
       key: 'mountain', series: 'mountain', en: 'Empty Mountain', zh: '空山',
-      mood: { en: 'Walnut, plaster and pause — rooms that breathe.', zh: '胡桃木、灰泥与留白，让空间呼吸。' },
+      mood: { en: 'Walnut and lime plaster — open space that lets each room breathe.', zh: '胡桃木与灰泥，留白让空间呼吸。' },
       palette: [
         { hex: '#F4EFE6', en: 'Ivory', zh: '象牙白' },
         { hex: '#E6DED2', en: 'Lime Plaster', zh: '石灰白' },
@@ -296,13 +305,13 @@
       ],
       promises: [
         { en: 'Plenty of storage that never looks full.', zh: '收纳很多，但看起来不满。' },
-        { en: 'Niches that give objects room to breathe.', zh: '壁龛给物件留出呼吸。' },
-        { en: 'Deep, warm wood you will want to touch.', zh: '深而温暖的木，会想伸手摸。' }
+        { en: 'Niches with room around each object.', zh: '壁龛给每件物品留出空间。' },
+        { en: 'Dark walnut you will want to touch.', zh: '深色胡桃木，会想伸手摸。' }
       ]
     },
     {
       key: 'weaving', series: 'weaving', en: 'Weaving', zh: '织',
-      mood: { en: 'Oak and woven texture — warmth you can touch.', zh: '橡木配编织纹理，摸得到的温度。' },
+      mood: { en: 'Oak and woven rattan — warmth you can touch.', zh: '橡木与藤编，摸得到的温度。' },
       palette: [
         { hex: '#F1EBDF', en: 'Cream', zh: '奶油白' },
         { hex: '#C8AE8C', en: 'Sand Oak', zh: '沙橡木' },
@@ -317,13 +326,13 @@
       ],
       promises: [
         { en: 'Doors you will want to touch.', zh: '会想伸手摸的柜门。' },
-        { en: 'Warm, never cold or showroom-stiff.', zh: '温暖，不冰冷、不样板间。' },
+        { en: 'Warm to the hand, never showroom-stiff.', zh: '摸起来是暖的，不像样板间。' },
         { en: 'Texture that hides daily fingerprints.', zh: '纹理让日常指纹不明显。' }
       ]
     },
     {
       key: 'wabi', series: 'wabi', en: 'Wabi-Sabi Eastern', zh: '宅仁 · 寂',
-      mood: { en: 'Aged wood, lime plaster, travertine — a home that gets better with time.', zh: '老木、灰泥、洞石，一个越住越有味道的家。' },
+      mood: { en: 'Aged wood, lime plaster and travertine — a home that gets better with time.', zh: '老木、灰泥与洞石，一个越住越有味道的家。' },
       palette: [
         { hex: '#D9D1C4', en: 'Lime Plaster', zh: '石灰' },
         { hex: '#CBBFAE', en: 'Travertine', zh: '洞石' },
@@ -337,9 +346,9 @@
         { hex: '#BDB4A6', en: 'Micro-cement', zh: '微水泥' }
       ],
       promises: [
-        { en: 'Materials that age beautifully.', zh: '越用越好看的材质。' },
+        { en: 'Materials that wear in, not out.', zh: '越用越好看的材质。' },
         { en: 'Quiet rooms, slow mornings.', zh: '安静的房间，慢下来的早晨。' },
-        { en: 'Crafted, not mass-produced.', zh: '手作感，不是流水线。' }
+        { en: 'Wood grain you can feel under your hand.', zh: '摸得到木纹的柜门。' }
       ]
     }
   ];
@@ -350,86 +359,134 @@
   /* ---------- 需求卡 → 「你说的 · 我们做的」 -------------------
      match     对应需求卡里的哪个选项（正则；华文、英文、中英文的需求卡都要认得）
      room/feats 对上之后，自动勾选哪个空间的哪些卖点
+     quote     他们选的那一项，用他们的口吻说（客户自己写的原话，另存在方案里）
+     told      转述（「你们提到 ___」/「You mentioned ___」）：勾选的选项不是他们亲口说的话，
+               开场短话、讯息、讲稿不能加引号当原话引用 —— 引号只给客户自己打的字
+               zh 不带主语（前面接「你们提到」或「你们」）；en 是带主语的子句
+     answer    我们的做法，一句话
      note      房间页上「为你」那一句                                */
   MB.NEEDS = {
     cook_daily: {
       field: 'cook', match: /天天开火|daily|every ?day/i, room: 'kitchen', feats: ['pantry', 'wetkitchen'],
       quote: { en: 'We cook almost every day.', zh: '我们几乎天天开火。' },
-      answer: { en: 'Tall pull-out pantry and a moisture-resistant wet kitchen — heavy cooking without the mess.', zh: '高柜拉篮 + 湿厨房防潮柜体，天天开火也不乱。' },
+      told: { en: 'you cook almost every day', zh: '几乎天天开火' },
+      answer: { en: 'A tall pull-out pantry with every jar in view, and moisture-resistant cabinets for the steam.', zh: '高柜拉篮，瓶罐一眼看完；湿厨房柜体用防潮板。' },
       note: { en: 'You cook almost every day, so pots and jars live in pull-outs at hip height — no kneeling in front of a deep corner cabinet.', zh: '你们几乎天天开火 —— 锅具瓶罐放在腰部高度的拉篮，不用再跪在深柜前翻找。' }
     },
     cook_rare: {
       field: 'cook', match: /几乎不开火|rarely|hardly/i, room: 'kitchen', feats: ['openshelf'],
       quote: { en: 'We rarely cook.', zh: '我们很少开火。' },
-      answer: { en: 'Open shelving and a coffee corner instead of heavy-duty cabinets — a lighter kitchen.', zh: '用开放层架和咖啡角取代重型柜体，厨房更轻盈。' },
+      told: { en: 'you rarely cook', zh: '很少开火' },
+      answer: { en: 'Open shelves instead of top cabinets, and closed storage only where it counts.', zh: '开放层架代替吊柜，只在需要的地方做封闭收纳。' },
       note: { en: 'You rarely cook, so the kitchen can be lighter: open shelves for the cups you love, closed storage only where it counts.', zh: '你们很少开火，厨房可以轻一点：开放层架放喜欢的杯子，只在需要的地方做封闭收纳。' }
     },
     appliances: {
       field: 'storage', match: /厨房锅具|cookware|pots|appliance/i, room: 'kitchen', feats: ['appliance'],
       quote: { en: 'We have lots of pots and appliances.', zh: '我们锅具和电器特别多。' },
-      answer: { en: 'A built-in appliance tower and a sideboard with pull-out shelf — counters stay clear.', zh: '嵌入式电器高柜 + 餐边柜拉板，台面保持清爽。' },
+      told: { en: 'you have lots of pots and appliances', zh: '锅具和电器特别多' },
+      answer: { en: 'A built-in appliance tower, each machine with its own place and socket — the counter stays clear.', zh: '嵌入式电器高柜，每台都有固定位置和插座，台面空出来。' },
       note: { en: 'Lots of appliances, so each one gets a fixed, powered place — the counter is for cooking, not storage.', zh: '电器多，所以每一台都有固定、有插座的位置 —— 台面用来做饭，不是用来堆东西。' }
     },
     clothes: {
       field: 'storage', match: /衣物|clothes|clothing/i, room: 'master', feats: ['fullheight', 'drawers'],
       quote: { en: 'We have a lot of clothes.', zh: '我们衣服特别多。' },
-      answer: { en: 'Full-height wardrobes with inner drawers — the top section takes luggage and seasonal clothes.', zh: '通顶衣柜 + 内抽，最上层放行李箱与换季衣物。' },
-      note: { en: 'You have a lot of clothes, so the wardrobe runs to the ceiling — the top section is for luggage and the off-season.', zh: '你们衣服多，所以衣柜做到天花 —— 最上层留给行李箱与换季衣物。' }
+      told: { en: 'you have a lot of clothes', zh: '衣服特别多' },
+      answer: { en: 'Ceiling-high wardrobes with inner drawers; luggage and off-season clothes go on top.', zh: '衣柜做到天花，配内抽；行李箱和换季衣物放最上层。' },
+      note: { en: 'You have a lot of clothes, so the wardrobe runs to the ceiling — the top section takes luggage and off-season clothes.', zh: '你们衣服多，所以衣柜做到天花 —— 最上层留给行李箱与换季衣物。' }
     },
     kids: {
       field: 'storage', match: /孩子|kid|child|toy/i, room: 'bedroom', feats: ['toy'],
       quote: { en: 'The kids’ things are everywhere.', zh: '孩子的东西到处都是。' },
-      answer: { en: 'Low open storage the kids can reach — so they can tidy up themselves.', zh: '孩子够得着的低位开放收纳，让他们自己收。' },
+      told: { en: 'the kids’ things end up everywhere', zh: '孩子的东西到处都是' },
+      answer: { en: 'Low, open storage at the kids’ height, so they can put things back themselves.', zh: '收纳做在孩子够得着的高度，让他们自己收。' },
       note: { en: 'Low, open storage at the kids’ height — if they can reach it, they can put it back.', zh: '收纳做在孩子的高度 —— 够得着，就放得回去。' }
     },
     books: {
       field: 'storage', match: /书籍|book|collection/i, room: 'living', feats: ['display'],
       quote: { en: 'We have books and collections to show.', zh: '我们有很多书和收藏想展示。' },
-      answer: { en: 'Lit display shelving in the living room — a proper home for the things you love.', zh: '客厅灯光展示格，给喜欢的东西一个像样的位置。' },
-      note: { en: 'Your books and collections get lit display shelves — they stop living in boxes.', zh: '你们的书和收藏有了带灯的展示格，不再一直放在箱子里。' }
+      told: { en: 'you have books and collections to show', zh: '有很多书和收藏想展示' },
+      answer: { en: 'Lit display shelves in the living room, with a place for every book and piece you collect.', zh: '客厅做带灯的展示格，书和收藏都有自己的位置。' },
+      note: { en: 'Your books and collections get lit display shelves, where you can see every piece.', zh: '你们的书和收藏有了带灯的展示格，每一件都看得见。' }
     },
     luggage: {
       field: 'storage', match: /行李箱|luggage|suitcase|bulky/i, room: 'foyer', feats: ['understair'],
       condo: {
         room: 'master', feats: ['fullheight'],
-        answer: { en: 'Wardrobes run to the ceiling — the top section takes luggage and bulky items, so nothing sits on top collecting dust.', zh: '衣柜做到天花，最上层放行李箱与大件，柜顶不再堆杂物积灰。' },
+        answer: { en: 'Wardrobes run to the ceiling; luggage and bulky things go in the top section.', zh: '衣柜做到天花，行李箱与大件放最上层，柜顶不再积灰。' },
         note: { en: 'Luggage and bulky items go into the top section of a ceiling-high wardrobe — out of sight, off the floor.', zh: '行李箱与大件放进通顶衣柜的最上层 —— 看不见，也不占地面。' }
       },
       quote: { en: 'Luggage and bulky things have nowhere to go.', zh: '行李箱和大件杂物没地方放。' },
-      answer: { en: 'The under-stair space and the top of every wardrobe become storage for bulky items.', zh: '楼梯底与每个衣柜顶部，都变成大件收纳。' },
+      told: { en: 'luggage and bulky things have nowhere to go', zh: '行李箱和大件杂物没地方放' },
+      answer: { en: 'The space under the stairs and the top of each wardrobe take the bulky things.', zh: '楼梯底与每个衣柜顶部，都变成大件收纳。' },
       note: { en: 'The space under the stairs takes the luggage and bulky items, so they never reach the bedrooms.', zh: '楼梯底收下行李箱与大件杂物，不再挤进卧室。' }
     },
     shoes: {
       field: 'storage', match: /鞋子|shoe/i, room: 'foyer', feats: ['fullheight', 'ventilated'],
       quote: { en: 'We have a lot of shoes.', zh: '我们鞋子很多。' },
-      answer: { en: 'A full-height, ventilated shoe wall at the entrance — no odour, no pile at the door.', zh: '玄关通顶透气鞋柜，没有异味，门口不再堆鞋。' },
+      told: { en: 'you have a lot of shoes', zh: '鞋子很多' },
+      answer: { en: 'A full-height, ventilated shoe wall at the door, so air keeps moving and every pair is put away.', zh: '整面通顶透气鞋柜，空气流通，每双鞋都收进柜里。' },
       note: { en: 'Lots of shoes, so the whole foyer wall becomes a ventilated shoe cabinet — nothing left at the door.', zh: '鞋子多，所以整面玄关墙都是透气鞋柜 —— 门口什么都不留。' }
     },
     elderly: {
       field: 'household', match: /长辈|elder|parent/i, room: 'foyer', feats: ['bench'],
       quote: { en: 'Our parents live with us.', zh: '长辈和我们同住。' },
-      answer: { en: 'A shoe-changing bench at the door and easy-reach storage — comfortable for every age.', zh: '门口换鞋凳与顺手的收纳高度，每个年龄都舒服。' },
-      note: { en: 'Your parents live with you, so there is a bench to sit and change shoes, and the daily pairs sit at an easy height.', zh: '长辈同住，所以门口有换鞋凳，常穿的鞋放在不用弯腰的高度。' }
+      told: { en: 'your parents live with you', zh: '家里有长辈同住' },
+      answer: { en: 'A bench by the door for changing shoes, and everyday things at an easy height.', zh: '门口一张换鞋凳，常用的东西放在不用弯腰的高度。' },
+      note: { en: 'Your parents live with you, so there’s a bench by the door, and everyday shoes sit where no one has to bend.', zh: '长辈同住，所以门口有换鞋凳，常穿的鞋放在不用弯腰的高度。' }
     },
     pets: {
       field: 'household', match: /宠物|\bpets?\b/i, room: 'living', feats: ['floatingconsole'],
       quote: { en: 'We have pets.', zh: '我们有宠物。' },
-      answer: { en: 'Floating units with no dark gap to hide under, and low-level finishes that wipe clean.', zh: '悬空柜体没有藏毛的死角，低处饰面好擦。' },
+      told: { en: 'you have pets', zh: '家里有宠物' },
+      answer: { en: 'Floating units with no dark gap for fur to collect, and low surfaces that wipe down easily.', zh: '柜体悬空，底下不积毛；低处饰面好擦。' },
       note: { en: 'With pets at home, the TV console floats — no dark gap for fur to collect, and the vacuum passes right under.', zh: '家里有宠物，所以电视柜悬空 —— 没有积毛的死角，吸尘器直接扫过去。' }
     },
     helper: {
       field: 'household', match: /帮佣|helper|maid/i, room: 'laundry', feats: ['tallbroom'],
       quote: { en: 'We have a helper at home.', zh: '家里有帮佣。' },
-      answer: { en: 'A tall utility cupboard in the laundry — every cleaning tool in one place.', zh: '洗衣房清洁高柜，清洁工具一次拿齐。' },
+      told: { en: 'you have a helper at home', zh: '家里有帮佣' },
+      answer: { en: 'One tall utility cupboard in the laundry, with every cleaning tool in one place.', zh: '洗衣房一个清洁高柜，清洁工具一次拿齐。' },
       note: { en: 'With a helper at home, every cleaning tool has one tall cupboard — nothing borrowed from other rooms.', zh: '家里有帮佣，所以清洁工具集中在一个高柜里，不用到处借位置。' }
     },
     guests: {
       field: 'household', match: /客人|guest/i, room: 'dining', feats: ['sideboard'],
       quote: { en: 'We often have guests over.', zh: '家里常有客人。' },
-      answer: { en: 'A sideboard for glasses and serving ware — hosting without running to the kitchen.', zh: '餐边柜放酒杯与餐具，招待客人不用一直跑厨房。' },
-      note: { en: 'You host often, so glasses and serving ware live in the sideboard — dinner is served without leaving the table.', zh: '你们常请客，酒杯与餐具都在餐边柜里 —— 上菜不用离开餐桌。' }
+      told: { en: 'you often have guests over', zh: '家里常有客人' },
+      // 上菜还是要从厨房端出来：只说「少跑几趟」「就在桌边」，不说「不用离开餐桌」
+      answer: { en: 'A sideboard by the table for glasses and serving ware — fewer trips to the kitchen.', zh: '餐边柜放酒杯与餐具，开饭少跑几趟厨房。' },
+      note: { en: 'You host often, so glasses and serving ware live in the sideboard, a step from the table.', zh: '你们常请客，酒杯与餐具就在餐边柜里，伸手就拿。' }
     }
   };
+
+  /* ---------- 常见顾虑（「工期 · 保障」页，先讲出来再回答） ----
+     马来西亚屋主对全屋定制最常担心的几件事，照重要性排（方案取前 2–3 条）。
+     answer 只用公司资料（brand.js：订单周期、售后、流程、供应链）和真的流程（先量尺再报价）。
+     答不了的不硬答：不保证「不会延期」，只说真的会做的事（每天在群里汇报）；不说「防潮」，只说真的板材与维保。
+     订单周期、质保年数在同一页另有大字，这里说数字以外的事（不重复）；事实照 brand.js，那边改了这里也要看。
+     needs     这一条要销售填了 p.extra 的哪一栏才出（没填预算就不先讲预算） */
+  MB.CONCERNS = [
+    { key: 'time',
+      worry: { en: 'How long will it take — and will it run late?', zh: '要等多久？会不会一拖再拖？' },
+      answer: { en: 'Each series has a stated lead time, shown here. Once installation starts, you get daily updates in your group chat.',
+        zh: '每个系列的订单周期都写在这一页；安装开始后，每天在群里汇报进度。' } },
+    { key: 'budget', needs: 'budget',
+      worry: { en: 'Will the budget keep creeping up?', zh: '预算会不会越做越高？' },
+      answer: { en: 'We quote after measuring on site, so the price is based on your home’s actual dimensions.',
+        zh: '报价在上门量尺之后，按你们家的实际尺寸算。' } },
+    { key: 'after',
+      worry: { en: 'Once it’s installed, who do we call?', zh: '装好以后，有问题找谁？' },
+      answer: { en: 'We come back: an adjustment visit before you move in, then a maintenance visit every year.',
+        zh: '我们会回来：入住前上门调试一次，之后每年一次维保。' } },
+    // 潮湿：只讲 brand.js 里有的事实（正品板材与五金、每年上门调试），不替板材打「防潮」的包票
+    { key: 'humid',
+      worry: { en: 'Will it hold up in our humidity?', zh: '马来西亚这么潮湿，柜子撑得住吗？' },
+      answer: { en: 'Genuine Egger and Kastamonu boards and Blum hardware, bought directly from the brands — and if a door shifts, our yearly visit adjusts it.',
+        zh: '板材是 Egger、Kastamonu 正品，五金用 Blum，都直接向品牌采购；门板走位了，每年的维保会来调。' } },
+    { key: 'look',
+      worry: { en: 'Will it look like these pictures?', zh: '做出来，会跟图上一样吗？' },
+      answer: { en: 'See and touch the real boards at the showroom; before handover, every item is checked and signed off.',
+        zh: '先到展厅看实物板材与色板；交付前专人逐项验收，签回执。' } }
+  ];
 
   /* 客户自己写的痛点 → 猜是哪个空间（对上了，「你说的」那一页才标得出页码） */
   MB.PAIN_ROOMS = [
@@ -498,7 +555,7 @@
     { id: 'b:weaving-2', src: C + 'weaving-2.jpg', w: 1000, h: 1346, series: 'weaving', rooms: ['living', 'bedroom'], en: 'Woven cabinet front', zh: '藤织柜门' },
     { id: 'b:detail', src: 'assets/img/scene-detail.jpg', w: 1000, h: 1337, series: 'skeleton', rooms: ['bedroom', 'master', 'guest'], en: 'Chest of drawers detail', zh: '斗柜细节' },
     { id: 'b:wood', src: 'assets/img/scene-wood.jpg', w: 849, h: 1279, series: 'mountain', rooms: ['study', 'living'], en: 'Study wall & desk', zh: '书房墙与书桌' },
-    { id: 'b:hero-sail', src: 'assets/img/hero-sail.jpg', w: 1800, h: 1036, series: '', rooms: ['showroom'], en: 'Sail façade', zh: '溪岸门面' }
+    { id: 'b:hero-sail', src: 'assets/img/hero-sail.jpg', w: 1800, h: 1036, series: '', rooms: ['showroom'], en: 'SAIL façade', zh: '溪岸门面' }
   ];
 
   /* 页面标签（图库筛选 + PDF 导入时用） */

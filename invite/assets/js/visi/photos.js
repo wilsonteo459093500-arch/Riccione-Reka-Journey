@@ -1,12 +1,16 @@
 /* ============================================================
    VISI · 更多内置照片（溪岸 2025 品牌手册里的实拍）
    ------------------------------------------------------------
-   老板给的品牌手册（PDF）抽出来的 44 张：五个系列、五种风格
+   老板给的品牌手册（PDF）抽出来的 43 张（一张是带印刷文字的型录扫描页，拿掉了）：五个系列、五种风格
    （轻法式 french · 中古 midcentury · 原木 wood · 奶油风 cream · 微侘寂 wabi）、
    六类产品（房门、柜门、定制床、护墙、橱柜、衣柜），加上风景与工艺细节。
    - 空间照：加进 MB.BUILTIN，自动配图和图库都用得到 —— 每个空间能挑的图多一倍。
    - 氛围照（rooms: ['mood']）：开场短话、章节页、封底这类情绪页轮着用，
-     不会每一份方案都同一张（见 model.js 的 MB.pageImage）。
+     不会每一份方案都同一张（见 model.js 的 MB.deckImages；哪一张适合哪一页在 MOOD_FIT）。
+   - rooms 只写照片里真的是哪个空间（原木起居其实是客厅，不标主卧）—— 标错了，主卧那一页就放了一张客厅。
+   - land-grassland 裁成 1600 × 426 的窄长条：只适合很宽的格子，自动配图不用（MOOD_FIT 'none'）。
+   - 有两张是别张的裁切（detail-corner、misty-corridor）：model.js 的 SAME_SHOT 把它们和原图当同一张。
+     加新照片时重跑两两比对（模板匹配），找出这种裁切。
    style 先记下来，案例库做好后「按风格找图」会用到。
    ============================================================ */
 (function () {
@@ -16,17 +20,17 @@
   var L = 'assets/img/lib/';
 
   var MORE = [
-    { id: 'b:land-grassland', src: L + 'land-grassland.jpg', w: 1600, h: 930, series: '', style: '', rooms: ['mood'], en: 'Highland grassland', zh: '高原草地' },
+    { id: 'b:land-grassland', src: L + 'land-grassland.jpg', w: 1600, h: 426, series: '', style: '', rooms: ['mood'], en: 'Highland grassland', zh: '高原草地' },
     { id: 'b:land-boards', src: L + 'land-boards.jpg', w: 900, h: 1200, series: '', style: '', rooms: ['mood'], en: 'Timber boards in the open', zh: '旷野里的木板' },
     { id: 'b:land-hills', src: L + 'land-hills.jpg', w: 1600, h: 947, series: '', style: '', rooms: ['mood'], en: 'Distant hills', zh: '远山' },
     { id: 'b:craft-touch', src: L + 'craft-touch.jpg', w: 862, h: 438, series: '', style: '', rooms: ['mood'], en: 'A hand on the boards', zh: '手摸板材' },
-    { id: 'b:detail-corner', src: L + 'detail-corner.jpg', w: 1600, h: 947, series: 'skeleton', style: '', rooms: ['mood'], en: 'Cabinet corner detail', zh: '柜角细节' },
+    // 骨骼线高柜（skeleton-kitchen-3）下缘裁出来、放大过的：档案 1600 宽，实际只有约 595 × 352 —— 写真的大小，挑图才不会把它放上整页
+    { id: 'b:detail-corner', src: L + 'detail-corner.jpg', w: 595, h: 352, series: 'skeleton', style: '', rooms: ['mood'], en: 'Cabinet corner detail', zh: '柜角细节' },
     { id: 'b:craft-inspect', src: L + 'craft-inspect.jpg', w: 843, h: 498, series: '', style: '', rooms: ['mood'], en: 'Quality inspection', zh: '质检' },
     { id: 'b:craft-pack', src: L + 'craft-pack.jpg', w: 843, h: 498, series: '', style: '', rooms: ['mood'], en: 'Careful packing', zh: '包装' },
     { id: 'b:store-entrance', src: L + 'store-entrance.jpg', w: 929, h: 1038, series: '', style: '', rooms: ['mood'], en: 'The SAIL entrance', zh: '溪岸门口' },
     { id: 'b:skeleton-kitchen', src: L + 'skeleton-kitchen.jpg', w: 889, h: 480, series: 'skeleton', style: '', rooms: ['kitchen'], en: 'Skeleton Line kitchen', zh: '骨骼线厨房' },
     { id: 'b:skeleton-kitchen-2', src: L + 'skeleton-kitchen-2.jpg', w: 889, h: 1037, series: 'skeleton', style: '', rooms: ['kitchen'], en: 'Skeleton Line kitchen detail', zh: '骨骼线厨房细节' },
-    { id: 'b:skeleton-sideboard', src: L + 'skeleton-sideboard.jpg', w: 1044, h: 685, series: 'skeleton', style: '', rooms: ['dining', 'living'], en: 'Skeleton Line sideboard', zh: '骨骼线边柜' },
     { id: 'b:skeleton-kitchen-3', src: L + 'skeleton-kitchen-3.jpg', w: 681, h: 1038, series: 'skeleton', style: '', rooms: ['kitchen'], en: 'Skeleton Line tall units', zh: '骨骼线高柜' },
     { id: 'b:skeleton-kitchen-dining', src: L + 'skeleton-kitchen-dining.jpg', w: 1600, h: 947, series: 'skeleton', style: '', rooms: ['kitchen', 'dining'], en: 'Skeleton Line kitchen and dining', zh: '骨骼线厨房与餐厅' },
     { id: 'b:natural-kitchen', src: L + 'natural-kitchen.jpg', w: 1600, h: 798, series: 'skeleton', style: '', rooms: ['kitchen'], en: 'Natural Line kitchen', zh: '自然线厨房' },
@@ -40,16 +44,19 @@
     { id: 'b:misty-living', src: L + 'misty-living.jpg', w: 1600, h: 607, series: 'misty', style: '', rooms: ['living'], en: 'Misty Mountain living room', zh: '雾山客厅' },
     { id: 'b:misty-lounge', src: L + 'misty-lounge.jpg', w: 890, h: 1038, series: 'misty', style: '', rooms: ['living'], en: 'Misty Mountain reading corner', zh: '雾山休闲角' },
     { id: 'b:misty-study', src: L + 'misty-study.jpg', w: 895, h: 1038, series: 'misty', style: '', rooms: ['study'], en: 'Misty Mountain study', zh: '雾山书房' },
-    { id: 'b:misty-corridor', src: L + 'misty-corridor.jpg', w: 842, h: 1039, series: 'misty', style: '', rooms: ['foyer'], en: 'Misty Mountain corridor', zh: '雾山走廊' },
+    // skeleton-1（溪岸官网「骨骼线 · 主卧通顶衣柜与过道」）的左半边、放大过的：同一张照片，系列、空间都跟着原图
+    // （骨骼线、主卧 —— 不是玄关）；id 沿用旧的，存档才认得；档案 842 宽，实际只有约 509 × 628
+    { id: 'b:misty-corridor', src: L + 'misty-corridor.jpg', w: 509, h: 628, series: 'skeleton', style: '', rooms: ['master'], en: 'Skeleton Line wardrobe and passage', zh: '骨骼线衣柜与过道' },
     { id: 'b:misty-kitchen', src: L + 'misty-kitchen.jpg', w: 1600, h: 798, series: 'misty', style: '', rooms: ['kitchen'], en: 'Misty Mountain kitchen', zh: '雾山厨房' },
     { id: 'b:misty-living-wide', src: L + 'misty-living-wide.jpg', w: 1600, h: 605, series: 'misty', style: '', rooms: ['living'], en: 'Warm-wood living room', zh: '原木客厅' },
-    { id: 'b:misty-bedroom', src: L + 'misty-bedroom.jpg', w: 1600, h: 1067, series: 'misty', style: '', rooms: ['master', 'living'], en: 'Warm-wood lounge', zh: '原木起居' },
+    { id: 'b:misty-bedroom', src: L + 'misty-bedroom.jpg', w: 1600, h: 1067, series: 'misty', style: '', rooms: ['living'], en: 'Warm-wood lounge', zh: '原木起居' },
     { id: 'b:door-hidden', src: L + 'door-hidden.jpg', w: 1600, h: 643, series: 'misty', style: '', rooms: ['foyer'], en: 'Door collection', zh: '房门系列' },
     { id: 'b:door-home', src: L + 'door-home.jpg', w: 1080, h: 1440, series: '', style: '', rooms: ['foyer'], en: 'Doors at home', zh: '房门与家' },
     { id: 'b:cabinet-doors', src: L + 'cabinet-doors.jpg', w: 1200, h: 800, series: '', style: '', rooms: ['living'], en: 'Cabinet door collection', zh: '柜门系列' },
     { id: 'b:bed-platform', src: L + 'bed-platform.jpg', w: 1016, h: 1038, series: 'wabi', style: '', rooms: ['master', 'guest'], en: 'Custom bed collection', zh: '定制床系列' },
     { id: 'b:wall-panel', src: L + 'wall-panel.jpg', w: 1600, h: 1067, series: 'mountain', style: '', rooms: ['living'], en: 'Wall panel collection', zh: '护墙系列' },
-    { id: 'b:wall-panel-2', src: L + 'wall-panel-2.jpg', w: 1080, h: 1440, series: '', style: '', rooms: ['living'], en: 'Wall panels and doors', zh: '护墙与门' },
+    // 浅橡木护墙 + 暖白沙发：拍的就是雾山的样子 —— 标上系列，别的风格的方案（微侘寂、织…）第 2 页才不会放一间浅橡木客厅
+    { id: 'b:wall-panel-2', src: L + 'wall-panel-2.jpg', w: 1080, h: 1440, series: 'misty', style: '', rooms: ['living'], en: 'Wall panels and doors', zh: '护墙与门' },
     { id: 'b:kitchen-wood', src: L + 'kitchen-wood.jpg', w: 1015, h: 1038, series: 'misty', style: '', rooms: ['kitchen'], en: 'Kitchen collection', zh: '橱柜系列' },
     { id: 'b:wardrobe-white', src: L + 'wardrobe-white.jpg', w: 1016, h: 1039, series: 'misty', style: '', rooms: ['master', 'bedroom', 'guest'], en: 'Wardrobe collection', zh: '衣柜系列' },
     { id: 'b:style-overview', src: L + 'style-overview.jpg', w: 1600, h: 605, series: 'misty', style: '', rooms: ['living'], en: 'Styles at a glance', zh: '风格展示' },

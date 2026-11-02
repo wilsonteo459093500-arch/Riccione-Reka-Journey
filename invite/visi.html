@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>VISI by Riccione Reka</title>
-<meta name="description" content="VISI by Riccione Reka —— 贴需求卡，出一份客户方案（A4 PDF），连发方案、邀约到馆的文案一起写好。" />
+<meta name="description" content="VISI by Riccione Reka —— 贴需求卡，出一份「只为你们家」的客户方案（16:9，导出 PDF），连发方案、邀约到馆的文案一起写好。" />
 <meta name="robots" content="noindex, nofollow" />
 <meta name="theme-color" content="#F4F0E8" />
 <!-- 加到手机主画面：图标 + 「VISI」（同 TORA 的做法）。不设 apple-mobile-web-app-capable：
@@ -16,7 +16,8 @@
 <link rel="manifest" href="visi.webmanifest" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,400&family=Jost:wght@300;400;500;600&family=Noto+Sans+SC:wght@300;400;500;600&family=Noto+Serif+SC:wght@300;400;500&display=swap" rel="stylesheet" />
+<!-- Outfit：方案页的英文大写宽字距标签与大号数字（HIPPO / Aman 的品牌字体） -->
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,400&family=Jost:wght@300;400;500;600&family=Outfit:wght@300;400;500&family=Noto+Sans+SC:wght@300;400;500;600&family=Noto+Serif+SC:wght@300;400;500&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="assets/css/invite.css" />
 <link rel="stylesheet" href="assets/css/form.css" />
 <link rel="stylesheet" href="assets/css/visi.css" />
@@ -104,6 +105,14 @@
         </div>
       </div>
 
+      <div class="panel" id="letter-panel">
+        <p class="sub-h" style="margin-top:0">开场短话 · 第 2 页 <button class="reset" type="button" id="letter-reset" hidden>↺ 用自动草稿</button></p>
+        <p class="hint" style="margin-bottom:8px">翻开的第一页是你写给他们的话。只写一件<b>只有你知道</b>、他们在乎的事（例：「你们说厨房永远收不干净」），
+          再说这份方案怎么回应 —— 读完他们会想回一句「对，就是这样」。</p>
+        <textarea id="letter-text" rows="9" aria-label="开场短话"></textarea>
+        <p class="hint letter-state" id="letter-state"></p>
+      </div>
+
       <div class="panel" id="needs-panel">
         <p class="sub-h" style="margin-top:0">你们说的 · 我们做的</p>
         <p class="hint" style="margin-bottom:8px">客户<b>原话</b>放左边，我们的做法放右边。原话比任何形容词都有说服力。</p>
@@ -127,7 +136,19 @@
       <p class="hint">整份方案只走<b>一个</b>方向。每页风格一致，客户才拼得出一个完整的家（WYSIATI）。</p>
       <div class="dir-cards" id="dir-cards"></div>
 
-      <div class="panel" style="margin-top:16px">
+      <div class="panel" id="ref-panel" style="margin-top:16px">
+        <p class="sub-h" style="margin-top:0">从客户参考图取色 <i class="muted small" style="text-transform:none;letter-spacing:0">最多 3 张</i></p>
+        <p class="hint" style="margin-bottom:10px">客户发来的参考照片，取出 5 个颜色放进方案 —— 是他们自己挑的颜色，整份方案一看就是他们的家。照片只存在这台电脑。</p>
+        <div class="drop" id="ref-drop">拖客户的参考照片进来，或 <u>点这里选图</u><input type="file" id="ref-file" accept="image/*" multiple hidden /></div>
+        <div class="thumbs" id="ref-thumbs"></div>
+        <p class="hint ref-state" id="ref-state"></p>
+        <div class="btn-row" style="gap:6px">
+          <button class="mini" type="button" id="ref-again" hidden>用这几张重新取色</button>
+          <button class="mini" type="button" id="pal-style" hidden>改回风格默认配色</button>
+        </div>
+      </div>
+
+      <div class="panel">
         <p class="sub-h" style="margin-top:0">配色 · 5 色 <button class="reset" type="button" id="pal-reset">↺ 恢复这个风格的默认</button></p>
         <div id="pal-edit"></div>
         <p class="sub-h">材质 · 换成真实板材色号更可信</p>
@@ -135,7 +156,7 @@
       </div>
 
       <div class="panel">
-        <p class="sub-h" style="margin-top:0">住进去的感觉 · 三句话（一页看懂）</p>
+        <p class="sub-h" style="margin-top:0">住进去的感觉 · 三句话 <i class="muted small" style="text-transform:none;letter-spacing:0">讲稿用，不印在页面上</i></p>
         <div id="prom-edit"></div>
       </div>
     </section>
@@ -143,12 +164,24 @@
     <!-- ③ 空间 -->
     <section class="mb-pane" data-pane="rooms">
       <h3>空间</h3>
-      <p class="hint">点下面加入空间，图和卖点会自动配好。每页 <b>1 张主图 + 最多 2 张辅图</b>；第一张是主图（★）。</p>
+      <p class="hint">点下面加入空间，图和卖点会自动配好。每页 <b>1 张主图 + 最多 2 张辅图</b>；第一张是主图（★）。同一张图整份方案只出现一次。</p>
       <div class="room-add" id="room-add"></div>
       <div class="btn-row" style="margin-bottom:14px">
         <button class="mini" type="button" id="auto-all">全部重新自动配图</button>
       </div>
       <div id="room-list"></div>
+
+      <div class="panel" id="cases-panel" style="margin-top:18px">
+        <p class="sub-h" style="margin-top:0">参考空间（最多 3 张）</p>
+        <!-- 现在挑的是溪岸自己的实拍，不是客户的家：页面叫「SAIL spaces · 参考空间」。
+             等云端案例库有每个项目的区域 / 房型 / 家庭资料，才改回「像你们这样的家」 -->
+        <p class="hint" style="margin-bottom:10px">挑 1–3 张跟方案同风格的溪岸实拍，让他们看到做出来的样子。每张一句话，
+          <b>只写看得到的事实</b>（系列、空间），不写「和你们很像」—— 这些不是客户的家。空着就用自动的那句。</p>
+        <div id="cases-list"></div>
+        <div class="btn-row" style="gap:6px;margin-top:10px">
+          <button class="mini" type="button" id="cases-pick">从图库选</button>
+        </div>
+      </div>
     </section>
 
     <!-- ④ 平面图 -->
@@ -195,9 +228,9 @@
         <div id="prep-edit"></div>
       </div>
 
-      <div class="panel">
-        <p class="sub-h" style="margin-top:0">工期 · 预算 · 保障 <i class="muted small" style="text-transform:none;letter-spacing:0">只填真实资料；都空着就不出这一页</i></p>
-        <p class="hint" style="margin-bottom:10px">第一个具体数字会变成锚 —— 我们先给，好过让别家的按尺价先给（锚定）。工期写过往项目的真实区间，不写最快那一次（规划谬误）。</p>
+      <div class="panel" id="practical-panel">
+        <p class="sub-h" style="margin-top:0">工期 · 保障 <i class="muted small" style="text-transform:none;letter-spacing:0">这一页预设关；只填真实资料</i></p>
+        <p class="hint" style="margin-bottom:10px">打开后只印三个大数字（订单周期、五金质保、板材质保）+ 一句顾虑回应。下面填了工期 / 预算，会多印一小行（第一行）；其余的进讲稿。工期写过往项目的真实区间，不写最快那一次。</p>
         <div class="field"><label class="q" for="x-time">工期</label>
           <input type="text" id="x-time" data-bind="extra.timeline" placeholder="例：确认设计后约 8–10 周完成安装（近 10 个马来西亚项目的实际区间）" /></div>
         <div class="field"><label class="q" for="x-budget">预算</label>
@@ -206,10 +239,17 @@
           <textarea id="x-built" data-bind="extra.built" placeholder="湿区柜体用防潮板 + 全封边&#10;柜体保修 __ 年，五金保修 __ 年&#10;自有团队量尺与安装"></textarea></div>
       </div>
 
+      <div class="panel" id="team-panel">
+        <p class="sub-h" style="margin-top:0">本案团队</p>
+        <p class="hint" style="margin-bottom:10px">放真名 —— 客户是跟「人」买，不是跟公司买。名字空着的那一行不会印出来。</p>
+        <div id="team-list"></div>
+        <button class="mini" type="button" id="team-add">＋ 加一位</button>
+      </div>
+
       <div class="panel">
         <p class="sub-h" style="margin-top:0">页面开关</p>
         <div class="chks" id="page-toggles"></div>
-        <p class="sub-h">封面 / 一页看懂 / 邀约 / 封底 用哪张图</p>
+        <p class="sub-h">每一页用哪张图 <i class="muted small" style="text-transform:none;letter-spacing:0">没选 = 自动：整份不重复，每个客户不一样</i></p>
         <div class="thumbs" id="slot-thumbs"></div>
       </div>
 
@@ -279,6 +319,7 @@
         <button type="button" data-v="en">EN</button><button type="button" data-v="zh">中文</button><button type="button" data-v="bi">双语</button>
       </div>
       <button class="mini gold" type="button" id="btn-print">导出 PDF</button>
+      <button class="mini" type="button" id="btn-pptx" hidden>导出 PPTX</button>
     </div>
     <div class="pv-check" id="pv-check"></div>
     <div class="deck" id="deck"></div>
@@ -323,6 +364,7 @@
 <script src="assets/js/cases.js"></script>
 <script src="assets/vendor/qrcode.js"></script>
 <script src="assets/js/visi/data.js"></script>
+<script src="assets/js/visi/photos.js"></script>
 <script src="assets/js/visi/store.js"></script>
 <script src="assets/js/visi/model.js"></script>
 <script src="assets/js/brief-card.js"></script>
@@ -332,6 +374,9 @@
 <script src="assets/js/visi/deck.js"></script>
 <script src="assets/js/visi/copy.js"></script>
 <script src="assets/js/visi/check.js"></script>
+<script src="assets/js/visi/palette.js"></script>
+<!-- 导出 PPTX：只载这一个小档；pptxgenjs（assets/vendor/pptxgenjs/）按下「导出 PPTX」才载 -->
+<script src="assets/js/visi/pptx.js"></script>
 <script src="assets/js/visi/app.js"></script>
 </body>
 </html>

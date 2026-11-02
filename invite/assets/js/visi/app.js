@@ -1,7 +1,7 @@
 /* ============================================================
    VISI · 工作台
    ------------------------------------------------------------
-   左边改，右边即时出 A4 方案；「导出 PDF」= 浏览器打印存 PDF。
+   左边改，右边即时出 16:9 方案；「导出 PDF」= 浏览器打印存 PDF。
    所有资料存在本机 IndexedDB（见 store.js）。
    ============================================================ */
 (function () {
@@ -148,8 +148,25 @@
     }).join('');
   }
 
+  /* 方案 2.0 的新栏位：model.js 的 normalizeProject 会补；这里再保险一次 ——
+     model 还没更新、或旧存档少了栏位时，编辑区不会因为 undefined 当掉 */
+  function ensureV2(p) {
+    if (typeof p.letter !== 'string') p.letter = null;
+    if (!Array.isArray(p.cases)) p.cases = [];
+    if (!Array.isArray(p.team)) p.team = [{ role: 'sales', name: (p.host && p.host.name) || '' }];
+    if (p.paletteFrom !== 'ref') p.paletteFrom = 'style';
+    if (!Array.isArray(p.refImages)) p.refImages = [];
+    // moodboard：资讯多的页（工期·保障、团队、章节页）默认关
+    var def = { letter: true, chapter: false, cases: true, team: false, practical: false };
+    Object.keys(def).forEach(function (k) { if (typeof p.pages[k] !== 'boolean') p.pages[k] = def[k]; });
+    // 每一页都能换图：缺的版位补 null（= 自动）
+    (MB.IMAGE_SLOTS || ['cover', 'letter', 'glance', 'invite', 'back']).forEach(function (k) { if (p.images[k] === undefined) p.images[k] = null; });
+    return p;
+  }
+
   function openProject(p) {
     if (pendingSave && pendingSave !== p) flushSave();
+    ensureV2(p);
     S.project = p;
     S.pinRoom = null;
     lsSet(ACTIVE_KEY, p.id);
@@ -171,23 +188,25 @@
 
   var SOON = 864e5;   // 自动建议的时段至少隔一天：方案隔天才发，不能约「明天」
 
-  /* 示范方案只用内置图库有图的空间 —— 示范本身不能体检不过 */
+  /* 示范方案只用内置图库有图的空间 —— 示范本身不能体检不过。
+     三个空间各对到一条需求卡的需求（内置的原话与做法三种语言都有）：切到华文 / 双语也不会冒出半句英文；
+     每个空间都有「为你们」那一句；厨房印出来的第一个卖点就是做法里答应的嵌入式电器高柜 */
   function demoProject() {
     var p = MB.newProject(loadProfile());
     p.demo = true;
     p.client.names = 'Mr & Mrs Lim';
     p.property = { name: 'Sample Residence', area: 'Setia Alam', type: 'Terrace', size: '' };
-    p.rooms = ['living', 'dining', 'kitchen', 'master'].map(MB.newRoom);
-    p.needs = [
-      { quote: 'The kitchen never stays tidy', answer: 'Every pot and jar gets a fixed place: tall pull-out pantry, appliance tower, nothing left on the counter.', room: 'kitchen' },
-      { key: 'clothes' }, { key: 'books' }
-    ];
+    p.rooms = ['living', 'kitchen', 'master'].map(MB.newRoom);
+    p.needs = [{ key: 'appliances' }, { key: 'clothes' }, { key: 'books' }];
     applyNeedFeats(p, p.needs, p.rooms);
     p.rooms.forEach(function (r) { r.images = MB.autoPick(p, r, S.viewImages); });
     p.visit.date = nextDow(6, Date.now() + SOON); p.visit.time = '14:00';
     p.visit.date2 = nextDow(0, Date.now() + SOON); p.visit.time2 = '11:00';
     return p;
   }
+
+  /** 互相矛盾的卖点：勾了一个就取消另一个（开放层架代替吊柜 ↔ 吊柜 + 地柜） */
+  var EXCLUSIVE_FEATS = { openshelf: 'topbase', topbase: 'openshelf' };
 
   /* 需求对到的卖点自动勾上 —— 只处理传进来的需求 × 空间（新加的那些），
      不重扫整份方案，免得把销售取消勾选的又勾回去 */
@@ -197,7 +216,12 @@
       if (!def) return;
       rooms.forEach(function (r) {
         if (r.key !== def.room) return;
-        def.feats.forEach(function (f) { if (r.feats.indexOf(f) < 0) r.feats.push(f); });
+        def.feats.forEach(function (f) {
+          if (r.feats.indexOf(f) < 0) r.feats.push(f);
+          // 很少开火 → 开放层架「代替吊柜」：把默认勾着的吊柜取消，编辑区跟页面一致（不会两个都勾）
+          var off = EXCLUSIVE_FEATS[f];
+          if (off && r.feats.indexOf(off) > -1) r.feats.splice(r.feats.indexOf(off), 1);
+        });
       });
     });
   }
@@ -218,7 +242,7 @@
   function renderPane(tab) {
     if (tab === 'brief') renderBrief();
     if (tab === 'style') renderStyle();
-    if (tab === 'rooms') renderRooms();
+    if (tab === 'rooms') { renderRooms(); renderCases(); }
     if (tab === 'plan') renderPlan();
     if (tab === 'visit') renderVisit();
     if (tab === 'copy') renderCopy();
@@ -238,7 +262,9 @@
       if (el.type === 'checkbox') el.checked = !!v; else el.value = v == null ? '' : v;
       el.oninput = el.onchange = function () {
         var val = el.type === 'checkbox' ? el.checked : el.type === 'number' ? (+el.value || 0) : el.value;
+        var before = getPath(S.project, path);
         setPath(S.project, path, val);
+        if (path === 'host.name') syncTeamHost(before, val);
         if (/^visit\.(date|time)/.test(path)) {   // 销售动过时段 = 已确认，不再算「自动建议」
           S.project.visit.auto = false;
           $('#slot-auto').hidden = true;
@@ -261,8 +287,53 @@
     bindInputs(pane);
     var draft = S.briefDraft[S.project.id];
     $('#brief-text').value = draft != null ? draft : S.project.brief || '';
+    renderLetter();
     renderNeeds();
   }
+
+  /* ---------- 开场短话（方案第 2 页） ----------------------------
+     null = 自动草稿（copy.js 从需求卡起草）；销售一改就存成字串，方案照他写的印 */
+  /** 双语方案：华文一段、英文一段（跟方案页一样）—— 改一个字也不会丢掉另一种语言 */
+  function letterDraft(p) {
+    if (typeof MB.draftLetter !== 'function') return '';
+    try {
+      if (p.lang === 'bi') return [MB.draftLetter(p, 'zh'), MB.draftLetter(p, 'en')].filter(Boolean).join('\n\n');
+      return MB.draftLetter(p, textLang()) || '';
+    } catch (e) { console.error(e); return ''; }
+  }
+  function renderLetter() {
+    var p = S.project, ta = $('#letter-text');
+    ta.value = p.letter == null ? letterDraft(p) : p.letter;
+    // 草稿还没载入（或删光了）时给一个具体的开头，不要一个空框
+    ta.placeholder = p.lang === 'zh' ? '例：你们说厨房永远收不干净 —— 所以这份方案从厨房开始……'
+      : 'e.g. You told us the kitchen never stays tidy, so this proposal starts there…';
+    letterState();
+  }
+  function letterState() {
+    var p = S.project, auto = p.letter == null;
+    $('#letter-text').classList.toggle('auto', auto);
+    $('#letter-reset').hidden = auto;
+    var who = [p.host.name, p.host.role].filter(Boolean).join(' · ');
+    $('#letter-state').textContent = (auto ? '浅色字 = 自动草稿。改一句，就变成你的话。' : '已改过 —— 方案页照你写的印。') +
+      ' 署名：' + (who || '（在下面「我是谁」填名字）');
+  }
+  /* 草稿跟着需求、名字、语言变；销售正在打字时不去动它 */
+  function syncLetterDraft() {
+    var ta = $('#letter-text');
+    if (S.tab !== 'brief' || S.project.letter != null || document.activeElement === ta) return;
+    ta.value = letterDraft(S.project);
+    letterState();
+  }
+  $('#letter-text').addEventListener('input', function (e) {
+    var v = e.target.value;
+    S.project.letter = v.trim() ? v : null;   // 删光 = 回到自动草稿
+    letterState(); changed();
+  });
+  $('#letter-text').addEventListener('blur', function () { if (S.project.letter == null) renderLetter(); });
+  $('#letter-reset').addEventListener('click', function () {
+    S.project.letter = null;
+    renderLetter(); changed();
+  });
 
   function renderNeeds() {
     var p = S.project, L = textLang();
@@ -292,7 +363,8 @@
   function answerHint(p, n) {
     var r = MB.needRoom(p, n);
     if (!r) return '我们的做法，例：每个锅具都有固定位置 —— 高柜拉篮 + 电器高柜';
-    var feats = MB.ROOM[r.key].feats.filter(function (f) { return r.feats.indexOf(f.id) > -1; }).slice(0, 2);
+    // 跟页面同一套（MB.roomFeats：需求点到的在前、层架代替吊柜时不提吊柜）
+    var feats = MB.roomFeats(p, r).slice(0, 2);
     return '我们的做法，例：' + feats.map(function (f) { return f.zh; }).join(' + ') +
       (feats[0] ? ' —— ' + feats[0].why.zh : '');
   }
@@ -411,8 +483,14 @@
     if (!nd) return;
     var untouched = sameAs(p.palette, old.palette) && sameAs(p.materials, old.materials);
     p.direction = key;
-    if (untouched || (!quiet && confirm('也把配色和材质换成「' + nd.zh + '」的默认值吗？'))) {
+    if (p.paletteFrom === 'ref') {
+      // 配色是从客户照片取的：那是他们的颜色，换风格不洗掉它，只问材质
+      if (sameAs(p.materials, old.materials) || (!quiet && confirm('也把材质换成「' + nd.zh + '」的默认值吗？（配色仍用客户照片取的颜色）'))) {
+        p.materials = MB.clone(nd.materials);
+      }
+    } else if (untouched || (!quiet && confirm('也把配色和材质换成「' + nd.zh + '」的默认值吗？'))) {
       p.palette = MB.clone(nd.palette); p.materials = MB.clone(nd.materials);
+      p.paletteFrom = 'style';
     }
     // 自动配的空间跟着新系列重新配；销售亲手挑过的（r.manual）、用了自己图的都不动
     p.rooms.forEach(function (r) {
@@ -444,7 +522,76 @@
         (p.promises[i] != null ? '<button class="reset" type="button" data-prom-reset="' + i + '">↺ 用默认</button>' : '') + '</label>' +
         '<input type="text" data-prom="' + i + '" value="' + esc(MB.t(MB.promise(p, i), L)) + '" /></div>';
     }).join('');
+    renderRefPalette();
   }
+
+  /* ---------- 从客户参考图取色 ----------------------------------
+     客户自己发来的照片 → 5 个颜色（palette.js）。方案里是他们挑的颜色，
+     一页看懂还会写「这组颜色来自你们发来的照片」 */
+  var REF_MAX = 3;
+  var DATA_IMG = /^data:image\/(png|jpe?g|webp);base64,/;
+  function renderRefPalette() {
+    var p = S.project, refs = p.refImages || [], fromRef = p.paletteFrom === 'ref';
+    $('#ref-thumbs').innerHTML = refs.map(function (r, i) {
+      if (!r || !DATA_IMG.test(r.src || '')) return '';
+      return '<div class="thumb"><img src="' + esc(r.src) + '" alt="" />' +
+        '<div class="ops"><button type="button" data-ref-del="' + i + '" title="拿掉这张">×</button></div></div>';
+    }).join('');
+    $('#ref-state').textContent = fromRef
+      ? '下面的配色来自这 ' + refs.length + ' 张照片 —— 「一页看懂」会写明，并放上小图。名字可以改。'
+      : refs.length ? '现在用的是风格默认配色。' : '';
+    $('#ref-state').hidden = !$('#ref-state').textContent;
+    $('#ref-again').hidden = fromRef || !refs.length;
+    $('#pal-style').hidden = !fromRef;
+  }
+
+  function addRefImages(files) {
+    files = files.filter(function (f) { return /^image\//.test(f.type); });
+    if (!files.length) { ping('请选图片文件（JPG / PNG）'); return; }
+    var p = S.project;
+    if (files.length > REF_MAX) ping('最多 3 张 —— 先用前 3 张', 2400);
+    // 缩到 360px：取色只要小图，存进方案也不占地方
+    Promise.all(files.slice(0, REF_MAX).map(function (f) {
+      return MB.compress(f, 360, 0.85).catch(function () { return null; });
+    })).then(function (outs) {
+      outs = outs.filter(Boolean);
+      if (!outs.length) { ping('这张图读不出来'); return; }
+      // 新的排后面；超过 3 张，最早放进来的那张让位
+      var refs = (p.refImages || []).concat(outs.map(function (o) { return { src: o.src, w: o.w, h: o.h }; })).slice(-REF_MAX);
+      extractRef(p, refs);
+    });
+  }
+
+  function extractRef(p, refs) {
+    if (typeof MB.extractPalette !== 'function') { ping('取色功能没有载入，请重新整理页面', 3000); return Promise.resolve(); }
+    ping('取色中…', 6000);
+    return MB.extractPalette(refs, 5).then(function (pal) {
+      p.refImages = refs;
+      p.palette = pal.map(function (c) { return { hex: c.hex, en: c.en, zh: c.zh }; });
+      p.paletteFrom = 'ref';
+      // 取色途中换了方案：结果照样存进原来那份
+      if (S.project === p) { renderStyle(); changed({ now: true }); } else storePut(p);
+      ping('已从 ' + refs.length + ' 张照片取出 ' + pal.length + ' 个颜色');
+    }, function (err) { console.error(err); ping('取色失败：' + (err && err.message || err), 3200); });
+  }
+
+  dropZone('#ref-drop', '#ref-file', addRefImages);
+  $('#ref-thumbs').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-ref-del]'); if (!b) return;
+    var p = S.project, refs = p.refImages.slice();
+    refs.splice(+b.getAttribute('data-ref-del'), 1);
+    if (p.paletteFrom === 'ref' && refs.length) { extractRef(p, refs); return; }
+    p.refImages = refs;
+    // 一张都不剩：配色回到风格默认（不能写「来自你们的照片」却没有照片）
+    if (p.paletteFrom === 'ref') { p.palette = MB.clone(MB.dir(p).palette); p.paletteFrom = 'style'; }
+    renderStyle(); changed({ now: true });
+  });
+  $('#ref-again').addEventListener('click', function () { extractRef(S.project, S.project.refImages.slice()); });
+  $('#pal-style').addEventListener('click', function () {
+    var p = S.project;
+    p.palette = MB.clone(MB.dir(p).palette); p.paletteFrom = 'style';
+    renderStyle(); changed({ now: true });
+  });
 
   $('#dir-cards').addEventListener('click', function (e) {
     var b = e.target.closest('[data-dir]'); if (!b) return;
@@ -461,6 +608,7 @@
   $('#pal-reset').addEventListener('click', function () {
     var d = MB.dir(S.project);
     S.project.palette = MB.clone(d.palette); S.project.materials = MB.clone(d.materials);
+    S.project.paletteFrom = 'style';
     renderStyle(); changed();
   });
   $('#prom-edit').addEventListener('input', function (e) {
@@ -492,8 +640,25 @@
     return r;
   }
 
-  function flashRoom(uid) {
-    var el = document.getElementById('room-' + uid);
+  /** 销售在 ⑤ 选了版位图、在 ③ 挑了案例、或打开了有手选图的页之后：自动配图的空间如果用到同一张
+      （含同一张的不同裁切），那个空间重新自动配图 —— 整份方案同一张照片只出现一次。
+      手选过的空间不动（那是销售自己的决定，体检会提醒重复）。回被换图的空间名 */
+  function yieldToHandPicked(p) {
+    if (typeof MB.handPicked !== 'function') return [];
+    var hp = MB.handPicked(p, S.resolve), key = MB.shotKey || function (r) { return r; };
+    var moved = [];
+    p.rooms.forEach(function (r) {
+      if (r.manual || !r.images.some(function (ref) { return hp[key(ref)]; })) return;
+      r.images = MB.autoPick(p, r, S.viewImages);
+      moved.push(MB.t(MB.roomTitle(p, r), 'zh'));
+    });
+    if (moved.length) ping('「' + moved.join('、') + '」换了一张图：原来那张已经放在别页', 2800);
+    return moved;
+  }
+
+  function flashRoom(uid) { flash(document.getElementById('room-' + uid)); }
+  /** 卷到那一块并闪一下：从预览点过来，眼睛才找得到要改的地方 */
+  function flash(el) {
     if (!el) return;
     el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
@@ -509,6 +674,14 @@
     }).join('');
 
     var who = (p.client.names || '').trim() || '客户';
+    // 没有图的空间，方案页会先放一张氛围 / 细节照（MB.deckImages 的 moodRooms）：这里照实显示，销售才知道
+    var plan = null;
+    try { plan = MB.deckImages ? MB.deckImages(p, S.resolve) : null; } catch (e) { console.error(e); }
+    function standIn(r) {
+      if (!plan || (plan.moodRooms || []).indexOf(r.uid) < 0) return '';
+      var im = S.resolve((plan.rooms[r.uid] || [])[0]);
+      return im ? '<div class="thumb"><img src="' + esc(im.src) + '" alt="" loading="lazy" /><span class="hero">氛围照代替</span></div>' : '';
+    }
     $('#room-list').innerHTML = p.rooms.length ? p.rooms.map(function (r, i) {
       var def = MB.ROOM[r.key];
       var thumbs = r.images.map(function (ref, k) {
@@ -536,13 +709,13 @@
             '<button class="icon" type="button" data-room-del title="删除这个空间">×</button>' +
           '</div></header>' +
         '<div class="body">' +
-          '<div class="thumbs">' + (thumbs || '<div class="thumb empty">还没有图</div>') + '</div>' +
+          '<div class="thumbs">' + (thumbs || standIn(r) + '<div class="thumb empty">还没有实景图' + (standIn(r) ? '（方案页先放左边这张）' : '') + '</div>') + '</div>' +
           '<div class="btn-row" style="gap:6px">' +
             '<button class="mini" type="button" data-room-auto>自动配图</button>' +
             '<button class="mini" type="button" data-room-pick>从图库选</button>' +
             '<label class="mini">上传照片<input type="file" accept="image/*" multiple hidden data-room-upload /></label>' +
           '</div>' +
-          '<p class="sub-h">卖点 <i class="muted small" style="text-transform:none;letter-spacing:0">最多 4 个上页</i></p>' +
+          '<p class="sub-h">卖点 <i class="muted small" style="text-transform:none;letter-spacing:0">页面只印 3 个名称，why 在讲稿</i></p>' +
           '<div class="chks">' + feats + '</div>' +
           '<p class="sub-h">为 ' + esc(who) + ' · 一句话' +
             (r.note != null ? '<button class="reset" type="button" data-note-reset>↺ 用默认</button>' : '') + '</p>' +
@@ -582,11 +755,20 @@
       var id = e.target.getAttribute('data-feat'), i = r.feats.indexOf(id);
       if (e.target.checked && i < 0) r.feats.push(id);
       if (!e.target.checked && i > -1) r.feats.splice(i, 1);
+      // 勾「开放层架代替吊柜」就取消「吊柜 + 地柜」（反过来也一样）：页面只能说一种，勾选框也只留一个
+      var off = e.target.checked && EXCLUSIVE_FEATS[id];
+      if (off && r.feats.indexOf(off) > -1) {
+        r.feats.splice(r.feats.indexOf(off), 1);
+        var box = e.target.closest('.chks') && e.target.closest('.chks').querySelector('[data-feat="' + off + '"]');
+        if (box) box.checked = false;
+        var fo = MB.ROOM[r.key].feats.filter(function (f) { return f.id === off; })[0];
+        if (fo) ping('已取消「' + fo.zh + '」—— 跟刚勾的那个说法相反', 2400);
+      }
       // 保持资料库里的顺序，页面上才稳定
       var order = MB.ROOM[r.key].feats.map(function (f) { return f.id; });
       r.feats.sort(function (a, b) { return order.indexOf(a) - order.indexOf(b); });
-      var cap = S.project.lang === 'bi' ? 3 : 4;
-      if (r.feats.length > cap) ping('超过 ' + cap + ' 个卖点，' + (cap === 3 ? '双语' : '') + '页面只放 ' + cap + ' 个（需求点到的排最前）', 2600);
+      // moodboard：页面只印 3 个卖点的名称（why 在讲稿里）
+      if (r.feats.length > 3) ping('超过 3 个卖点，页面只印 3 个名称（需求点到的排最前），其余的在讲稿里', 2800);
       changed();
     }
     if (e.target.hasAttribute('data-room-upload')) {
@@ -618,6 +800,58 @@
     else if (t.closest('[data-note-reset]')) { r.note = null; }
     else return;
     renderRooms(); changed({ now: true });
+  });
+
+  /* ---------- 参考空间（最多 3 个） ----------------------------
+     现在挑的是溪岸自己的实拍（品牌手册、内置图库），不是客户的家：页面叫「SAIL spaces · 参考空间」，
+     那一行只写看得到的事实（系列、空间），不写「和你们很像」。
+     等云端案例库有每个项目的区域 / 房型 / 家庭资料，才改回「像你们这样的家」。
+     p.cases = [{ ref, note }]，note 是 null 就用 copy.js 的自动那句 */
+  var CASE_MAX = 3;
+  /** 图库那一份（有 rooms / series / label），给 MB.caseNote 起草那一句 */
+  function libItem(ref) {
+    var all = MB.allImages(S.viewImages);
+    for (var i = 0; i < all.length; i++) if (all[i].ref === ref) return all[i];
+    return null;
+  }
+  function caseHint(p, im) {
+    if (typeof MB.caseNote !== 'function' || !im) return '';
+    try { return MB.caseNote(p, im, textLang()) || ''; } catch (e) { console.error(e); return ''; }
+  }
+  function renderCases() {
+    var p = S.project;
+    var rows = p.cases.map(function (c, i) {
+      var im = S.resolve(c.ref), item = libItem(c.ref);
+      if (!im) return '';
+      var hint = caseHint(p, item) || '一句话，只写看得到的事实，例：同一个系列的厨房';
+      return '<div class="case-row" data-i="' + i + '">' +
+        '<div class="thumb"><img src="' + esc(im.src) + '" alt="" loading="lazy" /><span class="hero">' + (i + 1) + '</span>' +
+          '<div class="ops">' +
+            (i ? '<button type="button" data-case-up title="往前">↑</button>' : '') +
+            '<button type="button" data-case-del title="拿掉">×</button>' +
+          '</div></div>' +
+        '<div class="case-txt"><span class="case-cap">' + esc(item && item.label ? item.label : '') + '</span>' +
+          '<textarea data-case-note rows="2" placeholder="' + esc(hint) + '" aria-label="这张图的一句话">' + esc(c.note || '') + '</textarea></div>' +
+      '</div>';
+    }).join('');
+    $('#cases-list').innerHTML = rows || '<p class="hint" style="margin:0">还没有。挑 1–3 张跟方案同风格的溪岸实拍；一张都没有就不出这一页。</p>';
+    $('#cases-pick').textContent = rows ? '换 / 加案例' : '从图库选';
+  }
+  $('#cases-pick').addEventListener('click', function () { openPicker({ mode: 'cases', filter: 'all' }); });
+  $('#cases-list').addEventListener('click', function (e) {
+    var row = e.target.closest('.case-row'); if (!row) return;
+    var list = S.project.cases, i = +row.getAttribute('data-i');
+    if (e.target.closest('[data-case-up]') && i > 0) list.splice(i - 1, 0, list.splice(i, 1)[0]);
+    else if (e.target.closest('[data-case-del]')) list.splice(i, 1);
+    else return;
+    renderCases(); changed({ now: true });
+  });
+  $('#cases-list').addEventListener('input', function (e) {
+    if (!e.target.hasAttribute('data-case-note')) return;
+    var c = S.project.cases[+e.target.closest('.case-row').getAttribute('data-i')];
+    if (!c) return;
+    c.note = e.target.value.trim() ? e.target.value : null;   // 删光 = 用自动的那句
+    changed();
   });
 
   /* ============================================================
@@ -716,16 +950,40 @@
   /* ============================================================
      ⑤ 到馆
      ============================================================ */
+  /* 照方案的页序排（model.js MB.pageList）；这是 moodboard，提示只写一句 */
   var PAGE_NAMES = [
-    ['glance', '一页看懂', '认知放松：先给完整的感觉'],
-    ['needs', '你们说的 · 我们做的', '用客户原话，证明听懂了'],
+    ['letter', '开场短话', '先讲他们，再讲我们'],
+    ['needs', '你们说的 · 我们做的', '最痛的 3 条，用他们的原话'],
+    ['glance', '一页看懂', '拼贴：图 + 配色 + 材质'],
     ['plan', '平面图编号', '把注意力锚在「我家」'],
-    ['practical', '工期 · 预算 · 保障', '填了下面的真实资料才会出现'],
-    ['language', '设计语言（品牌一页）', '品牌放后面，只占一页'],
-    ['invite', '到馆邀约', '峰终定律：结尾 = 下一步'],
-    ['back', '封底 · 联络', '']
+    ['chapter', '章节情绪页', '预设关 · 一张大图、一句话'],
+    ['cases', '参考空间', '在 ③ 挑了才出现'],
+    ['practical', '工期 · 保障', '预设关 · 三个大数字 + 一句'],
+    ['language', '品牌一页', '品牌只占一页，放后面'],
+    ['team', '本案团队', '预设关 · 填了名字才出现'],
+    ['invite', '到馆邀约', '结尾 = 下一步'],
+    ['back', '封底 · 欢迎回家', '']
   ];
-  var SLOTS = [['cover', '封面'], ['glance', '一页看懂'], ['invite', '邀约'], ['back', '封底']];
+  /* 每一页的图都能换（⑤）：没选 = 自动（整份不重复，按方案轮换） */
+  var SLOTS = [['cover', '封面'], ['letter', '开场'], ['glance', '一页看懂'], ['chapter', '章节'], ['practical', '工期'],
+    ['language', '品牌'], ['team', '团队'], ['invite', '邀约'], ['back', '封底']];
+  /* 情绪页选图时先看「氛围 · 风景」那一类 */
+  var MOOD_SLOTS = { letter: 1, chapter: 1, practical: 1, language: 1, team: 1, back: 1 };
+  var SLOT_BRAND = { cover: 'cover', letter: 'letter', back: 'welcome', chapter: 'detail', practical: 'craft', language: 'brand', team: 'team' };
+  /* 缩图要跟方案页同一张：model.js 的 MB.pageImageSrc（同一份 MB.deckImages，自动规则挑不到图就用品牌照） */
+  function slotSrc(p, slot, plan) {
+    try {
+      if (typeof MB.pageImageSrc === 'function') { var x = MB.pageImageSrc(p, slot, S.resolve, plan); return x ? x.src : ''; }
+      var im = S.resolve(MB.pageImage(p, slot, S.resolve));
+      if (im) return im.src;
+    } catch (e) { console.error(e); }
+    var ph = MB.BRAND && MB.BRAND.photos && MB.BRAND.photos[SLOT_BRAND[slot]];
+    return ph ? ph.src : '';
+  }
+  /** 这一页现在出不出（关着的页缩图变淡） */
+  function pageOn(p, type) {
+    return MB.pageList(p, S.resolve).some(function (pg) { return pg.type === type; });
+  }
 
   function renderVisit() {
     var p = S.project, L = textLang();
@@ -740,11 +998,13 @@
       return '<label class="chk"><input type="checkbox" data-page="' + x[0] + '"' + (p.pages[x[0]] ? ' checked' : '') + ' />' +
         '<span>' + x[1] + (x[2] ? '<small>' + x[2] + '</small>' : '') + '</span></label>';
     }).join('');
+    var plan = null;
+    try { plan = MB.deckImages ? MB.deckImages(p, S.resolve) : null; } catch (e) { console.error(e); }
     $('#slot-thumbs').innerHTML = SLOTS.map(function (s) {
-      var ref = MB.pageImage(p, s[0], S.resolve), im = S.resolve(ref);
-      return '<div style="text-align:center;font-size:11.5px;color:var(--ink-soft)">' +
-        '<button type="button" class="thumb" data-slot="' + s[0] + '" style="padding:0;border:0;cursor:pointer">' +
-          (im ? '<img src="' + esc(im.src) + '" alt="" />' : '') + '</button>' +
+      var src = slotSrc(p, s[0], plan || undefined), on = pageOn(p, s[0]);
+      return '<div class="slot' + (on ? '' : ' off') + '" title="' + (on ? '' : '这一页关着 —— 打开才会印') + '">' +
+        '<button type="button" class="thumb" data-slot="' + s[0] + '">' +
+          (src ? '<img src="' + esc(src) + '" alt="" />' : '') + '</button>' +
         '<div>' + s[1] + (p.images[s[0]] ? ' · <a href="#" data-slot-auto="' + s[0] + '">自动</a>' : '') + '</div></div>';
     }).join('');
     $('#slot-auto').hidden = !(p.visit.auto && p.visit.date);
@@ -755,8 +1015,71 @@
     $('#x-budget').placeholder = en ? 'e.g. RM 85k – 110k for the spaces and boards in this proposal; final quote after measuring' : '例：RM 85k – 110k（按这份方案的空间与板材；量尺后出正式报价）';
     $('#x-built').placeholder = en ? 'Moisture-resistant boards and full edge-banding in wet areas\nCabinet warranty __ years, hardware __ years\nOur own team measures and installs'
       : '湿区柜体用防潮板 + 全封边\n柜体保修 __ 年，五金保修 __ 年\n自有团队量尺与安装';
+    renderTeam();
     renderInviteLink();
   }
+
+  /* ---------- 本案团队 ------------------------------------------
+     p.team = [{ role, name }]：role 是 MB.BRAND.roles 的 key，或销售自订的职称；
+     名字空着的那一行不印 —— 客户是跟「人」买，有名有姓才有用 */
+  var TEAM_MAX = 6;
+  function roles() { return (MB.BRAND && MB.BRAND.roles) || []; }
+  function roleKnown(k) { return roles().some(function (r) { return r.key === k; }); }
+  function renderTeam() {
+    var p = S.project;
+    $('#team-list').innerHTML = p.team.length ? p.team.map(function (m, i) {
+      var known = roleKnown(m.role);
+      var opts = roles().map(function (r) {
+        return '<option value="' + esc(r.key) + '"' + (m.role === r.key ? ' selected' : '') + '>' + esc(r.zh) + '</option>';
+      }).join('') + '<option value="__custom"' + (known ? '' : ' selected') + '>自订职称…</option>';
+      return '<div class="team-row" data-i="' + i + '">' +
+        '<div class="team-role"><select data-team-role aria-label="职称">' + opts + '</select>' +
+          (known ? '' : '<input type="text" data-team-custom value="' + esc(m.role || '') + '" placeholder="职称，例：灯光顾问" aria-label="自订职称" />') +
+        '</div>' +
+        '<input type="text" data-team-name value="' + esc(m.name || '') + '" placeholder="名字" aria-label="名字" />' +
+        '<button class="icon" type="button" data-team-del title="删除这一行">×</button></div>';
+    }).join('') : '<p class="hint" style="margin:0 0 10px">还没有。一个名字都没有就不出团队页。</p>';
+    $('#team-add').disabled = p.team.length >= TEAM_MAX;
+  }
+  /* 预设那一行是「我」：改了「我是谁」的名字，团队里还是旧名字（或空着）的销售那一行跟着改 */
+  function syncTeamHost(before, now) {
+    var team = S.project.team || [];
+    for (var i = 0; i < team.length; i++) {
+      if (team[i].role === 'sales' && (team[i].name || '') === (before || '')) { team[i].name = now; return; }
+    }
+  }
+  $('#team-list').addEventListener('change', function (e) {
+    if (!e.target.hasAttribute('data-team-role')) return;
+    var i = +e.target.closest('.team-row').getAttribute('data-i'), m = S.project.team[i];
+    m.role = e.target.value === '__custom' ? '' : e.target.value;
+    renderTeam(); changed();
+    if (!m.role) { var inp = $('.team-row[data-i="' + i + '"] [data-team-custom]'); if (inp) inp.focus(); }
+  });
+  $('#team-list').addEventListener('input', function (e) {
+    var row = e.target.closest('.team-row'); if (!row) return;
+    var m = S.project.team[+row.getAttribute('data-i')];
+    if (e.target.hasAttribute('data-team-name')) m.name = e.target.value;
+    else if (e.target.hasAttribute('data-team-custom')) m.role = e.target.value;
+    else return;
+    changed();
+  });
+  $('#team-list').addEventListener('click', function (e) {
+    if (!e.target.closest('[data-team-del]')) return;
+    S.project.team.splice(+e.target.closest('.team-row').getAttribute('data-i'), 1);
+    renderTeam(); changed({ now: true });
+  });
+  $('#team-add').addEventListener('click', function () {
+    var team = S.project.team;
+    if (team.length >= TEAM_MAX) return;
+    // 预设给还没出现过的职称（设计师 → 技术设计 → 项目经理…）
+    var used = {};
+    team.forEach(function (m) { used[m.role] = 1; });
+    var next = roles().filter(function (r) { return !used[r.key]; })[0];
+    team.push({ role: next ? next.key : '', name: '' });
+    renderTeam(); changed();
+    var inp = $('.team-row:last-child [data-team-name]');
+    if (inp) inp.focus();
+  });
 
   $('#slot-ok').addEventListener('click', function () {
     S.project.visit.auto = false;
@@ -793,13 +1116,16 @@
   $('#page-toggles').addEventListener('change', function (e) {
     var k = e.target.getAttribute('data-page'); if (!k) return;
     S.project.pages[k] = e.target.checked;
+    // 打开的那一页有手选的图（或是参考空间页）：空间页让开同一张
+    if (e.target.checked) yieldToHandPicked(S.project);
     changed({ now: true });
   });
   $('#slot-thumbs').addEventListener('click', function (e) {
     var a = e.target.closest('[data-slot-auto]');
     if (a) { e.preventDefault(); S.project.images[a.getAttribute('data-slot-auto')] = null; renderVisit(); changed({ now: true }); return; }
     var b = e.target.closest('[data-slot]'); if (!b) return;
-    openPicker({ mode: 'slot', slot: b.getAttribute('data-slot'), filter: 'all' });
+    var slot = b.getAttribute('data-slot');
+    openPicker({ mode: 'slot', slot: slot, filter: MOOD_SLOTS[slot] ? 'mood' : 'all' });
   });
   $('#inv-copy').addEventListener('click', function () { copyText($('#inv-link').textContent, '邀请函链接已复制'); });
 
@@ -949,6 +1275,11 @@
           if (r.images.length !== n) hit = true;
         });
         Object.keys(p.images).forEach(function (k) { if (p.images[k] === ref) { p.images[k] = null; hit = true; } });
+        if (Array.isArray(p.cases)) {
+          var nc = p.cases.length;
+          p.cases = p.cases.filter(function (c) { return c.ref !== ref; });
+          if (p.cases.length !== nc) hit = true;
+        }
         if (hit && p !== S.project) storePut(p);
       });
       rebuildResolver(); renderLibrary(); changed({ now: true });
@@ -1062,6 +1393,7 @@
     var p = S.project, used = {};
     p.rooms.forEach(function (r) { r.images.forEach(function (ref) { used[ref] = 1; }); });
     Object.keys(p.images).forEach(function (k) { if (p.images[k]) used[p.images[k]] = 1; });
+    (p.cases || []).forEach(function (c) { used[c.ref] = 1; });
     var imgs = S.userImages.filter(function (u) { return used['u:' + u.id]; });
     var name = (p.client.names || 'client').replace(/[^\w一-龥]+/g, '-');
     download('visi-' + name + '-' + stamp() + '.json', JSON.stringify({ type: 'visi-project', v: 1, project: p, images: imgs }));
@@ -1110,21 +1442,50 @@
       S.picker.sel = r ? r.images.filter(function (ref) { return S.resolve(ref); }) : [];
       $('#pick-title').textContent = '选图 · ' + MB.t(MB.roomTitle(p, r), 'zh') + '（第一张 = 主图，最多 4 张）';
       $('#pick-ok').hidden = false;
+    } else if (opts.mode === 'cases') {
+      S.picker.sel = p.cases.map(function (c) { return c.ref; }).filter(function (ref) { return S.resolve(ref); });
+      $('#pick-title').textContent = '选参考空间（最多 ' + CASE_MAX + ' 张，标「已用」的在别页出现过）';
+      $('#pick-ok').hidden = false;
     } else {
-      $('#pick-title').textContent = '选一张 · ' + (SLOTS.filter(function (s) { return s[0] === opts.slot; })[0] || ['', ''])[1];
+      $('#pick-title').textContent = '选一张 · ' + (SLOTS.filter(function (s) { return s[0] === opts.slot; })[0] || ['', ''])[1] + '（标「已用」的在别页出现过）';
       $('#pick-ok').hidden = true;
     }
+    // 这份方案别页已经用了哪些图：选图时标出来，免得同一张出现两次
+    S.picker.usedBy = usedBy(p, opts);
     renderPicker();
     $('#pick-modal').classList.add('on');
   }
+  /** ref（同一张照片的不同裁切算同一张）→ 用在哪一页（排除正在选的这个位置自己） */
+  function usedBy(p, opts) {
+    var out = {};
+    if (typeof MB.deckImages !== 'function') return out;
+    var key = MB.shotKey || function (r) { return r; };
+    try {
+      var plan = MB.deckImages(p, S.resolve);
+      p.rooms.forEach(function (r) {
+        if (opts.mode === 'room' && r.uid === opts.uid) return;
+        (plan.rooms[r.uid] || []).forEach(function (ref) { out[key(ref)] = MB.t(MB.roomTitle(p, r), 'zh'); });
+      });
+      SLOTS.forEach(function (s) {
+        if (opts.mode === 'slot' && s[0] === opts.slot) return;
+        if (!pageOn(p, s[0])) return;
+        var refs = s[0] === 'glance' ? plan.glance : [plan.slot[s[0]]];
+        refs.forEach(function (ref) { if (ref) out[key(ref)] = s[1]; });
+      });
+      if (opts.mode !== 'cases') (p.cases || []).forEach(function (c) { if (c && c.ref) out[key(c.ref)] = '案例'; });
+    } catch (e) { console.error(e); }
+    return out;
+  }
   function renderPicker() {
     var pk = S.picker, items = libraryItems();
+    var key = MB.shotKey || function (r) { return r; };
     $('#pick-filter').innerHTML = filterChips(pk.filter, countTags(items));
     $('#pick-grid').innerHTML = items.filter(function (im) { return matches(im, pk.filter); }).map(function (im) {
-      var n = pk.sel.indexOf(im.ref);
-      return '<button type="button" class="lib-item' + (n > -1 ? ' sel' : '') + '" data-ref="' + esc(im.ref) + '">' +
+      var n = pk.sel.indexOf(im.ref), used = (pk.usedBy || {})[key(im.ref)];
+      return '<button type="button" class="lib-item' + (n > -1 ? ' sel' : '') + (used && n < 0 ? ' used' : '') + '" data-ref="' + esc(im.ref) + '">' +
         '<img src="' + esc(im.src) + '" alt="" loading="lazy" />' + (im.own ? '<span class="own">我的</span>' : '') +
-        '<span class="cap">' + (n > -1 ? (n === 0 ? '★ 主图' : '第 ' + (n + 1) + ' 张') : esc(im.own ? tagName(im.rooms[0]) : im.label || '')) + '</span></button>';
+        '<span class="cap">' + (n > -1 ? (pk.mode === 'cases' ? '第 ' + (n + 1) + ' 个' : n === 0 ? '★ 主图' : '第 ' + (n + 1) + ' 张')
+          : used ? '已用 · ' + esc(used) : esc(im.own ? tagName(im.rooms[0]) : im.label || '')) + '</span></button>';
     }).join('') || '<p class="hint">这一类还没有图。到「图库」上传，或把旧 proposal PDF 拖进去。</p>';
   }
   $('#pick-filter').addEventListener('click', function (e) {
@@ -1136,17 +1497,30 @@
     var ref = b.getAttribute('data-ref'), pk = S.picker;
     if (pk.mode === 'slot') {
       S.project.images[pk.slot] = ref;
+      yieldToHandPicked(S.project);
       closeModals(); renderVisit(); changed({ now: true });
       return;
     }
     var i = pk.sel.indexOf(ref);
+    var key = MB.shotKey || function (r) { return r; };
     if (i > -1) pk.sel.splice(i, 1);
+    else if (pk.mode === 'cases' && pk.sel.length >= CASE_MAX) { ping('最多 ' + CASE_MAX + ' 个 —— 挑最能说明风格的'); return; }
+    else if (pk.mode === 'cases' && pk.sel.some(function (x) { return key(x) === key(ref); })) { ping('这是已选那张的另一种裁切 —— 同一张照片只放一次'); return; }
     else if (pk.sel.length >= 4) { ping('一页最多 4 张 —— 3 张最好'); return; }
     else pk.sel.push(ref);
     renderPicker();
   });
   $('#pick-ok').addEventListener('click', function () {
     var pk = S.picker;
+    if (pk.mode === 'cases') {
+      // 已经写过那一句的案例，重新选过还留着那句
+      var notes = {};
+      S.project.cases.forEach(function (c) { notes[c.ref] = c.note; });
+      S.project.cases = pk.sel.slice(0, CASE_MAX).map(function (ref) { return { ref: ref, note: notes[ref] != null ? notes[ref] : null }; });
+      if (yieldToHandPicked(S.project).length) renderRooms();
+      closeModals(); renderCases(); changed({ now: true });
+      return;
+    }
     var r = S.project.rooms.filter(function (x) { return x.uid === pk.uid; })[0];
     if (r) { r.images = pk.sel.slice(); r.manual = true; }
     closeModals(); renderRooms(); changed({ now: true });
@@ -1202,29 +1576,36 @@
     } catch (e) { return ''; }
   }
 
+  /** 方案页（预览 / PDF）和 PPTX 用同一份资料 —— 两边才不会对不上 */
+  function deckCtx() {
+    var p = S.project, url = MB.inviteLink(p).url;
+    return {
+      resolve: S.resolve,
+      qrSvg: p.pages.invite ? qrSvg(url) : '',
+      cases: window.SAIL_CASES || [],
+      venue: CFG.venue || {},
+      planSrc: planSrc(),
+      inviteUrl: url,
+      maps: CFG.maps, waze: CFG.waze
+    };
+  }
+
   function renderPreview() {
     var p = S.project;
     var deck = $('#deck');
     deck.className = 'deck lang-' + p.lang;
-    deck.innerHTML = MB.renderDeck(p, {
-      resolve: S.resolve,
-      qrSvg: p.pages.invite ? qrSvg(MB.inviteLink(p).url) : '',
-      cases: window.SAIL_CASES || [],
-      venue: CFG.venue || {},
-      planSrc: planSrc(),
-      inviteUrl: MB.inviteLink(p).url,
-      maps: CFG.maps, waze: CFG.waze
-    });
-    // 长名字缩小一号
-    var name = $('.cv-name', deck);
-    if (name && name.textContent.length > 16) name.classList.add('long');
-
-    var pages = MB.pageList(p).length;
-    $('#pv-meta').textContent = pages + ' 页 · A4 横向';
+    // 方案页画不出来（例：旧存档少了某个栏位）也不能拖垮左边的编辑区
+    try { deck.innerHTML = MB.renderDeck(p, deckCtx()); }
+    catch (e) { console.error(e); deck.innerHTML = '<p class="hint" style="padding:24px">预览暂时画不出来：' + esc(e && e.message || e) + '</p>'; }
+    // 封面名字的字号由 deck.js 按长度定（sz1–sz4），这里不用再管
+    var pages = MB.pageList(p, S.resolve).length;
+    $('#pv-meta').textContent = pages + ' 页 · 16:9';
+    $('#btn-pptx').hidden = typeof MB.exportPptx !== 'function';   // pptx.js 载入了才出现
     $$('#deck-lang button').forEach(function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-v') === p.lang); });
     fitDeck();
     fitText();
     renderCheck();
+    syncLetterDraft();
     // 字体晚到会改变行高：到了再量一次
     if (document.fonts && document.fonts.status !== 'loaded') {
       document.fonts.ready.then(function () { if (S.project === p) { fitText(); renderCheck(); } });
@@ -1234,46 +1615,64 @@
   /* 字太多放不下的页：先缩一号（tight）、再缩一号（tighter）；还放不下就记下来，体检提醒。
      打印时被裁掉的字不会有任何提示 —— 客户只会看到半句话 */
   function fitText() {
-    var over = { needs: false, plan: false, rooms: [] };
+    var over = { needs: false, plan: false, letter: false, practical: false, cases: false, invite: false, rooms: [] };
     function tooTall(el) { return el.scrollHeight > el.clientHeight + 2; }
     $$('#deck .pg').forEach(function (pg) {
-      var box = $('.nd-list', pg) || $('.pl-side', pg) || $('.rm-txt', pg);
+      // .iv-flow：邀约页右栏（三样 + 时段 + 联络）—— 销售把「准备的三样」写长了会放不下
+      var box = $('.nd-list', pg) || $('.pl-side', pg) || $('.rm-txt', pg) || $('.lt-body', pg) || $('.pr-body', pg) || $('.cs-list', pg) || $('.iv-flow', pg);
       if (!box) return;
+      // 参考空间页（.cs-list）：每张卡片那一行不自己裁切，太长会伸出清单底部 —— 这里（和 pptx.js）量得到
       pg.classList.remove('tight', 'tighter');
       if (!box.clientHeight || !tooTall(box)) return;   // 预览没显示（手机收起）时量不到，不误报
       pg.classList.add('tight');
       if (!tooTall(box)) return;
       pg.classList.add('tighter');
       if (!tooTall(box)) return;
-      var g = pg.getAttribute('data-goto');
-      if (g === 'needs') over.needs = true;
-      else if (g === 'plan') over.plan = true;
-      else if (g.indexOf('room:') === 0) over.rooms.push(g.slice(5));
+      var g = pg.getAttribute('data-goto') || '';
+      if (g.indexOf('room:') === 0) over.rooms.push(g.slice(5));
+      else if (typeof over[g] === 'boolean') over[g] = true;   // needs / plan / letter / practical / cases / invite
     });
     S.overflow = over;
   }
 
   function fitDeck() {
     var w = $('#preview').clientWidth - 36;
-    var s = Math.max(0.25, Math.min(1, w / 1122));
+    var s = Math.max(0.25, Math.min(1, w / 1280));   // 16:9 页面 1280 × 720
     $('#deck').style.setProperty('--s', s.toFixed(4));
   }
   if (window.ResizeObserver) new ResizeObserver(fitDeck).observe($('#preview'));
   else window.addEventListener('resize', fitDeck);
 
-  var TAB_OF = { brief: 'brief', style: 'style', rooms: 'rooms', plan: 'plan', visit: 'visit' };
+  /* 预览页 / 体检项目 → 哪个编辑区（有些还要卷到那一块）。
+     体检的 goto 可能是分页名，也可能是页面 type（check.js 新规则用） */
+  var GOTO = {
+    brief: ['brief'], style: ['style'], rooms: ['rooms'], plan: ['plan'], visit: ['visit'], copy: ['copy'], library: ['library'],
+    cover: ['brief'], letter: ['brief', '#letter-panel'], needs: ['brief', '#needs-panel'], glance: ['style'],
+    chapter: ['style'], cases: ['rooms', '#cases-panel'], practical: ['visit', '#practical-panel'],
+    language: ['style'], team: ['visit', '#team-panel'], invite: ['visit'], back: ['visit']
+  };
+  function gotoOf(g) { return GOTO.hasOwnProperty(g) ? GOTO[g] : null; }
+  function tabOf(g) { return !g ? null : g.indexOf('room:') === 0 ? 'rooms' : (gotoOf(g) || [])[0] || null; }
+  function goTo(g) {
+    g = g || '';
+    if (g.indexOf('room:') === 0) { showTab('rooms'); flashRoom(g.slice(5)); return; }
+    var t = gotoOf(g) || ['brief'];
+    showTab(t[0]);
+    if (t[1]) flash($(t[1]));
+  }
+
   function renderCheck() {
     var r = MB.checkProject(S.project, S.resolve, S.overflow);
     var btn = $('#score');
     btn.className = 'score' + (r.bad ? ' bad' : r.items.some(function (x) { return x.level === 'warn'; }) ? ' warn' : '');
     $('span', btn).textContent = '体检 ' + r.score + '/' + r.total + (r.bad ? ' · ' + r.bad + ' 项要改' : '');
-    $('#pv-check').innerHTML = '<h4>发出去之前 · 《快思慢想》体检</h4><ul>' + r.items.map(function (it) {
+    $('#pv-check').innerHTML = '<h4>发出去之前 · 体检</h4><ul>' + r.items.map(function (it) {
       return '<li class="' + it.level + '"><i></i><div>' + esc(it.text) +
-        (it.goto ? '<a data-goto-tab="' + it.goto + '">去改</a>' : '') +
+        (it.goto ? '<a data-goto-tab="' + esc(it.goto) + '">去改</a>' : '') +
         (it.why ? '<small>' + esc(it.why) + '</small>' : '') + '</div></li>';
     }).join('') + '</ul>';
     var badTabs = {};
-    r.items.forEach(function (it) { if (it.level === 'bad' && it.goto) badTabs[TAB_OF[it.goto]] = 1; });
+    r.items.forEach(function (it) { if (it.level === 'bad' && tabOf(it.goto)) badTabs[tabOf(it.goto)] = 1; });
     $$('#tabs button').forEach(function (b) {
       var dot = $('.dot', b);
       if (badTabs[b.getAttribute('data-tab')] && !dot) b.insertAdjacentHTML('beforeend', '<span class="dot"></span>');
@@ -1284,17 +1683,13 @@
   $('#score').addEventListener('click', function () { $('#pv-check').classList.toggle('on'); });
   $('#pv-check').addEventListener('click', function (e) {
     var a = e.target.closest('[data-goto-tab]'); if (!a) return;
-    showTab(a.getAttribute('data-goto-tab'));
+    goTo(a.getAttribute('data-goto-tab'));
   });
 
   /* 点预览页 → 跳到对应的编辑区 */
   $('#deck').addEventListener('click', function (e) {
     var pg = e.target.closest('[data-goto]'); if (!pg) return;
-    var g = pg.getAttribute('data-goto');
-    if (g.indexOf('room:') === 0) { showTab('rooms'); flashRoom(g.slice(5)); return; }
-    var map = { cover: 'brief', glance: 'style', needs: 'brief', plan: 'plan', language: 'style', invite: 'visit', back: 'visit' };
-    showTab(map[g] || 'brief');
-    if (g === 'needs') $('#needs-panel').scrollIntoView({ behavior: 'smooth' });
+    goTo(pg.getAttribute('data-goto'));
   });
 
   $('#deck-lang').addEventListener('click', function (e) {
@@ -1305,12 +1700,18 @@
     changed({ now: true });
   });
 
-  /* 导出 PDF：等图片与字体都到位再叫打印；档名用客户名 */
-  $('#btn-print').addEventListener('click', function () {
+  /** 体检还有「一定要改」的：导出前问一声 */
+  function okToExport() {
     var r = MB.checkProject(S.project, S.resolve, S.overflow);
     if (r.bad && !confirm('体检还有 ' + r.bad + ' 项「一定要改」。仍然导出？')) {
-      $('#pv-check').classList.add('on'); return;
+      $('#pv-check').classList.add('on'); return false;
     }
+    return true;
+  }
+
+  /* 导出 PDF：等图片与字体都到位再叫打印；档名用客户名 */
+  $('#btn-print').addEventListener('click', function () {
+    if (!okToExport()) return;
     clearTimeout(renderTimer); renderPreview();
     var imgs = $$('#deck img');
     var waits = imgs.map(function (im) {
@@ -1326,6 +1727,18 @@
         setTimeout(function () { document.title = old; }, 400);
       }, 120);
     });
+  });
+
+  /* 导出 PPTX（pptx.js 提供 MB.exportPptx）：跟预览同一份 ctx，页面座标一样，每页附讲稿 */
+  $('#btn-pptx').addEventListener('click', function () {
+    if (typeof MB.exportPptx !== 'function' || !okToExport()) return;
+    var btn = $('#btn-pptx');
+    clearTimeout(renderTimer); renderPreview();
+    btn.disabled = true;
+    ping('正在做 PPTX…', 8000);
+    Promise.resolve().then(function () { return MB.exportPptx(S.project, deckCtx()); })
+      .then(function () { ping('PPTX 已导出'); }, function (err) { console.error(err); ping('PPTX 导出失败：' + (err && err.message || err), 3600); })
+      .then(function () { btn.disabled = false; });
   });
 
   /* ============================================================
