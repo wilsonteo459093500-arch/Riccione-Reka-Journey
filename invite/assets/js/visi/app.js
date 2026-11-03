@@ -516,10 +516,20 @@
     if (p.caseStyle && (!cst || cst.series !== nd.series)) p.caseStyle = '';
     // 自动配的空间跟着新系列重新配；销售亲手挑过的（r.manual）、用了自己图（u:）的都不动。
     // 内置图（b:）、公司案例（c:）都是自动配的：换风格就重配
+    // 这台电脑看不到的公司案例照片（同事放的、还没登入）也不动：登入后就看得到，不能被换掉
     p.rooms.forEach(function (r) {
       var live = r.images.filter(function (ref) { return S.resolve(ref); });
-      if (!r.manual && !live.some(function (ref) { return ref.indexOf('u:') === 0; })) r.images = MB.autoPick(p, r, S.viewImages);
+      if (!r.manual && !unseenCases(r.images).length && !live.some(function (ref) { return ref.indexOf('u:') === 0; })) r.images = MB.autoPick(p, r, S.viewImages);
     });
+  }
+  /** 方案里写着、这台电脑却解析不到的公司案例照片（没登入过、清单还没拿到）—— 不能当成「没有图」丢掉 */
+  function unseenCases(refs) {
+    return (refs || []).filter(function (ref) { return typeof ref === 'string' && ref.indexOf('c:') === 0 && !S.resolve(ref); });
+  }
+  function keepUnseen(rooms) {
+    var n = 0;
+    rooms.forEach(function (r) { n += unseenCases(r.images).length; });
+    return !n || confirm('有 ' + n + ' 张公司案例照片这台电脑看不到（同事放的，要先登入公司案例库）。重新配图会把它们换掉，继续？');
   }
 
   function renderStyle() {
@@ -779,6 +789,7 @@
   $('#auto-all').addEventListener('click', function () {
     var p = S.project;
     if (p.rooms.some(function (r) { return r.manual; }) && !confirm('会替换你手动选的图，继续？')) return;
+    if (!keepUnseen(p.rooms)) return;
     p.rooms.forEach(function (r) { r.images = []; r.manual = false; });
     p.rooms.forEach(function (r) { r.images = MB.autoPick(p, r, S.viewImages); });
     renderRooms(); changed({ now: true });
@@ -832,7 +843,7 @@
       if (!confirm('删除「' + MB.t(MB.roomTitle(p, r), 'zh') + '」这一页？')) return;
       p.rooms.splice(i, 1); delete p.plan.pins[r.uid];
     }
-    else if (t.closest('[data-room-auto]')) { r.images = []; r.manual = false; r.images = MB.autoPick(p, r, S.viewImages); }
+    else if (t.closest('[data-room-auto]')) { if (!keepUnseen([r])) return; r.images = []; r.manual = false; r.images = MB.autoPick(p, r, S.viewImages); }
     else if (t.closest('[data-room-pick]')) { openPicker({ mode: 'room', uid: r.uid, filter: r.key }); return; }
     // 动过图 = 销售亲手挑的，之后换风格不会被自动配图洗掉
     else if (t.hasAttribute('data-img-hero')) { var k = idx('data-img-hero'); r.images.unshift(r.images.splice(k, 1)[0]); r.manual = true; }
@@ -1601,7 +1612,8 @@
     if (st.status === 'cached') return '<p class="cloud-st">这台电脑存着 ' + n + ' 张案例' + when + ' —— 正在问有没有新的…</p>';
     if (st.status === 'offline') return '<p class="cloud-st warn">暂时连不上公司案例库' + (st.cached ? '，先用这台电脑存着的 ' + n + ' 张' + when : '') + '。</p>' + tools;
     if (st.status === 'unavailable') return '<p class="cloud-st">这个网址没有公司案例库（只有正式网站有）' + (st.cached ? '；这台电脑存着的 ' + n + ' 张照样能用' : '') + '。</p>';
-    if (st.status === 'login' && st.cached) return '<p class="cloud-st warn">登入过期了 —— 存着的 ' + n + ' 张照样能用；重新登入才拿得到新的案例。</p>' + form;
+    // 登入过期：存着的清单只拿来显示方案里已经放的（之后被隐藏的照片这里看不出来），不再自动挑；登出了就是一般的登入框
+    if (st.status === 'login' && st.cached && !st.loggedOut) return '<p class="cloud-st warn">登入过期了 —— 方案里已经放的案例照片照样显示，但不会再自动挑、也挑不到新的（之后被隐藏的照片这里看不出来）。重新登入：</p>' + form;
     return '<p class="cloud-st">公司做过的案例（风格、柜类、空间都标好了）。用<b>团队密码</b>登入一次，「帮我挑」就会按需求卡挑给你。</p>' + form;
   }
   function renderCloudBox() {
@@ -1710,6 +1722,12 @@
     matchList = list;
   }
   var matchList = [];
+  function draftNote(item, L) {
+    var f = (item.facts || []).slice(0, 2);
+    if (!f.length) return item.why[L] || '';
+    var s = f.map(function (x) { return x[L]; }).filter(Boolean).join(' · ');
+    return L === 'en' ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+  }
   /** 帮我挑那一行的小字：照片的标签 + 哪一个家（「原木 · 橱柜 · 厨房 · Setia Alam · #2」，重复的字只留一次） */
   function capOf(im) {
     var parts = [];
@@ -1743,9 +1761,13 @@
     }
     if (e.target.closest('[data-match-case]')) {
       if (p.cases.some(function (c) { return c && key(c.ref) === key(ref); })) { ping('参考空间里已经有这一张'); return; }
+      // 参考空间放 3 个不同的家：同一个家的两张，那一句会印两次
+      var home = (S.resolve(ref) || {}).pid;
+      if (home && p.cases.some(function (c) { var o = c && S.resolve(c.ref); return o && o.pid === home; })) { ping('参考空间已经有这个家的照片了 —— 换另一个家的', 3000); return; }
       if (p.cases.length >= CASE_MAX) { ping('参考空间最多 ' + CASE_MAX + ' 个 —— 先在「③ 空间 → 参考空间」拿掉一个', 3000); return; }
-      // 「为什么」变成这一张的说明草稿（销售在参考空间可以改）
-      p.cases.push({ ref: ref, note: p.lang === 'en' ? item.why.en : item.why.zh });
+      // 「为什么」变成这一张的说明草稿（销售在参考空间可以改）：只取前两项（一句 ≤ 20 字 / 12 words）；
+      // 双语方案不存单一语言的句子（null = 印的时候华文、英文各自写）
+      p.cases.push({ ref: ref, note: p.lang === 'bi' ? null : draftNote(item, p.lang === 'en' ? 'en' : 'zh') });
       matchDone[ref] = { where: '参考空间', item: item };
       if (yieldToHandPicked(p).length && S.tab === 'rooms') renderRooms();
       if (S.tab === 'rooms') renderCases();
@@ -1818,17 +1840,21 @@
      ============================================================ */
   function openPicker(opts) {
     // f：跟图库同一套筛选（来源 × 空间 × 公司案例的风格 · 柜类 · 项目 · 页）
-    S.picker = { mode: opts.mode, uid: opts.uid, slot: opts.slot, sel: [],
+    // keep：这台电脑看不到的公司案例照片（同事放的、还没登入）—— 选不到也看不到，按「确定」时照样留着
+    S.picker = { mode: opts.mode, uid: opts.uid, slot: opts.slot, sel: [], keep: [],
       f: { src: opts.src || 'all', room: opts.filter || 'all', style: '', cab: '', pid: '', page: 0 } };
     var p = S.project;
+    var keepNote = function (n) { return n ? ' · 另有 ' + n + ' 张公司案例照片这台电脑看不到，会留着（登入公司案例库就看得到）' : ''; };
     if (opts.mode === 'room') {
       var r = p.rooms.filter(function (x) { return x.uid === opts.uid; })[0];
       S.picker.sel = r ? r.images.filter(function (ref) { return S.resolve(ref); }) : [];
-      $('#pick-title').textContent = '选图 · ' + MB.t(MB.roomTitle(p, r), 'zh') + '（第一张 = 主图，最多 4 张）';
+      S.picker.keep = r ? unseenCases(r.images) : [];
+      $('#pick-title').textContent = '选图 · ' + MB.t(MB.roomTitle(p, r), 'zh') + '（第一张 = 主图，最多 4 张）' + keepNote(S.picker.keep.length);
       $('#pick-ok').hidden = false;
     } else if (opts.mode === 'cases') {
       S.picker.sel = p.cases.map(function (c) { return c.ref; }).filter(function (ref) { return S.resolve(ref); });
-      $('#pick-title').textContent = '选参考空间（最多 ' + CASE_MAX + ' 张，标「已用」的在别页出现过）';
+      S.picker.keep = unseenCases(p.cases.map(function (c) { return c && c.ref; }));
+      $('#pick-title').textContent = '选参考空间（最多 ' + CASE_MAX + ' 张，标「已用」的在别页出现过）' + keepNote(S.picker.keep.length);
       $('#pick-ok').hidden = false;
     } else {
       $('#pick-title').textContent = '选一张 · ' + (SLOTS.filter(function (s) { return s[0] === opts.slot; })[0] || ['', ''])[1] + '（标「已用」的在别页出现过）';
@@ -1908,13 +1934,14 @@
       // 已经写过那一句的案例，重新选过还留着那句
       var notes = {};
       S.project.cases.forEach(function (c) { notes[c.ref] = c.note; });
-      S.project.cases = pk.sel.slice(0, CASE_MAX).map(function (ref) { return { ref: ref, note: notes[ref] != null ? notes[ref] : null }; });
+      // 看不到的那几张排前面、一定留着（同事挑的，登入后就看得到）
+      S.project.cases = (pk.keep || []).concat(pk.sel).slice(0, CASE_MAX).map(function (ref) { return { ref: ref, note: notes[ref] != null ? notes[ref] : null }; });
       if (yieldToHandPicked(S.project).length) renderRooms();
       closeModals(); renderCases(); changed({ now: true });
       return;
     }
     var r = S.project.rooms.filter(function (x) { return x.uid === pk.uid; })[0];
-    if (r) { r.images = pk.sel.slice(); r.manual = true; }
+    if (r) { r.images = pk.sel.concat((pk.keep || []).filter(function (ref) { return pk.sel.indexOf(ref) < 0; })); r.manual = true; }
     closeModals(); renderRooms(); changed({ now: true });
   });
 

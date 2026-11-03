@@ -9,9 +9,11 @@
    - 失败重试 3 次（等越来越久）；401 → 叫出登入框，登入后接着传。
    - 当掉 / 关掉 / 断线：日志里的照片下次打开自动补登记，再选同一个文件夹也不会重传。
    - IndexedDB 'caselib-v1'：
-       files   路径|大小|修改时间 → h16（重扫不必重算 hash）
-       pending h16 → {k,w,ht,sz,dh,f,name,pid,thumb}（已上传、未登记）
-       packs   缩图包快取（审核页用，review.js）
+       files     路径|大小|修改时间 → h16（重扫不必重算 hash）
+       pending   h16 → {k,sig,w,ht,sz,dh,f,name,pid,thumb}（已上传、未登记）
+       committed h16 → {pid,rev,ts}（最近 15 分钟登记好的：公开 Blob 的 CDN 一分钟内可能还给旧清单，
+                 重新整理后再拖一次，这些照片也不会被当成新的再传一次）
+       packs     缩图包快取（审核页用，review.js）
    ============================================================ */
 (function () {
   'use strict';
@@ -31,23 +33,26 @@
   var LIMIT_BYTES = 1024 * 1024 * 1024;
   var EST_PHOTO = 500 * 1024;   // 1600px JPEG 平均约 0.3–0.7 MB
   var EST_THUMB = 30 * 1024;
+  var BACKUPS = 7;              // 清单每天的备份按星期几轮流覆盖：最多 7 份
+  var KEEP_DONE = 15 * 60 * 1000;
 
   /* ============================================================
      IndexedDB（打不开就只用记忆体，功能照样能用，只是不能续传）
      ============================================================ */
   var DB_NAME = 'caselib-v1';
   var dbp = null;
-  var memDb = { files: {}, pending: {}, packs: {} };
+  var memDb = { files: {}, pending: {}, packs: {}, committed: {} };
   function db() {
     if (dbp) return dbp;
     dbp = new Promise(function (resolve) {
       var req;
-      try { req = indexedDB.open(DB_NAME, 1); } catch (e) { return resolve(null); }
+      try { req = indexedDB.open(DB_NAME, 2); } catch (e) { return resolve(null); }
       req.onupgradeneeded = function () {
         var d = req.result;
         if (!d.objectStoreNames.contains('files')) d.createObjectStore('files');
         if (!d.objectStoreNames.contains('pending')) d.createObjectStore('pending', { keyPath: 'h' });
         if (!d.objectStoreNames.contains('packs')) d.createObjectStore('packs');
+        if (!d.objectStoreNames.contains('committed')) d.createObjectStore('committed', { keyPath: 'h' });
       };
       req.onsuccess = function () { resolve(req.result); };
       req.onerror = function () { resolve(null); };
@@ -107,6 +112,7 @@
      状态
      ============================================================ */
   var J = {};                   // 日志的记忆体副本：h → 记录
+  var DONE = {};                // 最近登记好的：h → {pid, rev, ts}（清单还是 CDN 旧版时用）
   // 登记的排队：跟「这次选的文件夹」分开放 —— 开机补登记时再选文件夹，也不会把排队丢掉
   var CQ = { q: {}, queued: {}, busy: false, recovering: false, commits: 0 };
   var S = freshState();
@@ -137,6 +143,8 @@
     if (!it.h) return '';
     var ph = CL.cat && CL.cat.photos[it.h];
     if (ph) return ph.p === it.p.pid ? 'known' : 'dup';
+    var d = recentDone(it.h);
+    if (d) return d.pid === it.p.pid ? 'known' : 'dup';
     var j = J[it.h];
     if (j) return j.pid === it.p.pid ? 'journal' : 'dup';
     var first = S.firstByH[it.h];
@@ -145,11 +153,16 @@
   }
   function dupWhere(it) {
     var ph = CL.cat && CL.cat.photos[it.h];
-    var pid = ph ? ph.p : J[it.h] ? J[it.h].pid : S.firstByH[it.h] ? S.firstByH[it.h].p.pid : '';
+    var d = recentDone(it.h);
+    var pid = ph ? ph.p : d ? d.pid : J[it.h] ? J[it.h].pid : S.firstByH[it.h] ? S.firstByH[it.h].p.pid : '';
     var pr = pid && CL.cat && CL.cat.projects[pid];
     if (pr) return pr.name;
     var p = S.byPid[pid];
     return p ? p.name : '';
+  }
+  function recentDone(h) {
+    var d = DONE[h];
+    return d && Date.now() - d.ts < KEEP_DONE ? d : null;
   }
   // 「第一次出现」只看有勾选的项目、照顺序
   function rebuildFirst() {
@@ -388,10 +401,27 @@
     if (r.status === 413) return '档案太大（' + (e || 413) + '）';
     if (r.status === 415) return '不是 JPEG（' + (e || 415) + '）';
     if (r.status === 500 && e === 'storage') return '储存出错：' + ((r.json && r.json.message) || '');
+    if (e === 'storage_busy') return 'Blob 太忙（限流）';
+    if (e === 'storage_timeout') return 'Blob 太久没回应';
+    if (e === 'storage_blocked') return 'Blob 不让写入：' + ((r.json && r.json.message) || '');
     return '伺服器回 ' + r.status + (e ? ' ' + e : '');
   }
   function retryable(r) {
     return r.status === 0 || r.status === 408 || r.status === 409 || r.status === 429 || r.status >= 500;
+  }
+  // store 被暂停 / 没权限 / 不存在（多半是这个月的免费额度用完了）：重试也没用，整批停下来、讲清楚
+  function blocked(r) { return !!(r && r.json && r.json.error === 'storage_blocked'); }
+  function blockedError(r) {
+    var e = new Error('Vercel Blob 暂停了写入 —— 多半是这个月的免费额度用完了，或 Blob store 被停用 / 没接好。' +
+      '已传好的照片都记在这台电脑，之后（下个月、或老板处理好）再拖一次同一个文件夹就会接着传，不会重传。' +
+      '（' + ((r.json && r.json.message) || 'storage_blocked') + '）');
+    e.fatal = true;
+    return e;
+  }
+  // 限流（429）：照伺服器说的秒数等（最多 2 分钟）；没说就照一般的退避
+  function waitMs(r, n, base, max) {
+    var s = r && r.status === 429 && r.json && +r.json.retryAfter;
+    return s > 0 ? Math.min(120, s) * 1000 + Math.round(Math.random() * 1000) : CL.backoff(n, base, max);
   }
 
   function sendPhoto(it) {
@@ -400,11 +430,12 @@
       return waitOnline().then(function () {
         return CL.api('POST', '/api/photo?h=' + it.h, it.res.jpeg, { type: 'image/jpeg' });
       }).then(function (r) {
-        if (r.status === 200 && r.json && r.json.k) return r.json.k;
+        if (r.status === 200 && r.json && r.json.k) return r.json;
         if (r.status === 401) { S.note = '登入过期：请再登入一次，登入后会接着传。'; render(); return CL.needLogin().then(function () { S.note = ''; return loop(); }); }
         if (r.status === 0 && navigator.onLine === false) return loop();
+        if (blocked(r)) throw blockedError(r);
         if (retryable(r) && attempt < TRIES) {
-          var ms = CL.backoff(attempt, 1500, 20000);
+          var ms = waitMs(r, attempt, 1500, 20000);
           attempt++;
           it.tries = attempt;
           S.note = describe(r) + '：' + Math.round(ms / 1000) + ' 秒后重试（第 ' + attempt + ' / ' + TRIES + ' 次）';
@@ -421,9 +452,10 @@
     it.st = 'up';
     S.up++;
     render();
-    sendPhoto(it).then(function (k) {
-      var res = it.res;
-      var rec = { h: it.h, k: k, w: res.w, ht: res.ht, sz: res.sz, dh: res.dh, f: it.f, name: CL.cleanName(it.p.name), pid: it.p.pid, thumb: res.thumb || '', ts: Date.now() };
+    sendPhoto(it).then(function (j) {
+      var res = it.res, k = j.k;
+      // sig：伺服器的签章，登记时要带回去（证明这张真的传过）
+      var rec = { h: it.h, k: k, sig: j.sig || '', w: res.w, ht: res.ht, sz: res.sz, dh: res.dh, f: it.f, name: CL.cleanName(it.p.name), pid: it.p.pid, thumb: res.thumb || '', ts: Date.now() };
       // 先记日志再算「已上传」：这时就算当掉，下次也不会重传
       return store.put('pending', rec).catch(function () { /* 记不进去也照样登记，只是不能续传 */ }).then(function () {
         J[it.h] = rec;
@@ -436,6 +468,13 @@
         queueCommit(it.p, rec);
       });
     }).catch(function (e) {
+      if (e && e.fatal) {
+        // 整批停：这张放回「等待」，下次再传
+        it.st = 'wait';
+        it.res = null;
+        if (!S.fatal) { S.fatal = e.message; wake(false); }
+        return;
+      }
       it.st = 'fail';
       it.err = (e && e.message) || String(e);
       it.res = null;
@@ -511,7 +550,7 @@
   function commit(name, recs) {
     var body = { op: 'addPhotos', project: { name: name }, photos: [], thumbs: {} };
     recs.forEach(function (r) {
-      body.photos.push({ h: r.h, k: r.k, w: r.w, ht: r.ht, sz: r.sz, dh: r.dh, f: r.f });
+      body.photos.push({ h: r.h, k: r.k, sig: r.sig || '', w: r.w, ht: r.ht, sz: r.sz, dh: r.dh, f: r.f });
       if (r.thumb) body.thumbs[r.h] = r.thumb;
     });
     var attempt = 0;
@@ -525,13 +564,14 @@
           fe.fatal = true;
           throw fe;
         }
+        if (blocked(r)) throw blockedError(r);
         if (r.status === 400 && r.json && r.json.h) {
           var de = new Error(describe(r) + (r.json.field ? '（' + r.json.field + '）' : ''));
           de.dropH = r.json.h;
           throw de;
         }
         if (retryable(r) && attempt < COMMIT_TRIES) {
-          var ms = CL.backoff(attempt, 1500, 30000);
+          var ms = waitMs(r, attempt, 1500, 30000);
           attempt++;
           S.note = '登记' + (r.status === 409 ? '撞到别人也在写' : '失败（' + describe(r) + '）') + '：' + Math.round(ms / 1000) + ' 秒后重试';
           render();
@@ -546,6 +586,8 @@
   function applyCommit(q, batch, out) {
     CQ.commits++;
     CL.bumpRev(out.rev);
+    // 本地的写入计数先加上（伺服器那边已经记了；CDN 可能一分钟内还给旧清单）：照片 + 缩图包 + 清单
+    if ((out.added || []).length) CL.addWrites(out.added.length + 2);
     var added = {}, dup = {};
     (out.added || []).forEach(function (h) { added[h] = 1; });
     (out.dup || []).forEach(function (h) { dup[h] = 1; });
@@ -553,10 +595,17 @@
     if (cat && out.pid && !cat.projects[out.pid]) {
       cat.projects[out.pid] = { name: q.name, area: '', ptype: '', traits: [], style: '', packs: [], n: 0, by: CL.me, ts: Date.now() };
     }
+    var now = Date.now();
     batch.forEach(function (r) {
       delete J[r.h];
       delete CQ.queued[r.h];
       store.del('pending', r.h).catch(function () { /* 留着也没关系：下次登记伺服器会当成已有 */ });
+      if (!dup[r.h]) {
+        // 记下「刚登记好」：重新整理后 CDN 可能还给旧清单，这些照片不能又被当成新的
+        var d = { h: r.h, pid: out.pid || r.pid, rev: out.rev | 0, ts: now };
+        DONE[r.h] = d;
+        store.put('committed', d).catch(function () { /* 记不进去：最多重传几张 */ });
+      }
       CL.keepThumb(r.h, r.thumb);
       // 本地清单先补上（公开 Blob 的 CDN 可能一分钟内还给旧版清单）
       if (cat && !cat.photos[r.h] && (added[r.h] || !dup[r.h])) {
@@ -594,8 +643,15 @@
       if (!CQ.busy && !pendingCommits() && CQ.recovering) { CQ.recovering = false; recoverDone(); }
       return;
     }
-    if (S.proc || S.up || S.buffer.length || CQ.busy) return;
-    if (S.fatal) { finish(); return; }
+    if (S.proc || S.up || CQ.busy) return;
+    if (S.fatal) {
+      // 停下来了：压好、还没传的放回「等待」（放掉记忆体），不然会一直等它们传完
+      S.buffer.forEach(function (it) { it.st = 'wait'; it.res = null; });
+      S.buffer = [];
+      finish();
+      return;
+    }
+    if (S.buffer.length) return;
     if (S.paused) return;
     if (nextWaiting()) return;
     var waiting = Object.keys(CQ.q).some(function (pid) { var q = CQ.q[pid]; return q.recs.length && !(q.wait > Date.now()); });
@@ -617,6 +673,18 @@
 
   /* ---------- 开机：补登记上次没登记的 ---------- */
   function recover() {
+    // 最近登记好的：放回 DONE，也把 minRev 设回去（拿到比它旧的清单 = CDN 还没更新）；过期的删掉
+    store.all('committed').then(function (list) {
+      var now = Date.now(), top = 0;
+      list.forEach(function (d) {
+        if (!d || !d.h) return;
+        if (now - d.ts >= KEEP_DONE) { store.del('committed', d.h).catch(function () { /* 下次再删 */ }); return; }
+        DONE[d.h] = d;
+        if ((d.rev | 0) > top) top = d.rev | 0;
+      });
+      if (top) CL.bumpRev(top);
+      if (list.length && S.scan) render();
+    }, function () { /* 读不到就算了 */ });
     return store.all('pending').then(function (list) {
       list.forEach(function (r) { if (r && r.h) J[r.h] = r; });
       var n = list.length;
@@ -658,21 +726,28 @@
   /* ============================================================
      估算：写入次数、容量，跟免费额度比
      ============================================================ */
+  // 清单本身多大（备份是整份复制）：同一版只算一次
+  var sizeOf = { rev: -1, n: -1, bytes: 0 };
+  function indexBytes(cat) {
+    var n = Object.keys(cat.photos || {}).length;
+    if (sizeOf.rev !== (cat.rev | 0) || sizeOf.n !== n) {
+      var b = 0;
+      try { b = JSON.stringify(cat).length; } catch (e) { b = n * 500; }
+      sizeOf = { rev: cat.rev | 0, n: n, bytes: b };
+    }
+    return sizeOf.bytes;
+  }
   function usage() {
     var cat = CL.cat || { photos: {}, log: [] };
-    var now = new Date();
-    var month = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
-    var writes = 0, days = {};
-    (cat.log || []).forEach(function (e) {
-      if (!e || e.ts < month) return;
-      writes += e.op === 'addPhotos' ? (e.n | 0) + 2 : 1;
-      days[new Date(e.ts).toISOString().slice(0, 10)] = 1;
-    });
-    writes += Object.keys(days).length;         // 每天第一次写入前的备份（copy 也算写入）
+    var days = {};
+    // 这个月的写入次数：伺服器在清单里记的（每次写入都算）；旧清单没有才从操作纪录估（只剩最近 300 笔，会少算）
+    var writes = CL.monthWrites(cat);
+    (cat.log || []).forEach(function (e) { if (e && e.ts) days[new Date(e.ts).toISOString().slice(0, 10)] = 1; });
     var bytes = 0, n = 0;
     Object.keys(cat.photos || {}).forEach(function (h) { bytes += cat.photos[h].sz || 0; n++; });
     var avg = n ? bytes / n : EST_PHOTO;
     bytes += n * EST_THUMB;
+    bytes += BACKUPS * indexBytes(cat);         // 每天的备份（最多 7 份整份清单）
     var today = new Date().toISOString().slice(0, 10);
     return { writes: writes, bytes: bytes, photos: n, avg: avg, wroteToday: !!days[today] };
   }

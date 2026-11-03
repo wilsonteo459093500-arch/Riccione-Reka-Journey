@@ -95,8 +95,10 @@ export function hexOf(n) { return n.toString(16).padStart(16, '0'); }
 /* ---------- 造照片 ---------- */
 var seq = 0;
 export function fakeH() { seq++; return (0x1000000000000000n + BigInt(seq) * 7919n).toString(16).slice(-16).padStart(16, '0'); }
+// sig：/api/photo 会给的签章（用当下环境变数的 SECRET 算；handler 测试要先 setup 再造照片）
 export function photo(h, dh, f) {
-  return { h: h, k: 'c/' + h + '-AbCdEfGhIjKlMnOpQrStU.jpg', w: 1600, ht: 1200, sz: 345678, dh: dh || 'f0f0f0f0f0f0f0f0', f: f || '厨房/IMG_' + h.slice(0, 4) + '.jpg' };
+  var k = 'c/' + h + '-AbCdEfGhIjKlMnOpQrStU.jpg';
+  return { h: h, k: k, w: 1600, ht: 1200, sz: 345678, dh: dh || 'f0f0f0f0f0f0f0f0', f: f || '厨房/IMG_' + h.slice(0, 4) + '.jpg', sig: lib.auth.photoSig(h, k) };
 }
 
 export function withEnv(vars, fn) {

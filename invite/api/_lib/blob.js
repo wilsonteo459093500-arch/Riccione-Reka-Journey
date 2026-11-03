@@ -5,8 +5,9 @@
      getJson(path, {fresh}) → {data, etag, url} | null
      putJson(path, text, {ifMatch} | {create:true}) → {etag, url, pathname}
        冲突（别人先写了）一律丢 code:'conflict' 的错误，mutate 会重读重试
-     putFile(pathname, body, contentType) → {url, pathname}（加随机后缀、快取一年）
-     copy(from, to) → 每日备份用
+     putFile(pathname, body, contentType, {fixed}) → {url, pathname, existed?}（加随机后缀、快取一年；
+       fixed = 路径照给的、不覆盖：已经有了就当成功，回 existed:true —— 缩图包重送不会多一个档）
+     copy(from, to) → 每日备份用（固定 7 个档，按星期几轮流覆盖）
      base → 公开网址前缀（学到之后才有）
    正式环境：realAdapter()，用到才 import('@vercel/blob')（没装、没 token 也不会一载入就坏）。
    测试 / 本机：memoryAdapter()，可以人为制造写入失败和冲突。
@@ -17,20 +18,45 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 export class ConflictError extends Error {
   constructor() { super('index changed by someone else'); this.code = 'conflict'; this.name = 'ConflictError'; }
 }
+// status / error：给 handler 回什么（500 storage = 一般的储存错误，可以重试）
+//   503 storage_blocked = store 被暂停 / 没权限 / 不存在（额度用完、设定错）—— 重试也没用，上传页会停下来
+//   503 storage_timeout = 太久没回（Blob 出状况）· 429 storage_busy = Blob 限流（带 retryAfter 秒）
 export class StorageError extends Error {
-  constructor(msg) { super(msg); this.code = 'storage'; this.name = 'StorageError'; }
+  constructor(msg, o) {
+    super(msg);
+    this.code = 'storage'; this.name = 'StorageError';
+    o = o || {};
+    this.status = o.status || 500;
+    this.error = o.error || 'storage';
+    if (o.retryAfter) this.retryAfter = o.retryAfter;
+  }
 }
 
 /* ---------- 清单路径：key 由 token 推出，Preview 和 Production 自动分开 ---------- */
+// 新的 Vercel Blob 连到项目时只给 BLOB_STORE_ID（用 Vercel 的 OIDC 登入），旧的给 BLOB_READ_WRITE_TOKEN：两种都认
+export function hasCredentials() { return !!(process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID); }
+// OIDC token 跟着每个请求来（x-vercel-oidc-token）；SDK 找不到请求的 context 时会读这个环境变数，这里先放进去
+export function useOidc(req) {
+  var t = req && req.headers && req.headers['x-vercel-oidc-token'];
+  if (typeof t === 'string' && t) process.env.VERCEL_OIDC_TOKEN = t;
+}
+// 在 Vercel 上（有 VERCEL_ENV）不准用推不出来的 key：清单是公开的 Blob，路径一猜就中的话客户名字就外流了
+function onVercel() { return !!process.env.VERCEL_ENV; }
+
 export function catalogKey() {
   var k = process.env.CATALOG_KEY;
   if (k && /^[A-Za-z0-9_-]{8,64}$/.test(k)) return k;
   if (k) return createHash('sha256').update('visi-catalog-key:' + k).digest('hex').slice(0, 24);
+  if (!process.env.BLOB_READ_WRITE_TOKEN && onVercel()) {
+    throw new StorageError('CATALOG_KEY is not set (this Blob store uses OIDC, so the key cannot be derived from a token)', { status: 503, error: 'not_configured' });
+  }
   var src = 'visi-catalog:' + (process.env.VERCEL_ENV || 'development') + ':' + (process.env.BLOB_READ_WRITE_TOKEN || '');
   return createHash('sha256').update(src).digest('hex').slice(0, 24);
 }
 export function indexPath() { return 'catalog/' + catalogKey() + '/index.json'; }
-export function bakPath(day) { return 'catalog/' + catalogKey() + '/bak/' + day + '.json'; }
+// 备份按星期几轮流覆盖（bak/mon.json …）：最多 7 份，不会一年累积几百 MB
+export const BAK_DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+export function bakPath(ts) { return 'catalog/' + catalogKey() + '/bak/' + BAK_DAYS[new Date(ts).getUTCDay()] + '.json'; }
 
 // 公开网址前缀 = 网址去掉 pathname
 export function baseOf(url, pathname) {
@@ -54,16 +80,31 @@ export function getAdapter() {
 }
 
 /* ---------- 正式：@vercel/blob ---------- */
+// 每个 SDK 呼叫最多等多久（毫秒）：Blob 出状况时不要一直卡到 function 的上限才回一个不是 JSON 的 504
+export const TIMEOUT = { photo: 20000, index: 15000, read: 15000, backup: 5000 };
+// SDK 预设失败重试 10 次（指数退避，加起来十几分钟）：改成 2 次，其它交给上传页自己重试
+const SDK_RETRIES = '2';
+
+function timer(ms) {
+  // 不用 AbortSignal.timeout()：它丢的是 TimeoutError，SDK 认不得、会当网路错误一直重试
+  var c = new AbortController();
+  var t = setTimeout(function () { c.abort(); }, ms);   // 不 unref：等的那一刻也要让 process 活着（用完就清掉）
+  return { signal: c.signal, done: function () { clearTimeout(t); } };
+}
+
 export function realAdapter(opts) {
   opts = opts || {};
   var load = opts.load || function () { return import('@vercel/blob'); };
   var mod = null;
   var lastUrl = {};
   var self = { kind: 'vercel', base: '' };
+  var ms = Object.assign({}, TIMEOUT, opts.timeout || {});
+  // SDK 每次呼叫都读这个环境变数
+  if (!process.env.VERCEL_BLOB_RETRIES) process.env.VERCEL_BLOB_RETRIES = SDK_RETRIES;
 
   async function sdk() {
-    if (!process.env.BLOB_READ_WRITE_TOKEN) {
-      throw new StorageError('BLOB_READ_WRITE_TOKEN is not set: connect the Blob store to this Vercel project (Storage → Connect), then redeploy');
+    if (!hasCredentials()) {
+      throw new StorageError('No Blob credentials (BLOB_STORE_ID or BLOB_READ_WRITE_TOKEN): connect the Blob store to this Vercel project (Storage → Connect), then redeploy');
     }
     if (!mod) {
       try { mod = await load(); } catch (e) { throw new StorageError('cannot load @vercel/blob: ' + (e && e.message)); }
@@ -74,18 +115,37 @@ export function realAdapter(opts) {
     var b = baseOf(url, pathname);
     if (b) self.base = b;
   }
-  // 网路断、限流、store 不存在……一律当储存错误（handler 回 500 storage，讯息带原因）
+  // SDK 的错误类别是匿名 class（name 都是 'Error'）：看 instanceof、class 名字、name 都行
+  function isA(m, e, n) {
+    if (!e) return false;
+    if (m && typeof m[n] === 'function' && e instanceof m[n]) return true;
+    return e.name === n || !!(e.constructor && e.constructor.name === n);
+  }
+  // 网路断、限流、store 不存在……一律当储存错误，讯息带原因；分成可以重试的（500 / 429）和重试也没用的（503 blocked）
   function wrap(e) {
     if (e && (e.code === 'conflict' || e.code === 'storage')) return e;
-    var s = new StorageError(((e && e.name) || 'Error') + ': ' + ((e && e.message) || e));
+    var m = mod;
+    var msg = ((e && e.constructor && e.constructor.name !== 'Error' ? e.constructor.name : e && e.name) || 'Error') + ': ' + ((e && e.message) || e);
+    var o = {};
+    if (isA(m, e, 'BlobServiceRateLimited')) o = { status: 429, error: 'storage_busy', retryAfter: Math.max(1, Math.min(300, +e.retryAfter || 10)) };
+    else if (isA(m, e, 'BlobStoreSuspendedError') || isA(m, e, 'BlobAccessError') || isA(m, e, 'BlobStoreNotFoundError')) o = { status: 503, error: 'storage_blocked' };
+    else if (isA(m, e, 'BlobRequestAbortedError') || (e && (e.name === 'AbortError' || e.name === 'TimeoutError'))) o = { status: 503, error: 'storage_timeout' };
+    var s = new StorageError(msg, o);
     s.cause = e;
     return s;
   }
   function isConflict(m, e, creating) {
     if (!e) return false;
-    if ((m.BlobPreconditionFailedError && e instanceof m.BlobPreconditionFailedError) || e.name === 'BlobPreconditionFailedError') return true;
+    if (isA(m, e, 'BlobPreconditionFailedError')) return true;
     // 第一次建立清单时不带 allowOverwrite：另一个人刚好先建好了 → 当成冲突，下一轮改成更新
-    return !!creating && /exist/i.test(String(e.message || ''));
+    // （只认「already exists」：「This store does not exist.」是设定错，不是冲突）
+    return !!creating && isExists(e);
+  }
+  function isExists(e) { return /already exists/i.test(String((e && e.message) || '')); }
+  // 呼叫 SDK，最多等 t 毫秒
+  async function within(t, fn) {
+    var tm = timer(t);
+    try { return await fn(tm.signal); } finally { tm.done(); }
   }
 
   self.getJson = async function (path, o) {
@@ -95,14 +155,17 @@ export function realAdapter(opts) {
     // 重试时改用带一次性参数的网址，避免一直读到旧版、白白冲突 5 次
     if (o && o.fresh && lastUrl[path]) target = lastUrl[path] + '?nc=' + Date.now().toString(36) + randomBytes(3).toString('hex');
     var r;
+    var text;
     try {
-      r = await m.get(target, { access: 'public', useCache: false });
-      if (!r && target !== path) r = await m.get(path, { access: 'public', useCache: false });
+      text = await within(ms.read, async function (signal) {
+        r = await m.get(target, { access: 'public', useCache: false, abortSignal: signal });
+        if (!r && target !== path) r = await m.get(path, { access: 'public', useCache: false, abortSignal: signal });
+        if (!r) return null;
+        if (r.statusCode !== 200 || !r.stream) throw new StorageError('unexpected blob status ' + r.statusCode);
+        return await new Response(r.stream).text();
+      });
     } catch (e) { throw wrap(e); }
     if (!r) return null;
-    if (r.statusCode !== 200 || !r.stream) throw new StorageError('unexpected blob status ' + r.statusCode);
-    var text;
-    try { text = await new Response(r.stream).text(); } catch (e) { throw wrap(e); }
     var url = String(r.blob.url || '').split('?')[0];
     lastUrl[path] = url;
     learn(url, path);
@@ -117,7 +180,7 @@ export function realAdapter(opts) {
     var options = { access: 'public', addRandomSuffix: false, contentType: 'application/json', cacheControlMaxAge: 60 };
     if (o.ifMatch) { options.allowOverwrite = true; options.ifMatch = o.ifMatch; }
     try {
-      var r = await m.put(path, text, options);
+      var r = await within(ms.index, function (signal) { return m.put(path, text, Object.assign({ abortSignal: signal }, options)); });
       learn(r.url, r.pathname);
       lastUrl[path] = r.url;
       return { etag: r.etag, url: r.url, pathname: r.pathname };
@@ -127,14 +190,21 @@ export function realAdapter(opts) {
     }
   };
 
-  self.putFile = async function (pathname, body, contentType) {
+  self.putFile = async function (pathname, body, contentType, o) {
     var m = await sdk();
+    var fixed = !!(o && o.fixed);
     var r;
     try {
-      r = await m.put(pathname, body, {
-        access: 'public', addRandomSuffix: true, contentType: contentType, cacheControlMaxAge: 31536000
+      r = await within(ms.photo, function (signal) {
+        return m.put(pathname, body, {
+          access: 'public', addRandomSuffix: !fixed, contentType: contentType, cacheControlMaxAge: 31536000, abortSignal: signal
+        });
       });
-    } catch (e) { throw wrap(e); }
+    } catch (e) {
+      // 固定路径已经有了（上一次请求写好、清单没登记成）：内容一样，直接用
+      if (fixed && isExists(e)) return { url: self.base ? self.base + pathname : '', pathname: pathname, existed: true };
+      throw wrap(e);
+    }
     learn(r.url, r.pathname);
     return { url: r.url, pathname: r.pathname };
   };
@@ -142,7 +212,9 @@ export function realAdapter(opts) {
   self.copy = async function (from, to) {
     var m = await sdk();
     try {
-      return await m.copy(from, to, { access: 'public', addRandomSuffix: false, allowOverwrite: true, contentType: 'application/json', cacheControlMaxAge: 60 });
+      return await within(ms.backup, function (signal) {
+        return m.copy(from, to, { access: 'public', addRandomSuffix: false, allowOverwrite: true, contentType: 'application/json', cacheControlMaxAge: 60, abortSignal: signal });
+      });
     } catch (e) { throw wrap(e); }
   };
 
@@ -200,10 +272,12 @@ export function memoryAdapter(opts) {
       return { etag: etag, url: self.base + path, pathname: path };
     },
 
-    putFile: async function (pathname, body, contentType) {
+    putFile: async function (pathname, body, contentType, o) {
       await tick();
       checkFail();
-      var p = withSuffix(pathname);
+      var fixed = !!(o && o.fixed);
+      if (fixed && store.has(pathname)) return { url: self.base + pathname, pathname: pathname, existed: true };
+      var p = fixed ? pathname : withSuffix(pathname);
       var buf = Buffer.isBuffer(body) ? body : Buffer.from(body);
       store.set(p, { body: buf, type: contentType || 'application/octet-stream', etag: etagOf(buf) });
       counts.puts++;

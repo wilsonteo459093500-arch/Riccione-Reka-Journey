@@ -6,8 +6,10 @@
    - 每页 48 张缩图（缩图包：base + pack，读过的存 IndexedDB；读不到就用原图）
    - 点照片 → 右边编辑：空间（单选）、柜类（多选）、风格（不选 = 跟项目）、可当主图、状态
    - 项目资料：区域、房型、家庭特点、风格；隐藏 / 复原（没有删除）
-   - 修改先排队、画面马上变；每 3 秒或按「保存」一次送出（patch，source:'human'）
+   - 修改先排队、画面马上变；停手 45 秒（一直在改的话最多 2 分钟）、按「保存」、切到别的分页、
+     离开这一页时一次送出（patch，source:'human'）—— 每次保存都是一次 Blob 写入（Hobby 每月约 2,000 次）
      人工改过的照片自动变「已确认」。401 → 登入后接着送，排队不会丢；网路断 → 等一下再试
+   - 隐藏 / 复原：画面马上变，连按几张 4 秒内一起送（一次写入）
    ============================================================ */
 (function () {
   'use strict';
@@ -17,7 +19,9 @@
   var $ = CL.$, $$ = CL.$$, esc = CL.esc;
 
   var PAGE = 48;
-  var FLUSH_MS = 3000;
+  var IDLE_MS = 45000;          // 停手多久才自动保存
+  var MAX_WAIT_MS = 120000;     // 一直在改：最多隔多久存一次
+  var HIDE_MS = 4000;           // 隐藏 / 复原：连按的几下一起送
   var MAX_ENTRIES = 400;        // 伺服器一次最多 400 笔
   var ORDER = { unsure: 0, 'new': 1, auto: 2, confirmed: 3 };
 
@@ -28,7 +32,8 @@
     sel: '', mode: '', selPid: '', from: '',
     queue: { photos: {}, projects: {} },
     inflight: null,
-    timer: 0, saving: false, again: false, lastSaved: 0, err: '', tries: 0,
+    timer: 0, saving: false, again: false, now: false, lastSaved: 0, err: '', tries: 0, firstAt: 0,
+    hideQ: { photos: {}, projects: {} }, hideInflight: null, hideTimer: 0, hiding: false, hideAgain: false,
     packs: {}                   // pack 路径 → 'loading' | 'ok' | 'fail'
   };
 
@@ -111,15 +116,30 @@
         Object.keys(q[k]).forEach(function (id) { n += Object.keys(q[k][id]).length; });
       });
     });
+    return n + hidesPending();
+  }
+  function hidesPending() {
+    var n = 0;
+    [R.hideQ, R.hideInflight].forEach(function (q) { if (q) n += Object.keys(q.photos).length + Object.keys(q.projects).length; });
     return n;
   }
   function dirty(kind, id) {
     return !!((R.queue[kind][id]) || (R.inflight && R.inflight[kind][id]));
   }
 
+  // 停手 idleMs 才存；从第一个没存的修改算起最多 maxWaitMs（一直点也会定时存）
   function scheduleFlush() {
-    if (R.timer || R.saving) { if (R.saving) R.again = true; return; }
-    R.timer = setTimeout(function () { R.timer = 0; flush(); }, FLUSH_MS);
+    if (R.saving) { R.again = true; return; }
+    var now = Date.now();
+    if (!R.firstAt) R.firstAt = now;
+    var due = Math.min(now + MB.clReview.idleMs, R.firstAt + MB.clReview.maxWaitMs);
+    if (R.timer) clearTimeout(R.timer);
+    R.timer = setTimeout(function () { R.timer = 0; flush(); }, Math.max(0, due - now));
+  }
+  // 马上存（按「保存」、切分页、离开这一页）：标签和隐藏都送
+  function flushNow(keepalive) {
+    flushHides(keepalive);
+    return flush(keepalive);
   }
 
   // 拿出最多 400 笔送出；其它留在排队
@@ -144,19 +164,22 @@
     });
   }
 
-  function flush() {
+  function flush(keepalive) {
     if (R.timer) { clearTimeout(R.timer); R.timer = 0; }
-    if (R.saving) { R.again = true; return Promise.resolve(); }
+    if (R.saving) { R.now = true; return Promise.resolve(); }
     var batch = takeBatch();
     if (!batch) { drawSave(); return Promise.resolve(); }
+    R.firstAt = 0;
+    if (takeable()) R.now = true;          // 超过 400 笔：剩下的存完马上接着送
     R.saving = true;
     R.inflight = batch;
     drawSave();
     var body = { op: 'patch', source: 'human', photos: batch.photos, projects: batch.projects };
-    return CL.api('POST', '/api/catalog', body).then(function (r) {
+    return CL.api('POST', '/api/catalog', body, { keepalive: keepalive === true }).then(function (r) {
       R.inflight = null;
       if (r.status === 200 && r.json) {
         CL.bumpRev(r.json.rev);
+        if (r.json.changed) CL.addWrites(1);
         var now = Date.now(), c = cat();
         Object.keys(batch.photos).forEach(function (h) {
           var ph = c.photos[h];
@@ -188,7 +211,7 @@
         delete batch.projects[id];
         requeue(batch);
         R.err = '有一项没存进去（' + (r.json.field || '') + '），已略过';
-        R.again = true;
+        R.now = true;
         return;
       }
       requeue(batch);
@@ -201,34 +224,86 @@
       R.saving = false;
       drawSave();
       drawDrawerTag();
-      if ((R.again || takeable()) && !R.timer) { R.again = false; if (takeable()) scheduleFlush(); }
+      var now = R.now;
+      R.now = false; R.again = false;
+      if (R.timer || !takeable()) return;
+      if (now) flush(); else scheduleFlush();
     });
   }
   function takeable() { return Object.keys(R.queue.photos).length + Object.keys(R.queue.projects).length > 0; }
 
-  /* ---------- 隐藏 / 复原：马上送（不排队） ---------- */
+  /* ---------- 隐藏 / 复原：画面马上变；连按的几张 4 秒内一起送（hide 一次、unhide 一次） ----------
+     hideQ[kind][id] = {hide, before}：before = 伺服器上原本的样子（按回原样就不用送） */
   function setHidden(kind, id, hide) {
     var rec = cat()[kind][id];
     if (!rec) return;
-    var before = rec.hidden;
+    var q = R.hideQ[kind];
+    var before = q[id] ? q[id].before : rec.hidden;
     if (hide) rec.hidden = { by: CL.me, ts: Date.now() }; else delete rec.hidden;
+    if (!!before === !!hide) delete q[id]; else q[id] = { hide: !!hide, before: before };
     refreshAll();
-    var body = { op: hide ? 'hide' : 'unhide', photos: kind === 'photos' ? [id] : [], projects: kind === 'projects' ? [id] : [] };
+    drawSave();
+    scheduleHides();
+  }
+  function scheduleHides() {
+    if (R.hideTimer) { clearTimeout(R.hideTimer); R.hideTimer = 0; }
+    if (!Object.keys(R.hideQ.photos).length && !Object.keys(R.hideQ.projects).length) return;
+    R.hideTimer = setTimeout(function () { R.hideTimer = 0; flushHides(); }, MB.clReview.hideMs);
+  }
+  function sendHide(body, keepalive) {
     var attempt = 0;
     function loop() {
-      return CL.call('POST', '/api/catalog', body).then(function (r) {
-        if (r.status === 200) { CL.bumpRev(r.json && r.json.rev); CL.toast(hide ? '已隐藏（可以复原）' : '已复原'); return; }
-        if ((r.status === 0 || r.status >= 500 || r.status === 409) && attempt < 3) {
+      return CL.call('POST', '/api/catalog', body, { keepalive: keepalive === true }).then(function (r) {
+        if (r.status === 200) { CL.bumpRev(r.json && r.json.rev); if (r.json && r.json.changed) CL.addWrites(1); return true; }
+        if ((r.status === 0 || r.status >= 500 || r.status === 409 || r.status === 429) && attempt < 3) {
           attempt++;
           return CL.sleep(CL.backoff(attempt - 1, 1500, 15000)).then(loop);
         }
-        // 没成功：画面改回去
-        if (before) rec.hidden = before; else delete rec.hidden;
-        refreshAll();
-        CL.toast((hide ? '隐藏' : '复原') + '失败（' + (r.status || '网路') + '），请再试一次', 4000);
+        return false;
       });
     }
-    loop();
+    return loop();
+  }
+  function flushHides(keepalive) {
+    if (R.hideTimer) { clearTimeout(R.hideTimer); R.hideTimer = 0; }
+    if (R.hiding) { R.hideAgain = true; return Promise.resolve(); }
+    var batch = R.hideQ;
+    if (!Object.keys(batch.photos).length && !Object.keys(batch.projects).length) return Promise.resolve();
+    R.hideQ = { photos: {}, projects: {} };
+    R.hiding = true;
+    R.hideInflight = batch;
+    var bodies = [true, false].map(function (want) {
+      var b = { op: want ? 'hide' : 'unhide', photos: [], projects: [] };
+      ['photos', 'projects'].forEach(function (k) { Object.keys(batch[k]).forEach(function (id) { if (batch[k][id].hide === want) b[k].push(id); }); });
+      return b;
+    }).filter(function (b) { return b.photos.length + b.projects.length; });
+    var failed = [], chain = Promise.resolve();
+    bodies.forEach(function (b) {
+      chain = chain.then(function () { return sendHide(b, keepalive).then(function (ok) { if (!ok) failed.push(b); }); });
+    });
+    return chain.then(function () {
+      R.hiding = false;
+      R.hideInflight = null;
+      if (failed.length) {
+        // 没成功：画面改回去（之后又按过的，以新的为准）
+        failed.forEach(function (b) {
+          ['photos', 'projects'].forEach(function (k) {
+            b[k].forEach(function (id) {
+              var rec = cat()[k][id], x = batch[k][id];
+              if (!rec || R.hideQ[k][id]) return;
+              if (x.before) rec.hidden = x.before; else delete rec.hidden;
+            });
+          });
+        });
+        refreshAll();
+        CL.toast(failed.map(function (b) { return b.op === 'hide' ? '隐藏' : '复原'; }).join('、') + '失败，请再试一次', 4000);
+      } else {
+        var ops = bodies.map(function (b) { return b.op; });
+        CL.toast(ops.length > 1 ? '已隐藏 / 复原' : ops[0] === 'hide' ? '已隐藏（可以复原）' : '已复原');
+      }
+      drawSave();
+      if (R.hideAgain || Object.keys(R.hideQ.photos).length || Object.keys(R.hideQ.projects).length) { R.hideAgain = false; scheduleHides(); }
+    });
   }
 
   /* ============================================================
@@ -490,14 +565,23 @@
     var el = $('#rv-save');
     var msg;
     if (R.err) msg = '<span class="err">' + esc(R.err) + '</span>';
-    else if (R.saving) msg = '<span>保存中…</span>';
-    else if (n) msg = '<span>未保存 <b>' + n + '</b> 项 · 3 秒后自动保存</span>';
+    else if (R.saving || R.hiding) msg = '<span>保存中…</span>';
+    else if (n) msg = '<span>未保存 <b>' + n + '</b> 项 · 停手 ' + Math.round(MB.clReview.idleMs / 1000) + ' 秒后自动保存（或按「保存」）</span>';
     else if (R.lastSaved) msg = '<span class="ok">已保存 ✓ ' + esc(CL.time(R.lastSaved)) + '</span>';
     else msg = '<span class="muted">点照片改标签；改了会自动保存</span>';
     el.querySelector('.msg').innerHTML = msg;
-    el.querySelector('#rv-savebtn').disabled = !n || R.saving;
+    el.querySelector('#rv-savebtn').disabled = !n || (R.saving && !hidesPending());
     el.classList.toggle('dirty', n > 0);
     $('#tab-review-dot').hidden = !n;
+    drawBudget();
+  }
+  // 这个月用掉几次 Blob 写入（伺服器在清单里记的；改标签每次保存 1 次）
+  function drawBudget() {
+    var b = $('#rv-budget');
+    if (!b || !CL.cat) return;
+    var used = CL.monthWrites(CL.cat), lim = CL.LIMIT_WRITES;
+    b.textContent = '本月 Blob 写入约 ' + CL.n(used) + ' / ' + CL.n(lim);
+    b.classList.toggle('warn', used > lim * 0.8);
   }
 
   var OPS = { addPhotos: '上传', patch: '改标签', hide: '隐藏', unhide: '复原' };
@@ -592,7 +676,10 @@
     $('#rv-proj').addEventListener('click', function (e) {
       if (e.target.closest('[data-act="proj-edit"]')) openProject(R.f.pid);
     });
-    $('#rv-savebtn').addEventListener('click', function () { flush(); });
+    $('#rv-savebtn').addEventListener('click', function () { flushNow(); });
+    // 离开这一页（关分页、切到别的 App）：马上存（keepalive：页面关了请求照样送完）
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden' && unsaved()) flushNow(true); });
+    window.addEventListener('pagehide', function () { if (unsaved()) flushNow(true); });
     $('#rv-reload').addEventListener('click', function () {
       CL.loadCatalog(true).then(function () { reapplyQueue(); render(); CL.toast('已重新载入'); }, function (e) { CL.toast(e.message, 4000); });
     });
@@ -661,7 +748,7 @@
     });
 
     CL.on('tab', function (t) {
-      if (t !== 'review') return;
+      if (t !== 'review') { if (unsaved()) flushNow(); return; }
       if (CL.cat) render();
       CL.loadCatalog().then(function () { reapplyQueue(); render(); }, function (e) { CL.toast(e.message, 4000); });
     });
@@ -689,6 +776,17 @@
       if (!q) return;
       ['photos', 'projects'].forEach(function (k) {
         Object.keys(q[k]).forEach(function (id) { applyFields(k, id, q[k][id]); });
+      });
+    });
+    // 还没送出的隐藏 / 复原也叠回去（不然新清单一到，画面又变回没隐藏）
+    [R.hideInflight, R.hideQ].forEach(function (q) {
+      if (!q) return;
+      ['photos', 'projects'].forEach(function (k) {
+        Object.keys(q[k]).forEach(function (id) {
+          var rec = cat()[k][id];
+          if (!rec) return;
+          if (q[k][id].hide) { if (!rec.hidden) rec.hidden = { by: CL.me, ts: Date.now() }; } else delete rec.hidden;
+        });
       });
     });
   }
@@ -734,8 +832,11 @@
       bind();
       drawSave();
     },
+    idleMs: IDLE_MS,
+    maxWaitMs: MAX_WAIT_MS,
+    hideMs: HIDE_MS,
     unsaved: unsaved,
-    flush: flush,
+    flush: flushNow,
     state: function () { return R; },
     render: render
   };

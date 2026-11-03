@@ -356,8 +356,12 @@
      隐藏的、不确定（unsure）的照样解析得到 —— 旧方案打开不会少图；只是自动配图、帮我挑不用它们 */
   var CASES = [], CASE_MAP = {}, CASE_SHOT = {}, CASE_SERIES = {}, CASE_VER = 0;
   var CASE_ID = /^c:[0-9a-f]{16}$/;
-  function usable(c) { return !!c && !c.hidden && c.status !== 'unsure'; }
+  // stale = 登入过期 / 登出了：存着的清单可能是旧的（之后被隐藏的照片看不出来）—— 只拿来解析方案里已经放的，不再自动挑
+  function usable(c) { return !!c && !c.hidden && c.status !== 'unsure' && !c.stale; }
   MB.caseUsable = usable;
+  /** 拍的是一个空间（不是平面图、截图、报价单，也不是没人标过的新照片）：自动放进方案的只能是这种 */
+  function caseIsRoom(c) { return !!(c && c.rooms && c.rooms[0] && MB.ROOM[c.rooms[0]]); }
+  MB.caseIsRoom = caseIsRoom;
   /** cloud.js 每次载入 / 更新清单后叫一次；之后要重建 resolver（app.js 的 rebuildResolver） */
   MB.setCases = function (list) {
     CASES = []; CASE_MAP = {}; CASE_SHOT = {}; CASE_SERIES = {}; CASE_VER++; poolCache = null;
@@ -682,6 +686,7 @@
     return picked;
   }
   /** 方案里写着的案例 ref（空间、版位、参考空间） */
+  MB.caseRefsIn = function (p) { return caseRefsIn(p || {}); };
   function caseRefsIn(p) {
     var out = [];
     function add(ref) { if (typeof ref === 'string' && ref.indexOf('c:') === 0 && out.indexOf(ref) < 0) out.push(ref); }
@@ -763,7 +768,8 @@
         if (!mine(c)) return 1;            // 别的风格的实景：排在所有氛围照后面，什么都没有才用
         if (c.own) return 100 + g;         // 客户 / 业务自己的图最优先
         // 公司做过的案例（真的家，同风格）：清楚的比内置照片高一点（62 > 60），能当主图的再 +1
-        if (g === 2 && c.isCase) return 62 + (c.hero ? 1 : 0);
+        // 客户挑的案例风格（原木、奶油风…）再 +1：封面（WhatsApp 预览）先用他们说的那一种
+        if (g === 2 && c.isCase) return 62 + (c.hero ? 1 : 0) + (p.caseStyle && c.style === p.caseStyle ? 1 : 0);
         if (g) return 60;                  // 好的、可以的同一级（同级按种子轮换）
         // 稍微小一点的风格实景还是比风景好（老板：封面、拼贴要看得到他们的风格）；糊得明显的才让给氛围照。
         // 邀约页不是看风格的页：放大的实景排在清楚的氛围照（40）后面
@@ -1217,6 +1223,10 @@
     var list = [];
     CASES.forEach(function (c) {
       if (!usable(c) || used[shot(c.id)] || (resolve && !resolve(c.id))) return;
+      // 只挑空间照（平面图、截图常有别的客户的名字、门牌、电话）；只挑方案的系列 / 客户说的风格 ——
+      // 别的风格的厨房「厨房有橱柜」也对得上，但放进去客户会开始比较（体检也会叫他换掉）
+      if (!caseIsRoom(c)) return;
+      if (c.series !== ctx.series && !(ctx.style && c.style === ctx.style)) return;
       var f = caseFacts(p, c, ctx);
       if (f.facts.length) list.push({ c: c, f: f });
     });
@@ -1245,7 +1255,10 @@
     var list = [];
     CASES.forEach(function (c) {
       if (!usable(c) || used[shot(c.id)] || (resolve && !resolve(c.id))) return;
-      if (c.series !== ctx.series && !(ctx.style && c.style === ctx.style)) return;   // 风格不一样的不放参考空间（体检会提醒）
+      // 自动放进客户的方案：只放有人看过、标好空间的空间照（新上传还没人看的、平面图、截图都不放）
+      if (!caseIsRoom(c) || c.status === 'new') return;
+      // 同一个系列；客户说了风格（p.caseStyle）就只要那一种 —— 宁可少放，也不放体检会说「风格不一样」的
+      if (c.series !== ctx.series || (ctx.style && c.style !== ctx.style)) return;
       list.push({ c: c, s: caseFacts(p, c, ctx).score });
     });
     var per = {}, out = [];

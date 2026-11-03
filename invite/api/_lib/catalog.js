@@ -22,6 +22,11 @@ export const SHOT_DISTANCE = 6;               // dHash 汉明距离 ≤ 6 = 同�
 export const AUTO_BY = 'Claude';              // 分类时 Claude 用这个名字登入；项目的 by 不是它就算人工
 
 const HEX16 = /^[0-9a-f]{16}$/;
+const PID_RE = /^p[0-9a-f]{10}$/;
+var own = Object.prototype.hasOwnProperty;
+// 只认清单里真的有的 id：'__proto__'、'constructor' 这类继承来的名字一律当不认得（不然会改到 Object.prototype）
+export function hasPhoto(index, h) { return typeof h === 'string' && HEX16.test(h) && own.call(index.photos, h); }
+export function hasProject(index, pid) { return typeof pid === 'string' && PID_RE.test(pid) && own.call(index.projects, pid); }
 
 export function emptyIndex() {
   return { v: 1, rev: 0, base: '', projects: {}, photos: {}, log: [] };
@@ -102,8 +107,11 @@ export function addPhotos(index, input, by, now) {
     proj = index.projects[pid] = { name: v.name, area: '', ptype: '', traits: [], style: '', packs: [], n: 0, by: by, ts: now };
   }
   var added = [], dup = [];
+  // 这次登记的照片各自花了一次 /api/photo 写入（同一个 k 重送的不算：那是同一次上传）
+  var puts = 0;
   v.photos.forEach(function (x) {
     var cur = index.photos[x.h];
+    if (!cur || cur.k !== x.k) puts++;
     if (cur) {
       if (cur.p !== pid && dup.indexOf(x.h) < 0) dup.push(x.h);
       return;
@@ -120,7 +128,8 @@ export function addPhotos(index, input, by, now) {
   if (input.pack && proj.packs.indexOf(input.pack) < 0) proj.packs.push(input.pack);
   groupShots(index, pid);
   proj.n = Object.keys(index.photos).filter(function (h) { return index.photos[h].p === pid; }).length;
-  return { pid: pid, added: added, dup: dup, n: added.length };
+  // writes：照片 + 缩图包（清单本身那一次由 mutate 算）
+  return { pid: pid, added: added, dup: dup, n: added.length, writes: puts + (input.pack ? 1 : 0) };
 }
 
 /* ---------- patch ----------
@@ -198,11 +207,11 @@ export function patch(index, input, by, now) {
   // 先全部验证，有一个不对就整批不写
   var P = {}, J = {};
   ph.forEach(function (h) {
-    if (!index.photos[h]) throw bad('unknown', { field: 'photos', id: h });
+    if (!hasPhoto(index, h)) throw bad('unknown', { field: 'photos', id: h });
     P[h] = validPhotoPatch(h, photos[h], auto);
   });
   pj.forEach(function (pid) {
-    if (!index.projects[pid]) throw bad('unknown', { field: 'projects', id: pid });
+    if (!hasProject(index, pid)) throw bad('unknown', { field: 'projects', id: pid });
     J[pid] = validProjectPatch(pid, projects[pid]);
   });
 
@@ -246,8 +255,8 @@ export function setHidden(index, input, hide, by, now) {
   var ph = input.photos || [], pj = input.projects || [];
   if (!Array.isArray(ph) || !Array.isArray(pj)) throw bad('ids');
   if (ph.length + pj.length > MAX_PATCH_ENTRIES) throw bad('too_many', { max: MAX_PATCH_ENTRIES });
-  ph.forEach(function (h) { if (typeof h !== 'string' || !index.photos[h]) throw bad('unknown', { field: 'photos', id: h }); });
-  pj.forEach(function (p) { if (typeof p !== 'string' || !index.projects[p]) throw bad('unknown', { field: 'projects', id: p }); });
+  ph.forEach(function (h) { if (!hasPhoto(index, h)) throw bad('unknown', { field: 'photos', id: String(h).slice(0, 40) }); });
+  pj.forEach(function (p) { if (!hasProject(index, p)) throw bad('unknown', { field: 'projects', id: String(p).slice(0, 40) }); });
   var changed = 0;
   function apply(rec, isPhoto) {
     if (hide) {
@@ -281,6 +290,20 @@ export function sizeOk(indexOrText) {
 }
 
 export function utcDay(ts) { return new Date(ts).toISOString().slice(0, 10); }
+export function utcMonth(ts) { return new Date(ts).toISOString().slice(0, 7); }
+
+/* ---------- 这个月用掉几次 Blob 写入 ----------
+   usage: { 'YYYY-MM': { writes } }，每次写清单时一起记：清单本身、没写成的那几次、备份、这次登记的照片和缩图包。
+   上传页拿它跟 Hobby 的每月约 2,000 次比（log 只留 300 笔，不能拿来算）。只留最近 3 个月 */
+export function bumpUsage(index, ts, writes) {
+  var u = index.usage && typeof index.usage === 'object' && !Array.isArray(index.usage) ? index.usage : {};
+  var m = utcMonth(ts);
+  var cur = u[m] && typeof u[m] === 'object' ? u[m] : { writes: 0 };
+  var out = {};
+  Object.keys(u).sort().slice(-2).forEach(function (k) { if (k !== m && /^\d{4}-\d{2}$/.test(k)) out[k] = u[k]; });
+  out[m] = { writes: (cur.writes | 0) + Math.max(0, writes | 0) };
+  index.usage = out;
+}
 
 /* ---------- mutate：读 → 改 → 条件写入，冲突重试 ----------
    fn(index) 直接改传进去的副本，回传 {…结果, n, noop?}；noop = 什么都没变，不写。
@@ -290,6 +313,7 @@ export async function mutate(adapter, path, fn, opts) {
   var tries = opts.tries || 5;
   var now = opts.now || Date.now;
   var sleep = opts.sleep || function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+  var spent = 0;                               // 这次 mutate 里没写成的清单、备份：也算写入次数
   for (var attempt = 0; attempt < tries; attempt++) {
     var cur = await adapter.getJson(path, { fresh: attempt > 0 });
     var base = cur && cur.data && typeof cur.data === 'object' ? cur.data : emptyIndex();
@@ -301,6 +325,7 @@ export async function mutate(adapter, path, fn, opts) {
     if (result.noop) {
       var out0 = Object.assign({}, result, { rev: base.rev | 0 });
       delete out0.noop;
+      delete out0.writes;
       return out0;
     }
     work.v = 1;
@@ -309,19 +334,24 @@ export async function mutate(adapter, path, fn, opts) {
     if (!Array.isArray(work.log)) work.log = [];
     work.log.push({ op: opts.op || '?', by: opts.by || '', ts: ts, n: result.n | 0 });
     if (work.log.length > LOG_KEEP) work.log = work.log.slice(-LOG_KEEP);
+
+    // 每天（UTC）第一次写入前，先备份一份昨天的样子（按星期几轮流覆盖）；失败不影响写入
+    var last = base.log && base.log.length ? base.log[base.log.length - 1].ts : 0;
+    if (cur && last && utcDay(last) !== utcDay(ts) && adapter.copy) {
+      spent++;
+      try { await adapter.copy(path, bakPath(ts)); } catch (e) { /* 备份失败不挡写入 */ }
+    }
+    bumpUsage(work, ts, 1 + spent + (result.writes | 0));
     var text = JSON.stringify(work);
     if (!sizeOk(text)) throw new HttpError(413, { error: 'index_too_large' });
 
-    // 每天（UTC）第一次写入前，先备份一份昨天的样子；失败不影响写入
-    var last = base.log && base.log.length ? base.log[base.log.length - 1].ts : 0;
-    if (cur && last && utcDay(last) !== utcDay(ts) && adapter.copy) {
-      try { await adapter.copy(path, bakPath(utcDay(ts))); } catch (e) { /* 备份失败不挡写入 */ }
-    }
-
     try {
+      spent++;
       await adapter.putJson(path, text, cur ? { ifMatch: cur.etag } : { create: true });
+      spent--;
       var out = Object.assign({}, result, { rev: work.rev });
       delete out.noop;
+      delete out.writes;
       return out;
     } catch (e) {
       if (!e || e.code !== 'conflict') throw e;

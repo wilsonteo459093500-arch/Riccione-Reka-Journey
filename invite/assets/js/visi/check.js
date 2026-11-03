@@ -429,20 +429,34 @@
         '同一道山、同一片草原出现两次，客户会觉得是同一张。到 ⑤「用哪张图」把其中一页换成别的照片。', 'visit');
     }
     // 16b · 印出来的公司案例照片：分类时标了「不确定」、或已经被隐藏（拍到客户、不想再用）—— 发出去之前换掉
-    var shaky = [], gone = [], shakyGo = null, goneGo = null;
+    var shaky = [], gone = [], odd = [], shakyGo = null, goneGo = null, oddGo = null;
     uses.forEach(function (u) {
       if (String(u.ref).indexOf('c:') !== 0) return;
       var im = resolve && resolve(u.ref);
       if (!im) return;
       var l = pageLabel(p, u);
       var go = u.pg.type === 'room' ? 'room:' + u.pg.room.uid : u.pg.type === 'cases' ? 'cases' : 'visit';
+      var isRoom = MB.caseIsRoom ? MB.caseIsRoom(im) : !!(im.rooms && im.rooms[0] && MB.ROOM[im.rooms[0]]);
       if (im.hidden) { if (gone.indexOf(l) < 0) gone.push(l); goneGo = goneGo || go; }
       else if (im.status === 'unsure') { if (shaky.indexOf(l) < 0) shaky.push(l); shakyGo = shakyGo || go; }
+      // 不是标好空间的照片（平面图、截图、报价单…）或还没有人看过的新照片：常拍到别的客户的名字、门牌、电话
+      else if (!isRoom || im.status === 'new') { if (odd.indexOf(l) < 0) odd.push(l); oddGo = oddGo || go; }
     });
     if (gone.length) add('warn', '用了已经隐藏的公司案例照片：' + gone.join('、'),
       '案例库里把它隐藏了（可能拍到客户、或不想再给人看）。换一张 —— 帮我挑、图库都挑得到别的。', goneGo);
     if (shaky.length) add('warn', '用了还没确认的公司案例照片：' + shaky.join('、'),
       '这张分类时标了「不确定」（空间、柜类、风格可能标错）。看一眼照片对不对，不对就换一张。', shakyGo);
+    if (odd.length) add('warn', '用了不是空间照、或还没人看过的公司案例照片：' + odd.join('、'),
+      '这张没有标成哪一个空间（可能是平面图、截图、报价单），或刚上传还没人看过。放大看清楚：有别的客户的名字、门牌、电话就一定要换掉。', oddGo);
+
+    // 16c · 方案里的公司案例照片：这台电脑看不到（同事导出的方案、没登入过），或登入过期（存着的是旧清单）
+    var cref = MB.caseRefsIn ? MB.caseRefsIn(p) : [];
+    var unseen = cref.filter(function (ref) { return !(resolve && resolve(ref)); });
+    var stale = cref.filter(function (ref) { var im = resolve && resolve(ref); return !!(im && im.stale); });
+    if (unseen.length) add('warn', '有 ' + unseen.length + ' 张公司案例照片这台电脑看不到 —— 先登入公司案例库',
+      '这份方案用了公司案例库的照片（例如同事导出给你的）。到「图库」登入之后就看得到；登入之前先别按「自动配图」、换风格或重新选图，不然那几张会被换掉。', 'library');
+    else if (stale.length) add('warn', '公司案例库登入过期：' + stale.length + ' 张案例照片没办法确认还能不能用',
+      '这台电脑存着的是旧清单 —— 之后被隐藏的照片（例如拍到别的客户）这里看不出来。到「图库」重新登入，再发给客户。', 'library');
 
     var offStyle = [];
     uses.forEach(function (u) {

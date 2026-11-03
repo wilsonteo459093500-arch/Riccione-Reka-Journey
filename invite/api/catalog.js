@@ -5,8 +5,8 @@
    POST {op:'addPhotos'|'patch'|'hide'|'unhide', …} → 改清单（条件写入，冲突自动重试）
    ============================================================ */
 import { send, sendError, readJson, checkWrite, methodNotAllowed, query, header, HttpError } from './_lib/http.js';
-import { requireUser } from './_lib/auth.js';
-import { getAdapter, indexPath } from './_lib/blob.js';
+import { requireUser, checkPhotoSig, packName } from './_lib/auth.js';
+import { getAdapter, indexPath, useOidc } from './_lib/blob.js';
 import { emptyIndex, visiView, mutate, addPhotos, patch, setHidden, validateAddPhotos, pidOf } from './_lib/catalog.js';
 
 const MAX_BODY = 4 * 1024 * 1024;        // 40 张缩图约 1.5 MB，Vercel 上限 4.5 MB
@@ -60,17 +60,24 @@ async function postCatalog(req, res) {
   if (op === 'addPhotos') {
     // 先验证（不合格就不浪费一次写入）
     var v = validateAddPhotos(body);
+    // 每张都要是 /api/photo 真的发出去的 k（签章）：不能登记没上传过的「照片」把清单塞满
+    v.photos.forEach(function (p, i) {
+      if (!checkPhotoSig(p.h, p.k, body.photos[i] && body.photos[i].sig)) throw new HttpError(400, { error: 'photo', field: 'sig', h: p.h });
+    });
     var thumbs = pickThumbs(body.thumbs, v.photos);
     var pack = '';
     var out = await mutate(adapter, path, async function (index, ts) {
       // 缩图包先写、清单后写；只放这次真的新增的照片（重送 = 0 次写入）。
-      // 冲突重试时沿用第一次写好的包，不重写
+      // 冲突重试时沿用第一次写好的包，不重写；包名由这批照片决定（固定、不加随机后缀）：
+      // 上一次请求写了包、清单却没写成（409、逾时），重送时直接用那一包，不会多一个没人用的档
       var fresh = {};
-      v.photos.forEach(function (p) { if (!index.photos[p.h] && thumbs[p.h]) fresh[p.h] = thumbs[p.h]; });
-      if (!pack && Object.keys(fresh).length) {
-        var r = await adapter.putFile('t/' + pidOf(v.name) + '-' + Date.now().toString(36) + '.json', JSON.stringify(fresh), 'application/json');
+      v.photos.forEach(function (p) { if (!Object.prototype.hasOwnProperty.call(index.photos, p.h) && thumbs[p.h]) fresh[p.h] = thumbs[p.h]; });
+      var hs = Object.keys(fresh).sort();
+      if (hs.length && (!pack || pack !== packName(pidOf(v.name), hs))) {
+        var r = await adapter.putFile(packName(pidOf(v.name), hs), JSON.stringify(fresh), 'application/json', { fixed: true });
         pack = r.pathname;
       }
+      if (!hs.length) pack = '';
       return addPhotos(index, { project: { name: v.name }, photos: body.photos, pack: pack }, by, ts);
     }, { by: by, op: 'addPhotos' });
     return send(res, 200, { pid: out.pid, added: out.added, dup: out.dup, rev: out.rev });
@@ -88,6 +95,7 @@ async function postCatalog(req, res) {
 
 export default async function handler(req, res) {
   try {
+    useOidc(req);
     if (req.method === 'GET') return await getCatalog(req, res);
     if (req.method === 'POST') return await postCatalog(req, res);
     return methodNotAllowed(res, 'GET, POST');

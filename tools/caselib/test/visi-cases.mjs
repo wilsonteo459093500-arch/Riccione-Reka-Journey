@@ -166,7 +166,7 @@ await login(page);
   const r = await page.evaluate(() => ({ st: MB.cloud.status(), n: MB.cases().length, usable: MB.cases().filter(MB.caseUsable).length,
     keys: Object.keys(MB.cases()[0]).sort().join(','), projects: MB.cloud.projects() }));
   ok('C1 login → catalog loaded (60 photos, 57 usable: 2 unsure + 1 hidden left out of auto use)', r.st.status === 'ok' && r.n === 60 && r.usable === 57, JSON.stringify(r.st) + ' ' + r.n + '/' + r.usable);
-  const allowed = 'area,cabinets,desc,en,h,hero,hidden,id,label,pid,plabel,ptype,rooms,series,shot,src,status,style,thumb,traits,w,zh';
+  const allowed = 'area,cabinets,desc,en,h,hero,hidden,id,label,pid,plabel,ptype,rooms,series,shot,src,stale,status,style,thumb,traits,w,zh';
   ok('C2 entries() carry only whitelisted fields (no name / f)', r.keys === allowed, r.keys);
   ok('C3 project labels are 「区域 · 风格 · #n」, never the folder name', r.projects.length === 6 && r.projects.every((x) => /^[^·]+ · [^·]+ · #\d+$/.test(x.label) && !leaks(x.label).length),
     r.projects.map((x) => x.label).join(' | '));
@@ -255,22 +255,25 @@ const P1REFS = fx.photos.filter((p) => p.project === 0 && !p.hidden && !p.unsure
 {
   const r = await page.evaluate((a) => {
     const runs = [];
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 24; i++) {
       const p = MB.newProject({});
-      p.id = 'p-sug-' + i; p.direction = 'misty'; p.caseStyle = 'wood';
+      // 一半有客户说的风格（原木：假资料只有 2 个原木的家），一半只有系列（雾山：4 个家）
+      p.id = 'p-sug-' + i; p.direction = 'misty'; p.caseStyle = i % 2 ? 'wood' : '';
       p.property.area = 'Setia Alam'; p.property.type = 'Terrace';
       p.rooms = ['kitchen', 'living'].map(MB.newRoom);
       p.rooms.forEach((r) => { r.images = MB.autoPick(p, r, []); });
       const used = {};
       p.rooms.forEach((r) => r.images.forEach((x) => { used[MB.shotKey(x)] = 1; }));
       const refs = MB.suggestCases(p, MB.makeResolver.last, 3);
-      runs.push({ refs, pids: refs.map((x) => MB.caseOf(x).pid), series: refs.map((x) => MB.caseOf(x).series),
+      runs.push({ cs: p.caseStyle, refs, pids: refs.map((x) => MB.caseOf(x).pid), series: refs.map((x) => MB.caseOf(x).series), styles: refs.map((x) => MB.caseOf(x).style),
         clash: refs.filter((x) => used[MB.shotKey(x)]), bad: refs.filter((x) => a.bad.indexOf(x) > -1) });
     }
     return runs;
   }, { bad: HIDDEN.concat(UNSURE) });
-  const good = r.every((x) => x.refs.length === 3 && new Set(x.pids).size === 3 && x.series.every((s) => s === 'misty') && !x.clash.length && !x.bad.length);
-  ok('D6 suggestCases → 3 distinct projects, same series, none already on a room page, never unsure / hidden', good, JSON.stringify(r.find((x) => !(x.refs.length === 3 && new Set(x.pids).size === 3)) || r[0]));
+  const good = r.every((x) => !x.clash.length && !x.bad.length && x.series.every((s) => s === 'misty') && new Set(x.pids).size === x.refs.length &&
+    (x.cs ? x.refs.length === 2 && x.styles.every((s) => s === x.cs) : x.refs.length === 3));
+  ok('D6 suggestCases → distinct projects, same series, none already on a room page, never unsure / hidden; with a client style only that style (fewer rather than padded)',
+    good, JSON.stringify(r.find((x) => !(new Set(x.pids).size === x.refs.length && (x.cs ? x.refs.length === 2 : x.refs.length === 3))) || r[0]));
 }
 
 /* ---------- 需求卡「有长辈同住、天天开火、Setia Alam 排屋、原木」→ 带入 → 帮我挑 ---------- */
@@ -292,9 +295,13 @@ let briefP = null;
     briefP.caseStyle === 'wood' && briefP.direction === 'misty' && ['kitchen', 'island', 'wardrobe', 'shoe'].every((k) => briefP.cabinets.indexOf(k) > -1) &&
     briefP.property.area === 'Setia Alam' && /Terrace/.test(briefP.property.type) && briefP.needs.some((n) => n.key === 'elderly') && briefP.needs.some((n) => n.key === 'cook_daily'),
     JSON.stringify({ cs: briefP.caseStyle, dir: briefP.direction, cab: briefP.cabinets, prop: briefP.property, needs: briefP.needs.map((n) => n.key) }));
-  ok('E2 brief import with cases available auto-fills 参考空间 with 3 cases from 3 projects',
-    briefP.cases.length === 3 && briefP.cases.every((c) => /^c:/.test(c.ref)) &&
-    new Set(briefP.cases.map((c) => byH[c.ref.slice(2)].pid)).size === 3, JSON.stringify(briefP.cases));
+  // 原木的家只有 2 个：只放 2 个，不拿别的风格（日式）凑满 3 个 —— 不然体检马上说「案例和方案风格不一样」
+  const chk = await page.evaluate(() => { const id = localStorage.getItem('sail-mb-active'); return MB.store.getProject(id).then((p) => MB.checkProject(MB.normalizeProject(p), MB.makeResolver.last).items.map((x) => x.text)); });
+  ok('E2 brief import with cases available auto-fills 参考空间 with the client\'s style only (2 wood homes), and the check has nothing to say about it',
+    briefP.cases.length === 2 && briefP.cases.every((c) => /^c:/.test(c.ref)) &&
+    new Set(briefP.cases.map((c) => byH[c.ref.slice(2)].pid)).size === 2 &&
+    briefP.cases.every((c) => fx.projects[byH[c.ref.slice(2)].project].style === 'wood') && !chk.some((t) => /案例和方案风格不一样/.test(t)),
+    JSON.stringify(briefP.cases) + ' ' + chk.filter((t) => /案例/.test(t)).join(' ; '));
   ok('E3 帮我挑 is offered right after the brief is pasted', await page.isVisible('#brief-match'), await page.innerText('#brief-match').catch(() => ''));
 }
 let matches = [];
@@ -355,7 +362,14 @@ let matches = [];
   await page.waitForSelector('#match-modal.on');
   await page.waitForTimeout(500);
   const rows = await page.locator('#match-list .match-row').count();
-  const firstCase = page.locator('#match-list .match-row').filter({ has: page.locator('[data-match-case]') }).first();
+  // 参考空间放不同的家：挑一张跟已经放着的不同家的
+  const have = (await current(page)).cases.map((c) => byH[c.ref.slice(2)].pid);
+  const caseRows = page.locator('#match-list .match-row').filter({ has: page.locator('[data-match-case]') });
+  let firstCase = caseRows.first();
+  for (let i = 0; i < await caseRows.count(); i++) {
+    const rr = await caseRows.nth(i).getAttribute('data-ref');
+    if (have.indexOf(byH[rr.slice(2)].pid) < 0) { firstCase = caseRows.nth(i); break; }
+  }
   const ref = await firstCase.getAttribute('data-ref');
   // 方案是英文的（新方案默认 en）就用英文那一句，华文 / 双语用华文
   const lang = (await current(page)).lang;
@@ -377,7 +391,9 @@ let matches = [];
   const r = p.rooms.find((x) => x.uid === roomUid);
   const ta = await page.locator('#cases-list textarea').evaluateAll((els) => els.map((e) => e.value));
   ok('F1 帮我挑 panel lists the matches with a why and buttons', rows >= 6 && !!why, rows + ' rows');
-  ok('F2 「放进参考空间」: the why becomes that case\'s note draft (editable textarea)', !!c && c.note === why && ta.indexOf(why) > -1 && done === 1, JSON.stringify(c) + ' ta=' + JSON.stringify(ta));
+  // 说明草稿 = 「为什么」的前两项（一句 ≤ 20 字 / 12 words，体检不会马上说太长）
+  const draft = why.split(' · ').slice(0, 2).join(' · ');
+  ok('F2 「放进参考空间」: the first two facts of the why become that case\'s note draft (editable textarea)', !!c && c.note === draft && ta.indexOf(draft) > -1 && done === 1, JSON.stringify(c) + ' ta=' + JSON.stringify(ta) + ' why=' + why);
   ok('F3 「放进<空间>」: the case becomes that room\'s hero, room marked manual', !!r && r.images[0] === roomRef && r.manual === true, JSON.stringify(r && r.images));
   briefP = p;
 }
@@ -688,6 +704,223 @@ if (process.env.SHOTS) {
   ok('N3 zh / en / bi cards all read the new options (first one wins: 奶油风)', ['zh', 'en', 'bi'].every((l) => r.langs[l] === 'misty/cream'), JSON.stringify(r.langs));
   ok('N4 brief.html style options = the case style list (+ 还没想好), value format 「华文 English」',
     JSON.stringify(r.options) === JSON.stringify(r.caseStyles.concat(['还没想好 Not decided'])), JSON.stringify(r.options));
+}
+
+/* ============================================================
+   O · 复审修正：只自动用空间照、只挑方案的风格、房型说法、说明草稿、
+       没登入的电脑看不到的照片不丢掉、登出记得住、登入过期不再自动挑、需求卡旧草稿
+   ============================================================ */
+{
+  // privacy-1：平面图 / 截图（标「其他」、auto）、没人看过的新照片（项目定了风格）—— 不会被自动放进方案
+  const r = await page.evaluate(() => {
+    const orig = MB.cases().slice();
+    const wood = orig.filter((c) => c.style === 'wood' && MB.caseUsable(c) && c.rooms[0] === 'kitchen');
+    const extra = [];
+    wood.slice(0, 4).forEach((c, i) => {
+      const a = 'c:ff' + String(i).padStart(14, '0'), b = 'c:ee' + String(i).padStart(14, '0');
+      extra.push(Object.assign({}, c, { id: a, shot: a, rooms: ['other'], status: 'auto', cabinets: ['kitchen', 'island'], hero: true }));
+      extra.push(Object.assign({}, c, { id: b, shot: b, rooms: [], status: 'new', cabinets: [], hero: false }));
+    });
+    MB.setCases(orig.concat(extra));
+    const res = MB.makeResolver([]);
+    const bad = {}; extra.forEach((c) => { bad[c.id] = 1; });
+    let hitsS = 0, hitsM = 0, nS = 0, nM = 0;
+    for (let i = 0; i < 80; i++) {
+      const p = MB.newProject({}); p.id = 'p-priv-' + i; p.direction = 'misty'; p.caseStyle = i % 2 ? 'wood' : '';
+      p.property.area = 'Setia Alam'; p.property.type = 'Terrace';
+      p.rooms = [MB.newRoom('kitchen')];
+      MB.suggestCases(p, res, 3).forEach((x) => { nS++; if (bad[x]) hitsS++; });
+      MB.matchCases(p, res).forEach((x) => { nM++; if (bad[x.ref]) hitsM++; });
+    }
+    // 体检：真的印了一张「其他」、一张没人看过的
+    const p = MB.newProject({}); p.id = 'p-priv-check'; p.direction = 'misty'; p.client.names = 'Mr Ong';
+    p.rooms = [MB.newRoom('kitchen')]; p.rooms[0].images = [wood[0].id]; p.rooms[0].manual = true;
+    p.cases = [{ ref: extra[0].id, note: null }, { ref: extra[1].id, note: null }];
+    const items = MB.checkProject(p, res).items.map((x) => x.level + '|' + x.text + '|' + x.goto);
+    MB.setCases(orig); MB.makeResolver([]);
+    return { hitsS, hitsM, nS, nM, items };
+  });
+  ok('O1 suggestCases / 帮我挑 never pick a floor plan / screenshot (room other) or an unreviewed photo', r.hitsS === 0 && r.hitsM === 0 && r.nS > 50 && r.nM > 50, JSON.stringify({ hitsS: r.hitsS, hitsM: r.hitsM, nS: r.nS, nM: r.nM }));
+  ok('O1b check warns when a printed case photo is not a tagged space photo (平面图 / 截图) or unreviewed', r.items.some((x) => /^warn\|用了不是空间照、或还没人看过的公司案例照片.*\|cases$/.test(x)), r.items.filter((x) => /案例/.test(x)).join(' ; '));
+}
+{
+  // visi-3：帮我挑只挑方案系列 / 客户说的风格（微侘寂的方案：案例库没有 → 0 张，不拿别的风格凑）
+  const r = await page.evaluate(() => {
+    const res = MB.makeResolver.last, out = {};
+    [['wabi', ''], ['misty', 'wood'], ['misty', ''], ['skeleton', 'modern']].forEach(([dir, cs]) => {
+      const p = MB.newProject({}); p.id = 'p-m-' + dir + cs; p.direction = dir; p.caseStyle = cs;
+      p.rooms = ['kitchen', 'living', 'master'].map(MB.newRoom);
+      const series = MB.dir(p).series;
+      const list = MB.matchCases(p, res);
+      out[dir + '/' + cs] = { n: list.length, off: list.filter((x) => { const c = MB.caseOf(x.ref); return c.series !== series && !(cs && c.style === cs); }).map((x) => MB.caseOf(x.ref).style) };
+    });
+    return out;
+  });
+  ok('O2 帮我挑 only suggests the proposal\'s series / the client\'s style (wabi → none)', r['wabi/'].n === 0 && Object.values(r).every((x) => !x.off.length) && r['misty/wood'].n > 0 && r['skeleton/modern'].n > 0, JSON.stringify(r));
+}
+{
+  // visi-5：客户是商用 / 店屋 / 认不出的房型：不说「也是有地住宅」
+  const r = await page.evaluate((a) => {
+    const im = (ref) => { const c = MB.caseOf(ref); return { ref, series: c.series, rooms: c.rooms, area: c.area, ptype: c.ptype, traits: c.traits, zh: c.zh, en: c.en, label: c.label }; };
+    const out = {};
+    ['商用 Commercial', 'Shop lot', 'Townhouse', 'Condo', 'Terrace', 'Semi-D'].forEach((t) => {
+      const p = MB.newProject({}); p.property.area = 'Puchong'; p.property.type = t; p.needs = [];
+      out[t] = MB.caseNote(p, im(a.terrace), 'zh') + ' / ' + MB.caseNote(p, im(a.terrace), 'en');
+    });
+    const p2 = MB.newProject({}); p2.property.type = 'Condo'; p2.property.area = 'KL';
+    out.condoCondo = MB.caseNote(p2, im(a.condo), 'zh') + ' / ' + MB.caseNote(p2, im(a.condo), 'en');
+    return out;
+  }, { terrace: P1REFS[0], condo: 'c:' + fx.photos.find((p) => p.project === 3 && !p.hidden && !p.unsure).h });
+  ok('O3 caseNote: no 「也是有地住宅」 for Commercial / shop lot / townhouse clients; condo ↔ condo and landed ↔ landed still said',
+    ['商用 Commercial', 'Shop lot', 'Townhouse', 'Condo'].every((t) => !/有地住宅|landed home|也是公寓|a condo/i.test(r[t])) &&
+    /也是有地住宅/.test(r['Semi-D']) && /also a landed home/i.test(r['Semi-D']) && /也是排屋/.test(r.Terrace) && /也是公寓/.test(r.condoCondo) && /also a condo/i.test(r.condoCondo), JSON.stringify(r));
+}
+{
+  // visi-7：「放进参考空间」—— 双语方案存 null（印的时候华文、英文各自写）；英文方案只取两项（体检不说太长）；同一个家只放一次
+  const mk = (lang, cases) => page.evaluate((a) => {
+    const p = MB.newProject({}); p.lang = a.lang; p.direction = 'misty'; p.caseStyle = 'wood';
+    p.client.names = 'Mr Ong'; p.property.area = 'Setia Alam'; p.property.type = 'Terrace';
+    p.needs = [{ key: 'elderly' }];
+    p.rooms = ['kitchen', 'foyer'].map(MB.newRoom); p.cases = a.cases;
+    return JSON.parse(JSON.stringify(p));
+  }, { lang, cases: cases || [] });
+  // pid：只点这个家的那一行（参考空间已经有这个家 → 应该不放）
+  const place = async (lang, cases, pid) => {
+    await importProject(page, await mk(lang, cases));
+    await page.click('[data-tab="rooms"]');
+    await page.click('#cases-match');
+    await page.waitForSelector('#match-modal.on');
+    await page.waitForTimeout(400);
+    const rows = page.locator('#match-list .match-row').filter({ has: page.locator('[data-match-case]') });
+    let row = null;
+    for (let i = 0; i < await rows.count(); i++) {
+      const ref = await rows.nth(i).getAttribute('data-ref');
+      if (!pid || byH[ref.slice(2)].pid === pid) { row = rows.nth(i); break; }
+    }
+    if (row) { await row.locator('[data-match-case]').click(); await page.waitForTimeout(300); }
+    await page.click('#match-modal [data-close]');
+    await page.waitForTimeout(700);
+    const p = await current(page);
+    const deck = await page.innerText('#deck').catch(() => '');
+    const items = await page.evaluate(() => { const id = localStorage.getItem('sail-mb-active'); return MB.store.getProject(id).then((x) => MB.checkProject(MB.normalizeProject(x), MB.makeResolver.last).items.map((i) => i.text)); });
+    return { p, deck, items, clicked: !!row };
+  };
+  const bi = await place('bi');
+  const biCard = bi.p.cases[0] ? await page.evaluate((ref) => { const id = localStorage.getItem('sail-mb-active'); return MB.store.getProject(id).then((x) => { const p = MB.normalizeProject(x); const c = MB.caseCards(p, MB.makeResolver.last, 'bi')[0]; return c ? c.line : null; }); }, bi.p.cases[0].ref) : null;
+  ok('O4 bilingual proposal: 「放进参考空间」 stores note null, the card prints both zh and en', bi.p.cases.length === 1 && bi.p.cases[0].note === null && biCard && typeof biCard === 'object' && !!biCard.zh && !!biCard.en,
+    JSON.stringify(bi.p.cases) + ' ' + JSON.stringify(biCard));
+  // 参考空间已经有 Setia Alam 陈先生家的一张：帮我挑里同一个家的另一张不放进去
+  const same = await place('zh', [{ ref: P1REFS[2], note: null }], P1.pid);
+  ok('O4b a second photo of the same home is not added to 参考空间', same.clicked && same.p.cases.length === 1 && same.p.cases[0].ref === P1REFS[2], JSON.stringify({ clicked: same.clicked, cases: same.p.cases }));
+  const en = await place('en');
+  const note = en.p.cases[0] && en.p.cases[0].note;
+  ok('O4c English proposal: note draft is the first two facts (≤ 12 words) and the check does not call it too long',
+    !!note && note.split(' · ').length <= 2 && note.split(/\s+/).length <= 14 && !en.items.some((t) => /写得太长/.test(t)), JSON.stringify(note) + ' ' + en.items.filter((t) => /太长/.test(t)).join());
+}
+{
+  // visi-2：同事导出的方案（rooms / 参考空间都是 c:），在没登入过的电脑打开
+  const exported = await page.evaluate((a) => {
+    const p = MB.newProject({}); p.id = 'p-export'; p.direction = 'misty'; p.client.names = 'Mr Ong';
+    p.rooms = ['kitchen', 'living'].map(MB.newRoom);
+    p.rooms[0].images = [a.k[0], a.k[1]]; p.rooms[1].images = [a.k[4]];
+    p.cases = [{ ref: a.k[2], note: null }, { ref: a.k[3], note: null }];
+    return JSON.parse(JSON.stringify(p));
+  }, { k: P1REFS });
+  const fresh = await open(mock.url);
+  const dialogs = [];
+  fresh.page.on('dialog', (d) => dialogs.push(d.message()));
+  await importProject(fresh.page, exported);
+  const items = await fresh.page.evaluate(() => { const id = localStorage.getItem('sail-mb-active'); return MB.store.getProject(id).then((x) => MB.checkProject(MB.normalizeProject(x), MB.makeResolver.last).items.map((i) => i.level + '|' + i.text + '|' + i.goto)); });
+  ok('O5 imported proposal on a never-logged-in computer: the check says how many case photos cannot be seen and points to 图库 (log in)',
+    items.some((x) => /^warn\|有 5 张公司案例照片这台电脑看不到 —— 先登入公司案例库\|library$/.test(x)), items.filter((x) => /案例/.test(x)).join(' ; '));
+  // 选图弹窗按「确定」、换风格：看不到的 c: 照片照样留着
+  await fresh.page.click('[data-tab="rooms"]');
+  await fresh.page.locator('#room-list [data-room-pick]').first().click();
+  await fresh.page.waitForSelector('#pick-modal.on');
+  const title = await fresh.page.textContent('#pick-title');
+  await fresh.page.click('#pick-ok');
+  await fresh.page.waitForTimeout(300);
+  await fresh.page.click('#cases-pick');
+  await fresh.page.waitForSelector('#pick-modal.on');
+  await fresh.page.click('#pick-ok');
+  await fresh.page.waitForTimeout(300);
+  await fresh.page.click('[data-tab="style"]');
+  await fresh.page.click('#dir-cards [data-dir="skeleton"]');
+  await fresh.page.waitForTimeout(800);
+  const after = await current(fresh.page);
+  const kept = after.rooms[0].images.filter((x) => /^c:/.test(x)).length === 2 && after.rooms[1].images.indexOf(P1REFS[4]) > -1 &&
+    after.cases.map((c) => c.ref).join() === [P1REFS[2], P1REFS[3]].join();
+  ok('O5b picker 「确定」 and a direction change keep the c: refs this computer cannot see', kept && /看不到，会留着/.test(title), JSON.stringify({ rooms: after.rooms.map((r) => r.images), cases: after.cases, title }));
+  // 自动配图前会先问
+  await fresh.page.click('[data-tab="rooms"]');
+  await fresh.page.locator('#room-list [data-room-auto]').first().click();
+  await fresh.page.waitForTimeout(300);
+  ok('O5c 自动配图 on a room with unseen case photos asks first', dialogs.some((m) => /这台电脑看不到/.test(m)), dialogs.join(' | '));
+  ok('O5d no /api request from the never-logged-in computer', fresh.api.length === 0, fresh.api.join());
+  await fresh.ctx.close();
+}
+{
+  // visi-9：登入过期（401）→ 存着的清单只解析方案里已经放的；不再自动挑、帮我挑也不用
+  const s = await open(mock.url);
+  await login(s.page);
+  const before = await s.page.evaluate(() => MB.cases().filter(MB.caseUsable).length);
+  await s.ctx.clearCookies();
+  await s.page.evaluate(() => MB.cloud.refresh(true));
+  await s.page.waitForTimeout(500);
+  const r = await s.page.evaluate((a) => {
+    const res = MB.makeResolver.last;
+    const p = MB.newProject({}); p.id = 'p-stale'; p.direction = 'misty'; p.caseStyle = 'wood'; p.client.names = 'Mr Ong';
+    p.rooms = [MB.newRoom('kitchen')];
+    const auto = MB.autoPick(p, p.rooms[0], []);
+    p.cases = [{ ref: a.ref, note: null }];
+    return { st: MB.cloud.status(), usable: MB.cases().filter(MB.caseUsable).length, stale: MB.cases().every((c) => c.stale),
+      resolves: !!res(a.ref), auto, suggest: MB.suggestCases(p, res, 3), match: MB.matchCases(p, res).length,
+      items: MB.checkProject(p, res).items.map((x) => x.level + '|' + x.text + '|' + x.goto) };
+  }, { ref: P1REFS[2] });
+  await s.page.click('[data-tab="library"]');
+  await s.page.waitForTimeout(300);
+  const box = await s.page.innerText('#cloud-panel');
+  ok('O6 session expired (401): cached cases only resolve refs — not used for auto-pick, suggestions or 帮我挑',
+    before === 57 && r.st.status === 'login' && r.stale && r.usable === 0 && r.resolves && !r.auto.some((x) => /^c:/.test(x)) && !r.suggest.length && !r.match &&
+    !(await s.page.isVisible('#lib-match')), JSON.stringify({ before, st: r.st, usable: r.usable, auto: r.auto, suggest: r.suggest, match: r.match }));
+  ok('O6b check warns that printed case photos cannot be confirmed until you log in again; box says the cache is display-only',
+    r.items.some((x) => /^warn\|公司案例库登入过期：1 张案例照片没办法确认还能不能用\|library$/.test(x)) && /登入过期了.*不会再自动挑/.test(box), r.items.filter((x) => /案例/.test(x)).join(' ; ') + ' || ' + box.slice(0, 160));
+  // 重新登入：又能自动挑
+  await s.page.fill('#cloud-panel [data-cloud-login] [name=name]', 'Ana');
+  await s.page.fill('#cloud-panel [data-cloud-login] [name=pw]', 'test-pass');
+  await s.page.click('#cloud-panel [data-cloud-login] button');
+  await s.page.waitForFunction(() => MB.cases().filter(MB.caseUsable).length === 57, null, { timeout: 8000 }).catch(() => {});
+  ok('O6c logging in again makes the cases usable again', await s.page.evaluate(() => MB.cases().filter(MB.caseUsable).length === 57 && !MB.cloud.status().stale));
+  // visi-8：登出 → 重新整理：不会又显示「已登入：Ana」、不再问伺服器、存着的也不再自动挑
+  await s.page.click('#cloud-panel [data-cloud-logout]');
+  await s.page.waitForTimeout(500);
+  s.api.length = 0;
+  await s.page.reload();
+  await s.page.waitForSelector('#deck .pg');
+  await s.page.waitForTimeout(800);
+  await s.page.click('[data-tab="library"]');
+  await s.page.waitForTimeout(300);
+  const box2 = await s.page.innerText('#cloud-panel');
+  const st2 = await s.page.evaluate(() => ({ st: MB.cloud.status(), usable: MB.cases().filter(MB.caseUsable).length, n: MB.cases().length, user: localStorage.getItem('sail-visi-cases-user') }));
+  ok('O7 logout survives a reload: login box (not 「已登入：Ana」), no /api request, cached cases kept but not auto-used',
+    !/已登入/.test(box2) && !/登入过期/.test(box2) && /团队密码/.test(box2) && await s.page.isVisible('#cloud-panel [name=pw]') && st2.st.status !== 'ok' && !st2.st.user && st2.user === null &&
+    st2.n === 60 && st2.usable === 0 && s.api.length === 0, JSON.stringify({ box: box2.slice(0, 120), st2, api: s.api }));
+  await s.ctx.close();
+}
+{
+  // privacy-5：需求卡改名前存的草稿（自然原木、侘寂）：回来时照样勾着（换成新名字）
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const pg = await ctx.newPage();
+  await pg.goto(mock.url + '/brief');
+  await pg.evaluate(() => localStorage.setItem('sail-brief-draft', JSON.stringify({ name: 'Mr Ong', style: ['自然原木 Natural wood', '侘寂 Wabi-sabi'] })));
+  await pg.reload();
+  await pg.waitForTimeout(400);
+  const checked = await pg.$$eval('input[name=style]:checked', (els) => els.map((e) => e.value));
+  await pg.evaluate(() => document.dispatchEvent(new Event('change')));
+  const saved = await pg.evaluate(() => JSON.parse(localStorage.getItem('sail-brief-draft')).style);
+  ok('O8 brief draft saved with the old style names keeps the picks (原木 / 微侘寂) after the rename', JSON.stringify(checked) === JSON.stringify(['原木 Natural wood', '微侘寂 Subtle wabi-sabi']) &&
+    JSON.stringify(saved) === JSON.stringify(checked), JSON.stringify({ checked, saved }));
+  await ctx.close();
 }
 
 const pageErrors = main.errors.filter((e) => /pageerror/.test(e));

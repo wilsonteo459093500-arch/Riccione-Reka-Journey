@@ -4,7 +4,7 @@
    全公司一个团队密码（Vercel 环境变数 VISI_TEAM_PASSWORD，老板自己设）。
    登入后 cookie visi_s = base64url(JSON{n, exp}) . base64url(HMAC)。
    HMAC 的 key = SECRET + ':' + sha256(团队密码)：老板换密码，全员自动登出。
-   SECRET 没另外设的话，从 BLOB_READ_WRITE_TOKEN 推出来（不必多一个环境变数）。
+   SECRET 没另外设的话，从 BLOB_READ_WRITE_TOKEN 推出来；Blob 用 OIDC（只有 BLOB_STORE_ID）时一定要设 SESSION_SECRET。
    ============================================================ */
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { HttpError, getCookie, isLocalHost } from './http.js';
@@ -20,6 +20,8 @@ export function configured() { return !!teamPassword(); }
 export function secret() {
   if (process.env.SESSION_SECRET) return process.env.SESSION_SECRET;
   var token = process.env.BLOB_READ_WRITE_TOKEN || '';
+  // 在 Vercel 上又没有 token（OIDC 的 store）：一定要设 SESSION_SECRET，不用写死的开发用 key
+  if (!token && process.env.VERCEL_ENV) throw new HttpError(503, { error: 'not_configured' });
   // 两个都没有只会是本机测试；key 里还有密码的杂凑，没有密码照样伪造不了
   return createHmac('sha256', token || 'visi-dev-only').update('visi-session').digest('hex');
 }
@@ -88,4 +90,22 @@ export function requireUser(req) {
   var n = currentUser(req);
   if (!n) throw new HttpError(401, { error: 'login' });
   return n;
+}
+
+/* ---------- 照片签章：addPhotos 只登记 /api/photo 真的存好的照片 ----------
+   /api/photo 回 {k, sig}；sig = HMAC(SECRET, 'photo:' + h + ':' + k)。不含团队密码：
+   换密码之前传好、还没登记的照片（在上传页的日志里）换密码后照样登记得进去 */
+export function photoSig(h, k) {
+  return createHmac('sha256', secret()).update('photo:' + h + ':' + k).digest('base64url').slice(0, 32);
+}
+export function checkPhotoSig(h, k, sig) {
+  if (typeof sig !== 'string' || sig.length !== 32) return false;
+  var got = Buffer.from(sig), want = Buffer.from(photoSig(h, k));
+  return got.length === want.length && timingSafeEqual(got, want);
+}
+
+/* 缩图包的路径：同一个项目、同一批照片 → 同一个名字（重送不会多一个档）。
+   名字里有 HMAC：不知道 SECRET 就猜不到网址（公开的 store，路径就是唯一的门） */
+export function packName(pid, hs) {
+  return 't/' + pid + '-' + createHmac('sha256', secret()).update('pack:' + pid + ':' + hs.join(',')).digest('hex').slice(0, 24) + '.json';
 }

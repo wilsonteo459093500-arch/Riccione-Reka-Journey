@@ -82,11 +82,22 @@
   照片在浏览器里先缩成 1600px（顺便去掉 EXIF / GPS），20 张登记一次；中途断网、关掉，再拖一次同一个文件夹就从断的地方接着传，传过的不会重传。
   开始前会先算「会用掉几次写入 / 几 MB」，跟 Vercel 免费方案的额度（每月约 2,000 次写入、1 GB）比。
 - **审核**：按 风格 × 柜类 × 空间 × 状态 × 项目 筛；点照片改空间、柜类、风格、能不能当主图；项目填区域、房型、家里有谁。
-  改动 3 秒自动存一次，每次都记下是谁改的。「隐藏」可以复原，不会真的删掉。**真实的文件夹名（有客户名字）只在这一页出现。**
+  改动停手 45 秒（一直在改最多 2 分钟）、按「保存」、切到上传分页或离开这一页时一次存起来，每次都记下是谁改的；
+  隐藏 / 复原连按几张会一起送。每次保存都是一次 Blob 写入，审核页右上角显示「本月 Blob 写入约 N / 2,000」。
+  「隐藏」可以复原，不会真的删掉。**真实的文件夹名（有客户名字）只在这一页出现。**
 - **一次性设定（老板）**：
   1. Vercel → Storage → Create → Blob：名字 `visi-cases`、区域 Singapore、**Public**，Connect 到 `visi-riccione-reka`（Production + Preview）。
   2. Vercel → `visi-riccione-reka` → Settings → Environment Variables：加 `VISI_TEAM_PASSWORD`（团队密码，Production + Preview），然后重新部署。
-  - 其他钥匙（登入签名、清单的秘密路径）都由 Blob 的 token 自动推出来，不用另外设；Preview 和正式站的清单自动分开。
+     **密码要长、要随机**（例：四、五个不相干的词加数字，20 个字以上），不要用「Sail2026!」这种好猜的 ——
+     网址和登入方式在公开的 repo 里看得到，猜中就看得到所有项目名（客户名字）、改得了所有标签。
+     伺服器会挡猜密码：同一个 IP 10 分钟错 5 次、全部加起来错 30 次，就先锁 10 分钟（已登入的人不受影响）。
+     有人离职就换密码（换了全员要重新登入）。
+  - 已经设好（2026-11-03）：Blob store `visi-cases`（Singapore、Public，连上 Production + Preview，用 OIDC：只有 `BLOB_STORE_ID`）、
+    `VISI_TEAM_PASSWORD`、`SESSION_SECRET`（登入签名）、`CATALOG_KEY`（清单的秘密路径）。后两个 Production 与 Preview 各一组随机值，
+    所以两边的清单是分开的。**`CATALOG_KEY` 不要改**（改了就找不到原来的清单）；换 `SESSION_SECRET` 或密码只会让大家重新登入。
+  - Blob 只有 OIDC（没有 `BLOB_READ_WRITE_TOKEN`）时，Vercel 上缺 `SESSION_SECRET` / `CATALOG_KEY` 会回「not_configured」，不会退回猜得到的 key。
+  - 清单每天第一次写入前备份一份，按星期几轮流覆盖（`catalog/<key>/bak/mon.json` …，最多 7 份）。
+  - Blob 这个月的额度用完、store 被停用时，上传页会整批停下来并说明原因；已传好的照片记在那台电脑，之后再拖一次同一个文件夹就接着传。
 - 程式：`api/session.js`（登入）、`api/photo.js`（存照片）、`api/catalog.js`（清单），共用的在 `api/_lib/`；
   测试与本机模拟伺服器在 repo 根目录的 `tools/caselib/`（`node --test tools/caselib/test/`、`node tools/caselib/mock-server.mjs --port 0`）。
 

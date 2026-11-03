@@ -127,7 +127,9 @@
     if (body instanceof Blob) { payload = body; headers['Content-Type'] = opts.type || body.type || 'application/octet-stream'; }
     else if (body !== undefined) { payload = JSON.stringify(body); headers['Content-Type'] = 'application/json'; }
     if (opts.etag) headers['If-None-Match'] = opts.etag;
-    return fetch(path, { method: method, headers: headers, body: payload, credentials: 'same-origin', cache: 'no-store' })
+    var init = { method: method, headers: headers, body: payload, credentials: 'same-origin', cache: 'no-store' };
+    if (opts.keepalive) init.keepalive = true;     // 关页时最后一次保存：页面关了请求照样送完
+    return fetch(path, init)
       .then(function (r) {
         var etag = r.headers.get('ETag') || '';
         if (r.status === 304) return { status: 304, json: null, etag: etag };
@@ -191,6 +193,36 @@
       return c;
     }, function (e) { catWaiters = null; throw e; });
     return catWaiters;
+  };
+
+  /* ---------- 这个月用掉几次 Blob 写入（Hobby 约 2,000 次）----------
+     伺服器每次写清单都记在 usage['YYYY-MM']（照片、缩图包、清单、备份都算）。
+     旧的清单没有 usage：才从操作纪录估（log 只留最近 300 笔，会少算） */
+  CL.LIMIT_WRITES = 2000;
+  function monthKey() { return new Date().toISOString().slice(0, 7); }
+  CL.monthWrites = function (cat) {
+    cat = cat || CL.cat || {};
+    if (cat.usage && typeof cat.usage === 'object') {
+      var u = cat.usage[monthKey()];
+      return u ? (u.writes | 0) : 0;
+    }
+    var now = new Date();
+    var month = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
+    var writes = 0, days = {};
+    (cat.log || []).forEach(function (e) {
+      if (!e || e.ts < month) return;
+      writes += e.op === 'addPhotos' ? (e.n | 0) + 2 : 1;
+      days[new Date(e.ts).toISOString().slice(0, 10)] = 1;
+    });
+    return writes + Object.keys(days).length;   // 每天第一次写入前的备份（copy 也算写入）
+  };
+  // 自己刚写成功：本地的计数先加上（下一次拿到伺服器的清单就以那边为准）
+  CL.addWrites = function (n) {
+    var c = CL.cat;
+    if (!c || !(n > 0)) return;
+    if (!c.usage || typeof c.usage !== 'object') c.usage = {};
+    var k = monthKey();
+    c.usage[k] = { writes: ((c.usage[k] && c.usage[k].writes) | 0) + n };
   };
 
   // 自己写入成功后：rev 以伺服器回的为准（公开 Blob 的 CDN 可能一分钟内还给旧版）
@@ -258,7 +290,9 @@
         if (first) start();
         return;
       }
+      var wait = r.status === 429 && r.json && r.json.retryAfter ? Math.max(1, Math.ceil(r.json.retryAfter / 60)) : 0;
       var msg = r.status === 401 ? '团队密码不对' :
+        r.status === 429 ? '密码错太多次了，为了安全先锁住：请约 ' + (wait || 10) + ' 分钟后再试' :
         r.status === 400 ? '名字要 1–30 个字' :
         r.status === 503 ? '老板还没设定团队密码（Vercel 的 VISI_TEAM_PASSWORD）' :
         r.status === 0 ? '网路连不上，请检查网路再试' : '登入失败（' + r.status + '）';
@@ -276,7 +310,7 @@
     CL.api('DELETE', '/api/session').then(function () {
       CL.me = '';
       // VISI 那边也别再自己去拿（快取的清单留着，旧方案的公司照片才不会变空白）
-      try { localStorage.removeItem('sail-visi-cases'); } catch (e) { /* 无痕模式 */ }
+      try { localStorage.removeItem('sail-visi-cases'); localStorage.removeItem('sail-visi-cases-user'); } catch (e) { /* 无痕模式 */ }
       location.reload();
     });
   }

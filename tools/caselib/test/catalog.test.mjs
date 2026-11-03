@@ -396,8 +396,8 @@ test('mutate: first write of a UTC day backs up the previous index (failures ign
   assert.equal(a.stats().copies, 0, 'same day → no backup');
   await K.mutate(a, PATH, (ix, ts) => K.patch(ix, { source: 'human', photos: { [h]: { room: 'living' } } }, 'Ana', ts), opts({ now: () => day2 }));
   assert.equal(a.stats().copies, 1);
-  const bak = [...a.store.keys()].find((k) => /\/bak\/2026-11-03\.json$/.test(k));
-  assert.ok(bak, 'backup named by the day it was taken');
+  const bak = [...a.store.keys()].find((k) => /\/bak\/tue\.json$/.test(k));
+  assert.ok(bak, 'backup named by the weekday it was taken (2026-11-03 is a Tuesday)');
   assert.equal(JSON.parse(a.read(bak).body.toString()).photos[h].room, 'kitchen', 'backup = state before the write');
   await K.mutate(a, PATH, (ix, ts) => K.patch(ix, { source: 'human', photos: { [h]: { room: 'study' } } }, 'Ana', ts), opts({ now: () => day2 + 5 }));
   assert.equal(a.stats().copies, 1, 'only the first write of the day');
@@ -406,4 +406,69 @@ test('mutate: first write of a UTC day backs up the previous index (failures ign
   a.copy = async () => { throw new Error('copy broke'); };
   const r = await K.mutate(a, PATH, (ix, ts) => K.patch(ix, { source: 'human', photos: { [h]: { room: 'master' } } }, 'Ana', ts), opts({ now: () => day3 }));
   assert.equal(r.rev, 5);
+});
+
+/* ---------- 继承来的名字（__proto__、constructor）不能当成 id ---------- */
+test('patch / hide: inherited names are unknown ids (no prototype pollution, no 500)', () => {
+  const ix = K.emptyIndex();
+  const h = fakeH();
+  K.addPhotos(ix, { project: { name: NAME }, photos: [photo(h)] }, 'Ana', NOW);
+  for (const bad of ['__proto__', 'constructor', 'toString', 'hasOwnProperty']) {
+    assert.throws(() => K.setHidden(ix, { photos: [bad] }, true, 'Mallory', NOW), (e) => e.status === 400 && e.body.error === 'unknown', 'hide photo ' + bad);
+    assert.throws(() => K.setHidden(ix, { projects: [bad] }, true, 'Mallory', NOW), (e) => e.status === 400 && e.body.error === 'unknown', 'hide project ' + bad);
+    const ph = {}; Object.defineProperty(ph, bad, { value: { room: 'kitchen' }, enumerable: true });
+    assert.throws(() => K.patch(ix, { source: 'human', photos: ph }, 'Mallory', NOW), (e) => e.status === 400 && e.body.error === 'unknown', 'patch photo ' + bad);
+    const pj = {}; Object.defineProperty(pj, bad, { value: { area: 'x' }, enumerable: true });
+    assert.throws(() => K.patch(ix, { source: 'human', projects: pj }, 'Mallory', NOW), (e) => e.status === 400 && e.body.error === 'unknown', 'patch project ' + bad);
+  }
+  // JSON 解析出来的 "__proto__" 是自己的 key：一样挡下
+  const parsed = JSON.parse('{"op":"hide","photos":["__proto__"]}');
+  assert.throws(() => K.setHidden(ix, parsed, true, 'Mallory', NOW), (e) => e.status === 400);
+  assert.equal(({}).hidden, undefined, 'Object.prototype untouched');
+  assert.equal(({}).by, undefined);
+  // 真的照片照样隐藏得了
+  assert.equal(K.setHidden(ix, { photos: [h] }, true, 'Ana', NOW).changed, 1);
+});
+
+/* ---------- 每月写入次数（上传页的额度估算用；log 只留 300 笔不能拿来算） ---------- */
+test('mutate: usage counts every Blob write of the month (index, photos, pack, backup, lost conflicts)', async () => {
+  const a = memoryAdapter();
+  const day1 = Date.UTC(2026, 10, 2, 10, 0, 0);
+  const h1 = fakeH(), h2 = fakeH();
+  // 2 张照片 + 1 包缩图 + 清单 = 4
+  await K.mutate(a, PATH, (ix, ts) => K.addPhotos(ix, { project: { name: NAME }, photos: [photo(h1), photo(h2)], pack: 't/x.json' }, 'Ana', ts), opts({ now: () => day1 }));
+  let ix = (await a.getJson(PATH)).data;
+  assert.deepEqual(ix.usage, { '2026-11': { writes: 4 } });
+  // 重送同样的照片：0 次写入（noop）
+  await K.mutate(a, PATH, (ix2, ts) => K.addPhotos(ix2, { project: { name: NAME }, photos: [photo(h1)] }, 'Ana', ts), opts({ now: () => day1 + 1 }));
+  assert.deepEqual((await a.getJson(PATH)).data.usage, { '2026-11': { writes: 4 } });
+  // 2 次冲突（没写成也算）+ 1 次写成 = 3
+  a.conflictNext(2);
+  await K.mutate(a, PATH, (ix2, ts) => K.patch(ix2, { source: 'human', photos: { [h1]: { room: 'kitchen' } } }, 'Ana', ts), opts({ now: () => day1 + 2 }));
+  assert.deepEqual((await a.getJson(PATH)).data.usage, { '2026-11': { writes: 7 } });
+  // 隔天第一次：备份 1 + 清单 1
+  await K.mutate(a, PATH, (ix2, ts) => K.patch(ix2, { source: 'human', photos: { [h1]: { room: 'living' } } }, 'Ana', ts), opts({ now: () => day1 + 86400000 }));
+  assert.deepEqual((await a.getJson(PATH)).data.usage, { '2026-11': { writes: 9 } });
+  // 300 笔以后照样对：log 被截掉了，计数没有
+  for (let i = 0; i < 305; i++) {
+    await K.mutate(a, PATH, (ix2, ts) => K.patch(ix2, { source: 'human', photos: { [h1]: { room: i % 2 ? 'kitchen' : 'study' } } }, 'Ana', ts), opts({ now: () => day1 + 86400000 + 10 + i }));
+  }
+  ix = (await a.getJson(PATH)).data;
+  assert.equal(ix.log.length, 300);
+  assert.equal(ix.usage['2026-11'].writes, 9 + 305);
+  // 换月：新的一格，只留最近 3 个月
+  for (const [y, m] of [[2026, 11], [2027, 0], [2027, 1]]) {
+    await K.mutate(a, PATH, (ix2, ts) => K.patch(ix2, { source: 'human', photos: { [h1]: { room: m % 2 ? 'master' : 'foyer' } } }, 'Ana', ts), opts({ now: () => Date.UTC(y, m, 5) }));
+  }
+  assert.deepEqual(Object.keys((await a.getJson(PATH)).data.usage).sort(), ['2026-12', '2027-01', '2027-02']);
+});
+
+test('addPhotos: a photo already registered with the same k is not counted again; a new k is', () => {
+  const ix = K.emptyIndex();
+  const h = fakeH(), h2 = fakeH();
+  const first = K.addPhotos(ix, { project: { name: NAME }, photos: [photo(h)] }, 'Ana', NOW);
+  assert.equal(first.writes, 1);
+  // 同一张（同一个 k）+ 一张新的 + 同一张但 k 不一样（CDN 旧清单害它重传了一次）
+  const again = K.addPhotos(ix, { project: { name: NAME }, photos: [photo(h), photo(h2), { ...photo(h), k: 'c/' + h + '-OtherOtherOtherOther0.jpg' }], pack: 't/y.json' }, 'Ana', NOW);
+  assert.equal(again.writes, 1 + 1 + 1, 'h2 + the re-uploaded copy of h + pack');
 });

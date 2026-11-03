@@ -65,7 +65,7 @@ test('mock server: full flow over real HTTP (startMock, CORS on)', async (t) => 
   assert.ok(Buffer.from(await blobRes.arrayBuffer()).equals(tinyJpeg()));
 
   // 登记（带缩图）
-  const add = await call('POST', '/api/catalog', { op: 'addPhotos', project: { name: NAME }, photos: [{ ...photo(h), k: up.json.k }], thumbs: { [h]: tinyThumb() } });
+  const add = await call('POST', '/api/catalog', { op: 'addPhotos', project: { name: NAME }, photos: [{ ...photo(h), k: up.json.k, sig: up.json.sig }], thumbs: { [h]: tinyThumb() } });
   assert.equal(add.status, 200, add.text);
   assert.deepEqual(add.json.added, [h]);
   const pid = add.json.pid;
@@ -192,7 +192,7 @@ test('mock server CLI: --no-cors, --password, --seed', async (t) => {
   assert.equal((await fetch(up.json.url)).headers.get('access-control-allow-origin'), null);
   // HTTP 钩子
   await fetch(info.blob + '__mock/conflictNext?n=2', { method: 'POST' });
-  const add = await call('POST', '/api/catalog', { op: 'addPhotos', project: { name: NAME }, photos: [{ ...photo(h2), k: up.json.k }] });
+  const add = await call('POST', '/api/catalog', { op: 'addPhotos', project: { name: NAME }, photos: [{ ...photo(h2), k: up.json.k, sig: up.json.sig }] });
   assert.equal(add.json.rev, 8);
   const stats = await (await fetch(info.blob + '__mock/stats')).json();
   assert.equal(stats.conflicts, 2);
@@ -212,7 +212,7 @@ test('mock server: two in-process instances keep separate storage (CORS on / off
   const cb = api(b.url, (await login(b.url)).cookie);
   const h = fakeH();
   const up = await ca('POST', '/api/photo?h=' + h, tinyJpeg(), { 'Content-Type': 'image/jpeg' });
-  await ca('POST', '/api/catalog', { op: 'addPhotos', project: { name: NAME }, photos: [{ ...photo(h), k: up.json.k }] });
+  await ca('POST', '/api/catalog', { op: 'addPhotos', project: { name: NAME }, photos: [{ ...photo(h), k: up.json.k, sig: up.json.sig }] });
   assert.equal((await ca('GET', '/api/catalog')).json.rev, 1);
   assert.equal((await cb('GET', '/api/catalog')).json.rev, 0, 'other instance untouched');
   assert.equal(a.adapter.stats().puts, 2);

@@ -7,6 +7,8 @@
      旧方案里的 c: 照片照样解析得到（只是图要有网路才载得出来）
    - 最多 10 分钟问一次有没有更新（If-None-Match "rev-N"，没变就 304）；业务按「更新」随时问
    - 这台电脑没登入过：一个请求都不发 —— 静态网站（没有 /api）、还没登入的同事打开 VISI 跟以前一模一样
+   - 登出（重新整理后也一样）/ 登入过期：存着的清单只拿来解析方案里已经放的照片（entries 带 stale），
+     不再自动挑、帮我挑也不用 —— 之后被隐藏的照片（拍到客户…）这台电脑看不出来；登出后也不再问伺服器
    - entries() 只给白名单栏位 + 自动产生的说明（「原木 · 橱柜 · 厨房」）。
      项目名（文件夹名，含客户名字）、档案路径 f 从来不进来：就算伺服器给了，这里也不收
    对外：MB.cloud.{ loadCached, refresh, me, login, logout, thumbs, thumb, entries, projects, status, onChange, proxySrc }
@@ -26,7 +28,8 @@
   var PACK_K = /^t\/[A-Za-z0-9._-]+\.json$/;
   var THUMB_RE = /^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/;
 
-  var state = { status: 'idle', user: lsGet(USER) || '', rev: 0, checked: 0, count: 0, error: '' };
+  // stale：存着的清单可能过时了（登入过期、登出）· loggedOut：自己按了登出（重新整理也记得）
+  var state = { status: 'idle', user: lsGet(USER) || '', rev: 0, checked: 0, count: 0, error: '', stale: false, loggedOut: false };
   var IDX = null;          // 白名单过的清单
   var ENTRIES = [];
   var THUMBS = {};         // h16 → dataURL（缩图包，320px）
@@ -155,6 +158,7 @@
   }
 
   function publish() {
+    ENTRIES.forEach(function (e) { e.stale = !!state.stale; });
     if (typeof MB.setCases === 'function') MB.setCases(ENTRIES);
     state.count = ENTRIES.filter(function (e) { return !e.hidden && e.status !== 'unsure'; }).length;
     notify('cases');
@@ -165,18 +169,26 @@
   function setStatus(s, err) {
     var changed = state.status !== s || state.error !== (err || '');
     state.status = s; state.error = err || '';
+    // 伺服器说要登入（cookie 过期）：存着的清单改成只解析、不自动挑
+    if (s === 'login') setStale(true);
     if (changed) notify('status');
+  }
+  function setStale(on) {
+    if (state.stale === !!on) return;
+    state.stale = !!on;
+    if (IDX) { publish(); save(); }
   }
   function status() {
     return { status: state.status, user: state.user, rev: IDX ? IDX.rev : 0, checked: state.checked, count: state.count, error: state.error,
-      cached: !!IDX };
+      cached: !!IDX, stale: !!state.stale, loggedOut: !!state.loggedOut };
   }
-  /** 这台电脑登入过（或存着清单）：才去问伺服器 */
-  function wanted() { return !!IDX || lsGet(FLAG) === '1'; }
+  /** 这台电脑登入着（登入过、没按登出）：才去问伺服器。只存着清单不算（登出后不再问） */
+  function wanted() { return lsGet(FLAG) === '1' && !state.loggedOut; }
 
   function save() {
     if (!IDX) return Promise.resolve();
-    return idbPut('meta', { k: 'index', index: IDX, checked: state.checked, user: state.user });
+    return idbPut('meta', { k: 'index', index: IDX, checked: state.checked, user: state.loggedOut ? '' : state.user,
+      stale: !!state.stale, loggedOut: !!state.loggedOut });
   }
 
   /* ---------- 网路 ---------- */
@@ -206,11 +218,14 @@
         if (rec && rec.index) {
           IDX = sanitize(rec.index);
           state.checked = +rec.checked || 0;
-          if (rec.user && !state.user) state.user = String(rec.user).slice(0, 30);
+          // 登出过（或案例库管理页登出、清掉了 FLAG）：不要又显示「已登入：某某」
+          if (rec.loggedOut || lsGet(FLAG) !== '1') { state.loggedOut = true; state.user = ''; }
+          else if (rec.user && !state.user) state.user = String(rec.user).slice(0, 30);
+          state.stale = !!(rec.stale || state.loggedOut);
         }
       }).catch(function () {}).then(function () {
         build(); publish();
-        if (IDX && state.status === 'idle') state.status = 'cached';
+        if (IDX && state.status === 'idle') state.status = state.loggedOut ? 'login' : 'cached';
         return ENTRIES.length;
       });
     },
@@ -218,7 +233,7 @@
     /** 问伺服器有没有新清单。force = 业务按「更新」/ 刚登入；否则 10 分钟内问过就不问。永远 resolve（回 status()） */
     refresh: function (force) {
       if (!wanted() && !force) return Promise.resolve(status());
-      if (!force && state.checked && Date.now() - state.checked < EVERY) {
+      if (!force && !state.stale && state.checked && Date.now() - state.checked < EVERY) {
         // 10 分钟内才问过：存着的就是最新的（不要一直显示「正在问」）
         if (state.status === 'cached') setStatus('ok');
         return Promise.resolve(status());
@@ -226,7 +241,7 @@
       if (inflight) return inflight;
       var extra = IDX && IDX.rev ? { 'If-None-Match': '"rev-' + IDX.rev + '"' } : {};
       inflight = call('GET', 'catalog?view=visi', null, extra).then(function (r) {
-        if (r.status === 304) { state.checked = Date.now(); save(); setStatus('ok'); return; }
+        if (r.status === 304) { state.checked = Date.now(); state.loggedOut = false; setStale(false); save(); setStatus('ok'); return; }
         if (r.status === 401) { setStatus('login'); return; }
         if (unavailable(r)) { setStatus('unavailable', 'http ' + r.status); return; }
         if (!r.ok) { setStatus('offline', 'http ' + r.status); return; }   // 500 storage 之类：照样用存着的
@@ -234,6 +249,7 @@
         if (!idx) { setStatus('offline', 'bad catalog'); return; }
         IDX = idx;
         state.checked = Date.now();
+        state.stale = false; state.loggedOut = false;
         lsSet(FLAG, '1');
         build(); publish(); save();
         setStatus('ok');
@@ -265,23 +281,29 @@
       return call('POST', 'session', { name: name, password: String(password) }).then(function (r) {
         if (r.status === 200 && r.data && r.data.name) {
           state.user = String(r.data.name).slice(0, 30);
+          state.loggedOut = false;
           lsSet(USER, state.user); lsSet(FLAG, '1');
-          setStatus('ok');
+          // 先不改 stale：要拿到伺服器的清单（200 / 304）才算是新的
+          state.status = 'cached';
           return MB.cloud.refresh(true).then(function () { return { ok: true, name: state.user }; });
         }
         var err = (r.data && r.data.error) || ('http_' + r.status);
         if (unavailable(r)) { setStatus('unavailable', err); return { ok: false, error: 'unavailable', msg: r.status === 503 ? '团队密码还没设定 —— 请老板在 Vercel 加 VISI_TEAM_PASSWORD' : '这个网址没有公司案例库（只有正式网站有）' }; }
         if (err === 'password') return { ok: false, error: err, msg: '团队密码不对' };
+        if (err === 'slow_down') return { ok: false, error: err, msg: '密码错太多次了，为了安全先锁住：请约 ' + Math.max(1, Math.ceil(((r.data && r.data.retryAfter) || 600) / 60)) + ' 分钟后再试' };
         if (err === 'name') return { ok: false, error: err, msg: '名字要 1–30 个字' };
         return { ok: false, error: err, msg: '登入失败（' + err + '），稍后再试' };
       }, function () { return { ok: false, error: 'network', msg: '连不上，检查网络后再试' }; });
     },
 
-    /** 登出：存着的清单留着（旧方案的案例照片还要解析得到），只是不再自动去问伺服器 */
+    /** 登出：存着的清单留着（旧方案的案例照片还要解析得到），但不再自动挑、不再自动去问伺服器；重新整理也记得 */
     logout: function () {
       return call('DELETE', 'session').catch(function () {}).then(function () {
-        state.user = ''; lsSet(FLAG, null);
-        setStatus('login');
+        state.user = ''; state.loggedOut = true;
+        lsSet(FLAG, null); lsSet(USER, null);
+        if (retry) { clearTimeout(retry); retry = null; }
+        setStatus('login');     // → stale（会存起来）
+        save();
         return status();
       });
     },

@@ -694,9 +694,11 @@
       var pk = MB.ptypeKey ? MB.ptypeKey(p.property.type) : '';
       var pt = pk && pk === im.ptype && pk !== 'landed' && pk !== 'condo' ? (MB.CASE_PTYPES || []).filter(function (t) { return t.key === pk; })[0] : null;
       var PT_EN = { terrace: 'a terrace house', semid: 'a semi-D', bungalow: 'a bungalow' };
-      var condo = /condo|公寓|apartment|serviced/i.test(im.ptype);
+      // 两边都要认得出来才说：客户是「商用」「店屋」这类认不出的（pk = ''），什么都不说 —— 不能说成「也是有地住宅」
+      var LANDED = { landed: 1, terrace: 1, semid: 1, bungalow: 1 };
       if (pt) facts.push(zh ? '也是' + pt.zh : 'also ' + (PT_EN[pk] || 'a ' + pt.en.toLowerCase()));
-      else if (condo === MB.isCondo(p)) facts.push(zh ? (condo ? '也是公寓' : '也是有地住宅') : (condo ? 'also a condo' : 'also a landed home'));
+      else if (pk === 'condo' && im.ptype === 'condo') facts.push(zh ? '也是公寓' : 'also a condo');
+      else if (LANDED[pk] && LANDED[im.ptype]) facts.push(zh ? '也是有地住宅' : 'also a landed home');
     }
     var TRAIT = { elderly: [/长辈|elder|parent/i, '也有长辈同住', 'parents at home too'], kids: [/孩子|小孩|kid|child/i, '也有小孩', 'kids at home too'],
       pets: [/宠物|pet/i, '也养宠物', 'pets too'], helper: [/帮佣|helper|maid/i, '也有帮佣', 'a helper too'] };

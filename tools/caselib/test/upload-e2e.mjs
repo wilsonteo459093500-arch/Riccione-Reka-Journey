@@ -284,11 +284,32 @@ test('review: edit room / cabinets / style / hero, 保存 → confirmed and by =
   await page.click('#drawer [data-act="ok-next"]');
   const after = await page.evaluate(() => MB.clReview.state().sel);
   assert.notEqual(after, before, 'moved to the next photo');
-  // 自动保存（不按保存，3 秒内送出）
+  // 自动保存不再每 3 秒一次（每次保存都是一次 Blob 写入）：停手 45 秒才存 —— 3.5 秒后伺服器还没变
+  assert.equal(await page.evaluate(() => MB.clReview.idleMs), 45000);
+  await page.waitForTimeout(3500);
+  assert.notEqual(index(m).photos[before].status, 'confirmed', 'not saved 3.5 s after the edit');
+  assert.equal(await page.evaluate(() => MB.clReview.unsaved()), 1);
+  assert.match(await page.textContent('#rv-save .msg'), /停手 45 秒后自动保存/);
+  // 切到别的分页：马上存
+  await page.click('#tabs [data-tab="upload"]');
   await waitServer(() => index(m).photos[before].status === 'confirmed' && index(m).photos[before].room === '', 8000);
+  await page.click('#tabs [data-tab="review"]');
+  await page.waitForSelector('#drawer.on');
+  // 停手才存：连点 3 下（间隔比停手时间短）只送一次
+  await page.evaluate(() => { MB.clReview.idleMs = 1200; });
+  const posts = [];
+  const onReq = (r) => { if (r.method() === 'POST' && /\/api\/catalog$/.test(r.url())) posts.push(r.postDataJSON()); };
+  page.on('request', onReq);
   const nextH = after;
+  await page.click('#drawer .chips[data-kind="room"] .chip[data-v="kitchen"]');
+  await page.waitForTimeout(500);
+  await page.click('#drawer .chips[data-kind="room"] .chip[data-v="dining"]');
+  await page.waitForTimeout(500);
   await page.click('#drawer .chips[data-kind="room"] .chip[data-v="living"]');
-  await page.waitForFunction(() => MB.clReview.unsaved() === 0, null, { timeout: 8000 });
+  await page.waitForFunction(() => MB.clReview.unsaved() === 0 && !MB.clReview.state().saving, null, { timeout: 8000 });
+  page.off('request', onReq);
+  assert.equal(posts.length, 1, 'debounced into one patch: ' + JSON.stringify(posts));
+  assert.equal(posts[0].photos[nextH].room, 'living');
   assert.equal(index(m).photos[nextH].room, 'living');
   assert.equal(index(m).photos[nextH].by, 'Ana');
   // 明确选「待确认」：之后改别的栏位也保持待确认
@@ -366,6 +387,44 @@ test('review: hide / unhide a photo and a project', async () => {
   await page.uncheck('#rv-filters input[data-f="hidden"]');
   await page.selectOption('#rv-filters select[data-f="pid"]', '');
   await page.click('#drawer .dr-x');
+  assert.deepEqual(page.errors, []);
+});
+
+test('review: quick hides go out together (one write); hide + unhide before sending = no write; month counter shown', async () => {
+  const { page } = A, m = A.m;
+  await page.evaluate(() => { MB.clReview.hideMs = 1500; });
+  const ids = await page.$$eval('#rv-grid .rv-card', (els) => els.slice(0, 3).map((e) => e.getAttribute('data-h')));
+  const before = m.adapter.stats().puts;
+  const budget0 = await page.textContent('#rv-budget');
+  assert.match(budget0, /本月 Blob 写入约 [\d,]+ \/ 2,000/);
+  for (const h of ids) {
+    await page.click('#rv-grid .rv-card[data-h="' + h + '"]');
+    await page.click('#drawer [data-act="hide-photo"]');
+  }
+  assert.ok(await page.evaluate(() => MB.clReview.unsaved()) >= 3, 'pending hides count as unsaved (beforeunload asks)');
+  await waitServer(() => ids.every((h) => index(m).photos[h].hidden), 8000);
+  assert.equal(m.adapter.stats().puts - before, 1, 'three hides = one Blob write');
+  // 按了又按回去：不用送
+  const mid = m.adapter.stats().puts;
+  await page.click('#drawer [data-act="hide-photo"]');     // 复原第 3 张
+  await page.click('#drawer [data-act="hide-photo"]');     // 又隐藏
+  await page.waitForTimeout(2500);
+  assert.equal(m.adapter.stats().puts, mid, 'toggled back before sending → nothing written');
+  // 全部复原（一次）
+  await page.check('#rv-filters input[data-f="hidden"]');
+  for (const h of ids) {
+    await page.click('#rv-grid .rv-card[data-h="' + h + '"]');
+    await page.click('#drawer [data-act="hide-photo"]');
+  }
+  await page.click('#rv-savebtn');                         // 「保存」也会马上送隐藏 / 复原
+  await waitServer(() => ids.every((h) => !index(m).photos[h].hidden), 4000);
+  assert.equal(m.adapter.stats().puts - mid, 1);
+  await page.uncheck('#rv-filters input[data-f="hidden"]');
+  await page.click('#drawer .dr-x');
+  const budget1 = await page.textContent('#rv-budget');
+  const n = (t) => +t.replace(/[^\d/]/g, '').split('/')[0];
+  assert.ok(n(budget1) >= n(budget0) + 2, budget0 + ' → ' + budget1);
+  await page.evaluate(() => { MB.clReview.hideMs = 4000; });
   assert.deepEqual(page.errors, []);
 });
 
@@ -642,4 +701,127 @@ test('over the Hobby budget → clear warning, start needs «我知道»', async
   await page.screenshot({ path: shotPath('upload-over-budget-1440.png'), fullPage: true });
   assert.deepEqual(page.errors, []);
   await ctx.close();
+});
+
+test('budget: this month\'s writes come from the server counter (the 300-entry log under-counts)', async () => {
+  const now = Date.now();
+  const month = new Date().toISOString().slice(0, 7);
+  // log 只剩 300 笔「改标签」（之前上传的纪录已经被挤掉）；伺服器的计数说这个月已经写了 1,997 次（再传 4 张就超过）
+  const log = Array.from({ length: 300 }, (_, i) => ({ op: 'patch', by: 'X', ts: now - 100000 + i, n: 1 }));
+  const m = await mock({ seed: { index: { v: 1, rev: 300, base: '', projects: {}, photos: {}, log, usage: { [month]: { writes: 1997 } } } } });
+  const { ctx, page } = await newPage(browser);
+  await loginOk(page, m.url, 'Ana');
+  await selectFolder(page, dirname(info.soloA));
+  await waitHashed(page);
+  const est = await page.evaluate(() => MB.clUpload.estimate());
+  assert.equal(est.u.writes, 1997, 'not 300 + 1 from the log');
+  assert.equal(est.over, true);
+  assert.equal(await page.isDisabled('#start'), true);
+  // 储存空间也算每天的备份（最多 7 份整份清单）
+  assert.ok(est.u.bytes >= 7 * JSON.stringify(await page.evaluate(() => MB.cl.cat)).length * 0.9, 'backups counted in storage');
+  // 审核分页也看得到这个月用了多少
+  await page.click('#tabs [data-tab="review"]');
+  await page.waitForFunction(() => /1,997/.test(document.querySelector('#rv-budget').textContent));
+  assert.ok(await page.$eval('#rv-budget', (e) => e.classList.contains('warn')));
+  assert.deepEqual(page.errors, []);
+  await ctx.close();
+});
+
+test('Blob stops taking writes mid-upload (503 storage_blocked) → the run stops with a clear message instead of grinding on', async () => {
+  const m = await mock();
+  const { ctx, page } = await newPage(browser);
+  await loginOk(page, m.url, 'Ana');
+  await page.evaluate(() => { MB.cl.backoff = function () { return 40; }; });
+  let ok = 0, blockedReq = 0;
+  await page.route('**/api/photo**', (route) => {
+    if (ok < 4) { ok++; return route.continue(); }
+    blockedReq++;
+    return route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"storage_blocked","message":"BlobStoreSuspendedError: Vercel Blob: This store has been suspended."}' });
+  });
+  await selectFolder(page, dirname(info.many));
+  await waitHashed(page);
+  await startAndWait(page, 60000);
+  const S = await page.evaluate(() => { const s = MB.clUpload.state(); return { fatal: s.fatal, counts: s.counts, wait: s.items.filter((it) => it.st === 'wait').length }; });
+  assert.match(S.fatal, /Vercel Blob 暂停了写入/);
+  assert.match(S.fatal, /suspended/);
+  assert.ok(blockedReq <= 4, 'stopped right away (no 4 tries × every remaining photo): ' + blockedReq);
+  assert.equal(S.counts.failed, 0, 'photos are not marked failed — they are still to do');
+  assert.ok(S.wait >= 20, 'the rest stay waiting: ' + S.wait);
+  assert.match(await page.textContent('#sum-body'), /上传停止了[\s\S]*Vercel Blob 暂停了写入/);
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  assert.deepEqual(page.errors, []);
+  await ctx.close();
+});
+
+test('Blob rate limit (429 storage_busy, retryAfter) → waits the time the server asked for', async () => {
+  const m = await mock();
+  const { ctx, page } = await newPage(browser);
+  await loginOk(page, m.url, 'Ana');
+  await page.evaluate(() => { MB.cl.backoff = function () { return 40; }; });
+  const times = [];
+  await page.route('**/api/photo**', (route) => {
+    times.push(Date.now());
+    if (times.length === 1) return route.fulfill({ status: 429, contentType: 'application/json', headers: { 'Retry-After': '2' }, body: '{"error":"storage_busy","retryAfter":2,"message":"rate limited"}' });
+    return route.continue();
+  });
+  await selectFolder(page, dirname(info.soloA));
+  await waitHashed(page);
+  await startAndWait(page, 60000);
+  assert.equal(byName(index(m), 'Ipoh 日式 黄小姐').n, 4);
+  // 第一张被限流：同一张的下一次至少等 2 秒（不是 40 ms 的退避）
+  const firstRetry = times.slice(1).find((t, i) => t - times[0] >= 1900);
+  assert.ok(firstRetry, 'a retry came ≥ 2 s later: ' + times.map((t) => t - times[0]).join(','));
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  assert.deepEqual(page.errors, []);
+  await ctx.close();
+});
+
+test('reload right after committing while the CDN still serves the old catalog → nothing is uploaded again', async () => {
+  const m = await mock();
+  const { ctx, page } = await newPage(browser);
+  await loginOk(page, m.url, 'Ana');
+  const stale = await page.evaluate(async () => { const r = await fetch('/api/catalog?view=full', { cache: 'no-store' }); return { body: await r.text(), etag: r.headers.get('ETag') }; });
+  await selectFolder(page, dirname(info.soloA));
+  await waitHashed(page);
+  await startAndWait(page);
+  assert.equal(byName(index(m), 'Ipoh 日式 黄小姐').n, 4);
+  // 公开 Blob 的 CDN：一分钟内还给写入前的清单
+  await page.route((u) => u.pathname === '/api/catalog' && u.searchParams.get('view') === 'full', (route) => {
+    if (route.request().method() !== 'GET') return route.continue();
+    return route.fulfill({ status: 200, contentType: 'application/json; charset=utf-8', headers: { ETag: stale.etag }, body: stale.body });
+  });
+  await page.reload();
+  await page.waitForSelector('#tabs:not([hidden])');
+  await page.waitForFunction(() => MB.cl.cat);
+  m.adapter.resetStats();
+  await selectFolder(page, dirname(info.soloA));
+  await waitHashed(page);
+  assert.equal(await page.evaluate(() => MB.cl.cat.rev), 0, 'really got the stale catalog');
+  assert.match(await page.textContent('#plan-body'), /0 张新照片 · 已在库里 4 张/);
+  assert.equal(await page.isDisabled('#start'), true);
+  assert.equal(m.adapter.stats().puts, 0, 'zero Blob writes');
+  assert.ok(await page.evaluate(() => MB.cl.minRev) >= 1, 'minRev restored from IndexedDB');
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  assert.deepEqual(page.errors, []);
+  await ctx.close();
+});
+
+test('login: too many wrong passwords → «密码错太多次» (429), the right one is blocked too', async () => {
+  const session = await import(new URL('../../../invite/api/session.js', import.meta.url).href);
+  session.resetLoginLimiter();
+  try {
+    const m = await mock();
+    for (let i = 0; i < 5; i++) {
+      const r = await fetch(m.url + '/api/session', { method: 'POST', headers: { 'X-VISI': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'X', password: 'guess' + i }) });
+      assert.equal(r.status, 401);
+    }
+    const { ctx, page } = await newPage(browser);
+    await login(page, m.url, 'Ana');
+    await page.waitForSelector('#login-err.on');
+    assert.match(await page.textContent('#login-err'), /密码错太多次了.*约 10 分钟后再试/);
+    assert.equal(await page.isHidden('#tabs'), true);
+    await ctx.close();
+  } finally {
+    session.resetLoginLimiter();
+  }
 });

@@ -18,28 +18,41 @@ export class HttpError extends Error {
 // 超过上限后不再存，但继续读到底：直接断线的话，客户端常常收不到 413 而是连线错误
 const HARD_LIMIT = 64 * 1024 * 1024;
 
+// 平台先读过的内容：Buffer / 字串照用；已解析的 JSON 物件转回字串；其它（例：image/jpeg 的 req.body 是 undefined）→ null
+function preRead(req) {
+  try {
+    var raw = req.rawBody;
+    if (Buffer.isBuffer(raw) || typeof raw === 'string') return Buffer.from(raw);
+    var b = req.body;
+    if (Buffer.isBuffer(b) || typeof b === 'string') return Buffer.from(b);
+    if (b && typeof b === 'object' && !(b instanceof Uint8Array)) return Buffer.from(JSON.stringify(b));
+  } catch (e) { /* 平台的 JSON 解析失败 → 改读 stream，readJson 会回 400 */ }
+  return null;
+}
+
 export function readRaw(req, limit) {
   return new Promise(function (resolve, reject) {
-    // 平台已经读完（极少数情况）：用它留下的内容（Buffer、字串，或已解析的 JSON 物件）
-    if (req.readableEnded) {
-      var pre = null;
-      try {
-        pre = req.rawBody || req.body || null;
-        if (pre && !Buffer.isBuffer(pre) && typeof pre === 'object') pre = JSON.stringify(pre);
-      } catch (e) { pre = null; }
-      var buf = pre ? Buffer.from(pre) : Buffer.alloc(0);
-      if (buf.length > limit) reject(new HttpError(413, { error: 'too_large' }));
-      else resolve(buf);
-      return;
+    // Vercel 的 Node runtime（helpers 预设开着）会先把 body 读完：原本的 stream 已经结束，
+    // 内容放在 req.body（只解析 json / text / octet-stream；image/jpeg 是 undefined），
+    // 'data' / 'end' 再从它的 PassThrough 重播一次。先用读好的，没有就照常读（会拿到重播）
+    var ended = !!req.readableEnded;
+    if (ended) {
+      var pre = preRead(req);
+      if (pre) {
+        if (pre.length > limit) reject(new HttpError(413, { error: 'too_large' }));
+        else resolve(pre);
+        return;
+      }
     }
     var declared = Number(req.headers && req.headers['content-length']);
     var over = Number.isFinite(declared) && declared > limit;
     var size = 0;
     var chunks = [];
-    var done = false;
+    var done = false, idle = 0;
     function finish(err, val) {
       if (done) return;
       done = true;
+      if (idle) clearTimeout(idle);
       if (err) reject(err); else resolve(val);
     }
     req.on('data', function (c) {
@@ -54,6 +67,11 @@ export function readRaw(req, limit) {
       else finish(null, Buffer.concat(chunks));
     });
     req.on('error', function (e) { finish(over ? new HttpError(413, { error: 'too_large' }) : e); });
+    if (ended) {
+      // 原本的 stream 早就关了（不会再有 'close'）：重播通常下一轮就到；一直没来 = 真的没有内容
+      idle = setTimeout(function () { finish(null, Buffer.alloc(0)); }, 1500);
+      return;
+    }
     // 客户端中途断线：不要让 handler 一直等下去
     req.on('close', function () {
       finish(over ? new HttpError(413, { error: 'too_large' }) : new HttpError(400, { error: 'aborted' }));
@@ -133,7 +151,12 @@ export function sendError(res, e) {
   if (e && e.code === 'conflict') return send(res, 409, { error: 'conflict' });
   if (e && (e.code === 'storage' || /^Blob/.test(String(e.name || '')) || /^Blob/.test(String(e.constructor && e.constructor.name)))) {
     console.error('[caselib] storage:', e && e.message);
-    return send(res, 500, { error: 'storage', message: String((e && e.message) || 'storage error').slice(0, 300) });
+    // 429 限流带 Retry-After；503 storage_blocked（store 停了、没权限）上传页会整个停下来，不再一张一张重试
+    var st = e.code === 'storage' && (e.status === 429 || e.status === 503) ? e.status : 500;
+    var body = { error: e.code === 'storage' && e.error ? e.error : 'storage', message: String((e && e.message) || 'storage error').slice(0, 300) };
+    var extra = null;
+    if (st === 429 && e.retryAfter) { body.retryAfter = e.retryAfter; extra = { 'Retry-After': String(e.retryAfter) }; }
+    return send(res, st, body, extra);
   }
   console.error('[caselib] server:', e && (e.stack || e.message || e));
   return send(res, 500, { error: 'server' });
