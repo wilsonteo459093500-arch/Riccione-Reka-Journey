@@ -127,6 +127,8 @@ export function addPhotos(index, input, by, now) {
   });
   // 一张都没新增（全部已登记过）：不写，省 Blob 写入次数；新项目也等有照片才建立
   if (!added.length) return { pid: pid, added: added, dup: dup, n: 0, noop: true };
+  // 删过又亲手选回来传的：从「删过」拿掉
+  if (Array.isArray(index.purged) && index.purged.length) index.purged = index.purged.filter(function (x) { return added.indexOf(x) < 0; });
   if (input.pack && proj.packs.indexOf(input.pack) < 0) {
     // 缩图包的大小记在 pb：旧项目（还没记过）先按原有张数估
     proj.pb = packBytes(proj) + Math.max(0, input.packSz | 0);
@@ -287,6 +289,7 @@ export function visiView(index) {
   Object.keys(out.projects || {}).forEach(function (pid) { delete out.projects[pid].name; });
   Object.keys(out.photos || {}).forEach(function (h) { delete out.photos[h].f; });
   delete out.log;
+  delete out.purged;
   return out;
 }
 
@@ -369,6 +372,7 @@ export function checkWrites(writes, add, cap, bytesLeft) {
    - 只能删已经隐藏的照片（照片自己隐藏，或它的项目隐藏）
    - 项目的照片全删光：缩图包一起删、项目也拿掉；只删一部分：缩图包留着（缩图约占 8% 的空间） */
 export const MAX_PURGE = 1000;
+export const PURGED_KEEP = 20000;           // 删过的 hash 留着（每个 16 字）：再拖同一个文件夹时上传页不会又传一次
 export function validatePurge(index, input) {
   input = input || {};
   var list = input.photos;
@@ -403,7 +407,7 @@ export function planPurge(index, hs) {
   return { photos: hs, keys: keys, packs: packs, emptied: emptied, freed: freed };
 }
 export function applyPurge(index, plan) {
-  var removed = 0, touched = {};
+  var removed = 0, touched = {}, gone = [];
   plan.photos.forEach(function (h) {
     if (!hasPhoto(index, h)) return;              // 别人刚好也删了
     var pid = index.photos[h].p;
@@ -413,8 +417,13 @@ export function applyPurge(index, plan) {
       if (!touched[pid]) { pr.pb = packBytes(pr); touched[pid] = 1; }
     }
     delete index.photos[h];
+    gone.push(h);
     removed++;
   });
+  if (gone.length) {
+    var prev = Array.isArray(index.purged) ? index.purged.filter(function (x) { return typeof x === 'string' && HEX16.test(x) && gone.indexOf(x) < 0; }) : [];
+    index.purged = prev.concat(gone).slice(-PURGED_KEEP);
+  }
   var gonePids = [];
   Object.keys(touched).forEach(function (pid) {
     var n = Object.keys(index.photos).filter(function (h) { return index.photos[h].p === pid; }).length;

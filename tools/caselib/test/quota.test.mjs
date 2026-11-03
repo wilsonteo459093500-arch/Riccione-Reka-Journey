@@ -306,6 +306,22 @@ test('purge: a fully-purged project loses its packs and its record; a hidden pro
   assert.equal(again.status, 400);
 });
 
+test('purge: purged hashes are remembered (upload page will not re-upload them); re-registering one forgets it', async (t) => {
+  const a = setup(t);
+  const { A, pa } = await twoProjects(a);
+  await post({ op: 'hide', photos: [A[1], A[2]] });
+  await post({ op: 'purge', photos: [A[1], A[2]], confirm: '删除' });
+  let idx = await readIndex(a);
+  assert.deepEqual(idx.purged.slice().sort(), [A[1], A[2]].sort());
+  const v = await call(handlers.catalog, { url: '/api/catalog', headers: { cookie: cookieFor('Ana') } });
+  assert.equal(v.json.purged, undefined, 'VISI view does not carry it');
+  // 业务亲手勾回来传：登记之后就不算「删过」
+  assert.equal((await post({ op: 'addPhotos', project: { name: NAME }, photos: [photo(A[1])] })).status, 200);
+  idx = await readIndex(a);
+  assert.deepEqual(idx.purged, [A[2]]);
+  assert.equal(idx.photos[A[1]].p, pa);
+});
+
 test('purge: VISI view of a purged photo is gone (the old proposal gets an empty slot, not a broken URL)', async (t) => {
   const a = setup(t);
   const { A } = await twoProjects(a);
