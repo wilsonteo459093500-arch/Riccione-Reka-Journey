@@ -23,6 +23,7 @@
     cat: null,          // 目前的清单（full）
     etag: '',           // 上次从伺服器拿到的那一版
     minRev: 0,          // 自己写入后伺服器回的 rev：拿到比它旧的清单 = CDN 还没更新
+    catErr: null,       // 上次读清单失败的原因（.code = 'storage_blocked' = 案例库被停权）
     thumbs: {},         // h16 → 缩图 dataURL（这次上传的、或从缩图包读到的）
     $: $, $$: $$
   };
@@ -175,16 +176,24 @@
     if (catWaiters) return catWaiters;
     catWaiters = CL.call('GET', '/api/catalog?view=full', undefined, { etag: force ? '' : CL.etag }).then(function (r) {
       catWaiters = null;
-      if (r.status === 304 && CL.cat) return (CL.cat.rev | 0) < CL.minRev ? stale() : CL.cat;
+      if (r.status === 304 && CL.cat) { CL.catErr = null; return (CL.cat.rev | 0) < CL.minRev ? stale() : CL.cat; }
       if (r.status !== 200 || !r.json) {
-        var e = new Error(r.status === 0 ? '网路连不上' : '读清单失败（' + r.status + (r.json && r.json.error ? ' ' + r.json.error : '') + '）');
+        var code = (r.json && r.json.error) || '';
+        // 给业务看的话：不放英文代码（not_configured…）；没设定好 ≠ 网路断，要老板去 Vercel 设
+        var e = new Error(r.status === 0 ? '网路连不上' :
+          code === 'storage_blocked' ? '案例库的储存（Vercel Blob）被暂停了，现在读不到照片清单，也不能上传。请老板到 Vercel 看看（多半是免费额度用完了），恢复后再重新整理这一页。' :
+          code === 'not_configured' ? '伺服器还没接好照片储存（Vercel 的 Blob 设定），现在读不到照片清单，也不能上传：请老板到 Vercel 设定好、重新部署后，再重新整理这一页。' :
+          '读不到案例库的清单（伺服器回 ' + r.status + '）。');
         e.status = r.status;
+        e.code = code;
+        CL.catErr = e;
         throw e;
       }
       var c = r.json;
       c.projects = c.projects || {};
       c.photos = c.photos || {};
       c.log = c.log || [];
+      CL.catErr = null;
       if (CL.cat && (c.rev | 0) < CL.minRev) return stale();
       staleTries = 0;
       CL.cat = c;
@@ -195,10 +204,14 @@
     return catWaiters;
   };
 
-  /* ---------- 这个月用掉几次 Blob 写入（Hobby 约 2,000 次）----------
+  /* ---------- 这个月用掉几次 Blob 写入 ----------
+     Vercel 免费（Hobby）方案每月约 2,000 次写入、1 GB 空间；超过整个 store 会被停权（连传好的照片都打不开）。
+     伺服器自己设了上限：这个月写入到 1,800 次、或空间到 950 MB 就不收新照片（回 507）。
+     上限以伺服器为准（GET ?view=full 的 quota，见 CL.quota）；这里的数字只给旧伺服器（没有 quota）用。
      伺服器每次写清单都记在 usage['YYYY-MM']（照片、缩图包、清单、备份都算）。
      旧的清单没有 usage：才从操作纪录估（log 只留最近 300 笔，会少算） */
-  CL.LIMIT_WRITES = 2000;
+  CL.LIMIT_WRITES = 1800;
+  CL.LIMIT_BYTES = 950 * 1024 * 1024;
   function monthKey() { return new Date().toISOString().slice(0, 7); }
   CL.monthWrites = function (cat) {
     cat = cat || CL.cat || {};
@@ -217,12 +230,61 @@
     return writes + Object.keys(days).length;   // 每天第一次写入前的备份（copy 也算写入）
   };
   // 自己刚写成功：本地的计数先加上（下一次拿到伺服器的清单就以那边为准）
-  CL.addWrites = function (n) {
+  // bytes：这次多存了多少（照片 + 缩图），额度的「空间」也先扣掉
+  CL.addWrites = function (n, bytes) {
     var c = CL.cat;
     if (!c || !(n > 0)) return;
     if (!c.usage || typeof c.usage !== 'object') c.usage = {};
     var k = monthKey();
     c.usage[k] = { writes: ((c.usage[k] && c.usage[k].writes) | 0) + n };
+    var q = c.quota;
+    if (q && typeof q === 'object') {
+      q.writes = (q.writes | 0) + n;
+      if (q.writesLeft != null) q.writesLeft = Math.max(0, (q.writesLeft | 0) - n);
+      if (bytes > 0) {
+        q.bytes = (+q.bytes || 0) + bytes;
+        if (q.bytesLeft != null) q.bytesLeft = Math.max(0, (+q.bytesLeft || 0) - bytes);
+      }
+    }
+  };
+
+  /* ---------- 额度：伺服器给的 quota（GET ?view=full）----------
+     {plan:'hobby'|'pro', month, writes, bytes, uploadCap, writeCap, bytesCap, writesLeft, bytesLeft}
+     Pro 的 cap / left 都是 null（不限）。旧伺服器没有 quota：用上面的数字自己估（est: true）。 */
+  var bytesMemo = { rev: -1, n: -1, v: 0 };
+  function estBytes(cat) {
+    var photos = cat.photos || {};
+    var keys = Object.keys(photos);
+    if (bytesMemo.rev === (cat.rev | 0) && bytesMemo.n === keys.length) return bytesMemo.v;
+    var b = 0;
+    keys.forEach(function (h) { b += Math.max(0, +photos[h].sz || 0) + 35 * 1024; });
+    var text = 0;
+    try { text = JSON.stringify(cat).length; } catch (e) { text = keys.length * 500; }
+    b += 8 * text;                     // 清单本身 + 7 份每天的备份
+    bytesMemo = { rev: cat.rev | 0, n: keys.length, v: b };
+    return b;
+  }
+  CL.quota = function (cat) {
+    cat = cat || CL.cat || {};
+    var q = cat.quota;
+    if (q && typeof q === 'object' && (q.plan === 'pro' || q.plan === 'hobby')) {
+      var out = {};
+      Object.keys(q).forEach(function (k) { out[k] = q[k]; });
+      if (q.plan === 'pro') { out.writesLeft = null; out.bytesLeft = null; out.uploadCap = null; out.bytesCap = null; }
+      else {
+        out.uploadCap = q.uploadCap == null ? CL.LIMIT_WRITES : q.uploadCap;
+        out.bytesCap = q.bytesCap == null ? CL.LIMIT_BYTES : q.bytesCap;
+        out.writesLeft = q.writesLeft == null ? Math.max(0, out.uploadCap - (q.writes | 0)) : Math.max(0, q.writesLeft | 0);
+        out.bytesLeft = q.bytesLeft == null ? Math.max(0, out.bytesCap - (+q.bytes || 0)) : Math.max(0, +q.bytesLeft || 0);
+      }
+      return out;
+    }
+    var w = CL.monthWrites(cat), b = estBytes(cat);
+    return {
+      plan: 'hobby', month: monthKey(), writes: w, bytes: b, est: true,
+      uploadCap: CL.LIMIT_WRITES, writeCap: 1950, bytesCap: CL.LIMIT_BYTES,
+      writesLeft: Math.max(0, CL.LIMIT_WRITES - w), bytesLeft: Math.max(0, CL.LIMIT_BYTES - b)
+    };
   };
 
   // 自己写入成功后：rev 以伺服器回的为准（公开 Blob 的 CDN 可能一分钟内还给旧版）

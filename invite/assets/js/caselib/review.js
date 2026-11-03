@@ -9,7 +9,17 @@
    - 修改先排队、画面马上变；停手 45 秒（一直在改的话最多 2 分钟）、按「保存」、切到别的分页、
      离开这一页时一次送出（patch，source:'human'）—— 每次保存都是一次 Blob 写入（Hobby 每月约 2,000 次）
      人工改过的照片自动变「已确认」。401 → 登入后接着送，排队不会丢；网路断 → 等一下再试
-   - 隐藏 / 复原：画面马上变，连按几张 4 秒内一起送（一次写入）
+   - 隐藏 / 复原：画面马上变，连按几张 4 秒内一起送（一次写入）；一次最多 400 张，多的分几次送
+   - 额度（#rv-budget）：伺服器在 full 清单附的 quota —— 本月写入 / 1,800、空间 / 950 MB；Pro 方案不限
+   - 整理空间（#rv-tidy，免费方案只有 1 GB）分两步：
+     1. 只留最好的 N 张（MB.clPick.best）：一个项目或全部项目，其它的先隐藏 —— 可以复原
+        不超过 N 张的项目也一样挑（同一个镜头只留一张，跟上传页一样）
+     2. 删除隐藏的照片（purge）：要亲手打「删除」两个字、再按红色按钮（没有按 Enter 就删）；
+        打完之后隐藏的照片变了就要再打一次。先把没保存的送出去，再一次 1,000 张慢慢删；
+        删除中不能隐藏 / 复原，每批送出前再确认一次都还是隐藏的。
+        删掉就找不回来，旧方案用到的那张会变空白；log 记下是谁删的
+   - 改的标签存不进去、重试也没用（507 额度用完、503 storage_blocked）：不自动重试、讲白话，
+     修改留在这一页，按「保存」才再送；也不挡删除（删除就是这时候要做的）
    ============================================================ */
 (function () {
   'use strict';
@@ -24,6 +34,12 @@
   var HIDE_MS = 4000;           // 隐藏 / 复原：连按的几下一起送
   var MAX_ENTRIES = 400;        // 伺服器一次最多 400 笔
   var ORDER = { unsure: 0, 'new': 1, auto: 2, confirmed: 3 };
+  var KEEP_MAX = 60;            // 「只留最好的 N 张」N 最多几张
+  var PURGE_BATCH = 1000;       // 删除：伺服器一次最多 1,000 张
+  var PACK_EST = 35 * 1024;     // 跟伺服器一样：还没记大小的旧缩图包，每张缩图估 35 KB
+  var MIB = 1048576;
+  var COLL = window.Intl && Intl.Collator ? new Intl.Collator('zh', { numeric: true }) : null;
+  function cmp(a, b) { a = String(a || ''); b = String(b || ''); return COLL ? COLL.compare(a, b) : (a < b ? -1 : a > b ? 1 : 0); }
 
   var R = {
     f: { style: '', cab: '', room: '', status: '', pid: '', hidden: false },
@@ -32,9 +48,20 @@
     sel: '', mode: '', selPid: '', from: '',
     queue: { photos: {}, projects: {} },
     inflight: null,
-    timer: 0, saving: false, again: false, now: false, lastSaved: 0, err: '', tries: 0, firstAt: 0,
+    timer: 0, saving: false, again: false, now: false, lastSaved: 0, err: '', errCode: '', tries: 0, firstAt: 0,
+    stuck: '',                  // 标签存不进去、重试也没用（额度用完 / store 暂停 / 没设定好）：不自动重试，按「保存」才再送
     hideQ: { photos: {}, projects: {} }, hideInflight: null, hideTimer: 0, hiding: false, hideAgain: false,
-    packs: {}                   // pack 路径 → 'loading' | 'ok' | 'fail'
+    hideProg: null,             // 分几次送的隐藏 / 复原：{i, n, op}
+    packs: {},                  // pack 路径 → 'loading' | 'ok' | 'fail'
+    // 整理空间
+    tidyOpen: null,             // null = 还没决定（快满了就自己打开）
+    keepN: (MB.clPick && MB.clPick.DEFAULT_N) || 6,
+    ask: null,                  // 「只留最好的」确认框：{pid（'' = 全部项目）, plan, from}
+    bulk: '',                   // 'keep' | 'restore' | 'purge'：大批的工作进行中
+    lastKeep: null,             // 刚才「只留最好的」隐藏了哪些：{ids, pid}（复原用）
+    keepMsg: '', keepErr: false,
+    purgeMsg: '', purgeErr: false,
+    purgeSig: ''                // 打好「删除」那一刻隐藏的是哪些（hiddenSig）：之后变了就要再打一次
   };
 
   function cat() { return CL.cat || { photos: {}, projects: {}, log: [], base: '' }; }
@@ -130,6 +157,8 @@
   // 停手 idleMs 才存；从第一个没存的修改算起最多 maxWaitMs（一直点也会定时存）
   function scheduleFlush() {
     if (R.saving) { R.again = true; return; }
+    // 这个月存不进去了（额度用完 / store 暂停）：不再自动送，等业务按「保存」
+    if (R.stuck) return;
     var now = Date.now();
     if (!R.firstAt) R.firstAt = now;
     var due = Math.min(now + MB.clReview.idleMs, R.firstAt + MB.clReview.maxWaitMs);
@@ -194,13 +223,22 @@
         });
         c.log = c.log || [];
         c.log.push({ op: 'patch', by: CL.me, ts: now, n: r.json.changed | 0 });
-        R.lastSaved = now; R.err = ''; R.tries = 0;
+        R.lastSaved = now; R.err = ''; R.errCode = ''; R.tries = 0; R.stuck = '';
         drawLog();
+        return;
+      }
+      if (hopeless(r)) {
+        // 额度用完 / store 暂停 / 没设定好：重试也没用（每次还要伺服器读一次清单）→ 留着、不自动重试
+        requeue(batch);
+        R.tries = 0;
+        R.stuck = patchStuckText(r);
+        R.err = R.stuck;
+        R.errCode = errCode(r);
         return;
       }
       if (r.status === 401) {
         requeue(batch);
-        R.err = '登入过期：请再登入一次，修改都还在。';
+        R.err = '登入过期：请再登入一次，修改都还在。'; R.errCode = '';
         CL.needLogin().then(function () { R.err = ''; flush(); });
         return;
       }
@@ -216,9 +254,11 @@
       }
       requeue(batch);
       R.tries++;
+      R.stuck = '';
       var ms = CL.backoff(R.tries - 1, 3000, 60000);
-      R.err = (r.status === 0 ? '网路断了' : r.status === 409 ? '太多人同时在改' : '保存失败（' + r.status + (r.json && r.json.error ? ' ' + r.json.error : '') + '）') +
+      R.err = (r.status === 0 ? '网路断了' : r.status === 409 ? '太多人同时在改' : r.status === 429 ? '案例库在忙' : '保存失败') +
         '：' + Math.round(ms / 1000) + ' 秒后自动重试';
+      R.errCode = errCode(r);
       R.timer = setTimeout(function () { R.timer = 0; flush(); }, ms);
     }).then(function () {
       R.saving = false;
@@ -226,17 +266,27 @@
       drawDrawerTag();
       var now = R.now;
       R.now = false; R.again = false;
-      if (R.timer || !takeable()) return;
+      if (R.timer || !takeable() || R.stuck) return;
       if (now) flush(); else scheduleFlush();
     });
   }
   function takeable() { return Object.keys(R.queue.photos).length + Object.keys(R.queue.projects).length > 0; }
+  // 只放在 title（除错用），画面上不出现英文代码
+  function errCode(r) { return r ? String(r.status) + (r.json && r.json.error ? ' ' + r.json.error : '') : ''; }
+  function patchStuckText(r) {
+    var e = (r && r.json && r.json.error) || '';
+    if (e === 'storage_blocked') return '案例库被 Vercel 暂停中，改的标签先存不进去（还留在这一页，关掉就没了）。等恢复之后按「保存」。';
+    if (e === 'not_configured') return '伺服器的设定不完整，改的标签存不进去：请告诉老板检查 Vercel 的设定。';
+    return '这个月的 Blob 写入次数用完了，改的标签先存不进去（还留在这一页，关掉就没了）。下个月 1 号重算之后按「保存」。';
+  }
 
   /* ---------- 隐藏 / 复原：画面马上变；连按的几张 4 秒内一起送（hide 一次、unhide 一次） ----------
      hideQ[kind][id] = {hide, before}：before = 伺服器上原本的样子（按回原样就不用送） */
   function setHidden(kind, id, hide) {
     var rec = cat()[kind][id];
     if (!rec) return;
+    // 删除中：要删哪些已经定了，这时复原的照样会被删掉 → 先不给按
+    if (R.bulk === 'purge') { CL.toast('正在删除隐藏的照片：等删完再隐藏或复原。', 4000); return; }
     var q = R.hideQ[kind];
     var before = q[id] ? q[id].before : rec.hidden;
     if (hide) rec.hidden = { by: CL.me, ts: Date.now() }; else delete rec.hidden;
@@ -250,40 +300,96 @@
     if (!Object.keys(R.hideQ.photos).length && !Object.keys(R.hideQ.projects).length) return;
     R.hideTimer = setTimeout(function () { R.hideTimer = 0; flushHides(); }, MB.clReview.hideMs);
   }
+  // 重试也没用的：store 被暂停、这个月额度用完、伺服器没设定好
+  function hopeless(r) {
+    var e = r && r.json && r.json.error;
+    return !!r && (r.status === 507 || e === 'quota' || e === 'storage_blocked' || e === 'not_configured');
+  }
+  function retryable(r) {
+    if (hopeless(r)) return false;
+    return r.status === 0 || r.status === 409 || r.status === 429 || r.status === 500 || r.status === 502 || r.status === 503 || r.status === 504;
+  }
+  function retryWait(r, attempt) {
+    if (r.status === 429 && r.json && r.json.retryAfter) return Math.min(300, +r.json.retryAfter || 10) * 1000;
+    return CL.backoff(attempt, 1500, 15000);
+  }
+  // 回最后一次的回应（200 = 成功）
   function sendHide(body, keepalive) {
     var attempt = 0;
     function loop() {
       return CL.call('POST', '/api/catalog', body, { keepalive: keepalive === true }).then(function (r) {
-        if (r.status === 200) { CL.bumpRev(r.json && r.json.rev); if (r.json && r.json.changed) CL.addWrites(1); return true; }
-        if ((r.status === 0 || r.status >= 500 || r.status === 409 || r.status === 429) && attempt < 3) {
+        if (r.status === 200) { CL.bumpRev(r.json && r.json.rev); if (r.json && r.json.changed) CL.addWrites(1); return r; }
+        if (retryable(r) && attempt < 3) {
           attempt++;
-          return CL.sleep(CL.backoff(attempt - 1, 1500, 15000)).then(loop);
+          return CL.sleep(retryWait(r, attempt - 1)).then(loop);
         }
-        return false;
+        return r;
       });
     }
     return loop();
   }
+  // 一次最多 400 笔：多的分几次送（先隐藏、后复原；每次 = 1 次 Blob 写入）
+  function hideBodies(batch) {
+    var bodies = [];
+    [true, false].forEach(function (want) {
+      var ids = [];
+      ['projects', 'photos'].forEach(function (k) {
+        Object.keys(batch[k]).forEach(function (id) { if (batch[k][id].hide === want) ids.push([k, id]); });
+      });
+      for (var i = 0; i < ids.length; i += MAX_ENTRIES) {
+        var b = { op: want ? 'hide' : 'unhide', photos: [], projects: [] };
+        ids.slice(i, i + MAX_ENTRIES).forEach(function (x) { b[x[0]].push(x[1]); });
+        bodies.push(b);
+      }
+    });
+    return bodies;
+  }
+  function opsZh(bodies) {
+    var out = [];
+    bodies.forEach(function (b) { var z = b.op === 'hide' ? '隐藏' : '复原'; if (out.indexOf(z) < 0) out.push(z); });
+    return out.join('、');
+  }
+  function hideFailText(failed, r) {
+    var what = opsZh(failed), j = (r && r.json) || {};
+    if (r && (r.status === 507 || j.error === 'quota')) {
+      return '这个月的 Blob 写入次数快用完了' + (j.writesLeft != null ? '（只剩约 ' + CL.n(j.writesLeft) + ' 次）' : '') +
+        '，' + what + '没送出去，画面已经改回去。下个月 1 号会重算。';
+    }
+    if (j.error === 'storage_blocked') return '案例库被 Vercel 暂停中，' + what + '没送出去（画面已经改回去）：等恢复之后再试。';
+    if (r && r.status === 0) return '网路断了，' + what + '没送出去，请再试一次';
+    return what + '失败，请再试一次';
+  }
+  // 回 {failed: 几笔没送成, msg}
   function flushHides(keepalive) {
     if (R.hideTimer) { clearTimeout(R.hideTimer); R.hideTimer = 0; }
-    if (R.hiding) { R.hideAgain = true; return Promise.resolve(); }
+    if (R.hiding) { R.hideAgain = true; return Promise.resolve({ failed: 0, msg: '' }); }
     var batch = R.hideQ;
-    if (!Object.keys(batch.photos).length && !Object.keys(batch.projects).length) return Promise.resolve();
+    if (!Object.keys(batch.photos).length && !Object.keys(batch.projects).length) return Promise.resolve({ failed: 0, msg: '' });
     R.hideQ = { photos: {}, projects: {} };
     R.hiding = true;
     R.hideInflight = batch;
-    var bodies = [true, false].map(function (want) {
-      var b = { op: want ? 'hide' : 'unhide', photos: [], projects: [] };
-      ['photos', 'projects'].forEach(function (k) { Object.keys(batch[k]).forEach(function (id) { if (batch[k][id].hide === want) b[k].push(id); }); });
-      return b;
-    }).filter(function (b) { return b.photos.length + b.projects.length; });
-    var failed = [], chain = Promise.resolve();
-    bodies.forEach(function (b) {
-      chain = chain.then(function () { return sendHide(b, keepalive).then(function (ok) { if (!ok) failed.push(b); }); });
+    var bodies = hideBodies(batch);
+    var failed = [], last = null, stop = false, chain = Promise.resolve();
+    bodies.forEach(function (b, i) {
+      chain = chain.then(function () {
+        // 额度用完 / store 停了：后面几批也不用送了
+        if (stop) { failed.push(b); return; }
+        R.hideProg = bodies.length > 1 ? { i: i + 1, n: bodies.length, op: b.op } : null;
+        drawSave();
+        drawTidyMsg();
+        return sendHide(b, keepalive).then(function (r) {
+          if (r && r.status === 200) return;
+          failed.push(b);
+          last = r;
+          if (hopeless(r)) stop = true;
+        });
+      });
     });
     return chain.then(function () {
       R.hiding = false;
       R.hideInflight = null;
+      R.hideProg = null;
+      var res = { failed: 0, msg: '' };
       if (failed.length) {
         // 没成功：画面改回去（之后又按过的，以新的为准）
         failed.forEach(function (b) {
@@ -295,15 +401,633 @@
             });
           });
         });
+        failed.forEach(function (b) { res.failed += b.photos.length + b.projects.length; });
+        res.msg = hideFailText(failed, last);
         refreshAll();
-        CL.toast(failed.map(function (b) { return b.op === 'hide' ? '隐藏' : '复原'; }).join('、') + '失败，请再试一次', 4000);
+        CL.toast(res.msg, 5000);
       } else {
         var ops = bodies.map(function (b) { return b.op; });
-        CL.toast(ops.length > 1 ? '已隐藏 / 复原' : ops[0] === 'hide' ? '已隐藏（可以复原）' : '已复原');
+        var mixed = ops.indexOf('hide') >= 0 && ops.indexOf('unhide') >= 0;
+        CL.toast(mixed ? '已隐藏 / 复原' : ops[0] === 'hide' ? '已隐藏（可以复原）' : '已复原');
       }
       drawSave();
+      drawTidyMsg();
       if (R.hideAgain || Object.keys(R.hideQ.photos).length || Object.keys(R.hideQ.projects).length) { R.hideAgain = false; scheduleHides(); }
+      return res;
     });
+  }
+  // 大批的：不等 4 秒，一直送到排队清空（中途又有人按的也一起送）。回 {failed, msg}
+  function settleHides() {
+    var res = { failed: 0, msg: '' };
+    function loop() {
+      if (R.hiding) return CL.sleep(150).then(loop);
+      if (!Object.keys(R.hideQ.photos).length && !Object.keys(R.hideQ.projects).length) return res;
+      return flushHides().then(function (r) {
+        if (r && r.failed) { res.failed += r.failed; res.msg = r.msg; }
+        return loop();
+      });
+    }
+    return loop();
+  }
+
+  /* ============================================================
+     额度：伺服器在 full 清单附的 quota（这个月写入、总空间、上限）
+     ============================================================ */
+  function quotaNow() {
+    var c = CL.cat;
+    if (!c) return null;
+    var local = CL.monthWrites ? CL.monthWrites(c) : 0;
+    var q = c.quota && typeof c.quota === 'object' ? c.quota : null;
+    // 旧的伺服器没有 quota：从清单的 usage 估，只有写入次数
+    if (!q) return { plan: 'hobby', writes: local, cap: CL.LIMIT_WRITES || 2000, writeCap: null, bytes: null, bytesCap: null };
+    return {
+      plan: q.plan === 'pro' ? 'pro' : 'hobby',
+      writes: Math.max(q.writes | 0, local),     // 自己刚写的（CL.addWrites）也算进去
+      cap: q.uploadCap, writeCap: q.writeCap,
+      bytes: typeof q.bytes === 'number' ? q.bytes : null, bytesCap: q.bytesCap || null
+    };
+  }
+  function mbNum(b) {
+    var m = Math.max(0, b || 0) / MIB;
+    return m < 10 ? m.toFixed(1) : CL.n(Math.round(m));
+  }
+  function quotaWarn(q) {
+    if (!q || q.plan === 'pro') return false;
+    return (q.cap && q.writes > q.cap * 0.8) || (q.bytes != null && q.bytesCap && q.bytes > q.bytesCap * 0.8);
+  }
+  function spaceText(q) {
+    if (!q || q.bytes == null) return '';
+    return '空间约 ' + mbNum(q.bytes) + (q.bytesCap ? ' / ' + mbNum(q.bytesCap) : '') + ' MB';
+  }
+
+  /* ============================================================
+     第 1 步：只留最好的 N 张（其它的隐藏，可以复原）
+     ============================================================ */
+  function photoCount(pid, hiddenOnly) {
+    var c = cat(), n = 0;
+    Object.keys(c.photos).forEach(function (h) { var ph = c.photos[h]; if (ph.p === pid && (!hiddenOnly || ph.hidden)) n++; });
+    return n;
+  }
+  function pickItem(h) {
+    var ph = cat().photos[h];
+    return { id: h, w: ph.w, h: ph.h, dh: ph.dh, shot: ph.shot, f: ph.f };
+  }
+  // pid = '' → 全部项目（隐藏的项目不算）。回 {hide:[h], keep, total, projects, over（要隐藏一些的项目）, writes}
+  // 不超过 N 张的项目也照样挑：同一个镜头只留一张（跟上传页的精选一样）
+  function keepPlan(pid, n) {
+    var c = cat(), by = {};
+    var out = { hide: [], keep: 0, total: 0, projects: 0, over: 0, writes: 0 };
+    if (!MB.clPick) return out;
+    Object.keys(c.photos).forEach(function (h) {
+      var ph = c.photos[h];
+      if ((pid && ph.p !== pid) || isHidden(ph)) return;
+      (by[ph.p] = by[ph.p] || []).push(h);
+    });
+    Object.keys(by).forEach(function (p) {
+      var hs = by[p];
+      out.projects++;
+      out.total += hs.length;
+      // 照路径排：同分的留文件夹里排前面的（每次挑的结果都一样）
+      hs.sort(function (a, b) { return cmp(c.photos[a].f, c.photos[b].f) || (a < b ? -1 : 1); });
+      var picked = MB.clPick.best(hs.map(pickItem), Math.min(n, hs.length)), keep = {};
+      picked.forEach(function (h) { keep[h] = 1; });
+      hs.forEach(function (h) { if (!keep[h]) out.hide.push(h); });
+      if (picked.length < hs.length) out.over++;
+      out.keep += picked.length;
+    });
+    out.writes = Math.ceil(out.hide.length / MAX_ENTRIES);
+    return out;
+  }
+  // 一次改很多张（只改画面 + 排队，不重画）：回真的改了几张
+  function queueHidden(kind, ids, hide) {
+    var c = cat(), q = R.hideQ[kind], now = Date.now(), n = 0;
+    ids.forEach(function (id) {
+      var rec = c[kind][id];
+      if (!rec || !!rec.hidden === !!hide) return;
+      var before = q[id] ? q[id].before : rec.hidden;
+      if (hide) rec.hidden = { by: CL.me, ts: now }; else delete rec.hidden;
+      if (!!before === !!hide) delete q[id]; else q[id] = { hide: !!hide, before: before };
+      n++;
+    });
+    return n;
+  }
+  function setKeepN(v) {
+    var n = Math.round(+v);
+    if (!(n >= 1)) return false;
+    R.keepN = Math.min(KEEP_MAX, n);
+    return true;
+  }
+
+  function runKeep(pid) {
+    if (R.bulk) return Promise.resolve();
+    var n = R.keepN, plan = keepPlan(pid, n);
+    if (!plan.hide.length) return Promise.resolve();
+    var changed = queueHidden('photos', plan.hide, true);
+    R.lastKeep = { ids: plan.hide.slice(), pid: pid || '' };
+    R.bulk = 'keep';
+    R.keepMsg = '隐藏中…'; R.keepErr = false;
+    render();
+    drawSave();
+    return settleHides().then(function (res) {
+      R.bulk = '';
+      var c = cat();
+      // 没送成的已经改回去了：只留真的隐藏好的（复原用）
+      R.lastKeep.ids = R.lastKeep.ids.filter(function (h) { return c.photos[h] && c.photos[h].hidden; });
+      var ok = R.lastKeep.ids.length;
+      if (!ok) R.lastKeep = null;
+      if (res.failed) {
+        R.keepErr = true;
+        R.keepMsg = (ok ? '隐藏了 ' + CL.n(ok) + ' 张；' + CL.n(changed - ok) + ' 张没送出去。' : '') + res.msg;
+      } else {
+        R.keepErr = false;
+        R.keepMsg = '已隐藏 ' + CL.n(ok) + ' 张（可以复原），留下 ' + CL.n(plan.keep) + ' 张。';
+        CL.toast('已隐藏 ' + CL.n(ok) + ' 张（可以复原）', 4000);
+      }
+      render();
+    });
+  }
+  // 复原：刚才「只留最好的」隐藏的、或一个项目里隐藏的照片
+  function runRestore(ids, label) {
+    if (R.bulk) return Promise.resolve();
+    var n = queueHidden('photos', ids, false);
+    if (!n) return Promise.resolve();
+    R.bulk = 'restore';
+    R.keepMsg = '复原中…'; R.keepErr = false;
+    render();
+    drawSave();
+    return settleHides().then(function (res) {
+      R.bulk = '';
+      var c = cat();
+      if (R.lastKeep) {
+        R.lastKeep.ids = R.lastKeep.ids.filter(function (h) { return c.photos[h] && c.photos[h].hidden; });
+        if (!R.lastKeep.ids.length) R.lastKeep = null;
+      }
+      if (res.failed) { R.keepErr = true; R.keepMsg = res.msg; }
+      else {
+        R.keepErr = false;
+        R.keepMsg = '已复原' + (label || '') + ' ' + CL.n(n) + ' 张';
+        CL.toast(R.keepMsg);
+      }
+      render();
+    });
+  }
+  function restoreProject(pid) {
+    var c = cat();
+    var ids = Object.keys(c.photos).filter(function (h) { return c.photos[h].p === pid && c.photos[h].hidden; });
+    return runRestore(ids, '这个项目隐藏的');
+  }
+
+  /* ---------- 确认框：会隐藏几张、留下几张；N 在这里也可以改 ---------- */
+  function openAsk(pid) {
+    if (!MB.clPick || R.bulk) return;
+    R.ask = { pid: pid || '', from: document.activeElement };
+    var box = $('#rv-ask');
+    var pr = pid ? cat().projects[pid] : null;
+    $('#rv-ask-t').textContent = pr ? '「' + pr.name + '」只留最好的' : '每个项目都只留最好的';
+    $('#rv-ask-lbl').textContent = pr ? '这个项目只留最好的' : '每个项目只留最好的';
+    $('#rv-ask-n').value = R.keepN;
+    box.hidden = false;
+    document.body.classList.add('rv-asking');
+    drawAsk();
+    var ok = $('#rv-ask [data-ask="ok"]');
+    (ok.disabled ? $('#rv-ask-n') : ok).focus();
+  }
+  function closeAsk() {
+    if (!R.ask) return;
+    var from = R.ask.from;
+    R.ask = null;
+    $('#rv-ask').hidden = true;
+    document.body.classList.remove('rv-asking');
+    if (from && from.focus && document.body.contains(from)) from.focus();
+  }
+  function drawAsk() {
+    if (!R.ask) return;
+    var n = R.keepN, plan = keepPlan(R.ask.pid, n);
+    var q = quotaNow();
+    R.ask.plan = plan;
+    var html;
+    if (!plan.total) {
+      html = '<p class="big">没有可以挑的照片（都已经隐藏了）。</p>';
+    } else if (!plan.hide.length) {
+      html = '<p class="big">' + (R.ask.pid ? '这个项目 ' + CL.n(plan.total) + ' 张都留下' : '每个项目的照片都留下') +
+        '：不超过 ' + n + ' 张，也没有同一个角度重复拍的，不用隐藏。</p>';
+    } else {
+      html = '<p class="big">会隐藏 <b>' + CL.n(plan.hide.length) + '</b> 张（可以复原），留下 <b>' + CL.n(plan.keep) + '</b> 张</p>';
+      if (!R.ask.pid) html += '<p>' + CL.n(plan.projects) + ' 个项目里有 ' + CL.n(plan.over) + ' 个要隐藏一些（超过 ' + n + ' 张，或同一个角度拍了几张）；其它的不动。</p>';
+      else if (plan.total <= n) html += '<p>这个项目不超过 ' + n + ' 张，隐藏的是同一个角度重复拍的（每个角度留最好的一张）。</p>';
+      html += '<p>要送 ' + CL.n(plan.writes) + ' 次（每次最多 ' + MAX_ENTRIES + ' 张，每次算 1 次 Blob 写入）。</p>';
+      if (q && q.plan !== 'pro' && q.writeCap) {
+        var left = Math.max(0, q.writeCap - q.writes);
+        if (left < plan.writes + 1) html += '<p class="warn">这个月的写入次数不够（只剩约 ' + CL.n(left) + ' 次），可能有一部分送不出去。</p>';
+      }
+      html += '<p class="muted">隐藏只是不给 VISI 用，空间不会马上空出来；要空出空间，之后到「整理空间」第 2 步删除。</p>';
+    }
+    $('#rv-ask-num').innerHTML = html;
+    var ok = $('#rv-ask [data-ask="ok"]');
+    ok.disabled = !plan.hide.length || !!R.bulk;
+    ok.textContent = plan.hide.length ? '隐藏 ' + CL.n(plan.hide.length) + ' 张' : '确定隐藏';
+  }
+
+  /* ============================================================
+     第 2 步：删除隐藏的照片（释放空间）—— 删掉就找不回来
+     ============================================================ */
+  function packBytes(pr) {
+    return typeof pr.pb === 'number' && isFinite(pr.pb) && pr.pb >= 0 ? pr.pb : Math.max(0, pr.n | 0) * PACK_EST;
+  }
+  // 隐藏的照片（照片自己隐藏，或它的项目隐藏）有几张、占多少空间；整个项目删光的话缩图包也一起删
+  function hiddenStats() {
+    var c = cat(), ids = [], sz = 0, per = {}, all = {};
+    Object.keys(c.photos).forEach(function (h) {
+      var ph = c.photos[h];
+      all[ph.p] = (all[ph.p] || 0) + 1;
+      if (!isHidden(ph)) return;
+      ids.push(h);
+      sz += Math.max(0, +ph.sz || 0);
+      per[ph.p] = (per[ph.p] || 0) + 1;
+    });
+    var packs = 0;
+    Object.keys(per).forEach(function (pid) { if (per[pid] === all[pid] && c.projects[pid]) packs += packBytes(c.projects[pid]); });
+    return { ids: ids, sz: sz, freed: sz + packs, projects: Object.keys(per).length };
+  }
+  function lastPurge() {
+    var log = cat().log || [];
+    for (var i = log.length - 1; i >= 0; i--) if (log[i] && log[i].op === 'purge') return log[i];
+    return null;
+  }
+  function purgeWordOk() {
+    var w = $('#rv-purge-word');
+    return !!w && w.value.trim() === '删除';
+  }
+  function clearPurgeWord() { var w = $('#rv-purge-word'); if (w) w.value = ''; R.purgeSig = ''; }
+  // 隐藏的是哪些（张数 + 大小 + hash 加总）：打「删除」那一刻记下来，之后变了就要再打一次
+  function hiddenSig() {
+    var c = cat(), n = 0, sz = 0, x = 0;
+    Object.keys(c.photos).forEach(function (h) {
+      var ph = c.photos[h];
+      if (!isHidden(ph)) return;
+      n++;
+      sz += Math.max(0, +ph.sz || 0);
+      x = (x + (parseInt(String(h).slice(0, 8), 16) || 0)) % 4294967296;
+    });
+    return { n: n, key: n + ':' + sz + ':' + x };
+  }
+  // 打了「删除」，而且打的时候确认的就是现在这些
+  function purgeArmed(sig) {
+    return purgeWordOk() && !!R.purgeSig && R.purgeSig === (sig || hiddenSig()).key;
+  }
+
+  // 删除前：没保存的修改、还没送的隐藏先送出去。回传还剩几项挡着不能删（0 = 可以删）
+  // 改的标签这个月存不进去（R.stuck：额度用完 / store 暂停）：不挡删除 —— 删除正是现在要做的事；
+  // 那些修改留在这一页（删掉的照片的修改跟着拿掉）。隐藏 / 复原一定要先送好（决定删哪些）
+  function blocking() { return R.stuck ? hidesPending() : unsaved(); }
+  function settleAll() {
+    var end = Date.now() + 30000, rounds = 0;
+    function loop() {
+      if (!blocking()) return Promise.resolve(0);
+      if (Date.now() > end || rounds > 8) return Promise.resolve(blocking());
+      if (R.saving || R.hiding) return CL.sleep(200).then(loop);
+      if (rounds && R.err) return Promise.resolve(blocking());   // 网路断、要登入……：别在这里一直重试
+      rounds++;
+      return flush().then(settleHides).then(loop);
+    }
+    return loop();
+  }
+
+  function sendPurge(batch) {
+    var attempt = 0;
+    var body = { op: 'purge', photos: batch, confirm: '删除' };
+    function loop() {
+      return CL.api('POST', '/api/catalog', body).then(function (r) {
+        if (r.status === 401) {
+          // 跟其它地方一样：登入框浮上来，登入后接着删
+          setPurgeMsg('登入过期：请再登入一次，登入后会接着删。', true);
+          return CL.needLogin().then(function () { setPurgeMsg('删除中…', false); return loop(); });
+        }
+        if (retryable(r) && attempt < 3) {
+          attempt++;
+          return CL.sleep(retryWait(r, attempt - 1)).then(loop);
+        }
+        return r;
+      });
+    }
+    return loop();
+  }
+  function purgeFailText(r, removed) {
+    var j = r.json || {};
+    var done = removed ? '（已经删好的 ' + CL.n(removed) + ' 张不受影响）' : '';
+    if (r.status === 507 || j.error === 'quota') {
+      return '这个月的 Blob 写入次数快用完了' + (j.writesLeft != null ? '（只剩约 ' + CL.n(j.writesLeft) + ' 次）' : '') +
+        '：删除也要用写入次数，为了不让 Vercel 停掉案例库，先停下来' + done + '。下个月 1 号重算之后再删。';
+    }
+    if (j.error === 'storage_blocked') return '案例库被 Vercel 暂停中，等恢复之后再删' + done + '。';
+    if (j.error === 'not_configured') return '伺服器的设定不完整，没办法删除' + done + '：请告诉老板检查 Vercel 的设定。';
+    if (j.error === 'not_hidden') return '有照片刚被别人复原了，所以这一批没删' + done + '。已经重新载入：请再看一下数字，要删的话再打一次「删除」。';
+    if (j.error === 'unknown') return '有照片已经不在案例库里了（可能别人刚删过）' + done + '。已经重新载入：请再看一下数字，要删的话再打一次「删除」。';
+    if (r.status === 0) return '网路断了，删除没做完' + done + '：网路好了再打一次「删除」。';
+    return '删除失败（' + r.status + (j.error ? ' ' + j.error : '') + '）' + done + '：请再试一次。';
+  }
+  // 删好的：画面上先拿掉（CDN 可能还给旧清单），额度用伺服器回的
+  function dropPurged(hs, json) {
+    var c = cat(), touched = {}, gone = {};
+    hs.forEach(function (h) {
+      var ph = c.photos[h];
+      if (!ph) return;
+      touched[ph.p] = 1;
+      gone[h] = 1;
+      delete c.photos[h];
+      delete CL.thumbs[h];
+      delete R.queue.photos[h];
+      delete R.hideQ.photos[h];
+    });
+    var left = {};
+    Object.keys(c.photos).forEach(function (h) { left[c.photos[h].p] = (left[c.photos[h].p] || 0) + 1; });
+    Object.keys(touched).forEach(function (pid) {
+      if (!c.projects[pid]) return;
+      if (left[pid]) { c.projects[pid].n = left[pid]; return; }
+      delete c.projects[pid];
+      delete R.queue.projects[pid];
+      delete R.hideQ.projects[pid];
+    });
+    c.purged = (Array.isArray(c.purged) ? c.purged : []).concat(Object.keys(gone));
+    if (json && json.quota) c.quota = json.quota;
+    c.log = c.log || [];
+    c.log.push({ op: 'purge', by: CL.me, ts: Date.now(), n: (json && json.removed) | 0 });
+    if (R.f.pid && !c.projects[R.f.pid]) R.f.pid = '';
+    if (R.mode === 'photo' && !c.photos[R.sel]) { R.mode = ''; R.sel = ''; }
+    if (R.mode === 'project' && !c.projects[R.selPid]) { R.mode = ''; R.selPid = ''; }
+    if (R.lastKeep) {
+      R.lastKeep.ids = R.lastKeep.ids.filter(function (h) { return !gone[h]; });
+      if (!R.lastKeep.ids.length) R.lastKeep = null;
+    }
+  }
+  function setPurgeMsg(msg, err) {
+    R.purgeMsg = msg; R.purgeErr = !!err;
+    drawTidyMsg();
+  }
+  function reloadAfter() {
+    return CL.loadCatalog(true).then(function () { reapplyQueue(); render(); }, function () { render(); });
+  }
+
+  // 这一张现在还可以删：画面上还是隐藏的，也没有排队中 / 送出中的「复原」（照片或它的项目）
+  function stillHidden(h) {
+    var c = cat(), ph = c.photos[h];
+    if (!ph || !isHidden(ph)) return false;
+    return ![R.hideQ, R.hideInflight].some(function (q) {
+      return q && ((q.photos[h] && !q.photos[h].hide) || (q.projects[ph.p] && !q.projects[ph.p].hide));
+    });
+  }
+
+  function runPurge() {
+    if (R.bulk || !purgeArmed()) return Promise.resolve();
+    var want = hiddenStats().ids;
+    if (!want.length) return Promise.resolve();
+    R.bulk = 'purge';
+    setPurgeMsg('先把还没保存的修改送出去…', false);
+    drawTidy();
+    // 抽屉开着的话：「复原这张 / 这个项目」先按不了（删除中复原的会被删掉）
+    if (R.mode) drawDrawer();
+    var done = { removed: 0, quota: null };
+    function end(msg, err, reload) {
+      R.bulk = '';
+      clearPurgeWord();
+      setPurgeMsg(msg, err);
+      drawTidy();
+      if (err) CL.toast(msg, 6000);
+      return reload ? reloadAfter() : render();
+    }
+    return settleAll().then(function (left) {
+      if (left) return end('还有 ' + CL.n(left) + ' 项修改没保存好' + (R.err ? '（' + R.err + '）' : '') + '：先等它保存完再删。', true, false);
+      // 送的时候有隐藏没成功（已经改回去）：跟刚才确认的数字不一样 → 停下来让业务再看一次
+      var c = cat();
+      var list = want.filter(stillHidden);
+      if (list.length !== want.length) return end('有 ' + CL.n(want.length - list.length) + ' 张没有隐藏好，所以先不删。请再看一下数字，要删的话再打一次「删除」。', true, false);
+      // 照项目排：同一个项目的尽量在同一批删完（缩图包跟着删）
+      list.sort(function (a, b) {
+        var A = c.photos[a], B = c.photos[b];
+        return cmp((c.projects[A.p] || {}).name, (c.projects[B.p] || {}).name) || cmp(A.p, B.p) || cmp(A.f, B.f) || (a < b ? -1 : 1);
+      });
+      var batches = [];
+      for (var i = 0; i < list.length; i += PURGE_BATCH) batches.push(list.slice(i, i + PURGE_BATCH));
+      function next(k) {
+        if (k >= batches.length) {
+          var msg = '已删除 ' + CL.n(done.removed) + ' 张';
+          var sp = spaceText(done.quota ? { bytes: done.quota.bytes, bytesCap: done.quota.bytesCap } : quotaNow());
+          if (sp) msg += ' · ' + sp;
+          CL.toast(msg, 5000);
+          // 改的标签这个月存不进去：删除照做了，那些修改还在这一页
+          if (R.stuck && takeable()) msg += '。改的标签还没存进去（看下面「保存」旁边的说明）。';
+          return end(msg, false, true);
+        }
+        // 再确认一次：送出前这一批都还是隐藏的（中途有人复原、新清单显示别人复原了 → 停下来）
+        var back = batches[k].filter(function (h) { return !stillHidden(h); }).length;
+        if (back) {
+          return end('有 ' + CL.n(back) + ' 张刚被复原了，所以' + (done.removed ? '后面的' : '') + '没删' +
+            (done.removed ? '（已经删好的 ' + CL.n(done.removed) + ' 张不受影响）' : '') +
+            '。请再看一下数字，要删的话再打一次「删除」。', true, done.removed > 0);
+        }
+        setPurgeMsg('删除中… ' + (batches.length > 1 ? '第 ' + (k + 1) + ' / ' + batches.length + ' 批 · ' : '') +
+          '已删 ' + CL.n(done.removed) + ' / ' + CL.n(list.length) + ' 张（不要关这一页）', false);
+        return sendPurge(batches[k]).then(function (r) {
+          if (r.status === 200 && r.json) {
+            CL.bumpRev(r.json.rev);
+            done.removed += r.json.removed | 0;
+            if (r.json.quota) done.quota = r.json.quota;
+            dropPurged(batches[k], r.json);
+            render();
+            return next(k + 1);
+          }
+          var e = r.json && r.json.error;
+          return end(purgeFailText(r, done.removed), true, done.removed > 0 || e === 'not_hidden' || e === 'unknown');
+        });
+      }
+      return next(0);
+    });
+  }
+
+  /* ---------- 整理空间的面板（建一次，之后只换数字：打字中的输入框不会被重画） ---------- */
+  function buildTidy() {
+    var host = $('#rv-filters');
+    if (!host || $('#rv-tidy')) return;
+    var el = document.createElement('section');
+    el.className = 'rv-tidy';
+    el.id = 'rv-tidy';
+    el.innerHTML =
+      '<button type="button" class="tidy-head" id="rv-tidy-head" aria-expanded="false" aria-controls="rv-tidy-body">' +
+        '<span class="tidy-t"><b>整理空间</b><small>只留最好的 · 删除隐藏的照片</small></span>' +
+        '<span class="tidy-sum" id="rv-tidy-sum"></span><i class="tidy-arrow" aria-hidden="true"></i></button>' +
+      '<div class="tidy-body" id="rv-tidy-body" hidden>' +
+        '<p class="hint tidy-why" id="rv-tidy-why"></p>' +
+        '<div class="tidy-steps">' +
+          '<div class="tidy-step" id="rv-keep">' +
+            '<p class="sub-h">第 1 步 · 先隐藏（可以复原）</p>' +
+            '<label class="tidy-n">每个项目只留最好的 <input type="number" id="rv-keep-n" min="1" max="' + KEEP_MAX + '" step="1" inputmode="numeric" /> 张</label>' +
+            '<p class="tidy-note">电脑帮你挑：同一个角度只留一张，横的、清楚的优先，每个空间（子文件夹）都留到。其它的先隐藏，VISI 就不会再用。</p>' +
+            '<p class="tidy-num" id="rv-keep-info"></p>' +
+            '<div class="btn-row"><button class="btn gold" type="button" id="rv-keep-all">每个项目都只留最好的</button></div>' +
+            '<div class="tidy-msg" id="rv-keep-msg" aria-live="polite"></div>' +
+            '<p class="tidy-note">只整理一个项目：上面「项目」选那个项目，按「只留最好的」。</p>' +
+          '</div>' +
+          '<div class="tidy-step del" id="rv-purge">' +
+            '<p class="sub-h">第 2 步 · 删除隐藏的照片（释放空间）</p>' +
+            '<p class="tidy-num" id="rv-purge-info"></p>' +
+            '<p class="tidy-warn">删掉就<b>找不回来</b>（不能复原）。用过这些照片的旧方案，那个位置会变成空白。要留的先复原（勾「显示已隐藏」就看得到）。</p>' +
+            '<label class="tidy-word">确定要删，请打「删除」两个字<input type="text" id="rv-purge-word" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="12" /></label>' +
+            '<div class="btn-row"><button class="btn danger" type="button" id="rv-purge-go" disabled>删除隐藏的照片</button></div>' +
+            '<div class="tidy-msg" id="rv-purge-msg" aria-live="polite"></div>' +
+            '<p class="tidy-note" id="rv-purge-last"></p>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    host.parentNode.insertBefore(el, host);
+
+    var ask = document.createElement('div');
+    ask.className = 'rv-ask';
+    ask.id = 'rv-ask';
+    ask.hidden = true;
+    ask.setAttribute('role', 'dialog');
+    ask.setAttribute('aria-modal', 'true');
+    ask.setAttribute('aria-labelledby', 'rv-ask-t');
+    ask.innerHTML = '<div class="ask-card">' +
+      '<p class="sub-h">先隐藏 · 可以复原</p>' +
+      '<h3 id="rv-ask-t"></h3>' +
+      '<label class="tidy-n"><span id="rv-ask-lbl"></span> <input type="number" id="rv-ask-n" min="1" max="' + KEEP_MAX + '" step="1" inputmode="numeric" /> 张</label>' +
+      '<div class="ask-num" id="rv-ask-num"></div>' +
+      '<div class="ask-btns"><button class="btn ghost" type="button" data-ask="no">取消</button><button class="btn gold" type="button" data-ask="ok">确定隐藏</button></div>' +
+      '</div>';
+    document.body.appendChild(ask);
+  }
+
+  function drawTidy() {
+    var el = $('#rv-tidy');
+    if (!el || !CL.cat) return;
+    var q = quotaNow(), st = hiddenStats();
+    if (R.tidyOpen == null) {
+      var saved = '';
+      try { saved = localStorage.getItem('caselib-tidy') || ''; } catch (e) { /* 无痕模式 */ }
+      // 没按过：快满了才自己打开
+      R.tidyOpen = saved ? saved === '1' : quotaWarn(q);
+    }
+    var open = !!R.tidyOpen;
+    el.classList.toggle('open', open);
+    el.classList.toggle('warn', !!quotaWarn(q));
+    $('#rv-tidy-head').setAttribute('aria-expanded', String(open));
+    $('#rv-tidy-body').hidden = !open;
+    var sum = [];
+    if (spaceText(q)) sum.push(spaceText(q));
+    sum.push(st.ids.length ? '已隐藏 ' + CL.n(st.ids.length) + ' 张（约 ' + CL.mb(st.freed) + '）' : '没有隐藏的照片');
+    $('#rv-tidy-sum').textContent = sum.join(' · ');
+    $('#rv-tidy-why').innerHTML = q.plan === 'pro' ?
+      'Pro 方案不限额度。照片太多 VISI 也比较难挑：一样可以每个项目只留最好的几张。' :
+      'Vercel 免费方案：每月最多 ' + CL.n(q.cap) + ' 次写入' + (q.bytesCap ? '、空间 ' + mbNum(q.bytesCap) + ' MB' : '') +
+      '，超过会把<b>整个案例库停掉</b>（连旧方案的照片都打不开）。所以每个项目只留最好的几张：<b>先隐藏</b>（可以复原），确定不要了再<b>删除</b>，空间才会空出来。';
+    if (!open) { drawTidyMsg(); return; }
+
+    // 第 1 步
+    var nIn = $('#rv-keep-n');
+    if (document.activeElement !== nIn) nIn.value = R.keepN;
+    nIn.disabled = !!R.bulk;
+    var plan = keepPlan('', R.keepN);
+    $('#rv-keep-info').innerHTML = plan.total ?
+      '现在 ' + CL.n(plan.total) + ' 张（' + CL.n(plan.projects) + ' 个项目）' +
+        (plan.hide.length ? ' → 留下 <b>' + CL.n(plan.keep) + '</b> 张、隐藏 <b>' + CL.n(plan.hide.length) + '</b> 张' : ' · 不用隐藏（每个项目都不超过 ' + R.keepN + ' 张，也没有重复的）') :
+      '没有可以挑的照片';
+    var all = $('#rv-keep-all');
+    all.textContent = '每个项目都只留最好的 ' + R.keepN + ' 张';
+    all.disabled = !!R.bulk || !plan.hide.length || !MB.clPick;
+
+    // 第 2 步
+    var info = '已隐藏 <b>' + CL.n(st.ids.length) + '</b> 张';
+    if (st.ids.length) {
+      info += ' · 约 <b>' + esc(CL.mb(st.freed)) + '</b>（' + CL.n(st.projects) + ' 个项目）';
+      if (q.bytes != null) info += '<br>删掉后空间约 ' + mbNum(q.bytes) + ' → <b>' + mbNum(Math.max(0, q.bytes - st.freed)) + '</b>' + (q.bytesCap ? ' / ' + mbNum(q.bytesCap) : '') + ' MB';
+    } else {
+      info += '：要删的照片先在第 1 步隐藏，或点照片按「隐藏这张」。';
+    }
+    $('#rv-purge-info').innerHTML = info;
+    $('#rv-purge-word').disabled = R.bulk === 'purge';
+    var lp = lastPurge();
+    $('#rv-purge-last').innerHTML = lp ? '上次删除：<b>' + esc(lp.by || '?') + '</b> · ' + esc(CL.time(lp.ts)) + ' · ' + CL.n(lp.n | 0) + ' 张' : '';
+    drawTidyMsg();
+  }
+  // 只换按钮、讯息（送出中也会叫，要轻）
+  function drawTidyMsg() {
+    if (!$('#rv-tidy')) return;
+    var km = $('#rv-keep-msg'), pm = $('#rv-purge-msg'), go = $('#rv-purge-go');
+    var html = '';
+    if (R.bulk === 'keep' || R.bulk === 'restore') {
+      html = '<p>' + (R.hideProg ? (R.hideProg.op === 'hide' ? '隐藏中' : '复原中') + '… 第 ' + R.hideProg.i + ' / ' + R.hideProg.n + ' 批（每批最多 ' + MAX_ENTRIES + ' 张）' : esc(R.keepMsg || '送出中…')) + '</p>';
+    } else {
+      if (R.keepMsg) html = '<p class="' + (R.keepErr ? 'err' : 'ok') + '">' + esc(R.keepMsg) + '</p>';
+      if (R.lastKeep && R.lastKeep.ids.length) {
+        html += '<button class="mini" type="button" data-act="keep-undo">复原刚才隐藏的 ' + CL.n(R.lastKeep.ids.length) + ' 张</button>';
+      }
+    }
+    km.innerHTML = html;
+    var sig = hiddenSig(), n = sig.n;
+    // 打好「删除」之后隐藏的照片变了（又隐藏 / 复原了几张、新清单）：那两个字确认的不是现在这些 → 清掉
+    if (R.bulk !== 'purge' && R.purgeSig && R.purgeSig !== sig.key) {
+      clearPurgeWord();
+      R.purgeMsg = '隐藏的照片变了（现在 ' + CL.n(n) + ' 张）：要删的话再打一次「删除」。';
+      R.purgeErr = false;
+    }
+    pm.innerHTML = R.purgeMsg ? '<p class="' + (R.purgeErr ? 'err' : R.bulk === 'purge' ? '' : 'ok') + '">' + esc(R.purgeMsg) + '</p>' : '';
+    go.textContent = R.bulk === 'purge' ? '删除中…' : n ? '删除 ' + CL.n(n) + ' 张隐藏的照片' : '没有隐藏的照片';
+    go.disabled = !!R.bulk || !n || !purgeArmed(sig);
+    var undo = $('#rv-tidy [data-act="keep-undo"]');
+    if (undo) undo.disabled = !!R.bulk;
+  }
+
+  function bindTidy() {
+    var el = $('#rv-tidy');
+    if (!el) return;
+    el.addEventListener('click', function (e) {
+      var t = e.target;
+      if (t.closest('#rv-tidy-head')) {
+        R.tidyOpen = !R.tidyOpen;
+        try { localStorage.setItem('caselib-tidy', R.tidyOpen ? '1' : '0'); } catch (err) { /* 无痕模式 */ }
+        drawTidy();
+        return;
+      }
+      if (t.closest('#rv-keep-all')) return openAsk('');
+      if (t.closest('[data-act="keep-undo"]')) { if (R.lastKeep) runRestore(R.lastKeep.ids.slice(), '刚才隐藏的'); return; }
+      if (t.closest('#rv-purge-go')) runPurge();
+    });
+    el.addEventListener('input', function (e) {
+      if (e.target.id === 'rv-keep-n') { if (setKeepN(e.target.value)) { drawTidy(); drawProjectBar(); } }
+      else if (e.target.id === 'rv-purge-word') {
+        // 打对的那一刻记下现在隐藏的是哪些
+        R.purgeSig = purgeWordOk() ? hiddenSig().key : '';
+        drawTidyMsg();
+      }
+    });
+    el.addEventListener('change', function (e) {
+      if (e.target.id === 'rv-keep-n') { e.target.value = R.keepN; drawDrawer(); }
+    });
+    // 没有「按 Enter 就删」：用注音 / 仓颉 / 拼音打字时，选字的那个 Enter 也会进来（Safari）→ 一定要亲手按红色按钮
+
+    var ask = $('#rv-ask');
+    ask.addEventListener('click', function (e) {
+      if (e.target === ask || e.target.closest('[data-ask="no"]')) return closeAsk();
+      var ok = e.target.closest('[data-ask="ok"]');
+      if (ok && !ok.disabled && R.ask) { var pid = R.ask.pid; closeAsk(); runKeep(pid); }
+    });
+    ask.addEventListener('input', function (e) {
+      if (e.target.id === 'rv-ask-n' && setKeepN(e.target.value)) { drawAsk(); drawTidy(); drawProjectBar(); }
+    });
+    ask.addEventListener('change', function (e) { if (e.target.id === 'rv-ask-n') e.target.value = R.keepN; });
+    // 确认框开着：Esc 关它（不关后面的抽屉）、← → 不换照片、Tab 不跑出去
+    document.addEventListener('keydown', function (e) {
+      if (!R.ask) return;
+      if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); closeAsk(); return; }
+      if (e.key === 'Enter' && e.target.id === 'rv-ask-n') { e.preventDefault(); var ok = $('#rv-ask [data-ask="ok"]'); if (!ok.disabled) ok.click(); return; }
+      if (e.key === 'Tab') {
+        var f = $$('#rv-ask input, #rv-ask button').filter(function (x) { return !x.disabled; });
+        if (!f.length) return;
+        var i = f.indexOf(document.activeElement);
+        if (e.shiftKey && i <= 0) { e.preventDefault(); f[f.length - 1].focus(); }
+        else if (!e.shiftKey && i === f.length - 1) { e.preventDefault(); f[0].focus(); }
+      }
+    }, true);
   }
 
   /* ============================================================
@@ -468,10 +1192,19 @@
     if (!pr) { el.hidden = true; return; }
     el.hidden = false;
     var bits = projSummary(pr);
+    var nHid = photoCount(pid, true);
     el.innerHTML = '<div><p class="sub-h">项目 · 只给业务看</p><h3>' + esc(pr.name) + (pr.hidden ? ' <span class="tag warn">已隐藏</span>' : '') + '</h3>' +
-      '<p class="muted">' + (pr.n | 0) + ' 张' + (bits.length ? ' · ' + esc(bits.join(' · ')) : ' · 还没填区域 / 房型 / 风格') +
+      '<p class="muted">' + (pr.n | 0) + ' 张' + (nHid ? '（隐藏了 ' + CL.n(nHid) + ' 张）' : '') + (bits.length ? ' · ' + esc(bits.join(' · ')) : ' · 还没填区域 / 房型 / 风格') +
       (pr.by ? ' · 上次修改 ' + esc(pr.by) + ' ' + esc(CL.time(pr.ts)) : '') + '</p></div>' +
-      '<div class="btn-row"><button class="mini dark" type="button" data-act="proj-edit">编辑项目资料</button></div>';
+      '<div class="btn-row"><button class="mini dark" type="button" data-act="proj-edit">编辑项目资料</button>' + keepButtons(pid) + '</div>';
+  }
+  // 项目列、项目资料共用：只留最好的 N 张、复原这个项目隐藏的照片
+  function keepButtons(pid) {
+    var pr = cat().projects[pid];
+    if (!pr || !MB.clPick) return '';
+    var nHid = photoCount(pid, true);
+    return (pr.hidden ? '' : '<button class="mini" type="button" data-act="keep-proj"' + (R.bulk ? ' disabled' : '') + '>只留最好的 ' + R.keepN + ' 张…</button>') +
+      (nHid ? '<button class="mini" type="button" data-act="unhide-proj-photos"' + (R.bulk ? ' disabled' : '') + '>复原隐藏的 ' + CL.n(nHid) + ' 张</button>' : '');
   }
 
   function chips(kind, items, cur, multi) {
@@ -523,7 +1256,7 @@
       '<p class="dr-meta">' + (ph.by ? '上次修改：<b>' + esc(ph.by) + '</b> · ' + esc(CL.time(ph.ts)) : '') +
       ' · ' + ph.w + '×' + ph.h + (ph.sz ? ' · ' + CL.mb(ph.sz) : '') + (ph.hidden ? ' · 由 ' + esc(ph.hidden.by) + ' 隐藏' : '') + '</p>' +
       '<div class="dr-actions"><button class="btn gold" type="button" data-act="ok-next">确认 ✓ 下一张</button>' +
-      '<button class="btn ghost" type="button" data-act="hide-photo">' + (ph.hidden ? '复原这张' : '隐藏这张') + '</button>' +
+      '<button class="btn ghost" type="button" data-act="hide-photo"' + (R.bulk === 'purge' ? ' disabled title="正在删除，等删完再按"' : '') + '>' + (ph.hidden ? '复原这张' : '隐藏这张') + '</button>' +
       '<button class="btn ghost" type="button" data-act="proj-edit">项目资料</button></div>';
     return html;
   }
@@ -544,8 +1277,11 @@
       '<div class="dr-sec"><p class="sub-h">房型</p>' + chips('ptype', ptypes, pr.ptype || '', false) + '</div>' +
       '<div class="dr-sec"><p class="sub-h">家庭特点 <i>可多选</i></p>' + chips('traits', traits, pr.traits || [], true) + '</div>' +
       '<div class="dr-sec"><p class="sub-h">风格 <i>整个项目</i></p>' + chips('pstyle', styles, pr.style || '', false) + '</div>' +
-      '<div class="dr-actions"><button class="btn ghost" type="button" data-act="hide-project">' + (pr.hidden ? '复原这个项目' : '隐藏这个项目') + '</button>' +
+      '<div class="dr-actions"><button class="btn ghost" type="button" data-act="hide-project"' + (R.bulk === 'purge' ? ' disabled title="正在删除，等删完再按"' : '') + '>' + (pr.hidden ? '复原这个项目' : '隐藏这个项目') + '</button>' +
       (R.f.pid !== pid ? '<button class="btn ghost" type="button" data-act="only-project">只看这个项目</button>' : '') + '</div>' +
+      (MB.clPick && !pr.hidden ? '<div class="dr-sec dr-keep"><p class="sub-h">照片太多 <i>免费方案空间有限</i></p>' +
+        '<p class="hint">只留最好的几张（同一个角度只留一张，每个空间都留到），其它的先隐藏，可以复原。</p>' +
+        '<div class="dr-actions">' + keepButtons(pid).replace(/class="mini"/g, 'class="btn ghost"') + '</div></div>' : '') +
       (pr.hidden ? '<p class="dr-meta">由 ' + esc(pr.hidden.by) + ' 隐藏 · ' + esc(CL.time(pr.hidden.ts)) + '：VISI 不会再挑这个项目的照片，旧方案照样打得开。</p>' : '');
   }
 
@@ -564,8 +1300,10 @@
     var n = unsaved();
     var el = $('#rv-save');
     var msg;
-    if (R.err) msg = '<span class="err">' + esc(R.err) + '</span>';
+    if (R.err) msg = '<span class="err"' + (R.errCode ? ' title="' + esc(R.errCode) + '"' : '') + '>' + esc(R.err) + '</span>';
+    else if (R.hiding && R.hideProg) msg = '<span>' + (R.hideProg.op === 'hide' ? '隐藏中' : '复原中') + '… 第 ' + R.hideProg.i + ' / ' + R.hideProg.n + ' 批</span>';
     else if (R.saving || R.hiding) msg = '<span>保存中…</span>';
+    else if (R.bulk === 'purge') msg = '<span>删除中…（看上面「整理空间」）</span>';
     else if (n) msg = '<span>未保存 <b>' + n + '</b> 项 · 停手 ' + Math.round(MB.clReview.idleMs / 1000) + ' 秒后自动保存（或按「保存」）</span>';
     else if (R.lastSaved) msg = '<span class="ok">已保存 ✓ ' + esc(CL.time(R.lastSaved)) + '</span>';
     else msg = '<span class="muted">点照片改标签；改了会自动保存</span>';
@@ -575,20 +1313,31 @@
     $('#tab-review-dot').hidden = !n;
     drawBudget();
   }
-  // 这个月用掉几次 Blob 写入（伺服器在清单里记的；改标签每次保存 1 次）
+  // 这个月用掉几次 Blob 写入、空间用了多少（伺服器在 full 清单附的 quota；改标签每次保存 1 次）
   function drawBudget() {
     var b = $('#rv-budget');
     if (!b || !CL.cat) return;
-    var used = CL.monthWrites(CL.cat), lim = CL.LIMIT_WRITES;
-    b.textContent = '本月 Blob 写入约 ' + CL.n(used) + ' / ' + CL.n(lim);
-    b.classList.toggle('warn', used > lim * 0.8);
+    var q = quotaNow(), over = false;
+    if (q.plan === 'pro') {
+      b.textContent = 'Pro 方案 · 不限额度 · 本月写入约 ' + CL.n(q.writes) + ' 次';
+      b.title = 'Vercel Pro 方案：写入次数、空间超过只是多付钱，案例库不会被停掉';
+    } else {
+      b.textContent = '本月 Blob 写入约 ' + CL.n(q.writes) + ' / ' + CL.n(q.cap) + (spaceText(q) ? ' · ' + spaceText(q) : '');
+      over = q.writes >= q.cap || (q.bytes != null && q.bytesCap && q.bytes >= q.bytesCap);
+      b.title = 'Vercel 免费方案：每月最多 ' + CL.n(q.cap) + ' 次写入' + (q.bytesCap ? '、空间最多 ' + mbNum(q.bytesCap) + ' MB' : '') +
+        '，超过 Vercel 会把整个案例库停掉。上传每张照片、每次保存、隐藏 / 复原、删除都算写入。' +
+        (over ? '现在已经到上限：先到「整理空间」删掉隐藏的照片，或等下个月 1 号重算。' : '');
+    }
+    b.classList.toggle('warn', !!quotaWarn(q));
+    b.classList.toggle('over', !!over);
   }
 
-  var OPS = { addPhotos: '上传', patch: '改标签', hide: '隐藏', unhide: '复原' };
+  var OPS = { addPhotos: '上传', patch: '改标签', hide: '隐藏', unhide: '复原', purge: '删除' };
   function drawLog() {
     var log = (cat().log || []).slice(-20).reverse();
     $('#rv-log').innerHTML = log.length ? log.map(function (e) {
-      return '<li><span class="t">' + esc(CL.time(e.ts)) + '</span><b>' + esc(e.by || '?') + '</b> ' + esc(OPS[e.op] || e.op) + ' ' + (e.n | 0) + (e.op === 'patch' ? ' 项' : ' 张') + '</li>';
+      return '<li' + (e.op === 'purge' ? ' class="del"' : '') + '><span class="t">' + esc(CL.time(e.ts)) + '</span><b>' + esc(e.by || '?') + '</b> ' +
+        esc(OPS[e.op] || e.op) + ' ' + CL.n(e.n | 0) + (e.op === 'patch' ? ' 项' : ' 张') + (e.op === 'purge' ? '（找不回来）' : '') + '</li>';
     }).join('') : '<li class="muted">还没有纪录</li>';
   }
 
@@ -601,6 +1350,7 @@
     drawProjectBar();
     drawPageCards();
     drawDrawer();
+    drawTidy();
   }
 
   // quiet：背景更新（拿到新清单、上传那边登记了）—— 抽屉开着就不重画它
@@ -612,6 +1362,8 @@
     drawGrid();
     drawSave();
     drawLog();
+    drawTidy();
+    if (R.ask) drawAsk();
     if (quiet && R.mode) drawDrawerTag();
     else drawDrawer();
   }
@@ -675,6 +1427,8 @@
     });
     $('#rv-proj').addEventListener('click', function (e) {
       if (e.target.closest('[data-act="proj-edit"]')) openProject(R.f.pid);
+      else if (e.target.closest('[data-act="keep-proj"]')) openAsk(R.f.pid);
+      else if (e.target.closest('[data-act="unhide-proj-photos"]')) restoreProject(R.f.pid);
     });
     $('#rv-savebtn').addEventListener('click', function () { flushNow(); });
     // 离开这一页（关分页、切到别的 App）：马上存（keepalive：页面关了请求照样送完）
@@ -715,6 +1469,10 @@
         setHidden('projects', R.selPid, !c.projects[R.selPid].hidden);
       } else if (a === 'only-project') {
         R.f.pid = R.selPid; R.page = 0; render();
+      } else if (a === 'keep-proj') {
+        openAsk(R.selPid);
+      } else if (a === 'unhide-proj-photos') {
+        restoreProject(R.selPid);
       }
     });
     dr.addEventListener('change', function (e) {
@@ -739,7 +1497,7 @@
       }
     });
     document.addEventListener('keydown', function (e) {
-      if (!R.mode || CL.tab !== 'review') return;
+      if (!R.mode || CL.tab !== 'review' || R.ask) return;
       var tag = (e.target.tagName || '').toLowerCase();
       if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
       if (e.key === 'Escape') closeDrawer();
@@ -829,7 +1587,9 @@
     init: function () {
       if (inited) return;
       inited = true;
+      buildTidy();
       bind();
+      bindTidy();
       drawSave();
     },
     idleMs: IDLE_MS,
@@ -838,6 +1598,10 @@
     unsaved: unsaved,
     flush: flushNow,
     state: function () { return R; },
-    render: render
+    render: render,
+    // 测试、除错用：只算不改
+    keepPlan: function (pid, n) { return keepPlan(pid || '', n || R.keepN); },
+    hiddenStats: hiddenStats,
+    quota: quotaNow
   };
 })();

@@ -433,7 +433,7 @@
     uses.forEach(function (u) {
       if (String(u.ref).indexOf('c:') !== 0) return;
       var im = resolve && resolve(u.ref);
-      if (!im) return;
+      if (!im || im.gone) return;   // 已经被删掉的（占位框）：下面 16d 另外说
       var l = pageLabel(p, u);
       var go = u.pg.type === 'room' ? 'room:' + u.pg.room.uid : u.pg.type === 'cases' ? 'cases' : 'visit';
       var isRoom = MB.caseIsRoom ? MB.caseIsRoom(im) : !!(im.rooms && im.rooms[0] && MB.ROOM[im.rooms[0]]);
@@ -451,12 +451,51 @@
 
     // 16c · 方案里的公司案例照片：这台电脑看不到（同事导出的方案、没登入过），或登入过期（存着的是旧清单）
     var cref = MB.caseRefsIn ? MB.caseRefsIn(p) : [];
+    var goneOf = function (ref) {
+      var im = resolve && resolve(ref);
+      return im ? (MB.caseGone ? MB.caseGone(im) : im.gone || (im.blocked ? 'blocked' : '')) : '';
+    };
+    // 案例库暂停中（Vercel 免费额度用完）：清单里每一张都带 blocked（一登入就暂停、还没有清单时看 cloud.js 的状态）
+    var paused = !!(MB.cases && MB.cases().some(function (c) { return c && c.blocked; })) ||
+      !!(MB.cloud && MB.cloud.status && MB.cloud.status().blocked);
     var unseen = cref.filter(function (ref) { return !(resolve && resolve(ref)); });
-    var stale = cref.filter(function (ref) { var im = resolve && resolve(ref); return !!(im && im.stale); });
-    if (unseen.length) add('warn', '有 ' + unseen.length + ' 张公司案例照片这台电脑看不到 —— 先登入公司案例库',
+    var stale = cref.filter(function (ref) { var im = resolve && resolve(ref); return !!(im && im.stale && !goneOf(ref)); });
+    // 暂停中：看不到的那几张也一样打不开 —— 算进下面「暂时打不开」，不叫他去登入
+    if (unseen.length && !paused) add('warn', '有 ' + unseen.length + ' 张公司案例照片这台电脑看不到 —— 先登入公司案例库',
       '这份方案用了公司案例库的照片（例如同事导出给你的）。到「图库」登入之后就看得到；登入之前先别按「自动配图」、换风格或重新选图，不然那几张会被换掉。', 'library');
-    else if (stale.length) add('warn', '公司案例库登入过期：' + stale.length + ' 张案例照片没办法确认还能不能用',
+    else if (stale.length && !unseen.length) add('warn', '公司案例库登入过期：' + stale.length + ' 张案例照片没办法确认还能不能用',
       '这台电脑存着的是旧清单 —— 之后被隐藏的照片（例如拍到别的客户）这里看不出来。到「图库」重新登入，再发给客户。', 'library');
+
+    // 16d · 印不出来的公司案例照片：方案页上是占位框（不是破图），但客户看到的是一格空白
+    //   暂停中（blocked）：等案例库恢复就回来 —— 急着发就换成内置 / 自己的照片
+    //   被删掉（deleted）：回不来了，换一张
+    //   自动配的空间不会印占位框（model.js 先换成别的照片）；这里只数真的印出来的 + 方案里写着的
+    var shown = { blocked: [], deleted: [] }, where = {};
+    uses.forEach(function (u) {
+      if (String(u.ref).indexOf('c:') !== 0) return;
+      var g = goneOf(u.ref);
+      if (!shown[g]) return;
+      if (shown[g].indexOf(u.ref) < 0) shown[g].push(u.ref);
+      where[g] = where[g] || (u.pg.type === 'room' ? 'room:' + u.pg.room.uid : u.pg.type === 'cases' ? 'cases' : 'visit');
+    });
+    /** 这张写在方案的哪里（「去改」）：空间 / 参考空间 / ⑤ 的版位图 */
+    function placeOf(ref) {
+      for (var i = 0; i < p.rooms.length; i++) if ((p.rooms[i].images || []).indexOf(ref) > -1) return 'room:' + p.rooms[i].uid;
+      if ((p.cases || []).some(function (c) { return c && c.ref === ref; })) return 'cases';
+      return 'visit';
+    }
+    if (paused) {
+      var nB = shown.blocked.length + unseen.length;
+      if (nB) add(shown.blocked.length ? 'bad' : 'warn', '有 ' + nB + ' 张公司案例照片暂时打不开（案例库暂停中），先别发给客户',
+        '公司案例库被 Vercel 暂停了（免费额度用完），这几张在方案页上是空白的占位框，PDF、PPTX 也一样。急着发：换成内置照片或你自己的照片；' +
+        '不急：等案例库恢复（老板处理好之后），到「图库」按「更新」，照片就回来了。', where.blocked || 'library');
+      else if (cref.length) add('tip', '公司案例库暂停中：自动配的案例照片先换成了内置照片',
+        '方案里没有打不开的照片，可以照常发。案例库恢复后，自动配的空间会换回原来的案例照片。', 'library');
+    }
+    var deleted = cref.filter(function (ref) { return goneOf(ref) === 'deleted'; });
+    if (deleted.length) add(shown.deleted.length ? 'bad' : 'warn', '有 ' + deleted.length + ' 张案例照片已经被删除，请换一张',
+      '公司案例库已经把它删掉了（例如释放空间时删的）。' + (shown.deleted.length ? '方案页上那一格现在是空白的占位框。' : '') +
+      '换一张 —— 帮我挑、图库都挑得到别的。', where.deleted || placeOf(deleted[0]));
 
     var offStyle = [];
     uses.forEach(function (u) {

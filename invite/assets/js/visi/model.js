@@ -356,15 +356,44 @@
      隐藏的、不确定（unsure）的照样解析得到 —— 旧方案打开不会少图；只是自动配图、帮我挑不用它们 */
   var CASES = [], CASE_MAP = {}, CASE_SHOT = {}, CASE_SERIES = {}, CASE_VER = 0;
   var CASE_ID = /^c:[0-9a-f]{16}$/;
+  // current = 这份清单刚跟伺服器对过（cloud.js 说的）：清单里没有的 c: 照片才算「被删掉了」；PURGED = 伺服器说删掉的
+  var CASE_INFO = { current: false }, PURGED = {}, GONE_IM = {};
   // stale = 登入过期 / 登出了：存着的清单可能是旧的（之后被隐藏的照片看不出来）—— 只拿来解析方案里已经放的，不再自动挑
-  function usable(c) { return !!c && !c.hidden && c.status !== 'unsure' && !c.stale; }
+  // blocked = 案例库暂停中（Vercel 免费额度用完）：照片打不开 —— 一样只解析、印成占位框，不进图库、不自动挑
+  // gone = 照片档已经不在了（cloud.js 试过那张回 404：这台电脑的清单是旧的）—— 跟已删除一样
+  function usable(c) { return !!c && !c.hidden && c.status !== 'unsure' && !c.stale && !c.blocked && !c.gone; }
   MB.caseUsable = usable;
+  /**
+   * 这张（ref 或 resolver 给的那一份）印不印得出来：
+   *   'blocked' = 案例库暂停中（照片网址回 403）· 'deleted' = 清单里已经没有了（被删掉）· '' = 没问题 / 不是案例 / 这台电脑看不到
+   * 「看不到」（没登入过、清单还没对过伺服器）不算删掉：那是 resolver 回 null，照旧留着、体检叫他先登入
+   */
+  function goneOf(x) {
+    if (!x) return '';
+    if (typeof x === 'object') return x.gone || (x.blocked ? 'blocked' : '');
+    if (typeof x !== 'string' || !CASE_ID.test(x)) return '';
+    var c = CASE_MAP[x];
+    if (c) return c.gone || (c.blocked ? 'blocked' : '');
+    return (PURGED[x] || (CASE_INFO.current && CASES.length)) ? 'deleted' : '';
+  }
+  MB.caseGone = goneOf;
+  /** 被删掉的案例照片：resolver 给一个占位的（方案页印成占位框，不是破图；体检叫他换一张）。没有任何项目资料 */
+  function deletedIm(ref) {
+    return GONE_IM[ref] || (GONE_IM[ref] = { id: ref, src: '', thumb: '', w: 1600, h: 1200, rooms: [], series: '', style: '', cabinets: [],
+      isCase: true, gone: 'deleted', label: '', zh: '', en: '', area: '', ptype: '', traits: [], hidden: false, status: '' });
+  }
   /** 拍的是一个空间（不是平面图、截图、报价单，也不是没人标过的新照片）：自动放进方案的只能是这种 */
   function caseIsRoom(c) { return !!(c && c.rooms && c.rooms[0] && MB.ROOM[c.rooms[0]]); }
   MB.caseIsRoom = caseIsRoom;
-  /** cloud.js 每次载入 / 更新清单后叫一次；之后要重建 resolver（app.js 的 rebuildResolver） */
-  MB.setCases = function (list) {
-    CASES = []; CASE_MAP = {}; CASE_SHOT = {}; CASE_SERIES = {}; CASE_VER++; poolCache = null;
+  /** cloud.js 每次载入 / 更新清单后叫一次；之后要重建 resolver（app.js 的 rebuildResolver）。
+      info = { current, purged:[h16] }（cloud.js 给；省略 = 照旧） */
+  MB.setCases = function (list, info) {
+    CASES = []; CASE_MAP = {}; CASE_SHOT = {}; CASE_SERIES = {}; CASE_VER++; poolCache = null; GONE_IM = {};
+    if (info && typeof info === 'object') {
+      CASE_INFO = { current: !!info.current };
+      PURGED = {};
+      (Array.isArray(info.purged) ? info.purged : []).forEach(function (h) { if (typeof h === 'string' && /^[0-9a-f]{16}$/.test(h)) PURGED['c:' + h] = 'deleted'; });
+    }
     (Array.isArray(list) ? list : []).forEach(function (c) {
       if (!c || typeof c.id !== 'string' || !CASE_ID.test(c.id) || CASE_MAP[c.id]) return;
       CASES.push(c);
@@ -515,7 +544,8 @@
     (userImages || []).forEach(function (u) { map['u:' + u.id] = u; });
     // 案例放最后（pool 照插入顺序走，内置 / 本机图的先后跟以前一样）
     CASES.forEach(function (c) { map[c.id] = c; });
-    var fn = function (ref) { return ref ? map[ref] || null : null; };
+    // 清单里没有了的 c:（被删掉）：给占位的那一份 —— 方案页印占位框，不是破图，也不会悄悄少一张
+    var fn = function (ref) { return ref ? map[ref] || (goneOf(ref) === 'deleted' ? deletedIm(ref) : null) : null; };
     fn.map = map;
     // 记住最近一个：MB.pageList(p) 没带 resolve 时（页码、讲稿）也能判断案例图找不找得到
     MB.makeResolver.last = fn;
@@ -660,7 +690,8 @@
     }
     // 同一张照片的不同档案：只留第一个（品牌照的别名本来就指向内置图）
     out.forEach(function (c) {
-      c.mood = c.rooms.indexOf('mood') > -1 || !!MOOD_FIT[c.ref];
+      // 打不开的案例（暂停中）什么版位都不拿去配
+      c.mood = !c.blocked && (c.rooms.indexOf('mood') > -1 || !!MOOD_FIT[c.ref]);
       // 平面图、展厅、其他 都不算空间照；隐藏 / 不确定的案例也不拿去配图
       c.room = !c.mood && !c.blocked && c.rooms.some(function (k) { return MB.ROOM[k]; });
     });
@@ -707,7 +738,8 @@
     if (im) return im;
     var b = builtins();
     for (var i = 0; i < b.length; i++) if (b[i].id === ref) return b[i];
-    return CASE_MAP[ref] || null;   // 案例（resolver 比 MB.setCases 早建的时候）
+    // 案例（resolver 比 MB.setCases 早建的时候）；清单里没有了的 → 占位的那一份
+    return CASE_MAP[ref] || (goneOf(ref) === 'deleted' ? deletedIm(ref) : null);
   }
 
   /**
@@ -923,9 +955,13 @@
 
     // 2 · 空间主图：手选过的空间照销售的（就算跟封面重复也是他选的 → dups，体检提醒）；
     //     自动配的空间让开前面用掉的，整组都被用掉就从图库重挑一张（跟 autoPick 同一套排序）
-    var live = {};
+    var live = {}, had = {};
     p.rooms.forEach(function (r) {
-      live[r.uid] = (r.images || []).filter(function (ref) { return look(resolve, ref); });
+      var refs = (r.images || []).filter(function (ref) { return look(resolve, ref); });
+      had[r.uid] = refs.length > 0;
+      // 自动配的空间：打不开的公司案例照片（案例库暂停中、已经删掉）不印，下面照常从图库重挑（恢复了就换回来）；
+      // 销售亲手放的照样占着那一格（印成占位框，不是破图；体检会说「先别发给客户」）
+      live[r.uid] = r.manual ? refs : refs.filter(function (ref) { return !goneOf(look(resolve, ref)); });
       out.rooms[r.uid] = [];
     });
     // 手选空间的辅图（最多 2 张）也先留住：不然封面、拼贴、开场会先拿走销售挑的图。第 6 步照版式再决定放几张
@@ -942,7 +978,7 @@
       if (r.manual) return;   // 销售把图都拿掉了：不替他补实景（下面第 5 步会放一张氛围照）
       var hero = live[r.uid].filter(free)[0];
       // 只有「原本有图、但都被别页用掉」才重挑；本来就没有图的空间不偷偷补（③ 会显示还没有图），第 5 步放氛围照
-      if (!hero && live[r.uid].length) { var c = roomCands(p, r, all, used)[0]; hero = c ? c.ref : null; }
+      if (!hero && had[r.uid]) { var c = roomCands(p, r, all, used)[0]; hero = c ? c.ref : null; }
       if (hero) { out.rooms[r.uid].push(hero); take(hero); }
     });
 
@@ -1036,7 +1072,8 @@
     var pick = plan.slot[slot] || null;
     var im = look(resolve, pick);
     var bk = brandKeyOf(pick);
-    if (im) return { src: im.src, w: im.w, h: im.h, ref: pick.indexOf('b:brand-') === 0 ? null : pick, brand: bk, pick: pick, pos: im.pos || '' };
+    // gone = 打不开的公司案例（'blocked' 暂停中 / 'deleted' 被删掉）：src 是空的，deck.js 印占位框
+    if (im) return { src: im.src, w: im.w, h: im.h, ref: pick.indexOf('b:brand-') === 0 ? null : pick, brand: bk, pick: pick, pos: im.pos || '', gone: goneOf(im) };
     var b = MB.BRAND && MB.BRAND.photos[BRAND_PHOTO[slot]];
     return b ? { src: b.src, w: b.w, h: b.h, ref: null, brand: BRAND_PHOTO[slot], pick: brandRef(BRAND_PHOTO[slot]), pos: BRAND_POS[BRAND_PHOTO[slot]] || '' } : null;
   };
@@ -1045,7 +1082,7 @@
     plan = plan || MB.deckImages(p, resolve);
     return plan.glance.map(function (ref) {
       var im = look(resolve, ref);
-      return im ? { src: im.src, w: im.w, h: im.h, ref: ref, pos: im.pos || '' } : null;
+      return im ? { src: im.src, w: im.w, h: im.h, ref: ref, pos: im.pos || '', gone: goneOf(im) } : null;
     }).filter(Boolean);
   };
   /** 空间页实际印的图（主图 + 最多 2 张辅图，跳过前面空间用过的） */

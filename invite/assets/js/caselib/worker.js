@@ -12,6 +12,10 @@
      重新编码会顺便去掉 EXIF / GPS（照片里不会留下客户家的位置）
    - thumb：长边 320px、q0.72 的 dataURL（审核页、VISI 图库用）
    - dh：9×8 灰阶 dHash（16 hex），伺服器拿来把「同一个镜头」的连拍分成一组
+
+   另外两种（上传页的「精选」用，都不上传、不压 JPEG）：
+   - analyze：只算 h、w / ht（转正、缩到 1200px 后的尺寸）、dh —— 跟 process 同一套画法，dh 一样
+   - preview：长边约 200px 的小 JPEG（Blob），给预览格子看
    ============================================================ */
 (function (G) {
   'use strict';
@@ -204,11 +208,53 @@
     });
   }
 
+  /* ---------- 只分析（精选用）：跟 processFile 一样转正、缩图、算 dHash，但不压 JPEG ---------- */
+  function analyzeFile(file, o, offscreen) {
+    o = o || {};
+    var res = {};
+    var hp = o.h ? Promise.resolve(o.h) : hash16(file);
+    return hp.then(function (h) {
+      res.h = h;
+      return decode(file, offscreen);
+    }).then(function (bmp) {
+      var sw = bmp.width || bmp.naturalWidth, sh = bmp.height || bmp.naturalHeight;
+      if (!sw || !sh) throw err('decode');
+      res.ow = sw; res.oh = sh;
+      var size = fit(sw, sh, opt(o, 'long'));
+      var main = draw(bmp, size.w, size.h, offscreen);
+      if (bmp.close) bmp.close();
+      res.w = size.w; res.ht = size.h;
+      var t = fit(main.width, main.height, opt(o, 'thumb'));
+      var th = draw(main, t.w, t.h, offscreen);
+      release(main);
+      res.dh = dhash(th);
+      release(th);
+      return res;
+    });
+  }
+
+  /* ---------- 预览格子的小图：长边 o.long（预设 200px） ---------- */
+  function previewFile(file, o, offscreen) {
+    o = o || {};
+    return decode(file, offscreen).then(function (bmp) {
+      var sw = bmp.width || bmp.naturalWidth, sh = bmp.height || bmp.naturalHeight;
+      if (!sw || !sh) throw err('decode');
+      var size = fit(sw, sh, o.long || 200);
+      var c = draw(bmp, size.w, size.h, offscreen);
+      if (bmp.close) bmp.close();
+      return toJpeg(c, o.q || 0.7).then(function (b) {
+        release(c);
+        return { blob: b, w: size.w, ht: size.h, ow: sw, oh: sh };
+      });
+    });
+  }
+
   /* ============================================================
      Worker 模式
      ============================================================ */
   if (IS_WORKER) {
     var supported = canUseOffscreen();
+    var CANVAS_OPS = { process: processFile, analyze: analyzeFile, preview: previewFile };
     G.onmessage = function (ev) {
       var m = ev.data || {};
       function reply(ok, val) {
@@ -216,9 +262,9 @@
       }
       if (m.op === 'ping') return reply(true, { offscreen: supported });
       if (m.op === 'hash') return hash16(m.file).then(function (h) { reply(true, { h: h }); }, function (e) { reply(false, e); });
-      if (m.op === 'process') {
+      if (CANVAS_OPS[m.op]) {
         if (!supported) return reply(false, err('unsupported'));
-        return processFile(m.file, m.opts, true).then(function (r) { reply(true, r); }, function (e) { reply(false, e); });
+        return CANVAS_OPS[m.op](m.file, m.opts, true).then(function (r) { reply(true, r); }, function (e) { reply(false, e); });
       }
       reply(false, err('op'));
     };
@@ -233,7 +279,7 @@
 
   var pool = [], queue = [], seq = 0, size = 2;
   var mainMode = false, mainBusy = 0, crashes = 0;
-  var counts = { hash: 0, process: 0, main: 0 };
+  var counts = { hash: 0, process: 0, analyze: 0, preview: 0, main: 0 };
 
   function spawn() {
     var w;
@@ -275,6 +321,8 @@
     mainBusy++;
     counts.main++;
     var p = job.op === 'hash' ? hash16(job.file).then(function (h) { return { h: h }; })
+      : job.op === 'analyze' ? analyzeFile(job.file, job.opts, false)
+      : job.op === 'preview' ? previewFile(job.file, job.opts, false)
       : processFile(job.file, job.opts, false);
     p.then(function (r) { mainBusy--; job.resolve(r); next(); }, function (e) { mainBusy--; job.reject(e); next(); });
   }
@@ -312,8 +360,11 @@
     forceMain: false,                       // 测试用：强制走主执行绪的后备做法
     hash: function (file) { return run('hash', file); },
     process: function (file, opts) { return run('process', file, opts); },
+    // 精选用：只算 w / ht / dh（不压、不传）；预览格子的小图
+    analyze: function (file, opts) { return run('analyze', file, opts); },
+    preview: function (file, opts) { return run('preview', file, opts); },
     pending: function () { return queue.length; },
-    stats: function () { return { hash: counts.hash, process: counts.process, main: counts.main, workers: pool.length, mainMode: mainMode }; },
+    stats: function () { return { hash: counts.hash, process: counts.process, analyze: counts.analyze, preview: counts.preview, main: counts.main, workers: pool.length, mainMode: mainMode }; },
     // 测试用：在主执行绪直接算（不经工作池）
     _processHere: function (file, opts) { return processFile(file, opts, false); },
     _dhash: dhash

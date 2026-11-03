@@ -923,6 +923,438 @@ if (process.env.SHOTS) {
   await ctx.close();
 }
 
+/* ============================================================
+   P · 案例库被 Vercel 暂停（免费额度用完）、案例照片被删掉：VISI 不出现破图
+   ------------------------------------------------------------
+   暂停中照片网址都回 403：方案里已经放的案例照片照样解析（方案打得开），但印成占位框；
+   自动配的空间、版位改用内置照片；图库、帮我挑、自动挑都不用案例，而且说清楚为什么；体检叫他先别发。
+   恢复（按「更新」）就回来。被删掉的 c: 照片也印占位框，体检叫他换一张。内置、自己的照片不受影响
+   ============================================================ */
+const BLOCKED_MSG = '公司案例库暂停中：Vercel 的免费额度用完了，案例照片暂时不能用。内置照片和你自己的照片照常可以用。';
+/** 方案页（#deck）里的 <img>：指着案例库网址的几张、没载出来的（破图）、占位框、载出来的内置图 */
+async function deckImgs(pg) {
+  return pg.evaluate(async (blob) => {
+    const ims = [...document.querySelectorAll('#deck img')];
+    await Promise.all(ims.map((im) => (im.complete ? null : new Promise((r) => { im.onload = im.onerror = r; setTimeout(r, 5000); }))));
+    const src = (i) => i.getAttribute('src') || '';
+    return {
+      n: ims.length,
+      caseSrc: ims.filter((i) => src(i).indexOf(blob) === 0).length,
+      broken: ims.filter((i) => !i.naturalWidth).map((i) => src(i).slice(0, 90)),
+      gone: [...document.querySelectorAll('#deck .ph-gone')].map((e) => e.getAttribute('data-gone')),
+      builtin: ims.filter((i) => /assets\/img\//.test(src(i)) && i.naturalWidth > 0).length
+    };
+  }, mock.blob);
+}
+const hook = (q) => fetch(mock.blob + '__mock/' + q, { method: 'POST' }).then((r) => r.json());
+const checkItems = (pg) => pg.evaluate(() => { const id = localStorage.getItem('sail-mb-active'); return MB.store.getProject(id).then((x) => MB.checkProject(MB.normalizeProject(x), MB.makeResolver.last).items.map((i) => i.level + '|' + i.text + '|' + i.goto)); });
+{
+  const t = await open(mock.url);
+  const tp = t.page;
+  await login(tp);
+  // 一份方案：厨房、客厅是销售亲手放的案例；玄关是自动配的案例；主卧亲手放内置图；封面亲手选了一张案例；参考空间 2 个案例
+  const other = 'c:' + fx.photos.find((p) => p.project === 3 && !p.hidden && !p.unsure && p.room === 'kitchen').h;
+  const BLK = await tp.evaluate((a) => {
+    const p = MB.newProject({});
+    p.id = 'p-blocked'; p.lang = 'zh'; p.direction = 'misty'; p.caseStyle = 'wood';
+    p.client.names = 'Mr Test'; p.host.name = 'Ana'; p.host.wa = '60123456789'; p.visit.date = '2026-12-12';
+    p.rooms = ['kitchen', 'living', 'foyer', 'master'].map(MB.newRoom);
+    p.rooms[0].images = [a.k[0], a.k[2]]; p.rooms[0].manual = true;
+    p.rooms[1].images = [a.k[3]]; p.rooms[1].manual = true;
+    p.rooms[2].images = [a.k[5]]; p.rooms[2].manual = false;
+    const bm = MB.BUILTIN.filter((b) => b.series === 'misty' && b.rooms.indexOf('master') > -1)[0];
+    p.rooms[3].images = [bm.id]; p.rooms[3].manual = true;
+    p.images.cover = a.k[8];
+    p.cases = [{ ref: a.k[4], note: null }, { ref: a.other, note: null }];
+    return MB.normalizeProject(p);
+  }, { k: P1REFS, other });
+  await importProject(tp, BLK);
+  const before = await deckImgs(tp);
+  ok('P0 before: the proposal prints its case photos (blob URLs, all loaded)', before.caseSrc >= 6 && !before.broken.length && !before.gone.length, JSON.stringify(before));
+
+  // ---- 暂停：伺服器回 503 storage_blocked、照片网址回 403 ----
+  await hook('blocked?on=1');
+  const apiBefore = t.api.length;
+  await tp.evaluate(() => MB.cloud.refresh(true));
+  await tp.waitForTimeout(500);
+  const st = await tp.evaluate((a) => ({ st: MB.cloud.status(), n: MB.cases().length, usable: MB.cases().filter(MB.caseUsable).length,
+    resolves: a.refs.every((x) => !!MB.makeResolver.last(x)), srcs: MB.cases().filter((c) => c.src).length }), { refs: [P1REFS[0], other] });
+  ok('P1 GET /api/catalog 503 storage_blocked → status blocked (not unavailable); cached cases still resolve, none usable, no photo URL handed out',
+    st.st.status === 'blocked' && st.st.blocked && st.n === 60 && st.usable === 0 && st.resolves && st.srcs === 0 && t.api.length === apiBefore + 1, JSON.stringify(st));
+  const blk = await deckImgs(tp);
+  const plan = await tp.evaluate(() => { const id = localStorage.getItem('sail-mb-active'); return MB.store.getProject(id).then((x) => { const p = MB.normalizeProject(x); const d = MB.deckImages(p, MB.makeResolver.last); return { foyer: d.rooms[p.rooms[2].uid], master: d.rooms[p.rooms[3].uid], cover: d.slot.cover }; }); });
+  ok('P2 deck while blocked: no <img> points at the case library, nothing broken; hand-placed case photos are placeholders (2 kitchen + living + cover + 2 cases)',
+    blk.caseSrc === 0 && !blk.broken.length && blk.gone.length === 6 && blk.gone.every((g) => g === 'blocked'), JSON.stringify(blk));
+  ok('P3 the auto-picked foyer falls back to a built-in photo; the hand-placed built-in master photo is unchanged and prints',
+    plan.foyer.length > 0 && plan.foyer.every((x) => /^b:/.test(x)) && /^b:/.test(plan.master[0]) && blk.builtin >= 3, JSON.stringify(plan) + ' builtin=' + blk.builtin);
+  // 自动挑 / 帮我挑：一张案例都不用
+  const picks = await tp.evaluate(() => { const id = localStorage.getItem('sail-mb-active'); return MB.store.getProject(id).then((x) => {
+    const p = MB.normalizeProject(x), res = MB.makeResolver.last;
+    const k = MB.newRoom('kitchen'), d = MB.newRoom('dining'); p.rooms.push(k, d);
+    return { k: MB.autoPick(p, k, []), d: MB.autoPick(p, d, []), suggest: MB.suggestCases(p, res, 3), match: MB.matchCases(p, res), lib: MB.allImages([]).filter((im) => im.isCase).length,
+      slots: (function () { const pl = MB.deckImages(p, res); return Object.keys(pl.slot).map((s) => pl.slot[s]).concat(pl.glance).filter((r) => r && /^c:/.test(r) && r !== p.images.cover); })() };
+  }); });
+  ok('P4 while blocked autoPick / deckImages / suggestCases / 帮我挑 / gallery use no c: refs',
+    picks.k.length > 0 && !picks.k.concat(picks.d).some((x) => /^c:/.test(x)) && !picks.suggest.length && !picks.match.length && picks.lib === 0 && !picks.slots.length, JSON.stringify(picks));
+  // 画面：图库那一格、参考空间、选图弹窗都有那一句；图库没有「公司案例」来源
+  await tp.click('[data-tab="library"]');
+  await tp.waitForTimeout(300);
+  const box = await tp.innerText('#cloud-panel');
+  const casesChip = await tp.isVisible('#lib-filter [data-src="cases"]');
+  const builtinTiles = await tp.locator('#lib-grid .lib-item:not(.case) img').count();
+  ok('P5 library: the case box shows the 暂停中 banner, no 公司案例 source, built-in photos still listed', box.indexOf(BLOCKED_MSG) > -1 && !casesChip && builtinTiles > 5, box.slice(0, 200) + ' chip=' + casesChip + ' tiles=' + builtinTiles);
+  await tp.click('[data-tab="rooms"]');
+  await tp.waitForTimeout(300);
+  const casesBanner = await tp.locator('#cases-panel [data-cases-blocked]').isVisible() && (await tp.textContent('#cases-panel [data-cases-blocked]')) === BLOCKED_MSG;
+  const tags = await tp.$$eval('#room-list .case-tag', (els) => els.map((e) => e.textContent));
+  const roomBroken = await tp.$$eval('#room-list img, #cases-list img', (ims) => ims.filter((i) => !/^data:|^blob:|assets\/img\//.test(i.getAttribute('src') || '')).map((i) => i.getAttribute('src')));
+  ok('P6 ③: 参考空间 shows the banner; placed case photos are tagged 暂时打不开 and show cached thumbnails (no case-library URL)', casesBanner && tags.filter((x) => x === '暂时打不开').length >= 4 && !roomBroken.length,
+    JSON.stringify({ casesBanner, tags, roomBroken }));
+  await tp.locator('#room-list [data-room-pick]').first().click();
+  await tp.waitForSelector('#pick-modal.on');
+  const pickBanner = await tp.locator('#pick-modal [data-cases-blocked]').isVisible();
+  const pickTitle = await tp.textContent('#pick-title');
+  await tp.click('#pick-ok');
+  await tp.waitForTimeout(500);
+  const keptKitchen = (await current(tp)).rooms[0].images;
+  ok('P7 picker: banner shown; 「加入所选」 keeps the case photos that cannot open right now', pickBanner && /暂时打不开（案例库暂停中），会留着/.test(pickTitle) && keptKitchen.join() === [P1REFS[0], P1REFS[2]].join(),
+    JSON.stringify({ pickBanner, pickTitle, keptKitchen }));
+  // 帮我挑、自动挑 3 个：说明为什么挑不了（不是一声不响地空着）
+  const matchVisible = await tp.isVisible('#cases-match');
+  await tp.click('#cases-match');
+  await tp.waitForSelector('#match-modal.on');
+  await tp.waitForTimeout(200);
+  const matchText = await tp.innerText('#match-modal');
+  await tp.click('#match-modal [data-close]');
+  await tp.click('#cases-auto');
+  await tp.waitForTimeout(200);
+  const toast = await tp.textContent('#toast');
+  const casesAfter = (await current(tp)).cases.map((c) => c.ref);
+  ok('P8 帮我挑 / 自动挑 3 个 explain the pause instead of returning nothing silently; 参考空间 untouched',
+    matchVisible && /帮我挑现在挑不了/.test(matchText) && matchText.indexOf(BLOCKED_MSG) > -1 && toast.indexOf(BLOCKED_MSG) > -1 && casesAfter.join() === [P1REFS[4], other].join(),
+    JSON.stringify({ matchVisible, matchText: matchText.slice(0, 200), toast, casesAfter }));
+  const items = await checkItems(tp);
+  ok('P9 体检 (bad): 有 6 张公司案例照片暂时打不开（案例库暂停中），先别发给客户', items.some((x) => /^bad\|有 6 张公司案例照片暂时打不开（案例库暂停中），先别发给客户\|/.test(x)) &&
+    !items.some((x) => /这台电脑看不到/.test(x)), items.filter((x) => /案例/.test(x)).join(' ; '));
+  // 打印：占位框里那行提醒不印；PPTX：照样导出，没有案例照片、也没有那行提醒
+  await tp.emulateMedia({ media: 'print' });
+  const printVis = await tp.$$eval('#deck .ph-gone .todo', (els) => els.map((e) => getComputedStyle(e).visibility));
+  await tp.emulateMedia({ media: 'screen' });
+  const out = await exportPptx(tp, 'visi-blocked');
+  const z = readPptx(out.file);
+  ok('P10 PDF print hides the placeholder note; PPTX still exports (no case image, no note text, no leak)',
+    printVis.length === 6 && printVis.every((v) => v === 'hidden') && /PPTX 已导出/.test(out.toast) && !z.media.some((h) => caseHashes[h]) && !/暂时打不开|案例库暂停中/.test(z.xml) && !leaks(z.xml).length,
+    JSON.stringify({ printVis, toast: out.toast, media: z.media.length }));
+  // 重新整理（伺服器也连不上）：记得是暂停中 —— 第一次排版就没有破图
+  mock.setDown(true);
+  await tp.reload();
+  await tp.waitForSelector('#deck .pg');
+  const first = await tp.evaluate((blob) => ({ caseSrc: [...document.querySelectorAll('#deck img')].filter((i) => (i.getAttribute('src') || '').indexOf(blob) === 0).length,
+    gone: document.querySelectorAll('#deck .ph-gone').length, blocked: MB.cloud.status().blocked }), mock.blob);
+  await tp.waitForTimeout(800);
+  const later = await tp.evaluate(() => MB.cloud.status());
+  await tp.click('[data-tab="rooms"]');
+  await tp.waitForTimeout(600);
+  const roomImgs = await tp.$$eval('#room-list img, #cases-list img', (ims, blob) => ({ data: ims.filter((i) => /^data:image\/jpeg/.test(i.src)).length,
+    lib: ims.filter((i) => (i.getAttribute('src') || '').indexOf(blob) === 0).length }), mock.blob);
+  mock.setDown(false);
+  ok('P11 reload while blocked (API down too): the first render already uses placeholders (blocked remembered), still blocked after the failed refresh; ③ shows the thumbnails saved on this computer',
+    first.blocked && first.caseSrc === 0 && first.gone === 6 && later.blocked && later.status === 'offline' && roomImgs.data >= 3 && roomImgs.lib === 0,
+    JSON.stringify({ first, later, roomImgs }));
+
+  // ---- 恢复：按「更新」→ 照片回来 ----
+  await hook('blocked?on=0');
+  await tp.click('[data-tab="library"]');
+  await tp.click('#cloud-panel [data-cloud-refresh]');
+  await tp.waitForTimeout(900);
+  const back = await deckImgs(tp);
+  const st2 = await tp.evaluate(() => ({ st: MB.cloud.status(), usable: MB.cases().filter(MB.caseUsable).length }));
+  const box2 = await tp.innerText('#cloud-panel');
+  const auto2 = await tp.evaluate(() => { const id = localStorage.getItem('sail-mb-active'); return MB.store.getProject(id).then((x) => {
+    const p = MB.normalizeProject(x), k = MB.newRoom('kitchen'); p.rooms.push(k);
+    return { k: MB.autoPick(p, k, []), foyer: MB.deckImages(p, MB.makeResolver.last).rooms[p.rooms[2].uid] };
+  }); });
+  ok('P12 unblock + 更新 → status ok, cases usable again, banner gone, deck shows the case photos again (loaded), auto foyer back to its case photo',
+    st2.st.status === 'ok' && !st2.st.blocked && st2.usable === 57 && box2.indexOf(BLOCKED_MSG) < 0 && back.caseSrc >= 6 && !back.broken.length && !back.gone.length &&
+    auto2.k.some((x) => /^c:/.test(x)) && auto2.foyer[0] === P1REFS[5], JSON.stringify({ st: st2, back, auto2 }));
+  ok('P13 no page errors in the blocked session', !t.errors.filter((e) => /pageerror/.test(e)).length, t.errors.filter((e) => /pageerror/.test(e)).join(' | '));
+
+  // ---- 被删掉：审核页释放空间删了一张（隐藏的那张）+ 一个清单里从来没有的 c: ----
+  const DEAD = HIDDEN[0], NEVER = 'c:' + '0f'.repeat(8);
+  const DEL = await tp.evaluate((a) => {
+    const p = MB.newProject({});
+    p.id = 'p-deleted'; p.lang = 'zh'; p.direction = 'misty'; p.client.names = 'Mr Test'; p.visit.date = '2026-12-12';
+    p.rooms = ['kitchen', 'living'].map(MB.newRoom);
+    p.rooms[0].images = [a.dead, a.k0]; p.rooms[0].manual = true;
+    const bl = MB.BUILTIN.filter((b) => b.series === 'misty' && b.rooms.indexOf('living') > -1)[0];
+    p.rooms[1].images = [bl.id]; p.rooms[1].manual = true;
+    p.cases = [{ ref: a.never, note: null }];
+    return MB.normalizeProject(p);
+  }, { dead: DEAD, k0: P1REFS[0], never: NEVER });
+  await importProject(tp, DEL);
+  const purge = await tp.evaluate((h) => fetch('api/catalog', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-VISI': '1' },
+    body: JSON.stringify({ op: 'purge', photos: [h], confirm: '删除' }) }).then((r) => r.json().then((j) => ({ s: r.status, j }))), DEAD.slice(2));
+  await tp.evaluate(() => MB.cloud.refresh(true));
+  await tp.waitForTimeout(600);
+  const del = await deckImgs(tp);
+  const delItems = await checkItems(tp);
+  await tp.click('[data-tab="rooms"]');
+  await tp.waitForTimeout(300);
+  const delTags = await tp.$$eval('#room-list .case-tag, #cases-list .case-tag', (els) => els.map((e) => e.textContent));
+  const k0src = await tp.evaluate((ref) => MB.makeResolver.last(ref).src, P1REFS[0]);
+  const k0shown = await tp.$$eval('#deck img', (ims, s) => ims.some((i) => i.getAttribute('src') === s && i.naturalWidth > 0), k0src);
+  ok('P14 purged / unknown c: refs (catalog current) → placeholders, nothing broken; the kitchen\'s other case photo and the built-in still print',
+    purge.s === 200 && purge.j.removed === 1 && del.gone.filter((g) => g === 'deleted').length === 2 && !del.broken.length && k0shown && del.builtin >= 2,
+    JSON.stringify({ purge, del, k0shown }));
+  ok('P15 体检: 有 2 张案例照片已经被删除，请换一张 (bad); ③ tags them 已删除', delItems.some((x) => /^bad\|有 2 张案例照片已经被删除，请换一张\|/.test(x)) &&
+    !delItems.some((x) => /这台电脑看不到/.test(x)) && delTags.filter((x) => x === '已删除').length === 2, delItems.filter((x) => /案例/.test(x)).join(' ; ') + ' tags=' + delTags.join());
+  await tp.locator('#room-list [data-room-pick]').first().click();
+  await tp.waitForSelector('#pick-modal.on');
+  const delTitle = await tp.textContent('#pick-title');
+  await tp.click('#pick-ok');
+  await tp.waitForTimeout(500);
+  const afterPick = (await current(tp)).rooms[0].images;
+  ok('P16 picker says the deleted photo will be removed; 「加入所选」 drops it and keeps the rest', /已经被删除，按「加入所选」就拿掉/.test(delTitle) && afterPick.join() === P1REFS[0],
+    JSON.stringify({ delTitle, afterPick }));
+  // 占位的那一份（被删掉的）进讲稿、文案、案例卡片也不出错、不外流
+  const txt = await tp.evaluate(() => { const id = localStorage.getItem('sail-mb-active'); return MB.store.getProject(id).then((x) => {
+    const p = MB.normalizeProject(x), res = MB.makeResolver.last, out = [];
+    MB.pageList(p, res).forEach((pg) => ['zh', 'en', 'bi'].forEach((L) => out.push(MB.pageNotes(p, pg, L))));
+    ['zh', 'en'].forEach((L) => out.push(JSON.stringify(MB.writeCopy(p, L)), JSON.stringify(MB.caseCards(p, res, L))));
+    return out.join('\n');
+  }); });
+  const pe = t.errors.filter((e) => /pageerror/.test(e));
+  ok('P16b with deleted / paused photos: speaker notes, copy and case cards build without errors and leak nothing; no page errors', txt.length > 300 && !leaks(txt).length && !pe.length,
+    leaks(txt).join(',') + ' ' + pe.join(' | '));
+  await t.ctx.close();
+}
+{
+  // 伺服器问不到（500）时，用一张照片试：回 403 才算暂停中；网路出错、伺服器 500 本身不会挡案例；一天最多试一次
+  const t = await open(mock.url);
+  const heads = [];
+  t.page.on('request', (r) => { if (r.method() === 'HEAD' && r.url().indexOf(mock.blob) === 0) heads.push(r.url()); });
+  await login(t.page);
+  mock.setDown(true);
+  await t.page.evaluate(() => MB.cloud.refresh(true));
+  await t.page.waitForTimeout(500);
+  const glitch = await t.page.evaluate(() => MB.cloud.status());
+  ok('P17 API 500 alone (photos fine) never blocks: one probe, answer 200, status offline, cases still usable',
+    glitch.status === 'offline' && !glitch.blocked && heads.length === 1 && await t.page.evaluate(() => MB.cases().filter(MB.caseUsable).length === 57), JSON.stringify({ glitch, heads: heads.length }));
+  await hook('blocked?on=1');
+  await t.page.evaluate(() => MB.cloud.refresh(true));
+  await t.page.waitForTimeout(400);
+  const limited = await t.page.evaluate(() => MB.cloud.status());
+  await t.page.evaluate(() => MB.cloud.probe());
+  await t.page.waitForTimeout(300);
+  const probed = await t.page.evaluate(() => ({ st: MB.cloud.status(), usable: MB.cases().filter(MB.caseUsable).length }));
+  ok('P18 probe at most once a day (second offline refresh does not probe); a probe answering 403 → blocked (status stays offline)',
+    !limited.blocked && heads.length === 2 && probed.st.blocked && probed.st.status === 'offline' && probed.usable === 0, JSON.stringify({ limited, probed, heads: heads.length }));
+  await hook('blocked?on=0');
+  mock.setDown(false);
+  await t.page.evaluate(() => MB.cloud.refresh(true));
+  await t.page.waitForTimeout(400);
+  const ok2 = await t.page.evaluate(() => ({ st: MB.cloud.status(), usable: MB.cases().filter(MB.caseUsable).length }));
+  ok('P19 API back → unblocked', ok2.st.status === 'ok' && !ok2.st.blocked && ok2.usable === 57, JSON.stringify(ok2));
+  // 503 not_configured 还是「这个网址没有案例库」（不是暂停中）；507 quota 算暂停中
+  const kinds = await t.page.evaluate(async () => {
+    const real = window.fetch, out = {};
+    const fake = (status, body) => function (u, o) {
+      if (String(u).indexOf('api/catalog') > -1) return Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }));
+      return real.apply(this, arguments);
+    };
+    window.fetch = fake(503, { error: 'not_configured' });
+    out.nc = await MB.cloud.refresh(true);
+    window.fetch = fake(507, { error: 'quota', reason: 'writes', writesLeft: 0, bytesLeft: 1 });
+    out.q = await MB.cloud.refresh(true);
+    window.fetch = real;
+    out.back = await MB.cloud.refresh(true);
+    return { nc: [out.nc.status, out.nc.blocked], q: [out.q.status, out.q.blocked], back: [out.back.status, out.back.blocked] };
+  });
+  ok('P20 503 not_configured stays 「unavailable」 (not blocked); 507 quota → blocked; a later good refresh → ok',
+    kinds.nc.join() === 'unavailable,false' && kinds.q.join() === 'blocked,true' && kinds.back.join() === 'ok,false', JSON.stringify(kinds));
+  await t.ctx.close();
+}
+
+/* ============================================================
+   Q · 审核找到的几个洞
+   ------------------------------------------------------------
+   Q1–Q3  这台电脑的清单是旧的（10 分钟内才问过）：照片刚被删掉 → 那张载不出来，马上换占位框、去问伺服器，
+          体检说「已经被删除」；登入过期（伺服器问不到）时 HEAD 那一张，回 404 一样当成删掉了
+   Q4     案例库刚被暂停、10 分钟一次的更新还没问到：照片 403 → 马上问伺服器 → 暂停中、全部占位框
+   Q5–Q7  暂停中照体检说的「换成内置照片」：选图弹窗最上面一排可以拿掉暂停中的那几张，新挑的不会被挤掉、
+          什么都不改按「确定」主图还是主图、4 张上限算进暂停中的
+   Q8     暂停中又连不上 / 登入过期：「更新」的提醒先说问不到、要登入，不说「还在暂停中」；登入框不说「照样显示」
+   每个浏览器都关掉 HTTP 快取（正式的照片网址 max-age 一年）：重新整理时照片真的去网路拿 —— 跟另一台电脑一样
+   ============================================================ */
+{
+  const nocache = async (t) => { const cdp = await t.ctx.newCDPSession(t.page); await cdp.send('Network.enable'); await cdp.send('Network.setCacheDisabled', { cacheDisabled: true }); t.cdp = cdp; };
+  const post = (pg, body) => pg.evaluate((b) => fetch('api/catalog', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-VISI': '1' },
+    body: JSON.stringify(b) }).then((r) => r.json().then((j) => ({ s: r.status, j }))), body);
+  const deckOf = (pg) => pg.evaluate(async (blob) => {
+    const ims = [...document.querySelectorAll('#deck img')];
+    await Promise.all(ims.map((im) => (im.complete ? null : new Promise((r) => { im.addEventListener('load', r); im.addEventListener('error', r); setTimeout(r, 5000); }))));
+    const src = (i) => i.getAttribute('src') || '';
+    return { caseSrc: ims.filter((i) => src(i).indexOf(blob) === 0).length, broken: ims.filter((i) => !i.naturalWidth).map((i) => src(i).slice(0, 90)),
+      gone: [...document.querySelectorAll('#deck .ph-gone')].map((e) => e.getAttribute('data-gone')) };
+  }, mock.blob);
+  const editorBroken = (pg) => pg.$$eval('#room-list img, #cases-list img', (ims) => ims.filter((i) => i.complete && !i.naturalWidth).length);
+  const X = UNSURE[0];   // 不确定的照片：手放的照样印；先隐藏才删得掉
+  const kx = fx.photos.find((p) => 'c:' + p.h === X).k;
+  const mkX = (id) => (a) => {
+    const p = MB.newProject({});
+    p.id = a.id; p.lang = 'zh'; p.direction = 'misty'; p.client.names = 'Mr Test'; p.visit.date = '2026-12-12';
+    p.rooms = ['kitchen'].map(MB.newRoom);
+    p.rooms[0].images = [a.x, a.k0]; p.rooms[0].manual = true;
+    return MB.normalizeProject(p);
+  };
+  const A = await open(mock.url); await nocache(A); await login(A.page);
+  const B = await open(mock.url); await nocache(B); await login(B.page);
+  for (const [t, id] of [[A, 'p-stale-a'], [B, 'p-stale-b']]) {
+    const proj = await t.page.evaluate(mkX(id), { id, x: X, k0: P1REFS[0] });
+    await importProject(t.page, proj);
+  }
+  const a0 = await deckOf(A.page);
+  ok('Q0 before the purge: both salespeople\'s proposals print the case photo (loaded)', a0.caseSrc >= 2 && !a0.broken.length && !a0.gone.length, JSON.stringify(a0));
+  // 老板在审核页：隐藏 → 删除（释放空间）。A、B 的 VISI 都没有去问
+  const hid = await post(A.page, { op: 'hide', photos: [X.slice(2)] });
+  const pur = await post(A.page, { op: 'purge', photos: [X.slice(2)], confirm: '删除' });
+
+  // Q1 · A 重新整理（10 分钟内才问过：不问伺服器就当最新）→ 那张 404
+  const aGets = A.api.filter((x) => x === 'GET /api/catalog').length;
+  await A.page.reload();
+  await A.page.waitForSelector('#deck .pg');
+  await A.page.waitForFunction((x) => MB.caseGone(x) === 'deleted', X, { timeout: 8000 }).catch(() => {});
+  await A.page.waitForTimeout(500);
+  const a1 = await deckOf(A.page);
+  const aItems = await checkItems(A.page);
+  const aGets2 = A.api.filter((x) => x === 'GET /api/catalog').length;
+  ok('Q1 stale catalog (asked < 10 min ago) + photo purged since: the failed photo triggers a refresh at once → placeholder (deleted), no broken image',
+    hid.s === 200 && pur.s === 200 && pur.j.removed === 1 && a1.caseSrc >= 1 && !a1.broken.length && a1.gone.join() === 'deleted' && aGets2 === aGets + 1,
+    JSON.stringify({ hid: hid.s, pur: pur.s, a1, gets: [aGets, aGets2] }));
+  ok('Q2 体检 then says 有 1 张案例照片已经被删除，请换一张 (bad)', aItems.some((x) => /^bad\|有 1 张案例照片已经被删除，请换一张\|/.test(x)), aItems.filter((x) => /案例/.test(x)).join(' ; '));
+  await A.page.click('[data-tab="rooms"]');
+  await A.page.waitForTimeout(400);
+  ok('Q2b ③ shows no broken thumbnail for it either', (await editorBroken(A.page)) === 0 && (await A.page.$$eval('#room-list .case-tag', (els) => els.map((e) => e.textContent))).indexOf('已删除') > -1);
+
+  // Q3 · B 的登入过期了（伺服器问不到清单）：HEAD 那一张，404 → 一样当成删掉了
+  const heads = [];
+  B.page.on('request', (r) => { if (r.method() === 'HEAD' && r.url().indexOf(mock.blob) === 0) heads.push(r.url()); });
+  await B.ctx.clearCookies();
+  await B.page.reload();
+  await B.page.waitForSelector('#deck .pg');
+  await B.page.waitForFunction((x) => MB.caseGone(x) === 'deleted', X, { timeout: 8000 }).catch(() => {});
+  await B.page.waitForTimeout(500);
+  const b1 = await deckOf(B.page);
+  const bSt = await B.page.evaluate(() => MB.cloud.status());
+  const bItems = await checkItems(B.page);
+  ok('Q3 login expired (API answers 401): the failed photo is checked with HEAD → 404 → placeholder (deleted), 体检 says it was deleted; the other case photo still prints',
+    bSt.status === 'login' && heads.some((u) => u.indexOf(kx) > -1) && !b1.broken.length && b1.gone.join() === 'deleted' && b1.caseSrc >= 1 &&
+    bItems.some((x) => /^bad\|有 1 张案例照片已经被删除，请换一张\|/.test(x)), JSON.stringify({ st: bSt.status, heads: heads.length, b1, items: bItems.filter((x) => /案例/.test(x)) }));
+  const abErrors = A.errors.concat(B.errors).filter((e) => /pageerror/.test(e));
+  await A.ctx.close(); await B.ctx.close();
+
+  // Q4 · C：案例库刚被暂停，C 10 分钟内才问过（还不知道）→ 重新整理，照片 403 → 马上问 → 暂停中
+  const pick3 = [1, 2, 3].map((pi) => 'c:' + fx.photos.find((p) => p.project === pi && !p.hidden && !p.unsure && !p.twin).h);
+  const C = await open(mock.url); await nocache(C); await login(C.page);
+  const CP = await C.page.evaluate((a) => {
+    const p = MB.newProject({});
+    p.id = 'p-paused-pick'; p.lang = 'zh'; p.direction = 'misty'; p.client.names = 'Mr Test'; p.visit.date = '2026-12-12';
+    p.rooms = ['kitchen'].map(MB.newRoom);
+    const bk = MB.BUILTIN.filter((b) => b.rooms.indexOf('kitchen') > -1)[0];
+    p.rooms[0].images = [a.d, bk.id]; p.rooms[0].manual = true;
+    p.cases = a.cases.map((ref) => ({ ref, note: null }));
+    return MB.normalizeProject(p);
+  }, { d: P1REFS[0], cases: pick3 });
+  await importProject(C.page, CP);
+  const c0 = await deckOf(C.page);
+  await hook('blocked?on=1');
+  await C.page.reload();
+  await C.page.waitForSelector('#deck .pg');
+  await C.page.waitForFunction(() => MB.cloud.status().blocked, null, { timeout: 8000 }).catch(() => {});
+  await C.page.waitForTimeout(600);
+  const c1 = await deckOf(C.page);
+  const cSt = await C.page.evaluate(() => MB.cloud.status());
+  ok('Q4 store suspended but not yet known (asked < 10 min ago): photos answer 403 → refresh at once → blocked; every placed case photo is a placeholder, nothing broken',
+    c0.caseSrc >= 4 && !c0.broken.length && cSt.status === 'blocked' && cSt.blocked && c1.caseSrc === 0 && !c1.broken.length && c1.gone.length === 4 && c1.gone.every((g) => g === 'blocked'),
+    JSON.stringify({ c0, cSt: cSt.status, c1 }));
+
+  // Q5 · 参考空间 3 张都暂停中，照体检说的换成内置照片：最上面那排拿掉 2 张，挑 2 张内置 → 内置的真的放进去
+  const cp = C.page;
+  await cp.click('[data-tab="rooms"]');
+  await cp.waitForTimeout(300);
+  await cp.click('#cases-pick');
+  await cp.waitForSelector('#pick-modal.on');
+  await cp.waitForTimeout(300);
+  const heldN = await cp.locator('#pick-held .lib-item.sel').count();
+  const bRefs = await cp.$$eval('#pick-grid .lib-item:not(.case)', (els) => els.map((e) => e.getAttribute('data-ref')).filter((r) => /^b:/.test(r)));
+  // 两张不同的照片（同一张的不同裁切，参考空间只放一次）
+  const [pk1, pk2] = await cp.evaluate((refs) => { const k = MB.shotKey || ((r) => r), out = []; refs.forEach((r) => { if (out.length < 2 && !out.some((x) => k(x) === k(r))) out.push(r); }); return out; }, bRefs);
+  await cp.click('#pick-grid [data-ref="' + pk1 + '"]');
+  const fullToast = await cp.textContent('#toast');
+  for (const ref of pick3.slice(0, 2)) await cp.click('#pick-held [data-ref="' + ref + '"]');
+  await cp.click('#pick-grid [data-ref="' + pk1 + '"]');
+  await cp.click('#pick-grid [data-ref="' + pk2 + '"]');
+  await cp.click('#pick-ok');
+  await cp.waitForTimeout(500);
+  const casesNow = (await current(cp)).cases.map((c) => c.ref);
+  ok('Q5 picker (cases, all 3 paused): paused photos sit in a strip on top, count toward the 3; the salesperson takes 2 out, picks 2 built-ins → p.cases = [paused #3, built-in, built-in]',
+    heldN === 3 && /先在最上面点一下把它拿掉/.test(fullToast) && casesNow.join() === [pick3[2], pk1, pk2].join(), JSON.stringify({ heldN, fullToast, casesNow, pk1, pk2 }));
+
+  // Q6 · 厨房 [暂停中的案例（主图）, 内置]：什么都不改按「确定」→ 顺序不变（主图还是那张）
+  const k0 = (await current(cp)).rooms[0].images.slice();
+  await cp.locator('#room-list [data-room-pick]').first().click();
+  await cp.waitForSelector('#pick-modal.on');
+  await cp.waitForTimeout(200);
+  const heroCap = await cp.textContent('#pick-held .lib-item.sel .cap');
+  await cp.click('#pick-ok');
+  await cp.waitForTimeout(500);
+  const k1 = (await current(cp)).rooms[0].images;
+  ok('Q6 picker (room): pressing 加入所选 without changes keeps the paused hero first (no reordering)', k1.join() === k0.join() && k0[0] === P1REFS[0] && /主图/.test(heroCap),
+    JSON.stringify({ k0, k1, heroCap }));
+
+  // Q7 · 4 张上限算进暂停中的那张；拿掉它，新挑的内置照片补上、第一张变主图
+  await cp.locator('#room-list [data-room-pick]').first().click();
+  await cp.waitForSelector('#pick-modal.on');
+  await cp.waitForTimeout(200);
+  const more = (await cp.$$eval('#pick-grid .lib-item:not(.case)', (els) => els.map((e) => e.getAttribute('data-ref')))).filter((r) => r !== k0[1]).slice(0, 3);
+  await cp.click('#pick-grid [data-ref="' + more[0] + '"]');
+  await cp.click('#pick-grid [data-ref="' + more[1] + '"]');
+  await cp.click('#pick-grid [data-ref="' + more[2] + '"]');
+  const capToast = await cp.textContent('#toast');
+  await cp.click('#pick-held [data-ref="' + P1REFS[0] + '"]');
+  await cp.click('#pick-grid [data-ref="' + more[2] + '"]');
+  await cp.click('#pick-ok');
+  await cp.waitForTimeout(500);
+  const k2 = (await current(cp)).rooms[0].images;
+  ok('Q7 picker (room): the 4-photo limit counts the paused photo (5th pick refused with a reason); after taking it out the picks fill in → [built-in, 3 new]',
+    /一页最多 4 张|最多 4 张/.test(capToast) && /先在最上面点一下把它拿掉/.test(capToast) && k2.join() === [k0[1]].concat(more).join() && k2.length === 4,
+    JSON.stringify({ capToast, k2, more }));
+
+  // Q8 · 暂停中又连不上 / 登入过期：「更新」先说问不到、要重新登入（不说「还在暂停中」）
+  await cp.click('[data-tab="library"]');
+  mock.setDown(true);
+  await cp.click('#cloud-panel [data-cloud-refresh]');
+  await cp.waitForTimeout(900);
+  const offToast = await cp.textContent('#toast');
+  const offBox = await cp.innerText('#cloud-panel');
+  mock.setDown(false);
+  await C.ctx.clearCookies();
+  await cp.click('#cloud-panel [data-cloud-refresh]');
+  await cp.waitForTimeout(900);
+  const loginToast = await cp.textContent('#toast');
+  const loginBox = await cp.innerText('#cloud-panel');
+  const st8 = await cp.evaluate(() => MB.cloud.status());
+  ok('Q8 blocked + offline → 「暂时连不上」; blocked + login expired → 「要重新登入 —— 登入后才知道案例库恢复了没有」; the login box no longer says the photos 照样显示',
+    /暂时连不上/.test(offToast) && !/还在暂停中/.test(offToast) && /上次知道的是暂停中/.test(offBox) && !/先用这台电脑存着的/.test(offBox) &&
+    st8.status === 'login' && st8.blocked && /要重新登入 —— 登入后才知道案例库恢复了没有/.test(loginToast) &&
+    loginBox.indexOf(BLOCKED_MSG) > -1 && /占位框/.test(loginBox) && !/照样显示/.test(loginBox),
+    JSON.stringify({ offToast, offBox: offBox.slice(0, 160), loginToast, loginBox: loginBox.slice(0, 220), st8: st8.status }));
+  const qe = abErrors.concat(C.errors.filter((e) => /pageerror/.test(e)));
+  ok('Q9 no page errors in the Q sessions', !qe.length, qe.join(' | '));
+  await hook('blocked?on=0');
+  await C.ctx.close();
+}
+
 const pageErrors = main.errors.filter((e) => /pageerror/.test(e));
 ok('Z no uncaught page errors in the main session', !pageErrors.length, pageErrors.join(' | '));
 note('console errors (expected only from the deliberate 401 / 500 / no-CORS steps)', main.errors.filter((e) => !/pageerror/.test(e)).length);

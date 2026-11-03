@@ -16,7 +16,7 @@ const ids = (a) => Array.from(a);
 // 彼此差很远的 dHash（每个差 16 bit 以上）
 const FAR = ['0000000000000000', 'ffffffffffffffff', '00000000ffffffff', 'ffffffff00000000', '0000ffff0000ffff', 'ffff0000ffff0000', '00ff00ff00ff00ff', 'ff00ff00ff00ff00'];
 
-test('pick: one photo per shot (near-identical dHash), keeps the landscape / larger one', () => {
+test('pick: one photo per shot (dHash ≤ 8), keeps the landscape / larger one', () => {
   const base = FAR[0];
   const items = [
     { id: 'small', w: 800, h: 600, dh: base, f: 'a.jpg' },
@@ -95,4 +95,13 @@ test('pick: 1,000 photos in one project stays fast', () => {
   const t0 = Date.now();
   assert.equal(P.best(items, 6).length, 6);
   assert.ok(Date.now() - t0 < 500);
+});
+
+test('pick: same-shot threshold is 8 (a re-framed burst ~7 bits apart is one shot; 9 bits apart are two)', () => {
+  assert.equal(P.SAME_SHOT, 8);
+  const a = FAR[0];
+  const seven = [{ id: 'a', w: 1200, h: 900, dh: a }, { id: 'b', w: 1200, h: 900, dh: flipBits(a, [0, 1, 2, 3, 4, 5, 6]) }];
+  assert.equal(P.best(seven, 6).length, 1);
+  const nine = [{ id: 'a', w: 1200, h: 900, dh: a }, { id: 'b', w: 1200, h: 900, dh: flipBits(a, [0, 1, 2, 3, 4, 5, 6, 7, 8]) }];
+  assert.equal(P.best(nine, 6).length, 2);
 });

@@ -118,6 +118,7 @@
   var pad2 = MB.pad2;
   var CJK = /[　-〿㐀-鿿豈-﫿＀-￯]/;
   var IMG = null;   // 这一次排版的图（MB.deckImages）：每页都从这一份拿，整份才不会重复
+  var LANG = 'en';  // 这一次排版的语言（占位框那行提醒用）
 
   /**
    * @param {object} p      方案
@@ -129,6 +130,7 @@
     var list = MB.pageList(p, ctx.resolve);
     var total = list.length;
     IMG = MB.deckImages ? MB.deckImages(p, ctx.resolve) : null;
+    LANG = lang;
     try {
       return list.map(function (pg, i) {
         var n = i + 1;
@@ -191,7 +193,14 @@
   }
   /** 一张照片（object-fit: cover）。pos = 照片自己的焦点（model.js 的 BRAND_POS 等）：写成行内样式，
       不管放在哪一页都裁同一边（PPTX 读 computed style，跟着一样） */
-  function photo(src, cls, pos) {
+  function photo(src, cls, pos, gone) {
+    // 打不开的公司案例照片（案例库暂停中 / 已经被删掉）：印成占位框（底色），绝不放会 403 的网址。
+    // 框里那行字是 .todo：只在预览给销售看，打印、PPTX 都不出现
+    if (gone === 'blocked' || gone === 'deleted') {
+      return '<div class="ph ' + cls + ' ph-gone" data-gone="' + gone + '">' + (gone === 'blocked'
+        ? todo('Case photo unavailable — the case library is paused', '公司案例照片暂时打不开（案例库暂停中）', LANG)
+        : todo('This case photo was deleted — choose another', '这张案例照片已经被删除，换一张', LANG)) + '</div>';
+    }
     if (!src) return '<div class="ph ' + cls + '"></div>';
     var st = pos && /^[\d.]+%? [\d.]+%?$|^(left|right|center|top|bottom)( (left|right|center|top|bottom))?$/.test(pos)
       ? ' style="object-position:' + esc(pos) + '"' : '';
@@ -200,12 +209,14 @@
   /** 版位图（封面、开场、邀约、封底…）：销售选的 > 自动（整份不重复）> 品牌照 */
   function slotPhoto(p, ctx, slot, cls) {
     var s = MB.pageImageSrc ? MB.pageImageSrc(p, slot, ctx.resolve, IMG || undefined) : null;
-    return photo(s && s.src, cls, s && s.pos);
+    return photo(s && s.src, cls, s && s.pos, s && s.gone);
   }
   function refPhoto(ctx, ref, cls) {
     var im = ctx.resolve(ref);
-    return photo(im && im.src, cls, im && im.pos);
+    return photo(im && im.src, cls, im && im.pos, goneOf(im));
   }
+  /** 'blocked' | 'deleted' | ''（model.js 的 MB.caseGone） */
+  function goneOf(im) { return im && MB.caseGone ? MB.caseGone(im) : ''; }
   /** 引号只包住那一句：华文「」、英文“”。句末的句号、惊叹号拿掉 ——
       内置的原话有句号、客户自己打的没有，同一页两种样子 */
   function quote(v, lang) {
@@ -456,7 +467,7 @@
     }).join('');
     // 第一格是横的（放上面）还是直的（放左边整高）：MB.deckImages 看照片决定，裁得最少
     var wide = !!(IMG && IMG.glanceWide && ims.length > 1);
-    return '<div class="gl-col n' + ims.length + (wide ? ' wide' : '') + '">' + ims.map(function (im, i) { return photo(im.src, 'g' + (i + 1), im.pos); }).join('') + refs + '</div>' +
+    return '<div class="gl-col n' + ims.length + (wide ? ' wide' : '') + '">' + ims.map(function (im, i) { return photo(im.src, 'g' + (i + 1), im.pos, im.gone); }).join('') + refs + '</div>' +
       logo(false) +
       '<div class="hd gl-hd">' + kicker('At a glance') +
         '<h2 class="ttl">' + T({ en: d.en, zh: d.zh }, lang) + '</h2>' +
@@ -562,7 +573,7 @@
     // 绝不会有项目名、档名（cloud.js 根本不收）
     return { ref: ref, src: b.src, w: b.w, h: b.h, series: b.series || '', rooms: b.rooms || (b.tag ? [b.tag] : []),
       own: own, label: own ? (b.label || '') : (b.zh || ''), en: b.en || '', zh: b.zh || '', pos: b.pos || '',
-      isCase: ref.indexOf('c:') === 0, area: b.area || '', ptype: b.ptype || '', traits: b.traits || [], style: b.style || '' };
+      isCase: ref.indexOf('c:') === 0, area: b.area || '', ptype: b.ptype || '', traits: b.traits || [], style: b.style || '', gone: goneOf(b) };
   }
   /** 一个案例那一句：销售写的 > copy.js 起草 > 图本身的说明（不编） */
   function caseLine(p, c, im, lang) {
@@ -593,7 +604,7 @@
     var n = cards.length, w = n === 1 ? 1136 : n === 3 ? 360 : 554, gap = 28;
     var html = cards.map(function (c, i) {
       return '<div class="cs" style="left:' + (i * (w + gap)) + 'px;width:' + w + 'px">' +
-        photo(c.im.src, 'cs-img', c.im.pos) +
+        photo(c.im.src, 'cs-img', c.im.pos, c.im.gone) +
         '<div class="cs-cap">' + (c.tag ? lbl(c.tag, c.tagZh, lang === 'bi' ? 'en' : lang) : '') +
           '<p class="cs-line">' + T(c.line, lang) + '</p></div>' +
       '</div>';
