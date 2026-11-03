@@ -7,7 +7,7 @@
 
    每张照片做的事：
    - h：原档 bytes 的 SHA-256 前 16 码（同一张照片不管放哪个文件夹都一样 → 不重复上传）
-   - 依 EXIF 转正（imageOrientation:'from-image'）→ 长边 1600px JPEG q0.82；
+   - 依 EXIF 转正（imageOrientation:'from-image'）→ 长边 1200px JPEG q0.78（约 150 KB：免费方案只有 1 GB）；
      超过 3.5 MB 再压 q0.7（伺服器上限），还是太大就再小一点
      重新编码会顺便去掉 EXIF / GPS（照片里不会留下客户家的位置）
    - thumb：长边 320px、q0.72 的 dataURL（审核页、VISI 图库用）
@@ -19,7 +19,7 @@
   var IS_WORKER = typeof window === 'undefined' && typeof G.importScripts === 'function';
 
   var DEF = {
-    long: 1600, q: 0.82, q2: 0.7,
+    long: 1200, q: 0.78, q2: 0.7,
     maxBytes: 3.5 * 1024 * 1024,
     thumb: 320, tq: 0.72,
     thumbMax: 190 * 1024            // 伺服器收的缩图 dataURL ≤ 200 KB，留一点余裕
@@ -170,7 +170,7 @@
       if (bmp.close) bmp.close();
       res.w = size.w; res.ht = size.h;
       var max = opt(o, 'maxBytes');
-      // 先 q0.82；太大改 q0.7；再太大就缩到 1280px（极少数：满是细纹的照片）
+      // 先 q0.78；太大改 q0.7；再太大就缩到 960px（极少数：满是细纹的照片）
       return toJpeg(main, opt(o, 'q')).then(function (b) {
         res.q = opt(o, 'q');
         if (b.size <= max) return b;

@@ -17,6 +17,9 @@
        POST /__mock/failNextGet?n=1        → 接下来 1 次读清单失败
        POST /__mock/conflictNext?n=3       → 接下来 3 次写清单冲突（mutate 会重试）
        POST /__mock/down?on=1|0            → 所有 /api/* 回 500（测 VISI 离线快取）
+       POST /__mock/blocked?on=1|0         → 假装 store 被停权：API 回 503 storage_blocked，blob port 的档回 403
+       POST /__mock/usage?writes=1790      → 把这个月的写入次数改成 N（测额度快用完）
+       POST /__mock/ballast?bytes=N        → 加一个隐藏的假项目，一张 sz=N 的照片（测空间快满）
        POST /__mock/resetStats
        GET  /__mock/index                  → 目前完整清单（含项目名，只给测试看）
    - --seed：{index, blobs:{pathname: base64}} 先放进记忆体（VISI 用假案例库测）。
@@ -95,6 +98,24 @@ export async function startMock(opts) {
         if (hook === 'conflictNext') { adapter.conflictNext(n); return json(res, 200, { ok: true }); }
         if (hook === 'resetStats') { adapter.resetStats(); return json(res, 200, { ok: true }); }
         if (hook === 'down') { state.down = u.searchParams.get('on') !== '0'; return json(res, 200, { down: state.down }); }
+        if (hook === 'blocked') { adapter.setBlocked(u.searchParams.get('on') !== '0'); return json(res, 200, { blocked: adapter.isBlocked() }); }
+        if (hook === 'usage' || hook === 'ballast') {
+          const cur = await adapter.getJson(blobLib.indexPath());
+          const idx = cur && cur.data ? cur.data : { v: 1, rev: 0, base: blobUrl, projects: {}, photos: {}, log: [] };
+          const month = new Date().toISOString().slice(0, 7);
+          if (hook === 'usage') {
+            idx.usage = idx.usage && typeof idx.usage === 'object' ? idx.usage : {};
+            idx.usage[month] = { writes: Math.max(0, Number(u.searchParams.get('writes')) | 0) };
+          } else {
+            const pid = 'p' + randomBytes(5).toString('hex');
+            const h = randomBytes(8).toString('hex');
+            idx.projects[pid] = { name: 'mock ballast', area: '', ptype: '', traits: [], style: '', packs: [], n: 1, pb: 0, by: 'mock', ts: Date.now(), hidden: { by: 'mock', ts: Date.now() } };
+            idx.photos[h] = { p: pid, k: 'c/' + h + '-ballast.jpg', w: 1200, h: 900, sz: Math.max(0, Number(u.searchParams.get('bytes')) || 0), dh: '0000000000000000', shot: h, f: 'ballast.jpg', room: '', cabinets: [], style: '', hero: false, desc: { zh: '', en: '' }, status: 'new', by: 'mock', ts: Date.now() };
+          }
+          idx.rev = (idx.rev | 0) + 1;
+          await adapter.putJson(blobLib.indexPath(), JSON.stringify(idx), cur ? { ifMatch: cur.etag } : { create: true });
+          return json(res, 200, { ok: true, rev: idx.rev });
+        }
         if (hook === 'index') {
           const cur = await adapter.getJson(blobLib.indexPath());
           return json(res, 200, cur ? cur.data : null);
@@ -108,6 +129,7 @@ export async function startMock(opts) {
       if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, cors); return res.end(); }
       let pathname = '';
       try { pathname = decodeURIComponent(u.pathname.slice(1)); } catch (e) { pathname = ''; }
+      if (adapter.isBlocked()) { res.writeHead(403, Object.assign({ 'Content-Type': 'text/plain' }, cors)); return res.end('Forbidden'); }
       const b = pathname && adapter.read(pathname);
       if (!b) { res.writeHead(404, Object.assign({ 'Content-Type': 'text/plain' }, cors)); return res.end('Not found'); }
       res.writeHead(200, Object.assign({
@@ -185,6 +207,7 @@ export async function startMock(opts) {
     indexPath: blobLib.indexPath(),
     setDown: function (on) { state.down = !!on; },
     setCors: function (on) { state.cors = !!on; },
+    setBlocked: function (on) { adapter.setBlocked(on); },
     close: async function () { await Promise.all([closeServer(appServer), closeServer(blobServer)]); }
   };
 }

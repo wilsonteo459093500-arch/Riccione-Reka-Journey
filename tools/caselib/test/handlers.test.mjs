@@ -199,7 +199,8 @@ test('catalog: GET needs login; empty catalog → emptyIndex rev 0 with ETag', a
   assert.equal((await call(handlers.catalog, { url: '/api/catalog' })).status, 401);
   const r = await call(handlers.catalog, { url: '/api/catalog?view=full', headers: { cookie: cookieFor('Ana') } });
   assert.equal(r.status, 200);
-  assert.equal(r.headers.etag, '"rev-0"');
+  // full 版的 ETag 带月份（额度换月会变）
+  assert.equal(r.headers.etag, '"rev-0-' + new Date().toISOString().slice(0, 7) + '"');
   assert.equal(r.json.rev, 0);
   assert.deepEqual(r.json.photos, {});
   assert.equal(r.json.base, 'http://blob.test/');
@@ -740,6 +741,10 @@ test('real SDK against a Blob API that keeps failing: one put gives up in second
   delete process.env.VERCEL_BLOB_RETRIES;
   t.after(() => { if (oldUrl == null) delete process.env.VERCEL_BLOB_API_URL; else process.env.VERCEL_BLOB_API_URL = oldUrl; if (oldRetries == null) delete process.env.VERCEL_BLOB_RETRIES; else process.env.VERCEL_BLOB_RETRIES = oldRetries; });
   process.env.BLOB_READ_WRITE_TOKEN = 'vercel_blob_rw_store123_fake';
+  // 只测 put 的重试：Pro 不先读清单的额度（Hobby 会先 get 公开网址，这里没网路）
+  const oldPlan = process.env.BLOB_PLAN;
+  process.env.BLOB_PLAN = 'pro';
+  t.after(() => { if (oldPlan == null) delete process.env.BLOB_PLAN; else process.env.BLOB_PLAN = oldPlan; });
   setAdapter(realAdapter({ load: async () => realBlob }));
   const t0 = Date.now();
   const p = await call(handlers.photo, { method: 'POST', url: '/api/photo?h=' + H, headers: jpegHeaders(), body: tinyJpeg() });

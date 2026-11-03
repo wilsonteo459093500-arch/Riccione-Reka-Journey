@@ -8,6 +8,7 @@
      putFile(pathname, body, contentType, {fixed}) → {url, pathname, existed?}（加随机后缀、快取一年；
        fixed = 路径照给的、不覆盖：已经有了就当成功，回 existed:true —— 缩图包重送不会多一个档）
      copy(from, to) → 每日备份用（固定 7 个档，按星期几轮流覆盖）
+     del(pathnames[]) → 真的删掉（审核页「删除隐藏的照片」才用；一次最多 DEL_BATCH 个）
      base → 公开网址前缀（学到之后才有）
    正式环境：realAdapter()，用到才 import('@vercel/blob')（没装、没 token 也不会一载入就坏）。
    测试 / 本机：memoryAdapter()，可以人为制造写入失败和冲突。
@@ -81,7 +82,14 @@ export function getAdapter() {
 
 /* ---------- 正式：@vercel/blob ---------- */
 // 每个 SDK 呼叫最多等多久（毫秒）：Blob 出状况时不要一直卡到 function 的上限才回一个不是 JSON 的 504
-export const TIMEOUT = { photo: 20000, index: 15000, read: 15000, backup: 5000 };
+export const TIMEOUT = { photo: 20000, index: 15000, read: 15000, backup: 5000, del: 20000 };
+// 文件写明一次 del() 最多 1,000 个
+export const DEL_BATCH = 1000;
+// store 被停权（额度用完）时 SDK 的讯息；get() 遇到 403 丢的是普通的 BlobError（「Failed to fetch blob: 403 Forbidden」）
+function looksBlocked(e) {
+  var m = String((e && e.message) || '');
+  return /suspended/i.test(m) || /Failed to fetch blob: 403\b/.test(m);
+}
 // SDK 预设失败重试 10 次（指数退避，加起来十几分钟）：改成 2 次，其它交给上传页自己重试
 const SDK_RETRIES = '2';
 
@@ -128,7 +136,7 @@ export function realAdapter(opts) {
     var msg = ((e && e.constructor && e.constructor.name !== 'Error' ? e.constructor.name : e && e.name) || 'Error') + ': ' + ((e && e.message) || e);
     var o = {};
     if (isA(m, e, 'BlobServiceRateLimited')) o = { status: 429, error: 'storage_busy', retryAfter: Math.max(1, Math.min(300, +e.retryAfter || 10)) };
-    else if (isA(m, e, 'BlobStoreSuspendedError') || isA(m, e, 'BlobAccessError') || isA(m, e, 'BlobStoreNotFoundError')) o = { status: 503, error: 'storage_blocked' };
+    else if (isA(m, e, 'BlobStoreSuspendedError') || isA(m, e, 'BlobAccessError') || isA(m, e, 'BlobStoreNotFoundError') || looksBlocked(e)) o = { status: 503, error: 'storage_blocked' };
     else if (isA(m, e, 'BlobRequestAbortedError') || (e && (e.name === 'AbortError' || e.name === 'TimeoutError'))) o = { status: 503, error: 'storage_timeout' };
     var s = new StorageError(msg, o);
     s.cause = e;
@@ -161,6 +169,7 @@ export function realAdapter(opts) {
         r = await m.get(target, { access: 'public', useCache: false, abortSignal: signal });
         if (!r && target !== path) r = await m.get(path, { access: 'public', useCache: false, abortSignal: signal });
         if (!r) return null;
+        if (r.statusCode === 403) throw new StorageError('blob status 403 (store suspended?)', { status: 503, error: 'storage_blocked' });
         if (r.statusCode !== 200 || !r.stream) throw new StorageError('unexpected blob status ' + r.statusCode);
         return await new Response(r.stream).text();
       });
@@ -209,6 +218,16 @@ export function realAdapter(opts) {
     return { url: r.url, pathname: r.pathname };
   };
 
+  self.del = async function (pathnames) {
+    var m = await sdk();
+    var list = (Array.isArray(pathnames) ? pathnames : [pathnames]).filter(Boolean);
+    if (!list.length) return;
+    if (list.length > DEL_BATCH) throw new StorageError('del: at most ' + DEL_BATCH + ' per call');
+    try {
+      await within(ms.del, function (signal) { return m.del(list, { abortSignal: signal }); });
+    } catch (e) { throw wrap(e); }
+  };
+
   self.copy = async function (from, to) {
     var m = await sdk();
     try {
@@ -225,8 +244,8 @@ export function realAdapter(opts) {
 export function memoryAdapter(opts) {
   opts = opts || {};
   var store = new Map(); // pathname → {body:Buffer, type, etag}
-  var failPuts = 0, failGets = 0, conflicts = 0;
-  var counts = { puts: 0, gets: 0, copies: 0, conflicts: 0, failedPuts: 0, failedGets: 0 };
+  var failPuts = 0, failGets = 0, conflicts = 0, blocked = false;
+  var counts = { puts: 0, gets: 0, copies: 0, conflicts: 0, failedPuts: 0, failedGets: 0, dels: 0, deleted: 0 };
   var seq = 0;
   // 先让出一轮：两个同时进来的 mutate 会读到同一个版本，才测得到冲突
   var tick = function () { return new Promise(function (r) { setImmediate(r); }); };
@@ -241,7 +260,12 @@ export function memoryAdapter(opts) {
     return dot > pathname.lastIndexOf('/') ? pathname.slice(0, dot) + '-' + suffix() + pathname.slice(dot) : pathname + '-' + suffix();
   }
   function checkFail() {
+    checkBlocked();
     if (failPuts > 0) { failPuts--; counts.failedPuts++; throw new StorageError('injected put failure'); }
+  }
+  // 假装 store 被停权：每个操作都跟正式的一样回 503 storage_blocked
+  function checkBlocked() {
+    if (blocked) throw new StorageError('BlobStoreSuspendedError: Vercel Blob: This store has been suspended.', { status: 503, error: 'storage_blocked' });
   }
 
   var self = {
@@ -251,6 +275,7 @@ export function memoryAdapter(opts) {
 
     getJson: async function (path) {
       await tick();
+      checkBlocked();
       if (failGets > 0) { failGets--; counts.failedGets++; throw new StorageError('injected get failure'); }
       counts.gets++;
       var b = store.get(path);
@@ -286,6 +311,7 @@ export function memoryAdapter(opts) {
 
     copy: async function (from, to) {
       await tick();
+      checkBlocked();
       var b = store.get(from);
       if (!b) throw new StorageError('copy: source not found');
       store.set(to, { body: Buffer.from(b.body), type: b.type, etag: etagOf(b.body) });
@@ -293,13 +319,26 @@ export function memoryAdapter(opts) {
       return { url: self.base + to, pathname: to };
     },
 
+    del: async function (pathnames) {
+      await tick();
+      var list = (Array.isArray(pathnames) ? pathnames : [pathnames]).filter(Boolean);
+      if (list.length > DEL_BATCH) throw new StorageError('del: at most ' + DEL_BATCH + ' per call');
+      checkFail();
+      counts.dels++;
+      list.forEach(function (p) { if (store.delete(p)) counts.deleted++; });
+    },
+
     // 读一个 blob（mock server 的 blob port 用）
     read: function (pathname) { return store.get(pathname) || null; },
+    // 所有档的总大小（测试拿来跟清单算的总储存量比）
+    bytes: function () { var n = 0; store.forEach(function (b) { n += b.body.length; }); return n; },
 
     // 测试钩子
     failNextPut: function (n) { failPuts = n == null ? 1 : n; },
     failNextGet: function (n) { failGets = n == null ? 1 : n; },
     conflictNext: function (n) { conflicts = n == null ? 1 : n; },
+    setBlocked: function (on) { blocked = !!on; },
+    isBlocked: function () { return blocked; },
     stats: function () { return Object.assign({}, counts); },
     resetStats: function () { Object.keys(counts).forEach(function (k) { counts[k] = 0; }); },
 
