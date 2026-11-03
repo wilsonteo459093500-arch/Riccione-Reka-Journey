@@ -345,3 +345,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 @media (prefers-reduced-motion: reduce) {
   .cl-drawer, .recent img, .cl-bar i { transition: none; animation: none; }
 }
+
+/* ==== 上传页：精选模式 / 额度（upload.js）==== */
+
+/* ==== 审核页：只留最好的 N 张 / 释放空间（review.js）==== */
