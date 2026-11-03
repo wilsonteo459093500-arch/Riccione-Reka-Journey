@@ -7,7 +7,7 @@
 > - **Sail CRM** — 销售 / pipeline / 售后管理。代码在 [`/crm`](./crm)，部署指南见 [`crm/DEPLOY.md`](./crm/DEPLOY.md)。
 > - **旧版 UKIR STUDIO**（AI 效果图 / 设计顾问 / Material Board）— 已由上面的新版 UKIR STUDIO 接替（同一网址；Material Board、材质库搬到新版）。代码仍在 [`/render`](./render) 备查 / 回滚。
 > - **CIPTA STUDIO**（by RICCIONE REKA）— 内容工作台：上传一条参考视频 + 你的原片/案例图，拆出配方、排好剪辑方案、写好发布文案。代码在 [`/studio`](./studio)，部署指南见 [`studio/DEPLOY.md`](./studio/DEPLOY.md)，工具调研见 [`studio/RESEARCH.md`](./studio/RESEARCH.md)。
-> - **RICCIONE REKA JOURNEY** — 客户需求卡 + 展厅邀请函（纯静态，无需构建）。代码在 [`/invite`](./invite)，说明见 [`invite/README.md`](./invite/README.md)。
+> - **RICCIONE REKA JOURNEY** — 客户需求卡 + VISI by RICCIONE REKA（方案与文案生成器）+ 展厅邀请函（纯静态，无需构建）。代码在 [`/invite`](./invite)，说明见 [`invite/README.md`](./invite/README.md)。
 
 ## 功能
 
@@ -92,5 +92,5 @@ supabase/schema.sql       # 一次性建表脚本
 crm/                      # 独立的 Sail CRM app（单独部署）
 render/                   # 独立的 溪岸 Render AI 效果图 app（单独部署）
 blueprint/                # 新版 UKIR STUDIO：方案 PPT 生成器 + Material Board + 3D 立体图（单独部署）
-invite/                   # RICCIONE REKA JOURNEY 邀约体验网站（纯静态）
+invite/                   # RICCIONE REKA JOURNEY 需求卡 · VISI 方案 · 邀请函（纯静态）
 ```

@@ -1,0 +1,513 @@
+/* ============================================================
+   VISI · 方案页 2.0（客户看到的那份）
+   ------------------------------------------------------------
+   16:9，每页 1280 × 720（= 13.333 × 7.5 in，PowerPoint 宽屏）。
+   品牌设计语言照 HIPPO / Aman：米色页底、半版出血大图、英文大写宽字距标签、
+   咖啡棕标题与大号数字、1px 浅沙细线、右上 logo、右下品牌签名。
+   每个区块都绝对定位（座标表在 deck.js 开头），PPTX 照同一张表做。
+   不要：标题下的装饰短线、边缘色条、置中的正文、米色以外的花俏底色。
+   编辑界面（左边的表单）在 visi.css。
+   ============================================================ */
+
+/* ---------- 方案页（预览缩放） ----------------------------- */
+.deck { --s: .6; padding: 22px 16px 60px; counter-reset: pg; }
+.pg-wrap {
+  position: relative; width: calc(1280px * var(--s)); height: calc(720px * var(--s));
+  margin: 0 auto 22px; box-shadow: 0 10px 34px rgba(40,32,22,.16); counter-increment: pg;
+}
+.pg-wrap::after {
+  content: counter(pg); position: absolute; right: 0; top: 100%; font-size: 11px; color: #8E8575; padding-top: 3px; letter-spacing: .1em;
+}
+.pg { transform: scale(var(--s)); transform-origin: 0 0; cursor: pointer; }
+
+/* ============================================================
+   页面本体 · 1280 × 720
+   ============================================================ */
+.pg {
+  --ink: #1C1915; --cof: #7B593D; --paper: #F3EEE7; --paper2: #F5EFDD; --taupe: #8C7B6A; --sand: #C9B9A6; --body: #464646;
+  --label: #6F6252;   /* 小标签、页脚：#8C7B6A 在米色上只有 3.5:1，手机上读不清；这个 ≥ 4.5:1 */
+  --strip: #3A2D24; --panel: #FBF8F3;
+  /* 英文：Outfit（大写标签、数字、正文）；中文正文落到 Noto Sans SC；标题衬线：英文 Cormorant（Ogg 的替代）、中文思源宋体 */
+  --f-en: "Outfit", "Jost", "Noto Sans SC", sans-serif;
+  --f-sans: "Outfit", "Jost", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --f-serif: "Cormorant Garamond", "Noto Serif SC", "Songti SC", Georgia, serif;
+  --f-zh: "Noto Serif SC", "Songti SC", "SimSun", serif;
+  width: 1280px; height: 720px; position: relative; overflow: hidden;
+  background: var(--paper); color: var(--ink);
+  font-family: var(--f-sans); font-size: 15px; line-height: 1.6; font-weight: 400; letter-spacing: .01em;
+  -webkit-font-smoothing: antialiased; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.pg *, .pg *::before, .pg *::after { box-sizing: border-box; }
+.pg p, .pg h1, .pg h2, .pg h3, .pg ol, .pg ul, .pg li, .pg figure, .pg dl, .pg dd { margin: 0; padding: 0; }
+.pg ol, .pg ul { list-style: none; }
+.pg .l-zh, .pg .l-en { display: block; }
+.pg .l-zh { letter-spacing: .02em; }
+.pg .ph { background: #E4DCCF; overflow: hidden; position: absolute; }
+.pg .ph img { width: 100%; height: 100%; object-fit: cover; display: block; max-width: none; }
+.pg .todo { color: #C2553B; }
+/* 换行：标题、一句话平衡成差不多长的两行（不留「wall.」「声。」单独一行）；正文最后一行至少两个字。
+   PPTX 照浏览器的断行点断，所以跟着一样 */
+.pg .ttl, .pg .rm-line, .pg .lg-line, .pg .ch-line, .pg .bk-wel, .pg .nd-q, .pg .cs-line, .pg .pr-w { text-wrap: balance; }
+.pg .lt-body p, .pg .rm-note, .pg .nd-a, .pg .pl-not, .pg .pr-a, .pg .gl-mood { text-wrap: pretty; }
+
+/* 右上 logo：米色上墨色版；照片上白色版 */
+.pg .logo { position: absolute; left: 1004px; top: 50px; width: 204px; height: 78px; object-fit: contain; object-position: right center; max-width: none; }
+
+/* 左上：英文大写标签 + 标题（依语言） */
+.pg .hd { position: absolute; left: 72px; top: 60px; width: 880px; }
+.pg .kick { font: 400 22px/1.25 var(--f-en); letter-spacing: .3em; text-transform: uppercase; color: var(--cof); }   /* 每一页同一个大小，翻起来不跳 */
+.pg .ttl { font-family: var(--f-serif); font-weight: 400; color: var(--cof); margin-top: 10px; }
+.pg .ttl .l-zh { font-family: var(--f-zh); font-size: 24px; line-height: 1.5; letter-spacing: .06em; }
+.pg .ttl .l-en { font-size: 31px; line-height: 1.15; }
+.pg .ttl .l-zh + .l-en { font-size: 24px; margin-top: 4px; }
+
+/* 小标签：英文大写（品牌字体）+ 华文 */
+.pg .lbl { font: 500 11px/1.5 var(--f-en); letter-spacing: .28em; text-transform: uppercase; color: var(--label); margin-bottom: 10px; }
+.pg p.lbl > span.l-zh { display: inline; font: 400 11px/1.5 var(--f-sans); letter-spacing: .2em; margin-left: 10px; text-transform: none; color: inherit; }
+
+/* 页脚：页码 + 页名 │ 品牌签名（照 HIPPO 右下角） */
+.pg-foot {
+  position: absolute; left: 808px; top: 628px; width: 400px; height: 44px;
+  display: flex; justify-content: flex-end; align-items: center; color: var(--label); text-align: right;
+}
+.pg-foot .pf-no { font: 400 10px/1.7 var(--f-en); letter-spacing: .26em; text-transform: uppercase; padding-right: 16px; margin-right: 16px; border-right: 1px solid var(--sand); white-space: nowrap; max-width: 210px; }
+.pg-foot .pf-no b { display: block; font-weight: 500; font-size: 11px; color: var(--cof); letter-spacing: .2em; }
+.pg-foot .pf-no span { display: block; overflow: hidden; text-overflow: ellipsis; }
+.pg-foot .pf-tag { white-space: nowrap; }
+.pg-foot .pf-tag .l-zh { font: 400 11px/1.7 var(--f-sans); letter-spacing: .5em; }
+.pg-foot .pf-tag .l-en { font: 400 9.5px/1.8 var(--f-en); letter-spacing: .42em; }
+.pg-foot.on-photo, .pg-foot.on-photo .pf-no b { color: rgba(255,255,255,.88); }
+.pg-foot.on-photo .pf-no { border-color: rgba(255,255,255,.5); }
+
+/* 照片上的遮罩（白字要读得到） */
+.pg .ph-shade { position: absolute; pointer-events: none; }
+
+/* ---------- 1 · 封面 ----------------------------------------
+   只放：名字、楼盘、一行副题、日期、业务名 */
+.pg-cover .cv-img { left: 0; top: 0; width: 1120px; height: 720px; }
+.pg-cover .cv-shade { position: absolute; left: 0; top: 0; width: 1120px; height: 720px;
+  /* 整张压暗 + 从名字下缘（36%）开始再暗：副题、楼盘、日期、业务名这些小白字在浅色照片（白厨房、白衣柜）上
+     也读得到（WhatsApp 预览是手机看的）。只用线性渐层：pptx.js 会把它画成 PNG（放射渐层它不认得） */
+  background: linear-gradient(180deg, rgba(28,25,21,0) 36%, rgba(28,25,21,.34) 56%, rgba(28,25,21,.5) 100%), rgba(28,25,21,.4); }
+.pg-cover .cv-strip { position: absolute; left: 1120px; top: 0; width: 160px; height: 720px; background: var(--strip); color: rgba(255,255,255,.82); }
+.pg-cover .cv-strip i { position: absolute; left: 80px; top: 64px; width: 1px; height: 250px; background: rgba(255,255,255,.45); }
+.pg-cover .cv-strip .l-zh { position: absolute; left: 60px; top: 372px; width: 40px; height: 210px; writing-mode: vertical-rl; font-size: 13px; letter-spacing: .62em; line-height: 40px; text-align: center; }
+.pg-cover .cv-strip .l-en { position: absolute; left: 8px; top: 628px; width: 144px; font: 400 10px/1.9 var(--f-en); letter-spacing: .42em; text-align: center; padding-left: .42em; }
+.pg-cover .logo { left: 72px; top: 56px; object-position: left center; }
+.pg-cover .cv-mid { position: absolute; left: 0; top: 0; width: 1120px; height: 720px; color: #fff; text-align: center; }
+.pg-cover .cv-mid > * { position: absolute; left: 80px; width: 960px; }
+.pg-cover .cv-name { top: 236px; height: 156px; display: flex; flex-direction: column; justify-content: center; align-items: center; font-weight: 300; }
+.pg-cover .cv-name .l-en { font-family: var(--f-en); text-transform: uppercase; letter-spacing: .16em; margin-right: -.16em; line-height: 1.12; }
+.pg-cover .cv-name .l-zh { font-family: var(--f-zh); font-weight: 400; letter-spacing: .14em; line-height: 1.3; }
+.pg-cover .cv-name.sz1 { font-size: 66px; }
+.pg-cover .cv-name.sz2 { font-size: 52px; }
+.pg-cover .cv-name.sz3 { font-size: 42px; }
+.pg-cover .cv-name.sz4 { font-size: 33px; }
+.pg-cover .cv-name.sz1 .l-zh { font-size: 60px; }
+.pg-cover .cv-kind { top: 410px; height: 30px; }
+.pg-cover .cv-kind .l-zh { font-size: 17px; font-weight: 500; letter-spacing: .42em; line-height: 30px; padding-left: .42em; }
+.pg-cover .cv-kind .l-zh i { font-style: normal; font-family: var(--f-en); font-size: 15px; letter-spacing: .24em; text-transform: uppercase; }
+.pg-cover .cv-kind .l-en { font: 500 13px/30px var(--f-en); letter-spacing: .36em; text-transform: uppercase; padding-left: .36em; }
+.pg-cover .cv-prop { top: 452px; height: 30px; }
+.pg-cover .cv-prop .l-en, .pg-cover .cv-prop .l-zh { font-family: var(--f-serif); font-size: 23px; line-height: 30px; font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pg-cover .cv-prop .l-zh { font-style: normal; font-size: 19px; }
+.pg-cover .cv-date { top: 494px; height: 22px; }
+.pg-cover .cv-date .l-zh, .pg-cover .cv-date .l-en { font: 400 12px/22px var(--f-en); letter-spacing: .32em; text-transform: uppercase; }
+.pg-cover .cv-date .l-zh { font-family: var(--f-sans); letter-spacing: .3em; }
+.pg-cover .cv-by { top: 640px; height: 22px; font: 400 11px/22px var(--f-en); letter-spacing: .32em; text-transform: uppercase; }
+.pg-cover .cv-by .l-zh { display: inline; font-family: var(--f-sans); letter-spacing: .2em; }
+.pg-cover .cv-by b { font-weight: 500; margin-left: 14px; letter-spacing: .22em; }
+
+/* ---------- 2 · 开场短话（两三句，留白多） ---------------------- */
+.pg-letter .lt-img { left: 0; top: 0; width: 600px; height: 720px; }
+.pg-letter .lt-shade { left: 0; top: 380px; width: 600px; height: 340px; background: linear-gradient(180deg, rgba(28,25,21,0), rgba(28,25,21,.58)); }
+.pg-letter .lt-kick { position: absolute; left: 56px; top: 584px; width: 488px; height: 88px; display: flex; flex-direction: column; justify-content: flex-end; color: #fff; }
+.pg-letter .lt-kick .kick { color: #fff; }
+.pg-letter .lt-kick .l-zh { font-family: var(--f-zh); font-size: 18px; letter-spacing: .2em; margin-top: 6px; }
+.pg-letter .lt-salute { position: absolute; left: 664px; top: 132px; width: 544px; height: 72px; display: flex; flex-direction: column; justify-content: flex-end; color: var(--cof); }
+.pg-letter .lt-salute .l-en { font: italic 400 34px/1.15 var(--f-serif); }
+.pg-letter .lt-salute .l-zh { font: 400 25px/1.4 var(--f-zh); letter-spacing: .06em; }
+.pg-letter .lt-salute .l-zh + .l-en { font-size: 23px; margin-top: 2px; }
+.pg-letter .lt-salute.long .l-en { font-size: 25px; }
+.pg-letter .lt-salute.long .l-zh { font-size: 19px; }
+.pg-letter .lt-salute.long .l-zh + .l-en { font-size: 18px; }
+/* 更长（Dato’ … bin … & Datin …、两位医生）：再缩一号，两行也不往上顶到 logo（logo 底在 128） */
+.pg-letter .lt-salute.longer .l-en { font-size: 21px; line-height: 1.2; }
+.pg-letter .lt-salute.longer .l-zh { font-size: 16px; line-height: 1.45; }
+.pg-letter .lt-salute.longer .l-zh + .l-en { font-size: 16px; }
+.pg-letter .lt-salute .l-en, .pg-letter .lt-salute .l-zh { text-wrap: balance; }
+.pg-letter .lt-body { position: absolute; left: 664px; top: 222px; width: 544px; height: 316px; overflow: hidden; color: var(--body); }
+.pg-letter .lt-body p { margin-bottom: 16px; }
+.pg-letter .lt-body .l-en { font-size: 17.5px; line-height: 1.75; }
+.pg-letter .lt-body .l-zh { font-size: 17px; line-height: 2; letter-spacing: .04em; }
+.pg-letter.L-bi .lt-body .l-en { font-size: 14.5px; line-height: 1.65; }
+.pg-letter.L-bi .lt-body .l-zh { font-size: 15px; line-height: 1.85; }
+.pg-letter.L-bi .lt-body p { margin-bottom: 10px; }
+.pg-letter.L-bi .lt-body .l-zh + .l-en { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--sand); }
+/* 字太多（销售自己写长了）：先缩一号（tight），再缩一号（tighter） */
+.pg-letter.tight .lt-body .l-en, .pg-letter.tight .lt-body .l-zh { font-size: 14px; line-height: 1.6; }
+.pg-letter.tight .lt-body p { margin-bottom: 8px; }
+.pg-letter.tighter .lt-body .l-en, .pg-letter.tighter .lt-body .l-zh { font-size: 12.5px; line-height: 1.5; }
+.pg-letter .lt-sign { position: absolute; left: 664px; top: 548px; width: 320px; height: 70px; }
+.pg-letter .lt-sign b { display: block; font: italic 400 34px/1.1 var(--f-serif); color: var(--cof); }
+.pg-letter .lt-sign span { display: block; font: 400 10.5px/1.6 var(--f-en); letter-spacing: .28em; text-transform: uppercase; color: var(--label); margin-top: 6px; }
+
+/* ---------- 3 · 你们说的 · 我们做的（最多 3 条） ------------------ */
+.pg-needs .nd-list { position: absolute; left: 72px; top: 212px; width: 1136px; height: 404px; overflow: hidden; border-top: 1px solid var(--sand); }
+.pg-needs .nd { position: relative; display: grid; grid-template-columns: 64px 432px 480px 80px; column-gap: 20px; padding: 30px 0; border-bottom: 1px solid var(--sand); align-items: baseline; }
+.pg-needs .nd-no { font: 300 34px/1 var(--f-en); color: var(--cof); }
+.pg-needs .nd-q .l-en { font: italic 400 27px/1.25 var(--f-serif); color: var(--ink); }
+.pg-needs .nd-q .l-zh { font: 400 21px/1.55 var(--f-zh); color: var(--ink); letter-spacing: .03em; }
+.pg-needs .nd-q .l-zh + .l-en { font-size: 20px; margin-top: 4px; color: var(--body); }
+/* 需求卡勾选的选项：转述（「你们提到…」），不是他们亲口说的 —— 不用引号、不用斜体，小一号 */
+.pg-needs .nd-q.told .l-en { font-style: normal; font-size: 23px; line-height: 1.3; }
+.pg-needs .nd-q.told .l-zh { font-size: 19px; }
+.pg-needs .nd-q.told .l-zh + .l-en { font-size: 18px; }
+.pg-needs .nd-a { color: var(--body); }
+.pg-needs .nd-a .l-en { font-size: 15.5px; line-height: 1.65; }
+.pg-needs .nd-a .l-zh { font-size: 15.5px; line-height: 1.85; }
+.pg-needs .nd-a .l-zh + .l-en { font-size: 13.5px; margin-top: 4px; }
+.pg-needs .nd-p { font: normal 500 11px/1 var(--f-en); letter-spacing: .2em; color: var(--cof); text-align: right; }
+.pg-needs.L-bi .nd { padding: 20px 0; }
+.pg-needs.tight .nd { padding: 14px 0; }
+.pg-needs.tight .nd-q .l-en { font-size: 22px; }
+.pg-needs.tight .nd-q .l-zh { font-size: 17px; }
+.pg-needs.tight .nd-a .l-en, .pg-needs.tight .nd-a .l-zh { font-size: 13.5px; line-height: 1.5; }
+.pg-needs.tighter .nd { padding: 8px 0; }
+.pg-needs.tighter .nd-no { font-size: 26px; }
+.pg-needs.tighter .nd-q .l-en { font-size: 18px; }
+.pg-needs.tighter .nd-q .l-zh + .l-en { font-size: 15px; }
+.pg-needs.tighter .nd-a .l-en, .pg-needs.tighter .nd-a .l-zh { font-size: 12.5px; line-height: 1.45; }
+
+/* ---------- 4 · 一页看懂（拼贴 moodboard） ------------------------
+   左边 720 宽拼 2–4 张图（米色 8px 缝），右边：风格名 + 一句 mood + 5 色 + 3 材质。
+   第一格看照片（MB.deckImages 的 glanceWide）：直的放左边整高；横的放上面（.wide），裁得最少 */
+.pg-glance .gl-col { position: absolute; left: 0; top: 0; width: 720px; height: 720px; }
+.pg-glance .gl-col .g1 { left: 0; top: 0; width: 416px; height: 720px; }
+.pg-glance .gl-col .g2 { left: 424px; top: 0; width: 296px; height: 235px; }
+.pg-glance .gl-col .g3 { left: 424px; top: 243px; width: 296px; height: 234px; }
+.pg-glance .gl-col .g4 { left: 424px; top: 485px; width: 296px; height: 235px; }
+.pg-glance .gl-col.n3 .g2 { height: 356px; }
+.pg-glance .gl-col.n3 .g3 { top: 364px; height: 356px; }
+.pg-glance .gl-col.n2 .g2 { height: 720px; }
+.pg-glance .gl-col.n1 .g1 { width: 720px; }
+.pg-glance .gl-col.wide .g1 { width: 720px; height: 400px; }
+.pg-glance .gl-col.wide .g2 { left: 0; top: 408px; width: 235px; height: 312px; }
+.pg-glance .gl-col.wide .g3 { left: 243px; top: 408px; width: 234px; height: 312px; }
+.pg-glance .gl-col.wide .g4 { left: 485px; top: 408px; width: 235px; height: 312px; }
+.pg-glance .gl-col.wide.n3 .g2 { width: 356px; }
+.pg-glance .gl-col.wide.n3 .g3 { left: 364px; width: 356px; }
+.pg-glance .gl-col.wide.n2 .g1 { height: 356px; }
+.pg-glance .gl-col.wide.n2 .g2 { top: 364px; width: 720px; height: 356px; }
+/* 客户发来的参考图：像钉在 moodboard 上的小照片 */
+.pg-glance .gl-refs { position: absolute; left: 24px; top: 580px; height: 116px; display: flex; gap: 10px; }
+.pg-glance .gl-refs .ph { position: relative; width: 88px; height: 108px; border: 5px solid var(--paper); box-shadow: 0 6px 16px rgba(28,25,21,.28); }
+.pg-glance .gl-hd { left: 784px; top: 138px; width: 424px; height: 204px; overflow: hidden; }   /* logo 在 128 以上；色块从 352 起 */
+.pg-glance .gl-hd .ttl { margin-top: 14px; }
+.pg-glance .gl-hd .ttl .l-zh { font-size: 34px; line-height: 1.3; letter-spacing: .14em; }
+.pg-glance .gl-hd .ttl .l-en { font-size: 40px; line-height: 1.08; }
+.pg-glance .gl-hd .ttl .l-zh + .l-en { font-size: 25px; margin-top: 2px; }
+.pg-glance .gl-mood { margin-top: 12px; color: var(--body); }
+.pg-glance .gl-mood .l-en { font: italic 400 18px/1.4 var(--f-serif); color: var(--ink); }
+.pg-glance .gl-mood .l-zh { font-size: 14.5px; line-height: 1.75; }
+.pg-glance .gl-mood .l-zh + .l-en { font-size: 15.5px; margin-top: 2px; }
+/* 双语：风格名、一句 mood 各两行，缩一点才放得进 204 高 */
+.pg-glance.L-bi .gl-hd .ttl { margin-top: 10px; }
+.pg-glance.L-bi .gl-hd .ttl .l-zh { font-size: 30px; }
+.pg-glance.L-bi .gl-mood { margin-top: 8px; }
+.pg-glance.L-bi .gl-mood .l-zh + .l-en { font-size: 14.5px; }
+.pg-glance .gl-pal { position: absolute; left: 784px; top: 352px; width: 424px; height: 132px; }
+.pg-glance .gl-pal ul { display: grid; grid-template-columns: repeat(5, 72px); column-gap: 8px; }
+.pg-glance .gl-pal i { display: block; height: 56px; margin-bottom: 7px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.06); }
+.pg-glance .gl-pal b { display: block; font-weight: 400; color: var(--ink); line-height: 1.3; }
+.pg-glance .gl-pal b .l-en, .pg-glance .gl-pal b .l-zh { font-size: 11px; }
+.pg-glance .gl-pal b .l-zh + .l-en { font-size: 10px; color: var(--label); }
+.pg-glance .gl-from { margin: -4px 0 8px; color: var(--cof); white-space: nowrap; overflow: hidden; }
+.pg-glance .gl-from .l-zh, .pg-glance .gl-from .l-en { display: inline; margin-right: 10px; }
+.pg-glance .gl-from .l-zh { font-size: 12px; }
+.pg-glance .gl-from .l-en { font: italic 400 15px/1.3 var(--f-serif); }
+.pg-glance .gl-pal.from-ref i { height: 44px; }
+.pg-glance .gl-mats { position: absolute; left: 784px; top: 496px; width: 424px; height: 116px; }
+.pg-glance .gl-mats li { display: flex; align-items: center; gap: 12px; padding: 4px 0; border-bottom: 1px solid var(--sand); line-height: 1.35; }
+.pg-glance .gl-mats li:first-child { border-top: 1px solid var(--sand); }
+.pg-glance .gl-mats i { width: 16px; height: 16px; flex: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.07); }
+.pg-glance .gl-mats b { flex: 1; font-weight: 400; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pg-glance .gl-mats b .l-zh, .pg-glance .gl-mats b .l-en { display: inline; font-size: 13.5px; }
+.pg-glance .gl-mats b .l-zh + .l-en { font-size: 12px; color: var(--body); margin-left: 8px; }
+.pg-glance .gl-mats em { font: normal 400 10px/1.5 var(--f-en); letter-spacing: .12em; color: var(--label); }
+
+/* ---------- 5 · 平面图 -------------------------------------- */
+.pg-plan .pl-panel { position: absolute; left: 0; top: 0; width: 720px; height: 720px; background: var(--panel); }
+.pg-plan .pl-box { position: absolute; left: 48px; top: 48px; width: 624px; height: 624px; display: flex; align-items: center; justify-content: center; }
+.pg-plan .pl-inner { position: relative; flex: none; }
+.pg-plan .pl-inner img { width: 100%; height: 100%; display: block; max-width: none; }
+.pg .pin {
+  position: absolute; width: 28px; height: 28px; margin: -14px 0 0 -14px; border-radius: 50%;
+  background: var(--cof); color: #fff; font: 500 12.5px/1 var(--f-en); display: grid; place-items: center;
+  box-shadow: 0 0 0 3px rgba(251,248,243,.92);
+}
+.pg-plan .pl-hd { left: 784px; top: 156px; width: 424px; }
+.pg-plan .pl-hd .ttl .l-en { font-size: 28px; }
+/* 双语：标题两行，往上移、英文缩小，不贴到下面清单的细线 */
+.pg-plan.L-bi .pl-hd { top: 132px; }
+.pg-plan.L-bi .pl-hd .ttl .l-zh + .l-en { font-size: 20px; }
+.pg-plan .pl-side { position: absolute; left: 784px; top: 272px; width: 424px; height: 344px; overflow: hidden; }
+.pg-plan .pl-legend { border-top: 1px solid var(--sand); }
+.pg-plan .pl-legend li { display: flex; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--sand); line-height: 1.3; }
+.pg-plan .pl-legend .pin { position: static; margin: 0; flex: none; width: 22px; height: 22px; font-size: 11px; box-shadow: none; }
+.pg-plan .pl-legend b { flex: 1; font-weight: 400; min-width: 0; }
+.pg-plan .pl-legend b .l-zh, .pg-plan .pl-legend b .l-en { display: inline; font-size: 14px; }
+.pg-plan .pl-legend b .l-en + .l-zh, .pg-plan .pl-legend b .l-zh + .l-en { margin-left: 10px; font-size: 12.5px; color: var(--body); }
+.pg-plan .pl-legend em { font: normal 500 10.5px/1 var(--f-en); color: var(--cof); letter-spacing: .18em; }
+.pg-plan .pl-not { font-size: 12.5px; color: var(--body); margin-top: 14px; line-height: 1.6; }
+.pg-plan .pl-not b { color: var(--ink); font-weight: 500; }
+.pg-plan.tight .pl-legend li { padding: 3px 0; }
+.pg-plan.tight .pl-legend b .l-zh, .pg-plan.tight .pl-legend b .l-en { font-size: 13px; }
+.pg-plan.tight .pl-not { margin-top: 8px; font-size: 12px; }
+.pg-plan.tighter .pl-legend li { padding: 2px 0; }
+.pg-plan.tighter .pl-legend .pin { width: 18px; height: 18px; font-size: 10px; }
+.pg-plan.tighter .pl-legend b .l-zh + .l-en, .pg-plan.tighter .pl-legend b .l-en + .l-zh { display: none; }
+
+/* ---------- 6 · 章节情绪页 ---------------------------------- */
+.pg-chapter .ch-img { left: 0; top: 0; width: 1280px; height: 720px; }
+.pg-chapter .ch-shade { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; background: linear-gradient(90deg, rgba(40,30,22,.66) 0%, rgba(40,30,22,.34) 55%, rgba(40,30,22,.12) 100%); }
+.pg-chapter .ch-kick { position: absolute; left: 80px; top: 292px; width: 700px; height: 24px; font: 400 15px/24px var(--f-en); letter-spacing: .4em; text-transform: uppercase; color: rgba(255,255,255,.86); }
+.pg-chapter .ch-kick .l-zh { display: inline; font-family: var(--f-sans); letter-spacing: .3em; margin-left: 16px; }
+.pg-chapter .ch-line { position: absolute; left: 80px; top: 330px; width: 700px; height: 200px; color: #fff; }
+.pg-chapter .ch-line .l-zh { font: 400 32px/1.5 var(--f-zh); letter-spacing: .08em; }
+.pg-chapter .ch-line .l-en { font: 400 40px/1.18 var(--f-serif); }
+.pg-chapter .ch-line .l-zh + .l-en { font: 400 15px/1.6 var(--f-en); letter-spacing: .14em; text-transform: uppercase; margin-top: 18px; opacity: .86; }
+
+/* ---------- 7 · 空间 ----------------------------------------
+   主图更大（720 宽）；字：编号 + 名称 + 一句 + 卖点名称（≤ 3）+「为 X」一句 */
+.pg-room .rm-imgs .rm-hero { left: 0; top: 0; width: 720px; height: 720px; }
+.pg-room .rm-imgs.l2 .rm-hero, .pg-room .rm-imgs.l3 .rm-hero { height: 472px; }
+.pg-room .rm-imgs .rm-sub1 { left: 0; top: 480px; width: 720px; height: 240px; }
+.pg-room .rm-imgs.l3 .rm-sub1 { width: 356px; }
+.pg-room .rm-imgs .rm-sub2 { left: 364px; top: 480px; width: 356px; height: 240px; }
+/* 直的照片（MB.deckImages 的 roomLayout）：两张并排，或主图在左、两张辅图叠在右边 */
+.pg-room .rm-imgs.l2v .rm-hero { width: 356px; height: 720px; }
+.pg-room .rm-imgs.l2v .rm-sub1 { left: 364px; top: 0; width: 356px; height: 720px; }
+.pg-room .rm-imgs.l3v .rm-hero { width: 476px; height: 720px; }
+.pg-room .rm-imgs.l3v .rm-sub1 { left: 484px; top: 0; width: 236px; height: 356px; }
+.pg-room .rm-imgs.l3v .rm-sub2 { left: 484px; top: 364px; width: 236px; height: 356px; }
+.pg-room .rm-no { position: absolute; left: 784px; top: 48px; width: 160px; height: 64px; font: 300 56px/64px var(--f-en); color: var(--cof); letter-spacing: -.01em; }
+.pg-room .rm-name { position: absolute; left: 784px; top: 126px; width: 424px; height: 26px; color: var(--cof); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-size: 15px; line-height: 26px; }   /* h2 自己的行高也是 26：不然浏览器预设的 1.5em 行框把华文的下缘裁掉 */
+.pg-room .rm-name .l-en, .pg-room .rm-name .l-zh { display: inline; vertical-align: top; }   /* 英文、华文字体的基线不同：对齐顶端，行框才不会多出 1px 被裁 */
+.pg-room .rm-name .l-en { font: 400 15px/26px var(--f-en); letter-spacing: .3em; text-transform: uppercase; }
+.pg-room .rm-name .l-en + .l-zh { font: 400 16px/26px var(--f-zh); letter-spacing: .2em; margin-left: 10px; }
+.pg-room .rm-name > .l-zh:first-child { font: 400 18px/26px var(--f-zh); letter-spacing: .2em; }
+/* 自己取的长名字（Master Bedroom & Walk-in Wardrobe）：缩字 */
+.pg-room .rm-name.n2 .l-en { font-size: 12.5px; letter-spacing: .2em; }
+.pg-room .rm-name.n3 .l-en { font-size: 11px; letter-spacing: .12em; }
+.pg-room .rm-line { position: absolute; left: 784px; top: 172px; width: 424px; height: 128px; border-top: 1px solid var(--sand); padding-top: 18px; overflow: hidden; }
+.pg-room .rm-line .l-en { font: 400 30px/1.2 var(--f-serif); color: var(--ink); }
+.pg-room .rm-line .l-zh { font: 400 23px/1.5 var(--f-zh); color: var(--ink); letter-spacing: .05em; }
+.pg-room .rm-line .l-zh + .l-en { font-size: 20px; color: var(--body); margin-top: 4px; }
+.pg-room .rm-txt { position: absolute; left: 784px; top: 316px; width: 424px; height: 300px; display: flex; flex-direction: column; overflow: hidden; contain: size; }   /* contain：打印分页时字太多也不能把整页撑开 */
+.pg-room .rm-feats { counter-reset: f; flex: none; }
+.pg-room .rm-feats li { counter-increment: f; position: relative; padding: 9px 0 9px 36px; border-bottom: 1px solid var(--sand); }
+.pg-room .rm-feats li:first-child { border-top: 1px solid var(--sand); }
+.pg-room .rm-feats li::before { content: counter(f, decimal-leading-zero); position: absolute; left: 0; top: 11px; font: 400 11px/1.4 var(--f-en); color: var(--cof); letter-spacing: .08em; }
+.pg-room .rm-feats b { display: block; font-weight: 400; color: var(--ink); line-height: 1.45; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pg-room .rm-feats b .l-en, .pg-room .rm-feats b .l-zh { display: inline; font-size: 14.5px; }
+.pg-room .rm-feats b .l-zh + .l-en { font-size: 12.5px; color: var(--body); margin-left: 10px; }
+.pg-room .rm-for { margin-top: auto; padding-top: 16px; }
+.pg-room .rm-for .lbl { color: var(--cof); margin-bottom: 6px; text-wrap: balance; }   /* 很长的名字（Dato’ … bin …）断成差不多长的两行 */
+.pg-room .rm-note .l-en { font: italic 400 19px/1.38 var(--f-serif); color: var(--ink); }
+.pg-room .rm-note .l-zh { font: 400 15.5px/1.8 var(--f-zh); color: var(--ink); }
+.pg-room .rm-note .l-zh + .l-en { font-size: 16px; margin-top: 4px; color: var(--body); }
+/* 字太多放不下（销售写长了）：先缩一号（tight），再缩一号（tighter）；还放不下，体检会提醒 */
+.pg-room.tight .rm-feats li { padding-top: 6px; padding-bottom: 6px; }
+.pg-room.tight .rm-feats li::before { top: 8px; }
+.pg-room.tight .rm-note .l-en { font-size: 17px; }
+.pg-room.tight .rm-note .l-zh { font-size: 14px; line-height: 1.6; }
+.pg-room.tight .rm-note .l-zh + .l-en { font-size: 14.5px; }
+.pg-room.tighter .rm-feats b .l-zh + .l-en { display: none; }
+.pg-room.tighter .rm-note .l-en { font-size: 15.5px; }
+.pg-room.tighter .rm-note .l-zh + .l-en { font-size: 13.5px; }
+/* 没有图：不留空白米色框（客户会以为方案没做完），左边放大号编号与那一句，右边放卖点 */
+.pg-room.rm-noimg .rm-no { left: 72px; top: 40px; width: 260px; height: 178px; font-size: 140px; line-height: 178px; }
+.pg-room.rm-noimg .rm-name { left: 72px; top: 222px; width: 560px; height: 30px; font-size: 20px; line-height: 30px; }
+.pg-room.rm-noimg .rm-name .l-en { font-size: 20px; line-height: 30px; }
+.pg-room.rm-noimg .rm-name .l-en + .l-zh { font-size: 20px; line-height: 30px; }
+.pg-room.rm-noimg .rm-line { left: 72px; top: 272px; width: 560px; height: 240px; padding-top: 22px; }
+.pg-room.rm-noimg .rm-line .l-en { font-size: 40px; line-height: 1.12; }
+.pg-room.rm-noimg .rm-line .l-zh { font-size: 30px; }
+.pg-room.rm-noimg .rm-line .l-zh + .l-en { font-size: 26px; margin-top: 8px; }
+.pg-room.rm-noimg .rm-txt { left: 704px; top: 272px; width: 504px; height: 344px; }   /* 跟左边那一句的细线同一条线 */
+
+/* ---------- 8 · 参考空间（溪岸的实拍；3 张图，每张一行） --------------- */
+.pg-cases .cs-list { position: absolute; left: 72px; top: 184px; width: 1136px; height: 432px; overflow: hidden; }
+.pg-cases .cs { position: absolute; top: 0; height: 432px; }
+.pg-cases .cs-img { left: 0; top: 0; width: 100%; height: 340px; }
+/* 那一行不自己裁切（只有最少 76 高）：太长会伸出 .cs-list 底部 → app.js / pptx.js 的 fitText 量得到，先缩字，
+   还放不下体检会提醒；超出的部分由 .cs-list 裁掉 */
+.pg-cases .cs-cap { position: absolute; left: 0; top: 356px; width: 100%; min-height: 76px; }
+.pg-cases .cs-cap .lbl { color: var(--cof); margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pg-cases .cs-line { color: var(--ink); }
+.pg-cases .cs-line .l-en { font: italic 400 18px/1.32 var(--f-serif); }
+.pg-cases .cs-line .l-zh { font: 400 14.5px/1.7 var(--f-zh); }
+.pg-cases .cs-line .l-zh + .l-en { font-size: 15px; color: var(--body); margin-top: 1px; }
+.pg-cases .cs-list.n1 .cs-img { width: 720px; height: 432px; }
+.pg-cases .cs-list.n1 .cs-cap { left: 760px; top: 0; width: 376px; min-height: 432px; display: flex; flex-direction: column; justify-content: safe flex-end; }
+.pg-cases .cs-list.n1 .cs-line .l-en { font-size: 26px; line-height: 1.3; }
+.pg-cases .cs-list.n1 .cs-line .l-zh { font-size: 19px; }
+.pg-cases .cs-list.n1 .cs-line .l-zh + .l-en { font-size: 20px; }
+.pg-cases.tight .cs-line .l-en { font-size: 15.5px; }
+.pg-cases.tight .cs-line .l-zh { font-size: 13px; line-height: 1.55; }
+.pg-cases.tighter .cs-img { height: 300px; }
+.pg-cases.tighter .cs-cap { top: 312px; min-height: 120px; }
+
+/* ---------- 9 · 工期 · 保障（预设关）：两组大数字 + 一句 -------------
+   左：订单周期（两个系列）；右：质保（五金、板材）。每个数字下面一行写是什么；单位写在标签里 */
+.pg-practical .pr-img { left: 0; top: 0; width: 600px; height: 720px; }
+.pg-practical .pr-hd { left: 664px; top: 60px; width: 324px; }   /* 右边是 logo（1004 起）：标题在 logo 左边换行 */
+.pg-practical .pr-hd .ttl .l-en { font-size: 29px; }
+.pg-practical .pr-hd .ttl .l-zh + .l-en { font-size: 21px; }
+.pg-practical .pr-body { position: absolute; left: 664px; top: 232px; width: 544px; height: 384px; overflow: hidden; }
+.pg-practical .pr-blk { position: absolute; top: 0; height: 168px; border-top: 1px solid var(--sand); padding-top: 14px; }
+.pg-practical .pr-b1 { left: 0; width: 256px; }
+.pg-practical .pr-b2 { left: 288px; width: 256px; }
+/* 标签：英文一行、华文在下一行（不缩排）；两块的数字对齐在同一条线 */
+.pg-practical .pr-blk .lbl { min-height: 36px; margin-bottom: 8px; letter-spacing: .22em; }
+.pg-practical .pr-blk p.lbl > span.l-zh { display: block; margin-left: 0; }
+.pg-practical .pr-nums { display: flex; gap: 22px; }
+.pg-practical .pr-num { flex: 1 1 0; min-width: 0; }
+/* 大数字：订单周期与质保同一个字体、同一个大小（Outfit 300 38px）；「年 / year」是小一号的单位 */
+.pg-practical .pr-n { display: block; height: 46px; font: 300 38px/46px var(--f-en); color: var(--cof); letter-spacing: -.01em; white-space: nowrap; }
+.pg-practical .pr-n small { font: 400 14px/1 var(--f-en); letter-spacing: .06em; margin-left: 6px; }
+.pg-practical.L-zh .pr-n small, .pg-practical.L-bi .pr-n small { font-family: var(--f-sans); }
+.pg-practical .pr-n.word { font-size: 32px; }
+.pg-practical .pr-n.zh { font: 400 28px/46px var(--f-zh); letter-spacing: .06em; }
+.pg-practical .pr-cap .l-zh, .pg-practical .pr-cap .l-en { display: block; font-size: 11.5px; color: var(--body); line-height: 1.35; margin-top: 4px; }
+.pg-practical .pr-cap .l-zh + .l-en { font-size: 10.5px; margin-top: 1px; color: var(--label); }
+.pg-practical .pr-con { margin-top: 196px; border-top: 1px solid var(--sand); padding-top: 18px; }
+.pg-practical .pr-w .l-en { font: italic 400 22px/1.3 var(--f-serif); color: var(--ink); }
+.pg-practical .pr-w .l-zh { font: 400 18px/1.6 var(--f-zh); color: var(--ink); }
+.pg-practical .pr-w .l-zh + .l-en { font-size: 18px; color: var(--body); }
+.pg-practical .pr-a { color: var(--body); margin-top: 6px; }
+.pg-practical .pr-a .l-en { font-size: 14.5px; line-height: 1.6; }
+.pg-practical .pr-a .l-zh { font-size: 14.5px; line-height: 1.75; }
+.pg-practical .pr-a .l-zh + .l-en { font-size: 13px; }
+.pg-practical .pr-proj { margin-top: 14px; }
+/* 销售写的一句（工期、预算）：一行放不下就换到第二行（不印半句「depending on bo…」）；
+   标签一栏、字一栏，第二行对齐字那一栏。再长 → .pr-body 放不下 → fitText 缩字，还放不下体检提醒 */
+.pg-practical .pr-proj p { display: flex; align-items: baseline; font-size: 13px; line-height: 20px; padding: 3px 0; color: var(--ink); }
+.pg-practical .pr-proj .k { flex: none; width: 112px; font: 500 10.5px/20px var(--f-en); letter-spacing: .24em; color: var(--cof); }
+.pg-practical.L-zh .pr-proj .k { font-family: var(--f-sans); font-size: 12px; letter-spacing: .14em; width: 72px; }
+.pg-practical .pr-proj .l-zh, .pg-practical .pr-proj .l-en { flex: 1; min-width: 0; text-wrap: pretty; }
+.pg-practical.tight .pr-con { margin-top: 186px; padding-top: 12px; }
+.pg-practical.tight .pr-proj { margin-top: 8px; }
+.pg-practical.tight .pr-proj p { padding: 1px 0; line-height: 18px; }
+.pg-practical.tight .pr-w .l-en { font-size: 18px; }
+.pg-practical.tight .pr-w .l-zh { font-size: 15px; }
+.pg-practical.tighter .pr-a .l-zh + .l-en { display: none; }
+
+/* ---------- 10 · 品牌一页：一张照片 + 一句品牌话 + 奖项 + 供应链 ------ */
+.pg-language .lg-img { left: 0; top: 0; width: 640px; height: 720px; }
+.pg-language .lg-hd { left: 704px; top: 60px; width: 290px; }
+.pg-language .lg-line { position: absolute; left: 704px; top: 196px; width: 504px; height: 180px; font-weight: 400; color: var(--cof); overflow: hidden; }
+.pg-language .lg-line .l-en { font: 400 40px/1.15 var(--f-serif); }
+.pg-language .lg-line .l-zh { font: 400 32px/1.45 var(--f-zh); letter-spacing: .1em; }
+.pg-language .lg-line .l-zh + .l-en { font-size: 26px; margin-top: 8px; }
+.pg-language .lg-proof { position: absolute; left: 704px; top: 410px; width: 504px; height: 206px; overflow: hidden; }
+.pg-language .lg-awards { border-top: 1px solid var(--sand); margin-bottom: 22px; }
+.pg-language .lg-awards li { display: grid; grid-template-columns: 104px 1fr; column-gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--sand); align-items: baseline; }
+.pg-language .lg-awards b { font: 300 15px/1.3 var(--f-en); color: var(--cof); letter-spacing: .04em; white-space: nowrap; }
+.pg-language .lg-awards span { font-size: 13.5px; line-height: 1.4; color: var(--ink); }
+.pg-language .lg-supply { font: 400 19px/1.4 var(--f-en); letter-spacing: .14em; color: var(--ink); border-top: 1px solid var(--sand); padding-top: 10px; }
+
+/* ---------- 11 · 本案团队（预设关） --------------------------------- */
+.pg-team .tm-img { left: 0; top: 0; width: 600px; height: 720px; }
+/* 照片自己的焦点（展厅一角靠底裁、不露出半个招牌）由 deck.js 写成行内 object-position：放在哪一页都一样 */
+.pg-team .tm-hd { left: 664px; top: 60px; width: 320px; }
+.pg-team .tm-rows { position: absolute; left: 664px; top: 236px; width: 544px; height: 380px; border-top: 1px solid var(--sand); }
+.pg-team .tm-rows li { display: grid; grid-template-columns: 200px 1fr; column-gap: 16px; padding: 16px 0; min-height: 62px; border-bottom: 1px solid var(--sand); align-items: center; }
+.pg-team .tm-rows .k .l-zh { font-size: 14px; color: var(--cof); letter-spacing: .12em; line-height: 1.4; }
+.pg-team .tm-rows .k .l-en { font: 400 12.5px/1.4 var(--f-en); color: var(--cof); letter-spacing: .06em; }
+.pg-team .tm-rows .k .l-zh + .l-en { font-size: 11.5px; }
+.pg-team .tm-rows b .l-en { font: 400 21px/1.25 var(--f-en); letter-spacing: .14em; text-transform: uppercase; color: var(--ink); }
+.pg-team .tm-rows b .l-zh { font: 400 20px/1.3 var(--f-sans); letter-spacing: .1em; color: var(--ink); }
+.pg-team .tm-rows b.long .l-en { font-size: 16px; letter-spacing: .1em; }
+/* 5–6 个人：行距收紧，6 行 + 双语职称也放得进 380px */
+.pg-team .tm-rows.many li { padding: 9px 0; min-height: 0; }
+
+/* ---------- 12 · 到馆邀约 ------------------------------------
+   保留时段 + 准备的三样 + QR + 一行链接 */
+.pg-invite .iv-img { left: 0; top: 0; width: 600px; height: 720px; }
+.pg-invite .iv-hd { left: 664px; top: 60px; width: 324px; }   /* 右边是 logo：标题在 logo 左边换行 */
+.pg-invite .iv-hd .ttl .l-en { font-size: 28px; }   /* 一行放得下，不留「you.」单字一行 */
+.pg-invite .iv-hd .ttl .l-zh + .l-en { font-size: 21px; }
+/* 右栏是一条直的流：三样 → 时段 + QR → 联络（贴底）。三样变高（双语、销售自己写长了）时，
+   时段跟着往下挪，不会被细线切过、不会叠到「已为你们保留」；还放不下 → .tight / .tighter（app.js fitText） */
+.pg-invite .iv-flow { position: absolute; left: 664px; top: 214px; width: 544px; height: 402px; display: flex; flex-direction: column; overflow: hidden; }
+.pg-invite .iv-prep { flex: none; min-height: 166px; }
+.pg-invite .iv-prep ol { border-top: 1px solid var(--sand); }
+.pg-invite .iv-prep li { display: flex; gap: 14px; padding: 9px 0; border-bottom: 1px solid var(--sand); align-items: baseline; text-wrap: pretty; }
+.pg-invite .iv-prep li > div { flex: 1; min-width: 0; }
+.pg-invite .iv-prep .no { font: 300 14px/1 var(--f-en); color: var(--cof); width: 22px; flex: none; }
+.pg-invite .iv-prep li .l-en { font-size: 15px; line-height: 1.45; color: var(--ink); }
+.pg-invite .iv-prep li .l-zh { font-size: 14.5px; line-height: 1.55; color: var(--ink); }
+/* 双语：英文在华文下面一行（小一号）—— 接在同一行会断成「…一起改 Your floor plan, printed / together」 */
+.pg-invite.L-bi .iv-prep li { padding: 4px 0; }
+.pg-invite.L-bi .iv-prep li .l-zh + .l-en { font-size: 12px; line-height: 1.4; color: var(--body); margin-top: 1px; }
+.pg-invite .iv-row { flex: none; display: flex; align-items: flex-start; margin: 24px 0 6px; }   /* 下面至少留 6px 才接联络那一行 */
+.pg-invite .iv-when { width: 384px; flex: none; padding: 14px 0 0; border-top: 1px solid var(--cof); }
+.pg-invite .iv-when .lbl { color: var(--cof); margin-bottom: 8px; }
+.pg-invite .iv-slot { font: 400 28px/1.15 var(--f-serif); color: var(--cof); }
+.pg-invite .iv-slot > span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pg-invite .iv-slot.iv-open { font-size: 23px; }
+.pg-invite .iv-slot.iv-open .l-zh + .l-en { font-size: 18px; margin-top: 2px; }
+.pg-invite .iv-alt { font-size: 14px; color: var(--body); margin-top: 4px; }
+.pg-invite .iv-meta { font: 400 10.5px/1.5 var(--f-en); letter-spacing: .2em; text-transform: uppercase; color: var(--label); margin-top: 10px; text-wrap: balance; }
+.pg-invite .iv-meta > span { display: block; }
+.pg-invite .iv-qr { flex: none; margin-left: auto; width: 136px; height: 150px; text-align: center; color: inherit; text-decoration: none; }
+.pg-invite .iv-qr svg { width: 112px; height: 112px; display: block; margin: 0 auto; }
+.pg-invite .iv-qr span { display: block; font-size: 10px; color: var(--body); letter-spacing: .04em; margin-top: 6px; line-height: 1.4; }
+.pg-invite .iv-host { flex: none; margin-top: auto; height: 24px; font-size: 12px; color: var(--body); letter-spacing: .02em; line-height: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pg-invite.tight .iv-prep { min-height: 0; }
+.pg-invite.tight .iv-prep li { padding-top: 4px; padding-bottom: 4px; }
+.pg-invite.tight .iv-row { margin-top: 16px; }
+.pg-invite.tight .iv-slot { font-size: 24px; }
+.pg-invite.tighter .iv-prep li .l-en, .pg-invite.tighter .iv-prep li .l-zh { font-size: 13px; }
+.pg-invite.tighter .iv-prep li .l-zh + .l-en { font-size: 11px; }
+.pg-invite.tighter .iv-slot { font-size: 21px; }
+.pg-invite.tighter .iv-when .lbl { margin-bottom: 4px; }
+.pg-invite .iv-host i { display: inline-block; width: 1px; height: 11px; background: var(--sand); margin: 0 12px; vertical-align: -1px; }
+.pg-invite .iv-host a { color: var(--cof); text-decoration: underline; text-underline-offset: 2px; }
+
+/* ---------- 13 · 欢迎回家（封底，Aman）：整页照片 + 一句话 + 联络小字 ---- */
+.pg-back .bk-img { left: 0; top: 0; width: 1280px; height: 720px; }
+.pg-back .bk-shade { position: absolute; left: 0; top: 0; width: 1280px; height: 720px;
+  background: linear-gradient(180deg, rgba(36,27,20,0) 62%, rgba(36,27,20,.38) 100%), linear-gradient(90deg, rgba(36,27,20,.7) 0%, rgba(36,27,20,.42) 50%, rgba(36,27,20,.1) 100%); }
+.pg-back .bk-txt { position: absolute; left: 80px; top: 0; width: 700px; height: 720px; color: #fff; }
+.pg-back .bk-wel { position: absolute; left: 0; top: 214px; width: 700px; height: 110px; display: flex; flex-direction: column; justify-content: flex-end; font-weight: 400; }
+.pg-back .bk-wel .l-en { font: 400 66px/1.12 var(--f-serif); }
+.pg-back .bk-wel .l-zh { font: 400 48px/1.3 var(--f-zh); letter-spacing: .16em; }
+.pg-back .bk-wel .l-zh + .l-en { font-size: 40px; }
+.pg-back .bk-thanks { position: absolute; left: 0; top: 334px; width: 700px; height: 40px; font-weight: 400; opacity: .92; }
+.pg-back .bk-thanks .l-en { font: italic 400 22px/1.4 var(--f-serif); }
+.pg-back .bk-thanks .l-zh { font: 400 17px/1.6 var(--f-zh); letter-spacing: .06em; }
+.pg-back .bk-thanks .l-zh + .l-en { font-size: 18px; }
+.pg-back.L-bi .bk-thanks { height: 64px; }
+.pg-back .bk-contact { position: absolute; left: 0; top: 506px; width: 620px; height: 110px; border-top: 1px solid rgba(255,255,255,.4); padding-top: 10px; }
+.pg-back .bk-contact li { display: grid; grid-template-columns: 96px 1fr; column-gap: 14px; padding: 2px 0; align-items: baseline; }
+.pg-back .bk-contact .k .l-zh, .pg-back .bk-contact .k .l-en { font: 400 10px/1.6 var(--f-en); letter-spacing: .2em; text-transform: uppercase; opacity: .78; }
+.pg-back .bk-contact .k .l-zh { font-family: var(--f-sans); letter-spacing: .12em; font-size: 11px; }
+.pg-back .bk-contact .v { font-size: 12px; line-height: 1.6; opacity: .92; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- 打印 = 导出 PDF ------------------------------- */
+@page { size: 13.333in 7.5in; margin: 0; }
+@media print {
+  html, body, body.mb-body { background: #fff !important; height: auto !important; overflow: visible !important; }
+  .f-top, .mb-edit, .pv-bar, .pv-check, .toast, .mb-modal { display: none !important; }
+  .mb, .mb-preview { display: block !important; height: auto !important; overflow: visible !important; background: none !important; }
+  .deck { --s: 1 !important; padding: 0 !important; }
+  .pg-wrap { margin: 0 !important; box-shadow: none !important; break-after: page; page-break-after: always; overflow: hidden; }
+  .pg-wrap:last-child { break-after: auto; page-break-after: auto; }
+  .pg-wrap::after { display: none !important; }
+  .pg { transform: none !important; cursor: default; }
+  .pg .todo { visibility: hidden; }
+}

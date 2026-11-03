@@ -66,6 +66,15 @@ a { color: inherit; }
 html[data-lang="zh"] .en,
 html[data-lang="en"] .zh { display: none !important; }
 
+/* 中英文（bi）：两种都显示，华文在前，英文跟在后面、淡一点。
+   行内的（span / b / i …）中间自动加「 / 」；段落、标题这类块级的自然换行。
+   想让行内的英文换到下一行：父元素加 .lang-stack */
+html[data-lang="bi"] .zh + .en { opacity: .74; }
+html[data-lang="bi"] :is(span, b, i, em, strong, small, a, label, button, abbr).zh + .en::before { content: " / "; }
+html[data-lang="bi"] .lang-stack > .zh + .en { display: block; }
+html[data-lang="bi"] .lang-stack > .zh + .en::before { content: none; }
+html[data-lang="bi"] :is(p, div, li, h1, h2, h3, h4, h5, h6, dd, dt, blockquote, figcaption).zh + .en { margin-top: .3em; }
+
 .lang-toggle {
   display: inline-flex; align-items: center; gap: 2px;
   border: 1px solid var(--line); border-radius: 100px;

@@ -61,13 +61,17 @@
     return d;
   }
   function saveDraft() { try { localStorage.setItem(KEY, JSON.stringify(collect())); } catch (e) {} }
+  var LEGACY = { '自然原木 Natural wood': '原木 Natural wood', '侘寂 Wabi-sabi': '微侘寂 Subtle wabi-sabi' };
   function loadDraft() {
     var raw; try { raw = localStorage.getItem(KEY); } catch (e) { return; }
     if (!raw) return;
     var d; try { d = JSON.parse(raw); } catch (e) { return; }
+    if (!d || typeof d !== 'object') return;
     $$('input, select, textarea').forEach(function (el) {
       if (!el.name || !(el.name in d)) return;
       var v = d[el.name];
+      // 风格选项改过名（跟案例库同一套）：旧草稿里的旧值换成新的，客户勾过的不会不见
+      if (Array.isArray(v)) v = v.map(function (x) { return LEGACY[x] || x; });
       if (el.type === 'checkbox') el.checked = Array.isArray(v) && v.indexOf(el.value) > -1;
       else if (el.type === 'radio') el.checked = (v === el.value);
       else if (!el.value) el.value = v;
