@@ -912,6 +912,25 @@
         if (proms.length) say('住进去会是这样：' + proms.join('；') + '。', 'What it will be like to live in: ' + proms.join('; ') + '.');
         break;
 
+      case 'series':
+        // 系列 · 设计理念：照 MB.SERIES_CONCEPT 念（溪岸的官方文案，不另外编、不删句子）；
+        // 页上没印的补充、雾山的佩索阿引文都在这里。这一页讲的是溪岸：不念客户的名字、楼盘
+        var sc = typeof MB.seriesBlocks === 'function' ? MB.seriesBlocks(p, L) : null;
+        if (!sc) break;
+        // 念出来不用「 · 」：「溪岸 · 自然线系列」→「自然线系列」、「SAIL · Natural Line」→「the Natural Line series」
+        var famZh = sc.ownFamily ? String(sc.family.zh || '').replace(/^溪岸\s*·\s*/, '') : '';
+        var famEn = sc.ownFamily ? String(sc.family.en || '').replace(/^SAIL\s*·\s*/, '') : '';
+        say('第 ' + no + ' 页是溪岸的「' + sc.name.zh + '」' + (famZh ? '，属于' + famZh : '') + '。',
+          'Page ' + no + ' is SAIL’s ' + sc.name.en + (famEn ? ', from the ' + famEn + ' series' : '') + '.');
+        say('它的设计理念：' + end(sc.title.zh, true), 'The idea behind it: ' + end(lower1(strip(sc.title.en)), false));
+        say(end(sc.body.zh, true), end(sc.body.en, false));
+        if (sc.noteAll) say(end(sc.noteAll.zh, true), end(sc.noteAll.en, false));
+        if (sc.quote) say('（可以念给他们听：）' + end(sc.quote.zh, true), '(You can read them this line:) ' + end(sc.quote.en, false));
+        say('你们家这一份，走的就是「' + sc.name.zh + '」：后面翻到每一个空间，都可以回想这一句。',
+          'Your home is planned in ' + sc.name.en + ', so keep this idea in mind as we go room by room.');
+        say('这样的感觉，是你们想要的吗？（停一下，听他们怎么说。）', 'Does that sound like the home you want? (Pause; let them answer.)');
+        break;
+
       case 'plan':
         var rl = p.rooms.map(function (r, i) {
           return zh ? (i + 1) + ' 号是' + roomRef(p, r, 'zh') : roomRef(p, r, 'en') + ' is number ' + (i + 1);

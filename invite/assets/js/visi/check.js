@@ -171,7 +171,7 @@
   }
 
   /**
-   * @param {object} [overflow]  预览量出来放不下的页：{ needs, plan, letter, practical, cases, rooms:[uid] }（app.js fitText）
+   * @param {object} [overflow]  预览量出来放不下的页：{ needs, plan, letter, series, practical, cases, rooms:[uid] }（app.js fitText）
    * @returns {{items: Array<{level,text,why,goto}>, score:number, total:number}}
    */
   MB.checkProject = function (p, resolve, overflow) {
@@ -282,6 +282,8 @@
     if (ov.needs) add('warn', '「你们说的」放不下，最后几条会被裁掉', '挑最痛的 3 条，或把做法写短。被裁掉的话，客户只会看到半句。', 'brief');
     if (ov.plan) add('warn', '平面图页右边的编号清单放不下', '空间太多或「这次没包含」写太长 —— 合并相近的空间，或把那句写短。', 'plan');
     if (ov.letter) add('warn', '开场短话太长，放不下', '这一页只放两三句。写短一点，客户才会读完。', 'letter');
+    // 系列页的字是溪岸的官方文案（销售改不了）：正常一定放得下，放不下多半是字体没载入（换了比较宽的退路字体）
+    if (ov.series) add('warn', '「系列 · 设计理念」那一页放不下', '这一页是溪岸的官方文案，不能删句子。多半是字体还没载入：等一下或重新整理再看；还是放不下就截图给老板。', 'series');
     if (ov.practical) add('warn', '「工期 · 保障」那一页放不下', '这一页只留几个大数字和一句回应顾虑的话，其余的当面讲。', 'practical');
     if (ov.cases) add('warn', '案例那一页放不下，句子会被裁掉', '每个案例只写一行（≤ 20 字 / 12 words），其余的当面讲。', 'cases');
     // 邀约页「为你们准备好的」三样：双语时华文、英文排成一行，太长会压到下面的时段（app.js fitText 量到才有）
@@ -332,9 +334,11 @@
     var same = p.materials.every(function (m, i) { return d.materials[i] && m.en === d.materials[i].en; });
     if (same) add('tip', '材料还是示例名称', '换成真实板材色号（例：EGGER H3303）。具体的名称比形容词可信。', 'style');
 
-    // 8 · 页数
-    var pages = MB.pageList(p).length;
-    if (pages > 14) add('warn', '共 ' + pages + ' 页，偏长', '这是一份 moodboard：页数越多，每一页越轻。合并相近的空间，关掉资讯多的页（工期 · 保障、团队、章节页），细节留到展厅讲。', 'rooms');
+    // 8 · 页数。「系列 · 设计理念」是老板要每一份都有的页（2026-11-04，默认开）：不算进「偏长」——
+    //   不然五个空间的旧方案一打开就多一条提醒，而且建议里没有、也不该叫他关掉这一页。关着的方案照旧 > 14 页提醒
+    var pageArr = MB.pageList(p), pages = pageArr.length;
+    var pageMax = 14 + (pageArr.some(function (x) { return x.type === 'series'; }) ? 1 : 0);
+    if (pages > pageMax) add('warn', '共 ' + pages + ' 页，偏长', '这是一份 moodboard：页数越多，每一页越轻。合并相近的空间，关掉资讯多的页（工期 · 保障、团队、章节页），细节留到展厅讲。', 'rooms');
 
     // 9 · 二维码网址
     var link = MB.inviteLink(p);
@@ -529,6 +533,21 @@
     });
     if (offStyle.length) add('tip', '主图和方案风格不一样：' + offStyle.join('、'),
       '客户看到另一种风格，会开始比较，而不是想象自己的家。换一张「' + d.zh + '」的图；图库没有的话，上传你们做过的同风格案例。', 'rooms');
+
+    // 「系列 · 设计理念」：旁边印的是这个系列的官方名字和文案 —— 照片拍的是别的系列（⑤ 亲手选的、导入的旧方案），
+    // 客户会以为那就是这个系列（不只是房间照：斗柜细节、护墙这类标了系列的氛围照也算）
+    var srOn = pageArr.some(function (x) { return x.type === 'series'; });
+    var srUse = uses.filter(function (u) { return u.pg.type === 'series'; })[0];
+    var srIm = srUse ? imageOf(resolve, srUse.ref) : null;
+    if (srIm && srIm.series && srIm.series !== d.series) {
+      var srName = (MB.DIRECTION[srIm.series] || {}).zh || srIm.series;
+      add('warn', '「系列 · 设计理念」的照片是另一个系列（' + srName + '）',
+        '这一页印的是「' + d.zh + '」的名字和官方文案，旁边放「' + srName + '」的照片，客户会以为那就是' + d.zh + '。到 ⑤「用哪张图」把「系列」换回「自动」，或选一张「' + d.zh + '」的照片。', 'visit');
+    } else if (srOn && !srUse && plan) {
+      // 挑不到不重复的照片（这个系列的照片、风景照都用在他们家的页面了）：方案页先印这个系列的五色（deck.js .sr-sw），不会空白
+      add('tip', '「系列 · 设计理念」没有照片可放，先印了这个系列的配色',
+        '「' + d.zh + '」的照片、风景照都已经用在他们家的页面（每张只出现一次）。要放照片：上传溪岸「' + d.zh + '」的作品照片，在 ⑤「用哪张图」的「系列」手选。', 'visit');
+    }
 
     var order = { bad: 0, warn: 1, tip: 2, ok: 3 };
     items.sort(function (a, b) { return order[a.level] - order[b.level]; });

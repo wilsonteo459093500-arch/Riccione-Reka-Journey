@@ -161,8 +161,8 @@
     // 案例库用的风格、柜类（帮我挑）
     if (typeof p.caseStyle !== 'string') p.caseStyle = '';
     if (!Array.isArray(p.cabinets)) p.cabinets = [];
-    // moodboard：资讯多的页（工期·保障、团队、章节页）默认关
-    var def = { letter: true, chapter: false, cases: true, team: false, practical: false };
+    // moodboard：资讯多的页（工期·保障、团队、章节页）默认关；系列 · 设计理念默认开（旧存档没有这个开关 = 开）
+    var def = { letter: true, series: true, chapter: false, cases: true, team: false, practical: false };
     Object.keys(def).forEach(function (k) { if (typeof p.pages[k] !== 'boolean') p.pages[k] = def[k]; });
     // 每一页都能换图：缺的版位补 null（= 自动）
     (MB.IMAGE_SLOTS || ['cover', 'letter', 'glance', 'invite', 'back']).forEach(function (k) { if (p.images[k] === undefined) p.images[k] = null; });
@@ -514,6 +514,10 @@
     // 案例风格（帮我挑用）跟新系列对不上了：清掉，免得挑出另一个系列的案例
     var cst = p.caseStyle && MB.caseStyle ? MB.caseStyle(p.caseStyle) : null;
     if (p.caseStyle && (!cst || cst.series !== nd.series)) p.caseStyle = '';
+    // 「系列 · 设计理念」那张是销售在 ⑤ 亲手选的、拍的是别的系列：换回自动 —— 不然「织」的名字和文案旁边是一间骨骼线的卧室。
+    // 不分系列的（风景、自己的图没标系列）照留
+    var sp = p.images && p.images.series ? S.resolve(p.images.series) : null;
+    if (sp && sp.series && sp.series !== nd.series) p.images.series = null;
     // 自动配的空间跟着新系列重新配；销售亲手挑过的（r.manual）、用了自己图（u:）的都不动。
     // 内置图（b:）、公司案例（c:）都是自动配的：换风格就重配
     // 这台电脑看不到的公司案例照片（同事放的、还没登入）也不动：登入后就看得到，不能被换掉
@@ -1126,6 +1130,7 @@
     ['letter', '开场短话', '先讲他们，再讲我们'],
     ['needs', '你们说的 · 我们做的', '最痛的 3 条，用他们的原话'],
     ['glance', '一页看懂', '拼贴：图 + 配色 + 材质'],
+    ['series', '系列 · 设计理念', '让客户认识这个系列的设计理念'],
     ['plan', '平面图编号', '把注意力锚在「我家」'],
     ['chapter', '章节情绪页', '预设关 · 一张大图、一句话'],
     ['cases', '参考空间', '在 ③ 挑了才出现'],
@@ -1136,7 +1141,7 @@
     ['back', '封底 · 欢迎回家', '']
   ];
   /* 每一页的图都能换（⑤）：没选 = 自动（整份不重复，按方案轮换） */
-  var SLOTS = [['cover', '封面'], ['letter', '开场'], ['glance', '一页看懂'], ['chapter', '章节'], ['practical', '工期'],
+  var SLOTS = [['cover', '封面'], ['letter', '开场'], ['glance', '一页看懂'], ['series', '系列'], ['chapter', '章节'], ['practical', '工期'],
     ['language', '品牌'], ['team', '团队'], ['invite', '邀约'], ['back', '封底']];
   /* 情绪页选图时先看「氛围 · 风景」那一类 */
   var MOOD_SLOTS = { letter: 1, chapter: 1, practical: 1, language: 1, team: 1, back: 1 };
@@ -1175,9 +1180,12 @@
     $('#slot-thumbs').innerHTML = SLOTS.map(function (s) {
       var x = slotSrc(p, s[0], plan || undefined), src = x.src, on = pageOn(p, s[0]);
       var gone = x.gone === 'blocked' ? '暂时打不开' : x.gone === 'deleted' ? (casesLocal() ? '这台电脑没有' : '已删除') : '';
+      // 系列页挑不到不重复的照片：方案页印那个系列的配色（deck.js .sr-sw）—— 缩图也是那几条色带
+      var sw = !src && !gone && s[0] === 'series' ? (MB.dir(p).palette || []).filter(function (c) { return c && /^#[0-9A-Fa-f]{6}$/.test(c.hex); }) : [];
       return '<div class="slot' + (on ? '' : ' off') + '" title="' + (on ? '' : '这一页关着 —— 打开才会印') + '">' +
         '<button type="button" class="thumb" data-slot="' + s[0] + '">' +
-          (src ? '<img src="' + esc(src) + '" alt="" />' : gone ? '<span class="img-gone" aria-hidden="true"></span><span class="case-tag warn">' + gone + '</span>' : '') + '</button>' +
+          (src ? '<img src="' + esc(src) + '" alt="" />' : gone ? '<span class="img-gone" aria-hidden="true"></span><span class="case-tag warn">' + gone + '</span>'
+            : sw.length ? '<span class="thumb-sw" title="这个系列的照片都用在别页了：先印这个系列的配色">' + sw.map(function (c) { return '<i style="background:' + c.hex + '"></i>'; }).join('') + '</span>' : '') + '</button>' +
         '<div>' + s[1] + (p.images[s[0]] ? ' · <a href="#" data-slot-auto="' + s[0] + '">自动</a>' : '') + '</div></div>';
     }).join('');
     $('#slot-auto').hidden = !(p.visit.auto && p.visit.date);
@@ -2209,11 +2217,12 @@
   /* 字太多放不下的页：先缩一号（tight）、再缩一号（tighter）；还放不下就记下来，体检提醒。
      打印时被裁掉的字不会有任何提示 —— 客户只会看到半句话 */
   function fitText() {
-    var over = { needs: false, plan: false, letter: false, practical: false, cases: false, invite: false, rooms: [] };
+    var over = { needs: false, plan: false, letter: false, series: false, practical: false, cases: false, invite: false, rooms: [] };
     function tooTall(el) { return el.scrollHeight > el.clientHeight + 2; }
     $$('#deck .pg').forEach(function (pg) {
       // .iv-flow：邀约页右栏（三样 + 时段 + 联络）—— 销售把「准备的三样」写长了会放不下
-      var box = $('.nd-list', pg) || $('.pl-side', pg) || $('.rm-txt', pg) || $('.lt-body', pg) || $('.pr-body', pg) || $('.cs-list', pg) || $('.iv-flow', pg);
+      // .sr-col：系列 · 设计理念的右栏（官方文案不删句子；字体没到时才可能放不下）
+      var box = $('.nd-list', pg) || $('.pl-side', pg) || $('.rm-txt', pg) || $('.lt-body', pg) || $('.pr-body', pg) || $('.cs-list', pg) || $('.iv-flow', pg) || $('.sr-col', pg);
       if (!box) return;
       // 参考空间页（.cs-list）：每张卡片那一行不自己裁切，太长会伸出清单底部 —— 这里（和 pptx.js）量得到
       pg.classList.remove('tight', 'tighter');
@@ -2224,7 +2233,7 @@
       if (!tooTall(box)) return;
       var g = pg.getAttribute('data-goto') || '';
       if (g.indexOf('room:') === 0) over.rooms.push(g.slice(5));
-      else if (typeof over[g] === 'boolean') over[g] = true;   // needs / plan / letter / practical / cases / invite
+      else if (typeof over[g] === 'boolean') over[g] = true;   // needs / plan / letter / series / practical / cases / invite
     });
     S.overflow = over;
   }
@@ -2241,7 +2250,7 @@
      体检的 goto 可能是分页名，也可能是页面 type（check.js 新规则用） */
   var GOTO = {
     brief: ['brief'], style: ['style'], rooms: ['rooms'], plan: ['plan'], visit: ['visit'], copy: ['copy'], library: ['library'],
-    cover: ['brief'], letter: ['brief', '#letter-panel'], needs: ['brief', '#needs-panel'], glance: ['style'],
+    cover: ['brief'], letter: ['brief', '#letter-panel'], needs: ['brief', '#needs-panel'], glance: ['style'], series: ['style'],
     chapter: ['style'], cases: ['rooms', '#cases-panel'], practical: ['visit', '#practical-panel'],
     language: ['style'], team: ['visit', '#team-panel'], invite: ['visit'], back: ['visit']
   };

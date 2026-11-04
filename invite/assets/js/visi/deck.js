@@ -6,7 +6,7 @@
    品牌设计语言照 HIPPO / Aman 两份 PPT：米色页底、半版出血大图、左上英文大写标签、
    右上 logo、右下品牌签名 + 页码、1px 细线、咖啡棕大号数字；情绪页 = 整页照片 + 一句话。
    页序（model.js 的 MB.pageList）：他们的家在前，品牌只占后面一页 ——
-     封面写名字 → 开场短话（业务署名）→ 你们说的 → 一页看懂（拼贴）→ 平面图 →（章节）
+     封面写名字 → 开场短话（业务署名）→ 你们说的 → 一页看懂（拼贴）→ 系列 · 设计理念 → 平面图 →（章节）
      → 逐个空间 → 参考空间 →（工期·保障）→ 品牌一页 →（本案团队）→ 到馆邀约 → 欢迎回家
    图（model.js 的 MB.deckImages）：整份同一张照片只出现一次；情绪页按方案 id 从氛围照池轮换。
    语言（p.lang）：英文大写标签是品牌字体，三种都印；标题与正文 zh 只华文、en 只英文、
@@ -47,6 +47,17 @@
      head          784, 150, 424, 186  标签 + 风格名 + 一句 mood
      palette       784, 352, 424, 130  5 色块（72 × 56，间距 8）+ 名字；取自参考图时多一行说明
      materials     784, 496, 424, 116  3 行：色块 + 名称 + 色号
+   series（系列 · 设计理念：只讲这份方案的那一个系列，字全部照 MB.SERIES_CONCEPT；没有客户名字）
+     photo           0, 0, 600, 720    MB.pageImageSrc(p,'series')（那个系列的溪岸照片，b: only）；
+                                       那个系列、不分系列的照片都印在别页了（不放重复的）→ .sr-sw：那个系列的五色，五条直的色带
+     col           664, 138, 544, 478  .sr-col 一条直的流（flex 直排）：
+       kick          0, 0, 544, ~56    英文大写标签（系列家族 / SAIL · Series）+ zh / bi 的华文家族
+       name          0, +30            系列名：zh / bi 华文大字（衬线 58px）+ 英文大写小标签；en 英文大字（Cormorant 58px）
+       title         0, +26            上缘 1px 细线；一句标题（衬线）
+       body          0, +16            一段话（官方文案，不删句子）
+       note          0, +14            补充（小字；MB.seriesBlocks 判断放得下才印，双语不印 —— 放不下的在讲稿）
+       philo         0, 底             贴底：上缘细线 + 小标签 + 溪岸的设计理念（MB.SAIL_PHILOSOPHY）
+                                       放不下 → .tight / .tighter（app.js fitText 量 .sr-col）
    plan
      panel           0, 0, 720, 720    #FBF8F3
      plan box       48, 48, 624, 624   平面图等比置中（deck.js 算好 width / height）
@@ -140,6 +151,7 @@
           case 'letter': html = letter(p, ctx, lang); break;
           case 'needs': html = needs(p, ctx, lang); break;
           case 'glance': html = glance(p, ctx, lang); break;
+          case 'series': html = seriesPage(p, ctx, lang); break;
           case 'plan': html = plan(p, ctx, lang); break;
           case 'chapter': html = chapter(p, ctx, lang); break;
           case 'room':
@@ -267,6 +279,7 @@
   var PAGE_NAMES = {
     cover: { en: 'Cover', zh: '封面' }, letter: { en: 'A note for you', zh: '写在前面' },
     needs: { en: 'You told us', zh: '你们说的' }, glance: { en: 'At a glance', zh: '一页看懂' },
+    series: { en: 'The series', zh: '系列 · 设计理念' },
     plan: { en: 'Layout', zh: '平面布局' }, chapter: { en: 'The spaces', zh: '逐个空间' },
     // 现在放的是溪岸自己的实拍（不是客户案例）：叫「参考空间」，不说「像你们这样的家」（稻盛：不编）。
     // 等云端案例库有每个项目的区域 / 房型 / 家庭资料，才改回「Homes like yours」
@@ -481,6 +494,67 @@
         '<ul>' + pal + '</ul>' +
       '</div>' +
       '<div class="gl-mats">' + lbl('Materials', '材质', lang) + '<ul>' + mats + '</ul></div>';
+  }
+
+  /* ---------- 4b · 系列 · 设计理念 ---------------------------------
+     老板（2026-11-04）：「我们的产品系列不要拿掉 —— 骨骼线、空山、雾山、织、侘寂东方 —— 需要给客户认识我们的好的设计理念」。
+     一页只讲这份方案的那一个系列（MB.dir(p).series），不列五个。字全部照 data.js 的 MB.SERIES_CONCEPT
+     （溪岸品牌手册 / 官方文案），不另外编、不删句子：家族标签 + 系列名 + 一句标题 + 一段话 +（放得下才印）一句补充，
+     贴底一行小字是溪岸的设计理念（MB.SAIL_PHILOSOPHY）。这一页讲的是溪岸，不印客户的名字、楼盘。
+     moodboard 字数（华文字 / 英文词）：标题 ≤ 18 / 14 · 正文 ≤ 60 / 45 · 补充 ≤ 30 / 18，而且整页（标题 + 正文 + 补充）≤ 90 / 64
+     才印补充；双语不印补充（两种语言字太多）。印不下的补充、雾山的佩索阿引文都在讲稿（copy.js 的 MB.pageNotes） */
+  var SERIES_MAX = { title: { zh: 18, en: 14 }, body: { zh: 60, en: 45 }, note: { zh: 30, en: 18 }, page: { zh: 90, en: 64 } };
+  MB.SERIES_MAX = SERIES_MAX;
+  function wc(s, L) {
+    if (typeof MB.textCount === 'function') return MB.textCount(s, L);
+    s = String(s || '');
+    return L === 'zh' ? (s.match(/[㐀-鿿]/g) || []).length : s.split(/\s+/).filter(function (w) { return /[A-Za-z0-9]/.test(w); }).length;
+  }
+  /** 系列页的字（deck、讲稿、测试共用）：
+      { series, name:{zh,en}, family:{zh,en}, ownFamily, title, body, note|null（印不印）, noteAll|null, quote|null, philosophy|null }；
+      资料不全回 null（MB.pageList 也不会排这一页） */
+  MB.seriesBlocks = function (p, lang) {
+    var d = MB.dir(p), c = MB.SERIES_CONCEPT && MB.SERIES_CONCEPT[d.series];
+    if (!c || !c.title || !c.body) return null;
+    var Ls = lang === 'bi' ? ['zh', 'en'] : [lang === 'zh' ? 'zh' : 'en'];
+    var noteOn = !!c.note && lang !== 'bi' && Ls.every(function (L) {
+      return wc(c.note[L], L) <= SERIES_MAX.note[L] &&
+        wc([c.title[L], c.body[L], c.note[L]].join(' '), L) <= SERIES_MAX.page[L];
+    });
+    return {
+      series: d.series, name: { zh: d.zh, en: d.en },
+      // 不是「自然线系列」的（雾山）不硬套家族：印通用的 SAIL · Series
+      family: c.family || { zh: '溪岸 · 系列', en: 'SAIL · Series' }, ownFamily: !!c.family,
+      title: c.title, body: c.body, note: noteOn ? c.note : null, noteAll: c.note || null, quote: c.quote || null,
+      philosophy: MB.SAIL_PHILOSOPHY || null
+    };
+  };
+  function seriesPage(p, ctx, lang) {
+    var k = MB.seriesBlocks(p, lang);
+    if (!k) return logo(false);
+    // 系列名：华文 / 双语 = 华文大字 + 英文大写小标签（品牌字体，三种语言都印）；英文 = 英文大字
+    var name = lang === 'en' ? span(k.name.en, 'en') : span(k.name.zh, 'zh') + span(k.name.en, 'en');
+    // 设计理念那一行：华文在冒号后面换行（「好的设计，正如一个自然的生命体：」一行、怎么做一行）—— 只是断行，字一个不改；
+    // 双语的华文一行就放得下，不断
+    var ph = k.philosophy, phZh = ph ? String(ph.zh || '') : '', cut = phZh.indexOf('：');
+    var phHtml = lang === 'zh' && cut > 0 && cut < phZh.length - 1
+      ? '<span class="l-zh">' + esc(phZh.slice(0, cut + 1)) + '<br />' + esc(phZh.slice(cut + 1)) + '</span>' : T(ph, lang);
+    // 照片：挑不到不重复的（这个系列、不分系列的风景 / 材质照都印在他们家的页面了）→ 印这个系列的配色（MB.DIRECTION 的五色，
+    // 不是客户照片取的那一组），五条直的色带，跟没有图的空间页一样：宁可不放图，也不放重复的
+    var im = MB.pageImageSrc ? MB.pageImageSrc(p, 'series', ctx.resolve, IMG || undefined) : null;
+    var pal = (MB.dir(p).palette || []).filter(function (c) { return c && /^#[0-9A-Fa-f]{6}$/.test(c.hex); });
+    var left = im || !pal.length ? slotPhoto(p, ctx, 'series', 'sr-img')
+      : '<div class="sr-img sr-sw" aria-hidden="true">' + pal.map(function (c) { return '<i style="background:' + c.hex + '"></i>'; }).join('') + '</div>';
+    return left + logo(false) +
+      '<div class="sr-col">' +
+        '<div class="sr-kick">' + kicker(k.family.en) + (lang !== 'en' ? span(k.family.zh, 'zh') : '') + '</div>' +
+        '<h2 class="sr-name">' + name + '</h2>' +
+        '<p class="sr-title">' + T(k.title, lang) + '</p>' +
+        '<div class="sr-body">' + T(k.body, lang) + '</div>' +
+        (k.note ? '<p class="sr-note">' + T(k.note, lang) + '</p>' : '') +
+        (k.philosophy ? '<div class="sr-philo">' + lbl('Our design philosophy', '溪岸的设计理念', lang) +
+          '<p class="sr-ph">' + phHtml + '</p></div>' : '') +
+      '</div>';
   }
 
   /* ---------- 5 · 平面图 ------------------------------------ */
