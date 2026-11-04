@@ -20,6 +20,14 @@
    - 一张案例照片载不出来（app.js 抓到 <img> 的 error → photoFailed）：这台电脑的清单可能是旧的（刚被删掉）、
      或案例库刚被暂停（10 分钟一次的更新还没问到）—— 马上问一次伺服器（最多一分钟一次）；伺服器问不到、
      或还是说清单里有，就 HEAD 那一张：404 = 档案已经不在了（当成已删除）、403 = 暂停中（伺服器问不到时才算）
+   - 本机案例库（案例库页选了「存在这台电脑」，MB.localSw.isLocal()）：同样的 /api/* 由这台电脑的 service worker
+     （caselib-sw.js）回答，照片在 <这个网址>/local-cases/…。这里几乎照旧，只是：
+     先等 service worker 接手这一页再发请求（不会跑去问云端）；不会有「Vercel 暂停中」（不试照片、不记暂停）；
+     status().local = true（图库那一格改说「本机案例库 · N 张（存在这台电脑）」）；
+     方案里有、这台电脑没有的案例照片：model.js 当成「这台电脑没有」（体检叫他先汇入那个项目的文件夹），不说「已删除」
+     两种清单分开存（meta 'index' = 云端、'index-local' = 本机），ETag 也照伺服器给的原样送回去（本机是 "local-rev-N"）：
+     换了模式不会拿到另一边的清单、照片网址，也不会因为 rev 刚好一样就 304。
+     另一边存着的清单里有的照片（例：本机的照片、现在是云端模式）：不说「已删除」，当成看不到（留着、体检说改回那一边就看得到）
    对外：MB.cloud.{ loadCached, refresh, me, login, logout, thumbs, thumb, entries, projects, status, onChange, proxySrc, photoFailed }
    ============================================================ */
 (function () {
@@ -53,8 +61,19 @@
   var MISSING = {};        // h16 → 1：照片档已经不在了（HEAD 回 404）—— 这次开着当成已删除（不存，重新整理再确认一次）
   var FAILQ = {}, HEADED = {}, failJob = null, failAt = 0;   // photoFailed：排队、每张只试一次、问伺服器的时间
   var pub = null;          // 上次交给 model.js 的状态 { stale, trust, blocked }：变了才重发（重排一次方案）
+  var ETAG = '';           // 上次拿到这份清单时伺服器 / service worker 给的 ETag（原样送回去问有没有新的）
+  var OTHER = {};          // h16 → 'local' | 'cloud'：另一个模式存着的清单里有的照片（这里没有也不是被删掉）
 
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  /** 本机案例库（案例库页选了「存在这台电脑」） */
+  function isLocal() { return !!(MB.localSw && MB.localSw.isLocal()); }
+  /** 这个模式的清单存在 IndexedDB 哪一笔：云端、本机分开（换模式不会拿错） */
+  function idxKey(local) { return local ? 'index-local' : 'index'; }
+  /** 本机案例库的照片网址开头（<这个网址>/local-cases/） */
+  function localBase() { return (location.origin || '') + '/local-cases/'; }
+  function isLocalBase(b) { return typeof b === 'string' && b === localBase(); }
+  /** 本机：等 service worker 接手这一页（不然 /api 会跑去问云端）。false = 这个浏览器开不了 */
+  function gate() { return isLocal() ? MB.localSw.ready() : Promise.resolve(true); }
   function lsSet(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} }
 
   /* ---------- IndexedDB（打不开就当没有快取：无痕模式照样能用） ---------- */
@@ -187,7 +206,7 @@
   function publish() {
     ENTRIES.forEach(function (e) { e.stale = !!state.stale; });
     pub = { stale: !!state.stale, trust: trusted(), blocked: !!state.blocked };
-    if (typeof MB.setCases === 'function') MB.setCases(ENTRIES, { current: pub.trust, purged: IDX ? IDX.purged || [] : [] });
+    if (typeof MB.setCases === 'function') MB.setCases(ENTRIES, { current: pub.trust, purged: IDX ? IDX.purged || [] : [], local: isLocal(), elsewhere: Object.keys(OTHER) });
     state.count = ENTRIES.filter(function (e) { return !e.hidden && e.status !== 'unsure' && !e.gone; }).length;
     notify('cases');
   }
@@ -225,27 +244,32 @@
   }
   function status() {
     return { status: state.status, user: state.user, rev: IDX ? IDX.rev : 0, checked: state.checked, count: state.count, error: state.error,
-      cached: !!IDX, stale: !!state.stale, loggedOut: !!state.loggedOut, blocked: !!state.blocked };
+      cached: !!IDX, stale: !!state.stale, loggedOut: !!state.loggedOut, blocked: !!state.blocked, local: isLocal() };
   }
   /** 这台电脑登入着（登入过、没按登出）：才去问伺服器。只存着清单不算（登出后不再问） */
   function wanted() { return lsGet(FLAG) === '1' && !state.loggedOut; }
 
   function save() {
     if (!IDX) return Promise.resolve();
-    return idbPut('meta', { k: 'index', index: IDX, checked: state.checked, user: state.loggedOut ? '' : state.user,
+    // 存在跟照片网址对得上的那一笔（本机的 /local-cases/ → 'index-local'）：中途换了模式也不会存错边
+    return idbPut('meta', { k: idxKey(IDX.base ? isLocalBase(IDX.base) : isLocal()), index: IDX, etag: ETAG, checked: state.checked, user: state.loggedOut ? '' : state.user,
       stale: !!state.stale, loggedOut: !!state.loggedOut, blocked: state.blocked ? { by: state.blocked, at: state.blockedAt } : null });
   }
 
   /* ---------- 网路 ---------- */
   function call(method, path, body, extra) {
-    var opts = { method: method, credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' } };
+    // X-Caselib-Mode：service worker 照这一页的模式决定自己回答（本机）还是交给伺服器（云端）
+    var opts = { method: method, credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json', 'X-Caselib-Mode': isLocal() ? 'local' : 'cloud' } };
     if (method !== 'GET') opts.headers['X-VISI'] = '1';   // 伺服器挡跨站写入（CSRF）要这个
     if (body != null) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
     Object.keys(extra || {}).forEach(function (k) { opts.headers[k] = extra[k]; });
-    return fetch(API + path, opts).then(function (r) {
+    return gate().then(function (ok) {
+      if (!ok) throw new Error('local case library is not ready');
+      return fetch(API + path, opts);
+    }).then(function (r) {
       var json = /json/i.test(r.headers.get('Content-Type') || '');
       return (json && r.status !== 304 ? r.json().catch(function () { return null; }) : Promise.resolve(null)).then(function (data) {
-        return { status: r.status, ok: r.ok, json: json, data: data };
+        return { status: r.status, ok: r.ok, json: json, data: data, etag: r.headers.get('ETag') || '' };
       });
     });
   }
@@ -264,9 +288,21 @@
   MB.cloud = {
     /** 开机：读这台电脑存着的清单（不发请求）。永远 resolve（回几张案例） */
     loadCached: function () {
-      return idbGet('meta', 'index').then(function (rec) {
+      var local = isLocal();
+      // 另一个模式存着的清单：只拿照片 id（那边有的照片，这里没有也不是被删掉）
+      idbGet('meta', idxKey(!local)).then(function (rec) {
+        var other = rec && rec.index && rec.index.photos && typeof rec.index.photos === 'object' ? rec.index.photos : null;
+        if (!other || (!!local === isLocalBase(rec.index.base))) return;
+        var tag = local ? 'cloud' : 'local', n = 0;
+        Object.keys(other).forEach(function (h) { if (HEX16.test(h) && !OTHER[h]) { OTHER[h] = tag; n++; } });
+        if (n && IDX) publish();
+      }).catch(function () {});
+      return idbGet('meta', idxKey(local)).then(function (rec) {
+        // 以前（只存一份）可能是另一边的：照片网址对不上这个模式就不用（本机 = /local-cases/，云端 = 别的）
+        if (rec && rec.index && !!local !== isLocalBase(rec.index.base)) rec = null;
         if (rec && rec.index) {
           IDX = sanitize(rec.index);
+          ETAG = typeof rec.etag === 'string' && rec.etag.length < 100 ? rec.etag : '';
           state.checked = +rec.checked || 0;
           // 登出过（或案例库管理页登出、清掉了 FLAG）：不要又显示「已登入：某某」
           if (rec.loggedOut || lsGet(FLAG) !== '1') { state.loggedOut = true; state.user = ''; }
@@ -274,7 +310,8 @@
           state.stale = !!(rec.stale || state.loggedOut);
           // 上次知道的是「暂停中」：照片网址会回 403 —— 先当暂停中（第一次排版就不会破图），问到伺服器 / 试到照片正常再恢复
           var bl = rec.blocked && typeof rec.blocked === 'object' ? rec.blocked : null;
-          if (bl && (bl.by === 'api' || bl.by === 'probe')) { state.blocked = bl.by; state.blockedAt = +bl.at || 0; }
+          // 本机案例库不会被 Vercel 暂停：以前记的「暂停中」不算
+          if (bl && (bl.by === 'api' || bl.by === 'probe') && !isLocal()) { state.blocked = bl.by; state.blockedAt = +bl.at || 0; }
         }
       }).catch(function () {}).then(function () {
         build(); publish();
@@ -294,9 +331,12 @@
         return Promise.resolve(status());
       }
       if (inflight) return inflight;
-      var extra = IDX && IDX.rev ? { 'If-None-Match': '"rev-' + IDX.rev + '"' } : {};
+      // 送回上次拿到的 ETag（原样）。旧的快取没存 ETag：云端照伺服器的样子拼一个；本机就整份重拿
+      var tag = ETAG || (IDX && IDX.rev && !isLocal() ? '"rev-' + IDX.rev + '"' : '');
+      var extra = IDX && tag ? { 'If-None-Match': tag } : {};
       inflight = call('GET', 'catalog?view=visi', null, extra).then(function (r) {
         if (r.status === 304) {
+          if (r.etag) ETAG = r.etag;
           state.checked = Date.now(); state.loggedOut = false; state.stale = false;
           setBlocked('');
           setStatus('ok'); save();
@@ -310,6 +350,9 @@
         var idx = sanitize(r.data);
         if (!idx) { setStatus('offline', 'bad catalog'); return; }
         IDX = idx;
+        ETAG = r.etag || '';
+        // 这份清单的照片：另一边也有的就不算「另一边的」了
+        Object.keys(idx.photos).forEach(function (h) { delete OTHER[h]; });
         state.checked = Date.now();
         state.stale = false; state.loggedOut = false;
         lsSet(FLAG, '1');
@@ -425,6 +468,8 @@
     },
     /** 测试 / 管理用：现在就试一次（不管一天一次的限制）。回 Promise<status()> */
     probe: function () { return probe(true) || Promise.resolve(status()); },
+    /** 这张案例（ref 'c:<h16>'）在另一个模式的案例库里：'local'（本机）| 'cloud'（云端）| ''。体检用来说「改回那一边就看得到」 */
+    elsewhere: function (ref) { var h = String(ref || '').slice(2); return IDX && IDX.photos[h] ? '' : OTHER[h] || ''; },
     /** 方案页 / 编辑区一张案例照片载不出来（app.js 抓 <img> 的 error）：去确认是删掉了还是暂停中。
         确认了就重建（notify 'cases'），方案页改印占位框、体检会说。回 Promise<status()> */
     photoFailed: function (src) { return photoFailed(src); },
@@ -443,6 +488,7 @@
   }
   function probe(now) {
     if (probing) return probing;
+    if (isLocal()) return null;            // 本机案例库：照片在这台电脑，不会被暂停
     if (!IDX || typeof fetch !== 'function' || (navigator && navigator.onLine === false)) return null;
     if (!now && state.status !== 'offline' && state.status !== 'login') return null;
     var k = probeKey();
@@ -469,6 +515,10 @@
   function photoFailed(src) {
     var base = IDX && IDX.base;
     if (!base || typeof src !== 'string' || src.indexOf(base) !== 0 || state.blocked) return Promise.resolve(status());
+    // 本机：service worker 还没接手这一页（刚打开）—— 载不到是正常的，接手后会重画，不能当成已删除
+    if (isLocal() && !MB.localSw.controlled()) return Promise.resolve(status());
+    // 本机的照片网址、现在却不是本机模式（改用云端了）：没有 service worker 回答，404 不代表被删掉
+    if (!isLocal() && isLocalBase(base)) return Promise.resolve(status());
     var k = src.slice(base.length), h = k.slice(2, 18);
     if (!PHOTO_K.test(k) || !HEX16.test(h) || MISSING[h] || HEADED[k]) return failJob || Promise.resolve(status());
     if (typeof fetch !== 'function' || (navigator && navigator.onLine === false)) return Promise.resolve(status());
@@ -508,12 +558,22 @@
     return failJob;
   }
 
+  // 本机：service worker 刚接手这一页（第一次打开）→ 照片现在拿得到了：重排一次、问一次清单
+  if (isLocal() && navigator.serviceWorker && !MB.localSw.controlled()) {
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      Object.keys(PACKS).forEach(function (k) { if (PACKS[k] === 'fail') delete PACKS[k]; });
+      fresh = true;
+      sync();
+      if (wanted()) MB.cloud.refresh(true);
+    });
+  }
+
   function loadPack(k) {
     var job = idbGet('packs', k).then(function (rec) {
       if (rec && rec.thumbs) return rec.thumbs;
       if (!IDX || !IDX.base) throw new Error('no base');
       if (state.blocked) throw new Error('blocked');   // 恢复时 sync() 会把这些「载不到」清掉、再试
-      return fetch(IDX.base + k, { mode: 'cors', credentials: 'omit' }).then(function (r) {
+      return gate().then(function () { return fetch(IDX.base + k, { mode: 'cors', credentials: 'omit' }); }).then(function (r) {
         if (!r.ok) throw new Error('http ' + r.status);
         return r.json();
       }).then(function (data) {

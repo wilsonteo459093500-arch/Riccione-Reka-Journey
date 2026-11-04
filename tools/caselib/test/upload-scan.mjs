@@ -340,12 +340,15 @@ test('phone path: loose photos need a project name before starting', async () =>
   assert.deepEqual(page.errors, []);
 });
 
-test('team password not set on the server → «还没启用» screen (503)', async () => {
+test('team password not set on the server → «还没启用» screen (503) after choosing 云端', async () => {
   const old = process.env.VISI_TEAM_PASSWORD;
   process.env.VISI_TEAM_PASSWORD = '';
   try {
     const one = await newPage(browser);
     await one.page.goto(m.url + '/caselib');
+    // 还没选过存在哪里：先选好「存在这台电脑」（一个请求都不发）；选云端才去问伺服器
+    await one.page.waitForSelector('#mode-local[aria-pressed="true"]');
+    await one.page.click('#mode-cloud');
     await one.page.waitForSelector('#not-config:not([hidden])');
     assert.match(await one.page.textContent('#not-config'), /VISI_TEAM_PASSWORD/);
     assert.equal(await one.page.isHidden('#login'), true);

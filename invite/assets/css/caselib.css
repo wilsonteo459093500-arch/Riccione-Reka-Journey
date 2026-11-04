@@ -93,6 +93,41 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .login-card .field { margin-bottom: 16px; }
 .login-card input { padding: 11px 13px; font-size: 15px; }
 .login-card .btn { width: 100%; margin-top: 4px; }
+/* 照片存在哪里：存在这台电脑 / 云端 */
+.mode-pick { display: grid; gap: 8px; margin: 4px 0 16px; }
+.mode-pick .q { margin: 0 0 2px; }
+.mode-opt {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; width: 100%; text-align: left; cursor: pointer;
+  border: 1px solid var(--line); background: rgba(255,255,255,.6); padding: 11px 13px; font: 400 14px/1.35 var(--sans); color: var(--ink);
+}
+.mode-opt b { font-weight: 500; }
+.mode-opt small { color: var(--ink-faint); font-size: 12.5px; }
+.mode-opt[aria-pressed="true"] { border-color: var(--night); background: var(--night); color: var(--paper); }
+.mode-opt[aria-pressed="true"] small { color: rgba(244,240,232,.75); }
+.login-card .local-note { color: #3F5A43; background: rgba(63,107,67,.08); padding: 8px 10px; }
+.login-card .local-space { margin: 12px 0 0 !important; color: var(--ink-faint); }
+.login-card .local-safari { margin: 10px 0 0 !important; color: #A8402A; background: rgba(194,85,59,.08); padding: 8px 10px; }
+.login-card .local-safari[hidden] { display: none; }
+/* 存在这台电脑：浏览器还没答应保留 → 一直显示，叫他备份标签档 */
+.cl-keep { max-width: 1080px; margin: 18px auto 0; padding: 10px 14px; border-left: 2px solid #C2553B; background: rgba(194,85,59,.07);
+  font-size: 13.5px; line-height: 1.5; color: var(--ink-soft); }
+.cl-keep[hidden] { display: none; }
+.cl-keep b { font-weight: 500; color: #A8402A; }
+/* 上传页的说明：照模式只显示一种 */
+.cl-body .local-only { display: none; }
+.cl-body.cl-local .local-only { display: block; }
+.cl-body.cl-local .cloud-only { display: none; }
+#who-mode:empty { display: none; }
+/* 审核：分类（自动标、标签档） */
+.rv-tags { border: 1px solid var(--line); background: rgba(255,255,255,.5); padding: 10px 14px; margin: 0 0 14px; }
+.rv-tags .tags-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.rv-tags .tags-t { display: flex; flex-direction: column; margin-right: auto; min-width: 0; }
+.rv-tags .tags-t b { font-weight: 500; }
+.rv-tags .tags-t small { color: var(--ink-faint); font-size: 12px; }
+.rv-tags .tidy-msg p { margin: 8px 0 0; font-size: 13px; }
+.rv-tags .tidy-msg .ok { color: #3F6B43; }
+.rv-tags .tidy-msg .err { color: #A4402B; }
+.rv-tags label.mini { cursor: pointer; }
 
 /* ---------- 上传：拖放区 ----------------------------------- */
 .cl-drop {
@@ -474,6 +509,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .tidy-msg p { margin: 10px 0 0; font-size: 13px; line-height: 1.7; color: var(--ink-soft); }
 .tidy-msg p.err { color: #A8402A; }
 .tidy-msg p.ok { color: #3F6B43; }
+.tidy-msg p.warn { color: #A8402A; }
+button.linkish { background: none; border: 0; padding: 0; font: inherit; }
 .tidy-msg .mini { margin-top: 8px; }
 .dr-keep { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
 

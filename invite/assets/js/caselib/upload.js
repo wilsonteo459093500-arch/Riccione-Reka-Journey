@@ -16,6 +16,8 @@
    - 被什么挡住要讲对：空间满了（bytes）不会下个月就好 → 叫他先到「审核」删除隐藏的照片；写入次数（writes）才是下个月再传。
    - 读不到的档（选好之后被改过、搬走、云端档还没下载）：算比对完，这次不传、列出来（「再读一次」）—— 不会卡住开始按钮。
    - 开始时重拿额度，定下来的放不下了（别人刚好也在传）：开始前就照重要顺序砍掉（没分析过就照档名），不等伺服器回 507。
+   - 「存在这台电脑」（quota.plan = 'local'，caselib-sw.js 回答）：跟 Pro 一样没有每月的上限，精选预设关着（还是可以打开）；
+     额度框改成「存在这台电脑 · 已用约 X / 可用约 Y」。浏览器给的空间满了 → 507 bytes，一样整批停下来
 
    流程（每张）：算 hash → 库里有了就跳过 → 压图（worker）→ POST /api/photo
               → 记进「已上传、未登记」日志（IndexedDB）→ 每 20 张 addPhotos 登记一次 → 删日志
@@ -348,7 +350,8 @@
   function budget() {
     var q = CL.quota(CL.cat || {});
     var u = usage(q);
-    if (q.plan === 'pro') return { pro: true, q: q, u: u, w: Infinity, b: Infinity, N: Infinity, M: Infinity, allowed: Infinity, zero: '' };
+    // Pro、存在这台电脑：没有每月的上限
+    if (q.plan === 'pro' || q.plan === 'local') return { pro: true, local: q.plan === 'local', q: q, u: u, w: Infinity, b: Infinity, N: Infinity, M: Infinity, allowed: Infinity, zero: '' };
     // 今天第一次写入前伺服器会先备份一次清单（也算 1 次写入）
     var w = Math.max(0, (q.writesLeft | 0) - pendingCost() - (u.wroteToday ? 0 : 1));
     var b = Math.max(0, +q.bytesLeft || 0);
@@ -890,7 +893,8 @@
     if (e === 'storage_busy') return 'Blob 太忙（限流）';
     if (e === 'storage_timeout') return 'Blob 太久没回应';
     if (e === 'storage_blocked') return 'Blob 不让写入：' + ((r.json && r.json.message) || '');
-    if (e === 'quota') return '这个月的免费额度到了';
+    // 存在这台电脑（caselib-sw.js 回 507 quota + local）：是这台电脑的空间满了，不是每月的额度
+    if (e === 'quota') return (r.json && r.json.local) || CL.mode === 'local' ? '这台电脑的空间满了' : '这个月的免费额度到了';
     return '伺服器回 ' + r.status + (e ? ' ' + e : '');
   }
   function retryable(r) {
@@ -1131,7 +1135,7 @@
       store.del('pending', r.h).catch(function () { /* 留着也没关系：下次登记伺服器会当成已有 */ });
       if (!dup[r.h]) {
         // 记下「刚登记好」：重新整理后 CDN 可能还给旧清单，这些照片不能又被当成新的
-        var d = { h: r.h, pid: out.pid || r.pid, rev: out.rev | 0, ts: now };
+        var d = { h: r.h, pid: out.pid || r.pid, rev: out.rev | 0, ts: now, local: CL.mode === 'local' };
         DONE[r.h] = d;
         store.put('committed', d).catch(function () { /* 记不进去：最多重传几张 */ });
       }
@@ -1199,14 +1203,16 @@
      空间满了不会下个月就好：要先到「审核」删除隐藏的照片 */
   function quotaText(running, reason) {
     var space = (reason || S.stopReason) === 'bytes';
-    var t = space ? '案例库的空间快满了，已经自动停下来，免得 Vercel 把案例库停权。' :
+    var t = CL.mode === 'local' ? '这台电脑给浏览器的空间满了，已经自动停下来。' :
+      space ? '案例库的空间快满了，已经自动停下来，免得 Vercel 把案例库停权。' :
       '这个月的免费额度快用完了，已经自动停下来，免得 Vercel 把案例库停权。';
     if (running) return t + '正在把传好的照片登记好…';
     var left = pendingCommits();
     var rest = (S.queue || []).filter(function (it) { return it.st === 'wait'; }).length;
     t += left ? '还有 ' + CL.n(left) + ' 张已经传上去、还没登记：资料留在这台电脑，下次打开这一页会自动补登记（不会重传）。' : '传好的照片都已经登记。';
     if (rest) {
-      t += space ? '剩下的 ' + CL.n(rest) + ' 张：先到「审核」删除隐藏的照片，释放空间，再拖同一个文件夹接着传（传过的不会重传）。' :
+      t += CL.mode === 'local' ? '剩下的 ' + CL.n(rest) + ' 张：先到「审核」删除隐藏的照片、或清出一些硬碟空间，再拖同一个文件夹接着传（传过的不会重传）。' :
+        space ? '剩下的 ' + CL.n(rest) + ' 张：先到「审核」删除隐藏的照片，释放空间，再拖同一个文件夹接着传（传过的不会重传）。' :
         '剩下的 ' + CL.n(rest) + ' 张下个月再传（到时再拖同一个文件夹就会接着传）。';
     }
     return t;
@@ -1214,6 +1220,8 @@
 
   function finish() {
     if (S.stopKind === 'quota') S.fatal = quotaText(false);
+    // 存在这台电脑：传了一批之后再问一次浏览器答应保留了没有（没答应就一直提醒他备份）
+    if (CL.mode === 'local' && CL.checkKeep) CL.checkKeep();
     S.running = false;
     S.done = true;
     S.paused = false;
@@ -1225,7 +1233,9 @@
     CL.loadCatalog().catch(function () { /* 下次再拿 */ }).then(render);
   }
 
-  /* ---------- 开机：补登记上次没登记的 ---------- */
+  /* ---------- 开机：补登记上次没登记的 ----------
+     只拿这个模式的（本机传的 sig = 'local'）：另一边（云端 / 这台电脑）传好、还没登记的留在日志里，换回去才补登记 */
+  function sameMode(local) { return !!local === (CL.mode === 'local'); }
   function recover() {
     // 最近登记好的：放回 DONE，也把 minRev 设回去（拿到比它旧的清单 = CDN 还没更新）；过期的删掉
     store.all('committed').then(function (list) {
@@ -1233,6 +1243,7 @@
       list.forEach(function (d) {
         if (!d || !d.h) return;
         if (now - d.ts >= KEEP_DONE) { store.del('committed', d.h).catch(function () { /* 下次再删 */ }); return; }
+        if (!sameMode(d.local)) return;
         DONE[d.h] = d;
         if ((d.rev | 0) > top) top = d.rev | 0;
       });
@@ -1240,7 +1251,8 @@
       if (list.length && S.scan) render();
     }, function () { /* 读不到就算了 */ });
     return store.all('pending').then(function (list) {
-      list.forEach(function (r) { if (r && r.h) J[r.h] = r; });
+      list = list.filter(function (r) { return r && r.h && sameMode(r.sig === 'local'); });
+      list.forEach(function (r) { J[r.h] = r; });
       var n = list.length;
       if (!n) return;
       CQ.recovering = true;
@@ -1258,6 +1270,7 @@
     var left = Object.keys(J).length;
     box.hidden = false;
     box.innerHTML = !left ? '<span>上次没登记的照片都补登记好了 ✓</span>' :
+      CQ.halt && CL.mode === 'local' ? '<span>还有 ' + CL.n(left) + ' 张已上传、还没登记：这台电脑的空间满了。清出一些硬碟空间、或到「审核」删除隐藏的照片，再打开这一页就会自动补登记（不会重传）。</span>' :
       CQ.halt ? '<span>还有 ' + CL.n(left) + ' 张已上传、还没登记：这个月的免费额度不够登记了。资料留在这台电脑，下个月打开这一页会自动补登记（不会重传）。</span>' :
       commitsStopped() ? '<span>还有 ' + CL.n(left) + ' 张已上传、还没登记：' + esc(S.fatal) + '</span>' :
       '<span>还有 ' + CL.n(left) + ' 张没登记成功，等一下会再试。</span>';
@@ -1528,6 +1541,12 @@
 
   function budgetBox(sel, est) {
     var bud = sel.bud, q = bud.q;
+    if (bud.local) {
+      var used = +q.bytes || 0, left = q.bytesLeft != null ? q.bytesLeft : null;
+      return '<div class="budget pro local"><p class="b-big"><b>存在这台电脑 · 已用约 ' + esc(CL.mb(used)) +
+        (left != null ? ' / 可用约 ' + esc(CL.mb(left)) : '') + '</b></p>' +
+        '<p class="b-note">这次约 ' + CL.mb(est.bytes) + '。没有每月的次数限制。照片只在这台电脑的浏览器里：<b>不要清除浏览器的资料</b>，不然照片会不见。</p></div>';
+    }
     if (bud.pro) {
       return '<div class="budget pro"><p class="b-big"><b>Pro 方案：不限额度</b></p>' +
         '<p class="b-note">这次约 ' + CL.n(est.writes) + ' 次写入、' + CL.mb(est.bytes) + '。</p></div>';

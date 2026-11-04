@@ -6,6 +6,11 @@
    - 登入 / 登出；needLogin()：中途 401 时叫出登入框，登入后原来的工作接着做（不丢上传、不丢未保存的修改）
    - 清单 catalog（view=full：含项目真名，只给业务）的快取与重新载入
    - 分页（上传 / 审核）、toast、小工具
+   - 存在哪里（CL.mode）：'local' =「存在这台电脑」（免费，现在就能用：caselib-sw.js 在浏览器里回答 /api/*，
+     照片在这台电脑的 IndexedDB，只要名字、不用密码）· 'cloud' = 云端（Vercel，要团队密码）。
+     还没选过：登入框先选好「存在这台电脑」。切换不会删掉本机的资料（MB.localSw，local-sw.js）。
+     登入框上点「云端」只是先问问伺服器：登入成功才记下「云端」（VISI 也才跟着换）；每个请求都带 X-Caselib-Mode，
+     service worker 照这一页说的模式回答（另一个分页换了模式也不会弄错）
    上传在 upload.js，审核在 review.js，读文件夹在 scan.js，照片处理在 worker.js。
    ============================================================ */
 (function () {
@@ -20,6 +25,7 @@
 
   var CL = MB.cl = {
     me: '',
+    mode: '',           // 'local' | 'cloud'：登入后定下来（还没登入时看登入框选的 pickMode）
     cat: null,          // 目前的清单（full）
     etag: '',           // 上次从伺服器拿到的那一版
     minRev: 0,          // 自己写入后伺服器回的 rev：拿到比它旧的清单 = CDN 还没更新
@@ -122,7 +128,12 @@
      回 {status, json, etag}；网路断 → status 0。呼叫的人自己看 status 决定怎么办 */
   CL.api = function (method, path, body, opts) {
     opts = opts || {};
-    var headers = {};
+    // 本机模式：一定要经过 service worker（不然会跑去问云端）。还没接手就当网路断了，不送出去
+    if (CL.mode === 'local' && MB.localSw && !MB.localSw.controlled() && /^\/api\//.test(path)) {
+      return Promise.resolve({ status: 0, json: null, error: 'local_sw' });
+    }
+    // 这一页是哪个模式：service worker 照这个决定自己回答还是交给伺服器
+    var headers = { 'X-Caselib-Mode': CL.mode === 'local' ? 'local' : 'cloud' };
     var payload;
     if (method !== 'GET') headers['X-VISI'] = '1';
     if (body instanceof Blob) { payload = body; headers['Content-Type'] = opts.type || body.type || 'application/octet-stream'; }
@@ -267,10 +278,12 @@
   CL.quota = function (cat) {
     cat = cat || CL.cat || {};
     var q = cat.quota;
-    if (q && typeof q === 'object' && (q.plan === 'pro' || q.plan === 'hobby')) {
+    if (q && typeof q === 'object' && (q.plan === 'pro' || q.plan === 'hobby' || q.plan === 'local')) {
       var out = {};
       Object.keys(q).forEach(function (k) { out[k] = q[k]; });
       if (q.plan === 'pro') { out.writesLeft = null; out.bytesLeft = null; out.uploadCap = null; out.bytesCap = null; }
+      // 存在这台电脑：没有每月的次数上限（跟 Pro 一样）；空间是浏览器给的（只拿来显示）
+      else if (q.plan === 'local') { out.writesLeft = null; out.uploadCap = null; out.writeCap = null; }
       else {
         out.uploadCap = q.uploadCap == null ? CL.LIMIT_WRITES : q.uploadCap;
         out.bytesCap = q.bytesCap == null ? CL.LIMIT_BYTES : q.bytesCap;
@@ -298,6 +311,85 @@
   CL.on = function (ev, fn) { (handlers[ev] = handlers[ev] || []).push(fn); };
   CL.emit = function (ev, data) { (handlers[ev] || []).forEach(function (fn) { try { fn(data); } catch (e) { console.error(e); } }); };
 
+  /* ---------- 存在哪里：这台电脑 / 云端 ---------- */
+  var LS = MB.localSw || null;
+  function localOk() { return !!(LS && LS.supported); }
+  // 登入框上现在选的（还没登入）；登入后 = CL.mode
+  CL.pickMode = '';
+  function drawMode() {
+    var m = CL.pickMode;
+    $$('#mode-pick [data-mode]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-mode') === m)); });
+    $$('#login .mode-local-only').forEach(function (el) { el.hidden = m !== 'local'; });
+    var sf = $('#local-safari');
+    if (sf) sf.hidden = m !== 'local' || !(LS && LS.safari);
+    $$('#login .mode-cloud-only').forEach(function (el) { el.hidden = m !== 'cloud'; });
+    $('#login-title').textContent = m === 'local' ? '案例库 · 存在这台电脑' : '案例库 · 员工登入';
+    $('#login-go').textContent = m === 'local' ? '开始用' : '登入';
+    if (m === 'local') drawSpace($('#local-space'), true);
+  }
+  // 这台电脑的空间（浏览器给这个网站的）：已用 / 可用
+  function drawSpace(el, intro) {
+    if (!el || !LS) return;
+    LS.estimate().then(function (e) {
+      if (!e || !(e.quota > 0)) { el.textContent = ''; return; }
+      el.textContent = (intro ? '这台电脑的浏览器给案例库的空间：' : '') + '已用约 ' + CL.mb(e.usage || 0) + ' / 可用约 ' + CL.mb(Math.max(0, e.quota - (e.usage || 0)));
+    });
+  }
+  CL.drawSpace = drawSpace;
+  // 游标放到登入框：已经在打字（某个输入框有焦点）就不要抢走
+  function focusLogin(el) {
+    setTimeout(function () {
+      var a = document.activeElement;
+      if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA') && $('#login').contains(a)) return;
+      if (el && !el.closest('[hidden]')) el.focus();
+    }, 30);
+  }
+  function pickMode(m) {
+    if (m === 'local' && !localOk()) {
+      var line = $('#login-err');
+      line.textContent = '这个浏览器不能用「存在这台电脑」（无痕模式、或浏览器太旧）：请用一般视窗的 Chrome 或 Edge。';
+      line.classList.add('on');
+      return;
+    }
+    if (m === CL.pickMode) return;
+    CL.pickMode = m;
+    $('#login-err').classList.remove('on');
+    drawMode();
+    if (m === 'cloud') {
+      // 选云端：先问伺服器（已经登入过就直接进去；还没设定好就说清楚）。
+      // 还不记下来：登入成功才换（commitCloud），点一下又点回来、或关掉这一页，VISI 照样用这台电脑的
+      CL.mode = 'cloud';
+      cloudSession(true);
+    } else {
+      CL.mode = '';            // 按「开始用」才定下来
+    }
+    focusLogin($('#login-name'));
+  }
+  // 云端登入成功了：才记下「云端」、取消 service worker（本机的资料不删）
+  function commitCloud() {
+    if (LS && LS.mode() !== 'cloud') LS.setMode('cloud');
+  }
+
+  /* 存在这台电脑：浏览器答应一直保留了没有（没答应 = 硬碟快满时整个案例库可能被清掉）。
+     每次打开、每次上传完都再问一次；没答应、或是 Safari（7 天没打开就清掉）就一直显示，叫他备份标签档 */
+  CL.persisted = null;
+  CL.checkKeep = function () {
+    var el = $('#local-keep');
+    if (!el) return Promise.resolve(null);
+    if (!LS || CL.mode !== 'local' || !CL.me) { el.hidden = true; return Promise.resolve(null); }
+    return LS.persisted().then(function (ok) { return ok || LS.persist(); }).then(function (ok) {
+      CL.persisted = ok;
+      if (CL.mode !== 'local') { el.hidden = true; return ok; }
+      var t = LS.safari ? '<b>这是 Safari：</b>Safari 只要 7 天没打开这个网址，就会把存在这台电脑的照片和分类清掉。请改用 Chrome 或 Edge；' +
+          '要继续用，就常打开这一页，并定期到「审核」按「汇出标签档」备份分类。' :
+        ok ? '' : '<b>浏览器还没答应一直保留这些资料</b>（硬碟快满时可能被清掉）：请定期到「审核」按「汇出标签档」备份分类。' +
+          '把这个网址加进书签、常常打开，浏览器比较会答应。';
+      el.innerHTML = t;
+      el.hidden = !t;
+      return ok;
+    });
+  };
+
   /* ---------- 登入 ---------- */
   function showLogin(overlay) {
     var box = $('#login');
@@ -305,9 +397,13 @@
     box.classList.toggle('overlay', !!overlay);
     document.body.classList.toggle('cl-locked', !overlay);
     if (overlay) $('#login-why').hidden = false;
+    // 中途过期（overlay）：不能换存放位置（上传、修改都还在这一边）
+    if (!CL.pickMode) CL.pickMode = CL.mode || (localOk() ? 'local' : 'cloud');
+    $('#mode-pick').hidden = !!overlay;
+    drawMode();
     var nm = $('#login-name');
     if (!nm.value) { try { nm.value = localStorage.getItem(NAME_KEY) || ''; } catch (e) { /* 无痕模式 */ } }
-    setTimeout(function () { (nm.value ? $('#login-pass') : nm).focus(); }, 30);
+    focusLogin(nm.value && CL.pickMode === 'cloud' ? $('#login-pass') : nm);
   }
   function hideLogin() {
     $('#login').hidden = true;
@@ -321,6 +417,32 @@
     $('#who-name').textContent = name;
     $('#who').hidden = false;
     $('#tabs').hidden = false;
+    var tag = $('#who-mode');
+    if (tag) {
+      tag.textContent = CL.mode === 'local' ? '存在这台电脑' : '云端';
+      tag.className = 'tag' + (CL.mode === 'local' ? ' on' : '');
+    }
+    var sw = $('#mode-switch');
+    if (sw) {
+      sw.hidden = CL.mode === 'cloud' && !localOk();
+      sw.textContent = CL.mode === 'local' ? '改用云端' : '改用这台电脑';
+    }
+    document.body.classList.toggle('cl-local', CL.mode === 'local');
+    CL.checkKeep();
+  }
+
+  function loggedIn(name, first) {
+    try {
+      localStorage.setItem(NAME_KEY, name);
+      // 同一个网址：VISI 看到这两个就会自己去拿案例库，不用再登入一次（cloud.js 的 FLAG / USER）
+      localStorage.setItem('sail-visi-cases', '1');
+      localStorage.setItem('sail-visi-cases-user', name);
+    } catch (e) { /* 无痕模式 */ }
+    setMe(name);
+    hideLogin();
+    var w = loginWaiters; loginWaiters = [];
+    w.forEach(function (fn) { fn(); });
+    if (first) start();
   }
 
   function doLogin(ev) {
@@ -328,30 +450,36 @@
     var name = $('#login-name').value.trim();
     var pass = $('#login-pass').value;
     var line = $('#login-err');
+    // 中途过期（已经登入过）：照原来的；还没登入：照登入框选的
+    var local = (CL.me ? CL.mode : CL.pickMode) === 'local';
     line.classList.remove('on');
     if (!name) { line.textContent = '请填你的名字（之后每次修改都会记下是谁改的）'; line.classList.add('on'); return; }
-    if (!pass) { line.textContent = '请填团队密码'; line.classList.add('on'); return; }
+    if (!local && !pass) { line.textContent = '请填团队密码'; line.classList.add('on'); return; }
     var btn = $('#login-go');
     btn.disabled = true;
-    btn.textContent = '登入中…';
+    btn.textContent = local ? '准备中…' : '登入中…';
+    var first = !CL.me;
+    if (local) {
+      // 存在这台电脑：装好 service worker、请浏览器别自己清掉，名字就好（不用密码）
+      LS.setMode('local').then(function (ok) {
+        if (!ok) return { status: -1 };
+        CL.mode = 'local';
+        LS.persist();              // 按了按钮才问（有的浏览器会跳出来问他）；setMe 会再确认一次、没答应就一直提醒
+        return CL.api('POST', '/api/session', { name: name });
+      }).then(function (r) {
+        btn.disabled = false;
+        drawMode();
+        if (r.status === 200 && r.json) { loggedIn(r.json.name, first); return; }
+        line.textContent = r.status === -1 ? '这个浏览器不能用「存在这台电脑」（无痕模式、或浏览器太旧）：请用一般视窗的 Chrome 或 Edge。' :
+          r.status === 400 ? '名字要 1–30 个字' : '开不了（' + r.status + '），请重新整理这一页再试';
+        line.classList.add('on');
+      });
+      return;
+    }
     CL.api('POST', '/api/session', { name: name, password: pass }).then(function (r) {
       btn.disabled = false;
       btn.textContent = '登入';
-      if (r.status === 200 && r.json) {
-        try {
-          localStorage.setItem(NAME_KEY, name);
-          // 同一个网址：VISI 看到这两个就会自己去拿案例库，不用再登入一次（cloud.js 的 FLAG / USER）
-          localStorage.setItem('sail-visi-cases', '1');
-          localStorage.setItem('sail-visi-cases-user', r.json.name);
-        } catch (e) { /* 无痕模式 */ }
-        var first = !CL.me;
-        setMe(r.json.name);
-        hideLogin();
-        var w = loginWaiters; loginWaiters = [];
-        w.forEach(function (fn) { fn(); });
-        if (first) start();
-        return;
-      }
+      if (r.status === 200 && r.json) { CL.mode = 'cloud'; commitCloud(); loggedIn(r.json.name, first); return; }
       var wait = r.status === 429 && r.json && r.json.retryAfter ? Math.max(1, Math.ceil(r.json.retryAfter / 60)) : 0;
       var msg = r.status === 401 ? '团队密码不对' :
         r.status === 429 ? '密码错太多次了，为了安全先锁住：请约 ' + (wait || 10) + ' 分钟后再试' :
@@ -377,6 +505,23 @@
     });
   }
 
+  /* 换存放位置（登入后，右上角）：本机的照片、标签都留着，换回来就还在 */
+  function switchMode() {
+    var to = CL.mode === 'local' ? 'cloud' : 'local';
+    if (to === 'local' && !localOk()) { CL.toast('这个浏览器不能用「存在这台电脑」：请用一般视窗的 Chrome 或 Edge', 4000); return; }
+    var busy = MB.clUpload && MB.clUpload.busy();
+    if (busy) { CL.toast('上传中不能换，请先暂停并等它停好'); return; }
+    var dirty = (MB.clReview && MB.clReview.unsaved()) || 0;
+    var msg = to === 'cloud' ?
+      '改用云端（Vercel）？这台电脑的照片和标签都会留着，之后改回「存在这台电脑」就还在。' :
+      '改用「存在这台电脑」？云端的照片不会动。';
+    if (dirty) msg += '\n还有 ' + dirty + ' 项修改没保存，换了就会丢掉。';
+    if (!window.confirm(msg)) return;
+    try { localStorage.removeItem('sail-visi-cases'); localStorage.removeItem('sail-visi-cases-user'); } catch (e) { /* 无痕模式 */ }
+    var before = CL.mode === 'local' ? CL.api('DELETE', '/api/session') : Promise.resolve();
+    before.then(function () { return LS.setMode(to); }).then(function () { location.reload(); });
+  }
+
   /* ---------- 分页 ---------- */
   CL.tab = '';
   CL.showTab = function (t) {
@@ -400,9 +545,45 @@
     CL.loadCatalog().catch(function (e) { CL.toast(e.message, 4000); });
   }
 
+  // 问「我登入了没有」：本机模式问 service worker，云端问伺服器。picked = 刚在登入框选了云端
+  function cloudSession(picked) {
+    CL.api('GET', '/api/session').then(function (r) {
+      $('#boot').hidden = true;
+      if (CL.me) return;                 // 这期间已经登入了（选了云端马上就按登入）
+      if (picked && CL.pickMode !== 'cloud') return;   // 点了云端又点回「存在这台电脑」：不算
+      if (r.status === 200 && r.json && r.json.name) {
+        if (!CL.mode) CL.mode = CL.pickMode || 'cloud';
+        if (CL.mode === 'cloud') commitCloud();
+        setMe(r.json.name); hideLogin(); start(); return;
+      }
+      if (r.status === 503 && CL.pickMode !== 'local') { $('#login').hidden = true; $('#not-config').hidden = false; return; }
+      if (r.status === 0 && !picked) {
+        $('#boot').hidden = false;
+        $('#boot').innerHTML = '网路连不上。<button class="mini" type="button" id="boot-retry">再试一次</button>';
+        $('#boot-retry').addEventListener('click', function () { location.reload(); });
+        return;
+      }
+      // 登入框已经开着（刚选了云端）：只换栏位，不要重新开（游标会跳走）
+      if (!$('#login').hidden) { drawMode(); return; }
+      showLogin(false);
+    });
+  }
+
   function boot() {
     $('#login-form').addEventListener('submit', doLogin);
     $('#logout').addEventListener('click', logout);
+    var ms = $('#mode-switch');
+    if (ms) ms.addEventListener('click', switchMode);
+    $$('#mode-pick [data-mode]').forEach(function (b) {
+      b.addEventListener('click', function () { pickMode(b.getAttribute('data-mode')); });
+    });
+    var nc = $('#not-config-local');
+    if (nc) nc.addEventListener('click', function () {
+      $('#not-config').hidden = true;
+      CL.pickMode = '';
+      showLogin(false);
+      pickMode('local');
+    });
     $$('#tabs button').forEach(function (b) {
       b.addEventListener('click', function () { CL.showTab(b.getAttribute('data-tab')); });
     });
@@ -414,18 +595,25 @@
       e.returnValue = '';
       return '';
     });
-    CL.api('GET', '/api/session').then(function (r) {
-      $('#boot').hidden = true;
-      if (r.status === 200 && r.json && r.json.name) { setMe(r.json.name); hideLogin(); start(); return; }
-      if (r.status === 503) { $('#not-config').hidden = false; return; }
-      if (r.status === 0) {
-        $('#boot').hidden = false;
-        $('#boot').innerHTML = '网路连不上。<button class="mini" type="button" id="boot-retry">再试一次</button>';
-        $('#boot-retry').addEventListener('click', function () { location.reload(); });
-        return;
-      }
-      showLogin(false);
-    });
+    var saved = LS ? LS.mode() : 'cloud';
+    if (saved === 'local' && localOk()) {
+      // 存在这台电脑：等 service worker 接手这一页，再问它
+      CL.mode = CL.pickMode = 'local';
+      LS.ready().then(function (ok) {
+        if (ok) { cloudSession(false); return; }
+        $('#boot').hidden = true;
+        showLogin(false);
+        var line = $('#login-err');
+        line.textContent = '这个浏览器现在开不了「存在这台电脑」（无痕模式？）：请用一般视窗的 Chrome 或 Edge，或重新整理一次。';
+        line.classList.add('on');
+      });
+      return;
+    }
+    if (saved === 'cloud' || !localOk()) { CL.mode = CL.pickMode = 'cloud'; cloudSession(false); return; }
+    // 还没选过：先选好「存在这台电脑」（免费、现在就能用），一个请求都不发
+    $('#boot').hidden = true;
+    CL.pickMode = 'local';
+    showLogin(false);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

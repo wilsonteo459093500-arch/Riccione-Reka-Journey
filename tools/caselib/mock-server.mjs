@@ -22,12 +22,13 @@
        POST /__mock/ballast?bytes=N        → 加一个隐藏的假项目，一张 sz=N 的照片（测空间快满）
        POST /__mock/resetStats
        GET  /__mock/index                  → 目前完整清单（含项目名，只给测试看）
+       GET  /__mock/api                    → {hits, paths}：主 port 的 /api/* 被叫了几次（本机模式要是 0）
    - --seed：{index, blobs:{pathname: base64}} 先放进记忆体（VISI 用假案例库测）。
      index.base 一律改成这个 mock 的 blob 网址。
    注意：密码是写进 process.env 的；同一个 process 开两个 mock 请用同一个密码。
    程式里用：import { startMock } from './mock-server.mjs'
      const m = await startMock({ port: 0, cors: true, password: 'test-pass', seed });
-     m.url / m.blob / m.adapter.stats() / m.adapter.conflictNext(3) / m.setDown(true) / await m.close()
+     m.url / m.blob / m.adapter.stats() / m.adapter.conflictNext(3) / m.setDown(true) / m.apiHits() / await m.close()
    ============================================================ */
 import http from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
@@ -81,7 +82,7 @@ export async function startMock(opts) {
     photo: (await import(API + 'photo.js')).default,
     catalog: (await import(API + 'catalog.js')).default
   };
-  const state = { down: false, cors: !!opts.cors };
+  const state = { down: false, cors: !!opts.cors, api: { hits: 0, paths: [] } };
   let adapter = null;
 
   /* ---------- blob port ---------- */
@@ -116,6 +117,7 @@ export async function startMock(opts) {
           await adapter.putJson(blobLib.indexPath(), JSON.stringify(idx), cur ? { ifMatch: cur.etag } : { create: true });
           return json(res, 200, { ok: true, rev: idx.rev });
         }
+        if (hook === 'api') return json(res, 200, state.api);
         if (hook === 'index') {
           const cur = await adapter.getJson(blobLib.indexPath());
           return json(res, 200, cur ? cur.data : null);
@@ -157,6 +159,8 @@ export async function startMock(opts) {
     try {
       if (HIDDEN.some(function (re) { return re.test(pathname); })) return notFound(res);
       if (pathname.indexOf('/api/') === 0) {
+        state.api.hits++;
+        if (state.api.paths.length < 200) state.api.paths.push(req.method + ' ' + pathname);
         if (state.down) return json(res, 500, { error: 'storage', message: 'mock server is down (/__mock/down)' });
         const name = pathname.slice(5);
         if (!Object.prototype.hasOwnProperty.call(handlers, name)) return json(res, 404, { error: 'not_found' });
@@ -208,6 +212,7 @@ export async function startMock(opts) {
     setDown: function (on) { state.down = !!on; },
     setCors: function (on) { state.cors = !!on; },
     setBlocked: function (on) { adapter.setBlocked(on); },
+    apiHits: function () { return { hits: state.api.hits, paths: state.api.paths.slice() }; },
     close: async function () { await Promise.all([closeServer(appServer), closeServer(blobServer)]); }
   };
 }

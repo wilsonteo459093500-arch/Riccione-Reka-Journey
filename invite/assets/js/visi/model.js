@@ -357,7 +357,8 @@
   var CASES = [], CASE_MAP = {}, CASE_SHOT = {}, CASE_SERIES = {}, CASE_VER = 0;
   var CASE_ID = /^c:[0-9a-f]{16}$/;
   // current = 这份清单刚跟伺服器对过（cloud.js 说的）：清单里没有的 c: 照片才算「被删掉了」；PURGED = 伺服器说删掉的
-  var CASE_INFO = { current: false }, PURGED = {}, GONE_IM = {};
+  // elsewhere = 另一个模式（本机 / 云端）存着的清单里有的 c:：这份清单里没有也不是被删掉 —— 当成看不到（留着、不换掉）
+  var CASE_INFO = { current: false }, PURGED = {}, GONE_IM = {}, ELSEWHERE = {};
   // stale = 登入过期 / 登出了：存着的清单可能是旧的（之后被隐藏的照片看不出来）—— 只拿来解析方案里已经放的，不再自动挑
   // blocked = 案例库暂停中（Vercel 免费额度用完）：照片打不开 —— 一样只解析、印成占位框，不进图库、不自动挑
   // gone = 照片档已经不在了（cloud.js 试过那张回 404：这台电脑的清单是旧的）—— 跟已删除一样
@@ -374,9 +375,12 @@
     if (typeof x !== 'string' || !CASE_ID.test(x)) return '';
     var c = CASE_MAP[x];
     if (c) return c.gone || (c.blocked ? 'blocked' : '');
-    return (PURGED[x] || (CASE_INFO.current && CASES.length)) ? 'deleted' : '';
+    if (PURGED[x]) return 'deleted';
+    return CASE_INFO.current && CASES.length && !ELSEWHERE[x] ? 'deleted' : '';
   }
   MB.caseGone = goneOf;
+  /** 现在用的是本机案例库（存在这台电脑）：'deleted' 的意思是「这台电脑没有」（体检、占位框照这个说） */
+  MB.casesLocal = function () { return !!CASE_INFO.local; };
   /** 被删掉的案例照片：resolver 给一个占位的（方案页印成占位框，不是破图；体检叫他换一张）。没有任何项目资料 */
   function deletedIm(ref) {
     return GONE_IM[ref] || (GONE_IM[ref] = { id: ref, src: '', thumb: '', w: 1600, h: 1200, rooms: [], series: '', style: '', cabinets: [],
@@ -390,8 +394,10 @@
   MB.setCases = function (list, info) {
     CASES = []; CASE_MAP = {}; CASE_SHOT = {}; CASE_SERIES = {}; CASE_VER++; poolCache = null; GONE_IM = {};
     if (info && typeof info === 'object') {
-      CASE_INFO = { current: !!info.current };
-      PURGED = {};
+      // local = 本机案例库（存在这台电脑）：清单里没有的 = 这台电脑没有（还没汇入那个文件夹），不一定是被删掉
+      CASE_INFO = { current: !!info.current, local: !!info.local };
+      PURGED = {}; ELSEWHERE = {};
+      (Array.isArray(info.elsewhere) ? info.elsewhere : []).forEach(function (h) { if (typeof h === 'string' && /^[0-9a-f]{16}$/.test(h)) ELSEWHERE['c:' + h] = 1; });
       (Array.isArray(info.purged) ? info.purged : []).forEach(function (h) { if (typeof h === 'string' && /^[0-9a-f]{16}$/.test(h)) PURGED['c:' + h] = 'deleted'; });
     }
     (Array.isArray(list) ? list : []).forEach(function (c) {

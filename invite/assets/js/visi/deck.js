@@ -199,7 +199,9 @@
     if (gone === 'blocked' || gone === 'deleted') {
       return '<div class="ph ' + cls + ' ph-gone" data-gone="' + gone + '">' + (gone === 'blocked'
         ? todo('Case photo unavailable — the case library is paused', '公司案例照片暂时打不开（案例库暂停中）', LANG)
-        : todo('This case photo was deleted — choose another', '这张案例照片已经被删除，换一张', LANG)) + '</div>';
+        : MB.casesLocal && MB.casesLocal()
+          ? todo('This computer does not have this case photo — import that project folder first', '这台电脑没有这张案例照片（要先汇入那个项目的文件夹）', LANG)
+          : todo('This case photo was deleted — choose another', '这张案例照片已经被删除，换一张', LANG)) + '</div>';
     }
     if (!src) return '<div class="ph ' + cls + '"></div>';
     var st = pos && /^[\d.]+%? [\d.]+%?$|^(left|right|center|top|bottom)( (left|right|center|top|bottom))?$/.test(pos)

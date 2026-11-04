@@ -522,20 +522,24 @@
       if (!r.manual && !unseenCases(r.images).length && !live.some(function (ref) { return ref.indexOf('u:') === 0; })) r.images = MB.autoPick(p, r, S.viewImages);
     });
   }
-  /** 方案里写着、这台电脑却解析不到的公司案例照片（没登入过、清单还没拿到）—— 不能当成「没有图」丢掉 */
+  /** 方案里写着、这台电脑却解析不到的公司案例照片（没登入过、清单还没拿到）—— 不能当成「没有图」丢掉。
+      本机案例库里没有的（absentHere）也算：那是这台电脑还没汇入那个文件夹，不是被删掉 */
   function unseenCases(refs) {
-    return (refs || []).filter(function (ref) { return typeof ref === 'string' && ref.indexOf('c:') === 0 && !S.resolve(ref); });
+    return (refs || []).filter(function (ref) { return typeof ref === 'string' && ref.indexOf('c:') === 0 && (!S.resolve(ref) || absentHere(ref)); });
   }
+  /** 本机案例库（存在这台电脑）：清单里没有 = 这台电脑没有（同事的方案、还没汇入那个项目的文件夹）——
+      方案页照样印占位框，但跟「看不到」一样：留着，自动配图、换风格、重新选图之前先问 */
+  function absentHere(ref) { return casesLocal() && goneOf(ref) === 'deleted'; }
   /** 打不开的公司案例照片：'blocked'（案例库暂停中）· 'deleted'（被删掉了）· ''（model.js 的 MB.caseGone） */
   function goneOf(ref) { var im = ref && S.resolve(ref); return im && MB.caseGone ? MB.caseGone(im) : ''; }
   /** 案例库暂停中打不开的那几张：选不到，但恢复了还要用 —— 重新选图、按「确定」照样留着 */
   function pausedCases(refs) { return (refs || []).filter(function (ref) { return goneOf(ref) === 'blocked'; }); }
-  /** 被删掉的那几张：回不来了 —— 重新选图时拿掉 */
-  function deadCases(refs) { return (refs || []).filter(function (ref) { return goneOf(ref) === 'deleted'; }); }
+  /** 被删掉的那几张：回不来了 —— 重新选图时拿掉（本机案例库里没有的不算：汇入那个文件夹就回来） */
+  function deadCases(refs) { return (refs || []).filter(function (ref) { return goneOf(ref) === 'deleted' && !absentHere(ref); }); }
   function keepUnseen(rooms) {
     var n = 0, b = 0;
     rooms.forEach(function (r) { n += unseenCases(r.images).length; b += pausedCases(r.images).length; });
-    if (n && !confirm('有 ' + n + ' 张公司案例照片这台电脑看不到（同事放的，要先登入公司案例库）。重新配图会把它们换掉，继续？')) return false;
+    if (n && !confirm('有 ' + n + ' 张公司案例照片这台电脑看不到（' + (casesLocal() ? '要先汇入那个项目的文件夹' : '同事放的，要先登入公司案例库') + '）。重新配图会把它们换掉，继续？')) return false;
     return !b || confirm('有 ' + b + ' 张公司案例照片暂时打不开（案例库暂停中）。重新配图会把它们换成别的照片，继续？');
   }
 
@@ -875,6 +879,8 @@
   /** 案例库暂停中（Vercel 的免费额度用完）：给业务看的那一句（图库、选图、参考空间、帮我挑都一样） */
   var BLOCKED_MSG = '公司案例库暂停中：Vercel 的免费额度用完了，案例照片暂时不能用。内置照片和你自己的照片照常可以用。';
   function casesBlocked() { return !!(MB.cloud && MB.cloud.status().blocked); }
+  /** 本机案例库（存在这台电脑）：没有登入、没有 Vercel 暂停；看不到的照片 = 这台电脑还没汇入那个文件夹 */
+  function casesLocal() { return !!(MB.cloud && MB.cloud.status().local); }
   /** 各处的「暂停中」横条（参考空间、选图弹窗）：暂停中才出现 */
   function renderBlocked() {
     var on = casesBlocked();
@@ -930,7 +936,7 @@
   function caseFlag(im) {
     if (!im || !(im.isCase || /^c:/.test(im.id || im.ref || ''))) return '';
     var g = MB.caseGone ? MB.caseGone(im) : '';
-    var t = g === 'blocked' ? '暂时打不开' : g === 'deleted' ? '已删除' : im.hidden ? '已隐藏' : im.status === 'unsure' ? '待确认' : '案例';
+    var t = g === 'blocked' ? '暂时打不开' : g === 'deleted' ? (casesLocal() ? '这台电脑没有' : '已删除') : im.hidden ? '已隐藏' : im.status === 'unsure' ? '待确认' : '案例';
     return '<span class="case-tag' + (t === '案例' ? '' : ' warn') + '">' + t + '</span>';
   }
   /** 图库那一份（有 rooms / series / label），给 MB.caseNote 起草那一句 */
@@ -975,6 +981,16 @@
     $('#cases-auto').hidden = !(on || paused);
     var st = MB.cloud ? MB.cloud.status().status : 'unavailable';
     $('#cases-cloud').hidden = on || paused || st === 'unavailable';
+    // 本机案例库：不用登入，是还没把案例文件夹汇入这台电脑
+    if (casesLocal() && !$('#cases-cloud').hidden) {
+      var cs = MB.cloud.status(), out = cs.cached && cs.count && cs.status === 'login' ? 'out' : 'empty';
+      if ($('#cases-cloud').getAttribute('data-local') !== out) {
+        $('#cases-cloud').setAttribute('data-local', out);
+        $('#cases-cloud').innerHTML = out === 'out' ?
+          '本机案例库登出了（' + cs.count + ' 张照片都还在这台电脑）：到<a href="caselib.html" target="_blank" rel="noopener">案例库</a>填你的名字、按「开始用」，「帮我挑」就回来。' :
+          '先到<a href="caselib.html" target="_blank" rel="noopener">案例库</a>把案例文件夹汇入这台电脑，「帮我挑」就会按需求卡挑公司做过的家。';
+      }
+    }
     renderBlocked();
   }
   $('#cases-pick').addEventListener('click', function () { openPicker({ mode: 'cases', src: hasCases() ? 'cases' : 'all' }); });
@@ -1158,7 +1174,7 @@
     try { plan = MB.deckImages ? MB.deckImages(p, S.resolve) : null; } catch (e) { console.error(e); }
     $('#slot-thumbs').innerHTML = SLOTS.map(function (s) {
       var x = slotSrc(p, s[0], plan || undefined), src = x.src, on = pageOn(p, s[0]);
-      var gone = x.gone === 'blocked' ? '暂时打不开' : x.gone === 'deleted' ? '已删除' : '';
+      var gone = x.gone === 'blocked' ? '暂时打不开' : x.gone === 'deleted' ? (casesLocal() ? '这台电脑没有' : '已删除') : '';
       return '<div class="slot' + (on ? '' : ' off') + '" title="' + (on ? '' : '这一页关着 —— 打开才会印') + '">' +
         '<button type="button" class="thumb" data-slot="' + s[0] + '">' +
           (src ? '<img src="' + esc(src) + '" alt="" />' : gone ? '<span class="img-gone" aria-hidden="true"></span><span class="case-tag warn">' + gone + '</span>' : '') + '</button>' +
@@ -1676,9 +1692,21 @@
     var tools = '<div class="btn-row"><button class="mini" type="button" data-cloud-refresh>更新</button>' +
       (st.user ? '<button class="mini" type="button" data-cloud-logout>登出</button>' : '') + '</div>';
     var when = st.checked ? ' · ' + fmtTime(st.checked) + ' 更新' : '';
+    if (st.local) return localBoxBody(st, n, when);
     // 暂停中：最上面先说清楚（登入过期、连不上的时候也一样）
     var ban = st.blocked ? '<p class="cloud-st warn cloud-blocked">' + BLOCKED_MSG + '</p>' : '';
     return ban + cloudBoxBody(st, n, form, tools, when);
+  }
+  /** 本机案例库（案例库页选了「存在这台电脑」）：不用登入、不会被 Vercel 暂停 */
+  function localBoxBody(st, n, when) {
+    var lib = '<a href="caselib.html" target="_blank" rel="noopener">案例库</a>';
+    var tools = '<div class="btn-row"><button class="mini" type="button" data-cloud-refresh>更新</button></div>';
+    if (st.status === 'ok' || (st.status === 'cached' && st.cached)) return '<p class="cloud-st ok">本机案例库 · ' + n + ' 张（存在这台电脑）' + when + '</p>' +
+      '<p class="cloud-st">同事看不到这台电脑的照片：要给同事用，到' + lib + '「审核」汇出标签档，连同那个文件夹一起给他汇入。</p>' + tools;
+    // 登出了（照片都还在这台电脑）：填名字就好，不要叫他再拖一次文件夹
+    if ((st.status === 'login' || st.status === 'idle') && st.cached && n) return '<p class="cloud-st warn">本机案例库登出了（' + n + ' 张照片都还在这台电脑）：到' + lib + '填你的名字、按「开始用」就回来。</p>' + tools;
+    if (st.status === 'login' || st.status === 'idle') return '<p class="cloud-st">本机案例库还没开：先到' + lib + '选「存在这台电脑」、填你的名字，再把案例文件夹拖进去。</p>' + tools;
+    return '<p class="cloud-st warn">这台电脑的案例库还没准备好' + (st.cached ? '，先用存着的 ' + n + ' 张' : '') + '：重新整理这一页再试（要用一般视窗的 Chrome 或 Edge）。</p>' + tools;
   }
   function cloudBoxBody(st, n, form, tools, when) {
     if (st.status === 'blocked') return '<p class="cloud-st">' + (st.user ? '已登入：<b>' + esc(st.user) + '</b> · ' : '') +
@@ -1722,7 +1750,8 @@
       ping('正在更新公司案例库…', 3000);
       MB.cloud.refresh(true).then(function (st) {
         // 先看「问到了没有」：登入过期、连不上的时候，「还在暂停中」只是上次知道的（不一定还是）
-        ping(st.status === 'ok' ? '公司案例库已是最新：' + st.count + ' 张' :
+        ping(st.local ? (st.status === 'ok' ? '本机案例库：' + st.count + ' 张（存在这台电脑）' : '这台电脑的案例库还没准备好') :
+          st.status === 'ok' ? '公司案例库已是最新：' + st.count + ' 张' :
           st.status === 'login' ? (st.blocked ? '要重新登入 —— 登入后才知道案例库恢复了没有' : '要重新登入') :
           st.status === 'blocked' ? '公司案例库还在暂停中 —— 案例照片暂时不能用' :
           '暂时连不上，先用存着的' + (st.blocked ? '（上次知道的是案例库暂停中）' : ''), 2600);
@@ -1776,7 +1805,8 @@
       return;
     }
     if (!hasCases()) {
-      hint.innerHTML = '要先登入公司案例库：';
+      var lst = MB.cloud ? MB.cloud.status() : {};
+      hint.innerHTML = !casesLocal() ? '要先登入公司案例库：' : lst.cached && lst.count && lst.status === 'login' ? '本机案例库登出了：' : '本机案例库里还没有照片：';
       $('#match-list').innerHTML = '<div data-cloud-box>' + cloudBoxHtml() + '</div>';
       return;
     }
@@ -1946,9 +1976,9 @@
     // 被删掉的按「确定」就拿掉
     var keepNote = function (refs) {
       var n = unseenCases(refs).length, b = pausedCases(refs).length, d = deadCases(refs).length;
-      return (n ? ' · 另有 ' + n + ' 张公司案例照片这台电脑看不到，会留着（登入公司案例库就看得到）' : '') +
+      return (n ? ' · 另有 ' + n + ' 张公司案例照片这台电脑看不到，会留着（' + (casesLocal() ? '汇入那个项目的文件夹就看得到' : '登入公司案例库就看得到') + '）' : '') +
         (b ? ' · 另有 ' + b + ' 张公司案例照片暂时打不开（案例库暂停中），会留着' : '') +
-        (d ? ' · 另有 ' + d + ' 张案例照片已经被删除，按「加入所选」就拿掉' : '');
+        (d ? ' · 另有 ' + d + ' 张案例照片' + (casesLocal() ? '这台电脑没有' : '已经被删除') + '，按「加入所选」就拿掉' : '');
     };
     var pickable = function (ref) { return !!S.resolve(ref) && (!goneOf(ref) || goneOf(ref) === 'blocked'); };
     if (opts.mode === 'room') {

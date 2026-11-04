@@ -71,9 +71,15 @@ export async function newPage(browser, opts) {
   return { ctx, page };
 }
 
+// 云端（Vercel）登入。还没选过存在哪里时，登入框预设是「存在这台电脑」：先点「云端」
 export async function login(page, url, name, pass) {
   if (url) await page.goto(url + '/caselib');
   await page.waitForSelector('#login:not([hidden])');
+  if (await page.isVisible('#mode-cloud') && await page.getAttribute('#mode-cloud', 'aria-pressed') !== 'true') {
+    await page.click('#mode-cloud');
+    await page.waitForSelector('#login-pass', { state: 'visible' });
+    await page.waitForSelector('#login-go:not([disabled])');
+  }
   await page.fill('#login-name', name || 'Ana');
   await page.fill('#login-pass', pass == null ? PASSWORD : pass);
   await page.click('#login-go');

@@ -20,6 +20,14 @@
         删掉就找不回来，旧方案用到的那张会变空白；log 记下是谁删的
    - 改的标签存不进去、重试也没用（507 额度用完、503 storage_blocked）：不自动重试、讲白话，
      修改留在这一页，按「保存」才再送；也不挡删除（删除就是这时候要做的）
+   - 分类（#rv-tags）：
+     「按文件夹名字自动标」= MB.clCore.autoTags：文件夹名 → 风格、区域；子文件夹名 → 空间、柜类（source:'auto'，只填空的，
+       人改过 / 确认过的不动；客户名字不会进到任何标签）
+     「汇出标签档」：只有标签（没有照片、没有档案路径）的 JSON，给同事汇入、也是分类的备份（本机模式没有别的备份）。
+       里面有项目的文件夹名（客户名字）：只给同事
+     「汇入标签档」：这台电脑有的照片照规则套用（人工）；还没有的（本机模式）先记着，汇入那个文件夹时自动套用
+       （「不用等了」= 不等了，全部清掉）。本机模式很久没汇出过：提醒他备份
+   - 存在这台电脑（quota.plan = 'local'）：没有每月的写入上限，额度那一行显示这台电脑的空间
    ============================================================ */
 (function () {
   'use strict';
@@ -29,6 +37,8 @@
   var $ = CL.$, $$ = CL.$$, esc = CL.esc;
 
   var PAGE = 48;
+  // 谁改的：本机模式的自动标签（文件夹名）记成 AUTO_BY —— 画面上写「自动」
+  function who(by) { return CL.mode === 'local' && MB.clCore && by === MB.clCore.AUTO_BY ? '自动' : (by || ''); }
   var IDLE_MS = 45000;          // 停手多久才自动保存
   var MAX_WAIT_MS = 120000;     // 一直在改：最多隔多久存一次
   var HIDE_MS = 4000;           // 隐藏 / 复原：连按的几下一起送
@@ -277,6 +287,7 @@
     var e = (r && r.json && r.json.error) || '';
     if (e === 'storage_blocked') return '案例库被 Vercel 暂停中，改的标签先存不进去（还留在这一页，关掉就没了）。等恢复之后按「保存」。';
     if (e === 'not_configured') return '伺服器的设定不完整，改的标签存不进去：请告诉老板检查 Vercel 的设定。';
+    if ((r && r.json && r.json.local) || CL.mode === 'local') return '这台电脑的空间满了，改的标签先存不进去（还留在这一页，关掉就没了）。清出一些硬碟空间、或删除隐藏的照片，再按「保存」。';
     return '这个月的 Blob 写入次数用完了，改的标签先存不进去（还留在这一页，关掉就没了）。下个月 1 号重算之后按「保存」。';
   }
 
@@ -441,10 +452,11 @@
     // 旧的伺服器没有 quota：从清单的 usage 估，只有写入次数
     if (!q) return { plan: 'hobby', writes: local, cap: CL.LIMIT_WRITES || 2000, writeCap: null, bytes: null, bytesCap: null };
     return {
-      plan: q.plan === 'pro' ? 'pro' : 'hobby',
+      plan: q.plan === 'pro' || q.plan === 'local' ? q.plan : 'hobby',
       writes: Math.max(q.writes | 0, local),     // 自己刚写的（CL.addWrites）也算进去
       cap: q.uploadCap, writeCap: q.writeCap,
-      bytes: typeof q.bytes === 'number' ? q.bytes : null, bytesCap: q.bytesCap || null
+      bytes: typeof q.bytes === 'number' ? q.bytes : null, bytesCap: q.bytesCap || null,
+      bytesLeft: typeof q.bytesLeft === 'number' ? q.bytesLeft : null
     };
   }
   function mbNum(b) {
@@ -452,7 +464,7 @@
     return m < 10 ? m.toFixed(1) : CL.n(Math.round(m));
   }
   function quotaWarn(q) {
-    if (!q || q.plan === 'pro') return false;
+    if (!q || q.plan === 'pro' || q.plan === 'local') return false;
     return (q.cap && q.writes > q.cap * 0.8) || (q.bytes != null && q.bytesCap && q.bytes > q.bytesCap * 0.8);
   }
   function spaceText(q) {
@@ -916,7 +928,9 @@
     if (spaceText(q)) sum.push(spaceText(q));
     sum.push(st.ids.length ? '已隐藏 ' + CL.n(st.ids.length) + ' 张（约 ' + CL.mb(st.freed) + '）' : '没有隐藏的照片');
     $('#rv-tidy-sum').textContent = sum.join(' · ');
-    $('#rv-tidy-why').innerHTML = q.plan === 'pro' ?
+    $('#rv-tidy-why').innerHTML = q.plan === 'local' ?
+      '照片存在这台电脑：没有每月的次数限制，空间看这台电脑的硬碟。照片太多 VISI 也比较难挑：一样可以每个项目只留最好的几张，<b>先隐藏</b>（可以复原），确定不要了再<b>删除</b>。' :
+      q.plan === 'pro' ?
       'Pro 方案不限额度。照片太多 VISI 也比较难挑：一样可以每个项目只留最好的几张。' :
       'Vercel 免费方案：每月最多 ' + CL.n(q.cap) + ' 次写入' + (q.bytesCap ? '、空间 ' + mbNum(q.bytesCap) + ' MB' : '') +
       '，超过会把<b>整个案例库停掉</b>（连旧方案的照片都打不开）。所以每个项目只留最好的几张：<b>先隐藏</b>（可以复原），确定不要了再<b>删除</b>，空间才会空出来。';
@@ -1028,6 +1042,221 @@
         else if (!e.shiftKey && i === f.length - 1) { e.preventDefault(); f[0].focus(); }
       }
     }, true);
+  }
+
+  /* ============================================================
+     分类：按文件夹名字自动标、汇出 / 汇入标签档
+     ============================================================ */
+  var TG = { msg: '', err: false };
+  function buildTags() {
+    var host = $('#rv-filters');
+    if (!host || $('#rv-tags')) return;
+    var el = document.createElement('section');
+    el.className = 'rv-tags';
+    el.id = 'rv-tags';
+    el.innerHTML = '<div class="tags-row"><span class="tags-t"><b>分类</b><small>文件夹名自动标 · 标签档：备份分类、给同事共用</small></span>' +
+      '<button class="mini" type="button" id="rv-auto" title="文件夹名的风格、区域，子文件夹名的空间（厨房、主卧…）和柜子（橱柜、衣柜…）：只填空的，人改过的不动">按文件夹名字自动标</button>' +
+      '<button class="mini" type="button" id="rv-export" title="备份分类、给同事汇入：只有标签（没有照片）。里面有项目的文件夹名（客户名字）：只给同事，不要传给客户、也不要放进有外人的群组">汇出标签档（备份）</button>' +
+      '<label class="mini" id="rv-import-lbl" title="同事汇出的标签档：这台电脑有的照片马上套用，还没有的等汇入那个文件夹后自动套用">汇入标签档' +
+        '<input type="file" id="rv-import" accept=".json,application/json" hidden /></label></div>' +
+      '<div class="tidy-msg" id="rv-tags-msg" aria-live="polite"></div>';
+    host.parentNode.insertBefore(el, host);
+  }
+  function drawTags() {
+    var el = $('#rv-tags-msg');
+    if (!el) return;
+    var pend = (CL.cat && CL.cat.pendingTags) | 0;
+    var html = TG.msg ? '<p class="' + (TG.err ? 'err' : R.bulk === 'tags' ? '' : 'ok') + '">' + esc(TG.msg) + '</p>' : '';
+    // 只数照片（项目不算）；之后不会汇入那个文件夹的：「不用等了」
+    if (pend && R.bulk !== 'tags') html += '<p class="muted">还有 ' + CL.n(pend) + ' 张照片的标签在等：汇入那个项目的文件夹后会自动套用。' +
+      (CL.mode === 'local' ? ' <button class="linkish" type="button" data-act="clear-pending">不用等了</button>' : '') + '</p>';
+    var nb = backupDue();
+    if (nb && R.bulk !== 'tags') html += '<p class="warn">' + esc(nb) + '</p>';
+    el.innerHTML = html;
+    ['#rv-auto', '#rv-export'].forEach(function (id) { var b = $(id); if (b) b.disabled = !!R.bulk; });
+    var inp = $('#rv-import');
+    if (inp) inp.disabled = !!R.bulk;
+  }
+  function setTagsMsg(msg, err) { TG.msg = msg; TG.err = !!err; drawTags(); }
+  /* 存在这台电脑没有别的备份：人改过的分类只在这个浏览器。还没汇出过、或上次汇出之后又改了不少 → 提醒一下 */
+  var BACKUP_KEY = 'caselib-tags-backup';
+  function backupDue() {
+    var c = CL.cat;
+    if (CL.mode !== 'local' || !c || !c.photos) return '';
+    var conf = 0;
+    Object.keys(c.photos).forEach(function (h) { if (c.photos[h].status === 'confirmed' || c.photos[h].status === 'unsure') conf++; });
+    if (conf < 10) return '';
+    var last = null;
+    try { last = JSON.parse(localStorage.getItem(BACKUP_KEY) || 'null'); } catch (e) { last = null; }
+    if (last && (c.rev | 0) - (last.rev | 0) < 30) return '';
+    return (last ? '上次汇出标签档之后又改了不少' : '人看过的 ' + CL.n(conf) + ' 张照片还没备份') +
+      '：按「汇出标签档（备份）」存一份 —— 浏览器资料被清掉、换电脑时，汇入同一个文件夹再汇入这个档，分类才救得回来。';
+  }
+  function tagsFail(r) {
+    var j = (r && r.json) || {};
+    if (hopeless(r)) return patchStuckText(r);
+    if (r && r.status === 0) return '网路断了（或这台电脑的案例库还没准备好），请再试一次';
+    if (j.error === 'kind') return '这不是标签档（要选「汇出标签档」存下来的 .json）';
+    return '没做完（' + (r ? r.status : '?') + (j.error ? ' ' + j.error : '') + '），请再试一次';
+  }
+  // 一批一批送（每批最多 400 笔）：回 {ok, changed, r}
+  function sendAll(bodies) {
+    var changed = 0, i = 0;
+    function next() {
+      if (i >= bodies.length) return Promise.resolve({ ok: true, changed: changed });
+      var b = bodies[i++];
+      return CL.call('POST', '/api/catalog', b).then(function (r) {
+        if (r.status !== 200 || !r.json) return { ok: false, changed: changed, r: r };
+        CL.bumpRev(r.json.rev);
+        if (r.json.changed) { changed += r.json.changed | 0; CL.addWrites(1); }
+        return next();
+      });
+    }
+    return next();
+  }
+  function patchBodies(p) {
+    return MB.clCore.chunkPatch(p).map(function (c) { return { op: 'patch', source: c.source, photos: c.photos, projects: c.projects }; });
+  }
+  function hideBodiesOf(h) {
+    var ids = h.projects.map(function (id) { return ['projects', id]; }).concat(h.photos.map(function (id) { return ['photos', id]; }));
+    var out = [];
+    for (var i = 0; i < ids.length; i += MAX_ENTRIES) {
+      var b = { op: 'hide', photos: [], projects: [] };
+      ids.slice(i, i + MAX_ENTRIES).forEach(function (x) { b[x[0]].push(x[1]); });
+      out.push(b);
+    }
+    return out;
+  }
+  function tagsDone(msg) {
+    return CL.loadCatalog(true).then(function () { reapplyQueue(); }, function () { /* 下次再拿 */ }).then(function () {
+      R.bulk = '';
+      setTagsMsg(msg, false);
+      CL.toast(msg, 4000);
+      render();
+    });
+  }
+  function tagsStop(msg) {
+    R.bulk = '';
+    setTagsMsg(msg, true);
+    render();
+  }
+  // 先把手上的修改存好（自动标签、标签档都照「人改过的不动」的规则：要先让清单知道人改了什么）
+  function beginTags(what) {
+    if (R.bulk || !MB.clCore || !CL.cat) return null;
+    R.bulk = 'tags';
+    setTagsMsg(what, false);
+    drawTidyMsg();
+    return settleAll().then(function (left) {
+      if (left) { tagsStop('还有 ' + CL.n(left) + ' 项修改没保存好' + (R.err ? '（' + R.err + '）' : '') + '：先等它保存完再试。'); return false; }
+      return true;
+    });
+  }
+
+  function runAuto() {
+    var go = beginTags('自动标签中…');
+    if (!go) return Promise.resolve();
+    return go.then(function (ok) {
+      if (!ok) return;
+      var p = MB.clCore.autoTags(cat());
+      var nP = Object.keys(p.photos).length, nJ = Object.keys(p.projects).length;
+      if (!nP && !nJ) return tagsDone('没有可以自动标的：空着的照片，文件夹名看不出空间、柜子、风格（人改过、确认过的不会动）。');
+      return sendAll(patchBodies(p)).then(function (res) {
+        if (!res.ok) return tagsStop(tagsFail(res.r));
+        return tagsDone('已按文件夹名字自动标好 ' + CL.n(nP) + ' 张照片' + (nJ ? '、' + CL.n(nJ) + ' 个项目' : '') + '（标成「自动标签」，看一眼对不对就好）。');
+      });
+    });
+  }
+
+  function runExport() {
+    var go = beginTags('汇出中…');
+    if (!go) return Promise.resolve();
+    return go.then(function (ok) {
+      if (!ok) return;
+      var c = cat(), n = Object.keys(c.photos).length;
+      if (!n) return tagsStop('案例库还是空的：没有标签可以汇出。');
+      var data = MB.clCore.exportTags(c, Date.now(), CL.me);
+      var blob = new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' });
+      var a = document.createElement('a');
+      var d = new Date();
+      a.href = URL.createObjectURL(blob);
+      a.download = 'visi-标签档-' + d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2) + '-' + n + '张.json';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); a.parentNode.removeChild(a); }, 1500);
+      R.bulk = '';
+      try { localStorage.setItem(BACKUP_KEY, JSON.stringify({ rev: c.rev | 0, at: Date.now() })); } catch (e) { /* 无痕模式 */ }
+      setTagsMsg('已汇出 ' + CL.n(n) + ' 张照片、' + CL.n(Object.keys(data.projects).length) + ' 个项目的标签（没有照片本身），也是分类的备份：存好这个档。' +
+        '给同事就连同一个文件夹一起给他：他先汇入文件夹、再汇入这个档（顺序反过来也可以）。' +
+        '档里有项目的文件夹名（客户名字）：只给同事，不要传给客户、也不要放进有外人的群组。', false);
+      render();
+    });
+  }
+
+  function runImport(file) {
+    if (!file) return Promise.resolve();
+    var go = beginTags('汇入中…');
+    if (!go) return Promise.resolve();
+    return go.then(function (ok) {
+      if (!ok) return;
+      return file.text().then(function (text) {
+        var tags;
+        try { tags = MB.clCore.readTags(JSON.parse(text)); } catch (e) { return tagsStop('这不是标签档（要选「汇出标签档」存下来的 .json）。'); }
+        var nPh = Object.keys(tags.photos).length;
+        if (!nPh && !Object.keys(tags.projects).length) return tagsStop('这个标签档是空的。');
+        // same = 这台电脑有、标签已经一样（不用改）：什么都没改时不要只说「套用了 0 张」（看起来像失败）
+        var summary = function (n, m, k, same) {
+          var parts = [];
+          if (n || m || !same) parts.push('套用了 ' + CL.n(n) + ' 张、' + CL.n(m) + ' 个项目');
+          if (same) parts.push(CL.n(same) + ' 张已经一样，不用改');
+          if (k) parts.push(CL.n(k) + ' 张这台电脑还没有照片，等汇入那个文件夹后会自动套用');
+          return parts.join('，') + '。';
+        };
+        if (CL.mode === 'local') {
+          // 本机：交给 service worker 一次做完（还没有的照片它会记着）
+          return CL.call('POST', '/api/catalog?op=importTags', { op: 'importTags', tags: tags }).then(function (r) {
+            if (r.status !== 200 || !r.json) return tagsStop(tagsFail(r));
+            CL.bumpRev(r.json.rev);
+            return tagsDone(summary(r.json.photos | 0, r.json.projects | 0, r.json.pending | 0, r.json.same | 0));
+          });
+        }
+        // 云端：一样的规则，用一般的 patch / hide 送；还没有的照片这里记不住
+        var m = MB.clCore.mergeTags(cat(), tags);
+        return sendAll(patchBodies(m.patch).concat(hideBodiesOf(m.hide))).then(function (res) {
+          if (!res.ok) return tagsStop(tagsFail(res.r));
+          return tagsDone(summary(m.n.photos, m.n.projects, 0, m.n.same).replace(/。$/, '') +
+            (m.n.pending ? '；' + CL.n(m.n.pending) + ' 张案例库里还没有（先上传那个文件夹，再汇入一次这个档）' : '') + '。');
+        });
+      }, function () { return tagsStop('读不到这个档，请再选一次。'); });
+    });
+  }
+
+  // 「不用等了」：汇入的标签档里、这台电脑没有的照片（之后也不会汇入那个文件夹）—— 不等了
+  function runClearPending() {
+    if (R.bulk || CL.mode !== 'local') return Promise.resolve();
+    var n = (CL.cat && CL.cat.pendingTags) | 0;
+    if (!window.confirm('不等那 ' + CL.n(n) + ' 张照片的标签了？之后再汇入那个文件夹，就要再汇入一次标签档。')) return Promise.resolve();
+    R.bulk = 'tags';
+    setTagsMsg('清除中…', false);
+    return CL.call('POST', '/api/catalog', { op: 'clearPending' }).then(function (r) {
+      if (r.status !== 200 || !r.json) return tagsStop(tagsFail(r));
+      return tagsDone('好了：不再等那 ' + CL.n(r.json.cleared | 0) + ' 张照片的标签。');
+    });
+  }
+
+  function bindTags() {
+    var el = $('#rv-tags');
+    if (!el) return;
+    el.addEventListener('click', function (e) {
+      if (e.target.closest('#rv-auto')) runAuto();
+      else if (e.target.closest('#rv-export')) runExport();
+      else if (e.target.closest('[data-act="clear-pending"]')) runClearPending();
+    });
+    el.addEventListener('change', function (e) {
+      if (e.target.id !== 'rv-import') return;
+      var f = e.target.files && e.target.files[0];
+      e.target.value = '';
+      runImport(f);
+    });
   }
 
   /* ============================================================
@@ -1195,7 +1424,7 @@
     var nHid = photoCount(pid, true);
     el.innerHTML = '<div><p class="sub-h">项目 · 只给业务看</p><h3>' + esc(pr.name) + (pr.hidden ? ' <span class="tag warn">已隐藏</span>' : '') + '</h3>' +
       '<p class="muted">' + (pr.n | 0) + ' 张' + (nHid ? '（隐藏了 ' + CL.n(nHid) + ' 张）' : '') + (bits.length ? ' · ' + esc(bits.join(' · ')) : ' · 还没填区域 / 房型 / 风格') +
-      (pr.by ? ' · 上次修改 ' + esc(pr.by) + ' ' + esc(CL.time(pr.ts)) : '') + '</p></div>' +
+      (pr.by ? ' · 上次修改 ' + esc(who(pr.by)) + ' ' + esc(CL.time(pr.ts)) : '') + '</p></div>' +
       '<div class="btn-row"><button class="mini dark" type="button" data-act="proj-edit">编辑项目资料</button>' + keepButtons(pid) + '</div>';
   }
   // 项目列、项目资料共用：只留最好的 N 张、复原这个项目隐藏的照片
@@ -1253,7 +1482,7 @@
       '<div class="dr-sec"><p class="sub-h">风格 <i>不选 = 跟项目</i></p>' + chips('style', styles, ph.style || '', false) + '</div>' +
       '<label class="switch"><input type="checkbox" data-field="hero"' + (ph.hero ? ' checked' : '') + ' /><span></span>可当主图 <small>拍得完整、光线好，适合放在方案的大图</small></label>' +
       ((desc.zh || desc.en) ? '<div class="dr-sec desc"><p class="sub-h">说明（分类时写的）</p>' + (desc.zh ? '<p>' + esc(desc.zh) + '</p>' : '') + (desc.en ? '<p class="muted">' + esc(desc.en) + '</p>' : '') + '</div>' : '') +
-      '<p class="dr-meta">' + (ph.by ? '上次修改：<b>' + esc(ph.by) + '</b> · ' + esc(CL.time(ph.ts)) : '') +
+      '<p class="dr-meta">' + (ph.by ? '上次修改：<b>' + esc(who(ph.by)) + '</b> · ' + esc(CL.time(ph.ts)) : '') +
       ' · ' + ph.w + '×' + ph.h + (ph.sz ? ' · ' + CL.mb(ph.sz) : '') + (ph.hidden ? ' · 由 ' + esc(ph.hidden.by) + ' 隐藏' : '') + '</p>' +
       '<div class="dr-actions"><button class="btn gold" type="button" data-act="ok-next">确认 ✓ 下一张</button>' +
       '<button class="btn ghost" type="button" data-act="hide-photo"' + (R.bulk === 'purge' ? ' disabled title="正在删除，等删完再按"' : '') + '>' + (ph.hidden ? '复原这张' : '隐藏这张') + '</button>' +
@@ -1271,7 +1500,7 @@
     return '<div class="dr-nav">' + (R.from ? '<button class="mini" type="button" data-act="back">← 回到照片</button>' : '') +
       (dirty('projects', pid) ? '<span class="tag on">未保存</span>' : '') + '</div>' +
       '<p class="sub-h">项目 · 只给业务看</p><h3 class="dr-title">' + esc(pr.name) + '</h3>' +
-      '<p class="muted">' + n + ' 张照片' + (pr.by ? ' · 上次修改 ' + esc(pr.by) + ' ' + esc(CL.time(pr.ts)) : '') + '</p>' +
+      '<p class="muted">' + n + ' 张照片' + (pr.by ? ' · 上次修改 ' + esc(who(pr.by)) + ' ' + esc(CL.time(pr.ts)) : '') + '</p>' +
       '<p class="hint">这些资料会用在方案的「像你们这样的家」：只写区域和特点，<b>不会</b>印出项目名或客户名字。</p>' +
       '<div class="dr-sec"><p class="sub-h">区域 <i>例：Setia Alam</i></p><input type="text" data-pfield="area" maxlength="60" value="' + esc(pr.area || '') + '" placeholder="区域" /></div>' +
       '<div class="dr-sec"><p class="sub-h">房型</p>' + chips('ptype', ptypes, pr.ptype || '', false) + '</div>' +
@@ -1318,7 +1547,10 @@
     var b = $('#rv-budget');
     if (!b || !CL.cat) return;
     var q = quotaNow(), over = false;
-    if (q.plan === 'pro') {
+    if (q.plan === 'local') {
+      b.textContent = '存在这台电脑 · 已用约 ' + CL.mb(q.bytes || 0) + (q.bytesLeft != null ? ' / 可用约 ' + CL.mb(q.bytesLeft) : '');
+      b.title = '照片存在这台电脑的浏览器里（免费，没有每月的次数限制）。不要清除浏览器的资料，不然照片会不见。';
+    } else if (q.plan === 'pro') {
       b.textContent = 'Pro 方案 · 不限额度 · 本月写入约 ' + CL.n(q.writes) + ' 次';
       b.title = 'Vercel Pro 方案：写入次数、空间超过只是多付钱，案例库不会被停掉';
     } else {
@@ -1336,7 +1568,7 @@
   function drawLog() {
     var log = (cat().log || []).slice(-20).reverse();
     $('#rv-log').innerHTML = log.length ? log.map(function (e) {
-      return '<li' + (e.op === 'purge' ? ' class="del"' : '') + '><span class="t">' + esc(CL.time(e.ts)) + '</span><b>' + esc(e.by || '?') + '</b> ' +
+      return '<li' + (e.op === 'purge' ? ' class="del"' : '') + '><span class="t">' + esc(CL.time(e.ts)) + '</span><b>' + esc(who(e.by) || '?') + '</b> ' +
         esc(OPS[e.op] || e.op) + ' ' + CL.n(e.n | 0) + (e.op === 'patch' ? ' 项' : ' 张') + (e.op === 'purge' ? '（找不回来）' : '') + '</li>';
     }).join('') : '<li class="muted">还没有纪录</li>';
   }
@@ -1363,6 +1595,7 @@
     drawSave();
     drawLog();
     drawTidy();
+    drawTags();
     if (R.ask) drawAsk();
     if (quiet && R.mode) drawDrawerTag();
     else drawDrawer();
@@ -1588,8 +1821,10 @@
       if (inited) return;
       inited = true;
       buildTidy();
+      buildTags();
       bind();
       bindTidy();
+      bindTags();
       drawSave();
     },
     idleMs: IDLE_MS,
@@ -1602,6 +1837,8 @@
     // 测试、除错用：只算不改
     keepPlan: function (pid, n) { return keepPlan(pid || '', n || R.keepN); },
     hiddenStats: hiddenStats,
-    quota: quotaNow
+    quota: quotaNow,
+    autoTags: function () { return runAuto(); },
+    importTags: function (file) { return runImport(file); }
   };
 })();

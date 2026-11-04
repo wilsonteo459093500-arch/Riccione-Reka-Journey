@@ -249,7 +249,7 @@
     {
       key: 'misty', series: 'misty', en: 'Misty Mountain', zh: '雾山',
       // 官方文案（溪岸原创设计篇 P25）：取晨雾之「灰」、春山之「木」、早春山间将有未有之「绿」为主色
-      mood: { en: 'Light oak and soft spring green — light as gentle as mist, a calm and quiet home.', zh: '浅橡木与淡淡的春绿，像雾一样柔和的光，一个安静温和的家。' },
+      mood: { en: 'Light oak and soft spring green — mist-soft light, a quiet home.', zh: '浅橡木与淡淡的春绿，雾一样柔和的光，安静温和。' },
       palette: [
         { hex: '#F2EDE4', en: 'Warm White', zh: '暖白' },
         { hex: '#D9C3A5', en: 'Spring Oak', zh: '春山木' },

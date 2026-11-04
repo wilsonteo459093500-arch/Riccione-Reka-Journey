@@ -459,9 +459,20 @@
     var paused = !!(MB.cases && MB.cases().some(function (c) { return c && c.blocked; })) ||
       !!(MB.cloud && MB.cloud.status && MB.cloud.status().blocked);
     var unseen = cref.filter(function (ref) { return !(resolve && resolve(ref)); });
+    // 看不到的里面、是另一个案例库的照片（例：本机案例库的照片，现在用的是云端）：改回那一边就看得到
+    var libOf = function (ref) { return MB.cloud && MB.cloud.elsewhere ? MB.cloud.elsewhere(ref) : ''; };
+    var other = { local: unseen.filter(function (ref) { return libOf(ref) === 'local'; }), cloud: unseen.filter(function (ref) { return libOf(ref) === 'cloud'; }) };
+    if (other.local.length) add('warn', '有 ' + other.local.length + ' 张是本机案例库的照片：改回「存在这台电脑」就看得到',
+      '这份方案用了存在这台电脑的案例照片，现在案例库用的是云端。到「案例库」右上角按「改用这台电脑」就回来；在那之前先别按「自动配图」、换风格或重新选图，不然那几张会被换掉。', 'library');
+    if (other.cloud.length) add('warn', '有 ' + other.cloud.length + ' 张是云端案例库的照片：改回「云端」就看得到',
+      '这份方案用了云端案例库的照片，现在案例库用的是「存在这台电脑」。要嘛到「案例库」改用云端，要嘛把那个项目的文件夹汇入这台电脑；在那之前先别按「自动配图」、换风格或重新选图，不然那几张会被换掉。', 'library');
+    unseen = unseen.filter(function (ref) { return !libOf(ref); });
     var stale = cref.filter(function (ref) { var im = resolve && resolve(ref); return !!(im && im.stale && !goneOf(ref)); });
     // 暂停中：看不到的那几张也一样打不开 —— 算进下面「暂时打不开」，不叫他去登入
-    if (unseen.length && !paused) add('warn', '有 ' + unseen.length + ' 张公司案例照片这台电脑看不到 —— 先登入公司案例库',
+    var localLib = !!(MB.casesLocal && MB.casesLocal()) || !!(MB.cloud && MB.cloud.status && MB.cloud.status().local);
+    if (unseen.length && !paused && localLib) add('warn', '有 ' + unseen.length + ' 张案例照片这台电脑没有（要先汇入那个项目的文件夹）',
+      '这份方案用了公司案例照片，但这台电脑的本机案例库里没有（例如同事做的方案）。请同事把那个项目的文件夹和他的标签档给你，到「案例库」汇入；汇入之前先别按「自动配图」、换风格或重新选图，不然那几张会被换掉。', 'library');
+    else if (unseen.length && !paused) add('warn', '有 ' + unseen.length + ' 张公司案例照片这台电脑看不到 —— 先登入公司案例库',
       '这份方案用了公司案例库的照片（例如同事导出给你的）。到「图库」登入之后就看得到；登入之前先别按「自动配图」、换风格或重新选图，不然那几张会被换掉。', 'library');
     else if (stale.length && !unseen.length) add('warn', '公司案例库登入过期：' + stale.length + ' 张案例照片没办法确认还能不能用',
       '这台电脑存着的是旧清单 —— 之后被隐藏的照片（例如拍到别的客户）这里看不出来。到「图库」重新登入，再发给客户。', 'library');
@@ -493,7 +504,11 @@
         '方案里没有打不开的照片，可以照常发。案例库恢复后，自动配的空间会换回原来的案例照片。', 'library');
     }
     var deleted = cref.filter(function (ref) { return goneOf(ref) === 'deleted'; });
-    if (deleted.length) add(shown.deleted.length ? 'bad' : 'warn', '有 ' + deleted.length + ' 张案例照片已经被删除，请换一张',
+    // 本机案例库：清单里没有 = 这台电脑没有（还没汇入那个项目的文件夹），不一定是被删掉
+    if (deleted.length && localLib) add(shown.deleted.length ? 'bad' : 'warn', '有 ' + deleted.length + ' 张案例照片这台电脑没有（要先汇入那个项目的文件夹）',
+      '这台电脑的本机案例库里没有这几张（同事做的方案，或这台电脑删过）。' + (shown.deleted.length ? '方案页上那一格现在是空白的占位框。' : '') +
+      '把那个项目的文件夹拖进「案例库」汇入就会回来；急着发就换一张 —— 帮我挑、图库都挑得到别的。', where.deleted || placeOf(deleted[0]));
+    else if (deleted.length) add(shown.deleted.length ? 'bad' : 'warn', '有 ' + deleted.length + ' 张案例照片已经被删除，请换一张',
       '公司案例库已经把它删掉了（例如释放空间时删的）。' + (shown.deleted.length ? '方案页上那一格现在是空白的占位框。' : '') +
       '换一张 —— 帮我挑、图库都挑得到别的。', where.deleted || placeOf(deleted[0]));
 
