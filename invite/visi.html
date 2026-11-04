@@ -188,6 +188,8 @@
              等云端案例库有每个项目的区域 / 房型 / 家庭资料，才改回「像你们这样的家」 -->
         <p class="hint" style="margin-bottom:10px">挑 1–3 张跟方案同风格的实拍（溪岸的空间、公司做过的家），让他们看到做出来的样子。每张一句话，
           <b>只写看得到、对得上的事实</b>（系列、空间；公司案例可以写「同在 Setia Alam」「也有长辈同住」），不写「和你们很像」。空着就用自动的那句。</p>
+        <!-- 公司案例库暂停中（Vercel 免费额度用完）：app.js 的 renderBlocked 填字 -->
+        <p class="cases-blocked" data-cases-blocked hidden></p>
         <div id="cases-list"></div>
         <div class="btn-row" style="gap:6px;margin-top:10px">
           <button class="mini" type="button" id="cases-pick">从图库选</button>
@@ -362,6 +364,9 @@
         <button class="mini" type="button" data-close>关闭</button>
       </div>
     </header>
+    <p class="cases-blocked" data-cases-blocked hidden></p>
+    <!-- 案例库暂停中：方案里本来就有、现在打不开的案例照片（app.js 的 renderPickHeld），点一下拿掉 / 放回 -->
+    <div class="pick-held" id="pick-held" hidden></div>
     <div class="lib-tools" id="pick-filter"></div>
     <div class="lib-tools lib-cf" id="pick-cfilter" hidden></div>
     <div class="lib-grid" id="pick-grid"></div>
@@ -412,6 +417,7 @@
 <script src="assets/js/visi/store.js"></script>
 <script src="assets/js/visi/model.js"></script>
 <!-- 公司案例库（MB.cloud）：没登入过就不发请求，静态网站上跟以前一样 -->
+<script src="assets/js/caselib/local-sw.js"></script>
 <script src="assets/js/visi/cloud.js"></script>
 <script src="assets/js/brief-card.js"></script>
 <script src="assets/js/visi/brief-parse.js"></script>

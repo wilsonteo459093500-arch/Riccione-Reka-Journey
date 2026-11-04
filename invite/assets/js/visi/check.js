@@ -171,7 +171,7 @@
   }
 
   /**
-   * @param {object} [overflow]  预览量出来放不下的页：{ needs, plan, letter, practical, cases, rooms:[uid] }（app.js fitText）
+   * @param {object} [overflow]  预览量出来放不下的页：{ needs, plan, letter, series, practical, cases, rooms:[uid] }（app.js fitText）
    * @returns {{items: Array<{level,text,why,goto}>, score:number, total:number}}
    */
   MB.checkProject = function (p, resolve, overflow) {
@@ -282,6 +282,8 @@
     if (ov.needs) add('warn', '「你们说的」放不下，最后几条会被裁掉', '挑最痛的 3 条，或把做法写短。被裁掉的话，客户只会看到半句。', 'brief');
     if (ov.plan) add('warn', '平面图页右边的编号清单放不下', '空间太多或「这次没包含」写太长 —— 合并相近的空间，或把那句写短。', 'plan');
     if (ov.letter) add('warn', '开场短话太长，放不下', '这一页只放两三句。写短一点，客户才会读完。', 'letter');
+    // 系列页的字是溪岸的官方文案（销售改不了）：正常一定放得下，放不下多半是字体没载入（换了比较宽的退路字体）
+    if (ov.series) add('warn', '「系列 · 设计理念」那一页放不下', '这一页是溪岸的官方文案，不能删句子。多半是字体还没载入：等一下或重新整理再看；还是放不下就截图给老板。', 'series');
     if (ov.practical) add('warn', '「工期 · 保障」那一页放不下', '这一页只留几个大数字和一句回应顾虑的话，其余的当面讲。', 'practical');
     if (ov.cases) add('warn', '案例那一页放不下，句子会被裁掉', '每个案例只写一行（≤ 20 字 / 12 words），其余的当面讲。', 'cases');
     // 邀约页「为你们准备好的」三样：双语时华文、英文排成一行，太长会压到下面的时段（app.js fitText 量到才有）
@@ -332,9 +334,11 @@
     var same = p.materials.every(function (m, i) { return d.materials[i] && m.en === d.materials[i].en; });
     if (same) add('tip', '材料还是示例名称', '换成真实板材色号（例：EGGER H3303）。具体的名称比形容词可信。', 'style');
 
-    // 8 · 页数
-    var pages = MB.pageList(p).length;
-    if (pages > 14) add('warn', '共 ' + pages + ' 页，偏长', '这是一份 moodboard：页数越多，每一页越轻。合并相近的空间，关掉资讯多的页（工期 · 保障、团队、章节页），细节留到展厅讲。', 'rooms');
+    // 8 · 页数。「系列 · 设计理念」是老板要每一份都有的页（2026-11-04，默认开）：不算进「偏长」——
+    //   不然五个空间的旧方案一打开就多一条提醒，而且建议里没有、也不该叫他关掉这一页。关着的方案照旧 > 14 页提醒
+    var pageArr = MB.pageList(p), pages = pageArr.length;
+    var pageMax = 14 + (pageArr.some(function (x) { return x.type === 'series'; }) ? 1 : 0);
+    if (pages > pageMax) add('warn', '共 ' + pages + ' 页，偏长', '这是一份 moodboard：页数越多，每一页越轻。合并相近的空间，关掉资讯多的页（工期 · 保障、团队、章节页），细节留到展厅讲。', 'rooms');
 
     // 9 · 二维码网址
     var link = MB.inviteLink(p);
@@ -433,7 +437,7 @@
     uses.forEach(function (u) {
       if (String(u.ref).indexOf('c:') !== 0) return;
       var im = resolve && resolve(u.ref);
-      if (!im) return;
+      if (!im || im.gone) return;   // 已经被删掉的（占位框）：下面 16d 另外说
       var l = pageLabel(p, u);
       var go = u.pg.type === 'room' ? 'room:' + u.pg.room.uid : u.pg.type === 'cases' ? 'cases' : 'visit';
       var isRoom = MB.caseIsRoom ? MB.caseIsRoom(im) : !!(im.rooms && im.rooms[0] && MB.ROOM[im.rooms[0]]);
@@ -451,12 +455,66 @@
 
     // 16c · 方案里的公司案例照片：这台电脑看不到（同事导出的方案、没登入过），或登入过期（存着的是旧清单）
     var cref = MB.caseRefsIn ? MB.caseRefsIn(p) : [];
+    var goneOf = function (ref) {
+      var im = resolve && resolve(ref);
+      return im ? (MB.caseGone ? MB.caseGone(im) : im.gone || (im.blocked ? 'blocked' : '')) : '';
+    };
+    // 案例库暂停中（Vercel 免费额度用完）：清单里每一张都带 blocked（一登入就暂停、还没有清单时看 cloud.js 的状态）
+    var paused = !!(MB.cases && MB.cases().some(function (c) { return c && c.blocked; })) ||
+      !!(MB.cloud && MB.cloud.status && MB.cloud.status().blocked);
     var unseen = cref.filter(function (ref) { return !(resolve && resolve(ref)); });
-    var stale = cref.filter(function (ref) { var im = resolve && resolve(ref); return !!(im && im.stale); });
-    if (unseen.length) add('warn', '有 ' + unseen.length + ' 张公司案例照片这台电脑看不到 —— 先登入公司案例库',
+    // 看不到的里面、是另一个案例库的照片（例：本机案例库的照片，现在用的是云端）：改回那一边就看得到
+    var libOf = function (ref) { return MB.cloud && MB.cloud.elsewhere ? MB.cloud.elsewhere(ref) : ''; };
+    var other = { local: unseen.filter(function (ref) { return libOf(ref) === 'local'; }), cloud: unseen.filter(function (ref) { return libOf(ref) === 'cloud'; }) };
+    if (other.local.length) add('warn', '有 ' + other.local.length + ' 张是本机案例库的照片：改回「存在这台电脑」就看得到',
+      '这份方案用了存在这台电脑的案例照片，现在案例库用的是云端。到「案例库」右上角按「改用这台电脑」就回来；在那之前先别按「自动配图」、换风格或重新选图，不然那几张会被换掉。', 'library');
+    if (other.cloud.length) add('warn', '有 ' + other.cloud.length + ' 张是云端案例库的照片：改回「云端」就看得到',
+      '这份方案用了云端案例库的照片，现在案例库用的是「存在这台电脑」。要嘛到「案例库」改用云端，要嘛把那个项目的文件夹汇入这台电脑；在那之前先别按「自动配图」、换风格或重新选图，不然那几张会被换掉。', 'library');
+    unseen = unseen.filter(function (ref) { return !libOf(ref); });
+    var stale = cref.filter(function (ref) { var im = resolve && resolve(ref); return !!(im && im.stale && !goneOf(ref)); });
+    // 暂停中：看不到的那几张也一样打不开 —— 算进下面「暂时打不开」，不叫他去登入
+    var localLib = !!(MB.casesLocal && MB.casesLocal()) || !!(MB.cloud && MB.cloud.status && MB.cloud.status().local);
+    if (unseen.length && !paused && localLib) add('warn', '有 ' + unseen.length + ' 张案例照片这台电脑没有（要先汇入那个项目的文件夹）',
+      '这份方案用了公司案例照片，但这台电脑的本机案例库里没有（例如同事做的方案）。请同事把那个项目的文件夹和他的标签档给你，到「案例库」汇入；汇入之前先别按「自动配图」、换风格或重新选图，不然那几张会被换掉。', 'library');
+    else if (unseen.length && !paused) add('warn', '有 ' + unseen.length + ' 张公司案例照片这台电脑看不到 —— 先登入公司案例库',
       '这份方案用了公司案例库的照片（例如同事导出给你的）。到「图库」登入之后就看得到；登入之前先别按「自动配图」、换风格或重新选图，不然那几张会被换掉。', 'library');
-    else if (stale.length) add('warn', '公司案例库登入过期：' + stale.length + ' 张案例照片没办法确认还能不能用',
+    else if (stale.length && !unseen.length) add('warn', '公司案例库登入过期：' + stale.length + ' 张案例照片没办法确认还能不能用',
       '这台电脑存着的是旧清单 —— 之后被隐藏的照片（例如拍到别的客户）这里看不出来。到「图库」重新登入，再发给客户。', 'library');
+
+    // 16d · 印不出来的公司案例照片：方案页上是占位框（不是破图），但客户看到的是一格空白
+    //   暂停中（blocked）：等案例库恢复就回来 —— 急着发就换成内置 / 自己的照片
+    //   被删掉（deleted）：回不来了，换一张
+    //   自动配的空间不会印占位框（model.js 先换成别的照片）；这里只数真的印出来的 + 方案里写着的
+    var shown = { blocked: [], deleted: [] }, where = {};
+    uses.forEach(function (u) {
+      if (String(u.ref).indexOf('c:') !== 0) return;
+      var g = goneOf(u.ref);
+      if (!shown[g]) return;
+      if (shown[g].indexOf(u.ref) < 0) shown[g].push(u.ref);
+      where[g] = where[g] || (u.pg.type === 'room' ? 'room:' + u.pg.room.uid : u.pg.type === 'cases' ? 'cases' : 'visit');
+    });
+    /** 这张写在方案的哪里（「去改」）：空间 / 参考空间 / ⑤ 的版位图 */
+    function placeOf(ref) {
+      for (var i = 0; i < p.rooms.length; i++) if ((p.rooms[i].images || []).indexOf(ref) > -1) return 'room:' + p.rooms[i].uid;
+      if ((p.cases || []).some(function (c) { return c && c.ref === ref; })) return 'cases';
+      return 'visit';
+    }
+    if (paused) {
+      var nB = shown.blocked.length + unseen.length;
+      if (nB) add(shown.blocked.length ? 'bad' : 'warn', '有 ' + nB + ' 张公司案例照片暂时打不开（案例库暂停中），先别发给客户',
+        '公司案例库被 Vercel 暂停了（免费额度用完），这几张在方案页上是空白的占位框，PDF、PPTX 也一样。急着发：换成内置照片或你自己的照片；' +
+        '不急：等案例库恢复（老板处理好之后），到「图库」按「更新」，照片就回来了。', where.blocked || 'library');
+      else if (cref.length) add('tip', '公司案例库暂停中：自动配的案例照片先换成了内置照片',
+        '方案里没有打不开的照片，可以照常发。案例库恢复后，自动配的空间会换回原来的案例照片。', 'library');
+    }
+    var deleted = cref.filter(function (ref) { return goneOf(ref) === 'deleted'; });
+    // 本机案例库：清单里没有 = 这台电脑没有（还没汇入那个项目的文件夹），不一定是被删掉
+    if (deleted.length && localLib) add(shown.deleted.length ? 'bad' : 'warn', '有 ' + deleted.length + ' 张案例照片这台电脑没有（要先汇入那个项目的文件夹）',
+      '这台电脑的本机案例库里没有这几张（同事做的方案，或这台电脑删过）。' + (shown.deleted.length ? '方案页上那一格现在是空白的占位框。' : '') +
+      '把那个项目的文件夹拖进「案例库」汇入就会回来；急着发就换一张 —— 帮我挑、图库都挑得到别的。', where.deleted || placeOf(deleted[0]));
+    else if (deleted.length) add(shown.deleted.length ? 'bad' : 'warn', '有 ' + deleted.length + ' 张案例照片已经被删除，请换一张',
+      '公司案例库已经把它删掉了（例如释放空间时删的）。' + (shown.deleted.length ? '方案页上那一格现在是空白的占位框。' : '') +
+      '换一张 —— 帮我挑、图库都挑得到别的。', where.deleted || placeOf(deleted[0]));
 
     var offStyle = [];
     uses.forEach(function (u) {
@@ -475,6 +533,21 @@
     });
     if (offStyle.length) add('tip', '主图和方案风格不一样：' + offStyle.join('、'),
       '客户看到另一种风格，会开始比较，而不是想象自己的家。换一张「' + d.zh + '」的图；图库没有的话，上传你们做过的同风格案例。', 'rooms');
+
+    // 「系列 · 设计理念」：旁边印的是这个系列的官方名字和文案 —— 照片拍的是别的系列（⑤ 亲手选的、导入的旧方案），
+    // 客户会以为那就是这个系列（不只是房间照：斗柜细节、护墙这类标了系列的氛围照也算）
+    var srOn = pageArr.some(function (x) { return x.type === 'series'; });
+    var srUse = uses.filter(function (u) { return u.pg.type === 'series'; })[0];
+    var srIm = srUse ? imageOf(resolve, srUse.ref) : null;
+    if (srIm && srIm.series && srIm.series !== d.series) {
+      var srName = (MB.DIRECTION[srIm.series] || {}).zh || srIm.series;
+      add('warn', '「系列 · 设计理念」的照片是另一个系列（' + srName + '）',
+        '这一页印的是「' + d.zh + '」的名字和官方文案，旁边放「' + srName + '」的照片，客户会以为那就是' + d.zh + '。到 ⑤「用哪张图」把「系列」换回「自动」，或选一张「' + d.zh + '」的照片。', 'visit');
+    } else if (srOn && !srUse && plan) {
+      // 挑不到不重复的照片（这个系列的照片、风景照都用在他们家的页面了）：方案页先印这个系列的五色（deck.js .sr-sw），不会空白
+      add('tip', '「系列 · 设计理念」没有照片可放，先印了这个系列的配色',
+        '「' + d.zh + '」的照片、风景照都已经用在他们家的页面（每张只出现一次）。要放照片：上传溪岸「' + d.zh + '」的作品照片，在 ⑤「用哪张图」的「系列」手选。', 'visit');
+    }
 
     var order = { bad: 0, warn: 1, tip: 2, ok: 3 };
     items.sort(function (a, b) { return order[a.level] - order[b.level]; });

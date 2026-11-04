@@ -143,6 +143,10 @@ body.mb-body { overflow: hidden; height: 100vh; }
 .slot .thumb { padding: 0; border: 0; cursor: pointer; display: block; }
 .slot.off .thumb img { opacity: .4; }
 .slot.off div { color: var(--ink-faint); }
+/* 系列页没有不重复的照片：缩图跟方案页一样是那个系列的五条色带 */
+.thumb .thumb-sw { display: flex; width: 100%; height: 100%; }
+.thumb .thumb-sw i { flex: 1 1 0; }
+.slot.off .thumb .thumb-sw { opacity: .4; }
 .thumb.empty { display: grid; place-items: center; color: var(--ink-faint); font-size: 12px; border: 1px dashed var(--line); background: none; }
 
 /* ---------- 方案 2.0 的编辑区 ------------------------------ */
@@ -314,3 +318,32 @@ body.mb-body { overflow: hidden; height: 100vh; }
 .pv-check li a { color: var(--gold); cursor: pointer; text-decoration: underline; font-size: 12px; margin-left: 6px; }
 
 /* 方案页本身（预览缩放、每一页的版式、打印）在 deck.css */
+
+/* ---------- 公司案例库暂停中 / 案例照片被删掉 ------------------
+   方案页：打不开的案例照片印成底色的占位框（.ph-gone），绝不放会 403 的网址。
+   框里那一行是 .todo（deck.css）：只在预览给销售看，打印、PPTX 都不出现 */
+/* 那行字放在框的上缘：封面、章节页中间有标题，不要叠在一起 */
+.pg .ph.ph-gone { display: flex; align-items: flex-start; justify-content: center; text-align: center; padding-top: 28px; box-sizing: border-box; }
+.pg .ph.ph-gone .todo {
+  display: block; max-width: 78%; padding: 8px 12px; border-radius: 4px;
+  background: rgba(251,248,242,.86); color: #8A5E22; font: 500 15px/1.5 var(--sans); letter-spacing: 0; text-transform: none;
+}
+/* 编辑区的小图：没有存着的缩图时，一个浅色斜纹块（不是破图） */
+.img-gone {
+  display: block; width: 100%; height: 100%; min-height: 40px;
+  background: repeating-linear-gradient(135deg, var(--paper-2) 0 8px, #EDE6D9 8px 16px);
+}
+/* 「暂停中」横条（参考空间、选图弹窗、公司案例库那一格）：一句话说清楚，内置照片照常能用 */
+.cases-blocked {
+  margin: 0 0 12px; padding: 10px 12px; border-radius: 6px; border: 1px solid #E3C99A;
+  background: #FBF1DE; color: #7A521B; font-size: 13px; line-height: 1.65;
+}
+.cloud-st.cloud-blocked { padding: 10px 12px; border-radius: 6px; border: 1px solid #E3C99A; background: #FBF1DE; color: #7A521B; }
+#pick-modal .cases-blocked { margin: 0 0 10px; }
+/* 选图弹窗最上面一排：暂停中打不开的那几张（方案里本来就有）—— 点一下拿掉 / 放回 */
+.pick-held { margin: 0 0 12px; padding: 10px 12px; border: 1px dashed #E3C99A; border-radius: 6px; }
+.pick-held .hint { margin: 0 0 8px; font-size: 12px; }
+.pick-held .lib-item:not(.sel) { opacity: .6; }
+.pick-held .lib-item .own { background: #8A5E22; }
+/* 格子里的占位块（暂停中、载不出来的案例照片）：跟图一样是正方形 */
+.lib-item .img-gone { aspect-ratio: 1; height: auto; }

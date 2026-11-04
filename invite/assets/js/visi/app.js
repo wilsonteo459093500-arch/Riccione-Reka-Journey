@@ -161,8 +161,8 @@
     // 案例库用的风格、柜类（帮我挑）
     if (typeof p.caseStyle !== 'string') p.caseStyle = '';
     if (!Array.isArray(p.cabinets)) p.cabinets = [];
-    // moodboard：资讯多的页（工期·保障、团队、章节页）默认关
-    var def = { letter: true, chapter: false, cases: true, team: false, practical: false };
+    // moodboard：资讯多的页（工期·保障、团队、章节页）默认关；系列 · 设计理念默认开（旧存档没有这个开关 = 开）
+    var def = { letter: true, series: true, chapter: false, cases: true, team: false, practical: false };
     Object.keys(def).forEach(function (k) { if (typeof p.pages[k] !== 'boolean') p.pages[k] = def[k]; });
     // 每一页都能换图：缺的版位补 null（= 自动）
     (MB.IMAGE_SLOTS || ['cover', 'letter', 'glance', 'invite', 'back']).forEach(function (k) { if (p.images[k] === undefined) p.images[k] = null; });
@@ -466,7 +466,7 @@
     var bare = p.rooms.filter(function (r) { return !r.images.length; }).map(function (r) { return MB.t(MB.roomTitle(p, r), 'zh'); });
     ping((fresh ? '已新建方案（' + fresh + '）· ' : '已带入：') +
       [setup.client.names, setup.rooms.length + ' 个空间', setup.needs.length + ' 条需求'].filter(Boolean).join(' · ') +
-      (autoCases ? ' · 参考空间先放了 ' + autoCases + ' 个公司案例' : '') +
+      (autoCases ? ' · 参考空间先放了 ' + autoCases + ' 个公司案例' : casesBlocked() ? ' · 公司案例库暂停中，先用内置照片' : '') +
       (bare.length ? '。' + bare.join('、') + ' 还没有图 —— 到「图库」导入旧 proposal PDF 或上传' : ''), bare.length ? 5200 : 2800);
   });
 
@@ -514,6 +514,10 @@
     // 案例风格（帮我挑用）跟新系列对不上了：清掉，免得挑出另一个系列的案例
     var cst = p.caseStyle && MB.caseStyle ? MB.caseStyle(p.caseStyle) : null;
     if (p.caseStyle && (!cst || cst.series !== nd.series)) p.caseStyle = '';
+    // 「系列 · 设计理念」那张是销售在 ⑤ 亲手选的、拍的是别的系列：换回自动 —— 不然「织」的名字和文案旁边是一间骨骼线的卧室。
+    // 不分系列的（风景、自己的图没标系列）照留
+    var sp = p.images && p.images.series ? S.resolve(p.images.series) : null;
+    if (sp && sp.series && sp.series !== nd.series) p.images.series = null;
     // 自动配的空间跟着新系列重新配；销售亲手挑过的（r.manual）、用了自己图（u:）的都不动。
     // 内置图（b:）、公司案例（c:）都是自动配的：换风格就重配
     // 这台电脑看不到的公司案例照片（同事放的、还没登入）也不动：登入后就看得到，不能被换掉
@@ -522,14 +526,25 @@
       if (!r.manual && !unseenCases(r.images).length && !live.some(function (ref) { return ref.indexOf('u:') === 0; })) r.images = MB.autoPick(p, r, S.viewImages);
     });
   }
-  /** 方案里写着、这台电脑却解析不到的公司案例照片（没登入过、清单还没拿到）—— 不能当成「没有图」丢掉 */
+  /** 方案里写着、这台电脑却解析不到的公司案例照片（没登入过、清单还没拿到）—— 不能当成「没有图」丢掉。
+      本机案例库里没有的（absentHere）也算：那是这台电脑还没汇入那个文件夹，不是被删掉 */
   function unseenCases(refs) {
-    return (refs || []).filter(function (ref) { return typeof ref === 'string' && ref.indexOf('c:') === 0 && !S.resolve(ref); });
+    return (refs || []).filter(function (ref) { return typeof ref === 'string' && ref.indexOf('c:') === 0 && (!S.resolve(ref) || absentHere(ref)); });
   }
+  /** 本机案例库（存在这台电脑）：清单里没有 = 这台电脑没有（同事的方案、还没汇入那个项目的文件夹）——
+      方案页照样印占位框，但跟「看不到」一样：留着，自动配图、换风格、重新选图之前先问 */
+  function absentHere(ref) { return casesLocal() && goneOf(ref) === 'deleted'; }
+  /** 打不开的公司案例照片：'blocked'（案例库暂停中）· 'deleted'（被删掉了）· ''（model.js 的 MB.caseGone） */
+  function goneOf(ref) { var im = ref && S.resolve(ref); return im && MB.caseGone ? MB.caseGone(im) : ''; }
+  /** 案例库暂停中打不开的那几张：选不到，但恢复了还要用 —— 重新选图、按「确定」照样留着 */
+  function pausedCases(refs) { return (refs || []).filter(function (ref) { return goneOf(ref) === 'blocked'; }); }
+  /** 被删掉的那几张：回不来了 —— 重新选图时拿掉（本机案例库里没有的不算：汇入那个文件夹就回来） */
+  function deadCases(refs) { return (refs || []).filter(function (ref) { return goneOf(ref) === 'deleted' && !absentHere(ref); }); }
   function keepUnseen(rooms) {
-    var n = 0;
-    rooms.forEach(function (r) { n += unseenCases(r.images).length; });
-    return !n || confirm('有 ' + n + ' 张公司案例照片这台电脑看不到（同事放的，要先登入公司案例库）。重新配图会把它们换掉，继续？');
+    var n = 0, b = 0;
+    rooms.forEach(function (r) { n += unseenCases(r.images).length; b += pausedCases(r.images).length; });
+    if (n && !confirm('有 ' + n + ' 张公司案例照片这台电脑看不到（' + (casesLocal() ? '要先汇入那个项目的文件夹' : '同事放的，要先登入公司案例库') + '）。重新配图会把它们换掉，继续？')) return false;
+    return !b || confirm('有 ' + b + ' 张公司案例照片暂时打不开（案例库暂停中）。重新配图会把它们换成别的照片，继续？');
   }
 
   function renderStyle() {
@@ -733,12 +748,15 @@
       var im = S.resolve((plan.rooms[r.uid] || [])[0]);
       return im ? '<div class="thumb"><img src="' + esc(im.src) + '" alt="" loading="lazy" /><span class="hero">氛围照代替</span></div>' : '';
     }
+    var placed = [];
+    p.rooms.forEach(function (r) { placed = placed.concat(r.images || []); });
+    localThumbs(placed);
     $('#room-list').innerHTML = p.rooms.length ? p.rooms.map(function (r, i) {
       var def = MB.ROOM[r.key];
       var thumbs = r.images.map(function (ref, k) {
         var im = S.resolve(ref);
         if (!im) return '';
-        return '<div class="thumb"><img src="' + esc(thumbSrc(im)) + '" alt="" loading="lazy" />' + caseFlag(im) +
+        return '<div class="thumb">' + thumbImg(im) + caseFlag(im) +
           (k === 0 ? '<span class="hero">★ 主图</span>' : '') +
           '<div class="ops">' +
             (k ? '<button type="button" data-img-hero="' + k + '" title="设为主图">★</button>' : '') +
@@ -862,12 +880,67 @@
   var CASE_MAX = 3;
   /** 有公司案例可以用（登入过、清单载入了） */
   function hasCases() { return !!(MB.cases && MB.cases().some(MB.caseUsable)); }
+  /** 案例库暂停中（Vercel 的免费额度用完）：给业务看的那一句（图库、选图、参考空间、帮我挑都一样） */
+  var BLOCKED_MSG = '公司案例库暂停中：Vercel 的免费额度用完了，案例照片暂时不能用。内置照片和你自己的照片照常可以用。';
+  function casesBlocked() { return !!(MB.cloud && MB.cloud.status().blocked); }
+  /** 本机案例库（存在这台电脑）：没有登入、没有 Vercel 暂停；看不到的照片 = 这台电脑还没汇入那个文件夹 */
+  function casesLocal() { return !!(MB.cloud && MB.cloud.status().local); }
+  /** 各处的「暂停中」横条（参考空间、选图弹窗）：暂停中才出现 */
+  function renderBlocked() {
+    var on = casesBlocked();
+    $$('[data-cases-blocked]').forEach(function (el) { el.hidden = !on; if (on) el.textContent = BLOCKED_MSG; });
+  }
   /** 小图：案例用缩图包（320px），载不到用原图 */
   function thumbSrc(im) { return (im && (im.thumb || (MB.cloud && im.id && MB.cloud.thumb(im.id)))) || (im && im.src) || ''; }
-  /** 案例照片的小标记：公司案例 / 待确认 / 已隐藏（隐藏、不确定的照样印 —— 体检会提醒） */
+  /** 暂停中：方案里放的案例照片改用这台电脑存着的缩图（看得出是哪一张）—— cloud.js 这时只读本机、不连网 */
+  function localThumbs(refs) {
+    if (!MB.cloud || !casesBlocked()) return;
+    var pids = [];
+    (refs || []).forEach(function (ref) {
+      var im = typeof ref === 'string' && ref.indexOf('c:') === 0 ? S.resolve(ref) : null;
+      if (im && im.pid && !im.thumb && !MB.cloud.thumb(ref) && pids.indexOf(im.pid) < 0) pids.push(im.pid);
+    });
+    if (pids.length) MB.cloud.thumbs(pids);
+  }
+  /** 小图的 <img>；打不开的案例（暂停中、已删除）又没有存着的缩图：一个占位块（绝不放会 403 的网址） */
+  function thumbImg(im) {
+    var src = thumbSrc(im);
+    return src ? '<img src="' + esc(src) + '" alt="" loading="lazy" />' : '<span class="img-gone" aria-hidden="true"></span>';
+  }
+  /* 公司案例照片载不出来（这台电脑的清单是旧的、照片刚被删掉；案例库刚被暂停、10 分钟一次的更新还没问到）：
+     那一格马上换成占位框（方案页、PDF、PPTX、编辑区都不留破图），再请 cloud.js 确认 ——
+     确认了（已删除 / 暂停中）会重排，方案页改印正式的占位框，体检也会说。
+     <img> 的 error 不会冒泡：在 document 上用 capture 抓（方案页、PPTX 排版的那一份、图库、选图都在这份网页里） */
+  function caseImgFailed(img) {
+    var box = img.parentNode;
+    if (!box) return;
+    if (box.classList && box.classList.contains('ph') && box.closest && box.closest('.pg')) {
+      // 方案页的 <figure class="ph …">：跟 deck.js 打不开的案例同一种占位框；那行字（.todo）只在预览出现，打印、PPTX 都不印
+      var deck = box.closest('.deck'), en = !!(deck && / lang-en\b/.test(' ' + deck.className));
+      box.classList.add('ph-gone');
+      box.setAttribute('data-gone', 'broken');
+      box.innerHTML = '<span class="todo">' + (en ? 'Case photo did not load — choose another, or refresh the case library'
+        : '这张公司案例照片载不出来：换一张，或到「图库」按「更新」') + '</span>';
+      return;
+    }
+    var sp = document.createElement('span');
+    sp.className = 'img-gone';
+    sp.setAttribute('aria-hidden', 'true');
+    box.replaceChild(sp, img);
+  }
+  document.addEventListener('error', function (e) {
+    var img = e.target;
+    if (!img || img.tagName !== 'IMG' || !MB.cloud || !MB.cloud.isCaseSrc) return;
+    var src = img.getAttribute('src') || '';
+    if (!MB.cloud.isCaseSrc(src)) return;
+    try { caseImgFailed(img); } catch (err) { console.error(err); }
+    if (MB.cloud.photoFailed) MB.cloud.photoFailed(src);
+  }, true);
+  /** 案例照片的小标记：公司案例 / 待确认 / 已隐藏 / 暂时打不开 / 已删除（照样印 —— 体检会提醒） */
   function caseFlag(im) {
     if (!im || !(im.isCase || /^c:/.test(im.id || im.ref || ''))) return '';
-    var t = im.hidden ? '已隐藏' : im.status === 'unsure' ? '待确认' : '案例';
+    var g = MB.caseGone ? MB.caseGone(im) : '';
+    var t = g === 'blocked' ? '暂时打不开' : g === 'deleted' ? (casesLocal() ? '这台电脑没有' : '已删除') : im.hidden ? '已隐藏' : im.status === 'unsure' ? '待确认' : '案例';
     return '<span class="case-tag' + (t === '案例' ? '' : ' warn') + '">' + t + '</span>';
   }
   /** 图库那一份（有 rooms / series / label），给 MB.caseNote 起草那一句 */
@@ -888,12 +961,13 @@
   }
   function renderCases() {
     var p = S.project;
+    localThumbs(p.cases.map(function (c) { return c && c.ref; }));
     var rows = p.cases.map(function (c, i) {
       var im = S.resolve(c.ref), item = libItem(c.ref);
       if (!im) return '';
       var hint = caseHint(p, item) || '一句话，只写看得到的事实，例：同一个系列的厨房';
       return '<div class="case-row" data-i="' + i + '">' +
-        '<div class="thumb"><img src="' + esc(thumbSrc(im)) + '" alt="" loading="lazy" /><span class="hero">' + (i + 1) + '</span>' +
+        '<div class="thumb">' + thumbImg(im) + '<span class="hero">' + (i + 1) + '</span>' +
           caseFlag(im) +
           '<div class="ops">' +
             (i ? '<button type="button" data-case-up title="往前">↑</button>' : '') +
@@ -905,17 +979,29 @@
     }).join('');
     $('#cases-list').innerHTML = rows || '<p class="hint" style="margin:0">还没有。挑 1–3 张跟方案同风格的溪岸实拍；一张都没有就不出这一页。</p>';
     $('#cases-pick').textContent = rows ? '换 / 加案例' : '从图库选';
-    // 公司案例库：帮我挑、自动挑 3 个（有案例才出现）
-    var on = hasCases();
-    $('#cases-match').hidden = !on;
-    $('#cases-auto').hidden = !on;
+    // 公司案例库：帮我挑、自动挑 3 个（有案例才出现；暂停中也出现，按了说明为什么挑不了）
+    var on = hasCases(), paused = casesBlocked();
+    $('#cases-match').hidden = !(on || paused);
+    $('#cases-auto').hidden = !(on || paused);
     var st = MB.cloud ? MB.cloud.status().status : 'unavailable';
-    $('#cases-cloud').hidden = on || st === 'unavailable';
+    $('#cases-cloud').hidden = on || paused || st === 'unavailable';
+    // 本机案例库：不用登入，是还没把案例文件夹汇入这台电脑
+    if (casesLocal() && !$('#cases-cloud').hidden) {
+      var cs = MB.cloud.status(), out = cs.cached && cs.count && cs.status === 'login' ? 'out' : 'empty';
+      if ($('#cases-cloud').getAttribute('data-local') !== out) {
+        $('#cases-cloud').setAttribute('data-local', out);
+        $('#cases-cloud').innerHTML = out === 'out' ?
+          '本机案例库登出了（' + cs.count + ' 张照片都还在这台电脑）：到<a href="caselib.html" target="_blank" rel="noopener">案例库</a>填你的名字、按「开始用」，「帮我挑」就回来。' :
+          '先到<a href="caselib.html" target="_blank" rel="noopener">案例库</a>把案例文件夹汇入这台电脑，「帮我挑」就会按需求卡挑公司做过的家。';
+      }
+    }
+    renderBlocked();
   }
   $('#cases-pick').addEventListener('click', function () { openPicker({ mode: 'cases', src: hasCases() ? 'cases' : 'all' }); });
   $('#cases-match').addEventListener('click', function () { openMatch(); });
   $('#cases-auto').addEventListener('click', function () {
     var p = S.project;
+    if (casesBlocked()) { ping(BLOCKED_MSG, 4800); return; }
     if (p.cases.length && !confirm('换掉现在的 ' + p.cases.length + ' 个参考空间？')) return;
     var refs = MB.suggestCases ? MB.suggestCases(p, S.resolve, CASE_MAX) : [];
     if (!refs.length) { ping('公司案例库里还没有「' + MB.dir(p).zh + '」的照片', 2800); return; }
@@ -1044,6 +1130,7 @@
     ['letter', '开场短话', '先讲他们，再讲我们'],
     ['needs', '你们说的 · 我们做的', '最痛的 3 条，用他们的原话'],
     ['glance', '一页看懂', '拼贴：图 + 配色 + 材质'],
+    ['series', '系列 · 设计理念', '让客户认识这个系列的设计理念'],
     ['plan', '平面图编号', '把注意力锚在「我家」'],
     ['chapter', '章节情绪页', '预设关 · 一张大图、一句话'],
     ['cases', '参考空间', '在 ③ 挑了才出现'],
@@ -1054,20 +1141,21 @@
     ['back', '封底 · 欢迎回家', '']
   ];
   /* 每一页的图都能换（⑤）：没选 = 自动（整份不重复，按方案轮换） */
-  var SLOTS = [['cover', '封面'], ['letter', '开场'], ['glance', '一页看懂'], ['chapter', '章节'], ['practical', '工期'],
+  var SLOTS = [['cover', '封面'], ['letter', '开场'], ['glance', '一页看懂'], ['series', '系列'], ['chapter', '章节'], ['practical', '工期'],
     ['language', '品牌'], ['team', '团队'], ['invite', '邀约'], ['back', '封底']];
   /* 情绪页选图时先看「氛围 · 风景」那一类 */
   var MOOD_SLOTS = { letter: 1, chapter: 1, practical: 1, language: 1, team: 1, back: 1 };
   var SLOT_BRAND = { cover: 'cover', letter: 'letter', back: 'welcome', chapter: 'detail', practical: 'craft', language: 'brand', team: 'team' };
   /* 缩图要跟方案页同一张：model.js 的 MB.pageImageSrc（同一份 MB.deckImages，自动规则挑不到图就用品牌照） */
+  /** { src, gone }：gone = 销售选的公司案例打不开（'blocked' 暂停中 / 'deleted' 被删掉），src 是空的 */
   function slotSrc(p, slot, plan) {
     try {
-      if (typeof MB.pageImageSrc === 'function') { var x = MB.pageImageSrc(p, slot, S.resolve, plan); return x ? x.src : ''; }
+      if (typeof MB.pageImageSrc === 'function') { var x = MB.pageImageSrc(p, slot, S.resolve, plan); return { src: x ? x.src : '', gone: x && x.gone || '' }; }
       var im = S.resolve(MB.pageImage(p, slot, S.resolve));
-      if (im) return im.src;
+      if (im) return { src: im.src, gone: MB.caseGone ? MB.caseGone(im) : '' };
     } catch (e) { console.error(e); }
     var ph = MB.BRAND && MB.BRAND.photos && MB.BRAND.photos[SLOT_BRAND[slot]];
-    return ph ? ph.src : '';
+    return { src: ph ? ph.src : '', gone: '' };
   }
   /** 这一页现在出不出（关着的页缩图变淡） */
   function pageOn(p, type) {
@@ -1090,10 +1178,14 @@
     var plan = null;
     try { plan = MB.deckImages ? MB.deckImages(p, S.resolve) : null; } catch (e) { console.error(e); }
     $('#slot-thumbs').innerHTML = SLOTS.map(function (s) {
-      var src = slotSrc(p, s[0], plan || undefined), on = pageOn(p, s[0]);
+      var x = slotSrc(p, s[0], plan || undefined), src = x.src, on = pageOn(p, s[0]);
+      var gone = x.gone === 'blocked' ? '暂时打不开' : x.gone === 'deleted' ? (casesLocal() ? '这台电脑没有' : '已删除') : '';
+      // 系列页挑不到不重复的照片：方案页印那个系列的配色（deck.js .sr-sw）—— 缩图也是那几条色带
+      var sw = !src && !gone && s[0] === 'series' ? (MB.dir(p).palette || []).filter(function (c) { return c && /^#[0-9A-Fa-f]{6}$/.test(c.hex); }) : [];
       return '<div class="slot' + (on ? '' : ' off') + '" title="' + (on ? '' : '这一页关着 —— 打开才会印') + '">' +
         '<button type="button" class="thumb" data-slot="' + s[0] + '">' +
-          (src ? '<img src="' + esc(src) + '" alt="" />' : '') + '</button>' +
+          (src ? '<img src="' + esc(src) + '" alt="" />' : gone ? '<span class="img-gone" aria-hidden="true"></span><span class="case-tag warn">' + gone + '</span>'
+            : sw.length ? '<span class="thumb-sw" title="这个系列的照片都用在别页了：先印这个系列的配色">' + sw.map(function (c) { return '<i style="background:' + c.hex + '"></i>'; }).join('') + '</span>' : '') + '</button>' +
         '<div>' + s[1] + (p.images[s[0]] ? ' · <a href="#" data-slot-auto="' + s[0] + '">自动</a>' : '') + '</div></div>';
     }).join('');
     $('#slot-auto').hidden = !(p.visit.auto && p.visit.date);
@@ -1429,7 +1521,7 @@
     $('#lib-filter').innerHTML = g.chips;
     $('#lib-cfilter').innerHTML = g.cfilter;
     $('#lib-cfilter').hidden = !g.cfilter;
-    $('#lib-match').hidden = !hasCases();
+    $('#lib-match').hidden = !(hasCases() || casesBlocked());
     $('#lib-grid').innerHTML = g.items.map(function (im) {
       if (im.isCase) {
         return '<div class="lib-item case" data-ref="' + esc(im.ref) + '" title="' + esc((MB.cloud && MB.cloud.projectLabel(im.pid)) || '') + '">' +
@@ -1608,16 +1700,39 @@
     var tools = '<div class="btn-row"><button class="mini" type="button" data-cloud-refresh>更新</button>' +
       (st.user ? '<button class="mini" type="button" data-cloud-logout>登出</button>' : '') + '</div>';
     var when = st.checked ? ' · ' + fmtTime(st.checked) + ' 更新' : '';
+    if (st.local) return localBoxBody(st, n, when);
+    // 暂停中：最上面先说清楚（登入过期、连不上的时候也一样）
+    var ban = st.blocked ? '<p class="cloud-st warn cloud-blocked">' + BLOCKED_MSG + '</p>' : '';
+    return ban + cloudBoxBody(st, n, form, tools, when);
+  }
+  /** 本机案例库（案例库页选了「存在这台电脑」）：不用登入、不会被 Vercel 暂停 */
+  function localBoxBody(st, n, when) {
+    var lib = '<a href="caselib.html" target="_blank" rel="noopener">案例库</a>';
+    var tools = '<div class="btn-row"><button class="mini" type="button" data-cloud-refresh>更新</button></div>';
+    if (st.status === 'ok' || (st.status === 'cached' && st.cached)) return '<p class="cloud-st ok">本机案例库 · ' + n + ' 张（存在这台电脑）' + when + '</p>' +
+      '<p class="cloud-st">同事看不到这台电脑的照片：要给同事用，到' + lib + '「审核」汇出标签档，连同那个文件夹一起给他汇入。</p>' + tools;
+    // 登出了（照片都还在这台电脑）：填名字就好，不要叫他再拖一次文件夹
+    if ((st.status === 'login' || st.status === 'idle') && st.cached && n) return '<p class="cloud-st warn">本机案例库登出了（' + n + ' 张照片都还在这台电脑）：到' + lib + '填你的名字、按「开始用」就回来。</p>' + tools;
+    if (st.status === 'login' || st.status === 'idle') return '<p class="cloud-st">本机案例库还没开：先到' + lib + '选「存在这台电脑」、填你的名字，再把案例文件夹拖进去。</p>' + tools;
+    return '<p class="cloud-st warn">这台电脑的案例库还没准备好' + (st.cached ? '，先用存着的 ' + n + ' 张' : '') + '：重新整理这一页再试（要用一般视窗的 Chrome 或 Edge）。</p>' + tools;
+  }
+  function cloudBoxBody(st, n, form, tools, when) {
+    if (st.status === 'blocked') return '<p class="cloud-st">' + (st.user ? '已登入：<b>' + esc(st.user) + '</b> · ' : '') +
+      '方案里已经放的案例照片先印成空白的占位框（体检会提醒）。老板处理好之后按「更新」就恢复。</p>' + tools;
     if (st.status === 'ok') return '<p class="cloud-st ok">' + (st.user ? '已登入：<b>' + esc(st.user) + '</b> · ' : '') + n + ' 张案例' + when + '</p>' + tools;
     if (st.status === 'cached') return '<p class="cloud-st">这台电脑存着 ' + n + ' 张案例' + when + ' —— 正在问有没有新的…</p>';
-    if (st.status === 'offline') return '<p class="cloud-st warn">暂时连不上公司案例库' + (st.cached ? '，先用这台电脑存着的 ' + n + ' 张' + when : '') + '。</p>' + tools;
-    if (st.status === 'unavailable') return '<p class="cloud-st">这个网址没有公司案例库（只有正式网站有）' + (st.cached ? '；这台电脑存着的 ' + n + ' 张照样能用' : '') + '。</p>';
+    if (st.status === 'offline') return '<p class="cloud-st warn">暂时连不上公司案例库' + (st.blocked ? '（上次知道的是暂停中），方案里的案例照片先印成空白的占位框' :
+      st.cached ? '，先用这台电脑存着的 ' + n + ' 张' + when : '') + '。</p>' + tools;
+    if (st.status === 'unavailable') return '<p class="cloud-st">这个网址没有公司案例库（只有正式网站有）' + (st.cached && !st.blocked ? '；这台电脑存着的 ' + n + ' 张照样能用' : '') + '。</p>';
     // 登入过期：存着的清单只拿来显示方案里已经放的（之后被隐藏的照片这里看不出来），不再自动挑；登出了就是一般的登入框
+    // 暂停中：方案里的案例照片这时是占位框（不是「照样显示」）
+    if (st.status === 'login' && st.cached && !st.loggedOut && st.blocked) return '<p class="cloud-st warn">登入过期了 —— 案例库暂停中，方案里已经放的案例照片先印成空白的占位框。重新登入（登入后才知道案例库恢复了没有）：</p>' + form;
     if (st.status === 'login' && st.cached && !st.loggedOut) return '<p class="cloud-st warn">登入过期了 —— 方案里已经放的案例照片照样显示，但不会再自动挑、也挑不到新的（之后被隐藏的照片这里看不出来）。重新登入：</p>' + form;
     return '<p class="cloud-st">公司做过的案例（风格、柜类、空间都标好了）。用<b>团队密码</b>登入一次，「帮我挑」就会按需求卡挑给你。</p>' + form;
   }
   function renderCloudBox() {
     $$('[data-cloud-box]').forEach(function (el) { el.innerHTML = cloudBoxHtml(); });
+    renderBlocked();
   }
   document.addEventListener('submit', function (e) {
     var f = e.target.closest && e.target.closest('[data-cloud-login]'); if (!f) return;
@@ -1634,14 +1749,20 @@
       renderCloudBox();
       if (S.tab === 'library') renderLibrary();
       if (S.tab === 'rooms') renderCases();
-      ping('已登入公司案例库：' + MB.cloud.status().count + ' 张案例', 2600);
+      if (casesBlocked()) ping('已登入。' + BLOCKED_MSG, 5200);
+      else ping('已登入公司案例库：' + MB.cloud.status().count + ' 张案例', 2600);
     });
   });
   document.addEventListener('click', function (e) {
     if (e.target.closest('[data-cloud-refresh]')) {
       ping('正在更新公司案例库…', 3000);
       MB.cloud.refresh(true).then(function (st) {
-        ping(st.status === 'ok' ? '公司案例库已是最新：' + st.count + ' 张' : st.status === 'login' ? '要重新登入' : '暂时连不上，先用存着的', 2400);
+        // 先看「问到了没有」：登入过期、连不上的时候，「还在暂停中」只是上次知道的（不一定还是）
+        ping(st.local ? (st.status === 'ok' ? '本机案例库：' + st.count + ' 张（存在这台电脑）' : '这台电脑的案例库还没准备好') :
+          st.status === 'ok' ? '公司案例库已是最新：' + st.count + ' 张' :
+          st.status === 'login' ? (st.blocked ? '要重新登入 —— 登入后才知道案例库恢复了没有' : '要重新登入') :
+          st.status === 'blocked' ? '公司案例库还在暂停中 —— 案例照片暂时不能用' :
+          '暂时连不上，先用存着的' + (st.blocked ? '（上次知道的是案例库暂停中）' : ''), 2600);
         renderCloudBox();
       });
     }
@@ -1684,8 +1805,16 @@
     var keep = Object.keys(matchDone).filter(function (ref) { return !list.some(function (x) { return x.ref === ref; }); });
     list = list.concat(keep.map(function (ref) { return matchDone[ref].item; }));
     var hint = $('#match-hint');
+    // 暂停中：说清楚为什么挑不了（不是「没有对得上的」）
+    if (casesBlocked()) {
+      hint.textContent = '帮我挑现在挑不了：';
+      $('#match-list').innerHTML = '<div data-cloud-box>' + cloudBoxHtml() + '</div>';
+      matchList = [];
+      return;
+    }
     if (!hasCases()) {
-      hint.innerHTML = '要先登入公司案例库：';
+      var lst = MB.cloud ? MB.cloud.status() : {};
+      hint.innerHTML = !casesLocal() ? '要先登入公司案例库：' : lst.cached && lst.count && lst.status === 'login' ? '本机案例库登出了：' : '本机案例库里还没有照片：';
       $('#match-list').innerHTML = '<div data-cloud-box>' + cloudBoxHtml() + '</div>';
       return;
     }
@@ -1704,7 +1833,7 @@
       var done = matchDone[x.ref];
       var rname = room ? MB.t(MB.roomTitle(p, room), 'zh') : '';
       return '<div class="match-row" data-ref="' + esc(x.ref) + '" data-why-zh="' + esc(x.why.zh) + '" data-why-en="' + esc(x.why.en) + '">' +
-        '<div class="thumb"><img src="' + esc(thumbSrc(im)) + '" alt="" loading="lazy" /></div>' +
+        '<div class="thumb">' + thumbImg(im) + '</div>' +
         '<div class="match-txt"><p class="match-why">' + esc(x.why.zh) + '</p><p class="match-en">' + esc(x.why.en) + '</p>' +
           '<span class="case-cap">' + esc(capOf(im)) + '</span>' +
           '<div class="btn-row">' +
@@ -1825,7 +1954,12 @@
           rebuildResolver();
           if (p) {
             S.projects.push(p);
-            return storePut(p).then(function () { openProject(p); ping('已导入方案'); });
+            return storePut(p).then(function () {
+              openProject(p); ping('已导入方案');
+              // 同事的方案用了这台电脑清单里还没有的案例照片（可能是刚上传的）：马上问一次，不要先当成「已经被删除」
+              if (MB.cloud && MB.caseRefsIn && MB.cloud.status().status === 'ok' &&
+                  MB.caseRefsIn(p).some(function (ref) { return !MB.caseOf(ref); })) MB.cloud.refresh(true);
+            });
           }
           renderLibrary(); ping('已导入 ' + imgs.length + ' 张图');
         });
@@ -1841,20 +1975,33 @@
   function openPicker(opts) {
     // f：跟图库同一套筛选（来源 × 空间 × 公司案例的风格 · 柜类 · 项目 · 页）
     // keep：这台电脑看不到的公司案例照片（同事放的、还没登入）—— 选不到也看不到，按「确定」时照样留着
-    S.picker = { mode: opts.mode, uid: opts.uid, slot: opts.slot, sel: [], keep: [],
+    S.picker = { mode: opts.mode, uid: opts.uid, slot: opts.slot, sel: [], keep: [], paused: [],
       f: { src: opts.src || 'all', room: opts.filter || 'all', style: '', cab: '', pid: '', page: 0 } };
     var p = S.project;
-    var keepNote = function (n) { return n ? ' · 另有 ' + n + ' 张公司案例照片这台电脑看不到，会留着（登入公司案例库就看得到）' : ''; };
+    // keep：这台电脑看不到的（同事放的）—— 选不到也看不到，按「确定」时照样留着（也算进张数上限）。
+    // paused：案例库暂停中打不开的 —— 照样算「已选」、留在原来的位置（主图还是主图），
+    //   放在选图弹窗最上面一排，销售点一下就能拿掉、换成内置 / 自己的照片（体检就是这样叫他做的）。
+    // 被删掉的按「确定」就拿掉
+    var keepNote = function (refs) {
+      var n = unseenCases(refs).length, b = pausedCases(refs).length, d = deadCases(refs).length;
+      return (n ? ' · 另有 ' + n + ' 张公司案例照片这台电脑看不到，会留着（' + (casesLocal() ? '汇入那个项目的文件夹就看得到' : '登入公司案例库就看得到') + '）' : '') +
+        (b ? ' · 另有 ' + b + ' 张公司案例照片暂时打不开（案例库暂停中），会留着' : '') +
+        (d ? ' · 另有 ' + d + ' 张案例照片' + (casesLocal() ? '这台电脑没有' : '已经被删除') + '，按「加入所选」就拿掉' : '');
+    };
+    var pickable = function (ref) { return !!S.resolve(ref) && (!goneOf(ref) || goneOf(ref) === 'blocked'); };
     if (opts.mode === 'room') {
       var r = p.rooms.filter(function (x) { return x.uid === opts.uid; })[0];
-      S.picker.sel = r ? r.images.filter(function (ref) { return S.resolve(ref); }) : [];
+      S.picker.sel = r ? r.images.filter(pickable) : [];
       S.picker.keep = r ? unseenCases(r.images) : [];
-      $('#pick-title').textContent = '选图 · ' + MB.t(MB.roomTitle(p, r), 'zh') + '（第一张 = 主图，最多 4 张）' + keepNote(S.picker.keep.length);
+      S.picker.paused = r ? pausedCases(r.images) : [];
+      $('#pick-title').textContent = '选图 · ' + MB.t(MB.roomTitle(p, r), 'zh') + '（第一张 = 主图，最多 4 张）' + keepNote(r ? r.images : []);
       $('#pick-ok').hidden = false;
     } else if (opts.mode === 'cases') {
-      S.picker.sel = p.cases.map(function (c) { return c.ref; }).filter(function (ref) { return S.resolve(ref); });
-      S.picker.keep = unseenCases(p.cases.map(function (c) { return c && c.ref; }));
-      $('#pick-title').textContent = '选参考空间（最多 ' + CASE_MAX + ' 张，标「已用」的在别页出现过）' + keepNote(S.picker.keep.length);
+      var crefs = p.cases.map(function (c) { return c && c.ref; });
+      S.picker.sel = crefs.filter(pickable);
+      S.picker.keep = unseenCases(crefs);
+      S.picker.paused = pausedCases(crefs);
+      $('#pick-title').textContent = '选参考空间（最多 ' + CASE_MAX + ' 张，标「已用」的在别页出现过）' + keepNote(crefs);
       $('#pick-ok').hidden = false;
     } else {
       $('#pick-title').textContent = '选一张 · ' + (SLOTS.filter(function (s) { return s[0] === opts.slot; })[0] || ['', ''])[1] + '（标「已用」的在别页出现过）';
@@ -1862,7 +2009,9 @@
     }
     // 这份方案别页已经用了哪些图：选图时标出来，免得同一张出现两次
     S.picker.usedBy = usedBy(p, opts);
+    localThumbs(S.picker.paused);
     renderPicker();
+    renderBlocked();
     $('#pick-modal').classList.add('on');
   }
   /** ref（同一张照片的不同裁切算同一张）→ 用在哪一页（排除正在选的这个位置自己） */
@@ -1886,17 +2035,38 @@
     } catch (e) { console.error(e); }
     return out;
   }
+  /** 选图格子下面那一行的「第几张」：参考空间里看不到的那几张排在最前面（按「确定」时） */
+  function pickCap(pk, n) {
+    if (pk.mode === 'cases') return '第 ' + (n + (pk.keep || []).length + 1) + ' 个';
+    return n === 0 ? '★ 主图' : '第 ' + (n + 1) + ' 张';
+  }
+  /** 案例库暂停中打不开、但方案里本来就有的那几张：最上面一排，点一下拿掉 / 放回（位置跟方案里一样） */
+  function renderPickHeld(pk) {
+    var el = $('#pick-held');
+    if (!el) return;
+    var list = (pk.paused || []).filter(function (ref) { return goneOf(ref) === 'blocked'; });
+    el.hidden = !list.length;
+    if (!list.length) { el.innerHTML = ''; return; }
+    el.innerHTML = '<p class="hint">这几张公司案例照片暂时打不开（案例库暂停中），方案页上是空白的占位框。' +
+      '点一下拿掉，再从下面挑内置照片或你自己的照片换上；不急就留着，案例库恢复后照片会回来。</p>' +
+      '<div class="lib-grid">' + list.map(function (ref) {
+        var im = S.resolve(ref), n = pk.sel.indexOf(ref);
+        return '<button type="button" class="lib-item case held' + (n > -1 ? ' sel' : '') + '" data-ref="' + esc(ref) + '" title="' + (n > -1 ? '点一下拿掉' : '点一下放回') + '">' +
+          thumbImg(im) + '<span class="own">暂时打不开</span><span class="cap">' + (n > -1 ? pickCap(pk, n) : '已拿掉') + '</span></button>';
+      }).join('') + '</div>';
+  }
   function renderPicker() {
     var pk = S.picker, g = gallery(pk.f, libraryItems());
     var key = MB.shotKey || function (r) { return r; };
     $('#pick-filter').innerHTML = g.chips;
     $('#pick-cfilter').innerHTML = g.cfilter;
     $('#pick-cfilter').hidden = !g.cfilter;
+    renderPickHeld(pk);
     $('#pick-grid').innerHTML = g.items.map(function (im) {
       var n = pk.sel.indexOf(im.ref), used = (pk.usedBy || {})[key(im.ref)];
       var btn = '<button type="button" class="lib-item' + (n > -1 ? ' sel' : '') + (used && n < 0 ? ' used' : '') + (im.isCase ? ' case' : '') + '" data-ref="' + esc(im.ref) + '">' +
         (im.isCase ? caseImg(im) + '<span class="own">案例</span>' : '<img src="' + esc(im.src) + '" alt="" loading="lazy" />' + (im.own ? '<span class="own">我的</span>' : '')) +
-        '<span class="cap">' + (n > -1 ? (pk.mode === 'cases' ? '第 ' + (n + 1) + ' 个' : n === 0 ? '★ 主图' : '第 ' + (n + 1) + ' 张')
+        '<span class="cap">' + (n > -1 ? pickCap(pk, n)
           : used ? '已用 · ' + esc(used) : esc(im.own ? tagName(im.rooms[0]) : im.label || '')) + '</span></button>';
       // 案例：格子旁边多一个「同项目」（不能放在按钮里面）
       return im.isCase ? '<div class="lib-cell">' + btn + sameProjBtn(im) + '</div>' : btn;
@@ -1909,24 +2079,36 @@
   $('#pick-cfilter').addEventListener('change', function (e) { if (galleryChange(S.picker.f, e)) renderPicker(); });
   $('#pick-cfilter').addEventListener('click', function (e) { if (galleryClick(S.picker.f, e)) renderPicker(); });
   $('#pick-pager').addEventListener('click', function (e) { if (galleryClick(S.picker.f, e)) renderPicker(); });
-  $('#pick-grid').addEventListener('click', function (e) {
-    if (e.target.closest('[data-same-proj]')) { if (galleryClick(S.picker.f, e)) renderPicker(); return; }
-    var b = e.target.closest('[data-ref]'); if (!b) return;
-    var ref = b.getAttribute('data-ref'), pk = S.picker;
+  /** 满了：说为什么（暂停中的那几张也算在里面 —— 要换就先拿掉；看不到的那几张会留着，也算） */
+  function pickFull(pk, max, base) {
+    var paused = (pk.paused || []).filter(function (ref) { return pk.sel.indexOf(ref) > -1; }).length, unseen = (pk.keep || []).length;
+    ping(paused ? '最多 ' + max + ' 张 —— 要换掉暂时打不开的案例照片：先在最上面点一下把它拿掉' :
+      unseen ? '最多 ' + max + ' 张（另有 ' + unseen + ' 张这台电脑看不到的公司案例照片会留着，也算在里面）' : base, 3600);
+  }
+  function pickTap(ref) {
+    var pk = S.picker;
     if (pk.mode === 'slot') {
       S.project.images[pk.slot] = ref;
       yieldToHandPicked(S.project);
       closeModals(); renderVisit(); changed({ now: true });
       return;
     }
-    var i = pk.sel.indexOf(ref);
+    var i = pk.sel.indexOf(ref), n = pk.sel.length + (pk.keep || []).length;
     var key = MB.shotKey || function (r) { return r; };
     if (i > -1) pk.sel.splice(i, 1);
-    else if (pk.mode === 'cases' && pk.sel.length >= CASE_MAX) { ping('最多 ' + CASE_MAX + ' 个 —— 挑最能说明风格的'); return; }
+    else if (pk.mode === 'cases' && n >= CASE_MAX) { pickFull(pk, CASE_MAX, '最多 ' + CASE_MAX + ' 个 —— 挑最能说明风格的'); return; }
     else if (pk.mode === 'cases' && pk.sel.some(function (x) { return key(x) === key(ref); })) { ping('这是已选那张的另一种裁切 —— 同一张照片只放一次'); return; }
-    else if (pk.sel.length >= 4) { ping('一页最多 4 张 —— 3 张最好'); return; }
+    else if (n >= 4) { pickFull(pk, 4, '一页最多 4 张 —— 3 张最好'); return; }
     else pk.sel.push(ref);
     renderPicker();
+  }
+  $('#pick-grid').addEventListener('click', function (e) {
+    if (e.target.closest('[data-same-proj]')) { if (galleryClick(S.picker.f, e)) renderPicker(); return; }
+    var b = e.target.closest('[data-ref]'); if (!b) return;
+    pickTap(b.getAttribute('data-ref'));
+  });
+  $('#pick-held').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-ref]'); if (b) pickTap(b.getAttribute('data-ref'));
   });
   $('#pick-ok').addEventListener('click', function () {
     var pk = S.picker;
@@ -1934,7 +2116,8 @@
       // 已经写过那一句的案例，重新选过还留着那句
       var notes = {};
       S.project.cases.forEach(function (c) { notes[c.ref] = c.note; });
-      // 看不到的那几张排前面、一定留着（同事挑的，登入后就看得到）
+      // 看不到的那几张排前面、一定留着（同事挑的，登入后就看得到）；张数上限已经算了它们（pickTap），新挑的不会被挤掉。
+      // 暂停中打不开的那几张就在 sel 里（原来的位置）：销售拿掉的才拿掉
       S.project.cases = (pk.keep || []).concat(pk.sel).slice(0, CASE_MAX).map(function (ref) { return { ref: ref, note: notes[ref] != null ? notes[ref] : null }; });
       if (yieldToHandPicked(S.project).length) renderRooms();
       closeModals(); renderCases(); changed({ now: true });
@@ -2034,11 +2217,12 @@
   /* 字太多放不下的页：先缩一号（tight）、再缩一号（tighter）；还放不下就记下来，体检提醒。
      打印时被裁掉的字不会有任何提示 —— 客户只会看到半句话 */
   function fitText() {
-    var over = { needs: false, plan: false, letter: false, practical: false, cases: false, invite: false, rooms: [] };
+    var over = { needs: false, plan: false, letter: false, series: false, practical: false, cases: false, invite: false, rooms: [] };
     function tooTall(el) { return el.scrollHeight > el.clientHeight + 2; }
     $$('#deck .pg').forEach(function (pg) {
       // .iv-flow：邀约页右栏（三样 + 时段 + 联络）—— 销售把「准备的三样」写长了会放不下
-      var box = $('.nd-list', pg) || $('.pl-side', pg) || $('.rm-txt', pg) || $('.lt-body', pg) || $('.pr-body', pg) || $('.cs-list', pg) || $('.iv-flow', pg);
+      // .sr-col：系列 · 设计理念的右栏（官方文案不删句子；字体没到时才可能放不下）
+      var box = $('.nd-list', pg) || $('.pl-side', pg) || $('.rm-txt', pg) || $('.lt-body', pg) || $('.pr-body', pg) || $('.cs-list', pg) || $('.iv-flow', pg) || $('.sr-col', pg);
       if (!box) return;
       // 参考空间页（.cs-list）：每张卡片那一行不自己裁切，太长会伸出清单底部 —— 这里（和 pptx.js）量得到
       pg.classList.remove('tight', 'tighter');
@@ -2049,7 +2233,7 @@
       if (!tooTall(box)) return;
       var g = pg.getAttribute('data-goto') || '';
       if (g.indexOf('room:') === 0) over.rooms.push(g.slice(5));
-      else if (typeof over[g] === 'boolean') over[g] = true;   // needs / plan / letter / practical / cases / invite
+      else if (typeof over[g] === 'boolean') over[g] = true;   // needs / plan / letter / series / practical / cases / invite
     });
     S.overflow = over;
   }
@@ -2066,7 +2250,7 @@
      体检的 goto 可能是分页名，也可能是页面 type（check.js 新规则用） */
   var GOTO = {
     brief: ['brief'], style: ['style'], rooms: ['rooms'], plan: ['plan'], visit: ['visit'], copy: ['copy'], library: ['library'],
-    cover: ['brief'], letter: ['brief', '#letter-panel'], needs: ['brief', '#needs-panel'], glance: ['style'],
+    cover: ['brief'], letter: ['brief', '#letter-panel'], needs: ['brief', '#needs-panel'], glance: ['style'], series: ['style'],
     chapter: ['style'], cases: ['rooms', '#cases-panel'], practical: ['visit', '#practical-panel'],
     language: ['style'], team: ['visit', '#team-panel'], invite: ['visit'], back: ['visit']
   };

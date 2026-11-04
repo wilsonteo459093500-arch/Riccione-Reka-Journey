@@ -185,8 +185,8 @@ test('worker pool and main-thread fallback give the same result', async () => {
   assert.equal(r.a.h, r.want, 'h = first 16 hex of sha256(original bytes)');
   assert.equal(r.b.h, r.want);
   assert.equal(r.h2, r.want);
-  assert.deepEqual([r.a.w, r.a.ht], [1600, 1067]);
-  assert.deepEqual([r.b.w, r.b.ht], [1600, 1067]);
+  assert.deepEqual([r.a.w, r.a.ht], [1200, 800], 'long side 1200px (free plan: ~150–250 KB a photo)');
+  assert.deepEqual([r.b.w, r.b.ht], [1200, 800]);
   assert.equal(r.a.jpegType, 'image/jpeg');
   assert.equal(r.a.thumb, 'data:image/jpeg;base64,');
   assert.equal(r.a.sz, true);
@@ -213,6 +213,54 @@ test('dHash: same picture → same hash; different pictures → far apart; thumb
   for (let i = 0; i < 16; i++) { let x = parseInt(r.a[i], 16) ^ parseInt(r.b[i], 16); while (x) { d += x & 1; x >>= 1; } }
   assert.ok(d > 12, 'different pictures differ by ' + d + ' bits');
   assert.deepEqual([r.tw, r.th], [320, 213]);
+});
+
+test('analyze (curated mode): same h / w / ht / dh as process, no JPEG; preview: a small JPEG Blob; both on the main-thread fallback too', async () => {
+  await makeJpeg(page, 61, 2400, 1600, 0.9);
+  await makeJpeg(page, 62, 900, 1350, 0.9);
+  const r = await page.evaluate(async () => {
+    const out = {};
+    for (const k of [61, 62]) {
+      const f = window.__files[k];
+      const p = await MB.clWork.process(f);
+      const a = await MB.clWork.analyze(f);
+      const a2 = await MB.clWork.analyze(f, { h: p.h });
+      MB.clWork.forceMain = true;
+      const am = await MB.clWork.analyze(f);
+      const pm = await MB.clWork.preview(f, { long: 200 });
+      MB.clWork.forceMain = false;
+      const pv = await MB.clWork.preview(f, { long: 200 });
+      const im = new Image();
+      const url = URL.createObjectURL(pv.blob);
+      await new Promise((ok) => { im.onload = ok; im.src = url; });
+      URL.revokeObjectURL(url);
+      out[k] = {
+        p: [p.h, p.w, p.ht, p.dh], a: [a.h, a.w, a.ht, a.dh], a2: [a2.h, a2.w, a2.ht, a2.dh], am: [am.h, am.w, am.ht], amDh: am.dh, aDh: a.dh,
+        noJpeg: !a.jpeg && !a.thumb, orig: [a.ow, a.oh],
+        pv: [pv.blob.type, pv.blob.size < 30000, im.naturalWidth, im.naturalHeight], pm: [pm.blob.type, pm.w, pm.ht]
+      };
+    }
+    out.stats = MB.clWork.stats();
+    let err = '';
+    try { await MB.clWork.analyze(new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3])], 'bad.jpg', { type: 'image/jpeg' })); } catch (e) { err = e.code; }
+    out.err = err;
+    return out;
+  });
+  for (const k of ['61', '62']) {
+    assert.deepEqual(r[k].a, r[k].p, 'analyze = process (h, w, ht, dh) for ' + k);
+    assert.deepEqual(r[k].a2, r[k].p, 'analyze with a known h');
+    assert.deepEqual(r[k].am, r[k].p.slice(0, 3), 'main-thread fallback: same h / size');
+    let d = 0;
+    for (let i = 0; i < 16; i++) { let x = parseInt(r[k].amDh[i], 16) ^ parseInt(r[k].aDh[i], 16); while (x) { d += x & 1; x >>= 1; } }
+    assert.ok(d <= 2, 'same dHash on the main thread (distance ' + d + ')');
+    assert.equal(r[k].noJpeg, true, 'analyze does not encode anything');
+  }
+  assert.deepEqual(r['61'].orig, [2400, 1600]);
+  assert.deepEqual(r['61'].pv, ['image/jpeg', true, 200, 133]);
+  assert.deepEqual(r['62'].pv, ['image/jpeg', true, 133, 200]);
+  assert.deepEqual(r['62'].pm, ['image/jpeg', 133, 200]);
+  assert.ok(r.stats.analyze >= 6 && r.stats.preview >= 4, JSON.stringify(r.stats));
+  assert.equal(r.err, 'decode');
 });
 
 test('too large after q0.82 → re-encoded smaller; corrupt file → decode error', async () => {
@@ -292,12 +340,15 @@ test('phone path: loose photos need a project name before starting', async () =>
   assert.deepEqual(page.errors, []);
 });
 
-test('team password not set on the server → «还没启用» screen (503)', async () => {
+test('team password not set on the server → «还没启用» screen (503) after choosing 云端', async () => {
   const old = process.env.VISI_TEAM_PASSWORD;
   process.env.VISI_TEAM_PASSWORD = '';
   try {
     const one = await newPage(browser);
     await one.page.goto(m.url + '/caselib');
+    // 还没选过存在哪里：先选好「存在这台电脑」（一个请求都不发）；选云端才去问伺服器
+    await one.page.waitForSelector('#mode-local[aria-pressed="true"]');
+    await one.page.click('#mode-cloud');
     await one.page.waitForSelector('#not-config:not([hidden])');
     assert.match(await one.page.textContent('#not-config'), /VISI_TEAM_PASSWORD/);
     assert.equal(await one.page.isHidden('#login'), true);

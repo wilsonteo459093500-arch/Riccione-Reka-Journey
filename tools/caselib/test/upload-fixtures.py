@@ -6,7 +6,7 @@
 #
 # <out>/案例图/                       ← 总文件夹：3 个子文件夹 = 3 个项目
 # （Chromium 要用 LANG=C.UTF-8 启动才读得到中文路径的档案，见 upload-kit.mjs）
-#   Setia Alam 原木 陈先生/            IMG_0001、近似重复的 IMG_0002、EXIF 转向 6 的 IMG_0003_rot、
+#   Setia Alam 原木 陈先生/            IMG_0001、近似重复（连拍）的 IMG_0002、EXIF 转向 6 的 IMG_0003_rot、
 #                                      shared.jpg、厨房/K_01.jpg、厨房/K_02.png、
 #                                      厨房/Thumbs.db、IMG_0005.HEIC、clip.mp4
 #   M Vertica 奶油风 林太太/           big_6000.jpg（6000×4000）、shared.jpg（同一个档）、V_02.jpg、brief.pdf、DSC_001.NEF
@@ -15,6 +15,13 @@
 # <out>/solo-a/Ipoh 日式 黄小姐/       4 张（两个视窗同时上传用）
 # <out>/solo-b/Puchong 北欧 Mdm Lee/   4 张
 # <out>/many/Klang 现代简约 Mr Ong/    26 张（中途断线再续传用）
+# <out>/curate/                       ← 精选用：2 个项目
+#   Cheras 现代 测试客户/              厨房/K_01、K_01b（K_01 的连拍）、K_02、K_03_tall（直的）、
+#                                      主卧/M_01、M_01b（M_01 的连拍）、M_02、电视墙/T_01、T_02  → 9 张、7 个镜头
+#   Kepong 简约 测试/                  P_01..P_05（各不相同）
+# <out>/burst/Rawang 连拍 测试客户/    「同一个镜头」的两种连拍：IMG_A、IMG_A_burst（多了一个小东西，dHash 0–1）、
+#                                      IMG_A_reframed（裁 2%、亮 8%：手动了一点再拍）、IMG_B（不一样的）
+#                                      reframed 在 1200px 下 dHash 差 7（> SAME_SHOT 6）：已知的缺口，测试用 todo 记着
 # 印出一行 JSON：每个文件夹的路径和预期数字
 # ============================================================
 import json
@@ -53,6 +60,25 @@ def scene(seed, w, h):
     return Image.fromarray(out, 'RGB')
 
 
+def near_dup(img):
+    """同一个镜头再拍一张：画面一样，只多了一个小东西（像连拍时有人走过）。
+    dHash 距离 0–4（≤ 6 = 同一个镜头）。裁边、调亮的连拍在 1200px 下会差 7 以上 —— 那种另外放在 burst/（reframed）"""
+    near = img.copy()
+    d = ImageDraw.Draw(near)
+    w, h = near.size
+    x0, y0 = int(w * 0.62), int(h * 0.58)
+    d.rectangle([x0, y0, x0 + int(w * 0.05), y0 + int(h * 0.05)], fill=(232, 226, 214))
+    return near
+
+
+def reframed(img):
+    """同一个镜头、手动了一点再拍：裁掉一点边、亮一点（原本 IMG_0002 的做法）。
+    1200px 下 dHash 差 4–16（多半 > 6）：pick.js / 伺服器都不会当成同一个镜头 —— 已知的缺口（见 upload-e2e 的 todo 测试）"""
+    cw, ch = img.size
+    near = img.crop((int(cw * 0.02), int(ch * 0.02), int(cw * 0.985), int(ch * 0.985))).resize(img.size, Image.LANCZOS)
+    return ImageEnhance.Brightness(near).enhance(1.08)
+
+
 def save_jpg(img, path, **kw):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     img.save(path, 'JPEG', quality=88, **kw)
@@ -76,11 +102,8 @@ def main(out):
     # --- Setia Alam ---
     a = scene(101, 2400, 1600)
     save_jpg(a, os.path.join(setia, 'IMG_0001.jpg'))
-    # 近似重复：同一个场景，裁掉一点边、亮一点（连拍 / 微调角度）
-    cw, ch = a.size
-    near = a.crop((int(cw * 0.02), int(ch * 0.02), int(cw * 0.985), int(ch * 0.985))).resize((2400, 1600), Image.LANCZOS)
-    near = ImageEnhance.Brightness(near).enhance(1.08)
-    save_jpg(near, os.path.join(setia, 'IMG_0002.jpg'))
+    # 近似重复：同一个镜头再拍一张（连拍）
+    save_jpg(near_dup(a), os.path.join(setia, 'IMG_0002.jpg'))
     # EXIF 转向 6：存的是横的 1200×800，看起来是直的 800×1200；再塞 GPS，确认上传后没有 EXIF
     rot = scene(103, 1200, 800)
     exif = Image.Exif()
@@ -127,6 +150,32 @@ def main(out):
     for i in range(26):
         save_jpg(scene(601 + i, 1400, 1000), os.path.join(many, 'K%02d.jpg' % (i + 1)))
 
+    # --- 精选用 ---
+    curate = os.path.join(out, 'curate')
+    cheras = os.path.join(curate, 'Cheras 现代 测试客户')
+    k1 = scene(701, 2000, 1333)
+    save_jpg(k1, os.path.join(cheras, '厨房', 'K_01.jpg'))
+    save_jpg(near_dup(k1), os.path.join(cheras, '厨房', 'K_01b.jpg'))
+    save_jpg(scene(702, 2000, 1333), os.path.join(cheras, '厨房', 'K_02.jpg'))
+    save_jpg(scene(703, 1000, 1500), os.path.join(cheras, '厨房', 'K_03_tall.jpg'))
+    m1 = scene(711, 1800, 1200)
+    save_jpg(m1, os.path.join(cheras, '主卧', 'M_01.jpg'))
+    save_jpg(near_dup(m1), os.path.join(cheras, '主卧', 'M_01b.jpg'))
+    save_jpg(scene(712, 1800, 1200), os.path.join(cheras, '主卧', 'M_02.jpg'))
+    save_jpg(scene(721, 1800, 1200), os.path.join(cheras, '电视墙', 'T_01.jpg'))
+    save_jpg(scene(722, 1800, 1200), os.path.join(cheras, '电视墙', 'T_02.jpg'))
+    kepong = os.path.join(curate, 'Kepong 简约 测试')
+    for i in range(5):
+        save_jpg(scene(731 + i, 1600, 1100), os.path.join(kepong, 'P_%02d.jpg' % (i + 1)))
+
+    # --- 两种连拍（一个镜头）---
+    burst = os.path.join(out, 'burst', 'Rawang 连拍 测试客户')
+    ba = scene(802, 2400, 1600)
+    save_jpg(ba, os.path.join(burst, 'IMG_A.jpg'))
+    save_jpg(near_dup(ba), os.path.join(burst, 'IMG_A_burst.jpg'))
+    save_jpg(reframed(ba), os.path.join(burst, 'IMG_A_reframed.jpg'))
+    save_jpg(scene(803, 2400, 1600), os.path.join(burst, 'IMG_B.jpg'))
+
     info = {
         'root': root,
         'projects': {
@@ -141,6 +190,11 @@ def main(out):
         'soloB': solo_b,
         'many': many,
         'manyN': 26,
+        'curate': curate,
+        'cheras': 'Cheras 现代 测试客户',
+        'kepong': 'Kepong 简约 测试',
+        'burst': burst,
+        'burstName': 'Rawang 连拍 测试客户',
     }
     print(json.dumps(info, ensure_ascii=False))
 

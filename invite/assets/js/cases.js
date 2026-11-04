@@ -46,9 +46,9 @@ window.SAIL_CASES = [
   {
     slug: 'misty',
     zh: '雾山', en: 'Misty Mountain',
-    tagZh: '轻盈纯净的空间意境', tagEn: 'Light, clear, quietly poetic',
-    descZh: '灵感源自「雾山春居」。颜色轻，光线软，适合想让家安静下来的人。',
-    descEn: 'Inspired by a spring house in the mist — light colours, soft daylight, for a home that wants to be quiet.',
+    tagZh: '雾山春居', tagEn: 'A spring house on the misty mountain',
+    descZh: '以「雾山春居」为设计灵感：山腰一间木屋，轻于色、安于形。晨雾的灰、春山的木、早春的绿，让家安静温和下来。',
+    descEn: 'Inspired by a spring house on a misty mountain: a timber cabin on the slope, light in colour and at ease in form. The grey of morning mist, the wood of the hills and the first green of spring keep the home calm.',
     photos: [
       { src: 'misty-1.jpg', zh: '开放空间 · 客餐厨一体', en: 'Open plan · living, dining and kitchen' },
       { src: 'misty-2.jpg', zh: '卧室 · 木格屏风与衣柜', en: 'Bedroom · timber screen and wardrobe' },
@@ -57,10 +57,10 @@ window.SAIL_CASES = [
   },
   {
     slug: 'wabi',
-    zh: '宅仁 · 寂', en: 'Wabi-Sabi Eastern',
-    tagZh: '实木的纯粹与真实', tagEn: 'The honesty of solid wood',
-    descZh: '于自然肌理之间，感受深邃而宁静的空间之美。材料不加掩饰，越用越好看。',
-    descEn: 'Depth and stillness in natural texture — materials left honest, ageing into something better.',
+    zh: '侘寂东方', en: 'Wabi-Sabi Eastern',
+    tagZh: '山，有它的时间', tagEn: 'Mountains have their own time',
+    descZh: '2025 年溪岸实木系列新品。把东方哲思中「关于时间的探索」融入设计，打磨经得起时间洗礼的实木家具。',
+    descEn: 'SAIL’s 2025 solid-wood series. The Eastern way of thinking about time, built into solid-wood pieces made to stand the test of time.',
     photos: [
       { src: 'wabi-1.jpg', zh: '厨房 · 水泥质感与木柜', en: 'Kitchen · concrete and timber' },
       { src: 'wabi-2.jpg', zh: '厨房 · 中岛与吊柜', en: 'Kitchen · island and wall units' },

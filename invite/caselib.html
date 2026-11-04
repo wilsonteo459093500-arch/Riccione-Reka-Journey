@@ -31,7 +31,9 @@
       <button type="button" role="tab" data-tab="review" aria-selected="false">审核 <small>Review</small><i class="dot" id="tab-review-dot" hidden></i></button>
     </nav>
     <div class="cl-who" id="who" hidden>
+      <span class="tag" id="who-mode"></span>
       <span class="who"><i aria-hidden="true">●</i><span id="who-name"></span></span>
+      <button class="mini" type="button" id="mode-switch" hidden></button>
       <button class="mini" type="button" id="logout">登出</button>
     </div>
   </div>
@@ -41,32 +43,47 @@
 
   <p class="cl-boot" id="boot">载入中…</p>
 
+  <!-- 存在这台电脑：浏览器还没答应一直保留（硬碟快满时会被清掉）、或用的是 Safari（7 天没打开就清掉）——一直显示，叫他备份 -->
+  <p class="cl-keep" id="local-keep" role="status" hidden></p>
+
   <!-- 还没设团队密码（Vercel 的 VISI_TEAM_PASSWORD） -->
   <section class="cl-login" id="not-config" hidden>
     <div class="login-card">
       <img src="assets/img/visi.svg?v=2" alt="" width="44" height="44" />
       <h2>案例库还没启用</h2>
       <p class="hint">请老板到 Vercel → visi-riccione-reka → Settings → Environment Variables 加上 <code>VISI_TEAM_PASSWORD</code>（团队密码），再重新部署。</p>
+      <p class="hint">不想等：照片可以先存在这台电脑（免费，现在就能用）。</p>
+      <button class="btn gold" type="button" id="not-config-local">改用「存在这台电脑」</button>
     </div>
   </section>
 
-  <!-- 登入：名字 + 团队密码。中途过期时它会变成浮在上面的框，底下的上传 / 修改都还在 -->
+  <!-- 登入：先选照片存在哪里。
+       存在这台电脑：只要名字（资料只在这台电脑的浏览器里）；云端：名字 + 团队密码。
+       中途过期时它会变成浮在上面的框（不能换存放位置），底下的上传 / 修改都还在 -->
   <section class="cl-login" id="login" hidden>
     <form class="login-card" id="login-form" autocomplete="on">
       <img src="assets/img/visi.svg?v=2" alt="" width="44" height="44" />
-      <h2>案例库 · 员工登入</h2>
+      <h2 id="login-title">案例库 · 员工登入</h2>
       <p class="hint" id="login-why" hidden>登入过期了。重新登入后，刚才的上传和修改会接着进行，不会不见。</p>
-      <p class="hint">全公司用同一组团队密码。名字填你自己的：每次上传、修改都会记下是谁做的。</p>
+      <div class="mode-pick" id="mode-pick" role="group" aria-label="照片存在哪里">
+        <p class="q">照片存在哪里？</p>
+        <button type="button" class="mode-opt" id="mode-local" data-mode="local" aria-pressed="false"><b>存在这台电脑</b><small>（免费，现在就能用）</small></button>
+        <button type="button" class="mode-opt" id="mode-cloud" data-mode="cloud" aria-pressed="false"><b>云端</b><small>（Vercel，现在暂停中）</small></button>
+      </div>
+      <p class="hint mode-local-only local-note" id="local-note" hidden>本机案例库：照片存在这台电脑的浏览器里，同事看不到；要给同事用，就把同一个文件夹给他汇入，再汇入你的标签档。</p>
+      <p class="hint mode-cloud-only" hidden>全公司用同一组团队密码。名字填你自己的：每次上传、修改都会记下是谁做的。</p>
       <div class="field">
         <label class="q" for="login-name">你的名字 <i class="eh">Your name</i></label>
         <input type="text" id="login-name" name="username" maxlength="30" autocomplete="username" placeholder="例：Ana" />
       </div>
-      <div class="field">
+      <div class="field mode-cloud-only" hidden>
         <label class="q" for="login-pass">团队密码 <i class="eh">Team password</i></label>
         <input type="password" id="login-pass" name="password" autocomplete="current-password" />
       </div>
       <button class="btn gold" type="submit" id="login-go">登入</button>
       <p class="err-line" id="login-err" role="alert"></p>
+      <p class="hint mode-local-only local-space" id="local-space" hidden></p>
+      <p class="hint mode-local-only local-safari" id="local-safari" hidden>这是 Safari：Safari 只要 7 天没打开这个网址，就会把存在这台电脑的照片和分类清掉。请改用 Chrome 或 Edge。</p>
     </form>
   </section>
 
@@ -76,7 +93,9 @@
       <div class="pane-head">
         <h2>上传案例图 <small>Upload</small></h2>
         <p class="hint">把整个「案例」总文件夹拖进来：里面<b>每个子文件夹 = 一个项目</b>（文件夹名 = 区域 风格 客户名，例：<i>Setia Alam 原木 陈先生</i>）。
-          照片在这台电脑先压成 1600px、去掉 GPS 资讯再上传，原档不动。客户名字只在「审核」看得到，不会出现在方案里。</p>
+          照片在这台电脑先压成 1200px、去掉 GPS 资讯再上传，原档不动。客户名字只在「审核」看得到，不会出现在方案里。</p>
+        <p class="hint cloud-only">免费方案的空间和每月写入次数有限：照片多的时候会<b>精选</b>，每个项目只传最好的几张（同一个镜头只传一张），你也可以展开项目自己勾。额度到了会自己停下来，不会让案例库被停权。</p>
+        <p class="hint local-only">照片<b>存在这台电脑</b>的浏览器里（免费、没有每月的次数限制），同事看不到。文件夹名的风格、区域，子文件夹名的空间（厨房、主卧…）和柜子（橱柜、衣柜…）会<b>自动标好</b>，再到「审核」看一眼。<b>不要清除浏览器的资料</b>（网站资料、Cookie），不然照片会不见。</p>
       </div>
 
       <div class="note-line" id="up-recover" hidden></div>
@@ -115,7 +134,7 @@
         </div>
         <div class="head-tools">
           <span class="muted" id="rv-count"></span>
-          <span class="muted rv-budget" id="rv-budget" title="Vercel 免费方案每月约 2,000 次 Blob 写入：上传、每次保存、隐藏 / 复原都算"></span>
+          <span class="muted rv-budget" id="rv-budget" title="免费方案每个月的写入次数有上限：上传、每次保存、隐藏 / 复原都算一次"></span>
           <button class="mini" type="button" id="rv-reload">重新载入</button>
         </div>
       </div>
@@ -147,9 +166,12 @@
 <!-- 词表（跟伺服器同一份）、VISI 的空间名；其它 VISI 的程式都不需要 -->
 <script src="assets/js/visi/case-vocab.js"></script>
 <script src="assets/js/visi/data.js"></script>
+<script src="assets/js/caselib/local-core.js"></script>
+<script src="assets/js/caselib/local-sw.js"></script>
 <script src="assets/js/caselib/ui.js"></script>
 <script src="assets/js/caselib/scan.js"></script>
 <script src="assets/js/caselib/worker.js"></script>
+<script src="assets/js/caselib/pick.js"></script>
 <script src="assets/js/caselib/upload.js"></script>
 <script src="assets/js/caselib/review.js"></script>
 </body>

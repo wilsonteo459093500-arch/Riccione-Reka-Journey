@@ -8,10 +8,11 @@
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { join, dirname } from 'node:path';
+import { cpSync, rmSync, utimesSync } from 'node:fs';
 import { startMock } from '../mock-server.mjs';
 import {
   fixtures, launch, newPage, login, loginOk, selectFolder, waitHashed, startAndWait, waitDone,
-  index, photoBlobs, packBlobs, sha16, hamming, byName, photosOf, shotPath, PASSWORD
+  index, photoBlobs, packBlobs, sha16, hamming, byName, photosOf, shotPath, PASSWORD, BASE
 } from './upload-kit.mjs';
 
 const SETIA = 'Setia Alam 原木 陈先生';
@@ -20,7 +21,10 @@ const BANG = 'Bangsar 轻法式 Mr Tan';
 
 let info, browser;
 const mocks = [];
+// /api/photo 把这个月的写入次数在记忆体里留 30 秒（每个 mock 的清单路径都一样）：每个情境先清掉，不然上一个测试的额度会带过来
+const photoMod = await import(new URL('../../../invite/api/photo.js', import.meta.url).href);
 async function mock(opts) {
+  photoMod.resetQuotaCache();
   const m = await startMock(Object.assign({ port: 0, blobPort: 0, password: PASSWORD }, opts || {}));
   mocks.push(m);
   return m;
@@ -165,9 +169,9 @@ test('upload: run stores each unique photo once, fixes rotation, groups near-dup
   const png = find('厨房/K_02.png');
   assert.ok(png, 'PNG accepted');
   assert.deepEqual([...m.adapter.read(png.k).body.subarray(0, 3)], [0xff, 0xd8, 0xff]);
-  // 6000×4000 → 1600 长边，≤ 3.5 MB
+  // 6000×4000 → 1200 长边（免费方案空间有限），≤ 3.5 MB
   const big = photosOf(idx, pV.pid).find((p) => p.f === 'big_6000.jpg');
-  assert.deepEqual([big.w, big.h], [1600, 1067]);
+  assert.deepEqual([big.w, big.h], [1200, 800]);
   assert.ok(m.adapter.read(big.k).body.length <= 3.5 * 1024 * 1024);
   // 近似重复（裁一点、亮一点）同一个 shot；其它各自一组
   const p1 = find('IMG_0001.jpg'), p2 = find('IMG_0002.jpg');
@@ -182,7 +186,7 @@ test('upload: run stores each unique photo once, fixes rotation, groups near-dup
     assert.match(ph.dh, /^[0-9a-f]{16}$/);
     assert.equal(ph.by, 'Ana');
     assert.equal(ph.status, 'new');
-    assert.ok(Math.max(ph.w, ph.h) <= 1600);
+    assert.ok(Math.max(ph.w, ph.h) <= 1200);
     assert.equal(ph.sz, m.adapter.read(ph.k).body.length, 'sz = stored JPEG bytes');
   }
   // 缩图包：每个项目一包，每张都有 320px 的 dataURL
@@ -396,7 +400,7 @@ test('review: quick hides go out together (one write); hide + unhide before send
   const ids = await page.$$eval('#rv-grid .rv-card', (els) => els.slice(0, 3).map((e) => e.getAttribute('data-h')));
   const before = m.adapter.stats().puts;
   const budget0 = await page.textContent('#rv-budget');
-  assert.match(budget0, /本月 Blob 写入约 [\d,]+ \/ 2,000/);
+  assert.match(budget0, /写入约 [\d,]+/);
   for (const h of ids) {
     await page.click('#rv-grid .rv-card[data-h="' + h + '"]');
     await page.click('#drawer [data-act="hide-photo"]');
@@ -422,7 +426,7 @@ test('review: quick hides go out together (one write); hide + unhide before send
   await page.uncheck('#rv-filters input[data-f="hidden"]');
   await page.click('#drawer .dr-x');
   const budget1 = await page.textContent('#rv-budget');
-  const n = (t) => +t.replace(/[^\d/]/g, '').split('/')[0];
+  const n = (t) => +((t.match(/写入约 ([\d,]+)/) || [0, '0'])[1].replace(/,/g, ''));
   assert.ok(n(budget1) >= n(budget0) + 2, budget0 + ' → ' + budget1);
   await page.evaluate(() => { MB.clReview.hideMs = 4000; });
   assert.deepEqual(page.errors, []);
@@ -683,48 +687,661 @@ test('session expires during an upload → login box, then the upload continues;
   await ctx.close();
 });
 
-test('over the Hobby budget → clear warning, start needs «我知道»', async () => {
-  const now = Date.now();
-  const m = await mock({ seed: { index: { v: 1, rev: 3, base: '', projects: {}, photos: {}, log: [{ op: 'addPhotos', by: 'X', ts: now - 1000, n: 1995 }] } } });
+/* ------------------------------------------------------------
+   免费方案的额度：上限以伺服器为准（quota），没有「照样上传」；放不下就自动少传（每个项目先留最重要的）
+   ------------------------------------------------------------ */
+const MONTH = () => new Date().toISOString().slice(0, 7);
+function seedUsage(writes, extra) {
+  return { index: Object.assign({ v: 1, rev: 3, base: '', projects: {}, photos: {}, log: [], usage: { [MONTH()]: { writes } } }, extra || {}) };
+}
+// 比对、分析都好了（精选挑好了）
+async function waitSel(page, timeout) {
+  await page.waitForFunction(() => { const s = MB.clUpload.selection(); return s.ready && !s.analyzing; }, null, { timeout: timeout || 30000 });
+  await page.evaluate(() => MB.clUpload.drawNow());
+}
+const sel = (page) => page.evaluate(() => MB.clUpload.selection());
+const projSel = (s, name) => s.projects.find((p) => p.name === name);
+async function openProject(page, name) {
+  const i = await page.evaluate((n) => MB.clUpload.state().projects.findIndex((p) => p.name === n), name);
+  const gi = await page.evaluate((k) => MB.clUpload.state().projects[k].gi, i);
+  await page.click('[data-open="' + gi + '"]');
+  await page.waitForSelector('.pg[data-pg="' + gi + '"] .pg-cell');
+  return gi;
+}
+// 在格子里点一张（f = 项目里的路径）
+async function tick(page, gi, f) {
+  const id = await page.evaluate(([k, f]) => MB.clUpload.state().projects[k].items.find((it) => it.f === f).id, [gi, f]);
+  await page.click('.pg[data-pg="' + gi + '"] input[data-pick="' + id + '"]');
+  await page.evaluate(() => MB.clUpload.drawNow());
+}
+async function setN(page, n) {
+  await page.fill('#cur-n', String(n));
+  await page.press('#cur-n', 'Tab');
+  await waitSel(page);
+}
+
+test('near the free-plan cap → selection is cut down fairly (best photos of every project first), start works, never a 507; no «照样上传» override', async () => {
+  // 这个月已经写了 1,785 次：上限 1,800 → 还剩 15（今天第一次写入还要 1 次备份）
+  const m = await mock({ seed: seedUsage(1785) });
   const { ctx, page } = await newPage(browser);
+  const got507 = [];
+  page.on('response', (r) => { if (r.status() === 507) got507.push(r.url()); });
   await loginOk(page, m.url, 'Ana');
-  await selectFolder(page, dirname(info.soloA));
+  assert.equal(await page.evaluate(() => MB.cl.cat.quota.writes), 1785, 'quota comes from the server (GET ?view=full)');
+  await selectFolder(page, info.root);
   await waitHashed(page);
+  await waitSel(page);
+  const s = await sel(page);
+  assert.equal(s.cur, true, '11 new photos do not fit → curated mode switched itself on');
+  // 精选（每个项目最多 6、同一个镜头一张）挑了 4 + 3 + 3 = 10 张，写入要 10 + 3 × 2 = 16 > 14
+  // → 每个项目轮流：第 1 张 3 次、之后每张 1 次 → 3 + 3 + 2 = 8 张（14 次）
+  assert.equal(s.total, 8);
+  assert.equal(s.cut, 2);
+  assert.equal(projSel(s, BANG).sel.length, 3);
+  assert.equal(projSel(s, VERT).sel.length, 3);
+  assert.equal(projSel(s, SETIA).sel.length, 2);
+  assert.ok(!projSel(s, SETIA).sel.includes('IMG_0002.jpg') || !projSel(s, SETIA).sel.includes('IMG_0001.jpg'), 'one per shot');
+  assert.equal(await page.$('#over-ok'), null, 'the «我知道，照样上传» override is gone');
+  const box = await page.textContent('.budget');
+  assert.match(box, /这个月还能传约 12 张 · 空间还够约 [\d,]+ 张/);
+  assert.match(box, /这个月的额度只够再传约 8 张/);
+  assert.match(box, /已先选好每个项目最重要的照片，其余的 2 张下个月再传/);
+  assert.match(await page.textContent('#plan-body'), /2 张额度不够，下个月/);
   const est = await page.evaluate(() => MB.clUpload.estimate());
-  assert.equal(est.u.writes, 1995 + 2 + 1);
-  assert.equal(est.over, true);
-  assert.equal(await page.isVisible('.budget.over .b-warn'), true);
-  assert.match(await page.textContent('.b-warn'), /超过免费额度/);
-  assert.equal(await page.isDisabled('#start'), true);
-  await page.check('#over-ok');
-  await page.waitForFunction(() => !document.querySelector('#start').disabled);
-  await page.screenshot({ path: shotPath('upload-over-budget-1440.png'), fullPage: true });
+  assert.equal(est.photos, 8);
+  assert.equal(est.writes, 8 + 3 * 2 + 1);
+  assert.ok(est.writes <= 15);
+  assert.equal(await page.isDisabled('#start'), false);
+  assert.match(await page.textContent('#start'), /开始上传 8 张/);
+  // 自己多勾一张（额度不够的那张）：自己勾的优先，总数还是不超过 —— 别的项目自动挑的让位
+  const gi = await openProject(page, SETIA);
+  const cutF = projSel(s, SETIA).cut[0];
+  await tick(page, gi, cutF);
+  const s2 = await sel(page);
+  assert.ok(projSel(s2, SETIA).sel.includes(cutF), 'manual tick kept');
+  assert.equal(projSel(s2, SETIA).touched, true);
+  assert.ok(s2.total <= 8, 'never more than the quota allows: ' + s2.total);
+  assert.match(await page.textContent('.pg[data-pg="' + gi + '"] .pg-count'), /选了 3 \/ 5 张/);
+  await page.screenshot({ path: shotPath('upload-quota-cut-1440.png'), fullPage: true });
+  await startAndWait(page);
+  const idx = index(m);
+  assert.equal(Object.keys(idx.photos).length, s2.total);
+  assert.ok(photosOf(idx, byName(idx, SETIA).pid).some((p) => p.f === cutF), 'the manually ticked photo was uploaded');
+  assert.deepEqual(got507, [], 'the server never had to refuse');
+  assert.ok(idx.usage[MONTH()].writes <= 1800, 'writes this month ' + idx.usage[MONTH()].writes);
+  const c = await page.evaluate(() => MB.clUpload.state().counts);
+  assert.equal(c.failed, 0);
+  assert.equal(c.skip, 11 - s2.total, 'the rest are «这次不传», not failed');
+  assert.match(await page.textContent('#sum-body'), /这次不传/);
   assert.deepEqual(page.errors, []);
   await ctx.close();
 });
 
-test('budget: this month\'s writes come from the server counter (the 300-entry log under-counts)', async () => {
+test('budget: this month\'s writes come from the server\'s quota (the 300-entry log under-counts); the review tab shows them too', async () => {
   const now = Date.now();
-  const month = new Date().toISOString().slice(0, 7);
-  // log 只剩 300 笔「改标签」（之前上传的纪录已经被挤掉）；伺服器的计数说这个月已经写了 1,997 次（再传 4 张就超过）
+  // log 只剩 300 笔「改标签」（之前上传的纪录已经被挤掉）；伺服器的计数说这个月已经写了 1,799 次：一张都不能传了
   const log = Array.from({ length: 300 }, (_, i) => ({ op: 'patch', by: 'X', ts: now - 100000 + i, n: 1 }));
-  const m = await mock({ seed: { index: { v: 1, rev: 300, base: '', projects: {}, photos: {}, log, usage: { [month]: { writes: 1997 } } } } });
+  const m = await mock({ seed: seedUsage(1799, { rev: 300, log }) });
+  const { ctx, page } = await newPage(browser);
+  await loginOk(page, m.url, 'Ana');
+  const q = await page.evaluate(() => MB.cl.cat.quota);
+  assert.equal(q.plan, 'hobby');
+  assert.equal(q.writes, 1799);
+  assert.equal(q.uploadCap, 1800);
+  assert.equal(q.writesLeft, 1);
+  await selectFolder(page, dirname(info.soloA));
+  await waitHashed(page);
+  await waitSel(page);
+  const est = await page.evaluate(() => MB.clUpload.estimate());
+  assert.equal(est.u.writes, 1799, 'not 300 + 1 from the log');
+  assert.equal(est.allowed, 0);
+  assert.equal(await page.isDisabled('#start'), true);
+  // 储存空间：伺服器算的（照片 + 缩图包 + 清单 × 8 份）
+  assert.ok(est.u.bytes >= 7 * JSON.stringify(await page.evaluate(() => MB.cl.cat)).length * 0.9, 'backups counted in storage');
+  // 审核分页也看得到这个月用了多少（超过上传上限的 80% → warn）
+  await page.click('#tabs [data-tab="review"]');
+  await page.waitForFunction(() => /1,799/.test(document.querySelector('#rv-budget').textContent));
+  assert.ok(await page.$eval('#rv-budget', (e) => e.classList.contains('warn')));
+  assert.deepEqual(page.errors, []);
+  await ctx.close();
+});
+
+test('writes at 1,800 → start disabled with the reason (and ticking by hand is refused); space full → reason says free space in 审核', async () => {
+  const m = await mock({ seed: seedUsage(1800) });
   const { ctx, page } = await newPage(browser);
   await loginOk(page, m.url, 'Ana');
   await selectFolder(page, dirname(info.soloA));
   await waitHashed(page);
-  const est = await page.evaluate(() => MB.clUpload.estimate());
-  assert.equal(est.u.writes, 1997, 'not 300 + 1 from the log');
-  assert.equal(est.over, true);
+  await waitSel(page);
   assert.equal(await page.isDisabled('#start'), true);
-  // 储存空间也算每天的备份（最多 7 份整份清单）
-  assert.ok(est.u.bytes >= 7 * JSON.stringify(await page.evaluate(() => MB.cl.cat)).length * 0.9, 'backups counted in storage');
-  // 审核分页也看得到这个月用了多少
-  await page.click('#tabs [data-tab="review"]');
-  await page.waitForFunction(() => /1,997/.test(document.querySelector('#rv-budget').textContent));
-  assert.ok(await page.$eval('#rv-budget', (e) => e.classList.contains('warn')));
+  assert.match(await page.textContent('#start'), /这个月不能再传了/);
+  const plan = await page.textContent('#plan-body');
+  assert.match(plan, /这个月的写入次数用完了/);
+  assert.match(plan, /下个月 1 号再传/);
+  assert.match(plan, /这个月还能传约 0 张/);
+  assert.equal((await sel(page)).zero, 'writes');
+  assert.equal(await page.evaluate(() => MB.clWork.stats().analyze), 0, 'nothing can be uploaded → no analysis either');
+  // 自己勾也不行
+  const gi = await openProject(page, 'Ipoh 日式 黄小姐');
+  await tick(page, gi, 'A_01.jpg');
+  await page.waitForSelector('#toast.on');
+  assert.match(await page.textContent('#toast'), /写入次数用完了/);
+  assert.equal((await sel(page)).total, 0);
+  assert.equal(await page.isChecked('.pg[data-pg="' + gi + '"] .pg-cell input'), false);
+  await page.screenshot({ path: shotPath('upload-quota-zero-1440.png'), fullPage: true });
+  // 空间满了（写入次数还够）
+  await fetch(m.blob + '__mock/usage?writes=100', { method: 'POST' });
+  await fetch(m.blob + '__mock/ballast?bytes=' + (950 * 1024 * 1024), { method: 'POST' });
+  await selectFolder(page, dirname(info.soloA));
+  await waitHashed(page);
+  await waitSel(page);
+  assert.equal((await sel(page)).zero, 'bytes');
+  assert.equal(await page.isDisabled('#start'), true);
+  assert.match(await page.textContent('#plan-body'), /空间满了[\s\S]*先到「审核」删除隐藏的照片，释放空间/);
+  assert.equal(photoBlobs(m).length, 0, 'nothing uploaded');
   assert.deepEqual(page.errors, []);
   await ctx.close();
+});
+
+test('curated mode: N per project, one per shot, spread over sub-folders; a manual tick uploads it; changing N re-picks untouched projects; library photos count toward N', async () => {
+  const m = await mock();
+  const { ctx, page } = await newPage(browser);
+  await loginOk(page, m.url, 'Ana');
+  const CH = info.cheras, KP = info.kepong;
+  await selectFolder(page, info.curate);
+  await waitHashed(page);
+  await waitSel(page);
+  // 全部放得下：精选预设关着，14 张全传、也不必分析
+  let s = await sel(page);
+  assert.equal(s.cur, false);
+  assert.equal(s.total, 14);
+  assert.equal(await page.evaluate(() => MB.clWork.stats().analyze), 0);
+  await page.check('#cur-on');
+  await waitSel(page);
+  assert.equal(await page.evaluate(() => MB.clWork.stats().analyze), 14, 'every new photo analysed once (2 workers)');
+  s = await sel(page);
+  assert.equal(s.curN, 6, 'default N = MB.clPick.DEFAULT_N');
+  const room = (f) => f.split('/')[0];
+  const ch = projSel(s, CH).sel;
+  assert.equal(ch.length, 6, 'Cheras: 9 photos / 7 shots → 6');
+  assert.ok(!(ch.includes('厨房/K_01.jpg') && ch.includes('厨房/K_01b.jpg')), 'one per shot (K_01)');
+  assert.ok(!(ch.includes('主卧/M_01.jpg') && ch.includes('主卧/M_01b.jpg')), 'one per shot (M_01)');
+  assert.deepEqual([...new Set(ch.map(room))].sort(), ['主卧', '厨房', '电视墙'].sort(), 'every room gets a photo');
+  assert.equal(projSel(s, KP).sel.length, 5);
+  // N = 2：每个项目重挑 —— 照片最多的两个空间各一张
+  await setN(page, 2);
+  s = await sel(page);
+  assert.deepEqual(projSel(s, CH).sel.map(room).sort(), ['主卧', '厨房'].sort());
+  assert.ok(projSel(s, CH).sel.includes('厨房/K_01.jpg') || projSel(s, CH).sel.includes('厨房/K_02.jpg'), 'a landscape kitchen photo, not the tall one: ' + projSel(s, CH).sel);
+  assert.equal(projSel(s, KP).sel.length, 2);
+  // 展开 Cheras：小图（看得到的才做）、预选的打勾、「选了 2 / 9 张」
+  const gi = await openProject(page, CH);
+  await page.waitForFunction((g) => [...document.querySelectorAll('.pg[data-pg="' + g + '"] .pg-img img')].filter((i) => (i.getAttribute('src') || '').startsWith('blob:')).length >= 9, gi, { timeout: 20000 });
+  assert.match(await page.textContent('.pg[data-pg="' + gi + '"] .pg-count'), /选了 2 \/ 9 张/);
+  assert.equal(await page.$$eval('.pg[data-pg="' + gi + '"] .pg-cell.sel', (els) => els.length), 2);
+  assert.match(await page.textContent('.pg[data-pg="' + gi + '"]'), /同一个镜头，已挑一张/);
+  // 自己勾一张电视墙的 → 这个项目之后照自己勾的
+  await tick(page, gi, '电视墙/T_01.jpg');
+  s = await sel(page);
+  assert.equal(projSel(s, CH).touched, true);
+  assert.ok(projSel(s, CH).sel.includes('电视墙/T_01.jpg'));
+  assert.equal(projSel(s, CH).sel.length, 3);
+  assert.match(await page.textContent('.pg[data-pg="' + gi + '"] .pg-count'), /选了 3 \/ 9 张/);
+  // N = 4：自己动过的不变，没动过的重挑
+  await setN(page, 4);
+  s = await sel(page);
+  assert.equal(projSel(s, CH).sel.length, 3, 'touched project keeps the manual picks');
+  assert.equal(projSel(s, KP).sel.length, 4, 'untouched project re-picked');
+  await page.screenshot({ path: shotPath('upload-curated-1440.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: shotPath('upload-curated-390.png'), fullPage: true });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const chosen = projSel(s, CH).sel.slice().sort();
+  // 收起：小图放掉
+  assert.ok(await page.evaluate(() => MB.clUpload.previewUrls()) >= 9);
+  await page.click('[data-open="' + gi + '"]');
+  assert.equal(await page.evaluate(() => MB.clUpload.previewUrls()), 0, 'object URLs revoked when collapsed');
+  await startAndWait(page);
+  let idx = index(m);
+  assert.deepEqual(photosOf(idx, byName(idx, CH).pid).map((p) => p.f).sort(), chosen);
+  assert.equal(byName(idx, KP).n, 4);
+  assert.equal(photoBlobs(m).length, 7, 'only the picked photos were uploaded');
+  // 再拖一次同一个文件夹：不必再分析（IndexedDB 快取）；库里的算在 N 里 —— Cheras 已有 3 张 → 只再挑 1 张，Kepong 已有 4 张 → 0
+  const anBefore = await page.evaluate(() => MB.clWork.stats().analyze);
+  await selectFolder(page, info.curate);
+  await waitHashed(page);
+  await page.check('#cur-on');
+  await waitSel(page);
+  assert.equal(await page.evaluate(() => MB.clWork.stats().analyze), anBefore, 'analysis comes from the IndexedDB cache');
+  s = await sel(page);
+  assert.equal(s.curN, 4, 'N is remembered');
+  assert.equal(projSel(s, CH).existing, 3);
+  assert.equal(projSel(s, CH).sel.length, 1);
+  assert.equal(projSel(s, KP).existing, 4);
+  assert.deepEqual(projSel(s, KP).sel, []);
+  // 跟库里同一个镜头的连拍不挑
+  for (const f of projSel(s, CH).sel) assert.ok(!/_01b/.test(f) || !chosen.includes(f.replace('b.jpg', '.jpg')), 'not a burst of a library photo: ' + f);
+  assert.match(await page.textContent('#start'), /开始上传 1 张/);
+  assert.deepEqual(page.errors, []);
+  await ctx.close();
+});
+
+test('purged photos (删过) are not uploaded again by default; ticking one by hand uploads it', async () => {
+  const m = await mock();
+  const { ctx, page } = await newPage(browser);
+  await loginOk(page, m.url, 'Ana');
+  await selectFolder(page, dirname(info.soloA));
+  await waitHashed(page);
+  await startAndWait(page);
+  const idx0 = index(m);
+  const pid = byName(idx0, 'Ipoh 日式 黄小姐').pid;
+  const gone = photosOf(idx0, pid).filter((p) => p.f === 'A_01.jpg' || p.f === 'A_02.jpg').map((p) => p.hash);
+  // 审核页的「删除隐藏的照片」：先隐藏、再删
+  const r = await page.evaluate(async (hs) => {
+    const post = (b) => fetch('/api/catalog', { method: 'POST', headers: { 'X-VISI': '1', 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then((x) => x.json());
+    await post({ op: 'hide', photos: hs });
+    return post({ op: 'purge', photos: hs, confirm: '删除' });
+  }, gone);
+  assert.equal(r.removed, 2);
+  await page.evaluate(() => MB.cl.loadCatalog(true));
+  assert.deepEqual((await page.evaluate(() => MB.cl.cat.purged)).slice().sort(), gone.slice().sort());
+  m.adapter.resetStats();
+  await selectFolder(page, dirname(info.soloA));
+  await waitHashed(page);
+  await waitSel(page);
+  let s = await sel(page);
+  assert.deepEqual(projSel(s, 'Ipoh 日式 黄小姐').purged.sort(), ['A_01.jpg', 'A_02.jpg']);
+  assert.equal(s.total, 0);
+  assert.match(await page.textContent('#plan-body'), /删过 2 张（不重传）/);
+  assert.equal(await page.isDisabled('#start'), true);
+  assert.match(await page.textContent('#start'), /没有新照片要传/);
+  const gi = await openProject(page, 'Ipoh 日式 黄小姐');
+  assert.match(await page.textContent('.pg[data-pg="' + gi + '"]'), /删过，不重传/);
+  assert.match(await page.textContent('.pg[data-pg="' + gi + '"]'), /已在库里/);
+  await tick(page, gi, 'A_02.jpg');
+  s = await sel(page);
+  assert.deepEqual(projSel(s, 'Ipoh 日式 黄小姐').sel, ['A_02.jpg']);
+  assert.match(await page.textContent('#start'), /开始上传 1 张/);
+  await startAndWait(page);
+  const idx = index(m);
+  assert.equal(byName(idx, 'Ipoh 日式 黄小姐').n, 3);
+  assert.ok(photosOf(idx, pid).some((p) => p.f === 'A_02.jpg'));
+  assert.ok(!photosOf(idx, pid).some((p) => p.f === 'A_01.jpg'), 'the other purged photo stays gone');
+  assert.equal(m.adapter.stats().puts, 1 + 1 + 1, 'one photo + its thumb pack + the index');
+  assert.deepEqual(page.errors, []);
+  await ctx.close();
+});
+
+test('Pro plan (BLOB_PLAN=pro): no limits, no auto curated mode, «Pro 方案：不限额度»', async () => {
+  const old = process.env.BLOB_PLAN;
+  process.env.BLOB_PLAN = 'pro';
+  try {
+    const m = await mock({ seed: seedUsage(5000) });
+    const { ctx, page } = await newPage(browser);
+    await loginOk(page, m.url, 'Ana');
+    assert.equal(await page.evaluate(() => MB.cl.cat.quota.plan), 'pro');
+    await selectFolder(page, info.root);
+    await waitHashed(page);
+    await waitSel(page);
+    const s = await sel(page);
+    assert.equal(s.plan, 'pro');
+    assert.equal(s.cur, false);
+    assert.equal(s.total, 11);
+    assert.equal(s.cut, 0);
+    assert.equal(s.allowed, null);
+    const box = await page.textContent('.budget');
+    assert.match(box, /Pro 方案：不限额度/);
+    assert.doesNotMatch(box, /这个月还能传/);
+    assert.equal(await page.$('.budget .b-warn'), null);
+    assert.match(await page.textContent('#start'), /开始上传 11 张/);
+    await startAndWait(page);
+    assert.equal(Object.keys(index(m).photos).length, 11);
+    assert.deepEqual(page.errors, []);
+    await ctx.close();
+  } finally {
+    if (old == null) delete process.env.BLOB_PLAN; else process.env.BLOB_PLAN = old;
+  }
+});
+
+test('free-plan cap hit mid-run (507 quota) → stops cleanly (no retry storm), uploaded photos are registered, the rest wait for next month', async () => {
+  const m = await mock();
+  const { ctx, page } = await newPage(browser);
+  await loginOk(page, m.url, 'Ana');
+  await page.evaluate(() => { MB.cl.backoff = function () { return 40; }; });
+  let ok = 0, refused = 0;
+  await page.route('**/api/photo**', (route) => {
+    if (ok < 6) { ok++; return route.continue(); }
+    refused++;
+    return route.fulfill({ status: 507, contentType: 'application/json', body: '{"error":"quota","reason":"writes","writesLeft":0,"bytesLeft":900000000}' });
+  });
+  await selectFolder(page, dirname(info.many));
+  await waitHashed(page);
+  await startAndWait(page, 60000);
+  const S = await page.evaluate(() => { const s = MB.clUpload.state(); return { fatal: s.fatal, kind: s.stopKind, counts: s.counts, wait: s.items.filter((it) => it.st === 'wait').length }; });
+  assert.equal(S.kind, 'quota');
+  assert.match(S.fatal, /这个月的免费额度快用完了，已经自动停下来，免得 Vercel 把案例库停权/);
+  assert.match(S.fatal, /传好的照片都已经登记/);
+  assert.match(S.fatal, /下个月再传/);
+  assert.ok(refused <= 3, 'stopped right away (only the uploads already in flight): ' + refused);
+  assert.equal(S.counts.failed, 0, 'not failed — still to do');
+  assert.ok(S.wait >= 17, 'the rest stay waiting: ' + S.wait);
+  const idx = index(m);
+  assert.equal(byName(idx, 'Klang 现代简约 Mr Ong').n, 6, 'the 6 uploaded photos are registered');
+  assert.equal(await page.evaluate(() => Object.keys(MB.clUpload.journal()).length), 0);
+  assert.match(await page.textContent('#sum-body'), /上传停止了[\s\S]*免费额度快用完了/);
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  assert.deepEqual(page.errors, []);
+  await ctx.close();
+});
+
+test('507 on registration → the uploaded photos stay in this computer\'s journal (one try, no retry storm) and are registered next time', async () => {
+  const m = await mock();
+  const { ctx, page } = await newPage(browser);
+  await loginOk(page, m.url, 'Ana');
+  await page.evaluate(() => { MB.cl.backoff = function () { return 40; }; });
+  let posts = 0;
+  await page.route('**/api/catalog', (route) => {
+    if (route.request().method() === 'GET') return route.continue();
+    posts++;
+    return route.fulfill({ status: 507, contentType: 'application/json', body: '{"error":"quota","reason":"writes","writesLeft":0,"bytesLeft":900000000}' });
+  });
+  await selectFolder(page, dirname(info.soloA));
+  await waitHashed(page);
+  await startAndWait(page, 60000);
+  assert.equal(posts, 1);
+  assert.equal(await page.evaluate(() => Object.keys(MB.clUpload.journal()).length), 4);
+  assert.equal(await page.evaluate(() => MB.clUpload.commits().halt), true);
+  assert.equal(index(m), null, 'nothing registered');
+  assert.match(await page.textContent('#sum-body'), /还有 4 张已经传上去、还没登记：资料留在这台电脑，下次打开这一页会自动补登记/);
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  // 下次打开：自动补登记（不重传）
+  await page.reload();
+  await page.waitForSelector('#tabs:not([hidden])');
+  await page.waitForFunction(() => /补登记好了/.test(document.querySelector('#up-recover').textContent), null, { timeout: 15000 });
+  assert.equal(byName(index(m), 'Ipoh 日式 黄小姐').n, 4);
+  assert.equal(photoBlobs(m).length, 4);
+  assert.deepEqual(page.errors, []);
+  await ctx.close();
+});
+
+/* ---------- 读不到的档、空间不够、开始时额度变少、分析失败、伺服器没设定好、连拍 ---------- */
+const BURST = {};       // 两个连拍测试共用：dHash、精选挑了哪几张
+// 比对完（读不到的也算）
+async function waitSettled(page, timeout) {
+  await page.waitForFunction(() => {
+    const S = MB.clUpload.state();
+    return S.scan && !S.hashing && S.items.every((it) => !it.p.include || it.h || it.hashErr);
+  }, null, { timeout: timeout || 60000 });
+  await page.evaluate(() => MB.clUpload.drawNow());
+}
+const PER_PHOTO = (200 + 30) * 1024;     // upload.js 的 EST_PHOTO + EST_THUMB
+
+test('a photo that cannot be read (changed on disk after choosing the folder) is listed and skipped — it does not lock the start button near the cap', async () => {
+  // 复制一份（要改档案的修改时间：Chromium 读到的 File 跟磁碟上的不一样就读不到）
+  const dir = join(BASE, 'unread-' + process.pid);
+  rmSync(dir, { recursive: true, force: true });
+  cpSync(info.soloA, join(dir, 'Ipoh 日式 黄小姐'), { recursive: true });
+  const f3 = join(dir, 'Ipoh 日式 黄小姐', 'A_03.jpg');
+  utimesSync(f3, 1700000000, 1700000000);
+  // 这个月已写 1,795 次：还剩 5（今天第一次写入还要 1 次备份）→ 4 次 → 3 张新照片放不下（3 + 2 = 5）
+  const m = await mock({ seed: seedUsage(1795) });
+  const { ctx, page } = await newPage(browser);
+  const got507 = [];
+  page.on('response', (r) => { if (r.status() === 507) got507.push(r.url()); });
+  await loginOk(page, m.url, 'Ana');
+  // 选好文件夹、还没开始比对时（先扣住清单）把 A_03 改掉
+  let release;
+  const held = new Promise((r) => { release = r; });
+  await page.route((u) => u.pathname === '/api/catalog', async (route) => { if (route.request().method() === 'GET') await held; return route.continue(); });
+  await selectFolder(page, dir);
+  await page.waitForTimeout(200);
+  utimesSync(f3, 1700000100, 1700000100);
+  release();
+  await waitSettled(page);
+  await waitSel(page);
+  let s = await sel(page);
+  const P = projSel(s, 'Ipoh 日式 黄小姐');
+  assert.deepEqual(P.unread, ['A_03.jpg']);
+  assert.equal(s.hashedAll, true, 'a file that cannot be read counts as settled');
+  assert.equal(s.cur, true, '3 readable new photos do not fit → curated mode on');
+  assert.equal(s.total, 2, '4 writes = first photo 3 + second 1');
+  assert.equal(s.cutBy, 'writes');
+  const plan = await page.textContent('#plan-body');
+  assert.match(plan, /✓ 比对完成：3 张新照片/);
+  assert.match(plan, /1 张读不到，这次不传：Ipoh 日式 黄小姐\/A_03\.jpg/);
+  assert.match(plan, /这个月的额度只够再传约 2 张/);
+  assert.equal(await page.isDisabled('#start'), false);
+  assert.match(await page.textContent('#start'), /开始上传 2 张/);
+  const gi = await openProject(page, 'Ipoh 日式 黄小姐');
+  const cell = await page.evaluate((g) => {
+    const it = MB.clUpload.state().projects[g].items.find((x) => x.f === 'A_03.jpg');
+    const c = document.querySelector('.pg[data-pg="' + g + '"] .pg-cell[data-id="' + it.id + '"]');
+    return { badge: c.querySelector('.pg-badge').textContent, disabled: c.querySelector('input').disabled };
+  }, gi);
+  assert.deepEqual(cell, { badge: '读不到', disabled: true });
+  await page.screenshot({ path: shotPath('upload-unread-1440.png'), fullPage: true });
+  await startAndWait(page);
+  const idx = index(m);
+  assert.equal(Object.keys(idx.photos).length, 2);
+  assert.deepEqual(got507, []);
+  const c = await page.evaluate(() => MB.clUpload.state().counts);
+  assert.equal(c.failed, 0);
+  assert.equal(c.bad, 1);
+  assert.match(await page.textContent('#sum-body'), /没传成功的（1）[\s\S]*A_03\.jpg[\s\S]*读不到这个档/);
+  // 再选一次：又在比对前被改了 → 读不到；改回来 →「再读一次」就读得到
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  let release2;
+  const held2 = new Promise((r) => { release2 = r; });
+  await page.route((u) => u.pathname === '/api/catalog', async (route) => { if (route.request().method() === 'GET') await held2; return route.continue(); });
+  await selectFolder(page, dir);
+  await page.waitForTimeout(200);
+  utimesSync(f3, 1700000200, 1700000200);
+  release2();
+  await waitSettled(page);
+  assert.deepEqual(projSel(await sel(page), 'Ipoh 日式 黄小姐').unread, ['A_03.jpg']);
+  utimesSync(f3, 1700000100, 1700000100);
+  await page.click('#rehash');
+  await waitSettled(page);
+  s = await sel(page);
+  assert.deepEqual(projSel(s, 'Ipoh 日式 黄小姐').unread, [], '«再读一次» reads it once the file is back');
+  assert.ok(await page.evaluate(() => !!MB.clUpload.state().items.find((it) => it.f === 'A_03.jpg').h));
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  assert.deepEqual(page.errors, []);
+  await ctx.close();
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('space (not writes) is the limit → the plan says «空间只够», tells you to free space in 审核 (not «下个月»); a 507 bytes mid-run says the same', async () => {
+  const m = await mock();
+  const { ctx, page } = await newPage(browser);
+  await loginOk(page, m.url, 'Ana');
+  // 空间只剩约 2.5 张（写入次数还很多）
+  const left = await page.evaluate(() => MB.cl.cat.quota.bytesLeft);
+  await fetch(m.blob + '__mock/ballast?bytes=' + Math.floor(left - 2.5 * PER_PHOTO), { method: 'POST' });
+  photoMod.resetQuotaCache();
+  await page.evaluate(() => MB.cl.loadCatalog(true));
+  await selectFolder(page, dirname(info.soloA));
+  await waitHashed(page);
+  await waitSel(page);
+  const s = await sel(page);
+  assert.equal(s.M, 2);
+  assert.ok(s.N > 100);
+  assert.equal(s.total, 2);
+  assert.equal(s.cut, 2);
+  assert.equal(s.cutBy, 'bytes');
+  const box = await page.textContent('.budget');
+  assert.match(box, /空间只够再传约 2 张/);
+  assert.match(box, /先到「审核」删除隐藏的照片，释放空间，再拖同一个文件夹接着传/);
+  assert.doesNotMatch(box, /下个月/);
+  const plan = await page.textContent('#plan-body');
+  assert.match(plan, /2 张空间不够/);
+  assert.doesNotMatch(plan, /额度不够，下个月/);
+  const gi = await openProject(page, 'Ipoh 日式 黄小姐');
+  assert.match(await page.textContent('.pg[data-pg="' + gi + '"]'), /空间不够/);
+  assert.doesNotMatch(await page.textContent('.pg[data-pg="' + gi + '"]'), /下个月/);
+  // 自己多勾一张：空间不够
+  await tick(page, gi, projSel(s, 'Ipoh 日式 黄小姐').cut[0]);
+  await page.waitForSelector('#toast.on');
+  assert.match(await page.textContent('#toast'), /空间只够这次传约 2 张/);
+  await page.screenshot({ path: shotPath('upload-space-cut-1440.png'), fullPage: true });
+  await startAndWait(page);
+  assert.equal(Object.keys(index(m).photos).length, 2 + 1, '2 photos + the ballast');
+  await ctx.close();
+
+  // 上传中伺服器说空间满了（507 reason bytes）
+  const m2 = await mock();
+  const two = await newPage(browser);
+  await loginOk(two.page, m2.url, 'Ana');
+  let ok = 0;
+  await two.page.route('**/api/photo**', (route) => {
+    if (ok < 2) { ok++; return route.continue(); }
+    return route.fulfill({ status: 507, contentType: 'application/json', body: '{"error":"quota","reason":"bytes","writesLeft":1500,"bytesLeft":1000}' });
+  });
+  await selectFolder(two.page, dirname(info.many));
+  await waitHashed(two.page);
+  await startAndWait(two.page, 60000);
+  const fatal = await two.page.evaluate(() => MB.clUpload.state().fatal);
+  assert.match(fatal, /案例库的空间快满了，已经自动停下来/);
+  assert.match(fatal, /传好的照片都已经登记/);
+  assert.match(fatal, /先到「审核」删除隐藏的照片，释放空间/);
+  assert.doesNotMatch(fatal, /下个月/);
+  assert.equal(byName(index(m2), 'Klang 现代简约 Mr Ong').n, 2);
+  await two.page.unrouteAll({ behavior: 'ignoreErrors' });
+  assert.deepEqual(page.errors.concat(two.page.errors), []);
+  await two.ctx.close();
+});
+
+test('quota shrinks between plan and start (someone else uploaded) with curated mode off and nothing analysed → the run is trimmed before it starts, never a 507', async () => {
+  // 1,700 次：26 张全放得下（精选关着、不分析）
+  const m = await mock({ seed: seedUsage(1700) });
+  const { ctx, page } = await newPage(browser);
+  const got507 = [];
+  page.on('response', (r) => { if (r.status() === 507) got507.push(r.url()); });
+  await loginOk(page, m.url, 'Ana');
+  await selectFolder(page, dirname(info.many));
+  await waitHashed(page);
+  await waitSel(page);
+  const s = await sel(page);
+  assert.equal(s.cur, false);
+  assert.equal(s.total, 26);
+  assert.equal(await page.evaluate(() => MB.clWork.stats().analyze), 0);
+  // 别人刚好用掉了：剩 15 次（-1 备份 = 14 → 3 + 11 = 12 张）
+  await fetch(m.blob + '__mock/usage?writes=1785', { method: 'POST' });
+  photoMod.resetQuotaCache();
+  await startAndWait(page, 60000);
+  const st = await page.evaluate(() => { const x = MB.clUpload.state(); return { counts: x.counts, fatal: x.fatal, note: x.note }; });
+  assert.deepEqual(got507, [], 'trimmed before uploading, the server never had to refuse');
+  assert.equal(st.fatal, '');
+  assert.equal(st.counts.committed, 12);
+  assert.equal(st.counts.skip, 14);
+  assert.equal(st.counts.failed, 0);
+  const idx = index(m);
+  assert.ok(idx.usage[MONTH()].writes <= 1800, 'writes this month ' + idx.usage[MONTH()].writes);
+  // 没分析过：照档名顺序留
+  assert.deepEqual(photosOf(idx, byName(idx, 'Klang 现代简约 Mr Ong').pid).map((p) => p.f).sort(),
+    Array.from({ length: 12 }, (_, i) => 'K' + String(i + 1).padStart(2, '0') + '.jpg'));
+  assert.deepEqual(page.errors, []);
+  await ctx.close();
+});
+
+test('analysis that fails (decode) is not remembered; outside curated mode the photo is still uploaded, and it can be ticked by hand', async () => {
+  const m = await mock();
+  const { ctx, page } = await newPage(browser);
+  await loginOk(page, m.url, 'Ana');
+  // 分析时暂时读不出 A_02（像记忆体不够）；压图时读得出来
+  await page.evaluate(() => {
+    const orig = MB.clWork.analyze;
+    MB.clWork.analyze = function (f, o) {
+      if (f.name === 'A_02.jpg') { const e = new Error('decode'); e.code = 'decode'; return Promise.reject(e); }
+      return orig(f, o);
+    };
+  });
+  await selectFolder(page, dirname(info.soloA));
+  await waitHashed(page);
+  await page.check('#cur-on');
+  await waitSel(page);
+  let s = await sel(page);
+  let P = projSel(s, 'Ipoh 日式 黄小姐');
+  assert.equal(P.bad, 1);
+  assert.equal(P.sel.length, 3, 'curated mode does not pick the photo it could not read');
+  assert.ok(!P.sel.includes('A_02.jpg'));
+  assert.match(await page.textContent('#plan-body'), /1 张读不出来，不挑/);
+  const rec = await page.evaluate(() => MB.clStore.all('files'));
+  assert.equal(rec.filter((r) => r.bad).length, 0, 'a failed analysis is not saved in IndexedDB');
+  // 精选关掉：照样排进上传
+  await page.uncheck('#cur-on');
+  await waitSel(page);
+  s = await sel(page);
+  assert.equal(s.total, 4);
+  assert.ok(projSel(s, 'Ipoh 日式 黄小姐').sel.includes('A_02.jpg'));
+  // 精选打开、自己勾回来
+  await page.check('#cur-on');
+  await waitSel(page);
+  const gi = await openProject(page, 'Ipoh 日式 黄小姐');
+  const id = await page.evaluate((g) => MB.clUpload.state().projects[g].items.find((x) => x.f === 'A_02.jpg').id, gi);
+  assert.equal(await page.isDisabled('.pg[data-pg="' + gi + '"] input[data-pick="' + id + '"]'), false, 'can be ticked by hand');
+  assert.match(await page.textContent('.pg[data-pg="' + gi + '"] .pg-cell[data-id="' + id + '"] .pg-badge'), /读不出来/);
+  await tick(page, gi, 'A_02.jpg');
+  s = await sel(page);
+  assert.ok(projSel(s, 'Ipoh 日式 黄小姐').sel.includes('A_02.jpg'));
+  await startAndWait(page);
+  const idx = index(m);
+  assert.equal(byName(idx, 'Ipoh 日式 黄小姐').n, 4);
+  assert.ok(photosOf(idx, byName(idx, 'Ipoh 日式 黄小姐').pid).some((p) => p.f === 'A_02.jpg'), 'uploaded: compressing decided, not the failed analysis');
+  assert.deepEqual(page.errors, []);
+  await ctx.close();
+});
+
+test('the catalog answers 503 not_configured → plain words (ask the boss to set up Vercel), no code, no «check the network»', async () => {
+  const m = await mock();
+  const { ctx, page } = await newPage(browser);
+  await page.route((u) => u.pathname === '/api/catalog', (route) => {
+    if (route.request().method() !== 'GET') return route.continue();
+    return route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"not_configured"}' });
+  });
+  await login(page, m.url, 'Ana');
+  await page.waitForSelector('#tabs:not([hidden])');
+  await selectFolder(page, dirname(info.soloA));
+  await page.waitForFunction(() => MB.cl.catErr && MB.cl.catErr.code === 'not_configured');
+  await page.waitForTimeout(300);
+  await page.evaluate(() => MB.clUpload.drawNow());
+  assert.equal(await page.isDisabled('#start'), true);
+  assert.match(await page.textContent('#start'), /现在不能上传/);
+  const why = await page.textContent('.go-why');
+  assert.match(why, /请老板到 Vercel 设定好/);
+  assert.doesNotMatch(why, /not_configured|503|请检查网路/);
+  assert.doesNotMatch(await page.textContent('#toast'), /not_configured/);
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  assert.deepEqual(page.errors, []);
+  await ctx.close();
+});
+
+test('near-duplicates: a burst with something small added is one shot (curated picks one)', async () => {
+  const m = await mock();
+  const { ctx, page } = await newPage(browser);
+  await loginOk(page, m.url, 'Ana');
+  await selectFolder(page, dirname(info.burst));
+  await waitHashed(page);
+  await page.check('#cur-on');
+  await waitSel(page);
+  const dh = await page.evaluate(() => { const o = {}; MB.clUpload.state().items.forEach((it) => { o[it.f] = it.dh; }); return o; });
+  BURST.dh = dh;
+  BURST.sel = projSel(await sel(page), info.burstName).sel;
+  const SAME = await page.evaluate(() => MB.clPick.SAME_SHOT);
+  assert.ok(hamming(dh['IMG_A.jpg'], dh['IMG_A_burst.jpg']) <= SAME, 'burst distance ' + hamming(dh['IMG_A.jpg'], dh['IMG_A_burst.jpg']));
+  assert.ok(hamming(dh['IMG_A.jpg'], dh['IMG_B.jpg']) > SAME);
+  BURST.same = SAME;
+  assert.ok(!(BURST.sel.includes('IMG_A.jpg') && BURST.sel.includes('IMG_A_burst.jpg')), 'one per shot: ' + BURST.sel);
+  assert.ok(BURST.sel.includes('IMG_B.jpg'));
+  assert.deepEqual(page.errors, []);
+  await ctx.close();
+});
+// 裁 2%、亮 8% 的连拍（手动了一点再拍）在 1200px 下 dHash 差 7 左右：精选的门槛是 8（伺服器分组仍是 6），只挑一张
+test('near-duplicates: a slightly re-framed burst (crop 2 %, 8 % brighter) is one shot', () => {
+  assert.ok(BURST.dh, 'previous test ran');
+  const d = hamming(BURST.dh['IMG_A.jpg'], BURST.dh['IMG_A_reframed.jpg']);
+  assert.ok(d <= BURST.same, 're-framed burst distance ' + d + ' > ' + BURST.same);
+  assert.ok(!(BURST.sel.includes('IMG_A.jpg') && BURST.sel.includes('IMG_A_reframed.jpg')), 'one per shot: ' + BURST.sel);
 });
 
 test('Blob stops taking writes mid-upload (503 storage_blocked) → the run stops with a clear message instead of grinding on', async () => {

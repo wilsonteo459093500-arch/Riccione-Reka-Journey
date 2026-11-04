@@ -11,7 +11,24 @@
      不再自动挑、帮我挑也不用 —— 之后被隐藏的照片（拍到客户…）这台电脑看不出来；登出后也不再问伺服器
    - entries() 只给白名单栏位 + 自动产生的说明（「原木 · 橱柜 · 厨房」）。
      项目名（文件夹名，含客户名字）、档案路径 f 从来不进来：就算伺服器给了，这里也不收
-   对外：MB.cloud.{ loadCached, refresh, me, login, logout, thumbs, thumb, entries, projects, status, onChange, proxySrc }
+   - 案例库被 Vercel 暂停（免费额度用完：API 回 503 storage_blocked / 507 quota）→ status 'blocked'：
+     照片网址这时都回 403，所以 entries 的 src 清空、带 blocked —— 方案里已经放的照样解析得到（方案打得开），
+     但印成占位框、不进图库、不自动挑（model.js 的 usable / caseGone）。之后问到伺服器正常了就恢复。
+     API 问不到（离线、登入过期、登出）时，最多一天一次用一张案例照片试一下（HEAD）：回 403 才算暂停中
+     （网路一时不通、没有 CORS 看不出来的，一律不算）；暂停中改成最多一小时试一次，恢复了马上知道。
+     暂停中会记在 IndexedDB：重新整理后第一次排版就不会出现破图
+   - 一张案例照片载不出来（app.js 抓到 <img> 的 error → photoFailed）：这台电脑的清单可能是旧的（刚被删掉）、
+     或案例库刚被暂停（10 分钟一次的更新还没问到）—— 马上问一次伺服器（最多一分钟一次）；伺服器问不到、
+     或还是说清单里有，就 HEAD 那一张：404 = 档案已经不在了（当成已删除）、403 = 暂停中（伺服器问不到时才算）
+   - 本机案例库（案例库页选了「存在这台电脑」，MB.localSw.isLocal()）：同样的 /api/* 由这台电脑的 service worker
+     （caselib-sw.js）回答，照片在 <这个网址>/local-cases/…。这里几乎照旧，只是：
+     先等 service worker 接手这一页再发请求（不会跑去问云端）；不会有「Vercel 暂停中」（不试照片、不记暂停）；
+     status().local = true（图库那一格改说「本机案例库 · N 张（存在这台电脑）」）；
+     方案里有、这台电脑没有的案例照片：model.js 当成「这台电脑没有」（体检叫他先汇入那个项目的文件夹），不说「已删除」
+     两种清单分开存（meta 'index' = 云端、'index-local' = 本机），ETag 也照伺服器给的原样送回去（本机是 "local-rev-N"）：
+     换了模式不会拿到另一边的清单、照片网址，也不会因为 rev 刚好一样就 304。
+     另一边存着的清单里有的照片（例：本机的照片、现在是云端模式）：不说「已删除」，当成看不到（留着、体检说改回那一边就看得到）
+   对外：MB.cloud.{ loadCached, refresh, me, login, logout, thumbs, thumb, entries, projects, status, onChange, proxySrc, photoFailed }
    ============================================================ */
 (function () {
   'use strict';
@@ -20,7 +37,9 @@
   var DB_NAME = 'sail-visi-cases';
   var FLAG = 'sail-visi-cases';            // localStorage：这台电脑登入过（开机才去问伺服器）
   var USER = 'sail-visi-cases-user';       // 上次登入的名字（只用来预填、显示）
+  var PROBE = 'sail-visi-cases-probe';     // localStorage：上次用一张案例照片试案例库开不开 { at, r }
   var EVERY = 10 * 60 * 1000;
+  var HOUR = 3600 * 1000, DAY = 24 * HOUR;
   var API = 'api/';
   var HEX16 = /^[0-9a-f]{16}$/;
   var PID = /^p[0-9a-f]{10}$/;
@@ -29,15 +48,32 @@
   var THUMB_RE = /^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/;
 
   // stale：存着的清单可能过时了（登入过期、登出）· loggedOut：自己按了登出（重新整理也记得）
-  var state = { status: 'idle', user: lsGet(USER) || '', rev: 0, checked: 0, count: 0, error: '', stale: false, loggedOut: false };
+  // blocked：案例库暂停中 —— 'api'（伺服器说的）· 'probe'（试了一张照片回 403）· ''（没有）
+  var state = { status: 'idle', user: lsGet(USER) || '', rev: 0, checked: 0, count: 0, error: '', stale: false, loggedOut: false,
+    blocked: '', blockedAt: 0 };
   var IDX = null;          // 白名单过的清单
   var ENTRIES = [];
   var THUMBS = {};         // h16 → dataURL（缩图包，320px）
   var PACKS = {};          // 缩图包 pathname → 'ok' | 'fail' | Promise
   var subs = [];
-  var inflight = null, retry = null;
+  var inflight = null, retry = null, probing = null;
+  var fresh = false;       // IDX 刚换过：下一次 sync() 要重建 entries
+  var MISSING = {};        // h16 → 1：照片档已经不在了（HEAD 回 404）—— 这次开着当成已删除（不存，重新整理再确认一次）
+  var FAILQ = {}, HEADED = {}, failJob = null, failAt = 0;   // photoFailed：排队、每张只试一次、问伺服器的时间
+  var pub = null;          // 上次交给 model.js 的状态 { stale, trust, blocked }：变了才重发（重排一次方案）
+  var ETAG = '';           // 上次拿到这份清单时伺服器 / service worker 给的 ETag（原样送回去问有没有新的）
+  var OTHER = {};          // h16 → 'local' | 'cloud'：另一个模式存着的清单里有的照片（这里没有也不是被删掉）
 
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  /** 本机案例库（案例库页选了「存在这台电脑」） */
+  function isLocal() { return !!(MB.localSw && MB.localSw.isLocal()); }
+  /** 这个模式的清单存在 IndexedDB 哪一笔：云端、本机分开（换模式不会拿错） */
+  function idxKey(local) { return local ? 'index-local' : 'index'; }
+  /** 本机案例库的照片网址开头（<这个网址>/local-cases/） */
+  function localBase() { return (location.origin || '') + '/local-cases/'; }
+  function isLocalBase(b) { return typeof b === 'string' && b === localBase(); }
+  /** 本机：等 service worker 接手这一页（不然 /api 会跑去问云端）。false = 这个浏览器开不了 */
+  function gate() { return isLocal() ? MB.localSw.ready() : Promise.resolve(true); }
   function lsSet(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} }
 
   /* ---------- IndexedDB（打不开就当没有快取：无痕模式照样能用） ---------- */
@@ -109,6 +145,10 @@
         status: oneOf(MB.CASE_STATUS, x.status) || 'new', hidden: !!x.hidden
       };
     });
+    // 已经删掉的照片（只有 h16）：伺服器的 visi 版现在不给；有给就收，model.js 才能肯定地说「已经被删除」
+    out.purged = (Array.isArray(raw.purged) ? raw.purged : []).filter(function (h) {
+      return typeof h === 'string' && HEX16.test(h) && !out.photos[h];
+    }).slice(0, 50000);
     return out;
   }
 
@@ -142,7 +182,8 @@
       var style = x.style || pr.style || '';
       var st = vocab(MB.CASE_STYLES, style);
       var e = {
-        id: 'c:' + h, src: IDX.base + x.k, thumb: THUMBS[h] || '', w: x.w, h: x.h,
+        // 暂停中：照片网址都回 403 —— 不给网址，方案页、PPTX、图库就不会出现破图（印成占位框）
+        id: 'c:' + h, src: state.blocked ? '' : IDX.base + x.k, thumb: THUMBS[h] || '', w: x.w, h: x.h,
         style: style, series: st ? st.series : '', cabinets: x.cabinets.slice(), rooms: x.room ? [x.room] : [],
         pid: x.p, area: pr.area, ptype: pr.ptype, traits: pr.traits.slice(), shot: 'c:' + x.shot,
         hero: x.hero, status: x.status, hidden: !!(x.hidden || pr.hidden), desc: { zh: x.desc.zh, en: x.desc.en }
@@ -153,56 +194,89 @@
       e.zh = x.desc.zh || zh;
       e.en = x.desc.en || en;
       e.plabel = PLABEL[x.p] || '';
+      if (state.blocked) e.blocked = true;
+      // 档案已经不在了（清单是旧的）：跟清单里没有的一样当成已删除 —— 不给网址、不给缩图（印占位框，体检叫他换一张）
+      if (MISSING[h]) { e.src = ''; e.thumb = ''; e.gone = 'deleted'; }
       ENTRIES.push(e);
     });
   }
 
+  /** 这份清单是刚跟伺服器对过的（登入着、没过期、没暂停）：清单里没有的 c: 照片才能说是「被删掉了」 */
+  function trusted() { return state.status === 'ok' && !state.stale && !state.blocked; }
   function publish() {
     ENTRIES.forEach(function (e) { e.stale = !!state.stale; });
-    if (typeof MB.setCases === 'function') MB.setCases(ENTRIES);
-    state.count = ENTRIES.filter(function (e) { return !e.hidden && e.status !== 'unsure'; }).length;
+    pub = { stale: !!state.stale, trust: trusted(), blocked: !!state.blocked };
+    if (typeof MB.setCases === 'function') MB.setCases(ENTRIES, { current: pub.trust, purged: IDX ? IDX.purged || [] : [], local: isLocal(), elsewhere: Object.keys(OTHER) });
+    state.count = ENTRIES.filter(function (e) { return !e.hidden && e.status !== 'unsure' && !e.gone; }).length;
     notify('cases');
+  }
+  /** 状态变了（换清单、过期、暂停 / 恢复、刚对过伺服器）：要重建的重建，只发一次给 model.js */
+  function sync() {
+    if (!IDX) return;
+    var rebuild = fresh || !pub || pub.blocked !== !!state.blocked;
+    fresh = false;
+    if (rebuild) {
+      // 恢复了：暂停中载不到的缩图包再试一次
+      if (!state.blocked) Object.keys(PACKS).forEach(function (k) { if (PACKS[k] === 'fail') delete PACKS[k]; });
+      build();
+    }
+    if (rebuild || pub.stale !== !!state.stale || pub.trust !== trusted()) publish();
   }
   function notify(what) {
     subs.slice().forEach(function (fn) { try { fn(what, status()); } catch (e) { console.error(e); } });
   }
   function setStatus(s, err) {
     var changed = state.status !== s || state.error !== (err || '');
+    var was = state.stale;
     state.status = s; state.error = err || '';
     // 伺服器说要登入（cookie 过期）：存着的清单改成只解析、不自动挑
-    if (s === 'login') setStale(true);
+    if (s === 'login') state.stale = true;
+    sync();
+    if (IDX && state.stale !== was) save();
     if (changed) notify('status');
   }
-  function setStale(on) {
-    if (state.stale === !!on) return;
-    state.stale = !!on;
-    if (IDX) { publish(); save(); }
+  /** 暂停 / 恢复（by = 'api' | 'probe' | ''）：只改状态，之后的 setStatus / sync 一次重建 */
+  function setBlocked(by) {
+    if (!!state.blocked === !!by) { if (by && state.blocked !== 'api') state.blocked = by; return false; }
+    state.blocked = by || '';
+    state.blockedAt = by ? Date.now() : 0;
+    return true;
   }
   function status() {
     return { status: state.status, user: state.user, rev: IDX ? IDX.rev : 0, checked: state.checked, count: state.count, error: state.error,
-      cached: !!IDX, stale: !!state.stale, loggedOut: !!state.loggedOut };
+      cached: !!IDX, stale: !!state.stale, loggedOut: !!state.loggedOut, blocked: !!state.blocked, local: isLocal() };
   }
   /** 这台电脑登入着（登入过、没按登出）：才去问伺服器。只存着清单不算（登出后不再问） */
   function wanted() { return lsGet(FLAG) === '1' && !state.loggedOut; }
 
   function save() {
     if (!IDX) return Promise.resolve();
-    return idbPut('meta', { k: 'index', index: IDX, checked: state.checked, user: state.loggedOut ? '' : state.user,
-      stale: !!state.stale, loggedOut: !!state.loggedOut });
+    // 存在跟照片网址对得上的那一笔（本机的 /local-cases/ → 'index-local'）：中途换了模式也不会存错边
+    return idbPut('meta', { k: idxKey(IDX.base ? isLocalBase(IDX.base) : isLocal()), index: IDX, etag: ETAG, checked: state.checked, user: state.loggedOut ? '' : state.user,
+      stale: !!state.stale, loggedOut: !!state.loggedOut, blocked: state.blocked ? { by: state.blocked, at: state.blockedAt } : null });
   }
 
   /* ---------- 网路 ---------- */
   function call(method, path, body, extra) {
-    var opts = { method: method, credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' } };
+    // X-Caselib-Mode：service worker 照这一页的模式决定自己回答（本机）还是交给伺服器（云端）
+    var opts = { method: method, credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json', 'X-Caselib-Mode': isLocal() ? 'local' : 'cloud' } };
     if (method !== 'GET') opts.headers['X-VISI'] = '1';   // 伺服器挡跨站写入（CSRF）要这个
     if (body != null) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
     Object.keys(extra || {}).forEach(function (k) { opts.headers[k] = extra[k]; });
-    return fetch(API + path, opts).then(function (r) {
+    return gate().then(function (ok) {
+      if (!ok) throw new Error('local case library is not ready');
+      return fetch(API + path, opts);
+    }).then(function (r) {
       var json = /json/i.test(r.headers.get('Content-Type') || '');
       return (json && r.status !== 304 ? r.json().catch(function () { return null; }) : Promise.resolve(null)).then(function (data) {
-        return { status: r.status, ok: r.ok, json: json, data: data };
+        return { status: r.status, ok: r.ok, json: json, data: data, etag: r.headers.get('ETag') || '' };
       });
     });
+  }
+  /** 回应 → 案例库被 Vercel 暂停了（免费额度用完：store 被停权、额度到顶）。跟 503 not_configured（没设定）不一样 */
+  function blockedResp(r) {
+    var e = r.data && r.data.error;
+    return (r.status === 503 && e === 'storage_blocked') || (r.status === 507 && e === 'quota');
   }
   /** 回应 → 这个网址没有案例库：静态网站（404、不收 POST、回的不是 JSON）、团队密码还没设（503 not_configured） */
   function unavailable(r) {
@@ -214,14 +288,30 @@
   MB.cloud = {
     /** 开机：读这台电脑存着的清单（不发请求）。永远 resolve（回几张案例） */
     loadCached: function () {
-      return idbGet('meta', 'index').then(function (rec) {
+      var local = isLocal();
+      // 另一个模式存着的清单：只拿照片 id（那边有的照片，这里没有也不是被删掉）
+      idbGet('meta', idxKey(!local)).then(function (rec) {
+        var other = rec && rec.index && rec.index.photos && typeof rec.index.photos === 'object' ? rec.index.photos : null;
+        if (!other || (!!local === isLocalBase(rec.index.base))) return;
+        var tag = local ? 'cloud' : 'local', n = 0;
+        Object.keys(other).forEach(function (h) { if (HEX16.test(h) && !OTHER[h]) { OTHER[h] = tag; n++; } });
+        if (n && IDX) publish();
+      }).catch(function () {});
+      return idbGet('meta', idxKey(local)).then(function (rec) {
+        // 以前（只存一份）可能是另一边的：照片网址对不上这个模式就不用（本机 = /local-cases/，云端 = 别的）
+        if (rec && rec.index && !!local !== isLocalBase(rec.index.base)) rec = null;
         if (rec && rec.index) {
           IDX = sanitize(rec.index);
+          ETAG = typeof rec.etag === 'string' && rec.etag.length < 100 ? rec.etag : '';
           state.checked = +rec.checked || 0;
           // 登出过（或案例库管理页登出、清掉了 FLAG）：不要又显示「已登入：某某」
           if (rec.loggedOut || lsGet(FLAG) !== '1') { state.loggedOut = true; state.user = ''; }
           else if (rec.user && !state.user) state.user = String(rec.user).slice(0, 30);
           state.stale = !!(rec.stale || state.loggedOut);
+          // 上次知道的是「暂停中」：照片网址会回 403 —— 先当暂停中（第一次排版就不会破图），问到伺服器 / 试到照片正常再恢复
+          var bl = rec.blocked && typeof rec.blocked === 'object' ? rec.blocked : null;
+          // 本机案例库不会被 Vercel 暂停：以前记的「暂停中」不算
+          if (bl && (bl.by === 'api' || bl.by === 'probe') && !isLocal()) { state.blocked = bl.by; state.blockedAt = +bl.at || 0; }
         }
       }).catch(function () {}).then(function () {
         build(); publish();
@@ -232,31 +322,49 @@
 
     /** 问伺服器有没有新清单。force = 业务按「更新」/ 刚登入；否则 10 分钟内问过就不问。永远 resolve（回 status()） */
     refresh: function (force) {
-      if (!wanted() && !force) return Promise.resolve(status());
-      if (!force && !state.stale && state.checked && Date.now() - state.checked < EVERY) {
+      // 登出了：不问伺服器（存着的清单只解析方案里已经放的）；照片还会载，所以最多一天试一次案例库开不开
+      if (!wanted() && !force) { probe(); return Promise.resolve(status()); }
+      // 暂停中不走这条：每次都问（恢复了才知道）
+      if (!force && !state.stale && !state.blocked && state.checked && Date.now() - state.checked < EVERY) {
         // 10 分钟内才问过：存着的就是最新的（不要一直显示「正在问」）
         if (state.status === 'cached') setStatus('ok');
         return Promise.resolve(status());
       }
       if (inflight) return inflight;
-      var extra = IDX && IDX.rev ? { 'If-None-Match': '"rev-' + IDX.rev + '"' } : {};
+      // 送回上次拿到的 ETag（原样）。旧的快取没存 ETag：云端照伺服器的样子拼一个；本机就整份重拿
+      var tag = ETAG || (IDX && IDX.rev && !isLocal() ? '"rev-' + IDX.rev + '"' : '');
+      var extra = IDX && tag ? { 'If-None-Match': tag } : {};
       inflight = call('GET', 'catalog?view=visi', null, extra).then(function (r) {
-        if (r.status === 304) { state.checked = Date.now(); state.loggedOut = false; setStale(false); save(); setStatus('ok'); return; }
+        if (r.status === 304) {
+          if (r.etag) ETAG = r.etag;
+          state.checked = Date.now(); state.loggedOut = false; state.stale = false;
+          setBlocked('');
+          setStatus('ok'); save();
+          return;
+        }
         if (r.status === 401) { setStatus('login'); return; }
+        // 案例库被暂停：存着的清单照样解析（方案打得开），照片不再给网址
+        if (blockedResp(r)) { setBlocked('api'); setStatus('blocked', r.data.error); save(); return; }
         if (unavailable(r)) { setStatus('unavailable', 'http ' + r.status); return; }
         if (!r.ok) { setStatus('offline', 'http ' + r.status); return; }   // 500 storage 之类：照样用存着的
         var idx = sanitize(r.data);
         if (!idx) { setStatus('offline', 'bad catalog'); return; }
         IDX = idx;
+        ETAG = r.etag || '';
+        // 这份清单的照片：另一边也有的就不算「另一边的」了
+        Object.keys(idx.photos).forEach(function (h) { delete OTHER[h]; });
         state.checked = Date.now();
         state.stale = false; state.loggedOut = false;
         lsSet(FLAG, '1');
-        build(); publish(); save();
-        setStatus('ok');
+        setBlocked('');
+        fresh = true;
+        setStatus('ok'); save();
       }).catch(function (e) {
         setStatus('offline', String(e && e.message || e));
       }).then(function () {
         inflight = null;
+        // 问不到伺服器（离线、500、登入过期）：照片还是会载 —— 试一张看案例库是不是被暂停了
+        if (state.status === 'offline' || state.status === 'login') probe();
         // 连不上（离线、伺服器 500）：1 分钟后自己再试一次，不用等 10 分钟
         if (state.status === 'offline' && !retry) retry = setTimeout(function () { retry = null; MB.cloud.refresh(true); }, 60000);
         return status();
@@ -308,7 +416,8 @@
       });
     },
 
-    /** 载入几个项目的缩图包（图库每页要显示的那几个项目）。永远 resolve；载不到的（没有 CORS、离线）就用原图 */
+    /** 载入几个项目的缩图包（图库每页要显示的那几个项目）。永远 resolve；载不到的（没有 CORS、离线）就用原图。
+        暂停中只读这台电脑存着的（网址一定 403，不连网）*/
     thumbs: function (pids) {
       if (!IDX) return Promise.resolve(0);
       var jobs = [];
@@ -320,7 +429,7 @@
       if (!jobs.length) return Promise.resolve(0);
       return Promise.all(jobs).then(function () {
         var n = 0;
-        ENTRIES.forEach(function (e) { var t = THUMBS[e.id.slice(2)]; if (t && e.thumb !== t) { e.thumb = t; n++; } });
+        ENTRIES.forEach(function (e) { var t = THUMBS[e.id.slice(2)]; if (t && !e.gone && e.thumb !== t) { e.thumb = t; n++; } });
         if (n) notify('thumbs');
         return n;
       });
@@ -337,7 +446,7 @@
     /** [{ pid, label, n }]：项目的显示名「区域 · 风格 · #n」，n = 能用的照片数 */
     projects: function () {
       var n = {};
-      ENTRIES.forEach(function (e) { if (!e.hidden && e.status !== 'unsure') n[e.pid] = (n[e.pid] || 0) + 1; });
+      ENTRIES.forEach(function (e) { if (!e.hidden && e.status !== 'unsure' && !e.gone) n[e.pid] = (n[e.pid] || 0) + 1; });
       return Object.keys(PLABEL).filter(function (pid) { return n[pid]; }).map(function (pid) {
         return { pid: pid, label: PLABEL[pid], n: n[pid] };
       });
@@ -357,14 +466,114 @@
       var base = IDX && IDX.base;
       return !!base && typeof src === 'string' && src.indexOf(base) === 0;
     },
+    /** 测试 / 管理用：现在就试一次（不管一天一次的限制）。回 Promise<status()> */
+    probe: function () { return probe(true) || Promise.resolve(status()); },
+    /** 这张案例（ref 'c:<h16>'）在另一个模式的案例库里：'local'（本机）| 'cloud'（云端）| ''。体检用来说「改回那一边就看得到」 */
+    elsewhere: function (ref) { var h = String(ref || '').slice(2); return IDX && IDX.photos[h] ? '' : OTHER[h] || ''; },
+    /** 方案页 / 编辑区一张案例照片载不出来（app.js 抓 <img> 的 error）：去确认是删掉了还是暂停中。
+        确认了就重建（notify 'cases'），方案页改印占位框、体检会说。回 Promise<status()> */
+    photoFailed: function (src) { return photoFailed(src); },
     EVERY: EVERY
   };
+
+  /* ---------- 试一张照片：案例库是不是被暂停了 ----------
+     只在问不到伺服器时（离线、500、登入过期、登出）。HEAD 一张照片（不下载），回 403 = 暂停中；2xx = 正常。
+     其他（404、500、连不上、没有 CORS 读不到状态）一律看不出来，什么都不改 —— 网路一时不通不会把案例挡掉。
+     平常一天最多试一次；已经是暂停中就一小时最多一次（恢复了才不会要等一天） */
+  function probeKey() {
+    if (!IDX || !IDX.base) return '';
+    var hs = Object.keys(IDX.photos).sort();
+    for (var i = 0; i < hs.length; i++) if (!IDX.photos[hs[i]].hidden) return IDX.photos[hs[i]].k;
+    return hs.length ? IDX.photos[hs[0]].k : '';
+  }
+  function probe(now) {
+    if (probing) return probing;
+    if (isLocal()) return null;            // 本机案例库：照片在这台电脑，不会被暂停
+    if (!IDX || typeof fetch !== 'function' || (navigator && navigator.onLine === false)) return null;
+    if (!now && state.status !== 'offline' && state.status !== 'login') return null;
+    var k = probeKey();
+    if (!k) return null;
+    var last = null;
+    try { last = JSON.parse(lsGet(PROBE) || 'null'); } catch (e) { last = null; }
+    var since = last && +last.at ? Date.now() - last.at : Infinity;
+    if (!now && since >= 0 && since < (state.blocked ? HOUR : DAY)) return null;
+    lsSet(PROBE, JSON.stringify({ at: Date.now() }));
+    probing = fetch(IDX.base + k, { method: 'HEAD', mode: 'cors', credentials: 'omit', cache: 'no-store' }).then(function (r) {
+      lsSet(PROBE, JSON.stringify({ at: Date.now(), r: r.status }));
+      var by = r.status === 403 ? 'probe' : r.ok ? '' : null;
+      if (by === null || !setBlocked(by)) return;
+      sync(); save(); notify('status');
+    }, function () {}).then(function () { probing = null; return status(); });
+    return probing;
+  }
+
+  /* ---------- 一张案例照片载不出来 ----------
+     先问伺服器（登入着才问，最多一分钟一次）：清单换了（照片被删掉）、暂停中，伺服器一次就说清楚。
+     问不到（登入过期、离线、500）、或伺服器还是说清单里有：HEAD 那一张（每张这次开着只试一次，一次最多 6 张）——
+     404 = 档案不在了 → 当成已删除；403 = 暂停中（只在伺服器问不到时算，伺服器说没暂停就信伺服器）；
+     其他（连不上、没有 CORS、200 = 刚才只是网路不稳）一律不改 */
+  function photoFailed(src) {
+    var base = IDX && IDX.base;
+    if (!base || typeof src !== 'string' || src.indexOf(base) !== 0 || state.blocked) return Promise.resolve(status());
+    // 本机：service worker 还没接手这一页（刚打开）—— 载不到是正常的，接手后会重画，不能当成已删除
+    if (isLocal() && !MB.localSw.controlled()) return Promise.resolve(status());
+    // 本机的照片网址、现在却不是本机模式（改用云端了）：没有 service worker 回答，404 不代表被删掉
+    if (!isLocal() && isLocalBase(base)) return Promise.resolve(status());
+    var k = src.slice(base.length), h = k.slice(2, 18);
+    if (!PHOTO_K.test(k) || !HEX16.test(h) || MISSING[h] || HEADED[k]) return failJob || Promise.resolve(status());
+    if (typeof fetch !== 'function' || (navigator && navigator.onLine === false)) return Promise.resolve(status());
+    FAILQ[k] = 1;
+    if (failJob) return failJob;
+    // 同一次排版好几张一起载不出来：等一下收齐，只问一次
+    failJob = new Promise(function (done) { setTimeout(done, 250); }).then(function () {
+      if (!wanted() || Date.now() - failAt < 60000) return;
+      failAt = Date.now();
+      return MB.cloud.refresh(true);
+    }).then(function () {
+      var list = Object.keys(FAILQ);
+      FAILQ = {};
+      // 伺服器说清楚了（暂停中、清单里已经没有这张）：不用再试
+      list = list.filter(function (k) {
+        var x = IDX && IDX.photos[k.slice(2, 18)];
+        return !state.blocked && x && x.k === k && !HEADED[k];
+      }).slice(0, 6);
+      return Promise.all(list.map(function (k) {
+        HEADED[k] = 1;
+        return fetch(IDX.base + k, { method: 'HEAD', mode: 'cors', credentials: 'omit', cache: 'no-store' }).then(function (r) {
+          return r.status === 404 ? 'gone' : r.status === 403 && !trusted() ? 'blocked' : '';
+        }, function () { return ''; }).then(function (v) { return { k: k, v: v }; });
+      }));
+    }).then(function (res) {
+      var gone = 0, blocked = false;
+      (res || []).forEach(function (x) { if (x.v === 'gone') { MISSING[x.k.slice(2, 18)] = 1; gone++; } else if (x.v === 'blocked') blocked = true; });
+      if (blocked && setBlocked('probe')) { sync(); save(); notify('status'); }
+      if (gone) { fresh = true; sync(); }
+    }).catch(function (e) { console.error(e); }).then(function () {
+      failJob = null;
+      // 这一轮在跑的时候又有别张载不出来：再跑一轮（每张只试一次，不会一直转）
+      var more = Object.keys(FAILQ)[0];
+      if (more && IDX && IDX.base) { delete FAILQ[more]; photoFailed(IDX.base + more); }
+      return status();
+    });
+    return failJob;
+  }
+
+  // 本机：service worker 刚接手这一页（第一次打开）→ 照片现在拿得到了：重排一次、问一次清单
+  if (isLocal() && navigator.serviceWorker && !MB.localSw.controlled()) {
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      Object.keys(PACKS).forEach(function (k) { if (PACKS[k] === 'fail') delete PACKS[k]; });
+      fresh = true;
+      sync();
+      if (wanted()) MB.cloud.refresh(true);
+    });
+  }
 
   function loadPack(k) {
     var job = idbGet('packs', k).then(function (rec) {
       if (rec && rec.thumbs) return rec.thumbs;
       if (!IDX || !IDX.base) throw new Error('no base');
-      return fetch(IDX.base + k, { mode: 'cors', credentials: 'omit' }).then(function (r) {
+      if (state.blocked) throw new Error('blocked');   // 恢复时 sync() 会把这些「载不到」清掉、再试
+      return gate().then(function () { return fetch(IDX.base + k, { mode: 'cors', credentials: 'omit' }); }).then(function (r) {
         if (!r.ok) throw new Error('http ' + r.status);
         return r.json();
       }).then(function (data) {

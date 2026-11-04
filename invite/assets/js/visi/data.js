@@ -248,17 +248,18 @@
   MB.DIRECTIONS = [
     {
       key: 'misty', series: 'misty', en: 'Misty Mountain', zh: '雾山',
-      mood: { en: 'Light oak and warm white — soft daylight, a quiet home.', zh: '浅橡木与暖白，柔和的日光，一个安静的家。' },
+      // 官方文案（溪岸原创设计篇 P25）：取晨雾之「灰」、春山之「木」、早春山间将有未有之「绿」为主色
+      mood: { en: 'Light oak and soft spring green — mist-soft light, a quiet home.', zh: '浅橡木与淡淡的春绿，雾一样柔和的光，安静温和。' },
       palette: [
         { hex: '#F2EDE4', en: 'Warm White', zh: '暖白' },
-        { hex: '#D9C3A5', en: 'Light Oak', zh: '浅橡木' },
-        { hex: '#E3D9C8', en: 'Linen', zh: '亚麻' },
-        { hex: '#C7C2B8', en: 'Mist Grey', zh: '雾灰' },
-        { hex: '#8D8478', en: 'Stone', zh: '石色' }
+        { hex: '#D9C3A5', en: 'Spring Oak', zh: '春山木' },
+        { hex: '#C7C2B8', en: 'Morning Mist Grey', zh: '晨雾灰' },
+        { hex: '#B9C0AC', en: 'Early-Spring Green', zh: '早春绿' },
+        { hex: '#E3D9C8', en: 'Linen', zh: '亚麻' }
       ],
       materials: [
         { hex: '#D9C3A5', en: 'Light oak veneer', zh: '浅橡木饰面' },
-        { hex: '#F2EDE4', en: 'Warm white matt', zh: '暖白哑光' },
+        { hex: '#B9C0AC', en: 'Pale sage matt fronts', zh: '淡绿哑光柜门' },
         { hex: '#DCD6CC', en: 'Pale sintered stone top', zh: '浅色岩板台面' }
       ],
       promises: [
@@ -331,7 +332,7 @@
       ]
     },
     {
-      key: 'wabi', series: 'wabi', en: 'Wabi-Sabi Eastern', zh: '宅仁 · 寂',
+      key: 'wabi', series: 'wabi', en: 'Wabi-Sabi Eastern', zh: '侘寂东方',
       mood: { en: 'Aged wood, lime plaster and travertine — a home that gets better with time.', zh: '老木、灰泥与洞石，一个越住越有味道的家。' },
       palette: [
         { hex: '#D9D1C4', en: 'Lime Plaster', zh: '石灰' },
@@ -355,6 +356,80 @@
 
   MB.DIRECTION = {};
   MB.DIRECTIONS.forEach(function (d) { MB.DIRECTION[d.key] = d; });
+
+  /* ---------- 五个产品系列的设计理念（方案里「系列 · 设计理念」那一页） ----------
+     给客户认识溪岸的设计理念：一句标题 + 一段话 + 一句补充，照溪岸 2025 品牌手册写，不另外编。
+     - 骨骼线、空山、织：手册 p.6（自然线系列的三大主题）、p.9–11、p.23–28。
+     - 雾山：溪岸原创设计篇 P25、品牌讲解 p.11（老板 2026-11-04 发的截图）。
+     - 侘寂东方：溪岸官方帐号 2025 年发布实木系列新品的文案（老板 2026-11-04 发的截图）。
+     family：属于「自然线系列」的才写，不是的留空，不硬套。                                 */
+  MB.SERIES_CONCEPT = {
+    skeleton: {
+      family: { zh: '溪岸 · 自然线系列', en: 'SAIL · Natural Line' },
+      title: { zh: '在时间的长河，寻找关于家具的记忆。', en: 'In the long river of time, looking for the memory of furniture.' },
+      body: {
+        zh: '我们将古典家具美学融入现代设计，打造「没那么现代」的设计：用柜子本身的装饰线条形成把手，营造家具的自然生长感。',
+        en: 'We bring the beauty of classical furniture into modern design — a design that is “not quite so modern”. The cabinet’s own lines become its handles, so the furniture feels as if it grew there.'
+      },
+      note: { zh: '灵感取自古典实木家具的形态：骨骼结构既是装饰，也是把手。', en: 'Inspired by classical solid-wood furniture: the frame is both the ornament and the handle.' },
+      source: '品牌手册 p.9, p.23–24'
+    },
+    mountain: {
+      family: { zh: '溪岸 · 自然线系列', en: 'SAIL · Natural Line' },
+      title: { zh: '入空山，感物近人。', en: 'Enter the empty mountain, and feel close to things and people.' },
+      body: {
+        zh: '我们弱化不必要的设计与装饰，以「退一步」的产品形态，消融大型柜体在空间里的存在感，衬托空间真正的主角，把视线重新聚焦到生活与人本身。',
+        en: 'We pare back unnecessary design and ornament. With a form that “takes a step back”, large cabinetry quietly dissolves into the room, leaving the focus on life and the people living it.'
+      },
+      note: { zh: '以「退」为设计哲学，「空而不空」的陈列美学。', en: '“Stepping back” as a design philosophy — display that is empty, yet never empty.' },
+      source: '品牌手册 p.10, p.28'
+    },
+    weaving: {
+      family: { zh: '溪岸 · 自然线系列', en: 'SAIL · Natural Line' },
+      title: { zh: '自然柔韧，回归感性生活。', en: 'Natural and supple — back to a life of the senses.' },
+      body: {
+        zh: '织系列汲取麻纤维织物的质感，以织物的朴素美学，唤醒对生活与材料的感知力。',
+        en: 'Weaving draws on the texture of woven linen fibre; its quiet, honest beauty reawakens how we feel our life and our materials.'
+      },
+      note: { zh: '在城市的喧嚣中迷失的感觉，在接近麻纤维的时候，会慢慢平复下来。', en: 'What gets lost in the noise of the city slowly settles when you are close to linen.' },
+      source: '品牌手册 p.11'
+    },
+    misty: {
+      family: null,
+      title: { zh: '雾山春居。', en: 'A spring house on the misty mountain.' },
+      body: {
+        zh: '以「雾山春居」为设计灵感：山腰一间木屋，以更自由的产品、更身心共融的家，将春日里雾山平和、纯粹、轻盈、充沛的自然表达，尽诉其中。',
+        en: 'Inspired by a spring house on a misty mountain: a timber cabin halfway up the slope. With freer pieces and a home where body and mind are at ease, it holds all the calm, purity, lightness and fullness of the mountain in spring.'
+      },
+      note: {
+        zh: '轻于色、安于形：取晨雾之「灰」、春山之「木」、早春山间将有未有之「绿」，消隐大型柜体的存在感，让空间平静温和。',
+        en: 'Light in colour, at ease in form: the grey of morning mist, the wood of the spring hills and the green that is only just arriving — large cabinetry fades back and the room stays calm and gentle.'
+      },
+      quote: {
+        zh: '「我心中有一种东西像薄雾，我被它包裹着……让我们保持安静，被生活环绕……」—— 费尔南多·佩索阿',
+        en: '“There is something in me like a mist, and I am wrapped in it… let us stay quiet, surrounded by life…” — Fernando Pessoa'
+      },
+      source: '溪岸原创设计篇 P25；溪岸品牌讲解 p.11'
+    },
+    wabi: {
+      family: { zh: '溪岸 · 实木系列', en: 'SAIL · Solid Wood' },
+      title: { zh: '山，有它的时间。', en: 'Mountains have their own time.' },
+      body: {
+        zh: '我们将东方哲思中「关于时间的探索」融入设计，在造物与空间中，注入对生命流动的理解与尊重。',
+        en: 'We bring the Eastern way of thinking about time into design, so that every piece and every space carries an understanding of, and respect for, the flow of life.'
+      },
+      note: {
+        zh: '打磨出能滋养心灵、连接自然、经得起时间洗礼的设计。',
+        en: 'Design that nourishes the mind, connects with nature, and stands the test of time.'
+      },
+      source: '溪岸官方帐号：2025 年实木系列新品「侘寂东方」发布文'
+    }
+  };
+  /* 溪岸的设计理念（同一页的小字；手册 p.2、p.14） */
+  MB.SAIL_PHILOSOPHY = {
+    zh: '好的设计，正如一个自然的生命体：去掉不必要的装饰，让柜体融于空间，去凸显、服务人的生活。',
+    en: 'Good design is like a living thing in nature: we take away needless ornament, so the cabinetry melts into the space and serves the life lived in it.'
+  };
 
   /* ---------- 需求卡 → 「你说的 · 我们做的」 -------------------
      match     对应需求卡里的哪个选项（正则；华文、英文、中英文的需求卡都要认得）

@@ -38,8 +38,8 @@
     zhTitle: '思源宋体 CN SemiBold', zhSerif: '思源宋体 CN Medium', zhSans: 'HarmonyOS Sans SC Medium'
   };
   // 跟 app.js 的 fitText 同一组、同一个先后（一页只量第一个找得到的）：
-  // .iv-flow = 邀约页右栏（三样 + 时段 + 联络），三样写长了预览会缩字，PPTX 也要跟着缩
-  var FIT = ['.nd-list', '.pl-side', '.rm-txt', '.lt-body', '.pr-body', '.cs-list', '.iv-flow'];
+  // .iv-flow = 邀约页右栏（三样 + 时段 + 联络），三样写长了预览会缩字，PPTX 也要跟着缩；.sr-col = 系列 · 设计理念的右栏
+  var FIT = ['.nd-list', '.pl-side', '.rm-txt', '.lt-body', '.pr-body', '.cs-list', '.iv-flow', '.sr-col'];
   var loading = null;
 
   /* ---------- 载入 pptxgenjs（第一次导出才载） ------------------ */
