@@ -331,7 +331,7 @@
       ]
     },
     {
-      key: 'wabi', series: 'wabi', en: 'Wabi-Sabi Eastern', zh: '宅仁 · 寂',
+      key: 'wabi', series: 'wabi', en: 'Wabi-Sabi Eastern', zh: '侘寂东方',
       mood: { en: 'Aged wood, lime plaster and travertine — a home that gets better with time.', zh: '老木、灰泥与洞石，一个越住越有味道的家。' },
       palette: [
         { hex: '#D9D1C4', en: 'Lime Plaster', zh: '石灰' },
@@ -355,6 +355,69 @@
 
   MB.DIRECTION = {};
   MB.DIRECTIONS.forEach(function (d) { MB.DIRECTION[d.key] = d; });
+
+  /* ---------- 五个产品系列的设计理念（方案里「系列 · 设计理念」那一页） ----------
+     给客户认识溪岸的设计理念：一句标题 + 一段话 + 一句补充，照溪岸 2025 品牌手册写，不另外编。
+     - 骨骼线、空山、织：手册 p.6（自然线系列的三大主题）、p.9–11、p.23–28。
+     - 雾山、侘寂东方：手册里没有，先用邀请函作品集（assets/js/cases.js）原有的介绍；老板给官方介绍后换掉。
+     family：属于「自然线系列」的才写，不是的留空，不硬套。                                 */
+  MB.SERIES_CONCEPT = {
+    skeleton: {
+      family: { zh: '溪岸 · 自然线系列', en: 'SAIL · Natural Line' },
+      title: { zh: '在时间的长河，寻找关于家具的记忆。', en: 'In the long river of time, looking for the memory of furniture.' },
+      body: {
+        zh: '我们将古典家具美学融入现代设计，打造「没那么现代」的设计：用柜子本身的装饰线条形成把手，营造家具的自然生长感。',
+        en: 'We bring the beauty of classical furniture into modern design — a design that is “not quite so modern”. The cabinet’s own lines become its handles, so the furniture feels as if it grew there.'
+      },
+      note: { zh: '灵感取自古典实木家具的形态：骨骼结构既是装饰，也是把手。', en: 'Inspired by classical solid-wood furniture: the frame is both the ornament and the handle.' },
+      source: '品牌手册 p.9, p.23–24'
+    },
+    mountain: {
+      family: { zh: '溪岸 · 自然线系列', en: 'SAIL · Natural Line' },
+      title: { zh: '入空山，感物近人。', en: 'Enter the empty mountain, and feel close to things and people.' },
+      body: {
+        zh: '我们弱化不必要的设计与装饰，以「退一步」的产品形态，消融大型柜体在空间里的存在感，衬托空间真正的主角，把视线重新聚焦到生活与人本身。',
+        en: 'We pare back unnecessary design and ornament. With a form that “takes a step back”, large cabinetry quietly dissolves into the room, leaving the focus on life and the people living it.'
+      },
+      note: { zh: '以「退」为设计哲学，「空而不空」的陈列美学。', en: '“Stepping back” as a design philosophy — display that is empty, yet never empty.' },
+      source: '品牌手册 p.10, p.28'
+    },
+    weaving: {
+      family: { zh: '溪岸 · 自然线系列', en: 'SAIL · Natural Line' },
+      title: { zh: '自然柔韧，回归感性生活。', en: 'Natural and supple — back to a life of the senses.' },
+      body: {
+        zh: '织系列汲取麻纤维织物的质感，以织物的朴素美学，唤醒对生活与材料的感知力。',
+        en: 'Weaving draws on the texture of woven linen fibre; its quiet, honest beauty reawakens how we feel our life and our materials.'
+      },
+      note: { zh: '在城市的喧嚣中迷失的感觉，在接近麻纤维的时候，会慢慢平复下来。', en: 'What gets lost in the noise of the city slowly settles when you are close to linen.' },
+      source: '品牌手册 p.11'
+    },
+    misty: {
+      family: null,
+      title: { zh: '轻盈纯净的空间意境。', en: 'Light, clear, quietly poetic.' },
+      body: {
+        zh: '灵感源自「雾山春居」。颜色轻，光线软，适合想让家安静下来的人。',
+        en: 'Inspired by a spring house in the mist — light colours and soft daylight, for a home that wants to be quiet.'
+      },
+      note: null,
+      source: '邀请函作品集（cases.js），待老板给官方介绍'
+    },
+    wabi: {
+      family: null,
+      title: { zh: '实木的纯粹与真实。', en: 'The honesty of solid wood.' },
+      body: {
+        zh: '于自然肌理之间，感受深邃而宁静的空间之美。材料不加掩饰，越用越好看。',
+        en: 'Depth and stillness in natural texture — materials left honest, ageing into something better.'
+      },
+      note: null,
+      source: '邀请函作品集（cases.js），待老板给官方介绍'
+    }
+  };
+  /* 溪岸的设计理念（同一页的小字；手册 p.2、p.14） */
+  MB.SAIL_PHILOSOPHY = {
+    zh: '好的设计，正如一个自然的生命体：去掉不必要的装饰，让柜体融于空间，去凸显、服务人的生活。',
+    en: 'Good design is like a living thing in nature: we take away needless ornament, so the cabinetry melts into the space and serves the life lived in it.'
+  };
 
   /* ---------- 需求卡 → 「你说的 · 我们做的」 -------------------
      match     对应需求卡里的哪个选项（正则；华文、英文、中英文的需求卡都要认得）

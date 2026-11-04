@@ -57,7 +57,7 @@ window.SAIL_CASES = [
   },
   {
     slug: 'wabi',
-    zh: '宅仁 · 寂', en: 'Wabi-Sabi Eastern',
+    zh: '侘寂东方', en: 'Wabi-Sabi Eastern',
     tagZh: '实木的纯粹与真实', tagEn: 'The honesty of solid wood',
     descZh: '于自然肌理之间，感受深邃而宁静的空间之美。材料不加掩饰，越用越好看。',
     descEn: 'Depth and stillness in natural texture — materials left honest, ageing into something better.',
