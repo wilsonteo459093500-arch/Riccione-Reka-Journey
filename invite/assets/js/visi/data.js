@@ -248,17 +248,18 @@
   MB.DIRECTIONS = [
     {
       key: 'misty', series: 'misty', en: 'Misty Mountain', zh: '雾山',
-      mood: { en: 'Light oak and warm white — soft daylight, a quiet home.', zh: '浅橡木与暖白，柔和的日光，一个安静的家。' },
+      // 官方文案（溪岸原创设计篇 P25）：取晨雾之「灰」、春山之「木」、早春山间将有未有之「绿」为主色
+      mood: { en: 'Light oak and soft spring green — light as gentle as mist, a calm and quiet home.', zh: '浅橡木与淡淡的春绿，像雾一样柔和的光，一个安静温和的家。' },
       palette: [
         { hex: '#F2EDE4', en: 'Warm White', zh: '暖白' },
-        { hex: '#D9C3A5', en: 'Light Oak', zh: '浅橡木' },
-        { hex: '#E3D9C8', en: 'Linen', zh: '亚麻' },
-        { hex: '#C7C2B8', en: 'Mist Grey', zh: '雾灰' },
-        { hex: '#8D8478', en: 'Stone', zh: '石色' }
+        { hex: '#D9C3A5', en: 'Spring Oak', zh: '春山木' },
+        { hex: '#C7C2B8', en: 'Morning Mist Grey', zh: '晨雾灰' },
+        { hex: '#B9C0AC', en: 'Early-Spring Green', zh: '早春绿' },
+        { hex: '#E3D9C8', en: 'Linen', zh: '亚麻' }
       ],
       materials: [
         { hex: '#D9C3A5', en: 'Light oak veneer', zh: '浅橡木饰面' },
-        { hex: '#F2EDE4', en: 'Warm white matt', zh: '暖白哑光' },
+        { hex: '#B9C0AC', en: 'Pale sage matt fronts', zh: '淡绿哑光柜门' },
         { hex: '#DCD6CC', en: 'Pale sintered stone top', zh: '浅色岩板台面' }
       ],
       promises: [
@@ -359,7 +360,8 @@
   /* ---------- 五个产品系列的设计理念（方案里「系列 · 设计理念」那一页） ----------
      给客户认识溪岸的设计理念：一句标题 + 一段话 + 一句补充，照溪岸 2025 品牌手册写，不另外编。
      - 骨骼线、空山、织：手册 p.6（自然线系列的三大主题）、p.9–11、p.23–28。
-     - 雾山、侘寂东方：手册里没有，先用邀请函作品集（assets/js/cases.js）原有的介绍；老板给官方介绍后换掉。
+     - 雾山：溪岸原创设计篇 P25、品牌讲解 p.11（老板 2026-11-04 发的截图）。
+     - 侘寂东方：溪岸官方帐号 2025 年发布实木系列新品的文案（老板 2026-11-04 发的截图）。
      family：属于「自然线系列」的才写，不是的留空，不硬套。                                 */
   MB.SERIES_CONCEPT = {
     skeleton: {
@@ -394,23 +396,33 @@
     },
     misty: {
       family: null,
-      title: { zh: '轻盈纯净的空间意境。', en: 'Light, clear, quietly poetic.' },
+      title: { zh: '雾山春居。', en: 'A spring house on the misty mountain.' },
       body: {
-        zh: '灵感源自「雾山春居」。颜色轻，光线软，适合想让家安静下来的人。',
-        en: 'Inspired by a spring house in the mist — light colours and soft daylight, for a home that wants to be quiet.'
+        zh: '以「雾山春居」为设计灵感：山腰一间木屋，以更自由的产品、更身心共融的家，将春日里雾山平和、纯粹、轻盈、充沛的自然表达，尽诉其中。',
+        en: 'Inspired by a spring house on a misty mountain: a timber cabin halfway up the slope. With freer pieces and a home where body and mind are at ease, it holds all the calm, purity, lightness and fullness of the mountain in spring.'
       },
-      note: null,
-      source: '邀请函作品集（cases.js），待老板给官方介绍'
+      note: {
+        zh: '轻于色、安于形：取晨雾之「灰」、春山之「木」、早春山间将有未有之「绿」，消隐大型柜体的存在感，让空间平静温和。',
+        en: 'Light in colour, at ease in form: the grey of morning mist, the wood of the spring hills and the green that is only just arriving — large cabinetry fades back and the room stays calm and gentle.'
+      },
+      quote: {
+        zh: '「我心中有一种东西像薄雾，我被它包裹着……让我们保持安静，被生活环绕……」—— 费尔南多·佩索阿',
+        en: '“There is something in me like a mist, and I am wrapped in it… let us stay quiet, surrounded by life…” — Fernando Pessoa'
+      },
+      source: '溪岸原创设计篇 P25；溪岸品牌讲解 p.11'
     },
     wabi: {
-      family: null,
-      title: { zh: '实木的纯粹与真实。', en: 'The honesty of solid wood.' },
+      family: { zh: '溪岸 · 实木系列', en: 'SAIL · Solid Wood' },
+      title: { zh: '山，有它的时间。', en: 'Mountains have their own time.' },
       body: {
-        zh: '于自然肌理之间，感受深邃而宁静的空间之美。材料不加掩饰，越用越好看。',
-        en: 'Depth and stillness in natural texture — materials left honest, ageing into something better.'
+        zh: '我们将东方哲思中「关于时间的探索」融入设计，在造物与空间中，注入对生命流动的理解与尊重。',
+        en: 'We bring the Eastern way of thinking about time into design, so that every piece and every space carries an understanding of, and respect for, the flow of life.'
       },
-      note: null,
-      source: '邀请函作品集（cases.js），待老板给官方介绍'
+      note: {
+        zh: '打磨出能滋养心灵、连接自然、经得起时间洗礼的设计。',
+        en: 'Design that nourishes the mind, connects with nature, and stands the test of time.'
+      },
+      source: '溪岸官方帐号：2025 年实木系列新品「侘寂东方」发布文'
     }
   };
   /* 溪岸的设计理念（同一页的小字；手册 p.2、p.14） */
