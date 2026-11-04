@@ -51,18 +51,17 @@
   <div class="mb-edit">
     <nav class="mb-tabs" role="tablist" id="tabs">
       <button type="button" data-tab="brief">① 客户</button>
-      <button type="button" data-tab="style">② 风格</button>
-      <button type="button" data-tab="rooms">③ 空间</button>
-      <button type="button" data-tab="plan">④ 平面图</button>
-      <button type="button" data-tab="visit">⑤ 到馆</button>
-      <button type="button" data-tab="copy">⑥ 文案</button>
+      <button type="button" data-tab="rooms">② 空间</button>
+      <button type="button" data-tab="plan">③ 平面图</button>
+      <button type="button" data-tab="visit">④ 到馆</button>
+      <button type="button" data-tab="copy">⑤ 文案</button>
       <button type="button" data-tab="library">图库</button>
     </nav>
 
     <!-- ① 客户 -->
     <section class="mb-pane" data-pane="brief">
       <h3>客户与需求</h3>
-      <p class="hint">最快的做法：把客户填好的<b>需求卡</b>整段贴进来 —— 名字、楼盘、空间、风格、需求会自动带出，图库里有的空间也会自动配好图。
+      <p class="hint">最快的做法：把客户填好的<b>需求卡</b>整段贴进来 —— 名字、楼盘、空间、客户喜欢的风格、需求会自动带出，图库里有的空间也会自动配好图。
         内置图库没有玄关、浴室的照片 —— 把以前的 proposal PDF 拖进「图库」一次，之后就会自动配上。
         客户还没填？到 <a href="create.html">销售端</a> 发需求卡链接。</p>
 
@@ -110,6 +109,13 @@
         </div>
       </div>
 
+      <!-- 客户喜欢的风格（需求卡会自动带）：只用来挑照片 —— 方案照样介绍溪岸全部五个原创系列，不替客户选一个系列 -->
+      <div class="panel" id="case-style-panel">
+        <p class="sub-h" style="margin-top:0">客户喜欢的风格 <i class="muted small" style="text-transform:none;letter-spacing:0">选填 · 不印在方案上</i></p>
+        <p class="hint" style="margin-bottom:8px">只用来挑照片：「帮我挑」先挑这种风格的公司案例，自动配图先用同一个系列的照片。方案照样介绍溪岸全部五个原创系列。不知道就选「不限」。</p>
+        <div class="lib-tools" id="case-style" style="margin:0"></div>
+      </div>
+
       <div class="panel" id="letter-panel">
         <p class="sub-h" style="margin-top:0">开场短话 · 第 2 页 <button class="reset" type="button" id="letter-reset" hidden>↺ 用自动草稿</button></p>
         <p class="hint" style="margin-bottom:8px">翻开的第一页是你写给他们的话。只写一件<b>只有你知道</b>、他们在乎的事（例：「你们说厨房永远收不干净」），
@@ -135,47 +141,10 @@
       </div>
     </section>
 
-    <!-- ② 风格 -->
-    <section class="mb-pane" data-pane="style">
-      <h3>风格方向</h3>
-      <p class="hint">整份方案只走<b>一个</b>方向。每页风格一致，客户才拼得出一个完整的家（WYSIATI）。</p>
-      <div class="dir-cards" id="dir-cards"></div>
-
-      <!-- 同一个系列里再细分的风格（客户在需求卡选的）：帮我挑、自动配图先挑这种风格的公司案例 -->
-      <div class="panel" id="case-style-panel" style="margin-top:16px" hidden>
-        <p class="sub-h" style="margin-top:0">案例风格 <i class="muted small" style="text-transform:none;letter-spacing:0">帮我挑用 · 需求卡会自动带</i></p>
-        <div class="lib-tools" id="case-style" style="margin:0"></div>
-      </div>
-
-      <div class="panel" id="ref-panel" style="margin-top:16px">
-        <p class="sub-h" style="margin-top:0">从客户参考图取色 <i class="muted small" style="text-transform:none;letter-spacing:0">最多 3 张</i></p>
-        <p class="hint" style="margin-bottom:10px">客户发来的参考照片，取出 5 个颜色放进方案 —— 是他们自己挑的颜色，整份方案一看就是他们的家。照片只存在这台电脑。</p>
-        <div class="drop" id="ref-drop">拖客户的参考照片进来，或 <u>点这里选图</u><input type="file" id="ref-file" accept="image/*" multiple hidden /></div>
-        <div class="thumbs" id="ref-thumbs"></div>
-        <p class="hint ref-state" id="ref-state"></p>
-        <div class="btn-row" style="gap:6px">
-          <button class="mini" type="button" id="ref-again" hidden>用这几张重新取色</button>
-          <button class="mini" type="button" id="pal-style" hidden>改回风格默认配色</button>
-        </div>
-      </div>
-
-      <div class="panel">
-        <p class="sub-h" style="margin-top:0">配色 · 5 色 <button class="reset" type="button" id="pal-reset">↺ 恢复这个风格的默认</button></p>
-        <div id="pal-edit"></div>
-        <p class="sub-h">材质 · 换成真实板材色号更可信</p>
-        <div id="mat-edit"></div>
-      </div>
-
-      <div class="panel">
-        <p class="sub-h" style="margin-top:0">住进去的感觉 · 三句话 <i class="muted small" style="text-transform:none;letter-spacing:0">讲稿用，不印在页面上</i></p>
-        <div id="prom-edit"></div>
-      </div>
-    </section>
-
-    <!-- ③ 空间 -->
+    <!-- ② 空间 -->
     <section class="mb-pane" data-pane="rooms">
       <h3>空间</h3>
-      <p class="hint">点下面加入空间，图和卖点会自动配好。每页 <b>1 张主图 + 最多 2 张辅图</b>；第一张是主图（★）。同一张图整份方案只出现一次。</p>
+      <p class="hint">点下面加入空间，图和卖点会自动配好。每页 <b>1 张主图 + 最多 2 张辅图</b>；第一张是主图（★）。同一张图整份方案只出现一次。溪岸五个系列的官方照片留给原创系列那几页，不会出现在空间页。</p>
       <div class="room-add" id="room-add"></div>
       <div class="btn-row" style="margin-bottom:14px">
         <button class="mini" type="button" id="auto-all">全部重新自动配图</button>
@@ -186,7 +155,7 @@
         <p class="sub-h" style="margin-top:0">参考空间（最多 3 张）</p>
         <!-- 现在挑的是溪岸自己的实拍，不是客户的家：页面叫「SAIL spaces · 参考空间」。
              等云端案例库有每个项目的区域 / 房型 / 家庭资料，才改回「像你们这样的家」 -->
-        <p class="hint" style="margin-bottom:10px">挑 1–3 张跟方案同风格的实拍（溪岸的空间、公司做过的家），让他们看到做出来的样子。每张一句话，
+        <p class="hint" style="margin-bottom:10px">挑 1–3 张溪岸的实拍（溪岸的空间、公司做过的家）；客户选了喜欢的风格，就挑那一种 —— 让他们看到做出来的样子。每张一句话，
           <b>只写看得到、对得上的事实</b>（系列、空间；公司案例可以写「同在 Setia Alam」「也有长辈同住」），不写「和你们很像」。空着就用自动的那句。</p>
         <!-- 公司案例库暂停中（Vercel 免费额度用完）：app.js 的 renderBlocked 填字 -->
         <p class="cases-blocked" data-cases-blocked hidden></p>
@@ -201,7 +170,7 @@
       </div>
     </section>
 
-    <!-- ④ 平面图 -->
+    <!-- ③ 平面图 -->
     <section class="mb-pane" data-pane="plan">
       <h3>平面图</h3>
       <p class="hint">上传平面图，再<b>选空间 → 点图上的位置</b>放编号。编号会对上后面每一页的页码。<br />平面图只存在这台电脑，不会上传。</p>
@@ -215,7 +184,7 @@
       </div>
     </section>
 
-    <!-- ⑤ 到馆 -->
+    <!-- ④ 到馆 -->
     <section class="mb-pane" data-pane="visit">
       <h3>到馆邀约 · 最后一页</h3>
       <p class="hint">峰终定律：客户记住的是<b>高峰</b>和<b>结尾</b>。最后一页给一个已经留好的时段，而不是「欢迎参观」。</p>
@@ -263,10 +232,10 @@
         <button class="mini" type="button" id="team-add">＋ 加一位</button>
       </div>
 
-      <div class="panel">
+      <div class="panel" id="pages-panel">
         <p class="sub-h" style="margin-top:0">页面开关</p>
         <div class="chks" id="page-toggles"></div>
-        <p class="sub-h">每一页用哪张图 <i class="muted small" style="text-transform:none;letter-spacing:0">没选 = 自动：整份不重复，每个客户不一样</i></p>
+        <p class="sub-h">每一页用哪张图 <i class="muted small" style="text-transform:none;letter-spacing:0">没选 = 自动：整份不重复，每个客户不一样；原创系列那几页用溪岸的官方照片，不用选</i></p>
         <div class="thumbs" id="slot-thumbs"></div>
       </div>
 
@@ -280,7 +249,7 @@
       </div>
     </section>
 
-    <!-- ⑥ 文案 -->
+    <!-- ⑤ 文案 -->
     <section class="mb-pane" data-pane="copy">
       <h3>文案 · 照这个顺序发</h3>
       <p class="hint">根据这份方案自动写好。每则下面标着用了《快思慢想》的哪个原理 —— 点一下看为什么。改过的字可以直接复制。</p>
@@ -426,7 +395,6 @@
 <script src="assets/js/visi/deck.js"></script>
 <script src="assets/js/visi/copy.js"></script>
 <script src="assets/js/visi/check.js"></script>
-<script src="assets/js/visi/palette.js"></script>
 <!-- 导出 PPTX：只载这一个小档；pptxgenjs（assets/vendor/pptxgenjs/）按下「导出 PPTX」才载 -->
 <script src="assets/js/visi/pptx.js"></script>
 <script src="assets/js/visi/app.js"></script>

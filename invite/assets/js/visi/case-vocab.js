@@ -23,7 +23,8 @@
 
   var MB = window.MB = window.MB || {};
 
-  // 风格：暂定九种，看完 100 张样本再定。series = 对应溪岸的五个系列（MB.DIRECTIONS）
+  // 风格：暂定九种，看完 100 张样本再定。series = 对应溪岸的五个系列（MB.SERIES）。
+  // 旧需求卡选项要一直认得（客户手上还没送出的卡）：match 只加不减
   MB.CASE_STYLES = [
     { key: 'wood', zh: '原木', en: 'Natural wood', series: 'misty', match: '原木|natural wood' },
     { key: 'wabi', zh: '微侘寂', en: 'Subtle wabi-sabi', series: 'wabi', match: '侘寂|wabi' },

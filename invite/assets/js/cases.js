@@ -4,6 +4,12 @@
    要换成真实的交付案例，只需要改下面这个数组：
    把照片丢进 assets/img/cases/，然后改 src 与说明文字即可。
    一个系列可以放任意张照片，第一张就是封面。
+   - 封面 = VISI 方案那个系列页的官方照片（visi/data.js 的 MB.SERIES_PHOTO，HIPPO 第 6 页那五张），两边才对得上。
+   - 只放确认过是那个系列的溪岸作品（老板 2026-11-04）：拿掉了瑞吉欧的斗柜（skeleton-5）、
+     老板退回的雾山卧室（misty-2）、没有柜体的灰泥角落（wabi-4）、看不出系列的衣帽间（mountain-1）。
+     档案留着不删（VISI 旧方案还认得）。
+   - pos（选填）= object-position：横幅照片放进直的封面（4:5）时留哪一边，例 '55% 50%'。
+   - 新照片要用新档名：vercel.json 把 assets/img 设成 immutable 一年，同名换图，看过的人一年都看到旧的。
    ============================================================ */
 window.SAIL_CASES = [
   {
@@ -13,11 +19,10 @@ window.SAIL_CASES = [
     descZh: '线条勾勒层次，让柜体在自然光下呈现光影的韵律。适合喜欢有细节、但不喜欢繁复的家。',
     descEn: 'Lines create depth, giving the cabinetry a rhythm of light and shadow — for homes that want detail without ornament.',
     photos: [
-      { src: 'skeleton-1.jpg', zh: '主卧 · 通顶衣柜与过道', en: 'Master bedroom · full-height wardrobe' },
-      { src: 'skeleton-2.jpg', zh: '开放厨房 · 吧台与储物墙', en: 'Open kitchen · bar counter and storage wall' },
       { src: 'skeleton-3.jpg', zh: '厨房 · 高柜与嵌入式电器', en: 'Kitchen · tall units and built-in appliances' },
-      { src: 'skeleton-4.jpg', zh: '厨房 · 中岛与餐边柜', en: 'Kitchen · island and sideboard' },
-      { src: 'skeleton-5.jpg', zh: '细节 · 抽屉线条与把手', en: 'Detail · drawer lines and handles' }
+      { src: 'skeleton-1.jpg', zh: '客厅 · 木饰墙', en: 'Living room · panelled wall' },
+      { src: 'skeleton-2.jpg', zh: '开放厨房 · 吧台与储物墙', en: 'Open kitchen · bar counter and storage wall' },
+      { src: 'skeleton-4.jpg', zh: '厨房 · 中岛与餐边柜', en: 'Kitchen · island and sideboard' }
     ]
   },
   {
@@ -27,7 +32,6 @@ window.SAIL_CASES = [
     descZh: '以留白与壁龛设计，让空间有呼吸的节奏 —— 收纳很多，但看起来不满。',
     descEn: 'Blank space and recessed niches let a room breathe — plenty of storage that never looks crowded.',
     photos: [
-      { src: 'mountain-1.jpg', zh: '衣帽间 · 开放挂衣与中岛', en: 'Walk-in wardrobe · open hanging and island' },
       { src: 'mountain-2.jpg', zh: '格架 · 留白与陈列', en: 'Grid shelving · display and pause' },
       { src: 'mountain-3.jpg', zh: '书墙 · 通顶格架', en: 'Book wall · floor-to-ceiling grid' }
     ]
@@ -40,7 +44,7 @@ window.SAIL_CASES = [
     descEn: 'Between nature and fibre — warmth built into the cabinet door, the kind you pause to touch.',
     photos: [
       { src: 'weaving-1.jpg', zh: '客厅 · 收纳墙与展示格', en: 'Living room · storage wall and display' },
-      { src: 'weaving-2.jpg', zh: '细节 · 藤织柜门', en: 'Detail · woven cabinet front' }
+      { src: 'weaving-2.jpg', zh: '细节 · 织纹柜门', en: 'Detail · woven cabinet front' }
     ]
   },
   {
@@ -50,8 +54,8 @@ window.SAIL_CASES = [
     descZh: '以「雾山春居」为设计灵感：山腰一间木屋，轻于色、安于形。晨雾的灰、春山的木、早春的绿，让家安静温和下来。',
     descEn: 'Inspired by a spring house on a misty mountain: a timber cabin on the slope, light in colour and at ease in form. The grey of morning mist, the wood of the hills and the first green of spring keep the home calm.',
     photos: [
+      { src: 'misty-wushan.jpg', pos: '55% 50%', zh: '厨房 · 白橡木吊柜与绿色高柜', en: 'Kitchen · white-oak wall units and sage tall cabinets' },
       { src: 'misty-1.jpg', zh: '开放空间 · 客餐厨一体', en: 'Open plan · living, dining and kitchen' },
-      { src: 'misty-2.jpg', zh: '卧室 · 木格屏风与衣柜', en: 'Bedroom · timber screen and wardrobe' },
       { src: 'misty-3.jpg', zh: '起居 · 书架与休憩角', en: 'Living · shelving and reading corner' }
     ]
   },
@@ -64,8 +68,7 @@ window.SAIL_CASES = [
     photos: [
       { src: 'wabi-1.jpg', zh: '厨房 · 水泥质感与木柜', en: 'Kitchen · concrete and timber' },
       { src: 'wabi-2.jpg', zh: '厨房 · 中岛与吊柜', en: 'Kitchen · island and wall units' },
-      { src: 'wabi-3.jpg', zh: '厨房 · 操作台与开放层板', en: 'Kitchen · worktop and open shelving' },
-      { src: 'wabi-4.jpg', zh: '一角 · 材质与光', en: 'A corner · material and light' }
+      { src: 'wabi-3.jpg', zh: '厨房 · 操作台与开放层板', en: 'Kitchen · worktop and open shelving' }
     ]
   }
 ];
@@ -81,15 +84,22 @@ window.SAIL_CASES = [
   if (!grid || !window.SAIL_CASES) return;
 
   function zh() { return document.documentElement.getAttribute('data-lang') !== 'en'; }
+  /* 照片的焦点（选填 pos，例 '55% 50%'）：只收数字 + % / px 的位置，别的字不进 style */
+  function posOf(p) {
+    var v = p && typeof p.pos === 'string' ? p.pos.trim() : '';
+    return /^-?\d+(\.\d+)?(%|px)?( -?\d+(\.\d+)?(%|px)?)?$/.test(v) ? v : '';
+  }
 
   /* ---------- 作品格 ---------- */
   window.SAIL_CASES.forEach(function (c, i) {
+    var pos = posOf(c.photos[0]);
     var card = document.createElement('button');
     card.type = 'button';
     card.className = 'work-card r s' + Math.min(4, i + 1);
     card.setAttribute('data-index', i);
     card.innerHTML =
-      '<span class="shot"><img src="' + BASE + c.photos[0].src + '" alt="' + c.zh + ' ' + c.en + '" loading="lazy" /></span>' +
+      '<span class="shot"><img src="' + BASE + c.photos[0].src + '" alt="' + c.zh + ' ' + c.en + '" loading="lazy"' +
+        (pos ? ' style="object-position:' + pos + '"' : '') + ' /></span>' +
       '<span class="meta">' +
         '<span class="nm"><span class="zh">' + c.zh + '</span><span class="en">' + c.en + '</span></span>' +
         '<span class="tg"><span class="zh">' + c.tagZh + '</span><span class="en">' + c.tagEn + '</span></span>' +
@@ -123,6 +133,7 @@ window.SAIL_CASES = [
   function render() {
     var c = window.SAIL_CASES[ci], p = c.photos[pi];
     img.src = BASE + p.src;
+    img.style.objectPosition = posOf(p);
     img.alt = (zh() ? p.zh : p.en) + ' — ' + (zh() ? c.zh : c.en);
     capS.textContent = zh() ? c.zh : c.en;
     capC.textContent = zh() ? p.zh : p.en;

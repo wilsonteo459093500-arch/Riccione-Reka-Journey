@@ -1,14 +1,14 @@
 /* ============================================================
    VISI · 资料库
    ------------------------------------------------------------
-   空间 · 功能卖点 · 风格方向 · 需求卡对照 · 常见顾虑 · 内置图库
-   全部是纯资料：要改文案、加空间、换配色，只动这一份。
+   空间 · 功能卖点 · 五个原创系列 · 需求卡对照 · 常见顾虑 · 内置图库
+   全部是纯资料：要改文案、加空间，只动这一份。
 
    这是 moodboard：以图为主、字要少。页面只印短的那一句，细节放讲稿（copy.js 的 MB.pageNotes）。
    字数上限（华文字 / 英文单词）：
    - head ≤ 18 / 10 · 卖点名称 ≤ 8 / 4（why 进讲稿，可以多一点）
    - 需求原话 ≤ 20 / 12 · 我们的做法 ≤ 30 / 18 · 「为 X」那一句 ≤ 40 / 25
-   - 到馆准备 ≤ 16 / 9 · 风格 mood ≤ 24 / 14
+   - 到馆准备 ≤ 16 / 9 · 原创系列页那一句（MB.COLLECTIONS_NOTE）≤ 20 / 12
    文案写法（README「文案怎么写」）：
    - 标题说「得到什么」，不是「这是什么」；why 用「少一个麻烦」的说法
    - 具体的画面（抽屉的分量、柜门关上的那一声）胜过形容词；不写温馨、高端、奢华、完美
@@ -240,124 +240,7 @@
   MB.ROOM = {};
   MB.ROOMS.forEach(function (r) { MB.ROOM[r.key] = r; });
 
-  /* ---------- 风格方向 · 对应溪岸五个系列 ---------------------
-     palette / materials 是起手建议 —— 销售可改成真实板材色号。
-     mood 的写法固定成「材质，感觉」（英文用 — 隔开）：开场短话只取前半句的材质，
-     具体的木色比一句形容词更像真的。
-     promises 不印在「一页看懂」上了（moodboard 少字），讲稿里会说            */
-  MB.DIRECTIONS = [
-    {
-      key: 'misty', series: 'misty', en: 'Misty Mountain', zh: '雾山',
-      // 官方文案（溪岸原创设计篇 P25）：取晨雾之「灰」、春山之「木」、早春山间将有未有之「绿」为主色
-      mood: { en: 'Light oak and soft spring green — mist-soft light, a quiet home.', zh: '浅橡木与淡淡的春绿，雾一样柔和的光，安静温和。' },
-      palette: [
-        { hex: '#F2EDE4', en: 'Warm White', zh: '暖白' },
-        { hex: '#D9C3A5', en: 'Spring Oak', zh: '春山木' },
-        { hex: '#C7C2B8', en: 'Morning Mist Grey', zh: '晨雾灰' },
-        { hex: '#B9C0AC', en: 'Early-Spring Green', zh: '早春绿' },
-        { hex: '#E3D9C8', en: 'Linen', zh: '亚麻' }
-      ],
-      materials: [
-        { hex: '#D9C3A5', en: 'Light oak veneer', zh: '浅橡木饰面' },
-        { hex: '#B9C0AC', en: 'Pale sage matt fronts', zh: '淡绿哑光柜门' },
-        { hex: '#DCD6CC', en: 'Pale sintered stone top', zh: '浅色岩板台面' }
-      ],
-      promises: [
-        { en: 'One palette, from the front door to the bedroom.', zh: '从玄关到卧室，一套颜色。' },
-        { en: 'Everything you use daily, behind a door.', zh: '每天用的东西，都收在柜门后面。' },
-        { en: 'Afternoon sun across pale oak.', zh: '午后的光，落在浅橡木上。' }
-      ]
-    },
-    {
-      key: 'skeleton', series: 'skeleton', en: 'Skeleton Line', zh: '骨骼线',
-      mood: { en: 'Natural oak and fine charcoal lines — detail without ornament.', zh: '原木与细黑线框，有细节，不繁复。' },
-      palette: [
-        { hex: '#EBE5DA', en: 'Plaster', zh: '灰泥白' },
-        { hex: '#B99B77', en: 'Natural Oak', zh: '原橡木' },
-        { hex: '#A69E94', en: 'Warm Grey', zh: '暖灰' },
-        { hex: '#2F2C29', en: 'Charcoal Line', zh: '炭黑线' },
-        { hex: '#B08D57', en: 'Brushed Brass', zh: '拉丝黄铜' }
-      ],
-      materials: [
-        { hex: '#B99B77', en: 'Oak veneer', zh: '橡木饰面' },
-        { hex: '#2F2C29', en: 'Black frame line', zh: '黑色线框' },
-        { hex: '#8F8A83', en: 'Dark sintered stone top', zh: '深色岩板台面' }
-      ],
-      promises: [
-        { en: 'Lines that cast a shadow.', zh: '线条在光里有影子。' },
-        { en: 'Storage that reads as architecture.', zh: '收纳本身就是建筑感。' },
-        { en: 'Straight lines that won’t date quickly.', zh: '直线条，不容易过时。' }
-      ]
-    },
-    {
-      key: 'mountain', series: 'mountain', en: 'Empty Mountain', zh: '空山',
-      mood: { en: 'Walnut and lime plaster — open space that lets each room breathe.', zh: '胡桃木与灰泥，留白让空间呼吸。' },
-      palette: [
-        { hex: '#F4EFE6', en: 'Ivory', zh: '象牙白' },
-        { hex: '#E6DED2', en: 'Lime Plaster', zh: '石灰白' },
-        { hex: '#9C948A', en: 'Stone', zh: '石色' },
-        { hex: '#6B4F3A', en: 'Walnut', zh: '胡桃木' },
-        { hex: '#3F3A36', en: 'Smoke', zh: '烟灰' }
-      ],
-      materials: [
-        { hex: '#6B4F3A', en: 'Walnut veneer', zh: '胡桃木饰面' },
-        { hex: '#E6DED2', en: 'Lime-plaster finish', zh: '石灰墙面' },
-        { hex: '#A39B91', en: 'Honed stone', zh: '哑光石材' }
-      ],
-      promises: [
-        { en: 'Plenty of storage that never looks full.', zh: '收纳很多，但看起来不满。' },
-        { en: 'Niches with room around each object.', zh: '壁龛给每件物品留出空间。' },
-        { en: 'Dark walnut you will want to touch.', zh: '深色胡桃木，会想伸手摸。' }
-      ]
-    },
-    {
-      key: 'weaving', series: 'weaving', en: 'Weaving', zh: '织',
-      mood: { en: 'Oak and woven rattan — warmth you can touch.', zh: '橡木与藤编，摸得到的温度。' },
-      palette: [
-        { hex: '#F1EBDF', en: 'Cream', zh: '奶油白' },
-        { hex: '#C8AE8C', en: 'Sand Oak', zh: '沙橡木' },
-        { hex: '#B98F5C', en: 'Rattan', zh: '藤色' },
-        { hex: '#A9836A', en: 'Clay', zh: '陶土' },
-        { hex: '#2E2A26', en: 'Ink', zh: '墨色' }
-      ],
-      materials: [
-        { hex: '#C8AE8C', en: 'Oak veneer', zh: '橡木饰面' },
-        { hex: '#B98F5C', en: 'Rattan-weave door panels', zh: '藤编柜门' },
-        { hex: '#E4DACB', en: 'Cotton-linen upholstery', zh: '棉麻布艺' }
-      ],
-      promises: [
-        { en: 'Doors you will want to touch.', zh: '会想伸手摸的柜门。' },
-        { en: 'Warm to the hand, never showroom-stiff.', zh: '摸起来是暖的，不像样板间。' },
-        { en: 'Texture that hides daily fingerprints.', zh: '纹理让日常指纹不明显。' }
-      ]
-    },
-    {
-      key: 'wabi', series: 'wabi', en: 'Wabi-Sabi Eastern', zh: '侘寂东方',
-      mood: { en: 'Aged wood, lime plaster and travertine — a home that gets better with time.', zh: '老木、灰泥与洞石，一个越住越有味道的家。' },
-      palette: [
-        { hex: '#D9D1C4', en: 'Lime Plaster', zh: '石灰' },
-        { hex: '#CBBFAE', en: 'Travertine', zh: '洞石' },
-        { hex: '#7A6552', en: 'Aged Wood', zh: '老木' },
-        { hex: '#6E6A55', en: 'Moss', zh: '苔绿' },
-        { hex: '#3A3633', en: 'Charcoal', zh: '炭灰' }
-      ],
-      materials: [
-        { hex: '#7A6552', en: 'Solid aged-wood fronts', zh: '实木老木纹柜门' },
-        { hex: '#CBBFAE', en: 'Travertine top', zh: '洞石台面' },
-        { hex: '#BDB4A6', en: 'Micro-cement', zh: '微水泥' }
-      ],
-      promises: [
-        { en: 'Materials that wear in, not out.', zh: '越用越好看的材质。' },
-        { en: 'Quiet rooms, slow mornings.', zh: '安静的房间，慢下来的早晨。' },
-        { en: 'Wood grain you can feel under your hand.', zh: '摸得到木纹的柜门。' }
-      ]
-    }
-  ];
-
-  MB.DIRECTION = {};
-  MB.DIRECTIONS.forEach(function (d) { MB.DIRECTION[d.key] = d; });
-
-  /* ---------- 五个产品系列的设计理念（方案里「系列 · 设计理念」那一页） ----------
+  /* ---------- 五个产品系列的设计理念（空间页之后五个系列各一页；「原创系列」总览页取 title、family） ----------
      给客户认识溪岸的设计理念：一句标题 + 一段话 + 一句补充，照溪岸 2025 品牌手册写，不另外编。
      - 骨骼线、空山、织：手册 p.6（自然线系列的三大主题）、p.9–11、p.23–28。
      - 雾山：溪岸原创设计篇 P25、品牌讲解 p.11（老板 2026-11-04 发的截图）。
@@ -430,6 +313,35 @@
     zh: '好的设计，正如一个自然的生命体：去掉不必要的装饰，让柜体融于空间，去凸显、服务人的生活。',
     en: 'Good design is like a living thing in nature: we take away needless ornament, so the cabinetry melts into the space and serves the life lived in it.'
   };
+
+  /* ---------- 溪岸五个原创系列 ----------------------------------
+     固定顺序 = 品牌手册 / HIPPO 第 6 页。方案不再「走」哪一个系列（老板 2026-11-04：不用替客户选风格）：
+     前面一页「原创系列」五个并排，空间页之后五个系列各一页 —— 这里只是名字表。
+     series 字面留着（tools/caselib/test/vocab.test.mjs 拿它比对案例库词表的 series）。
+     family：跟 SERIES_CONCEPT 的 family 同一套（en 是 key：相邻同 family 的栏位共用一条系列带；雾山没有）  */
+  MB.SERIES = [
+    { key: 'skeleton', series: 'skeleton', zh: '骨骼线', en: 'Skeleton Line', family: 'natural' },
+    { key: 'mountain', series: 'mountain', zh: '空山', en: 'Empty Mountain', family: 'natural' },
+    { key: 'weaving', series: 'weaving', zh: '织', en: 'Weaving', family: 'natural' },
+    { key: 'misty', series: 'misty', zh: '雾山', en: 'Misty Mountain', family: '' },
+    { key: 'wabi', series: 'wabi', zh: '侘寂东方', en: 'Wabi-Sabi Eastern', family: 'solid' }
+  ];
+  MB.SERIES_OF = {};
+  MB.SERIES.forEach(function (s) { MB.SERIES_OF[s.key] = s; });
+  MB.SERIES_ORDER = MB.SERIES.map(function (s) { return s.key; });
+
+  /* 系列页的官方照片（HIPPO / UKIR 第 6 页那五张，老板认可的）：每个客户都一样。
+     雾山 = #54 老板改定的雾山厨房（blueprint 的 sail-wushan.jpg 原样复制成 cases/misty-wushan.jpg） */
+  MB.SERIES_PHOTO = { skeleton: 'b:skeleton-3', mountain: 'b:mountain-2', weaving: 'b:weaving-1', misty: 'b:misty-wushan', wabi: 'b:wabi-1' };
+  /* 「原创系列」总览页的照片：每个系列另一张也确认过的（老板 2026-11-04：整份方案一张图不重复两次）。
+     骨骼线 手册 p.9 中岛 · 空山 p.10 格子书墙 · 织 p.11 藤编衣帽间 · 雾山 p.14 白橡木书房 · 侘寂东方 同一套的水槽区 */
+  MB.OVERVIEW_PHOTO = { skeleton: 'b:skeleton-kitchen', mountain: 'b:mountain-living', weaving: 'b:weaving-wardrobe', misty: 'b:misty-study', wabi: 'b:wabi-3' };
+  /* 总览栏位（208 × 236 的直条）的焦点：横幅原图要靠这个才裁到柜子（照片自己的 pos 是给空间页的，不动） */
+  MB.OVERVIEW_POS = { skeleton: '45% 50%', mountain: '30% 50%', weaving: '45% 50%', misty: '50% 50%', wabi: '50% 50%' };
+  /* 这 10 张（含同一张的裁切）只印在系列页、原创系列页：空间页、封面、情绪页、到馆页永远不用（model.js 预留） */
+
+  /* 「原创系列」页那一句（blueprint company.js brand-collections.note，官方句子） */
+  MB.COLLECTIONS_NOTE = { zh: '每一个系列，都从自然与真实的生活里来。', en: 'Every collection begins with nature and everyday life.' };
 
   /* ---------- 需求卡 → 「你说的 · 我们做的」 -------------------
      match     对应需求卡里的哪个选项（正则；华文、英文、中英文的需求卡都要认得）
@@ -595,23 +507,6 @@
     { match: /墙板|wall panel/i, rooms: ['living'] }
   ];
 
-  /* 需求卡「风格倾向」→ 方向（取第一个对上的）。
-     旧卡的选项（自然原木、侘寂…）一条都不能删：旧卡要读出一样的方向。
-     新卡的选项跟案例库的风格同一套（case-vocab.js 的 MB.CASE_STYLES）：新加的接在后面 */
-  MB.STYLE_DIRECTION = [
-    { match: /侘寂|wabi/i, dir: 'wabi' },
-    { match: /日式|japandi|japanese/i, dir: 'misty' },
-    { match: /自然原木|natural wood/i, dir: 'misty' },
-    { match: /北欧|nordic|scandi/i, dir: 'misty' },
-    { match: /现代简约|modern minimal|minimalist/i, dir: 'skeleton' },
-    { match: /轻奢|luxe|luxury/i, dir: 'mountain' },
-    { match: /中古|mid-century|vintage/i, dir: 'weaving' },
-    { match: /微侘寂/i, dir: 'wabi' },
-    { match: /奶油|cream/i, dir: 'misty' },
-    { match: /法式|french/i, dir: 'weaving' },
-    { match: /原木/i, dir: 'misty' }
-  ];
-
   /* 空间的卖点 → 案例库的柜类（MB.CASE_CABINETS 的 key）：「帮我挑」看客户要做哪几种柜子。
      没列的卖点（楼梯底、玩具收纳…）不对应任何柜类 */
   MB.FEAT_CABINETS = {
@@ -638,28 +533,31 @@
 
   /* ---------- 内置图库 ----------------------------------------
      溪岸自家的空间实拍（来自公司手册）。销售自己的参考图另存在浏览器里。
-     rooms 决定「自动配图」时这张会被放到哪些空间。                 */
+     rooms 决定「自动配图」时这张会被放到哪些空间。
+     series 只标确认过是那个系列的作品（手册有标的页、HIPPO、Jason & Bonnie 提案）；没把握的留空，只给空间页用。
+     pos = 照片自己的焦点（object-position）：空间页、封面裁切时留哪一边。
+     拿掉的（不是溪岸的作品、老板退回的）在 photos.js 的 MB.RETIRED_BUILTIN：旧方案照样认得。
+     新照片要用新档名（vercel.json 把图档设成 immutable 一年，同名换图客户看不到）。 */
   var C = 'assets/img/cases/';
   MB.BUILTIN = [
     { id: 'b:living-wide', src: 'assets/img/scene-living-wide.jpg', w: 1600, h: 958, series: 'misty', rooms: ['living', 'dining'], en: 'Living room, wide', zh: '客厅全景' },
-    { id: 'b:misty-2', src: C + 'misty-2.jpg', w: 821, h: 1280, series: 'misty', rooms: ['master', 'bedroom', 'guest'], en: 'Bedroom with timber screen', zh: '卧室木格屏风' },
+    // 雾山系列页的官方照片（#54 老板改定）：靠右裁，留住绿色高柜
+    { id: 'b:misty-wushan', src: C + 'misty-wushan.jpg', w: 1480, h: 1110, series: 'misty', rooms: ['kitchen', 'dining'], pos: '55% 50%', en: 'Misty Mountain kitchen & long table', zh: '雾山厨房与长餐桌' },
     { id: 'b:misty-3', src: C + 'misty-3.jpg', w: 516, h: 693, series: 'misty', rooms: ['living', 'study'], en: 'Reading corner & shelving', zh: '阅读角与书架' },
-    { id: 'b:mountain-1', src: C + 'mountain-1.jpg', w: 913, h: 686, series: 'mountain', rooms: ['walkin', 'master'], en: 'Walk-in wardrobe', zh: '衣帽间' },
+    { id: 'b:mountain-1', src: C + 'mountain-1.jpg', w: 913, h: 686, series: '', rooms: ['walkin', 'master'], en: 'Walk-in wardrobe', zh: '衣帽间' },
     { id: 'b:mountain-2', src: C + 'mountain-2.jpg', w: 594, h: 800, series: 'mountain', rooms: ['living', 'study', 'dining'], en: 'Grid display shelving', zh: '格架展示' },
     { id: 'b:mountain-3', src: C + 'mountain-3.jpg', w: 600, h: 800, series: 'mountain', rooms: ['study', 'living'], en: 'Floor-to-ceiling book wall', zh: '通顶书墙' },
-    { id: 'b:skeleton-1', src: C + 'skeleton-1.jpg', w: 942, h: 628, series: 'skeleton', rooms: ['living', 'master'], en: 'Living with panelled wall', zh: '客厅木饰墙' },
+    { id: 'b:skeleton-1', src: C + 'skeleton-1.jpg', w: 942, h: 628, series: 'skeleton', rooms: ['living'], en: 'Living with panelled wall', zh: '客厅木饰墙' },
     { id: 'b:skeleton-2', src: C + 'skeleton-2.jpg', w: 729, h: 982, series: 'skeleton', rooms: ['kitchen'], en: 'Bar counter & storage wall', zh: '吧台与储物墙' },
     { id: 'b:skeleton-3', src: C + 'skeleton-3.jpg', w: 730, h: 982, series: 'skeleton', rooms: ['kitchen'], en: 'Tall units & built-in appliances', zh: '高柜与嵌入式电器' },
     { id: 'b:skeleton-4', src: C + 'skeleton-4.jpg', w: 1000, h: 477, series: 'skeleton', rooms: ['kitchen', 'dining'], en: 'Island & sideboard', zh: '中岛与餐边柜' },
-    { id: 'b:skeleton-5', src: C + 'skeleton-5.jpg', w: 1000, h: 1872, series: 'skeleton', rooms: ['bedroom', 'master'], en: 'Drawer lines & handles', zh: '抽屉线条与把手' },
     { id: 'b:wabi-1', src: C + 'wabi-1.jpg', w: 775, h: 1033, series: 'wabi', rooms: ['kitchen'], en: 'Solid-wood kitchen', zh: '实木厨房' },
     { id: 'b:wabi-2', src: C + 'wabi-2.jpg', w: 862, h: 485, series: 'wabi', rooms: ['kitchen', 'dining'], en: 'Island & tall cabinetry', zh: '中岛与高柜' },
     { id: 'b:wabi-3', src: C + 'wabi-3.jpg', w: 775, h: 1034, series: 'wabi', rooms: ['kitchen', 'laundry'], en: 'Sink run & floating shelves', zh: '水槽区与层板' },
-    { id: 'b:wabi-4', src: C + 'wabi-4.jpg', w: 466, h: 554, series: 'wabi', rooms: ['living', 'guest'], en: 'Lime-plaster corner', zh: '灰泥墙角' },
+    { id: 'b:wabi-4', src: C + 'wabi-4.jpg', w: 466, h: 554, series: '', rooms: ['living', 'guest'], en: 'Lime-plaster corner', zh: '灰泥墙角' },
     { id: 'b:weaving-1', src: C + 'weaving-1.jpg', w: 1000, h: 1346, series: 'weaving', rooms: ['living', 'dining', 'study'], en: 'Storage wall & display', zh: '收纳墙与展示格' },
     { id: 'b:weaving-2', src: C + 'weaving-2.jpg', w: 1000, h: 1346, series: 'weaving', rooms: ['living', 'bedroom'], en: 'Woven cabinet front', zh: '藤织柜门' },
-    { id: 'b:detail', src: 'assets/img/scene-detail.jpg', w: 1000, h: 1337, series: 'skeleton', rooms: ['bedroom', 'master', 'guest'], en: 'Chest of drawers detail', zh: '斗柜细节' },
-    { id: 'b:wood', src: 'assets/img/scene-wood.jpg', w: 849, h: 1279, series: 'mountain', rooms: ['study', 'living'], en: 'Study wall & desk', zh: '书房墙与书桌' },
+    { id: 'b:wood', src: 'assets/img/scene-wood.jpg', w: 849, h: 1279, series: '', rooms: ['study', 'living'], en: 'Study wall & desk', zh: '书房墙与书桌' },
     { id: 'b:hero-sail', src: 'assets/img/hero-sail.jpg', w: 1800, h: 1036, series: '', rooms: ['showroom'], en: 'SAIL façade', zh: '溪岸门面' }
   ];
 
