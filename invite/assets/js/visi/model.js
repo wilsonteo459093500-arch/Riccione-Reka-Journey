@@ -611,6 +611,47 @@
       !!(raw.images && typeof raw.images === 'object' && ('glance' in raw.images || 'series' in raw.images));
   };
 
+  /* 旧版（替客户选一个风格方向、有配色的那一版）自动草稿里的两句，现在是假话：
+       开场短话那一段「整个家走「骨骼线」：…」/「这一份走「雾山」，配色取自你们发来的照片。」/
+       「The whole home is in our Skeleton Line series, in colours taken from the photos you sent us.」/「It’s all in our … series: …」
+       —— 现在不替客户选系列（方案介绍全部五个），也没有配色；
+       到馆准备的「按你们配色挑好的板材与色板」/「Board and colour samples in your palette」—— 没有配色可「按」。
+     旧版叫销售改一句就好，一改整份草稿就存进了 p.letter / p.visit.prepared[i]。
+     旧存档（MB.hasLegacy）打开时：开场短话拿掉那一整段（销售自己写的照留）；准备的那一样只换掉那几个字（后面销售加的照留） */
+  function reEsc(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+  function oldDirRes() {
+    var zh = [], en = [];
+    (MB.SERIES || []).forEach(function (s) { zh.push(reEsc(s.zh)); en.push(reEsc(s.en)); });
+    if (!zh.length) return [];
+    return [new RegExp('^[ \\t]*(整个家|这一份)(我们)?走「(' + zh.join('|') + ')」[：:，,].*$', 'gm'),
+      new RegExp('^[ \\t]*(The whole home is|It[’\']s all) in (our )?(' + en.join('|') + ')( series)?[,:].*$', 'gmi')];
+  }
+  /** 开场短话里旧版草稿的「走某个系列 / 配色」那一段：拿掉；没有就原样回（null 照旧是 null）；拿完是空的回 null（= 用新草稿） */
+  MB.legacyLetter = function (s) {
+    if (typeof s !== 'string') return s;
+    var out = s;
+    oldDirRes().forEach(function (re) { out = out.replace(re, ''); });
+    if (out === s) return s;
+    out = out.replace(/(\r?\n[ \t]*){3,}/g, '\n\n').replace(/^\s+|\s+$/g, '');
+    return out || null;
+  };
+  var OLD_PREP = [[/^\s*按你们配色挑好的板材与色板/, function () { return PREP_BOARDS.zh; }],
+    [/^\s*Board and colour samples in your palette/i, function () { return PREP_BOARDS.en; }]];
+  /** 到馆准备的一样：开头是旧版「按你们配色…」/「… in your palette」→ 换成现在的说法（后面销售加的字照留） */
+  MB.legacyPrep = function (s) {
+    if (typeof s !== 'string') return s;
+    for (var i = 0; i < OLD_PREP.length; i++) if (OLD_PREP[i][0].test(s)) return s.replace(OLD_PREP[i][0], OLD_PREP[i][1]());
+    return s;
+  };
+  /** 体检用：这段字还有旧版的「走某个系列」/「你们的配色」的说法（旧存档已经清过一次；这里抓销售自己改过的那几种） */
+  MB.legacyClaim = function (s) {
+    if (typeof s !== 'string' || !s) return false;
+    if (oldDirRes().some(function (re) { re.lastIndex = 0; var hit = re.test(s); re.lastIndex = 0; return hit; })) return true;
+    var zh = (MB.SERIES || []).map(function (x) { return reEsc(x.zh); }).join('|');
+    // 说「你们的配色」「配色取自…」才是假话（展厅本来就有色板，「一起挑配色」照样可以写）
+    return (zh && new RegExp('走「(' + zh + ')」').test(s)) || /(你们|您)的?配色|配色取自|colou?rs? (taken )?from (the|your) photos|in your (colou?r )?palette|your colou?r palette/i.test(s);
+  };
+
   /** ref → { src, w, h, series, rooms }；ref 形如 'b:misty-1'（内置）、'u:xxx'（本机图库）或 'c:<h16>'（公司案例库） */
   MB.makeResolver = function (userImages) {
     var map = {};
@@ -719,8 +760,9 @@
     count = count || 3;
     var used = handPicked(p, MB.makeResolver.last);
     p.rooms.forEach(function (r) { if (r !== room) r.images.forEach(function (ref) { used[shot(ref)] = 1; }); });
-    var cands = roomCands(p, room, MB.allImages(userImages, p, room.key), used);
-    if (!cands.length) return [];
+    var list = MB.allImages(userImages, p, room.key);
+    var cands = roomCands(p, room, list, used);
+    if (!cands.length) return borrowPhoto(p, room, list, userImages);
     // 同一页只用同一系列（没标系列的自己的图除外），免得自己挑的图被体检判「混了系列」；同一张照片的裁切不放两次
     var hero = cands[0], seen = {};
     seen[shot(hero.ref)] = 1;
@@ -744,6 +786,46 @@
     });
     return [hero].concat(rest).slice(0, count).map(function (im) { return im.ref; });
   };
+
+  /* 这个空间一张都挑不到（例：衣帽间对得上的内置图只有一张，主卧已经拿去当主图或辅图）：跟别的自动配图空间借一张。
+     先借辅图（那个空间留着主图）；再借主图（那个空间还有别张，下一张变主图）；
+     都不行才借那个空间唯一的一张 —— 它要能从图库换一张没人用的（例：客厅还有十几张能挑，儿童房只有两张）。
+     手选的空间、销售放在别页的照片不借。借走的从那个空间拿掉：整份方案同一张照片只出现一次，② 跟方案页看到的一样 */
+  function borrowPhoto(p, room, list, userImages) {
+    var resolve = MB.makeResolver.last;
+    var fixed = handPicked(p, resolve), lend = {};
+    var printable = function (ref) { var im = look(resolve, ref); return !!im && !goneOf(im) && !MB.photoRetired(ref) && !MB.photoReserved(ref); };
+    p.rooms.forEach(function (r) {
+      if (r === room) return;
+      var keep = r.manual ? [] : r.images.filter(printable);
+      r.images.forEach(function (ref, i) {
+        var k = shot(ref);
+        if (keep.indexOf(ref) < 0 || lend[k]) { fixed[k] = 1; return; }
+        var left = keep.some(function (x) { return shot(x) !== k; });
+        lend[k] = { room: r, tier: !left ? 2 : i === 0 ? 1 : 0 };
+      });
+    });
+    var cands = roomCands(p, room, list, fixed).filter(function (im) { return lend[shot(im.ref)]; });
+    var tier = function (t) { return cands.filter(function (im) { return lend[shot(im.ref)].tier === t; }); };
+    var pick = tier(0)[0] || tier(1)[0], swap = null;
+    if (!pick) {
+      var taken = handPicked(p, resolve);
+      p.rooms.forEach(function (r) { r.images.forEach(function (ref) { taken[shot(ref)] = 1; }); });
+      tier(2).some(function (im) {
+        var g = lend[shot(im.ref)].room;
+        var alt = roomCands(p, g, MB.allImages(userImages, p, g.key), taken)[0];
+        if (alt) { pick = im; swap = alt.ref; }
+        return !!alt;
+      });
+    }
+    if (!pick) return [];
+    var k = shot(pick.ref), from = lend[k].room;
+    var at = -1;
+    from.images.forEach(function (ref, i) { if (at < 0 && shot(ref) === k) at = i; });
+    from.images = from.images.filter(function (ref) { return shot(ref) !== k; });
+    if (swap) from.images.splice(at, 0, swap);
+    return [pick.ref];
+  }
 
   /** 图库里所有候选：{ ref, w, h, series, style, rooms, own, mood }。拿掉的照片不在里面。
       案例（c:）不整批扫：按方案 id 挑一组（没隐藏、不是 unsure）+ 方案里已经用到的 —— 3000 张也排得快 */
@@ -1430,6 +1512,11 @@
 
     /* ---- 方案 2.0 的字段：旧存档没有就用 newProject 的默认 ---- */
     out.letter = strOrNull(p.letter, 3000);
+    // 旧版存的草稿：「走某个系列 / 配色取自你们的照片」那一段、「按你们配色…」那几个字现在是假话 —— 拿掉 / 换掉（MB.legacyLetter）
+    if (MB.hasLegacy(p)) {
+      out.letter = MB.legacyLetter(out.letter);
+      out.visit.prepared = out.visit.prepared.map(MB.legacyPrep);
+    }
     var seen = {};
     out.cases = (Array.isArray(p.cases) ? p.cases : []).map(function (c) {
       c = c && typeof c === 'object' ? c : {};

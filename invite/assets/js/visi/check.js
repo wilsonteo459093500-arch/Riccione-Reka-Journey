@@ -172,11 +172,17 @@
     });
     return labels;
   }
-  /** 「去改」：第一个用到的空间 → 那一间；否则案例 → 参考空间；否则 ④ 的版位图 */
+  /** 「去改」：第一个用到的空间 → 那一间；否则案例 → 参考空间；否则 ④ 的「每一页用哪张图」（卷到那几张缩图） */
   function useGoto(list) {
     for (var i = 0; i < list.length; i++) if (list[i].pg.type === 'room') return 'room:' + list[i].pg.room.uid;
     for (var j = 0; j < list.length; j++) if (list[j].pg.type === 'cases') return 'cases';
-    return 'visit';
+    return 'slots';
+  }
+  /** 「去改」到了那里，按哪个钮换（useGoto 的结果）：空间卡片 / 参考空间 / 版位图各有各的钮 */
+  function swapHow(go) {
+    if (go === 'slots') return '到 ④「每一页用哪张图」点那一页的缩图换一张，或点「自动」。';
+    if (go === 'cases') return '到 ②「参考空间」拿掉它（×），或按「换 / 加案例」换一张。';
+    return '在 ② 那个空间按「从图库选」或「自动配图」都挑得到。';
   }
 
   /**
@@ -383,6 +389,15 @@
         '草稿只用得到需求卡上的字。加一件只有你知道的事 —— 见面时他们提过的一个细节 —— 这一页才像是写给他们的。', 'letter');
       else add('ok', '开场短话是你自己写的', '翻开第一页之后，先读到的是写给他们的话。');
     }
+    // 12b · 还写着旧版的「这一份走「某个系列」」/ 配色：方案现在介绍全部五个系列、没有配色 —— 印出来就是假话。
+    //       旧存档打开时已经清过一次（model.js 的 MB.legacyLetter / MB.legacyPrep）；这里抓销售改过、清不掉的那几种
+    if (MB.legacyClaim) {
+      var claim = [], claimGo = null;
+      if (p.pages.letter && MB.legacyClaim(p.letter)) { claim.push('开场短话'); claimGo = 'letter'; }
+      p.visit.prepared.forEach(function (t, i) { if (MB.legacyClaim(t)) { claim.push('准备的第 ' + (i + 1) + ' 样'); claimGo = claimGo || 'prep'; } });
+      if (claim.length) add('warn', '还写着旧版的「走某个系列」/ 配色：' + claim.join('、'),
+        '方案现在介绍溪岸全部五个原创系列，不替客户选一个，也没有配色。写「这一份走某个系列」「按你们配色」，客户找不到那一页 —— 把那一句改掉。', claimGo);
+    }
 
     // 13 · 案例：客户在需求卡选了喜欢的风格（p.caseStyle：原木、奶油风、现代简约…）才看 —— 另一种风格的案例，
     //      他们会开始比较哪个好，而不是想象自己的家。没选（「不限」）就不管：方案不替客户定系列，案例可以来自任何一个系列
@@ -419,7 +434,7 @@
     if (resv.length) {
       var rLabels = useLabels(p, resv, function (u) { var s = MB.SERIES_OF && MB.SERIES_OF[reservedOf(u)]; return s ? '（' + s.zh + '）' : ''; });
       add('warn', '用了系列页 / 原创系列页固定的官方照片：' + rLabels.join('、'),
-        '这几张是溪岸五个系列固定的官方照片，只给「原创系列」页和那个系列的那一页用（每一份方案都一样）；放在别页，整份方案就会重复 —— 换一张。', useGoto(resv));
+        '这几张是溪岸五个系列固定的官方照片，只给「原创系列」页和那个系列的那一页用（每一份方案都一样）；放在别页，整份方案就会重复 —— 换一张：' + swapHow(useGoto(resv)), useGoto(resv));
     }
     var dups = photoDups(uses).filter(function (g) { return !g.some(function (u) { return !!reservedOf(u); }); });
     if (dups.length) {
@@ -453,9 +468,9 @@
     var notOurs = retired.filter(function (u) { return MB.retiredKind && MB.retiredKind(u.ref) === 'riccione'; });
     var pulled = retired.filter(function (u) { return notOurs.indexOf(u) < 0; });
     if (notOurs.length) add('bad', '用了不是溪岸作品的照片：' + useLabels(p, notOurs).join('、'),
-      '这张不是溪岸的作品照片（瑞吉欧的家具），已经从图库拿掉：客户会以为那是我们做的。换一张 ——「从图库选」或「自动配图」都挑得到。', useGoto(notOurs));
+      '这张不是溪岸的作品照片（瑞吉欧的家具），已经从图库拿掉：客户会以为那是我们做的。换一张 —— ' + swapHow(useGoto(notOurs)), useGoto(notOurs));
     if (pulled.length) add('warn', '用了已经从图库拿掉的照片：' + useLabels(p, pulled).join('、'),
-      '这张已经从图库拿掉（不是溪岸确认过的作品照片，或放错了系列）。换一张 ——「从图库选」或「自动配图」都挑得到。', useGoto(pulled));
+      '这张已经从图库拿掉（不是溪岸确认过的作品照片，或放错了系列）。换一张 —— ' + swapHow(useGoto(pulled)), useGoto(pulled));
     // 16b · 印出来的公司案例照片：分类时标了「不确定」、或已经被隐藏（拍到客户、不想再用）—— 发出去之前换掉
     var shaky = [], gone = [], odd = [], shakyGo = null, goneGo = null, oddGo = null;
     uses.forEach(function (u) {

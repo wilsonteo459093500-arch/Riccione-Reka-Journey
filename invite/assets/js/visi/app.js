@@ -613,7 +613,9 @@
   function flash(el) {
     if (!el) return;
     el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+    // 指到面板里的一块（例：#slot-thumbs）：卷到那一块，闪整个面板
+    var box = el.closest('.panel, .room-card') || el;
+    box.classList.remove('flash'); void box.offsetWidth; box.classList.add('flash');
   }
 
   function renderRooms() {
@@ -2171,7 +2173,9 @@
     cover: ['brief'], letter: ['brief', '#letter-panel'], needs: ['brief', '#needs-panel'],
     collections: ['visit', '#pages-panel'], glance: ['visit', '#pages-panel'], series: ['visit', '#pages-panel'],
     chapter: ['visit', '#pages-panel'], cases: ['rooms', '#cases-panel'], practical: ['visit', '#practical-panel'],
-    language: ['visit', '#pages-panel'], team: ['visit', '#team-panel'], invite: ['visit'], back: ['visit']
+    language: ['visit', '#pages-panel'], team: ['visit', '#team-panel'], invite: ['visit'], back: ['visit'],
+    // 体检：到馆准备的那几样；每一页用哪张图（④ 页面开关下面的缩图）
+    prep: ['visit', '#prep-edit'], slots: ['visit', '#slot-thumbs']
   };
   /** 每个系列那一页是 series:<k>（MB.pageKey）：跟「系列」同一个地方（④ 页面开关） */
   function gotoOf(g) {

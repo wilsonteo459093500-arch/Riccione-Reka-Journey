@@ -693,9 +693,13 @@
       var tag = [sr ? sr.en : '', rm ? rm.en : ''].filter(Boolean).join(' · ');
       var tagZh = [sr ? sr.zh : '', rm ? rm.zh : ''].filter(Boolean).join(' · ');
       var line = caseLine(p, c, im, lang);
-      // 自动那句跟前一张一模一样（同系列、同空间）：改印这张图自己的说明，三张不要读起来一样
+      // 自动那句跟前一张一模一样：改印这张图自己的说明，三张不要读起来一样 —— 跟 copy.js 的 MB.caseNote 同一套（MB.caseWhatLine：
+      // 去掉开头的系列名、只剩空间名的不算），华文、英文都有才换。不印照片原本的说明：系列没把握的照片，说明里可能还有系列名
       var key = typeof line === 'string' ? line : (line.zh || '') + '|' + (line.en || '');
-      if (said[key] && typeof line !== 'string' && (im.en || im.zh)) line = { en: im.en || im.label, zh: im.zh || im.label };
+      if (said[key] && typeof line !== 'string') {
+        var wz = String(safe(MB.caseWhatLine, [im, 'zh'], '')), we = String(safe(MB.caseWhatLine, [im, 'en'], ''));
+        if (wz && we) line = { en: we, zh: wz };
+      }
       said[key] = 1;
       return { im: im, line: line, tag: tag, tagZh: tagZh };
     }).filter(Boolean);

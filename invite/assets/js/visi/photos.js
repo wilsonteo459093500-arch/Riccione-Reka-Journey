@@ -38,7 +38,8 @@
     { id: 'b:skeleton-kitchen-2', src: L + 'skeleton-kitchen-2.jpg', w: 889, h: 1037, series: 'skeleton', style: '', rooms: ['kitchen'], pos: '40% 50%', en: 'Skeleton Line kitchen detail', zh: '骨骼线厨房细节' },
     { id: 'b:skeleton-kitchen-3', src: L + 'skeleton-kitchen-3.jpg', w: 681, h: 1038, series: 'skeleton', style: '', rooms: ['kitchen'], en: 'Skeleton Line tall units', zh: '骨骼线高柜' },
     { id: 'b:skeleton-kitchen-dining', src: L + 'skeleton-kitchen-dining.jpg', w: 1600, h: 947, series: 'skeleton', style: '', rooms: ['kitchen', 'dining'], en: 'Skeleton Line kitchen and dining', zh: '骨骼线厨房与餐厅' },
-    { id: 'b:natural-kitchen', src: L + 'natural-kitchen.jpg', w: 1600, h: 798, series: '', style: '', rooms: ['kitchen'], en: 'Natural Line kitchen', zh: '自然线厨房' },
+    // 系列没把握（标签已拿掉）：说明也只写看得到的，不写系列名（跟 misty-kitchen 一样）—— 参考空间的卡片会印这一句
+    { id: 'b:natural-kitchen', src: L + 'natural-kitchen.jpg', w: 1600, h: 798, series: '', style: '', rooms: ['kitchen'], en: 'Charcoal kitchen with glass wall units', zh: '黑色厨房与玻璃吊柜' },
     { id: 'b:mountain-living', src: L + 'mountain-living.jpg', w: 892, h: 484, series: 'mountain', style: '', rooms: ['living'], en: 'Empty Mountain living room', zh: '空山客厅' },
     { id: 'b:mountain-shelf', src: L + 'mountain-shelf.jpg', w: 900, h: 1051, series: 'mountain', style: '', rooms: ['study', 'living'], pos: '45% 50%', en: 'Empty Mountain shelving', zh: '空山书架' },
     { id: 'b:mountain-shelf-2', src: L + 'mountain-shelf-2.jpg', w: 681, h: 1038, series: 'mountain', style: '', rooms: ['study'], en: 'Empty Mountain open shelves', zh: '空山层架' },

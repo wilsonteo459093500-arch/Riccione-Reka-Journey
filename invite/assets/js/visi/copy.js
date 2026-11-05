@@ -152,6 +152,10 @@
     var n = (MB.SERIES || []).map(function (s) { return L === 'zh' ? s.zh : s.en; }).filter(Boolean);
     return L === 'zh' ? n.join('、') : listJoin(n, 'en');
   }
+  /** 给 AI 的事实：华文名 + 官方英文名（「骨骼线 Skeleton Line、空山 Empty Mountain、…」）—— 写英文讯息时不用自己翻，翻出非官方的名字 */
+  function seriesNamesBoth() {
+    return (MB.SERIES || []).map(function (s) { return s.zh + ' ' + s.en; }).join('、');
+  }
 
   /** 句子太长就只取第一个分句（照原文，不改字），后面接「…」 */
   function firstClause(s, L, max) {
@@ -546,10 +550,13 @@
     }
     // 5–15 秒那一句：几个空间（每个一页）+ 溪岸的五个原创系列 —— 介绍溪岸，不说方案「走」哪一个系列
     var nRooms = p.rooms.length, needsNo = MB.pageNoOf(p, 'needs');
-    var roomsZh = nRooms ? (whole ? '整个家一共 ' : '这一份是 ') + nRooms + ' 个空间，每个空间一页' + (needsNo ? '，先从你们说的那几件事做起' : '') : '';
-    var roomsEn = nRooms ? cap1(numEn(nRooms)) + (nRooms > 1 ? ' spaces' : ' space') + ', one page each' + (needsNo ? ', starting from what you told us' : '') : '';
+    // 只有一个空间：不说「每个空间一页」「one page each / after them」
+    var roomsZh = !nRooms ? '' : (nRooms === 1 ? '这一份是一个空间，一页细讲' : (whole ? '整个家一共 ' : '这一份是 ') + nRooms + ' 个空间，每个空间一页') +
+      (needsNo ? '，先从你们说的那几件事做起' : '');
+    var roomsEn = !nRooms ? '' : (nRooms === 1 ? 'One space, on its own page' : cap1(numEn(nRooms)) + ' spaces, one page each') +
+      (needsNo ? ', starting from what you told us' : '');
     var srZh = si.pages.length ? '后面是溪岸的五个原创系列，看看哪一个最像你们' : coNo ? '第 ' + coNo + ' 页是溪岸的五个原创系列' : '';
-    var srEn = si.pages.length ? (nRooms ? 'after them, SAIL’s' : 'further on are SAIL’s') + ' five original collections, to see which one feels most like you'
+    var srEn = si.pages.length ? (nRooms === 1 ? 'after it, SAIL’s' : nRooms ? 'after them, SAIL’s' : 'further on are SAIL’s') + ' five original collections, to see which one feels most like you'
       : coNo ? 'page ' + coNo + ' shows SAIL’s five original collections' : '';
     var oneZh = [roomsZh, srZh].filter(Boolean).join('；');
     var oneEn = [roomsEn, srEn].filter(Boolean).join('; ');
@@ -618,7 +625,7 @@
     var facts = [
       '客户：{客户称呼}',
       '楼盘：{楼盘}' + (area ? '（' + area + '）' : '') + (p.property.type ? '，' + p.property.type : ''),
-      '方案里介绍的溪岸原创系列：' + (srHow ? seriesNames('zh') + '（' + srHow + '；是让客户认识溪岸的系列，不是替他们定了其中一个）' : '（这次没放）'),
+      '方案里介绍的溪岸原创系列：' + (srHow ? (L === 'zh' ? seriesNames('zh') : seriesNamesBoth()) + '（' + srHow + '；是让客户认识溪岸的系列，不是替他们定了其中一个）' : '（这次没放）'),
       '他们说过（原话）：' + (own.join('、') || '（无）'),
       '需求卡勾选：' + (ticked.join('、') || '（无）'),
       '我们的做法（只能用这些）：' + (ours.length ? '\n  · ' + ours.join('\n  · ') : '（无）'),
@@ -784,6 +791,13 @@
     }
     return caseWhatOne((zh ? im.zh : im.en) || (im.own ? im.label : ''), zh);
   }
+  /** 这张图自己的说明当成那一句（跟 MB.caseNote 同一个写法）；没有比卡片标签多说什么就回 ''。
+      deck.js 的 MB.caseCards 两张同一句时改印这个 —— 卡片、讲稿印的一样 */
+  MB.caseWhatLine = function (im, L) {
+    if (!im || (MB.photoRetired && MB.photoRetired(im.ref || im.id))) return '';
+    var w = caseWhat(im, L === 'zh' ? 'zh' : 'en');
+    return !w ? '' : L === 'zh' ? w : cap1(w) + '.';
+  };
 
   /** 「你们说的」页印了哪几条：跟方案页同一份（model.js 的 MB.printedNeeds：原话空的不印、最多 3 条）；
       没有就照旧版面：前 3 条 */
@@ -984,10 +998,14 @@
         // 现在的案例是溪岸的空间照，不是客户的家：不说「像你们」「跟你们很接近」
         say('这几个是溪岸的空间，给你们参考。', 'These are SAIL spaces, for reference.');
         var res = MB.makeResolver.last;
+        // 自动那一句跟方案页的卡片同一份（MB.caseCards：两张同一句时，第二张改说它自己拍的是什么）
+        var cards = res && MB.caseCards ? MB.caseCards(p, res, L) : [];
         var cl = (MB.caseRefs ? MB.caseRefs(p, res) : []).map(function (c, i) {
           var t = c.note != null && String(c.note).trim() ? strip(c.note) : '';
           if (t && !sameLang(t, L)) t = '';
-          if (!t && res) {
+          var card = cards.filter(function (x) { return x.im && x.im.ref === c.ref; })[0];
+          if (!t && card && typeof card.line !== 'string') t = strip(card.line[zh ? 'zh' : 'en'] || '');
+          else if (!t && res) {
             var b = res(c.ref);
             // 跟方案页（deck.js 的 caseImage）同一个形状：带上图库自己的说明，讲稿念的跟卡片印的是同一句
             if (b) t = strip(MB.caseNote(p, { ref: c.ref, series: b.series || '', rooms: b.rooms || (b.tag ? [b.tag] : []), own: c.ref.indexOf('u:') === 0,
