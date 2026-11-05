@@ -48,7 +48,7 @@
 /* 换行：标题、一句话平衡成差不多长的两行（不留「wall.」「声。」单独一行）；正文最后一行至少两个字。
    PPTX 照浏览器的断行点断，所以跟着一样 */
 .pg .ttl, .pg .rm-line, .pg .lg-line, .pg .ch-line, .pg .bk-wel, .pg .nd-q, .pg .cs-line, .pg .pr-w { text-wrap: balance; }
-.pg .lt-body p, .pg .rm-note, .pg .nd-a, .pg .pl-not, .pg .pr-a, .pg .gl-mood { text-wrap: pretty; }
+.pg .lt-body p, .pg .rm-note, .pg .nd-a, .pg .pl-not, .pg .pr-a { text-wrap: pretty; }
 
 /* 右上 logo：米色上墨色版；照片上白色版 */
 .pg .logo { position: absolute; left: 1004px; top: 50px; width: 204px; height: 78px; object-fit: contain; object-position: right center; max-width: none; }
@@ -179,122 +179,42 @@
 .pg-needs.tighter .nd-q .l-zh + .l-en { font-size: 15px; }
 .pg-needs.tighter .nd-a .l-en, .pg-needs.tighter .nd-a .l-zh { font-size: 12.5px; line-height: 1.45; }
 
-/* ---------- 4 · 一页看懂（拼贴 moodboard） ------------------------
-   左边 720 宽拼 2–4 张图（米色 8px 缝），右边：风格名 + 一句 mood + 5 色 + 3 材质。
-   第一格看照片（MB.deckImages 的 glanceWide）：直的放左边整高；横的放上面（.wide），裁得最少 */
-.pg-glance .gl-col { position: absolute; left: 0; top: 0; width: 720px; height: 720px; }
-.pg-glance .gl-col .g1 { left: 0; top: 0; width: 416px; height: 720px; }
-.pg-glance .gl-col .g2 { left: 424px; top: 0; width: 296px; height: 235px; }
-.pg-glance .gl-col .g3 { left: 424px; top: 243px; width: 296px; height: 234px; }
-.pg-glance .gl-col .g4 { left: 424px; top: 485px; width: 296px; height: 235px; }
-.pg-glance .gl-col.n3 .g2 { height: 356px; }
-.pg-glance .gl-col.n3 .g3 { top: 364px; height: 356px; }
-.pg-glance .gl-col.n2 .g2 { height: 720px; }
-.pg-glance .gl-col.n1 .g1 { width: 720px; }
-.pg-glance .gl-col.wide .g1 { width: 720px; height: 400px; }
-.pg-glance .gl-col.wide .g2 { left: 0; top: 408px; width: 235px; height: 312px; }
-.pg-glance .gl-col.wide .g3 { left: 243px; top: 408px; width: 234px; height: 312px; }
-.pg-glance .gl-col.wide .g4 { left: 485px; top: 408px; width: 235px; height: 312px; }
-.pg-glance .gl-col.wide.n3 .g2 { width: 356px; }
-.pg-glance .gl-col.wide.n3 .g3 { left: 364px; width: 356px; }
-.pg-glance .gl-col.wide.n2 .g1 { height: 356px; }
-.pg-glance .gl-col.wide.n2 .g2 { top: 364px; width: 720px; height: 356px; }
-/* 客户发来的参考图：像钉在 moodboard 上的小照片 */
-.pg-glance .gl-refs { position: absolute; left: 24px; top: 580px; height: 116px; display: flex; gap: 10px; }
-.pg-glance .gl-refs .ph { position: relative; width: 88px; height: 108px; border: 5px solid var(--paper); box-shadow: 0 6px 16px rgba(28,25,21,.28); }
-.pg-glance .gl-hd { left: 784px; top: 138px; width: 424px; height: 204px; overflow: hidden; }   /* logo 在 128 以上；色块从 352 起 */
-.pg-glance .gl-hd .ttl { margin-top: 14px; }
-.pg-glance .gl-hd .ttl .l-zh { font-size: 34px; line-height: 1.3; letter-spacing: .14em; }
-.pg-glance .gl-hd .ttl .l-en { font-size: 40px; line-height: 1.08; }
-.pg-glance .gl-hd .ttl .l-zh + .l-en { font-size: 25px; margin-top: 2px; }
-.pg-glance .gl-mood { margin-top: 12px; color: var(--body); }
-.pg-glance .gl-mood .l-en { font: italic 400 18px/1.4 var(--f-serif); color: var(--ink); }
-.pg-glance .gl-mood .l-zh { font-size: 14.5px; line-height: 1.75; }
-.pg-glance .gl-mood .l-zh + .l-en { font-size: 15.5px; margin-top: 2px; }
-/* 双语：风格名、一句 mood 各两行，缩一点才放得进 204 高 */
-.pg-glance.L-bi .gl-hd .ttl { margin-top: 10px; }
-.pg-glance.L-bi .gl-hd .ttl .l-zh { font-size: 30px; }
-.pg-glance.L-bi .gl-mood { margin-top: 8px; }
-.pg-glance.L-bi .gl-mood .l-zh + .l-en { font-size: 14.5px; }
-.pg-glance .gl-pal { position: absolute; left: 784px; top: 352px; width: 424px; height: 132px; }
-.pg-glance .gl-pal ul { display: grid; grid-template-columns: repeat(5, 72px); column-gap: 8px; }
-.pg-glance .gl-pal i { display: block; height: 56px; margin-bottom: 7px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.06); }
-.pg-glance .gl-pal b { display: block; font-weight: 400; color: var(--ink); line-height: 1.3; }
-.pg-glance .gl-pal b .l-en, .pg-glance .gl-pal b .l-zh { font-size: 11px; }
-.pg-glance .gl-pal b .l-zh + .l-en { font-size: 10px; color: var(--label); }
-.pg-glance .gl-from { margin: -4px 0 8px; color: var(--cof); white-space: nowrap; overflow: hidden; }
-.pg-glance .gl-from .l-zh, .pg-glance .gl-from .l-en { display: inline; margin-right: 10px; }
-.pg-glance .gl-from .l-zh { font-size: 12px; }
-.pg-glance .gl-from .l-en { font: italic 400 15px/1.3 var(--f-serif); }
-.pg-glance .gl-pal.from-ref i { height: 44px; }
-.pg-glance .gl-mats { position: absolute; left: 784px; top: 496px; width: 424px; height: 116px; }
-.pg-glance .gl-mats li { display: flex; align-items: center; gap: 12px; padding: 4px 0; border-bottom: 1px solid var(--sand); line-height: 1.35; }
-.pg-glance .gl-mats li:first-child { border-top: 1px solid var(--sand); }
-.pg-glance .gl-mats i { width: 16px; height: 16px; flex: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.07); }
-.pg-glance .gl-mats b { flex: 1; font-weight: 400; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pg-glance .gl-mats b .l-zh, .pg-glance .gl-mats b .l-en { display: inline; font-size: 13.5px; }
-.pg-glance .gl-mats b .l-zh + .l-en { font-size: 12px; color: var(--body); margin-left: 8px; }
-.pg-glance .gl-mats em { font: normal 400 10px/1.5 var(--f-en); letter-spacing: .12em; color: var(--label); }
-
-/* ---------- 4b · 系列 · 设计理念 ------------------------------------
-   左边一张那个系列的大图（600 宽，跟开场、邀约同一条栏线）；右边从 logo 下面开始一条直的流：
-   家族标签 → 系列名（大字）→ 细线 + 一句标题 → 一段话 →（补充）→ 贴底：溪岸的设计理念。
-   字全部是官方文案，不删句子：放不下先缩一号（tight）、再缩一号（tighter）—— app.js / pptx.js 的 fitText 量 .sr-col */
-.pg-series .sr-img { left: 0; top: 0; width: 600px; height: 720px; }
-/* 没有不重复的照片可放：那个系列的五色 —— 照片框的底色（跟照片还没载入时同一个色）上一张直的色卡，
-   五条色带并排；最浅的那一条（奶油白）靠细线框才看得出边 */
-.pg-series .sr-sw { position: absolute; display: flex; box-sizing: border-box; padding: 138px 96px 104px; background: #E4DCCF; }   /* 色卡上下跟右栏（138–616）对齐 */
-.pg-series .sr-sw i { flex: 1 1 0; height: 100%; box-shadow: inset 0 0 0 1px rgba(28,25,21,.06); }
-.pg-series .sr-col { position: absolute; left: 664px; top: 138px; width: 544px; height: 478px; display: flex; flex-direction: column; overflow: hidden; }   /* logo 底在 128；页脚从 628 起 */
-.pg-series .sr-col > * { flex: none; }
-.pg-series .sr-kick .l-zh { font: 400 15px/1.5 var(--f-zh); letter-spacing: .24em; color: var(--cof); margin-top: 6px; }
-.pg-series .sr-name { margin-top: 30px; font-weight: 400; color: var(--cof); }
-.pg-series .sr-name > .l-zh:first-child { font: 400 58px/1.12 var(--f-zh); letter-spacing: .16em; }
-.pg-series .sr-name > .l-en:first-child { font: 400 58px/1.04 var(--f-serif); letter-spacing: -.005em; }
-.pg-series .sr-name .l-zh + .l-en { font: 400 13px/1.5 var(--f-en); letter-spacing: .36em; text-transform: uppercase; margin-top: 10px; }
-.pg-series .sr-title { margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--sand); color: var(--ink); text-wrap: balance; }
-.pg-series .sr-title .l-zh { font: 400 22px/1.6 var(--f-zh); letter-spacing: .06em; }
-.pg-series .sr-title .l-en { font: italic 400 26px/1.25 var(--f-serif); }
-.pg-series .sr-title .l-zh + .l-en { font-size: 19px; margin-top: 4px; color: var(--body); }
-.pg-series .sr-body { margin-top: 16px; color: var(--body); text-wrap: pretty; }
-/* 华文正文两行差不多长（balance）：不会剩「知力。」三个字一行（织）。只照华文排版的一般规矩断行（标点不放行首），
-   不另外限制在标点断 —— 空山、雾山的长句那样会排成三行 */
-.pg-series .sr-body .l-zh { font-size: 15px; line-height: 1.95; letter-spacing: .04em; text-wrap: balance; }
-.pg-series .sr-body .l-en { font-size: 15.5px; line-height: 1.65; }
-.pg-series .sr-body .l-zh + .l-en { font-size: 13.5px; line-height: 1.6; margin-top: 8px; }
-.pg-series .sr-note { margin-top: 14px; color: var(--label); text-wrap: pretty; }
-.pg-series .sr-note .l-zh { font: 400 13.5px/1.8 var(--f-zh); letter-spacing: .04em; }
-.pg-series .sr-note .l-en { font: italic 400 17px/1.4 var(--f-serif); }
-.pg-series .sr-philo { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--sand); }
-.pg-series .sr-philo .lbl { margin-bottom: 6px; }
-.pg-series .sr-ph { color: var(--body); text-wrap: balance; }
-.pg-series .sr-ph .l-zh { font-size: 12.5px; line-height: 1.75; letter-spacing: .03em; }
-.pg-series .sr-ph .l-en { font: italic 400 15px/1.35 var(--f-serif); }
-.pg-series .sr-ph .l-zh + .l-en { font-size: 13.5px; margin-top: 2px; }
-/* 双语：每一块都是两种语言，缩一号才放得进 472 高 */
-.pg-series.L-bi .sr-kick .l-zh { font-size: 14px; margin-top: 4px; }
-.pg-series.L-bi .sr-name { margin-top: 22px; }
-.pg-series.L-bi .sr-name > .l-zh:first-child { font-size: 46px; }
-.pg-series.L-bi .sr-name .l-zh + .l-en { margin-top: 6px; }
-.pg-series.L-bi .sr-title { margin-top: 20px; padding-top: 16px; }
-.pg-series.L-bi .sr-title .l-zh { font-size: 19px; line-height: 1.5; }
-.pg-series.L-bi .sr-title .l-zh + .l-en { font-size: 17px; line-height: 1.25; }
-.pg-series.L-bi .sr-body { margin-top: 12px; }
-.pg-series.L-bi .sr-body .l-zh { font-size: 13.5px; line-height: 1.8; }
-.pg-series.L-bi .sr-body .l-zh + .l-en { font-size: 12.5px; line-height: 1.5; margin-top: 6px; }
-.pg-series.L-bi .sr-philo { padding-top: 10px; }
-.pg-series.L-bi .sr-ph .l-zh { font-size: 12px; line-height: 1.6; }
-.pg-series.L-bi .sr-ph .l-zh + .l-en { font-size: 13px; line-height: 1.3; }
-/* 字体没到、换了比较宽的退路字体时的保险：先缩一号、再缩一号（官方文案不删句子） */
-.pg-series.tight .sr-name { margin-top: 18px; }
-.pg-series.tight .sr-name > .l-zh:first-child, .pg-series.tight .sr-name > .l-en:first-child { font-size: 44px; }
-.pg-series.tight .sr-title { margin-top: 16px; padding-top: 14px; }
-.pg-series.tight .sr-body .l-zh, .pg-series.tight .sr-body .l-en { font-size: 13px; line-height: 1.6; }
-.pg-series.tight .sr-body .l-zh + .l-en { font-size: 12px; }
-.pg-series.tighter .sr-name > .l-zh:first-child, .pg-series.tighter .sr-name > .l-en:first-child { font-size: 36px; }
-.pg-series.tighter .sr-title .l-zh, .pg-series.tighter .sr-title .l-en { font-size: 16px; }
-.pg-series.tighter .sr-body .l-zh, .pg-series.tighter .sr-body .l-en { font-size: 12px; line-height: 1.5; }
-.pg-series.tighter .sr-note .l-zh, .pg-series.tighter .sr-note .l-en, .pg-series.tighter .sr-ph .l-en { font-size: 12px; }
+/* ---------- 4 · 原创系列（五个一页） --------------------------------
+   溪岸五个原创系列并排（HIPPO 第 6 页）：每栏一张固定的官方照片（MB.overviewPhoto，跟系列页不同张）+ 名字 + 一句标题；
+   上面一条系列家族带（相邻同一个家族共用一条，雾山不套）。left / width 由 deck.js 写成行内样式（每栏 232 一格）。
+   字全部是官方文案，不删、不缩：放不下只缩照片（tight 172、tighter 140）—— app.js / pptx.js 的 fitText 量 .co-list */
+.pg-collections .co-hd > .l-zh { font: 400 15px/1.5 var(--f-zh); letter-spacing: .24em; color: var(--cof); margin-top: 6px; }
+.pg-collections .co-hd .ttl { margin-top: 12px; }
+.pg-collections .co-fams { position: absolute; left: 72px; top: 200px; width: 1136px; height: 36px; }
+.pg-collections .co-fam { position: absolute; top: 0; height: 36px; border-top: 1px solid var(--sand); padding-top: 10px; overflow: hidden; }
+.pg-collections .co-fam .lbl { margin: 0; color: var(--cof); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pg-collections .co-list { position: absolute; left: 72px; top: 244px; width: 1136px; height: 372px; overflow: hidden; }   /* 底在 616：页脚从 628 起 */
+.pg-collections .co { position: absolute; top: 0; width: 208px; padding-top: 252px; }   /* 照片 236 + 16 */
+.pg-collections .co-img { left: 0; top: 0; width: 208px; height: 236px; }
+.pg-collections .co-name { font-weight: 400; color: var(--cof); }
+.pg-collections .co-name > .l-zh:first-child { font: 400 26px/1.3 var(--f-zh); letter-spacing: .14em; }
+.pg-collections .co-name > .l-en:first-child { font: 400 26px/1.15 var(--f-serif); }
+.pg-collections .co-name .l-zh + .l-en { font: 400 10.5px/1.5 var(--f-en); letter-spacing: .3em; text-transform: uppercase; margin-top: 4px; }
+.pg-collections .co-line { margin-top: 10px; color: var(--ink); text-wrap: balance; }
+/* 华文只在标点、空格断行（「在时间的长河，/ 寻找关于家具的记忆。」，不会断成「寻 / 找」）：五句都短，一段最长 10 个字也放得进 208 宽；
+   万一放不下（退路字体）才在字中间断 */
+.pg-collections .co-line .l-zh { font: 400 14px/1.7 var(--f-zh); letter-spacing: .04em; word-break: keep-all; overflow-wrap: break-word; }
+.pg-collections .co-line .l-en { font: italic 400 17px/1.3 var(--f-serif); }
+.pg-collections .co-line .l-zh + .l-en { font-size: 14px; margin-top: 4px; color: var(--body); }
+/* 双语：每一块都是两种语言 —— 标题那一句缩一点（页首 ≤ 128 高），照片 196 高 */
+.pg-collections.L-bi .co-hd .ttl { margin-top: 8px; }
+.pg-collections.L-bi .co-hd .ttl .l-zh { font-size: 22px; line-height: 1.45; }
+.pg-collections.L-bi .co-hd .ttl .l-zh + .l-en { font-size: 20px; margin-top: 2px; }
+.pg-collections.L-bi .co { padding-top: 212px; }
+.pg-collections.L-bi .co-img { height: 196px; }
+.pg-collections.L-bi .co-name > .l-zh:first-child { font-size: 24px; }
+.pg-collections.L-bi .co-line { margin-top: 8px; }
+.pg-collections.L-bi .co-line .l-zh { font-size: 13.5px; line-height: 1.65; }
+/* 字体没到、换了比较宽的退路字体时的保险：照片先缩到 172、再缩到 140（字一个不改） */
+.pg-collections.tight .co { padding-top: 188px; }
+.pg-collections.tight .co-img { height: 172px; }
+.pg-collections.tighter .co { padding-top: 156px; }
+.pg-collections.tighter .co-img { height: 140px; }
 
 /* ---------- 5 · 平面图 -------------------------------------- */
 .pg-plan .pl-panel { position: absolute; left: 0; top: 0; width: 720px; height: 720px; background: var(--panel); }
@@ -397,6 +317,62 @@
 .pg-room.rm-noimg .rm-line .l-zh { font-size: 30px; }
 .pg-room.rm-noimg .rm-line .l-zh + .l-en { font-size: 26px; margin-top: 8px; }
 .pg-room.rm-noimg .rm-txt { left: 704px; top: 272px; width: 504px; height: 344px; }   /* 跟左边那一句的细线同一条线 */
+
+/* ---------- 7b · 五个系列（各一页，放在空间页后面） ----------------------
+   左边一张那个系列固定的官方照片（MB.seriesPhoto；600 宽，跟开场、邀约同一条栏线）；右边从 logo 下面开始一条直的流：
+   家族标签 → 系列名（大字）→ 细线 + 一句标题 → 一段话 →（补充）→ 贴底：溪岸的设计理念。
+   字全部是官方文案，不删句子：放不下先缩一号（tight）、再缩一号（tighter）—— app.js / pptx.js 的 fitText 量 .sr-col */
+.pg-series .sr-img { left: 0; top: 0; width: 600px; height: 720px; }
+.pg-series .sr-col { position: absolute; left: 664px; top: 138px; width: 544px; height: 478px; display: flex; flex-direction: column; overflow: hidden; }   /* logo 底在 128；页脚从 628 起 */
+.pg-series .sr-col > * { flex: none; }
+.pg-series .sr-kick .l-zh { font: 400 15px/1.5 var(--f-zh); letter-spacing: .24em; color: var(--cof); margin-top: 6px; }
+.pg-series .sr-name { margin-top: 30px; font-weight: 400; color: var(--cof); }
+.pg-series .sr-name > .l-zh:first-child { font: 400 58px/1.12 var(--f-zh); letter-spacing: .16em; }
+.pg-series .sr-name > .l-en:first-child { font: 400 58px/1.04 var(--f-serif); letter-spacing: -.005em; }
+.pg-series .sr-name .l-zh + .l-en { font: 400 13px/1.5 var(--f-en); letter-spacing: .36em; text-transform: uppercase; margin-top: 10px; }
+.pg-series .sr-title { margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--sand); color: var(--ink); text-wrap: balance; }
+.pg-series .sr-title .l-zh { font: 400 22px/1.6 var(--f-zh); letter-spacing: .06em; }
+.pg-series .sr-title .l-en { font: italic 400 26px/1.25 var(--f-serif); }
+.pg-series .sr-title .l-zh + .l-en { font-size: 19px; margin-top: 4px; color: var(--body); }
+.pg-series .sr-body { margin-top: 16px; color: var(--body); text-wrap: pretty; }
+/* 华文正文两行差不多长（balance）：不会剩「知力。」三个字一行（织）。只照华文排版的一般规矩断行（标点不放行首），
+   不另外限制在标点断 —— 空山、雾山的长句那样会排成三行 */
+.pg-series .sr-body .l-zh { font-size: 15px; line-height: 1.95; letter-spacing: .04em; text-wrap: balance; }
+.pg-series .sr-body .l-en { font-size: 15.5px; line-height: 1.65; }
+.pg-series .sr-body .l-zh + .l-en { font-size: 13.5px; line-height: 1.6; margin-top: 8px; }
+.pg-series .sr-note { margin-top: 14px; color: var(--label); text-wrap: pretty; }
+.pg-series .sr-note .l-zh { font: 400 13.5px/1.8 var(--f-zh); letter-spacing: .04em; }
+.pg-series .sr-note .l-en { font: italic 400 17px/1.4 var(--f-serif); }
+.pg-series .sr-philo { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--sand); }
+.pg-series .sr-philo .lbl { margin-bottom: 6px; }
+.pg-series .sr-ph { color: var(--body); text-wrap: balance; }
+.pg-series .sr-ph .l-zh { font-size: 12.5px; line-height: 1.75; letter-spacing: .03em; }
+.pg-series .sr-ph .l-en { font: italic 400 15px/1.35 var(--f-serif); }
+.pg-series .sr-ph .l-zh + .l-en { font-size: 13.5px; margin-top: 2px; }
+/* 双语：每一块都是两种语言，缩一号才放得进 472 高 */
+.pg-series.L-bi .sr-kick .l-zh { font-size: 14px; margin-top: 4px; }
+.pg-series.L-bi .sr-name { margin-top: 22px; }
+.pg-series.L-bi .sr-name > .l-zh:first-child { font-size: 46px; }
+.pg-series.L-bi .sr-name .l-zh + .l-en { margin-top: 6px; }
+.pg-series.L-bi .sr-title { margin-top: 20px; padding-top: 16px; }
+.pg-series.L-bi .sr-title .l-zh { font-size: 19px; line-height: 1.5; }
+.pg-series.L-bi .sr-title .l-zh + .l-en { font-size: 17px; line-height: 1.25; }
+.pg-series.L-bi .sr-body { margin-top: 12px; }
+.pg-series.L-bi .sr-body .l-zh { font-size: 13.5px; line-height: 1.8; }
+.pg-series.L-bi .sr-body .l-zh + .l-en { font-size: 12.5px; line-height: 1.5; margin-top: 6px; }
+.pg-series.L-bi .sr-philo { padding-top: 10px; }
+.pg-series.L-bi .sr-ph .l-zh { font-size: 12px; line-height: 1.6; }
+.pg-series.L-bi .sr-ph .l-zh + .l-en { font-size: 13px; line-height: 1.3; }
+/* 字体没到、换了比较宽的退路字体时的保险：先缩一号、再缩一号（官方文案不删句子） */
+.pg-series.tight .sr-name { margin-top: 18px; }
+.pg-series.tight .sr-name > .l-zh:first-child, .pg-series.tight .sr-name > .l-en:first-child { font-size: 44px; }
+.pg-series.tight .sr-title { margin-top: 16px; padding-top: 14px; }
+.pg-series.tight .sr-body .l-zh, .pg-series.tight .sr-body .l-en { font-size: 13px; line-height: 1.6; }
+.pg-series.tight .sr-body .l-zh + .l-en { font-size: 12px; }
+.pg-series.tighter .sr-name > .l-zh:first-child, .pg-series.tighter .sr-name > .l-en:first-child { font-size: 36px; }
+.pg-series.tighter .sr-title .l-zh, .pg-series.tighter .sr-title .l-en { font-size: 16px; }
+.pg-series.tighter .sr-body .l-zh, .pg-series.tighter .sr-body .l-en { font-size: 12px; line-height: 1.5; }
+.pg-series.tighter .sr-note .l-zh, .pg-series.tighter .sr-note .l-en, .pg-series.tighter .sr-ph .l-en { font-size: 12px; }
 
 /* ---------- 8 · 参考空间（溪岸的实拍；3 张图，每张一行） --------------- */
 .pg-cases .cs-list { position: absolute; left: 72px; top: 184px; width: 1136px; height: 432px; overflow: hidden; }

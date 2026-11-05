@@ -42,8 +42,6 @@
   function lower1(s) { return s ? s.charAt(0).toLowerCase() + s.slice(1) : s; }
   function cap1(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
   var CJK = /[㐀-鿿豈-﫿]/;
-  /** 我们自己写的英文句子：句中的「 — 」换成逗号（一句里不要两个破折号） */
-  function undash(s) { return String(s || '').replace(/\s+—\s+/g, ', '); }
   var NUM_EN = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
   /** 英文句子里的小数字拼出来（two more spaces），10 以上照写数字 */
   function numEn(n) { return NUM_EN[n] || String(n); }
@@ -115,7 +113,7 @@
   /** 称呼：华文用「Wong 先生、太太」，英文照销售填的 */
   function namesFor(p, zh) { var n = MB.namesOr(p); return zh ? zhNames(n) : n; }
 
-  /** 一两个空间的方案不能说「整个家」（英文 whole home 是真的整间）；还没加空间时，方向就是给整个家的 */
+  /** 一两个空间的方案不能说「整个家」（英文 whole home 是真的整间）；还没加空间时，就是给整个家的 */
   function wholeHome(p) { return !p.rooms.length || p.rooms.length > 2; }
 
   /** 空间名放进句子里：the kitchen / your kitchen；销售取的名字（Ethan’s Room）原样 */
@@ -143,12 +141,20 @@
     return name || area;
   }
 
-  /** 风格那一句：「材质，感觉」。销售把材料换成真实板材时，就不再说示例的木色，只说感觉 —— 不说没做到的事 */
-  function moodLine(p, d, L) {
-    var same = p.materials.every(function (m, i) { return d.materials[i] && m.en === d.materials[i].en; });
-    var m = strip(L === 'zh' ? d.mood.zh : d.mood.en);
-    if (!same) m = L === 'zh' ? m.split(/[，,]/).slice(1).join('，') || m : m.split(/\s+—\s+/).slice(1).join(', ') || m;
-    return L === 'zh' ? m : lower1(undash(m));
+  /** 方案里的「原创系列」几页：pages = 五个系列页的页码（MB.SERIES_ORDER 的顺序；没有这一页的不算），
+      overview = 「原创系列」总览页的页码（没有 = 0）。方案不「走」哪一个系列：这些页是介绍溪岸，不是替客户定了一个 */
+  function seriesInfo(p) {
+    var pages = (MB.SERIES_ORDER || []).map(function (k) { return MB.pageNoOf(p, 'series', k); }).filter(Boolean);
+    return { pages: pages, overview: MB.pageNoOf(p, 'collections') };
+  }
+  /** 五个系列的名字（MB.SERIES 的固定顺序）：华文「骨骼线、空山、织、雾山、侘寂东方」/ 英文「…, Misty Mountain and Wabi-Sabi Eastern」 */
+  function seriesNames(L) {
+    var n = (MB.SERIES || []).map(function (s) { return L === 'zh' ? s.zh : s.en; }).filter(Boolean);
+    return L === 'zh' ? n.join('、') : listJoin(n, 'en');
+  }
+  /** 给 AI 的事实：华文名 + 官方英文名（「骨骼线 Skeleton Line、空山 Empty Mountain、…」）—— 写英文讯息时不用自己翻，翻出非官方的名字 */
+  function seriesNamesBoth() {
+    return (MB.SERIES || []).map(function (s) { return s.zh + ' ' + s.en; }).join('、');
   }
 
   /** 句子太长就只取第一个分句（照原文，不改字），后面接「…」 */
@@ -240,28 +246,28 @@
   /**
    * 第 2 页的开场短话（不含称呼与署名 —— 方案页自己印「Dear …」和署名）。
    * 三段：① 他们说过的一件事（让他们心里说「对，就是这样」）② 这份方案怎么回应 ③ 慢慢看，见面一起过。
-   * 有做法可讲时，第 ② 段只讲做法：风格、配色在「一页看懂」已经印了，黏在做法后面读起来像机器拼的。
+   * 有做法可讲时，第 ② 段只讲做法（黏上别的话读起来像机器拼的）；没有做法可讲时，第 ② 段说后面有溪岸的五个原创系列 ——
+   * 只是介绍溪岸，让他们自己看哪一个最像他们的家，不说方案「走」哪一个。
    * 第 ③ 段不约时间：到馆邀约页和 WhatsApp 已经在约了，这一页不重复。
-   * 上限 70 字 / 55 words（moodboard：2–3 句）。放不下就依序：做法只留第一个分句 → 原话再短 → 拿掉风格那句 → 拿掉第 ③ 段。
+   * 上限 70 字 / 55 words（moodboard：2–3 句）。放不下就依序：做法只留第一个分句 → 原话再短 → 拿掉原创系列那句 → 拿掉第 ③ 段。
    * @param {'zh'|'en'|'bi'} L
    */
   MB.draftLetter = function (p, L) {
     if (L === 'bi') return [MB.draftLetter(p, 'zh'), MB.draftLetter(p, 'en')].join('\n\n');
     var zh = L === 'zh';
     L = zh ? 'zh' : 'en';
-    var d = MB.dir(p);
     var v = letterNeed(p, L);
-    var fromRef = p.paletteFrom === 'ref' && (p.refImages || []).length;
     var sp = zh ? '' : ' ';
-    // 只有一两个空间：不说「整个家」（英文 whole home 对这位客户不是真的）
-    var whole = wholeHome(p);
-    var dirZh = (whole ? '整个家走「' : '这一份走「') + d.zh + '」';
-    var dirEn = (whole ? 'The whole home is' : 'It’s all') + ' in our ' + d.en + ' series';
 
-    // 整个家的方向（没有做法可讲时才说；有做法时，风格与配色已经在「一页看懂」）
-    var direction = fromRef
-      ? (zh ? dirZh + '，配色取自你们发来的照片。' : dirEn + ', in colours taken from the photos you sent us.')
-      : (zh ? dirZh + '：' + moodLine(p, d, L) + '。' : dirEn + ': ' + moodLine(p, d, L) + '.');
+    // 原创系列那一句（没有做法可讲时才说）：系列页在空间页后面；只有总览页就指那一页；两种都关了就不说
+    var si = seriesInfo(p);
+    var series = si.pages.length
+      ? (p.rooms.length
+        ? (zh ? '空间之后，是溪岸的五个原创系列，看看哪一个最像你们想要的家。' : 'After the rooms come SAIL’s five original collections: see which one feels most like your home.')
+        : (zh ? '后面是溪岸的五个原创系列，看看哪一个最像你们想要的家。' : 'Further on are SAIL’s five original collections: see which one feels most like your home.'))
+      : si.overview
+        ? (zh ? '第 ' + si.overview + ' 页是溪岸的五个原创系列，看看哪一个最像你们想要的家。' : 'Page ' + si.overview + ' shows SAIL’s five original collections: see which one feels most like your home.')
+        : '';
 
     // 没有需求可引：说「这一份是为哪几个空间做的」
     function intro() {
@@ -321,19 +327,19 @@
 
     function build(o) {
       var paras;
-      if (!v) paras = [intro()].concat(o.noDir ? [] : [direction]);
+      if (!v) paras = [intro()].concat(o.noSeries || !series ? [] : [series]);
       else if (v.answer) paras = [said(o.q), answer(o.short)];
       else {
         viaPage = false;
         var s1 = said(o.q), s2 = noAnswer();
-        paras = [s1 + (s2 ? sp + s2 : '')].concat(o.noDir ? [] : [direction]);
+        paras = [s1 + (s2 ? sp + s2 : '')].concat(o.noSeries || !series ? [] : [series]);
       }
       if (!o.noP3) paras.push(p3);
       return paras.join('\n\n');
     }
     var qMax = zh ? 20 : 12, qMin = zh ? 12 : 8;
     var tries = [{ q: qMax }, { q: qMax, short: true }, { q: qMin, short: true },
-      { q: qMin, short: true, noDir: true }, { q: qMin, short: true, noDir: true, noP3: true }];
+      { q: qMin, short: true, noSeries: true }, { q: qMin, short: true, noSeries: true, noP3: true }];
     var out = '';
     for (var i = 0; i < tries.length; i++) {
       out = build(tries[i]);
@@ -361,7 +367,7 @@
     var propL = MB.propertyLabel(p);
     var hs = highlights(p, L);
     var need = letterNeed(p, L);   // 跟第 2 页开场短话同一条
-    var glanceNo = MB.pageNoOf(p, 'glance');
+    var si = seriesInfo(p), coNo = si.overview;   // 「原创系列」总览页
     var letterNo = MB.pageNoOf(p, 'letter');
     var slot1 = MB.slotLabel(p.visit.date, p.visit.time, L);
     var slot2 = MB.slotLabel(p.visit.date2, p.visit.time2, L);
@@ -371,7 +377,6 @@
     var prepShort = [0, 1, 2].map(function (i) { try { return strip(MB.preparedShort(p, i, L)); } catch (e) { return ''; } });
     var prep0 = p.visit.prepared[0] == null ? lower1(prepShort[0]) : prepShort[0];
     var link = MB.inviteLink(p).url;
-    var d = MB.dir(p);
     var wa = MB.msisdn(p.host.wa);
     var near = !!(MB.sameTown && MB.sameTown(p, { venue: (window.SAIL || {}).venue }));
     var day1 = MB.parseISO(p.visit.date), today = new Date();
@@ -379,7 +384,6 @@
     var upcoming = !!day1 && day1 >= today;   // 已经过了的日期，不能再说「还帮你们留着」
     // 按需求卡自动建议、还没确认的时段：只能「建议」，不能说「已经帮你们留了」（稀缺只写真的）
     var held = !!slot1 && !p.visit.auto;
-    var glanceEn = whole ? 'the whole home' : 'everything';
     var heads = zh ? ['', '先看这一个重点：', '先看两个重点：', '先看三个重点：']
       : ['', 'One thing to look at first:', 'Two things to look at first:', 'Three things to look at first:'];
 
@@ -416,7 +420,7 @@
         '',
         (propL ? '为 ' + propL + ' ' : '为你们新家') + '准备的全屋定制 moodboard 做好了（PDF 附上）。' +
           (letterNo ? '第 ' + letterNo + ' 页是' + (hostName ? '我' : '我们') + '写给你们的几句话；' : '') +
-          (glanceNo ? '第 ' + glanceNo + ' 页是「一页看懂」，' + (whole ? '整个家' : '整份方案') + '一页就看完。' : (letterNo ? '先从那一页看起。' : '')),
+          (coNo ? '第 ' + coNo + ' 页是溪岸的五个原创系列，一页看完。' : (letterNo ? '先从那一页看起。' : '')),
         hs.length ? '' : null,
         hs.length ? heads[hs.length] : null,
         hs.length ? hlLines.join('\n') : null,
@@ -429,8 +433,8 @@
         '',
         // 一两个空间不叫 whole-home（华文「全屋定制」是服务的名字，照用）
         'Your ' + (whole ? 'whole-home ' : '') + 'moodboard' + (propL ? ' for ' + propL : '') + ' is ready (PDF attached).' +
-          (letterNo ? ' Page ' + letterNo + ' is a short note ' + (hostName ? 'I' : 'we') + ' wrote for you' + (glanceNo ? '; page ' + glanceNo + ' is ' + glanceEn + ' on a single page.' : '. Start there.') :
-            glanceNo ? ' Page ' + glanceNo + ' is ' + glanceEn + ' on a single page.' : ''),
+          (letterNo ? ' Page ' + letterNo + ' is a short note ' + (hostName ? 'I' : 'we') + ' wrote for you' + (coNo ? '; page ' + coNo + ' shows SAIL’s five original collections on a single page.' : '. Start there.') :
+            coNo ? ' Page ' + coNo + ' shows SAIL’s five original collections on a single page.' : ''),
         hs.length ? '' : null,
         hs.length ? heads[hs.length] : null,
         hs.length ? hlLines.join('\n') : null,
@@ -544,6 +548,20 @@
       // 一律「. So in the plan: …」：销售写的做法有句子也有名词短语，「, so」接名词短语会变成没有动词的半句
       return whoEn + (nAns ? '. So in the plan: ' + end(nAns, false) : pg && need.answered ? ', and page ' + pg + ' is planned around that.' : '. Let’s look at that together.');
     }
+    // 5–15 秒那一句：几个空间（每个一页）+ 溪岸的五个原创系列 —— 介绍溪岸，不说方案「走」哪一个系列
+    var nRooms = p.rooms.length, needsNo = MB.pageNoOf(p, 'needs');
+    // 只有一个空间：不说「每个空间一页」「one page each / after them」
+    var roomsZh = !nRooms ? '' : (nRooms === 1 ? '这一份是一个空间，一页细讲' : (whole ? '整个家一共 ' : '这一份是 ') + nRooms + ' 个空间，每个空间一页') +
+      (needsNo ? '，先从你们说的那几件事做起' : '');
+    var roomsEn = !nRooms ? '' : (nRooms === 1 ? 'One space, on its own page' : cap1(numEn(nRooms)) + ' spaces, one page each') +
+      (needsNo ? ', starting from what you told us' : '');
+    var srZh = si.pages.length ? '后面是溪岸的五个原创系列，看看哪一个最像你们' : coNo ? '第 ' + coNo + ' 页是溪岸的五个原创系列' : '';
+    var srEn = si.pages.length ? (nRooms === 1 ? 'after it, SAIL’s' : nRooms ? 'after them, SAIL’s' : 'further on are SAIL’s') + ' five original collections, to see which one feels most like you'
+      : coNo ? 'page ' + coNo + ' shows SAIL’s five original collections' : '';
+    var oneZh = [roomsZh, srZh].filter(Boolean).join('；');
+    var oneEn = [roomsEn, srEn].filter(Boolean).join('; ');
+    oneZh = oneZh ? oneZh + '。' : '这一份是为你们新家做的 moodboard。';
+    oneEn = oneEn ? cap1(oneEn) + '.' : 'This is the moodboard for your new home.';
     out.push({
       id: 'voice', title: zh ? '⑤ 60 秒讲解稿（语音 / 电话 / 见面）' : '⑤ 60-second talk track (voice note / call)',
       when: zh ? '发完 PDF 补一段语音；或电话、见面时照这个顺序讲。方括号里是给你的提示，不要照念。' : 'As a voice note after the PDF, or on a call. The bracketed lines are cues for you — don’t read them out.',
@@ -553,8 +571,8 @@
         '【0–5 秒 · 先叫名字】',
         (names ? names + '，' : '') + (hostName ? '我是 ' + hostName + '。' : '这里是溪岸。') + '方案发给你们了，' + (hostName ? '我' : '我们') + '用一分钟讲重点。',
         '',
-        '【5–15 秒 · 一句话说完' + (whole ? '整个家' : '整体方向') + '】',
-        (whole ? '整个家' : '这一份') + '我们走「' + d.zh + '」：' + moodLine(p, d, 'zh') + '。',
+        '【5–15 秒 · 一句话说完这一份】',
+        oneZh,
         '',
         '【15–45 秒 · ' + (['', '一个', '两个', '三个'][hs.length] || '') + '重点，' + (hs.length > 1 ? '每个都' : '') + '连回你们的生活】',
         talkH.length ? talkH.join('\n') : '（先在「空间」勾选卖点）',
@@ -568,8 +586,8 @@
         '[0–5 s · Say their names first]',
         (names ? names + ', it’s ' : 'Hi, it’s ') + (hostName ? hostName + '. I’ve' : 'SAIL. We’ve') + ' sent your proposal, and here’s the one-minute version.',
         '',
-        '[5–15 s · ' + (whole ? 'The whole home' : 'The whole idea') + ' in one sentence]',
-        'We’ve designed ' + (whole ? 'the whole home' : 'it') + ' around ' + d.en + ': ' + moodLine(p, d, 'en') + '.',
+        '[5–15 s · The whole proposal in one sentence]',
+        oneEn,
         '',
         '[15–45 s · ' + (['', 'One highlight', 'Two highlights', 'Three highlights'][hs.length] || 'Highlights') + (hs.length > 1 ? ', each' : ',') + ' tied to how you live]',
         talkH.length ? talkH.join('\n') : '(Tick features under Rooms first.)',
@@ -602,10 +620,12 @@
         (roomMissing(p, n) ? '这次方案没有那个空间，见面再谈'
           : any ? (v.page ? '第 ' + v.page + ' 页：' : '') + any : '还没有做法，见面一起想');
     }).filter(Boolean);
+    // 原创系列：方案介绍溪岸全部五个系列（让 AI 不要写成「我们替你们选了 X 系列」）
+    var srHow = [si.overview ? '一页总览' : '', si.pages.length ? '每个系列一页' : ''].filter(Boolean).join(' + ');
     var facts = [
       '客户：{客户称呼}',
       '楼盘：{楼盘}' + (area ? '（' + area + '）' : '') + (p.property.type ? '，' + p.property.type : ''),
-      '风格方向：' + d.zh + ' ' + d.en + ' —— ' + d.mood.zh,
+      '方案里介绍的溪岸原创系列：' + (srHow ? (L === 'zh' ? seriesNames('zh') : seriesNamesBoth()) + '（' + srHow + '；是让客户认识溪岸的系列，不是替他们定了其中一个）' : '（这次没放）'),
       '他们说过（原话）：' + (own.join('、') || '（无）'),
       '需求卡勾选：' + (ticked.join('、') || '（无）'),
       '我们的做法（只能用这些）：' + (ours.length ? '\n  · ' + ours.join('\n  · ') : '（无）'),
@@ -653,15 +673,19 @@
      方案页上的字：案例那一句 · 每页讲稿
      ============================================================ */
 
-  /** 前面有几个同空间、同系列的案例（三张不要读起来一样）：0 = 第一个；im.ref 不在 p.cases 里也回 0 */
-  function caseTwin(p, im, key) {
+  /** 前面有几个同空间、也只能说「同样是厨房」的案例（三张不要读起来一样：「同样是厨房」「另一个厨房」「第三个厨房」）：
+      0 = 第一个；im.ref 不在 p.cases 里也回 0。销售自己写了那一句、或图库有说明的（卡片印的是别句）不算。
+      不看系列：方案不「走」哪一个系列，另一个系列的厨房也是另一个厨房 */
+  function caseTwin(p, im, key, L) {
     if (!im || !im.ref || !MB.caseRefs) return 0;
     var res = MB.makeResolver && MB.makeResolver.last;
     var list = MB.caseRefs(p, res), twin = 0;
     for (var i = 0; i < list.length && list[i].ref !== im.ref; i++) {
-      var b = res ? res(list[i].ref) : null;
-      var rooms = b ? (b.rooms || (b.tag ? [b.tag] : [])) : [];
-      if (b && (b.series || '') === (im.series || '') && rooms.indexOf(key) > -1) twin++;
+      var c = list[i], b = res ? res(c.ref) : null;
+      if (!b || (c.note != null && String(c.note).trim())) continue;
+      var rooms = b.rooms || (b.tag ? [b.tag] : []);
+      var own = String(c.ref).indexOf('u:') === 0;
+      if (rooms.indexOf(key) > -1 && !caseWhat({ zh: b.zh || '', en: b.en || '', own: own, label: own ? b.label || '' : b.zh || '' }, L)) twin++;
     }
     return i < list.length ? twin : 0;
   }
@@ -669,15 +693,16 @@
   /**
    * 「参考空间」每个案例一句（≤ 20 字 / 12 words）。
    * 现在的案例是溪岸的空间照（品牌手册 / 图库），不是「像你们这样的家」：只说我们真的知道的 ——
-   * 同一个系列、同样是厨房。案例库以后有区域、房型、特点（im.area / ptype / traits）才说「也在 Setia Alam」「也有长辈同住」。
+   * 这张拍的是什么、同样是厨房。案例库以后有区域、房型、特点（im.area / ptype / traits）才说「也在 Setia Alam」「也有长辈同住」。
+   * 不拿系列跟他们的方案连在一起：方案不替客户选系列（卡片标签已经印了这张是哪个系列）。
    * 不叫他们「对照、比较」（标题要他们想象自己的家，不是比哪个好）。
    */
   MB.caseNote = function (p, im, L) {
     if (!p || !im) return '';
+    // 拿掉的照片（瑞吉欧的家具、手册没印出来的图）：一个字都不写 —— 写「溪岸的空间」就是说假话；体检会叫销售换掉
+    if (MB.photoRetired && MB.photoRetired(im.ref || im.id)) return '';
     var zh = L === 'zh';
     L = zh ? 'zh' : 'en';
-    var series = MB.dir(p).series;
-    var same = !!im.series && im.series === series;
     var room = null, key = '';
     (im.rooms || []).some(function (k) {
       for (var i = 0; i < p.rooms.length; i++) if (p.rooms[i].key === k) { room = p.rooms[i]; key = k; return true; }
@@ -717,24 +742,16 @@
     }
 
     var kind = roomKind(key, L);
-    var twin = page ? caseTwin(p, im, key) : 0;
     // 这张图拍的是什么（图库自己的说明，去掉卡片标签已经印的系列名之后还有内容才算）：真的、具体
     var what = caseWhat(im, L);
-    if (same) {
-      // 第一个同系列、同空间的：连回他们那一页
-      if (page && !twin) return zh ? '和你们第 ' + page + ' 页的' + roomRef(p, room, 'zh') + '同一个系列' : 'Same series as ' + roomRef(p, room, 'en', true) + ' on page ' + page + '.';
-      if (what) return zh ? '同一个系列的' + what.replace(/系列$/, '') : cap1(what) + ', in the same series.';
-      // 第二个、第三个同样的：「另一个厨房」「第三个厨房」
-      var nth = zh ? ['', '另一个', '第三个'][twin] || '再一个' : ['', 'Another', 'A third'][twin] || 'One more';
-      if (twin) return zh ? '同一个系列的' + nth + kind : nth + ' ' + kind + ' in the same series.';
-      return zh ? '和你们的方案同一个系列' : 'Same series as your moodboard.';
-    }
-    // 不同系列：卡片标签已经印了「骨骼线 · 厨房」、标题已经说「参考」——「同样是厨房」「供你们参考」没有多说什么。
-    // 改说这张图拍的是什么；图库的说明只有系列 + 空间名时，说那个系列真的用的材质（data.js 的 mood 前半句）
     if (what) return zh ? what : cap1(what) + '.';
-    var mats = seriesMaterials(im.series, L);
-    if (mats) return zh ? mats : cap1(mats) + '.';
-    if (page) return zh ? '同样是' + kind : 'Also ' + (/^[aeiou]/.test(kind) ? 'an ' : 'a ') + kind + '.';
+    // 图库的说明只有系列 + 空间名：他们家也有这个空间就说「同样是厨房」；第二个、第三个说「另一个厨房」「第三个厨房」
+    if (page) {
+      var twin = caseTwin(p, im, key, L);
+      if (!twin) return zh ? '同样是' + kind : 'Also ' + (/^[aeiou]/.test(kind) ? 'an ' : 'a ') + kind + '.';
+      var nth = zh ? ['', '另一个', '第三个'][twin] || '再一个' : ['', 'Another', 'A third'][twin] || 'One more';
+      return zh ? nth + kind : nth + ' ' + kind + '.';
+    }
     return zh ? '溪岸的空间' : 'A SAIL space.';
   };
 
@@ -746,7 +763,7 @@
     s = String(s || '').trim();
     if (!s || CJK.test(s) !== zh) return '';
     // 系列名只拿掉开头的（「雾山客厅」「Skeleton Line kitchen」）：「织」只有一个字，「藤织柜门」里的不是系列名
-    var names = MB.DIRECTIONS.map(function (d) { return zh ? d.zh : d.en; }).concat(zh ? ['自然线'] : ['Natural Line']);
+    var names = (MB.SERIES || []).map(function (s) { return zh ? s.zh : s.en; }).concat(zh ? ['自然线'] : ['Natural Line']);
     var again = true;
     while (again) {
       again = false;
@@ -774,13 +791,13 @@
     }
     return caseWhatOne((zh ? im.zh : im.en) || (im.own ? im.label : ''), zh);
   }
-  /** 一个系列真的用的材质：data.js 的 mood 前半句（「原木与细黑线框」/「Natural oak and fine charcoal lines」） */
-  function seriesMaterials(series, L) {
-    var d = series && MB.DIRECTION[series];
-    if (!d || !d.mood) return '';
-    var m = strip(L === 'zh' ? d.mood.zh : d.mood.en);
-    return L === 'zh' ? m.split(/[，,]/)[0] : m.split(/\s+—\s+/)[0];
-  }
+  /** 这张图自己的说明当成那一句（跟 MB.caseNote 同一个写法）；没有比卡片标签多说什么就回 ''。
+      deck.js 的 MB.caseCards 两张同一句时改印这个 —— 卡片、讲稿印的一样 */
+  MB.caseWhatLine = function (im, L) {
+    if (!im || (MB.photoRetired && MB.photoRetired(im.ref || im.id))) return '';
+    var w = caseWhat(im, L === 'zh' ? 'zh' : 'en');
+    return !w ? '' : L === 'zh' ? w : cap1(w) + '.';
+  };
 
   /** 「你们说的」页印了哪几条：跟方案页同一份（model.js 的 MB.printedNeeds：原话空的不印、最多 3 条）；
       没有就照旧版面：前 3 条 */
@@ -793,9 +810,9 @@
 
   /**
    * 每一页的讲稿（PPTX 备注 · 展厅或电话里边翻边讲）：2–4 句，从 60 秒讲解稿拆开。
-   * 页面上为了少字没印的东西（卖点的 why、多勾的卖点、没印的需求、三句承诺、订单周期与售后的细节、奖项全名）都在这里。
+   * 页面上为了少字没印的东西（卖点的 why、多勾的卖点、没印的需求、系列的补充与引文、订单周期与售后的细节、奖项全名）都在这里。
    * 要念得出来：句中不用大写、不用「 · 」。括号里是给销售的提示，不要念出来。
-   * @param {{type:string, room?:object}} pg  MB.pageList 的一项
+   * @param {{type:string, room?:object, series?:string}} pg  MB.pageList 的一项
    * @param {'zh'|'en'|'bi'} L
    */
   MB.pageNotes = function (p, pg, L) {
@@ -808,8 +825,7 @@
     var prop = propSpoken(p, L);
     // 没填业务名：讲稿里说「我们」，不说「我」（跟开场短话那页的讲稿一样）
     var me = String(p.host.name || '').trim() ? { zh: '我', en: 'me', I: 'I’ll', my: 'I’m your' } : { zh: '我们', en: 'us', I: 'we’ll', my: 'we’re your' };
-    var d = MB.dir(p);
-    var no = pg.room ? MB.roomPageNo(p, pg.room) : MB.pageNoOf(p, pg.type);
+    var no = pg.room ? MB.roomPageNo(p, pg.room) : MB.pageNoOf(p, pg.type, pg.series);
     var out = [];
     function say(zhS, enS) { var s = zh ? zhS : enS; if (s) out.push(s); }
     function T(o) { return strip(MB.t(o, L)); }
@@ -895,27 +911,36 @@
         say('有没有哪一条，我们理解错了？（停一下，等他们说「对」。）', 'Is there anything we’ve got wrong? (Pause; let them say “that’s right”.)');
         break;
 
-      case 'glance':
-        say((wholeHome(p) ? '整个家' : '这一份') + '走「' + d.zh + '」：' + moodLine(p, d, 'zh') + '。',
-          (wholeHome(p) ? 'The whole home is' : 'It’s all') + ' in ' + d.en + ': ' + moodLine(p, d, 'en') + '.');
-        if (p.paletteFrom === 'ref' && (p.refImages || []).length) say('这组颜色，是从你们发来的照片里取的。', 'These colours were taken from the photos you sent us.');
-        var mats = p.materials.slice(0, 3).map(function (m, i) {
-          var s = strip(MB.t({ en: m.en, zh: m.zh }, L));
-          // 我们的示例名称降小写；销售填的真实板材（EGGER H3303）原样
-          return zh || !(d.materials[i] && m.en === d.materials[i].en) ? s : lower1(s);
+      case 'collections':
+        // 原创系列（五个一页）：介绍溪岸全部五个系列，让他们自己挑 —— 不替他们选、不说方案「走」哪一个。
+        // 字照官方文案（MB.SERIES 的名字、SERIES_CONCEPT 的 family）；这一页讲的是溪岸：不念客户的名字、楼盘
+        var co = typeof MB.collectionsBlocks === 'function' ? MB.collectionsBlocks(p, L) : null;
+        if (!co || !co.cols.length) break;
+        var coNames = co.cols.map(function (c) { return c.name[L]; });
+        var coN = co.cols.length === 5 ? (zh ? '五' : 'five') : zh ? ' ' + co.cols.length + ' ' : numEn(co.cols.length);
+        say('第 ' + no + ' 页是溪岸的' + coN + '个原创系列：' + coNames.join('、') + '。',
+          'Page ' + no + ' shows SAIL’s ' + coN + ' original collections: ' + listJoin(coNames, 'en') + '.');
+        // 系列家族：「骨骼线、空山、织属于自然线系列；侘寂东方属于实木系列」（念出来不用「 · 」：拿掉「溪岸 · 」「SAIL · 」）
+        var fl = co.fams.map(function (f) {
+          var ns = coNames.slice(f.from, f.to + 1);
+          var fz = String(f.family.zh || '').replace(/^溪岸\s*·\s*/, ''), fe = String(f.family.en || '').replace(/^SAIL\s*·\s*/, '');
+          return zh ? (fz ? ns.join('、') + '属于' + fz : '') : (fe ? listJoin(ns, 'en') + (ns.length > 1 ? ' are' : ' is') + ' from the ' + fe + ' series' : '');
         }).filter(Boolean);
-        var proms = [0, 1, 2].map(function (i) {
-          var s = strip(MB.t(MB.promise(p, i), L));
-          return p.promises[i] != null ? lowerSafe(s) : zh ? s : lower1(s);
-        }).filter(function (s) { return sameLang(s, L); });
-        if (mats.length) say('主要材质：' + mats.join('、') + '。', 'The materials: ' + listJoin(mats, 'en') + '.');
-        if (proms.length) say('住进去会是这样：' + proms.join('；') + '。', 'What it will be like to live in: ' + proms.join('; ') + '.');
+        if (fl.length) say(fl.join('；') + '。', fl.join('; ') + '.');
+        // 后面每个系列各有一页：指出页码（系列页关了就不说）
+        var srPages = seriesInfo(p).pages;
+        if (srPages.length) {
+          var srA = srPages[0], srB = srPages[srPages.length - 1];
+          say((p.rooms.length ? '空间之后' : '后面') + '，每个系列各有一页细讲（第 ' + (srA === srB ? srA : srA + '–' + srB) + ' 页）。',
+            (p.rooms.length ? 'After the rooms' : 'Further on') + ', each one has its own page (' + (srA === srB ? 'page ' + srA : 'pages ' + srA + '–' + srB) + ').');
+        }
+        say('哪一个最像你们想要的家？（停一下，让他们自己挑；不用替他们选。）', 'Which one feels most like the home you want? (Pause; let them pick. Don’t pick for them.)');
         break;
 
       case 'series':
-        // 系列 · 设计理念：照 MB.SERIES_CONCEPT 念（溪岸的官方文案，不另外编、不删句子）；
-        // 页上没印的补充、雾山的佩索阿引文都在这里。这一页讲的是溪岸：不念客户的名字、楼盘
-        var sc = typeof MB.seriesBlocks === 'function' ? MB.seriesBlocks(p, L) : null;
+        // 五个系列各一页：照 MB.SERIES_CONCEPT 念（溪岸的官方文案，不另外编、不删句子）；
+        // 页上没印的补充、雾山的佩索阿引文都在这里。这一页讲的是溪岸：不念客户的名字、楼盘，也不说方案「走」这个系列
+        var sc = typeof MB.seriesBlocks === 'function' ? MB.seriesBlocks(p, L, pg.series) : null;
         if (!sc) break;
         // 念出来不用「 · 」：「溪岸 · 自然线系列」→「自然线系列」、「SAIL · Natural Line」→「the Natural Line series」
         var famZh = sc.ownFamily ? String(sc.family.zh || '').replace(/^溪岸\s*·\s*/, '') : '';
@@ -926,8 +951,6 @@
         say(end(sc.body.zh, true), end(sc.body.en, false));
         if (sc.noteAll) say(end(sc.noteAll.zh, true), end(sc.noteAll.en, false));
         if (sc.quote) say('（可以念给他们听：）' + end(sc.quote.zh, true), '(You can read them this line:) ' + end(sc.quote.en, false));
-        say('你们家这一份，走的就是「' + sc.name.zh + '」：后面翻到每一个空间，都可以回想这一句。',
-          'Your home is planned in ' + sc.name.en + ', so keep this idea in mind as we go room by room.');
         say('这样的感觉，是你们想要的吗？（停一下，听他们怎么说。）', 'Does that sound like the home you want? (Pause; let them answer.)');
         break;
 
@@ -975,10 +998,14 @@
         // 现在的案例是溪岸的空间照，不是客户的家：不说「像你们」「跟你们很接近」
         say('这几个是溪岸的空间，给你们参考。', 'These are SAIL spaces, for reference.');
         var res = MB.makeResolver.last;
+        // 自动那一句跟方案页的卡片同一份（MB.caseCards：两张同一句时，第二张改说它自己拍的是什么）
+        var cards = res && MB.caseCards ? MB.caseCards(p, res, L) : [];
         var cl = (MB.caseRefs ? MB.caseRefs(p, res) : []).map(function (c, i) {
           var t = c.note != null && String(c.note).trim() ? strip(c.note) : '';
           if (t && !sameLang(t, L)) t = '';
-          if (!t && res) {
+          var card = cards.filter(function (x) { return x.im && x.im.ref === c.ref; })[0];
+          if (!t && card && typeof card.line !== 'string') t = strip(card.line[zh ? 'zh' : 'en'] || '');
+          else if (!t && res) {
             var b = res(c.ref);
             // 跟方案页（deck.js 的 caseImage）同一个形状：带上图库自己的说明，讲稿念的跟卡片印的是同一句
             if (b) t = strip(MB.caseNote(p, { ref: c.ref, series: b.series || '', rooms: b.rooms || (b.tag ? [b.tag] : []), own: c.ref.indexOf('u:') === 0,
@@ -987,7 +1014,7 @@
           return t ? (zh ? '第 ' + (i + 1) + ' 张：' + t + '。' : 'Photo ' + (i + 1) + ': ' + lower1(t) + '.') : '';
         }).filter(Boolean);
         if (cl.length) out.push(cl.join(zh ? '' : ' '));
-        say('想看同系列的更多照片，跟我说。', 'If you’d like to see more from the same series, just ask.');
+        say('想看哪一张的更多照片，跟我说。', 'If you’d like to see more like any of these, just ask.');
         break;
 
       case 'practical':

@@ -6,9 +6,13 @@
    品牌设计语言照 HIPPO / Aman 两份 PPT：米色页底、半版出血大图、左上英文大写标签、
    右上 logo、右下品牌签名 + 页码、1px 细线、咖啡棕大号数字；情绪页 = 整页照片 + 一句话。
    页序（model.js 的 MB.pageList）：他们的家在前，品牌只占后面一页 ——
-     封面写名字 → 开场短话（业务署名）→ 你们说的 → 一页看懂（拼贴）→ 系列 · 设计理念 → 平面图 →（章节）
-     → 逐个空间 → 参考空间 →（工期·保障）→ 品牌一页 →（本案团队）→ 到馆邀约 → 欢迎回家
+     封面写名字 → 开场短话（业务署名）→ 你们说的 → 原创系列（五个一页）→ 平面图 →（章节）
+     → 逐个空间 → 五个系列（各一页：骨骼线 → 空山 → 织 → 雾山 → 侘寂东方）→ 参考空间 →（工期·保障）→ 品牌一页
+     →（本案团队）→ 到馆邀约 → 欢迎回家
+   方案不「走」哪一个系列（老板 2026-11-04）：溪岸五个原创系列全部介绍，客户自己看哪一个最像他们想要的家。
    图（model.js 的 MB.deckImages）：整份同一张照片只出现一次；情绪页按方案 id 从氛围照池轮换。
+     原创系列页、系列页印固定的官方照片（data.js 的 MB.OVERVIEW_PHOTO / MB.SERIES_PHOTO：每个客户都一样，两组不同张），
+     别页永远不用（model.js 预留）。
    语言（p.lang）：英文大写标签是品牌字体，三种都印；标题与正文 zh 只华文、en 只英文、
    bi 华文在前英文在后。每段字都包成 <span class="l-zh|l-en">，字体字号由 CSS 决定。
 
@@ -37,19 +41,19 @@
    needs（最多 3 条，MB.printedNeeds：原话空的不印）
      head           72, 60, 880, 120
      list           72, 212, 1136, 404 .nd-list；每行四栏：编号 64 · 原话 432 · 做法 480 · 页码 80（间距 20）
-   glance（拼贴 moodboard）
-     collage         0, 0, 720, 720    MB.glanceImages（2–4 张：风格实景，氛围照最多 1 张）
-                       直（预设）：g1 0,0,416,720 · g2 424,0,296,235 · g3 424,243,296,234 · g4 424,485,296,235
-                                   3 张 g2 424,0,296,356 · g3 424,364,296,356；2 张 g2 424,0,296,720；1 张 g1 0,0,720,720
-                       横（.wide，第一张是横的）：g1 0,0,720,400 · g2 0,408,235,312 · g3 243,408,234,312 · g4 485,408,235,312
-                                   3 张 g2 0,408,356,312 · g3 364,408,356,312；2 张 g1 0,0,720,356 · g2 0,364,720,356
-     refs           24, 580, ≤284, 116 客户发来的参考图（配色取自参考图时）：每张 88 × 108，米色 5px 边，间距 10
-     head          784, 150, 424, 186  标签 + 风格名 + 一句 mood
-     palette       784, 352, 424, 130  5 色块（72 × 56，间距 8）+ 名字；取自参考图时多一行说明
-     materials     784, 496, 424, 116  3 行：色块 + 名称 + 色号
-   series（系列 · 设计理念：只讲这份方案的那一个系列，字全部照 MB.SERIES_CONCEPT；没有客户名字）
-     photo           0, 0, 600, 720    MB.pageImageSrc(p,'series')（那个系列的溪岸照片，b: only）；
-                                       那个系列、不分系列的照片都印在别页了（不放重复的）→ .sr-sw：那个系列的五色，五条直的色带
+   collections（原创系列：溪岸五个系列并排，HIPPO 第 6 页；字全部是官方文案 —— MB.SERIES 的名字、
+                MB.SERIES_CONCEPT 的 family / title、MB.COLLECTIONS_NOTE；没有客户名字）
+     head           72, 60, 880, ≤128  ORIGINAL COLLECTIONS +（zh / bi）原创系列 + 一句（.ttl = MB.COLLECTIONS_NOTE）
+     fams           72, 200, 1136, 36  .co-fams：系列家族带（上缘 1px 细线 + 小标签，不印「溪岸 · / SAIL ·」）；
+                                       相邻同一个家族共用一条 —— 自然线（前三栏）、实木（侘寂东方）；雾山没有家族，不套
+                                       .co-fam：left = from × 232，width = (to − from + 1) × 232 − 24
+     list           72, 244, 1136, 372 .co-list（overflow:hidden；fitText 量这一块）：5 栏 .co[data-series]，宽 208，left = i × 232
+       img           0, 0, 208, 236    MB.overviewPhoto(k)（跟系列页不同张；照片自己的焦点 pos）；bi 196 · tight 172 · tighter 140
+       name          0, img + 16       h3.co-name：zh / bi 华文名 + 英文大写小标签；en 英文名（衬线）
+       line          0, +10            p.co-line：SERIES_CONCEPT[k].title（依语言）；整栏底 ≤ 616
+                                       放不下 → .tight / .tighter 只缩照片，官方文案不删、不缩
+   series（五个系列 · 各一页，放在空间页后面：{ type:'series', series:k }；字全部照 MB.SERIES_CONCEPT；没有客户名字）
+     photo           0, 0, 600, 720    MB.seriesPhoto(k)（HIPPO 第 6 页那张官方照片，每个客户都一样）
      col           664, 138, 544, 478  .sr-col 一条直的流（flex 直排）：
        kick          0, 0, 544, ~56    英文大写标签（系列家族 / SAIL · Series）+ zh / bi 的华文家族
        name          0, +30            系列名：zh / bi 华文大字（衬线 58px）+ 英文大写小标签；en 英文大字（Cormorant 58px）
@@ -150,8 +154,8 @@
           case 'cover': html = cover(p, ctx, lang); break;
           case 'letter': html = letter(p, ctx, lang); break;
           case 'needs': html = needs(p, ctx, lang); break;
-          case 'glance': html = glance(p, ctx, lang); break;
-          case 'series': html = seriesPage(p, ctx, lang); break;
+          case 'collections': html = collections(p, ctx, lang); break;
+          case 'series': html = seriesPage(p, ctx, lang, pg.series); break;
           case 'plan': html = plan(p, ctx, lang); break;
           case 'chapter': html = chapter(p, ctx, lang); break;
           case 'room':
@@ -168,8 +172,10 @@
         // 整页照片当底的页，页脚与 logo 用白色
         var dark = pg.type === 'chapter' || pg.type === 'back';
         var foot = pg.type === 'cover' ? '' : footer(pg.type === 'back' ? 0 : n, total, MB.pageName(p, pg, lang), lang, dark);
-        var target = pg.room ? 'room:' + esc(pg.room.uid) : pg.type;
-        return '<div class="pg-wrap"><div class="pg pg-' + pg.type + extra + ' L-' + lang + '" data-goto="' + target + '" data-n="' + n + '/' + total + '">' +
+        // room:<uid> / series:<k> / 页面 type（model.js 的 MB.pageKey）：点预览、体检「放不下」都靠这个找到那一页
+        var target = esc(MB.pageKey(pg));
+        var ser = pg.type === 'series' && pg.series ? ' data-series="' + esc(pg.series) + '"' : '';
+        return '<div class="pg-wrap"><div class="pg pg-' + pg.type + extra + ' L-' + lang + '" data-goto="' + target + '"' + ser + ' data-n="' + n + '/' + total + '">' +
           html + foot + '</div></div>';
       }).join('');
     } finally { IMG = null; }
@@ -278,8 +284,9 @@
   }
   var PAGE_NAMES = {
     cover: { en: 'Cover', zh: '封面' }, letter: { en: 'A note for you', zh: '写在前面' },
-    needs: { en: 'You told us', zh: '你们说的' }, glance: { en: 'At a glance', zh: '一页看懂' },
-    series: { en: 'The series', zh: '系列 · 设计理念' },
+    needs: { en: 'You told us', zh: '你们说的' }, collections: { en: 'Original collections', zh: '原创系列' },
+    // 系列页的页名是那个系列的名字（MB.pageName）；这个只是资料不全时的后备
+    series: { en: 'The series', zh: '系列' },
     plan: { en: 'Layout', zh: '平面布局' }, chapter: { en: 'The spaces', zh: '逐个空间' },
     // 现在放的是溪岸自己的实拍（不是客户案例）：叫「参考空间」，不说「像你们这样的家」（稻盛：不编）。
     // 等云端案例库有每个项目的区域 / 房型 / 家庭资料，才改回「Homes like yours」
@@ -289,7 +296,8 @@
   };
   /** 页名（页脚、PPTX 备注、界面都用）：zh 回华文，其余回英文 */
   MB.pageName = function (p, pg, lang) {
-    var o = pg.room ? MB.roomTitle(p, pg.room) : PAGE_NAMES[pg.type];
+    var s = pg.type === 'series' && MB.SERIES_OF ? MB.SERIES_OF[pg.series] : null;
+    var o = pg.room ? MB.roomTitle(p, pg.room) : s ? { en: s.en, zh: s.zh } : PAGE_NAMES[pg.type];
     return plain(o, lang);
   };
 
@@ -462,99 +470,58 @@
       '<div class="nd-list n' + list.length + '">' + rows + '</div>';
   }
 
-  /* ---------- 4 · 一页看懂（拼贴 moodboard） ----------------------
-     3–4 张图 + 5 色 + 3 材质（名称 + 色号）+ 风格名 + 一句 mood。三句承诺不印（在讲稿里） */
-  function glance(p, ctx, lang) {
-    var d = MB.dir(p);
-    var ims = MB.glanceImages ? MB.glanceImages(p, ctx.resolve, IMG || undefined).slice(0, 4) : [];
-    if (!ims.length) { var one = MB.pageImageSrc && MB.pageImageSrc(p, 'glance', ctx.resolve, IMG || undefined); if (one) ims = [one]; }
-    // 配色取自客户发来的照片：写出来（真的才写），有缩图就钉在拼贴上
-    var fromRef = p.paletteFrom === 'ref';
-    var hasRefs = fromRef && (p.refImages || []).length;
-    var refs = hasRefs ? '<div class="gl-refs n' + Math.min(3, p.refImages.length) + '">' + p.refImages.slice(0, 3).map(function (r) {
-      return '<figure class="ph"><img src="' + esc(r.src) + '" alt="" /></figure>';
-    }).join('') + '</div>' : '';
-    var pal = p.palette.slice(0, 5).map(function (c) {
-      return '<li><i style="background:' + MB.hex(c.hex) + '"></i><b>' + T({ en: c.en, zh: c.zh }, lang) + '</b></li>';
-    }).join('');
-    var mats = p.materials.slice(0, 3).map(function (m) {
-      return '<li><i style="background:' + MB.hex(m.hex) + '"></i><b>' + T({ en: m.en, zh: m.zh }, lang) + '</b><em>' + MB.hex(m.hex).toUpperCase() + '</em></li>';
-    }).join('');
-    // 第一格是横的（放上面）还是直的（放左边整高）：MB.deckImages 看照片决定，裁得最少
-    var wide = !!(IMG && IMG.glanceWide && ims.length > 1);
-    return '<div class="gl-col n' + ims.length + (wide ? ' wide' : '') + '">' + ims.map(function (im, i) { return photo(im.src, 'g' + (i + 1), im.pos, im.gone); }).join('') + refs + '</div>' +
-      logo(false) +
-      '<div class="hd gl-hd">' + kicker('At a glance') +
-        '<h2 class="ttl">' + T({ en: d.en, zh: d.zh }, lang) + '</h2>' +
-        '<p class="gl-mood">' + T(d.mood, lang) + '</p>' +
-      '</div>' +
-      '<div class="gl-pal' + (fromRef ? ' from-ref' : '') + '">' +
-        lbl('Palette', '配色', lang) +
-        (fromRef ? '<p class="gl-from">' + T({ en: 'From the photos you sent us', zh: '取自你们发来的照片' }, lang) + '</p>' : '') +
-        '<ul>' + pal + '</ul>' +
-      '</div>' +
-      '<div class="gl-mats">' + lbl('Materials', '材质', lang) + '<ul>' + mats + '</ul></div>';
-  }
-
-  /* ---------- 4b · 系列 · 设计理念 ---------------------------------
-     老板（2026-11-04）：「我们的产品系列不要拿掉 —— 骨骼线、空山、雾山、织、侘寂东方 —— 需要给客户认识我们的好的设计理念」。
-     一页只讲这份方案的那一个系列（MB.dir(p).series），不列五个。字全部照 data.js 的 MB.SERIES_CONCEPT
-     （溪岸品牌手册 / 官方文案），不另外编、不删句子：家族标签 + 系列名 + 一句标题 + 一段话 +（放得下才印）一句补充，
-     贴底一行小字是溪岸的设计理念（MB.SAIL_PHILOSOPHY）。这一页讲的是溪岸，不印客户的名字、楼盘。
-     moodboard 字数（华文字 / 英文词）：标题 ≤ 18 / 14 · 正文 ≤ 60 / 45 · 补充 ≤ 30 / 18，而且整页（标题 + 正文 + 补充）≤ 90 / 64
-     才印补充；双语不印补充（两种语言字太多）。印不下的补充、雾山的佩索阿引文都在讲稿（copy.js 的 MB.pageNotes） */
-  var SERIES_MAX = { title: { zh: 18, en: 14 }, body: { zh: 60, en: 45 }, note: { zh: 30, en: 18 }, page: { zh: 90, en: 64 } };
-  MB.SERIES_MAX = SERIES_MAX;
-  function wc(s, L) {
-    if (typeof MB.textCount === 'function') return MB.textCount(s, L);
-    s = String(s || '');
-    return L === 'zh' ? (s.match(/[㐀-鿿]/g) || []).length : s.split(/\s+/).filter(function (w) { return /[A-Za-z0-9]/.test(w); }).length;
-  }
-  /** 系列页的字（deck、讲稿、测试共用）：
-      { series, name:{zh,en}, family:{zh,en}, ownFamily, title, body, note|null（印不印）, noteAll|null, quote|null, philosophy|null }；
-      资料不全回 null（MB.pageList 也不会排这一页） */
-  MB.seriesBlocks = function (p, lang) {
-    var d = MB.dir(p), c = MB.SERIES_CONCEPT && MB.SERIES_CONCEPT[d.series];
-    if (!c || !c.title || !c.body) return null;
-    var Ls = lang === 'bi' ? ['zh', 'en'] : [lang === 'zh' ? 'zh' : 'en'];
-    var noteOn = !!c.note && lang !== 'bi' && Ls.every(function (L) {
-      return wc(c.note[L], L) <= SERIES_MAX.note[L] &&
-        wc([c.title[L], c.body[L], c.note[L]].join(' '), L) <= SERIES_MAX.page[L];
+  /* ---------- 4 · 原创系列（五个一页） ----------------------------
+     老板（2026-11-04）：不替客户选一个风格，直接介绍溪岸全部五个原创系列（照 HIPPO 第 6 页）。
+     五栏并排：一张固定的官方照片（MB.overviewPhoto：跟空间页后面的系列页不同张，整份不重复）+ 名字 + 一句标题；
+     上面一条系列家族带（自然线 = 前三个、实木 = 侘寂东方；雾山没有家族，不套）。
+     字全部是现有的官方文案（MB.SERIES 的名字、MB.SERIES_CONCEPT 的 family / title、MB.COLLECTIONS_NOTE），不另外编；
+     这一页讲的是溪岸，不印客户的名字、楼盘。放不下只缩照片（.tight / .tighter：app.js / pptx.js 的 fitText 量 .co-list），
+     官方文案不删、不缩 */
+  var CO_STEP = 232, CO_GAP = 24;   // 每栏宽 208 = 232 − 24（跟 deck.css 的 .co 一致）
+  /** 原创系列页的字与图（deck、讲稿、PPTX、测试共用）：
+      { note:{zh,en}|null, cols:[{ key, name:{zh,en}, title:{zh,en}, family:{zh,en}|null, photo:{ref,src,w,h,pos}|null }],
+        fams:[{ family:{zh,en}, from, to }] } —— from / to 是 cols 的栏号：相邻同一个家族（family.en）共用一条，没有家族的不套。
+      resolve 省略 = model.js 最近一次的 resolver（讲稿用） */
+  MB.collectionsBlocks = function (p, lang, resolve) {
+    var cols = [];
+    (MB.SERIES_ORDER || []).forEach(function (k) {
+      var s = MB.SERIES_OF && MB.SERIES_OF[k], c = MB.SERIES_CONCEPT && MB.SERIES_CONCEPT[k];
+      if (!s || !c || !c.title) return;
+      cols.push({ key: k, name: { zh: s.zh, en: s.en }, title: c.title, family: c.family || null,
+        photo: MB.overviewPhoto ? MB.overviewPhoto(k, resolve) : null });
     });
-    return {
-      series: d.series, name: { zh: d.zh, en: d.en },
-      // 不是「自然线系列」的（雾山）不硬套家族：印通用的 SAIL · Series
-      family: c.family || { zh: '溪岸 · 系列', en: 'SAIL · Series' }, ownFamily: !!c.family,
-      title: c.title, body: c.body, note: noteOn ? c.note : null, noteAll: c.note || null, quote: c.quote || null,
-      philosophy: MB.SAIL_PHILOSOPHY || null
-    };
+    var fams = [];
+    cols.forEach(function (c, i) {
+      var f = c.family, last = fams[fams.length - 1];
+      if (!f || !f.en) return;
+      if (last && last.to === i - 1 && last.family.en === f.en) last.to = i;
+      else fams.push({ family: f, from: i, to: i });
+    });
+    return { note: MB.COLLECTIONS_NOTE || null, cols: cols, fams: fams };
   };
-  function seriesPage(p, ctx, lang) {
-    var k = MB.seriesBlocks(p, lang);
-    if (!k) return logo(false);
-    // 系列名：华文 / 双语 = 华文大字 + 英文大写小标签（品牌字体，三种语言都印）；英文 = 英文大字
-    var name = lang === 'en' ? span(k.name.en, 'en') : span(k.name.zh, 'zh') + span(k.name.en, 'en');
-    // 设计理念那一行：华文在冒号后面换行（「好的设计，正如一个自然的生命体：」一行、怎么做一行）—— 只是断行，字一个不改；
-    // 双语的华文一行就放得下，不断
-    var ph = k.philosophy, phZh = ph ? String(ph.zh || '') : '', cut = phZh.indexOf('：');
-    var phHtml = lang === 'zh' && cut > 0 && cut < phZh.length - 1
-      ? '<span class="l-zh">' + esc(phZh.slice(0, cut + 1)) + '<br />' + esc(phZh.slice(cut + 1)) + '</span>' : T(ph, lang);
-    // 照片：挑不到不重复的（这个系列、不分系列的风景 / 材质照都印在他们家的页面了）→ 印这个系列的配色（MB.DIRECTION 的五色，
-    // 不是客户照片取的那一组），五条直的色带，跟没有图的空间页一样：宁可不放图，也不放重复的
-    var im = MB.pageImageSrc ? MB.pageImageSrc(p, 'series', ctx.resolve, IMG || undefined) : null;
-    var pal = (MB.dir(p).palette || []).filter(function (c) { return c && /^#[0-9A-Fa-f]{6}$/.test(c.hex); });
-    var left = im || !pal.length ? slotPhoto(p, ctx, 'series', 'sr-img')
-      : '<div class="sr-img sr-sw" aria-hidden="true">' + pal.map(function (c) { return '<i style="background:' + c.hex + '"></i>'; }).join('') + '</div>';
-    return left + logo(false) +
-      '<div class="sr-col">' +
-        '<div class="sr-kick">' + kicker(k.family.en) + (lang !== 'en' ? span(k.family.zh, 'zh') : '') + '</div>' +
-        '<h2 class="sr-name">' + name + '</h2>' +
-        '<p class="sr-title">' + T(k.title, lang) + '</p>' +
-        '<div class="sr-body">' + T(k.body, lang) + '</div>' +
-        (k.note ? '<p class="sr-note">' + T(k.note, lang) + '</p>' : '') +
-        (k.philosophy ? '<div class="sr-philo">' + lbl('Our design philosophy', '溪岸的设计理念', lang) +
-          '<p class="sr-ph">' + phHtml + '</p></div>' : '') +
+  /** 家族带只印家族名：「溪岸 · 自然线系列」→「自然线系列」（整页都是溪岸的；侘寂东方那一条只有一栏 208 宽） */
+  function famName(s) { return String(s || '').replace(/^\s*(溪岸|SAIL)\s*[·・]\s*/i, ''); }
+  function collections(p, ctx, lang) {
+    var k = MB.collectionsBlocks(p, lang, ctx.resolve);
+    var fams = k.fams.map(function (f) {
+      return '<div class="co-fam" style="left:' + (f.from * CO_STEP) + 'px;width:' + ((f.to - f.from + 1) * CO_STEP - CO_GAP) + 'px">' +
+        lbl(famName(f.family.en), famName(f.family.zh), lang) + '</div>';
+    }).join('');
+    var cols = k.cols.map(function (c, i) {
+      var ph = c.photo;
+      // 系列名：华文 / 双语 = 华文名 + 英文大写小标签（品牌字体，三种语言都印）；英文 = 英文名（衬线）—— 跟系列页一样
+      var name = lang === 'en' ? span(c.name.en, 'en') : span(c.name.zh, 'zh') + span(c.name.en, 'en');
+      return '<div class="co" data-series="' + esc(c.key) + '" style="left:' + (i * CO_STEP) + 'px">' +
+        photo(ph && ph.src, 'co-img', ph && ph.pos, '') +
+        '<h3 class="co-name">' + name + '</h3>' +
+        '<p class="co-line">' + T(c.title, lang) + '</p>' +
       '</div>';
+    }).join('');
+    return '<div class="hd co-hd">' + kicker('Original Collections') + (lang !== 'en' ? span('原创系列', 'zh') : '') +
+        (k.note ? '<h2 class="ttl">' + T(k.note, lang) + '</h2>' : '') + '</div>' +
+      logo(false) +
+      (fams ? '<div class="co-fams">' + fams + '</div>' : '') +
+      '<div class="co-list n' + k.cols.length + '">' + cols + '</div>';
   }
 
   /* ---------- 5 · 平面图 ------------------------------------ */
@@ -635,6 +602,64 @@
       '</div>';
   }
 
+  /* ---------- 7b · 五个系列（各一页） ---------------------------------
+     老板（2026-11-04）：「我们的产品系列不要拿掉 —— 骨骼线、空山、雾山、织、侘寂东方 —— 需要给客户认识我们的好的设计理念」；
+     方案不替客户选一个风格：空间页之后，五个系列各一页（MB.SERIES_ORDER 的固定顺序；p.pages.series 一个开关，五页都放或都不放）。
+     照片是那个系列固定的官方照片（MB.seriesPhoto：HIPPO 第 6 页那五张，每个客户都一样；别页永远不用）。
+     字全部照 data.js 的 MB.SERIES_CONCEPT（溪岸品牌手册 / 官方文案），不另外编、不删句子：家族标签 + 系列名 + 一句标题 + 一段话 +
+     （放得下才印）一句补充，贴底一行小字是溪岸的设计理念（MB.SAIL_PHILOSOPHY）。这一页讲的是溪岸，不印客户的名字、楼盘。
+     moodboard 字数（华文字 / 英文词）：标题 ≤ 18 / 14 · 正文 ≤ 60 / 45 · 补充 ≤ 30 / 18，而且整页（标题 + 正文 + 补充）≤ 90 / 64
+     才印补充；双语不印补充（两种语言字太多）。印不下的补充、雾山的佩索阿引文都在讲稿（copy.js 的 MB.pageNotes） */
+  var SERIES_MAX = { title: { zh: 18, en: 14 }, body: { zh: 60, en: 45 }, note: { zh: 30, en: 18 }, page: { zh: 90, en: 64 } };
+  MB.SERIES_MAX = SERIES_MAX;
+  function wc(s, L) {
+    if (typeof MB.textCount === 'function') return MB.textCount(s, L);
+    s = String(s || '');
+    return L === 'zh' ? (s.match(/[㐀-鿿]/g) || []).length : s.split(/\s+/).filter(function (w) { return /[A-Za-z0-9]/.test(w); }).length;
+  }
+  /** 一个系列页的字（deck、讲稿、测试共用）：key = 系列（MB.SERIES_ORDER 里的一个）→
+      { series, name:{zh,en}, family:{zh,en}, ownFamily, title, body, note|null（印不印）, noteAll|null, quote|null, philosophy|null }；
+      资料不全回 null（MB.pageList 也不会排这一页） */
+  MB.seriesBlocks = function (p, lang, key) {
+    var c = MB.SERIES_CONCEPT && MB.SERIES_CONCEPT[key], s = MB.SERIES_OF && MB.SERIES_OF[key];
+    if (!c || !s || !c.title || !c.body) return null;
+    var Ls = lang === 'bi' ? ['zh', 'en'] : [lang === 'zh' ? 'zh' : 'en'];
+    var noteOn = !!c.note && lang !== 'bi' && Ls.every(function (L) {
+      return wc(c.note[L], L) <= SERIES_MAX.note[L] &&
+        wc([c.title[L], c.body[L], c.note[L]].join(' '), L) <= SERIES_MAX.page[L];
+    });
+    return {
+      series: key, name: { zh: s.zh, en: s.en },
+      // 不是「自然线系列」的（雾山）不硬套家族：印通用的 SAIL · Series
+      family: c.family || { zh: '溪岸 · 系列', en: 'SAIL · Series' }, ownFamily: !!c.family,
+      title: c.title, body: c.body, note: noteOn ? c.note : null, noteAll: c.note || null, quote: c.quote || null,
+      philosophy: MB.SAIL_PHILOSOPHY || null
+    };
+  };
+  function seriesPage(p, ctx, lang, key) {
+    var k = MB.seriesBlocks(p, lang, key);
+    if (!k) return logo(false);
+    // 系列名：华文 / 双语 = 华文大字 + 英文大写小标签（品牌字体，三种语言都印）；英文 = 英文大字
+    var name = lang === 'en' ? span(k.name.en, 'en') : span(k.name.zh, 'zh') + span(k.name.en, 'en');
+    // 设计理念那一行：华文在冒号后面换行（「好的设计，正如一个自然的生命体：」一行、怎么做一行）—— 只是断行，字一个不改；
+    // 双语的华文一行就放得下，不断
+    var ph = k.philosophy, phZh = ph ? String(ph.zh || '') : '', cut = phZh.indexOf('：');
+    var phHtml = lang === 'zh' && cut > 0 && cut < phZh.length - 1
+      ? '<span class="l-zh">' + esc(phZh.slice(0, cut + 1)) + '<br />' + esc(phZh.slice(cut + 1)) + '</span>' : T(ph, lang);
+    // 照片：那个系列固定的官方照片（照片自己的焦点 pos；雾山 55% 50%）
+    var im = MB.seriesPhoto ? MB.seriesPhoto(key, ctx.resolve) : null;
+    return photo(im && im.src, 'sr-img', im && im.pos, '') + logo(false) +
+      '<div class="sr-col">' +
+        '<div class="sr-kick">' + kicker(k.family.en) + (lang !== 'en' ? span(k.family.zh, 'zh') : '') + '</div>' +
+        '<h2 class="sr-name">' + name + '</h2>' +
+        '<p class="sr-title">' + T(k.title, lang) + '</p>' +
+        '<div class="sr-body">' + T(k.body, lang) + '</div>' +
+        (k.note ? '<p class="sr-note">' + T(k.note, lang) + '</p>' : '') +
+        (k.philosophy ? '<div class="sr-philo">' + lbl('Our design philosophy', '溪岸的设计理念', lang) +
+          '<p class="sr-ph">' + phHtml + '</p></div>' : '') +
+      '</div>';
+  }
+
   /* ---------- 8 · 参考空间 ---------------------------------------
      现在的图是溪岸自己的实拍（品牌手册、内置图库），不是客户的家：所以叫「SAIL spaces · 参考空间」，
      不写「像你们这样的家」，那一行也只写看得到的事实（系列、空间），不编「和你们很像」。
@@ -663,13 +688,18 @@
     return MB.caseRefs(p, resolve).map(function (c) {
       var im = caseImage(c.ref, resolve);
       if (!im) return null;
-      var dir = MB.DIRECTION[im.series], rm = MB.ROOM[im.rooms[0]];
-      var tag = [dir ? dir.en : '', rm ? rm.en : ''].filter(Boolean).join(' · ');
-      var tagZh = [dir ? dir.zh : '', rm ? rm.zh : ''].filter(Boolean).join(' · ');
+      // 标签：系列名（照片真的有系列标签才写；没把握的照片 series 是空的）· 空间
+      var sr = MB.SERIES_OF ? MB.SERIES_OF[im.series] : null, rm = MB.ROOM[im.rooms[0]];
+      var tag = [sr ? sr.en : '', rm ? rm.en : ''].filter(Boolean).join(' · ');
+      var tagZh = [sr ? sr.zh : '', rm ? rm.zh : ''].filter(Boolean).join(' · ');
       var line = caseLine(p, c, im, lang);
-      // 自动那句跟前一张一模一样（同系列、同空间）：改印这张图自己的说明，三张不要读起来一样
+      // 自动那句跟前一张一模一样：改印这张图自己的说明，三张不要读起来一样 —— 跟 copy.js 的 MB.caseNote 同一套（MB.caseWhatLine：
+      // 去掉开头的系列名、只剩空间名的不算），华文、英文都有才换。不印照片原本的说明：系列没把握的照片，说明里可能还有系列名
       var key = typeof line === 'string' ? line : (line.zh || '') + '|' + (line.en || '');
-      if (said[key] && typeof line !== 'string' && (im.en || im.zh)) line = { en: im.en || im.label, zh: im.zh || im.label };
+      if (said[key] && typeof line !== 'string') {
+        var wz = String(safe(MB.caseWhatLine, [im, 'zh'], '')), we = String(safe(MB.caseWhatLine, [im, 'en'], ''));
+        if (wz && we) line = { en: we, zh: wz };
+      }
       said[key] = 1;
       return { im: im, line: line, tag: tag, tagZh: tagZh };
     }).filter(Boolean);

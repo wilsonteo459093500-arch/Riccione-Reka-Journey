@@ -10,7 +10,7 @@
    多个都对上时取第一个，所以排列顺序有意义（例：半独立 要排在 独立 前面）。
    ============================================================ */
 
-// 风格：暂定九种，看完 100 张样本再定。series = 对应溪岸的五个系列（MB.DIRECTIONS）
+// 风格：暂定九种，看完 100 张样本再定。series = 对应溪岸的五个系列（MB.SERIES）
 export const CASE_STYLES = [
   { key: 'wood', zh: '原木', en: 'Natural wood', series: 'misty', match: '原木|natural wood' },
   { key: 'wabi', zh: '微侘寂', en: 'Subtle wabi-sabi', series: 'wabi', match: '侘寂|wabi' },

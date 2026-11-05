@@ -3,7 +3,7 @@
    ------------------------------------------------------------
    客户在 brief.html 填完，WhatsApp 上收到的是一段
    「【溪岸 · 客户需求卡】…」文字。整段贴进来，这里把它拆回字段，
-   再换算成方案的起手设定：客户名 · 楼盘 · 空间 · 风格 · 需求。
+   再换算成方案的起手设定：客户名 · 楼盘 · 空间 · 客户喜欢的风格 · 需求。
    华文、英文、中英文三种卡都认得（栏位名称表在 assets/js/brief-card.js）。
    ============================================================ */
 (function () {
@@ -96,7 +96,7 @@
 
   /** 拆好的需求卡 → 方案起手设定（不碰销售已经改过的东西，交给 app 合并） */
   MB.briefToSetup = function (b) {
-    var setup = { client: {}, property: {}, rooms: [], needs: [], direction: null };
+    var setup = { client: {}, property: {}, rooms: [], needs: [] };
     if (b.name) setup.client.names = b.name;
     if (b.wa) setup.client.wa = MB.msisdn(b.wa);
 
@@ -149,14 +149,8 @@
 
     setup.rooms = MB.ROOMS.map(function (r) { return r.key; }).filter(function (k) { return want[k]; });
 
-    // 风格：取第一个对得上的
-    (b.style || []).some(function (s) {
-      for (var i = 0; i < MB.STYLE_DIRECTION.length; i++) {
-        if (has([s], MB.STYLE_DIRECTION[i].match)) { setup.direction = MB.STYLE_DIRECTION[i].dir; return true; }
-      }
-      return false;
-    });
-    // 案例库的风格（「帮我挑」用）：同样取第一个对得上的；case-vocab.js 没载入就不管
+    // 客户喜欢的风格（MB.CASE_STYLES 的 key）：取第一个对得上的；case-vocab.js 没载入就不管。
+    // 只给「帮我挑」、自动配图排先后用 —— 方案不再「走」哪一个系列，照样介绍溪岸全部五个原创系列
     setup.caseStyle = '';
     (b.style || []).some(function (s) {
       var hit = (MB.CASE_STYLES || []).filter(function (cs) { return new RegExp(cs.match, 'i').test(String(s)); })[0];

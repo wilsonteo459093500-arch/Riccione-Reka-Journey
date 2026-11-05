@@ -29,7 +29,7 @@
     libFilter: 'all',
     // 图库的筛选：来源（全部 / 我的 / 内置 / 公司案例）× 空间；公司案例再按 风格 × 柜类 × 项目，每页 48 张
     lib: { src: 'all', room: 'all', style: '', cab: '', pid: '', page: 0 },
-    copyEdits: {},      // 销售在 ⑥ 改过的讯息：'方案id:讯息id:语言' → 文字（切页不丢）
+    copyEdits: {},      // 销售在 ⑤ 改过的讯息：'方案id:讯息id:语言' → 文字（切页不丢）
     briefDraft: {},     // 贴了还没按「带入」的需求卡（切页不丢）
     lastPin: null,      // 刚放下的编号（放完会跳到下一间，「拿掉」要能撤回它）
     overflow: null      // 排版放不下的页（renderPreview 量出来，体检用）
@@ -137,7 +137,7 @@
     clearTimeout(saveTimer);
     saveTimer = setTimeout(function () { flushSave(); refreshProjectSelect(); }, 400);
     clearTimeout(renderTimer);
-    // 文案页不在这里重写：销售正在改的讯息会被洗掉（切到 ⑥ 时才重新生成）
+    // 文案页不在这里重写：销售正在改的讯息会被洗掉（切到 ⑤ 时才重新生成）
     renderTimer = setTimeout(function () { renderPreview(); if (S.tab === 'visit') renderInviteLink(); }, opts.now ? 0 : 140);
   }
 
@@ -156,22 +156,38 @@
     if (typeof p.letter !== 'string') p.letter = null;
     if (!Array.isArray(p.cases)) p.cases = [];
     if (!Array.isArray(p.team)) p.team = [{ role: 'sales', name: (p.host && p.host.name) || '' }];
-    if (p.paletteFrom !== 'ref') p.paletteFrom = 'style';
-    if (!Array.isArray(p.refImages)) p.refImages = [];
-    // 案例库用的风格、柜类（帮我挑）
+    // 客户喜欢的风格（只给帮我挑、自动配图排先后用，不印在方案上）、柜类
     if (typeof p.caseStyle !== 'string') p.caseStyle = '';
     if (!Array.isArray(p.cabinets)) p.cabinets = [];
-    // moodboard：资讯多的页（工期·保障、团队、章节页）默认关；系列 · 设计理念默认开（旧存档没有这个开关 = 开）
-    var def = { letter: true, series: true, chapter: false, cases: true, team: false, practical: false };
+    if (!p.pages || typeof p.pages !== 'object') p.pages = {};
+    if (!p.images || typeof p.images !== 'object') p.images = {};
+    // 旧版的字段（风格方向、配色、材质、三句承诺、参考图取色、一页看懂、系列页的版位图）：不再用，拿掉
+    ['direction', 'palette', 'materials', 'promises', 'paletteFrom', 'refImages'].forEach(function (k) { delete p[k]; });
+    delete p.pages.glance; delete p.images.glance; delete p.images.series;
+    // moodboard：资讯多的页（工期·保障、团队、章节页）默认关；原创系列、五个系列默认开（旧存档没有这个开关 = 开）
+    var def = { letter: true, collections: true, series: true, chapter: false, cases: true, team: false, practical: false };
     Object.keys(def).forEach(function (k) { if (typeof p.pages[k] !== 'boolean') p.pages[k] = def[k]; });
     // 每一页都能换图：缺的版位补 null（= 自动）
-    (MB.IMAGE_SLOTS || ['cover', 'letter', 'glance', 'invite', 'back']).forEach(function (k) { if (p.images[k] === undefined) p.images[k] = null; });
+    (MB.IMAGE_SLOTS || ['cover', 'letter', 'invite', 'back']).forEach(function (k) { if (p.images[k] === undefined) p.images[k] = null; });
     return p;
+  }
+
+  /* 打开旧方案：自动配的空间里有系列预留的官方照片、或已经从图库拿掉的照片（不是溪岸的作品、手册没印的）——
+     只拿掉那几张（不整组重挑：看不到的、暂停中的公司案例照片照样留着），拿完一张都不剩才重新自动配图。
+     用 storePut、不用 changed()：方案没有被销售改过，ts 不变（列表顺序不跳）。手动挑过的空间不动（照印，体检提醒） */
+  function migratePhotos(p) {
+    var moved = MB.stripRetired ? MB.stripRetired(p) : [];
+    moved.forEach(function (x) { if (x.emptied) x.room.images = MB.autoPick(p, x.room, S.viewImages); });
+    if (!moved.length) return;
+    storePut(p);
+    ping('「' + moved.map(function (x) { return MB.t(MB.roomTitle(p, x.room), 'zh'); }).join('、') +
+      '」换了一张图：原来那张不是溪岸的作品照片，或是系列页专用的', 3200);
   }
 
   function openProject(p) {
     if (pendingSave && pendingSave !== p) flushSave();
     ensureV2(p);
+    migratePhotos(p);
     S.project = p;
     S.pinRoom = null;
     lsSet(ACTIVE_KEY, p.id);
@@ -246,7 +262,6 @@
 
   function renderPane(tab) {
     if (tab === 'brief') renderBrief();
-    if (tab === 'style') renderStyle();
     if (tab === 'rooms') { renderRooms(); renderCases(); }
     if (tab === 'plan') renderPlan();
     if (tab === 'visit') renderVisit();
@@ -292,6 +307,7 @@
     bindInputs(pane);
     var draft = S.briefDraft[S.project.id];
     $('#brief-text').value = draft != null ? draft : S.project.brief || '';
+    renderCaseStyle();
     renderLetter();
     renderNeeds();
     renderBriefMatch(false);
@@ -429,16 +445,15 @@
       openProject(p);
     }
     delete S.briefDraft[p.id];
-    var firstBrief = !p.brief;
     p.brief = text;
     if (setup.client.names) p.client.names = setup.client.names;
     if (setup.client.wa) p.client.wa = setup.client.wa;
     ['name', 'area', 'type', 'size'].forEach(function (k) { if (setup.property[k]) p.property[k] = setup.property[k]; });
-    // 风格只在第一次贴需求卡时跟着走；之后由销售决定（改过的配色不会被洗掉）
-    if (setup.direction && setup.direction !== p.direction && firstBrief) setDirection(setup.direction, true);
-    // 案例库的风格：还没定、而且跟方案同一个系列才带（帮我挑先挑这种风格）；柜类累加
+    // 客户喜欢的风格（需求卡选的）：还没定才带 —— 销售在 ① 改过的不洗掉。只给帮我挑、自动配图排先后，不印在方案上。
+    // 带了就把自动配的空间按这种风格重配（亲手挑过的不动）；新加的空间下面 addRoom 时就按它配
     var cst = setup.caseStyle && MB.caseStyle ? MB.caseStyle(setup.caseStyle) : null;
-    if (cst && !p.caseStyle && cst.series === MB.dir(p).series) p.caseStyle = cst.key;
+    if (cst && !p.caseStyle) { p.caseStyle = cst.key; repickAuto(p); }
+    // 柜类累加
     (setup.cabinets || []).forEach(function (k) { if (p.cabinets.indexOf(k) < 0) p.cabinets.push(k); });
     var newRooms = [];
     setup.rooms.forEach(function (k) { if (!p.rooms.some(function (r) { return r.key === k; })) newRooms.push(addRoom(k, true)); });
@@ -453,7 +468,7 @@
     });
     applyNeedFeats(p, newNeeds, p.rooms);
     p.rooms.forEach(function (r) { if (!r.images.length) r.images = MB.autoPick(p, r, S.viewImages); });
-    // 有公司案例库：参考空间还空着就先挑 3 个（三个不同的家、同风格）；销售可以换
+    // 有公司案例库：参考空间还空着就先挑 3 个（三个不同的家；客户选了风格就挑那一种）；销售可以换
     var autoCases = 0;
     if (!p.cases.length && hasCases() && MB.suggestCases) {
       p.cases = MB.suggestCases(p, S.resolve, CASE_MAX).map(function (ref) { return { ref: ref, note: null }; });
@@ -466,6 +481,7 @@
     var bare = p.rooms.filter(function (r) { return !r.images.length; }).map(function (r) { return MB.t(MB.roomTitle(p, r), 'zh'); });
     ping((fresh ? '已新建方案（' + fresh + '）· ' : '已带入：') +
       [setup.client.names, setup.rooms.length + ' 个空间', setup.needs.length + ' 条需求'].filter(Boolean).join(' · ') +
+      (cst && p.caseStyle === cst.key ? ' · 客户喜欢「' + cst.zh + '」' : '') +
       (autoCases ? ' · 参考空间先放了 ' + autoCases + ' 个公司案例' : casesBlocked() ? ' · 公司案例库暂停中，先用内置照片' : '') +
       (bare.length ? '。' + bare.join('、') + ' 还没有图 —— 到「图库」导入旧 proposal PDF 或上传' : ''), bare.length ? 5200 : 2800);
   });
@@ -493,38 +509,23 @@
   }
 
   /* ============================================================
-     ② 风格
+     客户喜欢的风格（① 客户 · 选填 · 不印在方案上）
      ============================================================ */
-  function sameAs(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
-
-  function setDirection(key, quiet) {
-    var p = S.project, old = MB.dir(p), nd = MB.DIRECTION[key];
-    if (!nd) return;
-    var untouched = sameAs(p.palette, old.palette) && sameAs(p.materials, old.materials);
-    p.direction = key;
-    if (p.paletteFrom === 'ref') {
-      // 配色是从客户照片取的：那是他们的颜色，换风格不洗掉它，只问材质
-      if (sameAs(p.materials, old.materials) || (!quiet && confirm('也把材质换成「' + nd.zh + '」的默认值吗？（配色仍用客户照片取的颜色）'))) {
-        p.materials = MB.clone(nd.materials);
-      }
-    } else if (untouched || (!quiet && confirm('也把配色和材质换成「' + nd.zh + '」的默认值吗？'))) {
-      p.palette = MB.clone(nd.palette); p.materials = MB.clone(nd.materials);
-      p.paletteFrom = 'style';
-    }
-    // 案例风格（帮我挑用）跟新系列对不上了：清掉，免得挑出另一个系列的案例
-    var cst = p.caseStyle && MB.caseStyle ? MB.caseStyle(p.caseStyle) : null;
-    if (p.caseStyle && (!cst || cst.series !== nd.series)) p.caseStyle = '';
-    // 「系列 · 设计理念」那张是销售在 ⑤ 亲手选的、拍的是别的系列：换回自动 —— 不然「织」的名字和文案旁边是一间骨骼线的卧室。
-    // 不分系列的（风景、自己的图没标系列）照留
-    var sp = p.images && p.images.series ? S.resolve(p.images.series) : null;
-    if (sp && sp.series && sp.series !== nd.series) p.images.series = null;
-    // 自动配的空间跟着新系列重新配；销售亲手挑过的（r.manual）、用了自己图（u:）的都不动。
-    // 内置图（b:）、公司案例（c:）都是自动配的：换风格就重配
-    // 这台电脑看不到的公司案例照片（同事放的、还没登入）也不动：登入后就看得到，不能被换掉
+  /** 改了客户喜欢的风格：自动配的空间按新的风格重配。回换了图的空间数。
+      不动的：销售亲手挑过的（r.manual）、用了自己图（u:）的、
+      有这台电脑看不到的公司案例照片（同事放的、还没登入 / 还没汇入）或暂停中打不开的 —— 那些回来了还要用，不能被换掉。
+      内置图（b:）、公司案例（c:）都是自动配的：换风格就重配 */
+  function repickAuto(p) {
+    var n = 0;
     p.rooms.forEach(function (r) {
-      var live = r.images.filter(function (ref) { return S.resolve(ref); });
-      if (!r.manual && !unseenCases(r.images).length && !live.some(function (ref) { return ref.indexOf('u:') === 0; })) r.images = MB.autoPick(p, r, S.viewImages);
+      var imgs = r.images || [];
+      if (r.manual || unseenCases(imgs).length || pausedCases(imgs).length) return;
+      if (imgs.some(function (ref) { return typeof ref === 'string' && ref.indexOf('u:') === 0; })) return;
+      var before = JSON.stringify(imgs);
+      r.images = MB.autoPick(p, r, S.viewImages);
+      if (JSON.stringify(r.images) !== before) n++;
     });
+    return n;
   }
   /** 方案里写着、这台电脑却解析不到的公司案例照片（没登入过、清单还没拿到）—— 不能当成「没有图」丢掉。
       本机案例库里没有的（absentHere）也算：那是这台电脑还没汇入那个文件夹，不是被删掉 */
@@ -532,7 +533,7 @@
     return (refs || []).filter(function (ref) { return typeof ref === 'string' && ref.indexOf('c:') === 0 && (!S.resolve(ref) || absentHere(ref)); });
   }
   /** 本机案例库（存在这台电脑）：清单里没有 = 这台电脑没有（同事的方案、还没汇入那个项目的文件夹）——
-      方案页照样印占位框，但跟「看不到」一样：留着，自动配图、换风格、重新选图之前先问 */
+      方案页照样印占位框，但跟「看不到」一样：留着，自动配图、改客户喜欢的风格、重新选图之前先问 */
   function absentHere(ref) { return casesLocal() && goneOf(ref) === 'deleted'; }
   /** 打不开的公司案例照片：'blocked'（案例库暂停中）· 'deleted'（被删掉了）· ''（model.js 的 MB.caseGone） */
   function goneOf(ref) { var im = ref && S.resolve(ref); return im && MB.caseGone ? MB.caseGone(im) : ''; }
@@ -547,149 +548,34 @@
     return !b || confirm('有 ' + b + ' 张公司案例照片暂时打不开（案例库暂停中）。重新配图会把它们换成别的照片，继续？');
   }
 
-  function renderStyle() {
-    var p = S.project, L = textLang();
-    $('#dir-cards').innerHTML = MB.DIRECTIONS.map(function (d) {
-      return '<button type="button" class="dir-card" data-dir="' + d.key + '" aria-pressed="' + (d.key === p.direction) + '">' +
-        '<div class="strip">' + d.palette.map(function (c) { return '<i style="background:' + c.hex + '"></i>'; }).join('') + '</div>' +
-        '<b>' + esc(d.zh) + '</b><span>' + esc(d.en) + '</span></button>';
-    }).join('');
-
-    function swRows(list, kind) {
-      return list.map(function (c, i) {
-        return '<div class="sw-edit" data-kind="' + kind + '" data-i="' + i + '">' +
-          '<input type="color" value="' + MB.hex(c.hex) + '" data-f="hex" aria-label="颜色" />' +
-          '<input type="text" value="' + esc(c.en) + '" data-f="en" placeholder="English" />' +
-          '<input type="text" value="' + esc(c.zh) + '" data-f="zh" placeholder="中文" /></div>';
-      }).join('');
-    }
-    renderCaseStyle();
-    $('#pal-edit').innerHTML = swRows(p.palette, 'palette');
-    $('#mat-edit').innerHTML = swRows(p.materials, 'materials');
-    $('#prom-edit').innerHTML = [0, 1, 2].map(function (i) {
-      return '<div class="field" style="margin-bottom:10px"><label class="q">第 ' + (i + 1) + ' 句' +
-        (p.promises[i] != null ? '<button class="reset" type="button" data-prom-reset="' + i + '">↺ 用默认</button>' : '') + '</label>' +
-        '<input type="text" data-prom="' + i + '" value="' + esc(MB.t(MB.promise(p, i), L)) + '" /></div>';
-    }).join('');
-    renderRefPalette();
-  }
-
-  /* ---------- 案例风格（帮我挑用）：同一个系列里再细分（原木、奶油风、日式、北欧都是雾山） ---------- */
+  /* ---------- 客户喜欢的风格（① 客户 · 选填 · 不印在方案上） ----------
+     只用来挑照片：「帮我挑」先挑这种风格的公司案例，自动配图先用同一个系列的照片（model.js 的 MB.likedSeries）。
+     方案照样介绍溪岸全部五个原创系列 —— 不替客户选一个系列 */
   function renderCaseStyle() {
     var box = $('#case-style'), panel = $('#case-style-panel');
     if (!box || !panel) return;
-    var p = S.project, series = MB.dir(p).series;
-    var list = (MB.CASE_STYLES || []).filter(function (s) { return s.series === series; });
+    var p = S.project, list = MB.CASE_STYLES || [];
     panel.hidden = !list.length;
     box.innerHTML = [{ key: '', zh: '不限' }].concat(list).map(function (s) {
-      return '<button class="mini" type="button" data-case-style="' + esc(s.key) + '" aria-pressed="' + (s.key === (p.caseStyle || '')) + '">' + esc(s.zh) + '</button>';
+      var ser = s.series && MB.SERIES_OF ? MB.SERIES_OF[s.series] : null;
+      return '<button class="mini" type="button" data-case-style="' + esc(s.key) + '" aria-pressed="' + (s.key === (p.caseStyle || '')) + '"' +
+        (ser ? ' title="' + esc('自动配图先用「' + ser.zh + '」的照片') + '"' : '') + '>' + esc(s.zh) + '</button>';
     }).join('');
   }
   if ($('#case-style')) $('#case-style').addEventListener('click', function (e) {
     var b = e.target.closest('[data-case-style]'); if (!b) return;
-    S.project.caseStyle = b.getAttribute('data-case-style');
-    renderCaseStyle(); changed();
-  });
-
-  /* ---------- 从客户参考图取色 ----------------------------------
-     客户自己发来的照片 → 5 个颜色（palette.js）。方案里是他们挑的颜色，
-     一页看懂还会写「这组颜色来自你们发来的照片」 */
-  var REF_MAX = 3;
-  var DATA_IMG = /^data:image\/(png|jpe?g|webp);base64,/;
-  function renderRefPalette() {
-    var p = S.project, refs = p.refImages || [], fromRef = p.paletteFrom === 'ref';
-    $('#ref-thumbs').innerHTML = refs.map(function (r, i) {
-      if (!r || !DATA_IMG.test(r.src || '')) return '';
-      return '<div class="thumb"><img src="' + esc(r.src) + '" alt="" />' +
-        '<div class="ops"><button type="button" data-ref-del="' + i + '" title="拿掉这张">×</button></div></div>';
-    }).join('');
-    $('#ref-state').textContent = fromRef
-      ? '下面的配色来自这 ' + refs.length + ' 张照片 —— 「一页看懂」会写明，并放上小图。名字可以改。'
-      : refs.length ? '现在用的是风格默认配色。' : '';
-    $('#ref-state').hidden = !$('#ref-state').textContent;
-    $('#ref-again').hidden = fromRef || !refs.length;
-    $('#pal-style').hidden = !fromRef;
-  }
-
-  function addRefImages(files) {
-    files = files.filter(function (f) { return /^image\//.test(f.type); });
-    if (!files.length) { ping('请选图片文件（JPG / PNG）'); return; }
-    var p = S.project;
-    if (files.length > REF_MAX) ping('最多 3 张 —— 先用前 3 张', 2400);
-    // 缩到 360px：取色只要小图，存进方案也不占地方
-    Promise.all(files.slice(0, REF_MAX).map(function (f) {
-      return MB.compress(f, 360, 0.85).catch(function () { return null; });
-    })).then(function (outs) {
-      outs = outs.filter(Boolean);
-      if (!outs.length) { ping('这张图读不出来'); return; }
-      // 新的排后面；超过 3 张，最早放进来的那张让位
-      var refs = (p.refImages || []).concat(outs.map(function (o) { return { src: o.src, w: o.w, h: o.h }; })).slice(-REF_MAX);
-      extractRef(p, refs);
-    });
-  }
-
-  function extractRef(p, refs) {
-    if (typeof MB.extractPalette !== 'function') { ping('取色功能没有载入，请重新整理页面', 3000); return Promise.resolve(); }
-    ping('取色中…', 6000);
-    return MB.extractPalette(refs, 5).then(function (pal) {
-      p.refImages = refs;
-      p.palette = pal.map(function (c) { return { hex: c.hex, en: c.en, zh: c.zh }; });
-      p.paletteFrom = 'ref';
-      // 取色途中换了方案：结果照样存进原来那份
-      if (S.project === p) { renderStyle(); changed({ now: true }); } else storePut(p);
-      ping('已从 ' + refs.length + ' 张照片取出 ' + pal.length + ' 个颜色');
-    }, function (err) { console.error(err); ping('取色失败：' + (err && err.message || err), 3200); });
-  }
-
-  dropZone('#ref-drop', '#ref-file', addRefImages);
-  $('#ref-thumbs').addEventListener('click', function (e) {
-    var b = e.target.closest('[data-ref-del]'); if (!b) return;
-    var p = S.project, refs = p.refImages.slice();
-    refs.splice(+b.getAttribute('data-ref-del'), 1);
-    if (p.paletteFrom === 'ref' && refs.length) { extractRef(p, refs); return; }
-    p.refImages = refs;
-    // 一张都不剩：配色回到风格默认（不能写「来自你们的照片」却没有照片）
-    if (p.paletteFrom === 'ref') { p.palette = MB.clone(MB.dir(p).palette); p.paletteFrom = 'style'; }
-    renderStyle(); changed({ now: true });
-  });
-  $('#ref-again').addEventListener('click', function () { extractRef(S.project, S.project.refImages.slice()); });
-  $('#pal-style').addEventListener('click', function () {
-    var p = S.project;
-    p.palette = MB.clone(MB.dir(p).palette); p.paletteFrom = 'style';
-    renderStyle(); changed({ now: true });
-  });
-
-  $('#dir-cards').addEventListener('click', function (e) {
-    var b = e.target.closest('[data-dir]'); if (!b) return;
-    setDirection(b.getAttribute('data-dir'));
-    renderStyle(); changed({ now: true });
-  });
-  ['#pal-edit', '#mat-edit'].forEach(function (id) {
-    $(id).addEventListener('input', function (e) {
-      var row = e.target.closest('.sw-edit'); if (!row) return;
-      S.project[row.getAttribute('data-kind')][+row.getAttribute('data-i')][e.target.getAttribute('data-f')] = e.target.value;
-      changed();
-    });
-  });
-  $('#pal-reset').addEventListener('click', function () {
-    var d = MB.dir(S.project);
-    S.project.palette = MB.clone(d.palette); S.project.materials = MB.clone(d.materials);
-    S.project.paletteFrom = 'style';
-    renderStyle(); changed();
-  });
-  $('#prom-edit').addEventListener('input', function (e) {
-    if (!e.target.hasAttribute('data-prom')) return;
-    S.project.promises[+e.target.getAttribute('data-prom')] = e.target.value;
-    changed();
-  });
-  $('#prom-edit').addEventListener('click', function (e) {
-    var b = e.target.closest('[data-prom-reset]'); if (!b) return;
-    S.project.promises[+b.getAttribute('data-prom-reset')] = null;
-    renderStyle(); changed();
+    var p = S.project, key = b.getAttribute('data-case-style') || '';
+    if (key === (p.caseStyle || '')) return;
+    p.caseStyle = key;
+    var n = repickAuto(p);
+    renderCaseStyle(); renderBriefMatch(false); changed({ now: true });
+    var st = key && MB.caseStyle ? MB.caseStyle(key) : null, name = st ? st.zh : '不限';
+    ping(n > 0 ? '已按「' + name + '」重新配了 ' + n + ' 个空间的图（你亲手挑的没动）'
+      : '已记下「' + name + '」：帮我挑、自动配图' + (st ? '先挑这种风格' : '不偏好哪一种风格'), 2800);
   });
 
   /* ============================================================
-     ③ 空间
+     ② 空间
      ============================================================ */
   function addRoom(key, quiet) {
     var p = S.project, r = MB.newRoom(key);
@@ -706,7 +592,7 @@
     return r;
   }
 
-  /** 销售在 ⑤ 选了版位图、在 ③ 挑了案例、或打开了有手选图的页之后：自动配图的空间如果用到同一张
+  /** 销售在 ④ 选了版位图、在 ② 挑了案例、或打开了有手选图的页之后：自动配图的空间如果用到同一张
       （含同一张的不同裁切），那个空间重新自动配图 —— 整份方案同一张照片只出现一次。
       手选过的空间不动（那是销售自己的决定，体检会提醒重复）。回被换图的空间名 */
   function yieldToHandPicked(p) {
@@ -727,7 +613,9 @@
   function flash(el) {
     if (!el) return;
     el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+    // 指到面板里的一块（例：#slot-thumbs）：卷到那一块，闪整个面板
+    var box = el.closest('.panel, .room-card') || el;
+    box.classList.remove('flash'); void box.offsetWidth; box.classList.add('flash');
   }
 
   function renderRooms() {
@@ -811,7 +699,8 @@
     p.rooms.forEach(function (r) { r.images = []; r.manual = false; });
     p.rooms.forEach(function (r) { r.images = MB.autoPick(p, r, S.viewImages); });
     renderRooms(); changed({ now: true });
-    ping('已按「' + MB.dir(p).zh + '」重新配图');
+    var cst = p.caseStyle && MB.caseStyle ? MB.caseStyle(p.caseStyle) : null;
+    ping(cst ? '已重新配图（客户喜欢的「' + cst.zh + '」优先）' : '已重新配图');
   });
 
   $('#room-list').addEventListener('input', function (e) {
@@ -863,7 +752,7 @@
     }
     else if (t.closest('[data-room-auto]')) { if (!keepUnseen([r])) return; r.images = []; r.manual = false; r.images = MB.autoPick(p, r, S.viewImages); }
     else if (t.closest('[data-room-pick]')) { openPicker({ mode: 'room', uid: r.uid, filter: r.key }); return; }
-    // 动过图 = 销售亲手挑的，之后换风格不会被自动配图洗掉
+    // 动过图 = 销售亲手挑的，之后改客户喜欢的风格不会被自动配图洗掉
     else if (t.hasAttribute('data-img-hero')) { var k = idx('data-img-hero'); r.images.unshift(r.images.splice(k, 1)[0]); r.manual = true; }
     else if (t.hasAttribute('data-img-left')) { var j = idx('data-img-left'); r.images.splice(j - 1, 0, r.images.splice(j, 1)[0]); r.manual = true; }
     else if (t.hasAttribute('data-img-del')) { r.images.splice(idx('data-img-del'), 1); r.manual = true; }
@@ -965,7 +854,7 @@
     var rows = p.cases.map(function (c, i) {
       var im = S.resolve(c.ref), item = libItem(c.ref);
       if (!im) return '';
-      var hint = caseHint(p, item) || '一句话，只写看得到的事实，例：同一个系列的厨房';
+      var hint = caseHint(p, item) || '一句话，只写看得到的事实，例：骨骼线系列的厨房';
       return '<div class="case-row" data-i="' + i + '">' +
         '<div class="thumb">' + thumbImg(im) + '<span class="hero">' + (i + 1) + '</span>' +
           caseFlag(im) +
@@ -977,7 +866,7 @@
           '<textarea data-case-note rows="2" placeholder="' + esc(hint) + '" aria-label="这张图的一句话">' + esc(c.note || '') + '</textarea></div>' +
       '</div>';
     }).join('');
-    $('#cases-list').innerHTML = rows || '<p class="hint" style="margin:0">还没有。挑 1–3 张跟方案同风格的溪岸实拍；一张都没有就不出这一页。</p>';
+    $('#cases-list').innerHTML = rows || '<p class="hint" style="margin:0">还没有。挑 1–3 张溪岸的实拍（客户选了风格就挑那一种）；一张都没有就不出这一页。</p>';
     $('#cases-pick').textContent = rows ? '换 / 加案例' : '从图库选';
     // 公司案例库：帮我挑、自动挑 3 个（有案例才出现；暂停中也出现，按了说明为什么挑不了）
     var on = hasCases(), paused = casesBlocked();
@@ -1004,7 +893,11 @@
     if (casesBlocked()) { ping(BLOCKED_MSG, 4800); return; }
     if (p.cases.length && !confirm('换掉现在的 ' + p.cases.length + ' 个参考空间？')) return;
     var refs = MB.suggestCases ? MB.suggestCases(p, S.resolve, CASE_MAX) : [];
-    if (!refs.length) { ping('公司案例库里还没有「' + MB.dir(p).zh + '」的照片', 2800); return; }
+    if (!refs.length) {
+      var cst = p.caseStyle && MB.caseStyle ? MB.caseStyle(p.caseStyle) : null;
+      ping(cst ? '公司案例库里还没有「' + cst.zh + '」风格的空间照（可以在 ① 客户把风格改成「不限」）' : '公司案例库里还没有可以自动放的空间照', 3200);
+      return;
+    }
     p.cases = refs.map(function (ref) { return { ref: ref, note: null }; });
     if (yieldToHandPicked(p).length) renderRooms();
     renderCases(); changed({ now: true });
@@ -1030,7 +923,7 @@
   });
 
   /* ============================================================
-     ④ 平面图
+     ③ 平面图
      ============================================================ */
   function renderPlan() {
     var p = S.project;
@@ -1056,7 +949,7 @@
     }).join('');
     $('#plan-area').innerHTML =
       (p.rooms.length ? '<p class="sub-h">1 · 选空间　2 · 点图上的位置</p><div class="pin-picks">' + picks + '</div>'
-        : '<p class="hint">先到 ③ 加入空间，才能标编号。</p>') +
+        : '<p class="hint">先到 ② 加入空间，才能标编号。</p>') +
       '<div class="plan-edit" id="plan-edit"><img src="' + esc(planSrc()) + '" alt="平面图" draggable="false" />' + pins + '</div>' +
       '<div class="btn-row" style="margin-top:12px">' +
         '<button class="mini" type="button" id="pin-undo">拿掉这个编号</button>' +
@@ -1123,29 +1016,30 @@
   });
 
   /* ============================================================
-     ⑤ 到馆
+     ④ 到馆
      ============================================================ */
   /* 照方案的页序排（model.js MB.pageList）；这是 moodboard，提示只写一句 */
   var PAGE_NAMES = [
     ['letter', '开场短话', '先讲他们，再讲我们'],
     ['needs', '你们说的 · 我们做的', '最痛的 3 条，用他们的原话'],
-    ['glance', '一页看懂', '拼贴：图 + 配色 + 材质'],
-    ['series', '系列 · 设计理念', '让客户认识这个系列的设计理念'],
+    ['collections', '原创系列 · 五个一页', '溪岸五个系列各一张官方照片、一句话；不算进「偏长」'],
     ['plan', '平面图编号', '把注意力锚在「我家」'],
     ['chapter', '章节情绪页', '预设关 · 一张大图、一句话'],
-    ['cases', '参考空间', '在 ③ 挑了才出现'],
+    ['series', '五个系列 · 各一页', '放在空间页后面：官方照片 + 设计理念；不算进「偏长」'],
+    ['cases', '参考空间', '在 ② 挑了才出现'],
     ['practical', '工期 · 保障', '预设关 · 三个大数字 + 一句'],
     ['language', '品牌一页', '品牌只占一页，放后面'],
     ['team', '本案团队', '预设关 · 填了名字才出现'],
     ['invite', '到馆邀约', '结尾 = 下一步'],
     ['back', '封底 · 欢迎回家', '']
   ];
-  /* 每一页的图都能换（⑤）：没选 = 自动（整份不重复，按方案轮换） */
-  var SLOTS = [['cover', '封面'], ['letter', '开场'], ['glance', '一页看懂'], ['series', '系列'], ['chapter', '章节'], ['practical', '工期'],
+  /* 每一页的图都能换（④）：没选 = 自动（整份不重复，按方案轮换）。
+     原创系列、五个系列那几页的照片是固定的官方照片（MB.OVERVIEW_PHOTO / MB.SERIES_PHOTO），不在这里换 */
+  var SLOTS = [['cover', '封面'], ['letter', '开场'], ['chapter', '章节'], ['practical', '工期'],
     ['language', '品牌'], ['team', '团队'], ['invite', '邀约'], ['back', '封底']];
   /* 情绪页选图时先看「氛围 · 风景」那一类 */
   var MOOD_SLOTS = { letter: 1, chapter: 1, practical: 1, language: 1, team: 1, back: 1 };
-  var SLOT_BRAND = { cover: 'cover', letter: 'letter', back: 'welcome', chapter: 'detail', practical: 'craft', language: 'brand', team: 'team' };
+  var SLOT_BRAND = { cover: 'cover', letter: 'letter', back: 'welcome', chapter: 'craft', practical: 'craft', language: 'brand', team: 'team' };
   /* 缩图要跟方案页同一张：model.js 的 MB.pageImageSrc（同一份 MB.deckImages，自动规则挑不到图就用品牌照） */
   /** { src, gone }：gone = 销售选的公司案例打不开（'blocked' 暂停中 / 'deleted' 被删掉），src 是空的 */
   function slotSrc(p, slot, plan) {
@@ -1180,12 +1074,9 @@
     $('#slot-thumbs').innerHTML = SLOTS.map(function (s) {
       var x = slotSrc(p, s[0], plan || undefined), src = x.src, on = pageOn(p, s[0]);
       var gone = x.gone === 'blocked' ? '暂时打不开' : x.gone === 'deleted' ? (casesLocal() ? '这台电脑没有' : '已删除') : '';
-      // 系列页挑不到不重复的照片：方案页印那个系列的配色（deck.js .sr-sw）—— 缩图也是那几条色带
-      var sw = !src && !gone && s[0] === 'series' ? (MB.dir(p).palette || []).filter(function (c) { return c && /^#[0-9A-Fa-f]{6}$/.test(c.hex); }) : [];
       return '<div class="slot' + (on ? '' : ' off') + '" title="' + (on ? '' : '这一页关着 —— 打开才会印') + '">' +
         '<button type="button" class="thumb" data-slot="' + s[0] + '">' +
-          (src ? '<img src="' + esc(src) + '" alt="" />' : gone ? '<span class="img-gone" aria-hidden="true"></span><span class="case-tag warn">' + gone + '</span>'
-            : sw.length ? '<span class="thumb-sw" title="这个系列的照片都用在别页了：先印这个系列的配色">' + sw.map(function (c) { return '<i style="background:' + c.hex + '"></i>'; }).join('') + '</span>' : '') + '</button>' +
+          (src ? '<img src="' + esc(src) + '" alt="" />' : gone ? '<span class="img-gone" aria-hidden="true"></span><span class="case-tag warn">' + gone + '</span>' : '') + '</button>' +
         '<div>' + s[1] + (p.images[s[0]] ? ' · <a href="#" data-slot-auto="' + s[0] + '">自动</a>' : '') + '</div></div>';
     }).join('');
     $('#slot-auto').hidden = !(p.visit.auto && p.visit.date);
@@ -1311,7 +1202,7 @@
   $('#inv-copy').addEventListener('click', function () { copyText($('#inv-link').textContent, '邀请函链接已复制'); });
 
   /* ============================================================
-     ⑥ 文案
+     ⑤ 文案
      ============================================================ */
   function renderCopy() {
     var p = S.project;
@@ -1528,11 +1419,13 @@
           caseImg(im) + '<span class="own">案例</span>' + sameProjBtn(im) +
           '<span class="cap">' + esc(im.label || '') + '</span></div>';
       }
-      return '<div class="lib-item" data-ref="' + esc(im.ref) + '"><img src="' + esc(im.src) + '" alt="" loading="lazy" />' +
+      // 系列预留的官方照片：照样列出来（看得到有哪几张），标「系列页专用 · X」—— 只印在原创系列和系列页
+      var rcap = reservedCap(im);
+      return '<div class="lib-item' + (rcap ? ' used reserved' : '') + '" data-ref="' + esc(im.ref) + '"><img src="' + esc(im.src) + '" alt="" loading="lazy" />' +
         (im.own
           ? '<span class="own">我的</span><select data-retag aria-label="空间">' + tagOptions(im.rooms[0], true) + '</select>' +
             '<button class="icon del" type="button" data-del-img title="删除">×</button>'
-          : '<span class="cap">内置 · ' + esc(im.label || '') + '</span>') +
+          : '<span class="cap">' + (rcap ? esc(rcap) : '内置 · ' + esc(im.label || '')) + '</span>') +
         '</div>';
     }).join('') || '<p class="hint">这一类还没有图。</p>';
     $('#lib-pager').innerHTML = g.pager;
@@ -1649,7 +1542,7 @@
     var item = e.target.closest('[data-i]'); if (!item) return;
     var x = S.importBatch[+item.getAttribute('data-i')];
     if (e.target.hasAttribute('data-imp-toggle')) { x.sel = !x.sel; renderImport(); }
-    if (e.target.hasAttribute('data-imp-plan')) { setPlan(x.src, x.w, x.h); ping('已设为平面图，到 ④ 标编号'); }
+    if (e.target.hasAttribute('data-imp-plan')) { setPlan(x.src, x.w, x.h); ping('已设为平面图，到 ③ 标编号'); }
   });
   $('#imp-grid').addEventListener('change', function (e) {
     if (!e.target.hasAttribute('data-imp-tag')) return;
@@ -1675,7 +1568,7 @@
       S.importBatch = [];
       closeModals();
       renderLibrary(); changed({ now: true });
-      ping('已存入 ' + recs.length + ' 张' + (filled ? '，并配好 ' + filled + ' 个空着的空间' : '') + '。想全部换上新图：③ → 全部重新自动配图', 4200);
+      ping('已存入 ' + recs.length + ' 张' + (filled ? '，并配好 ' + filled + ' 个空着的空间' : '') + '。想全部换上新图：② → 全部重新自动配图', 4200);
     }).catch(function () { ping('存档失败：浏览器存储空间可能满了', 3200); });
   });
 
@@ -1818,13 +1711,13 @@
       $('#match-list').innerHTML = '<div data-cloud-box>' + cloudBoxHtml() + '</div>';
       return;
     }
+    // 客户喜欢的风格（没选 = 不限，全部系列都可以）· 区域 · 房型
     var facts = [];
-    if (p.caseStyle && MB.caseStyle(p.caseStyle)) facts.push(MB.caseStyle(p.caseStyle).zh);
-    else facts.push(MB.dir(p).zh);
+    if (p.caseStyle && MB.caseStyle && MB.caseStyle(p.caseStyle)) facts.push(MB.caseStyle(p.caseStyle).zh);
     if ((p.property.area || '').trim()) facts.push(p.property.area.trim());
     if ((p.property.type || '').trim()) facts.push(p.property.type.trim());
     hint.textContent = list.length
-      ? '按这份方案（' + facts.join(' · ') + '、空间、要做的柜子、家庭）挑的。「为什么」只写真的对得上的 —— 放进去之前看一眼照片。'
+      ? '按这份方案（' + (facts.length ? facts.join(' · ') + '、' : '') + '空间、要做的柜子、家庭）挑的。「为什么」只写真的对得上的 —— 放进去之前看一眼照片。'
       : '公司案例库里还没有跟这份方案对得上的照片（先贴需求卡、加空间，或到图库按风格找）。';
     $('#match-list').innerHTML = list.map(function (x) {
       var im = S.resolve(x.ref);
@@ -1893,7 +1786,7 @@
       // 参考空间放 3 个不同的家：同一个家的两张，那一句会印两次
       var home = (S.resolve(ref) || {}).pid;
       if (home && p.cases.some(function (c) { var o = c && S.resolve(c.ref); return o && o.pid === home; })) { ping('参考空间已经有这个家的照片了 —— 换另一个家的', 3000); return; }
-      if (p.cases.length >= CASE_MAX) { ping('参考空间最多 ' + CASE_MAX + ' 个 —— 先在「③ 空间 → 参考空间」拿掉一个', 3000); return; }
+      if (p.cases.length >= CASE_MAX) { ping('参考空间最多 ' + CASE_MAX + ' 个 —— 先在「② 空间 → 参考空间」拿掉一个', 3000); return; }
       // 「为什么」变成这一张的说明草稿（销售在参考空间可以改）：只取前两项（一句 ≤ 20 字 / 12 words）；
       // 双语方案不存单一语言的句子（null = 印的时候华文、英文各自写）
       p.cases.push({ ref: ref, note: p.lang === 'bi' ? null : draftNote(item, p.lang === 'en' ? 'en' : 'zh') });
@@ -1901,7 +1794,7 @@
       if (yieldToHandPicked(p).length && S.tab === 'rooms') renderRooms();
       if (S.tab === 'rooms') renderCases();
       renderMatch(); changed({ now: true });
-      ping('已放进参考空间 —— 那一句可以在「③ 空间 → 参考空间」改');
+      ping('已放进参考空间 —— 那一句可以在「② 空间 → 参考空间」改');
     }
   });
 
@@ -2007,6 +1900,9 @@
       $('#pick-title').textContent = '选一张 · ' + (SLOTS.filter(function (s) { return s[0] === opts.slot; })[0] || ['', ''])[1] + '（标「已用」的在别页出现过）';
       $('#pick-ok').hidden = true;
     }
+    // retired：已经从图库拿掉的照片（MB.RETIRED_BUILTIN：不是溪岸的作品、手册没印出来的）—— 图库格子里没有，
+    //   放在最上面一排（跟暂停中的那几张一样），销售点一下拿掉、再挑一张换上（体检就是这样叫他做的）
+    S.picker.retired = MB.photoRetired ? S.picker.sel.filter(function (ref) { return MB.photoRetired(ref); }) : [];
     // 这份方案别页已经用了哪些图：选图时标出来，免得同一张出现两次
     S.picker.usedBy = usedBy(p, opts);
     localThumbs(S.picker.paused);
@@ -2028,8 +1924,8 @@
       SLOTS.forEach(function (s) {
         if (opts.mode === 'slot' && s[0] === opts.slot) return;
         if (!pageOn(p, s[0])) return;
-        var refs = s[0] === 'glance' ? plan.glance : [plan.slot[s[0]]];
-        refs.forEach(function (ref) { if (ref) out[key(ref)] = s[1]; });
+        var ref = plan.slot[s[0]];
+        if (ref) out[key(ref)] = s[1];
       });
       if (opts.mode !== 'cases') (p.cases || []).forEach(function (c) { if (c && c.ref) out[key(c.ref)] = '案例'; });
     } catch (e) { console.error(e); }
@@ -2040,20 +1936,33 @@
     if (pk.mode === 'cases') return '第 ' + (n + (pk.keep || []).length + 1) + ' 个';
     return n === 0 ? '★ 主图' : '第 ' + (n + 1) + ' 张';
   }
-  /** 案例库暂停中打不开、但方案里本来就有的那几张：最上面一排，点一下拿掉 / 放回（位置跟方案里一样） */
+  /** 最上面一排（位置跟方案里一样，点一下拿掉 / 放回）：
+      案例库暂停中打不开、但方案里本来就有的那几张；已经从图库拿掉、但方案里本来就有的那几张 */
   function renderPickHeld(pk) {
     var el = $('#pick-held');
     if (!el) return;
-    var list = (pk.paused || []).filter(function (ref) { return goneOf(ref) === 'blocked'; });
-    el.hidden = !list.length;
-    if (!list.length) { el.innerHTML = ''; return; }
-    el.innerHTML = '<p class="hint">这几张公司案例照片暂时打不开（案例库暂停中），方案页上是空白的占位框。' +
+    var paused = (pk.paused || []).filter(function (ref) { return goneOf(ref) === 'blocked'; });
+    var retired = pk.retired || [];
+    el.hidden = !paused.length && !retired.length;
+    if (el.hidden) { el.innerHTML = ''; return; }
+    function cell(ref, kind) {
+      var im = S.resolve(ref), n = pk.sel.indexOf(ref);
+      var tag = kind === 'paused' ? '<span class="own">暂时打不开</span>' : n > -1 ? '<span class="own">' + pickCap(pk, n) + '</span>' : '';
+      var cap = kind === 'paused' ? (n > -1 ? pickCap(pk, n) : '已拿掉') : (n > -1 ? '已从图库拿掉' : '已拿掉');
+      return '<button type="button" class="lib-item ' + (kind === 'paused' ? 'case held' : 'held retired') + (n > -1 ? ' sel' : '') + '" data-ref="' + esc(ref) + '" title="' + (n > -1 ? '点一下拿掉' : '点一下放回') + '">' +
+        thumbImg(im) + tag + '<span class="cap">' + cap + '</span></button>';
+    }
+    el.innerHTML = (paused.length ? '<p class="hint">这几张公司案例照片暂时打不开（案例库暂停中），方案页上是空白的占位框。' +
       '点一下拿掉，再从下面挑内置照片或你自己的照片换上；不急就留着，案例库恢复后照片会回来。</p>' +
-      '<div class="lib-grid">' + list.map(function (ref) {
-        var im = S.resolve(ref), n = pk.sel.indexOf(ref);
-        return '<button type="button" class="lib-item case held' + (n > -1 ? ' sel' : '') + '" data-ref="' + esc(ref) + '" title="' + (n > -1 ? '点一下拿掉' : '点一下放回') + '">' +
-          thumbImg(im) + '<span class="own">暂时打不开</span><span class="cap">' + (n > -1 ? pickCap(pk, n) : '已拿掉') + '</span></button>';
-      }).join('') + '</div>';
+      '<div class="lib-grid">' + paused.map(function (ref) { return cell(ref, 'paused'); }).join('') + '</div>' : '') +
+      (retired.length ? '<p class="hint">这几张已经从图库拿掉（不是溪岸的作品照片，或放错了系列）：点一下拿掉，再从下面挑一张换上。</p>' +
+      '<div class="lib-grid">' + retired.map(function (ref) { return cell(ref, 'retired'); }).join('') + '</div>' : '');
+  }
+  /** 系列页 / 原创系列页预留的官方照片：图库、选图标「系列页专用 · 骨骼线」（不是就回 ''） */
+  function reservedCap(im) {
+    if (!im || !im.reserved) return '';
+    var s = MB.SERIES_OF ? MB.SERIES_OF[im.reserved] : null;
+    return '系列页专用' + (s ? ' · ' + s.zh : '');
   }
   function renderPicker() {
     var pk = S.picker, g = gallery(pk.f, libraryItems());
@@ -2064,9 +1973,11 @@
     renderPickHeld(pk);
     $('#pick-grid').innerHTML = g.items.map(function (im) {
       var n = pk.sel.indexOf(im.ref), used = (pk.usedBy || {})[key(im.ref)];
-      var btn = '<button type="button" class="lib-item' + (n > -1 ? ' sel' : '') + (used && n < 0 ? ' used' : '') + (im.isCase ? ' case' : '') + '" data-ref="' + esc(im.ref) + '">' +
+      // 系列预留的官方照片：选不进来（pickTap 会说为什么）；手动空间里本来就有的（已选）照常可以拿掉
+      var rcap = n < 0 ? reservedCap(im) : '';
+      var btn = '<button type="button" class="lib-item' + (n > -1 ? ' sel' : '') + (rcap ? ' used reserved' : used && n < 0 ? ' used' : '') + (im.isCase ? ' case' : '') + '" data-ref="' + esc(im.ref) + '">' +
         (im.isCase ? caseImg(im) + '<span class="own">案例</span>' : '<img src="' + esc(im.src) + '" alt="" loading="lazy" />' + (im.own ? '<span class="own">我的</span>' : '')) +
-        '<span class="cap">' + (n > -1 ? pickCap(pk, n)
+        '<span class="cap">' + (n > -1 ? pickCap(pk, n) : rcap ? esc(rcap)
           : used ? '已用 · ' + esc(used) : esc(im.own ? tagName(im.rooms[0]) : im.label || '')) + '</span></button>';
       // 案例：格子旁边多一个「同项目」（不能放在按钮里面）
       return im.isCase ? '<div class="lib-cell">' + btn + sameProjBtn(im) + '</div>' : btn;
@@ -2087,6 +1998,13 @@
   }
   function pickTap(ref) {
     var pk = S.picker;
+    // 系列页 / 原创系列页预留的官方照片（含同一张的裁切）：每一份方案都固定印在那几页，别页不能再放 ——
+    // 手动空间里本来就有的（已选）可以拿掉
+    var rk = MB.photoReserved ? MB.photoReserved(ref) : '';
+    if (rk && (pk.mode === 'slot' || pk.sel.indexOf(ref) < 0)) {
+      ping('这张是「' + ((MB.SERIES_OF && MB.SERIES_OF[rk]) || { zh: rk }).zh + '」的官方照片，只放在原创系列和系列页', 2800);
+      return;
+    }
     if (pk.mode === 'slot') {
       S.project.images[pk.slot] = ref;
       yieldToHandPicked(S.project);
@@ -2217,12 +2135,12 @@
   /* 字太多放不下的页：先缩一号（tight）、再缩一号（tighter）；还放不下就记下来，体检提醒。
      打印时被裁掉的字不会有任何提示 —— 客户只会看到半句话 */
   function fitText() {
-    var over = { needs: false, plan: false, letter: false, series: false, practical: false, cases: false, invite: false, rooms: [] };
+    var over = { needs: false, plan: false, letter: false, collections: false, series: false, seriesKeys: [], practical: false, cases: false, invite: false, rooms: [] };
     function tooTall(el) { return el.scrollHeight > el.clientHeight + 2; }
     $$('#deck .pg').forEach(function (pg) {
       // .iv-flow：邀约页右栏（三样 + 时段 + 联络）—— 销售把「准备的三样」写长了会放不下
-      // .sr-col：系列 · 设计理念的右栏（官方文案不删句子；字体没到时才可能放不下）
-      var box = $('.nd-list', pg) || $('.pl-side', pg) || $('.rm-txt', pg) || $('.lt-body', pg) || $('.pr-body', pg) || $('.cs-list', pg) || $('.iv-flow', pg) || $('.sr-col', pg);
+      // .sr-col：每个系列那一页的右栏；.co-list：原创系列那一页的五栏（官方文案不删句子；字体没到时才可能放不下）
+      var box = $('.nd-list', pg) || $('.pl-side', pg) || $('.rm-txt', pg) || $('.lt-body', pg) || $('.pr-body', pg) || $('.cs-list', pg) || $('.iv-flow', pg) || $('.sr-col', pg) || $('.co-list', pg);
       if (!box) return;
       // 参考空间页（.cs-list）：每张卡片那一行不自己裁切，太长会伸出清单底部 —— 这里（和 pptx.js）量得到
       pg.classList.remove('tight', 'tighter');
@@ -2233,7 +2151,8 @@
       if (!tooTall(box)) return;
       var g = pg.getAttribute('data-goto') || '';
       if (g.indexOf('room:') === 0) over.rooms.push(g.slice(5));
-      else if (typeof over[g] === 'boolean') over[g] = true;   // needs / plan / letter / series / practical / cases / invite
+      else if (g.indexOf('series:') === 0) { over.series = true; if (over.seriesKeys.indexOf(g.slice(7)) < 0) over.seriesKeys.push(g.slice(7)); }
+      else if (typeof over[g] === 'boolean') over[g] = true;   // needs / plan / letter / collections / practical / cases / invite
     });
     S.overflow = over;
   }
@@ -2249,12 +2168,20 @@
   /* 预览页 / 体检项目 → 哪个编辑区（有些还要卷到那一块）。
      体检的 goto 可能是分页名，也可能是页面 type（check.js 新规则用） */
   var GOTO = {
-    brief: ['brief'], style: ['style'], rooms: ['rooms'], plan: ['plan'], visit: ['visit'], copy: ['copy'], library: ['library'],
-    cover: ['brief'], letter: ['brief', '#letter-panel'], needs: ['brief', '#needs-panel'], glance: ['style'], series: ['style'],
-    chapter: ['style'], cases: ['rooms', '#cases-panel'], practical: ['visit', '#practical-panel'],
-    language: ['style'], team: ['visit', '#team-panel'], invite: ['visit'], back: ['visit']
+    brief: ['brief'], rooms: ['rooms'], plan: ['plan'], visit: ['visit'], copy: ['copy'], library: ['library'],
+    style: ['brief', '#case-style-panel'], caseStyle: ['brief', '#case-style-panel'],
+    cover: ['brief'], letter: ['brief', '#letter-panel'], needs: ['brief', '#needs-panel'],
+    collections: ['visit', '#pages-panel'], glance: ['visit', '#pages-panel'], series: ['visit', '#pages-panel'],
+    chapter: ['visit', '#pages-panel'], cases: ['rooms', '#cases-panel'], practical: ['visit', '#practical-panel'],
+    language: ['visit', '#pages-panel'], team: ['visit', '#team-panel'], invite: ['visit'], back: ['visit'],
+    // 体检：到馆准备的那几样；每一页用哪张图（④ 页面开关下面的缩图）
+    prep: ['visit', '#prep-edit'], slots: ['visit', '#slot-thumbs']
   };
-  function gotoOf(g) { return GOTO.hasOwnProperty(g) ? GOTO[g] : null; }
+  /** 每个系列那一页是 series:<k>（MB.pageKey）：跟「系列」同一个地方（④ 页面开关） */
+  function gotoOf(g) {
+    if (g && g.indexOf('series:') === 0) g = 'series';
+    return GOTO.hasOwnProperty(g) ? GOTO[g] : null;
+  }
   function tabOf(g) { return !g ? null : g.indexOf('room:') === 0 ? 'rooms' : (gotoOf(g) || [])[0] || null; }
   function goTo(g) {
     g = g || '';
@@ -2298,7 +2225,7 @@
   $('#deck-lang').addEventListener('click', function (e) {
     var b = e.target.closest('[data-v]'); if (!b) return;
     S.project.lang = b.getAttribute('data-v');
-    // 文案不看方案语言（⑥ 自己有中 / 英切换）—— 不重画，免得洗掉正在改的讯息
+    // 文案不看方案语言（⑤ 自己有中 / 英切换）—— 不重画，免得洗掉正在改的讯息
     if (S.tab !== 'copy') renderPane(S.tab);
     changed({ now: true });
   });
@@ -2420,7 +2347,13 @@
   Promise.all([MB.store.listImages(), MB.store.listProjects(), cloudCached]).then(function (res) {
     S.userImages = res[0].map(MB.normalizeImage).filter(Boolean);
     rebuildResolver();
-    S.projects = res[1].map(function (x) { return MB.normalizeProject(x); });
+    // 旧存档还带着旧版的字段（风格方向、配色、参考图取色、一页看懂…）：normalizeProject 已经丢掉了，
+    // 把干净的那一份写回去一次（storePut：ts 不变，列表顺序不跳）
+    S.projects = res[1].map(function (raw) {
+      var n = MB.normalizeProject(raw);
+      if (MB.hasLegacy && MB.hasLegacy(raw)) storePut(n);
+      return n;
+    });
     var active = lsGet(ACTIVE_KEY);
     var first = S.projects.filter(function (x) { return x.id === active; })[0] || S.projects[0];
     if (!first) {

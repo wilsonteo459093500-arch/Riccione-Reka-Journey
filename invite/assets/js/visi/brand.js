@@ -90,7 +90,7 @@
       letter:  { src: IMG + 'sail-hills.jpg', w: 889, h: 1039, note: '草原上走路的人 —— 开场情绪页' },
       brand:   { src: IMG + 'story-lift.jpg', w: 1800, h: 1036, note: '成都溪岸门口 —— 品牌页' },
       craft:   { src: IMG + 'sail-craft.jpg', w: 1755, h: 1038, note: '木格柜细节 —— 工期·保障页' },
-      detail:  { src: IMG + 'about-detail.jpg', w: 1079, h: 1348, note: '实木斗柜 —— 章节页' },
+      detail:  { src: IMG + 'about-detail.jpg', w: 1079, h: 1348, note: '瑞吉欧的实木斗柜（不是溪岸的作品）—— VISI 不用' },
       team:    { src: IMG + 'showroom-still.jpg', w: 1333, h: 2000, note: '展厅一角 —— 团队页' },
       showroom:{ src: IMG + 'riccione-showroom.jpg', w: 2049, h: 961, note: '吉隆坡展厅' },
       welcome: { src: IMG + 'sail-closing.jpg', w: 1080, h: 1440, note: '客厅 —— 欢迎回家（封底）' }
