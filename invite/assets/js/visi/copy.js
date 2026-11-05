@@ -692,6 +692,8 @@
    */
   MB.caseNote = function (p, im, L) {
     if (!p || !im) return '';
+    // 拿掉的照片（瑞吉欧的家具、手册没印出来的图）：一个字都不写 —— 写「溪岸的空间」就是说假话；体检会叫销售换掉
+    if (MB.photoRetired && MB.photoRetired(im.ref || im.id)) return '';
     var zh = L === 'zh';
     L = zh ? 'zh' : 'en';
     var room = null, key = '';

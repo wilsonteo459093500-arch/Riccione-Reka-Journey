@@ -8,7 +8,7 @@
    - 汇出标签档 → 新的浏览器（另一台电脑）：先汇入文件夹再汇入标签档 / 先汇入标签档再汇入文件夹，结果一样
    - 重新整理都还在；VISI 同一个网址显示「本机案例库」，帮我挑挑得到本机的案例，方案页的照片载得出来，PPTX 放得进去
    - 隐私：客户名字（陈先生…）、文件夹名、档案路径不在方案 HTML / 讲稿 / PPTX 里
-   - 少了照片的电脑：方案页是占位框，体检说「这台电脑没有（要先汇入那个项目的文件夹）」；那几张照样留着（选图、换风格不会换掉，自动配图先问）
+   - 少了照片的电脑：方案页是占位框，体检说「这台电脑没有（要先汇入那个项目的文件夹）」；那几张照样留着（选图、换客户喜欢的风格不会换掉，自动配图先问）
    - 登入框上点「云端」只是问问：登入成功才换；service worker 管着的这一页也照样问到伺服器（X-Caselib-Mode）
    - 登出后 VISI 说「本机案例库登出了（照片都还在）」；「不用等了」清掉等照片的标签
    - 换回云端：/api/* 又到伺服器（本机资料不删）；VISI 不会把本机的照片当成已删除；邀请页（index.html）永远不被 service worker 管
@@ -447,7 +447,7 @@ test('VISI on the same address: 「本机案例库」, 帮我挑 picks local cas
   const living = 'c:' + vh.living;
   const proj = await vp.evaluate(([k0, master, living]) => {
     const p = MB.newProject({});
-    p.id = 'p-local'; p.lang = 'bi'; p.direction = 'misty'; p.caseStyle = 'wood';
+    p.id = 'p-local'; p.lang = 'bi'; p.caseStyle = 'wood';
     p.client.names = 'Mr & Mrs Ong'; p.property = { name: 'Eco Grandeur', area: 'Setia Alam', type: 'Terrace', size: '' };
     p.needs = [{ key: 'cook_daily' }];
     p.rooms = ['kitchen', 'master', 'living', 'dining'].map(MB.newRoom);
@@ -524,7 +524,7 @@ test('a computer that does not have some case photos: placeholders (no broken im
   await vp.waitForSelector('#deck .pg');
   await vp.waitForFunction(() => MB.cloud.status().status === 'ok' && MB.cloud.status().local && MB.cases().length === 4, null, { timeout: 20000 });
   await vp.click('[data-tab="library"]');
-  // 第三个空间是自动配的、放着一张这台电脑没有的案例照片（Bangsar 的，别页没用到）：换风格时不能被换掉
+  // 第三个空间是自动配的、放着一张这台电脑没有的案例照片（Bangsar 的，别页没用到）：换客户喜欢的风格时不能被换掉
   const proj = JSON.parse(JSON.stringify(A.project));
   const aIdx = await localIndex(A.page);
   const absent = 'c:' + photosOf(aIdx, byName(aIdx, BANG).pid)[0].hash;
@@ -542,7 +542,7 @@ test('a computer that does not have some case photos: placeholders (no broken im
   assert.ok(deck.gone >= 2, JSON.stringify(deck));
   assert.match(deck.text, /这台电脑没有这张案例照片（要先汇入那个项目的文件夹）/);
   assert.equal(deck.broken, 0);
-  // 选图按「确定」、换风格：这台电脑没有的照样留着（汇入那个文件夹就回来），不会悄悄换掉
+  // 选图按「确定」、换客户喜欢的风格：这台电脑没有的照样留着（汇入那个文件夹就回来），不会悄悄换掉
   const current = () => vp.evaluate(() => MB.store.getProject(localStorage.getItem('sail-mb-active')).then((x) => MB.normalizeProject(x)));
   await vp.click('[data-tab="rooms"]');
   await vp.locator('#room-list [data-room-pick]').first().click();
@@ -554,10 +554,12 @@ test('a computer that does not have some case photos: placeholders (no broken im
   await vp.waitForSelector('#pick-modal.on');
   await vp.click('#pick-ok');
   await vp.waitForTimeout(300);
-  await vp.click('[data-tab="style"]');
-  await vp.click('#dir-cards [data-dir="skeleton"]');
+  // 换客户喜欢的风格（① 客户）：自动配的空间会重配，但放着这台电脑没有的那张的客厅（rooms[2]）不能动
+  await vp.click('[data-tab="brief"]');
+  await vp.click('#case-style [data-case-style="modern"]');
   await vp.waitForTimeout(900);
   const after = await current();
+  assert.equal(after.caseStyle, 'modern');
   assert.match(title, /这台电脑看不到，会留着（汇入那个项目的文件夹就看得到）/);
   assert.ok(!/按「加入所选」就拿掉/.test(title), title);
   assert.deepEqual([after.rooms[0].images, after.rooms[1].images, after.rooms[2].images, after.cases.map((c) => c.ref)],

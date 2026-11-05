@@ -729,10 +729,16 @@
       var same = cands.slice(1).filter(function (im) { return im.isCase && im.pid === hero.pid; });
       cands = [hero].concat(same, cands.slice(1).filter(function (im) { return same.indexOf(im) < 0; }));
     }
+    var ser = hero.series || '';
     var rest = cands.slice(1).filter(function (im) {
       if (seen[shot(im.ref)]) return false;
       // 主图有系列：辅图也要同系列（没标系列的内置图风格不一定对得上；只有自己的图例外）
       if (hero.series && im.series !== hero.series && !(im.own && !im.series)) return false;
+      // 主图没标系列：第一张有系列的辅图定下这一页的系列，后面有系列的都要跟它一样（不然一页两个系列）
+      if (!hero.series && im.series) {
+        if (ser && im.series !== ser) return false;
+        ser = im.series;
+      }
       seen[shot(im.ref)] = 1;
       return true;
     });

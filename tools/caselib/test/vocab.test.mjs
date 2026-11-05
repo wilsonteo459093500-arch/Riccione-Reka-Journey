@@ -50,7 +50,7 @@ test('vocab: consistent with VISI (MB.ROOM keys, series, caseNote traits)', () =
   const roomKeys = [...data.matchAll(/\bkey: '([a-z]+)', en: '[^']+', zh: '[^']+',\s*\n\s*head:/g)].map((m) => m[1]);
   assert.deepEqual([...roomKeys, 'other'].sort(), [...V.CASE_ROOMS].sort(), 'CASE_ROOMS = MB.ROOM keys + other');
   for (const c of V.CASE_CABINETS) for (const r of c.rooms) assert.ok(V.CASE_ROOMS.includes(r), c.key + ' → ' + r);
-  for (const s of V.CASE_STYLES) assert.ok(data.includes("series: '" + s.series + "'"), 'series ' + s.series + ' exists in MB.DIRECTIONS');
+  for (const s of V.CASE_STYLES) assert.ok(data.includes("series: '" + s.series + "'"), 'series ' + s.series + ' exists in MB.SERIES');
   for (const t of V.CASE_TRAITS) assert.match(copy, new RegExp('\\b' + t.key + ': \\['), 'caseNote TRAIT has ' + t.key);
   for (const s of V.SCOPE_CABINETS) for (const c of s.cabinets) assert.ok(V.isCabinet(c), s.scope + ' → ' + c);
 });

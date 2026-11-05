@@ -71,9 +71,11 @@
 
   /* 拿掉的照片（老板 2026-11-04）：不是溪岸的作品（瑞吉欧斗柜）、老板退回的雾山卧室（#54）、手册 PDF 里没印出来的图。
      图库、自动配图都看不到；旧方案里放了的照样认得（不破图），体检提醒换掉。档案留着、不改名。
-     retired：riccione = 瑞吉欧的家具（体检红色）· owner = 老板退回的 · unprinted = 手册没印出来的（体检黄色） */
+     retired：riccione = 瑞吉欧的家具（体检红色）· owner = 老板退回的 · unprinted = 手册没印出来的（体检黄色）
+     没有说明（en / zh 空的）：「参考空间」的那一句、讲稿会拿照片的说明来印 —— 「已拿掉的照片」是给销售看的，不能印给客户；
+     MB.caseNote 遇到拿掉的照片不写任何说明（不能说它是「溪岸的空间」）；体检照样提醒换掉 */
   function gone(id, src, w, h, kind) {
-    return { id: id, src: src, w: w, h: h, series: '', style: '', rooms: [], retired: kind, en: 'Retired photo', zh: '已拿掉的照片' };
+    return { id: id, src: src, w: w, h: h, series: '', style: '', rooms: [], retired: kind, en: '', zh: '' };
   }
   MB.RETIRED_BUILTIN = [
     gone('b:skeleton-5', 'assets/img/cases/skeleton-5.jpg', 1000, 1872, 'riccione'),
