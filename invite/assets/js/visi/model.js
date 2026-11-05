@@ -328,6 +328,8 @@
      - 骨骼线走廊（misty-corridor）是 skeleton-1 的左半边
      - 雾山系列页那张（misty-wushan）和客厅全景、雾山客厅拍的是同一间、同一个场景
      - skeleton-4（中岛与餐边柜）跟骨骼线厨房是同一个厨房、同一个场景
+     - 空山客厅（mountain-living，原创系列页那张）和 mountain-living-2 / -3 是同一间客厅换个角度：
+       原创系列页已经印了这间，封面、空间页再印一次客户会觉得重复（老板 2026-11-02：同一张图只出现一次）
      系列页、原创系列页的官方照片按这一组预留：同一组的裁切也不放空间页（reservedMap） */
   var SAME_SHOT = [
     ['b:misty-3', 'b:misty-study'],
@@ -335,7 +337,7 @@
     ['b:skeleton-kitchen', 'b:skeleton-kitchen-2', 'b:skeleton-4'],
     ['b:skeleton-3', 'b:skeleton-kitchen-3', 'b:detail-corner'],
     ['b:skeleton-1', 'b:misty-corridor'],
-    ['b:mountain-living', 'b:mountain-shelf']
+    ['b:mountain-living', 'b:mountain-shelf', 'b:mountain-living-2', 'b:mountain-living-3']
   ];
   var SHOT = {};
   SAME_SHOT.forEach(function (g) { g.forEach(function (ref) { SHOT[ref] = g[0]; }); });

@@ -531,7 +531,7 @@ await importProject(page, PRIV);
   const copyUi = await page.evaluate(() => [...document.querySelectorAll('#copy-list textarea')].map((t) => t.value).join('\n'));
   ok('G6 ⑤ copy pane texts contain no folder / client name / f path', copyUi.length > 200 && !leaks(copyUi).length, leaks(copyUi).join(','));
   // 案例库登入着（方案里有公司案例照片）：原创系列页 = MB.OVERVIEW_PHOTO、五个系列页 = MB.SERIES_PHOTO（10 张都不同）；
-  // 预留的官方照片（18 张，含同一张的裁切）不出现在别页；整份方案没有一张照片印两次（原创系列页也不豁免）
+  // 预留的官方照片（20 张，含同一张的裁切、同一间换角度）不出现在别页；整份方案没有一张照片印两次（原创系列页也不豁免）
   const r = await page.evaluate(() => {
     const res = MB.makeResolver.last;
     const srcOf = (ref) => { const im = res(ref); return im ? im.src : ''; };
@@ -556,7 +556,7 @@ await importProject(page, PRIV);
   ok('G7 with case photos in the deck: collections page = MB.OVERVIEW_PHOTO, series pages = MB.SERIES_PHOTO (10 distinct), no reserved shot elsewhere, no photo printed twice',
     r.order.join() === 'skeleton,mountain,weaving,misty,wabi' && JSON.stringify(r.ov) === JSON.stringify(r.wantOv) &&
     r.ser.every((s, i) => s && s.length === 1 && s[0] === r.wantSer[i]) && new Set(r.wantOv.concat(r.wantSer)).size === 10 &&
-    r.nResv === 18 && !r.leaked.length && !r.dups.length && r.caseImgs >= 5, JSON.stringify(r));
+    r.nResv === 20 && !r.leaked.length && !r.dups.length && r.caseImgs >= 5, JSON.stringify(r));
 }
 /** 用 app 的「导出 PPTX」按钮导出，回 { file, toast } */
 async function exportPptx(pg, name) {
