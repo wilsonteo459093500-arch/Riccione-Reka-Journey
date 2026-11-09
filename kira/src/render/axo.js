@@ -124,14 +124,13 @@ const wallOf = (walls, f) => {
 };
 
 // ---------------- 一个柜体 → 本地长方体 ----------------
-// 门铰链：成对的门左扇铰左、右扇铰右；单扇铰在远离柜体中心那一边。返回「开门那一边」。
+// 门铰链（同立面图 elevation.js drawDoors）：一格多扇 → 左半边铰左、右半边铰右；
+// 单扇 / 正中那扇 → 铰在远离柜体中心那一边（正中算左）。返回「开门那一边」（拉手在这边）。
 function openSide(i, n, doorCenter, frameCenter) {
-  const away = doorCenter < frameCenter ? 'left' : 'right';
-  let hinge;
-  if (n === 1) hinge = away;
-  else if (n % 2 === 1 && i === n - 1) hinge = away;
-  else hinge = i % 2 === 0 ? 'left' : 'right';
-  return hinge === 'left' ? 'right' : 'left';
+  const hingeLeft = n > 1 && i < Math.floor(n / 2) ? true
+    : n > 1 && i >= Math.ceil(n / 2) ? false
+      : doorCenter <= frameCenter + 0.5;
+  return hingeLeft ? 'right' : 'left';
 }
 // 拉手高度：吊柜靠下、地柜靠上、高柜约 1050 离地（夹在门内）
 function handleV(kind, v0, v1, hh) {
@@ -179,7 +178,28 @@ function solidRuns(leaves, W) {
   return runs;
 }
 
-function frameParts(f, C, handleStyle) {
+// 见光板：frame.ends 标了、且 cab.exposed 没关掉（同计价 bridge.js：'start' / 'end' = 整排起点 / 终点 → exposed.left / right）
+function endsOf(f, ex) {
+  const on = (side) => {
+    const flag = f?.ends?.[side];
+    if (!flag) return false;
+    const k = flag === 'start' ? 'left' : flag === 'end' ? 'right' : side;
+    return ex?.[k] !== false;
+  };
+  return { left: on('left'), right: on('right') };
+}
+
+// 切分树坏了（缺 children 等）→ 当整块封门，不让整张图炸掉
+function safeLeaves(body, W, Hb) {
+  if (!body) return null;
+  try {
+    return layoutLeaves(body, 0, 0, W, Hb).map((l) => ({ x: num(l.x), y: num(l.y), w: num(l.w), h: num(l.h), node: l.node }));
+  } catch {
+    return null;
+  }
+}
+
+function frameParts(f, C, handleStyle, ends = endsOf(f, null)) {
   const parts = [];
   const W = Math.max(0, num(f?.W)), H = Math.max(0, num(f?.H)), D = Math.max(0, num(f?.D));
   if (!(W > 0 && H > 0 && D > 0)) return parts;
@@ -205,15 +225,15 @@ function frameParts(f, C, handleStyle) {
   };
 
   // 见光板（两边露出）：门板色，满深 D；踢脚 / 底层架空时落地
-  const eL = f.ends?.left ? Math.min(T, W / 4) : 0;
-  const eR = f.ends?.right ? Math.min(T, W / 4) : 0;
+  const eL = ends?.left ? Math.min(T, W / 4) : 0;
+  const eR = ends?.right ? Math.min(T, W / 4) : 0;
   const toFloor = baseKind === 'plinth' || baseKind === 'raised';
   if (eL) add('end', C.door, x0, x0 + eL, toFloor ? y0 : vb, vt, 0, D);
   if (eR) add('end', C.door, x0 + W - eR, x0 + W, toFloor ? y0 : vb, vt, 0, D);
   const ia = x0 + eL, ib = x0 + W - eR;
 
   // 没切过的柜身当整块封门（同计价）
-  const leaves = f.body ? layoutLeaves(f.body, 0, 0, W, Hb) : [{ x: 0, y: 0, w: W, h: Hb, node: { leaf: true, type: 'closed' } }];
+  const leaves = safeLeaves(f.body, W, Hb) || [{ x: 0, y: 0, w: W, h: Hb, node: { leaf: true, type: 'closed' } }];
 
   // 底座
   if (bh > 0) {
@@ -354,7 +374,8 @@ function frameParts(f, C, handleStyle) {
         handleFor(du0, du1, dv0, dv1, side, s / 2 - 6);
       } else {
         const b = add('front', C.door, du0, du1, dv0, dv1, D - T, D, tag);
-        if (b && handleStyle === 'hidden') groove(b, du0, du1, dv0, dv1);
+        // 同立面图：门整扇在 1300 以上（吊柜 / 衣柜顶柜）→ 槽在下沿，否则在上沿
+        if (b && handleStyle === 'hidden') groove(b, du0, du1, dv0, dv1, dv1 <= 1300 || dv0 < 1300);
         handleFor(du0, du1, dv0, dv1, side, 34);
       }
     }
@@ -367,7 +388,7 @@ function frameParts(f, C, handleStyle) {
       const dv0 = v0 + k * step + GAP / 2, dv1 = v0 + (k + 1) * step - GAP / 2;
       const b = add('drawer', C.door, du0, du1, dv0, dv1, D - T, D, tag);
       if (!b) continue;
-      if (handleStyle === 'hidden') groove(b, du0, du1, dv0, dv1);
+      if (handleStyle === 'hidden') groove(b, du0, du1, dv0, dv1, true);
       const cu = (du0 + du1) / 2, cv = (dv0 + dv1) / 2;
       if (handleStyle === 'bar') {
         const len = Math.min(clamp((du1 - du0) * 0.4, 96, 320), du1 - du0 - 40);
@@ -378,10 +399,10 @@ function frameParts(f, C, handleStyle) {
     }
   }
 
-  // 隐藏拉手：门顶（吊柜在门底）一道细阴影槽
-  function groove(b, du0, du1, dv0, dv1) {
+  // 隐藏拉手：开口边一道细阴影槽（atTop：门顶；否则门底，吊柜 / 顶柜）
+  function groove(b, du0, du1, dv0, dv1, atTop) {
     const g = Math.min(8, (dv1 - dv0) / 6);
-    const ga = kind === 'wall' ? dv0 : dv1 - g, gb = kind === 'wall' ? dv0 + g : dv1;
+    const ga = atTop ? dv1 - g : dv0, gb = atTop ? dv1 : dv0 + g;
     b.decals = b.decals || [];
     b.decals.push({ axis: 'w', sign: 1, pts: [[du0, ga, D], [du1, ga, D], [du1, gb, D], [du0, gb, D]], fill: shade(C.door, 0.62), stroke: 'none' });
   }
@@ -448,7 +469,7 @@ function buildWorld(cab, opts = {}) {
   frames.forEach((f, fi) => {
     if (!f) return;
     const { wall, wallIndex } = wallOf(walls, f);
-    const parts = frameParts(f, C, handleStyle);
+    const parts = frameParts(f, C, handleStyle, endsOf(f, cab?.exposed));
     if (!parts.length) return;
     const use = wallUse[wallIndex];
     use.used = true;

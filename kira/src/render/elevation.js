@@ -29,6 +29,9 @@ const STILE = 50;         // 玻璃门边框
 const LEG = 40;           // 柜脚宽
 const TAP_H = 300;        // 龙头高出台面
 const HOB_H = 40;         // 炉头高出台面
+const OVEN_GLASS = '#3A3B3A';  // 烤箱门（同 axo.js）
+const OVEN_WINDOW = '#4C4E4D';
+const STEEL_DARK = '#A9AFAE';
 
 // ---------- 文案 ----------
 const TXT = {
@@ -185,6 +188,20 @@ function sanitize(shapes) {
 }
 
 // ---------- 柜体规范化（不改原对象） ----------
+// 切分树先洗一遍再交给 layoutLeaves：缺 children / sizes 是字符串 / 坏节点都不会抛错或拼出字符串坐标
+function cleanNode(n, depth = 0) {
+  if (!n || typeof n !== 'object' || depth > 24) return null;
+  const kids = Array.isArray(n.children) ? n.children : null;
+  if (n.leaf || (!kids && n.type)) return n;
+  if (!kids) return null;
+  const sizes = Array.isArray(n.sizes) ? n.sizes : [];
+  return {
+    split: n.split === 'v' ? 'v' : 'h',
+    sizes: kids.map((_, k) => Math.max(0, num(sizes[k]))),
+    children: kids.map((c) => cleanNode(c, depth + 1)),
+  };
+}
+
 function normFrame(f, i) {
   const H = Math.max(0, num(f.H));
   const bk = ['plinth', 'legs', 'raised', 'wallhung', 'none'].includes(f.base?.kind) ? f.base.kind : 'none';
@@ -195,11 +212,13 @@ function normFrame(f, i) {
     x: num(f.x), y: Math.max(0, num(f.y)), W, H, D: Math.max(0, num(f.D)),
     base: { kind: bk, h: bh },
     ends: { left: !!f.ends?.left, right: !!f.ends?.right },
-    worktop: !!f.worktop, body: f.body,
+    worktop: !!f.worktop,
   };
+  const body = cleanNode(f.body);
+  n.body = body;
   n.Hb = Math.max(0, H - bh);
-  n.leaves = f.body ? layoutLeaves(f.body, 0, 0, W, n.Hb).filter((l) => num(l.w) > 0 && num(l.h) > 0) : [];
-  const v = f.body && !f.body.leaf && f.body.split === 'v' ? (f.body.sizes || []).map((s) => Math.max(0, num(s))) : [];
+  n.leaves = body ? layoutLeaves(body, 0, 0, W, n.Hb).filter((l) => num(l.w) > 0 && num(l.h) > 0) : [];
+  const v = body && !body.leaf && body.split === 'v' ? body.sizes : [];
   n.cols = v.length > 1 ? v : [];
   n.hasSink = n.leaves.some((l) => l.node?.interior === 'sink' && l.node?.type !== 'void');
   n.hasHob = n.leaves.some((l) => l.node?.interior === 'hob' && l.node?.type !== 'void');
@@ -337,6 +356,7 @@ function drawFrame(ctx, f) {
     R(cell.x, cell.y, cell.w, cell.h, { fill: C.carcass, role: 'carcass' });
     if (type === 'open') drawOpen(ctx, f, G, cell);
     else if (type === 'drawer') drawDrawers(ctx, f, G, cell);
+    else if (type === 'closed' && node.interior === 'oven') drawOven(ctx, G, cell);
     else drawDoors(ctx, f, G, cell, type === 'glass');
   }
 
@@ -569,7 +589,7 @@ function closedHints(ctx, f, G, cell) {
   } else if (it === 'shelves') shelvesIn(y0, y1).forEach(shelf);
   else if (it === 'drawers') {
     // 内抽（门后）
-    const n = clamp(Math.floor((h * 0.45) / 180), 1, 3);
+    const n = Math.min(3, Math.floor((h * 0.45) / 180)); // 放不下一个就不画（以前矮格会画出格外）
     for (let k = 0; k < n; k++) R(x0 + 20, y0 + 10 + k * 190, w - 40, 170, { ...o, fill: 'none' });
   } else if (it === 'sink') {
     const bw = Math.min(w * 0.78, 800), bh = Math.min(190, h * 0.4);
@@ -581,6 +601,20 @@ function closedHints(ctx, f, G, cell) {
       G.P([['M', cx, top - bh - 70], ['Q', cx, top - bh - 130, cx + 50, top - bh - 130], ['Q', cx + 100, top - bh - 130, cx + 100, top - bh - 70]], { ...o, fill: 'none' });
     }
   }
+}
+
+// ---------- 烤箱位（同 3D：深色玻璃门 + 横拉手，代替柜门） ----------
+function drawOven(ctx, { R }, cell) {
+  const { S } = ctx;
+  const { fx, fy, fw, fh } = cell;
+  if (fw <= 0 || fh <= 0) return;
+  R(fx, fy, fw, fh, { fill: OVEN_GLASS, stroke: INK, sw: S.sw, role: 'fixture' });
+  const ctl = Math.min(90, fh * 0.18);
+  const m = Math.min(40, fw * 0.08, fh * 0.08);
+  R(fx + m, fy + m, fw - 2 * m, fh - ctl - 30 - m, { fill: OVEN_WINDOW, stroke: STEEL_DARK, sw: S.hair, role: 'fixture' });
+  const len = Math.max(Math.min(40, fw * 0.5), fw - 140);
+  const bh = Math.max(12, 1.1 * S.U);
+  R(fx + (fw - len) / 2, fy + fh - ctl - 18 - bh / 2, len, bh, { fill: STEEL_DARK, rx: bh / 2, role: 'fixture' });
 }
 
 // ---------- 抽屉 ----------
@@ -670,17 +704,18 @@ function drawHob(ctx, { R, X0 }, cx, y, w) {
 function placeDims(ctx, frames) {
   const { out, S } = ctx;
   const U = S.U;
-  // 已占用的区域：柜体（含台面）+ 台面上的龙头 / 炉头 + 已放好的尺寸线
+  // 已占用的区域：{ b: 外框, geo: 是不是柜体 / 龙头炉头（不是尺寸线）, own: 属于哪个柜体 }
   const occ = [];
+  const geoBox = (b, own) => occ.push({ b, geo: true, own });
   for (const f of frames) {
     if (f.W <= 0 || f.H <= 0) continue;
-    occ.push([f.X0 - f.ovhL, -f.top, f.X0 + f.W + f.ovhR, -f.y]);
+    geoBox([f.X0 - f.ovhL, -f.top, f.X0 + f.W + f.ovhR, -f.y], f);
     if (ctx.style !== 'drawing') continue;
     for (const lf of f.leaves) {
       const it = lf.node?.interior, cx = f.X0 + lf.x + lf.w / 2;
       if (lf.node?.type === 'void') continue;
-      if (it === 'sink') occ.push([cx - 70, -(f.top + TAP_H), cx + 160, -f.top]);
-      else if (it === 'hob') occ.push([cx - lf.w * 0.42, -(f.top + HOB_H), cx + lf.w * 0.42, -f.top]);
+      if (it === 'sink') geoBox([cx - 70, -(f.top + TAP_H), cx + 160, -f.top], f);
+      else if (it === 'hob') geoBox([cx - lf.w * 0.42, -(f.top + HOB_H), cx + lf.w * 0.42, -f.top], f);
     }
   }
   const pad = 2.5 * U;
@@ -688,13 +723,16 @@ function placeDims(ctx, frames) {
   const D = { stroke: ctx.C.dim, sw: S.hair * 1.2, role: 'dim' };
   const T = S.dimTxt;
 
-  // 在候选位置里选第一个不撞的；都撞就用第一个
-  const choose = (cands) => {
-    const ok = cands.find((c) => !occ.some((o) => hits(c.box, o, pad)));
-    const c = ok || cands[0];
-    if (!c) return;
-    occ.push(c.box);
+  // 候选位置：boxes = 尺寸线 + 字的外框（不能压任何东西）；geo = 引出线经过的走廊（不能穿过别的柜体）
+  const clearOf = (c, p) => c.boxes.every((b) => !occ.some((o) => hits(b, o.b, p)))
+    && (c.geo || []).every((g) => !occ.some((o) => o.geo && o.own !== c.own && hits(g, o.b, 0)));
+  // 选第一个不撞的；再退一步只要不实际重叠（不留间距）；都不行：fallback 时用第一个，否则不画（返回 false）
+  const choose = (cands, fallback = true) => {
+    const c = cands.find((x) => clearOf(x, pad)) || cands.find((x) => clearOf(x, 0)) || (fallback ? cands[0] : null);
+    if (!c) return false;
+    for (const b of c.boxes) occ.push({ b, geo: false, own: null });
     c.draw();
+    return true;
   };
 
   // 横向尺寸链：xs = 分界点，yl = 尺寸线，edge = 被量物体那条边（引出线从这里出）
@@ -705,7 +743,7 @@ function placeDims(ctx, frames) {
     // 横向两头收进来一点：同一高度上首尾相接的两条尺寸链不算相撞
     const box = [xs[0] + pad + U, Math.min(tb, yl - tk), xs[xs.length - 1] - pad - U, yl + tk];
     return {
-      box,
+      boxes: [box],
       draw: () => {
         out.line(xs[0] - 2 * U, yl, xs[xs.length - 1] + 2 * U, yl, D);
         for (const x of xs) {
@@ -717,27 +755,34 @@ function placeDims(ctx, frames) {
     };
   };
 
-  // 竖向尺寸：side = 1 右 / −1 左；文字转 90° 放在外侧
-  const vDim = (y1, y2, xl, edgeX, label, side) => {
-    const size = Math.max(T * 0.55, Math.min(T, (y2 - y1 - 1.5 * U) / textEm(label)));
-    const tx = xl + side * (2.2 * U + 0.5 * size);
-    const box = side > 0 ? [xl - tk, y1 + pad + U, tx + 0.5 * size, y2 - pad - U] : [tx - 0.5 * size, y1 + pad + U, xl + tk, y2 - pad - U];
+  // 竖向尺寸链：ys = 分界点（SVG y，上→下），side = 1 右 / −1 左；文字转 90° 放在外侧
+  const vChain = (ys, labels, xl, edgeX, side, own) => {
+    const sizes = labels.map((s, i) => Math.max(T * 0.55, Math.min(T, (ys[i + 1] - ys[i] - 1.5 * U) / textEm(s))));
+    const y1 = ys[0], y2 = ys[ys.length - 1];
+    const outer = xl + side * (2.2 * U + Math.max(...sizes));
+    const box = side > 0 ? [xl - tk, y1 + pad + U, outer, y2 - pad - U] : [outer, y1 + pad + U, xl + tk, y2 - pad - U];
+    const lane = side > 0 ? [edgeX + U, y1 + pad + U, xl, y2 - pad - U] : [xl, y1 + pad + U, edgeX - U, y2 - pad - U];
     return {
-      box,
+      boxes: [box],
+      geo: [lane],
+      own,
       draw: () => {
         out.line(xl, y1 - 2 * U, xl, y2 + 2 * U, D);
-        for (const y of [y1, y2]) {
+        for (const y of ys) {
           out.line(edgeX + side * 2 * U, y, xl + side * 2 * U, y, { ...D, sw: S.hair });
           out.line(xl - tk, y + tk, xl + tk, y - tk, { ...D, sw: S.sw });
         }
-        out.text(tx, (y1 + y2) / 2, label, size, { anchor: 'middle', baseline: 'central', rotate: -90, fill: ctx.C.dim, role: 'dim' });
+        labels.forEach((s, i) => out.text(xl + side * (2.2 * U + 0.5 * sizes[i]), (ys[i] + ys[i + 1]) / 2, s, sizes[i],
+          { anchor: 'middle', baseline: 'central', rotate: -90, fill: ctx.C.dim, role: 'dim' }));
       },
     };
   };
+  const vDim = (y1, y2, xl, edgeX, label, side, own) => vChain([y1, y2], [label], xl, edgeX, side, own);
 
   const below = (f) => frames.some((g) => g !== f && g.wall === f.wall && g.y + g.H <= f.y + 1
     && g.X0 - g.ovhL < f.X0 + f.W && g.X0 + g.W + g.ovhR > f.X0);
   const chainY = (edge, k) => edge + 7 * U + 0.8 * T + k * (T + 9 * U);
+  const step = T + 9 * U;
 
   // 1) 每列宽（多于一列才标）
   for (const f of frames) {
@@ -763,50 +808,77 @@ function placeDims(ctx, frames) {
     const xs = [f.X0, f.X0 + f.W];
     const label = [String(Math.round(f.W))];
     const edge = -f.top;
-    const above = [0, 1, 2].map((k) => hChain(xs, label, edge - 7 * U - k * (T + 9 * U), edge));
+    const above = [0, 1, 2].map((k) => hChain(xs, label, edge - 7 * U - k * step, edge));
     const floor = f.y > 0 && below(f) ? [] : [0, 1, 2, 3].map((k) => hChain(xs, label, chainY(0, k), 0));
     choose(capped(f) ? [...floor, ...above] : [...above, ...floor]);
   }
 
-  // 3) 总高（右边；挡住就放左边）
+  // 3) 总高（右边；挡住就放左边）。两边都被别的柜体挡住（例如电视柜夹在两个高柜中间）→
+  //    不压在别的柜子上画，改到这面墙最外侧的一条竖向尺寸链里（0 → 离地 → 柜高 …）
+  const deferred = new Map();
+  const wallEdge = (w, side) => {
+    const fs = frames.filter((g) => g.wall === w && g.W > 0 && g.H > 0);
+    return side > 0 ? Math.max(...fs.map((g) => g.X0 + g.W + g.ovhR)) : Math.min(...fs.map((g) => g.X0 - g.ovhL));
+  };
   for (const f of frames) {
-    if (f.H <= 0) continue;
+    if (f.H <= 0 || f.W <= 0) continue;
     const y1 = -(f.y + f.H), y2 = -f.y;
     const label = String(Math.round(f.H));
     const right = f.X0 + f.W + f.ovhR, left = f.X0 - f.ovhL;
     const cands = [];
-    for (let k = 0; k < 2; k++) {
-      cands.push(vDim(y1, y2, right + 7 * U + k * (T + 9 * U), right, label, 1));
-      cands.push(vDim(y1, y2, left - 7 * U - k * (T + 9 * U), left, label, -1));
+    for (let k = 0; k < 3; k++) {
+      cands.push(vDim(y1, y2, right + 7 * U + k * step, right, label, 1, f));
+      cands.push(vDim(y1, y2, left - 7 * U - k * step, left, label, -1, f));
     }
-    choose(cands);
+    if (choose(cands, false)) continue;
+    const mid = (wallEdge(f.wall, -1) + wallEdge(f.wall, 1)) / 2;
+    const key = `${f.wall}:${f.X0 + f.W / 2 < mid ? -1 : 1}`;
+    if (!deferred.has(key)) deferred.set(key, []);
+    deferred.get(key).push(f);
+  }
+  const chained = new Set();
+  for (const [key, fs] of deferred) {
+    const [w, sd] = key.split(':').map(Number);
+    const vals = [...new Set([0, ...fs.flatMap((f) => [f.y, f.y + f.H])].map((v) => rnd(v)))].sort((a, b) => b - a);
+    if (vals.length < 2) continue;
+    const ys = vals.map((v) => -v);
+    const labels = ys.slice(1).map((y, i) => String(Math.round(y - ys[i])));
+    const edgeX = wallEdge(w, sd);
+    const cands = [0, 1, 2, 3, 4].map((k) => vChain(ys, labels, edgeX + sd * (7 * U + k * step), edgeX, sd, null));
+    if (choose(cands, false)) fs.forEach((f) => chained.add(f));
   }
 
   // 4) 吊挂高度 ↑1500（离地）
   for (const f of frames) {
     if (!(f.y > 0) || f.W <= 0) continue;
     const label = `↑${Math.round(f.y)}`;
-    const ty = -f.y / 2;
-    const tw = textEm(label) * T;
+    const ty = f.y < T * 1.2 ? -f.y - 0.8 * T : -f.y / 2;
     const free = !below(f);
-    const mount = (xl, side, ext) => ({
-      box: side > 0 ? [xl - tk, -f.y + pad + U, xl + 2.2 * U + tw, -pad - U] : [xl - 2.2 * U - tw, -f.y + pad + U, xl + tk, -pad - U],
-      draw: () => {
-        out.line(xl, 0, xl, -f.y - (ext ? 2 * U : 0), D);
-        if (ext) out.line(f.X0 - f.ovhL - 2 * U, -f.y, xl - 2 * U, -f.y, { ...D, sw: S.hair });
-        for (const y of [0, -f.y]) out.line(xl - tk, y + tk, xl + tk, y - tk, { ...D, sw: S.sw });
-        out.text(xl + side * 2.2 * U, f.y < T * 1.2 ? -f.y - 0.8 * T : ty, label, T, { anchor: side > 0 ? 'start' : 'end', baseline: 'central', fill: ctx.C.dim, role: 'dim' });
-      },
-    });
+    const mount = (xl, side, ext) => {
+      const txt = { text: label, size: T, x: xl + side * 2.2 * U, y: ty, anchor: side > 0 ? 'start' : 'end', baseline: 'central' };
+      const edgeX = f.X0 - f.ovhL;
+      return {
+        boxes: [[xl - tk, -f.y + pad + U, xl + tk, -pad - U], textBox(txt)],
+        geo: ext ? [[xl, -f.y - 0.5 * U, edgeX - U, -f.y + 0.5 * U]] : [],
+        own: f,
+        draw: () => {
+          out.line(xl, 0, xl, -f.y - (ext ? 2 * U : 0), D);
+          if (ext) out.line(edgeX - 2 * U, -f.y, xl - 2 * U, -f.y, { ...D, sw: S.hair });
+          for (const y of [0, -f.y]) out.line(xl - tk, y + tk, xl + tk, y - tk, { ...D, sw: S.sw });
+          out.text(txt.x, txt.y, label, T, { anchor: txt.anchor, baseline: 'central', fill: ctx.C.dim, role: 'dim' });
+        },
+      };
+    };
     const cands = [];
     if (free) cands.push(mount(f.X0 + Math.min(10 * U, f.W * 0.1), 1, false));
-    for (let k = 0; k < 2; k++) cands.push(mount(f.X0 - f.ovhL - 7 * U - k * (T + 9 * U), -1, true));
-    const ok = cands.find((c) => !occ.some((o) => hits(c.box, o, pad)));
-    if (ok) { occ.push(ok.box); ok.draw(); }
-    else {
-      // 都挡住：只写字在柜体左下角外
-      const x = f.X0 - f.ovhL - 2.5 * U;
-      out.text(x, -f.y, label, T, { anchor: 'end', baseline: 'central', fill: ctx.C.dim, role: 'dim' });
-    }
+    for (let k = 0; k < 2; k++) cands.push(mount(f.X0 - f.ovhL - 7 * U - k * step, -1, true));
+    if (choose(cands, false) || chained.has(f)) continue; // 已经在竖向尺寸链里：不再另写
+    // 都挡住：只写字，找柜体旁边一个空位（左下角外 / 正下方外…），都不行就不写（不压在别的东西上）
+    const xL = f.X0 - f.ovhL - 2.5 * U, xR = f.X0 + f.W + f.ovhR + 2.5 * U;
+    const spots = [[xL, -f.y, 'end'], [xL, -f.y + 0.75 * T, 'end'], [xR, -f.y, 'start'], [xR, -f.y + 0.75 * T, 'start']].map(([x, y, anchor]) => {
+      const txt = { text: label, size: T, x, y, anchor, baseline: 'central' };
+      return { boxes: [textBox(txt)], draw: () => out.text(x, y, label, T, { anchor, baseline: 'central', fill: ctx.C.dim, role: 'dim' }) };
+    });
+    choose(spots, false);
   }
 }
