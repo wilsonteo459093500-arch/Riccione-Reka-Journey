@@ -267,3 +267,77 @@ test('kitchen template (I / L / U / galley) renders without overlaps or NaN', ()
     assert.ok(polys(sc).length > 0 && allFinite(sc), shape);
   }
 });
+
+test('end panels follow cab.exposed (same mapping as pricing: start → left, end → right)', () => {
+  const ends = (c) => cabinetBoxes(c).filter((b) => b.part === 'end').map((b) => (b.x < 100 ? 'L' : 'R')).sort().join('');
+  const w = newCabinet('wardrobe');
+  assert.equal(ends(w), 'LR');
+  assert.equal(ends({ ...w, exposed: { left: false, right: true } }), 'R');
+  assert.equal(ends({ ...w, exposed: { left: false, right: false } }), '');
+  // 没有见光板那边：第一列门板从 0 开始（不再让 18）
+  const fronts = cabinetBoxes({ ...w, exposed: { left: false, right: true } }).filter((b) => b.part === 'front');
+  assert.ok(Math.min(...fronts.map((b) => b.x)) < 5);
+  // 厨房 L：整排起点在 A 墙左端（'start'）、终点在 B 墙右端（'end'）
+  const k = updateSpec(newCabinet('kitchen'), { shape: 'L' });
+  const endFrames = (c) => [...new Set(cabinetBoxes(c).filter((b) => b.part === 'end').map((b) => `${b.wall}`))].sort().join('');
+  assert.equal(endFrames(k), '01');
+  assert.equal(endFrames({ ...k, exposed: { left: false, right: true } }), '1');
+  assert.equal(endFrames({ ...k, exposed: { left: true, right: false } }), '0');
+});
+
+test('handles sit on the opening side, same hinge rule as the elevation', () => {
+  // 1.8 m 衣柜 3 扇：左扇铰左、正中那扇铰左（同立面图）、右扇铰右 → 拉手在 右 / 右 / 左
+  const c = { ...updateSpec(newCabinet('wardrobe'), { W: 1800, top: false }), handle: 'bar' };
+  const doors = cabinetBoxes(c).filter((b) => b.part === 'front').sort((a, b) => a.x - b.x);
+  const hs = cabinetBoxes(c).filter((b) => b.part === 'handle');
+  const side = (d) => { const h = hs.find((x) => x.x >= d.x && x.x + x.w <= d.x + d.w); return h.x + h.w / 2 > d.x + d.w / 2 ? 'R' : 'L'; };
+  assert.equal(doors.map(side).join(''), 'RRL');
+  // 一格 4 扇：左半铰左、右半铰右 → 拉手 右 右 左 左
+  const f4 = frame({ W: 2400, H: 2100, D: 600, ends: { left: false, right: false }, body: leaf('closed') });
+  const b4 = cabinetBoxes(cabOf([f4], { handle: 'knob' }));
+  const d4 = b4.filter((b) => b.part === 'front').sort((a, b) => a.x - b.x);
+  const h4 = b4.filter((b) => b.part === 'handle');
+  assert.equal(d4.length, 4);
+  assert.equal(d4.map((d) => { const h = h4.find((x) => x.x >= d.x && x.x + x.w <= d.x + d.w); return h.x + h.w / 2 > d.x + d.w / 2 ? 'R' : 'L'; }).join(''), 'RRLL');
+});
+
+test('hidden-handle groove: top edge on low / full-height doors, bottom edge on doors above 1.3 m', () => {
+  const c = newCabinet('wardrobe'); // 顶柜在 2.1 m 以上
+  const fronts = cabinetBoxes(c).filter((b) => b.part === 'front' && b.decals);
+  assert.ok(fronts.length >= 8);
+  fronts.forEach((b) => {
+    const ys = b.decals[0].pts.map((p) => p[1]);
+    const atTop = Math.abs(Math.max(...ys) - (b.y + b.h)) < 0.01, atBottom = Math.abs(Math.min(...ys) - b.y) < 0.01;
+    if (b.y >= 1300) assert.ok(atBottom && !atTop, `door at ${b.y}`); else assert.ok(atTop && !atBottom, `door at ${b.y}`);
+  });
+});
+
+test('malformed body (no children) degrades to one closed block instead of throwing', () => {
+  for (const body of [{}, { split: 'v' }, { split: 'h', sizes: [100], children: [null] }]) {
+    const c = cabOf([frame({ W: 600, H: 2000, D: 600, body })]);
+    const sc = axoScene(c);
+    assert.ok(allFinite(sc) && polys(sc).length > 0);
+  }
+  assert.ok(cabinetBoxes(cabOf([frame({ W: 600, H: 2000, D: 600, body: {} })])).some((b) => b.part === 'front'));
+});
+
+test('see-through runs facing away do not show their internal partitions', () => {
+  const k = { ...updateSpec(newCabinet('kitchen'), { shape: 'galley' }), handle: 'hidden' };
+  const ps = polys(axoScene(k, { yaw: -30 }));
+  const { project } = axoProjector(-30);
+  // 近排（墙 1，背对观众 → 半透明）的地柜柜体：每格朝 −x 的侧面（看得到那一面）
+  const near = cabinetBoxes(k).filter((b) => b.wall === 1 && b.part === 'carcass' && b.y < 900);
+  assert.ok(near.length >= 4);
+  const sideFace = (b) => [[b.x, b.y, b.z], [b.x, b.y + b.h, b.z], [b.x, b.y + b.h, b.z + b.d], [b.x, b.y, b.z + b.d]].map((q) => project(...q));
+  const drawn = (pts) => ps.some((s) => s.opacity != null && s.points.length === 4 && pts.every(([x, y]) => s.points.some(([a, c]) => Math.abs(a - x) < 0.05 && Math.abs(c - y) < 0.05)));
+  // 格与格紧贴：内部隔板面被邻格盖住，不画；最多剩最外头那一面
+  assert.ok(near.filter((b) => drawn(sideFace(b))).length <= 1);
+});
+
+test('hinge side ignores the 18 mm end-panel shift (one exposed end, single centred door)', () => {
+  // 600 宽单门、只有左边见光板：门的中心被推右 9 mm，但开门方向仍按整格算（同立面图：正中铰左 → 拉手在右）
+  const f = frame({ W: 600, H: 2000, D: 600, ends: { left: true, right: false }, body: leaf('closed') });
+  const bx = cabinetBoxes(cabOf([f], { handle: 'bar' }));
+  const d = bx.find((b) => b.part === 'front'), h = bx.find((b) => b.part === 'handle');
+  assert.ok(h.x + h.w / 2 > d.x + d.w / 2);
+});

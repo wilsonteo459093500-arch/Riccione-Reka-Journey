@@ -281,14 +281,14 @@ function frameParts(f, C, handleStyle, ends = endsOf(f, null)) {
       topBox = shell(u0, u1, v0, v1, D, interior, tag);
     } else if (type === 'glass') {
       topBox = shell(u0, u1, v0, v1, Math.max(T, D - T), interior, tag);
-      doors(u0, u1, v0, v1, n, true, tag);
+      doors(u0, u1, v0, v1, n, true, tag, x0 + r.x, r.w);
     } else if (type === 'drawer') {
       topBox = add('carcass', C.carcass, u0, u1, v0, v1, 0, Math.max(T, D - T), tag);
       drawers(u0, u1, v0, v1, clamp(Math.round(num(nd.drawers, 3)) || 3, 1, 12), tag);
     } else {
       topBox = add('carcass', C.carcass, u0, u1, v0, v1, 0, Math.max(T, D - T), tag);
       if (interior === 'oven') oven(u0, u1, v0, v1, tag);
-      else doors(u0, u1, v0, v1, n, false, tag);
+      else doors(u0, u1, v0, v1, n, false, tag, x0 + r.x, r.w);
     }
 
     // 水槽 / 炉头：画在台面上（没有台面就画在这格顶上）
@@ -357,13 +357,14 @@ function frameParts(f, C, handleStyle, ends = endsOf(f, null)) {
     }
   }
 
-  function doors(u0, u1, v0, v1, n, glass, tag) {
+  // la / lw：这格没让见光板之前的位置（开门方向按它算，同立面图；只有一边有见光板时正中那扇不会被推偏）
+  function doors(u0, u1, v0, v1, n, glass, tag, la, lw) {
     const step = (u1 - u0) / n;
     for (let i = 0; i < n; i++) {
       const du0 = u0 + i * step + GAP / 2, du1 = u0 + (i + 1) * step - GAP / 2;
       const dv0 = v0 + GAP / 2, dv1 = v1 - GAP / 2;
       if (!(du1 - du0 > 1 && dv1 - dv0 > 1)) continue;
-      const side = openSide(i, n, (du0 + du1) / 2, frameCenter);
+      const side = openSide(i, n, la + ((i + 0.5) * lw) / n, frameCenter);
       if (glass) {
         const s = clamp(Math.min(du1 - du0, dv1 - dv0) * 0.12, 30, 60);
         add('front', C.door, du0, du0 + s, dv0, dv1, D - T, D, { ...tag, glassFrame: true });

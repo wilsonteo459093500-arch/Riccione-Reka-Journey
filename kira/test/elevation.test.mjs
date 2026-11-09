@@ -333,3 +333,24 @@ test('dimensions are never written on top of another cabinet (TV between towers,
   assert.ok(tvTexts.filter((t) => t === '400').length >= 2, tvTexts.join(' '));
   assert.ok(tvTexts.includes('2700'));
 });
+
+test('side panels follow cab.exposed like the price and the 3D (switched-off side not drawn)', () => {
+  const one = (exposed) => cab([frame({})], exposed ? { exposed } : {});
+  const plinthRects = (c) => role(elevationScene(c), 'base', 'rect').length;
+  const both = plinthRects(one(null));
+  assert.equal(plinthRects(one({ left: true, right: true })), both);
+  assert.equal(plinthRects(one({ left: false, right: true })), both - 1);
+  assert.equal(plinthRects(one({ left: false, right: false })), both - 2);
+  // kitchen ends 'start' / 'end' map to exposed.left / right
+  const k = cab([frame({ ends: { left: 'start', right: false } })], { exposed: { left: false, right: true } });
+  assert.equal(plinthRects(k), both - 2);
+});
+
+test('gaps are labelled by what goes there (hood / fridge / appliance)', () => {
+  const labels = (c) => role(elevationScene(c, { lang: 'zh' }), 'label', 'text').map((s) => s.text).join(' ');
+  assert.match(labels(updateSpec(newCabinet('kitchen'), { tall: { on: true, end: 'end', kind: 'fridgeGap' } })), /冰箱位/);
+  const hood = cab([frame({ kind: 'wall', W: 1800, H: 750, D: 350, y: 1500, base: { kind: 'wallhung', h: 0 },
+    body: vsplit([600, 600, 600], [leaf('closed'), leaf('void', { interior: 'hood' }), leaf('closed')]) })]);
+  assert.match(labels(hood), /烟机位/);
+  assert.match(labels(cab([frame({ body: leaf('void', { interior: 'appliance' }) })])), /电器位/);
+});

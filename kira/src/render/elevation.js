@@ -36,6 +36,8 @@ const STEEL_DARK = '#A9AFAE';
 // ---------- 文案 ----------
 const TXT = {
   appliance: { en: 'Appliance', zh: '电器位' },
+  hood: { en: 'Hood', zh: '烟机位' },
+  fridge: { en: 'Fridge', zh: '冰箱位' },
   note: { en: 'Illustrative', zh: '仅示意' },
   raised: { en: 'Raised', zh: '底层架空' },
   blocks: {
@@ -202,7 +204,18 @@ function cleanNode(n, depth = 0) {
   };
 }
 
-function normFrame(f, i) {
+// 见光板：同计价 bridge.js / axo.js —— frame.ends 标了且 cab.exposed 没关掉才画（'start' / 'end' = 整排起点 / 终点）
+function endsOf(f, ex) {
+  const on = (side) => {
+    const flag = f?.ends?.[side];
+    if (!flag) return false;
+    const k = flag === 'start' ? 'left' : flag === 'end' ? 'right' : side;
+    return ex?.[k] !== false;
+  };
+  return { left: on('left'), right: on('right') };
+}
+
+function normFrame(f, i, ex) {
   const H = Math.max(0, num(f.H));
   const bk = ['plinth', 'legs', 'raised', 'wallhung', 'none'].includes(f.base?.kind) ? f.base.kind : 'none';
   const bh = bk === 'wallhung' || bk === 'none' ? 0 : clamp(num(f.base?.h), 0, H);
@@ -211,7 +224,7 @@ function normFrame(f, i) {
     i, kind: f.kind || 'tall', wall: Math.max(0, Math.round(num(f.wall))),
     x: num(f.x), y: Math.max(0, num(f.y)), W, H, D: Math.max(0, num(f.D)),
     base: { kind: bk, h: bh },
-    ends: { left: !!f.ends?.left, right: !!f.ends?.right },
+    ends: endsOf(f, ex),
     worktop: !!f.worktop,
   };
   const body = cleanNode(f.body);
@@ -233,7 +246,7 @@ export function elevationScene(cab, opts = {}) {
   const showDims = opts.dims !== false;
   const lang = ['en', 'zh', 'both'].includes(opts.lang) ? opts.lang : 'both';
   const walls = Array.isArray(opts.walls) ? opts.walls : safeWalls(cab || {});
-  const frames = (Array.isArray(cab?.frames) ? cab.frames : []).filter((f) => f && typeof f === 'object').map(normFrame);
+  const frames = (Array.isArray(cab?.frames) ? cab.frames : []).filter((f) => f && typeof f === 'object').map((f, i) => normFrame(f, i, cab?.exposed));
 
   // 台面两头出挑：贴着别的柜体那一边不出挑
   for (const f of frames) {
@@ -470,9 +483,10 @@ function cellLabel(ctx, { X0 }, x, y, w, h, lines, size0, fill, role) {
 function drawVoid(ctx, f, G, cell) {
   const { S, lang } = ctx;
   G.R(cell.fx, cell.fy, cell.fw, cell.fh, { stroke: INK_SOFT, sw: S.thin, dash: S.dashVoid, role: 'void' });
-  const one = [pick(TXT.appliance, lang)];
+  const t = TXT[cell.node?.interior === 'hood' || cell.node?.interior === 'fridge' ? cell.node.interior : 'appliance'];
+  const one = [pick(t, lang)];
   const em = textEm(one[0]);
-  const lines = lang === 'both' && em * S.lbl > cell.fw * 0.86 ? pickLines(TXT.appliance, lang) : one;
+  const lines = lang === 'both' && em * S.lbl > cell.fw * 0.86 ? pickLines(t, lang) : one;
   cellLabel(ctx, G, cell.fx, cell.fy, cell.fw, cell.fh, lines, S.lbl, INK_SOFT, 'label');
 }
 
