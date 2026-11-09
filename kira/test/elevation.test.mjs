@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from './harness.mjs';
 import { elevationScene } from '../src/render/elevation.js';
-import { newCabinet, setUnit } from '../src/planner/templates.js';
+import { newCabinet, setUnit, updateSpec } from '../src/planner/templates.js';
 import { leaf, vsplit, hsplit } from '../src/planner/model.js';
 import { BLOCK_COLORS, finishOf } from '../src/render/palette.js';
 
@@ -285,4 +285,51 @@ test('garbage in → still a valid scene (no NaN)', () => {
       assert.ok(sc.shapes.length > 0);
     }
   }
+});
+
+test('malformed body trees (no children, string sizes) neither throw nor leak string coordinates', () => {
+  const bodies = [{}, { split: 'v', sizes: [600, 600] }, { split: 'v', sizes: ['600', '600'], children: [leaf('open'), leaf('closed')] }];
+  for (const body of bodies) {
+    for (const style of ['drawing', 'blocks']) {
+      const sc = elevationScene(cab([frame({ body })]), { style });
+      assertAllFinite(sc);
+      for (const s of sc.shapes) {
+        for (const k of ['x', 'y', 'w', 'h', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'size']) if (k in s) assert.equal(typeof s[k], 'number', `${k}=${s[k]}`);
+      }
+      assert.ok(sc.viewBox[2] < 3000, `viewBox ${sc.viewBox}`);
+    }
+  }
+  const sc = elevationScene(cab([frame({ body: bodies[2] })]));
+  assert.equal(role(sc, 'door', 'rect').length, 1); // open 600 + closed 600 → one door
+  assert.equal(role(sc, 'outline', 'rect')[0].w, 1200);
+});
+
+test('oven position is drawn as an appliance front (as in 3D), not a hinged door', () => {
+  const sc = elevationScene(cab([frame({ W: 600, H: 2250, body: hsplit([700, 600, 850], [leaf('drawer', { drawers: 2 }), leaf('closed', { interior: 'oven' }), leaf('closed')]) })]));
+  assert.equal(role(sc, 'door', 'rect').length, 1); // only the top door
+  assert.ok(role(sc, 'fixture', 'rect').some((r) => r.fill === '#3A3B3A' && r.h > 500));
+  assert.equal(role(sc, 'swing', 'line').length, 2);
+});
+
+test('dimensions are never written on top of another cabinet (TV between towers, kitchens with a tall unit)', () => {
+  const cases = [
+    updateSpec(newCabinet('tv'), { sides: { on: true, which: 'both' }, upper: { on: true } }),
+    updateSpec(newCabinet('kitchen'), { shape: 'L', tall: { on: true, end: 'end', kind: 'fridgeTop' } }),
+    updateSpec(newCabinet('kitchen'), { shape: 'U', tall: { on: true, end: 'start', kind: 'oven' } }),
+    updateSpec(newCabinet('kitchen'), { shape: 'galley', tall: { on: true, kind: 'fridgeGap' } }),
+  ];
+  for (const c of cases) {
+    const sc = elevationScene(c);
+    const bodies = role(sc, 'outline', 'rect');
+    for (const t of role(sc, 'dim', 'text')) {
+      for (const b of bodies) {
+        const inside = t.x > b.x + 1 && t.x < b.x + b.w - 1 && t.y > b.y + 1 && t.y < b.y + b.h - 1;
+        assert.ok(!inside, `${c.template}: dim "${t.text}" at ${t.x},${t.y} inside cabinet ${JSON.stringify(b)}`);
+      }
+    }
+  }
+  // TV between towers: the low / top cabinet heights still appear (in a chain outside the right tower)
+  const tvTexts = role(elevationScene(cases[0]), 'dim', 'text').map((s) => s.text);
+  assert.ok(tvTexts.filter((t) => t === '400').length >= 2, tvTexts.join(' '));
+  assert.ok(tvTexts.includes('2700'));
 });
