@@ -1,12 +1,43 @@
-// KIRA 字标：一个分格的柜子 + K（和 public/icon.svg 同一个图形）
+// KIRA 标志：直角尺 + 铅笔（用户提供的 logo，矢量重描；和 public/icon.svg、logo.svg 同一个图形）
 export default function KiraMark({ size = 28 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 512 512" aria-label="KIRA" role="img" className="shrink-0">
-      <rect width="512" height="512" rx="96" fill="#2D3E36" />
-      <rect x="112" y="136" width="288" height="240" rx="6" fill="none" stroke="#B8945E" strokeWidth="14" />
-      <line x1="256" y1="136" x2="256" y2="376" stroke="#B8945E" strokeWidth="10" />
-      <line x1="112" y1="296" x2="400" y2="296" stroke="#B8945E" strokeWidth="10" />
-      <text x="256" y="262" textAnchor="middle" fontFamily="Georgia, 'Times New Roman', serif" fontSize="150" fill="#FAF8F3">K</text>
+      <rect width="512" height="512" rx="96" fill="#000000" />
+      <g transform="translate(256 256) scale(0.36) translate(-480 -436)">
+        <rect x="95" y="52" width="180" height="768" fill="none" stroke="#FFFFFF" strokeWidth="20" />
+        <rect x="275" y="638" width="585" height="182" fill="none" stroke="#FFFFFF" strokeWidth="20" />
+        <rect x="105" y="93.0" width="92" height="14" fill="#FFFFFF" />
+        <rect x="105" y="133.3" width="48" height="14" fill="#FFFFFF" />
+        <rect x="105" y="173.6" width="48" height="14" fill="#FFFFFF" />
+        <rect x="105" y="213.9" width="48" height="14" fill="#FFFFFF" />
+        <rect x="105" y="254.2" width="48" height="14" fill="#FFFFFF" />
+        <rect x="105" y="294.5" width="92" height="14" fill="#FFFFFF" />
+        <rect x="105" y="334.8" width="48" height="14" fill="#FFFFFF" />
+        <rect x="105" y="375.1" width="48" height="14" fill="#FFFFFF" />
+        <rect x="105" y="415.4" width="48" height="14" fill="#FFFFFF" />
+        <rect x="105" y="455.7" width="48" height="14" fill="#FFFFFF" />
+        <rect x="105" y="496.0" width="92" height="14" fill="#FFFFFF" />
+        <rect x="105" y="536.3" width="48" height="14" fill="#FFFFFF" />
+        <rect x="105" y="576.6" width="48" height="14" fill="#FFFFFF" />
+        <rect x="105" y="616.9" width="48" height="14" fill="#FFFFFF" />
+        <rect x="105" y="657.2" width="48" height="14" fill="#FFFFFF" />
+        <rect x="105" y="697.5" width="92" height="14" fill="#FFFFFF" />
+        <circle cx="185" cy="770" r="22" fill="#FFFFFF" />
+        <rect x="320.0" y="762" width="14" height="48" fill="#FFFFFF" />
+        <rect x="360.6" y="762" width="14" height="48" fill="#FFFFFF" />
+        <rect x="401.2" y="718" width="14" height="92" fill="#FFFFFF" />
+        <rect x="441.8" y="762" width="14" height="48" fill="#FFFFFF" />
+        <rect x="482.4" y="762" width="14" height="48" fill="#FFFFFF" />
+        <rect x="523.0" y="762" width="14" height="48" fill="#FFFFFF" />
+        <rect x="563.6" y="762" width="14" height="48" fill="#FFFFFF" />
+        <rect x="604.2" y="718" width="14" height="92" fill="#FFFFFF" />
+        <rect x="644.8" y="762" width="14" height="48" fill="#FFFFFF" />
+        <rect x="685.4" y="762" width="14" height="48" fill="#FFFFFF" />
+        <rect x="726.0" y="762" width="14" height="48" fill="#FFFFFF" />
+        <rect x="766.6" y="762" width="14" height="48" fill="#FFFFFF" />
+        <rect x="807.2" y="718" width="14" height="92" fill="#FFFFFF" />
+        <g transform="translate(300 618) rotate(-42.36)"><polygon points="0,0 112,-30 112,30" fill="#FBB918"/><polygon points="0,0 30,-8 30,8" fill="#000000" opacity="0.55"/><line x1="112" y1="-30" x2="112" y2="30" stroke="#000000" strokeWidth="5"/><rect x="112" y="-30" width="538.731422539758" height="60" fill="#FBB918"/><line x1="112" y1="-10" x2="650.731422539758" y2="-10" stroke="#000000" strokeWidth="5"/><line x1="112" y1="10" x2="650.731422539758" y2="10" stroke="#000000" strokeWidth="5"/><rect x="650.731422539758" y="-30" width="62" height="60" fill="#FBB918"/><line x1="658.731422539758" y1="-30" x2="658.731422539758" y2="30" stroke="#000000" strokeWidth="5"/><line x1="673.731422539758" y1="-30" x2="673.731422539758" y2="30" stroke="#000000" strokeWidth="5"/><line x1="688.731422539758" y1="-30" x2="688.731422539758" y2="30" stroke="#000000" strokeWidth="5"/><line x1="703.731422539758" y1="-30" x2="703.731422539758" y2="30" stroke="#000000" strokeWidth="5"/><path d="M712.731422539758,-30 H754.731422539758 a14,14 0 0 1 14,14 V16 a14,14 0 0 1 -14,14 H712.731422539758 Z" fill="#FBB918"/></g>
+      </g>
     </svg>
   );
 }
