@@ -608,12 +608,13 @@ function boxOrder(a, b, V, eps) {
   return 0;
 }
 
-// 一个长方体的面被紧贴的不透明长方体整面盖住 → 不画（柜体之间的内部面）
+// 一个长方体的面被紧贴的实心长方体整面盖住 → 不画（柜体之间的内部面）。
+// 玻璃不参与；背对观众的半透明柜子之间也互相盖（不然透过去满是内部线），但半透明的盖不住不透明的。
 function buildCoverIndex(items) {
   const idx = [new Map(), new Map(), new Map()]; // 每轴：min 平面 → 长方体
   const key = (v) => Math.round(v * 10);
   items.forEach((it) => {
-    if (it.translucent) return;
+    if (!it.solid) return;
     for (let k = 0; k < 3; k++) {
       const m = idx[k], kk = key(it.min[k]);
       if (!m.has(kk)) m.set(kk, []);
@@ -622,7 +623,7 @@ function buildCoverIndex(items) {
   });
   const idxMax = [new Map(), new Map(), new Map()];
   items.forEach((it) => {
-    if (it.translucent) return;
+    if (!it.solid) return;
     for (let k = 0; k < 3; k++) {
       const m = idxMax[k], kk = key(it.max[k]);
       if (!m.has(kk)) m.set(kk, []);
@@ -633,7 +634,7 @@ function buildCoverIndex(items) {
     const plane = sign > 0 ? it.max[k] : it.min[k];
     const cands = (sign > 0 ? idx[k] : idxMax[k]).get(key(plane)) || [];
     const o1 = (k + 1) % 3, o2 = (k + 2) % 3;
-    return cands.some((c) => c !== it
+    return cands.some((c) => c !== it && (!c.ghost || it.ghost)
       && c.min[o1] <= it.min[o1] + 0.05 && c.max[o1] >= it.max[o1] - 0.05
       && c.min[o2] <= it.min[o2] + 0.05 && c.max[o2] >= it.max[o2] - 0.05);
   };
@@ -661,7 +662,7 @@ export function axoScene(cab, opts = {}) {
     const center = project((min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2);
     let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
     pts2.forEach(([x, y]) => { bx0 = Math.min(bx0, x); by0 = Math.min(by0, y); bx1 = Math.max(bx1, x); by1 = Math.max(by1, y); });
-    return { i, b, min, max, opacity, translucent: opacity != null && opacity < 1, hull: convexHull(pts2), bbox: [bx0, by0, bx1, by1], depth: center[2] };
+    return { i, b, min, max, opacity, ghost, solid: b.opacity == null, hull: convexHull(pts2), bbox: [bx0, by0, bx1, by1], depth: center[2] };
   });
 
   // 场景尺寸 → 线宽 / 字号单位
@@ -766,7 +767,7 @@ export function axoScene(cab, opts = {}) {
     FACE_DEFS.forEach((fd, fiIdx) => {
       if (dot3(fd.n, V) <= 1e-9) return;
       const axis = fiIdx >> 1, sign = fiIdx % 2 === 0 ? 1 : -1;
-      if (!it.translucent && covered(it, axis, sign)) return;
+      if (it.solid && covered(it, axis, sign)) return;
       const fill = shade(b.color, lightFactor(fd.n));
       const s = { t: 'poly', points: fd.c(it.min, it.max).map(P2), fill, stroke: shade(fill, b.part === 'glass' ? 0.8 : 0.76), sw, part: b.part };
       if (b.frame != null) s.frame = b.frame;
