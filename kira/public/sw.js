@@ -2,8 +2,8 @@
 // 策略（沿用旧报价工具 sw.js 的做法）：
 //  · 页面导航：network-first，离线时回退到缓存的 index.html（离线也能打开、继续报价）
 //  · 静态资源（Vite 带 hash 的 js/css/图片/字体）：缓存优先 + 后台更新
-// 换版改 CACHE 版本号即可清掉旧缓存。
-const CACHE = 'kira-v1';
+// 换版改 CACHE 版本号即可清掉旧缓存（v2：旧版可能把 404 / robots.txt / 视频当成首页缓存了，一次清掉）。
+const CACHE = 'kira-v2';
 const SHELL = '/index.html';
 
 self.addEventListener('install', (event) => {
@@ -28,7 +28,14 @@ self.addEventListener('fetch', (event) => {
   if (req.mode === 'navigate') {
     event.respondWith(
       fetch(req)
-        .then((res) => { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(SHELL, copy)); return res; })
+        .then((res) => {
+          // 只把真正的 app 首页（200 + text/html）存成离线首页；404 / 5xx / robots.txt / 视频等不存
+          if (res.ok && res.status === 200 && (res.headers.get('content-type') || '').includes('text/html')) {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put(SHELL, copy));
+          }
+          return res;
+        })
         .catch(() => caches.match(SHELL)),
     );
     return;

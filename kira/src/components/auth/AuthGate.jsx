@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { LogIn } from 'lucide-react';
 import { T } from '../../theme.js';
 import { supabase } from '../../services/supabase.js';
@@ -91,6 +91,8 @@ export default function AuthGate({ children }) {
     if (u && typeof navigator !== 'undefined' && navigator.onLine === false) return { status: 'offline', user: u };
     return { status: 'checking', user: null };
   });
+  const statusRef = useRef(auth.status);
+  statusRef.current = auth.status;
 
   useEffect(() => {
     let alive = true;
@@ -116,7 +118,7 @@ export default function AuthGate({ children }) {
     const recheck = () => { if (navigator.onLine !== false) check(); };
     const onVis = () => { if (document.visibilityState === 'visible') recheck(); };
     const onStorage = (e) => { if (e.key === supabase.auth.storageKey && !e.newValue) apply(null, { signedOut: true }); };
-    const iv = setInterval(() => { setAuth((a) => { if (a.status === 'offline') recheck(); return a; }); }, 30000);
+    const iv = setInterval(() => { if (statusRef.current === 'offline') recheck(); }, 30000);
     window.addEventListener('online', recheck);
     document.addEventListener('visibilitychange', onVis);
     window.addEventListener('storage', onStorage);
