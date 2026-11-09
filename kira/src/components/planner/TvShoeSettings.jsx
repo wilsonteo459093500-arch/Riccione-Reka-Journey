@@ -2,6 +2,10 @@
 import { T } from '../../theme.js';
 import { TV_LOW_UNITS, TV_SIDE_KINDS, TV_UPPER_UNITS, SHOE_STYLES, SHOE_UNITS, tvRun } from '../../planner/tvshoe.js';
 import { Section, Segmented, Toggle, MeterInput, Collapse } from './bits.jsx';
+import { DEFAULT_CEILING, mmToM } from '../../planner/model.js';
+
+// 房间没填楼高：模板按默认 2.70 m 做到顶（同衣柜的提示）
+const NO_CEILING = `Room ceiling not set — default ${mmToM(DEFAULT_CEILING)} m 楼高没填，先按 ${mmToM(DEFAULT_CEILING)} m`;
 
 function UnitGrid({ units, options, onSet, widths, cols = 3 }) {
   return (
@@ -42,7 +46,7 @@ export function TvSettings({ cab, setSpec, ceilingH }) {
         <div className="text-[10px] mt-3 mb-1" style={{ color: T.inkSoft }}>{run.runW} mm · 每格</div>
         <UnitGrid units={s.lowUnits} options={TV_LOW_UNITS} onSet={setArr('lowUnits')} widths={widthsOf(cab, '-low')} />
       </Section>
-      <Section title="Side tall cabinets 两侧高柜 / 展示柜">
+      <Section title="Side tall cabinets 两侧高柜 / 展示柜" hint={s.sides.on && !(ceilingH > 0) ? NO_CEILING : undefined}>
         <Toggle on={!!s.sides.on} onChange={(on) => setSpec({ sides: { ...s.sides, on, H: on && ceilingH && !s.sides.on ? ceilingH : s.sides.H } })} label={s.sides.on ? 'Yes 有' : 'No 没有'} />
         {s.sides.on && (
           <div className="space-y-2 mt-2">
@@ -85,7 +89,7 @@ export function ShoeSettings({ cab, setSpec, ceilingH }) {
         <Segmented size="sm" value={s.style} onChange={(style) => setSpec({ style })}
           options={SHOE_STYLES.map((x) => ({ id: x.id, label: x.zh }))} />
       </Section>
-      <Section title="Size 尺寸" hint={tallish && ceilingH ? `Room ceiling 楼高 ${(ceilingH / 1000).toFixed(2)} m` : undefined}>
+      <Section title="Size 尺寸" hint={!tallish ? undefined : ceilingH > 0 ? `Room ceiling 楼高 ${mmToM(ceilingH)} m` : NO_CEILING}>
         <div className="grid grid-cols-3 gap-2">
           <MeterInput label="Width 总宽" mm={s.W} onChange={(W) => setSpec({ W })} />
           {tallish && <MeterInput label="Height 高" mm={s.H} onChange={(H) => setSpec({ H })} />}

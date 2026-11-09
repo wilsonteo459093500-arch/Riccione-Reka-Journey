@@ -246,7 +246,8 @@ export function elevationScene(cab, opts = {}) {
   const showDims = opts.dims !== false;
   const lang = ['en', 'zh', 'both'].includes(opts.lang) ? opts.lang : 'both';
   const walls = Array.isArray(opts.walls) ? opts.walls : safeWalls(cab || {});
-  const frames = (Array.isArray(cab?.frames) ? cab.frames : []).filter((f) => f && typeof f === 'object').map((f, i) => normFrame(f, i, cab?.exposed));
+  // 宽 0 的柜体（厨房只剩转角计价的那段，实物画在相邻墙上）不画，也不参与排墙 / 台面出挑
+  const frames = (Array.isArray(cab?.frames) ? cab.frames : []).filter((f) => f && typeof f === 'object').map((f, i) => normFrame(f, i, cab?.exposed)).filter((f) => f.W > 0);
 
   // 台面两头出挑：贴着别的柜体那一边不出挑
   for (const f of frames) {

@@ -3,7 +3,7 @@
 // 规则：先定总宽 → 每扇门最宽 600 自动算门数（可 +/−）→ 平分。
 // 只在业务编辑时重算 frames；载入旧报价不重算（避免以后改模板时悄悄改价）。
 // ============================================================
-import { leaf, vsplit, hsplit, splitEven, autoDoors, uid, DEFAULT_CEILING, DEFAULT_GLASS_COEF, mmToM } from './model.js';
+import { leaf, vsplit, hsplit, splitEven, autoDoors, uid, ceilingOr, DEFAULT_GLASS_COEF, mmToM } from './model.js';
 import { kitchenDefaults, kitchenNormalize, kitchenBuild, kitchenWalls, kitchenSummary } from './kitchen.js';
 import { tvDefaults, tvNormalize, tvBuild, tvSummary, shoeDefaults, shoeNormalize, shoeBuild, shoeSummary } from './tvshoe.js';
 
@@ -44,14 +44,14 @@ const wardrobeColumn = (unit, mainH, topH) => {
 const wardrobe = {
   id: 'wardrobe', zh: '衣柜', en: 'Wardrobe', units: WARDROBE_UNITS, defaultUnit: 'hang',
   defaults: ({ ceilingH } = {}) => ({
-    W: 2400, H: int(ceilingH, DEFAULT_CEILING), D: 600, base: { kind: 'plinth', h: 100 },
+    W: 2400, H: ceilingOr(ceilingH), D: 600, base: { kind: 'plinth', h: 100 },
     top: true, topH: 500, doorsAuto: true, doors: autoDoors(2400),
     units: Array.from({ length: autoDoors(2400) }, () => ({ layout: 'hang' })),
   }),
   normalize(spec) {
     const s = { ...spec };
     s.W = clamp(int(s.W, 2400), 300, 12000);
-    s.H = clamp(int(s.H, DEFAULT_CEILING), 600, 4000);
+    s.H = clamp(ceilingOr(s.H), 600, 4000);
     s.D = clamp(int(s.D, 600), 200, 1200);
     s.base = normBase(s.base);
     s.topH = clamp(int(s.topH, 500), 200, 900);

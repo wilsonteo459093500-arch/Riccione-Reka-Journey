@@ -3,7 +3,7 @@
 // 电视柜默认（用户定）：低柜 高 400 深 400，悬空离地 250
 // 鞋柜默认（用户定）：深 350，底层架空 150；上下柜 + 中空 = 下柜 900 · 中空 350 · 上柜到顶
 // ============================================================
-import { leaf, vsplit, hsplit, splitEven, autoDoors, mmToM, DEFAULT_CEILING } from './model.js';
+import { leaf, vsplit, hsplit, splitEven, autoDoors, mmToM, ceilingOr } from './model.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const int = (v, d = 0) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? n : d; };
@@ -32,7 +32,7 @@ export const TV_UPPER_UNITS = [
 export function tvDefaults({ ceilingH } = {}) {
   return {
     W: 3000, lowKind: 'floating', lowH: 400, lowD: 400, lowY: 250, lowUnits: [],
-    sides: { on: false, which: 'both', W: 600, H: int(ceilingH, DEFAULT_CEILING), D: 350, kind: 'openTop' },
+    sides: { on: false, which: 'both', W: 600, H: ceilingOr(ceilingH), D: 350, kind: 'openTop' },
     upper: { on: false, H: 400, D: 350, y: 2000 }, upperUnits: [],
   };
 }
@@ -55,7 +55,7 @@ export function tvNormalize(spec) {
   s.lowY = clamp(int(s.lowY, 250), 100, 900);
   s.sides = { ...tvDefaults().sides, ...(s.sides || {}) };
   s.sides.W = clamp(int(s.sides.W, 600), 300, 1500);
-  s.sides.H = clamp(int(s.sides.H, DEFAULT_CEILING), 1200, 4000);
+  s.sides.H = clamp(ceilingOr(s.sides.H), 1200, 4000);
   s.sides.D = clamp(int(s.sides.D, 350), 250, 650);
   s.sides.which = ['both', 'left', 'right'].includes(s.sides.which) ? s.sides.which : 'both';
   s.sides.kind = TV_SIDE_KINDS.some((k) => k.id === s.sides.kind) ? s.sides.kind : 'openTop';
@@ -136,7 +136,7 @@ export const SHOE_UNITS = [
 
 export function shoeDefaults({ ceilingH } = {}) {
   return {
-    W: 1200, style: 'niche', H: int(ceilingH, DEFAULT_CEILING), D: 350, raised: true, raisedH: 150,
+    W: 1200, style: 'niche', H: ceilingOr(ceilingH), D: 350, raised: true, raisedH: 150,
     lowerH: 900, nicheH: 350, lowH: 950, benchH: 450, units: [],
   };
 }
@@ -147,7 +147,7 @@ export function shoeNormalize(spec) {
   const s = { ...shoeDefaults(), ...spec };
   s.W = clamp(int(s.W, 1200), 300, 8000);
   s.style = SHOE_STYLES.some((x) => x.id === s.style) ? s.style : 'niche';
-  s.H = clamp(int(s.H, DEFAULT_CEILING), 1200, 4000);
+  s.H = clamp(ceilingOr(s.H), 1200, 4000);
   s.D = clamp(int(s.D, 350), 200, 650);
   s.raisedH = clamp(int(s.raisedH, 150), 50, 400);
   s.lowerH = clamp(int(s.lowerH, 900), 400, 1400);

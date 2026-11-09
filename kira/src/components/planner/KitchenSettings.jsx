@@ -17,6 +17,20 @@ const END_LABEL = {
   U: [['start', '墙C 尽头'], ['end', '墙B 尽头']],
 };
 
+// 高柜 + 转角比墙还长（同 validate.js 的提醒，贴在那面墙下面）
+const fitMsg = (r, D) => {
+  const en = [r.tall && `tall unit ${r.tall.w}`, r.cornerSide && `corner ${D}`].filter(Boolean).join(' + ');
+  const zh = [r.tall && `高柜 ${r.tall.w}`, r.cornerSide && `转角 ${D}`].filter(Boolean).join(' + ');
+  return `${en.charAt(0).toUpperCase()}${en.slice(1)} = ${r.len + r.overflow} mm doesn't fit on this wall — measure again ${zh} 放不下，请再量墙长`;
+};
+
+// 这面墙实际建了什么、算了多少（照 frames 写，跟价钱一致）：实物宽 +「转角 N 照算」；墙太短只剩转角也照算
+function RunLabel({ title, f }) {
+  const W = f?.W || 0, cw = f?.cornerW || 0;
+  const txt = W > 0 ? `${W} mm${cw ? `（转角 ${cw} 照算）` : ''}` : cw > 0 ? `corner only — ${cw} mm priced 只有转角 ${cw}（照算）` : 'none 没有';
+  return <div className="text-[10px] mt-3 mb-1" style={{ color: T.inkSoft }}>{title} · {txt}</div>;
+}
+
 function UnitGrid({ units, options, onSet, widths }) {
   return (
     <div className="grid grid-cols-3 gap-1.5">
@@ -56,12 +70,15 @@ export default function KitchenSettings({ cab, setSpec }) {
             <MeterInput label={spec.shape === 'L' || spec.shape === 'U' ? 'Length to corner 长度（量到墙角）' : 'Length 长度'} mm={w.len} onChange={(len) => setWall(i, { len })} hint="可打 2.4+0.6" />
             <Toggle on={w.upper !== false} onChange={(upper) => setWall(i, { upper })} label="Top cabinets 吊柜" />
           </div>
-          <div className="text-[10px] mt-3 mb-1" style={{ color: T.inkSoft }}>Base 地柜 · {runs[i].runW} mm{runs[i].cornerW ? `（转角 ${runs[i].cornerW} 照算）` : ''}</div>
-          <UnitGrid units={w.units} options={KITCHEN_BASE_UNITS} onSet={setWallUnit(i, 'units')} widths={colWidths(frameOf(i, 'base'))} />
+          {runs[i].overflow > 0 && (
+            <div className="text-[11px] mt-2" style={{ color: T.terra }}>{fitMsg(runs[i], spec.baseD)}</div>
+          )}
+          <RunLabel title="Base 地柜" f={frameOf(i, 'base')} />
+          {frameOf(i, 'base')?.W > 0 && <UnitGrid units={w.units} options={KITCHEN_BASE_UNITS} onSet={setWallUnit(i, 'units')} widths={colWidths(frameOf(i, 'base'))} />}
           {w.upper !== false && (
             <>
-              <div className="text-[10px] mt-3 mb-1" style={{ color: T.inkSoft }}>Top 吊柜</div>
-              <UnitGrid units={w.upperUnits} options={KITCHEN_UPPER_UNITS} onSet={setWallUnit(i, 'upperUnits')} widths={colWidths(frameOf(i, 'wall'))} />
+              <RunLabel title="Top 吊柜" f={frameOf(i, 'wall')} />
+              {frameOf(i, 'wall')?.W > 0 && <UnitGrid units={w.upperUnits} options={KITCHEN_UPPER_UNITS} onSet={setWallUnit(i, 'upperUnits')} widths={colWidths(frameOf(i, 'wall'))} />}
             </>
           )}
         </Section>

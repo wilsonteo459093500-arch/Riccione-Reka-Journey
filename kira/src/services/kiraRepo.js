@@ -6,21 +6,46 @@
 //
 // 每个版本一行：{ id, data: <record>, updated_at, owner_id }。
 // owner_id 由数据库默认 auth.uid() 填入；RLS 规定只有 owner 能删。
+// 合并 / 待同步 / 待删除的规则在 src/components/quote/sync.js。
 // ============================================================
 import { supabase, cloudConfigured } from './supabase.js';
 
 export { cloudConfigured };
 
 const TABLE = 'kira_projects';
+const PAGE = 1000; // Supabase「Max rows」默认 1000：一次最多回这么多，多的会被悄悄截掉 → 一页一页读
+const MAX_PAGES = 500;
+
+// 分页读完整张表：.range() 一页一页拿，直到拿到短页 / 空页（有 count 时读满 count 为止）
+export async function selectAll(makeQuery, page = PAGE) {
+  const out = [];
+  for (let from = 0, n = 0; n < MAX_PAGES; n += 1) {
+    const { data, error, count } = await makeQuery().range(from, from + page - 1);
+    if (error) throw error;
+    const rows = data || [];
+    out.push(...rows);
+    from += rows.length;
+    const done = !rows.length || (Number.isFinite(count) ? from >= count : rows.length < page);
+    if (done) return out;
+  }
+  return out;
+}
+
+const toRecord = (r) => (r && r.data && typeof r.data === 'object' && !Array.isArray(r.data)
+  ? { ...r.data, id: r.data.id || r.id, ownerId: r.owner_id || r.data.ownerId || null }
+  : null);
 
 export const kiraCloud = {
   async load() {
-    const { data, error } = await supabase
+    // 按 id 排（改动不会让行在分页之间跳来跳去）；回来后再按更新时间排
+    const rows = await selectAll(() => supabase
       .from(TABLE)
-      .select('data, owner_id')
-      .order('updated_at', { ascending: false });
-    if (error) throw error;
-    return (data || []).map((r) => ({ ...r.data, ownerId: r.owner_id || r.data?.ownerId || null }));
+      .select('id, data, owner_id', { count: 'exact' })
+      .order('id', { ascending: true }));
+    const seen = new Set();
+    return rows.map(toRecord)
+      .filter((r) => r && typeof r.id === 'string' && !seen.has(r.id) && !!seen.add(r.id))
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   },
 
   async saveRecord(rec) {
@@ -31,35 +56,46 @@ export const kiraCloud = {
     if (error) throw error;
   },
 
-  // 删除：RLS 只允许 owner 删；被拒时 Supabase 不报错但删 0 行 → 用 count 判断
+  // 删除：RLS 只允许 owner 删；被拒时 Supabase 不报错、只是删 0 行 → 用 count 判断。
+  // 删少了就再查一次哪些还在云端：还在的 = 没删掉（kept），其余 = 已删 / 本来就不在（deleted）。
+  // 网络错误照样 throw（调用方留着下次再试）。
   async removeMany(ids) {
-    if (!ids || !ids.length) return 0;
+    if (!ids || !ids.length) return { deleted: [], kept: [] };
     const { error, count } = await supabase.from(TABLE).delete({ count: 'exact' }).in('id', ids);
     if (error) throw error;
-    return count ?? 0;
+    if ((count ?? 0) >= ids.length) return { deleted: [...ids], kept: [] };
+    const { data, error: e2 } = await supabase.from(TABLE).select('id').in('id', ids);
+    if (e2) throw e2;
+    const still = new Set((data || []).map((r) => r?.id).filter(Boolean));
+    return { deleted: ids.filter((id) => !still.has(id)), kept: ids.filter((id) => still.has(id)) };
   },
 
-  // onRow({ type:'upsert', record } | { type:'delete', id })
-  subscribe(onRow) {
+  // onRow({ type:'upsert', record } | { type:'delete', id })；onStatus('SUBSCRIBED' | 'CHANNEL_ERROR' | 'TIMED_OUT' | 'CLOSED')
+  // 断线重连后会再收到 SUBSCRIBED → 前端趁机重新拉一次（断线期间漏掉的改动不会重播）
+  subscribe(onRow, onStatus) {
     const channel = supabase
       .channel('kira-projects-sync')
       .on('postgres_changes', { event: '*', schema: 'public', table: TABLE }, (payload) => {
-        if (payload.eventType === 'DELETE') onRow({ type: 'delete', id: payload.old?.id });
-        else if (payload.new?.data) onRow({ type: 'upsert', record: { ...payload.new.data, ownerId: payload.new.owner_id || null } });
+        if (payload.eventType === 'DELETE') { if (payload.old?.id) onRow({ type: 'delete', id: payload.old.id }); }
+        else if (payload.new?.data) onRow({ type: 'upsert', record: { ...payload.new.data, id: payload.new.data.id || payload.new.id, ownerId: payload.new.owner_id || null } });
       })
-      .subscribe();
+      .subscribe((status) => { try { onStatus?.(status); } catch (e) { /* ignore */ } });
     return () => supabase.removeChannel(channel);
   },
 };
 
-// 旧报价工具的云端（public.quotes）—— 只读，绝不写入。
+// 旧报价工具的云端（public.quotes）—— 只读，绝不写入。分页读完（超过 1000 份也全部列出、全部对价）。
 export const oldQuotes = {
   async list() {
-    const { data, error } = await supabase
+    const rows = await selectAll(() => supabase
       .from('quotes')
-      .select('id, data, updated_at')
-      .order('updated_at', { ascending: false });
-    if (error) throw error;
-    return (data || []).map((r) => ({ ...r.data, _updatedAt: r.updated_at }));
+      .select('id, data, updated_at', { count: 'exact' })
+      .order('updated_at', { ascending: false })
+      .order('id', { ascending: true }));
+    const seen = new Set();
+    const fresh = (key) => key == null || (!seen.has(key) && !!seen.add(key)); // 分页重叠时去重
+    return rows
+      .filter((r) => r && r.data && typeof r.data === 'object' && fresh(r.id ?? r.data.id))
+      .map((r) => ({ ...r.data, _updatedAt: r.updated_at }));
   },
 };

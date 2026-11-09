@@ -1,6 +1,7 @@
 // 尺寸「不寻常」提醒（只提醒，不阻挡出价）。数字来自 .claude/skills/interior-design-expert/SKILL.md
 //   吊柜深 300–350 · 地柜深 560–600 · 衣柜深 550–600 · 长挂 ≥1400 · 台面高 850–900
 import { layoutLeaves, bodyHeight } from './model.js';
+import { wallRuns } from './kitchen.js';
 
 const T = (en, zh) => ({ en, zh });
 
@@ -18,6 +19,20 @@ export function validateCabinet(cab, { ceilingH } = {}) {
       if (w > 0 && w < 250 && node.type !== 'void') out.push({ level: 'info', msg: T(`A ${Math.round(w)} mm wide section is very narrow`, `有一格只有 ${Math.round(w)} 宽，很窄`) });
     });
   });
+  // 厨房：高柜 + 转角比墙还长 → 放不下（价钱照「墙长 − 高柜」算，但要提醒业务去量清楚）
+  if (cab?.template === 'kitchen' && Array.isArray(spec.walls) && spec.walls.length) {
+    let runs = [];
+    try { runs = wallRuns(spec); } catch { runs = []; }
+    const multi = spec.walls.length > 1;
+    runs.forEach((r) => {
+      if (!(r.overflow > 0)) return;
+      const L = multi ? ['A', 'B', 'C'][r.i] || '' : '';
+      const need = r.len + r.overflow;
+      const parts = [r.tall && T(`tall unit ${r.tall.w}`, `高柜 ${r.tall.w}`), r.cornerSide && T(`corner ${spec.baseD}`, `转角 ${spec.baseD}`)].filter(Boolean);
+      const en = parts.map((p) => p.en).join(' + '), zh = parts.map((p) => p.zh).join(' + ');
+      out.push({ level: 'warn', msg: T(`${L ? `Wall ${L}: ` : ''}${en} = ${need} mm doesn't fit on the wall (${r.len} mm)`, `${L ? `墙${L}：` : ''}${zh} = ${need}，比墙长 ${r.len} 还长，放不下`) });
+    });
+  }
   if (spec.W > 0 && spec.doors && spec.W / spec.doors > 650) out.push({ level: 'warn', msg: T('Doors wider than 600 mm', '门宽超过 600') });
   // 去重
   const seen = new Set();

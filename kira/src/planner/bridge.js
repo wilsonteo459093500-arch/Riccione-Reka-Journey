@@ -173,7 +173,9 @@ export const frameKindLabel = (kind, lang = 'both') => {
 };
 
 // 「L 1.20m × H 2.10m × D 0.60m」（真实尺寸，不是换算后的数量）
+// 厨房墙太短只剩转角（宽 0，转角照算）：写转角那段的长度，不写「L 0.00m」
 export function frameDimsLabel(frame, lang = 'en') {
-  const L = mmToM(frame.W), H = mmToM(frame.H), D = mmToM(frame.D);
-  return lang === 'zh' ? `长 ${L}m × 高 ${H}m × 深 ${D}m` : `L ${L}m × H ${H}m × D ${D}m`;
+  const corner = !(frame.W > 0) && frame.cornerW > 0;
+  const L = mmToM(corner ? frame.cornerW : frame.W), H = mmToM(frame.H), D = mmToM(frame.D);
+  return lang === 'zh' ? `${corner ? '转角 ' : ''}长 ${L}m × 高 ${H}m × 深 ${D}m` : `${corner ? 'Corner ' : ''}L ${L}m × H ${H}m × D ${D}m`;
 }

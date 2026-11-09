@@ -354,3 +354,28 @@ test('gaps are labelled by what goes there (hood / fridge / appliance)', () => {
   assert.match(labels(hood), /烟机位/);
   assert.match(labels(cab([frame({ body: leaf('void', { interior: 'appliance' }) })])), /电器位/);
 });
+
+// 厨房墙太短只剩转角（finding 0）：宽 0 的柜体只为了计价，立面图不画它、也不让它挪动排墙 / 台面出挑
+test('kitchen corner-only frames (W = 0 + cornerW) draw nothing extra: no NaN, same drawing as without them', () => {
+  const OVEN = { on: true, end: 'end', kind: 'oven', W: 600 };
+  const cases = [['L', [3000, 1200], OVEN], ['L', [3000, 900], OVEN], ['L', [3000, 600], OVEN], ['U', [3000, 2400, 600], { on: false }], ['U', [3000, 2400, 1100], { ...OVEN, end: 'start' }]];
+  for (const [shape, lens, tall] of cases) {
+    const k = updateSpec(newCabinet('kitchen'), { shape, walls: lens.map((len) => ({ len })), tall });
+    const zero = k.frames.filter((f) => f.W === 0);
+    assert.ok(zero.length > 0 || lens[1] === 600, `${shape} ${lens}: has a corner-only frame`);
+    zero.forEach((f) => assert.ok(f.cornerW > 0));
+    const without = { ...k, frames: k.frames.filter((f) => f.W > 0) };
+    for (const style of ['drawing', 'blocks']) {
+      const sc = elevationScene(k, { style });
+      const tag = `${shape} ${lens.join('/')} ${style}`;
+      assertAllFinite(sc, tag);
+      sc.viewBox.forEach((v) => assert.ok(Number.isFinite(v), tag));
+      assert.deepEqual(sc, elevationScene(without, { style }), tag);
+      for (const s of sc.shapes) if (s.t === 'rect') assert.ok(s.w >= 0 && s.h >= 0, tag);
+    }
+  }
+  // 单独一个宽 0 的柜体（带 cornerW）也不出错
+  const lone = elevationScene(cab([frame({ kind: 'base', W: 0, H: 850, worktop: true, cornerW: 600, wall: 1, x: 600 })]));
+  assertAllFinite(lone);
+  assert.equal(role(lone, 'outline').length, 0);
+});

@@ -182,3 +182,43 @@ test('shoe styles: low cabinet and bench are linear (height < 1 m)', () => {
   assert.equal(bench.frames[0].H, 450);
   assert.ok(cabinetTotal(bench) > 0);
 });
+
+// ---------------- 房间楼高没填（finding 15）----------------
+// 房间 ceilingH 是 null / 0 / '' / 没传 → 一律按默认 2700 做到顶（Number(null) = 0 不能当成「楼高 0」再被夹到 600 / 1200）
+test('room ceiling not set (null / 0 / undefined / \'\' / junk): every template builds to the default 2700, same price as 2700', () => {
+  const heights = (c) => (c.template === 'tv' ? [c.spec.sides.H] : c.template === 'kitchen' ? [] : [c.spec.H]);
+  for (const t of ['wardrobe', 'kitchen', 'tv', 'shoe']) {
+    const ref = newCabinet(t, { ceilingH: 2700 });
+    for (const ceilingH of [null, 0, undefined, '', -5, NaN, 'abc']) {
+      const c = newCabinet(t, { ceilingH });
+      heights(c).forEach((h) => assert.equal(h, 2700, `${t} ceilingH=${String(ceilingH)}`));
+      assert.ok(Math.abs(cabinetTotal(c) - cabinetTotal(ref)) < 1e-6, `${t} ceilingH=${String(ceilingH)} price`);
+      assert.deepEqual(c.frames.map((f) => f.H), ref.frames.map((f) => f.H));
+    }
+  }
+  // 填了就用填的（数字字符串也行）
+  assert.equal(newCabinet('wardrobe', { ceilingH: 2800 }).spec.H, 2800);
+  assert.equal(newCabinet('wardrobe', { ceilingH: '2800' }).spec.H, 2800);
+  assert.equal(newCabinet('shoe', { ceilingH: 2400 }).frames[0].H, 2400);
+});
+
+test('room ceiling not set: wardrobe frame 2.70 m (= RM 12,150), shoe to-ceiling / niche 2.70 m, TV side towers 2.70 m', () => {
+  const w = newCabinet('wardrobe', { ceilingH: null });
+  assert.equal(w.frames[0].H, 2700);
+  assert.ok(Math.abs(cabinetTotal(w) - 12150) < 1e-6);
+  for (const style of ['niche', 'full']) {
+    const s = updateSpec(newCabinet('shoe', { ceilingH: null }), { style });
+    assert.equal(s.frames[0].H, 2700, style);
+  }
+  const tv = updateSpec(newCabinet('tv', { ceilingH: null }), { sides: { on: true, which: 'both' } });
+  const towers = tv.frames.filter((f) => /side[LR]$/.test(f.id));
+  assert.equal(towers.length, 2);
+  towers.forEach((f) => assert.equal(f.H, 2700));
+  // 规范化也一样：坏掉的 H（null / ''）不变成 600 / 1200
+  assert.equal(updateSpec(w, { H: null }).spec.H, 2700);
+  assert.equal(updateSpec(newCabinet('shoe'), { H: '' }).spec.H, 2700);
+  assert.equal(updateSpec(newCabinet('tv'), { sides: { on: true, H: null } }).spec.sides.H, 2700);
+  // 用户自己改的高度照旧（夹在范围内）
+  assert.equal(updateSpec(w, { H: 2400 }).spec.H, 2400);
+  assert.equal(updateSpec(w, { H: 300 }).spec.H, 600);
+});

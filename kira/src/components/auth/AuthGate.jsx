@@ -72,24 +72,83 @@ function LoginScreen() {
   );
 }
 
+// 本机存着的登录（supabase-js 存在 localStorage 的 sb-<ref>-auth-token）。离线时只拿来认人，不拿来上云。
+function storedUser() {
+  try {
+    const key = supabase.auth.storageKey;
+    const s = JSON.parse(localStorage.getItem(key) || 'null');
+    const u = s?.user || JSON.parse(localStorage.getItem(`${key}-user`) || 'null')?.user;
+    return s?.refresh_token && u?.id ? u : null;
+  } catch (e) { return null; }
+}
+const OFFLINE_AFTER_MS = 2500; // 有本机登录记录时最多等这么久，就先用本机资料打开（离线 / token 过期正在刷新）
+
+// 状态：checking（载入中）· online（登录有效，可上云）· offline（有本机登录记录，但现在确认不了 →
+// 照样打开、用本机资料报价，改动排队等有网再上云）· out（确定没登录 → 登录页）
 export default function AuthGate({ children }) {
-  const [session, setSession] = useState(undefined); // undefined = still checking
+  const [auth, setAuth] = useState(() => {
+    const u = storedUser();
+    if (u && typeof navigator !== 'undefined' && navigator.onLine === false) return { status: 'offline', user: u };
+    return { status: 'checking', user: null };
+  });
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
-    return () => sub.subscription.unsubscribe();
+    let alive = true;
+    // 有 session → online；没有：本机还留着登录记录（离线 / 刷新失败可重试）→ offline；
+    // 只有 SIGNED_OUT 或本机根本没有登录记录才回登录页
+    const apply = (session, { signedOut = false } = {}) => {
+      if (!alive) return;
+      if (session?.user) { setAuth((a) => (a.status === 'online' && a.user?.id === session.user.id ? a : { status: 'online', user: session.user })); return; }
+      const u = signedOut ? null : storedUser();
+      setAuth((a) => (u ? (a.status === 'offline' && a.user?.id === u.id ? a : { status: 'offline', user: u }) : { status: 'out', user: null }));
+    };
+    const check = () => supabase.auth.getSession().then(({ data }) => apply(data?.session), () => apply(null));
+    check();
+    const t = setTimeout(() => {
+      const u = storedUser();
+      if (alive && u) setAuth((a) => (a.status === 'checking' ? { status: 'offline', user: u } : a));
+    }, OFFLINE_AFTER_MS);
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === 'SIGNED_OUT') apply(null, { signedOut: true });
+      else apply(s);
+    });
+    // 有网 / 回到前台 / 每 30 秒（离线模式时）→ 再确认一次登录（过期的 token 在这里刷新）
+    const recheck = () => { if (navigator.onLine !== false) check(); };
+    const onVis = () => { if (document.visibilityState === 'visible') recheck(); };
+    const onStorage = (e) => { if (e.key === supabase.auth.storageKey && !e.newValue) apply(null, { signedOut: true }); };
+    const iv = setInterval(() => { setAuth((a) => { if (a.status === 'offline') recheck(); return a; }); }, 30000);
+    window.addEventListener('online', recheck);
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+      clearInterval(iv);
+      window.removeEventListener('online', recheck);
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('storage', onStorage);
+      sub.subscription.unsubscribe();
+    };
   }, []);
 
-  if (session === undefined) {
+  // 退出这台设备（scope local：离线也能退；不会把同一账号在别的设备上也踢下线）
+  const signOut = async () => {
+    try {
+      await Promise.race([supabase.auth.signOut({ scope: 'local' }), new Promise((r) => setTimeout(r, 4000))]);
+    } catch (e) { /* ignore */ }
+    try { localStorage.removeItem(supabase.auth.storageKey); localStorage.removeItem(`${supabase.auth.storageKey}-user`); } catch (e) { /* ignore */ }
+    setAuth({ status: 'out', user: null });
+  };
+
+  if (auth.status === 'checking') {
     return (
       <div className="min-h-screen flex items-center justify-center font-body" style={{ background: T.paper, color: T.inkSoft }}>
-        <div className="font-display text-2xl">载入中…</div>
+        <div className="font-display text-2xl">Loading 载入中…</div>
       </div>
     );
   }
 
-  if (!session) return <LoginScreen />;
+  if (auth.status === 'out' || !auth.user) return <LoginScreen />;
 
-  return children({ user: session.user, signOut: () => supabase.auth.signOut() });
+  return children({ user: auth.user, signOut, cloudReady: auth.status === 'online' });
 }

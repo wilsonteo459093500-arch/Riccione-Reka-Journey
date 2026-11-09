@@ -56,6 +56,8 @@ export const CRAFT_COEF = [
 export const DEFAULT_GLASS_COEF = 1.5;
 
 export const DEFAULT_CEILING = 2700;
+// 楼高 / 到顶高度：null、''、0、负数、非数字都算「没填」→ 用默认 2700（Number(null) = 0，不能当成填了 0）
+export const ceilingOr = (v, d = DEFAULT_CEILING) => { const n = v == null || v === '' ? NaN : Math.round(Number(v)); return n > 0 ? n : d; };
 export const MAX_DOOR = 600; // 每扇门最宽 600 → 自动算门数
 
 let seq = 0;

@@ -89,7 +89,12 @@ export function wallRuns(spec) {
       if (endEnd.wall === i && endEnd.side === side) return 'end';
       return false;
     };
-    return { i, len: w.len, x0, x1, runW: Math.max(0, x1 - x0), cornerW: cornerSide ? D : 0, cornerSide, tall, endTag, tallSide: tallAt?.wall === i ? tallAt.side : null };
+    // 价钱 = 墙长（量到墙角）− 高柜；实物 runW 是扣掉转角后的那段，转角 cornerW 照算。
+    // 墙太短（高柜把整段占满 / 短的回头墙）时 runW = 0，但转角照样计价；高柜 + 转角比墙还宽 → 转角只算到高柜为止（价钱连续，不跳）
+    const runW = Math.max(0, x1 - x0);
+    const cornerW = cornerSide ? Math.min(D, Math.max(0, w.len - (tall ? tallW : 0)) - runW) : 0;
+    const overflow = Math.max(0, x0 - x1); // 高柜 + 转角超出墙长多少（validate 提醒）
+    return { i, len: w.len, x0, x1, runW, cornerW, cornerSide, tall, endTag, tallSide: tallAt?.wall === i ? tallAt.side : null, overflow };
   });
 }
 
@@ -151,29 +156,30 @@ export function kitchenBuild(spec, cab) {
     const w = spec.walls[r.i];
     const tag = multi ? ` · 墙${WALL_LETTER[r.i]} Wall ${WALL_LETTER[r.i]}` : '';
     const n = w.units.length;
-    if (r.runW > 0) {
-      const widths = splitEven(r.runW, n);
+    const ends = (W) => (W > 0 ? { left: r.tallSide === 'left' ? false : r.endTag('left'), right: r.tallSide === 'right' ? false : r.endTag('right') } : { left: false, right: false });
+    // 地柜：实物 runW = 0（只剩转角）也要建，转角照算；宽 0 的柜体没有侧面露出 → 不加见光板，也不算抽屉
+    if (r.runW > 0 || r.cornerW > 0) {
       const Hb = spec.baseH - spec.base.h;
       frames.push({
         id: `${cab.id}-w${r.i}-base`, kind: 'base', label: `Base Cabinet 地柜${tag}`, wall: r.i, x: r.x0, y: 0,
         W: r.runW, H: spec.baseH, D: spec.baseD, base: { ...spec.base }, worktop: !!spec.worktop,
-        cornerW: r.cornerW, ends: { left: r.tallSide === 'left' ? false : r.endTag('left'), right: r.tallSide === 'right' ? false : r.endTag('right') },
-        body: vsplit(widths, w.units.map((u) => baseColumn(u, Hb))),
+        cornerW: r.cornerW, ends: ends(r.runW),
+        body: r.runW > 0 ? vsplit(splitEven(r.runW, n), w.units.map((u) => baseColumn(u, Hb))) : leaf('closed'),
       });
-      if (w.upper) {
-        const upperCorner = r.cornerW ? spec.upperD : 0;
-        // 吊柜也从转角后开始（实物让给相邻墙的吊柜深度）
-        const ux0 = r.cornerSide === 'left' ? r.x0 - spec.baseD + spec.upperD : r.x0;
-        const ux1 = r.cornerSide === 'right' ? r.x1 + spec.baseD - spec.upperD : r.x1;
-        const uW = Math.max(0, ux1 - ux0);
-        if (uW > 0) {
-          frames.push({
-            id: `${cab.id}-w${r.i}-upper`, kind: 'wall', label: `Top Cabinet 吊柜${tag}`, wall: r.i, x: ux0, y: spec.upperY,
-            W: uW, H: spec.upperH, D: spec.upperD, base: { kind: 'wallhung', h: 0 },
-            cornerW: upperCorner, ends: { left: r.tallSide === 'left' ? false : r.endTag('left'), right: r.tallSide === 'right' ? false : r.endTag('right') },
-            body: vsplit(splitEven(uW, w.upperUnits.length), w.upperUnits.map(upperColumn)),
-          });
-        }
+    }
+    if (w.upper) {
+      // 吊柜也从转角后开始（实物让给相邻墙的吊柜深度）；价钱同地柜 = 墙长 − 高柜 → 转角段 = 价钱长 − 实物宽（最多吊柜深）
+      const ux0 = r.cornerSide === 'left' ? r.x0 - spec.baseD + spec.upperD : r.x0;
+      const ux1 = r.cornerSide === 'right' ? r.x1 + spec.baseD - spec.upperD : r.x1;
+      const uW = Math.max(0, ux1 - ux0);
+      const upperCorner = r.cornerSide ? Math.min(spec.upperD, Math.max(0, r.runW + r.cornerW - uW)) : 0;
+      if (uW > 0 || upperCorner > 0) {
+        frames.push({
+          id: `${cab.id}-w${r.i}-upper`, kind: 'wall', label: `Top Cabinet 吊柜${tag}`, wall: r.i, x: uW > 0 ? ux0 : Math.min(ux0, ux1), y: spec.upperY,
+          W: uW, H: spec.upperH, D: spec.upperD, base: { kind: 'wallhung', h: 0 },
+          cornerW: upperCorner, ends: ends(uW),
+          body: uW > 0 ? vsplit(splitEven(uW, w.upperUnits.length), w.upperUnits.map(upperColumn)) : leaf('closed', { interior: 'shelves' }),
+        });
       }
     }
     if (r.tall) {

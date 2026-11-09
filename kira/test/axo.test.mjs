@@ -341,3 +341,27 @@ test('hinge side ignores the 18 mm end-panel shift (one exposed end, single cent
   const d = bx.find((b) => b.part === 'front'), h = bx.find((b) => b.part === 'handle');
   assert.ok(h.x + h.w / 2 > d.x + d.w / 2);
 });
+
+// 厨房墙太短只剩转角（finding 0）：宽 0 的柜体只为了计价（转角实物是相邻墙的柜子），3D 不画、不出 NaN
+test('kitchen corner-only frames (W = 0 + cornerW) add no boxes and no NaN', () => {
+  const OVEN = { on: true, end: 'end', kind: 'oven', W: 600 };
+  const cases = [['L', [3000, 1200], OVEN], ['L', [3000, 900], OVEN], ['U', [3000, 2400, 600], { on: false }], ['U', [3000, 2400, 1100], { ...OVEN, end: 'start' }]];
+  for (const [shape, lens, tall] of cases) {
+    const k = { ...updateSpec(newCabinet('kitchen'), { shape, walls: lens.map((len) => ({ len })), tall }), handle: 'bar' };
+    const zero = k.frames.filter((f) => f.W === 0);
+    assert.ok(zero.length > 0, `${shape} ${lens}`);
+    const without = { ...k, frames: k.frames.filter((f) => f.W > 0) };
+    const boxes = cabinetBoxes(k);
+    assert.ok(boxes.length > 10 && boxes.every(finiteBox), `${shape} ${lens}`);
+    assert.equal(boxes.filter((b) => zero.some((f) => f.id === b.frame)).length, 0);
+    assert.deepEqual(boxes.map(({ frameIndex, ...b }) => b), cabinetBoxes(without).map(({ frameIndex, ...b }) => b));
+    for (const yaw of [-30, 0, 30]) {
+      const sc = axoScene(k, { yaw });
+      assert.ok(polys(sc).length > 0 && allFinite(sc), `${shape} ${lens} yaw ${yaw}`);
+      assert.deepEqual(sc.viewBox, axoScene(without, { yaw }).viewBox);
+    }
+  }
+  const lone = cabOf([frame({ id: 'z', kind: 'base', W: 0, H: 850, D: 600, worktop: true, cornerW: 600, body: leaf('closed') })]);
+  assert.deepEqual(cabinetBoxes(lone), []);
+  assert.ok(allFinite(axoScene(lone)));
+});

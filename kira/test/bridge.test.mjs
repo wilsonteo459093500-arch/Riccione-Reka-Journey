@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from './harness.mjs';
 import { computeItem, computeQuote } from '../src/constants/pricing.js';
 import { leaf, vsplit, hsplit } from '../src/planner/model.js';
-import { frameItems, frameQuantities, deriveZones, resolveSeries, cabinetTotal, mergeLines } from '../src/planner/bridge.js';
+import { frameItems, frameQuantities, deriveZones, resolveSeries, cabinetTotal, mergeLines, frameDimsLabel } from '../src/planner/bridge.js';
 
 const cab = (frames, extra = {}) => ({ id: 'c1', frames, exposed: { left: false, right: false }, ...extra });
 const frame = (o) => ({ id: 'f', kind: 'tall', label: 'T', x: 0, y: 0, base: { kind: 'plinth', h: 100 }, ends: { left: true, right: true }, ...o });
@@ -167,4 +167,23 @@ test('(r) L-shape corner: second wall measured to the corner — corner width is
   const c = cab([a, b]);
   const old = computeItem({ type: 'cabinet', cabType: 'base', length: '3+2.4', h: 0.85, d: 0.6, doorSeries: 'A', carcassSeries: 'A' }).total;
   closeTo(priceFrame(c, a) + priceFrame(c, b), old);
+});
+
+test('(s) corner-only frame (W 0, cornerW 600): priced as 0.6 L.m of closed base, no side panels', () => {
+  // 墙B 只剩转角（高柜占满 / 短回头墙）→ 价钱照「量到墙角」= 0.6 延米
+  const b = frame({ id: 'b', kind: 'base', W: 0, H: 850, D: 600, x: 600, cornerW: 600, ends: { left: false, right: false }, body: leaf('closed') });
+  const qq = frameQuantities(b);
+  assert.equal(qq.linear, true);
+  closeTo(qq.q.closed, 600);
+  const c = cab([b], { exposed: { left: true, right: true } });
+  const items = frameItems(c, b);
+  assert.equal(items.length, 1);
+  closeTo(items[0].length, 0.6);
+  closeTo(priceFrame(c, b), computeItem({ type: 'cabinet', cabType: 'base', length: '0.6', h: 0.85, d: 0.6, doorSeries: 'A', carcassSeries: 'A' }).total);
+  // 宽 0、也没有转角 → 什么都不算
+  assert.equal(frameItems(c, { ...b, cornerW: 0 }).length, 0);
+  // 报价单尺寸：写转角那段，不写 L 0.00m；正常柜体照旧写实物尺寸
+  assert.equal(frameDimsLabel(b), 'Corner L 0.60m × H 0.85m × D 0.60m');
+  assert.equal(frameDimsLabel(b, 'zh'), '转角 长 0.60m × 高 0.85m × 深 0.60m');
+  assert.equal(frameDimsLabel({ ...b, W: 1800 }), 'L 1.80m × H 0.85m × D 0.60m');
 });
