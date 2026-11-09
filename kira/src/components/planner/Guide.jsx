@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ChevronLeft, ChevronRight, PlayCircle, Sparkles } from 'lucide-react';
 import { T } from '../../theme.js';
+import { useBackClose } from './bits.jsx';
 
 export const GUIDE_KEY = 'kira.onboarded.v1';
 export const guideSeen = () => { try { return localStorage.getItem(GUIDE_KEY) === '1'; } catch (e) { return true; } };
@@ -21,6 +22,7 @@ export default function Guide({ onClose, onDemo, videoSrc }) {
   const [video, setVideo] = useState(false);
   const s = STEPS[i];
   const close = () => { markGuideSeen(); onClose(); };
+  useBackClose(close); // 手机返回键 = 关闭
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center no-print" style={{ background: 'rgba(45,62,54,0.55)' }} onClick={close}>
       <div className="w-full sm:max-w-lg p-5 sm:p-6" style={{ background: T.paper, borderRadius: 2 }} onClick={(e) => e.stopPropagation()}>

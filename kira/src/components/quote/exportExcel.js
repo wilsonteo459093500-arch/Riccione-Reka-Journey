@@ -1,7 +1,7 @@
 import { tr, pickLang, capColor, cabTypeById, cabDimsLabel, RLBL, QUOTE_TERMS, LOOSE_TERMS, discountChainRate, discountChainLabel } from '../../constants/pricing.js';
 import { fmt } from '../../utils/helpers.js';
-import { templateOf } from '../../planner/templates.js';
-import { frameDimsLabel, frameKindLabel } from '../../planner/bridge.js';
+import { cabinetTitle, frameTitle } from '../../planner/templates.js';
+import { frameDimsLabel } from '../../planner/bridge.js';
 
 const round0 = (n) => Math.round(Number(n) || 0);
 
@@ -9,6 +9,12 @@ const round0 = (n) => Math.round(Number(n) || 0);
 // Sheet1：定制橱柜（SAIL by Riccione Reka）；Sheet2：Loose Furniture（Riccione Furniture）。
 export async function exportExcel(meta, computed, loose, notes = {}, lang = 'both') {
   const XLSX = await import('xlsx');
+  const { wb, name } = excelWorkbook(XLSX, meta, computed, loose, notes, lang);
+  XLSX.writeFile(wb, name);
+}
+
+// 只组表、不下载（Node 测试可直接检查每一格）→ { wb, name }
+export function excelWorkbook(XLSX, meta, computed, loose, notes = {}, lang = 'both') {
   const t = (obj) => tr(obj, lang);
   // 三种版本：retail / designer 双价 / designer_net 净价（每个单价都是供货价）
   const isDesigner = notes.audience === 'designer';
@@ -81,9 +87,8 @@ export async function exportExcel(meta, computed, loose, notes = {}, lang = 'bot
           if (doneCab.has(cid)) return;
           doneCab.add(cid);
           const cab = cabById.get(cid);
-          const tpl = templateOf(cab.template);
           const irs = zr.items.filter((x) => x.item.kira?.cabinetId === cid);
-          row([[cab.code, cab.name || t({ en: tpl.en, zh: tpl.zh })].filter(Boolean).join(' · ')]);
+          row([[cab.code, cabinetTitle(cab, lang)].filter(Boolean).join(' · ')]);
           (cab.frames || []).forEach((f) => {
             const lines = [];
             irs.filter((x) => x.item.kira.frameId === f.id).forEach((x) => x.lines.forEach((ln) => {
@@ -94,7 +99,7 @@ export async function exportExcel(meta, computed, loose, notes = {}, lang = 'bot
               if (hit) { hit.qty += ln.qty; hit.total += ln.total; } else lines.push({ label, qty: ln.qty, piece: ln.piece, uom: lineUom(ln), unitMyr: ln.unitMyr, total: ln.total });
             }));
             if (!lines.length) return;
-            row([`  ${f.label ? pickLang(f.label, lang) : frameKindLabel(f.kind, lang)}  —  ${frameDimsLabel(f, lang === 'zh' ? 'zh' : 'en')}`]);
+            row([`  ${frameTitle(cab, f, lang)}  —  ${frameDimsLabel(f, lang === 'zh' ? 'zh' : 'en')}`]);
             lines.forEach((ln) => row([`    ${ln.label}`, ln.piece ? round0(ln.qty) : Number(ln.qty.toFixed(2)), ln.uom, px(ln.unitMyr), px(ln.total)]));
           });
           return;
@@ -181,5 +186,5 @@ export async function exportExcel(meta, computed, loose, notes = {}, lang = 'bot
   const safe = (s) => (s || '').replace(/[\\/:*?"<>|]/g, '').trim().replace(/\s+/g, ' ');
   const d = (meta.date || '').replace(/-/g, '');
   const name = `EST QUOTE_RICCIONE_${safe(meta.name) || 'Customer'}_${safe(meta.location) || 'Site'}_${d || 'draft'}${isDesignerNet ? '_DESIGNER_NET' : isDesigner ? '_DESIGNER' : ''}.xlsx`;
-  XLSX.writeFile(wb, name);
+  return { wb, name };
 }

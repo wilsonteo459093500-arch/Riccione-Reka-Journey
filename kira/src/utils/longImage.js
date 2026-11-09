@@ -6,9 +6,13 @@ const blank = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAI
 
 export async function renderLongImage(node) {
   const { toPng } = await import('html-to-image');
-  const prev = { width: node.style.width, maxWidth: node.style.maxWidth };
+  // 报价单是 flex 子项：只设 width 会被 flex 缩回手机屏宽（366 px、小图变成点）→ 一起锁 flexShrink / minWidth
+  const keys = ['width', 'maxWidth', 'minWidth', 'flexShrink'];
+  const prev = Object.fromEntries(keys.map((k) => [k, node.style[k]]));
   node.style.width = `${CAPTURE_WIDTH}px`;
+  node.style.minWidth = `${CAPTURE_WIDTH}px`;
   node.style.maxWidth = 'none';
+  node.style.flexShrink = '0';
   await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
   try {
     return await toPng(node, {
@@ -21,8 +25,7 @@ export async function renderLongImage(node) {
       filter: (el) => !(el.classList && el.classList.contains('no-print')),
     });
   } finally {
-    node.style.width = prev.width;
-    node.style.maxWidth = prev.maxWidth;
+    keys.forEach((k) => { node.style[k] = prev[k]; });
   }
 }
 

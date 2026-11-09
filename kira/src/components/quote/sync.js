@@ -6,7 +6,7 @@
 //   kira.records.v1    { records, activeId }   离线也能开、能改
 //   kira.pending.v1    [id]                    本机改了、还没成功上云
 //   kira.pendingDel.v1 [id]                    本机删了、云端还没确认删掉（tombstone：有网重试，拉云端时滤掉）
-//   kira.deleted.v1    { id: 删除时间 }         本机删过的 id（两个分页互相合并时，不把对方删掉的带回来）
+//   kira.deleted.v1    { id: 删除时间 }         本机删过的 id（两个标签页（tab）互相合并时，不把对方删掉的带回来）
 //   kira.cloudInit.v1  '1'                     本机模式做的报价已排队上云（每台设备只做一次）
 //
 // 规则：
@@ -154,8 +154,8 @@ export function applyRealtime(store, ev, { pending = new Set(), pendingDel = new
   return { store: { ...store, records }, settle: pending.has(c.id) ? [c.id] : [] };
 }
 
-// ---- 两个分页（tab）：别的分页写了 kira.records.v1 → 按 id 合并，同 id 留较新的；对方 / 自己删过的不带回来。
-//      没变就返回原来的 mine（不触发重画 / 重写，避免两个分页来回写）
+// ---- 两个标签页（tab）：别的标签页写了 kira.records.v1 → 按 id 合并，同 id 留较新的；对方 / 自己删过的不带回来。
+//      没变就返回原来的 mine（不触发重画 / 重写，避免两个标签页来回写）
 export function mergeTabs(mine, theirs, deleted = {}) {
   const gone = (id) => Object.prototype.hasOwnProperty.call(deleted, id);
   const byId = new Map();
@@ -170,7 +170,7 @@ export function mergeTabs(mine, theirs, deleted = {}) {
   return { records, activeId: keepActive(records, mine.activeId) };
 }
 
-// 从 store 里拿掉一批 id（别的分页删的）
+// 从 store 里拿掉一批 id（别的标签页删的）
 export function dropIds(store, ids) {
   const set = new Set(ids);
   if (!store.records.some((r) => set.has(r.id))) return store;
@@ -218,6 +218,19 @@ export const clearDevice = (storage) => {
   DEVICE_KEYS.forEach((k) => { try { storage?.removeItem(k); } catch (e) { /* ignore */ } });
 };
 
+// ---- 开 app 时读本机：资料（清洗过坏资料）+ 待同步 / 待删除 / 删除记录。
+//      云端模式第一次打开（这台设备以前是本机模式）→ 本机模式做的报价（没有主人）全部排队上传，
+//      不会被第一次拉云端冲掉；上传的人就是主人。标记 kira.cloudInit.v1，每台设备只做一次。
+export function bootDevice(storage, { cloud = false } = {}) {
+  const store = cleanStore(readJSON(storage, STORE_KEY, null) || {});
+  const pending = readSet(storage, PENDING_KEY);
+  if (cloud && storage && !readJSON(storage, CLOUD_INIT_KEY, null)) {
+    localOnlyIds(store.records).forEach((id) => pending.add(id));
+    if (writeSet(storage, PENDING_KEY, pending)) writeJSON(storage, CLOUD_INIT_KEY, 1);
+  }
+  return { store, pending, pendingDel: readSet(storage, PENDING_DEL_KEY), deleted: readDeleted(storage) };
+}
+
 // ---- 写本机资料。整份写不下（超出浏览器容量 ~5 MB）→ 先保住「待同步 + 正在看的」，
 //      其余按最近更新排，能放多少放多少；结果交给界面显示（不再默默失败）。
 //   返回 { status: 'ok' | 'trimmed' | 'failed', kept, total }
@@ -253,3 +266,19 @@ export function persistStore(storage, store, keepIds = new Set()) {
   return { status: 'trimmed', kept: must.length + lo, total };
 }
 export const _resetFitHint = () => { fitHint = Infinity; };
+
+// ---- 分页读完整张表：Supabase「Max rows」默认 1000，一次最多回这么多、多的会被悄悄截掉 → 用 .range() 一页一页拿，
+//      直到拿到短页 / 空页（有 count 时读满 count 为止；Max rows 设得比一页小也不会提早停）。makeQuery() 每次回一个新查询。
+export const PAGE_ROWS = 1000;
+export async function selectAll(makeQuery, page = PAGE_ROWS, maxPages = 500) {
+  const out = [];
+  for (let from = 0, n = 0; n < maxPages; n += 1) {
+    const { data, error, count } = await makeQuery().range(from, from + page - 1);
+    if (error) throw error;
+    const rows = data || [];
+    out.push(...rows);
+    from += rows.length;
+    if (!rows.length || (Number.isFinite(count) ? from >= count : rows.length < page)) return out;
+  }
+  return out;
+}

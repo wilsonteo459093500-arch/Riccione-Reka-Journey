@@ -3,8 +3,9 @@ import { createPortal } from 'react-dom';
 import { Printer, X, Image as ImageIcon } from 'lucide-react';
 import { exportLongImage } from '../../utils/longImage.js';
 import CabinetPics from '../planner/CabinetPics.jsx';
-import { templateOf } from '../../planner/templates.js';
-import { frameDimsLabel, frameKindLabel } from '../../planner/bridge.js';
+import { useBackClose } from '../planner/bits.jsx';
+import { cabinetTitle, frameTitle } from '../../planner/templates.js';
+import { frameDimsLabel } from '../../planner/bridge.js';
 import { T } from '../../theme.js';
 import { fmtMYR, fmtNum, tr, pickLang, capColor, cabTypeById, cabDimsLabel, RLBL, QUOTE_TERMS, LOOSE_TERMS, discountChainRate, discountChainLabel } from '../../constants/pricing.js';
 import { fmt } from '../../utils/helpers.js';
@@ -12,6 +13,7 @@ import { fmt } from '../../utils/helpers.js';
 // 报价单（可打印 / 另存 PDF）。lang：'en' | 'zh' | 'both'。
 // 定制橱柜（SAIL by Riccione Reka）+ Loose Furniture（Riccione Furniture，另起一页）。
 export default function QuotePrint({ meta, computed, loose, cabinetNote = '', looseNote = '', discountNote = '', looseDiscountNote = '', audience = 'retail', designerDisc = '30', lang = 'both', showPics = true, onClose }) {
+  useBackClose(onClose); // 手机返回键 = 关掉预览，不离开 KIRA
   const zones = computed.zoneResults.filter((zr) => zr.zone.items.length > 0);
   const looseRows = loose?.rows || [];
   const hasCab = zones.length > 0;
@@ -193,54 +195,69 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
     });
     return out;
   };
+  // 宽版（电脑 / 打印 / 长图 820 px）：小图在左边一栏（rowSpan）；
+  // 窄版（手机上看预览，报价单 < 600 px）：小图单独一行在上，明细占满整行。两版都出，用容器查询切换（kq-w / kq-n）。
   const kiraCabinetRows = (cab, irs) => {
-    const tpl = templateOf(cab.template);
     const frames = (cab.frames || []).map((f) => ({ f, lines: frameLines(f, irs) })).filter((x) => x.lines.length);
     const multi = frames.length > 1;
     const nRows = frames.reduce((a, x) => a + x.lines.length + (multi ? 1 : 0), 0);
-    const title = [cab.code, cab.name || t({ en: tpl.en, zh: tpl.zh })].filter(Boolean).join(' · ');
+    const title = [cab.code, cabinetTitle(cab, lang)].filter(Boolean).join(' · ');
     const one = frames[0]?.f;
-    const rows = [
-      <tr key={cab.id + '-h'} style={{ borderTop: `1px solid ${T.lineSoft}`, breakInside: 'avoid' }}>
-        {showPics && (
-          <td rowSpan={nRows + 1} className="py-2 px-2 align-top" style={{ width: '34%' }}>
-            <CabinetPics cab={cab} lang={lang} height="42mm" />
-          </td>
-        )}
-        <td className="py-1 px-2 font-medium" colSpan={showPics ? 5 : 6}>
-          {title}
-          {!multi && one && <span className="font-normal ml-2" style={{ color: T.inkSoft }}>{frameDimsLabel(one, lang === 'zh' ? 'zh' : 'en')}</span>}
-        </td>
-      </tr>,
-    ];
-    frames.forEach(({ f, lines }) => {
-      if (multi) rows.push(
-        <tr key={cab.id + f.id + '-h'}>
-          <td className="pt-1 px-2 pl-4 text-xs" colSpan={showPics ? 5 : 6} style={{ color: T.ink }}>
-            {f.label ? pickLang(f.label, lang) : frameKindLabel(f.kind, lang)}
-            <span className="ml-2" style={{ color: T.inkSoft }}>{frameDimsLabel(f, lang === 'zh' ? 'zh' : 'en')}</span>
+    const build = (side, cls) => {
+      const k = `${cab.id}-${cls || 'x'}`;
+      const span = side ? 5 : 6; // 左边一栏被小图占了 → 少一栏
+      const rows = [];
+      if (cls === 'kq-n') rows.push(
+        <tr key={k + '-p'} className={cls} style={{ borderTop: `1px solid ${T.lineSoft}`, breakInside: 'avoid' }}>
+          <td colSpan={6} className="pt-2 px-2"><CabinetPics cab={cab} lang={lang} height="42mm" /></td>
+        </tr>,
+      );
+      rows.push(
+        <tr key={k + '-h'} className={cls} style={{ borderTop: cls === 'kq-n' ? 'none' : `1px solid ${T.lineSoft}`, breakInside: 'avoid' }}>
+          {side && (
+            <td rowSpan={nRows + 1} className="py-2 px-2 align-top" style={{ width: '34%' }}>
+              <CabinetPics cab={cab} lang={lang} height="42mm" />
+            </td>
+          )}
+          <td className="py-1 px-2 font-medium" colSpan={span}>
+            {title}
+            {!multi && one && <span className="font-normal ml-2" style={{ color: T.inkSoft }}>{frameDimsLabel(one, lang === 'zh' ? 'zh' : 'en')}</span>}
           </td>
         </tr>,
       );
-      lines.forEach((ln, i) => rows.push(
-        <tr key={cab.id + f.id + i}>
-          <td className="py-1 px-2 pl-6" colSpan={showPics ? 1 : 2} style={{ color: T.inkSoft }}>{partLabel(ln)}</td>
-          <td className="text-right py-1 px-2">{fmtNum(ln.qty, ln.piece ? 0 : 2)}</td>
-          <td className="py-1 px-2">{lineUom(ln)}</td>
-          <td className="text-right py-1 px-2">{fmtNum(px(ln.unitMyr), 0)}</td>
-          <td className="text-right py-1 px-2">{fmtNum(px(ln.total), 0)}</td>
-        </tr>,
-      ));
-    });
-    return rows;
+      frames.forEach(({ f, lines }) => {
+        if (multi) rows.push(
+          <tr key={k + f.id + '-h'} className={cls}>
+            <td className="pt-1 px-2 pl-4 text-xs" colSpan={span} style={{ color: T.ink }}>
+              {frameTitle(cab, f, lang) /* 按语言从模板 + 柜体种类 / 第几面墙生成（不拆 label 字串）*/}
+              <span className="ml-2" style={{ color: T.inkSoft }}>{frameDimsLabel(f, lang === 'zh' ? 'zh' : 'en')}</span>
+            </td>
+          </tr>,
+        );
+        lines.forEach((ln, i) => rows.push(
+          <tr key={k + f.id + i} className={cls}>
+            <td className="py-1 px-2 pl-6" colSpan={side ? 1 : 2} style={{ color: T.inkSoft }}>{partLabel(ln)}</td>
+            <td className="text-right py-1 px-2">{fmtNum(ln.qty, ln.piece ? 0 : 2)}</td>
+            <td className="py-1 px-2">{lineUom(ln)}</td>
+            <td className="text-right py-1 px-2">{fmtNum(px(ln.unitMyr), 0)}</td>
+            <td className="text-right py-1 px-2">{fmtNum(px(ln.total), 0)}</td>
+          </tr>,
+        ));
+      });
+      return rows;
+    };
+    // 宽版在前、窄版在后：rowSpan 只跨宽版自己那几行
+    return showPics ? [...build(true, 'kq-w'), ...build(false, 'kq-n')] : build(false, undefined);
   };
 
   const th = 'text-right font-normal py-1 px-2';
 
   return createPortal(
     <div className="quote-print-overlay fixed inset-0 z-50 overflow-auto" style={{ background: 'rgba(45,62,54,0.85)' }} onClick={onClose}>
+      {/* 报价单本身窄（手机预览）→ 柜子小图换到明细上面一行；长图 / 打印 / 电脑都是宽版 */}
+      <style>{'.kq-n{display:none}@container (max-width:599px){.kq-w{display:none}.kq-n{display:table-row}}'}</style>
       <div className="min-h-screen flex items-start justify-center p-4 lg:p-8">
-        <div ref={sheetRef} className="quote-print-sheet w-full max-w-4xl my-4" style={{ background: '#fff', borderRadius: '2px', boxShadow: '0 24px 80px rgba(0,0,0,0.3)' }} onClick={(e) => e.stopPropagation()}>
+        <div ref={sheetRef} className="quote-print-sheet w-full max-w-4xl my-4" style={{ background: '#fff', borderRadius: '2px', boxShadow: '0 24px 80px rgba(0,0,0,0.3)', containerType: 'inline-size' }} onClick={(e) => e.stopPropagation()}>
 
           {/* toolbar */}
           <div className="no-print flex items-center justify-between p-4" style={{ borderBottom: `1px solid ${T.lineSoft}` }}>

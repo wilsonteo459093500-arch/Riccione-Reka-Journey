@@ -5,6 +5,7 @@
 - **独立 app**：自己的目录 `kira/`、自己的 Vercel 项目和网址。旧报价工具（PR #6，`quote.html`）一行都没改，照常可用。
 - **价格**：从旧报价工具原样复制 `src/constants/pricing.js`（门板 / 柜体 / 开放柜系列价、延米 vs 平米、抽屉、系数、岩板不折扣、设计师版）。以后**只在 KIRA 改价**。复制来源与指纹记在 `VENDOR.json`。
 - **数据**：本机先存（`kira.records.v1`，离线也能报价）；配置 Supabase 后和旧工具**同一套登录**，资料在新表 `kira_projects`（全员共享，只有做的人能删）。旧表 `quotes` 只读（导入旧报价用）。
+- **同步**（`src/components/quote/sync.js`，Node 测试 `test/sync.test.mjs`）：每条记录比 `updatedAt`——本机有没上云的改动且比云端新才上传，否则以云端为准；上线 / 回到前台 / 实时重连都先拉云端再推；离线删除记成 tombstone，有网重试；本机模式做的报价第一次登录时自动上传；不替别人上传；退出登录先推、再清本机；两个标签页（tab）互相合并；本机空间满会提示（没上云的一定保住）；离线 / 登录过期也能用本机资料打开。
 
 ## 第一版有什么
 
@@ -26,7 +27,7 @@
 cd kira
 npm install
 npm run dev           # http://localhost:5181
-npm test              # 价格黄金值 / 积木换算 / 模板 / 对价 / 立面 / 3D 的 Node 测试
+npm test              # 价格黄金值 / 积木换算 / 模板 / 对价 / 立面 / 3D / 同步 的 Node 测试
 npm run test:browser  # 浏览器端到端（先 npm run build && npm run preview）
 npm run build         # 产物在 dist/
 npm run check:vendor  # 检查从旧工具复制来的文件有没有被改
@@ -49,9 +50,12 @@ src/planner/bridge.js        积木柜 → 旧工具标准明细（价格规则�
 src/planner/importOld.js     导入旧报价 + 对价报告
 src/render/                  线稿立面图 elevation.js · 轻量 3D axo.js（纯数据 → SvgShapes.jsx 画）
 src/components/planner/      加柜子 / 编辑器 / 柜子卡片 / 导入 / 新人引导
-src/services/kiraRepo.js     云端（kira_projects；旧 quotes 只读）
+src/services/kiraRepo.js     云端（kira_projects；旧 quotes 只读；分页读完，不受 1000 行上限）
+src/components/quote/sync.js 本机 ↔ 云端合并 / 待同步 / 待删除 / 标签页合并 / 本机容量（纯函数）
+src/components/auth/AuthGate.jsx  登录；离线 / token 过期时用本机登录记录打开（不卡在登录页）
+src/components/ui/ErrorBoundary.jsx  出错兜底（不白屏，提示重新载入）
 supabase/kira_projects.sql   建表脚本（可重复执行）
-public/sw.js                 离线（KIRA 自己的网址，和旧工具的 SW 无关）
+public/sw.js                 离线（KIRA 自己的网址，和旧工具的 SW 无关；只把 200 的 HTML 存成离线首页）
 ```
 
 部署见 [DEPLOY.md](./DEPLOY.md)。

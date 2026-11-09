@@ -13,14 +13,14 @@ function LoginScreen() {
   const signIn = async (e) => {
     e?.preventDefault();
     if (!email.trim() || !password) {
-      setError('请输入邮箱和密码');
+      setError('Enter email and password 请输入邮箱和密码');
       return;
     }
     setBusy(true);
     setError('');
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
     setBusy(false);
-    if (error) setError(error.message || '登录失败');
+    if (error) setError(navigator.onLine === false ? 'No connection — signing in needs the internet 没有网络：登录需要连网' : `${error.message || 'Sign-in failed'} 登录失败`);
   };
 
   return (
@@ -31,7 +31,7 @@ function LoginScreen() {
             <span className="font-display text-4xl tracking-[0.15em]" style={{ color: T.ink }}>KIRA</span>
             <span className="font-display italic text-xl" style={{ color: T.wood }}>by Riccione Reka</span>
           </div>
-          <div className="text-xs tracking-[0.3em] uppercase" style={{ color: T.inkSoft }}>柜子规划报价 · 团队登录</div>
+          <div className="text-xs tracking-[0.3em] uppercase" style={{ color: T.inkSoft }}>Team sign-in · 柜子规划报价 · 团队登录</div>
           <div className="text-[11px] mt-2" style={{ color: T.inkSoft }}>和旧报价工具同一个账号 Same account as the old quote tool</div>
         </div>
 
@@ -58,14 +58,14 @@ function LoginScreen() {
             style={{ background: busy ? T.line : T.ink, color: T.paper, borderRadius: '2px' }}
           >
             <LogIn size={14} strokeWidth={1.5} />
-            {busy ? '登录中…' : '登录'}
+            {busy ? 'Signing in… 登录中…' : 'Sign in 登录'}
           </button>
         </div>
 
         <div className="text-[11px] mt-4 text-center leading-relaxed" style={{ color: T.inkSoft, opacity: 0.8 }}>
-          账号由管理员在 Supabase 后台创建。
+          Accounts are created by the admin in Supabase. 账号由管理员在 Supabase 后台创建。
           <br />
-          忘记密码请联系管理员重置。
+          Forgot your password? Ask the admin to reset it. 忘记密码请联系管理员重置。
         </div>
       </form>
     </div>
@@ -114,19 +114,25 @@ export default function AuthGate({ children }) {
       if (event === 'SIGNED_OUT') apply(null, { signedOut: true });
       else apply(s);
     });
-    // 有网 / 回到前台 / 每 30 秒（离线模式时）→ 再确认一次登录（过期的 token 在这里刷新）
-    const recheck = () => { if (navigator.onLine !== false) check(); };
-    const onVis = () => { if (document.visibilityState === 'visible') recheck(); };
+    // 有网 / 回到前台 / 每 30 秒（离线模式时）→ 再确认一次登录（过期的 token 在这里刷新）。
+    // 刚恢复网络时清掉 supabase-js 的「刷新失败冷却」（60 秒内不再试），马上重试，不用等一分钟。
+    const recheck = (fresh = false) => {
+      if (navigator.onLine === false) return;
+      if (fresh && statusRef.current !== 'online') { try { supabase.auth.lastRefreshFailure = null; } catch (e) { /* ignore */ } }
+      check();
+    };
+    const onOnline = () => recheck(true);
+    const onVis = () => { if (document.visibilityState === 'visible') recheck(true); };
     const onStorage = (e) => { if (e.key === supabase.auth.storageKey && !e.newValue) apply(null, { signedOut: true }); };
     const iv = setInterval(() => { if (statusRef.current === 'offline') recheck(); }, 30000);
-    window.addEventListener('online', recheck);
+    window.addEventListener('online', onOnline);
     document.addEventListener('visibilitychange', onVis);
     window.addEventListener('storage', onStorage);
     return () => {
       alive = false;
       clearTimeout(t);
       clearInterval(iv);
-      window.removeEventListener('online', recheck);
+      window.removeEventListener('online', onOnline);
       document.removeEventListener('visibilitychange', onVis);
       window.removeEventListener('storage', onStorage);
       sub.subscription.unsubscribe();

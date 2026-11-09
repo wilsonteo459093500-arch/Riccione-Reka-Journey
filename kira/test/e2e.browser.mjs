@@ -2,7 +2,7 @@
 //   KIRA_URL=http://localhost:5182 node test/e2e.browser.mjs [--video]
 // --video：顺便录 30 秒示范短视频到 public/help/kira-demo.webm（给新人看）
 import { createRequire } from 'module';
-import { mkdirSync, renameSync, existsSync, readdirSync, rmSync } from 'fs';
+import { mkdirSync, renameSync, existsSync, readdirSync, rmSync, readFileSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -60,12 +60,18 @@ try {
   await p.getByRole('button', { name: /Add 加入报价/ }).click();
   await slow(800);
   check('cabinet card appears with code K1', (await p.locator('text=K1').count()) > 0);
+  // 输出语言 EN（新客户默认）：WhatsApp 文字不夹中文（客户名「陈先生」是业务自己打的，不算）
+  const HAN = /\p{Script=Han}/u;
+  const wa = decodeURIComponent((await p.locator('a:has-text("WhatsApp")').getAttribute('href')).split('?text=')[1] || '');
+  const waHan = wa.replace('陈先生', '').split('\n').filter((l) => HAN.test(l));
+  check('EN WhatsApp text has no Chinese ("K1 Wardrobe · … · 2 doors")', !waHan.length && /K1 Wardrobe · 1\.20 × 2\.70 × 0\.60 m · 2 doors/.test(wa), waHan.join(' | '));
   await p.getByRole('button', { name: /Quote 报价单/ }).click();
   await slow(1500);
   const pics = await p.locator('.quote-print-sheet .kira-pics svg').count();
   check('quotation shows elevation + 3D beside the lines', pics >= 2, `${pics} svg`);
   const sheetText = await p.locator('.quote-print-sheet').textContent();
   check('quotation lists K1 with door / carcass / side panel lines', /K1/.test(sheetText) && /Carcass/.test(sheetText) && /Side Panel/.test(sheetText));
+  check('EN quotation sheet (incl. picture labels) has no Chinese', !HAN.test(sheetText.replace('陈先生', '')), (sheetText.replace('陈先生', '').match(/\p{Script=Han}+/gu) || []).join(' '));
   await p.locator('.quote-print-sheet').screenshot({ path: path.join(outDir, 'quote-sheet.png') });
   const [dl] = await Promise.all([p.waitForEvent('download', { timeout: 30000 }), p.getByRole('button', { name: /Long image/ }).click()]);
   check('long image downloads', /\.png$/.test(dl.suggestedFilename()), dl.suggestedFilename());
@@ -93,6 +99,111 @@ try {
   check('kitchen L 3D renders', (await m.locator('svg polygon').count()) > 50);
   await m.screenshot({ path: path.join(outDir, 'phone-kitchen-3d.png') });
   check('no browser errors (phone)', merr.length === 0, merr.join(' | '));
+  await m.close();
+
+  // ---------- 手机：返回键不离开 KIRA、自定义房间名、打毫米、报价单小图 + 820 px 长图 ----------
+  const pc = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, acceptDownloads: true });
+  const q = await pc.newPage();
+  const qerr = [];
+  q.on('pageerror', (e) => qerr.push(e.message));
+  const onKira = () => q.url().startsWith(URL);
+  const guardState = () => q.evaluate(() => !!(history.state && history.state.kiraModal));
+  await q.goto('about:blank');
+  await q.goto(URL);
+  await q.getByRole('button', { name: /Skip 跳过/ }).waitFor();
+  await q.waitForTimeout(100);
+  await q.goBack();
+  await q.waitForTimeout(300);
+  check('phone Back closes the guide and stays on KIRA', onKira() && (await q.getByRole('button', { name: /Skip 跳过/ }).count()) === 0, q.url());
+  await q.getByRole('button', { name: /New/ }).first().tap();
+  // 自定义房间名：手机上单独一行，打得了字
+  const room = q.locator('input[placeholder="Custom room 自定义区域名"]').first();
+  const rb = await room.boundingBox();
+  await room.tap();
+  await room.fill('Prayer room 祈祷室');
+  check('phone custom room name input is usable', rb && rb.width >= 150 && (await room.inputValue()) === 'Prayer room 祈祷室', `width ${rb?.width}`);
+  // 楼高打毫米 2700 → 2.70 m，有提示
+  const qc = q.locator('input[placeholder="2.70"]').first();
+  await qc.fill('2700');
+  await qc.blur();
+  await q.waitForTimeout(100);
+  const ceilNote = await q.locator('[data-mm-note]').first().textContent().catch(() => '');
+  check('ceiling typed in mm (2700) becomes 2.70 m with a hint', (await q.locator('input[placeholder="2.70"]').first().inputValue()) === '2.70' && /2700 mm → 2\.70 m/.test(ceilNote), ceilNote);
+  // 编辑器：改过 → 返回键先问；继续编辑 → 还在；不保存 → 关掉，仍在 KIRA
+  await q.getByRole('button', { name: /Add cabinet 加柜子/ }).first().tap();
+  await q.locator('.hover-lift', { hasText: '衣柜' }).tap();
+  await q.waitForTimeout(150);
+  check('wardrobe goes to the 2.70 m ceiling', (await q.locator('label:has-text("Height 高") input').inputValue()) === '2.70');
+  const qw = q.locator('label:has-text("Width 总宽") input');
+  await qw.fill('1800');
+  await qw.press('Enter');
+  const wNote = await q.locator('label:has-text("Width 总宽") [data-mm-note]').textContent().catch(() => '');
+  check('width typed in mm (1800) becomes 1.80 m with a hint', (await qw.inputValue()) === '1.80' && /1800 mm → 1\.80 m/.test(wNote), wNote);
+  await q.goBack();
+  await q.waitForTimeout(300);
+  const asked = await q.getByRole('button', { name: /Keep editing 继续编辑/ }).count();
+  await q.getByRole('button', { name: /Keep editing 继续编辑/ }).tap();
+  await q.waitForTimeout(200);
+  check('phone Back on a changed cabinet asks first and stays on KIRA', asked === 1 && onKira() && (await q.getByRole('button', { name: /Add 加入报价/ }).count()) === 1);
+  await q.goBack();
+  await q.waitForTimeout(300);
+  await q.getByRole('button', { name: /Discard 不保存/ }).tap();
+  await q.waitForTimeout(300);
+  check('Back → Discard closes the editor, still on KIRA', onKira() && (await q.getByRole('button', { name: /Add 加入报价/ }).count()) === 0, q.url());
+  // 正常加入 → 不留多余历史记录
+  await q.getByRole('button', { name: /Add cabinet 加柜子/ }).first().tap();
+  await q.locator('.hover-lift', { hasText: '衣柜' }).tap();
+  await q.getByRole('button', { name: /Add 加入报价/ }).tap();
+  await q.waitForTimeout(300);
+  check('saving the cabinet leaves no stray history entry', !(await guardState()) && (await q.getByText('Edit 编辑').count()) === 1);
+  // 报价单预览（手机）：小图看得到
+  await q.getByRole('button', { name: /报价 Quote/ }).tap();
+  await q.getByRole('button', { name: /Quote 报价单/ }).first().tap();
+  await q.waitForTimeout(500);
+  const prev = await q.evaluate(() => [...document.querySelectorAll('.quote-print-sheet .kira-pics svg')]
+    .map((s) => s.getBoundingClientRect()).filter((r) => r.width > 0).map((r) => Math.round(r.width)));
+  check('phone quote preview shows the cabinet pictures', prev.length >= 2 && prev.every((w) => w >= 60), JSON.stringify(prev));
+  // 长图：截图那一刻的版面（820 px、小图大小、小图位置）
+  await q.evaluate(() => {
+    const n = document.querySelector('.quote-print-sheet');
+    new MutationObserver(() => {
+      if (n.style.flexShrink !== '0' || window.__cap) return;
+      const s = n.getBoundingClientRect();
+      const bar = n.querySelector('.no-print').getBoundingClientRect().height; // 工具栏不进长图
+      const pics = [...n.querySelectorAll('.kira-pics')].filter((e) => e.getBoundingClientRect().width > 0);
+      const r = pics[0].getBoundingClientRect();
+      window.__cap = { w: s.width, svgs: pics.flatMap((e) => [...e.querySelectorAll('svg')].map((v) => Math.round(v.getBoundingClientRect().width))),
+        rect: { x: r.left - s.left, y: r.top - s.top - bar, w: r.width, h: r.height } };
+    }).observe(n, { attributes: true, attributeFilter: ['style'] });
+  });
+  const [ldl] = await Promise.all([q.waitForEvent('download', { timeout: 60000 }), q.getByRole('button', { name: /Long image/ }).tap()]);
+  const png = readFileSync(await ldl.path());
+  const pngW = png.readUInt32BE(16);
+  const cap = await q.evaluate(() => window.__cap);
+  // 长图里小图那一块：数非白色像素（有图 ≫ 5%）
+  const ink = await q.evaluate(async ({ b64, r }) => {
+    const img = new Image();
+    img.src = `data:image/png;base64,${b64}`;
+    await img.decode();
+    const c = document.createElement('canvas');
+    c.width = img.width; c.height = img.height;
+    const g = c.getContext('2d');
+    g.drawImage(img, 0, 0);
+    const d = g.getImageData(Math.round(r.x * 2), Math.round(r.y * 2), Math.round(r.w * 2), Math.round(r.h * 2)).data;
+    let n = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i] < 235 || d[i + 1] < 235 || d[i + 2] < 235) n += 1;
+    return n / (d.length / 4);
+  }, { b64: png.toString('base64'), r: cap.rect });
+  check('phone long image is the full 820 px layout (≥ 800 px)', pngW >= 1600 && cap.w >= 800, `png ${pngW}px @2x, sheet ${cap.w}px`);
+  check('phone long image contains the cabinet pictures', cap.svgs.length >= 2 && cap.svgs.every((w) => w >= 60) && ink > 0.05, `svg ${JSON.stringify(cap.svgs)}, ink ${(ink * 100).toFixed(1)}%`);
+  await q.goBack();
+  await q.waitForTimeout(300);
+  check('phone Back closes the quote preview, still on KIRA', onKira() && (await q.locator('.quote-print-sheet').count()) === 0, q.url());
+  await q.goBack();
+  await q.waitForTimeout(300);
+  check('no stray history entries left (next Back leaves KIRA)', q.url() === 'about:blank', q.url());
+  check('no browser errors (phone 2)', qerr.length === 0, qerr.join(' | '));
+  await pc.close();
 } finally {
   await browser.close();
 }

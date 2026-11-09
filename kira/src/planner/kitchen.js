@@ -5,6 +5,7 @@
 // 价格规则：每面墙各量到墙角（转角两面都算）—— 实物从转角后开始，转角宽度用 cornerW 照算。
 // ============================================================
 import { leaf, vsplit, hsplit, splitEven, MAX_DOOR } from './model.js';
+import { joinL, bi, FRAME_KIND_NAME, wallName } from './lang.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const int = (v, d = 0) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? n : d; };
@@ -154,6 +155,7 @@ export function kitchenBuild(spec, cab) {
   const multi = spec.walls.length > 1;
   runs.forEach((r) => {
     const w = spec.walls[r.i];
+    // label：存档用的双语字串（旧记录也是这个格式）；报价单 / Excel 按语言显示用 kitchenFrameName，不拆这个字串
     const tag = multi ? ` · 墙${WALL_LETTER[r.i]} Wall ${WALL_LETTER[r.i]}` : '';
     const n = w.units.length;
     const ends = (W) => (W > 0 ? { left: r.tallSide === 'left' ? false : r.endTag('left'), right: r.tallSide === 'right' ? false : r.endTag('right') } : { left: false, right: false });
@@ -161,7 +163,7 @@ export function kitchenBuild(spec, cab) {
     if (r.runW > 0 || r.cornerW > 0) {
       const Hb = spec.baseH - spec.base.h;
       frames.push({
-        id: `${cab.id}-w${r.i}-base`, kind: 'base', label: `Base Cabinet 地柜${tag}`, wall: r.i, x: r.x0, y: 0,
+        id: `${cab.id}-w${r.i}-base`, kind: 'base', label: `${bi(FRAME_KIND_NAME.base)}${tag}`, wall: r.i, x: r.x0, y: 0,
         W: r.runW, H: spec.baseH, D: spec.baseD, base: { ...spec.base }, worktop: !!spec.worktop,
         cornerW: r.cornerW, ends: ends(r.runW),
         body: r.runW > 0 ? vsplit(splitEven(r.runW, n), w.units.map((u) => baseColumn(u, Hb))) : leaf('closed'),
@@ -175,7 +177,7 @@ export function kitchenBuild(spec, cab) {
       const upperCorner = r.cornerSide ? Math.min(spec.upperD, Math.max(0, r.runW + r.cornerW - uW)) : 0;
       if (uW > 0 || upperCorner > 0) {
         frames.push({
-          id: `${cab.id}-w${r.i}-upper`, kind: 'wall', label: `Top Cabinet 吊柜${tag}`, wall: r.i, x: uW > 0 ? ux0 : Math.min(ux0, ux1), y: spec.upperY,
+          id: `${cab.id}-w${r.i}-upper`, kind: 'wall', label: `${bi(FRAME_KIND_NAME.wall)}${tag}`, wall: r.i, x: uW > 0 ? ux0 : Math.min(ux0, ux1), y: spec.upperY,
           W: uW, H: spec.upperH, D: spec.upperD, base: { kind: 'wallhung', h: 0 },
           cornerW: upperCorner, ends: ends(uW),
           body: uW > 0 ? vsplit(splitEven(uW, w.upperUnits.length), w.upperUnits.map(upperColumn)) : leaf('closed', { interior: 'shelves' }),
@@ -191,7 +193,7 @@ export function kitchenBuild(spec, cab) {
       else if (t.kind === 'fridgeTop') body = hsplit([t.fridgeH, t.H - t.fridgeH], [leaf('void', { interior: 'fridge' }), leaf('closed')]);
       else body = leaf('void', { interior: 'fridge' });
       frames.push({
-        id: `${cab.id}-w${r.i}-tall`, kind: 'tall', label: `Tall Cabinet 高柜${tag}`, wall: r.i, x: r.tall.x, y: 0,
+        id: `${cab.id}-w${r.i}-tall`, kind: 'tall', label: `${bi(FRAME_KIND_NAME.tall)}${tag}`, wall: r.i, x: r.tall.x, y: 0,
         W: r.tall.w, H: t.H, D: spec.baseD, base: t.kind === 'oven' ? { ...spec.base } : { kind: 'none', h: 0 },
         ends: { left: r.tallSide === 'left' ? r.endTag('left') : false, right: r.tallSide === 'right' ? r.endTag('right') : false },
         body,
@@ -201,13 +203,20 @@ export function kitchenBuild(spec, cab) {
   return frames;
 }
 
-// 3D 摆放：后墙 A 沿 +x；L/U 的右墙 B 从后墙右端往观众方向；U 的左墙 C 原点在前端；二字型对面那排朝后
-export function kitchenSummary(spec) {
+// 一句话简介（按输出语言）：「L-shape · 3.00 + 2.40 m · Tall Cabinet」/「L 型 · 3.00 + 2.40 m · 高柜」
+export function kitchenSummary(spec, lang = 'both') {
   const sh = KITCHEN_SHAPES.find((x) => x.id === spec.shape) || KITCHEN_SHAPES[0];
   const lens = spec.walls.map((w) => (w.len / 1000).toFixed(2)).join(' + ');
-  return `${sh.zh} ${sh.en} · ${lens} m${spec.tall?.on ? ' · 高柜' : ''}`;
+  return joinL([sh, `${lens} m`, spec.tall?.on && FRAME_KIND_NAME.tall], lang);
 }
 
+// 柜体名称（报价单 / Excel 小标题）：种类 + 多面墙时第几面墙 → [{en,zh}…]，渲染时按语言取
+export const kitchenFrameName = (frame, spec) => [
+  FRAME_KIND_NAME[frame?.kind] || FRAME_KIND_NAME.tall,
+  (spec?.walls?.length || 1) > 1 && wallName(frame?.wall),
+];
+
+// 3D 摆放：后墙 A 沿 +x；L/U 的右墙 B 从后墙右端往观众方向；U 的左墙 C 原点在前端；二字型对面那排朝后
 export function kitchenWalls(spec) {
   const D = spec.baseD;
   const [a, b, c] = spec.walls.map((w) => w.len);

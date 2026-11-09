@@ -18,6 +18,7 @@
 // ============================================================
 import { computeQuote, computeItem, isLinear, CARCASS_SERIES, OPEN_SERIES, DOOR_SERIES } from '../constants/pricing.js';
 import { layoutLeaves, bodyHeight, mmToM, DEFAULT_GLASS_COEF } from './model.js';
+import { pickL, FRAME_KIND_NAME } from './lang.js';
 
 const STRIP_KINDS = new Set(['plinth', 'legs', 'raised']);
 const EPS = 1e-9;
@@ -164,13 +165,7 @@ export function mergeLines(lines) {
   return out;
 }
 
-const KIND_LABEL = {
-  base: { en: 'Base Cabinet', zh: '地柜' }, wall: { en: 'Top Cabinet', zh: '吊柜' }, tall: { en: 'Tall Cabinet', zh: '高柜' },
-};
-export const frameKindLabel = (kind, lang = 'both') => {
-  const l = KIND_LABEL[kind] || KIND_LABEL.tall;
-  return lang === 'en' ? l.en : lang === 'zh' ? l.zh : `${l.en} ${l.zh}`;
-};
+export const frameKindLabel = (kind, lang = 'both') => pickL(FRAME_KIND_NAME[kind] || FRAME_KIND_NAME.tall, lang);
 
 // 「L 1.20m × H 2.10m × D 0.60m」（真实尺寸，不是换算后的数量）
 // 厨房墙太短只剩转角（宽 0，转角照算）：写转角那段的长度，不写「L 0.00m」

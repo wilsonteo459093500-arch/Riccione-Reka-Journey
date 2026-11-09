@@ -6,6 +6,7 @@ import { T } from '../../theme.js';
 import { fmtMYR, computeQuote } from '../../constants/pricing.js';
 import { oldQuotes, cloudConfigured } from '../../services/kiraRepo.js';
 import { parityReport } from '../../planner/importOld.js';
+import { useBackClose } from './bits.jsx';
 
 export default function ImportOld({ initialTab = 'import', onImport, onClose }) {
   const [tab, setTab] = useState(initialTab);
@@ -13,6 +14,7 @@ export default function ImportOld({ initialTab = 'import', onImport, onClose }) 
   const [err, setErr] = useState('');
   const [q, setQ] = useState('');
   const [busyId, setBusyId] = useState(null);
+  useBackClose(onClose); // 手机返回键 = 关闭
 
   useEffect(() => {
     if (!cloudConfigured) return;

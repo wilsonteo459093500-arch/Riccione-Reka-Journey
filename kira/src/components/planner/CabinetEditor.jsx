@@ -1,5 +1,5 @@
 // 积木柜编辑器（全屏）：上面看图、下面改设定（手机）；左图右设定（电脑）。底部常驻价钱条。
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Check, RotateCcw, Trash2, AlertTriangle } from 'lucide-react';
 import { T } from '../../theme.js';
@@ -13,7 +13,8 @@ import { FINISHES, HANDLES, DEFAULT_DOOR_FINISH, DEFAULT_CARCASS_FINISH } from '
 import SvgShapes from '../../render/SvgShapes.jsx';
 import { elevationScene } from '../../render/elevation.js';
 import { axoScene } from '../../render/axo.js';
-import { Section, Segmented, Toggle, Stepper, MeterInput, Collapse, Tip } from './bits.jsx';
+import { Section, Segmented, Toggle, Stepper, MeterInput, Collapse, Tip, useBackClose } from './bits.jsx';
+import { useConfirm } from '../ui/UIProvider.jsx';
 import KitchenSettings from './KitchenSettings.jsx';
 import { TvSettings, ShoeSettings } from './TvShoeSettings.jsx';
 
@@ -51,7 +52,7 @@ export default function CabinetEditor({ cab: initial, zone, defaults = {}, lang 
   const [cab, setCab] = useState(initial);
   const t = templateOf(cab.template);
   const spec = cab.spec;
-  const ceilingH = zone?.ceilingH || null;
+  const ceilingH = zone?.ceilingH > 0 ? zone.ceilingH : null; // 没填楼高 → null（模板按 2.70 m）
   const isKitchen = cab.template === 'kitchen';
   const set = (p) => setCab((c) => ({ ...c, ...p }));
   const setSpec = (p) => setCab((c) => updateSpec(c, p));
@@ -68,11 +69,25 @@ export default function CabinetEditor({ cab: initial, zone, defaults = {}, lang 
 
   const title = `${cab.code} · ${t.zh} ${t.en}`;
 
+  // 关闭（X / 手机返回键）：改过还没保存 → 先问，免得辛苦设计的柜子一下子没了
+  const confirm = useConfirm();
+  const asking = useRef(false);
+  const closeAsk = async () => {
+    if (JSON.stringify(cab) === JSON.stringify(initial)) { onClose(); return; }
+    if (asking.current) return;
+    asking.current = true;
+    const ok = await confirm({ title: 'Unsaved changes 还没保存', message: `Close without saving ${cab.code}? 不保存就关闭？刚才的修改会不见。`,
+      danger: true, confirmText: 'Discard 不保存', cancelText: 'Keep editing 继续编辑' });
+    asking.current = false;
+    if (ok) onClose();
+  };
+  useBackClose(closeAsk);
+
   return createPortal(
     <div className="fixed inset-0 z-50 flex flex-col no-print font-body" style={{ background: T.paper, color: T.ink }}>
       {/* 顶栏 */}
       <div className="flex items-center gap-2 px-3 sm:px-5 py-2.5" style={{ borderBottom: `1px solid ${T.lineSoft}` }}>
-        <button onClick={onClose} className="p-2 -ml-2" title="Close 关闭" style={{ color: T.inkSoft }}><X size={18} /></button>
+        <button onClick={closeAsk} className="p-2 -ml-2" title="Close 关闭" style={{ color: T.inkSoft }}><X size={18} /></button>
         <div className="min-w-0 flex-1">
           <div className="font-display text-lg sm:text-xl truncate">{title}</div>
           <input value={cab.name || ''} onChange={(e) => set({ name: e.target.value })} placeholder={`Name 名称（例：主卧衣柜）`}

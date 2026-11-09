@@ -9,28 +9,11 @@
 // 合并 / 待同步 / 待删除的规则在 src/components/quote/sync.js。
 // ============================================================
 import { supabase, cloudConfigured } from './supabase.js';
+import { selectAll } from '../components/quote/sync.js'; // 分页读完整张表（Supabase 一次最多回 1000 行）
 
 export { cloudConfigured };
 
 const TABLE = 'kira_projects';
-const PAGE = 1000; // Supabase「Max rows」默认 1000：一次最多回这么多，多的会被悄悄截掉 → 一页一页读
-const MAX_PAGES = 500;
-
-// 分页读完整张表：.range() 一页一页拿，直到拿到短页 / 空页（有 count 时读满 count 为止）
-export async function selectAll(makeQuery, page = PAGE) {
-  const out = [];
-  for (let from = 0, n = 0; n < MAX_PAGES; n += 1) {
-    const { data, error, count } = await makeQuery().range(from, from + page - 1);
-    if (error) throw error;
-    const rows = data || [];
-    out.push(...rows);
-    from += rows.length;
-    const done = !rows.length || (Number.isFinite(count) ? from >= count : rows.length < page);
-    if (done) return out;
-  }
-  return out;
-}
-
 const toRecord = (r) => (r && r.data && typeof r.data === 'object' && !Array.isArray(r.data)
   ? { ...r.data, id: r.data.id || r.id, ownerId: r.owner_id || r.data.ownerId || null }
   : null);

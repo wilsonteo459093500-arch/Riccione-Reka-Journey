@@ -4,8 +4,10 @@
 // 只在业务编辑时重算 frames；载入旧报价不重算（避免以后改模板时悄悄改价）。
 // ============================================================
 import { leaf, vsplit, hsplit, splitEven, autoDoors, uid, ceilingOr, DEFAULT_GLASS_COEF, mmToM } from './model.js';
-import { kitchenDefaults, kitchenNormalize, kitchenBuild, kitchenWalls, kitchenSummary } from './kitchen.js';
-import { tvDefaults, tvNormalize, tvBuild, tvSummary, shoeDefaults, shoeNormalize, shoeBuild, shoeSummary } from './tvshoe.js';
+import { kitchenDefaults, kitchenNormalize, kitchenBuild, kitchenWalls, kitchenSummary, kitchenFrameName } from './kitchen.js';
+import { tvDefaults, tvNormalize, tvBuild, tvSummary, tvFrameName, shoeDefaults, shoeNormalize, shoeBuild, shoeSummary, shoeFrameName } from './tvshoe.js';
+import { pickL, joinL, bi, FRAME_KIND_NAME } from './lang.js';
+import { pickLang } from '../constants/pricing.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const int = (v, d = 0) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? n : d; };
@@ -41,8 +43,9 @@ const wardrobeColumn = (unit, mainH, topH) => {
   return stack(cells);
 };
 
+const WARDROBE_NAME = { en: 'Wardrobe', zh: '衣柜' };
 const wardrobe = {
-  id: 'wardrobe', zh: '衣柜', en: 'Wardrobe', units: WARDROBE_UNITS, defaultUnit: 'hang',
+  id: 'wardrobe', ...WARDROBE_NAME, units: WARDROBE_UNITS, defaultUnit: 'hang',
   defaults: ({ ceilingH } = {}) => ({
     W: 2400, H: ceilingOr(ceilingH), D: 600, base: { kind: 'plinth', h: 100 },
     top: true, topH: 500, doorsAuto: true, doors: autoDoors(2400),
@@ -61,14 +64,18 @@ const wardrobe = {
   },
   // 墙的摆放（3D 用）：一面墙，从世界原点沿 +x 排，柜门朝 +z（朝观众）
   walls: (spec) => [{ ox: 0, oz: 0, angle: 0, len: spec.W }],
-  summary: (spec) => `${mmToM(spec.W)} × ${mmToM(spec.H)} × ${mmToM(spec.D)} m · ${spec.doors} 扇门`,
+  summary: (spec, lang) => joinL([
+    `${mmToM(spec.W)} × ${mmToM(spec.H)} × ${mmToM(spec.D)} m`,
+    { en: `${spec.doors} door${spec.doors === 1 ? '' : 's'}`, zh: `${spec.doors} 扇门` },
+  ], lang),
+  frameName: () => [WARDROBE_NAME],
   build(spec, cab) {
     const Hb = spec.H - spec.base.h;
     const topH = spec.top ? Math.min(spec.topH, Math.max(0, Hb - 800)) : 0;
     const mainH = Hb - topH;
     const widths = splitEven(spec.W, spec.doors);
     return [{
-      id: `${cab.id}-f0`, kind: 'tall', label: 'Wardrobe 衣柜', wall: 0, x: 0, y: 0,
+      id: `${cab.id}-f0`, kind: 'tall', label: bi(WARDROBE_NAME), wall: 0, x: 0, y: 0,
       W: spec.W, H: spec.H, D: spec.D, base: { ...spec.base }, ends: { left: true, right: true },
       body: vsplit(widths, widths.map((_, i) => wardrobeColumn(spec.units[i], mainH, topH))),
     }];
@@ -96,16 +103,17 @@ const kitchen = {
   build: kitchenBuild,
   walls: kitchenWalls,
   summary: kitchenSummary,
+  frameName: kitchenFrameName,
 };
 
 const tv = {
   id: 'tv', zh: '电视柜 / 展示柜', en: 'TV & display',
-  defaults: tvDefaults, normalize: tvNormalize, build: tvBuild, summary: tvSummary,
+  defaults: tvDefaults, normalize: tvNormalize, build: tvBuild, summary: tvSummary, frameName: tvFrameName,
   walls: (spec) => [{ ox: 0, oz: 0, angle: 0, len: spec.W }],
 };
 const shoe = {
   id: 'shoe', zh: '鞋柜 / 玄关柜', en: 'Shoe & foyer',
-  defaults: shoeDefaults, normalize: shoeNormalize, build: shoeBuild, summary: shoeSummary,
+  defaults: shoeDefaults, normalize: shoeNormalize, build: shoeBuild, summary: shoeSummary, frameName: shoeFrameName,
   walls: (spec) => [{ ox: 0, oz: 0, angle: 0, len: spec.W }],
 };
 
@@ -119,11 +127,24 @@ export function nextCode(zones = []) {
   return `K${Math.max(0, ...nums) + 1}`;
 }
 
+// ---- 按输出语言出字（报价单 / 长图 / Excel / WhatsApp）：lang 'en' | 'zh' | 'both'，从结构化数据生成，不拆「English 中文」字串 ----
+// 一句话简介：「2.40 × 2.70 × 0.60 m · 4 doors」/「… · 4 扇门」/ both「… · 4 doors 4 扇门」
+export const cabinetSummary = (cab, lang = 'both') => { const t = templateOf(cab.template); return t.summary ? t.summary(cab.spec, lang) : ''; };
+
+// 柜子名称：业务自己取的名字原样；没有就用模板名
+export const cabinetTitle = (cab, lang = 'both') => cab?.name || pickL(templateOf(cab?.template), lang);
+
+// 柜体小标题（多柜体的柜子：地柜 / 吊柜 / 高柜 · 墙A …）：按模板 + frame.kind / frame.wall 生成，新旧记录一样；
+// 不是模板做的（例如旧报价换算的柜子）才退回 frame.label
+export function frameTitle(cab, frame, lang = 'both') {
+  const t = TEMPLATES[cab?.template];
+  if (t?.frameName) return joinL(t.frameName(frame, cab.spec || {}), lang);
+  return frame?.label ? pickLang(frame.label, lang) : pickL(FRAME_KIND_NAME[frame?.kind] || FRAME_KIND_NAME.tall, lang);
+}
+
 // 每面墙在世界坐标（俯视：x 向右、z 朝观众）里的位置。
 //   world = (ox, oz) + R(angle)·(u 沿墙, w 离墙朝外)；R(0): u→+x, w→+z；R(90): u→+z, w→−x；
 //   R(180): u→−x, w→−z；R(270): u→−z, w→+x。柜体 frame.wall 指第几面墙，frame.x 是沿墙的位置。
-export const cabinetSummary = (cab) => { const t = templateOf(cab.template); return t.summary ? t.summary(cab.spec) : ''; };
-
 export function cabinetWalls(cab) {
   const t = templateOf(cab.template);
   return t.walls ? t.walls(cab.spec) : [{ ox: 0, oz: 0, angle: 0, len: cab.spec?.W || 0 }];

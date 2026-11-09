@@ -4,6 +4,7 @@
 // 鞋柜默认（用户定）：深 350，底层架空 150；上下柜 + 中空 = 下柜 900 · 中空 350 · 上柜到顶
 // ============================================================
 import { leaf, vsplit, hsplit, splitEven, autoDoors, mmToM, ceilingOr } from './model.js';
+import { joinL, bi, FRAME_KIND_NAME } from './lang.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const int = (v, d = 0) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? n : d; };
@@ -28,6 +29,13 @@ export const TV_UPPER_UNITS = [
   { id: 'open', zh: '开放格', en: 'Open' },
   { id: 'glass', zh: '玻璃门', en: 'Glass' },
 ];
+// 柜体名称（按 frame.kind）：低柜 = 电视柜、吊柜、两侧 = 展示高柜
+const TV_FRAME_NAME = {
+  base: { en: 'TV Cabinet', zh: '电视柜' },
+  wall: FRAME_KIND_NAME.wall,
+  tall: { en: 'Display Cabinet', zh: '展示高柜' },
+};
+export const tvFrameName = (frame) => [TV_FRAME_NAME[frame?.kind] || TV_FRAME_NAME.tall];
 
 export function tvDefaults({ ceilingH } = {}) {
   return {
@@ -93,14 +101,14 @@ export function tvBuild(spec, cab) {
   if (run.runW > 0) {
     const floating = spec.lowKind === 'floating';
     frames.push({
-      id: `${cab.id}-low`, kind: 'base', label: 'TV Cabinet 电视柜', wall: 0, x: run.x0, y: floating ? spec.lowY : 0,
+      id: `${cab.id}-low`, kind: 'base', label: bi(TV_FRAME_NAME.base), wall: 0, x: run.x0, y: floating ? spec.lowY : 0,
       W: run.runW, H: spec.lowH, D: spec.lowD, base: floating ? { kind: 'wallhung', h: 0 } : { kind: 'plinth', h: 80 },
       ends: { left: !run.left, right: !run.right },
       body: vsplit(splitEven(run.runW, spec.lowUnits.length), spec.lowUnits.map(tvLowLeaf)),
     });
     if (spec.upper.on) {
       frames.push({
-        id: `${cab.id}-upper`, kind: 'wall', label: 'Top Cabinet 吊柜', wall: 0, x: run.x0, y: spec.upper.y,
+        id: `${cab.id}-upper`, kind: 'wall', label: bi(TV_FRAME_NAME.wall), wall: 0, x: run.x0, y: spec.upper.y,
         W: run.runW, H: spec.upper.H, D: spec.upper.D, base: { kind: 'wallhung', h: 0 },
         ends: { left: !run.left, right: !run.right },
         body: vsplit(splitEven(run.runW, spec.upperUnits.length), spec.upperUnits.map(tvUpperLeaf)),
@@ -112,14 +120,25 @@ export function tvBuild(spec, cab) {
     const Hb = spec.sides.H - base.h;
     const n = autoDoors(spec.sides.W);
     const body = n > 1 ? vsplit(splitEven(spec.sides.W, n), Array.from({ length: n }, () => sideBody(spec.sides.kind, Hb))) : sideBody(spec.sides.kind, Hb);
-    return { id: `${cab.id}-${id}`, kind: 'tall', label: 'Display Cabinet 展示高柜', wall: 0, x, y: 0, W: spec.sides.W, H: spec.sides.H, D: spec.sides.D, base, ends, body };
+    return { id: `${cab.id}-${id}`, kind: 'tall', label: bi(TV_FRAME_NAME.tall), wall: 0, x, y: 0, W: spec.sides.W, H: spec.sides.H, D: spec.sides.D, base, ends, body };
   };
   if (run.left) frames.unshift(side('sideL', 0, { left: true, right: false }));
   if (run.right) frames.push(side('sideR', spec.W - spec.sides.W, { left: false, right: true }));
   return frames;
 }
 
-export const tvSummary = (spec) => `${mmToM(spec.W)} m · ${spec.lowKind === 'floating' ? '悬空' : '落地'}低柜${spec.sides.on ? ' · 两侧高柜' : ''}${spec.upper.on ? ' · 上方吊柜' : ''}`;
+// 一句话简介（按输出语言）
+const TV_SIDES_NAME = {
+  both: { en: 'Side towers', zh: '两侧高柜' },
+  left: { en: 'Left tower', zh: '左侧高柜' },
+  right: { en: 'Right tower', zh: '右侧高柜' },
+};
+export const tvSummary = (spec, lang = 'both') => joinL([
+  `${mmToM(spec.W)} m`,
+  spec.lowKind === 'floating' ? { en: 'Floating low cabinet', zh: '悬空低柜' } : { en: 'Floor low cabinet', zh: '落地低柜' },
+  spec.sides?.on && (TV_SIDES_NAME[spec.sides.which] || TV_SIDES_NAME.both),
+  spec.upper?.on && { en: 'Top cabinet above', zh: '上方吊柜' },
+], lang);
 
 // ---------------- 鞋柜 / 玄关柜 ----------------
 export const SHOE_STYLES = [
@@ -140,6 +159,9 @@ export function shoeDefaults({ ceilingH } = {}) {
     lowerH: 900, nicheH: 350, lowH: 950, benchH: 450, units: [],
   };
 }
+
+const SHOE_FRAME_NAME = { shoe: { en: 'Shoe Cabinet', zh: '鞋柜' }, bench: { en: 'Bench', zh: '换鞋凳' } };
+export const shoeFrameName = (frame, spec) => [spec?.style === 'bench' ? SHOE_FRAME_NAME.bench : SHOE_FRAME_NAME.shoe];
 
 const shoeHeight = (s) => (s.style === 'low' ? s.lowH : s.style === 'bench' ? s.benchH : s.H);
 
@@ -176,10 +198,13 @@ export function shoeBuild(spec, cab) {
     column = (u) => (u?.layout === 'doors' ? leaf('drawer', { drawers: 1, drawerKind: 'half', interior: 'drawers' }) : shoeLeaf(u));
   } else column = (u) => shoeLeaf(u);
   return [{
-    id: `${cab.id}-f0`, kind: H < 1000 ? 'base' : 'tall', label: spec.style === 'bench' ? 'Bench 换鞋凳' : 'Shoe Cabinet 鞋柜', wall: 0, x: 0, y: 0,
+    id: `${cab.id}-f0`, kind: H < 1000 ? 'base' : 'tall', label: bi(spec.style === 'bench' ? SHOE_FRAME_NAME.bench : SHOE_FRAME_NAME.shoe), wall: 0, x: 0, y: 0,
     W: spec.W, H, D: spec.style === 'bench' ? Math.max(spec.D, 400) : spec.D, base, ends: { left: true, right: true },
     body: vsplit(widths, spec.units.map(column)),
   }];
 }
 
-export const shoeSummary = (spec) => `${(SHOE_STYLES.find((x) => x.id === spec.style) || SHOE_STYLES[0]).zh} · ${mmToM(spec.W)} × ${mmToM(shoeHeight(spec))} × ${mmToM(spec.D)} m`;
+export const shoeSummary = (spec, lang = 'both') => joinL([
+  SHOE_STYLES.find((x) => x.id === spec.style) || SHOE_STYLES[0],
+  `${mmToM(spec.W)} × ${mmToM(shoeHeight(spec))} × ${mmToM(spec.D)} m`,
+], lang);

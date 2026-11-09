@@ -3,19 +3,21 @@ import { Plus, Copy, Trash2, GripVertical, Sofa, ChevronUp, ChevronDown, Chevron
 import { T } from '../../theme.js';
 import { newId, copyToClipboard } from '../../utils/helpers.js';
 import { useToast, useConfirm } from '../ui/UIProvider.jsx';
-import { computeQuote, computeLoose, CATEGORIES, ROOMS, CUSTOM_ROOM, OUTPUT_LANGS, tr, pickLang, RLBL, QUOTE_TERMS, LOOSE_TERMS, cabTypeById, fmtMYR, discountChainRate, discountChainLabel } from '../../constants/pricing.js';
+import { computeQuote, computeLoose, ROOMS, CUSTOM_ROOM, OUTPUT_LANGS, pickLang, cabTypeById, fmtMYR, discountChainRate, discountChainLabel } from '../../constants/pricing.js';
 import QuoteLineItem from './QuoteLineItem.jsx';
 import QuotePrint from './QuotePrint.jsx';
 import CatalogPicker from './CatalogPicker.jsx';
 import MeasureTool from './MeasureTool.jsx';
 import ItemEditorModal from './ItemEditorModal.jsx';
 import { exportExcel } from './exportExcel.js';
+import { buildTextQuote } from './textQuote.js';
 import { deriveZones, cabinetTotal } from '../../planner/bridge.js';
-import { newCabinet, nextCode, templateOf, cabinetSummary } from '../../planner/templates.js';
-import { parseMetersToMm, mmToM, uid } from '../../planner/model.js';
+import { newCabinet, nextCode } from '../../planner/templates.js';
+import { mmToM, uid } from '../../planner/model.js';
 import CabinetCard from '../planner/CabinetCard.jsx';
 import CabinetEditor from '../planner/CabinetEditor.jsx';
 import TemplatePicker from '../planner/TemplatePicker.jsx';
+import { parseMeters } from '../planner/bits.jsx';
 import { DOOR_SERIES, CARCASS_SERIES } from '../../constants/pricing.js';
 import { Boxes } from 'lucide-react';
 import { waLink } from '../../utils/whatsapp.js';
@@ -281,9 +283,11 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
   // ---- 积木柜 ----
   const [picking, setPicking] = useState(null);       // zoneId：正在选模板
   const [editingCab, setEditingCab] = useState(null); // { zoneId, cab, isNew }
+  const [ceilNote, setCeilNote] = useState({});       // zoneId → 「2700 mm → 2.70 m」（打了毫米时提示）
   const startCabinet = (zoneId, templateId) => {
     const zone = zones.find((z) => z.id === zoneId);
-    const cab = newCabinet(templateId, { ceilingH: zone?.ceilingH, code: nextCode(zones) });
+    // 楼高没填（null / 0）→ 不传，模板自己按 2.70 m（双保险：不让 null 变成 0 高的柜子）
+    const cab = newCabinet(templateId, { ceilingH: zone?.ceilingH > 0 ? zone.ceilingH : undefined, code: nextCode(zones) });
     setPicking(null);
     setEditingCab({ zoneId, cab, isNew: true });
   };
@@ -388,7 +392,8 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
                 if (d && d.zone && d.from !== zi) moveZone(d.from, zi);
                 dragRef.current = null;
               }}>
-              <div className="flex items-center gap-2 px-4 py-3" style={{ background: zoneHeadBg }}>
+              {/* 手机：自定义房间名单独一行（不然被楼高挤成 0 宽打不了字）；电脑照旧一行 */}
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 px-4 py-3" style={{ background: zoneHeadBg }}>
                 {/* 区域拖动 / 上下排序 */}
                 <div className="flex flex-col items-center shrink-0" style={{ marginLeft: -4 }}>
                   <button onClick={() => moveZone(zi, zi - 1)} disabled={zi === 0} title="上移 Move up"
@@ -403,26 +408,42 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
                   {zone.collapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
                 </button>
                 {/* 区域 = 房间：下拉选常见房间，也可直接改名；选「自定义」清空以便自填 */}
-                <select value={ROOMS.includes(zone.name) ? zone.name : ''}
-                  onChange={(e) => updateZone(zone.id, { name: e.target.value === CUSTOM_ROOM ? '' : e.target.value })}
-                  className="bg-transparent outline-none font-display text-base sm:text-lg cursor-pointer min-w-0 max-w-[45%] shrink" style={{ color: T.ink }}>
+                <select value={ROOMS.includes(zone.name) ? zone.name : zone.name ? CUSTOM_ROOM : ''}
+                  onChange={(e) => {
+                    const custom = e.target.value === CUSTOM_ROOM;
+                    updateZone(zone.id, { name: custom ? '' : e.target.value });
+                    if (custom) setTimeout(() => document.getElementById(`zname-${zone.id}`)?.focus(), 0);
+                  }}
+                  className="bg-transparent outline-none font-display text-base sm:text-lg cursor-pointer min-w-0 flex-1 sm:flex-initial sm:max-w-[45%]" style={{ color: T.ink }}>
                   <option value="" disabled>Room 选区域…</option>
                   {ROOMS.map((r) => <option key={r} value={r}>{r}</option>)}
                 </select>
-                <input value={zone.name} onChange={(e) => updateZone(zone.id, { name: e.target.value })}
+                <input id={`zname-${zone.id}`} value={zone.name} onChange={(e) => updateZone(zone.id, { name: e.target.value })}
                   placeholder="Custom room 自定义区域名"
-                  className="flex-1 min-w-0 bg-transparent outline-none text-sm" style={{ color: T.inkSoft }} />
+                  className={`${ROOMS.includes(zone.name) ? 'hidden sm:block' : 'block'} order-last basis-full sm:order-none sm:basis-0 sm:flex-1 min-w-0 bg-transparent outline-none text-sm py-1 sm:py-0 border-b border-dashed sm:border-b-0`}
+                  style={{ color: T.inkSoft, borderColor: T.line }} />
                 <label className="shrink-0 flex items-center gap-1 text-[11px]" style={{ color: zone.ceilingH ? T.inkSoft : T.terra }}
                   title="Ceiling height of this room 这个房间的楼高（衣柜默认做到顶）">
                   <span className="hidden sm:inline">Ceiling 楼高</span><span className="sm:hidden">楼高</span>
                   <input key={zone.ceilingH || 'none'} defaultValue={zone.ceilingH ? mmToM(zone.ceilingH) : ''} placeholder="2.70" inputMode="decimal"
-                    onBlur={(e) => { const v = parseMetersToMm(e.target.value); updateZone(zone.id, { ceilingH: v > 1500 ? v : null }); }}
+                    onInput={() => ceilNote[zone.id] && setCeilNote((n) => ({ ...n, [zone.id]: '' }))}
+                    onBlur={(e) => {
+                      // 打 2700（毫米）也行：≥ 100 当毫米，并提示「2700 mm → 2.70 m」
+                      const { mm: v, note } = parseMeters(e.target.value);
+                      const ok = v > 1500;
+                      if (ok) e.target.value = mmToM(v);
+                      setCeilNote((n) => ({ ...n, [zone.id]: ok ? note : '' }));
+                      updateZone(zone.id, { ceilingH: ok ? v : null });
+                    }}
                     className="w-12 px-1 py-0.5 text-xs outline-none" style={{ background: T.paper, border: `1px solid ${zone.ceilingH ? T.line : T.terra}`, borderRadius: 2, color: T.ink }} />
                   m
                 </label>
                 <span className="font-display text-base sm:text-lg shrink-0" style={{ color: T.wood }}>{fmtMYR(zr?.subtotal || 0)}</span>
                 <button onClick={() => removeZone(zone.id)} className="opacity-40 hover:opacity-100 shrink-0"
                   style={{ color: T.terra }} title="删除区域"><Trash2 size={15} /></button>
+                {ceilNote[zone.id] && (
+                  <div className="order-last basis-full text-right text-[10px]" style={{ color: T.wood }} data-mm-note>Ceiling 楼高 {ceilNote[zone.id]}</div>
+                )}
               </div>
 
               {!zone.collapsed && (
@@ -872,70 +893,4 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
       )}
     </div>
   );
-}
-
-// ---- WhatsApp / 纯文本报价（按语言）----
-function buildTextQuote(meta, computed, loose, notes = {}, lang = 'both') {
-  const t = (obj) => tr(obj, lang);
-  const pl = (text) => pickLang(text, lang);
-  const L = [];
-  L.push(`📋 *${t(RLBL.estQuote)} · SAIL by Riccione Reka*`);
-  L.push('━━━━━━━━━━━━━━━');
-  if (meta.name) L.push(`👤 ${t(RLBL.name)}：${meta.name}`);
-  if (meta.location) L.push(`📍 ${t(RLBL.site)}：${meta.location}`);
-  L.push(`📄 ${t(RLBL.rev)}：${meta.version || '1'}`);
-  L.push('');
-  computed.zoneResults.forEach((zr) => {
-    if (!zr.zone.items.length) return;
-    L.push(`▪️ *${pl(zr.zone.name) || t(RLBL.untitled)}* — ${fmtMYR(zr.subtotal)}`);
-    // KIRA：列出这个房间的积木柜（约数，房间小计以上面为准）
-    (zr.zone.cabinets || []).forEach((c) => {
-      const amt = zr.items.filter((ir) => ir.item.kira?.cabinetId === c.id).reduce((a, ir) => a + ir.total, 0);
-      const nm = c.name || pl(`${templateOf(c.template).en} ${templateOf(c.template).zh}`);
-      L.push(`   • ${c.code} ${nm} · ${cabinetSummary(c)} — ≈${fmtMYR(amt)}`);
-    });
-  });
-  L.push('');
-  L.push(`*${t({ en: 'Breakdown', zh: '分类明细' })}*`);
-  CATEGORIES.forEach((c) => {
-    const v = Math.round(computed.byCategory[c.key] || 0);
-    if (v > 0) L.push(`  ${pl(c.label)}：${fmtMYR(v)}`);
-  });
-  L.push('');
-  if (computed.discount > 0) {
-    L.push(`${t(RLBL.gross)}：${fmtMYR(computed.gross)}`);
-    L.push(`${t(RLBL.discount)}${computed.discountMode === 'amt' ? '' : ` (${computed.adjustPct}%)`}${computed.excluded > 0 ? ` · ${t(RLBL.noDiscExcl)}` : ''}${notes.discountNote ? ` — ${notes.discountNote}` : ''}：− ${fmtMYR(computed.discount)}`);
-  }
-  L.push(`*${t(RLBL.total)}：${fmtMYR(computed.net)}*`);
-  if (notes.cabinetNote) L.push(`${t(RLBL.notes)}：${notes.cabinetNote}`);
-  // Loose furniture 家具（Riccione Furniture）
-  if (loose && loose.rows.length > 0) {
-    L.push('');
-    L.push(`🛋️ *${t(RLBL.looseSection)} · Riccione Furniture*`);
-    loose.rows.forEach((r) => {
-      const nm = [r.type, r.model, r.color].filter(Boolean).join(' ');
-      L.push(`  ${nm || '-'} ×${Number(r.qty) || 0} — ${fmtMYR(r.total)}`);
-    });
-    if (loose.discount > 0) {
-      L.push(`${t(RLBL.gross)}：${fmtMYR(loose.gross)}`);
-      L.push(`${t(RLBL.discount)}${loose.discountMode === 'amt' ? '' : ` (${loose.adjustPct}%)`}${notes.looseDiscountNote ? ` — ${notes.looseDiscountNote}` : ''}：− ${fmtMYR(loose.discount)}`);
-    }
-    L.push(`*${t(RLBL.total)}：${fmtMYR(loose.net)}*`);
-    if (notes.looseNote) L.push(`${t(RLBL.notes)}：${notes.looseNote}`);
-  }
-  L.push('━━━━━━━━━━━━━━━');
-  const pushTerms = (terms) => terms.forEach((sec) => {
-    L.push(t(sec.title));
-    sec.lines.forEach((ln) => {
-      L.push((sec.bullet ? '• ' : '') + (lang === 'both' ? `${ln.en}　${ln.zh}` : t(ln)));
-    });
-    if (sec.note) L.push(lang === 'both' ? `${sec.note.en}　${sec.note.zh}` : t(sec.note));
-  });
-  const hasCabTerms = computed.zoneResults.some((zr) => zr.zone.items.length);
-  if (hasCabTerms) pushTerms(QUOTE_TERMS);
-  if ((loose?.rows || []).length) {
-    L.push(`[${t(RLBL.looseSection)}]`);
-    pushTerms(hasCabTerms ? LOOSE_TERMS.slice(1) : LOOSE_TERMS); // 有效期已在上方就不重复
-  }
-  return L.join('\n');
 }

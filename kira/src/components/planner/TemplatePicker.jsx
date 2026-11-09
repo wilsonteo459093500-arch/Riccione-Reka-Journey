@@ -5,6 +5,7 @@ import { T } from '../../theme.js';
 import { TEMPLATE_LIST, newCabinet } from '../../planner/templates.js';
 import SvgShapes from '../../render/SvgShapes.jsx';
 import { elevationScene } from '../../render/elevation.js';
+import { useBackClose } from './bits.jsx';
 
 const COMING = [
   { id: 'kitchen', zh: '厨房', en: 'Kitchen', sub: '一字 / L / U / 二字' },
@@ -14,6 +15,7 @@ const COMING = [
 
 export default function TemplatePicker({ onPick, onClose }) {
   const ready = new Set(TEMPLATE_LIST.map((t) => t.id));
+  useBackClose(onClose); // 手机返回键 = 关闭
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center no-print" style={{ background: 'rgba(45,62,54,0.55)' }} onClick={onClose}>
       <div className="w-full sm:max-w-2xl p-5 sm:p-6" style={{ background: T.paper, borderRadius: '2px 2px 0 0' }} onClick={(e) => e.stopPropagation()}>
