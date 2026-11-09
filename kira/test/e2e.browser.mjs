@@ -27,7 +27,7 @@ try {
   const p = await ctx.newPage();
   const errors = [];
   p.on('pageerror', (e) => errors.push(e.message));
-  const slow = (ms) => (VIDEO ? p.waitForTimeout(ms) : Promise.resolve());
+  const slow = (ms) => (VIDEO ? p.waitForTimeout(ms * 2) : Promise.resolve()); // 录影放慢一倍，新人看得清
 
   await p.goto(URL);
   await slow(1200);
