@@ -1,0 +1,455 @@
+import { useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { Printer, X, Image as ImageIcon } from 'lucide-react';
+import { exportLongImage } from '../../utils/longImage.js';
+import { T } from '../../theme.js';
+import { fmtMYR, fmtNum, tr, pickLang, capColor, cabTypeById, cabDimsLabel, RLBL, QUOTE_TERMS, LOOSE_TERMS, discountChainRate, discountChainLabel } from '../../constants/pricing.js';
+import { fmt } from '../../utils/helpers.js';
+
+// 报价单（可打印 / 另存 PDF）。lang：'en' | 'zh' | 'both'。
+// 定制橱柜（SAIL by Riccione Reka）+ Loose Furniture（Riccione Furniture，另起一页）。
+export default function QuotePrint({ meta, computed, loose, cabinetNote = '', looseNote = '', discountNote = '', looseDiscountNote = '', audience = 'retail', designerDisc = '30', lang = 'both', onClose }) {
+  const zones = computed.zoneResults.filter((zr) => zr.zone.items.length > 0);
+  const looseRows = loose?.rows || [];
+  const hasCab = zones.length > 0;
+  const hasLoose = looseRows.length > 0;
+  const looseNet = loose?.net || 0;
+  const grand = computed.net + looseNet;
+  const hasSummary = hasCab && hasLoose; // 两个部分都有才需要总览页
+  // 三种版本：retail 零售 / designer 双价(零售+供货,只在总额) / designer_net 净价(每个单价都是供货价)
+  const isDesigner = audience === 'designer';         // 双价
+  const isDesignerNet = audience === 'designer_net';  // 净价
+  const anyDesigner = isDesigner || isDesignerNet;
+  const supplyRate = discountChainRate(designerDisc);
+  const supply = (retail) => Math.round((Number(retail) || 0) * supplyRate);
+  const discTag = discountChainLabel(designerDisc); // "30%+10%"
+  const priceScale = isDesignerNet ? supplyRate : 1; // 净价版把每个价格 × 系数
+  const px = (v) => Math.round((Number(v) || 0) * priceScale); // 显示价（净价版=供货价）
+  // 岩板 sintered stone 不折扣：设计师版也不打供货折扣。按项目判断（ir.noDiscount）。
+  const pxi = (v, ir) => (ir?.noDiscount ? Math.round(Number(v) || 0) : px(v));
+  const zoneShown = (zr) => Math.round(zr.items.reduce((s, ir) => s + (ir.noDiscount ? ir.total : ir.total * priceScale), 0));
+  const excluded = computed.excluded || 0;
+  // 设计师版按「零售原价 gross」计（不理会给零售客户的折扣）；零售版按折后 net 计。
+  const cabRetail = anyDesigner ? computed.gross : computed.net;
+  const looseRetailV = anyDesigner ? (loose?.gross || 0) : looseNet;
+  const grandRetail = cabRetail + looseRetailV;
+  // 供货价：定制 = (原价 − 岩板) × 系数 + 岩板；家具 = 原价 × 系数
+  const cabSupply = supply(cabRetail - excluded) + Math.round(excluded);
+  const looseSupply = supply(looseRetailV);
+  const grandSupply = cabSupply + looseSupply;
+  const exclTag = excluded > 0 ? ` · ${tr(RLBL.noDiscExcl, lang)}` : '';
+  const t = (obj) => tr(obj, lang);
+  const lineDesc = (ln) => (lang === 'en' ? ln.descEn : lang === 'zh' ? ln.descZh : `${ln.descEn} ${ln.descZh}`);
+  const lineUom = (ln) => (lang === 'en' ? ln.uomEn : lang === 'zh' ? ln.uomZh : ln.uomZh);
+  // 定制柜体子项描述：门板/柜体 → "Door: A Series"；抽屉 → "Drawers"
+  const cabLineLabel = (ln) => {
+    const sid = (ln.descEn.split(' ')[1] || '').trim();
+    const map = {
+      door:    { en: `Door: ${sid} Series`,         zh: `门板：${sid} 系列` },
+      carcass: { en: `Carcass: ${sid} Series`,      zh: `柜体：${sid} 系列` },
+      open:    { en: `Open Cabinet: ${sid} Series`, zh: `开放柜：${sid} 系列` },
+      drawer:  { en: ln.descEn, zh: ln.descZh }, // 全展 / 半展 由明细自带
+    };
+    return map[ln.bucket] ? t(map[ln.bucket]) : lineDesc(ln);
+  };
+
+  // PDF 文件名：EST QUOTE_RICCIONE_[客户]_[Site]_YYYYMMDD（Chrome 存 PDF 默认取 document.title）
+  const handlePrint = () => {
+    const prev = document.title;
+    const safe = (s) => (s || '').replace(/[\\/:*?"<>|]/g, '').trim().replace(/\s+/g, ' ');
+    const d = (meta.date || '').replace(/-/g, '');
+    document.title = `EST QUOTE_RICCIONE_${safe(meta.name) || 'Customer'}_${safe(meta.location) || 'Site'}_${d || 'draft'}${isDesignerNet ? '_DESIGNER_NET' : isDesigner ? '_DESIGNER' : ''}`;
+    const restore = () => { document.title = prev; window.removeEventListener('afterprint', restore); };
+    window.addEventListener('afterprint', restore);
+    window.print();
+  };
+
+  // 一张长图（内容和 PDF 一样完整）：手机可直接分享到 WhatsApp，电脑则下载 PNG
+  const sheetRef = useRef(null);
+  const [imgBusy, setImgBusy] = useState(false);
+  const docName = () => {
+    const safe = (s) => (s || '').replace(/[\\/:*?"<>|]/g, '').trim().replace(/\s+/g, ' ');
+    const d = (meta.date || '').replace(/-/g, '');
+    return `EST QUOTE_RICCIONE_${safe(meta.name) || 'Customer'}_${safe(meta.location) || 'Site'}_${d || 'draft'}${isDesignerNet ? '_DESIGNER_NET' : isDesigner ? '_DESIGNER' : ''}`;
+  };
+  const handleImage = async () => {
+    if (!sheetRef.current || imgBusy) return;
+    setImgBusy(true);
+    try { await exportLongImage(sheetRef.current, docName()); } catch (e) { alert('Long image failed 长图生成失败：' + (e?.message || e)); }
+    setImgBusy(false);
+  };
+
+  // 抬头（品牌可换）
+  const Head = ({ brand }) => (
+    <div className="flex items-start justify-between pb-4 mb-4" style={{ borderBottom: `2px solid ${T.ink}` }}>
+      <div>
+        <div className="font-display text-2xl">{brand}</div>
+        <div className="text-xs tracking-widest uppercase mt-1" style={{ color: T.inkSoft }}>{t(RLBL.estQuote)}</div>
+        {anyDesigner && (
+          <div className="inline-block mt-1 px-2 py-0.5 text-[10px] uppercase tracking-widest"
+            style={{ background: T.wood, color: '#fff', borderRadius: 2 }}>
+            {t({ en: 'Designer Copy', zh: '设计师版' })}{isDesignerNet ? ` · ${t({ en: 'Net Price', zh: '净价' })}` : ''} · {t({ en: 'Confidential', zh: '内部' })}
+          </div>
+        )}
+      </div>
+      <div className="text-right text-xs" style={{ color: T.inkSoft }}>
+        <div className="font-medium" style={{ color: T.ink }}>{t(RLBL.rev)} {meta.version || '1'}</div>
+        <div>{t(RLBL.date)} {fmt(meta.date)}</div>
+        {meta.ref && <div>{t(RLBL.ref)} {meta.ref}</div>}
+        {meta.pic && <div>{t(RLBL.pic)} {meta.pic}</div>}
+      </div>
+    </div>
+  );
+
+  const CustomerRow = () => (
+    <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-xs mb-5">
+      <div><span style={{ color: T.inkSoft }}>{t(RLBL.name)}：</span>{meta.name || '—'}</div>
+      <div><span style={{ color: T.inkSoft }}>{t(RLBL.site)}：</span>{meta.location || '—'}</div>
+    </div>
+  );
+
+  const Terms = ({ terms }) => (
+    <div className="mt-8 space-y-3 text-[11px]" style={{ color: T.inkSoft, breakInside: 'avoid' }}>
+      {terms.map((sec, si) => (
+        <div key={si}>
+          <div className="font-medium" style={{ color: T.ink }}>{t(sec.title)}</div>
+          {sec.lines.map((ln, li) => (
+            lang === 'both'
+              ? <div key={li}>{sec.bullet ? '• ' : ''}{ln.en}　{ln.zh}</div>
+              : <div key={li}>{sec.bullet ? '• ' : ''}{t(ln)}</div>
+          ))}
+          {sec.note && <div className="italic">{t(sec.note)}</div>}
+        </div>
+      ))}
+    </div>
+  );
+
+  const NoteBlock = ({ text }) => (
+    text ? (
+      <div className="mt-5 text-[11px]" style={{ color: T.inkSoft, breakInside: 'avoid' }}>
+        <div className="font-medium" style={{ color: T.ink }}>{t(RLBL.notes)}</div>
+        <div style={{ whiteSpace: 'pre-line' }}>{text}</div>
+      </div>
+    ) : null
+  );
+
+  // 总览页：某部分的 原价 / 折扣 / 折后小计
+  const SummarySection = ({ label, brand, calc, note, supplyVal }) => (
+    <>
+      <tr style={{ borderTop: `1px solid ${T.line}` }}>
+        <td className="pt-2 px-2 font-medium" colSpan={2}>{label} <span style={{ color: T.inkSoft }}>· {brand}</span></td>
+      </tr>
+      {anyDesigner ? (
+        /* 设计师版：只显示一个小计（双价=零售原价；净价=供货价）*/
+        <tr>
+          <td className="py-0.5 px-2 pl-5 font-medium">{t(RLBL.subtotal)}</td>
+          <td className="text-right py-0.5 px-2 font-medium">{fmtMYR(isDesignerNet ? supplyVal : calc.gross)}</td>
+        </tr>
+      ) : (
+        <>
+          <tr>
+            <td className="py-0.5 px-2 pl-5" style={{ color: T.inkSoft }}>{t(RLBL.gross)}</td>
+            <td className="text-right py-0.5 px-2">{fmtMYR(calc.gross)}</td>
+          </tr>
+          {calc.discount > 0 && (
+            <tr style={{ color: T.terra }}>
+              <td className="py-0.5 px-2 pl-5">{t(RLBL.discount)}{calc.discountMode === 'amt' ? '' : ` (${calc.adjustPct}%)`}{calc.excluded > 0 ? ` · ${t(RLBL.noDiscExcl)}` : ''}{note ? <span className="italic"> — {note}</span> : null}</td>
+              <td className="text-right py-0.5 px-2">− {fmtMYR(calc.discount)}</td>
+            </tr>
+          )}
+          <tr>
+            <td className="py-0.5 px-2 pl-5 font-medium">{t(RLBL.subtotal)}</td>
+            <td className="text-right py-0.5 px-2 font-medium">{fmtMYR(calc.net)}</td>
+          </tr>
+        </>
+      )}
+    </>
+  );
+
+  const Signatures = () => (
+    <div className="mt-12 text-xs" style={{ width: '48%' }}>
+      <div style={{ borderTop: `1px solid ${T.line}`, paddingTop: 6 }}>{t(RLBL.customer)}</div>
+    </div>
+  );
+
+  const th = 'text-right font-normal py-1 px-2';
+
+  return createPortal(
+    <div className="quote-print-overlay fixed inset-0 z-50 overflow-auto" style={{ background: 'rgba(45,62,54,0.85)' }} onClick={onClose}>
+      <div className="min-h-screen flex items-start justify-center p-4 lg:p-8">
+        <div ref={sheetRef} className="quote-print-sheet w-full max-w-4xl my-4" style={{ background: '#fff', borderRadius: '2px', boxShadow: '0 24px 80px rgba(0,0,0,0.3)' }} onClick={(e) => e.stopPropagation()}>
+
+          {/* toolbar */}
+          <div className="no-print flex items-center justify-between p-4" style={{ borderBottom: `1px solid ${T.lineSoft}` }}>
+            <span className="text-xs uppercase tracking-widest" style={{ color: T.inkSoft }}>{t(RLBL.preview)}</span>
+            <div className="flex items-center gap-2">
+              <button onClick={handleImage} disabled={imgBusy} className="px-3 py-1.5 text-xs flex items-center gap-1.5 disabled:opacity-60"
+                style={{ background: T.sage, color: '#fff', borderRadius: '2px' }}>
+                <ImageIcon size={12} /> {imgBusy ? '…' : t({ en: 'Long image', zh: '存长图' })}
+              </button>
+              <button onClick={handlePrint} className="px-3 py-1.5 text-xs flex items-center gap-1.5"
+                style={{ background: T.wood, color: '#fff', borderRadius: '2px' }}>
+                <Printer size={12} /> {t(RLBL.printBtn)}
+              </button>
+              <button onClick={onClose} className="p-1.5" style={{ color: T.inkSoft }}><X size={16} /></button>
+            </div>
+          </div>
+
+          {/* ===== 第一页：总览 Summary（定制 + 家具 总计）===== */}
+          {hasSummary && (
+            <div className="p-8 text-[#2D3E36]" style={{ fontSize: 13 }}>
+              <Head brand="RICCIONE" />
+              <CustomerRow />
+              <div className="mt-6" style={{ breakInside: 'avoid' }}>
+                <div className="px-2 py-1 font-medium text-xs uppercase tracking-wide" style={{ background: T.sand }}>{t(RLBL.summary)}</div>
+                <table className="w-full" style={{ borderCollapse: 'collapse' }}>
+                  <tbody>
+                    <SummarySection label={t(RLBL.customCabinet)} brand="SAIL by Riccione Reka" calc={computed} note={discountNote} supplyVal={cabSupply} />
+                    <SummarySection label={t(RLBL.looseSection)} brand="Riccione Furniture" calc={loose} note={looseDiscountNote} supplyVal={looseSupply} />
+                    {/* 合计（两部分）—— 零售版才显示原价/折扣分解 */}
+                    {!anyDesigner && (
+                      <>
+                        <tr style={{ borderTop: `1.5px solid ${T.line}` }}>
+                          <td className="pt-2 px-2" style={{ color: T.inkSoft }}>{t(RLBL.totalBeforeDiscount)}</td>
+                          <td className="text-right pt-2 px-2">{fmtMYR(computed.gross + (loose?.gross || 0))}</td>
+                        </tr>
+                        {(computed.discount + (loose?.discount || 0)) > 0 && (
+                          <tr style={{ color: T.terra }}>
+                            <td className="py-0.5 px-2">{t(RLBL.totalDiscountAmt)}</td>
+                            <td className="text-right py-0.5 px-2">− {fmtMYR(computed.discount + (loose?.discount || 0))}</td>
+                          </tr>
+                        )}
+                      </>
+                    )}
+                    {isDesignerNet ? (
+                      /* 净价版：直接一个供货总额 */
+                      <tr style={{ borderTop: `2px solid ${T.ink}`, color: T.wood }}>
+                        <td className="py-3 px-2 font-display text-xl">{t({ en: 'Designer Total', zh: '设计师总额' })}{exclTag && <span className="text-xs font-body" style={{ color: T.inkSoft }}>{exclTag}</span>}</td>
+                        <td className="text-right py-3 px-2 font-display text-xl">{fmtMYR(grandSupply)}</td>
+                      </tr>
+                    ) : (
+                      <>
+                        <tr style={{ borderTop: `2px solid ${T.ink}` }}>
+                          <td className="py-3 px-2 font-display text-xl">{isDesigner ? t({ en: 'Retail Total', zh: '零售总额' }) : t(RLBL.grandTotal)}</td>
+                          <td className="text-right py-3 px-2 font-display text-xl">{fmtMYR(grandRetail)}</td>
+                        </tr>
+                        {isDesigner && (
+                          <tr style={{ color: T.wood, borderTop: `1px solid ${T.line}` }}>
+                            <td className="py-3 px-2 font-display text-xl">{t({ en: 'Designer Supply', zh: '设计师供货价' })} ({discTag}){exclTag && <span className="text-xs font-body" style={{ color: T.inkSoft }}>{exclTag}</span>}</td>
+                            <td className="text-right py-3 px-2 font-display text-xl">{fmtMYR(grandSupply)}</td>
+                          </tr>
+                        )}
+                      </>
+                    )}
+                  </tbody>
+                </table>
+                <div className="mt-4 text-[11px] italic" style={{ color: T.inkSoft }}>{t(RLBL.detailNote)}</div>
+              </div>
+              <Signatures />
+            </div>
+          )}
+
+          {/* ===== 定制橱柜 SAIL BY RICCIONE REKA ===== */}
+          {hasCab && (
+            <div className="p-8 text-[#2D3E36]" style={{ fontSize: 13, breakBefore: hasSummary ? 'page' : 'auto' }}>
+              <Head brand="SAIL BY RICCIONE REKA" />
+              <CustomerRow />
+
+              {zones.map((zr) => (
+                <div key={zr.zone.id} className="mb-4">
+                  <div className="px-2 py-1 font-medium text-xs uppercase tracking-wide"
+                    style={{ background: T.sand, breakInside: 'avoid', breakAfter: 'avoid' }}>{pickLang(zr.zone.name, lang) || t(RLBL.untitled)}</div>
+                  <table className="w-full" style={{ borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr className="text-[10px] uppercase tracking-wide" style={{ color: T.inkSoft }}>
+                        <th className="text-left font-normal py-1 px-2" style={{ width: '42%' }}>{t(RLBL.desc)}</th>
+                        <th className={th}>{t(RLBL.qty)}</th>
+                        <th className="text-left font-normal py-1 px-2">{t(RLBL.uom)}</th>
+                        <th className={th}>{t(RLBL.unitPrice)}</th>
+                        <th className={th}>{t(RLBL.amount)}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {zr.items.flatMap((ir) => {
+                        const qtyCell = (ln) => <td className="text-right py-1 px-2">{fmtNum(ln.qty, ln.piece ? 0 : 2)}</td>;
+                        // 定制柜体：柜体类型（+名称）作为分组抬头，门板/柜体/抽屉缩进列在下面
+                        if (ir.item.type === 'cabinet') {
+                          const typeLabel = pickLang(cabTypeById(ir.item.cabType).label, lang);
+                          const nm = pickLang(ir.item.name || ir.item.desc || '', lang);
+                          const head = [typeLabel, nm].filter(Boolean).join(' · ');
+                          const dims = cabDimsLabel(ir.item, lang === 'zh' ? 'zh' : 'en');
+                          return [
+                            <tr key={ir.item.id + '-h'} style={{ borderTop: `1px solid ${T.lineSoft}`, breakInside: 'avoid' }}>
+                              <td className="py-1 px-2 font-medium" colSpan={5}>
+                                {head}
+                                <span className="font-normal ml-2" style={{ color: T.inkSoft }}>{dims}</span>
+                              </td>
+                            </tr>,
+                            ...ir.lines.map((ln, i) => (
+                              <tr key={ir.item.id + i}>
+                                <td className="py-1 px-2 pl-6" style={{ color: T.inkSoft }}>{cabLineLabel(ln)}</td>
+                                {qtyCell(ln)}
+                                <td className="py-1 px-2">{lineUom(ln)}</td>
+                                <td className="text-right py-1 px-2">{fmtNum(pxi(ln.unitMyr, ir), 0)}</td>
+                                <td className="text-right py-1 px-2">{fmtNum(pxi(ln.total, ir), 0)}</td>
+                              </tr>
+                            )),
+                          ];
+                        }
+                        // 其他类型（墙板/房门/灯带/其他）：单行，首行带名称前缀
+                        return ir.lines.map((ln, i) => (
+                          <tr key={ir.item.id + i} style={{ borderTop: `1px solid ${T.lineSoft}`, breakInside: 'avoid' }}>
+                            <td className="py-1 px-2">
+                              {i === 0 && (() => {
+                                const nm = pickLang(ir.item.name || '', lang); // 房门/其他/灯带的 desc 即描述，避免重复
+                                return nm ? <span className="font-medium">{nm} · </span> : null;
+                              })()}
+                              {lineDesc(ln)}
+                            </td>
+                            {qtyCell(ln)}
+                            <td className="py-1 px-2">{lineUom(ln)}</td>
+                            <td className="text-right py-1 px-2">{fmtNum(pxi(ln.unitMyr, ir), 0)}</td>
+                            <td className="text-right py-1 px-2">{fmtNum(pxi(ln.total, ir), 0)}</td>
+                          </tr>
+                        ));
+                      })}
+                      <tr style={{ borderTop: `1.5px solid ${T.line}` }}>
+                        <td colSpan={4} className="text-right py-1 px-2 text-xs" style={{ color: T.inkSoft }}>{t(RLBL.subtotal)}</td>
+                        <td className="text-right py-1 px-2 font-medium">{fmtNum(zoneShown(zr), 0)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+
+              <div className="mt-6 flex justify-end" style={{ breakInside: 'avoid' }}>
+                <div className="w-72 text-sm">
+                  {!anyDesigner && (
+                    <>
+                      <div className="flex justify-between py-1">
+                        <span style={{ color: T.inkSoft }}>{t(RLBL.gross)}</span><span>{fmtMYR(computed.gross)}</span>
+                      </div>
+                      {computed.discount > 0 && (
+                        <>
+                          <div className="flex justify-between py-1" style={{ color: T.terra }}>
+                            <span>{t(RLBL.discount)}{computed.discountMode === 'amt' ? '' : ` (${computed.adjustPct}%)`}{computed.excluded > 0 ? ` · ${t(RLBL.noDiscExcl)}` : ''}</span><span>− {fmtMYR(computed.discount)}</span>
+                          </div>
+                          {discountNote && <div className="text-[10px] italic -mt-0.5 pb-1" style={{ color: T.inkSoft }}>{discountNote}</div>}
+                        </>
+                      )}
+                    </>
+                  )}
+                  {isDesignerNet ? (
+                    <div className="flex justify-between py-2 mt-1 font-display text-xl" style={{ borderTop: `2px solid ${T.ink}`, color: T.wood }}>
+                      <span>{t({ en: 'Designer Total', zh: '设计师总额' })}{exclTag && <span className="text-xs font-body" style={{ color: T.inkSoft }}>{exclTag}</span>}</span><span>{fmtMYR(cabSupply)}</span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex justify-between py-2 mt-1 font-display text-xl" style={{ borderTop: `2px solid ${T.ink}` }}>
+                        <span>{isDesigner ? t({ en: 'Retail Total', zh: '零售总额' }) : t(RLBL.total)}</span><span>{fmtMYR(cabRetail)}</span>
+                      </div>
+                      {isDesigner && (
+                        <div className="flex justify-between py-1 font-medium" style={{ color: T.wood }}>
+                          <span>{t({ en: 'Designer Supply', zh: '设计师供货价' })} ({discTag}){exclTag}</span><span>{fmtMYR(cabSupply)}</span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <NoteBlock text={cabinetNote} />
+              <Terms terms={QUOTE_TERMS} />
+              {!hasSummary && <Signatures />}
+            </div>
+          )}
+
+          {/* ===== Loose Furniture RICCIONE FURNITURE（另起一页）===== */}
+          {hasLoose && (
+            <div className="p-8 text-[#2D3E36]" style={{ fontSize: 13, breakBefore: hasCab ? 'page' : 'auto' }}>
+              <Head brand="RICCIONE FURNITURE" />
+              <CustomerRow />
+
+              <div>
+                <div className="px-2 py-1 font-medium text-xs uppercase tracking-wide" style={{ background: T.sand }}>
+                  {t(RLBL.looseSection)}
+                </div>
+                <table className="w-full" style={{ borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr className="text-[10px] uppercase tracking-wide" style={{ color: T.inkSoft }}>
+                      <th className="text-left font-normal py-1 px-2" style={{ width: 110 }}>{t(RLBL.photo)}</th>
+                      <th className="text-left font-normal py-1 px-2" style={{ width: '24%' }}>{t(RLBL.productType)}</th>
+                      <th className="text-left font-normal py-1 px-2">{t(RLBL.model)}</th>
+                      <th className="text-left font-normal py-1 px-2" style={{ width: 72 }}>{t(RLBL.color)}</th>
+                      <th className={th}>{t(RLBL.qty)}</th>
+                      <th className={th}>{t(RLBL.unitPrice)}</th>
+                      <th className={th}>{t(RLBL.amount)}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {looseRows.map((r) => (
+                      <tr key={r.id} style={{ borderTop: `1px solid ${T.lineSoft}`, breakInside: 'avoid' }}>
+                        <td className="py-1 px-2">
+                          {r.image ? <img src={r.image} alt="" style={{ width: 96, height: 96, objectFit: 'cover', borderRadius: 2, border: `1px solid ${T.lineSoft}` }} /> : null}
+                        </td>
+                        <td className="py-1 px-2">{r.type || '—'}</td>
+                        <td className="py-1 px-2">{r.model || '—'}</td>
+                        <td className="py-1 px-2">{capColor(r.color) || '—'}</td>
+                        <td className="text-right py-1 px-2">{fmtNum(Number(r.qty) || 0, 0)}</td>
+                        <td className="text-right py-1 px-2">{fmtNum(px(r.unitMyr), 0)}</td>
+                        <td className="text-right py-1 px-2">{fmtNum(px(r.total), 0)}</td>
+                      </tr>
+                    ))}
+                    {!anyDesigner && (
+                      <>
+                        <tr style={{ borderTop: `1.5px solid ${T.line}` }}>
+                          <td colSpan={6} className="text-right py-1 px-2 text-xs" style={{ color: T.inkSoft }}>{t(RLBL.gross)}</td>
+                          <td className="text-right py-1 px-2">{fmtNum(loose.gross, 0)}</td>
+                        </tr>
+                        {loose.discount > 0 && (
+                          <tr style={{ color: T.terra }}>
+                            <td colSpan={6} className="text-right py-1 px-2 text-xs">{t(RLBL.discount)}{loose.discountMode === 'amt' ? '' : ` (${loose.adjustPct}%)`}{looseDiscountNote ? <span className="italic"> — {looseDiscountNote}</span> : null}</td>
+                            <td className="text-right py-1 px-2">− {fmtNum(loose.discount, 0)}</td>
+                          </tr>
+                        )}
+                      </>
+                    )}
+                    {isDesignerNet ? (
+                      <tr style={{ borderTop: `1.5px solid ${T.line}`, color: T.wood }}>
+                        <td colSpan={6} className="text-right py-1 px-2 font-medium">{t({ en: 'Designer Total', zh: '设计师总额' })}</td>
+                        <td className="text-right py-1 px-2 font-medium">{fmtNum(supply(looseRetailV), 0)}</td>
+                      </tr>
+                    ) : (
+                      <>
+                        <tr style={{ borderTop: `1.5px solid ${T.line}` }}>
+                          <td colSpan={6} className="text-right py-1 px-2 font-medium">{isDesigner ? t({ en: 'Retail Total', zh: '零售总额' }) : t(RLBL.total)}</td>
+                          <td className="text-right py-1 px-2 font-medium">{fmtNum(looseRetailV, 0)}</td>
+                        </tr>
+                        {isDesigner && (
+                          <tr style={{ color: T.wood }}>
+                            <td colSpan={6} className="text-right py-1 px-2 font-medium">{t({ en: 'Designer Supply', zh: '设计师供货价' })} ({discTag})</td>
+                            <td className="text-right py-1 px-2 font-medium">{fmtNum(supply(looseRetailV), 0)}</td>
+                          </tr>
+                        )}
+                      </>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <NoteBlock text={looseNote} />
+              {/* Loose Furniture 只放 Validity 条款 */}
+              <Terms terms={LOOSE_TERMS} />
+              {!hasSummary && <Signatures />}
+            </div>
+          )}
+
+          {!hasCab && !hasLoose && (
+            <div className="p-8 text-center text-sm" style={{ color: T.inkSoft }}>No items 暂无明细</div>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}

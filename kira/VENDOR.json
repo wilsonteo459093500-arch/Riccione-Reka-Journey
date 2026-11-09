@@ -1,0 +1,108 @@
+{
+  "upstream": {
+    "repo": "wilsonteo459093500-arch/Riccione-Reka-Journey",
+    "branch": "claude/cabinet-quotation-tool-ba24um",
+    "commit": "391d3bd278ffbfdff27cf1e6fcc67a25cb30807f",
+    "note": "KIRA forked the old quote tool (PR #6). From now on the price table is owned by KIRA (pricing changes are made here only)."
+  },
+  "renamed": {
+    "src/services/quoteRepo.js": "src/services/kiraRepo.js (table kira_projects; read-only access to public.quotes for import)"
+  },
+  "files": {
+    "src/constants/pricing.js": {
+      "status": "verbatim",
+      "upstreamSha256": "bca295f323ba43080f610579456c93a0221abc5c2c5e25bb318782a99c9cec56",
+      "sha256": "bca295f323ba43080f610579456c93a0221abc5c2c5e25bb318782a99c9cec56"
+    },
+    "src/constants/looseCatalog.js": {
+      "status": "verbatim",
+      "upstreamSha256": "04b6361122107e56b7137227c98598c7e5005407dac9a81fe5e68d2d31f7f889",
+      "sha256": "04b6361122107e56b7137227c98598c7e5005407dac9a81fe5e68d2d31f7f889"
+    },
+    "src/theme.js": {
+      "status": "verbatim",
+      "upstreamSha256": "3a326648e5cbc30c015f011a093fdbfdd8aeadbbaeacb3ff845ab433ea074a71",
+      "sha256": "3a326648e5cbc30c015f011a093fdbfdd8aeadbbaeacb3ff845ab433ea074a71"
+    },
+    "src/components/ui/UIProvider.jsx": {
+      "status": "verbatim",
+      "upstreamSha256": "5ba8446bb4076f9ff704bf99939584ddc9b90055b3de1a5e224bae86d6728457",
+      "sha256": "5ba8446bb4076f9ff704bf99939584ddc9b90055b3de1a5e224bae86d6728457"
+    },
+    "src/components/ui/Inputs.jsx": {
+      "status": "verbatim",
+      "upstreamSha256": "c600d387f2357a208c455239df0df14f36ff77d82ed5bfe2597de76b25350546",
+      "sha256": "c600d387f2357a208c455239df0df14f36ff77d82ed5bfe2597de76b25350546"
+    },
+    "src/services/supabase.js": {
+      "status": "verbatim",
+      "upstreamSha256": "b88cffaca9b3fc92df6f44d670be84ec152a5c486da4ead94ea7bd95ffa543d5",
+      "sha256": "b88cffaca9b3fc92df6f44d670be84ec152a5c486da4ead94ea7bd95ffa543d5"
+    },
+    "src/components/quote/QuoteLineItem.jsx": {
+      "status": "verbatim",
+      "upstreamSha256": "e0b394ff0b923ce4f34615f1f7725193bc01c89fed84a27e3e0014ee881b9b27",
+      "sha256": "e0b394ff0b923ce4f34615f1f7725193bc01c89fed84a27e3e0014ee881b9b27"
+    },
+    "src/components/quote/ItemEditorModal.jsx": {
+      "status": "verbatim",
+      "upstreamSha256": "e22aab4a89bb2834e8d1c3a07c38fe9d3a7c6d23b6545143f57b10ec3aa59af8",
+      "sha256": "e22aab4a89bb2834e8d1c3a07c38fe9d3a7c6d23b6545143f57b10ec3aa59af8"
+    },
+    "src/components/quote/CatalogPicker.jsx": {
+      "status": "verbatim",
+      "upstreamSha256": "ad42d08fa139a9f8bd79c5b056a6d106048fdfa45803123255ecb8161bfe3979",
+      "sha256": "ad42d08fa139a9f8bd79c5b056a6d106048fdfa45803123255ecb8161bfe3979"
+    },
+    "src/components/quote/MeasureTool.jsx": {
+      "status": "verbatim",
+      "upstreamSha256": "946c8e8861421cf8ed74d1179f34c759ebc183010539242c31941fac8b370b1d",
+      "sha256": "946c8e8861421cf8ed74d1179f34c759ebc183010539242c31941fac8b370b1d"
+    },
+    "src/index.css": {
+      "status": "verbatim",
+      "upstreamSha256": "f61eb1b5eb77d13e5df88dae0d00ffd1fe60ab216da092ad0044b3c5f1a46a14",
+      "sha256": "f61eb1b5eb77d13e5df88dae0d00ffd1fe60ab216da092ad0044b3c5f1a46a14"
+    },
+    "tailwind.config.js": {
+      "status": "verbatim",
+      "upstreamSha256": "978c2d734d77986999a1374553624f6e2dd82b83e402185e32f7e4a42ed42c59",
+      "sha256": "978c2d734d77986999a1374553624f6e2dd82b83e402185e32f7e4a42ed42c59"
+    },
+    "postcss.config.js": {
+      "status": "verbatim",
+      "upstreamSha256": "e32657baf631d7c5f4dc67b4b2ee0ec8e7d5b3c41860e09cddce7c0377cd80bc",
+      "sha256": "e32657baf631d7c5f4dc67b4b2ee0ec8e7d5b3c41860e09cddce7c0377cd80bc"
+    },
+    "src/components/quote/QuoteApp.jsx": {
+      "status": "modified",
+      "upstreamSha256": "92a1d28b0b4bb683225aa395cc29734fdb85c473c385aa9f50639355d940b135",
+      "sha256": "0542c538fbcaf6fd102cc5c7ef1457e3a6c705bb1b827df975f1e7570dcd7c29"
+    },
+    "src/components/quote/QuotationView.jsx": {
+      "status": "modified",
+      "upstreamSha256": "2e8bb0011432bc6964856a372fddea16de80f6095eea65797172a43b53c432e2",
+      "sha256": "480eed834a3ca6794a31842751290bfa22448bff72f05642f890e4738a6396ad"
+    },
+    "src/components/quote/QuotePrint.jsx": {
+      "status": "modified",
+      "upstreamSha256": "15a5a3c3903b2052be57bf54ed59a09b57b4b53949f901df38ae9f8839246598",
+      "sha256": "0afac5f28e4c7bfa6c9e5c68fcb19c555b77aa666efeba6604d9e45056782935"
+    },
+    "src/components/quote/exportExcel.js": {
+      "status": "modified",
+      "upstreamSha256": "8208783079c73a13072e3e28e6a053629eda6199459949e94e8e3b4a08b2c896",
+      "sha256": "8208783079c73a13072e3e28e6a053629eda6199459949e94e8e3b4a08b2c896"
+    },
+    "src/components/auth/AuthGate.jsx": {
+      "status": "modified",
+      "upstreamSha256": "65a910a150c938572321d691de68866c903f628517f0a2a695a8beccdd2fa7da",
+      "sha256": "3eb206cb96e3c149ed6948ca49213fd1d4d314b8459606bba0dd27ff8e586498"
+    },
+    "src/utils/helpers.js": {
+      "status": "trimmed",
+      "upstreamSha256": "4e5f023fe90461dc69b36c549e4ab6137d7cf43c912acd9206037d6dc538f3aa",
+      "sha256": "0adc2ccb7f4e1734b50d4b2acf2b39261807b717be23172557bb401508367e35"
+    }
+  }
+}
