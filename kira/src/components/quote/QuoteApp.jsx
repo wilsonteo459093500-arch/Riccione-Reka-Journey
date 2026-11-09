@@ -110,7 +110,9 @@ function Inner({ signOut, user, cloudReady = false } = {}) {
     setDisk(bad);
     if (bad && !was) {
       toast(bad.status === 'failed'
-        ? 'Could not save on this device (storage full) 本机存储失败（空间满）—— keep online so changes reach the cloud 请保持连网让改动上云'
+        ? (cloudOn
+          ? 'Could not save on this device (storage full) 本机存储失败（空间满）—— keep online so changes reach the cloud 请保持连网让改动上云'
+          : 'Device storage full — your latest change is NOT saved. Export old quotes (PDF / Excel) and delete them 本机空间满：最新改动没存到！请先把旧报价导出（PDF / Excel）再删掉')
         : `Device storage full: only ${bad.kept} of ${bad.total} quotes kept offline 本机空间满：离线只存 ${bad.kept}/${bad.total} 份（待同步的都在）`, 'error');
     }
   };
@@ -131,7 +133,8 @@ function Inner({ signOut, user, cloudReady = false } = {}) {
   // 本地缓存（离线也能开、能改）；待同步的、正在看的优先保住
   useEffect(() => {
     if (frozen.current) return;
-    noteDisk(persistStore(LS, store, pending.current));
+    // 纯本机模式没有云端备份 → 不能为了写得下而删掉旧报价
+    noteDisk(persistStore(LS, store, pending.current, cloudOn ? (id) => cloudIds.current.has(id) : () => false));
   }, [store]);
 
   // ---- 云端同步（Supabase；配置了才启用，否则纯本地）。规则见 sync.js
@@ -144,7 +147,7 @@ function Inner({ signOut, user, cloudReady = false } = {}) {
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
-    return () => { alive.current = false; Object.values(saveTimers.current).forEach(clearTimeout); };
+    return () => { alive.current = false; Object.values(saveTimers.current).forEach(clearTimeout); clearTimeout(retry.current.t); };
   }, []);
   const canTalk = () => cloudOn && readyRef.current && !isOffline() && alive.current && !frozen.current;
 
@@ -172,6 +175,7 @@ function Inner({ signOut, user, cloudReady = false } = {}) {
       delete saveTimers.current[rec.id];
       const cur = storeRef.current.records.find((r) => r.id === rec.id);
       if (cur && canTalk() && synced.current) pushNow(cur).catch(() => {}); // 没拉过最新的 → 先不推，等拉完再推
+      else if (cur && canTalk()) resync({ minGapMs: 15000 }); // 上次拉失败 → 有改动就再试拉（拉完会推）
     }, 600);
   };
 
@@ -220,6 +224,15 @@ function Inner({ signOut, user, cloudReady = false } = {}) {
   // 先拉云端合并（每条比 updatedAt），再推。上线 / 回到前台 / 实时重连都会走这里；同时只跑一个，期间再要求就接着再跑一次
   const syncing = useRef(null);
   const again = useRef(false);
+  // 拉云端失败（信号差 / 503）→ 有网就自动重试：5 s、15 s、30 s，之后每 60 s，直到成功
+  const retry = useRef({ n: 0, t: null });
+  const scheduleRetry = () => {
+    clearTimeout(retry.current.t);
+    if (!alive.current || frozen.current) return;
+    const wait = [5000, 15000, 30000][retry.current.n] || 60000;
+    retry.current.n += 1;
+    retry.current.t = setTimeout(() => { if (alive.current && canTalk()) resync({ again: true }); else scheduleRetry(); }, wait);
+  };
   const resync = ({ again: more = false, minGapMs = 0 } = {}) => {
     if (!cloudOn || !readyRef.current || frozen.current) return Promise.resolve();
     if (!more && minGapMs && Date.now() - lastPull.current < minGapMs) return syncing.current || Promise.resolve();
@@ -228,7 +241,8 @@ function Inner({ signOut, user, cloudReady = false } = {}) {
       do {
         again.current = false;
         let cloud;
-        try { cloud = await kiraCloud.load(); } catch (e) { synced.current = false; if (alive.current) setReach(false); return; }
+        try { cloud = await kiraCloud.load(); } catch (e) { synced.current = false; if (alive.current) setReach(false); scheduleRetry(); return; }
+        clearTimeout(retry.current.t); retry.current.n = 0;
         if (!alive.current || frozen.current) return;
         const m = mergePull({ local: storeRef.current, cloud, pending: pending.current, pendingDel: pendingDel.current, userId });
         cloudIds.current = m.cloudIds;

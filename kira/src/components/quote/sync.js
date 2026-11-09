@@ -235,7 +235,8 @@ export function bootDevice(storage, { cloud = false } = {}) {
 //      其余按最近更新排，能放多少放多少；结果交给界面显示（不再默默失败）。
 //   返回 { status: 'ok' | 'trimmed' | 'failed', kept, total }
 let fitHint = Infinity; // 上次写得下的条数（下次先试它，免得每次都试很多遍）
-export function persistStore(storage, store, keepIds = new Set()) {
+// canDrop(id)：只有确定已在云端（且不待同步）的报价才可以不存本机；纯本机模式下一份都不能丢 → 写不下就 'failed'、留着上一份
+export function persistStore(storage, store, keepIds = new Set(), canDrop = () => true) {
   const total = store.records.length;
   if (!storage) return { status: 'failed', kept: 0, total };
   try {
@@ -245,7 +246,7 @@ export function persistStore(storage, store, keepIds = new Set()) {
   } catch (e) { /* 多半是 QuotaExceededError → 下面只存一部分 */ }
   const must = [];
   const rest = [];
-  for (const r of store.records) (keepIds.has(r.id) || r.id === store.activeId ? must : rest).push(r);
+  for (const r of store.records) (keepIds.has(r.id) || r.id === store.activeId || !canDrop(r.id) ? must : rest).push(r);
   rest.sort((a, b) => updatedAtOf(b) - updatedAtOf(a));
   const mustJSON = must.map((r) => JSON.stringify(r));
   const restJSON = rest.map((r) => JSON.stringify(r));

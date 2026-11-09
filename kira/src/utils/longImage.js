@@ -22,7 +22,8 @@ export async function renderLongImage(node) {
       height: node.scrollHeight,
       style: { margin: '0', boxShadow: 'none', borderRadius: '0' },
       imagePlaceholder: blank, // 产品照片跨域读不到时用空白占位，不让整张图失败
-      filter: (el) => !(el.classList && el.classList.contains('no-print')),
+      // 截图固定 820 宽 = 宽版排版 → 手机窄版的那一份（kq-n，隐藏着）不用复制，长图快一倍多
+      filter: (el) => !(el.classList && (el.classList.contains('no-print') || el.classList.contains('kq-n'))),
     });
   } finally {
     keys.forEach((k) => { node.style[k] = prev[k]; });

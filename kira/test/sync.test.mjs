@@ -305,3 +305,22 @@ test('malformed rows are dropped or repaired so the list never crashes on meta.n
   const m = mergePull({ local: { records: [], activeId: null }, cloud: [null, { meta: { name: 'x' } }, { id: 'rec_c', meta: 5 }], pending: new Set(), userId: A });
   assert.deepEqual(m.store.records.map((x) => [x.id, x.meta]), [['rec_c', {}]]);
 });
+
+test('F8 local-only mode: storage full never deletes old quotes (only the cloud copy makes dropping safe)', () => {
+  _resetFitHint();
+  const big = (id, t) => ({ ...rec(id, id, t), notes: 'x'.repeat(1000) });
+  const records = Array.from({ length: 30 }, (_, i) => big(`rec_${i}`, 1000 + i));
+  const ls = fakeStorage(20000);
+  const prev = '{"records":[],"activeId":null}';
+  ls.setItem(STORE_KEY, prev);
+  // 本机模式：一份都不能丢 → failed，上一份原样留着
+  assert.equal(persistStore(ls, { records, activeId: 'rec_3' }, new Set(), () => false).status, 'failed');
+  assert.equal(ls.getItem(STORE_KEY), prev);
+  // 云端模式：只有已在云端的可以不存本机
+  _resetFitHint();
+  const inCloud = new Set(records.slice(0, 25).map((r) => r.id));
+  const res = persistStore(ls, { records, activeId: 'rec_3' }, new Set(), (id) => inCloud.has(id));
+  assert.equal(res.status, 'trimmed');
+  const ids = JSON.parse(ls.getItem(STORE_KEY)).records.map((r) => r.id);
+  for (let i = 25; i < 30; i++) assert.ok(ids.includes(`rec_${i}`), `rec_${i} not in cloud → must stay`);
+});
