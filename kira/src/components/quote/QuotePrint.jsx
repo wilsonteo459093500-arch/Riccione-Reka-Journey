@@ -2,13 +2,16 @@ import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Printer, X, Image as ImageIcon } from 'lucide-react';
 import { exportLongImage } from '../../utils/longImage.js';
+import CabinetPics from '../planner/CabinetPics.jsx';
+import { templateOf } from '../../planner/templates.js';
+import { frameDimsLabel, frameKindLabel } from '../../planner/bridge.js';
 import { T } from '../../theme.js';
 import { fmtMYR, fmtNum, tr, pickLang, capColor, cabTypeById, cabDimsLabel, RLBL, QUOTE_TERMS, LOOSE_TERMS, discountChainRate, discountChainLabel } from '../../constants/pricing.js';
 import { fmt } from '../../utils/helpers.js';
 
 // 报价单（可打印 / 另存 PDF）。lang：'en' | 'zh' | 'both'。
 // 定制橱柜（SAIL by Riccione Reka）+ Loose Furniture（Riccione Furniture，另起一页）。
-export default function QuotePrint({ meta, computed, loose, cabinetNote = '', looseNote = '', discountNote = '', looseDiscountNote = '', audience = 'retail', designerDisc = '30', lang = 'both', onClose }) {
+export default function QuotePrint({ meta, computed, loose, cabinetNote = '', looseNote = '', discountNote = '', looseDiscountNote = '', audience = 'retail', designerDisc = '30', lang = 'both', showPics = true, onClose }) {
   const zones = computed.zoneResults.filter((zr) => zr.zone.items.length > 0);
   const looseRows = loose?.rows || [];
   const hasCab = zones.length > 0;
@@ -172,6 +175,66 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
     </div>
   );
 
+  // ---- KIRA 积木柜：小图（左）+ 每个柜体的明细（右）----
+  const partLabel = (ln) => {
+    const sid = (ln.descEn.split(' ')[1] || '').trim();
+    if (ln.bucket === 'panel') return t({ en: `Side Panel: ${sid} Series`, zh: `见光板：${sid} 系列` });
+    if (ln.bucket === 'door' && ln.part === 'glass') return t({ en: `Glass Door: ${sid} Series`, zh: `玻璃门：${sid} 系列` });
+    return cabLineLabel(ln);
+  };
+  const frameLines = (frame, irs) => {
+    const lines = irs.filter((ir) => ir.item.kira?.frameId === frame.id)
+      .flatMap((ir) => ir.lines.map((ln) => ({ ...ln, part: ir.item.kira.part })));
+    const out = [];
+    lines.forEach((ln) => {
+      const key = `${ln.bucket}|${ln.unitMyr}|${ln.uomEn}|${partLabel(ln)}`;
+      const hit = out.find((o) => o.key === key);
+      if (hit) { hit.qty += ln.qty; hit.total += ln.total; } else out.push({ ...ln, key });
+    });
+    return out;
+  };
+  const kiraCabinetRows = (cab, irs) => {
+    const tpl = templateOf(cab.template);
+    const frames = (cab.frames || []).map((f) => ({ f, lines: frameLines(f, irs) })).filter((x) => x.lines.length);
+    const multi = frames.length > 1;
+    const nRows = frames.reduce((a, x) => a + x.lines.length + (multi ? 1 : 0), 0);
+    const title = [cab.code, cab.name || t({ en: tpl.en, zh: tpl.zh })].filter(Boolean).join(' · ');
+    const one = frames[0]?.f;
+    const rows = [
+      <tr key={cab.id + '-h'} style={{ borderTop: `1px solid ${T.lineSoft}`, breakInside: 'avoid' }}>
+        {showPics && (
+          <td rowSpan={nRows + 1} className="py-2 px-2 align-top" style={{ width: '34%' }}>
+            <CabinetPics cab={cab} lang={lang} height="42mm" />
+          </td>
+        )}
+        <td className="py-1 px-2 font-medium" colSpan={showPics ? 5 : 6}>
+          {title}
+          {!multi && one && <span className="font-normal ml-2" style={{ color: T.inkSoft }}>{frameDimsLabel(one, lang === 'zh' ? 'zh' : 'en')}</span>}
+        </td>
+      </tr>,
+    ];
+    frames.forEach(({ f, lines }) => {
+      if (multi) rows.push(
+        <tr key={cab.id + f.id + '-h'}>
+          <td className="pt-1 px-2 pl-4 text-xs" colSpan={showPics ? 5 : 6} style={{ color: T.ink }}>
+            {f.label ? pickLang(f.label, lang) : frameKindLabel(f.kind, lang)}
+            <span className="ml-2" style={{ color: T.inkSoft }}>{frameDimsLabel(f, lang === 'zh' ? 'zh' : 'en')}</span>
+          </td>
+        </tr>,
+      );
+      lines.forEach((ln, i) => rows.push(
+        <tr key={cab.id + f.id + i}>
+          <td className="py-1 px-2 pl-6" colSpan={showPics ? 1 : 2} style={{ color: T.inkSoft }}>{partLabel(ln)}</td>
+          <td className="text-right py-1 px-2">{fmtNum(ln.qty, ln.piece ? 0 : 2)}</td>
+          <td className="py-1 px-2">{lineUom(ln)}</td>
+          <td className="text-right py-1 px-2">{fmtNum(px(ln.unitMyr), 0)}</td>
+          <td className="text-right py-1 px-2">{fmtNum(px(ln.total), 0)}</td>
+        </tr>,
+      ));
+    });
+    return rows;
+  };
+
   const th = 'text-right font-normal py-1 px-2';
 
   return createPortal(
@@ -255,14 +318,28 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
               <Head brand="SAIL BY RICCIONE REKA" />
               <CustomerRow />
 
-              {zones.map((zr) => (
+              {zones.map((zr) => {
+                // KIRA：积木柜的明细按柜子分组；有积木柜的房间多一栏放小图（立面 + 3D 在明细左边）
+                const cabById = new Map((zr.zone.cabinets || []).map((c) => [c.id, c]));
+                const groups = [];
+                zr.items.forEach((ir) => {
+                  const cid = ir.item.kira?.cabinetId;
+                  if (cid && cabById.has(cid)) {
+                    const last = groups[groups.length - 1];
+                    if (last && last.cab && last.cab.id === cid) last.irs.push(ir);
+                    else groups.push({ cab: cabById.get(cid), irs: [ir] });
+                  } else groups.push({ ir });
+                });
+                const withPics = groups.some((g) => g.cab);
+                const descSpan = withPics ? 2 : 1;
+                return (
                 <div key={zr.zone.id} className="mb-4">
                   <div className="px-2 py-1 font-medium text-xs uppercase tracking-wide"
                     style={{ background: T.sand, breakInside: 'avoid', breakAfter: 'avoid' }}>{pickLang(zr.zone.name, lang) || t(RLBL.untitled)}</div>
                   <table className="w-full" style={{ borderCollapse: 'collapse' }}>
                     <thead>
                       <tr className="text-[10px] uppercase tracking-wide" style={{ color: T.inkSoft }}>
-                        <th className="text-left font-normal py-1 px-2" style={{ width: '42%' }}>{t(RLBL.desc)}</th>
+                        <th className="text-left font-normal py-1 px-2" colSpan={descSpan} style={{ width: withPics ? '62%' : '42%' }}>{t(RLBL.desc)}</th>
                         <th className={th}>{t(RLBL.qty)}</th>
                         <th className="text-left font-normal py-1 px-2">{t(RLBL.uom)}</th>
                         <th className={th}>{t(RLBL.unitPrice)}</th>
@@ -270,7 +347,9 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                       </tr>
                     </thead>
                     <tbody>
-                      {zr.items.flatMap((ir) => {
+                      {groups.flatMap((g) => {
+                        if (g.cab) return kiraCabinetRows(g.cab, g.irs);
+                        const ir = g.ir;
                         const qtyCell = (ln) => <td className="text-right py-1 px-2">{fmtNum(ln.qty, ln.piece ? 0 : 2)}</td>;
                         // 定制柜体：柜体类型（+名称）作为分组抬头，门板/柜体/抽屉缩进列在下面
                         if (ir.item.type === 'cabinet') {
@@ -280,14 +359,14 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                           const dims = cabDimsLabel(ir.item, lang === 'zh' ? 'zh' : 'en');
                           return [
                             <tr key={ir.item.id + '-h'} style={{ borderTop: `1px solid ${T.lineSoft}`, breakInside: 'avoid' }}>
-                              <td className="py-1 px-2 font-medium" colSpan={5}>
+                              <td className="py-1 px-2 font-medium" colSpan={4 + descSpan}>
                                 {head}
                                 <span className="font-normal ml-2" style={{ color: T.inkSoft }}>{dims}</span>
                               </td>
                             </tr>,
                             ...ir.lines.map((ln, i) => (
                               <tr key={ir.item.id + i}>
-                                <td className="py-1 px-2 pl-6" style={{ color: T.inkSoft }}>{cabLineLabel(ln)}</td>
+                                <td className="py-1 px-2 pl-6" colSpan={descSpan} style={{ color: T.inkSoft }}>{cabLineLabel(ln)}</td>
                                 {qtyCell(ln)}
                                 <td className="py-1 px-2">{lineUom(ln)}</td>
                                 <td className="text-right py-1 px-2">{fmtNum(pxi(ln.unitMyr, ir), 0)}</td>
@@ -299,7 +378,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                         // 其他类型（墙板/房门/灯带/其他）：单行，首行带名称前缀
                         return ir.lines.map((ln, i) => (
                           <tr key={ir.item.id + i} style={{ borderTop: `1px solid ${T.lineSoft}`, breakInside: 'avoid' }}>
-                            <td className="py-1 px-2">
+                            <td className="py-1 px-2" colSpan={descSpan}>
                               {i === 0 && (() => {
                                 const nm = pickLang(ir.item.name || '', lang); // 房门/其他/灯带的 desc 即描述，避免重复
                                 return nm ? <span className="font-medium">{nm} · </span> : null;
@@ -314,13 +393,14 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                         ));
                       })}
                       <tr style={{ borderTop: `1.5px solid ${T.line}` }}>
-                        <td colSpan={4} className="text-right py-1 px-2 text-xs" style={{ color: T.inkSoft }}>{t(RLBL.subtotal)}</td>
+                        <td colSpan={3 + descSpan} className="text-right py-1 px-2 text-xs" style={{ color: T.inkSoft }}>{t(RLBL.subtotal)}</td>
                         <td className="text-right py-1 px-2 font-medium">{fmtNum(zoneShown(zr), 0)}</td>
                       </tr>
                     </tbody>
                   </table>
                 </div>
-              ))}
+                );
+              })}
 
               <div className="mt-6 flex justify-end" style={{ breakInside: 'avoid' }}>
                 <div className="w-72 text-sm">

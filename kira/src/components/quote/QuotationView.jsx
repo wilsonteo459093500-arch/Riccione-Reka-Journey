@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Copy, Trash2, GripVertical, Sofa, ChevronUp, ChevronDown, ChevronRight, FileText, FileSpreadsheet, LayoutGrid, Image as ImageIcon, Ruler, Pencil, MessageCircle } from 'lucide-react';
 import { T } from '../../theme.js';
 import { newId, copyToClipboard } from '../../utils/helpers.js';
-import { useToast } from '../ui/UIProvider.jsx';
+import { useToast, useConfirm } from '../ui/UIProvider.jsx';
 import { computeQuote, computeLoose, CATEGORIES, ROOMS, CUSTOM_ROOM, OUTPUT_LANGS, tr, pickLang, RLBL, QUOTE_TERMS, LOOSE_TERMS, cabTypeById, fmtMYR, discountChainRate, discountChainLabel } from '../../constants/pricing.js';
 import QuoteLineItem from './QuoteLineItem.jsx';
 import QuotePrint from './QuotePrint.jsx';
@@ -10,7 +10,14 @@ import CatalogPicker from './CatalogPicker.jsx';
 import MeasureTool from './MeasureTool.jsx';
 import ItemEditorModal from './ItemEditorModal.jsx';
 import { exportExcel } from './exportExcel.js';
-import { deriveZones } from '../../planner/bridge.js';
+import { deriveZones, cabinetTotal } from '../../planner/bridge.js';
+import { newCabinet, nextCode, templateOf, cabinetSummary } from '../../planner/templates.js';
+import { parseMetersToMm, mmToM, uid } from '../../planner/model.js';
+import CabinetCard from '../planner/CabinetCard.jsx';
+import CabinetEditor from '../planner/CabinetEditor.jsx';
+import TemplatePicker from '../planner/TemplatePicker.jsx';
+import { DOOR_SERIES, CARCASS_SERIES } from '../../constants/pricing.js';
+import { Boxes } from 'lucide-react';
 import { waLink } from '../../utils/whatsapp.js';
 
 // 手机（< lg）用弹窗编辑项目；桌面保持行内编辑
@@ -65,7 +72,8 @@ const CRAFT_COEF = [
   { name: '洞洞板 Pegboard', coef: 1.5 },
 ];
 
-export const blankZone = (name = '') => ({ id: newId('zone'), name, items: [], collapsed: false });
+// KIRA：房间多了 cabinets（积木柜）和 ceilingH（楼高 mm，每个房间填一次）
+export const blankZone = (name = '') => ({ id: newId('zone'), name, items: [], cabinets: [], ceilingH: null, collapsed: false });
 const blankLoose = () => ({ id: newId('lf'), type: '', model: '', color: '', qty: '1', unitMyr: '', image: '' });
 
 // 数组内移动元素（拖动排序用）
@@ -167,8 +175,9 @@ function MobileItemCard({ item, result, selected, onToggleSelect, onEdit, canUp,
 }
 
 // 受控组件：doc = { meta, zones, looseItems, adjustPct }；改动通过 onChange 回传上层。
-export default function QuotationView({ doc, onChange }) {
+export default function QuotationView({ doc, onChange, mobileTab = null, onMobileTab }) {
   const toast = useToast();
+  const confirm = useConfirm();
   const [showPrint, setShowPrint] = useState(false);
   const [showCatalog, setShowCatalog] = useState(false);
   const [showMeasure, setShowMeasure] = useState(false);
@@ -190,8 +199,10 @@ export default function QuotationView({ doc, onChange }) {
   // 设计师折扣链："30" 或 "30+10"（叠加）；供货价 = 零售 × 系数
   const designerDisc = meta.designerDisc ?? (meta.designerPct != null ? String(meta.designerPct) : '30');
   const designerRate = discountChainRate(designerDisc);
+  // 整份报价默认系列（柜子可单独改）
+  const defaults = doc.defaults || { door: 'A', carcass: 'A' };
   // 积木柜会变成标准明细一起算（deriveZones）；手动明细照旧
-  const computed = useMemo(() => computeQuote(deriveZones(zones), adjustPct, discountMode, discountAmt), [zones, adjustPct, discountMode, discountAmt]);
+  const computed = useMemo(() => computeQuote(deriveZones(zones, defaults), adjustPct, discountMode, discountAmt), [zones, defaults, adjustPct, discountMode, discountAmt]);
   const looseCalc = useMemo(() => computeLoose(looseItems, looseAdjustPct, looseDiscountMode, looseDiscountAmt), [looseItems, looseAdjustPct, looseDiscountMode, looseDiscountAmt]);
   const grandTotal = computed.net + looseCalc.net;
   const dragRef = useRef(null); // { zoneId, from } 或 { loose:true, from }
@@ -214,7 +225,12 @@ export default function QuotationView({ doc, onChange }) {
     });
   };
   const updateZone = (id, p) => setZones((zs) => zs.map((z) => (z.id === id ? { ...z, ...p } : z)));
-  const removeZone = (id) => setZones((zs) => zs.filter((z) => z.id !== id));
+  const removeZone = async (id) => {
+    const z = zones.find((x) => x.id === id);
+    const n = (z?.cabinets || []).length + (z?.items || []).length;
+    if (n && !(await confirm({ title: 'Delete room 删除房间', message: `This room has ${n} item(s). Delete it? 这个房间有 ${n} 项，确定删除？`, danger: true, confirmText: 'Delete 删除', cancelText: 'Cancel 取消' }))) return;
+    setZones((zs) => zs.filter((x) => x.id !== id));
+  };
   const moveZone = (from, to) => setZones((zs) => moveInArray(zs, from, to));
   const addItem = (zoneId, kind, prebuilt) =>
     setZones((zs) => zs.map((z) => (z.id === zoneId ? { ...z, items: [...z.items, prebuilt || makeItem(kind)] } : z)));
@@ -262,17 +278,61 @@ export default function QuotationView({ doc, onChange }) {
 
   const zoneResultById = (id) => computed.zoneResults.find((zr) => zr.zone.id === id);
 
+  // ---- 积木柜 ----
+  const [picking, setPicking] = useState(null);       // zoneId：正在选模板
+  const [editingCab, setEditingCab] = useState(null); // { zoneId, cab, isNew }
+  const startCabinet = (zoneId, templateId) => {
+    const zone = zones.find((z) => z.id === zoneId);
+    const cab = newCabinet(templateId, { ceilingH: zone?.ceilingH, code: nextCode(zones) });
+    setPicking(null);
+    setEditingCab({ zoneId, cab, isNew: true });
+  };
+  const saveCabinet = (zoneId, cab) => setZones((zs) => zs.map((z) => {
+    if (z.id !== zoneId) return z;
+    const list = z.cabinets || [];
+    return { ...z, cabinets: list.some((c) => c.id === cab.id) ? list.map((c) => (c.id === cab.id ? cab : c)) : [...list, cab] };
+  }));
+  const removeCabinetNow = (zoneId, id) => setZones((zs) => zs.map((z) => (z.id === zoneId ? { ...z, cabinets: (z.cabinets || []).filter((c) => c.id !== id) } : z)));
+  const removeCabinet = async (zoneId, id) => {
+    const c = zones.find((z) => z.id === zoneId)?.cabinets?.find((x) => x.id === id);
+    if (await confirm({ title: 'Delete cabinet 删除柜子', message: `Delete ${c?.code || ''} ${c?.name || ''}? 确定删除这个柜子？`, danger: true, confirmText: 'Delete 删除', cancelText: 'Cancel 取消' })) removeCabinetNow(zoneId, id);
+  };
+  const duplicateCabinet = (zoneId, cab) => {
+    const copy = { ...structuredClone(cab), id: uid('cab'), code: nextCode(zones) };
+    copy.frames = copy.frames.map((f, i) => ({ ...f, id: `${copy.id}-f${i}` }));
+    saveCabinet(zoneId, copy);
+  };
+  // 编辑中：「全部 RM」= 用草稿替换这个柜子后的整份报价
+  const totalWith = (zoneId) => (draft) => {
+    const zs = zones.map((z) => {
+      if (z.id !== zoneId) return z;
+      const list = z.cabinets || [];
+      return { ...z, cabinets: list.some((c) => c.id === draft.id) ? list.map((c) => (c.id === draft.id ? draft : c)) : [...list, draft] };
+    });
+    return computeQuote(deriveZones(zs, defaults), adjustPct, discountMode, discountAmt).net + looseCalc.net;
+  };
+  // 整份报价换系列比价（A/B/C）：所有积木柜都用该系列
+  const wholeCompare = useMemo(() => ['A', 'B', 'C'].map((L) => {
+    const zs = zones.map((z) => ({ ...z, cabinets: (z.cabinets || []).map((c) => ({ ...c, series: { door: L, carcass: L, open: 'door' } })) }));
+    return { L, net: computeQuote(deriveZones(zs, { door: L, carcass: L }), adjustPct, discountMode, discountAmt).net };
+  }), [zones, adjustPct, discountMode, discountAmt]);
+  const hasCabinets = zones.some((z) => (z.cabinets || []).length);
+  const applySeriesAll = (L) => patch({
+    defaults: { ...defaults, door: L, carcass: CARCASS_SERIES.includes(L) ? L : defaults.carcass },
+    zones: zones.map((z) => ({ ...z, cabinets: (z.cabinets || []).map((c) => ({ ...c, series: null })) })),
+  });
+
   return (
     <div className="grid gap-6 lg:gap-8 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px]">
-      {/* ===== 左侧：编辑区 ===== */}
-      <div className="space-y-6">
+      {/* ===== 左侧：编辑区（手机「设计」tab）===== */}
+      <div className={`space-y-6 ${mobileTab === 'summary' ? 'hidden' : ''}`}>
         {/* Ukur 量尺（放最上面，方便一开始就上传图量尺出报价）*/}
         <button onClick={() => setShowMeasure(true)}
-          className="w-full py-3 flex items-center justify-center gap-2 text-sm transition-colors"
-          style={{ background: T.wood, color: '#fff', borderRadius: '2px' }}
-          onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.9')}
-          onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}>
-          <Ruler size={16} /> Ukur 量尺 · 上传图算尺寸直接报价
+          className="w-full py-2.5 flex items-center justify-center gap-2 text-sm transition-colors"
+          style={{ border: `1px solid ${T.wood}`, color: T.wood, borderRadius: '2px' }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = T.cream)}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+          <Ruler size={16} /> Ukur 量尺 · 上传图算尺寸（手动明细）
         </button>
 
         {/* 客户信息 */}
@@ -352,6 +412,14 @@ export default function QuotationView({ doc, onChange }) {
                 <input value={zone.name} onChange={(e) => updateZone(zone.id, { name: e.target.value })}
                   placeholder="Custom room 自定义区域名"
                   className="flex-1 min-w-0 bg-transparent outline-none text-sm" style={{ color: T.inkSoft }} />
+                <label className="shrink-0 flex items-center gap-1 text-[11px]" style={{ color: zone.ceilingH ? T.inkSoft : T.terra }}
+                  title="Ceiling height of this room 这个房间的楼高（衣柜默认做到顶）">
+                  <span className="hidden sm:inline">Ceiling 楼高</span><span className="sm:hidden">楼高</span>
+                  <input key={zone.ceilingH || 'none'} defaultValue={zone.ceilingH ? mmToM(zone.ceilingH) : ''} placeholder="2.70" inputMode="decimal"
+                    onBlur={(e) => { const v = parseMetersToMm(e.target.value); updateZone(zone.id, { ceilingH: v > 1500 ? v : null }); }}
+                    className="w-12 px-1 py-0.5 text-xs outline-none" style={{ background: T.paper, border: `1px solid ${zone.ceilingH ? T.line : T.terra}`, borderRadius: 2, color: T.ink }} />
+                  m
+                </label>
                 <span className="font-display text-base sm:text-lg shrink-0" style={{ color: T.wood }}>{fmtMYR(zr?.subtotal || 0)}</span>
                 <button onClick={() => removeZone(zone.id)} className="opacity-40 hover:opacity-100 shrink-0"
                   style={{ color: T.terra }} title="删除区域"><Trash2 size={15} /></button>
@@ -359,8 +427,19 @@ export default function QuotationView({ doc, onChange }) {
 
               {!zone.collapsed && (
                 <div className="p-3 space-y-3" style={{ background: zoneBodyBg }}>
-                  {zone.items.length === 0 && (
-                    <div className="text-center py-4 text-sm" style={{ color: T.inkSoft }}>Add an item below 选下方类型添加</div>
+                  {(zone.cabinets || []).map((c) => (
+                    <CabinetCard key={c.id} cab={c} lang={lang} total={cabinetTotal(c, defaults)}
+                      onEdit={() => setEditingCab({ zoneId: zone.id, cab: c, isNew: false })}
+                      onDuplicate={() => duplicateCabinet(zone.id, c)}
+                      onRemove={() => removeCabinet(zone.id, c.id)} />
+                  ))}
+                  <button onClick={() => setPicking(zone.id)}
+                    className="w-full py-3 flex items-center justify-center gap-2 text-sm"
+                    style={{ background: T.ink, color: T.paper, borderRadius: '2px' }}>
+                    <Boxes size={16} /> Add cabinet 加柜子（选模板）
+                  </button>
+                  {zone.items.length === 0 && !(zone.cabinets || []).length && (
+                    <div className="text-center py-1 text-[11px]" style={{ color: T.inkSoft }}>Or add a line manually below 或在下方手动加一行</div>
                   )}
                   {zone.items.map((it, idx) => (
                     isMobile ? (
@@ -581,8 +660,17 @@ export default function QuotationView({ doc, onChange }) {
         </div>
       </div>
 
-      {/* ===== 右侧：汇总 ===== */}
-      <div className="space-y-4">
+      {/* 手机「设计」tab：底部常驻总额，点一下看报价 */}
+      {mobileTab === 'edit' && (
+        <button onClick={() => onMobileTab && onMobileTab('summary')} className="no-print fixed left-0 right-0 z-20 flex items-center justify-between px-4 py-2.5"
+          style={{ bottom: 'calc(58px + env(safe-area-inset-bottom))', background: T.ink, color: T.paper }}>
+          <span className="text-[10px] uppercase tracking-widest opacity-75">Estimated total 预估总额</span>
+          <span className="font-display text-xl">{fmtMYR(grandTotal)} →</span>
+        </button>
+      )}
+
+      {/* ===== 右侧：汇总（手机「报价」tab）===== */}
+      <div className={`space-y-4 ${mobileTab === 'edit' ? 'hidden' : ''}`}>
         <div className="sticky top-6 space-y-4">
           <div className="p-5 rounded" style={{ background: T.ink, color: T.paper }}>
             <div className="text-[10px] uppercase tracking-widest opacity-70">Estimated Total 预估总额</div>
@@ -600,6 +688,41 @@ export default function QuotationView({ doc, onChange }) {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* 整份报价默认系列 + 一键比价 */}
+          <div className="p-3 rounded" style={{ background: T.cream, border: `1px solid ${T.lineSoft}` }}>
+            <div className="text-[10px] uppercase tracking-widest mb-2" style={{ color: T.inkSoft }}>Default series 默认系列（全部柜子）</div>
+            <div className="flex items-center gap-2 text-xs mb-2" style={{ color: T.inkSoft }}>
+              <span className="w-14 shrink-0">Door 门板</span>
+              <select value={defaults.door} onChange={(e) => patch({ defaults: { ...defaults, door: e.target.value } })}
+                className="flex-1 px-2 py-1 text-sm outline-none" style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: 2 }}>
+                {DOOR_SERIES.map((L) => <option key={L} value={L}>{L}</option>)}
+              </select>
+              <span className="w-14 shrink-0 text-right">Carcass 柜体</span>
+              <select value={defaults.carcass} onChange={(e) => patch({ defaults: { ...defaults, carcass: e.target.value } })}
+                className="flex-1 px-2 py-1 text-sm outline-none" style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: 2 }}>
+                {CARCASS_SERIES.map((L) => <option key={L} value={L}>{L}</option>)}
+              </select>
+            </div>
+            {hasCabinets && (
+              <>
+                <div className="text-[10px] uppercase tracking-widest mt-3 mb-1" style={{ color: T.inkSoft }}>Compare 整份比价（只换积木柜）</div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {wholeCompare.map(({ L, net }) => {
+                    const on = defaults.door === L && defaults.carcass === L;
+                    return (
+                      <button key={L} onClick={() => applySeriesAll(L)} className="p-2 text-left"
+                        title={`Use series ${L} for all cabinets 全部柜子用 ${L} 系列`}
+                        style={{ borderRadius: 2, background: on ? T.sand : T.paper, border: `1px solid ${on ? T.wood : T.line}` }}>
+                        <div className="text-[10px]" style={{ color: T.inkSoft }}>{L}</div>
+                        <div className="font-display text-sm" style={{ color: T.ink }}>{fmtMYR(net)}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </div>
 
           {/* 输出语言 Output language */}
@@ -717,6 +840,15 @@ export default function QuotationView({ doc, onChange }) {
         </div>
       </div>
 
+      {picking && <TemplatePicker onPick={(tid) => startCabinet(picking, tid)} onClose={() => setPicking(null)} />}
+      {editingCab && (
+        <CabinetEditor key={editingCab.cab.id} cab={editingCab.cab} isNew={editingCab.isNew} lang={lang}
+          zone={zones.find((z) => z.id === editingCab.zoneId)} defaults={defaults}
+          totalWith={totalWith(editingCab.zoneId)}
+          onSave={(c) => { saveCabinet(editingCab.zoneId, c); setEditingCab(null); }}
+          onDelete={async () => { const zid = editingCab.zoneId, cid = editingCab.cab.id; if (await confirm({ title: 'Delete cabinet 删除柜子', message: 'Delete this cabinet? 确定删除这个柜子？', danger: true, confirmText: 'Delete 删除', cancelText: 'Cancel 取消' })) { removeCabinetNow(zid, cid); setEditingCab(null); } }}
+          onClose={() => setEditingCab(null)} />
+      )}
       {showPrint && <QuotePrint meta={meta} computed={computed} loose={looseCalc} cabinetNote={cabinetNote} looseNote={looseNote} discountNote={discountNote} looseDiscountNote={looseDiscountNote} audience={audience} designerDisc={designerDisc} lang={lang} onClose={() => setShowPrint(false)} />}
       {showCatalog && (
         <CatalogPicker
@@ -756,6 +888,12 @@ function buildTextQuote(meta, computed, loose, notes = {}, lang = 'both') {
   computed.zoneResults.forEach((zr) => {
     if (!zr.zone.items.length) return;
     L.push(`▪️ *${pl(zr.zone.name) || t(RLBL.untitled)}* — ${fmtMYR(zr.subtotal)}`);
+    // KIRA：列出这个房间的积木柜（约数，房间小计以上面为准）
+    (zr.zone.cabinets || []).forEach((c) => {
+      const amt = zr.items.filter((ir) => ir.item.kira?.cabinetId === c.id).reduce((a, ir) => a + ir.total, 0);
+      const nm = c.name || pl(`${templateOf(c.template).en} ${templateOf(c.template).zh}`);
+      L.push(`   • ${c.code} ${nm} · ${cabinetSummary(c)} — ≈${fmtMYR(amt)}`);
+    });
   });
   L.push('');
   L.push(`*${t({ en: 'Breakdown', zh: '分类明细' })}*`);

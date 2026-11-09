@@ -1,5 +1,7 @@
 import { tr, pickLang, capColor, cabTypeById, cabDimsLabel, RLBL, QUOTE_TERMS, LOOSE_TERMS, discountChainRate, discountChainLabel } from '../../constants/pricing.js';
 import { fmt } from '../../utils/helpers.js';
+import { templateOf } from '../../planner/templates.js';
+import { frameDimsLabel, frameKindLabel } from '../../planner/bridge.js';
 
 const round0 = (n) => Math.round(Number(n) || 0);
 
@@ -70,7 +72,33 @@ export async function exportExcel(meta, computed, loose, notes = {}, lang = 'bot
       const zr0 = row([pickLang(zr.zone.name, lang) || t(RLBL.untitled)]);
       merges.push({ s: { r: zr0, c: 0 }, e: { r: zr0, c: 4 } });
       row(HEAD);
+      // KIRA：积木柜按柜子分组（柜号 · 名称 —— 每个柜体的尺寸 + 明细）
+      const cabById = new Map((zr.zone.cabinets || []).map((c) => [c.id, c]));
+      const doneCab = new Set();
       zr.items.forEach((ir) => {
+        const cid = ir.item.kira?.cabinetId;
+        if (cid && cabById.has(cid)) {
+          if (doneCab.has(cid)) return;
+          doneCab.add(cid);
+          const cab = cabById.get(cid);
+          const tpl = templateOf(cab.template);
+          const irs = zr.items.filter((x) => x.item.kira?.cabinetId === cid);
+          row([[cab.code, cab.name || t({ en: tpl.en, zh: tpl.zh })].filter(Boolean).join(' · ')]);
+          (cab.frames || []).forEach((f) => {
+            const lines = [];
+            irs.filter((x) => x.item.kira.frameId === f.id).forEach((x) => x.lines.forEach((ln) => {
+              const sid = (ln.descEn.split(' ')[1] || '').trim();
+              const label = ln.bucket === 'panel' ? t({ en: `Side Panel: ${sid} Series`, zh: `见光板：${sid} 系列` })
+                : ln.bucket === 'door' && x.item.kira.part === 'glass' ? t({ en: `Glass Door: ${sid} Series`, zh: `玻璃门：${sid} 系列` }) : cabLineLabel(ln);
+              const hit = lines.find((o) => o.label === label && o.unitMyr === ln.unitMyr && o.uom === lineUom(ln));
+              if (hit) { hit.qty += ln.qty; hit.total += ln.total; } else lines.push({ label, qty: ln.qty, piece: ln.piece, uom: lineUom(ln), unitMyr: ln.unitMyr, total: ln.total });
+            }));
+            if (!lines.length) return;
+            row([`  ${f.label ? pickLang(f.label, lang) : frameKindLabel(f.kind, lang)}  —  ${frameDimsLabel(f, lang === 'zh' ? 'zh' : 'en')}`]);
+            lines.forEach((ln) => row([`    ${ln.label}`, ln.piece ? round0(ln.qty) : Number(ln.qty.toFixed(2)), ln.uom, px(ln.unitMyr), px(ln.total)]));
+          });
+          return;
+        }
         if (ir.item.type === 'cabinet') {
           // 柜体类型（+名称）作为分组抬头，子项缩进列在下面
           const typeLabel = pickLang(cabTypeById(ir.item.cabType).label, lang);

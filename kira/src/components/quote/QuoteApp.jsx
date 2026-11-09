@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Search, Trash2, Copy, Layers, FileText, Cloud, CloudOff, LogOut } from 'lucide-react';
+import { Plus, Search, Trash2, Copy, Layers, FileText, Cloud, CloudOff, LogOut, HelpCircle, Download, ShieldCheck, Sparkles, Users, PencilRuler, Receipt } from 'lucide-react';
 import { T } from '../../theme.js';
 import { newId } from '../../utils/helpers.js';
 import { UIProvider, useToast, useConfirm } from '../ui/UIProvider.jsx';
 import { computeLoose, fmtMYR } from '../../constants/pricing.js';
 import { computeRecordQuote } from '../../planner/bridge.js';
 import KiraMark from '../ui/KiraMark.jsx';
+import Guide, { guideSeen } from '../planner/Guide.jsx';
+import ImportOld from '../planner/ImportOld.jsx';
+import { importOldRecord } from '../../planner/importOld.js';
+import { demoRecord } from '../../planner/demo.js';
 import QuotationView, { blankZone } from './QuotationView.jsx';
 import AuthGate from '../auth/AuthGate.jsx';
 import { kiraCloud, cloudConfigured } from '../../services/kiraRepo.js';
@@ -27,6 +31,7 @@ function newRecord(ownerId = null) {
     ownerId, // 做的人（只有他能删）；云端以 owner_id 列为准
     groupId: id, // 同一客户的多个版本共享 groupId
     meta: { name: '', phone: '', location: '', ref: '', pic: '', version: '1', outputLang: 'en', date: todayISO() },
+    defaults: { door: 'A', carcass: 'A' }, // 整份报价默认系列（柜子可单独改）
     zones: [blankZone('')],
     looseItems: [],
     adjustPct: 0,
@@ -78,6 +83,17 @@ function Inner({ signOut, user } = {}) {
   const [pendingCount, setPendingCount] = useState(() => loadPending().size);
   const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine !== false));
   const userId = user?.id || null;
+  const [showGuide, setShowGuide] = useState(() => !guideSeen());
+  const [importTab, setImportTab] = useState(null); // 'import' | 'parity'
+  // 手机底部 3 个 tab：客户 / 设计（编辑）/ 报价（汇总 + 导出）
+  const [mtab, setMtab] = useState('edit');
+  const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.matchMedia('(max-width: 1023px)').matches : false));
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 1023px)');
+    const on = (e) => setIsMobile(e.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
 
   // 本地缓存（离线也能开、能改）
   useEffect(() => {
@@ -220,14 +236,26 @@ function Inner({ signOut, user } = {}) {
 
   const create = () => {
     const rec = newRecord(userId);
+    setMtab('edit');
     setStore((s) => ({ records: [rec, ...s.records], activeId: rec.id }));
     cloudSave(rec);
   };
 
   const openRec = (id) => setStore((s) => ({ ...s, activeId: id }));
 
+  // 示范报价 / 导入旧报价（复制一份，旧的不动）
+  const addRecord = (rec) => { setMtab('edit'); setStore((s) => ({ records: [rec, ...s.records], activeId: rec.id })); cloudSave(rec); };
+  const openDemo = () => { addRecord(demoRecord(userId)); setShowGuide(false); toast('Demo quote added 已加示范报价', 'success'); };
+  const importOld = async (old) => {
+    const rec = importOldRecord(old, { ownerId: userId, newId: () => newId('rec') });
+    addRecord(rec);
+    setImportTab(null);
+    toast(`Imported 已导入：${old.meta?.name || '—'} Rev ${old.meta?.version || '1'}`, 'success');
+  };
+
   // 打开某客户：定位到最新版本（若该组已有版本正在编辑则保持）
-  const openGroup = (g) => setStore((s) => {
+  const openGroup = (g) => { setMtab('edit'); openGroupRaw(g); };
+  const openGroupRaw = (g) => setStore((s) => {
     const inGroup = g.recs.some((r) => r.id === s.activeId);
     return { ...s, activeId: inGroup ? s.activeId : g.latest.id };
   });
@@ -330,6 +358,19 @@ function Inner({ signOut, user } = {}) {
               onMouseLeave={(e) => (e.currentTarget.style.background = T.ink)}>
               <Plus size={14} /> <span className="hidden sm:inline">New 新客户报价</span><span className="sm:hidden">New</span>
             </button>
+            {cloudConfigured && (
+              <>
+                <button onClick={() => setImportTab('import')} className="hidden sm:flex items-center gap-1 p-2 text-xs" style={{ color: T.inkSoft }} title="Import from the old quote tool 导入旧报价（只读）">
+                  <Download size={15} /> <span className="hidden lg:inline">Import 导入旧报价</span>
+                </button>
+                <button onClick={() => setImportTab('parity')} className="hidden sm:flex p-2" style={{ color: T.inkSoft }} title="Price check vs the old tool 对价报告">
+                  <ShieldCheck size={16} />
+                </button>
+              </>
+            )}
+            <button onClick={() => setShowGuide(true)} className="p-2" style={{ color: T.inkSoft }} title="How to use 怎么用">
+              <HelpCircle size={17} />
+            </button>
             {signOut && (
               <button onClick={signOut} className="p-2" style={{ color: T.inkSoft }} title="Sign out 退出登录">
                 <LogOut size={16} />
@@ -339,9 +380,9 @@ function Inner({ signOut, user } = {}) {
         </div>
       </header>
 
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 grid gap-6 grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)]">
-        {/* 左：客户记录列表（每个客户一张卡，含全部版本）*/}
-        <aside className="no-print space-y-3">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 pb-32 lg:pb-6 grid gap-6 grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)]">
+        {/* 左：客户记录列表（每个客户一张卡，含全部版本）—— 手机上在「客户」tab */}
+        <aside className={`no-print space-y-3 ${isMobile && active && mtab !== 'list' ? 'hidden' : ''}`}>
           <div className="relative">
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: T.inkSoft }} />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search 搜索 客户/地点/编号"
@@ -401,7 +442,7 @@ function Inner({ signOut, user } = {}) {
         </aside>
 
         {/* 右：版本 tab + 报价编辑 */}
-        <main>
+        <main className={isMobile && active && mtab === 'list' ? 'hidden' : ''}>
           {active ? (
             <div>
               {/* 版本 tab 栏 */}
@@ -434,7 +475,7 @@ function Inner({ signOut, user } = {}) {
                   </button>
                 </div>
               )}
-              <QuotationView key={active.id} doc={active} onChange={updateActive} />
+              <QuotationView key={active.id} doc={active} onChange={updateActive} mobileTab={isMobile ? mtab : null} onMobileTab={setMtab} />
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-32 text-center" style={{ color: T.inkSoft }}>
@@ -446,14 +487,43 @@ function Inner({ signOut, user } = {}) {
                 type the total width; KIRA splits the doors, draws it and prices it.<br />
                 填客户资料 → 加房间（填楼高）→ 选模板加柜子 → 打总宽，自动分门、画图、算价。
               </p>
-              <button onClick={create} className="mt-5 flex items-center gap-1.5 px-4 py-2 text-sm"
-                style={{ background: T.wood, color: T.paper, borderRadius: '2px' }}>
-                <Plus size={14} /> New 新客户报价
-              </button>
+              <div className="mt-5 flex items-center gap-2 flex-wrap justify-center">
+                <button onClick={create} className="flex items-center gap-1.5 px-4 py-2 text-sm"
+                  style={{ background: T.wood, color: T.paper, borderRadius: '2px' }}>
+                  <Plus size={14} /> New 新客户报价
+                </button>
+                <button onClick={openDemo} className="flex items-center gap-1.5 px-4 py-2 text-sm"
+                  style={{ border: `1px solid ${T.line}`, color: T.ink, borderRadius: '2px' }}>
+                  <Sparkles size={14} /> Demo 示范报价
+                </button>
+                {cloudConfigured && (
+                  <button onClick={() => setImportTab('import')} className="flex items-center gap-1.5 px-4 py-2 text-sm"
+                    style={{ border: `1px solid ${T.line}`, color: T.ink, borderRadius: '2px' }}>
+                    <Download size={14} /> Import 导入旧报价
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </main>
       </div>
+      {/* 手机底部 tab（参考 HISTRONG：Design / Workspace / Summary）*/}
+      {isMobile && (
+        <nav className="no-print fixed bottom-0 inset-x-0 z-30 grid grid-cols-3" style={{ background: T.paper, borderTop: `1px solid ${T.line}`, paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          {[['list', Users, 'Customers', '客户'], ['edit', PencilRuler, 'Design', '设计'], ['summary', Receipt, 'Quote', '报价']].map(([id, Icon, en, zh]) => {
+            const on = (active ? mtab : 'list') === id;
+            return (
+              <button key={id} onClick={() => setMtab(id)} disabled={!active && id !== 'list'}
+                className="flex flex-col items-center gap-0.5 py-2 text-[11px] disabled:opacity-30"
+                style={{ color: on ? T.ink : T.inkSoft, background: on ? T.sand : 'transparent', borderTop: `2px solid ${on ? T.ink : 'transparent'}` }}>
+                <Icon size={18} /> {zh} {en}
+              </button>
+            );
+          })}
+        </nav>
+      )}
+      {showGuide && <Guide onClose={() => setShowGuide(false)} onDemo={openDemo} videoSrc="/help/kira-demo.webm" />}
+      {importTab && <ImportOld initialTab={importTab} onImport={importOld} onClose={() => setImportTab(null)} />}
     </div>
   );
 }

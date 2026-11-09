@@ -77,22 +77,22 @@
     "src/components/quote/QuoteApp.jsx": {
       "status": "modified",
       "upstreamSha256": "92a1d28b0b4bb683225aa395cc29734fdb85c473c385aa9f50639355d940b135",
-      "sha256": "0542c538fbcaf6fd102cc5c7ef1457e3a6c705bb1b827df975f1e7570dcd7c29"
+      "sha256": "ee5a89adee467e2e239a83a4813b036f203a6d65d29bd324a68d4a1e5485cf0a"
     },
     "src/components/quote/QuotationView.jsx": {
       "status": "modified",
       "upstreamSha256": "2e8bb0011432bc6964856a372fddea16de80f6095eea65797172a43b53c432e2",
-      "sha256": "480eed834a3ca6794a31842751290bfa22448bff72f05642f890e4738a6396ad"
+      "sha256": "61faaa7b4e24c48193c45ed832192a4c407cfeee56f9041b4244185e17be5138"
     },
     "src/components/quote/QuotePrint.jsx": {
       "status": "modified",
       "upstreamSha256": "15a5a3c3903b2052be57bf54ed59a09b57b4b53949f901df38ae9f8839246598",
-      "sha256": "0afac5f28e4c7bfa6c9e5c68fcb19c555b77aa666efeba6604d9e45056782935"
+      "sha256": "aa40c4c980153ebb77df92707968590e0b2db6ee12f600363426a70bf59de1ec"
     },
     "src/components/quote/exportExcel.js": {
       "status": "modified",
       "upstreamSha256": "8208783079c73a13072e3e28e6a053629eda6199459949e94e8e3b4a08b2c896",
-      "sha256": "8208783079c73a13072e3e28e6a053629eda6199459949e94e8e3b4a08b2c896"
+      "sha256": "816d8bbc9f632a36f815b0f54f1ac71178ef79e7d65a7ca70ef943840429478e"
     },
     "src/components/auth/AuthGate.jsx": {
       "status": "modified",
