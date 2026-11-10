@@ -63,7 +63,8 @@ export function useBlockEditor({ cab, setCab, kitchen = false }) {
   const commitDrag = (start) => { if (start && start.frames !== cabRef.current.frames) push(start); };
 
   const restore = (s) => {
-    const next = syncBlank({ ...cabRef.current, frames: s.frames, custom: s.custom });
+    const { custom: _c, ...rest } = cabRef.current;
+    const next = syncBlank(s.custom ? { ...rest, frames: s.frames, custom: true } : { ...rest, frames: s.frames }); // 没画过 → 不留 custom 键（关闭时才不会误问「还没保存」）
     cabRef.current = next;
     setCab(() => next);
   };
@@ -111,7 +112,7 @@ export function useBlockEditor({ cab, setCab, kitchen = false }) {
 
   return {
     cab, selected: valid ? selected : null, sel: valid ? sel : null, selFrame: valid ? selFrame : null, selNode: valid ? selNode : null,
-    focus, setFocus, brush, setBrush, ops, apply, replaceFrames, commitDrag, snapshot: () => snapshot(cabRef.current),
+    focus, setFocus, brush, setBrush, ops, apply, replaceFrames, commitDrag, restore, snapshot: () => snapshot(cabRef.current),
     undo, redo, canUndo: hist.current.undo.length > 0, canRedo: hist.current.redo.length > 0, resetHistory, restoreTemplate, kitchen,
   };
 }
@@ -211,9 +212,11 @@ export function BlockCanvas({ ed, lang = 'both', onRestore, canRestore }) {
       const raw = line.dir === 'v' ? sp.x - fr.X0 : -sp.y - fr.yb;
       const pos = snap(raw);
       const g = moveCut(startFrame, line.path, line.k, pos - line.pos);
-      const nd = { ...d, cur: pos, frame: g };
+      const nd = { ...d, cur: g === startFrame ? line.pos : pos, frame: g };
       dragRef.current = nd; setDrag(nd);
-      ed.replaceFrames(d.start.frames.map((x) => (x.id === d.frameId ? g : x)));
+      // 拖回原位 / 没动 → 还原成按下时的样子（不留 custom、不存撤销）
+      if (g === startFrame) ed.restore(d.start);
+      else ed.replaceFrames(d.start.frames.map((x) => (x.id === d.frameId ? g : x)));
       return;
     }
     if (d.kind === 'maybeRect' || d.kind === 'rect') {
@@ -233,18 +236,18 @@ export function BlockCanvas({ ed, lang = 'both', onRestore, canRestore }) {
     if (!d || d.id !== e.pointerId) return;
     dragRef.current = null; setDrag(null);
     if (d.kind === 'line') {
-      if (d.cur === d.line.pos && d.tapSel) { ops.select(d.tapSel); return; } // 没拖动 = 点了线旁边那格
+      if (d.cur === d.line.pos) { ed.restore(d.start); if (d.tapSel) ops.select(d.tapSel); return; } // 没拖动 = 点了线旁边那格
       ed.commitDrag(d.start); return;
     }
     if (d.kind === 'rect') { ops.carve(d.frameId, d.path, { x: d.x0, y: d.y0, w: d.x1 - d.x0, h: d.y1 - d.y0 }); return; }
-    if (d.kind === 'tap' || d.kind === 'maybeRect') ops.select(d.sel === selected ? null : d.sel);
+    if (d.kind === 'tap' || d.kind === 'maybeRect') ops.select(d.sel); // 再点同一格不会取消（取消：✕ / Esc / 返回键 / 点空白处）
     if (d.kind === 'none') ops.select(null);
   };
   const onPointerCancel = (e) => {
     const d = dragRef.current;
     if (!d || d.id !== e.pointerId) return;
     dragRef.current = null; setDrag(null);
-    if (d.kind === 'line') ed.commitDrag(d.start);
+    if (d.kind === 'line') { if (d.cur === d.line.pos) ed.restore(d.start); else ed.commitDrag(d.start); }
   };
 
   // 分隔线把手：透明、粗（手指 24 px、滑鼠 10 px），touch-action:none

@@ -202,3 +202,15 @@ test('blank: one big closed block; resize scales the drawn blocks (no reset to a
   assert.match(cabinetSummary(w, 'zh'), /吊柜/);
   assert.equal(tplOf('nope').id, 'wardrobe');
 });
+
+test('blocks (review fix): wardrobe without top box — editing a block keeps its path; full-height block is not height-resizable', () => {
+  const f = updateSpec(newCab('wardrobe', { ceilingH: 2700 }), { top: false }).frames[0];
+  const p = leafBoxes(f)[1].path;
+  const g = setLeaf(f, p, { type: 'open' });
+  assert.equal(getNode(g.body, p)?.type, 'open');
+  assert.equal(canResize(f, p, 'y'), false);
+  assert.equal(canResize(f, p, 'x'), true);
+  const r = resizeLeaf(f, p, 'x', 700);
+  assert.ok(getNode(r.body, p)?.leaf);
+  ok(r);
+});

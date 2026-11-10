@@ -170,7 +170,9 @@ export function tidy(node) {
   return { ...node, sizes, children: kids };
 }
 
+// 结构变了（切 / 删 / 拖框）才整理；只改类型 / 尺寸 / 底座不整理 → 格子路径不变，选中的格子不会跑掉
 const withBody = (frame, body) => ({ ...frame, body: tidy(body) });
+const keepBody = (frame, body) => ({ ...frame, body });
 
 // ---------------- 改 ----------------
 const copyLeaf = (n) => { const c = { ...n }; if (n.series) c.series = { ...n.series }; return c; };
@@ -252,7 +254,7 @@ export function moveCut(frame, path, k, delta) {
   const minA = minSize(node.children[a], axis, curA), minB = minSize(node.children[b], axis, curB);
   const d = Math.max(minA - curA, Math.min(curB - minB, int(delta)));
   if (!d) return frame;
-  return withBody(frame, replaceNode(frame.body, path, (n) => {
+  return keepBody(frame, replaceNode(frame.body, path, (n) => {
     const sizes = n.sizes.map(int); const children = n.children.slice();
     sizes[a] = curA + d; sizes[b] = curB - d;
     children[a] = fitAxis(children[a], axis, sizes[a], 'end');
@@ -267,7 +269,7 @@ function ownerSplit(body, path, axis) {
   for (let d = idx.length - 1; d >= 0; d--) {
     const pp = joinPath(idx.slice(0, d));
     const p = getNode(body, pp);
-    if (p && p.split === SPLIT_OF[axis]) return { path: pp, i: idx[d], node: p };
+    if (p && p.split === SPLIT_OF[axis] && p.children?.length > 1) return { path: pp, i: idx[d], node: p }; // 只有一个孩子的切分 = 整个高 / 宽
   }
   return null;
 }
@@ -313,7 +315,7 @@ export function setLeaf(frame, path, patch = {}, { kitchen = false } = {}) {
   const node = getNode(frame.body, path);
   const box = nodeBox(frame, path);
   if (!node?.leaf || !box) return frame;
-  return withBody(frame, replaceNode(frame.body, path, (n) => {
+  return keepBody(frame, replaceNode(frame.body, path, (n) => {
     const out = { ...n, ...patch };
     if ('series' in patch) {
       const s = patch.series || {};
@@ -341,7 +343,7 @@ export function setLeaf(frame, path, patch = {}, { kitchen = false } = {}) {
 export function fitBody(frame, W, Hb, mode = 'tallest') {
   let body = fitAxis(frame.body, 'x', int(W), mode === 'tallest' ? 'end' : mode);
   body = fitAxis(body, 'y', int(Hb), mode);
-  return { ...frame, body: tidy(body) };
+  return { ...frame, body };
 }
 
 // 改底座（踢脚 / 柜脚 / 底层架空 / 悬挂 / 无 + 高度）：柜身高 = 总高 − 底座，差额由每一栏最高的那格吸收

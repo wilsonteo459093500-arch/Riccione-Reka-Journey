@@ -251,6 +251,24 @@ try {
   const undone = await barPrice(d);
   check('v2 desktop: drag a divider changes sizes, Ctrl+Z puts it back', dragged !== before && undone === before, `${before} → ${dragged} → ${undone}`);
   await d.locator('[data-block-canvas]').screenshot({ path: path.join(outDir, 'v2-desktop-blank.png') });
+  // 复查修正：点一下分隔线（几乎没动）不算画过；没顶柜的衣柜改格子类型后设定栏还在
+  await d.getByRole('button', { name: /Add 加入报价/ }).click();
+  await d.getByRole('button', { name: /Add cabinet 加柜子/ }).first().click();
+  await d.getByRole('button', { name: /衣柜 Wardrobe/ }).click();
+  await d.getByRole('button', { name: /分上下 Top \+ bottom/ }).click();
+  await d.getByRole('button', { name: /画框框 Blocks/ }).click();
+  const tc = await d.locator('[data-cut]').first().boundingBox();
+  await d.mouse.move(tc.x + tc.width / 2, tc.y + tc.height / 2);
+  await d.mouse.down();
+  await d.mouse.move(tc.x + tc.width / 2 + 0.6, tc.y + tc.height / 2);
+  await d.mouse.up();
+  const notCustom = (await d.locator('[data-restore]').count()) === 0 && !(await d.locator('[data-undo]').isEnabled());
+  const nc = await d.locator('[data-block-canvas] rect[data-block$="|1.0"]').boundingBox();
+  await d.mouse.click(nc.x + nc.width / 2, nc.y + nc.height * 0.3);
+  await d.locator('[data-cell-panel] [data-type="open"]').click();
+  const stays = (await d.locator('[data-cell-panel]').count()) === 1 && (await d.locator('[data-block-canvas] rect[data-block$="|1.0"]').count()) === 1;
+  const fixedH = (await d.locator('[data-cell-panel] label:has-text("Height 高")').count()) === 0;
+  check('v2 review fixes: tapping a divider is not an edit; block panel stays after an edit; full-height block shows fixed height', notCustom && stays && fixedH, `notCustom ${notCustom} stays ${stays} fixedH ${fixedH}`);
   check('v2 no browser errors (desktop)', derr.length === 0, derr.join(' | '));
   await dctx.close();
 
