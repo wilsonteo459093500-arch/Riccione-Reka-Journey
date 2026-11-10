@@ -25,5 +25,5 @@
       "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
     }
   ],
-  "rewrites": [{ "source": "/((?!assets|icon\\.svg|icon-192\\.png|icon-512\\.png|apple-touch-icon\\.png|robots\\.txt|sw\\.js|manifest\\.webmanifest).*)", "destination": "/index.html" }]
+  "rewrites": [{ "source": "/((?!assets|brand/|icon\\.svg|icon-192\\.png|icon-512\\.png|apple-touch-icon\\.png|robots\\.txt|sw\\.js|manifest\\.webmanifest).*)", "destination": "/index.html" }]
 }

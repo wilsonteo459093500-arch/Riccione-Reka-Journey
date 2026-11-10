@@ -85,10 +85,13 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
   };
 
   // 抬头（品牌可换）
-  const Head = ({ brand }) => (
+  // logo：有就印正式标志图（public/brand/），alt = 原来的品牌文字；没有就照旧印文字
+  const Head = ({ brand, logo, logoH = 40 }) => (
     <div className="flex items-start justify-between pb-4 mb-4" style={{ borderBottom: `2px solid ${T.ink}` }}>
       <div>
-        <div className="font-display text-2xl">{brand}</div>
+        {logo
+          ? <img src={logo} alt={brand} data-quote-logo style={{ height: logoH, width: 'auto', display: 'block' }} />
+          : <div className="font-display text-2xl">{brand}</div>}
         <div className="text-xs tracking-widest uppercase mt-1" style={{ color: T.inkSoft }}>{t(RLBL.estQuote)}</div>
         {anyDesigner && (
           <div className="inline-block mt-1 px-2 py-0.5 text-[10px] uppercase tracking-widest"
@@ -278,7 +281,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
           {/* ===== 第一页：总览 Summary（定制 + 家具 总计）===== */}
           {hasSummary && (
             <div className="p-8 text-[#2D3E36]" style={{ fontSize: 13 }}>
-              <Head brand="RICCIONE" />
+              <Head brand="RICCIONE" logo="/brand/riccione-logo.png" logoH={30} />
               <CustomerRow />
               <div className="mt-6" style={{ breakInside: 'avoid' }}>
                 <div className="px-2 py-1 font-medium text-xs uppercase tracking-wide" style={{ background: T.sand }}>{t(RLBL.summary)}</div>
@@ -332,7 +335,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
           {/* ===== 定制橱柜 SAIL BY RICCIONE REKA ===== */}
           {hasCab && (
             <div className="p-8 text-[#2D3E36]" style={{ fontSize: 13, breakBefore: hasSummary ? 'page' : 'auto' }}>
-              <Head brand="SAIL BY RICCIONE REKA" />
+              <Head brand="SAIL BY RICCIONE REKA" logo="/brand/sail-logo.png" logoH={58} />
               <CustomerRow />
 
               {zones.map((zr) => {
@@ -464,7 +467,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
           {/* ===== Loose Furniture RICCIONE FURNITURE（另起一页）===== */}
           {hasLoose && (
             <div className="p-8 text-[#2D3E36]" style={{ fontSize: 13, breakBefore: hasCab ? 'page' : 'auto' }}>
-              <Head brand="RICCIONE FURNITURE" />
+              <Head brand="RICCIONE FURNITURE" logo="/brand/riccione-furniture-logo.png" logoH={44} />
               <CustomerRow />
 
               <div>

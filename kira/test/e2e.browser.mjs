@@ -72,6 +72,9 @@ try {
   const sheetText = await p.locator('.quote-print-sheet').textContent();
   check('quotation lists K1 with door / carcass / side panel lines', /K1/.test(sheetText) && /Carcass/.test(sheetText) && /Side Panel/.test(sheetText));
   check('EN quotation sheet (incl. picture labels) has no Chinese', !HAN.test(sheetText.replace('陈先生', '')), (sheetText.replace('陈先生', '').match(/\p{Script=Han}+/gu) || []).join(' '));
+  const logos = await p.evaluate(() => [...document.querySelectorAll('.quote-print-sheet [data-quote-logo]')].map((i) => [i.getAttribute('alt'), i.complete && i.naturalWidth > 0]));
+  // 只有定制橱柜的报价：只印 SAIL 那页（RICCIONE 总览页要同时有家具才出现）
+  check('quotation prints the official SAIL logo, every logo image loaded', logos.some(([a]) => a === 'SAIL BY RICCIONE REKA') && logos.every(([, ok]) => ok), JSON.stringify(logos));
   await p.locator('.quote-print-sheet').screenshot({ path: path.join(outDir, 'quote-sheet.png') });
   const [dl] = await Promise.all([p.waitForEvent('download', { timeout: 30000 }), p.getByRole('button', { name: /Long image/ }).click()]);
   check('long image downloads', /\.png$/.test(dl.suggestedFilename()), dl.suggestedFilename());
