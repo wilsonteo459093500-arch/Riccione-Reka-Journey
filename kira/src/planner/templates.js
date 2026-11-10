@@ -3,7 +3,7 @@
 // 规则：先定总宽 → 每扇门最宽 600 自动算门数（可 +/−）→ 平分。
 // 只在业务编辑时重算 frames；载入旧报价不重算（避免以后改模板时悄悄改价）。
 // ============================================================
-import { leaf, vsplit, hsplit, splitEven, autoDoors, uid, ceilingOr, DEFAULT_GLASS_COEF, mmToM } from './model.js';
+import { leaf, vsplit, hsplit, splitEven, autoDoors, uid, ceilingOr, DEFAULT_GLASS_COEF, mmToM, normBase } from './model.js';
 import { kitchenDefaults, kitchenNormalize, kitchenBuild, kitchenWalls, kitchenSummary, kitchenFrameName } from './kitchen.js';
 import { tvDefaults, tvNormalize, tvBuild, tvSummary, tvFrameName, shoeDefaults, shoeNormalize, shoeBuild, shoeSummary, shoeFrameName } from './tvshoe.js';
 import { pickL, joinL, bi, FRAME_KIND_NAME } from './lang.js';
@@ -83,12 +83,7 @@ const wardrobe = {
 };
 
 // ---------------- 共用 ----------------
-export function normBase(b) {
-  const kind = ['plinth', 'legs', 'raised', 'wallhung', 'none'].includes(b?.kind) ? b.kind : 'plinth';
-  const def = { plinth: 100, legs: 120, raised: 150, wallhung: 0, none: 0 }[kind];
-  const h = kind === 'wallhung' || kind === 'none' ? 0 : clamp(int(b?.h, def), 20, 400);
-  return { kind, h };
-}
+export { normBase };
 
 export function resizeUnits(units = [], n, layout) {
   const out = (units || []).slice(0, n).map((u) => ({ ...u }));

@@ -77,18 +77,29 @@ export function splitEven(W, n) {
 export const autoDoors = (W) => Math.max(1, Math.ceil((Number(W) || 0) / MAX_DOOR));
 
 // 切分树 → 叶子的绝对矩形（柜身坐标：左下角为原点，y 向上）
-export function layoutLeaves(node, x = 0, y = 0, w = 0, h = 0, out = []) {
+// path：从 body 往下数第几个孩子，例如 "1.0"（body 本身是一格时为 ""）—— 第二版「画框框」用来认格子
+export function layoutLeaves(node, x = 0, y = 0, w = 0, h = 0, out = [], path = '') {
   if (!node) return out;
-  if (node.leaf) { out.push({ x, y, w, h, node }); return out; }
+  if (node.leaf) { out.push({ x, y, w, h, node, path }); return out; }
   const sizes = node.sizes || [];
   let off = 0;
   node.children.forEach((c, i) => {
     const s = sizes[i] || 0;
-    if (node.split === 'v') layoutLeaves(c, x + off, y, s, h, out);
-    else layoutLeaves(c, x, y + off, w, s, out);
+    const p = path === '' ? String(i) : `${path}.${i}`;
+    if (node.split === 'v') layoutLeaves(c, x + off, y, s, h, out, p);
+    else layoutLeaves(c, x, y + off, w, s, out, p);
     off += s;
   });
   return out;
+}
+
+// 底座：踢脚 / 柜脚 / 底层架空 有高度；悬挂 / 无 一律 h = 0（bodyHeight 不看 kind，照样会减掉 h）
+export function normBase(b) {
+  const kind = ['plinth', 'legs', 'raised', 'wallhung', 'none'].includes(b?.kind) ? b.kind : 'plinth';
+  const def = { plinth: 100, legs: 120, raised: 150, wallhung: 0, none: 0 }[kind];
+  const n = Math.round(Number(b?.h));
+  const h = kind === 'wallhung' || kind === 'none' ? 0 : Math.min(400, Math.max(20, Number.isFinite(n) ? n : def));
+  return { kind, h };
 }
 
 export const bodyHeight = (f) => Math.max(0, (f.H || 0) - (f.base?.h || 0));
