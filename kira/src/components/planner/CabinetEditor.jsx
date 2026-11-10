@@ -17,6 +17,7 @@ import { Section, Segmented, Toggle, Stepper, MeterInput, Collapse, Tip, useBack
 import { useConfirm } from '../ui/UIProvider.jsx';
 import KitchenSettings from './KitchenSettings.jsx';
 import { TvSettings, ShoeSettings } from './TvShoeSettings.jsx';
+import BlankSettings from './BlankSettings.jsx';
 import { useBlockEditor, useBlockKeys, BlockCanvas, BlockPanel } from './BlockEditor.jsx';
 
 const tx = (o, lang) => (lang === 'en' ? o.en : lang === 'zh' ? o.zh : `${o.zh} ${o.en}`);
@@ -160,6 +161,7 @@ export default function CabinetEditor({ cab: initial, zone, defaults = {}, lang 
           {isKitchen && <KitchenSettings cab={cab} setSpec={setSpec} />}
           {cab.template === 'tv' && <TvSettings cab={cab} setSpec={setSpec} ceilingH={ceilingH} />}
           {cab.template === 'shoe' && <ShoeSettings cab={cab} setSpec={setSpec} ceilingH={ceilingH} />}
+          {isBlank && <BlankSettings cab={cab} setSpec={setSpec} ceilingH={ceilingH} />}
           {cab.template === 'wardrobe' && (
           <>
           <Section title="Size 尺寸" hint={ceilingH ? `Room ceiling 房间楼高 ${mmToM(ceilingH)} m` : 'Room ceiling not set — using 2.70 m 楼高没填，先按 2.70 m'}>

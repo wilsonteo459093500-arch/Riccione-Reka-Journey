@@ -19,6 +19,9 @@ import { BLOCK_COLORS, BLOCK_SELECTED } from '../../render/palette.js';
 import SvgShapes from '../../render/SvgShapes.jsx';
 import { Section, Segmented, Stepper, MeterInput, Collapse, Tip, useBackClose } from './bits.jsx';
 
+// 空白柜子：spec 是总尺寸的来源 → 画框框里改了底座，spec.base 跟着改（下次改尺寸才不会跳回去）
+const syncBlank = (c) => (c.template === 'blank' && c.frames?.[0] ? { ...c, spec: { ...c.spec, base: { ...c.frames[0].base } } } : c);
+
 const isPhone = () => typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(max-width: 1023px)').matches;
 const parseSel = (s) => { if (!s) return null; const i = s.indexOf('|'); return { frameId: s.slice(0, i), path: s.slice(i + 1) }; };
 
@@ -45,7 +48,7 @@ export function useBlockEditor({ cab, setCab, kitchen = false }) {
     const g = fn(f);
     if (!g || g === f) return null;
     if (record) push(snapshot(c));
-    const next = { ...c, frames: c.frames.map((x) => (x.id === frameId ? g : x)), custom: true };
+    const next = syncBlank({ ...c, frames: c.frames.map((x) => (x.id === frameId ? g : x)), custom: true });
     cabRef.current = next;
     setCab(() => next);
     return g;
@@ -53,14 +56,14 @@ export function useBlockEditor({ cab, setCab, kitchen = false }) {
 
   // 拖拉中：直接换掉（不存撤销）；拖完 commitDrag(start) 存一步
   const replaceFrames = useCallback((frames) => {
-    const next = { ...cabRef.current, frames, custom: true };
+    const next = syncBlank({ ...cabRef.current, frames, custom: true });
     cabRef.current = next;
     setCab(() => next);
   }, [setCab]);
   const commitDrag = (start) => { if (start && start.frames !== cabRef.current.frames) push(start); };
 
   const restore = (s) => {
-    const next = { ...cabRef.current, frames: s.frames, custom: s.custom };
+    const next = syncBlank({ ...cabRef.current, frames: s.frames, custom: s.custom });
     cabRef.current = next;
     setCab(() => next);
   };

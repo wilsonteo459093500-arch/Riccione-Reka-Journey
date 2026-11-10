@@ -8,6 +8,7 @@ import { kitchenDefaults, kitchenNormalize, kitchenBuild, kitchenWalls, kitchenS
 import { tvDefaults, tvNormalize, tvBuild, tvSummary, tvFrameName, shoeDefaults, shoeNormalize, shoeBuild, shoeSummary, shoeFrameName } from './tvshoe.js';
 import { pickL, joinL, bi, FRAME_KIND_NAME } from './lang.js';
 import { pickLang } from '../constants/pricing.js';
+import { fitBody } from './blocks.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const int = (v, d = 0) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? n : d; };
@@ -112,8 +113,44 @@ const shoe = {
   walls: (spec) => [{ ox: 0, oz: 0, angle: 0, len: spec.W }],
 };
 
-export const TEMPLATES = { wardrobe, kitchen, tv, shoe };
-export const TEMPLATE_LIST = [wardrobe, kitchen, tv, shoe];
+// ---------------- 空白柜子（第二版）：从一个大框开始画 ----------------
+// spec = { kind:'tall'|'base'|'wall', W, H, D, y, base }；build 保留现有的框框，按新尺寸等比例缩放（没有「模板原样」可以还原）
+const BLANK_NAME = { en: 'Blank cabinet', zh: '空白柜子' };
+export const BLANK_KIND_DEFAULTS = {
+  tall: ({ ceilingH } = {}) => ({ kind: 'tall', W: 1200, H: ceilingOr(ceilingH), D: 600, y: 0, base: { kind: 'plinth', h: 100 } }),
+  base: () => ({ kind: 'base', W: 1200, H: 850, D: 600, y: 0, base: { kind: 'plinth', h: 100 } }),
+  wall: () => ({ kind: 'wall', W: 1200, H: 750, D: 350, y: 1500, base: { kind: 'wallhung', h: 0 } }),
+};
+const blank = {
+  id: 'blank', ...BLANK_NAME,
+  defaults: ({ ceilingH } = {}) => BLANK_KIND_DEFAULTS.tall({ ceilingH }),
+  normalize(spec) {
+    const s = { ...spec };
+    s.kind = ['tall', 'base', 'wall'].includes(s.kind) ? s.kind : 'tall';
+    s.W = clamp(int(s.W, 1200), 300, 12000);
+    s.H = clamp(s.kind === 'tall' ? ceilingOr(s.H) : int(s.H, s.kind === 'base' ? 850 : 750), 300, 4000);
+    s.D = clamp(int(s.D, s.kind === 'wall' ? 350 : 600), 200, 1200);
+    s.y = s.kind === 'wall' ? clamp(int(s.y, 1500), 0, 3500) : 0;
+    s.base = normBase(s.base);
+    if (s.H - s.base.h < 200) s.base = { ...s.base, h: Math.max(0, s.H - 200) };
+    return s;
+  },
+  walls: (spec) => [{ ox: 0, oz: 0, angle: 0, len: spec.W }],
+  summary: (spec, lang) => joinL([`${mmToM(spec.W)} × ${mmToM(spec.H)} × ${mmToM(spec.D)} m`, FRAME_KIND_NAME[spec.kind] || FRAME_KIND_NAME.tall], lang),
+  frameName: (frame) => [FRAME_KIND_NAME[frame?.kind] || FRAME_KIND_NAME.tall],
+  build(spec, cab) {
+    const old = (cab.frames || [])[0];
+    const f = {
+      id: old?.id || `${cab.id}-f0`, kind: spec.kind, label: bi(FRAME_KIND_NAME[spec.kind] || FRAME_KIND_NAME.tall), wall: 0, x: 0, y: spec.y,
+      W: spec.W, H: spec.H, D: spec.D, base: { ...spec.base }, ends: { left: true, right: true },
+      body: old?.body || leaf('closed', { interior: 'shelves' }),
+    };
+    return [fitBody(f, spec.W, spec.H - spec.base.h, 'scale')];
+  },
+};
+
+export const TEMPLATES = { wardrobe, kitchen, tv, shoe, blank };
+export const TEMPLATE_LIST = [wardrobe, kitchen, tv, shoe, blank];
 export const templateOf = (id) => TEMPLATES[id] || wardrobe;
 
 // 下一个柜号：整份报价里 K1、K2…

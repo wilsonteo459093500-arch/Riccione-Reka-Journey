@@ -6,6 +6,21 @@ import { TEMPLATE_LIST, newCabinet } from '../../planner/templates.js';
 import SvgShapes from '../../render/SvgShapes.jsx';
 import { elevationScene } from '../../render/elevation.js';
 import { useBackClose } from './bits.jsx';
+import { splitLeaf, setLeaf } from '../../planner/blocks.js';
+
+// 卡片上的小图；空白柜子画成色块（示意可以自己切格子）
+function cardScene(id) {
+  const cab = newCabinet(id);
+  if (id !== 'blank') return elevationScene(cab, { dims: false });
+  let f = cab.frames[0];
+  f = splitLeaf(f, '', 'v', 500);
+  f = splitLeaf(f, '1', 'h', 700);
+  f = setLeaf(f, '1.0', { type: 'drawer', drawers: 3 });
+  f = splitLeaf(f, '1.1', 'h', 900);
+  f = setLeaf(f, '1.1.0', { type: 'open' });
+  f = setLeaf(f, '0', { type: 'glass' });
+  return elevationScene({ ...cab, frames: [f] }, { style: 'blocks', dims: false, lang: 'zh' });
+}
 
 const COMING = [
   { id: 'kitchen', zh: '厨房', en: 'Kitchen', sub: '一字 / L / U / 二字' },
@@ -29,9 +44,10 @@ export default function TemplatePicker({ onPick, onClose }) {
             <button key={t.id} onClick={() => onPick(t.id)} className="p-3 text-left transition-colors hover-lift"
               style={{ background: T.cream, border: `1px solid ${T.line}`, borderRadius: 2 }}>
               <div className="h-28 flex items-center justify-center mb-2" style={{ background: '#fff' }}>
-                <SvgShapes scene={elevationScene(newCabinet(t.id), { dims: false })} style={{ height: '100%', width: 'auto' }} />
+                <SvgShapes scene={cardScene(t.id)} style={{ height: '100%', width: 'auto' }} />
               </div>
               <div className="font-display text-lg" style={{ color: T.ink }}>{t.zh} <span className="text-sm">{t.en}</span></div>
+              {t.id === 'blank' && <div className="text-[11px]" style={{ color: T.inkSoft }}>自己画框框 Draw your own blocks</div>}
             </button>
           ))}
           {COMING.filter((c) => !ready.has(c.id)).map((c) => (

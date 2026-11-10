@@ -176,3 +176,29 @@ test('blocks: 500 random cut / carve / drag / resize / delete / retype → integ
     assert.ok(Hb > 0);
   }
 });
+
+// ---------- 空白柜子 ----------
+import { newCabinet as newCab, updateSpec, templateOf as tplOf, cabinetSummary } from '../src/planner/templates.js';
+test('blank: one big closed block; resize scales the drawn blocks (no reset to a template)', () => {
+  let c = newCab('blank', { ceilingH: 2600 });
+  assert.equal(c.frames[0].body.leaf, true);
+  assert.equal(c.frames[0].H, 2600);
+  let f = splitLeaf(c.frames[0], '', 'v', 400);
+  f = splitLeaf(f, '1', 'h', 1000);
+  c = { ...c, frames: [f], custom: true };
+  const g = updateSpec(c, { W: 1800 }).frames[0];
+  assert.deepEqual(g.body.sizes, [600, 1200]);
+  assert.deepEqual(getNode(g.body, '1').sizes, [1000, 1500]); // 高度没变
+  ok(g);
+  const h = updateSpec(c, { H: 2100 }).frames[0];
+  ok(h);
+  assert.deepEqual(getNode(h.body, '1').sizes, [800, 1200]);
+  assert.equal(h.id, f.id);
+  // 吊柜：悬挂、离地
+  const w = updateSpec(c, { kind: 'wall', H: 750, D: 350, y: 1500, base: { kind: 'wallhung' } });
+  assert.equal(w.frames[0].y, 1500);
+  assert.deepEqual(w.frames[0].base, { kind: 'wallhung', h: 0 });
+  ok(w.frames[0]);
+  assert.match(cabinetSummary(w, 'zh'), /吊柜/);
+  assert.equal(tplOf('nope').id, 'wardrobe');
+});
