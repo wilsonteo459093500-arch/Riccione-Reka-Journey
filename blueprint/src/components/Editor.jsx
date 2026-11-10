@@ -36,15 +36,18 @@ function commitDrafts() {
   if (el && /^(INPUT|TEXTAREA)$/.test(el.tagName)) el.blur();
 }
 
-/** 撤销 / 重做时保留 AI 生成的立体图历史与平面图（它们不进撤销历史，花了钱的结果不能被一次 ⌘Z 撤掉） */
+/** 平面图、框选范围、图纸清单、立体图历史和检查结果：都不进撤销历史 */
+const GENERATED_FIELDS = ['renders3d', 'plan', 'planSource', 'planCrop', 'planRegion', 'planScope', 'planBrief', 'render3dInfo'];
+
+/** 撤销 / 重做时保留 AI 生成的立体图历史、平面图和图纸清单（它们不进撤销历史，花了钱的结果不能被一次 ⌘Z 撤掉） */
 function keepGenerated(current, restored) {
   const byId = new Map((current.floors || []).map((f) => [f.id, f]));
   let changed = false;
   const floors = (restored.floors || []).map((f) => {
     const cur = byId.get(f.id);
-    if (!cur || (cur.renders3d === f.renders3d && cur.plan === f.plan)) return f;
+    if (!cur || GENERATED_FIELDS.every((k) => cur[k] === f[k])) return f;
     changed = true;
-    return { ...f, renders3d: cur.renders3d, plan: cur.plan };
+    return { ...f, ...Object.fromEntries(GENERATED_FIELDS.map((k) => [k, cur[k]])) };
   });
   return changed ? { ...restored, floors } : restored;
 }

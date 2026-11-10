@@ -33,7 +33,7 @@ Project ──engine/deck.js renderDeck()──▶ 渲染页 [{ bg, els }]（eng
 | `src/engine/pptx/` | `buildPptx(slides, { loadImage })` → .pptx（JSZip，浏览器 / Node 通用） |
 | `src/store/db.js` | IndexedDB：projects / assets |
 | `src/store/assets.js` | `'asset:<id>'` ↔ Blob / object URL / 尺寸；`storeBlob`、`preloadProjectAssets`、`resolveUrl`、`metaOf`、`loadForPptx`、`toInlineImage` |
-| `src/ai/` | Gemini 客户端（`gemini.js`）、设置（`settings.js`）、标题润色（`polish.js`）、AI 翻译（`translate.js`）、3D 全屋立体图（`dollhouse.js`） |
+| `src/ai/` | Gemini 客户端（`gemini.js`）、设置（`settings.js`）、标题润色（`polish.js`）、AI 翻译（`translate.js`）、3D 立体图（`dollhouse.js`：框选范围 → 读图清单 → 俯视 3D 户型图 → 对照检查 → 文字修正） |
 | `src/import/` | PDF 解析：`pdfExtract.js`（pdf.js）、`analyze.js`（纯函数）、`labels.js`（词典与文字解析）、`importPdf.js`（编排） |
 | `src/moodboard/` | Material Board（移植自旧版 UKIR STUDIO，只保留 material board 功能）；`migrate.js` = 同网址时把旧版材质库 / 画板搬过来 |
 | `src/components/` | 界面：首页 / 编辑器 / 检查器 / 材料清单 / 导出 / 设置 / 独立画板（`BoardsPage.jsx`） |
@@ -60,8 +60,10 @@ Project ──engine/deck.js renderDeck()──▶ 渲染页 [{ bg, els }]（eng
   —— `meta = { source: 'board' | 'flatlay' | 'upload', orientation: 'portrait' | 'landscape' | 'square' }`；
   MoodBoard 会 await 它并自己弹成功 / 失败提示（壳层出错直接抛）。封面上 Board 整张放在右侧，任何比例都不裁。
   画板存在独立的 IndexedDB，删项目时要一起调 `removeBoardsOf(projectId)`（`src/moodboard/store.js`）。
-- `<DollhousePanel project settings notify onOpenSettings onChange />` —— 立体图页 = `kind: 'view', tag: '3d', layout: 'full'`，
-  插在该层章节页之后；不进楼层空间清单、不参与 AI 润色。
+- `<DollhousePanel project settings notify onOpenSettings onChange />` —— 立体图页 = `kind: 'view', tag: '3d'`（宽图 `layout: 'full'`，方图 / 竖图 `'auto'` → 图文页，不被裁），
+  插在该层章节页之后；不进楼层空间清单、不参与 AI 润色。平面图相关的数据都挂在楼层上（`planSource` 原图、`plan` 裁剪后发给 AI 的图、
+  `planCrop` / `planScope` / `planRegion` 框选范围、`planBrief` 图纸清单、`render3dInfo` 每张图的视角和检查结果），都不进撤销历史。
+  框选对话框是 `<PlanCropper>`。
 - `<PolishDialog project settings notify onOpenSettings onApply onClose onlySlideIds? />` —— 内部跑
   `polishProject(project, settings, { onProgress, onlySlideIds })` → `[{ slideId, before, patch }]`（只给建议），
   设计师勾选后 `onApply(patches)`，编辑器用 `applyPolishPatches(project, patches)` 套用（只改 subtitle / roomEn / notes，材料永远不动）。

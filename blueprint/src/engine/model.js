@@ -14,7 +14,8 @@
 //     team: [{ en:'DESIGN', name:'Sheerly', role:'方案设计师' }, ...],
 //   },
 //   floors:    [{ id, zh:'一楼', en:'GROUND FLOOR', image:'asset:…'|null,      // image = 楼层章节页背景（空 = 取该层第一张效果图）
-//                plan?:'asset:…', renders3d?:['asset:…'] }],                     // plan = 平面布置图；renders3d = AI 全屋立体图历史
+//                plan?:'asset:…', renders3d?:['asset:…'],                        // plan = 平面布置图（裁剪后、发给 AI 的那张）；renders3d = AI 立体图历史
+//                planSource?, planCrop?, planScope?, planRegion?, planBrief?, render3dInfo? }], // 原图 / 框选范围 / 图纸清单 / 每张图的检查结果（ai/dollhouse.js）
 //   materials: [{ id, name:'浅川橡', code:'AG273', image:'asset:…'|null, pending:false }],
 //   cover:     { image:'asset:…'|null },   // Material Board → 方案封面（整张放进右侧，不裁；旧项目的 layout 字段已不用）
 //   translations: { [中文]: 'English' },  // 翻译记忆：English / 中英版的英文（整套共用，engine/lang.js）
