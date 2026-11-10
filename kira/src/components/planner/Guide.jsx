@@ -14,6 +14,7 @@ const STEPS = [
   { t: 'Add a room 加房间', d: 'Pick the room and type its ceiling height — wardrobes go to the ceiling automatically.', z: '选房间，填这个房间的楼高 —— 衣柜会自动做到顶。' },
   { t: 'Add a cabinet 加柜子', d: 'Tap “Add cabinet”, pick a template (wardrobe / kitchen / TV / shoe) and type the total width. Doors are split automatically (each ≤ 600 mm).', z: '按「加柜子」选模板（衣柜 / 厨房 / 电视柜 / 鞋柜），打总宽就好：自动分门（每扇最宽 600）、自动画图、自动算价。' },
   { t: 'Pick each section 点每一格', d: 'Change any section: long hanging, drawers, open shelves, glass… The price bar at the bottom updates instantly. Not sure? Leave the defaults.', z: '每一格可以换：长挂衣、抽屉、开放格、玻璃门… 底部价钱条马上变。不确定就用默认的。' },
+  { t: 'Draw blocks 画框框', d: 'Odd cabinet? Switch to “Blocks”. On a computer drag a box inside a block or drag the lines; on a phone tap a block and cut it in two. Each block can have its own type, size and series. Or start from “Blank cabinet”.', z: '遇到不规则的柜子，切到「画框框」：电脑在格子里拖出框框、拖分隔线改尺寸；手机点一格再「切一刀」。每格可以改类型、尺寸、单独选系列。也可以从「空白柜子」开始画。' },
   { t: 'Show & send 给客户看、发出去', d: 'Turn the 3D view for the customer. Then “Quote” → PDF or long image, or “WhatsApp” to open the customer chat with the text ready.', z: '3D 可以左右转给客户看。然后「Quote 报价单」存 PDF / 长图，或按「WhatsApp」直接打开客户对话（文字已填好）。' },
 ];
 
