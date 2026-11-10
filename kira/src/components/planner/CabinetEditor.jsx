@@ -1,10 +1,10 @@
 // 积木柜编辑器（全屏）：上面看图、下面改设定（手机）；左图右设定（电脑）。底部常驻价钱条。
 import { useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Check, RotateCcw, Trash2, AlertTriangle, LayoutTemplate, SquareDashedMousePointer } from 'lucide-react';
+import { X, Check, RotateCcw, Trash2, AlertTriangle, Undo2 } from 'lucide-react';
 import { T } from '../../theme.js';
 import { fmtMYR, DOOR_SERIES, CARCASS_SERIES, seriesById, cnyToMyr } from '../../constants/pricing.js';
-import { templateOf, updateSpec, setUnit } from '../../planner/templates.js';
+import { templateOf, updateSpec, updateSpecKeep, frameTitle } from '../../planner/templates.js';
 import { cabinetTotal, resolveSeries, customSeriesCount } from '../../planner/bridge.js';
 import { explainCabinet } from '../../planner/explain.js';
 import { validateCabinet } from '../../planner/validate.js';
@@ -23,10 +23,10 @@ import { useBlockEditor, useBlockKeys, BlockCanvas, BlockPanel } from './BlockEd
 
 const tx = (o, lang) => (lang === 'en' ? o.en : lang === 'zh' ? o.zh : `${o.zh} ${o.en}`);
 
-// mode（立面 / 立体）由 CabinetEditor 管；画框框模式下「立面」= 可以点、可以拖的色块图（children）
+// 图：色块（可以点、可以拖 = children）/ 线稿立面 / 立体 3D；mode 由 CabinetEditor 管
 function Preview({ cab, onYaw, lang, mode, setMode, children }) {
   const yaw = cab.view?.yaw ?? -30;
-  const editing = mode === 'elev' && children;
+  const editing = mode === 'blocks';
   const scene = useMemo(() => {
     if (editing) return null;
     try { return mode === 'elev' ? elevationScene(cab, { style: 'drawing', dims: true, lang }) : axoScene(cab, { yaw }); } catch (e) { return null; }
@@ -35,7 +35,7 @@ function Preview({ cab, onYaw, lang, mode, setMode, children }) {
     <div className="h-full flex flex-col">
       <div className="flex items-center gap-2 px-2 pt-2">
         <Segmented size="sm" value={mode} onChange={setMode}
-          options={[{ id: 'elev', label: children ? '色块 Blocks' : '立面 Elevation' }, { id: 'axo', label: '立体 3D' }]} />
+          options={[{ id: 'blocks', label: '画框框 Blocks' }, { id: 'elev', label: '线稿 Drawing' }, { id: 'axo', label: '立体 3D' }]} />
         <span className="ml-auto text-[10px]" style={{ color: T.inkSoft }}>仅示意 Illustrative</span>
       </div>
       {editing ? <div className="flex-1 min-h-0">{children}</div> : (
@@ -63,25 +63,24 @@ export default function CabinetEditor({ cab: initial, zone, defaults = {}, lang 
   const isKitchen = cab.template === 'kitchen';
   const set = (p) => setCab((c) => ({ ...c, ...p }));
   const isBlank = cab.template === 'blank';
-  // 画框框模式 / 模板设定模式（空白柜子、手画过的柜子一打开就是画框框）
-  const [editMode, setEditMode] = useState(() => (initial.template === 'blank' || initial.custom ? 'blocks' : 'template'));
-  const [view, setView] = useState('elev');
+  // 画框框和模板设定在同一个画面：图默认就是可以点、可以拖的色块
+  const [view, setView] = useState('blocks');
   const ed = useBlockEditor({ cab, setCab, kitchen: isKitchen });
-  useBlockKeys(ed, editMode === 'blocks' && view === 'elev');
+  useBlockKeys(ed, view === 'blocks');
   const confirm = useConfirm();
-  // 画过框框后又改模板设定 → 先问；确定才重算柜子（清掉 custom），取消什么都不变（MeterInput 自动跳回原值）
-  //   空白柜子没有「模板原样」：改尺寸照比例缩放，不问、不还原
-  const guarded = async (fn) => {
-    if (cab.custom && !isBlank) {
-      const ok = await confirm({ title: 'Back to template? 还原成模板？', message: 'This will reset the hand-drawn blocks to the template. 会把手画的框框还原成模板，确定吗？',
-        danger: true, confirmText: 'Reset 还原', cancelText: 'Cancel 取消' });
-      if (!ok) return;
-    }
-    ed.resetHistory();
-    setCab((c) => { const n = fn(c); if (isBlank) return n; const { custom, ...rest } = n; return rest; });
+  // 改模板设定：手画的框框尽量保留（templates.js updateSpecKeep 三方合并）；可以撤销。
+  //   两边都改到同一处（例如门数变了）的柜体才照模板重做 → 提示一句，按撤销就回来
+  const [rebuilt, setRebuilt] = useState([]);
+  const setSpec = (p) => {
+    let names = [];
+    ed.applyCab((c) => {
+      const r = updateSpecKeep(c, p);
+      names = r.rebuilt.map((id) => (c.frames || []).find((f) => f.id === id)).filter(Boolean).map((f) => frameTitle(c, f, 'zh'));
+      return r.cab;
+    });
+    setRebuilt(names);
   };
-  const setSpec = (p) => guarded((c) => updateSpec(c, p));
-  const setUnitG = (i, p) => guarded((c) => setUnit(c, i, p));
+  const setUnitG = (i, p) => setSpec({ units: (cab.spec.units || []).map((u, k) => (k === i ? { ...u, ...p } : u)) });
   const restoreTemplate = async () => {
     const ok = await confirm({ title: 'Back to template? 还原成模板？', message: 'This will reset the hand-drawn blocks to the template. 会把手画的框框还原成模板，确定吗？',
       danger: true, confirmText: 'Reset 还原', cancelText: 'Cancel 取消' });
@@ -99,16 +98,8 @@ export default function CabinetEditor({ cab: initial, zone, defaults = {}, lang 
   const hasOpen = leaves.some((l) => l.node.type === 'open');
   const compare = useMemo(() => ['A', 'B', 'C'].map((L) => ({ L, total: cabinetTotal({ ...cab, series: { door: L, carcass: L, open: 'door' } }, defaults) })), [cab, defaults]);
   const columnWidths = cab.frames?.[0]?.body?.split === 'v' ? cab.frames[0].body.sizes : [spec.W || 0];
-  const blocks = editMode === 'blocks';
 
   const title = `${cab.code} · ${t.zh} ${t.en}`;
-  const modeBar = (
-    <div className="flex items-center gap-2 px-3 sm:px-5 py-1.5" style={{ borderBottom: `1px solid ${T.lineSoft}`, background: T.cream }} data-edit-mode>
-      <Segmented size="sm" value={editMode} onChange={(m) => { setEditMode(m); setView('elev'); if (m !== 'blocks') ed.ops.select(null); }}
-        options={[{ id: 'template', label: <span className="inline-flex items-center gap-1"><LayoutTemplate size={13} /> 模板设定 Template</span> },
-          { id: 'blocks', label: <span className="inline-flex items-center gap-1"><SquareDashedMousePointer size={13} /> 画框框 Blocks</span> }]} />
-    </div>
-  );
 
   // 关闭（X / 手机返回键）：改过还没保存 → 先问，免得辛苦设计的柜子一下子没了
   const asking = useRef(false);
@@ -138,27 +129,26 @@ export default function CabinetEditor({ cab: initial, zone, defaults = {}, lang 
         )}
       </div>
 
-      {modeBar}
-
       {/* 主体：手机上图下设定；电脑左图右设定 */}
       <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
-        <div className={`shrink-0 lg:flex-1 ${blocks ? 'h-[55vh]' : 'h-[40vh]'} lg:h-auto`} style={{ borderBottom: `1px solid ${T.lineSoft}` }}>
+        <div className="shrink-0 lg:flex-1 h-[50vh] lg:h-auto" style={{ borderBottom: `1px solid ${T.lineSoft}` }}>
           <Preview cab={cab} lang={lang} mode={view} setMode={setView} onYaw={(yaw) => set({ view: { ...(cab.view || {}), yaw } })}>
-            {blocks ? <BlockCanvas ed={ed} lang={lang} canRestore={!isBlank && !!cab.custom} onRestore={restoreTemplate} /> : null}
+            <BlockCanvas ed={ed} lang={lang} canRestore={!isBlank && !!cab.custom} onRestore={restoreTemplate} />
           </Preview>
         </div>
         <div className="flex-1 lg:flex-none lg:w-[440px] min-h-0 overflow-y-auto px-4 sm:px-5 pb-8 scrollbar-thin" style={{ borderLeft: `1px solid ${T.lineSoft}` }}>
 
-          {blocks && <BlockPanel ed={ed} defaults={defaults} />}
+          {view === 'blocks' && <BlockPanel ed={ed} defaults={defaults} />}
 
-          {!blocks && cab.custom && !isBlank && (
-            <div className="mt-3 p-2.5 text-xs flex items-start gap-1.5" data-custom-banner style={{ background: T.sand, border: `1px solid ${T.line}`, borderRadius: 2, color: T.ink }}>
+          {rebuilt.length > 0 && (
+            <div className="mt-3 p-2.5 text-xs flex items-start gap-1.5" data-rebuilt-note style={{ background: T.sand, border: `1px solid ${T.line}`, borderRadius: 2, color: T.ink }}>
               <AlertTriangle size={13} className="mt-0.5 shrink-0" style={{ color: T.terra }} />
-              <span>这个柜子的框框是手画的，改下面的设定会还原成模板 The blocks were drawn by hand — changing these settings resets them to the template</span>
+              <span className="flex-1">{rebuilt.join('、')} 照模板重做了（这个设定改到手画的地方）Rebuilt from the template — the change touched hand-drawn blocks</span>
+              <button type="button" onClick={() => { ed.undo(); setRebuilt([]); }} className="shrink-0 inline-flex items-center gap-1 underline" style={{ color: T.wood }}><Undo2 size={12} /> 撤销 Undo</button>
             </div>
           )}
 
-          {!blocks && <>
+          <>
           {isKitchen && <KitchenSettings cab={cab} setSpec={setSpec} />}
           {cab.template === 'tv' && <TvSettings cab={cab} setSpec={setSpec} ceilingH={ceilingH} />}
           {cab.template === 'shoe' && <ShoeSettings cab={cab} setSpec={setSpec} ceilingH={ceilingH} />}
@@ -237,7 +227,7 @@ export default function CabinetEditor({ cab: initial, zone, defaults = {}, lang 
 
           </>
           )}
-          </>}
+          </>
 
           <Section title="Series 系列" hint={cab.series ? 'Set for this cabinet 这个柜子单独设定' : 'Using the quote default 用整份报价的默认系列'}
             right={cab.series && <button type="button" className="text-xs underline" style={{ color: T.wood }} onClick={() => set({ series: null })}>Use default 用默认</button>}>

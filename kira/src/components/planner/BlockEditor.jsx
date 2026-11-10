@@ -38,7 +38,7 @@ export function useBlockEditor({ cab, setCab, kitchen = false }) {
   const cabRef = useRef(cab);
   cabRef.current = cab;
 
-  const snapshot = (c) => ({ frames: c.frames, custom: !!c.custom });
+  const snapshot = (c) => ({ frames: c.frames, custom: !!c.custom, spec: c.spec }); // 含 spec：改模板设定也能撤销
   const push = (prev) => { hist.current.undo.push(prev); if (hist.current.undo.length > 100) hist.current.undo.shift(); hist.current.redo = []; bump((n) => n + 1); };
 
   // 改一个柜体：fn(frame) → 新 frame；没变就不存撤销
@@ -65,13 +65,16 @@ export function useBlockEditor({ cab, setCab, kitchen = false }) {
 
   const restore = (s) => {
     const { custom: _c, ...rest } = cabRef.current;
-    const next = syncBlank(s.custom ? { ...rest, frames: s.frames, custom: true } : { ...rest, frames: s.frames }); // 没画过 → 不留 custom 键（关闭时才不会误问「还没保存」）
+    const base = { ...rest, frames: s.frames, ...(s.spec ? { spec: s.spec } : {}) };
+    const next = syncBlank(s.custom ? { ...base, custom: true } : base); // 没画过 → 不留 custom 键（关闭时才不会误问「还没保存」）
     cabRef.current = next;
     setCab(() => next);
   };
   const undo = () => { const s = hist.current.undo.pop(); if (!s) return; hist.current.redo.push(snapshot(cabRef.current)); restore(s); bump((n) => n + 1); };
   const redo = () => { const s = hist.current.redo.pop(); if (!s) return; hist.current.undo.push(snapshot(cabRef.current)); restore(s); bump((n) => n + 1); };
   const resetHistory = () => { hist.current = { undo: [], redo: [] }; bump((n) => n + 1); };
+  // 整个柜子的改动（模板设定）：存一步撤销再换
+  const applyCab = (fn) => { const c = cabRef.current; const next = fn(c); if (!next || next === c) return; push(snapshot(c)); cabRef.current = next; setCab(() => next); };
   // 「还原成模板」：也能撤销
   const restoreTemplate = (build) => { const c = cabRef.current; push(snapshot(c)); const next = build(c); cabRef.current = next; setCab(() => next); setSelected(null); };
 
@@ -114,7 +117,7 @@ export function useBlockEditor({ cab, setCab, kitchen = false }) {
   return {
     cab, selected: valid ? selected : null, sel: valid ? sel : null, selFrame: valid ? selFrame : null, selNode: valid ? selNode : null,
     focus, setFocus, brush, setBrush, ops, apply, replaceFrames, commitDrag, restore, snapshot: () => snapshot(cabRef.current),
-    undo, redo, canUndo: hist.current.undo.length > 0, canRedo: hist.current.redo.length > 0, resetHistory, restoreTemplate, kitchen,
+    undo, redo, applyCab, canUndo: hist.current.undo.length > 0, canRedo: hist.current.redo.length > 0, resetHistory, restoreTemplate, kitchen,
   };
 }
 

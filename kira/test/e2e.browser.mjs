@@ -262,13 +262,23 @@ try {
   await d.mouse.down();
   await d.mouse.move(tc.x + tc.width / 2 + 0.6, tc.y + tc.height / 2);
   await d.mouse.up();
-  const notCustom = (await d.locator('[data-restore]').count()) === 0 && !(await d.locator('[data-undo]').isEnabled());
+  const notCustom = (await d.locator('[data-restore]').count()) === 0; // 没被当成手画过（模板设定本身可以撤销，所以不看撤销键）
   const nc = await d.locator('[data-block-canvas] rect[data-block$="|1.0"]').boundingBox();
   await d.mouse.click(nc.x + nc.width / 2, nc.y + nc.height * 0.3);
   await d.locator('[data-cell-panel] [data-type="open"]').click();
   const stays = (await d.locator('[data-cell-panel]').count()) === 1 && (await d.locator('[data-block-canvas] rect[data-block$="|1.0"]').count()) === 1;
   const fixedH = (await d.locator('[data-cell-panel] label:has-text("Height 高")').count()) === 0;
   check('v2 review fixes: tapping a divider is not an edit; block panel stays after an edit; full-height block shows fixed height', notCustom && stays && fixedH, `notCustom ${notCustom} stays ${stays} fixedH ${fixedH}`);
+  // 飘板模板：1.2 m × 3 块，25mm 隐形层板销，A 系列 → 3 × RM 1,235；报价单英文行
+  await d.getByRole('button', { name: /Add 加入报价/ }).click();
+  await d.getByRole('button', { name: /Add cabinet 加柜子/ }).first().click();
+  await d.getByRole('button', { name: /飘板 \/ 层架 Floating shelves/ }).click();
+  const shelfPrice = await barPrice(d);
+  await d.getByRole('button', { name: /Add 加入报价/ }).click();
+  await d.getByRole('button', { name: /Quote 报价单/ }).first().click();
+  await d.waitForTimeout(400);
+  const ssheet = await d.locator('.quote-print-sheet').textContent();
+  check('v2 floating shelves template: 3 boards × RM 1,235, EN quote line', shelfPrice === 3705 && /Floating Shelf 25 mm hidden pins/.test(ssheet), `got ${shelfPrice}`);
   check('v2 no browser errors (desktop)', derr.length === 0, derr.join(' | '));
   await dctx.close();
 
@@ -322,28 +332,29 @@ try {
   check('v2 quote sheet: separate Door A and Door C rows, total right', /Door: A Series/.test(vsheet) && /Door: C Series/.test(vsheet) && vsheet.includes(fmt), `expects ${fmt}`);
   await v.goBack();
   await v.waitForTimeout(300);
-  // 还原提示：改过框框后改总宽 → 先问；取消 = 框框还在；确定 = 还原成模板
+  // 模板设定和画框框同一个画面：改顶柜高 → 手切的格子还在；改总宽让门数变了 → 照模板重做 + 提示，按撤销回来
   await v.getByRole('button', { name: /设计 Design/ }).tap();
   await v.getByText('Edit 编辑').first().tap();
   await v.waitForTimeout(200);
   const reopenBlocks = (await v.locator('[data-block-canvas]').count()) === 1;
-  await v.getByRole('button', { name: /模板设定 Template/ }).tap();
-  const banner = (await v.locator('[data-custom-banner]').count()) === 1;
+  const blocksBefore = await v.locator('[data-block-canvas] rect[data-block]:not([data-block$="|base"])').count();
+  const th = v.locator('label:has-text("Top 顶柜高") input');
+  await th.fill('0.6'); await th.press('Enter');
+  await v.waitForTimeout(200);
+  const blocksAfter = await v.locator('[data-block-canvas] rect[data-block]:not([data-block$="|base"])').count();
+  const keptC = /Closed C|封闭区 C/.test(await v.locator('[data-block-canvas]').textContent());
+  check('v2 sync: blocks always on screen with the template settings; top-box height change keeps the hand-cut block + series C', reopenBlocks && blocksAfter === blocksBefore && blocksBefore === 9 && keptC, `blocks ${blocksBefore} → ${blocksAfter}, C kept ${keptC}`);
+  const priceTop = await barPrice(v);
   const vw = v.locator('label:has-text("Width 总宽") input');
   await vw.fill('1.8'); await vw.press('Enter');
   await v.waitForTimeout(200);
-  const asked2 = await v.getByText('会把手画的框框还原成模板').count();
-  await v.getByRole('button', { name: /Cancel 取消/ }).tap();
-  await v.waitForTimeout(200);
-  const kept = (await vw.inputValue()) === '2.40' && (await barPrice(v)) === expW;
-  check('v2 reset prompt: reopens in Blocks, banner, asks before resetting; Cancel keeps the blocks', reopenBlocks && banner && asked2 >= 1 && kept, `reopen ${reopenBlocks} banner ${banner} asked ${asked2} kept ${kept}`);
-  await vw.fill('1.8'); await vw.press('Enter');
-  await v.waitForTimeout(200);
-  await v.getByRole('button', { name: /Reset 还原/ }).tap();
-  await v.waitForTimeout(200);
-  const exp18 = Math.round(BR2.cabinetTotal(T2.updateSpec(T2.newCabinet('wardrobe', { ceilingH: 2700 }), { W: 1800 })));
+  const note = await v.locator('[data-rebuilt-note]').count();
+  const exp18 = Math.round(BR2.cabinetTotal(T2.updateSpec(T2.newCabinet('wardrobe', { ceilingH: 2700 }), { W: 1800, topH: 600 })));
   const got18 = await barPrice(v);
-  check('v2 reset prompt: Reset → back to the template at the new width', got18 === exp18 && (await v.locator('[data-custom-banner]').count()) === 0, `got ${got18}, expected ${exp18}`);
+  await v.locator('[data-rebuilt-note] button').tap();
+  await v.waitForTimeout(200);
+  const back = (await barPrice(v)) === priceTop && (await vw.inputValue()) === '2.40' && (await v.locator('[data-rebuilt-note]').count()) === 0;
+  check('v2 sync: width change that changes the door count → rebuilt from template with a note; Undo brings the blocks back', note === 1 && got18 === exp18 && back, `note ${note}, got ${got18} expected ${exp18}, undo ok ${back}`);
   check('v2 no browser errors (phone)', verr.length === 0, verr.join(' | '));
   await mctx.close();
 } finally {

@@ -243,6 +243,60 @@ export function updateSpec(cab, patch) {
   return next;
 }
 
+// ---------------- 第二版：改模板设定时保留手画的框框（三方合并） ----------------
+// o = 现在画面上的（含手画），t = 旧设定的模板原样，n = 新设定的模板原样
+//   o 跟 t 一样（没画过）→ 用 n；t 跟 n 一样（模板没改这里）→ 留 o；
+//   三个都是同方向、同格数的切分 → 一格一格往下合并（线没拖过的用新尺寸）；
+//   其他（两边都改了这里，例如门数变了）→ 用 n，记一笔「照模板重做」。最后把尺寸修整到新的宽 / 柜身高。
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+function mergeNode(o, t, n, hit) {
+  if (same(o, t)) return n;
+  if (same(t, n)) return o;
+  const split = (x) => x && !x.leaf && Array.isArray(x.children);
+  if (split(o) && split(t) && split(n) && o.split === t.split && t.split === n.split
+    && o.children.length === t.children.length && t.children.length === n.children.length) {
+    return {
+      ...n,
+      sizes: same(o.sizes, t.sizes) ? n.sizes.slice() : o.sizes.slice(),
+      children: o.children.map((c, i) => mergeNode(c, t.children[i], n.children[i], hit)),
+    };
+  }
+  hit.conflict = true;
+  return n;
+}
+
+export function mergeFrames(oldCab, newFrames) {
+  const oldTpl = new Map(buildFrames({ ...oldCab, frames: oldCab.template === 'blank' ? oldCab.frames : [] }).map((f) => [f.id, f]));
+  const cur = new Map((oldCab.frames || []).map((f) => [f.id, f]));
+  const rebuilt = [];
+  let kept = false;
+  const frames = newFrames.map((nf) => {
+    const of = cur.get(nf.id), ot = oldTpl.get(nf.id);
+    if (!of || !ot) return nf;
+    if (same(of.body, ot.body) && same(of.base, ot.base)) return nf;
+    const hit = { conflict: false };
+    const body = mergeNode(of.body, ot.body, nf.body, hit);
+    const base = !same(of.base, ot.base) && same(nf.base, ot.base) ? { ...of.base } : nf.base;
+    if (hit.conflict) rebuilt.push(nf.id);
+    let g = { ...nf, base, body };
+    g = fitBody(g, g.W, Math.max(0, g.H - (g.base?.h || 0)), 'scale');
+    if (!same(g.body, nf.body) || !same(g.base, nf.base)) kept = true;
+    return g;
+  });
+  (oldCab.frames || []).forEach((f) => { const ot = oldTpl.get(f.id); if (ot && !newFrames.some((x) => x.id === f.id) && !same(f.body, ot.body)) rebuilt.push(f.id); });
+  return { frames, rebuilt, kept };
+}
+
+// 改模板设定（同 updateSpec），但手画过的框框尽量保留 → { cab, rebuilt: [frame id…] }
+export function updateSpecKeep(cab, patch) {
+  const next = updateSpec(cab, patch);
+  if (!cab.custom || cab.template === 'blank') return { cab: next, rebuilt: [] };
+  const { frames, rebuilt, kept } = mergeFrames(cab, next.frames);
+  const out = { ...next, frames };
+  if (kept) out.custom = true; else delete out.custom;
+  return { cab: out, rebuilt };
+}
+
 // 改其中一格的单元
 export function setUnit(cab, index, patch) {
   const units = (cab.spec.units || []).map((u, i) => (i === index ? { ...u, ...patch } : u));
