@@ -9,6 +9,7 @@ import { tvDefaults, tvNormalize, tvBuild, tvSummary, tvFrameName, shoeDefaults,
 import { pickL, joinL, bi, FRAME_KIND_NAME } from './lang.js';
 import { pickLang } from '../constants/pricing.js';
 import { fitBody } from './blocks.js';
+import { SHELF_KINDS, shelfKind, DEFAULT_SHELF_KIND } from '../constants/shelves.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const int = (v, d = 0) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? n : d; };
@@ -149,8 +150,41 @@ const blank = {
   },
 };
 
-export const TEMPLATES = { wardrobe, kitchen, tv, shoe, blank };
-export const TEMPLATE_LIST = [wardrobe, kitchen, tv, shoe, blank];
+// ---------------- 飘板 / 层架 Shelving（第二版）：墙上一排飘板，按块计价 ----------------
+// spec = { W 板长, n 块数, gap 间距, D 深, low 最低一块离地（板面）, kind 种类 }
+const SHELF_NAME = { en: 'Floating Shelves', zh: '飘板' };
+const shelfTpl = {
+  id: 'shelf', zh: '飘板 / 层架', en: 'Floating shelves',
+  defaults: () => ({ W: 1200, n: 3, gap: 350, D: 250, low: 1000, kind: DEFAULT_SHELF_KIND }),
+  normalize(spec) {
+    const s = { ...spec };
+    s.kind = SHELF_KINDS.some((k) => k.id === s.kind) ? s.kind : DEFAULT_SHELF_KIND;
+    s.W = clamp(int(s.W, 1200), 300, 12000);
+    s.n = clamp(int(s.n, 3), 1, 20);
+    s.gap = clamp(int(s.gap, 350), 150, 1000);
+    s.D = clamp(int(s.D, 250), 100, 600);
+    s.low = clamp(int(s.low, 1000), s.gap, 3500);
+    return s;
+  },
+  walls: (spec) => [{ ox: 0, oz: 0, angle: 0, len: spec.W }],
+  summary: (spec, lang) => joinL([
+    `${mmToM(spec.W)} m`,
+    { en: `${spec.n} shelf${spec.n === 1 ? '' : 'ves'}`, zh: `${spec.n} 块` },
+    shelfKind(spec.kind).short,
+  ], lang),
+  frameName: () => [SHELF_NAME],
+  build(spec, cab) {
+    // 每块板在自己那一段的顶上：最低一块板面 = low → 整块区域从 low − gap 开始，高 n × gap
+    return [{
+      id: `${cab.id}-f0`, kind: 'wall', label: bi(SHELF_NAME), wall: 0, x: 0, y: spec.low - spec.gap,
+      W: spec.W, H: spec.n * spec.gap, D: spec.D, base: { kind: 'wallhung', h: 0 }, ends: { left: false, right: false },
+      body: leaf('shelf', { shelves: spec.n, shelfKind: spec.kind }),
+    }];
+  },
+};
+
+export const TEMPLATES = { wardrobe, kitchen, tv, shoe, shelf: shelfTpl, blank };
+export const TEMPLATE_LIST = [wardrobe, kitchen, tv, shoe, shelfTpl, blank];
 export const templateOf = (id) => TEMPLATES[id] || wardrobe;
 
 // 下一个柜号：整份报价里 K1、K2…

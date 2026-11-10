@@ -18,6 +18,7 @@ import { elevationScene } from '../../render/elevation.js';
 import { BLOCK_COLORS, BLOCK_SELECTED } from '../../render/palette.js';
 import SvgShapes from '../../render/SvgShapes.jsx';
 import { Section, Segmented, Stepper, MeterInput, Collapse, Tip, useBackClose } from './bits.jsx';
+import { ShelfKindPicker } from './ShelfSettings.jsx';
 
 // 空白柜子：spec 是总尺寸的来源 → 画框框里改了底座，spec.base 跟着改（下次改尺寸才不会跳回去）
 const syncBlank = (c) => (c.template === 'blank' && c.frames?.[0] ? { ...c, spec: { ...c.spec, base: { ...c.frames[0].base } } } : c);
@@ -466,7 +467,17 @@ function CellPanel({ ed, defaults }) {
         </div>
       )}
 
-      {type !== 'drawer' && type !== 'void' && (
+      {type === 'shelf' && (
+        <div className="mb-3">
+          <div className="flex items-center gap-3 mb-2">
+            <Stepper value={selNode.shelves || 1} min={1} max={20} onChange={(shelves) => ops.setLeaf({ shelves })} suffix="块" />
+            <span className="text-[10px]" style={{ color: T.inkSoft }}>每块在自己那一段的顶上 Each board sits at the top of its band</span>
+          </div>
+          <ShelfKindPicker value={selNode.shelfKind || 'if25'} onChange={(shelfKind) => ops.setLeaf({ shelfKind })} />
+        </div>
+      )}
+
+      {type !== 'drawer' && type !== 'void' && type !== 'shelf' && (
         <div className="mb-3">
           <div className="text-[10px] uppercase tracking-widest mb-1" style={{ color: T.inkSoft }}>Inside 里面（只影响图）</div>
           <Segmented size="sm" value={INTERIORS.some((o) => o.id === (selNode.interior || '')) ? (selNode.interior || '') : null}
@@ -481,7 +492,7 @@ function CellPanel({ ed, defaults }) {
             <SerBtn on={!own.door} onClick={() => ops.setLeaf({ series: { ...own, door: null } })} data-series="">跟柜子（{cabSer.door}）</SerBtn>
             {DOOR_SERIES.map((L) => <SerBtn key={L} on={own.door === L} onClick={() => ops.setLeaf({ series: { ...own, door: L } })} data-series={L}>{L}</SerBtn>)}
           </div>
-          {type !== 'open' && (
+          {type !== 'open' && type !== 'shelf' && (
             <Collapse title={`Carcass 柜体：${own.carcass || `跟柜子 ${cabSer.carcass}`}`}>
               <div className="flex flex-wrap gap-1.5">
                 <SerBtn on={!own.carcass} onClick={() => ops.setLeaf({ series: { ...own, carcass: null } })}>跟柜子（{cabSer.carcass}）</SerBtn>
@@ -490,6 +501,7 @@ function CellPanel({ ed, defaults }) {
             </Collapse>
           )}
           {type === 'open' && <Tip>Open shelves use this door series 开放格跟这格的门板系列</Tip>}
+          {type === 'shelf' && <Tip>Floating shelves are priced per board by this door series 飘板按这格的门板系列、每块分档计价</Tip>}
         </div>
       )}
 

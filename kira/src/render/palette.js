@@ -29,6 +29,7 @@ export const BLOCK_COLORS = {
   drawer: '#F0D5CC', // 抽屉区 —— 赤陶浅
   void: '#EDE5D6',   // 空位 —— 沙色
   raised: '#EDE5D6', // 底层架空区 —— 沙色（同上）
+  shelf: '#FFFFFF',  // 飘板（墙面留白，板子另画）
 };
 // 画框框：选中的格子（品牌金，同 theme.js T.gold）
 export const BLOCK_SELECTED = '#B8945E';

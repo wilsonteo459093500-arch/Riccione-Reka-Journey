@@ -15,6 +15,7 @@
 // ============================================================
 import { layoutLeaves, MAX_DOOR } from '../planner/model.js';
 import { cabinetWalls } from '../planner/templates.js';
+import { shelfKind } from '../constants/shelves.js';
 import {
   INK, INK_SOFT, GLASS, WORKTOP, BLOCK_COLORS, BLOCK_SELECTED, LINE,
   finishOf, DEFAULT_DOOR_FINISH, DEFAULT_CARCASS_FINISH,
@@ -49,6 +50,7 @@ const TXT = {
     glass: { en: 'Glass', zh: '玻璃柜体区' },
     drawer: { en: 'Drawers', zh: '抽屉区' },
     void: { en: 'Gap', zh: '空位' },
+    shelf: { en: 'Shelves', zh: '飘板' },
   },
 };
 const wallText = (i) => {
@@ -363,7 +365,7 @@ function drawFrame(ctx, f) {
   const Hb = f.Hb;
   for (const lf of f.leaves) {
     const node = lf.node || {};
-    const type = ['closed', 'open', 'glass', 'drawer', 'void'].includes(node.type) ? node.type : 'closed';
+    const type = ['closed', 'open', 'glass', 'drawer', 'void', 'shelf'].includes(node.type) ? node.type : 'closed';
     const e = { l: lf.x <= 0.5, r: lf.x + lf.w >= W - 0.5, b: lf.y <= 0.5, t: lf.y + lf.h >= Hb - 0.5 };
     const cell = { x: lf.x, y: yb + lf.y, w: lf.w, h: lf.h, e, node, type, hit: `${f.id}|${lf.path ?? ''}` };
     // 门板外框：外圈 3mm 缝，相邻两格之间各让 1.5mm
@@ -372,6 +374,7 @@ function drawFrame(ctx, f) {
 
     if (style === 'blocks') { drawBlock(ctx, f, G, cell); continue; }
     if (type === 'void') { drawVoid(ctx, f, G, cell); continue; }
+    if (type === 'shelf') { drawShelves(ctx, G, cell, C.tint); continue; }
     R(cell.x, cell.y, cell.w, cell.h, { fill: C.carcass, role: 'carcass' });
     if (type === 'open') drawOpen(ctx, f, G, cell);
     else if (type === 'drawer') drawDrawers(ctx, f, G, cell);
@@ -484,7 +487,8 @@ function drawBlock(ctx, f, G, cell) {
   const { S } = ctx;
   const fill = BLOCK_COLORS[cell.type] || BLOCK_COLORS.closed;
   G.R(cell.x, cell.y, cell.w, cell.h, { fill, stroke: INK, sw: S.thin, role: 'block', hit: cell.hit });
-  const n = cell.type === 'drawer' ? drawerCount(cell) : 0;
+  if (cell.type === 'shelf') drawShelves(ctx, G, cell, mix(BLOCK_COLORS.open, INK, 0.25));
+  const n = cell.type === 'drawer' ? drawerCount(cell) : cell.type === 'shelf' ? shelfCount(cell) : 0;
   const ser = cell.node?.series;
   const tag = ser && (ser.door || ser.carcass) ? [ser.door, ser.carcass].filter(Boolean).join('/') : null;
   const size = ctx.sizes ? `${Math.round(cell.w)}×${Math.round(cell.h)}` : null;
@@ -515,6 +519,18 @@ function cellLabel(ctx, { X0 }, x, y, w, h, lines, size0, fill, role) {
     const sz = i === 0 ? size : size * 0.86;
     out.text(cx, cy + (i - (ls.length - 1) / 2) * lh, s, sz, { anchor: 'middle', baseline: 'central', fill, role });
   });
+}
+
+// ---------- 飘板（墙上的板，不是柜子）：n 块，每块在自己那一段的顶上 ----------
+const shelfCount = (cell) => clamp(Math.round(num(cell.node?.shelves, 1)) || 1, 1, 20);
+function drawShelves(ctx, { R }, cell, fill) {
+  const { S } = ctx;
+  const n = shelfCount(cell);
+  const t = Math.min(shelfKind(cell.node?.shelfKind).t, cell.h / (n * 2));
+  for (let i = 0; i < n; i++) {
+    const y = cell.y + (cell.h * (i + 1)) / n - t;
+    R(cell.x + GAP / 2, y, Math.max(0, cell.w - GAP), t, { fill, stroke: INK, sw: S.thin, role: 'shelf' });
+  }
 }
 
 // ---------- 空位（电器位） ----------

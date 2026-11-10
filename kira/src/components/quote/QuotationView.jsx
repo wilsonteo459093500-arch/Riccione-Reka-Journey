@@ -11,7 +11,7 @@ import MeasureTool from './MeasureTool.jsx';
 import ItemEditorModal from './ItemEditorModal.jsx';
 import { exportExcel } from './exportExcel.js';
 import { buildTextQuote } from './textQuote.js';
-import { deriveZones, cabinetTotal, customSeriesCount } from '../../planner/bridge.js';
+import { deriveZones, cabinetTotal, customSeriesCount, localizeKira } from '../../planner/bridge.js';
 import { newCabinet, nextCode } from '../../planner/templates.js';
 import { mmToM, uid } from '../../planner/model.js';
 import CabinetCard from '../planner/CabinetCard.jsx';
@@ -204,7 +204,7 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
   // 整份报价默认系列（柜子可单独改）
   const defaults = doc.defaults || { door: 'A', carcass: 'A' };
   // 积木柜会变成标准明细一起算（deriveZones）；手动明细照旧
-  const computed = useMemo(() => computeQuote(deriveZones(zones, defaults), adjustPct, discountMode, discountAmt), [zones, defaults, adjustPct, discountMode, discountAmt]);
+  const computed = useMemo(() => localizeKira(computeQuote(deriveZones(zones, defaults), adjustPct, discountMode, discountAmt)), [zones, defaults, adjustPct, discountMode, discountAmt]);
   const looseCalc = useMemo(() => computeLoose(looseItems, looseAdjustPct, looseDiscountMode, looseDiscountAmt), [looseItems, looseAdjustPct, looseDiscountMode, looseDiscountAmt]);
   const grandTotal = computed.net + looseCalc.net;
   const dragRef = useRef(null); // { zoneId, from } 或 { loose:true, from }

@@ -16,6 +16,7 @@
 // 纯 JS：不用 React / DOM；同样输入 → 同样输出。
 // ============================================================
 import { layoutLeaves } from '../planner/model.js';
+import { shelfKind } from '../constants/shelves.js';
 import { cabinetWalls } from '../planner/templates.js';
 import { finishOf, DEFAULT_DOOR_FINISH, DEFAULT_CARCASS_FINISH, INK, GLASS, WORKTOP, WALL, FLOOR, LINE } from './palette.js';
 
@@ -170,7 +171,7 @@ function solidRuns(leaves, W) {
     const a = xs[i], b = xs[i + 1];
     if (b - a <= 1e-6) continue;
     const cover = leaves.filter((l) => l.x <= a + 1e-6 && l.x + l.w >= b - 1e-6 && l.h > 0);
-    const allVoid = cover.length > 0 && cover.every((l) => l.node?.type === 'void');
+    const allVoid = cover.length > 0 && cover.every((l) => l.node?.type === 'void' || l.node?.type === 'shelf'); // 飘板下面也没有踢脚
     if (allVoid) continue;
     const last = runs[runs.length - 1];
     if (last && Math.abs(last[1] - a) < 1e-6) last[1] = b; else runs.push([a, b]);
@@ -267,6 +268,15 @@ function frameParts(f, C, handleStyle, ends = endsOf(f, null)) {
     const nd = r.node || {};
     const type = nd.type || 'closed';
     if (type === 'void') return; // 空位：真的空着
+    if (type === 'shelf') { // 飘板：只有板，门板色，满深
+      const ns = clamp(Math.round(num(nd.shelves, 1)) || 1, 1, 20);
+      const t = Math.min(shelfKind(nd.shelfKind).t, r.h / (ns * 2));
+      for (let i = 0; i < ns; i++) {
+        const top = vb + r.y + (r.h * (i + 1)) / ns;
+        add('shelf', C.door, x0 + r.x, x0 + r.x + r.w, top - t, top, 0, D, { leaf: li });
+      }
+      return;
+    }
     const tag = { leaf: li };
     let u0 = x0 + r.x, u1 = x0 + r.x + r.w;
     const v0 = vb + r.y, v1 = vb + r.y + r.h;

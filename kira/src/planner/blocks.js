@@ -188,10 +188,13 @@ export function splitLeaf(frame, path, dir, at) {
   a = Math.min(L - MIN_BLOCK, Math.max(MIN_BLOCK, a));
   const b = L - a;
   const A = copyLeaf(node), B = copyLeaf(node);
-  if (node.type === 'drawer' && dir === 'h') {
-    const n = Math.max(1, int(node.drawers) || 1);
-    A.drawers = Math.max(1, Math.round((n * a) / L));
-    B.drawers = Math.max(1, n - A.drawers);
+  // 抽屉 / 飘板横切：按高度比例分数量，每格至少 1
+  for (const [type, key] of [['drawer', 'drawers'], ['shelf', 'shelves']]) {
+    if (node.type === type && dir === 'h') {
+      const n = Math.max(1, int(node[key]) || 1);
+      A[key] = Math.max(1, Math.round((n * a) / L));
+      B[key] = Math.max(1, n - A[key]);
+    }
   }
   const idx = parsePath(path);
   if (idx.length) {
@@ -305,7 +308,8 @@ export function removeLeaf(frame, path) {
   }));
 }
 
-export const DEFAULT_INTERIOR = { closed: 'shelves', glass: 'shelves', open: 'shelves', drawer: 'drawers', void: 'appliance' };
+export const DEFAULT_INTERIOR = { closed: 'shelves', glass: 'shelves', open: 'shelves', drawer: 'drawers', void: 'appliance', shelf: '' };
+export const SHELF_PITCH = 350; // 飘板默认间距 → 块数 = max(1, round(高 / 350))
 const TYPE_ONLY_INTERIOR = new Set(['drawers', 'appliance', 'hood']);
 
 // 改格子：type / drawers / drawerKind / interior / series
@@ -329,11 +333,16 @@ export function setLeaf(frame, path, patch = {}, { kitchen = false } = {}) {
         if (!('drawers' in patch)) out.drawers = Math.max(1, Math.round(box.h / 200));
         if (!('drawerKind' in patch)) out.drawerKind = kitchen ? 'full' : 'half';
       } else { delete out.drawers; delete out.drawerKind; }
+      if (patch.type === 'shelf') {
+        if (!('shelves' in patch)) out.shelves = Math.max(1, Math.round(box.h / SHELF_PITCH));
+        if (!('shelfKind' in patch)) out.shelfKind = n.shelfKind || 'if25';
+      } else { delete out.shelves; delete out.shelfKind; }
       if (!('interior' in patch)) {
-        if (patch.type === 'drawer' || patch.type === 'void' || !n.interior || TYPE_ONLY_INTERIOR.has(n.interior)) out.interior = DEFAULT_INTERIOR[patch.type];
+        if (patch.type === 'drawer' || patch.type === 'void' || patch.type === 'shelf' || !n.interior || TYPE_ONLY_INTERIOR.has(n.interior)) out.interior = DEFAULT_INTERIOR[patch.type];
       }
     }
     if (out.type === 'drawer') out.drawers = Math.max(1, Math.min(12, int(out.drawers) || 1));
+    if (out.type === 'shelf') out.shelves = Math.max(1, Math.min(20, int(out.shelves) || 1));
     if (out.interior === '' || out.interior == null) delete out.interior;
     return out;
   }));

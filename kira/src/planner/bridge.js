@@ -19,6 +19,7 @@
 import { computeQuote, computeItem, isLinear, CARCASS_SERIES, OPEN_SERIES, DOOR_SERIES } from '../constants/pricing.js';
 import { layoutLeaves, bodyHeight, mmToM, DEFAULT_GLASS_COEF } from './model.js';
 import { pickL, FRAME_KIND_NAME } from './lang.js';
+import { shelfBoards, shelfKind, bracketLabel } from '../constants/shelves.js';
 
 const STRIP_KINDS = new Set(['plinth', 'legs', 'raised']);
 const EPS = 1e-9;
@@ -50,7 +51,7 @@ export function frameQuantities(frame, seriesOf = null) {
       .map((l) => ({ y0: l.y0, y1: l.y1, type: l.node.type || 'closed', node: l.node }))
       .sort((a, b) => a.y0 - b.y0);
     if (!segs.length) segs.push({ y0: 0, y1: Hb, type: 'closed', node: null }); // 没切到的地方当封门
-    const nonvoid = segs.filter((g) => g.type !== 'void');
+    const nonvoid = segs.filter((g) => g.type !== 'void' && g.type !== 'shelf'); // 飘板格不是柜子：同空位，另外按块计价
     if (!nonvoid.length) { slices.push({ s, hp: 0, parts: [] }); continue; } // 整列空位：不计价（连底座）
     const lowest = segs[0];
     // 底座高度并入最下面那格 → 也跟着那格的系列
@@ -120,11 +121,35 @@ const FRAME_TYPE = { base: 'base', wall: 'wall', tall: 'tall' };
 
 // 一个柜体 → 标准明细：每个「部位 + 系列」一条（封门(含抽屉) / 玻璃 / 开放），外加 左见光板 / 右见光板
 //   和柜子系列相同的那一组沿用第一版的 id（…:closed）；单独选了系列的组 id 加后缀（…:closed@C-A），kira 标签多带 series
+// 飘板格：每块板按「宽度档」计价（价格表 constants/shelves.js），同「种类 + 系列 + 档」合并成一行
+export function shelfItems(cab, frame, defaults = {}, ser = resolveSeries(cab, defaults)) {
+  const groups = new Map();
+  layoutLeaves(frame.body, 0, 0, Math.max(0, frame.W || 0), bodyHeight(frame)).forEach(({ w, node }) => {
+    if (node.type !== 'shelf' || !(w > 0)) return;
+    const n = Math.max(1, Math.round(Number(node.shelves) || 1));
+    const k = shelfKind(node.shelfKind);
+    const door = resolveLeafSeries(cab, node, defaults, ser).door;
+    shelfBoards(k.id, door, w).forEach((b) => {
+      const key = `${k.id}-${door}-${b.bracket}`;
+      const g = groups.get(key) || { k, door, b, qty: 0 };
+      g.qty += n;
+      groups.set(key, g);
+    });
+  });
+  return [...groups.entries()].map(([key, { k, door, b, qty }]) => {
+    const br = bracketLabel(k.id, b.bracket);
+    const i18n = { en: `Floating Shelf ${k.short.en}, ${br}: ${door} Series`, zh: `飘板 ${k.short.zh}（${br}）：${door} 系列` };
+    return { id: `${cab.id}:${frame.id}:shelf@${key}`, type: 'other', name: frame.label || '', desc: i18n.en, qty, uom: 'pc', unitMyr: b.myr, noDiscount: false,
+      kira: { cabinetId: cab.id, frameId: frame.id, part: 'shelf', series: door, i18n } };
+  });
+}
+
 export function frameItems(cab, frame, defaults = {}) {
   const ser = resolveSeries(cab, defaults);
   const seriesOf = (node) => resolveLeafSeries(cab, node, defaults, ser);
   const { linear, pricedH, q, qBy, drawersBy } = frameQuantities(frame, seriesOf);
-  if (pricedH <= 0) return [];
+  const shelves = shelfItems(cab, frame, defaults, ser);
+  if (pricedH <= 0) return shelves;
   const Hm = pricedH / 1000;
   const Dm = (frame.D || 0) / 1000;
   const toLen = (v) => (linear ? v / 1000 : v / 1e6 / Hm); // 平米柜：length × H = 面积（computeItem 再乘 max(H,D)/H）
@@ -188,7 +213,7 @@ export function frameItems(cab, frame, defaults = {}) {
     items.push({ id: `${cab.id}:${frame.id}:panelIn`, type: 'panel', preset: 'custom', name: frame.label || '', length: Dm, h: Number(ip.area) / 1e6 / Dm,
       panelSeries: ser.door, noDiscount: false, kira: tag('panelIn') });
   }
-  return items;
+  return [...items, ...shelves];
 }
 
 export function cabinetItemsFor(cab, defaults = {}) {
@@ -209,7 +234,18 @@ export function deriveZones(zones = [], defaults = {}) {
 }
 
 export function computeRecordQuote(r) {
-  return computeQuote(deriveZones(r.zones || [], r.defaults || {}), r.adjustPct, r.discountMode, r.discountAmt);
+  return localizeKira(computeQuote(deriveZones(r.zones || [], r.defaults || {}), r.adjustPct, r.discountMode, r.discountAmt));
+}
+
+// 旧工具的「其他」行只有一个描述字串（中英同一句）→ KIRA 自己的行（飘板）换成中英各一句、单位 pc / 块。只改文字，不改钱。
+export function localizeLines(item, lines) {
+  const t = item?.kira?.i18n;
+  if (!t) return lines;
+  return lines.map((ln) => ({ ...ln, descEn: t.en, descZh: t.zh, uomEn: 'pc', uomZh: '块' }));
+}
+export function localizeKira(computed) {
+  if (!computed?.zoneResults) return computed;
+  return { ...computed, zoneResults: computed.zoneResults.map((zr) => ({ ...zr, items: zr.items.map((ir) => (ir.item?.kira?.i18n ? { ...ir, lines: localizeLines(ir.item, ir.lines) } : ir)) })) };
 }
 
 // 一个柜子的金额（未四舍五入；报价单按房间四舍五入）

@@ -22,7 +22,7 @@
 //
 // Node（柜身切分树：先竖切成列，列里再横切成格）
 //   { split:'v'|'h', sizes:[mm…], children:[Node…] }   v：左→右；h：下→上
-//   { leaf:true, type:'closed'|'open'|'glass'|'drawer'|'void', drawers, drawerKind:'full'|'half', interior }
+//   { leaf:true, type:'closed'|'open'|'glass'|'drawer'|'void'|'shelf', drawers, drawerKind:'full'|'half', interior, shelves, shelfKind }
 //   第二版「画色块」直接在同一棵树上切，不另立模型。
 // ============================================================
 
@@ -32,6 +32,7 @@ export const LEAF_TYPES = [
   { id: 'glass', zh: '玻璃柜体区', en: 'Glass cabinet' },
   { id: 'drawer', zh: '抽屉区', en: 'Drawers' },
   { id: 'void', zh: '空位（不计价）', en: 'Gap (not priced)' },
+  { id: 'shelf', zh: '飘板', en: 'Floating shelves' }, // 第二版：墙上的飘板（不是柜子），按块计价：shelves 块数、shelfKind 种类
 ];
 
 export const BASE_KINDS = [
