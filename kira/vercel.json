@@ -5,7 +5,7 @@
   "installCommand": "npm install",
   "framework": "vite",
   "devCommand": "npm run dev",
-  "ignoreCommand": "git diff --quiet ${VERCEL_GIT_PREVIOUS_SHA:-HEAD^} HEAD -- .",
+  "ignoreCommand": "[ \"$VERCEL_ENV\" = production ] && exit 1 || git diff --quiet ${VERCEL_GIT_PREVIOUS_SHA:-HEAD^} HEAD -- .",
   "headers": [
     {
       "source": "/(.*)",

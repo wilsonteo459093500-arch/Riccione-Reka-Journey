@@ -10,7 +10,7 @@
 > 所以接云端之前：别清浏览器资料、别换浏览器；每台用过本机模式的设备都要登录一次（有网时），等顶栏显示 *Synced 已同步*。
 > Preview 网址（见下）是另一个网址，那里做的报价**不会**跟着上传。
 
-`kira/vercel.json` 的 `ignoreCommand` 只在 `kira/` 有改动时才重新构建；其他 app 的项目也各有自己的 ignoreCommand，互不触发。
+`kira/vercel.json` 的 `ignoreCommand`：预览版只在 `kira/` 有改动时才重新构建；**正式版（Production）每次都构建**（换了环境变量要重新 build 才生效）。其他 app 的项目也各有自己的 ignoreCommand，互不触发。
 
 ## 2. Supabase（和旧报价工具同一个项目、同一套账号）
 1. **先确认** Authentication → Providers → Email → *Allow new users to sign up* 已关闭
