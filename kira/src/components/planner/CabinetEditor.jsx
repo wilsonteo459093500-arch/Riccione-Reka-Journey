@@ -65,7 +65,7 @@ export default function CabinetEditor({ cab: initial, zone, defaults = {}, lang 
   const isBlank = cab.template === 'blank';
   // 画框框和模板设定在同一个画面：图默认就是可以点、可以拖的色块
   const [view, setView] = useState('blocks');
-  const ed = useBlockEditor({ cab, setCab, kitchen: isKitchen });
+  const ed = useBlockEditor({ cab, setCab, kitchen: isKitchen, ceilingH });
   useBlockKeys(ed, view === 'blocks');
   const confirm = useConfirm();
   // 改模板设定：手画的框框尽量保留（templates.js updateSpecKeep 三方合并）；可以撤销。
@@ -85,7 +85,8 @@ export default function CabinetEditor({ cab: initial, zone, defaults = {}, lang 
     const ok = await confirm({ title: 'Back to template? 还原成模板？', message: 'This will reset the hand-drawn blocks to the template. 会把手画的框框还原成模板，确定吗？',
       danger: true, confirmText: 'Reset 还原', cancelText: 'Cancel 取消' });
     if (!ok) return;
-    ed.restoreTemplate((c) => { const { custom, ...rest } = updateSpec(c, {}); return rest; });
+    // 还原成模板：手画的格子、移动 / 加 / 删的柜体全部回到模板
+    ed.restoreTemplate((c) => { const { custom, removedFrames, ...rest } = updateSpec({ ...c, frames: (c.frames || []).filter((f) => !f.user) }, {}); return rest; });
   };
   const ownSeries = useMemo(() => customSeriesCount(cab), [cab]);
   const ser = resolveSeries(cab, defaults);
@@ -133,7 +134,7 @@ export default function CabinetEditor({ cab: initial, zone, defaults = {}, lang 
       <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
         <div className="shrink-0 lg:flex-1 h-[50vh] lg:h-auto" style={{ borderBottom: `1px solid ${T.lineSoft}` }}>
           <Preview cab={cab} lang={lang} mode={view} setMode={setView} onYaw={(yaw) => set({ view: { ...(cab.view || {}), yaw } })}>
-            <BlockCanvas ed={ed} lang={lang} canRestore={!isBlank && !!cab.custom} onRestore={restoreTemplate} />
+            <BlockCanvas ed={ed} lang={lang} canRestore={!!cab.custom && (!isBlank || (cab.frames || []).some((f) => f.user) || !!cab.removedFrames?.length)} onRestore={restoreTemplate} />
           </Preview>
         </div>
         <div className="flex-1 lg:flex-none lg:w-[440px] min-h-0 overflow-y-auto px-4 sm:px-5 pb-8 scrollbar-thin" style={{ borderLeft: `1px solid ${T.lineSoft}` }}>

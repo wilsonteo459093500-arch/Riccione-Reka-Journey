@@ -10,6 +10,10 @@ export function validateCabinet(cab, { ceilingH } = {}) {
   const out = [];
   const spec = cab?.spec || {};
   (cab?.frames || []).forEach((f) => {
+    if (f.kind === 'backdrop') { // 电视墙只看高度
+      if (ceilingH && f.y + f.H > ceilingH) out.push({ level: 'warn', msg: T(`Feature wall taller than the room (${f.y + f.H} > ceiling ${ceilingH})`, `电视墙比楼高还高（${f.y + f.H} > 楼高 ${ceilingH}）`) });
+      return;
+    }
     if (f.kind === 'wall' && (f.D < 300 || f.D > 400)) out.push({ level: 'warn', msg: T(`Wall cabinet depth ${f.D} mm is unusual (300–350)`, `吊柜深 ${f.D} 不常见（一般 300–350）`) });
     if (f.kind === 'base' && (f.D < 520 || f.D > 650)) out.push({ level: 'warn', msg: T(`Base cabinet depth ${f.D} mm is unusual (560–600)`, `地柜深 ${f.D} 不常见（一般 560–600）`) });
     if (cab.template === 'wardrobe' && (f.D < 500 || f.D > 650)) out.push({ level: 'warn', msg: T(`Wardrobe depth ${f.D} mm is unusual (550–600)`, `衣柜深 ${f.D} 不常见（一般 550–600）`) });

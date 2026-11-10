@@ -360,6 +360,106 @@ try {
   check('v2 sync: width change that changes the door count → rebuilt from template with a note; Undo brings the blocks back', note === 1 && got18 === exp18 && back, `note ${note}, got ${got18} expected ${exp18}, undo ok ${back}`);
   check('v2 no browser errors (phone)', verr.length === 0, verr.join(' | '));
   await mctx.close();
+
+  // =================== 第二版追加 2：柜体像乐高 + 电视墙 ===================
+  const PR = await import('../src/constants/pricing.js');
+  const sec = (pg, title) => pg.locator('section', { hasText: title });
+  // ---------- 电脑：电视柜 + 两侧高柜 + 吊柜 → 柜体模式把吊柜拖到顶（贴齐 2.70）→ 加飘板 → 电视墙 → 报价单 ----------
+  const xctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const x = await xctx.newPage();
+  const xerr = [];
+  x.on('pageerror', (e) => xerr.push(e.message));
+  await x.goto(URL);
+  await x.getByRole('button', { name: /Skip 跳过/ }).click();
+  await x.getByRole('button', { name: /New/ }).first().click();
+  const xc = x.locator('input[placeholder="2.70"]').first();
+  await xc.fill('2.7'); await xc.blur();
+  await x.getByRole('button', { name: /Add cabinet 加柜子/ }).first().click();
+  await x.getByRole('button', { name: /TV & display/ }).click();
+  await sec(x, 'Side tall cabinets').getByRole('button', { name: /No 没有/ }).click();
+  await sec(x, 'Top cabinet above TV').getByRole('button', { name: /No 没有/ }).click();
+  const tvPrice = await barPrice(x);
+  await x.locator('[data-mode]').getByRole('button', { name: /柜体 Boxes/ }).click();
+  const up = await x.locator('[data-block-canvas] rect[data-block*="-upper|"]').first().boundingBox();
+  const pxmm = up.height / 400; // 吊柜高 400
+  await x.mouse.move(up.x + up.width * 0.25, up.y + up.height / 2);
+  await x.mouse.down();
+  await x.mouse.move(up.x + up.width * 0.25, up.y + up.height / 2 - 150 * pxmm, { steps: 4 });
+  await x.mouse.move(up.x + up.width * 0.25, up.y + up.height / 2 - 285 * pxmm, { steps: 4 });
+  const lbl = await x.locator('[data-drag-label]').count();
+  await x.mouse.up();
+  const topTxt = await x.locator('[data-box-top]').textContent();
+  const yVal = await x.locator('[data-box-panel] label:has-text("Off floor 离地") input').inputValue();
+  check('v2+ desktop: drag the top cabinet up → snaps to the tower tops 2.70 m (off floor 2.30), price unchanged',
+    /2\.70/.test(topTxt) && yVal === '2.30' && lbl === 1 && (await barPrice(x)) === tvPrice, `${topTxt} · y ${yVal} · label ${lbl}`);
+  await x.keyboard.press('Control+z');
+  await x.waitForTimeout(100);
+  const yUndo = await x.locator('[data-box-panel] label:has-text("Off floor 离地") input').inputValue();
+  await x.keyboard.press('Control+Shift+z');
+  check('v2+ desktop: Ctrl+Z puts the box back, Ctrl+Shift+Z moves it again', yUndo === '2.00' && (await x.locator('[data-box-panel] label:has-text("Off floor 离地") input').inputValue()) === '2.30', `undo ${yUndo}`);
+  // 改模板设定（低柜高）→ 吊柜留在顶上
+  await x.keyboard.press('Escape');
+  await x.locator('label:has-text("Low height 低柜高") input').fill('0.45');
+  await x.locator('label:has-text("Low height 低柜高") input').press('Enter');
+  const up2 = await x.locator('[data-block-canvas] rect[data-block*="-upper|"]').first().boundingBox();
+  await x.mouse.click(up2.x + up2.width * 0.25, up2.y + up2.height / 2);
+  const yKeep = await x.locator('[data-box-panel] label:has-text("Off floor 离地") input').inputValue();
+  check('v2+ desktop: template change keeps the moved box at the top', yKeep === '2.30', `y ${yKeep}`);
+  await x.keyboard.press('Escape');
+  const p0 = await barPrice(x);
+  await x.locator('[data-add="shelf"]').click();
+  const p1 = await barPrice(x);
+  check('v2+ desktop: + add box → floating shelves (3 × RM 1,235) added, selected', p1 - p0 === 3705 && (await x.locator('[data-box-panel]').count()) === 1, `+${p1 - p0}`);
+  await x.locator('[data-box-panel] [data-remove-frame]').click();
+  const p2 = await barPrice(x);
+  await x.locator('[data-add="shelf"]').click();
+  check('v2+ desktop: delete box removes its price', p2 === p0, `${p0} → ${p2}`);
+  await sec(x, 'TV feature wall').getByRole('button', { name: /No 没有/ }).click();
+  const p3 = await barPrice(x);
+  const wallExp = Math.round(1.8 * 2.7 * PR.cnyToMyr(PR.seriesById('A').panel));
+  check('v2+ desktop: TV feature wall on → + 1.80 × 2.70 m wall panel', Math.abs((p3 - p1) - wallExp) <= 1, `+${p3 - p1}, expected ${wallExp}`);
+  await x.locator('[data-block-canvas]').screenshot({ path: path.join(outDir, 'v2plus-boxes.png') });
+  await x.getByRole('button', { name: /Add 加入报价/ }).click();
+  await x.getByRole('button', { name: /Quote 报价单/ }).first().click();
+  await x.waitForTimeout(400);
+  const xsheet = await x.locator('.quote-print-sheet').textContent();
+  check('v2+ quote sheet has "Feature Wall: A Series" and the floating shelf', /Feature Wall: A Series/.test(xsheet) && /Floating Shelf/.test(xsheet));
+  await x.locator('.quote-print-sheet').screenshot({ path: path.join(outDir, 'v2plus-quote.png') });
+  check('v2+ no browser errors (desktop)', xerr.length === 0, xerr.join(' | '));
+  await xctx.close();
+
+  // ---------- 手机（触控）：柜体模式点选 → 设定栏打离地 → 删柜体；返回键先关设定栏 ----------
+  const yctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const y = await yctx.newPage();
+  const yerr = [];
+  y.on('pageerror', (e) => yerr.push(e.message));
+  await y.goto(URL);
+  await y.getByRole('button', { name: /Skip 跳过/ }).tap();
+  await y.getByRole('button', { name: /New/ }).first().tap();
+  const yc = y.locator('input[placeholder="2.70"]').first();
+  await yc.fill('2.7'); await yc.blur();
+  await y.getByRole('button', { name: /Add cabinet 加柜子/ }).first().tap();
+  await y.locator('.hover-lift', { hasText: '电视柜' }).tap();
+  await sec(y, 'Top cabinet above TV').getByRole('button', { name: /No 没有/ }).tap();
+  await y.locator('[data-mode]').getByRole('button', { name: /柜体 Boxes/ }).tap();
+  const yu = await y.locator('[data-block-canvas] rect[data-block*="-upper|"]').first().boundingBox();
+  await y.touchscreen.tap(yu.x + yu.width * 0.2, yu.y + yu.height / 2);
+  const tapped = (await y.locator('[data-box-panel]').count()) === 1 && (await y.locator('[data-move]').count()) === 1 && (await y.locator('[data-edge]').count()) === 4;
+  const yin = y.locator('[data-box-panel] label:has-text("Off floor 离地") input');
+  await yin.fill('2.3'); await yin.press('Enter');
+  const ytop = await y.locator('[data-box-top]').textContent();
+  check('v2+ phone: tap a box → panel with move / edge handles; type off-floor 2.30 → top 2.70', tapped && /2\.70/.test(ytop), `tapped ${tapped} · ${ytop}`);
+  await y.goBack();
+  await y.waitForTimeout(200);
+  const closed = (await y.locator('[data-box-panel]').count()) === 0 && (await y.getByRole('button', { name: /Add 加入报价/ }).count()) === 1;
+  const yu2 = await y.locator('[data-block-canvas] rect[data-block*="-upper|"]').first().boundingBox();
+  await y.touchscreen.tap(yu2.x + yu2.width * 0.2, yu2.y + yu2.height / 2);
+  await y.locator('[data-box-panel] [data-remove-frame]').tap();
+  const gone = (await y.locator('[data-block-canvas] rect[data-block*="-upper|"]').count()) === 0;
+  check('v2+ phone: Back closes the box panel first; delete box removes it', closed && gone, `closed ${closed} gone ${gone}`);
+  await y.locator('[data-block-canvas]').screenshot({ path: path.join(outDir, 'v2plus-phone.png') });
+  check('v2+ no browser errors (phone)', yerr.length === 0, yerr.join(' | '));
+  await yctx.close();
 } finally {
   await browser.close();
 }
