@@ -1,0 +1,41 @@
+{
+  "v": 1,
+  "note": "STUDY ROOM 的坐标样本（只有坐标和图上印的柜名，不含图纸图片）。单位 = 原图像素（1856 x 1044 的整页），x 向右、y 向下。",
+  "source": { "w": 1856, "h": 1044 },
+  "mmPerPx": 6.9,
+  "wallT": 26,
+  "rooms": [
+    {
+      "name": "STUDY ROOM",
+      "rects": [
+        [305, 133, 1070, 856],
+        [186, 133, 305, 365]
+      ]
+    }
+  ],
+  "openings": [
+    { "type": "window", "side": "top", "a": 309, "b": 697 },
+    { "type": "door", "side": "left", "a": 732, "b": 856 },
+    { "type": "hidden-door", "side": "bottom", "a": 305, "b": 458 }
+  ],
+  "items": [
+    { "id": "col-top", "label": "", "kind": "column", "box": [702, 69, 775, 133] },
+    { "id": "col-bottom", "label": "", "kind": "column", "box": [685, 856, 747, 882] },
+    { "id": "storage-niche", "label": "STORAGE CABINET", "kind": "tall", "box": [186, 158, 318, 290], "against": "left" },
+    { "id": "shelf-niche", "label": "", "kind": "shelf", "box": [186, 290, 318, 338], "against": "left", "unsure": true },
+    { "id": "desk-left", "label": "", "kind": "desk", "box": [316, 338, 408, 641], "against": "left", "round": { "tr": 22, "br": 22 } },
+    { "id": "hung-left", "label": "TOP HUNG CABINET", "kind": "hung", "box": [318, 362, 365, 612], "against": "left" },
+    { "id": "chair-1", "label": "", "kind": "chair", "box": [418, 386, 494, 467], "facing": "left" },
+    { "id": "chair-2", "label": "", "kind": "chair", "box": [418, 518, 494, 600], "facing": "left" },
+    { "id": "glass-end", "label": "", "kind": "low", "box": [796, 558, 848, 633], "round": { "tl": 24, "bl": 24 } },
+    { "id": "glass", "label": "GLASS DOOR CABINET", "kind": "glass", "box": [848, 558, 1069, 633], "against": "right" },
+    { "id": "block-dark", "label": "", "kind": "column", "box": [880, 633, 985, 668], "unsure": true },
+    { "id": "block-light", "label": "", "kind": "block", "box": [985, 633, 1069, 668], "against": "right", "unsure": true },
+    { "id": "book", "label": "BOOK CABINET", "kind": "tall", "box": [1005, 668, 1069, 855], "against": "right" },
+    { "id": "storage-bottom", "label": "STORAGE CABINET", "kind": "low", "box": [864, 802, 1005, 855], "against": "bottom" },
+    { "id": "desk-bottom", "label": "", "kind": "desk", "box": [565, 772, 864, 855], "against": "bottom", "round": { "tl": 22 } },
+    { "id": "hung-bottom", "label": "TOP HUNG CABINET", "kind": "hung", "box": [610, 801, 866, 855], "against": "bottom" },
+    { "id": "chair-3", "label": "", "kind": "chair", "box": [611, 686, 692, 763], "facing": "bottom" },
+    { "id": "chair-4", "label": "", "kind": "chair", "box": [742, 686, 828, 763], "facing": "bottom" }
+  ]
+}

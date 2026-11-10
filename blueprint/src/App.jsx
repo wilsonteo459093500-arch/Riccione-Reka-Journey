@@ -1,7 +1,7 @@
 // UKIR STUDIO 应用外壳：登录门 → 首页（项目列表 / 导入 PDF）↔ 编辑器（#/p/<项目 id>，刷新可回到原项目）
 // ↔ 独立 Material Board（#/boards）。启动时把旧版 UKIR STUDIO 的材质库 / 画板搬过来（同一网址时）。
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import LoginGate from './components/LoginGate.jsx';
 import Home from './components/Home.jsx';
 import Editor from './components/Editor.jsx';
@@ -27,12 +27,29 @@ function parseHash() {
 
 const isBoardsHash = () => /^#\/boards\b/.test(window.location.hash || '');
 
+/** 试验页（#/lab/plan3d）：程序按坐标画的 3D 户型图样图。按需加载，不进主包 */
+const isLabHash = () => /^#\/lab\/plan3d\b/.test(window.location.hash || '');
+const Plan3dLab = lazy(() => import('./plan3d/Lab.jsx'));
+
 let persistenceAsked = false;
 let migrationStarted = false;
 
 export default function App() {
   const [authed, setAuthed] = useState(isAuthed);
+  const [lab, setLab] = useState(isLabHash);
+  useEffect(() => {
+    const onHash = () => setLab(isLabHash());
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
   if (!authed) return <LoginGate onSuccess={() => setAuthed(true)} />;
+  if (lab) {
+    return (
+      <Suspense fallback={<div className="min-h-[100dvh] flex items-center justify-center bg-bp-paper text-sm text-bp-muted">加载中…</div>}>
+        <Plan3dLab />
+      </Suspense>
+    );
+  }
   return (
     <Workspace
       onLogout={() => {
