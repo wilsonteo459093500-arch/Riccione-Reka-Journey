@@ -3,7 +3,7 @@
 //  · 页面导航：network-first，离线时回退到缓存的 index.html（离线也能打开、继续报价）
 //  · 静态资源（Vite 带 hash 的 js/css/图片/字体）：缓存优先 + 后台更新
 // 换版改 CACHE 版本号即可清掉旧缓存（v2：旧版可能把 404 / robots.txt / 视频当成首页缓存了，一次清掉）。
-const CACHE = 'kira-v2';
+const CACHE = 'kira-v3'; // 第二版：旧版不认得 leaf.series 和空白柜子，会算错价 → 换名字让大家的手机马上换新版
 const SHELL = '/index.html';
 
 self.addEventListener('install', (event) => {

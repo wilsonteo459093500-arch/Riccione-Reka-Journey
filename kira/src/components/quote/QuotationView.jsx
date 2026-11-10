@@ -11,7 +11,7 @@ import MeasureTool from './MeasureTool.jsx';
 import ItemEditorModal from './ItemEditorModal.jsx';
 import { exportExcel } from './exportExcel.js';
 import { buildTextQuote } from './textQuote.js';
-import { deriveZones, cabinetTotal } from '../../planner/bridge.js';
+import { deriveZones, cabinetTotal, customSeriesCount, localizeKira } from '../../planner/bridge.js';
 import { newCabinet, nextCode } from '../../planner/templates.js';
 import { mmToM, uid } from '../../planner/model.js';
 import CabinetCard from '../planner/CabinetCard.jsx';
@@ -204,7 +204,7 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
   // 整份报价默认系列（柜子可单独改）
   const defaults = doc.defaults || { door: 'A', carcass: 'A' };
   // 积木柜会变成标准明细一起算（deriveZones）；手动明细照旧
-  const computed = useMemo(() => computeQuote(deriveZones(zones, defaults), adjustPct, discountMode, discountAmt), [zones, defaults, adjustPct, discountMode, discountAmt]);
+  const computed = useMemo(() => localizeKira(computeQuote(deriveZones(zones, defaults), adjustPct, discountMode, discountAmt)), [zones, defaults, adjustPct, discountMode, discountAmt]);
   const looseCalc = useMemo(() => computeLoose(looseItems, looseAdjustPct, looseDiscountMode, looseDiscountAmt), [looseItems, looseAdjustPct, looseDiscountMode, looseDiscountAmt]);
   const grandTotal = computed.net + looseCalc.net;
   const dragRef = useRef(null); // { zoneId, from } 或 { loose:true, from }
@@ -321,6 +321,8 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
     return { L, net: computeQuote(deriveZones(zs, { door: L, carcass: L }), adjustPct, discountMode, discountAmt).net };
   }), [zones, adjustPct, discountMode, discountAmt]);
   const hasCabinets = zones.some((z) => (z.cabinets || []).length);
+  // 画框框里单独选了系列的格子：一键比价只换柜子的系列，这些格子不跟着换
+  const ownSeriesCells = useMemo(() => zones.reduce((a, z) => a + (z.cabinets || []).reduce((b, c) => b + customSeriesCount(c), 0), 0), [zones]);
   const applySeriesAll = (L) => patch({
     defaults: { ...defaults, door: L, carcass: CARCASS_SERIES.includes(L) ? L : defaults.carcass },
     zones: zones.map((z) => ({ ...z, cabinets: (z.cabinets || []).map((c) => ({ ...c, series: null })) })),
@@ -742,6 +744,11 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
                     );
                   })}
                 </div>
+                {ownSeriesCells > 0 && (
+                  <div className="text-[10px] mt-1.5" style={{ color: T.inkSoft }} data-own-series-note>
+                    {ownSeriesCells} block{ownSeriesCells > 1 ? 's have' : ' has'} its own series and won't change · 有 {ownSeriesCells} 格单独选了系列，不跟着换
+                  </div>
+                )}
               </>
             )}
           </div>

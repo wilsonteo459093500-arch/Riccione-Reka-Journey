@@ -28,7 +28,9 @@ test('L 3000/1200 + oven tower at the end of wall B: wall B still prices its cor
   assert.equal(priced(c, 1, 'base'), 600);
   assert.equal(priced(c, 1, 'wall'), 600);
   // 同旧工具：地柜 3+0.6 延米、吊柜 3+0.6 延米、烤箱高柜 0.6×2.25（2 抽）+ 见光板（墙A 起点 + 高柜终点）
-  const panels = (0.6 * 0.85 + 0.35 * 0.75 + 0.6 * 2.25) * 530;
+  // 第二版加：高柜内侧见光板 = 深 0.6 × 高 2.25 − 地柜挡住 0.6 × (0.85 + 台面 0.03) − 吊柜挡住 0.35 × 0.75
+  const inner = 0.6 * 2.25 - 0.6 * 0.88 - 0.35 * 0.75;
+  const panels = (0.6 * 0.85 + 0.35 * 0.75 + 0.6 * 2.25 + inner) * 530;
   const expect = old('base', '3+0.6', 0.85, 0.6) + old('wall', '3+0.6', 0.75, 0.35) + old('tall', '0.6', 2.25, 0.6, { drawers: 2 }) + panels;
   const c2 = updateSpec(c, { walls: c.spec.walls.map((w, i) => ({ ...w, units: w.units.map(() => ({ layout: i === 0 ? 'doors' : w.units[0].layout })) })) });
   closeTo(cabinetTotal(c2), expect);
@@ -122,4 +124,18 @@ test('golden: normal L / U kitchens unchanged (each wall to the corner; corner o
   assert.deepEqual(wallRuns(U.spec).map((x) => [x.runW, x.cornerW]), [[3000, 0], [1800, 600], [1400, 600]]);
   assert.equal(priced(U, 2, 'base'), 2000);
   assert.equal(priced(U, 2, 'wall'), 2000);
+});
+
+test('v2: tall unit inner side panel — exposed area above the worktop / beside the top cabinets; toggle off; none for a bare fridge gap', () => {
+  const c = kit('I', [3000], OVEN);
+  const t = c.frames.find((f) => f.kind === 'tall');
+  assert.deepEqual(t.innerPanel, { side: 'left', area: Math.round(600 * 2250 - 600 * 880 - 350 * 750) });
+  const pin = (x) => cabinetItemsFor(x).filter((i) => i.kira.part === 'panelIn');
+  assert.equal(pin(c).length, 1);
+  closeTo(pin(c)[0].length * pin(c)[0].h, 0.5595);
+  assert.equal(pin({ ...c, exposed: { ...c.exposed, tallInner: false } }).length, 0);
+  assert.equal(pin(kit('I', [3000], { ...OVEN, kind: 'fridgeGap' })).length, 0);
+  // 没有吊柜：台面以上整段露出
+  const noUp = updateSpec(c, { walls: [{ ...c.spec.walls[0], upper: false }] });
+  closeTo(pin(noUp)[0].length * pin(noUp)[0].h, 0.6 * (2.25 - 0.88));
 });

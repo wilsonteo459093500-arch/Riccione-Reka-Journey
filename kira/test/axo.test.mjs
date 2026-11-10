@@ -365,3 +365,14 @@ test('kitchen corner-only frames (W = 0 + cornerW) add no boxes and no NaN', () 
   assert.deepEqual(cabinetBoxes(lone), []);
   assert.ok(allFinite(axoScene(lone)));
 });
+
+// 第二版：厨房高柜内侧见光板也画出来（门板色），关掉就不画
+import { newCabinet as nc2, updateSpec as us2 } from '../src/planner/templates.js';
+test('v2: kitchen tall unit inner side panel is drawn in 3D (door colour), not when switched off', () => {
+  const c = us2(nc2('kitchen'), { tall: { on: true, end: 'end', kind: 'oven' } });
+  const t = c.frames.find((f) => f.kind === 'tall');
+  const ends = (cab) => cabinetBoxes(cab).filter((b) => b.part === 'end' && b.frame === t.id);
+  assert.equal(t.innerPanel.side, 'left');
+  assert.equal(ends(c).length, 2); // 外侧（整排终点）+ 内侧
+  assert.equal(ends({ ...c, exposed: { ...c.exposed, tallInner: false } }).length, 1);
+});

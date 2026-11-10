@@ -379,3 +379,34 @@ test('kitchen corner-only frames (W = 0 + cornerW) draw nothing extra: no NaN, s
   assertAllFinite(lone);
   assert.equal(role(lone, 'outline').length, 0);
 });
+
+// ---------- 第二版「画框框」标记 ----------
+import { newCabinet as newCab2 } from '../src/planner/templates.js';
+import { leafBoxes as leafBoxes2 } from '../src/planner/blocks.js';
+test("v2 blocks: every block rect carries hit 'frameId|path', base strip 'frameId|base', scene.frames for pointer maths", () => {
+  const c = newCab2('wardrobe', { ceilingH: 2700 });
+  const f = c.frames[0];
+  const sc = elevationScene(c, { style: 'blocks' });
+  const hits = sc.shapes.filter((s) => s.role === 'block').map((s) => s.hit);
+  assert.deepEqual(hits, leafBoxes2(f).map((b) => `${f.id}|${b.path}`));
+  assert.ok(sc.shapes.some((s) => s.hit === `${f.id}|base`));
+  assert.equal(sc.frames.length, 1);
+  assert.equal(sc.frames[0].id, f.id);
+  assert.equal(sc.frames[0].Hb, f.H - f.base.h);
+  // drawing 样式没有这些标记
+  const d = elevationScene(c, { style: 'drawing', selected: `${f.id}|0.0`, sizes: true });
+  assert.ok(!d.shapes.some((s) => s.hit || s.role === 'selected' || s.role === 'size'));
+  assert.equal(d.frames, undefined);
+});
+test('v2 blocks: selected cell gets a gold outline; sizes:true writes W×H in cells', () => {
+  const c = newCab2('wardrobe', { ceilingH: 2700 });
+  const f = c.frames[0];
+  const sc = elevationScene(c, { style: 'blocks', selected: `${f.id}|0.0`, sizes: true });
+  const sel = sc.shapes.filter((s) => s.role === 'selected');
+  assert.equal(sel.length, 1);
+  assert.equal(sel[0].stroke, '#B8945E');
+  const b = leafBoxes2(f)[0];
+  assert.ok(sc.shapes.some((s) => s.t === 'text' && s.text === `${b.w}×${b.h}`));
+  const base = elevationScene(c, { style: 'blocks', selected: `${f.id}|base` });
+  assert.equal(base.shapes.filter((s) => s.role === 'selected').length, 1);
+});
