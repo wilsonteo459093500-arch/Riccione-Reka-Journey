@@ -7,7 +7,7 @@
 //         地面上的位置不变（z = 0 的点不动），所以脚印仍然和图纸重合。
 // 投影：P = vp + (p - vp) * H / (H - z)   （vp = 镜头正下方的点，H = 镜头高度）
 
-import { kindOf, roomRects, deriveWalls, openingRect, snapToWall, rectPoly, chairPolys, contentBox } from './geometry.js';
+import { KINDS, kindOf, roomRects, deriveWalls, openingRect, snapToWall, rectPoly, chairPolys, contentBox } from './geometry.js';
 
 var SCENE_DEFAULTS = {
   view: 'top', // 'top' | 'persp'
@@ -194,6 +194,7 @@ function buildScene(geo, options) {
       zMm: spec.zMm,
       z1: z1,
       base: base,
+      hidden: spec.skip || null, // 第 i 条边顶着相邻的墙格（不画侧面，也不描轮廓线）
       faces: faces,
       near: polyDist(vp, base),
       rank: spec.rank || 0,
@@ -221,7 +222,7 @@ function buildScene(geo, options) {
       addSolid({ id: id, kind: 'hidden-door', mat: 'panel', poly: C(rectPoly(b)), zMm: o.wallMm, skip: ends });
     } else if (op.type === 'window') {
       // 窗：矮窗台 + 中间一片玻璃
-      addSolid({ id: id + '-sill', kind: 'sill', mat: 'wall', poly: C(rectPoly(b)), zMm: 100, skip: ends });
+      addSolid({ id: id + '-sill', kind: 'sill', mat: 'sill', poly: C(rectPoly(b)), zMm: 100, skip: ends });
       var inset = (horizontal ? b[3] - b[1] : b[2] - b[0]) * 0.38;
       var glass = horizontal ? [b[0], b[1] + inset, b[2], b[3] - inset] : [b[0] + inset, b[1], b[2] - inset, b[3]];
       addSolid({ id: id + '-glass', kind: 'window', mat: 'windowGlass', poly: C(rectPoly(glass)), zMm: o.wallMm * 0.96, skip: ends, rank: 1 });
@@ -237,8 +238,8 @@ function buildScene(geo, options) {
     var box = snapToWall(geo, it, o.snapTol);
     if (it.kind === 'hung') {
       if (o.hung === 'hide') return;
-      // 吊柜在切面以上：画成切面高度的一片半透明轮廓，看得到下面的书桌
-      addSolid({ id: it.id, kind: 'hung', mat: k.mat, label: it.label, poly: C(rectPoly(box, it.round)), zMm: o.wallMm, ghost: true, topOnly: true, rank: 9 });
+      // 吊柜在切面以上：画成落在台面高度的一片半透明轮廓，看得到下面的书桌
+      addSolid({ id: it.id, kind: 'hung', mat: k.mat, label: it.label, poly: C(rectPoly(box, it.round)), zMm: KINDS.desk.z1, ghost: true, topOnly: true, rank: 9 });
       return;
     }
     if (it.kind === 'chair') {
