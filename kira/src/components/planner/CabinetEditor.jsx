@@ -287,6 +287,11 @@ export default function CabinetEditor({ cab: initial, zone, defaults = {}, lang 
               <Toggle on={cab.exposed?.left !== false} onChange={(v) => set({ exposed: { ...(cab.exposed || {}), left: v } })} label="Left 左边露出" />
               <Toggle on={cab.exposed?.right !== false} onChange={(v) => set({ exposed: { ...(cab.exposed || {}), right: v } })} label="Right 右边露出" />
             </div>
+            {(cab.frames || []).some((f) => f.innerPanel) && (
+              <div className="mt-1">
+                <Toggle on={cab.exposed?.tallInner !== false} onChange={(v) => set({ exposed: { ...(cab.exposed || {}), tallInner: v } })} label="Tall unit inner side 高柜内侧（台面以上露出的部分）" />
+              </div>
+            )}
           </Section>
 
           {hasGlass && (

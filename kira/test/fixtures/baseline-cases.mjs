@@ -53,6 +53,24 @@ export function baselineCases() {
 // 示范报价：固定 id 后的全部明细 + 总价
 import { demoRecord } from '../../src/planner/demo.js';
 import { deriveZones, computeRecordQuote } from '../../src/planner/bridge.js';
+import { computeQuote } from '../../src/constants/pricing.js';
+// 第二版之后新加的明细（第一版没有）：比对 v1 快照时去掉
+export const V2_ADDED_PARTS = new Set(['panelIn']);
+export const withoutV2 = (items) => items.filter((it) => !V2_ADDED_PARTS.has(it.kira?.part));
+export function demoBaselineV1() {
+  const { zones, record } = demoParts();
+  const dz = deriveZones(record.zones, record.defaults).map((z) => ({ ...z, items: withoutV2(z.items) }));
+  return { zones: zones.map(withoutV2), quote: computeQuote(dz, record.adjustPct, record.discountMode, record.discountAmt) };
+}
+function demoParts() {
+  const r = demoRecord();
+  r.zones = r.zones.map((z, zi) => ({ ...z, id: `z${zi}`, cabinets: z.cabinets.map((c, ci) => {
+    const cab = { ...c, id: `demo${zi}${ci}` };
+    cab.frames = buildFrames(cab);
+    return cab;
+  }) }));
+  return { zones: deriveZones(r.zones, r.defaults).map((z) => z.items), record: r };
+}
 export function demoBaseline() {
   const r = demoRecord();
   r.zones = r.zones.map((z, zi) => ({ ...z, id: `z${zi}`, cabinets: z.cabinets.map((c, ci) => {

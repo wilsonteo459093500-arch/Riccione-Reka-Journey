@@ -192,10 +192,22 @@ export function kitchenBuild(spec, cab) {
       if (t.kind === 'oven') body = hsplit([Math.round(Hb * 0.35), 600, Hb - Math.round(Hb * 0.35) - 600], [leaf('drawer', { drawers: 2, drawerKind: 'full' }), leaf('closed', { interior: 'oven' }), leaf('closed')]);
       else if (t.kind === 'fridgeTop') body = hsplit([t.fridgeH, t.H - t.fridgeH], [leaf('void', { interior: 'fridge' }), leaf('closed')]);
       else body = leaf('void', { interior: 'fridge' });
+      // 高柜内侧（朝台面那一边）：台面以上、吊柜以外露出来的侧面 → 见光板（整个冰箱空位不计价，不加）
+      //   露出面积 = 深 × 高 − 地柜挡住的（地柜深 × 台面高）− 吊柜挡住的（吊柜深 × 吊柜跟高柜重叠的高度）
+      let innerPanel = null;
+      if (t.kind !== 'fridgeGap') {
+        const D = spec.baseD;
+        let area = D * t.H;
+        // 墙短到只剩转角时，挨着高柜的是转角那段地柜 / 吊柜，照样挡住 → 不看 runW（价钱连续）
+        area -= D * Math.min(t.H, spec.baseH + (spec.worktop ? 30 : 0));
+        if (w.upper) area -= Math.min(D, spec.upperD) * Math.max(0, Math.min(t.H, spec.upperY + spec.upperH) - Math.max(0, spec.upperY));
+        if (area > 0) innerPanel = { side: r.tallSide === 'left' ? 'right' : 'left', area: Math.round(area) };
+      }
       frames.push({
         id: `${cab.id}-w${r.i}-tall`, kind: 'tall', label: `${bi(FRAME_KIND_NAME.tall)}${tag}`, wall: r.i, x: r.tall.x, y: 0,
         W: r.tall.w, H: t.H, D: spec.baseD, base: t.kind === 'oven' ? { ...spec.base } : { kind: 'none', h: 0 },
         ends: { left: r.tallSide === 'left' ? r.endTag('left') : false, right: r.tallSide === 'right' ? r.endTag('right') : false },
+        ...(innerPanel ? { innerPanel } : {}),
         body,
       });
     }

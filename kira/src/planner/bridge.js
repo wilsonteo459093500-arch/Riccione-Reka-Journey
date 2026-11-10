@@ -182,6 +182,12 @@ export function frameItems(cab, frame, defaults = {}) {
         panelSeries: ser.door, noDiscount: false, kira: tag(`panel${k}`) });
     }
   });
+  // 高柜内侧（厨房：朝台面那一边露出来的部分）：见光板，面积由模板算好放在 frame.innerPanel.area（mm²）
+  const ip = frame.innerPanel;
+  if (ip && ex.tallInner !== false && Number(ip.area) > 0 && Dm > 0) {
+    items.push({ id: `${cab.id}:${frame.id}:panelIn`, type: 'panel', preset: 'custom', name: frame.label || '', length: Dm, h: Number(ip.area) / 1e6 / Dm,
+      panelSeries: ser.door, noDiscount: false, kira: tag('panelIn') });
+  }
   return items;
 }
 

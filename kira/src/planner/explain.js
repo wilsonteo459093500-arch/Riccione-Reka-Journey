@@ -8,6 +8,7 @@ const PART = {
   open: { en: 'Open shelves', zh: '开放格' },
   panelL: { en: 'Left side panel', zh: '左见光板' },
   panelR: { en: 'Right side panel', zh: '右见光板' },
+  panelIn: { en: 'Tall unit inner side panel', zh: '高柜内侧见光板' },
 };
 
 export function explainCabinet(cab, defaults = {}) {
