@@ -27,8 +27,11 @@ export const BLOCK_COLORS = {
   open: '#F1E4C6',   // 开放区 —— 金色浅
   glass: '#D9E1E6',  // 玻璃柜体区 —— 冷灰蓝浅
   drawer: '#F0D5CC', // 抽屉区 —— 赤陶浅
-  void: '#EDE5D6',   // 底层架空 / 空位 —— 沙色
+  void: '#EDE5D6',   // 空位 —— 沙色
+  raised: '#EDE5D6', // 底层架空区 —— 沙色（同上）
 };
+// 画框框：选中的格子（品牌金，同 theme.js T.gold）
+export const BLOCK_SELECTED = '#B8945E';
 
 export const HANDLES = [
   { id: 'hidden', zh: '隐藏拉手', en: 'Hidden' },

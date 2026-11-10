@@ -4,6 +4,9 @@
 // 不用 React / DOM，不用随机数 → 同样输入永远同样输出，可在 Node 里测试。
 //
 //   elevationScene(cab, { style:'drawing'|'blocks', dims:true, lang:'en'|'zh'|'both', walls })
+//   第二版「画框框」（只在 blocks 样式）：
+//     每个色块 rect 带 hit:'frameId|path'，底座条带 hit:'frameId|base'；scene 多回传 frames:[{id,X0,yb,W,Hb}] 给拖拉换算坐标
+//     selected:'frameId|path' → 那格画金色粗框；sizes:true → 格子里多写「600×900」
 //
 // 坐标：模型 y 向上（地面 y=0），SVG y = −模型 y（只翻转一次）。
 // 多面墙：按墙序号从左到右展开排，墙与墙之间留 ~400mm；frame.x = 在这面墙上的位置。
@@ -13,7 +16,7 @@
 import { layoutLeaves, MAX_DOOR } from '../planner/model.js';
 import { cabinetWalls } from '../planner/templates.js';
 import {
-  INK, INK_SOFT, GLASS, WORKTOP, BLOCK_COLORS, LINE,
+  INK, INK_SOFT, GLASS, WORKTOP, BLOCK_COLORS, BLOCK_SELECTED, LINE,
   finishOf, DEFAULT_DOOR_FINISH, DEFAULT_CARCASS_FINISH,
 } from './palette.js';
 
@@ -145,6 +148,7 @@ function makeOut() {
     if (o.rx) r.rx = o.rx;
     if (o.opacity != null) r.opacity = o.opacity;
     if (o.role) r.role = o.role;
+    if (o.hit) r.hit = o.hit;
     return r;
   };
   return {
@@ -221,7 +225,7 @@ function normFrame(f, i, ex) {
   const bh = bk === 'wallhung' || bk === 'none' ? 0 : clamp(num(f.base?.h), 0, H);
   const W = Math.max(0, num(f.W));
   const n = {
-    i, kind: f.kind || 'tall', wall: Math.max(0, Math.round(num(f.wall))),
+    i, id: f.id == null ? `f${i}` : String(f.id), kind: f.kind || 'tall', wall: Math.max(0, Math.round(num(f.wall))),
     x: num(f.x), y: Math.max(0, num(f.y)), W, H, D: Math.max(0, num(f.D)),
     base: { kind: bk, h: bh },
     ends: endsOf(f, ex),
@@ -307,7 +311,7 @@ export function elevationScene(cab, opts = {}) {
   C.floor = mix(INK, '#FFFFFF', 0.15);
 
   const out = makeOut();
-  const ctx = { out, S, C, style, lang, handle: ['hidden', 'bar', 'knob', 'push'].includes(cab?.handle) ? cab.handle : 'hidden' };
+  const ctx = { out, S, C, style, lang, selected: style === 'blocks' && opts.selected ? String(opts.selected) : null, sizes: style === 'blocks' && !!opts.sizes, handle: ['hidden', 'bar', 'knob', 'push'].includes(cab?.handle) ? cab.handle : 'hidden' };
 
   // 地面线
   for (const x of ext) out.line(x.x0 - 120, 0, x.x1 + 120, 0, { stroke: C.floor, sw: 1.2 * U, role: 'floor' });
@@ -335,6 +339,7 @@ export function elevationScene(cab, opts = {}) {
   bb = unionBox(shapes.map(shapeBox)) || [0, -600, 600, 0];
   const m = 6 * U;
   const viewBox = [rnd(bb[0] - m), rnd(bb[1] - m), rnd(Math.max(1, bb[2] - bb[0] + 2 * m)), rnd(Math.max(1, bb[3] - bb[1] + 2 * m))];
+  if (style === 'blocks') return { viewBox, shapes, frames: frames.map((f) => ({ id: f.id, X0: f.X0, yb: f.y + f.base.h, W: f.W, Hb: f.Hb })) };
   return { viewBox, shapes };
 }
 
@@ -360,7 +365,7 @@ function drawFrame(ctx, f) {
     const node = lf.node || {};
     const type = ['closed', 'open', 'glass', 'drawer', 'void'].includes(node.type) ? node.type : 'closed';
     const e = { l: lf.x <= 0.5, r: lf.x + lf.w >= W - 0.5, b: lf.y <= 0.5, t: lf.y + lf.h >= Hb - 0.5 };
-    const cell = { x: lf.x, y: yb + lf.y, w: lf.w, h: lf.h, e, node, type };
+    const cell = { x: lf.x, y: yb + lf.y, w: lf.w, h: lf.h, e, node, type, hit: `${f.id}|${lf.path ?? ''}` };
     // 门板外框：外圈 3mm 缝，相邻两格之间各让 1.5mm
     const il = e.l ? GAP : GAP / 2, ir = e.r ? GAP : GAP / 2, ib = e.b ? GAP : GAP / 2, it = e.t ? GAP : GAP / 2;
     cell.fx = cell.x + il; cell.fy = cell.y + ib; cell.fw = Math.max(0, cell.w - il - ir); cell.fh = Math.max(0, cell.h - ib - it);
@@ -376,6 +381,15 @@ function drawFrame(ctx, f) {
 
   // 柜身外轮廓
   R(0, yb, W, Hb, { stroke: INK, sw: S.main, role: 'outline' });
+
+  // 画框框：选中的格子 / 底座条画金色粗框（画在外轮廓上面）
+  if (style === 'blocks' && ctx.selected) {
+    const sel = ctx.selected;
+    if (sel === `${f.id}|base` && f.base.h > 0) R(0, f.y, W, f.base.h, { stroke: BLOCK_SELECTED, sw: S.main * 2.2, role: 'selected' });
+    for (const lf of f.leaves) {
+      if (sel === `${f.id}|${lf.path ?? ''}`) R(lf.x, yb + lf.y, lf.w, lf.h, { stroke: BLOCK_SELECTED, sw: S.main * 2.2, role: 'selected' });
+    }
+  }
 
   // 台面
   if (f.worktop) R(-f.ovhL, yt, W + f.ovhL + f.ovhR, WT_T, { fill: WORKTOP, stroke: INK, sw: S.sw, role: 'worktop' });
@@ -398,6 +412,25 @@ function drawBase(ctx, f, { R, L }) {
   const { S, C, style } = ctx;
   const { kind, h } = f.base;
   if (h <= 0) return;
+  const W = f.W, y0 = f.y;
+  if (style === 'blocks') drawBlockBase(ctx, f, { R, L });
+  else drawBaseDrawing(ctx, f, { R, L });
+}
+
+// 色块样式的底座：画法同第一版，外加一条看不见的点击条（hit:'frameId|base'），柜脚之间也点得到
+function drawBlockBase(ctx, f, G) {
+  drawBaseDrawing(ctx, f, G);
+  const { S } = ctx;
+  G.R(0, f.y, f.W, f.base.h, { fill: INK, opacity: 0, role: 'base-hit', hit: `${f.id}|base` });
+  if (ctx.sizes && f.base.h >= S.U * 8) {
+    const t = `${Math.round(f.base.h)}`;
+    ctx.out.text(f.X0 + f.W - 3 * S.U, -(f.y + f.base.h / 2), t, Math.min(S.lbl, f.base.h * 0.6), { anchor: 'end', baseline: 'central', fill: INK_SOFT, role: 'size' });
+  }
+}
+
+function drawBaseDrawing(ctx, f, { R, L }) {
+  const { S, C, style } = ctx;
+  const { kind, h } = f.base;
   const W = f.W, y0 = f.y;
   if (kind === 'plinth') {
     const l = f.ends.left ? PANEL : 0, r = f.ends.right ? PANEL : 0;
@@ -423,7 +456,7 @@ function drawBase(ctx, f, { R, L }) {
   } else if (kind === 'raised') {
     const T = Math.min(PANEL, W / 4);
     if (style === 'blocks') {
-      R(0, y0, W, h, { fill: BLOCK_COLORS.void, stroke: INK, sw: S.thin, role: 'base' });
+      R(0, y0, W, h, { fill: BLOCK_COLORS.raised, stroke: INK, sw: S.thin, role: 'base' });
       blockLabel(ctx, { R, X0: f.X0 }, 0, y0, W, h, TXT.raised, null);
       return;
     }
@@ -450,14 +483,18 @@ function drawBase(ctx, f, { R, L }) {
 function drawBlock(ctx, f, G, cell) {
   const { S } = ctx;
   const fill = BLOCK_COLORS[cell.type] || BLOCK_COLORS.closed;
-  G.R(cell.x, cell.y, cell.w, cell.h, { fill, stroke: INK, sw: S.thin, role: 'block' });
+  G.R(cell.x, cell.y, cell.w, cell.h, { fill, stroke: INK, sw: S.thin, role: 'block', hit: cell.hit });
   const n = cell.type === 'drawer' ? drawerCount(cell) : 0;
-  blockLabel(ctx, G, cell.x, cell.y, cell.w, cell.h, TXT.blocks[cell.type], n > 0 ? `×${n}` : null);
+  const ser = cell.node?.series;
+  const tag = ser && (ser.door || ser.carcass) ? [ser.door, ser.carcass].filter(Boolean).join('/') : null;
+  const size = ctx.sizes ? `${Math.round(cell.w)}×${Math.round(cell.h)}` : null;
+  blockLabel(ctx, G, cell.x, cell.y, cell.w, cell.h, TXT.blocks[cell.type], [n > 0 ? `×${n}` : null, tag].filter(Boolean).join(' ') || null, size);
 }
 
-function blockLabel(ctx, G, x, y, w, h, t, suffix) {
+function blockLabel(ctx, G, x, y, w, h, t, suffix, extra) {
   const { lang, S } = ctx;
   const lines = (lang === 'both' ? [t.zh, t.en] : [lang === 'en' ? t.en : t.zh]).map((s, i) => (i === 0 && suffix ? `${s} ${suffix}` : s));
+  if (extra) lines.push(extra);
   cellLabel(ctx, G, x, y, w, h, lines, S.lbl, INK, 'label');
 }
 

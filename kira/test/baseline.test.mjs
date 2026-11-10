@@ -21,3 +21,9 @@ test('baseline: demo quote items and total identical to v1', () => {
   assert.deepEqual(now.zones, base.demo.zones);
   assert.deepEqual(now.quote, base.demo.quote);
 });
+
+import { elevHash, ELEV_OPTS } from './fixtures/make-elev-baseline.mjs';
+const elevBase = JSON.parse(readFileSync(new URL('./fixtures/elev-baseline.json', import.meta.url), 'utf8'));
+test('baseline: drawing-style elevation output identical to v1 (sha1 per cabinet × lang × dims)', () => {
+  baselineCases().cabs.forEach((c) => ELEV_OPTS.forEach((o, i) => assert.equal(elevHash(c, o), elevBase[`${c.id}#${i}`], `${c.id}#${i}`)));
+});
