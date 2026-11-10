@@ -4,8 +4,9 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { test } from './harness.mjs';
-import { KINDS, deriveWalls, openingRect, edgeFor, snapToWall, rectPoly, chairPolys, clipPolyToBox, contentBox, roomRects } from '../src/plan3d/geometry.js';
-import { buildScene, polyArea, polyDist, hull } from '../src/plan3d/scene.js';
+import { KINDS, deriveWalls, openingRect, edgeFor, snapToWall, rectPoly, chairPolys, clipPolyToBox, contentBox, roomRects, inventoryLines } from '../src/plan3d/geometry.js';
+import { buildScene, recommendCorner, projectPoint, planeMatrix, CORNERS, polyArea, polyDist, hull } from '../src/plan3d/scene.js';
+import { reskinPromptText } from '../src/ai/prompts.js';
 import { paletteOf, PALETTES } from '../src/plan3d/palette.js';
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
@@ -214,6 +215,87 @@ test('影子：每个实体一块，沿光线方向、按高度拉长；吊柜�
   assert.equal(hull([[0, 0], [2, 0], [1, 1], [2, 2], [0, 2]]).length, 4, '凸包去掉内部的点');
   assert.equal(polyDist([5, 5], [[0, 0], [10, 0], [10, 10], [0, 10]]), 0, '点在里面 = 0');
   assert.equal(polyDist([15, 5], [[0, 0], [10, 0], [10, 10], [0, 10]]), 5);
+});
+
+test('斜角立体：所有东西都在画框里；地面是一个仿射变换；顶面 = 脚印套上那个高度的变换', () => {
+  for (const corner of Object.keys(CORNERS)) {
+    const scene = buildScene(STUDY, { view: 'iso', corner });
+    assert.equal(scene.view, 'iso');
+    assert.equal(scene.corner, corner);
+    assert.equal(Math.max(scene.w, scene.h), 2400);
+    assert.equal(scene.plan, null, '斜角下不提供叠图位置');
+    for (const sd of scene.solids) {
+      for (const f of sd.faces) for (const p of f.pts) assert.ok(p[0] > 0 && p[0] < scene.w && p[1] > 0 && p[1] < scene.h, `${corner} ${sd.id} 在画框里`);
+      const top = sd.faces[sd.faces.length - 1];
+      const m = sd.tm;
+      sd.base.forEach((b, i) => {
+        assert.ok(Math.abs(top.pts[i][0] - (m[0] * b[0] + m[2] * b[1] + m[4])) < 1e-6 && Math.abs(top.pts[i][1] - (m[1] * b[0] + m[3] * b[1] + m[5])) < 1e-6, `${sd.id} 顶面`);
+      });
+      assert.deepEqual(sd.foot, sd.base.map((b) => projectPoint(scene.pj, b, 0)));
+    }
+    assert.deepEqual(planeMatrix(scene.pj, 0), scene.fm);
+    assert.ok(Math.abs(planeMatrix(scene.pj, 100)[5] - (scene.fm[5] - 100 * scene.pj.kz)) < 1e-9, '越高越往画面上方');
+  }
+  // 镜头在右下角：图纸右下角的点落在画面最下面，左上角的点落在最上面
+  const se = buildScene(STUDY, { view: 'iso', corner: 'se' });
+  const at = (x, y) => projectPoint(se.pj, [x * se.s, y * se.s], 0);
+  assert.ok(at(1070, 856)[1] > at(305, 856)[1] && at(1070, 856)[1] > at(1070, 133)[1] && at(305, 133)[1] < at(305, 856)[1]);
+  assert.ok(Math.abs(at(1070, 133)[0] - at(305, 856)[0]) > 100, '另外两个角一左一右');
+});
+
+test('斜角立体：只画朝镜头的侧面；靠近镜头的东西后画；墙默认矮、柜子在 1.1 米切开', () => {
+  const scene = buildScene(STUDY, { view: 'iso', corner: 'se' });
+  assert.equal(Math.round(solid(scene, 'wall-0').zMm), 650);
+  assert.equal(solid(scene, 'book').zMm, 1100);
+  assert.equal(solid(scene, 'book').tall, true);
+  for (const sd of scene.solids) for (const f of sd.faces) if (f.type === 'side') assert.ok(f.nx + f.ny > 0, `${sd.id}：镜头在右下，只看得到朝右和朝下的面`);
+  assert.ok(solid(scene, 'book').faces.filter((f) => f.type === 'side').length === 2);
+  // 书柜在右下角（靠近镜头），左上角凹位里的储物柜离镜头最远
+  assert.ok(order(scene, 'storage-niche') < order(scene, 'book'));
+  assert.ok(order(scene, 'desk-left') < order(scene, 'chair-1'), '椅子在书桌右边，更靠近镜头');
+  assert.ok(order(scene, 'chair-1') < order(scene, 'chair-1-back'));
+  assert.ok(order(scene, 'desk-bottom') < order(scene, 'hung-bottom'), '吊柜的轮廓画在书桌之后');
+  // 换成左上角看，顺序反过来
+  const nw = buildScene(STUDY, { view: 'iso', corner: 'nw' });
+  assert.ok(order(nw, 'book') < order(nw, 'storage-niche'));
+  for (const sd of nw.solids) for (const f of sd.faces) if (f.type === 'side') assert.ok(f.nx + f.ny < 0);
+  assert.equal(solid(buildScene(STUDY, { view: 'iso', wallMm: 400 }), 'wall-0').zMm, 400);
+});
+
+test('斜角立体 · 柜子全高：高柜不切、吊柜是悬在墙上的实体；切开时吊柜只是轮廓', () => {
+  const full = buildScene(STUDY, { view: 'iso', corner: 'nw', cutMm: Infinity, hung: 'solid' });
+  assert.equal(solid(full, 'book').zMm, KINDS.tall.z1);
+  assert.equal(solid(full, 'book').tall, false);
+  const hung = solid(full, 'hung-left');
+  assert.equal(hung.ghost, false);
+  assert.ok(Math.abs(hung.z0 - KINDS.hung.z0 * full.zs) < 1e-9 && hung.z1 > hung.z0, '离地');
+  assert.ok(hung.faces.some((f) => f.type === 'side'));
+  assert.ok(order(full, 'desk-left') < order(full, 'hung-left'));
+  const cut = buildScene(STUDY, { view: 'iso', corner: 'nw', hung: 'solid' });
+  assert.equal(solid(cut, 'hung-left').ghost, true, '切面比吊柜低：画不出实体，退回轮廓');
+  const shadow = full.shadows.find((sh) => sh.id === 'hung-left');
+  assert.ok(shadow && shadow.pts.length >= 4);
+});
+
+test('recommendCorner：镜头一侧的两面墙上柜子越少越好', () => {
+  assert.equal(recommendCorner(STUDY), 'nw', '上墙只有窗，左墙比右墙轻');
+  const g = box({ items: [{ id: 'a', kind: 'tall', box: [100, 100, 500, 140], against: 'top' }, { id: 'b', kind: 'tall', box: [100, 100, 140, 400], against: 'left' }] });
+  assert.equal(recommendCorner(g), 'se');
+  assert.equal(recommendCorner(box()), 'se', '没有柜子：默认右下');
+});
+
+test('AI 美化的提示词：只换材质和光影、位置不动、物件清单、参考图只取材质', () => {
+  const inv = inventoryLines(STUDY);
+  assert.ok(inv.includes('4 x chair') && inv.includes('1 x glass-door display cabinet (GLASS DOOR CABINET)') && inv.includes('1 x window'));
+  assert.ok(inv.includes('2 x full-height cabinet (STORAGE CABINET, BOOK CABINET)'), '同名的柜名不重复');
+  const p = reskinPromptText({ inventory: inv, refCount: 2, view: 'iso' });
+  assert.ok(/MATERIAL AND LIGHTING pass only/.test(p) && /Do not move, rotate, resize, merge or split anything/.test(p));
+  assert.ok(/must line up with image 1/.test(p) && /Do not add anything/.test(p) && /No text/.test(p));
+  assert.ok(p.includes('The scene contains exactly: ') && p.includes('4 x chair'));
+  assert.ok(p.includes('images 2–3') && /ONLY for materials and colours/.test(p));
+  assert.ok(/angled axonometric/.test(p));
+  const bare = reskinPromptText({ view: 'top' });
+  assert.ok(!/MATERIAL REFERENCES/.test(bare) && !/The scene contains exactly/.test(bare) && /strict top-down/.test(bare));
 });
 
 test('配色：每套都有画图要用的材质槽', () => {

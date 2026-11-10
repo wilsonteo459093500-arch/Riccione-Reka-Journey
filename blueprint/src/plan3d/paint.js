@@ -2,7 +2,7 @@
 // env.createCanvas(w, h) 由调用方给（网页里 = document.createElement('canvas')），方便以后搬到别处。
 // 不用 ctx.filter（部分平板没有）：模糊一律用 shadowBlur；所有随机数来自固定种子，同一张图每次画出来一样。
 
-import { hull } from './scene.js';
+import { hull, projectPoint } from './scene.js';
 
 function hexToRgb(hex) {
   var h = String(hex).replace('#', '');
@@ -88,12 +88,36 @@ function insetBox(b, d) {
   return [b[0] + d, b[1] + d, b[2] - d, b[3] - d];
 }
 
+/** 平面坐标的点 → 画布（m = [a, b, c, d, e, f]） */
+function mapPts(m, pts) {
+  return pts.map(function (p) {
+    return [m[0] * p[0] + m[2] * p[1] + m[4], m[1] * p[0] + m[3] * p[1] + m[5]];
+  });
+}
+
+function rectPts(r) {
+  return [
+    [r[0], r[1]],
+    [r[2], r[1]],
+    [r[2], r[3]],
+    [r[0], r[3]],
+  ];
+}
+
+/** 把之后的绘制限制在地板范围内（画布坐标） */
 function clipFloors(ctx, scene) {
   ctx.beginPath();
   scene.floors.forEach(function (r) {
-    ctx.rect(r[0], r[1], r[2] - r[0], r[3] - r[1]);
+    var q = mapPts(scene.fm, rectPts(r));
+    ctx.moveTo(q[0][0], q[0][1]);
+    for (var i = 1; i < q.length; i++) ctx.lineTo(q[i][0], q[i][1]);
+    ctx.closePath();
   });
   ctx.clip();
+}
+
+function applyMatrix(ctx, m) {
+  ctx.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
 }
 
 /** 用 shadowBlur 画一块模糊的纯色形状（本体画在画布外面，只留下影子） */
@@ -155,6 +179,7 @@ function paintFloor(ctx, scene, pal) {
 
   ctx.save();
   clipFloors(ctx, scene);
+  applyMatrix(ctx, scene.fm); // 之后都在平面坐标里画，斜角下木板跟着斜过去
   ctx.fillStyle = pal.floor.base;
   ctx.fillRect(all[0], all[1], all[2] - all[0], all[3] - all[1]);
   ctx.translate(cx, cy);
@@ -176,6 +201,7 @@ function paintFloor(ctx, scene, pal) {
   // 整块地板上一层很淡的明暗：左上亮、右下略暗
   ctx.save();
   clipFloors(ctx, scene);
+  applyMatrix(ctx, scene.fm);
   var g = ctx.createLinearGradient(all[0], all[1], all[2], all[3]);
   g.addColorStop(0, 'rgba(255,246,230,0.10)');
   g.addColorStop(1, 'rgba(60,40,20,0.08)');
@@ -194,7 +220,8 @@ function paintFloorShadows(ctx, scene, pal, env) {
   var layer = env.createCanvas(scene.w, scene.h);
   var c = layer.getContext('2d');
   scene.shadows.forEach(function (sh) {
-    blurFill(c, sh.pts, pal.shadow, Math.max(5, sh.z1 * 0.13), scene.w);
+    // shadowBlur 不跟着变换走，所以先把点换算到画布坐标再画
+    blurFill(c, mapPts(scene.fm, sh.pts), pal.shadow, Math.max(5, sh.z1 * 0.13), scene.w);
   });
   ctx.save();
   clipFloors(ctx, scene);
@@ -205,8 +232,8 @@ function paintFloorShadows(ctx, scene, pal, env) {
   var ao = env.createCanvas(scene.w, scene.h);
   var a = ao.getContext('2d');
   scene.solids.forEach(function (sd) {
-    if (sd.ghost || !(sd.z1 > 0)) return;
-    blurFill(a, sd.base, pal.shadow, px * 9, scene.w);
+    if (sd.ghost || !(sd.z1 > 0) || sd.z0 > 0) return; // 悬空的吊柜不贴地
+    blurFill(a, sd.foot, pal.shadow, px * 9, scene.w);
   });
   ctx.save();
   clipFloors(ctx, scene);
@@ -215,11 +242,9 @@ function paintFloorShadows(ctx, scene, pal, env) {
   ctx.restore();
 }
 
-/** 高的东西投到矮的东西顶面上的影子（高柜的影子落在旁边的书桌上） */
+/** 高的东西投到矮的东西顶面上的影子（高柜的影子落在旁边的书桌上）。在画布坐标里画 */
 function paintTopShadows(ctx, scene, pal, sd, top) {
   var b = boundsOf(sd.base);
-  var persp = scene.view === 'persp';
-  var k = persp ? scene.camH / (scene.camH - sd.z1) : 1;
   ctx.save();
   tracePoly(ctx, top.pts);
   ctx.clip();
@@ -227,24 +252,19 @@ function paintTopShadows(ctx, scene, pal, sd, top) {
   scene.solids.forEach(function (o) {
     if (o === sd || o.ghost || !(o.z1 > sd.z1 + 1)) return;
     if (o.id.indexOf(sd.id) === 0 || sd.id.indexOf(o.id) === 0) return; // 椅背 / 椅面是同一把椅子
-    var dz = o.z1 - sd.z1;
-    var dx = scene.light[0] * dz;
-    var dy = scene.light[1] * dz;
+    var lo = Math.max(0, o.z0 - sd.z1);
+    var hi = o.z1 - sd.z1;
     var ob = boundsOf(o.base);
-    if (ob[2] + dx < b[0] || ob[0] > b[2] || ob[3] + dy < b[1] || ob[1] > b[3]) return;
-    var pts = hull(
-      o.base.concat(
-        o.base.map(function (p) {
-          return [p[0] + dx, p[1] + dy];
-        })
-      )
-    );
-    if (persp) {
-      pts = pts.map(function (p) {
-        return [scene.vp[0] + (p[0] - scene.vp[0]) * k, scene.vp[1] + (p[1] - scene.vp[1]) * k];
+    if (ob[2] + scene.light[0] * hi < b[0] || ob[0] > b[2] || ob[3] + scene.light[1] * hi < b[1] || ob[1] > b[3]) return;
+    var shifted = function (dz) {
+      return o.base.map(function (p) {
+        return [p[0] + scene.light[0] * dz, p[1] + scene.light[1] * dz];
       });
-    }
-    blurFill(ctx, pts, pal.shadow, Math.max(4, dz * 0.1), scene.w);
+    };
+    var pts = hull(shifted(lo).concat(shifted(hi))).map(function (p) {
+      return projectPoint(scene.pj, p, sd.z1);
+    });
+    blurFill(ctx, pts, pal.shadow, Math.max(4, hi * 0.1), scene.w);
   });
   ctx.restore();
 }
@@ -427,11 +447,13 @@ function bevel(ctx, pts, px, strength) {
   ctx.restore();
 }
 
-function paintTop(ctx, scene, pal, sd, top) {
+/** 画一个顶面。调用前已经套好这个顶面所在平面的变换，这里一律在平面坐标里画（pts = 实体的脚印） */
+function paintTop(ctx, scene, pal, sd, pts) {
   var px = scene.s;
   var m = pal[sd.mat] || pal.neutral;
   var seed = seedOf(sd.id);
-  var b = boundsOf(top.pts);
+  var b = boundsOf(pts);
+  var top = { pts: pts };
 
   tracePoly(ctx, top.pts);
   if (sd.kind === 'wall' || sd.kind === 'sill') {
@@ -550,15 +572,17 @@ function paintSide(ctx, scene, pal, sd, face) {
   var px = scene.s;
   var m = pal[sd.mat] || pal.neutral;
   var p = face.pts; // [下-起点, 下-终点, 上-终点, 上-起点]
-  var lit = 0.97 - face.nx * 0.08 - face.ny * 0.11; // 光从左上来
+  // 光从左上来；斜角立体只看得到两组面，让它们一明一暗，体块才立得起来
+  var lit = scene.view === 'iso' ? (Math.abs(face.nx) > Math.abs(face.ny) ? 1.02 : 0.82) : 0.97 - face.nx * 0.08 - face.ny * 0.11;
   var baseMid = lerpPt(p[0], p[1], 0.5);
   var topMid = lerpPt(p[3], p[2], 0.5);
   var color = m.side;
   // 沿法线方向：同一面墙被切成几格时，各格的渐变方向和长度都一样，不会出现色块
   var rise = (topMid[0] - baseMid[0]) * face.nx + (topMid[1] - baseMid[1]) * face.ny;
   var g = ctx.createLinearGradient(baseMid[0], baseMid[1], baseMid[0] + face.nx * rise, baseMid[1] + face.ny * rise);
-  g.addColorStop(0, shade(color, lit * 0.78));
-  g.addColorStop(1, shade(color, lit * 1.04));
+  var wallish = sd.kind === 'wall' || sd.kind === 'sill';
+  g.addColorStop(0, shade(color, lit * (wallish ? 0.9 : 0.78)));
+  g.addColorStop(1, shade(color, lit * (wallish ? 1.02 : 1.04)));
   tracePoly(ctx, p);
   if (sd.kind === 'window') {
     ctx.fillStyle = rgba(m.side, 0.6);
@@ -601,9 +625,38 @@ function paintSide(ctx, scene, pal, sd, face) {
       ctx.stroke();
     }
   } else if (sd.mat === 'glass') {
-    tracePoly(ctx, quad(0.06, 0.94));
-    ctx.fillStyle = rgba(pal.glass.glow, 0.42);
+    // 玻璃柜正面：木框 + 暖光的玻璃 + 立框和层板
+    tracePoly(ctx, p);
+    ctx.fillStyle = shade(pal.glass.frame, lit);
     ctx.fill();
+    var along = function (u, v) {
+      return lerpPt(lerpPt(p[0], p[1], u), lerpPt(p[3], p[2], u), v);
+    };
+    tracePoly(ctx, [along(0.03, 0.07), along(0.97, 0.07), along(0.97, 0.96), along(0.03, 0.96)]);
+    var gg = ctx.createLinearGradient(baseMid[0], baseMid[1], baseMid[0] + face.nx * rise, baseMid[1] + face.ny * rise);
+    gg.addColorStop(0, mix(pal.glass.top, pal.glass.glow, 0.35));
+    gg.addColorStop(1, mix(pal.glass.top, pal.glass.glow, 0.75));
+    ctx.fillStyle = gg;
+    ctx.fill();
+    ctx.strokeStyle = rgba(pal.glass.frame, 0.9);
+    ctx.lineWidth = Math.max(1.2, px * 1.6);
+    var bays = Math.max(1, Math.round(lenMm / 450));
+    var k;
+    for (k = 1; k < bays; k++) {
+      ctx.beginPath();
+      ctx.moveTo(along(k / bays, 0.07)[0], along(k / bays, 0.07)[1]);
+      ctx.lineTo(along(k / bays, 0.96)[0], along(k / bays, 0.96)[1]);
+      ctx.stroke();
+    }
+    ctx.lineWidth = Math.max(1, px * 0.9);
+    ctx.strokeStyle = rgba(pal.glass.frame, 0.55);
+    var shelves = Math.max(1, Math.round((sd.z1 - sd.z0) / scene.zs / 380));
+    for (k = 1; k < shelves; k++) {
+      ctx.beginPath();
+      ctx.moveTo(along(0.03, k / shelves)[0], along(0.03, k / shelves)[1]);
+      ctx.lineTo(along(0.97, k / shelves)[0], along(0.97, k / shelves)[1]);
+      ctx.stroke();
+    }
   }
 }
 
@@ -658,11 +711,12 @@ function paintScene(canvas, scene, pal, env) {
   ctx.fillStyle = pal.bg;
   scene.solids.forEach(function (sd) {
     if (sd.kind !== 'wall' && sd.kind !== 'sill' && sd.kind !== 'hidden-door' && sd.kind !== 'column') return;
-    tracePoly(ctx, sd.base);
+    tracePoly(ctx, sd.foot);
     ctx.fill();
   });
   scene.floors.forEach(function (r) {
-    ctx.fillRect(r[0], r[1], r[2] - r[0], r[3] - r[1]);
+    tracePoly(ctx, mapPts(scene.fm, rectPts(r)));
+    ctx.fill();
   });
   ctx.restore();
 
@@ -670,7 +724,7 @@ function paintScene(canvas, scene, pal, env) {
 
   // 门槛
   scene.patches.forEach(function (p) {
-    tracePoly(ctx, p.pts);
+    tracePoly(ctx, mapPts(scene.fm, p.pts));
     ctx.fillStyle = (pal[p.mat] || pal.threshold).top;
     ctx.fill();
   });
@@ -682,7 +736,8 @@ function paintScene(canvas, scene, pal, env) {
     var top = sd.faces[sd.faces.length - 1];
     if (sd.ghost) {
       ctx.save();
-      tracePoly(ctx, top.pts);
+      applyMatrix(ctx, sd.tm);
+      tracePoly(ctx, sd.base);
       ctx.globalAlpha = 0.16;
       ctx.fillStyle = pal.ghost.fill;
       ctx.fill();
@@ -697,7 +752,10 @@ function paintScene(canvas, scene, pal, env) {
     sd.faces.forEach(function (face) {
       if (face.type === 'side') paintSide(ctx, scene, pal, sd, face);
     });
-    paintTop(ctx, scene, pal, sd, top);
+    ctx.save();
+    applyMatrix(ctx, sd.tm);
+    paintTop(ctx, scene, pal, sd, sd.base);
+    ctx.restore();
     if (sd.kind === 'wall' || sd.kind === 'sill' || sd.kind === 'hidden-door') wallOutline(ctx, sd, top.pts, px);
     else if (sd.kind !== 'window') paintTopShadows(ctx, scene, pal, sd, top);
   });

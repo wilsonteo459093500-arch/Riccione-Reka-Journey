@@ -282,3 +282,29 @@ ${list.map((f) => `- ${f}`).join('\n')}
 
 Keep everything else exactly as it is in image 1: the same camera and framing, the same walls and furniture that are not mentioned, the same materials, colours, lighting, shadows and background. Do not restyle or re-imagine the picture. No text, no labels, no watermark, no logo.`;
 }
+
+/**
+ * 「AI 美化」（英文，给出图模型；随附 [程序画的精确图, ...材质参考图]）—— 只换材质和光影，位置一律不动
+ * @param {{ inventory?:string[], refCount?:number, view?:'top'|'persp'|'iso' }} args
+ *   inventory：由几何自动生成的物件清单（「4 x chair」…），让模型知道画面里应该有什么、不该多出什么
+ */
+export function reskinPromptText({ inventory = [], refCount = 0, view = 'top' } = {}) {
+  const viewName = view === 'iso' ? 'an angled axonometric 3D view with low cut walls' : view === 'persp' ? 'a look-down 3D floor plan with mild perspective' : 'a strict top-down 3D floor plan';
+  const list = inventory.map((l) => String(l || '').trim()).filter(Boolean);
+  const refs =
+    refCount > 0
+      ? `\n\nMATERIAL REFERENCES — ${imagesRange(2, refCount)} ${refCount > 1 ? 'are interior renders' : 'is an interior render'} of this project. Use ${refCount > 1 ? 'them' : 'it'} ONLY for materials and colours (wood veneer, stone, metal, fabric, floor finish). Ignore ${refCount > 1 ? 'their' : 'its'} layout, camera and furniture positions completely.`
+      : '';
+  return `Image 1 is a precise 3D floor plan render (${viewName}) drawn by a program from measured coordinates. Every wall, opening, cabinet, desk and chair in it is already at its exact position and size.
+
+Re-render image 1 as a photorealistic architectural visualisation. This is a MATERIAL AND LIGHTING pass only:
+- Same camera, framing and aspect ratio. The result must line up with image 1 when laid over it.
+- Keep every object's position, footprint, size, height and shape exactly as in image 1. Do not move, rotate, resize, merge or split anything.
+- Do not add anything: no extra furniture, cabinets, shelves, walls, doors, plants, rugs, lamps, decor, people or text. Do not remove anything.${list.length ? `\n- The scene contains exactly: ${list.join('; ')}. Nothing else.` : ''}
+- A dashed translucent outline on a desk marks a wall-hung cabinet above it: keep it as a subtle outline or leave it out; never turn it into a solid object standing on the desk or floor.
+
+What to improve:
+- Materials: fine-grained walnut veneer on the cabinetry, white marble with soft grey veining on the worktops, light oak herringbone floor, matte plaster walls, clear glass with soft reflections, upholstered chairs.
+- Lighting: soft global illumination, gentle contact shadows and ambient occlusion, warm natural light from the same direction as in image 1.
+- Background: the same clean seamless warm light-beige. No text, no labels, no watermark, no logo, no border.${refs}`;
+}

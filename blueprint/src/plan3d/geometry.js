@@ -10,8 +10,8 @@
 
 /** 家具 / 柜体的种类：中文名、默认高度（毫米，图纸上读不出来，设计师可改）、材质槽 */
 var KINDS = {
-  tall: { zh: '高柜', z0: 0, z1: 1600, mat: 'cabinet' },
-  glass: { zh: '玻璃柜', z0: 0, z1: 1600, mat: 'glass' },
+  tall: { zh: '高柜', z0: 0, z1: 2200, mat: 'cabinet' },
+  glass: { zh: '玻璃柜', z0: 0, z1: 2100, mat: 'glass' },
   low: { zh: '矮柜', z0: 0, z1: 850, mat: 'cabinet' },
   desk: { zh: '书桌台面', z0: 0, z1: 750, mat: 'worktop' },
   shelf: { zh: '层架', z0: 0, z1: 420, mat: 'cabinet' },
@@ -288,4 +288,41 @@ function contentBox(geo) {
   ];
 }
 
-export { KINDS, SIDES, kindOf, roomRects, edgeFor, openingRect, deriveWalls, snapToWall, rectPoly, chairPolys, clipPolyToBox, contentBox };
+var KIND_EN = {
+  tall: 'full-height cabinet',
+  glass: 'glass-door display cabinet',
+  low: 'low cabinet',
+  desk: 'desk with a stone worktop',
+  shelf: 'low open shelf unit',
+  hung: 'wall-hung cabinet above a desk',
+  chair: 'chair',
+  column: 'structural column',
+  block: 'low plain block',
+};
+var OPENING_EN = { window: 'window', door: 'door opening', 'hidden-door': 'flush hidden door panel', gap: 'opening' };
+
+/** 物件清单（英文，给 AI 美化的提示词用）：「4 x chair」「1 x glass-door display cabinet (GLASS DOOR CABINET)」 */
+function inventoryLines(geo) {
+  var order = [];
+  var groups = {};
+  var add = function (key, name, label) {
+    if (!groups[key]) {
+      groups[key] = { name: name, n: 0, labels: [] };
+      order.push(key);
+    }
+    groups[key].n += 1;
+    if (label && groups[key].labels.indexOf(label) < 0) groups[key].labels.push(label);
+  };
+  (geo.items || []).forEach(function (it) {
+    add('item:' + it.kind, KIND_EN[it.kind] || KIND_EN.block, it.label);
+  });
+  (geo.openings || []).forEach(function (op) {
+    add('opening:' + op.type, OPENING_EN[op.type] || OPENING_EN.gap, '');
+  });
+  return order.map(function (key) {
+    var g = groups[key];
+    return g.n + ' x ' + g.name + (g.labels.length ? ' (' + g.labels.join(', ') + ')' : '');
+  });
+}
+
+export { inventoryLines, KINDS, SIDES, kindOf, roomRects, edgeFor, openingRect, deriveWalls, snapToWall, rectPoly, chairPolys, clipPolyToBox, contentBox };

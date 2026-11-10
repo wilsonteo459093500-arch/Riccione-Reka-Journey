@@ -7,7 +7,7 @@ import { extractJson } from './polish.js';
 import { toInlineImage, toJpegBlob, dataUrlToBlob, canvasToBlob } from '../store/assets.js';
 import { uid } from '../engine/model.js';
 import {
-  floorplanPromptText, planRegionPrompt, planBriefPrompt, checkPrompt, refinePrompt, resolveView, resolveScope,
+  floorplanPromptText, planRegionPrompt, planBriefPrompt, checkPrompt, refinePrompt, reskinPromptText, resolveView, resolveScope,
   DOLLHOUSE_VIEWS, PLAN_SCOPES,
 } from './prompts.js';
 import { PDFJS_DOC_OPTIONS } from '../import/pdfjsAssets.js';
@@ -423,6 +423,30 @@ export async function refineDollhouse({ settings, renderBlob, planBlob = null, f
   if (planBlob) inputs.push(inline(await toInlineImage(planBlob, PLAN_EDGE)));
   const size = await sizeOfBlob(renderBlob);
   const prompt = refinePrompt({ fixes: list, hasPlan: !!planBlob });
+  return await runImage({ settings, prompt, inputs, aspect: pickAspect(size.w, size.h), onWait, onFallback });
+}
+
+export const MAX_POLISH_REFS = 3;
+
+/**
+ * 「AI 美化」：把程序按坐标画的精确图交给出图模型，只换材质和光影（位置由提示词要求保持不动，不保证）。
+ * 输入 = [精确图, ...最多 3 张材质参考图]，输出比例跟精确图一致，方便叠在一起对比。
+ * @param {{ settings, guideBlob:Blob, refSrcs?:Array<string|Blob>, inventory?:string[], view?:string, onWait?, onFallback? }} args
+ * @returns {Promise<Blob>} JPEG
+ */
+export async function polishRender({ settings, guideBlob, refSrcs = [], inventory = [], view = 'top', onWait, onFallback }) {
+  if (!settings?.apiKey) throw new Error('还没有配置 API key，点右上角设置。');
+  if (!guideBlob) throw new Error('没有可以美化的图');
+  const inputs = [inline(await toInlineImage(guideBlob, PLAN_EDGE))];
+  for (const src of (refSrcs || []).slice(0, MAX_POLISH_REFS)) {
+    try {
+      inputs.push(inline(await toInlineImage(src, REF_EDGE)));
+    } catch {
+      /* 某张参考图读不出来就跳过 */
+    }
+  }
+  const size = await sizeOfBlob(guideBlob);
+  const prompt = reskinPromptText({ inventory, refCount: inputs.length - 1, view });
   return await runImage({ settings, prompt, inputs, aspect: pickAspect(size.w, size.h), onWait, onFallback });
 }
 
