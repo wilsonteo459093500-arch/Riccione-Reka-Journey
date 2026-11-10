@@ -88,7 +88,7 @@ export function excelWorkbook(XLSX, meta, computed, loose, notes = {}, lang = 'b
           doneCab.add(cid);
           const cab = cabById.get(cid);
           const irs = zr.items.filter((x) => x.item.kira?.cabinetId === cid);
-          row([[cab.code, cabinetTitle(cab, lang)].filter(Boolean).join(' · ')]);
+          row([[cab.code, cabinetTitle(cab, lang), cab.place?.planId ? t({ en: 'see floor plan', zh: '见平面图' }) : ''].filter(Boolean).join(' · ')]);
           (cab.frames || []).forEach((f) => {
             const lines = [];
             irs.filter((x) => x.item.kira.frameId === f.id).forEach((x) => x.lines.forEach((ln) => {

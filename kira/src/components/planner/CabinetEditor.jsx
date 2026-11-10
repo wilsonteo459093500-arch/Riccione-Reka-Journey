@@ -8,6 +8,7 @@ import { templateOf, updateSpec, updateSpecKeep, frameTitle } from '../../planne
 import { cabinetTotal, resolveSeries, customSeriesCount } from '../../planner/bridge.js';
 import { explainCabinet } from '../../planner/explain.js';
 import { validateCabinet } from '../../planner/validate.js';
+import { aisleWarningsFor } from '../../planner/plan.js';
 import { layoutLeaves, bodyHeight, CRAFT_COEF, DEFAULT_GLASS_COEF, mmToM } from '../../planner/model.js';
 import { FINISHES, HANDLES, DEFAULT_DOOR_FINISH, DEFAULT_CARCASS_FINISH } from '../../render/palette.js';
 import SvgShapes from '../../render/SvgShapes.jsx';
@@ -55,7 +56,7 @@ function Preview({ cab, onYaw, lang, mode, setMode, children }) {
   );
 }
 
-export default function CabinetEditor({ cab: initial, zone, defaults = {}, lang = 'both', isNew, totalWith, onSave, onDelete, onClose }) {
+export default function CabinetEditor({ cab: initial, zone, defaults = {}, lang = 'both', isNew, totalWith, onSave, onDelete, onClose, plans = [], otherCabinets = [] }) {
   const [cab, setCab] = useState(initial);
   const t = templateOf(cab.template);
   const spec = cab.spec;
@@ -93,7 +94,8 @@ export default function CabinetEditor({ cab: initial, zone, defaults = {}, lang 
   const total = useMemo(() => cabinetTotal(cab, defaults), [cab, defaults]);
   const grand = useMemo(() => (totalWith ? totalWith(cab) : total), [cab, totalWith, total]);
   const rows = useMemo(() => explainCabinet(cab, defaults), [cab, defaults]);
-  const warnings = useMemo(() => validateCabinet(cab, { ceilingH }), [cab, ceilingH]);
+  // 第三版：放在户型图上的柜子，走道 / 重叠提醒也列在这里（只提醒，不挡出价）
+  const warnings = useMemo(() => [...validateCabinet(cab, { ceilingH }), ...aisleWarningsFor(cab, plans, otherCabinets).map((w) => ({ level: w.level, msg: w.msg }))], [cab, ceilingH, plans, otherCabinets]);
   const leaves = useMemo(() => (cab.frames || []).flatMap((f) => layoutLeaves(f.body, 0, 0, f.W, bodyHeight(f))), [cab]);
   const hasGlass = leaves.some((l) => l.node.type === 'glass');
   const hasOpen = leaves.some((l) => l.node.type === 'open');

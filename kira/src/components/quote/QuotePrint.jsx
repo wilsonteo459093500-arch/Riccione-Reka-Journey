@@ -1,8 +1,11 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Printer, X, Image as ImageIcon } from 'lucide-react';
 import { exportLongImage } from '../../utils/longImage.js';
 import CabinetPics from '../planner/CabinetPics.jsx';
+import PlanFigure from '../plan/PlanFigure.jsx';
+import { planReady } from '../../planner/plan.js';
+import { planImageDataUrl } from '../../services/planImages.js';
 import { useBackClose } from '../planner/bits.jsx';
 import { cabinetTitle, frameTitle } from '../../planner/templates.js';
 import { frameDimsLabel } from '../../planner/bridge.js';
@@ -12,8 +15,19 @@ import { fmt } from '../../utils/helpers.js';
 
 // 报价单（可打印 / 另存 PDF）。lang：'en' | 'zh' | 'both'。
 // 定制橱柜（SAIL by Riccione Reka）+ Loose Furniture（Riccione Furniture，另起一页）。
-export default function QuotePrint({ meta, computed, loose, cabinetNote = '', looseNote = '', discountNote = '', looseDiscountNote = '', audience = 'retail', designerDisc = '30', lang = 'both', showPics = true, onClose }) {
+export default function QuotePrint({ meta, computed, loose, cabinetNote = '', looseNote = '', discountNote = '', looseDiscountNote = '', audience = 'retail', designerDisc = '30', lang = 'both', showPics = true, plans = [], onClose }) {
   useBackClose(onClose); // 手机返回键 = 关掉预览，不离开 KIRA
+  // 第三版：平面索引图（每张有柜子的户型图一页）。图片先转 data URL（长图截图时不用再下载）
+  const allZones = computed.zoneResults.map((zr) => zr.zone);
+  const cabsAll = allZones.flatMap((z) => (z.cabinets || []).map((c) => ({ c, z })));
+  const planPages = (plans || []).filter((p) => planReady(p) && cabsAll.some(({ c }) => c.place?.planId === p.id));
+  const [planImgs, setPlanImgs] = useState({});
+  const planLoad = useRef(null);
+  if (!planLoad.current) {
+    planLoad.current = Promise.all(planPages.map((p) => planImageDataUrl(p.image.path).then((u) => [p.image.path, u || '']).catch(() => [p.image.path, ''])))
+      .then((pairs) => Object.fromEntries(pairs));
+  }
+  useEffect(() => { let on = true; planLoad.current.then((m) => { if (on) setPlanImgs(m); }); return () => { on = false; }; }, []);
   const zones = computed.zoneResults.filter((zr) => zr.zone.items.length > 0);
   const looseRows = loose?.rows || [];
   const hasCab = zones.length > 0;
@@ -80,7 +94,11 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
   const handleImage = async () => {
     if (!sheetRef.current || imgBusy) return;
     setImgBusy(true);
-    try { await exportLongImage(sheetRef.current, docName()); } catch (e) { alert('Long image failed 长图生成失败：' + (e?.message || e)); }
+    try {
+      await planLoad.current; // 户型图载入完才截图
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      await exportLongImage(sheetRef.current, docName());
+    } catch (e) { alert('Long image failed 长图生成失败：' + (e?.message || e)); }
     setImgBusy(false);
   };
 
@@ -333,9 +351,38 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
             </div>
           )}
 
+          {/* ===== 第三版：平面索引图（定制橱柜明细前，每张户型图一页）===== */}
+          {hasCab && planPages.map((p, i) => {
+            const here = cabsAll.filter(({ c }) => c.place?.planId === p.id).sort((a, b) => (parseInt(String(a.c.code).replace(/\D/g, ''), 10) || 0) - (parseInt(String(b.c.code).replace(/\D/g, ''), 10) || 0));
+            return (
+              <div key={p.id} className="p-8 text-[#2D3E36]" style={{ fontSize: 13, breakBefore: hasSummary || i > 0 ? 'page' : 'auto' }} data-plan-page>
+                <Head brand="SAIL BY RICCIONE REKA" logo="/brand/sail-logo.png" logoH={58} />
+                <CustomerRow />
+                <div className="mt-4 px-2 py-1 font-medium text-xs uppercase tracking-wide" style={{ background: T.sand }}>
+                  {t({ en: 'Floor Plan Index', zh: '平面索引图' })}{p.name ? ` · ${pickLang(p.name, lang)}` : ''}
+                </div>
+                <div className="mt-2" style={{ border: `1px solid ${T.lineSoft}`, breakInside: 'avoid' }}>
+                  <PlanFigure plan={p} href={planImgs[p.image.path] || null} cabinets={here.map(({ c }) => c)} />
+                </div>
+                <table className="w-full mt-3 text-xs" style={{ borderCollapse: 'collapse', breakInside: 'avoid' }}>
+                  <tbody>
+                    {here.map(({ c, z }) => (
+                      <tr key={c.id} style={{ borderTop: `1px solid ${T.lineSoft}` }}>
+                        <td className="py-1 px-2 font-medium" style={{ width: 48 }}>{c.code}</td>
+                        <td className="py-1 px-2">{cabinetTitle(c, lang)}</td>
+                        <td className="py-1 px-2" style={{ color: T.inkSoft }}>{pickLang(z.name, lang) || t(RLBL.untitled)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="mt-2 text-[11px] italic" style={{ color: T.inkSoft }}>{t({ en: 'Positions are indicative; final dimensions follow site measurement.', zh: '位置仅示意，最终尺寸以现场测量为准。' })}</div>
+              </div>
+            );
+          })}
+
           {/* ===== 定制橱柜 SAIL BY RICCIONE REKA ===== */}
           {hasCab && (
-            <div className="p-8 text-[#2D3E36]" style={{ fontSize: 13, breakBefore: hasSummary ? 'page' : 'auto' }}>
+            <div className="p-8 text-[#2D3E36]" style={{ fontSize: 13, breakBefore: hasSummary || planPages.length ? 'page' : 'auto' }}>
               <Head brand="SAIL BY RICCIONE REKA" logo="/brand/sail-logo.png" logoH={58} />
               <CustomerRow />
 

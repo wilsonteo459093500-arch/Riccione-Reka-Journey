@@ -17,6 +17,8 @@ import { mmToM, uid } from '../../planner/model.js';
 import CabinetCard from '../planner/CabinetCard.jsx';
 import CabinetEditor from '../planner/CabinetEditor.jsx';
 import TemplatePicker from '../planner/TemplatePicker.jsx';
+import PlanBoard from '../plan/PlanBoard.jsx';
+import { fitCabinetToRect } from '../../planner/plan.js';
 import { parseMeters } from '../planner/bits.jsx';
 import { DOOR_SERIES, CARCASS_SERIES } from '../../constants/pricing.js';
 import { Boxes } from 'lucide-react';
@@ -177,7 +179,7 @@ function MobileItemCard({ item, result, selected, onToggleSelect, onEdit, canUp,
 }
 
 // 受控组件：doc = { meta, zones, looseItems, adjustPct }；改动通过 onChange 回传上层。
-export default function QuotationView({ doc, onChange, mobileTab = null, onMobileTab }) {
+export default function QuotationView({ doc, onChange, mobileTab = null, onMobileTab, planPathShared }) {
   const toast = useToast();
   const confirm = useConfirm();
   const [showPrint, setShowPrint] = useState(false);
@@ -284,10 +286,13 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
   const [picking, setPicking] = useState(null);       // zoneId：正在选模板
   const [editingCab, setEditingCab] = useState(null); // { zoneId, cab, isNew }
   const [ceilNote, setCeilNote] = useState({});       // zoneId → 「2700 mm → 2.70 m」（打了毫米时提示）
+  const plans = doc.plans || [];
+  const [drawn, setDrawn] = useState(null); // 第三版：在户型图上画的框 { planId, rect } → 选完模板用框的尺寸
   const startCabinet = (zoneId, templateId) => {
     const zone = zones.find((z) => z.id === zoneId);
     // 楼高没填（null / 0）→ 不传，模板自己按 2.70 m（双保险：不让 null 变成 0 高的柜子）
-    const cab = newCabinet(templateId, { ceilingH: zone?.ceilingH > 0 ? zone.ceilingH : undefined, code: nextCode(zones) });
+    let cab = newCabinet(templateId, { ceilingH: zone?.ceilingH > 0 ? zone.ceilingH : undefined, code: nextCode(zones) });
+    if (drawn) { cab = fitCabinetToRect(cab, drawn.rect, drawn.planId); setDrawn(null); }
     setPicking(null);
     setEditingCab({ zoneId, cab, isNew: true });
   };
@@ -302,7 +307,8 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
     if (await confirm({ title: 'Delete cabinet 删除柜子', message: `Delete ${c?.code || ''} ${c?.name || ''}? 确定删除这个柜子？`, danger: true, confirmText: 'Delete 删除', cancelText: 'Cancel 取消' })) removeCabinetNow(zoneId, id);
   };
   const duplicateCabinet = (zoneId, cab) => {
-    const copy = { ...structuredClone(cab), id: uid('cab'), code: nextCode(zones) };
+    const { place: _p, ...rest } = structuredClone(cab); // 复制的柜子不放在图上同一个位置（会重叠）
+    const copy = { ...rest, id: uid('cab'), code: nextCode(zones) };
     copy.frames = copy.frames.map((f, i) => ({ ...f, id: `${copy.id}-f${i}` }));
     saveCabinet(zoneId, copy);
   };
@@ -363,6 +369,18 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
               style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }} />
           </div>
         </div>
+
+        {/* 第三版：户型图（客户资料下面、所有房间上面；可收起）*/}
+        <PlanBoard plans={plans} zones={zones} lang={lang} planPathShared={planPathShared}
+          onChange={({ plans: ps, zones: zs }) => patch({ plans: ps, zones: zs })}
+          onEdit={(zoneId, cab) => setEditingCab({ zoneId, cab, isNew: false })}
+          onDraw={({ planId, rect, zoneId }) => {
+            setDrawn({ planId, rect });
+            if (zoneId && zones.some((z) => z.id === zoneId)) { setPicking(zoneId); return; }
+            const z = blankZone('');
+            patch({ zones: [...zones, z] });
+            setPicking(z.id);
+          }} />
 
         {/* 定制 items 批量操作条 */}
         {selItems.size > 0 && (
@@ -868,16 +886,17 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
         </div>
       </div>
 
-      {picking && <TemplatePicker onPick={(tid) => startCabinet(picking, tid)} onClose={() => setPicking(null)} />}
+      {picking && <TemplatePicker onPick={(tid) => startCabinet(picking, tid)} onClose={() => { setPicking(null); setDrawn(null); }} />}
       {editingCab && (
         <CabinetEditor key={editingCab.cab.id} cab={editingCab.cab} isNew={editingCab.isNew} lang={lang}
           zone={zones.find((z) => z.id === editingCab.zoneId)} defaults={defaults}
+          plans={plans} otherCabinets={zones.flatMap((z) => z.cabinets || []).filter((c) => c.id !== editingCab.cab.id)}
           totalWith={totalWith(editingCab.zoneId)}
           onSave={(c) => { saveCabinet(editingCab.zoneId, c); setEditingCab(null); }}
           onDelete={async () => { const zid = editingCab.zoneId, cid = editingCab.cab.id; if (await confirm({ title: 'Delete cabinet 删除柜子', message: 'Delete this cabinet? 确定删除这个柜子？', danger: true, confirmText: 'Delete 删除', cancelText: 'Cancel 取消' })) { removeCabinetNow(zid, cid); setEditingCab(null); } }}
           onClose={() => setEditingCab(null)} />
       )}
-      {showPrint && <QuotePrint meta={meta} computed={computed} loose={looseCalc} cabinetNote={cabinetNote} looseNote={looseNote} discountNote={discountNote} looseDiscountNote={looseDiscountNote} audience={audience} designerDisc={designerDisc} lang={lang} onClose={() => setShowPrint(false)} />}
+      {showPrint && <QuotePrint meta={meta} computed={computed} loose={looseCalc} cabinetNote={cabinetNote} looseNote={looseNote} discountNote={discountNote} looseDiscountNote={looseDiscountNote} audience={audience} designerDisc={designerDisc} lang={lang} plans={plans} onClose={() => setShowPrint(false)} />}
       {showCatalog && (
         <CatalogPicker
           onAdd={(it) => setLoose((ls) => [...ls, { id: newId('lf'), ...it }])}

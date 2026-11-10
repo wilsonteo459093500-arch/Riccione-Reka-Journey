@@ -23,7 +23,8 @@ export function buildTextQuote(meta, computed, loose, notes = {}, lang = 'both')
     (zr.zone.cabinets || []).forEach((c) => {
       const amt = zr.items.filter((ir) => ir.item.kira?.cabinetId === c.id).reduce((a, ir) => a + ir.total, 0);
       // 名称 / 简介按语言从结构化数据生成（EN 不夹中文、中文不夹英文）
-      L.push(`   • ${c.code} ${cabinetTitle(c, lang)} · ${cabinetSummary(c, lang)} — ≈${fmtMYR(amt)}`);
+      const seePlan = c.place?.planId ? ` (${t({ en: 'see floor plan', zh: '见平面图' })})` : ''; // 放在户型图上的柜子（删户型图时会一起拿掉 place）
+      L.push(`   • ${c.code} ${cabinetTitle(c, lang)}${seePlan} · ${cabinetSummary(c, lang)} — ≈${fmtMYR(amt)}`);
     });
   });
   L.push('');
