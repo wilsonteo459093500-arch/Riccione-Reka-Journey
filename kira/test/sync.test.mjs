@@ -324,3 +324,12 @@ test('F8 local-only mode: storage full never deletes old quotes (only the cloud 
   const ids = JSON.parse(ls.getItem(STORE_KEY)).records.map((r) => r.id);
   for (let i = 25; i < 30; i++) assert.ok(ids.includes(`rec_${i}`), `rec_${i} not in cloud → must stay`);
 });
+
+test('cleanRecord: plans (v3) — old records without plans untouched, junk cleaned, non-array → []', () => {
+  const old = { id: 'r1', groupId: 'r1', meta: {}, zones: [] };
+  assert.equal(cleanRecord(old), old);
+  const good = { ...old, plans: [{ id: 'p', name: 'G', image: { path: 'local:a', w: 10, h: 10, kind: 'img', page: 1 }, scale: null }] };
+  assert.equal(cleanRecord(good), good);
+  assert.deepEqual(cleanRecord({ ...old, plans: 'x' }).plans, []);
+  assert.deepEqual(cleanRecord({ ...old, plans: [null, good.plans[0]] }).plans.map((p) => p.id), ['p']);
+});

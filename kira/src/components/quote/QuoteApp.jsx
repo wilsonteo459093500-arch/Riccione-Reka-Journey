@@ -14,6 +14,7 @@ import { demoRecord } from '../../planner/demo.js';
 import QuotationView, { blankZone } from './QuotationView.jsx';
 import AuthGate from '../auth/AuthGate.jsx';
 import { kiraCloud, cloudConfigured } from '../../services/kiraRepo.js';
+import { promoteLocalPlans, replacePlanPaths, retryPlanDeletes, isLocalPath } from '../../services/planImages.js';
 import {
   STORE_KEY, PENDING_KEY, PENDING_DEL_KEY, DELETED_KEY, bootDevice,
   mergePull, applyRealtime, mergeTabs, dropIds, canUpload, updatedAtOf,
@@ -208,9 +209,28 @@ function Inner({ signOut, user, cloudReady = false } = {}) {
     else toast('Deleted 已删除', 'success');
   };
 
+  // 第三版：本机模式 / 离线时存的户型图（local:…）→ 登录有网后补传，再把记录里的路径换掉（记录照常待同步）
+  const promoting = useRef(false);
+  const promotePlanImages = async () => {
+    if (promoting.current) return;
+    promoting.current = true;
+    try {
+      await retryPlanDeletes().catch(() => {});
+      for (const r of storeRef.current.records) {
+        if (!(r.plans || []).some((p) => isLocalPath(p?.image?.path)) || !canUpload(r, userId, cloudIds.current)) continue;
+        const map = await promoteLocalPlans(r.plans).catch(() => new Map());
+        if (!map.size) continue;
+        let saved = null;
+        setStore((s) => ({ ...s, records: s.records.map((x) => (x.id === r.id ? (saved = { ...x, plans: replacePlanPaths(x.plans || [], map), updatedAt: nowTs() }) : x)) }));
+        if (saved) setPendingIds([saved.id], true);
+      }
+    } finally { promoting.current = false; }
+  };
+
   // 把待删除 / 待同步的推上云（只在拉过云端之后：推的都是比云端新的）
   const flush = async () => {
     if (!canTalk() || !synced.current) return;
+    await promotePlanImages();
     if (pendingDel.current.size) {
       const res = await sendDeletes([...pendingDel.current]);
       if (res === 'refused') deleteToast(res);
@@ -679,7 +699,8 @@ function Inner({ signOut, user, cloudReady = false } = {}) {
               )}
               {/* 一份报价出错只影响这一份：列表 / 其他客户照常可用 */}
               <ErrorBoundary inline key={active.id}>
-                <QuotationView key={active.id} doc={active} onChange={updateActive} mobileTab={isMobile ? mtab : null} onMobileTab={setMtab} />
+                <QuotationView key={active.id} doc={active} onChange={updateActive}
+                  planPathShared={(path) => storeRef.current.records.some((r) => r.id !== active.id && (r.plans || []).some((p) => p?.image?.path === path))} mobileTab={isMobile ? mtab : null} onMobileTab={setMtab} />
               </ErrorBoundary>
             </div>
           ) : (
