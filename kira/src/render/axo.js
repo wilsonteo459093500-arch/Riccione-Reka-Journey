@@ -187,7 +187,9 @@ function endsOf(f, ex) {
     const k = flag === 'start' ? 'left' : flag === 'end' ? 'right' : side;
     return ex?.[k] !== false;
   };
-  return { left: on('left'), right: on('right') };
+  // 厨房高柜内侧（朝台面那一边）：有 innerPanel、且「高柜内侧」没关 → 也画见光板（同计价 bridge.js panelIn）
+  const inner = (side) => f?.innerPanel?.side === side && Number(f.innerPanel.area) > 0 && ex?.tallInner !== false;
+  return { left: on('left') || inner('left'), right: on('right') || inner('right') };
 }
 
 // 切分树坏了（缺 children 等）→ 当整块封门，不让整张图炸掉
