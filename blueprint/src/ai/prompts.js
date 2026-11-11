@@ -108,23 +108,16 @@ ${JSON.stringify(items.map((it) => ({ id: it.id, kind: it.kind, zh: it.zh })))}
 }
 
 // ---------------------------------------------------------------------------
-// 「3D 户型图」：平面布置图 →（框选范围 → 读成清单 → 确认）→ 照片级俯视 3D 户型图 →（对照清单检查 → 文字修正）
+// 「3D 户型图」：找图纸范围（AI 框图的提示词在 src/plan3d/prompt.js，和画图的程序放在一起，以后给 VISI 用同一份）
 // ---------------------------------------------------------------------------
 
-/** 视角：正俯视（和图纸一一对应，位置最准）/ 微倾俯视（略带透视，看得到一点墙面和柜体立面） */
+/** 旧版「AI 直接出图」的两种视角：只用来给生成记录里的旧图标名字 */
 export const DOLLHOUSE_VIEWS = [
   { id: 'top', zh: '正俯视', hint: '垂直往下看，和图纸一一对应，位置最准。' },
   { id: 'tilt', zh: '微倾俯视', hint: '略带透视，能看到一点墙面和柜体立面，更有立体感。' },
 ];
 
-/** 'top' / '正俯视' / 对象 → 视角定义（认不出 = 正俯视） */
-export function resolveView(view) {
-  if (view && typeof view === 'object') view = view.id || view.zh;
-  const key = String(view || '').trim().toLowerCase();
-  return DOLLHOUSE_VIEWS.find((v) => v.id === key || v.zh === String(view || '').trim()) || DOLLHOUSE_VIEWS[0];
-}
-
-/** 生成范围：room = 只做主房间（墙外的楼梯、储藏间不画）；all = 图上有的都画 */
+/** 框选范围：room = 只框主房间（墙外的楼梯、储藏间不要）；all = 图上有的都框进来 */
 export const PLAN_SCOPES = [
   { id: 'room', zh: '只做主房间', hint: '只画主房间四面墙以内，墙外的楼梯、储藏间、隔壁房间都不画。' },
   { id: 'all', zh: '连邻近空间', hint: '图纸上露出的邻近空间也一起画，位置照图纸。' },
@@ -151,136 +144,6 @@ Also decide:
 
 Return strict JSON only, no explanation and no code fence:
 {"kind":"room","roomName":"STUDY ROOM","drawing":[0,0,1000,1000],"mainRoom":[0,0,1000,1000]}`;
-}
-
-/**
- * 读图清单（给看图模型，中文；回 JSON）
- * @param {{ kind?:'room'|'floor', scope?:'room'|'all', roomName?:string }} args
- */
-export function planBriefPrompt({ kind = 'room', scope = 'room', roomName = '' } = {}) {
-  const name = String(roomName || '').trim();
-  const single = kind !== 'floor';
-  const rowsSpec = single
-    ? `这张图画的是一个房间${name ? `（${name}）` : ''}。rows 固定按这个顺序写 5 行，label 就用这几个词：
-- 「上墙」「右墙」「下墙」「左墙」：这面墙上有什么（窗、门、暗门、柱子）以及贴着这面墙放了什么（柜子、书桌、吊柜）。上墙、下墙从左到右写，左墙、右墙从上到下写；说清每样东西占这面墙的哪一段（左段 / 中段 / 右段，或大约几分之几）、从墙面往房间里伸出多少（浅 / 约四分之一房间深）。这面墙什么都没有就写「空墙」。
-- 「中央」：不贴墙、摆在房间中间的家具；没有就写「空，无家具」。
-- 椅子写在它所属的桌子那一行：几张、在桌子的哪一侧。${
-        scope === 'all'
-          ? '\n- 图上露出的邻近空间（楼梯、储藏间、走廊、隔壁房间）每个再加一行：label 写它的名字，text 写它在主房间的哪一侧、里面画了什么。outside 留空数组。'
-          : '\n- 主房间围墙以外的东西（楼梯、储藏间、墙外的柜子、隔壁房间）不要写进 rows，只把名字列在 outside 里 —— 它们不会被画出来。'
-      }`
-    : `这张图画的是整层 / 全屋。rows 每个房间或空间写一行：label 写图上印的房间名（没有印就写「左上房间」这样的位置名），text 先写它在图纸上的位置（左上 / 上中 / 右下…）和大概占多大，再写里面的家具贴着哪面墙、门窗开在哪面墙。走廊、楼梯、阳台、卫生间也各写一行。outside 留空数组。`;
-
-  return `你在帮室内设计师把一张平面布置图读成文字清单。后面会按清单生成俯视的 3D 户型图，所以位置必须准确。图纸的上方就是「上」，不要旋转，不要镜像。
-
-读图规则：
-- 粗黑线、涂黑的是墙和柱子；墙上的细双线是窗；带弧线或斜线的是门，写清开在哪面墙的哪一段。
-- 虚线框是吊柜、顶柜这类不落地的东西，写的时候加上「（吊柜，不落地）」。
-- 图上印的英文名（TOP HUNG CABINET、GLASS DOOR CABINET、HIDDEN DOOR…）原样保留，不翻译、不改写。
-- 只写图上看得见的；不要猜尺寸、材质、颜色、品牌。看不清的地方写「不确定」。
-- 标题栏、logo、装饰图案、页码不属于图纸，忽略。
-
-${rowsSpec}
-
-另外给出：
-- title：${single ? '主房间的名字（图上印的原样）' : '楼层名（图上印的原样，没有就写「全屋」）'}；
-- shape：${single ? '房间的形状和宽深比例，例如「近正方形，宽:深约 1:0.95」「横向长方形，宽:深约 3:2，右下角缺一块」' : '整层的外轮廓和宽深比例，例如「横向长方形，宽:深约 4:3，左下角凸出一块」'}。
-
-每行 text 用简洁的中文，不超过 80 个字。只返回严格的 JSON，不要任何解释、不要代码块：
-{"title":"…","shape":"…","rows":[{"label":"上墙","text":"…"}],"outside":["…"]}`;
-}
-
-/**
- * 英文出图提示词（俯视 3D 户型图）
- * @param {{ view?:object|string, lines?:string[], scope?:'room'|'all', kind?:'room'|'floor', title?:string,
- *           outside?:string[], refCount?:number, notes?:string }} args
- *   lines：设计师确认过的图纸清单（中文，逐行）；没有清单就只按图纸描
- */
-export function floorplanPromptText({ view, lines = [], scope = 'room', kind = 'room', title = '', outside = [], refCount = 0, notes = '' } = {}) {
-  const v = resolveView(view);
-  const name = String(title || '').trim();
-  const single = kind !== 'floor';
-  const roomOnly = single && resolveScope(scope) === 'room';
-
-  const camera =
-    v.id === 'tilt'
-      ? `- Almost top-down view: the camera is overhead and tilted only about 15–20° toward the bottom edge of the plan, with mild perspective, so the inner faces of the walls and the fronts of the cabinets along the top and side walls are slightly visible. It must still read as a floor plan — NOT a 45° isometric or corner view.`
-      : `- Straight top-down view: the camera is directly overhead looking vertically down, orthographic, with no tilt and no perspective distortion.`;
-
-  const checklist = lines.length
-    ? `\n\nCHECKLIST — the designer read the plan and confirmed the list below (上 / 下 / 左 / 右 = top / bottom / left / right of image 1; 吊柜 = wall-hung cabinet). Place every item where the list says. If your own reading of image 1 disagrees with the list, the list wins:\n${lines.map((l) => `- ${l}`).join('\n')}`
-    : '';
-
-  const outsideLine = outside.length ? ` (on this plan: ${outside.join(', ')})` : '';
-  const scopeText = roomOnly
-    ? `SCOPE — render ONLY ${name || 'the main room'}: the one room enclosed by its own walls. Anything drawn outside those walls${outsideLine} must NOT appear — no stairs, no store rooms, no corridor, no neighbouring rooms, no cabinets outside the walls. Beyond the outer face of the room's walls there is only the plain background.`
-    : single
-      ? `SCOPE — render everything image 1 shows: ${name || 'the main room'} and the partly drawn neighbouring spaces, each at its drawn position. Cut the neighbouring spaces off cleanly at the edge of the drawing; do not invent the parts that are not drawn.`
-      : `SCOPE — render the whole floor shown in image 1: every room and space at its drawn position. Do not add, remove, merge, mirror or move rooms.`;
-
-  const design =
-    refCount > 0
-      ? `MATERIALS — ${imagesRange(2, refCount)} ${refCount > 1 ? 'are interior renders' : 'is an interior render'} of this project. Use ${refCount > 1 ? 'them' : 'it'} ONLY as a material and colour palette: floor finish, wood veneers, stone, metal and fabric colours and textures. Do NOT copy ${refCount > 1 ? 'their' : 'its'} camera angle, room shape, furniture arrangement or the position of any object — positions come only from image 1${lines.length ? ' and the checklist' : ''}.`
-      : `MATERIALS — no reference renders were provided: use a warm, contemporary custom-cabinetry palette (light oak and walnut veneers, warm white walls, soft beige stone or timber floor), consistent across the plan.`;
-
-  const extra = String(notes || '').trim();
-
-  return `Turn the 2D floor layout plan in image 1 into ONE photorealistic 3D floor plan render seen from above — the furnished "3D floor plan" used in property brochures.
-
-CAMERA
-${camera}
-- Same orientation as image 1: the top of the plan is the top of the picture. Do not rotate, mirror or flip the plan.
-- The plan fills the frame with a small even margin on all sides.
-
-LAYOUT — trace image 1
-- Treat image 1 as a tracing template. Every wall, opening, column, cabinet and piece of furniture sits at the same position, with the same footprint and proportions, as drawn — laid over the plan, the render would line up with it.
-- Draw only what the plan shows. Do not add rooms, partitions, walls, doors, stairs or furniture that are not drawn, and do not leave out anything that is drawn.
-- Walls are cut low (about 1 m high) with clean flat tops that show their thickness, so nothing hides the interior. Windows are low glazed sections in the wall; doors are shown at their drawn position.
-- Dashed outlines on the plan are wall-hung or overhead units (for example top hung cabinets). They are not floor-standing: leave them out so the desk or worktop drawn beneath them stays visible.
-- Floor-standing cabinets are solid blocks exactly on their drawn footprint against the wall they are drawn on; desks and chairs keep their drawn position, count and orientation.
-- Ignore everything in image 1 that is not the building itself: slide titles, logos, decorative panels, labels, dimension text and hatching.${checklist}
-
-${scopeText}
-
-${design}
-
-RENDERING
-- Photorealistic architectural visualisation: physically based materials, realistic wood grain, stone veining and fabric, soft global illumination, soft contact shadows, and a soft drop shadow of the whole model on the background.
-- Background: clean seamless warm light-beige, nothing else on it.
-- No text, no labels, no room names, no dimensions, no arrows, no icons, no people, no watermark, no logo, no title, no border.${extra ? `\n\nDESIGNER NOTES (follow them unless they contradict the plan): ${extra}` : ''}`;
-}
-
-/**
- * 出图后对照检查（给看图模型，中文；随附 [平面图, 效果图]；回 JSON）
- * @param {{ lines?:string[], scope?:'room'|'all', kind?:'room'|'floor', title?:string }} args
- */
-export function checkPrompt({ lines = [], scope = 'room', kind = 'room', title = '' } = {}) {
-  const roomOnly = kind !== 'floor' && resolveScope(scope) === 'room';
-  const name = String(title || '').trim() || '主房间';
-  return `图 1 是平面布置图，图 2 是按它生成的俯视 3D 户型图。请对照图纸${lines.length ? '和下面的清单' : ''}检查图 2，只找「位置和数量」上的明显错误：
-- 多出或缺少的墙、隔间、房间、门、窗、柜子、桌子、椅子；
-- 东西放错了墙，或者不贴墙的画成了贴墙、贴墙的画到了房间中间；
-- 整体被旋转或镜像（图纸的上方应该是图 2 的上方）；
-- ${roomOnly ? `画出了「${name}」围墙以外的空间（楼梯、储藏间、隔壁房间等都不该出现）` : '图纸上有的房间或邻近空间没有画出来，或位置不对'}；
-- 图上出现了文字、标注、logo。
-不要评价材质、颜色、光线和风格，不要挑细微的比例差别，虚线框的吊柜没有画出来不算错。
-${lines.length ? `\n清单（设计师确认过，上 / 下 / 左 / 右指图纸的方向）：\n${lines.map((l) => `- ${l}`).join('\n')}\n` : ''}
-只返回严格的 JSON，不要任何解释、不要代码块。没有明显错误：{"ok":true,"issues":[]}；有错误：ok 为 false，issues 最多 5 条，每条一句中文，写清「哪里、错在哪、应该怎样」，例如：
-{"ok":false,"issues":["左墙的书桌画成了房间中央的独立书桌，应贴着左墙中段"]}`;
-}
-
-/**
- * 文字修正（英文，给出图模型；随附 [效果图, 平面图]）—— 只改列出的问题，其余保持不变
- * @param {{ fixes:string[], hasPlan?:boolean }} args
- */
-export function refinePrompt({ fixes = [], hasPlan = true } = {}) {
-  const list = fixes.map((f) => String(f || '').trim()).filter(Boolean);
-  return `Edit image 1, a 3D floor plan render seen from above.${hasPlan ? ' Image 2 is the 2D floor layout plan it was made from — use it only to see where things belong (上 / 下 / 左 / 右 in the corrections = top / bottom / left / right of the plan and of the render).' : ''}
-
-Apply ONLY these corrections:
-${list.map((f) => `- ${f}`).join('\n')}
-
-Keep everything else exactly as it is in image 1: the same camera and framing, the same walls and furniture that are not mentioned, the same materials, colours, lighting, shadows and background. Do not restyle or re-imagine the picture. No text, no labels, no watermark, no logo.`;
 }
 
 // ---------------------------------------------------------------------------

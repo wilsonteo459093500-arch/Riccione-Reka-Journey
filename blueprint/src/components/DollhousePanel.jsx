@@ -1,19 +1,28 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Box, Upload, Loader2, Download, Trash2, Presentation, ImageIcon, X, FileText, RotateCcw, Check, Info, Maximize2,
-  Crop, Plus, RefreshCw, Wand2, AlertTriangle, CheckCircle2, ListChecks,
+  Box, Upload, Loader2, Download, Trash2, Presentation, ImageIcon, X, FileText, Check, Info, Maximize2, Crop, Wand2, AlertTriangle, PencilRuler, Save,
+  SlidersHorizontal,
 } from 'lucide-react';
 import {
-  DOLLHOUSE_VIEWS, PLAN_SCOPES, MAX_REFS, MAX_BRIEF_ROWS, renderPlanToImage, cropPlan, isFullBox, detectPlanRegion, analyzePlan,
-  generateDollhouse, refineDollhouse, checkDollhouse, dollhouseFloors, floorViewSlides, defaultRefIds, setFloorPlan,
-  setFloorPlanUpload, setFloorRegion, setFloorPlanCrop, setFloorBrief, setFloorImage, addRender3d, removeRender3d, setRenderInfo,
-  insertDollhouseSlide, findDollhouseSlides, hasFloorSlide,
+  DOLLHOUSE_VIEWS, PLAN_SCOPES, renderPlanToImage, cropPlan, isFullBox, detectPlanRegion, dollhouseFloors, floorViewSlides, setFloorPlan,
+  setFloorPlanUpload, setFloorRegion, setFloorPlanCrop, setFloorImage, addRender3d, removeRender3d, setRenderInfo, insertDollhouseSlide,
+  findDollhouseSlides, hasFloorSlide,
 } from '../ai/dollhouse.js';
-import { storeBlob, getBlob, resolveUrl, onAssetsChanged, metaOf } from '../store/assets.js';
-import { clientLine, uid } from '../engine/model.js';
+import {
+  floorPlan3d, setPlan3dGeo, setPlan3dView, normalizeView, defaultView, activeTextures, recropGeo, carryPlan3d, detectPlanGeometry, detectPlanItems,
+} from '../ai/plan3d.js';
+import { recommendCorner } from '../plan3d/scene.js';
+import { renderGeo } from '../plan3d/edit.js';
+import { detectSummary } from '../plan3d/detect.js';
+import { storeBlob, getBlob, resolveUrl, onAssetsChanged, metaOf, measureBlob, canvasToBlob } from '../store/assets.js';
+import { clientLine } from '../engine/model.js';
 import PlanCropper from './PlanCropper.jsx';
+import Plan3dEditor from './plan3d/Plan3dEditor.jsx';
+import Plan3dPreview, { paintPlan3d, useTextureImages } from './plan3d/Plan3dPreview.jsx';
+import { ViewOptions, TexturePanel, viewLabel } from './plan3d/Plan3dOptions.jsx';
 
-// 「3D 户型图」面板：平面布置图 → 框选范围 → AI 读成清单（可改）→ 俯视 3D 户型图 → 对照清单检查 → 文字修正。
+// 「3D 户型图」面板：平面布置图 → 框选范围 → AI 先框出墙、门窗、柜子家具（或自己画）→ 在图纸上拖动核对
+// → 程序按坐标出图（视角、材质贴图可选）→ 保存 → 插入提案。位置以设计师核对过的坐标为准，AI 不画图。
 // props: { project, settings, notify, onOpenSettings, onChange(updater) }
 
 const card = 'bg-bp-card border border-bp-line rounded-2xl p-4';
@@ -27,14 +36,13 @@ const chip = (active) =>
     active ? 'bg-bp-dark text-bp-light border-bp-dark' : 'bg-white text-bp-muted border-bp-line hover:border-bp-rule'
   }`;
 
-// —— 生成任务放在模块级：切到别的标签再回来，进行中的状态还在 ——
-// '项目id:楼层id' → 出图 / 修正 { startedAt, msg }（按项目区分：复制出来的项目楼层 id 相同）；
-// 'brief:项目id:楼层id' → 读图；'check:图片 src' → 对照检查
+// —— AI 框图的任务放在模块级：切到别的标签再回来，进行中的状态还在 ——
+// 'detect:项目id:楼层id' → { startedAt, stage:'structure'|'items' }（按项目区分：复制出来的项目楼层 id 相同）
 const jobs = new Map();
 const jobListeners = new Set();
-function setJob(floorId, job) {
-  if (job) jobs.set(floorId, job);
-  else jobs.delete(floorId);
+function setJob(key, job) {
+  if (job) jobs.set(key, job);
+  else jobs.delete(key);
   jobListeners.forEach((fn) => fn());
 }
 function useJobs() {
@@ -70,9 +78,7 @@ const fmtSec = (ms) => {
 
 const safeName = (s) => String(s || '').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim();
 
-async function downloadSrc(src, filename) {
-  const blob = await getBlob(src);
-  if (!blob) throw new Error('图片不存在了');
+function saveBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -83,35 +89,13 @@ async function downloadSrc(src, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 3000);
 }
 
-/** 视角示意：正俯视 = 正方形；微倾俯视 = 上窄下宽的梯形 */
-function ViewGlyph({ id }) {
-  return (
-    <svg viewBox="0 0 16 16" width="15" height="15" className="inline-block align-[-3px]" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" aria-hidden="true">
-      {id === 'tilt' ? <path d="M4.5 3.5h7L14 12.5H2z" /> : <rect x="2.5" y="2.5" width="11" height="11" rx="1" />}
-    </svg>
-  );
+async function downloadSrc(src, filename) {
+  const blob = await getBlob(src);
+  if (!blob) throw new Error('图片不存在了');
+  saveBlob(blob, filename);
 }
 
-const inputCls =
-  'w-full rounded-lg border border-bp-line bg-white px-2.5 py-1.5 text-xs leading-relaxed text-bp-ink placeholder:text-bp-faint focus:outline-none focus:border-bp-gold';
-
-/** 多行文字：高度跟着内容走 */
-function AutoTextarea({ value, onChange, className = '', ...rest }) {
-  const ref = useRef(null);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${el.scrollHeight + 2}px`;
-  }, [value]);
-  return <textarea ref={ref} rows={1} value={value} onChange={onChange} className={`${inputCls} resize-none overflow-hidden ${className}`} {...rest} />;
-}
-
-const splitFixes = (text) =>
-  String(text || '')
-    .split(/\n+/)
-    .map((l) => l.trim())
-    .filter(Boolean);
+const STAGE_ZH = { structure: 'AI 正在看墙和门窗（第 1 次看图）', items: 'AI 正在找柜子和家具（第 2 次看图）' };
 
 export default function DollhousePanel({ project, settings, notify, onOpenSettings, onChange }) {
   useAssetsTick();
@@ -125,13 +109,6 @@ export default function DollhousePanel({ project, settings, notify, onOpenSettin
     if (!floors.some((f) => f.id === floorId)) setFloorId(floors[0]?.id);
   }, [floors, floorId]);
 
-  const views = useMemo(() => floorViewSlides(project, fid), [project, fid]);
-  const [refsByFloor, setRefsByFloor] = useState({});
-  const refIds = (refsByFloor[fid] ?? defaultRefIds(project, fid)).filter((id) => views.some((v) => v.id === id));
-  const setRefIds = (ids) => setRefsByFloor((m) => ({ ...m, [fid]: ids }));
-
-  const [view, setView] = useState('top');
-  const [style, setStyle] = useState('');
   const [planBusy, setPlanBusy] = useState(false);
   const [pdfSource, setPdfSource] = useState(null); // { floorId, file, pages, page } 多页 PDF 可换页
   const [dragOver, setDragOver] = useState(false);
@@ -139,17 +116,14 @@ export default function DollhousePanel({ project, settings, notify, onOpenSettin
   const [pendingInsert, setPendingInsert] = useState(null); // src：该层已有立体图页时，问替换还是再加一页
   const [cropper, setCropper] = useState(null); // { floorId, detecting } 框选对话框
   const [cropBusy, setCropBusy] = useState(false);
-  const [briefErr, setBriefErr] = useState({}); // 楼层 id → 读图失败的原因
-  const [fixOpen, setFixOpen] = useState(null); // 正在写修正的那张图
-  const [fixText, setFixText] = useState('');
+  const [detectErr, setDetectErr] = useState({}); // 楼层 id → AI 框图失败的原因
+  const [editing, setEditing] = useState(null); // 正在核对位置的楼层 id
+  const [saving, setSaving] = useState(false);
   const fileRef = useRef(null);
 
-  const jobKey = (floorId) => `${project.id}:${floorId}`;
-  const briefKey = (floorId) => `brief:${project.id}:${floorId}`;
-  const checkKey = (src) => `check:${src}`;
-  const job = jobMap.get(jobKey(fid));
-  const briefJob = jobMap.get(briefKey(fid));
-  const myJobs = [...jobMap.keys()].filter((k) => k.startsWith(`${project.id}:`) || k.startsWith(`brief:${project.id}:`)).length;
+  const detectKey = (id) => `detect:${project.id}:${id}`;
+  const job = jobMap.get(detectKey(fid));
+  const myJobs = [...jobMap.keys()].filter((k) => k.startsWith(`detect:${project.id}:`)).length;
   const now = useNow(myJobs > 0);
   const planUrl = resolveUrl(floor?.plan);
   const sourceSrc = floor?.planSource || floor?.plan || null;
@@ -157,13 +131,31 @@ export default function DollhousePanel({ project, settings, notify, onOpenSettin
   const kind = region?.kind === 'floor' ? 'floor' : 'room';
   const scope = kind === 'floor' ? 'all' : floor?.planScope === 'all' ? 'all' : 'room';
   const cropped = !!floor?.planCrop;
-  const brief = floor?.planBrief || null;
   const info = floor?.render3dInfo || {};
   const renders = [...(floor?.renders3d || [])].reverse(); // 最新在前
   const deck3d = findDollhouseSlides(project, fid);
   const canSetFloorBg = hasFloorSlide(project, fid);
   const floorLabel = floor?.zh || '全屋';
   const scopeDef = PLAN_SCOPES.find((x) => x.id === scope) || PLAN_SCOPES[0];
+
+  // ---------------- 这层楼的坐标、视角、贴图 ----------------
+  const p3 = floorPlan3d(floor);
+  const geo = p3?.geo || null;
+  const hasRoom = !!geo && (geo.rooms || []).length > 0;
+  const view = useMemo(() => normalizeView(p3?.view), [p3?.view]);
+  const texSrcs = useMemo(() => activeTextures(p3), [p3]);
+  const textures = useTextureImages(texSrcs);
+  const summary = useMemo(() => (geo ? detectSummary(geo) : null), [geo]);
+  const bestCorner = useMemo(() => {
+    try {
+      return hasRoom ? recommendCorner(renderGeo(geo)) : 'se';
+    } catch {
+      return 'se';
+    }
+  }, [geo, hasRoom]);
+  const planMeta = metaOf(floor?.plan);
+  const planSize = planMeta?.w && planMeta?.h ? { w: planMeta.w, h: planMeta.h } : geo?.source || null;
+  const refSrcs = useMemo(() => floorViewSlides(project, fid).map((s) => s.image), [project, fid]);
 
   // ---------------- 平面图：上传 → 框选范围 ----------------
   async function handlePlanFile(file, page = 1) {
@@ -174,9 +166,9 @@ export default function DollhousePanel({ project, settings, notify, onOpenSettin
       let pdf = null;
       const blob = await renderPlanToImage(file, { page, onInfo: (i) => (pdf = i) });
       const src = await storeBlob(blob, { projectId: project.id });
-      onChange((p) => setFloorPlanUpload(p, target, src), { history: false }); // 上传的平面图 / 生成的立体图不进撤销历史
+      onChange((p) => setFloorPlanUpload(p, target, src), { history: false }); // 上传的平面图 / 保存的立体图不进撤销历史
       setPdfSource(pdf && pdf.pages > 1 ? { floorId: target, file, pages: pdf.pages, page: pdf.page } : null);
-      setBriefErr((m) => ({ ...m, [target]: '' }));
+      setDetectErr((m) => ({ ...m, [target]: '' }));
       openCropper(target, blob, src);
     } catch (e) {
       notify?.({ type: 'error', text: `平面图读取失败：${e.message || e}` });
@@ -188,14 +180,18 @@ export default function DollhousePanel({ project, settings, notify, onOpenSettin
   function onPickFile(e) {
     const file = e.target.files?.[0];
     e.target.value = '';
-    if (file) handlePlanFile(file);
+    if (!file) return;
+    if (geo && !window.confirm('换一张图纸？按现在这张图纸核对好的位置会清掉。')) return;
+    handlePlanFile(file);
   }
 
   function onDrop(e) {
     e.preventDefault();
     setDragOver(false);
     const file = e.dataTransfer?.files?.[0];
-    if (file) handlePlanFile(file);
+    if (!file) return;
+    if (geo && !window.confirm('换一张图纸？按现在这张图纸核对好的位置会清掉。')) return;
+    handlePlanFile(file);
   }
 
   /** 打开框选对话框；还没让 AI 认过范围（新上传 / 旧项目）就在后台认一次，认不出也能手动框 */
@@ -221,8 +217,9 @@ export default function DollhousePanel({ project, settings, notify, onOpenSettin
   async function confirmCrop({ box, scope: picked }) {
     const target = fid;
     const source = sourceSrc;
-    const foundKind = kind;
-    const roomName = region?.roomName || '';
+    const old = floorPlan3d(floor);
+    const oldBox = floor.plan === source ? null : floor.planCrop || null; // 旧图就是原图 = 没裁过
+    const oldSize = old?.geo?.source || metaOf(floor.plan);
     setCropBusy(true);
     try {
       const blob = await getBlob(source);
@@ -230,9 +227,22 @@ export default function DollhousePanel({ project, settings, notify, onOpenSettin
       const whole = isFullBox(box);
       const planBlob = whole ? blob : await cropPlan(blob, box);
       const plan = whole ? source : await storeBlob(planBlob, { projectId: project.id });
-      onChange((p) => setFloorPlanCrop(p, target, { plan, source, crop: box, scope: picked }), { history: false });
+      // 已经核对过位置：把框带到新范围上（范围外的丢掉）
+      let carried = null;
+      if (old?.geo) {
+        const m = metaOf(plan);
+        const size = m?.w && m?.h ? { w: m.w, h: m.h } : await measureBlob(planBlob);
+        carried = recropGeo(old.geo, oldBox, oldSize, whole ? null : box, size);
+      }
+      onChange(
+        (p) => {
+          const next = setFloorPlanCrop(p, target, { plan, source, crop: box, scope: picked });
+          return old?.geo ? carryPlan3d(next, target, { planSrc: plan, geo: carried }) : next;
+        },
+        { history: false }
+      );
       setCropper(null);
-      readBrief(target, { plan, planBlob, kind: foundKind, scope: picked, roomName });
+      if (old?.geo) notify?.({ type: carried ? 'ok' : 'info', text: carried ? '范围改了，已把核对好的位置带过去，请再看一眼' : '范围变化太大，位置要重新核对' });
     } catch (e) {
       notify?.({ type: 'error', text: `裁剪失败：${e.message || e}` });
     } finally {
@@ -240,132 +250,89 @@ export default function DollhousePanel({ project, settings, notify, onOpenSettin
     }
   }
 
-  // ---------------- 图纸清单 ----------------
-  /** AI 把平面图读成清单；读完时平面图已经换了就丢掉结果 */
-  async function readBrief(target, { plan, planBlob, kind: k, scope: sc, roomName }) {
-    if (!settings?.apiKey) return;
-    const key = briefKey(target);
-    setBriefErr((m) => ({ ...m, [target]: '' }));
-    setJob(key, { startedAt: Date.now(), msg: '' });
+  // ---------------- 位置：AI 先框 / 自己画 → 在图纸上核对 ----------------
+  /** 存坐标；第一次存的时候顺便定下默认视角 */
+  const saveGeo = (target, planSrc, g, extra) =>
+    onChange(
+      (p) => {
+        const f = (p.floors || []).find((x) => x.id === target);
+        if (!f || f.plan !== planSrc) return p; // 这期间图纸换了：丢掉
+        const cur = floorPlan3d(f);
+        return setPlan3dGeo(p, target, g, { ...(extra || {}), ...(cur?.view ? {} : { view: defaultView(g) }) });
+      },
+      { history: false }
+    );
+
+  async function runDetect() {
+    if (!floor?.plan) return;
+    if (!settings?.apiKey) {
+      onOpenSettings?.();
+      return;
+    }
+    const target = fid;
+    const planSrc = floor.plan;
+    const key = detectKey(target);
+    if (jobs.has(key)) return;
+    if (geo && summary && summary.rooms + summary.openings + summary.items > 0 && !window.confirm('让 AI 重新框一遍？现在核对好的位置会被替换。')) return;
+    setJob(key, { startedAt: Date.now(), stage: 'structure' });
+    setDetectErr((m) => ({ ...m, [target]: '' }));
     try {
-      const blob = planBlob || (await getBlob(plan));
+      const blob = await getBlob(planSrc);
       if (!blob) throw new Error('平面图找不到了，请重新上传');
-      const result = await analyzePlan({ settings, planBlob: blob, kind: k, scope: sc, roomName });
-      onChange((p) => ((p.floors || []).some((f) => f.id === target && f.plan === plan) ? setFloorBrief(p, target, result) : p), { history: false });
+      const m = metaOf(planSrc);
+      const size = m?.w && m?.h ? { w: m.w, h: m.h } : await measureBlob(blob);
+      const res = await detectPlanGeometry({ settings, planBlob: blob, size, onStage: (stage) => jobs.has(key) && setJob(key, { ...jobs.get(key), stage }) });
+      saveGeo(target, planSrc, res.geo, {
+        detected: res.geo,
+        detect: { at: Date.now(), partial: res.partial, notes: res.notes, itemsError: res.itemsError, raw: res.raw },
+      });
+      const s = res.summary;
+      notify?.({
+        type: res.itemsError ? 'info' : 'ok',
+        text: res.itemsError
+          ? `「${floorLabel}」的墙和门窗框好了；柜子家具没框出来（${res.itemsError}），可以在核对时重试或自己画`
+          : `「${floorLabel}」AI 框好了：${s.items} 个柜子家具，${s.unsure} 个待确认。请在图纸上核对`,
+      });
+      setEditing((cur) => cur || target);
     } catch (e) {
-      setBriefErr((m) => ({ ...m, [target]: e.message || String(e) }));
+      const text = e.message || String(e);
+      setDetectErr((m) => ({ ...m, [target]: text }));
+      notify?.({ type: 'error', text: `AI 框图失败：${text}` });
+      if (e.keyProblem) onOpenSettings?.();
     } finally {
       setJob(key, null);
     }
   }
 
-  function rereadBrief() {
-    if (!settings?.apiKey) {
-      onOpenSettings?.();
-      return;
-    }
-    if (brief && !window.confirm('重新读图会覆盖你改过的清单，继续？')) return;
-    readBrief(fid, { plan: floor.plan, kind, scope, roomName: region?.roomName || '' });
+  async function redetectItems(g) {
+    const blob = await getBlob(floor.plan);
+    if (!blob) throw new Error('平面图找不到了，请重新上传');
+    const res = await detectPlanItems({ settings, planBlob: blob, geo: g });
+    return res.items;
   }
 
-  const editBrief = (fn) => onChange((p) => setFloorBrief(p, fid, fn(((p.floors || []).find((f) => f.id === fid) || {}).planBrief || brief)), { history: false });
-  const setBriefField = (field, value) => editBrief((b) => ({ ...b, [field]: value }));
-  const setRow = (id, patch) => editBrief((b) => ({ ...b, rows: (b.rows || []).map((r) => (r.id === id ? { ...r, ...patch } : r)) }));
-  const removeRow = (id) => editBrief((b) => ({ ...b, rows: (b.rows || []).filter((r) => r.id !== id) }));
-  const addRow = () => editBrief((b) => ({ ...b, rows: [...(b.rows || []), { id: uid('r'), label: '', text: '' }] }));
-  const startBlankBrief = () =>
-    onChange((p) => setFloorBrief(p, fid, { kind, scope, title: region?.roomName || '', shape: '', rows: [{ id: uid('r'), label: '', text: '' }], outside: [] }), { history: false });
-
-  // ---------------- 参考图 ----------------
-  function toggleRef(id) {
-    if (refIds.includes(id)) setRefIds(refIds.filter((x) => x !== id));
-    else if (refIds.length >= MAX_REFS) notify?.({ type: 'warn', text: `最多选 ${MAX_REFS} 张参考效果图` });
-    else setRefIds([...refIds, id]);
+  /** 导出 AI 的原始回复和整理后的坐标（不含图纸），发给开发调提示词用 */
+  function exportRaw() {
+    const data = { at: p3?.detect?.at || null, size: planSize, notes: p3?.detect?.notes || [], itemsError: p3?.detect?.itemsError || '', raw: p3?.detect?.raw || null, detected: p3?.detected || null, corrected: geo };
+    saveBlob(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), `${safeName(project.name || 'plan3d')} · ${safeName(floorLabel)} · AI 框图结果.json`);
   }
 
-  // ---------------- 出图 / 修正 / 检查 ----------------
-  const jobCallbacks = (key) => ({
-    onWait: (sec, n) => setJob(key, { ...jobs.get(key), msg: `被限流了，${sec} 秒后自动重试（第 ${n} 次）` }),
-    onFallback: (model) => setJob(key, { ...jobs.get(key), msg: `高级 3D 模型暂不可用，改用 ${model} 再试一次…` }),
-  });
-
-  /** 出图后让 AI 对照图纸和清单检查一遍；检查失败不打扰（图已经出来了） */
-  async function runCheck(target, src, { planBlob, renderBlob, brief: b, scope: sc, kind: k, title }) {
-    const key = checkKey(src);
-    setJob(key, { startedAt: Date.now(), msg: '' });
-    try {
-      const check = await checkDollhouse({ settings, planBlob, renderBlob, brief: b, scope: sc, kind: k, title });
-      onChange((p) => ((p.floors || []).some((f) => f.id === target && (f.renders3d || []).includes(src)) ? setRenderInfo(p, target, src, { check }) : p), { history: false });
-    } catch {
-      /* 忽略 */
-    } finally {
-      setJob(key, null);
-    }
-  }
-
-  async function generate() {
-    if (!settings?.apiKey) {
-      onOpenSettings?.();
-      return;
-    }
-    if (!floor?.plan) {
-      notify?.({ type: 'warn', text: '先上传这一层的平面布置图' });
-      return;
-    }
+  // ---------------- 出图：保存 ----------------
+  async function saveRender() {
+    if (!hasRoom || saving) return;
     const target = fid;
-    const targetFloor = floor;
-    const key = jobKey(target);
-    const projectName = project.name || '这个项目';
-    const refSrcs = refIds.map((id) => views.find((v) => v.id === id)?.image).filter(Boolean);
-    const ctx = { brief, scope, kind, title: brief?.title || region?.roomName || '' };
-    const usedView = view;
-    setJob(key, { startedAt: Date.now(), msg: '' });
+    setSaving(true);
     try {
-      const planBlob = await getBlob(targetFloor.plan);
-      if (!planBlob) throw new Error('平面图找不到了，请重新上传');
-      const blob = await generateDollhouse({ settings, planBlob, refSrcs, view: usedView, style, ...ctx, ...jobCallbacks(key) });
-      const src = await storeBlob(blob, { projectId: project.id });
-      onChange((p) => setRenderInfo(addRender3d(p, target, src), target, src, { view: usedView }), { history: false });
-      notify?.({ type: 'ok', text: `「${projectName}」${targetFloor.zh || '全屋'} 3D 户型图生成好了，正在对照图纸检查` });
-      runCheck(target, src, { planBlob, renderBlob: blob, ...ctx });
+      const canvas = document.createElement('canvas');
+      if (!paintPlan3d(canvas, geo, view, textures)) throw new Error('还没有房间');
+      const blob = await canvasToBlob(canvas, 'image/jpeg', 0.92);
+      const src = await storeBlob(blob, { projectId: project.id, w: canvas.width, h: canvas.height });
+      onChange((p) => setRenderInfo(addRender3d(p, target, src), target, src, { by: 'plan3d', ...view, tex: Object.keys(texSrcs), at: Date.now() }), { history: false });
+      notify?.({ type: 'ok', text: `已保存到「${floorLabel}」的生成记录` });
     } catch (e) {
-      notify?.({ type: 'error', text: `「${projectName}」3D 户型图生成失败：${e.message || e}` });
+      notify?.({ type: 'error', text: `保存失败：${e.message || e}` });
     } finally {
-      setJob(key, null);
-    }
-  }
-
-  /** 在某张图上做文字修正：结果是新的一条记录，原图保留 */
-  async function refine(src, fixes) {
-    const list = (fixes || []).map((f) => String(f || '').trim()).filter(Boolean);
-    if (!list.length) {
-      notify?.({ type: 'warn', text: '先写要修正什么（每行一处）' });
-      return;
-    }
-    if (!settings?.apiKey) {
-      onOpenSettings?.();
-      return;
-    }
-    const target = fid;
-    const key = jobKey(target);
-    const ctx = { brief, scope, kind, title: brief?.title || region?.roomName || '' };
-    const parentView = info[src]?.view || view;
-    setFixOpen(null);
-    setFixText('');
-    setJob(key, { startedAt: Date.now(), msg: '正在按你的说明修正…', refine: true });
-    try {
-      const renderBlob = await getBlob(src);
-      if (!renderBlob) throw new Error('这张图找不到了');
-      const planBlob = floor?.plan ? await getBlob(floor.plan) : null;
-      const blob = await refineDollhouse({ settings, renderBlob, planBlob, fixes: list, ...jobCallbacks(key) });
-      const next = await storeBlob(blob, { projectId: project.id });
-      onChange((p) => setRenderInfo(addRender3d(p, target, next), target, next, { view: parentView, from: src, fixes: list }), { history: false });
-      notify?.({ type: 'ok', text: '修正好了，原图还在生成记录里' });
-      if (planBlob) runCheck(target, next, { planBlob, renderBlob: blob, ...ctx });
-    } catch (e) {
-      notify?.({ type: 'error', text: `修正失败：${e.message || e}` });
-    } finally {
-      setJob(key, null);
+      setSaving(false);
     }
   }
 
@@ -411,10 +378,6 @@ export default function DollhousePanel({ project, settings, notify, onOpenSettin
     }
   }
 
-  const viewDef = DOLLHOUSE_VIEWS.find((v) => v.id === view) || DOLLHOUSE_VIEWS[0];
-  const reading = !!briefJob;
-  const genLabel = brief ? '按清单生成 3D 户型图' : '跳过清单直接生成';
-
   return (
     <div className="h-full overflow-y-auto thin-scroll bg-bp-paper">
       <div className="max-w-6xl mx-auto px-6 py-6 space-y-5">
@@ -425,7 +388,7 @@ export default function DollhousePanel({ project, settings, notify, onOpenSettin
             <h2 className="font-serif text-2xl text-bp-ink mt-1">3D 立体图 · 俯视户型图</h2>
             <p className="mt-1.5 text-xs text-bp-muted flex items-start gap-1.5 max-w-3xl leading-relaxed">
               <Info size={13} className="mt-0.5 shrink-0 text-bp-gold" />
-              上传平面布置图 → 框出要做的范围 → 核对 AI 读出的图纸清单 → 生成俯视 3D 户型图。AI 出的图用来营造提案氛围，不是施工图。
+              上传平面布置图 → 框出要做的范围 → AI 先在图纸上框出墙、门窗、柜子，你拖动核对 → 程序按核对好的位置出图。图不是 AI 画的，所以位置不会跑；用来营造提案氛围，不是施工图。
             </p>
           </div>
           {floors.length > 1 && (
@@ -433,7 +396,7 @@ export default function DollhousePanel({ project, settings, notify, onOpenSettin
               {floors.map((f) => (
                 <button key={f.id} type="button" className={chip(f.id === fid)} onClick={() => setFloorId(f.id)}>
                   {f.zh || f.en || '未命名楼层'}
-                  {jobMap.has(jobKey(f.id)) && <Loader2 size={11} className="inline ml-1 animate-spin" />}
+                  {jobMap.has(detectKey(f.id)) && <Loader2 size={11} className="inline ml-1 animate-spin" />}
                 </button>
               ))}
             </div>
@@ -441,14 +404,18 @@ export default function DollhousePanel({ project, settings, notify, onOpenSettin
         </div>
 
         <div className="grid gap-5 lg:grid-cols-[400px_minmax(0,1fr)] items-start">
-          {/* ---------------- 左：输入 ---------------- */}
+          {/* ---------------- 左：图纸、位置、视角和材质 ---------------- */}
           <div className="space-y-4">
             {/* 1 平面图 */}
             <div className={card}>
               <div className={sectionLabel}>
                 <span>① 平面布置图 · {floorLabel}</span>
                 {floor?.plan && (
-                  <button type="button" className="text-bp-faint hover:text-bp-danger font-normal" onClick={() => onChange((p) => setFloorPlan(p, fid, null), { history: false })}>
+                  <button
+                    type="button"
+                    className="text-bp-faint hover:text-bp-danger font-normal"
+                    onClick={() => (!geo || window.confirm('移除这张图纸？按它核对好的位置也会清掉。')) && onChange((p) => setFloorPlan(p, fid, null), { history: false })}
+                  >
                     移除
                   </button>
                 )}
@@ -525,334 +492,184 @@ export default function DollhousePanel({ project, settings, notify, onOpenSettin
               )}
             </div>
 
-            {/* 2 图纸清单 */}
+            {/* 2 核对位置 */}
             {floor?.plan && (
-              <div className={card} data-testid="brief-card">
+              <div className={card} data-testid="position-card">
                 <div className={sectionLabel}>
-                  <span>② 图纸清单（AI 读的，可以改）</span>
-                  {(brief || briefErr[fid]) && !reading && (
-                    <button type="button" className="text-bp-faint hover:text-bp-ink font-normal inline-flex items-center gap-1" onClick={rereadBrief}>
-                      <RefreshCw size={11} /> 重新读图
+                  <span>② 核对位置</span>
+                  {p3?.detect?.raw && (
+                    <button type="button" className="text-bp-faint hover:text-bp-ink font-normal" onClick={exportRaw} title="只有坐标和文字，不含图纸；AI 框得不准时发给开发调整用">
+                      导出 AI 原始结果
                     </button>
                   )}
                 </div>
-                {reading ? (
-                  <div className="py-6 flex flex-col items-center gap-2 text-xs text-bp-muted">
-                    <Loader2 size={16} className="animate-spin" />
-                    AI 正在读图纸 · {fmtSec(now - briefJob.startedAt)}
-                    <span className="text-[11px] text-bp-faint">通常 10–40 秒；读完请核对每面墙的内容</span>
+                {job ? (
+                  <div className="rounded-xl bg-bp-tint border border-bp-line px-3 py-4 text-xs text-bp-muted flex items-center gap-2">
+                    <Loader2 size={14} className="animate-spin shrink-0" />
+                    <span>
+                      {STAGE_ZH[job.stage] || 'AI 正在看图纸'} · {fmtSec(now - job.startedAt)}
+                      <span className="block text-[11px] text-bp-faint mt-0.5">通常要 20–60 秒，可以先去改别的页</span>
+                    </span>
                   </div>
-                ) : brief ? (
-                  <div className="space-y-2">
-                    <div className="text-[11px] text-bp-faint leading-relaxed">
-                      出图会严格按这份清单摆放。「上 / 下 / 左 / 右」指图纸的方向；哪一行读错了直接改字。
+                ) : geo ? (
+                  <div className="space-y-2.5">
+                    <div className="text-xs text-bp-ink">
+                      房间 {summary.rooms} · 门窗 {summary.openings} · 柜子家具 {summary.items}
+                      {summary.unsure > 0 && <span className="text-bp-danger"> · {summary.unsure} 个待确认</span>}
                     </div>
-                    <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-1.5 items-start">
-                      <span className="text-[11px] text-bp-faint pt-2">{brief.kind === 'floor' ? '楼层' : '房间'}</span>
-                      <input className={inputCls} value={brief.title || ''} onChange={(e) => setBriefField('title', e.target.value)} placeholder="房间名（图上印的）" aria-label="房间名" />
-                      <span className="text-[11px] text-bp-faint pt-2">形状比例</span>
-                      <input className={inputCls} value={brief.shape || ''} onChange={(e) => setBriefField('shape', e.target.value)} placeholder="例如：近正方形，宽:深约 1:1" aria-label="形状比例" />
-                    </div>
-                    <div className="space-y-1.5 pt-1">
-                      {(brief.rows || []).map((r) => (
-                        <div key={r.id} className="grid grid-cols-[72px_minmax(0,1fr)_28px] gap-1.5 items-start" data-testid="brief-row">
-                          <input className={`${inputCls} !px-2 font-medium`} value={r.label || ''} onChange={(e) => setRow(r.id, { label: e.target.value })} placeholder="哪面墙" aria-label="位置" />
-                          <AutoTextarea value={r.text || ''} onChange={(e) => setRow(r.id, { text: e.target.value })} placeholder="这面墙有什么、贴着放了什么" aria-label={`${r.label || '这一行'}的内容`} />
-                          <button type="button" className="h-8 flex items-center justify-center rounded-lg text-bp-faint hover:text-bp-danger hover:bg-bp-tint" onClick={() => removeRow(r.id)} title="删掉这一行" aria-label="删掉这一行">
-                            <X size={13} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                    {(brief.rows || []).length < MAX_BRIEF_ROWS && (
-                      <button type="button" className={btnGhost} onClick={addRow}>
-                        <Plus size={12} /> 加一行
-                      </button>
-                    )}
-                    {brief.kind !== 'floor' && scope === 'room' && (
-                      <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-1.5 items-start pt-1">
-                        <span className="text-[11px] text-bp-faint pt-2">范围外不画</span>
-                        <input
-                          className={inputCls}
-                          value={(brief.outside || []).join('、')}
-                          onChange={(e) => setBriefField('outside', e.target.value.split(/[、,，;；]+/).map((x) => x.trim()).filter(Boolean))}
-                          placeholder="例如：楼梯、STORE"
-                          aria-label="范围外不画的东西"
-                        />
+                    {!hasRoom && (
+                      <div className="text-[11px] text-bp-danger flex items-center gap-1">
+                        <AlertTriangle size={12} /> 还没有房间，出不了图：打开核对，先画出房间
                       </div>
                     )}
+                    {p3?.detect?.partial && <div className="text-[11px] text-bp-faint">AI 的回复不完整，可能漏了东西，核对时留意。</div>}
+                    {p3?.detect?.itemsError && <div className="text-[11px] text-bp-faint">上次 AI 没框出柜子家具：{p3.detect.itemsError}</div>}
+                    <div className="flex flex-wrap gap-1.5">
+                      <button type="button" className={btnPrimary} onClick={() => setEditing(fid)}>
+                        <PencilRuler size={15} /> 在图纸上核对 / 修改
+                      </button>
+                      <button type="button" className={btnGhost} onClick={runDetect} title="AI 重新看一遍图纸（2 次看图），替换现在的位置">
+                        <Wand2 size={12} /> 让 AI 重新框
+                      </button>
+                    </div>
                   </div>
                 ) : (
-                  <div className="space-y-2 text-xs text-bp-muted leading-relaxed">
-                    {briefErr[fid] ? (
-                      <div className="flex items-start gap-1.5 text-bp-danger">
-                        <AlertTriangle size={13} className="mt-0.5 shrink-0" /> 读图没成功：{briefErr[fid]}
-                      </div>
-                    ) : !settings?.apiKey ? (
-                      <div>配置 API key 之后，AI 会先把图纸读成清单给你核对，再出图。</div>
-                    ) : !cropped ? (
-                      <div>先框选范围，AI 再读图纸。</div>
-                    ) : (
-                      <div>还没有清单。让 AI 读一遍图纸，核对后再出图，位置会准很多。</div>
-                    )}
+                  <div className="space-y-2.5">
+                    <div className="text-xs text-bp-muted leading-relaxed">
+                      先在图纸上定出墙、门窗和每个柜子的位置。可以让 AI 先框一遍再改，也可以自己画。
+                    </div>
                     <div className="flex flex-wrap gap-1.5">
-                      {!cropped && settings?.apiKey ? (
-                        <button type="button" className={btnGhost} onClick={recrop}>
-                          <Crop size={12} /> 框选范围
-                        </button>
-                      ) : (
-                        <button type="button" className={btnGhost} onClick={rereadBrief}>
-                          <ListChecks size={12} /> {briefErr[fid] ? '重试读图' : settings?.apiKey ? '让 AI 读图' : '去配置 API key'}
-                        </button>
-                      )}
-                      <button type="button" className={btnGhost} onClick={startBlankBrief}>
-                        <Plus size={12} /> 自己写清单
+                      <button type="button" className={btnPrimary} onClick={runDetect}>
+                        <Wand2 size={15} /> 让 AI 先框（2 次看图）
                       </button>
+                      <button type="button" className={btnGhost} onClick={() => setEditing(fid)}>
+                        <PencilRuler size={12} /> 我自己画
+                      </button>
+                    </div>
+                    <div className="text-[11px] text-bp-faint leading-relaxed">
+                      AI 框图用你的 Gemini key 看 2 次图（先墙和门窗，再柜子家具），不是出图，费用很低。{!settings?.apiKey && '还没有 key：点上面会先打开设置。'}
                     </div>
                   </div>
                 )}
+                {detectErr[fid] && !job && <div className="mt-2 text-[11px] text-bp-danger">AI 框图没成功：{detectErr[fid]}</div>}
               </div>
             )}
 
-            {/* 3 参考效果图 */}
+            {/* 3 视角和材质 */}
+            {hasRoom && (
+              <div className={card}>
+                <div className={sectionLabel}>
+                  <span className="inline-flex items-center gap-1.5">
+                    <SlidersHorizontal size={12} /> ③ 视角
+                  </span>
+                </div>
+                <ViewOptions view={view} bestCorner={bestCorner} onChange={(patch) => onChange((p) => setPlan3dView(p, fid, patch), { history: false })} />
+                <div className={`${sectionLabel} mt-4`}>
+                  <span>④ 材质贴图（可选）</span>
+                </div>
+                <TexturePanel project={project} floorId={fid} plan3d={p3} settings={settings} refSrcs={refSrcs} notify={notify} onChange={onChange} onOpenSettings={onOpenSettings} />
+              </div>
+            )}
+          </div>
+
+          {/* ---------------- 右：出图 + 生成记录 ---------------- */}
+          <div className="space-y-4 min-w-0">
+            {hasRoom && (
+              <div className={card} data-testid="render-card">
+                <div className={sectionLabel}>
+                  <span>出图 · {viewLabel(view.view)}</span>
+                  <span className="font-normal">程序按核对好的位置画，不花 key</span>
+                </div>
+                <Plan3dPreview geo={geo} view={view} textures={textures} longEdge={1400} className="rounded-xl overflow-hidden border border-bp-line bg-white" />
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <button type="button" className={btnPrimary} disabled={saving} onClick={saveRender}>
+                    {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} 保存这张图
+                  </button>
+                  <span className="text-[11px] text-bp-faint">保存后进下面的生成记录，可以插入提案、下载。</span>
+                </div>
+              </div>
+            )}
+
             <div className={card}>
               <div className={sectionLabel}>
-                <span>
-                  ③ 参考效果图（已选 {refIds.length}/{MAX_REFS}）
-                </span>
-                {views.length > 0 && (
-                  <button type="button" className="text-bp-faint hover:text-bp-ink font-normal inline-flex items-center gap-1" onClick={() => setRefIds(defaultRefIds(project, fid))}>
-                    <RotateCcw size={11} /> 默认
-                  </button>
-                )}
+                <span>生成记录 · {floorLabel}</span>
+                {deck3d.length > 0 && <span className="font-normal text-bp-green">提案里已有 {deck3d.length} 页 3D 户型图</span>}
               </div>
-              {views.length ? (
-                <div className="grid grid-cols-4 gap-1.5 max-h-72 overflow-y-auto thin-scroll pr-0.5">
-                  {views.map((v) => {
-                    const idx = refIds.indexOf(v.id);
-                    const url = resolveUrl(v.image);
-                    const title = [v.room, v.subtitle].filter(Boolean).join(' · ') || '效果图';
+              {!renders.length ? (
+                <div className="py-14 text-center text-sm text-bp-faint">
+                  <Box size={28} className="mx-auto mb-3 text-bp-rule" />
+                  还没有保存的 3D 户型图。上传平面图、框好范围、核对位置，再点「保存这张图」。
+                </div>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {renders.map((src, i) => {
+                    const url = resolveUrl(src);
+                    const inDeck = (project.slides || []).some((s) => s.tag === '3d' && s.image === src);
+                    const isBg = floor?.image === src;
+                    const meta = info[src] || {};
+                    const legacy = meta.by !== 'plan3d';
+                    const viewZh = legacy ? DOLLHOUSE_VIEWS.find((v) => v.id === meta.view)?.zh : viewLabel(meta.view);
                     return (
-                      <button
-                        key={v.id}
-                        type="button"
-                        title={title}
-                        onClick={() => toggleRef(v.id)}
-                        className={`relative rounded-lg overflow-hidden border-2 text-left ${idx >= 0 ? 'border-bp-gold' : 'border-transparent hover:border-bp-line'}`}
-                      >
-                        <div className="aspect-[4/3] bg-bp-line/40">{url && <img src={url} alt="" className="w-full h-full object-cover" />}</div>
-                        <div className="px-1 py-0.5 text-[10px] text-bp-muted truncate bg-white">{title}</div>
-                        {idx >= 0 && (
-                          <span className="absolute top-1 left-1 w-4 h-4 rounded-full bg-bp-dark text-bp-light text-[10px] flex items-center justify-center">
-                            {idx + 1}
+                      <div key={src} className="rounded-xl overflow-hidden border border-bp-line bg-white">
+                        <button type="button" className="relative block w-full aspect-[4/3] bg-bp-tint group" onClick={() => url && setPreview(url)}>
+                          {url && <img src={url} alt="3D 户型图" className="w-full h-full object-contain" />}
+                          <span className="absolute right-2 top-2 p-1 rounded-md bg-white/85 text-bp-muted opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Maximize2 size={13} />
                           </span>
+                          <span className="absolute left-2 top-2 flex flex-wrap gap-1 pr-8">
+                            {i === 0 && <span className="px-1.5 py-0.5 rounded bg-bp-dark/80 text-bp-light text-[10px]">最新</span>}
+                            {legacy && <span className="px-1.5 py-0.5 rounded bg-bp-dark/60 text-bp-light text-[10px]">旧版 AI 图</span>}
+                            {viewZh && <span className="px-1.5 py-0.5 rounded bg-white/85 text-bp-muted text-[10px]">{viewZh}</span>}
+                            {inDeck && <span className="px-1.5 py-0.5 rounded bg-bp-green/90 text-white text-[10px]">已在提案中</span>}
+                            {isBg && <span className="px-1.5 py-0.5 rounded bg-bp-gold/90 text-white text-[10px]">章节页背景</span>}
+                          </span>
+                        </button>
+
+                        {pendingInsert === src ? (
+                          <div className="p-3 space-y-2 bg-bp-tint">
+                            <div className="text-xs text-bp-ink">这一层已经有 3D 户型图页了：</div>
+                            <div className="flex flex-wrap gap-1.5">
+                              <button type="button" className={btnGhost} onClick={() => insert(src, 'replace')}>
+                                <Check size={12} /> 替换那一页的图
+                              </button>
+                              <button type="button" className={btnGhost} onClick={() => insert(src, 'add')}>
+                                再加一页
+                              </button>
+                              <button type="button" className={btnGhost} onClick={() => setPendingInsert(null)}>
+                                取消
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap items-center gap-1.5 p-2.5">
+                            <button type="button" className={btnGhost} onClick={() => onInsertClick(src)} title="插入为提案里的一页">
+                              <Presentation size={13} /> 插入提案
+                            </button>
+                            {canSetFloorBg && (
+                              <button type="button" className={btnGhost} onClick={() => toggleFloorBg(src)} title="用作这一层的章节页背景">
+                                <ImageIcon size={13} /> {isBg ? '取消章节页背景' : '设为章节页背景'}
+                              </button>
+                            )}
+                            {!legacy && p3 && (
+                              <button type="button" className={btnGhost} onClick={() => onChange((p) => setPlan3dView(p, fid, meta), { history: false })} title="把上面的视角换成这张图当时的设置">
+                                用这张的视角
+                              </button>
+                            )}
+                            <div className="flex-1" />
+                            <button type="button" className={`${btnGhost} !px-2`} onClick={() => download(src, i)} title="下载">
+                              <Download size={13} />
+                            </button>
+                            <button type="button" className={`${btnGhost} !px-2 hover:!text-bp-danger`} onClick={() => remove(src)} title="删除">
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
                         )}
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
-              ) : (
-                <div className="text-xs text-bp-faint leading-relaxed">
-                  这一层还没有效果图页 —— 只用平面图也能生成，材质会按暖木色默认风格。
-                </div>
-              )}
-              {views.length > 0 && (
-                <div className="mt-2 text-[11px] text-bp-faint leading-relaxed">参考图只用来取材质和色调（地板、木饰面、石材、布艺）；位置一律按图纸和清单。</div>
               )}
             </div>
-
-            {/* 4 视角 + 说明 */}
-            <div className={card}>
-              <div className={sectionLabel}>
-                <span>④ 视角</span>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {DOLLHOUSE_VIEWS.map((v) => (
-                  <button key={v.id} type="button" className={`${chip(v.id === view)} inline-flex items-center gap-1.5`} onClick={() => setView(v.id)} aria-pressed={v.id === view}>
-                    <ViewGlyph id={v.id} />
-                    {v.zh}
-                  </button>
-                ))}
-              </div>
-              <div className="mt-1.5 text-[11px] text-bp-faint">{viewDef.hint}图纸的上方就是画面的上方。</div>
-              <div className={`${sectionLabel} mt-4`}>
-                <span>补充说明（可选）</span>
-              </div>
-              <textarea
-                rows={2}
-                value={style}
-                onChange={(e) => setStyle(e.target.value)}
-                placeholder="例如：傍晚暖光；地面统一浅色大理石"
-                className="w-full rounded-xl border border-bp-line bg-white px-3 py-2 text-xs leading-relaxed text-bp-ink placeholder:text-bp-faint focus:outline-none focus:border-bp-gold resize-none"
-              />
-            </div>
-
-            <button type="button" className={`${btnPrimary} w-full`} disabled={!!job || planBusy || reading || !floor?.plan} onClick={generate}>
-              {job ? (
-                <>
-                  <Loader2 size={16} className="animate-spin" /> {job.refine ? '修正中' : '生成中'} · {fmtSec(now - job.startedAt)}
-                </>
-              ) : reading ? (
-                <>
-                  <Loader2 size={16} className="animate-spin" /> 等 AI 读完图纸…
-                </>
-              ) : (
-                <>
-                  <Box size={16} /> {floor?.plan ? genLabel : '生成 3D 户型图'}
-                </>
-              )}
-            </button>
-            {job ? (
-              <div className="text-[11px] text-bp-faint text-center -mt-2">{job.msg || '通常要 30–90 秒，可以先去改别的页，好了会提示你'}</div>
-            ) : !floor?.plan ? (
-              <div className="text-[11px] text-bp-faint text-center -mt-2">先上传平面布置图</div>
-            ) : !brief && !reading ? (
-              <div className="text-[11px] text-bp-faint text-center -mt-2">没有清单也能出图，但位置容易跑偏</div>
-            ) : null}
-          </div>
-
-          {/* ---------------- 右：生成记录 ---------------- */}
-          <div className={card}>
-            <div className={sectionLabel}>
-              <span>生成记录 · {floorLabel}</span>
-              {deck3d.length > 0 && <span className="font-normal text-bp-green">提案里已有 {deck3d.length} 页 3D 户型图</span>}
-            </div>
-            {!renders.length && !job ? (
-              <div className="py-16 text-center text-sm text-bp-faint">
-                <Box size={28} className="mx-auto mb-3 text-bp-rule" />
-                还没有 3D 户型图。上传平面图、框好范围、核对清单，再点生成。
-              </div>
-            ) : (
-              <div className="grid gap-4 sm:grid-cols-2">
-                {job && (
-                  <div className="rounded-xl overflow-hidden border border-bp-line">
-                    <div className="aspect-[4/3] shimmer flex items-center justify-center text-xs text-bp-muted">
-                      <Loader2 size={14} className="animate-spin mr-1.5" /> {job.refine ? '正在修正…' : '正在画 3D 户型图…'}
-                    </div>
-                    <div className="px-3 py-2 text-[11px] text-bp-faint">{fmtSec(now - job.startedAt)}</div>
-                  </div>
-                )}
-                {renders.map((src, i) => {
-                  const url = resolveUrl(src);
-                  const inDeck = (project.slides || []).some((s) => s.tag === '3d' && s.image === src);
-                  const isBg = floor?.image === src;
-                  const meta = info[src] || {};
-                  const checking = jobMap.has(checkKey(src));
-                  const issues = meta.check?.issues || [];
-                  const viewZh = DOLLHOUSE_VIEWS.find((v) => v.id === meta.view)?.zh;
-                  return (
-                    <div key={src} className="rounded-xl overflow-hidden border border-bp-line bg-white">
-                      <button type="button" className="relative block w-full aspect-[4/3] bg-bp-tint group" onClick={() => url && setPreview(url)}>
-                        {url && <img src={url} alt="3D 户型图" className="w-full h-full object-contain" />}
-                        <span className="absolute right-2 top-2 p-1 rounded-md bg-white/85 text-bp-muted opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Maximize2 size={13} />
-                        </span>
-                        <span className="absolute left-2 top-2 flex gap-1">
-                          {i === 0 && <span className="px-1.5 py-0.5 rounded bg-bp-dark/80 text-bp-light text-[10px]">最新</span>}
-                          {meta.from && <span className="px-1.5 py-0.5 rounded bg-bp-dark/60 text-bp-light text-[10px]">修正版</span>}
-                          {viewZh && <span className="px-1.5 py-0.5 rounded bg-white/85 text-bp-muted text-[10px]">{viewZh}</span>}
-                          {inDeck && <span className="px-1.5 py-0.5 rounded bg-bp-green/90 text-white text-[10px]">已在提案中</span>}
-                          {isBg && <span className="px-1.5 py-0.5 rounded bg-bp-gold/90 text-white text-[10px]">章节页背景</span>}
-                        </span>
-                      </button>
-
-                      {/* 对照图纸检查的结果 */}
-                      {checking ? (
-                        <div className="px-3 pt-2.5 text-[11px] text-bp-faint flex items-center gap-1.5">
-                          <Loader2 size={12} className="animate-spin" /> AI 正在对照图纸检查…
-                        </div>
-                      ) : meta.check?.ok ? (
-                        <div className="px-3 pt-2.5 text-[11px] text-bp-green flex items-center gap-1.5">
-                          <CheckCircle2 size={12} /> 对照图纸：没有发现明显不符
-                        </div>
-                      ) : issues.length ? (
-                        <div className="mx-2.5 mt-2.5 rounded-lg bg-bp-tint border border-bp-line px-2.5 py-2" data-testid="check-issues">
-                          <div className="text-[11px] font-medium text-bp-ink flex items-center gap-1.5">
-                            <AlertTriangle size={12} className="text-bp-gold" /> 对照图纸，AI 发现 {issues.length} 处不符
-                          </div>
-                          <ul className="mt-1 space-y-0.5 text-[11px] text-bp-muted leading-relaxed list-disc pl-4">
-                            {issues.map((it) => (
-                              <li key={it}>{it}</li>
-                            ))}
-                          </ul>
-                          <button type="button" className={`${btnGhost} mt-2`} disabled={!!job} onClick={() => refine(src, issues)}>
-                            <Wand2 size={12} /> 一键修正这些问题
-                          </button>
-                        </div>
-                      ) : null}
-
-                      {fixOpen === src ? (
-                        <div className="p-3 space-y-2 bg-bp-tint mt-2.5">
-                          <div className="text-xs text-bp-ink">要改哪里？每行写一处，其余保持不变：</div>
-                          <AutoTextarea
-                            value={fixText}
-                            onChange={(e) => setFixText(e.target.value)}
-                            autoFocus
-                            placeholder={'例如：\n左边的书桌贴着左墙\n去掉房间中间那面隔墙'}
-                            aria-label="修正说明"
-                            className="min-h-[64px]"
-                          />
-                          <div className="flex flex-wrap gap-1.5">
-                            <button type="button" className={btnGhost} disabled={!!job || !splitFixes(fixText).length} onClick={() => refine(src, splitFixes(fixText))}>
-                              <Wand2 size={12} /> 开始修正
-                            </button>
-                            <button type="button" className={btnGhost} onClick={() => setFixOpen(null)}>
-                              取消
-                            </button>
-                          </div>
-                        </div>
-                      ) : pendingInsert === src ? (
-                        <div className="p-3 space-y-2 bg-bp-tint mt-2.5">
-                          <div className="text-xs text-bp-ink">这一层已经有 3D 户型图页了：</div>
-                          <div className="flex flex-wrap gap-1.5">
-                            <button type="button" className={btnGhost} onClick={() => insert(src, 'replace')}>
-                              <Check size={12} /> 替换那一页的图
-                            </button>
-                            <button type="button" className={btnGhost} onClick={() => insert(src, 'add')}>
-                              再加一页
-                            </button>
-                            <button type="button" className={btnGhost} onClick={() => setPendingInsert(null)}>
-                              取消
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex flex-wrap items-center gap-1.5 p-2.5">
-                          <button type="button" className={btnGhost} onClick={() => onInsertClick(src)} title="插入为提案里的一页">
-                            <Presentation size={13} /> 插入提案
-                          </button>
-                          <button
-                            type="button"
-                            className={btnGhost}
-                            disabled={!!job}
-                            onClick={() => {
-                              setPendingInsert(null);
-                              setFixText('');
-                              setFixOpen(src);
-                            }}
-                            title="用文字说明要改哪里，AI 只改这些地方"
-                          >
-                            <Wand2 size={13} /> 修正
-                          </button>
-                          {canSetFloorBg && (
-                            <button type="button" className={btnGhost} onClick={() => toggleFloorBg(src)} title="用作这一层的章节页背景">
-                              <ImageIcon size={13} /> {isBg ? '取消章节页背景' : '设为章节页背景'}
-                            </button>
-                          )}
-                          <div className="flex-1" />
-                          <button type="button" className={`${btnGhost} !px-2`} onClick={() => download(src, i)} title="下载">
-                            <Download size={13} />
-                          </button>
-                          <button type="button" className={`${btnGhost} !px-2 hover:!text-bp-danger`} onClick={() => remove(src)} title="删除">
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -869,6 +686,22 @@ export default function DollhousePanel({ project, settings, notify, onOpenSettin
           busy={cropBusy}
           onConfirm={confirmCrop}
           onCancel={() => !cropBusy && setCropper(null)}
+        />
+      )}
+
+      {/* 核对位置 */}
+      {editing === fid && floor?.plan && planSize && planUrl && (
+        <Plan3dEditor
+          key={floor.plan}
+          planUrl={planUrl}
+          size={planSize}
+          geo={geo}
+          detected={p3?.detected || null}
+          textures={textures}
+          canAi={!!settings?.apiKey}
+          onChange={(g) => saveGeo(fid, floor.plan, g)}
+          onClose={() => setEditing(null)}
+          onRedetectItems={redetectItems}
         />
       )}
 
