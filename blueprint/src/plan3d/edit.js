@@ -38,6 +38,11 @@ function withKey(obj, key, value) {
   return out;
 }
 
+/** 不是数组（缺了 / 数据坏了）就当空的 */
+function arr(v) {
+  return Array.isArray(v) ? v : [];
+}
+
 function validIndex(list, i) {
   return isNum(i) && i === Math.floor(i) && i >= 0 && i < list.length;
 }
@@ -148,7 +153,8 @@ function boundaryEdges(geo) {
       for (var n = 0; n < segs.length; n++) {
         var s = segs[n];
         if (!(s.b - s.a > EPS)) continue;
-        if (cur && Math.abs(cur.at - s.at) <= EPS && s.a <= cur.b + EPS) {
+        // 只合并严格在同一条直线上的（at 差一点点的算两条：排序是按 at 分组的，放宽了会把夹在中间的段吞掉）
+        if (cur && cur.at === s.at && s.a <= cur.b + EPS) {
           if (s.b > cur.b) cur.b = s.b;
         } else {
           cur = { side: side, at: s.at, a: s.a, b: s.b, room: ri };
@@ -426,25 +432,30 @@ function snapBox(geo, box, tol, handle) {
   var out = b.slice();
   var w = b[2] - b[0];
   var h = b[3] - b[1];
-  var sx = bestSnap(edges, false, b, ed[0], ed[2], t, move);
-  var sy = bestSnap(edges, true, b, ed[1], ed[3], t, move);
-  if (sx) {
-    if (sx.lo) {
-      out[0] = sx.at;
-      if (move) out[2] = sx.at + w;
-    } else {
-      out[2] = sx.at;
-      if (move) out[0] = sx.at - w;
+  // 吸完一个方向，另一个方向面对的墙可能变了 → 再看一遍，直到不动为止（这样对结果再吸一次不会又跳一下）
+  for (var pass = 0; pass < 8; pass++) {
+    var cur = out.slice();
+    var sx = bestSnap(edges, false, cur, ed[0], ed[2], t, move);
+    var sy = bestSnap(edges, true, cur, ed[1], ed[3], t, move);
+    if (sx) {
+      if (sx.lo) {
+        out[0] = sx.at;
+        if (move) out[2] = sx.at + w;
+      } else {
+        out[2] = sx.at;
+        if (move) out[0] = sx.at - w;
+      }
     }
-  }
-  if (sy) {
-    if (sy.lo) {
-      out[1] = sy.at;
-      if (move) out[3] = sy.at + h;
-    } else {
-      out[3] = sy.at;
-      if (move) out[1] = sy.at - h;
+    if (sy) {
+      if (sy.lo) {
+        out[1] = sy.at;
+        if (move) out[3] = sy.at + h;
+      } else {
+        out[3] = sy.at;
+        if (move) out[1] = sy.at - h;
+      }
     }
+    if (sameValue(out, cur)) break;
   }
   return { box: out, against: againstOf(edges, out) };
 }
@@ -611,15 +622,15 @@ function transformGeo(geo, sx, sy, dx, dy) {
   var out = copy(geo);
   if (isNum(geo.wallT)) out.wallT = geo.wallT * m;
   if (isNum(geo.mmPerPx)) out.mmPerPx = geo.mmPerPx / m;
-  if (geo.rooms) {
+  if (Array.isArray(geo.rooms)) {
     out.rooms = geo.rooms.map(function (room) {
-      if (!room || !room.rects) return room;
+      if (!room || !Array.isArray(room.rects)) return room;
       return withKey(room, 'rects', room.rects.map(mapBox));
     });
   }
-  if (geo.items) {
+  if (Array.isArray(geo.items)) {
     out.items = geo.items.map(function (it) {
-      if (!it) return it;
+      if (!it || typeof it !== 'object') return it;
       var next = copy(it);
       if (it.box) next.box = mapBox(it.box);
       if (it.round && typeof it.round === 'object') {
@@ -630,9 +641,9 @@ function transformGeo(geo, sx, sy, dx, dy) {
       return next;
     });
   }
-  if (geo.openings) {
+  if (Array.isArray(geo.openings)) {
     out.openings = geo.openings.map(function (o) {
-      if (!o) return o;
+      if (!o || typeof o !== 'object') return o;
       var horiz = isHorizontal(o.side);
       var next = copy(o);
       if (isNum(o.a)) next.a = horiz ? o.a * sx + ox : o.a * sy + oy;
@@ -655,10 +666,13 @@ function newItemId(geo, kind) {
   return k + '-' + n;
 }
 
+/** 值一样：同一个东西，或者内容逐项相同的数组 / 对象（只比一层，比如框、圆角） */
 function sameValue(a, b) {
   if (a === b) return true;
-  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
-  for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object' || Array.isArray(a) !== Array.isArray(b)) return false;
+  var k;
+  for (k in a) if (has(a, k) && (!has(b, k) || a[k] !== b[k])) return false;
+  for (k in b) if (has(b, k) && !has(a, k)) return false;
   return true;
 }
 
@@ -687,7 +701,7 @@ function validOpening(o) {
 
 /** 去掉列表里每一项的 unsure；一项都没有 = 原列表 */
 function confirmList(list) {
-  if (!list) return list;
+  if (!Array.isArray(list)) return list;
   var changed = false;
   var out = list.map(function (it) {
     if (!it || typeof it !== 'object' || !has(it, 'unsure')) return it;
@@ -703,9 +717,9 @@ function confirmList(list) {
 function applyOp(geo, op) {
   if (!op || typeof op.type !== 'string') return geo;
   var g = geo || {};
-  var items = g.items || [];
-  var rooms = g.rooms || [];
-  var openings = g.openings || [];
+  var items = arr(g.items);
+  var rooms = arr(g.rooms);
+  var openings = arr(g.openings);
   var type = op.type;
   var box;
   var next;
@@ -750,7 +764,7 @@ function applyOp(geo, op) {
   if (type === 'addRoomRect' || type === 'setRoomRect' || type === 'removeRoomRect' || type === 'setRoomName') {
     if (!validIndex(rooms, op.room) || !rooms[op.room]) return geo;
     room = rooms[op.room];
-    rects = room.rects || [];
+    rects = arr(room.rects);
     if (type === 'setRoomName') {
       if (typeof op.name !== 'string' || op.name === room.name) return geo;
       return withKey(g, 'rooms', replaceAt(rooms, op.room, withKey(room, 'name', op.name)));
@@ -820,7 +834,7 @@ function histInit(geo) {
 /** 记一步（和当前是同一个对象就不记）；清掉重做；最多留 limit 步（默认 100） */
 function histPush(h, geo, limit) {
   if (!h || geo === h.present) return h;
-  var n = isNum(limit) && limit >= 0 ? Math.floor(limit) : 100;
+  var n = typeof limit === 'number' && limit >= 0 ? Math.floor(limit) : 100;
   var past = (h.past || []).concat([h.present]);
   if (past.length > n) past = past.slice(past.length - n);
   return { past: past, present: geo, future: [] };
