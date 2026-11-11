@@ -120,8 +120,10 @@ async function analyzeOnce(settings, model, prompt, image, opts = {}) {
       headers: authHeaders(settings),
       body: JSON.stringify({
         contents: [{ role: 'user', parts }],
-        // opts.json：要求模型只回 JSON（标题润色 / 材料识别）
-        ...(opts.json ? { generationConfig: { responseMimeType: 'application/json' } } : {}),
+        // opts.json：要求模型只回 JSON（标题润色 / 材料识别）；opts.config：其余的 generationConfig（例如回复长度上限）
+        ...(opts.json || opts.config
+          ? { generationConfig: { ...(opts.json ? { responseMimeType: 'application/json' } : {}), ...(opts.config || {}) } }
+          : {}),
       }),
     });
     try {

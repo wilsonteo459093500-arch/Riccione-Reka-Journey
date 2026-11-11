@@ -362,6 +362,10 @@ function recommendCorner(geo) {
  */
 function buildScene(geo, options) {
   var o = mergeOpts(options);
+  // 贴墙容差跟着图纸大小走（坐标带着图纸尺寸时）；没指定图纸尺寸就用默认的 16 像素
+  if (!(options && options.snapTol > 0) && geo.source && geo.source.w > 0 && geo.source.h > 0) {
+    o.snapTol = Math.max(4, 0.0086 * Math.max(geo.source.w, geo.source.h));
+  }
   var pj = makeProjection(geo, o);
   var s = pj.s;
   var zs = pj.zs; // 画布像素 / 毫米

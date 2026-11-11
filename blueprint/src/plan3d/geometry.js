@@ -3,8 +3,8 @@
 // 数据模型（单位 = 图纸像素，x 向右、y 向下，不分轴归一）：
 //   { mmPerPx, wallT,
 //     rooms:    [{ name, rects: [[x0,y0,x1,y1], …] }],        房间 = 若干横平竖直的矩形拼起来（主矩形 + 凹位）
-//     openings: [{ type:'window'|'door'|'hidden-door'|'gap', side:'top'|'right'|'bottom'|'left', a, b }],
-//                                                                门窗 = 贴在某一侧墙上的一段（a、b 沿墙方向）
+//     openings: [{ type:'window'|'door'|'hidden-door'|'gap', side:'top'|'right'|'bottom'|'left', a, b, at? }],
+//                                                                门窗 = 贴在某一侧墙上的一段（a、b 沿墙方向；at = 墙面位置，可不写）
 //     items:    [{ id, label, kind, box:[x0,y0,x1,y1], against?, round?:{tl,tr,br,bl}, facing?, unsure? }] }
 // 位置由这份数据决定，画图的程序只照着画。
 
@@ -78,7 +78,8 @@ function edgeFor(rects, side, a, b) {
 function openingRect(rects, opening, wallT) {
   var a = Math.min(opening.a, opening.b);
   var b = Math.max(opening.a, opening.b);
-  var edge = edgeFor(rects, opening.side, a, b);
+  // at = 明确指定的墙面位置（内墙上的门窗；不写就找这一侧最外面的墙边）
+  var edge = typeof opening.at === 'number' && isFinite(opening.at) ? opening.at : edgeFor(rects, opening.side, a, b);
   if (edge === null || !(b - a > 0)) return null;
   if (opening.side === 'top') return [a, edge - wallT, b, edge];
   if (opening.side === 'bottom') return [a, edge, b, edge + wallT];

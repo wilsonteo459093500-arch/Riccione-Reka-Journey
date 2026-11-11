@@ -15,6 +15,7 @@ import { getProject } from '../store/db.js';
 import { preloadProjectAssets, onAssetsChanged, storeBlob } from '../store/assets.js';
 import { uploadImage } from './editor/upload.js';
 import { useProjectState, waitForSaves } from '../lib/useProjectState.js';
+import { keepGenerated } from '../lib/generated.js';
 import { designCoverSlideId, projectStats, ensureDesignCoverSlide, upgradeProject, legacyEditPages } from '../lib/project.js';
 import { sectionLabel } from '../engine/deck.js';
 import { deckChapters } from '../engine/b/company.js';
@@ -34,22 +35,6 @@ const TAB_IDS = TABS.map((t) => t.id);
 function commitDrafts() {
   const el = document.activeElement;
   if (el && /^(INPUT|TEXTAREA)$/.test(el.tagName)) el.blur();
-}
-
-/** 平面图、框选范围、图纸清单、立体图历史和检查结果：都不进撤销历史 */
-const GENERATED_FIELDS = ['renders3d', 'plan', 'planSource', 'planCrop', 'planRegion', 'planScope', 'planBrief', 'render3dInfo'];
-
-/** 撤销 / 重做时保留 AI 生成的立体图历史、平面图和图纸清单（它们不进撤销历史，花了钱的结果不能被一次 ⌘Z 撤掉） */
-function keepGenerated(current, restored) {
-  const byId = new Map((current.floors || []).map((f) => [f.id, f]));
-  let changed = false;
-  const floors = (restored.floors || []).map((f) => {
-    const cur = byId.get(f.id);
-    if (!cur || GENERATED_FIELDS.every((k) => cur[k] === f[k])) return f;
-    changed = true;
-    return { ...f, ...Object.fromEntries(GENERATED_FIELDS.map((k) => [k, cur[k]])) };
-  });
-  return changed ? { ...restored, floors } : restored;
 }
 
 export default function Editor({ projectId, settings, notify, onOpenSettings, onExit }) {
