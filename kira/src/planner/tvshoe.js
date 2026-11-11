@@ -120,15 +120,28 @@ export function tvBuild(spec, cab) {
       });
     }
   }
-  const side = (id, x, ends) => {
+  // 高柜内侧（朝电视那一边）：矮柜 / 吊柜以外露出来的侧面 → 见光板（同厨房高柜内侧，bridge.js panelIn）
+  //   露出面积 = 深 × 高 − 矮柜挡住的（min(深) × 重叠高度）− 吊柜挡住的；中间没有矮柜（全宽都是高柜）就不加
+  const overlap = (a0, a1, b0, b1) => Math.max(0, Math.min(a1, b1) - Math.max(a0, b0));
+  const innerArea = () => {
+    if (!(run.runW > 0)) return 0;
+    const { D, H } = spec.sides;
+    const lowY0 = spec.lowKind === 'floating' ? spec.lowY : 0;
+    let area = D * H - Math.min(D, spec.lowD) * overlap(0, H, lowY0, lowY0 + spec.lowH);
+    if (spec.upper.on) area -= Math.min(D, spec.upper.D) * overlap(0, H, spec.upper.y, spec.upper.y + spec.upper.H);
+    return Math.max(0, Math.round(area));
+  };
+  const side = (id, x, ends, innerSide) => {
     const base = { kind: 'plinth', h: 80 };
     const Hb = spec.sides.H - base.h;
     const n = autoDoors(spec.sides.W);
     const body = n > 1 ? vsplit(splitEven(spec.sides.W, n), Array.from({ length: n }, () => sideBody(spec.sides.kind, Hb))) : sideBody(spec.sides.kind, Hb);
-    return { id: `${cab.id}-${id}`, kind: 'tall', label: bi(TV_FRAME_NAME.tall), wall: 0, x, y: 0, W: spec.sides.W, H: spec.sides.H, D: spec.sides.D, base, ends, body };
+    const area = innerArea();
+    return { id: `${cab.id}-${id}`, kind: 'tall', label: bi(TV_FRAME_NAME.tall), wall: 0, x, y: 0, W: spec.sides.W, H: spec.sides.H, D: spec.sides.D, base, ends,
+      ...(area > 0 ? { innerPanel: { side: innerSide, area } } : {}), body };
   };
-  if (run.left) frames.unshift(side('sideL', 0, { left: true, right: false }));
-  if (run.right) frames.push(side('sideR', spec.W - spec.sides.W, { left: false, right: true }));
+  if (run.left) frames.unshift(side('sideL', 0, { left: true, right: false }, 'right'));
+  if (run.right) frames.push(side('sideR', spec.W - spec.sides.W, { left: false, right: true }, 'left'));
   // 电视墙：一块墙板放在柜子后面（排最前 = 先画）；价钱 = 宽 × 高 × 墙板价（被柜子挡住也算）
   if (spec.tvWall?.on && run.runW > 0) {
     frames.unshift({

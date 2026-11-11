@@ -284,7 +284,7 @@ export default function CabinetEditor({ cab: initial, zone, defaults = {}, lang 
             </div>
             {(cab.frames || []).some((f) => f.innerPanel) && (
               <div className="mt-1">
-                <Toggle on={cab.exposed?.tallInner !== false} onChange={(v) => set({ exposed: { ...(cab.exposed || {}), tallInner: v } })} label="Tall unit inner side 高柜内侧（台面以上露出的部分）" />
+                <Toggle on={cab.exposed?.tallInner !== false} onChange={(v) => set({ exposed: { ...(cab.exposed || {}), tallInner: v } })} label={isKitchen ? 'Tall unit inner side 高柜内侧（台面以上露出的部分）' : 'Tower inner side 高柜内侧（矮柜 / 吊柜以外露出的部分）'} />
               </div>
             )}
           </Section>

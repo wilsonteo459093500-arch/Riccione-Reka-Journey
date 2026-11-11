@@ -222,3 +222,25 @@ test('room ceiling not set: wardrobe frame 2.70 m (= RM 12,150), shoe to-ceiling
   assert.equal(updateSpec(w, { H: 2400 }).spec.H, 2400);
   assert.equal(updateSpec(w, { H: 300 }).spec.H, 600);
 });
+
+test('TV side towers: inner side (facing the TV) gets a side panel for the part not covered by the low / top cabinet', () => {
+  // 高柜 2.70 × 深 0.35；悬空矮柜 离地 0.25、高 0.40、深 0.40 → 挡住 0.35 × 0.40
+  const c = updateSpec(newCabinet('tv', { ceilingH: 2700 }), { sides: { on: true, which: 'both' } });
+  const towers = c.frames.filter((f) => /side[LR]$/.test(f.id));
+  assert.deepEqual(towers.map((f) => f.innerPanel), [{ side: 'right', area: 350 * 2700 - 350 * 400 }, { side: 'left', area: 350 * 2700 - 350 * 400 }]);
+  const inner = cabinetItemsFor(c).filter((it) => it.kira?.part === 'panelIn');
+  assert.equal(inner.length, 2);
+  inner.forEach((it) => assert.ok(Math.abs(it.length * it.h - 0.35 * 2.3) < 1e-9));
+  // 开吊柜（离地 2.00、高 0.40、深 0.35）→ 再扣 0.35 × 0.40
+  const up = updateSpec(c, { upper: { on: true } });
+  assert.equal(up.frames.find((f) => f.id.endsWith('-sideL')).innerPanel.area, 350 * 2700 - 350 * 400 - 350 * 400);
+  // 关「高柜内侧」→ 不计价；价钱少两块
+  const off = { ...c, exposed: { tallInner: false } };
+  assert.equal(cabinetItemsFor(off).filter((it) => it.kira?.part === 'panelIn').length, 0);
+  assert.ok(cabinetTotal(c) > cabinetTotal(off));
+  // 只有一边高柜 → 只有那一块
+  const one = updateSpec(c, { sides: { on: true, which: 'left' } });
+  assert.equal(cabinetItemsFor(one).filter((it) => it.kira?.part === 'panelIn').length, 1);
+  // 没有高柜 → 没有
+  assert.equal(cabinetItemsFor(newCabinet('tv', { ceilingH: 2700 })).filter((it) => it.kira?.part === 'panelIn').length, 0);
+});
