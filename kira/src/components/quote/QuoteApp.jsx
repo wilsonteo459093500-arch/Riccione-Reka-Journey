@@ -14,7 +14,7 @@ import { demoRecord } from '../../planner/demo.js';
 import QuotationView, { blankZone } from './QuotationView.jsx';
 import AuthGate from '../auth/AuthGate.jsx';
 import { kiraCloud, cloudConfigured } from '../../services/kiraRepo.js';
-import { promoteLocalPlans, replacePlanPaths, retryPlanDeletes, isLocalPath } from '../../services/planImages.js';
+import { promoteLocalPlans, replacePlanPaths, processPlanDeletes, isLocalPath } from '../../services/planImages.js';
 import {
   STORE_KEY, PENDING_KEY, PENDING_DEL_KEY, DELETED_KEY, bootDevice,
   mergePull, applyRealtime, mergeTabs, dropIds, canUpload, updatedAtOf,
@@ -209,13 +209,20 @@ function Inner({ signOut, user, cloudReady = false } = {}) {
     else toast('Deleted 已删除', 'success');
   };
 
+  const planImageUsed = (path) => storeRef.current.records.some((r) => (r.plans || []).some((p) => p?.image?.path === path));
+  // 本机模式（没有云端）：删掉的户型图（local:…）只在这台设备，改动存好就可以删
+  useEffect(() => {
+    if (cloudConfigured) return undefined;
+    const t = setTimeout(() => { processPlanDeletes(planImageUsed, { cloud: false }).catch(() => {}); }, 1500);
+    return () => clearTimeout(t);
+  }, [store]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // 第三版：本机模式 / 离线时存的户型图（local:…）→ 登录有网后补传，再把记录里的路径换掉（记录照常待同步）
   const promoting = useRef(false);
   const promotePlanImages = async () => {
     if (promoting.current) return;
     promoting.current = true;
     try {
-      await retryPlanDeletes().catch(() => {});
       for (const r of storeRef.current.records) {
         if (!(r.plans || []).some((p) => isLocalPath(p?.image?.path)) || !canUpload(r, userId, cloudIds.current)) continue;
         const map = await promoteLocalPlans(r.plans).catch(() => new Map());
@@ -237,6 +244,8 @@ function Inner({ signOut, user, cloudReady = false } = {}) {
     }
     const recs = storeRef.current.records.filter((r) => pending.current.has(r.id) && canUpload(r, userId, cloudIds.current));
     await Promise.allSettled(recs.map((r) => pushNow(r)));
+    // 户型图图片：删掉户型图的那个改动推上云以后才删图片；整个本机还有记录在用的不删（复制出来的版本可能共用同一张图）
+    if (![...pending.current].some((id) => storeRef.current.records.some((r) => r.id === id))) await processPlanDeletes(planImageUsed).catch(() => {});
     // 本机已没有的待同步 id 清掉
     setPendingIds([...pending.current].filter((id) => !storeRef.current.records.some((r) => r.id === id)), false);
   };
@@ -699,8 +708,7 @@ function Inner({ signOut, user, cloudReady = false } = {}) {
               )}
               {/* 一份报价出错只影响这一份：列表 / 其他客户照常可用 */}
               <ErrorBoundary inline key={active.id}>
-                <QuotationView key={active.id} doc={active} onChange={updateActive}
-                  planPathShared={(path) => storeRef.current.records.some((r) => r.id !== active.id && (r.plans || []).some((p) => p?.image?.path === path))} mobileTab={isMobile ? mtab : null} onMobileTab={setMtab} />
+                <QuotationView key={active.id} doc={active} onChange={updateActive} mobileTab={isMobile ? mtab : null} onMobileTab={setMtab} />
               </ErrorBoundary>
             </div>
           ) : (

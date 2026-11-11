@@ -98,7 +98,7 @@ export const placedFootprint = (cab) => placeOnPlan(cabinetFootprint(cab), cab?.
 export function placeAt(cab, x, y, rot = 0, planId = cab?.place?.planId) {
   const r = normRot(rot);
   const b = placeOnPlan(cabinetFootprint(cab), { x: 0, y: 0, rot: r }).bbox;
-  return { ...(planId != null ? { planId } : {}), x: round1(num(x) - b[0]), y: round1(num(y) - b[1]), rot: r };
+  return { ...(planId != null ? { planId } : {}), x: Math.round(num(x) - b[0]), y: Math.round(num(y) - b[1]), rot: r };
 }
 
 // 转 90°：绕外框中心转（转完中心不动）
@@ -108,7 +108,7 @@ export function rotatePlace(cab, by = 90) {
   const cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
   const r = normRot(num(p.rot) + by);
   const nb = placeOnPlan(cabinetFootprint(cab), { x: 0, y: 0, rot: r }).bbox;
-  return { ...p, rot: r, x: round1(cx - (nb[0] + nb[2]) / 2), y: round1(cy - (nb[1] + nb[3]) / 2) };
+  return { ...p, rot: r, x: Math.round(cx - (nb[0] + nb[2]) / 2), y: Math.round(cy - (nb[1] + nb[3]) / 2) };
 }
 
 // ---------------- 图上的尺寸 ↔ 模板设定 ----------------
@@ -160,7 +160,7 @@ export function dragPlanEdge(cab, edge, delta) {
   else if (edge === 'top') y += before[3] - after[3];
   else if (edge === 'right') x += before[0] - after[0];
   else y += before[1] - after[1];
-  return { cab: { ...r.cab, place: { ...(cab.place || {}), x: round1(x), y: round1(y) } }, rebuilt: r.rebuilt };
+  return { cab: { ...r.cab, place: { ...(cab.place || {}), x: Math.round(x), y: Math.round(y) } }, rebuilt: r.rebuilt };
 }
 
 // 画了一个框（户型图 mm）：长边 = 沿墙长度、短边 = 深；墙在哪一边由 rot 决定（默认：横的墙在上、竖的墙在左）

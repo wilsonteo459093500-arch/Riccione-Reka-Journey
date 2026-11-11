@@ -144,3 +144,13 @@ test('cleanPlans: junk dropped, bad scale → null, defaults filled', () => {
   assert.deepEqual(out[1].image, { path: 'a', w: 0, h: 0, kind: 'img', page: 1 });
   assert.deepEqual(cleanPlans(undefined), []);
 });
+
+test('review fix: positions on the plan are whole mm after rotate / place / edge drag', () => {
+  const w = { ...updateSpec(newCabinet('wardrobe'), { W: 2410, D: 575 }) };
+  const placed = { ...w, place: placeAt(w, 1000, 1000, 0, 'p1') };
+  const r = { ...placed, place: rotatePlace(placed, 90) };
+  assert.ok(Number.isInteger(r.place.x) && Number.isInteger(r.place.y), JSON.stringify(r.place));
+  const e = dragPlanEdge(r, 'left', -15).cab;
+  assert.ok(Number.isInteger(e.place.x) && Number.isInteger(e.place.y), JSON.stringify(e.place));
+  for (const rot of [90, 180, 270]) { const p = placeAt(w, 333, 777, rot, 'p1'); assert.ok(Number.isInteger(p.x) && Number.isInteger(p.y)); }
+});

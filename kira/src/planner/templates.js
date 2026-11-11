@@ -144,7 +144,8 @@ const blank = {
     const old = (cab.frames || []).find((f) => !f.user);
     const f = {
       id: old?.id || `${cab.id}-f0`, kind: spec.kind, label: bi(FRAME_KIND_NAME[spec.kind] || FRAME_KIND_NAME.tall), wall: 0,
-      x: Math.max(0, int(old?.x, 0)), y: spec.kind === 'wall' ? spec.y : Math.max(0, int(old?.y, 0)),
+      // 种类没变才沿用移动过的离地高度（吊柜一律看 spec.y）；换种类 → 用新种类的离地（地柜 / 高柜 = 0）
+      x: Math.max(0, int(old?.x, 0)), y: spec.kind === 'wall' || old?.kind !== spec.kind ? spec.y : Math.max(0, int(old?.y, 0)),
       W: spec.W, H: spec.H, D: spec.D, base: { ...spec.base }, ends: { left: true, right: true },
       body: old?.body || leaf('closed', { interior: 'shelves' }),
     };
@@ -269,6 +270,8 @@ function mergeNode(o, t, n, hit) {
 }
 
 const GEO = ['x', 'y', 'W', 'H', 'D'];
+const pruneRemoved = (removed, newFrames) => (removed || []).filter((id) => newFrames.some((f) => f.id === id));
+const withRemoved = (cab, list) => { const out = { ...cab }; if (list.length) out.removedFrames = list; else delete out.removedFrames; return out; };
 const sameGeo = (a, b) => GEO.every((k) => Number(a?.[k]) === Number(b?.[k]));
 
 export function mergeFrames(oldCab, newFrames) {
@@ -294,10 +297,12 @@ export function mergeFrames(oldCab, newFrames) {
     return g;
   });
   (oldCab.frames || []).forEach((f) => { const ot = oldTpl.get(f.id); if (ot && !newFrames.some((x) => x.id === f.id) && !same(f.body, ot.body)) rebuilt.push(f.id); });
-  // 用户自己加的柜体永远保留；删掉的模板柜体不长回来
+  // 用户自己加的柜体永远保留；删掉的模板柜体不长回来。
+  // 新设定已经不生成的 id 从「删掉清单」拿掉（例：电视墙删了 → 关掉 → 再开，就会回来）
   const users = (oldCab.frames || []).filter((f) => f.user);
-  if (users.length || removed.size) kept = true;
-  return { frames: [...frames, ...users], rebuilt, kept };
+  const removedFrames = pruneRemoved(oldCab.removedFrames, newFrames);
+  if (users.length || removedFrames.length) kept = true;
+  return { frames: [...frames, ...users], rebuilt, kept, removedFrames };
 }
 
 // 改模板设定（同 updateSpec），但手画过的框框尽量保留 → { cab, rebuilt: [frame id…] }
@@ -305,11 +310,11 @@ export function updateSpecKeep(cab, patch) {
   const next = updateSpec(cab, patch);
   if (!cab.custom) return { cab: next, rebuilt: [] };
   if (cab.template === 'blank') { // 空白柜子：框框由 build 保留；这里只接回用户加的柜体、滤掉删掉的
-    const removed = new Set(cab.removedFrames || []);
-    return { cab: { ...next, frames: [...next.frames.filter((f) => !removed.has(f.id)), ...(cab.frames || []).filter((f) => f.user)] }, rebuilt: [] };
+    const removed = pruneRemoved(cab.removedFrames, next.frames);
+    return { cab: withRemoved({ ...next, frames: [...next.frames.filter((f) => !removed.includes(f.id)), ...(cab.frames || []).filter((f) => f.user)] }, removed), rebuilt: [] };
   }
-  const { frames, rebuilt, kept } = mergeFrames(cab, next.frames);
-  const out = { ...next, frames };
+  const { frames, rebuilt, kept, removedFrames } = mergeFrames(cab, next.frames);
+  const out = withRemoved({ ...next, frames }, removedFrames);
   if (kept) out.custom = true; else delete out.custom;
   return { cab: out, rebuilt };
 }
@@ -345,6 +350,26 @@ export function addFrame(cab, kind, { ceilingH, wall = 0 } = {}) {
     };
   }
   return { cab: { ...cab, frames: [...frames, f], custom: true }, id };
+}
+
+// 复制柜子：新 id；柜体 id 的前缀「旧 id-」换成「新 id-」（模板 id 对得上 → 改设定时手画框框照样保留），
+// removedFrames 一样换；不是这个前缀的（例：旧报价换算来的）才改成「新 id-f序号」。不带图上位置（会重叠）。
+export function copyCabinet(cab, { id = uid('cab'), code } = {}) {
+  const src = JSON.parse(JSON.stringify(cab));
+  const { place: _p, ...rest } = src;
+  const pre = `${cab.id}-`;
+  const used = new Set();
+  const rename = (fid, i) => {
+    let n = typeof fid === 'string' && fid.startsWith(pre) ? `${id}-${fid.slice(pre.length)}` : `${id}-f${i}`;
+    while (used.has(n)) n = `${n}x`;
+    used.add(n);
+    return n;
+  };
+  const out = { ...rest, id, ...(code ? { code } : {}), frames: (rest.frames || []).map((f, i) => ({ ...f, id: rename(f.id, i) })) };
+  if (Array.isArray(rest.removedFrames)) {
+    out.removedFrames = rest.removedFrames.map((fid) => (typeof fid === 'string' && fid.startsWith(pre) ? `${id}-${fid.slice(pre.length)}` : fid));
+  }
+  return out;
 }
 
 // 删一个柜体：模板的柜体记进 removedFrames（改设定时不长回来）；用户加的直接拿掉

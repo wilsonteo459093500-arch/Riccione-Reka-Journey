@@ -19,6 +19,7 @@ import CabinetEditor from '../planner/CabinetEditor.jsx';
 import TemplatePicker from '../planner/TemplatePicker.jsx';
 import PlanBoard from '../plan/PlanBoard.jsx';
 import { fitCabinetToRect } from '../../planner/plan.js';
+import { copyCabinet } from '../../planner/templates.js';
 import { parseMeters } from '../planner/bits.jsx';
 import { DOOR_SERIES, CARCASS_SERIES } from '../../constants/pricing.js';
 import { Boxes } from 'lucide-react';
@@ -179,7 +180,7 @@ function MobileItemCard({ item, result, selected, onToggleSelect, onEdit, canUp,
 }
 
 // 受控组件：doc = { meta, zones, looseItems, adjustPct }；改动通过 onChange 回传上层。
-export default function QuotationView({ doc, onChange, mobileTab = null, onMobileTab, planPathShared }) {
+export default function QuotationView({ doc, onChange, mobileTab = null, onMobileTab }) {
   const toast = useToast();
   const confirm = useConfirm();
   const [showPrint, setShowPrint] = useState(false);
@@ -307,9 +308,7 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
     if (await confirm({ title: 'Delete cabinet 删除柜子', message: `Delete ${c?.code || ''} ${c?.name || ''}? 确定删除这个柜子？`, danger: true, confirmText: 'Delete 删除', cancelText: 'Cancel 取消' })) removeCabinetNow(zoneId, id);
   };
   const duplicateCabinet = (zoneId, cab) => {
-    const { place: _p, ...rest } = structuredClone(cab); // 复制的柜子不放在图上同一个位置（会重叠）
-    const copy = { ...rest, id: uid('cab'), code: nextCode(zones) };
-    copy.frames = copy.frames.map((f, i) => ({ ...f, id: `${copy.id}-f${i}` }));
+    const copy = copyCabinet(cab, { code: nextCode(zones) }); // 新 id、柜体 id 跟着换、不带图上位置（templates.js）
     saveCabinet(zoneId, copy);
   };
   // 编辑中：「全部 RM」= 用草稿替换这个柜子后的整份报价
@@ -371,7 +370,7 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
         </div>
 
         {/* 第三版：户型图（客户资料下面、所有房间上面；可收起）*/}
-        <PlanBoard plans={plans} zones={zones} lang={lang} planPathShared={planPathShared}
+        <PlanBoard plans={plans} zones={zones} lang={lang}
           onChange={({ plans: ps, zones: zs }) => patch({ plans: ps, zones: zs })}
           onEdit={(zoneId, cab) => setEditingCab({ zoneId, cab, isNew: false })}
           onDraw={({ planId, rect, zoneId }) => {

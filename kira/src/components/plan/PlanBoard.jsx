@@ -10,7 +10,7 @@ import { BLOCK_COLORS, BLOCK_SELECTED, INK } from '../../render/palette.js';
 import { mmToM } from '../../planner/model.js';
 import { cabinetTitle } from '../../planner/templates.js';
 import { mmPerPx, planReady, placedFootprint, placeAt, rotatePlace, dragPlanEdge, aisleWarnings, dist } from '../../planner/plan.js';
-import { isPdf, prepareImage, openPdf, renderPdfPage, pdfThumb, savePlanImage, planImageUrl, deletePlanImage } from '../../services/planImages.js';
+import { isPdf, prepareImage, openPdf, renderPdfPage, pdfThumb, savePlanImage, planImageUrl, queuePlanDelete } from '../../services/planImages.js';
 import { parseMeters, useBackClose } from '../planner/bits.jsx';
 import { useToast, useConfirm } from '../ui/UIProvider.jsx';
 
@@ -38,7 +38,7 @@ function Btn({ on, children, title, onClick, disabled, danger, ...rest }) {
 }
 
 // ============================================================
-export default function PlanBoard({ plans = [], zones = [], onChange, onDraw, onEdit, planPathShared = () => false, lang = 'en' }) {
+export default function PlanBoard({ plans = [], zones = [], onChange, onDraw, onEdit, lang = 'en' }) {
   const toast = useToast();
   const confirm = useConfirm();
   const [open, setOpen] = useState(() => plans.length > 0 || !isPhone());
@@ -96,26 +96,37 @@ export default function PlanBoard({ plans = [], zones = [], onChange, onDraw, on
     const h = hist.current;
     if (h.last && (h.last.zones !== zones || h.last.plans !== plans)) { h.undo = []; h.redo = []; h.last = null; bump((n) => n + 1); }
   }, [zones, plans]);
+  // 一律用最新的 plans / zones / onChange（上传、PDF 渲页、确认框都要等；等完再用旧的会把整份报价盖回去）
+  const live = useRef(null);
+  live.current = { plans, zones, onChange };
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  const emit = (out) => { if (alive.current) live.current.onChange(out); };
+  // next：{ plans?, zones? } 或 (现在的 { plans, zones }) => { plans?, zones? }
   const commit = (next) => {
-    const snap = { plans, zones };
-    const out = { plans: next.plans || plans, zones: next.zones || zones };
-    hist.current.undo.push(snap);
+    const cur = { plans: live.current.plans, zones: live.current.zones };
+    const n = typeof next === 'function' ? next(cur) : next;
+    const out = { plans: n.plans || cur.plans, zones: n.zones || cur.zones };
+    hist.current.undo.push(cur);
     if (hist.current.undo.length > 60) hist.current.undo.shift();
     hist.current.redo = [];
     hist.current.last = out;
-    onChange(out);
-    bump((n) => n + 1);
+    emit(out);
+    bump((x) => x + 1);
   };
-  const undo = () => { const h = hist.current; const s = h.undo.pop(); if (!s) return; h.redo.push({ plans, zones }); h.last = s; onChange(s); bump((n) => n + 1); };
-  const redo = () => { const h = hist.current; const s = h.redo.pop(); if (!s) return; h.undo.push({ plans, zones }); h.last = s; onChange(s); bump((n) => n + 1); };
+  const undo = () => { const h = hist.current; const s = h.undo.pop(); if (!s) return; h.redo.push({ plans: live.current.plans, zones: live.current.zones }); h.last = s; emit(s); bump((n) => n + 1); };
+  const redo = () => { const h = hist.current; const s = h.redo.pop(); if (!s) return; h.undo.push({ plans: live.current.plans, zones: live.current.zones }); h.last = s; emit(s); bump((n) => n + 1); };
 
-  const setPlan = (p) => commit({ plans: plans.map((x) => (x.id === p.id ? p : x)) });
+  const setPlan = (p) => commit((c) => ({ plans: c.plans.map((x) => (x.id === p.id ? p : x)) }));
 
   // ---------------- 上传 ----------------
   const addPlan = async (blob, w, h, extra) => {
     const path = await savePlanImage(blob);
-    const p = { id: newPlanId(), name: `Plan ${plans.length + 1} 户型图 ${plans.length + 1}`, image: { path, w, h, ...extra }, scale: null };
-    commit({ plans: [...plans, p] });
+    // 等的时候换了报价（这个画面已经关掉）→ 不写回，免得写进别的报价
+    if (!alive.current) { queuePlanDelete(path); return; }
+    const n = live.current.plans.length + 1;
+    const p = { id: newPlanId(), name: `Plan ${n} 户型图 ${n}`, image: { path, w, h, ...extra }, scale: null };
+    commit((c) => ({ plans: [...c.plans, p] }));
     setActiveId(p.id);
     setOpen(true);
     setMode('scale');
@@ -158,14 +169,16 @@ export default function PlanBoard({ plans = [], zones = [], onChange, onDraw, on
     if (!plan) return;
     const n = cabsHere.length;
     if (!(await confirm({ title: 'Delete floor plan 删除户型图', message: `Delete "${plan.name}"?${n ? ` ${n} cabinet(s) will be taken off the plan (they stay in the quote). 上面的 ${n} 个柜子会从图上拿掉（报价里还在）。` : ''} 确定删除？`, danger: true, confirmText: 'Delete 删除', cancelText: 'Cancel 取消' }))) return;
+    if (!alive.current) return;
     const path = plan.image?.path;
-    let zs = zones;
-    cabsHere.forEach((x) => { zs = replaceCab(zs, dropPlace(x.cab)); });
-    // 先删报价里的引用，再删图片（别的报价版本还在用就不删）
-    onChange({ plans: plans.filter((p) => p.id !== plan.id), zones: zs });
+    const { plans: P, zones: Z } = live.current; // 确认框等的时候报价可能改过 → 用最新的
+    let zs = Z;
+    Z.flatMap((z) => z.cabinets || []).filter((c) => c.place?.planId === plan.id).forEach((c) => { zs = replaceCab(zs, dropPlace(c)); });
+    // 先删报价里的引用；图片排队，等这个改动同步完、而且没有任何报价版本还在用，才真的删（QuoteApp）
+    emit({ plans: P.filter((p) => p.id !== plan.id), zones: zs });
     hist.current = { undo: [], redo: [], last: null };
-    setActiveId(plans.find((p) => p.id !== plan.id)?.id || null);
-    if (path && !planPathShared(path)) deletePlanImage(path);
+    setActiveId(P.find((p) => p.id !== plan.id)?.id || null);
+    if (path) queuePlanDelete(path);
   };
 
   // ---------------- 坐标 ----------------
@@ -310,6 +323,7 @@ export default function PlanBoard({ plans = [], zones = [], onChange, onDraw, on
     dragRef.current = null; setDrag(null);
     const sp = toSvg(e) || d.sp;
     if (d.kind === 'move' && d.cab) { commit({ zones: replaceCab(zones, d.cab) }); return; }
+    if (d.kind === 'edge' && !d.cab) return; // 点了把手没拖：保持选中
     if (d.kind === 'edge' && d.cab) {
       commit({ zones: replaceCab(zones, d.cab) });
       if (d.rebuilt?.length) toast('Rebuilt from the template (the size change touched hand-drawn blocks) — Undo to go back 照模板重做了，按撤销可以回来', 'info');
@@ -441,7 +455,7 @@ export default function PlanBoard({ plans = [], zones = [], onChange, onDraw, on
         <>
           {/* 提示 / 比例输入 */}
           <div className="px-3 py-1.5 text-[11px] flex items-center gap-2 flex-wrap" style={{ background: T.cream, color: T.ink, borderBottom: `1px solid ${T.lineSoft}` }}>
-            <input value={plan.name} onChange={(e) => onChange({ plans: plans.map((p) => (p.id === plan.id ? { ...p, name: e.target.value } : p)), zones })}
+            <input value={plan.name} onChange={(e) => emit({ plans: live.current.plans.map((p) => (p.id === plan.id ? { ...p, name: e.target.value } : p)), zones: live.current.zones })}
               className="bg-transparent outline-none text-xs font-medium min-w-0 w-36" style={{ color: T.ink }} title="Plan name 户型图名称" data-plan-name />
             {mode === 'scale' && (
               <span className="flex items-center gap-1.5 flex-wrap" data-plan-scale>

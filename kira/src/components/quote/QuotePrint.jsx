@@ -73,7 +73,9 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
   };
 
   // PDF 文件名：EST QUOTE_RICCIONE_[客户]_[Site]_YYYYMMDD（Chrome 存 PDF 默认取 document.title）
-  const handlePrint = () => {
+  const handlePrint = async () => {
+    // 户型图（平面索引图页）载入完才打印，不然那一页会是空白
+    if (planPages.length) { await planLoad.current; await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); }
     const prev = document.title;
     const safe = (s) => (s || '').replace(/[\\/:*?"<>|]/g, '').trim().replace(/\s+/g, ' ');
     const d = (meta.date || '').replace(/-/g, '');

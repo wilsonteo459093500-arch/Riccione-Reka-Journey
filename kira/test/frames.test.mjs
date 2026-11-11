@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from './harness.mjs';
 import { leaf, vsplit, hsplit } from '../src/planner/model.js';
-import { newCabinet, updateSpec, updateSpecKeep, addFrame, removeFrame, frameTitle } from '../src/planner/templates.js';
+import { newCabinet, updateSpec, updateSpecKeep, addFrame, removeFrame, frameTitle, copyCabinet } from '../src/planner/templates.js';
 import { cabinetItemsFor, cabinetTotal } from '../src/planner/bridge.js';
 import { computeItem, seriesById, cnyToMyr } from '../src/constants/pricing.js';
 import { moveFrame, snapMove, resizeFrame, setFrameSize, checkBody, minAxis, FRAME_SNAP } from '../src/planner/blocks.js';
@@ -167,4 +167,57 @@ test('TV feature wall draws behind (elevation + 3D), no side panels, selection o
   const ax = axoScene(w, { yaw: -30 });
   assert.ok(ax.shapes.length > 0);
   assert.equal(cabinetItemsFor(w).filter((it) => it.kira.frameId === `${w.id}-tvwall`).length, 1);
+});
+
+// ---------------- 独立复查修正 ----------------
+test('review fix: a deleted feature wall comes back after turning it off and on (removedFrames pruned)', () => {
+  const c = updateSpec(tvFull(), { tvWall: { on: true, H: 2700 } });
+  const full = cabinetTotal(c);
+  const d = removeFrame(c, `${c.id}-tvwall`);
+  const kept = updateSpecKeep(d, { lowH: 450 }).cab;
+  assert.ok(!kept.frames.some((f) => f.kind === 'backdrop'), 'still deleted while the wall is on');
+  assert.deepEqual(kept.removedFrames, [`${c.id}-tvwall`]);
+  const off = updateSpecKeep(kept, { tvWall: { on: false, H: 2700 } }).cab;
+  assert.equal(off.removedFrames, undefined, 'forgotten once the template no longer makes it');
+  const on = updateSpecKeep(off, { tvWall: { on: true, H: 2700 } }).cab;
+  assert.ok(on.frames.some((f) => f.kind === 'backdrop'), 'wall back');
+  const lowOnly = updateSpecKeep(on, { lowH: 400 }).cab;
+  assert.ok(Math.abs(cabinetTotal(lowOnly) - full) < 0.01);
+});
+
+test('review fix: duplicating keeps template frame ids (prefix swap), removedFrames follow, no duplicate ids', () => {
+  const c = updateSpec(tvFull(), { tvWall: { on: true, H: 2700 } });
+  const d = removeFrame(c, `${c.id}-tvwall`);
+  const copy = copyCabinet(d, { id: 'cabCOPY', code: 'K9' });
+  assert.equal(copy.code, 'K9');
+  assert.deepEqual(copy.frames.map((f) => f.id), d.frames.map((f) => f.id.replace(c.id, 'cabCOPY')));
+  assert.deepEqual(copy.removedFrames, ['cabCOPY-tvwall']);
+  const wider = updateSpecKeep(copy, { W: 3200 }).cab;
+  assert.ok(!wider.frames.some((f) => f.kind === 'backdrop'), 'deleted wall stays deleted in the copy');
+  assert.equal(new Set(wider.frames.map((f) => f.id)).size, wider.frames.length);
+  assert.ok(Math.abs(cabinetTotal(wider) - cabinetTotal(updateSpecKeep(d, { W: 3200 }).cab)) < 0.01);
+  // 空白柜子：主柜体删掉 + 加一个 → 复制后改宽，没有重复 id
+  let b = newCabinet('blank', { ceilingH: 2700 });
+  b = removeFrame(b, b.frames[0].id);
+  b = addFrame(b, 'base', { ceilingH: 2700 }).cab;
+  const bc = copyCabinet(b, { id: 'cabB2' });
+  const bw = updateSpecKeep(bc, { W: 1500 }).cab;
+  assert.equal(new Set(bw.frames.map((f) => f.id)).size, bw.frames.length, bw.frames.map((f) => f.id).join(','));
+  assert.equal(bw.frames.length, 1);
+  // 不带图上位置
+  assert.equal(copyCabinet({ ...c, place: { planId: 'p', x: 0, y: 0, rot: 0 } }, { id: 'z' }).place, undefined);
+});
+
+test('review fix: blank cabinet switching kind uses the new kind height off the floor', () => {
+  let b = newCabinet('blank', { ceilingH: 2700 });
+  b = { ...b, custom: true };
+  const wall = updateSpecKeep(b, { kind: 'wall', H: 750, D: 350, y: 1500, base: { kind: 'wallhung', h: 0 } }).cab;
+  assert.equal(wall.frames[0].y, 1500);
+  const base = updateSpecKeep(wall, { kind: 'base', H: 850, D: 600, y: 0, base: { kind: 'plinth', h: 100 } }).cab;
+  assert.equal(base.frames[0].y, 0);
+  const tall = updateSpecKeep(wall, { kind: 'tall', H: 2700, y: 0 }).cab;
+  assert.ok(tall.frames[0].y + tall.frames[0].H <= 2700);
+  // 种类没变：移动过的高度保留
+  const moved = { ...base, frames: [{ ...base.frames[0], y: 300 }] };
+  assert.equal(updateSpecKeep(moved, { W: 1500 }).cab.frames[0].y, 300);
 });

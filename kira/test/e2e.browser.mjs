@@ -555,6 +555,41 @@ try {
   check('v3 no browser errors (desktop)', gerr.length === 0, gerr.join(' | '));
   await pctx.close();
 
+  // ---------- 复查修正：上传很慢（toBlob 延迟 2.5 s）时改报价 / 换报价，不会被旧的报价盖回去 ----------
+  const sctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await sctx.addInitScript(() => {
+    const orig = HTMLCanvasElement.prototype.toBlob;
+    HTMLCanvasElement.prototype.toBlob = function (cb, ...a) { setTimeout(() => orig.call(this, cb, ...a), 2500); };
+  });
+  const sp3 = await sctx.newPage();
+  const serr = [];
+  sp3.on('pageerror', (e) => serr.push(e.message));
+  await sp3.goto(URL);
+  await sp3.getByRole('button', { name: /Skip 跳过/ }).click();
+  await sp3.getByRole('button', { name: /New/ }).first().click();
+  const nameIn = sp3.locator('input').nth(1);
+  await nameIn.fill('Before');
+  await sp3.locator('[data-plan-file]').setInputFiles(path.join(FIX, 'floorplan.png'));
+  await sp3.waitForTimeout(300);
+  await nameIn.fill('Edited during upload');
+  await sp3.waitForSelector('[data-plan-svg] image', { timeout: 20000 });
+  await sp3.waitForTimeout(300);
+  const keptName = await nameIn.inputValue();
+  check('v3 review fix: typing during a slow upload is not overwritten when the upload finishes', keptName === 'Edited during upload', keptName);
+  // 上传中按 New 开另一份报价 → 两份都在、id 不重复、B 的名字还在
+  await sp3.locator('[data-plan-file]').setInputFiles(path.join(FIX, 'floorplan.png'));
+  await sp3.waitForTimeout(300);
+  await sp3.getByRole('button', { name: /New/ }).first().click();
+  await sp3.locator('input').nth(1).fill('Customer B');
+  await sp3.waitForTimeout(4000);
+  const recs = await sp3.evaluate(() => { const s = JSON.parse(localStorage.getItem('kira.records.v1') || '{}'); return (s.records || []).map((r) => [r.id, r.meta?.name || '', (r.plans || []).length]); });
+  const ids = recs.map((r) => r[0]);
+  const b = recs.find((r) => r[1] === 'Customer B');
+  check('v3 review fix: switching quotes during an upload keeps both quotes (no overwrite, no duplicate id)',
+    new Set(ids).size === ids.length && !!b && b[2] === 0 && recs.some((r) => r[1] === 'Edited during upload' && r[2] === 1) && (await sp3.locator('input').nth(1).inputValue()) === 'Customer B', JSON.stringify(recs));
+  check('v3 no browser errors (slow upload)', serr.length === 0, serr.join(' | '));
+  await sctx.close();
+
   // ---------- 手机（触控）：上传 → 点两点定比例 → 点两个对角画柜子 → 衣柜 ----------
   const hctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const hp = await hctx.newPage();

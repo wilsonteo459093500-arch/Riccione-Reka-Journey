@@ -214,24 +214,42 @@ export const replacePlanPaths = (plans = [], map) => (map?.size
   : plans);
 
 // ---------------- 删除（先删报价里的引用，再删图片）----------------
-const readDel = () => { try { const v = JSON.parse(localStorage.getItem(DEL_KEY) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } };
+// 删户型图时只排队；QuoteApp 在「这个改动已经推上云」之后调 processPlanDeletes，
+// 而且只删整个本机 store 里没有任何记录还在用的（复制的版本 / 同步回来的旧版可能还指着它）。
+const readDel = () => { try { const v = JSON.parse(localStorage.getItem(DEL_KEY) || '[]'); return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []; } catch { return []; } };
 const writeDel = (v) => { try { localStorage.setItem(DEL_KEY, JSON.stringify([...new Set(v)])); } catch { /* ignore */ } };
-export async function deletePlanImage(path) {
-  if (!path) return;
+export const pendingPlanDeletes = readDel;
+export function queuePlanDelete(path) { if (path) writeDel([...readDel(), path]); }
+
+async function dropLocal(path) {
   const u = urlCache.get(path);
   if (u) { URL.revokeObjectURL(u); urlCache.delete(path); }
   await idbDel(path);
-  if (isLocalPath(path)) return;
-  try {
-    if (!online() || !(await cloudUser())) throw new Error('offline');
-    const { error } = await supabase.storage.from(BUCKET).remove([path]);
-    if (error) throw error;
-  } catch { writeDel([...readDel(), path]); }
 }
-// 有网时重试排队的删除
-export async function retryPlanDeletes() {
+
+// isUsed(path)：还有记录在用 → 从队列拿掉、不删。cloud:false = 只处理本机的 local:…（本机模式）
+export async function processPlanDeletes(isUsed, { cloud = true } = {}) {
   const q = readDel();
-  if (!q.length || !online() || !(await cloudUser())) return;
-  const { error } = await supabase.storage.from(BUCKET).remove(q);
-  if (!error) writeDel([]);
+  if (!q.length) return;
+  const keep = [];
+  const cloudPaths = [];
+  for (const path of q) {
+    if (isUsed(path)) continue; // 被用回来了（撤销 / 同步回来）→ 不删
+    if (isLocalPath(path)) { await dropLocal(path); continue; }
+    if (!cloud) { keep.push(path); continue; }
+    cloudPaths.push(path);
+  }
+  if (cloudPaths.length) {
+    let ok = false;
+    try {
+      if (online() && (await cloudUser())) {
+        const { error } = await supabase.storage.from(BUCKET).remove(cloudPaths);
+        ok = !error;
+      }
+    } catch { ok = false; }
+    if (ok) { for (const p of cloudPaths) await dropLocal(p); } else keep.push(...cloudPaths);
+  }
+  // 处理期间又排进来的也留着
+  const added = readDel().filter((p) => !q.includes(p));
+  writeDel([...keep, ...added]);
 }
