@@ -335,7 +335,7 @@ test('配色：每套都有画图要用的材质槽', () => {
 });
 
 test('plan3d 核心文件是 ES5 写法、没有外部依赖（以后原样搬到没有构建步骤的 VISI）', () => {
-  for (const f of ['geometry.js', 'scene.js', 'palette.js', 'paint.js']) {
+  for (const f of ['geometry.js', 'scene.js', 'palette.js', 'paint.js', 'edit.js', 'settle.js', 'detect.js', 'prompt.js']) {
     const code = src(f);
     const bare = code
       .replace(/\/\*[\s\S]*?\*\//g, '')
@@ -348,7 +348,8 @@ test('plan3d 核心文件是 ES5 写法、没有外部依赖（以后原样搬�
     assert.ok(!/\.\.\./.test(bare), `${f}: 不用展开运算符`);
     const imports = [...bare.matchAll(/^\s*import\s[^;]*from\s*(''|"")/gm)];
     const real = [...code.matchAll(/^\s*import\s[^;]*from\s*['"]([^'"]+)['"]/gm)].map((m) => m[1]);
-    assert.ok(real.every((p) => /^\.\/(geometry|scene|palette)\.js$/.test(p)), `${f}: 只引用 plan3d 自己的文件（${real.join(', ') || '无'}）`);
+    assert.ok(real.every((p) => /^\.\/(geometry|scene|palette|edit|settle|detect|prompt)\.js$/.test(p)), `${f}: 只引用 plan3d 自己的文件（${real.join(', ') || '无'}）`);
+    assert.ok(!/^\s*import\s[^;]*\bas\b/m.test(bare), `${f}: import 不改名（搬到 VISI 的脚本按原名接）`);
     assert.equal(imports.length, real.length);
     assert.equal((code.match(/^export\s*\{[^}]*\};?\s*$/gm) || []).length, 1, `${f}: 只有末尾一行 export`);
     assert.ok(!/^export\s+(function|var|default)/m.test(code), `${f}: 不在声明处 export`);
