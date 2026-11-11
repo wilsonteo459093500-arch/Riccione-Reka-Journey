@@ -69,6 +69,15 @@ test('boundaryEdges：同一房间里重叠的矩形只留外轮廓；两个房�
   assert.deepEqual(pick(boundaryEdges({ rooms: [{ rects: [[500, 400, 100, 100]] }] }), 'top'), [[100, 100, 500]], '坐标写反也行');
 });
 
+test('boundaryEdges：坐标只差一点点（浮点误差）的两条线各算各的，夹在中间的那段不会被吞掉', () => {
+  // 左右两个矩形的上边在 y = 10，中间那个在 y = 10.0000001：三段首尾相接，总长 30
+  const geo = { rooms: [{ name: 'F', rects: [[0, 10, 5, 20], [20, 10, 30, 20], [5, 10.0000001, 20, 20]] }] };
+  const top = boundaryEdges(geo).filter((e) => e.side === 'top');
+  assert.deepEqual(pick(top, 'top'), [[10, 0, 5], [10, 20, 30], [10.0000001, 5, 20]]);
+  assert.equal(total(top), 30);
+  assert.equal(total(boundaryEdges(geo).filter((e) => e.side === 'bottom')), 30);
+});
+
 test('hitTest：先家具、再门窗、再房间矩形的边；点在空地板上什么都不选；可以只看某一层', () => {
   const geo = room({
     openings: [{ type: 'window', side: 'top', a: 200, b: 300 }],
@@ -228,6 +237,30 @@ test('snapBox 缩放：只有被拖的那几条边会吸；样本里贴墙的柜
     assert.equal(res.against, it.against, `${it.id} 贴 ${it.against}`);
   }
   assert.equal(snapBox(STUDY, [418, 386, 494, 467], 4).against, null, '椅子哪面墙都不贴');
+});
+
+test('snapBox：对吸过的结果再吸一次不会又动（吸完一个方向后面对的墙变了，要接着看到不动为止）', () => {
+  // 移动：先左右吸到 x = 29..51，这时才正对着下墙（y = 55），接着吸上去
+  const geo = { rooms: [{ name: 'A', rects: [[29, 1, 51, 55], [44, 32, 53, 49]] }] };
+  const moved = snapBox(geo, [31, 50, 53, 60], 4);
+  assert.deepEqual(moved, { box: [29, 45, 51, 55], against: 'bottom' });
+  assert.deepEqual(snapBox(geo, moved.box, 4), moved);
+  // 缩放（拖左上角）：左边吸到 x = 300 以后，上边才和隔壁房间的下墙（y = 100，x 到 302 为止）对上
+  const two = { rooms: [{ name: 'A', rects: [[100, 100, 300, 300]] }, { name: 'B', rects: [[250, 40, 302, 100]] }] };
+  const sized = snapBox(two, [303, 104, 360, 200], 8, 'nw');
+  assert.deepEqual(sized.box, [300, 100, 360, 200]);
+  assert.deepEqual(snapBox(two, sized.box, 8, 'nw'), sized);
+  // 样本和 L 形房间里扫一遍：吸两次 = 吸一次
+  for (const g of [STUDY, ell(), geo, two]) {
+    for (let x = 80; x < 1100; x += 37) {
+      for (let y = 60; y < 900; y += 41) {
+        for (const handle of ['move', 'nw', 'se']) {
+          const once = snapBox(g, [x, y, x + 90, y + 60], 16, handle);
+          assert.deepEqual(snapBox(g, once.box, 16, handle), once, `${handle} ${x},${y}`);
+        }
+      }
+    }
+  }
 });
 
 test('snapOpening：画的一段落到最近的轮廓边上，四面墙都行；超出边的部分夹掉；太短 / 太远 / 没有房间 = null', () => {
@@ -488,6 +521,15 @@ test('applyOp：不认识的操作 / 序号不对 / 数值不对 / 其实没变 
   assert.equal(applyOp(empty, { type: 'confirmAll' }), empty);
 });
 
+test('applyOp updateItem：圆角换成内容一样的新对象 = 没变，返回原对象（不占一步撤销）', () => {
+  const geo = room({ items: [{ id: 'a', kind: 'desk', box: [120, 120, 180, 180], round: { tl: 22, br: 4 } }] });
+  assert.equal(applyOp(geo, { type: 'updateItem', index: 0, patch: { round: { tl: 22, br: 4 } } }), geo);
+  assert.equal(applyOp(geo, { type: 'updateItem', index: 0, patch: { round: { br: 4, tl: 22 }, label: undefined } }), geo);
+  assert.deepEqual(applyOp(geo, { type: 'updateItem', index: 0, patch: { round: { tl: 22 } } }).items[0].round, { tl: 22 }, '少了一个角：变了');
+  assert.deepEqual(applyOp(geo, { type: 'updateItem', index: 0, patch: { round: { tl: 22, br: 5 } } }).items[0].round, { tl: 22, br: 5 });
+  assert.notEqual(applyOp(geo, { type: 'updateItem', index: 0, patch: { round: [22, 4] } }), geo, '数组和对象不算一样');
+});
+
 test('newItemId：种类-N，不和已有的重复', () => {
   assert.equal(newItemId(STUDY, 'chair'), 'chair-5');
   assert.equal(newItemId(STUDY, 'tall'), 'tall-1');
@@ -543,6 +585,18 @@ test('撤销 / 重做：记一步清掉重做；同一个对象不记；最多�
   assert.equal(histUndo(hist).present, g);
 });
 
+test('撤销 / 重做：limit 可以是 Infinity（不设上限）；历史对象残缺也不报错', () => {
+  let h = histInit(0);
+  for (let n = 1; n <= 150; n++) h = histPush(h, n, Infinity);
+  assert.equal(h.past.length, 150);
+  assert.equal(histPush(histInit(0), 1, NaN).past.length, 1, '不是数的 limit 用默认值');
+  for (const broken of [{ present: 1 }, { past: 'abc', present: 1, future: 5 }, { past: { length: 3 }, present: 1, future: { length: 3 } }]) {
+    assert.equal(histUndo(broken), broken);
+    assert.equal(histRedo(broken), broken);
+    assert.deepEqual(histPush(broken, 2), { past: [1], present: 2, future: [] });
+  }
+});
+
 test('iou / normBox', () => {
   assert.equal(iou([0, 0, 10, 10], [0, 0, 10, 10]), 1);
   assert.equal(iou([0, 0, 10, 10], [5, 0, 15, 10]), 50 / 150);
@@ -590,6 +644,37 @@ test('空数据不报错：{}、缺数组、数组里有 null', () => {
   assert.deepEqual(snapBox(room(), null, 8), { box: null, against: null });
   assert.equal(validateGeo(null)[0].code, 'no-room');
   assert.equal(transformGeo(null, 1, 1, 0, 0), null);
+});
+
+test('数据坏了（该是数组的地方不是数组）也不报错：transformGeo / applyOp 和别的函数一样当成空的', () => {
+  const junk = [
+    { rooms: 'abc', items: 'abc', openings: 'abc' },
+    { rooms: {}, items: {}, openings: {} },
+    { rooms: 5, items: true, openings: 5 },
+    { rooms: [{ name: 'x', rects: 'abcd' }, { rects: {} }, 7, 'x'], items: [5, 'x'], openings: [5, 'x'] },
+  ];
+  for (const geo of junk) {
+    const before = snapshot(geo);
+    assert.deepEqual(transformGeo(geo, 2, 2, 1, 1), geo, '没有能换算的坐标：内容不变');
+    assert.equal(applyOp(geo, { type: 'confirmAll' }), geo);
+    assert.equal(applyOp(geo, { type: 'updateItem', index: 0, patch: { kind: 'low' } }), geo, '那一项不是对象：不改');
+    assert.equal(applyOp(geo, { type: 'updateOpening', index: 0, patch: { a: 3 } }), geo);
+    assert.equal(applyOp(geo, { type: 'setRoomName', room: 2, name: 'N' }), geo);
+    assert.equal(applyOp(geo, { type: 'removeOpening', index: 9 }), geo);
+    assert.equal(applyOp(geo, { type: 'setRoomRect', room: 0, rect: 0, box: [0, 0, 9, 9] }), geo);
+    assert.equal(applyOp(geo, { type: 'removeRoomRect', room: 1, rect: 0 }), geo);
+    assert.deepEqual(boundaryEdges(geo), []);
+    assert.equal(hitTest(geo, [1, 1]), null);
+    assert.equal(validateGeo(geo)[0].code, 'no-room');
+    assert.ok(renderGeo(geo));
+    assert.equal(newItemId(geo, 'low'), 'low-1');
+    assert.deepEqual(geo, before, '不改原数据');
+  }
+  // 往坏数据里加东西：坏掉的那一项换成正常的数组
+  assert.deepEqual(applyOp(junk[1], { type: 'addItem', item: { kind: 'low', box: [0, 0, 9, 9] } }).items, [{ kind: 'low', box: [0, 0, 9, 9], label: '', id: 'low-1' }]);
+  assert.deepEqual(applyOp(junk[0], { type: 'addRoom', name: 'A', box: [0, 0, 9, 9] }).rooms, [{ name: 'A', rects: [[0, 0, 9, 9]] }]);
+  assert.deepEqual(applyOp(junk[2], { type: 'addOpening', opening: { type: 'gap', side: 'top', a: 1, b: 9 } }).openings, [{ type: 'gap', side: 'top', a: 1, b: 9 }]);
+  assert.deepEqual(applyOp(junk[3], { type: 'addRoomRect', room: 0, box: [0, 0, 9, 9] }).rooms[0], { name: 'x', rects: [[0, 0, 9, 9]] });
 });
 
 test('edit.js 导出的名字是约定好的那些；ES5 写法、只引用 geometry.js、末尾一行 export', () => {

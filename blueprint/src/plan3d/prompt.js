@@ -44,11 +44,14 @@ function itemsPrompt(rooms) {
   for (var i = 0; i < src.length && list.length < 20; i++) {
     var r = src[i];
     if (!r || !Array.isArray(r.box_2d) || r.box_2d.length < 4) continue;
+    var box = [];
+    for (var k = 0; k < 4; k++) if (typeof r.box_2d[k] === 'number' && isFinite(r.box_2d[k])) box.push(Math.round(r.box_2d[k]));
+    if (box.length < 4) continue;
     var name = typeof r.name === 'string' ? r.name.slice(0, 40) : '';
-    list.push((list.length + 1) + '. ' + JSON.stringify(name) + ' box_2d [' + r.box_2d.slice(0, 4).join(', ') + ']');
+    list.push((list.length + 1) + '. ' + JSON.stringify(name) + ' box_2d [' + box.join(', ') + ']');
   }
   var context = list.length
-    ? ['The rooms are (inner faces of the walls):'].concat(list).concat(['Look for pieces inside these rooms.'])
+    ? ['The rooms are (inner faces of the walls):'].concat(list).concat(['Use them as context: the pieces to find are inside or right next to these rooms.'])
     : ['The rooms were not outlined; look at the whole drawing.'];
   return [
     INTRO,

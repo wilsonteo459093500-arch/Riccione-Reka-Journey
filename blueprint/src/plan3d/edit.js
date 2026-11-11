@@ -47,6 +47,11 @@ function validIndex(list, i) {
   return isNum(i) && i === Math.floor(i) && i >= 0 && i < list.length;
 }
 
+/** 序号对、而且那一项真是个对象 */
+function objAt(list, i) {
+  return validIndex(list, i) && !!list[i] && typeof list[i] === 'object';
+}
+
 function replaceAt(list, i, v) {
   var out = list.slice();
   out[i] = v;
@@ -739,7 +744,7 @@ function applyOp(geo, op) {
     return withKey(g, 'items', items.concat([next]));
   }
   if (type === 'updateItem') {
-    if (!validIndex(items, op.index) || !items[op.index] || !op.patch || typeof op.patch !== 'object') return geo;
+    if (!objAt(items, op.index) || !op.patch || typeof op.patch !== 'object') return geo;
     patch = op.patch;
     if (has(patch, 'box')) {
       box = normBox(patch.box);
@@ -762,7 +767,7 @@ function applyOp(geo, op) {
     return withKey(g, 'rooms', rooms.concat([next]));
   }
   if (type === 'addRoomRect' || type === 'setRoomRect' || type === 'removeRoomRect' || type === 'setRoomName') {
-    if (!validIndex(rooms, op.room) || !rooms[op.room]) return geo;
+    if (!objAt(rooms, op.room)) return geo;
     room = rooms[op.room];
     rects = arr(room.rects);
     if (type === 'setRoomName') {
@@ -790,7 +795,7 @@ function applyOp(geo, op) {
     return withKey(g, 'openings', openings.concat([next]));
   }
   if (type === 'updateOpening') {
-    if (!validIndex(openings, op.index) || !openings[op.index] || !op.patch || typeof op.patch !== 'object') return geo;
+    if (!objAt(openings, op.index) || !op.patch || typeof op.patch !== 'object') return geo;
     next = mergePatch(openings[op.index], op.patch);
     if (!next || !validOpening(next)) return geo;
     return withKey(g, 'openings', replaceAt(openings, op.index, next));
@@ -835,26 +840,26 @@ function histInit(geo) {
 function histPush(h, geo, limit) {
   if (!h || geo === h.present) return h;
   var n = typeof limit === 'number' && limit >= 0 ? Math.floor(limit) : 100;
-  var past = (h.past || []).concat([h.present]);
+  var past = arr(h.past).concat([h.present]);
   if (past.length > n) past = past.slice(past.length - n);
   return { past: past, present: geo, future: [] };
 }
 
 /** 撤销一步（没有可撤销的 = 原对象） */
 function histUndo(h) {
-  if (!h || !h.past || !h.past.length) return h;
+  if (!h || !arr(h.past).length) return h;
   return {
     past: h.past.slice(0, h.past.length - 1),
     present: h.past[h.past.length - 1],
-    future: [h.present].concat(h.future || []),
+    future: [h.present].concat(arr(h.future)),
   };
 }
 
 /** 重做一步（没有可重做的 = 原对象） */
 function histRedo(h) {
-  if (!h || !h.future || !h.future.length) return h;
+  if (!h || !arr(h.future).length) return h;
   return {
-    past: (h.past || []).concat([h.present]),
+    past: arr(h.past).concat([h.present]),
     present: h.future[0],
     future: h.future.slice(1),
   };
