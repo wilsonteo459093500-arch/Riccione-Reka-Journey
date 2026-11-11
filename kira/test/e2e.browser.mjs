@@ -608,6 +608,54 @@ try {
   check('v3 no browser errors (AI)', aerr.length === 0, aerr.join(' | '));
   await actx.close();
 
+  // ---------- 找得到 AI：最上面「✨ 户型图」→ 选图 → 上传完自动问 AI；Ukur 量尺里「用这张图做户型图」→ 同一张图 + 校准比例带过去 ----------
+  const fctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const fp = await fctx.newPage();
+  const ferr = [];
+  fp.on('pageerror', (e) => ferr.push(e.message));
+  let fCalls = 0, fBody = null;
+  await fp.route('**/api/plan-ai', async (route) => {
+    fCalls += 1;
+    fBody = route.request().postDataJSON();
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ result: aiAnswer, model: 'claude-opus-5-5', usage: { input: 2600, output: 1400 } }) });
+  });
+  await fp.goto(URL);
+  await fp.getByRole('button', { name: /Skip 跳过/ }).click();
+  await fp.getByRole('button', { name: /New/ }).first().click();
+  const topBtns = await fp.locator('[data-top-plan-ai], [data-top-measure]').evaluateAll((els) => els.map((e) => e.hasAttribute('data-top-plan-ai') ? 'ai' : 'ukur'));
+  check('find AI: the top of the quote shows "✨ 户型图 · AI" first, then Ukur', topBtns.join(',') === 'ai,ukur', topBtns.join(','));
+  await fp.locator('[data-top-plan-ai]').locator('..').screenshot({ path: path.join(outDir, 'v3-top-buttons.png') });
+  const [fc] = await Promise.all([fp.waitForEvent('filechooser'), fp.locator('[data-top-plan-ai]').click()]);
+  await fc.setFiles(path.join(FIX, 'floorplan.png'));
+  await fp.getByRole('button', { name: /Read 开始/ }).click({ timeout: 15000 });
+  await fp.locator('[data-plan-ai-pass]').fill('team123');
+  await fp.locator('[data-plan-ai-pass-ok]').click();
+  await fp.waitForSelector('[data-plan-ai-scale-ok]', { timeout: 10000 });
+  check('find AI: top button → pick the image → upload → AI starts by itself', fCalls === 1 && (await fp.locator('[data-plan-svg] image').count()) === 1);
+  // Ukur 量尺：上传 → 校准 2.7 m → 「用这张图做户型图 · AI 识图」
+  await fp.getByRole('button', { name: /New/ }).first().click();
+  await fp.locator('[data-top-measure]').click();
+  check('find AI: Ukur shows the "go to AI" bar even before an image', /去户型图 · AI 识图/.test(await fp.locator('[data-measure-to-plan]').innerText()));
+  await fp.locator('.fixed.inset-0 input[type=file]').first().setInputFiles(path.join(FIX, 'floorplan.png'));
+  const uimg = fp.locator('.fixed.inset-0 img[alt="plan"]');
+  await uimg.waitFor();
+  const ub = await uimg.boundingBox();
+  const uk = ub.width / 1200;
+  await fp.mouse.click(ub.x + 100 * uk, ub.y + 60 * uk);
+  await fp.mouse.click(ub.x + 370 * uk, ub.y + 60 * uk);
+  await fp.locator('.fixed.inset-0 input[type=number]').first().fill('2.7');
+  await fp.locator('.fixed.inset-0').getByRole('button', { name: 'Set', exact: true }).click();
+  await fp.locator('[data-measure-to-plan]').click();
+  await fp.getByRole('button', { name: /Read 开始/ }).click({ timeout: 15000 });
+  await fp.waitForSelector('[data-plan-ai-list]', { timeout: 10000 });
+  const ktxt = (await fp.locator('[data-plan-board]').innerText()).match(/1 px = ([\d.]+) mm/);
+  check('find AI: Ukur → "use this image" → new floor plan with the Ukur scale (≈10 mm/px), AI runs straight to suggestions (passcode remembered)',
+    fCalls === 2 && (await fp.locator('.fixed.inset-0 img[alt="plan"]').count()) === 0 && ktxt && Math.abs(Number(ktxt[1]) - 10) < 0.4 && Math.abs(fBody.mmPerPx - 10) < 0.4 && (await fp.locator('[data-plan-ai-item="ok"]').count()) === 2,
+    `${fCalls} calls, ${ktxt?.[1]} mm/px, sent ${fBody?.mmPerPx}`);
+  await fp.locator('[data-plan-board]').screenshot({ path: path.join(outDir, 'v3-ukur-to-ai.png') });
+  check('find AI: no browser errors', ferr.length === 0, ferr.join(' | '));
+  await fctx.close();
+
   // ---------- 复查修正：上传很慢（toBlob 延迟 2.5 s）时改报价 / 换报价，不会被旧的报价盖回去 ----------
   const sctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   await sctx.addInitScript(() => {
@@ -651,7 +699,7 @@ try {
   await hp.goto(URL);
   await hp.getByRole('button', { name: /Skip 跳过/ }).tap();
   await hp.getByRole('button', { name: /New/ }).first().tap();
-  await hp.locator('[data-plan-toggle]').tap();
+  check('v3 phone: floor plan board is open by default with the AI button showing', (await hp.locator('[data-plan-ai]').count()) === 1 && (await hp.locator('[data-plan-empty-ai]').count()) === 1);
   await hp.locator('[data-plan-file]').setInputFiles(path.join(FIX, 'floorplan.png'));
   await hp.waitForSelector('[data-plan-svg] image', { timeout: 15000 });
   await hp.locator('[data-plan-svg]').scrollIntoViewIfNeeded();

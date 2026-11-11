@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Copy, Trash2, GripVertical, Sofa, ChevronUp, ChevronDown, ChevronRight, FileText, FileSpreadsheet, LayoutGrid, Image as ImageIcon, Ruler, Pencil, MessageCircle } from 'lucide-react';
+import { Plus, Copy, Trash2, GripVertical, Sofa, ChevronUp, ChevronDown, ChevronRight, FileText, FileSpreadsheet, LayoutGrid, Image as ImageIcon, Ruler, Pencil, MessageCircle, Sparkles } from 'lucide-react';
 import { T } from '../../theme.js';
 import { newId, copyToClipboard } from '../../utils/helpers.js';
 import { useToast, useConfirm } from '../ui/UIProvider.jsx';
@@ -186,6 +186,16 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
   const [showPrint, setShowPrint] = useState(false);
   const [showCatalog, setShowCatalog] = useState(false);
   const [showMeasure, setShowMeasure] = useState(false);
+  const planRef = useRef(null);
+  // Ukur 量尺 → 户型图 AI 识图（有图就把同一张图带过去，校准过的比例也带）
+  const measureToPlan = async (x) => {
+    setShowMeasure(false);
+    if (!x) { planRef.current?.openAndUpload({ autoAi: true }); return; }
+    try {
+      const blob = await (await fetch(x.src)).blob();
+      await planRef.current?.importImage({ blob, w: x.w, h: x.h, scale: x.scale, autoAi: true });
+    } catch (e) { toast(`Could not use this image 这张图用不了：${e?.message || e}`, 'error'); }
+  };
   const isMobile = useIsMobile();
   const [editing, setEditing] = useState(null); // { zoneId, item, isNew } → 手机弹窗编辑
   const { meta, zones, adjustPct } = doc;
@@ -337,14 +347,21 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
     <div className="grid gap-6 lg:gap-8 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px]">
       {/* ===== 左侧：编辑区（手机「设计」tab）===== */}
       <div className={`space-y-6 ${mobileTab === 'summary' ? 'hidden' : ''}`}>
-        {/* Ukur 量尺（放最上面，方便一开始就上传图量尺出报价）*/}
-        <button onClick={() => setShowMeasure(true)}
-          className="w-full py-2.5 flex items-center justify-center gap-2 text-sm transition-colors"
-          style={{ border: `1px solid ${T.wood}`, color: T.wood, borderRadius: '2px' }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = T.cream)}
-          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
-          <Ruler size={16} /> Ukur 量尺 · 上传图算尺寸（手动明细）
-        </button>
+        {/* 最上面两颗：户型图 AI 识图（主）+ Ukur 量尺（手动）*/}
+        <div className="grid gap-2 grid-cols-1 sm:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+          <button onClick={() => planRef.current?.openAndUpload({ autoAi: true })} data-top-plan-ai
+            className="w-full py-2.5 px-2 flex items-center justify-center gap-2 text-sm font-medium"
+            style={{ background: '#7A5BA6', color: '#fff', borderRadius: '2px' }}>
+            <Sparkles size={16} /> 户型图 · AI 认房间放柜子 <span className="text-xs opacity-80 hidden md:inline">Floor plan + AI</span>
+          </button>
+          <button onClick={() => setShowMeasure(true)} data-top-measure
+            className="w-full py-2.5 px-2 flex items-center justify-center gap-2 text-sm transition-colors"
+            style={{ border: `1px solid ${T.wood}`, color: T.wood, borderRadius: '2px' }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = T.cream)}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+            <Ruler size={16} /> Ukur 量尺 · 手动量尺寸
+          </button>
+        </div>
 
         {/* 客户信息 */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 rounded"
@@ -370,7 +387,7 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
         </div>
 
         {/* 第三版：户型图（客户资料下面、所有房间上面；可收起）*/}
-        <PlanBoard plans={plans} zones={zones} lang={lang} makeZone={(name) => blankZone(name)}
+        <PlanBoard ref={planRef} plans={plans} zones={zones} lang={lang} makeZone={(name) => blankZone(name)}
           onChange={({ plans: ps, zones: zs }) => patch({ plans: ps, zones: zs })}
           onEdit={(zoneId, cab) => setEditingCab({ zoneId, cab, isNew: false })}
           onDraw={({ planId, rect, zoneId }) => {
@@ -905,6 +922,7 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
         <MeasureTool
           zones={zones.map((z) => ({ id: z.id, name: pickLang(z.name, lang) }))}
           onAddItems={handleMeasureAdd}
+          onToPlan={measureToPlan}
           onClose={() => setShowMeasure(false)} />
       )}
       {editing && (

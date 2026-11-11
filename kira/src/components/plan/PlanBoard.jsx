@@ -2,7 +2,7 @@
 //   上传（照片 / 截图 / PDF 选页）→ 定比例（点两点打长度）→ 画框选模板 / 把已有的柜子放到图上 → 拖柜子、拖边改尺寸、转 90° → 走道提醒
 //   户型图坐标：SVG 用图片像素；柜子位置 cab.place 用 mm（像素 × mmPerPx）。外框每次由 plan.js placedFootprint 算 → 编辑器改尺寸，图上跟着变。
 //   拖拉写法同 BlockEditor.jsx：setPointerCapture、getScreenCTM().inverse()；拖完才写回报价（一步撤销）。
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Upload, Ruler, Square, Undo2, Redo2, Maximize2, Minimize2, RotateCw, Pencil, X, Trash2, ChevronDown, ChevronRight, MapPin, Crosshair, AlertTriangle, Loader2, ScanSearch, Sparkles } from 'lucide-react';
 import { T } from '../../theme.js';
@@ -20,7 +20,6 @@ const SNAP = 10;
 const snapMm = (v) => Math.round(v / SNAP) * SNAP;
 const newPlanId = () => `plan_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 const isCoarse = () => typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
-const isPhone = () => typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(max-width: 1023px)').matches;
 
 // 把某个柜子换掉（或去掉 place）
 export const replaceCab = (zones, cab) => zones.map((z) => ((z.cabinets || []).some((c) => c.id === cab.id)
@@ -40,10 +39,11 @@ function Btn({ on, children, title, onClick, disabled, danger, ...rest }) {
 }
 
 // ============================================================
-export default function PlanBoard({ plans = [], zones = [], onChange, onDraw, onEdit, makeZone, lang = 'en' }) {
+// ref：{ openAndUpload({ autoAi }), importImage({ blob, w, h, scale, autoAi }) } —— 报价页最上面的「✨ 户型图」按钮、Ukur 量尺「用这张图做户型图」用
+const PlanBoard = forwardRef(function PlanBoard({ plans = [], zones = [], onChange, onDraw, onEdit, makeZone, lang = 'en' }, ref) {
   const toast = useToast();
   const confirm = useConfirm();
-  const [open, setOpen] = useState(() => plans.length > 0 || !isPhone());
+  const [open, setOpen] = useState(true);
   const [activeId, setActiveId] = useState(() => plans[0]?.id || null);
   const plan = plans.find((p) => p.id === activeId) || plans[0] || null;
   const [mode, setMode] = useState('view'); // view | scale | draw | place
@@ -59,6 +59,8 @@ export default function PlanBoard({ plans = [], zones = [], onChange, onDraw, on
   const [drag, setDrag] = useState(null);
   const [corner, setCorner] = useState(null); // 手指画框：第一个角
   const fileRef = useRef(null);
+  const autoAi = useRef(false); // 下一张上传的户型图上传完自动开始 AI 识图
+  const rootRef = useRef(null);
   const svgRef = useRef(null);
   const dragRef = useRef(null);
   const touches = useRef(new Map());
@@ -125,17 +127,42 @@ export default function PlanBoard({ plans = [], zones = [], onChange, onDraw, on
   const setPlan = (p) => commit((c) => ({ plans: c.plans.map((x) => (x.id === p.id ? p : x)) }));
 
   // ---------------- 上传 ----------------
-  const addPlan = async (blob, w, h, extra) => {
+  const addPlan = async (blob, w, h, extra, scale = null) => {
     const path = await savePlanImage(blob);
     // 等的时候换了报价（这个画面已经关掉）→ 不写回，免得写进别的报价
     if (!alive.current) { queuePlanDelete(path); return; }
     const n = live.current.plans.length + 1;
-    const p = { id: newPlanId(), name: `Plan ${n} 户型图 ${n}`, image: { path, w, h, ...extra }, scale: null };
+    const p = { id: newPlanId(), name: `Plan ${n} 户型图 ${n}`, image: { path, w, h, ...extra }, scale };
     commit((c) => ({ plans: [...c.plans, p] }));
     setActiveId(p.id);
     setOpen(true);
-    setMode('scale');
+    setMode(planReady(p) ? 'view' : 'scale');
+    if (autoAi.current) { autoAi.current = false; startAi(p); }
   };
+  const pickFile = (auto = false) => { autoAi.current = auto; setOpen(true); fileRef.current?.click(); };
+  useImperativeHandle(ref, () => ({
+    openAndUpload: ({ autoAi: auto = true } = {}) => {
+      rootRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+      if (live.current.plans.length && plan) { setOpen(true); if (auto) startAi(plan); return; }
+      pickFile(auto);
+    },
+    // Ukur 量尺那张图直接变户型图（比例照带）
+    importImage: async ({ blob, w, h, scale = null, autoAi: auto = true }) => {
+      setOpen(true);
+      rootRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+      try {
+        setBusy('Compressing 压缩中…');
+        const r = await prepareImage(blob);
+        const k = w > 0 ? r.w / w : 1; // 压缩后像素变了，比例点跟着缩
+        const sc = scale && k !== 1 ? { a: scale.a.map((v) => v * k), b: scale.b.map((v) => v * k), mm: scale.mm } : scale;
+        autoAi.current = auto;
+        await addPlan(r.blob, r.w, r.h, { kind: 'img', page: 1 }, sc);
+      } catch (e) {
+        autoAi.current = false;
+        toast(`Could not open the image 打不开这张图：${e?.message || e}`, 'error');
+      } finally { setBusy(''); }
+    },
+  }));
   const onFile = async (file) => {
     if (!file) return;
     try {
@@ -175,8 +202,7 @@ export default function PlanBoard({ plans = [], zones = [], onChange, onDraw, on
     const sugg = planReady(p) ? buildSuggestions(r.result, p, { sentW: r.sentW }) : [];
     return { sugg, picked: new Set(sugg.filter((x) => x.ok).map((x) => x.id)) };
   };
-  const runAi = async (passcode) => {
-    const p = plan;
+  const runAi = async (passcode, p = plan) => {
     if (!p) return;
     setAi({ stage: 'busy', planId: p.id });
     try {
@@ -191,12 +217,13 @@ export default function PlanBoard({ plans = [], zones = [], onChange, onDraw, on
       setAi({ stage: 'error', planId: p.id, error: aiErrorText(e) });
     }
   };
-  const startAi = async () => {
-    if (!plan || ai?.stage === 'busy') return;
+  const startAi = async (p = plan) => {
+    if (!p) { pickFile(true); return; } // 还没有户型图：先选图，上传完自动接着做
+    if (ai?.stage === 'busy') return;
     const ok = await confirm({ title: 'AI 识图 Read with AI', message: 'The floor plan is sent to AI to find the rooms and suggest cabinets (about 20–40 s, roughly US$0.10 each time). Nothing is added until you tick and confirm. 会把这张户型图送去 AI 认房间、建议柜子（约 20–40 秒，每次约 US$0.10）。勾选确认后才加入报价。', confirmText: 'Read 开始', cancelText: 'Cancel 取消' });
     if (!ok || !alive.current) return;
-    if (needsPasscode() && !savedPasscode()) { setAiPass(''); setAi({ stage: 'pass', planId: plan.id }); return; }
-    runAi(savedPasscode());
+    if (needsPasscode() && !savedPasscode()) { setAiPass(''); setAi({ stage: 'pass', planId: p.id }); return; }
+    runAi(savedPasscode(), p);
   };
   const useAiScale = () => {
     if (!ai?.scale || !plan) return;
@@ -476,13 +503,13 @@ export default function PlanBoard({ plans = [], zones = [], onChange, onDraw, on
         )}
         {open && (
           <div className="ml-auto flex items-center gap-1 flex-wrap">
-            <Btn title="Upload a floor plan 上传户型图（照片 / 截图 / PDF）" onClick={() => fileRef.current?.click()} data-plan-upload><Upload size={13} /> 上传 Upload</Btn>
+            <Btn title="Upload a floor plan 上传户型图（照片 / 截图 / PDF）" onClick={() => pickFile(false)} data-plan-upload><Upload size={13} /> 上传 Upload</Btn>
+            <Btn on={!!ai} title={plan ? 'AI 识图 Read with AI' : 'Upload a floor plan, then AI reads it 上传户型图，AI 自动认房间'} onClick={() => startAi()} disabled={ai?.stage === 'busy'} data-plan-ai><Sparkles size={13} style={{ color: ai ? undefined : AI_COLOR }} /> AI 识图</Btn>
             {plan && <>
               <Btn on={mode === 'scale'} title="Set scale 定比例" onClick={() => { setMode(mode === 'scale' ? 'view' : 'scale'); setScalePts([]); }} data-plan-mode="scale"><Ruler size={13} /> 比例</Btn>
               <Btn on={mode === 'draw'} disabled={!ready} title="Draw a cabinet 画柜子" onClick={() => { setMode(mode === 'draw' ? 'view' : 'draw'); setCorner(null); }} data-plan-mode="draw"><Square size={13} /> 画柜子</Btn>
               <Btn title="Undo 撤销" disabled={!hist.current.undo.length} onClick={undo} data-plan-undo><Undo2 size={13} /></Btn>
               <Btn title="Redo 重做" disabled={!hist.current.redo.length} onClick={redo}><Redo2 size={13} /></Btn>
-              <Btn on={!!ai} title="AI 识图 Read with AI" onClick={startAi} disabled={ai?.stage === 'busy'} data-plan-ai><Sparkles size={13} /> AI 识图</Btn>
               <Btn title="Fit 看全部" onClick={() => setVb([0, 0, W, H])}><ScanSearch size={13} /></Btn>
               <Btn title={full ? 'Exit full screen 退出全屏' : 'Full screen 全屏'} onClick={() => setFull(!full)} data-plan-full>{full ? <Minimize2 size={13} /> : <Maximize2 size={13} />}</Btn>
             </>}
@@ -495,11 +522,19 @@ export default function PlanBoard({ plans = [], zones = [], onChange, onDraw, on
       {open && busy && <div className="px-3 py-2 text-xs flex items-center gap-1.5" style={{ color: T.inkSoft }}><Loader2 size={13} className="animate-spin" /> {busy}</div>}
 
       {open && !plan && !busy && (
-        <button type="button" onClick={() => fileRef.current?.click()} className="w-full py-6 text-sm flex flex-col items-center gap-1" style={{ color: T.inkSoft }}>
-          <Upload size={22} style={{ color: T.wood }} />
-          上传户型图（照片 / 截图 / PDF），在图上画柜子、检查走道
-          <span className="text-[11px]">Upload a floor plan (photo / screenshot / PDF) to place cabinets and check aisles</span>
-        </button>
+        <div className="px-3 py-4 flex flex-col sm:flex-row gap-2" data-plan-empty>
+          <button type="button" onClick={() => pickFile(true)} className="flex-1 py-4 text-sm flex flex-col items-center gap-1" data-plan-empty-ai
+            style={{ color: T.ink, border: `1px solid ${AI_COLOR}`, borderRadius: 2, background: '#F6F2FA' }}>
+            <Sparkles size={22} style={{ color: AI_COLOR }} />
+            <span className="font-medium">上传户型图 + AI 识图</span>
+            <span className="text-[11px]" style={{ color: T.inkSoft }}>Upload a floor plan — AI finds the rooms and suggests cabinets</span>
+          </button>
+          <button type="button" onClick={() => pickFile(false)} className="flex-1 py-4 text-sm flex flex-col items-center gap-1" style={{ color: T.inkSoft, border: `1px dashed ${T.line}`, borderRadius: 2 }}>
+            <Upload size={22} style={{ color: T.wood }} />
+            只上传，自己画柜子
+            <span className="text-[11px]">Upload only (photo / screenshot / PDF) and draw cabinets yourself</span>
+          </button>
+        </div>
       )}
 
       {open && plan && (
@@ -658,11 +693,12 @@ export default function PlanBoard({ plans = [], zones = [], onChange, onDraw, on
   );
 
   return (
-    <div className="rounded overflow-hidden no-print" style={{ border: `1px solid ${T.line}`, background: T.paper }}>
+    <div ref={rootRef} className="rounded overflow-hidden no-print" style={{ border: `1px solid ${T.line}`, background: T.paper, scrollMarginTop: 96 }} data-plan-root>
       {content}
     </div>
   );
-}
+});
+export default PlanBoard;
 
 const AI_COLOR = '#7A5BA6'; // AI 建议：紫色虚线（和真的柜子分开）
 
