@@ -1,25 +1,32 @@
-// 「3D 户型图」的公共部分 —— 平面图转图片（PDF 用 pdf.js 渲染）、找图纸范围、裁剪、材质样本（出图模型），
-// 以及对项目的纯函数修改（楼层平面图 / 立体图历史 / 插入提案页），便于 Node 测试。
-// 坐标、AI 框图、出图在 ./plan3d.js 和 src/plan3d/；提示词在 prompts.js 和 src/plan3d/prompt.js。
+// 「3D 户型图」—— 平面布置图 → 框选范围 → AI 读成清单（设计师确认）→ 照片级俯视 3D 户型图 → 对照清单检查 → 文字修正。
+// 提示词在 prompts.js；这里负责：平面图转图片（PDF 用 pdf.js 渲染）、裁剪、读图 / 检查（看图模型）、出图 / 修正（Pro 优先，失败回退）、
+// 以及对项目的纯函数修改（楼层平面图 / 清单 / 立体图历史 / 插入提案页），便于 Node 测试。
 
 import { generateImage, analyzeImage } from './gemini.js';
 import { extractJson } from './polish.js';
 import { toInlineImage, toJpegBlob, dataUrlToBlob, canvasToBlob } from '../store/assets.js';
 import { uid } from '../engine/model.js';
-import { planRegionPrompt, swatchPromptText, resolveScope, DOLLHOUSE_VIEWS, PLAN_SCOPES } from './prompts.js';
+import {
+  floorplanPromptText, planRegionPrompt, planBriefPrompt, checkPrompt, refinePrompt, swatchPromptText, resolveView, resolveScope,
+  DOLLHOUSE_VIEWS, PLAN_SCOPES,
+} from './prompts.js';
 import { PDFJS_DOC_OPTIONS } from '../import/pdfjsAssets.js';
 
-export { DOLLHOUSE_VIEWS, PLAN_SCOPES, resolveScope };
+export { DOLLHOUSE_VIEWS, PLAN_SCOPES, resolveView, resolveScope };
 
+export const MAX_REFS = 4;
 export const PLAN_SOURCE_EDGE = 3200; // 上传的原图最长边（裁剪之后还要够清楚）
 export const PLAN_EDGE = 2000; // 发给 AI 的平面图最长边
 export const CROP_MIN_EDGE = 1600; // 裁出来的平面图不到这么大就放大
-export const LOOK_EDGE = 1280; // 找图纸范围时的图片最长边
+export const REF_EDGE = 1280; // 参考效果图最长边
+export const LOOK_EDGE = 1280; // 找范围 / 对照检查时的图片最长边
 /** 满版大图要这么宽（16:9 = 1.78）；更方的立体图插入提案时用自动版式（图文页，整张图不被裁） */
 export const WIDE_RATIO = 1.6;
 
-/** AI 框图优先用的模型（更强的空间理解）；不可用时自动回退到 gemini.js 的候选列表 */
+/** 读图纸 / 对照检查优先用的模型（更强的空间理解）；不可用时自动回退到 gemini.js 的候选列表 */
 export const PLAN_MODELS = ['gemini-3-pro-preview', 'gemini-2.5-pro'];
+const PLAN_MODEL_KEY = 'blueprint.planModel';
+const planModels = (settings) => [settings?.modelPlan, ...PLAN_MODELS].filter(Boolean);
 
 /** 项目还没有楼层时用的「全屋」虚拟楼层（第一次存平面图 / 立体图时才真正写进 project.floors） */
 export const ALL_FLOOR_ID = 'floor-all';
@@ -132,6 +139,76 @@ export function parseRegionResponse(text) {
 /** 某个范围默认用哪个框 */
 export const regionBox = (region, scope) => (region ? (resolveScope(scope) === 'room' ? region.mainRoom : region.drawing) || FULL_BOX : FULL_BOX);
 
+export const MAX_BRIEF_ROWS = 24;
+
+/**
+ * 「读图清单」的回复 → { kind, scope, title, shape, rows:[{ id, label, text }], outside:[…] }。一行都没有抛错。
+ */
+export function parseBriefResponse(text, { kind = 'room', scope = 'room' } = {}) {
+  const obj = asObject(extractJson(text));
+  const rows = (Array.isArray(obj?.rows) ? obj.rows : [])
+    .map((r) => (typeof r === 'string' ? { label: '', text: r } : r || {}))
+    .map((r) => ({ label: cleanText(r.label ?? r.name, 24), text: cleanText(r.text ?? r.desc, 240) }))
+    .filter((r) => r.text)
+    .slice(0, MAX_BRIEF_ROWS)
+    .map((r, i) => ({ id: `r${i + 1}`, ...r }));
+  if (!rows.length) throw new Error('AI 没有读出图纸内容');
+  const outside = [...new Set((Array.isArray(obj.outside) ? obj.outside : []).map((s) => cleanText(s, 40)).filter(Boolean))].slice(0, 12);
+  return {
+    kind: kind === 'floor' ? 'floor' : 'room',
+    scope: resolveScope(scope),
+    title: cleanText(obj.title, 60),
+    shape: cleanText(obj.shape, 120),
+    rows,
+    outside,
+  };
+}
+
+/** 清单 → 写进提示词的行（中文原样）：「房间：STUDY ROOM，近正方形…」「上墙：…」 */
+export function briefToLines(brief) {
+  if (!brief) return [];
+  const out = [];
+  const title = cleanText(brief.title, 60);
+  const shape = cleanText(brief.shape, 120);
+  if (title || shape) out.push(`${brief.kind === 'floor' ? '楼层' : '房间'}：${[title, shape].filter(Boolean).join('，')}`);
+  for (const r of (brief.rows || []).slice(0, MAX_BRIEF_ROWS)) {
+    const text = cleanText(r?.text, 240);
+    if (!text) continue;
+    const label = cleanText(r?.label, 24);
+    out.push(label ? `${label}：${text}` : text);
+  }
+  return out;
+}
+
+export const MAX_ISSUES = 5;
+
+/** 「对照检查」的回复 → { ok, issues:[中文…] }（有问题才算不通过） */
+export function parseCheckResponse(text) {
+  const obj = asObject(extractJson(text));
+  const issues = [...new Set((Array.isArray(obj?.issues) ? obj.issues : []).map((it) => cleanText(typeof it === 'string' ? it : it?.text ?? it?.zh ?? it?.issue, 160)).filter(Boolean))].slice(
+    0,
+    MAX_ISSUES
+  );
+  return { ok: issues.length === 0, issues };
+}
+
+/**
+ * 出图提示词（英文）。brief = 设计师确认过的清单（没有就只按图纸描）。
+ * @param {{ view?:string, brief?:object|null, scope?:string, kind?:string, title?:string, style?:string, refCount?:number }} args
+ */
+export function buildFloorplanPrompt({ view, brief = null, scope, kind, title = '', style = '', refCount = 0 } = {}) {
+  return floorplanPromptText({
+    view: resolveView(view),
+    lines: briefToLines(brief),
+    scope: resolveScope(scope ?? brief?.scope),
+    kind: (kind ?? brief?.kind) === 'floor' ? 'floor' : 'room',
+    title: cleanText(brief?.title || title, 60),
+    outside: brief?.outside || [],
+    refCount: Math.max(0, Math.min(MAX_REFS, Number(refCount) || 0)),
+    notes: style,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // 平面图 → 图片
 // ---------------------------------------------------------------------------
@@ -227,10 +304,21 @@ export async function cropPlan(blob, box, { maxEdge = PLAN_EDGE } = {}) {
   return await canvasToBlob(canvas, 'image/jpeg', 0.92);
 }
 
+async function sizeOfBlob(blob) {
+  try {
+    const bmp = await createImageBitmap(blob);
+    const size = { w: bmp.width, h: bmp.height };
+    bmp.close?.();
+    return size;
+  } catch {
+    return { w: 0, h: 0 };
+  }
+}
+
 const inline = ({ mimeType, base64 }) => ({ mimeType, base64 });
 
 // ---------------------------------------------------------------------------
-// 读图（看图模型，便宜）：找图纸范围
+// 读图（看图模型，便宜）：找图纸范围、读成清单、出图后对照检查
 // ---------------------------------------------------------------------------
 
 /**
@@ -244,12 +332,99 @@ export async function detectPlanRegion({ settings, blob }) {
   return parseRegionResponse(text);
 }
 
+/**
+ * 把（裁剪好的）平面图读成按墙分行的清单。
+ * @returns {Promise<{ kind, scope, title, shape, rows, outside }>}
+ */
+export async function analyzePlan({ settings, planBlob, kind = 'room', scope = 'room', roomName = '' }) {
+  if (!settings?.apiKey) throw new Error('还没有配置 API key，点右上角设置。');
+  if (!planBlob) throw new Error('先上传平面布置图');
+  const img = await toInlineImage(planBlob, PLAN_EDGE);
+  const prompt = planBriefPrompt({ kind, scope: resolveScope(scope), roomName });
+  const text = await analyzeImage(settings, prompt, inline(img), { json: true, models: planModels(settings), cacheKey: PLAN_MODEL_KEY });
+  const brief = parseBriefResponse(text, { kind, scope });
+  return brief.title ? brief : { ...brief, title: cleanText(roomName, 60) };
+}
+
+/**
+ * 出图后对照图纸和清单检查一遍。
+ * @returns {Promise<{ ok:boolean, issues:string[] }>}
+ */
+export async function checkDollhouse({ settings, planBlob, renderBlob, brief = null, scope, kind, title = '' }) {
+  if (!settings?.apiKey) throw new Error('还没有配置 API key，点右上角设置。');
+  const images = [inline(await toInlineImage(planBlob, LOOK_EDGE)), inline(await toInlineImage(renderBlob, LOOK_EDGE))];
+  const prompt = checkPrompt({
+    lines: briefToLines(brief),
+    scope: resolveScope(scope ?? brief?.scope),
+    kind: (kind ?? brief?.kind) === 'floor' ? 'floor' : 'room',
+    title: cleanText(brief?.title || title, 60),
+  });
+  const text = await analyzeImage(settings, prompt, images, { json: true, models: planModels(settings), cacheKey: PLAN_MODEL_KEY });
+  return parseCheckResponse(text);
+}
+
 // ---------------------------------------------------------------------------
-// 材质样本（出图模型）
+// 出图 / 修正（出图模型）
 // ---------------------------------------------------------------------------
 
 /** 这种错误换模型重试也没用（key 问题） */
 const keyProblem = (e) => /API key|还没有配置/i.test(e?.message || '');
+
+/** 先用 settings.model3d（Pro 图像模型），不可用 / 额度用完等失败时自动用 settings.model 再试一次 → JPEG Blob */
+async function runImage({ settings, prompt, inputs, aspect, onWait, onFallback }) {
+  const primary = settings.model3d || settings.model;
+  let dataUrl;
+  try {
+    dataUrl = await generateImage({ ...settings, model: primary }, prompt, inputs, aspect, onWait);
+  } catch (e) {
+    if (!settings.model || primary === settings.model || keyProblem(e)) throw e;
+    onFallback?.(settings.model, e);
+    dataUrl = await generateImage({ ...settings }, prompt, inputs, aspect, onWait);
+  }
+  const blob = await dataUrlToBlob(dataUrl);
+  return await toJpegBlob(blob, { quality: 0.92 });
+}
+
+/**
+ * 生成一张俯视 3D 户型图：输入 = [平面图（已裁剪）, ...最多 4 张参考效果图]，比例按图纸形状自动选。
+ * @param {{ settings, planBlob:Blob, refSrcs?:Array<string|Blob>, view?, brief?, scope?, kind?, title?, style?,
+ *           onWait?:(sec:number, attempt:number)=>void, onFallback?:(model:string, err:Error)=>void }} args
+ * @returns {Promise<Blob>} JPEG
+ */
+export async function generateDollhouse({ settings, planBlob, refSrcs = [], view, brief = null, scope, kind, title, style, onWait, onFallback }) {
+  if (!settings?.apiKey) throw new Error('还没有配置 API key，点右上角设置。');
+  if (!planBlob) throw new Error('先上传这一层的平面布置图');
+
+  const plan = await toInlineImage(planBlob, PLAN_EDGE);
+  const refs = [];
+  for (const src of (refSrcs || []).slice(0, MAX_REFS)) {
+    try {
+      refs.push(await toInlineImage(src, REF_EDGE));
+    } catch {
+      /* 某张参考图丢了就跳过 */
+    }
+  }
+  const size = await sizeOfBlob(planBlob);
+  const prompt = buildFloorplanPrompt({ view, brief, scope, kind, title, style, refCount: refs.length });
+  return await runImage({ settings, prompt, inputs: [plan, ...refs].map(inline), aspect: pickAspect(size.w, size.h), onWait, onFallback });
+}
+
+/**
+ * 在一张已生成的户型图上做文字修正：输入 = [效果图, 平面图]，只改列出的问题，比例不变。
+ * @param {{ settings, renderBlob:Blob, planBlob?:Blob|null, fixes:string[], onWait?, onFallback? }} args
+ * @returns {Promise<Blob>} JPEG
+ */
+export async function refineDollhouse({ settings, renderBlob, planBlob = null, fixes = [], onWait, onFallback }) {
+  if (!settings?.apiKey) throw new Error('还没有配置 API key，点右上角设置。');
+  if (!renderBlob) throw new Error('这张图找不到了');
+  const list = (fixes || []).map((f) => cleanText(f, 300)).filter(Boolean);
+  if (!list.length) throw new Error('先写要修正什么');
+  const inputs = [inline(await toInlineImage(renderBlob, PLAN_EDGE))];
+  if (planBlob) inputs.push(inline(await toInlineImage(planBlob, PLAN_EDGE)));
+  const size = await sizeOfBlob(renderBlob);
+  const prompt = refinePrompt({ fixes: list, hasPlan: !!planBlob });
+  return await runImage({ settings, prompt, inputs, aspect: pickAspect(size.w, size.h), onWait, onFallback });
+}
 
 export const MAX_SWATCH_REFS = 3;
 
@@ -304,8 +479,7 @@ export function updateFloor(project, floorId, fn) {
   return { ...p, floors: (p.floors || []).map((f) => (f.id === floorId ? fn(f) : f)) };
 }
 
-// plan3d：换了图纸，按旧图纸量的坐标作废
-const PLAN_FIELDS = { planSource: null, planCrop: null, planRegion: null, planScope: null, planBrief: null, plan3d: null };
+const PLAN_FIELDS = { planSource: null, planCrop: null, planRegion: null, planScope: null, planBrief: null };
 
 /** 直接设平面图（PDF 导入自动填的那张）；src 为空 = 移除平面图，连同原图 / 裁剪框 / 清单一起清掉 */
 export const setFloorPlan = (project, floorId, src) =>
@@ -332,6 +506,9 @@ export const setFloorPlanCrop = (project, floorId, { plan, source, crop, scope }
     planBrief: null,
   }));
 
+/** 图纸清单（AI 读的，设计师可改）；null = 清掉 */
+export const setFloorBrief = (project, floorId, brief) => updateFloor(project, floorId, (f) => ({ ...f, planBrief: brief || null }));
+
 export const setFloorImage = (project, floorId, src) => updateFloor(project, floorId, (f) => ({ ...f, image: src || null }));
 
 /** 立体图历史：追加到末尾（界面倒序显示 = 最新在前） */
@@ -344,7 +521,7 @@ export const removeRender3d = (project, floorId, src) =>
     return { ...f, renders3d: (f.renders3d || []).filter((s) => s !== src), ...(f.render3dInfo ? { render3dInfo: info } : {}) };
   });
 
-/** 每张立体图的附带信息（合并更新）：新流程 { by:'plan3d', view, corner, wallMm, cab, hung, tex, at }；旧版 AI 图 { view, check, from, fixes } */
+/** 每张立体图的附带信息（合并更新）：{ view, check:{ ok, issues }, from, fixes } */
 export const setRenderInfo = (project, floorId, src, patch) =>
   updateFloor(project, floorId, (f) => ({ ...f, render3dInfo: { ...(f.render3dInfo || {}), [src]: { ...(f.render3dInfo?.[src] || {}), ...patch } } }));
 
@@ -353,6 +530,25 @@ export function floorViewSlides(project, floorId) {
   return (project?.slides || []).filter(
     (s) => s.kind === 'view' && s.enabled !== false && s.tag !== '3d' && s.image && (floorId === ALL_FLOOR_ID || s.floorId === floorId)
   );
+}
+
+/** 默认参考图：前 4 个不同空间各取第一张，不够再按顺序补 */
+export function defaultRefIds(project, floorId, max = MAX_REFS) {
+  const views = floorViewSlides(project, floorId);
+  const picked = [];
+  const rooms = new Set();
+  for (const s of views) {
+    const r = (s.room || '').trim();
+    if (picked.length >= max) break;
+    if (rooms.has(r)) continue;
+    rooms.add(r);
+    picked.push(s.id);
+  }
+  for (const s of views) {
+    if (picked.length >= max) break;
+    if (!picked.includes(s.id)) picked.push(s.id);
+  }
+  return picked;
 }
 
 /** 该层已有的立体图页 */

@@ -172,7 +172,7 @@ export default function SettingsModal({ settings, onSave, onClose, onLogout }) {
               />
             </label>
             <label className="block">
-              <span className={cls.label}>材质贴图的备用出图模型</span>
+              <span className={cls.label}>3D 立体图模型</span>
               <input
                 type="text"
                 value={form.model3d || ''}
