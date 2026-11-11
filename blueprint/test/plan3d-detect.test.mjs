@@ -222,10 +222,13 @@ test('parseItems：种类按别名认（不分大小写、去空白、中文也�
   assert.equal(kindOf('bookshelf').kind, 'tall');
   assert.equal(kindOf('Table').kind, 'desk');
   assert.equal(kindOf('worktop').kind, 'desk');
-  assert.equal(kindOf('counter').kind, 'desk');
+  assert.equal(kindOf('counter').kind, 'low', '厨房的台面一整条 = 矮柜');
   assert.equal(kindOf('stool').kind, 'chair');
-  assert.equal(kindOf('sofa').kind, 'block');
-  assert.equal(kindOf('bed').kind, 'block');
+  assert.equal(kindOf('sofa').kind, 'sofa');
+  assert.equal(kindOf('bed').kind, 'bed');
+  assert.equal(kindOf('Toilet').kind, 'fixture');
+  assert.equal(kindOf('洗手盆').kind, 'fixture');
+  assert.equal(kindOf('dining table').kind, 'desk');
   assert.equal(kindOf('Pillar').kind, 'column');
   assert.equal(kindOf('wall cabinet').kind, 'hung');
   assert.equal(kindOf('wall-hung_cabinet').kind, 'hung', '下划线、连字符当空格');
@@ -888,7 +891,7 @@ test('提示词：说清楚 box_2d、ymin 在前、0–1000、只回 JSON；家�
   for (const word of ['"rooms"', '"niches"', '"openings"', '"columns"', '"wall_thickness"', '"dimension"', '"mm"', '"p1"', '"p2"', 'window|door|hidden-door|gap', 'INNER', 'swing arc', 'millimetres', 'null', 'fully drawn', 'empty array']) {
     assert.ok(s.includes(word), `第一次看图的提示词里有 ${word}`);
   }
-  assert.ok(it.includes('tall|glass|low|desk|shelf|hung|chair|column|block'));
+  assert.ok(it.includes('tall|glass|low|desk|shelf|hung|chair|bed|sofa|fixture|column|block'));
   for (const kind of Object.keys(KINDS)) assert.ok(new RegExp(`^- ${kind} = `, 'm').test(it), `种类 ${kind} 有定义`);
   for (const word of ['"items"', '"kind"', '"label"', '"dashed"', 'DASHED', 'one box per chair', 'L-shaped', 'verbatim', 'door swings', 'dimension lines', 'title blocks', 'north arrows', 'rugs', 'At most 80']) {
     assert.ok(it.includes(word), `第二次看图的提示词里有 ${word}`);
@@ -906,14 +909,14 @@ test('提示词：说清楚 box_2d、ymin 在前、0–1000、只回 JSON；家�
   assert.ok(itemsPrompt(roomsForPrompt(parseStructure(studyReplies().structureReply, STUDY_SIZE), STUDY_SIZE)).includes('"STUDY ROOM" box_2d [127, 164, 820, 577]'));
 });
 
-test('KIND_ALIASES：键都是小写、不带下划线和连字符，值都是九个种类之一；九个种类自己也在里面', () => {
+test('KIND_ALIASES：键都是小写、不带下划线和连字符，值都是已有的种类之一；每个种类自己也在里面', () => {
   for (const [alias, kind] of Object.entries(KIND_ALIASES)) {
     assert.ok(Object.hasOwn(KINDS, kind), `${alias} → ${kind}`);
     assert.equal(alias, alias.toLowerCase().trim());
     assert.ok(!/[_-]/.test(alias), alias);
   }
   for (const kind of Object.keys(KINDS)) assert.equal(KIND_ALIASES[kind], kind);
-  for (const [alias, kind] of [['wardrobe', 'tall'], ['cabinet', 'tall'], ['bookcase', 'tall'], ['bookshelf', 'tall'], ['table', 'desk'], ['worktop', 'desk'], ['counter', 'desk'], ['stool', 'chair'], ['sofa', 'block'], ['bed', 'block'], ['pillar', 'column'], ['wall cabinet', 'hung'], ['display', 'glass'], ['高柜', 'tall'], ['衣柜', 'tall'], ['书柜', 'tall'], ['矮柜', 'low'], ['书桌', 'desk'], ['桌', 'desk'], ['椅', 'chair'], ['吊柜', 'hung'], ['玻璃柜', 'glass'], ['柱', 'column'], ['层架', 'shelf']]) {
+  for (const [alias, kind] of [['wardrobe', 'tall'], ['cabinet', 'tall'], ['bookcase', 'tall'], ['bookshelf', 'tall'], ['table', 'desk'], ['worktop', 'desk'], ['counter', 'low'], ['stool', 'chair'], ['sofa', 'sofa'], ['bed', 'bed'], ['toilet', 'fixture'], ['沙发', 'sofa'], ['床', 'bed'], ['马桶', 'fixture'], ['pillar', 'column'], ['wall cabinet', 'hung'], ['display', 'glass'], ['高柜', 'tall'], ['衣柜', 'tall'], ['书柜', 'tall'], ['矮柜', 'low'], ['书桌', 'desk'], ['桌', 'desk'], ['椅', 'chair'], ['吊柜', 'hung'], ['玻璃柜', 'glass'], ['柱', 'column'], ['层架', 'shelf']]) {
     assert.equal(KIND_ALIASES[alias], kind, alias);
   }
 });

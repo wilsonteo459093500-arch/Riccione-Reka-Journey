@@ -11,9 +11,9 @@ import Plan3dPreview from './Plan3dPreview.jsx';
 // 右边的 3D 图跟着实时变。位置以这里确认的为准。
 // props: { planUrl, size:{w,h}, geo, detected?, textures?, canAi?, onChange(geo), onClose(), onRedetectItems?(geo)→Promise<items> }
 
-const KIND_ORDER = ['tall', 'low', 'desk', 'chair', 'glass', 'hung', 'shelf', 'column', 'block'];
+const KIND_ORDER = ['tall', 'low', 'desk', 'chair', 'bed', 'sofa', 'fixture', 'glass', 'hung', 'shelf', 'column', 'block'];
 const KIND_COLORS = {
-  tall: '#7A4F2E', low: '#B07A45', desk: '#C99A2E', chair: '#D2527A', glass: '#2E9C9C', hung: '#8A5BD1', shelf: '#7D8B3A', column: '#3A3A3A', block: '#6F7785',
+  tall: '#7A4F2E', low: '#B07A45', desk: '#C99A2E', chair: '#D2527A', bed: '#4F7FC4', sofa: '#B5566B', fixture: '#3E9A8A', glass: '#2E9C9C', hung: '#8A5BD1', shelf: '#7D8B3A', column: '#3A3A3A', block: '#6F7785',
 };
 const OPENING_TYPES = [
   { id: 'door', zh: '门', color: '#E07B1A' },
@@ -260,8 +260,14 @@ export default function Plan3dEditor({ planUrl, size, geo: initial, detected, te
       return;
     } else if (tool.type === 'room') {
       const rooms = base.rooms || [];
-      if (!rooms.length) commit(settleGeo(applyOp(base, { type: 'addRoom', name: '', box: b })));
-      else commit(settleGeo(applyOp(base, { type: 'addRoomRect', room: sel?.type === 'room' ? sel.index : 0, box: b })));
+      if (!rooms.length || !tool.niche) {
+        commit(settleGeo(applyOp(base, { type: 'addRoom', name: '', box: b })));
+        setSel({ type: 'room', index: rooms.length, rect: 0 });
+      } else {
+        const ri = sel?.type === 'room' ? sel.index : 0;
+        commit(settleGeo(applyOp(base, { type: 'addRoomRect', room: ri, box: b })));
+        setSel({ type: 'room', index: ri, rect: (rooms[ri]?.rects || []).length });
+      }
     } else {
       const first = snapBox(base, b, d.tol, 'nw');
       const snapped = snapBox(base, first.box, d.tol, 'se');
@@ -369,9 +375,20 @@ export default function Plan3dEditor({ planUrl, size, geo: initial, detected, te
         <span className="text-[11px] text-bp-faint ml-1">加一个：</span>
         {mode === 'structure' ? (
           <>
-            <button type="button" className={chip(tool?.type === 'room')} aria-pressed={tool?.type === 'room'} onClick={() => setTool({ type: 'room' })}>
-              {(geo.rooms || []).length ? '凹位 / 房间的另一块' : '房间'}
+            <button type="button" className={chip(tool?.type === 'room' && !tool.niche)} aria-pressed={tool?.type === 'room' && !tool.niche} onClick={() => setTool({ type: 'room' })}>
+              房间
             </button>
+            {(geo.rooms || []).length > 0 && (
+              <button
+                type="button"
+                className={chip(tool?.type === 'room' && !!tool.niche)}
+                aria-pressed={tool?.type === 'room' && !!tool.niche}
+                onClick={() => setTool({ type: 'room', niche: true })}
+                title="房间不是方的：给选中的房间（没选就是第一个）再拼一块"
+              >
+                凹位
+              </button>
+            )}
             {OPENING_TYPES.map((t) => (
               <button
                 key={t.id}
