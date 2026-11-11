@@ -921,7 +921,9 @@ function buildCore(structure, items, size, hints) {
       if (attached(main, niche, tol)) rects.push(glued(main, niche));
       else notes.push(shown + '有一个凹位没有和房间连在一起，已丢掉');
     }
-    rooms.push({ name: name, rects: rects });
+    var made = { name: name, rects: rects };
+    if (floorForName(name) === 'tile') made.floor = 'tile';
+    rooms.push(made);
     if (sr.unsure) notes.push(shown + 'AI 不太确定，请核对范围');
   }
   if (over) notes.push('房间 / 房间里的矩形太多，后面的没有要');
@@ -1113,4 +1115,14 @@ function roomsForPrompt(structure, size) {
   return out;
 }
 
-export { looseJson, toPxBox, parseStructure, parseItems, alignRects, dedupeItems, estimateScale, deriveWallT, buildGeo, detectSummary, roomsForPrompt };
+/**
+ * 按房间名猜地面：浴室、厕所、阳台、后院这些湿的 / 露天的地方铺瓷砖，其余木地板。认不出 = 木地板（编辑器里可以改）。
+ */
+function floorForName(name) {
+  var n = typeof name === 'string' ? name : '';
+  if (/(^|[^A-Z])(BATH|BATHROOM|WC|W\.C\.?|TOILET|POWDER|SHOWER|YARD|BALCONY|TERRACE|PATIO|UTILITY|LAUNDRY|WET KITCHEN|AIR ?WELL|CAR ?PORCH|PORCH)([^A-Z]|$)/i.test(n)) return 'tile';
+  if (/浴|卫|厕|洗手间|阳台|露台|后院|天井|车库|车棚/.test(n)) return 'tile';
+  return 'wood';
+}
+
+export { looseJson, toPxBox, parseStructure, parseItems, alignRects, dedupeItems, estimateScale, deriveWallT, buildGeo, detectSummary, roomsForPrompt, floorForName };

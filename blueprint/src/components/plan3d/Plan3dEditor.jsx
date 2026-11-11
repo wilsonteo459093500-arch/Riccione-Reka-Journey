@@ -23,6 +23,13 @@ const OPENING_TYPES = [
 ];
 const openingDef = (type) => OPENING_TYPES.find((t) => t.id === type) || OPENING_TYPES[3];
 const ROOM_COLOR = '#2563EB';
+// 整套户型有好几个房间：每个房间一个颜色，分得清谁是谁
+const ROOM_COLORS = ['#2563EB', '#0E8F6E', '#B45309', '#7C3AED', '#BE185D', '#0E7490', '#4D7C0F', '#9A3412'];
+const roomColor = (i) => ROOM_COLORS[i % ROOM_COLORS.length];
+const FLOORS = [
+  { id: 'wood', zh: '木地板' },
+  { id: 'tile', zh: '瓷砖' },
+];
 
 const chip = (active) =>
   `px-2.5 py-1.5 rounded-lg text-xs border transition-colors disabled:opacity-40 ${
@@ -437,20 +444,27 @@ export default function Plan3dEditor({ planUrl, size, geo: initial, detected, te
                 {(geo.rooms || []).map((room, ri) =>
                   (room.rects || []).map((r, k) => {
                     const on = sel?.type === 'room' && sel.index === ri && (sel.rect || 0) === k;
+                    const color = roomColor(ri);
                     return (
-                      <rect
-                        key={`r${ri}-${k}`}
-                        x={r[0]}
-                        y={r[1]}
-                        width={r[2] - r[0]}
-                        height={r[3] - r[1]}
-                        fill={ROOM_COLOR}
-                        fillOpacity={mode === 'structure' ? 0.07 : 0.03}
-                        stroke={ROOM_COLOR}
-                        strokeWidth={(on ? 2.6 : mode === 'structure' ? 1.8 : 1) / scale}
-                        strokeOpacity={mode === 'structure' ? 1 : 0.45}
-                        pointerEvents="none"
-                      />
+                      <g key={`r${ri}-${k}`} pointerEvents="none">
+                        <rect
+                          x={r[0]}
+                          y={r[1]}
+                          width={r[2] - r[0]}
+                          height={r[3] - r[1]}
+                          fill={color}
+                          fillOpacity={mode === 'structure' ? (on ? 0.16 : 0.08) : 0.03}
+                          stroke={color}
+                          strokeWidth={(on ? 2.8 : mode === 'structure' ? 1.8 : 1) / scale}
+                          strokeOpacity={mode === 'structure' ? 1 : 0.45}
+                        />
+                        {mode === 'structure' && k === 0 && (r[2] - r[0]) * scale > 46 && (
+                          <text x={r[0] + 4 / scale} y={r[1] + 13 / scale} fontSize={11 / scale} fill={color} fontWeight="600" style={{ paintOrder: 'stroke' }} stroke="#fff" strokeWidth={2.5 / scale}>
+                            {room.name || `房间 ${ri + 1}`}
+                            {room.floor === 'tile' ? ' · 瓷砖' : ''}
+                          </text>
+                        )}
+                      </g>
                     );
                   })
                 )}
@@ -609,10 +623,31 @@ export default function Plan3dEditor({ planUrl, size, geo: initial, detected, te
           ) : selRoom ? (
             <div className="rounded-xl border border-bp-line p-3 space-y-2.5">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-bp-ink">{(sel.rect || 0) === 0 ? '房间' : '凹位'}</span>
+                <span className="text-xs font-semibold text-bp-ink">
+                  <span className="inline-block w-2 h-2 rounded-sm mr-1.5 align-middle" style={{ background: roomColor(sel.index) }} />
+                  {(sel.rect || 0) === 0 ? '房间' : '凹位'}
+                </span>
                 <button type="button" className="text-bp-faint hover:text-bp-danger" onClick={removeSelected} aria-label="删除这一块">
                   <Trash2 size={14} />
                 </button>
+              </div>
+              <input
+                className="w-full rounded-lg border border-bp-line bg-white px-2.5 py-1.5 text-xs text-bp-ink placeholder:text-bp-faint focus:outline-none focus:border-bp-gold"
+                value={selRoom.name || ''}
+                onChange={(e) => run({ type: 'setRoomName', room: sel.index, name: e.target.value.slice(0, 40) })}
+                placeholder="房间名（可选，例如 主卧）"
+                aria-label="房间名"
+              />
+              <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="地面">
+                <span className="text-[11px] text-bp-faint">地面</span>
+                {FLOORS.map((f) => {
+                  const active = (selRoom.floor === 'tile' ? 'tile' : 'wood') === f.id;
+                  return (
+                    <button key={f.id} type="button" className={`${chip(active)} !px-2 !py-1`} aria-pressed={active} onClick={() => run({ type: 'setRoomFloor', room: sel.index, floor: f.id })}>
+                      {f.zh}
+                    </button>
+                  );
+                })}
               </div>
               <div className="text-[11px] text-bp-faint leading-relaxed">框要贴着墙的内侧（地板的边）。房间不是方的，就用「凹位」再加一块拼起来。</div>
             </div>

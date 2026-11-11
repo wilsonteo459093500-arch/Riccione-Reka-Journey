@@ -766,13 +766,19 @@ function applyOp(geo, op) {
     next = { name: typeof op.name === 'string' && op.name ? op.name : '房间 ' + (rooms.length + 1), rects: [box] };
     return withKey(g, 'rooms', rooms.concat([next]));
   }
-  if (type === 'addRoomRect' || type === 'setRoomRect' || type === 'removeRoomRect' || type === 'setRoomName') {
+  if (type === 'addRoomRect' || type === 'setRoomRect' || type === 'removeRoomRect' || type === 'setRoomName' || type === 'setRoomFloor') {
     if (!objAt(rooms, op.room)) return geo;
     room = rooms[op.room];
     rects = arr(room.rects);
     if (type === 'setRoomName') {
       if (typeof op.name !== 'string' || op.name === room.name) return geo;
       return withKey(g, 'rooms', replaceAt(rooms, op.room, withKey(room, 'name', op.name)));
+    }
+    if (type === 'setRoomFloor') {
+      // 地面：'wood' 木地板（默认）| 'tile' 瓷砖
+      var floor = op.floor === 'tile' ? 'tile' : 'wood';
+      if ((room.floor === 'tile' ? 'tile' : 'wood') === floor) return geo;
+      return withKey(g, 'rooms', replaceAt(rooms, op.room, withKey(room, 'floor', floor)));
     }
     if (type === 'removeRoomRect') {
       if (!validIndex(rects, op.rect)) return geo;

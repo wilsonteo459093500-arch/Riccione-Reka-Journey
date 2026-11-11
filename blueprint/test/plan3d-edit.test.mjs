@@ -699,3 +699,14 @@ test('edit.js 导出的名字是约定好的那些；ES5 写法、只引用 geom
   assert.ok(!/^export\s+(function|var|default)/m.test(code), '不在声明处 export');
   assert.ok(/export \{[^}]*\};\n$/.test(code), 'export 在最后一行');
 });
+
+test('applyOp setRoomFloor：木地板 / 瓷砖；没变就原样返回；不认识的值当木地板', () => {
+  const g = { rooms: [{ name: 'BATH', rects: [[0, 0, 10, 10]] }], openings: [], items: [] };
+  const t = applyOp(g, { type: 'setRoomFloor', room: 0, floor: 'tile' });
+  assert.equal(t.rooms[0].floor, 'tile');
+  assert.equal(g.rooms[0].floor, undefined, '不改原数据');
+  assert.equal(applyOp(t, { type: 'setRoomFloor', room: 0, floor: 'tile' }), t);
+  assert.equal(applyOp(g, { type: 'setRoomFloor', room: 0, floor: 'wood' }), g, '没写 = 木地板');
+  assert.equal(applyOp(t, { type: 'setRoomFloor', room: 0, floor: 'carpet' }).rooms[0].floor, 'wood');
+  assert.equal(applyOp(g, { type: 'setRoomFloor', room: 3, floor: 'tile' }), g);
+});

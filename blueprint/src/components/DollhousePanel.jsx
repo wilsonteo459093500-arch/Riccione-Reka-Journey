@@ -441,6 +441,7 @@ export default function DollhousePanel({ project, settings, notify, onOpenSettin
                     <Upload size={22} />
                     <div className="text-sm text-bp-muted">点击或拖入平面布置图</div>
                     <div className="text-[11px]">JPG / PNG / PDF（PDF 默认取第 1 页）</div>
+                    <div className="text-[11px]">一张图上并排两层？每个楼层各上传一次，框选范围时各框一层</div>
                   </div>
                 )}
                 {planBusy && (

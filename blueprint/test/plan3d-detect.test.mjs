@@ -6,7 +6,7 @@ import path from 'node:path';
 import { test } from './harness.mjs';
 import * as detect from '../src/plan3d/detect.js';
 import * as prompt from '../src/plan3d/prompt.js';
-import { looseJson, toPxBox, parseStructure, parseItems, alignRects, dedupeItems, estimateScale, deriveWallT, buildGeo, detectSummary, roomsForPrompt } from '../src/plan3d/detect.js';
+import { looseJson, toPxBox, parseStructure, parseItems, alignRects, dedupeItems, estimateScale, deriveWallT, buildGeo, detectSummary, roomsForPrompt, floorForName } from '../src/plan3d/detect.js';
 import { structurePrompt, itemsPrompt, KIND_ALIASES } from '../src/plan3d/prompt.js';
 import { KINDS, openingRect, roomRects } from '../src/plan3d/geometry.js';
 import { renderGeo, validateGeo } from '../src/plan3d/edit.js';
@@ -922,7 +922,7 @@ test('KIND_ALIASES：键都是小写、不带下划线和连字符，值都是�
 });
 
 test('detect.js / prompt.js 导出的名字是约定好的那些；ES5 写法、只引用 plan3d 自己的文件、末尾一行 export', () => {
-  assert.deepEqual(Object.keys(detect).sort(), ['alignRects', 'buildGeo', 'dedupeItems', 'deriveWallT', 'detectSummary', 'estimateScale', 'looseJson', 'parseItems', 'parseStructure', 'roomsForPrompt', 'toPxBox']);
+  assert.deepEqual(Object.keys(detect).sort(), ['alignRects', 'buildGeo', 'dedupeItems', 'deriveWallT', 'detectSummary', 'estimateScale', 'floorForName', 'looseJson', 'parseItems', 'parseStructure', 'roomsForPrompt', 'toPxBox']);
   assert.deepEqual(Object.keys(prompt).sort(), ['KIND_ALIASES', 'itemsPrompt', 'structurePrompt']);
   const allowed = { 'detect.js': ['./geometry.js', './edit.js', './prompt.js'], 'prompt.js': [] };
   for (const f of Object.keys(allowed)) {
@@ -950,4 +950,36 @@ test('detect.js / prompt.js 导出的名字是约定好的那些；ES5 写法、
     assert.ok(/export \{[^}]*\};\n$/.test(code), `${f}: export 在最后一行`);
     if (real.length) assert.ok(/^(\/\/[^\n]*\n)*(import \{[^}]*\} from '[^']+';\n)+\n/.test(code), `${f}: import 紧跟在开头的说明后面`);
   }
+});
+
+test('floorForName：浴室、厕所、阳台、后院 → 瓷砖；卧室、客厅、厨房、没名字 → 木地板', () => {
+  for (const n of ['BATH 1', 'Bathroom', 'MASTER BATH', 'WC', 'W.C.', 'Toilet', 'POWDER ROOM', 'YARD', 'BALCONY', 'UTILITY', 'WET KITCHEN', 'CAR PORCH', 'AIR WELL', '主卫', '浴室', '阳台', '洗手间']) {
+    assert.equal(floorForName(n), 'tile', n);
+  }
+  for (const n of ['BEDROOM 1', 'MASTER BEDROOM', 'LIVING', 'DINING', 'KITCHEN', 'STUDY ROOM', 'FOYER', 'FAMILY AREA', 'BATHTUB STORE'.replace('BATHTUB ', ''), '', null, undefined, 5, '主卧', '客厅']) {
+    assert.equal(floorForName(n), 'wood', String(n));
+  }
+});
+
+test('buildGeo：整套户型 —— 每个房间各自一份，湿区带上瓷砖地面；两个房间之间的门落在离它最近的那面墙上', () => {
+  const size = { w: 1000, h: 800 };
+  // 左边卧室、右边浴室，中间一道 20 px 的墙（x 490–510）；门开在这道墙上
+  const structure = parseStructure(
+    {
+      rooms: [
+        { name: 'BEDROOM 1', box_2d: [125, 100, 875, 490], confidence: 0.9 },
+        { name: 'BATH 1', box_2d: [125, 510, 500, 900], confidence: 0.9 },
+      ],
+      openings: [{ type: 'door', box_2d: [250, 490, 375, 510], confidence: 0.9 }],
+      wall_thickness: 20,
+    },
+    size
+  );
+  const { geo } = buildGeo(structure, parseItems({ items: [{ kind: 'bed', box_2d: [150, 120, 450, 330] }, { kind: 'toilet', box_2d: [140, 800, 220, 880] }, { kind: 'sofa', box_2d: [10, 10, 60, 90] }] }, size), size, {});
+  assert.deepEqual(geo.rooms.map((r) => [r.name, r.floor || 'wood']), [['BEDROOM 1', 'wood'], ['BATH 1', 'tile']]);
+  assert.equal(geo.openings.length, 1, '门只算一次');
+  const door = geo.openings[0];
+  assert.ok((door.side === 'right' && Math.abs(door.at - 490) <= 2) || (door.side === 'left' && Math.abs(door.at - 510) <= 2), JSON.stringify(door));
+  assert.ok(Math.abs(door.a - 200) <= 3 && Math.abs(door.b - 300) <= 3, JSON.stringify(door));
+  assert.deepEqual(geo.items.map((i) => [i.kind, !!i.unsure]), [['bed', false], ['fixture', false], ['sofa', true]], '房间外的沙发留着但标待确认');
 });
