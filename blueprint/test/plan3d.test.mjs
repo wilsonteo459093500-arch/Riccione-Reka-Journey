@@ -4,10 +4,11 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { test } from './harness.mjs';
-import { KINDS, deriveWalls, openingRect, edgeFor, snapToWall, rectPoly, chairPolys, clipPolyToBox, contentBox, roomRects, inventoryLines } from '../src/plan3d/geometry.js';
+import { KINDS, deriveWalls, openingRect, edgeFor, snapToWall, rectPoly, chairPolys, clipPolyToBox, contentBox, roomRects } from '../src/plan3d/geometry.js';
 import { buildScene, recommendCorner, projectPoint, planeMatrix, CORNERS, polyArea, polyDist, hull } from '../src/plan3d/scene.js';
-import { reskinPromptText } from '../src/ai/prompts.js';
-import { paletteOf, PALETTES } from '../src/plan3d/palette.js';
+import { swatchPromptText, SWATCH_SLOTS } from '../src/ai/prompts.js';
+import { paletteOf, PALETTES, TEXTURE_SLOTS } from '../src/plan3d/palette.js';
+import { mirrorTileRects } from '../src/plan3d/paint.js';
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const src = (f) => readFileSync(path.join(dir, '../src/plan3d', f), 'utf8');
@@ -284,18 +285,44 @@ test('recommendCorner：镜头一侧的两面墙上柜子越少越好', () => {
   assert.equal(recommendCorner(box()), 'se', '没有柜子：默认右下');
 });
 
-test('AI 美化的提示词：只换材质和光影、位置不动、物件清单、参考图只取材质', () => {
-  const inv = inventoryLines(STUDY);
-  assert.ok(inv.includes('4 x chair') && inv.includes('1 x glass-door display cabinet (GLASS DOOR CABINET)') && inv.includes('1 x window'));
-  assert.ok(inv.includes('2 x full-height cabinet (STORAGE CABINET, BOOK CABINET)'), '同名的柜名不重复');
-  const p = reskinPromptText({ inventory: inv, refCount: 2, view: 'iso' });
-  assert.ok(/MATERIAL AND LIGHTING pass only/.test(p) && /Do not move, rotate, resize, merge or split anything/.test(p));
-  assert.ok(/must line up with image 1/.test(p) && /Do not add anything/.test(p) && /No text/.test(p));
-  assert.ok(p.includes('The scene contains exactly: ') && p.includes('4 x chair'));
-  assert.ok(p.includes('images 2–3') && /ONLY for materials and colours/.test(p));
-  assert.ok(/angled axonometric/.test(p));
-  const bare = reskinPromptText({ view: 'top' });
-  assert.ok(!/MATERIAL REFERENCES/.test(bare) && !/The scene contains exactly/.test(bare) && /strict top-down/.test(bare));
+test('材质样本的提示词：只出一块平铺的材质、没有阴影 / 物体 / 文字；参考图只取材质；槽位各有默认描述', () => {
+  for (const slot of TEXTURE_SLOTS) {
+    assert.ok(SWATCH_SLOTS[slot.id], `${slot.id} 有默认描述`);
+    assert.ok(slot.mm > 0 && slot.zh);
+    const p = swatchPromptText({ slot: slot.id });
+    assert.ok(p.includes(SWATCH_SLOTS[slot.id].desc), slot.id);
+    assert.ok(/flat material texture swatch/.test(p) && /Tileable/.test(p));
+    assert.ok(/no shadows/.test(p) && /no objects/.test(p) && /no text/.test(p) && /no borders/.test(p));
+    assert.ok(!/REFERENCE/.test(p) && !/DESIGNER NOTE/.test(p), '没有参考图 / 补充说明时不提');
+    assert.equal(/grain runs horizontally/.test(p), !!SWATCH_SLOTS[slot.id].wood, '木纹统一横向，程序再转');
+    assert.ok(!/floor plan|layout|cabinet positions/i.test(p), '提示词里没有户型');
+  }
+  const one = swatchPromptText({ slot: 'worktop', refCount: 1, hint: '  白色大理石，灰色细纹  ' });
+  assert.ok(/REFERENCE — image 1 is an interior render/.test(one) && /Do NOT reproduce the room/.test(one));
+  assert.ok(one.includes('the stone of the worktops') && one.endsWith('DESIGNER NOTE: 白色大理石，灰色细纹'));
+  const three = swatchPromptText({ slot: 'cabinet', refCount: 3 });
+  assert.ok(three.includes('images 1–3 are interior renders') && three.includes('the wood veneer of the cabinetry'));
+  assert.ok(swatchPromptText({ slot: '没有这个' }).includes(SWATCH_SLOTS.cabinet.desc), '不认识的槽位按柜体');
+});
+
+test('mirrorTileRects：贴图左右、上下各翻一次拼成 2×2，四条接缝两边是同一条边', () => {
+  const q = 512;
+  const rects = mirrorTileRects(q);
+  assert.equal(rects.length, 4);
+  // 每个象限：把贴图上的点 (u, v) 画到 (sx * u + tx, sy * v + ty)
+  const at = (r, u, v) => [r[0] * u + r[2], r[1] * v + r[3]];
+  const covered = rects.map((r) => {
+    const a = at(r, 0, 0);
+    const b = at(r, q, q);
+    return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])].join(',');
+  });
+  assert.deepEqual(covered.sort(), ['0,0,512,512', '0,512,512,1024', '512,0,1024,512', '512,512,1024,1024']);
+  // 中间的竖缝：左边那块的右边缘和右边那块的左边缘是贴图的同一列（u = q）
+  assert.deepEqual(at(rects[0], q, 100), at(rects[1], q, 100));
+  assert.deepEqual(at(rects[0], 100, q), at(rects[2], 100, q));
+  // 整块再平铺时的外缝：左右两条外边缘都是贴图的 u = 0
+  assert.equal(at(rects[0], 0, 0)[0], 0);
+  assert.equal(at(rects[1], 0, 0)[0], 2 * q);
 });
 
 test('配色：每套都有画图要用的材质槽', () => {

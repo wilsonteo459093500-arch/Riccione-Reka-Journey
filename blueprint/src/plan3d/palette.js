@@ -25,8 +25,16 @@ var PALETTES = {
   },
 };
 
+/** 材质贴图的四个槽位：一张贴图在现实里大约多大（毫米），贴到哪些材质上 */
+var TEXTURE_SLOTS = [
+  { id: 'floor', zh: '地板木纹', mm: 1000 },
+  { id: 'cabinet', zh: '柜体木饰面', mm: 1200 },
+  { id: 'worktop', zh: '台面石材', mm: 1500 },
+  { id: 'fabric', zh: '椅子面料', mm: 600 },
+];
+
 function paletteOf(id) {
   return PALETTES[id] || PALETTES.warm;
 }
 
-export { PALETTES, paletteOf };
+export { PALETTES, TEXTURE_SLOTS, paletteOf };

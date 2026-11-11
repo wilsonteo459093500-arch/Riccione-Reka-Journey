@@ -7,7 +7,7 @@ import { extractJson } from './polish.js';
 import { toInlineImage, toJpegBlob, dataUrlToBlob, canvasToBlob } from '../store/assets.js';
 import { uid } from '../engine/model.js';
 import {
-  floorplanPromptText, planRegionPrompt, planBriefPrompt, checkPrompt, refinePrompt, reskinPromptText, resolveView, resolveScope,
+  floorplanPromptText, planRegionPrompt, planBriefPrompt, checkPrompt, refinePrompt, swatchPromptText, resolveView, resolveScope,
   DOLLHOUSE_VIEWS, PLAN_SCOPES,
 } from './prompts.js';
 import { PDFJS_DOC_OPTIONS } from '../import/pdfjsAssets.js';
@@ -426,28 +426,34 @@ export async function refineDollhouse({ settings, renderBlob, planBlob = null, f
   return await runImage({ settings, prompt, inputs, aspect: pickAspect(size.w, size.h), onWait, onFallback });
 }
 
-export const MAX_POLISH_REFS = 3;
+export const MAX_SWATCH_REFS = 3;
 
 /**
- * 「AI 美化」：把程序按坐标画的精确图交给出图模型，只换材质和光影（位置由提示词要求保持不动，不保证）。
- * 输入 = [精确图, ...最多 3 张材质参考图]，输出比例跟精确图一致，方便叠在一起对比。
- * @param {{ settings, guideBlob:Blob, refSrcs?:Array<string|Blob>, inventory?:string[], view?:string, onWait?, onFallback? }} args
+ * 「材质贴图」：让出图模型出一小块 1:1 的材质样本（它看不到户型，只看得到最多 3 张效果图作材质参考）。
+ * 先用普通出图模型（便宜），失败再用高级的那个。
+ * @param {{ settings, slot:'floor'|'cabinet'|'worktop'|'fabric', refSrcs?:Array<string|Blob>, hint?:string, onWait? }} args
  * @returns {Promise<Blob>} JPEG
  */
-export async function polishRender({ settings, guideBlob, refSrcs = [], inventory = [], view = 'top', onWait, onFallback }) {
+export async function generateSwatch({ settings, slot, refSrcs = [], hint = '', onWait }) {
   if (!settings?.apiKey) throw new Error('还没有配置 API key，点右上角设置。');
-  if (!guideBlob) throw new Error('没有可以美化的图');
-  const inputs = [inline(await toInlineImage(guideBlob, PLAN_EDGE))];
-  for (const src of (refSrcs || []).slice(0, MAX_POLISH_REFS)) {
+  const inputs = [];
+  for (const src of (refSrcs || []).slice(0, MAX_SWATCH_REFS)) {
     try {
-      inputs.push(inline(await toInlineImage(src, REF_EDGE)));
+      inputs.push(inline(await toInlineImage(src, 1024)));
     } catch {
       /* 某张参考图读不出来就跳过 */
     }
   }
-  const size = await sizeOfBlob(guideBlob);
-  const prompt = reskinPromptText({ inventory, refCount: inputs.length - 1, view });
-  return await runImage({ settings, prompt, inputs, aspect: pickAspect(size.w, size.h), onWait, onFallback });
+  const prompt = swatchPromptText({ slot, refCount: inputs.length, hint });
+  const cheap = settings.model || settings.model3d;
+  let dataUrl;
+  try {
+    dataUrl = await generateImage({ ...settings, model: cheap }, prompt, inputs, '1:1', onWait, { imageSize: '1K' });
+  } catch (e) {
+    if (!settings.model3d || settings.model3d === cheap || keyProblem(e)) throw e;
+    dataUrl = await generateImage({ ...settings, model: settings.model3d }, prompt, inputs, '1:1', onWait, { imageSize: '1K' });
+  }
+  return await toJpegBlob(await dataUrlToBlob(dataUrl), { maxEdge: 1024, quality: 0.9 });
 }
 
 // ---------------------------------------------------------------------------

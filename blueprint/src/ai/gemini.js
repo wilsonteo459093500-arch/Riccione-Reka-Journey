@@ -178,9 +178,10 @@ export async function testConnection(settings) {
  * @param {object|null} image  { mimeType, base64 }
  * @param {string|null} aspectRatio 仅文字模式使用，如 '16:9'
  * @param {(seconds: number, attempt: number) => void} [onWait] 重试等待回调
+ * @param {{ imageSize?: '1K'|'2K' }} [opts]
  * @returns {Promise<string>} 图片 dataURL
  */
-export async function generateImage(settings, prompt, image, aspectRatio, onWait) {
+export async function generateImage(settings, prompt, image, aspectRatio, onWait, opts = {}) {
   if (!settings.apiKey) throw new Error('还没有配置 API key，点右上角设置。');
 
   // image 可以是单张 { mimeType, base64 }，也可以是多张数组（如 flat-lay 合成）
@@ -192,7 +193,8 @@ export async function generateImage(settings, prompt, image, aspectRatio, onWait
   const imageConfig = {};
   if (aspectRatio) imageConfig.aspectRatio = aspectRatio;
   // 2.5 只支持 1K；新模型（3.1+）显式要 2K 高清输出（值必须大写，小写会被静默忽略）
-  if (!/2\.5-flash-image/.test(settings.model || '')) imageConfig.imageSize = '2K';
+  // opts.imageSize：小图（材质样本）用 '1K' 就够
+  if (!/2\.5-flash-image/.test(settings.model || '')) imageConfig.imageSize = opts.imageSize || '2K';
   if (Object.keys(imageConfig).length) generationConfig.imageConfig = imageConfig;
 
   const url = endpoint(settings, `/v1beta/models/${settings.model}:generateContent`);

@@ -1,16 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Download, Upload, Wand2, Loader2, X } from 'lucide-react';
 import { buildScene, recommendCorner, CORNERS } from './scene.js';
-import { inventoryLines } from './geometry.js';
 import { paintScene } from './paint.js';
-import { paletteOf } from './palette.js';
-import { pickAspect, polishRender, MAX_POLISH_REFS } from '../ai/dollhouse.js';
+import { paletteOf, TEXTURE_SLOTS } from './palette.js';
+import { pickAspect, generateSwatch, MAX_SWATCH_REFS } from '../ai/dollhouse.js';
 import { loadSettings } from '../ai/settings.js';
 import STUDY from './sample-study-room.json';
 
 // 试验页（#/lab/plan3d）：把 STUDY ROOM 的坐标样本用程序画成 3D 户型图，给设计师看画风和位置；
-// 另有「AI 美化」测试：把这张精确图交给出图模型只换质感，和精确图叠在一起对比有没有东西被挪位。
-// 坐标是手工录入的样本；正式功能里由设计师在图纸上核对后得到。
+// 另有「材质贴图」测试：AI 只出一小块材质样本（或直接上传材质照片），程序把它贴到画好的柜子、台面、地板上。
+// AI 接触不到户型，所以加不了东西也挪不了位。坐标是手工录入的样本；正式功能里由设计师在图纸上核对后得到。
 
 const chip = (active) =>
   `px-3 py-1.5 rounded-lg text-xs border transition-colors disabled:opacity-50 ${
@@ -36,8 +35,14 @@ const CABS = [
   { id: 'full', zh: '柜子全高', hint: '真实高度，吊柜悬在墙上；靠近镜头的高柜会挡住后面。' },
 ];
 const CORNER_ORDER = ['nw', 'ne', 'sw', 'se'];
+const SLOT_HINTS = {
+  floor: '例如：浅色橡木',
+  cabinet: '例如：深胡桃木，直纹',
+  worktop: '例如：白色大理石，灰色细纹',
+  fabric: '例如：暖灰色布艺',
+};
 
-const env = { createCanvas: (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }) };
+const createCanvas = (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h });
 
 const ratioOf = (aspect) => {
   const [w, h] = aspect.split(':').map(Number);
@@ -53,6 +58,20 @@ function saveBlob(blob, name) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 3000);
+}
+
+/** 图片文件 / Blob → 已经解码好的 <img>（画到 canvas 上要等它加载完） */
+async function loadImage(blob) {
+  const url = URL.createObjectURL(blob);
+  const img = new Image();
+  img.src = url;
+  try {
+    await img.decode();
+  } catch {
+    URL.revokeObjectURL(url);
+    throw new Error('这张图片读不出来，换成 JPG / PNG 再试');
+  }
+  return { img, url };
 }
 
 export default function Plan3dLab() {
@@ -74,18 +93,102 @@ export default function Plan3dLab() {
         : { view, hung },
     [iso, view, corner, wallMm, cab, hung]
   );
-  // 按出图模型支持的比例出图：AI 美化的结果和这张图能 1:1 叠在一起
+  // 按出图模型支持的比例出图（和提案页、以后的出图比例一致）
   const scene = useMemo(() => {
     const natural = buildScene(STUDY, opts);
     return buildScene(STUDY, { ...opts, ratio: ratioOf(pickAspect(natural.w, natural.h)) });
   }, [opts]);
-  const sceneKey = JSON.stringify(opts, (k, v) => (v === Infinity ? 'inf' : v));
+
+  // ---------------- 材质贴图（测试） ----------------
+  const [textures, setTextures] = useState({}); // 槽位 → { img, url, ai }
+  const [useTex, setUseTex] = useState(true);
+  const [refs, setRefs] = useState([]); // [{ file, url }]
+  const [hints, setHints] = useState({});
+  const [busy, setBusy] = useState(''); // 正在生成的槽位（'all' = 四个一起）
+  const [msg, setMsg] = useState('');
+  const [error, setError] = useState('');
+  const [runs, setRuns] = useState(0);
+  const hasKey = !!loadSettings().apiKey;
+  const texCount = Object.keys(textures).length;
+
+  const env = useMemo(() => {
+    const imgs = {};
+    if (useTex) Object.keys(textures).forEach((slot) => (imgs[slot] = textures[slot].img));
+    return { createCanvas, textures: imgs };
+  }, [textures, useTex]);
 
   useEffect(() => {
     if (canvasRef.current) paintScene(canvasRef.current, scene, paletteOf('warm'), env);
-  }, [scene]);
+  }, [scene, env]);
 
   useEffect(() => () => planUrl && URL.revokeObjectURL(planUrl), [planUrl]);
+
+  function putTexture(slot, loaded, ai) {
+    setTextures((cur) => {
+      if (cur[slot]) URL.revokeObjectURL(cur[slot].url);
+      return { ...cur, [slot]: { ...loaded, ai } };
+    });
+    setUseTex(true);
+  }
+
+  function clearTexture(slot) {
+    setTextures((cur) => {
+      if (!cur[slot]) return cur;
+      URL.revokeObjectURL(cur[slot].url);
+      const next = { ...cur };
+      delete next[slot];
+      return next;
+    });
+  }
+
+  async function onUploadTexture(slot, e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setError('');
+    try {
+      putTexture(slot, await loadImage(file), false);
+    } catch (err) {
+      setError(err.message || String(err));
+    }
+  }
+
+  function onPickRefs(e) {
+    const files = [...(e.target.files || [])].filter((f) => /^image\//.test(f.type));
+    e.target.value = '';
+    if (!files.length) return;
+    setRefs((cur) => [...cur, ...files.map((file) => ({ file, url: URL.createObjectURL(file) }))].slice(0, MAX_SWATCH_REFS));
+  }
+
+  async function generateOne(slot) {
+    setRuns((n) => n + 1);
+    const blob = await generateSwatch({
+      settings: loadSettings(),
+      slot,
+      refSrcs: refs.map((r) => r.file),
+      hint: hints[slot] || '',
+      onWait: (sec, n) => setMsg(`被限流了，${sec} 秒后自动重试（第 ${n} 次）`),
+    });
+    putTexture(slot, await loadImage(blob), true);
+  }
+
+  async function generate(which) {
+    if (busy) return;
+    setError('');
+    setMsg('');
+    const slots = which === 'all' ? TEXTURE_SLOTS.map((s) => s.id) : [which];
+    try {
+      for (const slot of slots) {
+        setBusy(slot);
+        await generateOne(slot);
+      }
+    } catch (e) {
+      setError(e.message || String(e));
+    } finally {
+      setBusy('');
+      setMsg('');
+    }
+  }
 
   function onPickPlan(e) {
     const file = e.target.files?.[0];
@@ -93,66 +196,10 @@ export default function Plan3dLab() {
     if (file) setPlanUrl(URL.createObjectURL(file));
   }
 
-  const canvasBlob = () => new Promise((resolve) => canvasRef.current?.toBlob((b) => resolve(b), 'image/jpeg', 0.92));
-  const fileStem = `study-room-${view}${iso ? `-${corner}-${cab}` : hung === 'hide' ? '-no-hung' : ''}`;
+  const fileStem = `study-room-${view}${iso ? `-${corner}-${cab}` : hung === 'hide' ? '-no-hung' : ''}${useTex && texCount ? '-tex' : ''}`;
 
-  async function download() {
-    const blob = await canvasBlob();
-    if (blob) saveBlob(blob, `${fileStem}.jpg`);
-  }
-
-  // ---------------- AI 美化（测试） ----------------
-  const [refs, setRefs] = useState([]); // [{ file, url }]
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState('');
-  const [error, setError] = useState('');
-  const [runs, setRuns] = useState(0);
-  const [polished, setPolished] = useState(null); // { key, blob, url }
-  const [mixAI, setMixAI] = useState(1);
-  const hasKey = !!loadSettings().apiKey;
-  const shown = polished && polished.key === sceneKey ? polished : null;
-
-  function onPickRefs(e) {
-    const files = [...(e.target.files || [])].filter((f) => /^image\//.test(f.type));
-    e.target.value = '';
-    if (!files.length) return;
-    setRefs((cur) => [...cur, ...files.map((file) => ({ file, url: URL.createObjectURL(file) }))].slice(0, MAX_POLISH_REFS));
-  }
-
-  function removeRef(i) {
-    setRefs((cur) => cur.filter((_, k) => k !== i));
-  }
-
-  async function polish() {
-    if (busy) return;
-    setBusy(true);
-    setError('');
-    setMsg('');
-    const key = sceneKey;
-    try {
-      const guideBlob = await canvasBlob();
-      if (!guideBlob) throw new Error('样图还没画好，稍等再试');
-      setRuns((n) => n + 1);
-      const blob = await polishRender({
-        settings: loadSettings(),
-        guideBlob,
-        refSrcs: refs.map((r) => r.file),
-        inventory: inventoryLines(STUDY),
-        view,
-        onWait: (sec, n) => setMsg(`被限流了，${sec} 秒后自动重试（第 ${n} 次）`),
-        onFallback: (model) => setMsg(`高级模型暂不可用，改用 ${model} 再试一次…`),
-      });
-      setPolished((old) => {
-        if (old) URL.revokeObjectURL(old.url);
-        return { key, blob, url: URL.createObjectURL(blob) };
-      });
-      setMixAI(1);
-    } catch (e) {
-      setError(e.message || String(e));
-    } finally {
-      setBusy(false);
-      setMsg('');
-    }
+  function download() {
+    canvasRef.current?.toBlob((blob) => blob && saveBlob(blob, `${fileStem}.jpg`), 'image/jpeg', 0.92);
   }
 
   // 原图在画布上的位置（百分比），叠图时把图纸摆回去
@@ -166,6 +213,8 @@ export default function Plan3dLab() {
   };
   const viewDef = VIEWS.find((v) => v.id === view);
   const card = 'rounded-2xl border border-bp-line bg-bp-card p-4 space-y-2';
+  const input =
+    'min-w-0 flex-1 rounded-lg border border-bp-line bg-white px-2.5 py-1.5 text-xs text-bp-ink placeholder:text-bp-faint focus:outline-none focus:border-bp-gold';
 
   return (
     <div className="min-h-[100dvh] bg-bp-paper text-bp-ink">
@@ -177,7 +226,7 @@ export default function Plan3dLab() {
           <div className="mt-3 text-[11px] tracking-[0.3em] text-bp-eyebrow">PLAN 3D · LAB</div>
           <h1 className="font-serif text-2xl mt-1">3D 户型图样图 · STUDY ROOM</h1>
           <p className="mt-1.5 text-xs text-bp-muted leading-relaxed max-w-3xl">
-            这张图不是 AI 画的：程序按图纸上量出来的坐标逐个画出墙、门窗、柜子和桌椅，所以位置不会跑。柜子高度是按种类的默认值，材质是一套示意配色。
+            这张图不是 AI 画的：程序按图纸上量出来的坐标逐个画出墙、门窗、柜子和桌椅，所以位置不会跑。柜子高度是按种类的默认值；材质可以用默认配色，也可以在下面换成贴图。
           </p>
         </div>
 
@@ -240,62 +289,108 @@ export default function Plan3dLab() {
 
         <div className="relative rounded-2xl overflow-hidden border border-bp-line bg-white">
           <canvas ref={canvasRef} className="block w-full h-auto" aria-label="3D 户型图样图" />
-          {shown && <img src={shown.url} alt="AI 美化的结果" className="absolute inset-0 w-full h-full" style={{ opacity: mixAI }} data-testid="polished" />}
-          {!shown && planUrl && planStyle && <img src={planUrl} alt="" className="absolute max-w-none pointer-events-none mix-blend-multiply" style={planStyle} />}
+          {planUrl && planStyle && <img src={planUrl} alt="" className="absolute max-w-none pointer-events-none mix-blend-multiply" style={planStyle} />}
         </div>
 
-        {/* AI 美化（测试） */}
-        <div className={card} data-testid="polish-card">
-          <div className="text-xs font-semibold text-bp-faint">AI 美化（测试）：把上面这张精确图交给 AI，只换材质和光影</div>
-          <div className="text-[11px] text-bp-faint leading-relaxed">
-            每点一次 = 用你的 Gemini key 出 1 张图。AI 被要求不动任何位置，但它不一定做得到，所以结果会和精确图叠在一起让你对比。精确图始终保留。
+        {/* 材质贴图（测试） */}
+        <div className={card} data-testid="texture-card">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-xs font-semibold text-bp-faint">材质贴图（测试）：只换表面的材质，位置和形状不变</div>
+            {texCount > 0 && (
+              <div className="flex items-center gap-1.5" role="group" aria-label="用贴图还是默认画法">
+                <button type="button" className={chip(useTex)} aria-pressed={useTex} onClick={() => setUseTex(true)}>
+                  用贴图
+                </button>
+                <button type="button" className={chip(!useTex)} aria-pressed={!useTex} onClick={() => setUseTex(false)}>
+                  用默认画法
+                </button>
+              </div>
+            )}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="text-[11px] text-bp-faint leading-relaxed">
+            AI 只出一小块材质样本，看不到户型，所以不会多出柜子或挪位。每个「AI 生成」= 用你的 Gemini key 出 1 张小图；也可以直接上传自己的材质照片，不花钱。
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 pt-1">
             {refs.map((r, i) => (
               <span key={r.url} className="relative inline-block w-14 h-14 rounded-lg overflow-hidden border border-bp-line">
-                <img src={r.url} alt={`材质参考图 ${i + 1}`} className="w-full h-full object-cover" />
-                <button type="button" className="absolute top-0 right-0 p-0.5 bg-white/85 text-bp-muted hover:text-bp-danger" onClick={() => removeRef(i)} aria-label={`移除材质参考图 ${i + 1}`}>
+                <img src={r.url} alt={`效果图参考 ${i + 1}`} className="w-full h-full object-cover" />
+                <button
+                  type="button"
+                  className="absolute top-0 right-0 p-0.5 bg-white/85 text-bp-muted hover:text-bp-danger"
+                  onClick={() => setRefs((cur) => cur.filter((_, k) => k !== i))}
+                  aria-label={`移除效果图参考 ${i + 1}`}
+                >
                   <X size={11} />
                 </button>
               </span>
             ))}
-            {refs.length < MAX_POLISH_REFS && (
+            {refs.length < MAX_SWATCH_REFS && (
               <label className={`${chip(false)} cursor-pointer`}>
                 <Upload size={12} className="inline -mt-0.5 mr-1" />
-                加材质参考图（可选，最多 {MAX_POLISH_REFS} 张）
+                加效果图给 AI 参考材质（可选，最多 {MAX_SWATCH_REFS} 张）
                 <input type="file" accept="image/*" multiple className="hidden" onChange={onPickRefs} />
               </label>
             )}
           </div>
+
+          <div className="divide-y divide-bp-line">
+            {TEXTURE_SLOTS.map((slot) => {
+              const t = textures[slot.id];
+              const working = busy === slot.id;
+              return (
+                <div key={slot.id} className="flex flex-wrap items-center gap-2 py-2" data-testid={`slot-${slot.id}`}>
+                  <span className="w-12 h-12 shrink-0 rounded-lg overflow-hidden border border-bp-line bg-bp-tint flex items-center justify-center">
+                    {working ? <Loader2 size={15} className="animate-spin text-bp-muted" /> : t ? <img src={t.url} alt={`${slot.zh}贴图`} className="w-full h-full object-cover" /> : null}
+                  </span>
+                  <span className="w-20 shrink-0 text-xs text-bp-ink">
+                    {slot.zh}
+                    <span className="block text-[10px] text-bp-faint">{t ? (t.ai ? 'AI 生成' : '已上传') : '默认画法'}</span>
+                  </span>
+                  <input
+                    className={input}
+                    value={hints[slot.id] || ''}
+                    onChange={(e) => setHints((h) => ({ ...h, [slot.id]: e.target.value }))}
+                    placeholder={`给 AI 的补充说明（可选）${SLOT_HINTS[slot.id]}`}
+                    aria-label={`${slot.zh}的补充说明`}
+                  />
+                  <button type="button" className={chip(false)} disabled={!!busy || !hasKey} onClick={() => generate(slot.id)}>
+                    <Wand2 size={12} className="inline -mt-0.5 mr-1" />
+                    AI 生成
+                  </button>
+                  <label className={`${chip(false)} cursor-pointer`}>
+                    <Upload size={12} className="inline -mt-0.5 mr-1" />
+                    上传图片
+                    <input type="file" accept="image/*" className="hidden" onChange={(e) => onUploadTexture(slot.id, e)} aria-label={`上传${slot.zh}图片`} />
+                  </label>
+                  {t && (
+                    <button type="button" className={chip(false)} onClick={() => clearTexture(slot.id)} aria-label={`清除${slot.zh}贴图`}>
+                      清除
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-bp-dark text-bp-light text-sm font-medium hover:opacity-90 disabled:opacity-50"
-              disabled={busy || !hasKey}
-              onClick={polish}
+              disabled={!!busy || !hasKey}
+              onClick={() => generate('all')}
             >
-              {busy ? <Loader2 size={15} className="animate-spin" /> : <Wand2 size={15} />} {busy ? 'AI 正在美化…' : 'AI 美化这张图（1 次出图）'}
+              {busy ? <Loader2 size={15} className="animate-spin" /> : <Wand2 size={15} />}
+              {busy ? `正在生成${TEXTURE_SLOTS.find((s) => s.id === busy)?.zh || ''}…` : `四个都用 AI 生成（${TEXTURE_SLOTS.length} 次出图）`}
             </button>
             <span className="text-[11px] text-bp-faint">本次已出图 {runs} 次</span>
           </div>
-          {!hasKey && <div className="text-[11px] text-bp-danger">还没有 Gemini key：先回到 UKIR STUDIO，在右上角设置里填好，再回来这一页。</div>}
-          {busy && <div className="text-[11px] text-bp-faint">{msg || '通常要 30–90 秒，这期间不要切换视角。'}</div>}
-          {error && <div className="text-[11px] text-bp-danger">美化失败：{error}</div>}
-          {shown && (
-            <div className="flex flex-wrap items-center gap-3 pt-1">
-              <label className="flex items-center gap-2 text-xs text-bp-muted">
-                精确图
-                <input type="range" min="0" max="1" step="0.05" value={mixAI} onChange={(e) => setMixAI(Number(e.target.value))} aria-label="在精确图和 AI 美化之间对比" />
-                AI 美化
-              </label>
-              <button type="button" className={chip(false)} onClick={() => saveBlob(shown.blob, `${fileStem}-ai.jpg`)}>
-                <Download size={12} className="inline -mt-0.5 mr-1" />
-                下载 AI 美化的图
-              </button>
-              <span className="text-[11px] text-bp-faint basis-full">来回拖动滑杆：墙、柜子、桌椅如果在两张图之间「跳」了，就是 AI 把它挪位了。</span>
-            </div>
-          )}
-          {polished && !shown && <div className="text-[11px] text-bp-faint">视角或选项改过了，上一张 AI 美化的结果不再对应这张图；改回去可以再看到。</div>}
+          {!hasKey && <div className="text-[11px] text-bp-danger">还没有 Gemini key：AI 生成用不了，可以先上传图片试；要用 AI 请回到 UKIR STUDIO 在右上角设置里填好再回来。</div>}
+          {busy && <div className="text-[11px] text-bp-faint">{msg || '每张通常要 10–40 秒。'}</div>}
+          {error && <div className="text-[11px] text-bp-danger">没成功：{error}</div>}
+          <div className="text-[11px] text-bp-faint leading-relaxed">
+            贴图会左右、上下镜像着平铺，所以不是无缝的图也看不出接缝。木纹默认是横向的，程序会让它沿着柜子的长边走。光影仍然是程序画的。
+          </div>
         </div>
 
         <div className={card}>

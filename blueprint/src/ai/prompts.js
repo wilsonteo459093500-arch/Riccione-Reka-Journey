@@ -283,28 +283,38 @@ ${list.map((f) => `- ${f}`).join('\n')}
 Keep everything else exactly as it is in image 1: the same camera and framing, the same walls and furniture that are not mentioned, the same materials, colours, lighting, shadows and background. Do not restyle or re-imagine the picture. No text, no labels, no watermark, no logo.`;
 }
 
+// ---------------------------------------------------------------------------
+// 「材质贴图」：AI 只出一小块材质样本，程序把它贴到按坐标画好的柜子、台面、地板上（AI 接触不到户型）
+// ---------------------------------------------------------------------------
+
+/** 四个贴图槽位的默认描述（英文，写进提示词）和「从参考图里取哪种材质」 */
+export const SWATCH_SLOTS = {
+  floor: {
+    desc: 'the face of a light natural oak timber floor board (one continuous piece of wood, no plank joints)',
+    from: 'the timber floor',
+    wood: true,
+  },
+  cabinet: { desc: 'a walnut wood veneer cabinet door panel with fine straight grain, matte finish', from: 'the wood veneer of the cabinetry', wood: true },
+  worktop: { desc: 'a polished white marble slab with soft grey veining', from: 'the stone of the worktops or stone wall panels', wood: false },
+  fabric: { desc: 'a warm grey-taupe woven upholstery fabric', from: 'the upholstery of the chairs or sofa', wood: false },
+};
+
 /**
- * 「AI 美化」（英文，给出图模型；随附 [程序画的精确图, ...材质参考图]）—— 只换材质和光影，位置一律不动
- * @param {{ inventory?:string[], refCount?:number, view?:'top'|'persp'|'iso' }} args
- *   inventory：由几何自动生成的物件清单（「4 x chair」…），让模型知道画面里应该有什么、不该多出什么
+ * 材质样本的出图提示词（英文；随附 0–3 张效果图作参考）
+ * @param {{ slot:'floor'|'cabinet'|'worktop'|'fabric', refCount?:number, hint?:string }} args
  */
-export function reskinPromptText({ inventory = [], refCount = 0, view = 'top' } = {}) {
-  const viewName = view === 'iso' ? 'an angled axonometric 3D view with low cut walls' : view === 'persp' ? 'a look-down 3D floor plan with mild perspective' : 'a strict top-down 3D floor plan';
-  const list = inventory.map((l) => String(l || '').trim()).filter(Boolean);
+export function swatchPromptText({ slot, refCount = 0, hint = '' } = {}) {
+  const def = SWATCH_SLOTS[slot] || SWATCH_SLOTS.cabinet;
+  const note = String(hint || '').trim();
   const refs =
     refCount > 0
-      ? `\n\nMATERIAL REFERENCES — ${imagesRange(2, refCount)} ${refCount > 1 ? 'are interior renders' : 'is an interior render'} of this project. Use ${refCount > 1 ? 'them' : 'it'} ONLY for materials and colours (wood veneer, stone, metal, fabric, floor finish). Ignore ${refCount > 1 ? 'their' : 'its'} layout, camera and furniture positions completely.`
+      ? `\n\nREFERENCE — ${imagesRange(1, refCount)} ${refCount > 1 ? 'are interior renders' : 'is an interior render'} of a project. Match the colour, tone and ${def.wood ? 'grain' : 'pattern'} of ${def.from} shown there. Do NOT reproduce the room, the furniture, the lighting or any object from ${refCount > 1 ? 'them' : 'it'} — output only the bare material.`
       : '';
-  return `Image 1 is a precise 3D floor plan render (${viewName}) drawn by a program from measured coordinates. Every wall, opening, cabinet, desk and chair in it is already at its exact position and size.
+  return `Create ONE flat material texture swatch: ${def.desc}.
 
-Re-render image 1 as a photorealistic architectural visualisation. This is a MATERIAL AND LIGHTING pass only:
-- Same camera, framing and aspect ratio. The result must line up with image 1 when laid over it.
-- Keep every object's position, footprint, size, height and shape exactly as in image 1. Do not move, rotate, resize, merge or split anything.
-- Do not add anything: no extra furniture, cabinets, shelves, walls, doors, plants, rugs, lamps, decor, people or text. Do not remove anything.${list.length ? `\n- The scene contains exactly: ${list.join('; ')}. Nothing else.` : ''}
-- A dashed translucent outline on a desk marks a wall-hung cabinet above it: keep it as a subtle outline or leave it out; never turn it into a solid object standing on the desk or floor.
-
-What to improve:
-- Materials: fine-grained walnut veneer on the cabinetry, white marble with soft grey veining on the worktops, light oak herringbone floor, matte plaster walls, clear glass with soft reflections, upholstered chairs.
-- Lighting: soft global illumination, gentle contact shadows and ambient occlusion, warm natural light from the same direction as in image 1.
-- Background: the same clean seamless warm light-beige. No text, no labels, no watermark, no logo, no border.${refs}`;
+- Straight-on view of the bare surface, as if a piece of it was scanned on a flatbed scanner. The material fills the entire square frame, edge to edge.
+- Perfectly even, diffuse lighting: no shadows, no highlights or reflections, no vignette, no gradient from one side to the other.
+- Only the material: no objects, no furniture, no room, no edges, no borders, no joints or seams, no frame, no text, no logo, no watermark.
+- The same scale and density across the whole image.${def.wood ? '\n- The wood grain runs horizontally, from the left edge to the right edge.' : ''}
+- Tileable: the left edge continues naturally into the right edge, and the top edge into the bottom edge.${refs}${note ? `\n\nDESIGNER NOTE: ${note}` : ''}`;
 }
