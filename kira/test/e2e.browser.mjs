@@ -557,6 +557,13 @@ try {
 
   // ---------- AI 识图（/api/plan-ai 用假的回答，不花钱）：密码 → AI 读到的比例 → 2 个建议 → 取消 1 个 → 加入 → 撤销 ----------
   const aiAnswer = JSON.parse(readFileSync(path.join(FIX, 'plan-ai-demo.json'), 'utf8'));
+  // 假回答是整张原图的 px；送去的图会去白边 / 框选 → 换成送去那张图的 px（同真的 AI）
+  const toSent = (ans, body) => {
+    const c = body.crop || { x: 0, y: 0, w: body.w }, k = body.w / c.w;
+    const P = (p) => [(p[0] - c.x) * k, (p[1] - c.y) * k];
+    const B = (b) => [...P([b[0], b[1]]), ...P([b[2], b[3]])];
+    return { ...ans, scale: { ...ans.scale, a: P(ans.scale.a), b: P(ans.scale.b) }, rooms: ans.rooms.map((r) => ({ ...r, box: B(r.box) })), suggestions: ans.suggestions.map((sg) => ({ ...sg, segments: sg.segments.map(B) })) };
+  };
   const actx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const ap = await actx.newPage();
   const aerr = [];
@@ -566,7 +573,7 @@ try {
     aiCalls += 1;
     aiBody = route.request().postDataJSON();
     if (route.request().headers()['x-kira-ai-passcode'] !== 'team123') return route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ error: 'passcode' }) });
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ result: aiAnswer, model: 'claude-opus-5-5', usage: { input: 2600, output: 1400 } }) });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ result: toSent(aiAnswer, aiBody), model: 'claude-opus-5-5', usage: { input: 2600, output: 1400 } }) });
   });
   await ap.goto(URL);
   await ap.getByRole('button', { name: /Skip 跳过/ }).click();
@@ -581,7 +588,7 @@ try {
   await ap.locator('[data-plan-ai-pass]').fill('team123');
   await ap.locator('[data-plan-ai-pass-ok]').click();
   await ap.waitForSelector('[data-plan-ai-scale-ok]', { timeout: 10000 });
-  check('v3 AI: wrong passcode is refused, right one works; image sent ≤ 1568 px as JPEG', aiCalls === 2 && aiBody.w === 1200 && aiBody.h === 800 && aiBody.image.startsWith('/9j/'), `${aiCalls} calls, ${aiBody?.w}×${aiBody?.h}`);
+  check('v3 AI: wrong passcode is refused, right one works; image sent as JPEG with the white margin trimmed', aiCalls === 2 && aiBody.image.startsWith('/9j/') && aiBody.crop.x > 60 && aiBody.crop.x < 100 && aiBody.crop.y < 40 && aiBody.crop.y > 5 && aiBody.w < 1100 && aiBody.w === aiBody.crop.w, `${aiCalls} calls, ${aiBody?.w}×${aiBody?.h} crop ${JSON.stringify(aiBody?.crop)}`);
   await ap.locator('[data-plan-ai-scale-ok]').click(); // 还没定比例：用 AI 读到的 2.70 m
   await ap.waitForSelector('[data-plan-ai-list]');
   const items = await ap.locator('[data-plan-ai-item="ok"]').count();
@@ -614,10 +621,16 @@ try {
   const ferr = [];
   fp.on('pageerror', (e) => ferr.push(e.message));
   let fCalls = 0, fBody = null;
+  // 这里的假回答：衣柜那条线故意偏进房间 16 px（AI 常见的误差）→ 要贴回墙上；多两间重叠的小房间测名字不叠
+  const offAnswer = {
+    ...aiAnswer,
+    rooms: [...aiAnswer.rooms, { type: 'bathroom', name: 'Bath 1', box: [104, 104, 220, 170] }, { type: 'bathroom', name: 'Bath 2', box: [104, 104, 230, 180] }],
+    suggestions: aiAnswer.suggestions.map((sg, i) => (i === 0 ? { ...sg, segments: [[104, 120, 344, 120]], note: 'Top wall."}],"notes":""}' } : sg)),
+  };
   await fp.route('**/api/plan-ai', async (route) => {
     fCalls += 1;
     fBody = route.request().postDataJSON();
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ result: aiAnswer, model: 'claude-opus-5-5', usage: { input: 2600, output: 1400 } }) });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ result: toSent(offAnswer, fBody), model: 'claude-opus-5-5', usage: { input: 2600, output: 1400 } }) });
   });
   await fp.goto(URL);
   await fp.getByRole('button', { name: /Skip 跳过/ }).click();
@@ -653,6 +666,43 @@ try {
     fCalls === 2 && (await fp.locator('.fixed.inset-0 img[alt="plan"]').count()) === 0 && ktxt && Math.abs(Number(ktxt[1]) - 10) < 0.4 && Math.abs(fBody.mmPerPx - 10) < 0.4 && (await fp.locator('[data-plan-ai-item="ok"]').count()) === 2,
     `${fCalls} calls, ${ktxt?.[1]} mm/px, sent ${fBody?.mmPerPx}`);
   await fp.locator('[data-plan-board]').screenshot({ path: path.join(outDir, 'v3-ukur-to-ai.png') });
+  // 房间名不叠在一起；乱码说明被清掉
+  const labels = await fp.locator('[data-plan-ai-label]').evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom]; }));
+  const clash = labels.some((a, i) => labels.some((b, j) => j > i && a[0] < b[2] - 1 && b[0] < a[2] - 1 && a[1] < b[3] - 1 && b[1] < a[3] - 1));
+  const listTxt = await fp.locator('[data-plan-ai-list]').innerText();
+  check('AI fix: room names on the plan do not overlap; JSON junk in notes is cleaned', labels.length === 4 && !clash && /Top wall\./.test(listTxt) && !/notes/.test(listTxt), `${labels.length} labels, clash ${clash}`);
+  // 加入 → 衣柜贴回上墙（墙面 y 104 px），不是 AI 给的 120
+  await fp.locator('[data-plan-ai-add]').click();
+  await fp.waitForTimeout(300);
+  const wardY = await fp.evaluate(() => { const ys = [...document.querySelectorAll('[data-pcab] rect')].map((r) => Number(r.getAttribute('y'))).filter(Number.isFinite); return Math.min(...ys); });
+  check('AI fix: a suggestion 16 px off the wall snaps back onto the wall when added', Math.abs(wardY - 104) <= 2.5, `top ${wardY}`);
+  // 框选范围：只送框起来的左半边
+  await fp.locator('[data-plan-ai]').click();
+  await fp.getByRole('button', { name: /Read 开始/ }).click();
+  await fp.waitForSelector('[data-plan-ai-list]', { timeout: 10000 });
+  await fp.locator('[data-plan-ai-area]').first().click();
+  const fpt = planPt(fp);
+  const [ax, ay] = await fpt(60, 80), [bx, by] = await fpt(620, 720);
+  await fp.mouse.move(ax, ay); await fp.mouse.down(); await fp.mouse.move((ax + bx) / 2, (ay + by) / 2, { steps: 4 }); await fp.mouse.move(bx, by, { steps: 4 }); await fp.mouse.up();
+  await fp.getByRole('button', { name: /Read 开始/ }).click();
+  await fp.waitForSelector('[data-plan-ai-list]', { timeout: 10000 });
+  const ac = fBody.crop;
+  check('AI fix: "Select area" sends only the boxed part (crop ≈ 60,80 → 620,720)', Math.abs(ac.x - 60) < 4 && Math.abs(ac.y - 80) < 4 && Math.abs(ac.x + ac.w - 620) < 4 && Math.abs(ac.y + ac.h - 720) < 4 && fBody.w === Math.round(ac.w) && /只读框起来/.test(await fp.locator('[data-plan-ai-panel]').innerText()), JSON.stringify(ac));
+  // 图上已有的柜子会告诉 AI；重复的建议不勾
+  check('AI fix: cabinets already on the plan (inside the boxed area) are sent to the AI and the same suggestions are not ticked', fBody.cabinets.length === 1 && fBody.cabinets[0].code === 'K1' && (await fp.locator('[data-plan-ai-pick="yes"]').count()) === 0 && (await fp.locator('[data-plan-ai-why]').count()) >= 2, `${fBody.cabinets.length} cabs`);
+  // 手机截图式的黑边：送去前自动裁掉
+  const barred = await fp.evaluate(async () => {
+    const img = await new Promise((res) => { const i = new Image(); i.onload = () => res(i); i.src = document.querySelector('[data-plan-svg] image').getAttribute('href'); });
+    const c = document.createElement('canvas'); c.width = 1500; c.height = 800;
+    const g = c.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, 1500, 800); g.drawImage(img, 150, 0, 1200, 800);
+    return c.toDataURL('image/png').split(',')[1];
+  });
+  await fp.getByRole('button', { name: /New/ }).first().click();
+  const [fc2] = await Promise.all([fp.waitForEvent('filechooser'), fp.locator('[data-top-plan-ai]').click()]);
+  await fc2.setFiles({ name: 'screenshot.png', mimeType: 'image/png', buffer: Buffer.from(barred, 'base64') });
+  await fp.getByRole('button', { name: /Read 开始/ }).click({ timeout: 15000 });
+  await fp.waitForSelector('[data-plan-ai-panel="result"]', { timeout: 10000 });
+  check('AI fix: black side bars of a phone screenshot are cut before sending', fBody.crop.x > 210 && fBody.crop.x < 250 && fBody.crop.x + fBody.crop.w < 1270 && fBody.crop.x + fBody.crop.w > 1240, JSON.stringify(fBody.crop));
   check('find AI: no browser errors', ferr.length === 0, ferr.join(' | '));
   await fctx.close();
 

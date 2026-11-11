@@ -47,16 +47,17 @@ export const RESULT_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['template', 'room', 'segments', 'note'],
+        required: ['template', 'room', 'segments', 'confidence', 'note'],
         properties: {
           template: { type: 'string', enum: TEMPLATES },
+          confidence: { type: 'string', enum: ['high', 'low'], description: 'low when the wall, the room or the scale is hard to read' },
           room: { type: 'string', description: 'The name of one of the rooms above' },
           segments: {
             type: 'array',
             items: { type: 'array', items: { type: 'number' } },
-            description: 'Each [x0, y0, x1, y1]: the stretch of the wall\'s inner face the cabinet stands against, in image pixels. One segment, except a kitchen: 2 for an L or a galley, 3 for a U, in order, sharing corner points for L / U.',
+            description: 'Each [x0, y0, x1, y1]: the stretch of the wall\'s inner face (the room side of the wall line) the cabinet stands against, in image pixels, horizontal or vertical, inside the room\'s box. One segment, except a kitchen: 2 for an L or a galley, 3 for a U, in order, sharing corner points for L / U.',
           },
-          note: { type: 'string', description: 'One short sentence: why here (English)' },
+          note: { type: 'string', description: 'One short plain sentence: why here (English, no quotes or JSON)' },
         },
       },
     },
@@ -72,7 +73,9 @@ Cabinet types you may suggest:
 - tv: the TV wall in the living room, usually the long solid wall facing the sofa area.
 - shoe: a shoe / foyer cabinet beside the main entrance door, usually 1.0-1.5 m.
 
-Give positions as segments along the inner face of the wall in the image's pixel coordinates (origin top-left, x to the right, y down). Measure lengths from the plan's own scale or printed dimensions when you can. Only suggest a cabinet where you are reasonably confident there is a suitable wall; leave a room out rather than guess. Do not give depths or heights: the company's templates set those.
+Cover the whole plan: one wardrobe in every bedroom and the master bedroom, the kitchen, the living room TV wall and a shoe cabinet at the main entrance. A sheet may show several floors side by side (for example "GROUND FLOOR PLAN" and "FIRST FLOOR PLAN"); read every floor. When a wall or a room is hard to read, still give your best suggestion with confidence "low" instead of leaving it out. Skip only rooms that have no possible wall, and rooms that already have a cabinet listed below.
+
+Give positions as segments along the inner face of the wall (the side facing into the room, not the outside of the building) in the image's pixel coordinates (origin top-left, x to the right, y down). Segments are horizontal or vertical and lie inside the room; a cabinet never crosses a door opening. Rooms are boxes of their inner walls. Measure lengths from the plan's own scale or printed dimensions when you can. Do not give depths or heights: the company's templates set those. Notes are short plain English sentences.
 
 If the plan prints a dimension (for example "3000", "3.0m" or "10'0\\"") along a dimension line, report one clear one as the scale (the two ends of the line and the value in millimetres). If none is readable, set scale.found to false.`;
 
@@ -99,11 +102,20 @@ export async function checkAccess(req, env, fetchImpl = fetch) {
 }
 
 // ---------------- 问 Claude ----------------
-export async function readPlan(client, { image, w, h, mmPerPx, ceilingH }) {
+// 图上已有的柜子：[{ code, box:[x0,y0,x1,y1] }]（送去那张图的 px）
+export function cabinetFacts(cabinets) {
+  const list = (Array.isArray(cabinets) ? cabinets : []).slice(0, 40)
+    .filter((c) => Array.isArray(c?.box) && c.box.length === 4 && c.box.every((v) => Number.isFinite(Number(v))))
+    .map((c) => `${String(c.code || 'cabinet').replace(/[^\w -]/g, '').slice(0, 12)} at [${c.box.map((v) => Math.round(Number(v))).join(', ')}]`);
+  return list.length ? `Cabinets already drawn on the plan (do not suggest these again): ${list.join('; ')}.` : '';
+}
+
+export async function readPlan(client, { image, w, h, mmPerPx, ceilingH, cabinets }) {
   const facts = [
     `The image is ${w} x ${h} pixels.`,
     mmPerPx > 0 ? `The salesperson already set the scale: 1 pixel = ${Number(mmPerPx).toFixed(2)} mm in this image.` : 'The scale is not set yet.',
     ceilingH > 0 ? `Ceiling height ${ceilingH} mm.` : '',
+    cabinetFacts(cabinets),
   ].filter(Boolean).join(' ');
   const stream = client.beta.messages.stream({
     model: MODEL,
@@ -145,7 +157,7 @@ export function createHandler({ env = process.env, makeClient = () => new Anthro
     if (!image || image.length > MAX_BODY_CHARS || !/^[A-Za-z0-9+/=]+$/.test(image.slice(0, 200))) return send(400, { error: 'bad_image' });
     if (!(w > 0 && h > 0 && w <= 4000 && h <= 4000)) return send(400, { error: 'bad_size' });
     try {
-      const r = await readPlan(makeClient(), { image, w, h, mmPerPx: Number(body?.mmPerPx) || 0, ceilingH: Number(body?.ceilingH) || 0 });
+      const r = await readPlan(makeClient(), { image, w, h, mmPerPx: Number(body?.mmPerPx) || 0, ceilingH: Number(body?.ceilingH) || 0, cabinets: body?.cabinets });
       return send(r.status, r.body);
     } catch (e) {
       if (e instanceof Anthropic.AuthenticationError) return send(503, { error: 'key_invalid' });

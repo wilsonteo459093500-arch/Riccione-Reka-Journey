@@ -4,12 +4,13 @@
 //   拖拉写法同 BlockEditor.jsx：setPointerCapture、getScreenCTM().inverse()；拖完才写回报价（一步撤销）。
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Upload, Ruler, Square, Undo2, Redo2, Maximize2, Minimize2, RotateCw, Pencil, X, Trash2, ChevronDown, ChevronRight, MapPin, Crosshair, AlertTriangle, Loader2, ScanSearch, Sparkles } from 'lucide-react';
+import { Upload, Ruler, Square, Undo2, Redo2, Maximize2, Minimize2, RotateCw, Pencil, X, Trash2, ChevronDown, ChevronRight, MapPin, Crosshair, AlertTriangle, Loader2, ScanSearch, Sparkles, BoxSelect, Copy } from 'lucide-react';
 import { T } from '../../theme.js';
 import { BLOCK_COLORS, BLOCK_SELECTED, INK } from '../../render/palette.js';
 import { mmToM, uid } from '../../planner/model.js';
 import { cabinetTitle, templateOf } from '../../planner/templates.js';
-import { aiScaleToPlan, buildSuggestions, applySuggestions } from '../../planner/planAi.js';
+import { aiScaleToPlan, buildSuggestions, applySuggestions, sentToPlan, cleanText } from '../../planner/planAi.js';
+import { snapSegment } from '../../planner/wallSnap.js';
 import { readPlanWithAi, needsPasscode, savedPasscode, savePasscode, aiErrorText } from '../../services/planAi.js';
 import { mmPerPx, planReady, placedFootprint, placeAt, rotatePlace, dragPlanEdge, aisleWarnings, dist } from '../../planner/plan.js';
 import { isPdf, prepareImage, openPdf, renderPdfPage, pdfThumb, savePlanImage, planImageUrl, queuePlanDelete } from '../../services/planImages.js';
@@ -46,7 +47,7 @@ const PlanBoard = forwardRef(function PlanBoard({ plans = [], zones = [], onChan
   const [open, setOpen] = useState(true);
   const [activeId, setActiveId] = useState(() => plans[0]?.id || null);
   const plan = plans.find((p) => p.id === activeId) || plans[0] || null;
-  const [mode, setMode] = useState('view'); // view | scale | draw | place
+  const [mode, setMode] = useState('view'); // view | scale | draw | place | aiArea（框选要 AI 读的范围）
   const [placing, setPlacing] = useState(null); // 要放到图上的柜子 id
   const [sel, setSel] = useState(null); // 选中的柜子 id
   const [scalePts, setScalePts] = useState([]);
@@ -198,33 +199,45 @@ const PlanBoard = forwardRef(function PlanBoard({ plans = [], zones = [], onChan
   };
 
   // ---------------- AI 识图 ----------------
+  const cabsOn = (p) => live.current.zones.flatMap((z) => z.cabinets || []).filter((c) => c.place?.planId === p.id);
   const suggest = (r, p) => {
-    const sugg = planReady(p) ? buildSuggestions(r.result, p, { sentW: r.sentW }) : [];
-    return { sugg, picked: new Set(sugg.filter((x) => x.ok).map((x) => x.id)) };
+    const snap = r.dark ? (seg, box, tpl) => snapSegment(r.dark, seg, box, { cutGaps: tpl !== 'kitchen' }) : null;
+    const sugg = planReady(p) ? buildSuggestions(r.result, p, { sentW: r.sentW, crop: r.crop, snap, existing: cabsOn(p) }) : [];
+    return { sugg, picked: new Set(sugg.filter((x) => x.ok && x.pick !== false).map((x) => x.id)) };
   };
-  const runAi = async (passcode, p = plan) => {
+  // area：只读这一块（原图 px { x, y, w, h }）；不给 = 整张（自动去黑边 / 白边）
+  const runAi = async (passcode, p = plan, area = null) => {
     if (!p) return;
-    setAi({ stage: 'busy', planId: p.id });
+    setAi({ stage: 'busy', planId: p.id, area });
     try {
-      const r = await readPlanWithAi(p, { mmPerPx: mmPerPx(p), passcode });
+      const kk = mmPerPx(p);
+      const cabinets = kk > 0 ? cabsOn(p).map((c) => ({ code: c.code, box: placedFootprint(c).bbox.map((v) => v / kk) })) : [];
+      const r = await readPlanWithAi(p, { mmPerPx: kk, passcode, area, cabinets });
       if (!alive.current) return;
       if (needsPasscode()) savePasscode(passcode);
-      const scale = planReady(p) ? null : aiScaleToPlan(r.result, r.sentW, p);
-      setAi({ stage: 'result', planId: p.id, r, scale, ...suggest(r, p) });
+      const scale = planReady(p) ? null : aiScaleToPlan(r.result, r.sentW, p, r.crop);
+      setAi({ stage: 'result', planId: p.id, area, r, scale, ...suggest(r, p) });
     } catch (e) {
       if (!alive.current) return;
-      if (e?.code === 'passcode') { savePasscode(''); setAi({ stage: 'pass', planId: p.id, error: aiErrorText(e) }); return; }
-      setAi({ stage: 'error', planId: p.id, error: aiErrorText(e) });
+      if (e?.code === 'passcode') { savePasscode(''); setAi({ stage: 'pass', planId: p.id, area, error: aiErrorText(e) }); return; }
+      setAi({ stage: 'error', planId: p.id, area, error: aiErrorText(e) });
     }
   };
-  const startAi = async (p = plan) => {
+  const startAi = async (p = plan, area = null) => {
     if (!p) { pickFile(true); return; } // 还没有户型图：先选图，上传完自动接着做
     if (ai?.stage === 'busy') return;
-    const ok = await confirm({ title: 'AI 识图 Read with AI', message: 'The floor plan is sent to AI to find the rooms and suggest cabinets (about 20–40 s, roughly US$0.10 each time). Nothing is added until you tick and confirm. 会把这张户型图送去 AI 认房间、建议柜子（约 20–40 秒，每次约 US$0.10）。勾选确认后才加入报价。', confirmText: 'Read 开始', cancelText: 'Cancel 取消' });
+    const ok = await confirm({ title: 'AI 识图 Read with AI', message: `${area ? 'Only the area you boxed is sent. 只送框起来的那一块。 ' : ''}The floor plan is sent to AI to find the rooms and suggest cabinets (about 20–40 s, roughly US$0.10 each time). Nothing is added until you tick and confirm. 会把这张户型图送去 AI 认房间、建议柜子（约 20–40 秒，每次约 US$0.10）。勾选确认后才加入报价。`, confirmText: 'Read 开始', cancelText: 'Cancel 取消' });
     if (!ok || !alive.current) return;
-    if (needsPasscode() && !savedPasscode()) { setAiPass(''); setAi({ stage: 'pass', planId: p.id }); return; }
-    runAi(savedPasscode(), p);
+    if (needsPasscode() && !savedPasscode()) { setAiPass(''); setAi({ stage: 'pass', planId: p.id, area }); return; }
+    runAi(savedPasscode(), p, area);
   };
+  // 复制 AI 原始结果（给开发重放 / 调整）
+  const copyAi = async () => {
+    if (!ai?.r) return;
+    const txt = JSON.stringify({ kira: 'plan-ai', sentW: ai.r.sentW, sentH: ai.r.sentH, crop: ai.r.crop, model: ai.r.model, result: ai.r.result });
+    try { await navigator.clipboard.writeText(txt); toast('Copied 已复制 AI 结果', 'success'); } catch { toast('Could not copy 复制不了', 'error'); }
+  };
+  const [aiHi, setAiHi] = useState(null); // 列表里指着的建议 → 图上加粗
   const useAiScale = () => {
     if (!ai?.scale || !plan) return;
     const p = { ...plan, scale: ai.scale };
@@ -327,7 +340,7 @@ const PlanBoard = forwardRef(function PlanBoard({ plans = [], zones = [], onChan
       dragRef.current = { ...base, kind: 'tap', tapCab: cid };
       return;
     }
-    if (mode === 'draw' && ready && !base.touch) { dragRef.current = { ...base, kind: 'maybeRect' }; return; }
+    if (((mode === 'draw' && ready) || mode === 'aiArea') && !base.touch) { dragRef.current = { ...base, kind: 'maybeRect' }; return; }
     dragRef.current = { ...base, kind: 'maybePan' };
   };
 
@@ -382,6 +395,15 @@ const PlanBoard = forwardRef(function PlanBoard({ plans = [], zones = [], onChan
   };
 
   const finishRect = (a, b, touch = false) => {
+    if (mode === 'aiArea') {
+      const x = Math.max(0, Math.min(a[0], b[0])), y = Math.max(0, Math.min(a[1], b[1]));
+      const w = Math.min(W, Math.max(a[0], b[0])) - x, h = Math.min(H, Math.max(a[1], b[1])) - y;
+      setMode('view');
+      if (w < W * 0.05 || h < H * 0.05) { toast('Area too small 框太小了', 'info'); return; }
+      const go = () => startAi(plan, { x, y, w, h });
+      if (touch) setTimeout(go, 450); else go();
+      return;
+    }
     const [ax, ay] = pxToMm(a), [bx, by] = pxToMm(b);
     const rect = { x: Math.min(ax, bx), y: Math.min(ay, by), w: Math.abs(bx - ax), h: Math.abs(by - ay) };
     if (rect.w < 200 || rect.h < 150) { toast('Box too small 框太小了（至少 0.20 × 0.15 m）', 'info'); return; }
@@ -416,7 +438,7 @@ const PlanBoard = forwardRef(function PlanBoard({ plans = [], zones = [], onChan
       setScalePts(pts);
       return;
     }
-    if (mode === 'draw' && ready) {
+    if ((mode === 'draw' && ready) || mode === 'aiArea') {
       if (!corner) { setCorner(sp); return; }
       finishRect(corner, sp, d.touch); setCorner(null);
       return;
@@ -569,6 +591,7 @@ const PlanBoard = forwardRef(function PlanBoard({ plans = [], zones = [], onChan
                 )}
               </span>
             )}
+            {mode === 'aiArea' && <span className="flex items-center gap-1.5" data-plan-ai-area-hint><BoxSelect size={12} style={{ color: AI_COLOR }} /> {corner ? '点对角 Tap the opposite corner' : '框出要 AI 读的那一块（例如其中一层楼）— Box the part for AI to read (e.g. one floor)'} <Btn onClick={() => { setMode('view'); setCorner(null); }}><X size={12} /></Btn></span>}
             {mode === 'place' && <span className="flex items-center gap-1.5"><MapPin size={12} style={{ color: T.wood }} /> 点图上的位置放 {allCabs.find((x) => x.cab.id === placing)?.cab.code} — Tap where it goes <Btn onClick={() => { setMode('view'); setPlacing(null); }}><X size={12} /></Btn></span>}
           </div>
 
@@ -618,25 +641,48 @@ const PlanBoard = forwardRef(function PlanBoard({ plans = [], zones = [], onChan
                 return (
                   <g pointerEvents="none">
                     <rect x={x} y={y} width={w} height={h} fill={BLOCK_COLORS.open} fillOpacity={0.6} stroke={BLOCK_SELECTED} strokeWidth={sw * 1.4} strokeDasharray={`${6 * upp} ${4 * upp}`} />
-                    <text x={x + w / 2} y={y + h / 2} fontSize={fs} textAnchor="middle" dominantBaseline="central" fill={T.ink} fontWeight={700} data-plan-draw-size>{mmToM(snapMm(w * k))} × {mmToM(snapMm(h * k))} m</text>
+                    {mode !== 'aiArea' && <text x={x + w / 2} y={y + h / 2} fontSize={fs} textAnchor="middle" dominantBaseline="central" fill={T.ink} fontWeight={700} data-plan-draw-size>{mmToM(snapMm(w * k))} × {mmToM(snapMm(h * k))} m</text>}
                   </g>
                 );
               })()}
               {corner && <circle cx={corner[0]} cy={corner[1]} r={6 * upp} fill={BLOCK_SELECTED} pointerEvents="none" />}
               {/* AI 识图：房间名 + 建议柜子（虚线框，还没加入报价） */}
               {ai?.stage === 'result' && ai.planId === plan.id && (() => {
-                const kp = W / (ai.r.sentW || W);
+                const { pt } = sentToPlan(plan, ai.r.sentW || W, ai.r.crop);
+                const withSugg = new Set(ai.sugg.filter((x) => x.ok).map((x) => x.room));
+                // 房间框 + 名字的位置：框里左上角；和前面的名字撞到就往下挪一行
+                const used = [];
+                const rooms = (ai.r.result?.rooms || []).filter((rm) => Array.isArray(rm.box) && rm.box.length === 4 && rm.box.every((v) => Number.isFinite(Number(v)))).map((rm) => {
+                  const [a, b] = [pt([rm.box[0], rm.box[1]]), pt([rm.box[2], rm.box[3]])];
+                  const x = Math.min(a[0], b[0]), y = Math.min(a[1], b[1]), w = Math.abs(b[0] - a[0]), h = Math.abs(b[1] - a[1]);
+                  const name = cleanText(rm.name, 24);
+                  const f = Math.max(8 * upp, Math.min(fs, (w * 0.9) / Math.max(4, name.length * 0.6), h * 0.3));
+                  const lw = name.length * f * 0.6, lh = f * 1.2;
+                  let ly = y + 3 * upp;
+                  const hit = (yy) => used.some((u) => x + 3 * upp < u[2] && u[0] < x + 3 * upp + lw && yy < u[3] && u[1] < yy + lh);
+                  for (let n = 0; n < 6 && hit(ly); n++) ly += lh;
+                  used.push([x + 3 * upp, ly, x + 3 * upp + lw, ly + lh]);
+                  return { rm, name, x, y, w, h, f, ly };
+                });
                 return (
                   <g pointerEvents="none" data-plan-ai-overlay>
-                    {(ai.r.result?.rooms || []).filter((rm) => Array.isArray(rm.box) && rm.box.length === 4).map((rm, i) => (
-                      <text key={`r${i}`} x={((rm.box[0] + rm.box[2]) / 2) * kp} y={((rm.box[1] + rm.box[3]) / 2) * kp} fontSize={fs * 1.1} textAnchor="middle" dominantBaseline="central" fill={AI_COLOR} opacity={0.75} fontWeight={600}>{rm.name}</text>
-                    ))}
-                    {ready && ai.sugg.filter((x) => x.ok).map((x, i) => {
-                      const on = ai.picked.has(x.id);
+                    {/* 房间：细虚线框 + 框里左上角的小字（字号跟框宽缩，白边衬底，不会叠在一起）*/}
+                    {rooms.map(({ rm, name, x, y, w, h, f, ly }, i) => {
+                      const minor = rm.type === 'bathroom' || rm.type === 'other';
                       return (
-                        <g key={x.id} opacity={on ? 1 : 0.35}>
-                          {placedFootprint(x.cab).parts.map((pt) => { const r = rectPx(pt.rect); return <rect key={pt.id} x={r[0]} y={r[1]} width={r[2] - r[0]} height={r[3] - r[1]} fill={AI_COLOR} fillOpacity={pt.floor ? 0.18 : 0.06} stroke={AI_COLOR} strokeWidth={sw * 1.3} strokeDasharray={`${5 * upp} ${3 * upp}`} />; })}
-                          {(() => { const b = rectPx(placedFootprint(x.cab).bbox); return <text x={(b[0] + b[2]) / 2} y={(b[1] + b[3]) / 2} fontSize={fs} textAnchor="middle" dominantBaseline="central" fill={AI_COLOR} fontWeight={700}>#{ai.sugg.indexOf(x) + 1}</text>; })()}
+                        <g key={`r${i}`} data-plan-ai-room={name}>
+                          <rect x={x} y={y} width={w} height={h} fill="none" stroke={AI_COLOR} strokeOpacity={minor ? 0.25 : 0.5} strokeWidth={sw * 0.7} strokeDasharray={`${2 * upp} ${3 * upp}`} />
+                          <text x={x + 3 * upp} y={ly} fontSize={f} dominantBaseline="hanging" fill={AI_COLOR} opacity={minor ? 0.5 : 0.95}
+                            fontWeight={withSugg.has(rm.name) ? 700 : 500} stroke="#fff" strokeWidth={f * 0.25} paintOrder="stroke" data-plan-ai-label>{name}</text>
+                        </g>
+                      );
+                    })}
+                    {ready && ai.sugg.filter((x) => x.ok).map((x) => {
+                      const on = ai.picked.has(x.id), hot = aiHi === x.id;
+                      return (
+                        <g key={x.id} opacity={on || hot ? 1 : 0.35} data-plan-ai-sugg={x.id}>
+                          {placedFootprint(x.cab).parts.map((p) => { const r = rectPx(p.rect); return <rect key={p.id} x={r[0]} y={r[1]} width={r[2] - r[0]} height={r[3] - r[1]} fill={AI_COLOR} fillOpacity={p.floor ? (hot ? 0.4 : 0.18) : 0.06} stroke={AI_COLOR} strokeWidth={sw * (hot ? 2.4 : 1.3)} strokeDasharray={`${5 * upp} ${3 * upp}`} />; })}
+                          {(() => { const b = rectPx(placedFootprint(x.cab).bbox); return <text x={(b[0] + b[2]) / 2} y={(b[1] + b[3]) / 2} fontSize={fs} textAnchor="middle" dominantBaseline="central" fill={AI_COLOR} fontWeight={700} stroke="#fff" strokeWidth={fs * 0.25} paintOrder="stroke">#{ai.sugg.indexOf(x) + 1}</text>; })()}
                         </g>
                       );
                     })}
@@ -646,7 +692,8 @@ const PlanBoard = forwardRef(function PlanBoard({ plans = [], zones = [], onChan
             </svg>
           </div>
 
-          {ai && ai.planId === plan.id && <AiPanel ai={ai} ready={ready} pass={aiPass} setPass={setAiPass} onRun={runAi} onClose={() => setAi(null)} onToggle={toggleAi} onAdd={addAi} onUseScale={useAiScale} />}
+          {ai && ai.planId === plan.id && <AiPanel ai={ai} ready={ready} pass={aiPass} setPass={setAiPass} onRun={(pc) => runAi(pc, plan, ai.area)} onClose={() => setAi(null)} onToggle={toggleAi} onAdd={addAi} onUseScale={useAiScale}
+            onArea={() => { setAi(null); setCorner(null); setMode('aiArea'); }} onCopy={copyAi} hi={aiHi} setHi={setAiHi} />}
 
           {/* 选中的柜子 */}
           {selCab && selCab.place?.planId === plan.id && (
@@ -702,7 +749,7 @@ export default PlanBoard;
 
 const AI_COLOR = '#7A5BA6'; // AI 建议：紫色虚线（和真的柜子分开）
 
-function AiPanel({ ai, ready, pass, setPass, onRun, onClose, onToggle, onAdd, onUseScale }) {
+function AiPanel({ ai, ready, pass, setPass, onRun, onClose, onToggle, onAdd, onUseScale, onArea, onCopy, hi, setHi }) {
   const n = ai.sugg ? ai.sugg.filter((x) => x.ok && ai.picked.has(x.id)).length : 0;
   return (
     <div className="px-3 py-2 text-xs" style={{ borderTop: `1px solid ${T.lineSoft}`, background: '#F6F2FA' }} data-plan-ai-panel={ai.stage}>
@@ -710,6 +757,7 @@ function AiPanel({ ai, ready, pass, setPass, onRun, onClose, onToggle, onAdd, on
         <Sparkles size={13} style={{ color: AI_COLOR }} />
         <span className="font-medium" style={{ color: T.ink }}>AI 识图 Read with AI</span>
         {ai.r?.usage && <span className="text-[10px]" style={{ color: T.inkSoft }}>· {(ai.r.usage.input + ai.r.usage.output).toLocaleString()} tokens</span>}
+        {ai.area && <span className="text-[10px]" style={{ color: AI_COLOR }}>· 只读框起来的部分 boxed area</span>}
         <button type="button" onClick={onClose} className="ml-auto p-0.5" style={{ color: T.inkSoft }} aria-label="Close 关闭" disabled={ai.stage === 'busy'}><X size={14} /></button>
       </div>
       {ai.stage === 'pass' && (
@@ -726,6 +774,7 @@ function AiPanel({ ai, ready, pass, setPass, onRun, onClose, onToggle, onAdd, on
         <div className="flex items-center gap-2 flex-wrap" data-plan-ai-error>
           <span style={{ color: T.terra }}>{ai.error}</span>
           <Btn onClick={() => onRun(savedPasscode())}>再试 Retry</Btn>
+          <Btn onClick={onArea} data-plan-ai-area><BoxSelect size={12} /> 框选范围 Select area</Btn>
         </div>
       )}
       {ai.stage === 'result' && (
@@ -744,12 +793,14 @@ function AiPanel({ ai, ready, pass, setPass, onRun, onClose, onToggle, onAdd, on
                 const t = x.template ? templateOf(x.template) : null;
                 const size = x.ok ? (x.lenMm || []).map((v) => mmToM(v)).join(' + ') + ' m' : '';
                 return (
-                  <label key={x.id} className="flex items-start gap-1.5" style={{ color: x.ok ? T.ink : T.inkSoft }} data-plan-ai-item={x.ok ? 'ok' : 'no'}>
+                  <label key={x.id} className="flex items-start gap-1.5 px-1 -mx-1" style={{ color: x.ok ? T.ink : T.inkSoft, background: hi === x.id ? '#EAE1F4' : 'transparent', borderRadius: 2 }} data-plan-ai-item={x.ok ? 'ok' : 'no'} data-plan-ai-pick={x.ok && x.pick !== false ? 'yes' : 'no'}
+                    onMouseEnter={() => setHi(x.id)} onMouseLeave={() => setHi(null)} onFocus={() => setHi(x.id)}>
                     <input type="checkbox" checked={x.ok && ai.picked.has(x.id)} disabled={!x.ok} onChange={() => onToggle(x.id)} className="mt-0.5" style={{ accentColor: AI_COLOR }} />
                     <span>
                       <b>#{i + 1}</b> {t ? `${t.zh} ${t.en}` : '?'} · {x.roomName}{size ? ` · ${size}` : ''}
                       {x.ok && x.cab?.spec?.shape && x.template === 'kitchen' ? ` · ${x.cab.spec.shape === 'I' ? '一字' : x.cab.spec.shape === 'galley' ? '二字 galley' : x.cab.spec.shape}` : ''}
                       {!x.ok && x.reason && <span style={{ color: T.terra }}> — {x.reason.zh} {x.reason.en}</span>}
+                      {(x.why || []).map((nt, j) => <span key={`w${j}`} className="block text-[10px]" style={{ color: T.terra }} data-plan-ai-why>没勾：{nt.zh} — Not ticked: {nt.en}</span>)}
                       {(x.notes || []).map((nt, j) => <span key={j} className="block text-[10px]" style={{ color: T.wood }}>{nt.zh} {nt.en}</span>)}
                       {x.note && <span className="block text-[10px]" style={{ color: T.inkSoft }}>{x.note}</span>}
                     </span>
@@ -758,13 +809,18 @@ function AiPanel({ ai, ready, pass, setPass, onRun, onClose, onToggle, onAdd, on
               })}
             </div>
           )}
-          {ai.r?.result?.notes && <div className="mb-2 text-[10px]" style={{ color: T.inkSoft }}>AI: {ai.r.result.notes}</div>}
+          {cleanText(ai.r?.result?.notes, 300) && <div className="mb-2 text-[10px]" style={{ color: T.inkSoft }}>AI: {cleanText(ai.r.result.notes, 300)}</div>}
           {ready && ai.sugg.length > 0 && (
             <div className="flex items-center gap-2">
               <Btn on disabled={!n} onClick={onAdd} data-plan-ai-add>加入报价 Add {n}</Btn>
               <span className="text-[10px]" style={{ color: T.inkSoft }}>尺寸按模板，加入后可以拖、改、删 — Standard sizes; drag / edit after adding</span>
             </div>
           )}
+          <div className="mt-2 flex items-center gap-1.5 flex-wrap text-[10px]" style={{ color: T.inkSoft }}>
+            <span>不准？一张图有几层楼时，框一层再读一次会准很多 — Not right? Box one floor and read again</span>
+            <Btn onClick={onArea} data-plan-ai-area><BoxSelect size={12} /> 框选范围 Select area</Btn>
+            <Btn onClick={onCopy} title="Copy the raw AI answer (for support) 复制 AI 原始结果（给开发调整用）" data-plan-ai-copy><Copy size={12} /> 复制结果 Copy</Btn>
+          </div>
         </>
       )}
     </div>

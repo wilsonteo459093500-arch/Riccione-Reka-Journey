@@ -2,7 +2,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from './harness.mjs';
-import { aiScaleToPlan, buildSuggestions, applySuggestions, roomZoneName, AI_LIMITS } from '../src/planner/planAi.js';
+import { aiScaleToPlan, buildSuggestions, applySuggestions, roomZoneName, AI_LIMITS, cleanText } from '../src/planner/planAi.js';
+import { snapSegment } from '../src/planner/wallSnap.js';
 import { placedFootprint } from '../src/planner/plan.js';
 import { cabinetTotal } from '../src/planner/bridge.js';
 
@@ -94,4 +95,62 @@ test('applySuggestions: new rooms named like the room list, codes continue, over
   const again = applySuggestions(r.zones, [s[0]], { uid: () => 'cabY' });
   assert.equal(again.added.length, 0); assert.equal(again.skipped.length, 1);
   assert.equal(roomZoneName({ type: 'kitchen', name: 'Wet kitchen' }), 'Wet Kitchen 湿厨');
+});
+
+test('AI text clean-up: JSON that leaked into a note is cut off', () => {
+  assert.equal(cleanText('Solid back wall away from the door near the A/C ledge window."}],"notes":""}'), 'Solid back wall away from the door near the A/C ledge window.');
+  assert.equal(cleanText('Top wall, no door'), 'Top wall, no door');
+  assert.equal(cleanText('a\\"b'), 'a');
+  assert.equal(cleanText('x'.repeat(300)).length, 200);
+  const ai = { ...DEMO_AI, suggestions: [{ ...DEMO_AI.suggestions[0], note: 'Near the window."}],"notes":""}' }] };
+  assert.equal(buildSuggestions(ai, plan, { sentW: 1200 })[0].note, 'Near the window.');
+});
+
+test('crop: AI read only a part of the plan (offset + smaller image) → same cabinet as reading the whole plan', () => {
+  const whole = buildSuggestions(DEMO_AI, plan, { sentW: 1200 }).find((x) => x.template === 'wardrobe');
+  // 只送左半边（x 0–600 → 送去 1200 px 宽，放大 2 倍）
+  const sh = (p) => p.map((v, i) => (i % 2 === 0 ? v * 2 : v * 2));
+  const part = { ...DEMO_AI, rooms: [{ ...DEMO_AI.rooms[0], box: sh(DEMO_AI.rooms[0].box) }], suggestions: [{ ...DEMO_AI.suggestions[0], segments: [sh(DEMO_AI.suggestions[0].segments[0])] }] };
+  const [w] = buildSuggestions(part, plan, { sentW: 1200, crop: { x: 0, y: 0, w: 600, h: 400 } });
+  assert.deepEqual(bbox(w), bbox(whole));
+  // 有偏移：从 x 100 开始的一块
+  const off = { ...DEMO_AI, rooms: [{ ...DEMO_AI.rooms[0], box: [4, 104, 496, 696] }], suggestions: [{ ...DEMO_AI.suggestions[0], segments: [[4, 104, 244, 104]] }] };
+  const [w2] = buildSuggestions(off, plan, { sentW: 1100, crop: { x: 100, y: 0, w: 1100, h: 800 } });
+  assert.deepEqual(bbox(w2), bbox(whole));
+  assert.deepEqual(aiScaleToPlan({ scale: { found: true, a: [0, 60], b: [270, 60], mm: 2700 } }, 1100, plan, { x: 100, y: 0, w: 1100, h: 800 }), { a: [100, 60], b: [370, 60], mm: 2700 });
+});
+
+test('not ticked by default (with the reason): AI unsure, mostly outside the room, overlapping a cabinet already on the plan', () => {
+  const low = buildSuggestions({ ...DEMO_AI, suggestions: [{ ...DEMO_AI.suggestions[0], confidence: 'low' }] }, plan, { sentW: 1200 })[0];
+  assert.equal(low.ok, true); assert.equal(low.pick, false);
+  assert.match(low.why[0].zh, /不太确定/);
+  // 线段画在房间外面（房间框在下面，线在上面很远）
+  const out = buildSuggestions({ ...DEMO_AI, suggestions: [{ ...DEMO_AI.suggestions[0], segments: [[104, 30, 344, 30]] }] }, plan, { sentW: 1200 })[0];
+  assert.equal(out.pick, false);
+  assert.ok(out.why.some((w) => /房间外面/.test(w.zh)));
+  // 主卧已经有 K1 在同一个位置
+  const first = buildSuggestions(DEMO_AI, plan, { sentW: 1200 }).find((x) => x.template === 'wardrobe');
+  const k1 = { ...first.cab, id: 'k1', code: 'K1' };
+  const again = buildSuggestions(DEMO_AI, plan, { sentW: 1200, existing: [k1] });
+  const w = again.find((x) => x.template === 'wardrobe');
+  assert.equal(w.pick, false);
+  assert.ok(w.why.some((x) => /K1/.test(x.zh)));
+  // 默认勾的排前面
+  assert.equal(again[0].template, 'kitchen');
+  assert.equal(again.find((x) => x.template === 'kitchen').pick, true);
+});
+
+test('wall snap inside buildSuggestions: AI line 20 px off the wall → wardrobe back on the wall; no wall → note', () => {
+  const w = 1200, h = 800, data = new Uint8Array(w * h);
+  for (let y = 96; y <= 103; y++) for (let x = 96; x <= 1103; x++) data[y * w + x] = 1; // 上墙
+  for (let y = 96; y <= 703; y++) for (let x = 96; x <= 103; x++) data[y * w + x] = 1; // 左墙
+  const dark = { w, h, data };
+  const snap = (seg, box, tpl) => snapSegment(dark, seg, box, { cutGaps: tpl !== 'kitchen' });
+  const ai = { ...DEMO_AI, suggestions: [{ ...DEMO_AI.suggestions[0], segments: [[104, 124, 344, 124]] }] };
+  const [s] = buildSuggestions(ai, plan, { sentW: 1200, snap });
+  assert.deepEqual(bbox(s), [1040, 1040, 3440, 1640]);
+  assert.equal(s.pick, true);
+  assert.equal((s.notes || []).length, 0);
+  const lost = buildSuggestions({ ...DEMO_AI, suggestions: [{ ...DEMO_AI.suggestions[0], segments: [[200, 400, 440, 400]] }] }, plan, { sentW: 1200, snap })[0];
+  assert.ok(lost.notes.some((n) => /找不到这面墙/.test(n.zh)));
 });

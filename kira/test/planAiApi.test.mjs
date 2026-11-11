@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import Anthropic from '@anthropic-ai/sdk';
 import { test } from './harness.mjs';
-import { createHandler, RESULT_SCHEMA, MODEL } from '../api/plan-ai.js';
+import { createHandler, RESULT_SCHEMA, MODEL, cabinetFacts } from '../api/plan-ai.js';
 
 const fakeRes = () => { const r = { statusCode: 0, headers: {}, body: null }; r.setHeader = (k, v) => { r.headers[k] = v; }; r.end = (b) => { r.body = JSON.parse(b); }; return r; };
 const IMG = Buffer.from('fake-jpeg').toString('base64');
@@ -71,4 +71,21 @@ test('plan-ai schema: every object closed and fully required (structured outputs
     if (s?.type === 'array') walk(s.items);
   };
   walk(RESULT_SCHEMA);
+});
+
+test('plan-ai: cabinets already on the plan go into the prompt; suggestions carry a confidence', async () => {
+  const env = { ANTHROPIC_API_KEY: 'k', KIRA_AI_PASSCODE: 'p' };
+  const seen = {};
+  const h = createHandler({ env, makeClient: client(okMsg(result), seen) });
+  const ok = await run(h, { headers: { 'x-kira-ai-passcode': 'p' }, body: { image: IMG, w: 1200, h: 800, cabinets: [{ code: 'K1', box: [100, 104.4, 340, 164] }, { code: '<b>', box: 'x' }] } });
+  assert.equal(ok.statusCode, 200);
+  assert.match(seen.params.messages[0].content[1].text, /already drawn on the plan .*K1 at \[100, 104, 340, 164\]/);
+  assert.doesNotMatch(seen.params.messages[0].content[1].text, /<b>/);
+  assert.equal(cabinetFacts([]), '');
+  assert.equal(cabinetFacts(null), '');
+  const sg = RESULT_SCHEMA.properties.suggestions.items;
+  assert.ok(sg.required.includes('confidence'));
+  assert.deepEqual(sg.properties.confidence.enum, ['high', 'low']);
+  assert.match(seen.params.system, /every bedroom/);
+  assert.match(seen.params.system, /several floors/);
 });
