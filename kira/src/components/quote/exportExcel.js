@@ -1,0 +1,191 @@
+import { tr, pickLang, capColor, cabTypeById, cabDimsLabel, RLBL, QUOTE_TERMS, LOOSE_TERMS, discountChainRate, discountChainLabel } from '../../constants/pricing.js';
+import { fmt } from '../../utils/helpers.js';
+import { cabinetTitle, frameTitle } from '../../planner/templates.js';
+import { frameDimsLabel } from '../../planner/bridge.js';
+
+const round0 = (n) => Math.round(Number(n) || 0);
+
+// 导出为 Excel（.xlsx）。lang：'en' | 'zh' | 'both'。
+// Sheet1：定制橱柜（SAIL by Riccione Reka）；Sheet2：Loose Furniture（Riccione Furniture）。
+export async function exportExcel(meta, computed, loose, notes = {}, lang = 'both') {
+  const XLSX = await import('xlsx');
+  const { wb, name } = excelWorkbook(XLSX, meta, computed, loose, notes, lang);
+  XLSX.writeFile(wb, name);
+}
+
+// 只组表、不下载（Node 测试可直接检查每一格）→ { wb, name }
+export function excelWorkbook(XLSX, meta, computed, loose, notes = {}, lang = 'both') {
+  const t = (obj) => tr(obj, lang);
+  // 三种版本：retail / designer 双价 / designer_net 净价（每个单价都是供货价）
+  const isDesigner = notes.audience === 'designer';
+  const isDesignerNet = notes.audience === 'designer_net';
+  const anyDesigner = isDesigner || isDesignerNet;
+  const supplyRate = discountChainRate(notes.designerDisc);
+  const supply = (retail) => Math.round((Number(retail) || 0) * supplyRate);
+  const priceScale = isDesignerNet ? supplyRate : 1;
+  const px = (v) => Math.round((Number(v) || 0) * priceScale);
+  // 岩板 sintered stone 不折扣：设计师版也不打供货折扣
+  const pxi = (v, ir) => (ir?.noDiscount ? Math.round(Number(v) || 0) : px(v));
+  const zoneShown = (zr) => Math.round(zr.items.reduce((s, ir) => s + (ir.noDiscount ? ir.total : ir.total * priceScale), 0));
+  const excluded = computed.excluded || 0;
+  const exclTag = excluded > 0 ? ` · ${t(RLBL.noDiscExcl)}` : '';
+  const discTag = discountChainLabel(notes.designerDisc);
+  const supplyLbl = () => `${t({ en: 'Designer Supply', zh: '设计师供货价' })} (${discTag})${exclTag}`;
+  const dTotalLbl = () => `${t({ en: 'Designer Total', zh: '设计师总额' })}${exclTag}`;
+  const lineDesc = (ln) => (lang === 'en' ? ln.descEn : lang === 'zh' ? ln.descZh : `${ln.descEn} ${ln.descZh}`);
+  const lineUom = (ln) => (lang === 'en' ? ln.uomEn : lang === 'zh' ? ln.uomZh : ln.uomZh);
+  // 定制柜体子项描述：门板/柜体 → "Door: A Series"；抽屉 → "Drawers"
+  const cabLineLabel = (ln) => {
+    const sid = (ln.descEn.split(' ')[1] || '').trim();
+    const map = {
+      door:    { en: `Door: ${sid} Series`,         zh: `门板：${sid} 系列` },
+      carcass: { en: `Carcass: ${sid} Series`,      zh: `柜体：${sid} 系列` },
+      open:    { en: `Open Cabinet: ${sid} Series`, zh: `开放柜：${sid} 系列` },
+      drawer:  { en: ln.descEn, zh: ln.descZh }, // 全展 / 半展 由明细自带
+    };
+    return map[ln.bucket] ? t(map[ln.bucket]) : lineDesc(ln);
+  };
+
+  const termLines = (terms, aoa) => {
+    terms.forEach((sec) => {
+      aoa.push([t(sec.title)]);
+      sec.lines.forEach((ln) => {
+        const text = lang === 'both' ? `${ln.en}　${ln.zh}` : t(ln);
+        aoa.push([(sec.bullet ? '• ' : '') + text]);
+      });
+      if (sec.note) aoa.push([lang === 'both' ? `${sec.note.en}　${sec.note.zh}` : t(sec.note)]);
+      aoa.push([]);
+    });
+  };
+
+  const wb = XLSX.utils.book_new();
+
+  // ---------- Sheet 1：定制橱柜 ----------
+  const zones = computed.zoneResults.filter((zr) => zr.zone.items.length > 0);
+  if (zones.length) {
+    const aoa = [];
+    const merges = [];
+    const row = (arr = []) => { aoa.push(arr); return aoa.length - 1; };
+    row(['SAIL BY RICCIONE REKA']);
+    row([t(RLBL.estQuote)]);
+    row([]);
+    row([t(RLBL.name), meta.name || '', '', t(RLBL.date), fmt(meta.date)]);
+    row([t(RLBL.site), meta.location || '', '', t(RLBL.ref), meta.ref || '']);
+    row([t(RLBL.pic), meta.pic || '', '', t(RLBL.rev), meta.version || '1']);
+    row([]);
+    const HEAD = [t(RLBL.desc), t(RLBL.qty), t(RLBL.uom), t(RLBL.unitPrice), t(RLBL.amount)];
+    zones.forEach((zr) => {
+      const zr0 = row([pickLang(zr.zone.name, lang) || t(RLBL.untitled)]);
+      merges.push({ s: { r: zr0, c: 0 }, e: { r: zr0, c: 4 } });
+      row(HEAD);
+      // KIRA：积木柜按柜子分组（柜号 · 名称 —— 每个柜体的尺寸 + 明细）
+      const cabById = new Map((zr.zone.cabinets || []).map((c) => [c.id, c]));
+      const doneCab = new Set();
+      zr.items.forEach((ir) => {
+        const cid = ir.item.kira?.cabinetId;
+        if (cid && cabById.has(cid)) {
+          if (doneCab.has(cid)) return;
+          doneCab.add(cid);
+          const cab = cabById.get(cid);
+          const irs = zr.items.filter((x) => x.item.kira?.cabinetId === cid);
+          row([[cab.code, cabinetTitle(cab, lang), cab.place?.planId ? t({ en: 'see floor plan', zh: '见平面图' }) : ''].filter(Boolean).join(' · ')]);
+          (cab.frames || []).forEach((f) => {
+            const lines = [];
+            irs.filter((x) => x.item.kira.frameId === f.id).forEach((x) => x.lines.forEach((ln) => {
+              const sid = (ln.descEn.split(' ')[1] || '').trim();
+              const label = ln.bucket === 'panel' && x.item.kira.part === 'tvWall' ? t({ en: `Feature Wall: ${sid} Series`, zh: `电视墙：${sid} 系列` })
+                : ln.bucket === 'panel' ? t({ en: `Side Panel: ${sid} Series`, zh: `见光板：${sid} 系列` })
+                : ln.bucket === 'door' && x.item.kira.part === 'glass' ? t({ en: `Glass Door: ${sid} Series`, zh: `玻璃门：${sid} 系列` }) : cabLineLabel(ln);
+              const hit = lines.find((o) => o.label === label && o.unitMyr === ln.unitMyr && o.uom === lineUom(ln));
+              if (hit) { hit.qty += ln.qty; hit.total += ln.total; } else lines.push({ label, qty: ln.qty, piece: ln.piece, uom: lineUom(ln), unitMyr: ln.unitMyr, total: ln.total });
+            }));
+            if (!lines.length) return;
+            row([`  ${frameTitle(cab, f, lang)}  —  ${frameDimsLabel(f, lang === 'zh' ? 'zh' : 'en')}`]);
+            lines.forEach((ln) => row([`    ${ln.label}`, ln.piece ? round0(ln.qty) : Number(ln.qty.toFixed(2)), ln.uom, px(ln.unitMyr), px(ln.total)]));
+          });
+          return;
+        }
+        if (ir.item.type === 'cabinet') {
+          // 柜体类型（+名称）作为分组抬头，子项缩进列在下面
+          const typeLabel = pickLang(cabTypeById(ir.item.cabType).label, lang);
+          const nm = pickLang(ir.item.name || ir.item.desc || '', lang);
+          row([`${[typeLabel, nm].filter(Boolean).join(' · ')}  —  ${cabDimsLabel(ir.item, lang === 'zh' ? 'zh' : 'en')}`]);
+          ir.lines.forEach((ln) => {
+            const qty = ln.piece ? round0(ln.qty) : Number(ln.qty.toFixed(2));
+            row([`    ${cabLineLabel(ln)}`, qty, lineUom(ln), pxi(ln.unitMyr, ir), pxi(ln.total, ir)]);
+          });
+        } else {
+          ir.lines.forEach((ln, i) => {
+            const nm = i === 0 ? pickLang(ir.item.name || '', lang) : '';
+            const label = nm ? `${nm} · ${lineDesc(ln)}` : lineDesc(ln);
+            const qty = ln.piece ? round0(ln.qty) : Number(ln.qty.toFixed(2));
+            row([label, qty, lineUom(ln), pxi(ln.unitMyr, ir), pxi(ln.total, ir)]);
+          });
+        }
+      });
+      row(['', '', '', t(RLBL.subtotal), zoneShown(zr)]);
+      row([]);
+    });
+    if (!anyDesigner) {
+      row(['', '', '', t(RLBL.gross), round0(computed.gross)]);
+      if (computed.discount > 0) row(['', '', '', `${t(RLBL.discount)}${computed.discountMode === 'amt' ? '' : ` (${computed.adjustPct}%)`}${computed.excluded > 0 ? ` · ${t(RLBL.noDiscExcl)}` : ''}${notes.discountNote ? ` — ${notes.discountNote}` : ''}`, -round0(computed.discount)]);
+    }
+    const cabRetail = anyDesigner ? computed.gross : computed.net; // 设计师版按原价
+    const cabSupply = supply(cabRetail - excluded) + Math.round(excluded); // 岩板不打供货折扣
+    if (isDesignerNet) {
+      row(['', '', '', dTotalLbl(), cabSupply]);
+    } else {
+      row(['', '', '', isDesigner ? t({ en: 'Retail Total', zh: '零售总额' }) : t(RLBL.total), round0(cabRetail)]);
+      if (isDesigner) row(['', '', '', supplyLbl(), cabSupply]);
+    }
+    row([]);
+    if (notes.cabinetNote) { row([t(RLBL.notes), notes.cabinetNote]); row([]); }
+    termLines(QUOTE_TERMS, aoa);
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!merges'] = merges;
+    ws['!cols'] = [{ wch: 44 }, { wch: 10 }, { wch: 12 }, { wch: 16 }, { wch: 14 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Quotation');
+  }
+
+  // ---------- Sheet 2：Loose Furniture ----------
+  const looseRows = loose?.rows || [];
+  if (looseRows.length) {
+    const aoa = [];
+    const row = (arr = []) => aoa.push(arr);
+    row(['RICCIONE FURNITURE']);
+    row([t(RLBL.estQuote)]);
+    row([]);
+    row([t(RLBL.name), meta.name || '', '', t(RLBL.date), fmt(meta.date)]);
+    row([t(RLBL.site), meta.location || '', '', t(RLBL.rev), meta.version || '1']);
+    row([]);
+    row([t(RLBL.productType), t(RLBL.model), t(RLBL.color), t(RLBL.qty), t(RLBL.unitPrice), t(RLBL.amount)]);
+    looseRows.forEach((r) => {
+      row([r.type || '', r.model || '', capColor(r.color) || '', round0(r.qty), px(r.unitMyr), px(r.total)]);
+    });
+    if (!anyDesigner) {
+      row(['', '', '', '', t(RLBL.gross), round0(loose.gross)]);
+      if (loose.discount > 0) row(['', '', '', '', `${t(RLBL.discount)}${loose.discountMode === 'amt' ? '' : ` (${loose.adjustPct}%)`}${notes.looseDiscountNote ? ` — ${notes.looseDiscountNote}` : ''}`, -round0(loose.discount)]);
+    }
+    const looseRetail = anyDesigner ? loose.gross : loose.net; // 设计师版按原价
+    if (isDesignerNet) {
+      row(['', '', '', '', dTotalLbl(), supply(looseRetail)]);
+    } else {
+      row(['', '', '', '', isDesigner ? t({ en: 'Retail Total', zh: '零售总额' }) : t(RLBL.total), round0(looseRetail)]);
+      if (isDesigner) row(['', '', '', '', supplyLbl(), supply(looseRetail)]);
+    }
+    row([]);
+    if (notes.looseNote) { row([t(RLBL.notes), notes.looseNote]); row([]); }
+    termLines(LOOSE_TERMS, aoa); // 有效期 + 家具付款条件
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{ wch: 22 }, { wch: 16 }, { wch: 14 }, { wch: 10 }, { wch: 16 }, { wch: 14 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Loose Furniture');
+  }
+
+  if (!wb.SheetNames.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['No items 暂无明细']]), 'Quotation');
+
+  // 文件名：EST QUOTE_RICCIONE_[客户]_[Site]_YYYYMMDD.xlsx
+  const safe = (s) => (s || '').replace(/[\\/:*?"<>|]/g, '').trim().replace(/\s+/g, ' ');
+  const d = (meta.date || '').replace(/-/g, '');
+  const name = `EST QUOTE_RICCIONE_${safe(meta.name) || 'Customer'}_${safe(meta.location) || 'Site'}_${d || 'draft'}${isDesignerNet ? '_DESIGNER_NET' : isDesigner ? '_DESIGNER' : ''}.xlsx`;
+  return { wb, name };
+}
