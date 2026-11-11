@@ -8,6 +8,7 @@ import { templateOf, updateSpec, updateSpecKeep, frameTitle } from '../../planne
 import { cabinetTotal, resolveSeries, customSeriesCount } from '../../planner/bridge.js';
 import { explainCabinet } from '../../planner/explain.js';
 import { validateCabinet } from '../../planner/validate.js';
+import { aisleWarningsFor } from '../../planner/plan.js';
 import { layoutLeaves, bodyHeight, CRAFT_COEF, DEFAULT_GLASS_COEF, mmToM } from '../../planner/model.js';
 import { FINISHES, HANDLES, DEFAULT_DOOR_FINISH, DEFAULT_CARCASS_FINISH } from '../../render/palette.js';
 import SvgShapes from '../../render/SvgShapes.jsx';
@@ -55,7 +56,7 @@ function Preview({ cab, onYaw, lang, mode, setMode, children }) {
   );
 }
 
-export default function CabinetEditor({ cab: initial, zone, defaults = {}, lang = 'both', isNew, totalWith, onSave, onDelete, onClose }) {
+export default function CabinetEditor({ cab: initial, zone, defaults = {}, lang = 'both', isNew, totalWith, onSave, onDelete, onClose, plans = [], otherCabinets = [] }) {
   const [cab, setCab] = useState(initial);
   const t = templateOf(cab.template);
   const spec = cab.spec;
@@ -65,7 +66,7 @@ export default function CabinetEditor({ cab: initial, zone, defaults = {}, lang 
   const isBlank = cab.template === 'blank';
   // 画框框和模板设定在同一个画面：图默认就是可以点、可以拖的色块
   const [view, setView] = useState('blocks');
-  const ed = useBlockEditor({ cab, setCab, kitchen: isKitchen });
+  const ed = useBlockEditor({ cab, setCab, kitchen: isKitchen, ceilingH });
   useBlockKeys(ed, view === 'blocks');
   const confirm = useConfirm();
   // 改模板设定：手画的框框尽量保留（templates.js updateSpecKeep 三方合并）；可以撤销。
@@ -85,14 +86,16 @@ export default function CabinetEditor({ cab: initial, zone, defaults = {}, lang 
     const ok = await confirm({ title: 'Back to template? 还原成模板？', message: 'This will reset the hand-drawn blocks to the template. 会把手画的框框还原成模板，确定吗？',
       danger: true, confirmText: 'Reset 还原', cancelText: 'Cancel 取消' });
     if (!ok) return;
-    ed.restoreTemplate((c) => { const { custom, ...rest } = updateSpec(c, {}); return rest; });
+    // 还原成模板：手画的格子、移动 / 加 / 删的柜体全部回到模板
+    ed.restoreTemplate((c) => { const { custom, removedFrames, ...rest } = updateSpec({ ...c, frames: (c.frames || []).filter((f) => !f.user) }, {}); return rest; });
   };
   const ownSeries = useMemo(() => customSeriesCount(cab), [cab]);
   const ser = resolveSeries(cab, defaults);
   const total = useMemo(() => cabinetTotal(cab, defaults), [cab, defaults]);
   const grand = useMemo(() => (totalWith ? totalWith(cab) : total), [cab, totalWith, total]);
   const rows = useMemo(() => explainCabinet(cab, defaults), [cab, defaults]);
-  const warnings = useMemo(() => validateCabinet(cab, { ceilingH }), [cab, ceilingH]);
+  // 第三版：放在户型图上的柜子，走道 / 重叠提醒也列在这里（只提醒，不挡出价）
+  const warnings = useMemo(() => [...validateCabinet(cab, { ceilingH }), ...aisleWarningsFor(cab, plans, otherCabinets).map((w) => ({ level: w.level, msg: w.msg }))], [cab, ceilingH, plans, otherCabinets]);
   const leaves = useMemo(() => (cab.frames || []).flatMap((f) => layoutLeaves(f.body, 0, 0, f.W, bodyHeight(f))), [cab]);
   const hasGlass = leaves.some((l) => l.node.type === 'glass');
   const hasOpen = leaves.some((l) => l.node.type === 'open');
@@ -133,7 +136,7 @@ export default function CabinetEditor({ cab: initial, zone, defaults = {}, lang 
       <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
         <div className="shrink-0 lg:flex-1 h-[50vh] lg:h-auto" style={{ borderBottom: `1px solid ${T.lineSoft}` }}>
           <Preview cab={cab} lang={lang} mode={view} setMode={setView} onYaw={(yaw) => set({ view: { ...(cab.view || {}), yaw } })}>
-            <BlockCanvas ed={ed} lang={lang} canRestore={!isBlank && !!cab.custom} onRestore={restoreTemplate} />
+            <BlockCanvas ed={ed} lang={lang} canRestore={!!cab.custom && (!isBlank || (cab.frames || []).some((f) => f.user) || !!cab.removedFrames?.length)} onRestore={restoreTemplate} />
           </Preview>
         </div>
         <div className="flex-1 lg:flex-none lg:w-[440px] min-h-0 overflow-y-auto px-4 sm:px-5 pb-8 scrollbar-thin" style={{ borderLeft: `1px solid ${T.lineSoft}` }}>
@@ -281,7 +284,7 @@ export default function CabinetEditor({ cab: initial, zone, defaults = {}, lang 
             </div>
             {(cab.frames || []).some((f) => f.innerPanel) && (
               <div className="mt-1">
-                <Toggle on={cab.exposed?.tallInner !== false} onChange={(v) => set({ exposed: { ...(cab.exposed || {}), tallInner: v } })} label="Tall unit inner side 高柜内侧（台面以上露出的部分）" />
+                <Toggle on={cab.exposed?.tallInner !== false} onChange={(v) => set({ exposed: { ...(cab.exposed || {}), tallInner: v } })} label={isKitchen ? 'Tall unit inner side 高柜内侧（台面以上露出的部分）' : 'Tower inner side 高柜内侧（矮柜 / 吊柜以外露出的部分）'} />
               </div>
             )}
           </Section>

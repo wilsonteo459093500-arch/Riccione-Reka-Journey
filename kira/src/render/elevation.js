@@ -52,6 +52,7 @@ const TXT = {
     void: { en: 'Gap', zh: '空位' },
     shelf: { en: 'Shelves', zh: '飘板' },
   },
+  backdrop: { en: 'Feature wall', zh: '电视墙' },
 };
 const wallText = (i) => {
   const ch = String.fromCharCode(65 + (i % 26)) + (i >= 26 ? String(Math.floor(i / 26)) : '');
@@ -254,10 +255,13 @@ export function elevationScene(cab, opts = {}) {
   const walls = Array.isArray(opts.walls) ? opts.walls : safeWalls(cab || {});
   // 宽 0 的柜体（厨房只剩转角计价的那段，实物画在相邻墙上）不画，也不参与排墙 / 台面出挑
   const frames = (Array.isArray(cab?.frames) ? cab.frames : []).filter((f) => f && typeof f === 'object').map((f, i) => normFrame(f, i, cab?.exposed)).filter((f) => f.W > 0);
+  // 电视墙（backdrop）先画，在柜子后面
+  frames.sort((a, b) => (a.kind === 'backdrop' ? 0 : 1) - (b.kind === 'backdrop' ? 0 : 1) || a.i - b.i);
+  const solid = frames.filter((f) => f.kind !== 'backdrop');
 
   // 台面两头出挑：贴着别的柜体那一边不出挑
   for (const f of frames) {
-    const touching = (side) => frames.some((g) => g !== f && g.wall === f.wall && g.y < f.y + f.H && g.y + g.H > f.y - 1
+    const touching = (side) => solid.some((g) => g !== f && g.wall === f.wall && g.y < f.y + f.H && g.y + g.H > f.y - 1
       && (side === 'L' ? Math.abs(g.x + g.W - f.x) < 5 : Math.abs(f.x + f.W - g.x) < 5));
     f.ovhL = f.worktop && !touching('L') ? WT_OVH : 0;
     f.ovhR = f.worktop && !touching('R') ? WT_OVH : 0;
@@ -320,7 +324,7 @@ export function elevationScene(cab, opts = {}) {
 
   for (const f of frames) drawFrame(ctx, f);
 
-  if (showDims) placeDims(ctx, frames);
+  if (showDims) placeDims(ctx, solid);
 
   // 墙名（多于一面墙才画）
   if (ext.length > 1) {
@@ -341,7 +345,7 @@ export function elevationScene(cab, opts = {}) {
   bb = unionBox(shapes.map(shapeBox)) || [0, -600, 600, 0];
   const m = 6 * U;
   const viewBox = [rnd(bb[0] - m), rnd(bb[1] - m), rnd(Math.max(1, bb[2] - bb[0] + 2 * m)), rnd(Math.max(1, bb[3] - bb[1] + 2 * m))];
-  if (style === 'blocks') return { viewBox, shapes, frames: frames.map((f) => ({ id: f.id, X0: f.X0, yb: f.y + f.base.h, W: f.W, Hb: f.Hb })) };
+  if (style === 'blocks') return { viewBox, shapes, frames: frames.map((f) => ({ id: f.id, kind: f.kind, X0: f.X0, y: f.y, H: f.H, yb: f.y + f.base.h, W: f.W, Hb: f.Hb })) };
   return { viewBox, shapes };
 }
 
@@ -359,6 +363,8 @@ function drawFrame(ctx, f) {
   const G = { R, L, P, Ci, X0 };
 
   if (W <= 0 || f.H <= 0) return;
+
+  if (f.kind === 'backdrop') { drawBackdrop(ctx, f, G); drawFrameSelected(ctx, f, G); return; }
 
   drawBase(ctx, f, G);
 
@@ -394,6 +400,8 @@ function drawFrame(ctx, f) {
     }
   }
 
+  drawFrameSelected(ctx, f, G);
+
   // 台面
   if (f.worktop) R(-f.ovhL, yt, W + f.ovhL + f.ovhR, WT_T, { fill: WORKTOP, stroke: INK, sw: S.sw, role: 'worktop' });
 
@@ -408,6 +416,24 @@ function drawFrame(ctx, f) {
       else drawHob(ctx, G, cx, ytop, lf.w);
     }
   }
+}
+
+// 柜体模式（追加 2）：选中整个柜体 'frameId|frame' → 金色外框（含底座）
+function drawFrameSelected(ctx, f, { R }) {
+  if (ctx.style !== 'blocks' || ctx.selected !== `${f.id}|frame`) return;
+  R(0, f.y, f.W, f.H, { stroke: BLOCK_SELECTED, sw: ctx.S.main * 2.6, role: 'selected' });
+}
+
+// 电视墙：一整块墙板（门板色浅一点），竖缝每 ~600 一条；左上角小字
+function drawBackdrop(ctx, f, { R, L, X0 }) {
+  const { S, C, style } = ctx;
+  const fill = style === 'blocks' ? BLOCK_COLORS.backdrop : mix(C.tint, '#FFFFFF', 0.25);
+  R(0, f.y, f.W, f.H, { fill, stroke: INK, sw: S.thin, role: 'backdrop', hit: `${f.id}|frame` });
+  const n = Math.max(1, Math.round(f.W / 600));
+  for (let k = 1; k < n; k++) L((f.W * k) / n, f.y, (f.W * k) / n, f.y + f.H, { stroke: mix(INK, fill, 0.75), sw: S.hair, role: 'backdrop' });
+  const t = pickLines(TXT.backdrop, ctx.lang).join(' ');
+  const size = Math.min(S.lbl, (f.W * 0.8) / Math.max(1, textEm(t)));
+  if (size >= S.U * 3) ctx.out.text(X0 + 4 * S.U, -(f.y + f.H) + 3 * S.U + size, t, size, { fill: INK_SOFT, role: 'label' });
 }
 
 // ---------- 底座 ----------

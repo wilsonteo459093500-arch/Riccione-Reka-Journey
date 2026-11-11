@@ -10,7 +10,7 @@
 > 所以接云端之前：别清浏览器资料、别换浏览器；每台用过本机模式的设备都要登录一次（有网时），等顶栏显示 *Synced 已同步*。
 > Preview 网址（见下）是另一个网址，那里做的报价**不会**跟着上传。
 
-`kira/vercel.json` 的 `ignoreCommand`：预览版只在 `kira/` 有改动时才重新构建；**正式版（Production）每次都构建**（换了环境变量要重新 build 才生效）。其他 app 的项目也各有自己的 ignoreCommand，互不触发。
+`kira/vercel.json` 的 `ignoreCommand`：预览版只在 `kira/` 有改动时才重新构建；**正式版（Production）每次都构建**；在 Vercel 按「Redeploy」（同一个 commit 重新部署）也一定会构建 —— 换了环境变量要重新 build 才生效。其他 app 的项目也各有自己的 ignoreCommand，互不触发。
 
 ## 2. Supabase（和旧报价工具同一个项目、同一套账号）
 1. **先确认** Authentication → Providers → Email → *Allow new users to sign up* 已关闭
@@ -22,6 +22,25 @@
 5. 本机模式用过的每台设备：用**同一个浏览器**打开正式网址 → 登录 → 本机模式的报价自动上传（见第 1 步的说明）
 
 Preview 部署不设这两个变量 → 预览网址永远是本机模式，不会写进正式云端。
+
+## 2b. 户型图图片（第三版，Supabase Storage）
+1. SQL Editor → 整段执行 `kira/supabase/kira_plans_storage.sql`（可重复执行；只新增私有 bucket `kira-plans` 和它的权限）
+   - 登录的同事可以看、可以上传；只有上传的人能删；图片不公开（读的时候用 signed URL）
+2. 不用新的环境变量（用同一个 Supabase 项目）
+3. 试一次：正式网址 → 某份报价「户型图 → 上传」→ 重新整理页面图还在；另一台设备登录同一份报价也看得到
+4. 预览网址 / 本机模式：图片存在那台设备的浏览器（IndexedDB，路径 `local:…`）；在同一个浏览器登录正式版后会自动补传
+5. 删掉整份报价不会删图片（同一张图可能被复制出来的版本共用）。在户型图区按「删除这张户型图」→ 图片先排队，等这个改动同步上云、而且本机没有任何报价版本还在用，才真的删
+6. 只有上传的人能删图片：别的同事删户型图时，云端那张图会留着（不影响报价，只是占一点空间）
+
+## 2c. 户型图「AI 识图」（钥匙只放在 Vercel，不进浏览器、不进仓库）
+1. 到 console.anthropic.com 建一把 API key（建议设每月用量上限）
+2. Vercel → kira-riccione-reka → Settings → Environment Variables：
+   - `ANTHROPIC_API_KEY` = 那把 key，勾 **Production** 和 **Preview**（类型选 Sensitive）
+   - `KIRA_AI_PASSCODE` = 自己定一个团队密码，勾 **Preview**（预览网址没有登录，靠这个挡外人）
+3. 重新部署（预览：推一次或在 Vercel 按 Redeploy；正式版：照第二版的做法用正式版设定重建）
+4. 谁能用：正式网址 = 已登录的同事；预览网址 = 知道团队密码的人（这次浏览器开着时只问一次）
+5. 每次识图约 US$0.10（看图片大小）；面板上会显示这次用了多少 tokens。AI 只给建议，勾选确认后才加入报价
+6. 没设这些：按「AI 识图」会显示「AI 还没设定」，其他功能照常
 
 ## 3. 手机加到主屏幕
 打开网址 → 浏览器菜单「加到主屏幕 / Add to Home Screen」→ 出现 KIRA 图标；没讯号时也能打开、继续报价，有网后自动同步。

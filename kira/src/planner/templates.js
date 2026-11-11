@@ -140,9 +140,12 @@ const blank = {
   summary: (spec, lang) => joinL([`${mmToM(spec.W)} × ${mmToM(spec.H)} × ${mmToM(spec.D)} m`, FRAME_KIND_NAME[spec.kind] || FRAME_KIND_NAME.tall], lang),
   frameName: (frame) => [FRAME_KIND_NAME[frame?.kind] || FRAME_KIND_NAME.tall],
   build(spec, cab) {
-    const old = (cab.frames || [])[0];
+    // 第一个不是用户自己加的柜体（追加 2：用户可以加柜体 / 移动柜体）；位置沿用（吊柜的离地由 spec.y 管）
+    const old = (cab.frames || []).find((f) => !f.user);
     const f = {
-      id: old?.id || `${cab.id}-f0`, kind: spec.kind, label: bi(FRAME_KIND_NAME[spec.kind] || FRAME_KIND_NAME.tall), wall: 0, x: 0, y: spec.y,
+      id: old?.id || `${cab.id}-f0`, kind: spec.kind, label: bi(FRAME_KIND_NAME[spec.kind] || FRAME_KIND_NAME.tall), wall: 0,
+      // 种类没变才沿用移动过的离地高度（吊柜一律看 spec.y）；换种类 → 用新种类的离地（地柜 / 高柜 = 0）
+      x: Math.max(0, int(old?.x, 0)), y: spec.kind === 'wall' || old?.kind !== spec.kind ? spec.y : Math.max(0, int(old?.y, 0)),
       W: spec.W, H: spec.H, D: spec.D, base: { ...spec.base }, ends: { left: true, right: true },
       body: old?.body || leaf('closed', { interior: 'shelves' }),
     };
@@ -203,6 +206,7 @@ export const cabinetTitle = (cab, lang = 'both') => cab?.name || pickL(templateO
 // 柜体小标题（多柜体的柜子：地柜 / 吊柜 / 高柜 · 墙A …）：按模板 + frame.kind / frame.wall 生成，新旧记录一样；
 // 不是模板做的（例如旧报价换算的柜子）才退回 frame.label
 export function frameTitle(cab, frame, lang = 'both') {
+  if (frame?.user) return frame.name ? pickL(frame.name, lang) : pickL(FRAME_KIND_NAME[frame.kind] || FRAME_KIND_NAME.tall, lang);
   const t = TEMPLATES[cab?.template];
   if (t?.frameName) return joinL(t.frameName(frame, cab.spec || {}), lang);
   return frame?.label ? pickLang(frame.label, lang) : pickL(FRAME_KIND_NAME[frame?.kind] || FRAME_KIND_NAME.tall, lang);
@@ -265,36 +269,116 @@ function mergeNode(o, t, n, hit) {
   return n;
 }
 
+const GEO = ['x', 'y', 'W', 'H', 'D'];
+const pruneRemoved = (removed, newFrames) => (removed || []).filter((id) => newFrames.some((f) => f.id === id));
+const withRemoved = (cab, list) => { const out = { ...cab }; if (list.length) out.removedFrames = list; else delete out.removedFrames; return out; };
+const sameGeo = (a, b) => GEO.every((k) => Number(a?.[k]) === Number(b?.[k]));
+
 export function mergeFrames(oldCab, newFrames) {
   const oldTpl = new Map(buildFrames({ ...oldCab, frames: oldCab.template === 'blank' ? oldCab.frames : [] }).map((f) => [f.id, f]));
   const cur = new Map((oldCab.frames || []).map((f) => [f.id, f]));
+  const removed = new Set(oldCab.removedFrames || []);
   const rebuilt = [];
   let kept = false;
-  const frames = newFrames.map((nf) => {
+  const frames = newFrames.filter((nf) => !removed.has(nf.id)).map((nf) => {
     const of = cur.get(nf.id), ot = oldTpl.get(nf.id);
     if (!of || !ot) return nf;
-    if (same(of.body, ot.body) && same(of.base, ot.base)) return nf;
+    if (same(of.body, ot.body) && same(of.base, ot.base) && sameGeo(of, ot)) return nf;
     const hit = { conflict: false };
     const body = mergeNode(of.body, ot.body, nf.body, hit);
     const base = !same(of.base, ot.base) && same(nf.base, ot.base) ? { ...of.base } : nf.base;
+    // 位置 / 尺寸（追加 2：柜体可以移动、改大小）：用户改过、模板没改的 → 留用户的
+    const geo = {};
+    GEO.forEach((k) => { geo[k] = Number(of[k]) !== Number(ot[k]) && Number(nf[k]) === Number(ot[k]) ? of[k] : nf[k]; });
     if (hit.conflict) rebuilt.push(nf.id);
-    let g = { ...nf, base, body };
+    let g = { ...nf, ...geo, base, body };
     g = fitBody(g, g.W, Math.max(0, g.H - (g.base?.h || 0)), 'scale');
-    if (!same(g.body, nf.body) || !same(g.base, nf.base)) kept = true;
+    if (!same(g.body, nf.body) || !same(g.base, nf.base) || !sameGeo(g, nf)) kept = true;
     return g;
   });
   (oldCab.frames || []).forEach((f) => { const ot = oldTpl.get(f.id); if (ot && !newFrames.some((x) => x.id === f.id) && !same(f.body, ot.body)) rebuilt.push(f.id); });
-  return { frames, rebuilt, kept };
+  // 用户自己加的柜体永远保留；删掉的模板柜体不长回来。
+  // 新设定已经不生成的 id 从「删掉清单」拿掉（例：电视墙删了 → 关掉 → 再开，就会回来）
+  const users = (oldCab.frames || []).filter((f) => f.user);
+  const removedFrames = pruneRemoved(oldCab.removedFrames, newFrames);
+  if (users.length || removedFrames.length) kept = true;
+  return { frames: [...frames, ...users], rebuilt, kept, removedFrames };
 }
 
 // 改模板设定（同 updateSpec），但手画过的框框尽量保留 → { cab, rebuilt: [frame id…] }
 export function updateSpecKeep(cab, patch) {
   const next = updateSpec(cab, patch);
-  if (!cab.custom || cab.template === 'blank') return { cab: next, rebuilt: [] };
-  const { frames, rebuilt, kept } = mergeFrames(cab, next.frames);
-  const out = { ...next, frames };
+  if (!cab.custom) return { cab: next, rebuilt: [] };
+  if (cab.template === 'blank') { // 空白柜子：框框由 build 保留；这里只接回用户加的柜体、滤掉删掉的
+    const removed = pruneRemoved(cab.removedFrames, next.frames);
+    return { cab: withRemoved({ ...next, frames: [...next.frames.filter((f) => !removed.includes(f.id)), ...(cab.frames || []).filter((f) => f.user)] }, removed), rebuilt: [] };
+  }
+  const { frames, rebuilt, kept, removedFrames } = mergeFrames(cab, next.frames);
+  const out = withRemoved({ ...next, frames }, removedFrames);
   if (kept) out.custom = true; else delete out.custom;
   return { cab: out, rebuilt };
+}
+
+// ---------------- 追加 2：加 / 删整个柜体 ----------------
+export const ADD_KINDS = [
+  { id: 'base', ...FRAME_KIND_NAME.base },
+  { id: 'wall', ...FRAME_KIND_NAME.wall },
+  { id: 'tall', ...FRAME_KIND_NAME.tall },
+  { id: 'shelf', ...SHELF_NAME },
+];
+
+// 加一个柜体：常用尺寸（同空白柜子），放在那面墙现有柜体的最右边 → { cab, id }
+export function addFrame(cab, kind, { ceilingH, wall = 0 } = {}) {
+  const frames = cab.frames || [];
+  const used = new Set(frames.map((f) => f.id));
+  let n = 1;
+  while (used.has(`${cab.id}-u${n}`)) n += 1;
+  const id = `${cab.id}-u${n}`;
+  const onWall = frames.filter((f) => (f.wall || 0) === wall && f.kind !== 'backdrop' && f.W > 0);
+  const x = onWall.length ? Math.max(...onWall.map((f) => (Number(f.x) || 0) + (Number(f.W) || 0))) : 0;
+  let f;
+  if (kind === 'shelf') {
+    const s = shelfTpl.normalize(shelfTpl.defaults());
+    f = { ...shelfTpl.build(s, { id: 'x' })[0], id, x, wall, name: SHELF_NAME, label: bi(SHELF_NAME), user: true };
+  } else {
+    const k = BLANK_KIND_DEFAULTS[kind] ? kind : 'base';
+    const s = blank.normalize(BLANK_KIND_DEFAULTS[k]({ ceilingH }));
+    f = {
+      id, kind: k, label: bi(FRAME_KIND_NAME[k]), name: FRAME_KIND_NAME[k], wall, x, y: s.y, W: s.W, H: s.H, D: s.D,
+      base: { ...s.base }, ends: { left: true, right: true }, user: true,
+      body: fitBody({ W: s.W, H: s.H, base: s.base, body: leaf('closed', { interior: 'shelves' }) }, s.W, s.H - s.base.h).body,
+    };
+  }
+  return { cab: { ...cab, frames: [...frames, f], custom: true }, id };
+}
+
+// 复制柜子：新 id；柜体 id 的前缀「旧 id-」换成「新 id-」（模板 id 对得上 → 改设定时手画框框照样保留），
+// removedFrames 一样换；不是这个前缀的（例：旧报价换算来的）才改成「新 id-f序号」。不带图上位置（会重叠）。
+export function copyCabinet(cab, { id = uid('cab'), code } = {}) {
+  const src = JSON.parse(JSON.stringify(cab));
+  const { place: _p, ...rest } = src;
+  const pre = `${cab.id}-`;
+  const used = new Set();
+  const rename = (fid, i) => {
+    let n = typeof fid === 'string' && fid.startsWith(pre) ? `${id}-${fid.slice(pre.length)}` : `${id}-f${i}`;
+    while (used.has(n)) n = `${n}x`;
+    used.add(n);
+    return n;
+  };
+  const out = { ...rest, id, ...(code ? { code } : {}), frames: (rest.frames || []).map((f, i) => ({ ...f, id: rename(f.id, i) })) };
+  if (Array.isArray(rest.removedFrames)) {
+    out.removedFrames = rest.removedFrames.map((fid) => (typeof fid === 'string' && fid.startsWith(pre) ? `${id}-${fid.slice(pre.length)}` : fid));
+  }
+  return out;
+}
+
+// 删一个柜体：模板的柜体记进 removedFrames（改设定时不长回来）；用户加的直接拿掉
+export function removeFrame(cab, id) {
+  const f = (cab.frames || []).find((x) => x.id === id);
+  if (!f) return cab;
+  const out = { ...cab, frames: cab.frames.filter((x) => x.id !== id), custom: true };
+  if (!f.user) out.removedFrames = [...new Set([...(cab.removedFrames || []), id])];
+  return out;
 }
 
 // 改其中一格的单元

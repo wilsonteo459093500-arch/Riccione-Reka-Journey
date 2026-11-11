@@ -62,6 +62,14 @@ export function TvSettings({ cab, setSpec, ceilingH }) {
           </div>
         )}
       </Section>
+      <Section title="TV feature wall 电视墙" hint={`Width = between the side towers 宽 = 两侧高柜之间（${mmToM(run.runW)} m）· priced width × height 按宽 × 高计价`}>
+        <div data-tv-wall>
+          <Toggle on={!!s.tvWall?.on} onChange={(on) => setSpec({ tvWall: { ...(s.tvWall || {}), on, H: on && ceilingH && !s.tvWall?.on ? ceilingH : s.tvWall?.H } })} label={s.tvWall?.on ? 'Yes 有' : 'No 没有'} />
+        </div>
+        {s.tvWall?.on && (
+          <div className="w-36 mt-2"><MeterInput label="Height 高" mm={s.tvWall.H} onChange={(H) => setSpec({ tvWall: { ...s.tvWall, H } })} /></div>
+        )}
+      </Section>
       <Section title="Top cabinet above TV 电视上方吊柜">
         <Toggle on={!!s.upper.on} onChange={(on) => setSpec({ upper: { ...s.upper, on } })} label={s.upper.on ? 'Yes 有' : 'No 没有'} />
         {s.upper.on && (

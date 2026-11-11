@@ -32,6 +32,8 @@ const META_TEXT = ['name', 'phone', 'location', 'ref', 'pic', 'version', 'output
 
 // ---- 坏资料保护：不是对象 / 没有 id → 丢掉；meta / zones / looseItems 形状不对 → 补成安全值。
 //      没问题的记录原样返回（同一个对象），方便比较有没有变。
+import { cleanPlans } from '../../planner/plan.js';
+
 export function cleanRecord(r) {
   if (!isObj(r) || typeof r.id !== 'string' || !r.id) return null;
   let out = r;
@@ -48,6 +50,11 @@ export function cleanRecord(r) {
   if (!Array.isArray(r.zones)) fix('zones', []);
   else if (r.zones.some((z) => !isObj(z))) fix('zones', r.zones.filter(isObj));
   if (r.looseItems !== undefined && !Array.isArray(r.looseItems)) fix('looseItems', []);
+  // 第三版：户型图（旧记录没有 = 当成 []，读的地方一律 r.plans || []；坏的才清洗，不改 schema 版本）
+  if (r.plans !== undefined) {
+    if (!Array.isArray(r.plans)) fix('plans', []);
+    else if (r.plans.some((p) => !isObj(p) || typeof p.id !== 'string' || !isObj(p.image) || typeof p.image.path !== 'string')) fix('plans', cleanPlans(r.plans));
+  }
   if (r.updatedAt !== undefined && !Number.isFinite(r.updatedAt)) fix('updatedAt', Number(r.updatedAt) || 0);
   return out;
 }

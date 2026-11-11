@@ -20,6 +20,7 @@ export const FRAME_KIND_NAME = {
   base: { en: 'Base Cabinet', zh: '地柜' },
   wall: { en: 'Top Cabinet', zh: '吊柜' },
   tall: { en: 'Tall Cabinet', zh: '高柜' },
+  backdrop: { en: 'Feature Wall', zh: '电视墙' }, // 追加 2：电视墙（一块墙板，不是柜子）
 };
 
 // 第 i 面墙（同立面图的墙名）

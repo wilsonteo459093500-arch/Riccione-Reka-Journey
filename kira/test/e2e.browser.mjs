@@ -360,6 +360,414 @@ try {
   check('v2 sync: width change that changes the door count → rebuilt from template with a note; Undo brings the blocks back', note === 1 && got18 === exp18 && back, `note ${note}, got ${got18} expected ${exp18}, undo ok ${back}`);
   check('v2 no browser errors (phone)', verr.length === 0, verr.join(' | '));
   await mctx.close();
+
+  // =================== 第二版追加 2：柜体像乐高 + 电视墙 ===================
+  const PR = await import('../src/constants/pricing.js');
+  const sec = (pg, title) => pg.locator('section', { hasText: title });
+  // ---------- 电脑：电视柜 + 两侧高柜 + 吊柜 → 柜体模式把吊柜拖到顶（贴齐 2.70）→ 加飘板 → 电视墙 → 报价单 ----------
+  const xctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const x = await xctx.newPage();
+  const xerr = [];
+  x.on('pageerror', (e) => xerr.push(e.message));
+  await x.goto(URL);
+  await x.getByRole('button', { name: /Skip 跳过/ }).click();
+  await x.getByRole('button', { name: /New/ }).first().click();
+  const xc = x.locator('input[placeholder="2.70"]').first();
+  await xc.fill('2.7'); await xc.blur();
+  await x.getByRole('button', { name: /Add cabinet 加柜子/ }).first().click();
+  await x.getByRole('button', { name: /TV & display/ }).click();
+  await sec(x, 'Side tall cabinets').getByRole('button', { name: /No 没有/ }).click();
+  await sec(x, 'Top cabinet above TV').getByRole('button', { name: /No 没有/ }).click();
+  const tvPrice = await barPrice(x);
+  await x.locator('[data-mode]').getByRole('button', { name: /柜体 Boxes/ }).click();
+  const up = await x.locator('[data-block-canvas] rect[data-block*="-upper|"]').first().boundingBox();
+  const pxmm = up.height / 400; // 吊柜高 400
+  await x.mouse.move(up.x + up.width * 0.25, up.y + up.height / 2);
+  await x.mouse.down();
+  await x.mouse.move(up.x + up.width * 0.25, up.y + up.height / 2 - 150 * pxmm, { steps: 4 });
+  await x.mouse.move(up.x + up.width * 0.25, up.y + up.height / 2 - 285 * pxmm, { steps: 4 });
+  const lbl = await x.locator('[data-drag-label]').count();
+  await x.mouse.up();
+  const topTxt = await x.locator('[data-box-top]').textContent();
+  const yVal = await x.locator('[data-box-panel] label:has-text("Off floor 离地") input').inputValue();
+  check('v2+ desktop: drag the top cabinet up → snaps to the tower tops 2.70 m (off floor 2.30), price unchanged',
+    /2\.70/.test(topTxt) && yVal === '2.30' && lbl === 1 && (await barPrice(x)) === tvPrice, `${topTxt} · y ${yVal} · label ${lbl}`);
+  await x.keyboard.press('Control+z');
+  await x.waitForTimeout(100);
+  const yUndo = await x.locator('[data-box-panel] label:has-text("Off floor 离地") input').inputValue();
+  await x.keyboard.press('Control+Shift+z');
+  check('v2+ desktop: Ctrl+Z puts the box back, Ctrl+Shift+Z moves it again', yUndo === '2.00' && (await x.locator('[data-box-panel] label:has-text("Off floor 离地") input').inputValue()) === '2.30', `undo ${yUndo}`);
+  // 改模板设定（低柜高）→ 吊柜留在顶上
+  await x.keyboard.press('Escape');
+  await x.locator('label:has-text("Low height 低柜高") input').fill('0.45');
+  await x.locator('label:has-text("Low height 低柜高") input').press('Enter');
+  const up2 = await x.locator('[data-block-canvas] rect[data-block*="-upper|"]').first().boundingBox();
+  await x.mouse.click(up2.x + up2.width * 0.25, up2.y + up2.height / 2);
+  const yKeep = await x.locator('[data-box-panel] label:has-text("Off floor 离地") input').inputValue();
+  check('v2+ desktop: template change keeps the moved box at the top', yKeep === '2.30', `y ${yKeep}`);
+  await x.keyboard.press('Escape');
+  const p0 = await barPrice(x);
+  await x.locator('[data-add="shelf"]').click();
+  const p1 = await barPrice(x);
+  check('v2+ desktop: + add box → floating shelves (3 × RM 1,235) added, selected', p1 - p0 === 3705 && (await x.locator('[data-box-panel]').count()) === 1, `+${p1 - p0}`);
+  await x.locator('[data-box-panel] [data-remove-frame]').click();
+  const p2 = await barPrice(x);
+  await x.locator('[data-add="shelf"]').click();
+  check('v2+ desktop: delete box removes its price', p2 === p0, `${p0} → ${p2}`);
+  await sec(x, 'TV feature wall').getByRole('button', { name: /No 没有/ }).click();
+  const p3 = await barPrice(x);
+  const wallExp = Math.round(1.8 * 2.7 * PR.cnyToMyr(PR.seriesById('A').panel));
+  check('v2+ desktop: TV feature wall on → + 1.80 × 2.70 m wall panel', Math.abs((p3 - p1) - wallExp) <= 1, `+${p3 - p1}, expected ${wallExp}`);
+  await x.locator('[data-block-canvas]').screenshot({ path: path.join(outDir, 'v2plus-boxes.png') });
+  await x.getByRole('button', { name: /Add 加入报价/ }).click();
+  await x.getByRole('button', { name: /Quote 报价单/ }).first().click();
+  await x.waitForTimeout(400);
+  const xsheet = await x.locator('.quote-print-sheet').textContent();
+  check('v2+ quote sheet has "Feature Wall: A Series" and the floating shelf', /Feature Wall: A Series/.test(xsheet) && /Floating Shelf/.test(xsheet));
+  await x.locator('.quote-print-sheet').screenshot({ path: path.join(outDir, 'v2plus-quote.png') });
+  check('v2+ no browser errors (desktop)', xerr.length === 0, xerr.join(' | '));
+  await xctx.close();
+
+  // ---------- 手机（触控）：柜体模式点选 → 设定栏打离地 → 删柜体；返回键先关设定栏 ----------
+  const yctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const y = await yctx.newPage();
+  const yerr = [];
+  y.on('pageerror', (e) => yerr.push(e.message));
+  await y.goto(URL);
+  await y.getByRole('button', { name: /Skip 跳过/ }).tap();
+  await y.getByRole('button', { name: /New/ }).first().tap();
+  const yc = y.locator('input[placeholder="2.70"]').first();
+  await yc.fill('2.7'); await yc.blur();
+  await y.getByRole('button', { name: /Add cabinet 加柜子/ }).first().tap();
+  await y.locator('.hover-lift', { hasText: '电视柜' }).tap();
+  await sec(y, 'Top cabinet above TV').getByRole('button', { name: /No 没有/ }).tap();
+  await y.locator('[data-mode]').getByRole('button', { name: /柜体 Boxes/ }).tap();
+  const yu = await y.locator('[data-block-canvas] rect[data-block*="-upper|"]').first().boundingBox();
+  await y.touchscreen.tap(yu.x + yu.width * 0.2, yu.y + yu.height / 2);
+  const tapped = (await y.locator('[data-box-panel]').count()) === 1 && (await y.locator('[data-move]').count()) === 1 && (await y.locator('[data-edge]').count()) === 4;
+  const yin = y.locator('[data-box-panel] label:has-text("Off floor 离地") input');
+  await yin.fill('2.3'); await yin.press('Enter');
+  const ytop = await y.locator('[data-box-top]').textContent();
+  check('v2+ phone: tap a box → panel with move / edge handles; type off-floor 2.30 → top 2.70', tapped && /2\.70/.test(ytop), `tapped ${tapped} · ${ytop}`);
+  await y.goBack();
+  await y.waitForTimeout(200);
+  const closed = (await y.locator('[data-box-panel]').count()) === 0 && (await y.getByRole('button', { name: /Add 加入报价/ }).count()) === 1;
+  const yu2 = await y.locator('[data-block-canvas] rect[data-block*="-upper|"]').first().boundingBox();
+  await y.touchscreen.tap(yu2.x + yu2.width * 0.2, yu2.y + yu2.height / 2);
+  await y.locator('[data-box-panel] [data-remove-frame]').tap();
+  const gone = (await y.locator('[data-block-canvas] rect[data-block*="-upper|"]').count()) === 0;
+  check('v2+ phone: Back closes the box panel first; delete box removes it', closed && gone, `closed ${closed} gone ${gone}`);
+  await y.locator('[data-block-canvas]').screenshot({ path: path.join(outDir, 'v2plus-phone.png') });
+  check('v2+ no browser errors (phone)', yerr.length === 0, yerr.join(' | '));
+  await yctx.close();
+
+  // =================== 第三版：户型图 ===================
+  const FIX = path.join(here, 'fixtures');
+  const planPt = (pg) => (x, y) => pg.evaluate(([x, y]) => { const s = document.querySelector('[data-plan-svg]'); const q = s.createSVGPoint(); q.x = x; q.y = y; const r = q.matrixTransform(s.getScreenCTM()); return [r.x, r.y]; }, [x, y]);
+  // ---------- 电脑：上传 PNG → 定比例 2.70 → 画 2.4 m → 衣柜 → 图上拖到 3.0 m → 厨房正对 0.8 m → 走道提醒 → 报价单索引图 → PDF 第 2 页 → 全屏返回键 ----------
+  const pctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
+  const g = await pctx.newPage();
+  const gerr = [];
+  g.on('pageerror', (e) => gerr.push(e.message));
+  await g.goto(URL);
+  await g.getByRole('button', { name: /Skip 跳过/ }).click();
+  await g.getByRole('button', { name: /New/ }).first().click();
+  const gc = g.locator('input[placeholder="2.70"]').first();
+  await gc.fill('2.7'); await gc.blur();
+  await g.locator('[data-plan-file]').setInputFiles(path.join(FIX, 'floorplan.png'));
+  await g.waitForSelector('[data-plan-svg] image', { timeout: 15000 });
+  const gp = planPt(g);
+  const gclick = async (x, y) => { const [a, b] = await gp(x, y); await g.mouse.click(a, b); };
+  const gdrag = async (x0, y0, x1, y1) => {
+    const [a, b] = await gp(x0, y0), [c, d] = await gp(x1, y1);
+    await g.mouse.move(a, b); await g.mouse.down();
+    await g.mouse.move((a + c) / 2, (b + d) / 2, { steps: 3 }); await g.mouse.move(c, d, { steps: 3 }); await g.mouse.up();
+  };
+  await gclick(100, 60); await gclick(370, 60);
+  await g.locator('[data-plan-scale-input]').fill('2700');
+  await g.locator('[data-plan-scale-ok]').click();
+  check('v3 desktop: upload PNG + set scale (2 points, typed 2700) → 10 mm per px', /1 px = 10\.0 mm/.test(await g.locator('[data-plan-board]').innerText()));
+  await g.locator('[data-plan-mode="draw"]').click();
+  await gdrag(104, 104, 344, 164);
+  await g.getByRole('button', { name: /衣柜 Wardrobe/ }).click();
+  const w0 = await g.locator('label:has-text("Width 总宽") input').inputValue();
+  await g.getByRole('button', { name: /Add 加入报价/ }).click();
+  check('v3 desktop: draw a 2.40 m box → pick wardrobe → editor width 2.40, K1 on the plan', w0 === '2.40' && (await g.locator('[data-pcab]').count()) === 1, `width ${w0}`);
+  await gclick(224, 134);
+  await gdrag(344, 134, 404, 134); // 右边往右 60 px = 600 mm
+  const selSize = await g.locator('[data-plan-sel-size]').textContent();
+  await g.locator('[data-plan-edit]').click();
+  const w1 = await g.locator('label:has-text("Width 总宽") input').inputValue();
+  await g.locator('label:has-text("Width 总宽") input').fill('2.7');
+  await g.locator('label:has-text("Width 总宽") input').press('Enter');
+  await g.getByRole('button', { name: /Done 完成/ }).click();
+  await gclick(200, 134);
+  const selSize2 = await g.locator('[data-plan-sel-size]').textContent();
+  check('v3 desktop: drag the edge on the plan → editor shows 3.00; editor 2.70 → plan box follows', /3\.00 × 0\.60/.test(selSize) && w1 === '3.00' && /2\.70 × 0\.60/.test(selSize2), `${selSize} · editor ${w1} · ${selSize2}`);
+  // 厨房正对、相距 0.8 m（画在下面再转 180°）
+  await g.locator('[data-plan-mode="draw"]').click();
+  await gdrag(104, 244, 344, 304);
+  await g.getByRole('button', { name: /厨房 Kitchen/ }).click();
+  await g.getByRole('button', { name: /Add 加入报价/ }).click();
+  const [kx, ky] = [224, 274];
+  await gclick(kx, ky);
+  await g.locator('[data-plan-rotate]').click(); await g.locator('[data-plan-rotate]').click();
+  await g.waitForTimeout(150);
+  const aisle = await g.locator('[data-plan-aisle="warn"]').count();
+  const wtxt = (await g.locator('[data-plan-warnings]').textContent().catch(() => '')) || '';
+  check('v3 desktop: kitchen facing the wardrobe 0.80 m apart → red aisle line + "厨房走道只有 800"', aisle >= 1 && /厨房走道只有 800/.test(wtxt), `${aisle} lines · ${wtxt}`);
+  await g.locator('[data-plan-edit]').click();
+  const edWarn = await g.locator('section:has-text("Check 提醒")').textContent().catch(() => '');
+  await g.getByRole('button', { name: /Done 完成/ }).click();
+  check('v3 desktop: the aisle warning also shows in the cabinet editor', /kitchen aisle only 800|厨房走道只有 800/.test(edWarn || ''), edWarn);
+  await g.locator('[data-plan-board]').screenshot({ path: path.join(outDir, 'v3-plan-board.png') });
+  // 报价单：平面索引图页
+  await g.getByRole('button', { name: /Quote 报价单/ }).first().click();
+  await g.waitForSelector('[data-plan-page] [data-plan-figure] image', { timeout: 15000 });
+  await g.waitForTimeout(300);
+  const fig = await g.evaluate(() => { const im = document.querySelector('[data-plan-page] [data-plan-figure] image'); return (im?.getAttribute('href') || '').slice(0, 11); });
+  const ptext = await g.locator('[data-plan-page]').textContent();
+  const HAN3 = /\p{Script=Han}/u;
+  check('v3 quote: floor plan index page (image as data URL, K1 + K2, EN text without Chinese)', fig === 'data:image/' && /Floor Plan Index/.test(ptext) && /K1/.test(ptext) && /K2/.test(ptext) && !HAN3.test(ptext), `${fig} · ${(ptext.match(/\p{Script=Han}+/gu) || []).join(' ')}`);
+  await g.locator('[data-plan-page]').screenshot({ path: path.join(outDir, 'v3-plan-page.png') });
+  const [pdl] = await Promise.all([g.waitForEvent('download', { timeout: 30000 }), g.getByRole('button', { name: /Long image/ }).click()]);
+  const lp = await pdl.path();
+  const lbuf = readFileSync(lp);
+  check('v3 long image with the floor plan page downloads', /\.png$/.test(pdl.suggestedFilename()) && lbuf.length > 50000, `${lbuf.length} bytes`);
+  await g.goBack(); // 返回键关掉报价单
+  await g.waitForTimeout(200);
+  // PDF 选第 2 页
+  await g.locator('[data-plan-file]').setInputFiles(path.join(FIX, 'floorplan-2p.pdf'));
+  await g.waitForSelector('[data-pdf-pages] [data-pdf-page="2"]', { timeout: 20000 });
+  await g.locator('[data-pdf-page="2"]').click();
+  await g.waitForFunction(() => document.querySelectorAll('[data-plan-select] option').length === 2, null, { timeout: 20000 });
+  await g.waitForSelector('[data-plan-svg] image', { timeout: 15000 });
+  const pname = await g.locator('[data-plan-name]').inputValue();
+  check('v3 desktop: PDF upload → pick page 2 → second floor plan', pname === 'Plan 2 户型图 2' && (await g.locator('[data-plan-scale]').count()) === 1, pname);
+  // 全屏 → 返回键先关全屏，还在 KIRA
+  await g.locator('[data-plan-full]').click();
+  await g.waitForTimeout(200);
+  const fullOn = await g.evaluate(() => getComputedStyle(document.querySelector('[data-plan-board]')).position === 'fixed');
+  await g.goBack();
+  await g.waitForTimeout(300);
+  const fullOff = await g.evaluate(() => getComputedStyle(document.querySelector('[data-plan-board]')).position !== 'fixed');
+  check('v3 desktop: Back closes the full-screen floor plan first, stays on KIRA', fullOn && fullOff && g.url().startsWith(URL.replace(/\/$/, '')), g.url());
+  check('v3 no browser errors (desktop)', gerr.length === 0, gerr.join(' | '));
+  await pctx.close();
+
+  // ---------- AI 识图（/api/plan-ai 用假的回答，不花钱）：密码 → AI 读到的比例 → 2 个建议 → 取消 1 个 → 加入 → 撤销 ----------
+  const aiAnswer = JSON.parse(readFileSync(path.join(FIX, 'plan-ai-demo.json'), 'utf8'));
+  // 假回答是整张原图的 px；送去的图会去白边 / 框选 → 换成送去那张图的 px（同真的 AI）
+  const toSent = (ans, body) => {
+    const c = body.crop || { x: 0, y: 0, w: body.w }, k = body.w / c.w;
+    const P = (p) => [(p[0] - c.x) * k, (p[1] - c.y) * k];
+    const B = (b) => [...P([b[0], b[1]]), ...P([b[2], b[3]])];
+    return { ...ans, scale: { ...ans.scale, a: P(ans.scale.a), b: P(ans.scale.b) }, rooms: ans.rooms.map((r) => ({ ...r, box: B(r.box) })), suggestions: ans.suggestions.map((sg) => ({ ...sg, segments: sg.segments.map(B) })) };
+  };
+  const actx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const ap = await actx.newPage();
+  const aerr = [];
+  ap.on('pageerror', (e) => aerr.push(e.message));
+  let aiCalls = 0, aiBody = null;
+  await ap.route('**/api/plan-ai', async (route) => {
+    aiCalls += 1;
+    aiBody = route.request().postDataJSON();
+    if (route.request().headers()['x-kira-ai-passcode'] !== 'team123') return route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ error: 'passcode' }) });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ result: toSent(aiAnswer, aiBody), model: 'claude-opus-5-5', usage: { input: 2600, output: 1400 } }) });
+  });
+  await ap.goto(URL);
+  await ap.getByRole('button', { name: /Skip 跳过/ }).click();
+  await ap.getByRole('button', { name: /New/ }).first().click();
+  await ap.locator('[data-plan-file]').setInputFiles(path.join(FIX, 'floorplan.png'));
+  await ap.waitForSelector('[data-plan-svg] image', { timeout: 15000 });
+  await ap.locator('[data-plan-ai]').click();
+  await ap.getByRole('button', { name: /Read 开始/ }).click();
+  await ap.locator('[data-plan-ai-pass]').fill('wrong');
+  await ap.locator('[data-plan-ai-pass-ok]').click();
+  await ap.waitForSelector('[data-plan-ai-panel="pass"] >> text=团队密码不对', { timeout: 10000 });
+  await ap.locator('[data-plan-ai-pass]').fill('team123');
+  await ap.locator('[data-plan-ai-pass-ok]').click();
+  await ap.waitForSelector('[data-plan-ai-scale-ok]', { timeout: 10000 });
+  check('v3 AI: wrong passcode is refused, right one works; image sent as JPEG with the white margin trimmed', aiCalls === 2 && aiBody.image.startsWith('/9j/') && aiBody.crop.x > 60 && aiBody.crop.x < 100 && aiBody.crop.y < 40 && aiBody.crop.y > 5 && aiBody.w < 1100 && aiBody.w === aiBody.crop.w, `${aiCalls} calls, ${aiBody?.w}×${aiBody?.h} crop ${JSON.stringify(aiBody?.crop)}`);
+  await ap.locator('[data-plan-ai-scale-ok]').click(); // 还没定比例：用 AI 读到的 2.70 m
+  await ap.waitForSelector('[data-plan-ai-list]');
+  const items = await ap.locator('[data-plan-ai-item="ok"]').count();
+  const dashed = await ap.locator('[data-plan-ai-overlay] rect').count();
+  check('v3 AI: scale from the printed 2700 → 2 suggestions (wardrobe + L kitchen) drawn dashed on the plan', items === 2 && dashed >= 2 && /1 px = 10\.0 mm/.test(await ap.locator('[data-plan-board]').innerText()), `${items} items, ${dashed} rects`);
+  await ap.locator('[data-plan-board]').screenshot({ path: path.join(outDir, 'v3-plan-ai-suggest.png') });
+  await ap.locator('[data-plan-ai-item="ok"] input').first().uncheck();
+  await ap.locator('[data-plan-ai-add]').click();
+  await ap.waitForTimeout(300);
+  const placed = await ap.locator('[data-pcab]').count();
+  const kitchenRoom = await ap.locator('text=Dry Kitchen 干厨').count();
+  check('v3 AI: untick the wardrobe, add → only the kitchen goes in (new room Dry Kitchen, on the plan)', placed === 1 && kitchenRoom > 0 && (await ap.locator('[data-plan-ai-panel]').count()) === 0, `placed ${placed}, room ${kitchenRoom}`);
+  await ap.locator('[data-plan-undo]').click();
+  await ap.waitForTimeout(200);
+  check('v3 AI: Undo takes the added cabinets back out', (await ap.locator('[data-pcab]').count()) === 0);
+  await ap.locator('[data-plan-board]').screenshot({ path: path.join(outDir, 'v3-plan-ai.png') });
+  // 第二次：这次浏览器开着就记住密码，不再问；出错照实显示
+  await ap.unroute('**/api/plan-ai');
+  await ap.route('**/api/plan-ai', (route) => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'not_configured' }) }));
+  await ap.locator('[data-plan-ai]').click();
+  await ap.getByRole('button', { name: /Read 开始/ }).click();
+  await ap.waitForSelector('[data-plan-ai-error]', { timeout: 10000 });
+  check('v3 AI: passcode remembered this session; server errors shown in plain words', /AI 还没设定/.test(await ap.locator('[data-plan-ai-error]').innerText()) && (await ap.locator('[data-plan-ai-pass]').count()) === 0);
+  check('v3 no browser errors (AI)', aerr.length === 0, aerr.join(' | '));
+  await actx.close();
+
+  // ---------- 找得到 AI：最上面「✨ 户型图」→ 选图 → 上传完自动问 AI；Ukur 量尺里「用这张图做户型图」→ 同一张图 + 校准比例带过去 ----------
+  const fctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const fp = await fctx.newPage();
+  const ferr = [];
+  fp.on('pageerror', (e) => ferr.push(e.message));
+  let fCalls = 0, fBody = null;
+  // 这里的假回答：衣柜那条线故意偏进房间 16 px（AI 常见的误差）→ 要贴回墙上；多两间重叠的小房间测名字不叠
+  const offAnswer = {
+    ...aiAnswer,
+    rooms: [...aiAnswer.rooms, { type: 'bathroom', name: 'Bath 1', box: [104, 104, 220, 170] }, { type: 'bathroom', name: 'Bath 2', box: [104, 104, 230, 180] }],
+    suggestions: aiAnswer.suggestions.map((sg, i) => (i === 0 ? { ...sg, segments: [[104, 120, 344, 120]], note: 'Top wall."}],"notes":""}' } : sg)),
+  };
+  await fp.route('**/api/plan-ai', async (route) => {
+    fCalls += 1;
+    fBody = route.request().postDataJSON();
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ result: toSent(offAnswer, fBody), model: 'claude-opus-5-5', usage: { input: 2600, output: 1400 } }) });
+  });
+  await fp.goto(URL);
+  await fp.getByRole('button', { name: /Skip 跳过/ }).click();
+  await fp.getByRole('button', { name: /New/ }).first().click();
+  const topBtns = await fp.locator('[data-top-plan-ai], [data-top-measure]').evaluateAll((els) => els.map((e) => e.hasAttribute('data-top-plan-ai') ? 'ai' : 'ukur'));
+  check('find AI: the top of the quote shows "✨ 户型图 · AI" first, then Ukur', topBtns.join(',') === 'ai,ukur', topBtns.join(','));
+  await fp.locator('[data-top-plan-ai]').locator('..').screenshot({ path: path.join(outDir, 'v3-top-buttons.png') });
+  const [fc] = await Promise.all([fp.waitForEvent('filechooser'), fp.locator('[data-top-plan-ai]').click()]);
+  await fc.setFiles(path.join(FIX, 'floorplan.png'));
+  await fp.getByRole('button', { name: /Read 开始/ }).click({ timeout: 15000 });
+  await fp.locator('[data-plan-ai-pass]').fill('team123');
+  await fp.locator('[data-plan-ai-pass-ok]').click();
+  await fp.waitForSelector('[data-plan-ai-scale-ok]', { timeout: 10000 });
+  check('find AI: top button → pick the image → upload → AI starts by itself', fCalls === 1 && (await fp.locator('[data-plan-svg] image').count()) === 1);
+  // Ukur 量尺：上传 → 校准 2.7 m → 「用这张图做户型图 · AI 识图」
+  await fp.getByRole('button', { name: /New/ }).first().click();
+  await fp.locator('[data-top-measure]').click();
+  check('find AI: Ukur shows the "go to AI" bar even before an image', /去户型图 · AI 识图/.test(await fp.locator('[data-measure-to-plan]').innerText()));
+  await fp.locator('.fixed.inset-0 input[type=file]').first().setInputFiles(path.join(FIX, 'floorplan.png'));
+  const uimg = fp.locator('.fixed.inset-0 img[alt="plan"]');
+  await uimg.waitFor();
+  const ub = await uimg.boundingBox();
+  const uk = ub.width / 1200;
+  await fp.mouse.click(ub.x + 100 * uk, ub.y + 60 * uk);
+  await fp.mouse.click(ub.x + 370 * uk, ub.y + 60 * uk);
+  await fp.locator('.fixed.inset-0 input[type=number]').first().fill('2.7');
+  await fp.locator('.fixed.inset-0').getByRole('button', { name: 'Set', exact: true }).click();
+  await fp.locator('[data-measure-to-plan]').click();
+  await fp.getByRole('button', { name: /Read 开始/ }).click({ timeout: 15000 });
+  await fp.waitForSelector('[data-plan-ai-list]', { timeout: 10000 });
+  const ktxt = (await fp.locator('[data-plan-board]').innerText()).match(/1 px = ([\d.]+) mm/);
+  check('find AI: Ukur → "use this image" → new floor plan with the Ukur scale (≈10 mm/px), AI runs straight to suggestions (passcode remembered)',
+    fCalls === 2 && (await fp.locator('.fixed.inset-0 img[alt="plan"]').count()) === 0 && ktxt && Math.abs(Number(ktxt[1]) - 10) < 0.4 && Math.abs(fBody.mmPerPx - 10) < 0.4 && (await fp.locator('[data-plan-ai-item="ok"]').count()) === 2,
+    `${fCalls} calls, ${ktxt?.[1]} mm/px, sent ${fBody?.mmPerPx}`);
+  await fp.locator('[data-plan-board]').screenshot({ path: path.join(outDir, 'v3-ukur-to-ai.png') });
+  // 房间名不叠在一起；乱码说明被清掉
+  const labels = await fp.locator('[data-plan-ai-label]').evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom]; }));
+  const clash = labels.some((a, i) => labels.some((b, j) => j > i && a[0] < b[2] - 1 && b[0] < a[2] - 1 && a[1] < b[3] - 1 && b[1] < a[3] - 1));
+  const listTxt = await fp.locator('[data-plan-ai-list]').innerText();
+  check('AI fix: room names on the plan do not overlap; JSON junk in notes is cleaned', labels.length === 4 && !clash && /Top wall\./.test(listTxt) && !/notes/.test(listTxt), `${labels.length} labels, clash ${clash}`);
+  // 加入 → 衣柜贴回上墙（墙面 y 104 px），不是 AI 给的 120
+  await fp.locator('[data-plan-ai-add]').click();
+  await fp.waitForTimeout(300);
+  const wardY = await fp.evaluate(() => { const ys = [...document.querySelectorAll('[data-pcab] rect')].map((r) => Number(r.getAttribute('y'))).filter(Number.isFinite); return Math.min(...ys); });
+  check('AI fix: a suggestion 16 px off the wall snaps back onto the wall when added', Math.abs(wardY - 104) <= 2.5, `top ${wardY}`);
+  // 框选范围：只送框起来的左半边
+  await fp.locator('[data-plan-ai]').click();
+  await fp.getByRole('button', { name: /Read 开始/ }).click();
+  await fp.waitForSelector('[data-plan-ai-list]', { timeout: 10000 });
+  await fp.locator('[data-plan-ai-area]').first().click();
+  const fpt = planPt(fp);
+  const [ax, ay] = await fpt(60, 80), [bx, by] = await fpt(620, 720);
+  await fp.mouse.move(ax, ay); await fp.mouse.down(); await fp.mouse.move((ax + bx) / 2, (ay + by) / 2, { steps: 4 }); await fp.mouse.move(bx, by, { steps: 4 }); await fp.mouse.up();
+  await fp.getByRole('button', { name: /Read 开始/ }).click();
+  await fp.waitForSelector('[data-plan-ai-list]', { timeout: 10000 });
+  const ac = fBody.crop;
+  check('AI fix: "Select area" sends only the boxed part (crop ≈ 60,80 → 620,720)', Math.abs(ac.x - 60) < 4 && Math.abs(ac.y - 80) < 4 && Math.abs(ac.x + ac.w - 620) < 4 && Math.abs(ac.y + ac.h - 720) < 4 && fBody.w === Math.round(ac.w) && /只读框起来/.test(await fp.locator('[data-plan-ai-panel]').innerText()), JSON.stringify(ac));
+  // 图上已有的柜子会告诉 AI；重复的建议不勾
+  check('AI fix: cabinets already on the plan (inside the boxed area) are sent to the AI and the same suggestions are not ticked', fBody.cabinets.length === 1 && fBody.cabinets[0].code === 'K1' && (await fp.locator('[data-plan-ai-pick="yes"]').count()) === 0 && (await fp.locator('[data-plan-ai-why]').count()) >= 2, `${fBody.cabinets.length} cabs`);
+  // 手机截图式的黑边：送去前自动裁掉
+  const barred = await fp.evaluate(async () => {
+    const img = await new Promise((res) => { const i = new Image(); i.onload = () => res(i); i.src = document.querySelector('[data-plan-svg] image').getAttribute('href'); });
+    const c = document.createElement('canvas'); c.width = 1500; c.height = 800;
+    const g = c.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, 1500, 800); g.drawImage(img, 150, 0, 1200, 800);
+    return c.toDataURL('image/png').split(',')[1];
+  });
+  await fp.getByRole('button', { name: /New/ }).first().click();
+  const [fc2] = await Promise.all([fp.waitForEvent('filechooser'), fp.locator('[data-top-plan-ai]').click()]);
+  await fc2.setFiles({ name: 'screenshot.png', mimeType: 'image/png', buffer: Buffer.from(barred, 'base64') });
+  await fp.getByRole('button', { name: /Read 开始/ }).click({ timeout: 15000 });
+  await fp.waitForSelector('[data-plan-ai-panel="result"]', { timeout: 10000 });
+  check('AI fix: black side bars of a phone screenshot are cut before sending', fBody.crop.x > 210 && fBody.crop.x < 250 && fBody.crop.x + fBody.crop.w < 1270 && fBody.crop.x + fBody.crop.w > 1240, JSON.stringify(fBody.crop));
+  check('find AI: no browser errors', ferr.length === 0, ferr.join(' | '));
+  await fctx.close();
+
+  // ---------- 复查修正：上传很慢（toBlob 延迟 2.5 s）时改报价 / 换报价，不会被旧的报价盖回去 ----------
+  const sctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await sctx.addInitScript(() => {
+    const orig = HTMLCanvasElement.prototype.toBlob;
+    HTMLCanvasElement.prototype.toBlob = function (cb, ...a) { setTimeout(() => orig.call(this, cb, ...a), 2500); };
+  });
+  const sp3 = await sctx.newPage();
+  const serr = [];
+  sp3.on('pageerror', (e) => serr.push(e.message));
+  await sp3.goto(URL);
+  await sp3.getByRole('button', { name: /Skip 跳过/ }).click();
+  await sp3.getByRole('button', { name: /New/ }).first().click();
+  const nameIn = sp3.locator('input').nth(1);
+  await nameIn.fill('Before');
+  await sp3.locator('[data-plan-file]').setInputFiles(path.join(FIX, 'floorplan.png'));
+  await sp3.waitForTimeout(300);
+  await nameIn.fill('Edited during upload');
+  await sp3.waitForSelector('[data-plan-svg] image', { timeout: 20000 });
+  await sp3.waitForTimeout(300);
+  const keptName = await nameIn.inputValue();
+  check('v3 review fix: typing during a slow upload is not overwritten when the upload finishes', keptName === 'Edited during upload', keptName);
+  // 上传中按 New 开另一份报价 → 两份都在、id 不重复、B 的名字还在
+  await sp3.locator('[data-plan-file]').setInputFiles(path.join(FIX, 'floorplan.png'));
+  await sp3.waitForTimeout(300);
+  await sp3.getByRole('button', { name: /New/ }).first().click();
+  await sp3.locator('input').nth(1).fill('Customer B');
+  await sp3.waitForTimeout(4000);
+  const recs = await sp3.evaluate(() => { const s = JSON.parse(localStorage.getItem('kira.records.v1') || '{}'); return (s.records || []).map((r) => [r.id, r.meta?.name || '', (r.plans || []).length]); });
+  const ids = recs.map((r) => r[0]);
+  const b = recs.find((r) => r[1] === 'Customer B');
+  check('v3 review fix: switching quotes during an upload keeps both quotes (no overwrite, no duplicate id)',
+    new Set(ids).size === ids.length && !!b && b[2] === 0 && recs.some((r) => r[1] === 'Edited during upload' && r[2] === 1) && (await sp3.locator('input').nth(1).inputValue()) === 'Customer B', JSON.stringify(recs));
+  check('v3 no browser errors (slow upload)', serr.length === 0, serr.join(' | '));
+  await sctx.close();
+
+  // ---------- 手机（触控）：上传 → 点两点定比例 → 点两个对角画柜子 → 衣柜 ----------
+  const hctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const hp = await hctx.newPage();
+  const herr = [];
+  hp.on('pageerror', (e) => herr.push(e.message));
+  await hp.goto(URL);
+  await hp.getByRole('button', { name: /Skip 跳过/ }).tap();
+  await hp.getByRole('button', { name: /New/ }).first().tap();
+  check('v3 phone: floor plan board is open by default with the AI button showing', (await hp.locator('[data-plan-ai]').count()) === 1 && (await hp.locator('[data-plan-empty-ai]').count()) === 1);
+  await hp.locator('[data-plan-file]').setInputFiles(path.join(FIX, 'floorplan.png'));
+  await hp.waitForSelector('[data-plan-svg] image', { timeout: 15000 });
+  await hp.locator('[data-plan-svg]').scrollIntoViewIfNeeded();
+  const hpp = planPt(hp);
+  const htap = async (x, y) => { const [a, b] = await hpp(x, y); await hp.touchscreen.tap(a, b); };
+  await htap(100, 60); await htap(370, 60);
+  await hp.locator('[data-plan-scale-input]').fill('2.7');
+  await hp.locator('[data-plan-scale-ok]').tap();
+  await hp.locator('[data-plan-mode="draw"]').tap();
+  await hp.locator('[data-plan-svg]').scrollIntoViewIfNeeded();
+  await htap(104, 104); await htap(344, 164);
+  await hp.locator('.hover-lift', { hasText: '衣柜' }).tap();
+  const hw = await hp.locator('label:has-text("Width 总宽") input').inputValue();
+  await hp.getByRole('button', { name: /Add 加入报价/ }).tap();
+  check('v3 phone: tap two points for scale, tap two corners to draw → wardrobe 2.40 on the plan', hw === '2.40' && (await hp.locator('[data-pcab]').count()) === 1, `width ${hw}`);
+  await hp.locator('[data-plan-board]').screenshot({ path: path.join(outDir, 'v3-plan-phone.png') });
+  check('v3 no browser errors (phone)', herr.length === 0, herr.join(' | '));
+  await hctx.close();
 } finally {
   await browser.close();
 }

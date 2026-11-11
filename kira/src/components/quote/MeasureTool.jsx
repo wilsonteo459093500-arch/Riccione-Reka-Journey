@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Upload, Ruler, RotateCcw, Trash2, Plus, CornerDownRight, Undo2, Redo2, ZoomIn, ZoomOut, Maximize2, Eraser } from 'lucide-react';
+import { X, Upload, Ruler, RotateCcw, Trash2, Plus, CornerDownRight, Undo2, Redo2, ZoomIn, ZoomOut, Maximize2, Eraser, Sparkles } from 'lucide-react';
 import { T } from '../../theme.js';
 import { CABINET_TYPES } from '../../constants/pricing.js';
 
@@ -18,7 +18,8 @@ const UNITS = [
 // 全程浏览器本地运行；坐标用图片原始像素，缩放/换窗不影响比例。
 // 量尺支持多段折线：连续点转角（L 型柜），整条折线 = 一个柜体项目（长度累加）。
 // ============================================================
-export default function MeasureTool({ zones = [], onAddItems, onClose }) {
+// onToPlan(x)：交给「户型图」做 AI 识图。x = { src, w, h, scale } 或 null（还没上传图 → 户型图那边选图）
+export default function MeasureTool({ zones = [], onAddItems, onClose, onToPlan }) {
   const [img, setImg] = useState(null);        // { src, w, h }
   const [pxPerM, setPxPerM] = useState(0);      // 原始像素/米（0=未校准）
   const [pending, setPending] = useState(null); // 校准起点 {x,y}（原始坐标）
@@ -312,6 +313,19 @@ export default function MeasureTool({ zones = [], onAddItems, onClose }) {
             </div>
             <button onClick={onClose} style={{ color: T.inkSoft }}><X size={18} /></button>
           </div>
+
+          {/* 这里是手动量尺；AI 识图在「户型图」—— 一键带过去（有图就用这张，校准过比例也带过去） */}
+          {onToPlan && (
+            <div className="flex items-center gap-2 flex-wrap px-4 py-2.5 text-xs" style={{ background: '#F6F2FA', borderBottom: `1px solid ${T.lineSoft}` }} data-measure-ai>
+              <Sparkles size={14} style={{ color: '#7A5BA6' }} />
+              <span style={{ color: T.ink }}>想让 AI 自动认房间、放柜子？ <span style={{ color: T.inkSoft }}>Let AI find the rooms and suggest cabinets</span></span>
+              <button type="button" data-measure-to-plan
+                onClick={() => onToPlan(img ? { src: img.src, w: img.w, h: img.h, scale: pxPerM > 0 && calib && calibM > 0 ? { a: [calib.a.x, calib.a.y], b: [calib.b.x, calib.b.y], mm: Math.round(calibM * 1000) } : null } : null)}
+                className="ml-auto flex items-center gap-1 px-3 py-1.5 font-medium" style={{ background: '#7A5BA6', color: '#fff', borderRadius: 2 }}>
+                <Sparkles size={13} /> {img ? '用这张图做户型图 · AI 识图' : '去户型图 · AI 识图'}
+              </button>
+            </div>
+          )}
 
           <div className="grid gap-4 p-4 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px]">
             {/* 左：图纸 + 画布 */}

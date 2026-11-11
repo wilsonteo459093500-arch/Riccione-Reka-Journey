@@ -144,7 +144,16 @@ export function shelfItems(cab, frame, defaults = {}, ser = resolveSeries(cab, d
   });
 }
 
+// 电视墙（kind 'backdrop'）：整面墙 宽 × 高 × 墙板价，系列跟门板（同见光板）
+export function backdropItems(cab, frame, defaults = {}, ser = resolveSeries(cab, defaults)) {
+  const L = Math.max(0, frame.W || 0) / 1000, H = Math.max(0, frame.H || 0) / 1000;
+  if (!(L > 0 && H > 0)) return [];
+  return [{ id: `${cab.id}:${frame.id}:tvWall`, type: 'panel', preset: 'feature', name: frame.label || '', length: L, h: H,
+    panelSeries: ser.door, noDiscount: false, kira: { cabinetId: cab.id, frameId: frame.id, part: 'tvWall' } }];
+}
+
 export function frameItems(cab, frame, defaults = {}) {
+  if (frame?.kind === 'backdrop') return backdropItems(cab, frame, defaults);
   const ser = resolveSeries(cab, defaults);
   const seriesOf = (node) => resolveLeafSeries(cab, node, defaults, ser);
   const { linear, pricedH, q, qBy, drawersBy } = frameQuantities(frame, seriesOf);

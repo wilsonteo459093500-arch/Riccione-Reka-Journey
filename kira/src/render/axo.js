@@ -214,6 +214,12 @@ function frameParts(f, C, handleStyle, ends = endsOf(f, null)) {
   const kind = f.kind || 'tall';
   const tagF = { frame: f.id ?? null };
 
+  // 电视墙（追加 2）：一块门板色墙板贴在墙面后面（w −D…0），不和柜子穿插
+  if (kind === 'backdrop') {
+    parts.push({ part: 'wallpanel', color: shade(C.door, 1.08), u0: x0, u1: x0 + W, v0: y0, v1: y0 + H, w0: -Math.min(D, 30), w1: 0, ...tagF });
+    return parts;
+  }
+
   const add = (part, color, u0, u1, v0, v1, w0, w1, extra) => {
     const b = {
       part, color,
@@ -505,7 +511,7 @@ function buildWorld(cab, opts = {}) {
     });
     // 地面阴影（落地柜深、低悬挂浅）
     const y0 = Math.max(0, num(f.y));
-    const op = y0 <= 1 ? 0.1 : y0 < 900 ? 0.05 : 0;
+    const op = f.kind === 'backdrop' ? 0 : y0 <= 1 ? 0.1 : y0 < 900 ? 0.05 : 0;
     if (op > 0) {
       const W = num(f.W), D = num(f.D), x0 = num(f.x);
       footprints.push({ wall: wallIndex, opacity: op, pts: [[x0, 0, 0], [x0 + W, 0, 0], [x0 + W, 0, D + 30], [x0, 0, D + 30]].map(([u, v, w]) => wallToWorld(wall, u, v, w)) });

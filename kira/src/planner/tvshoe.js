@@ -34,6 +34,7 @@ const TV_FRAME_NAME = {
   base: { en: 'TV Cabinet', zh: '电视柜' },
   wall: FRAME_KIND_NAME.wall,
   tall: { en: 'Display Cabinet', zh: '展示高柜' },
+  backdrop: FRAME_KIND_NAME.backdrop,
 };
 export const tvFrameName = (frame) => [TV_FRAME_NAME[frame?.kind] || TV_FRAME_NAME.tall];
 
@@ -42,6 +43,7 @@ export function tvDefaults({ ceilingH } = {}) {
     W: 3000, lowKind: 'floating', lowH: 400, lowD: 400, lowY: 250, lowUnits: [],
     sides: { on: false, which: 'both', W: 600, H: ceilingOr(ceilingH), D: 350, kind: 'openTop' },
     upper: { on: false, H: 400, D: 350, y: 2000 }, upperUnits: [],
+    tvWall: { on: false, H: ceilingOr(ceilingH) }, // 追加 2：电视墙（宽 = 两侧高柜之间；高默认到楼高）
   };
 }
 
@@ -71,6 +73,9 @@ export function tvNormalize(spec) {
   s.upper.H = clamp(int(s.upper.H, 400), 250, 1000);
   s.upper.D = clamp(int(s.upper.D, 350), 250, 600);
   s.upper.y = clamp(int(s.upper.y, 2000), 1200, 3000);
+  s.tvWall = { ...tvDefaults().tvWall, ...(s.tvWall || {}) };
+  s.tvWall.on = !!s.tvWall.on;
+  s.tvWall.H = clamp(ceilingOr(s.tvWall.H), 600, 4000);
   const run = tvRun(s);
   const n = autoDoors(run.runW);
   s.lowUnits = resize(s.lowUnits, n, 'doors');
@@ -115,15 +120,36 @@ export function tvBuild(spec, cab) {
       });
     }
   }
-  const side = (id, x, ends) => {
+  // 高柜内侧（朝电视那一边）：矮柜 / 吊柜以外露出来的侧面 → 见光板（同厨房高柜内侧，bridge.js panelIn）
+  //   露出面积 = 深 × 高 − 矮柜挡住的（min(深) × 重叠高度）− 吊柜挡住的；中间没有矮柜（全宽都是高柜）就不加
+  const overlap = (a0, a1, b0, b1) => Math.max(0, Math.min(a1, b1) - Math.max(a0, b0));
+  const innerArea = () => {
+    if (!(run.runW > 0)) return 0;
+    const { D, H } = spec.sides;
+    const lowY0 = spec.lowKind === 'floating' ? spec.lowY : 0;
+    let area = D * H - Math.min(D, spec.lowD) * overlap(0, H, lowY0, lowY0 + spec.lowH);
+    if (spec.upper.on) area -= Math.min(D, spec.upper.D) * overlap(0, H, spec.upper.y, spec.upper.y + spec.upper.H);
+    return Math.max(0, Math.round(area));
+  };
+  const side = (id, x, ends, innerSide) => {
     const base = { kind: 'plinth', h: 80 };
     const Hb = spec.sides.H - base.h;
     const n = autoDoors(spec.sides.W);
     const body = n > 1 ? vsplit(splitEven(spec.sides.W, n), Array.from({ length: n }, () => sideBody(spec.sides.kind, Hb))) : sideBody(spec.sides.kind, Hb);
-    return { id: `${cab.id}-${id}`, kind: 'tall', label: bi(TV_FRAME_NAME.tall), wall: 0, x, y: 0, W: spec.sides.W, H: spec.sides.H, D: spec.sides.D, base, ends, body };
+    const area = innerArea();
+    return { id: `${cab.id}-${id}`, kind: 'tall', label: bi(TV_FRAME_NAME.tall), wall: 0, x, y: 0, W: spec.sides.W, H: spec.sides.H, D: spec.sides.D, base, ends,
+      ...(area > 0 ? { innerPanel: { side: innerSide, area } } : {}), body };
   };
-  if (run.left) frames.unshift(side('sideL', 0, { left: true, right: false }));
-  if (run.right) frames.push(side('sideR', spec.W - spec.sides.W, { left: false, right: true }));
+  if (run.left) frames.unshift(side('sideL', 0, { left: true, right: false }, 'right'));
+  if (run.right) frames.push(side('sideR', spec.W - spec.sides.W, { left: false, right: true }, 'left'));
+  // 电视墙：一块墙板放在柜子后面（排最前 = 先画）；价钱 = 宽 × 高 × 墙板价（被柜子挡住也算）
+  if (spec.tvWall?.on && run.runW > 0) {
+    frames.unshift({
+      id: `${cab.id}-tvwall`, kind: 'backdrop', label: bi(TV_FRAME_NAME.backdrop), wall: 0, x: run.x0, y: 0,
+      W: run.runW, H: spec.tvWall.H, D: 18, base: { kind: 'none', h: 0 }, ends: { left: false, right: false },
+      body: leaf('void'),
+    });
+  }
   return frames;
 }
 
@@ -138,6 +164,7 @@ export const tvSummary = (spec, lang = 'both') => joinL([
   spec.lowKind === 'floating' ? { en: 'Floating low cabinet', zh: '悬空低柜' } : { en: 'Floor low cabinet', zh: '落地低柜' },
   spec.sides?.on && (TV_SIDES_NAME[spec.sides.which] || TV_SIDES_NAME.both),
   spec.upper?.on && { en: 'Top cabinet above', zh: '上方吊柜' },
+  spec.tvWall?.on && { en: 'Feature wall', zh: '电视墙' },
 ], lang);
 
 // ---------------- 鞋柜 / 玄关柜 ----------------

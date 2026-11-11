@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Copy, Trash2, GripVertical, Sofa, ChevronUp, ChevronDown, ChevronRight, FileText, FileSpreadsheet, LayoutGrid, Image as ImageIcon, Ruler, Pencil, MessageCircle } from 'lucide-react';
+import { Plus, Copy, Trash2, GripVertical, Sofa, ChevronUp, ChevronDown, ChevronRight, FileText, FileSpreadsheet, LayoutGrid, Image as ImageIcon, Ruler, Pencil, MessageCircle, Sparkles } from 'lucide-react';
 import { T } from '../../theme.js';
 import { newId, copyToClipboard } from '../../utils/helpers.js';
 import { useToast, useConfirm } from '../ui/UIProvider.jsx';
@@ -17,6 +17,9 @@ import { mmToM, uid } from '../../planner/model.js';
 import CabinetCard from '../planner/CabinetCard.jsx';
 import CabinetEditor from '../planner/CabinetEditor.jsx';
 import TemplatePicker from '../planner/TemplatePicker.jsx';
+import PlanBoard from '../plan/PlanBoard.jsx';
+import { fitCabinetToRect } from '../../planner/plan.js';
+import { copyCabinet } from '../../planner/templates.js';
 import { parseMeters } from '../planner/bits.jsx';
 import { DOOR_SERIES, CARCASS_SERIES } from '../../constants/pricing.js';
 import { Boxes } from 'lucide-react';
@@ -183,6 +186,16 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
   const [showPrint, setShowPrint] = useState(false);
   const [showCatalog, setShowCatalog] = useState(false);
   const [showMeasure, setShowMeasure] = useState(false);
+  const planRef = useRef(null);
+  // Ukur 量尺 → 户型图 AI 识图（有图就把同一张图带过去，校准过的比例也带）
+  const measureToPlan = async (x) => {
+    setShowMeasure(false);
+    if (!x) { planRef.current?.openAndUpload({ autoAi: true }); return; }
+    try {
+      const blob = await (await fetch(x.src)).blob();
+      await planRef.current?.importImage({ blob, w: x.w, h: x.h, scale: x.scale, autoAi: true });
+    } catch (e) { toast(`Could not use this image 这张图用不了：${e?.message || e}`, 'error'); }
+  };
   const isMobile = useIsMobile();
   const [editing, setEditing] = useState(null); // { zoneId, item, isNew } → 手机弹窗编辑
   const { meta, zones, adjustPct } = doc;
@@ -284,10 +297,13 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
   const [picking, setPicking] = useState(null);       // zoneId：正在选模板
   const [editingCab, setEditingCab] = useState(null); // { zoneId, cab, isNew }
   const [ceilNote, setCeilNote] = useState({});       // zoneId → 「2700 mm → 2.70 m」（打了毫米时提示）
+  const plans = doc.plans || [];
+  const [drawn, setDrawn] = useState(null); // 第三版：在户型图上画的框 { planId, rect } → 选完模板用框的尺寸
   const startCabinet = (zoneId, templateId) => {
     const zone = zones.find((z) => z.id === zoneId);
     // 楼高没填（null / 0）→ 不传，模板自己按 2.70 m（双保险：不让 null 变成 0 高的柜子）
-    const cab = newCabinet(templateId, { ceilingH: zone?.ceilingH > 0 ? zone.ceilingH : undefined, code: nextCode(zones) });
+    let cab = newCabinet(templateId, { ceilingH: zone?.ceilingH > 0 ? zone.ceilingH : undefined, code: nextCode(zones) });
+    if (drawn) { cab = fitCabinetToRect(cab, drawn.rect, drawn.planId); setDrawn(null); }
     setPicking(null);
     setEditingCab({ zoneId, cab, isNew: true });
   };
@@ -302,8 +318,7 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
     if (await confirm({ title: 'Delete cabinet 删除柜子', message: `Delete ${c?.code || ''} ${c?.name || ''}? 确定删除这个柜子？`, danger: true, confirmText: 'Delete 删除', cancelText: 'Cancel 取消' })) removeCabinetNow(zoneId, id);
   };
   const duplicateCabinet = (zoneId, cab) => {
-    const copy = { ...structuredClone(cab), id: uid('cab'), code: nextCode(zones) };
-    copy.frames = copy.frames.map((f, i) => ({ ...f, id: `${copy.id}-f${i}` }));
+    const copy = copyCabinet(cab, { code: nextCode(zones) }); // 新 id、柜体 id 跟着换、不带图上位置（templates.js）
     saveCabinet(zoneId, copy);
   };
   // 编辑中：「全部 RM」= 用草稿替换这个柜子后的整份报价
@@ -332,14 +347,21 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
     <div className="grid gap-6 lg:gap-8 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px]">
       {/* ===== 左侧：编辑区（手机「设计」tab）===== */}
       <div className={`space-y-6 ${mobileTab === 'summary' ? 'hidden' : ''}`}>
-        {/* Ukur 量尺（放最上面，方便一开始就上传图量尺出报价）*/}
-        <button onClick={() => setShowMeasure(true)}
-          className="w-full py-2.5 flex items-center justify-center gap-2 text-sm transition-colors"
-          style={{ border: `1px solid ${T.wood}`, color: T.wood, borderRadius: '2px' }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = T.cream)}
-          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
-          <Ruler size={16} /> Ukur 量尺 · 上传图算尺寸（手动明细）
-        </button>
+        {/* 最上面两颗：户型图 AI 识图（主）+ Ukur 量尺（手动）*/}
+        <div className="grid gap-2 grid-cols-1 sm:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+          <button onClick={() => planRef.current?.openAndUpload({ autoAi: true })} data-top-plan-ai
+            className="w-full py-2.5 px-2 flex items-center justify-center gap-2 text-sm font-medium"
+            style={{ background: '#7A5BA6', color: '#fff', borderRadius: '2px' }}>
+            <Sparkles size={16} /> 户型图 · AI 认房间放柜子 <span className="text-xs opacity-80 hidden md:inline">Floor plan + AI</span>
+          </button>
+          <button onClick={() => setShowMeasure(true)} data-top-measure
+            className="w-full py-2.5 px-2 flex items-center justify-center gap-2 text-sm transition-colors"
+            style={{ border: `1px solid ${T.wood}`, color: T.wood, borderRadius: '2px' }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = T.cream)}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+            <Ruler size={16} /> Ukur 量尺 · 手动量尺寸
+          </button>
+        </div>
 
         {/* 客户信息 */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 rounded"
@@ -363,6 +385,18 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
               style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }} />
           </div>
         </div>
+
+        {/* 第三版：户型图（客户资料下面、所有房间上面；可收起）*/}
+        <PlanBoard ref={planRef} plans={plans} zones={zones} lang={lang} makeZone={(name) => blankZone(name)}
+          onChange={({ plans: ps, zones: zs }) => patch({ plans: ps, zones: zs })}
+          onEdit={(zoneId, cab) => setEditingCab({ zoneId, cab, isNew: false })}
+          onDraw={({ planId, rect, zoneId }) => {
+            setDrawn({ planId, rect });
+            if (zoneId && zones.some((z) => z.id === zoneId)) { setPicking(zoneId); return; }
+            const z = blankZone('');
+            patch({ zones: [...zones, z] });
+            setPicking(z.id);
+          }} />
 
         {/* 定制 items 批量操作条 */}
         {selItems.size > 0 && (
@@ -868,16 +902,17 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
         </div>
       </div>
 
-      {picking && <TemplatePicker onPick={(tid) => startCabinet(picking, tid)} onClose={() => setPicking(null)} />}
+      {picking && <TemplatePicker onPick={(tid) => startCabinet(picking, tid)} onClose={() => { setPicking(null); setDrawn(null); }} />}
       {editingCab && (
         <CabinetEditor key={editingCab.cab.id} cab={editingCab.cab} isNew={editingCab.isNew} lang={lang}
           zone={zones.find((z) => z.id === editingCab.zoneId)} defaults={defaults}
+          plans={plans} otherCabinets={zones.flatMap((z) => z.cabinets || []).filter((c) => c.id !== editingCab.cab.id)}
           totalWith={totalWith(editingCab.zoneId)}
           onSave={(c) => { saveCabinet(editingCab.zoneId, c); setEditingCab(null); }}
           onDelete={async () => { const zid = editingCab.zoneId, cid = editingCab.cab.id; if (await confirm({ title: 'Delete cabinet 删除柜子', message: 'Delete this cabinet? 确定删除这个柜子？', danger: true, confirmText: 'Delete 删除', cancelText: 'Cancel 取消' })) { removeCabinetNow(zid, cid); setEditingCab(null); } }}
           onClose={() => setEditingCab(null)} />
       )}
-      {showPrint && <QuotePrint meta={meta} computed={computed} loose={looseCalc} cabinetNote={cabinetNote} looseNote={looseNote} discountNote={discountNote} looseDiscountNote={looseDiscountNote} audience={audience} designerDisc={designerDisc} lang={lang} onClose={() => setShowPrint(false)} />}
+      {showPrint && <QuotePrint meta={meta} computed={computed} loose={looseCalc} cabinetNote={cabinetNote} looseNote={looseNote} discountNote={discountNote} looseDiscountNote={looseDiscountNote} audience={audience} designerDisc={designerDisc} lang={lang} plans={plans} onClose={() => setShowPrint(false)} />}
       {showCatalog && (
         <CatalogPicker
           onAdd={(it) => setLoose((ls) => [...ls, { id: newId('lf'), ...it }])}
@@ -887,6 +922,7 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
         <MeasureTool
           zones={zones.map((z) => ({ id: z.id, name: pickLang(z.name, lang) }))}
           onAddItems={handleMeasureAdd}
+          onToPlan={measureToPlan}
           onClose={() => setShowMeasure(false)} />
       )}
       {editing && (

@@ -378,3 +378,98 @@ export function checkBody(frame) {
   });
   return errs;
 }
+
+// ============================================================
+// 第二版追加 2「柜体像乐高」：整个柜体移动 / 改大小（frame 级，返回新 frame）
+//   snaps = { ceilingH, others:[frame…] }：others = 同一面墙的其他柜体（不含电视墙 backdrop）
+//   离吸附目标 30 mm 内贴齐；x ≥ 0（墙起点）、y ≥ 0（地面）；整数 mm。位置不影响价钱。
+// ============================================================
+export const FRAME_SNAP = 30;
+
+// 柜体沿某轴最少多大（宽：柜身格子的下限；高：柜身下限 + 底座）
+export function minAxis(frame, axis) {
+  const { W, Hb } = dims(frame);
+  if (axis === 'x') return Math.max(MIN_BLOCK, minSize(frame.body, 'x', W));
+  return Math.max(MIN_BLOCK, minSize(frame.body, 'y', Hb)) + Math.max(0, int(frame.base?.h));
+}
+
+// 一条边的位置 v 吸到 targets 里最近的（30 mm 内）；没有就原样
+function snapTo(v, targets, tol = FRAME_SNAP) {
+  let best = null;
+  for (const t of targets) { if (!Number.isFinite(t)) continue; const d = Math.abs(t - v); if (d <= tol && (best == null || d < Math.abs(best - v))) best = t; }
+  return best;
+}
+const others = (snaps, frame) => (snaps?.others || []).filter((o) => o && o.id !== frame.id && o.kind !== 'backdrop');
+const xTargets = (snaps, frame) => [0, ...others(snaps, frame).flatMap((o) => [int(o.x), int(o.x) + int(o.W)])];
+const yTargets = (snaps, frame) => [0, ...(snaps?.ceilingH > 0 ? [int(snaps.ceilingH)] : []), ...others(snaps, frame).flatMap((o) => [int(o.y), int(o.y) + int(o.H)])];
+
+// 把柜体放到 (x, y)（左下角，离地），吸附后返回 { x, y, sx, sy }（sx / sy：贴到哪条线，给画面画提示）
+export function snapMove(frame, x, y, snaps) {
+  const W = int(frame.W), H = int(frame.H);
+  let nx = int(x), ny = int(y), sx = null, sy = null;
+  const xt = xTargets(snaps, frame), yt = yTargets(snaps, frame);
+  // 左边 / 右边各找最近的，取更近的那个
+  const l = snapTo(nx, xt), r = snapTo(nx + W, xt);
+  if (l != null && (r == null || Math.abs(l - nx) <= Math.abs(r - nx - W))) { nx = l; sx = l; } else if (r != null) { nx = r - W; sx = r; }
+  const b = snapTo(ny, yt), t = snapTo(ny + H, yt);
+  if (b != null && (t == null || Math.abs(b - ny) <= Math.abs(t - ny - H))) { ny = b; sy = b; } else if (t != null) { ny = t - H; sy = t; }
+  if (nx < 0) { nx = 0; sx = 0; }
+  if (ny < 0) { ny = 0; sy = 0; }
+  return { x: nx, y: ny, sx, sy };
+}
+
+export function moveFrame(frame, dx, dy, snaps) {
+  const p = snapMove(frame, int(frame.x) + int(dx), int(frame.y) + int(dy), snaps);
+  if (p.x === int(frame.x) && p.y === int(frame.y)) return frame;
+  return { ...frame, x: p.x, y: p.y };
+}
+
+// 拖柜体的一条边：left / right / top / bottom 移动 delta mm；里面的格子由拖的那一边吸收（fitAxis）
+export function resizeFrame(frame, edge, delta, snaps) {
+  const x = int(frame.x), y = int(frame.y), W = int(frame.W), H = int(frame.H);
+  const bh = Math.max(0, int(frame.base?.h));
+  const minW = minAxis(frame, 'x'), minH = minAxis(frame, 'y');
+  let d = int(delta);
+  if (edge === 'right') {
+    let e = x + W + d;
+    if (snaps) { const s = snapTo(e, xTargets(snaps, frame)); if (s != null) e = s; }
+    const nW = Math.max(minW, e - x);
+    if (nW === W) return frame;
+    return { ...frame, W: nW, body: fitAxis(frame.body, 'x', nW, 'end') };
+  }
+  if (edge === 'left') {
+    let e = x + d;
+    if (snaps) { const s = snapTo(e, xTargets(snaps, frame)); if (s != null) e = s; }
+    e = Math.max(0, Math.min(x + W - minW, e));
+    const nW = x + W - e;
+    if (nW === W) return frame;
+    return { ...frame, x: e, W: nW, body: fitAxis(frame.body, 'x', nW, 'start') };
+  }
+  if (edge === 'top') {
+    let e = y + H + d;
+    if (snaps) { const s = snapTo(e, yTargets(snaps, frame)); if (s != null) e = s; }
+    const nH = Math.max(minH, e - y);
+    if (nH === H) return frame;
+    return { ...frame, H: nH, body: fitAxis(frame.body, 'y', nH - bh, 'end') };
+  }
+  if (edge === 'bottom') {
+    let e = y + d;
+    if (snaps) { const s = snapTo(e, yTargets(snaps, frame)); if (s != null) e = s; }
+    e = Math.max(0, Math.min(y + H - minH, e));
+    const nH = y + H - e;
+    if (nH === H) return frame;
+    return { ...frame, y: e, H: nH, body: fitAxis(frame.body, 'y', nH - bh, 'start') };
+  }
+  return frame;
+}
+
+// 设定栏直接打数字：宽 / 高（右边 / 上边吸收）、离地、深
+export function setFrameSize(frame, patch = {}) {
+  let f = frame;
+  if (patch.W != null) f = resizeFrame(f, 'right', int(patch.W) - int(f.W));
+  if (patch.H != null) f = resizeFrame(f, 'top', int(patch.H) - int(f.H));
+  if (patch.y != null) { const y = Math.max(0, int(patch.y)); if (y !== int(f.y)) f = { ...f, y }; }
+  if (patch.x != null) { const x = Math.max(0, int(patch.x)); if (x !== int(f.x)) f = { ...f, x }; }
+  if (patch.D != null) { const D = Math.max(f.kind === 'backdrop' ? 10 : 100, Math.min(1200, int(patch.D))); if (D !== int(f.D)) f = { ...f, D }; }
+  return f;
+}

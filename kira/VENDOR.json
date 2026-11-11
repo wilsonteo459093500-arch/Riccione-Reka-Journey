@@ -55,9 +55,9 @@
       "sha256": "ad42d08fa139a9f8bd79c5b056a6d106048fdfa45803123255ecb8161bfe3979"
     },
     "src/components/quote/MeasureTool.jsx": {
-      "status": "verbatim",
+      "status": "modified",
       "upstreamSha256": "946c8e8861421cf8ed74d1179f34c759ebc183010539242c31941fac8b370b1d",
-      "sha256": "946c8e8861421cf8ed74d1179f34c759ebc183010539242c31941fac8b370b1d"
+      "sha256": "fd0f683a6c1bdabe6a8a15279452181f6c79d2a0eec16c17385acd2198151ac7"
     },
     "src/index.css": {
       "status": "verbatim",
