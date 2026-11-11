@@ -4,11 +4,13 @@
 //   拖拉写法同 BlockEditor.jsx：setPointerCapture、getScreenCTM().inverse()；拖完才写回报价（一步撤销）。
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Upload, Ruler, Square, Undo2, Redo2, Maximize2, Minimize2, RotateCw, Pencil, X, Trash2, ChevronDown, ChevronRight, MapPin, Crosshair, AlertTriangle, Loader2, ScanSearch } from 'lucide-react';
+import { Upload, Ruler, Square, Undo2, Redo2, Maximize2, Minimize2, RotateCw, Pencil, X, Trash2, ChevronDown, ChevronRight, MapPin, Crosshair, AlertTriangle, Loader2, ScanSearch, Sparkles } from 'lucide-react';
 import { T } from '../../theme.js';
 import { BLOCK_COLORS, BLOCK_SELECTED, INK } from '../../render/palette.js';
-import { mmToM } from '../../planner/model.js';
-import { cabinetTitle } from '../../planner/templates.js';
+import { mmToM, uid } from '../../planner/model.js';
+import { cabinetTitle, templateOf } from '../../planner/templates.js';
+import { aiScaleToPlan, buildSuggestions, applySuggestions } from '../../planner/planAi.js';
+import { readPlanWithAi, needsPasscode, savedPasscode, savePasscode, aiErrorText } from '../../services/planAi.js';
 import { mmPerPx, planReady, placedFootprint, placeAt, rotatePlace, dragPlanEdge, aisleWarnings, dist } from '../../planner/plan.js';
 import { isPdf, prepareImage, openPdf, renderPdfPage, pdfThumb, savePlanImage, planImageUrl, queuePlanDelete } from '../../services/planImages.js';
 import { parseMeters, useBackClose } from '../planner/bits.jsx';
@@ -38,7 +40,7 @@ function Btn({ on, children, title, onClick, disabled, danger, ...rest }) {
 }
 
 // ============================================================
-export default function PlanBoard({ plans = [], zones = [], onChange, onDraw, onEdit, lang = 'en' }) {
+export default function PlanBoard({ plans = [], zones = [], onChange, onDraw, onEdit, makeZone, lang = 'en' }) {
   const toast = useToast();
   const confirm = useConfirm();
   const [open, setOpen] = useState(() => plans.length > 0 || !isPhone());
@@ -65,9 +67,12 @@ export default function PlanBoard({ plans = [], zones = [], onChange, onDraw, on
 
   const k = plan ? mmPerPx(plan) : 0;
   const ready = !!plan && planReady(plan);
+  // ---- AI 识图：{ stage:'pass'|'busy'|'result'|'error', planId, r, sugg, picked:Set, scale, error } ----
+  const [ai, setAi] = useState(null);
+  const [aiPass, setAiPass] = useState('');
   const W = plan?.image?.w || 1000, H = plan?.image?.h || 700;
   const [vb, setVb] = useState([0, 0, W, H]);
-  useEffect(() => { setVb([0, 0, W, H]); setSel(null); setScalePts([]); setCorner(null); }, [plan?.id, W, H]);
+  useEffect(() => { setVb([0, 0, W, H]); setSel(null); setScalePts([]); setCorner(null); setAi((a) => (a && a.planId !== plan?.id ? null : a)); }, [plan?.id, W, H]);
   useEffect(() => { if (plan && !planReady(plan)) setMode('scale'); }, [plan?.id, ready]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 图片
@@ -163,6 +168,51 @@ export default function PlanBoard({ plans = [], zones = [], onChange, onDraw, on
       const r = await renderPdfPage(doc, page);
       await addPlan(r.blob, r.w, r.h, { kind: 'pdf', page });
     } catch (e) { toast(`PDF page failed 这一页处理失败：${e?.message || e}`, 'error'); } finally { setBusy(''); }
+  };
+
+  // ---------------- AI 识图 ----------------
+  const suggest = (r, p) => {
+    const sugg = planReady(p) ? buildSuggestions(r.result, p, { sentW: r.sentW }) : [];
+    return { sugg, picked: new Set(sugg.filter((x) => x.ok).map((x) => x.id)) };
+  };
+  const runAi = async (passcode) => {
+    const p = plan;
+    if (!p) return;
+    setAi({ stage: 'busy', planId: p.id });
+    try {
+      const r = await readPlanWithAi(p, { mmPerPx: mmPerPx(p), passcode });
+      if (!alive.current) return;
+      if (needsPasscode()) savePasscode(passcode);
+      const scale = planReady(p) ? null : aiScaleToPlan(r.result, r.sentW, p);
+      setAi({ stage: 'result', planId: p.id, r, scale, ...suggest(r, p) });
+    } catch (e) {
+      if (!alive.current) return;
+      if (e?.code === 'passcode') { savePasscode(''); setAi({ stage: 'pass', planId: p.id, error: aiErrorText(e) }); return; }
+      setAi({ stage: 'error', planId: p.id, error: aiErrorText(e) });
+    }
+  };
+  const startAi = async () => {
+    if (!plan || ai?.stage === 'busy') return;
+    const ok = await confirm({ title: 'AI 识图 Read with AI', message: 'The floor plan is sent to AI to find the rooms and suggest cabinets (about 20–40 s, roughly US$0.10 each time). Nothing is added until you tick and confirm. 会把这张户型图送去 AI 认房间、建议柜子（约 20–40 秒，每次约 US$0.10）。勾选确认后才加入报价。', confirmText: 'Read 开始', cancelText: 'Cancel 取消' });
+    if (!ok || !alive.current) return;
+    if (needsPasscode() && !savedPasscode()) { setAiPass(''); setAi({ stage: 'pass', planId: plan.id }); return; }
+    runAi(savedPasscode());
+  };
+  const useAiScale = () => {
+    if (!ai?.scale || !plan) return;
+    const p = { ...plan, scale: ai.scale };
+    setPlan(p);
+    setScalePts([]); setMode('view');
+    setAi((a) => ({ ...a, scale: null, ...suggest(a.r, p) }));
+  };
+  const toggleAi = (id) => setAi((a) => { const picked = new Set(a.picked); if (picked.has(id)) picked.delete(id); else picked.add(id); return { ...a, picked }; });
+  const addAi = () => {
+    if (!ai?.sugg) return;
+    const picked = ai.sugg.filter((x) => x.ok && ai.picked.has(x.id));
+    const r = applySuggestions(live.current.zones, picked, { makeZone, uid: () => uid('cab') });
+    if (r.added.length) commit({ zones: r.zones });
+    toast(`Added ${r.added.length} cabinet(s) 加入 ${r.added.length} 个柜子${r.skipped.length ? ` · ${r.skipped.length} skipped (overlap) 跳过 ${r.skipped.length} 个（重叠）` : ''}`, r.added.length ? 'success' : 'info');
+    setAi(null);
   };
 
   const removePlan = async () => {
@@ -432,6 +482,7 @@ export default function PlanBoard({ plans = [], zones = [], onChange, onDraw, on
               <Btn on={mode === 'draw'} disabled={!ready} title="Draw a cabinet 画柜子" onClick={() => { setMode(mode === 'draw' ? 'view' : 'draw'); setCorner(null); }} data-plan-mode="draw"><Square size={13} /> 画柜子</Btn>
               <Btn title="Undo 撤销" disabled={!hist.current.undo.length} onClick={undo} data-plan-undo><Undo2 size={13} /></Btn>
               <Btn title="Redo 重做" disabled={!hist.current.redo.length} onClick={redo}><Redo2 size={13} /></Btn>
+              <Btn on={!!ai} title="AI 识图 Read with AI" onClick={startAi} disabled={ai?.stage === 'busy'} data-plan-ai><Sparkles size={13} /> AI 识图</Btn>
               <Btn title="Fit 看全部" onClick={() => setVb([0, 0, W, H])}><ScanSearch size={13} /></Btn>
               <Btn title={full ? 'Exit full screen 退出全屏' : 'Full screen 全屏'} onClick={() => setFull(!full)} data-plan-full>{full ? <Minimize2 size={13} /> : <Maximize2 size={13} />}</Btn>
             </>}
@@ -537,8 +588,30 @@ export default function PlanBoard({ plans = [], zones = [], onChange, onDraw, on
                 );
               })()}
               {corner && <circle cx={corner[0]} cy={corner[1]} r={6 * upp} fill={BLOCK_SELECTED} pointerEvents="none" />}
+              {/* AI 识图：房间名 + 建议柜子（虚线框，还没加入报价） */}
+              {ai?.stage === 'result' && ai.planId === plan.id && (() => {
+                const kp = W / (ai.r.sentW || W);
+                return (
+                  <g pointerEvents="none" data-plan-ai-overlay>
+                    {(ai.r.result?.rooms || []).filter((rm) => Array.isArray(rm.box) && rm.box.length === 4).map((rm, i) => (
+                      <text key={`r${i}`} x={((rm.box[0] + rm.box[2]) / 2) * kp} y={((rm.box[1] + rm.box[3]) / 2) * kp} fontSize={fs * 1.1} textAnchor="middle" dominantBaseline="central" fill={AI_COLOR} opacity={0.75} fontWeight={600}>{rm.name}</text>
+                    ))}
+                    {ready && ai.sugg.filter((x) => x.ok).map((x, i) => {
+                      const on = ai.picked.has(x.id);
+                      return (
+                        <g key={x.id} opacity={on ? 1 : 0.35}>
+                          {placedFootprint(x.cab).parts.map((pt) => { const r = rectPx(pt.rect); return <rect key={pt.id} x={r[0]} y={r[1]} width={r[2] - r[0]} height={r[3] - r[1]} fill={AI_COLOR} fillOpacity={pt.floor ? 0.18 : 0.06} stroke={AI_COLOR} strokeWidth={sw * 1.3} strokeDasharray={`${5 * upp} ${3 * upp}`} />; })}
+                          {(() => { const b = rectPx(placedFootprint(x.cab).bbox); return <text x={(b[0] + b[2]) / 2} y={(b[1] + b[3]) / 2} fontSize={fs} textAnchor="middle" dominantBaseline="central" fill={AI_COLOR} fontWeight={700}>#{ai.sugg.indexOf(x) + 1}</text>; })()}
+                        </g>
+                      );
+                    })}
+                  </g>
+                );
+              })()}
             </svg>
           </div>
+
+          {ai && ai.planId === plan.id && <AiPanel ai={ai} ready={ready} pass={aiPass} setPass={setAiPass} onRun={runAi} onClose={() => setAi(null)} onToggle={toggleAi} onAdd={addAi} onUseScale={useAiScale} />}
 
           {/* 选中的柜子 */}
           {selCab && selCab.place?.planId === plan.id && (
@@ -587,6 +660,77 @@ export default function PlanBoard({ plans = [], zones = [], onChange, onDraw, on
   return (
     <div className="rounded overflow-hidden no-print" style={{ border: `1px solid ${T.line}`, background: T.paper }}>
       {content}
+    </div>
+  );
+}
+
+const AI_COLOR = '#7A5BA6'; // AI 建议：紫色虚线（和真的柜子分开）
+
+function AiPanel({ ai, ready, pass, setPass, onRun, onClose, onToggle, onAdd, onUseScale }) {
+  const n = ai.sugg ? ai.sugg.filter((x) => x.ok && ai.picked.has(x.id)).length : 0;
+  return (
+    <div className="px-3 py-2 text-xs" style={{ borderTop: `1px solid ${T.lineSoft}`, background: '#F6F2FA' }} data-plan-ai-panel={ai.stage}>
+      <div className="flex items-center gap-1.5 mb-1.5">
+        <Sparkles size={13} style={{ color: AI_COLOR }} />
+        <span className="font-medium" style={{ color: T.ink }}>AI 识图 Read with AI</span>
+        {ai.r?.usage && <span className="text-[10px]" style={{ color: T.inkSoft }}>· {(ai.r.usage.input + ai.r.usage.output).toLocaleString()} tokens</span>}
+        <button type="button" onClick={onClose} className="ml-auto p-0.5" style={{ color: T.inkSoft }} aria-label="Close 关闭" disabled={ai.stage === 'busy'}><X size={14} /></button>
+      </div>
+      {ai.stage === 'pass' && (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span style={{ color: T.ink }}>团队密码 Team passcode</span>
+          <input type="password" value={pass} onChange={(e) => setPass(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && pass) onRun(pass); }} autoFocus
+            className="w-32 px-2 py-1 text-sm outline-none" style={{ background: T.paper, border: `1px solid ${T.line}`, borderRadius: 2 }} data-plan-ai-pass />
+          <Btn on disabled={!pass} onClick={() => onRun(pass)} data-plan-ai-pass-ok>OK</Btn>
+          {ai.error && <span style={{ color: T.terra }}>{ai.error}</span>}
+        </div>
+      )}
+      {ai.stage === 'busy' && <div className="flex items-center gap-1.5" style={{ color: T.inkSoft }}><Loader2 size={13} className="animate-spin" /> AI 正在看户型图（约 20–40 秒）Reading the floor plan…</div>}
+      {ai.stage === 'error' && (
+        <div className="flex items-center gap-2 flex-wrap" data-plan-ai-error>
+          <span style={{ color: T.terra }}>{ai.error}</span>
+          <Btn onClick={() => onRun(savedPasscode())}>再试 Retry</Btn>
+        </div>
+      )}
+      {ai.stage === 'result' && (
+        <>
+          {!ready && ai.scale && (
+            <div className="mb-1.5 flex items-center gap-1.5 flex-wrap" data-plan-ai-scale>
+              <span style={{ color: T.ink }}>AI 读到图上的尺寸 {mmToM(ai.scale.mm)} m — 用这个当比例？ Use the printed dimension as the scale?</span>
+              <Btn on onClick={onUseScale} data-plan-ai-scale-ok>用这个 Use</Btn>
+            </div>
+          )}
+          {!ready && !ai.scale && <div className="mb-1.5" style={{ color: T.terra }}>先定比例（点两点打长度），AI 才能放柜子 — Set the scale first, then the AI can place cabinets</div>}
+          {ready && !ai.sugg.length && <div style={{ color: T.inkSoft }}>AI 没找到适合放柜子的地方 — No cabinet suggestions</div>}
+          {ready && ai.sugg.length > 0 && (
+            <div className="space-y-1 mb-2" data-plan-ai-list>
+              {ai.sugg.map((x, i) => {
+                const t = x.template ? templateOf(x.template) : null;
+                const size = x.ok ? (x.lenMm || []).map((v) => mmToM(v)).join(' + ') + ' m' : '';
+                return (
+                  <label key={x.id} className="flex items-start gap-1.5" style={{ color: x.ok ? T.ink : T.inkSoft }} data-plan-ai-item={x.ok ? 'ok' : 'no'}>
+                    <input type="checkbox" checked={x.ok && ai.picked.has(x.id)} disabled={!x.ok} onChange={() => onToggle(x.id)} className="mt-0.5" style={{ accentColor: AI_COLOR }} />
+                    <span>
+                      <b>#{i + 1}</b> {t ? `${t.zh} ${t.en}` : '?'} · {x.roomName}{size ? ` · ${size}` : ''}
+                      {x.ok && x.cab?.spec?.shape && x.template === 'kitchen' ? ` · ${x.cab.spec.shape === 'I' ? '一字' : x.cab.spec.shape === 'galley' ? '二字 galley' : x.cab.spec.shape}` : ''}
+                      {!x.ok && x.reason && <span style={{ color: T.terra }}> — {x.reason.zh} {x.reason.en}</span>}
+                      {(x.notes || []).map((nt, j) => <span key={j} className="block text-[10px]" style={{ color: T.wood }}>{nt.zh} {nt.en}</span>)}
+                      {x.note && <span className="block text-[10px]" style={{ color: T.inkSoft }}>{x.note}</span>}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+          {ai.r?.result?.notes && <div className="mb-2 text-[10px]" style={{ color: T.inkSoft }}>AI: {ai.r.result.notes}</div>}
+          {ready && ai.sugg.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Btn on disabled={!n} onClick={onAdd} data-plan-ai-add>加入报价 Add {n}</Btn>
+              <span className="text-[10px]" style={{ color: T.inkSoft }}>尺寸按模板，加入后可以拖、改、删 — Standard sizes; drag / edit after adding</span>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

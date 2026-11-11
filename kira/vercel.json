@@ -6,6 +6,9 @@
   "framework": "vite",
   "devCommand": "npm run dev",
   "ignoreCommand": "[ \"$VERCEL_ENV\" = production ] && exit 1 || git diff --quiet ${VERCEL_GIT_PREVIOUS_SHA:-HEAD^} HEAD -- .",
+  "functions": {
+    "api/plan-ai.js": { "maxDuration": 60 }
+  },
   "headers": [
     {
       "source": "/(.*)",
@@ -25,5 +28,5 @@
       "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
     }
   ],
-  "rewrites": [{ "source": "/((?!assets|brand/|icon\\.svg|icon-192\\.png|icon-512\\.png|apple-touch-icon\\.png|robots\\.txt|sw\\.js|manifest\\.webmanifest).*)", "destination": "/index.html" }]
+  "rewrites": [{ "source": "/((?!api/|assets|brand/|icon\\.svg|icon-192\\.png|icon-512\\.png|apple-touch-icon\\.png|robots\\.txt|sw\\.js|manifest\\.webmanifest).*)", "destination": "/index.html" }]
 }

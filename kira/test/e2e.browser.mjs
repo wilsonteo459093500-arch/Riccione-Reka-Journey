@@ -555,6 +555,59 @@ try {
   check('v3 no browser errors (desktop)', gerr.length === 0, gerr.join(' | '));
   await pctx.close();
 
+  // ---------- AI 识图（/api/plan-ai 用假的回答，不花钱）：密码 → AI 读到的比例 → 2 个建议 → 取消 1 个 → 加入 → 撤销 ----------
+  const aiAnswer = JSON.parse(readFileSync(path.join(FIX, 'plan-ai-demo.json'), 'utf8'));
+  const actx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const ap = await actx.newPage();
+  const aerr = [];
+  ap.on('pageerror', (e) => aerr.push(e.message));
+  let aiCalls = 0, aiBody = null;
+  await ap.route('**/api/plan-ai', async (route) => {
+    aiCalls += 1;
+    aiBody = route.request().postDataJSON();
+    if (route.request().headers()['x-kira-ai-passcode'] !== 'team123') return route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ error: 'passcode' }) });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ result: aiAnswer, model: 'claude-opus-5-5', usage: { input: 2600, output: 1400 } }) });
+  });
+  await ap.goto(URL);
+  await ap.getByRole('button', { name: /Skip 跳过/ }).click();
+  await ap.getByRole('button', { name: /New/ }).first().click();
+  await ap.locator('[data-plan-file]').setInputFiles(path.join(FIX, 'floorplan.png'));
+  await ap.waitForSelector('[data-plan-svg] image', { timeout: 15000 });
+  await ap.locator('[data-plan-ai]').click();
+  await ap.getByRole('button', { name: /Read 开始/ }).click();
+  await ap.locator('[data-plan-ai-pass]').fill('wrong');
+  await ap.locator('[data-plan-ai-pass-ok]').click();
+  await ap.waitForSelector('[data-plan-ai-panel="pass"] >> text=团队密码不对', { timeout: 10000 });
+  await ap.locator('[data-plan-ai-pass]').fill('team123');
+  await ap.locator('[data-plan-ai-pass-ok]').click();
+  await ap.waitForSelector('[data-plan-ai-scale-ok]', { timeout: 10000 });
+  check('v3 AI: wrong passcode is refused, right one works; image sent ≤ 1568 px as JPEG', aiCalls === 2 && aiBody.w === 1200 && aiBody.h === 800 && aiBody.image.startsWith('/9j/'), `${aiCalls} calls, ${aiBody?.w}×${aiBody?.h}`);
+  await ap.locator('[data-plan-ai-scale-ok]').click(); // 还没定比例：用 AI 读到的 2.70 m
+  await ap.waitForSelector('[data-plan-ai-list]');
+  const items = await ap.locator('[data-plan-ai-item="ok"]').count();
+  const dashed = await ap.locator('[data-plan-ai-overlay] rect').count();
+  check('v3 AI: scale from the printed 2700 → 2 suggestions (wardrobe + L kitchen) drawn dashed on the plan', items === 2 && dashed >= 2 && /1 px = 10\.0 mm/.test(await ap.locator('[data-plan-board]').innerText()), `${items} items, ${dashed} rects`);
+  await ap.locator('[data-plan-board]').screenshot({ path: path.join(outDir, 'v3-plan-ai-suggest.png') });
+  await ap.locator('[data-plan-ai-item="ok"] input').first().uncheck();
+  await ap.locator('[data-plan-ai-add]').click();
+  await ap.waitForTimeout(300);
+  const placed = await ap.locator('[data-pcab]').count();
+  const kitchenRoom = await ap.locator('text=Dry Kitchen 干厨').count();
+  check('v3 AI: untick the wardrobe, add → only the kitchen goes in (new room Dry Kitchen, on the plan)', placed === 1 && kitchenRoom > 0 && (await ap.locator('[data-plan-ai-panel]').count()) === 0, `placed ${placed}, room ${kitchenRoom}`);
+  await ap.locator('[data-plan-undo]').click();
+  await ap.waitForTimeout(200);
+  check('v3 AI: Undo takes the added cabinets back out', (await ap.locator('[data-pcab]').count()) === 0);
+  await ap.locator('[data-plan-board]').screenshot({ path: path.join(outDir, 'v3-plan-ai.png') });
+  // 第二次：这次浏览器开着就记住密码，不再问；出错照实显示
+  await ap.unroute('**/api/plan-ai');
+  await ap.route('**/api/plan-ai', (route) => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'not_configured' }) }));
+  await ap.locator('[data-plan-ai]').click();
+  await ap.getByRole('button', { name: /Read 开始/ }).click();
+  await ap.waitForSelector('[data-plan-ai-error]', { timeout: 10000 });
+  check('v3 AI: passcode remembered this session; server errors shown in plain words', /AI 还没设定/.test(await ap.locator('[data-plan-ai-error]').innerText()) && (await ap.locator('[data-plan-ai-pass]').count()) === 0);
+  check('v3 no browser errors (AI)', aerr.length === 0, aerr.join(' | '));
+  await actx.close();
+
   // ---------- 复查修正：上传很慢（toBlob 延迟 2.5 s）时改报价 / 换报价，不会被旧的报价盖回去 ----------
   const sctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   await sctx.addInitScript(() => {

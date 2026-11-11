@@ -370,7 +370,7 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
         </div>
 
         {/* 第三版：户型图（客户资料下面、所有房间上面；可收起）*/}
-        <PlanBoard plans={plans} zones={zones} lang={lang}
+        <PlanBoard plans={plans} zones={zones} lang={lang} makeZone={(name) => blankZone(name)}
           onChange={({ plans: ps, zones: zs }) => patch({ plans: ps, zones: zs })}
           onEdit={(zoneId, cab) => setEditingCab({ zoneId, cab, isNew: false })}
           onDraw={({ planId, rect, zoneId }) => {

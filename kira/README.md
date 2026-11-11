@@ -54,6 +54,9 @@ src/planner/plan.js          第三版户型图纯逻辑：比例、柜子俯视
 src/components/plan/         户型图 PlanBoard（上传 / 定比例 / 画框 / 放柜子）· 报价单平面索引图 PlanFigure
 src/services/planImages.js   户型图图片：压缩、PDF 渲页、Supabase Storage / 本机 IndexedDB
 supabase/kira_plans_storage.sql  户型图图片的 Storage 设定（可重复执行）
+api/plan-ai.js               户型图 AI 识图（Vercel function；钥匙在服务器；正式版要登录、预览要团队密码）
+src/planner/planAi.js        AI 读图结果 → 建议柜子（长度对齐、方向、厨房 L / U / 二字）→ 勾选后加入报价
+src/services/planAi.js       浏览器缩图、带身份、调 /api/plan-ai
 src/services/kiraRepo.js     云端（kira_projects；旧 quotes 只读；分页读完，不受 1000 行上限）
 src/components/quote/sync.js 本机 ↔ 云端合并 / 待同步 / 待删除 / 标签页合并 / 本机容量（纯函数）
 src/components/auth/AuthGate.jsx  登录；离线 / token 过期时用本机登录记录打开（不卡在登录页）
