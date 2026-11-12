@@ -51,8 +51,8 @@ export const PHOTOS = {
   storyLift: sail('/template/b/story-lift.jpg', 1800, 1036), // 溪岸门头、长墙与石凳
   sailLiving: sail('/template/b/sail-living.jpg', 1754, 1039), // 溪岸手册 p30：书格墙、圆镜、绿植的客厅
   sailCraft: sail('/template/b/sail-craft.jpg', 1755, 1038), // 溪岸手册 p27：木格柜的近景（木纹、层板）
-  // 溪岸手册的雾山书房（VISI 内置图库 misty-study 原图）：台灯下读书的人、通顶的白橡木书架 —— 感谢信页
-  sailStudy: sail('/template/b/sail-study.jpg', 895, 1038),
+  // 溪岸自家实拍（VISI 内置图库 scene-wood 原图）：深色木柜墙、亮着的台灯、木桌椅，没有人 —— 感谢信页
+  sailLetter: sail('/template/b/sail-letter-wood.jpg', 849, 1279),
   coll1: sail('/template/b/coll-1.jpg', 580, 982), // 骨骼线
   coll2: sail('/template/b/coll-2.jpg', 473, 800), // 空山
   coll3: sail('/template/b/coll-3.jpg', 693, 1173), // 织
@@ -94,8 +94,8 @@ export const PHOTO_SLOTS = {
   //   text = 默认图上字组的位置：木板（x≈796–1610）中间有一列旧钉和裂缝，字组放在左边的灰泥墙上（从 x 100 起，宽 600；内容长才往右放宽）
   //   设计师换了封面照片：字组回到照片正中（看不到像素，托字一律最深）
   cover: { photo: slot(PHOTOS.sailCover, '封面照片', { ay: 0.5, text: { left: 100, w: 600 } }) },
-  // 感谢信：竖幅照片贴右（宽 820，中英版 680；1.04 倍）：裁掉原图最左边的深色木柱，读书的人和台灯落在照片左半
-  letter: { photo: slot(PHOTOS.sailStudy, '感谢信照片', { ax: 0.55 }) },
+  // 感谢信：竖幅照片贴右（宽 820，中英版 680；0.97 / 0.84 倍，不放大）：上下各裁一点，台灯和木桌都留在画面里（老板要没有人的照片）
+  letter: { photo: slot(PHOTOS.sailLetter, '感谢信照片', { ax: 0.5, ay: 0.4 }) },
   // 满版：溪岸门头的清水墙（墙上的 sAil 溪岸 招牌留在两栏中间）
   contents: { photo: slot(PHOTOS.storyLift, '目录照片', { ay: 0.5 }) },
   'brand-divider': { photo: slot(PHOTOS.sailHills, '章节照片', { ay: 0.55 }) },
@@ -719,7 +719,7 @@ const BOTTOM = 900;
 const SHADE_A = {
   'cover:logo': 0.15, // 灰泥墙（中灰）：白 logo 不托也够 3:1
   'cover:title': 0.34, // 灰泥墙（中灰）：托到 0.30 小字 4.54，加 0.04 余量
-  'letter:logo': 0.15, // 雾山书房的木顶板：白 logo 不托也有 5.2:1（三种语言）
+  'letter:logo': 0.15, // 木顶板（暖中灰）：白 logo 不托也有 3.6:1（中英版）/ 3.9:1
   'contents:left': 0.45, // 门洞两边是清水墙：要托满（「CONTENTS」0.44）
   'contents:logo': 0.45, // 右上是亮墙和枯枝
   'brand-divider:label': 0.25, // 深色山体（「BRAND」0.20）
