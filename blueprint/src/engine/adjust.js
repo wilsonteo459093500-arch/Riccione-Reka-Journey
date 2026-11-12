@@ -2,7 +2,7 @@
 // 调整存在 slide.adjust 里，在整套渲染的最后一步（renderDeck，fitText 之后）套到元素上 ——
 // 网页预览和 PPT 导出共用同一份元素，所以「看到的就是导出的」。
 //
-//   slide.adjust = { [组名]: 块 { dx, dy, k } | 照片 { box?:{x,y,w,h}, view?:'whole'|{ z, cx, cy } } }
+//   slide.adjust = { [组名]: 块 { dx, dy, k } | 照片 { box?:{x,y,w,h}, view?:'whole'|{ z, cx, cy }, src? } }
 //
 // 组 = 一页里 edit.field 相同的元素（中英文标题是两个文字框、同一个栏位）→ 一起动。一个 slide 排成几页时
 //   （材料页），第 2 页起组名带页序号：'#2:栏位'。
@@ -11,6 +11,7 @@
 // 照片（这一组只有一张图）：box = 照片框的位置和大小（px，绝对值）；view = 取景 ——
 //   'whole' 整张显示（不裁，比例不同的地方留纸色）；{ z, cx, cy }：z = 相对「刚好铺满框」的放大倍数，
 //   cx / cy = 取景中心（占原图的比例）。只改了框、没改取景：沿用自动排版的取景（水印照样留在画外）。
+//   src = 取景是给哪张图定的：这个照片位换了图，旧取景自动作废，框留着。
 
 import { SLIDE_W, SLIDE_H } from '../theme.js';
 import { placeImage } from './spec.js';
@@ -128,7 +129,9 @@ export function clampBox(box) {
 function adjustPhoto(el, adj) {
   const box = clampBox(adj.box) || { x: el.x, y: el.y, w: el.w, h: el.h };
   const moved = box.x !== el.x || box.y !== el.y || box.w !== el.w || box.h !== el.h;
-  const view = adj.view === 'whole' || (adj.view && typeof adj.view === 'object') ? adj.view : null;
+  // 取景是给某一张图定的（adj.src）：这个照片位换了另一张图，旧取景作废（新图比例不同），框留着
+  const stale = adj.src && el.src && adj.src !== el.src;
+  const view = !stale && (adj.view === 'whole' || (adj.view && typeof adj.view === 'object')) ? adj.view : null;
   if (!moved && !view) return el;
   const { crop: _crop, ...rest } = el;
   const next = { ...rest, ...box };
@@ -230,18 +233,4 @@ export function clearAdjust(project, slideId) {
   if (idx < 0 || !slides[idx].adjust) return project;
   const { adjust: _old, ...rest } = slides[idx];
   return { ...project, slides: slides.map((s, i) => (i === idx ? rest : s)) };
-}
-
-/** 换了照片：这个照片位的取景作废（新图比例不同），框留着 */
-export function dropPhotoView(project, slideId, field) {
-  const slide = (project?.slides || []).find((s) => s.id === slideId);
-  if (!slide?.adjust) return project;
-  let out = project;
-  for (const [key, adj] of Object.entries(slide.adjust)) {
-    const f = key.replace(/^#\d+:/, '');
-    if (f !== field || !adj || typeof adj !== 'object' || !('view' in adj)) continue;
-    const { view: _v, ...rest } = adj;
-    out = setAdjust(out, slideId, key, rest);
-  }
-  return out;
 }

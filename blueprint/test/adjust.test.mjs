@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import JSZip from 'jszip';
 import { test } from './harness.mjs';
 import {
-  groupsOf, applyAdjust, adjustKey, viewCrop, clampView, wholeZoom, autoView, clampBox, cleanBlockAdjust, setAdjust, clearAdjust, dropPhotoView,
+  groupsOf, applyAdjust, adjustKey, viewCrop, clampView, wholeZoom, autoView, clampBox, cleanBlockAdjust, setAdjust, clearAdjust,
   ADJUST_LIMITS,
 } from '../src/engine/adjust.js';
 import { placeImage } from '../src/engine/spec.js';
@@ -140,7 +140,7 @@ test('clampBox：不小于 40 px；至少留 40 px 在页面里；坏数据 = nu
   assert.equal(clampBox(null), null);
 });
 
-test('setAdjust / clearAdjust / dropPhotoView：不可变；清到没有就去掉字段；换照片只作废取景、框留着', () => {
+test('setAdjust / clearAdjust：不可变；清到没有就去掉字段', () => {
   const p = { slides: [{ id: 's1', kind: 'view' }, { id: 's2', kind: 'view' }] };
   const before = JSON.stringify(p);
   const a = setAdjust(p, 's1', 'title', { dx: 5, dy: 0, k: 1 });
@@ -149,16 +149,23 @@ test('setAdjust / clearAdjust / dropPhotoView：不可变；清到没有就去�
   assert.equal(a.slides[1], p.slides[1], '别的页不动');
   const b = setAdjust(a, 's1', 'image', { box: { x: 1, y: 2, w: 300, h: 300 }, view: { z: 2, cx: 0.5, cy: 0.5 } });
   assert.deepEqual(Object.keys(b.slides[0].adjust), ['title', 'image']);
-  const c = dropPhotoView(b, 's1', 'image');
-  assert.deepEqual(c.slides[0].adjust.image, { box: { x: 1, y: 2, w: 300, h: 300 } });
-  assert.equal(dropPhotoView(c, 's1', 'image'), c);
-  assert.equal(dropPhotoView(p, 's1', 'image'), p);
-  const d = setAdjust(setAdjust(c, 's1', 'title', null), 's1', 'image', {});
+  const d = setAdjust(setAdjust(b, 's1', 'title', null), 's1', 'image', {});
   assert.equal('adjust' in d.slides[0], false, '整页都清了：去掉字段');
   assert.equal(setAdjust(p, 's1', 'title', null), p, '本来就没有：原样返回');
   assert.equal(setAdjust(p, 'nope', 'title', { dx: 1 }), p);
   assert.equal('adjust' in clearAdjust(b, 's1').slides[0], false);
   assert.equal(clearAdjust(p, 's1'), p);
+});
+
+test('换了照片：给旧图定的取景作废（按自动的铺法），照片框留着', () => {
+  const p = page();
+  const adj = { image: { box: { x: 0, y: 0, w: 800, h: 800 }, view: { z: 2, cx: 0.5, cy: 0.5 }, src: 'asset:a' } };
+  const same = applyAdjust(p, adj).els[0];
+  assert.deepEqual(same.crop, { l: 0.375, t: 0.25, r: 0.375, b: 0.25 }, '还是那张图：取景生效');
+  const swapped = { els: [{ ...p.els[0], src: 'asset:b' }] };
+  const out = applyAdjust(swapped, adj).els[0];
+  assert.deepEqual([out.w, out.h], [800, 800], '框留着');
+  assert.deepEqual(out.crop, { l: 0.25, t: 0, r: 0.25, b: 0 }, '取景回到自动（铺满、居中）');
 });
 
 // ---------------------------------------------------------------------------
