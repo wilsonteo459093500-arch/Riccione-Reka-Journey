@@ -12,6 +12,7 @@ PDF ──import/pdfExtract.js──▶ rawPages（文字行 + 图片框（按�
         ──import/analyze.js──▶ analysis（楼层 / 空间 / 视角 / 材料，纯函数，可在 Node 测）
         ──import/importPdf.js──▶ Project（engine/model.js，图片存进 IndexedDB → 'asset:<id>'）
 Project ──engine/deck.js renderDeck()──▶ 渲染页 [{ bg, els }]（engine/spec.js 元素规格）
+        │   （最后一步 engine/adjust.js applyAdjust：套上这一页的手动调整 slide.adjust —— 预览和导出因此一致）
         ├─ components/SlideCanvas.jsx  网页预览（所见即所得）
         └─ engine/pptx/writer.js       导出 .pptx（真文本框 / 真图片，可在 PPT 里改）
 ```
@@ -30,6 +31,7 @@ Project ──engine/deck.js renderDeck()──▶ 渲染页 [{ bg, els }]（eng
 | `src/engine/metrics.js` | 三种字体的实测字宽（估算换行用） |
 | `src/engine/lang.js` · `glossary.js` | 提案语言（华文 / English / 中英）、翻译记忆、词典自动英文、缺英文提醒 |
 | `src/engine/deck.js` | `renderDeck(project, { meta })` → 渲染页（每页的提醒、缺英文清单）；`sectionLabel(section, deckChapters(project))` = 编辑器里的章节名（页面列表、章节开关），编号与目录一致 |
+| `src/engine/adjust.js` | 手动调整版面：`groupsOf(page)`（一页上可以调的块 = `edit.field` 相同的元素）、`applyAdjust(page, adjust, pageIndex)`（文字块 `{dx,dy,k}`，照片 `{box, view}` → 显式 `crop`）、`setAdjust` / `clearAdjust`；界面在 `components/editor/AdjustLayer.jsx` |
 | `src/engine/pptx/` | `buildPptx(slides, { loadImage })` → .pptx（JSZip，浏览器 / Node 通用） |
 | `src/store/db.js` | IndexedDB：projects / assets |
 | `src/store/assets.js` | `'asset:<id>'` ↔ Blob / object URL / 尺寸；`storeBlob`、`preloadProjectAssets`、`resolveUrl`、`metaOf`、`loadForPptx`、`toInlineImage` |
