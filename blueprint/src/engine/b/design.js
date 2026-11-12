@@ -269,7 +269,8 @@ const sampleRect = (x, y, w, h, field) => ({ t: 'rect', x, y, w, h, fill: B.samp
 /** 缺效果图的位置：小样底色 + 页面里看得见的那几条边的细线（出血的边不画） */
 function missingImage(x, y, w, h) {
   const els = [sampleRect(x, y, w, h, 'image')];
-  const hairline = (rx, ry, rw, rh) => ({ t: 'rect', x: rx, y: ry, w: rw, h: rh, fill: B.hair });
+  // 细线和底色同一个栏位：手动调整版面时一起动
+  const hairline = (rx, ry, rw, rh) => ({ t: 'rect', x: rx, y: ry, w: rw, h: rh, fill: B.hair, edit: { field: 'image' } });
   if (y > 0) els.push(hairline(x, y, w, 1));
   if (y + h < H) els.push(hairline(x, y + h - 1, w, 1));
   if (x > 0) els.push(hairline(x, y, 1, h));
@@ -278,12 +279,15 @@ function missingImage(x, y, w, h) {
 }
 
 /** 细线框（没有图的材料小样） */
-const frame = (x, y, w, h) => [
-  { t: 'rect', x, y, w, h: 1, fill: B.hair },
-  { t: 'rect', x, y: y + h - 1, w, h: 1, fill: B.hair },
-  { t: 'rect', x, y, w: 1, h, fill: B.hair },
-  { t: 'rect', x: x + w - 1, y, w: 1, h, fill: B.hair },
-];
+const frame = (x, y, w, h, field) => {
+  const edit = field ? { edit: { field } } : {}; // 和小样同一个栏位：手动调整版面时一起动
+  return [
+    { t: 'rect', x, y, w, h: 1, fill: B.hair, ...edit },
+    { t: 'rect', x, y: y + h - 1, w, h: 1, fill: B.hair, ...edit },
+    { t: 'rect', x, y, w: 1, h, fill: B.hair, ...edit },
+    { t: 'rect', x: x + w - 1, y, w: 1, h, fill: B.hair, ...edit },
+  ];
+};
 
 /** 纸面栏里成组的字（楼层页、空栏的图文页）上下居中的中线：logo 底（192）与签名顶（944）的中间 */
 const MID = 568;
@@ -1129,7 +1133,7 @@ function matRow(x, y, w, row, lang, d, keyW = 0, keyMode = 'auto', noRule = fals
       els.push(ph.el);
       if (ph.scale > 1.15) warn.push(`${row.what}图片像素偏低：放大 ${ph.scale.toFixed(1)} 倍会发虚，建议换高清图`);
     } else {
-      els.push(sampleRect(x, top, d.sw, d.sh, row.codeField), ...frame(x, top, d.sw, d.sh));
+      els.push(sampleRect(x, top, d.sw, d.sh, row.codeField), ...frame(x, top, d.sw, d.sh, row.codeField));
     }
     const tx = x + d.sw + 24;
     const t = matRow(tx, top - 2, w - d.sw - 24, row, lang, { ...d, swatch: false, pad: 0 }, 0, 'auto', true);
@@ -1822,7 +1826,7 @@ export function bMaterials(ctx, mats = [], pageIndex = 0, pageCount = 1, perPage
         els.push(ph.el);
         if (ph.scale > 1.15) warnings.push(`${what}图片像素偏低：放大 ${ph.scale.toFixed(1)} 倍会发虚，建议换高清图`);
       } else {
-        els.push(sampleRect(x, y, size, plateH, field), ...frame(x, y, size, plateH));
+        els.push(sampleRect(x, y, size, plateH, field), ...frame(x, y, size, plateH, field));
       }
       els.push(...drawCaption(x, y + plateH + capGap, size, caps[i], lang, field).els);
       if (capInfo[i].cut) warnings.push(`${what}名称太长：页面上截短了（末尾「…」）—— 建议精简（去材料清单改）`);

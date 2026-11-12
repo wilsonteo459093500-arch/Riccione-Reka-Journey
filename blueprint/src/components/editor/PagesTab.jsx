@@ -367,7 +367,7 @@ export default function PagesTab({ project, onChange, settings, notify, onOpenSe
       onTranslate={() => openTranslate()}
       // 手动调整版面：拖一次 = 一步撤销；滑块 / 滚轮 / 方向键这种连续的小改动合成一步
       onAdjust={(key, value, soft) => slide && onChange((p) => setAdjust(p, slide.id, key, value), soft ? { coalesce: `adjust:${slide.id}:${key}` } : { coalesce: false })}
-      onClearAdjust={() => slide && act((p) => clearAdjust(p, slide.id))}
+      onClearAdjust={(pageIndex) => slide && act((p) => clearAdjust(p, slide.id, pageIndex))}
     />
   ) : (
     <div className="h-full flex flex-col items-center justify-center gap-2 text-bp-faint">

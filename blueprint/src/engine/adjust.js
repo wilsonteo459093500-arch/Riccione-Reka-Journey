@@ -2,13 +2,15 @@
 // 调整存在 slide.adjust 里，在整套渲染的最后一步（renderDeck，fitText 之后）套到元素上 ——
 // 网页预览和 PPT 导出共用同一份元素，所以「看到的就是导出的」。
 //
-//   slide.adjust = { [组名]: 块 { dx, dy, k } | 照片 { box?:{x,y,w,h}, view?:'whole'|{ z, cx, cy }, src? } }
+//   slide.adjust = { [组名]: 块 { dx, dy, k } | 照片 { box?:{x,y,w,h}, base?:{x,y,w,h}, view?:'whole'|{ z, cx, cy }, src? } }
 //
 // 组 = 一页里 edit.field 相同的元素（中英文标题是两个文字框、同一个栏位）→ 一起动。一个 slide 排成几页时
 //   （材料页），第 2 页起组名带页序号：'#2:栏位'。
 // 块（文字，或文字 + 色块）：dx / dy = 相对自动排版的位移（px）；k = 绕这一组左上角的缩放倍数（框、字号、字距、行高一起）。
 //   存相对值：以后改了字、自动排版挪了位置，手动的偏移照样跟着。
-// 照片（这一组只有一张图）：box = 照片框的位置和大小（px，绝对值）；view = 取景 ——
+// 照片（这一组只有一张图）：box = 照片框的位置和大小（px）；base = 定这个框时自动排版给的框 ——
+//   以后自动排版变了（左右对调、换了比例不同的图、换版式），手动的框按「相对自动位置的位移 + 相对自动大小的倍数」
+//   跟过去，不会留在原地压住文字。view = 取景 ——
 //   'whole' 整张显示（不裁，比例不同的地方留纸色）；{ z, cx, cy }：z = 相对「刚好铺满框」的放大倍数，
 //   cx / cy = 取景中心（占原图的比例）。只改了框、没改取景：沿用自动排版的取景（水印照样留在画外）。
 //   src = 取景是给哪张图定的：这个照片位换了图，旧取景自动作废，框留着。
@@ -17,6 +19,7 @@ import { SLIDE_W, SLIDE_H } from '../theme.js';
 import { placeImage } from './spec.js';
 
 export const ADJUST_LIMITS = { kMin: 0.4, kMax: 3, minBox: 40, zMax: 6 };
+const LOW_RES = 1.15; // 和自动排版的低像素提醒同一条线（engine/b/design.js lowRes）
 
 const finite = (n) => typeof n === 'number' && Number.isFinite(n);
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
@@ -126,20 +129,94 @@ export function clampBox(box) {
   return { x: r2(clamp(box.x, m - w, SLIDE_W - m)), y: r2(clamp(box.y, m - h, SLIDE_H - m)), w: r2(w), h: r2(h) };
 }
 
+const boxOf = (b) => ({ x: b.x, y: b.y, w: b.w, h: b.h });
+const sameBox = (a, b) => Math.abs(a.x - b.x) < 0.01 && Math.abs(a.y - b.y) < 0.01 && Math.abs(a.w - b.w) < 0.01 && Math.abs(a.h - b.h) < 0.01;
+const validBox = (b) => !!b && [b.x, b.y, b.w, b.h].every(finite) && b.w > 0 && b.h > 0;
+
+/**
+ * 照片现在的框：手动的框；自动排版给的框变了（adj.base 对不上现在的）就跟着挪 / 缩放。没调过框 = 自动的框
+ * @param {{x,y,w,h}} auto  自动排版现在给这张图的框
+ */
+export function photoBox(auto, adj) {
+  const box = clampBox(adj?.box);
+  if (!box || !validBox(auto)) return boxOf(auto);
+  const base = validBox(adj.base) ? adj.base : null;
+  if (!base || sameBox(base, auto)) return box;
+  return clampBox({ x: auto.x + (box.x - base.x), y: auto.y + (box.y - base.y), w: (auto.w * box.w) / base.w, h: (auto.h * box.h) / base.h });
+}
+
+const sameView = (a, b) =>
+  a === b || (!!a && !!b && typeof a === 'object' && typeof b === 'object' && Math.abs(a.z - b.z) < 1e-4 && Math.abs(a.cx - b.cx) < 1e-4 && Math.abs(a.cy - b.cy) < 1e-4);
+
+/** 照片的手动取景（给别的图定的 = 作废）：'whole' | { z, cx, cy } | null */
+function photoView(el, adj) {
+  const stale = adj?.src && el.src && adj.src !== el.src;
+  return !stale && (adj?.view === 'whole' || (adj?.view && typeof adj.view === 'object')) ? adj.view : null;
+}
+
+/**
+ * 照片的调整值整理干净：框和自动的一样 → 不存框；取景和自动的一样（或是给别的图定的）→ 不存取景；都没有 = null
+ * @param {object} el  自动排版的这张图
+ */
+export function cleanPhotoAdjust(adj, el) {
+  if (!adj || typeof adj !== 'object' || !el) return null;
+  const auto = boxOf(el);
+  const box = photoBox(auto, adj);
+  const out = {};
+  if (!sameBox(box, auto)) {
+    out.box = box;
+    out.base = { x: r2(auto.x), y: r2(auto.y), w: r2(auto.w), h: r2(auto.h) };
+  }
+  const view = photoView(el, adj);
+  const v = view && view !== 'whole' && el.nat ? clampView(el.nat, box, view) : view;
+  if (v && !sameView(v, autoView(el))) {
+    out.view = v;
+    if (el.src) out.src = el.src;
+  }
+  return out.box || out.view ? out : null;
+}
+
 function adjustPhoto(el, adj) {
-  const box = clampBox(adj.box) || { x: el.x, y: el.y, w: el.w, h: el.h };
-  const moved = box.x !== el.x || box.y !== el.y || box.w !== el.w || box.h !== el.h;
+  if (!validBox(el)) return el;
+  const box = photoBox(el, adj);
+  const moved = !sameBox(box, el);
   // 取景是给某一张图定的（adj.src）：这个照片位换了另一张图，旧取景作废（新图比例不同），框留着
-  const stale = adj.src && el.src && adj.src !== el.src;
-  const view = !stale && (adj.view === 'whole' || (adj.view && typeof adj.view === 'object')) ? adj.view : null;
-  if (!moved && !view) return el;
+  const view = photoView(el, adj);
+  const auto = autoView(el);
+  if (!moved && (!view || sameView(view, auto))) return el;
   const { crop: _crop, ...rest } = el;
-  const next = { ...rest, ...box };
-  const v = view || autoView(el);
-  if (v === 'whole') return { ...next, fit: 'contain', ax: 0.5, ay: 0.5 };
-  const crop = el.nat ? viewCrop(el.nat, box, v) : null;
-  // 不知道原图多大：算不出取景，按原来的铺法（cover / contain）放进新框
-  return crop ? { ...next, crop } : next;
+  const next = moved ? { ...rest, ...box } : rest;
+  const v = view || auto;
+  // 整张显示：用户选的 → 居中；自动排版本来就是整张（3D 户型图）→ 保持它原来靠哪边
+  if (v === 'whole') return view ? { ...next, fit: 'contain', ax: 0.5, ay: 0.5 } : { ...next, fit: 'contain' };
+  const crop = el.nat ? viewCrop(el.nat, next, v) : null;
+  // 不知道原图多大：算不出取景，按原来的铺法（cover / contain / 原来的裁切）放进新框
+  return crop ? { ...next, crop } : el.crop ? { ...next, crop: el.crop } : next;
+}
+
+/** 手动取景把照片放大了多少倍（原图 1 像素占页面几像素）；算不出 = 0 */
+function photoScale(el) {
+  const nat = el?.nat;
+  if (!nat?.w || !nat?.h || !validBox(el)) return 0;
+  if (el.fit === 'contain' && !el.crop) return Math.min(el.w / nat.w, el.h / nat.h);
+  const crop = placeImage(el).crop;
+  const fw = 1 - crop.l - crop.r;
+  const fh = 1 - crop.t - crop.b;
+  return fw > 0 && fh > 0 ? Math.max(el.w / (nat.w * fw), el.h / (nat.h * fh)) : 0;
+}
+
+/** 压在照片上的托字暗渐变（name:'shade'）：照片框变了，跟着照片框一起挪 / 缩放 */
+function followPhoto(els, from, to) {
+  const sx = to.w / from.w;
+  const sy = to.h / from.h;
+  let hit = false;
+  els.forEach((el, i) => {
+    if (el?.name !== 'shade' || !validBox(el)) return;
+    if (el.x < from.x - 1 || el.y < from.y - 1 || el.x + el.w > from.x + from.w + 1 || el.y + el.h > from.y + from.h + 1) return;
+    els[i] = { ...el, x: r2(to.x + (el.x - from.x) * sx), y: r2(to.y + (el.y - from.y) * sy), w: r2(el.w * sx), h: r2(el.h * sy) };
+    hit = true;
+  });
+  return hit;
 }
 
 // ---------------------------------------------------------------------------
@@ -151,7 +228,7 @@ const half = (n) => Math.round(n * 2) / 2;
 function adjustBlockEl(el, origin, dx, dy, k) {
   const map = (b) => ({ x: r2(origin.x + dx + (b.x - origin.x) * k), y: r2(origin.y + dy + (b.y - origin.y) * k), w: r2(b.w * k), h: r2(b.h * k) });
   const next = { ...el, ...map(el) };
-  if (el.edit && Array.isArray(el.edit.zones)) next.edit = { ...el.edit, zones: el.edit.zones.map((z) => ({ ...z, ...map(z) })) };
+  if (el.edit && Array.isArray(el.edit.zones)) next.edit = { ...el.edit, zones: el.edit.zones.map((z) => (z && typeof z === 'object' ? { ...z, ...map(z) } : z)) };
   if (el.t === 'text' && k !== 1) {
     next.paras = (el.paras || []).map((p) => ({
       ...p,
@@ -172,6 +249,20 @@ export function cleanBlockAdjust(adj) {
 }
 
 /**
+ * 块的调整值按这一组的外包框再夹一次：缩放后的块至少留 40 px 在页面里（拖出页面外就找不回来了）
+ * @param {{x,y,w,h}} box  这一组自动排版的外包框
+ * @returns {{dx,dy,k}|null}
+ */
+export function clampBlock(box, adj) {
+  const b = cleanBlockAdjust(adj);
+  if (!b || !validBox(box)) return b;
+  const m = ADJUST_LIMITS.minBox;
+  const dx = r2(clamp(b.dx, m - box.w * b.k - box.x, SLIDE_W - m - box.x));
+  const dy = r2(clamp(b.dy, m - box.h * b.k - box.y, SLIDE_H - m - box.y));
+  return dx || dy || b.k !== 1 ? { dx, dy, k: b.k } : null;
+}
+
+/**
  * 把手动调整套到一页上。没有调整（或组名都对不上）= 原样返回同一个对象。
  * @param {{els:object[]}} page  自动排好的一页
  * @param {object|null|undefined} adjust  slide.adjust
@@ -184,25 +275,34 @@ export function applyAdjust(page, adjust, pageIndex = 0) {
   if (!groups.length) return page;
   const els = page.els.slice();
   let changed = false;
+  let blurry = 0;
   for (const g of groups) {
     const adj = adjust[g.key];
     if (g.type === 'photo') {
       const i = g.indexes[0];
-      const next = adjustPhoto(els[i], adj);
-      if (next !== els[i]) {
+      const el = els[i];
+      const next = adjustPhoto(el, adj);
+      if (next !== el) {
         els[i] = next;
         changed = true;
+        if (!sameBox(next, el)) followPhoto(els, el, next);
+        // 手动放大过头会发虚：自动排版最多放大到 1.15 倍，手动的不拦，但要提醒
+        const scale = photoScale(next);
+        if (scale > LOW_RES && scale > photoScale(el) * 1.02) blurry = Math.max(blurry, scale);
       }
       continue;
     }
-    const b = cleanBlockAdjust(adj);
+    const b = clampBlock(g.box, adj);
     if (!b) continue;
     g.indexes.forEach((i) => {
       els[i] = adjustBlockEl(els[i], g.box, b.dx, b.dy, b.k);
     });
     changed = true;
   }
-  return changed ? { ...page, els, adjusted: true, autoEls: page.els } : page;
+  if (!changed) return page;
+  const out = { ...page, els, adjusted: true, autoEls: page.els };
+  if (blurry) out.warnings = [...(page.warnings || []), `手动取景把照片放大了 ${blurry.toFixed(1)} 倍，会发虚：缩小一点，或换高清图`];
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -226,11 +326,36 @@ export function setAdjust(project, slideId, key, value) {
   return { ...project, slides: slides.map((s, i) => (i === idx ? out : s)) };
 }
 
-/** 整页恢复自动排版 */
-export function clearAdjust(project, slideId) {
+const keyPage = (key) => {
+  const m = /^#(\d+):/.exec(key);
+  return m ? Number(m[1]) - 1 : 0;
+};
+
+/**
+ * 恢复自动排版：pageIndex 给了 = 只清这个 slide 排出来的那一页（材料页会排成几页）；不给 = 整个 slide
+ */
+export function clearAdjust(project, slideId, pageIndex = null) {
   const slides = project?.slides || [];
   const idx = slides.findIndex((s) => s.id === slideId);
   if (idx < 0 || !slides[idx].adjust) return project;
-  const { adjust: _old, ...rest } = slides[idx];
-  return { ...project, slides: slides.map((s, i) => (i === idx ? rest : s)) };
+  const { adjust, ...rest } = slides[idx];
+  const kept = pageIndex === null ? {} : Object.fromEntries(Object.entries(adjust).filter(([k]) => keyPage(k) !== pageIndex));
+  if (pageIndex !== null && Object.keys(kept).length === Object.keys(adjust).length) return project;
+  const out = Object.keys(kept).length ? { ...rest, adjust: kept } : rest;
+  return { ...project, slides: slides.map((s, i) => (i === idx ? out : s)) };
+}
+
+/**
+ * 列表（notes / materials…）删了、加了、换了顺序：按序号记的调整（'notes.1.text'）会对到别的条目上 → 丢掉这个列表的调整
+ * @param {object} slide
+ * @param {string} listName
+ * @returns {object} 没有要丢的 = 原样返回同一个对象
+ */
+export function dropListAdjust(slide, listName) {
+  if (!slide?.adjust || !listName) return slide;
+  const re = new RegExp(`^(#\\d+:)?${listName}\\.\\d+(\\.|$)`);
+  const kept = Object.fromEntries(Object.entries(slide.adjust).filter(([k]) => !re.test(k)));
+  if (Object.keys(kept).length === Object.keys(slide.adjust).length) return slide;
+  const { adjust: _old, ...rest } = slide;
+  return Object.keys(kept).length ? { ...rest, adjust: kept } : rest;
 }

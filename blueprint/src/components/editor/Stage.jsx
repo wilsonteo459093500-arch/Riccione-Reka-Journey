@@ -141,7 +141,7 @@ function Toolbar({
  *   onPrev(), onNext(), onPick(field, el), activeField?:string, onClearPick(), compare:boolean, onToggleCompare(),
  *   onFix(fix), onPolish(onlyThis?:boolean), onGlobalLayout(mode), onToggleEnabled(),
  *   onLang?(lang:'zh'|'en'|'bi'), missingCount?:number, onTranslate?(),
- *   onAdjust?(key, value|null, soft?), onClearAdjust?() }} props
+ *   onAdjust?(key, value|null, soft?), onClearAdjust?(pageIndex) }} props
  *   onLang：顶栏的提案语言切换；missingCount：整套缺英文的条数（English / 中英版时显示「AI 翻译 · N」）
  */
 export default function Stage({
@@ -226,7 +226,7 @@ export default function Stage({
       <div
         ref={areaRef}
         onClick={onClearPick}
-        className="relative flex-1 min-h-0 flex items-center justify-center"
+        className={`relative flex-1 min-h-0 flex items-center justify-center ${adjusting ? 'overflow-hidden' : ''}`}
       >
         {page && slideW > 0 && (
           <div className="flex items-center" style={{ gap: GAP }}>
@@ -250,12 +250,18 @@ export default function Stage({
                   page={autoPage}
                   adjust={slide?.adjust}
                   scale={slideW / 1920}
+                  areaEl={areaRef.current}
                   onDraft={setDraft}
                   onCommit={(key, value, soft) => {
                     setDraft(null);
                     onAdjust?.(key, value, soft);
                   }}
-                  onExit={() => setAdjusting(false)}
+                  onExit={() => {
+                    setAdjusting(false);
+                    setDraft(null);
+                    // 焦点回到开关上（键盘用户不会掉到页面开头）
+                    areaRef.current?.parentElement?.querySelector('button[aria-label="调整版面"]')?.focus();
+                  }}
                 />
               )}
               {!page.enabled && (
@@ -310,7 +316,7 @@ export default function Stage({
             {adjusting ? (
               <>
                 <Move className="w-3.5 h-3.5" />
-                点照片或文字选中 · 拖动换位置，拖角改大小 · 照片可在框里拖动取景、滚轮缩放 · 方向键微调 · Esc 退出
+                点照片或文字选中 · 拖动换位置，拖角改大小 · 照片可在框里拖动取景、滚轮缩放 · 方向键微调 · 按住 Alt 不吸附 · Esc 退出
               </>
             ) : (
               <>
@@ -318,12 +324,19 @@ export default function Stage({
                 点画面上的文字或图片，右侧就会跳到对应的输入框 · ← → 翻页 · Alt + ↑ ↓ 调整顺序
               </>
             )}
-            {page?.adjusted && (
-              <button type="button" onClick={onClearAdjust} className="inline-flex items-center gap-1 ml-2 text-bp-eyebrow hover:underline" title="这一页的照片和文字全部回到程序排的位置">
-                <RotateCcw className="w-3 h-3" />
-                这一页有手动调整 · 整页恢复自动排版
-              </button>
-            )}
+          </p>
+        )}
+        {page?.adjusted && (
+          <p className="flex justify-center mt-1.5 text-[11px]">
+            <button
+              type="button"
+              onClick={() => onClearAdjust?.(page.pageIndex || 0)}
+              className="inline-flex items-center gap-1 text-bp-eyebrow hover:underline"
+              title="这一页的照片和文字全部回到程序排的位置"
+            >
+              <RotateCcw className="w-3 h-3" />
+              这一页有手动调整 · 整页恢复自动排版
+            </button>
           </p>
         )}
       </div>
