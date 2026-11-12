@@ -9,6 +9,7 @@ const PART = {
   panelL: { en: 'Left side panel', zh: '左见光板' },
   panelR: { en: 'Right side panel', zh: '右见光板' },
   panelIn: { en: 'Tall unit inner side panel', zh: '高柜内侧见光板' },
+  panelBack: { en: 'Island back panel', zh: '岛台背面见光板' },
   shelf: { en: 'Floating shelves', zh: '飘板' },
   tvWall: { en: 'Feature wall', zh: '电视墙' },
 };

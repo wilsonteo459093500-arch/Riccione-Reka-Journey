@@ -42,6 +42,7 @@ const TXT = {
   appliance: { en: 'Appliance', zh: '电器位' },
   hood: { en: 'Hood', zh: '烟机位' },
   fridge: { en: 'Fridge', zh: '冰箱位' },
+  legroom: { en: 'Legroom', zh: '放脚位' },
   note: { en: 'Illustrative', zh: '仅示意' },
   raised: { en: 'Raised', zh: '底层架空' },
   blocks: {
@@ -233,6 +234,7 @@ function normFrame(f, i, ex) {
     base: { kind: bk, h: bh },
     ends: endsOf(f, ex),
     worktop: !!f.worktop,
+    wtDoor: f.worktop === 'door', // 书桌 / 妆台桌面：门板色
   };
   const body = cleanNode(f.body);
   n.body = body;
@@ -331,7 +333,7 @@ export function elevationScene(cab, opts = {}) {
     const bb = unionBox(out.shapes.map(shapeBox)) || [0, 0, 0, 0];
     const y = bb[3] + 5 * U + 0.8 * S.wallTxt;
     for (const x of ext) {
-      out.text((x.x0 + x.x1) / 2, y, pick(wallText(x.w), lang), S.wallTxt, { anchor: 'middle', fill: INK_SOFT, weight: 600, role: 'wall-label' });
+      out.text((x.x0 + x.x1) / 2, y, pick(walls[x.w]?.name || wallText(x.w), lang), S.wallTxt, { anchor: 'middle', fill: INK_SOFT, weight: 600, role: 'wall-label' });
     }
   }
 
@@ -403,7 +405,7 @@ function drawFrame(ctx, f) {
   drawFrameSelected(ctx, f, G);
 
   // 台面
-  if (f.worktop) R(-f.ovhL, yt, W + f.ovhL + f.ovhR, WT_T, { fill: WORKTOP, stroke: INK, sw: S.sw, role: 'worktop' });
+  if (f.worktop) R(-f.ovhL, yt, W + f.ovhL + f.ovhR, WT_T, { fill: f.wtDoor ? C.tint : WORKTOP, stroke: INK, sw: S.sw, role: 'worktop' });
 
   // 水槽龙头 / 炉头（画在台面上）
   if (style === 'drawing') {
@@ -563,7 +565,7 @@ function drawShelves(ctx, { R }, cell, fill) {
 function drawVoid(ctx, f, G, cell) {
   const { S, lang } = ctx;
   G.R(cell.fx, cell.fy, cell.fw, cell.fh, { stroke: INK_SOFT, sw: S.thin, dash: S.dashVoid, role: 'void' });
-  const t = TXT[cell.node?.interior === 'hood' || cell.node?.interior === 'fridge' ? cell.node.interior : 'appliance'];
+  const t = TXT[['hood', 'fridge', 'legroom'].includes(cell.node?.interior) ? cell.node.interior : 'appliance'];
   const one = [pick(t, lang)];
   const em = textEm(one[0]);
   const lines = lang === 'both' && em * S.lbl > cell.fw * 0.86 ? pickLines(t, lang) : one;

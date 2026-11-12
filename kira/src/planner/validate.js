@@ -15,7 +15,7 @@ export function validateCabinet(cab, { ceilingH } = {}) {
       return;
     }
     if (f.kind === 'wall' && (f.D < 300 || f.D > 400)) out.push({ level: 'warn', msg: T(`Wall cabinet depth ${f.D} mm is unusual (300–350)`, `吊柜深 ${f.D} 不常见（一般 300–350）`) });
-    if (f.kind === 'base' && (f.D < 520 || f.D > 650)) out.push({ level: 'warn', msg: T(`Base cabinet depth ${f.D} mm is unusual (560–600)`, `地柜深 ${f.D} 不常见（一般 560–600）`) });
+    if (f.kind === 'base' && !f.priceVoid && (f.D < 520 || f.D > 650)) out.push({ level: 'warn', msg: T(`Base cabinet depth ${f.D} mm is unusual (560–600)`, `地柜深 ${f.D} 不常见（一般 560–600）`) });
     if (cab.template === 'wardrobe' && (f.D < 500 || f.D > 650)) out.push({ level: 'warn', msg: T(`Wardrobe depth ${f.D} mm is unusual (550–600)`, `衣柜深 ${f.D} 不常见（一般 550–600）`) });
     if (ceilingH && f.y + f.H > ceilingH) out.push({ level: 'warn', msg: T(`Taller than the room (${f.y + f.H} > ceiling ${ceilingH})`, `比楼高还高（${f.y + f.H} > 楼高 ${ceilingH}）`) });
     layoutLeaves(f.body, 0, 0, f.W, bodyHeight(f)).forEach(({ w, h, node }) => {

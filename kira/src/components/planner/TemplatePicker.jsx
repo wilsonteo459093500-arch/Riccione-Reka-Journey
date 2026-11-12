@@ -33,7 +33,7 @@ export default function TemplatePicker({ onPick, onClose }) {
   useBackClose(onClose); // 手机返回键 = 关闭
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center no-print" style={{ background: 'rgba(45,62,54,0.55)' }} onClick={onClose}>
-      <div className="w-full sm:max-w-2xl p-5 sm:p-6" style={{ background: T.paper, borderRadius: '2px 2px 0 0' }} onClick={(e) => e.stopPropagation()}>
+      <div className="w-full sm:max-w-2xl p-5 sm:p-6 max-h-[92vh] overflow-y-auto overscroll-contain" data-template-picker style={{ background: T.paper, borderRadius: '2px 2px 0 0' }} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-1">
           <div className="font-display text-2xl" style={{ color: T.ink }}>Add a cabinet 加柜子</div>
           <button onClick={onClose} className="p-2" style={{ color: T.inkSoft }}><X size={18} /></button>
@@ -41,9 +41,9 @@ export default function TemplatePicker({ onPick, onClose }) {
         <div className="text-xs mb-4" style={{ color: T.inkSoft }}>Pick a template — you only need the total width. 选一个模板，打总宽就好。</div>
         <div className="grid grid-cols-2 gap-3">
           {TEMPLATE_LIST.map((t) => (
-            <button key={t.id} onClick={() => onPick(t.id)} className="p-3 text-left transition-colors hover-lift"
+            <button key={t.id} onClick={() => onPick(t.id)} data-template={t.id} className="p-3 text-left transition-colors hover-lift"
               style={{ background: T.cream, border: `1px solid ${T.line}`, borderRadius: 2 }}>
-              <div className="h-28 flex items-center justify-center mb-2" style={{ background: '#fff' }}>
+              <div className="h-20 sm:h-28 flex items-center justify-center mb-2" style={{ background: '#fff' }}>
                 <SvgShapes scene={cardScene(t.id)} style={{ height: '100%', width: 'auto' }} />
               </div>
               <div className="font-display text-lg" style={{ color: T.ink }}>{t.zh} <span className="text-sm">{t.en}</span></div>

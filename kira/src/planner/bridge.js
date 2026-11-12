@@ -51,6 +51,8 @@ export function frameQuantities(frame, seriesOf = null) {
       .map((l) => ({ y0: l.y0, y1: l.y1, type: l.node.type || 'closed', node: l.node }))
       .sort((a, b) => a.y0 - b.y0);
     if (!segs.length) segs.push({ y0: 0, y1: Hb, type: 'closed', node: null }); // 没切到的地方当封门
+    // 书桌 / 妆台：整张桌按地柜延米计价，放脚位（空位）也算 → frame.priceVoid 时空位当封门
+    if (frame.priceVoid) segs.forEach((g) => { if (g.type === 'void') g.type = 'closed'; });
     const nonvoid = segs.filter((g) => g.type !== 'void' && g.type !== 'shelf'); // 飘板格不是柜子：同空位，另外按块计价
     if (!nonvoid.length) { slices.push({ s, hp: 0, parts: [] }); continue; } // 整列空位：不计价（连底座）
     const lowest = segs[0];
@@ -221,6 +223,13 @@ export function frameItems(cab, frame, defaults = {}) {
   if (ip && ex.tallInner !== false && Number(ip.area) > 0 && Dm > 0) {
     items.push({ id: `${cab.id}:${frame.id}:panelIn`, type: 'panel', preset: 'custom', name: frame.label || '', length: Dm, h: Number(ip.area) / 1e6 / Dm,
       panelSeries: ser.door, noDiscount: false, kira: tag('panelIn') });
+  }
+  // 岛台背面（只做一排时）：一整块见光板，面积由模板算好放在 frame.backPanel.area（mm²，宽 × 高）
+  const bp = frame.backPanel;
+  const Wm = Math.max(0, frame.W || 0) / 1000;
+  if (bp && Number(bp.area) > 0 && Wm > 0) {
+    items.push({ id: `${cab.id}:${frame.id}:panelBack`, type: 'panel', preset: 'custom', name: frame.label || '', length: Wm, h: Number(bp.area) / frame.W / 1000,
+      panelSeries: ser.door, noDiscount: false, kira: tag('panelBack') });
   }
   return [...items, ...shelves];
 }

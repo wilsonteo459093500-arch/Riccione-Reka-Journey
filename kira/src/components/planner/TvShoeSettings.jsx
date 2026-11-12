@@ -26,27 +26,33 @@ const widthsOf = (cab, idPart) => {
   return f?.body?.split === 'v' ? f.body.sizes : f ? [f.W] : [];
 };
 
-export function TvSettings({ cab, setSpec, ceilingH }) {
+// variant 'sideboard'：干厨 / 餐边柜（同电视柜结构：地柜 + 台面示意 · 吊柜默认开 · 两侧高柜可选 · 没有电视墙）
+export function TvSettings({ cab, setSpec, ceilingH, variant }) {
   const s = cab.spec;
+  const sb = variant === 'sideboard';
   const run = tvRun(s);
   const setArr = (key) => (i, p) => setSpec({ [key]: s[key].map((u, j) => (j === i ? { ...u, ...p } : u)) });
   return (
-    <>
-      <Section title="Size 尺寸" hint="Total width of the TV wall 整面电视墙的总宽">
+    <div data-tv-settings={sb ? 'sideboard' : 'tv'}>
+      <Section title="Size 尺寸" hint={sb ? 'Total width incl. side tall cabinets 总宽（含两侧高柜）' : 'Total width of the TV wall 整面电视墙的总宽'}>
         <div className="grid grid-cols-3 gap-2">
           <MeterInput label="Total width 总宽" mm={s.W} onChange={(W) => setSpec({ W })} />
-          <MeterInput label="Low height 低柜高" mm={s.lowH} onChange={(lowH) => setSpec({ lowH })} />
-          <MeterInput label="Low depth 低柜深" mm={s.lowD} onChange={(lowD) => setSpec({ lowD })} />
+          <MeterInput label={sb ? 'Base height 地柜高' : 'Low height 低柜高'} mm={s.lowH} onChange={(lowH) => setSpec({ lowH })} />
+          <MeterInput label={sb ? 'Base depth 地柜深' : 'Low depth 低柜深'} mm={s.lowD} onChange={(lowD) => setSpec({ lowD })} />
         </div>
       </Section>
-      <Section title="Low cabinet 低柜">
-        <Segmented value={s.lowKind} onChange={(lowKind) => setSpec({ lowKind })}
-          options={[{ id: 'floating', label: '悬空 Floating' }, { id: 'floor', label: '落地 On floor' }]} />
-        {s.lowKind === 'floating' && <div className="w-36 mt-2"><MeterInput label="From floor 离地" mm={s.lowY} onChange={(lowY) => setSpec({ lowY })} /></div>}
+      <Section title={sb ? 'Base cabinet 地柜' : 'Low cabinet 低柜'}>
+        {sb ? (
+          <Toggle on={!!s.worktop} onChange={(worktop) => setSpec({ worktop })} label="Show worktop 显示台面（仅示意，台面价钱另外手动加）" />
+        ) : (
+          <Segmented value={s.lowKind} onChange={(lowKind) => setSpec({ lowKind })}
+            options={[{ id: 'floating', label: '悬空 Floating' }, { id: 'floor', label: '落地 On floor' }]} />
+        )}
+        {!sb && s.lowKind === 'floating' && <div className="w-36 mt-2"><MeterInput label="From floor 离地" mm={s.lowY} onChange={(lowY) => setSpec({ lowY })} /></div>}
         <div className="text-[10px] mt-3 mb-1" style={{ color: T.inkSoft }}>{run.runW} mm · 每格</div>
         <UnitGrid units={s.lowUnits} options={TV_LOW_UNITS} onSet={setArr('lowUnits')} widths={widthsOf(cab, '-low')} />
       </Section>
-      <Section title="Side tall cabinets 两侧高柜 / 展示柜" hint={s.sides.on && !(ceilingH > 0) ? NO_CEILING : undefined}>
+      <Section title={sb ? 'Side tall cabinets 两侧高柜' : 'Side tall cabinets 两侧高柜 / 展示柜'} hint={s.sides.on && !(ceilingH > 0) ? NO_CEILING : undefined}>
         <Toggle on={!!s.sides.on} onChange={(on) => setSpec({ sides: { ...s.sides, on, H: on && ceilingH && !s.sides.on ? ceilingH : s.sides.H } })} label={s.sides.on ? 'Yes 有' : 'No 没有'} />
         {s.sides.on && (
           <div className="space-y-2 mt-2">
@@ -62,15 +68,15 @@ export function TvSettings({ cab, setSpec, ceilingH }) {
           </div>
         )}
       </Section>
-      <Section title="TV feature wall 电视墙" hint={`Width = between the side towers 宽 = 两侧高柜之间（${mmToM(run.runW)} m）· priced width × height 按宽 × 高计价`}>
+      {!sb && <Section title="TV feature wall 电视墙" hint={`Width = between the side towers 宽 = 两侧高柜之间（${mmToM(run.runW)} m）· priced width × height 按宽 × 高计价`}>
         <div data-tv-wall>
           <Toggle on={!!s.tvWall?.on} onChange={(on) => setSpec({ tvWall: { ...(s.tvWall || {}), on, H: on && ceilingH && !s.tvWall?.on ? ceilingH : s.tvWall?.H } })} label={s.tvWall?.on ? 'Yes 有' : 'No 没有'} />
         </div>
         {s.tvWall?.on && (
           <div className="w-36 mt-2"><MeterInput label="Height 高" mm={s.tvWall.H} onChange={(H) => setSpec({ tvWall: { ...s.tvWall, H } })} /></div>
         )}
-      </Section>
-      <Section title="Top cabinet above TV 电视上方吊柜">
+      </Section>}
+      <Section title={sb ? 'Top cabinet 吊柜' : 'Top cabinet above TV 电视上方吊柜'}>
         <Toggle on={!!s.upper.on} onChange={(on) => setSpec({ upper: { ...s.upper, on } })} label={s.upper.on ? 'Yes 有' : 'No 没有'} />
         {s.upper.on && (
           <div className="space-y-2 mt-2">
@@ -83,7 +89,7 @@ export function TvSettings({ cab, setSpec, ceilingH }) {
           </div>
         )}
       </Section>
-    </>
+    </div>
   );
 }
 

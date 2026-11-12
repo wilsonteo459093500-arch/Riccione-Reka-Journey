@@ -741,6 +741,78 @@ try {
   check('v3 no browser errors (slow upload)', serr.length === 0, serr.join(' | '));
   await sctx.close();
 
+  // ---------- 新模板：书桌 / 妆台 / 岛台 / 干厨·餐边柜（价钱 = 现有种类，跟 Node 算的一样）→ 报价单 ----------
+  const nctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const np = await nctx.newPage();
+  const nerr = [];
+  np.on('pageerror', (e) => nerr.push(e.message));
+  const TPL = await import('../src/planner/templates.js');
+  const BR = await import('../src/planner/bridge.js');
+  const expectOf = (id, patch = {}) => Math.round(BR.cabinetTotal(TPL.updateSpec(TPL.newCabinet(id, { ceilingH: 2700 }), patch)));
+  const inSec = (marker) => np.locator('section', { has: np.locator(marker) });
+  await np.goto(URL);
+  await np.getByRole('button', { name: /Skip 跳过/ }).click();
+  await np.getByRole('button', { name: /New/ }).first().click();
+  const nceil = np.locator('input[placeholder="2.70"]').first();
+  await nceil.fill('2.7'); await nceil.blur();
+  const addTpl = async (name) => { await np.getByRole('button', { name: /Add cabinet 加柜子/ }).first().click(); await np.getByRole('button', { name }).click(); };
+  // 书桌
+  await addTpl(/Study desk/);
+  const desk0 = await barPrice(np);
+  check('new: study desk 1.2 × 0.75 × 0.6 m = base cabinet per metre + drawers + 2 side panels (RM 3,519)', desk0 === 3519 && desk0 === expectOf('desk'), `got ${desk0}`);
+  await inSec('[data-desk-drawers]').getByRole('button', { name: /两边 Both/ }).click();
+  await inSec('[data-desk-tower]').getByRole('button', { name: /左 Left/ }).click();
+  await inSec('[data-desk-tower]').getByRole('button', { name: /衣柜 Wardrobe/ }).click();
+  await inSec('[data-desk-above]').getByRole('button', { name: /吊柜 Top cabinet/ }).click();
+  const desk1 = await barPrice(np);
+  const deskExp = expectOf('desk', { drawers: 'both', above: 'upper', tower: { which: 'left', kind: 'wardrobe', W: 600, H: 2700, D: 600 } });
+  check('new: desk + both drawer units + left wardrobe (inner side panel) + top cabinet', desk1 === deskExp, `got ${desk1}, expected ${deskExp}`);
+  await np.getByRole('button', { name: /立体 3D/ }).click();
+  await np.waitForTimeout(150);
+  await np.locator('.fixed.inset-0 svg').first().screenshot({ path: path.join(outDir, 'new-desk-3d.png') });
+  await np.getByRole('button', { name: /Add 加入报价/ }).click();
+  // 妆台
+  await addTpl(/Vanity/);
+  const van = await barPrice(np);
+  check('new: vanity 1.0 × 0.75 × 0.45 m priced as base cabinet per metre', van === expectOf('vanity'), `got ${van}`);
+  check('new: vanity has no "unusual depth" warning', (await np.locator('section', { hasText: 'Check 提醒' }).count()) === 0);
+  await np.getByRole('button', { name: /Add 加入报价/ }).click();
+  // 岛台：先看两面都是柜，再回到背面见光板
+  await addTpl(/Island/);
+  const isl0 = await barPrice(np);
+  check('new: island 2.4 m (back = finished panel) = base + 2 end panels + back panel 2.4 × 0.85 (RM 5,486)', isl0 === 5486 && isl0 === expectOf('island'), `got ${isl0}`);
+  await inSec('[data-island-back]').getByRole('button', { name: /两面都是柜/ }).click();
+  const isl1 = await barPrice(np);
+  check('new: island with cabinets both sides = 2 rows + 4 end panels, no back panel', isl1 === expectOf('island', { back: 'cabinets' }), `got ${isl1}`);
+  await np.getByRole('button', { name: /立体 3D/ }).click();
+  await np.waitForTimeout(150);
+  await np.locator('.fixed.inset-0 svg').first().screenshot({ path: path.join(outDir, 'new-island-3d.png') });
+  await inSec('[data-island-back]').getByRole('button', { name: /见光板 Finished panel/ }).click();
+  check('new: back to finished panel → same price as before', (await barPrice(np)) === isl0);
+  await np.getByRole('button', { name: /Add 加入报价/ }).click();
+  // 干厨 / 餐边柜
+  await addTpl(/Dry kitchen & sideboard/);
+  const sb0 = await barPrice(np);
+  check('new: dry kitchen / sideboard default = base 0.85 × 0.55 + top cabinet at 1.50 (worktop not priced)', sb0 === expectOf('sideboard'), `got ${sb0}`);
+  check('new: sideboard has no TV feature wall setting', (await np.locator('[data-tv-wall]').count()) === 0 && (await np.locator('[data-tv-settings="sideboard"]').count()) === 1);
+  await sec(np, 'Side tall cabinets').getByRole('button', { name: /No 没有/ }).click();
+  const sb1 = await barPrice(np);
+  const sbExp = expectOf('sideboard', { sides: { on: true, which: 'both', W: 600, H: 2700, D: 550, kind: 'closed' } });
+  check('new: sideboard side tall cabinets on (with inner side panels)', sb1 === sbExp, `got ${sb1}, expected ${sbExp}`);
+  await np.getByRole('button', { name: /立体 3D/ }).click();
+  await np.waitForTimeout(150);
+  await np.locator('.fixed.inset-0 svg').first().screenshot({ path: path.join(outDir, 'new-sideboard-3d.png') });
+  await np.getByRole('button', { name: /Add 加入报价/ }).click();
+  check('new: four cabinets K1–K4 on the quote', (await np.locator('text=K4').count()) > 0);
+  await np.getByRole('button', { name: /Quote 报价单/ }).first().click();
+  await np.waitForTimeout(400);
+  const nsheet = await np.locator('.quote-print-sheet').textContent();
+  check('new: quote sheet lists Study Desk / Vanity / Island and "Back Panel: A Series"',
+    /Study Desk/.test(nsheet) && /Vanity/.test(nsheet) && /Island/.test(nsheet) && /Back Panel: A Series/.test(nsheet) && /Wardrobe/.test(nsheet));
+  await np.locator('.quote-print-sheet').screenshot({ path: path.join(outDir, 'new-templates-quote.png') });
+  check('new: no browser errors (new templates)', nerr.length === 0, nerr.join(' | '));
+  await nctx.close();
+
   // ---------- 手机（触控）：上传 → 点两点定比例 → 点两个对角画柜子 → 衣柜 ----------
   const hctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const hp = await hctx.newPage();
