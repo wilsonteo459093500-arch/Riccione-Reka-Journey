@@ -1,7 +1,7 @@
 // 「页面」编辑器纯函数（src/components/editor/ops.js）：排序 / 复制 / 删除 / 新增 / 版式 / 材料 / 改字 / 提醒修复
 import assert from 'node:assert/strict';
 import { bTeam, bViewPlate, bViewFull, planViews, WM_WARN } from '../src/engine/b/design.js';
-import { upgradeProject, legacyEditPages, setSectionEnabled, TOGGLE_SECTIONS } from '../src/lib/project.js';
+import { upgradeProject, legacyEditPages, setSectionEnabled, TOGGLE_SECTIONS, withLaterPages } from '../src/lib/project.js';
 import { deckChapters } from '../src/engine/b/company.js';
 import { floorPageImage } from '../src/engine/b/design.js';
 import fs from 'fs';
@@ -324,23 +324,29 @@ test('upgradeProject：旧项目的效果图版式交还给自动排版（立体
   assert.equal(upgradeProject(fresh), fresh);
 });
 
-test('upgradeProject：旧项目没有感谢信 → 补在封面后面（只补一次，隐藏了也不再补）；还没有整套的空项目不补', () => {
+test('withLaterPages：旧项目没有感谢信 → 补在封面后面（固定 id，每次打开都一样；隐藏了也不再补）；upgradeProject 不管这件事；空项目不补', () => {
   const p = smallProject();
   const old = { ...p, slides: p.slides.filter((s) => !(s.kind === 'company' && s.key === 'letter')) };
   assert.equal(old.slides.length, p.slides.length - 1, 'smallProject 本来就有感谢信');
-  const up = upgradeProject(old);
+  // 补页不是换版式：upgradeProject 原样返回，编辑器就不会因此提醒「旧版改过的字」
+  assert.equal(upgradeProject(old), old);
+  const up = withLaterPages(old);
   assert.notEqual(up, old);
   assert.deepEqual(up.slides.filter((s) => s.kind === 'company').map((s) => s.key).slice(0, 3), ['cover', 'letter', 'contents']);
   assert.equal(up.slides.length, old.slides.length + 1);
   const letter = up.slides.find((s) => s.key === 'letter');
-  assert.equal(letter.kind, 'company');
-  assert.equal(letter.enabled, true);
-  assert.ok(letter.id && !old.slides.some((s) => s.id === letter.id));
-  assert.equal(upgradeProject(up), up, '已经有了：原样返回');
+  assert.deepEqual(letter, { id: 's-letter', kind: 'company', key: 'letter', enabled: true });
+  assert.equal(withLaterPages(old).slides.find((s) => s.key === 'letter').id, 's-letter', '每次打开 id 都一样');
+  assert.equal(withLaterPages(up), up, '已经有了：原样返回');
   const hidden = { ...up, slides: up.slides.map((s) => (s.key === 'letter' ? { ...s, enabled: false } : s)) };
-  assert.equal(upgradeProject(hidden), hidden, '隐藏了：不再补一页');
-  const empty = { ...newProject(), layoutVersion: 2 };
-  assert.equal(upgradeProject(empty), empty);
+  assert.equal(withLaterPages(hidden), hidden, '隐藏了：不再补一页');
+  const empty = newProject();
+  assert.equal(withLaterPages(empty), empty);
+  // 旧项目（还要换版式）：先 upgradeProject 再补页，两件事都做
+  const older = { ...old, layoutVersion: undefined };
+  const both = withLaterPages(upgradeProject(older));
+  assert.equal(both.layoutVersion, 2);
+  assert.ok(both.slides.some((s) => s.key === 'letter'));
 });
 
 test('upgradeProject：旧版公司页按元素序号的改写，意思一样的搬到新栏位（质保年数、封面、封底联系方式），其余留着提醒', () => {

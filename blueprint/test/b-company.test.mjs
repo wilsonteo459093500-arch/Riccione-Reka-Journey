@@ -9,7 +9,7 @@ import path from 'node:path';
 import { test } from './harness.mjs';
 import {
   COMPANY_PAGES_B, COMPANY_KEYS_B, renderCompanyB, companyFieldsB, companyImagesB, companyTokensB, dateZh, dateEn,
-  PHOTOS, LOGO, QR, yearsEn, deckChapters, chapterZh, chapterEn, companyFieldByLabel, legacyOverrides, PHOTO_HIDDEN, ZH_EN_HEADER, LETTER_BI_PHOTO_W,
+  PHOTOS, LOGO, QR, yearsEn, deckChapters, chapterZh, chapterEn, companyFieldByLabel, legacyOverrides, PHOTO_HIDDEN, ZH_EN_HEADER, LETTER_BI_PHOTO_W, LETTER_PARA_GAP,
 } from '../src/engine/b/company.js';
 import { INSET, B, LOGOS, ALPHA, measure, SIGNATURE } from '../src/engine/b/kit.js';
 import { makeTranslator } from '../src/engine/lang.js';
@@ -1007,7 +1007,7 @@ test('感谢信：称呼叫得出客户的名字；没填客户 = 朋友 / frien
   assert.deepEqual(greet(two), ['亲爱的 Mr & Mrs Lau and family：']);
 });
 
-test('感谢信：照片贴右（820，中英版 680），字都在纸面上；一段一个元素、段距半行；中英版中文左栏、英文右栏同一高度起排', () => {
+test('感谢信：照片贴右（820，中英版 680），字都在纸面上；一段一个元素、段距 0.4 行；中英版中文左栏、英文右栏同一高度起排', () => {
   for (const lang of LANGS) {
     const pg = render('letter', lang);
     assert.deepEqual(pg.warnings, [], lang);
@@ -1022,7 +1022,7 @@ test('感谢信：照片贴右（820，中英版 680），字都在纸面上；�
         const [a] = els[i - 1];
         const [b] = els[i];
         const lh = a.paras[0].lineHeight;
-        assert.equal(Math.round(b.y - (a.y + a.h) + 2 * INSET), Math.round(lh / 2), `${lang} ${side}: 第 ${i} / ${i + 1} 段之间空半行`);
+        assert.equal(Math.round(b.y - (a.y + a.h) + 2 * INSET), Math.round(lh * LETTER_PARA_GAP), `${lang} ${side}: 第 ${i} / ${i + 1} 段之间空 0.4 行`);
       }
     }
     if (lang === 'bi') {
@@ -1038,14 +1038,14 @@ test('感谢信：照片贴右（820，中英版 680），字都在纸面上；�
 });
 
 test('感谢信：正文太长 → 截短的那一段和后面没排的段都点名提醒（按顺序），一键修复跳到那一栏；清空一段 = 不要这一段', () => {
-  // 第二段长到排不满：第二段截短（末尾「…」），第三、四段没有显示 —— 两条提醒，各自点名
+  // 第二段长到排不满：第二段截短（末尾「…」），第三到五段没有显示 —— 两条提醒，各自点名
   const long = '我们相信，认真把一件小事做好，就是对人最大的尊重。'.repeat(14);
   const pg = render('letter', 'zh', { overrides: { p2: long } });
   assert.ok(pg.warnings.includes('文字太长放不下：「第二段」已截短（末尾「…」）—— 请删减'), pg.warnings.join(' / '));
-  assert.ok(pg.warnings.includes('文字太长放不下：「第三段」「第四段」排不下、没有显示 —— 请删减正文'), pg.warnings.join(' / '));
+  assert.ok(pg.warnings.includes('文字太长放不下：「第三段」「第四段」「第五段」排不下、没有显示 —— 请删减正文'), pg.warnings.join(' / '));
   assert.equal(companyFieldByLabel('letter', '第二段'), 'overrides.p2');
   assert.ok(byField(pg, 'overrides.p2')[0].paras[0].runs[0].text.endsWith('…'));
-  assert.equal(byField(pg, 'overrides.p3').length + byField(pg, 'overrides.p4').length, 0);
+  assert.equal(['p3', 'p4', 'p5'].reduce((n, f) => n + byField(pg, `overrides.${f}`).length, 0), 0);
   for (const el of pg.els) assert.ok(el.y + el.h <= 1080, '不出画布');
   // 一键修复：截短的 → 那一段；没显示的 → 第一段没显示的
   assert.deepEqual(fixForWarning('文字太长放不下：「第二段」已截短（末尾「…」）—— 请删减', { key: 'letter' }), { id: 'focus', label: '去删减', field: 'overrides.p2' });
@@ -1062,4 +1062,52 @@ test('感谢信：设计师在一段里再空一行 → 也分成两段（同一
   const pg = render('letter', 'zh', { overrides: { p1: '谢谢你。\n\n谢谢你的家人。\n也谢谢每一次的耐心。' } });
   const els = byField(pg, 'overrides.p1');
   assert.deepEqual(els.map(textOf), ['谢谢你。', '谢谢你的家人。\n也谢谢每一次的耐心。']);
+});
+
+test('感谢信：中英版窄栏重排设计师的英文时，é / 引号 / 破折号结尾的词也空一格，不粘在一起', () => {
+  const p1 = "Thank you for the afternoon at your café\nand for every detail you shared with us about how you really live.\n“Home” was the word you used most —\nwe have not forgotten it.";
+  const pg = render('letter', 'bi', { overridesEn: { p1 } });
+  const t = flat(byField(pg, 'overridesEn.p1').map(textOf).join('\n'));
+  assert.ok(/café and/.test(t), t);
+  assert.ok(/most — we/.test(t), t);
+  // 中文照旧直接接上（不加空格）
+  const zh = render('letter', 'bi', { overrides: { p1: '谢谢您愿意相信我们，\n把一个家的期待，交到我们手里，也把每一个日常的小习惯都告诉了我们。' } });
+  assert.ok(!/， 把/.test(byField(zh, 'overrides.p1').map(textOf).join('')));
+});
+
+test('感谢信：空行里只有全角空格也算分段；清空落款就不画短线；清空称呼 / 标题，后面一组用前一组的间距', () => {
+  const two = render('letter', 'zh', { overrides: { p1: '谢谢您。\n　\n谢谢您的家人。' } });
+  assert.deepEqual(byField(two, 'overrides.p1').map(textOf), ['谢谢您。', '谢谢您的家人。']);
+  const rules = (pg) => pg.els.filter((el) => isRule(el) && el.w === 120);
+  assert.equal(rules(render('letter', 'zh')).length, 1);
+  for (const lang of LANGS) {
+    const noSign = render('letter', lang, { overrides: { sign: '' }, overridesEn: { sign: '' } });
+    assert.equal(rules(noSign).length, 0, `${lang}: 没有落款就不画短线`);
+    assert.deepEqual(noSign.warnings, []);
+  }
+  const top = (pg, f) => Math.round(byField(pg, f)[0].y + INSET);
+  const bottom = (pg, f) => Math.round(byField(pg, f)[0].y + byField(pg, f)[0].h - INSET);
+  // 没有称呼：正文和标题之间用「标题之后」的间距（36–72），不是称呼与正文之间的 16–28
+  const noGreet = render('letter', 'zh', { overrides: { greeting: '' } });
+  const gap = top(noGreet, 'overrides.p1') - bottom(noGreet, 'overrides.title');
+  assert.ok(gap >= 36 && gap <= 72, `标题到正文 ${gap}`);
+  const noTitle = render('letter', 'zh', { overrides: { title: '' }, overridesEn: { title: '' } });
+  assert.equal(top(noTitle, 'overrides.greeting'), 92, '没有标题：称呼从页顶开始');
+});
+
+test('感谢信：清空一段中文（英文没动）= 这一段三种语言都不要，不退回英文默认稿、不提醒补英文；编辑器的英文框也空着', () => {
+  for (const lang of LANGS) {
+    const pg = render('letter', lang, { overrides: { p4: '' } });
+    assert.deepEqual(pg.warnings, [], lang);
+    assert.equal(byField(pg, 'overrides.p4').length + byField(pg, 'overridesEn.p4').length, 0, lang);
+  }
+  const f = companyFieldsB('letter', { overrides: { p4: '' } }, project('bi')).find((x) => x.field === 'p4');
+  assert.equal(f.zh, '');
+  assert.equal(f.en, '');
+  // 只清空英文：中英版照旧只留中文（和其它页一样）
+  const enOnly = render('letter', 'bi', { overridesEn: { p4: '' } });
+  assert.equal(byField(enOnly, 'overrides.p4').length, 1);
+  assert.equal(byField(enOnly, 'overridesEn.p4').length, 0);
+  // 不是可省略的栏位（标题）照旧：清空中文、英文没动 → 中英版提醒补英文
+  assert.ok(render('letter', 'bi', { overrides: { title: '感谢' } }).warnings.some((w) => /改过的中文还没有对应的英文：「标题」/.test(w)));
 });

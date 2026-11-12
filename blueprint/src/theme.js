@@ -38,7 +38,11 @@ const OGG_CSS = "'Ogg','Ogg Local','Cormorant Garamond','Source Han Serif CN','N
 const HOS_TAIL = "'Noto Sans SC','PingFang SC','Microsoft YaHei',system-ui,sans-serif";
 const HOS_CSS = `'HarmonyOS Sans SC',${HOS_TAIL}`;
 const OUTFIT_CSS = "'Outfit','HarmonyOS Sans SC','Noto Sans SC',system-ui,sans-serif";
-const song = (w, name) => ({ label: `思源宋体 CN ${name}`, latin: `思源宋体 CN ${name}`, ea: `思源宋体 CN ${name}`, css: SONG_CSS, weight: w });
+// Regular 装好的字体族名就是「思源宋体 CN」（其余字重才带字重名），和 HarmonyOS 一样
+const song = (w, name) => {
+  const family = name === 'Regular' ? '思源宋体 CN' : `思源宋体 CN ${name}`;
+  return { label: `思源宋体 CN ${name}`, latin: family, ea: family, css: SONG_CSS, weight: w };
+};
 // Ogg 段里夹带的中文 / 全角标点用思源宋体 CN Medium（FONT_PACK 里有）；Outfit 段里的用 HarmonyOS Sans SC Medium
 const ogg = (w, name) => ({ label: `Ogg ${name}`, latin: name === 'Roman' ? 'Ogg' : `Ogg ${name}`, ea: '思源宋体 CN Medium', css: OGG_CSS, weight: w });
 const hos = (w, name) => ({
@@ -80,7 +84,7 @@ export const FONTS = {
  */
 export const FONT_PACK = [
   {
-    name: '思源宋体 CN（Source Han Serif CN）Medium / SemiBold',
+    name: '思源宋体 CN（Source Han Serif CN）Regular / Medium / SemiBold',
     href: 'https://github.com/adobe-fonts/source-han-serif/releases',
     note: '免费（SIL OFL）· Adobe GitHub',
   },

@@ -15,7 +15,7 @@ import { getProject } from '../store/db.js';
 import { preloadProjectAssets, onAssetsChanged, storeBlob } from '../store/assets.js';
 import { uploadImage } from './editor/upload.js';
 import { useProjectState, waitForSaves } from '../lib/useProjectState.js';
-import { designCoverSlideId, projectStats, ensureDesignCoverSlide, upgradeProject, legacyEditPages } from '../lib/project.js';
+import { designCoverSlideId, projectStats, ensureDesignCoverSlide, upgradeProject, legacyEditPages, withLaterPages } from '../lib/project.js';
 import { sectionLabel } from '../engine/deck.js';
 import { deckChapters } from '../engine/b/company.js';
 import { cls } from '../lib/ui.jsx';
@@ -70,7 +70,8 @@ export default function Editor({ projectId, settings, notify, onOpenSettings, on
         }
         // 旧项目升级到现在的版式（效果图版式交还给自动排版、旧版改的字搬到新栏位，见 lib/project.js upgradeProject）
         const upgraded = upgradeProject(project);
-        setLoaded({ project: upgraded });
+        // 后来才加进默认整套的公司页（第二页的感谢信）：缺就补上。和换版式分开，不触发下面「旧版改过的字」的提醒
+        setLoaded({ project: withLaterPages(upgraded) });
         // 旧版改过的字有搬不过来的（新版式没有那个位置）：说一次是哪几页，那几页上有提醒和「知道了」
         const legacy = upgraded !== project ? legacyEditPages(upgraded) : [];
         if (legacy.length) {

@@ -124,7 +124,7 @@ export function legacyEditPages(project) {
  *        （和下一页同一张时会换掉）→ 抄到这一层的楼层页上，算设计师选的，照旧显示（可「恢复自动」）
  *   2. 公司页按旧模板元素序号的改写（数字键）：意思一样的几处搬到新栏位（封面、售后维保的质保年数、封底联系方式）；
  *      其余留在数据里，页面上提醒设计师对照（legacyEditPages）。只要还有可搬的就搬（已升级过的项目也补上）
- *   3. 后来加进整套的公司页（ensureCompanyPages）：第二页的感谢信补在封面后面
+ * 后来加进整套的公司页（第二页的感谢信）不在这里补，见 withLaterPages：补页不是「换版式」，编辑器不该因此提醒旧版改过的字
  * 没有要改的返回原对象
  */
 export function upgradeProject(project) {
@@ -132,7 +132,7 @@ export function upgradeProject(project) {
   const old = (project.layoutVersion || 1) < LAYOUT_VERSION;
   const floorImage = new Map(old ? (project.floors || []).filter((f) => f?.image).map((f) => [f.id, f.image]) : []);
   let changed = old;
-  let slides = (project.slides || []).map((s) => {
+  const slides = (project.slides || []).map((s) => {
     if (!s) return s;
     let next = s;
     if (old && s.kind === 'view' && s.tag !== '3d' && s.layout && s.layout !== 'auto') next = { ...next, layout: 'auto' };
@@ -141,11 +141,6 @@ export function upgradeProject(project) {
     if (next !== s) changed = true;
     return next;
   });
-  const added = ensureCompanyPages(slides);
-  if (added !== slides) {
-    slides = added;
-    changed = true;
-  }
   if (!changed) return project;
   return { ...project, slides, layoutVersion: Math.max(project.layoutVersion || 1, LAYOUT_VERSION) };
 }
@@ -156,7 +151,11 @@ export function upgradeProject(project) {
  */
 const LATER_PAGES = [['letter', 'cover']];
 
-/** 补上缺的公司页（还没有整套的空项目不补）；没有要补的返回原数组 */
+/**
+ * 补上缺的公司页（还没有整套的空项目不补）；没有要补的返回原数组
+ *   补的页用固定的 id（s-letter）：编辑器打开时补上、设计师还没改东西就不会存回去，下次打开再补一次 —— id 一样，
+ *   记住的「选中这一页」才不会丢（公司页不能复制，一份提案里不会有第二个同 key 的页）
+ */
 export function ensureCompanyPages(slides) {
   const list = slides || [];
   if (!list.some((s) => s?.kind === 'company')) return slides;
@@ -164,10 +163,19 @@ export function ensureCompanyPages(slides) {
   for (const [key, after] of LATER_PAGES) {
     if (out.some((s) => s?.kind === 'company' && s.key === key)) continue;
     const at = out.findIndex((s) => s?.kind === 'company' && s.key === after);
+    const fixed = `s-${key}`;
+    const id = out.some((s) => s?.id === fixed) ? uid('s') : fixed;
     out = [...out];
-    out.splice(at >= 0 ? at + 1 : 0, 0, { id: uid('s'), kind: 'company', key, enabled: true });
+    out.splice(at >= 0 ? at + 1 : 0, 0, { id, kind: 'company', key, enabled: true });
   }
   return out;
+}
+
+/** 打开项目时补上后来才加进默认整套的公司页（编辑器在 upgradeProject 之后调用）；没有要补的返回原对象 */
+export function withLaterPages(project) {
+  if (!project) return project;
+  const slides = ensureCompanyPages(project.slides || []);
+  return slides === (project.slides || []) ? project : { ...project, slides };
 }
 
 /** 首页卡片缩略图：方案封面（Material Board）→ 第一张效果图 → 楼层图 → 原稿第一页 */
