@@ -116,7 +116,10 @@ export function rotatePlace(cab, by = 90) {
 export function planSize(cab) {
   const s = cab?.spec || {};
   if (cab?.template === 'kitchen') return { W: num(s.walls?.[0]?.len), D: num(s.baseD) };
-  if (cab?.template === 'tv') return { W: num(s.W), D: Math.max(num(s.lowD), s.sides?.on ? num(s.sides.D) : 0) };
+  if (cab?.template === 'tv' || cab?.template === 'sideboard') return { W: num(s.W), D: Math.max(num(s.lowD), s.sides?.on ? num(s.sides.D) : 0) };
+  // 书桌 / 妆台：沿墙长度 = 桌子宽（侧边高柜另外加在旁边，图上外框照柜体算），深 = 桌深
+  // 岛台：两面都是柜 → 深 = 两排
+  if (cab?.template === 'island') return { W: num(s.W), D: num(s.D) * (s.back === 'cabinets' ? 2 : 1) };
   return { W: num(s.W), D: num(s.D) };
 }
 function sizePatch(cab, { W, D } = {}) {
@@ -125,9 +128,12 @@ function sizePatch(cab, { W, D } = {}) {
   if (cab?.template === 'kitchen') {
     if (W != null) p.walls = (s.walls || []).map((w, i) => (i === 0 ? { ...w, len: Math.round(W) } : w));
     if (D != null) p.baseD = Math.round(D);
-  } else if (cab?.template === 'tv') {
+  } else if (cab?.template === 'tv' || cab?.template === 'sideboard') {
     if (W != null) p.W = Math.round(W);
     if (D != null) p.lowD = Math.round(D);
+  } else if (cab?.template === 'island') {
+    if (W != null) p.W = Math.round(W);
+    if (D != null) p.D = Math.round(s.back === 'cabinets' ? D / 2 : D);
   } else {
     if (W != null) p.W = Math.round(W);
     if (D != null) p.D = Math.round(D);
@@ -188,7 +194,7 @@ export const AISLE = {
   maxCheck: 2500,   // 超过这个距离不检查
   overlapArea: 100 * 100, // 重叠面积超过这个（mm²）算「柜子互相重叠」
 };
-const roleOf = (cab) => (cab?.template === 'kitchen' ? 'kitchen' : cab?.template === 'wardrobe' ? 'wardrobe' : 'other');
+const roleOf = (cab) => (cab?.template === 'kitchen' || cab?.template === 'island' ? 'kitchen' : cab?.template === 'wardrobe' ? 'wardrobe' : 'other');
 const T = (en, zh) => ({ en, zh });
 
 // 正面朝 +y 的 A 和朝 −y 的 B（或 x 方向同理）：两个正面之间的距离 + 量线

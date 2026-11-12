@@ -204,6 +204,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
   const partLabel = (ln) => {
     const sid = (ln.descEn.split(' ')[1] || '').trim();
     if (ln.bucket === 'panel' && ln.part === 'tvWall') return t({ en: `Feature Wall: ${sid} Series`, zh: `电视墙：${sid} 系列` });
+    if (ln.bucket === 'panel' && ln.part === 'panelBack') return t({ en: `Back Panel: ${sid} Series`, zh: `背面见光板：${sid} 系列` });
     if (ln.bucket === 'panel') return t({ en: `Side Panel: ${sid} Series`, zh: `见光板：${sid} 系列` });
     if (ln.bucket === 'door' && ln.part === 'glass') return t({ en: `Glass Door: ${sid} Series`, zh: `玻璃门：${sid} 系列` });
     return cabLineLabel(ln);

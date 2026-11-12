@@ -94,6 +94,7 @@ export function excelWorkbook(XLSX, meta, computed, loose, notes = {}, lang = 'b
             irs.filter((x) => x.item.kira.frameId === f.id).forEach((x) => x.lines.forEach((ln) => {
               const sid = (ln.descEn.split(' ')[1] || '').trim();
               const label = ln.bucket === 'panel' && x.item.kira.part === 'tvWall' ? t({ en: `Feature Wall: ${sid} Series`, zh: `电视墙：${sid} 系列` })
+                : ln.bucket === 'panel' && x.item.kira.part === 'panelBack' ? t({ en: `Back Panel: ${sid} Series`, zh: `背面见光板：${sid} 系列` })
                 : ln.bucket === 'panel' ? t({ en: `Side Panel: ${sid} Series`, zh: `见光板：${sid} 系列` })
                 : ln.bucket === 'door' && x.item.kira.part === 'glass' ? t({ en: `Glass Door: ${sid} Series`, zh: `玻璃门：${sid} 系列` }) : cabLineLabel(ln);
               const hit = lines.find((o) => o.label === label && o.unitMyr === ln.unitMyr && o.uom === lineUom(ln));

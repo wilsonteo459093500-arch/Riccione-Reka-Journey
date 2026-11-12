@@ -117,7 +117,8 @@ function safeWalls(cab, opts) {
     try { walls = cabinetWalls(cab); } catch { walls = null; }
   }
   if (!Array.isArray(walls) || !walls.length) walls = [{ ox: 0, oz: 0, angle: 0, len: 0 }];
-  return walls.map((w) => ({ ox: num(w?.ox), oz: num(w?.oz), angle: num(w?.angle), len: Math.max(0, num(w?.len)) }));
+  // free：不靠墙的那一排（岛台）→ 不画墙、地面不截在那里
+  return walls.map((w) => ({ ox: num(w?.ox), oz: num(w?.oz), angle: num(w?.angle), len: Math.max(0, num(w?.len)), ...(w?.free ? { free: true } : {}) }));
 }
 const wallOf = (walls, f) => {
   const i = Number.isInteger(f?.wall) && walls[f.wall] ? f.wall : 0;
@@ -268,7 +269,8 @@ function frameParts(f, C, handleStyle, ends = endsOf(f, null)) {
   }
 
   // 台面（只示意，叠在柜体上面）
-  const worktop = f.worktop ? add('worktop', WORKTOP, x0, x0 + W, vt, vt + WT_H, 0, D + WT_OVER) : null;
+  // worktop 'door'：书桌 / 妆台的桌面（门板色，不是石材台面）
+  const worktop = f.worktop ? add('worktop', f.worktop === 'door' ? C.door : WORKTOP, x0, x0 + W, vt, vt + WT_H, 0, D + WT_OVER) : null;
 
   // 门 / 抽屉 / 开放格
   const frameCenter = x0 + W / 2;
@@ -697,7 +699,7 @@ export function axoScene(cab, opts = {}) {
     const size = Math.max(wx1 - wx0, wz1 - wz0, top);
     const m = clamp(size * 0.1, 120, 700);
     let fx0 = wx0 - m, fx1 = wx1 + m, fz0 = wz0 - m, fz1 = wz1 + m * 1.6;
-    const usedWalls = walls.map((w, i) => ({ w, i })).filter(({ i }) => wallUse[i].used);
+    const usedWalls = walls.map((w, i) => ({ w, i })).filter(({ w, i }) => wallUse[i].used && !w.free);
     // 地面不越过墙
     usedWalls.forEach(({ w }) => {
       const q = (((Math.round(w.angle / 90)) % 4) + 4) % 4;

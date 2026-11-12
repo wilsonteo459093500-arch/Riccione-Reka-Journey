@@ -5,7 +5,9 @@
 // ============================================================
 import { leaf, vsplit, hsplit, splitEven, autoDoors, uid, ceilingOr, DEFAULT_GLASS_COEF, mmToM, normBase } from './model.js';
 import { kitchenDefaults, kitchenNormalize, kitchenBuild, kitchenWalls, kitchenSummary, kitchenFrameName } from './kitchen.js';
-import { tvDefaults, tvNormalize, tvBuild, tvSummary, tvFrameName, shoeDefaults, shoeNormalize, shoeBuild, shoeSummary, shoeFrameName } from './tvshoe.js';
+import { tvDefaults, sideboardDefaults, tvNormalize, tvBuild, tvSummary, tvFrameName, shoeDefaults, shoeNormalize, shoeBuild, shoeSummary, shoeFrameName } from './tvshoe.js';
+import { deskDefaults, deskNormalize, deskBuild, deskSummary, deskFrameName, deskWalls } from './desk.js';
+import { islandDefaults, islandNormalize, islandBuild, islandSummary, islandFrameName, islandWalls } from './island.js';
 import { pickL, joinL, bi, FRAME_KIND_NAME } from './lang.js';
 import { pickLang } from '../constants/pricing.js';
 import { fitBody } from './blocks.js';
@@ -114,6 +116,27 @@ const shoe = {
   walls: (spec) => [{ ox: 0, oz: 0, angle: 0, len: spec.W }],
 };
 
+// ---------------- 书桌 / 妆台（desk.js）· 岛台（island.js）· 干厨 / 餐边柜（重用电视柜 tvshoe.js，variant 'sideboard'） ----------------
+const deskTpl = (variant, zh, en) => ({
+  id: variant, zh, en,
+  defaults: (o = {}) => deskDefaults(variant, o),
+  normalize: (spec) => deskNormalize({ ...spec, variant }),
+  build: deskBuild, summary: deskSummary, frameName: deskFrameName, walls: deskWalls,
+});
+const desk = deskTpl('desk', '书桌', 'Study desk');
+const vanity = deskTpl('vanity', '妆台', 'Vanity');
+const island = {
+  id: 'island', zh: '岛台', en: 'Island',
+  defaults: () => islandDefaults(), normalize: islandNormalize, build: islandBuild, summary: islandSummary, frameName: islandFrameName, walls: islandWalls,
+};
+const sideboard = {
+  id: 'sideboard', zh: '干厨 / 餐边柜', en: 'Dry kitchen & sideboard',
+  defaults: sideboardDefaults,
+  normalize: (spec) => tvNormalize({ ...spec, variant: 'sideboard' }),
+  build: tvBuild, summary: tvSummary, frameName: tvFrameName,
+  walls: (spec) => [{ ox: 0, oz: 0, angle: 0, len: spec.W }],
+};
+
 // ---------------- 空白柜子（第二版）：从一个大框开始画 ----------------
 // spec = { kind:'tall'|'base'|'wall', W, H, D, y, base }；build 保留现有的框框，按新尺寸等比例缩放（没有「模板原样」可以还原）
 const BLANK_NAME = { en: 'Blank cabinet', zh: '空白柜子' };
@@ -186,8 +209,8 @@ const shelfTpl = {
   },
 };
 
-export const TEMPLATES = { wardrobe, kitchen, tv, shoe, shelf: shelfTpl, blank };
-export const TEMPLATE_LIST = [wardrobe, kitchen, tv, shoe, shelfTpl, blank];
+export const TEMPLATES = { wardrobe, kitchen, tv, shoe, shelf: shelfTpl, desk, vanity, island, sideboard, blank };
+export const TEMPLATE_LIST = [wardrobe, kitchen, tv, shoe, shelfTpl, desk, vanity, island, sideboard, blank];
 export const templateOf = (id) => TEMPLATES[id] || wardrobe;
 
 // 下一个柜号：整份报价里 K1、K2…
