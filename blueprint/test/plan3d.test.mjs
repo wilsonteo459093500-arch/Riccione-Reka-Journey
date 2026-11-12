@@ -326,7 +326,7 @@ test('mirrorTileRects：贴图左右、上下各翻一次拼成 2×2，四条接
 });
 
 test('配色：每套都有画图要用的材质槽', () => {
-  const mats = ['wall', 'structure', 'panel', 'cabinet', 'worktop', 'glass', 'windowGlass', 'fabric', 'neutral'];
+  const mats = ['wall', 'structure', 'panel', 'cabinet', 'worktop', 'glass', 'windowGlass', 'fabric', 'linen', 'ceramic', 'neutral'];
   for (const [id, pal] of Object.entries(PALETTES)) {
     mats.forEach((m) => assert.ok(pal[m] && pal[m].top && pal[m].side, `${id}.${m}`));
     assert.ok(pal.floor && pal.bg && pal.shadow, id);

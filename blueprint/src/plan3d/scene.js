@@ -8,7 +8,7 @@
 // 「平面坐标」= 图纸坐标乘上缩放（还没投影）。每个实体的 base 都是平面坐标；
 // 同一高度的平面 → 画布是一个仿射变换（tm），画顶面的花纹时直接套这个变换，花纹就跟着视角走。
 
-import { KINDS, kindOf, roomRects, deriveWalls, openingRect, snapToWall, rectPoly, chairPolys, contentBox } from './geometry.js';
+import { KINDS, kindOf, roomRects, floorOf, deriveWalls, openingRect, snapToWall, rectPoly, chairPolys, contentBox, boxOk, bedParts, sofaParts, fixtureParts } from './geometry.js';
 
 var SCENE_DEFAULTS = {
   view: 'top', // 'top' | 'persp' | 'iso'
@@ -302,6 +302,11 @@ function isoOrder(solids, pj) {
   var out = [];
   var left = n;
   for (i = 0; i < n; i++) done.push(false);
+  // 压在别的实体上的小件（枕头、床头板、扶手、台面上的水槽）：记下它的主体是第几个
+  var where = {};
+  var host = [];
+  for (i = 0; i < n; i++) where[solids[i].id] = i;
+  for (i = 0; i < n; i++) host.push(solids[i].on && Object.prototype.hasOwnProperty.call(where, solids[i].on) && where[solids[i].on] !== i ? where[solids[i].on] : -1);
   var depth = function (k) {
     return boxes[k][2] + boxes[k][3];
   };
@@ -315,14 +320,101 @@ function isoOrder(solids, pj) {
       if (pick < 0 || depth(i) < depth(pick)) pick = i;
     }
     if (pick < 0) {
-      // 出现了循环（极少见）：剩下的里面挑最远的
-      for (i = 0; i < n; i++) if (!done[i] && (pick < 0 || depth(i) < depth(pick))) pick = i;
+      // 出现了循环（极少见，框互相压着时才有）：剩下的里面挑最远的；但小件不能抢在它的主体前面（否则枕头被床垫盖住）
+      for (i = 0; i < n; i++) if (!done[i] && (host[i] < 0 || done[host[i]]) && (pick < 0 || depth(i) < depth(pick))) pick = i;
+      for (i = 0; i < n && pick < 0; i++) if (!done[i]) pick = i;
     }
     done[pick] = true;
     left -= 1;
     out.push(solids[pick]);
     after[pick].forEach(release);
   }
+  return out;
+}
+
+/** 从镜头正下方（vp）看过去，一个外包矩形占的方位角：{ mid, lo, hi }；vp 就在矩形里 = null（四面八方） */
+function arcOf(b, vp) {
+  if (vp[0] >= b[0] && vp[0] <= b[2] && vp[1] >= b[1] && vp[1] <= b[3]) return null;
+  var mid = Math.atan2((b[1] + b[3]) / 2 - vp[1], (b[0] + b[2]) / 2 - vp[0]);
+  var lo = 0;
+  var hi = 0;
+  [[b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]]].forEach(function (c) {
+    var d = Math.atan2(c[1] - vp[1], c[0] - vp[0]) - mid;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    lo = Math.min(lo, d);
+    hi = Math.max(hi, d);
+  });
+  return { mid: mid, lo: lo, hi: hi };
+}
+
+/**
+ * 立体俯视里 a 是不是挡在 b 前面（a 要后画）：两个外包矩形分得开、从 vp 出发有同一条视线先碰到 a 再碰到 b。
+ * 东西都是往外倒的，所以只有同一条视线上靠里的才会挡住靠外的。
+ */
+function perspFront(a, b, vp) {
+  var eps = 0.01;
+  var side = function (lo0, hi0, lo1, hi1, v) {
+    // 沿一个轴：null = 这个轴上分不开；1 = vp 在 a 这边；-1 = vp 在 b 这边；0 = vp 在两者之间（没有共同的视线）
+    if (hi0 <= lo1 + eps) return v <= hi0 ? 1 : v >= lo1 ? -1 : 0;
+    if (hi1 <= lo0 + eps) return v >= lo0 ? 1 : v <= hi1 ? -1 : 0;
+    return null;
+  };
+  var rx = side(a[0], a[2], b[0], b[2], vp[0]);
+  var ry = side(a[1], a[3], b[1], b[3], vp[1]);
+  if (rx === null && ry === null) return false;
+  var r = rx === null ? ry : ry === null ? rx : rx === ry ? rx : 0;
+  if (r !== 1) return false;
+  var p = arcOf(a, vp);
+  var q = arcOf(b, vp);
+  if (!p || !q) return true;
+  var d = q.mid - p.mid;
+  for (var k = -1; k <= 1; k++) {
+    var t = d + k * Math.PI * 2;
+    if (t + q.lo <= p.hi + 1e-9 && t + q.hi >= p.lo - 1e-9) return true;
+  }
+  return false;
+}
+
+/**
+ * 立体俯视的顺序补一步，只管床 / 沙发 / 洁具（piece）：按「离 vp 最近的点」排序时，一段很长的墙可能排在
+ * 它前面那件矮东西的后面，墙的内侧面就把东西盖住了。这里把每一件挪到它背后最后一段墙之后；
+ * 夹在中间、本来就该盖在它上面的东西（压在它上面的枕头、挡在它前面的家具）跟着一起挪。其他东西的顺序不动。
+ */
+function perspPieces(solids, vp) {
+  var wallish = { wall: 1, sill: 1, window: 1, 'hidden-door': 1, column: 1 };
+  var boxes = {};
+  var bb = function (sd) {
+    return boxes[sd.seq] || (boxes[sd.seq] = boxOf(sd.base));
+  };
+  var apart = function (a, b) {
+    return a[2] <= b[0] + 0.01 || b[2] <= a[0] + 0.01 || a[3] <= b[1] + 0.01 || b[3] <= a[1] + 0.01;
+  };
+  var out = solids.slice();
+  solids.forEach(function (sd) {
+    if (!sd.piece || sd.ghost) return;
+    var i = out.indexOf(sd);
+    var last = -1;
+    var j;
+    for (j = i + 1; j < out.length; j++) {
+      if (out[j].ghost) break;
+      if (wallish[out[j].kind] === 1 && perspFront(bb(sd), bb(out[j]), vp)) last = j;
+    }
+    if (last < 0) return;
+    var block = [sd];
+    var rest = [];
+    var joins = function (y) {
+      for (var m = 0; m < block.length; m++) {
+        if (!apart(bb(block[m]), bb(y)) || perspFront(bb(y), bb(block[m]), vp)) return true;
+      }
+      return false;
+    };
+    for (j = i + 1; j <= last; j++) {
+      if (joins(out[j])) block.push(out[j]);
+      else rest.push(out[j]);
+    }
+    out = out.slice(0, i).concat(rest, block, out.slice(last + 1));
+  });
   return out;
 }
 
@@ -333,7 +425,7 @@ function isoOrder(solids, pj) {
 function recommendCorner(geo) {
   var load = { top: 0, right: 0, bottom: 0, left: 0 };
   (geo.items || []).forEach(function (it) {
-    if (!it.against || load[it.against] === undefined || it.kind === 'hung' || it.kind === 'column') return;
+    if (!boxOk(it) || !it.against || load[it.against] === undefined || it.kind === 'hung' || it.kind === 'column') return;
     var k = kindOf(it.kind);
     var w = it.box[2] - it.box[0];
     var h = it.box[3] - it.box[1];
@@ -355,10 +447,16 @@ function recommendCorner(geo) {
 /**
  * @param {object} geo      geometry.js 里说的数据模型
  * @param {object} options  见 SCENE_DEFAULTS
- * @returns {object} { w, h, view, s, zs, pj, fm, floors, patches, shadows, solids, plan, light, wallZ }
+ * @returns {object} { w, h, view, s, zs, pj, fm, floors, floorAreas, patches, shadows, solids, plan, light, wallZ }
+ *   floors = 所有房间的矩形（平面坐标）；floorAreas = 每个房间一块 { name, floor:'wood'|'tile', rects, box }：
+ *     rects 按顺序连起来就是 floors（同一个房间的矩形可以互相重叠），box = 这个房间的外包矩形（地砖从它的左上角铺起）
  *   solids 已经按绘制顺序排好；每个 solid = { id, kind, mat, label, ghost, unsure, tall, zMm, z0, z1,
  *     base（平面坐标的脚印）, foot（脚印落在画布上的位置）, tm（顶面所在平面 → 画布的变换）,
  *     faces:[{ type:'side'|'top', pts（画布坐标）, nx, ny }] }
+ *   床 / 沙发 / 洁具拆成几个 solid（和椅子的座面 + 靠背一样）：
+ *     床 = bed（整个框，床垫）+ 压在上面的 bed-pillow、bed-head（床头板）；
+ *     沙发 = sofa（整个框，底座）+ 压在上面的 sofa-arm x 2、sofa-back；洁具 = fixture（马桶另有 fixture-tank 水箱）。
+ *     detail = 顶面上要画的细节（平面坐标），on = 压在哪个 solid 上，piece = 是这三种东西的一块
  */
 function buildScene(geo, options) {
   var o = mergeOpts(options);
@@ -379,6 +477,10 @@ function buildScene(geo, options) {
     return pts.map(function (p) {
       return [X(p[0]), Y(p[1])];
     });
+  };
+
+  var R = function (r) {
+    return [X(r[0]), Y(r[1]), X(r[2]), Y(r[3])];
   };
 
   var solids = [];
@@ -438,6 +540,9 @@ function buildScene(geo, options) {
       faces: faces,
       near: pj.type === 'persp' ? polyDist(pj.vp, base) : 0,
       rank: spec.rank || 0,
+      detail: spec.detail || null, // 顶面上的细节：枕头的位置、坐垫的分缝、盆的内沿……（平面坐标）
+      on: spec.on || '', // 压在哪个实体上（枕头在床垫上、水槽在台面上）：立体俯视里跟着它排顺序
+      piece: !!spec.piece, // 床 / 沙发 / 洁具的一块：立体俯视里要保证画在它背后的墙之后（见 perspPieces）
     });
   };
   var rectSkip = function (open) {
@@ -477,6 +582,7 @@ function buildScene(geo, options) {
     return Math.min(mm, o.cutMm);
   };
   (geo.items || []).forEach(function (it) {
+    if (!boxOk(it)) return; // 坏数据（没有框、框里不是数）：这一件不画
     var k = kindOf(it.kind);
     var box = snapToWall(geo, it, o.snapTol);
     if (it.kind === 'hung') {
@@ -497,6 +603,105 @@ function buildScene(geo, options) {
       return;
     }
     var full = it.zMm || k.z1;
+    if (it.kind === 'bed') {
+      var bed = bedParts(geo, it, box);
+      if (bed) {
+        // 整个框是床垫（被子）；床头板和枕头压在它上面（从床垫的高度往上）
+        addSolid({
+          id: it.id,
+          kind: 'bed',
+          mat: k.mat,
+          label: it.label,
+          poly: C(rectPoly(box)),
+          zMm: cut(full),
+          unsure: it.unsure,
+          piece: true,
+          detail: { head: bed.head, single: bed.single, sheet: R(bed.sheet), fold: R(bed.fold), pillows: bed.pillows.map(R), pillowR: bed.pillowR * s },
+        });
+        var pr = bed.pillowR;
+        bed.pillows.forEach(function (pb, pi) {
+          addSolid({
+            id: it.id + '-pillow-' + (pi + 1),
+            kind: 'bed-pillow',
+            mat: 'linen',
+            poly: C(rectPoly(pb, { tl: pr, tr: pr, br: pr, bl: pr }, 4)),
+            z0Mm: cut(full),
+            zMm: cut(full + k.pillow),
+            rank: 1,
+            on: it.id,
+            piece: true,
+            detail: { head: bed.head },
+          });
+        });
+        addSolid({ id: it.id + '-head', kind: 'bed-head', mat: 'cabinet', poly: C(rectPoly(bed.headboard)), z0Mm: cut(full), zMm: cut(full + k.head - k.z1), rank: 2, on: it.id, piece: true });
+        return;
+      }
+    }
+    if (it.kind === 'sofa') {
+      var sofa = sofaParts(geo, it, box);
+      if (sofa) {
+        // 整个框是底座（坐垫那么高）；扶手和靠背压在它上面
+        addSolid({
+          id: it.id,
+          kind: 'sofa',
+          mat: k.mat,
+          label: it.label,
+          poly: C(rectPoly(box, sofa.round, 4)),
+          zMm: cut(full),
+          unsure: it.unsure,
+          piece: true,
+          detail: { back: sofa.back, seat: R(sofa.seat), cushions: sofa.cushions.map(R) },
+        });
+        sofa.arms.forEach(function (arm, ai) {
+          addSolid({ id: it.id + '-arm-' + (ai + 1), kind: 'sofa-arm', mat: k.mat, poly: C(rectPoly(arm.box, arm.round, 4)), z0Mm: cut(full), zMm: cut(full + k.arm - k.z1), rank: 1, on: it.id, piece: true, detail: { back: sofa.back } });
+        });
+        addSolid({ id: it.id + '-back', kind: 'sofa-back', mat: k.mat, poly: C(rectPoly(sofa.backRect, sofa.backRound, 4)), z0Mm: cut(full), zMm: cut(full + k.back - k.z1), rank: 2, on: it.id, piece: true, detail: { back: sofa.back } });
+        return;
+      }
+    }
+    if (it.kind === 'fixture') {
+      var fx = fixtureParts(geo, it, box);
+      if (fx) {
+        var disc = function (c) {
+          return c ? [X(c[0]), Y(c[1]), c[2] * s] : null;
+        };
+        var z0Mm = 0;
+        var topMm = full;
+        if (fx.host) {
+          // 嵌在台面 / 矮柜上的水槽、灶：抬到台面高度，只露一点边
+          z0Mm = fx.host.zMm || kindOf(fx.host.kind).z1;
+          topMm = z0Mm + 4;
+        } else if (!it.zMm) {
+          if (fx.variant === 'tray') topMm = k.tray;
+          else if (fx.variant === 'basin' && fx.named) topMm = k.basin; // 落地的洗手盆有台面那么高
+        }
+        addSolid({
+          id: it.id,
+          kind: 'fixture',
+          mat: k.mat,
+          label: it.label,
+          poly: C(rectPoly(fx.body.box, fx.body.round, 6)),
+          z0Mm: cut(z0Mm),
+          zMm: cut(topMm),
+          unsure: it.unsure,
+          rank: fx.host ? 3 : 0,
+          on: fx.host ? fx.host.id : '',
+          piece: true,
+          detail: {
+            variant: fx.variant,
+            back: fx.back,
+            bowl: fx.bowl ? C(rectPoly(fx.bowl.box, fx.bowl.round, 8)) : null,
+            drain: disc(fx.drain),
+            tap: disc(fx.tap),
+            rings: fx.rings.map(disc),
+          },
+        });
+        if (fx.tank) {
+          addSolid({ id: it.id + '-tank', kind: 'fixture-tank', mat: k.mat, poly: C(rectPoly(fx.tank.box, fx.tank.round, 3)), zMm: cut(full + k.tank - k.z1), rank: 1, piece: true, detail: { variant: 'tank', back: fx.back, tap: disc(fx.tap) } });
+        }
+        return;
+      }
+    }
     addSolid({
       id: it.id,
       kind: it.kind,
@@ -512,8 +717,14 @@ function buildScene(geo, options) {
   });
 
   // —— 绘制顺序 ——
+  var byId = {};
   solids.forEach(function (sd, i) {
     sd.seq = i;
+    byId[sd.id] = sd;
+  });
+  // 压在别的实体上的小件（枕头、台面上的水槽）：立体俯视里和它算一样远，再按高度排在它后面
+  solids.forEach(function (sd) {
+    if (sd.on && Object.prototype.hasOwnProperty.call(byId, sd.on) && byId[sd.on] !== sd) sd.near = byId[sd.on].near;
   });
   if (pj.type === 'iso') {
     solids = isoOrder(solids, pj);
@@ -529,6 +740,8 @@ function buildScene(geo, options) {
     });
   }
 
+  if (pj.type === 'persp') solids = perspPieces(solids, pj.vp);
+
   // —— 落在地上的影子（平面坐标；画的时候再套地面的变换）——
   var shadows = [];
   solids.forEach(function (sd) {
@@ -539,6 +752,18 @@ function buildScene(geo, options) {
       });
     };
     shadows.push({ id: sd.id, pts: hull(shifted(sd.z0).concat(shifted(sd.z1))), z1: sd.z1 });
+  });
+
+  // —— 地板：每个房间一块，带着铺的是什么（木地板 / 地砖）——
+  var floorAreas = [];
+  (geo.rooms || []).forEach(function (room) {
+    var list = (room.rects || []).map(R);
+    if (!list.length) return;
+    var corners = [];
+    list.forEach(function (r) {
+      corners.push([r[0], r[1]], [r[2], r[3]]);
+    });
+    floorAreas.push({ name: room.name || '', floor: floorOf(room), rects: list, box: boxOf(corners) });
   });
 
   var src = geo.source || null;
@@ -560,6 +785,7 @@ function buildScene(geo, options) {
     floors: rects.map(function (r) {
       return [X(r[0]), Y(r[1]), X(r[2]), Y(r[3])];
     }),
+    floorAreas: floorAreas,
     patches: patches,
     shadows: shadows,
     solids: solids,

@@ -105,16 +105,26 @@ function rectPts(r) {
   ];
 }
 
-/** 把之后的绘制限制在地板范围内（画布坐标） */
-function clipFloors(ctx, scene) {
+/** 把之后的绘制限制在几块地面矩形里（矩形是平面坐标，裁剪在画布坐标里做） */
+function clipRects(ctx, scene, rects) {
   ctx.beginPath();
-  scene.floors.forEach(function (r) {
+  rects.forEach(function (r) {
     var q = mapPts(scene.fm, rectPts(r));
     ctx.moveTo(q[0][0], q[0][1]);
     for (var i = 1; i < q.length; i++) ctx.lineTo(q[i][0], q[i][1]);
     ctx.closePath();
   });
   ctx.clip();
+}
+
+/** 把之后的绘制限制在地板范围内（画布坐标） */
+function clipFloors(ctx, scene) {
+  clipRects(ctx, scene, scene.floors);
+}
+
+/** 矩形的两个角不分先后 → [小 x, 小 y, 大 x, 大 y] */
+function sortedRect(r) {
+  return [Math.min(r[0], r[2]), Math.min(r[1], r[3]), Math.max(r[0], r[2]), Math.max(r[1], r[3])];
 }
 
 function applyMatrix(ctx, m) {
@@ -257,10 +267,58 @@ function texShade(ctx, b, strength) {
 }
 
 // ---------------------------------------------------------------------------
-// 地板：人字拼橡木
+// 地板：每个房间各铺各的 —— 木地板（人字拼橡木，可以贴图）或地砖（不贴图）
 // ---------------------------------------------------------------------------
 
+/**
+ * 一个房间的地砖：正方形的砖从房间外包矩形的左上角铺起（顶着上墙和左墙的是整砖），
+ * 每块砖深浅差一点点，砖缝整条整条地描。在平面坐标里画，斜角下跟着斜过去。
+ */
+function paintTiles(ctx, scene, pal, area, seed) {
+  var tp = pal.tile;
+  var T = Math.max(8, tp.sizeMm * scene.zs);
+  var b = area.box;
+  var rects = area.rects.map(sortedRect);
+  var rnd = rng(seed);
+  var nx = Math.ceil((b[2] - b[0]) / T - 1e-6);
+  var ny = Math.ceil((b[3] - b[1]) / T - 1e-6);
+  var i;
+  var j;
+  ctx.save();
+  clipRects(ctx, scene, area.rects);
+  applyMatrix(ctx, scene.fm);
+  ctx.fillStyle = tp.base;
+  ctx.fillRect(b[0], b[1], b[2] - b[0], b[3] - b[1]);
+  for (j = 0; j < ny; j++) {
+    for (i = 0; i < nx; i++) {
+      var t = rnd(); // 每一格都取，L 形房间缺的那一角不影响其他砖的深浅
+      var x = b[0] + i * T;
+      var y = b[1] + j * T;
+      var hit = false;
+      for (var n = 0; n < rects.length && !hit; n++) hit = x < rects[n][2] && x + T > rects[n][0] && y < rects[n][3] && y + T > rects[n][1];
+      if (!hit) continue;
+      var d = (t - 0.5) * 2; // 大多数砖接近底色，少数几块稍亮 / 稍暗
+      ctx.fillStyle = mix(tp.base, d < 0 ? tp.light : tp.dark, d * d);
+      ctx.fillRect(x, y, T + 0.5, T + 0.5); // 多盖半个像素，相邻两块之间不漏底色
+    }
+  }
+  ctx.beginPath();
+  for (i = 1; i < nx; i++) {
+    ctx.moveTo(b[0] + i * T, b[1]);
+    ctx.lineTo(b[0] + i * T, b[3]);
+  }
+  for (j = 1; j < ny; j++) {
+    ctx.moveTo(b[0], b[1] + j * T);
+    ctx.lineTo(b[2], b[1] + j * T);
+  }
+  ctx.strokeStyle = rgba(tp.gap, 0.7);
+  ctx.lineWidth = Math.max(0.8, T * 0.012);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function paintFloor(ctx, scene, pal, tex) {
+  if (!scene.floors.length) return;
   var ft = tex && tex.floor;
   var L = Math.max(40, pal.floor.plankMm[0] * scene.zs);
   var W = Math.max(8, pal.floor.plankMm[1] * scene.zs);
@@ -272,6 +330,37 @@ function paintFloor(ctx, scene, pal, tex) {
   var cx = (all[0] + all[2]) / 2;
   var cy = (all[1] + all[3]) / 2;
   var reach = Math.sqrt(Math.pow(all[2] - all[0], 2) + Math.pow(all[3] - all[1], 2)) / 2 + L;
+
+  // 哪些矩形铺木地板、哪些房间铺地砖（清单里没有 floorAreas、配色里没有地砖 = 全是木地板）
+  var wood = scene.floors;
+  var tiled = [];
+  if (scene.floorAreas && pal.tile) {
+    scene.floorAreas.forEach(function (area, i) {
+      if (area.floor === 'tile') tiled.push({ area: area, seed: 20261111 + i * 7919 });
+    });
+    if (tiled.length) {
+      wood = [];
+      scene.floorAreas.forEach(function (area) {
+        if (area.floor !== 'tile') wood = wood.concat(area.rects);
+      });
+    }
+  }
+  // 木板只画在木地板的房间里：整块落在外面的不画，但随机数照样取 —— 别的房间改铺地砖，这边的木纹不跟着变
+  var pad = W * 0.1 + 2;
+  var woodBoxes = wood.map(sortedRect);
+  var onWood = function (x, y, w, h) {
+    // 木板在转了 45° 的坐标里；换回平面坐标后的外包矩形是个正方形
+    var mx = x + w / 2;
+    var my = y + h / 2;
+    var px = cx + (mx - my) * Math.SQRT1_2;
+    var py = cy + (mx + my) * Math.SQRT1_2;
+    var half = ((w + h) / 2) * Math.SQRT1_2 + pad;
+    for (var i = 0; i < woodBoxes.length; i++) {
+      var r = woodBoxes[i];
+      if (px + half >= r[0] && px - half <= r[2] && py + half >= r[1] && py - half <= r[3]) return true;
+    }
+    return false;
+  };
 
   /** 有贴图时：每块木板从贴图上取一条不同位置的木纹（竖着的板把木纹转过来），再加一点深浅变化 */
   var texPlank = function (x, y, w, h) {
@@ -298,6 +387,10 @@ function paintFloor(ctx, scene, pal, tex) {
   };
 
   var plank = function (x, y, w, h) {
+    if (!onWood(x, y, w, h)) {
+      for (var skip = ft ? 3 : 7; skip > 0; skip--) rnd(); // 一块板用掉的随机数：贴图 3 个，手画 7 个
+      return;
+    }
     if (ft) {
       texPlank(x, y, w, h);
       return;
@@ -328,26 +421,47 @@ function paintFloor(ctx, scene, pal, tex) {
     ctx.strokeRect(x, y, w, h);
   };
 
-  ctx.save();
-  clipFloors(ctx, scene);
-  applyMatrix(ctx, scene.fm); // 之后都在平面坐标里画，斜角下木板跟着斜过去
-  ctx.fillStyle = ft ? ft.avg : pal.floor.base;
-  ctx.fillRect(all[0], all[1], all[2] - all[0], all[3] - all[1]);
-  ctx.translate(cx, cy);
-  ctx.rotate(Math.PI / 4);
-  // 人字拼的两个平移方向：(W, W) 和 (L, -L)；每个单元 = 一横一竖两块板
-  var nk = Math.ceil(reach / W) + 2;
-  var nm = Math.ceil(reach / L) + 2;
-  for (var m = -nm; m <= nm; m++) {
-    for (var k = -nk; k <= nk; k++) {
-      var ox = k * W + m * L;
-      var oy = k * W - m * L;
-      if (Math.abs(ox) > reach + L || Math.abs(oy) > reach + L) continue;
-      plank(ox, oy, L, W);
-      plank(ox + L, oy + W - L, W, L);
-    }
+  if (tiled.length) {
+    // 地砖房间先垫一层砖缝色，四周多出一个像素：和木地板直接相接（中间没有墙）的地方不露出背景色的细线
+    ctx.save();
+    clipFloors(ctx, scene);
+    applyMatrix(ctx, scene.fm);
+    ctx.fillStyle = pal.tile.gap;
+    tiled.forEach(function (t) {
+      t.area.rects.forEach(function (r0) {
+        var r = sortedRect(r0);
+        ctx.fillRect(r[0] - 1, r[1] - 1, r[2] - r[0] + 2, r[3] - r[1] + 2);
+      });
+    });
+    ctx.restore();
   }
-  ctx.restore();
+
+  if (wood.length) {
+    ctx.save();
+    clipRects(ctx, scene, wood);
+    applyMatrix(ctx, scene.fm); // 之后都在平面坐标里画，斜角下木板跟着斜过去
+    ctx.fillStyle = ft ? ft.avg : pal.floor.base;
+    ctx.fillRect(all[0], all[1], all[2] - all[0], all[3] - all[1]);
+    ctx.translate(cx, cy);
+    ctx.rotate(Math.PI / 4);
+    // 人字拼的两个平移方向：(W, W) 和 (L, -L)；每个单元 = 一横一竖两块板
+    var nk = Math.ceil(reach / W) + 2;
+    var nm = Math.ceil(reach / L) + 2;
+    for (var m = -nm; m <= nm; m++) {
+      for (var k = -nk; k <= nk; k++) {
+        var ox = k * W + m * L;
+        var oy = k * W - m * L;
+        if (Math.abs(ox) > reach + L || Math.abs(oy) > reach + L) continue;
+        plank(ox, oy, L, W);
+        plank(ox + L, oy + W - L, W, L);
+      }
+    }
+    ctx.restore();
+  }
+
+  tiled.forEach(function (t) {
+    paintTiles(ctx, scene, pal, t.area, t.seed);
+  });
 
   // 整块地板上一层很淡的明暗：左上亮、右下略暗
   ctx.save();
@@ -402,7 +516,9 @@ function paintTopShadows(ctx, scene, pal, sd, top) {
   ctx.globalAlpha = 0.2;
   scene.solids.forEach(function (o) {
     if (o === sd || o.ghost || !(o.z1 > sd.z1 + 1)) return;
-    if (o.id.indexOf(sd.id) === 0 || sd.id.indexOf(o.id) === 0) return; // 椅背 / 椅面是同一把椅子
+    var oid = String(o.id); // 没写 id（或 id 是数字）的东西也不能出错
+    var sid = String(sd.id);
+    if (oid.indexOf(sid) === 0 || sid.indexOf(oid) === 0) return; // 椅背 / 椅面是同一把椅子
     var lo = Math.max(0, o.z0 - sd.z1);
     var hi = o.z1 - sd.z1;
     var ob = boundsOf(o.base);
@@ -598,6 +714,244 @@ function bevel(ctx, pts, px, strength) {
   ctx.restore();
 }
 
+// ---------------------------------------------------------------------------
+// 床、沙发、洁具的顶面（细节的位置来自清单的 detail，这里只管画；尺寸按毫米 u = scene.zs）
+// ---------------------------------------------------------------------------
+
+/** 两个颜色按比例混合，结果仍是 #rrggbb */
+function mixHex(a, b, t) {
+  var x = hexToRgb(a);
+  var y = hexToRgb(b);
+  return '#' + hex2(x[0] + (y[0] - x[0]) * t) + hex2(x[1] + (y[1] - x[1]) * t) + hex2(x[2] + (y[2] - x[2]) * t);
+}
+
+/** 软的面（布、枕头）：中间亮、四周暗的径向渐变；有贴图就贴图上再盖一层明暗。当前路径 = 这块面 */
+function softFill(ctx, scene, pts, b, col, tx, seed, hi, lo) {
+  var cxm = (b[0] + b[2]) / 2;
+  var cym = (b[1] + b[3]) / 2;
+  var rad = Math.max(b[2] - b[0], b[3] - b[1]) * 0.7;
+  var g = ctx.createRadialGradient(cxm - rad * 0.2, cym - rad * 0.25, rad * 0.05, cxm, cym, rad);
+  if (tx) {
+    texFill(ctx, scene, tx, b, seed, false);
+    tracePoly(ctx, pts);
+    g.addColorStop(0, 'rgba(255,255,255,' + (hi - 1) * 0.8 + ')');
+    g.addColorStop(1, 'rgba(0,0,0,' + (1 - lo) * 1.2 + ')');
+  } else {
+    g.addColorStop(0, shade(col, hi));
+    g.addColorStop(1, shade(col, lo));
+  }
+  ctx.fillStyle = g;
+  ctx.fill();
+}
+
+/** 沿着矩形 b 的 side 那条边、往里 depth 这么宽的一条渐变（边上深、往里淡）：靠背压在坐垫上的暗处、翻折的被子边 */
+function edgeShade(ctx, b, side, depth, color, alpha) {
+  var x0 = b[0];
+  var y0 = b[1];
+  var x1 = b[2];
+  var y1 = b[3];
+  var g;
+  if (side === 'top') {
+    g = ctx.createLinearGradient(0, y0, 0, y0 + depth);
+    y1 = y0 + depth;
+  } else if (side === 'bottom') {
+    g = ctx.createLinearGradient(0, y1, 0, y1 - depth);
+    y0 = y1 - depth;
+  } else if (side === 'left') {
+    g = ctx.createLinearGradient(x0, 0, x0 + depth, 0);
+    x1 = x0 + depth;
+  } else {
+    g = ctx.createLinearGradient(x1, 0, x1 - depth, 0);
+    x0 = x1 - depth;
+  }
+  g.addColorStop(0, rgba(color, alpha));
+  g.addColorStop(1, rgba(color, 0));
+  ctx.fillStyle = g;
+  ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+}
+
+var OTHER_SIDE = { top: 'bottom', bottom: 'top', left: 'right', right: 'left' };
+
+/** 圆角矩形的路径（r = [x0, y0, x1, y1]） */
+function roundRectPath(ctx, r, rad) {
+  var k = Math.max(0, Math.min(rad, (r[2] - r[0]) / 2, (r[3] - r[1]) / 2));
+  ctx.beginPath();
+  ctx.moveTo(r[0] + k, r[1]);
+  ctx.arcTo(r[2], r[1], r[2], r[3], k);
+  ctx.arcTo(r[2], r[3], r[0], r[3], k);
+  ctx.arcTo(r[0], r[3], r[0], r[1], k);
+  ctx.arcTo(r[0], r[1], r[2], r[1], k);
+  ctx.closePath();
+}
+
+/** 床垫的顶面：被子 + 床头那一段露出来的床单 + 枕头下面翻折的一道 */
+function bedTop(ctx, scene, pal, sd, pts, b, tx, seed) {
+  var m = pal.fabric || pal.neutral;
+  var ln = pal.linen || pal.neutral;
+  var d = sd.detail;
+  var u = scene.zs;
+  var foot = OTHER_SIDE[d.head] || 'bottom';
+  softFill(ctx, scene, pts, b, m.top, tx, seed, 1.1, 0.9);
+  ctx.save();
+  tracePoly(ctx, pts);
+  ctx.clip();
+  // 床单
+  var sh = d.sheet;
+  var gs = ctx.createLinearGradient(b[0], b[1], b[2], b[3]);
+  gs.addColorStop(0, shade(ln.sheet || ln.side, 1.03));
+  gs.addColorStop(1, shade(ln.sheet || ln.side, 0.95));
+  ctx.fillStyle = gs;
+  ctx.fillRect(sh[0], sh[1], sh[2] - sh[0], sh[3] - sh[1]);
+  edgeShade(ctx, sh, d.head, 90 * u, pal.shadow, 0.16); // 床头板压下来的一点暗
+  // 枕头落在床单上的影子（往右下偏一点）
+  ctx.fillStyle = rgba(pal.shadow, 0.07);
+  d.pillows.forEach(function (p) {
+    // 叠两层、一层比一层偏得远：边缘就是软的
+    for (var k = 1; k <= 2; k++) {
+      var ox = scene.light[0] * 150 * u * k;
+      var oy = scene.light[1] * 150 * u * k;
+      roundRectPath(ctx, [p[0] + ox, p[1] + oy, p[2] + ox, p[3] + oy], d.pillowR || 0);
+      ctx.fill();
+    }
+  });
+  // 翻折的被子：比被面浅一点，朝床尾的那条边下面有一道影子
+  var f = d.fold;
+  ctx.fillStyle = rgba(ln.top, 0.42);
+  ctx.fillRect(f[0], f[1], f[2] - f[0], f[3] - f[1]);
+  edgeShade(ctx, f, d.head, 26 * u, pal.shadow, 0.14);
+  edgeShade(ctx, f, foot, 40 * u, '#FFFFFF', 0.16);
+  var below = foot === 'bottom' ? [b[0], f[3], b[2], b[3]] : foot === 'top' ? [b[0], b[1], b[2], f[1]] : foot === 'right' ? [f[2], b[1], b[2], b[3]] : [b[0], b[1], f[0], b[3]];
+  edgeShade(ctx, below, d.head, 70 * u, pal.shadow, 0.24);
+  ctx.restore();
+  bevel(ctx, pts, scene.s, 0.32);
+}
+
+/** 沙发坐垫的顶面：分成几块的垫子（每块中间略鼓）、垫子之间的缝、靠背和扶手压下来的暗处 */
+function sofaSeatTop(ctx, scene, pal, sd, pts, b, tx, seed) {
+  var m = pal.fabric || pal.neutral;
+  var d = sd.detail;
+  var u = scene.zs;
+  softFill(ctx, scene, pts, b, m.top, tx, seed, 1.08, 0.94);
+  b = d.seat; // 底座的顶面只露出中间的坐垫（靠背和扶手压在四周）
+  ctx.save();
+  tracePoly(ctx, pts);
+  ctx.clip();
+  d.cushions.forEach(function (c) {
+    var cx = (c[0] + c[2]) / 2;
+    var cy = (c[1] + c[3]) / 2;
+    var r = Math.max(c[2] - c[0], c[3] - c[1]) * 0.72;
+    var g = ctx.createRadialGradient(cx, cy, r * 0.15, cx, cy, r);
+    g.addColorStop(0, 'rgba(255,255,255,0.09)');
+    g.addColorStop(1, 'rgba(30,20,12,0.13)');
+    ctx.fillStyle = g;
+    ctx.fillRect(c[0], c[1], c[2] - c[0], c[3] - c[1]);
+  });
+  // 垫子之间的缝：一条软的暗线
+  var alongX = d.back === 'top' || d.back === 'bottom';
+  ctx.strokeStyle = rgba(pal.shadow, 0.3);
+  ctx.lineWidth = Math.max(1, 9 * u);
+  for (var i = 1; i < d.cushions.length; i++) {
+    var c = d.cushions[i];
+    ctx.beginPath();
+    if (alongX) {
+      ctx.moveTo(c[0], c[1]);
+      ctx.lineTo(c[0], c[3]);
+    } else {
+      ctx.moveTo(c[0], c[1]);
+      ctx.lineTo(c[2], c[1]);
+    }
+    ctx.stroke();
+  }
+  ['top', 'right', 'bottom', 'left'].forEach(function (side) {
+    if (side === OTHER_SIDE[d.back]) return; // 前沿没有东西压着
+    edgeShade(ctx, b, side, (side === d.back ? 110 : 70) * u, pal.shadow, side === d.back ? 0.3 : 0.22);
+  });
+  ctx.restore();
+}
+
+function disc(ctx, c, color) {
+  ctx.beginPath();
+  ctx.arc(c[0], c[1], c[2], 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
+/** 洁具的顶面：陶瓷（左上一点柔和的高光）+ 往下凹的盆 / 缸 + 下水口和龙头；灶 = 黑玻璃上几个灶眼 */
+function fixtureTop(ctx, scene, pal, sd, pts, b) {
+  var m = pal.ceramic || pal.neutral;
+  var d = sd.detail;
+  var u = scene.zs;
+  var w = b[2] - b[0];
+  var h = b[3] - b[1];
+  var metal = m.metal || m.side;
+  var base = d.variant === 'hob' ? m.hob || '#3A3632' : d.variant === 'sink' ? m.steel || m.side : m.top;
+  var g = ctx.createLinearGradient(b[0], b[1], b[2], b[3]);
+  g.addColorStop(0, shade(base, 1.04));
+  g.addColorStop(1, shade(base, d.variant === 'hob' ? 0.86 : 0.94));
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.save();
+  tracePoly(ctx, pts);
+  ctx.clip();
+  // 釉面的高光：左上角一团很淡的白
+  var hr = Math.max(w, h) * 0.6;
+  var gh = ctx.createRadialGradient(b[0] + w * 0.28, b[1] + h * 0.25, 0, b[0] + w * 0.28, b[1] + h * 0.25, hr);
+  gh.addColorStop(0, 'rgba(255,255,255,' + (d.variant === 'hob' ? 0.16 : 0.6) + ')');
+  gh.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = gh;
+  ctx.fillRect(b[0], b[1], w, h);
+  if (d.bowl) {
+    var bb = boundsOf(d.bowl);
+    var deep = d.variant === 'tub' ? 1 : d.variant === 'tray' ? 0.3 : 0.75;
+    var bowlCol = d.variant === 'sink' ? scaleHex(m.steel || m.side, 0.9) : m.bowl || m.side;
+    var gb = ctx.createLinearGradient(bb[0], bb[1], bb[2], bb[3]);
+    gb.addColorStop(0, shade(bowlCol, 1 - 0.1 * deep));
+    gb.addColorStop(0.6, shade(bowlCol, 1));
+    gb.addColorStop(1, shade(bowlCol, 1.04));
+    tracePoly(ctx, d.bowl);
+    ctx.fillStyle = gb;
+    ctx.fill();
+    // 内沿：左上是盆沿投下的影子，右下是受光的一边
+    ctx.save();
+    ctx.clip();
+    var gr = ctx.createLinearGradient(bb[0], bb[1], bb[2], bb[3]);
+    gr.addColorStop(0, rgba(pal.shadow, 0.34 * deep));
+    gr.addColorStop(0.5, rgba(pal.shadow, 0.05 * deep));
+    gr.addColorStop(1, 'rgba(255,255,255,' + 0.7 * deep + ')');
+    tracePoly(ctx, d.bowl);
+    ctx.lineWidth = Math.max(2, 46 * u * deep);
+    ctx.strokeStyle = gr;
+    ctx.stroke();
+    ctx.restore();
+    tracePoly(ctx, d.bowl);
+    ctx.lineWidth = Math.max(0.8, 5 * u);
+    ctx.strokeStyle = rgba(pal.shadow, 0.26);
+    ctx.stroke();
+  }
+  (d.rings || []).forEach(function (c) {
+    ctx.beginPath();
+    ctx.arc(c[0], c[1], c[2], 0, Math.PI * 2);
+    ctx.lineWidth = Math.max(1, 9 * u);
+    ctx.strokeStyle = 'rgba(255,255,255,0.26)';
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(c[0], c[1], c[2] * 0.52, 0, Math.PI * 2);
+    ctx.lineWidth = Math.max(0.8, 6 * u);
+    ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+    ctx.stroke();
+  });
+  if (d.drain) {
+    disc(ctx, d.drain, shade(metal, 0.92));
+    disc(ctx, [d.drain[0], d.drain[1], d.drain[2] * 0.45], shade(metal, 0.55));
+  }
+  if (d.tap) {
+    disc(ctx, [d.tap[0] + scene.light[0] * 60 * u, d.tap[1] + scene.light[1] * 60 * u, d.tap[2]], rgba(pal.shadow, 0.2));
+    disc(ctx, d.tap, shade(metal, 1));
+    disc(ctx, [d.tap[0] - d.tap[2] * 0.25, d.tap[1] - d.tap[2] * 0.25, d.tap[2] * 0.45], shade(metal, 1.3));
+  }
+  ctx.restore();
+}
+
 /** 画一个顶面。调用前已经套好这个顶面所在平面的变换，这里一律在平面坐标里画（pts = 实体的脚印） */
 function paintTop(ctx, scene, pal, sd, pts, tex) {
   var tx = texFor(tex, sd);
@@ -699,6 +1053,19 @@ function paintTop(ctx, scene, pal, sd, pts, tex) {
       }
     }
     bevel(ctx, top.pts, px, 0.55);
+  } else if (sd.kind === 'bed' && sd.detail) {
+    bedTop(ctx, scene, pal, sd, top.pts, b, tx, seed);
+  } else if (sd.kind === 'sofa' && sd.detail) {
+    sofaSeatTop(ctx, scene, pal, sd, top.pts, b, tx, seed);
+  } else if (sd.kind === 'sofa-back' || sd.kind === 'sofa-arm') {
+    // 靠背和扶手：比坐垫深一点的同一种布
+    softFill(ctx, scene, top.pts, b, mixHex(m.top, m.back || m.side, 0.5), tx, seed, 1.1, tx ? 0.8 : 0.9);
+    bevel(ctx, top.pts, px, 0.3);
+  } else if (sd.kind === 'bed-pillow') {
+    softFill(ctx, scene, top.pts, b, m.top, null, seed, 1.03, 0.9);
+    bevel(ctx, top.pts, px, 0.28);
+  } else if (sd.mat === 'ceramic' && sd.detail) {
+    fixtureTop(ctx, scene, pal, sd, top.pts, b);
   } else if (sd.mat === 'fabric') {
     var back = sd.kind === 'chair-back';
     var cxm = (b[0] + b[2]) / 2;
@@ -742,7 +1109,8 @@ function paintTop(ctx, scene, pal, sd, pts, tex) {
   if (sd.kind !== 'window') {
     tracePoly(ctx, top.pts);
     ctx.lineWidth = Math.max(1, px * 0.7);
-    ctx.strokeStyle = 'rgba(40,26,16,0.42)';
+    // 浅色的床品和陶瓷：轮廓线淡一些，不然像描了黑边
+    ctx.strokeStyle = sd.mat === 'ceramic' || sd.mat === 'linen' ? 'rgba(70,54,40,0.3)' : 'rgba(40,26,16,0.42)';
     ctx.stroke();
   }
 }
@@ -758,14 +1126,24 @@ function paintSide(ctx, scene, pal, sd, face, tex) {
   var p = face.pts; // [下-起点, 下-终点, 上-终点, 上-起点]
   // 光从左上来；斜角立体只看得到两组面，让它们一明一暗，体块才立得起来
   var lit = scene.view === 'iso' ? (Math.abs(face.nx) > Math.abs(face.ny) ? 1.02 : 0.82) : 0.97 - face.nx * 0.08 - face.ny * 0.11;
+  // 圆角的软东西（枕头、沙发、洁具）：斜角立体里明暗跟着法线慢慢过渡，圆角上不出现一道硬边
+  var roundish = sd.mat === 'ceramic' || sd.mat === 'linen' || sd.kind === 'sofa' || sd.kind === 'sofa-back' || sd.kind === 'sofa-arm';
+  if (roundish && scene.view === 'iso') lit = 0.82 + 0.2 * face.nx * face.nx;
   var baseMid = lerpPt(p[0], p[1], 0.5);
   var topMid = lerpPt(p[3], p[2], 0.5);
   var color = tx ? scaleHex(tx.avg, 0.84) : m.side; // 有贴图：侧面用贴图的平均色，和顶面是同一种材质
   // 沿法线方向：同一面墙被切成几格时，各格的渐变方向和长度都一样，不会出现色块
   var rise = (topMid[0] - baseMid[0]) * face.nx + (topMid[1] - baseMid[1]) * face.ny;
-  var g = ctx.createLinearGradient(baseMid[0], baseMid[1], baseMid[0] + face.nx * rise, baseMid[1] + face.ny * rise);
-  var wallish = sd.kind === 'wall' || sd.kind === 'sill';
-  g.addColorStop(0, shade(color, lit * (wallish ? 0.9 : 0.78)));
+  // 圆角由很多窄面拼成：渐变直接从底边走到顶边，每个窄面一样，拼起来才是一个光滑的圆角
+  // 斜角立体里法线沿 x 的面 rise = 0：渐变没有长度，画布就什么都不画（面是透明的）—— 这种面也从底边走到顶边
+  var flat = Math.abs(rise) < 1e-9;
+  var g =
+    roundish || sd.piece || flat
+      ? ctx.createLinearGradient(baseMid[0], baseMid[1], topMid[0], topMid[1])
+      : ctx.createLinearGradient(baseMid[0], baseMid[1], baseMid[0] + face.nx * rise, baseMid[1] + face.ny * rise);
+  var wallish = sd.kind === 'wall' || sd.kind === 'sill' || sd.mat === 'ceramic' || sd.mat === 'linen'; // 浅色的东西底边不压得太暗
+  // 压在底座上的靠背 / 扶手：下沿不再压暗一次，和底座的侧面接得上
+  g.addColorStop(0, shade(color, lit * (wallish ? 0.9 : roundish && sd.z0 > 0 ? 0.9 : 0.78)));
   g.addColorStop(1, shade(color, lit * (wallish ? 1.02 : 1.04)));
   tracePoly(ctx, p);
   if (sd.kind === 'window') {
@@ -792,7 +1170,7 @@ function paintSide(ctx, scene, pal, sd, face, tex) {
     tracePoly(ctx, quad(0.84, 1));
     ctx.fillStyle = shade(tx ? scaleHex(tx.avg, 0.92) : m.side, lit);
     ctx.fill();
-  } else if ((sd.mat === 'cabinet' || sd.mat === 'panel') && sd.kind !== 'hidden-door') {
+  } else if ((sd.mat === 'cabinet' || sd.mat === 'panel') && sd.kind !== 'hidden-door' && sd.kind !== 'bed-head') {
     // 柜门缝 + 踢脚
     tracePoly(ctx, quad(0, 0.08));
     ctx.fillStyle = 'rgba(20,12,8,0.5)';
@@ -817,7 +1195,9 @@ function paintSide(ctx, scene, pal, sd, face, tex) {
       return lerpPt(lerpPt(p[0], p[1], u), lerpPt(p[3], p[2], u), v);
     };
     tracePoly(ctx, [along(0.03, 0.07), along(0.97, 0.07), along(0.97, 0.96), along(0.03, 0.96)]);
-    var gg = ctx.createLinearGradient(baseMid[0], baseMid[1], baseMid[0] + face.nx * rise, baseMid[1] + face.ny * rise);
+    var gg = flat
+      ? ctx.createLinearGradient(baseMid[0], baseMid[1], topMid[0], topMid[1])
+      : ctx.createLinearGradient(baseMid[0], baseMid[1], baseMid[0] + face.nx * rise, baseMid[1] + face.ny * rise);
     gg.addColorStop(0, mix(pal.glass.top, pal.glass.glow, 0.35));
     gg.addColorStop(1, mix(pal.glass.top, pal.glass.glow, 0.75));
     ctx.fillStyle = gg;
