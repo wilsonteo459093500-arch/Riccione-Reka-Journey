@@ -5,6 +5,7 @@
 //   名字沿用 B 时的（编辑器、旧项目的 overrides 和迁移都靠它们），只换了版式，数据结构不变。
 
 import { fitText } from './spec.js';
+import { applyAdjust } from './adjust.js';
 import { clientLine, floorsLine, findFloor } from './model.js';
 import { makeTranslator, missWarning, roomEnOf, langOf, floorsLineEn, resolveEn, hasCJKText } from './lang.js';
 import { COMPANY_PAGES_B, renderCompanyB, deckChapters } from './b/company.js';
@@ -193,13 +194,21 @@ export function renderDeck(project, { meta = () => null } = {}) {
     }
     const miss = missWarning(lang, tr.misses);
     pages.filter(Boolean).forEach((pg, i) =>
-      out.push({
-        ...base,
-        key: i ? `${slide.id}#${i + 1}` : slide.id,
-        ...pg,
-        els: (pg.els || []).map((el) => fitText(el)),
-        ...(miss ? { warnings: [...(pg.warnings || []), miss], missing: tr.misses } : {}),
-      })
+      out.push(
+        // 最后一步：套上设计师的手动调整（slide.adjust）—— 预览和导出共用这份元素，所以两边一致
+        applyAdjust(
+          {
+            ...base,
+            key: i ? `${slide.id}#${i + 1}` : slide.id,
+            pageIndex: i,
+            ...pg,
+            els: (pg.els || []).map((el) => fitText(el)),
+            ...(miss ? { warnings: [...(pg.warnings || []), miss], missing: tr.misses } : {}),
+          },
+          slide.adjust,
+          i
+        )
+      )
     );
   }
   return out;

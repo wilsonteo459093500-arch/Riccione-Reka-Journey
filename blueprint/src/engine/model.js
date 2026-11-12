@@ -36,6 +36,8 @@
 //     sourcePage?: 9, tag?:'3d' }               效果图页（tag:'3d' = 3D 户型图）
 //                                                layout：auto = 整套自动排（b/design.js planViews）；full = 满版大图（满版带标题：视角名 + 材料）；framed = 图文
 //   { kind:'team' }                              本案服务团队（按 info.team 生成）
+//   任何页都可以带 adjust?:{ [组名]: 块 { dx, dy, k } | 照片 { box?, view? } } —— 设计师在画布上手动调的位置 / 大小 / 取景
+//                                                （engine/adjust.js；没调过就没有这个字段，版面全由程序排）
 
 /** 版式版本：2 = B「格物」起的数据结构（C「安然」只换版式，数据不变，所以不升版本） */
 export const LAYOUT_VERSION = 2;
