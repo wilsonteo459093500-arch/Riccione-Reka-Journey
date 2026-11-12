@@ -48,9 +48,9 @@ export const DEFAULT_TEAM = [
   { en: 'STORE', name: '', role: '店长' },
 ];
 
-/** 默认整套顺序：开篇 → 品牌 → 公司 → [方案] → 服务 */
+/** 默认整套顺序：开篇（封面、感谢信、目录）→ 品牌 → 公司 → [方案] → 服务 */
 export const COMPANY_BEFORE_DESIGN = [
-  'cover', 'contents',
+  'cover', 'letter', 'contents',
   'brand-divider', 'brand-philosophy', 'brand-story', 'brand-collections', 'brand-awards', 'brand-supply',
   'company-divider', 'company-about', 'company-history', 'company-showrooms', 'company-certified',
 ];

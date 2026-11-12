@@ -372,8 +372,8 @@ test('网页字体：HarmonyOS 不托管（授权不允许修改字体，切片 
   assert.match(FONT_PACK.find((f) => f.paid).note, /公司购买的桌面授权/);
   assert.match(FONT_PACK.find((f) => /HarmonyOS/.test(f.name)).note, /HarmonyOS Sans Fonts License/);
   // PPT 里每个 C 角色的中文字体（ea）都在 FONT_PACK 列出的字重里：设计师照清单装好，PPT 里没有被替换的字
-  const listed = ['思源宋体 CN Medium', '思源宋体 CN SemiBold', 'HarmonyOS Sans SC Medium', 'Ogg', 'Ogg Medium', 'Outfit Light', 'Outfit', 'Outfit Medium'];
-  for (const r of ['songM', 'songSB', 'ogg', 'oggM', 'hosM', 'outfitL', 'outfit', 'outfitM']) {
+  const listed = ['思源宋体 CN', '思源宋体 CN Medium', '思源宋体 CN SemiBold', 'HarmonyOS Sans SC Medium', 'Ogg', 'Ogg Medium', 'Outfit Light', 'Outfit', 'Outfit Medium'];
+  for (const r of ['song', 'songM', 'songSB', 'ogg', 'oggM', 'hosM', 'outfitL', 'outfit', 'outfitM']) {
     assert.ok(listed.includes(FONTS[r].ea), `${r} 的 ea 字体 ${FONTS[r].ea} 不在字体清单里`);
     assert.ok(listed.includes(FONTS[r].latin), `${r} 的 latin 字体 ${FONTS[r].latin} 不在字体清单里`);
   }

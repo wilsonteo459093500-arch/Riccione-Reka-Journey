@@ -1,4 +1,4 @@
-// C 安然 · 公司固定页 = 品牌画册（19 页）：封面、目录、四个章节页、品牌 / 公司 / 服务各页、封底。
+// C 安然 · 公司固定页 = 品牌画册（20 页）：封面、感谢信、目录、四个章节页、品牌 / 公司 / 服务各页、封底。
 //
 // 版式照 Aman 品牌手册（老板选定的 dirA2 样张，规格见 /tmp/claude-0/c/dirA/notes.md「通用规格」），全部用 kit.js 的 C 工具拼：
 //   封面、目录、公司章节页 = 满版 / 大照片，白字直接压在照片上；内容页 = 半版照片（上下贴边）配文字栏；
@@ -51,6 +51,8 @@ export const PHOTOS = {
   storyLift: sail('/template/b/story-lift.jpg', 1800, 1036), // 溪岸门头、长墙与石凳
   sailLiving: sail('/template/b/sail-living.jpg', 1754, 1039), // 溪岸手册 p30：书格墙、圆镜、绿植的客厅
   sailCraft: sail('/template/b/sail-craft.jpg', 1755, 1038), // 溪岸手册 p27：木格柜的近景（木纹、层板）
+  // 溪岸自家实拍（VISI 内置图库 scene-wood 原图）：深色木柜墙、亮着的台灯、木桌椅，没有人 —— 感谢信页
+  sailLetter: sail('/template/b/sail-letter-wood.jpg', 849, 1279),
   coll1: sail('/template/b/coll-1.jpg', 580, 982), // 骨骼线
   coll2: sail('/template/b/coll-2.jpg', 473, 800), // 空山
   coll3: sail('/template/b/coll-3.jpg', 693, 1173), // 织
@@ -92,6 +94,8 @@ export const PHOTO_SLOTS = {
   //   text = 默认图上字组的位置：木板（x≈796–1610）中间有一列旧钉和裂缝，字组放在左边的灰泥墙上（从 x 100 起，宽 600；内容长才往右放宽）
   //   设计师换了封面照片：字组回到照片正中（看不到像素，托字一律最深）
   cover: { photo: slot(PHOTOS.sailCover, '封面照片', { ay: 0.5, text: { left: 100, w: 600 } }) },
+  // 感谢信：竖幅照片贴右（宽 820，中英版 680；0.97 / 0.84 倍，不放大）：上下各裁一点，台灯和木桌都留在画面里（老板要没有人的照片）
+  letter: { photo: slot(PHOTOS.sailLetter, '感谢信照片', { ax: 0.5, ay: 0.4 }) },
   // 满版：溪岸门头的清水墙（墙上的 sAil 溪岸 招牌留在两栏中间）
   contents: { photo: slot(PHOTOS.storyLift, '目录照片', { ay: 0.5 }) },
   'brand-divider': { photo: slot(PHOTOS.sailHills, '章节照片', { ay: 0.55 }) },
@@ -127,7 +131,7 @@ export const PHOTO_SLOTS = {
 };
 
 // ---------------------------------------------------------------------------
-// 19 页：编辑器页名、章节、文字字段（中文 / 英文默认稿）、照片位
+// 20 页：编辑器页名、章节、文字字段（中文 / 英文默认稿）、照片位
 //   字段没有 en = 中英同一段（品牌名、年份、地址），英文版也用它
 //   oneLine = 版面上只排一行（目录、章节名、年份、标签…）：编辑器里按回车不换行
 //   enFrom = 只改了中文时英文怎么自动跟着变（'years'：「5 年」→ 5 years；'date'：「2026 年 9 月」→ September 2026）
@@ -135,6 +139,8 @@ export const PHOTO_SLOTS = {
 
 const F = (zh, en, label, extra = {}) => ({ zh, en, label, ...extra });
 const ONE = { oneLine: true };
+/** 可以整段不要的正文（感谢信）：清空中文、没动英文 = 三种语言都不排这一段 */
+const PARA = { multiline: true, optional: true };
 
 export const COMPANY_PAGES_B = {
   cover: {
@@ -146,6 +152,28 @@ export const COMPANY_PAGES_B = {
       date: F('{{dateZh}}', '{{dateEn}}', '日期', { ...ONE, enFrom: 'date' }),
     },
     images: PHOTO_SLOTS['cover'],
+  },
+  // 第二页：老板写给客户的感谢信（称呼自动带上客户名；落款只写职位，默认稿每一份提案都能直接用）
+  letter: {
+    title: '感谢信',
+    section: 'opening',
+    fields: {
+      // 老板写给客户的一封信（第一人称：「我」说感受，「我们」说承诺；称呼客户用「您」——品牌其他页用「你」）
+      //   感恩客户的信任 → 唯有真心付出 → 家具不是终点、交到客户手上才是服务的起点 → 找到属于自己的「岸」（溪岸）→ 代表团队再次感恩
+      //   落款只写职位（Riccione Reka 创办人），每一份提案通用；第五段写「整个团队」，免得和落款的公司名挨着重复
+      title: F('写给您的一封信', 'A Letter to You', '标题'),
+      // 「亲爱的」和名字之间：中文名不空格（亲爱的刘先生：），英文名空一格（亲爱的 Mr Lau：）—— 空格在 greetName 里
+      greeting: F('亲爱的{{greetName}}：', 'Dear {{greetNameEn}},', '称呼', ONE),
+      // 正文一段一个栏位（段与段之间空一小截）；清空一段 = 这一段不要。中文每行不超过 18 个字、英文每行都放得下中英版的窄栏（496），
+      //   中英版不用重新折行；English 版也照这样短行排（和中文一样像一封信）
+      p1: F('谢谢您愿意相信我们，\n把一个家的期待，交到我们手里。', 'Thank you for trusting us\nwith your hopes for this home.', '第一段', PARA),
+      p2: F('这份信任，我一直放在心上；\n我们能回报的，唯有真心付出。', 'That trust means a great deal to me.\nWe will repay it with our whole hearts.', '第二段', PARA),
+      p3: F('家具，并不是我们的终点；\n交到您手上的那天，才是服务的起点。', 'Furniture is not where our work ends.\nThe day it reaches your home\nis the day our service begins.', '第三段', PARA),
+      p4: F('愿这一路的陪伴，\n让您找到属于自己的那一片「岸」。', 'I hope that, with us beside you,\nyou will find a shore to call your own.', '第四段', PARA),
+      p5: F('我谨代表整个团队，\n再一次，真心感恩您的信任。', 'On behalf of our whole team,\nthank you, sincerely, for your trust.', '第五段', PARA),
+      sign: F('Riccione Reka 创办人　敬上', 'With gratitude,\nFounder, Riccione Reka', '落款', { multiline: true }),
+    },
+    images: PHOTO_SLOTS['letter'],
   },
   contents: {
     title: '目录',
@@ -618,6 +646,11 @@ export function companyTokensB(project, enOf, base = null) {
   t.coverNameEn = partsEn.every(Boolean) ? partsEn.join('\n') : '';
   t.designTitle = t.coverName || '方案';
   t.designTitleEn = parts.length ? t.coverNameEn : 'Design';
+  // 感谢信的称呼：叫得出客户的名字（「亲爱的刘先生：」「亲爱的 Mr Lau：」/「Dear Mr Lau,」）；没填客户 =「朋友 / friend」；
+  //   中文客户名还没有英文 → 英文版先称呼 friend（封面那边已经会提醒补英文）。两行的客户名并成一行（中文之间不空格）
+  const who = joinLines(clean(info.client).split(/\s*\n+\s*/).filter(Boolean));
+  t.greetName = !who ? '朋友' : /^[A-Za-z0-9]/.test(who) ? ` ${who}` : who;
+  t.greetNameEn = (who && latin(who)) || 'friend';
   t.dateZh = dateZh(info.date);
   t.dateEn = dateEn(info.date, latin);
   return t;
@@ -687,6 +720,7 @@ const BOTTOM = 900;
 const SHADE_A = {
   'cover:logo': 0.15, // 灰泥墙（中灰）：白 logo 不托也够 3:1
   'cover:title': 0.34, // 灰泥墙（中灰）：托到 0.30 小字 4.54，加 0.04 余量
+  'letter:logo': 0.15, // 木顶板（暖中灰）：白 logo 不托也有 3.6:1（中英版）/ 3.9:1
   'contents:left': 0.45, // 门洞两边是清水墙：要托满（「CONTENTS」0.44）
   'contents:logo': 0.45, // 右上是亮墙和枯枝
   'brand-divider:label': 0.25, // 深色山体（「BRAND」0.20）
@@ -712,18 +746,31 @@ function latinOf(pair, lang) {
   return [pair, lang];
 }
 
+/** 汉字（不含全角标点） */
+const IDEO = /[\u3400-\u9fff\uf900-\ufaff]/;
+const ALNUM = /[A-Za-z0-9]/;
+
+/**
+ * 几行并成一行：英文行与行之间接一个空格，中文（含全角标点）直接接上，汉字和英文 / 数字之间空一格（「Riccione Reka 全体」）
+ */
+export function joinLines(lines) {
+  return lines.reduce((acc, line) => {
+    if (!acc) return line;
+    const a = acc.slice(-1);
+    const b = line[0];
+    if ((IDEO.test(a) && ALNUM.test(b)) || (ALNUM.test(a) && IDEO.test(b))) return `${acc} ${line}`;
+    return hasCJK(a) || hasCJK(b) ? `${acc}${line}` : `${acc} ${line}`;
+  }, '');
+}
+
 /**
  * 默认稿里的手动换行是照旧版式的栏宽断的：有一行在这一栏里放不下（要折行）时，整段按栏宽重新排
- *   （英文行与行之间接一个空格，中文直接接上），免得排出「… makes / furniture / that returns …」这种落单的词
+ *   （行与行照 joinLines 接上），免得排出「… makes / furniture / that returns …」这种落单的词
  */
 function reflow(text, st, w) {
   const t = clean(text);
   if (!t.includes('\n') || K.wrapText(t, st, w).every((p) => p.length <= 1)) return t;
-  return t
-    .split('\n')
-    .map(clean)
-    .filter(Boolean)
-    .reduce((acc, line) => (!acc ? line : /[A-Za-z0-9,.;:!?)%]$/.test(acc) && /^[A-Za-z0-9(“"]/.test(line) ? `${acc} ${line}` : `${acc}${line}`), '');
+  return joinLines(t.split('\n').map(clean).filter(Boolean));
 }
 
 /**
@@ -903,6 +950,7 @@ function chapterLabel(R, x, y, w, color) {
  * 中文改过、英文没跟上时页眉的英文先不印并提醒（R.pair）
  */
 export const ZH_EN_HEADER = {
+  letter: ['title'],
   contents: ['title'],
   'brand-divider': ['label'],
   'brand-philosophy': ['title'],
@@ -1010,6 +1058,8 @@ function makeR(key, slide, ctx) {
       let en = typeof oe === 'string' ? fill(oe) : shared ? zh : auto || fill(f.en);
       const fields = { field: `overrides.${field}`, fieldEn: shared && typeof oe !== 'string' ? `overrides.${field}` : `overridesEn.${field}` };
       const edited = { zh: typeof oz === 'string', en: typeof oe === 'string' || !!auto || (shared && typeof oz === 'string') };
+      // 可以整段不要的正文（感谢信）：清空了中文、英文没动 = 这一段三种语言都不要（不退回英文默认稿、不提醒补英文）
+      if (f.optional && typeof oz === 'string' && !zh && typeof oe !== 'string') return { zh: '', en: '', ...fields, edited };
       // 英文栏清空 = 这一行在英文里不要：English 版不显示（不退回中文），中英版只显示中文
       if (typeof oe === 'string' && !en) return { zh: lang === 'en' ? '' : zh, en: '', ...fields, edited };
       // 这一段的英文用到了还没有翻译的客户 / 地点 / 方案名：现在才记「缺英文」（页面会提醒）
@@ -2003,8 +2053,153 @@ function layClosing(R) {
   return [ph.el, logo.el, ...g.els, ...sig.els];
 }
 
+// ===========================================================================
+// 感谢信（第二页）：纸面左栏是一封信 —— 标题组 → 称呼 → 正文（空一行 = 分段，段距半行）→ 短线 → 落款；
+//   竖幅照片贴右（白 logo 右上，页脚签名在纸面文字栏右下）。中英版：中文、英文左右两栏对照（照片收窄一点给文字）
+// ===========================================================================
+
+/** 信的字级：正文用思源宋体 Regular（像一封写给人的信），称呼、落款用宋体 Medium + 标题色；英文 Outfit */
+const LT = {
+  greet: K.style('close', { font: 'songM', size: 22, spacing: 2, lh: 44 }),
+  greetEn: K.style('closeEn', { font: 'outfit', size: 21, spacing: 0.5, lh: 42 }),
+  body: K.style('body', { font: 'song', size: 20, spacing: 2, lh: 42 }), // 五段十行：行高 42（2.1 倍字高）
+  bodyEn: K.style('bodyEn', { font: 'outfitL', size: 20, spacing: 0.3, lh: 38 }),
+  sign: K.style('close', { font: 'songM', size: 18, spacing: 2, lh: 36 }),
+  signEn: K.style('closeEn', { font: 'outfit', size: 18, spacing: 0.5, lh: 34 }),
+  // 中英版：两栏各 470 宽，字小一号
+  greetBi: K.style('close', { font: 'songM', size: 20, spacing: 2, lh: 40 }),
+  greetBiEn: K.style('closeEn', { font: 'outfit', size: 19, spacing: 0.5, lh: 40 }),
+  bodyBi: K.style('body', { font: 'song', size: 18, spacing: 1.5, lh: 38 }),
+  bodyBiEn: K.style('bodyEn', { font: 'outfitL', size: 17, spacing: 0.3, lh: 32 }),
+  signBi: K.style('close', { font: 'songM', size: 16, spacing: 2, lh: 32 }),
+  signBiEn: K.style('closeEn', { font: 'outfit', size: 16, spacing: 0.5, lh: 30 }),
+};
+
+/** 感谢信中英版的照片宽（比半版下限 820 窄：两栏对照要放得下一行 18 个字） */
+export const LETTER_BI_PHOTO_W = 680;
+
+/** 段与段之间空多少（行高的几分之几） */
+export const LETTER_PARA_GAP = 0.4;
+
+/** 正文的段落栏位（p1、p2…，按顺序） */
+const LETTER_PARAS = Object.keys(COMPANY_PAGES_B.letter.fields).filter((f) => /^p\d+$/.test(f));
+
+/**
+ * 信的正文：一段一个文字元素（段距 = 0.4 行，不是空一整行）；段里再空一行也算分段（同一个栏位）。段内的手动换行照留
+ *   排不下（maxBottom）：最后一段截短（末尾「…」），后面的段不排 —— 末段标上 _cut，R.finish 会说出是哪一栏
+ * @param {Array<{ text:string, field:string, st:object, edited?:boolean }>} items  一栏里的各段（st = 这一段的字级：English 版缺英文的段落先排中文）
+ *   edited = 设计师改过的字：照设计师的分段排，太长的那一行自己折，不并段重排（和别的页一样）；默认稿放不下才按栏宽重排
+ * @returns {{ els, top, bottom, x0, x1, cut, cutField:string|null, dropped:string[] }}
+ *   cutField = 截短（末尾「…」）的那一段；dropped = 后面整段排不下、没有显示的段落栏位（按顺序）
+ */
+function letterParas(x, y, w, items, opts = {}) {
+  const paras = items.flatMap((it) =>
+    String(it.text ?? '')
+      .replace(/\r/g, '')
+      .split(/\n(?:[^\S\n]*\n)+/)
+      .map(clean)
+      .filter(Boolean)
+      .map((text) => ({ text, field: it.field, st: it.st, edited: !!it.edited })),
+  );
+  const maxBottom = opts.maxBottom ?? Infinity;
+  const els = [];
+  const dropped = [];
+  let cutField = null;
+  let cur = y;
+  let x1 = x;
+  let cut = false;
+  for (const p of paras) {
+    if (cut) {
+      if (!dropped.includes(p.field)) dropped.push(p.field);
+      continue;
+    }
+    const y0 = els.length ? cur + Math.round(p.st.lh * LETTER_PARA_GAP) : cur;
+    // 留 2px 余量：flow 把组间距取整，差不到 1px 就少排一行不值得
+    const room = Number.isFinite(maxBottom) ? Math.floor((maxBottom - y0 + 2) / p.st.lh) : Infinity;
+    if (room < 1) {
+      cut = true;
+      dropped.push(p.field);
+      continue;
+    }
+    // 默认稿段内的手动换行是照宽栏断的：有一行在这一栏放不下（中英版的窄栏）→ 整段按栏宽重排，不留「…结 / 构」这种落单的字；
+    //   设计师改过的字照设计师的分段排（太长的那一行自己折）
+    const r = K.textBlock(x, y0, w, p.edited ? p.text : reflow(p.text, p.st, w), p.st, { field: p.field, balance: true, maxLines: Number.isFinite(room) ? room : undefined });
+    if (!r.el) continue;
+    els.push(r.el);
+    cur = r.bottom;
+    x1 = Math.max(x1, r.x1);
+    if (r.cut) {
+      r.el._cut = true;
+      cut = true;
+      cutField = p.field;
+    }
+  }
+  return { els, top: y, bottom: cur, x0: x, x1, cut, cutField, dropped: dropped.filter((f) => f !== cutField) };
+}
+
+function layLetter(R) {
+  const { lang } = R;
+  const bi = lang === 'bi';
+  // 半版照片贴右 820（半版的下限）。中英版是中文、英文左右两栏，一栏要放得下 18 个字（18pt）的一行：
+  //   照片收窄到 680（只有这一页的中英版比半版窄），照片边到文字栏空 88（半版间距的下限）
+  const g0 = K.halfPage('right', { photoW: bi ? LETTER_BI_PHOTO_W : K.HALF.min, gap: bi ? K.HALF.gapMin : 100 });
+  const ph = R.photo('photo', g0.photo.x, 0, g0.photo.w, PAGE.H, { dark: true });
+  const logo = K.cornerLogo('sail', { onPhoto: true });
+  const sig = sign(R, 'sail', { right: g0.col.right });
+  const { x, w } = g0.col;
+  const G = 48;
+  const cw = bi ? Math.floor((w - G) / 2) : w;
+  // 中英版：中文在左栏、英文在右栏（只有一种语言的那一段也待在自己那一栏）
+  const colX = (lg) => (bi && lg === 'en' ? x + cw + G : x);
+  const st = (base) => (lg) => LT[`${base}${bi ? 'Bi' : ''}${lg === 'en' ? 'En' : ''}`];
+  const join = (y, parts) => (parts.length ? { els: parts.flatMap((p) => p.els), top: y, bottom: Math.max(...parts.map((p) => p.bottom)), x0: x, x1: Math.max(...parts.map((p) => p.x1)) } : { els: [], top: y, bottom: y, x0: x, x1: x });
+  // 称呼、落款：一行（最多两行）
+  const short = (field, role) => (y) => join(y, K.pick(lang, R.pair(field)).map((it) => part(K.textBlock(colX(it.lang), y, cw, it.text, role(it.lang), { field: it.field, maxLines: 2 }))));
+  // 正文：每种语言一栏，一段一个元素；截短的段、整段排不下的段记下来（只在真正排版那一次，量高度的那几次不记）
+  const dropped = [];
+  const body = (y, mb = Infinity, measuring = false) => {
+    const per = LETTER_PARAS.map((f) => {
+      const pr = R.pair(f);
+      return K.pick(lang, pr).map((it) => ({ ...it, edited: !!pr.edited?.[it.lang] }));
+    });
+    const colsOf = bi ? ['zh', 'en'].map((lg) => per.map((its) => its.find((it) => it.lang === lg)).filter(Boolean)) : [per.map((its) => its[0]).filter(Boolean)];
+    const parts = colsOf
+      .filter((items) => items.length)
+      .map((items) => {
+        const lg = bi ? items[0].lang : null;
+        const r = letterParas(bi ? colX(lg) : x, y, cw, items.map((it) => ({ ...it, st: st('body')(it.lang) })), { maxBottom: mb });
+        if (!measuring) {
+          if (r.cutField) R.cutAt(r.cutField);
+          dropped.push(...r.dropped);
+        }
+        return r;
+      });
+    return join(y, parts);
+  };
+  // 标题 / 称呼 / 落款清空了：后面那一组用前一组的间距（不留空洞、不贴太近）；没有落款就不画短线
+  const has = (f) => K.pick(lang, R.pair(f)).length > 0;
+  const hasTitle = K.titleGroup(x, PAGE.top, w, R.pair('title'), lang).els.length > 0;
+  const afterTitle = hasTitle ? [bi ? 60 : 72, 36] : [0, 0];
+  const none = (y) => ({ els: [], top: y, bottom: y, x0: x, x1: x });
+  const g = flow(PAGE.top, BOTTOM, [
+    titleG(R, x, w),
+    { gap: afterTitle, build: short('greeting', st('greet')) },
+    { gap: has('greeting') ? [bi ? 24 : 28, 16] : afterTitle, flex: true, build: body },
+    { gap: [bi ? 40 : 48, 24], build: (y) => (has('sign') ? solo(K.rule(x, y, 120)) : none(y)) },
+    { gap: [bi ? 24 : 28, 16], build: short('sign', st('sign')) },
+  ]);
+  // 整段没有显示（不是截短）：单独说清楚，免得设计师找不到「…」（一键修复跳到第一段没显示的）
+  if (dropped.length) {
+    const names = [...new Set(dropped.map((f) => fieldLabel(R.def, f)).filter(Boolean))].map((n) => `「${n}」`).join('');
+    R.warn(`文字太长放不下：${names}排不下、没有显示 —— 请删减正文`);
+  }
+  const sh = R.shade(ph, [logo], 'logo', { dir: 'v' });
+  return [ph.el, sh, logo.el, ...g.els, ...sig.els];
+}
+
 const LAYOUTS = {
   cover: layCover,
+  letter: layLetter,
   contents: layContents,
   'brand-divider': layDivider,
   'brand-philosophy': layPhilosophy,
@@ -2067,7 +2262,9 @@ export function companyFieldsB(key, slide = {}, project = {}) {
     const enDefault = shared ? zhDefault : fill(f.en);
     // 与页面一致：只改了中文时能自动换成英文的（5 年 → 5 years、Mr & Mrs Lau）英文跟着变
     const autoEn = !shared && typeof oz === 'string' && typeof oe !== 'string' ? autoEnOf(f, zh) : '';
-    const en = typeof oe === 'string' ? fill(oe) : shared ? zh : autoEn || enDefault;
+    // 可以整段不要的正文：清空了中文、英文没动 = 整段不要（与页面一致，英文框也空着）
+    const dropped = !!f.optional && typeof oz === 'string' && !zh && typeof oe !== 'string';
+    const en = dropped ? '' : typeof oe === 'string' ? fill(oe) : shared ? zh : autoEn || enDefault;
     // 目录里被隐藏的那一章：栏位还能改，只是页面上不列
     const ch = key === 'contents' ? /^ch(\d)/.exec(field) : null;
     return {
