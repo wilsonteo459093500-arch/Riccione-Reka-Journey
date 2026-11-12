@@ -9,7 +9,7 @@ import path from 'node:path';
 import { test } from './harness.mjs';
 import {
   COMPANY_PAGES_B, COMPANY_KEYS_B, renderCompanyB, companyFieldsB, companyImagesB, companyTokensB, dateZh, dateEn,
-  PHOTOS, LOGO, QR, yearsEn, deckChapters, chapterZh, chapterEn, companyFieldByLabel, legacyOverrides, PHOTO_HIDDEN, ZH_EN_HEADER, LETTER_BI_PHOTO_W, LETTER_PARA_GAP,
+  PHOTOS, LOGO, QR, yearsEn, deckChapters, chapterZh, chapterEn, companyFieldByLabel, legacyOverrides, PHOTO_HIDDEN, ZH_EN_HEADER, LETTER_BI_PHOTO_W, LETTER_PARA_GAP, joinLines,
 } from '../src/engine/b/company.js';
 import { INSET, B, LOGOS, ALPHA, measure, SIGNATURE } from '../src/engine/b/kit.js';
 import { makeTranslator } from '../src/engine/lang.js';
@@ -992,19 +992,21 @@ const LETTER_PARAS = Object.keys(COMPANY_PAGES_B.letter.fields).filter((f) => /^
 
 test('感谢信：称呼叫得出客户的名字；没填客户 = 朋友 / friend；中文客户名还没有英文 → 英文称呼 friend（不提醒），有翻译就用翻译', () => {
   const greet = (pg) => [...byField(pg, 'overrides.greeting'), ...byField(pg, 'overridesEn.greeting')].map(textOf);
-  assert.deepEqual(greet(render('letter', 'zh')), ['亲爱的 Mr Lau：']);
+  assert.deepEqual(greet(render('letter', 'zh')), ['亲爱的 Mr Lau：'], '英文名前面空一格');
   assert.deepEqual(greet(render('letter', 'en')), ['Dear Mr Lau,']);
   assert.deepEqual(greet(render('letter', 'bi')), ['亲爱的 Mr Lau：', 'Dear Mr Lau,']);
   const none = render('letter', 'bi', {}, { project: project('bi', { info: { client: '' } }) });
-  assert.deepEqual(greet(none), ['亲爱的 朋友：', 'Dear friend,']);
+  assert.deepEqual(greet(none), ['亲爱的朋友：', 'Dear friend,'], '中文之间不空格');
   const zhName = render('letter', 'bi', {}, { project: project('bi', { info: { client: '刘先生' } }) });
-  assert.deepEqual(greet(zhName), ['亲爱的 刘先生：', 'Dear friend,']);
+  assert.deepEqual(greet(zhName), ['亲爱的刘先生：', 'Dear friend,']);
   assert.deepEqual(zhName.warnings, []);
   const tm = render('letter', 'en', {}, { project: project('en', { info: { client: '刘先生' }, translations: { 刘先生: 'Mr Lau' } }) });
   assert.deepEqual(greet(tm), ['Dear Mr Lau,']);
-  // 两行的客户名（Mr & Mrs Lau\n与家人）并成一行称呼
+  // 两行的客户名并成一行称呼：英文之间空一格，中文之间不空格
   const two = render('letter', 'zh', {}, { project: project('zh', { info: { client: 'Mr & Mrs Lau\nand family' } }) });
   assert.deepEqual(greet(two), ['亲爱的 Mr & Mrs Lau and family：']);
+  const twoZh = render('letter', 'zh', {}, { project: project('zh', { info: { client: '刘先生\n与家人' } }) });
+  assert.deepEqual(greet(twoZh), ['亲爱的刘先生与家人：']);
 });
 
 test('感谢信：照片贴右（820，中英版 680），字都在纸面上；一段一个元素、段距 0.4 行；中英版中文左栏、英文右栏同一高度起排', () => {
@@ -1058,10 +1060,29 @@ test('感谢信：正文太长 → 截短的那一段和后面没排的段都点
   assert.equal(byField(cleared, 'overrides.p4').length + byField(cleared, 'overridesEn.p4').length, 0);
 });
 
-test('感谢信：设计师在一段里再空一行 → 也分成两段（同一个栏位），段内的手动换行照留', () => {
+test('感谢信：设计师在一段里再空一行 → 也分成两段（同一个栏位），段内的手动换行照留（有一行太长也只折那一行）', () => {
   const pg = render('letter', 'zh', { overrides: { p1: '谢谢你。\n\n谢谢你的家人。\n也谢谢每一次的耐心。' } });
   const els = byField(pg, 'overrides.p1');
   assert.deepEqual(els.map(textOf), ['谢谢你。', '谢谢你的家人。\n也谢谢每一次的耐心。']);
+  // 改过的字有一行放不下：只折那一行，前面的「谢谢您。」照旧单独一行（不并段重排）
+  for (const lang of ['zh', 'bi']) {
+    const long = render('letter', lang, { overrides: { p1: '谢谢您。\n这一年里，您把家里每一个角落的期待都慢慢讲给我们听，我们一直记在心上，也一直努力做到更好。' } });
+    const lines = textOf(byField(long, 'overrides.p1')[0]).split('\n');
+    assert.equal(lines[0], '谢谢您。', `${lang}: ${lines.join(' / ')}`);
+    assert.ok(lines.length >= 3, lang);
+  }
+  // 英文和中文之间的手动换行也照留（不会粘成「Riccione Reka全体」）
+  const mix = render('letter', 'bi', { overrides: { p5: '我谨代表 Riccione Reka\n全体同事，再一次真心感恩您的信任。' } });
+  assert.ok(!/Reka全体/.test(textOf(byField(mix, 'overrides.p5')[0])));
+});
+
+test('joinLines：英文之间空一格、中文直接接上、汉字和英文 / 数字之间空一格', () => {
+  assert.equal(joinLines(['Riccione Reka', '全体同事']), 'Riccione Reka 全体同事');
+  assert.equal(joinLines(['全体', 'Riccione Reka']), '全体 Riccione Reka');
+  assert.equal(joinLines(['谢谢。', '你好']), '谢谢。你好');
+  assert.equal(joinLines(['刘先生', '与家人']), '刘先生与家人');
+  assert.equal(joinLines(['café', 'and']), 'café and');
+  assert.equal(joinLines(['2025 年，', 'Riccione Reka']), '2025 年，Riccione Reka');
 });
 
 test('感谢信：中英版窄栏重排设计师的英文时，é / 引号 / 破折号结尾的词也空一格，不粘在一起', () => {

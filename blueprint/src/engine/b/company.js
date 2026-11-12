@@ -162,7 +162,8 @@ export const COMPANY_PAGES_B = {
       //   感恩客户的信任 → 唯有真心付出 → 家具不是终点、交到客户手上才是服务的起点 → 找到属于自己的「岸」（溪岸）→ 代表团队再次感恩
       //   落款只写职位（Riccione Reka 创办人），每一份提案通用；第五段写「整个团队」，免得和落款的公司名挨着重复
       title: F('写给您的一封信', 'A Letter to You', '标题'),
-      greeting: F('亲爱的 {{greetName}}：', 'Dear {{greetNameEn}},', '称呼', ONE),
+      // 「亲爱的」和名字之间：中文名不空格（亲爱的刘先生：），英文名空一格（亲爱的 Mr Lau：）—— 空格在 greetName 里
+      greeting: F('亲爱的{{greetName}}：', 'Dear {{greetNameEn}},', '称呼', ONE),
       // 正文一段一个栏位（段与段之间空一小截）；清空一段 = 这一段不要。中文每行不超过 18 个字、英文每行都放得下中英版的窄栏（496），
       //   中英版不用重新折行；English 版也照这样短行排（和中文一样像一封信）
       p1: F('谢谢您愿意相信我们，\n把一个家的期待，交到我们手里。', 'Thank you for trusting us\nwith your hopes for this home.', '第一段', PARA),
@@ -645,10 +646,10 @@ export function companyTokensB(project, enOf, base = null) {
   t.coverNameEn = partsEn.every(Boolean) ? partsEn.join('\n') : '';
   t.designTitle = t.coverName || '方案';
   t.designTitleEn = parts.length ? t.coverNameEn : 'Design';
-  // 感谢信的称呼：叫得出客户的名字（「亲爱的 Mr Lau：」/「Dear Mr Lau,」）；没填客户 =「朋友 / friend」；
-  //   中文客户名还没有英文 → 英文版先称呼 friend（封面那边已经会提醒补英文）
-  const who = clean(info.client).replace(/\s*\n+\s*/g, ' ');
-  t.greetName = who || '朋友';
+  // 感谢信的称呼：叫得出客户的名字（「亲爱的刘先生：」「亲爱的 Mr Lau：」/「Dear Mr Lau,」）；没填客户 =「朋友 / friend」；
+  //   中文客户名还没有英文 → 英文版先称呼 friend（封面那边已经会提醒补英文）。两行的客户名并成一行（中文之间不空格）
+  const who = joinLines(clean(info.client).split(/\s*\n+\s*/).filter(Boolean));
+  t.greetName = !who ? '朋友' : /^[A-Za-z0-9]/.test(who) ? ` ${who}` : who;
   t.greetNameEn = (who && latin(who)) || 'friend';
   t.dateZh = dateZh(info.date);
   t.dateEn = dateEn(info.date, latin);
@@ -745,18 +746,31 @@ function latinOf(pair, lang) {
   return [pair, lang];
 }
 
+/** 汉字（不含全角标点） */
+const IDEO = /[\u3400-\u9fff\uf900-\ufaff]/;
+const ALNUM = /[A-Za-z0-9]/;
+
+/**
+ * 几行并成一行：英文行与行之间接一个空格，中文（含全角标点）直接接上，汉字和英文 / 数字之间空一格（「Riccione Reka 全体」）
+ */
+export function joinLines(lines) {
+  return lines.reduce((acc, line) => {
+    if (!acc) return line;
+    const a = acc.slice(-1);
+    const b = line[0];
+    if ((IDEO.test(a) && ALNUM.test(b)) || (ALNUM.test(a) && IDEO.test(b))) return `${acc} ${line}`;
+    return hasCJK(a) || hasCJK(b) ? `${acc}${line}` : `${acc} ${line}`;
+  }, '');
+}
+
 /**
  * 默认稿里的手动换行是照旧版式的栏宽断的：有一行在这一栏里放不下（要折行）时，整段按栏宽重新排
- *   （英文行与行之间接一个空格，中文直接接上），免得排出「… makes / furniture / that returns …」这种落单的词
+ *   （行与行照 joinLines 接上），免得排出「… makes / furniture / that returns …」这种落单的词
  */
 function reflow(text, st, w) {
   const t = clean(text);
   if (!t.includes('\n') || K.wrapText(t, st, w).every((p) => p.length <= 1)) return t;
-  return t
-    .split('\n')
-    .map(clean)
-    .filter(Boolean)
-    .reduce((acc, line) => (!acc ? line : hasCJK(acc.slice(-1)) || hasCJK(line[0]) ? `${acc}${line}` : `${acc} ${line}`), '');
+  return joinLines(t.split('\n').map(clean).filter(Boolean));
 }
 
 /**
@@ -2073,7 +2087,8 @@ const LETTER_PARAS = Object.keys(COMPANY_PAGES_B.letter.fields).filter((f) => /^
 /**
  * 信的正文：一段一个文字元素（段距 = 0.4 行，不是空一整行）；段里再空一行也算分段（同一个栏位）。段内的手动换行照留
  *   排不下（maxBottom）：最后一段截短（末尾「…」），后面的段不排 —— 末段标上 _cut，R.finish 会说出是哪一栏
- * @param {Array<{ text:string, field:string, st:object }>} items  一栏里的各段（st = 这一段的字级：English 版缺英文的段落先排中文）
+ * @param {Array<{ text:string, field:string, st:object, edited?:boolean }>} items  一栏里的各段（st = 这一段的字级：English 版缺英文的段落先排中文）
+ *   edited = 设计师改过的字：照设计师的分段排，太长的那一行自己折，不并段重排（和别的页一样）；默认稿放不下才按栏宽重排
  * @returns {{ els, top, bottom, x0, x1, cut, cutField:string|null, dropped:string[] }}
  *   cutField = 截短（末尾「…」）的那一段；dropped = 后面整段排不下、没有显示的段落栏位（按顺序）
  */
@@ -2084,7 +2099,7 @@ function letterParas(x, y, w, items, opts = {}) {
       .split(/\n(?:[^\S\n]*\n)+/)
       .map(clean)
       .filter(Boolean)
-      .map((text) => ({ text, field: it.field, st: it.st })),
+      .map((text) => ({ text, field: it.field, st: it.st, edited: !!it.edited })),
   );
   const maxBottom = opts.maxBottom ?? Infinity;
   const els = [];
@@ -2106,8 +2121,9 @@ function letterParas(x, y, w, items, opts = {}) {
       dropped.push(p.field);
       continue;
     }
-    // 段内的手动换行是照宽栏断的：有一行在这一栏放不下（中英版的窄栏）→ 整段按栏宽重排，不留「…结 / 构」这种落单的字
-    const r = K.textBlock(x, y0, w, reflow(p.text, p.st, w), p.st, { field: p.field, balance: true, maxLines: Number.isFinite(room) ? room : undefined });
+    // 默认稿段内的手动换行是照宽栏断的：有一行在这一栏放不下（中英版的窄栏）→ 整段按栏宽重排，不留「…结 / 构」这种落单的字；
+    //   设计师改过的字照设计师的分段排（太长的那一行自己折）
+    const r = K.textBlock(x, y0, w, p.edited ? p.text : reflow(p.text, p.st, w), p.st, { field: p.field, balance: true, maxLines: Number.isFinite(room) ? room : undefined });
     if (!r.el) continue;
     els.push(r.el);
     cur = r.bottom;
@@ -2142,7 +2158,10 @@ function layLetter(R) {
   // 正文：每种语言一栏，一段一个元素；截短的段、整段排不下的段记下来（只在真正排版那一次，量高度的那几次不记）
   const dropped = [];
   const body = (y, mb = Infinity, measuring = false) => {
-    const per = LETTER_PARAS.map((f) => K.pick(lang, R.pair(f)));
+    const per = LETTER_PARAS.map((f) => {
+      const pr = R.pair(f);
+      return K.pick(lang, pr).map((it) => ({ ...it, edited: !!pr.edited?.[it.lang] }));
+    });
     const colsOf = bi ? ['zh', 'en'].map((lg) => per.map((its) => its.find((it) => it.lang === lg)).filter(Boolean)) : [per.map((its) => its[0]).filter(Boolean)];
     const parts = colsOf
       .filter((items) => items.length)
