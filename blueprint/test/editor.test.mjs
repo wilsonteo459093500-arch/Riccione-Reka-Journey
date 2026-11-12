@@ -324,6 +324,25 @@ test('upgradeProject：旧项目的效果图版式交还给自动排版（立体
   assert.equal(upgradeProject(fresh), fresh);
 });
 
+test('upgradeProject：旧项目没有感谢信 → 补在封面后面（只补一次，隐藏了也不再补）；还没有整套的空项目不补', () => {
+  const p = smallProject();
+  const old = { ...p, slides: p.slides.filter((s) => !(s.kind === 'company' && s.key === 'letter')) };
+  assert.equal(old.slides.length, p.slides.length - 1, 'smallProject 本来就有感谢信');
+  const up = upgradeProject(old);
+  assert.notEqual(up, old);
+  assert.deepEqual(up.slides.filter((s) => s.kind === 'company').map((s) => s.key).slice(0, 3), ['cover', 'letter', 'contents']);
+  assert.equal(up.slides.length, old.slides.length + 1);
+  const letter = up.slides.find((s) => s.key === 'letter');
+  assert.equal(letter.kind, 'company');
+  assert.equal(letter.enabled, true);
+  assert.ok(letter.id && !old.slides.some((s) => s.id === letter.id));
+  assert.equal(upgradeProject(up), up, '已经有了：原样返回');
+  const hidden = { ...up, slides: up.slides.map((s) => (s.key === 'letter' ? { ...s, enabled: false } : s)) };
+  assert.equal(upgradeProject(hidden), hidden, '隐藏了：不再补一页');
+  const empty = { ...newProject(), layoutVersion: 2 };
+  assert.equal(upgradeProject(empty), empty);
+});
+
 test('upgradeProject：旧版公司页按元素序号的改写，意思一样的搬到新栏位（质保年数、封面、封底联系方式），其余留着提醒', () => {
   const p = smallProject();
   const byKey = (q, k) => q.slides.find((s) => s.kind === 'company' && s.key === k);

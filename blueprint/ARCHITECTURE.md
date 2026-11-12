@@ -25,7 +25,7 @@ Project ──engine/deck.js renderDeck()──▶ 渲染页 [{ bg, els }]（eng
 | `src/engine/spec.js` | 元素规格（rect / img / text）+ 文字宽度估算 + 图片裁切计算 |
 | `src/engine/b/kit.js` | B「格物」版式工具：12 栏网格、字级（中 / 英）、固定行高的文字块、中英并排 / 上下对照、照片裁切、属性列表 |
 | `src/engine/b/design.js` | 方案页：方案封面、楼层章节页、满版大图 / 图文效果图页、本案材料、本案团队；`planViews` 整套排版计划 |
-| `src/engine/b/company.js` | 公司页 = 品牌画册（19 页）：栏位文字（中 / 英默认稿）、照片位、`renderCompanyB` / `companyFieldsB`；`deckChapters`（隐藏了章节时目录与「第几章」重排） |
+| `src/engine/b/company.js` | 公司页 = 品牌画册（20 页）：栏位文字（中 / 英默认稿）、照片位、`renderCompanyB` / `companyFieldsB`；`deckChapters`（隐藏了章节时目录与「第几章」重排） |
 | `src/engine/b/text.js` | 均衡断行（方案页、公司页的大标题 / 名称共用）：折成两三行时各行长短接近，不留落单的一个词 |
 | `src/engine/metrics.js` | 三种字体的实测字宽（估算换行用） |
 | `src/engine/lang.js` · `glossary.js` | 提案语言（华文 / English / 中英）、翻译记忆、词典自动英文、缺英文提醒 |

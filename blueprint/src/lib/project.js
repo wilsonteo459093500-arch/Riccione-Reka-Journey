@@ -124,6 +124,7 @@ export function legacyEditPages(project) {
  *        （和下一页同一张时会换掉）→ 抄到这一层的楼层页上，算设计师选的，照旧显示（可「恢复自动」）
  *   2. 公司页按旧模板元素序号的改写（数字键）：意思一样的几处搬到新栏位（封面、售后维保的质保年数、封底联系方式）；
  *      其余留在数据里，页面上提醒设计师对照（legacyEditPages）。只要还有可搬的就搬（已升级过的项目也补上）
+ *   3. 后来加进整套的公司页（ensureCompanyPages）：第二页的感谢信补在封面后面
  * 没有要改的返回原对象
  */
 export function upgradeProject(project) {
@@ -131,7 +132,7 @@ export function upgradeProject(project) {
   const old = (project.layoutVersion || 1) < LAYOUT_VERSION;
   const floorImage = new Map(old ? (project.floors || []).filter((f) => f?.image).map((f) => [f.id, f.image]) : []);
   let changed = old;
-  const slides = (project.slides || []).map((s) => {
+  let slides = (project.slides || []).map((s) => {
     if (!s) return s;
     let next = s;
     if (old && s.kind === 'view' && s.tag !== '3d' && s.layout && s.layout !== 'auto') next = { ...next, layout: 'auto' };
@@ -140,8 +141,33 @@ export function upgradeProject(project) {
     if (next !== s) changed = true;
     return next;
   });
+  const added = ensureCompanyPages(slides);
+  if (added !== slides) {
+    slides = added;
+    changed = true;
+  }
   if (!changed) return project;
   return { ...project, slides, layoutVersion: Math.max(project.layoutVersion || 1, LAYOUT_VERSION) };
+}
+
+/**
+ * 后来才加进默认整套的公司页：[页, 放在哪一页后面]。旧项目打开时缺哪页就补哪页（公司页只能隐藏、不能删，所以缺 = 当时还没有这一页）
+ *   感谢信（2026-11）：封面后面
+ */
+const LATER_PAGES = [['letter', 'cover']];
+
+/** 补上缺的公司页（还没有整套的空项目不补）；没有要补的返回原数组 */
+export function ensureCompanyPages(slides) {
+  const list = slides || [];
+  if (!list.some((s) => s?.kind === 'company')) return slides;
+  let out = list;
+  for (const [key, after] of LATER_PAGES) {
+    if (out.some((s) => s?.kind === 'company' && s.key === key)) continue;
+    const at = out.findIndex((s) => s?.kind === 'company' && s.key === after);
+    out = [...out];
+    out.splice(at >= 0 ? at + 1 : 0, 0, { id: uid('s'), kind: 'company', key, enabled: true });
+  }
+  return out;
 }
 
 /** 首页卡片缩略图：方案封面（Material Board）→ 第一张效果图 → 楼层图 → 原稿第一页 */
