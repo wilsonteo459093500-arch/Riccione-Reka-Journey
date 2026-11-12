@@ -9,5 +9,8 @@ import floors from './en-floors.js';
 import imp from './en-import.js';
 import voice from './en-voice.js';
 import cases from './en-cases.js';
+import showcase from './en-showcase.js';
+import casestaff from './en-casestaff.js';
+import photopick from './en-photopick.js';
 
-export default { ...base, ...quiz, ...studio, ...shell, ...logic, ...engine, ...floors, ...imp, ...voice, ...cases };
+export default { ...base, ...quiz, ...studio, ...shell, ...logic, ...engine, ...floors, ...imp, ...voice, ...cases, ...showcase, ...casestaff, ...photopick };
