@@ -14,7 +14,9 @@
 //     team: [{ en:'DESIGN', name:'Sheerly', role:'方案设计师' }, ...],
 //   },
 //   floors:    [{ id, zh:'一楼', en:'GROUND FLOOR', image:'asset:…'|null,      // image = 楼层章节页背景（空 = 取该层第一张效果图）
-//                plan?:'asset:…', renders3d?:['asset:…'] }],                     // plan = 平面布置图；renders3d = AI 全屋立体图历史
+//                plan?:'asset:…', renders3d?:['asset:…'],                        // plan = 平面布置图（裁剪后的那张，坐标按它量）；renders3d = 保存的 3D 户型图
+//                planSource?, planCrop?, planScope?, planRegion?, render3dInfo?,       // 原图 / 框选范围 / 每张图的设置（ai/dollhouse.js）
+//                plan3d?:{ planSrc, geo, detected, detect, view, tex } }],              // 3D 户型图：核对过的坐标、视角、贴图（ai/plan3d.js）
 //   materials: [{ id, name:'浅川橡', code:'AG273', image:'asset:…'|null, pending:false }],
 //   cover:     { image:'asset:…'|null },   // Material Board → 方案封面（整张放进右侧，不裁；旧项目的 layout 字段已不用）
 //   translations: { [中文]: 'English' },  // 翻译记忆：English / 中英版的英文（整套共用，engine/lang.js）
@@ -31,9 +33,11 @@
 //   { kind:'floor', floorId, image?:'asset:…' }  楼层章节页
 //   { kind:'view', floorId, layout:'auto'|'framed'|'full', image:'asset:…', room:'客厅', roomEn:'LIVING AREA',
 //     subtitle:'全景', materials:[{ role:'柜体 & 柜门', materialId }], notes:[{ label:'隐形门 · Hidden door', text:'液压闭门器，配反弹器' }],
-//     sourcePage?: 9, tag?:'3d' }               效果图页（tag:'3d' = AI 全屋立体图）
+//     sourcePage?: 9, tag?:'3d' }               效果图页（tag:'3d' = 3D 户型图）
 //                                                layout：auto = 整套自动排（b/design.js planViews）；full = 满版大图（满版带标题：视角名 + 材料）；framed = 图文
 //   { kind:'team' }                              本案服务团队（按 info.team 生成）
+//   任何页都可以带 adjust?:{ [组名]: 块 { dx, dy, k } | 照片 { box?, view? } } —— 设计师在画布上手动调的位置 / 大小 / 取景
+//                                                （engine/adjust.js；没调过就没有这个字段，版面全由程序排）
 
 /** 版式版本：2 = B「格物」起的数据结构（C「安然」只换版式，数据不变，所以不升版本） */
 export const LAYOUT_VERSION = 2;

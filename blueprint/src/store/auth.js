@@ -2,7 +2,7 @@
 // 登录成功后在本机 localStorage 记一个通行票（同样是哈希，不含密码）。
 
 const AUTH_KEY = 'blueprint.auth.v1'; // 与 UKIR STUDIO 同一组账号密码
-const AUTH_HASH = '351a011641198a2ab04b35e22c5cf55fb1d81cd4cce829d5f3795b4565025ad2';
+const AUTH_HASH = '6f910b33d131f1d6ba5eb446af4fa027cfd38116c1c9b0e0b5d2a3016b3c8bc8';
 
 async function sha256Hex(text) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));

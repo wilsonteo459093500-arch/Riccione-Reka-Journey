@@ -6,7 +6,7 @@ export const DEFAULT_SETTINGS = {
   apiKey: '',
   // 出图模型（Material Board 实拍排版 / 3D 全屋立体图）：Nano Banana 2；不可用时可在设置换回 gemini-2.5-flash-image
   model: 'gemini-3.1-flash-image-preview',
-  // 3D 全屋立体图优先用 Pro 图像模型（空间推理更强），失败自动回退到 model
+  // 3D 立体图（俯视户型图）优先用 Pro 图像模型（空间推理更强），失败自动回退到 model
   model3d: 'gemini-3-pro-image-preview',
   baseUrl: 'https://generativelanguage.googleapis.com',
   watermark: 'logo', // 下载 Material Board 图时右下角印 sAil 溪岸 logo；'' = 关闭（旧版 UKIR STUDIO 也是这个值）

@@ -6,6 +6,7 @@ import { planViews, TEAM_MAX, materialSlices } from '../../engine/b/design.js';
 import { COMPANY_PAGES_B, companyFieldsB, companyImagesB, companyFieldByLabel, legacyOverrides } from '../../engine/b/company.js';
 import { isMissWarning, langOf } from '../../engine/lang.js';
 import { findFloor } from '../../engine/model.js';
+import { dropListAdjust } from '../../engine/adjust.js';
 
 /** 材料「部位」常用词（输入框下拉建议） */
 export const ROLE_SUGGESTIONS = ['柜体 & 柜门', '柜门', '柜体', '见光板', '开放柜', '岩板', '台面', '墙板', '玻璃门', '背板', '床头板', '地板', '拉手'];
@@ -83,7 +84,13 @@ export const toggleSlide = (project, id) => updateSlide(project, id, (s) => ({ .
 
 /** 效果图页的 materials / notes 列表 */
 export const updateViewList = (project, id, listName, fn) =>
-  updateSlide(project, id, (s) => ({ ...s, [listName]: fn(s[listName] || []) }));
+  updateSlide(project, id, (s) => {
+    const prev = s[listName] || [];
+    const next = fn(prev);
+    // 条目删了 / 加了 / 换了顺序：按序号记的手动调整（'notes.1.text'）会对到别的条目上 → 丢掉（只改了某一条的字不算）
+    const reshaped = !Array.isArray(next) || next.length !== prev.length || next.filter((x, i) => x !== prev[i]).length > 1;
+    return { ...(reshaped ? dropListAdjust(s, listName) : s), [listName]: next };
+  });
 
 // ---------------------------------------------------------------------------
 // 排序 / 复制 / 删除 / 新增
@@ -295,8 +302,10 @@ export function splitView(project, id, newId) {
   const half = Math.ceil(total / 2);
   const n1 = Math.min(notes.length, half);
   const m1 = Math.max(0, half - notes.length);
-  const first = { ...s, layout: 'framed', notes: notes.slice(0, n1), materials: mats.slice(0, m1) };
-  const second = { ...clone(s), id: newId, enabled: true, layout: 'framed', notes: clone(notes.slice(n1)), materials: clone(mats.slice(m1)) };
+  // 两页的条目都重排了：按序号记的手动调整不再对得上，丢掉（照片的调整留着）
+  const base = dropListAdjust(dropListAdjust(s, 'notes'), 'materials');
+  const first = { ...base, layout: 'framed', notes: notes.slice(0, n1), materials: mats.slice(0, m1) };
+  const second = { ...clone(base), id: newId, enabled: true, layout: 'framed', notes: clone(notes.slice(n1)), materials: clone(mats.slice(m1)) };
   return { ...project, slides: [...slides.slice(0, i), first, second, ...slides.slice(i + 1)] };
 }
 

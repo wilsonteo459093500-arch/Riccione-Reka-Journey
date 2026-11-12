@@ -1,11 +1,15 @@
-// 3D 全屋立体图纯函数测试：提示词、方位、楼层 / 参考图选择、插入提案页（不发网络请求）
+// 3D 户型图纯函数测试：提示词、视角、输出比例、裁剪框、AI 回复解析、楼层 / 参考图选择、插入提案页（不发网络请求）
 import assert from 'node:assert/strict';
 import { test } from './harness.mjs';
 import {
-  buildDollhousePrompt, resolveAngle, floorNameOf, dollhouseFloors, ensureFloor, setFloorPlan, setFloorImage,
-  addRender3d, removeRender3d, floorViewSlides, floorRoomsList, defaultRefIds, makeDollhouseSlide,
-  dollhouseInsertIndex, insertDollhouseSlide, findDollhouseSlides, hasFloorSlide, ALL_FLOOR, ALL_FLOOR_ID, MAX_REFS,
+  resolveScope, pickAspect, normalizeBox, isFullBox, dragCropBox, regionBox, FULL_BOX, MIN_CROP, parseRegionResponse, dollhouseFloors,
+  ensureFloor, setFloorPlan, setFloorPlanUpload, setFloorRegion, setFloorPlanCrop, setFloorImage, setRenderInfo, addRender3d, removeRender3d,
+  floorViewSlides, makeDollhouseSlide, dollhouseInsertIndex, insertDollhouseSlide, findDollhouseSlides, hasFloorSlide, ALL_FLOOR_ID,
+  DOLLHOUSE_VIEWS,
 } from '../src/ai/dollhouse.js';
+import * as dollhouse from '../src/ai/dollhouse.js';
+import * as prompts from '../src/ai/prompts.js';
+import { planRegionPrompt } from '../src/ai/prompts.js';
 import { renderDeck } from '../src/engine/deck.js';
 import { newProject, assembleDeck } from '../src/engine/model.js';
 
@@ -34,39 +38,81 @@ function sample() {
   return newProject({ id: 'p1', floors, slides: assembleDeck(design) });
 }
 
-test('resolveAngle：中文 / 缩写 / 对象都认得，认不出 = 东南', () => {
-  assert.equal(resolveAngle('东南').id, 'south-east');
-  assert.equal(resolveAngle('NW').id, 'north-west');
-  assert.equal(resolveAngle('south west').id, 'south-west');
-  assert.equal(resolveAngle({ id: 'north-east' }).id, 'north-east');
-  assert.equal(resolveAngle('乱填').id, 'south-east');
+test('resolveScope：认不出 = 只做主房间；旧版视角只剩名字（给生成记录里的旧图用）', () => {
+  assert.equal(resolveScope('all'), 'all');
+  assert.equal(resolveScope('乱填'), 'room');
+  assert.deepEqual(DOLLHOUSE_VIEWS.map((v) => [v.id, v.zh]), [['top', '正俯视'], ['tilt', '微倾俯视']]);
 });
 
-test('buildDollhousePrompt：楼层名、方位、参考图张数、空间清单、风格备注都写进提示词', () => {
-  const prompt = buildDollhousePrompt({
-    floor: { id: 'f1', zh: '一楼', en: 'Ground floor' },
-    angle: '西北',
-    style: 'warm evening light',
-    roomsList: [{ zh: '客厅', en: 'living area' }, '饭厅', { zh: '客厅', en: 'living area' }],
-    refCount: 3,
-  });
-  assert.ok(prompt.includes('GROUND FLOOR (一楼)'), '楼层名');
-  assert.ok(/north-west/i.test(prompt), '方位');
-  assert.ok(prompt.includes('images 2–4'), '参考图是第 2–4 张');
-  assert.ok(prompt.includes('客厅 (LIVING AREA)') && prompt.includes('饭厅'), '空间清单');
-  assert.equal(prompt.split('客厅 (LIVING AREA)').length - 1, 1, '空间清单去重');
-  assert.ok(prompt.includes('warm evening light'), '风格备注');
-  assert.ok(/isometric/i.test(prompt) && /no text/i.test(prompt), '等轴测、无文字');
+test('旧的「AI 直接出整张图」流程已经整套拿掉（位置不准；现在由程序按核对过的坐标出图）', () => {
+  for (const name of ['generateDollhouse', 'refineDollhouse', 'checkDollhouse', 'analyzePlan', 'buildFloorplanPrompt', 'parseBriefResponse', 'parseCheckResponse', 'setFloorBrief']) {
+    assert.equal(dollhouse[name], undefined, name);
+  }
+  for (const name of ['floorplanPromptText', 'planBriefPrompt', 'checkPrompt', 'refinePrompt', 'reskinPromptText']) {
+    assert.equal(prompts[name], undefined, name);
+  }
 });
 
-test('buildDollhousePrompt：参考图张数夹在 0–4；全屋模式', () => {
-  const p1 = buildDollhousePrompt({ floor: ALL_FLOOR, refCount: 9 });
-  assert.ok(p1.includes(`images 2–${1 + MAX_REFS}`));
-  assert.ok(/ENTIRE home/.test(p1));
-  const p0 = buildDollhousePrompt({ floor: 'Ground floor', refCount: 0 });
-  assert.ok(!/images 2/.test(p0));
-  assert.equal(floorNameOf(null), 'floor');
-  assert.equal(floorNameOf({ zh: '三楼' }), '三楼');
+test('pickAspect：按图纸宽高取最近的输出比例', () => {
+  assert.equal(pickAspect(1000, 950), '1:1');
+  assert.equal(pickAspect(1600, 900), '16:9');
+  assert.equal(pickAspect(1500, 1000), '3:2');
+  assert.equal(pickAspect(1300, 1000), '4:3');
+  assert.equal(pickAspect(900, 1200), '3:4');
+  assert.equal(pickAspect(900, 1600), '9:16');
+  assert.equal(pickAspect(0, 0), '4:3', '读不到尺寸');
+});
+
+test('normalizeBox：认 0–1000 的 [ymin,xmin,ymax,xmax] 和 0–1 的 {x,y,w,h}；夹在图内；太小 = null', () => {
+  assert.deepEqual(normalizeBox([100, 200, 900, 600]), { x: 0.2, y: 0.1, w: 0.4, h: 0.8 });
+  assert.deepEqual(normalizeBox({ x: 0.2, y: 0.1, w: 0.4, h: 0.8 }), { x: 0.2, y: 0.1, w: 0.4, h: 0.8 });
+  assert.deepEqual(normalizeBox([900, 600, 100, 200]), { x: 0.2, y: 0.1, w: 0.4, h: 0.8 }, '写反了也认');
+  assert.deepEqual(normalizeBox([-50, -50, 1200, 1100]), FULL_BOX, '出界夹回来');
+  assert.deepEqual(normalizeBox([100, 200, 900, 600], { pad: 0.05 }), { x: 0.15, y: 0.05, w: 0.5, h: 0.9 });
+  assert.equal(normalizeBox([100, 200, 120, 220]), null, '太小');
+  assert.equal(normalizeBox('乱填'), null);
+  assert.equal(normalizeBox([1, 2, 3]), null);
+  assert.equal(isFullBox(FULL_BOX), true);
+  assert.equal(isFullBox(null), true);
+  assert.equal(isFullBox({ x: 0.2, y: 0.1, w: 0.4, h: 0.8 }), false);
+});
+
+test('dragCropBox：拖动不出界，缩放不小于最小边长', () => {
+  const start = { x: 0.2, y: 0.2, w: 0.4, h: 0.4 };
+  assert.deepEqual(dragCropBox(start, 'move', 0.9, -0.9), { x: 0.6, y: 0, w: 0.4, h: 0.4 });
+  const se = dragCropBox(start, 'se', 0.1, 0.2);
+  assert.ok(Math.abs(se.w - 0.5) < 1e-9 && Math.abs(se.h - 0.6) < 1e-9 && se.x === 0.2 && se.y === 0.2);
+  const nw = dragCropBox(start, 'nw', 0.9, 0.9);
+  assert.ok(Math.abs(nw.w - MIN_CROP) < 1e-9 && Math.abs(nw.h - MIN_CROP) < 1e-9, '拖过头 = 最小框');
+  assert.ok(Math.abs(nw.x + nw.w - 0.6) < 1e-9, '右边不动');
+  const e = dragCropBox(start, 'e', 5, 5);
+  assert.ok(Math.abs(e.x + e.w - 1) < 1e-9 && e.h === 0.4, '只动右边，停在图边');
+});
+
+test('parseRegionResponse：带代码块 / 字段名变体都能读；整层 mainRoom = drawing；读不懂抛错', () => {
+  const r = parseRegionResponse('```json\n{"kind":"room","roomName":"STUDY ROOM","drawing":[60,65,910,612],"main_room":[95,160,845,595],}\n```');
+  assert.equal(r.kind, 'room');
+  assert.equal(r.roomName, 'STUDY ROOM');
+  assert.ok(r.drawing.x + r.drawing.w < 0.65, '右边的装饰栏在框外');
+  assert.ok(r.mainRoom.x > r.drawing.x && r.mainRoom.w < r.drawing.w, '主房间框比图纸框小');
+  assert.deepEqual(regionBox(r, 'room'), r.mainRoom);
+  assert.deepEqual(regionBox(r, 'all'), r.drawing);
+  assert.deepEqual(regionBox(null, 'room'), FULL_BOX);
+
+  const f = parseRegionResponse('{"kind":"floor","roomName":"","drawing":[50,50,950,700],"mainRoom":[100,100,400,400]}');
+  assert.equal(f.kind, 'floor');
+  assert.deepEqual(f.mainRoom, f.drawing);
+
+  const half = parseRegionResponse('{"kind":"room","mainRoom":[100,100,800,600]}');
+  assert.deepEqual(half.drawing, FULL_BOX, '没给图纸框 = 整张图');
+  assert.throws(() => parseRegionResponse('{"kind":"room"}'));
+  assert.throws(() => parseRegionResponse('我看不出来'));
+});
+
+test('找图纸范围的提示词', () => {
+  const region = planRegionPrompt();
+  assert.ok(/\[ymin, xmin, ymax, xmax\]/.test(region) && /"drawing"/.test(region) && /"mainRoom"/.test(region));
+  assert.ok(/Exclude slide titles, logos, decorative panels/.test(region));
 });
 
 test('dollhouseFloors / ensureFloor：没有楼层 → 「全屋」虚拟楼层，第一次用到才写进项目', () => {
@@ -90,18 +136,44 @@ test('楼层修改是不可变更新：平面图 / 背景 / 立体图历史', ()
   assert.deepEqual(p2.floors[0].renders3d, ['asset:r1', 'asset:r2']);
   assert.deepEqual(addRender3d(p2, 'f1', 'asset:r1').floors[0].renders3d, ['asset:r2', 'asset:r1'], '重复加 = 移到最新');
   assert.deepEqual(removeRender3d(p2, 'f1', 'asset:r1').floors[0].renders3d, ['asset:r2']);
+  const p3 = setRenderInfo(setRenderInfo(p2, 'f1', 'asset:r1', { view: 'top' }), 'f1', 'asset:r1', { check: { ok: true, issues: [] } });
+  assert.deepEqual(p3.floors[0].render3dInfo, { 'asset:r1': { view: 'top', check: { ok: true, issues: [] } } }, '合并更新');
+  assert.deepEqual(removeRender3d(p3, 'f1', 'asset:r1').floors[0].render3dInfo, {}, '删图连同它的信息');
   assert.equal(setFloorImage(p, 'f2', 'asset:bg').floors[1].image, 'asset:bg');
   assert.equal(setFloorImage(p, 'f2', '').floors[1].image, null);
 });
 
-test('参考图：本层启用的效果图；默认取前 4 个不同空间', () => {
+test('平面图：上传 → 认范围 → 确认裁剪；换图后范围作废；移除全部清掉', () => {
+  const p = sample();
+  const up = setFloorPlanUpload(p, 'f1', 'asset:src');
+  assert.equal(up.floors[0].plan, 'asset:src');
+  assert.equal(up.floors[0].planSource, 'asset:src');
+  assert.equal(up.floors[0].planCrop, null);
+  const region = { kind: 'room', roomName: 'STUDY ROOM', drawing: FULL_BOX, mainRoom: { x: 0.1, y: 0.1, w: 0.5, h: 0.8 } };
+  const withRegion = setFloorRegion(up, 'f1', region);
+  const crop = setFloorPlanCrop(withRegion, 'f1', { plan: 'asset:crop', source: 'asset:src', crop: region.mainRoom, scope: 'room' });
+  assert.equal(crop.floors[0].plan, 'asset:crop');
+  assert.equal(crop.floors[0].planSource, 'asset:src', '原图留着，可以重新框选');
+  assert.deepEqual(crop.floors[0].planCrop, region.mainRoom);
+  assert.equal(crop.floors[0].planScope, 'room');
+  assert.deepEqual(crop.floors[0].planRegion, region);
+  const again = setFloorPlanCrop(crop, 'f1', { plan: 'asset:crop2', crop: FULL_BOX, scope: 'all' });
+  assert.equal(again.floors[0].planSource, 'asset:src');
+  assert.equal(again.floors[0].planScope, 'all');
+  const legacy = setFloorPlanCrop(setFloorPlan(p, 'f1', 'asset:old'), 'f1', { plan: 'asset:oldcrop', crop: FULL_BOX });
+  assert.equal(legacy.floors[0].planSource, 'asset:old', '旧项目：原来那张当原图');
+  const reup = setFloorPlanUpload(crop, 'f1', 'asset:src2');
+  assert.equal(reup.floors[0].planRegion, null);
+  assert.equal(reup.floors[0].planCrop, null);
+  const gone = setFloorPlan(crop, 'f1', null).floors[0];
+  assert.deepEqual([gone.plan, gone.planSource, gone.planCrop, gone.planRegion, gone.plan3d], [null, null, null, null, null]);
+  assert.equal(crop.floors[1], p.floors[1], '别的楼层不动');
+});
+
+test('材质参考图：本层启用的效果图（AI 出材质样本时取前几张）', () => {
   const p = sample();
   assert.deepEqual(floorViewSlides(p, 'f1').map((s) => s.id), ['a', 'b', 'c', 'd', 'e', 'g']);
   assert.deepEqual(floorViewSlides(p, ALL_FLOOR_ID).map((s) => s.id), ['a', 'b', 'c', 'd', 'e', 'g', 'h']);
-  assert.deepEqual(defaultRefIds(p, 'f1'), ['a', 'b', 'd', 'e'], '客厅只取第一张');
-  assert.deepEqual(defaultRefIds(p, 'f2'), ['h']);
-  assert.deepEqual(floorRoomsList(p, 'f1').map((r) => r.zh), ['鞋柜', '客厅', '饭厅', 'KTV 娱乐室', '麻将房']);
-  assert.equal(floorRoomsList(p, 'f1')[1].en, 'LIVING AREA');
 });
 
 test('insertDollhouseSlide：插在楼层章节页之后；再插 = 只换图；add 模式追加在后面', () => {
@@ -111,7 +183,7 @@ test('insertDollhouseSlide：插在楼层章节页之后；再插 = 只换图；
   assert.equal(p1.slides[idx - 1].id, 'fl1');
   const d1 = p1.slides[idx];
   assert.equal(d1.tag, '3d');
-  assert.equal(d1.layout, 'full');
+  assert.equal(d1.layout, 'auto', '3D 户型图页一律图文：整张图放进去，不裁');
   assert.equal(d1.room, '一楼');
   assert.equal(d1.subtitle, '全屋立体图');
   assert.equal(d1.roomEn, '3D OVERVIEW');
@@ -130,6 +202,36 @@ test('insertDollhouseSlide：插在楼层章节页之后；再插 = 只换图；
   assert.equal(findDollhouseSlides(p3, 'f1').length, 2);
   assert.equal(hasFloorSlide(p3, 'f1'), true);
   assert.equal(hasFloorSlide(p3, 'nope'), false);
+});
+
+test('3D 户型图页：不管图多宽都用图文版式；整张图放进框里，不裁、不做水印取景；旧的满版 3D 页也照这个排', () => {
+  const p = sample();
+  const sq = insertDollhouseSlide(p, { floorId: 'f1', image: 'asset:sq', id: 'd1', ratio: 1 });
+  assert.equal(sq.slides.find((s) => s.id === 'd1').layout, 'auto');
+  const wide = insertDollhouseSlide(p, { floorId: 'f1', image: 'asset:w', id: 'd1', ratio: 16 / 9 });
+  assert.equal(wide.slides.find((s) => s.id === 'd1').layout, 'auto', '宽图也不用满版（满版会切掉上下）');
+  const framed = { ...wide, slides: wide.slides.map((s) => (s.id === 'd1' ? { ...s, layout: 'framed' } : s)) };
+  assert.equal(insertDollhouseSlide(framed, { floorId: 'f1', image: 'asset:sq', ratio: 1 }).slides.find((s) => s.id === 'd1').layout, 'framed', '设计师选的图文版式不动');
+  assert.equal(makeDollhouseSlide(null, 'asset:x', 'd9', { ratio: 0.75 }).layout, 'auto');
+  // 各种比例的图：出图里那张 3D 图没有 crop、是 contain，框的比例 = 图的比例、不出页面
+  const sizes = { 'asset:sq': { w: 2000, h: 2000 }, 'asset:w': { w: 2400, h: 1350 }, 'asset:tall': { w: 1500, h: 2400 }, 'asset:plan': { w: 2400, h: 1920 }, 'asset:pano': { w: 3000, h: 1200 } };
+  const meta = (src) => sizes[src] || null;
+  for (const [src, nat] of Object.entries(sizes)) {
+    for (const layout of ['auto', 'full']) {
+      const proj = insertDollhouseSlide(p, { floorId: 'f1', image: src, id: 'd1' });
+      const withLayout = { ...proj, slides: proj.slides.map((s) => (s.id === 'd1' ? { ...s, layout } : s)) }; // 'full' = 以前插进去的旧页
+      const page = renderDeck(withLayout, { meta }).find((r) => r.slideId === 'd1');
+      const img = page.els.find((el) => el.t === 'img' && el.src === src);
+      assert.ok(img, `${src} ${layout}`);
+      assert.equal(img.fit, 'contain', `${src} ${layout}`);
+      assert.equal(img.crop, undefined, `${src} ${layout}: 不裁`);
+      assert.ok(img.x >= 0 && img.y >= 0 && img.x + img.w <= 1920 && img.y + img.h <= 1080, `${src} ${layout}: 在页面里`);
+      if (nat.w / nat.h < 1.9) assert.ok(Math.abs(img.w / img.h - nat.w / nat.h) < 0.01, `${src} ${layout}: 框的比例 = 图的比例（${img.w}×${img.h}）`);
+      assert.ok(!(page.warnings || []).some((w) => /水印/.test(w)), `${src} ${layout}: 不报水印`);
+    }
+  }
+  const rendered = renderDeck(sq);
+  assert.ok(rendered.find((r) => r.slideId === 'd1').els.length > 0);
 });
 
 test('dollhouseInsertIndex：没有章节页 → 本层第一张效果图之前 → 本案材料之后', () => {

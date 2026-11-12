@@ -269,7 +269,8 @@ const sampleRect = (x, y, w, h, field) => ({ t: 'rect', x, y, w, h, fill: B.samp
 /** 缺效果图的位置：小样底色 + 页面里看得见的那几条边的细线（出血的边不画） */
 function missingImage(x, y, w, h) {
   const els = [sampleRect(x, y, w, h, 'image')];
-  const hairline = (rx, ry, rw, rh) => ({ t: 'rect', x: rx, y: ry, w: rw, h: rh, fill: B.hair });
+  // 细线和底色同一个栏位：手动调整版面时一起动
+  const hairline = (rx, ry, rw, rh) => ({ t: 'rect', x: rx, y: ry, w: rw, h: rh, fill: B.hair, edit: { field: 'image' } });
   if (y > 0) els.push(hairline(x, y, w, 1));
   if (y + h < H) els.push(hairline(x, y + h - 1, w, 1));
   if (x > 0) els.push(hairline(x, y, 1, h));
@@ -278,12 +279,15 @@ function missingImage(x, y, w, h) {
 }
 
 /** 细线框（没有图的材料小样） */
-const frame = (x, y, w, h) => [
-  { t: 'rect', x, y, w, h: 1, fill: B.hair },
-  { t: 'rect', x, y: y + h - 1, w, h: 1, fill: B.hair },
-  { t: 'rect', x, y, w: 1, h, fill: B.hair },
-  { t: 'rect', x: x + w - 1, y, w: 1, h, fill: B.hair },
-];
+const frame = (x, y, w, h, field) => {
+  const edit = field ? { edit: { field } } : {}; // 和小样同一个栏位：手动调整版面时一起动
+  return [
+    { t: 'rect', x, y, w, h: 1, fill: B.hair, ...edit },
+    { t: 'rect', x, y: y + h - 1, w, h: 1, fill: B.hair, ...edit },
+    { t: 'rect', x, y, w: 1, h, fill: B.hair, ...edit },
+    { t: 'rect', x: x + w - 1, y, w: 1, h, fill: B.hair, ...edit },
+  ];
+};
 
 /** 纸面栏里成组的字（楼层页、空栏的图文页）上下居中的中线：logo 底（192）与签名顶（944）的中间 */
 const MID = 568;
@@ -801,6 +805,11 @@ export function planViews(project, metaFn = () => null) {
   };
   for (const s of slides) {
     if (s?.kind !== 'view') continue;
+    // 3D 户型图：一律图文（整张放进去，不裁）—— 满版要铺满 16:9，会切掉图的上下；以前设成满版的旧页也照这个排
+    if (s.tag === '3d') {
+      plan.set(s.id, 'plate');
+      continue;
+    }
     const forced = forcedOf(s);
     if (forced) {
       plan.set(s.id, forced);
@@ -1124,7 +1133,7 @@ function matRow(x, y, w, row, lang, d, keyW = 0, keyMode = 'auto', noRule = fals
       els.push(ph.el);
       if (ph.scale > 1.15) warn.push(`${row.what}图片像素偏低：放大 ${ph.scale.toFixed(1)} 倍会发虚，建议换高清图`);
     } else {
-      els.push(sampleRect(x, top, d.sw, d.sh, row.codeField), ...frame(x, top, d.sw, d.sh));
+      els.push(sampleRect(x, top, d.sw, d.sh, row.codeField), ...frame(x, top, d.sw, d.sh, row.codeField));
     }
     const tx = x + d.sw + 24;
     const t = matRow(tx, top - 2, w - d.sw - 24, row, lang, { ...d, swatch: false, pad: 0 }, 0, 'auto', true);
@@ -1357,8 +1366,13 @@ export function bViewPlate(ctx, slide, plan = null) {
   // 竖图、方图（< 1.25）：半版照片上下贴边（宽 820–1050，按比例），页眉在纸面栏 —— 不缩成一小块、旁边空一大片
   const half = ratio < PLATE_HALF_RATIO;
   const halfW = Math.max(HALF.min, Math.min(HALF.max, Math.round(H * ratio)));
+  // 3D 户型图：没有水印、每一处都要看得到 —— 整张放进框里（contain），不裁、不做水印取景
+  const whole = s.tag === '3d';
   const putImage = (img) => {
-    if (s.image) {
+    if (s.image && whole) {
+      els.push({ t: 'img', x: img.x, y: img.y, w: img.w, h: img.h, src: s.image, fit: 'contain', ax: mirror ? 1 : 0, ay: 0.5, ...(nat ? { nat } : {}), edit: { field: 'image' } });
+      if (nat?.w) lowRes(warnings, Math.min(img.w / nat.w, img.h / nat.h));
+    } else if (s.image) {
       const r = rendering(img.x, img.y, img.w, img.h, s.image, nat);
       els.push(r.el);
       lowRes(warnings, r.scale);
@@ -1384,7 +1398,12 @@ export function bViewPlate(ctx, slide, plan = null) {
     // 其余：照片上下贴边（宽最多 1340；竖图 / 方图 820–1050），纸面栏放章节页式的大标题 + 短线 +「楼层　空间」，整组上下居中（楼层页的样子）。
     // 原图不够大（铺满 1080 高要放大超过 1.15 倍、或躲不开水印）：照片缩小到清楚为止、上下居中（上下留同样的纸）
     let box = { x: 0, y: 0, w: half ? halfW : Math.min(PLATE_IMG_MAX, Math.round(H * ratio)), h: H };
-    if (nat?.w && !fillsClean(nat, box.w, box.h)) {
+    if (whole) {
+      // 框的比例 = 图的比例：高最多整页、宽最多 1340，上下居中
+      const bw = Math.min(PLATE_IMG_MAX, Math.round(H * ratio));
+      const bh = Math.min(H, Math.round(bw / ratio));
+      box = { x: 0, y: Math.round((H - bh) / 2), w: bw, h: bh };
+    } else if (nat?.w && !fillsClean(nat, box.w, box.h)) {
       for (let ih = H - 20; ih >= 0.6 * H; ih -= 20) {
         const iw = half ? Math.min(halfW, Math.round(ih * ratio)) : Math.min(PLATE_IMG_MAX, Math.round(ih * ratio));
         if (fillsClean(nat, iw, ih)) {
@@ -1807,7 +1826,7 @@ export function bMaterials(ctx, mats = [], pageIndex = 0, pageCount = 1, perPage
         els.push(ph.el);
         if (ph.scale > 1.15) warnings.push(`${what}图片像素偏低：放大 ${ph.scale.toFixed(1)} 倍会发虚，建议换高清图`);
       } else {
-        els.push(sampleRect(x, y, size, plateH, field), ...frame(x, y, size, plateH));
+        els.push(sampleRect(x, y, size, plateH, field), ...frame(x, y, size, plateH, field));
       }
       els.push(...drawCaption(x, y + plateH + capGap, size, caps[i], lang, field).els);
       if (capInfo[i].cut) warnings.push(`${what}名称太长：页面上截短了（末尾「…」）—— 建议精简（去材料清单改）`);

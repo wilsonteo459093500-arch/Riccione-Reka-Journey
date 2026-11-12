@@ -116,7 +116,7 @@ export default function ViewInspector({ project, slide, change, notify, openPoli
       {is3d && (
         <div className="flex items-start gap-2 rounded-xl bg-bp-tint border border-bp-line px-3 py-2 text-[11px] text-bp-muted">
           <Box className="w-3.5 h-3.5 mt-px shrink-0 text-bp-eyebrow" />
-          AI 全屋立体图页 —— 重新生成请到「3D 立体图」；这里可以改标题、材料和说明。
+          3D 户型图页 —— 要换图请到「3D 立体图」；这里可以改标题、材料和说明。
         </div>
       )}
 

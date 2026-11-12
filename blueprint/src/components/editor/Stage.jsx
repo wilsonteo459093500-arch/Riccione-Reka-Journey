@@ -1,9 +1,11 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronLeft, ChevronRight, Columns2, Sparkles, LayoutTemplate, TriangleAlert, Wand2, EyeOff, MousePointerClick,
-  RectangleHorizontal, PanelLeft, Shuffle, Languages,
+  RectangleHorizontal, PanelLeft, Shuffle, Languages, Move, RotateCcw,
 } from 'lucide-react';
 import SlideCanvas from '../SlideCanvas.jsx';
+import AdjustLayer from './AdjustLayer.jsx';
+import { applyAdjust } from '../../engine/adjust.js';
 import { resolveUrl, metaOf } from '../../store/assets.js';
 import { langOf } from '../../engine/lang.js';
 import { LANG_OPTIONS, LANG_VERSION, toolbarCompactWidth } from '../../lib/langUi.js';
@@ -48,7 +50,7 @@ function LangControls({ lang, onLang, missingCount, onTranslate, compact }) {
 
 function Toolbar({
   page, navIndex, navTotal, pageNo, exportTotal, onPrev, onNext, compare, canCompare, onToggleCompare, isView, onPolish, onGlobalLayout, hasViews,
-  lang, onLang, missingCount, onTranslate, compact,
+  lang, onLang, missingCount, onTranslate, compact, adjusting, onToggleAdjust,
 }) {
   // 页名：画布区够宽（桌面）时至少留 96px —— 放不下就让语言组折到第二行，不让页名被挤没（窗口变宽页名反而消失）；
   // 很窄（手机）时页名只是提示（检查器顶上也有），挤得只剩一两个字就干脆不显示，留作空白
@@ -98,6 +100,17 @@ function Toolbar({
             {!compact && '对照原稿'}
           </button>
         )}
+        <button
+          type="button"
+          onClick={onToggleAdjust}
+          aria-pressed={adjusting}
+          title="手动调整这一页：拖动照片和文字换位置、改大小，照片可以改取景"
+          aria-label="调整版面"
+          className={`${btnGhost} ${compact ? '!px-2' : ''} ${adjusting ? '!bg-bp-dark !text-bp-light !border-bp-dark' : ''}`}
+        >
+          <Move className="w-3.5 h-3.5" />
+          {!compact && '调整版面'}
+        </button>
         <Menu
           label={compact ? '润色' : 'AI 润色'}
           icon={Sparkles}
@@ -127,14 +140,25 @@ function Toolbar({
  * @param {{ page:object, slide:object, project:object, navIndex:number, navTotal:number, pageNo?:number, exportTotal:number,
  *   onPrev(), onNext(), onPick(field, el), activeField?:string, onClearPick(), compare:boolean, onToggleCompare(),
  *   onFix(fix), onPolish(onlyThis?:boolean), onGlobalLayout(mode), onToggleEnabled(),
- *   onLang?(lang:'zh'|'en'|'bi'), missingCount?:number, onTranslate?() }} props
+ *   onLang?(lang:'zh'|'en'|'bi'), missingCount?:number, onTranslate?(),
+ *   onAdjust?(key, value|null, soft?), onClearAdjust?(pageIndex) }} props
  *   onLang：顶栏的提案语言切换；missingCount：整套缺英文的条数（English / 中英版时显示「AI 翻译 · N」）
  */
 export default function Stage({
   page, slide, project, navIndex, navTotal, pageNo, exportTotal, onPrev, onNext, onPick, activeField, onClearPick, compare,
-  onToggleCompare, onFix, onPolish, onGlobalLayout, onToggleEnabled, onLang, missingCount = 0, onTranslate,
+  onToggleCompare, onFix, onPolish, onGlobalLayout, onToggleEnabled, onLang, missingCount = 0, onTranslate, onAdjust, onClearAdjust,
 }) {
   const areaRef = useRef(null);
+  // 「调整版面」：打开后在画布上拖动照片 / 文字块（AdjustLayer）；关着时和原来一样（点一下跳到右侧输入框）
+  const [adjusting, setAdjusting] = useState(false);
+  const [draft, setDraft] = useState(null); // 拖动中的草稿 { key, value }：实时预览，松手才写进项目
+  useEffect(() => setDraft(null), [page?.key]);
+  // 自动排版的这一页（没套手动调整）：调整都是相对它算的
+  const autoPage = useMemo(() => (page?.adjusted ? { ...page, els: page.autoEls } : page), [page]);
+  const shownPage = useMemo(
+    () => (adjusting && draft && autoPage ? applyAdjust(autoPage, { ...(slide?.adjust || {}), [draft.key]: draft.value }, page?.pageIndex || 0) : page),
+    [adjusting, draft, autoPage, slide?.adjust, page]
+  );
   const size = useElementSize(areaRef);
   const isView = slide?.kind === 'view';
   const lang = langOf(project);
@@ -191,12 +215,18 @@ export default function Stage({
         missingCount={missingCount}
         onTranslate={onTranslate}
         compact={compact}
+        adjusting={adjusting}
+        onToggleAdjust={() => {
+          setAdjusting((v) => !v);
+          setDraft(null);
+          onClearPick?.();
+        }}
       />
 
       <div
         ref={areaRef}
         onClick={onClearPick}
-        className="relative flex-1 min-h-0 flex items-center justify-center"
+        className={`relative flex-1 min-h-0 flex items-center justify-center ${adjusting ? 'overflow-hidden' : ''}`}
       >
         {page && slideW > 0 && (
           <div className="flex items-center" style={{ gap: GAP }}>
@@ -206,14 +236,34 @@ export default function Stage({
                 onClick={(e) => e.stopPropagation()}
               >
                 <SlideCanvas
-                  slide={page}
+                  slide={shownPage}
                   width={slideW}
                   resolveUrl={resolveUrl}
-                  interactive
+                  interactive={!adjusting}
                   onPick={onPick}
-                  activeField={activeField || undefined}
+                  activeField={adjusting ? undefined : activeField || undefined}
                 />
               </div>
+              {adjusting && autoPage && (
+                <AdjustLayer
+                  key={page.key}
+                  page={autoPage}
+                  adjust={slide?.adjust}
+                  scale={slideW / 1920}
+                  areaEl={areaRef.current}
+                  onDraft={setDraft}
+                  onCommit={(key, value, soft) => {
+                    setDraft(null);
+                    onAdjust?.(key, value, soft);
+                  }}
+                  onExit={() => {
+                    setAdjusting(false);
+                    setDraft(null);
+                    // 焦点回到开关上（键盘用户不会掉到页面开头）
+                    areaRef.current?.parentElement?.querySelector('button[aria-label="调整版面"]')?.focus();
+                  }}
+                />
+              )}
               {!page.enabled && (
                 <div className="absolute left-3 top-3 inline-flex items-center gap-2 rounded-full bg-white/95 shadow px-3 py-1 text-xs text-bp-muted">
                   <EyeOff className="w-3.5 h-3.5" />
@@ -262,9 +312,31 @@ export default function Stage({
             })}
           </ul>
         ) : (
-          <p className="flex items-center justify-center gap-1.5 text-[11px] text-bp-faint">
-            <MousePointerClick className="w-3.5 h-3.5" />
-            点画面上的文字或图片，右侧就会跳到对应的输入框 · ← → 翻页 · Alt + ↑ ↓ 调整顺序
+          <p className="flex flex-wrap items-center justify-center gap-1.5 text-[11px] text-bp-faint">
+            {adjusting ? (
+              <>
+                <Move className="w-3.5 h-3.5" />
+                点照片或文字选中 · 拖动换位置，拖角改大小 · 照片可在框里拖动取景、滚轮缩放 · 方向键微调 · 按住 Alt 不吸附 · Esc 退出
+              </>
+            ) : (
+              <>
+                <MousePointerClick className="w-3.5 h-3.5" />
+                点画面上的文字或图片，右侧就会跳到对应的输入框 · ← → 翻页 · Alt + ↑ ↓ 调整顺序
+              </>
+            )}
+          </p>
+        )}
+        {page?.adjusted && (
+          <p className="flex justify-center mt-1.5 text-[11px]">
+            <button
+              type="button"
+              onClick={() => onClearAdjust?.(page.pageIndex || 0)}
+              className="inline-flex items-center gap-1 text-bp-eyebrow hover:underline"
+              title="这一页的照片和文字全部回到程序排的位置"
+            >
+              <RotateCcw className="w-3 h-3" />
+              这一页有手动调整 · 整页恢复自动排版
+            </button>
           </p>
         )}
       </div>
