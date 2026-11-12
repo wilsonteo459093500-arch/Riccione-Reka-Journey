@@ -15,8 +15,6 @@ export const PLAN_SOURCE_EDGE = 3200; // 上传的原图最长边（裁剪之后
 export const PLAN_EDGE = 2000; // 发给 AI 的平面图最长边
 export const CROP_MIN_EDGE = 1600; // 裁出来的平面图不到这么大就放大
 export const LOOK_EDGE = 1280; // 找图纸范围时的图片最长边
-/** 满版大图要这么宽（16:9 = 1.78）；更方的立体图插入提案时用自动版式（图文页，整张图不被裁） */
-export const WIDE_RATIO = 1.6;
 
 /** AI 框图优先用的模型（更强的空间理解）；不可用时自动回退到 gemini.js 的候选列表 */
 export const PLAN_MODELS = ['gemini-3-pro-preview', 'gemini-2.5-pro'];
@@ -359,8 +357,11 @@ export function floorViewSlides(project, floorId) {
 export const findDollhouseSlides = (project, floorId) =>
   (project?.slides || []).filter((s) => s.kind === 'view' && s.tag === '3d' && (s.floorId || ALL_FLOOR_ID) === floorId);
 
-/** ratio = 图片宽 / 高：够宽（≥ 1.6）才用满版；方图、竖图用自动版式（排成图文页，整张图不被裁）。不知道比例 = 满版 */
-const slideLayoutFor = (ratio) => (ratio > 0 && ratio < WIDE_RATIO ? 'auto' : 'full');
+/**
+ * 3D 户型图页一律用自动版式：排成图文页，整张图放进去、不裁（engine/b/design.js 里 tag '3d' 的图用 contain）。
+ * 满版要铺满 16:9，会切掉图的上下 —— 户型图每一处都要看得到。
+ */
+const slideLayoutFor = () => 'auto';
 
 export function makeDollhouseSlide(floor, image, id = uid('s'), { ratio = 0 } = {}) {
   const whole = !floor || floor.id === ALL_FLOOR_ID;

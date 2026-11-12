@@ -183,7 +183,7 @@ test('insertDollhouseSlide：插在楼层章节页之后；再插 = 只换图；
   assert.equal(p1.slides[idx - 1].id, 'fl1');
   const d1 = p1.slides[idx];
   assert.equal(d1.tag, '3d');
-  assert.equal(d1.layout, 'full');
+  assert.equal(d1.layout, 'auto', '3D 户型图页一律图文：整张图放进去，不裁');
   assert.equal(d1.room, '一楼');
   assert.equal(d1.subtitle, '全屋立体图');
   assert.equal(d1.roomEn, '3D OVERVIEW');
@@ -204,17 +204,32 @@ test('insertDollhouseSlide：插在楼层章节页之后；再插 = 只换图；
   assert.equal(hasFloorSlide(p3, 'nope'), false);
 });
 
-test('insertDollhouseSlide：方图 / 竖图用自动版式（图文页，不被满版裁掉）；宽图仍满版', () => {
+test('3D 户型图页：不管图多宽都用图文版式；整张图放进框里，不裁、不做水印取景；旧的满版 3D 页也照这个排', () => {
   const p = sample();
   const sq = insertDollhouseSlide(p, { floorId: 'f1', image: 'asset:sq', id: 'd1', ratio: 1 });
   assert.equal(sq.slides.find((s) => s.id === 'd1').layout, 'auto');
   const wide = insertDollhouseSlide(p, { floorId: 'f1', image: 'asset:w', id: 'd1', ratio: 16 / 9 });
-  assert.equal(wide.slides.find((s) => s.id === 'd1').layout, 'full');
-  const swapped = insertDollhouseSlide(wide, { floorId: 'f1', image: 'asset:sq', ratio: 1 });
-  assert.equal(swapped.slides.find((s) => s.id === 'd1').layout, 'auto', '满版页换成方图 → 改回自动版式');
+  assert.equal(wide.slides.find((s) => s.id === 'd1').layout, 'auto', '宽图也不用满版（满版会切掉上下）');
   const framed = { ...wide, slides: wide.slides.map((s) => (s.id === 'd1' ? { ...s, layout: 'framed' } : s)) };
   assert.equal(insertDollhouseSlide(framed, { floorId: 'f1', image: 'asset:sq', ratio: 1 }).slides.find((s) => s.id === 'd1').layout, 'framed', '设计师选的图文版式不动');
   assert.equal(makeDollhouseSlide(null, 'asset:x', 'd9', { ratio: 0.75 }).layout, 'auto');
+  // 各种比例的图：出图里那张 3D 图没有 crop、是 contain，框的比例 = 图的比例、不出页面
+  const sizes = { 'asset:sq': { w: 2000, h: 2000 }, 'asset:w': { w: 2400, h: 1350 }, 'asset:tall': { w: 1500, h: 2400 }, 'asset:plan': { w: 2400, h: 1920 }, 'asset:pano': { w: 3000, h: 1200 } };
+  const meta = (src) => sizes[src] || null;
+  for (const [src, nat] of Object.entries(sizes)) {
+    for (const layout of ['auto', 'full']) {
+      const proj = insertDollhouseSlide(p, { floorId: 'f1', image: src, id: 'd1' });
+      const withLayout = { ...proj, slides: proj.slides.map((s) => (s.id === 'd1' ? { ...s, layout } : s)) }; // 'full' = 以前插进去的旧页
+      const page = renderDeck(withLayout, { meta }).find((r) => r.slideId === 'd1');
+      const img = page.els.find((el) => el.t === 'img' && el.src === src);
+      assert.ok(img, `${src} ${layout}`);
+      assert.equal(img.fit, 'contain', `${src} ${layout}`);
+      assert.equal(img.crop, undefined, `${src} ${layout}: 不裁`);
+      assert.ok(img.x >= 0 && img.y >= 0 && img.x + img.w <= 1920 && img.y + img.h <= 1080, `${src} ${layout}: 在页面里`);
+      if (nat.w / nat.h < 1.9) assert.ok(Math.abs(img.w / img.h - nat.w / nat.h) < 0.01, `${src} ${layout}: 框的比例 = 图的比例（${img.w}×${img.h}）`);
+      assert.ok(!(page.warnings || []).some((w) => /水印/.test(w)), `${src} ${layout}: 不报水印`);
+    }
+  }
   const rendered = renderDeck(sq);
   assert.ok(rendered.find((r) => r.slideId === 'd1').els.length > 0);
 });
