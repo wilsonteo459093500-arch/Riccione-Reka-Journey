@@ -615,22 +615,12 @@
   "风",
   "style"
  ],
+ "_about_series": "series = 溪岸五大系列（id 就是 src/shared/series.js 的 key，品牌手册 p.6 的顺序）；项目文件夹名字里第一个读到的系列 → 案例的 series（员工在案例库里定过的不盖掉）。seriesHints = 只暗示风格、不算系列的词：自然线（骨骼线 / 空山 / 织的总称）、庭前（不是五大系列之一）。",
  "series": [
   {
-   "id": "自然线",
-   "zh": "自然线",
-   "en": "Natural Line",
-   "words": [
-    "自然线"
-   ],
-   "implies": [
-    "原木"
-   ]
-  },
-  {
-   "id": "骨骼线",
+   "id": "skeleton",
    "zh": "骨骼线",
-   "en": "Skeletal Line",
+   "en": "Skeleton Line",
    "words": [
     "骨骼线"
    ],
@@ -640,9 +630,9 @@
    ]
   },
   {
-   "id": "空山",
+   "id": "mountain",
    "zh": "空山",
-   "en": "Kongshan",
+   "en": "Empty Mountain",
    "words": [
     "空山"
    ],
@@ -652,9 +642,9 @@
    ]
   },
   {
-   "id": "织",
+   "id": "weaving",
    "zh": "织",
-   "en": "Zhi",
+   "en": "Weaving",
    "words": [
     "织系列"
    ],
@@ -665,6 +655,42 @@
    "implies": [
     "侘寂",
     "南洋"
+   ]
+  },
+  {
+   "id": "misty",
+   "zh": "雾山",
+   "en": "Misty Mountain",
+   "words": [
+    "雾山"
+   ],
+   "implies": [
+    "极简",
+    "奶油"
+   ]
+  },
+  {
+   "id": "wabi",
+   "zh": "侘寂东方",
+   "en": "Wabi-Sabi Eastern",
+   "words": [
+    "侘寂东方"
+   ],
+   "implies": [
+    "侘寂"
+   ]
+  }
+ ],
+ "seriesHints": [
+  {
+   "id": "自然线",
+   "zh": "自然线",
+   "en": "Natural Line",
+   "words": [
+    "自然线"
+   ],
+   "implies": [
+    "原木"
    ]
   },
   {

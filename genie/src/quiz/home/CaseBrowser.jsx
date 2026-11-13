@@ -1,12 +1,14 @@
 // 看全部的家（docs/showcase/SPEC.md §2，懒载入）：满屏的一层 —— 顶上「全部的家 · {0} 个家」+ ✕；
-// 筛选（种类 · 房子 · 房间 · 风格，数字 = browseCases 的 facets，没筛选时的数）；按和这位客人像不像排好的案例卡；
+// 筛选（种类 · 系列 · 房子 · 房间 · 风格，数字 = browseCases 的 facets，没筛选时的数）；按和这位客人像不像排好的案例卡；
+//   系列（溪岸五大系列，docs/showcase/SERIES.md §3）：写了系列的真实案例才有；最适合这位客人的那个系列，小牌子上一个金色的小点。
 // 页脚：选了的小头像 + 「选好了」（关掉这一层，回到案例那一步）。
 //   选 / 取消 和案例那一步是同一个 toggle（CasesStep 的；最多三个，「最多三个哦」）—— 关掉这一层、打开详情、换筛选都不会丢。
 //   点卡片 → 案例详情（在这一层上面；「下一个」= 筛选结果里的下一个）。
 //   readOnly（蓝图的参考案例）：只看，不能选，没有页脚。
 //   雷区一定要避开的家永远不在这里（照旧说「已经帮你避开用了『X』的家」）；草稿 / 隐藏的 / 没有业主同意的真实项目也不会有（guestPool）。
 // 设备上的照片：卡片只读封面 + 两张小图（useCardCovers），关掉时收回。挂在 body 上（createPortal）。
-// props：{ profile, cases, isOn(c), onToggleCase(c, e) → 'on' | 'off' | 'full', chosen: Case[], pickedThumb(c) → url, onClose, readOnly }
+// props：{ profile, cases, isOn(c), onToggleCase(c, e) → 'on' | 'off' | 'full', chosen: Case[], pickedThumb(c) → url, onClose, readOnly,
+//          initialFilters（打开时先筛好，例如系列卡的「看空山的家」= { series: ['mountain'] }）}
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -17,9 +19,10 @@ import * as C from '../../shared/cases.js';
 import CaseCard from './CaseCard.jsx';
 import CaseDetail, { useCaseBoards } from './CaseDetail.jsx';
 import { pushLayer, lockScroll, useCardCovers, inWish, noSave } from './CaseGallery.jsx';
+import { useSeriesTop } from './SeriesCard.jsx';
 import './showcase.css';
 
-const EMPTY = { kind: 'all', type: [], room: [], style: [] };
+const EMPTY = { kind: 'all', type: [], room: [], style: [], series: [] };
 // 两栏时筛选贴着不动的那一块：顶上让出顶栏（showcase.css .cv-br-filters.is-stick 的 top: 92px），
 // 底下让出页脚（「选好了」那一条，大概 104 px；只看的没有页脚）—— 最下面一组不能藏在页脚后面
 const STICK_TOP = 92;
@@ -27,8 +30,8 @@ const FOOT_ROOM = 104;
 const listSep = () => (isEn() ? ', ' : '、');
 const flip = (arr, v) => (arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
 
-export default function CaseBrowser({ profile, cases, isOn, onToggleCase, chosen = [], pickedThumb, onClose, readOnly = false }) {
-  const [filters, setFilters] = useState(EMPTY);
+export default function CaseBrowser({ profile, cases, isOn, onToggleCase, chosen = [], pickedThumb, onClose, readOnly = false, initialFilters = null }) {
+  const [filters, setFilters] = useState(() => ({ ...EMPTY, ...(initialFilters || {}) }));
   const [detail, setDetail] = useState(null);
   const [closing, setClosing] = useState(false);
   const [toast, setToast] = useState('');
@@ -44,7 +47,9 @@ export default function CaseBrowser({ profile, cases, isOn, onToggleCase, chosen
   const shown = res.list;
   const covers = useCardCovers(shown.map((m) => m.case));
   const on = (c) => !!isOn?.(c);
-  const filtered = filters.kind !== 'all' || filters.type.length > 0 || filters.room.length > 0 || filters.style.length > 0;
+  const filtered = filters.kind !== 'all' || filters.type.length > 0 || filters.room.length > 0 || filters.style.length > 0 || filters.series.length > 0;
+  // 最适合这位客人的系列（客人挑的案例也算进去，和案例那一步的系列卡同一个）；卡片的理由跟着它（fix）
+  const { top: best, fix } = useSeriesTop(profile, chosen);
 
   useEffect(() => {
     const pop = pushLayer((e) => e.key === 'Escape' && keys.current?.close(), rootRef);
@@ -111,7 +116,14 @@ export default function CaseBrowser({ profile, cases, isOn, onToggleCase, chosen
 
   const excludedTags = [...new Set((res.excluded || []).flatMap((x) => x.tags))].map(C.noGoLabel).filter(Boolean);
   const f = res.facets;
+  const series = f.series || [];
   const groups = [
+    // 系列：两个以上，或者只有一个但不是每个家都写了（点了就只看这个系列）
+    (series.length > 1 || (series.length === 1 && series[0].n < res.total)) && {
+      key: 'series',
+      label: t('系列'),
+      items: series.map((x) => ({ id: x.id, n: x.n, label: x.label, best: x.id === best })),
+    },
     f.type.length > 1 && { key: 'type', label: t('房子'), items: f.type.map((x) => ({ id: x.id, n: x.n, label: x.label })) },
     f.room.length > 1 && { key: 'room', label: t('房间'), items: f.room.map((x) => ({ id: x.id, n: x.n, label: x.label })) },
     f.style.length > 1 && { key: 'style', label: t('风格'), items: f.style.map((x) => ({ id: x.code, n: x.n, label: x.label })) },
@@ -158,8 +170,17 @@ export default function CaseBrowser({ profile, cases, isOn, onToggleCase, chosen
                     {g.items.map((x) => {
                       const sel = filters[g.key].includes(x.id);
                       return (
-                        <button key={x.id} type="button" className={`cv-fchip ${sel ? 'on' : ''}`} aria-pressed={sel} onClick={() => setF({ [g.key]: flip(filters[g.key], x.id) })}>
+                        <button
+                          key={x.id}
+                          type="button"
+                          className={`cv-fchip ${sel ? 'on' : ''} ${x.best ? 'is-best' : ''}`}
+                          aria-pressed={sel}
+                          title={x.best ? t('最适合你的系列') : undefined}
+                          onClick={() => setF({ [g.key]: flip(filters[g.key], x.id) })}
+                        >
+                          {x.best && <i className="cv-fchip-dot" aria-hidden="true" />}
                           {x.label}
+                          {x.best && <span className="sr-only">{t('最适合你的系列')}</span>}
                           <small>{x.n}</small>
                         </button>
                       );
@@ -183,7 +204,7 @@ export default function CaseBrowser({ profile, cases, isOn, onToggleCase, chosen
             {shown.length ? (
               <div className="cv-br-grid" ref={gridRef}>
                 {shown.map((m) => (
-                  <CaseCard key={m.case.id} match={withCover(m)} on={on(m.case)} onToggle={readOnly ? undefined : (e) => toggle(m.case, e)} onOpen={() => setDetail(m)} />
+                  <CaseCard key={m.case.id} match={withCover(fix(m))} on={on(m.case)} onToggle={readOnly ? undefined : (e) => toggle(m.case, e)} onOpen={() => setDetail(m)} />
                 ))}
               </div>
             ) : (
@@ -218,7 +239,7 @@ export default function CaseBrowser({ profile, cases, isOn, onToggleCase, chosen
       {detail && (
         <CaseDetail
           key={detail.case.id}
-          match={shown.find((m) => m.case.id === detail.case.id) || detail}
+          match={fix(shown.find((m) => m.case.id === detail.case.id) || detail)}
           on={on(detail.case)}
           onToggle={readOnly ? undefined : (e) => toggle(detail.case, e)}
           hasNext={shown.length > 1}
@@ -229,6 +250,7 @@ export default function CaseBrowser({ profile, cases, isOn, onToggleCase, chosen
           profile={profile}
           isOn={isOn}
           onToggleCase={readOnly ? null : toggle}
+          fixMatch={fix}
         />
       )}
     </div>,

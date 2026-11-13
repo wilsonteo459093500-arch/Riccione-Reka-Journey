@@ -12,6 +12,7 @@ import path from 'node:path';
 import { resolveObjectURL } from 'node:buffer';
 import { fileURLToPath } from 'node:url';
 import * as C from '../src/shared/cases.js';
+import * as S from '../src/shared/series.js';
 import { CONFIG } from '../src/shared/config.js';
 import { MAT_BY_ID, registerBoards, unregisterBoards } from '../src/shared/materials.js';
 import { resetBoards, TEST_ID_PREFIX } from '../src/shared/boards/library-api.js';
@@ -648,7 +649,7 @@ const home = (id, over = {}) =>
     ...over,
   });
 
-await test('similarCases：分数 = 0.55 轴 + 0.15 同主牌 + 0.1 同一张牌 + 0.1 同一类房子（+0.05 同类型）+ 0.1 房间 Jaccard + 0.02 真实项目；同分按 order', () => {
+await test('similarCases：分数 = 0.55 轴 + 0.15 同主牌 + 0.1 同一张牌 + 0.1 同一类房子（+0.05 同类型）+ 0.1 房间 Jaccard + 0.02 真实项目；同分按 order', async () => {
   const me = home('me');
   const twin = home('twin');
   const opposite = home('opposite', { style: { dreamers: ['CLRD'], axes: { temp: 20, density: 90, texture: 20, storage: 10 } }, property: { type: 'bungalow' }, rooms: ['study'] });
@@ -661,9 +662,11 @@ await test('similarCases：分数 = 0.55 轴 + 0.15 同主牌 + 0.1 同一张牌
   approx(scoreOf('near'), 0.55 + 0.1 + 0.1 + 0.05 + 0.1, 'shares a card, not the main one');
   approx(scoreOf('landed'), 0.55 + 0.15 + 0.1 + (0.1 * 2) / 3, 'other class (no class / type bonus), 2 of 3 rooms');
   approx(scoreOf('opposite'), 0.55 * 0.4, 'axes 60 apart on every axis → 0.4 × 0.55; nothing else shared');
-  // 真实项目 + 0.02；同分按 order（再按 id）
+  // 真实项目 + 0.02；同分按 order（再按 id）—— 3D 方案和真实项目放在一起比分：用以前的门槛（8 个真实项目才藏 3D 方案）
   const real = home('real', { kind: 'project', consent: true });
-  assert.deepEqual(C.similarCases(me, [twin, real]).map((m) => [m.case.id, m.score]), [['real', 1.07], ['twin', 1.05]]);
+  await withConfig(CONFIG.cases, { hideConceptsAt: 8 }, () => {
+    assert.deepEqual(C.similarCases(me, [twin, real]).map((m) => [m.case.id, m.score]), [['real', 1.07], ['twin', 1.05]]);
+  });
   const a = home('a', { order: 30 });
   const b = home('b', { order: 10 });
   const c = home('c', { order: 20 });
@@ -744,7 +747,11 @@ await test('browseCases：没筛选 = matchCases 的排法（limit = 全部，�
   assert.ok(gl.list.find((m) => m.case.id === 'seed-nordic-studio').reasons.some((r) => r.kind === 'swap'));
 });
 
-await test('browseCases 筛选：组和组之间「而且」、组里「或者」；房间 = 做了的或有照片的；风格 = 主牌；数量（facets）不管筛选；种类', () => {
+await test('browseCases 筛选：组和组之间「而且」、组里「或者」；房间 = 做了的或有照片的；风格 = 主牌；数量（facets）不管筛选；种类', async () => {
+  // 3D 方案和两个真实项目一起筛：用以前的门槛（8 个真实项目才藏 3D 方案）
+  await withConfig(CONFIG.cases, { hideConceptsAt: 8 }, () => browseFilterChecks());
+});
+function browseFilterChecks() {
   const p = realProfile(GUESTS.ken);
   const cases = [
     ...LIVE,
@@ -787,7 +794,8 @@ await test('browseCases 筛选：组和组之间「而且」、组里「或者�
   assert.deepEqual(all.facets.style.map((x) => [x.code, x.n]), DREAMERS.map((d) => [d.code, count((c) => c.style.dreamers[0] === d.code)]).filter(([, k]) => k));
   for (const g of Object.values(all.facets)) for (const x of g) assert.ok(x.n >= 1 && x.label, JSON.stringify(x));
   assert.ok(!all.facets.room.some((x) => x.id === 'plan3d'), 'the 3D overview is not a room');
-});
+  assert.deepEqual(all.facets.series, [], 'no case here has a series → no series chips');
+}
 
 await test('browseCases：草稿 / 隐藏 / 展厅 / 没同意的永远不出现（员工预览 allowDrafts 才有草稿）；hideConceptsAt / keepConcepts；空的、没有档案也不出错', async () => {
   const extra = [home('d', { kind: 'project', status: 'draft', consent: true }), home('h', { kind: 'project', status: 'hidden', consent: true }), home('s', { kind: 'showroom' }), home('n', { kind: 'project', consent: false })];
@@ -803,7 +811,7 @@ await test('browseCases：草稿 / 隐藏 / 展厅 / 没同意的永远不出现
     assert.deepEqual(r.facets.kind.map((x) => x.id), ['project']);
     assert.equal(C.browseCases(null, [...LIVE, ...real], {}, { keepConcepts: true }).total, LIVE.length + 2);
   });
-  assert.deepEqual(C.browseCases(null, []), { list: [], excluded: [], facets: { kind: [], type: [], room: [], style: [] }, total: 0 });
+  assert.deepEqual(C.browseCases(null, []), { list: [], excluded: [], facets: { kind: [], type: [], room: [], style: [], series: [] }, total: 0 });
   assert.deepEqual(C.browseCases({}, LIVE, { type: ['other'] }).list, []);
   await inEnglish(() => {
     const e = C.browseCases(realProfile(GUESTS.aisha), LIVE);
@@ -1092,6 +1100,182 @@ await test('设备上的副本盖过随网站的案例：网站后来新加的�
   C._resetDevice();
 });
 
+// ───────────────────────── 9b. 实拍案例优先 + 五大系列（docs/showcase/SERIES.md §1） ─────────────────────────
+
+await test('hideConceptsAt 默认 1：一个上架、有业主同意的真实项目 → guestPool / matchCases / browseCases / similarCases 一个 3D 方案都没有（员工预览也一样）；keepConcepts 照样给', () => {
+  assert.equal(CONFIG.cases.hideConceptsAt, 1);
+  const p = realProfile(GUESTS.peggy);
+  const real = home('p-real1', { kind: 'project', consent: true, series: 'mountain' });
+  const real2 = home('p-real2', { kind: 'project', consent: true });
+  const all = [...LIVE, real, real2];
+  const ids = (l) => l.map((x) => x.case?.id ?? x.id).sort();
+  assert.deepEqual(ids(C.guestPool(all)), ['p-real1', 'p-real2']);
+  assert.deepEqual(ids(C.guestPool([...LIVE, real])), ['p-real1'], 'one is enough');
+  const m = C.matchCases(p, all, { limit: 20 });
+  assert.deepEqual(ids([...m.picks, ...m.rest]), ['p-real1', 'p-real2']);
+  assert.deepEqual(m.excluded, [], 'the concepts are not "excluded" either — they are simply not offered');
+  const b = C.browseCases(p, all);
+  assert.deepEqual([ids(b.list), b.total, b.facets.kind.map((x) => x.id)], [['p-real1', 'p-real2'], 2, ['project']]);
+  assert.deepEqual(ids(C.similarCases(real, all, { n: 10 })), ['p-real2']);
+  assert.deepEqual(ids(C.similarCases(zen, all, { n: 10 })), ['p-real1', 'p-real2'], 'even from a concept, similar homes are real ones only');
+  // 员工预览（allowDrafts）：数的也是上架、有同意的 → 一样没有 3D 方案
+  assert.ok(C.guestPool(all, { allowDrafts: true }).every((c) => c.kind === 'project'));
+  assert.ok(C.matchCases(p, all, { limit: 20, allowDrafts: true }).picks.every((x) => x.case.kind === 'project'));
+  // keepConcepts：照样全部给（员工的地方用）
+  assert.equal(C.guestPool(all, { keepConcepts: true }).length, LIVE.length + 2);
+  assert.equal(C.browseCases(p, all, {}, { keepConcepts: true }).total + C.browseCases(p, all, {}, { keepConcepts: true }).excluded.length, LIVE.length + 2);
+});
+
+await test('草稿、没有业主同意、藏起来、展厅的「项目」都不算数：3D 方案照常给（客人和员工预览都一样）；只有 3D 方案 → 和以前一模一样', () => {
+  const p = realProfile(GUESTS.peggy);
+  const others = {
+    draft: home('p-d', { kind: 'project', status: 'draft', consent: true }),
+    noconsent: home('p-n', { kind: 'project', consent: false }),
+    hidden: home('p-h', { kind: 'project', status: 'hidden', consent: true }),
+    showroom: home('p-s', { kind: 'showroom', consent: true }),
+  };
+  for (const [what, x] of Object.entries(others)) {
+    const list = [...LIVE, x];
+    assert.deepEqual(C.guestPool(list).map((c) => c.id), LIVE.map((c) => c.id), what);
+    assert.ok([...C.matchCases(p, list, { limit: 20 }).picks].some((m) => m.case.kind === 'concept'), `${what}: matchCases`);
+    assert.equal(C.browseCases(p, list).total + C.browseCases(p, list).excluded.length, LIVE.length, `${what}: browse`);
+    assert.ok(C.similarCases(zen, list, { n: 10 }).every((m) => m.case.kind === 'concept') && C.similarCases(zen, list).length === 4, `${what}: similar`);
+    assert.ok(C.guestPool(list, { allowDrafts: true }).some((c) => c.kind === 'concept'), `${what}: staff preview keeps the concepts too`);
+  }
+  // 员工预览：草稿 + 没同意的都在，3D 方案也在
+  const staff = C.guestPool([...LIVE, others.draft, others.noconsent], { allowDrafts: true }).map((c) => c.id);
+  assert.deepEqual(staff, [...LIVE.map((c) => c.id), 'p-d', 'p-n']);
+  // 只有 3D 方案（客人自己的手机）：默认的门槛下，和重构前记下的结果一模一样
+  for (const [key, g] of Object.entries(GUESTS)) {
+    const tp = tableProfile(g);
+    const rp = realProfile(g);
+    const runs = {
+      [`${key}/table`]: C.matchCases(tp, LIVE, { picksMats: tp._picks }),
+      [`${key}/real`]: C.matchCases(rp, LIVE),
+      [`${key}/real/6`]: C.matchCases(rp, LIVE, { limit: 6 }),
+    };
+    for (const [k, r] of Object.entries(runs)) assert.deepEqual({ picks: r.picks.map((m) => m.case.id), rest: r.rest.map((m) => m.case.id), excluded: r.excluded.map((e) => e.id) }, BEFORE[k], k);
+  }
+});
+
+await test('migrateCase：case.series = 系列的 key 或 null；旧写法（空山 / 织系列 / Skeleton Line…）也认；自然线、庭前 = null；可以重复调用；随网站的 3D 方案都没有系列', () => {
+  const cases = [
+    ['mountain', 'mountain'], ['空山', 'mountain'], ['空山系列', 'mountain'], ['织', 'weaving'], ['织系列', 'weaving'], ['骨骼线', 'skeleton'], ['Skeleton Line', 'skeleton'],
+    ['雾山', 'misty'], ['Misty Mountain', 'misty'], ['侘寂东方', 'wabi'], ['wabi', 'wabi'], ['溪岸 · 空山', 'mountain'],
+    ['自然线', null], ['庭前', null], ['侘寂', null], ['', null], [null, null], [undefined, null], [42, null], ['nope', null],
+  ];
+  for (const [inp, out] of cases) {
+    const c = C.migrateCase({ id: 'p-ser', kind: 'project', series: inp });
+    assert.equal(c.series, out, String(inp));
+    assert.deepEqual(C.migrateCase(c), c, `${inp} idempotent`);
+  }
+  assert.equal(C.migrateCase({ id: 'p-old' }).series, null, 'an old case has no series');
+  for (const c of LIVE) assert.equal(c.series, null, `${c.id}: seed concepts have no series`);
+});
+
+await test('存进这台设备 / 案例包来回一趟：系列还在', async () => {
+  C._resetDevice();
+  const saved = await C.saveCase(home('p-ser-dev', { kind: 'project', consent: true, series: '雾山' }));
+  assert.equal(saved.series, 'misty');
+  assert.equal((await C.getCase('p-ser-dev')).series, 'misty');
+  const blob = await C.exportPack(['p-ser-dev']);
+  C._resetDevice();
+  const res = await C.importPack(await blob.text());
+  assert.equal(res.added, 1);
+  assert.equal((await C.getCase('p-ser-dev')).series, 'misty');
+  C._resetDevice();
+});
+
+/** 这位客人最适合的三个系列（recommendSeries 的前三名） */
+const seriesOrder = (p) => S.recommendSeries(p).map((x) => x.key);
+
+await test('matchCases：案例的系列 = 客人最适合的 + 0.12、第二适合的 + 0.05、别的不加；理由「和最适合你的系列一样：{0}」只给第一名；没写系列的家分数照旧', async () => {
+  const p = realProfile(GUESTS.peggy);
+  const [first, second, third] = seriesOrder(p);
+  const base = home('p-none', { kind: 'project', consent: true });
+  const withS = (key) => ({ ...base, id: `p-${key}`, series: key });
+  const one = (c, prof = p) => C.matchCases(prof, [c], { limit: 1 }).picks[0];
+  const s0 = one(base).score;
+  approx(one(withS(first)).score - s0, C.WEIGHTS.series, 'the best series');
+  approx(one(withS(second)).score - s0, C.WEIGHTS.series2, 'the second');
+  approx(one(withS(third)).score - s0, 0, 'the third: nothing');
+  assert.deepEqual([C.WEIGHTS.series, C.WEIGHTS.series2], [0.12, 0.05]);
+  assert.deepEqual(one(withS(first)).parts.find((x) => x.kind === 'series'), { kind: 'series', v: 0.12 });
+  assert.ok(!one(base).parts.some((x) => x.kind === 'series'));
+  // 理由：只有第一名的说
+  const r1 = one(withS(first)).reasons.find((r) => r.kind === 'series');
+  assert.ok(r1, 'the reason is there');
+  assert.equal(C.reasonText(r1), `和最适合你的系列一样：${S.SERIES_BY_KEY[first].zh}`);
+  assert.ok(!one(withS(second)).reasons.some((r) => r.kind === 'series'));
+  await inEnglish(() => assert.equal(C.reasonText(r1), `Same as the series that suits you best: ${S.SERIES_BY_KEY[first].en}`));
+  // 排在前面：别的都一样，系列对的那个家先
+  const r = C.matchCases(p, [withS(third), base, withS(first), withS(second)], { limit: 4, lambda: 0 });
+  assert.deepEqual(r.picks.slice(0, 2).map((m) => m.case.id), [`p-${first}`, `p-${second}`]);
+  // 客人没答题（没有轴）：不说「最适合你的系列」，也不加分
+  for (const prof of [null, {}, { code: 'WMNH' }]) {
+    const m = one(withS(first), prof);
+    assert.ok(!m.parts.some((x) => x.kind === 'series') && !m.reasons.some((x) => x.kind === 'series'), JSON.stringify(prof));
+  }
+  // 没写系列的家：和别的家放在一起照样是原来的分数（3D 方案、员工还没定系列的）
+  const mix = C.matchCases(p, [...LIVE, withS(first)], { limit: 100, keepConcepts: true });
+  const alone = C.matchCases(p, LIVE, { limit: 100 });
+  const scoreOf = (res) => Object.fromEntries([...res.picks, ...res.rest].map((m) => [m.case.id, m.score]));
+  for (const [id, sc] of Object.entries(scoreOf(alone))) assert.equal(scoreOf(mix)[id], sc, id);
+  // 看全部的理由和 matchCases 一样
+  const b = C.browseCases(p, [withS(first), base]);
+  assert.deepEqual(b.list.map((m) => m.reasons), C.matchCases(p, [withS(first), base], { limit: 100 }).picks.map((m) => m.reasons));
+});
+
+await test('browseCases：系列的筛选（facets.series 按品牌手册的顺序，没写系列的不算；filters.series 收 key 或名字；和别的组之间「而且」）', async () => {
+  const p = realProfile(GUESTS.ken);
+  const cs = [
+    home('p-m1', { kind: 'project', consent: true, series: 'mountain' }),
+    home('p-m2', { kind: 'project', consent: true, series: '空山', property: { type: 'terrace' } }),
+    home('p-w', { kind: 'project', consent: true, series: 'wabi' }),
+    home('p-sk', { kind: 'project', consent: true, series: 'skeleton' }),
+    home('p-0', { kind: 'project', consent: true }),
+  ];
+  const all = C.browseCases(p, cs);
+  assert.deepEqual(all.facets.series.map((x) => [x.id, x.n, x.label]), [['skeleton', 1, '骨骼线'], ['mountain', 2, '空山'], ['wabi', 1, '侘寂东方']]);
+  const ids = (f) => C.browseCases(p, cs, f).list.map((m) => m.case.id).sort();
+  assert.deepEqual(ids({ series: ['mountain'] }), ['p-m1', 'p-m2']);
+  assert.deepEqual(ids({ series: ['wabi', 'mountain'] }), ['p-m1', 'p-m2', 'p-w'], 'OR inside the group');
+  assert.deepEqual(ids({ series: '侘寂东方' }), ['p-w'], 'a name / single value works too');
+  assert.deepEqual(ids({ series: ['mountain'], type: ['terrace'] }), ['p-m2'], 'AND across groups');
+  assert.deepEqual(ids({ series: ['nope'] }), ids({}), 'an unknown series filters nothing out');
+  assert.deepEqual(C.browseCases(p, cs, { series: ['wabi'] }).facets, all.facets, 'facets ignore the filters');
+  await inEnglish(() => {
+    assert.deepEqual(C.browseCases(p, cs).facets.series.map((x) => x.label), ['Skeleton Line', 'Empty Mountain', 'Wabi-Sabi Eastern']);
+  });
+});
+
+await test('caseFacts：写了系列 → 「系列 · 空山」（在风格后面）；没写 → 没有这一行；英文是系列的英文名', async () => {
+  const c = home('p-f', { kind: 'project', consent: true, series: 'misty' });
+  const facts = C.caseFacts(c).map((f) => [f.k, f.label, f.value]);
+  const at = facts.findIndex((f) => f[0] === 'series');
+  assert.deepEqual(facts[at], ['series', '系列', '雾山']);
+  assert.equal(facts[at - 1][0], 'style', 'right after 风格');
+  assert.ok(!C.caseFacts(home('p-f0')).some((f) => f.k === 'series'));
+  assert.ok(!C.caseFacts(zen).some((f) => f.k === 'series'));
+  assert.equal(C.caseFacts({ ...c, series: '织系列' }).find((f) => f.k === 'series').value, '织', 'a raw (not migrated) legacy name works too');
+  await inEnglish(() => {
+    assert.deepEqual(C.caseFacts(c).find((f) => f.k === 'series'), { k: 'series', label: 'Series', value: 'Misty Mountain' });
+    assert.equal(C.caseFacts({ ...c, series: 'weaving' }).find((f) => f.k === 'series').value, 'Weaving');
+  });
+});
+
+await test('100 个案例（每 3 个有一个写了系列）也很快：看全部 < 25 ms', () => {
+  const keys = S.SERIES.map((s) => s.key);
+  const big = Array.from({ length: 100 }, (_, i) => ({ ...LIVE[i % LIVE.length], id: `s${i}`, order: i, kind: 'project', consent: true, status: 'live', series: i % 3 ? null : keys[(i / 3) % keys.length] }));
+  const p = { ...realProfile(GUESTS.aisha), avoid: [] };
+  C.browseCases(p, big);
+  const t0 = performance.now();
+  for (let i = 0; i < 5; i++) C.browseCases(p, big);
+  const ms = (performance.now() - t0) / 5;
+  assert.ok(ms < 25, `browse ${ms.toFixed(2)} ms`);
+  assert.deepEqual(C.browseCases(p, big).facets.series.map((x) => x.n), [7, 7, 7, 7, 6], '34 of the 100 have a series');
+});
+
 // ───────────────────────── 10. 快：100 个案例 ─────────────────────────
 
 await test('100 个案例也很快：看全部 < 25 ms、相似的家 < 2 ms、每个房间我们做了什么 / 照片标签 < 0.5 ms', () => {
@@ -1116,7 +1300,7 @@ await test('100 个案例也很快：看全部 < 25 ms、相似的家 < 2 ms、�
 // ───────────────────────── 11. 英文 ─────────────────────────
 
 await test('英文：这一层新加的中文都有英文（en-cases.js），英文界面里没有中文', async () => {
-  for (const k of ['全部', '细节', '全屋', '房子', '建筑面积', '几房几卫', '楼层', '{0} 层楼', '我们做了', '整个家', '{0} 个房间', '风格', '地区', '做过的家', '3D 方案']) assert.ok(EN[k], k);
+  for (const k of ['全部', '细节', '全屋', '房子', '建筑面积', '几房几卫', '楼层', '{0} 层楼', '我们做了', '整个家', '{0} 个房间', '风格', '地区', '做过的家', '3D 方案', '系列', '和最适合你的系列一样：{0}']) assert.ok(EN[k], k);
   await inEnglish(() => {
     for (const c of [mkCase(), ...LIVE]) {
       for (const x of C.galleryTabs(c)) assert.ok(!HAN.test(x.label), x.label);

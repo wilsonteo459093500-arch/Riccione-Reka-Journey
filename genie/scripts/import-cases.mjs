@@ -10,7 +10,11 @@
 //       01 客厅.jpg  02-kitchen.jpg  主卧.heic …   ← 文件名里有房间名就自动认（客厅 / living、厨房 / kitchen、主卧 / master …）
 //       05 厨房 细节.jpg  closeup-handle.jpg …     ← 文件名里有「细节 / 特写 / 局部 / 近景 / detail / close-up / closeup / macro」= 细节特写（detail: true）
 //       case.txt                 ← 选填：第 1 行中文标题，第 2 行英文标题（第 3、4 行：中文 / 英文故事）
-//       case.json                ← 选填：任何案例字段（property、style、materials、consent …），会盖过 case.txt
+//       case.json                ← 选填：任何案例字段（property、style、materials、consent、series …），会盖过 case.txt
+//
+// 溪岸五大系列（series）：case.json 的 "series"（"空山" / "mountain" / "织系列" / "Skeleton Line" … 都认，写进 manifest 的是 key）；
+// 没写 → 新项目看文件夹名字里有没有单独一段是系列的名字（例：shift-空山 → mountain）；已有的项目留着 manifest 里的（员工定的）。
+// case.json 里的系列改了、照片没变 → 也算更新。不是五大系列的（「自然线」「庭前」）= null。
 //
 // 每张照片：转正（EXIF 方向）→ 1600 px 大图 + 480 px 小图，WebP（q ≈ 0.82，太大会自动降一点），
 // EXIF / GPS / 相机资料全部去掉（重新编码，不复制任何元数据）。输出 <out>/<编号>/NN-1600.webp、NN-480.webp。
@@ -30,6 +34,7 @@ import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { seriesKeyOf } from '../src/shared/series.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const IMG_EXT = /\.(jpe?g|png|webp|heic|heif|tiff?|avif)$/i;
@@ -95,6 +100,18 @@ export function slugOf(folder) {
 }
 
 const natural = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+
+/**
+ * 文件夹名字里单独一段是五大系列的中文名字（「-」「_」、空格分段；只认整段：「轻衫织」不算「织」）→ key；没有 → null。
+ * 只认中文（老板的文件夹是「城市-姓名-风格」）：英文的 mountain-view-condo 不会被当成空山。
+ */
+export function seriesOfFolder(folder) {
+  for (const seg of String(folder).split(/[\s\-_－—–]+/)) {
+    const k = /[一-鿿]/.test(seg) ? seriesKeyOf(seg) : null;
+    if (k) return k;
+  }
+  return null;
+}
 
 function parseArgs(argv) {
   const o = { src: null, out: path.join(ROOT, 'public/cases'), manifest: path.join(ROOT, 'src/cases/manifest.json'), base: '', engine: 'auto', dry: false, quiet: false };
@@ -295,6 +312,8 @@ export async function importCases(opts) {
   for (const folder of folders) {
     const dir = path.join(o.src, folder);
     const extra = readCaseText(dir);
+    // case.json 写了系列：换成 key（不是五大系列的 = null）
+    if ('series' in extra) extra.series = seriesKeyOf(extra.series);
     const id = extra.id || `p-${slugOf(folder)}`;
     const files = fs.readdirSync(dir).filter((f) => IMG_EXT.test(f) && !f.startsWith('.')).sort(natural);
     if (!files.length) {
@@ -361,7 +380,7 @@ export async function importCases(opts) {
     if (keptCover && images.some((im) => oldOf.get(im) === keptCover)) images.forEach((im) => (im.cover = oldOf.get(im) === keptCover));
     const rooms = [...new Set(images.map((im) => im.room).filter((r) => r && r !== 'plan3d'))];
     if (prev) {
-      const changed = !sameImages(prev.images, images) || (extra.title && JSON.stringify(extra.title) !== JSON.stringify(prev.title));
+      const changed = !sameImages(prev.images, images) || (extra.title && JSON.stringify(extra.title) !== JSON.stringify(prev.title)) || ('series' in extra && extra.series !== (seriesKeyOf(prev.series) ?? null));
       if (!changed) {
         // 照片没变、只是旧的 manifest 还没记 srcName：补记上（不算改动 —— rev 不变，设备上改过的副本照样盖得过它）
         if (prev.images.some((im, n) => im.srcName !== images[n].srcName)) byId.set(id, { ...prev, images: prev.images.map((im, n) => ({ ...im, srcName: images[n].srcName })) });
@@ -397,6 +416,7 @@ export async function importCases(opts) {
         supplies: { firm: [], context: [] },
         products: [],
         wishNotes: {},
+        series: seriesOfFolder(folder),
         images,
         createdAt: now,
         updatedAt: now,
@@ -445,6 +465,9 @@ export async function mergePack(opts) {
         continue;
       }
       const { origin, ...c } = JSON.parse(JSON.stringify(raw));
+      // 五大系列：存 key（旧写法也认）；旧版本存的案例不认得 series（整个没有这个字段）→ 留着 manifest 里的那一个
+      if ('series' in c) c.series = seriesKeyOf(c.series);
+      else if (prev && seriesKeyOf(prev.series)) c.series = seriesKeyOf(prev.series);
       // 溪岸板材（R11 e）：旧版本存过的案例不认得 boards / boardsAlso，存的时候整个丢了 → 留着 manifest 里的那一份，并提醒
       const had = (x) => (Array.isArray(x) ? x.length > 0 : !!x && typeof x === 'object' && Object.keys(x).length > 0);
       if (prev && had(prev.boards) && !('boards' in raw)) {

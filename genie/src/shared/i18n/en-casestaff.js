@@ -32,4 +32,11 @@ export default {
   '一句说明（客人看得到）': 'A short note (guests see it)',
   '例：岛台下面一整排抽屉，锅具全收进去': 'e.g. A full run of drawers under the island for every pot and pan',
   恢复自动: 'Back to auto',
+  // 溪岸系列（五大系列，docs/showcase/SERIES.md §4）：系列的名字和那一句话在 en-cases.js（src/shared/series.js）
+  溪岸系列: 'sAil series',
+  '这个家做的是溪岸哪一个系列。客人在卡片和详情里看到「溪岸 · 空山」这样的小标签；和客人最适合的系列一样的家会排前面。拿不准就先选「未定」。':
+    'Which sAil series this home was made in. Guests see a small tag like "SAIL · Empty Mountain" on the card and in the details, and homes in the series that suits a guest best rank higher. If you’re not sure, leave it as "Not set".',
+  未定: 'Not set',
+  '还没定：客人那边不显示系列标签，也不会因为系列排前。': 'Not set yet: guests see no series tag, and the home gets no series boost.',
+  '这个家的溪岸系列 = 客人最适合的（第二适合的加得少一点）': 'This home’s sAil series = the one that suits the guest best (the second-best adds a little less)',
 };

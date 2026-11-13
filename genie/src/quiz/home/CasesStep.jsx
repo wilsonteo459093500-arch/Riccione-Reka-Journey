@@ -6,6 +6,8 @@
 //   · 一个案例都没有（案例库还是空的）：不是预览就直接 onDone([])（用牌的材质往下走）。
 //   · 「看全部 {0} 个家」→ CaseBrowser（懒载入的一层：筛选 + 全部的家）；详情里有「相似的家」。
 //     选 / 取消 不管从哪里按（卡片、详情、相似的家、看全部）都走同一个 toggle：最多三个、同一句「最多三个哦」；关掉那一层也不会丢。
+//   · 标题旁边（窄的屏幕：标题下面）一张系列卡：最适合这位客人的溪岸系列（SeriesCard，docs/showcase/SERIES.md §3）；
+//     挑了别的系列的真实案例 → 跟着重排。展开里的「看空山的家」= 看全部，先筛好那个系列。
 // 隐私：理由只用客人看得到的事实（reasonText）；雷区提示只说「已经帮你避开用了『X』的家」。
 
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
@@ -19,6 +21,7 @@ import * as C from '../../shared/cases.js';
 import CaseCard from './CaseCard.jsx';
 import CaseDetail, { useCaseBoards } from './CaseDetail.jsx';
 import { useCardCovers } from './CaseGallery.jsx';
+import SeriesCard, { useSeriesTop } from './SeriesCard.jsx';
 import { phrased } from '../typo.jsx';
 import { Odo } from '../ui.jsx';
 import './home.css';
@@ -33,6 +36,7 @@ export default function CasesStep({ profile, cases: given, preview = false, onDo
   const [round, setRound] = useState(0);
   const [chosen, setChosen] = useState(() => initial.filter(Boolean));
   const [detail, setDetail] = useState(null);
+  // 看全部：false = 关着；true = 打开；{ series: [key] } = 打开、先筛好（系列卡的「看空山的家」）
   const [browse, setBrowse] = useState(false);
   const [toast, setToast] = useState('');
   const [leaving, setLeaving] = useState(false);
@@ -90,8 +94,13 @@ export default function CasesStep({ profile, cases: given, preview = false, onDo
     const cv = C.coverOf(r);
     return cv ? C.imageURL(r, cv, 480) : '';
   };
-  // 「看全部 {0} 个家」：这位客人能看到的家一共几个（雷区一定要避开的不算）
-  const total = useMemo(() => (list ? C.browseCases(profile, list).total : 0), [profile, list, bv]);
+  // 「看全部 {0} 个家」：这位客人能看到的家一共几个（雷区一定要避开的不算）；每个系列各几个（系列卡的「看空山的家」）
+  const all = useMemo(() => (list ? C.browseCases(profile, list) : null), [profile, list, bv]);
+  const total = all?.total || 0;
+  const seriesN = useMemo(() => Object.fromEntries((all?.facets.series || []).map((x) => [x.id, x.n])), [all]);
+  // 最适合这位客人的系列：挑了的案例也算（挑一个别的系列的真实案例 → 重排）；卡片、详情里「和最适合你的系列一样」跟着它（fix）
+  const { rec, top: srTop, fix } = useSeriesTop(profile, chosen);
+  const hasSeries = !!srTop;
 
   const flash = (msg) => {
     setToast(msg);
@@ -161,7 +170,7 @@ export default function CasesStep({ profile, cases: given, preview = false, onDo
 
   return (
     <div className={`cs-wrap ${preview ? 'is-preview' : ''}`}>
-      <header className="cs-head">
+      <header className={`cs-head ${hasSeries ? 'has-sr' : ''}`}>
         <div>
           <p className="eyebrow">{eyebrow}</p>
           <h2 className="h-title">{phrased(title)}</h2>
@@ -183,13 +192,14 @@ export default function CasesStep({ profile, cases: given, preview = false, onDo
             <Pangie mood="happy" prop="ball" size={80} speaker />
           </span>
         )}
+        {hasSeries && <SeriesCard rec={rec} counts={seriesN} onBrowse={(key) => setBrowse({ series: [key] })} />}
       </header>
       {n === 0 ? (
         <p className="lead">{t('案例库里还没有上架的家。')}</p>
       ) : (
         <div className="cs-grid" key={round}>
           {shown.map((m0) => {
-            const m = withUrls(m0);
+            const m = withUrls(fix(m0));
             return <CaseCard key={m.case.id} match={m} on={isOn(m.case)} onToggle={(e) => toggle(m0.case, e)} onOpen={() => setDetail(m0)} />;
           })}
         </div>
@@ -222,7 +232,7 @@ export default function CasesStep({ profile, cases: given, preview = false, onDo
       {detail && (
         <CaseDetail
           key={detail.case.id}
-          match={shown.find((m) => m.case.id === detail.case.id) || detail}
+          match={fix(shown.find((m) => m.case.id === detail.case.id) || detail)}
           on={isOn(detail.case)}
           hasNext={shown.length > 1}
           onToggle={(e) => toggle(detail.case, e)}
@@ -232,11 +242,21 @@ export default function CasesStep({ profile, cases: given, preview = false, onDo
           profile={profile}
           isOn={isOn}
           onToggleCase={toggle}
+          fixMatch={fix}
         />
       )}
       {browse && (
         <Suspense fallback={null}>
-          <CaseBrowser profile={profile} cases={list} isOn={isOn} onToggleCase={toggle} chosen={chosen} pickedThumb={thumbOf} onClose={() => setBrowse(false)} />
+          <CaseBrowser
+            profile={profile}
+            cases={list}
+            isOn={isOn}
+            onToggleCase={toggle}
+            chosen={chosen}
+            pickedThumb={thumbOf}
+            initialFilters={browse === true ? null : browse}
+            onClose={() => setBrowse(false)}
+          />
         </Suspense>
       )}
     </div>

@@ -1,14 +1,15 @@
 // 案例详情（SPEC §4 detail sheet + docs/showcase/SPEC.md §2）：底部升起、iPad 上差不多满屏的一张纸。
 //   左（横放 ≥ 901 px，固定不动）/ 上（竖放、手机）：相册（CaseGallery：照片标签、大图、说明、一排小图 → 全屏看图）。
 //   右（自己滚）：{种类} · {房子} · 名字 · 「3D 风格方案 · 不是真实业主的家」/ 地点 · 故事 · 为什么适合你（≤ 3）·
-//       房子档案（caseFacts）· 每个房间我们做了什么（caseRoomsMade：点一行 → 相册切到那个房间）·
+//       房子档案（caseFacts；系列那一格写「溪岸 · 空山」+ 品牌那一句，docs/showcase/SERIES.md §3）· 每个房间我们做了什么（caseRoomsMade：点一行 → 相册切到那个房间）·
 //       这个家用了（六个主要表面的色卡；公司做的那几样带「我们做」）· 我们做（业主 + LEAD NOTE 6：只有定制柜、墙板、门）vs
 //       家具示意（活动家具：通用的样子，不是公司的产品）+ 只是背景（地板、灯、窗帘、天花、墙漆 —— 不是公司做的：
 //       3D 里保留你家原有的，或只是中性的背景；没有「合作伙伴」）· 这个家里的产品 ·
 //       相似的家（similarCases，给了 all 才有：点一个 → 同一张纸里看它，「← 返回」回来；没有 readOnly 就可以选）·
 //       ✓ 选这个案例 / 已选 · 下一个 · ✕。
 // props：match、on、onToggle(e)、onNext、onClose、hasNext、readOnly（以前就有的，照旧）
-//        + all（案例列表：相似的家）、profile（客人档案：相似的家避开雷区、理由）、isOn(c)、onToggleCase(c, e)（相似的家也能选）。
+//        + all（案例列表：相似的家）、profile（客人档案：相似的家避开雷区、理由）、isOn(c)、onToggleCase(c, e)（相似的家也能选）
+//        + fixMatch(match) → match（相似的家的理由也跟着系列卡：SeriesCard.jsx withSeriesTop）。
 //   onToggle / onToggleCase 回 'full'（已经三个了）→ 这张纸自己说「最多三个哦」。
 // 设备上的照片（员工在 iPad 上加的）一张一张读（useImageStore），关掉时全部收回；永远不会一次读出全部的 1600。
 // 挂在 body 上（createPortal）：蓝图那张纸有 transform 动画，fixed 的东西放在它里面会被它框住、跑到纸的底下。
@@ -26,6 +27,8 @@ import { isOfferSlot, offerKinds, offersWorktop, splitSupply, lab } from '../../
 import { propertyTag, capFirst, kindBadge } from './CaseCard.jsx';
 import { Swatch } from './kit.jsx';
 import CaseGallery, { useImageStore, pushLayer, lockScroll, indexIn, CaseThumb, inWish } from './CaseGallery.jsx';
+import { caseSeries } from './SeriesCard.jsx';
+import { SERIES_BY_KEY } from '../../shared/series.js';
 import './showcase.css';
 
 /**
@@ -68,7 +71,7 @@ export function matGuestName(mat) {
   return C.boardGuestName(mat.id) || (near && !near.board ? L(near) : '') || t('溪岸板材');
 }
 
-export default function CaseDetail({ match, on, onToggle, onNext, onClose, hasNext = true, readOnly = false, all = null, profile = null, isOn = null, onToggleCase = null }) {
+export default function CaseDetail({ match, on, onToggle, onNext, onClose, hasNext = true, readOnly = false, all = null, profile = null, isOn = null, onToggleCase = null, fixMatch = null }) {
   // 相似的家点进去的那几步（最后一个 = 现在看的）；「← 返回」退一步
   const [stack, setStack] = useState([]);
   const cur = stack.length ? stack[stack.length - 1] : match;
@@ -140,7 +143,8 @@ export default function CaseDetail({ match, on, onToggle, onNext, onClose, hasNe
   const openSimilar = (x) => {
     // 理由：这位客人为什么会喜欢它（和配对一样的句子；没有客人档案就不写）
     const reasons = profile ? C.matchCases(profile, [x], { limit: 1 }).picks[0]?.reasons || [] : [];
-    setStack((s) => [...s, { case: x, reasons }]);
+    const m = { case: x, reasons };
+    setStack((s) => [...s, fixMatch ? fixMatch(m) : m]);
     showCase(x);
   };
   const back = () => {
@@ -207,6 +211,7 @@ export default function CaseDetail({ match, on, onToggle, onNext, onClose, hasNe
   const sub0 = concept ? t('3D 风格方案 · 不是真实业主的家') : L(c.place) && L(c.place) !== place ? L(c.place) : '';
   // 地区已经写在名字下面了：房子档案里不再说一遍
   const facts = facts0.filter((f) => !(f.k === 'area' && f.value === sub0));
+  const series = caseSeries(c);
   const products = Array.isArray(c.products) ? c.products.filter((p) => p && (p.name?.zh || p.name?.en)) : [];
   const title = L(c.title);
   const prevTitle = sub ? L((stack.length > 1 ? stack[stack.length - 2] : match).case.title) : '';
@@ -248,12 +253,22 @@ export default function CaseDetail({ match, on, onToggle, onNext, onClose, hasNe
             <>
               <h4>{t('房子档案')}</h4>
               <dl className="cv-facts">
-                {facts.map((f) => (
-                  <div key={f.k} className={`is-${f.k}`}>
-                    <dt>{f.label}</dt>
-                    <dd>{f.value}</dd>
-                  </div>
-                ))}
+                {facts.map((f) =>
+                  f.k === 'series' && series ? (
+                    <div key={f.k} className="is-series">
+                      <dt>{f.label}</dt>
+                      <dd>
+                        {series.tag}
+                        <small>{L(SERIES_BY_KEY[series.key].title)}</small>
+                      </dd>
+                    </div>
+                  ) : (
+                    <div key={f.k} className={`is-${f.k}`}>
+                      <dt>{f.label}</dt>
+                      <dd>{f.value}</dd>
+                    </div>
+                  )
+                )}
               </dl>
             </>
           )}

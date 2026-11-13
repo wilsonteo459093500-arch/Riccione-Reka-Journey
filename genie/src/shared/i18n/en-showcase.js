@@ -34,4 +34,13 @@ export default {
   没有符合的家: 'No homes match these filters.',
   '选了 {0} 个 · 最多 3 个': '{0} chosen · up to 3',
   选好了: 'Done',
+  // 溪岸五大系列 · 客人这边（src/quiz/home/SeriesCard.jsx、CaseCard.jsx、CaseDetail.jsx、CaseBrowser.jsx；蓝图 VIII）
+  // 系列的名字、family、品牌文字、理由在 en-cases.js；「溪岸 · 自然线系列」是 SAIL · Natural Line，小牌子跟它一样写 SAIL
+  '溪岸 · {0}': 'SAIL · {0}',
+  最适合你的系列: 'The series that suits you best',
+  '最适合你的系列：{0}': 'The series that suits you best: {0}',
+  读读这个系列: 'Read about this series',
+  '也适合你：{0}': 'Also a good fit: {0}',
+  '看{0}的家': 'See our {0} homes',
+  建议的系列: 'Suggested series',
 };

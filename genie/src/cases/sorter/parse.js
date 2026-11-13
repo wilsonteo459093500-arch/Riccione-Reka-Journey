@@ -124,24 +124,30 @@ export function specialOf(seg) {
 
 // ───────────────────────── 项目名 ─────────────────────────
 
-/** 一段文字里的风格 / 系列 / 板材，剩下认不出来的文字 */
+/**
+ * 一段文字里的系列 / 风格 / 板材，剩下认不出来的文字。
+ * 系列先认：「侘寂东方」是五大系列之一，不能让风格「侘寂」先抢走、剩下「东方」；
+ * 然后是只暗示风格的词（自然线、庭前 —— hints，不算系列），最后风格。
+ */
 function analyseToken(tok) {
-  const { styleWords, seriesWords, seriesById } = index();
-  const st = scanWords(tok, styleWords);
-  const se = scanWords(st.rest, seriesWords);
+  const { styleWords, seriesWords, hintWords, seriesById } = index();
+  const se = scanWords(tok, seriesWords);
   const series = se.hits.map((h) => h.id);
-  let rest = se.rest;
+  const hi = scanWords(se.rest, hintWords);
+  const st = scanWords(hi.rest, styleWords);
+  let rest = st.rest;
   // 「织」只有单独一段（或「织系列」）才算系列，免得「轻衫织」这种板材名也被当成系列
   for (const s of Object.values(seriesById)) if ((s.exact || []).includes(stripSuffix(rest).trim())) {
     series.push(s.id);
     rest = '';
   }
   const bd = scanBoards(rest);
-  return { styles: st.hits.map((h) => h.id), series, boards: bd.hits, rest: bd.rest, styled: endsWithSuffix(tok) };
+  return { styles: st.hits.map((h) => h.id), series, hints: hi.hits.map((h) => h.id), boards: bd.hits, rest: bd.rest, styled: endsWithSuffix(tok) };
 }
 
 /**
  * 一个项目文件夹的名字 → 结构化资料。
+ * series：溪岸五大系列的 key（'skeleton' 'mountain' 'weaving' 'misty' 'wabi'，读到的顺序；案例用第一个 → case.series）。
  * { city, styles:[id], raw:[string], series:[id], boards:[{ name, code, variant }], materials:[string],
  *   names:[string]（只用来遮掉，不能显示 / 存）, conv:boolean（符合「城市-姓名-风格」的写法） }
  */
@@ -158,13 +164,14 @@ export function parseProjectName(name, { cityHint = '' } = {}) {
     i = 1;
   }
   let nameSlot = true; // 城市后面的第一段：不是风格，就当成人名（哪怕它碰巧和某个板材同名 —— 宁可少显示）
+  const hints = []; // 自然线 / 庭前：只暗示风格（下面和系列一样补风格），不算系列
   for (; i < parts.length; i++) {
     const tok = parts[i];
     if (nameSlot) {
       nameSlot = false;
       if (!/\d/.test(tok) && isNameLike(tok)) {
         const a = analyseToken(tok);
-        if (!a.styles.length && !a.series.length) {
+        if (!a.styles.length && !a.series.length && !a.hints.length) {
           out.names.push(tok);
           continue;
         }
@@ -175,12 +182,13 @@ export function parseProjectName(name, { cityHint = '' } = {}) {
     const leftovers = [];
     for (const s of sub) {
       const a = analyseToken(s);
-      if (a.styles.length || a.series.length) styled = true;
+      if (a.styles.length || a.series.length || a.hints.length) styled = true;
       out.styles.push(...a.styles);
       out.series.push(...a.series);
+      hints.push(...a.hints);
       out.boards.push(...a.boards);
       const rest = stripSuffix(a.rest);
-      if (rest && /[\p{L}\p{N}]/u.test(rest)) leftovers.push({ rest, styledTok: a.styled, hadKnown: !!(a.styles.length || a.series.length || a.boards.length) });
+      if (rest && /[\p{L}\p{N}]/u.test(rest)) leftovers.push({ rest, styledTok: a.styled, hadKnown: !!(a.styles.length || a.series.length || a.hints.length || a.boards.length) });
     }
     for (const lo of leftovers) {
       const r = lo.rest;
@@ -195,10 +203,11 @@ export function parseProjectName(name, { cityHint = '' } = {}) {
   out.raw = [...new Set(out.raw)];
   out.materials = [...new Set(out.materials)];
   out.conv = parts.length >= 2 && (!!out.city || out.styles.length > 0);
-  // 系列暗示风格（文件夹只写了「骨骼线」时）
+  // 系列暗示风格（文件夹只写了「骨骼线」/「自然线」时）
   if (!out.styles.length) {
-    const { seriesById } = index();
+    const { seriesById, hintById } = index();
     for (const s of out.series) for (const st of seriesById[s]?.implies || []) if (!out.styles.includes(st)) out.styles.push(st);
+    for (const h of hints) for (const st of hintById[h]?.implies || []) if (!out.styles.includes(st)) out.styles.push(st);
   }
   // 布纹板（…织 / …格）属于「织」系列（data.json 里 boardFamily 的那个系列）
   const woven = Object.values(index().seriesById).find((x) => x.boardFamily);

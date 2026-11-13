@@ -60,7 +60,7 @@ const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     '南京-测试癸-原木简约': { styles: ['原木'], names: ['测试癸'] },
     '南京-测试子-微侘寂': { styles: ['侘寂'], names: ['测试子'] },
     '广州-测试甲-轻法式-奶油风': { styles: ['法式', '奶油'], names: ['测试甲'] },
-    '成都-测试乙-骨骼线': { styles: ['原木', '中古'], names: ['测试乙'], series: ['骨骼线'] },
+    '成都-测试乙-骨骼线': { styles: ['原木', '中古'], names: ['测试乙'], series: ['skeleton'] },
     '上海-春和-极简风': { styles: ['极简'], names: ['春和'] }, // 人名碰巧是板材名：仍然当人名
     '成都-Lily-轻奢风': { styles: [], names: ['Lily'], raw: ['轻奢'] },
   };
@@ -76,7 +76,7 @@ const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   }
   const p1 = P.parseProjectName('上海-甲乙-极简原木风-罗维尔素岩03野径');
   ok(p1.boards.find((b) => b.name === '素岩')?.variant === '03', '「素岩03」= 素岩 + 变体 03');
-  ok(P.parseProjectName('上海-测试丙-织').series.includes('织'), '单独的「织」= 织系列');
+  ok(P.parseProjectName('上海-测试丙-织').series.includes('weaving'), '单独的「织」= 织系列');
   ok(!P.parseProjectName('上海-测试丙-轻衫织').series.length || P.parseProjectName('上海-测试丙-轻衫织').boards[0]?.name === '轻衫织', '「轻衫织」是板材（布纹 → 织系列）');
   ok(P.redact('上海-甲乙-极简/甲乙家客厅.jpg', ['甲乙']) === '上海-··-极简/··家客厅.jpg', 'redact 把人名换成 ··');
 
@@ -501,6 +501,63 @@ const roomCount = (list) => {
   ok(PK.projectScore({ picked: keys.slice(0, 5), q, rooms: rooms4 }) === PK.projectScore({ picked: keys, q, rooms: [...rooms4, ...rooms4] }), '项目分：5 张和 18 张一样（张数 5 张满分，没变）');
 }
 
+// ───────────────────────── 溪岸五大系列（docs/showcase/SERIES.md §2）：词表、读文件夹名字、案例的 series ─────────────────────────
+{
+  const SR = await import('../src/shared/series.js');
+  const d = getData();
+  ok(eq(d.series.map((x) => x.id), SR.SERIES_KEYS), 'data.json 的系列 = 五大系列的 key（品牌手册的顺序）', JSON.stringify(d.series.map((x) => x.id)));
+  ok(d.series.every((x) => SR.SERIES_BY_KEY[x.id].zh === x.zh && SR.seriesKeyOf(x.en) === x.id), '中文名字和 series.js 一样，英文名字也认得');
+  ok(eq(d.series.find((x) => x.id === 'weaving').words, ['织系列']) && eq(d.series.find((x) => x.id === 'weaving').exact, ['织']), '织：「织系列」，或者单独一段「织」');
+  ok(eq((d.seriesHints || []).map((x) => x.id), ['自然线', '庭前']) && d.seriesHints.every((x) => SR.seriesKeyOf(x.zh) === null && x.implies.includes('原木')), '自然线、庭前：只暗示原木，不是系列');
+  for (const x of d.series) for (const st of x.implies) ok(d.styles.some((y) => y.id === st), `系列 ${x.id} 暗示的风格 ${st} 在风格表里`);
+
+  const parse = (name) => P.parseProjectName(name);
+  const cases = {
+    '成都-测试乙-骨骼线': { series: ['skeleton'], styles: ['原木', '中古'] },
+    '上海-测试丙-空山': { series: ['mountain'], styles: ['侘寂', '原木'] },
+    '上海-测试丙-空山系列': { series: ['mountain'], styles: ['侘寂', '原木'] },
+    '上海-测试丙-织系列': { series: ['weaving'], styles: ['侘寂', '南洋'] },
+    '上海-测试丙-雾山': { series: ['misty'], styles: ['极简', '奶油'] },
+    '上海-测试丙-侘寂东方': { series: ['wabi'], styles: ['侘寂'] },
+    '上海-测试丙-侘寂东方系列': { series: ['wabi'], styles: ['侘寂'] },
+    '上海-测试丙-侘寂东方-极简风': { series: ['wabi'], styles: ['极简'] },
+    '上海-测试丙-空山+侘寂风': { series: ['mountain'], styles: ['侘寂'] },
+    '上海-测试丙-骨骼线-空山': { series: ['skeleton', 'mountain'], styles: ['原木', '中古', '侘寂'] },
+    '上海-测试丙-侘寂风': { series: [], styles: ['侘寂'] },
+    '上海-测试丙-自然线': { series: [], styles: ['原木'] },
+    '上海-测试丙-自然线-中古风': { series: [], styles: ['中古'] },
+    '上海-测试丙-庭前': { series: [], styles: ['原木'] },
+  };
+  for (const [name, exp] of Object.entries(cases)) {
+    const p = parse(name);
+    ok(eq(p.series, exp.series), `系列：${name}`, JSON.stringify(p.series));
+    ok(eq(p.styles, exp.styles), `风格：${name}`, JSON.stringify(p.styles));
+    ok(eq(p.names, ['测试丙']) || name.startsWith('成都'), `人名照样认出来：${name}`, JSON.stringify(p.names));
+    ok(!JSON.stringify({ ...p, names: [] }).includes('东方') && !p.materials.length && !p.raw.length, `没有剩下的字（「侘寂东方」不会变成风格「侘寂」+「东方」）：${name}`, JSON.stringify([p.materials, p.raw]));
+    ok(p.series.every((k) => SR.seriesKeyOf(k) === k), `读到的系列都是 series.js 的 key：${name}`);
+  }
+  ok(P.looksLikeProject('测试丙-雾山') && P.looksLikeProject('测试丙-侘寂东方') && P.looksLikeProject('测试丙-自然线'), '只写了系列 / 自然线的文件夹也认得出是项目');
+  ok(eq(parse('上海-测试丙-轻衫织').series, parse('上海-测试丙-轻衫织').boards.length ? ['weaving'] : []), '布纹板（…织）→ 织系列');
+
+  // 案例：series = 文件夹名字里第一个系列；上次存的案例已经有系列（员工定的）→ 留着
+  const g = { id: 'gs', dir: '案例/上海/上海-测试丙-空山', kind: 'home', city: '上海', styles: [], raw: [], series: ['mountain'], keys: ['k1'] };
+  const shot = [{ key: 'k1', room: 'living', view: 'photo', image: { id: '01', w: 1600, h: 1200, device: true, src: '', thumb: '' } }];
+  const dec = { styles: ['原木'], type: 'condo', bedrooms: 3, consent: true };
+  const c1 = B.caseFromGroup(g, dec, shot);
+  ok(c1.series === 'mountain', '新案例：series = 文件夹名字读到的系列', c1.series);
+  ok(C.validateCase(c1, { forLive: true }).ok, '有系列的案例照样能上架');
+  ok(B.caseFromGroup({ ...g, series: [] }, dec, shot).series === null, '文件夹没写系列 → null（员工在案例库里定）');
+  ok(B.caseFromGroup({ ...g, series: ['weaving', 'mountain'] }, dec, shot).series === 'weaving', '写了两个 → 第一个');
+  ok(B.caseFromGroup({ ...g, series: ['空山'] }, dec, shot).series === 'mountain', '旧的中文 id 也认');
+  ok(B.caseFromGroup({ ...g, series: ['自然线', '庭前'] }, dec, shot).series === null, '自然线 / 庭前不是系列');
+  const staffSet = C.migrateCase({ ...c1, series: 'wabi' });
+  const again = B.caseFromGroup(g, dec, shot, undefined, { prev: staffSet });
+  ok(again.series === 'wabi', '再存一次：员工在案例库里定的系列留着（不被文件夹的盖掉）', again.series);
+  ok(B.caseFromGroup({ ...g, series: [] }, dec, shot, undefined, { prev: { ...staffSet, series: '雾山' } }).series === 'misty', '上次存的是旧写法 → 换成 key 留着');
+  ok(B.caseFromGroup(g, dec, shot, undefined, { prev: { ...staffSet, series: null } }).series === 'mountain', '上次没有系列 → 用文件夹的');
+  ok(!JSON.stringify(c1).includes('测试丙') && !JSON.stringify(c1).includes('上海'), '案例里没有人名 / 城市');
+}
+
 // ───────────────────────── 生成案例 ─────────────────────────
 {
   const st = B.styleOf(['原木']);
@@ -884,6 +941,44 @@ const roomCount = (list) => {
   C._resetDevice();
 }
 
+// ───────────────────────── 五大系列：整理一次存进案例库、员工改了系列再存一次（Session）─────────────────────────
+{
+  const S = await import('../src/cases/sorter/session.js');
+  C._resetDevice();
+  const pool = {
+    run: async (task) => {
+      if (task.op === 'compress') return { 1600: new Blob(['big']), 480: new Blob(['small']), w: 1600, h: 1200 };
+      throw new Error('cancelled');
+    },
+    pause() {},
+    clear() {},
+  };
+  const dir = '案例/上海/上海-测试戊-空山';
+  const s = new S.Session(['客厅1.jpg', '厨房1.jpg', '主卧1.jpg'].map((name, i) => ({ path: `${dir}/${name}`, name, size: 3000 + i, mtime: 1.7e12 + i * 1000 })), { pool });
+  const g = s.groups[0];
+  ok(eq(g.series, ['mountain']), '文件夹名字「空山」→ 这一组的系列', JSON.stringify(g.series));
+  ok(eq(s.noteOf(g).series, ['mountain']), '员工的笔记记的是 key');
+  for (const k of g.keys) s.an.set(k, ph(null).a);
+  s._repick(g);
+  s.setDecision(g.id, { styles: ['原木'], type: 'condo', consent: true, state: 'ready' });
+  const out = await s.saveToLibrary([g.id]);
+  const cid = out.saved[0];
+  ok((await C.getCase(cid))?.series === 'mountain', '存进案例库：case.series = 空山（mountain）');
+  // 员工在案例库里改成侘寂东方 → 整理工具里又改了点东西、再存一次：系列留着
+  await C.saveCase({ ...(await C.getCase(cid)), series: 'wabi' });
+  s.setDecision(g.id, { bedrooms: 2 });
+  ok(s.dirty(g), '改过 → 要再存');
+  await s.saveToLibrary([g.id]);
+  ok((await C.getCase(cid)).series === 'wabi', '再存一次：员工定的系列（侘寂东方）留着');
+  // 员工改回「未定」（null）→ 再存一次补回文件夹的那个（文件夹名字写着空山）
+  await C.saveCase({ ...(await C.getCase(cid)), series: null });
+  s.setDecision(g.id, { bedrooms: 3 });
+  await s.saveToLibrary([g.id]);
+  ok((await C.getCase(cid)).series === 'mountain', '案例库里没有系列 → 再存一次用文件夹的');
+  s.destroy();
+  C._resetDevice();
+}
+
 // ───────────────────────── 导入脚本（scripts/import-cases.mjs）：文件名「细节」、再导入一次员工写的说明 / 细节 / 顺序留着 ─────────────────────────
 // --dry-run：不转照片（不用 Pillow / Chromium），只看 manifest 怎么变；照片文件是空的假文件
 {
@@ -973,6 +1068,51 @@ const roomCount = (list) => {
     const r6 = await run5();
     const a6 = r6.manifest.cases[0];
     ok(eq(r6.unchanged, [a2.id]) && a6.rev === legacy.rev && eq(a6.images.map((x) => x.srcName), a2.images.map((x) => x.srcName)) && eq(a6.images.map((x) => x.caption), a2.images.map((x) => x.caption)), '旧的 manifest：补记 srcName，rev 不变、说明照旧', JSON.stringify([r6.unchanged, a6.rev, legacy.rev]));
+
+    // 五大系列：case.json 的 series（写进 manifest 的是 key）；没写 → 新项目看文件夹名字里单独一段中文系列名；已有的留着
+    {
+      ok(IC.seriesOfFolder('上海-测试-空山') === 'mountain' && IC.seriesOfFolder('x_织') === 'weaving' && IC.seriesOfFolder('侘寂东方系列') === 'wabi', 'seriesOfFolder：整段的中文系列名');
+      ok(IC.seriesOfFolder('轻衫织-home') === null && IC.seriesOfFolder('mountain-view-condo') === null && IC.seriesOfFolder('自然线-x') === null && IC.seriesOfFolder('demo-home') === null, 'seriesOfFolder：「轻衫织」、英文的 mountain、自然线都不算');
+      const src8 = path.join(tmp, 'photos8');
+      const mk8 = (folder, files, json) => {
+        fs.mkdirSync(path.join(src8, folder), { recursive: true });
+        for (const f of files) fs.writeFileSync(path.join(src8, folder, f), 'x');
+        if (json) fs.writeFileSync(path.join(src8, folder, 'case.json'), JSON.stringify(json));
+      };
+      mk8('demo-空山', ['01 客厅.jpg'], null);
+      mk8('demo-json', ['01 客厅.jpg'], { series: '侘寂东方' });
+      mk8('demo-none', ['01 客厅.jpg'], { series: '自然线' });
+      mk8('demo-plain', ['01 客厅.jpg'], null);
+      const manifest8 = path.join(tmp, 'manifest8.json');
+      const run8 = () => IC.importCases({ src: src8, out: path.join(tmp, 'out8'), manifest: manifest8, engine: 'pillow', dry: true, quiet: true });
+      const r8 = await run8();
+      const by8 = (m, id) => m.cases.find((c) => c.id === id);
+      const idOf = (folder) => `p-${IC.slugOf(folder)}`;
+      ok(by8(r8.manifest, idOf('demo-空山')).series === 'mountain', '新项目：文件夹名字「空山」→ mountain');
+      ok(by8(r8.manifest, 'p-demo-json').series === 'wabi', 'case.json "侘寂东方" → wabi（存 key）');
+      ok(by8(r8.manifest, 'p-demo-none').series === null && by8(r8.manifest, 'p-demo-plain').series === null, '不是五大系列 / 没写 → null');
+      ok(C.migrateCase(by8(r8.manifest, 'p-demo-json')).series === 'wabi', '案例库读得懂');
+      // 员工（案例包合并回来）给 demo-plain 定了雾山；再导入一次（照片没变、case.json 没写系列）→ 留着、不算改动
+      fs.writeFileSync(manifest8, JSON.stringify({ ...r8.manifest, cases: r8.manifest.cases.map((c) => (c.id === 'p-demo-plain' ? { ...c, series: 'misty', rev: 2 } : c)) }));
+      const r9 = await run8();
+      ok(by8(r9.manifest, 'p-demo-plain').series === 'misty' && r9.unchanged.includes('p-demo-plain'), '再导入：员工定的系列留着，不算改动', JSON.stringify(r9.unchanged));
+      ok(r9.unchanged.includes('p-demo-json'), 'case.json 的系列没变 → 没变');
+      // case.json 的系列改了（照片没变）→ 更新
+      fs.writeFileSync(path.join(src8, 'demo-json', 'case.json'), JSON.stringify({ series: '织系列' }));
+      fs.writeFileSync(manifest8, JSON.stringify(r9.manifest));
+      const r10 = await run8();
+      ok(r10.updated.includes('p-demo-json') && by8(r10.manifest, 'p-demo-json').series === 'weaving', 'case.json 的系列改了 → 更新（织系列 → weaving）', JSON.stringify([r10.updated, by8(r10.manifest, 'p-demo-json').series]));
+      // 案例包合并回 manifest：系列跟着走（旧写法换成 key）
+      fs.writeFileSync(manifest8, JSON.stringify(r10.manifest));
+      const packed = { ...C.migrateCase(by8(r10.manifest, 'p-demo-plain')), series: '骨骼线', rev: 5 };
+      const r11 = await IC.mergePack({ pack: { kind: 'wish-cases', v: 1, cases: [packed] }, out: path.join(tmp, 'out8'), manifest: manifest8, engine: 'pillow', dry: true, quiet: true });
+      ok(by8(r11.manifest, 'p-demo-plain').series === 'skeleton', '案例包合并回来：系列 = key（骨骼线 → skeleton）');
+      // 旧版本存的案例包（案例里根本没有 series 这个字段）：manifest 里的系列留着
+      fs.writeFileSync(manifest8, JSON.stringify(r11.manifest));
+      const { series: _drop, ...oldBuild } = { ...packed, rev: 6 };
+      const r12 = await IC.mergePack({ pack: { kind: 'wish-cases', v: 1, cases: [oldBuild] }, out: path.join(tmp, 'out8'), manifest: manifest8, engine: 'pillow', dry: true, quiet: true });
+      ok(eq(r12.updated, ['p-demo-plain']) && by8(r12.manifest, 'p-demo-plain').series === 'skeleton', '旧版本的案例包没有 series：manifest 里的系列留着');
+    }
 
     // iPad 存的案例没有 srcName（只有导入脚本用）：案例包合并回 manifest 的时候，同一张照片记过的接着用
     fs.writeFileSync(manifest5, JSON.stringify({ kind: 'wish-cases', v: 1, updatedAt: '', cases: [a2] }));

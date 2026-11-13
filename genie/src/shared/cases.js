@@ -11,6 +11,9 @@
 //
 // 没有任何颜色写死：案例的色板从材质 id 推出来（MAT_BY_ID[id].color）。
 //
+// 溪岸五大系列（docs/showcase/SERIES.md）：case.series = 'skeleton' | 'mountain' | 'weaving' | 'misty' | 'wabi' | null（series.js）。
+// 种子 3D 方案没有系列；真实项目由案例整理从文件夹名字读出来，或者员工在案例库里选。配对时和客人「最适合的系列」一样的家加一点分。
+//
 // 溪岸板材（SPEC §4.2 + §8 R11）：case.boards = { cabinetry?, feature? } 是设计师真的用的那几块板（板材 id，'sail-7'），
 // case.boardsAlso = [id…] 是照片里还看得到的别的板（例如织系列编织门：只显示、不上 3D）。
 // 板材 id 就算这台设备还不认得也留着（员工可能先填 23号、板材包后来才导入）；case.materials[slot] 永远留一个程序化的
@@ -23,6 +26,7 @@ import { BOARD_ID_RE, isColourCode } from './boards/library-api.js';
 import { exactBoards, idLabel, boardsOn } from './boards/match.js';
 import { tagsOf } from './moods.js';
 import { AXES, HIDDEN_AXES, DREAMERS, DREAMER_BY_CODE, codeOf } from './dreamers.js';
+import { SERIES, SERIES_BY_KEY, seriesKeyOf, recommendSeries, topSeries } from './series.js';
 import * as FLOW from '../quiz/flow.js';
 
 export const CASE_V = 1;
@@ -281,6 +285,7 @@ function cleanRoomsMade(v) {
  * v0（早期草稿 / 手写 JSON）：title 是字符串、dreamer / dreamers / axes / hidden 放在最外层、
  * photos: [url | { src, room }]、type / size / bedrooms 放在最外层、tags = features。
  * 案例展示（showcase）加的字段都是补出来的（v 还是 1）：照片的 caption { zh, en } / detail，案例的 roomsMade（cleanRoomsMade）。
+ * 五大系列：series = 系列的 key 或 null（旧的写法 —— 「空山」「织系列」「Skeleton Line」—— 也认，seriesKeyOf；「自然线」「庭前」= null）。
  * case.images 的顺序就是员工排的顺序。
  */
 export function migrateCase(raw) {
@@ -365,6 +370,7 @@ export function migrateCase(raw) {
       wishes: [...new Set(style.wishes || r.wishes || [])],
       features: [...new Set(style.features || r.features || r.tags || [])].filter((f) => FEATURES.some((x) => x.id === f)),
     },
+    series: seriesKeyOf(r.series),
     materials,
     boards,
     boardsAlso,
@@ -564,11 +570,22 @@ export function picksMaterials(profile) {
 
 // ───────────────────────── 配对 ─────────────────────────
 
-export const WEIGHTS = { style: 1, hidden: 0.35, card: 0.18, cardNear: 0.08, wish: 0.05, propClass: 0.1, propType: 0.04, size: 0.05, scope: 0.1, pick: 0.04, real: 0.05, swap: 0.03 };
+/** series：案例的系列 = 客人最适合的系列（recommendSeries 第一名）· series2：= 第二名 */
+export const WEIGHTS = { style: 1, hidden: 0.35, card: 0.18, cardNear: 0.08, wish: 0.05, propClass: 0.1, propType: 0.04, size: 0.05, scope: 0.1, pick: 0.04, real: 0.05, swap: 0.03, series: 0.12, series2: 0.05 };
 const simOf = (a = {}, b = {}, keys) => 1 - keys.reduce((s, k) => s + Math.abs((a[k] ?? 50) - (b[k] ?? 50)), 0) / (100 * keys.length);
 const caseSim = (a, b) => 0.7 * simOf(a.style?.axes, b.style?.axes, AX) + 0.3 * (a.style?.dreamers?.[0] && a.style.dreamers[0] === b.style?.dreamers?.[0] ? 1 : 0);
 
-function scoreOne(p, c, picksMats) {
+/**
+ * 客人最适合的前两个系列（[第一, 第二]）—— 只在这一批里有写了系列的家、客人也答过题（有轴）的时候才算：
+ * 没答题的客人（看全部 profile = null）不说「最适合你的系列」；种子 3D 方案都没有系列 → 分数和以前一模一样。
+ */
+function seriesTop(p, pool) {
+  if (!pool.some((c) => c?.series)) return [];
+  if (!AX.some((k) => Number.isFinite(p?.axes?.[k]))) return [];
+  return topSeries(recommendSeries(p), 2);
+}
+
+function scoreOne(p, c, picksMats, top = []) {
   const W = WEIGHTS;
   const parts = [];
   const add = (kind, v) => {
@@ -597,6 +614,10 @@ function scoreOne(p, c, picksMats) {
   const hit = [...new Set([...Object.values(c.materials || {}), ...nears].filter((id) => picksMats.has(id)))];
   add('pick', W.pick * Math.min(3, hit.length));
   if (c.kind === 'project') add('real', W.real);
+  // 五大系列：这个家的系列 = 客人最适合的（第二适合的少一点）
+  const cs = seriesKeyOf(c.series);
+  if (cs && cs === top[0]) add('series', W.series);
+  else if (cs && cs === top[1]) add('series', W.series2);
   return { score: parts.reduce((s, x) => s + x.v, 0), parts, wishes, pickHits: hit };
 }
 
@@ -604,11 +625,14 @@ function scoreOne(p, c, picksMats) {
  * 理由候选（只用客人看得到的事实），按「最能说明为什么」排好；matchCases 再挑出每张卡最多 3 条，
  * 而且同一批卡片的第一条（卡片上看得到的那条）不重复。key = 中文模板（也是 i18n key）
  */
-function reasonsOf(p, c, m, picks) {
+function reasonsOf(p, c, m, picks, top = []) {
   const out = [];
   const d = DREAMER_BY_CODE[p.code];
   const ds = c.style?.dreamers || [];
   if (d && ds[0] === p.code) out.push({ kind: 'card', key: '和你的牌一样：{0}', vars: [{ zh: d.zh, en: d.en }] });
+  // 五大系列：和客人最适合的系列一样（只说第一名；名字中英文都给）
+  const sr = SERIES_BY_KEY[seriesKeyOf(c.series)];
+  if (sr && sr.key === top[0]) out.push({ kind: 'series', key: '和最适合你的系列一样：{0}', vars: [{ zh: sr.zh, en: sr.en }] });
   // 你选的图：最多两条，而且是两张不同的图（第一条被别的卡片用掉时，还有第二张可以说）
   const labels = new Set();
   const exact = exactBoards(c);
@@ -699,18 +723,23 @@ export function reasonText(r) {
  * 哪些案例可以给客人看（matchCases、相似的家、看全部都用这一条）：
  *   客人：只有上架的；真实项目还要有业主同意。员工预览（allowDrafts）：草稿也算，隐藏的不算。
  *   展厅照片（kind showroom）永远不配：不是客人的家。
- *   上架的真实项目 ≥ CONFIG.cases.hideConceptsAt 以后不再给 3D 风格方案（keepConcepts = 照样给）。
+ *   上架、有业主同意的真实项目 ≥ CONFIG.cases.hideConceptsAt（默认 1：老板 2026-11-13「3D 太不好看了，直接用我们实体照的案例」）
+ *   以后不再给 3D 风格方案（keepConcepts = 照样给）—— 没有一个真实的家合适，客人就带着自己的牌往下走，不拿 3D 补。
+ *   草稿、没有业主同意的项目不算数（员工预览 allowDrafts 也一样：数的是客人真的看得到的）；
+ *   这台设备一个真实项目都没有（客人自己的手机）→ 3D 方案照常给。
  */
 export function guestPool(cases, { allowDrafts = false, keepConcepts = false } = {}) {
   const live = (cases || []).filter((c) => c && c.kind !== 'showroom' && (allowDrafts ? c.status !== 'hidden' : c.status === 'live' && (c.kind !== 'project' || c.consent)));
-  const projects = live.filter((c) => c.kind === 'project' && c.status === 'live').length;
-  const hideAt = CONFIG.cases?.hideConceptsAt ?? 8;
+  const projects = live.filter((c) => c.kind === 'project' && c.status === 'live' && c.consent).length;
+  const hideAt = CONFIG.cases?.hideConceptsAt ?? 1;
   return !keepConcepts && hideAt > 0 && projects >= hideAt ? live.filter((c) => c.kind === 'project') : live;
 }
 
 /**
  * 为一位客人挑案例。
  * profile：客人档案（code / axes / hidden / wishes / avoid / home / answers.pairs）。
+ * 五大系列：recommendSeries(profile) 算一次；系列 = 客人最适合的 + WEIGHTS.series、第二适合的 + WEIGHTS.series2，
+ *   理由「和最适合你的系列一样：{0}」（kind 'series'）。没写系列的家（种子 3D 方案）分数和以前一模一样。
  * cases：listCases() 的结果（草稿、隐藏的这里再挡一次，客人永远看不到 —— guestPool）。
  * → { picks: Match[], excluded: [{ id, tags }], rest: Match[] }，Match = { case, score, parts, reasons }
  */
@@ -727,6 +756,8 @@ function rankCases(profile, pool0, { limit = 4, picksMats, lambda = 0.3, readmit
   const avoid = new Set(p.avoid || []);
   const pm = picksMats instanceof Set ? picksMats : picksMaterials(p);
   const picksLabel = pickIndex(p);
+  // 客人最适合的系列（一次算好；这一批没有写了系列的家 → []，分数和以前一样）
+  const top = seriesTop(p, pool0);
   const excluded = [];
   const pool = [];
   // 每个表面一条：{ slot, tags }（3D 里 avoidMaterials 会把这些表面换成最接近的安全材质）
@@ -743,7 +774,7 @@ function rankCases(profile, pool0, { limit = 4, picksMats, lambda = 0.3, readmit
       continue;
     }
     const swap = bySlot(hits);
-    const s = scoreOne(p, c, pm);
+    const s = scoreOne(p, c, pm, top);
     if (swap.length) {
       s.parts.push({ kind: 'swap', v: -WEIGHTS.swap * swap.length });
       s.score -= WEIGHTS.swap * swap.length;
@@ -775,7 +806,7 @@ function rankCases(profile, pool0, { limit = 4, picksMats, lambda = 0.3, readmit
   if (readmit && out.length < limit) {
     const back = excluded
       .filter((e) => e.hits.every((x) => x.slot))
-      .map((e) => ({ e, swap: bySlot(e.hits), ...scoreOne(p, e.c, pm) }))
+      .map((e) => ({ e, swap: bySlot(e.hits), ...scoreOne(p, e.c, pm, top) }))
       .sort((a, b) => a.swap.length - b.swap.length || b.score - a.score || (a.e.c.order ?? 0) - (b.e.c.order ?? 0));
     for (const b of back.slice(0, limit - out.length)) {
       excluded.splice(excluded.indexOf(b.e), 1);
@@ -784,7 +815,7 @@ function rankCases(profile, pool0, { limit = 4, picksMats, lambda = 0.3, readmit
     }
   }
   const wrapAll = (list) => {
-    const reasons = pickReasons(list.map((m) => ({ cands: reasonsOf(p, m.c, m, picksLabel), swap: m.swap, readmit: m.readmit })));
+    const reasons = pickReasons(list.map((m) => ({ cands: reasonsOf(p, m.c, m, picksLabel, top), swap: m.swap, readmit: m.readmit })));
     return list.map((m, i) => ({
       case: m.c,
       score: Math.round(m.score * 1000) / 1000,
@@ -980,7 +1011,7 @@ const PLACE_LINE_RE = /sq\s*ft|\d+\s*(房|卫|bed|bath)/i;
 /**
  * 房子档案（客人看的，只有这些）→ [{ k, label, value }]：
  *   type 房子 · size 面积 · beds 几房几卫（3 房 2 卫；和蓝图 homeSummary 同一个标签）· storeys 楼层（有地的房子、两层以上才有）· scope 我们做了（整个家 / {0} 个房间）·
- *   style 风格（主牌的名字）· area 地区（case.place，不是又把房子那一行说一遍才有）。
+ *   style 风格（主牌的名字）· series 系列（五大系列的名字，写了才有）· area 地区（case.place，不是又把房子那一行说一遍才有）。
  * 永远没有价钱、预算、时间、员工的资料。
  */
 export function caseFacts(c) {
@@ -1001,6 +1032,8 @@ export function caseFacts(c) {
   else if (rooms.length > 1) add('scope', t('我们做了'), t('{0} 个房间', [rooms.length]));
   const d = DREAMER_BY_CODE[c.style?.dreamers?.[0]];
   if (d) add('style', t('风格'), L(d));
+  const sr = SERIES_BY_KEY[seriesKeyOf(c.series)];
+  if (sr) add('series', t('系列'), L(sr));
   const area = txtNow(c.place);
   if (area && area !== placeLine(c) && !PLACE_LINE_RE.test(area)) add('area', t('地区'), area);
   return out;
@@ -1042,12 +1075,12 @@ export function similarCases(c, cases, { n = 4, profile = null, exclude = [], al
   return out.slice(0, Math.max(0, n)).map((m) => ({ case: m.case, score: r3(m.score) }));
 }
 
-/** 看全部的筛选用的几样：种类 · 房子类型 · 房间（做了的 + 有照片的）· 风格（主牌） */
+/** 看全部的筛选用的几样：种类 · 房子类型 · 房间（做了的 + 有照片的）· 风格（主牌）· 系列（五大系列，没写 = null） */
 function browseKeys(c) {
   const rooms = new Set((c.rooms || []).filter((r) => ROOM_BY_ID[r] && r !== 'plan3d'));
   for (const im of c.images || []) if (ROOM_BY_ID[im.room] && im.room !== 'plan3d') rooms.add(im.room);
   const d = c.style?.dreamers?.[0];
-  return { kind: c.kind === 'project' ? 'project' : 'concept', type: PROPERTY_BY_ID[c.property?.type] ? c.property.type : 'other', rooms, style: DREAMER_BY_CODE[d] ? d : null };
+  return { kind: c.kind === 'project' ? 'project' : 'concept', type: PROPERTY_BY_ID[c.property?.type] ? c.property.type : 'other', rooms, style: DREAMER_BY_CODE[d] ? d : null, series: seriesKeyOf(c.series) };
 }
 const KIND_FACETS = [
   { id: 'project', zh: '做过的家', en: 'Homes we made' },
@@ -1059,11 +1092,12 @@ const asList = (v) => (Array.isArray(v) ? v : v ? [v] : []).filter(Boolean);
  * 看全部（客人可以翻所有的家）→ { list: Match[], excluded: [{ id, tags }], facets, total }
  *   list：筛选以后的家，排法和 matchCases 一样（limit = 全部、MMR、理由一起给，同一页第一条理由不重复）；雷区一定要避开的家不放回来。
  *   excluded：雷区一定要避开的家（不管筛选；界面照旧说「已经帮你避开…」）。
- *   facets：{ kind: [{ id, n, label }], type: [{ id, n, label }], room: [{ id, n, label }], style: [{ code, n, label }] }
- *     —— 在没筛选、可以给客人看、没被雷区挡掉的家里数（n ≥ 1 的才有；种类 / 房子 / 房间 / 牌各按自己的表的顺序）。
+ *   facets：{ kind: [{ id, n, label }], type: [{ id, n, label }], room: [{ id, n, label }], style: [{ code, n, label }], series: [{ id, n, label }] }
+ *     —— 在没筛选、可以给客人看、没被雷区挡掉的家里数（n ≥ 1 的才有；种类 / 房子 / 房间 / 牌 / 系列各按自己的表的顺序；
+ *     系列 id = 系列的 key，按品牌手册的顺序，没写系列的家不算在里面）。
  *   total：没筛选时一共几个家（= facets 数的那一批）。
- * filters = { kind: 'all' | 'project' | 'concept', type: [], room: [], style: [] }：不同组之间「而且」，同一组里「或者」；
- *   room = case.rooms 里有、或者有这个房间的照片；style = 主牌。
+ * filters = { kind: 'all' | 'project' | 'concept', type: [], room: [], style: [], series: [] }：不同组之间「而且」，同一组里「或者」；
+ *   room = case.rooms 里有、或者有这个房间的照片；style = 主牌；series = 系列的 key（名字也认，seriesKeyOf）。
  * opts（和 matchCases 一样）：picksMats、lambda、allowDrafts（员工预览）、keepConcepts。
  */
 export function browseCases(profile, cases, filters = {}, { picksMats, lambda = 0.3, allowDrafts = false, keepConcepts = false } = {}) {
@@ -1078,26 +1112,29 @@ export function browseCases(profile, cases, filters = {}, { picksMats, lambda = 
     else ok.push({ c, k: browseKeys(c) });
   }
   // 数一数（没筛选的那一批）
-  const cnt = { kind: new Map(), type: new Map(), room: new Map(), style: new Map() };
+  const cnt = { kind: new Map(), type: new Map(), room: new Map(), style: new Map(), series: new Map() };
   const bump = (m, key) => key && m.set(key, (m.get(key) || 0) + 1);
   for (const { k } of ok) {
     bump(cnt.kind, k.kind);
     bump(cnt.type, k.type);
     for (const r of k.rooms) bump(cnt.room, r);
     bump(cnt.style, k.style);
+    bump(cnt.series, k.series);
   }
   const facets = {
     kind: KIND_FACETS.filter((x) => cnt.kind.get(x.id)).map((x) => ({ id: x.id, n: cnt.kind.get(x.id), label: L(x) })),
     type: PROPERTY_TYPES.filter((x) => cnt.type.get(x.id)).map((x) => ({ id: x.id, n: cnt.type.get(x.id), label: L(x) })),
     room: ROOMS.filter((x) => cnt.room.get(x.id)).map((x) => ({ id: x.id, n: cnt.room.get(x.id), label: L(x) })),
     style: DREAMERS.filter((x) => cnt.style.get(x.code)).map((x) => ({ code: x.code, n: cnt.style.get(x.code), label: L(x) })),
+    series: SERIES.filter((x) => cnt.series.get(x.key)).map((x) => ({ id: x.key, n: cnt.series.get(x.key), label: L(x) })),
   };
   const kind = f.kind === 'project' || f.kind === 'concept' ? f.kind : null;
   const types = asList(f.type);
   const rooms = asList(f.room);
   const styles = asList(f.style);
+  const series = asList(f.series).map(seriesKeyOf).filter(Boolean);
   const shown = ok
-    .filter(({ k }) => (!kind || k.kind === kind) && (!types.length || types.includes(k.type)) && (!rooms.length || rooms.some((r) => k.rooms.has(r))) && (!styles.length || styles.includes(k.style)))
+    .filter(({ k }) => (!kind || k.kind === kind) && (!types.length || types.includes(k.type)) && (!rooms.length || rooms.some((r) => k.rooms.has(r))) && (!styles.length || styles.includes(k.style)) && (!series.length || series.includes(k.series)))
     .map((x) => x.c);
   const r = rankCases(p, shown, { limit: shown.length, picksMats, lambda, readmit: false });
   return { list: r.picks, excluded, facets, total: ok.length };

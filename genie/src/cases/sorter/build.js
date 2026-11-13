@@ -9,6 +9,7 @@ import { matchScore, deltaE, rgbToLab } from './color.js';
 import { MAT_BY_ID, fits, hexToRgb } from '../../shared/materials.js';
 import { CHIP_VALUE, PROPERTY_BY_ID, ROOM_BY_ID, SUPPLY_BY_ID, SUPPLY_OFFER, migrateCase, guessDreamers } from '../../shared/cases.js';
 import { AXES, HIDDEN_AXES, DREAMER_BY_CODE } from '../../shared/dreamers.js';
+import { seriesKeyOf } from '../../shared/series.js';
 
 const NEUTRAL = new Set(['black', 'white', 'grey']);
 export const TEMPLATE_FOR = { condo: 'condo3', terrace: 'terrace2', semid: 'semid2', bungalow: 'semid2', townhouse: 'terrace2', other: 'condo3' };
@@ -158,7 +159,10 @@ export function suppliesOf(rooms = []) {
  *   detail = 细节特写（没给 → 上次存的那张怎么标就怎么标）；prev = 上次存的同一张照片：员工在案例库里写的说明 / 替代文字留着；
  *   keep = 员工在案例库里自己加的照片，原样留着）；palette：color.paletteOf 的结果
  * prev（上次存的案例）：员工在案例库里做的都留着 —— 上架 / 藏起来、业主同意（dec.consent 没给的时候）、故事、地址、板材、
- *   每个房间做了什么、家具、产品…；标题、材质、做了哪些是整理工具按照片重新算的
+ *   每个房间做了什么、家具、产品、五大系列…；标题、材质、做了哪些是整理工具按照片重新算的
+ * series（溪岸五大系列）：上次存的案例已经有系列（员工在案例库里定的，或者上次从文件夹读的）→ 留着；
+ *   没有 → 项目文件夹名字里读到的第一个系列（g.series，data.json 的 id = series.js 的 key）；都没有 → null（员工在案例库里定）。
+ *   （员工在案例库里把系列改回「未定」、文件夹名字又写着系列 → 再存一次会补回文件夹的那个。）
  */
 export function caseFromGroup(g, dec = {}, shots = [], palette = { families: {}, swatches: [] }, { now = new Date().toISOString(), prev = null } = {}) {
   const styles = dec.styles?.length ? dec.styles : g.styles || [];
@@ -195,6 +199,7 @@ export function caseFromGroup(g, dec = {}, shots = [], palette = { families: {},
     rooms: rooms.length ? rooms : ['living'],
     template: TEMPLATE_FOR[type] || null,
     style: { dreamers: style.dreamers, axes: style.axes, hidden: style.hidden, wishes: prev?.style?.wishes || [], features: style.features },
+    series: seriesKeyOf(prev?.series) || (g.series || []).map(seriesKeyOf).find(Boolean) || null,
     materials: suggestMaterials(styles, palette.swatches, rooms),
     boards: prev?.boards || {},
     boardsAlso: prev?.boardsAlso || [],

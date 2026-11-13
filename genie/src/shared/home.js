@@ -631,7 +631,10 @@ export function homeSummary(home, { designer = false, staffNote = null } = {}) {
   return out;
 }
 
-/** 案例 → 档案里存的小引用 { id, rev, title } */
+/** 溪岸五大系列的 key（series.js 的 SERIES；这里只认样子，不 import 那份文案） */
+export const SERIES_KEY_RE = /^(skeleton|mountain|weaving|misty|wabi)$/;
+
+/** 案例 → 档案里存的小引用 { id, rev, title, boards?, series? } */
 export function caseRef(c) {
   if (!c) return null;
   const title = c.title && typeof c.title === 'object' ? { zh: c.title.zh || '', en: c.title.en || '' } : { zh: String(c.title || ''), en: '' };
@@ -640,6 +643,8 @@ export function caseRef(c) {
   const boards = {};
   for (const slot of ['cabinetry', 'feature']) if (typeof c.boards?.[slot] === 'string' && /^sail-[a-z0-9-]{1,40}$/.test(c.boards[slot])) boards[slot] = c.boards[slot];
   if (Object.keys(boards).length) ref.boards = boards;
+  // 案例的溪岸系列（key）：客人自己的手机上没有这个案例时，蓝图「建议的系列」、设计师简报照样算得出来
+  if (typeof c.series === 'string' && SERIES_KEY_RE.test(c.series)) ref.series = c.series;
   return ref;
 }
 

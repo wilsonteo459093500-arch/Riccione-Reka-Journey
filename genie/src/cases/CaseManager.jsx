@@ -14,6 +14,7 @@ import { ArrowDown, ArrowDownUp, ArrowLeft, ArrowUp, Check, ChevronDown, Chevron
 import LangToggle from '../shared/LangToggle.jsx';
 import { t, L, isEn } from '../shared/i18n.js';
 import * as C from '../shared/cases.js';
+import { SERIES, SERIES_BY_KEY, seriesKeyOf } from '../shared/series.js';
 import { MATERIALS, MAT_BY_ID, SLOTS, SLOT_BY_ID, CATEGORIES, fits, onBoards } from '../shared/materials.js';
 import { idLabel, factoryCode, boardsOn } from '../shared/boards/match.js';
 import { swatchURL } from '../shared/textures.js';
@@ -229,7 +230,9 @@ function Tile({ c, sel, i, onOpen, onGrip, dragging }) {
   const src = cover ? C.imageURL(r || c, cover, 480) : '';
   const st = c.status === 'live' ? (c.kind === 'concept' ? 'seed' : 'live') : c.status;
   const p = c.property || {};
-  const line = [C.PROPERTY_BY_ID[p.type] && p.type !== 'other' ? t(C.PROPERTY_BY_ID[p.type].zh) : '', p.bedrooms ? t('{0} 房', [p.bedrooms]) : '', c.scope === 'rooms' ? t('部分房间') : ''].filter(Boolean).join(' · ');
+  // 溪岸系列写了就跟在后面（一眼看得出哪几个家还没定系列）
+  const sr = SERIES_BY_KEY[seriesKeyOf(c.series)];
+  const line = [C.PROPERTY_BY_ID[p.type] && p.type !== 'other' ? t(C.PROPERTY_BY_ID[p.type].zh) : '', p.bedrooms ? t('{0} 房', [p.bedrooms]) : '', c.scope === 'rooms' ? t('部分房间') : '', sr ? L(sr) : ''].filter(Boolean).join(' · ');
   return (
     <li className={`mg-tile ${sel ? 'is-sel' : ''} ${dragging ? 'is-ghosted' : ''}`} data-id={c.id} style={{ '--fx-i': Math.min(i, 10) }}>
       <button type="button" className="mg-tile-open" data-fx-depth="0.985" data-sfx="open" onClick={() => onOpen(c)} aria-label={L(c.title) || t('未命名')}>
@@ -872,6 +875,40 @@ function RoomsMade({ draft, patch }) {
   );
 }
 
+// ───────────────────────── 溪岸五大系列（docs/showcase/SERIES.md §4） ─────────────────────────
+
+/**
+ * 「溪岸系列」：这个家做的是五大系列的哪一个（骨骼线 · 空山 · 织 · 雾山 · 侘寂东方，品牌手册的顺序）+「未定」（null）。
+ * 员工只看名字（没有编号）；选了以后下面一行是这个系列的总称（雾山没有）+ 一句话（照品牌手册），一眼认得出没选错。
+ * 存的是 key（case.series）；旧案例 migrateCase 已经整理成 key 或 null，打开不会算「改过」。
+ */
+function SeriesField({ value, onChange }) {
+  const key = seriesKeyOf(value);
+  const s = SERIES_BY_KEY[key];
+  return (
+    <Field id="mg-f-series" label="溪岸系列" hint="这个家做的是溪岸哪一个系列。客人在卡片和详情里看到「溪岸 · 空山」这样的小标签；和客人最适合的系列一样的家会排前面。拿不准就先选「未定」。">
+      <div className="chips mg-chips mg-series" data-sfx="radio" role="group" aria-label={t('溪岸系列')}>
+        {SERIES.map((x) => (
+          <button key={x.key} type="button" className={`chip ${key === x.key ? 'on' : ''}`} aria-pressed={key === x.key} onClick={() => onChange(x.key)}>
+            {L(x)}
+          </button>
+        ))}
+        <button type="button" className={`chip mg-series-none ${key ? '' : 'on'}`} aria-pressed={!key} onClick={() => onChange(null)}>
+          {t('未定')}
+        </button>
+      </div>
+      {s ? (
+        <p className="mg-series-line">
+          {s.family && <small>{L(s.family)}</small>}
+          <span>{L(s.title)}</span>
+        </p>
+      ) : (
+        <p className="mg-hint mg-series-line is-none">{t('还没定：客人那边不显示系列标签，也不会因为系列排前。')}</p>
+      )}
+    </Field>
+  );
+}
+
 // 文件名 → 房间（和 scripts/import-cases.mjs 同一套的简版）
 function guessRoom(name) {
   const s = String(name).toLowerCase();
@@ -1052,6 +1089,8 @@ function Editor({ draft, patch, errors, dirty, pending, onSave, onDiscard, onDel
         ))}
       </Field>
       <RoomsMade draft={draft} patch={patch} />
+
+      <SeriesField value={draft.series} onChange={(k) => patch((d) => (d.series = k))} />
 
       <Field label="风格（点一点，不用填数字）">
         <div className="mg-axis">
@@ -1346,8 +1385,8 @@ function Editor({ draft, patch, errors, dirty, pending, onSave, onDiscard, onDel
 
 // ───────────────────────── 预览：示范客人会看到什么 ─────────────────────────
 
-const PART_LABEL = { style: '风格', hidden: '明暗线条', card: '牌', wish: '愿望', prop: '房子', size: '大小', scope: '房间', pick: '选的图', real: '真实项目', swap: '要换' };
-const PART_HINT = { hidden: '明暗 · 线条 · 社交', swap: '踩到雷区的表面，3D 里会帮客人换掉（每个表面扣一点）' };
+const PART_LABEL = { style: '风格', hidden: '明暗线条', card: '牌', wish: '愿望', prop: '房子', size: '大小', scope: '房间', pick: '选的图', real: '真实项目', series: '系列', swap: '要换' };
+const PART_HINT = { hidden: '明暗 · 线条 · 社交', series: '这个家的溪岸系列 = 客人最适合的（第二适合的加得少一点）', swap: '踩到雷区的表面，3D 里会帮客人换掉（每个表面扣一点）' };
 
 function GuestCard({ m }) {
   const c = m.case;
