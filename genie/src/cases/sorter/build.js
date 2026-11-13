@@ -9,6 +9,7 @@ import { matchScore, deltaE, rgbToLab } from './color.js';
 import { MAT_BY_ID, fits, hexToRgb } from '../../shared/materials.js';
 import { CHIP_VALUE, PROPERTY_BY_ID, ROOM_BY_ID, SUPPLY_BY_ID, SUPPLY_OFFER, migrateCase, guessDreamers } from '../../shared/cases.js';
 import { AXES, HIDDEN_AXES, DREAMER_BY_CODE } from '../../shared/dreamers.js';
+import { seriesKeyOf } from '../../shared/series.js';
 
 const NEUTRAL = new Set(['black', 'white', 'grey']);
 export const TEMPLATE_FOR = { condo: 'condo3', terrace: 'terrace2', semid: 'semid2', bungalow: 'semid2', townhouse: 'terrace2', other: 'condo3' };
@@ -154,16 +155,29 @@ export function suppliesOf(rooms = []) {
 /**
  * 整理好的项目 → 案例（还没存；调用的人先 putImage 存照片，再 saveCase）。
  * g：项目（groups 的一项）；dec：员工的决定 { styles, type, bedrooms, consent, rooms:{key:room} }；
- * shots：[{ key, room, view, image }]（image = putImage 的结果，封面在第一个）；palette：color.paletteOf 的结果
+ * shots：[{ key, room, view, detail?, image, prev?, cover?, keep? }]（image = putImage 的结果，封面在第一个 —— 或者 cover: true 的那张；
+ *   detail = 细节特写（没给 → 上次存的那张怎么标就怎么标）；prev = 上次存的同一张照片：员工在案例库里写的说明 / 替代文字留着；
+ *   keep = 员工在案例库里自己加的照片，原样留着）；palette：color.paletteOf 的结果
+ * prev（上次存的案例）：员工在案例库里做的都留着 —— 上架 / 藏起来、业主同意（dec.consent 没给的时候）、故事、地址、板材、
+ *   每个房间做了什么、家具、产品、五大系列…；标题、材质、做了哪些是整理工具按照片重新算的
+ * series（溪岸五大系列）：上次存的案例已经有系列（员工在案例库里定的，或者上次从文件夹读的）→ 留着；
+ *   没有 → 项目文件夹名字里读到的第一个系列（g.series，data.json 的 id = series.js 的 key）；都没有 → null（员工在案例库里定）。
+ *   （员工在案例库里把系列改回「未定」、文件夹名字又写着系列 → 再存一次会补回文件夹的那个。）
  */
 export function caseFromGroup(g, dec = {}, shots = [], palette = { families: {}, swatches: [] }, { now = new Date().toISOString(), prev = null } = {}) {
   const styles = dec.styles?.length ? dec.styles : g.styles || [];
   const style = styleOf(styles);
   // 没标房间的照片：room ''（案例库显示「房间？」，客人看不到房间名字）—— 永远不猜成客厅。
   // 整个家的 3D 鸟瞰：room 'plan3d'、kind 'plan3d'（客人那边标「整个家（3D）」，不算一个房间）
+  // 细节特写（门板、拉手、木纹…）：detail: true（客人那边有「细节」一栏）；没说就看照片类型 'detail'
+  const txt = (x) => ({ zh: String(x?.zh || ''), en: String(x?.en || '') });
+  const flagged = shots.some((s) => s.cover === true);
   const images = shots.map((s, i) => {
+    const cover = flagged ? s.cover === true : i === 0;
+    if (s.keep) return { ...s.image, cover };
     const room = s.room && ROOM_BY_ID[s.room] ? s.room : '';
-    return { ...s.image, room, kind: room === 'plan3d' ? 'plan3d' : s.view === 'render' ? 'render' : 'photo', cover: i === 0, alt: { zh: '', en: '' } };
+    const detail = typeof s.detail === 'boolean' ? s.detail : typeof s.prev?.detail === 'boolean' ? s.prev.detail : s.view === 'detail' || !!s.image?.detail;
+    return { ...s.image, room, kind: room === 'plan3d' ? 'plan3d' : s.view === 'render' ? 'render' : 'photo', cover, alt: txt(s.prev?.alt), caption: txt(s.prev?.caption), detail };
   });
   const rooms = [...new Set(images.map((im) => im.room))].filter((r) => r && r !== 'plan3d');
   const type = dec.type || null;
@@ -174,9 +188,9 @@ export function caseFromGroup(g, dec = {}, shots = [], palette = { families: {},
     kind: showroom ? 'showroom' : 'project', // 展厅：cases.js 的 'showroom' 类，matchCases 永远不配给客人
     v: 1,
     rev: prev?.rev || 0,
-    status: showroom ? 'hidden' : 'draft',
+    status: showroom ? 'hidden' : prev?.status || 'draft', // 再存一次：上架的还是上架（不会退回草稿），藏起来的还藏着
     order: prev?.order ?? 1000,
-    consent: !showroom && !!dec.consent,
+    consent: !showroom && (typeof dec.consent === 'boolean' ? dec.consent : !!prev?.consent),
     title: titleOf({ styles, raw: g.raw, type, bedrooms: dec.bedrooms, families: palette.families }),
     story: prev?.story?.zh || prev?.story?.en ? prev.story : null, // 下面按风格 / 房子 / 材质补上两句
     place: prev?.place || { zh: '', en: '' },
@@ -185,11 +199,15 @@ export function caseFromGroup(g, dec = {}, shots = [], palette = { families: {},
     rooms: rooms.length ? rooms : ['living'],
     template: TEMPLATE_FOR[type] || null,
     style: { dreamers: style.dreamers, axes: style.axes, hidden: style.hidden, wishes: prev?.style?.wishes || [], features: style.features },
+    series: seriesKeyOf(prev?.series) || (g.series || []).map(seriesKeyOf).find(Boolean) || null,
     materials: suggestMaterials(styles, palette.swatches, rooms),
+    boards: prev?.boards || {},
+    boardsAlso: prev?.boardsAlso || [],
     mood: style.mood,
-    time: null,
+    time: prev?.time ?? null,
     furniture: prev?.furniture || {},
     supplies: suppliesOf(rooms),
+    roomsMade: prev?.roomsMade || {},
     products: prev?.products || [],
     wishNotes: prev?.wishNotes || {},
     images,
@@ -197,5 +215,6 @@ export function caseFromGroup(g, dec = {}, shots = [], palette = { families: {},
     updatedAt: now,
   };
   if (!raw.story) raw.story = storyOf({ styles, type, bedrooms: dec.bedrooms, firm: raw.supplies.firm, materials: raw.materials });
+  if (raw.status === 'live' && !raw.consent) raw.status = 'draft'; // 没有业主同意不能给客人看
   return migrateCase(raw);
 }

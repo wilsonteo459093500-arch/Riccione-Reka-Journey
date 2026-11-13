@@ -8,13 +8,20 @@
 //   photos/
 //     setia-alam-condo/          ← 文件夹名 = 案例编号（p-setia-alam-condo）
 //       01 客厅.jpg  02-kitchen.jpg  主卧.heic …   ← 文件名里有房间名就自动认（客厅 / living、厨房 / kitchen、主卧 / master …）
+//       05 厨房 细节.jpg  closeup-handle.jpg …     ← 文件名里有「细节 / 特写 / 局部 / 近景 / detail / close-up / closeup / macro」= 细节特写（detail: true）
 //       case.txt                 ← 选填：第 1 行中文标题，第 2 行英文标题（第 3、4 行：中文 / 英文故事）
-//       case.json                ← 选填：任何案例字段（property、style、materials、consent …），会盖过 case.txt
+//       case.json                ← 选填：任何案例字段（property、style、materials、consent、series …），会盖过 case.txt
+//
+// 溪岸五大系列（series）：case.json 的 "series"（"空山" / "mountain" / "织系列" / "Skeleton Line" … 都认，写进 manifest 的是 key）；
+// 没写 → 新项目看文件夹名字里有没有单独一段是系列的名字（例：shift-空山 → mountain）；已有的项目留着 manifest 里的（员工定的）。
+// case.json 里的系列改了、照片没变 → 也算更新。不是五大系列的（「自然线」「庭前」）= null。
 //
 // 每张照片：转正（EXIF 方向）→ 1600 px 大图 + 480 px 小图，WebP（q ≈ 0.82，太大会自动降一点），
 // EXIF / GPS / 相机资料全部去掉（重新编码，不复制任何元数据）。输出 <out>/<编号>/NN-1600.webp、NN-480.webp。
 // manifest：新项目 = kind 'project'、status 'draft'（员工在案例库里打好标签、勾「业主同意」才上架）；
-// 已有的项目只换照片，员工打过的标签（风格、材质、故事…）都保留。
+// 已有的项目只换照片，员工打过的标签（风格、材质、故事…）都保留；每张照片员工写的说明（caption）、替代文字、房间、「细节」标记、
+// 排的顺序、封面跟着照片走：按源文件认（每张照片记下源文件名的指纹 srcName；文件夹里中间多了 / 少了一张，编号会变，说明不会跑到别的照片上）；
+// 旧的 manifest 没记 srcName 的，才按编号（NN）+ 同样大小认。文件名说是细节的，一定是细节。
 //
 // --base：照片放在别的公开空间（这个仓库是公开的，真实照片可以不进 git）—— manifest 里写完整网址 base + 编号/NN-1600.webp，
 //         <out> 里生成的文件再自己上传到那里。也可以不写 --base，改 src/shared/config.js 的 CONFIG.cases.base（全部照片一起换）。
@@ -27,6 +34,7 @@ import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { seriesKeyOf } from '../src/shared/series.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const IMG_EXT = /\.(jpe?g|png|webp|heic|heif|tiff?|avif)$/i;
@@ -59,6 +67,23 @@ export function guessRoom(name) {
   return null;
 }
 
+// 文件名 → 细节特写（门板、拉手、木纹、收口的近拍）；和案例整理工具（src/cases/sorter/data.json 的 views.detail）同一组词
+const DETAIL_WORDS = ['细节', '特写', '局部', '近景', 'detail', 'close-up', 'closeup', 'macro'];
+export function guessDetail(name) {
+  const s = String(name).toLowerCase();
+  return DETAIL_WORDS.some((w) => s.includes(w));
+}
+
+/** 上一次导入的那张和这张大小一样（两个引擎缩图可能差 1–2 px） */
+const samePhoto = (old, w, h) => !!old && Math.abs((old.w || 0) - w) <= 2 && Math.abs((old.h || 0) - h) <= 2;
+
+/**
+ * 源文件名的指纹（srcName）：再导入的时候认「上一次的同一张照片」用。
+ * 只存指纹、不存文件名本身 —— manifest 跟着网站发布、仓库是公开的，文件名里可能有人名。
+ */
+export const srcNameOf = (file) => crypto.createHash('sha1').update(String(file).normalize('NFC')).digest('hex').slice(0, 12);
+const text2 = (x) => ({ zh: String(x?.zh || ''), en: String(x?.en || '') });
+
 export function slugOf(folder) {
   const name = String(folder);
   const ascii = name
@@ -75,6 +100,18 @@ export function slugOf(folder) {
 }
 
 const natural = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+
+/**
+ * 文件夹名字里单独一段是五大系列的中文名字（「-」「_」、空格分段；只认整段：「轻衫织」不算「织」）→ key；没有 → null。
+ * 只认中文（老板的文件夹是「城市-姓名-风格」）：英文的 mountain-view-condo 不会被当成空山。
+ */
+export function seriesOfFolder(folder) {
+  for (const seg of String(folder).split(/[\s\-_－—–]+/)) {
+    const k = /[一-鿿]/.test(seg) ? seriesKeyOf(seg) : null;
+    if (k) return k;
+  }
+  return null;
+}
 
 function parseArgs(argv) {
   const o = { src: null, out: path.join(ROOT, 'public/cases'), manifest: path.join(ROOT, 'src/cases/manifest.json'), base: '', engine: 'auto', dry: false, quiet: false };
@@ -253,7 +290,8 @@ function readCaseText(dir) {
   return o;
 }
 
-const sameImages = (a = [], b = []) => a.length === b.length && a.every((x, i) => x.src === b[i].src && x.w === b[i].w && x.h === b[i].h && x.room === b[i].room);
+// 照片一样（同样的文件、大小、房间、细节；记过源文件的还要是同一个源文件 —— 没记过的不算改动，见下面补记 srcName）
+const sameImages = (a = [], b = []) => a.length === b.length && a.every((x, i) => x.src === b[i].src && x.w === b[i].w && x.h === b[i].h && x.room === b[i].room && !!x.detail === !!b[i].detail && (!x.srcName || x.srcName === b[i].srcName));
 
 export async function importCases(opts) {
   const o = { ...parseArgs([]), ...opts };
@@ -274,6 +312,8 @@ export async function importCases(opts) {
   for (const folder of folders) {
     const dir = path.join(o.src, folder);
     const extra = readCaseText(dir);
+    // case.json 写了系列：换成 key（不是五大系列的 = null）
+    if ('series' in extra) extra.series = seriesKeyOf(extra.series);
     const id = extra.id || `p-${slugOf(folder)}`;
     const files = fs.readdirSync(dir).filter((f) => IMG_EXT.test(f) && !f.startsWith('.')).sort(natural);
     if (!files.length) {
@@ -292,37 +332,58 @@ export async function importCases(opts) {
     else results = engine === 'pillow' ? encodePillow(jobs) : await encodeChromium(jobs);
     const prev = byId.get(id);
     const prevImgs = new Map((prev?.images || []).map((im) => [im.id, im]));
+    const bySrc = new Map((prev?.images || []).filter((im) => im.srcName).map((im) => [im.srcName, im]));
     const images = [];
+    const oldOf = new Map(); // 这次的照片 → 上一次的同一张照片（排顺序、留封面用；不写进 manifest）
     results.forEach((r, i) => {
       const j = jobs[i];
       if (r.error) {
         report.errors.push({ id, file: j.file, error: /heic|heif|cannot identify/i.test(r.error) && /\.hei[cf]$/i.test(j.file) ? 'HEIC: pip install pillow-heif, or export the photo as JPG' : r.error });
         return;
       }
-      const old = prevImgs.get(j.nn);
+      const srcName = srcNameOf(j.file);
       const rel = (tag) => `${o.base}${id}/${j.nn}-${tag}.webp`;
       const big = r.files[0];
-      images.push({
+      // 上一次的同一张照片：记了源文件的按源文件认；旧的（没记 srcName）才按编号认。还要同样大小（换了照片就不算）。
+      // 员工写的说明 / 替代文字、房间、标的「细节」、排的顺序、封面都跟着这张照片走（不跟着编号）。
+      // 「细节」和房间一样：文件名说是细节就是细节；文件名没说 → 员工标过的留着
+      const byNN = prevImgs.get(j.nn);
+      const cand = bySrc.get(srcName) || (byNN && !byNN.srcName ? byNN : null);
+      const old = samePhoto(cand, big.w, big.h) ? cand : null;
+      const im = {
         id: j.nn,
+        srcName,
         room: guessRoom(j.file) || old?.room || '', // 认不出来 = 空着（案例库显示「房间？」），不要猜成客厅
         kind: old?.kind || (guessRoom(j.file) === 'plan3d' ? 'plan3d' : 'photo'),
         w: big.w,
         h: big.h,
         src: rel('1600'),
         thumb: rel('480'),
-        alt: old?.alt || { zh: '', en: '' },
+        alt: old ? text2(old.alt) : { zh: '', en: '' },
+        caption: old ? text2(old.caption) : { zh: '', en: '' },
+        detail: guessDetail(j.file) || old?.detail === true,
         cover: i === coverIdx,
-      });
+      };
+      if (old) oldOf.set(im, old.id);
+      images.push(im);
       for (const f of r.files) if (f.bytes != null && !o.quiet) log(`  ${id}/${path.basename(f.dest)}  ${f.w}×${f.h}  ${(f.bytes / 1024).toFixed(0)} KB`);
     });
     if (!images.length) continue;
-    // 如果员工已经在 manifest 里挑过封面，保留
+    // 员工在案例库里排过的顺序（images 的先后 = 客人看到的先后）：认得的照片按原来的顺序，新照片接在后面
+    if (prev?.images?.length) {
+      const at = new Map(prev.images.map((im, i) => [im.id, i]));
+      const rank = (im) => (oldOf.has(im) && at.has(oldOf.get(im)) ? at.get(oldOf.get(im)) : prev.images.length);
+      images.sort((a, b) => rank(a) - rank(b));
+    }
+    // 如果员工已经在 manifest 里挑过封面（那张照片还在），保留
     const keptCover = prev?.images?.find((im) => im.cover)?.id;
-    if (keptCover && images.some((im) => im.id === keptCover)) images.forEach((im) => (im.cover = im.id === keptCover));
+    if (keptCover && images.some((im) => oldOf.get(im) === keptCover)) images.forEach((im) => (im.cover = oldOf.get(im) === keptCover));
     const rooms = [...new Set(images.map((im) => im.room).filter((r) => r && r !== 'plan3d'))];
     if (prev) {
-      const changed = !sameImages(prev.images, images) || (extra.title && JSON.stringify(extra.title) !== JSON.stringify(prev.title));
+      const changed = !sameImages(prev.images, images) || (extra.title && JSON.stringify(extra.title) !== JSON.stringify(prev.title)) || ('series' in extra && extra.series !== (seriesKeyOf(prev.series) ?? null));
       if (!changed) {
+        // 照片没变、只是旧的 manifest 还没记 srcName：补记上（不算改动 —— rev 不变，设备上改过的副本照样盖得过它）
+        if (prev.images.some((im, n) => im.srcName !== images[n].srcName)) byId.set(id, { ...prev, images: prev.images.map((im, n) => ({ ...im, srcName: images[n].srcName })) });
         report.unchanged.push(id);
         continue;
       }
@@ -355,6 +416,7 @@ export async function importCases(opts) {
         supplies: { firm: [], context: [] },
         products: [],
         wishNotes: {},
+        series: seriesOfFolder(folder),
         images,
         createdAt: now,
         updatedAt: now,
@@ -403,6 +465,9 @@ export async function mergePack(opts) {
         continue;
       }
       const { origin, ...c } = JSON.parse(JSON.stringify(raw));
+      // 五大系列：存 key（旧写法也认）；旧版本存的案例不认得 series（整个没有这个字段）→ 留着 manifest 里的那一个
+      if ('series' in c) c.series = seriesKeyOf(c.series);
+      else if (prev && seriesKeyOf(prev.series)) c.series = seriesKeyOf(prev.series);
       // 溪岸板材（R11 e）：旧版本存过的案例不认得 boards / boardsAlso，存的时候整个丢了 → 留着 manifest 里的那一份，并提醒
       const had = (x) => (Array.isArray(x) ? x.length > 0 : !!x && typeof x === 'object' && Object.keys(x).length > 0);
       if (prev && had(prev.boards) && !('boards' in raw)) {
@@ -423,7 +488,9 @@ export async function mergePack(opts) {
       const images = [];
       for (const im of c.images || []) {
         if (!im.device) {
-          images.push(im);
+          // iPad 上存的时候不留 srcName（只有导入脚本用）：manifest 里同一张照片（同一个编号、同一个文件）记过的接着用
+          const was = !im.srcName && prev?.images?.find((p) => p.id === im.id && p.src === im.src)?.srcName;
+          images.push(was ? { ...im, srcName: was } : im);
           continue;
         }
         const url = pack.photos?.[`${c.id}/${im.id}`];

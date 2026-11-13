@@ -717,6 +717,18 @@ html[lang='en'] .so-row-name h3 {
   font: 700 11.5px/1 var(--sans);
   box-shadow: 0 2px 8px rgba(var(--gold-d-rgb), 0.3);
 }
+/* 细节特写的小标（左上角；封面的标在左下角） */
+.so-ph-detail {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(var(--shade-rgb), 0.62);
+  color: var(--card);
+  font: 700 10.5px/1.1 var(--sans);
+  letter-spacing: 0.02em;
+}
 .so-ph-why {
   position: absolute;
   left: 6px;
@@ -1068,6 +1080,17 @@ html[lang='en'] .so-row-name h3 {
 .so-out-done .so-lead svg {
   color: var(--accent);
 }
+/* 存不进去（空间满了 / 出错）：红字说清楚，下面的按钮照样能关 */
+.so-out-error .so-lead {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--danger);
+}
+.so-out-error .so-lead svg {
+  flex: none;
+  margin-top: 2px;
+}
 .so-parts {
   display: grid;
   gap: 8px;
@@ -1179,6 +1202,12 @@ html[lang='en'] .so-row-name h3 {
   flex-wrap: wrap;
   gap: 6px;
 }
+.so .chip.so-chip.so-pop-detail {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 10px;
+}
 
 /* 看大图（暗底，照片更准） */
 .so-lb {
@@ -1250,6 +1279,7 @@ html[lang='en'] .so-row-name h3 {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end; /* 按钮多了换行时，第二行靠右（和第一行的按钮对齐） */
   gap: 10px;
   padding: 12px 16px 16px;
 }

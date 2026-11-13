@@ -32,7 +32,7 @@ export function profileForStudio(p) {
   const { id, name, code, axes, hidden, life, storage, avoid, materials, wishes, createdAt } = p;
   const out = { id, name, code, axes, hidden, life, storage, avoid, materials, wishes, createdAt };
   if (isObj(p.home)) out.home = homeForStudio(p.home);
-  if (Array.isArray(p.cases)) out.cases = p.cases.filter((c) => isObj(c) && c.id).map(({ id: cid, rev, title }) => ({ id: cid, rev: rev || 1, title: isObj(title) ? { zh: title.zh || '', en: title.en || '' } : { zh: String(title || ''), en: '' } })).slice(0, 3);
+  if (Array.isArray(p.cases)) out.cases = p.cases.filter((c) => isObj(c) && c.id).map(({ id: cid, rev, title, series }) => ({ id: cid, rev: rev || 1, title: isObj(title) ? { zh: title.zh || '', en: title.en || '' } : { zh: String(title || ''), en: '' }, ...(typeof series === 'string' && /^(skeleton|mountain|weaving|misty|wabi)$/.test(series) ? { series } : {}) })).slice(0, 3);
   if (p.caseId !== undefined) out.caseId = p.caseId ?? null;
   return out;
 }

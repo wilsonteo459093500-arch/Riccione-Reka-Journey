@@ -1,4 +1,5 @@
-// 一张案例卡（C 屏，SPEC §4）：封面 + 两张房间小图、房子类型、「3D 示意」/「我们做过的家」、名字、一行地点、
+// 一张案例卡（C 屏，SPEC §4）：封面 + 两张房间小图、房子类型、「3D 示意」/「我们做过的家」、
+// 系列的小牌子「溪岸 · 空山」（案例写了系列才有，名字上面；docs/showcase/SERIES.md §3）、名字、一行地点、
 // 「我们做」那一行（业主 + LEAD NOTE 6：只列定制柜、墙板、门；活动家具只是示意，地板、灯、窗帘从来不写成公司做的）、
 // 四个色点、一条理由、「选这个 / 已选」。
 // 只读 480 的小图（列表要快：40 个案例 / 200 张照片也只读封面）；还没有照片 → 用这个家的材质拼一张色卡。
@@ -10,6 +11,7 @@ import * as C from '../../shared/cases.js';
 import { splitSupply, lab } from '../../shared/home.js';
 import { Spark } from './icons.jsx';
 import { Swatch } from './kit.jsx';
+import { SeriesTag, caseSeries } from './SeriesCard.jsx';
 
 const SWATCH_SLOTS = ['floor', 'walls', 'cabinetry', 'upholstery', 'feature'];
 
@@ -50,6 +52,9 @@ export const capFirst = (s) => (s && /^[a-z]/.test(s) ? s[0].toUpperCase() + s.s
 
 export const kindBadge = (c) => (C.isConcept(c) ? lab(CONCEPT_BADGE) : t('我们做过的家'));
 
+// 许愿模式：照片不给存（不能拖出去、没有长按 / 右键菜单；CSS 再加 -webkit-touch-callout: none）
+const noMenu = (e) => e.preventDefault();
+
 function CaseCard({ match, on, onToggle, onOpen }) {
   const c = match.case;
   const cover = C.coverOf(c);
@@ -59,6 +64,7 @@ function CaseCard({ match, on, onToggle, onOpen }) {
   const title = L(c.title);
   const tag = propertyTag(c);
   const firm = firmLine(c);
+  const series = caseSeries(c);
   const open = (e) => {
     if (e.target.closest?.('.cs-pick')) return;
     onOpen?.(e);
@@ -74,9 +80,9 @@ function CaseCard({ match, on, onToggle, onOpen }) {
       data-sfx="open"
       data-case={c.id}
     >
-      <div className="cs-cover">
+      <div className="cs-cover" onContextMenu={noMenu}>
         {cover ? (
-          <img src={C.imageURL(c, cover, 480)} alt={L(cover.alt) || title} loading="lazy" decoding="async" width="480" height="360" />
+          <img src={C.imageURL(c, cover, 480)} alt={L(cover.alt) || title} loading="lazy" decoding="async" width="480" height="360" draggable={false} />
         ) : (
           <SwatchCover c={c} />
         )}
@@ -85,7 +91,7 @@ function CaseCard({ match, on, onToggle, onOpen }) {
         {thumbs.length > 0 && (
           <span className="cs-thumbs" aria-hidden="true">
             {thumbs.map((im) => (
-              <img key={im.id} src={C.imageURL(c, im, 480)} alt="" loading="lazy" decoding="async" />
+              <img key={im.id} src={C.imageURL(c, im, 480)} alt="" loading="lazy" decoding="async" draggable={false} />
             ))}
           </span>
         )}
@@ -106,7 +112,15 @@ function CaseCard({ match, on, onToggle, onOpen }) {
         )}
       </div>
       <div className="cs-body">
-        <h3>{title}</h3>
+        {/* 写了系列：小牌子和名字包在一起（色点照旧对着名字 + 地点那两行）；没写系列的卡和以前一模一样 */}
+        {series ? (
+          <div className="cv-sr-head">
+            <SeriesTag c={c} />
+            <h3>{title}</h3>
+          </div>
+        ) : (
+          <h3>{title}</h3>
+        )}
         <p className="cs-place">{String(C.placeLine(c) || '').replace(/ sq ft/g, '\u00a0sq\u00a0ft')}</p>
         {firm && (
           <p className="cs-offer">

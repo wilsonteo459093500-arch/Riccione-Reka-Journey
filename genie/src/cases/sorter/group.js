@@ -69,7 +69,7 @@ export function safeFolderName(seg, names = []) {
  * 列出来的文件 → 项目分组。
  * entries：[{ path, name, size, mtime }]（浏览器里还带 file）
  * → { groups, files: Map<key, item>, skipped, names, stats }
- *   item = { key, path, name, size, mtime, kind, room, view, sub, groupId }
+ *   item = { key, path, name, size, mtime, kind, room, view, detail, sub, groupId }（detail：文件名 / 子文件夹说是细节特写）
  *   group = { id, dir, kind:'home'|'showroom'|'event', collection, city, styles, raw, series, boards, materials, flat, keys:[…], seq }
  */
 export function buildGroups(entries) {
@@ -92,7 +92,7 @@ export function buildGroups(entries) {
     }
     if (kind === 'heic') heic++;
     const key = fileKey(e);
-    const item = { key, path: e.path || e.name, name: e.name, size: e.size, mtime: e.mtime, kind, room: c.room, view: c.view, sub: c.sub, file: e.file, groupId: null };
+    const item = { key, path: e.path || e.name, name: e.name, size: e.size, mtime: e.mtime, kind, room: c.room, view: c.view, detail: c.detail, sub: c.sub, file: e.file, groupId: null };
     files.set(key, item);
     let g = byDir.get(c.projDir);
     if (!g) {

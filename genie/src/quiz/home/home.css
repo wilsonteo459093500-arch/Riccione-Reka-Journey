@@ -484,7 +484,8 @@
   box-sizing: border-box;
   width: min(1120px, 100vw);
   margin: 0 auto;
-  padding: clamp(28px, 7vh, 86px) 28px 130px;
+  /* 底下让出固定的页脚（约 84 px + iPad 的 home 条）再多一点：滚到底，最后那个「看全部」完整露在页脚上面 */
+  padding: clamp(28px, 7vh, 86px) 28px calc(130px + env(safe-area-inset-bottom));
 }
 .cs-wrap.is-preview {
   width: 100%;
@@ -733,7 +734,8 @@
   justify-content: center;
   gap: 12px;
   padding: 18px 20px calc(14px + env(safe-area-inset-bottom));
-  background: linear-gradient(rgba(var(--bg-rgb), 0), rgba(var(--bg-rgb), 0.94) 32%);
+  /* 按钮那一条是实的：后面滚过去的卡片、「看全部」不会从按钮中间透出来（只有最上面一小截淡进来） */
+  background: linear-gradient(rgba(var(--bg-rgb), 0), var(--bg) 22px);
 }
 .cs-foot.is-inline {
   position: sticky;
@@ -801,7 +803,7 @@
 }
 @media (max-width: 560px) {
   .cs-wrap {
-    padding: 22px 14px 130px;
+    padding: 22px 14px calc(130px + env(safe-area-inset-bottom));
   }
   .cs-grid {
     grid-template-columns: 1fr;

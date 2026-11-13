@@ -1,17 +1,26 @@
-// 每个项目自动挑：一张封面（清楚、曝光好、横的、宽）+ 最多 5 张「不一样」的（指纹差得多、颜色 / 房间不一样）。
+// 每个项目自动挑：一张封面（清楚、曝光好、横的、宽）+ 最多 17 张「不一样」的（指纹差得多、颜色 / 房间不一样）。
+//   · 每个房间最多 4 张（没标房间的算同一个「房间」）—— 客人按房间看，一个客厅拍了 30 张也只挑最好最不一样的 4 张；
+//     照片最少的房间先挑（每个房间都有一张了，才挑第二张…），客人每个房间都看得到；
+//   · 细节特写（门板、拉手、木纹、收口）另外最多 4 张，不占房间的名额，排在最后；
+//   · 几乎同一个角度（> 0.93 像）的不硬凑。
 // 重复的、不合适的（截图、单据、太小、糊、太暗、工地）先藏起来 —— 员工点一下就能拿回来。
 
 import { clusterNear } from './dupes.js';
 import { hamming, hashWords, LIMITS } from './imgmath.js';
 import { deltaE } from './color.js';
 
-export const PICK = { max: 6, lambda: 0.55, simBits: 56 };
+export const PICK = { max: 18, perRoom: 4, details: 4, near: 0.93, lambda: 0.55, simBits: 56 };
 const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
 const median = (a) => {
   if (!a.length) return 0;
   const s = [...a].sort((x, y) => x - y);
   return s[s.length >> 1];
 };
+
+/** 细节特写：员工 / AI 标过的（detail: true / false）优先，没标就看文件名 / 子文件夹（view 'detail'） */
+export const isDetail = (p) => (typeof p?.detail === 'boolean' ? p.detail : p?.view === 'detail');
+/** 房间名额按哪个「房间」算：没标房间的都算同一个（''） */
+const roomKey = (p) => p.room || '';
 
 /** 直接藏起来的理由（flags 里「太亮」只扣分，不藏） */
 export function rejectReasons(a) {
@@ -61,11 +70,14 @@ export function similarity(a, b, W = new Map()) {
 }
 
 /**
- * 自动挑选。photos：[{ key, a (分析结果 | null), room, view, t }]；opt.crossDup：Set<key>（在别的项目里已经有了）
- * → { cover, picked:[key…]（封面在第一个）, dupOf:Map<key, 留下的那张>, rejects:Map<key, [理由]>, q:Map<key, q'> }
+ * 自动挑选。photos：[{ key, a (分析结果 | null), room, view, detail?, t }]；opt.crossDup：Set<key>（在别的项目里已经有了）
+ * opt.max / perRoom / details：总数、每个房间（不算细节）、细节特写的上限（默认 PICK）
+ * → { cover, picked:[key…]（封面在第一个，细节特写在最后）, dupOf:Map<key, 留下的那张>, rejects:Map<key, [理由]>, q:Map<key, q'> }
  */
 export function autoPick(photos, opt = {}) {
   const max = opt.max ?? PICK.max;
+  const perRoom = opt.perRoom ?? PICK.perRoom;
+  const maxDetails = opt.details ?? PICK.details;
   const crossDup = opt.crossDup || new Set();
   const ready = photos.filter((p) => p.a && p.a.hash);
   const q = relativeQuality(ready);
@@ -73,8 +85,8 @@ export function autoPick(photos, opt = {}) {
   const med = median(ready.map((p) => p.a.sharp));
   for (const p of ready) {
     const r = rejectReasons(p.a);
-    // 相对糊：比这个项目的中位数糊很多，绝对值也低
-    if (!r.includes('blur') && med > 0 && p.a.sharp < med * 0.22 && p.a.sharp < LIMITS.soft) r.push('blur');
+    // 相对糊：比这个项目的中位数糊很多，绝对值也低（细节特写不比：近拍的背景本来就是虚的）
+    if (!r.includes('blur') && !isDetail(p) && med > 0 && p.a.sharp < med * 0.22 && p.a.sharp < LIMITS.soft) r.push('blur');
     if (p.view === 'site' && !r.includes('site')) r.push('site');
     if ((p.view === 'shot' || p.view === 'doc' || p.view === 'plan') && !r.length) r.push(p.view === 'plan' ? 'plan' : p.view);
     if (r.length) rejects.set(p.key, r);
@@ -91,30 +103,57 @@ export function autoPick(photos, opt = {}) {
   if (!cands.length) return { cover: null, picked: [], dupOf, rejects, q };
   const hasPhotoView = cands.some((p) => p.view === 'photo');
   const W = new Map(cands.map((p) => [p.key, hashWords(p.a.hash)]));
-  let cover = cands[0];
-  for (const p of cands) if (coverScore(p, q.get(p.key), { hasPhotoView }) > coverScore(cover, q.get(cover.key), { hasPhotoView })) cover = p;
+  // 封面：规则不变；只是有房间照片的时候，不拿细节特写当封面
+  const coverPool = cands.some((p) => !isDetail(p)) ? cands.filter((p) => !isDetail(p)) : cands;
+  let cover = coverPool[0];
+  for (const p of coverPool) if (coverScore(p, q.get(p.key), { hasPhotoView }) > coverScore(cover, q.get(cover.key), { hasPhotoView })) cover = p;
   const picked = [cover];
-  const rooms = new Set([cover.room].filter(Boolean));
+  const rooms = new Set(); // 已经有照片的房间（细节不算）：新房间加一点分
+  const perRoomN = new Map(); // 每个房间挑了几张（细节不算）
+  let nDetail = 0;
+  const add = (p) => {
+    if (isDetail(p)) nDetail++;
+    else {
+      perRoomN.set(roomKey(p), (perRoomN.get(roomKey(p)) || 0) + 1);
+      if (p.room) rooms.add(p.room);
+    }
+  };
+  add(cover);
   const pool = cands.filter((p) => p !== cover);
-  while (picked.length < max && pool.length) {
-    let bi = -1;
-    let bv = -Infinity;
-    pool.forEach((p, i) => {
-      const red = Math.max(...picked.map((x) => similarity(p, x, W)));
-      const v = (q.get(p.key) || 0) - PICK.lambda * red + (p.room && !rooms.has(p.room) ? 0.06 : 0);
-      if (v > bv) {
-        bv = v;
-        bi = i;
-      }
-    });
-    if (bi < 0) break;
-    const p = pool.splice(bi, 1)[0];
-    // 和已经挑的太像（几乎同一个角度），就不硬凑满 6 张
-    if (Math.max(...picked.map((x) => similarity(p, x, W))) > 0.93) continue;
-    picked.push(p);
-    if (p.room) rooms.add(p.room);
-  }
-  return { cover: cover.key, picked: picked.map((p) => p.key), dupOf, rejects, q };
+  // 和已经挑的最像的那张有多像（每挑一张只和新挑的那张比一次）
+  const red = new Map(pool.map((p) => [p.key, similarity(p, cover, W)]));
+  const nOf = (p) => perRoomN.get(roomKey(p)) || 0;
+  // reserve：先给细节特写留几个位子（房间照片很多的项目，细节也挑得进来）
+  const fill = (reserve) => {
+    while (picked.length < max && pool.length) {
+      const roomsLeft = picked.length - nDetail < max - reserve;
+      // 房间照片：只从「挑得最少」的房间里挑（满 perRoom 张的房间不再挑）
+      let level = Infinity;
+      if (roomsLeft) for (const p of pool) if (!isDetail(p)) level = Math.min(level, nOf(p));
+      let bi = -1;
+      let bv = -Infinity;
+      pool.forEach((p, i) => {
+        if (isDetail(p) ? nDetail >= maxDetails : !roomsLeft || level >= perRoom || nOf(p) !== level) return; // 名额满了 / 别的房间还少
+        const v = (q.get(p.key) || 0) - PICK.lambda * red.get(p.key) + (!isDetail(p) && p.room && !rooms.has(p.room) ? 0.06 : 0);
+        if (v > bv) {
+          bv = v;
+          bi = i;
+        }
+      });
+      if (bi < 0) return;
+      const p = pool.splice(bi, 1)[0];
+      // 和已经挑的太像（几乎同一个角度），就不硬凑满
+      if (red.get(p.key) > PICK.near) continue;
+      picked.push(p);
+      add(p);
+      for (const x of pool) red.set(x.key, Math.max(red.get(x.key), similarity(x, p, W)));
+    }
+  };
+  fill(Math.min(maxDetails, pool.filter(isDetail).length));
+  fill(0); // 留给细节的位子没用完（太像 / 不够）→ 再让房间照片补上
+  // 顺序：封面 → 房间照片（挑的先后）→ 细节特写（案例里照片的顺序就是这个）
+  const order = [cover, ...picked.slice(1).filter((p) => !isDetail(p)), ...picked.slice(1).filter(isDetail)];
+  return { cover: cover.key, picked: order.map((p) => p.key), dupOf, rejects, q };
 }
 
 /**
