@@ -87,14 +87,26 @@
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-x: contain;
+}
+/* 还能往那边滑的一边淡出去（CaseGallery.jsx 加 .is-l / .is-r；切到一半的标签看起来是故意的） */
+.cv-tabs.is-r {
   -webkit-mask-image: linear-gradient(to right, black calc(100% - 22px), transparent);
   mask-image: linear-gradient(to right, black calc(100% - 22px), transparent);
+}
+.cv-tabs.is-l {
+  -webkit-mask-image: linear-gradient(to right, transparent, black 22px);
+  mask-image: linear-gradient(to right, transparent, black 22px);
+}
+.cv-tabs.is-l.is-r {
+  -webkit-mask-image: linear-gradient(to right, transparent, black 22px, black calc(100% - 22px), transparent);
+  mask-image: linear-gradient(to right, transparent, black 22px, black calc(100% - 22px), transparent);
 }
 .cv-tabs::-webkit-scrollbar,
 .cv-strip::-webkit-scrollbar,
 .cv-fchips::-webkit-scrollbar {
   display: none;
 }
+.cv-tabs:has(.cv-tab:first-child:focus-visible),
 .cv-tabs:has(.cv-tab:last-child:focus-visible) {
   -webkit-mask-image: none;
   mask-image: none;
@@ -358,6 +370,10 @@
 .cv-sheet .cs-info {
   min-width: 0;
   overscroll-behavior: contain;
+}
+/* 眉题「我们做过的家 · 公寓 · 3 房 2 卫 · 约 1,180 sq ft」：中文界面不转大写（不然是「SQ FT」）；只改详情这一个 */
+html:not([lang='en']) .cv-sheet .cs-info > .eyebrow {
+  text-transform: none;
 }
 .cv-facts {
   display: grid;
@@ -995,6 +1011,9 @@
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-x: contain;
+  /* 右边（屏幕边）淡出去：切到一半的那颗看起来是「还能往右滑」，不是坏掉 */
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 26px), transparent);
+  mask-image: linear-gradient(to right, black calc(100% - 26px), transparent);
 }
 .cv-fchip {
   flex: none;
@@ -1116,23 +1135,22 @@
     gap: 28px;
     padding-top: 20px;
   }
+  /* 筛选跟着页面一起滚（每一组都看得到、滑得到）；整个放得进一屏才贴着不动（CaseBrowser.jsx 量好了加 .is-stick） */
   .cv-br-filters {
-    position: sticky;
-    top: 92px;
-    max-height: calc(100dvh - 92px - 104px);
-    overflow: auto;
     gap: 18px;
     padding: 2px 4px 24px 2px;
-    scrollbar-width: none;
   }
-  .cv-br-filters::-webkit-scrollbar {
-    display: none;
+  .cv-br-filters.is-stick {
+    position: sticky;
+    top: 92px;
   }
   .cv-fchips {
     flex-wrap: wrap;
     margin: 0;
     padding: 0;
     overflow: visible;
+    -webkit-mask-image: none;
+    mask-image: none;
   }
   .cv-fchip {
     min-height: 44px;
@@ -1191,13 +1209,9 @@
   -webkit-user-drag: none;
 }
 
-/* 案例那一步 / 蓝图：「看全部 {0} 个家」「更多案例」 */
+/* 案例那一步 / 蓝图：「看全部 {0} 个家」 */
 .cv-all {
   gap: 6px;
-}
-.cv-all small {
-  font: 500 13px/1 var(--sans);
-  color: var(--text-soft);
 }
 .cv-bp-more {
   margin: 0;

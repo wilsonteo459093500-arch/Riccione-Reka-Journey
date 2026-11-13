@@ -17,10 +17,15 @@ export default {
   '空间快满了（大约还能放 {0} 张照片）：先「导出」备份，再移除用不到的照片。': 'Space is nearly full (room for about {0} more photos): Export a backup first, then remove photos you don’t need.',
   '浏览器没答应长期保留：空间紧张时可能会清掉这里的照片，记得常「导出」。': 'The browser hasn’t promised to keep these photos: it may clear them when space runs low, so Export often.',
   '这台设备的空间不够了：后面的照片没有存进去': 'This device is out of space: the remaining photos were not saved',
+  // 存案例 / 藏起来 / 导入案例包的时候存不进去
+  '这台设备的空间不够了：这次的改动没有存进去': 'This device is out of space: these changes were not saved',
+  '没存进去：改动都还在，再存一次试试': 'Not saved: your changes are still here, so try saving again',
+  '这台设备的空间不够了：案例包没有全部导进来': 'This device is out of space: the case pack was not fully imported',
+  '案例包没有全部导进来，再试一次': 'The case pack was not fully imported. Try again.',
   // 每个房间我们做了什么
   '客人在案例详情里一个房间一行地看。「自动」= 照「我们做」和溪岸板材推算的；改了任何一样，这个房间就照你写的。':
     'Guests see this in the case details, one line per room. "Auto" = worked out from "We make this" and the sAil boards; change anything and this room uses what you wrote.',
-  '没写：客人那边不显示这个房间': 'Empty: guests won’t see this room',
+  '没写：客人在「每个房间」里看不到这一行（照片照常显示）': 'Empty: left out of "What we made in each room" for guests (the photos still show)',
   '这个房间不在「做了哪些地方」里': 'Not in "Which spaces were done"',
   '每个房间最多 4 块板': 'Up to 4 boards per room',
   '这个案例还没填溪岸板材（在「这个家用了」里选）。': 'No sAil boards on this case yet (pick them under "In this home").',

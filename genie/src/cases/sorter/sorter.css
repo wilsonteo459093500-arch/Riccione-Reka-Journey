@@ -1080,6 +1080,17 @@ html[lang='en'] .so-row-name h3 {
 .so-out-done .so-lead svg {
   color: var(--accent);
 }
+/* 存不进去（空间满了 / 出错）：红字说清楚，下面的按钮照样能关 */
+.so-out-error .so-lead {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--danger);
+}
+.so-out-error .so-lead svg {
+  flex: none;
+  margin-top: 2px;
+}
 .so-parts {
   display: grid;
   gap: 8px;

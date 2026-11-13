@@ -154,8 +154,11 @@ export function suppliesOf(rooms = []) {
 /**
  * 整理好的项目 → 案例（还没存；调用的人先 putImage 存照片，再 saveCase）。
  * g：项目（groups 的一项）；dec：员工的决定 { styles, type, bedrooms, consent, rooms:{key:room} }；
- * shots：[{ key, room, view, detail?, image, prev? }]（image = putImage 的结果，封面在第一个；detail = 细节特写；
- *   prev = 上次存的同一张照片：员工在案例库里写的说明 / 替代文字留着）；palette：color.paletteOf 的结果
+ * shots：[{ key, room, view, detail?, image, prev?, cover?, keep? }]（image = putImage 的结果，封面在第一个 —— 或者 cover: true 的那张；
+ *   detail = 细节特写（没给 → 上次存的那张怎么标就怎么标）；prev = 上次存的同一张照片：员工在案例库里写的说明 / 替代文字留着；
+ *   keep = 员工在案例库里自己加的照片，原样留着）；palette：color.paletteOf 的结果
+ * prev（上次存的案例）：员工在案例库里做的都留着 —— 上架 / 藏起来、业主同意（dec.consent 没给的时候）、故事、地址、板材、
+ *   每个房间做了什么、家具、产品…；标题、材质、做了哪些是整理工具按照片重新算的
  */
 export function caseFromGroup(g, dec = {}, shots = [], palette = { families: {}, swatches: [] }, { now = new Date().toISOString(), prev = null } = {}) {
   const styles = dec.styles?.length ? dec.styles : g.styles || [];
@@ -164,10 +167,13 @@ export function caseFromGroup(g, dec = {}, shots = [], palette = { families: {},
   // 整个家的 3D 鸟瞰：room 'plan3d'、kind 'plan3d'（客人那边标「整个家（3D）」，不算一个房间）
   // 细节特写（门板、拉手、木纹…）：detail: true（客人那边有「细节」一栏）；没说就看照片类型 'detail'
   const txt = (x) => ({ zh: String(x?.zh || ''), en: String(x?.en || '') });
+  const flagged = shots.some((s) => s.cover === true);
   const images = shots.map((s, i) => {
+    const cover = flagged ? s.cover === true : i === 0;
+    if (s.keep) return { ...s.image, cover };
     const room = s.room && ROOM_BY_ID[s.room] ? s.room : '';
-    const detail = typeof s.detail === 'boolean' ? s.detail : s.view === 'detail' || !!s.image?.detail;
-    return { ...s.image, room, kind: room === 'plan3d' ? 'plan3d' : s.view === 'render' ? 'render' : 'photo', cover: i === 0, alt: txt(s.prev?.alt), caption: txt(s.prev?.caption), detail };
+    const detail = typeof s.detail === 'boolean' ? s.detail : typeof s.prev?.detail === 'boolean' ? s.prev.detail : s.view === 'detail' || !!s.image?.detail;
+    return { ...s.image, room, kind: room === 'plan3d' ? 'plan3d' : s.view === 'render' ? 'render' : 'photo', cover, alt: txt(s.prev?.alt), caption: txt(s.prev?.caption), detail };
   });
   const rooms = [...new Set(images.map((im) => im.room))].filter((r) => r && r !== 'plan3d');
   const type = dec.type || null;
@@ -178,9 +184,9 @@ export function caseFromGroup(g, dec = {}, shots = [], palette = { families: {},
     kind: showroom ? 'showroom' : 'project', // 展厅：cases.js 的 'showroom' 类，matchCases 永远不配给客人
     v: 1,
     rev: prev?.rev || 0,
-    status: showroom ? 'hidden' : 'draft',
+    status: showroom ? 'hidden' : prev?.status || 'draft', // 再存一次：上架的还是上架（不会退回草稿），藏起来的还藏着
     order: prev?.order ?? 1000,
-    consent: !showroom && !!dec.consent,
+    consent: !showroom && (typeof dec.consent === 'boolean' ? dec.consent : !!prev?.consent),
     title: titleOf({ styles, raw: g.raw, type, bedrooms: dec.bedrooms, families: palette.families }),
     story: prev?.story?.zh || prev?.story?.en ? prev.story : null, // 下面按风格 / 房子 / 材质补上两句
     place: prev?.place || { zh: '', en: '' },
@@ -190,10 +196,13 @@ export function caseFromGroup(g, dec = {}, shots = [], palette = { families: {},
     template: TEMPLATE_FOR[type] || null,
     style: { dreamers: style.dreamers, axes: style.axes, hidden: style.hidden, wishes: prev?.style?.wishes || [], features: style.features },
     materials: suggestMaterials(styles, palette.swatches, rooms),
+    boards: prev?.boards || {},
+    boardsAlso: prev?.boardsAlso || [],
     mood: style.mood,
-    time: null,
+    time: prev?.time ?? null,
     furniture: prev?.furniture || {},
     supplies: suppliesOf(rooms),
+    roomsMade: prev?.roomsMade || {},
     products: prev?.products || [],
     wishNotes: prev?.wishNotes || {},
     images,
@@ -201,5 +210,6 @@ export function caseFromGroup(g, dec = {}, shots = [], palette = { families: {},
     updatedAt: now,
   };
   if (!raw.story) raw.story = storyOf({ styles, type, bedrooms: dec.bedrooms, firm: raw.supplies.firm, materials: raw.materials });
+  if (raw.status === 'live' && !raw.consent) raw.status = 'draft'; // 没有业主同意不能给客人看
   return migrateCase(raw);
 }

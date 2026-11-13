@@ -11,11 +11,33 @@ import fx from '../../shared/fx.js';
 import { sfx } from '../../shared/sfx.js';
 import { t } from '../../shared/i18n.js';
 import * as C from '../../shared/cases.js';
-import { pushLayer, noSave, textOf, inWish, useBig, capture } from './CaseGallery.jsx';
+import { pushLayer, lockScroll, noSave, textOf, inWish, useBig, capture } from './CaseGallery.jsx';
 
 const MAX = 4;
 const DOUBLE = 2.5;
+const SNAP = 1.05; // 捏完不到这么大 → 回到 1×（放大一点点没意义，还会让左右滑换照片失灵）
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+/**
+ * 放大以后照片的边不离开屏幕的边；比屏幕小的那一边不能拖（放在中间）。
+ * size = 照片 1× 时的大小，vp = 屏幕，shiftY = 照片中心比屏幕中心低多少（上下留给字的不一样多）。
+ */
+export function clampPan(s, x, y, size, vp, shiftY) {
+  const mx = (size.w * s - vp.w) / 2;
+  const my = (size.h * s - vp.h) / 2;
+  return { s, x: mx > 0 ? clamp(x, -mx, mx) : 0, y: my > 0 ? clamp(y, -my - shiftY, my - shiftY) : 0 };
+}
+
+/**
+ * 两指捏完、松开一根 → { z: 放手以后的倍数和位置, g: 还按着的那根手指（rest = { x, y }，没有 → null）接下来的手势 }。
+ * 先定倍数再给手势：不到 SNAP 就回到 1×，剩下那根手指什么都不做（g = null；不能带着捏的时候的倍数接着拖 ——
+ * 照片又会放大一点点、「放大」按钮还以为没放大、左右滑也不灵了）；还放大着 → 剩下那根手指接着拖。
+ */
+export function pinchEnd(z, rest, t0 = 0) {
+  const z1 = z.s < SNAP ? { s: 1, x: 0, y: 0 } : { ...z };
+  const g = rest && z1.s > 1 ? { kind: 'pan', x0: rest.x, y0: rest.y, t0, z0: { ...z1 }, moved: true } : null;
+  return { z: z1, g };
+}
 
 /** 照片放进 vw × vh（留出上下的字）的大小（照片资料里的宽高，不等图片读完 —— 换大图不跳） */
 function fitSize(img, vw, vh) {
@@ -99,18 +121,17 @@ export default function Lightbox({ c, list, index, store, title = '', onIndex, o
     el.style.transform = s === 1 && !x && !y ? '' : `translate3d(${x}px, ${y}px, 0) scale(${s})`;
   };
   const shiftY = (padTop - padBottom) / 2; // 照片中心比屏幕中心低（正）/ 高（负）多少
-  /** 放大以后照片的边不离开屏幕的边；比屏幕小的那一边不能拖（放在中间） */
-  const bound = (s, x, y) => {
-    const mx = (size.w * s - vp.w) / 2;
-    const my = (size.h * s - vp.h) / 2;
-    return { s, x: mx > 0 ? clamp(x, -mx, mx) : 0, y: my > 0 ? clamp(y, -my - shiftY, my - shiftY) : 0 };
-  };
+  const bound = (s, x, y) => clampPan(s, x, y, size, vp, shiftY);
   const setZoom = (s, x, y, anim) => {
     z.current = s <= 1.01 ? { s: 1, x: 0, y: 0 } : bound(s, x, y);
     apply(anim);
     const on = z.current.s > 1;
     setZoomed((v) => (v === on ? v : on));
   };
+  // 转了 iPad / 窗口变了：放大着的照片按新的大小重新夹一下（画出来之前；不然边上露出一条黑的，下一次碰到才跳回来）
+  useLayoutEffect(() => {
+    if (z.current.s > 1) setZoom(z.current.s, z.current.x, z.current.y);
+  }, [vp.w, vp.h]); // eslint-disable-line react-hooks/exhaustive-deps
   /** 以屏幕上的一点 (px, py) 为中心缩放到 s */
   const zoomAt = (s1, px, py, anim) => {
     const { s, x, y } = z.current;
@@ -151,6 +172,7 @@ export default function Lightbox({ c, list, index, store, title = '', onIndex, o
       } else if (e.key === 'ArrowRight') keys.current.go(1, true);
       else if (e.key === 'ArrowLeft') keys.current.go(-1, true);
     }, rootRef);
+    const unlock = lockScroll();
     let r1 = 0;
     let r2 = 0;
     r1 = requestAnimationFrame(() => {
@@ -160,6 +182,7 @@ export default function Lightbox({ c, list, index, store, title = '', onIndex, o
       cancelAnimationFrame(r1);
       cancelAnimationFrame(r2);
       pop();
+      unlock();
     };
   }, []);
 
@@ -250,13 +273,12 @@ export default function Lightbox({ c, list, index, store, title = '', onIndex, o
     const st = g.current;
     if (!st) return;
     if (st.kind === 'pinch') {
-      if (ptrs.current.size === 1) {
-        // 还剩一根手指：接着拖
-        const [p] = [...ptrs.current.values()];
-        g.current = { kind: 'pan', x0: p.x, y0: p.y, t0: performance.now(), z0: { ...z.current }, moved: true };
-      } else g.current = null;
-      if (z.current.s < 1.05) setZoom(1, 0, 0, true);
-      else setZoomed(true);
+      // 先定倍数（不到 1.05 → 1×），再看还剩的那根手指：还放大着才接着拖
+      const rest = ptrs.current.size === 1 ? [...ptrs.current.values()][0] : null;
+      const end = pinchEnd(z.current, rest, performance.now());
+      g.current = end.g;
+      if (end.z.s > 1) setZoomed(true);
+      else setZoom(1, 0, 0, true);
       return;
     }
     g.current = null;

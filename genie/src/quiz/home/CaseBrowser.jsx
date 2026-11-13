@@ -8,7 +8,7 @@
 // 设备上的照片：卡片只读封面 + 两张小图（useCardCovers），关掉时收回。挂在 body 上（createPortal）。
 // props：{ profile, cases, isOn(c), onToggleCase(c, e) → 'on' | 'off' | 'full', chosen: Case[], pickedThumb(c) → url, onClose, readOnly }
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Check, RotateCcw } from 'lucide-react';
 import fx from '../../shared/fx.js';
@@ -16,10 +16,14 @@ import { t, isEn } from '../../shared/i18n.js';
 import * as C from '../../shared/cases.js';
 import CaseCard from './CaseCard.jsx';
 import CaseDetail, { useCaseBoards } from './CaseDetail.jsx';
-import { pushLayer, useCardCovers, inWish, noSave } from './CaseGallery.jsx';
+import { pushLayer, lockScroll, useCardCovers, inWish, noSave } from './CaseGallery.jsx';
 import './showcase.css';
 
 const EMPTY = { kind: 'all', type: [], room: [], style: [] };
+// 两栏时筛选贴着不动的那一块：顶上让出顶栏（showcase.css .cv-br-filters.is-stick 的 top: 92px），
+// 底下让出页脚（「选好了」那一条，大概 104 px；只看的没有页脚）—— 最下面一组不能藏在页脚后面
+const STICK_TOP = 92;
+const FOOT_ROOM = 104;
 const listSep = () => (isEn() ? ', ' : '、');
 const flip = (arr, v) => (arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
 
@@ -44,9 +48,7 @@ export default function CaseBrowser({ profile, cases, isOn, onToggleCase, chosen
 
   useEffect(() => {
     const pop = pushLayer((e) => e.key === 'Escape' && keys.current?.close(), rootRef);
-    const html = document.documentElement;
-    const prev = html.style.overflow;
-    html.style.overflow = 'hidden';
+    const unlock = lockScroll();
     const back = document.activeElement;
     let r1 = 0;
     let r2 = 0;
@@ -57,11 +59,29 @@ export default function CaseBrowser({ profile, cases, isOn, onToggleCase, chosen
       cancelAnimationFrame(r1);
       cancelAnimationFrame(r2);
       pop();
-      html.style.overflow = prev;
+      unlock();
       if (back && back.isConnected) back.focus?.({ preventScroll: true });
     };
   }, []);
   useEffect(() => () => clearTimeout(toastT.current), []);
+
+  // 两栏（≥ 1000 px）：筛选整个放得进一屏（顶栏和页脚中间）才贴着不动；放不下就跟着页面一起滚 ——
+  // 不能自己藏一个滚动框（iPad 横放时「风格」那一组整个在页脚后面，看不出来还能往下滑）
+  const filtersRef = useRef(null);
+  const [stick, setStick] = useState(false);
+  useLayoutEffect(() => {
+    const el = filtersRef.current;
+    if (!el) return undefined;
+    const read = () => setStick(window.innerWidth >= 1000 && el.offsetHeight <= window.innerHeight - STICK_TOP - (readOnly ? 24 : FOOT_ROOM));
+    read();
+    window.addEventListener('resize', read);
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(read);
+    ro?.observe(el);
+    return () => {
+      window.removeEventListener('resize', read);
+      ro?.disconnect();
+    };
+  }, []);
 
   const close = () => {
     if (closing) return;
@@ -83,8 +103,10 @@ export default function CaseBrowser({ profile, cases, isOn, onToggleCase, chosen
   };
   const setF = (patch) => {
     setFilters((f) => ({ ...f, ...patch }));
-    // 换了筛选：回到最上面（结果从第一个开始看）
-    rootRef.current?.querySelector('.cv-br-scroll')?.scrollTo?.({ top: 0, behavior: fx.motion.reduced ? 'auto' : 'smooth' });
+    // 换了筛选：回到最上面（结果从第一个开始看）。左右两栏（≥ 1000 px）时筛选和结果一起滚：
+    // 不滚，免得客人刚点的那颗（在筛选栏下面）一下子跑到屏幕外
+    const twoCol = typeof matchMedia === 'function' && matchMedia('(min-width: 1000px)').matches;
+    if (!twoCol) rootRef.current?.querySelector('.cv-br-scroll')?.scrollTo?.({ top: 0, behavior: fx.motion.reduced ? 'auto' : 'smooth' });
   };
 
   const excludedTags = [...new Set((res.excluded || []).flatMap((x) => x.tags))].map(C.noGoLabel).filter(Boolean);
@@ -115,7 +137,7 @@ export default function CaseBrowser({ profile, cases, isOn, onToggleCase, chosen
         </header>
         <div className="cv-br-body">
           {(kinds.length > 0 || groups.length > 0) && (
-            <aside className="cv-br-filters" aria-label={t('筛选')}>
+            <aside ref={filtersRef} className={`cv-br-filters ${stick ? 'is-stick' : ''}`} aria-label={t('筛选')}>
               {kinds.length > 0 && (
                 <div className="cv-fgroup">
                   <span className="cv-flabel">{t('种类')}</span>

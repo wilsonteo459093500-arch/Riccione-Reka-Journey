@@ -5,6 +5,7 @@
 // 这里也放详情 / 看全部 / 全屏看图共用的几样：
 //   useImageStore —— 一张一张读设备上的照片（员工在 iPad 上加的，在 IndexedDB），用完收回 object URL；
 //   pushLayer     —— 一层一层的弹出画面，Esc、← → 只给最上面那一层（全屏看图 → 详情 → 看全部）；
+//   lockScroll    —— 弹出画面开着的时候后面的页面不滚（几层共用一个，数着用）；
 //   useCardCovers —— 卡片的封面 + 两张小图（设备上的照片要先读出来），用完收回；
 //   noSave        —— 许愿模式：照片不能拖、不能长按存（再加 CSS 的 -webkit-touch-callout: none）。
 
@@ -87,6 +88,56 @@ export function pushLayer(handler, root = null) {
     const i = LAYERS.indexOf(me);
     if (i >= 0) LAYERS.splice(i, 1);
   };
+}
+
+/**
+ * 锁住后面的页面不滚（<html> 的 overflow）→ 返回「放开」（叫几次都只算一次）。
+ * 看全部、详情、全屏看图共用这一个，数着用：第一个锁的记下原来的值，最后一个放开的才还原。
+ * 不能各自记、各自还原：几层一起拿掉（许愿模式没人理了整页重来、下一位客人）的时候，React 先清父亲再清孩子，
+ * 孩子最后还原的是父亲设的 'hidden' —— 后面的客人整页都滚不动。
+ */
+let scrollLocks = 0;
+let scrollSaved = '';
+export function lockScroll() {
+  const html = typeof document !== 'undefined' ? document.documentElement : null;
+  if (!html) return () => {};
+  if (scrollLocks++ === 0) {
+    scrollSaved = html.style.overflow;
+    html.style.overflow = 'hidden';
+  }
+  let done = false;
+  return () => {
+    if (done) return;
+    done = true;
+    if (--scrollLocks === 0) html.style.overflow = scrollSaved;
+  };
+}
+
+/**
+ * 相册的大图：这一下按下去是不是「第二根手指」（两指捏、两指碰到）—— 是就不拖、不换照片，正在拖的那一下也放掉。
+ * cur = 正在拖的那一下（{ id, type }）。鼠标永远不算（上一次没收到放开，新的按下照样开始拖）。
+ */
+export const secondTouch = (cur, e) => e.isPrimary === false || (!!cur && cur.id !== e.pointerId && cur.type === 'touch' && e.pointerType === 'touch');
+
+/**
+ * 照片标签那一排要滚到哪里（现在这个标签完整露出来，不压在两边淡出去的那一截里）→ 新的 scrollLeft；已经看得到 → null。
+ *   chips = 每个标签在这一排里的 [{ x, w }]，a = 现在这个是第几个，left / view / max = 现在滚到哪、看得到多宽、最多滚到哪，
+ *   fade = 两边淡出去多宽（还能往那边滑才有），gap = 标签之间的空。
+ * 停的地方对齐到两个标签中间的空：最左边（✕ 旁边）不会只露出半个标签、半个字；对齐的位置里挑最接近「放在中间」的。
+ * 对齐的位置都放不下（最后一个标签）→ 滚到最右边。
+ */
+export function tabScroll(chips, a, left, view, max, fade, gap) {
+  const c = chips[a];
+  if (!c) return null;
+  const fits = (L) => c.x - L >= (L > 1 ? fade : 0) && L + view - (c.x + c.w) >= (L < max - 1 ? fade : 0);
+  if (fits(left)) return null;
+  const mid = c.x - (view - c.w) / 2;
+  let best = null;
+  for (let k = 0; k < chips.length; k++) {
+    const L = k ? Math.round(chips[k].x - gap) : 0;
+    if (L <= max && fits(L) && (best == null || Math.abs(L - mid) < Math.abs(best - mid))) best = L;
+  }
+  return best ?? Math.round(max);
 }
 
 /**
@@ -210,6 +261,9 @@ export function useCardCovers(cases, { thumbs = 2 } = {}) {
 
 /** el 在可以左右滚的 box 里离最左边多远（含已经滚过去的；offsetLeft 量的是别的祖先，不能用） */
 const leftIn = (box, el) => box.scrollLeft + el.getBoundingClientRect().left - box.getBoundingClientRect().left;
+/** 照片标签那一排两边淡出去多宽、标签之间的空（showcase.css .cv-tabs 的 mask 22px、gap 6px） */
+const TAB_FADE = 22;
+const TAB_GAP = 6;
 
 /** 照片框（w × h）放这张照片：比例差不多（裁掉 ≤ 22%：4:3 的照片放进两栏的框）就铺满，不然整张放进来（竖的照片） */
 const FILL_MAX_CROP = 0.22;
@@ -303,14 +357,49 @@ export default function CaseGallery({ c, tabs, tab, onTab, list, index, onIndex,
     const left = leftIn(s, el) - (s.clientWidth - el.offsetWidth) / 2;
     s.scrollTo?.({ left: Math.max(0, left), behavior: reduced ? 'auto' : 'smooth' });
   }, [i, list, reduced]);
+  // 标签那一排两边：还能往那边滑才淡出去（.is-l / .is-r）—— 切到一半的标签看起来是故意的，不像没对齐。
+  // 最右边也停在两个标签中间：滚到头时最左边（✕ 旁边）会被切开的那个标签，在最后一个标签后面补上它露出来的那么多空
+  const [tabEdge, setTabEdge] = useState('');
+  const hasTabs = tabs.length > 1;
+  useEffect(() => {
+    const s = tabsRef.current;
+    if (!s) return undefined;
+    const read = () => {
+      const l = s.scrollLeft > 1;
+      const r = s.scrollLeft + s.clientWidth < s.scrollWidth - 1;
+      const v = `${l ? 'is-l' : ''} ${r ? 'is-r' : ''}`.trim();
+      setTabEdge((x) => (x === v ? x : v));
+    };
+    const fixEnd = () => {
+      const last = s.lastElementChild;
+      if (!last) return;
+      last.style.marginRight = '';
+      const max = s.scrollWidth - s.clientWidth;
+      if (max <= 1) return;
+      const cut = [...s.children].map((b) => ({ x0: leftIn(s, b), x1: leftIn(s, b) + b.offsetWidth })).find((e) => e.x0 < max && e.x1 > max + 0.5);
+      if (cut) last.style.marginRight = `${parseFloat(getComputedStyle(last).marginRight) + cut.x1 - max}px`;
+    };
+    const update = () => {
+      fixEnd();
+      read();
+    };
+    update();
+    s.addEventListener('scroll', read, { passive: true });
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update);
+    ro?.observe(s);
+    return () => {
+      s.removeEventListener('scroll', read);
+      ro?.disconnect();
+    };
+  }, [hasTabs, n > 0]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const s = tabsRef.current;
     const el = s?.querySelector('.on');
     if (!el) return;
-    const x = leftIn(s, el);
-    if (x < s.scrollLeft || x + el.offsetWidth > s.scrollLeft + s.clientWidth - 22) {
-      s.scrollTo?.({ left: Math.max(0, x - 12), behavior: reduced ? 'auto' : 'smooth' });
-    }
+    const all = [...s.querySelectorAll('.cv-tab')];
+    const chips = all.map((b) => ({ x: leftIn(s, b), w: b.offsetWidth }));
+    const left = tabScroll(chips, all.indexOf(el), s.scrollLeft, s.clientWidth, s.scrollWidth - s.clientWidth, TAB_FADE, TAB_GAP);
+    if (left != null) s.scrollTo?.({ left, behavior: reduced ? 'auto' : 'smooth' });
   }, [tab, reduced]);
 
   useEffect(() => {
@@ -368,7 +457,15 @@ export default function CaseGallery({ c, tabs, tab, onTab, list, index, onIndex,
 
   const onDown = (e) => {
     if (e.button > 0 || moving.current || !n) return;
-    drag.current = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now(), dx: 0, axis: null };
+    // 第二根手指（在大图上两指捏、两指碰到）：不拖、不换照片；第一根正在拖的那一下也放掉，照片弹回原位
+    if (secondTouch(drag.current, e)) {
+      if (drag.current) {
+        drag.current = null;
+        snapBack();
+      }
+      return;
+    }
+    drag.current = { id: e.pointerId, type: e.pointerType, x: e.clientX, y: e.clientY, t: performance.now(), dx: 0, axis: null };
   };
   const onMove = (e) => {
     const d = drag.current;
@@ -391,8 +488,9 @@ export default function CaseGallery({ c, tabs, tab, onTab, list, index, onIndex,
   };
   const onUp = (e) => {
     const d = drag.current;
-    drag.current = null;
+    // 只有开始拖的那根手指放开才结束（别的手指放开不算）
     if (!d || d.id !== e.pointerId) return;
+    drag.current = null;
     const dt = Math.max(1, performance.now() - d.t);
     if (!d.axis) {
       if (dt < 600 && img) openZoom();
@@ -404,7 +502,8 @@ export default function CaseGallery({ c, tabs, tab, onTab, list, index, onIndex,
     const dir = Math.abs(d.dx) > w * 0.18 || fast ? (d.dx < 0 ? 1 : -1) : 0;
     if (!dir || !go(dir)) snapBack();
   };
-  const onCancel = () => {
+  const onCancel = (e) => {
+    if (drag.current && drag.current.id !== e.pointerId) return;
     drag.current = null;
     snapBack();
   };
@@ -435,7 +534,7 @@ export default function CaseGallery({ c, tabs, tab, onTab, list, index, onIndex,
       <div className="cv-bar">
         {lead}
         {tabs.length > 1 && (
-          <div className="cv-tabs" ref={tabsRef} role="group" aria-label={t('照片分类')} data-sfx="radio">
+          <div className={`cv-tabs ${tabEdge}`} ref={tabsRef} role="group" aria-label={t('照片分类')} data-sfx="radio">
             {tabs.map((tb) => (
               <button key={tb.id} type="button" className={`cv-tab ${tb.id === tab ? 'on' : ''}`} aria-pressed={tb.id === tab} onClick={() => onTab(tb.id)}>
                 {tb.label}

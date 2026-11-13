@@ -1,5 +1,5 @@
 // 蓝图 VII · 参考案例（SPEC §9.2）：客人选的案例（点开 = 详情，只看不改）+「更多像你的家」（最像的 6 个，一排可以左右滑）
-// +「更多案例」（看全部的家，只看：CaseBrowser readOnly，懒载入）。详情里有「相似的家」（只看，不能选）。
+// +「看全部 {0} 个家」（和案例那一步同一句；看全部的家，只看：CaseBrowser readOnly，懒载入）。详情里有「相似的家」（只看，不能选）。
 // 懒载入（蓝图先出来，案例库读好了再补上）；案例库是空的就整节不出现。设备上的照片：卡片只读封面 + 两张小图，用完收回。
 
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
@@ -65,8 +65,7 @@ export default function BlueprintCases({ profile }) {
       {total > list.length && (
         <p className="cv-bp-more">
           <button type="button" className="btn-line small cv-all" onClick={() => setBrowse(true)} data-sfx="open">
-            <span>{t('更多案例')}</span>
-            <small>{t('{0} 个家', [total])}</small>
+            <span>{t('看全部 {0} 个家', [total])}</span>
             <ChevronRight size={17} strokeWidth={2} aria-hidden="true" />
           </button>
         </p>

@@ -210,7 +210,7 @@ export default function CasesStep({ profile, cases: given, preview = false, onDo
           })}
         </span>
         <button type="button" className="btn btn-primary" disabled={!chosen.length || leaving} onClick={(e) => finish(e, chosen)} data-sfx="confirm">
-          <span>{chosen.length ? tj('就用这 {0} 个', [<Odo key="n" value={chosen.length} />]) : t('先选一个')}</span>
+          <span>{chosen.length === 1 ? t('就用这一个') : chosen.length ? tj('就用这 {0} 个', [<Odo key="n" value={chosen.length} />]) : t('先选一个')}</span>
         </button>
         <button type="button" className="btn btn-line" onClick={none} disabled={leaving}>
           <span>{hasMore ? t('都不太像') : t('那就先用你的牌')}</span>

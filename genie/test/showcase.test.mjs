@@ -17,7 +17,7 @@ import { MAT_BY_ID, registerBoards, unregisterBoards } from '../src/shared/mater
 import { resetBoards, TEST_ID_PREFIX } from '../src/shared/boards/library-api.js';
 import { DREAMERS, DREAMER_BY_CODE } from '../src/shared/dreamers.js';
 import { buildProfile } from '../src/shared/profile.js';
-import { offersWorktop } from '../src/shared/home.js';
+import { offersWorktop, homeSummary } from '../src/shared/home.js';
 import * as FLOW from '../src/quiz/flow.js';
 import { setLang as setLang0 } from '../src/shared/i18n.js';
 import EN from '../src/shared/i18n/en.js';
@@ -346,10 +346,14 @@ const TEST_BOARDS = [
   rec('stone', '#9C9890', { code: 'XT-ST-92', kind: 'stone', name: { zh: '测试石纹', en: 'Test stone' } }),
   rec('label', '#A68C73', { code: 'XT993', label: { zh: '测试橡XT993', en: 'Test oak XT993' }, name: { zh: '测试橡', en: 'Test oak' } }),
   rec('noname', '#694330', { code: 'XT-TP-94' }),
+  // 只有编号、id 里就有这个编号（导入器的 sail-c<编号>）：显示名 = id，拿掉编号以后只剩 id 的碎片
+  rec('cxt995', '#7A5A44', { code: 'XT995' }),
+  // 员工把厂家编号当名字填了
+  rec('codename', '#6B4F3A', { code: 'XT-TP-96', name: { zh: 'XT-TP-96', en: 'XT-TP-96' } }),
 ];
 const B = Object.fromEntries(TEST_BOARDS.map((r) => [r.id.slice(P.length), r.id]));
 const reg = registerBoards(TEST_BOARDS, { src: 'bundled' });
-const FACTORY = /XT-TP-9|XT-ST-92|TS-PK99|XT993|XT-TP-94/i;
+const FACTORY = /XT-TP-9|XT-ST-92|TS-PK99|XT99\d|XT-TP-94/i;
 
 await test('boardGuestName：认得的板 →「7号 · 名字」/ 色号 · 名字 / 系列 · 名字（和详情「还用了」一样）；不认得、关掉、没名字 → \'\'；永远没有厂家编号', async () => {
   assert.deepEqual(reg.skipped, []);
@@ -360,6 +364,8 @@ await test('boardGuestName：认得的板 →「7号 · 名字」/ 色号 · 名
   assert.equal(C.boardGuestName(B.stone), '测试石纹');
   assert.equal(C.boardGuestName(B.label), '测试橡', 'a factory code typed into the label is taken out');
   assert.equal(C.boardGuestName(B.noname), '', 'only the id left → nothing to say');
+  assert.equal(C.boardGuestName(B.cxt995), '', 'only a code that is also in the id → never a piece of the id (sail-t-c)');
+  assert.equal(C.boardGuestName(B.codename), '', 'the name is just the factory code → nothing to say');
   for (const id of [`${P}unknown`, 'sail-404', 'XT-TP-91', '', null, undefined, 7]) assert.equal(C.boardGuestName(id), '', String(id));
   await inEnglish(() => {
     assert.equal(C.boardGuestName(B['7']), 'No. 7 · Test walnut');
@@ -375,6 +381,33 @@ await test('boardGuestName：认得的板 →「7号 · 名字」/ 色号 · 名
   assert.equal(C.boardGuestName(B.weave), also);
   await withConfig(CONFIG.boards, { on: false }, () => assert.equal(C.boardGuestName(B['7']), '', 'boards switched off → never shown'));
   for (const r of TEST_BOARDS) assert.ok(!FACTORY.test(C.boardGuestName(r.id)), r.id);
+});
+
+await test('boardGuestNames：中英文各一个（同样的规则），不管界面现在是哪一种语言；boardGuestName = 现在这个语言的那一个；永远没有厂家编号、没有板材 id', async () => {
+  const want = {
+    7: { zh: '7号 · 测试胡桃', en: 'No. 7 · Test walnut' },
+    c9131: { zh: '9131 · 测试墨绿', en: '9131 · Test ink green' },
+    weave: { zh: '织系列 · 测试编织', en: 'Woven · Test weave' },
+    stone: { zh: '测试石纹', en: 'Test stone' },
+    label: { zh: '测试橡', en: 'Test oak' },
+    noname: { zh: '', en: '' },
+    cxt995: { zh: '', en: '' },
+    codename: { zh: '', en: '' },
+  };
+  const all = () => Object.fromEntries(TEST_BOARDS.map((r) => [r.id.slice(P.length), C.boardGuestNames(r.id)]));
+  assert.deepEqual(all(), want);
+  await inEnglish(() => {
+    assert.deepEqual(all(), want, 'the same while the page is in English');
+    for (const r of TEST_BOARDS) assert.equal(C.boardGuestName(r.id), C.boardGuestNames(r.id).en);
+  });
+  for (const r of TEST_BOARDS) {
+    assert.equal(C.boardGuestName(r.id), C.boardGuestNames(r.id).zh);
+    for (const s of Object.values(C.boardGuestNames(r.id))) assert.ok(!FACTORY.test(s) && !/sail-/i.test(s), `${r.id}: ${s}`);
+  }
+  for (const id of [`${P}unknown`, 'XT-TP-91', null]) assert.deepEqual(C.boardGuestNames(id), { zh: '', en: '' }, String(id));
+  assert.deepEqual(C.boardGuestNames(B.weave, { series: false }), { zh: '测试编织', en: 'Test weave' }, 'series: false → no series prefix');
+  assert.deepEqual(C.boardGuestNames(B.label, { series: false }), want.label);
+  await withConfig(CONFIG.boards, { on: false }, () => assert.deepEqual(C.boardGuestNames(B['7']), { zh: '', en: '' }));
 });
 
 /** 一个编出来的真实项目（没有照片文件；名字都是「测试」） */
@@ -553,15 +586,17 @@ await test('caseRoomsMade：客人看的东西里永远没有厂家编号（中�
 
 // ───────────────────────── 5. 房子档案 ─────────────────────────
 
-await test('caseFacts：房子 / 建筑面积 / 房间 / 楼层（有地、两层以上）/ 我们做了 / 风格 / 地区；永远没有价钱、预算、时间、员工的资料', async () => {
+await test('caseFacts：房子 / 建筑面积 / 几房几卫 / 楼层（有地、两层以上）/ 我们做了 / 风格 / 地区；永远没有价钱、预算、时间、员工的资料', async () => {
   const facts = (c) => C.caseFacts(c).map((f) => [f.k, f.label, f.value]);
   assert.deepEqual(facts(zen), [
     ['type', '房子', '公寓'],
     ['size', '建筑面积', '约 1,100 sq ft'],
-    ['beds', '房间', '3 房 2 卫'],
+    ['beds', '几房几卫', '3 房 2 卫'],
     ['scope', '我们做了', '整个家'],
     ['style', '风格', DREAMER_BY_CODE.WMNH.zh],
   ], 'a seed: its place line is just the property line again → no 地区');
+  const bpBeds = () => homeSummary({ type: 'condo', bedrooms: 3, bathrooms: 2 }).find((x) => x.id === 'rooms');
+  assert.deepEqual(C.caseFacts(zen).find((f) => f.k === 'beds').label, bpBeds().label, 'the blueprint facts row uses the same label');
   const semid = byId('seed-softluxe-semid');
   assert.deepEqual(C.caseFacts(semid).find((f) => f.k === 'storeys').value, '2 层楼');
   assert.ok(!C.caseFacts({ ...zen, property: { ...zen.property, storeys: 3 } }).some((f) => f.k === 'storeys'), 'a condo never shows storeys');
@@ -573,7 +608,7 @@ await test('caseFacts：房子 / 建筑面积 / 房间 / 楼层（有地、两�
   assert.deepEqual(facts(real), [
     ['type', '房子', '排屋'],
     ['size', '建筑面积', '约 1,650 sq ft'],
-    ['beds', '房间', '4 房'],
+    ['beds', '几房几卫', '4 房'],
     ['storeys', '楼层', '2 层楼'],
     ['scope', '我们做了', '2 个房间'],
     ['style', '风格', DREAMER_BY_CODE.WLND.zh],
@@ -589,7 +624,8 @@ await test('caseFacts：房子 / 建筑面积 / 房间 / 楼层（有地、两�
   assert.deepEqual(C.caseFacts(null), []);
   await inEnglish(() => {
     const en = C.caseFacts(real);
-    assert.deepEqual(en.map((f) => f.label), ['Property', 'Built-up area', 'Room', 'Floor', 'We made', 'Style', 'Area']);
+    assert.equal(en[2].label, bpBeds().label);
+    assert.deepEqual(en.map((f) => f.label), ['Property', 'Built-up area', 'Bed / bath', 'Floor', 'We made', 'Style', 'Area'], 'bed / bath: the same label as the blueprint (homeSummary 几房几卫)');
     assert.deepEqual(en.map((f) => f.value), ['Terrace', '~1,650 sq ft', '4 bed', '2 storeys', '2 rooms', DREAMER_BY_CODE.WLND.en, 'Test Gardens, Selangor']);
     for (const c of LIVE) for (const f of C.caseFacts(c)) assert.ok(!HAN.test(f.label + f.value), `${c.id} ${f.k}: ${f.label} ${f.value}`);
   });
@@ -777,6 +813,47 @@ await test('browseCases：草稿 / 隐藏 / 展厅 / 没同意的永远不出现
   });
 });
 
+await test('为什么适合你（matchCases / 看全部 / 相似的家都一样）：案例原板说客人看的名字（boardGuestNames）；只有编号的板 → 改说客人选的材质；中英文都没有厂家编号、没有板材 id', async () => {
+  // 客人在地板那题选了「深深的胡桃木」（walnut）；每块测试板的近似材质都是 walnut
+  const prof = { code: 'WMNH', axes: { temp: 80, density: 30, texture: 80, storage: 70 }, answers: { pairs: { floor: { pick: 'f', ms: 2000 } } } };
+  const opts = { picksMats: new Set(['walnut']) };
+  const walnut = MAT_BY_ID.walnut;
+  const named = { [B['7']]: '7号 · 测试胡桃', [B.c9131]: '9131 · 测试墨绿', [B.label]: '测试橡' };
+  const pickReason = (board) => {
+    const c = home(`p-why-${board.slice(P.length)}`, { boards: { cabinetry: board } });
+    const m = C.matchCases(prof, [c], { limit: 1, ...opts }).picks[0];
+    const b = C.browseCases(prof, [c], {}, opts).list[0];
+    assert.deepEqual(b.reasons, m.reasons, `${board}: browse-all says the same`);
+    return m.reasons.find((r) => r.kind === 'pick');
+  };
+  for (const board of [B['7'], B.c9131, B.label, B.noname, B.cxt995, B.codename]) {
+    const r = pickReason(board);
+    assert.ok(r, board);
+    if (named[board]) {
+      assert.equal(r.key, '你选了「{0}」—— 这个家用的就是溪岸 {1}', board);
+      assert.deepEqual(r.vars[1], C.boardGuestNames(board, { series: false }), 'seq + name (no series prefix in this sentence)');
+      assert.ok(C.reasonText(r).endsWith(`溪岸 ${named[board]}`), C.reasonText(r));
+    } else {
+      assert.equal(r.key, '你选了「{0}」—— 这个家也是{1}', `${board}: no guest name → say the picked material, not the board`);
+      assert.deepEqual(r.vars[1], { zh: walnut.zh, en: walnut.en.toLowerCase() });
+    }
+    for (const lang of ['zh', 'en']) {
+      setLang(lang);
+      try {
+        const text = C.reasonText(r);
+        assert.ok(!FACTORY.test(text) && !/sail-/i.test(text), `${lang}: ${text}`);
+        if (lang === 'en') assert.ok(!HAN.test(text), text);
+      } finally {
+        setLang('zh');
+      }
+    }
+  }
+  await inEnglish(() => {
+    assert.ok(C.reasonText(pickReason(B.label)).endsWith('sAil Test oak'), C.reasonText(pickReason(B.label)));
+    assert.ok(C.reasonText(pickReason(B.cxt995)).endsWith(`${walnut.en.toLowerCase()} too`), C.reasonText(pickReason(B.cxt995)));
+  });
+});
+
 // ───────────────────────── 8. 一次读一张大图 · 存储空间 ─────────────────────────
 
 const png = (bytes) => new Blob([new Uint8Array(bytes)], { type: 'image/webp' });
@@ -832,6 +909,88 @@ await test('storageInfo / askPersist：Node（没有 navigator.storage）→ nul
   assert.equal(await C.storageInfo(), null, 'restored');
 });
 
+await test('存照片失败（空间满了）：小图写不进去 → 大图也不留下；抛出写的那个错误；isQuotaError 认得空间不够（QuotaExceededError / quota · space / 写的时候的 NotFound · UnknownError）', async () => {
+  C._resetDevice();
+  const blobs = () => ({ 1600: png([1, 2, 3]), 480: png([4]), w: 1600, h: 1200 });
+  const gone = async (caseId, id) => (await C.loadImageURL({ id: caseId }, { id, device: true })).url === '';
+  // 内存仓库：480 那一下失败（iPad 的 WebKit 空间满的时候常见 UnknownError）
+  C._failWrites((store, key) => (store === 'photos' && key.endsWith('/480') ? new DOMException('Error writing to database', 'UnknownError') : null));
+  const err = await C.putImage('p-full', null, { id: 'x1', blobs: blobs() }).then(() => null, (e) => e);
+  assert.equal(err?.name, 'UnknownError');
+  assert.ok(C.isQuotaError(err), 'an UnknownError raised by a write = the device is full');
+  assert.ok(await gone('p-full', 'x1'), 'no orphaned 1600 left behind');
+  // 案例本身存不进去
+  C._failWrites((store) => (store === 'cases' ? new DOMException('The quota has been exceeded.', 'QuotaExceededError') : null));
+  const e2 = await C.saveCase(C.newCase('project')).then(() => null, (e) => e);
+  assert.ok(C.isQuotaError(e2), String(e2));
+  C._failWrites(null);
+  const ok = await C.putImage('p-full', null, { id: 'x2', blobs: blobs() });
+  assert.ok(!(await gone('p-full', ok.id)), 'writes work again');
+  // isQuotaError 本身
+  assert.ok(C.isQuotaError(new DOMException('x', 'QuotaExceededError')));
+  assert.ok(C.isQuotaError(new Error('Failed to PutOrAdd in database because not enough space for domain')));
+  assert.ok(C.isQuotaError({ name: 'Error', message: 'Quota exceeded' }));
+  for (const e of [null, undefined, 'quota', new Error('decode'), new Error('namespace mismatch'), new DOMException('x', 'UnknownError'), new DOMException('x', 'NotFoundError')]) {
+    assert.ok(!C.isQuotaError(e), `${e}: not a write → not a full device`);
+  }
+  C._resetDevice();
+});
+
+await test('IndexedDB：请求出错的时候 tx.error 还是 null → 照样拿到那个请求的错误；大图小图同一个交易，小图失败大图也不留', async () => {
+  const data = new Map();
+  const quota = new DOMException('Failed to PutOrAdd in database because not enough space for domain', 'QuotaExceededError');
+  const db = {
+    objectStoreNames: { contains: () => true },
+    createObjectStore() {},
+    transaction() {
+      const tx = { error: null, abort() {} };
+      const puts = [];
+      let bad = null;
+      tx.objectStore = () => ({
+        put(val, key) {
+          const req = { error: null };
+          if (String(key).endsWith('/480')) bad = req;
+          puts.push([key, val]);
+          return req;
+        },
+      });
+      setTimeout(() => {
+        if (!bad) {
+          for (const [k, v] of puts) data.set(k, v);
+          tx.oncomplete?.();
+          return;
+        }
+        // 规范（WebKit 也一样）：请求的 error 事件先冒泡到交易 —— 这时 tx.error 还是 null —— 然后交易才 abort、才有 tx.error
+        bad.error = quota;
+        tx.onerror?.({ target: bad });
+        tx.error = quota;
+        tx.onabort?.({ target: tx });
+      });
+      return tx;
+    },
+  };
+  const had = Object.getOwnPropertyDescriptor(globalThis, 'indexedDB');
+  globalThis.indexedDB = {
+    open() {
+      const req = {};
+      setTimeout(() => {
+        req.result = db;
+        req.onsuccess?.();
+      });
+      return req;
+    },
+  };
+  try {
+    const err = await C.putImage('p-idb', null, { id: 'x1', blobs: { 1600: png([1, 2, 3]), 480: png([4]), w: 1600, h: 1200 } }).then(() => null, (e) => e);
+    assert.equal(err, quota, 'the failing request’s error (tx.error is still null at that moment)');
+    assert.ok(C.isQuotaError(err));
+    assert.deepEqual([...data.keys()], [], 'one transaction: the 1600 is not kept when the 480 fails');
+  } finally {
+    if (had) Object.defineProperty(globalThis, 'indexedDB', had);
+    else delete globalThis.indexedDB;
+  }
+});
+
 // ───────────────────────── 9. 案例包来回一趟 ─────────────────────────
 
 await test('案例包：导出 → 清空 → 导入，照片说明、细节、排好的顺序、每个房间我们做了什么都还在（设备照片 + 网址照片）', async () => {
@@ -863,6 +1022,76 @@ await test('案例包：导出 → 清空 → 导入，照片说明、细节、�
   C._resetDevice();
 });
 
+await test('设备上的副本盖过随网站的案例：网站后来新加的照片照样补上（排在副本的照片后面、封面不变）；员工删掉的不会回来；随网站那一份重新发布过（rev 变了）→ 不补，免得重复；设备上新增的案例不动', async () => {
+  C._resetDevice();
+  const ids = (c) => c.images.map((im) => im.id);
+  const covers = (c) => c.images.filter((im) => im.cover).map((im) => im.id);
+  const seed = await C.getCase('seed-zen-condo');
+  assert.equal(seed.origin, 'bundled');
+  const all = ids(seed);
+  assert.ok(all.length >= 8 && all.slice(0, 3).join() === '01,02,03', all.join());
+  // 更新以前存的旧副本（rev 2，只有 01–03、没有说明 / 细节、没有 bundledImages）：从旧的案例包导进来（不经过 saveCase）
+  const oldCopy = (images) => {
+    const { origin, bundledImages, ...c } = { ...seed, rev: 2, images: images.map(({ caption, detail, ...im }) => im) };
+    return c;
+  };
+  const load = async (copy, photos = {}) => {
+    C._resetDevice();
+    const r = await C.importPack(JSON.stringify({ kind: C.PACK_KIND, v: 1, cases: [copy], photos }));
+    assert.deepEqual([r.updated, r.errors], [1, []]);
+    const got = await C.getCase(seed.id);
+    assert.equal(got.origin, 'override');
+    return got;
+  };
+  const dev = { id: 'dtest', room: 'kitchen', kind: 'photo', w: 1600, h: 1200, src: '', thumb: '', alt: { zh: '', en: '' }, cover: false, device: true };
+  const got = await load(oldCopy([...seed.images.slice(0, 3), dev]), { [`${seed.id}/dtest`]: 'data:image/webp;base64,AQID' });
+  assert.deepEqual(ids(got), ['01', '02', '03', 'dtest', ...all.slice(3)], 'new bundled photos after the copy’s own (device photo included)');
+  assert.deepEqual(covers(got), covers(seed).filter((id) => ['01', '02', '03'].includes(id)), 'cover unchanged');
+  assert.deepEqual(got.images.slice(4), seed.images.slice(3).map((im) => ({ ...im, cover: false })), 'captions / close-ups of the new photos come along');
+  assert.ok(C.galleryTabs(got).some((x) => x.id === 'detail'), 'the 细节 tab shows up');
+  assert.equal((await C.listCases()).find((c) => c.id === seed.id).images.length, all.length + 1, 'guests see them too');
+  // 旧副本里员工删掉了 02：编号不超过 03 的都算副本知道的 → 02 不回来
+  assert.deepEqual(ids(await load(oldCopy([seed.images[0], seed.images[2]]))), ['01', '03', ...all.slice(3)]);
+  // 旧副本里随网站的照片全删了（只剩设备上的）：不知道哪些是新的 → 一张都不补
+  assert.deepEqual(ids(await load(oldCopy([dev]), { [`${seed.id}/dtest`]: 'data:image/webp;base64,AQID' })), ['dtest']);
+
+  // 存过（saveCase 记下 bundledImages）：员工删掉 05 → 05 不回来；网站以后再加的（09）照样补上
+  C._resetDevice();
+  const cur = await C.getCase(seed.id);
+  const saved = await C.saveCase({ ...cur, images: cur.images.filter((im) => im.id !== '05') });
+  assert.deepEqual([saved.bundledImages, saved.bundledRev], [all, 1], 'stamped with the bundled photo ids and rev');
+  assert.deepEqual(ids(await C.getCase(seed.id)), all.filter((id) => id !== '05'));
+  const extra = { ...seed.images[3], id: '09', cover: false, src: 'seed-zen-condo/09-1600.webp', thumb: 'seed-zen-condo/09-480.webp' };
+  C.useManifest({ cases: MANIFEST.cases.map((c) => (c.id === seed.id ? { ...c, images: [...c.images, extra] } : c)) });
+  try {
+    const later = await C.getCase(seed.id);
+    assert.deepEqual(ids(later), [...all.filter((id) => id !== '05'), '09'], 'a photo the website adds later still arrives; 05 stays removed');
+    assert.deepEqual(covers(later), covers(saved));
+  } finally {
+    C.useManifest(MANIFEST);
+  }
+  // 随网站那一份重新发布过（rev 变了，例如这台设备的案例包合回了网站：设备上的照片变成了 09）→ 一张都不补（补了会重复）
+  assert.equal((await C.saveCase(await C.getCase(seed.id))).rev, 3);
+  C.useManifest({ cases: MANIFEST.cases.map((c) => (c.id === seed.id ? { ...c, rev: 2, images: [...c.images, extra] } : c)) });
+  try {
+    const got2 = await C.getCase(seed.id);
+    assert.deepEqual([got2.origin, ids(got2)], ['override', all.filter((id) => id !== '05')]);
+  } finally {
+    C.useManifest(MANIFEST);
+  }
+
+  // 设备上新增的案例：不动，也不记 bundledImages
+  C._resetDevice();
+  const mine = C.newCase('project');
+  mine.images = [img('01', 'living', { cover: true }), img('02', 'kitchen')];
+  const s2 = await C.saveCase(mine);
+  assert.ok(!('bundledImages' in s2));
+  const back = await C.getCase(mine.id);
+  assert.equal(back.origin, 'device');
+  assert.deepEqual(back.images, s2.images);
+  C._resetDevice();
+});
+
 // ───────────────────────── 10. 快：100 个案例 ─────────────────────────
 
 await test('100 个案例也很快：看全部 < 25 ms、相似的家 < 2 ms、每个房间我们做了什么 / 照片标签 < 0.5 ms', () => {
@@ -887,7 +1116,7 @@ await test('100 个案例也很快：看全部 < 25 ms、相似的家 < 2 ms、�
 // ───────────────────────── 11. 英文 ─────────────────────────
 
 await test('英文：这一层新加的中文都有英文（en-cases.js），英文界面里没有中文', async () => {
-  for (const k of ['全部', '细节', '全屋', '房子', '建筑面积', '房间', '楼层', '{0} 层楼', '我们做了', '整个家', '{0} 个房间', '风格', '地区', '做过的家', '3D 方案']) assert.ok(EN[k], k);
+  for (const k of ['全部', '细节', '全屋', '房子', '建筑面积', '几房几卫', '楼层', '{0} 层楼', '我们做了', '整个家', '{0} 个房间', '风格', '地区', '做过的家', '3D 方案']) assert.ok(EN[k], k);
   await inEnglish(() => {
     for (const c of [mkCase(), ...LIVE]) {
       for (const x of C.galleryTabs(c)) assert.ok(!HAN.test(x.label), x.label);
@@ -903,3 +1132,4 @@ await test('英文：这一层新加的中文都有英文（en-cases.js），英
 unregisterBoards(TEST_BOARDS.map((r) => r.id), { src: 'bundled' });
 console.log(`\n${n - failed}/${n} 通过`);
 if (failed) process.exit(1);
+

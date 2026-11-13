@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Download, Focus, Library, Merge, Scissors, Sparkles, Star, X, Check, TriangleAlert, Loader } from 'lucide-react';
 import { t, L, isEn } from '../../shared/i18n.js';
-import { ROOMS, roomLabel, PHOTO_EST_BYTES, storageInfo, askPersist } from '../../shared/cases.js';
+import { ROOMS, roomLabel, PHOTO_EST_BYTES, storageInfo, askPersist, isQuotaError } from '../../shared/cases.js';
 import { MAT_BY_ID, fits } from '../../shared/materials.js';
 import fx from '../../shared/fx.js';
 import { sfx } from '../../shared/sfx.js';
@@ -564,6 +564,7 @@ export function OutputSheet({ s, mode, onClose }) {
   const [phase, setPhase] = useState('ask');
   const [prog, setProg] = useState(null);
   const [res, setRes] = useState(null);
+  const [err, setErr] = useState(null); // 存不进去 / 做不出案例包：{ space, msg }
   // 这台设备还剩多少照片空间（一个项目现在最多 18 张 ≈ 6 MB；浏览器量不出来就不说）
   const [free, setFree] = useState(null);
   useEffect(() => {
@@ -585,25 +586,34 @@ export function OutputSheet({ s, mode, onClose }) {
   const go = async () => {
     setPhase('run');
     askPersist(); // 请浏览器别在空间紧的时候自己清掉案例照片（不支持 / 不同意都没关系）
-    const r = await s.saveToLibrary(
-      toSave.map((g) => g.id),
-      { onStep: (p) => setProg(p) }
-    );
-    let parts = null;
-    if (mode === 'export') {
-      setProg({ exporting: true });
-      const ids = ready.map((g) => s.decision(g.id).saved?.caseId).filter(Boolean);
-      parts = await s.exportPacks(ids);
-      for (let i = 0; i < parts.length; i++) {
-        download(parts[i].blob, parts[i].name);
-        if (i < parts.length - 1) await new Promise((r2) => setTimeout(r2, 450));
+    let r = { saved: [], skipped: [] };
+    try {
+      r = await s.saveToLibrary(
+        toSave.map((g) => g.id),
+        { onStep: (p) => setProg(p) }
+      );
+      if (r.error) throw r.error;
+      let parts = null;
+      if (mode === 'export') {
+        setProg({ exporting: true });
+        const ids = ready.map((g) => s.decision(g.id).saved?.caseId).filter(Boolean);
+        parts = await s.exportPacks(ids);
+        for (let i = 0; i < parts.length; i++) {
+          download(parts[i].blob, parts[i].name);
+          if (i < parts.length - 1) await new Promise((r2) => setTimeout(r2, 450));
+        }
       }
+      setRes({ ...r, parts });
+      setPhase('done');
+      sfx.play('achievement');
+      const el = document.querySelector('.so-out-done');
+      if (el) fx.scan(el, { sound: false });
+    } catch (e) {
+      // 存不进去（多半是空间满了）/ 做不出案例包：说清楚，✕ / Esc 照样能关（不会一直转圈）
+      setRes({ ...r, parts: null });
+      setErr({ space: isQuotaError(e), msg: String(e?.message || e || '').slice(0, 160) });
+      setPhase('error');
     }
-    setRes({ ...r, parts });
-    setPhase('done');
-    sfx.play('achievement');
-    const el = document.querySelector('.so-out-done');
-    if (el) fx.scan(el, { sound: false });
   };
   return (
     <Veil onClose={phase === 'run' ? () => {} : onClose}>
@@ -672,6 +682,15 @@ export function OutputSheet({ s, mode, onClose }) {
               {res.parts?.length > 1 && <p className="so-muted">{t('合并到网站时每一份各跑一次：node scripts/import-cases.mjs --pack <文件>')}</p>}
             </div>
           )}
+          {phase === 'error' && (
+            <div className="so-out-error" role="alert">
+              <p className="so-lead so-warn">
+                <TriangleAlert size={18} strokeWidth={2.2} aria-hidden="true" />{' '}
+                {err?.space ? t('存不下了：这台设备的照片空间不够。先少存几个项目，或者在空间大的电脑上存、导出案例包。') : t('存的时候出了问题，没存完：{0}', [err?.msg || '?'])}
+              </p>
+              {res?.saved?.length > 0 && <p className="so-muted">{t('存好了 {0} 个草稿案例。', [res.saved.length])}</p>}
+            </div>
+          )}
         </div>
         <footer className="so-sheet-foot">
           {phase === 'ask' && (
@@ -703,6 +722,22 @@ export function OutputSheet({ s, mode, onClose }) {
               </a>
             </>
           )}
+          {phase === 'error' &&
+            (res?.saved?.length > 0 ? (
+              <>
+                <button type="button" className="btn-ghost" onClick={onClose}>
+                  {t('继续整理')}
+                </button>
+                <a className="btn-primary small" href={libHref} data-sfx="open">
+                  <Library size={16} strokeWidth={2} aria-hidden="true" />
+                  {t('去案例库上架')}
+                </a>
+              </>
+            ) : (
+              <button type="button" className="btn-primary small" onClick={onClose}>
+                {t('好')}
+              </button>
+            ))}
         </footer>
       </div>
     </Veil>

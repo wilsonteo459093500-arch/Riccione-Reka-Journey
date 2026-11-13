@@ -91,7 +91,7 @@ Lightbox.jsx, CaseBrowser.jsx, showcase.css; edit CasesStep.jsx, BlueprintCases.
     我们做的 · 只是示意 (existing supply split, unchanged wording) → products (existing) → 相似的家 (similarCases, 3–4 compact cards; tap →
     that case's detail inside the same sheet with a 「← 返回」 back step; can select it if not readOnly) → actions.
   - New optional props: `all` (case list for similar homes), `profile`, `isOn(c)`, `onToggleCase(c, e)`. Without `all` there is no 相似的家.
-- **Browse all** (CaseBrowser, lazy-loaded chunk): a 「看全部 {0} 个家」 button on the cases step (and 「更多案例」 in the blueprint's 参考案例)
+- **Browse all** (CaseBrowser, lazy-loaded chunk): a 「看全部 {0} 个家」 button on the cases step (the same button in the blueprint's 参考案例)
   opens a full-screen overlay: header (title, count, ✕ back), filter chips (种类 · 房子 · 房间 · 风格) from `browseCases` facets, a grid of
   CaseCards ranked for this guest, the same select toggles (max 3, same 「最多三个哦」), a footer with the picked thumbnails and 「好了」 that
   closes the overlay. Picks live in CasesStep — closing the browser, opening details or changing filters never loses them. Cards open CaseDetail.

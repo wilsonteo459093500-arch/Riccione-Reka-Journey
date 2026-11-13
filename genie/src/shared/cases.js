@@ -17,7 +17,7 @@
 // 近似材质（板材的 near）—— 旧版本、手机、没导入板材包的设备照样看得懂这个案例。
 
 import { CONFIG } from './config.js';
-import { t, L, isEn } from './i18n.js';
+import { t, tIn, L, isEn, missing } from './i18n.js';
 import { MAT_BY_ID, SLOTS, SLOT_BY_ID, fits, BOARD_SLOTS } from './materials.js';
 import { BOARD_ID_RE, isColourCode } from './boards/library-api.js';
 import { exactBoards, idLabel, boardsOn } from './boards/match.js';
@@ -376,6 +376,8 @@ export function migrateCase(raw) {
     products: Array.isArray(r.products) ? r.products.filter(isObj).map((p) => ({ id: String(p.id || ''), name: txt(p.name), kind: p.kind === 'furniture' ? 'furniture' : 'cabinet', note: txt(p.note) })) : [],
     wishNotes: Object.fromEntries(Object.entries(isObj(r.wishNotes) ? r.wishNotes : {}).map(([k, v]) => [k, txt(v)])),
     images,
+    // 设备上的副本存的时候，随网站那一份的照片 id 和 rev（saveCase 记的；merged 用它认出网站后来新加的照片）
+    ...(Array.isArray(r.bundledImages) ? { bundledImages: [...new Set(r.bundledImages.map(String))], ...(num(r.bundledRev) != null ? { bundledRev: num(r.bundledRev) } : {}) } : {}),
     createdAt: at,
     updatedAt: r.updatedAt || at,
   };
@@ -616,11 +618,11 @@ function reasonsOf(p, c, m, picks) {
     const bs = boardSlot(id);
     if (!label || labels.has(label) || (!bs && !HERO.some((s) => c.materials?.[s] === id))) continue;
     const mat = MAT_BY_ID[id];
-    // 这一面是案例原板：说出那块板（客人看的名字：序号 + 名字，没有厂家编号）
-    if (bs) {
-      const b = MAT_BY_ID[exact[bs]];
-      out.push({ kind: 'pick', key: '你选了「{0}」—— 这个家用的就是溪岸 {1}', vars: [label, { zh: b.zh, en: b.en }] });
-    } else out.push({ kind: 'pick', key: '你选了「{0}」—— 这个家也是{1}', vars: [label, { zh: mat.zh, en: mat.en.toLowerCase() }] });
+    // 这一面是案例原板：说出那块板（客人看的名字 boardGuestNames：序号 + 名字，没有厂家编号）；
+    // 板没有客人看的名字（只有编号）→ 和没有原板一样，说客人选的那个材质（= 这块板的近似材质 near，或者这一面的程序化材质）
+    const gn = bs ? boardGuestNames(exact[bs], { series: false }) : null;
+    if (gn && (gn.zh || gn.en)) out.push({ kind: 'pick', key: '你选了「{0}」—— 这个家用的就是溪岸 {1}', vars: [label, gn] });
+    else out.push({ kind: 'pick', key: '你选了「{0}」—— 这个家也是{1}', vars: [label, { zh: mat.zh, en: mat.en.toLowerCase() }] });
     labels.add(label);
     if (labels.size >= 2) break;
   }
@@ -843,27 +845,50 @@ export function galleryImages(c, tabId = 'all') {
 }
 
 const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const HAN_RE = /[一-鿿]/;
+
+/** { zh, en } → 指定的语言（不管界面现在是哪一种）。英文和 L() 一样：中文在词典里就用词典的，没有再用 en（不出「还没翻译」的提醒） */
+function inLang(l, o) {
+  const zh = String(o?.zh ?? '');
+  const en = String(o?.en ?? '');
+  if (l !== 'en') return zh || en;
+  return zh && HAN_RE.test(zh) && missing(zh) == null ? tIn('en', zh) : en || zh;
+}
 
 /**
- * 客人看的板材名字：这台设备认得的板 → 「7号 · 黑胡桃」；有系列、名字里又没有的 → 「织系列 · …」（和详情的「还用了」一样）。
- * 这台设备不认得、板材整个关掉（CONFIG.boards.on = false）、没有名字（只剩 id）→ ''。
+ * 客人看的板材名字，中英文各一个 → { zh, en }：这台设备认得的板 → 「7号 · 黑胡桃」；有系列、名字里又没有的 → 「织系列 · …」
+ * （和详情的「还用了」一样）。这台设备不认得、板材整个关掉（CONFIG.boards.on = false）→ { zh: '', en: '' }。
+ * 没有真正的名字（没有序号、没有色号、没有名字、员工也没写显示名）→ ''：显示名只剩 id，拿掉编号也只剩 id 的碎片（'sail-c'）。
  * 永远不出厂家编号（XA-TP-01、AG337 …）：员工写的显示名里万一带了，也拿掉（色号 2810 这种本来就是名字）。
+ * series: false = 不加系列（「为什么适合你」那一句只说序号 + 名字）。
  */
-export function boardGuestName(id) {
+export function boardGuestNames(id, { series = true } = {}) {
   const m = isBoardId(id) && boardsOn() ? MAT_BY_ID[id] : null;
-  if (!m?.board) return '';
-  let name = L(m);
-  const code = String(m.board.code || '').trim();
-  if (code && !isColourCode(code) && name.toLowerCase().includes(code.toLowerCase())) {
-    name = name
-      .replace(new RegExp(escRe(code), 'gi'), ' ')
-      .replace(/\s*·\s*(·\s*)+/g, ' · ')
-      .replace(/\s+/g, ' ')
-      .replace(/^[\s·]+|[\s·]+$/g, '');
-  }
-  if (!name || name === id) return '';
-  const series = m.board.series && !name.includes(m.board.series) ? t(m.board.series) : '';
-  return series ? `${series} · ${name}` : name;
+  const b = m?.board;
+  if (!b) return { zh: '', en: '' };
+  const code = String(b.code || '').trim();
+  const named = !!b.rec?.label?.zh || !!(b.name?.zh || b.name?.en) || (b.seq != null && b.seq !== '') || isColourCode(code);
+  if (!named) return { zh: '', en: '' };
+  const one = (l) => {
+    let name = inLang(l, m);
+    if (code && !isColourCode(code) && name.toLowerCase().includes(code.toLowerCase())) {
+      name = name
+        .replace(new RegExp(escRe(code), 'gi'), ' ')
+        .replace(/\s*·\s*(·\s*)+/g, ' · ')
+        .replace(/\s+/g, ' ')
+        .replace(/^[\s·]+|[\s·]+$/g, '');
+    }
+    // 剩下的还是 id（或 id 的一段）：不是名字
+    if (!name || name === id || /^sail-[a-z0-9-]*$/i.test(name)) return '';
+    const pre = series && b.series && !name.includes(b.series) ? inLang(l, { zh: b.series, en: b.series }) : '';
+    return pre ? `${pre} · ${name}` : name;
+  };
+  return { zh: one('zh'), en: one('en') };
+}
+
+/** boardGuestNames 现在这个语言的那一个（'' = 不给客人说这块板） */
+export function boardGuestName(id) {
+  return boardGuestNames(id)[isEn() ? 'en' : 'zh'];
 }
 
 /**
@@ -954,7 +979,7 @@ const PLACE_LINE_RE = /sq\s*ft|\d+\s*(房|卫|bed|bath)/i;
 
 /**
  * 房子档案（客人看的，只有这些）→ [{ k, label, value }]：
- *   type 房子 · size 面积 · beds 房间（3 房 2 卫）· storeys 楼层（有地的房子、两层以上才有）· scope 我们做了（整个家 / {0} 个房间）·
+ *   type 房子 · size 面积 · beds 几房几卫（3 房 2 卫；和蓝图 homeSummary 同一个标签）· storeys 楼层（有地的房子、两层以上才有）· scope 我们做了（整个家 / {0} 个房间）·
  *   style 风格（主牌的名字）· area 地区（case.place，不是又把房子那一行说一遍才有）。
  * 永远没有价钱、预算、时间、员工的资料。
  */
@@ -968,7 +993,7 @@ export function caseFacts(c) {
   const type = PROPERTY_BY_ID[p.type];
   if (type && p.type !== 'other') add('type', t('房子'), t(type.zh));
   if (p.sizeSqft > 0) add('size', t('建筑面积'), t('约 {0} sq ft', [Math.round(p.sizeSqft).toLocaleString('en-US')]));
-  if (p.bedrooms > 0) add('beds', t('房间'), p.bathrooms > 0 ? t('{0} 房 {1} 卫', [p.bedrooms, p.bathrooms]) : t('{0} 房', [p.bedrooms]));
+  if (p.bedrooms > 0) add('beds', t('几房几卫'),p.bathrooms > 0 ? t('{0} 房 {1} 卫', [p.bedrooms, p.bathrooms]) : t('{0} 房', [p.bedrooms]));
   if (type?.landed && p.storeys > 1) add('storeys', t('楼层'), t('{0} 层楼', [p.storeys]));
   const rooms = (c.rooms || []).filter((r) => ROOM_BY_ID[r] && r !== 'plan3d');
   if (c.scope !== 'rooms') add('scope', t('我们做了'), t('整个家'));
@@ -1083,7 +1108,7 @@ export function browseCases(profile, cases, filters = {}, { picksMats, lambda = 
 const DB_NAME = 'genie-cases';
 const META_KEY = 'genie.cases.meta.v1';
 const hasIDB = () => typeof indexedDB !== 'undefined';
-const mem = { cases: new Map(), photos: new Map(), meta: null };
+const mem = { cases: new Map(), photos: new Map(), meta: null, fail: null };
 let dbp = null;
 
 function openDB() {
@@ -1109,24 +1134,88 @@ function openDB() {
   return dbp;
 }
 
+/**
+ * 交易失败的原因：出错的那一个请求的错误。请求的 error 事件冒泡到交易的时候 tx.error 还是 null
+ * （规范如此，iPad 的 WebKit 也一样：先发 error 事件，然后才 abort、才填 tx.error）—— 只看 tx.error 就会拿到 null。
+ */
+const txError = (tx, e) => tx.error || e?.target?.error || new Error('IndexedDB transaction failed');
+
 async function idb(store, mode, fn) {
   const db = await openDB();
   if (!db) return fn(null, mem[store]);
   return new Promise((res, rej) => {
+    let tx = null;
     try {
-      const tx = db.transaction(store, mode);
+      tx = db.transaction(store, mode);
       const out = fn(tx.objectStore(store), null);
       const isReq = typeof IDBRequest !== 'undefined' && out instanceof IDBRequest;
       tx.oncomplete = () => res(isReq ? out.result : out);
-      tx.onerror = () => rej(tx.error);
-      tx.onabort = () => rej(tx.error);
+      tx.onerror = (e) => rej(txError(tx, e));
+      tx.onabort = (e) => rej(txError(tx, e));
     } catch (e) {
+      // fn 里同步出错：已经排进这个交易的写入也不要留下来
+      try {
+        tx?.abort();
+      } catch {
+        /* 交易已经结束了 */
+      }
       rej(e);
     }
   });
 }
+
+/** 写进这台设备的时候出的错（isQuotaError 用：写的时候出的 NotFound / UnknownError 多半是空间满了） */
+const WRITE_ERRS = new WeakSet();
+function writeError(e) {
+  const err = e && typeof e === 'object' ? e : new Error(String(e ?? 'write failed'));
+  WRITE_ERRS.add(err);
+  return err;
+}
+
+/**
+ * 是不是「这台设备的空间不够了」：QuotaExceededError；错误信息里说 quota / space；或者写案例 / 照片的时候出的
+ * NotFoundError / UnknownError（iPad 的 WebKit 空间满的时候常常是这两个：SQLite 写不进去、Blob 的临时文件建不出来）。
+ * 员工的案例库、整理照片都用这一条：空间不够 = 停下来说一声，不要每张照片都说「打不开」。
+ */
+export function isQuotaError(e) {
+  if (!e || typeof e !== 'object') return false;
+  if (e.name === 'QuotaExceededError') return true;
+  if (/quota|\bspace\b/i.test(String(e.message || ''))) return true;
+  return (e.name === 'NotFoundError' || e.name === 'UnknownError') && WRITE_ERRS.has(e);
+}
+
+/** 内存仓库（Node 测试）写一样；测试可以让它失败（_failWrites），模拟设备空间满了 */
+function memSet(store, m, key, val) {
+  const err = mem.fail?.(store, key);
+  if (err) throw err;
+  m.set(key, val);
+}
+
+/** 一起写几样：同一个 readwrite 交易（一样写不进去，整个交易都不算）；内存仓库写到一半失败也退回原样 */
+function dbPutAll(store, entries) {
+  return idb(store, 'readwrite', (os, m) => {
+    if (os) {
+      for (const [key, val] of entries) os.put(val, key);
+      return undefined;
+    }
+    const before = entries.map(([key]) => [key, m.has(key), m.get(key)]);
+    try {
+      for (const [key, val] of entries) memSet(store, m, key, val);
+    } catch (e) {
+      for (const [key, had, old] of before) {
+        if (had) m.set(key, old);
+        else m.delete(key);
+      }
+      throw e;
+    }
+    return undefined;
+  }).catch((e) => {
+    throw writeError(e);
+  });
+}
+
 const dbGet = (store, key) => idb(store, 'readonly', (os, m) => (os ? os.get(key) : m.get(key)));
-const dbPut = (store, key, val) => idb(store, 'readwrite', (os, m) => (os ? (os.put(val, key), undefined) : (m.set(key, val), undefined)));
+const dbPut = (store, key, val) => dbPutAll(store, [[key, val]]);
 const dbDel = (store, key) => idb(store, 'readwrite', (os, m) => (os ? (os.delete(key), undefined) : (m.delete(key), undefined)));
 async function dbAll(store) {
   const db = await openDB();
@@ -1143,7 +1232,7 @@ async function dbAll(store) {
       }
     };
     tx.oncomplete = () => res(out);
-    tx.onerror = () => rej(tx.error);
+    tx.onerror = (e) => rej(txError(tx, e));
   });
 }
 
@@ -1195,11 +1284,17 @@ function loadBundled() {
   return bundledP;
 }
 
+/** 测试用：fail(store, key) 返回一个错误 → 内存仓库的那一次写入抛出它（模拟设备空间满了）；不给 = 恢复正常 */
+export function _failWrites(fail) {
+  mem.fail = typeof fail === 'function' ? fail : null;
+}
+
 /** 测试用：清掉内存里的设备资料 */
 export function _resetDevice() {
   mem.cases.clear();
   mem.photos.clear();
   mem.meta = null;
+  mem.fail = null;
   try {
     if (typeof localStorage !== 'undefined') localStorage.removeItem(META_KEY);
   } catch {
@@ -1207,7 +1302,36 @@ export function _resetDevice() {
   }
 }
 
-/** 随网站发布的 + 这台设备上的，合在一起（rev 大的赢），排好序 */
+const NUM_ID = /^\d+$/;
+
+/**
+ * 设备上的副本盖过随网站的案例（override）时：网站后来新加的照片照样补上（排在副本的照片后面，封面不变）。
+ * 副本「已经知道」的随网站照片不补 —— 员工删掉的永远不会回来：
+ *   · 存的时候记下来的 copy.bundledImages（saveCase：那时候随网站那一份的照片 id）；随网站那一份后来重新发布过（rev 和记下的
+ *     bundledRev 不一样，例如这台设备的案例包合回了网站）→ 一张都不补：新的照片可能就是副本里设备上的那几张，补了会重复；
+ *   · 旧副本没记：副本里不是设备上的照片的 id，加上编号不超过其中最大那个的（副本有 01、03 → 01–03 都算知道）；
+ *     副本里一张随网站的照片都没有（员工全删了）→ 全部算知道。
+ */
+function withNewBundled(copy, base) {
+  const imgs = copy.images || [];
+  let known;
+  if (Array.isArray(copy.bundledImages)) {
+    if (copy.bundledRev != null && copy.bundledRev !== base.rev) return copy;
+    known = new Set(copy.bundledImages);
+  } else {
+    const own = imgs.filter((im) => !im.device);
+    if (!own.length) return copy;
+    const top = Math.max(...own.map((im) => (NUM_ID.test(im.id) ? +im.id : -Infinity)));
+    known = new Set(own.map((im) => im.id));
+    for (const im of base.images || []) if (NUM_ID.test(im.id) && +im.id <= top) known.add(im.id);
+  }
+  const have = new Set(imgs.map((im) => im.id));
+  const add = (base.images || []).filter((im) => !known.has(im.id) && !have.has(im.id));
+  if (!add.length) return copy;
+  return { ...copy, images: [...imgs, ...add.map((im) => ({ ...clone(im), cover: false }))] };
+}
+
+/** 随网站发布的 + 这台设备上的，合在一起（rev 大的赢；盖过随网站的副本照样拿到网站新加的照片），排好序 */
 async function merged() {
   const base = await loadBundled();
   let device = [];
@@ -1222,7 +1346,7 @@ async function merged() {
   for (const c of device) {
     const b = byId.get(c.id);
     if (!b) byId.set(c.id, { ...c, origin: 'device' });
-    else if (c.rev > b.rev) byId.set(c.id, { ...c, origin: 'override' });
+    else if (c.rev > b.rev) byId.set(c.id, { ...withNewBundled(c, b), origin: 'override' });
   }
   const out = [...byId.values()];
   for (const c of out) {
@@ -1249,12 +1373,17 @@ export function newCase(kind = 'project') {
   return migrateCase({ id: `p-${Date.now().toString(36)}`, kind, v: CASE_V, rev: 0, status: 'draft', order: 1000, createdAt: at, updatedAt: at });
 }
 
-/** 存一个案例到这台设备（rev + 1；比随网站发布的那份大，所以会盖过它） */
+/**
+ * 存一个案例到这台设备（rev + 1；比随网站发布的那份大，所以会盖过它）。
+ * 随网站也有的案例：记下那一份现在的照片 id 和 rev（bundledImages / bundledRev）—— 网站以后新加的照片才认得出来（merged / withNewBundled）。
+ */
 export async function saveCase(c) {
   const cur = migrateCase(c);
   const prev = await getCase(cur.id);
+  const base = (await loadBundled()).find((x) => x.id === cur.id);
   const rev = Math.max(cur.rev || 0, prev?.rev || 0) + 1;
-  const { origin, ...rest } = { ...cur, rev, updatedAt: nowISO() };
+  const { origin, bundledImages, bundledRev, ...rest } = { ...cur, rev, updatedAt: nowISO() };
+  if (base) Object.assign(rest, { bundledImages: base.images.map((im) => im.id), bundledRev: base.rev });
   const meta = loadMeta();
   if (meta.hidden.includes(rest.id) && rest.status !== 'hidden') saveMeta({ ...meta, hidden: meta.hidden.filter((x) => x !== rest.id) });
   await dbPut('cases', rest.id, rest);
@@ -1483,6 +1612,7 @@ export async function compressImage(src, { maxW = 1600, maxH = 1600, q = 0.82 } 
  * 给案例加一张照片（员工编辑器）：压缩成 1600 + 480，存进这台设备。
  * 返回 image 条目（还没写进案例：调用的人把它放进 c.images 再 saveCase）。
  * blobs：已经压好的 { 1600: Blob, 480: Blob, w, h }（导入案例包 / 测试用）。
+ * 存不进去 → 抛出写的那个错误（空间不够用 isQuotaError 认）。
  */
 export async function putImage(caseId, file, { room = ROOM_UNKNOWN, id, blobs, kind = 'photo', detail = false, caption } = {}) {
   let big = blobs?.[1600];
@@ -1503,8 +1633,11 @@ export async function putImage(caseId, file, { room = ROOM_UNKNOWN, id, blobs, k
     }
   }
   const imgId = id || `d${Date.now().toString(36)}${Math.floor(Math.random() * 1e4).toString(36)}`;
-  await dbPut('photos', `${caseId}/${imgId}/1600`, big);
-  await dbPut('photos', `${caseId}/${imgId}/480`, small);
+  // 大图、小图同一个交易：小图写不进去（多半是空间满了）大图也不留下（不会有一张没有案例指着、永远清不掉的照片）
+  await dbPutAll('photos', [
+    [`${caseId}/${imgId}/1600`, big],
+    [`${caseId}/${imgId}/480`, small],
+  ]);
   return { id: imgId, room: ROOM_BY_ID[room] ? room : ROOM_UNKNOWN, kind: room === 'plan3d' ? 'plan3d' : kind, w: w || 1600, h: h || 1200, src: '', thumb: '', alt: { zh: '', en: '' }, cover: false, device: true, caption: txt(caption), detail: !!detail };
 }
 
@@ -1612,7 +1745,12 @@ export async function importPack(file) {
           /* Node / 没有 canvas：小图先用大图 */
         }
         await putImage(c.id, null, { id: im.id, room: im.room, kind: im.kind, blobs: { 1600: big, 480: small, w: im.w, h: im.h } });
-      } catch {
+      } catch (e) {
+        // 设备满了：说清楚、停下来（后面的照片一样存不进去）；别的错只是这一张读不出来
+        if (isQuotaError(e)) {
+          res.errors.push({ id: c.id, zh: '这台设备的空间不够了：后面的照片没有存进去' });
+          return res;
+        }
         res.errors.push({ id: c.id, zh: '有一张照片读不出来' });
       }
     }

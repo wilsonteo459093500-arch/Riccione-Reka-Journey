@@ -15,8 +15,9 @@
 // 每张照片：转正（EXIF 方向）→ 1600 px 大图 + 480 px 小图，WebP（q ≈ 0.82，太大会自动降一点），
 // EXIF / GPS / 相机资料全部去掉（重新编码，不复制任何元数据）。输出 <out>/<编号>/NN-1600.webp、NN-480.webp。
 // manifest：新项目 = kind 'project'、status 'draft'（员工在案例库里打好标签、勾「业主同意」才上架）；
-// 已有的项目只换照片，员工打过的标签（风格、材质、故事…）都保留；每张照片员工写的说明（caption）、替代文字、「细节」标记、
-// 排的顺序按照片编号（NN）留着（同一个编号、同样大小 = 同一张照片；文件名说是细节的，一定是细节）。
+// 已有的项目只换照片，员工打过的标签（风格、材质、故事…）都保留；每张照片员工写的说明（caption）、替代文字、房间、「细节」标记、
+// 排的顺序、封面跟着照片走：按源文件认（每张照片记下源文件名的指纹 srcName；文件夹里中间多了 / 少了一张，编号会变，说明不会跑到别的照片上）；
+// 旧的 manifest 没记 srcName 的，才按编号（NN）+ 同样大小认。文件名说是细节的，一定是细节。
 //
 // --base：照片放在别的公开空间（这个仓库是公开的，真实照片可以不进 git）—— manifest 里写完整网址 base + 编号/NN-1600.webp，
 //         <out> 里生成的文件再自己上传到那里。也可以不写 --base，改 src/shared/config.js 的 CONFIG.cases.base（全部照片一起换）。
@@ -68,8 +69,14 @@ export function guessDetail(name) {
   return DETAIL_WORDS.some((w) => s.includes(w));
 }
 
-/** 上一次导入的同一个编号是不是同一张照片（大小一样；两个引擎缩图可能差 1–2 px） */
+/** 上一次导入的那张和这张大小一样（两个引擎缩图可能差 1–2 px） */
 const samePhoto = (old, w, h) => !!old && Math.abs((old.w || 0) - w) <= 2 && Math.abs((old.h || 0) - h) <= 2;
+
+/**
+ * 源文件名的指纹（srcName）：再导入的时候认「上一次的同一张照片」用。
+ * 只存指纹、不存文件名本身 —— manifest 跟着网站发布、仓库是公开的，文件名里可能有人名。
+ */
+export const srcNameOf = (file) => crypto.createHash('sha1').update(String(file).normalize('NFC')).digest('hex').slice(0, 12);
 const text2 = (x) => ({ zh: String(x?.zh || ''), en: String(x?.en || '') });
 
 export function slugOf(folder) {
@@ -266,7 +273,8 @@ function readCaseText(dir) {
   return o;
 }
 
-const sameImages = (a = [], b = []) => a.length === b.length && a.every((x, i) => x.src === b[i].src && x.w === b[i].w && x.h === b[i].h && x.room === b[i].room && !!x.detail === !!b[i].detail);
+// 照片一样（同样的文件、大小、房间、细节；记过源文件的还要是同一个源文件 —— 没记过的不算改动，见下面补记 srcName）
+const sameImages = (a = [], b = []) => a.length === b.length && a.every((x, i) => x.src === b[i].src && x.w === b[i].w && x.h === b[i].h && x.room === b[i].room && !!x.detail === !!b[i].detail && (!x.srcName || x.srcName === b[i].srcName));
 
 export async function importCases(opts) {
   const o = { ...parseArgs([]), ...opts };
@@ -305,48 +313,58 @@ export async function importCases(opts) {
     else results = engine === 'pillow' ? encodePillow(jobs) : await encodeChromium(jobs);
     const prev = byId.get(id);
     const prevImgs = new Map((prev?.images || []).map((im) => [im.id, im]));
+    const bySrc = new Map((prev?.images || []).filter((im) => im.srcName).map((im) => [im.srcName, im]));
     const images = [];
+    const oldOf = new Map(); // 这次的照片 → 上一次的同一张照片（排顺序、留封面用；不写进 manifest）
     results.forEach((r, i) => {
       const j = jobs[i];
       if (r.error) {
         report.errors.push({ id, file: j.file, error: /heic|heif|cannot identify/i.test(r.error) && /\.hei[cf]$/i.test(j.file) ? 'HEIC: pip install pillow-heif, or export the photo as JPG' : r.error });
         return;
       }
-      const old = prevImgs.get(j.nn);
+      const srcName = srcNameOf(j.file);
       const rel = (tag) => `${o.base}${id}/${j.nn}-${tag}.webp`;
       const big = r.files[0];
-      // 员工在案例库里写的说明 / 替代文字、标的「细节」：同一个编号、同样大小（= 同一张照片）才留着。
+      // 上一次的同一张照片：记了源文件的按源文件认；旧的（没记 srcName）才按编号认。还要同样大小（换了照片就不算）。
+      // 员工写的说明 / 替代文字、房间、标的「细节」、排的顺序、封面都跟着这张照片走（不跟着编号）。
       // 「细节」和房间一样：文件名说是细节就是细节；文件名没说 → 员工标过的留着
-      const same = samePhoto(old, big.w, big.h);
-      images.push({
+      const byNN = prevImgs.get(j.nn);
+      const cand = bySrc.get(srcName) || (byNN && !byNN.srcName ? byNN : null);
+      const old = samePhoto(cand, big.w, big.h) ? cand : null;
+      const im = {
         id: j.nn,
+        srcName,
         room: guessRoom(j.file) || old?.room || '', // 认不出来 = 空着（案例库显示「房间？」），不要猜成客厅
         kind: old?.kind || (guessRoom(j.file) === 'plan3d' ? 'plan3d' : 'photo'),
         w: big.w,
         h: big.h,
         src: rel('1600'),
         thumb: rel('480'),
-        alt: same ? text2(old.alt) : { zh: '', en: '' },
-        caption: same ? text2(old.caption) : { zh: '', en: '' },
-        detail: guessDetail(j.file) || (same && old.detail === true),
+        alt: old ? text2(old.alt) : { zh: '', en: '' },
+        caption: old ? text2(old.caption) : { zh: '', en: '' },
+        detail: guessDetail(j.file) || old?.detail === true,
         cover: i === coverIdx,
-      });
+      };
+      if (old) oldOf.set(im, old.id);
+      images.push(im);
       for (const f of r.files) if (f.bytes != null && !o.quiet) log(`  ${id}/${path.basename(f.dest)}  ${f.w}×${f.h}  ${(f.bytes / 1024).toFixed(0)} KB`);
     });
     if (!images.length) continue;
-    // 员工在案例库里排过的顺序（images 的先后 = 客人看到的先后）：认得的编号按原来的顺序，新照片接在后面
+    // 员工在案例库里排过的顺序（images 的先后 = 客人看到的先后）：认得的照片按原来的顺序，新照片接在后面
     if (prev?.images?.length) {
       const at = new Map(prev.images.map((im, i) => [im.id, i]));
-      const rank = (im) => (at.has(im.id) ? at.get(im.id) : prev.images.length);
+      const rank = (im) => (oldOf.has(im) && at.has(oldOf.get(im)) ? at.get(oldOf.get(im)) : prev.images.length);
       images.sort((a, b) => rank(a) - rank(b));
     }
-    // 如果员工已经在 manifest 里挑过封面，保留
+    // 如果员工已经在 manifest 里挑过封面（那张照片还在），保留
     const keptCover = prev?.images?.find((im) => im.cover)?.id;
-    if (keptCover && images.some((im) => im.id === keptCover)) images.forEach((im) => (im.cover = im.id === keptCover));
+    if (keptCover && images.some((im) => oldOf.get(im) === keptCover)) images.forEach((im) => (im.cover = oldOf.get(im) === keptCover));
     const rooms = [...new Set(images.map((im) => im.room).filter((r) => r && r !== 'plan3d'))];
     if (prev) {
       const changed = !sameImages(prev.images, images) || (extra.title && JSON.stringify(extra.title) !== JSON.stringify(prev.title));
       if (!changed) {
+        // 照片没变、只是旧的 manifest 还没记 srcName：补记上（不算改动 —— rev 不变，设备上改过的副本照样盖得过它）
+        if (prev.images.some((im, n) => im.srcName !== images[n].srcName)) byId.set(id, { ...prev, images: prev.images.map((im, n) => ({ ...im, srcName: images[n].srcName })) });
         report.unchanged.push(id);
         continue;
       }
@@ -447,7 +465,9 @@ export async function mergePack(opts) {
       const images = [];
       for (const im of c.images || []) {
         if (!im.device) {
-          images.push(im);
+          // iPad 上存的时候不留 srcName（只有导入脚本用）：manifest 里同一张照片（同一个编号、同一个文件）记过的接着用
+          const was = !im.srcName && prev?.images?.find((p) => p.id === im.id && p.src === im.src)?.srcName;
+          images.push(was ? { ...im, srcName: was } : im);
           continue;
         }
         const url = pack.photos?.[`${c.id}/${im.id}`];

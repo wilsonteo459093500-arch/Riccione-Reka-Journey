@@ -25,7 +25,7 @@ import { boardsSoon } from '../../shared/boards/soon.js';
 import { isOfferSlot, offerKinds, offersWorktop, splitSupply, lab } from '../../shared/home.js';
 import { propertyTag, capFirst, kindBadge } from './CaseCard.jsx';
 import { Swatch } from './kit.jsx';
-import CaseGallery, { useImageStore, pushLayer, indexIn, CaseThumb, inWish } from './CaseGallery.jsx';
+import CaseGallery, { useImageStore, pushLayer, lockScroll, indexIn, CaseThumb, inWish } from './CaseGallery.jsx';
 import './showcase.css';
 
 /**
@@ -50,7 +50,23 @@ export function useCaseBoards(cases) {
 }
 
 const listSep = () => (isEn() ? ', ' : '、');
-const placeOf = (c) => String(C.placeLine(c) || '').replace(/ sq ft/g, ' sq ft');
+// 「约 1,180 sq ft」整个不断行（手机上眉题第二行不会只剩一个 FT，也不会在「约」后面断开）
+export const placeOf = (c) =>
+  String(C.placeLine(c) || '')
+    .replace(/ sq ft/g, '\u00a0sq\u00a0ft')
+    .replace(/(约) (?=\d)/g, '$1\u00a0');
+
+/**
+ * 「这个家用了」那一格的名字。溪岸板材只给客人看的名字（C.boardGuestName：「7号 · 黑胡桃」，没有厂家编号）；
+ * 没有能给客人看的名字（只有编号、只剩 id）→ 这块板最接近的程序化材质的名字 → 都没有就「溪岸板材」。
+ * 永远不退回板材自己的标签（那里可能就是厂家编号、或带着编号的 id）。
+ */
+export function matGuestName(mat) {
+  if (!mat) return '';
+  if (!C.isBoardId(mat.id) && !mat.board) return L(mat);
+  const near = MAT_BY_ID[mat.board?.near];
+  return C.boardGuestName(mat.id) || (near && !near.board ? L(near) : '') || t('溪岸板材');
+}
 
 export default function CaseDetail({ match, on, onToggle, onNext, onClose, hasNext = true, readOnly = false, all = null, profile = null, isOn = null, onToggleCase = null }) {
   // 相似的家点进去的那几步（最后一个 = 现在看的）；「← 返回」退一步
@@ -81,9 +97,7 @@ export default function CaseDetail({ match, on, onToggle, onNext, onClose, hasNe
       else if (e.key === 'ArrowRight') keys.current?.step(1);
       else if (e.key === 'ArrowLeft') keys.current?.step(-1);
     }, sheetRef);
-    const html = document.documentElement;
-    const prev = html.style.overflow;
-    html.style.overflow = 'hidden';
+    const unlock = lockScroll();
     // 焦点放到 ✕ 上：等纸升起的第一帧画完（双 rAF）再放 —— 同一个任务里 focus() 会逼浏览器马上排版整张纸（iPad 上 ~0.3 s）
     let r1 = 0;
     let r2 = 0;
@@ -94,7 +108,7 @@ export default function CaseDetail({ match, on, onToggle, onNext, onClose, hasNe
       cancelAnimationFrame(r1);
       cancelAnimationFrame(r2);
       pop();
-      html.style.overflow = prev;
+      unlock();
     };
   }, []);
   useEffect(() => () => clearTimeout(toastT.current), []);
@@ -264,7 +278,7 @@ export default function CaseDetail({ match, on, onToggle, onNext, onClose, hasNe
                     <Swatch id={mat.id} px={96} className="cs-mat-sw" />
                     <figcaption>
                       {L(SLOT_BY_ID[slot])}
-                      <b>{C.isBoardId(mat.id) ? C.boardGuestName(mat.id) || L(mat) : L(mat)}</b>
+                      <b>{matGuestName(mat)}</b>
                       {isOfferSlot(slot, mat.id) && (slot !== 'countertop' || worktop) && <i className="cs-ours">{t('我们做')}</i>}
                     </figcaption>
                   </figure>

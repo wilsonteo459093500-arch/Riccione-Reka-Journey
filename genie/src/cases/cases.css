@@ -1213,7 +1213,12 @@ html[lang='en'] .mg-furn-row {
 .mg-acts-main {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
+}
+/* 「放弃改动」跟在两个存的按钮后面（字，不是按钮） */
+.mg-acts-main .mg-link {
+  margin-left: 8px;
 }
 .mg-acts .btn-primary.small {
   min-height: 46px;
@@ -1720,27 +1725,16 @@ html[lang='en'] .mg-gcard b {
     margin: 20px -16px -20px;
     padding: 12px 16px max(14px, env(safe-area-inset-bottom));
   }
-  /* 手机：三个主要按钮排一行（「用示范客人看看」只留眼睛图标） */
-  .mg-acts-main {
-    flex-wrap: nowrap;
-  }
-  .mg-acts .mg-save {
+  /* 手机：两个存的按钮 +「放弃改动」排一行（按钮左右窄一点），「保存并上架」占满剩下的宽 */
+  .mg-acts .mg-save.small {
     flex: 1 1 auto;
-    padding: 0 16px;
+    padding: 0 12px;
   }
-  .mg-prev-btn {
-    flex: none;
-    width: 46px;
-    padding: 0 !important;
-    justify-content: center;
+  .mg-acts .btn-line.small {
+    padding: 0 12px;
   }
-  .mg-prev-btn span {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
+  .mg-acts-main .mg-link {
+    margin-left: 0;
   }
   .mg-mats-list {
     grid-template-columns: minmax(0, 1fr);

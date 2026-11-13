@@ -598,6 +598,56 @@ const roomCount = (list) => {
   ok(kept.story.zh === '员工写的', '员工改过的故事不会被盖掉');
 }
 
+// ───────────────────────── 再存一次（build.js）：员工在案例库里做的都留着 ─────────────────────────
+{
+  const g = { id: 'g5', dir: '案例/上海/上海-测试丁-原木', kind: 'home', city: '上海', styles: ['原木'], raw: [], keys: ['k1', 'k2', 'k3'] };
+  const img = (id, o = {}) => ({ id, w: 1600, h: 1200, device: true, src: '', thumb: '', ...o });
+  const dec = { styles: ['原木'], type: 'condo', bedrooms: 3, consent: true };
+  const first = B.caseFromGroup(g, dec, [
+    { key: 'k1', room: 'living', view: 'photo', image: img('01') },
+    { key: 'k2', room: 'kitchen', view: 'photo', image: img('02') },
+  ]);
+  // 员工在案例库里：上架、每个房间做了什么、板材、工期、把 02 标成细节、自己加了一张照片（设成封面）
+  const made = { kitchen: { firm: ['kitchen'], boards: ['sail-7'], note: { zh: '整面高柜', en: 'Full-height cabinets' } } };
+  const lib = C.migrateCase({
+    ...first,
+    status: 'live',
+    roomsMade: made,
+    boards: { cabinetry: 'sail-7' },
+    boardsAlso: ['sail-9'],
+    time: 6,
+    images: [
+      { ...first.images[1], detail: true, caption: { zh: '拉手', en: 'Handle' }, cover: false },
+      { ...first.images[0], cover: false },
+      img('dk3x', { room: 'dining', cover: true, caption: { zh: '员工加的', en: 'Staff added' } }),
+    ],
+  });
+  const P1 = lib.images.find((x) => x.id === '01');
+  const P2 = lib.images.find((x) => x.id === '02');
+  const own = lib.images.find((x) => x.id === 'dk3x');
+  // 整理工具里又改了点东西（多挑了一张），再存：照片在 session 里按案例库的顺序排好、标好封面（这里直接给）
+  const again = B.caseFromGroup(g, { ...dec, consent: undefined }, [
+    { key: 'k2', room: 'kitchen', view: 'photo', image: img('02'), prev: P2 },
+    { key: 'k1', room: 'living', view: 'photo', image: img('01'), prev: P1 },
+    { key: null, keep: true, image: own, prev: own, cover: true },
+    { key: 'k3', room: 'master', view: 'photo', image: img('03') },
+  ], undefined, { prev: lib });
+  ok(again.status === 'live' && again.consent === true, '再存一次：上架的还是上架、业主同意留着', JSON.stringify([again.status, again.consent]));
+  ok(eq(again.roomsMade, made), '再存一次：每个房间做了什么留着', JSON.stringify(again.roomsMade));
+  ok(eq(again.boards, { cabinetry: 'sail-7' }) && eq(again.boardsAlso, ['sail-9']) && again.time === 6, '再存一次：板材、工期留着');
+  ok(eq(again.images.map((x) => [x.id, x.detail, x.cover]), [['02', true, false], ['01', false, false], ['dk3x', false, true], ['03', false, false]]), '再存一次：员工标的细节、排的顺序、挑的封面、自己加的照片都留着', JSON.stringify(again.images.map((x) => [x.id, x.detail, x.cover])));
+  ok(again.images[0].caption.zh === '拉手' && again.images[2].caption.en === 'Staff added' && again.images[2].room === 'dining', '说明 / 员工加的照片原样留着');
+  ok(eq(again.rooms.sort(), ['dining', 'kitchen', 'living', 'master']), '房间清单算上员工加的照片');
+  // 整理工具明明白白说「不是细节」→ 整理工具说了算
+  const no = B.caseFromGroup(g, dec, [{ key: 'k2', room: 'kitchen', view: 'photo', detail: false, image: img('02'), prev: P2 }], undefined, { prev: lib });
+  ok(no.images[0].detail === false, '整理工具标过「不是细节」→ 盖过案例库里的');
+  // 整理工具里拿掉了「业主同意」→ 不能再给客人看（退回草稿）
+  const off = B.caseFromGroup(g, { ...dec, consent: false }, [{ key: 'k1', room: 'living', view: 'photo', image: img('01'), prev: P1 }], undefined, { prev: lib });
+  ok(off.consent === false && off.status === 'draft', '整理工具里拿掉业主同意 → 退回草稿', JSON.stringify([off.consent, off.status]));
+  const hid = B.caseFromGroup(g, dec, [{ key: 'k1', room: 'living', view: 'photo', image: img('01') }], undefined, { prev: { ...lib, status: 'hidden' } });
+  ok(hid.status === 'hidden', '藏起来的还藏着');
+}
+
 // ───────────────────────── 案例包拆分 ─────────────────────────
 {
   const MB = 1024 * 1024;
@@ -720,6 +770,120 @@ const roomCount = (list) => {
   C._resetDevice();
 }
 
+// ───────────────────────── 整理工具再存一次 / 存不进去（Session）─────────────────────────
+// 存过的项目不会因为挑照片的规则变了就变成「改过」；再存一次员工在案例库里做的都留着；空间满了不会一直转圈、不留下没人要的照片
+{
+  const S = await import('../src/cases/sorter/session.js');
+  C._resetDevice();
+  const pool = {
+    run: async (task) => {
+      if (task.op === 'compress') return { 1600: new Blob(['big']), 480: new Blob(['small']), w: 1600, h: 1200 };
+      throw new Error('cancelled');
+    },
+    pause() {},
+    clear() {},
+  };
+  const mk = (dir, names) => names.map((name, i) => ({ path: `${dir}/${name}`, name, size: 2000 + i, mtime: 1.7e12 + i * 1000 }));
+  const hasPhoto = async (cid, imgId) => {
+    const r = await C.loadImageURL({ id: cid }, { id: imgId, device: true }, 1600);
+    r.release();
+    return !!r.url;
+  };
+  const dirA = '案例/上海/上海-测试乙-原木';
+  const dirB = '案例/上海/上海-测试丙-侘寂';
+  const s = new S.Session([...mk(dirA, ['客厅1.jpg', '客厅2.jpg', '客厅3.jpg', '客厅4.jpg', '客厅5.jpg', '厨房1.jpg', '厨房2.jpg', '主卧1.jpg']), ...mk(dirB, ['客厅1.jpg', '厨房1.jpg', '主卧1.jpg'])], { pool });
+  const gA = s.groups.find((g) => g.dir === dirA);
+  const gB = s.groups.find((g) => g.dir === dirB);
+  const ready = { styles: ['原木'], type: 'condo', consent: true, state: 'ready' };
+  for (const g of [gA, gB]) {
+    for (const k of g.keys) s.an.set(k, ph(null).a);
+    s._repick(g);
+    s.setDecision(g.id, ready);
+  }
+  const out = await s.saveToLibrary([gA.id]);
+  const cid = out.saved[0];
+  const keysA = s.pickedOf(gA);
+  ok(out.saved.length === 1 && !s.dirty(gA) && eq(s.decision(gA.id).saved.keys, keysA), '存好了、没改过');
+
+  // 挑照片的规则变了（以后的版本）：存过的项目照样是存的那几张，不会变成「改过，要再存」
+  const max0 = PK.PICK.max;
+  PK.PICK.max = 3;
+  s._repick(gA);
+  ok(s.auto.get(gA.id).picked.length <= 3 && eq(s.pickedOf(gA), keysA) && !s.dirty(gA), '存过的项目：自动挑的规则变了 → 还是存的那几张、不算改过', JSON.stringify([s.auto.get(gA.id).picked.length, s.pickedOf(gA).length]));
+  PK.PICK.max = max0;
+  s._repick(gA);
+  s.setDecision(gA.id, { picked: keysA.slice(0, -1) });
+  ok(s.dirty(gA), '员工自己拿掉一张 → 改过');
+  s.setDecision(gA.id, { picked: undefined });
+  ok(!s.dirty(gA) && eq(s.pickedOf(gA), keysA), '放回去 → 又是存的那几张');
+
+  // 员工在案例库里：上架、写每个房间做了什么、把 02 标成细节、写说明、把最后一张排到最前、自己加一张照片当封面
+  const c = await C.getCase(cid);
+  const added = await C.putImage(cid, null, { blobs: { 1600: new Blob(['own']), 480: new Blob(['own-s']), w: 1600, h: 1200 }, room: 'dining' });
+  const imgs = c.images.map((im) => ({ ...im, cover: false, ...(im.id === '02' ? { detail: true, caption: { zh: '员工写的', en: 'Staff wrote' } } : {}) }));
+  const lib = [imgs.at(-1), ...imgs.slice(0, -1), { ...added, cover: true }];
+  const made = { living: { firm: ['tvWall'], boards: [], note: { zh: '电视墙', en: 'TV wall' } } };
+  await C.saveCase({ ...c, status: 'live', roomsMade: made, images: lib });
+  s.setDecision(gA.id, { bedrooms: 3 }); // 整理工具里又改了点东西 → 要再存
+  ok(s.dirty(gA), '改过 → 要再存');
+  await s.saveToLibrary([gA.id]);
+  const c2 = await C.getCase(cid);
+  ok(c2.status === 'live' && c2.consent && eq(c2.roomsMade, made), '再存一次：上架的还是上架、每个房间做了什么留着', JSON.stringify([c2.status, c2.roomsMade]));
+  ok(eq(c2.images.map((im) => im.id), lib.map((im) => im.id)), '再存一次：员工排的顺序留着', JSON.stringify(c2.images.map((im) => im.id)));
+  const im02 = c2.images.find((im) => im.id === '02');
+  ok(im02.detail === true && im02.caption.zh === '员工写的', '再存一次：员工在案例库里标的细节、写的说明留着');
+  ok(c2.images.find((im) => im.id === added.id)?.cover && c2.images.filter((im) => im.cover).length === 1 && (await hasPhoto(cid, added.id)), '再存一次：员工自己加的照片、挑的封面留着');
+  // 整理工具里明明白白说「不是细节」→ 整理工具说了算
+  s.setDetail(gA.id, s.decision(gA.id).saved.keys[1], false);
+  await s.saveToLibrary([gA.id]);
+  ok((await C.getCase(cid)).images.find((im) => im.id === '02').detail === false, '整理工具标「不是细节」→ 盖过案例库里的');
+
+  // 以前的版本存的（saved 里没有 keys）、员工没点过照片：打开以后不会都变成「改过」；员工再改资料才算
+  const dB = s.decision(gB.id);
+  s.dec.set(gB.id, { ...dB, saved: { caseId: 'p-old', at: 1, sig: 'old-sig', bytes: 1, json: 1 } });
+  await s.resume();
+  ok(!s.dirty(gB) && s.decision(gB.id).saved.nopick === true, '以前的版本存的项目：打开以后不是「改过，要再存」');
+  PK.PICK.max = 2;
+  s._repick(gB);
+  ok(!s.dirty(gB), '挑照片的规则再变也一样');
+  PK.PICK.max = max0;
+  s._repick(gB);
+  s.setDecision(gB.id, { bedrooms: 4 });
+  ok(s.dirty(gB), '员工改了资料 → 改过');
+  // 旧的、员工点过照片的：指纹本来就对得上，不重新盖章
+  s.dec.set(gB.id, { ...dB, picked: s.pickedOf(gB), saved: { caseId: 'p-old', at: 1, sig: '' } });
+  s.dec.get(gB.id).saved.sig = s.sigOf(gB);
+  await s.resume();
+  ok(!s.dirty(gB) && !s.decision(gB.id).saved.nopick, '旧的、员工点过照片的：指纹照旧');
+
+  // 空间满了（第 3 张照片写不进去）：不会卡住、说是空间不够；写进去的照片删掉；后面的项目不再试
+  s.dec.set(gB.id, { ...ready });
+  const cidB = B.caseIdFor(gB.dir, gB.kind);
+  const quota = () => Object.assign(new Error('The quota has been exceeded.'), { name: 'QuotaExceededError' });
+  C._failWrites((store, key) => (store === 'photos' && key.startsWith(`${cidB}/03/`) ? quota() : null));
+  s.setDecision(gA.id, { bedrooms: 2 });
+  const revA = (await C.getCase(cid)).rev;
+  const out3 = await s.saveToLibrary([gB.id, gA.id]);
+  C._failWrites(null);
+  ok(!out3.saved.length && eq(out3.skipped, [{ gid: gB.id, why: ['space'] }]) && C.isQuotaError(out3.error), '空间满了：saveToLibrary 照样回来，说是空间不够', JSON.stringify(out3.skipped));
+  ok(!(await hasPhoto(cidB, '01')) && !(await hasPhoto(cidB, '02')) && !(await C.getCase(cidB)) && !s.decision(gB.id).saved, '存不进去的项目：写进去的照片删掉了（没有案例指着）、没有案例、不算存过');
+  ok((await C.getCase(cid)).rev === revA && s.dirty(gA), '空间满了：后面的项目不再试（还是「要再存」）');
+  // 再存一次的时候案例写不进去：旧案例的照片一张都不删
+  const cA = await C.getCase(cid);
+  C._failWrites((store) => (store === 'cases' ? quota() : null));
+  const out4 = await s.saveToLibrary([gA.id]);
+  C._failWrites(null);
+  const still = await Promise.all(cA.images.map((im) => hasPhoto(cid, im.id)));
+  ok(eq(out4.skipped, [{ gid: gA.id, why: ['space'] }]) && still.every(Boolean) && (await C.getCase(cid)).rev === cA.rev, '再存一次存不进去：旧案例和它的照片都还在', JSON.stringify(still));
+  // 不是空间的问题：这个项目跳过（why error），后面的照样存
+  C._failWrites((store, key) => (store === 'photos' && key.startsWith(`${cidB}/01/`) ? new Error('boom') : null));
+  const out5 = await s.saveToLibrary([gB.id, gA.id]);
+  C._failWrites(null);
+  ok(eq(out5.skipped, [{ gid: gB.id, why: ['error'] }]) && eq(out5.saved, [cid]) && !C.isQuotaError(out5.error), '别的错误：这个项目跳过，后面的照样存', JSON.stringify([out5.skipped, out5.saved]));
+  s.destroy();
+  C._resetDevice();
+}
+
 // ───────────────────────── 导入脚本（scripts/import-cases.mjs）：文件名「细节」、再导入一次员工写的说明 / 细节 / 顺序留着 ─────────────────────────
 // --dry-run：不转照片（不用 Pillow / Chromium），只看 manifest 怎么变；照片文件是空的假文件
 {
@@ -774,6 +938,47 @@ const roomCount = (list) => {
     fs.writeFileSync(manifest, JSON.stringify(m4));
     const c4 = (await run()).manifest.cases[0];
     ok(eq(c4.images.find((x) => x.id === '01').caption, { zh: '', en: '' }) && c4.images.find((x) => x.id === '01').alt.zh === '', '同一个编号、大小不一样 = 换了照片：说明不留');
+
+    // 文件夹中间多了一张（排在前面）：后面的编号都往后挪 —— 员工写的说明、细节、房间、顺序、封面跟着照片（源文件）走，不跟着编号
+    const home5 = path.join(tmp, 'photos5', 'shift-home');
+    fs.mkdirSync(home5, { recursive: true });
+    for (const f of ['01 客厅.jpg', '02 厨房.jpg', '03 主卧.jpg', '04 IMG.jpg']) fs.writeFileSync(path.join(home5, f), 'x');
+    const manifest5 = path.join(tmp, 'manifest5.json');
+    const run5 = () => IC.importCases({ src: path.join(tmp, 'photos5'), out: path.join(tmp, 'out5'), manifest: manifest5, engine: 'pillow', dry: true, quiet: true });
+    const byFile = (c, f) => c.images.find((x) => x.srcName === IC.srcNameOf(f));
+    const a1 = (await run5()).manifest.cases[0];
+    ok(['01 客厅.jpg', '02 厨房.jpg', '03 主卧.jpg', '04 IMG.jpg'].every((f, i) => byFile(a1, f)?.id === String(i + 1).padStart(2, '0')) && !JSON.stringify(a1).includes('.jpg'), '每张照片记下源文件名的指纹（文件名本身不进 manifest）');
+    const st = JSON.parse(JSON.stringify(a1));
+    byFile(st, '01 客厅.jpg').caption = { zh: '客厅：电视墙', en: 'Living: TV wall' };
+    Object.assign(byFile(st, '02 厨房.jpg'), { caption: { zh: '厨房：白橡橱柜', en: 'Kitchen: white oak' }, alt: { zh: '厨房', en: 'Kitchen' }, detail: true });
+    byFile(st, '03 主卧.jpg').caption = { zh: '主卧：到顶衣柜', en: 'Master: full-height wardrobe' };
+    byFile(st, '04 IMG.jpg').room = 'study'; // 文件名认不出来，员工标的
+    const coverId = byFile(st, '02 厨房.jpg').id;
+    st.images = ['03 主卧.jpg', '01 客厅.jpg', '02 厨房.jpg', '04 IMG.jpg'].map((f) => ({ ...byFile(st, f), cover: byFile(st, f).id === coverId }));
+    fs.writeFileSync(manifest5, JSON.stringify({ kind: 'wish-cases', v: 1, updatedAt: '', cases: [st] }));
+    fs.writeFileSync(path.join(home5, '01b 拉手细节.jpg'), 'x'); // 排在 01 和 02 中间
+    const a2 = (await run5()).manifest.cases[0];
+    const f2 = (f) => byFile(a2, f);
+    ok(f2('01b 拉手细节.jpg').id === '02' && f2('02 厨房.jpg').id === '03' && f2('03 主卧.jpg').id === '04', '中间多了一张：后面的编号往后挪', JSON.stringify(a2.images.map((x) => x.id)));
+    ok(f2('01 客厅.jpg').caption.zh === '客厅：电视墙' && f2('02 厨房.jpg').caption.zh === '厨房：白橡橱柜' && f2('02 厨房.jpg').alt.en === 'Kitchen' && f2('03 主卧.jpg').caption.zh === '主卧：到顶衣柜', '说明 / 替代文字跟着照片走（不跑到别的照片上）', JSON.stringify(a2.images.map((x) => [x.id, x.caption.zh])));
+    ok(eq(f2('01b 拉手细节.jpg').caption, { zh: '', en: '' }) && f2('01b 拉手细节.jpg').detail === true && f2('02 厨房.jpg').detail === true && f2('03 主卧.jpg').detail === false && f2('04 IMG.jpg').detail === false, '细节跟着照片走；新照片说明空着', JSON.stringify(a2.images.map((x) => [x.id, x.detail])));
+    ok(f2('04 IMG.jpg').room === 'study' && f2('02 厨房.jpg').room === 'kitchen' && f2('01b 拉手细节.jpg').room === '', '员工标的房间跟着照片走');
+    ok(eq(a2.images.map((x) => x.srcName), ['03 主卧.jpg', '01 客厅.jpg', '02 厨房.jpg', '04 IMG.jpg', '01b 拉手细节.jpg'].map(IC.srcNameOf)), '员工排的顺序跟着照片走，新照片接在后面');
+    ok(f2('02 厨房.jpg').cover && a2.images.filter((x) => x.cover).length === 1, '员工挑的封面跟着照片走');
+
+    // 旧的 manifest（没记 srcName）：照片没变 → 补记 srcName，不算改动（rev 不变）；说明按编号 + 大小认
+    const legacy = JSON.parse(JSON.stringify(a2));
+    for (const x of legacy.images) delete x.srcName;
+    fs.writeFileSync(manifest5, JSON.stringify({ kind: 'wish-cases', v: 1, updatedAt: '', cases: [legacy] }));
+    const r6 = await run5();
+    const a6 = r6.manifest.cases[0];
+    ok(eq(r6.unchanged, [a2.id]) && a6.rev === legacy.rev && eq(a6.images.map((x) => x.srcName), a2.images.map((x) => x.srcName)) && eq(a6.images.map((x) => x.caption), a2.images.map((x) => x.caption)), '旧的 manifest：补记 srcName，rev 不变、说明照旧', JSON.stringify([r6.unchanged, a6.rev, legacy.rev]));
+
+    // iPad 存的案例没有 srcName（只有导入脚本用）：案例包合并回 manifest 的时候，同一张照片记过的接着用
+    fs.writeFileSync(manifest5, JSON.stringify({ kind: 'wish-cases', v: 1, updatedAt: '', cases: [a2] }));
+    const packCase = { ...C.migrateCase(a2), rev: a2.rev + 1 };
+    const r7 = await IC.mergePack({ pack: { kind: 'wish-cases', v: 1, cases: [packCase] }, out: path.join(tmp, 'out5'), manifest: manifest5, engine: 'pillow', dry: true, quiet: true });
+    ok(!packCase.images.some((x) => 'srcName' in x) && eq(r7.manifest.cases[0].images.map((x) => x.srcName), a2.images.map((x) => x.srcName)), '案例包合并回来：srcName 接着用');
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

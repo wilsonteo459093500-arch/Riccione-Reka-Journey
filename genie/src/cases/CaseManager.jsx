@@ -319,8 +319,69 @@ const isPlan = (im) => im.room === 'plan3d' || im.kind === 'plan3d';
 const photoRank = (im) => (isPlan(im) ? 1000 : ROOM_RANK[im.room] ?? 500);
 /** case.roomsMade 照这个顺序写（和 cases.js 整理出来的一样：房间按 ROOMS，全屋最后） */
 const MADE_ORDER = [...C.ROOMS.filter((r) => r.id !== 'plan3d').map((r) => r.id), C.ROOM_HOME];
-/** IndexedDB 写不进去是因为空间满了（不是这张照片坏了） */
-const isQuota = (e) => e?.name === 'QuotaExceededError' || /quota/i.test(String(e?.message || ''));
+/** 「{0} 张照片」：一张的时候英文是单数（和客人那边 CaseDetail 一样） */
+export const photosText = (n) => (n === 1 ? t('1 张照片') : t('{0} 张照片', [n]));
+
+/**
+ * 加照片：一张一张来 —— 先压缩，压好了才写进这台设备。
+ * 压不了 = 这张照片打不开：说一声，接着下一张。
+ * 压好了却写不进去 = 这台设备的空间出了问题（iPad 的 WebKit 空间满了不一定说 QuotaExceeded）：后面的也存不进去 →
+ * 停下来说空间不够，不要每张都说「打不开」，也不要再压后面的。
+ * on.added(im, room)：存好一张；on.done(k)：处理完第 k 张；on.flash(msg, 'error')。compress 可以换掉（测试用）。回来：存好了几张。
+ */
+export async function addPhotos(caseId, files, on, compress = C.compressImage) {
+  let k = 0;
+  let saved = 0;
+  for (const f of files) {
+    // 认不出房间 = 先空着（「房间？」），不要猜成客厅
+    const room = guessRoom(f.name) || C.ROOM_UNKNOWN;
+    let big = null;
+    try {
+      big = await compress(f, { maxW: 1600, maxH: 1600 });
+    } catch {
+      on.flash(t('这张照片打不开：{0}', [f.name]), 'error');
+    }
+    if (big) {
+      let im;
+      try {
+        im = await C.putImage(caseId, f, { room, blobs: { 1600: big.blob, w: big.w, h: big.h } });
+      } catch (e) {
+        console.warn('[cases]', e);
+        on.flash(t('这台设备的空间不够了：后面的照片没有存进去'), 'error');
+        break;
+      }
+      on.added(im, room);
+      saved++;
+    }
+    on.done(++k);
+  }
+  return saved;
+}
+
+/**
+ * 存一个案例（保存 / 上架 / 藏起来都走这里）：先存案例，存好了才删掉编辑器里移除的设备照片 ——
+ * 存不进去的话，这台设备上那一版还指着它们。
+ * 存不进去 → 抛出原来的错误，pending（新加的 / 移除的照片）原样留着：再存一次、或者「放弃改动」都还对得上。
+ * 存的时候才加进来 / 移除的照片不在存的这一版里：留在 pending 里等下一次。
+ */
+export async function commitCase(next, pending) {
+  const adds = [...pending.current.adds];
+  const drops = [...pending.current.drops];
+  const saved = await C.saveCase(next);
+  const cur = pending.current;
+  pending.current = { adds: cur.adds.filter((id) => !adds.includes(id)), drops: cur.drops.filter((id) => !drops.includes(id)) };
+  for (const id of drops) {
+    try {
+      await C.dropImage(next.id, id);
+    } catch {
+      /* 案例已经存好了：删不掉的那张只是多占一点空间 */
+    }
+  }
+  return saved;
+}
+
+/** 存不进去的时候说什么：空间不够了 / 别的问题（改动都还在编辑器里） */
+export const saveFailText = (e) => (C.isQuotaError(e) ? t('这台设备的空间不够了：这次的改动没有存进去') : t('没存进去：改动都还在，再存一次试试'));
 
 /**
  * 一张小图（480）的网址。随网站的照片直接给网址（<img loading="lazy">）；
@@ -606,29 +667,18 @@ function Photos({ draft, patch, pending, onBusy, flash, busy }) {
       });
     }
     onBusy(t('正在压缩照片 {0}/{1}', [0, list.length]));
-    let k = 0;
-    for (const f of list) {
-      try {
-        // 认不出房间 = 先空着（「房间？」），不要猜成客厅
-        const room = guessRoom(f.name) || C.ROOM_UNKNOWN;
-        const im = await C.putImage(draft.id, f, { room });
+    await addPhotos(draft.id, list, {
+      added: (im, room) => {
         pending.current.adds.push(im.id);
         patch((d) => {
           d.images = [...(d.images || []), im];
           if (!d.images.some((x) => x.cover)) d.images[0].cover = true;
           if (room && room !== 'plan3d' && !d.rooms.includes(room)) d.rooms.push(room);
         });
-      } catch (e) {
-        // 空间满了：后面的也一定存不进去，停下来
-        if (isQuota(e)) {
-          flash(t('这台设备的空间不够了：后面的照片没有存进去'), 'error');
-          break;
-        }
-        flash(t('这张照片打不开：{0}', [f.name]), 'error');
-      }
-      k++;
-      onBusy(k < list.length ? t('正在压缩照片 {0}/{1}', [k, list.length]) : null);
-    }
+      },
+      done: (k) => onBusy(k < list.length ? t('正在压缩照片 {0}/{1}', [k, list.length]) : null),
+      flash,
+    });
     onBusy(null);
     refresh();
   };
@@ -752,9 +802,10 @@ function RoomsMade({ draft, patch }) {
                   <b>
                     <span>{row.label}</span>
                     {row.derived && <em className="mg-made-auto">{t('自动')}</em>}
-                    {!home && <small>{t('{0} 张照片', [row.images])}</small>}
+                    {!home && <small>{photosText(row.images)}</small>}
                   </b>
-                  <small className={summary ? '' : 'is-empty'}>{summary || t('没写：客人那边不显示这个房间')}</small>
+                  {/* 没写的房间：客人「每个房间我们做了什么」里少这一行，照片（相册的房间标签）照样看得到 */}
+                  <small className={summary ? '' : 'is-empty'}>{summary || t('没写：客人在「每个房间」里看不到这一行（照片照常显示）')}</small>
                   {offRoom && <small className="mg-made-off">{t('这个房间不在「做了哪些地方」里')}</small>}
                 </span>
                 <ChevronDown className="mg-made-chev" size={18} strokeWidth={1.8} aria-hidden="true" />
@@ -1246,17 +1297,18 @@ function Editor({ draft, patch, errors, dirty, pending, onSave, onDiscard, onDel
           <button type="button" className="btn-line small" disabled={!!busy} onClick={() => onSave('draft')}>
             {t('存草稿')}
           </button>
-          <button type="button" className="btn-line small mg-prev-btn" data-sfx="open" aria-label={t('用示范客人看看')} onClick={onPreview}>
-            <Eye size={16} strokeWidth={1.8} aria-hidden="true" />
-            <span>{t('用示范客人看看')}</span>
-          </button>
-        </div>
-        <div className="mg-acts-sub">
           {dirty && (
             <button type="button" className="mg-link" data-sfx="back" onClick={onDiscard}>
               {t('放弃改动')}
             </button>
           )}
+        </div>
+        {/* 存 / 放弃一行；看看 / 藏起来 / 删除是下面一行字（编辑器只有 460 px 宽：英文三个按钮放不下一行，字不缩短） */}
+        <div className="mg-acts-sub">
+          <button type="button" className="mg-link mg-prev-btn" data-sfx="open" onClick={onPreview}>
+            <Eye size={14} aria-hidden="true" />
+            {t('用示范客人看看')}
+          </button>
           {!isNew && (
             <button type="button" className="mg-link" onClick={onHide}>
               {draft.status === 'hidden' ? <Eye size={14} aria-hidden="true" /> : <EyeOff size={14} aria-hidden="true" />}
@@ -1527,6 +1579,11 @@ export default function CaseManager() {
     const id = setTimeout(() => setToast(null), 3200);
     return () => clearTimeout(id);
   }, [toast]);
+  /** 存不进去（空间满了 / 别的问题）：改动都还在编辑器里，说一声就好 */
+  const saveFailed = (e) => {
+    console.warn('[cases]', e);
+    flash(saveFailText(e), 'error');
+  };
 
   const dirty = !!draft && JSON.stringify(draft) !== base;
   const patch = (fn) =>
@@ -1603,9 +1660,13 @@ export default function CaseManager() {
         return;
       }
     }
-    for (const id of pending.current.drops) await C.dropImage(next.id, id);
-    pending.current = { adds: [], drops: [] };
-    const saved = await C.saveCase(next);
+    let saved;
+    try {
+      saved = await commitCase(next, pending);
+    } catch (e) {
+      saveFailed(e);
+      return;
+    }
     const l = await reload();
     const now = l.find((c) => c.id === saved.id) || saved;
     setDraft(clone(now));
@@ -1646,9 +1707,13 @@ export default function CaseManager() {
   const hideToggle = async () => {
     // 取消隐藏：种子回到上架；我们的案例先回到草稿（上架要再检查一次）。改到一半的内容一起存下来
     const st = draft.status === 'hidden' ? (draft.kind === 'concept' ? 'live' : 'draft') : 'hidden';
-    for (const id of pending.current.drops) await C.dropImage(draft.id, id);
-    pending.current = { adds: [], drops: [] };
-    const saved = await C.saveCase({ ...draft, status: st });
+    let saved;
+    try {
+      saved = await commitCase({ ...draft, status: st }, pending);
+    } catch (e) {
+      saveFailed(e);
+      return;
+    }
     const l = await reload();
     const now = l.find((c) => c.id === draft.id) || saved;
     setDraft(clone(now));
@@ -1756,7 +1821,16 @@ export default function CaseManager() {
   };
   const doImport = async (file) => {
     if (!file) return;
-    const r = await C.importPack(file);
+    let r;
+    try {
+      r = await C.importPack(file);
+    } catch (e) {
+      // 写到一半存不进去（多半是空间满了）：已经导进来的照样列出来
+      console.warn('[cases]', e);
+      await reload();
+      flash(C.isQuotaError(e) ? t('这台设备的空间不够了：案例包没有全部导进来') : t('案例包没有全部导进来，再试一次'), 'error');
+      return;
+    }
     await reload();
     if (r.errors.length && !r.added && !r.updated) flash(t(r.errors[0].zh), 'error');
     else flash(t('新增 {0} · 更新 {1} · 跳过 {2}', [r.added, r.updated, r.skipped]));

@@ -15,4 +15,8 @@ export default {
   '没标房间的照片': 'Photos without a room',
   '大约要用 {0} MB 照片空间（这台设备还有约 {1} MB）': 'About {0} MB of photo space needed ({1} MB left on this device)',
   '可能不够：先少存几个项目，或者在空间大的电脑上存、导出案例包。': 'That may not fit: save fewer projects at a time, or save on a computer with more space and export a case pack.',
+  // 存进案例库的时候存不进去（空间满了 / 别的错误）
+  '存不下了：这台设备的照片空间不够。先少存几个项目，或者在空间大的电脑上存、导出案例包。':
+    'Out of space: this device has no room left for more photos. Save fewer projects at a time, or save on a computer with more space and export a case pack.',
+  '存的时候出了问题，没存完：{0}': 'Something went wrong while saving, so not everything was saved: {0}',
 };

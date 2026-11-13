@@ -19,9 +19,11 @@ export default {
   全屏看图: 'Full-screen photos',
   还原: 'Zoom out',
   '两指捏开 · 双击放大': 'Pinch or double-tap to zoom',
+  // 案例详情「这个家用了」：溪岸板材没有能给客人看的名字时（src/quiz/home/CaseDetail.jsx matGuestName）用 en-studio.js 的「溪岸板材」
   // 看全部的家（src/quiz/home/CaseBrowser.jsx、CasesStep.jsx、BlueprintCases.jsx）
   '看全部 {0} 个家': 'See all {0} homes',
-  更多案例: 'More homes',
+  // 案例那一步的页脚：只选了一个（两三个照旧是 en-shell.js 的「就用这 {0} 个」）
+  就用这一个: 'Use this one',
   '{0} 个家': '{0} homes',
   '{0} / {1} 个家': '{0} of {1} homes',
   全部的家: 'All our homes',
