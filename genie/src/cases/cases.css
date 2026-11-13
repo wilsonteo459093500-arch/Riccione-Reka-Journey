@@ -484,15 +484,37 @@ html[lang='en'] .mg-ed-head h2 {
   color: var(--text-strong);
 }
 
-/* 照片 */
-.mg-photos {
+/* 照片：上面一条（几张 / 最多几张 · 按房间排），格子自己排几列（编辑器 416 px = 3 列，iPad 竖屏全宽 = 5 列，手机 = 2 列） */
+.mg-ph-bar {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
   gap: 10px;
+  min-height: 30px;
+  margin: 0 0 6px;
 }
+.mg-ph-count {
+  font: 600 12.5px/1 var(--sans);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-soft);
+}
+.mg-ph-count.is-full {
+  color: var(--gold-d);
+}
+.mg-ph-sort {
+  min-height: 30px;
+}
+.mg-photos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  gap: 12px 10px;
+}
+/* 40 张照片也不卡：看不到的格子先不排版、不画（高度先记住，滚动条不跳） */
 .mg-photos figure {
-  width: calc((100% - 20px) / 3);
+  min-width: 0;
   margin: 0;
+  content-visibility: auto;
+  contain-intrinsic-height: auto 196px;
 }
 .mg-ph {
   position: relative;
@@ -501,15 +523,27 @@ html[lang='en'] .mg-ed-head h2 {
   border-radius: 11px;
   overflow: hidden;
   background: var(--bg-deep);
+  -webkit-touch-callout: none;
 }
 .mg-photos figure.is-cover .mg-ph {
   box-shadow: 0 0 0 2px var(--gold);
+}
+/* 细节特写：照片里面一圈金色虚线（画在按钮下面） */
+.mg-photos figure.is-detail .mg-ph::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border: 1.5px dashed rgba(var(--gold-rgb), 0.95);
+  border-radius: 9px;
+  pointer-events: none;
 }
 .mg-ph img {
   display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  -webkit-user-drag: none;
+  user-select: none;
 }
 .mg-ph-star,
 .mg-ph-x {
@@ -534,7 +568,28 @@ html[lang='en'] .mg-ed-head h2 {
 .mg-ph-x {
   right: 4px;
 }
+/* 「细节」开关：照片左下角（右下角是换顺序的两个箭头） */
+.mg-ph-detail {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(var(--glass-rgb), 0.92);
+  color: var(--text-soft);
+  font: 600 11px/26px var(--sans);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.mg-ph-detail[aria-pressed='true'] {
+  background: var(--gold-btn);
+  color: var(--ink);
+}
 .mg-photos figcaption {
+  display: grid;
+  gap: 4px;
   margin-top: 6px;
 }
 /* 还没标房间：虚线框 + 金色字，一眼看出哪几张要补 */
@@ -550,6 +605,43 @@ html[lang='en'] .mg-ed-head h2 {
   padding: 4px 6px;
   font-size: 12.5px;
   border-radius: 8px;
+}
+/* 照片说明：一格中文、一格英文（前面一个小字「中」/「EN」） */
+.mg-ph-cap {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+.mg-ph-cap > span {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 24px;
+  font: 700 9.5px/30px var(--sans);
+  color: var(--text-soft);
+  text-align: center;
+  pointer-events: none;
+}
+.mg-ph-cap input {
+  display: block;
+  width: 100%;
+  min-height: 30px;
+  box-sizing: border-box;
+  padding: 5px 7px 5px 24px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px rgba(var(--text-rgb), 0.12);
+  color: var(--text-strong);
+  font: 400 12.5px/1.3 var(--sans);
+  text-overflow: ellipsis;
+}
+.mg-ph-cap input::placeholder {
+  color: rgba(var(--text-rgb), 0.38);
+}
+.mg-ph-cap input:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 1.5px var(--accent);
 }
 /* 换顺序：照片右下角两个小箭头（不占说明那一行，房间名字才写得下） */
 .mg-ph-mv {
@@ -570,14 +662,218 @@ html[lang='en'] .mg-ed-head h2 {
   place-items: center;
   align-content: center;
   gap: 4px;
-  width: calc((100% - 20px) / 3);
+  min-width: 0;
   aspect-ratio: 4 / 3;
+  padding: 6px;
   border: 1.5px dashed var(--line);
   border-radius: 11px;
   background: none;
   color: var(--text-soft);
-  font: 600 12px/1 var(--sans);
+  font: 600 12px/1.25 var(--sans);
+  text-align: center;
   cursor: pointer;
+}
+.mg-ph-add:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.mg-ph-add.is-full {
+  border-style: solid;
+  border-color: rgba(var(--gold-d-rgb), 0.35);
+  color: var(--gold-d);
+  opacity: 1;
+}
+/* 这台设备的照片空间：细细一条 + 一行字；快满了变成金色提醒 */
+.mg-store {
+  margin-top: 14px;
+}
+.mg-store-bar {
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: rgba(var(--text-rgb), 0.09);
+}
+.mg-store-bar i {
+  display: block;
+  width: var(--p, 0%);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+.mg-store.is-warn .mg-store-bar i {
+  background: var(--gold-d);
+}
+.mg-store p {
+  margin: 6px 0 0;
+  font: 400 12px/1.45 var(--sans);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-soft);
+}
+.mg-store .mg-store-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(var(--gold-d-rgb), 0.08);
+  color: var(--gold-d);
+  font-weight: 600;
+}
+.mg-store-warn svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+/* 每个房间我们做了什么：一个房间一行（小图 · 名字 · 自动 · 写了什么），点开改 */
+.mg-made {
+  display: grid;
+  gap: 6px;
+}
+.mg-made-row {
+  border-radius: 14px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+}
+.mg-made-row.is-open {
+  box-shadow: inset 0 0 0 1px rgba(var(--gold-rgb), 0.5);
+}
+.mg-made-head {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 58px;
+  padding: 7px 10px 7px 7px;
+  border: 0;
+  border-radius: 14px;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mg-made-thumb {
+  display: block;
+  width: 56px;
+  aspect-ratio: 4 / 3;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-deep);
+}
+.mg-made-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.mg-made-t {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.mg-made-t b {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 7px;
+  font: 600 14px/1.25 var(--sans);
+  color: var(--text-strong);
+}
+.mg-made-t b small {
+  font: 500 11.5px/1.2 var(--sans);
+  color: var(--text-soft);
+}
+.mg-made-auto {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--accent-tint);
+  color: var(--accent);
+  font: 700 10.5px/1 var(--sans);
+  font-style: normal;
+  letter-spacing: 0.04em;
+}
+.mg-made-t > small {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font: 400 12.5px/1.4 var(--sans);
+  color: var(--text-soft);
+}
+.mg-made-t > small.is-empty {
+  color: rgba(var(--text-rgb), 0.42);
+}
+.mg-made-t > small.mg-made-off {
+  color: var(--gold-d);
+  font-weight: 600;
+}
+.mg-made-chev {
+  color: var(--text-soft);
+  transition: transform 0.22s var(--ease);
+}
+.mg-made-row.is-open .mg-made-chev {
+  transform: rotate(180deg);
+}
+.mg-made-body {
+  padding: 0 12px 12px;
+}
+.mg-made-body .mg-sub:first-child {
+  margin-top: 4px;
+}
+.mg-made-firm .chip {
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+.mg-made-firm .chip.on {
+  background: var(--gold-btn);
+  color: var(--ink);
+}
+.mg-made-boards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.mg-bchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  min-height: 38px;
+  padding: 4px 12px 4px 5px;
+  border: 0;
+  border-radius: 11px;
+  background: rgba(var(--text-rgb), 0.05);
+  box-shadow: inset 0 0 0 1px rgba(var(--text-rgb), 0.1);
+  color: var(--text-strong);
+  font: 500 13px/1.2 var(--sans);
+  text-align: left;
+  cursor: pointer;
+}
+.mg-bchip.on {
+  background: rgba(var(--gold-l-rgb), 0.45);
+  box-shadow: inset 0 0 0 1.5px var(--gold);
+}
+.mg-bchip:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.mg-bchip small {
+  font: 500 11px/1 var(--sans);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-soft);
+}
+.mg-bchip .mg-sw {
+  border-radius: 7px;
+}
+/* 还不在板材库里的板：斜纹虚框 */
+.mg-sw.is-unknown {
+  background: repeating-linear-gradient(135deg, var(--bg-deep) 0 5px, var(--surface) 5px 10px);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.mg-made-reset {
+  margin-top: 8px;
 }
 
 /* 风格 */
@@ -1459,6 +1755,25 @@ html[lang='en'] .mg-gcard b {
   .mg-sheet {
     max-height: calc(100dvh - 24px);
   }
+  .mg-photos {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .mg-made-head {
+    grid-template-columns: 48px minmax(0, 1fr) auto;
+  }
+  .mg-made-thumb {
+    width: 48px;
+  }
+  .mg-made-firm .chip,
+  .mg-bchip {
+    min-height: 36px;
+  }
+}
+/* 触屏（iPad / 手机）：小于 16px 的输入框一点就整页放大 → 照片说明用 16px */
+@media (pointer: coarse) {
+  .mg-ph-cap input {
+    font-size: 16px;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .mg-veil,
@@ -1469,5 +1784,8 @@ html[lang='en'] .mg-gcard b {
   }
   .mg-edit {
     transition: none !important;
+  }
+  .mg-made-chev {
+    transition: none;
   }
 }

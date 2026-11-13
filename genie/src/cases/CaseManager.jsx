@@ -8,13 +8,14 @@
 //
 // 声音 / 动效：installSfx 盖住所有按钮；多选标签 data-sfx="choice"，拖动 grab / drop，删除 = 金尘（fx.dissolve）。
 
-import { Component, Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
+import { Component, Suspense, lazy, memo, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { ArrowDown, ArrowLeft, ArrowUp, Check, ChevronLeft, ChevronRight, Download, Eye, EyeOff, FolderTree, GripVertical, ImagePlus, Layers, LockKeyhole, Plus, Sparkles, Star, Trash2, TriangleAlert, Upload, X } from 'lucide-react';
+import { ArrowDown, ArrowDownUp, ArrowLeft, ArrowUp, Check, ChevronDown, ChevronLeft, ChevronRight, Download, Eye, EyeOff, FolderTree, GripVertical, ImagePlus, Layers, LockKeyhole, Plus, RotateCcw, Sparkles, Star, Trash2, TriangleAlert, Upload, X } from 'lucide-react';
 import LangToggle from '../shared/LangToggle.jsx';
 import { t, L, isEn } from '../shared/i18n.js';
 import * as C from '../shared/cases.js';
-import { MATERIALS, MAT_BY_ID, SLOTS, SLOT_BY_ID, CATEGORIES, fits } from '../shared/materials.js';
+import { MATERIALS, MAT_BY_ID, SLOTS, SLOT_BY_ID, CATEGORIES, fits, onBoards } from '../shared/materials.js';
+import { idLabel, factoryCode, boardsOn } from '../shared/boards/match.js';
 import { swatchURL } from '../shared/textures.js';
 import { DREAMERS, DREAMER_BY_CODE, AXES, HIDDEN_AXES } from '../shared/dreamers.js';
 import { MOODS } from '../shared/moods.js';
@@ -302,19 +303,310 @@ function MatPicker({ slot, value, onPick, onClose }) {
 
 // ───────────────────────── 照片 ─────────────────────────
 
-function Photos({ draft, patch, pending, onBusy, flash }) {
-  const r = useResolved(draft, { thumbsOnly: true });
+/** 这一页第一次加照片时请浏览器长期保留这台设备的照片（C.askPersist；整页只问一次） */
+let persistAsked = false;
+const MB = 1024 * 1024;
+/** 数字的千位逗号（中英文一样）；Intl 只建一次（toLocaleString 每次都建一个，很慢） */
+const NUM = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 });
+/** 字节 → MB（10 MB 以下留一位小数） */
+const fmtMB = (b) => {
+  const v = Math.max(0, b) / MB;
+  return NUM.format(v < 10 ? Math.round(v * 10) / 10 : Math.round(v));
+};
+/** 「按房间排」：ROOMS 的顺序；没标房间的排在认得的后面，整个家（3D）永远最后 */
+const ROOM_RANK = Object.fromEntries(C.ROOMS.filter((r) => r.id !== 'plan3d').map((r, i) => [r.id, i]));
+const isPlan = (im) => im.room === 'plan3d' || im.kind === 'plan3d';
+const photoRank = (im) => (isPlan(im) ? 1000 : ROOM_RANK[im.room] ?? 500);
+/** case.roomsMade 照这个顺序写（和 cases.js 整理出来的一样：房间按 ROOMS，全屋最后） */
+const MADE_ORDER = [...C.ROOMS.filter((r) => r.id !== 'plan3d').map((r) => r.id), C.ROOM_HOME];
+/** IndexedDB 写不进去是因为空间满了（不是这张照片坏了） */
+const isQuota = (e) => e?.name === 'QuotaExceededError' || /quota/i.test(String(e?.message || ''));
+
+/**
+ * 一张小图（480）的网址。随网站的照片直接给网址（<img loading="lazy">）；
+ * 设备上的照片等它快滚到眼前（编辑器里上下 400 px 以内）才从 IndexedDB 读成 object URL，换掉 / 离开时放掉。
+ * 每张只读一次：加照片、改顺序、换封面、打说明都不会把其它照片再读一遍。
+ */
+function useThumb(ref, caseId, im) {
+  const dev = !!im?.device;
+  const id = im?.id || '';
+  const [got, setGot] = useState(null); // { key, url }
+  const key = `${caseId}/${id}`;
+  useEffect(() => {
+    if (!dev || !id) return undefined;
+    let alive = true;
+    let res = null;
+    let io = null;
+    const load = () => {
+      io?.disconnect();
+      io = null;
+      C.loadImageURL({ id: caseId }, { id, device: true }, 480).then((r) => {
+        if (!alive) return r.release();
+        res = r;
+        setGot({ key, url: r.url });
+      });
+    };
+    const el = ref.current;
+    if (el && typeof IntersectionObserver === 'function') {
+      io = new IntersectionObserver((es) => es.some((e) => e.isIntersecting) && load(), { root: el.closest('.mg-edit'), rootMargin: '400px 0px' });
+      io.observe(el);
+    } else load();
+    return () => {
+      alive = false;
+      io?.disconnect();
+      res?.release();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, dev]);
+  if (!im) return '';
+  if (!dev) return C.imageURL(null, im, 480);
+  return got?.key === key ? got.url : '';
+}
+
+/** 这台设备的照片空间（navigator.storage）：dep 变了 300 ms 后重新量一次；refresh() 马上量 */
+function useStorage(dep) {
+  const [info, setInfo] = useState(null);
+  const seq = useRef(0);
+  const refresh = useCallback(() => {
+    const k = ++seq.current;
+    return C.storageInfo().then((x) => {
+      if (k === seq.current) setInfo(x);
+    });
+  }, []);
+  useEffect(() => {
+    const id = setTimeout(refresh, 300);
+    return () => clearTimeout(id);
+  }, [dep, refresh]);
+  return [info, refresh];
+}
+
+/** 照片下面一行：这台设备已用多少、还剩多少；剩不到 150 MB 或用了 85 % 以上就提醒先导出 */
+const StorageLine = memo(function StorageLine({ info, asked, device }) {
+  if (!info?.quota) return null;
+  const free = Math.max(0, info.quota - info.usage);
+  const used = Math.min(1, info.usage / info.quota);
+  const warn = free < 150 * MB || used > 0.85;
+  return (
+    <div className={`mg-store ${warn ? 'is-warn' : ''}`}>
+      <span className="mg-store-bar" aria-hidden="true">
+        <i style={{ '--p': `${Math.max(used * 100, 1).toFixed(1)}%` }} />
+      </span>
+      <p>{t('这台设备的照片空间：已用 {0} MB · 还有约 {1} MB', [fmtMB(info.usage), fmtMB(free)])}</p>
+      {warn && (
+        <p className="mg-store-warn">
+          <TriangleAlert size={14} strokeWidth={2} aria-hidden="true" />
+          <span>{t('空间快满了（大约还能放 {0} 张照片）：先「导出」备份，再移除用不到的照片。', [NUM.format(Math.floor(free / C.PHOTO_EST_BYTES))])}</span>
+        </p>
+      )}
+      {asked && !info.persisted && device && <p className="mg-store-note">{t('浏览器没答应长期保留：空间紧张时可能会清掉这里的照片，记得常「导出」。')}</p>}
+    </div>
+  );
+});
+
+/**
+ * 照片说明的一格：打的字先进这一格自己的 state（只重画这一格，字马上出来）；画完这一帧以后才用 startTransition 写回案例 ——
+ * 整个编辑器（40 张照片 + 所有栏位）重画不挡打字，下一个字来了还可以打断它。一帧里打了好几个字只写回一次；离开这一格马上写回。
+ * 案例里的值变了：是自己写回去的（可能是打到一半的旧字）就不管；不是 = 外面改的（放弃改动、重新打开）→ 跟着换（不用先离开这一格）。
+ */
+function CapInput({ value, onCommit, ...rest }) {
+  const [v, setV] = useState(value);
+  const ref = useRef(null);
+  if (!ref.current) ref.current = { text: value, last: value, sent: new Set(), queued: false, alive: true };
+  const s = ref.current;
+  s.commit = onCommit;
+  useEffect(() => {
+    s.alive = true;
+    return () => {
+      s.alive = false;
+    };
+  }, [s]);
+  useLayoutEffect(() => {
+    if (s.sent.has(value)) {
+      if (value === s.text) s.sent.clear(); // 写回去的都到了
+      return;
+    }
+    s.text = s.last = value;
+    s.sent.clear();
+    setV(value);
+  }, [s, value]);
+  const send = (x) => {
+    s.last = x;
+    s.sent.add(x);
+    s.commit(x);
+  };
+  return (
+    <input
+      {...rest}
+      value={v}
+      onChange={(e) => {
+        s.text = e.target.value;
+        setV(s.text);
+        if (s.queued) return;
+        s.queued = true;
+        requestAnimationFrame(() =>
+          setTimeout(() => {
+            s.queued = false;
+            if (s.alive && s.text !== s.last) startTransition(() => send(s.text));
+          }, 0)
+        );
+      }}
+      onBlur={() => s.text !== s.last && send(s.text)}
+    />
+  );
+}
+
+/** 一张照片的格子：只比较这张照片自己的资料（patch 每次都是新对象），别的照片改了它不重画 */
+const TILE_KEYS = ['id', 'room', 'kind', 'cover', 'detail', 'device', 'src', 'thumb'];
+const sameTile = (a, b) =>
+  a.i === b.i &&
+  a.n === b.n &&
+  a.caseId === b.caseId &&
+  a.act === b.act &&
+  TILE_KEYS.every((k) => a.im[k] === b.im[k]) &&
+  (a.im.caption?.zh || '') === (b.im.caption?.zh || '') &&
+  (a.im.caption?.en || '') === (b.im.caption?.en || '');
+
+const PhotoTile = memo(function PhotoTile({ caseId, im, i, n, act }) {
+  const fig = useRef(null);
+  const src = useThumb(fig, caseId, im);
+  const known = !!C.ROOM_BY_ID[im.room];
+  const plan = isPlan(im);
+  const cls = [im.cover ? 'is-cover' : '', im.detail && !plan ? 'is-detail' : ''].filter(Boolean).join(' ');
+  return (
+    <figure ref={fig} className={cls || undefined} data-id={im.id}>
+      <span className="mg-ph">
+        {src ? <img src={src} alt="" loading="lazy" decoding="async" draggable={false} /> : <i />}
+        <button type="button" className="mg-ph-star" aria-pressed={!!im.cover} aria-label={t('设为封面')} title={t('设为封面')} onClick={() => act('cover', im.id)}>
+          <Star size={14} strokeWidth={2} fill={im.cover ? 'currentColor' : 'none'} />
+        </button>
+        <button type="button" className="mg-ph-x" aria-label={t('移除这张')} title={t('移除这张')} data-sfx="chipRemove" onClick={() => act('remove', im.id)}>
+          <X size={13} strokeWidth={2.2} />
+        </button>
+        {!plan && (
+          <button type="button" className="mg-ph-detail" aria-pressed={!!im.detail} title={t('标成细节特写（柜门、拉手、板材纹理、收口）')} data-sfx="choice" onClick={() => act('detail', im.id)}>
+            {t('细节')}
+          </button>
+        )}
+        {n > 1 && (
+          <span className="mg-ph-mv">
+            <button type="button" aria-label={t('往前')} data-sfx="drop" disabled={i === 0} onClick={() => act('move', im.id, -1)}>
+              <ChevronLeft size={14} />
+            </button>
+            <button type="button" aria-label={t('往后')} data-sfx="drop" disabled={i === n - 1} onClick={() => act('move', im.id, 1)}>
+              <ChevronRight size={14} />
+            </button>
+          </span>
+        )}
+      </span>
+      <figcaption className={known ? '' : 'is-unknown'}>
+        <select value={known ? im.room : ''} aria-label={t('房间')} onChange={(e) => act('room', im.id, e.target.value)}>
+          {!known && <option value="">{t('房间？')}</option>}
+          {C.ROOMS.map((rm) => (
+            <option key={rm.id} value={rm.id}>
+              {L(rm)}
+            </option>
+          ))}
+        </select>
+        {/* 说明：中文那一格的示例永远是中文、英文那一格是英文（和 Pair 一样） */}
+        <label className="mg-ph-cap">
+          <span aria-hidden="true">中</span>
+          <CapInput value={im.caption?.zh || ''} placeholder="照片说明" lang="zh-Hans" maxLength={80} aria-label={t('照片说明（中文）')} onCommit={(x) => act('caption', im.id, { lang: 'zh', value: x })} />
+        </label>
+        <label className="mg-ph-cap">
+          <span aria-hidden="true">EN</span>
+          <CapInput value={im.caption?.en || ''} placeholder="Caption" lang="en" maxLength={160} aria-label={t('照片说明（英文）')} onCommit={(x) => act('caption', im.id, { lang: 'en', value: x })} />
+        </label>
+      </figcaption>
+    </figure>
+  );
+}, sameTile);
+
+function Photos({ draft, patch, pending, onBusy, flash, busy }) {
   const input = useRef(null);
+  const grid = useRef(null);
   const imgs = draft.images || [];
-  const shown = imgs.map((im) => {
-    const got = r?.images?.find((x) => x.id === im.id);
-    return got ? { ...im, url: got.url, thumbUrl: got.thumbUrl } : im;
-  });
+  const n = imgs.length;
+  const full = n >= C.PHOTO_MAX;
+  const [asked, setAsked] = useState(persistAsked);
+  const [store, refresh] = useStorage(`${n}:${draft.rev}`);
+  // 每张照片的按钮都用同一个 act（不会变）→ 打字时其它照片的格子不用重画；patch / pending 从这里拿最新的
+  const live = useRef(null);
+  live.current = { patch, pending };
+  /** 改顺序 / 移除：先量、再改、弹簧滑到新位置（fx.layout） */
+  const relayout = (fn) =>
+    fx.layout(
+      () => [...(grid.current?.querySelectorAll('figure') || [])],
+      () => flushSync(fn)
+    );
+  const act = useCallback((type, id, v) => {
+    const { patch: p, pending: pend } = live.current;
+    const edit = (fn) =>
+      p((x) => {
+        const y = x?.images?.find((z) => z.id === id);
+        if (y) fn(y, x);
+      });
+    if (type === 'cover') p((x) => x.images.forEach((y) => (y.cover = y.id === id)));
+    else if (type === 'remove')
+      relayout(() =>
+        p((x) => {
+          const gone = x.images.find((y) => y.id === id);
+          x.images = x.images.filter((y) => y.id !== id);
+          if (gone?.device) pend.current.drops.push(id);
+          if (gone?.cover && x.images[0]) x.images[0].cover = true;
+        })
+      );
+    else if (type === 'move')
+      relayout(() =>
+        p((x) => {
+          const i = x.images.findIndex((y) => y.id === id);
+          const j = i + v;
+          if (i < 0 || j < 0 || j >= x.images.length) return;
+          [x.images[i], x.images[j]] = [x.images[j], x.images[i]];
+        })
+      );
+    else if (type === 'room')
+      edit((y, x) => {
+        y.room = v;
+        y.kind = y.room === 'plan3d' ? 'plan3d' : y.kind === 'plan3d' ? (x.kind === 'project' ? 'photo' : 'render') : y.kind;
+        if (y.kind === 'plan3d') y.detail = false;
+      });
+    else if (type === 'detail') edit((y) => (y.detail = !y.detail));
+    else if (type === 'caption') edit((y) => (y.caption = { zh: '', en: '', ...y.caption, [v.lang]: v.value }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 按房间排：封面永远第一张，其它照 ROOMS 的顺序（没标房间的在后面、整个家（3D）最后）；同一个房间里保持原来的先后
+  const sortByRoom = () => {
+    const order = imgs
+      .map((im, i) => ({ im, i }))
+      .sort((a, b) => (b.im.cover ? 1 : 0) - (a.im.cover ? 1 : 0) || photoRank(a.im) - photoRank(b.im) || a.i - b.i)
+      .map((x) => x.im.id);
+    if (order.join() !== imgs.map((im) => im.id).join())
+      relayout(() =>
+        patch((x) => {
+          const by = new Map(x.images.map((y) => [y.id, y]));
+          x.images = [...order.map((id) => by.get(id)).filter(Boolean), ...x.images.filter((y) => !order.includes(y.id))];
+        })
+      );
+    flash(t('已按房间排好'));
+  };
+
   const add = async (files) => {
-    const list = [...(files || [])].filter((f) => f.type.startsWith('image/') || /\.(heic|heif)$/i.test(f.name));
+    const picked = [...(files || [])].filter((f) => f.type.startsWith('image/') || /\.(heic|heif)$/i.test(f.name));
+    if (!picked.length) return;
+    // 一个案例最多 PHOTO_MAX 张：多出来的不加，告诉员工几张没加进来
+    const list = picked.slice(0, Math.max(0, C.PHOTO_MAX - n));
+    if (list.length < picked.length) flash(t('最多 {0} 张照片：有 {1} 张没加进来', [C.PHOTO_MAX, picked.length - list.length]), 'error');
     if (!list.length) return;
+    if (!persistAsked) {
+      persistAsked = true;
+      C.askPersist().finally(() => {
+        setAsked(true);
+        refresh();
+      });
+    }
     onBusy(t('正在压缩照片 {0}/{1}', [0, list.length]));
-    let n = 0;
+    let k = 0;
     for (const f of list) {
       try {
         // 认不出房间 = 先空着（「房间？」），不要猜成客厅
@@ -326,90 +618,40 @@ function Photos({ draft, patch, pending, onBusy, flash }) {
           if (!d.images.some((x) => x.cover)) d.images[0].cover = true;
           if (room && room !== 'plan3d' && !d.rooms.includes(room)) d.rooms.push(room);
         });
-      } catch {
+      } catch (e) {
+        // 空间满了：后面的也一定存不进去，停下来
+        if (isQuota(e)) {
+          flash(t('这台设备的空间不够了：后面的照片没有存进去'), 'error');
+          break;
+        }
         flash(t('这张照片打不开：{0}', [f.name]), 'error');
       }
-      n++;
-      onBusy(n < list.length ? t('正在压缩照片 {0}/{1}', [n, list.length]) : null);
+      k++;
+      onBusy(k < list.length ? t('正在压缩照片 {0}/{1}', [k, list.length]) : null);
     }
     onBusy(null);
+    refresh();
   };
-  const move = (i, d) =>
-    patch((x) => {
-      const j = i + d;
-      if (j < 0 || j >= x.images.length) return;
-      [x.images[i], x.images[j]] = [x.images[j], x.images[i]];
-    });
+
   return (
     <Field id="mg-f-photos" label="照片（第一张是封面）" hint="点星星换封面；每张选一下是哪个房间（「房间？」= 还没标，客人看不到房间名字）。这里加的照片只存在这台设备，「导出」时会一起带走。">
-      <div className="mg-photos">
-        {shown.map((im, i) => (
-          <figure key={im.id} className={im.cover ? 'is-cover' : ''}>
-            <span className="mg-ph">
-              {C.imageURL(draft, im, 480) ? <img src={C.imageURL(draft, im, 480)} alt="" loading="lazy" decoding="async" /> : <i />}
-              <button
-                type="button"
-                className="mg-ph-star"
-                aria-pressed={!!im.cover}
-                aria-label={t('设为封面')}
-                title={t('设为封面')}
-                onClick={() => patch((x) => x.images.forEach((y) => (y.cover = y.id === im.id)))}
-              >
-                <Star size={14} strokeWidth={2} fill={im.cover ? 'currentColor' : 'none'} />
-              </button>
-              <button
-                type="button"
-                className="mg-ph-x"
-                aria-label={t('移除这张')}
-                title={t('移除这张')}
-                data-sfx="chipRemove"
-                onClick={() =>
-                  patch((x) => {
-                    const gone = x.images.find((y) => y.id === im.id);
-                    x.images = x.images.filter((y) => y.id !== im.id);
-                    if (gone?.device) pending.current.drops.push(im.id);
-                    if (gone?.cover && x.images[0]) x.images[0].cover = true;
-                  })
-                }
-              >
-                <X size={13} strokeWidth={2.2} />
-              </button>
-              {shown.length > 1 && (
-                <span className="mg-ph-mv">
-                  <button type="button" aria-label={t('往前')} data-sfx="drop" disabled={i === 0} onClick={() => move(i, -1)}>
-                    <ChevronLeft size={14} />
-                  </button>
-                  <button type="button" aria-label={t('往后')} data-sfx="drop" disabled={i === shown.length - 1} onClick={() => move(i, 1)}>
-                    <ChevronRight size={14} />
-                  </button>
-                </span>
-              )}
-            </span>
-            <figcaption className={C.ROOM_BY_ID[im.room] ? '' : 'is-unknown'}>
-              <select
-                value={C.ROOM_BY_ID[im.room] ? im.room : ''}
-                aria-label={t('房间')}
-                onChange={(e) =>
-                  patch((x) => {
-                    const y = x.images.find((z) => z.id === im.id);
-                    y.room = e.target.value;
-                    y.kind = y.room === 'plan3d' ? 'plan3d' : y.kind === 'plan3d' ? (x.kind === 'project' ? 'photo' : 'render') : y.kind;
-                  })
-                }
-              >
-                {!C.ROOM_BY_ID[im.room] && <option value="">{t('房间？')}</option>}
-                {C.ROOMS.map((rm) => (
-                  <option key={rm.id} value={rm.id}>
-                    {L(rm)}
-                  </option>
-                ))}
-              </select>
-            </figcaption>
-          </figure>
+      <p className="mg-hint">{t('「细节」= 柜门、拉手、板材纹理、收口这类近照，客人那边单独一格；说明写一句就好，客人看大图时看得到。')}</p>
+      <div className="mg-ph-bar">
+        <span className={`mg-ph-count ${full ? 'is-full' : ''}`}>{t('{0} / {1} 张', [n, C.PHOTO_MAX])}</span>
+        {n > 1 && (
+          <button type="button" className="mg-link mg-ph-sort" data-sfx="apply" onClick={sortByRoom}>
+            <ArrowDownUp size={14} strokeWidth={2} aria-hidden="true" />
+            {t('按房间排')}
+          </button>
+        )}
+      </div>
+      <div className="mg-photos" ref={grid}>
+        {imgs.map((im, i) => (
+          <PhotoTile key={im.id} caseId={draft.id} im={im} i={i} n={n} act={act} />
         ))}
-        <button type="button" className="mg-ph-add" data-sfx="open" onClick={() => input.current?.click()}>
+        <button type="button" className={`mg-ph-add ${full ? 'is-full' : ''}`} data-sfx="open" disabled={full || !!busy} onClick={() => input.current?.click()}>
           <ImagePlus size={22} strokeWidth={1.6} aria-hidden="true" />
-          <span>{t('加照片')}</span>
+          <span>{full ? t('满了 · 最多 {0} 张', [C.PHOTO_MAX]) : t('加照片')}</span>
         </button>
         <input
           ref={input}
@@ -422,6 +664,158 @@ function Photos({ draft, patch, pending, onBusy, flash }) {
             e.target.value = '';
           }}
         />
+      </div>
+      <StorageLine info={store} asked={asked} device={imgs.some((im) => im.device)} />
+    </Field>
+  );
+}
+
+// ───────────────────────── 每个房间我们做了什么 ─────────────────────────
+
+/** 一个房间最多几块板（和 cases.js cleanRoomsMade 一样） */
+const BOARDS_PER_ROOM = 4;
+
+/** 板材登记好了 / 变了（「这个家用了」的 BoardRows 载入后读这台设备的板材包）→ 重新画板的名字和色卡 */
+function useBoardsV() {
+  const [v, setV] = useState(0);
+  useEffect(() => onBoards(() => setV((x) => x + 1)), []);
+  return v;
+}
+
+/** 板的色卡：板材库里有 → 真实色卡 / 近似色；还不认得 → 虚线斜纹 */
+function BoardSw({ id, v, size = 28 }) {
+  const m = MAT_BY_ID[id];
+  const url = useMemo(() => {
+    try {
+      return m?.board ? swatchURL(id, 96) || '' : '';
+    } catch {
+      return '';
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, m, v]);
+  if (!m?.board) return <i className="mg-sw is-unknown" style={{ width: size, height: size }} aria-hidden="true" />;
+  return <i className="mg-sw" style={{ width: size, height: size, backgroundImage: url ? `url(${url})` : 'none', backgroundColor: m.color }} aria-hidden="true" />;
+}
+
+/** 房间那一行左边的小图（这个房间的封面 / 第一张；全屋 = 案例封面） */
+function MadeThumb({ caseId, im }) {
+  const ref = useRef(null);
+  const src = useThumb(ref, caseId, im);
+  return <span ref={ref} className="mg-made-thumb">{src ? <img src={src} alt="" loading="lazy" decoding="async" draggable={false} /> : null}</span>;
+}
+
+/**
+ * 「每个房间我们做了什么」：一个房间一行（C.caseRoomsMade(draft, { staff:true })），点开改。
+ * 没改过的房间是「自动」（照「我们做」和溪岸板材推算）；改了任何一样 → roomsMade[room] 存下这个房间现在的全部（我们做、板、说明），
+ * 之后这个房间就照员工写的；「恢复自动」= 删掉 roomsMade[room]。
+ */
+function RoomsMade({ draft, patch }) {
+  const v = useBoardsV();
+  const [open, setOpen] = useState(null);
+  const rows = C.caseRoomsMade(draft, { staff: true });
+  const caseBoards = C.caseBoardList(draft).map((b) => b.id);
+  const boardsShown = boardsOn();
+  const write = (room, fn) =>
+    patch((d) => {
+      const row = C.caseRoomsMade(d, { staff: true }).find((r) => r.room === room);
+      const m = row?.made ? clone(row.made) : { firm: [], boards: [], note: { zh: '', en: '' } };
+      fn(m);
+      // 我们做的照 SUPPLY_OFFER 的顺序；房间照 MADE_ORDER 的顺序写
+      m.firm = C.SUPPLY_OFFER.map((s) => s.id).filter((id) => m.firm.includes(id));
+      m.boards = [...new Set(m.boards)].slice(0, BOARDS_PER_ROOM);
+      const next = { ...(d.roomsMade || {}), [room]: m };
+      d.roomsMade = Object.fromEntries(MADE_ORDER.filter((r) => next[r]).map((r) => [r, next[r]]));
+    });
+  const reset = (room) =>
+    patch((d) => {
+      const { [room]: _, ...rest } = d.roomsMade || {};
+      d.roomsMade = rest;
+    });
+  const toggle = (arr, x) => (arr.includes(x) ? arr.filter((y) => y !== x) : [...arr, x]);
+  return (
+    <Field id="mg-f-made" label="每个房间我们做了什么" hint="客人在案例详情里一个房间一行地看。「自动」= 照「我们做」和溪岸板材推算的；改了任何一样，这个房间就照你写的。">
+      <div className="mg-made">
+        {rows.map((row) => {
+          const on = open === row.room;
+          const made = row.made;
+          const home = row.room === C.ROOM_HOME;
+          const summary = [...row.firm.map((f) => f.label), ...row.boards.map((b) => b.name), row.note].filter(Boolean).join(listSep());
+          const offRoom = !home && !row.derived && !draft.rooms.includes(row.room);
+          const ids = [...caseBoards, ...made.boards.filter((id) => !caseBoards.includes(id))];
+          const fullBoards = made.boards.length >= BOARDS_PER_ROOM;
+          const bodyId = `mg-made-${row.room}`;
+          return (
+            <div key={row.room} className={`mg-made-row ${on ? 'is-open' : ''}`}>
+              <button type="button" className="mg-made-head" aria-expanded={on} aria-controls={bodyId} data-sfx={on ? 'close' : 'open'} onClick={() => setOpen(on ? null : row.room)}>
+                <MadeThumb caseId={draft.id} im={row.cover} />
+                <span className="mg-made-t">
+                  <b>
+                    <span>{row.label}</span>
+                    {row.derived && <em className="mg-made-auto">{t('自动')}</em>}
+                    {!home && <small>{t('{0} 张照片', [row.images])}</small>}
+                  </b>
+                  <small className={summary ? '' : 'is-empty'}>{summary || t('没写：客人那边不显示这个房间')}</small>
+                  {offRoom && <small className="mg-made-off">{t('这个房间不在「做了哪些地方」里')}</small>}
+                </span>
+                <ChevronDown className="mg-made-chev" size={18} strokeWidth={1.8} aria-hidden="true" />
+              </button>
+              {on && (
+                <div className="mg-made-body" id={bodyId}>
+                  <p className="mg-sub">{t('我们做')}</p>
+                  <div className="chips mg-chips mg-made-firm" data-sfx="choice">
+                    {C.SUPPLY_OFFER.map((s) => {
+                      const sel = made.firm.includes(s.id);
+                      return (
+                        <button key={s.id} type="button" className={`chip ${sel ? 'on' : ''}`} aria-pressed={sel} onClick={() => write(row.room, (m) => (m.firm = toggle(m.firm, s.id)))}>
+                          {L(s)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {boardsShown && (
+                    <>
+                      <p className="mg-sub">{t('溪岸板材')}</p>
+                      {ids.length ? (
+                        <div className="mg-made-boards" data-sfx="choice">
+                          {ids.map((id) => {
+                            const sel = made.boards.includes(id);
+                            const known = !!MAT_BY_ID[id]?.board;
+                            const code = known ? factoryCode(id) : '';
+                            return (
+                              <button
+                                key={id}
+                                type="button"
+                                className={`mg-bchip ${sel ? 'on' : ''}`}
+                                aria-pressed={sel}
+                                disabled={!sel && fullBoards}
+                                title={!sel && fullBoards ? t('每个房间最多 4 块板') : undefined}
+                                onClick={() => write(row.room, (m) => (m.boards = toggle(m.boards, id)))}
+                              >
+                                <BoardSw id={id} v={v} />
+                                <span>{known ? L(MAT_BY_ID[id]) : idLabel(id)}</span>
+                                {code && <small>{code}</small>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="mg-hint">{t('这个案例还没填溪岸板材（在「这个家用了」里选）。')}</p>
+                      )}
+                    </>
+                  )}
+                  <p className="mg-sub">{t('一句说明（客人看得到）')}</p>
+                  <Pair value={made.note} onChange={(nv) => write(row.room, (m) => (m.note = nv))} zhPh="例：岛台下面一整排抽屉，锅具全收进去" enPh="e.g. A full run of drawers under the island for every pot and pan" />
+                  {!row.derived && (
+                    <button type="button" className="mg-link mg-made-reset" data-sfx="back" onClick={() => reset(row.room)}>
+                      <RotateCcw size={13} strokeWidth={2} aria-hidden="true" />
+                      {t('恢复自动')}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </Field>
   );
@@ -493,7 +887,7 @@ function Editor({ draft, patch, errors, dirty, pending, onSave, onDiscard, onDel
         )}
       </header>
 
-      <Photos draft={draft} patch={patch} pending={pending} onBusy={setBusy} flash={flash} />
+      <Photos draft={draft} patch={patch} pending={pending} onBusy={setBusy} flash={flash} busy={busy} />
       <Suspense fallback={null}>
         <SorterNote id={draft.id} />
       </Suspense>
@@ -606,6 +1000,7 @@ function Editor({ draft, patch, errors, dirty, pending, onSave, onDiscard, onDel
           </p>
         ))}
       </Field>
+      <RoomsMade draft={draft} patch={patch} />
 
       <Field label="风格（点一点，不用填数字）">
         <div className="mg-axis">
