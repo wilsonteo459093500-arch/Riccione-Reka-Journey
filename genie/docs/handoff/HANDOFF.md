@@ -7,6 +7,10 @@ Read this first. Reply to the owner in **Chinese**, short and plain. Do one step
   - Spec: `genie/docs/showcase/SPEC.md`. Release check passed (npm test, vite build, studio chunk 395.70 kB gzip, screenshots at 4 sizes × zh/en, independent review: 14 findings fixed).
   - **Waiting for the owner's OK on the screenshots.** On "go": merge PR #65 (or deploy the branch head) to production as below; keep 3ea54bf's deployment for rollback.
   - Owner's small open choices from step 3: browse footer 「选好了」 wording; unlabelled-room projects auto-pick only 4 photos (pick.js PICK.perRoom); projects saved in the sorter before step 3 keep their old 6 photos until staff re-pick.
+- **Step 3b (real cases first + suggested SAIL series) is BUILT on the same PR #65, not live.** Spec: `genie/docs/showcase/SERIES.md`. Commit a7ca947.
+  - Owner's choices: real photos only on the showroom iPad; the 3D concepts are never shown to guests once ≥ 1 live, consented real case exists (`CONFIG.cases.hideConceptsAt` = 1); the five series are 骨骼线 · 空山 · 织 · 雾山 · 侘寂东方.
+  - **To make it real:** staff import the photos on the showroom iPad (案例库 → 整理照片文件夹), set each case's 溪岸系列, then 保存并上架 with consent. Until then the iPad and phones still show the concepts.
+  - Small open choices: English brand spelling (SAIL vs sAil); the series card's small colour swatches (keep or text only).
 - **Live site:** https://wish-riccione-reka.vercel.app = commit **3ea54bf** (board library 溪岸板材 live).
   - Vercel project `wish-riccione-reka`, team `team_o5uT7vzbGzKNPpi04SRuCi0n`, Root Directory `genie`.
   - Production deploys are MANUAL: `create_deployment` with gitSource github `wilsonteo459093500-arch/Riccione-Reka-Journey`, ref + sha, `target: production`.
@@ -33,7 +37,7 @@ Read this first. Reply to the owner in **Chinese**, short and plain. Do one step
 - **Commits** end with:
   ```
   Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-  Claude-Session: https://claude.ai/code/session_01FfASrzHoAkdYs5Ur895BaZ
+  Claude-Session: https://claude.ai/code/session_011Ur8W3ce2kPLTt5uszJyei
   ```
   (The session URL may change with a new conversation; use the trailer the system gives you.)
 
@@ -57,22 +61,24 @@ Read this first. Reply to the owner in **Chinese**, short and plain. Do one step
 - **Old projects, cases and share links must render exactly as before.** Today there is ONE `cabinetry` slot (`genie/src/shared/materials.js` SLOTS); cabinets are built in `genie/src/studio/engine/furniture.js` (`panel()` handles: none / bar / barH / knob / groove; `doorRow`, `kitchenRun`, `wardrobe`, `tvWall`, …).
 - **Order:** show a design + mock-ups and the owner's questions first, then build.
 
-**3. Case showcase — DONE on PR #65, waiting for the owner's OK to deploy.** See `genie/docs/showcase/SPEC.md`.
+**3. Case showcase — DONE on PR #65 (with 3b), waiting for the owner's OK to deploy.** See `genie/docs/showcase/SPEC.md` and `SERIES.md`.
 - **Guest:** `CaseDetail.jsx` (gallery by room, 细节 tab, captions, house facts, 每个房间我们做了什么, 相似的家), `CaseGallery.jsx`, `Lightbox.jsx` (zoom), `CaseBrowser.jsx` (看全部 + filters; picks shared with `CasesStep.jsx`), `showcase.css`.
 - **Data:** `src/shared/cases.js` (image `caption` / `detail`, case `roomsMade`, guestPool, galleryTabs, caseRoomsMade, caseFacts, similarCases, browseCases, boardGuestName(s), loadImageURL, storageInfo, isQuotaError). Tests: `test/showcase*.test.mjs`, `test/case-manager.test.mjs`.
 - **Staff:** `CaseManager.jsx` (up to 40 photos per case, 细节, captions 中/EN, 按房间排, storage meter; 每个房间我们做了什么 editor). Sorter `pick.js` picks up to 18 (≤ 4 per room + 4 close-ups); re-saving keeps staff work; `import-cases.mjs` matches photos by file name.
 - **Seed concepts:** 38 more renders (our own stage, `src/cases/seed/scenes.js`), images 01–03 untouched.
-- **Known small leftovers:** on a phone a cut tab can show next to ✕ after the tab strip scrolls to the end; cards run under the fixed footer at first view on iPad landscape (reachable by scrolling).
+- **3b · series:** `src/shared/series.js` (SERIES brand copy, SERIES_TARGET, recommendSeries, seriesKeyOf); `matchCases` adds W.series; case `series`; guest `SeriesCard.jsx` (cases step, re-ranks when a guest picks a case of another series), card badge 「溪岸 · 空山」, browse 系列 filter, detail facts 系列, blueprint VIII 建议的系列; staff series chips in CaseManager; designer brief + README line. Tests: `test/series.test.mjs`.
+  - Calibration (16 style cards → top series): 骨骼线 5, 雾山 4, 织 3, 空山 2, 侘寂东方 2. Tune `SERIES_TARGET` if the owner disagrees.
+- **Known small leftovers:** on a phone a cut tab can show next to ✕ after the tab strip scrolls to the end; cards run under the fixed footer at first view on iPad landscape (reachable by scrolling); the series card makes the iPad-landscape header taller.
 
 **4. Later.**
 - Bahasa Melayu (third language).
-- Import real case photos via 整理照片文件夹.
+- Import real case photos via 整理照片文件夹 (and set their series).
 - Owner's open decisions:
   - make the repo private, or ask GitHub Support to purge old commits 79ae03f / 33f20be that hold real client names;
   - `crm/src/seed.js` (older code) has real names / phones in the public repo;
   - 溪岸 SAIL plinth wording;
   - the timeline in guest `#p=` links;
-  - add a real 侘寂 case.
+  - add a real 侘寂 case (and at least one real case per series).
 
 ## How to start the next conversation
 > 先切到分支 `claude/walk-in-wip`，读 `genie/docs/handoff/HANDOFF.md`，做第 N 步。用中文回答我。
