@@ -2,7 +2,11 @@
 
 Read this first. Reply to the owner in **Chinese**, short and plain. Do one step per conversation, then stop.
 
-## Where things are (2026-11-12)
+## Where things are (2026-11-13)
+- **Step 3 (case showcase) is BUILT, not live.** Branch `ccr-eb67bc6b-ecbura` = 3ea54bf + these notes + step 3; draft PR #65 into `claude/ecstatic-keller-sw56vw`.
+  - Spec: `genie/docs/showcase/SPEC.md`. Release check passed (npm test, vite build, studio chunk 395.70 kB gzip, screenshots at 4 sizes × zh/en, independent review: 14 findings fixed).
+  - **Waiting for the owner's OK on the screenshots.** On "go": merge PR #65 (or deploy the branch head) to production as below; keep 3ea54bf's deployment for rollback.
+  - Owner's small open choices from step 3: browse footer 「选好了」 wording; unlabelled-room projects auto-pick only 4 photos (pick.js PICK.perRoom); projects saved in the sorter before step 3 keep their old 6 photos until staff re-pick.
 - **Live site:** https://wish-riccione-reka.vercel.app = commit **3ea54bf** (board library 溪岸板材 live).
   - Vercel project `wish-riccione-reka`, team `team_o5uT7vzbGzKNPpi04SRuCi0n`, Root Directory `genie`.
   - Production deploys are MANUAL: `create_deployment` with gitSource github `wilsonteo459093500-arch/Riccione-Reka-Journey`, ref + sha, `target: production`.
@@ -53,14 +57,12 @@ Read this first. Reply to the owner in **Chinese**, short and plain. Do one step
 - **Old projects, cases and share links must render exactly as before.** Today there is ONE `cabinetry` slot (`genie/src/shared/materials.js` SLOTS); cabinets are built in `genie/src/studio/engine/furniture.js` (`panel()` handles: none / bar / barH / knob / groove; `doorRow`, `kitchenRun`, `wardrobe`, `tvWall`, …).
 - **Order:** show a design + mock-ups and the owner's questions first, then build.
 
-**3. Case showcase.** Owner request in OWNER-ANSWERS.md. Today `genie/src/quiz/home/CaseDetail.jsx` shows ≤ 5 thumbs.
-- **Guest view:**
-  - Many more photos per case, by room, full-screen + zoom, 细节 close-ups.
-  - What the firm made per room, with boards (guest names).
-  - House facts + story.
-  - 相似的家 + browse all cases (filters) without losing the guest's picks.
-- **Staff:** more photos per case (room, caption 中/EN, 细节 flag, order, cover) in `genie/src/cases/CaseManager.jsx`. The sorter (`genie/src/cases/sorter/pick.js`, today cover + 5) picks more.
-- **Limits:** watch iPad IndexedDB quota and memory. Show the owner screenshots before deploy.
+**3. Case showcase — DONE on PR #65, waiting for the owner's OK to deploy.** See `genie/docs/showcase/SPEC.md`.
+- **Guest:** `CaseDetail.jsx` (gallery by room, 细节 tab, captions, house facts, 每个房间我们做了什么, 相似的家), `CaseGallery.jsx`, `Lightbox.jsx` (zoom), `CaseBrowser.jsx` (看全部 + filters; picks shared with `CasesStep.jsx`), `showcase.css`.
+- **Data:** `src/shared/cases.js` (image `caption` / `detail`, case `roomsMade`, guestPool, galleryTabs, caseRoomsMade, caseFacts, similarCases, browseCases, boardGuestName(s), loadImageURL, storageInfo, isQuotaError). Tests: `test/showcase*.test.mjs`, `test/case-manager.test.mjs`.
+- **Staff:** `CaseManager.jsx` (up to 40 photos per case, 细节, captions 中/EN, 按房间排, storage meter; 每个房间我们做了什么 editor). Sorter `pick.js` picks up to 18 (≤ 4 per room + 4 close-ups); re-saving keeps staff work; `import-cases.mjs` matches photos by file name.
+- **Seed concepts:** 38 more renders (our own stage, `src/cases/seed/scenes.js`), images 01–03 untouched.
+- **Known small leftovers:** on a phone a cut tab can show next to ✕ after the tab strip scrolls to the end; cards run under the fixed footer at first view on iPad landscape (reachable by scrolling).
 
 **4. Later.**
 - Bahasa Melayu (third language).
