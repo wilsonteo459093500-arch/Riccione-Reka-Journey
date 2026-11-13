@@ -221,10 +221,21 @@ export function roomOf(text) {
   const low = lower(text);
   return roomWords.find((x) => low.includes(x.w))?.room || null;
 }
-export function viewOf(text) {
+/** 照片类型（实景 / 效果图 / 工地 / 图纸 / 单据 / 截图）—— 不算「细节」 */
+export function baseViewOf(text) {
   const { viewWords } = index();
   const low = lower(text);
-  return viewWords.find((x) => low.includes(x.w))?.view || null;
+  return viewWords.find((x) => x.view !== 'detail' && low.includes(x.w))?.view || null;
+}
+/** 细节特写（门板、拉手、木纹、收口的近景）：文字里有「细节 / 特写 / 局部 / 近景 / detail / close-up / macro」 */
+export function detailOf(text) {
+  const { viewWords } = index();
+  const low = lower(text);
+  return viewWords.some((x) => x.view === 'detail' && low.includes(x.w));
+}
+/** 照片类型；只认得出「细节」的 → 'detail'（「实景/细节」还是 'photo'，细节另外看 detailOf） */
+export function viewOf(text) {
+  return baseViewOf(text) || (detailOf(text) ? 'detail' : null);
 }
 
 /** 把人名遮掉（界面上任何一段从文件夹 / 文件名来的文字都要先过这一关） */
@@ -267,12 +278,13 @@ function classifyDirs(dirs) {
   if (project && !city) city = project.city;
   const projDir = projectSeg ? dirs.slice(0, k + 1).join('/') : dirs.join('/');
   const subText = sub.join('/');
-  return { special, city, projectSeg, project, sub, subText, projDir, projView: projectSeg ? viewOf(projectSeg) : null, flat: !project?.conv };
+  // 项目文件夹名只看照片类型（「细节」只按子文件夹 / 文件名一张一张算，不会整个项目都变成细节）
+  return { special, city, projectSeg, project, sub, subText, projDir, projView: projectSeg ? baseViewOf(projectSeg) : null, flat: !project?.conv };
 }
 
 /**
  * 「顶层/上海/上海-测试甲-极简原木风/效果图/IMG_01.jpg」→
- * { segs, name, dirs, special, city, projectSeg, project, sub:[…], room, view, projDir, flat }
+ * { segs, name, dirs, special, city, projectSeg, project, sub:[…], room, view, detail, projDir, flat }
  *   projDir：分组用的文件夹（项目文件夹的路径；没有项目文件夹 = 它所在的「容器」文件夹，flat:true → 按拍摄时间分）
  * cache：Map（同一批文件共用，文件夹只分析一次）
  */
@@ -287,6 +299,7 @@ export function classifyPath(path, cache = null) {
     cache?.set(dk, d);
   }
   const hintText = d.subText ? d.subText + '/' + name : name;
+  const detail = detailOf(hintText);
   return {
     segs,
     name,
@@ -297,7 +310,8 @@ export function classifyPath(path, cache = null) {
     project: d.project,
     sub: d.sub,
     room: roomOf(hintText),
-    view: viewOf(hintText) || d.projView,
+    view: baseViewOf(hintText) || d.projView || (detail ? 'detail' : null),
+    detail, // 细节特写（子文件夹 / 文件名里有「细节 / 特写 / 局部 / 近景 …」）：不藏，每个项目最多挑 4 张，存成案例照片的 detail: true
     projDir: d.projDir,
     // 不是「城市-姓名-风格」的文件夹（或者照片直接放在容器里）→ 里面可能混了好几个项目：按拍摄时间再分
     flat: d.flat,

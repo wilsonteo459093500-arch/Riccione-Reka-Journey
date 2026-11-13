@@ -154,16 +154,20 @@ export function suppliesOf(rooms = []) {
 /**
  * 整理好的项目 → 案例（还没存；调用的人先 putImage 存照片，再 saveCase）。
  * g：项目（groups 的一项）；dec：员工的决定 { styles, type, bedrooms, consent, rooms:{key:room} }；
- * shots：[{ key, room, view, image }]（image = putImage 的结果，封面在第一个）；palette：color.paletteOf 的结果
+ * shots：[{ key, room, view, detail?, image, prev? }]（image = putImage 的结果，封面在第一个；detail = 细节特写；
+ *   prev = 上次存的同一张照片：员工在案例库里写的说明 / 替代文字留着）；palette：color.paletteOf 的结果
  */
 export function caseFromGroup(g, dec = {}, shots = [], palette = { families: {}, swatches: [] }, { now = new Date().toISOString(), prev = null } = {}) {
   const styles = dec.styles?.length ? dec.styles : g.styles || [];
   const style = styleOf(styles);
   // 没标房间的照片：room ''（案例库显示「房间？」，客人看不到房间名字）—— 永远不猜成客厅。
   // 整个家的 3D 鸟瞰：room 'plan3d'、kind 'plan3d'（客人那边标「整个家（3D）」，不算一个房间）
+  // 细节特写（门板、拉手、木纹…）：detail: true（客人那边有「细节」一栏）；没说就看照片类型 'detail'
+  const txt = (x) => ({ zh: String(x?.zh || ''), en: String(x?.en || '') });
   const images = shots.map((s, i) => {
     const room = s.room && ROOM_BY_ID[s.room] ? s.room : '';
-    return { ...s.image, room, kind: room === 'plan3d' ? 'plan3d' : s.view === 'render' ? 'render' : 'photo', cover: i === 0, alt: { zh: '', en: '' } };
+    const detail = typeof s.detail === 'boolean' ? s.detail : s.view === 'detail' || !!s.image?.detail;
+    return { ...s.image, room, kind: room === 'plan3d' ? 'plan3d' : s.view === 'render' ? 'render' : 'photo', cover: i === 0, alt: txt(s.prev?.alt), caption: txt(s.prev?.caption), detail };
   });
   const rooms = [...new Set(images.map((im) => im.room))].filter((r) => r && r !== 'plan3d');
   const type = dec.type || null;

@@ -249,6 +249,9 @@ export class Session {
     const da = this.dec.get(aId) || {};
     const db = this.dec.get(bId) || {};
     if (da.picked || db.picked) this.dec.set(aId, { ...da, picked: [...new Set([...this.pickedOf(a), ...(db.picked || [])])] });
+    // b 那边标好的房间 / 细节也带过来（a 自己标过的优先）
+    for (const f of ['rooms', 'detail']) if (db[f]) this.dec.set(aId, { ...this.decision(aId), [f]: { ...db[f], ...(this.decision(aId)[f] || {}) } });
+    if (db.rooms || db.detail) this._repick(m);
     this.dec.delete(bId);
     this.saveSoon();
     this.changed(true);
@@ -279,7 +282,7 @@ export class Session {
     const photos = g.keys.map((k) => {
       const f = this.files.get(k);
       const a = this.an.get(k) || null;
-      return { key: k, a, room: this.dec.get(g.id)?.rooms?.[k] || f?.room || null, view: f?.view || null, t: a?.dto ?? f?.mtime ?? null };
+      return { key: k, a, room: this.dec.get(g.id)?.rooms?.[k] || f?.room || null, view: f?.view || null, detail: this.detailOf(g, k), t: a?.dto ?? f?.mtime ?? null };
     });
     const crossDup = new Set(g.keys.filter((k) => this.cross.dupPhoto.has(k)));
     this.auto.set(g.id, autoPick(photos, { crossDup }));
@@ -320,7 +323,7 @@ export class Session {
     const d = { ...this.decision(gid), ...patch };
     this.dec.set(gid, d);
     this._touch(gid);
-    if (patch.rooms) {
+    if (patch.rooms || patch.detail) {
       const g = this.groups.find((x) => x.id === gid);
       if (g) this._repick(g);
     }
@@ -364,6 +367,18 @@ export class Session {
   }
   roomOf(g, k) {
     return this.decision(g.id).rooms?.[k] || this.files.get(k)?.room || null;
+  }
+  /** 这张是不是细节特写：员工 / AI 标过的（dec.detail[k] = true / false）优先，没标就看文件名 / 子文件夹 */
+  detailOf(g, k) {
+    const v = this.decision(g.id).detail?.[k];
+    if (typeof v === 'boolean') return v;
+    const f = this.files.get(k);
+    return !!(f?.detail || f?.view === 'detail');
+  }
+  /** 员工改「是不是细节特写」：记下来（是 / 不是都记 —— 之后 AI 预填不会再改员工标过的） */
+  setDetail(gid, k, on) {
+    if (!this.groups.some((x) => x.id === gid)) return;
+    this.setDecision(gid, { detail: { ...(this.decision(gid).detail || {}), [k]: !!on } });
   }
   /** 这个项目值不值得先做（pick.js projectScore）：照片好不好、够不够、拍到几个房间 */
   scoreOf(g) {
@@ -409,7 +424,9 @@ export class Session {
   }
   sigOf(g) {
     const d = this.decision(g.id);
-    return hashKey(JSON.stringify([this.pickedOf(g), this.stylesOf(g), d.type, d.bedrooms, d.consent, d.rooms, d.aiMats]));
+    const parts = [this.pickedOf(g), this.stylesOf(g), d.type, d.bedrooms, d.consent, d.rooms, d.aiMats];
+    if (d.detail && Object.keys(d.detail).length) parts.push(d.detail); // 没标过细节 = 和以前一样的指纹（存过的不会都变成「改过」）
+    return hashKey(JSON.stringify(parts));
   }
 
   counts() {
@@ -464,6 +481,8 @@ export class Session {
       const id = d.saved?.caseId || caseIdFor(g.from || g.split || g.merged ? `${g.dir}#${g.id}` : g.dir, g.kind);
       const prev = await C.getCase(id);
       const picked = this.pickedOf(g);
+      // 上次存的时候每张照片的编号（01、02…）→ 同一张照片再存一次，员工在案例库里写的说明 / 替代文字留着
+      const before = new Map((d.saved?.keys || []).map((k, j) => [k, prev?.images?.find((im) => im.id === String(j + 1).padStart(2, '0')) || null]));
       const shots = [];
       let bytes = 0;
       for (let j = 0; j < picked.length; j++) {
@@ -473,9 +492,11 @@ export class Session {
         const imgId = String(j + 1).padStart(2, '0');
         // 没标的就空着（不再把封面猜成客厅）
         const room = this.roomOf(g, k) || null;
-        const image = await C.putImage(id, null, { id: imgId, room: room || '', kind: room === 'plan3d' ? 'plan3d' : f.view === 'render' ? 'render' : 'photo', blobs });
+        const detail = this.detailOf(g, k);
+        // detail：细节特写（客人那边有「细节」一栏）
+        const image = await C.putImage(id, null, { id: imgId, room: room || '', kind: room === 'plan3d' ? 'plan3d' : f.view === 'render' ? 'render' : 'photo', blobs, detail });
         bytes += blobs[1600]?.size || 0;
-        shots.push({ key: k, room, view: f.view, image });
+        shots.push({ key: k, room, view: f.view, detail, image, prev: before.get(k) || null });
       }
       // 上次存的比这次多 → 多出来的照片删掉
       for (const im of prev?.images || []) if (im.device && !shots.some((x) => x.image.id === im.id)) await C.dropImage(id, im.id);
@@ -484,7 +505,7 @@ export class Session {
       if (d.aiMats) c.materials = { ...c.materials, ...d.aiMats };
       const saved = await C.saveCase(c);
       await cache.put('notes', saved.id, this.noteOf(g));
-      this.dec.set(g.id, { ...this.decision(g.id), state: 'ready', saved: { caseId: saved.id, at: Date.now(), sig: this.sigOf(g), bytes, json: JSON.stringify(saved).length } });
+      this.dec.set(g.id, { ...this.decision(g.id), state: 'ready', saved: { caseId: saved.id, at: Date.now(), sig: this.sigOf(g), bytes, json: JSON.stringify(saved).length, keys: picked } });
       this._touch(g.id);
       out.saved.push(saved.id);
       onStep?.({ photos: photosDone, photosTotal, projects: out.saved.length });

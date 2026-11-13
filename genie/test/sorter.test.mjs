@@ -1,5 +1,6 @@
 // 案例整理（src/cases/sorter/*.js）的纯逻辑：读文件夹名、分组、指纹 / 去重、清晰度 / 曝光 / 截图判断、主色、自动挑选、
-// 生成案例、拆案例包、AI 预填（假的 Gemini）。照片都是这里用代码画出来的（不用任何真实照片）。
+// 生成案例、拆案例包、AI 预填（假的 Gemini）、导入脚本的「细节」/ 员工说明（scripts/import-cases.mjs）。
+// 照片都是这里用代码画出来的（不用任何真实照片）。
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -95,6 +96,21 @@ const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   ok(gen.projectSeg === '测试家' && gen.city === '上海' && gen.room === 'living' && gen.flat, '不按写法命名的项目文件夹：城市后面那一段');
   ok(P.classifyPath('案例/各地展厅/成都展厅/a.jpg').projDir === '案例/各地展厅/成都展厅', '展厅子文件夹 = 一组');
   ok(P.fileKind('a.HEIC') === 'heic' && P.fileKind('a.jpg') === 'image' && P.fileKind('a.mp4') === 'other', 'fileKind');
+  // 细节特写（案例展示 §4）：子文件夹 / 文件名里的词 → detail；照片类型（实景 / 效果图）照样认
+  const dv = getData().views.find((v) => v.view === 'detail');
+  ok(dv && ['细节', '特写', '局部', '近景', 'detail', 'close-up', 'closeup', 'macro'].every((w) => dv.words.includes(w)), 'data.json 有「细节」这一类（8 个词）');
+  ok(['细节', '特写', '局部', '近景', 'Detail', 'CLOSE-UP', 'closeup', 'macro'].every((w) => P.detailOf(`x/${w}01.jpg`)) && !P.detailOf('x/客厅01.jpg'), 'detailOf：这些词都认（不分大小写）');
+  ok(P.viewOf('细节') === 'detail' && P.viewOf('实景/细节') === 'photo' && P.viewOf('效果图 特写') === 'render' && P.viewOf('客厅') === null, 'viewOf：只有「细节」= detail；「实景/细节」还是实景');
+  const d1 = P.classifyPath('案例/上海/上海-测试甲-原木/实景/细节/拉手.jpg');
+  ok(d1.view === 'photo' && d1.detail === true, '「实景/细节」：实景照片 + 细节特写', JSON.stringify([d1.view, d1.detail]));
+  const d2 = P.classifyPath('案例/上海/上海-测试甲-原木/厨房 特写.jpg');
+  ok(d2.view === 'detail' && d2.detail && d2.room === 'kitchen', '「厨房 特写」：厨房的细节特写');
+  const d3 = P.classifyPath('案例/上海/上海-测试甲-原木/效果图/Close-up_handle.jpg');
+  ok(d3.view === 'render' && d3.detail, '效果图里的细节特写还是效果图');
+  ok(!P.classifyPath('案例/上海/上海-测试甲-原木/客厅01.jpg').detail, '普通照片不是细节');
+  const d5 = P.classifyPath('案例/上海/上海-测试甲-细节控原木/IMG_1.jpg');
+  ok(!d5.detail && d5.view !== 'detail', '项目文件夹名里的「细节」不会让整个项目都变成细节特写');
+  ok(G.safeFolderName('细节', []) === '细节', '「细节」文件夹名可以显示');
   ok(P.fileKey({ path: 'a/b.jpg', size: 1, mtime: 2 }) === P.fileKey({ path: 'a/b.jpg', size: 1, mtime: 2 }) && P.fileKey({ path: 'a/b.jpg', size: 1, mtime: 2 }) !== P.fileKey({ path: 'a/b.jpg', size: 1, mtime: 3 }), '文件 key = 路径 + 大小 + 修改时间（稳定）');
 }
 
@@ -151,6 +167,8 @@ const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   const m = G.mergeGroups({ id: 'x', keys: ['a'], styles: ['原木'] }, { id: 'y', keys: ['b', 'a'], styles: ['侘寂'] });
   ok(eq(m.keys, ['a', 'b']) && eq(m.styles, ['原木', '侘寂']), '合并');
   ok(G.safeFolderName('张三家', []) === '' && G.safeFolderName('手机导出 2024', []) === '手机导出 2024' && G.safeFolderName('客厅', []) === '客厅', '像人名的文件夹名不显示');
+  const rd = G.buildGroups([e('案例/上海/上海-测试甲-原木/细节/a.jpg'), e('案例/上海/上海-测试甲-原木/客厅/b.jpg')]);
+  ok(eq([...rd.files.values()].map((f) => [f.name, f.detail]), [['a.jpg', true], ['b.jpg', false]]) && rd.groups.length === 1, '分组：每张照片带着 detail（细节子文件夹和客厅在同一个项目里）');
 }
 
 // ───────────────────────── EXIF ─────────────────────────
@@ -305,6 +323,7 @@ function documentPage() {
   ok(doc.flags.includes('doc'), `单据 / 文件：doc（${doc.signals.doc}）`);
   ok(!M.analysePixels(room({ seed: 5, wall: [246, 245, 242], floor: [235, 233, 228], cab: [250, 250, 250] }), { w: 4000, h: 3000, make: 'Canon' }).flags.includes('doc'), '白色的房间不算单据');
   ok(M.analysePixels(a, { w: 4000, h: 3000, view: 'site' }).flags.includes('site'), '文件夹叫「工地 / 施工」→ site');
+  ok(!M.analysePixels(a, { w: 4000, h: 3000, view: 'detail' }).flags.some((f) => ['site', 'shot', 'doc', 'plan'].includes(f)), '文件夹叫「细节」→ 不算工地 / 截图 / 单据');
   ok(full.q > M.analysePixels(blur(a, 3), { w: 4000, h: 3000 }).q, '质量分：清楚 > 糊');
 }
 
@@ -374,7 +393,8 @@ function documentPage() {
   ];
   const r = PK.autoPick(photos);
   ok(r.cover === 'wide' || r.cover === 'wideBurst', `封面是横的、清楚的那张（${r.cover}）`);
-  ok(r.picked[0] === r.cover && r.picked.length <= 6, '封面在第一个，最多 6 张');
+  ok(r.picked[0] === r.cover && r.picked.length <= PK.PICK.max, `封面在第一个，最多 ${PK.PICK.max} 张`);
+  ok(r.picked.length === 4 && ['portrait', 'kitchen', 'bed'].every((k) => r.picked.includes(k)), '这个项目合适的都挑进来（客厅 2 张没超过每个房间 4 张）', JSON.stringify(r.picked));
   ok(!(r.picked.includes('wide') && r.picked.includes('wideBurst')), '连拍只留一张');
   ok(r.dupOf.has('wideBurst') || r.dupOf.has('wide'), '连拍的另一张记成重复（找得回来）');
   ok(r.rejects.get('blurry')?.includes('blur') && r.rejects.get('dark')?.includes('dark') && r.rejects.get('shot')?.includes('shot'), '糊 / 暗 / 截图被藏起来（理由都在）');
@@ -383,6 +403,102 @@ function documentPage() {
   const r2 = PK.autoPick(photos, { crossDup: new Set(['kitchen']) });
   ok(!r2.picked.includes('kitchen'), '在别的项目里已经有的照片不挑');
   ok(PK.autoPick([]).cover === null, '空的项目');
+}
+
+// ───────────────────────── 自动挑选 · 更多照片（案例展示 §4：18 张，每个房间 4 张 + 细节特写 4 张） ─────────────────────────
+// 「分析好的照片」直接造出来：指纹随机（彼此差很多 = 都不一样），颜色也各不一样
+const R9 = rnd(4242);
+const hex32 = () => Array.from({ length: 4 }, () => ((R9() * 4294967296) >>> 0).toString(16).padStart(8, '0')).join('');
+let phN = 0;
+const ph = (room, o = {}) => ({
+  key: o.key || `p${++phN}`,
+  room: room || null,
+  view: o.view || 'photo',
+  ...('detail' in o ? { detail: o.detail } : {}),
+  t: null,
+  a: { hash: hex32(), sharp: o.sharp ?? 300 + R9() * 200, q: o.q ?? 0.6 + R9() * 0.3, flags: o.flags || [], colours: [{ lab: [30 + R9() * 50, R9() * 40 - 20, R9() * 40 - 20] }], w: o.w ?? 4000, h: o.h ?? 3000 },
+});
+const roomCount = (list) => {
+  const n = {};
+  for (const p of list) if (!PK.isDetail(p)) n[p.room || '?'] = (n[p.room || '?'] || 0) + 1;
+  return n;
+};
+{
+  ok(PK.PICK.max === 18 && PK.PICK.perRoom === 4 && PK.PICK.details === 4 && PK.PICK.near === 0.93, 'PICK：最多 18 张 · 每个房间 4 张 · 细节 4 张 · 太像（> 0.93）不挑');
+  const many = [
+    ...Array.from({ length: 10 }, () => ph('living')),
+    ...Array.from({ length: 8 }, () => ph('kitchen')),
+    ...Array.from({ length: 6 }, () => ph('master')),
+    ...Array.from({ length: 5 }, () => ph('dining')),
+    ...Array.from({ length: 3 }, () => ph('bath')),
+    ...Array.from({ length: 9 }, () => ph(null)),
+    ...Array.from({ length: 4 }, () => ph('kitchen', { view: 'detail' })),
+    ...Array.from({ length: 3 }, () => ph(null, { detail: true })),
+  ];
+  const byKey = new Map(many.map((p) => [p.key, p]));
+  const r = PK.autoPick(many);
+  const picked = r.picked.map((k) => byKey.get(k));
+  ok(r.picked.length === 18 && new Set(r.picked).size === 18, `照片多的项目挑满 18 张（${r.picked.length}）`);
+  const per = roomCount(picked);
+  ok(Object.values(per).every((n) => n <= 4), '每个房间最多 4 张（没标房间的算同一个「房间」）', JSON.stringify(per));
+  ok(Object.keys(per).length === 6 && Math.max(...Object.values(per)) - Math.min(...Object.values(per)) <= 1, '每个房间都挑到、挑得平均（照片最少的房间先挑）', JSON.stringify(per));
+  const rooms1 = new Set(picked.slice(0, 6).map((p) => p.room || '?'));
+  ok(rooms1.size === 6, '前 6 张 = 每个房间一张（客人先看到整个家）', JSON.stringify([...rooms1]));
+  ok(picked.filter(PK.isDetail).length === 4, '细节特写挑 4 张（房间照片再多也给细节留位子）');
+  ok(r.picked[0] === r.cover && !PK.isDetail(picked[0]), '封面在第一个，不是细节特写');
+  const firstD = picked.findIndex(PK.isDetail);
+  ok(firstD === 14 && picked.slice(firstD).every(PK.isDetail), '细节特写排在最后（案例里照片的顺序）');
+  ok(eq(PK.autoPick(many).picked, r.picked), '同样的照片 → 同样的结果');
+  ok(PK.autoPick(many, { max: 6 }).picked.length === 6, 'opt.max 还能用');
+  ok(Object.values(roomCount(PK.autoPick(many, { perRoom: 2 }).picked.map((k) => byKey.get(k)))).every((n) => n <= 2), 'opt.perRoom 还能用');
+  ok(PK.autoPick(many, { details: 0 }).picked.map((k) => byKey.get(k)).every((p) => !PK.isDetail(p)), 'opt.details = 0 → 不挑细节');
+
+  // 以前最多 6 张；现在 5 个房间 × 3 张 = 15 张都挑
+  const five = ['living', 'kitchen', 'master', 'dining', 'study'].flatMap((rm) => [ph(rm), ph(rm), ph(rm)]);
+  ok(PK.autoPick(five).picked.length === 15, '5 个房间各 3 张 → 15 张都挑（以前只挑 6 张）');
+  // 都没标房间：算同一个房间 → 4 张（R / AI 标好房间以后，再按房间多挑）；细节另外算
+  const flat = Array.from({ length: 12 }, () => ph(null));
+  ok(PK.autoPick(flat).picked.length === 4, '都没标房间 = 一个「房间」→ 最多 4 张');
+  ok(PK.autoPick([...flat, ph(null, { view: 'detail' }), ph(null, { view: 'detail' })]).picked.length === 6, '没标房间的 4 张 + 细节 2 张');
+
+  // 员工 / AI 说「不是细节」（detail: false）比文件名优先：算回厨房的名额
+  const kitchen = [ph('kitchen'), ph('kitchen'), ph('kitchen'), ph('kitchen', { view: 'detail', detail: false }), ph('kitchen', { view: 'detail', detail: false }), ph('kitchen', { view: 'detail' })];
+  const rk = PK.autoPick(kitchen).picked.map((k) => kitchen.find((p) => p.key === k));
+  ok(PK.isDetail({ view: 'detail' }) && !PK.isDetail({ view: 'detail', detail: false }) && PK.isDetail({ view: 'photo', detail: true }), 'isDetail：标过的优先，没标看 view');
+  ok(rk.length === 5 && rk.filter((p) => !PK.isDetail(p)).length === 4 && rk.filter(PK.isDetail).length === 1, '厨房 5 张「不是细节」只挑 4 张 + 1 张细节', JSON.stringify(rk.map((p) => [p.view, p.detail])));
+
+  // 细节特写不会被藏起来（不像工地 / 截图 / 单据 / 图纸），也不按「比别的照片糊」藏（近拍的背景本来就是虚的）
+  const mixed = [
+    ...Array.from({ length: 6 }, () => ph('living', { sharp: 400 })),
+    ph('kitchen', { key: 'softRoom', sharp: 60 }),
+    ph('kitchen', { key: 'softDetail', sharp: 60, view: 'detail' }),
+    ph('kitchen', { key: 'sharpBlurFlag', sharp: 20, view: 'detail', flags: ['blur'] }),
+    ph('bath', { key: 'site', view: 'site' }),
+  ];
+  const rm = PK.autoPick(mixed);
+  ok(rm.rejects.get('softRoom')?.includes('blur') && !rm.rejects.has('softDetail'), '比别的照片糊很多：房间照片藏起来，细节特写不藏');
+  ok(rm.rejects.get('sharpBlurFlag')?.includes('blur') && rm.rejects.get('site')?.includes('site'), '真的糊（分析说 blur）的细节、工地照片照样藏');
+  ok(rm.picked.includes('softDetail'), '细节特写被挑进来');
+
+  // 封面：细节特写再好看也不当封面；只有细节特写的项目才用细节当封面
+  const shiny = ph('kitchen', { key: 'shinyDetail', view: 'detail', q: 0.99, w: 4000, h: 2400 });
+  const rc = PK.autoPick([shiny, ph('living', { key: 'plain', q: 0.5, w: 3000, h: 4000 }), ph('bath', { q: 0.45, w: 3000, h: 4000 })]);
+  ok(rc.cover === 'plain' && rc.picked.includes('shinyDetail') && rc.picked[rc.picked.length - 1] === 'shinyDetail', `封面是房间照片（${rc.cover}），细节排最后`);
+  const onlyD = Array.from({ length: 6 }, () => ph(null, { view: 'detail' }));
+  const ro = PK.autoPick(onlyD);
+  ok(ro.cover && ro.picked.length === 4, '只有细节特写：细节当封面，最多 4 张');
+
+  // 近似重复照样只留一张（连拍 / 同一个角度）
+  const base = ph('living', { key: 'shot1', q: 0.8 });
+  const twin = { ...ph('living', { key: 'shot2', q: 0.7 }), a: { ...base.a, q: 0.7, hash: base.a.hash.slice(0, 31) + ((parseInt(base.a.hash[31], 16) ^ 1).toString(16)) } };
+  const rt = PK.autoPick([base, twin, ph('kitchen'), ph('master')]);
+  ok(!(rt.picked.includes('shot1') && rt.picked.includes('shot2')) && rt.dupOf.get('shot2') === 'shot1', '差 1 位的两张 = 重复：只留好的那张');
+
+  // 项目分（「每种风格先做最好的」）意思不变：5 张就算「张数够」
+  const q = new Map(Array.from({ length: 18 }, (_, i) => [`k${i}`, 0.8]));
+  const keys = [...q.keys()];
+  const rooms4 = ['living', 'kitchen', 'master', 'dining'];
+  ok(PK.projectScore({ picked: keys.slice(0, 5), q, rooms: rooms4 }) === PK.projectScore({ picked: keys, q, rooms: [...rooms4, ...rooms4] }), '项目分：5 张和 18 张一样（张数 5 张满分，没变）');
 }
 
 // ───────────────────────── 生成案例 ─────────────────────────
@@ -430,6 +546,20 @@ function documentPage() {
   ok(eq(c2.images.map((im) => [im.room, im.kind]), [['', 'photo'], ['plan3d', 'plan3d'], ['kitchen', 'photo']]), '没标 = 空着；鸟瞰 = plan3d', JSON.stringify(c2.images.map((im) => [im.room, im.kind])));
   ok(eq(c2.rooms, ['kitchen']), '房间清单只算标了的（不含 3D 鸟瞰）', JSON.stringify(c2.rooms));
   ok(P.classifyPath('案例/上海/上海-测试甲-原木/全屋3D鸟瞰.jpg').room === 'plan3d' && P.classifyPath('案例/上海/上海-测试甲-原木/3D户型.jpg').view === 'render', '文件名「鸟瞰 / 3D户型」= 整个家（3D），是效果图不是图纸');
+  // 细节特写：detail: true（客人那边有「细节」一栏）；效果图的细节还是效果图；上次存的同一张照片，员工写的说明留着
+  const img = (id) => ({ id, w: 1600, h: 1200, device: true, src: '', thumb: '' });
+  const shots3 = [
+    { key: 'k1', room: 'living', view: 'photo', image: img('01') },
+    { key: 'k2', room: 'kitchen', view: 'detail', image: img('02') },
+    { key: 'k3', room: 'kitchen', view: 'render', detail: true, image: img('03') },
+    { key: 'k4', room: 'kitchen', view: 'detail', detail: false, image: img('04') },
+    { key: 'k5', room: 'living', view: 'photo', image: img('05'), prev: { caption: { zh: '员工写的说明', en: 'Staff caption' }, alt: { zh: '替代文字', en: 'Alt text' } } },
+  ];
+  const c3 = B.caseFromGroup(g, { styles: ['原木'], type: 'condo', bedrooms: 3, consent: true }, shots3);
+  ok(eq(c3.images.map((im) => [im.kind, im.detail]), [['photo', false], ['photo', true], ['render', true], ['photo', false], ['photo', false]]), '细节：view detail / 员工标的；效果图的细节还是效果图', JSON.stringify(c3.images.map((im) => [im.kind, im.detail])));
+  ok(c3.images[4].caption?.zh === '员工写的说明' && c3.images[4].caption?.en === 'Staff caption' && c3.images[4].alt.en === 'Alt text', '同一张照片再存一次：员工写的说明 / 替代文字留着', JSON.stringify(c3.images[4]));
+  ok(eq(c3.images[0].caption, { zh: '', en: '' }) && c3.images[0].cover && !c3.images[0].detail, '新照片：说明空着，封面不是细节');
+  ok(C.validateCase(c3, { forLive: true }).ok, '有细节特写的案例照样能上架', JSON.stringify(C.validateCase(c3, { forLive: true }).errors));
   ok(C.matchCases({ code: 'WMNH', axes: { temp: 80, density: 80, texture: 80, storage: 80 } }, [sr]).picks.length === 0, '展厅案例不会出现在客人的配对里');
   const live = { ...c, status: 'live' };
   const m = C.matchCases({ code: 'WMNH', axes: { temp: 80, density: 80, texture: 80, storage: 80 }, hidden: { light: 80, curve: 50, social: 50 } }, [live]);
@@ -503,6 +633,150 @@ function documentPage() {
   ok(eq(out.styles, ['侘寂', '原木']), '风格：S2 = 侘寂、S1 = 原木，不认得的丢掉', JSON.stringify(out.styles));
   ok(eq(out.materials, { floor: 'walnut', cabinetry: 'cream-lacquer' }), '材质：不在可选列表里的（navy-paint）丢掉');
   ok(eq(out.colours, ['walnut', 'cream']), '颜色词');
+  ok(eq(out.details, [false, false, false]), '没说是细节 = 都不是');
+  // 细节特写（案例展示 §4）：说明里问、schema 里有；只有明明白白的 true 才算
+  ok(/close-up detail/i.test(prompt) && prompt.includes('"detail":true'), '发给 AI 的说明里问「是不是细节特写」');
+  ok(AI.SCHEMA.properties.photos.items.properties.detail?.type === 'BOOLEAN' && eq(AI.SCHEMA.properties.photos.items.required, ['i', 'room']), 'SCHEMA：每张照片可以带 detail（不是必填）');
+  const fake2 = async () => ({ json: { photos: [{ i: 1, room: 'kitchen', detail: true }, { i: 2, room: 'living', detail: 'yes' }, { i: 3, room: 'garage', detail: true }, { i: 9, room: 'bath', detail: true }, { i: 1.5, room: 'bath', detail: true }], styles: ['S1'] } });
+  const out2 = await AI.autoTagGroup({ images: ['data:image/jpeg;base64,AAAA', 'data:image/jpeg;base64,BBBB', 'data:image/jpeg;base64,CCCC'], settings: { apiKey: 'TEST' }, call: fake2, imagePart, v });
+  ok(eq(out2.details, [true, false, true]) && eq(out2.rooms, ['kitchen', 'living', null]), '细节：true 才算（"yes" 不算）；房间不认得也照样记细节；超出范围的丢掉', JSON.stringify([out2.details, out2.rooms]));
+  // 用到员工的决定上：只填还没填的（和房间一样）
+  const dec = { rooms: { b: 'dining' }, detail: { c: false } };
+  const patch = AI.answerPatch(dec, ['a', 'b', 'c', 'd'], { rooms: ['kitchen', 'living', 'bath', null], details: [true, true, true, true], styles: ['原木'], materials: {}, colours: [] }, (k) => k === 'd');
+  ok(eq(patch.rooms, { b: 'dining', a: 'kitchen', c: 'bath' }), 'AI 的房间：员工标过的不动，没标的才填', JSON.stringify(patch.rooms));
+  ok(eq(patch.detail, { c: false, a: true, b: true }), 'AI 的细节：员工说「不是」的不动；文件名已经说是细节的（d）不用再记', JSON.stringify(patch.detail));
+  ok(eq(patch.aiStyles, ['原木']) && patch.aiMats === undefined && !('ai' in patch), '风格只是建议；没有材质 = 不写');
+  ok(eq(dec, { rooms: { b: 'dining' }, detail: { c: false } }), '不改原来的决定（给一个新的补丁）');
+}
+
+// ───────────────────────── 整理一次（Session，Node 里跑：假的 worker 池、假的 AI、设备案例库在内存里） ─────────────────────────
+{
+  const S = await import('../src/cases/sorter/session.js');
+  C._resetDevice();
+  const dir = '案例/上海/上海-测试甲-原木';
+  const names = ['客厅1.jpg', '客厅2.jpg', '客厅3.jpg', '客厅4.jpg', '客厅5.jpg', '客厅6.jpg', '厨房1.jpg', '厨房 细节 拉手.jpg', 'closeup-grain.jpg', 'IMG_1.jpg'];
+  const entries = names.map((name, i) => ({ path: `${dir}/${name}`, name, size: 1000 + i, mtime: 1.7e12 + i * 1000 }));
+  const runs = [];
+  const pool = {
+    run: async (task) => {
+      runs.push(task.op);
+      if (task.op === 'compress') return { 1600: new Blob(['big']), 480: new Blob(['small']), w: 1600, h: 1200 };
+      throw new Error('cancelled');
+    },
+    pause() {},
+    clear() {},
+  };
+  const s = new S.Session(entries, { pool });
+  ok(s.groups.length === 1, '一个项目');
+  const g = s.groups[0];
+  const keyOf = (name) => g.keys.find((k) => s.files.get(k).name === name);
+  for (const k of g.keys) s.an.set(k, ph(null).a);
+  s._repick(g);
+  const picked = s.pickedOf(g);
+  const kHandle = keyOf('厨房 细节 拉手.jpg');
+  const kGrain = keyOf('closeup-grain.jpg');
+  ok(s.detailOf(g, kHandle) && s.detailOf(g, kGrain) && !s.detailOf(g, keyOf('客厅1.jpg')), '文件名说是细节 → 细节特写');
+  ok(picked.length === 8 && picked.filter((k) => s.files.get(k).name.startsWith('客厅')).length === 4, `客厅 6 张挑 4 张；厨房 1、没标房间 1、细节 2 → 一共 8 张（${picked.length}）`);
+  ok(eq(picked.slice(-2).sort(), [kHandle, kGrain].sort()), '细节特写在最后');
+  // 员工：「这张不是细节」→ 算回没标房间的照片；再改回来
+  s.setDetail(g.id, kGrain, false);
+  ok(!s.detailOf(g, kGrain) && s.decision(g.id).detail[kGrain] === false && s.pickedOf(g).includes(kGrain) && s.pickedOf(g).at(-1) === kHandle, '员工说不是细节：重新挑（它变成普通照片）');
+  s.setDetail(g.id, kGrain, true);
+  ok(s.detailOf(g, kGrain) && s.decision(g.id).detail[kGrain] === true, '改回来：又是细节');
+  // 员工把一张客厅照片标成细节：客厅空出一个位子
+  const k1 = keyOf('客厅1.jpg');
+  s.setDetail(g.id, k1, true);
+  ok(s.detailOf(g, k1) && s.pickedOf(g).filter((k) => s.files.get(k).name.startsWith('客厅') && !s.detailOf(g, k)).length === 4, '一张客厅标成细节 → 客厅还能再挑一张');
+  s.setDetail(g.id, k1, false);
+  // AI（假的）：说「厨房1」是细节特写 → 只填员工还没填的
+  const fakeAi = async (settings, opts) => {
+    ok(opts.schema === AI.SCHEMA && opts.parts.length === s.pickedOf(g).length + 1, '一次请求：每张挑好的小图 + 说明');
+    return { json: { photos: s.pickedOf(g).map((k, i) => ({ i: i + 1, room: s.files.get(k).name.startsWith('厨房') ? 'kitchen' : 'living', ...(s.files.get(k).name === '厨房1.jpg' ? { detail: true } : {}) })), styles: ['S1'] } };
+  };
+  const keys = s.pickedOf(g);
+  const r = await AI.autoTagGroup({ images: keys.map(() => 'data:image/jpeg;base64,AAAA'), settings: { apiKey: 'TEST' }, call: fakeAi, imagePart: (src) => ({ inline_data: { data: src } }), v: AI.vocab({ rooms: C.ROOMS.map((x) => x.id), mats: {} }) });
+  s.setDecision(g.id, { ...AI.answerPatch(s.decision(g.id), keys, r, (k) => s.detailOf(g, k)), ai: Date.now() });
+  ok(s.detailOf(g, keyOf('厨房1.jpg')) && s.decision(g.id).detail[keyOf('厨房1.jpg')] === true && s.decision(g.id).detail[k1] === false, 'AI 说是细节 → 记下来；员工说过「不是」的不动');
+  ok(s.roomOf(g, keyOf('IMG_1.jpg')) === 'living' || !s.pickedOf(g).includes(keyOf('IMG_1.jpg')), 'AI 填了房间');
+  // 存进案例库：细节特写 → detail: true；员工在案例库写的说明，同一张照片再存一次还在
+  s.setDecision(g.id, { styles: ['原木'], type: 'condo', consent: true, state: 'ready' });
+  const out = await s.saveToLibrary([g.id]);
+  ok(out.saved.length === 1 && !out.skipped.length, '存好了', JSON.stringify(out));
+  const c = await C.getCase(out.saved[0]);
+  const fin = s.pickedOf(g);
+  ok(c.images.length === fin.length && c.images.every((im, i) => im.detail === s.detailOf(g, fin[i])), '案例照片的 detail = 整理时的「细节」', JSON.stringify(c.images.map((im) => [im.id, im.detail])));
+  ok(c.images.filter((im) => im.detail).length === 3 && c.images.at(-1).detail && c.images[0].cover && !c.images[0].detail, '3 张细节特写排在最后；封面不是细节');
+  ok(eq(s.decision(g.id).saved.keys, fin), '记下每个编号是哪一张照片（只有指纹 key）');
+  c.images[1].caption = { zh: '员工写的说明', en: 'Staff caption' };
+  await C.saveCase(c);
+  s.setDecision(g.id, { bedrooms: 2 }); // 改了 → 要再存
+  ok(s.dirty(g), '改过 → 要再存');
+  const out2 = await s.saveToLibrary([g.id]);
+  const c2 = await C.getCase(out2.saved[0]);
+  ok(out2.saved[0] === out.saved[0] && c2.images[1].caption?.zh === '员工写的说明', '再存一次：同一张照片的说明留着', JSON.stringify(c2.images[1]));
+  ok(!JSON.stringify(c2).includes('测试甲') && !JSON.stringify(c2).includes('上海'), '案例里没有人名 / 城市');
+  ok(runs.every((op) => op === 'compress'), '只用到压缩（没有别的 worker 活）');
+  s.destroy();
+  C._resetDevice();
+}
+
+// ───────────────────────── 导入脚本（scripts/import-cases.mjs）：文件名「细节」、再导入一次员工写的说明 / 细节 / 顺序留着 ─────────────────────────
+// --dry-run：不转照片（不用 Pillow / Chromium），只看 manifest 怎么变；照片文件是空的假文件
+{
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const IC = await import('../scripts/import-cases.mjs');
+  ok(['05 厨房 细节.jpg', 'closeup-handle.jpg', 'Close-Up 2.JPG', '局部.png', '特写_门板.jpg', 'detail.jpg', 'Macro01.jpg', '近景.jpg'].every(IC.guessDetail), 'guessDetail：细节 / 特写 / 局部 / 近景 / detail / close-up / closeup / macro');
+  ok(!IC.guessDetail('01 客厅.jpg') && !IC.guessDetail('closet.jpg') && IC.guessRoom('05 厨房 细节.jpg') === 'kitchen', '普通照片不是细节；细节照片照样认房间');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'wish-sorter-import-'));
+  try {
+    const src = path.join(tmp, 'photos');
+    const home = path.join(src, 'demo-home');
+    fs.mkdirSync(home, { recursive: true });
+    for (const f of ['01 客厅.jpg', '02 厨房 细节.jpg', '03 closeup handle.jpg', '04 主卧.jpg']) fs.writeFileSync(path.join(home, f), 'x');
+    const manifest = path.join(tmp, 'manifest.json');
+    const run = () => IC.importCases({ src, out: path.join(tmp, 'out'), manifest, engine: 'pillow', dry: true, quiet: true });
+    const r1 = await run();
+    const c1 = r1.manifest.cases.find((c) => c.id === 'p-demo-home');
+    ok(eq(r1.added, ['p-demo-home']) && eq(c1.images.map((im) => [im.id, im.room, im.detail]), [['01', 'living', false], ['02', 'kitchen', true], ['03', '', true], ['04', 'master', false]]), '新导入：文件名说是细节 → detail: true', JSON.stringify(c1.images.map((im) => [im.id, im.room, im.detail])));
+    ok(c1.images.every((im) => eq(im.caption, { zh: '', en: '' })) && C.validateCase(C.migrateCase(c1)).ok, '新导入：说明空着；是合格的草稿');
+
+    // 员工在 iPad 上改过（导出案例包再合并进 manifest）：排了顺序、写了说明、标了细节；然后文件夹里多了一张照片，再导入一次
+    const staff = JSON.parse(JSON.stringify(c1));
+    const im = (id) => staff.images.find((x) => x.id === id);
+    im('01').caption = { zh: '客厅的电视墙', en: 'The TV wall' };
+    im('01').alt = { zh: '客厅', en: 'Living room' };
+    im('04').detail = true; // 员工：主卧这张其实是衣柜门的特写
+    im('02').detail = false; // 员工取消了，但文件名写着「细节」→ 还是细节（和房间一样：文件名优先）
+    staff.images = [im('03'), im('01'), im('02'), im('04')].map((x) => ({ ...x, cover: x.id === '03' }));
+    staff.title = { zh: '员工改的标题', en: 'Staff title' };
+    staff.rev = 3;
+    fs.writeFileSync(manifest, JSON.stringify({ kind: 'wish-cases', v: 1, updatedAt: '', cases: [staff] }));
+    fs.writeFileSync(path.join(home, '05 餐厅.jpg'), 'x');
+    const r2 = await run();
+    const c2 = r2.manifest.cases.find((c) => c.id === 'p-demo-home');
+    ok(eq(r2.updated, ['p-demo-home']) && c2.rev === 4 && c2.title.zh === '员工改的标题', '再导入：更新、rev + 1、员工的标题留着');
+    ok(eq(c2.images.map((x) => x.id), ['03', '01', '02', '04', '05']), '员工排的顺序留着，新照片接在后面', JSON.stringify(c2.images.map((x) => x.id)));
+    const im2 = (id) => c2.images.find((x) => x.id === id);
+    ok(eq(im2('01').caption, { zh: '客厅的电视墙', en: 'The TV wall' }) && im2('01').alt.en === 'Living room', '员工写的说明 / 替代文字按编号留着');
+    ok(im2('04').detail === true && im2('02').detail === true && im2('05').detail === false && im2('03').detail === true, '细节：员工标的留着；文件名写着「细节」的一定是细节', JSON.stringify(c2.images.map((x) => [x.id, x.detail])));
+    ok(im2('03').cover && c2.images.filter((x) => x.cover).length === 1, '员工挑的封面留着');
+    ok(C.validateCase(C.migrateCase(c2)).ok, '还是合格的案例');
+
+    // 再跑一次（什么都没改）= 没变
+    fs.writeFileSync(manifest, JSON.stringify(r2.manifest));
+    const r3 = await run();
+    ok(eq(r3.unchanged, ['p-demo-home']) && !r3.updated.length, '什么都没改 → 没变（员工排的顺序不算改动）');
+
+    // 同一个编号换成了另一张照片（大小不一样）→ 不把旧的说明安到新照片上
+    const m4 = JSON.parse(JSON.stringify(r2.manifest));
+    Object.assign(m4.cases[0].images.find((x) => x.id === '01'), { w: 900, h: 1600 });
+    fs.writeFileSync(manifest, JSON.stringify(m4));
+    const c4 = (await run()).manifest.cases[0];
+    ok(eq(c4.images.find((x) => x.id === '01').caption, { zh: '', en: '' }) && c4.images.find((x) => x.id === '01').alt.zh === '', '同一个编号、大小不一样 = 换了照片：说明不留');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 }
 
 console.log(`${failed ? '✗' : '✓'} 案例整理：${passed} 项通过${failed ? `，${failed} 项没过` : ''}`);

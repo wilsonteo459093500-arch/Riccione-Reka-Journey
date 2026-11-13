@@ -874,6 +874,20 @@
     "Screenshot",
     "screenshot"
    ]
+  },
+  {
+   "view": "detail",
+   "_about": "细节特写（门板、拉手、木纹、收口的近景）：只看子文件夹 / 文件名，不看项目文件夹名。不是一种照片类型 —— 「实景/细节」还是实景，另外标一个 detail（parse.js detailOf）。不会被藏起来；每个项目最多挑 4 张（pick.js）。",
+   "words": [
+    "细节",
+    "特写",
+    "局部",
+    "近景",
+    "detail",
+    "close-up",
+    "closeup",
+    "macro"
+   ]
   }
  ],
  "families": [

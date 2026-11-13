@@ -454,7 +454,9 @@ await test('migrateCase：v0（早期草稿）→ v1 的完整形状；v1 原样
   assert.deepEqual(C.migrateCase(c), c);
   for (const raw of MANIFEST.cases) {
     const m = C.migrateCase(raw);
-    for (const k of Object.keys(raw)) assert.deepEqual(m[k], raw[k], `${raw.id}.${k} unchanged`);
+    // 案例展示补的默认值（照片说明、细节特写）之外，一个字都不变
+    const want = (k) => (k === 'images' ? raw.images.map((im) => ({ caption: { zh: '', en: '' }, detail: false, ...im })) : raw[k]);
+    for (const k of Object.keys(raw)) assert.deepEqual(m[k], want(k), `${raw.id}.${k} unchanged`);
   }
 });
 

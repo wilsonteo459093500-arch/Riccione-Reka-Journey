@@ -8,13 +8,15 @@
 //   photos/
 //     setia-alam-condo/          ← 文件夹名 = 案例编号（p-setia-alam-condo）
 //       01 客厅.jpg  02-kitchen.jpg  主卧.heic …   ← 文件名里有房间名就自动认（客厅 / living、厨房 / kitchen、主卧 / master …）
+//       05 厨房 细节.jpg  closeup-handle.jpg …     ← 文件名里有「细节 / 特写 / 局部 / 近景 / detail / close-up / closeup / macro」= 细节特写（detail: true）
 //       case.txt                 ← 选填：第 1 行中文标题，第 2 行英文标题（第 3、4 行：中文 / 英文故事）
 //       case.json                ← 选填：任何案例字段（property、style、materials、consent …），会盖过 case.txt
 //
 // 每张照片：转正（EXIF 方向）→ 1600 px 大图 + 480 px 小图，WebP（q ≈ 0.82，太大会自动降一点），
 // EXIF / GPS / 相机资料全部去掉（重新编码，不复制任何元数据）。输出 <out>/<编号>/NN-1600.webp、NN-480.webp。
 // manifest：新项目 = kind 'project'、status 'draft'（员工在案例库里打好标签、勾「业主同意」才上架）；
-// 已有的项目只换照片，员工打过的标签（风格、材质、故事…）都保留。
+// 已有的项目只换照片，员工打过的标签（风格、材质、故事…）都保留；每张照片员工写的说明（caption）、替代文字、「细节」标记、
+// 排的顺序按照片编号（NN）留着（同一个编号、同样大小 = 同一张照片；文件名说是细节的，一定是细节）。
 //
 // --base：照片放在别的公开空间（这个仓库是公开的，真实照片可以不进 git）—— manifest 里写完整网址 base + 编号/NN-1600.webp，
 //         <out> 里生成的文件再自己上传到那里。也可以不写 --base，改 src/shared/config.js 的 CONFIG.cases.base（全部照片一起换）。
@@ -58,6 +60,17 @@ export function guessRoom(name) {
   for (const [room, words] of ROOM_WORDS) if (words.some((w) => s.includes(w))) return room;
   return null;
 }
+
+// 文件名 → 细节特写（门板、拉手、木纹、收口的近拍）；和案例整理工具（src/cases/sorter/data.json 的 views.detail）同一组词
+const DETAIL_WORDS = ['细节', '特写', '局部', '近景', 'detail', 'close-up', 'closeup', 'macro'];
+export function guessDetail(name) {
+  const s = String(name).toLowerCase();
+  return DETAIL_WORDS.some((w) => s.includes(w));
+}
+
+/** 上一次导入的同一个编号是不是同一张照片（大小一样；两个引擎缩图可能差 1–2 px） */
+const samePhoto = (old, w, h) => !!old && Math.abs((old.w || 0) - w) <= 2 && Math.abs((old.h || 0) - h) <= 2;
+const text2 = (x) => ({ zh: String(x?.zh || ''), en: String(x?.en || '') });
 
 export function slugOf(folder) {
   const name = String(folder);
@@ -253,7 +266,7 @@ function readCaseText(dir) {
   return o;
 }
 
-const sameImages = (a = [], b = []) => a.length === b.length && a.every((x, i) => x.src === b[i].src && x.w === b[i].w && x.h === b[i].h && x.room === b[i].room);
+const sameImages = (a = [], b = []) => a.length === b.length && a.every((x, i) => x.src === b[i].src && x.w === b[i].w && x.h === b[i].h && x.room === b[i].room && !!x.detail === !!b[i].detail);
 
 export async function importCases(opts) {
   const o = { ...parseArgs([]), ...opts };
@@ -302,6 +315,9 @@ export async function importCases(opts) {
       const old = prevImgs.get(j.nn);
       const rel = (tag) => `${o.base}${id}/${j.nn}-${tag}.webp`;
       const big = r.files[0];
+      // 员工在案例库里写的说明 / 替代文字、标的「细节」：同一个编号、同样大小（= 同一张照片）才留着。
+      // 「细节」和房间一样：文件名说是细节就是细节；文件名没说 → 员工标过的留着
+      const same = samePhoto(old, big.w, big.h);
       images.push({
         id: j.nn,
         room: guessRoom(j.file) || old?.room || '', // 认不出来 = 空着（案例库显示「房间？」），不要猜成客厅
@@ -310,12 +326,20 @@ export async function importCases(opts) {
         h: big.h,
         src: rel('1600'),
         thumb: rel('480'),
-        alt: old?.alt || { zh: '', en: '' },
+        alt: same ? text2(old.alt) : { zh: '', en: '' },
+        caption: same ? text2(old.caption) : { zh: '', en: '' },
+        detail: guessDetail(j.file) || (same && old.detail === true),
         cover: i === coverIdx,
       });
       for (const f of r.files) if (f.bytes != null && !o.quiet) log(`  ${id}/${path.basename(f.dest)}  ${f.w}×${f.h}  ${(f.bytes / 1024).toFixed(0)} KB`);
     });
     if (!images.length) continue;
+    // 员工在案例库里排过的顺序（images 的先后 = 客人看到的先后）：认得的编号按原来的顺序，新照片接在后面
+    if (prev?.images?.length) {
+      const at = new Map(prev.images.map((im, i) => [im.id, i]));
+      const rank = (im) => (at.has(im.id) ? at.get(im.id) : prev.images.length);
+      images.sort((a, b) => rank(a) - rank(b));
+    }
     // 如果员工已经在 manifest 里挑过封面，保留
     const keptCover = prev?.images?.find((im) => im.cover)?.id;
     if (keptCover && images.some((im) => im.id === keptCover)) images.forEach((im) => (im.cover = im.id === keptCover));

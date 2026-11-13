@@ -533,4 +533,12 @@ export default {
   '{0}（溪岸 · {1}）': '{0} (sAil · {1})',
   '{0}（溪岸）': '{0} (sAil)',
   '这个家还用了溪岸板材：{0}': 'This home also uses sAil boards: {0}',
+
+  // ── 案例展示 · 资料（src/shared/cases.js：照片标签、每个房间我们做了什么、房子档案、看全部的筛选）──
+  // 「全部」「全屋」「房子」「房间」「楼层」「{0} 层楼」「整个家」「{0} 个房间」「风格」「地区」别的词典里已经有，同一个英文
+  '细节': 'Details', // 和 en-boards.js、en-photopick.js 一样
+  建筑面积: 'Built-up area', // 不用「面积」：en-export.js 里「面积」是 Areas（总表不能有不一样的英文）
+  我们做了: 'We made',
+  做过的家: 'Homes we made',
+  '3D 方案': '3D schemes',
 };

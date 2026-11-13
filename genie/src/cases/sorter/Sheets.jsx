@@ -1,18 +1,21 @@
 // 案例整理 · 弹出来的卡：看大图、选房间、AI 帮我填、存进案例库 / 导出、键盘说明、改名 / 合并。
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Download, Library, Merge, Scissors, Sparkles, Star, X, Check, TriangleAlert, Loader } from 'lucide-react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight, Download, Focus, Library, Merge, Scissors, Sparkles, Star, X, Check, TriangleAlert, Loader } from 'lucide-react';
 import { t, L, isEn } from '../../shared/i18n.js';
-import { ROOMS, roomLabel } from '../../shared/cases.js';
+import { ROOMS, roomLabel, PHOTO_EST_BYTES, storageInfo, askPersist } from '../../shared/cases.js';
 import { MAT_BY_ID, fits } from '../../shared/materials.js';
 import fx from '../../shared/fx.js';
 import { sfx } from '../../shared/sfx.js';
 import { whyLabel } from './Row.jsx';
 import { fmtMB } from './pack.js';
 import { getData } from './data.js';
+import { PICK } from './pick.js';
 
 /** AI 只回答真的房间（不会回答「整个家（3D）」） */
 const ROOM_CHOICES = ROOMS.filter((r) => r.id !== 'plan3d');
+/** 「AI 帮我填」每个项目最多发几张小图（= 自动挑的上限） */
+const AI_MAX = PICK.max;
 /**
  * 员工标房间的快捷键（RoomPicker 打开时：按 R，或者点照片下面的房间小标签）。
  * 常用的用数字，少用的用英文首字母；标完一张自动跳到下一张。
@@ -104,6 +107,7 @@ export function Preview({ s, pool, gid, k0, onClose }) {
   const picked = s.pickedOf(g);
   const isPicked = picked.includes(k);
   const isCover = picked[0] === k;
+  const isDetail = s.detailOf(g, k);
   const a = s.an.get(k);
   const why = s.hiddenWhy(g, k);
   const toggle = () => {
@@ -142,6 +146,10 @@ export function Preview({ s, pool, gid, k0, onClose }) {
             <Scissors size={15} strokeWidth={2} aria-hidden="true" />
             {t('从这张开始拆成新项目')}
           </button>
+          <button type="button" className={`btn-line small ${isDetail ? 'so-on' : ''}`} data-sfx="toggle" aria-pressed={isDetail} title={t('门板、拉手、木纹、收口的近拍：不占房间的名额')} onClick={() => s.setDetail(g.id, k, !isDetail)}>
+            <Focus size={15} strokeWidth={2} aria-hidden="true" />
+            {t('细节特写')}
+          </button>
           <button type="button" className={`btn-line small ${isCover ? 'so-on' : ''}`} data-sfx="select" onClick={() => s.setDecision(g.id, { picked: isPicked ? picked : [k, ...picked], cover: k })}>
             <Star size={15} strokeWidth={2} fill={isCover ? 'currentColor' : 'none'} aria-hidden="true" />
             {isCover ? t('封面') : t('设为封面')}
@@ -158,36 +166,62 @@ export function Preview({ s, pool, gid, k0, onClose }) {
 
 // ───────────────────────── 选房间 ─────────────────────────
 
-export function RoomPicker({ s, gid, k, anchor, onClose, onNext }) {
+export function RoomPicker({ s, gid, k, anchor, onClose, onNext, onDropped }) {
   const g = s.groups.find((x) => x.id === gid);
   const ref = useRef(null);
+  const at = useRef(null); // 房间小标签（anchor 可以是元素，也可以是「画好以后再找」的函数）
   const [pos, setPos] = useState(null);
   useEffect(() => {
-    const r = anchor?.getBoundingClientRect?.();
+    at.current = typeof anchor === 'function' ? anchor() : anchor;
+    const r = at.current?.getBoundingClientRect?.();
     const W = window.innerWidth;
     const H = window.innerHeight;
     const w = Math.min(360, W - 24);
     if (!r) return setPos({ left: (W - w) / 2, top: H / 3, w });
     const left = Math.max(12, Math.min(W - w - 12, r.left - 20));
     const below = r.bottom + 8;
-    setPos({ left, top: below + 250 > H ? Math.max(12, r.top - 258) : below, w });
+    setPos({ left, top: below + 300 > H ? Math.max(12, r.top - 308) : below, w });
   }, [anchor]);
+  // 画出来以后量一下真的多高（英文的房间名长、多了「细节特写」一行）：下面放不下就放到上面，上面也不够就贴着屏幕底
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || !pos || pos.fit) return;
+    const h = el.offsetHeight;
+    const H = window.innerHeight;
+    const r = at.current?.getBoundingClientRect?.();
+    let top = pos.top;
+    if (top + h > H - 8) top = r && r.top - h - 8 >= 8 ? r.top - h - 8 : Math.max(8, H - h - 8);
+    setPos({ ...pos, top, fit: true });
+  }, [pos, anchor]);
+  // 标了以后自动挑的会重新挑（每个房间最多 4 张）：这张被挤出去了 → 告诉员工
+  const watch = (fn) => {
+    const was = g && s.pickedOf(g).includes(k);
+    fn();
+    if (was && !s.pickedOf(g).includes(k)) onDropped?.(k);
+  };
   const set = (room, { next = false } = {}) => {
     const rooms = { ...(s.decision(gid).rooms || {}) };
     if (room) rooms[k] = room;
     else delete rooms[k];
-    s.setDecision(gid, { rooms });
+    watch(() => s.setDecision(gid, { rooms }));
     if (next && onNext) onNext(k);
     else onClose();
   };
+  const toggleDetail = () => watch(() => s.setDetail(gid, k, !s.detailOf(g, k)));
   useEffect(() => {
     const onDown = (e) => {
       if (ref.current && !ref.current.contains(e.target)) onClose();
     };
-    // 键盘：数字 / 字母 = 标这张，然后跳到下一张；⌫ = 不知道；Esc = 关
+    // 键盘：数字 / 字母 = 标这张，然后跳到下一张；⌫ = 不知道；D = 细节特写（是 / 不是，不跳）；Esc = 关
     const onKey = (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === 'Escape') return onClose();
+      if (String(e.key).toLowerCase() === 'd' && g) {
+        e.preventDefault();
+        sfx.play(s.detailOf(g, k) ? 'toggleOff' : 'toggleOn');
+        toggleDetail();
+        return;
+      }
       const room = ROOM_OF_KEY[String(e.key).toLowerCase()];
       if (room) {
         e.preventDefault();
@@ -208,6 +242,7 @@ export function RoomPicker({ s, gid, k, anchor, onClose, onNext }) {
   });
   if (!g || !pos) return null;
   const cur = s.roomOf(g, k);
+  const det = s.detailOf(g, k);
   return (
     <div ref={ref} className="so-pop" role="dialog" aria-label={t('这张是哪个房间')} style={{ left: pos.left, top: pos.top, width: pos.w }}>
       <p>{t('这张是哪个房间')}</p>
@@ -223,6 +258,11 @@ export function RoomPicker({ s, gid, k, anchor, onClose, onNext }) {
           {t('不知道')}
         </button>
       </div>
+      <button type="button" className={`chip so-chip so-pop-detail ${det ? 'on' : ''}`} aria-pressed={det} data-sfx="toggle" title={t('门板、拉手、木纹、收口的近拍：不占房间的名额')} onClick={toggleDetail}>
+        <kbd>D</kbd>
+        <Focus size={14} strokeWidth={2} aria-hidden="true" />
+        {t('细节特写')}
+      </button>
       <small className="so-pop-tip">{t('按键标好，自动跳到下一张')}</small>
     </div>
   );
@@ -301,6 +341,7 @@ const KEYS = [
   ['S', '设为封面'],
   ['E', '展开 / 收起其它照片'],
   ['V', '看大图'],
+  ['D', '细节特写：是 / 不是（门板、拉手、木纹的近拍）'],
   ['R', '给这张标房间（1 客厅 · 2 餐厅 · 3 厨房 · 4 主卧 · 5 卧室 · 6 儿童房 · 7 书房 · 8 浴室 · 9 玄关 · 0 整个家 3D · F 起居厅 · W 衣帽间 · B 阳台；标完跳到下一张）'],
   ['?', '这张说明'],
 ];
@@ -359,8 +400,8 @@ export async function hasAiKey() {
 }
 
 /**
- * 把这些项目挑好的照片（每个项目最多 6 张，≈ 512 px，没有元数据）发给 Gemini，预填房间、风格、材质、颜色。
- * 只填员工还没填的房间；风格只是建议（带「AI」小字），员工按「好了」才算。
+ * 把这些项目挑好的照片（每个项目最多 18 张，≈ 512 px，没有元数据）发给 Gemini，预填房间、细节特写、风格、材质、颜色。
+ * 只填员工还没填的房间 / 细节；风格只是建议（带「AI」小字），员工按「好了」才算。
  * → { ok, err, stopped }
  */
 export async function runAutoTag(s, pool, targets, { signal, onProg } = {}) {
@@ -368,7 +409,7 @@ export async function runAutoTag(s, pool, targets, { signal, onProg } = {}) {
   const settings = loadSettings();
   if (!settings?.apiKey) return { ok: 0, err: 'nokey' };
   const { callGemini, imagePart } = await import('../../studio/plan/ai.js');
-  const { autoTagGroup, vocab, AI_SLOTS } = await import('./ai.js');
+  const { autoTagGroup, answerPatch, vocab, AI_SLOTS } = await import('./ai.js');
   const D = getData();
   const mats = Object.fromEntries(AI_SLOTS.map((slot) => [slot, [...new Set(D.styles.flatMap((st) => st.mats?.[slot] || []))].filter((id) => MAT_BY_ID[id] && fits(id, slot))]));
   const v = vocab({ rooms: ROOM_CHOICES.map((r) => r.id), mats });
@@ -378,7 +419,7 @@ export async function runAutoTag(s, pool, targets, { signal, onProg } = {}) {
     const g = targets[i];
     onProg?.({ i, n: targets.length, ok });
     try {
-      const keys = s.pickedOf(g).slice(0, 6);
+      const keys = s.pickedOf(g).slice(0, AI_MAX);
       const images = [];
       for (const k of keys) {
         const { blob } = await pool.run({ op: 'preview', file: s.files.get(k).file, long: 512, type: 'image/jpeg', q: 0.8 }, { urgent: true });
@@ -391,12 +432,8 @@ export async function runAutoTag(s, pool, targets, { signal, onProg } = {}) {
         );
       }
       const r = await autoTagGroup({ images, settings, call: callGemini, imagePart, v, signal });
-      const d = s.decision(g.id);
-      const rooms = { ...(d.rooms || {}) };
-      keys.forEach((k, j) => {
-        if (r.rooms[j] && !rooms[k]) rooms[k] = r.rooms[j];
-      });
-      s.setDecision(g.id, { rooms, aiStyles: r.styles, aiMats: Object.keys(r.materials).length ? r.materials : undefined, aiColours: r.colours, ai: Date.now() });
+      // 只填员工还没填的房间 / 细节特写（ai.js answerPatch）
+      s.setDecision(g.id, { ...answerPatch(s.decision(g.id), keys, r, (k) => s.detailOf(g, k)), ai: Date.now() });
       ok++;
     } catch (e) {
       if (e?.code === 'cancel' || signal?.aborted) return { ok, stopped: true };
@@ -415,7 +452,7 @@ export function AiSheet({ s, pool, onClose, onDone, offered = false }) {
   const [auto, setAuto] = useState(() => aiPref() === 'auto');
   const ctl = useRef(null);
   const targets = aiTargets(s);
-  const photos = targets.reduce((n, g) => n + Math.min(6, s.pickedOf(g).length), 0);
+  const photos = targets.reduce((n, g) => n + Math.min(AI_MAX, s.pickedOf(g).length), 0);
   useEffect(() => () => ctl.current?.abort(), []);
   const run = async () => {
     if (!(await hasAiKey())) {
@@ -444,7 +481,7 @@ export function AiSheet({ s, pool, onClose, onDone, offered = false }) {
         <div className="so-sheet-body">
           {phase === 'ask' && (
             <>
-              <p className="so-lead">{t('AI 看一看每个项目挑好的照片，帮你预填：每张是哪个房间、风格、主要材质、颜色。你再确认就好。')}</p>
+              <p className="so-lead">{t('AI 看一看每个项目挑好的照片，帮你预填：每张是哪个房间、是不是细节特写、风格、主要材质、颜色。你再确认就好。')}</p>
               <div className="so-privacy">
                 <TriangleAlert size={18} strokeWidth={2} aria-hidden="true" />
                 <div>
@@ -520,19 +557,34 @@ function download(blob, name) {
   setTimeout(() => URL.revokeObjectURL(url), 8000);
 }
 
+/** 很多 MB：整数加千分位（「12,345」）；少的留一位小数 */
+const mbText = (b) => (b >= 10 * 1024 * 1024 ? Math.round(b / 1024 / 1024).toLocaleString('en-US') : fmtMB(b));
+
 export function OutputSheet({ s, mode, onClose }) {
   const [phase, setPhase] = useState('ask');
   const [prog, setProg] = useState(null);
   const [res, setRes] = useState(null);
+  // 这台设备还剩多少照片空间（一个项目现在最多 18 张 ≈ 6 MB；浏览器量不出来就不说）
+  const [free, setFree] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    storageInfo().then((st) => alive && st?.quota > 0 && setFree(Math.max(0, st.quota - st.usage)));
+    return () => {
+      alive = false;
+    };
+  }, []);
   const ready = s.groups.filter((g) => s.stateOf(g) === 'ready' && (g.kind === 'home' || s.include[g.kind]));
   const toSave = ready.filter((g) => !s.decision(g.id).saved || s.dirty(g));
   const photos = toSave.reduce((n, g) => n + s.pickedOf(g).length, 0);
   const noConsent = ready.filter((g) => !s.decision(g.id).consent && g.kind === 'home').length;
+  const need = photos * PHOTO_EST_BYTES;
+  const tight = free != null && need > free * 0.9;
   // 只是「存」、又都存过没改 → 不用再压，直接去案例库
   const nothing = mode !== 'export' && ready.length > 0 && !toSave.length;
   const libHref = `cases.html?staff=1${isEn() ? '&lang=en' : ''}`;
   const go = async () => {
     setPhase('run');
+    askPersist(); // 请浏览器别在空间紧的时候自己清掉案例照片（不支持 / 不同意都没关系）
     const r = await s.saveToLibrary(
       toSave.map((g) => g.id),
       { onStep: (p) => setProg(p) }
@@ -569,6 +621,12 @@ export function OutputSheet({ s, mode, onClose }) {
               </p>
               <ul className="so-facts">
                 {toSave.length > 0 && <li>{t('这次要压缩：{0} 个项目 · {1} 张照片', [toSave.length, photos])}</li>}
+                {toSave.length > 0 && free != null && (
+                  <li className={tight ? 'so-warn' : ''}>
+                    {t('大约要用 {0} MB 照片空间（这台设备还有约 {1} MB）', [mbText(need), mbText(free)])}
+                    {tight && ' ' + t('可能不够：先少存几个项目，或者在空间大的电脑上存、导出案例包。')}
+                  </li>
+                )}
                 {ready.length - toSave.length > 0 && <li>{t('已经存过、没改过的：{0} 个（不用再压）', [ready.length - toSave.length])}</li>}
                 {noConsent > 0 && <li className="so-warn">{t('{0} 个还没勾「业主同意」：可以存草稿，但上架前一定要勾', [noConsent])}</li>}
                 <li>{t('标题自动生成（风格 · 颜色 · 房子），不会用文件夹名字；城市、人名不会进案例。')}</li>
