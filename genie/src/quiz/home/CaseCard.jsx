@@ -50,6 +50,9 @@ export const capFirst = (s) => (s && /^[a-z]/.test(s) ? s[0].toUpperCase() + s.s
 
 export const kindBadge = (c) => (C.isConcept(c) ? lab(CONCEPT_BADGE) : t('我们做过的家'));
 
+// 许愿模式：照片不给存（不能拖出去、没有长按 / 右键菜单；CSS 再加 -webkit-touch-callout: none）
+const noMenu = (e) => e.preventDefault();
+
 function CaseCard({ match, on, onToggle, onOpen }) {
   const c = match.case;
   const cover = C.coverOf(c);
@@ -74,9 +77,9 @@ function CaseCard({ match, on, onToggle, onOpen }) {
       data-sfx="open"
       data-case={c.id}
     >
-      <div className="cs-cover">
+      <div className="cs-cover" onContextMenu={noMenu}>
         {cover ? (
-          <img src={C.imageURL(c, cover, 480)} alt={L(cover.alt) || title} loading="lazy" decoding="async" width="480" height="360" />
+          <img src={C.imageURL(c, cover, 480)} alt={L(cover.alt) || title} loading="lazy" decoding="async" width="480" height="360" draggable={false} />
         ) : (
           <SwatchCover c={c} />
         )}
@@ -85,7 +88,7 @@ function CaseCard({ match, on, onToggle, onOpen }) {
         {thumbs.length > 0 && (
           <span className="cs-thumbs" aria-hidden="true">
             {thumbs.map((im) => (
-              <img key={im.id} src={C.imageURL(c, im, 480)} alt="" loading="lazy" decoding="async" />
+              <img key={im.id} src={C.imageURL(c, im, 480)} alt="" loading="lazy" decoding="async" draggable={false} />
             ))}
           </span>
         )}

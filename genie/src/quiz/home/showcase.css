@@ -1,0 +1,1311 @@
+/* 案例展示（docs/showcase/SPEC.md §2）：详情的相册 · 房子档案 · 每个房间我们做了什么 · 相似的家、全屏看图、看全部的家。
+   只用 base.css 的变量（颜色守门 test/palette.test.mjs）；新的 class 都带前缀 cv-（case view）。
+   沿用 home.css 的 .cs-veil / .cs-sheet / .cs-info / .cs-acts / .cs-card / .cs-picked / .cs-note、quiz.css 的 .btn-* / .eyebrow。
+   三种宽度和 home.css 一样：手机 ≤ 560 · iPad 竖放 561–900（一栏）· iPad 横放 ≥ 901（两栏：相册在左不动、右栏自己滚）。
+   许愿模式：外壳的小坞在左下角（约 330 × 60）—— 相册的小图、看全部的页脚、全屏看图的说明都让开它。 */
+
+/* ───────── 详情：差不多满屏的一张纸 ───────── */
+/* 三层弹出画面都挂在 body 上：看全部 52 < 详情 54 < 全屏看图 58 —— 盖住员工预览（50）、蓝图的按钮条（40），
+   「还在吗？」（.prompt-veil 60）永远在最上面。 */
+.cs-veil.cv-veil {
+  z-index: 54;
+  font-family: var(--sans);
+  color: var(--text);
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.cs-sheet.cv-sheet {
+  --cv-gap: 12px;
+  grid-template-columns: minmax(0, 1.42fr) minmax(0, 1fr);
+  width: min(1280px, 100vw);
+  height: calc(100dvh - 16px);
+  max-height: none;
+}
+.cv-gal {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+  padding: 12px 14px 14px;
+  background: rgba(var(--bg-deep-rgb), 0.55);
+}
+.cv-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 44px;
+}
+.cs-x.cv-x {
+  position: relative;
+  top: auto;
+  left: auto;
+  flex: none;
+  width: 44px;
+  height: 44px;
+}
+.cs-x.cv-x:focus-visible,
+.cv-back:focus-visible,
+.cv-tab:focus-visible,
+.cv-thumb:focus-visible,
+.cv-zoom:focus-visible,
+.cv-arrow:focus-visible,
+.cv-room.is-tap:focus-visible,
+.cv-sim:focus-visible,
+.cv-fchip:focus-visible,
+.cv-fclear:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.cv-back {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 44px;
+  padding: 0 16px 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(var(--glass-rgb), 0.92);
+  box-shadow: 0 4px 12px rgba(var(--shade-rgb), 0.14);
+  font: 600 14.5px/1 var(--sans);
+  color: var(--ink);
+  cursor: pointer;
+  animation: cv-pop 0.3s var(--ease) both;
+}
+/* 照片标签：「全部 18 · 客厅 5 · 厨房 4 · … · 细节 3 · 整个家（3D）1」，放不下就左右滑 */
+.cv-tabs {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  margin: -3px;
+  padding: 3px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 22px), transparent);
+  mask-image: linear-gradient(to right, black calc(100% - 22px), transparent);
+}
+.cv-tabs::-webkit-scrollbar,
+.cv-strip::-webkit-scrollbar,
+.cv-fchips::-webkit-scrollbar {
+  display: none;
+}
+.cv-tabs:has(.cv-tab:last-child:focus-visible) {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+.cv-tab {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 44px;
+  padding: 0 15px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(var(--glass-rgb), 0.82);
+  box-shadow: inset 0 0 0 0.5px rgba(var(--text-rgb), 0.16);
+  font: 500 14.5px/1 var(--sans);
+  color: var(--text-strong);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 0.25s var(--ease),
+    color 0.25s var(--ease);
+}
+.cv-tab:last-child {
+  margin-right: 18px;
+}
+.cv-tab small {
+  font: 600 11.5px/1 var(--sans);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-soft);
+}
+.cv-tab.on {
+  background: var(--ink);
+  color: var(--card);
+  box-shadow: 0 4px 12px rgba(var(--shade-rgb), 0.16);
+}
+.cv-tab.on small {
+  color: rgba(var(--glass-rgb), 0.72);
+}
+
+/* 大图：框的大小由版面定（不跟照片走），换大图不跳；滑动 = 整条轨道跟着手指 */
+.cv-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 220px;
+  border-radius: 18px;
+  overflow: hidden;
+  background: rgba(var(--shade-rgb), 0.08);
+  touch-action: pan-y;
+  cursor: zoom-in;
+  outline: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.cv-stage:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.cv-gal.is-empty .cv-stage {
+  cursor: default;
+}
+/* 还没有照片：这个家的材质拼成一块小小的色板放在中间（色卡最多 112 px，铺满整个框会糊成一格一格） */
+.cv-gal.is-empty .cv-stage {
+  background: rgba(var(--bg-deep-rgb), 0.8);
+}
+.cv-gal.is-empty .cv-stage .cs-swatch {
+  position: absolute;
+  inset: 0;
+  width: min(56%, 340px);
+  height: auto;
+  aspect-ratio: 4 / 3;
+  margin: auto;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 6px var(--card),
+    0 18px 40px rgba(var(--shade-rgb), 0.16);
+}
+.cv-track {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
+}
+.cv-slide {
+  position: absolute;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  border-radius: inherit;
+}
+.cv-slide img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  -webkit-user-drag: none;
+  -webkit-touch-callout: none;
+  user-select: none;
+  pointer-events: none;
+}
+.cv-slide.is-contain img {
+  object-fit: contain;
+}
+/* 比例差太多、整张放进来的照片：后面垫一层模糊的小图（不是空的灰边） */
+.cv-slide-bg {
+  position: absolute;
+  inset: -36px;
+  background-position: center;
+  background-size: cover;
+  filter: blur(26px) saturate(1.05);
+  opacity: 0.5;
+}
+.cv-slide-wait {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-deep);
+}
+.cv-badge,
+.cv-count {
+  position: absolute;
+  top: 12px;
+  z-index: 1;
+  padding: 6px 10px;
+  border-radius: 999px;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+}
+.cv-badge {
+  left: 12px;
+  background: rgba(var(--glass-rgb), 0.9);
+  font: 600 11.5px/1 var(--sans);
+  letter-spacing: 0.06em;
+  color: var(--gold-ink);
+}
+.cv-count {
+  right: 12px;
+  background: rgba(var(--accent-deep-rgb), 0.5);
+  font: 600 12px/1 var(--sans);
+  font-variant-numeric: tabular-nums;
+  color: var(--cream);
+}
+.cv-zoom,
+.cv-arrow {
+  position: absolute;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(var(--glass-rgb), 0.9);
+  box-shadow: 0 4px 12px rgba(var(--shade-rgb), 0.18);
+  color: var(--ink);
+  cursor: pointer;
+}
+.cv-zoom {
+  right: 10px;
+  bottom: 10px;
+}
+.cv-arrow {
+  top: 50%;
+  margin-top: -22px;
+  display: none;
+  opacity: 0;
+  transition: opacity 0.25s var(--ease);
+}
+.cv-arrow.is-prev {
+  left: 10px;
+}
+.cv-arrow.is-next {
+  right: 10px;
+}
+/* 有鼠标的设备：两边的箭头（停在照片上才出来）；iPad / 手机用滑的 */
+@media (hover: hover) and (pointer: fine) {
+  .cv-arrow {
+    display: grid;
+  }
+  .cv-stage:hover .cv-arrow,
+  .cv-arrow:focus-visible {
+    opacity: 1;
+  }
+}
+.cv-cap {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  flex: none;
+  min-height: calc(2 * 1.42em);
+  margin: 0;
+  padding: 0 4px;
+  font: 400 13.5px/1.42 var(--sans);
+  color: var(--text);
+}
+.cv-cap b {
+  margin-right: 8px;
+  font-weight: 600;
+  color: var(--gold-ink);
+}
+.cv-strip {
+  display: flex;
+  flex: none;
+  gap: 8px;
+  margin: -3px;
+  padding: 3px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+.cv-thumb {
+  position: relative;
+  flex: none;
+  width: 72px;
+  height: 54px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(var(--shade-rgb), 0.08);
+  opacity: 0.74;
+  cursor: pointer;
+  transition:
+    opacity 0.2s var(--ease),
+    box-shadow 0.2s var(--ease);
+}
+.cv-thumb img,
+.cv-thumb span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  -webkit-user-drag: none;
+  -webkit-touch-callout: none;
+}
+.cv-thumb.on {
+  opacity: 1;
+  box-shadow: 0 0 0 2.5px var(--gold);
+}
+/* 细节特写：右上角一个金色的小点 */
+.cv-thumb i {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--gold-l);
+  box-shadow: 0 0 0 1.5px rgba(var(--shade-rgb), 0.35);
+}
+
+/* ───────── 右栏：房子档案 · 每个房间 · 相似的家 ───────── */
+.cv-sheet .cs-info {
+  min-width: 0;
+  overscroll-behavior: contain;
+}
+.cv-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+.cv-facts > div {
+  padding: 8px 11px 9px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+}
+.cv-facts dt {
+  font: 500 11px/1.25 var(--sans);
+  letter-spacing: 0.02em;
+  color: var(--text-soft);
+}
+.cv-facts dd {
+  margin: 3px 0 0;
+  font: 600 13.5px/1.3 var(--sans);
+  color: var(--text-strong);
+}
+.cv-rooms {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cv-room {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 64px;
+  margin: 0;
+  padding: 8px 10px 8px 8px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+.cv-room.is-tap {
+  cursor: pointer;
+  transition:
+    box-shadow 0.25s var(--ease),
+    transform 0.2s var(--ease);
+}
+@media (hover: hover) {
+  .cv-room.is-tap:hover {
+    box-shadow:
+      inset 0 0 0 0.5px rgba(var(--gold-rgb), 0.6),
+      0 6px 16px rgba(var(--shade-rgb), 0.08);
+  }
+}
+.cv-pic {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  background: var(--bg-deep);
+}
+.cv-pic img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  -webkit-user-drag: none;
+  -webkit-touch-callout: none;
+}
+.cv-pic .cs-swatch {
+  position: absolute;
+  inset: 0;
+}
+.cv-room-pic {
+  align-self: start;
+  width: 64px;
+  height: 48px;
+  border-radius: 10px;
+}
+.cv-room-pic.is-none .cv-room-sw {
+  display: block;
+  width: 100%;
+  height: 100%;
+  opacity: 0.85;
+}
+.cv-room-txt {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.cv-room-txt b {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font: 600 14.5px/1.25 var(--sans);
+  color: var(--text-strong);
+}
+.cv-room-txt b small {
+  font: 500 11.5px/1 var(--sans);
+  color: var(--text-soft);
+}
+.cv-room-firm {
+  font: 400 12.5px/1.45 var(--sans);
+  color: var(--text);
+}
+.cv-room .cs-ours {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(var(--gold-rgb), 0.16);
+  font: 600 10.5px/1.45 var(--sans);
+  font-style: normal;
+  color: var(--gold-d);
+  vertical-align: 1px;
+}
+.cv-room-boards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cv-board {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 3px 10px 3px 3px;
+  border-radius: 999px;
+  background: rgba(var(--bg-deep-rgb), 0.7);
+  font: 500 12px/1.2 var(--sans);
+  color: var(--text);
+}
+.cv-board .cv-board-sw {
+  display: block;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 0.5px rgba(var(--text-rgb), 0.2);
+}
+.cv-room em {
+  font: 400 12px/1.45 var(--sans);
+  font-style: normal;
+  color: var(--text-soft);
+}
+.cv-room-go {
+  color: var(--text-soft);
+}
+.cv-sims {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.cv-sim {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 0 0 11px;
+  border-radius: 16px;
+  background: var(--card);
+  box-shadow:
+    inset 0 0 0 0.5px rgba(var(--gold-rgb), 0.4),
+    0 6px 16px rgba(var(--shade-rgb), 0.07);
+  overflow: hidden;
+  cursor: pointer;
+  transition: box-shadow 0.3s var(--ease);
+}
+.cv-sim.on {
+  box-shadow:
+    inset 0 0 0 2px var(--gold),
+    0 10px 24px rgba(var(--gold-d-rgb), 0.16);
+}
+.cv-sim-cover {
+  position: relative;
+  display: block;
+  aspect-ratio: 16 / 10;
+  background: var(--bg-deep);
+}
+.cv-sim-cover .cv-pic {
+  position: absolute;
+  inset: 0;
+}
+.cv-sim .cs-render {
+  left: 8px;
+  bottom: 8px;
+}
+.cv-sim > b {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  margin: 7px 11px 0;
+  font: 600 14.5px/1.3 var(--zh-serif);
+  color: var(--text-strong);
+}
+.cv-sim > small {
+  margin: 0 11px;
+  font: 400 11.5px/1.35 var(--sans);
+  color: var(--text-soft);
+}
+.cv-sim-pick {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 12px 0 8px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(var(--glass-rgb), 0.92);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 3px 10px rgba(var(--shade-rgb), 0.16);
+  font: 600 12px/1 var(--sans);
+  color: var(--ink);
+  cursor: pointer;
+}
+/* 手指点得到的范围 ≥ 44 px（看起来还是小小的一颗） */
+.cv-sim-pick::after {
+  content: '';
+  position: absolute;
+  inset: -6px -4px;
+}
+.cv-sim-pick i {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--ink-soft);
+  font-style: normal;
+}
+.cv-sim.on .cv-sim-pick {
+  background: var(--gold-btn);
+}
+.cv-sim.on .cv-sim-pick i {
+  background: var(--ink);
+  box-shadow: none;
+  color: var(--gold-l);
+}
+/* 「最多三个哦」：贴在「选这个案例」旁边 */
+.cv-toast {
+  align-self: center;
+  font: 600 13px/1.3 var(--sans);
+  color: var(--gold-ink);
+  opacity: 0;
+  transition: opacity 0.2s var(--ease);
+}
+.cv-toast.is-on {
+  opacity: 1;
+}
+
+/* 两栏（iPad 横放 / 电脑）：整张纸一屏高，左边相册不动，右栏自己滚（「选这个案例」贴在右栏底下，home.css） */
+@media (min-width: 901px) {
+  /* 右栏自己滚：贴底的按钮条要贴到纸的最底下（滚动框的下内边距会把 sticky 抬高，后面的字从按钮下面露出来） */
+  .cv-sheet .cs-info {
+    box-sizing: border-box;
+    height: 100%;
+    max-height: none;
+    padding-bottom: 0;
+  }
+  .cv-sheet .cs-acts {
+    margin-bottom: 0;
+  }
+  /* 许愿模式：小图那一排抬到小坞上面 */
+  .is-wish .cv-sheet .cv-gal {
+    padding-bottom: calc(74px + env(safe-area-inset-bottom, 0px));
+  }
+}
+/* 一栏（iPad 竖放、手机）：相册在上面、整张纸一起滚；✕ 和照片标签那一排一直贴在最上面 */
+@media (max-width: 900px) {
+  .cs-sheet.cv-sheet {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+    max-height: calc(100dvh - 12px);
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+  .cv-sheet .cv-gal {
+    display: contents;
+  }
+  .cv-sheet .cv-bar {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    padding: 12px 14px 10px;
+    background: var(--surface);
+    box-shadow: 0 0.5px 0 var(--line-soft);
+  }
+  .cv-sheet .cv-stage {
+    flex: none;
+    min-height: 0;
+    aspect-ratio: 4 / 3;
+    margin: 2px 14px 0;
+  }
+  .cv-sheet .cv-cap {
+    min-height: 0;
+    margin: 10px 16px 0;
+    padding: 0;
+  }
+  .cv-sheet .cv-cap:empty {
+    display: none;
+  }
+  .cv-sheet .cv-strip {
+    margin: 8px 11px 0;
+  }
+  .cv-sheet .cs-info {
+    padding-top: 18px;
+  }
+  .cv-sheet .cv-gal.is-empty .cv-stage {
+    aspect-ratio: 16 / 10;
+  }
+}
+/* 许愿模式、一栏：贴底的「选这个案例 / 下一个」靠右放（左下角是外壳的小坞） */
+@media (min-width: 561px) and (max-width: 900px) {
+  .cv-veil.is-wish .cs-acts {
+    justify-content: flex-end;
+  }
+}
+@media (max-width: 560px) {
+  .cv-sheet .cv-bar {
+    padding: 10px 12px 8px;
+  }
+  .cv-sheet .cv-stage {
+    margin: 2px 12px 0;
+    border-radius: 14px;
+  }
+  .cv-tab {
+    padding: 0 13px;
+    font-size: 14px;
+  }
+  .cv-thumb {
+    width: 64px;
+    height: 48px;
+  }
+  .cv-sims {
+    gap: 8px;
+  }
+  .cv-sim > b {
+    font-size: 13.5px;
+  }
+  .cv-room {
+    grid-template-columns: 56px minmax(0, 1fr) auto;
+    gap: 10px;
+  }
+  .cv-room-pic {
+    width: 56px;
+    height: 42px;
+  }
+}
+
+/* ───────── 全屏看图：黑底，照片自己说话 ───────── */
+.cv-lb {
+  position: fixed;
+  inset: 0;
+  z-index: 58;
+  overflow: hidden;
+  background: var(--studio-bg);
+  color: var(--cream);
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: contain;
+  animation: cv-fade 0.22s var(--ease) both;
+}
+.cv-lb.is-closing {
+  animation: cv-fade-out 0.18s var(--ease) both;
+}
+.cv-lb-stage {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+  cursor: zoom-in;
+}
+.cv-lb.is-zoomed .cv-lb-stage {
+  cursor: grab;
+}
+.cv-lb-track {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
+}
+.cv-lb-slide {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.cv-lb-zoom {
+  transform-origin: center;
+  will-change: transform;
+}
+.cv-lb-zoom img,
+.cv-lb-wait {
+  display: block;
+  max-width: none;
+  -webkit-user-drag: none;
+  -webkit-touch-callout: none;
+}
+.cv-lb-wait {
+  background: rgba(var(--glass-rgb), 0.06);
+}
+.cv-lb-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: max(12px, env(safe-area-inset-top)) 14px 22px;
+  pointer-events: none;
+  /* 放大以后照片可以一直到顶：上面垫一层淡淡的暗色，✕ 和计数在亮的照片上也看得清 */
+  background: linear-gradient(to bottom, rgba(var(--shade-rgb), 0.42), rgba(var(--shade-rgb), 0));
+  transition: opacity 0.25s var(--ease);
+}
+.cv-lb-x,
+.cv-lb-zbtn,
+.cv-lb-arrow {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(var(--shade-rgb), 0.46);
+  box-shadow: inset 0 0 0 0.5px rgba(var(--glass-rgb), 0.22);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  color: var(--cream);
+  cursor: pointer;
+  pointer-events: auto;
+  transition:
+    opacity 0.25s var(--ease),
+    background-color 0.25s var(--ease);
+}
+.cv-lb-x:focus-visible,
+.cv-lb-zbtn:focus-visible,
+.cv-lb-arrow:focus-visible {
+  outline: 2px solid var(--gold-l);
+  outline-offset: 2px;
+}
+@media (hover: hover) {
+  .cv-lb-x:hover,
+  .cv-lb-zbtn:hover,
+  .cv-lb-arrow:hover:not(:disabled) {
+    background: rgba(var(--shade-rgb), 0.66);
+  }
+}
+.cv-lb-count {
+  font: 600 13.5px/1 var(--sans);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  color: rgba(var(--glass-rgb), 0.92);
+  text-shadow: 0 1px 3px rgba(var(--shade-rgb), 0.6);
+}
+.cv-lb-arrow {
+  position: absolute;
+  top: 50%;
+  width: 52px;
+  height: 52px;
+  margin-top: -26px;
+}
+.cv-lb-arrow.is-prev {
+  left: 16px;
+}
+.cv-lb-arrow.is-next {
+  right: 16px;
+}
+.cv-lb-arrow:disabled {
+  opacity: 0.22;
+  cursor: default;
+}
+.cv-lb-foot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 26px 24px max(18px, env(safe-area-inset-bottom));
+  text-align: center;
+  pointer-events: none;
+  background: linear-gradient(to top, rgba(var(--shade-rgb), 0.55), rgba(var(--shade-rgb), 0));
+  transition: opacity 0.25s var(--ease);
+}
+.cv-lb-foot b {
+  display: block;
+  font: 600 12px/1.2 var(--sans);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gold-l);
+}
+.cv-lb-foot span {
+  display: block;
+  max-width: 44em;
+  margin: 5px auto 0;
+  font: 400 14.5px/1.5 var(--sans);
+  color: var(--cream);
+  text-wrap: pretty;
+}
+.cv-lb-hint {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  background: rgba(var(--glass-rgb), 0.12);
+  font: 500 12px/1.2 var(--sans);
+  font-style: normal;
+  color: rgba(var(--glass-rgb), 0.82);
+  animation: cv-hint 2.6s var(--ease) both;
+}
+/* 点一下照片：上下的字和按钮收起来（再点一下回来） */
+.cv-lb.is-bare .cv-lb-top,
+.cv-lb.is-bare .cv-lb-top > *,
+.cv-lb.is-bare .cv-lb-arrow,
+.cv-lb.is-bare .cv-lb-foot {
+  opacity: 0;
+  pointer-events: none;
+}
+@media (min-width: 561px) {
+  .cv-lb.is-wish .cv-lb-foot {
+    padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* ───────── 看全部的家：满屏的一层 ───────── */
+.cv-br {
+  position: fixed;
+  inset: 0;
+  z-index: 52;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  animation: cv-br-in 0.36s var(--spring-soft, var(--ease)) both;
+}
+.cv-br.is-closing {
+  animation: cv-br-out 0.22s var(--ease) both;
+}
+.cv-br-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+.cv-br-head {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: max(14px, env(safe-area-inset-top)) 24px 12px;
+  background: rgba(var(--bg-rgb), 0.9);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  backdrop-filter: blur(16px) saturate(140%);
+  box-shadow: 0 0.5px 0 var(--line);
+}
+.cv-br-head > div {
+  flex: 1;
+  min-width: 0;
+}
+.cv-br-head .eyebrow {
+  margin: 0 0 3px;
+  font-size: 11.5px;
+  text-align: left;
+}
+.cv-br-head h2 {
+  margin: 0;
+  font: 600 25px/1.15 var(--zh-serif);
+  color: var(--text-strong);
+}
+.cv-br-n {
+  margin: 0;
+  font: 500 14px/1.2 var(--sans);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+.cv-br-body {
+  box-sizing: border-box;
+  display: grid;
+  gap: 16px;
+  width: min(1360px, 100%);
+  margin: 0 auto;
+  padding: 16px 24px calc(130px + env(safe-area-inset-bottom, 0px));
+}
+.cv-br.is-read .cv-br-body {
+  padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px));
+}
+.cv-br-filters {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+}
+.cv-fgroup {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+.cv-flabel {
+  font: 600 11.5px/1 var(--sans);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold-ink);
+}
+/* 竖放 / 手机：每一组一排，放不下就左右滑（滑到屏幕边） */
+.cv-fchips {
+  display: flex;
+  gap: 7px;
+  margin: -3px -24px;
+  padding: 3px 24px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+.cv-fchip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 0 15px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(var(--glass-rgb), 0.92);
+  box-shadow: inset 0 0 0 1px rgba(var(--text-rgb), 0.12);
+  font: 500 14.5px/1.15 var(--sans);
+  color: var(--text-strong);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 0.25s var(--ease),
+    color 0.25s var(--ease),
+    box-shadow 0.25s var(--ease);
+}
+.cv-fchip small {
+  font: 600 11.5px/1 var(--sans);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-soft);
+}
+.cv-fchip.on {
+  background: var(--ink);
+  color: var(--card);
+  box-shadow: 0 4px 12px rgba(var(--shade-rgb), 0.16);
+}
+.cv-fchip.on small {
+  color: rgba(var(--glass-rgb), 0.72);
+}
+.cv-fclear {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  margin: -8px 0;
+  padding: 0 6px;
+  border: 0;
+  background: none;
+  font: 600 14px/1 var(--sans);
+  color: var(--accent);
+  cursor: pointer;
+}
+.cv-br-main {
+  min-width: 0;
+}
+.cv-br-lead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 14px;
+  font: 400 14px/1.4 var(--sans);
+  color: var(--text-soft);
+}
+.cv-br-lead .cs-excl {
+  margin: 0;
+}
+.cv-br-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(252px, 1fr));
+  gap: 16px;
+}
+/* 卡片窄一点（三、四栏）：色点放到地点下面、标题小一号（和 home.css 四栏时一样） */
+.cv-br-grid .cs-body {
+  grid-template-columns: 1fr;
+}
+.cv-br-grid .cs-dots {
+  grid-column: 1;
+  grid-row: auto;
+  margin-top: 6px;
+}
+.cv-br-grid .cs-body h3 {
+  font-size: 17.5px;
+}
+.cv-br-grid .cs-why {
+  font-size: 13px;
+}
+.cv-br-none {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  padding: 48px 0;
+}
+.cv-br-none p {
+  margin: 0;
+  font: 500 16px/1.4 var(--sans);
+  color: var(--text-soft);
+}
+.cv-br-foot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 22px 20px calc(14px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(rgba(var(--bg-rgb), 0), rgba(var(--bg-rgb), 0.95) 34%);
+  pointer-events: none;
+}
+.cv-br-foot > * {
+  pointer-events: auto;
+}
+.cv-br-foot .cs-picked {
+  margin-right: 0;
+}
+/* 两栏以上（iPad 横放 / 电脑）：筛选在左边一直看得到，案例在右边 */
+@media (min-width: 1000px) {
+  .cv-br-body {
+    grid-template-columns: 232px minmax(0, 1fr);
+    align-items: start;
+    gap: 28px;
+    padding-top: 20px;
+  }
+  .cv-br-filters {
+    position: sticky;
+    top: 92px;
+    max-height: calc(100dvh - 92px - 104px);
+    overflow: auto;
+    gap: 18px;
+    padding: 2px 4px 24px 2px;
+    scrollbar-width: none;
+  }
+  .cv-br-filters::-webkit-scrollbar {
+    display: none;
+  }
+  .cv-fchips {
+    flex-wrap: wrap;
+    margin: 0;
+    padding: 0;
+    overflow: visible;
+  }
+  .cv-fchip {
+    min-height: 44px;
+    padding: 0 13px;
+    font-size: 14px;
+  }
+}
+/* 许愿模式：页脚靠右（左下角是外壳的小坞） */
+@media (min-width: 561px) {
+  .cv-br.is-wish .cv-br-foot {
+    justify-content: flex-end;
+    padding-right: 28px;
+  }
+}
+@media (max-width: 560px) {
+  .cv-br-head {
+    gap: 10px;
+    padding: max(10px, env(safe-area-inset-top)) 14px 10px;
+  }
+  .cv-br-head h2 {
+    font-size: 21px;
+  }
+  .cv-br-n {
+    font-size: 12.5px;
+  }
+  .cv-br-body {
+    gap: 12px;
+    padding: 12px 14px calc(120px + env(safe-area-inset-bottom, 0px));
+  }
+  .cv-fchips {
+    margin: -3px -14px;
+    padding: 3px 14px;
+  }
+  .cv-fchip {
+    padding: 0 13px;
+    font-size: 14px;
+  }
+  .cv-br-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .cv-br-foot {
+    gap: 10px;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  .cv-br-foot .btn {
+    padding: 0 20px;
+  }
+}
+
+/* 许愿模式：案例卡和页脚小头像的照片也不给长按存图（卡片在案例那一步、蓝图、看全部都用） */
+.cs-cover img,
+.cs-picked img {
+  -webkit-touch-callout: none;
+  -webkit-user-drag: none;
+}
+
+/* 案例那一步 / 蓝图：「看全部 {0} 个家」「更多案例」 */
+.cv-all {
+  gap: 6px;
+}
+.cv-all small {
+  font: 500 13px/1 var(--sans);
+  color: var(--text-soft);
+}
+.cv-bp-more {
+  margin: 0;
+}
+@media print {
+  .cv-bp-more {
+    display: none;
+  }
+}
+
+@keyframes cv-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes cv-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes cv-pop {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+}
+@keyframes cv-br-in {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+}
+@keyframes cv-br-out {
+  to {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+}
+@keyframes cv-hint {
+  0%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cv-br,
+  .cv-br.is-closing,
+  .cv-lb,
+  .cv-lb.is-closing,
+  .cv-back,
+  .cv-lb-hint {
+    animation: none;
+  }
+  .cv-tab,
+  .cv-thumb,
+  .cv-fchip,
+  .cv-arrow,
+  .cv-room.is-tap,
+  .cv-sim,
+  .cv-toast,
+  .cv-lb-foot,
+  .cv-lb-x,
+  .cv-lb-zbtn,
+  .cv-lb-arrow {
+    transition: none;
+  }
+}
+
+/* 案例那一步的标题下面：「已经帮你避开…」+「看全部 {0} 个家 ›」（一进来就看得到，不被页脚挡住） */
+.cv-head-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin-top: 12px;
+}
+.cv-head-row .cs-excl {
+  margin: 0;
+}
+.cv-all-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 0 12px 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(var(--glass-rgb), 0.9);
+  box-shadow: inset 0 0 0 1px rgba(var(--gold-rgb), 0.5);
+  font: 600 14.5px/1 var(--sans);
+  color: var(--gold-ink);
+  cursor: pointer;
+  transition:
+    background-color 0.25s var(--ease),
+    box-shadow 0.25s var(--ease);
+}
+.cv-all-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+@media (hover: hover) {
+  .cv-all-link:hover {
+    background: var(--card);
+    box-shadow:
+      inset 0 0 0 1px var(--gold),
+      0 4px 12px rgba(var(--gold-d-rgb), 0.12);
+  }
+}

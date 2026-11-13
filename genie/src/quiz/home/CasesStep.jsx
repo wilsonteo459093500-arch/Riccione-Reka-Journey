@@ -4,9 +4,12 @@
 //   · 挑一到三个 → onDone([案例…])；「都不太像」→ 下一组 4 个（rest）；第二次（或者没有下一组）→「那就先用你的牌」→ onDone([])；
 //   · 点卡片（不是「选这个」）→ 详情；第 4 个 → 摇一摇 +「最多三个哦」；
 //   · 一个案例都没有（案例库还是空的）：不是预览就直接 onDone([])（用牌的材质往下走）。
+//   · 「看全部 {0} 个家」→ CaseBrowser（懒载入的一层：筛选 + 全部的家）；详情里有「相似的家」。
+//     选 / 取消 不管从哪里按（卡片、详情、相似的家、看全部）都走同一个 toggle：最多三个、同一句「最多三个哦」；关掉那一层也不会丢。
 // 隐私：理由只用客人看得到的事实（reasonText）；雷区提示只说「已经帮你避开用了『X』的家」。
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronRight } from 'lucide-react';
 import Pangie from '../../shared/Pangie.jsx';
 import fx from '../../shared/fx.js';
 import { voice } from '../../shared/voice.js';
@@ -15,18 +18,22 @@ import { DREAMER_BY_CODE } from '../../shared/dreamers.js';
 import * as C from '../../shared/cases.js';
 import CaseCard from './CaseCard.jsx';
 import CaseDetail, { useCaseBoards } from './CaseDetail.jsx';
+import { useCardCovers } from './CaseGallery.jsx';
 import { phrased } from '../typo.jsx';
 import { Odo } from '../ui.jsx';
 import './home.css';
 
 const MAX = 3;
 const listSep = () => (isEn() ? ', ' : '、');
+// 看全部的家：点了才下载（案例那一步自己这一块保持很小）
+const CaseBrowser = lazy(() => import('./CaseBrowser.jsx'));
 
 export default function CasesStep({ profile, cases: given, preview = false, onDone, initial = [] }) {
   const [list, setList] = useState(given || null);
   const [round, setRound] = useState(0);
   const [chosen, setChosen] = useState(() => initial.filter(Boolean));
   const [detail, setDetail] = useState(null);
+  const [browse, setBrowse] = useState(false);
   const [toast, setToast] = useState('');
   const [leaving, setLeaving] = useState(false);
   const footRef = useRef(null);
@@ -74,24 +81,17 @@ export default function CasesStep({ profile, cases: given, preview = false, onDo
 
   useEffect(() => () => clearTimeout(toastT.current), []);
 
-  // 设备上的照片（员工在 iPad 上加的）：只读封面那张 480；用完放掉
-  const [urls, setUrls] = useState({});
-  useEffect(() => {
-    const need = shown.map((m) => m.case).filter((c) => (c.images || []).some((im) => im.device));
-    if (!need.length) return undefined;
-    let alive = true;
-    const got = [];
-    Promise.all(need.map((c) => C.resolveImages(c, { thumbsOnly: true }).catch(() => null))).then((rs) => {
-      for (const r of rs) if (r) got.push(r);
-      if (!alive) return got.forEach(C.releaseImages);
-      setUrls((u) => ({ ...u, ...Object.fromEntries(got.map((r) => [r.id, r])) }));
-    });
-    return () => {
-      alive = false;
-      got.forEach(C.releaseImages);
-    };
-  }, [shown]);
+  // 设备上的照片（员工在 iPad 上加的）：卡片只读封面 + 两张小图的 480；页脚的小头像（从「看全部」选的家也要有）只读封面；用完放掉
+  const urls = useCardCovers(shown.map((m) => m.case));
+  const pickUrls = useCardCovers(chosen, { thumbs: 0 });
   const withUrls = (m) => (urls[m.case.id] ? { ...m, case: urls[m.case.id] } : m);
+  const thumbOf = (c) => {
+    const r = urls[c.id] || pickUrls[c.id] || c;
+    const cv = C.coverOf(r);
+    return cv ? C.imageURL(r, cv, 480) : '';
+  };
+  // 「看全部 {0} 个家」：这位客人能看到的家一共几个（雷区一定要避开的不算）
+  const total = useMemo(() => (list ? C.browseCases(profile, list).total : 0), [profile, list, bv]);
 
   const flash = (msg) => {
     setToast(msg);
@@ -100,23 +100,25 @@ export default function CasesStep({ profile, cases: given, preview = false, onDo
   };
 
   const isOn = (c) => chosen.some((x) => x.id === c.id);
+  /** 选 / 取消（卡片、详情、相似的家、看全部都用这一个）→ 'on' | 'off' | 'full'（已经三个了：摇一摇 +「最多三个哦」） */
   const toggle = (c, e) => {
     const btn = e?.currentTarget;
     if (isOn(c)) {
       setChosen((cur) => cur.filter((x) => x.id !== c.id));
-      return;
+      return 'off';
     }
     if (chosen.length >= MAX) {
       if (btn) fx.nope(btn);
       flash(t('最多三个哦'));
-      return;
+      return 'full';
     }
     setChosen((cur) => [...cur, c]);
-    const card = btn?.closest('.cs-card') || btn;
+    const card = btn?.closest('.cs-card, .cv-sim') || btn;
     if (card) fx.scan(card, { sound: null, duration: 380 });
-    // 一粒光从卡片飞到页脚的小头像
-    const dock = footRef.current?.querySelector('.cs-picked');
+    // 一粒光从卡片飞到页脚的小头像（「看全部」开着 = 那一层自己的页脚；详情开着 = 页脚在纸后面，不飞）
+    const dock = document.querySelector('.cv-veil') ? null : (document.querySelector('.cv-br:not(.is-read)') || footRef.current)?.querySelector('.cs-picked');
     if (card && dock && !fx.motion.reduced) fx.mote(card, dock, { delay: 120 });
+    return 'on';
   };
 
   const finish = (e, picked) => {
@@ -164,7 +166,17 @@ export default function CasesStep({ profile, cases: given, preview = false, onDo
           <p className="eyebrow">{eyebrow}</p>
           <h2 className="h-title">{phrased(title)}</h2>
           <p className="lead">{phrased(lead, { sentences: false })}</p>
-          {excludedTags.length > 0 && <p className="cs-excl">{t('已经帮你避开用了「{0}」的家', [excludedTags.slice(0, 3).join(listSep())])}</p>}
+          {(excludedTags.length > 0 || total > n) && (
+            <div className="cv-head-row">
+              {excludedTags.length > 0 && <p className="cs-excl">{t('已经帮你避开用了「{0}」的家', [excludedTags.slice(0, 3).join(listSep())])}</p>}
+              {total > n && (
+                <button type="button" className="cv-all-link" onClick={() => setBrowse(true)} data-sfx="open">
+                  <span>{t('看全部 {0} 个家', [total])}</span>
+                  <ChevronRight size={16} strokeWidth={2.2} aria-hidden="true" />
+                </button>
+              )}
+            </div>
+          )}
         </div>
         {!preview && (
           <span className="cs-mini" aria-hidden="true">
@@ -182,11 +194,19 @@ export default function CasesStep({ profile, cases: given, preview = false, onDo
           })}
         </div>
       )}
+      {total > n && (
+        <p className="cs-more">
+          <button type="button" className="btn-line small cv-all" onClick={() => setBrowse(true)} data-sfx="open">
+            <span>{t('看全部 {0} 个家', [total])}</span>
+            <ChevronRight size={17} strokeWidth={2} aria-hidden="true" />
+          </button>
+        </p>
+      )}
       <div className={`cs-foot ${preview ? 'is-inline' : ''}`} ref={footRef}>
         <span className="cs-picked" aria-hidden="true">
           {chosen.map((c) => {
-            const cv = C.coverOf(urls[c.id] || c);
-            return cv ? <img key={c.id} src={C.imageURL(urls[c.id] || c, cv, 480)} alt="" /> : <i key={c.id} />;
+            const u = thumbOf(c);
+            return u ? <img key={c.id} src={u} alt="" draggable={false} /> : <i key={c.id} />;
           })}
         </span>
         <button type="button" className="btn btn-primary" disabled={!chosen.length || leaving} onClick={(e) => finish(e, chosen)} data-sfx="confirm">
@@ -202,13 +222,22 @@ export default function CasesStep({ profile, cases: given, preview = false, onDo
       {detail && (
         <CaseDetail
           key={detail.case.id}
-          match={withUrls(shown.find((m) => m.case.id === detail.case.id) || detail)}
+          match={shown.find((m) => m.case.id === detail.case.id) || detail}
           on={isOn(detail.case)}
           hasNext={shown.length > 1}
           onToggle={(e) => toggle(detail.case, e)}
           onNext={() => setDetail(shown[(detailIdx + 1) % shown.length] || null)}
           onClose={() => setDetail(null)}
+          all={list}
+          profile={profile}
+          isOn={isOn}
+          onToggleCase={toggle}
         />
+      )}
+      {browse && (
+        <Suspense fallback={null}>
+          <CaseBrowser profile={profile} cases={list} isOn={isOn} onToggleCase={toggle} chosen={chosen} pickedThumb={thumbOf} onClose={() => setBrowse(false)} />
+        </Suspense>
       )}
     </div>
   );
