@@ -346,16 +346,37 @@ export function clearAdjust(project, slideId, pageIndex = null) {
 }
 
 /**
- * 列表（notes / materials…）删了、加了、换了顺序：按序号记的调整（'notes.1.text'）会对到别的条目上 → 丢掉这个列表的调整
+ * 丢掉某个列表（notes / materials…）按序号记的调整（'notes.1.text'、'#2:materials.0'）—— 序号对到别的条目上就不能再用
  * @param {object} slide
  * @param {string} listName
+ * @param {(index:number) => boolean} [keep]  给了 = 这些序号的留着（条目没挪位置）
  * @returns {object} 没有要丢的 = 原样返回同一个对象
  */
-export function dropListAdjust(slide, listName) {
+export function dropListAdjust(slide, listName, keep = null) {
   if (!slide?.adjust || !listName) return slide;
-  const re = new RegExp(`^(#\\d+:)?${listName}\\.\\d+(\\.|$)`);
-  const kept = Object.fromEntries(Object.entries(slide.adjust).filter(([k]) => !re.test(k)));
+  const re = new RegExp(`^(?:#\\d+:)?${listName}\\.(\\d+)(?:\\.|$)`);
+  const kept = Object.fromEntries(
+    Object.entries(slide.adjust).filter(([k]) => {
+      const m = re.exec(k);
+      return !m || (!!keep && keep(Number(m[1])));
+    })
+  );
   if (Object.keys(kept).length === Object.keys(slide.adjust).length) return slide;
   const { adjust: _old, ...rest } = slide;
   return Object.keys(kept).length ? { ...rest, adjust: kept } : rest;
+}
+
+/**
+ * 列表从 prev 改成了 next：只丢掉「序号现在对到了别的条目（或没有条目了）」的调整。
+ *   同一位置还是同一个对象 = 没挪；条数没变、只有一条换了新对象 = 改了那一条的字，也算没挪；
+ *   其余情况（中间删了、换了顺序）：第一处不一样的位置起全丢。在末尾加一条、删最后一条，前面的都留着。
+ */
+export function pruneListAdjust(slide, listName, prev, next) {
+  if (!slide?.adjust) return slide;
+  if (!Array.isArray(prev) || !Array.isArray(next)) return dropListAdjust(slide, listName);
+  const n = Math.min(prev.length, next.length);
+  const diff = [];
+  for (let i = 0; i < n; i += 1) if (next[i] !== prev[i]) diff.push(i);
+  const stable = !diff.length || (diff.length === 1 && next.length === prev.length) ? n : diff[0];
+  return dropListAdjust(slide, listName, (i) => i < stable);
 }

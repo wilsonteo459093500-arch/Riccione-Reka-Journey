@@ -6,6 +6,7 @@ import { analyzeImage } from './gemini.js';
 import { toInlineImage } from '../store/assets.js';
 import { findFloor, findMaterial } from '../engine/model.js';
 import { buildPolishPrompt } from './prompts.js';
+import { dropListAdjust } from '../engine/adjust.js';
 
 export const MAX_PER_GROUP = 6; // 每次请求最多几张图
 export const SUBTITLE_MAX = 12; // 视角名最长字数（含「 · 」）
@@ -383,7 +384,9 @@ export function applyPolishPatches(project, patches) {
     slides: (project.slides || []).map((s) => {
       const patch = map.get(s.id);
       if (!patch) return s;
-      const next = { ...s };
+      // 说明的条数变了：按序号记的手动调整（engine/adjust.js）不再对得上，丢掉；条数没变 = 同一条改了写法，留着
+      const reshaped = Array.isArray(patch.notes) && patch.notes.length !== (s.notes || []).length;
+      const next = { ...(reshaped ? dropListAdjust(s, 'notes') : s) };
       if (typeof patch.subtitle === 'string') next.subtitle = patch.subtitle;
       if (typeof patch.roomEn === 'string') next.roomEn = patch.roomEn;
       if (Array.isArray(patch.notes)) next.notes = patch.notes.map((n) => ({ label: n.label || '', text: n.text || '' }));

@@ -4,9 +4,11 @@ import JSZip from 'jszip';
 import { test } from './harness.mjs';
 import {
   groupsOf, applyAdjust, adjustKey, viewCrop, clampView, wholeZoom, autoView, clampBox, cleanBlockAdjust, setAdjust, clearAdjust,
-  photoBox, cleanPhotoAdjust, clampBlock, dropListAdjust, ADJUST_LIMITS,
+  photoBox, cleanPhotoAdjust, clampBlock, dropListAdjust, pruneListAdjust, ADJUST_LIMITS,
 } from '../src/engine/adjust.js';
-import { updateViewList, splitView } from '../src/components/editor/ops.js';
+import { updateViewList, splitView, assignMaterial, copyMaterialsToRoom, removeMissingMaterials } from '../src/components/editor/ops.js';
+import { deleteMaterials } from '../src/lib/materials.js';
+import { applyPolishPatches } from '../src/ai/polish.js';
 import { collectAssetSrcs } from '../src/store/assets.js';
 import { placeImage } from '../src/engine/spec.js';
 import { newProject, assembleDeck } from '../src/engine/model.js';
@@ -350,4 +352,41 @@ test('列表删了一条 / 换了顺序 / 拆成两页：按序号记的调整�
 test('adjust 里的 src 只是记号，不算素材引用：换图以后旧图不会还被备份带着走', () => {
   const p = { slides: [{ id: 'v', image: 'asset:new', adjust: { image: { view: 'whole', src: 'asset:old' } } }] };
   assert.deepEqual([...collectAssetSrcs(p)], ['asset:new']);
+});
+
+test('末尾加一条 / 删最后一条：前面条目的调整留着；中间删了：从那一条起丢掉', () => {
+  const adj = { 'notes.0.text': { dx: 1, dy: 0, k: 1 }, 'notes.1.text': { dx: 2, dy: 0, k: 1 }, 'notes.2.label': { dx: 3, dy: 0, k: 1 }, 'materials.1': { dx: 4, dy: 0, k: 1 } };
+  const base = { slides: [{ id: 'v', kind: 'view', notes: [{ text: 'A' }, { text: 'B' }, { text: 'C' }], materials: [{ materialId: 'a' }, { materialId: 'b' }], adjust: adj }] };
+  const keys = (p) => Object.keys(p.slides[0].adjust || {});
+  assert.deepEqual(keys(updateViewList(base, 'v', 'notes', (l) => [...l, { text: 'D' }])), Object.keys(adj), '末尾加一条：都留着');
+  assert.deepEqual(keys(updateViewList(base, 'v', 'notes', (l) => l.slice(0, 2))), ['notes.0.text', 'notes.1.text', 'materials.1'], '删最后一条：只丢它的');
+  assert.deepEqual(keys(updateViewList(base, 'v', 'notes', (l) => [l[0], l[2]])), ['notes.0.text', 'materials.1'], '删中间一条：它和后面的都丢');
+  assert.deepEqual(keys(updateViewList(base, 'v', 'notes', (l) => [{ text: 'new' }, ...l])), ['materials.1'], '开头插一条：全丢');
+  assert.deepEqual(keys(assignMaterial(base, 'v', -1, 'c')), Object.keys(adj), '加一行材料：都留着');
+  assert.equal(pruneListAdjust(base.slides[0], 'notes', base.slides[0].notes, base.slides[0].notes), base.slides[0], '没变：同一个对象');
+});
+
+test('别的路径改了列表也一样：删除 / 合并材料、复制到同房间、移除失效材料、AI 润色换说明', () => {
+  const mk = () => ({
+    materials: [{ id: 'm0', name: 'A' }, { id: 'm1', name: 'B' }, { id: 'm2', name: 'C' }],
+    slides: [
+      { id: 'v', kind: 'view', room: '书房', floorId: 'f', image: 'asset:x', notes: [{ label: '', text: 'A' }, { label: '', text: 'B' }],
+        materials: [{ role: '', materialId: 'm0' }, { role: '', materialId: 'm1' }, { role: '', materialId: 'm2' }],
+        adjust: { image: { view: 'whole' }, 'materials.0': { dx: 1, dy: 0, k: 1 }, 'materials.2': { dx: 2, dy: 0, k: 1 }, 'notes.1.text': { dx: 3, dy: 0, k: 1 } } },
+      { id: 'w', kind: 'view', room: '书房', floorId: 'f', image: 'asset:y', notes: [], materials: [{ role: '', materialId: 'm2' }], adjust: { 'materials.0': { dx: 9, dy: 0, k: 1 }, image: { view: 'whole' } } },
+    ],
+  });
+  const keys = (p, id) => Object.keys(p.slides.find((s) => s.id === id).adjust || {});
+  assert.deepEqual(keys(deleteMaterials(mk(), ['m1']), 'v'), ['image', 'materials.0', 'notes.1.text'], '删了第 2 种材料：第 1 行没挪，留着；第 3 行挪了，丢掉');
+  assert.deepEqual(keys(deleteMaterials(mk(), ['m0']), 'v'), ['image', 'notes.1.text'], '删了第 1 种：材料行全挪了');
+  assert.deepEqual(keys(deleteMaterials(mk(), ['m1']), 'w'), ['materials.0', 'image'], '没用到这种材料的页不受影响');
+  assert.deepEqual(keys(copyMaterialsToRoom(mk(), 'v'), 'w'), ['image'], '复制材料到同房间：目标页的材料调整丢掉');
+  assert.deepEqual(keys(copyMaterialsToRoom(mk(), 'v'), 'v'), ['image', 'materials.0', 'materials.2', 'notes.1.text'], '来源页不变');
+  const stale = mk();
+  stale.materials = stale.materials.slice(1); // m0 已经从清单里删掉
+  assert.deepEqual(keys(removeMissingMaterials(stale, 'v'), 'v'), ['image', 'notes.1.text'], '移除失效的材料：行挪了');
+  const fewer = applyPolishPatches(mk(), [{ slideId: 'v', patch: { notes: [{ label: '', text: 'only one' }] } }]);
+  assert.deepEqual(keys(fewer, 'v'), ['image', 'materials.0', 'materials.2'], 'AI 润色后说明条数变了：说明的调整丢掉');
+  const same = applyPolishPatches(mk(), [{ slideId: 'v', patch: { subtitle: 'x', notes: [{ label: '', text: 'A2' }, { label: '', text: 'B2' }] } }]);
+  assert.deepEqual(keys(same, 'v'), ['image', 'materials.0', 'materials.2', 'notes.1.text'], '条数没变（同一条改了写法）：留着');
 });
