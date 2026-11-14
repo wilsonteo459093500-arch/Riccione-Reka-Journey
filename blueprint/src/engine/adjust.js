@@ -14,9 +14,14 @@
 //   'whole' 整张显示（不裁，比例不同的地方留纸色）；{ z, cx, cy }：z = 相对「刚好铺满框」的放大倍数，
 //   cx / cy = 取景中心（占原图的比例）。只改了框、没改取景：沿用自动排版的取景（水印照样留在画外）。
 //   src = 取景是给哪张图定的：这个照片位换了图，旧取景自动作废，框留着。
+// 语言：每条调整记下是在哪个语言版本里调的（lang）。中文和英文是不同的栏位、排出来的版面也不一样，
+//   在华文版里调的版面套到 English / 中英版上只会动一半、叠字 —— 所以调整只对调的那个语言版本生效，
+//   别的语言版本按自动排版（那一页带一条提醒）。同一组在第二个语言里再调，存在 '组名@en' 这样的键下，互不影响。
+//   没有 lang 的旧数据：各语言都套用。
 
 import { SLIDE_W, SLIDE_H } from '../theme.js';
 import { placeImage } from './spec.js';
+import { langOf, LANG_NAMES } from './lang.js';
 
 export const ADJUST_LIMITS = { kMin: 0.4, kMax: 3, minBox: 40, zMax: 6 };
 const LOW_RES = 1.15; // 和自动排版的低像素提醒同一条线（engine/b/design.js lowRes）
@@ -30,6 +35,43 @@ const r6 = (n) => Math.round(n * 1e6) / 1e6;
 export const adjustKey = (pageIndex, field) => (pageIndex > 0 ? `#${pageIndex + 1}:${field}` : String(field));
 
 const boxOfEl = (el) => (el.t === 'img' ? placeImage(el) : el);
+
+// ---------------------------------------------------------------------------
+// 语言：调整只对调的那个语言版本生效
+// ---------------------------------------------------------------------------
+
+const LANG_SUFFIX = /@(zh|en|bi)$/;
+const isEntry = (e) => !!e && typeof e === 'object';
+
+/** 这一组在这个语言版本里生效的调整：这个语言自己的（'组名@en'）优先；否则是没带后缀的那条 —— 只要它不是别的语言里调的 */
+export function entryFor(adjust, key, lang) {
+  if (!adjust) return null;
+  const own = lang ? adjust[`${key}@${lang}`] : null;
+  if (isEntry(own)) return own;
+  const e = adjust[key];
+  return isEntry(e) && (!lang || !e.lang || e.lang === lang) ? e : null;
+}
+
+/** 这一组只在别的语言版本里调过（这个语言没有自己的）→ 那个语言；否则 null */
+function otherLangOf(adjust, key, lang) {
+  if (entryFor(adjust, key, lang)) return null;
+  const e = adjust?.[key];
+  if (isEntry(e) && e.lang && e.lang !== lang) return e.lang;
+  const k = Object.keys(adjust || {}).find((x) => x.startsWith(`${key}@`) && LANG_SUFFIX.test(x) && isEntry(adjust[x]));
+  return k ? k.slice(key.length + 1) : null;
+}
+
+/** 这个语言版本里生效的全部调整 { 组名: 调整 }（编辑器用：别的语言里调的看作没调） */
+export function adjustFor(adjust, lang) {
+  const out = {};
+  for (const k of Object.keys(adjust || {})) {
+    const key = k.replace(LANG_SUFFIX, '');
+    if (key in out) continue;
+    const e = entryFor(adjust, key, lang);
+    if (e) out[key] = e;
+  }
+  return out;
+}
 
 /**
  * 这一页可以调的组（按自动排版的元素算）。
@@ -148,6 +190,13 @@ export function photoBox(auto, adj) {
 const sameView = (a, b) =>
   a === b || (!!a && !!b && typeof a === 'object' && typeof b === 'object' && Math.abs(a.z - b.z) < 1e-4 && Math.abs(a.cx - b.cx) < 1e-4 && Math.abs(a.cy - b.cy) < 1e-4);
 
+/**
+ * 这个取景和自动的是一回事：数值一样；或者自动排版本来就整张显示（3D 户型图、Material Board），
+ * 手动的取景也是「全都看得见」（在取景档拖了一下、按了方向键 —— 没有东西可挪）
+ */
+const sameAsAuto = (el, box, view, auto) =>
+  sameView(view, auto) || (auto === 'whole' && !!view && view !== 'whole' && !!el.nat?.w && !!el.nat?.h && view.z <= wholeZoom(el.nat, box) + 1e-4);
+
 /** 照片的手动取景（给别的图定的 = 作废）：'whole' | { z, cx, cy } | null */
 function photoView(el, adj) {
   const stale = adj?.src && el.src && adj.src !== el.src;
@@ -169,7 +218,7 @@ export function cleanPhotoAdjust(adj, el) {
   }
   const view = photoView(el, adj);
   const v = view && view !== 'whole' && el.nat ? clampView(el.nat, box, view) : view;
-  if (v && !sameView(v, autoView(el))) {
+  if (v && !sameAsAuto(el, box, v, autoView(el))) {
     out.view = v;
     if (el.src) out.src = el.src;
   }
@@ -181,9 +230,10 @@ function adjustPhoto(el, adj) {
   const box = photoBox(el, adj);
   const moved = !sameBox(box, el);
   // 取景是给某一张图定的（adj.src）：这个照片位换了另一张图，旧取景作废（新图比例不同），框留着
-  const view = photoView(el, adj);
   const auto = autoView(el);
-  if (!moved && (!view || sameView(view, auto))) return el;
+  const view0 = photoView(el, adj);
+  const view = view0 && !sameAsAuto(el, box, view0, auto) ? view0 : null;
+  if (!moved && !view) return el;
   const { crop: _crop, ...rest } = el;
   const next = moved ? { ...rest, ...box } : rest;
   const v = view || auto;
@@ -267,17 +317,24 @@ export function clampBlock(box, adj) {
  * @param {{els:object[]}} page  自动排好的一页
  * @param {object|null|undefined} adjust  slide.adjust
  * @param {number} [pageIndex]  这个 slide 排出来的第几页（0 起）
+ * @param {'zh'|'en'|'bi'|null} [lang]  现在渲染的语言版本：只套用在这个语言里调的（和没记语言的旧数据）；不给 = 都套用
  * @returns {object} 调过的页带 adjusted:true 和 autoEls（自动排版的元素，编辑器算相对位移用）
  */
-export function applyAdjust(page, adjust, pageIndex = 0) {
+export function applyAdjust(page, adjust, pageIndex = 0, lang = null) {
   if (!page || !adjust || typeof adjust !== 'object') return page;
-  const groups = groupsOf(page, pageIndex).filter((g) => adjust[g.key] && typeof adjust[g.key] === 'object');
-  if (!groups.length) return page;
+  const all = groupsOf(page, pageIndex);
+  const picked = new Map(all.map((g) => [g.key, entryFor(adjust, g.key, lang)]));
+  const groups = all.filter((g) => picked.get(g.key));
+  // 这一页的版面是在别的语言版本里调的：这个语言版本按自动排版，提醒一下
+  const other = lang ? all.map((g) => otherLangOf(adjust, g.key, lang)).find(Boolean) : null;
+  const warned = (pg) =>
+    other ? { ...pg, warnings: [...(pg.warnings || []), `这一页的版面是在${LANG_NAMES[other] || other}版里手动调的，${LANG_NAMES[lang] || lang}版按自动排版 —— 要调请在这个语言版本里再调一次`] } : pg;
+  if (!groups.length) return warned(page);
   const els = page.els.slice();
   let changed = false;
   let blurry = 0;
   for (const g of groups) {
-    const adj = adjust[g.key];
+    const adj = picked.get(g.key);
     if (g.type === 'photo') {
       const i = g.indexes[0];
       const el = els[i];
@@ -299,9 +356,9 @@ export function applyAdjust(page, adjust, pageIndex = 0) {
     });
     changed = true;
   }
-  if (!changed) return page;
-  const out = { ...page, els, adjusted: true, autoEls: page.els };
-  if (blurry) out.warnings = [...(page.warnings || []), `手动取景把照片放大了 ${blurry.toFixed(1)} 倍，会发虚：缩小一点，或换高清图`];
+  if (!changed) return warned(page);
+  const out = warned({ ...page, els, adjusted: true, autoEls: page.els });
+  if (blurry) out.warnings = [...(out.warnings || []), `手动取景把照片放大了 ${blurry.toFixed(1)} 倍，会发虚：缩小一点，或换高清图`];
   return out;
 }
 
@@ -309,18 +366,25 @@ export function applyAdjust(page, adjust, pageIndex = 0) {
 // 对项目的修改（纯函数）
 // ---------------------------------------------------------------------------
 
-/** 设某一组的调整；value 为空（或等于没调）= 清掉这一组；整页都清了就去掉 adjust 字段 */
+/**
+ * 设某一组的调整；value 为空（或等于没调）= 清掉这一组；整页都清了就去掉 adjust 字段。
+ * 记下是在哪个语言版本里调的；这一组已经在别的语言里调过 → 存在 '组名@语言' 下，两边互不影响
+ */
 export function setAdjust(project, slideId, key, value) {
   const slides = project?.slides || [];
   const idx = slides.findIndex((s) => s.id === slideId);
   if (idx < 0 || !key) return project;
   const slide = slides[idx];
   const cur = slide.adjust || {};
+  const lang = langOf(project);
+  const own = `${key}@${lang}`;
+  const base = cur[key];
+  const target = own in cur || (isEntry(base) && base.lang && base.lang !== lang) ? own : key;
   const next = { ...cur };
   const keep = value && typeof value === 'object' && Object.keys(value).length > 0;
-  if (keep) next[key] = value;
-  else delete next[key];
-  if (!keep && !(key in cur)) return project;
+  if (keep) next[target] = { ...value, lang };
+  else delete next[target];
+  if (!keep && !(target in cur)) return project;
   const { adjust: _old, ...rest } = slide;
   const out = Object.keys(next).length ? { ...rest, adjust: next } : rest;
   return { ...project, slides: slides.map((s, i) => (i === idx ? out : s)) };
@@ -332,15 +396,21 @@ const keyPage = (key) => {
 };
 
 /**
- * 恢复自动排版：pageIndex 给了 = 只清这个 slide 排出来的那一页（材料页会排成几页）；不给 = 整个 slide
+ * 恢复自动排版：pageIndex 给了 = 只清这个 slide 排出来的那一页（材料页会排成几页）；不给 = 整个 slide。
+ * lang 给了 = 只清这个语言版本里生效的（别的语言版本里调的不动）
  */
-export function clearAdjust(project, slideId, pageIndex = null) {
+export function clearAdjust(project, slideId, pageIndex = null, lang = null) {
   const slides = project?.slides || [];
   const idx = slides.findIndex((s) => s.id === slideId);
   if (idx < 0 || !slides[idx].adjust) return project;
   const { adjust, ...rest } = slides[idx];
-  const kept = pageIndex === null ? {} : Object.fromEntries(Object.entries(adjust).filter(([k]) => keyPage(k) !== pageIndex));
-  if (pageIndex !== null && Object.keys(kept).length === Object.keys(adjust).length) return project;
+  const gone = ([k, e]) => {
+    if (pageIndex !== null && keyPage(k) !== pageIndex) return false;
+    const of = (LANG_SUFFIX.exec(k) || [])[1] || (isEntry(e) && e.lang) || null;
+    return !lang || !of || of === lang;
+  };
+  const kept = Object.fromEntries(Object.entries(adjust).filter((x) => !gone(x)));
+  if (Object.keys(kept).length === Object.keys(adjust).length) return project;
   const out = Object.keys(kept).length ? { ...rest, adjust: kept } : rest;
   return { ...project, slides: slides.map((s, i) => (i === idx ? out : s)) };
 }
@@ -354,7 +424,7 @@ export function clearAdjust(project, slideId, pageIndex = null) {
  */
 export function dropListAdjust(slide, listName, keep = null) {
   if (!slide?.adjust || !listName) return slide;
-  const re = new RegExp(`^(?:#\\d+:)?${listName}\\.(\\d+)(?:\\.|$)`);
+  const re = new RegExp(`^(?:#\\d+:)?${listName}\\.(\\d+)(?:\\.|@|$)`);
   const kept = Object.fromEntries(
     Object.entries(slide.adjust).filter(([k]) => {
       const m = re.exec(k);

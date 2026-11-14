@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import SlideCanvas from '../SlideCanvas.jsx';
 import AdjustLayer from './AdjustLayer.jsx';
-import { applyAdjust } from '../../engine/adjust.js';
+import { applyAdjust, adjustFor } from '../../engine/adjust.js';
 import { resolveUrl, metaOf } from '../../store/assets.js';
 import { langOf } from '../../engine/lang.js';
 import { LANG_OPTIONS, LANG_VERSION, toolbarCompactWidth } from '../../lib/langUi.js';
@@ -155,13 +155,15 @@ export default function Stage({
   useEffect(() => setDraft(null), [page?.key]);
   // 自动排版的这一页（没套手动调整）：调整都是相对它算的
   const autoPage = useMemo(() => (page?.adjusted ? { ...page, els: page.autoEls } : page), [page]);
+  // 这个语言版本里生效的调整（别的语言版本里调的看作没调：版面不一样，套过来只会动一半）
+  const lang = langOf(project);
+  const ownAdjust = useMemo(() => adjustFor(slide?.adjust, lang), [slide?.adjust, lang]);
   const shownPage = useMemo(
-    () => (adjusting && draft && autoPage ? applyAdjust(autoPage, { ...(slide?.adjust || {}), [draft.key]: draft.value }, page?.pageIndex || 0) : page),
-    [adjusting, draft, autoPage, slide?.adjust, page]
+    () => (adjusting && draft && autoPage ? applyAdjust(autoPage, { ...ownAdjust, [draft.key]: draft.value }, page?.pageIndex || 0) : page),
+    [adjusting, draft, autoPage, ownAdjust, page]
   );
   const size = useElementSize(areaRef);
   const isView = slide?.kind === 'view';
-  const lang = langOf(project);
   const compact = size.w > 0 && size.w < toolbarCompactWidth(lang, missingCount);
   const source = isView && slide.sourcePage ? (project.pages || []).find((p) => p.n === slide.sourcePage) : null;
   const sourceUrl = source?.thumb ? resolveUrl(source.thumb) : null;
@@ -248,7 +250,7 @@ export default function Stage({
                 <AdjustLayer
                   key={page.key}
                   page={autoPage}
-                  adjust={slide?.adjust}
+                  adjust={ownAdjust}
                   scale={slideW / 1920}
                   areaEl={areaRef.current}
                   onDraft={setDraft}
@@ -326,10 +328,12 @@ export default function Stage({
             )}
           </p>
         )}
-        {page?.adjusted && (
-          <p className="flex justify-center mt-1.5 text-[11px]">
+        {/* 调整版面时先把这一行的位置占住：第一次调完多出这一行，画布不会跟着缩一下 */}
+        {(page?.adjusted || adjusting) && (
+          <p className={`flex justify-center mt-1.5 text-[11px] ${page?.adjusted ? '' : 'invisible'}`} aria-hidden={!page?.adjusted}>
             <button
               type="button"
+              tabIndex={page?.adjusted ? 0 : -1}
               onClick={() => onClearAdjust?.(page.pageIndex || 0)}
               className="inline-flex items-center gap-1 text-bp-eyebrow hover:underline"
               title="这一页的照片和文字全部回到程序排的位置"

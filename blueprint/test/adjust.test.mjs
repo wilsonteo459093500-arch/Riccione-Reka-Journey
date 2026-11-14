@@ -4,7 +4,7 @@ import JSZip from 'jszip';
 import { test } from './harness.mjs';
 import {
   groupsOf, applyAdjust, adjustKey, viewCrop, clampView, wholeZoom, autoView, clampBox, cleanBlockAdjust, setAdjust, clearAdjust,
-  photoBox, cleanPhotoAdjust, clampBlock, dropListAdjust, pruneListAdjust, ADJUST_LIMITS,
+  photoBox, cleanPhotoAdjust, clampBlock, dropListAdjust, pruneListAdjust, entryFor, adjustFor, ADJUST_LIMITS,
 } from '../src/engine/adjust.js';
 import { updateViewList, splitView, assignMaterial, copyMaterialsToRoom, removeMissingMaterials } from '../src/components/editor/ops.js';
 import { deleteMaterials } from '../src/lib/materials.js';
@@ -149,7 +149,7 @@ test('setAdjust / clearAdjust：不可变；清到没有就去掉字段', () => 
   const before = JSON.stringify(p);
   const a = setAdjust(p, 's1', 'title', { dx: 5, dy: 0, k: 1 });
   assert.equal(JSON.stringify(p), before);
-  assert.deepEqual(a.slides[0].adjust, { title: { dx: 5, dy: 0, k: 1 } });
+  assert.deepEqual(a.slides[0].adjust, { title: { dx: 5, dy: 0, k: 1, lang: 'zh' } }, '记下是在哪个语言版本里调的');
   assert.equal(a.slides[1], p.slides[1], '别的页不动');
   const b = setAdjust(a, 's1', 'image', { box: { x: 1, y: 2, w: 300, h: 300 }, view: { z: 2, cx: 0.5, cy: 0.5 } });
   assert.deepEqual(Object.keys(b.slides[0].adjust), ['title', 'image']);
@@ -242,7 +242,7 @@ test('导出 PPT：调过的照片框 / 裁切、文字框位置 / 字号都写�
 test('复制项目：手动调整跟着走', () => {
   const q = setAdjust(sampleProject(), 'v1', 'image', { view: 'whole' });
   const copy = remapAssetSrcs(q, new Map([['asset:r1', 'asset:n1']])); // 复制 / 备份导入都走这一步（深拷贝 + 改写素材引用）
-  assert.deepEqual(copy.slides.find((s) => s.id === 'v1').adjust, { image: { view: 'whole' } });
+  assert.deepEqual(copy.slides.find((s) => s.id === 'v1').adjust, { image: { view: 'whole', lang: 'zh' } });
 });
 
 // ---------------------------------------------------------------------------
@@ -389,4 +389,78 @@ test('别的路径改了列表也一样：删除 / 合并材料、复制到同�
   assert.deepEqual(keys(fewer, 'v'), ['image', 'materials.0', 'materials.2'], 'AI 润色后说明条数变了：说明的调整丢掉');
   const same = applyPolishPatches(mk(), [{ slideId: 'v', patch: { subtitle: 'x', notes: [{ label: '', text: 'A2' }, { label: '', text: 'B2' }] } }]);
   assert.deepEqual(keys(same, 'v'), ['image', 'materials.0', 'materials.2', 'notes.1.text'], '条数没变（同一条改了写法）：留着');
+});
+
+// ---------------------------------------------------------------------------
+// 第二轮验证后补的：本来就整张显示的图、语言版本
+// ---------------------------------------------------------------------------
+
+test('本来就整张显示的图（3D 户型图）：取景档拖一下 / 按方向键存下的「全都看得见」不算调整；之后缩框仍然整张', () => {
+  const el = { t: 'img', x: 0, y: 4, w: 1340, h: 1072, src: 'asset:a', fit: 'contain', ax: 0, ay: 0.5, nat: { w: 2400, h: 1920 }, edit: { field: 'image' } };
+  const phantom = { view: { z: 1, cx: 0.5, cy: 0.5 }, src: 'asset:a' };
+  assert.equal(cleanPhotoAdjust(phantom, el), null);
+  const p = { els: [el] };
+  assert.equal(applyAdjust(p, { image: phantom }), p, '已经存下的假调整：渲染出来还是自动排版');
+  const narrow = { box: { x: 0, y: 4, w: 1000, h: 1072 }, view: { z: wholeZoom(el.nat, { w: 1000, h: 1072 }), cx: 0.5, cy: 0.5 }, src: 'asset:a' };
+  assert.deepEqual(Object.keys(cleanPhotoAdjust(narrow, el)), ['box', 'base'], '缩了框：只存框');
+  const out = applyAdjust(p, { image: narrow }).els[0];
+  assert.deepEqual([out.fit, out.crop, out.ax], ['contain', undefined, 0], '整张、不裁、还靠原来那一边');
+  assert.ok(cleanPhotoAdjust({ view: { z: 1.5, cx: 0.5, cy: 0.5 }, src: 'asset:a' }, el).view, '真的放大了：存');
+  const cover = { ...el, fit: 'cover', ax: 0.5 };
+  const tall = { ...cover, w: 1000 };
+  assert.ok(cleanPhotoAdjust({ view: { z: wholeZoom(tall.nat, tall), cx: 0.5, cy: 0.5 }, src: 'asset:a' }, tall).view, '铺满的照片缩到整张：是真的调整');
+});
+
+test('语言版本：调整只对调的那个语言生效；别的语言按自动排版并提醒；第二个语言里再调互不影响', () => {
+  const proj = (lang) => ({ info: { lang }, slides: [{ id: 's', kind: 'view' }] });
+  const zh = setAdjust(proj('zh'), 's', 'title', { dx: 30, dy: 0, k: 1 });
+  const adj = zh.slides[0].adjust;
+  assert.deepEqual(adj, { title: { dx: 30, dy: 0, k: 1, lang: 'zh' } });
+  const p = page();
+  assert.equal(applyAdjust(p, adj, 0, 'zh').els[2].x, 1130);
+  const en = applyAdjust(p, adj, 0, 'en');
+  assert.equal(en.els, p.els, '英文版：元素原样');
+  assert.equal(en.adjusted, undefined);
+  assert.match(en.warnings[0], /华文版里手动调的，English版按自动排版/);
+  assert.equal(applyAdjust(p, adj, 0, null).els[2].x, 1130, '不给语言：都套用');
+  assert.equal(applyAdjust(p, { title: { dx: 30, dy: 0, k: 1 } }, 0, 'en').els[2].x, 1130, '没记语言的旧数据：各语言都套用');
+  assert.equal(applyAdjust(p, { title: { dx: 30, dy: 0, k: 1 } }, 0, 'en').warnings, undefined);
+
+  // 在英文版里再调同一组：存在 'title@en' 下，华文版的不动
+  const both = setAdjust({ ...zh, info: { lang: 'en' } }, 's', 'title', { dx: -10, dy: 0, k: 1 });
+  assert.deepEqual(both.slides[0].adjust, { title: { dx: 30, dy: 0, k: 1, lang: 'zh' }, 'title@en': { dx: -10, dy: 0, k: 1, lang: 'en' } });
+  const a2 = both.slides[0].adjust;
+  assert.equal(applyAdjust(p, a2, 0, 'en').els[2].x, 1090);
+  assert.equal(applyAdjust(p, a2, 0, 'en').warnings, undefined);
+  assert.equal(applyAdjust(p, a2, 0, 'zh').els[2].x, 1130);
+  assert.match(applyAdjust(p, a2, 0, 'bi').warnings[0], /版里手动调的，中英文版按自动排版/);
+  assert.deepEqual(entryFor(a2, 'title', 'en'), a2['title@en']);
+  assert.deepEqual(adjustFor(a2, 'bi'), {});
+  assert.deepEqual(Object.keys(adjustFor(a2, 'zh')), ['title']);
+
+  // 恢复自动 / 整页恢复只动这个语言版本的
+  const enReset = setAdjust(both, 's', 'title', null);
+  assert.deepEqual(Object.keys(enReset.slides[0].adjust), ['title'], '英文版里恢复自动：华文版的还在');
+  assert.deepEqual(Object.keys(clearAdjust(both, 's', 0, 'zh').slides[0].adjust), ['title@en']);
+  assert.deepEqual(Object.keys(clearAdjust(both, 's', 0, 'en').slides[0].adjust), ['title']);
+  assert.equal('adjust' in clearAdjust(both, 's').slides[0], false);
+  const zhInEn = { ...zh, info: { lang: 'en' } };
+  assert.equal(setAdjust(zhInEn, 's', 'title', null), zhInEn, '英文版里没调过：恢复自动不碰华文版的');
+  // 列表删改：带语言后缀的序号键一样清
+  const s = { id: 'v', adjust: { 'notes.1.text@en': { dx: 1, dy: 0, k: 1, lang: 'en' }, 'notes.0.text': { dx: 1, dy: 0, k: 1, lang: 'zh' } } };
+  assert.equal('adjust' in dropListAdjust(s, 'notes'), false);
+});
+
+test('整套渲染按项目语言套用：华文版里调的页，换成中英版渲染 = 自动排版 + 一条提醒', () => {
+  const p = sampleProject();
+  const auto = pageOf(p, 'v1');
+  const block = groupsOf(auto).find((g) => g.type === 'block');
+  const q = setAdjust(p, 'v1', block.key, { dx: 30, dy: 12, k: 1.2 });
+  assert.equal(pageOf(q, 'v1').adjusted, true);
+  const bi = { ...q, info: { ...q.info, lang: 'bi' } };
+  const biAuto = pageOf({ ...p, info: { ...p.info, lang: 'bi' } }, 'v1');
+  const biPage = pageOf(bi, 'v1');
+  assert.equal(biPage.adjusted, undefined);
+  assert.deepEqual(JSON.stringify(biPage.els), JSON.stringify(biAuto.els), '中英版：和没调过一样');
+  assert.ok(biPage.warnings.some((w) => /华文版里手动调的/.test(w)));
 });

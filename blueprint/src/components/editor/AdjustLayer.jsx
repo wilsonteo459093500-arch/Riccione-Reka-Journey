@@ -155,7 +155,9 @@ export default function AdjustLayer({ page, adjust, scale, areaEl, onDraft, onCo
   const commit = (g, value, soft = false) => {
     const clean = !value ? null : g.type === 'block' ? clampBlock(g.box, value) : cleanPhotoAdjust(value, page.els[g.indexes[0]]);
     endDraft();
-    if (!clean && !adjust?.[g.key]) return;
+    const { lang: _lang, ...stored } = adjust?.[g.key] || {};
+    // 和存着的一样（晃了一下又放回原处）：不多出一步撤销
+    if (clean ? JSON.stringify(clean) === JSON.stringify(stored) : !adjust?.[g.key]) return;
     onCommit?.(g.key, clean, soft);
   };
 
@@ -236,6 +238,7 @@ export default function AdjustLayer({ page, adjust, scale, areaEl, onDraft, onCo
         const v0 = d.view0 || (d.view0 = viewNumbers(n, d.box0, currentView(el, d.adj0)));
         if (!n || !v0) return;
         const win = viewWindow(n, d.box0, v0.z);
+        if (win.fw >= 1 && win.fh >= 1) return; // 整张都看得见：没有东西可挪
         value = mk({ view: clampView(n, d.box0, { z: v0.z, cx: v0.cx - (dx * win.fw) / d.box0.w, cy: v0.cy - (dy * win.fh) / d.box0.h }) });
       } else if (d.handle === 'move') {
         const sx = snapAxis(d.box0.x + dx, snapCands('photo', d.box0.w, 'x'), tol, g.box.x);
@@ -299,9 +302,13 @@ export default function AdjustLayer({ page, adjust, scale, areaEl, onDraft, onCo
     if (!el) return undefined;
     const onWheel = (e) => {
       if (!group || group.type !== 'photo' || !nat || !selBox || !inBox(selBox, toPage(e))) return;
+      if (!e.deltaY) return; // 横向滑动：不是缩放，交给浏览器
       e.preventDefault();
+      // 倍数跟着滚动的距离走：鼠标滚一格（约 100 px）= 1.08 倍；触控板一次发很多小步，加起来也是这么多
+      const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
       const v = viewObj(selBox);
-      const view = clampView(nat, selBox, { ...v, z: v.z * (e.deltaY < 0 ? 1.08 : 1 / 1.08) });
+      const view = clampView(nat, selBox, { ...v, z: v.z * Math.exp(-clampN(dy, -300, 300) * (Math.log(1.08) / 100)) });
+      if (Math.abs(view.z - v.z) < 1e-6) return; // 已经到头了
       commit(group, photoValue({ view }), true);
     };
     el.addEventListener('wheel', onWheel, { passive: false });
@@ -332,6 +339,7 @@ export default function AdjustLayer({ page, adjust, scale, areaEl, onDraft, onCo
         // 取景档：方向键挪的是照片在框里的位置（和拖动一个方向）
         const v = viewObj(selBox);
         const win = viewWindow(nat, selBox, v.z);
+        if (win.fw >= 1 && win.fh >= 1) return; // 整张都看得见：没有东西可挪
         commit(group, photoValue({ view: clampView(nat, selBox, { z: v.z, cx: v.cx - (ddx * win.fw) / selBox.w, cy: v.cy - (ddy * win.fh) / selBox.h }) }), true);
       } else {
         commit(group, photoValue({ box: clampBox({ ...selBox, x: selBox.x + ddx, y: selBox.y + ddy }) }), true);

@@ -206,7 +206,8 @@ export function renderDeck(project, { meta = () => null } = {}) {
             ...(miss ? { warnings: [...(pg.warnings || []), miss], missing: tr.misses } : {}),
           },
           slide.adjust,
-          i
+          i,
+          lang
         )
       )
     );
