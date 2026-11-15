@@ -1,7 +1,7 @@
 // 整套提案渲染：Project → 有序的渲染页 [{ key, slideId, kind, label, section, enabled, bg, els, warnings }]
 // 编辑器预览、缩略图、PPT 导出都只认这一份输出。
 // 版式：C「安然」（参考 Aman 品牌手册，取代 B「格物」）—— engine/b/kit.js（字级、标题组、正文块、签名、logo、照片、托字渐变、
-//   半版栅格）、b/design.js（方案页）、b/company.js（公司页 = 品牌画册 19 页）。目录名 b/ 和 renderCompanyB / COMPANY_PAGES_B 等
+//   半版栅格）、b/design.js（方案页）、b/company.js（公司页 = 品牌画册 20 页）。目录名 b/ 和 renderCompanyB / COMPANY_PAGES_B 等
 //   名字沿用 B 时的（编辑器、旧项目的 overrides 和迁移都靠它们），只换了版式，数据结构不变。
 
 import { fitText } from './spec.js';

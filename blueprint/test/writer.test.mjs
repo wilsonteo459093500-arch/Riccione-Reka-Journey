@@ -50,8 +50,8 @@ function assertWellFormed(xml, name) {
 
 test('整套导出：包结构、关系、XML 闭合', async () => {
   const rendered = exportableSlides(renderDeck(sampleProject(), { meta }));
-  // 13 公司开篇 + 方案封面 + 本案材料 2 页（14 种 → 7 + 7）+ 5 方案页 + 服务章节 + 团队 + 4 服务尾页
-  assert.equal(rendered.length, 27);
+  // 14 公司开篇（含感谢信）+ 方案封面 + 本案材料 2 页（14 种 → 7 + 7）+ 5 方案页 + 服务章节 + 团队 + 4 服务尾页
+  assert.equal(rendered.length, 28);
   const { file, warnings } = await buildPptx(rendered, { loadImage, type: 'uint8array' });
   assert.deepEqual(warnings, []);
   const zip = await JSZip.loadAsync(file);
