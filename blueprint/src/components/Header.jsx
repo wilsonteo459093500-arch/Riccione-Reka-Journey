@@ -1,7 +1,7 @@
 // 顶栏：品牌 + （编辑器里）返回项目列表 / 项目名 / 保存状态 / 撤销重做 / 导出 PPT / 设置
 
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Settings, Download, Undo2, Redo2, Check, Loader2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Settings, Download, Undo2, Redo2, Check, Loader2, AlertTriangle, MonitorPlay } from 'lucide-react';
 import { cls } from '../lib/ui.jsx';
 import BrandMark from './BrandMark.jsx';
 
@@ -137,7 +137,7 @@ export default function Header({ onOpenSettings, hasKey, editor, onBack: onPageB
     );
   }
 
-  const { name, onRename, onBack, saveState, onRetrySave, onExport, canUndo, canRedo, onUndo, onRedo } = editor;
+  const { name, onRename, onBack, saveState, onRetrySave, onExport, onShow, canUndo, canRedo, onUndo, onRedo } = editor;
   return (
     <header className="shrink-0 z-40 bg-bp-paper/95 backdrop-blur border-b border-bp-line">
       <div className="px-3 sm:px-4 h-14 flex items-center gap-2">
@@ -160,6 +160,12 @@ export default function Header({ onOpenSettings, hasKey, editor, onBack: onPageB
           </button>
         </div>
         <SettingsButton onClick={onOpenSettings} hasKey={hasKey} />
+        {onShow && (
+          <button type="button" onClick={onShow} className={`${cls.btnGhost} shrink-0`} title="在展厅大屏上滑着看方案（和导出的 PPT 同一套页面）">
+            <MonitorPlay size={16} />
+            <span className="hidden sm:inline">展厅播放</span>
+          </button>
+        )}
         <button type="button" onClick={onExport} className={`${cls.btnPrimary} shrink-0`}>
           <Download size={16} />
           导出 PPT
