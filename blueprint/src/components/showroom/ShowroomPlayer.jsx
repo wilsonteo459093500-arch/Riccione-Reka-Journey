@@ -5,13 +5,13 @@
 // 角落：目录（跳到任一空间）· 音乐（第一次点选一首，存在本机）· 全屏 · 退出；鼠标不动 2.5 秒后自动隐藏。
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { LayoutGrid, Music, VolumeX, Maximize, X } from 'lucide-react';
+import { LayoutGrid, Music, VolumeX, Maximize, X, Eye, EyeOff } from 'lucide-react';
 import SlideCanvas from '../SlideCanvas.jsx';
 import { renderDeck, exportableSlides } from '../../engine/deck.js';
 import { metaOf, resolveUrl } from '../../store/assets.js';
 import { getAssetRecord, putAssetRecord } from '../../store/db.js';
 import { buildStops, transitionKind, transitionWeight, indexOf, SECTION_NAMES } from '../../showroom/timeline.js';
-import { layerMotion, frameAt, snapTarget, cssOf, clamp01, plan3dMotion, enterProgress } from '../../showroom/motion.js';
+import { layerMotion, frameAt, snapTarget, cssOf, clamp01, plan3dMotion, enterProgress, morphRects } from '../../showroom/motion.js';
 import { plan3dKey, peekPlan3d, requestPlan3d, onPlan3dProgress } from '../../showroom/build3dCache.js';
 import { matchRoom } from '../../showroom/build3d.js';
 import { sketchFrame } from '../../showroom/sketch.js';
@@ -248,27 +248,51 @@ function plan3dInfo(stops, k, role, kind) {
   return { frames: entry?.total || 1, areas: areas.length, target: next ? matchRoom(areas, next) : -1 };
 }
 
+/** 设计特点的过渡：效果图从原页的框（含裁切）移到设计特点页左边（整张）—— 两头和两页的原样一模一样 */
+function MorphImg({ fromEl, toEl, t }) {
+  const { clip, img } = morphRects(fromEl, toEl, t);
+  const url = resolveUrl(toEl.src);
+  return (
+    <div style={{ position: 'absolute', left: clip.x, top: clip.y, width: clip.w, height: clip.h, overflow: 'hidden' }}>
+      {url && <img src={url} alt="" draggable={false} style={{ position: 'absolute', left: img.x - clip.x, top: img.y - clip.y, width: img.w, height: img.h, maxWidth: 'none' }} />}
+    </div>
+  );
+}
+
 /** 一层（一页）：整层透明度 + 每个元素的动效；换到效果图页时，效果图换成「线稿 → 上色」画布 */
-function Layer({ stop, role, kind, f, width }) {
+function Layer({ stop, role, kind, f, width, peer }) {
   // 3D 开场的前后两页：离开的楼层页照「从无到有」淡出；进来的效果图页照常线稿 → 上色
   const k2 = kind === 'build' ? 'sketch' : kind === 'enter' ? (stop.hero >= 0 ? 'sketch' : 'cut') : kind;
   // 从 3D 停点进房间：先让 3D 图高亮、推近，这一页晚一点才开始画线稿
   const m = layerMotion(role, k2, kind === 'enter' && role === 'b' ? enterProgress(f) : f, stop.page.els);
   const heroEl = stop.hero >= 0 ? stop.page.els[stop.hero] : null;
   const entry = m.sketch && heroEl ? peekSketch(sketchGeom(heroEl).key) : null;
-  const elStyle = useCallback((el, i) => (entry && i === stop.hero ? null : cssOf(m.el(el, i))), [m, entry, stop.hero]);
+  // 进设计特点（role b）：效果图从上一页（peer）那张的框移过来
+  const fromEl = kind === 'craft' && role === 'b' && peer && peer.hero >= 0 ? peer.page.els[peer.hero] : null;
+  const elStyle = useCallback((el, i) => ((entry && i === stop.hero) || (fromEl && el.name === 'photo:craft') ? null : cssOf(m.el(el, i))), [m, entry, stop.hero, fromEl]);
   const replaceEl = useCallback(
-    (el, i) => (entry && i === stop.hero ? <SketchEl el={el} entry={entry} lineQ={m.sketch.lineQ} colQ={m.sketch.colQ} /> : null),
-    [entry, stop.hero, m]
+    (el, i) => {
+      if (entry && i === stop.hero) return <SketchEl el={el} entry={entry} lineQ={m.sketch.lineQ} colQ={m.sketch.colQ} />;
+      if (fromEl && el.name === 'photo:craft') return <MorphImg fromEl={fromEl} toEl={el} t={m.morph ?? 1} />;
+      return null;
+    },
+    [entry, stop.hero, m, fromEl]
   );
   return (
     <div style={{ position: 'absolute', inset: 0, opacity: m.opacity }}>
-      <SlideCanvas slide={stop.page} width={width} resolveUrl={resolveUrl} elStyle={elStyle} replaceEl={entry ? replaceEl : undefined} />
+      <SlideCanvas
+        slide={stop.page}
+        width={width}
+        resolveUrl={resolveUrl}
+        elStyle={elStyle}
+        replaceEl={entry || fromEl ? replaceEl : undefined}
+        noBg={kind === 'craft' && role === 'a'}
+      />
     </div>
   );
 }
 
-function IndexPanel({ stops, current, width, onPick, onClose, music }) {
+function IndexPanel({ stops, current, width, onPick, onClose, music, craftPreview, onCraftPreview }) {
   const groups = useMemo(() => indexOf(stops), [stops]);
   const fileRef = useRef(null);
   const thumbW = width >= 1400 ? 248 : 200;
@@ -283,6 +307,13 @@ function IndexPanel({ stops, current, width, onPick, onClose, music }) {
         <div className="flex items-center justify-between mb-8">
           <div className="text-white/90 text-lg tracking-[0.3em]">目录</div>
           <div className="flex items-center gap-2">
+            <ChromeButton
+              onClick={() => onCraftPreview(!craftPreview)}
+              title={craftPreview ? '关掉：只放老板审过定义的设计特点' : '内部预览：定义还没审过的设计特点也放出来（卡片上标「待审」），别在客人面前开'}
+            >
+              {craftPreview ? <Eye size={16} /> : <EyeOff size={16} />}
+              {craftPreview ? '正在预览待审的设计特点' : '预览待审的设计特点'}
+            </ChromeButton>
             <ChromeButton onClick={() => fileRef.current?.click()} title="换一首背景音乐">
               <Music size={16} />
               {music.hasTrack ? '换音乐' : '选背景音乐'}
@@ -337,7 +368,9 @@ function IndexPanel({ stops, current, width, onPick, onClose, music }) {
 
 export default function ShowroomPlayer({ project, onClose }) {
   const pages = useMemo(() => exportableSlides(renderDeck(project, { meta: metaOf })), [project]);
-  const stops = useMemo(() => buildStops(pages, project), [pages, project]);
+  // 内部预览：待审的设计特点也放（只在这次打开有效，下次打开又关上 —— 免得在客人面前忘了关）
+  const [craftPreview, setCraftPreview] = useState(false);
+  const stops = useMemo(() => buildStops(pages, project, { craftPreview }), [pages, project, craftPreview]);
   const count = stops.length;
   const vp = useViewport();
   const stageW = Math.min(vp.w, (vp.h * 16) / 9);
@@ -356,6 +389,19 @@ export default function ShowroomPlayer({ project, onClose }) {
   const chromeTimer = useRef(0);
   const indexOpen = useRef(false);
   indexOpen.current = showIndex;
+
+  // 打开 / 关上「预览待审」会多出 / 少掉设计特点停点：留在同一页（按停点 key 找回来），不跳到别处
+  const prevStops = useRef(stops);
+  useEffect(() => {
+    const before = prevStops.current;
+    prevStops.current = stops;
+    if (before === stops) return;
+    const key = before[Math.round(cur.current)]?.key;
+    let k = stops.findIndex((st) => st.key === key);
+    if (k < 0) k = Math.min(Math.round(cur.current), stops.length - 1);
+    cur.current = target.current = Math.max(0, k);
+    jump.current = null;
+  }, [stops]);
 
   const clampPos = useCallback((p) => Math.min(Math.max(p, 0), Math.max(0, count - 1)), [count]);
   /** 一次手势最多走到当前页的前后一页：讲解时不会一下滑过好几页 */
@@ -580,7 +626,8 @@ export default function ShowroomPlayer({ project, onClose }) {
       data-pos={view.pos.toFixed(3)}
     >
       <div style={{ position: 'absolute', left: (vp.w - stageW) / 2, top: (vp.h - stageH) / 2, width: stageW, height: stageH, overflow: 'hidden' }}>
-        {layers.map((l) =>
+        {/* 进设计特点：原页（不画底色）盖在设计特点页上面 —— 字淡掉时还在纸面上，效果图由下面那层接手移过去 */}
+        {(view.kind === 'craft' ? [...layers].reverse() : layers).map((l) =>
           stops[l.k].plan3d ? (
             <Plan3dLayer
               key={stops[l.k].key}
@@ -589,7 +636,15 @@ export default function ShowroomPlayer({ project, onClose }) {
               m={plan3dMotion(l.role, view.kind, view.f, plan3dInfo(stops, l.k, l.role, view.kind))}
             />
           ) : (
-            <Layer key={stops[l.k].key} stop={stops[l.k]} role={l.role} kind={view.kind} f={view.f} width={stageW} />
+            <Layer
+              key={stops[l.k].key}
+              stop={stops[l.k]}
+              role={l.role}
+              kind={view.kind}
+              f={view.f}
+              width={stageW}
+              peer={l.role === 'b' ? stops[view.a] : null}
+            />
           )
         )}
       </div>
@@ -626,6 +681,8 @@ export default function ShowroomPlayer({ project, onClose }) {
           current={Math.round(view.pos)}
           width={vp.w}
           music={music}
+          craftPreview={craftPreview}
+          onCraftPreview={setCraftPreview}
           onClose={() => setShowIndex(false)}
           onPick={(k) => {
             setShowIndex(false);

@@ -8,8 +8,10 @@
 //   换页（cut）：A 的字先淡出上移 → A 的效果图轻轻推近 1.04 → 两页交叉淡化 → B 的效果图从 1.05 缓缓退回 1.00 →
 //                B 的字按排版顺序一行行淡入、轻轻上浮
 //   同一段（same：白天 → 夜晚）：版面不动，B 整页在 A 上面慢慢显出来（灯光亮起）
+//   设计特点（craft）：A 的字淡掉 → 同一张效果图从 A 的框（含裁切）平滑移到 B 左边的框（整张）→ 特点一张张浮出
 
 import { SLIDE_W, SLIDE_H } from '../theme.js';
+import { placeImage } from '../engine/spec.js';
 
 export const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 /** smoothstep：两头都没有折角 */
@@ -56,6 +58,33 @@ function textIn(els, start0, spread, dur) {
  * @returns {{ opacity:number, el:(el:object, i:number)=>({opacity,ty,scale}) }}
  */
 export function layerMotion(role, kind, f, els = []) {
+  if (kind === 'craft') {
+    // 画的顺序反过来：B（设计特点页）在下，A（原页，不画底色）在上 —— A 的字淡掉的时候还盖在 B 的纸面上，
+    // A 的效果图由 B 的效果图接手（从 A 的框移过去），所以一开始就藏起来
+    if (role === 'a') {
+      if (f <= 0) return { opacity: 1, el: () => IDENTITY };
+      const out = span(f, 0, 0.3);
+      return {
+        opacity: 1,
+        el: (el) => (el.t === 'img' && isHeroImg(el) ? { opacity: 0, ty: 0, scale: 1 } : { opacity: 1 - out, ty: isText(el) ? -14 * out : 0, scale: 1 }),
+      };
+    }
+    if (f >= 1) return { opacity: 1, el: () => IDENTITY, morph: 1 };
+    const tin = textIn(els, 0.58, 0.24, 0.16);
+    const lines = span(f, 0.55, 0.8);
+    return {
+      opacity: 1,
+      morph: span(f, 0.08, 0.7),
+      el: (el, i) => {
+        if (isText(el)) {
+          const o = tin(f, i);
+          return { opacity: o, ty: 16 * (1 - o), scale: 1 };
+        }
+        if (el.t === 'rect') return { opacity: lines, ty: 0, scale: 1 };
+        return IDENTITY;
+      },
+    };
+  }
   if (kind === 'same') {
     // 白天 → 夜晚：版面不动。A 的字先淡掉（不然「白天」「夜晚」叠在一起成重影）→ 两张原图交叉淡化 → B 的字再淡入
     if (role === 'a') {
@@ -198,4 +227,28 @@ export function plan3dMotion(role, kind, f, info) {
     zoom: 1 + 0.7 * span(f, 0, ENTER_SPLIT + 0.25),
     zoomArea: target,
   };
+}
+
+/**
+ * 一张效果图元素在画布上的两个框：clip = 看得见的框，img = 整张图（含裁掉的部分）铺开的位置。
+ * SlideCanvas 的 ImgEl 就是这样画的（clip 是 overflow:hidden 的框，img 在里面偏移）。
+ */
+export function imageRects(el) {
+  const pl = placeImage(el);
+  const { l, t, r, b } = pl.crop;
+  const iw = pl.w / (1 - l - r || 1);
+  const ih = pl.h / (1 - t - b || 1);
+  return { clip: { x: pl.x, y: pl.y, w: pl.w, h: pl.h }, img: { x: pl.x - l * iw, y: pl.y - t * ih, w: iw, h: ih } };
+}
+
+// a·(1−t) + b·t：t = 0 / 1 时正好是 a / b（不留浮点误差）
+const mix = (a, b, t) => a * (1 - t) + b * t;
+const lerpRect = (a, b, t) => ({ x: mix(a.x, b.x, t), y: mix(a.y, b.y, t), w: mix(a.w, b.w, t), h: mix(a.h, b.h, t) });
+
+/** 设计特点：效果图从 A 的样子（t = 0，和 A 页一模一样）移到 B 的样子（t = 1，和 B 页一模一样） */
+export function morphRects(fromEl, toEl, t) {
+  const a = imageRects(fromEl);
+  const b = imageRects(toEl);
+  const k = clamp01(t);
+  return { clip: lerpRect(a.clip, b.clip, k), img: lerpRect(a.img, b.img, k) };
 }

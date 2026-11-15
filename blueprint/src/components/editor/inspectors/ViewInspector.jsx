@@ -12,6 +12,7 @@ import { Section, Field, Segmented, AutoTextarea, inputCls, btnGhost, btnIcon } 
 import ImageField from '../ImageField.jsx';
 import MaterialPicker from '../MaterialPicker.jsx';
 import EnInput, { EnBox, EnAlias, EN_BADGE, EN_PLACEHOLDER } from '../EnInput.jsx';
+import CraftSection from '../CraftSection.jsx';
 
 // 效果图页：标题（房间 · 视角名）、空间英文名、楼层、版式、图片、材料、说明。
 // English / 中英版：每个中文栏下面紧跟一个一样大的英文框（EN）—— 视角名、材料部位、材料名、备注写进翻译记忆（整套共用）；
@@ -380,6 +381,8 @@ export default function ViewInspector({ project, slide, change, notify, openPoli
           </button>
         </div>
       </Section>
+
+      {!is3d && <CraftSection project={project} slide={slide} change={change} />}
     </div>
   );
 }

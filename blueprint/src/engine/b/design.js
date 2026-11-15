@@ -29,6 +29,7 @@ import {
 import { findFloor, findMaterial, floorsLine } from '../model.js';
 import { makeTranslator, langOf, floorTitleEn, floorsLineEn, resolveEn, memoryEn, roomEnOf } from '../lang.js';
 import { chapterZh, PHOTOS } from './company.js';
+import { placeImage } from '../spec.js';
 
 export { balanceLine } from './text.js';
 
@@ -1003,6 +1004,78 @@ export function bViewFullNotes(ctx, slide) {
   const ink = inkBox(...parts.map((p) => ({ x0: p.x0, x1: p.x1, top: p.top + dy, bottom: p.bottom + dy })));
   const sh = shade(ink, fullBleed(), { dir: 'v' });
   return { els: [sh ? { ...sh.el, name: 'showroom-shade' } : null, ...moved].filter(Boolean) };
+}
+
+/**
+ * 展厅播放用：房间「设计特点」那一页（只在播放器里出现，不进 PPT）。
+ * 左边 = 同一张效果图，**整张显示、不裁**（和原图一样，只是缩小）；右边 = 文字栏（x 1273、宽 537，和图文页的规格栏同一条线）：
+ *   页眉「设计特点 / DESIGN DETAILS」+ 视角名 → 每个特点一张：名称 · 对客人的好处 · 一句话（小字）
+ * 文字全部来自词库（showroom/craft.js，老板审过的定义），这里不改字。
+ * @param {object} heroEl   原页上的那张效果图元素（决定图片的完整比例）
+ * @param {object[]} entries 词库条目（craftText 取字）；opts.preview：待审的条目名称后标「待审」
+ * @returns {{ bg, els, warnings, kind:'craft' }}
+ */
+export const CRAFT_PHOTO = { x: 112, y: 92, w: 1100, h: 896 };
+export const CRAFT_COL = { x: 1273, w: 537 };
+export function bCraftPage(ctx, slide, heroEl, entries, textOf, opts = {}) {
+  const { project, lang, tr } = env(ctx);
+  const warnings = [];
+  const els = [];
+  // 效果图：按原图的完整比例放进框里（contain），不裁
+  if (heroEl?.src) {
+    const nat = heroEl.nat?.w && heroEl.nat?.h ? heroEl.nat : null;
+    let ratio = nat ? nat.w / nat.h : 0;
+    if (!ratio) {
+      const pl = placeImage(heroEl);
+      const fw = 1 - pl.crop.l - pl.crop.r || 1;
+      const fh = 1 - pl.crop.t - pl.crop.b || 1;
+      ratio = pl.w / fw / (pl.h / fh);
+    }
+    const box = CRAFT_PHOTO;
+    const w = ratio >= box.w / box.h ? box.w : box.h * ratio;
+    const h = w / ratio;
+    els.push({ t: 'img', x: box.x + (box.w - w) / 2, y: box.y + (box.h - h) / 2, w, h, src: heroEl.src, crop: { l: 0, t: 0, r: 0, b: 0 }, name: 'photo:craft' });
+  }
+  const { x, w } = CRAFT_COL;
+  const col = [];
+  let y = 0;
+  const add = (r) => {
+    col.push(...r.els);
+    warnings.push(...(r.warnings || []));
+    y = r.bottom;
+    return r;
+  };
+  add(pairBlock(x, y, w, { zh: '设计特点', en: 'Design Details' }, lang, style('rowKey', { lh: 32 }), { enRole: style('rowKeyEn', { size: 16, spacing: 3, lh: 28, caps: true }), gap: 0, maxLines: 1 }));
+  const { titlePair } = viewText(project, slide || {}, lang, tr, []);
+  if (titlePair.zh || titlePair.en) {
+    y += 10;
+    add(pairBlock(x, y, w, { zh: titlePair.zh, en: titlePair.en }, lang, 'title', { maxLines: 2, gap: 0 }));
+  }
+  y += 44;
+  const nameSt = style('rowVal', { lh: 42 });
+  const nameEn = style('rowValEn', { lh: 38 });
+  const smallSt = style('body', { size: 15, color: B.foot, lh: 30 });
+  const smallEn = style('bodyEn', { size: 15, color: B.foot, lh: 28 });
+  entries.forEach((entry, k) => {
+    const t = textOf(entry, lang);
+    const pending = opts.preview && entry.status === 'pending';
+    const mark = (s, tag) => (pending && s ? `${s}　${tag}` : s);
+    if (k) y += 34;
+    col.push({ ...rule(x, y, w, { h: 1, alpha: ALPHA.tableRule }), name: `craft-rule:${k}` });
+    y += 22;
+    add(pairBlock(x, y, w, { zh: mark(t.zh.name, '待审'), en: t.en ? mark(t.en.name, 'DRAFT') : '' }, lang, nameSt, { enRole: nameEn, gap: 0, maxLines: 1, name: `craft-name:${k}` }));
+    y += 6;
+    add(pairBlock(x, y, w, { zh: t.zh.benefit, en: t.en?.benefit || '' }, lang, 'body', { maxLines: 3, gap: 4, name: `craft-benefit:${k}` }));
+    y += 6;
+    add(pairBlock(x, y, w, { zh: t.zh.oneLine, en: t.en?.oneLine || '' }, lang, smallSt, { enRole: smallEn, maxLines: 2, gap: 2, name: `craft-def:${k}` }));
+  });
+  // 文字栏和效果图上下居中对齐（不超出 92–900；放不下就从 92 排起）
+  const photo = els.find((el) => el.name === 'photo:craft');
+  const mid = photo ? photo.y + photo.h / 2 : (PAGE.top + PAGE.contentBottom) / 2;
+  const top = Math.max(PAGE.top, Math.min(mid - y / 2, PAGE.contentBottom - y));
+  for (const el of col) els.push({ ...el, y: el.y + top, edit: undefined });
+  if (top + y > PAGE.contentBottom + 60) warnings.push('设计特点太多放不下：建议少勾一两个');
+  return page(els, [...new Set(warnings)], { kind: 'craft' });
 }
 
 export function bViewPage(ctx, slide, plan) {
