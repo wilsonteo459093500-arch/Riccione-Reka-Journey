@@ -151,3 +151,51 @@ export function cssOf(m) {
   if (!m || (m.opacity === 1 && !m.ty && m.scale === 1)) return null;
   return { opacity: m.opacity, transform: m.ty ? `translate3d(0, ${m.ty.toFixed(2)}px, 0)` : undefined, imgScale: m.scale };
 }
+
+/** 从 3D 停点进房间：前 35% 只做「高亮 + 推近」，之后下一页才开始（线稿 → 上色），见 enterProgress */
+export const ENTER_SPLIT = 0.35;
+/** 进房间时，下一页（效果图）用的进度：前 35% 还没开始 */
+export const enterProgress = (f) => clamp01((f - ENTER_SPLIT) / (1 - ENTER_SPLIT));
+
+/**
+ * 3D 户型开场那一层（停点 kind 'plan3d'）的样子
+ *   进场（build，role b）：原平面图在纸上 → 关键帧依次（墙升起、柜子出现）→ 房间逐个亮一下 → f = 1 完整 3D 图、无高亮
+ *   离场（enter，role a）：要去的房间亮起、镜头向它推近，再淡出（下一页的效果图同时线稿 → 上色）
+ *   停点：最后一帧原样（不高亮、不放大）
+ * @param {{ frames:number, areas:number, target?:number }} info  关键帧数、房间数、要去的房间（-1 = 不知道）
+ * @returns {{ opacity, frameT, planAlpha, highlights:[{ i, alpha }], zoom, zoomArea }}
+ */
+export function plan3dMotion(role, kind, f, info) {
+  const n = Math.max(1, info.frames);
+  const last = n - 1;
+  const still = { opacity: 1, frameT: last, planAlpha: 0, highlights: [], zoom: 1, zoomArea: -1 };
+  if (role === 'b') {
+    if (f >= 1) return still;
+    if (kind !== 'build') return { ...still, opacity: span(f, 0.3, 0.75) };
+    const m = Math.max(1, info.areas);
+    const highlights = [];
+    for (let i = 0; i < info.areas; i++) {
+      const s = 0.85 + 0.08 * (m > 1 ? i / (m - 1) : 0);
+      const t = clamp01((f - s) / 0.06);
+      if (t > 0 && t < 1) highlights.push({ i, alpha: Math.sin(Math.PI * t) * 0.9 });
+    }
+    return {
+      opacity: span(f, 0, 0.12),
+      frameT: clamp01((f - 0.2) / 0.65) * last,
+      planAlpha: 1 - span(f, 0.14, 0.26),
+      highlights,
+      zoom: 1,
+      zoomArea: -1,
+    };
+  }
+  if (f <= 0) return still;
+  if (kind !== 'enter') return { ...still, opacity: 1 - span(f, 0.25, 0.7) };
+  const target = info.target ?? -1;
+  return {
+    ...still,
+    opacity: 1 - span(f, ENTER_SPLIT, ENTER_SPLIT + 0.25),
+    highlights: target >= 0 ? [{ i: target, alpha: 0.9 * span(f, 0, 0.15) }] : [],
+    zoom: 1 + 0.7 * span(f, 0, ENTER_SPLIT + 0.25),
+    zoomArea: target,
+  };
+}

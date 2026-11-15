@@ -11,7 +11,9 @@ import { renderDeck, exportableSlides } from '../../engine/deck.js';
 import { metaOf, resolveUrl } from '../../store/assets.js';
 import { getAssetRecord, putAssetRecord } from '../../store/db.js';
 import { buildStops, transitionKind, transitionWeight, indexOf, SECTION_NAMES } from '../../showroom/timeline.js';
-import { layerMotion, frameAt, snapTarget, cssOf, clamp01 } from '../../showroom/motion.js';
+import { layerMotion, frameAt, snapTarget, cssOf, clamp01, plan3dMotion, enterProgress } from '../../showroom/motion.js';
+import { plan3dKey, peekPlan3d, requestPlan3d, onPlan3dProgress } from '../../showroom/build3dCache.js';
+import { matchRoom } from '../../showroom/build3d.js';
 import { sketchFrame } from '../../showroom/sketch.js';
 import { sketchGeom, peekSketch, requestSketch, onSketchReady } from '../../showroom/sketchCache.js';
 
@@ -150,9 +152,108 @@ function SketchEl({ el, entry, lineQ, colQ }) {
   );
 }
 
+/**
+ * 3D 户型开场那一层：关键帧（墙升起、柜子出现）交叉淡化 + 原平面图 + 房间高亮 + 推近
+ * 画布内部 1920 × 1080（关键帧 1600 × 900 放大），按 SlideCanvas 一样等比缩放到 width
+ */
+function Plan3dLayer({ stop, m, width }) {
+  const ref = useRef(null);
+  const entry = peekPlan3d(plan3dKey(stop.plan3d));
+  const W = 1920;
+  const H = 1080;
+  useEffect(() => {
+    const c = ref.current;
+    if (!c) return;
+    const ctx = c.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#F3EEE7';
+    ctx.fillRect(0, 0, W, H);
+    if (!entry) return;
+    const { built, frames, plan } = entry;
+    const k = W / built.w; // 关键帧 → 画布
+    // 推近：以要去的房间中心为原点
+    const area = m.zoomArea >= 0 ? built.final.floorAreas[m.zoomArea] : null;
+    const fm = built.final.fm;
+    const toCanvas = (x, y) => [(fm[0] * x + fm[2] * y + fm[4]) * k, (fm[1] * x + fm[3] * y + fm[5]) * k];
+    let cx = W / 2;
+    let cy = H / 2;
+    if (area) [cx, cy] = toCanvas((area.box[0] + area.box[2]) / 2, (area.box[1] + area.box[3]) / 2);
+    if (m.zoom !== 1) ctx.setTransform(m.zoom, 0, 0, m.zoom, cx * (1 - m.zoom), cy * (1 - m.zoom));
+    // 关键帧（还没画好的帧用最近的一张顶上）
+    const pick = (i) => {
+      for (let d = 0; d < frames.length + entry.total; d++) {
+        if (frames[i - d]) return frames[i - d];
+        if (frames[i + d]) return frames[i + d];
+      }
+      return null;
+    };
+    const i0 = Math.floor(m.frameT + 1e-6);
+    const frac = m.frameT - i0;
+    const a = pick(i0);
+    if (a) ctx.drawImage(a, 0, 0, W, H);
+    const b = frac > 1e-3 ? frames[i0 + 1] : null;
+    if (b) {
+      ctx.globalAlpha = frac;
+      ctx.drawImage(b, 0, 0, W, H);
+      ctx.globalAlpha = 1;
+    }
+    // 原平面图：开场先在纸上，再淡成 3D
+    const pr = built.final.plan;
+    if (plan && pr && m.planAlpha > 0) {
+      ctx.globalAlpha = m.planAlpha;
+      ctx.fillStyle = '#F3EEE7';
+      ctx.fillRect(0, 0, W, H);
+      ctx.drawImage(plan, pr[0] * k, pr[1] * k, (pr[2] - pr[0]) * k, (pr[3] - pr[1]) * k);
+      ctx.globalAlpha = 1;
+    }
+    // 房间高亮（地面上一块暖金色）
+    for (const h of m.highlights) {
+      const ar = built.final.floorAreas[h.i];
+      if (!ar) continue;
+      ctx.save();
+      ctx.globalAlpha = h.alpha;
+      ctx.fillStyle = 'rgba(214, 170, 96, 0.42)';
+      ctx.strokeStyle = 'rgba(160, 112, 52, 0.9)';
+      ctx.lineWidth = 3;
+      for (const r of ar.rects) {
+        const pts = [
+          [r[0], r[1]],
+          [r[2], r[1]],
+          [r[2], r[3]],
+          [r[0], r[3]],
+        ].map(([x, y]) => toCanvas(x, y));
+        ctx.beginPath();
+        pts.forEach(([x, y], j) => (j ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  });
+  return (
+    <div style={{ position: 'absolute', inset: 0, opacity: m.opacity }}>
+      <canvas ref={ref} width={W} height={H} style={{ width, height: (width * 9) / 16, display: 'block' }} />
+    </div>
+  );
+}
+
+/** 3D 停点的动效参数（要去的房间：下一页效果图的空间名对到 3D 图上的房间） */
+function plan3dInfo(stops, k, role, kind) {
+  const stop = stops[k];
+  const entry = peekPlan3d(plan3dKey(stop.plan3d));
+  const areas = entry?.built.final.floorAreas || [];
+  const next = role === 'a' && kind === 'enter' ? stops[k + 1]?.slide : null;
+  return { frames: entry?.total || 1, areas: areas.length, target: next ? matchRoom(areas, next) : -1 };
+}
+
 /** 一层（一页）：整层透明度 + 每个元素的动效；换到效果图页时，效果图换成「线稿 → 上色」画布 */
 function Layer({ stop, role, kind, f, width }) {
-  const m = layerMotion(role, kind, f, stop.page.els);
+  // 3D 开场的前后两页：离开的楼层页照「从无到有」淡出；进来的效果图页照常线稿 → 上色
+  const k2 = kind === 'build' ? 'sketch' : kind === 'enter' ? (stop.hero >= 0 ? 'sketch' : 'cut') : kind;
+  // 从 3D 停点进房间：先让 3D 图高亮、推近，这一页晚一点才开始画线稿
+  const m = layerMotion(role, k2, kind === 'enter' && role === 'b' ? enterProgress(f) : f, stop.page.els);
   const heroEl = stop.hero >= 0 ? stop.page.els[stop.hero] : null;
   const entry = m.sketch && heroEl ? peekSketch(sketchGeom(heroEl).key) : null;
   const elStyle = useCallback((el, i) => (entry && i === stop.hero ? null : cssOf(m.el(el, i))), [m, entry, stop.hero]);
@@ -215,7 +316,13 @@ function IndexPanel({ stops, current, width, onPick, onClose, music }) {
                     className={`text-left rounded-lg overflow-hidden ring-2 transition ${active ? 'ring-white' : 'ring-transparent hover:ring-white/50'}`}
                     style={{ width: thumbW }}
                   >
-                    <SlideCanvas slide={stops[it.stop].page} width={thumbW} resolveUrl={resolveUrl} />
+                    {stops[it.stop].plan3d ? (
+                      <div style={{ position: 'relative', width: thumbW, height: (thumbW * 9) / 16 }}>
+                        <Plan3dLayer stop={stops[it.stop]} width={thumbW} m={plan3dMotion('a', 'cut', 0, { frames: peekPlan3d(plan3dKey(stops[it.stop].plan3d))?.total || 1, areas: 0 })} />
+                      </div>
+                    ) : (
+                      <SlideCanvas slide={stops[it.stop].page} width={thumbW} resolveUrl={resolveUrl} />
+                    )}
                     <div className="px-2 py-1.5 text-[13px] text-white/80 bg-white/5 truncate">{it.label}</div>
                   </button>
                 );
@@ -327,6 +434,11 @@ export default function ShowroomPlayer({ project, onClose }) {
   // 线稿分析好了 → 重画（分析在背景线程里跑）
   const [, setSketchTick] = useState(0);
   useEffect(() => onSketchReady(() => setSketchTick((t) => t + 1)), []);
+  useEffect(() => onPlan3dProgress(() => setSketchTick((t) => t + 1)), []);
+  // 3D 开场的关键帧：一打开就在空闲时开始画（讲品牌那几页的时间够画完）
+  useEffect(() => {
+    for (const st of stops) if (st.plan3d) requestPlan3d(st.plan3d);
+  }, [stops]);
 
   // 角落按钮：动一下鼠标 / 碰一下屏幕就出来，2.5 秒不动就藏起来
   const poke = useCallback(() => {
@@ -468,9 +580,18 @@ export default function ShowroomPlayer({ project, onClose }) {
       data-pos={view.pos.toFixed(3)}
     >
       <div style={{ position: 'absolute', left: (vp.w - stageW) / 2, top: (vp.h - stageH) / 2, width: stageW, height: stageH, overflow: 'hidden' }}>
-        {layers.map((l) => (
-          <Layer key={stops[l.k].key} stop={stops[l.k]} role={l.role} kind={view.kind} f={view.f} width={stageW} />
-        ))}
+        {layers.map((l) =>
+          stops[l.k].plan3d ? (
+            <Plan3dLayer
+              key={stops[l.k].key}
+              stop={stops[l.k]}
+              width={stageW}
+              m={plan3dMotion(l.role, view.kind, view.f, plan3dInfo(stops, l.k, l.role, view.kind))}
+            />
+          ) : (
+            <Layer key={stops[l.k].key} stop={stops[l.k]} role={l.role} kind={view.kind} f={view.f} width={stageW} />
+          )
+        )}
       </div>
 
       {/* 进度：底部一条很细的线 */}

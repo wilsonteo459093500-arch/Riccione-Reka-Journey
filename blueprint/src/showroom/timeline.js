@@ -11,6 +11,7 @@
 import { splitTimeOfDay } from '../import/labels.js';
 import { bViewFullNotes } from '../engine/b/design.js';
 import { makeTranslator, langOf } from '../engine/lang.js';
+import { hasPlan3d } from './build3d.js';
 
 /** 效果图页上那张效果图（满版 name 'photo:image'，图文页 edit.field 'image'）的元素序号；没有 → -1 */
 export const heroIndex = (page) =>
@@ -42,8 +43,31 @@ export function buildStops(pages, project) {
   const stops = [];
   let segment = -1;
   let prevSlide = null;
+  // 3D 户型开场：有 3D 户型图的楼层，在楼层章节页之后插一个停点（没有章节页 = 插在这层第一张效果图前面）
+  const floors = new Map((project?.floors || []).map((f) => [f.id, f]));
+  const done3d = new Set();
+  const push3d = (floorId) => {
+    const floor = floors.get(floorId);
+    if (!floor || done3d.has(floorId) || !hasPlan3d(floor)) return;
+    done3d.add(floorId);
+    segment += 1;
+    stops.push({
+      key: `3d:${floorId}`,
+      page: { kind: 'plan3d', bg: 'F3EEE7', els: [] },
+      plan3d: floor,
+      hero: -1,
+      slide: null,
+      segment,
+      phase: null,
+      label: `${floor.zh || '楼层'} · 3D 户型`,
+      section: 'design',
+      inPair: false,
+    });
+    prevSlide = null;
+  };
   for (const pg of pages || []) {
     const slide = slides.get(pg.slideId) || null;
+    if (slide?.kind === 'view' && slide.floorId) push3d(slide.floorId);
     // 同一 slide 的续页（材料第 2 页）、或白天 → 夜晚：留在同一段
     const sameSlide = prevSlide && slide && prevSlide.id === slide.id;
     // 一对只配两张：上一张已经在一对里（白天 · 夜晚 · 白天）就不再往后配
@@ -66,12 +90,13 @@ export function buildStops(pages, project) {
       inPair: paired,
     });
     prevSlide = slide;
+    if (slide?.kind === 'floor' && slide.floorId) push3d(slide.floorId);
   }
   return stops.map(({ inPair, ...s }) => s);
 }
 
 /**
- * 两个停点之间的过渡：
+ * 两个停点之间的过渡（另有 3D 开场：'build' 进 3D 停点 = 墙升起、柜子出现；'enter' 从 3D 停点进房间 = 高亮推近）：
  *   'same'   同一段（白天 → 夜晚）：交叉淡化
  *   'sketch' 换到一张效果图页：效果图从白纸上「线稿 → 上色 → 原图」
  *   'cut'    其他换页：交叉淡化 + 推近
@@ -81,11 +106,13 @@ export function transitionKind(stops, a, b) {
   const sb = stops[b];
   if (!sa || !sb) return 'cut';
   if (sa.segment === sb.segment && sa.slide?.kind === 'view' && sb.slide?.kind === 'view') return 'same';
+  if (sb.plan3d) return 'build';
+  if (sa.plan3d) return 'enter';
   return sb.hero >= 0 ? 'sketch' : 'cut';
 }
 
-/** 这段过渡要滑多长（相对一般换页）：「从无到有」慢一点，看得清线是怎么画出来的 */
-export const transitionWeight = (kind) => (kind === 'sketch' ? 2.4 : 1);
+/** 这段过渡要滑多长（相对一般换页）：「从无到有」慢一点，看得清线是怎么画出来的；3D 开场最慢 */
+export const transitionWeight = (kind) => (kind === 'build' || kind === 'enter' ? 3 : kind === 'sketch' ? 2.4 : 1);
 
 /** 目录：每段一项（第一个停点），按章节分组 → [{ section, items:[{ stop, label, segment }] }] */
 export function indexOf(stops) {

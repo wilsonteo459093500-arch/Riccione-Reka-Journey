@@ -238,3 +238,115 @@ test('从无到有：换到效果图页才用；线稿先、上色后、字最�
   assert.equal(layerMotion('b', 'sketch', 0.5, fp.els).el(fp.els[sh], sh).opacity, 0);
   assert.equal(layerMotion('b', 'sketch', 1, fp.els).el(fp.els[sh], sh).opacity, 1);
 });
+
+// ---------------------------------------------------------------------------
+// 3D 户型开场
+// ---------------------------------------------------------------------------
+import { build3dScenes, matchRoom, hasPlan3d, WALL_STEPS } from '../src/showroom/build3d.js';
+import { plan3dMotion, enterProgress } from '../src/showroom/motion.js';
+import { paintScene } from '../src/plan3d/paint.js';
+import { paletteOf } from '../src/plan3d/palette.js';
+
+/** 两室一厨（1 像素 = 10 毫米）+ 柜子、家具 */
+const GEO = {
+  mmPerPx: 10,
+  wallT: 15,
+  source: { w: 900, h: 700 },
+  rooms: [
+    { name: 'LIVING', rects: [[100, 100, 500, 400]] },
+    { name: 'KITCHEN', rects: [[500, 100, 800, 400]] },
+    { name: 'MASTER BEDROOM', rects: [[100, 415, 560, 600]] },
+  ],
+  openings: [{ type: 'door', side: 'bottom', a: 150, b: 240, at: 400 }],
+  items: [
+    { id: 'tv', label: '电视柜', kind: 'low', box: [120, 110, 300, 150], against: 'top' },
+    { id: 'sofa', label: '沙发', kind: 'sofa', box: [150, 300, 400, 380], against: 'bottom' },
+    { id: 'tall1', label: '高柜', kind: 'tall', box: [520, 110, 780, 170], against: 'top' },
+    { id: 'bed', label: '床', kind: 'bed', box: [250, 440, 450, 590], against: 'bottom' },
+    { id: 'wardrobe', label: '衣柜', kind: 'tall', box: [110, 430, 200, 590], against: 'left' },
+  ],
+};
+const p3Project = (withGeo = true) => {
+  const p = sample();
+  p.floors = [{ id: 'f1', zh: '一楼', en: 'GROUND FLOOR', image: null, plan: '/plan.png', ...(withGeo ? { plan3d: { v: 1, planSrc: '/plan.png', geo: GEO, view: { view: 'persp' } } } : {}) }];
+  return p;
+};
+
+test('3D 开场：有 3D 户型图的楼层，在楼层章节页后面多一个停点；没有就不插；过渡种类与权重', () => {
+  const stops = stopsOf(p3Project());
+  const fi = stops.findIndex((s) => s.slide?.kind === 'floor');
+  assert.ok(stops[fi + 1].plan3d, '楼层页后面是 3D');
+  assert.equal(stops.filter((s) => s.plan3d).length, 1, '一层只插一次');
+  assert.equal(transitionKind(stops, fi, fi + 1), 'build');
+  assert.equal(transitionKind(stops, fi + 1, fi + 2), 'enter');
+  assert.ok(transitionWeight('build') > transitionWeight('sketch'));
+  assert.ok(indexOf(stops).flatMap((g) => g.items).some((it) => /3D 户型/.test(it.label)));
+  assert.equal(stopsOf(p3Project(false)).filter((s) => s.plan3d).length, 0, '没有 3D 数据：不插');
+  // 图纸换过（planSrc 对不上）也不插
+  const stale = p3Project();
+  stale.floors[0].plan = '/new-plan.png';
+  assert.equal(hasPlan3d(stale.floors[0]), false);
+  // 没有楼层章节页：插在这层第一张效果图前面
+  const noFloorPage = p3Project();
+  noFloorPage.slides = noFloorPage.slides.filter((s) => s.kind !== 'floor');
+  const st2 = stopsOf(noFloorPage);
+  const i3 = st2.findIndex((s) => s.plan3d);
+  assert.equal(st2[i3 + 1].slide.kind, 'view');
+});
+
+test('3D 开场关键帧：镜头不动；墙从很低升到满高；物件只增不减，最后一帧 = 完整 3D 图', () => {
+  for (const view of [{ view: 'top' }, { view: 'persp' }, { view: 'iso', corner: 'se' }]) {
+    const b = build3dScenes(GEO, view);
+    assert.equal(b.w / b.h, 16 / 9);
+    assert.equal(new Set(b.scenes.map((s) => JSON.stringify([s.w, s.h, s.fm]))).size, 1, `${view.view} 镜头不动`);
+    assert.notEqual(b.scenes[0].view, 'top', '正俯视改成立体，看得到墙升起');
+    const walls = b.scenes.slice(0, WALL_STEPS.length).map((s) => s.wallZ);
+    walls.forEach((z, i) => i && assert.ok(z > walls[i - 1], '墙一帧比一帧高'));
+    assert.ok(b.scenes[0].solids.every((sd) => sd.kind === 'wall'), '一开始只有墙');
+    const ids = b.scenes.map((s) => new Set(s.solids.map((sd) => sd.id)));
+    for (let i = WALL_STEPS.length; i < ids.length; i++) for (const id of ids[i - 1]) assert.ok(ids[i].has(id), '物件只增不减');
+    const last = b.scenes[b.scenes.length - 1];
+    assert.equal(last.solids.length, b.final.solids.length, '最后一帧 = 完整 3D 图');
+    // 柜子先于家具
+    const firstGroup = b.groups[0].map((id) => GEO.items.find((it) => it.id === id).kind);
+    assert.ok(firstGroup.every((k) => ['tall', 'low', 'glass', 'hung', 'desk', 'shelf'].includes(k)));
+  }
+});
+
+test('3D 开场：按 id 过滤后真的只画这一帧的东西（假画布跑真的 paintScene）', () => {
+  const b = build3dScenes(GEO, { view: 'persp' });
+  const count = (scene) => {
+    let n = 0;
+    const ctx = new Proxy({}, { get: (t, k) => (k in t ? t[k] : () => ({ addColorStop() {} }, n++, { addColorStop() {} })), set: (t, k, v) => ((t[k] = v), true) });
+    const fake = () => ({ width: 0, height: 0, getContext: () => ctx });
+    paintScene(fake(), scene, paletteOf('warm'), { createCanvas: fake });
+    return n;
+  };
+  assert.ok(count(b.scenes[0]) < count(b.scenes[b.scenes.length - 1]), '第一帧（只有墙）画的东西比最后一帧少');
+});
+
+test('3D 开场：房间名对得上（客厅 ↔ LIVING、主人房 ↔ MASTER BEDROOM），对不上 = -1', () => {
+  const areas = build3dScenes(GEO, { view: 'persp' }).final.floorAreas;
+  assert.equal(areas[matchRoom(areas, { room: '客厅' })].name, 'LIVING');
+  assert.equal(areas[matchRoom(areas, { room: '主人房', roomEn: 'Master Bedroom' })].name, 'MASTER BEDROOM');
+  assert.equal(areas[matchRoom(areas, { room: '厨房' })].name, 'KITCHEN');
+  assert.equal(matchRoom(areas, { room: '茶室' }), -1);
+  assert.equal(matchRoom([{ name: '' }], { room: '客厅' }), -1);
+});
+
+test('3D 开场动效：平面图 → 关键帧 → 房间逐个亮 → 停点原样；离场高亮要去的房间并推近', () => {
+  const info = { frames: 14, areas: 3 };
+  const still = plan3dMotion('b', 'build', 1, info);
+  assert.deepEqual([still.opacity, still.frameT, still.planAlpha, still.highlights.length, still.zoom], [1, 13, 0, 0, 1], '停点原样');
+  assert.deepEqual(plan3dMotion('a', 'enter', 0, { ...info, target: 1 }).zoom, 1);
+  assert.ok(plan3dMotion('b', 'build', 0.1, info).planAlpha === 1, '先是平面图');
+  const mid = plan3dMotion('b', 'build', 0.5, info);
+  assert.ok(mid.frameT > 0 && mid.frameT < 13 && mid.planAlpha === 0, '中间：墙、柜子在出现');
+  const lit = [0.86, 0.9, 0.94].map((f) => plan3dMotion('b', 'build', f, info).highlights.map((h) => h.i));
+  assert.ok(lit.flat().length >= 2, '房间逐个亮');
+  const out = plan3dMotion('a', 'enter', 0.3, { ...info, target: 2 });
+  assert.ok(out.zoom > 1 && out.zoomArea === 2 && out.highlights[0].i === 2 && out.opacity === 1, '先高亮、推近，3D 图还在');
+  assert.equal(enterProgress(0.3), 0, '这时下一页还没开始');
+  assert.equal(enterProgress(1), 1);
+  assert.ok(plan3dMotion('a', 'enter', 0.7, { ...info, target: 2 }).opacity === 0, '之后 3D 图淡出');
+});
