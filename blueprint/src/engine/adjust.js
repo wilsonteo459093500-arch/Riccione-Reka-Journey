@@ -357,7 +357,8 @@ export function applyAdjust(page, adjust, pageIndex = 0, lang = null) {
     changed = true;
   }
   if (!changed) return warned(page);
-  const out = warned({ ...page, els, adjusted: true, autoEls: page.els });
+  // 这个语言版本里自己也调过了：不再说「按自动排版」
+  const out = { ...page, els, adjusted: true, autoEls: page.els };
   if (blurry) out.warnings = [...(out.warnings || []), `手动取景把照片放大了 ${blurry.toFixed(1)} 倍，会发虚：缩小一点，或换高清图`];
   return out;
 }

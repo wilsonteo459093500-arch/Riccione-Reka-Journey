@@ -434,7 +434,7 @@ export default function AdjustLayer({ page, adjust, scale, areaEl, onDraft, onCo
             key={h}
             data-handle={h}
             onPointerDown={(e) => startDrag(e, group, h)}
-            className="absolute w-3 h-3 -translate-x-1/2 -translate-y-1/2 rounded-sm bg-white border border-sky-600 shadow-sm"
+            className="absolute z-20 w-3 h-3 -translate-x-1/2 -translate-y-1/2 rounded-sm bg-white border border-sky-600 shadow-sm"
             style={{ left: px(selBox.x + selBox.w * HANDLE_POS[h][0]), top: px(selBox.y + selBox.h * HANDLE_POS[h][1]), cursor: HANDLE_CURSOR[h] }}
           />
         ))}
@@ -445,6 +445,8 @@ export default function AdjustLayer({ page, adjust, scale, areaEl, onDraft, onCo
           ref={barRef}
           className="absolute z-10 flex flex-wrap items-center gap-0.5 rounded-lg bg-white/95 shadow-lg ring-1 ring-black/10 px-1 py-1"
           style={{
+            // 宽度只看内容、不看位置：位置是按量出来的宽度夹的，两边互相依赖会在窄画布上来回量个不停
+            width: 'max-content',
             maxWidth: Math.max(160, slideW - 8),
             left: clampN(px(selBox.x), 4, Math.max(4, slideW - (barSize.w || 0) - 4)),
             top: barAbove ? Math.min(px(selBox.y), slideH) - barH - 6 : clampN(px(selBox.y + selBox.h) + 8, 4, Math.max(4, slideH - barH - 4)),
@@ -486,14 +488,17 @@ export default function AdjustLayer({ page, adjust, scale, areaEl, onDraft, onCo
           ) : (
             <span className="px-1.5 text-[11px] text-bp-muted whitespace-nowrap">拖动换位置 · 拖角改大小</span>
           )}
-          {adjusted && (
-            <>
-              <span className="w-px h-4 bg-bp-line mx-0.5" />
-              <button type="button" className={btn(false)} onClick={() => commit(group, null)} title="这一块回到程序排的位置和大小">
-                <RotateCcw size={12} /> 恢复自动
-              </button>
-            </>
-          )}
+          {/* 一直都在（没调过时点不了）：第一次拖滑块时工具栏不会突然变宽、从鼠标底下挪走 */}
+          <span className="w-px h-4 bg-bp-line mx-0.5" />
+          <button
+            type="button"
+            className={`${btn(false)} disabled:opacity-40 disabled:hover:bg-transparent`}
+            disabled={!adjusted}
+            onClick={() => commit(group, null)}
+            title="这一块回到程序排的位置和大小"
+          >
+            <RotateCcw size={12} /> 恢复自动
+          </button>
         </div>
       )}
     </div>
