@@ -12,6 +12,10 @@ import { splitTimeOfDay } from '../import/labels.js';
 import { bViewFullNotes } from '../engine/b/design.js';
 import { makeTranslator, langOf } from '../engine/lang.js';
 
+/** 效果图页上那张效果图（满版 name 'photo:image'，图文页 edit.field 'image'）的元素序号；没有 → -1 */
+export const heroIndex = (page) =>
+  page?.kind === 'view' ? (page.els || []).findIndex((el) => el.t === 'img' && el.src && (el.name === 'photo:image' || el.edit?.field === 'image')) : -1;
+
 /** 满版效果图页：效果图元素标名 'photo:image'（b/design.js bViewFull） */
 export const isFullView = (page) => page?.kind === 'view' && (page.els || []).some((el) => el.name === 'photo:image');
 
@@ -49,9 +53,11 @@ export function buildStops(pages, project) {
     else if (!sameSlide) segment += 1;
     const tod = slide?.kind === 'view' ? splitTimeOfDay(slide.subtitle).tod : null;
     const extra = isFullView(pg) && slide ? bViewFullNotes(ctx, slide).els : [];
+    const page = extra.length ? { ...pg, els: [...pg.els, ...extra] } : pg;
     stops.push({
       key: pg.key,
-      page: extra.length ? { ...pg, els: [...pg.els, ...extra] } : pg,
+      page,
+      hero: heroIndex(page), // 换页进来时「线稿 → 上色 → 原图」的那张效果图
       slide,
       segment,
       phase: tod,
@@ -64,13 +70,22 @@ export function buildStops(pages, project) {
   return stops.map(({ inPair, ...s }) => s);
 }
 
-/** 两个停点之间的过渡：'same' = 同一段（白天 → 夜晚、材料续页）交叉淡化；'cut' = 换页 */
+/**
+ * 两个停点之间的过渡：
+ *   'same'   同一段（白天 → 夜晚）：交叉淡化
+ *   'sketch' 换到一张效果图页：效果图从白纸上「线稿 → 上色 → 原图」
+ *   'cut'    其他换页：交叉淡化 + 推近
+ */
 export function transitionKind(stops, a, b) {
   const sa = stops[a];
   const sb = stops[b];
   if (!sa || !sb) return 'cut';
-  return sa.segment === sb.segment && sa.slide?.kind === 'view' && sb.slide?.kind === 'view' ? 'same' : 'cut';
+  if (sa.segment === sb.segment && sa.slide?.kind === 'view' && sb.slide?.kind === 'view') return 'same';
+  return sb.hero >= 0 ? 'sketch' : 'cut';
 }
+
+/** 这段过渡要滑多长（相对一般换页）：「从无到有」慢一点，看得清线是怎么画出来的 */
+export const transitionWeight = (kind) => (kind === 'sketch' ? 2.4 : 1);
 
 /** 目录：每段一项（第一个停点），按章节分组 → [{ section, items:[{ stop, label, segment }] }] */
 export function indexOf(stops) {

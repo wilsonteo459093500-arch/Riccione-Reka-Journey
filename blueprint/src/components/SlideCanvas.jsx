@@ -115,8 +115,9 @@ function TextEl({ el }) {
  *           onPick?:(field:string, el:object)=>void, activeField?:string, interactive?:boolean,
  *           elStyle?:(el:object, i:number)=>({ opacity?:number, transform?:string, imgScale?:number }|null) }} props
  *   elStyle：展厅播放用（每个元素的透明度 / 位移 / 效果图推近）；编辑器不传 = 原样
+ *   replaceEl(el, i)：展厅播放用，返回节点 = 这个元素换成它画（效果图的「线稿 → 上色」画布），null = 照常
  */
-function SlideCanvas({ slide, width = 960, resolveUrl, onPick, activeField, interactive = false, className = '', elStyle }) {
+function SlideCanvas({ slide, width = 960, resolveUrl, onPick, activeField, interactive = false, className = '', elStyle, replaceEl }) {
   const scale = width / SLIDE_W;
   const height = SLIDE_H * scale;
   return (
@@ -136,6 +137,8 @@ function SlideCanvas({ slide, width = 960, resolveUrl, onPick, activeField, inte
           if (el.t === 'rect') node = <RectEl el={el} />;
           else if (el.t === 'img') node = <ImgEl el={el} url={el.src ? resolveUrl?.(el.src) : null} scale={st?.imgScale ?? 1} />;
           else if (el.t === 'text') node = <TextEl el={el} />;
+          const custom = replaceEl ? replaceEl(el, i) : null;
+          if (custom) node = custom;
           if (!node) return null;
           // 展厅播放：每个元素一层（一直包着，样式变来变去也不会重建 <img>）
           if (elStyle) {

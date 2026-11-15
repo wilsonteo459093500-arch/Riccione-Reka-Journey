@@ -30,6 +30,23 @@ export const PUSH_IN = 0.05; // B 进场时从 1.05 退回 1
 
 const IDENTITY = Object.freeze({ opacity: 1, ty: 0, scale: 1 });
 
+/** 「从无到有」（sketch）：线稿、上色的进度（过渡进度 f 的函数） */
+export const sketchProgress = (f) => ({ lineQ: span(f, 0.12, 0.55), colQ: span(f, 0.5, 0.97) });
+
+/** B 页的字（和小图）依次进来：start0 起，最后一个在 f = 1 前到位 */
+function textIn(els, start0, spread, dur) {
+  const order = new Map();
+  els.forEach((el, i) => {
+    if (isText(el)) order.set(i, order.size);
+  });
+  const n = Math.max(1, order.size);
+  return (f, i) => {
+    const k = order.get(i) ?? 0;
+    const start = start0 + spread * (n > 1 ? k / (n - 1) : 0);
+    return span(f, start, Math.min(1, start + dur));
+  };
+}
+
 /**
  * 某一页在过渡里的样子
  * @param {'a'|'b'} role   a = 离开的那页，b = 进来的那页
@@ -49,6 +66,34 @@ export function layerMotion(role, kind, f, els = []) {
     const text = span(f, 0.6, 0.9);
     // 元素透明度要乘上整层的透明度：字的实际透明度 = text（不超过整层）
     return { opacity: layer, el: (el) => (isText(el) && layer > 0 && text < layer ? { opacity: clamp01(text / layer), ty: 0, scale: 1 } : IDENTITY) };
+  }
+  if (kind === 'sketch') {
+    // 换到效果图页：上一页淡出 → 这一页的效果图在白纸上画线稿、上色 → 字最后进来；f = 1 原样
+    if (role === 'a') {
+      if (f <= 0) return { opacity: 1, el: () => IDENTITY };
+      const out = span(f, 0, 0.2);
+      return { opacity: 1 - span(f, 0.05, 0.3), el: (el) => (isText(el) ? { opacity: 1 - out, ty: -14 * out, scale: 1 } : IDENTITY) };
+    }
+    if (f >= 1) return { opacity: 1, el: () => IDENTITY, sketch: null };
+    const tin = textIn(els, 0.72, 0.14, 0.12);
+    const sk = sketchProgress(f);
+    const late = span(f, 0.72, 0.98); // 小图（材料小样、logo）和字一起进来
+    return {
+      opacity: span(f, 0.05, 0.3),
+      sketch: sk,
+      el: (el, i) => {
+        if (isText(el)) {
+          const o = tin(f, i);
+          return { opacity: o, ty: 16 * (1 - o), scale: 1 };
+        }
+        if (el.t === 'img' && !isHeroImg(el)) return { opacity: late, ty: 0, scale: 1 };
+        // 托字暗渐变（满版页白字下面那条）：跟着字一起出来，不然会先压在白纸线稿上
+        if (el.t === 'rect' && /shade/.test(el.name || '')) return { opacity: late, ty: 0, scale: 1 };
+        // 效果图本身：线稿画布接手；画布还没准备好时退回淡入
+        if (el.t === 'img') return { opacity: sk.colQ, ty: 0, scale: 1 };
+        return IDENTITY;
+      },
+    };
   }
   if (role === 'a') {
     if (f <= 0) return { opacity: 1, el: () => IDENTITY };

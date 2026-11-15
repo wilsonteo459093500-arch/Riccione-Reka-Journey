@@ -10,11 +10,14 @@ import SlideCanvas from '../SlideCanvas.jsx';
 import { renderDeck, exportableSlides } from '../../engine/deck.js';
 import { metaOf, resolveUrl } from '../../store/assets.js';
 import { getAssetRecord, putAssetRecord } from '../../store/db.js';
-import { buildStops, transitionKind, indexOf, SECTION_NAMES } from '../../showroom/timeline.js';
+import { buildStops, transitionKind, transitionWeight, indexOf, SECTION_NAMES } from '../../showroom/timeline.js';
 import { layerMotion, frameAt, snapTarget, cssOf, clamp01 } from '../../showroom/motion.js';
+import { sketchFrame } from '../../showroom/sketch.js';
+import { sketchGeom, peekSketch, requestSketch, onSketchReady } from '../../showroom/sketchCache.js';
 
 const WHEEL_UNIT = 900; // 滚轮 / 触控板：滚多少 px 走一页
 const SMOOTH = 0.075; // 每帧（60fps）追上目标的比例：越小越慢越稳
+const MIN_SPEED = 0.0035 / 16.7; // 最后一小段的最低速度（页 / ms）
 const IDLE_SNAP_MS = 650; // 停手多久后吸到最近一页（触控板慢慢滑、中途停一下也不会被拉回去）
 const JUMP_MS = 1400; // 目录跳转的过渡时长
 const CHROME_HIDE_MS = 2500;
@@ -127,13 +130,39 @@ function ChromeButton({ onClick, title, children }) {
   );
 }
 
-/** 一层（一页）：整层透明度 + 每个元素的动效 */
+/** 效果图的「线稿 → 上色」画布：放在效果图原来的框里（同样的裁切），逐帧合成 */
+function SketchEl({ el, entry, lineQ, colQ }) {
+  const ref = useRef(null);
+  const buf = useRef(null);
+  const { pl, W, H } = sketchGeom(el);
+  useEffect(() => {
+    const c = ref.current;
+    if (!c) return;
+    const ctx = c.getContext('2d');
+    if (!buf.current || buf.current.width !== W || buf.current.height !== H) buf.current = ctx.createImageData(W, H);
+    sketchFrame(entry.an, entry.src, lineQ, colQ, buf.current.data);
+    ctx.putImageData(buf.current, 0, 0);
+  }, [entry, lineQ, colQ, W, H]);
+  return (
+    <div style={{ position: 'absolute', left: pl.x, top: pl.y, width: pl.w, height: pl.h, overflow: 'hidden' }}>
+      <canvas ref={ref} width={W} height={H} style={{ width: '100%', height: '100%', display: 'block' }} />
+    </div>
+  );
+}
+
+/** 一层（一页）：整层透明度 + 每个元素的动效；换到效果图页时，效果图换成「线稿 → 上色」画布 */
 function Layer({ stop, role, kind, f, width }) {
   const m = layerMotion(role, kind, f, stop.page.els);
-  const elStyle = useCallback((el, i) => cssOf(m.el(el, i)), [m]);
+  const heroEl = stop.hero >= 0 ? stop.page.els[stop.hero] : null;
+  const entry = m.sketch && heroEl ? peekSketch(sketchGeom(heroEl).key) : null;
+  const elStyle = useCallback((el, i) => (entry && i === stop.hero ? null : cssOf(m.el(el, i))), [m, entry, stop.hero]);
+  const replaceEl = useCallback(
+    (el, i) => (entry && i === stop.hero ? <SketchEl el={el} entry={entry} lineQ={m.sketch.lineQ} colQ={m.sketch.colQ} /> : null),
+    [entry, stop.hero, m]
+  );
   return (
     <div style={{ position: 'absolute', inset: 0, opacity: m.opacity }}>
-      <SlideCanvas slide={stop.page} width={width} resolveUrl={resolveUrl} elStyle={elStyle} />
+      <SlideCanvas slide={stop.page} width={width} resolveUrl={resolveUrl} elStyle={elStyle} replaceEl={entry ? replaceEl : undefined} />
     </div>
   );
 }
@@ -223,14 +252,23 @@ export default function ShowroomPlayer({ project, onClose }) {
 
   const clampPos = useCallback((p) => Math.min(Math.max(p, 0), Math.max(0, count - 1)), [count]);
   /** 一次手势最多走到当前页的前后一页：讲解时不会一下滑过好几页 */
+  /** 当前位置往 dir 方向的那一段过渡要滑多长（「从无到有」慢一些） */
+  const weightAt = useCallback(
+    (pos, dir) => {
+      const a = dir >= 0 ? Math.floor(pos + 1e-6) : Math.ceil(pos - 1e-6) - 1;
+      return a < 0 || a + 1 >= count ? 1 : transitionWeight(transitionKind(stops, a, a + 1));
+    },
+    [stops, count]
+  );
   const nudge = useCallback(
-    (delta) => {
+    (raw) => {
       const base = cur.current;
+      const delta = raw / weightAt(target.current, raw);
       target.current = clampPos(Math.min(Math.max(target.current + delta, Math.floor(base) - 1), Math.ceil(base) + 1));
       lastInput.current = performance.now();
       jump.current = null;
     },
-    [clampPos]
+    [clampPos, weightAt]
   );
   const goTo = useCallback(
     (k) => {
@@ -270,15 +308,25 @@ export default function ShowroomPlayer({ project, onClose }) {
       }
       if (!drag.current && now - lastInput.current > IDLE_SNAP_MS) target.current = snapTarget(target.current, count);
       const d = target.current - cur.current;
-      const k = 1 - Math.pow(1 - SMOOTH, dt / 16.7);
-      cur.current = Math.abs(d) < 5e-4 ? target.current : cur.current + d * k;
+      // 「从无到有」那段（按键 / 吸附时）走得慢一些
+      const w = weightAt(cur.current, d);
+      const k = 1 - Math.pow(1 - SMOOTH / w, dt / 16.7);
+      // 前半段按比例追（慢慢停），最后一小段用最低速度走完（不会拖着一点点尾巴不到位）
+      const minStep = (MIN_SPEED * dt) / w;
+      let step = d * k;
+      if (Math.abs(step) < minStep) step = Math.sign(d) * Math.min(Math.abs(d), minStep);
+      cur.current = Math.abs(d) < 5e-4 ? target.current : cur.current + step;
       const fr = frameAt(cur.current, count);
       set({ ...fr, kind: fr.b == null ? 'cut' : transitionKind(stops, fr.a, fr.b), pos: cur.current });
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [count, stops]);
+  }, [count, stops, weightAt]);
+
+  // 线稿分析好了 → 重画（分析在背景线程里跑）
+  const [, setSketchTick] = useState(0);
+  useEffect(() => onSketchReady(() => setSketchTick((t) => t + 1)), []);
 
   // 角落按钮：动一下鼠标 / 碰一下屏幕就出来，2.5 秒不动就藏起来
   const poke = useCallback(() => {
@@ -350,8 +398,9 @@ export default function ShowroomPlayer({ project, onClose }) {
     const dy = e.clientY - d.y;
     if (!d.axis && Math.hypot(dx, dy) > 8) d.axis = Math.abs(dy) >= Math.abs(dx) ? 'y' : 'x';
     if (!d.axis) return;
-    const span = d.axis === 'y' ? vp.h * 0.85 : vp.w * 0.85;
-    const move = -(d.axis === 'y' ? dy : dx) / span;
+    const raw = -(d.axis === 'y' ? dy : dx);
+    const span = (d.axis === 'y' ? vp.h * 0.85 : vp.w * 0.85) * weightAt(d.start, raw);
+    const move = raw / span;
     target.current = clampPos(Math.min(Math.max(d.start + move, Math.floor(d.start) - 1), Math.ceil(d.start) + 1));
     const now = performance.now();
     const step = d.axis === 'y' ? e.clientY - d.ly : e.clientX - d.lx;
@@ -385,6 +434,9 @@ export default function ShowroomPlayer({ project, onClose }) {
         im.src = url;
         im.decode?.().catch(() => {});
       }
+      // 后面几张效果图先在背景线程里算好线稿
+      const hero = stops[k].hero >= 0 ? stops[k].page.els[stops[k].hero] : null;
+      if (hero) requestSketch(hero, resolveUrl(hero.src));
     }
   }, [view.a, stops, count]);
 
