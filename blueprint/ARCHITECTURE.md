@@ -12,6 +12,7 @@ PDF ──import/pdfExtract.js──▶ rawPages（文字行 + 图片框（按�
         ──import/analyze.js──▶ analysis（楼层 / 空间 / 视角 / 材料，纯函数，可在 Node 测）
         ──import/importPdf.js──▶ Project（engine/model.js，图片存进 IndexedDB → 'asset:<id>'）
 Project ──engine/deck.js renderDeck()──▶ 渲染页 [{ bg, els }]（engine/spec.js 元素规格）
+        │   （最后一步 engine/adjust.js applyAdjust：套上这一页的手动调整 slide.adjust —— 预览和导出因此一致）
         ├─ components/SlideCanvas.jsx  网页预览（所见即所得）
         └─ engine/pptx/writer.js       导出 .pptx（真文本框 / 真图片，可在 PPT 里改）
 ```
@@ -30,10 +31,12 @@ Project ──engine/deck.js renderDeck()──▶ 渲染页 [{ bg, els }]（eng
 | `src/engine/metrics.js` | 三种字体的实测字宽（估算换行用） |
 | `src/engine/lang.js` · `glossary.js` | 提案语言（华文 / English / 中英）、翻译记忆、词典自动英文、缺英文提醒 |
 | `src/engine/deck.js` | `renderDeck(project, { meta })` → 渲染页（每页的提醒、缺英文清单）；`sectionLabel(section, deckChapters(project))` = 编辑器里的章节名（页面列表、章节开关），编号与目录一致 |
+| `src/engine/adjust.js` | 手动调整版面：`groupsOf(page)`（一页上可以调的块 = `edit.field` 相同的元素）、`applyAdjust(page, adjust, pageIndex)`（文字块 `{dx,dy,k}`，照片 `{box, view}` → 显式 `crop`）、`setAdjust` / `clearAdjust`；界面在 `components/editor/AdjustLayer.jsx` |
 | `src/engine/pptx/` | `buildPptx(slides, { loadImage })` → .pptx（JSZip，浏览器 / Node 通用） |
 | `src/store/db.js` | IndexedDB：projects / assets |
 | `src/store/assets.js` | `'asset:<id>'` ↔ Blob / object URL / 尺寸；`storeBlob`、`preloadProjectAssets`、`resolveUrl`、`metaOf`、`loadForPptx`、`toInlineImage` |
-| `src/ai/` | Gemini 客户端（`gemini.js`）、设置（`settings.js`）、标题润色（`polish.js`）、AI 翻译（`translate.js`）、3D 全屋立体图（`dollhouse.js`） |
+| `src/ai/` | Gemini 客户端（`gemini.js`）、设置（`settings.js`）、标题润色（`polish.js`）、AI 翻译（`translate.js`）、3D 立体图（`dollhouse.js`：图纸转图片、框选范围、材质样本、楼层 / 提案页的纯函数；`plan3d.js`：存在楼层上的坐标 / 视角 / 贴图、AI 框图的两次看图、出图参数） |
+| `src/plan3d/` | 3D 户型图的核心（ES5、无依赖，以后原样搬到 VISI）：几何模型 `geometry.js`、场景 `scene.js`、画法 `paint.js`、配色 `palette.js`、编辑器的纯函数 `edit.js` / `settle.js`、整理 AI 回复 `detect.js`、AI 框图提示词 `prompt.js` |
 | `src/import/` | PDF 解析：`pdfExtract.js`（pdf.js）、`analyze.js`（纯函数）、`labels.js`（词典与文字解析）、`importPdf.js`（编排） |
 | `src/moodboard/` | Material Board（移植自旧版 UKIR STUDIO，只保留 material board 功能）；`migrate.js` = 同网址时把旧版材质库 / 画板搬过来 |
 | `src/components/` | 界面：首页 / 编辑器 / 检查器 / 材料清单 / 导出 / 设置 / 独立画板（`BoardsPage.jsx`） |
@@ -60,8 +63,11 @@ Project ──engine/deck.js renderDeck()──▶ 渲染页 [{ bg, els }]（eng
   —— `meta = { source: 'board' | 'flatlay' | 'upload', orientation: 'portrait' | 'landscape' | 'square' }`；
   MoodBoard 会 await 它并自己弹成功 / 失败提示（壳层出错直接抛）。封面上 Board 整张放在右侧，任何比例都不裁。
   画板存在独立的 IndexedDB，删项目时要一起调 `removeBoardsOf(projectId)`（`src/moodboard/store.js`）。
-- `<DollhousePanel project settings notify onOpenSettings onChange />` —— 立体图页 = `kind: 'view', tag: '3d', layout: 'full'`，
-  插在该层章节页之后；不进楼层空间清单、不参与 AI 润色。
+- `<DollhousePanel project settings notify onOpenSettings onChange />` —— 立体图页 = `kind: 'view', tag: '3d'`（宽图 `layout: 'full'`，方图 / 竖图 `'auto'` → 图文页，不被裁），
+  插在该层章节页之后；不进楼层空间清单、不参与 AI 润色。平面图相关的数据都挂在楼层上（`planSource` 原图、`plan` 裁剪后的图、
+  `planCrop` / `planScope` / `planRegion` 框选范围、`plan3d` 核对过的坐标 + 视角 + 贴图、`render3dInfo` 每张图的设置），都不进撤销历史
+  （字段清单在 `src/lib/generated.js`，新加的生成字段要登记在那里）。图不是 AI 画的：`plan3d.geo` → `buildScene` → `paintScene`。
+  框选对话框是 `<PlanCropper>`；核对位置的对话框是 `<Plan3dEditor>`（`src/components/plan3d/`）。
 - `<PolishDialog project settings notify onOpenSettings onApply onClose onlySlideIds? />` —— 内部跑
   `polishProject(project, settings, { onProgress, onlySlideIds })` → `[{ slideId, before, patch }]`（只给建议），
   设计师勾选后 `onApply(patches)`，编辑器用 `applyPolishPatches(project, patches)` 套用（只改 subtitle / roomEn / notes，材料永远不动）。

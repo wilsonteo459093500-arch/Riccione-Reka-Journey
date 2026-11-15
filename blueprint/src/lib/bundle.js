@@ -23,7 +23,7 @@ const EXT_BY_MIME = {
 
 export const extForMime = (mime) => EXT_BY_MIME[String(mime || '').toLowerCase()] || 'bin';
 
-/** 深拷贝并改写所有 'asset:<旧id>' → map 里的新 src（不在 map 里的原样保留） */
+/** 深拷贝并改写所有 'asset:<旧id>' → map 里的新 src（值和对象的键都改；不在 map 里的原样保留） */
 export function remapAssetSrcs(obj, map) {
   const get = (src) => (map instanceof Map ? map.get(src) : map?.[src]);
   const walk = (v) => {
@@ -31,7 +31,8 @@ export function remapAssetSrcs(obj, map) {
     if (Array.isArray(v)) return v.map(walk);
     if (v && typeof v === 'object') {
       const out = {};
-      for (const [k, x] of Object.entries(v)) out[k] = walk(x);
+      // 键也可能是素材引用（render3dInfo 以图片的 src 作键）
+      for (const [k, x] of Object.entries(v)) out[isAssetSrc(k) ? get(k) || k : k] = walk(x);
       return out;
     }
     return v;

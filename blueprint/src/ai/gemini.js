@@ -61,35 +61,49 @@ function parseRetryDelaySeconds(data) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const ADVISOR_MODEL_KEY = 'blueprint.textModel';
+const missingModels = new Set(); // 回过 404 的模型（本次打开期间）
 
 /**
- * 图像理解 / 文字分析（方案标题润色 / 材料识别用）。
+ * 图像理解 / 文字分析（方案标题润色 / 材料识别 / 3D 户型图读图用）。
  * 模型不写死：按候选列表逐个尝试（404 才换下一个），成功的记进 localStorage；
  * 最后保底用当前出图模型（它必然可用）。
+ * opts.models：优先尝试的模型（读图纸想先用更强的模型）—— 它们不可用 / 被限流 / 出错时不等待、直接换下一个候选；
+ * opts.cacheKey：这类任务单独记住上次成功的模型（不和润色共用）。
  */
 export async function analyzeImage(settings, prompt, image, opts = {}) {
-  const cached = localStorage.getItem(ADVISOR_MODEL_KEY);
+  const cacheKey = opts.cacheKey || ADVISOR_MODEL_KEY;
+  const prefer = (opts.models || []).filter(Boolean);
+  const cached = localStorage.getItem(cacheKey);
   const candidates = [
     ...new Set(
-      [cached, 'gemini-2.5-flash', 'gemini-flash-latest', 'gemini-3-flash', settings.model].filter(Boolean)
+      [...prefer, cached, 'gemini-2.5-flash', 'gemini-flash-latest', 'gemini-3-flash', settings.model].filter(Boolean)
     ),
   ];
   let lastErr = null;
-  for (const model of candidates) {
+  for (let i = 0; i < candidates.length; i++) {
+    const model = candidates[i];
+    if (missingModels.has(model) && i < candidates.length - 1) continue; // 这次打开期间已经确认不存在的模型不再问
+    const preferred = prefer.includes(model) && i < candidates.length - 1;
     try {
-      const text = await analyzeOnce(settings, model, prompt, image, opts);
-      localStorage.setItem(ADVISOR_MODEL_KEY, model);
+      const text = await analyzeOnce(settings, model, prompt, image, preferred ? { ...opts, retries: 0 } : opts);
+      localStorage.setItem(cacheKey, model);
       return text;
     } catch (e) {
       lastErr = e;
-      if (!e.modelNotFound) throw e; // 只有「模型不存在」才尝试下一个候选
+      if (e.modelNotFound) missingModels.add(model);
+      // 「模型不存在」才尝试下一个候选；优先模型出任何错（除了 key 问题）也换下一个
+      if (!e.modelNotFound && !(preferred && !e.keyProblem)) throw e;
     }
   }
   throw lastErr || new Error('没有可用的分析模型。');
 }
 
 async function analyzeOnce(settings, model, prompt, image, opts = {}) {
-  if (!settings.apiKey) throw new Error('还没有配置 API key，点右上角设置。');
+  if (!settings.apiKey) {
+    const err = new Error('还没有配置 API key，点右上角设置。');
+    err.keyProblem = true;
+    throw err;
+  }
   const url = endpoint(settings, `/v1beta/models/${model}:generateContent`);
   // image 可为单张 { mimeType, base64 } 或多张数组（如差异质检需要底图+出图两张）
   const images = Array.isArray(image) ? image : image ? [image] : [];
@@ -106,8 +120,10 @@ async function analyzeOnce(settings, model, prompt, image, opts = {}) {
       headers: authHeaders(settings),
       body: JSON.stringify({
         contents: [{ role: 'user', parts }],
-        // opts.json：要求模型只回 JSON（标题润色 / 材料识别）
-        ...(opts.json ? { generationConfig: { responseMimeType: 'application/json' } } : {}),
+        // opts.json：要求模型只回 JSON（标题润色 / 材料识别）；opts.config：其余的 generationConfig（例如回复长度上限）
+        ...(opts.json || opts.config
+          ? { generationConfig: { ...(opts.json ? { responseMimeType: 'application/json' } : {}), ...(opts.config || {}) } }
+          : {}),
       }),
     });
     try {
@@ -116,12 +132,13 @@ async function analyzeOnce(settings, model, prompt, image, opts = {}) {
       data = null;
     }
     const retryable = res.status === 429 || res.status >= 500;
-    if (res.ok || !retryable || attempt >= 2) break;
+    if (res.ok || !retryable || attempt >= (opts.retries ?? 2)) break;
     await sleep((parseRetryDelaySeconds(data) ?? 10 * 2 ** attempt) * 1000);
   }
   if (!res.ok) {
     const err = new Error(friendlyError(res.status, data?.error?.message));
     err.modelNotFound = res.status === 404;
+    err.keyProblem = res.status === 401 || res.status === 403 || (res.status === 400 && /api key/i.test(data?.error?.message || ''));
     throw err;
   }
 
@@ -163,9 +180,10 @@ export async function testConnection(settings) {
  * @param {object|null} image  { mimeType, base64 }
  * @param {string|null} aspectRatio 仅文字模式使用，如 '16:9'
  * @param {(seconds: number, attempt: number) => void} [onWait] 重试等待回调
+ * @param {{ imageSize?: '1K'|'2K' }} [opts]
  * @returns {Promise<string>} 图片 dataURL
  */
-export async function generateImage(settings, prompt, image, aspectRatio, onWait) {
+export async function generateImage(settings, prompt, image, aspectRatio, onWait, opts = {}) {
   if (!settings.apiKey) throw new Error('还没有配置 API key，点右上角设置。');
 
   // image 可以是单张 { mimeType, base64 }，也可以是多张数组（如 flat-lay 合成）
@@ -177,7 +195,8 @@ export async function generateImage(settings, prompt, image, aspectRatio, onWait
   const imageConfig = {};
   if (aspectRatio) imageConfig.aspectRatio = aspectRatio;
   // 2.5 只支持 1K；新模型（3.1+）显式要 2K 高清输出（值必须大写，小写会被静默忽略）
-  if (!/2\.5-flash-image/.test(settings.model || '')) imageConfig.imageSize = '2K';
+  // opts.imageSize：小图（材质样本）用 '1K' 就够
+  if (!/2\.5-flash-image/.test(settings.model || '')) imageConfig.imageSize = opts.imageSize || '2K';
   if (Object.keys(imageConfig).length) generationConfig.imageConfig = imageConfig;
 
   const url = endpoint(settings, `/v1beta/models/${settings.model}:generateContent`);

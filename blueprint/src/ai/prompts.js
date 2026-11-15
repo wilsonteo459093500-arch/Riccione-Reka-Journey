@@ -1,4 +1,4 @@
-// AI 提示词 —— 标题润色（中文，给看图模型）与 3D 全屋立体图（英文，给出图模型）。纯字符串，无副作用，可在 Node 测。
+// AI 提示词 —— 标题润色 / 翻译（中文，给看图模型）与 3D 户型图（读图 / 检查用中文，出图 / 修正用英文）。纯字符串，无副作用，可在 Node 测。
 
 // ---------------------------------------------------------------------------
 // 「AI 润色」：效果图页的视角名 / 英文小标题 / 备注
@@ -108,56 +108,76 @@ ${JSON.stringify(items.map((it) => ({ id: it.id, kind: it.kind, zh: it.zh })))}
 }
 
 // ---------------------------------------------------------------------------
-// 「3D 全屋立体图」：平面布置图 + 效果图 → 照片级等轴测剖切鸟瞰（像 The Sims 的建造视图）
+// 「3D 户型图」：找图纸范围（AI 框图的提示词在 src/plan3d/prompt.js，和画图的程序放在一起，以后给 VISI 用同一份）
 // ---------------------------------------------------------------------------
 
-/** 镜头方位：界面显示中文，提示词用英文 */
-export const DOLLHOUSE_ANGLES = [
-  { id: 'south-east', zh: '东南', en: 'south-east', corner: 'bottom-right', toward: 'north-west' },
-  { id: 'south-west', zh: '西南', en: 'south-west', corner: 'bottom-left', toward: 'north-east' },
-  { id: 'north-east', zh: '东北', en: 'north-east', corner: 'top-right', toward: 'south-west' },
-  { id: 'north-west', zh: '西北', en: 'north-west', corner: 'top-left', toward: 'south-east' },
+/** 旧版「AI 直接出图」的两种视角：只用来给生成记录里的旧图标名字 */
+export const DOLLHOUSE_VIEWS = [
+  { id: 'top', zh: '正俯视', hint: '垂直往下看，和图纸一一对应，位置最准。' },
+  { id: 'tilt', zh: '微倾俯视', hint: '略带透视，能看到一点墙面和柜体立面，更有立体感。' },
 ];
 
-/** 'south-east' / '东南' / 'SE' / 对象 → 方位定义（认不出 = 东南） */
-export function resolveAngle(angle) {
-  if (angle && typeof angle === 'object') angle = angle.id || angle.en || angle.zh;
-  const key = String(angle || '').trim().toLowerCase().replace(/[\s_]+/g, '-');
-  const abbr = { se: 'south-east', sw: 'south-west', ne: 'north-east', nw: 'north-west', southeast: 'south-east', southwest: 'south-west', northeast: 'north-east', northwest: 'north-west' };
-  const id = abbr[key] || key;
-  return DOLLHOUSE_ANGLES.find((a) => a.id === id || a.zh === String(angle || '').trim()) || DOLLHOUSE_ANGLES[0];
-}
+/** 框选范围：room = 只框主房间（墙外的楼梯、储藏间不要）；all = 图上有的都框进来 */
+export const PLAN_SCOPES = [
+  { id: 'room', zh: '只做主房间', hint: '只画主房间四面墙以内，墙外的楼梯、储藏间、隔壁房间都不画。' },
+  { id: 'all', zh: '连邻近空间', hint: '图纸上露出的邻近空间也一起画，位置照图纸。' },
+];
+
+export const resolveScope = (scope) => (scope === 'all' ? 'all' : 'room');
 
 const imagesRange = (from, count) => (count <= 1 ? `image ${from}` : `images ${from}–${from + count - 1}`);
 
 /**
- * 英文出图提示词
- * @param {{ floorName:string, angle:object, style?:string, rooms?:string[], refCount?:number, wholeHome?:boolean }} args
+ * 找图纸范围（给看图模型，英文；回 JSON）。上传的常常是整张 PPT / PDF 页：要把标题栏、logo、装饰栏排除在外。
+ * 框的写法用 Gemini 惯用的 [ymin, xmin, ymax, xmax]，0–1000。
  */
-export function dollhousePromptText({ floorName, angle, style = '', rooms = [], refCount = 0, wholeHome = false }) {
-  const scope = wholeHome ? 'the ENTIRE home shown in the plan' : `the ENTIRE ${floorName}`;
-  const roomsLine = rooms.length ? `\nRooms on this floor (from the designer's proposal): ${rooms.join(', ')}.` : '';
+export function planRegionPrompt() {
+  return `You are reading an interior designer's floor layout plan. The image may be a whole presentation slide or PDF page: besides the drawing itself it can contain a slide title (e.g. "LAYOUT PLAN"), a logo, a decorative gradient panel, page numbers or empty margins.
 
-  const design = refCount > 0
-    ? `DESIGN — ${imagesRange(2, refCount)} ${refCount > 1 ? 'are' : 'is'} the designer's interior render${refCount > 1 ? 's' : ''} of this same home; use ${refCount > 1 ? 'them' : 'it'} as the design reference:
-- Furnish and finish each room with the same built-in cabinetry design, door styles, colours, wood grains, stone, metal and fabric materials shown in the reference render${refCount > 1 ? 's' : ''}; match each room's look to its render as closely as possible.
-- Rooms without a reference render follow the same palette and design language.
-- The reference renders are only for design and materials — the layout always comes from image 1.`
-    : `DESIGN — no reference renders were provided: furnish every room in a warm, contemporary Malaysian custom-cabinetry style (light oak and walnut veneers, warm white walls, soft beige stone floors), consistent across the floor.`;
+Find two bounding boxes. Write each as [ymin, xmin, ymax, xmax], integers 0–1000 normalised to the image height and width (0,0 = top-left corner):
+- "drawing": the tightest box around the architectural drawing itself — every wall and piece of furniture, plus the notes written on the drawing (e.g. "HIDDEN DOOR", "EXTG. MARBLE FEATURED WALL"). Exclude slide titles, logos, decorative panels and empty margins.
+- "mainRoom": the tightest box around the OUTER face of the walls that enclose the main room the plan is about — the room that is drawn completely and furnished, usually labelled (e.g. "STUDY ROOM"). Include the doors and windows in those walls. Neighbouring spaces that are only partly drawn (stairs, stores, corridors, the next room) stay outside this box.
 
-  const notes = String(style || '').trim();
+Also decide:
+- "kind": "room" when the drawing is about ONE room and other spaces only appear as cut-off fragments; "floor" when it shows a whole floor or whole home with several complete rooms. For "floor", "mainRoom" is the same box as "drawing".
+- "roomName": the label printed for the main room, exactly as printed ("" when nothing is printed; for "floor" use the printed floor name or "").
 
-  return `Create ONE photorealistic 3D isometric CUTAWAY "dollhouse" render of ${scope} — like an architectural section model or the build view of The Sims, but ultra-realistic.
+Return strict JSON only, no explanation and no code fence:
+{"kind":"room","roomName":"STUDY ROOM","drawing":[0,0,1000,1000],"mainRoom":[0,0,1000,1000]}`;
+}
 
-LAYOUT — image 1 is the 2D floor layout plan. Follow it EXACTLY:
-- Same wall positions, room arrangement, door and window openings, columns, stairs and proportions as the plan. Do not add, remove, merge, mirror or move rooms.
-- Every wall is cut horizontally at about 1.2 m height with clean cut tops that show the wall thickness, so the interior of every room is visible from above.
-- Camera: elevated about 45° view from the ${angle.en} corner (the ${angle.corner} corner of the plan as drawn, assuming north is up), looking diagonally across the floor toward the ${angle.toward}. Orthographic-feeling isometric projection with no strong perspective distortion; the whole floor fits inside the frame with a small even margin.${roomsLine}
+// ---------------------------------------------------------------------------
+// 「材质贴图」：AI 只出一小块材质样本，程序把它贴到按坐标画好的柜子、台面、地板上（AI 接触不到户型）
+// ---------------------------------------------------------------------------
 
-${design}
+/** 四个贴图槽位的默认描述（英文，写进提示词）和「从参考图里取哪种材质」 */
+export const SWATCH_SLOTS = {
+  floor: {
+    desc: 'the face of a light natural oak timber floor board (one continuous piece of wood, no plank joints)',
+    from: 'the timber floor',
+    wood: true,
+  },
+  cabinet: { desc: 'a walnut wood veneer cabinet door panel with fine straight grain, matte finish', from: 'the wood veneer of the cabinetry', wood: true },
+  worktop: { desc: 'a polished white marble slab with soft grey veining', from: 'the stone of the worktops or stone wall panels', wood: false },
+  fabric: { desc: 'a warm grey-taupe woven upholstery fabric', from: 'the upholstery of the chairs or sofa', wood: false },
+};
 
-RENDERING:
-- Ultra-realistic architectural visualisation: physically based materials, soft global illumination, gentle ambient occlusion, realistic textures (wood grain, stone veining, fabric weave), warm natural daylight, crisp detail.
-- The cut floor slab sits on a thin white plinth, on a clean light warm-grey seamless background.
-- No text, no labels, no room names, no dimensions, no annotations, no people, no watermark, no logo.${notes ? `\n\nDESIGNER NOTES (follow them unless they contradict the plan): ${notes}` : ''}`;
+/**
+ * 材质样本的出图提示词（英文；随附 0–3 张效果图作参考）
+ * @param {{ slot:'floor'|'cabinet'|'worktop'|'fabric', refCount?:number, hint?:string }} args
+ */
+export function swatchPromptText({ slot, refCount = 0, hint = '' } = {}) {
+  const def = SWATCH_SLOTS[slot] || SWATCH_SLOTS.cabinet;
+  const note = String(hint || '').trim();
+  const refs =
+    refCount > 0
+      ? `\n\nREFERENCE — ${imagesRange(1, refCount)} ${refCount > 1 ? 'are interior renders' : 'is an interior render'} of a project. Match the colour, tone and ${def.wood ? 'grain' : 'pattern'} of ${def.from} shown there. Do NOT reproduce the room, the furniture, the lighting or any object from ${refCount > 1 ? 'them' : 'it'} — output only the bare material.`
+      : '';
+  return `Create ONE flat material texture swatch: ${def.desc}.
+
+- Straight-on view of the bare surface, as if a piece of it was scanned on a flatbed scanner. The material fills the entire square frame, edge to edge.
+- Perfectly even, diffuse lighting: no shadows, no highlights or reflections, no vignette, no gradient from one side to the other.
+- Only the material: no objects, no furniture, no room, no edges, no borders, no joints or seams, no frame, no text, no logo, no watermark.
+- The same scale and density across the whole image.${def.wood ? '\n- The wood grain runs horizontally, from the left edge to the right edge.' : ''}
+- Tileable: the left edge continues naturally into the right edge, and the top edge into the bottom edge.${refs}${note ? `\n\nDESIGNER NOTE: ${note}` : ''}`;
 }

@@ -4,7 +4,7 @@ import { renderDeck } from '../../engine/deck.js';
 import { planViews } from '../../engine/b/design.js';
 import { deckChapters } from '../../engine/b/company.js';
 import { uid } from '../../engine/model.js';
-import { missingInPages, addTranslations } from '../../engine/lang.js';
+import { missingInPages, addTranslations, langOf } from '../../engine/lang.js';
 import { metaOf } from '../../store/assets.js';
 import { applyPolishPatches } from '../../ai/polish.js';
 import PolishDialog from '../PolishDialog.jsx';
@@ -17,6 +17,7 @@ import {
   duplicateSlide, deleteSlide, insertViewsAfter, setAllViewLayouts, countLayoutChanges, applyFix, resolveViewLayout, canDelete,
   canDuplicate, setLang, NOW,
 } from './ops.js';
+import { setAdjust, clearAdjust } from '../../engine/adjust.js';
 import { useMediaQuery, useFillViewport, useStableCallback, isTypingTarget } from './hooks.js';
 import { uploadImage, imageFiles } from './upload.js';
 
@@ -364,6 +365,9 @@ export default function PagesTab({ project, onChange, settings, notify, onOpenSe
       onLang={changeLang}
       missingCount={missing.length}
       onTranslate={() => openTranslate()}
+      // 手动调整版面：拖一次 = 一步撤销；滑块 / 滚轮 / 方向键这种连续的小改动合成一步
+      onAdjust={(key, value, soft) => slide && onChange((p) => setAdjust(p, slide.id, key, value), soft ? { coalesce: `adjust:${slide.id}:${key}` } : { coalesce: false })}
+      onClearAdjust={(pageIndex) => slide && act((p) => clearAdjust(p, slide.id, pageIndex, langOf(p)))}
     />
   ) : (
     <div className="h-full flex flex-col items-center justify-center gap-2 text-bp-faint">

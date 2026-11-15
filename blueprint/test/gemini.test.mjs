@@ -11,7 +11,7 @@ const settings = { apiKey: 'AIzaSy-SECRET', model: 'gemini-3.1-flash-image-previ
 function mockFetch(handler) {
   const calls = [];
   globalThis.fetch = async (url, init = {}) => {
-    calls.push({ url: String(url), headers: init.headers || {} });
+    calls.push({ url: String(url), headers: init.headers || {}, body: init.body });
     const { status = 200, body } = handler(String(url), init) || {};
     return { ok: status >= 200 && status < 300, status, json: async () => (typeof body === 'string' ? JSON.parse(body) : body) };
   };
@@ -59,4 +59,14 @@ test('AI 润色：被安全策略拦截的组只跳过；出错停下时，后�
   const rows = await polishProject(project, settings, { onGroupError: (e, g, fatal) => errs.push([g.room, !!e.pending, fatal]) });
   assert.equal(rows.length, 1, '第 1 组有结果');
   assert.deepEqual(errs, [['饭厅', false, false], ['厨房', false, true], ['书房', true, true]]);
+});
+
+test('analyzeImage：opts.config 并进 generationConfig（和 json 一起用）；都没有就不带', async () => {
+  const body = { candidates: [{ content: { parts: [{ text: '{"ok":1}' }] } }] };
+  let calls = mockFetch(() => ({ body }));
+  await analyzeImage(settings, 'p', null, { json: true, config: { maxOutputTokens: 16000 } });
+  assert.deepEqual(JSON.parse(calls[0].body).generationConfig, { responseMimeType: 'application/json', maxOutputTokens: 16000 });
+  calls = mockFetch(() => ({ body }));
+  await analyzeImage(settings, 'p', null, {});
+  assert.equal(JSON.parse(calls[0].body).generationConfig, undefined);
 });

@@ -111,6 +111,15 @@ const ListItem = memo(function ListItem({ page, pageNo, selected, dropPlace, men
         <span className="flex items-center gap-1.5 mt-1 px-0.5 min-w-0">
           <span className={`text-[10px] tabular-nums w-5 shrink-0 ${page.enabled ? 'text-bp-faint' : 'text-bp-line'}`}>{pageNo || '—'}</span>
           <span className={`text-[11px] truncate ${page.enabled ? 'text-bp-ink' : 'text-bp-faint line-through'}`}>{page.label}</span>
+          {page.adjusted && (
+            <span
+              data-testid="adjusted-mark"
+              className="shrink-0 text-[9px] font-semibold text-bp-eyebrow border border-bp-gold/50 rounded px-1"
+              title="这一页有手动调整过的版面"
+            >
+              手调
+            </span>
+          )}
           {is3d && (
             <span className="shrink-0 inline-flex items-center gap-0.5 text-[9px] font-semibold text-bp-eyebrow border border-bp-gold/50 rounded px-1">
               <Box className="w-2.5 h-2.5" />

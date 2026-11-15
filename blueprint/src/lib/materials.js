@@ -2,6 +2,7 @@
 // 材料被效果图页引用：slide.materials = [{ role, materialId }]
 
 import { uid } from '../engine/model.js';
+import { pruneListAdjust } from '../engine/adjust.js';
 
 /** 每种材料被哪些效果图页引用：Map<materialId, Slide[]>（按整套顺序） */
 export function materialUsage(project) {
@@ -68,7 +69,8 @@ function rewriteRefs(project, mapId) {
     }
     if (!touched) return s;
     changed = true;
-    return { ...s, materials: out };
+    // 行挪了位置：按序号记的手动调整（engine/adjust.js）丢掉对不上的
+    return { ...pruneListAdjust(s, 'materials', s.materials, out), materials: out };
   });
   return changed ? slides : project.slides;
 }

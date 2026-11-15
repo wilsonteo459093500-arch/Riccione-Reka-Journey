@@ -71,7 +71,8 @@ export function collectAssetSrcs(obj, out = new Set()) {
   if (typeof obj === 'string') {
     if (isAssetSrc(obj)) out.add(obj);
   } else if (Array.isArray(obj)) obj.forEach((v) => collectAssetSrcs(v, out));
-  else if (obj && typeof obj === 'object') Object.values(obj).forEach((v) => collectAssetSrcs(v, out));
+  // slide.adjust 里的 src 只是「这个取景是给哪张图定的」的记号，不算引用：换了图以后旧图不该还被带着走
+  else if (obj && typeof obj === 'object') Object.entries(obj).forEach(([k, v]) => k !== 'adjust' && collectAssetSrcs(v, out));
   return out;
 }
 

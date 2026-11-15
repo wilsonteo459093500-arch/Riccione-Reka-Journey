@@ -206,6 +206,9 @@ test('remapAssetSrcs：深层改写 asset 引用，不改原对象，未映射�
   // 普通对象做映射表也可以；静态模板图不动
   const o = remapAssetSrcs({ a: ['asset:x', '/template/cover-1.jpg'] }, { 'asset:x': 'asset:y' });
   assert.deepEqual(o, { a: ['asset:y', '/template/cover-1.jpg'] });
+  // 以素材引用作键的对象（立体图的记录 render3dInfo）：键也要改，否则复制 / 导入后记录对不上图
+  const info = remapAssetSrcs({ renders3d: ['asset:r1', 'asset:r2'], render3dInfo: { 'asset:r1': { view: 'iso' }, 'asset:r2': { view: 'top' }, other: 1 } }, { 'asset:r1': 'asset:n1' });
+  assert.deepEqual(info, { renders3d: ['asset:n1', 'asset:r2'], render3dInfo: { 'asset:n1': { view: 'iso' }, 'asset:r2': { view: 'top' }, other: 1 } });
 });
 
 test('buildBundleManifest：每个引用一个文件，扩展名按 mime，缺失的单独列出', () => {
