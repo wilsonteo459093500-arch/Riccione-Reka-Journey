@@ -81,6 +81,11 @@ export default function CraftSection({ project, slide, change }) {
                 <option key={e.id} value={e.id}>{`${e.zh}${isPlayable(e) ? '' : '（待审）'}`}</option>
               ))}
             </optgroup>
+            <optgroup label="溪岸系列">
+              {rest.filter((e) => e.group === 'series').map((e) => (
+                <option key={e.id} value={e.id}>{e.zh}</option>
+              ))}
+            </optgroup>
             <optgroup label="设计手法">
               {rest.filter((e) => e.group === 'method').map((e) => (
                 <option key={e.id} value={e.id}>{`${e.zh}${isPlayable(e) ? '' : '（待审）'}`}</option>

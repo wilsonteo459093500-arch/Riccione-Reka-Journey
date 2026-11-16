@@ -73,6 +73,9 @@
 > **每条「好处」只换说法、不加新的说法**：意思都来自第一、二节的「对客人的好处 / 效果」，没有加防潮、耐用年限之类原稿没有的承诺。
 > 审稿：逐条看，改字直接改这张表（UKIR 的 `blueprint/src/showroom/craft.js` 会跟着同步，`npm test` 会对一字不差），满意就把「状态」改成 ✅。
 > 骨骼线用的是品牌手册的官方说法，状态写「官方」，已经可以播。
+> 表的最后五行是**溪岸五大原创系列**（骨骼线、空山、织、雾山、侘寂东方）：大字 = 系列的题眼，小字 = 设计理念，一字不改照抄品牌官方说法
+> （`invite/assets/js/visi/data.js` 的 `MB.SERIES_CONCEPT`，出处见状态栏），所以状态是「官方」、已经可以播；要改请改品牌那一份，这里跟着改。
+> 图纸上写「空山系列展示柜」「雾山」「侘寂东方」这类字，程序就会建议对应的系列（「织」单字太常见，要写「织系列」才认）。
 
 | 名称 | 一句话（小字） | 对客人的好处（大字） | English | English · one line | English · benefit | 状态 |
 |---|---|---|---|---|---|---|
@@ -105,3 +108,8 @@
 | **咬合** | 体块互相嵌入，像齿轮咬合。 | 整体感强，静中有一点张力。 | Interlocking | Volumes that fit into one another, like gears meshing. | A strong sense of unity, with a quiet tension. | 待审 |
 | **穿插** | 横板穿过竖向的体块。 | 一条线贯穿到底，空间被连成一体。 | Intersecting | A horizontal shelf running through vertical volumes. | One line carries through, and the space reads as a whole. | 待审 |
 | **矩阵** | 同样尺寸的模块，整齐重复。 | 秩序本身，就是一种安静。 | Grid | Modules of the same size, repeated in an even grid. | Order, in itself, is a kind of quiet. | 待审 |
+| **骨骼线系列** | 灵感取自古典实木家具的形态：骨骼结构既是装饰，也是把手。 | 在时间的长河，寻找关于家具的记忆。 | Skeleton Line Series | Inspired by classical solid-wood furniture: the frame is both the ornament and the handle. | In the long river of time, looking for the memory of furniture. | 官方（品牌手册 p.9, p.23–24） |
+| **空山系列** | 以「退」为设计哲学，「空而不空」的陈列美学。 | 入空山，感物近人。 | Empty Mountain Series | “Stepping back” as a design philosophy — display that is empty, yet never empty. | Enter the empty mountain, and feel close to things and people. | 官方（品牌手册 p.10, p.28） |
+| **织系列** | 在城市的喧嚣中迷失的感觉，在接近麻纤维的时候，会慢慢平复下来。 | 自然柔韧，回归感性生活。 | Weaving Series | What gets lost in the noise of the city slowly settles when you are close to linen. | Natural and supple — back to a life of the senses. | 官方（品牌手册 p.11） |
+| **雾山系列** | 轻于色、安于形：取晨雾之「灰」、春山之「木」、早春山间将有未有之「绿」，消隐大型柜体的存在感，让空间平静温和。 | 雾山春居。 | Misty Mountain Series | Light in colour, at ease in form: the grey of morning mist, the wood of the spring hills and the green that is only just arriving — large cabinetry fades back and the room stays calm and gentle. | A spring house on the misty mountain. | 官方（溪岸原创设计篇 P25；溪岸品牌讲解 p.11） |
+| **侘寂东方系列** | 打磨出能滋养心灵、连接自然、经得起时间洗礼的设计。 | 山，有它的时间。 | Wabi-Sabi Eastern Series | Design that nourishes the mind, connects with nature, and stands the test of time. | Mountains have their own time. | 官方（溪岸官方帐号：2025 年实木系列新品「侘寂东方」发布文） |

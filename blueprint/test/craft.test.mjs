@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import vm from 'node:vm';
 import { test } from './harness.mjs';
 import { renderDeck, exportableSlides } from '../src/engine/deck.js';
 import {
@@ -42,9 +43,10 @@ function mdRows() {
 
 test('词库和 cabinet-craft.md 一字不差（第一、二节：名称、一句话、好处）', () => {
   const { rows } = mdRows();
-  assert.equal(rows.length, CRAFT_VOCAB.length, `md 有 ${rows.length} 条，词库有 ${CRAFT_VOCAB.length} 条`);
+  const vocab = CRAFT_VOCAB.filter((e) => e.group !== 'series'); // 溪岸系列没有研究底稿
+  assert.equal(rows.length, vocab.length, `md 有 ${rows.length} 条，词库有 ${vocab.length} 条`);
   rows.forEach((r, i) => {
-    const e = CRAFT_VOCAB[i];
+    const e = vocab[i];
     assert.equal(e.mdName || e.zh, r.name, `第 ${i + 1} 条名称`);
     assert.equal(e.group, r.group, `${r.name} 的分组`);
     assert.equal(e.oneLine, r.oneLine, `${r.name} 的一句话`);
@@ -71,8 +73,35 @@ test('溪岸文案和 md 第四节一字不差（中英文 + 状态）：老板�
   });
 });
 
-test('溪岸文案：卡片放得下（好处 ≤ 40 字、一句话 ≤ 36 字），不用 md 的 ** 强调', () => {
-  for (const e of CRAFT_VOCAB) {
+test('溪岸五大系列：文字和品牌官方说法（invite/.../visi/data.js MB.SERIES_CONCEPT）一字不差，状态是官方、可以播', () => {
+  const win = {};
+  vm.runInNewContext(readFileSync(path.join(here, '../../invite/assets/js/visi/data.js'), 'utf8'), { window: win });
+  const MB = win.MB;
+  const series = CRAFT_VOCAB.filter((e) => e.group === 'series');
+  assert.deepEqual(series.map((e) => e.series), Array.from(MB.SERIES, (s) => s.key), '五个系列，顺序和品牌一样');
+  for (const e of series) {
+    const c = CRAFT_COPY[e.id];
+    const off = MB.SERIES_CONCEPT[e.series];
+    const meta = MB.SERIES_OF[e.series];
+    assert.equal(e.zh, `${meta.zh}系列`);
+    assert.equal(c.en.name, `${meta.en} Series`);
+    assert.equal(c.zh.benefit, off.title.zh, `${e.zh} 大字 = 官方题眼`);
+    assert.equal(c.zh.oneLine, off.note.zh, `${e.zh} 小字 = 官方理念`);
+    assert.equal(c.en.benefit, off.title.en);
+    assert.equal(c.en.oneLine, off.note.en);
+    assert.equal(c.status, 'official');
+    assert.ok(isPlayable(e));
+  }
+  // 图纸上写系列名就建议；「骨骼线系列」只建议系列、不建议骨骼线工艺；「织」单字不认
+  assert.deepEqual(detectCrafts(view({ notes: [{ label: '', text: '空山系列展示柜' }] })).map((x) => x.id), ['s_mountain']);
+  assert.deepEqual(detectCrafts(view({ notes: [{ label: '', text: '骨骼线系列衣柜' }] })).map((x) => x.id), ['s_skeleton']);
+  assert.deepEqual(detectCrafts(view({ notes: [{ label: '', text: '骨骼线门板' }] })).map((x) => x.id), ['gugexian', 's_skeleton']);
+  assert.deepEqual(detectCrafts(view({ notes: [{ label: '', text: '编织纹理背板' }] })), []);
+  assert.deepEqual(detectCrafts(view({ subtitle: '雾山 · 白天' })).map((x) => x.id), ['s_misty']);
+});
+
+test('溪岸文案：卡片放得下（好处 ≤ 40 字、一句话 ≤ 36 字；系列的官方理念另算），不用 md 的 ** 强调', () => {
+  for (const e of CRAFT_VOCAB.filter((x) => x.group !== 'series')) {
     const t = craftText(e, 'bi');
     assert.ok(t.zh.benefit.length <= 40, `${e.zh} 好处 ${t.zh.benefit.length} 字`);
     assert.ok(t.zh.oneLine.length <= 36, `${e.zh} 一句话 ${t.zh.oneLine.length} 字`);
@@ -114,7 +143,8 @@ test('建议：标注里写着的词条 → 建议，带上哪一条、原文', 
 
 test('建议：英文术语、视角名、材料部位也认；空格、大小写不影响', () => {
   assert.deepEqual(detectCrafts(view({ notes: [{ label: '隐形门 · Hidden door', text: '液压闭门器，配反弹器' }] })).map((x) => x.id), ['yinxingmen']);
-  assert.deepEqual(detectCrafts(view({ subtitle: '骨骼线 衣柜' })).map((x) => x.id), ['gugexian']);
+  // 只写「骨骼线」：工艺和系列都建议，设计师挑
+  assert.deepEqual(detectCrafts(view({ subtitle: '骨骼线 衣柜' })).map((x) => x.id), ['gugexian', 's_skeleton']);
   assert.deepEqual(detectCrafts(view({ materials: [{ role: '拉 槽门板', materialId: 'm' }] })).map((x) => x.id), ['lacao']);
   assert.equal(matchEntry(craftById('yinxingmen'), 'HIDDEN DOOR'), 'hidden door');
 });

@@ -21,7 +21,7 @@ export const CRAFT_MAX = 3;
 const E = (id, group, zh, oneLine, benefit, aliases, extra = {}) => ({ id, group, zh, oneLine, benefit, aliases, ...extra });
 
 /**
- * group：'craft' 工艺细节（md 一）/ 'method' 设计手法（md 二，「好处」= md 的「效果」）
+ * group：'craft' 工艺细节（md 一）/ 'method' 设计手法（md 二，「好处」= md 的「效果」）/ 'series' 溪岸五大原创系列（没有研究底稿，只有官方说法）
  * aliases：图纸上可能的写法（含名称本身）；比对时去掉空格、不分大小写；拉丁字母的别名要整词
  * exclude：碰到这些写法就不算（「夹心板」是板材，不是 ABA 夹心）
  */
@@ -38,7 +38,7 @@ export const CRAFT_VOCAB = [
   E('haitang', 'craft', '海棠角', '阳角不做成尖直角，而是做出一个内凹的小台阶 / 小方角（取自传统家具的海棠角）', '不磕手、不易崩边，转角有细节、有东方味', ['海棠角']),
   E('jiaxin', 'craft', '夹心 / ABA 夹心', '层板或边框用「A 料 + B 料 + A 料」三层叠，侧面露出中间那道对比色线', '层板看起来更薄、更精致；有设计细节', ['ABA 夹心', 'ABA', '夹心'], { exclude: ['夹心板', '夹芯板'] }),
   // 骨骼线是溪岸原创系列名：给客人看的文字用品牌手册的官方说法（见 CRAFT_COPY.gugexian）
-  E('gugexian', 'craft', '骨骼线', '柜面上凸出的竖向 / 横向线条，既是结构感也是拉手', '不用另装拉手，立面有家具感', ['骨骼线', 'skeleton line']),
+  E('gugexian', 'craft', '骨骼线', '柜面上凸出的竖向 / 横向线条，既是结构感也是拉手', '不用另装拉手，立面有家具感', ['骨骼线', 'skeleton line'], { exclude: ['骨骼线系列'] }),
   E('yuanhu', 'craft', '圆弧', '柜体、墙板、台面做成弧形', '动线更顺、更安全，空间变柔和', ['圆弧', '弧形']),
   E('gezha', 'craft', '格栅', '一排间隔的木条做隔断或柜面', '通透、透气，有分区又不封闭', ['格栅', '格珊', 'grille']),
   E('gangqin', 'craft', '钢琴键', '竖条长短 / 进出不一，像钢琴键', '比格栅多一层节奏和立体感', ['钢琴键']),
@@ -58,6 +58,12 @@ export const CRAFT_VOCAB = [
   E('yaohe', 'method', '咬合', '体块互相嵌进去，像齿轮咬住', '整体感强、有设计张力', ['咬合']),
   E('chuancha', 'method', '穿插', '横板穿过竖向体块', '线条贯穿，空间连贯', ['穿插']),
   E('juzhen', 'method', '矩阵', '同尺寸的模块整齐重复', '秩序感、安静', ['矩阵']),
+  // —— 三、溪岸五大原创系列（md 第四节；文字 = 品牌官方说法，invite/assets/js/visi/data.js MB.SERIES_CONCEPT，测试对一字不差）——
+  E('s_skeleton', 'series', '骨骼线系列', '', '', ['骨骼线系列', '骨骼线', 'skeleton line'], { series: 'skeleton' }),
+  E('s_mountain', 'series', '空山系列', '', '', ['空山系列', '空山', 'empty mountain'], { series: 'mountain' }),
+  E('s_weaving', 'series', '织系列', '', '', ['织系列', 'weaving series'], { series: 'weaving' }),
+  E('s_misty', 'series', '雾山系列', '', '', ['雾山系列', '雾山', 'misty mountain'], { series: 'misty' }),
+  E('s_wabi', 'series', '侘寂东方系列', '', '', ['侘寂东方', '侘寂', 'wabi-sabi'], { series: 'wabi' }),
 ];
 
 /**
@@ -95,6 +101,12 @@ export const CRAFT_COPY = {
   yaohe: { status: 'pending', zh: { oneLine: '体块互相嵌入，像齿轮咬合。', benefit: '整体感强，静中有一点张力。' }, en: { name: 'Interlocking', oneLine: 'Volumes that fit into one another, like gears meshing.', benefit: 'A strong sense of unity, with a quiet tension.' } },
   chuancha: { status: 'pending', zh: { oneLine: '横板穿过竖向的体块。', benefit: '一条线贯穿到底，空间被连成一体。' }, en: { name: 'Intersecting', oneLine: 'A horizontal shelf running through vertical volumes.', benefit: 'One line carries through, and the space reads as a whole.' } },
   juzhen: { status: 'pending', zh: { oneLine: '同样尺寸的模块，整齐重复。', benefit: '秩序本身，就是一种安静。' }, en: { name: 'Grid', oneLine: 'Modules of the same size, repeated in an even grid.', benefit: 'Order, in itself, is a kind of quiet.' } },
+  // 溪岸系列：大字 = 系列的题眼（title），小字 = 设计理念（note），都是品牌官方说法
+  s_skeleton: { status: 'official', zh: { oneLine: '灵感取自古典实木家具的形态：骨骼结构既是装饰，也是把手。', benefit: '在时间的长河，寻找关于家具的记忆。' }, en: { name: 'Skeleton Line Series', oneLine: 'Inspired by classical solid-wood furniture: the frame is both the ornament and the handle.', benefit: 'In the long river of time, looking for the memory of furniture.' } },
+  s_mountain: { status: 'official', zh: { oneLine: '以「退」为设计哲学，「空而不空」的陈列美学。', benefit: '入空山，感物近人。' }, en: { name: 'Empty Mountain Series', oneLine: '“Stepping back” as a design philosophy — display that is empty, yet never empty.', benefit: 'Enter the empty mountain, and feel close to things and people.' } },
+  s_weaving: { status: 'official', zh: { oneLine: '在城市的喧嚣中迷失的感觉，在接近麻纤维的时候，会慢慢平复下来。', benefit: '自然柔韧，回归感性生活。' }, en: { name: 'Weaving Series', oneLine: 'What gets lost in the noise of the city slowly settles when you are close to linen.', benefit: 'Natural and supple — back to a life of the senses.' } },
+  s_misty: { status: 'official', zh: { oneLine: '轻于色、安于形：取晨雾之「灰」、春山之「木」、早春山间将有未有之「绿」，消隐大型柜体的存在感，让空间平静温和。', benefit: '雾山春居。' }, en: { name: 'Misty Mountain Series', oneLine: 'Light in colour, at ease in form: the grey of morning mist, the wood of the spring hills and the green that is only just arriving — large cabinetry fades back and the room stays calm and gentle.', benefit: 'A spring house on the misty mountain.' } },
+  s_wabi: { status: 'official', zh: { oneLine: '打磨出能滋养心灵、连接自然、经得起时间洗礼的设计。', benefit: '山，有它的时间。' }, en: { name: 'Wabi-Sabi Eastern Series', oneLine: 'Design that nourishes the mind, connects with nature, and stands the test of time.', benefit: 'Mountains have their own time.' } },
 };
 
 // 状态跟着溪岸文案走（没有文案的条目 = 待审）

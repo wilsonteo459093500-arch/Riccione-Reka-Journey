@@ -1069,7 +1069,7 @@ export function bCraftPage(ctx, slide, heroEl, entries, textOf, opts = {}) {
     // 中英版只印名称 + 好处（两种语言都印一句话会挤爆），华文 / English 版再加一句话（小字）
     if (lang !== 'bi') {
       y += 6;
-      add(pairBlock(x, y, w, { zh: t.zh.oneLine, en: t.en?.oneLine || '' }, lang, smallSt, { enRole: smallEn, maxLines: 2, gap: 2, balance: true, name: `craft-def:${k}` }));
+      add(pairBlock(x, y, w, { zh: t.zh.oneLine, en: t.en?.oneLine || '' }, lang, smallSt, { enRole: smallEn, maxLines: 4, gap: 2, balance: true, name: `craft-def:${k}` }));
     }
   });
   // 文字栏和效果图上下居中对齐（不超出 92–900；放不下就从 92 排起）
