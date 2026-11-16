@@ -8,7 +8,7 @@ import path from 'node:path';
 import { test } from './harness.mjs';
 import { renderDeck, exportableSlides } from '../src/engine/deck.js';
 import {
-  CRAFT_VOCAB, CRAFT_MAX, craftById, detectCrafts, matchEntry, playableCrafts, toggleCraft, craftText, isPlayable,
+  CRAFT_VOCAB, CRAFT_COPY, CRAFT_MAX, craftById, detectCrafts, matchEntry, playableCrafts, toggleCraft, craftText, isPlayable,
 } from '../src/showroom/craft.js';
 import { buildStops, transitionKind, indexOf, transitionWeight } from '../src/showroom/timeline.js';
 import { layerMotion, morphRects, imageRects } from '../src/showroom/motion.js';
@@ -24,23 +24,24 @@ const MD = path.join(here, '../../.claude/skills/interior-design-expert/referenc
 function mdRows() {
   const text = readFileSync(MD, 'utf8');
   const rows = [];
+  const copy = [];
   let group = null;
   for (const line of text.split('\n')) {
     if (/^## 一、/.test(line)) group = 'craft';
     else if (/^## 二、/.test(line)) group = 'method';
+    else if (/^## 四、/.test(line)) group = 'copy';
     else if (/^## /.test(line)) group = null;
     if (!group || !/^\|\s*\*\*/.test(line)) continue;
     const cells = line.split('|').slice(1, -1).map((c) => c.trim());
     const name = cells[0].replace(/\*\*/g, '').trim();
-    rows.push(group === 'craft'
-      ? { group, name, oneLine: cells[1], benefit: cells[2], status: cells[5] }
-      : { group, name, oneLine: cells[1], benefit: cells[2], status: cells[3] });
+    if (group === 'copy') copy.push({ name, oneLine: cells[1], benefit: cells[2], en: cells[3], enOne: cells[4], enBenefit: cells[5], status: cells[6] });
+    else rows.push({ group, name, oneLine: cells[1], benefit: cells[2] });
   }
-  return rows;
+  return { rows, copy };
 }
 
-test('词库和 cabinet-craft.md 一字不差（名称、一句话、好处、状态）：老板改 md → 代码跟着改', () => {
-  const rows = mdRows();
+test('词库和 cabinet-craft.md 一字不差（第一、二节：名称、一句话、好处）', () => {
+  const { rows } = mdRows();
   assert.equal(rows.length, CRAFT_VOCAB.length, `md 有 ${rows.length} 条，词库有 ${CRAFT_VOCAB.length} 条`);
   rows.forEach((r, i) => {
     const e = CRAFT_VOCAB[i];
@@ -48,10 +49,36 @@ test('词库和 cabinet-craft.md 一字不差（名称、一句话、好处、�
     assert.equal(e.group, r.group, `${r.name} 的分组`);
     assert.equal(e.oneLine, r.oneLine, `${r.name} 的一句话`);
     assert.equal(e.benefit, r.benefit, `${r.name} 的好处`);
-    const expect = e.mdStatus ?? (e.status === 'approved' ? '✅' : '待审');
-    assert.ok(r.status.startsWith(expect), `${r.name} 的状态：md「${r.status}」，词库 ${e.status}`);
-    if (r.status.startsWith('✅')) assert.equal(e.status, 'approved', `${r.name}：md 已 ✅，词库也要改成 approved`);
   });
+});
+
+test('溪岸文案和 md 第四节一字不差（中英文 + 状态）：老板审这一张，✅ 才播', () => {
+  const { copy } = mdRows();
+  assert.equal(copy.length, CRAFT_VOCAB.length, '每一条都有溪岸文案');
+  copy.forEach((r, i) => {
+    const e = CRAFT_VOCAB[i];
+    const c = CRAFT_COPY[e.id];
+    assert.equal(r.name, e.zh, `第 ${i + 1} 条名称`);
+    assert.ok(c, `${e.zh} 缺溪岸文案`);
+    assert.equal(c.zh.oneLine, r.oneLine, `${e.zh} 的一句话`);
+    assert.equal(c.zh.benefit, r.benefit, `${e.zh} 的好处`);
+    assert.equal(c.en.name, r.en, `${e.zh} 的英文名`);
+    assert.equal(c.en.oneLine, r.enOne, `${e.zh} 的英文一句话`);
+    assert.equal(c.en.benefit, r.enBenefit, `${e.zh} 的英文好处`);
+    const want = r.status.startsWith('✅') ? 'approved' : r.status.startsWith('官方') ? 'official' : 'pending';
+    assert.equal(c.status, want, `${e.zh} 的状态：md「${r.status}」`);
+    assert.equal(e.status, c.status);
+  });
+});
+
+test('溪岸文案：卡片放得下（好处 ≤ 40 字、一句话 ≤ 36 字），不用 md 的 ** 强调', () => {
+  for (const e of CRAFT_VOCAB) {
+    const t = craftText(e, 'bi');
+    assert.ok(t.zh.benefit.length <= 40, `${e.zh} 好处 ${t.zh.benefit.length} 字`);
+    assert.ok(t.zh.oneLine.length <= 36, `${e.zh} 一句话 ${t.zh.oneLine.length} 字`);
+    assert.ok(t.en && t.en.name && t.en.oneLine && t.en.benefit, `${e.zh} 英文`);
+    assert.ok(!/\*/.test(t.zh.benefit + t.zh.oneLine));
+  }
 });
 
 test('词库：id 不重复；每条至少一个别名，名称本身在别名里；骨骼线用溪岸官方说法', () => {
@@ -116,7 +143,9 @@ test('播放：只放勾过 + 审过的；待审的要内部预览才放；Engli
   assert.deepEqual(playableCrafts(s).entries.map((e) => e.id), ['gugexian']);
   assert.equal(playableCrafts(s).held[0].why, '定义待老板审，审过才播');
   assert.deepEqual(playableCrafts(s, { preview: true }).entries.map((e) => e.id), ['haitang', 'gugexian']);
-  assert.deepEqual(playableCrafts(s, { preview: true, lang: 'en' }).entries.map((e) => e.id), ['gugexian']);
+  // 每条都有英文文案了：English 版也能放；没有英文文案的条目 craftText 给不出英文（English 版就不放）
+  assert.deepEqual(playableCrafts(s, { preview: true, lang: 'en' }).entries.map((e) => e.id), ['haitang', 'gugexian']);
+  assert.equal(craftText({ id: 'nope', zh: '某工艺', oneLine: '一句话', benefit: '好处' }, 'en').en, null);
   const many = view({ crafts: ['haitang', 'jiaxin', 'xicao', 'lacao'] });
   assert.equal(playableCrafts(many, { preview: true }).entries.length, CRAFT_MAX);
   // 认出来但没勾：不放
@@ -188,7 +217,9 @@ test('设计特点页：同一张效果图整张显示（不裁、比例对）�
     for (const st of s.filter((x) => x.craft)) {
       const prev = s[st.craft.from];
       const photo = st.page.els.find((el) => el.name === 'photo:craft');
-      assert.equal(photo.src, prev.page.els[prev.hero].src);
+      const prevPhoto = prev.craft ? prev.page.els.find((el) => el.name === 'photo:craft') : prev.page.els[prev.hero];
+      assert.equal(photo.src, prevPhoto.src);
+      assert.ok(st.page.fits, `${lang} 放得下`);
       assert.deepEqual(photo.crop, { l: 0, t: 0, r: 0, b: 0 });
       const [nw, nh] = SIZES[photo.src];
       assert.ok(Math.abs(photo.w / photo.h - nw / nh) < 0.01, `${lang} ${photo.src} 比例`);
@@ -218,6 +249,7 @@ test('过渡（craft）：两头原样 —— 效果图 t = 0 和原页一模一
   const s = stopsOf(sample('zh', { 'v-day': ['gugexian'], 'v-kitchen': ['gugexian'] }));
   for (const st of s.filter((x) => x.craft)) {
     const prev = s[st.craft.from];
+    if (prev.craft) continue; // 接着的第二页：效果图同一个框，不用移
     const from = prev.page.els[prev.hero];
     const to = st.page.els.find((el) => el.name === 'photo:craft');
     assert.deepEqual(morphRects(from, to, 0), imageRects(from));
@@ -230,4 +262,25 @@ test('过渡（craft）：两头原样 —— 效果图 t = 0 和原页一模一
     const mid = layerMotion('a', 'craft', 0.4, prev.page.els);
     assert.equal(mid.el(from, prev.hero).opacity, 0);
   }
+});
+
+test('设计特点：一页放不下（中英版）→ 后面几个挪到下一个停点；效果图同一个框；每页都放得下、不截字', () => {
+  const s = stopsOf(sample('bi', { 'v-kitchen': ['haitang', 'jiaxin', 'gugexian'] }), { craftPreview: true });
+  const pages = s.filter((x) => x.craft);
+  assert.ok(pages.length >= 2, `分成 ${pages.length} 页`);
+  assert.deepEqual(pages.flatMap((p) => p.craft.entries.map((e) => e.id)), ['haitang', 'jiaxin', 'gugexian']);
+  const box = (p) => {
+    const el = p.page.els.find((x) => x.name === 'photo:craft');
+    return [el.x, el.y, el.w, el.h];
+  };
+  for (const p of pages) {
+    assert.ok(p.page.fits);
+    assert.deepEqual(box(p), box(pages[0]));
+    assert.ok(!p.page.els.some((el) => el._cut));
+  }
+  const k = s.indexOf(pages[1]);
+  assert.equal(transitionKind(s, k - 1, k), 'craft');
+  assert.equal(new Set(s.map((x) => x.key)).size, s.length, 'key 不重复');
+  // 华文版：三个放得下一页
+  assert.equal(stopsOf(sample('zh', { 'v-kitchen': ['haitang', 'jiaxin', 'gugexian'] }), { craftPreview: true }).filter((x) => x.craft).length, 1);
 });

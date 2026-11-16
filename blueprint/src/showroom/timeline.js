@@ -121,18 +121,32 @@ function withCrafts(stops, ctx, opts) {
     }
     if (!entries.length) return;
     told.set(room, skip);
-    const page = bCraftPage(ctx, s.slide, s.page.els[s.hero], entries, craftText, { preview: !!opts.craftPreview });
-    out.push({
-      key: `craft:${s.key}`,
-      page,
-      hero: -1,
-      slide: s.slide,
-      segment: s.segment,
-      phase: null,
-      label: `${(s.phase ? s.label.replace(/\s*·\s*(白天|夜晚)$/, '') : s.label) || '空间'} · 设计特点`,
-      section: s.section,
-      craft: { entries, from: out.length - 1 },
-    });
+    // 一页放不下（中英版、文字长）→ 后面几个挪到下一个设计特点停点：效果图同一个框不动，只换右边的字
+    const label = `${(s.phase ? s.label.replace(/\s*·\s*(白天|夜晚)$/, '') : s.label) || '空间'} · 设计特点`;
+    const heroEl = s.page.els[s.hero];
+    let rest = entries;
+    let n = 0;
+    while (rest.length) {
+      let k = rest.length;
+      let page = bCraftPage(ctx, s.slide, heroEl, rest.slice(0, k), craftText, { preview: !!opts.craftPreview });
+      while (!page.fits && k > 1) {
+        k -= 1;
+        page = bCraftPage(ctx, s.slide, heroEl, rest.slice(0, k), craftText, { preview: !!opts.craftPreview });
+      }
+      out.push({
+        key: `craft:${s.key}${n ? `:${n}` : ''}`,
+        page,
+        hero: -1,
+        slide: s.slide,
+        segment: s.segment,
+        phase: null,
+        label,
+        section: s.section,
+        craft: { entries: rest.slice(0, k), from: out.length - 1 },
+      });
+      rest = rest.slice(k);
+      n += 1;
+    }
   });
   return out;
 }
@@ -149,6 +163,7 @@ export function transitionKind(stops, a, b) {
   const sb = stops[b];
   if (!sa || !sb) return 'cut';
   // 进「设计特点」：同一张效果图从原来的位置缩到左边，特点一张张浮出来；从设计特点离开：照下一页的样子
+  // 设计特点一页放不下、接着下一页：效果图同一个框，只换字（同样走 'craft'：上一页的效果图藏起来，下一页的在同一位置接手）
   if (sb.craft) return 'craft';
   if (sa.craft) return sb.plan3d ? 'build' : sb.hero >= 0 ? 'sketch' : 'cut';
   if (sa.segment === sb.segment && sa.slide?.kind === 'view' && sb.slide?.kind === 'view') return 'same';

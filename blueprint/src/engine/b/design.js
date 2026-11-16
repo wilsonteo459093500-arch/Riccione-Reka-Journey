@@ -1013,7 +1013,7 @@ export function bViewFullNotes(ctx, slide) {
  * 文字全部来自词库（showroom/craft.js，老板审过的定义），这里不改字。
  * @param {object} heroEl   原页上的那张效果图元素（决定图片的完整比例）
  * @param {object[]} entries 词库条目（craftText 取字）；opts.preview：待审的条目名称后标「待审」
- * @returns {{ bg, els, warnings, kind:'craft' }}
+ * @returns {{ bg, els, warnings, kind:'craft', fits:boolean }}  fits = 放得下、没截字（放不下时 timeline 会把后面几个挪到下一页）
  */
 export const CRAFT_PHOTO = { x: 112, y: 92, w: 1100, h: 896 };
 export const CRAFT_COL = { x: 1273, w: 537 };
@@ -1065,17 +1065,21 @@ export function bCraftPage(ctx, slide, heroEl, entries, textOf, opts = {}) {
     y += 22;
     add(pairBlock(x, y, w, { zh: mark(t.zh.name, '待审'), en: t.en ? mark(t.en.name, 'DRAFT') : '' }, lang, nameSt, { enRole: nameEn, gap: 0, maxLines: 1, name: `craft-name:${k}` }));
     y += 6;
-    add(pairBlock(x, y, w, { zh: t.zh.benefit, en: t.en?.benefit || '' }, lang, 'body', { maxLines: 3, gap: 4, name: `craft-benefit:${k}` }));
-    y += 6;
-    add(pairBlock(x, y, w, { zh: t.zh.oneLine, en: t.en?.oneLine || '' }, lang, smallSt, { enRole: smallEn, maxLines: 2, gap: 2, name: `craft-def:${k}` }));
+    add(pairBlock(x, y, w, { zh: t.zh.benefit, en: t.en?.benefit || '' }, lang, 'body', { maxLines: 3, gap: 4, balance: true, name: `craft-benefit:${k}` }));
+    // 中英版只印名称 + 好处（两种语言都印一句话会挤爆），华文 / English 版再加一句话（小字）
+    if (lang !== 'bi') {
+      y += 6;
+      add(pairBlock(x, y, w, { zh: t.zh.oneLine, en: t.en?.oneLine || '' }, lang, smallSt, { enRole: smallEn, maxLines: 2, gap: 2, balance: true, name: `craft-def:${k}` }));
+    }
   });
   // 文字栏和效果图上下居中对齐（不超出 92–900；放不下就从 92 排起）
   const photo = els.find((el) => el.name === 'photo:craft');
   const mid = photo ? photo.y + photo.h / 2 : (PAGE.top + PAGE.contentBottom) / 2;
   const top = Math.max(PAGE.top, Math.min(mid - y / 2, PAGE.contentBottom - y));
   for (const el of col) els.push({ ...el, y: el.y + top, edit: undefined });
-  if (top + y > PAGE.contentBottom + 60) warnings.push('设计特点太多放不下：建议少勾一两个');
-  return page(els, [...new Set(warnings)], { kind: 'craft' });
+  const cut = col.some((el) => el._cut);
+  const fits = !cut && top + y <= PAGE.contentBottom + 60;
+  return page(els, [...new Set(warnings)], { kind: 'craft', fits });
 }
 
 export function bViewPage(ctx, slide, plan) {
