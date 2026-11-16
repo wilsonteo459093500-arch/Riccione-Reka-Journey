@@ -59,7 +59,12 @@ export default function CraftSection({ project, slide, change }) {
                 <span className="block text-[11px] text-bp-faint mt-0.5">
                   {hit ? `图纸 · ${hit.evidence.where}：「${clip(hit.evidence.text)}」` : '手动加的（图纸文字里没写）'}
                 </span>
-                {on && <span className="block text-[11px] text-bp-muted mt-0.5">{t.zh.benefit}</span>}
+                {on && (
+                  <span className="block text-[11px] text-bp-muted mt-0.5">
+                    {t.zh.feature && <span className="block">特点：{t.zh.feature}</span>}
+                    {t.zh.advantage && <span className="block">优势：{t.zh.advantage}</span>}
+                  </span>
+                )}
                 {why && <span className="block text-[11px] text-amber-700 mt-0.5">暂不播放：{why}</span>}
               </span>
             </label>

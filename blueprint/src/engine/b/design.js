@@ -1008,15 +1008,15 @@ export function bViewFullNotes(ctx, slide) {
 
 /**
  * 展厅播放用：房间「设计特点」那一页（只在播放器里出现，不进 PPT）。
- * 左边 = 同一张效果图，**整张显示、不裁**（和原图一样，只是缩小）；右边 = 文字栏（x 1273、宽 537，和图文页的规格栏同一条线）：
- *   页眉「设计特点 / DESIGN DETAILS」+ 视角名 → 每个特点一张：名称 · 对客人的好处 · 一句话（小字）
+ * 左边 = 同一张效果图，**整张显示、不裁**（和原图一样，只是缩小）；右边 = 文字栏（x 1200、宽 610；特点 / 优势字多，比图文页的规格栏宽一些）：
+ *   页眉「设计特点 / DESIGN DETAILS」+ 视角名 → 每个特点一张：名称 · 题眼 · 特点 · 优势（标签在左、正文在右；空栏不印）
  * 文字全部来自词库（showroom/craft.js，老板审过的定义），这里不改字。
  * @param {object} heroEl   原页上的那张效果图元素（决定图片的完整比例）
  * @param {object[]} entries 词库条目（craftText 取字）；opts.preview：待审的条目名称后标「待审」
  * @returns {{ bg, els, warnings, kind:'craft', fits:boolean }}  fits = 放得下、没截字（放不下时 timeline 会把后面几个挪到下一页）
  */
-export const CRAFT_PHOTO = { x: 112, y: 92, w: 1100, h: 896 };
-export const CRAFT_COL = { x: 1273, w: 537 };
+export const CRAFT_PHOTO = { x: 112, y: 92, w: 1000, h: 896 };
+export const CRAFT_COL = { x: 1200, w: 610 };
 export function bCraftPage(ctx, slide, heroEl, entries, textOf, opts = {}) {
   const { project, lang, tr } = env(ctx);
   const warnings = [];
@@ -1051,25 +1051,38 @@ export function bCraftPage(ctx, slide, heroEl, entries, textOf, opts = {}) {
     y += 10;
     add(pairBlock(x, y, w, { zh: titlePair.zh, en: titlePair.en }, lang, 'title', { maxLines: 2, gap: 0 }));
   }
-  y += 44;
+  y += 36;
   const nameSt = style('rowVal', { lh: 42 });
   const nameEn = style('rowValEn', { lh: 38 });
-  const smallSt = style('body', { size: 15, color: B.foot, lh: 30 });
-  const smallEn = style('bodyEn', { size: 15, color: B.foot, lh: 28 });
+  // 特点 / 优势：左边一栏小标签（说明的小标题样式），右边正文
+  const labSt = style('rowKey', { size: 16, spacing: 2, lh: 32 });
+  const labEn = style('rowKeyEn', { size: 14, spacing: 0.5, lh: 30 });
+  const txtSt = style('body', { size: 16, lh: 32 });
+  const txtEn = style('bodyEn', { size: 16, lh: 30 });
+  const labW = lang === 'zh' ? 62 : 104;
+  const LABELS = { feature: { zh: '特点', en: 'Feature' }, advantage: { zh: '优势', en: 'Advantage' } };
   entries.forEach((entry, k) => {
     const t = textOf(entry, lang);
     const pending = opts.preview && entry.status === 'pending';
     const mark = (s, tag) => (pending && s ? `${s}　${tag}` : s);
-    if (k) y += 34;
+    if (k) y += 26;
     col.push({ ...rule(x, y, w, { h: 1, alpha: ALPHA.tableRule }), name: `craft-rule:${k}` });
-    y += 22;
+    y += 18;
     add(pairBlock(x, y, w, { zh: mark(t.zh.name, '待审'), en: t.en ? mark(t.en.name, 'DRAFT') : '' }, lang, nameSt, { enRole: nameEn, gap: 0, maxLines: 1, name: `craft-name:${k}` }));
-    y += 6;
-    add(pairBlock(x, y, w, { zh: t.zh.benefit, en: t.en?.benefit || '' }, lang, 'body', { maxLines: 3, gap: 4, balance: true, name: `craft-benefit:${k}` }));
-    // 中英版只印名称 + 好处（两种语言都印一句话会挤爆），华文 / English 版再加一句话（小字）
-    if (lang !== 'bi') {
-      y += 6;
-      add(pairBlock(x, y, w, { zh: t.zh.oneLine, en: t.en?.oneLine || '' }, lang, smallSt, { enRole: smallEn, maxLines: 4, gap: 2, balance: true, name: `craft-def:${k}` }));
+    // 题眼（中英版不印：两种语言都印会挤爆）
+    if (lang !== 'bi' && (t.zh.title || t.en?.title)) {
+      y += 4;
+      add(pairBlock(x, y, w, { zh: t.zh.title, en: t.en?.title || '' }, lang, style('body', { size: 17, lh: 34 }), { enRole: style('bodyEn', { size: 17, lh: 32 }), maxLines: 2, gap: 4, balance: true, name: `craft-title:${k}` }));
+    }
+    for (const key of ['feature', 'advantage']) {
+      const pair = { zh: t.zh[key], en: t.en?.[key] || '' };
+      if (!pair.zh && !pair.en) continue;
+      y += 8;
+      const lab = pairBlock(x, y, labW, LABELS[key], lang, labSt, { enRole: labEn, gap: 0, maxLines: 1, name: `craft-${key}-label:${k}` });
+      const txt = pairBlock(x + labW, y, w - labW, pair, lang, txtSt, { enRole: txtEn, gap: 4, maxLines: 6, balance: true, name: `craft-${key}:${k}` });
+      col.push(...lab.els, ...txt.els);
+      warnings.push(...(txt.warnings || []));
+      y = Math.max(lab.bottom, txt.bottom);
     }
   });
   // 文字栏和效果图上下居中对齐（不超出 92–900；放不下就从 92 排起）

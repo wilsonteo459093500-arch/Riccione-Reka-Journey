@@ -35,7 +35,8 @@ function mdRows() {
     if (!group || !/^\|\s*\*\*/.test(line)) continue;
     const cells = line.split('|').slice(1, -1).map((c) => c.trim());
     const name = cells[0].replace(/\*\*/g, '').trim();
-    if (group === 'copy') copy.push({ name, oneLine: cells[1], benefit: cells[2], en: cells[3], enOne: cells[4], enBenefit: cells[5], status: cells[6] });
+    const dash = (v) => (v === '—' ? '' : v);
+    if (group === 'copy') copy.push({ name, title: dash(cells[1]), feature: dash(cells[2]), advantage: dash(cells[3]), en: cells[4], enTitle: dash(cells[5]), enFeature: dash(cells[6]), enAdvantage: dash(cells[7]), status: cells[8] });
     else rows.push({ group, name, oneLine: cells[1], benefit: cells[2] });
   }
   return { rows, copy };
@@ -62,11 +63,11 @@ test('溪岸文案和 md 第四节一字不差（中英文 + 状态）：老板�
     const c = CRAFT_COPY[e.id];
     assert.equal(r.name, e.zh, `第 ${i + 1} 条名称`);
     assert.ok(c, `${e.zh} 缺溪岸文案`);
-    assert.equal(c.zh.oneLine, r.oneLine, `${e.zh} 的一句话`);
-    assert.equal(c.zh.benefit, r.benefit, `${e.zh} 的好处`);
+    for (const k of ['title', 'feature', 'advantage']) assert.equal(c.zh[k], r[k], `${e.zh} 的 ${k}`);
     assert.equal(c.en.name, r.en, `${e.zh} 的英文名`);
-    assert.equal(c.en.oneLine, r.enOne, `${e.zh} 的英文一句话`);
-    assert.equal(c.en.benefit, r.enBenefit, `${e.zh} 的英文好处`);
+    assert.equal(c.en.title, r.enTitle, `${e.zh} 的英文题眼`);
+    assert.equal(c.en.feature, r.enFeature, `${e.zh} 的英文特点`);
+    assert.equal(c.en.advantage, r.enAdvantage, `${e.zh} 的英文优势`);
     const want = r.status.startsWith('✅') ? 'approved' : r.status.startsWith('官方') ? 'official' : 'pending';
     assert.equal(c.status, want, `${e.zh} 的状态：md「${r.status}」`);
     assert.equal(e.status, c.status);
@@ -85,10 +86,11 @@ test('溪岸五大系列：文字和品牌官方说法（invite/.../visi/data.js
     const meta = MB.SERIES_OF[e.series];
     assert.equal(e.zh, `${meta.zh}系列`);
     assert.equal(c.en.name, `${meta.en} Series`);
-    assert.equal(c.zh.benefit, off.title.zh, `${e.zh} 大字 = 官方题眼`);
-    assert.equal(c.zh.oneLine, off.note.zh, `${e.zh} 小字 = 官方理念`);
-    assert.equal(c.en.benefit, off.title.en);
-    assert.equal(c.en.oneLine, off.note.en);
+    assert.equal(c.zh.title, off.title.zh, `${e.zh} 题眼 = 官方题眼`);
+    assert.equal(c.zh.feature, off.note.zh, `${e.zh} 特点 = 官方理念`);
+    assert.equal(c.zh.advantage, '', `${e.zh} 官方没有优势，不编`);
+    assert.equal(c.en.title, off.title.en);
+    assert.equal(c.en.feature, off.note.en);
     assert.equal(c.status, 'official');
     assert.ok(isPlayable(e));
   }
@@ -100,14 +102,22 @@ test('溪岸五大系列：文字和品牌官方说法（invite/.../visi/data.js
   assert.deepEqual(detectCrafts(view({ subtitle: '雾山 · 白天' })).map((x) => x.id), ['s_misty']);
 });
 
-test('溪岸文案：和五大系列同一种写法 —— 题眼（大字）≤ 24 字、设计理念（小字）≤ 56 字；都有英文；不用 md 的 ** 强调', () => {
+test('溪岸文案：题眼 ≤ 24 字、特点 / 优势 ≤ 40 字（系列的官方理念另算 ≤ 56）；每条都有特点和英文；不用 md 的 ** 强调', () => {
   for (const e of CRAFT_VOCAB) {
     const t = craftText(e, 'bi');
-    assert.ok(t.zh.benefit.length <= 24, `${e.zh} 题眼 ${t.zh.benefit.length} 字`);
-    assert.ok(t.zh.oneLine.length <= 56, `${e.zh} 设计理念 ${t.zh.oneLine.length} 字`);
-    assert.ok(t.en && t.en.name && t.en.oneLine && t.en.benefit, `${e.zh} 英文`);
-    assert.ok(!/\*/.test(t.zh.benefit + t.zh.oneLine));
+    const series = e.group === 'series';
+    assert.ok(t.zh.title.length <= 24, `${e.zh} 题眼 ${t.zh.title.length} 字`);
+    assert.ok(t.zh.feature && t.zh.feature.length <= (series ? 56 : 40), `${e.zh} 特点 ${t.zh.feature.length} 字`);
+    assert.ok(t.zh.advantage.length <= 40, `${e.zh} 优势 ${t.zh.advantage.length} 字`);
+    if (!series) assert.ok(t.zh.advantage, `${e.zh} 要有优势`);
+    assert.ok(t.en && t.en.name && t.en.feature, `${e.zh} 英文`);
+    assert.ok(!/\*/.test(t.zh.title + t.zh.feature + t.zh.advantage));
   }
+  // 骨骼线（工艺）：全部官方原文，没有题眼
+  const g = craftText(craftById('gugexian'));
+  assert.equal(g.zh.title, '');
+  assert.match(g.zh.feature, /骨骼结构既是装饰，也是把手/);
+  assert.match(g.zh.advantage, /细线框让每扇柜门都有一道影子/);
 });
 
 test('词库：id 不重复；每条至少一个别名，名称本身在别名里；骨骼线用溪岸官方说法', () => {
@@ -120,10 +130,10 @@ test('词库：id 不重复；每条至少一个别名，名称本身在别名�
   const g = craftById('gugexian');
   assert.equal(g.status, 'official');
   assert.ok(isPlayable(g));
-  assert.match(craftText(g, 'zh').zh.oneLine, /骨骼结构既是装饰，也是把手/);
-  assert.ok(craftText(g, 'en').en.benefit);
+  assert.match(craftText(g, 'zh').zh.feature, /骨骼结构既是装饰，也是把手/);
+  assert.ok(craftText(g, 'en').en.advantage);
   // 去掉 md 的 ** 强调
-  assert.ok(!craftText(craftById('zhuifeng')).zh.oneLine.includes('*'));
+  assert.ok(!craftText(craftById('zhuifeng')).zh.feature.includes('*'));
 });
 
 // ---------------------------------------------------------------------------

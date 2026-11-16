@@ -38,6 +38,10 @@
 | **发光背板** | 柜内背板做成整块发光（灯箱） | 展示更有氛围，酒柜、展示柜的主角 | 柜内背板整面亮 | 酒柜、展示柜、吧台 |
 | **硬碰** | 两种材质直接对接、不加收边条 | 立面极简、线条干净（对工艺精度要求高） | 石材台面与木 / 金属直接碰，没有压条 | 台面、岛台、柜墙交接 |
 
+> **其它来源的说法（待老板确认溪岸也做得到，确认前不进卡片）**
+> - 夹心 / ABA 夹心（小红书「装修研究爱好者」高定木作 9 种工艺，2026-11-16 用户转发）：三层不同厚度板材叠加（如 9 mm + 18 mm + 9 mm）的「三明治」结构，
+>   可用木皮、金属、亚克力等不同材质叠加；称「提升整体结构强度、减少变形风险」；常用于层板、台面。
+
 ## 二、设计手法（看「体块怎么组合」——柜墙 / 玄关 / 电视墙）
 
 | 名称 | 一句话（整理稿） | 效果 |
@@ -68,49 +72,49 @@
 
 ## 四、溪岸文案（给客人看的 · 老板审这一张）
 
-> UKIR 展厅播放的「房间设计特点」卡片就印这一张表：名称 → **题眼（大字）** → **设计理念（小字）**；English / 中英版印英文三栏。
-> 写法照五大系列（「入空山，感物近人。」+「以「退」为设计哲学……」）：大字一句有画面的话，小字讲清楚做法和对生活的好处。
+> UKIR 展厅播放的「房间设计特点」卡片就印这一张表：名称 → **题眼**（一句有画面的话）→ **特点**（是什么、看得到什么）→ **优势**（对生活的好处）；English 版印英文，中英版只印名称 + 特点 + 优势。
+> 题眼照五大系列的写法（「入空山，感物近人。」）；特点 / 优势照小红书「特点 + 优势」的讲法，客人一看就懂。空栏不印。
 > 写法照溪岸的口吻（`invite/assets/js/visi/data.js` 的系列理念、VISI 的「为什么」）：短、安静、落到日常生活，不堆术语。
-> **只换说法、不加新的说法**：意思都来自第一、二节的「一句话 / 对客人的好处 / 效果」，没有加防潮、耐用年限之类原稿没有的承诺。
+> **只换说法、不加新的说法**：特点来自第一、二节的「一句话 / 怎么认出来」，优势来自「对客人的好处 / 效果」，没有加结构强度、防潮、耐用年限之类原稿没有的承诺（别家的这类说法记在第一节末尾，等老板确认）。
 > 审稿：逐条看，改字直接改这张表（UKIR 的 `blueprint/src/showroom/craft.js` 会跟着同步，`npm test` 会对一字不差），满意就把「状态」改成 ✅。
 > 骨骼线用的是品牌手册的官方说法，状态写「官方」，已经可以播。
-> 表的最后五行是**溪岸五大原创系列**（骨骼线、空山、织、雾山、侘寂东方）：大字 = 系列的题眼，小字 = 设计理念，一字不改照抄品牌官方说法
+> 表的最后五行是**溪岸五大原创系列**（骨骼线、空山、织、雾山、侘寂东方）：题眼 = 系列的题眼，特点 = 设计理念（官方没有「优势」，留空），一字不改照抄品牌官方说法
 > （`invite/assets/js/visi/data.js` 的 `MB.SERIES_CONCEPT`，出处见状态栏），所以状态是「官方」、已经可以播；要改请改品牌那一份，这里跟着改。
 > 图纸上写「空山系列展示柜」「雾山」「侘寂东方」这类字，程序就会建议对应的系列（「织」单字太常见，要写「织系列」才认）。
 
-| 名称 | 设计理念（小字） | 题眼（大字） | English | English · 设计理念 | English · 题眼 | 状态 |
-|---|---|---|---|---|---|---|
-| **脱缝** | 柜与墙、与天花之间，留一道均匀的细缝：柜体像浮在墙前，墙面的些许不平，也被这道影子悄悄收住。 | 离墙一线，柜子便轻了。 | Shadow Gap | A fine, even gap between cabinet and wall or ceiling: the piece seems to float, and the shadow quietly absorbs a wall that isn’t perfectly true. | A line from the wall, and the cabinet grows light. | 待审 |
-| **追缝** | 门与门、柜与墙板之间的缝，对齐成一条线：几组柜子，读起来是同一件作品。 | 一面墙，只说一句话。 | Aligned Joints | The joints between doors, cabinets and wall panels align into a single line — many pieces read as one. | One wall, one sentence. | 待审 |
-| **对纹** | 相邻柜门的木纹接续不断，像取自同一块木：不需装饰，纹理本身就是表情。 | 木纹从一扇门，走到下一扇门。 | Continuous Grain | Neighbouring doors carry continuous grain, as if cut from one board — no ornament needed; the grain is the expression. | The grain walks from one door to the next. | 待审 |
-| **对开混拼** | 宽幅山纹木皮从中剖开、随机拼接，山纹与直纹自然相接：木皮尺寸有限，拼得自然，整墙才有木的本来样子。 | 把一棵树，铺成一面墙。 | Split & Mixed Veneer | Wide veneer is split down the middle and re-laid at random, so the grain meets naturally — veneer comes only so wide; laid with care, the wall keeps the look of living wood. | One tree, laid out as a wall. | 待审 |
-| **铣槽** | 在门边铣出一道凹槽，指尖一勾即开：立面干净，走过也不勾衣角。 | 把手，藏进了门的边缘。 | Routed Finger Pull | A groove routed into the door edge opens at a fingertip — a clean face, and nothing to catch a sleeve. | The handle hides in the edge of the door. | 待审 |
-| **拉槽** | 门板铣出一道道竖向细槽：只用一种颜色，也有节奏、有手感。 | 光走过，留下一行行细影。 | Fluted Panel | Vertical flutes routed across the door — a single colour, yet full of rhythm to the eye and hand. | Light passes, leaving lines of fine shadow. | 待审 |
-| **斜切** | 门板与抽屉面的边做成斜角，不多一件五金：正面看去更轻薄、利落。 | 一道斜面，就是拉手。 | Bevelled Edge | Door and drawer edges are cut at an angle, with no extra hardware — the front looks slimmer and cleaner. | One bevel is the handle. | 待审 |
-| **斜拼** | 两块板以 45° 相接，木纹与边线绕过转角：看不见板材的断面，像一整块实木。 | 转角处，木纹没有断。 | Mitred Corner | Two panels meet at 45°, grain and edge wrapping the corner — no raw board edge, as if made from one piece of solid wood. | At the corner, the grain does not break. | 待审 |
-| **海棠角** | 取自传统家具的海棠角：外转角不做尖直角，内收一个小方角，不磕手、不易崩边，多一道细细的影。 | 转角收一笔，是东方家具的温柔。 | Haitang Corner | From the haitang corner of classical furniture: the outer corner steps in with a small notch — kinder to the hand, slow to chip, one more fine shadow. | One small step at the corner — the gentleness of Eastern furniture. | 待审 |
-| **夹心 / ABA 夹心** | 层板与边框以 A·B·A 三层叠成，侧面露出一道对比色细线：层板显得更薄、更轻。 | 走近了，才看见那一道线。 | ABA Sandwich Edge | Shelves and frames built in three layers, A–B–A, show a fine contrasting line on the edge — the shelf reads thinner and lighter. | Come closer, and the line appears. | 待审 |
-| **骨骼线** | 灵感取自古典实木家具的形态：骨骼结构既是装饰，也是把手。 | 细线框让每扇柜门都有一道影子，有细节但不繁复。 | Skeleton Line | Inspired by classical solid-wood furniture: the frame is both the ornament and the handle. | A fine frame line gives each door its own shadow — detail without ornament. | 官方（品牌手册 p.9、p.23–24） |
-| **圆弧** | 柜体、墙板、台面做成弧形：动线更顺，转角不再是硬角，小孩与长辈走过也安心。 | 没有棱角的家，走起来更柔软。 | Curves | Cabinets, panels and worktops follow a curve — movement flows, corners soften, and children and elders pass by at ease. | A home without hard corners walks more softly. | 待审 |
-| **格栅** | 一排间隔的木条做隔断或柜面：分出区域，仍然通透、透气，木条之间有光有影。 | 隔开，却不隔光。 | Timber Slats | A row of spaced timber slats as a screen or a front — the space is defined, yet stays open to light and air, with shadow between the slats. | Divided, yet never closed to light. | 待审 |
-| **钢琴键** | 竖条长短、进出不一，像一排琴键：比格栅多一层节奏与立体感。 | 一排琴键，等光来弹奏。 | Piano-key Slats | Vertical slats of varied length and depth, like piano keys — more rhythm and depth than plain slats. | A row of keys, waiting for the light to play. | 待审 |
-| **铣型** | 在板面铣出造型，如半圆拉手或图案：柜子有了自己的表情。 | 拉手与造型，本是一体。 | Routed Motif | A shape routed into the panel — a half-moon pull, a pattern — and the cabinet gains a character of its own. | Handle and form, one and the same. | 待审 |
-| **隐形门** | 门与墙板、柜门齐平，不留门套，只剩一圈细缝：整面墙干净、完整。 | 门在，墙仍然安静。 | Hidden Door | Flush with the wall panels or cabinet doors, no frame, only a fine outline — the wall remains whole. | The door is there; the wall stays quiet. | 待审 |
-| **透气** | 板上铣出一排细长的透气缝：潮湿的天气里，鞋柜、设备柜也不闷、不生味。 | 让柜子，也能呼吸。 | Ventilation Slots | A row of fine slots routed into the panel — even in humid weather, shoe and equipment cabinets stay fresh. | Let the cabinet breathe, too. | 待审 |
-| **发光背板** | 柜内整块背板发光，像一个灯箱：酒与收藏，成为空间的主角。 | 让珍藏，在柔光里被看见。 | Lit Back Panel | The whole back panel glows like a light box — wine and collections become the heart of the room. | Let what you treasure be seen in soft light. | 待审 |
-| **硬碰** | 不加收边条，石、木、金属直接对接：线条极简、干净，靠的是看不见的精度。 | 两种材质，直接相遇。 | Direct Junction | No trim strip — stone, timber and metal meet directly; the clean line rests on a precision you never see. | Two materials, meeting face to face. | 待审 |
-| **悬挑** | 一端固定、一端悬空的结构：家具像浮在空间里，轻盈，不压人。 | 一端扎根，一端向空中伸出。 | Cantilever | Fixed at one end, free at the other — the piece seems to float, light and never heavy. | Rooted at one end, reaching into the air at the other. | 待审 |
-| **叠级** | 体块逐层向前、向上叠起：立面有了层次，不呆板。 | 一层一层，像山势起伏。 | Stepped Layers | Volumes stack forward and upward — the wall gains depth, never flat. | Layer upon layer, like the rise of hills. | 待审 |
-| **错位** | 体块上下、前后错开：打破方正，空间多了一点自然的动势。 | 不必对齐，才有动感。 | Offset | Volumes shift up, down, forward and back — the box is broken, and the room gains a natural movement. | Out of line, and so alive. | 待审 |
-| **离缝** | 体块之间以一道缝分开：每一块独立、轻盈。 | 留一道缝，让墙透一口气。 | Separated Volumes | Volumes set apart by a gap — each one stands alone, and lighter. | Leave a gap, and let the wall breathe. | 待审 |
-| **夹吊** | 高体块之间夹着吊柜或层板：中间通透，放上喜欢的东西。 | 两座高柜之间，留一处空。 | Suspended Between | A hanging cabinet or shelf held between tall volumes — the middle stays airy, for the things you love. | Between two tall cabinets, a space left open. | 待审 |
-| **进退** | 同一立面上，体块有凸有凹：深浅之间，立面更立体。 | 有进有退，光影自来。 | Advance & Recess | Volumes advance and recede on one wall — depth gathers between them. | Step forward, step back — light and shadow follow. | 待审 |
-| **围合** | 体块围成一个框、一个龛：展示或常用的那一格，成为焦点。 | 围出一处，让目光停留。 | Framed Niche | Volumes form a frame or a niche — the display, or the everyday spot, becomes the focus. | Frame a place, and the eye will rest there. | 待审 |
-| **咬合** | 体块互相咬合，像齿轮相扣：整体感强，有一点安静的张力。 | 彼此嵌入，静中有力。 | Interlocking | Volumes interlock like gears — strongly unified, with a quiet tension. | Fitted into each other — stillness with strength. | 待审 |
-| **穿插** | 横板穿过竖向体块：线条贯穿，空间连成一体。 | 一条线，穿过整个空间。 | Intersecting | A horizontal shelf passes through vertical volumes — the line carries on, and the space becomes one. | One line runs through the whole room. | 待审 |
-| **矩阵** | 同样尺寸的模块，整齐重复：让空间沉静下来。 | 秩序，本身就是一种安静。 | Grid | Modules of one size, repeated in an even grid — and the room settles. | Order, in itself, is a kind of quiet. | 待审 |
-| **骨骼线系列** | 灵感取自古典实木家具的形态：骨骼结构既是装饰，也是把手。 | 在时间的长河，寻找关于家具的记忆。 | Skeleton Line Series | Inspired by classical solid-wood furniture: the frame is both the ornament and the handle. | In the long river of time, looking for the memory of furniture. | 官方（品牌手册 p.9, p.23–24） |
-| **空山系列** | 以「退」为设计哲学，「空而不空」的陈列美学。 | 入空山，感物近人。 | Empty Mountain Series | “Stepping back” as a design philosophy — display that is empty, yet never empty. | Enter the empty mountain, and feel close to things and people. | 官方（品牌手册 p.10, p.28） |
-| **织系列** | 在城市的喧嚣中迷失的感觉，在接近麻纤维的时候，会慢慢平复下来。 | 自然柔韧，回归感性生活。 | Weaving Series | What gets lost in the noise of the city slowly settles when you are close to linen. | Natural and supple — back to a life of the senses. | 官方（品牌手册 p.11） |
-| **雾山系列** | 轻于色、安于形：取晨雾之「灰」、春山之「木」、早春山间将有未有之「绿」，消隐大型柜体的存在感，让空间平静温和。 | 雾山春居。 | Misty Mountain Series | Light in colour, at ease in form: the grey of morning mist, the wood of the spring hills and the green that is only just arriving — large cabinetry fades back and the room stays calm and gentle. | A spring house on the misty mountain. | 官方（溪岸原创设计篇 P25；溪岸品牌讲解 p.11） |
-| **侘寂东方系列** | 打磨出能滋养心灵、连接自然、经得起时间洗礼的设计。 | 山，有它的时间。 | Wabi-Sabi Eastern Series | Design that nourishes the mind, connects with nature, and stands the test of time. | Mountains have their own time. | 官方（溪岸官方帐号：2025 年实木系列新品「侘寂东方」发布文） |
+| 名称 | 题眼 | 特点 | 优势 | English | English · 题眼 | English · 特点 | English · 优势 | 状态 |
+|---|---|---|---|---|---|---|---|---|
+| **脱缝** | 离墙一线，柜子便轻了。 | 柜体与墙、天花、旁板之间，留一道均匀的凹缝。 | 柜子像浮在墙前，更轻；墙面的些许不平，也被这道缝收住。 | Shadow Gap | A line from the wall, and the cabinet grows light. | An even recessed gap between the cabinet and the wall, ceiling or side panel. | The cabinet seems to float and feels lighter; slight unevenness in the wall disappears into the gap. | 待审 |
+| **追缝** | 一面墙，只说一句话。 | 不同柜子、门板、墙板之间的缝，对齐成一条线。 | 整面墙是一体的设计，看起来整齐、不乱。 | Aligned Joints | One wall, one sentence. | The joints between cabinets, doors and wall panels line up in one line. | The whole wall reads as one design — orderly, never busy. | 待审 |
+| **对纹** | 木纹从一扇门，走到下一扇门。 | 相邻门板的木纹接得上，像同一块木头。 | 大面木作更完整、更有质感。 | Continuous Grain | The grain walks from one door to the next. | The grain continues across neighbouring doors, as if from one board. | Large timber surfaces look whole and rich. | 待审 |
+| **对开混拼** | 把一棵树，铺成一面墙。 | 宽幅山纹木皮从中间裁开再随机拼，山纹与直纹自然接上。 | 天然木皮尺寸有限，拼得好，整面墙才有自然感。 | Split & Mixed Veneer | One tree, laid out as a wall. | Wide cathedral-grain veneer is split down the middle and re-laid at random, so the grain meets naturally. | Natural veneer comes only so wide; laid well, the whole wall keeps a natural look. | 待审 |
+| **铣槽** | 把手，藏进了门的边缘。 | 在门板边上铣出凹槽，当作拉手。 | 不用装拉手，立面干净；也不会勾到衣服。 | Routed Finger Pull | The handle hides in the edge of the door. | A groove routed into the door edge serves as the handle. | No hardware, a clean face, and nothing to catch your clothes. | 待审 |
+| **拉槽** | 光走过，留下一行行细影。 | 门板表面铣出一条条竖向凹槽，有凹凸纹理。 | 有节奏感和手感，单一颜色也不单调。 | Fluted Panel | Light passes, leaving lines of fine shadow. | Vertical grooves routed across the door face give it a ribbed texture. | Rhythm and touch — even a single colour never looks plain. | 待审 |
+| **斜切** | 一道斜面，就是拉手。 | 门板、抽屉面的边，做成斜角。 | 斜边本身就是拉手；立面显薄、利落。 | Bevelled Edge | One bevel is the handle. | The edge of the door or drawer front is cut at an angle. | The bevel is the handle; the front looks slim and crisp. | 待审 |
+| **斜拼** | 转角处，木纹没有断。 | 两块板在转角以 45° 拼接，木纹和边线绕过转角不断开。 | 看不到板材断面，像一整块实木。 | Mitred Corner | At the corner, the grain does not break. | Two panels meet at 45° on the corner; grain and edge wrap around unbroken. | No exposed board edge — it reads as solid wood. | 待审 |
+| **海棠角** | 转角收一笔，是东方家具的温柔。 | 外转角不做尖直角，内收一个小方角，取自传统家具。 | 不磕手、不易崩边；转角多一道细影，有东方味。 | Haitang Corner | One small step at the corner — the gentleness of Eastern furniture. | Instead of a sharp corner, the outer corner steps in with a small notch, from classical furniture. | Kind to the hand, less prone to chipping, with a fine shadow and an Eastern feel. | 待审 |
+| **夹心 / ABA 夹心** | 走近了，才看见那一道线。 | 层板或边框用 A + B + A 三层叠成，侧面露出一道对比色细线。 | 层板看起来更薄、更精致，多一处设计细节。 | ABA Sandwich Edge | Come closer, and the line appears. | Shelves or frames layered A + B + A, showing a fine contrasting line on the edge. | Shelves look thinner and more refined, with one more crafted detail. | 待审 |
+| **骨骼线** | — | 灵感取自古典实木家具的形态：骨骼结构既是装饰，也是把手。 | 细线框让每扇柜门都有一道影子，有细节但不繁复。 | Skeleton Line | — | Inspired by classical solid-wood furniture: the frame is both the ornament and the handle. | A fine frame line gives each door its own shadow — detail without ornament. | 官方（品牌手册 p.9、p.23–24） |
+| **圆弧** | 没有棱角的家，走起来更柔软。 | 柜体、墙板、台面做成弧形。 | 动线更顺、更安全，空间更柔和。 | Curves | A home without hard corners walks more softly. | Cabinets, wall panels or worktops shaped in a curve. | Smoother, safer movement, and a softer room. | 待审 |
+| **格栅** | 隔开，却不隔光。 | 一排间隔的木条，做隔断或柜面。 | 通透、透气；有分区，又不封闭。 | Timber Slats | Divided, yet never closed to light. | A row of spaced timber slats, used as a screen or a cabinet front. | Open and airy — it divides the space without closing it off. | 待审 |
+| **钢琴键** | 一排琴键，等光来弹奏。 | 竖条长短、进出不一，像一排琴键。 | 比格栅多一层节奏和立体感。 | Piano-key Slats | A row of keys, waiting for the light to play. | Vertical slats of varied length and depth, like piano keys. | More rhythm and depth than plain slats. | 待审 |
+| **铣型** | 拉手与造型，本是一体。 | 在板上铣出造型，例如半圆拉手、图案。 | 拉手和造型合为一体，有个性。 | Routed Motif | Handle and form, one and the same. | A shape routed into the panel — a half-moon pull or a pattern. | Handle and form become one, with character. | 待审 |
+| **隐形门** | 门在，墙仍然安静。 | 门和墙板、柜门做平，不留门套，只剩一圈细缝。 | 门「消失」在墙里，整面墙干净。 | Hidden Door | The door is there; the wall stays quiet. | The door sits flush with the wall panels or cabinet doors — no frame, only a fine outline. | The door disappears, and the wall stays clean. | 待审 |
+| **透气** | 让柜子，也能呼吸。 | 板上铣出一排细长的透气缝。 | 鞋柜、设备柜不闷、不生味。 | Ventilation Slots | Let the cabinet breathe, too. | A row of narrow ventilation slots routed into the panel. | Shoe and equipment cabinets stay fresh, never stuffy. | 待审 |
+| **发光背板** | 让珍藏，在柔光里被看见。 | 柜内整块背板会发光，像一个灯箱。 | 展示更有氛围，是酒柜、展示柜的主角。 | Lit Back Panel | Let what you treasure be seen in soft light. | The whole back panel inside the cabinet glows like a light box. | Displays gain atmosphere — the centrepiece of a wine or display cabinet. | 待审 |
+| **硬碰** | 两种材质，直接相遇。 | 两种材质直接对接，不加收边条。 | 立面极简、线条干净；对工艺精度要求很高。 | Direct Junction | Two materials, meeting face to face. | Two materials meet directly, with no trim strip. | A minimal face and clean lines — it demands real precision. | 待审 |
+| **悬挑** | 一端扎根，一端向空中伸出。 | 结构一端固定、一端悬空伸出。 | 轻盈，家具像浮在空间里。 | Cantilever | Rooted at one end, reaching into the air at the other. | A structure fixed at one end, reaching out freely at the other. | Light — the furniture seems to float. | 待审 |
+| **叠级** | 一层一层，像山势起伏。 | 体块一层层往前、往上叠。 | 有层次，不呆板。 | Stepped Layers | Layer upon layer, like the rise of hills. | Volumes stacked forward and upward, layer by layer. | Depth and layering, never flat. | 待审 |
+| **错位** | 不必对齐，才有动感。 | 体块上下、前后错开，不对齐。 | 打破方正，有动感。 | Offset | Out of line, and so alive. | Volumes shifted up, down, forward or back, out of line. | It breaks the box and adds movement. | 待审 |
+| **离缝** | 留一道缝，让墙透一口气。 | 体块之间留一道缝分开。 | 每个体块独立、更轻。 | Separated Volumes | Leave a gap, and let the wall breathe. | A gap left between the volumes. | Each volume stands on its own, and feels lighter. | 待审 |
+| **夹吊** | 两座高柜之间，留一处空。 | 两个高体块中间，夹着吊柜或层板。 | 中间留空、通透，可以做展示。 | Suspended Between | Between two tall cabinets, a space left open. | A hanging cabinet or shelf held between two tall volumes. | The middle stays open and airy, ready for display. | 待审 |
+| **进退** | 有进有退，光影自来。 | 同一立面上，有凸出、也有凹进的体块。 | 深浅对比，立面更立体。 | Advance & Recess | Step forward, step back — light and shadow follow. | Volumes that project and recess on the same wall. | The contrast of depth gives the wall dimension. | 待审 |
+| **围合** | 围出一处，让目光停留。 | 体块围出一个框、一个龛。 | 视线聚焦在中间的展示或功能区。 | Framed Niche | Frame a place, and the eye will rest there. | Volumes that enclose a frame or a niche. | The eye settles on the display or working area at its centre. | 待审 |
+| **咬合** | 彼此嵌入，静中有力。 | 体块互相嵌入，像齿轮咬合。 | 整体感强，有设计张力。 | Interlocking | Fitted into each other — stillness with strength. | Volumes that fit into one another, like meshing gears. | Strong unity, with design tension. | 待审 |
+| **穿插** | 一条线，穿过整个空间。 | 横板穿过竖向体块。 | 线条贯穿，空间连贯。 | Intersecting | One line runs through the whole room. | A horizontal panel passing through vertical volumes. | A continuous line ties the space together. | 待审 |
+| **矩阵** | 秩序，本身就是一种安静。 | 同样尺寸的模块，整齐重复。 | 有秩序感，安静。 | Grid | Order, in itself, is a kind of quiet. | Modules of the same size, repeated evenly. | A sense of order, and calm. | 待审 |
+| **骨骼线系列** | 在时间的长河，寻找关于家具的记忆。 | 灵感取自古典实木家具的形态：骨骼结构既是装饰，也是把手。 | — | Skeleton Line Series | In the long river of time, looking for the memory of furniture. | Inspired by classical solid-wood furniture: the frame is both the ornament and the handle. | — | 官方（品牌手册 p.9, p.23–24） |
+| **空山系列** | 入空山，感物近人。 | 以「退」为设计哲学，「空而不空」的陈列美学。 | — | Empty Mountain Series | Enter the empty mountain, and feel close to things and people. | “Stepping back” as a design philosophy — display that is empty, yet never empty. | — | 官方（品牌手册 p.10, p.28） |
+| **织系列** | 自然柔韧，回归感性生活。 | 在城市的喧嚣中迷失的感觉，在接近麻纤维的时候，会慢慢平复下来。 | — | Weaving Series | Natural and supple — back to a life of the senses. | What gets lost in the noise of the city slowly settles when you are close to linen. | — | 官方（品牌手册 p.11） |
+| **雾山系列** | 雾山春居。 | 轻于色、安于形：取晨雾之「灰」、春山之「木」、早春山间将有未有之「绿」，消隐大型柜体的存在感，让空间平静温和。 | — | Misty Mountain Series | A spring house on the misty mountain. | Light in colour, at ease in form: the grey of morning mist, the wood of the spring hills and the green that is only just arriving — large cabinetry fades back and the room stays calm and gentle. | — | 官方（溪岸原创设计篇 P25；溪岸品牌讲解 p.11） |
+| **侘寂东方系列** | 山，有它的时间。 | 打磨出能滋养心灵、连接自然、经得起时间洗礼的设计。 | — | Wabi-Sabi Eastern Series | Mountains have their own time. | Design that nourishes the mind, connects with nature, and stands the test of time. | — | 官方（溪岸官方帐号：2025 年实木系列新品「侘寂东方」发布文） |
