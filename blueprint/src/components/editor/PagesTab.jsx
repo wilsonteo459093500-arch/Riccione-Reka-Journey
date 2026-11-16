@@ -390,6 +390,8 @@ export default function PagesTab({ project, onChange, settings, notify, onOpenSe
       pickNonce={pickNonce}
       onHighlight={setActiveField}
       openPolish={openPolish}
+      settings={settings}
+      onOpenSettings={onOpenSettings}
       onDuplicate={duplicate}
       onDelete={remove}
       onInsertAfter={insertAfter}

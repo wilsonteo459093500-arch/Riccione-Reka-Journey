@@ -46,6 +46,36 @@ export function peekSketch(key) {
   return e?.status === 'ready' ? e : null;
 }
 
+/** 按版面裁切取一张图的像素（W×H RGBA）；毛坯图也用同一个裁切（同机位、同比例） */
+export async function cropPixels(url, crop, W, H) {
+  const img = new Image();
+  img.src = url;
+  await img.decode();
+  const nw = img.naturalWidth;
+  const nh = img.naturalHeight;
+  const { l, t, r, b } = crop;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const g = c.getContext('2d', { willReadFrequently: true });
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(img, l * nw, t * nh, Math.max(1, (1 - l - r) * nw), Math.max(1, (1 - t - b) * nh), 0, 0, W, H);
+  return g.getImageData(0, 0, W, H).data;
+}
+
+/** 交给背景线程算；不支持 Worker → null（调用方在主线程算） */
+export async function runInWorker(msg, transfer) {
+  const w = getWorker();
+  if (!w) return null;
+  const id = ++seq;
+  const res = await new Promise((resolve) => {
+    waiting.set(id, resolve);
+    w.postMessage({ ...msg, id }, transfer);
+  });
+  if (res.error) throw new Error(res.error);
+  return res;
+}
+
 /** 开始分析（重复调用无妨） */
 export function requestSketch(el, url) {
   if (!el?.src || !url) return;
@@ -53,33 +83,10 @@ export function requestSketch(el, url) {
   if (cache.has(key)) return;
   cache.set(key, { status: 'pending' });
   (async () => {
-    const img = new Image();
-    img.src = url;
-    await img.decode();
-    const nw = img.naturalWidth;
-    const nh = img.naturalHeight;
-    const { l, t, r, b } = pl.crop;
-    const c = document.createElement('canvas');
-    c.width = W;
-    c.height = H;
-    const g = c.getContext('2d', { willReadFrequently: true });
-    g.imageSmoothingQuality = 'high';
-    g.drawImage(img, l * nw, t * nh, Math.max(1, (1 - l - r) * nw), Math.max(1, (1 - t - b) * nh), 0, 0, W, H);
-    const src = g.getImageData(0, 0, W, H).data;
-    const w = getWorker();
-    let an;
-    if (w) {
-      const id = ++seq;
-      const res = await new Promise((resolve) => {
-        waiting.set(id, resolve);
-        const copy = src.slice().buffer;
-        w.postMessage({ id, W, H, buf: copy }, [copy]);
-      });
-      if (res.error) throw new Error(res.error);
-      an = { W, H, mag: res.mag, order: res.order, reveal: res.reveal };
-    } else {
-      an = analyseSketch(src, W, H);
-    }
+    const src = await cropPixels(url, pl.crop, W, H);
+    const copy = src.slice().buffer;
+    const res = await runInWorker({ W, H, buf: copy }, [copy]);
+    const an = res ? { W, H, mag: res.mag, order: res.order, reveal: res.reveal } : analyseSketch(src, W, H);
     cache.set(key, { status: 'ready', an, src });
     listeners.forEach((fn) => fn(key));
   })().catch(() => cache.set(key, { status: 'error' }));

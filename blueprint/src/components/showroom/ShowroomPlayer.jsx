@@ -16,12 +16,15 @@ import { plan3dKey, peekPlan3d, requestPlan3d, onPlan3dProgress } from '../../sh
 import { matchRoom } from '../../showroom/build3d.js';
 import { sketchFrame } from '../../showroom/sketch.js';
 import { sketchGeom, peekSketch, requestSketch, onSketchReady } from '../../showroom/sketchCache.js';
+import { cabinetFrame } from '../../showroom/cabinets.js';
+import { cabinetsKey, peekCabinets, requestCabinets, onCabinetsReady } from '../../showroom/cabinetsCache.js';
 
 const WHEEL_UNIT = 900; // 滚轮 / 触控板：滚多少 px 走一页
 const SMOOTH = 0.075; // 每帧（60fps）追上目标的比例：越小越慢越稳
 const MIN_SPEED = 0.0035 / 16.7; // 最后一小段的最低速度（页 / ms）
 const IDLE_SNAP_MS = 650; // 停手多久后吸到最近一页（触控板慢慢滑、中途停一下也不会被拉回去）
 const JUMP_MS = 1400; // 目录跳转的过渡时长
+const CABINETS_MS = 4200; // 「柜子一件件出现」那一段最快也要走这么久（按键时不会一下冲过线稿、毛坯）
 const CHROME_HIDE_MS = 2500;
 const MUSIC_ID = 'showroom-music'; // 背景音乐存在素材库里的固定 id（不属于任何项目）
 const MUSIC_VOLUME = 0.55;
@@ -152,6 +155,26 @@ function SketchEl({ el, entry, lineQ, colQ }) {
   );
 }
 
+/** 「毛坯 → 柜子一件件出现」画布：同样放在效果图原来的框里，逐帧合成（走完 = 原图） */
+function CabinetEl({ el, entry, q }) {
+  const ref = useRef(null);
+  const buf = useRef(null);
+  const { pl, W, H } = sketchGeom(el);
+  useEffect(() => {
+    const c = ref.current;
+    if (!c) return;
+    const ctx = c.getContext('2d');
+    if (!buf.current || buf.current.width !== W || buf.current.height !== H) buf.current = ctx.createImageData(W, H);
+    cabinetFrame(entry.an, entry.src, entry.shell, q, buf.current.data);
+    ctx.putImageData(buf.current, 0, 0);
+  }, [entry, q.lineQ, q.baseQ, q.pieceQ, W, H]);
+  return (
+    <div style={{ position: 'absolute', left: pl.x, top: pl.y, width: pl.w, height: pl.h, overflow: 'hidden' }}>
+      <canvas ref={ref} width={W} height={H} style={{ width: '100%', height: '100%', display: 'block' }} />
+    </div>
+  );
+}
+
 /**
  * 3D 户型开场那一层：关键帧（墙升起、柜子出现）交叉淡化 + 原平面图 + 房间高亮 + 推近
  * 画布内部 1920 × 1080（关键帧 1600 × 900 放大），按 SlideCanvas 一样等比缩放到 width
@@ -262,21 +285,25 @@ function MorphImg({ fromEl, toEl, t }) {
 /** 一层（一页）：整层透明度 + 每个元素的动效；换到效果图页时，效果图换成「线稿 → 上色」画布 */
 function Layer({ stop, role, kind, f, width, peer }) {
   // 3D 开场的前后两页：离开的楼层页照「从无到有」淡出；进来的效果图页照常线稿 → 上色
-  const k2 = kind === 'build' ? 'sketch' : kind === 'enter' ? (stop.hero >= 0 ? 'sketch' : 'cut') : kind;
+  const into = stop.hero < 0 ? 'cut' : stop.cabinets ? 'cabinets' : 'sketch';
+  const k2 = kind === 'build' ? 'sketch' : kind === 'enter' ? into : kind;
   // 从 3D 停点进房间：先让 3D 图高亮、推近，这一页晚一点才开始画线稿
   const m = layerMotion(role, k2, kind === 'enter' && role === 'b' ? enterProgress(f) : f, stop.page.els);
   const heroEl = stop.hero >= 0 ? stop.page.els[stop.hero] : null;
-  const entry = m.sketch && heroEl ? peekSketch(sketchGeom(heroEl).key) : null;
+  // 柜子一件件出现：分析好了用它；没好（或毛坯图对不上）退回「从无到有」
+  const cab = m.cab && heroEl && stop.cabinets ? peekCabinets(cabinetsKey(heroEl, stop.cabinets)) : null;
+  const entry = m.sketch && heroEl ? cab || peekSketch(sketchGeom(heroEl).key) : null;
   // 进设计特点（role b）：效果图从上一页（peer）那张的框移过来
   const fromEl = kind === 'craft' && role === 'b' && peer && peer.hero >= 0 ? peer.page.els[peer.hero] : null;
   const elStyle = useCallback((el, i) => ((entry && i === stop.hero) || (fromEl && el.name === 'photo:craft') ? null : cssOf(m.el(el, i))), [m, entry, stop.hero, fromEl]);
   const replaceEl = useCallback(
     (el, i) => {
+      if (cab && i === stop.hero) return <CabinetEl el={el} entry={cab} q={m.cab} />;
       if (entry && i === stop.hero) return <SketchEl el={el} entry={entry} lineQ={m.sketch.lineQ} colQ={m.sketch.colQ} />;
       if (fromEl && el.name === 'photo:craft') return <MorphImg fromEl={fromEl} toEl={el} t={m.morph ?? 1} />;
       return null;
     },
-    [entry, stop.hero, m, fromEl]
+    [entry, cab, stop.hero, m, fromEl]
   );
   return (
     <div style={{ position: 'absolute', inset: 0, opacity: m.opacity }}>
@@ -406,13 +433,17 @@ export default function ShowroomPlayer({ project, onClose }) {
   const clampPos = useCallback((p) => Math.min(Math.max(p, 0), Math.max(0, count - 1)), [count]);
   /** 一次手势最多走到当前页的前后一页：讲解时不会一下滑过好几页 */
   /** 当前位置往 dir 方向的那一段过渡要滑多长（「从无到有」慢一些） */
-  const weightAt = useCallback(
+  const kindAt = useCallback(
     (pos, dir) => {
       const a = dir >= 0 ? Math.floor(pos + 1e-6) : Math.ceil(pos - 1e-6) - 1;
-      return a < 0 || a + 1 >= count ? 1 : transitionWeight(transitionKind(stops, a, a + 1));
+      return a < 0 || a + 1 >= count ? null : transitionKind(stops, a, a + 1);
     },
     [stops, count]
   );
+  const weightAt = useCallback((pos, dir) => {
+    const k = kindAt(pos, dir);
+    return k ? transitionWeight(k) : 1;
+  }, [kindAt]);
   const nudge = useCallback(
     (raw) => {
       const base = cur.current;
@@ -468,6 +499,8 @@ export default function ShowroomPlayer({ project, onClose }) {
       const minStep = (MIN_SPEED * dt) / w;
       let step = d * k;
       if (Math.abs(step) < minStep) step = Math.sign(d) * Math.min(Math.abs(d), minStep);
+      // 柜子一件件出现：限最高速度，线稿 → 毛坯 → 一组组柜子都看得清
+      if (kindAt(cur.current, d) === 'cabinets') step = Math.sign(step) * Math.min(Math.abs(step), dt / CABINETS_MS);
       cur.current = Math.abs(d) < 5e-4 ? target.current : cur.current + step;
       const fr = frameAt(cur.current, count);
       set({ ...fr, kind: fr.b == null ? 'cut' : transitionKind(stops, fr.a, fr.b), pos: cur.current });
@@ -475,11 +508,12 @@ export default function ShowroomPlayer({ project, onClose }) {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [count, stops, weightAt]);
+  }, [count, stops, weightAt, kindAt]);
 
   // 线稿分析好了 → 重画（分析在背景线程里跑）
   const [, setSketchTick] = useState(0);
   useEffect(() => onSketchReady(() => setSketchTick((t) => t + 1)), []);
+  useEffect(() => onCabinetsReady(() => setSketchTick((t) => t + 1)), []);
   useEffect(() => onPlan3dProgress(() => setSketchTick((t) => t + 1)), []);
   // 3D 开场的关键帧：一打开就在空闲时开始画（讲品牌那几页的时间够画完）
   useEffect(() => {
@@ -595,6 +629,7 @@ export default function ShowroomPlayer({ project, onClose }) {
       // 后面几张效果图先在背景线程里算好线稿
       const hero = stops[k].hero >= 0 ? stops[k].page.els[stops[k].hero] : null;
       if (hero) requestSketch(hero, resolveUrl(hero.src));
+      if (hero && stops[k].cabinets) requestCabinets(hero, stops[k].cabinets, resolveUrl);
     }
   }, [view.a, stops, count]);
 

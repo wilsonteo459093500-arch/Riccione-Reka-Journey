@@ -16,6 +16,7 @@ import { bViewFullNotes, bCraftPage } from '../engine/b/design.js';
 import { playableCrafts, craftText, craftPhoto, CRAFT_MAX } from './craft.js';
 import { makeTranslator, langOf } from '../engine/lang.js';
 import { hasPlan3d } from './build3d.js';
+import { playableCabinets } from './cabinets.js';
 
 /** 效果图页上那张效果图（满版 name 'photo:image'，图文页 edit.field 'image'）的元素序号；没有 → -1 */
 export const heroIndex = (page) =>
@@ -61,6 +62,7 @@ export function buildStops(pages, project, opts = {}) {
       page: { kind: 'plan3d', bg: 'F3EEE7', els: [] },
       plan3d: floor,
       hero: -1,
+      cabinets: null,
       slide: null,
       segment,
       phase: null,
@@ -83,10 +85,14 @@ export function buildStops(pages, project, opts = {}) {
     const tod = slide?.kind === 'view' ? splitTimeOfDay(slide.subtitle).tod : null;
     const extra = isFullView(pg) && slide ? bViewFullNotes(ctx, slide).els : [];
     const page = extra.length ? { ...pg, els: [...pg.els, ...extra] } : pg;
+    const hero = heroIndex(page);
+    // 「毛坯 → 柜子一件件出现」：设计师勾过、毛坯图 / 核对过的框是给这张效果图做的，版面上那张也正是它
+    const cab = slide?.kind === 'view' && hero >= 0 && page.els[hero].src === slide.image ? playableCabinets(slide) : null;
     stops.push({
       key: pg.key,
       page,
-      hero: heroIndex(page), // 换页进来时「线稿 → 上色 → 原图」的那张效果图
+      hero, // 换页进来时「线稿 → 上色 → 原图」的那张效果图
+      cabinets: cab?.mode ? cab : null,
       slide,
       segment,
       phase: tod,
@@ -137,6 +143,7 @@ function withCrafts(stops, ctx, opts) {
         key: `craft:${s.key}${n ? `:${n}` : ''}`,
         page,
         hero: -1,
+        cabinets: null,
         slide: s.slide,
         segment: s.segment,
         phase: null,
@@ -155,6 +162,7 @@ function withCrafts(stops, ctx, opts) {
  * 两个停点之间的过渡（另有 3D 开场：'build' 进 3D 停点 = 墙升起、柜子出现；'enter' 从 3D 停点进房间 = 高亮推近）：
  *   'same'   同一段（白天 → 夜晚）：交叉淡化
  *   'sketch' 换到一张效果图页：效果图从白纸上「线稿 → 上色 → 原图」
+ *   'cabinets' 换到勾了「柜子一件件出现」的效果图页：白纸 → 线稿 → 毛坯上色 → 柜子一组组长出来 → 原图
  *   'cut'    其他换页：交叉淡化 + 推近
  *   'craft'  进设计特点停点：效果图从原页的框移到左边（整张），特点浮出
  */
@@ -162,18 +170,20 @@ export function transitionKind(stops, a, b) {
   const sa = stops[a];
   const sb = stops[b];
   if (!sa || !sb) return 'cut';
+  const into = () => (sb.hero < 0 ? 'cut' : sb.cabinets ? 'cabinets' : 'sketch');
   // 进「设计特点」：同一张效果图从原来的位置缩到左边，特点一张张浮出来；从设计特点离开：照下一页的样子
   // 设计特点一页放不下、接着下一页：效果图同一个框，只换字（同样走 'craft'：上一页的效果图藏起来，下一页的在同一位置接手）
   if (sb.craft) return 'craft';
-  if (sa.craft) return sb.plan3d ? 'build' : sb.hero >= 0 ? 'sketch' : 'cut';
+  if (sa.craft) return sb.plan3d ? 'build' : into();
   if (sa.segment === sb.segment && sa.slide?.kind === 'view' && sb.slide?.kind === 'view') return 'same';
   if (sb.plan3d) return 'build';
   if (sa.plan3d) return 'enter';
-  return sb.hero >= 0 ? 'sketch' : 'cut';
+  return into();
 }
 
-/** 这段过渡要滑多长（相对一般换页）：「从无到有」慢一点，看得清线是怎么画出来的；3D 开场最慢 */
-export const transitionWeight = (kind) => (kind === 'build' || kind === 'enter' ? 3 : kind === 'sketch' ? 2.4 : kind === 'craft' ? 1.6 : 1);
+/** 这段过渡要滑多长（相对一般换页）：「从无到有」慢一点，看得清线是怎么画出来的；柜子一件件出现、3D 开场最慢 */
+export const transitionWeight = (kind) =>
+  kind === 'cabinets' ? 3.6 : kind === 'build' || kind === 'enter' ? 3 : kind === 'sketch' ? 2.4 : kind === 'craft' ? 1.6 : 1;
 
 /** 目录：每段一项（第一个停点），按章节分组 → [{ section, items:[{ stop, label, segment }] }] */
 export function indexOf(stops) {
