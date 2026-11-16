@@ -13,7 +13,7 @@
 
 import { splitTimeOfDay } from '../import/labels.js';
 import { bViewFullNotes, bCraftPage } from '../engine/b/design.js';
-import { playableCrafts, craftText, CRAFT_MAX } from './craft.js';
+import { playableCrafts, craftText, craftPhoto, CRAFT_MAX } from './craft.js';
 import { makeTranslator, langOf } from '../engine/lang.js';
 import { hasPlan3d } from './build3d.js';
 
@@ -128,10 +128,10 @@ function withCrafts(stops, ctx, opts) {
     let n = 0;
     while (rest.length) {
       let k = rest.length;
-      let page = bCraftPage(ctx, s.slide, heroEl, rest.slice(0, k), craftText, { preview: !!opts.craftPreview });
+      let page = bCraftPage(ctx, s.slide, heroEl, rest.slice(0, k), craftText, { preview: !!opts.craftPreview, photoOf: (e) => craftPhoto(e.id) });
       while (!page.fits && k > 1) {
         k -= 1;
-        page = bCraftPage(ctx, s.slide, heroEl, rest.slice(0, k), craftText, { preview: !!opts.craftPreview });
+        page = bCraftPage(ctx, s.slide, heroEl, rest.slice(0, k), craftText, { preview: !!opts.craftPreview, photoOf: (e) => craftPhoto(e.id) });
       }
       out.push({
         key: `craft:${s.key}${n ? `:${n}` : ''}`,

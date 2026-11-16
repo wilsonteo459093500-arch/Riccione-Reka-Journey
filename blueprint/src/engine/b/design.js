@@ -1009,7 +1009,8 @@ export function bViewFullNotes(ctx, slide) {
 /**
  * 展厅播放用：房间「设计特点」那一页（只在播放器里出现，不进 PPT）。
  * 左边 = 同一张效果图，**整张显示、不裁**（和原图一样，只是缩小）；右边 = 文字栏（x 1200、宽 610；特点 / 优势字多，比图文页的规格栏宽一些）：
- *   页眉「设计特点 / DESIGN DETAILS」+ 视角名 → 每个特点一张：名称 · 题眼 · 特点 · 优势（标签在左、正文在右；空栏不印）
+ *   页眉「设计特点 / DESIGN DETAILS」+ 视角名 → 每个特点一张小卡片：左边方形小图（有图才有；别家示意图下面标「示意」），
+ *   右边 名称 · 题眼 · 特点 · 优势（标签在左、正文在右；空栏不印）
  * 文字全部来自词库（showroom/craft.js，老板审过的定义），这里不改字。
  * @param {object} heroEl   原页上的那张效果图元素（决定图片的完整比例）
  * @param {object[]} entries 词库条目（craftText 取字）；opts.preview：待审的条目名称后标「待审」
@@ -1061,29 +1062,55 @@ export function bCraftPage(ctx, slide, heroEl, entries, textOf, opts = {}) {
   const txtEn = style('bodyEn', { size: 16, lh: 30 });
   const labW = lang === 'zh' ? 62 : 104;
   const LABELS = { feature: { zh: '特点', en: 'Feature' }, advantage: { zh: '优势', en: 'Advantage' } };
+  // 小图（opts.photoOf(entry) → { src, w, h, source }）：卡片左边一张方形小图，文字排在右边；
+  // 别家的示意图（source 'reference'）在图下面标一行小字「示意 / Reference」—— 图上不放字、不压暗
+  const THUMB = 108;
+  const THUMB_GAP = 18;
+  const capSt = style('body', { size: 12, spacing: 1, color: B.foot, lh: 24 });
+  const capEn = style('bodyEn', { size: 12, spacing: 0.5, color: B.foot, lh: 24 });
   entries.forEach((entry, k) => {
     const t = textOf(entry, lang);
     const pending = opts.preview && entry.status === 'pending';
     const mark = (s, tag) => (pending && s ? `${s}　${tag}` : s);
-    if (k) y += 26;
+    if (k) y += 22;
     col.push({ ...rule(x, y, w, { h: 1, alpha: ALPHA.tableRule }), name: `craft-rule:${k}` });
-    y += 18;
-    add(pairBlock(x, y, w, { zh: mark(t.zh.name, '待审'), en: t.en ? mark(t.en.name, 'DRAFT') : '' }, lang, nameSt, { enRole: nameEn, gap: 0, maxLines: 1, name: `craft-name:${k}` }));
+    y += 16;
+    const cardTop = y;
+    const ph = opts.photoOf ? opts.photoOf(entry) : null;
+    let tx = x;
+    let tw = w;
+    let thumbBottom = cardTop;
+    if (ph?.src) {
+      const pp = placePhoto({ src: ph.src, nat: { w: ph.w, h: ph.h }, label: entry.zh }, x, cardTop + 4, THUMB, THUMB, { name: `craft-thumb:${k}`, maxScale: 99 });
+      col.push(pp.el);
+      thumbBottom = cardTop + 4 + THUMB;
+      if (ph.source === 'reference') {
+        const cap = pairBlock(x, thumbBottom + 6, THUMB, { zh: '示意', en: 'Reference' }, lang, capSt, { enRole: capEn, gap: 0, maxLines: 1, name: `craft-thumb-note:${k}` });
+        col.push(...cap.els);
+        thumbBottom = cap.bottom;
+      }
+      tx = x + THUMB + THUMB_GAP;
+      tw = w - THUMB - THUMB_GAP;
+    }
+    add(pairBlock(tx, y, tw, { zh: mark(t.zh.name, '待审'), en: t.en ? mark(t.en.name, 'DRAFT') : '' }, lang, nameSt, { enRole: nameEn, gap: 0, maxLines: 1, name: `craft-name:${k}` }));
     // 题眼（中英版不印：两种语言都印会挤爆）
     if (lang !== 'bi' && (t.zh.title || t.en?.title)) {
       y += 4;
-      add(pairBlock(x, y, w, { zh: t.zh.title, en: t.en?.title || '' }, lang, style('body', { size: 17, lh: 34 }), { enRole: style('bodyEn', { size: 17, lh: 32 }), maxLines: 2, gap: 4, balance: true, name: `craft-title:${k}` }));
+      add(pairBlock(tx, y, tw, { zh: t.zh.title, en: t.en?.title || '' }, lang, style('body', { size: 17, lh: 34 }), { enRole: style('bodyEn', { size: 17, lh: 32 }), maxLines: 2, gap: 4, balance: true, name: `craft-title:${k}` }));
     }
-    for (const key of ['feature', 'advantage']) {
+    // 中英版每栏都要印两种语言，放不下：有优势的只印优势（「是什么」看小图），没有优势的（五大系列）印特点
+    const keys = lang === 'bi' && (t.zh.advantage || t.en?.advantage) ? ['advantage'] : ['feature', 'advantage'];
+    for (const key of keys) {
       const pair = { zh: t.zh[key], en: t.en?.[key] || '' };
       if (!pair.zh && !pair.en) continue;
       y += 8;
-      const lab = pairBlock(x, y, labW, LABELS[key], lang, labSt, { enRole: labEn, gap: 0, maxLines: 1, name: `craft-${key}-label:${k}` });
-      const txt = pairBlock(x + labW, y, w - labW, pair, lang, txtSt, { enRole: txtEn, gap: 4, maxLines: 6, balance: true, name: `craft-${key}:${k}` });
+      const lab = pairBlock(tx, y, labW, LABELS[key], lang, labSt, { enRole: labEn, gap: 0, maxLines: 1, name: `craft-${key}-label:${k}` });
+      const txt = pairBlock(tx + labW, y, tw - labW, pair, lang, txtSt, { enRole: txtEn, gap: 4, maxLines: 6, balance: true, name: `craft-${key}:${k}` });
       col.push(...lab.els, ...txt.els);
       warnings.push(...(txt.warnings || []));
       y = Math.max(lab.bottom, txt.bottom);
     }
+    y = Math.max(y, thumbBottom);
   });
   // 文字栏和效果图上下居中对齐（不超出 92–900；放不下就从 92 排起）
   const photo = els.find((el) => el.name === 'photo:craft');
