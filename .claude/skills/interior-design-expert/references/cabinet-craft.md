@@ -83,6 +83,10 @@
 > （`invite/assets/js/visi/data.js` 的 `MB.SERIES_CONCEPT`，出处见状态栏），所以状态是「官方」、已经可以播；要改请改品牌那一份，这里跟着改。
 > 图纸上写「空山系列展示柜」「雾山」「侘寂东方」这类字，程序就会建议对应的系列（「织」单字太常见，要写「织系列」才认）。
 
+> **卡片小图**（`blueprint/public/craft/`，清单在 `blueprint/src/showroom/craft.js` `CRAFT_PHOTOS`）：五大系列用 VISI 系列页的溪岸官方照片，骨骼线（工艺）用品牌手册 p.23；
+> 其余 27 张是 2026-11-16 用户转发的小红书截图裁的（宜朴森、VISN、纳兹木作、岚酷、懂你设计、全球定制出海资讯、北京栖木），**别家品牌的照片，卡片上标「示意 / Reference」**；
+> 离缝暂时没有图。溪岸拍了自己的特写，同名替换、`source` 改 `'sail'`，「示意」就不印了。
+
 | 名称 | 题眼 | 特点 | 优势 | English | English · 题眼 | English · 特点 | English · 优势 | 状态 |
 |---|---|---|---|---|---|---|---|---|
 | **脱缝** | 离墙一线，柜子便轻了。 | 柜体与墙、天花、旁板之间，留一道均匀的凹缝。 | 柜子像浮在墙前，更轻；墙面的些许不平，也被这道缝收住。 | Shadow Gap | A line from the wall, and the cabinet grows light. | An even recessed gap between the cabinet and the wall, ceiling or side panel. | The cabinet seems to float and feels lighter; slight unevenness in the wall disappears into the gap. | ✅ |

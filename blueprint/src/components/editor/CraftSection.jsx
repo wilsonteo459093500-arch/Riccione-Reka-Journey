@@ -4,7 +4,7 @@ import { Section, inputCls } from './ui.jsx';
 import { updateSlide, NOW } from './ops.js';
 import { langOf } from '../../engine/lang.js';
 import {
-  CRAFT_VOCAB, CRAFT_STATUS, CRAFT_MAX, detectCrafts, tickedCrafts, toggleCraft, playableCrafts, craftText, isPlayable,
+  CRAFT_VOCAB, CRAFT_STATUS, CRAFT_MAX, detectCrafts, tickedCrafts, toggleCraft, playableCrafts, craftText, isPlayable, craftPhoto,
 } from '../../showroom/craft.js';
 
 // 效果图页 · 设计特点（展厅播放）：程序从这一页的图纸文字认出来 → 设计师打勾 → 展厅播放才出现。
@@ -49,6 +49,14 @@ export default function CraftSection({ project, slide, change }) {
               className={`flex gap-2 rounded-xl border p-2 cursor-pointer ${on ? 'border-bp-ink/30 bg-bp-tint/60' : 'border-bp-line bg-bp-tint/20'}`}
             >
               <input type="checkbox" className="mt-0.5 shrink-0" checked={on} onChange={(e) => set(entry.id, e.target.checked)} />
+              {craftPhoto(entry.id) && (
+                <img
+                  src={craftPhoto(entry.id).src}
+                  alt=""
+                  className="w-12 h-12 rounded-md object-cover shrink-0"
+                  title={craftPhoto(entry.id).source === 'reference' ? '示意图（别家品牌的照片，卡片上会标「示意」）' : '溪岸的照片'}
+                />
+              )}
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-1.5 flex-wrap">
                   <span className="text-sm text-bp-ink">{entry.zh}</span>

@@ -1,5 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="-40 -40 634 634">
-  <!-- UKIR STUDIO 字标（与 src/components/BrandMark.jsx 同一组形状）；深色模式的标签栏里改成浅色 -->
-  <style>path{fill:#111111}@media (prefers-color-scheme:dark){path{fill:#F2F0EB}}</style>
-  <path d="M0 0H168V336H0Z M0 386H336V554H168Z M386 0H554V386L386 554Z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-6 -6 112 112">
+  <!-- UKIR STUDIO 木纹「U」字标（简化版，与 src/components/BrandMark.jsx 的 UKIR_MARK_SMALL 同一组形状）；深色模式的标签栏里改成浅色 -->
+  <style>g{stroke:#111111}@media (prefers-color-scheme:dark){g{stroke:#F2F0EB}}</style>
+  <g fill="none" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M18 8 H44.5 V58 A5.5 5.5 0 0 0 55.5 58 V8 H82 A12 12 0 0 1 94 20 V64 A30 30 0 0 1 64 94 H36 A30 30 0 0 1 6 64 V20 A12 12 0 0 1 18 8 Z"/>
+    <path d="M22 20 V60 Q22 78 40 80 H60 Q78 78 78 60 V20"/>
+  </g>
 </svg>

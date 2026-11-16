@@ -9,7 +9,7 @@ import vm from 'node:vm';
 import { test } from './harness.mjs';
 import { renderDeck, exportableSlides } from '../src/engine/deck.js';
 import {
-  CRAFT_VOCAB, CRAFT_COPY, CRAFT_MAX, craftById, detectCrafts, matchEntry, playableCrafts, toggleCraft, craftText, isPlayable,
+  CRAFT_VOCAB, CRAFT_COPY, CRAFT_PHOTOS, CRAFT_MAX, craftById, detectCrafts, matchEntry, playableCrafts, toggleCraft, craftText, isPlayable,
 } from '../src/showroom/craft.js';
 import { buildStops, transitionKind, indexOf, transitionWeight } from '../src/showroom/timeline.js';
 import { layerMotion, morphRects, imageRects } from '../src/showroom/motion.js';
@@ -341,4 +341,71 @@ test('设计特点：一页放不下（中英版）→ 后面几个挪到下一�
   assert.equal(new Set(s.map((x) => x.key)).size, s.length, 'key 不重复');
   // 华文版：三个放得下一页
   assert.equal(stopsOf(sample('zh', { 'v-kitchen': ['haitang', 'jiaxin', 'gugexian'] }), { craftPreview: true }).filter((x) => x.craft).length, 1);
+});
+
+// ---------------------------------------------------------------------------
+// 卡片小图
+// ---------------------------------------------------------------------------
+
+/** JPEG 的宽高（读 SOF 段，不用装图片库） */
+function jpegSize(file) {
+  const b = readFileSync(file);
+  let i = 2;
+  while (i < b.length) {
+    if (b[i] !== 0xff) { i += 1; continue; }
+    const m = b[i + 1];
+    const len = b.readUInt16BE(i + 2);
+    if (m >= 0xc0 && m <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(m)) return { h: b.readUInt16BE(i + 5), w: b.readUInt16BE(i + 7) };
+    i += 2 + len;
+  }
+  return null;
+}
+
+test('小图：每个文件都在、宽高和清单一样；只能是词库里的条目；source 只有 sail / reference', () => {
+  for (const [id, ph] of Object.entries(CRAFT_PHOTOS)) {
+    assert.ok(craftById(id), `${id} 不在词库`);
+    assert.ok(['sail', 'reference'].includes(ph.source), id);
+    const file = path.join(here, '../public', ph.src);
+    const size = jpegSize(file);
+    assert.ok(size, `${ph.src} 读不到`);
+    assert.deepEqual(size, { w: ph.w, h: ph.h }, `${ph.src} 尺寸`);
+    assert.ok(ph.from, `${id} 要写来源`);
+  }
+  // 五大系列都有图、都是溪岸自己的
+  for (const e of CRAFT_VOCAB.filter((x) => x.group === 'series')) assert.equal(CRAFT_PHOTOS[e.id]?.source, 'sail', e.id);
+});
+
+test('小图：五大系列用的是 VISI 系列页的官方照片（MB.SERIES_PHOTO）', () => {
+  const win = {};
+  vm.runInNewContext(readFileSync(path.join(here, '../../invite/assets/js/visi/data.js'), 'utf8'), { window: win });
+  for (const e of CRAFT_VOCAB.filter((x) => x.group === 'series')) {
+    const id = win.MB.SERIES_PHOTO[e.series]; // 'b:skeleton-3'
+    assert.ok(CRAFT_PHOTOS[e.id].from.includes(id.replace(/^b:/, '')), `${e.zh}：${CRAFT_PHOTOS[e.id].from} 应该是 ${id}`);
+  }
+});
+
+test('小卡片：有图的卡左边是方形小图、文字在图右边不压图；别家示意图下面标「示意」，溪岸的不标', () => {
+  for (const lang of ['zh', 'en', 'bi']) {
+    const s = stopsOf(sample(lang, { 'v-kitchen': ['haitang', 's_mountain', 'lifeng'] }));
+    const pages = s.filter((x) => x.craft);
+    const all = pages.flatMap((p) => p.page.els);
+    const thumbs = all.filter((el) => /^craft-thumb:/.test(el.name || ''));
+    assert.equal(thumbs.length, 2, `${lang}：海棠角、空山有图，离缝没有`);
+    for (const p of pages) {
+      for (const th of p.page.els.filter((el) => /^craft-thumb:/.test(el.name || ''))) {
+        assert.equal(Math.round(th.w), Math.round(th.h), '方形');
+        assert.ok(th.x >= CRAFT_COL.x - 1 && th.x + th.w <= CRAFT_COL.x + CRAFT_COL.w);
+        const k = th.name.split(':')[1];
+        // 同一张卡的文字都在小图右边
+        for (const el of p.page.els.filter((e) => e.t === 'text' && new RegExp(`^craft-(name|title|feature|advantage)(-label)?:${k}$`).test(e.name || ''))) {
+          assert.ok(el.x >= th.x + th.w - 3, `${lang} 文字压到图：${el.name}`);
+        }
+      }
+    }
+    const notes = all.filter((el) => /^craft-thumb-note:/.test(el.name || ''));
+    const txt = (el) => el.paras.flatMap((p) => p.runs.map((r) => r.text)).join('');
+    assert.equal(notes.length, lang === 'bi' ? 2 : 1, `${lang}：只有海棠角（别家图）标示意`);
+    assert.match(txt(notes[0]), lang === 'en' ? /Reference/ : /示意/);
+    for (const p of pages) assert.ok(p.page.fits && !p.page.els.some((el) => el._cut), `${lang} 放得下`);
+  }
 });

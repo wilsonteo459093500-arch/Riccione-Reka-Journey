@@ -109,10 +109,53 @@ export const CRAFT_COPY = {
   s_wabi: { status: 'official', zh: { title: '山，有它的时间。', feature: '打磨出能滋养心灵、连接自然、经得起时间洗礼的设计。', advantage: '' }, en: { name: 'Wabi-Sabi Eastern Series', title: 'Mountains have their own time.', feature: 'Design that nourishes the mind, connects with nature, and stands the test of time.', advantage: '' } },
 };
 
+/**
+ * 卡片小图（blueprint/public/craft/）：source 'sail' = 溪岸自己的照片；'reference' = 别家品牌的示意图（小红书截图裁的），卡片上标「示意 / Reference」。
+ * 以后溪岸拍了自己的特写：同名换掉图片、source 改 'sail'（w / h 跟着改，测试会对）。没有图的条目卡片照常只排字。
+ * 五大系列 = VISI 系列页的官方照片（测试对 invite/assets/js/visi/data.js MB.SERIES_PHOTO）。
+ */
+export const CRAFT_PHOTOS = {
+  tuofeng: { src: '/craft/tuofeng.jpg', w: 577, h: 517, source: 'reference', from: '小红书 · 宜朴森全屋定制' },
+  zhuifeng: { src: '/craft/zhuifeng.jpg', w: 321, h: 333, source: 'reference', from: '小红书 · 纳兹木作-贵阳' },
+  duiwen: { src: '/craft/duiwen.jpg', w: 320, h: 336, source: 'reference', from: '小红书 · 纳兹木作-贵阳' },
+  duikai: { src: '/craft/duikai.jpg', w: 879, h: 784, source: 'reference', from: '小红书 · VISN全案艺术木作' },
+  xicao: { src: '/craft/xicao.jpg', w: 516, h: 641, source: 'reference', from: '小红书 · 宜朴森全屋定制' },
+  lacao: { src: '/craft/lacao.jpg', w: 900, h: 546, source: 'reference', from: '小红书 · 宜朴森全屋定制' },
+  xieqie: { src: '/craft/xieqie.jpg', w: 321, h: 336, source: 'reference', from: '小红书 · 纳兹木作-贵阳' },
+  xiepin: { src: '/craft/xiepin.jpg', w: 900, h: 408, source: 'reference', from: '小红书 · 宜朴森全屋定制' },
+  haitang: { src: '/craft/haitang.jpg', w: 659, h: 641, source: 'reference', from: '小红书 · 宜朴森全屋定制' },
+  jiaxin: { src: '/craft/jiaxin.jpg', w: 426, h: 900, source: 'reference', from: '小红书 · 宜朴森全屋定制' },
+  gugexian: { src: '/craft/gugexian.jpg', w: 771, h: 900, source: 'sail', from: '溪岸品牌手册 p.23（骨骼线厨房）' },
+  yuanhu: { src: '/craft/yuanhu.jpg', w: 900, h: 607, source: 'reference', from: '小红书 · 宜朴森全屋定制' },
+  gezha: { src: '/craft/gezha.jpg', w: 283, h: 358, source: 'reference', from: '小红书 · 岚酷美学定制' },
+  gangqin: { src: '/craft/gangqin.jpg', w: 162, h: 128, source: 'reference', from: '小红书 · 全球定制出海资讯' },
+  xixing: { src: '/craft/xixing.jpg', w: 178, h: 173, source: 'reference', from: '小红书 · 全球定制出海资讯' },
+  yinxingmen: { src: '/craft/yinxingmen.jpg', w: 165, h: 165, source: 'reference', from: '小红书 · 全球定制出海资讯' },
+  touqi: { src: '/craft/touqi.jpg', w: 321, h: 231, source: 'reference', from: '小红书 · 纳兹木作-贵阳' },
+  faguang: { src: '/craft/faguang.jpg', w: 285, h: 261, source: 'reference', from: '小红书 · 岚酷美学定制' },
+  yingpeng: { src: '/craft/yingpeng.jpg', w: 287, h: 362, source: 'reference', from: '小红书 · 岚酷美学定制' },
+  xuantiao: { src: '/craft/xuantiao.jpg', w: 249, h: 302, source: 'reference', from: '小红书 · 北京栖木整体木作' },
+  dieji: { src: '/craft/dieji.jpg', w: 279, h: 314, source: 'reference', from: '小红书 · 北京栖木整体木作' },
+  cuowei: { src: '/craft/cuowei.jpg', w: 273, h: 259, source: 'reference', from: '小红书 · 北京栖木整体木作' },
+  jiadiao: { src: '/craft/jiadiao.jpg', w: 273, h: 315, source: 'reference', from: '小红书 · 北京栖木整体木作' },
+  jintui: { src: '/craft/jintui.jpg', w: 279, h: 315, source: 'reference', from: '小红书 · 北京栖木整体木作' },
+  weihe: { src: '/craft/weihe.jpg', w: 273, h: 315, source: 'reference', from: '小红书 · 北京栖木整体木作' },
+  yaohe: { src: '/craft/yaohe.jpg', w: 273, h: 302, source: 'reference', from: '小红书 · 北京栖木整体木作' },
+  chuancha: { src: '/craft/chuancha.jpg', w: 273, h: 252, source: 'reference', from: '小红书 · 北京栖木整体木作' },
+  juzhen: { src: '/craft/juzhen.jpg', w: 279, h: 258, source: 'reference', from: '小红书 · 北京栖木整体木作' },
+  s_skeleton: { src: '/craft/series-skeleton.jpg', w: 669, h: 900, source: 'sail', from: '溪岸官方系列照片（VISI MB.SERIES_PHOTO：skeleton-3）' },
+  s_mountain: { src: '/craft/series-mountain.jpg', w: 594, h: 800, source: 'sail', from: '溪岸官方系列照片（VISI MB.SERIES_PHOTO：mountain-2）' },
+  s_weaving: { src: '/craft/series-weaving.jpg', w: 668, h: 899, source: 'sail', from: '溪岸官方系列照片（VISI MB.SERIES_PHOTO：weaving-1）' },
+  s_misty: { src: '/craft/series-misty.jpg', w: 900, h: 675, source: 'sail', from: '溪岸官方系列照片（VISI MB.SERIES_PHOTO：misty-wushan）' },
+  s_wabi: { src: '/craft/series-wabi.jpg', w: 675, h: 900, source: 'sail', from: '溪岸官方系列照片（VISI MB.SERIES_PHOTO：wabi-1）' },
+};
+
 // 状态跟着溪岸文案走（没有文案的条目 = 待审）
 for (const e of CRAFT_VOCAB) e.status = CRAFT_COPY[e.id]?.status || 'pending';
 export const CRAFT_BY_ID = new Map(CRAFT_VOCAB.map((e) => [e.id, e]));
 export const craftById = (id) => CRAFT_BY_ID.get(id) || null;
+/** 这一条的卡片小图（没有 = null） */
+export const craftPhoto = (id) => CRAFT_PHOTOS[id] || null;
 
 /** 给客人看的文字：溪岸文案（md 第四节）→ { zh:{ name, title, feature, advantage }, en:{ … } | null }；没有文案的退回研究底稿 */
 export function craftText(entry, lang = 'zh') {

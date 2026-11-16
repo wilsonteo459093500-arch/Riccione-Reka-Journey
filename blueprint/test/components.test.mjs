@@ -95,3 +95,23 @@ test('SlideCanvas（编辑器）：edit.zones —— 同一段里另一栏的字
   const [active] = kids(kids(Canvas({ slide, width: 960, interactive: true, activeField: 'overridesEn.s1Unit', resolveUrl: (s) => s }))[0]);
   assert.equal(active.props['data-active'], '1');
 });
+
+test('BrandMark：木纹 U —— 小于 32 px 用简化版（外框 + 一道纹、粗线），大尺寸用完整版（四道纹 + 木节）；浏览器标签图标和简化版同一组形状', async () => {
+  const mod = await loadComponent('src/components/BrandMark.jsx');
+  const { default: BrandMark, UKIR_MARK, UKIR_MARK_SMALL, UKIR_MARK_OUTLINE, markFor } = mod;
+  assert.equal(markFor(22), UKIR_MARK_SMALL);
+  assert.equal(markFor(52), UKIR_MARK);
+  const kids = (n) => [].concat(n?.props?.children ?? []).flat().filter(Boolean);
+  const small = BrandMark({ size: 22 });
+  const big = BrandMark({ size: 52 });
+  assert.equal(kids(small).filter((k) => k.type === 'path').length, 2);
+  assert.equal(kids(small).some((k) => k.type === 'ellipse'), false);
+  assert.equal(kids(big).filter((k) => k.type === 'path').length, 5);
+  assert.equal(kids(big).some((k) => k.type === 'ellipse'), true);
+  assert.ok(small.props.strokeWidth > big.props.strokeWidth, '小尺寸线要粗一点');
+  assert.equal(small.props.stroke, 'currentColor');
+  const { readFileSync } = await import('node:fs');
+  const icon = readFileSync(path.join(ROOT, 'public/icon.svg'), 'utf8');
+  for (const d of UKIR_MARK_SMALL.paths) assert.ok(icon.includes(d), `icon.svg 里要有 ${d.slice(0, 20)}…`);
+  assert.ok(icon.includes(UKIR_MARK_OUTLINE));
+});
