@@ -100,11 +100,11 @@ test('溪岸五大系列：文字和品牌官方说法（invite/.../visi/data.js
   assert.deepEqual(detectCrafts(view({ subtitle: '雾山 · 白天' })).map((x) => x.id), ['s_misty']);
 });
 
-test('溪岸文案：卡片放得下（好处 ≤ 40 字、一句话 ≤ 36 字；系列的官方理念另算），不用 md 的 ** 强调', () => {
-  for (const e of CRAFT_VOCAB.filter((x) => x.group !== 'series')) {
+test('溪岸文案：和五大系列同一种写法 —— 题眼（大字）≤ 24 字、设计理念（小字）≤ 56 字；都有英文；不用 md 的 ** 强调', () => {
+  for (const e of CRAFT_VOCAB) {
     const t = craftText(e, 'bi');
-    assert.ok(t.zh.benefit.length <= 40, `${e.zh} 好处 ${t.zh.benefit.length} 字`);
-    assert.ok(t.zh.oneLine.length <= 36, `${e.zh} 一句话 ${t.zh.oneLine.length} 字`);
+    assert.ok(t.zh.benefit.length <= 24, `${e.zh} 题眼 ${t.zh.benefit.length} 字`);
+    assert.ok(t.zh.oneLine.length <= 56, `${e.zh} 设计理念 ${t.zh.oneLine.length} 字`);
     assert.ok(t.en && t.en.name && t.en.oneLine && t.en.benefit, `${e.zh} 英文`);
     assert.ok(!/\*/.test(t.zh.benefit + t.zh.oneLine));
   }
