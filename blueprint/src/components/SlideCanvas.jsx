@@ -116,14 +116,15 @@ function TextEl({ el }) {
  *           elStyle?:(el:object, i:number)=>({ opacity?:number, transform?:string, imgScale?:number }|null) }} props
  *   elStyle：展厅播放用（每个元素的透明度 / 位移 / 效果图推近）；编辑器不传 = 原样
  *   replaceEl(el, i)：展厅播放用，返回节点 = 这个元素换成它画（效果图的「线稿 → 上色」画布），null = 照常
+ *   noBg：展厅播放用（设计特点的过渡：原页盖在设计特点页上面，不画底色）
  */
-function SlideCanvas({ slide, width = 960, resolveUrl, onPick, activeField, interactive = false, className = '', elStyle, replaceEl }) {
+function SlideCanvas({ slide, width = 960, resolveUrl, onPick, activeField, interactive = false, className = '', elStyle, replaceEl, noBg = false }) {
   const scale = width / SLIDE_W;
   const height = SLIDE_H * scale;
   return (
     <div
       className={`relative overflow-hidden select-none ${className}`}
-      style={{ width, height, background: `#${slide?.bg || 'F5F0E6'}` }}
+      style={{ width, height, background: noBg ? 'transparent' : `#${slide?.bg || 'F5F0E6'}` }}
     >
       <div
         style={{

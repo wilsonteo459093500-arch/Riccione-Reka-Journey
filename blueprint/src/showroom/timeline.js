@@ -7,9 +7,13 @@
 // 两张各是一个停点，属于同一「段」，之间的过渡是原图交叉淡化（灯光亮起来），不是换页。
 //
 // 满版效果图页（PPT 上不放设计说明）：播放时在右下角叠一栏说明（b/design.js bViewFullNotes），只在播放器里出现。
+//
+// 房间设计特点（showroom/craft.js）：设计师在这一页勾过、老板审过定义的工艺 / 手法，在这一段（白天 / 夜晚一对算一段）后面多一个停点：
+// 同一张效果图缩到左边（整张、不裁），右边浮出 2–3 个特点。原页的停点照旧是原图；同一空间讲过的不再讲。只在播放器里有，不进 PPT。
 
 import { splitTimeOfDay } from '../import/labels.js';
-import { bViewFullNotes } from '../engine/b/design.js';
+import { bViewFullNotes, bCraftPage } from '../engine/b/design.js';
+import { playableCrafts, craftText, CRAFT_MAX } from './craft.js';
 import { makeTranslator, langOf } from '../engine/lang.js';
 import { hasPlan3d } from './build3d.js';
 
@@ -33,10 +37,11 @@ export function dayNightPair(a, b) {
 /**
  * @param {object[]} pages    exportableSlides(renderDeck(project, { meta }))
  * @param {object}   project
- * @returns {{ key, page, slide, segment:number, phase:'day'|'night'|null, label:string, section:string }[]}
- *   page = 播放用的页（满版效果图页多了说明那一栏）
+ * @param {{ craftPreview?:boolean }} opts  craftPreview = 内部预览：待审的设计特点也放（卡片上标「待审」）
+ * @returns {{ key, page, slide, segment:number, phase:'day'|'night'|null, label:string, section:string, craft? }[]}
+ *   page = 播放用的页（满版效果图页多了说明那一栏）；craft = 设计特点停点 { entries, from }（from = 前一个停点的序号）
  */
-export function buildStops(pages, project) {
+export function buildStops(pages, project, opts = {}) {
   const slides = new Map((project?.slides || []).map((s) => [s.id, s]));
   const lang = langOf(project);
   const ctx = { project, lang, tr: makeTranslator(project) };
@@ -92,7 +97,58 @@ export function buildStops(pages, project) {
     prevSlide = slide;
     if (slide?.kind === 'floor' && slide.floorId) push3d(slide.floorId);
   }
-  return stops.map(({ inPair, ...s }) => s);
+  return withCrafts(stops.map(({ inPair, ...s }) => s), ctx, opts);
+}
+
+/** 每一段效果图后面插「设计特点」停点（这一段里各页勾过的，合起来最多 CRAFT_MAX 个；同一空间讲过的不重讲） */
+function withCrafts(stops, ctx, opts) {
+  const out = [];
+  const told = new Map(); // 楼层|空间 → 讲过的 id
+  stops.forEach((s, i) => {
+    out.push(s);
+    if (stops[i + 1]?.segment === s.segment) return; // 这一段还没完
+    const views = stops.filter((x) => x.segment === s.segment && x.slide?.kind === 'view' && x.slide.tag !== '3d');
+    if (!views.length || s.hero < 0 || s.slide?.kind !== 'view') return;
+    const room = `${s.slide.floorId || ''}|${String(s.slide.room || '').trim()}`;
+    const skip = new Set(told.get(room) || []);
+    const entries = [];
+    for (const v of views) {
+      for (const e of playableCrafts(v.slide, { preview: !!opts.craftPreview, lang: ctx.lang, skip }).entries) {
+        if (entries.length >= CRAFT_MAX) break;
+        entries.push(e);
+        skip.add(e.id);
+      }
+    }
+    if (!entries.length) return;
+    told.set(room, skip);
+    // 一页放不下（中英版、文字长）→ 后面几个挪到下一个设计特点停点：效果图同一个框不动，只换右边的字
+    const label = `${(s.phase ? s.label.replace(/\s*·\s*(白天|夜晚)$/, '') : s.label) || '空间'} · 设计特点`;
+    const heroEl = s.page.els[s.hero];
+    let rest = entries;
+    let n = 0;
+    while (rest.length) {
+      let k = rest.length;
+      let page = bCraftPage(ctx, s.slide, heroEl, rest.slice(0, k), craftText, { preview: !!opts.craftPreview });
+      while (!page.fits && k > 1) {
+        k -= 1;
+        page = bCraftPage(ctx, s.slide, heroEl, rest.slice(0, k), craftText, { preview: !!opts.craftPreview });
+      }
+      out.push({
+        key: `craft:${s.key}${n ? `:${n}` : ''}`,
+        page,
+        hero: -1,
+        slide: s.slide,
+        segment: s.segment,
+        phase: null,
+        label,
+        section: s.section,
+        craft: { entries: rest.slice(0, k), from: out.length - 1 },
+      });
+      rest = rest.slice(k);
+      n += 1;
+    }
+  });
+  return out;
 }
 
 /**
@@ -100,11 +156,16 @@ export function buildStops(pages, project) {
  *   'same'   同一段（白天 → 夜晚）：交叉淡化
  *   'sketch' 换到一张效果图页：效果图从白纸上「线稿 → 上色 → 原图」
  *   'cut'    其他换页：交叉淡化 + 推近
+ *   'craft'  进设计特点停点：效果图从原页的框移到左边（整张），特点浮出
  */
 export function transitionKind(stops, a, b) {
   const sa = stops[a];
   const sb = stops[b];
   if (!sa || !sb) return 'cut';
+  // 进「设计特点」：同一张效果图从原来的位置缩到左边，特点一张张浮出来；从设计特点离开：照下一页的样子
+  // 设计特点一页放不下、接着下一页：效果图同一个框，只换字（同样走 'craft'：上一页的效果图藏起来，下一页的在同一位置接手）
+  if (sb.craft) return 'craft';
+  if (sa.craft) return sb.plan3d ? 'build' : sb.hero >= 0 ? 'sketch' : 'cut';
   if (sa.segment === sb.segment && sa.slide?.kind === 'view' && sb.slide?.kind === 'view') return 'same';
   if (sb.plan3d) return 'build';
   if (sa.plan3d) return 'enter';
@@ -112,7 +173,7 @@ export function transitionKind(stops, a, b) {
 }
 
 /** 这段过渡要滑多长（相对一般换页）：「从无到有」慢一点，看得清线是怎么画出来的；3D 开场最慢 */
-export const transitionWeight = (kind) => (kind === 'build' || kind === 'enter' ? 3 : kind === 'sketch' ? 2.4 : 1);
+export const transitionWeight = (kind) => (kind === 'build' || kind === 'enter' ? 3 : kind === 'sketch' ? 2.4 : kind === 'craft' ? 1.6 : 1);
 
 /** 目录：每段一项（第一个停点），按章节分组 → [{ section, items:[{ stop, label, segment }] }] */
 export function indexOf(stops) {

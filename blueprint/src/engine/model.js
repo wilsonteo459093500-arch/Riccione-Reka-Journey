@@ -33,7 +33,8 @@
 //   { kind:'floor', floorId, image?:'asset:…' }  楼层章节页
 //   { kind:'view', floorId, layout:'auto'|'framed'|'full', image:'asset:…', room:'客厅', roomEn:'LIVING AREA',
 //     subtitle:'全景', materials:[{ role:'柜体 & 柜门', materialId }], notes:[{ label:'隐形门 · Hidden door', text:'液压闭门器，配反弹器' }],
-//     sourcePage?: 9, tag?:'3d' }               效果图页（tag:'3d' = 3D 户型图）
+//     sourcePage?: 9, tag?:'3d',
+//     crafts?:['haitang','gugexian'] }          效果图页（tag:'3d' = 3D 户型图）；crafts = 设计师勾的设计特点（词库 id，showroom/craft.js；只在展厅播放出现）
 //                                                layout：auto = 整套自动排（b/design.js planViews）；full = 满版大图（满版带标题：视角名 + 材料）；framed = 图文
 //   { kind:'team' }                              本案服务团队（按 info.team 生成）
 //   任何页都可以带 adjust?:{ [组名 | 组名@语言]: 块 { dx, dy, k, lang } | 照片 { box?, base?, view?, src?, lang } } —— 设计师在画布上手动调的位置 / 大小 / 取景
