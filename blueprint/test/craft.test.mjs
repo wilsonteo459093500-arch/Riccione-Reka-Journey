@@ -178,18 +178,32 @@ test('勾选：toggleCraft 按勾的先后，不重复；词库里没有的 id �
   assert.deepEqual(toggleCraft(['nope', 'haitang'], 'jiaxin', false), ['haitang']);
 });
 
+/** 老板审过全部之后已经没有待审的条目了：测试「待审不播」时临时把一条改回待审 */
+function asPending(id, fn) {
+  const e = craftById(id);
+  const was = e.status;
+  e.status = 'pending';
+  try {
+    return fn();
+  } finally {
+    e.status = was;
+  }
+}
+
 test('播放：只放勾过 + 审过的；待审的要内部预览才放；English 版要有英文；最多 3 个', () => {
-  const s = view({ crafts: ['haitang', 'gugexian'] });
-  assert.deepEqual(playableCrafts(s).entries.map((e) => e.id), ['gugexian']);
-  assert.equal(playableCrafts(s).held[0].why, '定义待老板审，审过才播');
-  assert.deepEqual(playableCrafts(s, { preview: true }).entries.map((e) => e.id), ['haitang', 'gugexian']);
-  // 每条都有英文文案了：English 版也能放；没有英文文案的条目 craftText 给不出英文（English 版就不放）
-  assert.deepEqual(playableCrafts(s, { preview: true, lang: 'en' }).entries.map((e) => e.id), ['haitang', 'gugexian']);
-  assert.equal(craftText({ id: 'nope', zh: '某工艺', oneLine: '一句话', benefit: '好处' }, 'en').en, null);
-  const many = view({ crafts: ['haitang', 'jiaxin', 'xicao', 'lacao'] });
-  assert.equal(playableCrafts(many, { preview: true }).entries.length, CRAFT_MAX);
-  // 认出来但没勾：不放
-  assert.deepEqual(playableCrafts(view({ notes: [{ label: '', text: '骨骼线' }] })).entries, []);
+  asPending('haitang', () => {
+    const s = view({ crafts: ['haitang', 'gugexian'] });
+    assert.deepEqual(playableCrafts(s).entries.map((e) => e.id), ['gugexian']);
+    assert.equal(playableCrafts(s).held[0].why, '定义待老板审，审过才播');
+    assert.deepEqual(playableCrafts(s, { preview: true }).entries.map((e) => e.id), ['haitang', 'gugexian']);
+    // 每条都有英文文案了：English 版也能放；没有英文文案的条目 craftText 给不出英文（English 版就不放）
+    assert.deepEqual(playableCrafts(s, { preview: true, lang: 'en' }).entries.map((e) => e.id), ['haitang', 'gugexian']);
+    assert.equal(craftText({ id: 'nope', zh: '某工艺', oneLine: '一句话', benefit: '好处' }, 'en').en, null);
+    const many = view({ crafts: ['haitang', 'jiaxin', 'xicao', 'lacao'] });
+    assert.equal(playableCrafts(many, { preview: true }).entries.length, CRAFT_MAX);
+    // 认出来但没勾：不放
+    assert.deepEqual(playableCrafts(view({ notes: [{ label: '', text: '骨骼线' }] })).entries, []);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -221,20 +235,22 @@ function sample(lang = 'zh', crafts = {}) {
 const stopsOf = (project, opts) => buildStops(exportableSlides(renderDeck(project, { meta })), project, opts);
 
 test('停点：没勾 / 只勾了待审的 → 不多停点；勾了审过的 → 这一段后面多一个设计特点停点', () => {
-  const plain = stopsOf(sample()).length;
-  assert.equal(stopsOf(sample('zh', { 'v-kitchen': ['haitang'] })).length, plain);
-  const s = stopsOf(sample('zh', { 'v-kitchen': ['gugexian'] }));
-  assert.equal(s.length, plain + 1);
-  const k = s.findIndex((x) => x.craft);
-  assert.equal(s[k - 1].slide.id, 'v-kitchen');
-  assert.equal(s[k].segment, s[k - 1].segment, '和那张效果图同一段（目录不多一项）');
-  assert.equal(transitionKind(s, k - 1, k), 'craft');
-  assert.ok(transitionWeight('craft') > 1);
-  assert.match(s[k].label, /岛台 · 设计特点$/);
-  const groups = indexOf(s).flatMap((g) => g.items);
-  assert.ok(!groups.some((it) => s[it.stop].craft));
-  // 内部预览：待审的也放
-  assert.equal(stopsOf(sample('zh', { 'v-kitchen': ['haitang'] }), { craftPreview: true }).length, plain + 1);
+  asPending('haitang', () => {
+    const plain = stopsOf(sample()).length;
+    assert.equal(stopsOf(sample('zh', { 'v-kitchen': ['haitang'] })).length, plain);
+    const s = stopsOf(sample('zh', { 'v-kitchen': ['gugexian'] }));
+    assert.equal(s.length, plain + 1);
+    const k = s.findIndex((x) => x.craft);
+    assert.equal(s[k - 1].slide.id, 'v-kitchen');
+    assert.equal(s[k].segment, s[k - 1].segment, '和那张效果图同一段（目录不多一项）');
+    assert.equal(transitionKind(s, k - 1, k), 'craft');
+    assert.ok(transitionWeight('craft') > 1);
+    assert.match(s[k].label, /岛台 · 设计特点$/);
+    const groups = indexOf(s).flatMap((g) => g.items);
+    assert.ok(!groups.some((it) => s[it.stop].craft));
+    // 内部预览：待审的也放
+    assert.equal(stopsOf(sample('zh', { 'v-kitchen': ['haitang'] }), { craftPreview: true }).length, plain + 1);
+  });
 });
 
 test('停点：白天 / 夜晚一对 → 设计特点在夜晚后面（两张勾的合起来、不重复）；同一空间讲过的不再讲', () => {
@@ -279,10 +295,12 @@ test('设计特点页：同一张效果图整张显示（不裁、比例对）�
 });
 
 test('设计特点页：内部预览时待审的条目名称后面标「待审」', () => {
-  const s = stopsOf(sample('zh', { 'v-kitchen': ['haitang'] }), { craftPreview: true });
-  const st = s.find((x) => x.craft);
-  const all = st.page.els.filter((el) => el.t === 'text').flatMap((el) => el.paras.flatMap((p) => p.runs.map((r) => r.text))).join('');
-  assert.match(all, /海棠角　待审/);
+  asPending('haitang', () => {
+    const s = stopsOf(sample('zh', { 'v-kitchen': ['haitang'] }), { craftPreview: true });
+    const st = s.find((x) => x.craft);
+    const all = st.page.els.filter((el) => el.t === 'text').flatMap((el) => el.paras.flatMap((p) => p.runs.map((r) => r.text))).join('');
+    assert.match(all, /海棠角　待审/);
+  });
 });
 
 test('过渡（craft）：两头原样 —— 效果图 t = 0 和原页一模一样、t = 1 和设计特点页一模一样；停在设计特点页时一切原样', () => {
