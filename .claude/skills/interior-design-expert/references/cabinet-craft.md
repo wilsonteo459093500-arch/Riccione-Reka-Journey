@@ -38,7 +38,7 @@
 | **发光背板** | 柜内背板做成整块发光（灯箱） | 展示更有氛围，酒柜、展示柜的主角 | 柜内背板整面亮 | 酒柜、展示柜、吧台 |
 | **硬碰** | 两种材质直接对接、不加收边条 | 立面极简、线条干净（对工艺精度要求高） | 石材台面与木 / 金属直接碰，没有压条 | 台面、岛台、柜墙交接 |
 
-> **其它来源的说法（待老板确认溪岸也做得到，确认前不进卡片）**
+> **其它来源的说法（老板 2026-11-16 确认溪岸做得到，多材质叠加、结构更强 / 减少变形已写进第四节卡片；「常用于层板、台面」只记录，卡片不印「应用」）**
 > - 夹心 / ABA 夹心（小红书「装修研究爱好者」高定木作 9 种工艺，2026-11-16 用户转发）：三层不同厚度板材叠加（如 9 mm + 18 mm + 9 mm）的「三明治」结构，
 >   可用木皮、金属、亚克力等不同材质叠加；称「提升整体结构强度、减少变形风险」；常用于层板、台面。
 
@@ -94,7 +94,7 @@
 | **斜切** | 一道斜面，就是拉手。 | 门板、抽屉面的边，做成斜角。 | 斜边本身就是拉手；立面显薄、利落。 | Bevelled Edge | One bevel is the handle. | The edge of the door or drawer front is cut at an angle. | The bevel is the handle; the front looks slim and crisp. | ✅ |
 | **斜拼** | 转角处，木纹没有断。 | 两块板在转角以 45° 拼接，木纹和边线绕过转角不断开。 | 看不到板材断面，像一整块实木。 | Mitred Corner | At the corner, the grain does not break. | Two panels meet at 45° on the corner; grain and edge wrap around unbroken. | No exposed board edge — it reads as solid wood. | ✅ |
 | **海棠角** | 转角收一笔，是东方家具的温柔。 | 外转角不做尖直角，内收一个小方角，取自传统家具。 | 不磕手、不易崩边；转角多一道细影，有东方味。 | Haitang Corner | One small step at the corner — the gentleness of Eastern furniture. | Instead of a sharp corner, the outer corner steps in with a small notch, from classical furniture. | Kind to the hand, less prone to chipping, with a fine shadow and an Eastern feel. | ✅ |
-| **夹心 / ABA 夹心** | 走近了，才看见那一道线。 | 层板或边框用 A + B + A 三层叠成，侧面露出一道对比色细线。 | 层板看起来更薄、更精致，多一处设计细节。 | ABA Sandwich Edge | Come closer, and the line appears. | Shelves or frames layered A + B + A, showing a fine contrasting line on the edge. | Shelves look thinner and more refined, with one more crafted detail. | ✅ |
+| **夹心 / ABA 夹心** | 走近了，才看见那一道线。 | 层板或边框三层叠成，可叠木皮、金属、亚克力，侧面露出一道对比色细线。 | 层板更薄、更精致；结构更强，减少变形。 | ABA Sandwich Edge | Come closer, and the line appears. | Shelves or frames layered A + B + A — timber veneer, metal or acrylic — showing a contrasting line on the edge. | Shelves look thinner and more refined; the structure is stronger and less prone to warping. | ✅ |
 | **骨骼线** | — | 灵感取自古典实木家具的形态：骨骼结构既是装饰，也是把手。 | 细线框让每扇柜门都有一道影子，有细节但不繁复。 | Skeleton Line | — | Inspired by classical solid-wood furniture: the frame is both the ornament and the handle. | A fine frame line gives each door its own shadow — detail without ornament. | 官方（品牌手册 p.9、p.23–24） |
 | **圆弧** | 没有棱角的家，走起来更柔软。 | 柜体、墙板、台面做成弧形。 | 动线更顺、更安全，空间更柔和。 | Curves | A home without hard corners walks more softly. | Cabinets, wall panels or worktops shaped in a curve. | Smoother, safer movement, and a softer room. | ✅ |
 | **格栅** | 隔开，却不隔光。 | 一排间隔的木条，做隔断或柜面。 | 通透、透气；有分区，又不封闭。 | Timber Slats | Divided, yet never closed to light. | A row of spaced timber slats, used as a screen or a cabinet front. | Open and airy — it divides the space without closing it off. | ✅ |
