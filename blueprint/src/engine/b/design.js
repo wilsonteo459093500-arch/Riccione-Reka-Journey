@@ -24,7 +24,7 @@
 
 import {
   B, PAGE, ALPHA, HALF, SIGNATURE, style, measure, wrapText, textLines, textBlock, titleGroup,
-  signature, cornerLogo, placePhoto, rule, page, pick, hasCJK, sameLatin, shade, inkBox, fullBleed, wrapWidth,
+  signature, cornerLogo, placePhoto, rule, page, pick, hasCJK, sameLatin, shade, inkBox, fullBleed, wrapWidth, pairBlock,
 } from './kit.js';
 import { findFloor, findMaterial, floorsLine } from '../model.js';
 import { makeTranslator, langOf, floorTitleEn, floorsLineEn, resolveEn, memoryEn, roomEnOf } from '../lang.js';
@@ -966,6 +966,43 @@ export function bViewFull(ctx, slide, plan) {
   const lost = lostOnFull(project, s, plan || planViews(project, meta));
   if (lost.length) warnings.push(`满版大图不显示${lost.join('与')} —— 要列出来请换成「图文」版式`);
   return page(els.filter(Boolean), [...new Set(warnings)]);
+}
+
+/**
+ * 展厅播放用：满版效果图页不印设计说明（lostOnFull 会提醒），播放时在右下角叠上一栏说明（白字 + 托字渐变）。
+ * 只在播放器里出现，不进 PPT。右栏 1330–1810，最后一行的底 1004（和左下材料同一条底）；最多 4 条、每条正文最多 3 行。
+ * @returns {{ els:object[] }}  没有说明 → els 为空
+ */
+export const FULL_NOTES_MAX = 4;
+export function bViewFullNotes(ctx, slide) {
+  const { project, lang, tr } = env(ctx);
+  const notes = notesOf(project, slide || {}, lang, tr).slice(0, FULL_NOTES_MAX);
+  if (!notes.length) return { els: [] };
+  const x = 1330;
+  const w = PAGE.right - x;
+  const label = { zh: style(ST.noteLabel, { color: B.cream }), en: style(ST.noteLabelEn, { color: B.cream }) };
+  const body = { zh: style(ST.note, { color: B.white }), en: style(ST.noteEn, { color: B.white }) };
+  const parts = [];
+  const els = [];
+  let y = 0;
+  notes.forEach((n, k) => {
+    if (k) y += 22;
+    if (n.label) {
+      const lb = pairBlock(x, y, w, n.label, lang, label.zh, { enRole: label.en, gap: 0, maxLines: 1, name: 'showroom-note' });
+      els.push(...lb.els);
+      parts.push(lb);
+      y = lb.bottom + 2;
+    }
+    const tb = pairBlock(x, y, w, n.text, lang, body.zh, { enRole: body.en, gap: 4, maxLines: 3, name: 'showroom-note' });
+    els.push(...tb.els);
+    parts.push(tb);
+    y = tb.bottom;
+  });
+  const dy = 1004 - y;
+  const moved = els.map((el) => ({ ...el, y: el.y + dy, edit: undefined }));
+  const ink = inkBox(...parts.map((p) => ({ x0: p.x0, x1: p.x1, top: p.top + dy, bottom: p.bottom + dy })));
+  const sh = shade(ink, fullBleed(), { dir: 'v' });
+  return { els: [sh ? { ...sh.el, name: 'showroom-shade' } : null, ...moved].filter(Boolean) };
 }
 
 export function bViewPage(ctx, slide, plan) {

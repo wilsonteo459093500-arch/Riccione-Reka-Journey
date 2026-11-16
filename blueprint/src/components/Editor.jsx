@@ -9,6 +9,7 @@ import PagesTab from './editor/PagesTab.jsx';
 import MaterialsPanel from './MaterialsPanel.jsx';
 import InfoPanel from './InfoPanel.jsx';
 import ExportDialog from './ExportDialog.jsx';
+import ShowroomPlayer from './showroom/ShowroomPlayer.jsx';
 import DollhousePanel from './DollhousePanel.jsx';
 import MoodBoard from '../moodboard/MoodBoard.jsx';
 import { getProject } from '../store/db.js';
@@ -141,6 +142,31 @@ function Workspace({ initial, settings, notify, onOpenSettings, onExit }) {
   const [focusSlideId, setFocusSlideId] = useState(null);
   const [assetsVersion, setAssetsVersion] = useState(0);
   const [showExport, setShowExport] = useState(false);
+  // 展厅播放：#/p/<id>/show（浏览器后退 = 退出播放；刷新后仍在播放，只是要再按一次全屏）
+  const isShowHash = () => /^#\/p\/[^/?#]+\/show\b/.test(window.location.hash || '');
+  const [showroom, setShowroom] = useState(isShowHash);
+  const pushedShow = useRef(false);
+  useEffect(() => {
+    const onHash = () => setShowroom(isShowHash());
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+  const openShowroom = useCallback(() => {
+    // 全屏必须在点击里直接请求（浏览器只认用户手势）
+    document.documentElement.requestFullscreen?.().catch(() => {});
+    if (!isShowHash()) {
+      window.history.pushState(null, '', `#/p/${encodeURIComponent(projectId)}/show`);
+      pushedShow.current = true;
+    }
+    setShowroom(true);
+  }, [projectId]);
+  const closeShowroom = useCallback(() => {
+    setShowroom(false);
+    if (!isShowHash()) return;
+    if (pushedShow.current) window.history.back();
+    else window.history.replaceState(null, '', `#/p/${encodeURIComponent(projectId)}`);
+    pushedShow.current = false;
+  }, [projectId]);
 
   const tabRef = useRef(tab);
   tabRef.current = tab;
@@ -281,6 +307,7 @@ function Workspace({ initial, settings, notify, onOpenSettings, onExit }) {
           saveState,
           onRetrySave: flush,
           onExport: () => setShowExport(true),
+          onShow: openShowroom,
           canUndo,
           canRedo,
           onUndo: undo,
@@ -369,6 +396,8 @@ function Workspace({ initial, settings, notify, onOpenSettings, onExit }) {
           </Pane>
         )}
       </main>
+
+      {showroom && <ShowroomPlayer project={project} onClose={closeShowroom} />}
 
       {showExport && (
         <ExportDialog

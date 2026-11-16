@@ -21,7 +21,7 @@ function RectEl({ el }) {
   return <div style={style} />;
 }
 
-function ImgEl({ el, url }) {
+function ImgEl({ el, url, scale = 1 }) {
   const pl = placeImage(el);
   const { l, t, r, b } = pl.crop;
   const fw = 1 - l - r || 1;
@@ -35,7 +35,11 @@ function ImgEl({ el, url }) {
           src={url}
           alt=""
           draggable={false}
-          style={{ position: 'absolute', left: -l * iw, top: -t * ih, width: iw, height: ih, maxWidth: 'none', objectFit: 'fill' }}
+          style={{
+            position: 'absolute', left: -l * iw, top: -t * ih, width: iw, height: ih, maxWidth: 'none', objectFit: 'fill',
+            // 展厅播放的推近：以框的中心为原点放大（scale = 1 就是原样）
+            ...(scale !== 1 ? { transform: `scale(${scale})`, transformOrigin: `${l * iw + pl.w / 2}px ${t * ih + pl.h / 2}px` } : {}),
+          }}
         />
       ) : (
         <div style={{ position: 'absolute', inset: 0, background: '#E9E5DC' }} />
@@ -108,9 +112,12 @@ function TextEl({ el }) {
 
 /**
  * @param {{ slide:{bg:string, els:object[]}, width:number, resolveUrl:(src:string)=>string|null,
- *           onPick?:(field:string, el:object)=>void, activeField?:string, interactive?:boolean }} props
+ *           onPick?:(field:string, el:object)=>void, activeField?:string, interactive?:boolean,
+ *           elStyle?:(el:object, i:number)=>({ opacity?:number, transform?:string, imgScale?:number }|null) }} props
+ *   elStyle：展厅播放用（每个元素的透明度 / 位移 / 效果图推近）；编辑器不传 = 原样
+ *   replaceEl(el, i)：展厅播放用，返回节点 = 这个元素换成它画（效果图的「线稿 → 上色」画布），null = 照常
  */
-function SlideCanvas({ slide, width = 960, resolveUrl, onPick, activeField, interactive = false, className = '' }) {
+function SlideCanvas({ slide, width = 960, resolveUrl, onPick, activeField, interactive = false, className = '', elStyle, replaceEl }) {
   const scale = width / SLIDE_W;
   const height = SLIDE_H * scale;
   return (
@@ -125,11 +132,22 @@ function SlideCanvas({ slide, width = 960, resolveUrl, onPick, activeField, inte
         }}
       >
         {(slide?.els || []).map((el, i) => {
+          const st = elStyle ? elStyle(el, i) : null;
           let node = null;
           if (el.t === 'rect') node = <RectEl el={el} />;
-          else if (el.t === 'img') node = <ImgEl el={el} url={el.src ? resolveUrl?.(el.src) : null} />;
+          else if (el.t === 'img') node = <ImgEl el={el} url={el.src ? resolveUrl?.(el.src) : null} scale={st?.imgScale ?? 1} />;
           else if (el.t === 'text') node = <TextEl el={el} />;
+          const custom = replaceEl ? replaceEl(el, i) : null;
+          if (custom) node = custom;
           if (!node) return null;
+          // 展厅播放：每个元素一层（一直包着，样式变来变去也不会重建 <img>）
+          if (elStyle) {
+            return (
+              <div key={i} style={{ position: 'absolute', inset: 0, opacity: st?.opacity ?? 1, transform: st?.transform, pointerEvents: 'none' }}>
+                {node}
+              </div>
+            );
+          }
           if (!interactive) return <React.Fragment key={i}>{node}</React.Fragment>;
           // 编辑器里：不能编辑的元素（托字渐变、logo、签名…）不接点击，点下去落到下面的照片 / 文字上
           // （C 安然的托字渐变整片盖在照片上，接了点击就点不到照片了）

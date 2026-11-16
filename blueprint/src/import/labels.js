@@ -433,6 +433,24 @@ function mapQualifier(q) {
   return pangu(s);
 }
 
+/**
+ * 视角名里的「白天 / 夜晚」（parseSpaceTitle 把它们写成 subtitle 的一段，设计师也可能手改成「晚上」「Night」）：
+ *   '电视墙 · 白天' → { tod:'day', rest:'电视墙' }；'夜景' → { tod:'night', rest:'' }；'电视墙' → { tod:null, rest:'电视墙' }
+ * 展厅播放用它把同一空间同一视角的白天 / 夜晚两张配成一对（用 mapQualifier 同一组词，不另写一套）
+ */
+export function splitTimeOfDay(subtitle) {
+  const parts = String(subtitle ?? '').split(/\s*[·•・]\s*/).map((p) => p.trim()).filter(Boolean);
+  let tod = null;
+  const rest = [];
+  for (const p of parts) {
+    const q = mapQualifier(p);
+    if (!tod && q === '白天') tod = 'day';
+    else if (!tod && q === '夜晚') tod = 'night';
+    else rest.push(p);
+  }
+  return { tod, rest: rest.join(' · ') };
+}
+
 const CN_ORDINAL = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
 
 /**

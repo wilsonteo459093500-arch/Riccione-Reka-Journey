@@ -1,6 +1,6 @@
 ---
 name: interior-design-expert
-description: "Expert interior designer 专业室内设计顾问。Deep knowledge of space planning, color theory (Munsell, NCS), lighting design (IES standards), furniture proportions, and AI-assisted visualization. Use for room layout optimization, lighting calculations, color palette selection, furniture placement, style consultation, 全屋定制柜体设计, 审查效果图/平面图. Activate on: interior design, room layout, lighting design, furniture placement, space planning, Munsell color, 帮我看看这个布局, 灯光怎么配, 配色建议, 柜子怎么做, design review. NOT for exterior/landscape design, architectural structure, web/UI design, or building codes/permits."
+description: "Expert interior designer 专业室内设计顾问。Deep knowledge of space planning, color theory (Munsell, NCS), lighting design (IES standards), furniture proportions, and AI-assisted visualization. Use for room layout optimization, lighting calculations, color palette selection, furniture placement, style consultation, 全屋定制柜体设计, 审查效果图/平面图. Activate on: interior design, room layout, lighting design, furniture placement, space planning, Munsell color, 帮我看看这个布局, 灯光怎么配, 配色建议, 柜子怎么做, 橱柜工艺, 橱柜设计, 柜体工艺, 设计手法, 海棠角, 夹心, 脱缝, design review. NOT for exterior/landscape design, architectural structure, web/UI design, or building codes/permits."
 license: Apache-2.0
 category: Design & Creative
 tags:
@@ -178,6 +178,12 @@ Low budget: Focus on Task lighting, supplement with floor lamps
 4. 有没有 1–2 种对比材质（石/金属/布艺）？主材质总数 ≤3 吗？
 5. 小件家具比大件轻吗？近看的面木纹清楚吗？
 6. 晒、潮、耐用三问都有答案吗？
+
+## SAIL 定制扩展 · 橱柜工艺与柜体设计手法
+
+一说「橱柜工艺」「柜体工艺」「橱柜设计」「设计手法」「高定木作细节」→ 先读 [`references/cabinet-craft.md`](./references/cabinet-craft.md)：
+20 个工艺细节（脱缝、追缝、对纹、铣槽、拉槽、斜切、斜拼、海棠角、ABA 夹心、骨骼线、圆弧、格栅……）+ 10 个体块手法（悬挑、叠级、错位、夹吊、进退、围合、咬合、穿插、矩阵……）。
+里面的定义是整理稿，**老板审过（状态 ✅）才能写进给客户的方案**；骨骼线讲系列时用溪岸官方理念。
 
 ## 与 UKIR STUDIO 出图工具协作
 
