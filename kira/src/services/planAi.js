@@ -88,13 +88,7 @@ export async function readPlanWithAi(plan, { mmPerPx = 0, ceilingH = 0, passcode
   const toSent = (b) => [(b[0] - crop.x) * s, (b[1] - crop.y) * s, (b[2] - crop.x) * s, (b[3] - crop.y) * s].map((v) => Math.round(v));
   const sentCabs = (cabinets || []).map((c) => ({ code: String(c.code || ''), box: toSent(c.box) }))
     .filter((c) => c.box[2] > 0 && c.box[3] > 0 && c.box[0] < w && c.box[1] < h).slice(0, 40);
-  const headers = { 'Content-Type': 'application/json' };
-  if (cloudConfigured && supabase) {
-    const { data: s } = await supabase.auth.getSession();
-    const token = s?.session?.access_token;
-    if (!token) throw new PlanAiError('login_required');
-    headers.Authorization = `Bearer ${token}`;
-  } else if (passcode) headers['x-kira-ai-passcode'] = passcode;
+  const headers = await authHeaders(passcode);
   let res;
   try {
     res = await fetch('/api/plan-ai', { method: 'POST', headers, body: JSON.stringify({ image: data, w, h, mmPerPx: sentMmPerPx, ceilingH, cabinets: sentCabs, crop }) });
@@ -103,5 +97,49 @@ export async function readPlanWithAi(plan, { mmPerPx = 0, ceilingH = 0, passcode
   if (!type.includes('application/json')) throw new PlanAiError(res.status === 404 || res.ok ? 'unavailable' : 'server', res.status); // 本机开发 / 没有部署 api
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new PlanAiError(body?.error || 'server', res.status);
-  return { result: body.result, sentW: w, sentH: h, crop, dark, usage: body.usage || null, model: body.model || '' };
+  // image：送去 AI 的那张 JPEG（base64）只放在内存，👎 反馈时一起送（看得到 AI 当时看的图）；readId 把同一次识图的反馈串起来
+  return { result: body.result, sentW: w, sentH: h, crop, dark, usage: body.usage || null, model: body.model || '', image: data, readId: newReadId() };
 }
+
+const newReadId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+
+// 正式版：Supabase 登录 token；预览 / 本机模式：团队密码
+async function authHeaders(passcode) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (cloudConfigured && supabase) {
+    const { data: s } = await supabase.auth.getSession();
+    const token = s?.session?.access_token;
+    if (!token) throw new PlanAiError('login_required');
+    headers.Authorization = `Bearer ${token}`;
+  } else if (passcode) headers['x-kira-ai-passcode'] = passcode;
+  return headers;
+}
+
+// ---------------- 👎 反馈（/api/plan-feedback）----------------
+// payload：{ kind:'bad'|'missing'|'added', readId, reasons, note, template?, suggestion?, ai?, picks?, image? }
+// → { ok:true } ；没设定（503 not_configured）/ 没网 / 没部署 api → 丢 PlanAiError（前端改成复制到剪贴板）
+export async function sendPlanFeedback(payload, { passcode = '' } = {}) {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new PlanAiError('offline');
+  const headers = await authHeaders(passcode);
+  let res;
+  try {
+    res = await fetch('/api/plan-feedback', { method: 'POST', headers, body: JSON.stringify(payload) });
+  } catch { throw new PlanAiError('offline'); }
+  const type = res.headers.get('content-type') || '';
+  if (!type.includes('application/json')) throw new PlanAiError('unavailable', res.status);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new PlanAiError(body?.error || 'server', res.status);
+  return body;
+}
+
+// 反馈要带的 AI 资料（不带深色格 dark、不带图；图另外只送一次）+ 户型图大小 / 比例（以后可以重跑 buildSuggestions）
+export const feedbackAi = (r, plan = null) => (r ? {
+  result: r.result, sentW: r.sentW, sentH: r.sentH, crop: r.crop, model: r.model,
+  plan: plan ? { w: plan.image?.w || 0, h: plan.image?.h || 0, scale: plan.scale || null } : null,
+} : null);
+// 一个建议 → 反馈要存的样子（柜子本身太大，只留关键的）
+export const feedbackSuggestion = (x) => (x ? {
+  id: x.id, template: x.template, room: x.room, roomName: x.roomName, ok: !!x.ok, pick: x.pick !== false,
+  lenMm: x.lenMm || null, reason: x.reason || null, why: x.why || [], notes: x.notes || [], note: x.note || '',
+  place: x.cab?.place || null, group: x.group || null, part: x.part || null,
+} : null);

@@ -4,14 +4,14 @@
 //   拖拉写法同 BlockEditor.jsx：setPointerCapture、getScreenCTM().inverse()；拖完才写回报价（一步撤销）。
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Upload, Ruler, Square, Undo2, Redo2, Maximize2, Minimize2, RotateCw, Pencil, X, Trash2, ChevronDown, ChevronRight, MapPin, Crosshair, AlertTriangle, Loader2, ScanSearch, Sparkles, BoxSelect, Copy } from 'lucide-react';
+import { Upload, Ruler, Square, Undo2, Redo2, Maximize2, Minimize2, RotateCw, Pencil, X, Trash2, ChevronDown, ChevronRight, MapPin, Crosshair, AlertTriangle, Loader2, ScanSearch, Sparkles, BoxSelect, Copy, ThumbsDown, Check } from 'lucide-react';
 import { T } from '../../theme.js';
 import { BLOCK_COLORS, BLOCK_SELECTED, INK } from '../../render/palette.js';
 import { mmToM, uid } from '../../planner/model.js';
 import { cabinetTitle, templateOf } from '../../planner/templates.js';
 import { aiScaleToPlan, buildSuggestions, applySuggestions, sentToPlan, cleanText } from '../../planner/planAi.js';
 import { snapSegment } from '../../planner/wallSnap.js';
-import { readPlanWithAi, needsPasscode, savedPasscode, savePasscode, aiErrorText } from '../../services/planAi.js';
+import { readPlanWithAi, needsPasscode, savedPasscode, savePasscode, aiErrorText, sendPlanFeedback, feedbackAi, feedbackSuggestion } from '../../services/planAi.js';
 import { mmPerPx, planReady, placedFootprint, placeAt, rotatePlace, dragPlanEdge, aisleWarnings, dist } from '../../planner/plan.js';
 import { isPdf, prepareImage, openPdf, renderPdfPage, pdfThumb, savePlanImage, planImageUrl, queuePlanDelete } from '../../services/planImages.js';
 import { parseMeters, useBackClose } from '../planner/bits.jsx';
@@ -245,12 +245,46 @@ const PlanBoard = forwardRef(function PlanBoard({ plans = [], zones = [], onChan
     setScalePts([]); setMode('view');
     setAi((a) => ({ ...a, scale: null, ...suggest(a.r, p) }));
   };
+  // 👎 反馈：送到 /api/plan-feedback；同一次识图的图只送一次。没设定 / 没网 → 复制到剪贴板（quiet：不复制、不提示）
+  const sendFb = async (payload, { quiet = false } = {}) => {
+    const cur = aiRef.current;
+    if (!cur?.r) return 'failed';
+    const p = live.current.plans.find((x) => x.id === cur.planId) || null;
+    const body = { readId: cur.r.readId, ai: feedbackAi(cur.r, p), ...payload };
+    try {
+      await sendPlanFeedback({ ...body, ...(cur.fbImage ? {} : { image: cur.r.image }) }, { passcode: savedPasscode() });
+      setAi((a) => (a && a.r?.readId === body.readId ? { ...a, fbImage: true } : a));
+      if (!quiet) toast('Thanks — feedback saved 谢谢，反馈已收到', 'success');
+      return 'sent';
+    } catch {
+      if (quiet) return 'failed';
+      try {
+        await navigator.clipboard.writeText(JSON.stringify({ kira: 'plan-ai-feedback', ...body }));
+        toast('Feedback is not set up yet — copied, send it to the developer 反馈功能还没设定，已复制，可以 WhatsApp 给开发', 'info');
+        return 'copied';
+      } catch { toast('Could not save the feedback 反馈存不了', 'error'); return 'failed'; }
+    }
+  };
+  const aiRef = useRef(ai);
+  aiRef.current = ai;
+  // st：busy / sent / copied；failed → 清掉（👎 回来，可以再按）
+  const markFb = (key, st) => setAi((a) => (a ? { ...a, fb: { ...(a.fb || {}), [key]: st === 'failed' ? undefined : st } } : a));
+  const badAi = async (x, reasons, note) => {
+    markFb(x.id, 'busy');
+    markFb(x.id, await sendFb({ kind: 'bad', reasons, note, template: x.template, suggestion: feedbackSuggestion(x) }));
+  };
+  const missingAi = async (template, note) => {
+    markFb('missing', 'busy');
+    markFb('missing', await sendFb({ kind: 'missing', template, note, reasons: [] }));
+  };
   const toggleAi = (id) => setAi((a) => { const picked = new Set(a.picked); if (picked.has(id)) picked.delete(id); else picked.add(id); return { ...a, picked }; });
   const addAi = () => {
     if (!ai?.sugg) return;
     const picked = ai.sugg.filter((x) => x.ok && ai.picked.has(x.id));
     const r = applySuggestions(live.current.zones, picked, { makeZone, uid: () => uid('cab') });
     if (r.added.length) commit({ zones: r.zones });
+    // 「这些还行」的信号：勾了哪些、没勾哪些（不用业务多按；没设定就算了）
+    sendFb({ kind: 'added', reasons: [], picks: { added: picked.map((x) => x.id), notPicked: ai.sugg.filter((x) => !picked.includes(x)).map((x) => x.id), suggestions: ai.sugg.map(feedbackSuggestion) } }, { quiet: true });
     toast(`Added ${r.added.length} cabinet(s) 加入 ${r.added.length} 个柜子${r.skipped.length ? ` · ${r.skipped.length} skipped (overlap) 跳过 ${r.skipped.length} 个（重叠）` : ''}`, r.added.length ? 'success' : 'info');
     setAi(null);
   };
@@ -683,6 +717,13 @@ const PlanBoard = forwardRef(function PlanBoard({ plans = [], zones = [], onChan
                         <g key={x.id} opacity={on || hot ? 1 : 0.35} data-plan-ai-sugg={x.id}>
                           {placedFootprint(x.cab).parts.map((p) => { const r = rectPx(p.rect); return <rect key={p.id} x={r[0]} y={r[1]} width={r[2] - r[0]} height={r[3] - r[1]} fill={AI_COLOR} fillOpacity={p.floor ? (hot ? 0.4 : 0.18) : 0.06} stroke={AI_COLOR} strokeWidth={sw * (hot ? 2.4 : 1.3)} strokeDasharray={`${5 * upp} ${3 * upp}`} />; })}
                           {(() => { const b = rectPx(placedFootprint(x.cab).bbox); return <text x={(b[0] + b[2]) / 2} y={(b[1] + b[3]) / 2} fontSize={fs} textAnchor="middle" dominantBaseline="central" fill={AI_COLOR} fontWeight={700} stroke="#fff" strokeWidth={fs * 0.25} paintOrder="stroke">#{ai.sugg.indexOf(x) + 1}</text>; })()}
+                          {/* 指着这个衣柜：画床可以放的位置（放不下就画 AI 自己的床位）*/}
+                          {hot && x.bedPx && (() => { const b = x.bedPx; return (
+                            <g data-plan-ai-bed={x.bedKind}>
+                              <rect x={b[0]} y={b[1]} width={b[2] - b[0]} height={b[3] - b[1]} fill={x.bedKind === 'fit' ? '#5B8A72' : T.terra} fillOpacity={0.1} stroke={x.bedKind === 'fit' ? '#5B8A72' : T.terra} strokeWidth={sw} strokeDasharray={`${3 * upp} ${3 * upp}`} />
+                              <text x={(b[0] + b[2]) / 2} y={(b[1] + b[3]) / 2} fontSize={fs * 0.85} textAnchor="middle" dominantBaseline="central" fill={x.bedKind === 'fit' ? '#5B8A72' : T.terra} stroke="#fff" strokeWidth={fs * 0.2} paintOrder="stroke">{x.bedKind === 'fit' ? '床可放这里 Bed fits' : 'AI 床位 AI bed'}</text>
+                            </g>
+                          ); })()}
                         </g>
                       );
                     })}
@@ -693,7 +734,7 @@ const PlanBoard = forwardRef(function PlanBoard({ plans = [], zones = [], onChan
           </div>
 
           {ai && ai.planId === plan.id && <AiPanel ai={ai} ready={ready} pass={aiPass} setPass={setAiPass} onRun={(pc) => runAi(pc, plan, ai.area)} onClose={() => setAi(null)} onToggle={toggleAi} onAdd={addAi} onUseScale={useAiScale}
-            onArea={() => { setAi(null); setCorner(null); setMode('aiArea'); }} onCopy={copyAi} hi={aiHi} setHi={setAiHi} />}
+            onArea={() => { setAi(null); setCorner(null); setMode('aiArea'); }} onCopy={copyAi} hi={aiHi} setHi={setAiHi} onBad={badAi} onMissing={missingAi} />}
 
           {/* 选中的柜子 */}
           {selCab && selCab.place?.planId === plan.id && (
@@ -749,8 +790,53 @@ export default PlanBoard;
 
 const AI_COLOR = '#7A5BA6'; // AI 建议：紫色虚线（和真的柜子分开）
 
-function AiPanel({ ai, ready, pass, setPass, onRun, onClose, onToggle, onAdd, onUseScale, onArea, onCopy, hi, setHi }) {
+// 👎 的原因（存的是 id；文字只给业务看）
+const FB_REASONS = [
+  { id: 'bed', zh: '挡床位', en: 'Blocks the bed' },
+  { id: 'wall', zh: '墙选错', en: 'Wrong wall' },
+  { id: 'length', zh: '长度不对', en: 'Wrong length' },
+  { id: 'doorWindow', zh: '挡门 / 窗', en: 'Blocks a door / window' },
+  { id: 'room', zh: '房间认错', en: 'Wrong room' },
+  { id: 'other', zh: '其他', en: 'Other' },
+];
+const FB_MISSING = [
+  { id: 'wardrobe', zh: '衣柜', en: 'Wardrobe' },
+  { id: 'shoe', zh: '鞋柜', en: 'Shoe cabinet' },
+  { id: 'tv', zh: '电视柜', en: 'TV cabinet' },
+  { id: 'kitchen', zh: '厨房', en: 'Kitchen' },
+];
+
+// 反馈小表：选原因（可多选）+ 备注 → 送出
+function FbForm({ options, multi = true, placeholder, onSend, onCancel, sendLabel = '送出 Send' }) {
+  const [on, setOn] = useState([]);
+  const [note, setNote] = useState('');
+  const flip = (id) => setOn((v) => (v.includes(id) ? v.filter((x) => x !== id) : multi ? [...v, id] : [id]));
+  return (
+    <div className="mt-1 mb-1 ml-5 p-2 space-y-1.5" style={{ background: T.paper, border: `1px solid ${T.line}`, borderRadius: 2 }} data-plan-ai-fb-form>
+      <div className="flex flex-wrap gap-1">
+        {options.map((o) => (
+          <button key={o.id} type="button" onClick={() => flip(o.id)} data-fb-reason={o.id} className="px-2 py-1 text-[11px]"
+            style={{ borderRadius: 2, border: `1px solid ${on.includes(o.id) ? AI_COLOR : T.line}`, background: on.includes(o.id) ? AI_COLOR : T.paper, color: on.includes(o.id) ? '#fff' : T.ink }}>
+            {o.zh} <span className="opacity-70">{o.en}</span>
+          </button>
+        ))}
+      </div>
+      <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={placeholder} maxLength={500} data-fb-note
+        className="w-full px-2 py-1 text-xs outline-none" style={{ background: T.paper, border: `1px solid ${T.line}`, borderRadius: 2 }} />
+      <div className="flex gap-1.5">
+        <Btn on disabled={!on.length && !note.trim()} onClick={() => onSend(on, note.trim())} data-fb-send>{sendLabel}</Btn>
+        <Btn onClick={onCancel}>取消 Cancel</Btn>
+      </div>
+    </div>
+  );
+}
+
+function AiPanel({ ai, ready, pass, setPass, onRun, onClose, onToggle, onAdd, onUseScale, onArea, onCopy, hi, setHi, onBad, onMissing }) {
   const n = ai.sugg ? ai.sugg.filter((x) => x.ok && ai.picked.has(x.id)).length : 0;
+  const [fbOpen, setFbOpen] = useState(null); // 哪一个建议的 👎 表打开着（'missing' = 漏了柜子）
+  const fb = ai.fb || {};
+  const FbDone = ({ st }) => (st === 'busy' ? <Loader2 size={12} className="animate-spin" />
+    : <span className="flex items-center gap-0.5 text-[10px]" style={{ color: '#5B8A72' }} data-plan-ai-fb-done={st}><Check size={12} />{st === 'copied' ? '已复制 Copied' : '已反馈 Sent'}</span>);
   return (
     <div className="px-3 py-2 text-xs" style={{ borderTop: `1px solid ${T.lineSoft}`, background: '#F6F2FA' }} data-plan-ai-panel={ai.stage}>
       <div className="flex items-center gap-1.5 mb-1.5">
@@ -792,12 +878,15 @@ function AiPanel({ ai, ready, pass, setPass, onRun, onClose, onToggle, onAdd, on
               {ai.sugg.map((x, i) => {
                 const t = x.template ? templateOf(x.template) : null;
                 const size = x.ok ? (x.lenMm || []).map((v) => mmToM(v)).join(' + ') + ' m' : '';
+                const st = fb[x.id];
                 return (
-                  <label key={x.id} className="flex items-start gap-1.5 px-1 -mx-1" style={{ color: x.ok ? T.ink : T.inkSoft, background: hi === x.id ? '#EAE1F4' : 'transparent', borderRadius: 2 }} data-plan-ai-item={x.ok ? 'ok' : 'no'} data-plan-ai-pick={x.ok && x.pick !== false ? 'yes' : 'no'}
+                  <div key={x.id} data-plan-ai-row={x.id}>
+                  <div className="flex items-start gap-1">
+                  <label className="flex-1 flex items-start gap-1.5 px-1 -mx-1" style={{ color: x.ok ? T.ink : T.inkSoft, background: hi === x.id ? '#EAE1F4' : 'transparent', borderRadius: 2 }} data-plan-ai-item={x.ok ? 'ok' : 'no'} data-plan-ai-pick={x.ok && x.pick !== false ? 'yes' : 'no'}
                     onMouseEnter={() => setHi(x.id)} onMouseLeave={() => setHi(null)} onFocus={() => setHi(x.id)}>
                     <input type="checkbox" checked={x.ok && ai.picked.has(x.id)} disabled={!x.ok} onChange={() => onToggle(x.id)} className="mt-0.5" style={{ accentColor: AI_COLOR }} />
                     <span>
-                      <b>#{i + 1}</b> {t ? `${t.zh} ${t.en}` : '?'} · {x.roomName}{size ? ` · ${size}` : ''}
+                      <b>#{i + 1}</b> {t ? `${t.zh} ${t.en}` : '?'} · {x.roomName}{x.part ? ` · L 型 ${x.part}` : ''}{size ? ` · ${size}` : ''}
                       {x.ok && x.cab?.spec?.shape && x.template === 'kitchen' ? ` · ${x.cab.spec.shape === 'I' ? '一字' : x.cab.spec.shape === 'galley' ? '二字 galley' : x.cab.spec.shape}` : ''}
                       {!x.ok && x.reason && <span style={{ color: T.terra }}> — {x.reason.zh} {x.reason.en}</span>}
                       {(x.why || []).map((nt, j) => <span key={`w${j}`} className="block text-[10px]" style={{ color: T.terra }} data-plan-ai-why>没勾：{nt.zh} — Not ticked: {nt.en}</span>)}
@@ -805,8 +894,30 @@ function AiPanel({ ai, ready, pass, setPass, onRun, onClose, onToggle, onAdd, on
                       {x.note && <span className="block text-[10px]" style={{ color: T.inkSoft }}>{x.note}</span>}
                     </span>
                   </label>
+                  {st ? <span className="mt-0.5 shrink-0"><FbDone st={st} /></span> : (
+                    <button type="button" onClick={() => setFbOpen(fbOpen === x.id ? null : x.id)} className="mt-0.5 p-1 shrink-0" title="Not right? Tell us why 不对？告诉我们哪里不对"
+                      aria-label="Not right 不对" style={{ color: fbOpen === x.id ? AI_COLOR : T.inkSoft }} data-plan-ai-bad={x.id}><ThumbsDown size={13} /></button>
+                  )}
+                  </div>
+                  {fbOpen === x.id && !st && (
+                    <FbForm options={FB_REASONS} placeholder="哪里不对？例：衣柜挡到床头墙 — What's wrong? (optional)"
+                      onCancel={() => setFbOpen(null)} onSend={(reasons, note) => { setFbOpen(null); onBad(x, reasons, note); }} />
+                  )}
+                  </div>
                 );
               })}
+            </div>
+          )}
+          {ready && (
+            <div className="mb-2" data-plan-ai-missing>
+              {fb.missing ? <FbDone st={fb.missing} /> : fbOpen === 'missing' ? (
+                <FbForm options={FB_MISSING} multi={false} placeholder="哪里漏了？例：Foyer 大门旁边的鞋柜 — Where? (optional)" sendLabel="送出 Send"
+                  onCancel={() => setFbOpen(null)} onSend={(tpl, note) => { setFbOpen(null); onMissing(tpl[0] || null, note); }} />
+              ) : (
+                <button type="button" onClick={() => setFbOpen('missing')} className="flex items-center gap-1 text-[10px]" style={{ color: T.inkSoft }} data-plan-ai-missing-open>
+                  <ThumbsDown size={11} /> 漏了柜子？Missing a cabinet
+                </button>
+              )}
             </div>
           )}
           {cleanText(ai.r?.result?.notes, 300) && <div className="mb-2 text-[10px]" style={{ color: T.inkSoft }}>AI: {cleanText(ai.r.result.notes, 300)}</div>}
