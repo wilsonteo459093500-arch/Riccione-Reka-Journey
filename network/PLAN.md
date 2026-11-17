@@ -39,7 +39,7 @@ Wilson 想要一个**只给自己用**的人脉管理 app，用来记录每个�
 | **1 资料库 + 名片扫描** ✅ | 数据结构、登录；手机拍名片 → AI 识别 → 公司背景查询 → 4 个维度评分 →"我可以给他什么资源（家具以外）"建议；上传合照；人物详情页 | Opus 5.5 · high（地基要打稳） |
 | **2 对话输入与分析** ✅ | Plaud 逐字稿导入（先确认 Plaud 有没有开放 API，没有就用分享/导出的文字）、语音备注（可以用手机键盘语音输入或 Plaud 录）、WhatsApp .txt 和截图 → AI 提取兴趣、需求、资源、情绪 → 写进人物档案 | Opus 5.5 · medium |
 | **3 Sims 关系图 + 今日行动** ✅ | 好感度衰减公式、圈层对应的联系频率、"今天该找谁"、"要找人帮忙时谁有这个资源"搜索；卡片列表 + 星系图；见面前的提示卡；一键排进 TickTick（官方 Open API） | Opus 5.5 · high |
-| **4 个人名片页 + 扫码留资料 + FoloToy + NFC** | 可以放视频的单页名片（静态页，加载要快）、二维码；**别人扫码 → 留下资料 → 自动加进 SPACE**（细节见下面「第 4 阶段：扫码留资料」）；NFC 贴纸写入链接；FoloToy 开源固件（ESP32-C3、240×320 屏幕）里加一个显示二维码的小应用 | 网页：Sonnet 5.5 · medium；FoloToy 固件：Opus 5.5 · high |
+| **4 个人名片页 + 扫码留资料 + FoloToy + NFC** ✅ | 可以放视频的单页名片（静态页，加载要快）、二维码；**别人扫码 → 留下资料 → 自动加进 SPACE**（细节见下面「第 4 阶段：扫码留资料」）；NFC 贴纸写入链接；FoloToy 开源固件（ESP32-C3、240×320 屏幕）里加一个显示二维码的小应用 | 网页：Sonnet 5.5 · medium；FoloToy 固件：Opus 5.5 · high |
 | **5 WhatsApp 半自动群发 + 话术** | 按标签、圈层选人 → AI 帮每个人写不同的话（按卡耐基原则：叫名字、提他感兴趣的事、真诚赞美）→ 生成卡片 → 逐个点开 `wa.me`；记录活动出席；根据回应调整以后的话术、标出"要避开的话题" | Sonnet 5.5 · medium |
 
 **什么时候开新对话：** 每个阶段开一个新对话，开头说一句"读 `network/PLAN.md`，做第 X 阶段"。如果同一阶段里 PR 合并了，或者对话已经很长（开始要回头重复解释前面的内容），也开新对话。
@@ -91,3 +91,9 @@ Wilson 想要一个**只给自己用**的人脉管理 app，用来记录每个�
   - 好感度的数字（加几分、多久减半）都在 `src/lib/relation.js` 最上面，用一两个月觉得太快 / 太慢再调
   - 留给第 5 阶段：`todayActions()` 的结果 + `topicsFor()` 可以直接当群发的名单和话术素材；`people.affinity` 已经存回资料库，可以拿来筛选
   - 没做（以后可以加）：生日提醒（要先加 `people.birthday`）；TickTick 任务做完自动记成「联系过了」（要 TickTick webhook，官方没有）
+- **第 4 阶段 ✅**（2026-11）：公开名片页 `/c`（不载 React，约 20KB；视频 / 照片开场、WhatsApp、vCard、中英切换）+ 扫码留资料（PDPA 同意、可拍名片代替打字、陷阱栏位、同 IP 限次、可选 Turnstile → 自动建人 / 只补空栏位、活动出席、`inbox` 记录）+ SPACE「新朋友」确认 +「我的名片」（编辑、二维码 PNG、活动二维码、Web NFC 写贴纸）+ FoloToy AI Passport 名片二维码 app（`folotoy/`）。做了什么见 `README.md`「第 4 阶段」，升级步骤见 `DEPLOY.md`「第 4 阶段升级」+ 第 8 节验收。
+  - 还没在真的 Supabase / Vercel 上测（`/api/inbox` 用假的资料库测过 10 个情境；`service_role`、公开 bucket 的规则要部署后照第 8 节验收）
+  - FoloToy：上游是 [FoloToy/ai-passport](https://github.com/FoloToy/ai-passport)（MIT，ESP-IDF 5.5.3 + LVGL 9.5）。开发环境没有 ESP-IDF，**没编译、没烧录**；只用真的 LVGL / BSP 标头做了型别检查 + host 测试。真机要照 `folotoy/README.md` 做
+  - FoloToy 背面 NFC 能不能写还是不知道 → 先用 NTAG215 贴纸（SPACE 里可以写）
+  - 留给第 5 阶段：`events` / `attendance` 已经有资料了（活动模式），可以直接拿来「活动后群发」；`people.tags` 有「扫码」可以筛选
+  - 没做（以后可以加）：公开页的 WhatsApp / Facebook 分享预览图（要 edge middleware 依名片动态产生 og:image）；FoloToy 用 Wi-Fi 同步最新的活动二维码；名片页浏览次数统计

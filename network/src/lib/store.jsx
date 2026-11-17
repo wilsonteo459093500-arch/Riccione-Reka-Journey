@@ -11,6 +11,7 @@ import {
 } from './logic.js';
 import { mergeList, appendFacts } from './talk.js';
 import { relationOf, bandOf } from './relation.js';
+import { cleanCard, DEFAULT_CARD } from './card.js';
 
 const Ctx = createContext(null);
 export const useStore = () => useContext(Ctx);
@@ -60,6 +61,7 @@ export function StoreProvider({ children }) {
       }
       if (table === 'photos') next.photo_people = next.photo_people.filter((r) => r.photo_id !== id);
       if (table === 'circles') next.person_circles = next.person_circles.filter((r) => r.circle_id !== id);
+      if (table === 'events') next.attendance = next.attendance.filter((r) => r.event_id !== id);
       return next;
     });
   }, []);
@@ -335,9 +337,85 @@ export function StoreProvider({ children }) {
       return n;
     }
 
+    /* ---------- 第 4 阶段：我的名片 + 扫码留资料 ---------- */
+    async function saveCard(card) {
+      try {
+        return await put('profile', { ...(profile || DEFAULT_PROFILE), card: cleanCard(card) });
+      } catch (e) {
+        if (/card/.test(String(e.message)) && /column/.test(String(e.message))) throw new Error('资料库还没升级：Supabase 重跑一次 schema.sql（见 DEPLOY.md「第 4 阶段升级」）');
+        throw e;
+      }
+    }
+
+    /** 名片的照片 / 视频 / 案例图 → 公开 bucket，回存储路径 */
+    async function uploadCardMedia(file, kind = 'photo') {
+      const owner = await repo.userId();
+      const stamp = Date.now().toString(36);
+      if (/^video\//.test(file.type)) {
+        if (!/^video\/(mp4|webm|quicktime)$/.test(file.type)) throw new Error('视频只收 MP4 / WebM / MOV');
+        if (file.size > 50 * 1024 * 1024) throw new Error('视频太大了（最多 50MB）：先剪短一点、或用 720p 汇出');
+        const ext = { 'video/mp4': 'mp4', 'video/webm': 'webm', 'video/quicktime': 'mov' }[file.type];
+        const path = `${owner}/card/${kind}-${stamp}.${ext}`;
+        await repo.uploadPublic(path, file);
+        return path;
+      }
+      const img = await shrinkImage(file, kind === 'case' ? 1400 : 1800, 0.84);
+      const path = `${owner}/card/${kind}-${stamp}.jpg`;
+      await repo.uploadPublic(path, img.blob);
+      return path;
+    }
+
+    async function saveEvent(row) {
+      return put('events', { name: String(row.name || '').trim(), held_on: row.held_on || null, location: row.location || '', notes: row.notes || '', ...(row.id ? { id: row.id } : {}) });
+    }
+
+    /** 新朋友：确认（不再出现在「新朋友」） */
+    async function confirmNew(ids) {
+      for (const id of ids) {
+        const row = dataRef.current.people.find((p) => p.id === id);
+        if (row && row.pending_review) await put('people', { ...row, pending_review: false });
+      }
+    }
+
+    /** 新朋友只拍了名片：用 AI 读那张名片，补进资料（名字是「名片待确认」就换掉） */
+    async function readCardWithAI(personId) {
+      const row = dataRef.current.people.find((p) => p.id === personId);
+      if (!row) throw new Error('找不到这个人');
+      const photo = dataRef.current.photos.find((ph) => ph.id === row.card_photo_id);
+      if (!photo) throw new Error('这个人没有名片照片');
+      const blob = await (await fetch(await repo.imageUrl(photo.path))).blob();
+      const img = await shrinkImage(blob, 1600);
+      const { card, usage } = await api.scanCard([{ media_type: img.media_type, data: img.base64 }]);
+      logUsage(usage);
+      const company = !row.company_id && card.company ? await ensureCompany(card.company, { name_alt: card.company_alt, website: card.website, address: card.address, industry: card.industry_guess }) : null;
+      const placeholder = !row.name || /名片待确认/.test(row.name);
+      const phones = [...(row.phones || [])];
+      for (const p of card.phones || []) if (!phones.some((x) => x.number.replace(/\D/g, '').slice(-9) === p.number.replace(/\D/g, '').slice(-9))) phones.push(p);
+      return put('people', {
+        ...row,
+        name: placeholder && card.name ? card.name : row.name,
+        name_alt: row.name_alt || card.name_alt || '',
+        title: row.title || card.title || '',
+        company_id: row.company_id || (company && company.id) || null,
+        phones,
+        emails: [...new Set([...(row.emails || []), ...(card.emails || [])])],
+        whatsapp: row.whatsapp || pickWhatsApp(card.phones || []),
+        website: row.website || card.website || '',
+        address: row.address || card.address || '',
+        card_notes: row.card_notes || card.card_notes || '',
+        notes: String(row.notes || '').replace(/\n?名片还没读：在「新朋友」按「AI 读名片」/, '').trim(),
+      });
+    }
+
     return {
       reload,
       logUsage,
+      saveCard,
+      uploadCardMedia,
+      saveEvent,
+      deleteEvent: (id) => drop('events', id),
+      confirmNew,
+      readCardWithAI,
       quickContact,
       snooze,
       syncAffinity,
@@ -429,7 +507,11 @@ export function StoreProvider({ children }) {
     actions.syncAffinity(people).then(() => { try { localStorage.setItem('space:affinity-sync', today); } catch { /* 无痕模式 */ } }).catch(() => null);
   }, [loading, error, people, actions]);
 
-  const value = { data, people, view, profile, me, loading, error, mode: repo.mode, imageUrl: repo.imageUrl, ...actions };
+  // 第 4 阶段：我的名片（还没存过就用默认值 + 「我的资料」的名字）
+  const card = useMemo(() => cleanCard(profile && profile.card ? profile.card : { ...DEFAULT_CARD, name: (profile && profile.display_name) || DEFAULT_CARD.name }), [profile]);
+  const newFriends = useMemo(() => people.filter((p) => p.pending_review).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))), [people]);
+
+  const value = { data, people, view, profile, me, card, newFriends, loading, error, mode: repo.mode, imageUrl: repo.imageUrl, publicUrl: repo.publicUrl, ...actions };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

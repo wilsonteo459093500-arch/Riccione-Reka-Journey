@@ -1,0 +1,33 @@
+menu "SPACE card"
+
+    config SPACE_CARD_URL
+        string "Card link (https://<your SPACE>/c)"
+        default ""
+        help
+            SPACE 公开名片页的网址，例：https://space-wilson.vercel.app/c
+            （SPACE →「我的名片」→ FoloToy 分页可以复制）。
+            会自动加上 ?s=folotoy，扫进来的人记成「扫 FoloToy 留资料」。
+            只收 https://，最长 200 字。
+
+    config SPACE_CARD_LABEL
+        string "Caption under the card QR (ASCII)"
+        default "Scan to connect"
+        help
+            二维码下面的小字。预设字型（Montserrat）没有中文，请用英文；中文字会变成 ?。
+
+    config SPACE_CARD_NAME
+        string "Name at the top (ASCII)"
+        default "Wilson Teo"
+
+    config SPACE_CARD_EVENT_URL
+        string "Event link (optional, https://<your SPACE>/c?e=<id>)"
+        default ""
+        help
+            选填：某个活动的专属二维码（SPACE →「我的名片」→ 活动模式 → 二维码 → 复制）。
+            有设的话，上 / 下键可以在「名片」和「活动」两个二维码之间切换。
+
+    config SPACE_CARD_EVENT_LABEL
+        string "Caption under the event QR (ASCII)"
+        default "Event check-in"
+
+endmenu

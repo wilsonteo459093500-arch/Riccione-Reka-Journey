@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Users, ScanLine, UserRound, MessagesSquare, Sun, Orbit, HandHelping } from 'lucide-react';
+import { Users, ScanLine, UserRound, MessagesSquare, Sun, Orbit, HandHelping, QrCode } from 'lucide-react';
 import { supabase, cloudConfigured } from './lib/supabase.js';
 import { StoreProvider, useStore } from './lib/store.jsx';
 import Login, { Logo } from './components/Login.jsx';
@@ -12,9 +12,11 @@ import Today from './components/Today.jsx';
 import Galaxy from './components/Galaxy.jsx';
 import FindHelp from './components/FindHelp.jsx';
 import BriefCard from './components/BriefCard.jsx';
+import CardStudio from './components/CardStudio.jsx';
+import NewFriends from './components/NewFriends.jsx';
 import { ToastProvider, Spinner, cx } from './components/ui.jsx';
 
-/* ---------- 路由：#/today  #/  #/p/<id>  #/p/<id>/brief  #/p/<id>/talk  #/talk  #/scan  #/galaxy  #/find  #/me ---------- */
+/* ---------- 路由：#/today  #/  #/p/<id>  #/p/<id>/brief  #/p/<id>/talk  #/talk  #/scan  #/galaxy  #/find  #/me  #/card  #/inbox ---------- */
 function parseHash() {
   const h = window.location.hash.replace(/^#/, '') || '/today'; // 打开 app 先看「今天该找谁」
   const br = /^\/p\/([\w-]+)\/brief$/.exec(h);
@@ -22,6 +24,8 @@ function parseHash() {
   if (h === '/today') return { name: 'today' };
   if (h === '/galaxy') return { name: 'galaxy' };
   if (h === '/find') return { name: 'find' };
+  if (h === '/card') return { name: 'card' };
+  if (h === '/inbox') return { name: 'inbox' };
   const t = /^\/p\/([\w-]+)\/talk$/.exec(h);
   if (t) return { name: 'talk', personId: t[1] };
   if (h === '/talk') return { name: 'talk', personId: null };
@@ -78,7 +82,7 @@ function Shell() {
   // 从哪一页点进人物页的，「返回」就回那一页
   const back = React.useRef('/');
   useEffect(() => {
-    if (['today', 'galaxy', 'find', 'list'].includes(route.name)) back.current = route.name === 'list' ? '/' : `/${route.name}`;
+    if (['today', 'galaxy', 'find', 'list', 'inbox'].includes(route.name)) back.current = route.name === 'list' ? '/' : `/${route.name}`;
   }, [route.name]);
   const fullScreen = ['scan', 'talk', 'brief'].includes(route.name);
 
@@ -93,6 +97,7 @@ function Shell() {
         <SideBtn icon={HandHelping} label="找资源" active={route.name === 'find'} onClick={() => go('/find')} />
         <SideBtn icon={ScanLine} label="扫名片" active={route.name === 'scan'} onClick={() => go('/scan')} />
         <SideBtn icon={MessagesSquare} label="记对话" active={route.name === 'talk'} onClick={() => go('/talk')} />
+        <SideBtn icon={QrCode} label="名片" active={route.name === 'card'} onClick={() => go('/card')} />
         <SideBtn icon={UserRound} label="我" active={route.name === 'me'} onClick={() => go('/me')} />
       </nav>
 
@@ -104,7 +109,7 @@ function Shell() {
           <div className="flex min-h-0 flex-1">
             {/* 列表：手机只在 list 显示；电脑一直在左边 */}
             <div className={cx('h-full w-full lg:w-[380px] lg:shrink-0 lg:border-r lg:border-line', route.name === 'person' && 'hidden lg:block')}>
-              <PeopleList selectedId={route.id} onOpen={openPerson} onScan={() => go('/scan')} onTalk={() => go('/talk')} onGalaxy={() => go('/galaxy')} />
+              <PeopleList selectedId={route.id} onOpen={openPerson} onScan={() => go('/scan')} onTalk={() => go('/talk')} onGalaxy={() => go('/galaxy')} onInbox={() => go('/inbox')} />
             </div>
             <div className={cx('h-full min-w-0 flex-1 overflow-y-auto', route.name === 'list' && 'hidden lg:block')}>
               {route.name === 'person' ? (
@@ -141,7 +146,9 @@ function Shell() {
                 onDone={(id) => openPerson(id)}
               />
             )}
-            {route.name === 'me' && <Settings />}
+            {route.name === 'me' && <Settings onCard={() => go('/card')} />}
+            {route.name === 'card' && <CardStudio />}
+            {route.name === 'inbox' && <NewFriends onBack={() => go('/')} onOpen={openPerson} onCard={() => go('/card')} />}
           </div>
         )}
       </main>
@@ -157,7 +164,7 @@ function Shell() {
               <span className="text-[11px] font-medium text-ink">扫名片</span>
             </button>
             <TabBtn icon={HandHelping} label="找资源" active={route.name === 'find'} onClick={() => go('/find')} />
-            <TabBtn icon={UserRound} label="我" active={route.name === 'me'} onClick={() => go('/me')} />
+            <TabBtn icon={UserRound} label="我" active={route.name === 'me' || route.name === 'card'} onClick={() => go('/me')} />
           </div>
         </nav>
       )}

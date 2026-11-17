@@ -10,6 +10,12 @@ function localApi() {
   return {
     name: 'network-local-api',
     configureServer(server) {
+      // 公开名片页：/c、/c?e=… → card.html（正式环境由 vercel.json 的 rewrite 做）
+      server.middlewares.use((req, _res, next) => {
+        const u = req.url || '';
+        if (/^\/c(?:\/)?(?:\?.*)?$/.test(u)) req.url = `/card.html${u.includes('?') ? u.slice(u.indexOf('?')) : ''}`;
+        next();
+      });
       server.middlewares.use(async (req, res, next) => {
         const m = /^\/api\/([a-z][a-z-]*)(?:\?.*)?$/.exec(req.url || '');
         if (!m) return next();
@@ -58,7 +64,8 @@ export default defineConfig(({ mode }) => {
         workbox: {
           globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
           navigateFallback: '/index.html',
-          navigateFallbackDenylist: [/^\/api\//],
+          // /c 是给别人看的公开名片页，不要被 SPACE 的 app 接走
+          navigateFallbackDenylist: [/^\/api\//, /^\/c(?:[/?#]|$)/, /^\/card\.html/],
         },
       }),
     ],
@@ -66,6 +73,12 @@ export default defineConfig(({ mode }) => {
       // 前端显示预算用；跟服务器同一组变数
       'import.meta.env.VITE_AI_MONTHLY_BUDGET_MYR': JSON.stringify(env.AI_MONTHLY_BUDGET_MYR || env.VITE_AI_MONTHLY_BUDGET_MYR || '50'),
       'import.meta.env.VITE_USD_TO_MYR': JSON.stringify(env.USD_TO_MYR || env.VITE_USD_TO_MYR || '4.4'),
+    },
+    build: {
+      rollupOptions: {
+        // 两个入口：SPACE app（index.html）+ 公开名片页（card.html，不载 React，打开很快）
+        input: { main: resolve(process.cwd(), 'index.html'), card: resolve(process.cwd(), 'card.html') },
+      },
     },
     server: { host: true, port: 5176 },
   };
