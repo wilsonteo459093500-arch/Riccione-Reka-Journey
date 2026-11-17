@@ -33,3 +33,17 @@ test('AI feedback fixtures marked "unpicked": the 👎 suggestion is now not tic
     });
   });
 });
+
+// "relocated"：被 👎 的鞋柜挡门 → 现在搬到门的另一边、默认勾、写「改放」
+// "kept"：被 👎 说长度不对（贴墙截短）→ 没有贴墙时照 AI 的长度、默认勾
+test('AI feedback fixtures marked "relocated" / "kept"', () => {
+  cases.filter((c) => c.expect === 'relocated' || c.expect === 'kept').forEach((c) => {
+    const p = c.ai.plan;
+    const plan = { id: 'fb', name: 'fb', image: { path: 'local:fb', w: p.w, h: p.h, kind: 'img', page: 1 }, scale: p.scale };
+    const s = buildSuggestions(c.ai.result, plan, { sentW: c.ai.sentW, crop: c.ai.crop });
+    const x = s.find((y) => y.id === c.suggestion?.id);
+    assert.ok(x?.ok && x.pick === true, `${c.f}: ${c.suggestion?.id} should be ticked (${(x?.why || []).map((w) => w.zh)})`);
+    if (c.expect === 'relocated') assert.ok((x.notes || []).some((n) => /改放门的另一边/.test(n.zh)), `${c.f}: no relocation note`);
+    if (c.expect === 'kept') assert.ok(x.lenMm[0] >= c.suggestion.lenMm[0] * 1.5, `${c.f}: still short (${x.lenMm})`);
+  });
+});

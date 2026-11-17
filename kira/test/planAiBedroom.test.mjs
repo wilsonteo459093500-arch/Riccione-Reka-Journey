@@ -161,3 +161,48 @@ test('plan-ai: existing cabinets are sent with their type; prompt makes the shoe
   assert.match(SYSTEM_PROMPT, /does not cover the TV wall/);
   assert.ok(RESULT_SCHEMA.properties.rooms.items.properties.doors.items.properties.to.enum.includes('main'));
 });
+
+// ---------------- 用户反馈 2026-11-18（公寓：大门开在干厨、卧室 2 衣柜被贴墙截短）----------------
+test('wall snap guard: snapping that cuts a wardrobe by > 30 % or moves it > 0.5 m is ignored (AI line kept, with a note)', () => {
+  const room = { type: 'bedroom', name: 'Bedroom 2', box: [100, 100, 400, 340], doors: [], windows: [], bed: [] };
+  const ai = { rooms: [room], suggestions: [{ template: 'wardrobe', room: 'Bedroom 2', segments: [[100, 120, 100, 345]], confidence: 'high', note: '' }], notes: '' };
+  // 假的贴墙：截成一半（像撞到图上画好的柜子线）
+  const cut = () => ({ snapped: true, seg: [100, 230, 100, 345], moved: 0 });
+  const [a] = buildSuggestions(ai, plan, { sentW: 1200, snap: cut });
+  assert.equal(a.cab.spec.W, 2250);
+  assert.ok(a.notes.some((n) => /先按 AI 的线/.test(n.zh)));
+  // 假的贴墙：挪了 60 px = 0.6 m
+  const far = () => ({ snapped: true, seg: [160, 120, 160, 345], moved: 60 });
+  const [b] = buildSuggestions(ai, plan, { sentW: 1200, snap: far });
+  assert.ok(Math.abs(placedFootprint(b.cab).bbox[0] - 1000) <= 1, 'stays on the AI line');
+  // 正常的贴墙（挪 2 px、长度不变）照用
+  const ok = () => ({ snapped: true, seg: [102, 120, 102, 345], moved: 2 });
+  const [c] = buildSuggestions(ai, plan, { sentW: 1200, snap: ok });
+  assert.ok(!c.notes.some((n) => /先按 AI 的线/.test(n.zh)));
+});
+
+test('shoe cabinet in front of the main door → moved to the other side of the door (same wall), ticked, room Foyer; overlapping suggestion unticked', () => {
+  // 干厨 3.0 × 2.0 m，大门在下墙左边 x 100–180；AI 把鞋柜放在左墙、紧贴门口
+  const kitchen = { type: 'kitchen', name: 'Kitchen', box: [100, 300, 400, 500], doors: [{ seg: [100, 500, 180, 500], to: 'main' }], windows: [], bed: [] };
+  const ai = { rooms: [kitchen], suggestions: [
+    { template: 'shoe', room: 'Kitchen', segments: [[100, 430, 100, 498]], confidence: 'low', note: '' },
+    { template: 'sideboard', room: 'Kitchen', segments: [[190, 500, 390, 500]], confidence: 'high', note: '' },
+  ], notes: '' };
+  const s = run(ai);
+  const shoe = s.find((x) => x.template === 'shoe');
+  assert.equal(shoe.roomName, 'Foyer 玄关');
+  assert.equal(shoe.pick, true, (shoe.why || []).map((w) => w.zh).join());
+  assert.ok(shoe.notes.some((n) => /改放门的另一边/.test(n.zh)));
+  const b = placedFootprint(shoe.cab).bbox;
+  assert.ok(b[0] >= 1800 && b[3] <= 5000 + 1 && b[1] >= 5000 - 400, `on the bottom wall right of the door: ${b}`);
+  const sb = s.find((x) => x.template === 'sideboard');
+  assert.equal(sb.pick, false);
+  assert.ok(sb.why.some((w) => /和鞋柜重叠/.test(w.zh)));
+});
+
+test('any cabinet (not only bedroom wardrobes) in front of a door is not ticked', () => {
+  const living = { type: 'living', name: 'Living', box: [100, 100, 500, 400], doors: [{ seg: [100, 200, 100, 300], to: 'balcony' }], windows: [], bed: [] };
+  const [tv] = run({ rooms: [living], suggestions: [{ template: 'tv', room: 'Living', segments: [[100, 150, 100, 350]], confidence: 'high', note: '' }], notes: '' });
+  assert.equal(tv.pick, false);
+  assert.ok(tv.why.some((w) => /挡阳台门/.test(w.zh)));
+});

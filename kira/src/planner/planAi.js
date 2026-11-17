@@ -167,6 +167,13 @@ export function buildSuggestions(ai, plan, { sentW, crop = null, snap = null, ex
   const sugIn = Array.isArray(ai?.suggestions) ? [...ai.suggestions] : [];
   const hasShoe = sugIn.some((s) => s?.template === 'shoe') || (existing || []).some((c) => c?.template === 'shoe' && c?.place?.planId === plan.id);
   if (!hasShoe) { const a = autoShoe(rooms, mmpp * k); if (a) sugIn.push(a); }
+  // AI 放的鞋柜压到开门的地方（用户反馈：「挡着门口，应该在对面」= 门洞的另一边）→ 搬到大门同一道墙、门的另一边
+  sugIn.forEach((sg, i) => {
+    if (sg?.template !== 'shoe' || sg.auto || !blocksDoor(sg, rooms, roomOf, mmpp * k)) return;
+    const s0 = (sg.segments || []).find(segOk).map(Number);
+    const moved = autoShoe(rooms, mmpp * k, { awayFrom: [(s0[0] + s0[2]) / 2, (s0[1] + s0[3]) / 2] });
+    if (moved) sugIn[i] = { ...moved, note: sg.note || '', auto: false, relocated: true };
+  });
   sugIn.forEach((sg, idx) => {
     const segs = (Array.isArray(sg?.segments) ? sg.segments : []).filter(segOk).map((s) => s.map(Number));
     if (sg?.template === 'wardrobe' && segs.length === 2) {
@@ -185,7 +192,7 @@ export function buildSuggestions(ai, plan, { sentW, crop = null, snap = null, ex
     const segsPx = (Array.isArray(sg?.segments) ? sg.segments : []).filter(segOk).map((s) => s.map(Number));
     const hit = roomOf(sg?.room);
     const room = hit?.room || { type: 'other', name: String(sg?.room || '') };
-    const roomName = roomZoneName(room, hit ? bedroomNth.get(hit.i) || 0 : 0);
+    const roomName = sg?.template === 'shoe' ? 'Foyer 玄关' : roomZoneName(room, hit ? bedroomNth.get(hit.i) || 0 : 0); // 鞋柜一律归玄关（大门常开在厨房 / 客厅）
     const low = sg?.confidence === 'low';
     const base = { id, template, room: cleanText(room.name, 40), roomName, note: cleanText(sg?.note), low, ...(group ? { group, part } : {}) };
     if (!template) { out.push({ ...base, ok: false, reason: T('Unknown cabinet type', '不认识的柜子种类') }); return; }
@@ -198,10 +205,18 @@ export function buildSuggestions(ai, plan, { sentW, crop = null, snap = null, ex
     const roomBoxPx = Array.isArray(room.box) && room.box.length === 4 && room.box.every((v) => Number.isFinite(Number(v))) ? room.box.map(Number) : null;
     // 贴墙：AI 的线常常偏十几 px（压在墙上 / 跑到墙外）
     let snappedAll = !snap;
+    let distrusted = false;
     if (snap) {
       const rs = segsPx.map((sgm) => snap(sgm, roomBoxPx, template));
       snappedAll = rs.every((r) => r?.snapped);
-      rs.forEach((r, j) => { if (r?.snapped) segsPx[j] = r.seg.map(Number); });
+      // 防呆（用户反馈：2.25 m 衣柜贴墙后剩 1.2 m、还跑到门口）：贴墙把线截掉三成以上、或挪了 0.5 m 以上 → 不信，按 AI 的线
+      rs.forEach((r, j) => {
+        if (!r?.snapped) return;
+        const a = segsPx[j], b = r.seg.map(Number);
+        const la = Math.hypot(a[2] - a[0], a[3] - a[1]), lb = Math.hypot(b[2] - b[0], b[3] - b[1]);
+        if (lb < la * SNAP_MIN_KEEP || num(r.moved) * mmpp * k > SNAP_MAX_MOVE_MM) { distrusted = true; return; }
+        segsPx[j] = b;
+      });
     }
     // L 型衣柜第二段：墙角那头让出第一段的深度（送去 px）
     if (corner && segsPx.length === 1) {
@@ -219,6 +234,8 @@ export function buildSuggestions(ai, plan, { sentW, crop = null, snap = null, ex
     const lim = AI_LIMITS[template];
     const notes = [];
     if (sg?.auto) notes.push(T('AI did not suggest one — placed beside the main door, check the position', 'AI 没给鞋柜：按大门位置自动放，请确认位置'));
+    if (sg?.relocated) notes.push(T('AI put it where the door opens — moved to the other side of the door, check it', 'AI 放的位置挡门，改放门的另一边，请确认'));
+    if (distrusted) notes.push(T('The wall line here is unclear (snapping cut it short / moved it) — using the AI line, check length and position', '贴墙时图上的线不清楚（会被截短 / 跑位），先按 AI 的线，长度和位置请确认'));
     if (!snappedAll) notes.push(T('No wall found here — check the position', '图上找不到这面墙 —— 位置请确认'));
     const fixLen = (L) => {
       const v = clamp(snapTo(L, lim.snap), lim.min, lim.max);
@@ -277,18 +294,22 @@ export function buildSuggestions(ai, plan, { sentW, crop = null, snap = null, ex
     const mine = fp.parts.filter((p) => p.floor);
     const clash = (existing || []).find((c) => c?.place?.planId === plan.id && placedFootprint(c).parts.filter((p) => p.floor).some((o) => mine.some((p) => area(p.rect, o.rect) > 100 * 100)));
     if (clash) why.push(T(`Overlaps ${clash.code || 'a cabinet'} already on the plan`, `和图上已有的 ${clash.code || '柜子'} 重叠`));
-    if (template === 'wardrobe' && roomBoxPx && (room.type === 'master' || room.type === 'bedroom')) geoOf.set(id, roomGeo(room, roomBoxPx, toMm));
+    if (roomBoxPx) geoOf.set(id, roomGeo(room, roomBoxPx, toMm));
     out.push({ ...base, cab, lenMm, ok: true, pick: !why.length, why, notes });
   });
   checkBedrooms(out, geoOf, mmpp);
+  checkDoorsAndShoe(out, geoOf);
   // 默认勾的排前面（不勾的留着、写原因，业务自己决定）
   return out.map((x, i) => [x, i]).sort((p, q) => ((q[0].ok && q[0].pick) - (p[0].ok && p[0].pick)) || (q[0].ok - p[0].ok) || (p[1] - q[1])).map(([x]) => x);
 }
 
 // ---------------- 鞋柜一定要有 / 电视墙 ----------------
 export const SHOE_AUTO_MM = 1200;
+export const SNAP_MIN_KEEP = 0.7;      // 贴墙后至少要留 AI 线长的 7 成
+export const SNAP_MAX_MOVE_MM = 500;   // 贴墙最多挪 0.5 m
 // 大门（某个房间的 doors 里 to:'main'）旁边的墙 → 1.2 m 鞋柜线段（送去 px）；门两边选比较长的那边；放不下 0.6 m → 看下一个
-function autoShoe(rooms, mmPerSentPx) {
+//   awayFrom（送去 px 的点）：AI 原本放的位置 → 优先放在门的另一边（用户：「应该在对面」= 门洞的另一边）
+function autoShoe(rooms, mmPerSentPx, { awayFrom = null } = {}) {
   if (!(mmPerSentPx > 0)) return null;
   const px = (mm) => mm / mmPerSentPx;
   for (const rm of rooms) {
@@ -303,11 +324,41 @@ function autoShoe(rooms, mmPerSentPx) {
     const wall = horiz ? (Math.abs(c - box[1]) <= Math.abs(c - box[3]) ? box[1] : box[3]) : (Math.abs(c - box[0]) <= Math.abs(c - box[2]) ? box[0] : box[2]);
     const gap = px(50), before = d0 - gap - lo, after = hi - (d1 + gap);
     if (Math.max(before, after) < px(600)) continue;
-    const [u0, u1] = after >= before ? [d1 + gap, d1 + gap + Math.min(px(SHOE_AUTO_MM), after)] : [d0 - gap - Math.min(px(SHOE_AUTO_MM), before), d0 - gap];
+    let useAfter = after >= before;
+    if (awayFrom) { // AI 放在门的哪一边 → 换另一边（那边放不下 0.6 m 才回来）
+      const wasBefore = (horiz ? awayFrom[0] : awayFrom[1]) < (d0 + d1) / 2;
+      const want = wasBefore ? after : before;
+      if (want >= px(600)) useAfter = wasBefore;
+    }
+    const [u0, u1] = useAfter ? [d1 + gap, d1 + gap + Math.min(px(SHOE_AUTO_MM), after)] : [d0 - gap - Math.min(px(SHOE_AUTO_MM), before), d0 - gap];
     const seg = horiz ? [u0, wall, u1, wall] : [wall, u0, wall, u1];
     return { template: 'shoe', room: rm.name, segments: [seg], confidence: 'high', note: '', auto: true };
   }
   return null;
+}
+
+// AI 的鞋柜线段（送去 px）压到它那间房的门、或大门的开门区？（mm 判断，深度 = 鞋柜模板的深）
+function blocksDoor(sg, rooms, roomOf, mmPerSentPx) {
+  if (!(mmPerSentPx > 0)) return false;
+  const s = (sg.segments || []).find(segOk);
+  const own = roomOf(sg.room)?.room;
+  if (!s || !own || !segOk(own.box)) return false;
+  const mm = (v) => Number(v) * mmPerSentPx;
+  const box = normRect(own.box.map(mm));
+  const [ax, ay, bx, by] = s.map(mm);
+  const D = num(newCabinet('shoe').spec?.D, 350);
+  const c = [(box[0] + box[2]) / 2, (box[1] + box[3]) / 2];
+  const horiz = Math.abs(bx - ax) >= Math.abs(by - ay);
+  const rect = horiz
+    ? (c[1] >= (ay + by) / 2 ? [Math.min(ax, bx), ay, Math.max(ax, bx), ay + D] : [Math.min(ax, bx), ay - D, Math.max(ax, bx), ay])
+    : (c[0] >= (ax + bx) / 2 ? [ax, Math.min(ay, by), ax + D, Math.max(ay, by)] : [ax - D, Math.min(ay, by), ax, Math.max(ay, by)]);
+  const doors = [...(own.doors || []).map((d) => ({ d, box })),
+    ...rooms.filter((r) => r !== own && segOk(r?.box)).flatMap((r) => (r.doors || []).filter((d) => d?.to === 'main').map((d) => ({ d, box: normRect(r.box.map(mm)) })))];
+  return doors.some(({ d, box: b }) => {
+    if (!segOk(d?.seg)) return false;
+    const z = doorZone(b, d.seg.map(mm));
+    return z && overlaps(rect, z, 50);
+  });
 }
 
 // AI 结果面板要列出来的（用户定：每个房间都有一套柜，厕所 / 阳台不算；鞋柜一定要有）：
@@ -340,7 +391,7 @@ export function aiCoverage(ai, sugg = [], existing = [], plan = null, { sentW = 
       const rb = [Math.min(a[0], b[0]) - 300, Math.min(a[1], b[1]) - 300, Math.max(a[0], b[0]) + 300, Math.max(a[1], b[1]) + 300];
       codes = here.filter((c) => c.template !== 'shoe').filter((c) => { const m = centre(c); return m && m[0] >= rb[0] && m[0] <= rb[2] && m[1] >= rb[1] && m[1] <= rb[3]; }).map((c) => c.code);
     }
-    const suggested = (sugg || []).some((x) => x.ok && x.room === name);
+    const suggested = (sugg || []).some((x) => x.ok && x.room === name && x.template !== 'shoe'); // 鞋柜不算那间房自己的一套柜
     if (codes.length) rows.push({ kind: 'room', room: name, roomName, type: r.type, status: 'existing', codes });
     else if (!suggested) rows.push({ kind: 'room', room: name, roomName, type: r.type, status: 'missing', required: false });
   });
@@ -358,15 +409,35 @@ function roomGeo(room, boxPx, toMm) {
     .filter((d) => d.zone);
   const windows = (Array.isArray(room.windows) ? room.windows : []).filter(segOk).map((s) => windowBand(segMm(s)));
   const bed = segOk(room.bed) ? mmRect(toMm, room.bed.map(Number)) : null;
-  return { rect, doors, windows, bed, master: room.type === 'master' };
+  return { rect, doors, windows, bed, master: room.type === 'master', type: room.type };
 }
-const DOOR_NAME = { bathroom: T('bathroom door', '厕所门'), balcony: T('balcony door', '阳台门'), entry: T('room door', '房门') };
+const DOOR_NAME = { main: T('main door', '大门'), bathroom: T('bathroom door', '厕所门'), balcony: T('balcony door', '阳台门'), entry: T('room door', '房门') };
+
+// 卧室衣柜以外的柜子也不能挡门（用户反馈：鞋柜挡着门口）；鞋柜一定要有 → 和鞋柜重叠的别的建议不勾
+function checkDoorsAndShoe(out, geoOf) {
+  const floorsOf = (x) => placedFootprint(x.cab).parts.filter((p) => p.floor).map((p) => normRect(p.rect));
+  out.forEach((x) => {
+    const geo = geoOf.get(x.id);
+    if (!x.ok || !geo || isBedroomWardrobe(x, geo)) return; // 卧室衣柜在 checkBedrooms 查过
+    const floors = floorsOf(x);
+    const door = geo.doors.find((d) => floors.some((f) => overlaps(f, d.zone, 100)));
+    if (door) { const nm = DOOR_NAME[door.to] || T('door', '门'); x.why = [...x.why, T(`Blocks the ${nm.en}`, `挡${nm.zh}`)]; x.pick = false; }
+  });
+  out.filter((x) => x.ok && x.template === 'shoe').forEach((shoe) => {
+    const sf = floorsOf(shoe);
+    out.forEach((x) => {
+      if (x === shoe || !x.ok || x.template === 'shoe' || !floorsOf(x).some((f) => sf.some((g) => overlaps(f, g, 50)))) return;
+      x.why = [...x.why, T('Overlaps the shoe cabinet (the shoe cabinet comes first)', '和鞋柜重叠（鞋柜优先）')]; x.pick = false;
+    });
+  });
+}
 
 // 同一个房间的衣柜（L 型两段算一组）一起看：挡到 AI 的床位 / 放了就放不下床 / 挡窗 / 挡门 → 不勾、写原因；
 // 顺便给图上画床：bedMm = 放了衣柜之后床可以放的位置（找不到就画 AI 的床位）
+const isBedroomWardrobe = (x, geo) => x.template === 'wardrobe' && (geo?.type === 'master' || geo?.type === 'bedroom');
 function checkBedrooms(out, geoOf, mmpp) {
   const groups = new Map();
-  out.forEach((x) => { if (x.ok && geoOf.has(x.id)) { const g = x.group || x.id; groups.set(g, [...(groups.get(g) || []), x]); } });
+  out.forEach((x) => { if (x.ok && isBedroomWardrobe(x, geoOf.get(x.id))) { const g = x.group || x.id; groups.set(g, [...(groups.get(g) || []), x]); } });
   groups.forEach((members) => {
     const geo = geoOf.get(members[0].id);
     const parts = members.flatMap((x) => placedFootprint(x.cab).parts.filter((p) => p.floor));
