@@ -192,8 +192,8 @@
         var code = (r.json && r.json.error) || '';
         // 给业务看的话：不放英文代码（not_configured…）；没设定好 ≠ 网路断，要老板去 Vercel 设
         var e = new Error(r.status === 0 ? '网路连不上' :
-          code === 'storage_blocked' ? '案例库的储存（Vercel Blob）被暂停了，现在读不到照片清单，也不能上传。请老板到 Vercel 看看（多半是免费额度用完了），恢复后再重新整理这一页。' :
-          code === 'not_configured' ? '伺服器还没接好照片储存（Vercel 的 Blob 设定），现在读不到照片清单，也不能上传：请老板到 Vercel 设定好、重新部署后，再重新整理这一页。' :
+          code === 'storage_blocked' ? '案例库的储存被暂停了或连不上，现在读不到照片清单，也不能上传。请老板看一下储存的设定（Supabase 或 Vercel Blob：多半是额度用完、或金钥不对），好了再重新整理这一页。' :
+          code === 'not_configured' ? '伺服器还没接好照片储存（Vercel 环境变数：SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY，或 Blob），现在读不到照片清单，也不能上传：请老板设定好、重新部署后，再重新整理这一页。' :
           '读不到案例库的清单（伺服器回 ' + r.status + '）。');
         e.status = r.status;
         e.code = code;
@@ -260,7 +260,8 @@
   };
 
   /* ---------- 额度：伺服器给的 quota（GET ?view=full）----------
-     {plan:'hobby'|'pro', month, writes, bytes, uploadCap, writeCap, bytesCap, writesLeft, bytesLeft}
+     {plan:'hobby'|'pro'|'supabase', month, writes, bytes, uploadCap, writeCap, bytesCap, writesLeft, bytesLeft}
+     Supabase：没有每月的写入上限（cap / left 是 null），只有空间 bytesCap / bytesLeft
      Pro 的 cap / left 都是 null（不限）。旧伺服器没有 quota：用上面的数字自己估（est: true）。 */
   var bytesMemo = { rev: -1, n: -1, v: 0 };
   function estBytes(cat) {
@@ -278,12 +279,16 @@
   CL.quota = function (cat) {
     cat = cat || CL.cat || {};
     var q = cat.quota;
-    if (q && typeof q === 'object' && (q.plan === 'pro' || q.plan === 'hobby' || q.plan === 'local')) {
+    if (q && typeof q === 'object' && (q.plan === 'pro' || q.plan === 'hobby' || q.plan === 'local' || q.plan === 'supabase')) {
       var out = {};
       Object.keys(q).forEach(function (k) { out[k] = q[k]; });
       if (q.plan === 'pro') { out.writesLeft = null; out.bytesLeft = null; out.uploadCap = null; out.bytesCap = null; }
       // 存在这台电脑：没有每月的次数上限（跟 Pro 一样）；空间是浏览器给的（只拿来显示）
       else if (q.plan === 'local') { out.writesLeft = null; out.uploadCap = null; out.writeCap = null; }
+      else if (q.plan === 'supabase') {
+        out.writesLeft = null; out.uploadCap = null; out.writeCap = null;
+        out.bytesLeft = q.bytesCap == null ? null : (q.bytesLeft == null ? Math.max(0, q.bytesCap - (+q.bytes || 0)) : Math.max(0, +q.bytesLeft || 0));
+      }
       else {
         out.uploadCap = q.uploadCap == null ? CL.LIMIT_WRITES : q.uploadCap;
         out.bytesCap = q.bytesCap == null ? CL.LIMIT_BYTES : q.bytesCap;

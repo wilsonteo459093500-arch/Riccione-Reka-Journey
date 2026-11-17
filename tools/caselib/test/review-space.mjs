@@ -453,10 +453,10 @@ test('review space: this month\'s writes used up (507) and store suspended (503 
   try {
     await page.fill('#rv-purge-word', '删除');
     await page.click('#rv-purge-go');
-    await page.waitForFunction(() => /案例库被 Vercel 暂停中，等恢复之后再删/.test(document.querySelector('#rv-purge-msg').textContent));
+    await page.waitForFunction(() => /案例库的储存暂停了或连不上，等恢复之后再删/.test(document.querySelector('#rv-purge-msg').textContent));
     await page.click('#rv-proj [data-act="keep-proj"]');
     await page.click('#rv-ask [data-ask="ok"]');
-    await page.waitForFunction(() => /案例库被 Vercel 暂停中/.test(document.querySelector('#rv-keep-msg').textContent));
+    await page.waitForFunction(() => /案例库的储存暂停了或连不上/.test(document.querySelector('#rv-keep-msg').textContent));
   } finally {
     m.setBlocked(false);
   }
@@ -727,7 +727,7 @@ test('review space: tag edits that cannot be saved (507 writes used up, 503 stor
   m.setBlocked(true);
   try {
     await page.click('#rv-savebtn');
-    await page.waitForFunction(() => /案例库被 Vercel 暂停中，改的标签先存不进去/.test(document.querySelector('#rv-save .msg').textContent));
+    await page.waitForFunction(() => /案例库的储存暂停了或连不上，改的标签先存不进去/.test(document.querySelector('#rv-save .msg').textContent));
     const n1 = patches();
     await page.waitForTimeout(1000);
     assert.equal(patches(), n1, 'no automatic retries while suspended');

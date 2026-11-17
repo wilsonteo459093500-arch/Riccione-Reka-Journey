@@ -1308,7 +1308,7 @@ test('the catalog answers 503 not_configured → plain words (ask the boss to se
   assert.equal(await page.isDisabled('#start'), true);
   assert.match(await page.textContent('#start'), /现在不能上传/);
   const why = await page.textContent('.go-why');
-  assert.match(why, /请老板到 Vercel 设定好/);
+  assert.match(why, /请老板设定好/);
   assert.doesNotMatch(why, /not_configured|503|请检查网路/);
   assert.doesNotMatch(await page.textContent('#toast'), /not_configured/);
   await page.unrouteAll({ behavior: 'ignoreErrors' });
@@ -1359,12 +1359,12 @@ test('Blob stops taking writes mid-upload (503 storage_blocked) → the run stop
   await waitHashed(page);
   await startAndWait(page, 60000);
   const S = await page.evaluate(() => { const s = MB.clUpload.state(); return { fatal: s.fatal, counts: s.counts, wait: s.items.filter((it) => it.st === 'wait').length }; });
-  assert.match(S.fatal, /Vercel Blob 暂停了写入/);
+  assert.match(S.fatal, /储存暂停了写入/);
   assert.match(S.fatal, /suspended/);
   assert.ok(blockedReq <= 4, 'stopped right away (no 4 tries × every remaining photo): ' + blockedReq);
   assert.equal(S.counts.failed, 0, 'photos are not marked failed — they are still to do');
   assert.ok(S.wait >= 20, 'the rest stay waiting: ' + S.wait);
-  assert.match(await page.textContent('#sum-body'), /上传停止了[\s\S]*Vercel Blob 暂停了写入/);
+  assert.match(await page.textContent('#sum-body'), /上传停止了[\s\S]*储存暂停了写入/);
   await page.unrouteAll({ behavior: 'ignoreErrors' });
   assert.deepEqual(page.errors, []);
   await ctx.close();

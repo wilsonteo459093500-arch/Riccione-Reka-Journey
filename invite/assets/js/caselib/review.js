@@ -285,8 +285,8 @@
   function errCode(r) { return r ? String(r.status) + (r.json && r.json.error ? ' ' + r.json.error : '') : ''; }
   function patchStuckText(r) {
     var e = (r && r.json && r.json.error) || '';
-    if (e === 'storage_blocked') return '案例库被 Vercel 暂停中，改的标签先存不进去（还留在这一页，关掉就没了）。等恢复之后按「保存」。';
-    if (e === 'not_configured') return '伺服器的设定不完整，改的标签存不进去：请告诉老板检查 Vercel 的设定。';
+    if (e === 'storage_blocked') return '案例库的储存暂停了或连不上，改的标签先存不进去（还留在这一页，关掉就没了）。等恢复之后按「保存」。';
+    if (e === 'not_configured') return '伺服器的设定不完整，改的标签存不进去：请告诉老板检查储存的设定（Vercel 环境变数）。';
     if ((r && r.json && r.json.local) || CL.mode === 'local') return '这台电脑的空间满了，改的标签先存不进去（还留在这一页，关掉就没了）。清出一些硬碟空间、或删除隐藏的照片，再按「保存」。';
     return '这个月的 Blob 写入次数用完了，改的标签先存不进去（还留在这一页，关掉就没了）。下个月 1 号重算之后按「保存」。';
   }
@@ -366,7 +366,7 @@
       return '这个月的 Blob 写入次数快用完了' + (j.writesLeft != null ? '（只剩约 ' + CL.n(j.writesLeft) + ' 次）' : '') +
         '，' + what + '没送出去，画面已经改回去。下个月 1 号会重算。';
     }
-    if (j.error === 'storage_blocked') return '案例库被 Vercel 暂停中，' + what + '没送出去（画面已经改回去）：等恢复之后再试。';
+    if (j.error === 'storage_blocked') return '案例库的储存暂停了或连不上，' + what + '没送出去（画面已经改回去）：等恢复之后再试。';
     if (r && r.status === 0) return '网路断了，' + what + '没送出去，请再试一次';
     return what + '失败，请再试一次';
   }
@@ -452,7 +452,7 @@
     // 旧的伺服器没有 quota：从清单的 usage 估，只有写入次数
     if (!q) return { plan: 'hobby', writes: local, cap: CL.LIMIT_WRITES || 2000, writeCap: null, bytes: null, bytesCap: null };
     return {
-      plan: q.plan === 'pro' || q.plan === 'local' ? q.plan : 'hobby',
+      plan: q.plan === 'pro' || q.plan === 'local' || q.plan === 'supabase' ? q.plan : 'hobby',
       writes: Math.max(q.writes | 0, local),     // 自己刚写的（CL.addWrites）也算进去
       cap: q.uploadCap, writeCap: q.writeCap,
       bytes: typeof q.bytes === 'number' ? q.bytes : null, bytesCap: q.bytesCap || null,
@@ -731,8 +731,8 @@
       return '这个月的 Blob 写入次数快用完了' + (j.writesLeft != null ? '（只剩约 ' + CL.n(j.writesLeft) + ' 次）' : '') +
         '：删除也要用写入次数，为了不让 Vercel 停掉案例库，先停下来' + done + '。下个月 1 号重算之后再删。';
     }
-    if (j.error === 'storage_blocked') return '案例库被 Vercel 暂停中，等恢复之后再删' + done + '。';
-    if (j.error === 'not_configured') return '伺服器的设定不完整，没办法删除' + done + '：请告诉老板检查 Vercel 的设定。';
+    if (j.error === 'storage_blocked') return '案例库的储存暂停了或连不上，等恢复之后再删' + done + '。';
+    if (j.error === 'not_configured') return '伺服器的设定不完整，没办法删除' + done + '：请告诉老板检查储存的设定（Vercel 环境变数）。';
     if (j.error === 'not_hidden') return '有照片刚被别人复原了，所以这一批没删' + done + '。已经重新载入：请再看一下数字，要删的话再打一次「删除」。';
     if (j.error === 'unknown') return '有照片已经不在案例库里了（可能别人刚删过）' + done + '。已经重新载入：请再看一下数字，要删的话再打一次「删除」。';
     if (r.status === 0) return '网路断了，删除没做完' + done + '：网路好了再打一次「删除」。';
@@ -932,6 +932,8 @@
       '照片存在这台电脑：没有每月的次数限制，空间看这台电脑的硬碟。照片太多 VISI 也比较难挑：一样可以每个项目只留最好的几张，<b>先隐藏</b>（可以复原），确定不要了再<b>删除</b>。' :
       q.plan === 'pro' ?
       'Pro 方案不限额度。照片太多 VISI 也比较难挑：一样可以每个项目只留最好的几张。' :
+      q.plan === 'supabase' ?
+      '云端案例库（Supabase）：没有每月的次数限制，空间最多 ' + mbNum(q.bytesCap) + ' MB（到了会自己停下来）。照片太多 VISI 也比较难挑：每个项目只留最好的几张，<b>先隐藏</b>（可以复原），确定不要了再<b>删除</b>，空间才会空出来。' :
       'Vercel 免费方案：每月最多 ' + CL.n(q.cap) + ' 次写入' + (q.bytesCap ? '、空间 ' + mbNum(q.bytesCap) + ' MB' : '') +
       '，超过会把<b>整个案例库停掉</b>（连旧方案的照片都打不开）。所以每个项目只留最好的几张：<b>先隐藏</b>（可以复原），确定不要了再<b>删除</b>，空间才会空出来。';
     if (!open) { drawTidyMsg(); return; }
@@ -1703,6 +1705,10 @@
     if (q.plan === 'local') {
       b.textContent = '存在这台电脑 · 已用约 ' + CL.mb(q.bytes || 0) + (q.bytesLeft != null ? ' / 可用约 ' + CL.mb(q.bytesLeft) : '');
       b.title = '照片存在这台电脑的浏览器里（免费，没有每月的次数限制）。不要清除浏览器的资料，不然照片会不见。';
+    } else if (q.plan === 'supabase') {
+      b.textContent = '云端（Supabase）· ' + (spaceText(q) || '空间不限');
+      over = !!(q.bytes != null && q.bytesCap && q.bytes >= q.bytesCap);
+      b.title = '照片存在公司的 Supabase：没有每月的次数限制，空间到上限会自己停下来。' + (over ? '现在已经满了：先到「整理空间」删掉隐藏的照片。' : '');
     } else if (q.plan === 'pro') {
       b.textContent = 'Pro 方案 · 不限额度 · 本月写入约 ' + CL.n(q.writes) + ' 次';
       b.title = 'Vercel Pro 方案：写入次数、空间超过只是多付钱，案例库不会被停掉';

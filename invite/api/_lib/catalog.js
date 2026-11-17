@@ -13,7 +13,7 @@
    ============================================================ */
 import { createHash } from 'node:crypto';
 import { HttpError } from './http.js';
-import { bakPath } from './blob.js';
+import { bakPath, adapterKind } from './blob.js';
 import { isStyle, isCabinet, isRoom, isPtype, isTrait, isStatus } from './vocab.js';
 
 export const MAX_INDEX = 3.5 * 1024 * 1024;   // 清单上限：约 1 万张照片，远超过需要
@@ -320,7 +320,9 @@ export function bumpUsage(index, ts, writes) {
    - 传新照片（/api/photo）：这个月写入到 UPLOAD_CAP 就停，总储存量超过 BYTES_CAP 也停
    - 写清单（登记、改标签、隐藏）：到 WRITE_CAP 才停 —— 已经传上去的照片还能登记，不会变成没人用的档
    - 删除（purge）：到 PURGE_CAP 才停（删东西是为了救急）
-   BLOB_PLAN=pro 就不设上限（Pro 超过只是多付钱，不会停权）。 */
+   BLOB_PLAN=pro 就不设上限（Pro 超过只是多付钱，不会停权）。
+   存在 Supabase（设了 SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY，plan = 'supabase'）：没有每月的写入次数上限，
+   只看空间：STORAGE_CAP_MB（预设 700 MB —— 免费方案 1 GB，留空间给同一个项目的 KIRA 户型图）。 */
 export const UPLOAD_CAP = 1800;
 export const WRITE_CAP = 1950;
 export const PURGE_CAP = 1990;
@@ -328,7 +330,22 @@ export const BYTES_CAP = 950 * 1024 * 1024;
 export const PACK_EST = 35 * 1024;           // 还没记大小的旧缩图包：每张缩图估 35 KB
 export const INDEX_COPIES = 8;               // 清单本身 + 7 份每日备份
 
-export function blobPlan() { return String(process.env.BLOB_PLAN || '').trim().toLowerCase() === 'pro' ? 'pro' : 'hobby'; }
+export const STORAGE_CAP_MB = 700;
+export function blobPlan() {
+  if (adapterKind() === 'supabase') return 'supabase';
+  return String(process.env.BLOB_PLAN || '').trim().toLowerCase() === 'pro' ? 'pro' : 'hobby';
+}
+// Supabase 的空间上限（bytes）
+export function storageCap() {
+  var mb = Number(process.env.STORAGE_CAP_MB);
+  return Math.round((Number.isFinite(mb) && mb > 0 ? mb : STORAGE_CAP_MB) * 1024 * 1024);
+}
+// 这个方案每月写入有没有上限（只有 Vercel 免费方案有）
+export function writesCapped(plan) { return (plan || blobPlan()) === 'hobby'; }
+export function bytesCapOf(plan) {
+  plan = plan || blobPlan();
+  return plan === 'hobby' ? BYTES_CAP : plan === 'supabase' ? storageCap() : null;
+}
 
 export function monthWrites(index, ts) {
   var u = index && index.usage && typeof index.usage === 'object' ? index.usage[utcMonth(ts)] : null;
@@ -350,12 +367,12 @@ export function storedBytes(index) {
 export function quota(index, ts, plan) {
   plan = plan || blobPlan();
   var writes = monthWrites(index, ts), bytes = storedBytes(index);
-  var pro = plan === 'pro';
+  var capped = writesCapped(plan), bCap = bytesCapOf(plan);
   return {
     plan: plan, month: utcMonth(ts), writes: writes, bytes: bytes,
-    uploadCap: pro ? null : UPLOAD_CAP, writeCap: pro ? null : WRITE_CAP, bytesCap: pro ? null : BYTES_CAP,
-    writesLeft: pro ? null : Math.max(0, UPLOAD_CAP - writes),
-    bytesLeft: pro ? null : Math.max(0, BYTES_CAP - bytes)
+    uploadCap: capped ? UPLOAD_CAP : null, writeCap: capped ? WRITE_CAP : null, bytesCap: bCap,
+    writesLeft: capped ? Math.max(0, UPLOAD_CAP - writes) : null,
+    bytesLeft: bCap == null ? null : Math.max(0, bCap - bytes)
   };
 }
 export function quotaError(reason, writesLeft, bytesLeft) {

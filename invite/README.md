@@ -141,7 +141,39 @@
   给客户看的邀请页不会被它管）、`assets/js/caselib/local-core.js`（清单规则，照抄 `api/_lib/catalog.js`，测试逐项比对）、
   `assets/js/caselib/local-sw.js`（切换模式）。测试：`node --test tools/caselib/test/local-core.test.mjs`、`node --test tools/caselib/test/local-mode.mjs`。
 
-**云端模式（Vercel，现在暂停中）**：
+**云端改存 Supabase（照片、清单不放 Vercel Blob）**：
+
+Vercel Blob 免费方案 2026-11-03 被停用，而且不能商用。程式的储存只隔着一层转接（`api/_lib/blob.js` 的 adapter），
+现在多了一个 Supabase 版（`api/_lib/supabase.js`）：**Vercel 上设了下面两个环境变数就用 Supabase**，没设照旧用 Blob。
+上传页、审核页、VISI、本机模式都不用改；照片 id（原档 sha256）、项目 id（文件夹名算出来）两边一样。
+
+- **放在哪里**：用 KIRA 那个 Supabase 项目（免费方案一个组织最多两个项目，已经有 KIRA 和 SPACE NETWORK）。
+  - 照片、缩图包 → 公开 bucket `visi-cases`（路径带 21 个随机字，猜不到；VISI 的图片和 PPTX 直接用网址）。
+  - 清单（有项目的文件夹名 = 客户名字）和 7 份每日备份 → 资料表 `visi_catalog`：开了 RLS、没有任何 policy，
+    **只有 Vercel 上的伺服器（service role key）读得到**，登入 KIRA 的同事、外人都读不到。
+- **额度**：Supabase 没有每月的写入次数上限，只看空间。免费方案 1 GB（跟 KIRA 的户型图共用），
+  所以伺服器自己设上限 `STORAGE_CAP_MB`（预设 700 MB），到了就回「空间满了」，不会超额。
+  一张照片加缩图约 0.25 MB：**每个项目精选 35 张（约 900 张）约 250 MB 放得下；全部 7,881 张约 2 GB 放不下**
+  （要升级 Supabase Pro，或改用 Cloudflare R2）。
+- **一次性设定（老板）**：
+  1. Supabase → KIRA 项目 → SQL Editor：整段执行 `invite/supabase/visi_cases.sql`（建 bucket `visi-cases` + 资料表 `visi_catalog`，可以重复执行）。
+  2. Supabase → Project Settings → API：复制 **Project URL** 和 **service_role key**（或新的 Secret key `sb_secret_…`）。
+     **这把 key 能读写整个项目：只贴进 Vercel，不要贴到聊天、不要放进 repo。**
+  3. Vercel → `visi-riccione-reka` → Settings → Environment Variables（Production + Preview）：
+     `SUPABASE_URL` = Project URL、`SUPABASE_SERVICE_ROLE_KEY` = 那把 key；
+     选填 `STORAGE_CAP_MB`（预设 700）、`SUPABASE_CASES_BUCKET`（预设 `visi-cases`）。
+     `CATALOG_KEY`、`SESSION_SECRET`、`VISI_TEAM_PASSWORD` 照旧（不要改 `CATALOG_KEY`）。然后 Redeploy。
+  4. 打开案例库 → 登入框选「云端」→ 团队密码登入：右上角额度那行应该写「云端（Supabase）· 空间约 … / 700 MB」。
+- **把照片搬上来**（Blob 上原本的照片停权中拿不到，要重传）：
+  1. 先在本机模式的「审核」按「**汇出标签档（备份）**」。
+  2. 切到云端，在上传页把同一个案例总文件夹拖进来，**打开「精选」、每个项目 35 张**（空间放得下），开始上传。
+  3. 传完之后，在「审核」按「**汇入标签档**」：照片 id 一样，分类、隐藏、确认全部回来。
+     云端不会先记着还没上传的照片：顺序一定是**先传、再汇入**；之后补传的照片，再汇入一次同一个档就好。
+- 改回 Blob：把 Vercel 的 `SUPABASE_URL` 删掉、Redeploy（Supabase 里的资料都留着）。
+- 测试：`node --test tools/caselib/test/supabase-adapter.test.mjs`（假的 Supabase：`tools/caselib/fake-supabase.mjs`）、
+  `node --test tools/caselib/test/supabase-cloud.mjs`（浏览器：上传 → 审核 → 删除，全程打假的 Supabase）。
+
+**云端模式（Vercel Blob，2026-11-03 起暂停中）**：
 
 - **上传**：用 Windows 的 Chrome，把装案例的**总文件夹**整个拖进来（或按「选文件夹」）。里面每个子文件夹就是一个项目；
   子文件夹里再分「厨房」「主卧」也可以。HEIC、RAW、影片、超过 60MB 的档会列出来跳过（HEIC 请先转成 JPG）。
