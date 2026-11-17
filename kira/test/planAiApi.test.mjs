@@ -86,6 +86,6 @@ test('plan-ai: cabinets already on the plan go into the prompt; suggestions carr
   const sg = RESULT_SCHEMA.properties.suggestions.items;
   assert.ok(sg.required.includes('confidence'));
   assert.deepEqual(sg.properties.confidence.enum, ['high', 'low']);
-  assert.match(seen.params.system, /every bedroom/);
+  assert.match(seen.params.system, /every room gets its own set of cabinets/);
   assert.match(seen.params.system, /several floors/);
 });

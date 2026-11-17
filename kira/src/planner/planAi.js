@@ -22,14 +22,20 @@ const num = (v, d = 0) => { const n = Number(v); return Number.isFinite(n) ? n :
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const snapTo = (v, g) => Math.round(v / g) * g;
 
-export const AI_TEMPLATES = ['wardrobe', 'kitchen', 'tv', 'shoe'];
-export const AI_ROOM_TYPES = ['kitchen', 'master', 'bedroom', 'living', 'dining', 'entrance', 'bathroom', 'other'];
+export const AI_TEMPLATES = ['wardrobe', 'kitchen', 'tv', 'shoe', 'sideboard', 'desk', 'vanity', 'blank'];
+export const AI_ROOM_TYPES = ['kitchen', 'master', 'bedroom', 'living', 'dining', 'entrance', 'study', 'utility', 'bathroom', 'balcony', 'other'];
+// 用户定：每个房间都有一套柜（厕所、阳台那种不算）—— 这些房间该有柜子；其他（bathroom / balcony / other = 楼梯走廊）不用
+export const ROOMS_WITH_CABINETS = new Set(['master', 'bedroom', 'kitchen', 'living', 'dining', 'entrance', 'study', 'utility']);
 // 每段墙的常用长度（mm）：超出就夹住、写一句理由
 export const AI_LIMITS = {
   wardrobe: { min: 900, max: 4000, snap: 50 },
   shoe: { min: 600, max: 2400, snap: 50 },
   tv: { min: 1500, max: 5000, snap: 50 },
   kitchen: { min: 1200, max: 6000, snap: 10 },
+  sideboard: { min: 900, max: 4000, snap: 50 },
+  desk: { min: 900, max: 3000, snap: 50 },
+  vanity: { min: 600, max: 2000, snap: 50 },
+  blank: { min: 600, max: 4000, snap: 50 },
 };
 const T = (en, zh) => ({ en, zh });
 
@@ -74,7 +80,10 @@ export function roomZoneName(room, nth = 0) {
     const n = m ? Number(m[1]) : nth + 2;
     return `Bedroom ${n} 卧室${n}`;
   }
-  if (type === 'living') return 'Living Room 客厅';
+  if (type === 'living') return /family|flexi|家庭/i.test(nm) ? 'Family Hall 家庭厅' : 'Living Room 客厅';
+  if (type === 'study') return 'Study 书房';
+  if (type === 'utility') return /store|储/i.test(nm) ? 'Storeroom 储藏室' : 'Laundry 洗衣房';
+  if (type === 'balcony') return 'Balcony 阳台';
   if (type === 'dining') return 'Dining 餐厅';
   if (type === 'entrance') return 'Foyer 玄关';
   if (type === 'bathroom') return 'Bathroom 卫生间';
@@ -301,18 +310,39 @@ function autoShoe(rooms, mmPerSentPx) {
   return null;
 }
 
-// AI 结果面板要列出来的：图上已经有的（例：「图上已有 K1 电视柜」，AI 不会重复建议）、该有却没有的（鞋柜一定要加）
-//   鞋柜：看得到大门、或有玄关 / 客厅 / 餐厅 / 厨房（= 有楼下）才要；电视柜：有客厅才要
+// AI 结果面板要列出来的（用户定：每个房间都有一套柜，厕所 / 阳台不算；鞋柜一定要有）：
+//   · 鞋柜：图上已有 → 写出来；没有、AI 也没给 → 红字「一定要加」（看得到大门、或有玄关 / 客厅 / 餐厅 / 厨房 = 有楼下 才要）
+//   · 每间该有柜子的房间：图上已有（柜子中心在房间框里）→「图上已有 K1」，免得以为漏了；AI 没给、图上也没有 →「还没有柜子」
+//   plan + sentW / crop：把房间框换成 mm 才看得出图上已有的柜子在哪间房；没定比例 → 只看 AI 的建议
 const GROUND_ROOMS = new Set(['entrance', 'living', 'dining', 'kitchen']);
-export function aiCoverage(ai, sugg = [], existing = [], planId = null) {
-  const rooms = Array.isArray(ai?.rooms) ? ai.rooms : [];
-  const ground = rooms.some((r) => GROUND_ROOMS.has(r?.type) || (Array.isArray(r?.doors) && r.doors.some((d) => d?.to === 'main')));
-  const living = rooms.some((r) => r?.type === 'living');
+export function aiCoverage(ai, sugg = [], existing = [], plan = null, { sentW = 0, crop = null } = {}) {
+  const rooms = (Array.isArray(ai?.rooms) ? ai.rooms : []).filter((r) => r && typeof r === 'object');
+  const planId = plan?.id || null;
+  const here = (existing || []).filter((c) => c?.code && (!planId || c?.place?.planId === planId));
+  const ground = rooms.some((r) => GROUND_ROOMS.has(r.type) || (Array.isArray(r.doors) && r.doors.some((d) => d?.to === 'main')));
   const rows = [];
-  [['shoe', ground], ['tv', living]].forEach(([template, need]) => {
-    const codes = (existing || []).filter((c) => c?.template === template && (!planId || c?.place?.planId === planId)).map((c) => c.code).filter(Boolean);
-    if (codes.length) rows.push({ template, status: 'existing', codes });
-    else if (need && !(sugg || []).some((x) => x.template === template && x.ok)) rows.push({ template, status: 'missing', required: template === 'shoe' });
+  const shoes = here.filter((c) => c.template === 'shoe').map((c) => c.code);
+  if (shoes.length) rows.push({ kind: 'shoe', template: 'shoe', status: 'existing', codes: shoes });
+  else if (ground && !(sugg || []).some((x) => x.template === 'shoe' && x.ok)) rows.push({ kind: 'shoe', template: 'shoe', status: 'missing', required: true });
+  // 每间房
+  const mmpp = plan ? mmPerPx(plan) : 0;
+  const map = plan && mmpp > 0 && sentW > 0 ? sentToPlan(plan, sentW, crop) : null;
+  const centre = (c) => { try { const b = placedFootprint(c).bbox; return [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2]; } catch { return null; } };
+  const counts = new Map();
+  rooms.forEach((r, i) => { if (r.type === 'bedroom') counts.set(i, counts.size); });
+  rooms.forEach((r, i) => {
+    if (!ROOMS_WITH_CABINETS.has(r.type) || r.type === 'entrance') return; // 玄关 = 上面的鞋柜那行
+    const name = cleanText(r.name, 40);
+    const roomName = roomZoneName(r, counts.get(i) || 0);
+    let codes = [];
+    if (map && segOk(r.box)) {
+      const [a, b] = [map.pt([Number(r.box[0]), Number(r.box[1])]), map.pt([Number(r.box[2]), Number(r.box[3])])].map((p) => p.map((v) => v * mmpp));
+      const rb = [Math.min(a[0], b[0]) - 300, Math.min(a[1], b[1]) - 300, Math.max(a[0], b[0]) + 300, Math.max(a[1], b[1]) + 300];
+      codes = here.filter((c) => c.template !== 'shoe').filter((c) => { const m = centre(c); return m && m[0] >= rb[0] && m[0] <= rb[2] && m[1] >= rb[1] && m[1] <= rb[3]; }).map((c) => c.code);
+    }
+    const suggested = (sugg || []).some((x) => x.ok && x.room === name);
+    if (codes.length) rows.push({ kind: 'room', room: name, roomName, type: r.type, status: 'existing', codes });
+    else if (!suggested) rows.push({ kind: 'room', room: name, roomName, type: r.type, status: 'missing', required: false });
   });
   return rows;
 }

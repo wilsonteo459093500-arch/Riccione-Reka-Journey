@@ -204,7 +204,7 @@ const PlanBoard = forwardRef(function PlanBoard({ plans = [], zones = [], onChan
     const snap = r.dark ? (seg, box, tpl) => snapSegment(r.dark, seg, box, { cutGaps: tpl !== 'kitchen' }) : null;
     const existing = cabsOn(p);
     const sugg = planReady(p) ? buildSuggestions(r.result, p, { sentW: r.sentW, crop: r.crop, snap, existing }) : [];
-    return { sugg, cover: aiCoverage(r.result, sugg, existing, p.id), picked: new Set(sugg.filter((x) => x.ok && x.pick !== false).map((x) => x.id)) };
+    return { sugg, cover: aiCoverage(r.result, sugg, existing, p, { sentW: r.sentW, crop: r.crop }), picked: new Set(sugg.filter((x) => x.ok && x.pick !== false).map((x) => x.id)) };
   };
   // area：只读这一块（原图 px { x, y, w, h }）；不给 = 整张（自动去黑边 / 白边）
   const runAi = async (passcode, p = plan, area = null) => {
@@ -909,19 +909,20 @@ function AiPanel({ ai, ready, pass, setPass, onRun, onClose, onToggle, onAdd, on
               })}
             </div>
           )}
-          {/* 图上已经有的（AI 不重复建议，写出来免得以为漏了）/ 该有却没有的（鞋柜一定要加）*/}
+          {/* 每间房一套柜（厕所 / 阳台不算）：图上已经有的写出来（AI 不重复建议，免得以为漏了）；还没有的提醒画一个；鞋柜一定要加 */}
           {ready && (ai.cover || []).length > 0 && (
             <div className="mb-2 space-y-0.5" data-plan-ai-cover>
               {ai.cover.map((c) => {
-                const t = templateOf(c.template);
+                const key = c.kind === 'shoe' ? 'shoe' : `room-${c.room}`;
+                const label = c.kind === 'shoe' ? (() => { const t = templateOf('shoe'); return `${t.zh} ${t.en}`; })() : `${c.room} · ${c.roomName}`;
                 return c.status === 'existing' ? (
-                  <div key={c.template} className="flex items-center gap-1" style={{ color: '#5B8A72' }} data-plan-ai-cover-row="existing" data-template={c.template}>
-                    <Check size={12} /> {t.zh} {t.en}：图上已有 {c.codes.join('、')}（AI 不重复建议）— already on the plan
+                  <div key={key} className="flex items-center gap-1" style={{ color: '#5B8A72' }} data-plan-ai-cover-row="existing" data-template={c.template || ''} data-room={c.room || ''}>
+                    <Check size={12} /> {label}：图上已有 {c.codes.join('、')}（AI 不重复建议）— already on the plan
                   </div>
                 ) : (
-                  <div key={c.template} className="flex items-center gap-1.5 flex-wrap" style={{ color: c.required ? T.terra : T.wood }} data-plan-ai-cover-row="missing" data-template={c.template}>
-                    <AlertTriangle size={12} /> {t.zh} {t.en}：AI 没给{c.required ? '，一定要加' : ''} — {c.template === 'shoe' ? '在大门旁边画一个 Draw one by the main door' : '在电视墙画一个 Draw one on the TV wall'}
-                    <Btn onClick={onDraw} data-plan-ai-cover-draw={c.template}><Square size={12} /> 画柜子 Draw</Btn>
+                  <div key={key} className="flex items-center gap-1.5 flex-wrap" style={{ color: c.required ? T.terra : T.wood }} data-plan-ai-cover-row="missing" data-template={c.template || ''} data-room={c.room || ''}>
+                    <AlertTriangle size={12} /> {label}：{c.required ? 'AI 没给，一定要加 — 在大门旁边画一个 Draw one by the main door' : '还没有柜子 — 每间房都要一套 No cabinet in this room yet'}
+                    <Btn onClick={onDraw} data-plan-ai-cover-draw={c.template || c.room}><Square size={12} /> 画柜子 Draw</Btn>
                   </div>
                 );
               })}

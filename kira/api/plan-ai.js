@@ -13,8 +13,8 @@ import { timingSafeEqual } from 'node:crypto';
 
 export const MODEL = 'claude-opus-5-5';
 const MAX_BODY_CHARS = 6_000_000; // base64 图 ≈ 4.5 MB
-const TEMPLATES = ['wardrobe', 'kitchen', 'tv', 'shoe'];
-const ROOM_TYPES = ['kitchen', 'master', 'bedroom', 'living', 'dining', 'entrance', 'bathroom', 'other'];
+const TEMPLATES = ['wardrobe', 'kitchen', 'tv', 'shoe', 'sideboard', 'desk', 'vanity', 'blank'];
+const ROOM_TYPES = ['kitchen', 'master', 'bedroom', 'living', 'dining', 'entrance', 'study', 'utility', 'bathroom', 'balcony', 'other'];
 
 const point = { type: 'array', items: { type: 'number' }, description: '[x, y] in image pixels' };
 export const DOOR_TO = ['main', 'entry', 'bathroom', 'balcony', 'closet', 'other'];
@@ -38,7 +38,7 @@ export const RESULT_SCHEMA = {
         additionalProperties: false,
         required: ['type', 'name', 'box', 'doors', 'windows', 'bed'],
         properties: {
-          type: { type: 'string', enum: ROOM_TYPES },
+          type: { type: 'string', enum: ROOM_TYPES, description: 'living also covers a family hall / flexi area; utility = laundry, store room, utility room; balcony also covers yards, terraces, porches, the car porch and A/C ledges; other = stairs, corridors and anything else' },
           name: { type: 'string', description: 'Short unique English name, e.g. "Master Bedroom", "Bedroom 2", "Kitchen"' },
           box: { type: 'array', items: { type: 'number' }, description: '[x0, y0, x1, y1] inner bounds of the room in image pixels' },
           doors: {
@@ -94,8 +94,12 @@ Cabinet types you may suggest:
 - kitchen: base and top cabinets along the kitchen counter walls. One straight wall, an L (two walls meeting at a corner), a U (three walls) or a galley (two facing walls). Keep clear of doors; a window over the sink is fine.
 - tv: the TV wall in the living room, usually the long solid wall facing the sofa area.
 - shoe: a shoe / foyer cabinet beside the main entrance door, usually 1.0-1.5 m.
+- sideboard: a dining-room sideboard, or a dry-kitchen counter outside the wet kitchen, 1.2-3.0 m on a solid wall.
+- desk: a study desk in a study room, 1.2-2.4 m, preferably along a wall by the window.
+- vanity: a dressing table, 0.8-1.4 m (only as an extra in a bedroom, never instead of its wardrobe).
+- blank: a full-height storage cabinet for a utility / laundry / store room, 0.9-2.4 m.
 
-Cover the whole plan: one wardrobe in every bedroom and the master bedroom, the kitchen, the living room TV wall and a shoe cabinet at the main entrance. A sheet may show several floors side by side (for example "GROUND FLOOR PLAN" and "FIRST FLOOR PLAN"); read every floor. When a wall or a room is hard to read, still give your best suggestion with confidence "low" instead of leaving it out. Skip only rooms that have no possible wall.
+Think room by room: every room gets its own set of cabinets, except bathrooms / toilets, balconies, yards, terraces, porches, the car porch, A/C ledges, stairs and corridors. The main cabinet per room: bedroom and master bedroom = wardrobe; kitchen = kitchen; living room and family hall = tv; dining = sideboard; foyer / entrance = shoe; study = desk; utility, laundry or store room = blank. A sheet may show several floors side by side (for example "GROUND FLOOR PLAN" and "FIRST FLOOR PLAN"); read every floor. When a wall or a room is hard to read, still give your best suggestion with confidence "low" instead of leaving it out. Skip only rooms that have no possible wall.
 The shoe cabinet is required: whenever the plan shows the main entrance door, mark that door with to "main" and always suggest a shoe cabinet beside it (inside, against the wall next to the door, clear of its swing), with confidence "low" if unsure.
 Cabinets already drawn on the plan are listed below with their type. Do not suggest the same type again where one is already drawn, but still suggest every other type: for example a cabinet in the living room that is not a tv cabinet does not cover the TV wall.
 

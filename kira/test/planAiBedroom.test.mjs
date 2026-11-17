@@ -114,16 +114,45 @@ test('no auto shoe when the AI already gave one, or one is already drawn on the 
   assert.equal(drawn.filter((x) => x.template === 'shoe').length, 0);
 });
 
-test('AI panel coverage: "already on the plan: K1" for the TV; shoe missing (no main door found) is flagged as required', () => {
-  const k1 = { id: 'k1', code: 'K1', template: 'tv', place: { planId: 'p2', x: 0, y: 0, rot: 0 } };
-  const ai = { rooms: [{ ...living, doors: [] }], suggestions: [], notes: '' };
-  const rows = aiCoverage(ai, run(ai), [k1], 'p2');
-  assert.deepEqual(rows, [
-    { template: 'shoe', status: 'missing', required: true },
-    { template: 'tv', status: 'existing', codes: ['K1'] },
+test('AI panel, room by room (bathroom / balcony do not count): "already on the plan: K1" in the living room; empty bedroom flagged; shoe required', () => {
+  // K1 = 电视柜，已经放在客厅里（同用户的情况：AI 不重复建议，但清单要写出来）
+  const [tv] = run({ rooms: [living], suggestions: [{ template: 'tv', room: 'Living', segments: [[450, 540, 750, 540]], confidence: 'high', note: '' }], notes: '' });
+  const k1 = { ...tv.cab, id: 'k1', code: 'K1', template: 'tv' };
+  const rooms = [{ ...living, doors: [] }, master(), { type: 'bathroom', name: 'Bath', box: [460, 300, 520, 400] }, { type: 'balcony', name: 'Balcony', box: [100, 560, 460, 620] }];
+  const ai = { rooms, suggestions: [], notes: '' };
+  const rows = aiCoverage(ai, run(ai), [k1], plan, { sentW: 1200 });
+  assert.deepEqual(rows.map((r) => [r.kind, r.room || r.template, r.status, (r.codes || []).join()]), [
+    ['shoe', 'shoe', 'missing', ''],
+    ['room', 'Living', 'existing', 'K1'],
+    ['room', 'Master Bedroom', 'missing', ''],
   ]);
-  // 楼上（只有卧室）：不吵着要鞋柜 / 电视柜
-  assert.deepEqual(aiCoverage({ rooms: [master()] }, [], [], 'p2'), []);
+  assert.equal(rows[0].required, true);
+  assert.equal(rows[2].roomName, 'Master Bedroom 主卧');
+  // 楼上（只有卧室）：不吵着要鞋柜；有建议的房间不列
+  const up = { rooms: [master()], suggestions: [{ template: 'wardrobe', room: 'Master Bedroom', segments: [[100, 100, 340, 100]], confidence: 'high', note: '' }], notes: '' };
+  assert.deepEqual(aiCoverage(up, run(up), [], plan, { sentW: 1200 }), []);
+});
+
+test('more cabinet types per room: dining sideboard, study desk, store room tall cabinet; room names', () => {
+  const rooms = [
+    { type: 'dining', name: 'Dining', box: [100, 100, 400, 400], doors: [], windows: [], bed: [] },
+    { type: 'study', name: 'Study', box: [400, 100, 700, 400], doors: [], windows: [], bed: [] },
+    { type: 'utility', name: 'Store', box: [700, 100, 900, 300], doors: [], windows: [], bed: [] },
+  ];
+  const s = run({ rooms, suggestions: [
+    { template: 'sideboard', room: 'Dining', segments: [[120, 100, 300, 100]], confidence: 'high', note: '' },
+    { template: 'desk', room: 'Study', segments: [[420, 100, 580, 100]], confidence: 'high', note: '' },
+    { template: 'blank', room: 'Store', segments: [[720, 100, 840, 100]], confidence: 'high', note: '' },
+  ], notes: '' });
+  assert.deepEqual(s.map((x) => [x.template, x.ok, x.cab?.spec?.W, x.roomName]), [
+    ['sideboard', true, 1800, 'Dining 餐厅'],
+    ['desk', true, 1600, 'Study 书房'],
+    ['blank', true, 1200, 'Storeroom 储藏室'],
+  ]);
+  assert.equal(roomZoneName({ type: 'living', name: 'Family' }), 'Family Hall 家庭厅');
+  assert.equal(roomZoneName({ type: 'utility', name: 'Laundry' }), 'Laundry 洗衣房');
+  assert.match(SYSTEM_PROMPT, /every room gets its own set of cabinets, except bathrooms/);
+  assert.ok(RESULT_SCHEMA.properties.suggestions.items.properties.template.enum.includes('desk'));
 });
 
 test('plan-ai: existing cabinets are sent with their type; prompt makes the shoe cabinet required and only skips the same type', () => {
