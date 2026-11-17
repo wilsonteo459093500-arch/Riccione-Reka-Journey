@@ -10,6 +10,7 @@ import {
   uid, findCompany, worthScore, emailDomain, pickWhatsApp, DEFAULT_PROFILE, splitTags,
 } from './logic.js';
 import { mergeList, appendFacts } from './talk.js';
+import { relationOf, bandOf } from './relation.js';
 
 const Ctx = createContext(null);
 export const useStore = () => useContext(Ctx);
@@ -83,6 +84,7 @@ export function StoreProvider({ children }) {
       circlesBy: group(data.person_circles, 'person_id'),
       photoPeopleBy: group(data.photo_people, 'person_id'),
       peopleByPhoto: group(data.photo_people, 'photo_id'),
+      now: Date.now(), // 好感度、该不该联系都用同一个「现在」算
     };
   }, [data]);
 
@@ -98,6 +100,8 @@ export function StoreProvider({ children }) {
       circles: (index.circlesBy.get(p.id) || []).map((pc) => ({ ...index.circles.get(pc.circle_id), link: pc })).filter((c) => c.id),
       photos: (index.photoPeopleBy.get(p.id) || []).map((pp) => index.photos.get(pp.photo_id)).filter(Boolean)
         .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))),
+      // 第 3 阶段：好感度、趋势、上次联系、该不该联系了（由互动记录算出来）
+      rel: relationOf(p, interactions, index.now),
     };
   }, [index]);
 
@@ -284,9 +288,59 @@ export function StoreProvider({ children }) {
       return put('interactions', { ...interaction, ai: { ...interaction.ai, action_items: items } });
     }
 
+    /** 第 3 阶段：快速记一笔「联系过了」（今日行动 / 提示卡用） */
+    async function quickContact(personId, kind = 'message', title = '') {
+      const person = dataRef.current.people.find((p) => p.id === personId);
+      if (!person) throw new Error('找不到这个人');
+      const at = nowIso();
+      const saved = await put('interactions', { person_id: personId, kind, source: 'manual', occurred_at: at, title: title || { message: '发了讯息', call: '打了电话', meeting: '见面' }[kind] || '联系', summary: '' });
+      await put('people', { ...person, last_contact_at: at, snooze_until: person.snooze_until ? null : person.snooze_until });
+      return saved;
+    }
+
+    /** 晚点再说：N 天内不出现在「今天该找谁」 */
+    async function snooze(personId, days) {
+      const person = dataRef.current.people.find((p) => p.id === personId);
+      if (!person) throw new Error('找不到这个人');
+      let until = null;
+      if (days > 0) {
+        const d = new Date();
+        d.setDate(d.getDate() + days);
+        until = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      }
+      try {
+        return await put('people', { ...person, snooze_until: until });
+      } catch (e) {
+        if (/snooze_until/.test(String(e.message))) throw new Error('资料库还没升级：Supabase 重跑一次 schema.sql（见 DEPLOY.md「第 3 阶段升级」）');
+        throw e;
+      }
+    }
+
+    /**
+     * 好感度存回 people.affinity（汇出、以后群发筛选用）：差 3 分以上才写；
+     * 跨过一个等级（朋友 → 点头之交）再记一笔快照，画趋势、看历史用。
+     */
+    async function syncAffinity(views) {
+      let n = 0;
+      for (const v of views) {
+        const a = v.rel.affinity;
+        if (Math.abs((v.affinity ?? 50) - a) < 3) continue;
+        const row = dataRef.current.people.find((p) => p.id === v.id);
+        if (!row) continue;
+        const from = bandOf(row.affinity ?? 50);
+        const saved = await put('people', { ...row, affinity: a });
+        if (from.key !== bandOf(a).key) await snapshot(saved, `好感度：${from.label} → ${bandOf(a).label}`);
+        if (++n >= 40) break; // 一次最多 40 个，剩下的下次开 app 再补
+      }
+      return n;
+    }
+
     return {
       reload,
       logUsage,
+      quickContact,
+      snooze,
+      syncAffinity,
       saveTalk,
       toggleActionItem,
       ensureCompany,
@@ -365,13 +419,23 @@ export function StoreProvider({ children }) {
     };
   }, [put, drop, reload, view, index, me, profile]);
 
+  // 每天第一次打开时，把算出来的好感度存回资料库（只写变化大的）
+  const synced = useRef(false);
+  useEffect(() => {
+    if (loading || error || synced.current || !people.length) return;
+    synced.current = true;
+    let today = '';
+    try { today = new Date().toDateString(); if (localStorage.getItem('space:affinity-sync') === today) return; } catch { /* 无痕模式 */ }
+    actions.syncAffinity(people).then(() => { try { localStorage.setItem('space:affinity-sync', today); } catch { /* 无痕模式 */ } }).catch(() => null);
+  }, [loading, error, people, actions]);
+
   const value = { data, people, view, profile, me, loading, error, mode: repo.mode, imageUrl: repo.imageUrl, ...actions };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
 /** 把 view 加的衍生字段拿掉，只留数据库栏位 */
 export function stripView(p) {
-  const { company, resources, interactions, meetings, circles, photos, ...row } = p;
+  const { company, resources, interactions, meetings, circles, photos, rel, ...row } = p;
   return row;
 }
 

@@ -74,6 +74,22 @@
 
 ---
 
+## 第 3 阶段升级（关系图 + 今日行动 + TickTick）
+
+1. Supabase → **SQL Editor** → 最新的 `network/supabase/schema.sql` **整份再跑一次**
+   （补上 `people.snooze_until`，给「晚点再说」用；不会删资料）
+2. **TickTick（选填，但建议接）**：
+   1. 电脑打开 TickTick 网页版 → 左上头像 → **设定** → **帐户** → **API Token** → 产生 / 复制
+      （找不到这个选项的话：TickTick 有改过位置，搜一下设定里的「API」；真的没有，就先用下面的 .ics 方式）
+   2. Vercel → Settings → Environment Variables → 加 `TICKTICK_TOKEN` = 刚刚复制的 token，勾 **Sensitive**
+   3. （选填）想放进某个清单而不是收集箱：加 `TICKTICK_PROJECT_ID` = 清单 ID（TickTick 网页版打开那个清单，网址 `#p/<这一段>/tasks` 就是）
+3. Vercel → Deployments → 最新那次 → ⋯ → **Redeploy**
+
+没设 `TICKTICK_TOKEN` 也能用：「排时间」会变成「下载行事历档（.ics）」，手机点开就加进行事历。
+TickTick 的 token 只在服务器，前端拿不到；这个功能不用 AI，不扣 AI 预算。
+
+---
+
 ## 5) 验收清单（第 1 阶段）
 
 - [ ] 手机上扫 3 张真的名片：名字、电话、公司对不对？哪里常错记下来
@@ -92,6 +108,18 @@
 - [ ] **截图**：3 张聊天截图 → 抄出来的对话对不对？
 - [ ] 「答应过的事」打勾 → 移到「做完的」
 - [ ] 换帐号测 RLS：第二个帐号看不到任何对话 / 逐字稿
+
+## 7) 验收清单（第 3 阶段：关系图 + 今日行动）
+
+- [ ] 打开 app 先看到「今日」：答应过的事（到期的排最前）、刚认识 3 天内的人、太久没联系的（核心每 2 周 / 重要每月 / 活跃每 2 个月 / 认识每 4 个月）
+- [ ] 一个人按「联系过了」→ 从今日消失（除非还有答应的事没做）；「晚点再说 → 3 天后」→ 3 天内不出现
+- [ ] **TickTick**：一个人按「排时间」→ 选时间 →「排进 TickTick」→ TickTick 里出现时间盒，内容有提示卡和 WhatsApp 连结；再试「一键排进 TickTick」排 3 个人，时间一个接一个
+- [ ] 没设 token 时：「下载行事历档」→ iPhone 点开能加进行事历
+- [ ] **提示卡**：见面前打开一个有对话记录的人 →「见面提示卡」：别聊、答应的事、上次聊什么、可以聊的话题都对吗？
+- [ ] **找资源**：打「律师」「建筑师」「贷款」，结果合不合理？关系浅的有没有提醒「先联络感情」
+- [ ] **星系**（电脑）：核心圈在最里面；好感度高的比较靠近中心；滑过去看得到名字和上次联系；点下去打开那个人
+- [ ] 人物页「关系」：好感度条 + 半年曲线；补记一笔半年前的见面，曲线跟着变
+- [ ] 换帐号测 RLS：第二个帐号的「今日」「星系」都是空的；按「排进 TickTick」应该回「这个帐号不是主人」
 
 ---
 
@@ -130,4 +158,7 @@ npm test                     # 单元测试（不会真的呼叫 AI）
 | iPhone 拍的照片读不到 | 设定 → 相机 → 格式 → 选「最兼容」（不要 HEIC） |
 | 读取失败：relation "people" does not exist | `schema.sql` 没跑 |
 | 存对话时「avoid_topics column」/「resources_source_check」错误 | 第 2 阶段的升级没跑：`schema.sql` 整份再跑一次 |
+| 按「晚点再说」出现「资料库还没升级」 | 第 3 阶段的升级没跑：`schema.sql` 整份再跑一次 |
+| 「还没接 TickTick」 / 只有「下载行事历档」 | 没设 `TICKTICK_TOKEN`，或设了没 Redeploy |
+| 「TickTick 不接受这个 token」 | Token 过期或复制不完整：重新产生、贴进 `TICKTICK_TOKEN`、Redeploy |
 | WhatsApp 档案「读不到讯息」 | 选错档案了；iPhone 要选整个 .zip（或里面的 `_chat.txt`） |

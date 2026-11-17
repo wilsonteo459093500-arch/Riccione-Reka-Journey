@@ -1,5 +1,5 @@
 -- =====================================================================
--- 人脉 App · Supabase schema（第 1 阶段定稿 + 第 2 阶段升级）
+-- 人脉 App · Supabase schema（第 1 阶段定稿 + 第 2、3 阶段升级）
 -- ---------------------------------------------------------------------
 -- 只给自己用：每一列都有 owner（= 登入的人），RLS 规定只能读写自己的。
 -- 照片 / 名片放私有 bucket「network」，路径 <user id>/<photo id>.jpg，
@@ -217,6 +217,10 @@ create index if not exists ai_usage_owner_at on public.ai_usage (owner, at desc)
 alter table public.people add column if not exists avoid_topics text[] not null default '{}';  -- 要避开的话题
 alter table public.resources drop constraint if exists resources_source_check;
 alter table public.resources add constraint resources_source_check check (source in ('manual','ai','talk'));
+
+-- ---------- 第 3 阶段升级（关系图 + 今日行动）----------
+alter table public.people add column if not exists snooze_until date;   -- 「晚点再说」：这天以前不出现在今日行动
+-- people.affinity 现在由互动记录算出来（app 每天存回一次）；relationship_snapshots 记好感度跨等级的变化
 
 -- ---------- updated_at trigger + RLS（每张表一样）----------
 do $$
