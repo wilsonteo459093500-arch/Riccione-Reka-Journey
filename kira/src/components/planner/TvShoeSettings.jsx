@@ -1,7 +1,7 @@
 // 电视柜 / 鞋柜 设定
 import { T } from '../../theme.js';
 import { TV_LOW_UNITS, TV_SIDE_KINDS, TV_UPPER_UNITS, SHOE_STYLES, SHOE_UNITS, tvRun } from '../../planner/tvshoe.js';
-import { Section, Segmented, Toggle, MeterInput, Collapse } from './bits.jsx';
+import { Section, Segmented, Toggle, MeterInput, Collapse, WorktopToggles } from './bits.jsx';
 import { DEFAULT_CEILING, mmToM } from '../../planner/model.js';
 
 // 房间没填楼高：模板按默认 2.70 m 做到顶（同衣柜的提示）
@@ -43,7 +43,7 @@ export function TvSettings({ cab, setSpec, ceilingH, variant }) {
       </Section>
       <Section title={sb ? 'Base cabinet 地柜' : 'Low cabinet 低柜'}>
         {sb ? (
-          <Toggle on={!!s.worktop} onChange={(worktop) => setSpec({ worktop })} label="Show worktop 显示台面（仅示意，台面价钱另外手动加）" />
+          <WorktopToggles cab={cab} setSpec={setSpec} />
         ) : (
           <Segmented value={s.lowKind} onChange={(lowKind) => setSpec({ lowKind })}
             options={[{ id: 'floating', label: '悬空 Floating' }, { id: 'floor', label: '落地 On floor' }]} />

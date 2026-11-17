@@ -10,6 +10,7 @@
 //   踢脚 / 柜脚 / 底层架空 = 按总高算（并入最下面那格）
 //   整列空位（电器位）= 不计价
 //   两边露出 = 见光板 深×高 × 墙板价（系列跟门板）
+//   岩板台面 = 台面延米 ÷ 0.3 × RM240（frame.stone：厨房 / 岛台 / 干厨勾了「加岩板」；转角照算；不折扣）
 //
 // 换算（每一竖条 s 宽）：hp = 这条里所有非空格的高度（含并入的底座）
 //   延米柜（frame 价高 <1m）：门板/柜体延米 += s × 格高 / hp（叠在一起的格只算一次宽度）
@@ -17,6 +18,7 @@
 //   开放格：平米 += s × 格高（旧工具开放柜本来就按 长×高）
 // ============================================================
 import { computeQuote, computeItem, isLinear, CARCASS_SERIES, OPEN_SERIES, DOOR_SERIES } from '../constants/pricing.js';
+import { SINTERED_MYR_PER_M } from '../constants/stone.js';
 import { layoutLeaves, bodyHeight, mmToM, DEFAULT_GLASS_COEF } from './model.js';
 import { pickL, FRAME_KIND_NAME } from './lang.js';
 import { shelfBoards, shelfKind, bracketLabel } from '../constants/shelves.js';
@@ -154,12 +156,25 @@ export function backdropItems(cab, frame, defaults = {}, ser = resolveSeries(cab
     panelSeries: ser.door, noDiscount: false, kira: { cabinetId: cab.id, frameId: frame.id, part: 'tvWall' } }];
 }
 
+// 岩板台面：台面延米 = 地柜宽 + 转角（同柜子「每面墙各量到墙角」）。要 frame.worktop 和 frame.stone 都开
+export function stoneLength(frame) {
+  if (!frame?.worktop || !frame?.stone) return 0;
+  return (Math.max(0, frame.W || 0) + Math.max(0, Number(frame.cornerW) || 0)) / 1000;
+}
+export function stoneItems(cab, frame) {
+  const L = stoneLength(frame);
+  if (!(L > 0)) return [];
+  const i18n = { en: 'Sintered Stone Worktop', zh: '岩板台面', uomEn: 'L.m', uomZh: '延米' };
+  return [{ id: `${cab.id}:${frame.id}:stone`, type: 'other', name: frame.label || '', desc: 'Sintered stone worktop 岩板台面', qty: L, uom: 'm',
+    unitMyr: SINTERED_MYR_PER_M, noDiscount: true, kira: { cabinetId: cab.id, frameId: frame.id, part: 'stone', i18n } }];
+}
+
 export function frameItems(cab, frame, defaults = {}) {
   if (frame?.kind === 'backdrop') return backdropItems(cab, frame, defaults);
   const ser = resolveSeries(cab, defaults);
   const seriesOf = (node) => resolveLeafSeries(cab, node, defaults, ser);
   const { linear, pricedH, q, qBy, drawersBy } = frameQuantities(frame, seriesOf);
-  const shelves = shelfItems(cab, frame, defaults, ser);
+  const shelves = [...shelfItems(cab, frame, defaults, ser), ...stoneItems(cab, frame)];
   if (pricedH <= 0) return shelves;
   const Hm = pricedH / 1000;
   const Dm = (frame.D || 0) / 1000;
@@ -255,11 +270,11 @@ export function computeRecordQuote(r) {
   return localizeKira(computeQuote(deriveZones(r.zones || [], r.defaults || {}), r.adjustPct, r.discountMode, r.discountAmt));
 }
 
-// 旧工具的「其他」行只有一个描述字串（中英同一句）→ KIRA 自己的行（飘板）换成中英各一句、单位 pc / 块。只改文字，不改钱。
+// 旧工具的「其他」行只有一个描述字串（中英同一句）→ KIRA 自己的行换成中英各一句；单位默认 pc / 块（飘板），岩板 L.m / 延米。只改文字，不改钱。
 export function localizeLines(item, lines) {
   const t = item?.kira?.i18n;
   if (!t) return lines;
-  return lines.map((ln) => ({ ...ln, descEn: t.en, descZh: t.zh, uomEn: 'pc', uomZh: '块' }));
+  return lines.map((ln) => ({ ...ln, descEn: t.en, descZh: t.zh, uomEn: t.uomEn || 'pc', uomZh: t.uomZh || '块' }));
 }
 export function localizeKira(computed) {
   if (!computed?.zoneResults) return computed;

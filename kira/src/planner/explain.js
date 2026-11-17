@@ -12,6 +12,7 @@ const PART = {
   panelBack: { en: 'Island back panel', zh: '岛台背面见光板' },
   shelf: { en: 'Floating shelves', zh: '飘板' },
   tvWall: { en: 'Feature wall', zh: '电视墙' },
+  stone: { en: 'Sintered stone worktop', zh: '岩板台面' },
 };
 
 export function explainCabinet(cab, defaults = {}) {

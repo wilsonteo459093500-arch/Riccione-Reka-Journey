@@ -1,7 +1,7 @@
 // 岛台 设定：尺寸 · 底座 · 背面（见光板 / 两面都是柜）· 每格单元 · 台面（仅示意）
 import { T } from '../../theme.js';
 import { ISLAND_UNITS, ISLAND_BACKS } from '../../planner/island.js';
-import { Section, Segmented, Toggle, MeterInput, Tip } from './bits.jsx';
+import { Section, Segmented, Toggle, MeterInput, Tip, WorktopToggles } from './bits.jsx';
 import { mmToM } from '../../planner/model.js';
 
 function Units({ units, widths, onSet }) {
@@ -51,8 +51,7 @@ export default function IslandSettings({ cab, setSpec }) {
         </Section>
       )}
       <Section title="Worktop 台面">
-        <Toggle on={!!s.worktop} onChange={(worktop) => setSpec({ worktop })} label="Show worktop 显示台面（仅示意，台面价钱另外手动加）" />
-        <div className="mt-1"><Tip>Worktop is not priced (same as the kitchen) 台面不计价（同厨房）</Tip></div>
+        <WorktopToggles cab={cab} setSpec={setSpec} />
       </Section>
     </div>
   );

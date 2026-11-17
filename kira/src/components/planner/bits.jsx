@@ -3,6 +3,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Minus, Plus, ChevronDown, ChevronRight, Info } from 'lucide-react';
 import { T } from '../../theme.js';
 import { parseMetersToMm, mmToM } from '../../planner/model.js';
+import { stoneLength } from '../../planner/bridge.js';
+import { SINTERED_STEP_M, SINTERED_STEP_MYR, SINTERED_MYR_PER_M } from '../../constants/stone.js';
+import { fmtMYR } from '../../constants/pricing.js';
 
 // 打字的米数 → mm 整数。员工常直接打毫米：某一项 ≥ 100 就当毫米（2700 → 2.70 m）。
 // 每一项各自判断，「2.86+2.6」「2400+1200」「2.4+600」都对。只有这一条规则（不猜厘米）。
@@ -168,5 +171,30 @@ export function Tip({ children }) {
     <span className="inline-flex items-start gap-1 text-[11px]" style={{ color: T.inkSoft }}>
       <Info size={12} className="mt-0.5 shrink-0" /> <span>{children}</span>
     </span>
+  );
+}
+
+// 台面：显示台面（只是图）+ 加岩板（按台面延米计价：延米 ÷ 0.3 × RM240，不折扣）。厨房 / 岛台 / 干厨共用
+export function WorktopToggles({ cab, setSpec }) {
+  const s = cab?.spec || {};
+  const L = (cab?.frames || []).reduce((a, f) => a + stoneLength(f), 0);
+  return (
+    <div data-worktop>
+      <Toggle on={!!s.worktop} onChange={(worktop) => setSpec({ worktop })} label="Show worktop 显示台面" />
+      {s.worktop ? (
+        <div className="mt-1" data-stone>
+          <Toggle on={!!s.stone} onChange={(stone) => setSpec({ stone })} label="Sintered stone 加岩板台面" />
+          <div className="mt-0.5">
+            <Tip>
+              {s.stone && L > 0
+                ? <span data-stone-price>{mmToM(L * 1000)} 延米 ÷ {SINTERED_STEP_M} × RM{SINTERED_STEP_MYR} = {fmtMYR(L * SINTERED_MYR_PER_M)}（岩板不折扣 No discount）</span>
+                : <>按台面延米 ÷ {SINTERED_STEP_M} × RM{SINTERED_STEP_MYR} 计价，不折扣 — Priced per running metre of worktop, no discount</>}
+            </Tip>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-0.5"><Tip>Worktop hidden — no sintered stone 台面关掉就不能加岩板</Tip></div>
+      )}
+    </div>
   );
 }
