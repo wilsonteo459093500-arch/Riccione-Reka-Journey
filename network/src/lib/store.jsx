@@ -9,6 +9,7 @@ import { shrinkImage } from './image.js';
 import {
   uid, findCompany, worthScore, emailDomain, pickWhatsApp, DEFAULT_PROFILE, splitTags,
 } from './logic.js';
+import { mergeList, appendFacts } from './talk.js';
 
 const Ctx = createContext(null);
 export const useStore = () => useContext(Ctx);
@@ -208,8 +209,10 @@ export function StoreProvider({ children }) {
           name: person.name, title: person.title, company: company ? company.name : '', card_notes: person.card_notes,
           how_met: person.how_met, notes: person.notes, interests: person.interests, tags: person.tags,
           circles: v.circles.map((c) => (c.link.role ? `${c.name}（${c.link.role}）` : c.name)),
-          has: v.resources.filter((r) => r.kind === 'has' && r.source === 'manual').map((r) => r.label),
-          needs: v.resources.filter((r) => r.kind === 'needs' && r.source === 'manual').map((r) => r.label),
+          // 手动加的 + 从对话整理、勾选过的（上一次 AI 推测的不算，会被这次换掉）
+          has: v.resources.filter((r) => r.kind === 'has' && r.source !== 'ai').map((r) => r.label),
+          needs: v.resources.filter((r) => r.kind === 'needs' && r.source !== 'ai').map((r) => r.label),
+          avoid_topics: person.avoid_topics || [],
           interactions: v.interactions.slice(0, 10).map((i) => `${String(i.occurred_at).slice(0, 10)} ${i.title} ${i.summary}`.trim()),
         },
         company: company && company.background ? company.background : (company ? { name: company.name, industry: company.industry } : {}),
@@ -228,9 +231,64 @@ export function StoreProvider({ children }) {
       return person;
     }
 
+    /**
+     * 第 2 阶段：对话整理好、勾选过 → 写进人物档案
+     *   interaction（逐字稿 + AI 结果）、兴趣、资源（source = talk）、备注后面接近况、要避开的话题、上次联系
+     * pick = 使用者勾选要留的：{ interests, has, needs, give, facts, avoid_topics, action_items }
+     */
+    async function saveTalk(personId, { source, kind, occurredAt, title, summary, transcript, analysis = null, pick = {}, range = null }) {
+      let person = dataRef.current.people.find((p) => p.id === personId);
+      if (!person) throw new Error('找不到这个人');
+      const at = occurredAt || nowIso();
+      const day = at.slice(0, 10);
+      const { transcript: _shot, ...rest } = analysis || {}; // 截图抄出来的字放 interactions.transcript，不重复放 ai
+      // 存进 ai 的也只放勾选过的（没勾的 = 本人认为 AI 抓错了，下次不要再看到）
+      const ai = analysis ? {
+        ...rest,
+        ...Object.fromEntries(['interests', 'has', 'needs', 'give', 'facts', 'avoid_topics'].map((k) => [k, pick[k] || []])),
+        action_items: (pick.action_items || []).map((x) => ({ ...x, done: false })),
+        range,
+      } : (range ? { range } : null);
+      const interaction = await put('interactions', {
+        person_id: personId, kind, source, occurred_at: at, title: title || '', summary: summary || '', transcript: transcript || null, ai,
+      });
+
+      const patch = {};
+      if (pick.interests && pick.interests.length) patch.interests = mergeList(person.interests || [], pick.interests);
+      if (pick.avoid_topics && pick.avoid_topics.length) patch.avoid_topics = mergeList(person.avoid_topics || [], pick.avoid_topics);
+      if (pick.facts && pick.facts.length) patch.notes = appendFacts(person.notes, pick.facts, day);
+      if (['meeting', 'call', 'message', 'event'].includes(kind) && (!person.last_contact_at || at > person.last_contact_at)) patch.last_contact_at = at;
+      if (Object.keys(patch).length) person = await put('people', { ...person, ...patch });
+
+      const have = new Set(dataRef.current.resources.filter((r) => r.person_id === personId && r.source !== 'ai').map((r) => `${r.kind}:${r.label.trim().toLowerCase()}`));
+      const rows = [
+        ...(pick.has || []).map((x) => ['has', x.label, x.detail]),
+        ...(pick.needs || []).map((x) => ['needs', x.label, x.detail]),
+        ...(pick.give || []).map((x) => ['give', x.idea, x.why]),
+      ];
+      for (const [k, label, detail] of rows) {
+        const key = `${k}:${String(label).trim().toLowerCase()}`;
+        if (!label || have.has(key)) continue;
+        have.add(key);
+        // 跟上一次深度分析推测的一样 → 换成「对话里确认过」的那一笔
+        const guess = dataRef.current.resources.find((r) => r.person_id === personId && r.source === 'ai' && `${r.kind}:${r.label.trim().toLowerCase()}` === key);
+        if (guess) await drop('resources', guess.id);
+        await put('resources', { person_id: personId, kind: k, label, detail: [detail, `${day} 对话`].filter(Boolean).join(' · '), source: 'talk' });
+      }
+      return interaction;
+    }
+
+    /** 承诺打勾 / 取消 */
+    async function toggleActionItem(interaction, index) {
+      const items = ((interaction.ai && interaction.ai.action_items) || []).map((x, i) => (i === index ? { ...x, done: !x.done, done_at: x.done ? null : nowIso() } : x));
+      return put('interactions', { ...interaction, ai: { ...interaction.ai, action_items: items } });
+    }
+
     return {
       reload,
       logUsage,
+      saveTalk,
+      toggleActionItem,
       ensureCompany,
       addPhoto,
       saveFromCard,

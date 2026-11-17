@@ -8,7 +8,7 @@ import { Logo, MeaningRow } from './Login.jsx';
 
 const RATE = Number(import.meta.env.VITE_USD_TO_MYR || 4.4);
 const BUDGET_MYR = Number(import.meta.env.VITE_AI_MONTHLY_BUDGET_MYR || 50);
-const FEATURE = { scan_card: '名片识别', company: '公司背景', assess: '深度分析' };
+const FEATURE = { scan_card: '名片识别', company: '公司背景', assess: '深度分析', talk: '对话分析' };
 
 export default function Settings() {
   const store = useStore();

@@ -1,10 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { Search, ScanLine, Users } from 'lucide-react';
+import { Search, ScanLine, Users, MessagesSquare } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
 import { matchPerson, SORTS, tierCounts, relDay } from '../lib/logic.js';
 import { Avatar, Chip, TierBadge, WorthGem, Spinner, Button, cx } from './ui.jsx';
 
-export default function PeopleList({ selectedId, onOpen, onScan }) {
+export default function PeopleList({ selectedId, onOpen, onScan, onTalk }) {
   const { people, loading, error, reload } = useStore();
   const [q, setQ] = useState('');
   const [tier, setTier] = useState('all');
@@ -21,10 +21,17 @@ export default function PeopleList({ selectedId, onOpen, onScan }) {
       <div className="space-y-3 px-4 pb-3 pt-4">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-semibold tracking-tight">人脉 <span className="text-base font-normal text-faint">{people.length}</span></h1>
-          <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="排序"
-            className="rounded-lg border border-line bg-white px-2 py-1 text-sm text-muted">
-            {Object.entries(SORTS).map(([k, s]) => <option key={k} value={k}>{s.label}</option>)}
-          </select>
+          <div className="flex items-center gap-2">
+            {people.length > 0 && (
+              <button onClick={onTalk} className="flex items-center gap-1 rounded-lg border border-line bg-white px-2 py-1 text-sm font-medium text-ink hover:border-ink/30 lg:hidden">
+                <MessagesSquare className="h-4 w-4" />记对话
+              </button>
+            )}
+            <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="排序"
+              className="rounded-lg border border-line bg-white px-2 py-1 text-sm text-muted">
+              {Object.entries(SORTS).map(([k, s]) => <option key={k} value={k}>{s.label}</option>)}
+            </select>
+          </div>
         </div>
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />

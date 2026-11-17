@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import {
   ChevronLeft, MessageCircle, Phone, Mail, Sparkles, RefreshCw, Pencil, Trash2, Plus, Globe, MapPin,
   Building2, ExternalLink, Gift, Users, CalendarDays, AlertTriangle, MessagesSquare,
+  AudioLines, Mic, Images, ScanLine, PenLine, ListChecks, Ban, ChevronDown,
 } from 'lucide-react';
 import { useStore, stripView } from '../lib/store.jsx';
 import { DIMS, TIERS, worthVerdict, waLink, fmtDate, relDay, splitTags } from '../lib/logic.js';
 import { Avatar, Button, Chip, Section, TierBadge, WorthGem, Input, Textarea, Field, Sheet, Spinner, useToast, cx, inputCls } from './ui.jsx';
 import PhotoGrid from './PhotoGrid.jsx';
 import { PhonesEditor } from './ScanCard.jsx';
+import { openPromises, MOODS, SOURCE_BY_KEY } from '../lib/talk.js';
 
 export default function PersonDetail({ id, onBack, autoAnalyze, onAnalyzed }) {
   const store = useStore();
@@ -73,6 +75,9 @@ export default function PersonDetail({ id, onBack, autoAnalyze, onAnalyzed }) {
             {p.met_on && <span>认识于 {fmtDate(p.met_on)}</span>}
             {p.last_contact_at && <span>上次联系 {relDay(p.last_contact_at)}</span>}
           </div>
+          {(p.avoid_topics || []).length > 0 && (
+            <div className="mt-1.5 flex items-start gap-1 text-[13px] text-danger"><Ban className="mt-0.5 h-3.5 w-3.5 shrink-0" />别聊：{p.avoid_topics.join('、')}</div>
+          )}
         </div>
       </div>
 
@@ -97,6 +102,9 @@ export default function PersonDetail({ id, onBack, autoAnalyze, onAnalyzed }) {
           </button>
         ))}
       </div>
+
+      {/* ---------- 答应过的事（第 2 阶段：从对话整理出来的）---------- */}
+      <PromisesSection person={p} />
 
       {/* ---------- 值得认识吗 ---------- */}
       <Section
@@ -250,8 +258,8 @@ function ResourceRow({ person, kind, label }) {
       <div className="mb-1.5 text-[13px] font-medium text-muted">{label}</div>
       <div className="flex flex-wrap gap-1.5">
         {list.map((r) => (
-          <Chip key={r.id} tone={r.source === 'ai' ? 'ai' : kind} title={r.detail || (r.source === 'ai' ? 'AI 推测的' : '')} onRemove={() => store.removeResource(r.id)}>
-            {r.source === 'ai' && '✦ '}{r.label}
+          <Chip key={r.id} tone={r.source === 'ai' ? 'ai' : kind} title={r.detail || (r.source === 'ai' ? 'AI 推测的' : r.source === 'talk' ? '从对话整理的' : '')} onRemove={() => store.removeResource(r.id)}>
+            {r.source === 'ai' && '✦ '}{r.source === 'talk' && '💬 '}{r.label}
           </Chip>
         ))}
         <form onSubmit={add} className="inline-flex">
@@ -350,7 +358,12 @@ function InteractionsSection({ person }) {
   return (
     <Section
       title={<span>见面 / 互动 <span className="font-normal text-faint">{person.interactions.length}</span></span>}
-      action={<Button size="sm" variant="ghost" onClick={() => setOpen(!open)}><Plus className="h-4 w-4" />记一笔</Button>}
+      action={(
+        <div className="flex gap-1">
+          <Button size="sm" variant="ghost" onClick={() => setOpen(!open)}><Plus className="h-4 w-4" />记一笔</Button>
+          <a href={`#/p/${person.id}/talk`} className="inline-flex h-8 items-center gap-1.5 rounded-xl bg-plum px-3 text-sm font-medium text-white hover:bg-plum-deep"><MessagesSquare className="h-4 w-4" />加对话</a>
+        </div>
+      )}
     >
       {open && (
         <form onSubmit={add} className="mb-4 space-y-2 rounded-xl bg-ink/5 p-3">
@@ -368,19 +381,93 @@ function InteractionsSection({ person }) {
           </div>
         </form>
       )}
-      {person.interactions.length === 0 && <p className="text-sm text-faint">还没有记录</p>}
+      {person.interactions.length === 0 && <p className="text-sm text-faint">还没有记录。见完面按「加对话」：贴 Plaud 逐字稿、说一段语音备注，或导入 WhatsApp 聊天记录。</p>}
       <ol className="relative space-y-3 border-l border-line pl-4">
-        {person.interactions.map((i) => (
-          <li key={i.id} className="group">
-            <span className="absolute -left-[5px] mt-1.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-ink/30" />
-            <div className="flex items-baseline justify-between gap-2">
-              <div className="text-sm"><span className="font-medium">{i.title || KIND_LABEL[i.kind]}</span> <span className="text-xs text-faint">{KIND_LABEL[i.kind]} · {fmtDate(i.occurred_at)}</span></div>
-              <button onClick={() => window.confirm('删掉这笔记录？') && store.removeInteraction(i.id)} className="text-faint opacity-0 hover:text-danger group-hover:opacity-100" aria-label="删除记录"><Trash2 className="h-3.5 w-3.5" /></button>
-            </div>
-            {i.summary && <p className="mt-0.5 whitespace-pre-wrap text-[13px] text-muted">{i.summary}</p>}
-          </li>
-        ))}
+        {person.interactions.map((i) => <InteractionItem key={i.id} i={i} onRemove={() => window.confirm('删掉这笔记录？') && store.removeInteraction(i.id)} />)}
       </ol>
+    </Section>
+  );
+}
+
+const SOURCE_ICON = { plaud: AudioLines, voice: Mic, whatsapp_txt: MessageCircle, whatsapp_screenshot: Images, card: ScanLine, manual: PenLine };
+
+function InteractionItem({ i, onRemove }) {
+  const [open, setOpen] = useState(false);
+  const a = i.ai && i.ai.summary !== undefined ? i.ai : null; // 有 AI 整理过
+  const Icon = SOURCE_ICON[i.source] || PenLine;
+  const mood = a && a.mood ? MOODS[a.mood.tone] : null;
+  const src = SOURCE_BY_KEY[i.source];
+  const range = i.ai && i.ai.range;
+  const details = a && [
+    ['兴趣', a.interests], ['他有的', (a.has || []).map((x) => x.label)], ['他需要的', (a.needs || []).map((x) => x.label)],
+    ['我可以帮他的', (a.give || []).map((x) => x.idea)], ['近况 / 个人', a.facts], ['提到的人', (a.people_mentioned || []).map((x) => `${x.name}（${x.context}）`)],
+    ['下次可以聊', a.next_topics], ['要避开', a.avoid_topics],
+  ].filter(([, v]) => v && v.length);
+  const expandable = (details && details.length) || i.transcript;
+  return (
+    <li className="group">
+      <span className="absolute -left-[9px] mt-0.5 flex h-[18px] w-[18px] items-center justify-center rounded-full border-2 border-white bg-paper text-muted" title={src ? src.label : KIND_LABEL[i.kind]}>
+        <Icon className="h-3 w-3" />
+      </span>
+      <div className="flex items-baseline justify-between gap-2">
+        <div className="text-sm">
+          <span className="font-medium">{i.title || KIND_LABEL[i.kind]}</span>{' '}
+          <span className="text-xs text-faint">{KIND_LABEL[i.kind]} · {fmtDate(i.occurred_at)}{src ? ` · ${src.short}` : ''}{range ? ` · ${range.count} 则` : ''}</span>
+          {mood && <span className="ml-1.5 inline-block h-2 w-2 rounded-full align-middle" style={{ background: mood.color }} title={`气氛：${mood.label}${a.mood.note ? ` —— ${a.mood.note}` : ''}`} />}
+        </div>
+        <button onClick={onRemove} className="text-faint opacity-0 hover:text-danger focus:opacity-100 group-hover:opacity-100" aria-label="删除记录"><Trash2 className="h-3.5 w-3.5" /></button>
+      </div>
+      {i.summary && <p className="mt-0.5 whitespace-pre-wrap text-[13px] text-muted">{i.summary}</p>}
+      {expandable && (
+        <button onClick={() => setOpen(!open)} className="mt-1 flex items-center gap-0.5 text-xs font-medium text-muted hover:text-ink" aria-expanded={open}>
+          <ChevronDown className={cx('h-3.5 w-3.5 transition-transform', open && 'rotate-180')} />{open ? '收起' : details && details.length ? '看整理的重点' : '看原文'}
+        </button>
+      )}
+      {open && (
+        <div className="mt-2 space-y-2 rounded-xl bg-ink/[0.03] p-2.5 text-[13px]">
+          {details && details.map(([k, v]) => (
+            <div key={k}><span className="text-muted">{k}：</span>{v.join('、')}</div>
+          ))}
+          {i.transcript && (
+            <details>
+              <summary className="cursor-pointer text-muted">原文 {i.transcript.length.toLocaleString()} 字</summary>
+              <pre className="mt-1.5 max-h-80 overflow-y-auto whitespace-pre-wrap font-sans text-[13px] leading-relaxed">{i.transcript}</pre>
+            </details>
+          )}
+        </div>
+      )}
+    </li>
+  );
+}
+
+function PromisesSection({ person }) {
+  const store = useStore();
+  const toast = useToast();
+  const [showDone, setShowDone] = useState(false);
+  const open = openPromises(person.interactions);
+  const done = person.interactions.flatMap((it) => ((it.ai && it.ai.action_items) || []).map((item, index) => ({ interaction: it, index, item }))).filter((x) => x.item.done);
+  if (!open.length && !done.length) return null;
+  const toggle = (x) => store.toggleActionItem(x.interaction, x.index).catch((e) => toast(e.message, 'error'));
+  const who = { me: '我', him: '他', both: '一起' };
+  const row = (x, isDone) => (
+    <li key={`${x.interaction.id}:${x.index}`}>
+      <label className="flex cursor-pointer gap-2.5 rounded-lg p-1 hover:bg-ink/[0.03]">
+        <input type="checkbox" checked={isDone} onChange={() => toggle(x)} className="mt-0.5 h-4 w-4 shrink-0 accent-[#22A55B]" />
+        <span className={cx('min-w-0 text-sm', isDone && 'text-faint line-through')}>
+          <span className={cx('mr-1 rounded px-1 text-[11px] font-semibold', x.item.who === 'me' ? 'bg-plum/15 text-plum-deep' : 'bg-ink/5 text-muted')}>{who[x.item.who] || '我'}</span>
+          {x.item.what}
+          <span className="ml-1 text-xs text-faint">{[x.item.due, fmtDate(x.interaction.occurred_at)].filter(Boolean).join(' · ')}</span>
+        </span>
+      </label>
+    </li>
+  );
+  return (
+    <Section
+      title={<span className="flex items-center gap-1.5"><ListChecks className="h-4 w-4 text-plum" />答应过的事 {open.length > 0 && <span className="font-normal text-faint">{open.length}</span>}</span>}
+      action={done.length > 0 && <button onClick={() => setShowDone(!showDone)} className="text-xs text-muted hover:text-ink">{showDone ? '收起做完的' : `做完的 ${done.length}`}</button>}
+    >
+      {open.length ? <ul className="space-y-0.5">{open.map((x) => row(x, false))}</ul> : <p className="text-sm text-faint">都做完了 👍</p>}
+      {showDone && <ul className="mt-2 space-y-0.5 border-t border-line pt-2">{done.map((x) => row(x, true))}</ul>}
     </Section>
   );
 }
@@ -409,6 +496,7 @@ function InfoSection({ person }) {
       <div className="space-y-4">
         <TagEditor label="兴趣" values={person.interests || []} onChange={(interests) => save({ interests })} />
         <TagEditor label="标签" values={person.tags || []} onChange={(tags) => save({ tags })} />
+        <TagEditor label="要避开的话题" values={person.avoid_topics || []} onChange={(avoid_topics) => save({ avoid_topics })} />
         <dl className="space-y-2 text-sm">
           {(person.phones || []).map((ph, i) => <Row key={i} icon={Phone} label={ph.label}><a className="text-sky-700" href={`tel:${ph.number.replace(/[^\d+]/g, '')}`}>{ph.number}</a></Row>)}
           {(person.emails || []).map((e) => <Row key={e} icon={Mail}><a className="break-all text-sky-700" href={`mailto:${e}`}>{e}</a></Row>)}

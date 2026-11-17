@@ -37,7 +37,7 @@ Wilson 想要一个**只给自己用**的人脉管理 app，用来记录每个�
 | 阶段 | 内容 | 建议用的模型 / effort |
 |---|---|---|
 | **1 资料库 + 名片扫描** ✅ | 数据结构、登录；手机拍名片 → AI 识别 → 公司背景查询 → 4 个维度评分 →"我可以给他什么资源（家具以外）"建议；上传合照；人物详情页 | Opus 5.5 · high（地基要打稳） |
-| **2 对话输入与分析** | Plaud 逐字稿导入（先确认 Plaud 有没有开放 API，没有就用分享/导出的文字）、语音备注（可以用手机键盘语音输入或 Plaud 录）、WhatsApp .txt 和截图 → AI 提取兴趣、需求、资源、情绪 → 写进人物档案 | Opus 5.5 · medium |
+| **2 对话输入与分析** ✅ | Plaud 逐字稿导入（先确认 Plaud 有没有开放 API，没有就用分享/导出的文字）、语音备注（可以用手机键盘语音输入或 Plaud 录）、WhatsApp .txt 和截图 → AI 提取兴趣、需求、资源、情绪 → 写进人物档案 | Opus 5.5 · medium |
 | **3 Sims 关系图 + 今日行动** | 好感度衰减公式、圈层对应的联系频率、"今天该找谁"、"要找人帮忙时谁有这个资源"搜索；卡片列表 + 星系图；见面前的提示卡；一键排进 TickTick（官方 Open API） | Opus 5.5 · high |
 | **4 个人名片页 + FoloToy + NFC** | 可以放视频的单页名片（静态页，加载要快）、二维码；NFC 贴纸写入链接；FoloToy 开源固件（ESP32-C3、240×320 屏幕）里加一个显示二维码的小应用 | 网页：Sonnet 5.5 · medium；FoloToy 固件：Opus 5.5 · high |
 | **5 WhatsApp 半自动群发 + 话术** | 按标签、圈层选人 → AI 帮每个人写不同的话（按卡耐基原则：叫名字、提他感兴趣的事、真诚赞美）→ 生成卡片 → 逐个点开 `wa.me`；记录活动出席；根据回应调整以后的话术、标出"要避开的话题" | Sonnet 5.5 · medium |
@@ -47,7 +47,7 @@ Wilson 想要一个**只给自己用**的人脉管理 app，用来记录每个�
 **app 里的 AI 怎么选模型（控制在 RM50/月）：** 名片识别、日常摘要用 Haiku 5.5；深度分析、公司背景、话术用 Sonnet 5.5（只在按"深度分析"按钮时才跑）；公司背景查一次就存起来，不重复查。
 
 ## 待确认风险
-- Plaud 有没有给第三方 app 用的 API → 第 2 阶段一开始先查
+- ~~Plaud 有没有给第三方 app 用的 API~~ → 查过了（2026-11）：没有给个人用的公开 API（官方指向 Plaud MCP / CLI；Developer Platform 是给硬件厂商的 Embedded SDK）→ 用汇出的 TXT / SRT
 - FoloToy 背面的 NFC 能不能写入还不清楚 → 先准备 NTAG215 贴纸作为保底方案
 - WhatsApp 导出的聊天记录含有对方的个人资料 → 私有存储 + 只有本人能看（用户已经选择全部保留）
 
@@ -61,3 +61,8 @@ Wilson 想要一个**只给自己用**的人脉管理 app，用来记录每个�
 - **第 1 阶段 ✅**（2026-11）：资料库 + 登入 + 扫名片 + 公司背景 + 4 维度评分 +「我能给他什么」+ 合照 + 人物页。做了什么见 `README.md`，上线步骤见 `DEPLOY.md`。
   - 还没用真名片和真 API 测：部署后照 `DEPLOY.md` 第 5 节验收（扫 3 张真名片、换帐号测 RLS）
   - 留给后面阶段的栏位已经建好：`interactions.transcript / ai`（第 2 阶段）、`people.affinity` + `relationship_snapshots`（第 3 阶段）、`events / attendance`（第 5 阶段）
+- **第 2 阶段 ✅**（2026-11）：Plaud 逐字稿（贴上 / 上传 TXT·SRT）、语音备注、WhatsApp 汇出（iPhone .zip / Android .txt，只送上次之后的新讯息）、WhatsApp 截图 → Haiku 整理 → 勾选 → 写进档案（兴趣、资源、近况、要避开的话题、「答应过的事」）。做了什么见 `README.md`「第 2 阶段」，升级步骤见 `DEPLOY.md`「第 2 阶段升级」+ 第 6 节验收。
+  - 还没用真的 Plaud 档案 / 真的 WhatsApp 汇出 / 真的 API 测（用的是假资料 + 假 AI 回应）
+  - 留给第 3 阶段：每笔对话的 `ai.mood.score`（-2 ~ +2）可以进好感度公式；没做完的承诺（`openPromises()`）可以进「今日行动」和 TickTick；`ai.next_topics` + `people.avoid_topics` 可以进见面前的提示卡
+  - 没做（以后可以加）：Android PWA「分享到 S.T.A.R」直接收 WhatsApp 档案（Web Share Target；iPhone 不支援）；在 app 里直接录音
+

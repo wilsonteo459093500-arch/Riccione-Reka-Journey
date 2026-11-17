@@ -35,6 +35,7 @@ async function post(path, body) {
   let data = null;
   try { data = await res.json(); } catch { /* 不是 JSON */ }
   if (!res.ok) {
+    if (res.status === 413) throw new ApiError(413, { message: '内容太大了（截图请少选几张，逐字稿请分段）' });
     if (res.status === 404) throw new ApiError(404, { message: '找不到 AI 服务（本机开发请在 .env.local 放 ANTHROPIC_API_KEY 后 npm run dev）' });
     throw new ApiError(res.status, data || {});
   }
@@ -45,4 +46,5 @@ export const api = {
   scanCard: (images) => post('scan-card', { images }),
   company: (info) => post('company', info),
   assess: (payload) => post('assess', payload),
+  analyzeTalk: (payload) => post('analyze-talk', payload),
 };

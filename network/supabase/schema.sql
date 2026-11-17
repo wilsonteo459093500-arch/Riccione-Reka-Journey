@@ -1,5 +1,5 @@
 -- =====================================================================
--- 人脉 App · Supabase schema（第 1 阶段定稿）
+-- 人脉 App · Supabase schema（第 1 阶段定稿 + 第 2 阶段升级）
 -- ---------------------------------------------------------------------
 -- 只给自己用：每一列都有 owner（= 登入的人），RLS 规定只能读写自己的。
 -- 照片 / 名片放私有 bucket「network」，路径 <user id>/<photo id>.jpg，
@@ -109,13 +109,13 @@ create table if not exists public.resources (
   kind text not null check (kind in ('has','needs','give')),
   label text not null,
   detail text not null default '',
-  source text not null default 'manual' check (source in ('manual','ai')),
+  source text not null default 'manual' check (source in ('manual','ai','talk')),  -- talk = 从对话整理、本人勾选过的
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 create index if not exists resources_person on public.resources (person_id);
 
--- ---------- 互动记录：见面、对话（第 2 阶段会接 Plaud / WhatsApp）----------
+-- ---------- 互动记录：见面、对话（Plaud / 语音备注 / WhatsApp 汇出 / 截图）----------
 create table if not exists public.interactions (
   id uuid primary key default gen_random_uuid(),
   owner uuid not null default auth.uid() references auth.users(id) on delete cascade,
@@ -126,7 +126,7 @@ create table if not exists public.interactions (
   title text not null default '',
   summary text not null default '',
   transcript text,                         -- 逐字稿（私密，只有本人看得到）
-  ai jsonb,                                -- AI 摘要：兴趣、需求、资源、情绪
+  ai jsonb,                                -- /api/analyze-talk 的结果：兴趣、需求、资源、情绪、承诺（action_items[].done）
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -210,6 +210,11 @@ create table if not exists public.ai_usage (
   updated_at timestamptz not null default now()
 );
 create index if not exists ai_usage_owner_at on public.ai_usage (owner, at desc);
+
+-- ---------- 第 2 阶段升级（对话输入）：旧的资料库重跑这份就会补上 ----------
+alter table public.people add column if not exists avoid_topics text[] not null default '{}';  -- 要避开的话题
+alter table public.resources drop constraint if exists resources_source_check;
+alter table public.resources add constraint resources_source_check check (source in ('manual','ai','talk'));
 
 -- ---------- updated_at trigger + RLS（每张表一样）----------
 do $$

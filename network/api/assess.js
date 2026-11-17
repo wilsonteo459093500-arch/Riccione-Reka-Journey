@@ -85,8 +85,9 @@ export function buildAssessPrompt({ me = {}, person = {}, company = {} }) {
       ['标签', list(person.tags)],
       ['已知他有的', list(person.has)],
       ['已知他需要的', list(person.needs)],
+      ['要避开的话题', list(person.avoid_topics)],
       ['我的备注', cleanText(person.notes, 1500)],
-      ['互动记录', list(person.interactions, 10)],
+      ['互动记录（新的在前）', list(person.interactions, 10)],
     ]),
     block('他的公司（网上查到的）', [
       ['名称', cleanText(company.name, 200)],

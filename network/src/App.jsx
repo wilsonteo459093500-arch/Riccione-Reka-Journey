@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Users, ScanLine, UserRound } from 'lucide-react';
+import { Users, ScanLine, UserRound, MessagesSquare } from 'lucide-react';
 import { supabase, cloudConfigured } from './lib/supabase.js';
 import { StoreProvider, useStore } from './lib/store.jsx';
 import Login, { Logo } from './components/Login.jsx';
@@ -7,11 +7,15 @@ import PeopleList from './components/PeopleList.jsx';
 import PersonDetail from './components/PersonDetail.jsx';
 import ScanCard from './components/ScanCard.jsx';
 import Settings from './components/Settings.jsx';
+import TalkImport from './components/TalkImport.jsx';
 import { ToastProvider, Spinner, cx } from './components/ui.jsx';
 
-/* ---------- 路由：#/  #/p/<id>  #/scan  #/me ---------- */
+/* ---------- 路由：#/  #/p/<id>  #/p/<id>/talk  #/talk  #/scan  #/me ---------- */
 function parseHash() {
   const h = window.location.hash.replace(/^#/, '') || '/';
+  const t = /^\/p\/([\w-]+)\/talk$/.exec(h);
+  if (t) return { name: 'talk', personId: t[1] };
+  if (h === '/talk') return { name: 'talk', personId: null };
   const m = /^\/p\/([\w-]+)(\?analyze)?$/.exec(h);
   if (m) return { name: 'person', id: m[1], analyze: !!m[2] };
   if (h === '/scan') return { name: 'scan' };
@@ -70,6 +74,7 @@ function Shell() {
         <Logo className="mb-4 h-9 w-9" />
         <SideBtn icon={Users} label="人脉" active={listActive} onClick={() => go('/')} />
         <SideBtn icon={ScanLine} label="扫名片" active={route.name === 'scan'} onClick={() => go('/scan')} />
+        <SideBtn icon={MessagesSquare} label="记对话" active={route.name === 'talk'} onClick={() => go('/talk')} />
         <SideBtn icon={UserRound} label="我" active={route.name === 'me'} onClick={() => go('/me')} />
       </nav>
 
@@ -81,7 +86,7 @@ function Shell() {
           <div className="flex min-h-0 flex-1">
             {/* 列表：手机只在 list 显示；电脑一直在左边 */}
             <div className={cx('h-full w-full lg:w-[380px] lg:shrink-0 lg:border-r lg:border-line', route.name === 'person' && 'hidden lg:block')}>
-              <PeopleList selectedId={route.id} onOpen={openPerson} onScan={() => go('/scan')} />
+              <PeopleList selectedId={route.id} onOpen={openPerson} onScan={() => go('/scan')} onTalk={() => go('/talk')} />
             </div>
             <div className={cx('h-full min-w-0 flex-1 overflow-y-auto', route.name === 'list' && 'hidden lg:block')}>
               {route.name === 'person' ? (
@@ -105,13 +110,21 @@ function Shell() {
                 onDone={(id, { analyze }) => { if (analyze) setAnalyzeId(id); openPerson(id); }}
               />
             )}
+            {route.name === 'talk' && (
+              <TalkImport
+                key={route.personId || 'any'}
+                personId={route.personId}
+                onCancel={() => (route.personId ? openPerson(route.personId) : go('/'))}
+                onDone={(id) => openPerson(id)}
+              />
+            )}
             {route.name === 'me' && <Settings />}
           </div>
         )}
       </main>
 
       {/* 手机：底部导航，中间大按钮扫名片 */}
-      {route.name !== 'scan' && (
+      {route.name !== 'scan' && route.name !== 'talk' && (
         <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
           <div className="mx-auto flex max-w-md items-end justify-around px-6">
             <TabBtn icon={Users} label="人脉" active={listActive} onClick={() => go('/')} />
