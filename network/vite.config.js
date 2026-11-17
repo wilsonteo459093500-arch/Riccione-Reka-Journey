@@ -44,6 +44,8 @@ export default defineConfig(({ mode }) => {
       localApi(),
       VitePWA({
         registerType: 'autoUpdate',
+        // 不自动塞进每个 html：公开名片页 /c 不要帮访客下载整个 SPACE（src/main.jsx 自己注册）
+        injectRegister: false,
         includeAssets: ['icon.svg', 'apple-touch-icon.png'],
         manifest: {
           name: 'SPACE — Seek · Profile · Assist · Connect · Evolve',
