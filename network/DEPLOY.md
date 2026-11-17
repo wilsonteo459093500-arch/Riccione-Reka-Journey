@@ -1,4 +1,4 @@
-# 人脉簿 · 部署指南（Vercel + Supabase）
+# S.T.A.R · 部署指南（Vercel + Supabase）
 
 大概 20 分钟。照顺序做。
 

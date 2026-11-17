@@ -23,8 +23,9 @@ export default function Login() {
       <form onSubmit={submit} className="w-full max-w-sm space-y-5">
         <div className="text-center">
           <Logo className="mx-auto h-14 w-14" />
-          <h1 className="mt-4 text-2xl font-semibold tracking-tight">人脉簿</h1>
-          <p className="mt-1 text-sm text-muted">只有你看得到的人脉资料库</p>
+          <h1 className="mt-4 text-3xl font-semibold tracking-[0.2em]">S.T.A.R</h1>
+          <p className="mt-1 text-sm italic text-muted">Strong Ties Are Riches</p>
+          <MeaningRow className="mt-4" />
         </div>
         <div className="space-y-3 rounded-2xl border border-line bg-white p-4">
           <Field label="邮箱">
@@ -42,15 +43,42 @@ export default function Login() {
   );
 }
 
+/** S.T.A.R 的四个动作：寻找 → 珍惜 → 帮助 → 再联系 */
+export const STAR_WORDS = [
+  { letter: 'S', word: 'Seek', zh: '寻找' },
+  { letter: 'T', word: 'Treasure', zh: '珍惜' },
+  { letter: 'A', word: 'Assist', zh: '帮助' },
+  { letter: 'R', word: 'Reconnect', zh: '再联系' },
+];
+
+export function MeaningRow({ className = '' }) {
+  return (
+    <div className={`grid grid-cols-4 gap-1 ${className}`}>
+      {STAR_WORDS.map((w) => (
+        <div key={w.letter} className="text-center">
+          <div className="text-lg font-semibold text-plum-deep">{w.letter}</div>
+          <div className="text-[11px] font-medium text-ink">{w.word}</div>
+          <div className="text-[11px] text-faint">{w.zh}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** 图示：中间一颗星（你），周围的点是人脉，连线 = 关系，椭圆 = 轨道 */
 export function Logo({ className }) {
   return (
-    <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
+    <svg viewBox="0 0 64 64" className={className} role="img" aria-label="S.T.A.R">
       <rect width="64" height="64" rx="16" fill="#1C1917" />
-      <path d="M32 9 L46 25 L32 55 L18 25 Z" fill="#22A55B" />
-      <path d="M32 9 L46 25 L32 28 Z" fill="#fff" opacity=".35" />
-      <circle cx="16" cy="44" r="4" fill="#F7F5F0" opacity=".9" />
-      <circle cx="48" cy="44" r="4" fill="#F7F5F0" opacity=".9" />
-      <path d="M19 43 L29 36 M45 43 L35 36" stroke="#F7F5F0" strokeWidth="2" opacity=".6" />
+      <ellipse cx="32" cy="33" rx="25" ry="11" transform="rotate(-18 32 33)" fill="none" stroke="#F7F5F0" strokeWidth="1.2" opacity=".28" />
+      <g stroke="#F7F5F0" strokeWidth="1.3" opacity=".55">
+        <path d="M32 32 L10 42" /><path d="M32 32 L54 22" /><path d="M32 32 L47 46" /><path d="M32 32 L18 19" />
+      </g>
+      <g fill="#F7F5F0">
+        <circle cx="10" cy="42" r="3.2" /><circle cx="54" cy="22" r="3.2" /><circle cx="47" cy="46" r="2.6" /><circle cx="18" cy="19" r="2.4" />
+      </g>
+      <path d="M32 15 L36.2 27.8 L49 32 L36.2 36.2 L32 49 L27.8 36.2 L15 32 L27.8 27.8 Z" fill="#22A55B" />
+      <path d="M32 15 L36.2 27.8 L32 32 Z M49 32 L36.2 27.8 L32 32 Z" fill="#fff" opacity=".32" />
     </svg>
   );
 }

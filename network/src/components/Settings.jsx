@@ -4,6 +4,7 @@ import { useStore } from '../lib/store.jsx';
 import { supabase } from '../lib/supabase.js';
 import { monthUsage, tierCounts, DEFAULT_PROFILE } from '../lib/logic.js';
 import { Button, Field, Section, Textarea, Input, useToast } from './ui.jsx';
+import { Logo, MeaningRow } from './Login.jsx';
 
 const RATE = Number(import.meta.env.VITE_USD_TO_MYR || 4.4);
 const BUDGET_MYR = Number(import.meta.env.VITE_AI_MONTHLY_BUDGET_MYR || 50);
@@ -29,7 +30,7 @@ export default function Settings() {
     const blob = new Blob([JSON.stringify({ exported_at: new Date().toISOString(), ...store.data }, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `人脉-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `STAR-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
@@ -89,6 +90,13 @@ export default function Settings() {
           {supabase && <Button variant="outline" size="sm" onClick={() => supabase.auth.signOut()}><LogOut className="h-4 w-4" />登出</Button>}
         </div>
       </Section>
+
+      <div className="flex flex-col items-center gap-2 pt-4 text-center">
+        <Logo className="h-10 w-10" />
+        <div className="text-sm font-semibold tracking-[0.2em]">S.T.A.R</div>
+        <div className="text-xs italic text-muted">Strong Ties Are Riches</div>
+        <MeaningRow className="mt-1 w-full max-w-xs" />
+      </div>
     </div>
   );
 }
