@@ -11,7 +11,9 @@
 
 -- ---------- 共用：updated_at 自动更新 ----------
 create or replace function public.network_touch() returns trigger
-language plpgsql as $$
+language plpgsql
+set search_path = ''   -- 锁定 search_path（Supabase 安全检查 0011）；只用到 now()，系统内建
+as $$
 begin
   new.updated_at = now();
   return new;
