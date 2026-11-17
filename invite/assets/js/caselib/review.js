@@ -1058,7 +1058,10 @@
       '<button class="mini" type="button" id="rv-auto" title="文件夹名的风格、区域，子文件夹名的空间（厨房、主卧…）和柜子（橱柜、衣柜…）：只填空的，人改过的不动">按文件夹名字自动标</button>' +
       '<button class="mini" type="button" id="rv-export" title="备份分类、给同事汇入：只有标签（没有照片）。里面有项目的文件夹名（客户名字）：只给同事，不要传给客户、也不要放进有外人的群组">汇出标签档（备份）</button>' +
       '<label class="mini" id="rv-import-lbl" title="同事汇出的标签档：这台电脑有的照片马上套用，还没有的等汇入那个文件夹后自动套用">汇入标签档' +
-        '<input type="file" id="rv-import" accept=".json,application/json" hidden /></label></div>' +
+        '<input type="file" id="rv-import" accept=".json,application/json" hidden /></label>' +
+      (MB.clAi ? '<button class="mini dark" type="button" id="rv-ai-open" aria-expanded="false" aria-controls="rv-ai" title="文件夹名看不出风格、柜子的照片：让 Claude 一张一张看">AI 看图标风格、柜子</button>' : '') +
+      '</div>' +
+      (MB.clAi ? '<div class="rv-ai" id="rv-ai" hidden></div>' : '') +
       '<div class="tidy-msg" id="rv-tags-msg" aria-live="polite"></div>';
     host.parentNode.insertBefore(el, host);
   }
@@ -1076,6 +1079,7 @@
     ['#rv-auto', '#rv-export'].forEach(function (id) { var b = $(id); if (b) b.disabled = !!R.bulk; });
     var inp = $('#rv-import');
     if (inp) inp.disabled = !!R.bulk;
+    drawAi();
   }
   function setTagsMsg(msg, err) { TG.msg = msg; TG.err = !!err; drawTags(); }
   /* 存在这台电脑没有别的备份：人改过的分类只在这个浏览器。还没汇出过、或上次汇出之后又改了不少 → 提醒一下 */
@@ -1243,13 +1247,158 @@
     });
   }
 
+  /* ============================================================
+     AI 看图标风格、柜子（MB.clAi）
+     - 一个项目一个项目看，看完那个项目就送一次 patch（source:'auto'，跟「按文件夹名字自动标」同一条路）
+     - API key、进度只存在这台电脑（localStorage）；送出去的只有照片本身
+     ============================================================ */
+  var AI = { open: false, runner: null, st: null, msg: '', err: false };
+  function usd(x) { return 'US$' + (x < 1 ? x.toFixed(2) : x < 100 ? x.toFixed(1) : Math.round(x)); }
+  function drawAi() {
+    var el = $('#rv-ai'), A = MB.clAi;
+    var ob = $('#rv-ai-open');
+    if (ob) ob.setAttribute('aria-expanded', String(AI.open));
+    if (!el || !A) return;
+    el.hidden = !AI.open;
+    if (!AI.open) return;
+    // 正在打 key 的时候背景重画：留住打到一半的字
+    var old = $('#rv-ai-key'), typed = old ? old.value : '', focused = old && document.activeElement === old;
+    var key = A.getKey(), running = R.bulk === 'ai';
+    var store = A.loadStore();
+    var html = '<p class="hint">Claude 一张一张看照片，标好<b>风格</b>（一个项目定一种）和<b>柜类</b>（只算定制的柜子）。' +
+      '有把握的标成「自动标签」，没把握的标成「不确定」；人确认过、改过的不会动。' +
+      '送出去的只有照片本身（缩成 1024px、没有 EXIF / GPS）—— <b>文件夹名、客户名字不会送出去</b>。</p>';
+    if (!key) {
+      html += '<div class="ai-key"><input type="password" id="rv-ai-key" autocomplete="off" spellcheck="false" placeholder="sk-ant-…（Anthropic API key）" />' +
+        '<button class="mini dark" type="button" data-ai="save-key">存在这台电脑</button></div>' +
+        '<p class="muted">key 只存在这台电脑的这个浏览器，不会上传、不会进 repo。到 console.anthropic.com → API Keys 拿一把。</p>';
+    } else {
+      html += '<p class="muted">API key 已经存在这台电脑 · <button class="linkish" type="button" data-ai="clear-key"' + (running ? ' disabled' : '') + '>清除 key</button></p>';
+    }
+    if (running && AI.st) {
+      var st = AI.st, pr = cat().projects[st.pid];
+      html += '<p class="ai-prog"><b>看了 ' + CL.n(st.done) + ' / ' + CL.n(st.total) + ' 张</b>' + (st.failed ? '（' + CL.n(st.failed) + ' 张没看成）' : '') +
+        ' · 花了约 ' + usd(st.spent) + (pr ? ' · 现在：' + esc(pr.name) : '') + '</p>' +
+        '<div class="btn-row"><button class="mini" type="button" data-ai="stop"' + (st.stopped ? ' disabled' : '') + '>' + (st.stopped ? '停下来中…（看完手上这几张）' : '暂停') + '</button></div>';
+    } else {
+      var groups = A.plan(cat(), store), n = A.countPlan(groups);
+      html += '<p>' + (n ? '还有 <b>' + CL.n(n) + '</b> 张要看（' + groups.length + ' 个项目），全部大约 <b>' + usd(n * A.EST_PER_PHOTO) + '</b>。'
+        : '没有要看的照片了（隐藏的、已确认 / 不确定的、AI 看过的都不算）。') +
+        (store.spent ? ' 到目前一共花了约 ' + usd(store.spent) + '。' : '') + '</p>';
+      if (n > 300) html += '<p class="warn">照片很多：建议先在上面「整理空间」按「只留最好的 N 张」（例：35 张），重复的先隐藏（可以复原），再来标 —— 便宜很多，业务也不用翻几百张差不多的照片。</p>';
+      var off = !key || !n || !!R.bulk;
+      if (n) html += '<div class="btn-row">' +
+        '<button class="mini dark" type="button" data-ai="trial"' + (off ? ' disabled' : '') + '>先试 ' + Math.min(A.TRIAL, n || A.TRIAL) + ' 张</button>' +
+        '<button class="mini" type="button" data-ai="all"' + (off ? ' disabled' : '') + '>' + (store.spent ? '继续，全部看完' : '全部开始') + '</button></div>';
+    }
+    if (AI.msg) html += '<p class="' + (AI.err ? 'err' : 'ok') + '">' + esc(AI.msg) + '</p>';
+    el.innerHTML = html;
+    var inp = $('#rv-ai-key');
+    if (inp && typed) inp.value = typed;
+    if (inp && focused) inp.focus();
+  }
+  function aiMsg(msg, err) { AI.msg = msg; AI.err = !!err; drawAi(); }
+
+  function runAi(limit) {
+    var A = MB.clAi, key = A && A.getKey();
+    if (!key || R.bulk) return Promise.resolve();
+    R.bulk = 'ai';
+    AI.st = null;
+    aiMsg('', false);
+    drawTags();
+    drawTidyMsg();
+    function finish() {
+      R.bulk = '';
+      AI.runner = null;
+      return CL.loadCatalog(true).then(function () { reapplyQueue(); }, function () { /* 下次再拿 */ }).then(function () { render(); });
+    }
+    return settleAll().then(function (left) {
+      if (left) { aiMsg('还有 ' + CL.n(left) + ' 项修改没保存好' + (R.err ? '（' + R.err + '）' : '') + '：先等它保存完再试。', true); return; }
+      var store = A.loadStore();
+      var groups = A.plan(cat(), store, limit ? { limit: limit, perProject: A.TRIAL_PER_PROJECT } : null);
+      if (!A.countPlan(groups)) { aiMsg('没有要看的照片了。', false); return; }
+      var runner = A.makeRunner({
+        store: store,
+        index: cat,
+        look: function (h) {
+          var c = cat(), ph = c.photos[h];
+          var src = ph && c.base ? c.base + ph.k : CL.thumbs[h];
+          if (!src) return Promise.reject(new Error('no_photo'));
+          return A.shrink(src).then(function (b64) { return A.callApi(key, b64); });
+        },
+        send: function (p) {
+          return sendAll(patchBodies(p)).then(function (res) {
+            if (!res.ok) { var e = new Error(tagsFail(res.r)); e.fatal = true; throw e; }
+            return CL.loadCatalog(true).then(function () { reapplyQueue(); render(); }, function () { /* 下次再拿 */ });
+          });
+        },
+        save: function () { A.saveStore(store); },
+        progress: function (st) { AI.st = st; drawAi(); }
+      });
+      AI.runner = runner;
+      // 讯息等 finish() 重新载入清单、重画之后才出现（不会先看到「停下来中…」又跳回来）
+      return runner.run(groups).then(function (st) {
+        AI.err = false;
+        AI.msg = ((st.stopped ? '暂停了：' : '好了：') + '看了 ' + CL.n(st.done) + ' 张、花了约 ' + usd(st.spent) +
+          (st.failed ? '；' + CL.n(st.failed) + ' 张没看成（再按一次会再试）' : '') +
+          '。接着在「项目」选一个项目看一眼：错的点开改，对的按「这个项目看过了，全部确认」。「状态」选「不确定」可以先看 AI 没把握的。' +
+          '改完记得「汇出标签档（备份）」。');
+      }, function (e) {
+        AI.err = true;
+        AI.msg = (e && e.message) || '没做完，请再试一次';
+      });
+    }).then(finish, function (e) { aiMsg((e && e.message) || '没做完，请再试一次', true); return finish(); });
+  }
+  function onAi(act) {
+    var A = MB.clAi;
+    if (act === 'save-key') {
+      var v = ($('#rv-ai-key') || {}).value || '';
+      v = v.trim();
+      if (!/^sk-ant-\S{10,}$/.test(v)) return aiMsg('这不像 Anthropic 的 API key（应该是 sk-ant- 开头）。', true);
+      if (!A.setKey(v)) return aiMsg('这个浏览器存不了 key（无痕视窗？）：请用一般的 Chrome / Edge 视窗。', true);
+      $('#rv-ai-key').value = '';
+      aiMsg('key 存好了（只在这台电脑）。', false);
+    } else if (act === 'clear-key') {
+      A.setKey('');
+      aiMsg('key 清掉了。', false);
+    } else if (act === 'trial') runAi(A.TRIAL);
+    else if (act === 'all') runAi(0);
+    else if (act === 'stop') { if (AI.runner) AI.runner.stop(); drawAi(); }
+  }
+
+  /* 一个项目「看过了」：还是「自动标签」的照片一次改成「已确认」（人工 patch；不确定的要一张一张看，不在这里） */
+  function autoInProject(pid) {
+    var c = cat();
+    return Object.keys(c.photos).filter(function (h) { var ph = c.photos[h]; return ph.p === pid && !ph.hidden && ph.status === 'auto'; });
+  }
+  function confirmProject(pid) {
+    var hs = autoInProject(pid);
+    if (!hs.length) return;
+    if (!window.confirm('这个项目还是「自动标签」的 ' + hs.length + ' 张照片，全部改成「已确认」？\n（错的请先点开改；改成已确认之后，自动标签就不会再动它们）')) return;
+    hs.forEach(function (h) {
+      var q = R.queue.photos[h] || (R.queue.photos[h] = {});
+      q.status = 'confirmed';
+      applyFields('photos', h, { status: 'confirmed' });
+    });
+    scheduleFlush();
+    drawSave();
+    render();
+    CL.toast('已确认 ' + CL.n(hs.length) + ' 张', 3000);
+  }
+
   function bindTags() {
     var el = $('#rv-tags');
     if (!el) return;
     el.addEventListener('click', function (e) {
+      var ai = e.target.closest('[data-ai]');
+      if (ai) { onAi(ai.getAttribute('data-ai')); return; }
+      if (e.target.closest('#rv-ai-open')) { AI.open = !AI.open; drawAi(); if (AI.open && $('#rv-ai-key')) $('#rv-ai-key').focus(); return; }
       if (e.target.closest('#rv-auto')) runAuto();
       else if (e.target.closest('#rv-export')) runExport();
       else if (e.target.closest('[data-act="clear-pending"]')) runClearPending();
+    });
+    el.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && e.target.id === 'rv-ai-key') { e.preventDefault(); onAi('save-key'); }
     });
     el.addEventListener('change', function (e) {
       if (e.target.id !== 'rv-import') return;
@@ -1425,7 +1574,11 @@
     el.innerHTML = '<div><p class="sub-h">项目 · 只给业务看</p><h3>' + esc(pr.name) + (pr.hidden ? ' <span class="tag warn">已隐藏</span>' : '') + '</h3>' +
       '<p class="muted">' + (pr.n | 0) + ' 张' + (nHid ? '（隐藏了 ' + CL.n(nHid) + ' 张）' : '') + (bits.length ? ' · ' + esc(bits.join(' · ')) : ' · 还没填区域 / 房型 / 风格') +
       (pr.by ? ' · 上次修改 ' + esc(who(pr.by)) + ' ' + esc(CL.time(pr.ts)) : '') + '</p></div>' +
-      '<div class="btn-row"><button class="mini dark" type="button" data-act="proj-edit">编辑项目资料</button>' + keepButtons(pid) + '</div>';
+      '<div class="btn-row"><button class="mini dark" type="button" data-act="proj-edit">编辑项目资料</button>' + confirmButton(pid) + keepButtons(pid) + '</div>';
+  }
+  function confirmButton(pid) {
+    var n = autoInProject(pid).length;
+    return n ? '<button class="mini" type="button" data-act="confirm-proj" title="错的先点开改，剩下对的一次确认">这个项目看过了，' + CL.n(n) + ' 张全部确认</button>' : '';
   }
   // 项目列、项目资料共用：只留最好的 N 张、复原这个项目隐藏的照片
   function keepButtons(pid) {
@@ -1662,6 +1815,7 @@
       if (e.target.closest('[data-act="proj-edit"]')) openProject(R.f.pid);
       else if (e.target.closest('[data-act="keep-proj"]')) openAsk(R.f.pid);
       else if (e.target.closest('[data-act="unhide-proj-photos"]')) restoreProject(R.f.pid);
+      else if (e.target.closest('[data-act="confirm-proj"]')) confirmProject(R.f.pid);
     });
     $('#rv-savebtn').addEventListener('click', function () { flushNow(); });
     // 离开这一页（关分页、切到别的 App）：马上存（keepalive：页面关了请求照样送完）
@@ -1839,6 +1993,7 @@
     hiddenStats: hiddenStats,
     quota: quotaNow,
     autoTags: function () { return runAuto(); },
+    aiTags: function (limit) { return runAi(limit || 0); },
     importTags: function (file) { return runImport(file); }
   };
 })();

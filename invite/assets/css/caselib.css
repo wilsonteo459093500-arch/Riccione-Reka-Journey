@@ -124,6 +124,14 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .rv-tags .tags-t { display: flex; flex-direction: column; margin-right: auto; min-width: 0; }
 .rv-tags .tags-t b { font-weight: 500; }
 .rv-tags .tags-t small { color: var(--ink-faint); font-size: 12px; }
+.rv-ai { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 10px; display: grid; gap: 8px; font-size: 14px; }
+.rv-ai p { margin: 0; }
+.rv-ai .ai-key { display: flex; flex-wrap: wrap; gap: 8px; }
+.rv-ai .ai-key input { flex: 1 1 260px; min-width: 0; padding: 7px 10px; border: 1px solid var(--line); background: #fff; font: inherit; }
+.rv-ai .btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.rv-ai .err { color: #A4402B; }
+.rv-ai .ok { color: #3F6B43; }
+.rv-ai .warn { color: #A8402A; }
 .rv-tags .tidy-msg p { margin: 8px 0 0; font-size: 13px; }
 .rv-tags .tidy-msg .ok { color: #3F6B43; }
 .rv-tags .tidy-msg .err { color: #A4402B; }
