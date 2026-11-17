@@ -15,7 +15,11 @@ export const MAX_OFFERS = 8;
 export const MAX_CASES = 6;
 export const MAX_SOCIALS = 6;
 export const MAX_OPENING = 6;     // 开场白最多几句
-export const MAX_MILESTONES = 8;  // 「两代人」的大事记
+export const MAX_MILESTONES = 10; // 发展历程的大事记
+export const MAX_STATS = 6;       // 公司的数字格子
+export const MAX_AWARDS = 8;
+export const MAX_PLACES = 4;      // 展厅 / 仓库
+export const MAX_EXHIBITIONS = 8;
 export const MAX_GROUPS = 4;      // 商会 / 组织
 export const MAX_CARD_IMAGES = 2; // 实体名片的照片
 
@@ -55,7 +59,39 @@ export const DEFAULT_CARD = {
   title: '董事 Director · 家族企业第二代',
   company: 'RICCIONE 瑞吉欧 · 溪岸 SAIL',
   tagline: '以木为语，与自然共生。',
-  intro: '我在麻坡长大，小时候发誓绝不接我爸的生意。后来为了家人，考了 CIMA 特许管理会计师，再从仓库扛货做起，一步一步接下这份家业。\n\n现在我在马来西亚带着 RICCIONE 瑞吉欧做实木家具的设计与零售；2025 年成立 Riccione Reka 全屋定制，也把来自成都的自然主义品牌溪岸 Sail 带到东南亚。\n\n我想做的，是把父亲四十多年的实木匠心，和更慢、更自然的生活，落地到你的家。我没有成功，我只是还在路上。',
+  intro: '我是 Wilson，麻坡长大的家族企业第二代。小时候发誓不接班，后来为了家人考了 CIMA 特许管理会计师，再从仓库扛货做起。现在带着瑞吉欧和溪岸，在马来西亚做实木家具与全屋定制。我没有成功，我只是还在路上。',
+  about_photo_path: '/card/father.jpg',
+  firm: {
+    title: 'RICCIONE 瑞吉欧',
+    lead: '专注自然主义与实木的家具品牌。2025 年起成立 Riccione Reka 全屋定制，成为溪岸 Sail 的东南亚总代理。',
+    photo_path: '/card/showroom-kl.jpg',
+    stats: [
+      { value: '2002', label: '中国公司成立（广东瑞吉欧家具有限公司）' },
+      { value: '20+ 年', label: '在中国经营' },
+      { value: '11,000 sq ft', label: '吉隆坡四层楼展厅' },
+      { value: '21,000 sq ft', label: '佛山旗舰展厅' },
+      { value: '600+', label: '个货柜出口中国（2018 年）' },
+      { value: '18 家', label: '中国品牌门店（2024 年）' },
+    ],
+  },
+  awards: {
+    photo_path: '/card/awards.jpg',
+    items: [
+      { year: '2021', title: '美国 MUSE 缪斯设计奖 · 金奖', note: '溪岸 4.0 系列 · 从 100 多个国家和地区的 3.8 万件作品中选出' },
+      { year: '2017', title: 'ARCHIDEX 最佳展位设计奖', note: '瑞吉欧 · 吉隆坡 KLCC' },
+      { year: '2019', title: '佛山最佳家具设计奖', note: '瑞吉欧' },
+      { year: '2022', title: 'HCA 高定家居设计奖 · 年度产品设计奖', note: '溪岸 · 自然线系列' },
+      { year: '2023', title: 'HCA 高定家居设计奖 · 年度产品设计至尊奖（终评前三）', note: '溪岸 · 骨骼线 · 闲庭' },
+      { year: '2024', title: 'HCA 高定家居设计奖 · 年度产品设计奖', note: '溪岸 · 骨骼线 · 山居' },
+    ],
+  },
+  places: [
+    { title: '吉隆坡展厅', note: '11,000 sq ft · 四层楼展厅与办公室' },
+    { title: '佛山旗舰展厅', note: '21,000 sq ft · 办公室与展厅' },
+    { title: 'Setia Alam 仓储中心', note: '马来西亚仓储与配送' },
+  ],
+  places_photo_path: '/card/showroom-inside.jpg',
+  exhibitions: ['CIFF 广州家博会', 'CIFF 上海 · 设计馆', 'ARCHIDEX · KLCC'],
   whatsapp: '60163881919',
   phone: '',
   email: 'wilsonteo@riccione.asia',
@@ -69,17 +105,22 @@ export const DEFAULT_CARD = {
   opening_en: [],
   opening_on: true,
   story: {
-    title: '两代人，一份木作',
-    note: '我和爸爸，在我们的展位上。他用青春打下的舞台，现在换我接着走。',
-    photo_path: '/card/father.jpg',
+    title: '从 1979 到今天',
+    note: '',
+    photo_path: '',
     milestones: [
-      { year: '1979', text: '爸爸开始做木作，一做四十多年' },
+      { year: '1979', text: '父辈开始做木作' },
+      { year: '2002', text: '中国公司成立：广东瑞吉欧家具有限公司' },
       { year: '2015', text: 'RICCIONE 瑞吉欧在马来西亚成立，以实木家具起步' },
-      { year: '2017', text: '佛山 21,000 平方尺旗舰展厅，获 Archidex 最佳展位设计奖' },
-      { year: '2020', text: '吉隆坡 11,000 平方尺展厅落成' },
+      { year: '2017', text: '佛山 21,000 sq ft 旗舰展厅；获 ARCHIDEX 最佳展位设计奖' },
+      { year: '2018', text: '出口中国超过 600 个货柜，经销商近 1,000 家' },
+      { year: '2019', text: '首次参展 CIFF 广州，产品销往日本与欧洲' },
+      { year: '2020', text: '吉隆坡 11,000 sq ft 展厅落成；受邀参展 CIFF 上海设计馆' },
+      { year: '2024', text: '中国 18 家品牌门店；马来西亚线上线下一体化零售' },
       { year: '2025', text: 'Riccione Reka 全屋定制成立，成为溪岸 Sail 东南亚总代理' },
     ],
   },
+
   offers: [
     '全屋定制：门、墙、柜一体化，从设计、生产到安装',
     '100% 实木家具，模块化，按你的家调整',
@@ -106,7 +147,7 @@ export const DEFAULT_CARD = {
     {
       name: 'PUMM 马来西亚创业促进会',
       role: '彭亨州联委会理事 · Pahang State Liaison Committee',
-      note: 'Persatuan Usahawan Maju Malaysia，全国性的创业者组织。想认识各行各业的创业者、参加商会活动，或需要人脉牵线，都可以找我。',
+      note: 'Persatuan Usahawan Maju Malaysia，全国 3,000 多名会员的创业者组织。想认识各行各业的创业者、参加商会活动，或需要人脉牵线，都可以找我。',
       logo_path: '/card/logo-pumm.jpg',
       links: [
         { label: '认识 PUMM', url: 'https://pumm.my/' },
@@ -152,6 +193,12 @@ export function cleanCard(c = {}) {
     opening_en: cleanLines(src.opening_en),
     opening_on: src.opening_on !== false,
     story: cleanStory(src.story),
+    about_photo_path: safePath(src.about_photo_path),
+    firm: cleanFirm(src.firm),
+    awards: cleanAwards(src.awards),
+    places: (Array.isArray(src.places) ? src.places : []).map((x) => ({ title: str(x && x.title, 60), note: str(x && x.note, 160) })).filter((x) => x.title).slice(0, MAX_PLACES),
+    places_photo_path: safePath(src.places_photo_path),
+    exhibitions: cleanLines(src.exhibitions, MAX_EXHIBITIONS, 60),
     groups: (Array.isArray(src.groups) ? src.groups : []).map(cleanGroup).filter((g) => g.name).slice(0, MAX_GROUPS),
     card_images: (Array.isArray(src.card_images) ? src.card_images : []).map(safePath).filter(Boolean).slice(0, MAX_CARD_IMAGES),
     greeting: str(src.greeting, 200) || DEFAULT_CARD.greeting,
@@ -172,6 +219,32 @@ function cleanStory(v) {
       .map((m) => ({ year: str(m && m.year, 12), text: str(m && m.text, 120) }))
       .filter((m) => m.year || m.text)
       .slice(0, MAX_MILESTONES),
+  };
+}
+
+/** 公司：标题、一句话、照片、数字格子 */
+function cleanFirm(v) {
+  const x = v && typeof v === 'object' ? v : {};
+  return {
+    title: str(x.title, 80),
+    lead: str(x.lead, 400),
+    photo_path: safePath(x.photo_path),
+    stats: (Array.isArray(x.stats) ? x.stats : [])
+      .map((m) => ({ value: str(m && m.value, 20), label: str(m && m.label, 60) }))
+      .filter((m) => m.value)
+      .slice(0, MAX_STATS),
+  };
+}
+
+/** 奖项：一张照片 + 几项（年份、奖名、哪个品牌 / 哪个系列） */
+function cleanAwards(v) {
+  const x = v && typeof v === 'object' ? v : {};
+  return {
+    photo_path: safePath(x.photo_path),
+    items: (Array.isArray(x.items) ? x.items : [])
+      .map((m) => ({ year: str(m && m.year, 12), title: str(m && m.title, 100), note: str(m && m.note, 160) }))
+      .filter((m) => m.title)
+      .slice(0, MAX_AWARDS),
   };
 }
 
@@ -207,7 +280,7 @@ export function publicUrl(base, path) {
 export function publicCard(card, supabaseUrl) {
   const c = cleanCard(card);
   const url = (p) => publicUrl(supabaseUrl, p);
-  const { photo_path, video_path, poster_path, ...rest } = c;
+  const { photo_path, video_path, poster_path, about_photo_path, places_photo_path, ...rest } = c;
   return {
     ...rest,
     photo: url(photo_path),
@@ -218,6 +291,10 @@ export function publicCard(card, supabaseUrl) {
     socials: c.socials.map(({ icon_path, ...x }) => ({ ...x, icon: url(icon_path) })),
     groups: c.groups.map(({ logo_path, ...x }) => ({ ...x, logo: url(logo_path) })),
     card_images: c.card_images.map(url),
+    about_photo: url(c.about_photo_path),
+    firm: (({ photo_path: cp, ...x }) => ({ ...x, photo: url(cp) }))(c.firm),
+    awards: (({ photo_path: ap, ...x }) => ({ ...x, photo: url(ap) }))(c.awards),
+    places_photo: url(c.places_photo_path),
   };
 }
 

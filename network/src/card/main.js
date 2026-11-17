@@ -35,7 +35,7 @@ const T = {
     thanks: (n) => (n ? `谢谢，${n}！` : '谢谢！'), thanksSub: '资料收到了。顺手发个 WhatsApp 给我，我就记得你是哪一位 😊',
     waMe: '发 WhatsApp 给我', again: '再留一次',
     dock: '交换联络方式', sound: '声音',
-    skip: '跳过', cue: '往下看，认识我', story: '传承', groups: '商会与资源', cards: '我的名片', cardsSub: '点一下看大图',
+    skip: '跳过', cue: '往下看，认识我', story: '发展历程', firm: '公司', awards: '奖项', places: '展厅与展会', shows: '常年参展', groups: '商会与资源', cards: '我的名片', cardsSub: '点一下看大图',
     errNet: '连不上，检查一下网络再试一次', errBusy: '送出太多次了，请稍后再试，或直接 WhatsApp 我',
     fail: '名片暂时打不开，请稍后再试。',
     lang: 'EN',
@@ -59,7 +59,7 @@ const T = {
     thanks: (n) => (n ? `Thank you, ${n}!` : 'Thank you!'), thanksSub: 'Got it. Send me a quick WhatsApp so I know which one is you 😊',
     waMe: 'WhatsApp me now', again: 'Send again',
     dock: 'Swap contacts', sound: 'Sound',
-    skip: 'Skip', cue: 'Scroll to meet me', story: 'Our story', groups: 'Networks', cards: 'My business cards', cardsSub: 'Tap to enlarge',
+    skip: 'Skip', cue: 'Scroll to meet me', story: 'Milestones', firm: 'Company', awards: 'Awards', places: 'Showrooms & fairs', shows: 'Trade fairs', groups: 'Networks', cards: 'My business cards', cardsSub: 'Tap to enlarge',
     errNet: 'Can’t connect — check your network and try again', errBusy: 'Too many tries — please try later or just WhatsApp me',
     fail: 'This card can’t be opened right now. Please try again later.',
     lang: '中文',
@@ -114,6 +114,19 @@ const GLYPH = {
   youtube: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 9v6l5-3-5-3Z"/></svg>',
   website: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>',
 };
+/** 「我可以帮你」每一条前面的小图示：按内容关键字配 */
+const SVG = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const OFFER_ICONS = [
+  [/全屋|柜|cabinet|bespoke/i, SVG('<rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M12 3v18M9.5 11v2M14.5 11v2"/>')],
+  [/实木|木|wood|timber/i, SVG('<path d="M12 21v-6M8 15h8l-4-11-4 11Z"/><path d="M6.5 15h11"/>')],
+  [/二代|家族|接班|family|succession/i, SVG('<circle cx="8.5" cy="8" r="3"/><circle cx="16.5" cy="9.5" r="2.4"/><path d="M3 20a5.5 5.5 0 0 1 11 0M14 20a4.2 4.2 0 0 1 7-3.2"/>')],
+  [/人脉|供应链|工程|网络|network|supply/i, SVG('<circle cx="5" cy="12" r="2.2"/><circle cx="19" cy="6" r="2.2"/><circle cx="19" cy="18" r="2.2"/><path d="m7 11 10-4M7 13l10 4"/>')],
+  [/展厅|咖啡|活动|showroom|coffee|event/i, SVG('<path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V9Z"/><path d="M16 11h1.5a2.5 2.5 0 0 1 0 5H16M8 3v3M12 3v3"/>')],
+  [/设计|建筑师|溪岸|定制|design|architect/i, SVG('<path d="m4 20 5-1L19.5 8.5a2.1 2.1 0 0 0-3-3L6 16l-2 4Z"/><path d="m14.5 7.5 3 3"/>')],
+];
+const OFFER_DEFAULT = SVG('<path d="m12 3 2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7L12 3Z"/>');
+const offerIcon = (text) => (OFFER_ICONS.find(([re]) => re.test(text)) || [null, OFFER_DEFAULT])[1];
+
 const GLYPH_TEXT = { linkedin: 'in', tiktok: '♪', xiaohongshu: '书' };
 const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
 
@@ -263,18 +276,42 @@ function render() {
   if (event && form) side.append(form); // 活动现场：表格排前面
 
   const sec = (label, ...kids) => h('section.sec', null, h('h2.kicker', null, label), ...kids);
-  if (card.intro) side.append(sec(tr.about, h('p.lead', null, card.intro)));
+  const pic = (src, alt, cls = 'figure.pic') => (src ? h(cls, null, h('img', { src, alt: alt || '', loading: 'lazy', decoding: 'async' })) : null);
+
+  /* 公司：一句话 + 数字格子 + 展厅照片（讲事实：年份、面积、数量） */
+  const fm = card.firm;
+  if (fm && (fm.title || fm.lead || (fm.stats && fm.stats.length))) {
+    side.append(sec(tr.firm,
+      fm.title ? h('h3.st-title', null, fm.title) : null,
+      fm.lead ? h('p.st-note', null, fm.lead) : null,
+      fm.stats && fm.stats.length ? h('dl.stats', null, fm.stats.map((m) => h('div.stat', null, h('dt', null, m.value), h('dd', null, m.label)))) : null,
+      pic(fm.photo, fm.title)));
+  }
+  /* 奖项 */
+  const aw = card.awards;
+  if (aw && aw.items && aw.items.length) {
+    side.append(sec(tr.awards,
+      pic(aw.photo, tr.awards, 'figure.pic.top'),
+      h('ul.awards', null, aw.items.map((m) => h('li', null, h('span.yr', null, m.year), h('span.aw', null, h('b', null, m.title), m.note ? h('small', null, m.note) : null))))));
+  }
+  /* 展厅、仓库、展会 */
+  if ((card.places && card.places.length) || (card.exhibitions && card.exhibitions.length)) {
+    side.append(sec(tr.places,
+      card.places && card.places.length ? h('ul.places', null, card.places.map((m) => h('li', null, h('b', null, m.title), m.note ? h('span', null, m.note) : null))) : null,
+      card.exhibitions && card.exhibitions.length ? h('div.shows', null, h('p.shows-t', null, tr.shows), h('div.chips', null, card.exhibitions.map((x) => h('span.chip', null, x)))) : null,
+      pic(card.places_photo, tr.places)));
+  }
+  /* 发展历程 */
   const st = card.story;
   if (st && (st.photo || st.note || (st.milestones && st.milestones.length))) {
-    side.append(h('section.sec.story', null,
-      h('h2.kicker', null, tr.story),
+    side.append(sec(tr.story,
       st.title ? h('h3.st-title', null, st.title) : null,
-      st.photo ? h('figure.st-photo', null, h('img', { src: st.photo, alt: st.note || st.title || card.name, loading: 'lazy', decoding: 'async' })) : null,
+      pic(st.photo, st.title, 'figure.st-photo'),
       st.note ? h('p.st-note', null, st.note) : null,
       st.milestones && st.milestones.length ? h('ol.timeline', null, st.milestones.map((m) => h('li', null, h('span.yr', null, m.year), h('span', null, m.text)))) : null));
   }
   if (card.offers && card.offers.length) {
-    side.append(sec(tr.offers, h('ol.offers', null, card.offers.map((o, i) => h('li', null, h('span.no', { 'aria-hidden': 'true' }, String(i + 1).padStart(2, '0')), h('span', null, o))))));
+    side.append(sec(tr.offers, h('ul.offers', null, card.offers.map((o) => h('li', null, h('span.oi', { 'aria-hidden': 'true', html: offerIcon(o) }), h('span', null, o))))));
   }
   if (card.groups && card.groups.length) {
     side.append(sec(tr.groups, card.groups.map((g) => h('div.group', null,
@@ -288,6 +325,13 @@ function render() {
     side.append(sec(tr.find,
       card.socials && card.socials.length ? h('div.links', null, card.socials.map(linkCard)) : null,
       card.address ? h('p.addr', null, card.address) : null));
+  }
+
+  /* 关于我：一小段就好 */
+  if (card.intro || card.about_photo) {
+    side.append(sec(tr.about, h('div.me', null,
+      card.about_photo ? h('img.me-photo', { src: card.about_photo, alt: card.name, loading: 'lazy', decoding: 'async' }) : null,
+      card.intro ? h('p.me-text', null, card.intro) : null)));
   }
 
   if (!event && form) side.append(form);

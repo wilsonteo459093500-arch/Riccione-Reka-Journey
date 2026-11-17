@@ -46,6 +46,26 @@ test('开场白 / 传承：一行一句、上限、网站自带的图', () => {
   assert.ok(d.socials.every((x) => x.icon && x.icon_path === undefined));
 });
 
+test('公司 / 奖项 / 展厅：只留有内容的、上限；预设名片讲事实', () => {
+  const c = cleanCard({
+    firm: { title: 'R', stats: [{ value: '2002', label: '成立' }, { label: '没数字' }, ...Array.from({ length: 8 }, (_, i) => ({ value: String(i) }))] },
+    awards: { photo_path: '/card/awards.jpg', items: [{ year: '2021', title: 'MUSE' }, { year: '2020' }] },
+    places: [{ title: 'KL', note: '11,000' }, { note: '没名字' }],
+    exhibitions: 'CIFF\nARCHIDEX',
+  });
+  assert.equal(c.firm.stats.length, 6);
+  assert.equal(c.firm.stats[0].value, '2002');
+  assert.equal(c.awards.items.length, 1);
+  assert.equal(c.places.length, 1);
+  assert.deepEqual(c.exhibitions, ['CIFF', 'ARCHIDEX']);
+  const d = publicCard(DEFAULT_CARD, 'https://x.supabase.co');
+  assert.equal(d.company, 'RICCIONE 瑞吉欧 · 溪岸 SAIL'); // 公司名字（字串）不能被「公司」区块盖掉
+  assert.ok(d.firm.stats.some((m) => m.value === '2002'));
+  assert.ok(d.awards.items.some((m) => /MUSE/.test(m.title)) && d.awards.items.some((m) => /ARCHIDEX/.test(m.title)));
+  assert.equal(d.awards.photo, '/card/awards.jpg');
+  assert.equal(d.about_photo_path, undefined);
+});
+
 test('商会 / 实体名片：没名字的不要、链接只收 https、上限', () => {
   const c = cleanCard({
     groups: [{ name: 'PUMM', links: [{ label: 'a', url: 'pumm.my' }, { url: 'javascript:1' }, { url: 'https://b.my' }, { url: 'https://c.my' }] }, { role: '没名字' }],

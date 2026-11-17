@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
 import { repo } from '../lib/repo.js';
-import { cardLink, cardReady, cleanLines, MAX_OFFERS, MAX_CASES, MAX_SOCIALS, MAX_OPENING, MAX_MILESTONES, MAX_GROUPS, SOCIAL_PLATFORMS } from '../lib/card.js';
+import { cardLink, cardReady, cleanLines, MAX_OFFERS, MAX_CASES, MAX_SOCIALS, MAX_OPENING, MAX_MILESTONES, MAX_GROUPS, MAX_STATS, MAX_AWARDS, MAX_PLACES, MAX_EXHIBITIONS, SOCIAL_PLATFORMS } from '../lib/card.js';
 import { qrPath, qrPng } from '../lib/qr.js';
 import { fmtDate } from '../lib/logic.js';
 import { Button, Field, Input, Textarea, Section, Sheet, useToast, cx } from './ui.jsx';
@@ -215,14 +215,14 @@ function CardEditor() {
   // 本机模式：上传过的图在 IndexedDB，打开时先放进预览网址
   const [, bump] = useState(0);
   useEffect(() => {
-    const paths = [store.card.photo_path, store.card.video_path, store.card.poster_path, store.card.story.photo_path, ...store.card.cases.map((c) => c.image_path), ...store.card.socials.map((x) => x.icon_path), ...store.card.groups.map((g) => g.logo_path), ...store.card.card_images];
+    const paths = [store.card.photo_path, store.card.video_path, store.card.poster_path, store.card.story.photo_path, store.card.about_photo_path, store.card.firm.photo_path, store.card.awards.photo_path, store.card.places_photo_path, ...store.card.cases.map((c) => c.image_path), ...store.card.socials.map((x) => x.icon_path), ...store.card.groups.map((g) => g.logo_path), ...store.card.card_images];
     if (repo.warmPublic) repo.warmPublic(paths).then(() => bump((x) => x + 1)).catch(() => null);
   }, [store.card]);
 
   const set = (patch) => setF((x) => ({ ...x, ...patch }));
   async function save() {
     setBusy(true);
-    try { await store.saveCard({ ...f, opening: cleanLines(f.opening), opening_en: cleanLines(f.opening_en) }); toast('名片存好了（公开页 1 分钟内更新）'); } catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
+    try { await store.saveCard({ ...f, opening: cleanLines(f.opening), opening_en: cleanLines(f.opening_en), exhibitions: cleanLines(f.exhibitions, MAX_EXHIBITIONS) }); toast('名片存好了（公开页 1 分钟内更新）'); } catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
   }
   async function upload(file, kind, apply) {
     if (!file) return;
@@ -274,7 +274,12 @@ function CardEditor() {
             <Field label="公司"><Input value={f.company} onChange={(e) => set({ company: e.target.value })} /></Field>
           </div>
           <Field label="一句话介绍"><Input value={f.tagline} onChange={(e) => set({ tagline: e.target.value })} maxLength={160} /></Field>
-          <Field label="关于我（几行就好）"><Textarea value={f.intro} onChange={(e) => set({ intro: e.target.value })} maxLength={1200} /></Field>
+          <div className="flex gap-3">
+            <MediaSlot small path={f.about_photo_path} busy={uploading === 'about'} accept="image/*" icon={ImagePlus}
+              onPick={(file) => { setUploading('about'); store.uploadCardMedia(file, 'case').then((p) => set({ about_photo_path: p })).catch((e) => toast(e.message, 'error')).finally(() => setUploading('')); }}
+              onClear={() => set({ about_photo_path: '' })} />
+            <Field className="flex-1" label="关于我（放在页面下面，几行就好）"><Textarea value={f.intro} onChange={(e) => set({ intro: e.target.value })} maxLength={1200} /></Field>
+          </div>
         </div>
       </Section>
 
@@ -307,7 +312,63 @@ function CardEditor() {
         <p className="mt-1 text-xs text-faint">左边的小图 = 卡片上的 logo / 头像（选填）。</p>
       </Section>
 
-      <Section title="传承（两代人的故事）">
+      <Section title="公司（讲事实：年份、面积、数量）">
+        <div className="flex gap-3">
+          <MediaSlot small path={f.firm.photo_path} busy={uploading === 'firm'} accept="image/*" icon={ImagePlus}
+            onPick={(file) => { setUploading('firm'); store.uploadCardMedia(file, 'case').then((p) => set({ firm: { ...f.firm, photo_path: p } })).catch((e) => toast(e.message, 'error')).finally(() => setUploading('')); }}
+            onClear={() => set({ firm: { ...f.firm, photo_path: '' } })} />
+          <div className="flex-1 space-y-2">
+            <Input value={f.firm.title} onChange={(e) => set({ firm: { ...f.firm, title: e.target.value } })} placeholder="标题：例 RICCIONE 瑞吉欧" maxLength={80} />
+            <Textarea rows={2} value={f.firm.lead} onChange={(e) => set({ firm: { ...f.firm, lead: e.target.value } })} placeholder="一句话介绍公司" maxLength={400} />
+          </div>
+        </div>
+        <ListEditor className="mt-3" label="数字格子（大字 + 说明）" max={MAX_STATS} items={f.firm.stats} onChange={(stats) => set({ firm: { ...f.firm, stats } })} blank={{ value: '', label: '' }}
+          render={(m, upd) => (
+            <div className="flex flex-1 gap-2">
+              <Input className="w-32" value={m.value} onChange={(e) => upd({ ...m, value: e.target.value })} placeholder="2002" maxLength={20} />
+              <Input value={m.label} onChange={(e) => upd({ ...m, label: e.target.value })} placeholder="中国公司成立" maxLength={60} />
+            </div>
+          )} />
+      </Section>
+
+      <Section title="奖项">
+        <div className="flex gap-3">
+          <MediaSlot small path={f.awards.photo_path} busy={uploading === 'awards'} accept="image/*" icon={ImagePlus}
+            onPick={(file) => { setUploading('awards'); store.uploadCardMedia(file, 'case').then((p) => set({ awards: { ...f.awards, photo_path: p } })).catch((e) => toast(e.message, 'error')).finally(() => setUploading('')); }}
+            onClear={() => set({ awards: { ...f.awards, photo_path: '' } })} />
+          <p className="flex-1 text-xs text-faint">奖杯 / 证书 / 颁奖的照片（选填）</p>
+        </div>
+        <ListEditor className="mt-3" max={MAX_AWARDS} items={f.awards.items} onChange={(items) => set({ awards: { ...f.awards, items } })} blank={{ year: '', title: '', note: '' }}
+          render={(m, upd) => (
+            <div className="flex flex-1 gap-2">
+              <Input className="w-20" value={m.year} onChange={(e) => upd({ ...m, year: e.target.value })} placeholder="2021" maxLength={12} />
+              <div className="flex-1 space-y-1">
+                <Input value={m.title} onChange={(e) => upd({ ...m, title: e.target.value })} placeholder="奖名：例 美国 MUSE 设计奖 · 金奖" maxLength={100} />
+                <Input value={m.note} onChange={(e) => upd({ ...m, note: e.target.value })} placeholder="哪个品牌 / 系列" maxLength={160} />
+              </div>
+            </div>
+          )} />
+      </Section>
+
+      <Section title="展厅与展会">
+        <ListEditor max={MAX_PLACES} items={f.places} onChange={(places) => set({ places })} blank={{ title: '', note: '' }}
+          render={(m, upd) => (
+            <div className="flex flex-1 gap-2">
+              <Input className="w-40" value={m.title} onChange={(e) => upd({ ...m, title: e.target.value })} placeholder="吉隆坡展厅" maxLength={60} />
+              <Input value={m.note} onChange={(e) => upd({ ...m, note: e.target.value })} placeholder="11,000 sq ft · 四层楼" maxLength={160} />
+            </div>
+          )} />
+        <div className="mt-3 flex gap-3">
+          <MediaSlot small path={f.places_photo_path} busy={uploading === 'places'} accept="image/*" icon={ImagePlus}
+            onPick={(file) => { setUploading('places'); store.uploadCardMedia(file, 'case').then((p) => set({ places_photo_path: p })).catch((e) => toast(e.message, 'error')).finally(() => setUploading('')); }}
+            onClear={() => set({ places_photo_path: '' })} />
+          <Field className="flex-1" label={`常年参展（一行一个，最多 ${MAX_EXHIBITIONS} 个）`}>
+            <Textarea rows={3} value={(f.exhibitions || []).join('\n')} onChange={(e) => set({ exhibitions: e.target.value.split('\n').slice(0, MAX_EXHIBITIONS) })} placeholder={'CIFF 广州家博会\nARCHIDEX · KLCC'} />
+          </Field>
+        </div>
+      </Section>
+
+      <Section title="发展历程">
         <div className="flex gap-3">
           <MediaSlot small path={f.story.photo_path} busy={uploading === 'case'} accept="image/*" icon={ImagePlus}
             onPick={(file) => upload(file, 'case', (p) => set({ story: { ...f.story, photo_path: p } }))} onClear={() => set({ story: { ...f.story, photo_path: '' } })} />
