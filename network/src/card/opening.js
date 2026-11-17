@@ -53,7 +53,7 @@ export function mountOpening({ h, card, lang, labels, force = false }) {
   const final = h('div.op-final');
   const cue = h('button.op-cue', { type: 'button', onclick: () => { const a = document.getElementById('app'); if (a) a.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth' }); } });
   const skip = h('button.op-skip', { type: 'button', onclick: (e) => { e.stopPropagation(); light(true); } });
-  el.replaceChildren(bg, h('div.op-shade'), h('div.op-glow'), h('div.op-sweep'), stage, final, cue, skip);
+  el.replaceChildren(bg, h('div.op-shade'), h('div.op-glow'), h('div.op-flash'), h('div.op-sweep'), stage, final, cue, skip);
 
   let cur = { card, lang, labels };
   let timers = [];
@@ -89,11 +89,28 @@ export function mountOpening({ h, card, lang, labels, force = false }) {
 
   /** 逗号后面换行（中文排得整齐）；字号看最长那一段 */
   function partsOf(text) {
-    return String(text).split(/(?<=[，；])\s*/).filter(Boolean);
+    const out = [];
+    for (const part of String(text).split(/(?<=[，；])\s*/).filter(Boolean)) {
+      // 英文长句：按字词平均拆成几行（每行大约 16 个字母以内）
+      const words = part.split(' ');
+      const len = part.length;
+      if (len <= 22 || words.length < 3) { out.push(part); continue; }
+      const rows = Math.ceil(len / 20);
+      const target = len / rows;
+      let cur = '';
+      for (const wd of words) {
+        if (cur && (cur.length + 1 + wd.length) > target + 4) { out.push(cur); cur = wd; } else cur = cur ? `${cur} ${wd}` : wd;
+      }
+      if (cur) out.push(cur);
+    }
+    return out;
   }
+  /** 字号：撑满画面宽度（中文一个字算 1、英文字母算 0.56），短的一句（你好）特别大 */
   function sizeOf(parts) {
-    const n = Math.max(...parts.map((x) => [...x].length));
-    return parts.length === 1 && n <= 5 ? 'xl' : n <= 12 ? 'l' : 'm';
+    const w = (x) => [...x].reduce((a, ch) => a + (/[\u2e80-\uffff]/.test(ch) ? 1 : 0.56), 0);
+    const n = Math.max(...parts.map(w));
+    if (parts.length === 1 && n <= 3) return 'min(160px, 32vw)';
+    return `min(${parts.length > 1 ? 68 : 60}px, calc((100vw - 40px) / ${Math.max(n, 5).toFixed(2)}))`;
   }
 
   function play() {
@@ -106,7 +123,7 @@ export function mountOpening({ h, card, lang, labels, force = false }) {
         if (lit) return;
         if (i >= 2 || lines.length < 3) loadBg();
         const parts = partsOf(text);
-        const p = h(`p.op-line.${sizeOf(parts)}`, null, parts.map((x) => h('span', null, x)));
+        const p = h('p.op-line', { style: `font-size:${sizeOf(parts)}` }, parts.map((x) => h('span', null, x)));
         stage.replaceChildren(p);
         later(() => p.classList.add('out'), hold);
       }, t);

@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
 import { repo } from '../lib/repo.js';
-import { cardLink, cardReady, cleanLines, MAX_OFFERS, MAX_CASES, MAX_SOCIALS, MAX_OPENING, MAX_MILESTONES, SOCIAL_PLATFORMS } from '../lib/card.js';
+import { cardLink, cardReady, cleanLines, MAX_OFFERS, MAX_CASES, MAX_SOCIALS, MAX_OPENING, MAX_MILESTONES, MAX_GROUPS, SOCIAL_PLATFORMS } from '../lib/card.js';
 import { qrPath, qrPng } from '../lib/qr.js';
 import { fmtDate } from '../lib/logic.js';
 import { Button, Field, Input, Textarea, Section, Sheet, useToast, cx } from './ui.jsx';
@@ -215,7 +215,7 @@ function CardEditor() {
   // 本机模式：上传过的图在 IndexedDB，打开时先放进预览网址
   const [, bump] = useState(0);
   useEffect(() => {
-    const paths = [store.card.photo_path, store.card.video_path, store.card.poster_path, store.card.story.photo_path, ...store.card.cases.map((c) => c.image_path)];
+    const paths = [store.card.photo_path, store.card.video_path, store.card.poster_path, store.card.story.photo_path, ...store.card.cases.map((c) => c.image_path), ...store.card.socials.map((x) => x.icon_path), ...store.card.groups.map((g) => g.logo_path), ...store.card.card_images];
     if (repo.warmPublic) repo.warmPublic(paths).then(() => bump((x) => x + 1)).catch(() => null);
   }, [store.card]);
 
@@ -287,15 +287,24 @@ function CardEditor() {
         </div>
         <Field className="mt-3" label="地址 / 展厅"><Input value={f.address} onChange={(e) => set({ address: e.target.value })} /></Field>
         <ListEditor className="mt-3" label="社交平台" max={MAX_SOCIALS} items={f.socials} onChange={(socials) => set({ socials })}
-          blank={{ platform: 'instagram', url: '' }}
-          render={(s, upd) => (
+          blank={{ platform: 'instagram', url: '', label: '', icon_path: '' }}
+          render={(s, upd, i) => (
             <div className="flex flex-1 gap-2">
-              <select value={s.platform} onChange={(e) => upd({ ...s, platform: e.target.value })} className="rounded-xl border border-line bg-white px-2 text-sm">
-                {SOCIAL_PLATFORMS.map((p) => <option key={p} value={p}>{SOCIAL_LABEL[p]}</option>)}
-              </select>
-              <Input value={s.url} onChange={(e) => upd({ ...s, url: e.target.value })} placeholder="https://instagram.com/…" />
+              <MediaSlot small path={s.icon_path} busy={uploading === `icon${i}`} accept="image/*" icon={ImagePlus}
+                onPick={(file) => { setUploading(`icon${i}`); store.uploadCardMedia(file, 'case').then((p) => upd({ ...s, icon_path: p })).catch((e) => toast(e.message, 'error')).finally(() => setUploading('')); }}
+                onClear={() => upd({ ...s, icon_path: '' })} />
+              <div className="flex-1 space-y-1">
+                <div className="flex gap-2">
+                  <select value={s.platform} onChange={(e) => upd({ ...s, platform: e.target.value })} className="rounded-xl border border-line bg-white px-2 text-sm">
+                    {SOCIAL_PLATFORMS.map((p) => <option key={p} value={p}>{SOCIAL_LABEL[p]}</option>)}
+                  </select>
+                  <Input value={s.label || ''} onChange={(e) => upd({ ...s, label: e.target.value })} placeholder="名字：例 溪岸 Sail" maxLength={40} />
+                </div>
+                <Input value={s.url} onChange={(e) => upd({ ...s, url: e.target.value })} placeholder="https://instagram.com/…" />
+              </div>
             </div>
           )} />
+        <p className="mt-1 text-xs text-faint">左边的小图 = 卡片上的 logo / 头像（选填）。</p>
       </Section>
 
       <Section title="传承（两代人的故事）">
@@ -334,6 +343,42 @@ function CardEditor() {
               </div>
             </div>
           )} />
+      </Section>
+
+      <Section title="商会与资源" action={<span className="text-xs text-faint">最多 {MAX_GROUPS} 个</span>}>
+        <ListEditor max={MAX_GROUPS} items={f.groups} onChange={(groups) => set({ groups })} blank={{ name: '', role: '', note: '', logo_path: '', links: [] }}
+          render={(g, upd, i) => (
+            <div className="flex flex-1 gap-2">
+              <MediaSlot small path={g.logo_path} busy={uploading === `group${i}`} accept="image/*" icon={ImagePlus}
+                onPick={(file) => { setUploading(`group${i}`); store.uploadCardMedia(file, 'case').then((p) => upd({ ...g, logo_path: p })).catch((e) => toast(e.message, 'error')).finally(() => setUploading('')); }}
+                onClear={() => upd({ ...g, logo_path: '' })} />
+              <div className="flex-1 space-y-1">
+                <Input value={g.name} onChange={(e) => upd({ ...g, name: e.target.value })} placeholder="名字：例 PUMM 马来西亚创业促进会" maxLength={80} />
+                <Input value={g.role} onChange={(e) => upd({ ...g, role: e.target.value })} placeholder="你的职位：例 彭亨州联委会理事" maxLength={120} />
+                <Textarea rows={2} value={g.note} onChange={(e) => upd({ ...g, note: e.target.value })} placeholder="一段介绍：别人可以找你拿什么资源" maxLength={400} />
+                {[0, 1].map((k) => {
+                  const l = (g.links || [])[k] || { label: '', url: '' };
+                  const setL = (patch) => { const links = [...(g.links || [])]; links[k] = { ...l, ...patch }; upd({ ...g, links: links.filter((x) => x && (x.url || x.label) ) }); };
+                  return (
+                    <div key={k} className="flex gap-2">
+                      <Input className="w-36" value={l.label} onChange={(e) => setL({ label: e.target.value })} placeholder={k ? '链接 2 名字' : '链接名字'} maxLength={40} />
+                      <Input value={l.url} onChange={(e) => setL({ url: e.target.value })} placeholder="https://…" />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )} />
+      </Section>
+
+      <Section title="我的实体名片（放在名片页最下面）">
+        <div className="grid grid-cols-2 gap-3">
+          {[0, 1].map((k) => (
+            <MediaSlot key={k} label={k ? '第二张' : '第一张'} path={(f.card_images || [])[k] || ''} busy={uploading === `nc${k}`} accept="image/*" icon={ImagePlus}
+              onPick={(file) => { setUploading(`nc${k}`); store.uploadCardMedia(file, 'case').then((p) => { const a = [...(f.card_images || [])]; a[k] = p; set({ card_images: a.filter(Boolean) }); }).catch((e) => toast(e.message, 'error')).finally(() => setUploading('')); }}
+              onClear={() => { const a = [...(f.card_images || [])]; a[k] = ''; set({ card_images: a.filter(Boolean) }); }} />
+          ))}
+        </div>
       </Section>
 
       <Section title="留资料的表格">

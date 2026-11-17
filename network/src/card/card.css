@@ -108,6 +108,39 @@ h1.name { margin: 0; font-weight: 700; font-size: clamp(36px, 10vw, 44px); line-
 .socials li:last-child a { border-bottom: 0; }
 .arrow { color: var(--faint); }
 .handle { margin-left: 8px; color: var(--faint); font-size: 14px; }
+
+/* 找到我：两栏的小卡片（logo / 头像 + 名字 + @帐号） */
+.links { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.lc { position: relative; display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 14px 14px 13px; border-radius: 16px; background: var(--field); text-decoration: none; transition: transform 0.12s ease, background 0.15s ease; }
+.lc:active { transform: scale(0.98); }
+.lc:hover { background: #ebebf0; }
+.lc-art { display: flex; align-items: center; height: 46px; margin-bottom: 8px; }
+.lc-logo { max-height: 30px; max-width: calc(100% - 30px); object-fit: contain; }
+.lc-photo { width: 46px; height: 46px; border-radius: 50%; object-fit: cover; }
+.lc-plain { font-size: 17px; font-weight: 700; }
+.lc-name { font-size: 15px; font-weight: 600; line-height: 1.3; }
+.lc-sub { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lc-badge { position: absolute; top: 12px; right: 12px; display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 8px; color: #fff; background: var(--ink); font-size: 12px; font-weight: 700; }
+.lc-badge svg { width: 15px; height: 15px; }
+.lc-badge.instagram { background: radial-gradient(circle at 30% 107%, #fdf497 0%, #fd5949 45%, #d6249f 60%, #285aeb 90%); }
+.lc-badge.facebook { background: #1877f2; }
+.lc-badge.youtube { background: #ff0000; }
+.lc-badge.linkedin { background: #0a66c2; }
+.lc-badge.xiaohongshu { background: #ff2442; }
+.lc-badge.website { background: var(--ink); }
+
+/* 商会与资源 */
+.group + .group { margin-top: 22px; padding-top: 22px; border-top: 1px solid var(--hair); }
+.g-logo { display: block; height: 40px; width: auto; max-width: 100%; margin: 2px 0 16px; object-fit: contain; }
+.g-role { display: inline-block; margin: 10px 0 0; padding: 7px 12px; border-radius: 10px; background: #fdecec; color: #b3261e; font-size: 13px; font-weight: 600; line-height: 1.4; }
+.g-links { display: grid; gap: 8px; margin-top: 16px; }
+.g-link { justify-content: space-between; min-height: 50px; padding: 0 16px; background: var(--field); border-color: var(--field); font-size: 14.5px; }
+
+/* 我的名片（实体名片照片，放最下面） */
+.namecards .namecard { display: block; margin-top: 12px; border-radius: 12px; overflow: hidden; box-shadow: 0 6px 22px rgba(0, 0, 0, 0.12); }
+.namecards .kicker + .namecard { margin-top: 2px; }
+.namecard img { width: 100%; aspect-ratio: 674 / 420; object-fit: cover; }
+.nc-sub { margin: 12px 0 0; text-align: center; font-size: 12px; color: var(--faint); }
 .addr { margin: 12px 0 0; font-size: 14px; line-height: 1.6; color: var(--muted); }
 
 /* ---------- 表格 ---------- */
@@ -189,45 +222,44 @@ footer { padding: 40px 0 max(36px, env(safe-area-inset-bottom)); text-align: cen
 .op { --p: 0; position: relative; z-index: 0; height: 100vh; height: 100svh; min-height: 520px; overflow: hidden; background: #000; color: #fff; display: block; cursor: default; isolation: isolate; }
 .op > * { position: absolute; }
 .op-bg, .op-shade, .op-glow, .op-sweep { inset: 0; pointer-events: none; }
-.op-bg { opacity: 0; transform: scale(1.1); }
+.op-bg { opacity: 0; transform: scale(1.1); filter: brightness(1.12) saturate(1.06); }
 .op-bg picture { display: contents; }
 .op-bg img, .op-bg video { width: 100%; height: 100%; object-fit: cover; object-position: 50% 72%; }
-.op-shade { opacity: 0; background: radial-gradient(ellipse 60% 45% at 50% 47%, rgba(0, 0, 0, 0.32), transparent 70%), linear-gradient(180deg, rgba(0, 0, 0, 0.55) 0%, rgba(0, 0, 0, 0.18) 38%, rgba(0, 0, 0, 0.2) 60%, rgba(0, 0, 0, 0.7) 100%); }
+.op-shade { opacity: 0; background: radial-gradient(ellipse 60% 40% at 50% 47%, rgba(0, 0, 0, 0.26), transparent 70%), linear-gradient(180deg, rgba(0, 0, 0, 0.4) 0%, rgba(0, 0, 0, 0.06) 36%, rgba(0, 0, 0, 0.08) 62%, rgba(0, 0, 0, 0.6) 100%); }
+.op-flash { inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(circle at 50% 50%, #fffaf0 0%, rgba(255, 236, 200, 0.85) 35%, rgba(255, 210, 150, 0.4) 70%, rgba(255, 200, 140, 0.15) 100%); }
 .op-glow { inset: auto; left: 50%; top: 50%; width: 90vmax; height: 90vmax; margin: -45vmax 0 0 -45vmax; border-radius: 50%; opacity: 0; transform: scale(0.02);
-  background: radial-gradient(circle, rgba(255, 246, 228, 1) 0%, rgba(255, 222, 170, 0.75) 14%, rgba(240, 180, 110, 0.32) 34%, rgba(200, 140, 80, 0.08) 52%, transparent 68%); }
-.op-sweep { opacity: 0; mix-blend-mode: soft-light; background: linear-gradient(105deg, transparent 35%, rgba(255, 244, 220, 0.9) 50%, transparent 65%) no-repeat; background-size: 250% 100%; background-position: 130% 0; }
+  mix-blend-mode: screen; background: radial-gradient(circle, #fff 0%, rgba(255, 244, 220, 1) 10%, rgba(255, 220, 160, 0.8) 22%, rgba(245, 185, 110, 0.4) 40%, rgba(220, 150, 80, 0.12) 56%, transparent 70%); }
+.op-sweep { opacity: 0; mix-blend-mode: screen; background: linear-gradient(105deg, transparent 38%, rgba(255, 240, 210, 0.55) 50%, transparent 62%) no-repeat; background-size: 250% 100%; background-position: 130% 0; }
 
 /* 一句一句 */
-.op-stage { inset: 0; display: flex; align-items: center; justify-content: center; padding: 0 28px; text-align: center; }
-.op-line { margin: 0; max-width: 16em; font-weight: 600; line-height: 1.35; letter-spacing: 0.02em; text-wrap: balance;
-  background: linear-gradient(100deg, #9a8664 0%, #fff 28%, #f6dcaa 46%, #fff 64%, #c9b48a 100%); background-size: 260% 100%; background-position: 100% 0;
+.op-stage { inset: 0; display: flex; align-items: center; justify-content: center; padding: 0 18px; text-align: center; }
+.op-line { margin: 0; font-weight: 600; line-height: 1.3; letter-spacing: 0; white-space: nowrap;
+  background: linear-gradient(100deg, #b49a6a 0%, #fff 26%, #ffe7b8 44%, #fff 62%, #e2c890 100%); background-size: 260% 100%; background-position: 100% 0;
   -webkit-background-clip: text; background-clip: text; color: transparent;
   animation: op-in 1s cubic-bezier(0.2, 0.7, 0.2, 1) both, op-shine 2.6s ease-out 0.15s both; }
-.op-line.xl { font-size: clamp(64px, 20vw, 140px); font-weight: 600; letter-spacing: 0.04em; }
-.op-line.l { font-size: clamp(28px, 8vw, 56px); }
-.op-line.m { font-size: clamp(22px, 6vw, 42px); }
 .op-line span { display: block; }
 .op-line.out { animation: op-out 0.5s ease-in both; }
-@keyframes op-in { from { opacity: 0; filter: blur(16px); transform: scale(1.05); letter-spacing: 0.22em; } to { opacity: 1; filter: blur(0); transform: none; } }
+@keyframes op-in { from { opacity: 0; filter: blur(16px); transform: scale(1.06); } to { opacity: 1; filter: blur(0) drop-shadow(0 0 22px rgba(255, 214, 150, 0.45)); transform: none; } }
 @keyframes op-shine { from { background-position: 100% 0; } to { background-position: 0 0; } }
-@keyframes op-out { from { opacity: 1; filter: blur(0); transform: none; } to { opacity: 0; filter: blur(10px); transform: translateY(-16px); } }
+@keyframes op-out { from { opacity: 1; filter: blur(0) drop-shadow(0 0 22px rgba(255, 214, 150, 0.45)); transform: none; } to { opacity: 0; filter: blur(10px); transform: translateY(-16px); } }
 
 /* 亮起来之后 */
 .op-final { inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 28px 6vh; text-align: center; opacity: calc(1 - var(--p) * 1.6); transform: translateY(calc(var(--p) * -60px)); }
 .op-final > * { opacity: 0; }
-.op-co { margin: 0 0 18px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.28em; text-transform: uppercase; color: rgba(255, 255, 255, 0.82); }
-.op-name { margin: 0; font-size: clamp(44px, 13vw, 92px); font-weight: 700; line-height: 1.02; letter-spacing: -0.03em; text-shadow: 0 2px 30px rgba(0, 0, 0, 0.25); }
-.op-alt { display: block; margin-top: 12px; font-size: clamp(17px, 4.6vw, 24px); font-weight: 400; letter-spacing: 0.5em; padding-left: 0.5em; color: rgba(255, 255, 255, 0.9); }
-.op-tag { margin: 26px 0 0; font-size: clamp(16px, 4.4vw, 21px); line-height: 1.6; letter-spacing: 0.08em; color: rgba(255, 255, 255, 0.94); }
-.op-cue { left: 50%; bottom: max(26px, env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 8px 16px; border: 0; background: none; color: rgba(255, 255, 255, 0.9); font-size: 12px; letter-spacing: 0.24em; cursor: pointer; opacity: 0; pointer-events: none; }
+.op-co { margin: 0 0 20px; font-size: 12.5px; font-weight: 600; letter-spacing: 0.28em; text-transform: uppercase; color: rgba(255, 255, 255, 0.82); }
+.op-name { margin: 0; font-size: clamp(50px, 14vw, 112px); font-weight: 700; line-height: 1.02; letter-spacing: -0.03em; text-shadow: 0 2px 30px rgba(0, 0, 0, 0.25); }
+.op-alt { display: block; margin-top: 14px; font-size: clamp(20px, 5.6vw, 30px); font-weight: 400; letter-spacing: 0.5em; padding-left: 0.5em; color: rgba(255, 255, 255, 0.9); }
+.op-tag { margin: 28px 0 0; font-size: clamp(18px, 5.2vw, 26px); line-height: 1.6; letter-spacing: 0.08em; color: rgba(255, 255, 255, 0.94); }
+.op-cue { left: 50%; bottom: max(26px, env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 8px 16px; border: 0; background: none; color: #fff; font-size: 13.5px; letter-spacing: 0.24em; cursor: pointer; opacity: 0; pointer-events: none; text-shadow: 0 1px 12px rgba(0, 0, 0, 0.4); }
 .op-rail { position: relative; display: block; width: 1px; height: 46px; overflow: hidden; background: rgba(255, 255, 255, 0.28); }
 .op-rail::after { content: ''; position: absolute; left: -1px; top: -14px; width: 3px; height: 14px; border-radius: 2px; background: #fff; box-shadow: 0 0 8px #fff; animation: op-drop 1.8s cubic-bezier(0.6, 0, 0.3, 1) infinite; }
 @keyframes op-drop { from { transform: translateY(0); } to { transform: translateY(64px); } }
-.op-skip { right: max(16px, env(safe-area-inset-right)); bottom: max(22px, env(safe-area-inset-bottom)); padding: 8px 12px; border: 0; background: none; color: rgba(255, 255, 255, 0.45); font-size: 12.5px; letter-spacing: 0.14em; cursor: pointer; }
+.op-skip { right: max(16px, env(safe-area-inset-right)); bottom: max(22px, env(safe-area-inset-bottom)); padding: 8px 12px; border: 0; background: none; color: rgba(255, 255, 255, 0.55); font-size: 14px; letter-spacing: 0.14em; cursor: pointer; }
 .op-skip:hover { color: #fff; }
 
 .op.lit .op-skip { display: none; }
-.op.lit .op-glow { animation: op-glow 2.4s cubic-bezier(0.16, 0.8, 0.2, 1) both; }
+.op.lit .op-glow { animation: op-glow 2.8s cubic-bezier(0.16, 0.8, 0.2, 1) both; }
+.op.lit .op-flash { animation: op-flash 1.8s ease-out 0.35s both; }
 .op.lit .op-bg { animation: op-bg 2.8s cubic-bezier(0.2, 0.7, 0.2, 1) 0.45s both; }
 .op.lit .op-shade { animation: op-fade 1.6s ease 0.6s both; }
 .op.lit .op-sweep { animation: op-sweep 1.9s cubic-bezier(0.4, 0, 0.2, 1) 1.1s both; }
@@ -236,13 +268,15 @@ footer { padding: 40px 0 max(36px, env(safe-area-inset-bottom)); text-align: cen
 .op.lit .op-name { animation-delay: 1.5s; }
 .op.lit .op-tag { animation-delay: 1.85s; }
 .op.lit .op-cue { animation: op-fade 1s ease 2.6s both; pointer-events: auto; }
-@keyframes op-glow { 0% { opacity: 0; transform: scale(0.02); } 22% { opacity: 1; } 55% { opacity: 0.9; } 100% { opacity: 0; transform: scale(2.6); } }
+@keyframes op-glow { 0% { opacity: 0; transform: scale(0.02); } 20% { opacity: 1; } 60% { opacity: 1; } 100% { opacity: 0.12; transform: scale(2.4); } }
+@keyframes op-flash { 0% { opacity: 0; } 30% { opacity: 0.9; } 100% { opacity: 0; } }
 @keyframes op-bg { from { opacity: 0; transform: scale(1.12); } to { opacity: 1; transform: scale(1); } }
 @keyframes op-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes op-sweep { 0% { opacity: 1; background-position: 130% 0; } 100% { opacity: 1; background-position: -30% 0; } }
 @keyframes op-up { from { opacity: 0; transform: translateY(18px); filter: blur(6px); } to { opacity: 1; transform: none; filter: blur(0); } }
 /* 看过了 / 点了跳过：一样亮起来，快一点 */
-.op.quick .op-glow { animation-duration: 1.3s; }
+.op.quick .op-glow { animation-duration: 1.5s; }
+.op.quick .op-flash { animation-duration: 1s; animation-delay: 0.1s; }
 .op.quick .op-bg { animation-duration: 1.4s; animation-delay: 0.15s; }
 .op.quick .op-shade { animation-duration: 0.8s; animation-delay: 0.2s; }
 .op.quick .op-sweep { animation-duration: 1.2s; animation-delay: 0.4s; }

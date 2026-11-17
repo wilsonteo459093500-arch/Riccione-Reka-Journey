@@ -16,6 +16,8 @@ export const MAX_CASES = 6;
 export const MAX_SOCIALS = 6;
 export const MAX_OPENING = 6;     // 开场白最多几句
 export const MAX_MILESTONES = 8;  // 「两代人」的大事记
+export const MAX_GROUPS = 4;      // 商会 / 组织
+export const MAX_CARD_IMAGES = 2; // 实体名片的照片
 
 const str = (v, max = 200) => (typeof v === 'string' ? v : v == null ? '' : String(v))
   .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
@@ -95,11 +97,24 @@ export const DEFAULT_CARD = {
     { title: '瑞吉欧 · 实木', note: '更慢、更柔和，也更自然的生活', image_path: '/card/riccione.jpg' },
   ],
   socials: [
-    { platform: 'instagram', url: 'https://www.instagram.com/wilsonteo0419/' },
-    { platform: 'instagram', url: 'https://www.instagram.com/riccione_furniture/' },
-    { platform: 'instagram', url: 'https://www.instagram.com/sail_riccione_reka/' },
-    { platform: 'website', url: 'https://www.riccione.asia/' },
+    { platform: 'instagram', url: 'https://www.instagram.com/wilsonteo0419/', label: 'Wilson 个人', icon_path: '/card/avatar.jpg' },
+    { platform: 'instagram', url: 'https://www.instagram.com/riccione_furniture/', label: '瑞吉欧 RICCIONE', icon_path: '/card/logo-riccione.png' },
+    { platform: 'instagram', url: 'https://www.instagram.com/sail_riccione_reka/', label: '溪岸 Sail', icon_path: '/card/logo-sail.png' },
+    { platform: 'website', url: 'https://www.riccione.asia/', label: '官网', icon_path: '/card/logo-riccione.png' },
   ],
+  groups: [
+    {
+      name: 'PUMM 马来西亚创业促进会',
+      role: '彭亨州联委会理事 · Pahang State Liaison Committee',
+      note: 'Persatuan Usahawan Maju Malaysia，全国性的创业者组织。想认识各行各业的创业者、参加商会活动，或需要人脉牵线，都可以找我。',
+      logo_path: '/card/logo-pumm.jpg',
+      links: [
+        { label: '认识 PUMM', url: 'https://pumm.my/' },
+        { label: '我的 PUMM 会员名片', url: 'https://signup.pumm.my/member/ProfileCardV4.aspx?Uname=PUMM_YQBxQs&LanguageCode=system&FromApp=Y' },
+      ],
+    },
+  ],
+  card_images: ['/card/namecard-riccione.jpg', '/card/namecard-pumm.jpg'],
   greeting: 'Hi {me}，我是 {name}，刚刚在 {where} 认识 😊',
   privacy_contact: '',
   form_on: true,
@@ -130,13 +145,15 @@ export function cleanCard(c = {}) {
       .filter((x) => x.title || x.image_path)
       .slice(0, MAX_CASES),
     socials: (Array.isArray(src.socials) ? src.socials : [])
-      .map((x) => ({ platform: SOCIAL_PLATFORMS.includes(str(x && x.platform, 20).toLowerCase()) ? str(x.platform, 20).toLowerCase() : 'website', url: safeUrl(x && x.url) }))
+      .map((x) => ({ platform: SOCIAL_PLATFORMS.includes(str(x && x.platform, 20).toLowerCase()) ? str(x.platform, 20).toLowerCase() : 'website', url: safeUrl(x && x.url), label: str(x && x.label, 40), icon_path: safePath(x && x.icon_path) }))
       .filter((x) => x.url)
       .slice(0, MAX_SOCIALS),
     opening: cleanLines(src.opening),
     opening_en: cleanLines(src.opening_en),
     opening_on: src.opening_on !== false,
     story: cleanStory(src.story),
+    groups: (Array.isArray(src.groups) ? src.groups : []).map(cleanGroup).filter((g) => g.name).slice(0, MAX_GROUPS),
+    card_images: (Array.isArray(src.card_images) ? src.card_images : []).map(safePath).filter(Boolean).slice(0, MAX_CARD_IMAGES),
     greeting: str(src.greeting, 200) || DEFAULT_CARD.greeting,
     privacy_contact: str(src.privacy_contact, 120),
     form_on: src.form_on !== false,
@@ -155,6 +172,21 @@ function cleanStory(v) {
       .map((m) => ({ year: str(m && m.year, 12), text: str(m && m.text, 120) }))
       .filter((m) => m.year || m.text)
       .slice(0, MAX_MILESTONES),
+  };
+}
+
+/** 商会 / 组织：名字、职位、一段介绍、logo、最多 2 个链接 */
+function cleanGroup(v) {
+  const x = v && typeof v === 'object' ? v : {};
+  return {
+    name: str(x.name, 80),
+    role: str(x.role, 120),
+    note: str(x.note, 400),
+    logo_path: safePath(x.logo_path),
+    links: (Array.isArray(x.links) ? x.links : [])
+      .map((l) => ({ label: str(l && l.label, 40), url: safeUrl(l && l.url) }))
+      .filter((l) => l.url)
+      .slice(0, 2),
   };
 }
 
@@ -183,6 +215,9 @@ export function publicCard(card, supabaseUrl) {
     poster: url(poster_path) || url(photo_path),
     cases: c.cases.map(({ image_path, ...x }) => ({ ...x, image: url(image_path) })),
     story: (({ photo_path: sp, ...x }) => ({ ...x, photo: url(sp) }))(c.story),
+    socials: c.socials.map(({ icon_path, ...x }) => ({ ...x, icon: url(icon_path) })),
+    groups: c.groups.map(({ logo_path, ...x }) => ({ ...x, logo: url(logo_path) })),
+    card_images: c.card_images.map(url),
   };
 }
 

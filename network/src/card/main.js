@@ -35,7 +35,7 @@ const T = {
     thanks: (n) => (n ? `谢谢，${n}！` : '谢谢！'), thanksSub: '资料收到了。顺手发个 WhatsApp 给我，我就记得你是哪一位 😊',
     waMe: '发 WhatsApp 给我', again: '再留一次',
     dock: '交换联络方式', sound: '声音',
-    skip: '跳过', cue: '往下看，认识我', story: '传承',
+    skip: '跳过', cue: '往下看，认识我', story: '传承', groups: '商会与资源', cards: '我的名片', cardsSub: '点一下看大图',
     errNet: '连不上，检查一下网络再试一次', errBusy: '送出太多次了，请稍后再试，或直接 WhatsApp 我',
     fail: '名片暂时打不开，请稍后再试。',
     lang: 'EN',
@@ -59,7 +59,7 @@ const T = {
     thanks: (n) => (n ? `Thank you, ${n}!` : 'Thank you!'), thanksSub: 'Got it. Send me a quick WhatsApp so I know which one is you 😊',
     waMe: 'WhatsApp me now', again: 'Send again',
     dock: 'Swap contacts', sound: 'Sound',
-    skip: 'Skip', cue: 'Scroll to meet me', story: 'Our story',
+    skip: 'Skip', cue: 'Scroll to meet me', story: 'Our story', groups: 'Networks', cards: 'My business cards', cardsSub: 'Tap to enlarge',
     errNet: 'Can’t connect — check your network and try again', errBusy: 'Too many tries — please try later or just WhatsApp me',
     fail: 'This card can’t be opened right now. Please try again later.',
     lang: '中文',
@@ -75,7 +75,8 @@ const params = new URLSearchParams(window.location.search);
 const EVENT = params.get('e') || '';
 const SRC = params.get('s') || '';
 const t0 = Date.now();
-let lang = ls.get('space-card:lang') || ((navigator.language || 'zh').toLowerCase().startsWith('zh') ? 'zh' : 'en');
+// 默认中文（名片内容是中文的）；按过 EN 就记住
+let lang = ls.get('space-card:lang') || 'zh';
 let tr = T[lang];
 
 /** h('div.a.b', {attrs}, ...children) —— 字串一律当文字 */
@@ -106,6 +107,27 @@ const ICONS = {
   mute: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5ZM22 9l-6 6M16 9l6 6"/></svg>',
   sound: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5ZM15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>',
 };
+/** 平台小图示（「找到我」卡片右上角） */
+const GLYPH = {
+  instagram: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="0.6" fill="currentColor"/></svg>',
+  facebook: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 8h3V4h-3c-2.8 0-4.5 1.8-4.5 4.6V11H7v4h2.5v6h4v-6h3l.5-4h-3.5V8.8c0-.5.3-.8.5-.8Z"/></svg>',
+  youtube: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 9v6l5-3-5-3Z"/></svg>',
+  website: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>',
+};
+const GLYPH_TEXT = { linkedin: 'in', tiktok: '♪', xiaohongshu: '书' };
+const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
+
+/** 「找到我」的一张卡：logo / 头像 + 名字 + @帐号，右上角是平台图示 */
+function linkCard(s) {
+  const photo = s.icon && /\.jpe?g(\?|$)/i.test(s.icon);
+  const badge = GLYPH[s.platform] ? h(`span.lc-badge.${s.platform}`, { 'aria-hidden': 'true', html: GLYPH[s.platform] }) : h(`span.lc-badge.${s.platform}`, { 'aria-hidden': 'true' }, GLYPH_TEXT[s.platform] || '↗');
+  return h('a.lc', { href: s.url, target: '_blank', rel: 'noopener' },
+    h('span.lc-art', null, s.icon ? h(photo ? 'img.lc-photo' : 'img.lc-logo', { src: s.icon, alt: '', loading: 'lazy', decoding: 'async' }) : h('span.lc-plain', null, SOCIAL_LABEL[s.platform] || s.platform)),
+    badge,
+    h('span.lc-name', null, s.label || SOCIAL_LABEL[s.platform] || s.platform),
+    h('span.lc-sub', null, handle(s) || hostOf(s.url)));
+}
+
 const SOCIAL_LABEL = { linkedin: 'LinkedIn', instagram: 'Instagram', facebook: 'Facebook', xiaohongshu: '小红书', tiktok: 'TikTok', youtube: 'YouTube', website: 'Website' };
 
 /** instagram.com/wilsonteo0419 → @wilsonteo0419（同一个平台有好几个帐号时分得出来） */
@@ -254,13 +276,26 @@ function render() {
   if (card.offers && card.offers.length) {
     side.append(sec(tr.offers, h('ol.offers', null, card.offers.map((o, i) => h('li', null, h('span.no', { 'aria-hidden': 'true' }, String(i + 1).padStart(2, '0')), h('span', null, o))))));
   }
+  if (card.groups && card.groups.length) {
+    side.append(sec(tr.groups, card.groups.map((g) => h('div.group', null,
+      g.logo ? h('img.g-logo', { src: g.logo, alt: g.name, loading: 'lazy', decoding: 'async' }) : null,
+      h('h3.st-title', null, g.name),
+      g.role ? h('p.g-role', null, g.role) : null,
+      g.note ? h('p.st-note', null, g.note) : null,
+      g.links && g.links.length ? h('div.g-links', null, g.links.map((l) => h('a.btn.line.g-link', { href: l.url, target: '_blank', rel: 'noopener' }, l.label || hostOf(l.url), h('span.arrow', { 'aria-hidden': 'true' }, '↗')))) : null))));
+  }
   if ((card.socials && card.socials.length) || card.address) {
     side.append(sec(tr.find,
-      card.socials && card.socials.length ? h('ul.socials', null, card.socials.map((s) => h('li', null, h('a', { href: s.url, target: '_blank', rel: 'noopener' }, h('span', null, SOCIAL_LABEL[s.platform] || s.platform, handle(s) ? h('span.handle', null, handle(s)) : null), h('span.arrow', { 'aria-hidden': 'true' }, '↗'))))) : null,
+      card.socials && card.socials.length ? h('div.links', null, card.socials.map(linkCard)) : null,
       card.address ? h('p.addr', null, card.address) : null));
   }
 
   if (!event && form) side.append(form);
+  if (card.card_images && card.card_images.length) {
+    side.append(h('section.sec.namecards', null, h('h2.kicker', null, tr.cards),
+      card.card_images.map((src) => h('a.namecard', { href: src, target: '_blank', rel: 'noopener', 'aria-label': tr.cardsSub }, h('img', { src, alt: tr.cards, loading: 'lazy', decoding: 'async' }))),
+      h('p.nc-sub', null, tr.cardsSub)));
+  }
   side.append(h('footer', null, card.company || card.name));
   root.append(side);
 

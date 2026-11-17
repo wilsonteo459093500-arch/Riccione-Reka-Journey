@@ -41,6 +41,19 @@ test('开场白 / 传承：一行一句、上限、网站自带的图', () => {
   assert.equal(d.photo, '/card/avatar.jpg');
   assert.ok(d.cases.length >= 5 && d.cases.every((x) => x.image.startsWith('/card/')));
   assert.equal(d.whatsapp, '60163881919');
+  assert.equal(d.groups[0].logo, '/card/logo-pumm.jpg');
+  assert.equal(d.card_images.length, 2);
+  assert.ok(d.socials.every((x) => x.icon && x.icon_path === undefined));
+});
+
+test('商会 / 实体名片：没名字的不要、链接只收 https、上限', () => {
+  const c = cleanCard({
+    groups: [{ name: 'PUMM', links: [{ label: 'a', url: 'pumm.my' }, { url: 'javascript:1' }, { url: 'https://b.my' }, { url: 'https://c.my' }] }, { role: '没名字' }],
+    card_images: ['/card/a.jpg', 'evil.html', '/card/b.jpg', '/card/c.jpg'],
+  });
+  assert.equal(c.groups.length, 1);
+  assert.deepEqual(c.groups[0].links.map((l) => l.url), ['https://pumm.my/', 'https://b.my/']);
+  assert.deepEqual(c.card_images, ['/card/a.jpg', '/card/b.jpg']);
 });
 
 test('cleanCard: 只留认得的栏位、WhatsApp 变数字、上限', () => {
@@ -55,7 +68,7 @@ test('cleanCard: 只留认得的栏位、WhatsApp 变数字、上限', () => {
   assert.equal(c.email, '');
   assert.equal(c.evil, undefined);
   assert.equal(c.offers.length, 8);
-  assert.deepEqual(c.socials, [{ platform: 'instagram', url: 'https://instagram.com/x' }]);
+  assert.deepEqual(c.socials, [{ platform: 'instagram', url: 'https://instagram.com/x', label: '', icon_path: '' }]);
   assert.equal(c.cases.length, 1);
   assert.equal(c.form_on, true);
   assert.equal(cardReady(c), true);
