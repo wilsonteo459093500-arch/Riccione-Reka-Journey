@@ -97,3 +97,15 @@ Wilson 想要一个**只给自己用**的人脉管理 app，用来记录每个�
   - FoloToy 背面 NFC 能不能写还是不知道 → 先用 NTAG215 贴纸（SPACE 里可以写）
   - 留给第 5 阶段：`events` / `attendance` 已经有资料了（活动模式），可以直接拿来「活动后群发」；`people.tags` 有「扫码」可以筛选
   - 没做（以后可以加）：公开页的 WhatsApp / Facebook 分享预览图（要 edge middleware 依名片动态产生 og:image）；FoloToy 用 Wi-Fi 同步最新的活动二维码；名片页浏览次数统计
+
+## 名片页 `/c` 重新设计（2026-11-17：本人觉得第 4 阶段的版本太丑，开新对话重做）
+**只改外观和排版，功能不变**：WhatsApp 我、存我的联络方式（vCard）、留资料表格（PDPA 同意、拍名片代替打字）、活动模式 `?e=`、来源 `?s=nfc / folotoy`、中英切换、送出后 WhatsApp 我。
+- 代码：`card.html` + `src/card/main.js`（画面，原生 JS，不载 React）+ `src/card/card.css`；资料来自 `GET /api/card`（栏位见 `src/lib/card.js` 的 `cleanCard`）。后端、`/api/inbox`、SPACE 里的「我的名片」编辑页尽量不动；真的需要新栏位，就在 `cleanCard` + `CardStudio.jsx` 一起加
+- 现在的样子：深色底 + 黄铜色、上面大照片 / 视频、下面一块块卡片（截图可以用 `npm run dev` 开 `http://localhost:5176/c` 看）
+- 限制：手机优先（多数人在活动现场用 4G 打开）；JS + CSS 维持在 ~30KB gzip 以内、2 秒内看到名字；不要载大的网页字型（真的要用就只载需要的字）；中文 / 英文都要好看
+- 先跟本人确认再动手：
+  1. 代表哪个身份 / 品牌：Wilson 个人？RICCIONE REKA？溪岸 SAIL？UKIR STUDIO？（repo 里 `invite/`、`blueprint/` 有品牌素材、logo、Aman 风格版式 C「安然」可以参考）
+  2. 喜欢的参考（别人的数位名片、品牌网站、Instagram），浅色还是深色
+  3. 第一眼最想让人记住什么（人、作品、展厅视频、一句话）
+- 做法：先出 2–3 个方向（静态示意图 / 截图）给本人挑 → 再做完整版 → Playwright 截手机 + 电脑宽度 → 推到第 4 阶段的分支（或开新分支接在后面）
+- 建议模型：Opus 5.5 · medium（设计要多来回几次）
