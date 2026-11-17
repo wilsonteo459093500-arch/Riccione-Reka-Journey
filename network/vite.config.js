@@ -40,9 +40,9 @@ export default defineConfig(({ mode }) => {
         registerType: 'autoUpdate',
         includeAssets: ['icon.svg', 'apple-touch-icon.png'],
         manifest: {
-          name: 'S.T.A.R — Seek · Treasure · Assist · Reconnect',
-          short_name: 'S.T.A.R',
-          description: 'Strong Ties Are Riches — 只有你看得到的人脉资料库：扫名片、AI 评分、关系记录',
+          name: 'SPACE — Seek · Profile · Assist · Connect · Evolve',
+          short_name: 'SPACE',
+          description: 'Give Every Tie Its Space — 只有你看得到的人脉资料库：扫名片、AI 评分、关系记录',
           theme_color: '#F7F5F0',
           background_color: '#F7F5F0',
           display: 'standalone',

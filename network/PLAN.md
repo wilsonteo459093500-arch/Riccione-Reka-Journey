@@ -1,6 +1,6 @@
-# S.T.A.R（人脉 App）规划
+# SPACE（人脉 App）规划
 
-> 名字：**S**eek 寻找 · **T**reasure 珍惜 · **A**ssist 帮助 · **R**econnect 再联系 —— Strong Ties Are Riches。灵感来自 Starlink：你是中间的星，人脉是轨道上的卫星。
+> 名字：**S**eek 寻 · **P**rofile 识 · **A**ssist 助 · **C**onnect 连 · **E**volve 长 —— Give Every Tie Its Space。灵感来自 Starlink：你是中间的星，人脉是轨道上的卫星。（以前叫 S.T.A.R）
 
 ## 原始规划（灵感：康妮《如何结交比你更优秀的人》+ 卡耐基《人性的弱点》）
 
@@ -64,5 +64,5 @@ Wilson 想要一个**只给自己用**的人脉管理 app，用来记录每个�
 - **第 2 阶段 ✅**（2026-11）：Plaud 逐字稿（贴上 / 上传 TXT·SRT）、语音备注、WhatsApp 汇出（iPhone .zip / Android .txt，只送上次之后的新讯息）、WhatsApp 截图 → Haiku 整理 → 勾选 → 写进档案（兴趣、资源、近况、要避开的话题、「答应过的事」）。做了什么见 `README.md`「第 2 阶段」，升级步骤见 `DEPLOY.md`「第 2 阶段升级」+ 第 6 节验收。
   - 还没用真的 Plaud 档案 / 真的 WhatsApp 汇出 / 真的 API 测（用的是假资料 + 假 AI 回应）
   - 留给第 3 阶段：每笔对话的 `ai.mood.score`（-2 ~ +2）可以进好感度公式；没做完的承诺（`openPromises()`）可以进「今日行动」和 TickTick；`ai.next_topics` + `people.avoid_topics` 可以进见面前的提示卡
-  - 没做（以后可以加）：Android PWA「分享到 S.T.A.R」直接收 WhatsApp 档案（Web Share Target；iPhone 不支援）；在 app 里直接录音
+  - 没做（以后可以加）：Android PWA「分享到 SPACE」直接收 WhatsApp 档案（Web Share Target；iPhone 不支援）；在 app 里直接录音
 
