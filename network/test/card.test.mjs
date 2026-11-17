@@ -246,3 +246,14 @@ test('loadCard: 读主人的名片 + 活动', async () => {
   assert.equal(out.event.name, '商会晚宴');
   assert.equal(out.inbox, 'off');
 });
+
+test('keyHint: 认出贴错的 key（不说出 key 本身）', async () => {
+  const { keyHint } = await import('../api/_lib/admin.js');
+  const jwt = (o) => `eyJhbGciOiJIUzI1NiJ9.${Buffer.from(JSON.stringify(o)).toString('base64url')}.sig`;
+  assert.match(keyHint(jwt({ role: 'anon', ref: 'abc' }), 'https://abc.supabase.co'), /anon key/);
+  assert.match(keyHint(jwt({ role: 'service_role', ref: 'xyz' }), 'https://abc.supabase.co'), /别的 Supabase project/);
+  assert.equal(keyHint(jwt({ role: 'service_role', ref: 'abc' }), 'https://abc.supabase.co'), '');
+  assert.equal(keyHint('sb_secret_123'), '');
+  assert.match(keyHint('sb_publishable_123'), /publishable/);
+  assert.match(keyHint('hello'), /格式不对/);
+});

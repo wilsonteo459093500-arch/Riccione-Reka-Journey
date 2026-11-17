@@ -12,9 +12,29 @@ import { HttpError, header } from './http.js';
 import { CARD_BUCKET } from '../../src/lib/card.js';
 
 export function adminEnv() {
-  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  // 复制贴上常常多一个空格 / 换行 → 先修掉
+  const url = String(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
+  const key = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim().replace(/^["']|["']$/g, '');
   return url && key ? { url, key } : null;
+}
+
+/**
+ * key 哪里不对（不会把 key 本身说出来）：
+ * 旧格式是 JWT，里面写着 role（anon / service_role）和是哪个 project（ref）；新格式 sb_secret_ / sb_publishable_
+ */
+export function keyHint(key, url = '') {
+  const k = String(key || '');
+  if (k.startsWith('sb_publishable_')) return '贴到的是 publishable key（公开的那把），要的是 secret key（sb_secret_…）或旧版的 service_role';
+  if (k.startsWith('sb_secret_')) return '';
+  const parts = k.split('.');
+  if (parts.length !== 3) return 'key 格式不对：应该是 eyJ… 开头的一长串（service_role），或 sb_secret_ 开头';
+  let payload = null;
+  try { payload = JSON.parse(Buffer.from(parts[1].replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8')); } catch { /* 不是 JWT */ }
+  if (!payload) return 'key 格式不对：解不开';
+  if (payload.role && payload.role !== 'service_role') return `贴到的是 ${payload.role} key，要的是 service_role（Supabase → Project Settings → API → service_role → Reveal）`;
+  const ref = (/^https:\/\/([a-z0-9]+)\.supabase\.co/.exec(String(url)) || [])[1];
+  if (ref && payload.ref && payload.ref !== ref) return `这把 key 是别的 Supabase project（${payload.ref}）的，网址是 ${ref}`;
+  return '';
 }
 
 let cached = null; // { client, ownerId }
@@ -27,7 +47,16 @@ export async function resolveOwner(client, env = process.env) {
   if (!email) throw new HttpError(503, { error: 'owner_not_configured', message: '服务器还没设 OWNER_EMAIL' });
   for (let page = 1; page <= 20; page += 1) {
     const { data, error } = await client.auth.admin.listUsers({ page, perPage: 200 });
-    if (error) throw new HttpError(503, { error: 'admin_error', message: 'SUPABASE_SERVICE_ROLE_KEY 好像不对' });
+    if (error) {
+      const env2 = adminEnv() || {};
+      const hint = keyHint(env2.key, env2.url);
+      throw new HttpError(503, {
+        error: 'admin_error',
+        message: `SUPABASE_SERVICE_ROLE_KEY 好像不对${hint ? `：${hint}` : ''}`,
+        detail: String((error && (error.message || error.code)) || '').slice(0, 200),
+        status: error && error.status,
+      });
+    }
     const users = (data && data.users) || [];
     const hit = users.find((u) => String(u.email || '').toLowerCase() === email);
     if (hit) return hit.id;
