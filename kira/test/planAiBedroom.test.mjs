@@ -82,3 +82,53 @@ test('room names keep the number printed on the plan', () => {
   assert.equal(roomZoneName({ type: 'bedroom', name: 'Bedroom' }, 1), 'Bedroom 3 卧室3');
   assert.equal(roomZoneName({ type: 'bedroom', name: 'Guest room' }), 'Bedroom 2 卧室2');
 });
+
+// ---------------- 鞋柜一定要有；图上已有的写出来 ----------------
+import { aiCoverage } from '../src/planner/planAi.js';
+import { cabinetFacts, SYSTEM_PROMPT, RESULT_SCHEMA } from '../api/plan-ai.js';
+
+// 玄关 3.0 × 2.4 m，大门在下墙左边（x 1100–2000 mm）
+const foyer = { type: 'entrance', name: 'Foyer', box: [100, 300, 400, 540], doors: [{ seg: [110, 540, 200, 540], to: 'main' }], windows: [], bed: [] };
+const living = { type: 'living', name: 'Living', box: [400, 100, 800, 540], doors: [], windows: [], bed: [] };
+
+test('shoe cabinet is required: AI gave none → one 1.2 m shoe cabinet is placed beside the main door, ticked, with a note', () => {
+  const s = run({ rooms: [foyer, living], suggestions: [], notes: '' });
+  const shoe = s.find((x) => x.template === 'shoe');
+  assert.ok(shoe?.ok, JSON.stringify(shoe));
+  assert.equal(shoe.pick, true);
+  assert.equal(shoe.cab.spec.W, 1200);
+  assert.ok(shoe.notes.some((n) => /按大门位置自动放/.test(n.zh)));
+  const b = placedFootprint(shoe.cab).bbox;
+  assert.ok(b[0] >= 2000 && b[2] <= 4000 && b[3] <= 5400 + 1, `beside the door, inside the foyer: ${b}`);
+  // 门边只剩 0.95 m → 鞋柜就做 0.95 m（不会伸出房间）
+  const small = run({ rooms: [{ ...foyer, box: [100, 300, 300, 540] }], suggestions: [], notes: '' }).find((x) => x.template === 'shoe');
+  assert.equal(small.cab.spec.W, 950);
+});
+
+test('no auto shoe when the AI already gave one, or one is already drawn on the plan', () => {
+  const given = run({ rooms: [foyer], suggestions: [{ template: 'shoe', room: 'Foyer', segments: [[100, 320, 100, 440]], confidence: 'high', note: '' }], notes: '' });
+  assert.equal(given.filter((x) => x.template === 'shoe').length, 1);
+  assert.ok(!given[0].notes.some((n) => /自动放/.test(n.zh)));
+  const k2 = { id: 'k2', code: 'K2', template: 'shoe', place: { planId: 'p2', x: 0, y: 0, rot: 0 } };
+  const drawn = buildSuggestions({ rooms: [foyer], suggestions: [], notes: '' }, plan, { sentW: 1200, existing: [k2] });
+  assert.equal(drawn.filter((x) => x.template === 'shoe').length, 0);
+});
+
+test('AI panel coverage: "already on the plan: K1" for the TV; shoe missing (no main door found) is flagged as required', () => {
+  const k1 = { id: 'k1', code: 'K1', template: 'tv', place: { planId: 'p2', x: 0, y: 0, rot: 0 } };
+  const ai = { rooms: [{ ...living, doors: [] }], suggestions: [], notes: '' };
+  const rows = aiCoverage(ai, run(ai), [k1], 'p2');
+  assert.deepEqual(rows, [
+    { template: 'shoe', status: 'missing', required: true },
+    { template: 'tv', status: 'existing', codes: ['K1'] },
+  ]);
+  // 楼上（只有卧室）：不吵着要鞋柜 / 电视柜
+  assert.deepEqual(aiCoverage({ rooms: [master()] }, [], [], 'p2'), []);
+});
+
+test('plan-ai: existing cabinets are sent with their type; prompt makes the shoe cabinet required and only skips the same type', () => {
+  assert.match(cabinetFacts([{ code: 'K1', box: [1, 2, 3, 4], template: 'tv' }, { code: 'K2', box: [1, 2, 3, 4], template: '<x>' }]), /K1 at \[1, 2, 3, 4\] \(tv\); K2 at \[1, 2, 3, 4\]\./);
+  assert.match(SYSTEM_PROMPT, /The shoe cabinet is required/);
+  assert.match(SYSTEM_PROMPT, /does not cover the TV wall/);
+  assert.ok(RESULT_SCHEMA.properties.rooms.items.properties.doors.items.properties.to.enum.includes('main'));
+});

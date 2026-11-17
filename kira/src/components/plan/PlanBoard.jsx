@@ -9,7 +9,7 @@ import { T } from '../../theme.js';
 import { BLOCK_COLORS, BLOCK_SELECTED, INK } from '../../render/palette.js';
 import { mmToM, uid } from '../../planner/model.js';
 import { cabinetTitle, templateOf } from '../../planner/templates.js';
-import { aiScaleToPlan, buildSuggestions, applySuggestions, sentToPlan, cleanText } from '../../planner/planAi.js';
+import { aiScaleToPlan, buildSuggestions, applySuggestions, sentToPlan, cleanText, aiCoverage } from '../../planner/planAi.js';
 import { snapSegment } from '../../planner/wallSnap.js';
 import { readPlanWithAi, needsPasscode, savedPasscode, savePasscode, aiErrorText, sendPlanFeedback, feedbackAi, feedbackSuggestion } from '../../services/planAi.js';
 import { mmPerPx, planReady, placedFootprint, placeAt, rotatePlace, dragPlanEdge, aisleWarnings, dist } from '../../planner/plan.js';
@@ -202,8 +202,9 @@ const PlanBoard = forwardRef(function PlanBoard({ plans = [], zones = [], onChan
   const cabsOn = (p) => live.current.zones.flatMap((z) => z.cabinets || []).filter((c) => c.place?.planId === p.id);
   const suggest = (r, p) => {
     const snap = r.dark ? (seg, box, tpl) => snapSegment(r.dark, seg, box, { cutGaps: tpl !== 'kitchen' }) : null;
-    const sugg = planReady(p) ? buildSuggestions(r.result, p, { sentW: r.sentW, crop: r.crop, snap, existing: cabsOn(p) }) : [];
-    return { sugg, picked: new Set(sugg.filter((x) => x.ok && x.pick !== false).map((x) => x.id)) };
+    const existing = cabsOn(p);
+    const sugg = planReady(p) ? buildSuggestions(r.result, p, { sentW: r.sentW, crop: r.crop, snap, existing }) : [];
+    return { sugg, cover: aiCoverage(r.result, sugg, existing, p.id), picked: new Set(sugg.filter((x) => x.ok && x.pick !== false).map((x) => x.id)) };
   };
   // area：只读这一块（原图 px { x, y, w, h }）；不给 = 整张（自动去黑边 / 白边）
   const runAi = async (passcode, p = plan, area = null) => {
@@ -211,7 +212,7 @@ const PlanBoard = forwardRef(function PlanBoard({ plans = [], zones = [], onChan
     setAi({ stage: 'busy', planId: p.id, area });
     try {
       const kk = mmPerPx(p);
-      const cabinets = kk > 0 ? cabsOn(p).map((c) => ({ code: c.code, box: placedFootprint(c).bbox.map((v) => v / kk) })) : [];
+      const cabinets = kk > 0 ? cabsOn(p).map((c) => ({ code: c.code, template: c.template, box: placedFootprint(c).bbox.map((v) => v / kk) })) : [];
       const r = await readPlanWithAi(p, { mmPerPx: kk, passcode, area, cabinets });
       if (!alive.current) return;
       if (needsPasscode()) savePasscode(passcode);
@@ -734,7 +735,7 @@ const PlanBoard = forwardRef(function PlanBoard({ plans = [], zones = [], onChan
           </div>
 
           {ai && ai.planId === plan.id && <AiPanel ai={ai} ready={ready} pass={aiPass} setPass={setAiPass} onRun={(pc) => runAi(pc, plan, ai.area)} onClose={() => setAi(null)} onToggle={toggleAi} onAdd={addAi} onUseScale={useAiScale}
-            onArea={() => { setAi(null); setCorner(null); setMode('aiArea'); }} onCopy={copyAi} hi={aiHi} setHi={setAiHi} onBad={badAi} onMissing={missingAi} />}
+            onArea={() => { setAi(null); setCorner(null); setMode('aiArea'); }} onCopy={copyAi} hi={aiHi} setHi={setAiHi} onBad={badAi} onMissing={missingAi} onDraw={() => { setMode('draw'); setCorner(null); }} />}
 
           {/* 选中的柜子 */}
           {selCab && selCab.place?.planId === plan.id && (
@@ -831,7 +832,7 @@ function FbForm({ options, multi = true, placeholder, onSend, onCancel, sendLabe
   );
 }
 
-function AiPanel({ ai, ready, pass, setPass, onRun, onClose, onToggle, onAdd, onUseScale, onArea, onCopy, hi, setHi, onBad, onMissing }) {
+function AiPanel({ ai, ready, pass, setPass, onRun, onClose, onToggle, onAdd, onUseScale, onArea, onCopy, hi, setHi, onBad, onMissing, onDraw }) {
   const n = ai.sugg ? ai.sugg.filter((x) => x.ok && ai.picked.has(x.id)).length : 0;
   const [fbOpen, setFbOpen] = useState(null); // 哪一个建议的 👎 表打开着（'missing' = 漏了柜子）
   const fb = ai.fb || {};
@@ -903,6 +904,24 @@ function AiPanel({ ai, ready, pass, setPass, onRun, onClose, onToggle, onAdd, on
                     <FbForm options={FB_REASONS} placeholder="哪里不对？例：衣柜挡到床头墙 — What's wrong? (optional)"
                       onCancel={() => setFbOpen(null)} onSend={(reasons, note) => { setFbOpen(null); onBad(x, reasons, note); }} />
                   )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {/* 图上已经有的（AI 不重复建议，写出来免得以为漏了）/ 该有却没有的（鞋柜一定要加）*/}
+          {ready && (ai.cover || []).length > 0 && (
+            <div className="mb-2 space-y-0.5" data-plan-ai-cover>
+              {ai.cover.map((c) => {
+                const t = templateOf(c.template);
+                return c.status === 'existing' ? (
+                  <div key={c.template} className="flex items-center gap-1" style={{ color: '#5B8A72' }} data-plan-ai-cover-row="existing" data-template={c.template}>
+                    <Check size={12} /> {t.zh} {t.en}：图上已有 {c.codes.join('、')}（AI 不重复建议）— already on the plan
+                  </div>
+                ) : (
+                  <div key={c.template} className="flex items-center gap-1.5 flex-wrap" style={{ color: c.required ? T.terra : T.wood }} data-plan-ai-cover-row="missing" data-template={c.template}>
+                    <AlertTriangle size={12} /> {t.zh} {t.en}：AI 没给{c.required ? '，一定要加' : ''} — {c.template === 'shoe' ? '在大门旁边画一个 Draw one by the main door' : '在电视墙画一个 Draw one on the TV wall'}
+                    <Btn onClick={onDraw} data-plan-ai-cover-draw={c.template}><Square size={12} /> 画柜子 Draw</Btn>
                   </div>
                 );
               })}

@@ -76,5 +76,5 @@ test('plan-ai prompt + schema: bed first, door wall, doors / windows / bed per r
   assert.match(SYSTEM_PROMPT, /L-shaped wardrobe/);
   const room = RESULT_SCHEMA.properties.rooms.items;
   assert.deepEqual(room.required, ['type', 'name', 'box', 'doors', 'windows', 'bed']);
-  assert.deepEqual(room.properties.doors.items.properties.to.enum, ['entry', 'bathroom', 'balcony', 'closet', 'other']);
+  assert.deepEqual(room.properties.doors.items.properties.to.enum, ['main', 'entry', 'bathroom', 'balcony', 'closet', 'other']);
 });

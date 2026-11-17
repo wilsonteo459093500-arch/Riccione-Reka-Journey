@@ -86,7 +86,7 @@ export async function readPlanWithAi(plan, { mmPerPx = 0, ceilingH = 0, passcode
   const s = w / crop.w; // 原图 px → 送去 px
   const sentMmPerPx = mmPerPx > 0 ? mmPerPx / s : 0;
   const toSent = (b) => [(b[0] - crop.x) * s, (b[1] - crop.y) * s, (b[2] - crop.x) * s, (b[3] - crop.y) * s].map((v) => Math.round(v));
-  const sentCabs = (cabinets || []).map((c) => ({ code: String(c.code || ''), box: toSent(c.box) }))
+  const sentCabs = (cabinets || []).map((c) => ({ code: String(c.code || ''), box: toSent(c.box), template: String(c.template || '') }))
     .filter((c) => c.box[2] > 0 && c.box[3] > 0 && c.box[0] < w && c.box[1] < h).slice(0, 40);
   const headers = await authHeaders(passcode);
   let res;

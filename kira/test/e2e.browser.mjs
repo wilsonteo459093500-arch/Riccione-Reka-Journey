@@ -603,6 +603,8 @@ try {
   const dashed = await ap.locator('[data-plan-ai-overlay] rect').count();
   check('v3 AI: scale from the printed 2700 → 2 suggestions (wardrobe + L kitchen) drawn dashed on the plan', items === 2 && dashed >= 2 && /1 px = 10\.0 mm/.test(await ap.locator('[data-plan-board]').innerText()), `${items} items, ${dashed} rects`);
   await ap.locator('[data-plan-board]').screenshot({ path: path.join(outDir, 'v3-plan-ai-suggest.png') });
+  const coverTxt = await ap.locator('[data-plan-ai-cover-row="missing"][data-template="shoe"]').innerText().catch(() => '');
+  check('AI: no shoe cabinet and no main door found → red "一定要加" row with a Draw button', /一定要加/.test(coverTxt) && (await ap.locator('[data-plan-ai-cover-draw="shoe"]').count()) === 1, coverTxt);
   // 👎 第一个建议：选「挡床位」+ 备注 → 送出 → 那行显示「已反馈」；第一笔带图（送去 AI 的那张 JPEG）
   const firstRow = ap.locator('[data-plan-ai-row]').first();
   await firstRow.locator('[data-plan-ai-item]').hover();
@@ -721,6 +723,7 @@ try {
   await fp.getByRole('button', { name: /Read 开始/ }).click();
   await fp.waitForSelector('[data-plan-ai-list]', { timeout: 10000 });
   await fp.locator('[data-plan-ai-area]').first().click();
+  await fp.locator('[data-plan-svg]').evaluate((e) => e.scrollIntoView({ block: 'center' })); // AI 面板变高了：先把图捲回来再拖
   const fpt = planPt(fp);
   const [ax, ay] = await fpt(60, 80), [bx, by] = await fpt(620, 720);
   await fp.mouse.move(ax, ay); await fp.mouse.down(); await fp.mouse.move((ax + bx) / 2, (ay + by) / 2, { steps: 4 }); await fp.mouse.move(bx, by, { steps: 4 }); await fp.mouse.up();

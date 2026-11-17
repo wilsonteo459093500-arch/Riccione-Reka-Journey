@@ -17,7 +17,7 @@ const TEMPLATES = ['wardrobe', 'kitchen', 'tv', 'shoe'];
 const ROOM_TYPES = ['kitchen', 'master', 'bedroom', 'living', 'dining', 'entrance', 'bathroom', 'other'];
 
 const point = { type: 'array', items: { type: 'number' }, description: '[x, y] in image pixels' };
-export const DOOR_TO = ['entry', 'bathroom', 'balcony', 'closet', 'other'];
+export const DOOR_TO = ['main', 'entry', 'bathroom', 'balcony', 'closet', 'other'];
 const seg = (description) => ({ type: 'array', items: { type: 'number' }, description });
 export const RESULT_SCHEMA = {
   type: 'object',
@@ -50,7 +50,7 @@ export const RESULT_SCHEMA = {
               required: ['seg', 'to'],
               properties: {
                 seg: seg('[x0, y0, x1, y1]: the opening along the wall, in image pixels'),
-                to: { type: 'string', enum: DOOR_TO, description: 'entry = the door you walk in through; bathroom = an en-suite / toilet door; balcony = a door out to a balcony, yard or terrace' },
+                to: { type: 'string', enum: DOOR_TO, description: 'main = the main entrance door of the house (from outside, the porch or the car porch); entry = the door you walk into this room through; bathroom = an en-suite / toilet door; balcony = a door out to a balcony, yard or terrace' },
               },
             },
           },
@@ -95,7 +95,9 @@ Cabinet types you may suggest:
 - tv: the TV wall in the living room, usually the long solid wall facing the sofa area.
 - shoe: a shoe / foyer cabinet beside the main entrance door, usually 1.0-1.5 m.
 
-Cover the whole plan: one wardrobe in every bedroom and the master bedroom, the kitchen, the living room TV wall and a shoe cabinet at the main entrance. A sheet may show several floors side by side (for example "GROUND FLOOR PLAN" and "FIRST FLOOR PLAN"); read every floor. When a wall or a room is hard to read, still give your best suggestion with confidence "low" instead of leaving it out. Skip only rooms that have no possible wall, and rooms that already have a cabinet listed below.
+Cover the whole plan: one wardrobe in every bedroom and the master bedroom, the kitchen, the living room TV wall and a shoe cabinet at the main entrance. A sheet may show several floors side by side (for example "GROUND FLOOR PLAN" and "FIRST FLOOR PLAN"); read every floor. When a wall or a room is hard to read, still give your best suggestion with confidence "low" instead of leaving it out. Skip only rooms that have no possible wall.
+The shoe cabinet is required: whenever the plan shows the main entrance door, mark that door with to "main" and always suggest a shoe cabinet beside it (inside, against the wall next to the door, clear of its swing), with confidence "low" if unsure.
+Cabinets already drawn on the plan are listed below with their type. Do not suggest the same type again where one is already drawn, but still suggest every other type: for example a cabinet in the living room that is not a tv cabinet does not cover the TV wall.
 
 Give positions as segments along the inner face of the wall (the side facing into the room, not the outside of the building) in the image's pixel coordinates (origin top-left, x to the right, y down). Segments are horizontal or vertical and lie inside the room; a cabinet never crosses a door opening. Rooms are boxes of their inner walls; for every room also list its door openings and windows (empty arrays when none), and for bedrooms the planned bed box (empty array for other rooms). Measure lengths from the plan's own scale or printed dimensions when you can. Do not give depths or heights: the company's templates set those. Notes are short plain English sentences.
 
@@ -127,12 +129,15 @@ export async function checkAccess(req, env, fetchImpl = fetch) {
 }
 
 // ---------------- 问 Claude ----------------
-// 图上已有的柜子：[{ code, box:[x0,y0,x1,y1] }]（送去那张图的 px）
+// 图上已有的柜子：[{ code, box:[x0,y0,x1,y1], template? }]（送去那张图的 px）—— 带种类，AI 只跳过同一种
 export function cabinetFacts(cabinets) {
   const list = (Array.isArray(cabinets) ? cabinets : []).slice(0, 40)
     .filter((c) => Array.isArray(c?.box) && c.box.length === 4 && c.box.every((v) => Number.isFinite(Number(v))))
-    .map((c) => `${String(c.code || 'cabinet').replace(/[^\w -]/g, '').slice(0, 12)} at [${c.box.map((v) => Math.round(Number(v))).join(', ')}]`);
-  return list.length ? `Cabinets already drawn on the plan (do not suggest these again): ${list.join('; ')}.` : '';
+    .map((c) => {
+      const type = /^[a-z]{2,12}$/.test(String(c.template || '')) ? ` (${c.template})` : '';
+      return `${String(c.code || 'cabinet').replace(/[^\w -]/g, '').slice(0, 12)} at [${c.box.map((v) => Math.round(Number(v))).join(', ')}]${type}`;
+    });
+  return list.length ? `Cabinets already drawn on the plan (do not suggest the same type again there): ${list.join('; ')}.` : '';
 }
 
 export async function readPlan(client, { image, w, h, mmPerPx, ceilingH, cabinets }) {

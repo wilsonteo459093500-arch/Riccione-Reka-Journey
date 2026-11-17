@@ -154,7 +154,11 @@ export function buildSuggestions(ai, plan, { sentW, crop = null, snap = null, ex
   const geoOf = new Map(); // 建议 id → 卧室的门 / 窗 / 床（mm），衣柜检查用
   // L 型衣柜（2 段）→ 拆成两个衣柜：第二段在墙角那头让出第一段的深度（同厨房转角）
   const items = [];
-  (Array.isArray(ai?.suggestions) ? ai.suggestions : []).forEach((sg, idx) => {
+  // 鞋柜一定要有（用户定）：AI 没给、图上也还没有 → 按大门（to 'main'）自动放一个
+  const sugIn = Array.isArray(ai?.suggestions) ? [...ai.suggestions] : [];
+  const hasShoe = sugIn.some((s) => s?.template === 'shoe') || (existing || []).some((c) => c?.template === 'shoe' && c?.place?.planId === plan.id);
+  if (!hasShoe) { const a = autoShoe(rooms, mmpp * k); if (a) sugIn.push(a); }
+  sugIn.forEach((sg, idx) => {
     const segs = (Array.isArray(sg?.segments) ? sg.segments : []).filter(segOk).map((s) => s.map(Number));
     if (sg?.template === 'wardrobe' && segs.length === 2) {
       const [s1, s2] = segs;
@@ -205,6 +209,7 @@ export function buildSuggestions(ai, plan, { sentW, crop = null, snap = null, ex
     const lens = segs.map((s) => Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]));
     const lim = AI_LIMITS[template];
     const notes = [];
+    if (sg?.auto) notes.push(T('AI did not suggest one — placed beside the main door, check the position', 'AI 没给鞋柜：按大门位置自动放，请确认位置'));
     if (!snappedAll) notes.push(T('No wall found here — check the position', '图上找不到这面墙 —— 位置请确认'));
     const fixLen = (L) => {
       const v = clamp(snapTo(L, lim.snap), lim.min, lim.max);
@@ -269,6 +274,47 @@ export function buildSuggestions(ai, plan, { sentW, crop = null, snap = null, ex
   checkBedrooms(out, geoOf, mmpp);
   // 默认勾的排前面（不勾的留着、写原因，业务自己决定）
   return out.map((x, i) => [x, i]).sort((p, q) => ((q[0].ok && q[0].pick) - (p[0].ok && p[0].pick)) || (q[0].ok - p[0].ok) || (p[1] - q[1])).map(([x]) => x);
+}
+
+// ---------------- 鞋柜一定要有 / 电视墙 ----------------
+export const SHOE_AUTO_MM = 1200;
+// 大门（某个房间的 doors 里 to:'main'）旁边的墙 → 1.2 m 鞋柜线段（送去 px）；门两边选比较长的那边；放不下 0.6 m → 看下一个
+function autoShoe(rooms, mmPerSentPx) {
+  if (!(mmPerSentPx > 0)) return null;
+  const px = (mm) => mm / mmPerSentPx;
+  for (const rm of rooms) {
+    const door = (Array.isArray(rm?.doors) ? rm.doors : []).find((d) => d?.to === 'main' && segOk(d.seg));
+    if (!door || !segOk(rm?.box)) continue;
+    const box = normRect(rm.box.map(Number));
+    const [ax, ay, bx, by] = door.seg.map(Number);
+    const horiz = Math.abs(bx - ax) >= Math.abs(by - ay);
+    const [lo, hi] = horiz ? [box[0], box[2]] : [box[1], box[3]];
+    const d0 = horiz ? Math.min(ax, bx) : Math.min(ay, by), d1 = horiz ? Math.max(ax, bx) : Math.max(ay, by);
+    const c = horiz ? (ay + by) / 2 : (ax + bx) / 2; // 门在哪一道墙：贴最近的房间边
+    const wall = horiz ? (Math.abs(c - box[1]) <= Math.abs(c - box[3]) ? box[1] : box[3]) : (Math.abs(c - box[0]) <= Math.abs(c - box[2]) ? box[0] : box[2]);
+    const gap = px(50), before = d0 - gap - lo, after = hi - (d1 + gap);
+    if (Math.max(before, after) < px(600)) continue;
+    const [u0, u1] = after >= before ? [d1 + gap, d1 + gap + Math.min(px(SHOE_AUTO_MM), after)] : [d0 - gap - Math.min(px(SHOE_AUTO_MM), before), d0 - gap];
+    const seg = horiz ? [u0, wall, u1, wall] : [wall, u0, wall, u1];
+    return { template: 'shoe', room: rm.name, segments: [seg], confidence: 'high', note: '', auto: true };
+  }
+  return null;
+}
+
+// AI 结果面板要列出来的：图上已经有的（例：「图上已有 K1 电视柜」，AI 不会重复建议）、该有却没有的（鞋柜一定要加）
+//   鞋柜：看得到大门、或有玄关 / 客厅 / 餐厅 / 厨房（= 有楼下）才要；电视柜：有客厅才要
+const GROUND_ROOMS = new Set(['entrance', 'living', 'dining', 'kitchen']);
+export function aiCoverage(ai, sugg = [], existing = [], planId = null) {
+  const rooms = Array.isArray(ai?.rooms) ? ai.rooms : [];
+  const ground = rooms.some((r) => GROUND_ROOMS.has(r?.type) || (Array.isArray(r?.doors) && r.doors.some((d) => d?.to === 'main')));
+  const living = rooms.some((r) => r?.type === 'living');
+  const rows = [];
+  [['shoe', ground], ['tv', living]].forEach(([template, need]) => {
+    const codes = (existing || []).filter((c) => c?.template === template && (!planId || c?.place?.planId === planId)).map((c) => c.code).filter(Boolean);
+    if (codes.length) rows.push({ template, status: 'existing', codes });
+    else if (need && !(sugg || []).some((x) => x.template === template && x.ok)) rows.push({ template, status: 'missing', required: template === 'shoe' });
+  });
+  return rows;
 }
 
 // ---------------- 卧室衣柜：别挡床、窗、门（用户定：先留床位再放衣柜）----------------
