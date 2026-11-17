@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
 import { repo } from '../lib/repo.js';
-import { cardLink, cardReady, MAX_OFFERS, MAX_CASES, MAX_SOCIALS, SOCIAL_PLATFORMS } from '../lib/card.js';
+import { cardLink, cardReady, cleanLines, MAX_OFFERS, MAX_CASES, MAX_SOCIALS, MAX_OPENING, MAX_MILESTONES, SOCIAL_PLATFORMS } from '../lib/card.js';
 import { qrPath, qrPng } from '../lib/qr.js';
 import { fmtDate } from '../lib/logic.js';
 import { Button, Field, Input, Textarea, Section, Sheet, useToast, cx } from './ui.jsx';
@@ -215,14 +215,14 @@ function CardEditor() {
   // 本机模式：上传过的图在 IndexedDB，打开时先放进预览网址
   const [, bump] = useState(0);
   useEffect(() => {
-    const paths = [store.card.photo_path, store.card.video_path, store.card.poster_path, ...store.card.cases.map((c) => c.image_path)];
+    const paths = [store.card.photo_path, store.card.video_path, store.card.poster_path, store.card.story.photo_path, ...store.card.cases.map((c) => c.image_path)];
     if (repo.warmPublic) repo.warmPublic(paths).then(() => bump((x) => x + 1)).catch(() => null);
   }, [store.card]);
 
   const set = (patch) => setF((x) => ({ ...x, ...patch }));
   async function save() {
     setBusy(true);
-    try { await store.saveCard(f); toast('名片存好了（公开页 1 分钟内更新）'); } catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
+    try { await store.saveCard({ ...f, opening: cleanLines(f.opening), opening_en: cleanLines(f.opening_en) }); toast('名片存好了（公开页 1 分钟内更新）'); } catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
   }
   async function upload(file, kind, apply) {
     if (!file) return;
@@ -243,6 +243,24 @@ function CardEditor() {
         {!f.video_path && (
           <Field className="mt-2" label="或者贴视频网址（MP4 直链，https）"><Input value={f.video_url} onChange={(e) => set({ video_url: e.target.value })} placeholder="https://…/showroom.mp4" /></Field>
         )}
+      </Section>
+
+      <Section title="开场白（全黑、一句一句出现，然后亮起来）">
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={f.opening_on} onChange={(e) => set({ opening_on: e.target.checked })} className="h-4 w-4 accent-plum" />
+          打开名片先播开场（第一次约 9 秒，之后只亮 1 秒；点一下就跳过）
+        </label>
+        {f.opening_on && (
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label={`中文（一行一句，最多 ${MAX_OPENING} 句）`} hint="空白 = 你好 / 我是…，你可以叫我… / 很高兴认识你 / 希望我们之间的认识，能为你创造价值">
+              <Textarea rows={5} value={(f.opening || []).join('\n')} onChange={(e) => set({ opening: e.target.value.split('\n').slice(0, MAX_OPENING) })} placeholder={'你好\n我是张炜盛，你可以叫我 Wilson\n很高兴认识你\n希望我们之间的认识，能为你创造价值'} />
+            </Field>
+            <Field label="English（一行一句）" hint="空白 = Hello / I’m … / Nice to meet you / …">
+              <Textarea rows={5} value={(f.opening_en || []).join('\n')} onChange={(e) => set({ opening_en: e.target.value.split('\n').slice(0, MAX_OPENING) })} placeholder={'Hello\nI’m Wilson Teo — 张炜盛.\nNice to meet you.'} />
+            </Field>
+          </div>
+        )}
+        <p className="mt-2 text-xs text-faint">亮起来之后的背景：有展厅视频就放视频，没有就用溪岸图册的照片；名字下面那句是「一句话介绍」。</p>
       </Section>
 
       <Section title="名字和介绍">
@@ -276,6 +294,24 @@ function CardEditor() {
                 {SOCIAL_PLATFORMS.map((p) => <option key={p} value={p}>{SOCIAL_LABEL[p]}</option>)}
               </select>
               <Input value={s.url} onChange={(e) => upd({ ...s, url: e.target.value })} placeholder="https://instagram.com/…" />
+            </div>
+          )} />
+      </Section>
+
+      <Section title="传承（两代人的故事）">
+        <div className="flex gap-3">
+          <MediaSlot small path={f.story.photo_path} busy={uploading === 'case'} accept="image/*" icon={ImagePlus}
+            onPick={(file) => upload(file, 'case', (p) => set({ story: { ...f.story, photo_path: p } }))} onClear={() => set({ story: { ...f.story, photo_path: '' } })} />
+          <div className="flex-1 space-y-2">
+            <Input value={f.story.title} onChange={(e) => set({ story: { ...f.story, title: e.target.value } })} placeholder="标题：例 两代人，一份木作" maxLength={60} />
+            <Textarea rows={2} value={f.story.note} onChange={(e) => set({ story: { ...f.story, note: e.target.value } })} placeholder="照片下面的一句话" maxLength={300} />
+          </div>
+        </div>
+        <ListEditor className="mt-3" label="大事记" max={MAX_MILESTONES} items={f.story.milestones} onChange={(milestones) => set({ story: { ...f.story, milestones } })} blank={{ year: '', text: '' }}
+          render={(m, upd) => (
+            <div className="flex flex-1 gap-2">
+              <Input className="w-20" value={m.year} onChange={(e) => upd({ ...m, year: e.target.value })} placeholder="1979" maxLength={12} />
+              <Input value={m.text} onChange={(e) => upd({ ...m, text: e.target.value })} placeholder="发生了什么" maxLength={120} />
             </div>
           )} />
       </Section>

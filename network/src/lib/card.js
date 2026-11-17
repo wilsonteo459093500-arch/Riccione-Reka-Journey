@@ -14,6 +14,8 @@ export const CONSENT_VERSION = 'pdpa-2026-11';
 export const MAX_OFFERS = 8;
 export const MAX_CASES = 6;
 export const MAX_SOCIALS = 6;
+export const MAX_OPENING = 6;     // 开场白最多几句
+export const MAX_MILESTONES = 8;  // 「两代人」的大事记
 
 const str = (v, max = 200) => (typeof v === 'string' ? v : v == null ? '' : String(v))
   .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
@@ -31,33 +33,73 @@ export function safeUrl(v, max = 500) {
   } catch { return ''; }
 }
 
-/** 存储路径：<user id>/card/<档名>，不准 .. 或奇怪字元 */
+/** 存储路径：<user id>/card/<档名>，或网站自带的 /card/<档名>（预设名片用的图）；不准 .. 或奇怪字元 */
 export function safePath(v) {
   const s = str(v, 300);
-  return /^[\w-]+\/card\/[\w.-]+\.(jpe?g|png|webp|mp4|webm|mov)$/i.test(s) && !s.includes('..') ? s : '';
+  return /^(?:[\w-]+\/|\/)card\/[\w.-]+\.(jpe?g|png|webp|mp4|webm|mov)$/i.test(s) && !s.includes('..') ? s : '';
+}
+
+/** 一行一句（阵列或多行字都收）→ 去空白、截长度、限几句 */
+export function cleanLines(v, max = MAX_OPENING, len = 60) {
+  const arr = Array.isArray(v) ? v : typeof v === 'string' ? v.split(/\r?\n/) : [];
+  return arr.map((x) => str(x, len)).filter(Boolean).slice(0, max);
 }
 
 export const SOCIAL_PLATFORMS = ['linkedin', 'instagram', 'facebook', 'xiaohongshu', 'tiktok', 'youtube', 'website'];
 
 export const DEFAULT_CARD = {
-  name: 'Wilson',
-  name_alt: '',
-  title: 'Founder',
-  company: 'RICCIONE REKA · 溪岸 SAIL',
-  tagline: '把家做成你想住一辈子的样子。',
-  intro: '马来西亚的全屋定制品牌：橱柜、衣柜、全屋定制家具，从设计、生产到安装一条龙。展厅随时欢迎来喝杯咖啡。',
-  whatsapp: '',
+  name: 'Wilson Teo',
+  name_alt: '张炜盛',
+  title: '董事 Director · 家族企业第二代',
+  company: 'RICCIONE 瑞吉欧 · 溪岸 SAIL',
+  tagline: '以木为语，与自然共生。',
+  intro: '我在麻坡长大，小时候发誓绝不接我爸的生意。后来为了家人，考了 CIMA 特许管理会计师，再从仓库扛货做起，一步一步接下这份家业。\n\n现在我在马来西亚带着 RICCIONE 瑞吉欧做实木家具的设计与零售；2025 年成立 Riccione Reka 全屋定制，也把来自成都的自然主义品牌溪岸 Sail 带到东南亚。\n\n我想做的，是把父亲四十多年的实木匠心，和更慢、更自然的生活，落地到你的家。我没有成功，我只是还在路上。',
+  whatsapp: '60163881919',
   phone: '',
-  email: '',
-  website: '',
-  address: '',
-  photo_path: '',
+  email: 'wilsonteo@riccione.asia',
+  website: 'https://www.riccione.asia/',
+  address: '23-2, Jalan Setia Prima (S) U13/S, Seksyen U13, Setia Alam, 40170 Shah Alam, Selangor',
+  photo_path: '/card/avatar.jpg',
   video_path: '',
   video_url: '',
   poster_path: '',
-  offers: ['全屋定制 / 室内设计的专业意见', '展厅可以借来办小型活动', '设计师、师傅、供应商人脉'],
-  cases: [],
-  socials: [],
+  opening: [],
+  opening_en: [],
+  opening_on: true,
+  story: {
+    title: '两代人，一份木作',
+    note: '我和爸爸，在我们的展位上。他用青春打下的舞台，现在换我接着走。',
+    photo_path: '/card/father.jpg',
+    milestones: [
+      { year: '1979', text: '爸爸开始做木作，一做四十多年' },
+      { year: '2015', text: 'RICCIONE 瑞吉欧在马来西亚成立，以实木家具起步' },
+      { year: '2017', text: '佛山 21,000 平方尺旗舰展厅，获 Archidex 最佳展位设计奖' },
+      { year: '2020', text: '吉隆坡 11,000 平方尺展厅落成' },
+      { year: '2025', text: 'Riccione Reka 全屋定制成立，成为溪岸 Sail 东南亚总代理' },
+    ],
+  },
+  offers: [
+    '全屋定制：门、墙、柜一体化，从设计、生产到安装',
+    '100% 实木家具，模块化，按你的家调整',
+    '溪岸 Sail 自然主义定制：建筑师、设计师的项目',
+    '吉隆坡四层展厅：来喝杯咖啡，也可以借来办小型活动',
+    '二代接班、家族生意：二代聊二代',
+    '中马两地的设计、工程与供应链人脉',
+  ],
+  cases: [
+    { title: '溪岸 · 骨骼线', note: '古典与现代的对话 · HCA 获奖系列', image_path: '/card/skeleton.jpg' },
+    { title: '溪岸 · 空山', note: '留白与壁龛，让空间呼吸', image_path: '/card/kongshan.jpg' },
+    { title: '溪岸 · 织', note: '织物的质感，生活的温度', image_path: '/card/zhi.jpg' },
+    { title: '溪岸 · 雾山', note: '轻盈纯净，如雾中春居', image_path: '/card/wushan.jpg' },
+    { title: '溪岸 · 寂东方', note: '实木的纯粹，东方的沉静', image_path: '/card/jidongfang.jpg' },
+    { title: '瑞吉欧 · 实木', note: '更慢、更柔和，也更自然的生活', image_path: '/card/riccione.jpg' },
+  ],
+  socials: [
+    { platform: 'instagram', url: 'https://www.instagram.com/wilsonteo0419/' },
+    { platform: 'instagram', url: 'https://www.instagram.com/riccione_furniture/' },
+    { platform: 'instagram', url: 'https://www.instagram.com/sail_riccione_reka/' },
+    { platform: 'website', url: 'https://www.riccione.asia/' },
+  ],
   greeting: 'Hi {me}，我是 {name}，刚刚在 {where} 认识 😊',
   privacy_contact: '',
   form_on: true,
@@ -91,11 +133,29 @@ export function cleanCard(c = {}) {
       .map((x) => ({ platform: SOCIAL_PLATFORMS.includes(str(x && x.platform, 20).toLowerCase()) ? str(x.platform, 20).toLowerCase() : 'website', url: safeUrl(x && x.url) }))
       .filter((x) => x.url)
       .slice(0, MAX_SOCIALS),
+    opening: cleanLines(src.opening),
+    opening_en: cleanLines(src.opening_en),
+    opening_on: src.opening_on !== false,
+    story: cleanStory(src.story),
     greeting: str(src.greeting, 200) || DEFAULT_CARD.greeting,
     privacy_contact: str(src.privacy_contact, 120),
     form_on: src.form_on !== false,
   };
   return out;
+}
+
+/** 「两代人」那一块：标题、一句话、一张照片、几件大事（年份 + 一句） */
+function cleanStory(v) {
+  const x = v && typeof v === 'object' ? v : {};
+  return {
+    title: str(x.title, 60),
+    note: str(x.note, 300),
+    photo_path: safePath(x.photo_path),
+    milestones: (Array.isArray(x.milestones) ? x.milestones : [])
+      .map((m) => ({ year: str(m && m.year, 12), text: str(m && m.text, 120) }))
+      .filter((m) => m.year || m.text)
+      .slice(0, MAX_MILESTONES),
+  };
 }
 
 /** 名片有没有填到可以公开（至少名字 + 一个联络方式） */
@@ -107,6 +167,7 @@ export function cardReady(card) {
 /** 存储路径 → 公开网址 */
 export function publicUrl(base, path) {
   if (!path) return '';
+  if (path.startsWith('/')) return path; // 网站自带的图（/card/…）
   return `${String(base || '').replace(/\/+$/, '')}/storage/v1/object/public/${CARD_BUCKET}/${path.split('/').map(encodeURIComponent).join('/')}`;
 }
 
@@ -121,6 +182,7 @@ export function publicCard(card, supabaseUrl) {
     video: video_path ? url(video_path) : c.video_url,
     poster: url(poster_path) || url(photo_path),
     cases: c.cases.map(({ image_path, ...x }) => ({ ...x, image: url(image_path) })),
+    story: (({ photo_path: sp, ...x }) => ({ ...x, photo: url(sp) }))(c.story),
   };
 }
 

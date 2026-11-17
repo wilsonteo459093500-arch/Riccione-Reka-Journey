@@ -74,7 +74,7 @@
       "destination": "/card.html"
     },
     {
-      "source": "/((?!api/|assets|card\\.html|icon\\.svg|icon-192\\.png|icon-512\\.png|robots\\.txt|sw\\.js|workbox-.*\\.js|manifest\\.webmanifest|apple-touch-icon\\.png).*)",
+      "source": "/((?!api/|assets|card/|card\\.html|icon\\.svg|icon-192\\.png|icon-512\\.png|robots\\.txt|sw\\.js|workbox-.*\\.js|manifest\\.webmanifest|apple-touch-icon\\.png).*)",
       "destination": "/index.html"
     }
   ]

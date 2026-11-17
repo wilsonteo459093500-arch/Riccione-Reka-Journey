@@ -107,6 +107,7 @@ h1.name { margin: 0; font-weight: 700; font-size: clamp(36px, 10vw, 44px); line-
 .socials li:first-child a { padding-top: 2px; }
 .socials li:last-child a { border-bottom: 0; }
 .arrow { color: var(--faint); }
+.handle { margin-left: 8px; color: var(--faint); font-size: 14px; }
 .addr { margin: 12px 0 0; font-size: 14px; line-height: 1.6; color: var(--muted); }
 
 /* ---------- 表格 ---------- */
@@ -170,4 +171,89 @@ footer { padding: 40px 0 max(36px, env(safe-area-inset-bottom)); text-align: cen
   .gallery.empty + .side { grid-column: 1 / -1; width: 520px; margin: 0 auto; }
   .gallery.empty ~ .dock { left: 50%; }
   .skeleton { grid-column: 1 / -1; width: 520px; margin: 0 auto; }
+}
+
+/* ---------- 传承（两代人） ---------- */
+.st-title { margin: 0; font-size: 22px; font-weight: 700; line-height: 1.3; letter-spacing: -0.01em; }
+.st-photo { margin: 16px -4px 0; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 5; background: #e8e8ed; }
+.st-photo img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 70%; }
+.st-note { margin: 14px 0 0; font-size: 15px; line-height: 1.7; color: var(--muted); }
+.timeline { list-style: none; margin: 18px 0 0; padding: 0; position: relative; }
+.timeline::before { content: ''; position: absolute; left: 4px; top: 8px; bottom: 8px; width: 1px; background: var(--hair); }
+.timeline li { position: relative; display: flex; gap: 14px; padding: 8px 0 8px 22px; font-size: 14.5px; line-height: 1.55; }
+.timeline li::before { content: ''; position: absolute; left: 0; top: 14px; width: 9px; height: 9px; border-radius: 50%; background: var(--card); border: 1.5px solid var(--ink); }
+.timeline li:first-child::before, .timeline li:last-child::before { background: var(--ink); }
+.timeline .yr { flex-shrink: 0; width: 40px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ---------- 开场：全黑，一句一句，然后亮起来（opening.js） ---------- */
+.op { --p: 0; position: relative; z-index: 0; height: 100vh; height: 100svh; min-height: 520px; overflow: hidden; background: #000; color: #fff; display: block; cursor: default; isolation: isolate; }
+.op > * { position: absolute; }
+.op-bg, .op-shade, .op-glow, .op-sweep { inset: 0; pointer-events: none; }
+.op-bg { opacity: 0; transform: scale(1.1); }
+.op-bg picture { display: contents; }
+.op-bg img, .op-bg video { width: 100%; height: 100%; object-fit: cover; object-position: 50% 72%; }
+.op-shade { opacity: 0; background: radial-gradient(ellipse 60% 45% at 50% 47%, rgba(0, 0, 0, 0.32), transparent 70%), linear-gradient(180deg, rgba(0, 0, 0, 0.55) 0%, rgba(0, 0, 0, 0.18) 38%, rgba(0, 0, 0, 0.2) 60%, rgba(0, 0, 0, 0.7) 100%); }
+.op-glow { inset: auto; left: 50%; top: 50%; width: 90vmax; height: 90vmax; margin: -45vmax 0 0 -45vmax; border-radius: 50%; opacity: 0; transform: scale(0.02);
+  background: radial-gradient(circle, rgba(255, 246, 228, 1) 0%, rgba(255, 222, 170, 0.75) 14%, rgba(240, 180, 110, 0.32) 34%, rgba(200, 140, 80, 0.08) 52%, transparent 68%); }
+.op-sweep { opacity: 0; mix-blend-mode: soft-light; background: linear-gradient(105deg, transparent 35%, rgba(255, 244, 220, 0.9) 50%, transparent 65%) no-repeat; background-size: 250% 100%; background-position: 130% 0; }
+
+/* 一句一句 */
+.op-stage { inset: 0; display: flex; align-items: center; justify-content: center; padding: 0 28px; text-align: center; }
+.op-line { margin: 0; max-width: 16em; font-weight: 600; line-height: 1.35; letter-spacing: 0.02em; text-wrap: balance;
+  background: linear-gradient(100deg, #9a8664 0%, #fff 28%, #f6dcaa 46%, #fff 64%, #c9b48a 100%); background-size: 260% 100%; background-position: 100% 0;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: op-in 1s cubic-bezier(0.2, 0.7, 0.2, 1) both, op-shine 2.6s ease-out 0.15s both; }
+.op-line.xl { font-size: clamp(64px, 20vw, 140px); font-weight: 600; letter-spacing: 0.04em; }
+.op-line.l { font-size: clamp(28px, 8vw, 56px); }
+.op-line.m { font-size: clamp(22px, 6vw, 42px); }
+.op-line span { display: block; }
+.op-line.out { animation: op-out 0.5s ease-in both; }
+@keyframes op-in { from { opacity: 0; filter: blur(16px); transform: scale(1.05); letter-spacing: 0.22em; } to { opacity: 1; filter: blur(0); transform: none; } }
+@keyframes op-shine { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@keyframes op-out { from { opacity: 1; filter: blur(0); transform: none; } to { opacity: 0; filter: blur(10px); transform: translateY(-16px); } }
+
+/* 亮起来之后 */
+.op-final { inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 28px 6vh; text-align: center; opacity: calc(1 - var(--p) * 1.6); transform: translateY(calc(var(--p) * -60px)); }
+.op-final > * { opacity: 0; }
+.op-co { margin: 0 0 18px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.28em; text-transform: uppercase; color: rgba(255, 255, 255, 0.82); }
+.op-name { margin: 0; font-size: clamp(44px, 13vw, 92px); font-weight: 700; line-height: 1.02; letter-spacing: -0.03em; text-shadow: 0 2px 30px rgba(0, 0, 0, 0.25); }
+.op-alt { display: block; margin-top: 12px; font-size: clamp(17px, 4.6vw, 24px); font-weight: 400; letter-spacing: 0.5em; padding-left: 0.5em; color: rgba(255, 255, 255, 0.9); }
+.op-tag { margin: 26px 0 0; font-size: clamp(16px, 4.4vw, 21px); line-height: 1.6; letter-spacing: 0.08em; color: rgba(255, 255, 255, 0.94); }
+.op-cue { left: 50%; bottom: max(26px, env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 8px 16px; border: 0; background: none; color: rgba(255, 255, 255, 0.9); font-size: 12px; letter-spacing: 0.24em; cursor: pointer; opacity: 0; pointer-events: none; }
+.op-rail { position: relative; display: block; width: 1px; height: 46px; overflow: hidden; background: rgba(255, 255, 255, 0.28); }
+.op-rail::after { content: ''; position: absolute; left: -1px; top: -14px; width: 3px; height: 14px; border-radius: 2px; background: #fff; box-shadow: 0 0 8px #fff; animation: op-drop 1.8s cubic-bezier(0.6, 0, 0.3, 1) infinite; }
+@keyframes op-drop { from { transform: translateY(0); } to { transform: translateY(64px); } }
+.op-skip { right: max(16px, env(safe-area-inset-right)); bottom: max(22px, env(safe-area-inset-bottom)); padding: 8px 12px; border: 0; background: none; color: rgba(255, 255, 255, 0.45); font-size: 12.5px; letter-spacing: 0.14em; cursor: pointer; }
+.op-skip:hover { color: #fff; }
+
+.op.lit .op-skip { display: none; }
+.op.lit .op-glow { animation: op-glow 2.4s cubic-bezier(0.16, 0.8, 0.2, 1) both; }
+.op.lit .op-bg { animation: op-bg 2.8s cubic-bezier(0.2, 0.7, 0.2, 1) 0.45s both; }
+.op.lit .op-shade { animation: op-fade 1.6s ease 0.6s both; }
+.op.lit .op-sweep { animation: op-sweep 1.9s cubic-bezier(0.4, 0, 0.2, 1) 1.1s both; }
+.op.lit .op-final > * { animation: op-up 1.1s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.op.lit .op-co { animation-delay: 1.3s; }
+.op.lit .op-name { animation-delay: 1.5s; }
+.op.lit .op-tag { animation-delay: 1.85s; }
+.op.lit .op-cue { animation: op-fade 1s ease 2.6s both; pointer-events: auto; }
+@keyframes op-glow { 0% { opacity: 0; transform: scale(0.02); } 22% { opacity: 1; } 55% { opacity: 0.9; } 100% { opacity: 0; transform: scale(2.6); } }
+@keyframes op-bg { from { opacity: 0; transform: scale(1.12); } to { opacity: 1; transform: scale(1); } }
+@keyframes op-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes op-sweep { 0% { opacity: 1; background-position: 130% 0; } 100% { opacity: 1; background-position: -30% 0; } }
+@keyframes op-up { from { opacity: 0; transform: translateY(18px); filter: blur(6px); } to { opacity: 1; transform: none; filter: blur(0); } }
+/* 看过了 / 点了跳过：一样亮起来，快一点 */
+.op.quick .op-glow { animation-duration: 1.3s; }
+.op.quick .op-bg { animation-duration: 1.4s; animation-delay: 0.15s; }
+.op.quick .op-shade { animation-duration: 0.8s; animation-delay: 0.2s; }
+.op.quick .op-sweep { animation-duration: 1.2s; animation-delay: 0.4s; }
+.op.quick .op-co { animation-delay: 0.35s; }
+.op.quick .op-name { animation-delay: 0.45s; }
+.op.quick .op-tag { animation-delay: 0.65s; }
+.op.quick .op-cue { animation-delay: 1s; }
+/* 系统设了「减少动态效果」：直接是最后画面 */
+.op.still *, .op.still *::after { animation: none !important; }
+.op.still .op-bg, .op.still .op-shade, .op.still .op-final > *, .op.still .op-cue { opacity: 1; transform: none; }
+.op.still .op-cue { transform: translateX(-50%); }
+@media (min-aspect-ratio: 5/4) {
+  .op-bg img { object-position: 50% 40%; }
 }

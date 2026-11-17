@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   cleanCard, publicCard, toVCard, greeting, cleanLead, LeadError, fillLeadFromCard, findExisting,
-  leadToPerson, mergeLeadInto, safeUrl, safePath, cardLink, cleanSource, klDate, cardReady,
+  leadToPerson, mergeLeadInto, safeUrl, safePath, cardLink, cleanSource, klDate, cardReady, cleanLines, DEFAULT_CARD,
 } from '../src/lib/card.js';
 import { receiveLead, LIMITS } from '../api/inbox.js';
 import { loadCard } from '../api/card.js';
@@ -18,6 +18,29 @@ test('safeUrl / safePath: 只收 https 和自己的路径', () => {
   assert.equal(safePath('u1/../u2/card/a.jpg'), '');
   assert.equal(safePath('u1/other/a.jpg'), '');
   assert.equal(safePath('u1/card/a.html'), '');
+});
+
+test('开场白 / 传承：一行一句、上限、网站自带的图', () => {
+  assert.deepEqual(cleanLines('你好\n\n  我是 Wilson \n'), ['你好', '我是 Wilson']);
+  assert.equal(cleanLines(Array.from({ length: 9 }, (_, i) => `l${i}`)).length, 6);
+  assert.equal(cleanLines(['x'.repeat(99)])[0].length, 60);
+  const c = cleanCard({ opening: '你好\n很高兴认识你', story: { title: 'T', photo_path: '/card/father.jpg', milestones: [{ year: '1979', text: '起家' }, {}, { year: '<b>', text: 'x' }] } });
+  assert.deepEqual(c.opening, ['你好', '很高兴认识你']);
+  assert.deepEqual(c.opening_en, []);
+  assert.equal(c.opening_on, true);
+  assert.equal(cleanCard({ opening_on: false }).opening_on, false);
+  assert.equal(c.story.milestones.length, 2);
+  assert.equal(safePath('/card/father.jpg'), '/card/father.jpg');
+  assert.equal(safePath('/card/../x.jpg'), '');
+  assert.equal(safePath('/etc/card/x.jpg'), '');
+  const pub = publicCard(c, 'https://x.supabase.co');
+  assert.equal(pub.story.photo, '/card/father.jpg');
+  assert.equal(pub.story.photo_path, undefined);
+  // 预设名片（还没在 SPACE 存过）：图都是网站自带的、能直接打开
+  const d = publicCard(DEFAULT_CARD, 'https://x.supabase.co');
+  assert.equal(d.photo, '/card/avatar.jpg');
+  assert.ok(d.cases.length >= 5 && d.cases.every((x) => x.image.startsWith('/card/')));
+  assert.equal(d.whatsapp, '60163881919');
 });
 
 test('cleanCard: 只留认得的栏位、WhatsApp 变数字、上限', () => {

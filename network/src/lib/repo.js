@@ -85,6 +85,7 @@ function makeCloudRepo() {
       if (error) throw new Error(/bucket not found/i.test(error.message) ? '资料库还没升级：Supabase 重跑一次 schema.sql（见 DEPLOY.md「第 4 阶段升级」）' : error.message);
     },
     publicUrl(path) {
+      if (path && path.startsWith('/')) return path; // 网站自带的图（预设名片 /card/…）
       return path ? supabase.storage.from(CARD_BUCKET).getPublicUrl(path).data.publicUrl : '';
     },
     async removePublic(path) {
@@ -189,7 +190,7 @@ function makeLocalRepo() {
     },
     // 本机模式没有公开网址：只在这个浏览器预览（公开名片页要接 Supabase 才看得到）
     async uploadPublic(path, blob) { await kvSet(`f:${path}`, blob); urls.delete(path); urls.set(path, URL.createObjectURL(blob)); },
-    publicUrl(path) { return urls.get(path) || ''; },
+    publicUrl(path) { return path && path.startsWith('/') ? path : urls.get(path) || ''; },
     async removePublic(path) { await kvDel(`f:${path}`); urls.delete(path); },
     async warmPublic(paths) { for (const p of paths) if (p && !urls.has(p)) { const b = await kvGet(`f:${p}`); if (b) urls.set(p, URL.createObjectURL(b)); } },
     async accessToken() { return null; },

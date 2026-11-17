@@ -4,13 +4,15 @@
    /c            一般的名片
    /c?e=<活动>    活动模式：扫码的人自动记到那个活动的出席名单，表格排前面
    /c?s=nfc      从 NFC 贴纸来的（s=folotoy：从 FoloToy 屏幕上的二维码来的）
-   流程：作品（开场视频 + 案例照片，左右滑）→ 名字 → WhatsApp 我 · 存我的联络方式 → 关于我 · 我能帮你 · 找到我 → 留下你的联络方式
+   流程：开场（全黑、一句一句，亮起来，见 opening.js）→ 作品（开场视频 + 案例照片，左右滑）→ 名字 → WhatsApp 我 · 存我的联络方式 → 关于我 · 我能帮你 · 找到我 → 留下你的联络方式
    电脑宽度：左边作品固定、右边资料往下滑
+   ?intro=1：每次都播完整的开场（示范用）
    所有使用者给的字都用 textContent 放进去，不用 innerHTML（防 XSS）
    ============================================================ */
 import './card.css';
 import { greeting, CONSENT_VERSION } from '../lib/card.js';
 import { shrinkImage } from '../lib/image.js';
+import { mountOpening } from './opening.js';
 
 /* ---------- 文字（中文 / English） ---------- */
 const T = {
@@ -33,6 +35,7 @@ const T = {
     thanks: (n) => (n ? `谢谢，${n}！` : '谢谢！'), thanksSub: '资料收到了。顺手发个 WhatsApp 给我，我就记得你是哪一位 😊',
     waMe: '发 WhatsApp 给我', again: '再留一次',
     dock: '交换联络方式', sound: '声音',
+    skip: '跳过', cue: '往下看，认识我', story: '传承',
     errNet: '连不上，检查一下网络再试一次', errBusy: '送出太多次了，请稍后再试，或直接 WhatsApp 我',
     fail: '名片暂时打不开，请稍后再试。',
     lang: 'EN',
@@ -56,6 +59,7 @@ const T = {
     thanks: (n) => (n ? `Thank you, ${n}!` : 'Thank you!'), thanksSub: 'Got it. Send me a quick WhatsApp so I know which one is you 😊',
     waMe: 'WhatsApp me now', again: 'Send again',
     dock: 'Swap contacts', sound: 'Sound',
+    skip: 'Skip', cue: 'Scroll to meet me', story: 'Our story',
     errNet: 'Can’t connect — check your network and try again', errBusy: 'Too many tries — please try later or just WhatsApp me',
     fail: 'This card can’t be opened right now. Please try again later.',
     lang: '中文',
@@ -104,6 +108,11 @@ const ICONS = {
 };
 const SOCIAL_LABEL = { linkedin: 'LinkedIn', instagram: 'Instagram', facebook: 'Facebook', xiaohongshu: '小红书', tiktok: 'TikTok', youtube: 'YouTube', website: 'Website' };
 
+/** instagram.com/wilsonteo0419 → @wilsonteo0419（同一个平台有好几个帐号时分得出来） */
+const handle = (s) => {
+  if (!['instagram', 'tiktok', 'xiaohongshu', 'youtube', 'facebook'].includes(s.platform)) return '';
+  try { const seg = new URL(s.url).pathname.split('/').filter(Boolean)[0] || ''; return seg && seg.length <= 40 ? `@${seg.replace(/^@/, '')}` : ''; } catch { return ''; }
+};
 const waHref = (n, text = '') => (n ? `https://wa.me/${n}${text ? `?text=${encodeURIComponent(text)}` : ''}` : '');
 const firstName = (s) => String(s || '').trim().split(/\s+/)[0] || '';
 
@@ -121,6 +130,22 @@ async function loadData() {
 /* ---------- 画面 ---------- */
 let state = { data: null, sent: ls.get('space-card:sent'), cardImg: null, busy: false, err: '', tsToken: '' };
 const app = document.getElementById('app');
+let op = null; // 开场
+
+/** 开场：名片关掉了就拿走 card.html 里先放好的黑底 */
+function syncOpening(card) {
+  const labels = { skip: tr.skip, cue: tr.cue };
+  if (card.opening_on === false) {
+    const pre = document.getElementById('opening');
+    if (pre) pre.remove();
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', '#F5F5F7');
+    op = null;
+    return;
+  }
+  if (op) op.update(card, lang, labels);
+  else op = mountOpening({ h, card, lang, labels, force: params.get('intro') === '1' });
+}
 
 function render() {
   const { card, event } = state.data;
@@ -128,6 +153,7 @@ function render() {
   document.title = `${card.name}${card.company ? ` · ${card.company}` : ''}`;
   document.documentElement.lang = lang === 'zh' ? 'zh-Hans' : 'en';
 
+  syncOpening(card);
   const root = document.createDocumentFragment();
 
   /* 第一眼是作品：开场视频 → 案例照片（左右滑）；都没有才用照片 */
@@ -216,12 +242,21 @@ function render() {
 
   const sec = (label, ...kids) => h('section.sec', null, h('h2.kicker', null, label), ...kids);
   if (card.intro) side.append(sec(tr.about, h('p.lead', null, card.intro)));
+  const st = card.story;
+  if (st && (st.photo || st.note || (st.milestones && st.milestones.length))) {
+    side.append(h('section.sec.story', null,
+      h('h2.kicker', null, tr.story),
+      st.title ? h('h3.st-title', null, st.title) : null,
+      st.photo ? h('figure.st-photo', null, h('img', { src: st.photo, alt: st.note || st.title || card.name, loading: 'lazy', decoding: 'async' })) : null,
+      st.note ? h('p.st-note', null, st.note) : null,
+      st.milestones && st.milestones.length ? h('ol.timeline', null, st.milestones.map((m) => h('li', null, h('span.yr', null, m.year), h('span', null, m.text)))) : null));
+  }
   if (card.offers && card.offers.length) {
     side.append(sec(tr.offers, h('ol.offers', null, card.offers.map((o, i) => h('li', null, h('span.no', { 'aria-hidden': 'true' }, String(i + 1).padStart(2, '0')), h('span', null, o))))));
   }
   if ((card.socials && card.socials.length) || card.address) {
     side.append(sec(tr.find,
-      card.socials && card.socials.length ? h('ul.socials', null, card.socials.map((s) => h('li', null, h('a', { href: s.url, target: '_blank', rel: 'noopener' }, h('span', null, SOCIAL_LABEL[s.platform] || s.platform), h('span.arrow', { 'aria-hidden': 'true' }, '↗'))))) : null,
+      card.socials && card.socials.length ? h('ul.socials', null, card.socials.map((s) => h('li', null, h('a', { href: s.url, target: '_blank', rel: 'noopener' }, h('span', null, SOCIAL_LABEL[s.platform] || s.platform, handle(s) ? h('span.handle', null, handle(s)) : null), h('span.arrow', { 'aria-hidden': 'true' }, '↗'))))) : null,
       card.address ? h('p.addr', null, card.address) : null));
   }
 
@@ -241,12 +276,13 @@ function render() {
 
   if (form && dock && 'IntersectionObserver' in window) {
     let seenForm = false;
+    const past = () => (op ? op.height() : 0) + 240; // 滑过开场才出现
     const io = new IntersectionObserver((es) => {
       for (const e of es) if (e.target === form) seenForm = e.isIntersecting;
-      dock.classList.toggle('show', !seenForm && window.scrollY > 240);
+      dock.classList.toggle('show', !seenForm && window.scrollY > past());
     }, { threshold: 0.05 });
     io.observe(form);
-    window.addEventListener('scroll', () => dock.classList.toggle('show', !seenForm && window.scrollY > 240), { passive: true });
+    window.addEventListener('scroll', () => dock.classList.toggle('show', !seenForm && window.scrollY > past()), { passive: true });
   }
   if (state.data.turnstile_site_key && form && !state.sent) {
     const slot = document.getElementById('ts');
@@ -411,6 +447,7 @@ async function submit(form, card, event) {
       }).catch(() => null);
     }
   } catch {
+    if (!op) { const pre = document.getElementById('opening'); if (pre) pre.remove(); }
     app.replaceChildren(h('p.fail', null, tr.fail));
     app.setAttribute('aria-busy', 'false');
   }
