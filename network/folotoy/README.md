@@ -53,7 +53,7 @@ FoloToy AI Passport（ESP32-C3、240×320 屏幕、三个按键）开机直接�
    idf.py set-target esp32c3
    idf.py menuconfig        # → SPACE card
    ```
-   - `Card link`：SPACE →「我的名片」→ FoloToy 分页 → 复制（例：`https://你的-space.vercel.app/c`）
+   - `Card link`：SPACE →「我的名片」→ FoloToy 分页 → 复制（例：`https://space-riccione-reka.vercel.app/c`）
    - `Name at the top`：英文名（预设字型 Montserrat 没有中文，中文会变成 `?`）
    - 选填 `Event link`：「活动模式」某个活动的二维码连结（上下键切换）
 5. **编译、烧录**：

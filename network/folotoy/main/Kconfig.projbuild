@@ -2,9 +2,9 @@ menu "SPACE card"
 
     config SPACE_CARD_URL
         string "Card link (https://<your SPACE>/c)"
-        default ""
+        default "https://space-riccione-reka.vercel.app/c"
         help
-            SPACE 公开名片页的网址，例：https://space-wilson.vercel.app/c
+            SPACE 公开名片页的网址，例：https://space-riccione-reka.vercel.app/c
             （SPACE →「我的名片」→ FoloToy 分页可以复制）。
             会自动加上 ?s=folotoy，扫进来的人记成「扫 FoloToy 留资料」。
             只收 https://，最长 200 字。
@@ -20,7 +20,7 @@ menu "SPACE card"
         default "Wilson Teo"
 
     config SPACE_CARD_EVENT_URL
-        string "Event link (optional, https://<your SPACE>/c?e=<id>)"
+        string "Event link (optional, https://space-riccione-reka.vercel.app/c?e=<id>)"
         default ""
         help
             选填：某个活动的专属二维码（SPACE →「我的名片」→ 活动模式 → 二维码 → 复制）。

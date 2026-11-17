@@ -111,7 +111,7 @@ TickTick 的 token 只在服务器，前端拿不到；这个功能不用 AI，�
 > 公开页只读得到「我的名片」里填的东西（`profile.card`，只回认得的栏位）。你的人脉、对话、照片都还是只有你登入看得到。
 > `SUPABASE_SERVICE_ROLE_KEY` 会跳过 RLS，所以只用在 `/api/card`、`/api/inbox` 这两个端点，而且每个查询都锁在 `OWNER_EMAIL` 那个帐号底下。
 
-**NFC 贴纸**：买 NTAG215 / NTAG213（Shopee 一张几毛钱）。Android：SPACE「我的名片」→ NFC 贴纸 →「写进 NFC 贴纸」→ 贴近。iPhone：装 NFC Tools → 写 → 添加记录 → 网址 → 贴 `https://<你的网址>/c?s=nfc` → 写。
+**NFC 贴纸**：买 NTAG215 / NTAG213（Shopee 一张几毛钱）。Android：SPACE「我的名片」→ NFC 贴纸 →「写进 NFC 贴纸」→ 贴近。iPhone：装 NFC Tools → 写 → 添加记录 → 网址 → 贴 `https://space-riccione-reka.vercel.app/c?s=nfc` → 写。
 **FoloToy**：见 `network/folotoy/README.md`（要一台装了 ESP-IDF 的电脑）。
 
 ---

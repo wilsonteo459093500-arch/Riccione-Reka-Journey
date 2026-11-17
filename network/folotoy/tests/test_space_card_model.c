@@ -89,9 +89,9 @@ static void test_qr_size(void) {
     assert(space_card_qr_version(84) == 5);
     assert(space_card_qr_version(214) == 0);
     // 一般名片网址（~40 字）：版本 3 → 29+8 = 37 格；176px → 每格 4px
-    assert(space_card_module_px(strlen("https://space-wilson.vercel.app/c?s=folotoy"), 176) == 4);
+    assert(space_card_module_px(strlen("https://space-riccione-reka.vercel.app/c?s=folotoy"), 176) == 4);
     // 活动网址（~90 字）：版本 6 → 41+8 = 49 格；176px → 3px、大模式 224px → 4px
-    const char *ev = "https://space-wilson.vercel.app/c?e=11111111-2222-4333-8444-555555555555&s=folotoy";
+    const char *ev = "https://space-riccione-reka.vercel.app/c?e=11111111-2222-4333-8444-555555555555&s=folotoy";
     assert(space_card_module_px(strlen(ev), 176) == 3);
     assert(space_card_module_px(strlen(ev), 224) == 4);
     assert(space_card_module_px(300, 176) == 0);
