@@ -3,6 +3,8 @@
 CONFIG_LV_USE_QRCODE=y
 # 车用遥控器画面的大图示（蓝牙、播放、下一首）
 CONFIG_LV_FONT_MONTSERRAT_48=y
+# 中文字型 32px 的英文 / 数字交给 Montserrat 32（tools/make_font.py 的 fallback）
+CONFIG_LV_FONT_MONTSERRAT_32=y
 
 # 车用遥控器：BLE HID（NimBLE + ESP-IDF esp_hid）。名片模式不会启动蓝牙。
 CONFIG_BT_ENABLED=y

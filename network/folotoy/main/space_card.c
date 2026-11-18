@@ -91,6 +91,7 @@ static void apply_layout(void) {
 static void tick_cb(lv_timer_t *t) {
     (void)t;
     static uint32_t n;
+    if (!s_state) return;
     const int64_t idle_us = esp_timer_get_time() - s_last_input_us;
     if (space_card_on_idle(s_state, (uint32_t)(idle_us / 1000))) {
         bsp_display_backlight(space_card_backlight(s_state));
@@ -183,6 +184,7 @@ void space_card_show(space_card_state_t *state) {
 
 void space_card_on_input(int redraw) {
     s_last_input_us = esp_timer_get_time();
+    if (!s_state) return;
     if (!s_state || s_state->count == 0) return;
     if (redraw & SPACE_CARD_REDRAW_LAYOUT) apply_layout();
     if (redraw & SPACE_CARD_REDRAW_QR) {
@@ -190,4 +192,10 @@ void space_card_on_input(int redraw) {
         lv_obj_center(s_qr);
     }
     if (redraw & SPACE_CARD_REDRAW_BACKLIGHT) bsp_display_backlight(space_card_backlight(s_state));
+}
+
+void space_card_hide(void) {
+    if (s_tick) lv_timer_delete(s_tick);
+    s_tick = NULL;
+    s_state = NULL;
 }

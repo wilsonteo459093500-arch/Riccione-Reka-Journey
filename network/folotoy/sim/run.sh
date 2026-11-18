@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 在电脑上模拟 FoloToy 屏幕：画出名片 / 活动 / 大二维码三个画面，用程序扫二维码确认网址对；
-# 再画车用遥控器的四个状态（等配对、已连线、刚按播放、没连上就按）。
+# 再画车用遥控器的四个状态（等配对、已连线、刚按播放、没连上就按），和口袋机（菜单、蜡烛、计时器）。
 # 要 cc、git、python3。LVGL 用 ../build.sh 同一个快取（没有就自己 clone）。
 #
 #   ./sim/run.sh                       # 输出到 /tmp/folotoy-build/sim-out
@@ -26,7 +26,8 @@ LVGL="${WORK}/sim-lvgl"
 OBJ="${WORK}/sim-obj-$(md5sum "${SIM}/lv_conf.h" | cut -c1-8)"
 OUT="${WORK}/sim-out/card"
 CAR_OUT="${WORK}/sim-out/car"
-mkdir -p "${WORK}/cache" "${OUT}" "${CAR_OUT}"
+POCKET_OUT="${WORK}/sim-out/pocket"
+mkdir -p "${WORK}/cache" "${OUT}" "${CAR_OUT}" "${POCKET_OUT}"
 
 # --- LVGL 原始码 + 编一次的 .o（之后重用）---
 if [[ ! -d "${LVGL}/src" ]]; then
@@ -47,11 +48,13 @@ cc -O1 -Wall -Wextra -Werror -I"${SIM}" -I"${SIM}/stub" -I"${LVGL}" -I"${MAIN}" 
   "-DCONFIG_SPACE_CARD_URL=\"${CARD_URL}\"" "-DCONFIG_SPACE_CARD_LABEL=\"${CARD_LABEL}\"" \
   "-DCONFIG_SPACE_CARD_NAME=\"${CARD_NAME}\"" "-DCONFIG_SPACE_CARD_EVENT_LABEL=\"${EVENT_LABEL}\"" \
   "-DCONFIG_SPACE_REMOTE_NAME=\"${REMOTE_NAME}\"" \
-  "${SIM}/sim.c" "${SIM}/stub/ble_remote_stub.c" \
+  "${SIM}/sim.c" "${SIM}/stub/ble_remote_stub.c" "${SIM}/stub/sound_stub.c" \
   "${MAIN}/space_card.c" "${MAIN}/space_card_model.c" "${MAIN}/car_screen.c" "${MAIN}/car_remote_model.c" \
+  "${MAIN}/pocket_model.c" "${MAIN}/audio_dsp.c" "${MAIN}/menu_screen.c" "${MAIN}/candle_screen.c" "${MAIN}/timer_screen.c" \
+  "${MAIN}"/font_*.c \
   "${OBJ}"/*.o -lm -o "${WORK}/sim"
-rm -f "${OUT}"/*.ppm "${OUT}"/*.png "${CAR_OUT}"/*.ppm "${CAR_OUT}"/*.png
-"${WORK}/sim" "${OUT}" "${CAR_OUT}" "${EVENT_URL}"
+rm -f "${OUT}"/*.ppm "${OUT}"/*.png "${CAR_OUT}"/*.ppm "${CAR_OUT}"/*.png "${POCKET_OUT}"/*.ppm "${POCKET_OUT}"/*.png
+"${WORK}/sim" "${OUT}" "${CAR_OUT}" "${POCKET_OUT}" "${EVENT_URL}"
 
 # --- 扫二维码（OpenCV 装在独立 venv）---
 VENV="${WORK}/sim-venv"
@@ -61,9 +64,11 @@ if [[ ! -x "${VENV}/bin/python" ]]; then
 fi
 "${VENV}/bin/python" -I "${SIM}/scan_qr.py" "${OUT}" "${CARD_URL}?s=folotoy" "${EVENT_URL}&s=folotoy"
 "${VENV}/bin/python" -I "${SIM}/scan_qr.py" "${CAR_OUT}"
+"${VENV}/bin/python" -I "${SIM}/scan_qr.py" "${POCKET_OUT}"
 
 if [[ "${1:-}" == "--update-screenshot" ]]; then
   cp "${OUT}/screens.png" "${SIM}/../firmware/screens.png"
   cp "${CAR_OUT}/screens.png" "${SIM}/../firmware/car-screens.png"
-  echo "已更新 firmware/screens.png、firmware/car-screens.png"
+  cp "${POCKET_OUT}/screens.png" "${SIM}/../firmware/pocket-screens.png"
+  echo "已更新 firmware/screens.png、car-screens.png、pocket-screens.png"
 fi

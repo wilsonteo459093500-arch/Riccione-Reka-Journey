@@ -8,3 +8,6 @@ void space_card_show(space_card_state_t *state);
 
 // 按键处理完之后呼叫：redraw = space_card_on_key() 的回传值；也会重设闲置计时
 void space_card_on_input(int redraw);
+
+// 离开名片画面（去菜单）：停掉计时器；画面本身由 main.c 换画面时删掉
+void space_card_hide(void);

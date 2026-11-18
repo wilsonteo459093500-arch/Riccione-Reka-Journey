@@ -6,6 +6,7 @@
 //   上 / 下 短按   切换「名片」/「活动」二维码（menuconfig 有设活动网址才有第二个）
 //   确定 短按      亮度 100% → 60% → 30%
 //   确定 长按      大二维码模式（只剩二维码）
+//   上 长按        → 口袋机菜单：蜡烛与生日歌 / 计时器 / 倒数计时 / 车用遥控器 / 返回名片（不用重开机）
 //   下 长按        → 车用遥控器模式
 //   闲置 60 秒自动调暗；调暗时按任何键只会叫醒
 //
@@ -21,6 +22,7 @@
 #include "bsp_i2c.h"
 #include "bsp_pins.h"
 #include "esp_log.h"
+#include "candle_screen.h"
 #include "car_remote_model.h"
 #include "car_screen.h"
 #include "esp_system.h"
@@ -31,10 +33,12 @@
 #include "freertos/task.h"
 #include "key_guard.h"      // 沿用上游：按键唤醒时挡住那一下（非 UI 逻辑，可以重用）
 #include "lvgl.h"
+#include "menu_screen.h"
 #include "nvs.h"
 #include "nvs_flash.h"
 #include "space_card.h"
 #include "space_card_model.h"
+#include "timer_screen.h"
 
 static const char *TAG = "space";
 
@@ -46,6 +50,14 @@ typedef struct {
 static space_card_state_t s_card;
 static car_remote_state_t s_car;
 static app_mode_t s_mode = APP_MODE_CARD;
+
+// 名片模式里的画面（换画面不用重开机；车用遥控器要开蓝牙，才走重开机）
+typedef enum { SCR_CARD, SCR_MENU, SCR_CANDLE, SCR_STOPWATCH, SCR_COUNTDOWN } screen_t;
+static screen_t s_screen = SCR_CARD;
+static menu_state_t s_menu;
+static candle_state_t s_candle;
+static stopwatch_t s_stopwatch;    // 状态放这里：离开画面再回来，计时还在
+static countdown_t s_countdown;
 static QueueHandle_t s_queue;
 static volatile bool s_input_ready;
 static key_guard_t s_key_guard;
@@ -81,13 +93,80 @@ static void switch_mode(app_mode_t next) {
     esp_restart();
 }
 
+static uint32_t now_ms(void) {
+    return (uint32_t)(esp_timer_get_time() / 1000);
+}
+
+// 换画面（要持 LVGL 锁）：旧画面先停计时器，新画面载入后再删旧的
+static void go(screen_t next) {
+    lv_obj_t *old = lv_screen_active();
+    switch (s_screen) {
+    case SCR_CARD: space_card_hide(); break;
+    case SCR_MENU: menu_screen_hide(); break;
+    case SCR_CANDLE: candle_screen_hide(); break;
+    case SCR_STOPWATCH:
+    case SCR_COUNTDOWN: timer_screen_hide(); break;
+    }
+    s_screen = next;
+    switch (next) {
+    case SCR_CARD:
+        s_card.dimmed = false;
+        space_card_show(&s_card);
+        bsp_display_backlight(space_card_backlight(&s_card));
+        break;
+    case SCR_MENU: menu_screen_show(&s_menu); break;
+    case SCR_CANDLE: candle_screen_show(&s_candle); break;
+    case SCR_STOPWATCH: timer_screen_show(&s_stopwatch, &s_countdown, false); break;
+    case SCR_COUNTDOWN: timer_screen_show(&s_stopwatch, &s_countdown, true); break;
+    }
+    if (old && old != lv_screen_active()) lv_obj_delete(old);
+}
+
 static void card_key(space_card_btn_t btn, space_card_ev_t ev) {
     app_mode_t next;
-    // 调暗时第一下只叫醒（space_card_on_key 处理），不会误换模式
+    // 调暗时第一下只叫醒（space_card_on_key 处理），不会误换模式 / 开菜单
     if (!s_card.dimmed && app_mode_switch(APP_MODE_CARD, btn, ev, &next)) switch_mode(next);
     if (!bsp_lvgl_lock(500)) return;
-    const int redraw = space_card_on_key(&s_card, btn, ev);
-    space_card_on_input(redraw);
+    if (!s_card.dimmed && ev == SPACE_CARD_EV_LONG && btn == SPACE_CARD_BTN_UP) {
+        go(SCR_MENU);
+    } else {
+        const int redraw = space_card_on_key(&s_card, btn, ev);
+        space_card_on_input(redraw);
+    }
+    bsp_lvgl_unlock();
+}
+
+static void menu_key(space_card_btn_t btn, space_card_ev_t ev) {
+    switch (menu_on_key(&s_menu, btn, ev)) {
+    case NAV_REDRAW: menu_screen_update(); break;
+    case NAV_TO_CARD: go(SCR_CARD); break;
+    case NAV_OPEN:
+        switch (s_menu.cursor) {
+        case MENU_CANDLE: go(SCR_CANDLE); break;
+        case MENU_STOPWATCH: go(SCR_STOPWATCH); break;
+        case MENU_COUNTDOWN: go(SCR_COUNTDOWN); break;
+        case MENU_CAR: switch_mode(APP_MODE_CAR); break;   // 要开蓝牙：存模式、重开机
+        default: go(SCR_CARD); break;
+        }
+        break;
+    default: break;
+    }
+}
+
+static void pocket_key(space_card_btn_t btn, space_card_ev_t ev) {
+    if (!bsp_lvgl_lock(500)) return;
+    if (s_screen == SCR_MENU) {
+        menu_key(btn, ev);
+    } else if (s_screen == SCR_CANDLE) {
+        const candle_do_t d = candle_on_key(&s_candle, btn, ev);
+        if (d == CANDLE_DO_EXIT) go(SCR_MENU);
+        else candle_screen_on_do(d);
+    } else {
+        const nav_t nav = s_screen == SCR_STOPWATCH ? stopwatch_on_key(&s_stopwatch, btn, ev, now_ms())
+                                                    : countdown_on_key(&s_countdown, btn, ev, now_ms());
+        if (nav == NAV_TO_MENU) go(SCR_MENU);
+        else timer_screen_update();
+    }
     bsp_lvgl_unlock();
 }
 
@@ -112,7 +191,8 @@ static void input_task(void *arg) {
         if (xQueueReceive(s_queue, &in, portMAX_DELAY) != pdTRUE) continue;
         if (in.ev == BSP_BTN_PRESS || in.ev == BSP_BTN_RELEASE) continue;   // 只看单击 / 长按
         if (s_mode == APP_MODE_CAR) car_key(map_btn(in.btn), map_ev(in.ev));
-        else card_key(map_btn(in.btn), map_ev(in.ev));
+        else if (s_screen == SCR_CARD) card_key(map_btn(in.btn), map_ev(in.ev));
+        else pocket_key(map_btn(in.btn), map_ev(in.ev));
     }
 }
 
@@ -139,6 +219,10 @@ void app_main(void) {
     if (nvs == ESP_OK) s_mode = load_mode();
     else ESP_LOGE(TAG, "NVS 初始化失败：%s（只能用名片模式）", esp_err_to_name(nvs));
 
+    menu_init(&s_menu);
+    candle_init(&s_candle);
+    stopwatch_init(&s_stopwatch);
+    countdown_init(&s_countdown);
     space_card_init(&s_card, CONFIG_SPACE_CARD_URL, CONFIG_SPACE_CARD_LABEL,
                     CONFIG_SPACE_CARD_EVENT_URL, CONFIG_SPACE_CARD_EVENT_LABEL);
     if (s_card.count == 0) ESP_LOGW(TAG, "SPACE_CARD_URL 没设或不是 https://，屏幕会显示设定说明");

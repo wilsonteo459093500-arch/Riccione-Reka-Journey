@@ -5,6 +5,16 @@ idf_component_register(
          "car_remote_model.c"
          "car_screen.c"
          "ble_remote.c"
+         "pocket_model.c"
+         "audio_dsp.c"
+         "sound.c"
+         "menu_screen.c"
+         "candle_screen.c"
+         "timer_screen.c"
+         "font_cjk_20.c"
+         "font_cjk_32.c"
+         "font_digits_64.c"
+         "font_digits_140.c"
     INCLUDE_DIRS "."
     REQUIRES bsp esp_timer esp_hw_support esp_system nvs_flash bt esp_hid
 )

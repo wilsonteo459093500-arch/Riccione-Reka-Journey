@@ -190,3 +190,8 @@ void car_screen_on_action(car_action_t a, bool sent) {
     s_action_until_us = esp_timer_get_time() + (int64_t)ACTION_SHOW_MS * 1000;
     update_link();   // 配对提示跟动作同一块位置：先藏起来
 }
+
+void car_screen_hide(void) {
+    if (s_tick) lv_timer_delete(s_tick);
+    s_tick = NULL;
+}

@@ -3,9 +3,10 @@
 FoloToy AI Passport（ESP32-C3、240×320 屏幕、三个按键）有两个模式：
 
 - **名片模式**（预设）：显示**你的 SPACE 名片二维码**。活动上把它拿出来：对方手机一扫 → 打开 SPACE 公开名片页 → 留资料 → **自动进 SPACE**（标签「扫码」，互动记成「扫 FoloToy 留资料」）。
+- **口袋机菜单**：名片画面**「上」长按**打开菜单，里面有**蜡烛与生日歌**、**计时器**、**倒数计时**、车用遥控器。见下面「口袋机」。
 - **车用遥控器模式**：FoloToy 当 Android 手机的**蓝牙媒体遥控器**，手机不用装 app。开车时按 FoloToy 控制微信读书听书、音乐，长按叫语音助理。见下面「车用遥控器」。
 
-名片画面**「下」长按** → 车用模式；车用画面**「上」长按** → 回名片。机器会记住模式，下次开机停在同一个（换模式会重开机，约 2 秒）。
+名片画面**「下」长按**（或菜单里选「车用遥控器」）→ 车用模式；车用画面**「上」长按** → 回名片。机器会记住模式，下次开机停在同一个（换模式会重开机，约 2 秒）。菜单里的其他功能不用重开机。
 
 上游韧体：[FoloToy/ai-passport](https://github.com/FoloToy/ai-passport)（MIT，ESP-IDF 5.5.3 + LVGL 9.5）。
 这个资料夹不是完整韧体，是放进上游 fork 的 `main/`（取代原本的测试菜单）。已经编好的韧体在 `firmware/`。
@@ -59,6 +60,44 @@ FoloToy 背面就是一枚**被动 NTAG213** NFC 芯片（官方规格：支持�
 | 下 长按 | 换到车用遥控器模式（重开机约 2 秒） |
 
 二维码用 LVGL 内建的 `lv_qrcode`（qrcodegen、ECC M、整数倍放大不会糊）。网址会自动加上 `?s=folotoy`（已经有 `s=` 就不加）。
+
+## 口袋机：蜡烛与生日歌、计时器、倒数
+
+![模拟画面：菜单 / 蜡烛（点着、有人吹、唱华语、唱英语、吹熄、一位数）/ 计时器 / 倒数（设定、进行中、时间到）](./firmware/pocket-screens.png)
+
+名片画面按住「上」→ 菜单（上下选、确定打开）。每个功能里**按住「上」回菜单**。
+
+### 蜡烛与生日歌
+
+生日蛋糕没有蜡烛也能吹：屏幕上是**数字蜡烛**（年龄），火苗会晃，关灯时很有气氛。
+
+| 键 | 做什么 |
+|---|---|
+| 上 / 下 短按 | 年龄 +1 / −1（0–99，预设 18） |
+| 确定 短按 | 放「祝你生日快乐」，屏幕跟着显示**华语**歌词 |
+| 下 长按 | 放「Happy Birthday」，屏幕跟着显示**英语**歌词 |
+| 唱歌时按任何键 | 停 |
+| **对着 FoloToy 吹一口气** | 蜡烛熄灭、冒烟、出现「生日快乐！」 |
+| 确定 长按 | 用按键熄灭（太吵、吹不熄时用） |
+| 熄了之后 确定 | 重新点燃 |
+
+- 歌是 FoloToy 喇叭自己合成的**旋律**（像音乐盒），没有人声，所以华语和英语的旋律一样，差别在屏幕上的歌词。这首歌的旋律和歌词都已经是公有领域。
+- **唱歌时不会被吹熄**（麦克风会听到歌声），唱完 1 秒后才开始听吹气。有人吹时火苗会往旁边倒。
+- 吹气的判断：要**够大声、持续约 0.1 秒以上、而且像气流的沙沙声**。拍桌、咳一声、大声说话唱歌都不会误熄（电脑测试有测这几种）。门槛要等真机测过再调。
+- 蜡烛画面一直全亮、不会自动变暗。
+
+### 计时器 / 倒数计时
+
+| 画面 | 键 | 做什么 |
+|---|---|---|
+| 计时器 | 确定 | 开始 / 暂停 |
+| 计时器 | 下（暂停时） | 归零 |
+| 倒数 | 上 / 下（设定时） | ±1 分钟（1–99 分，预设 5 分） |
+| 倒数 | 确定 | 开始 / 暂停 / 继续 |
+| 倒数 | 确定 长按 | 归零回设定 |
+| 倒数时间到 | 任何键 | 停铃（画面红白闪 + 嘀嘀嘀） |
+
+离开画面再回来，时间照算；但倒数要**停在倒数画面**才会响铃。
 
 ## 车用遥控器（Android，蓝牙，不用装 app）
 
@@ -137,12 +176,20 @@ FoloToy 背面就是一枚**被动 NTAG213** NFC 芯片（官方规格：支持�
 | `main/car_remote_model.c/.h` | 车用遥控器纯逻辑：换模式、按键 → 动作 → HID 用法码（播放 0xCD、下一首 0xB5、上一首 0xB6、语音 0xCF）、报告格式、调暗、画面文字（**有 host 测试**） |
 | `main/ble_remote.c/.h` | 蓝牙：ESP-IDF `esp_hid`（NimBLE）建 HID / 电量 / 装置资讯服务；广播「SPACE Remote」、Just Works 配对 + 绑定、断线重新广播、送媒体键 |
 | `main/car_screen.c/.h` | 车用画面：蓝牙图示（颜色 = 状态）、状态大字、刚按的动作、按键说明 |
+| `main/pocket_model.c/.h` | 口袋机纯逻辑：菜单、蜡烛（年龄、唱歌、熄灭）、计时器、倒数、时间文字（**有 host 测试**） |
+| `main/audio_dsp.c/.h` | 生日歌旋律与歌词、音色合成（整数正弦表 + 泛音 + 包络）、吹气判断（大声 + 持续 + 沙沙感 / 爆音）（**有 host 测试**） |
+| `main/sound.c/.h` | 喇叭 / 麦克风背景 task：放歌、响铃、听吹气；画面只送命令、读状态 |
+| `main/menu_screen.c`、`candle_screen.c`、`timer_screen.c`、`pocket_ui.h` | 菜单、数字蜡烛（火苗动画、烟、歌词）、计时器 / 倒数（圆环、红白闪）画面 |
+| `main/font_*.c` | `tools/make_font.py` 产生的字型：中文 20 / 32px（只放用到的字）、大数字 64 / 140px |
+| `tools/make_font.py` | 字型产生器：从 `main/*.c` 的字串收集中文字 → Pillow 画字 → LVGL 4bpp 格式，逐像素读回比对；`--check` 检查是不是最新（`build.sh` 每次跑） |
 | `main/main.c` | 开机：NVS（模式 + 配对资料）→ BSP 初始化 → 依模式开名片或车用画面 → 按键（回呼只丢 queue，input task 拿 LVGL 锁再改画面；沿用上游的按键唤醒保护） |
 | `main/Kconfig.projbuild` | menuconfig 的「SPACE card」：网址、名字、说明字、活动网址、遥控器蓝牙名字 |
-| `tests/test_*.c` | host 测试（名片、车用遥控器）：指令写在各档案开头；`build.sh` 每次都跑 |
+| `tests/test_*.c` | host 测试（名片、车用遥控器、口袋机、生日歌 / 吹气）：指令写在各档案开头；`build.sh` 每次都跑 |
 | `build.sh` | 一键编韧体：取上游（固定 commit）+ 叠上 `main/` + 依赖照 `dependencies.lock` 从 git 取 → Docker `espressif/idf:v5.5.3` 里 host 测试、编译、merge-bin、上游 `verify_firmware.py`；`--original` 编官方原版 |
 | `sim/` | 电脑模拟屏幕：真的 LVGL 9.5 + `space_card.c`、`car_screen.c`，假的电量 / 背光 / 时间 / 蓝牙（`sim/stub/`）→ 画面 PNG，名片的二维码用 OpenCV 扫过比对网址（`sim/run.sh`） |
 | `firmware/` | 编好的韧体（名片、官方原版）、`SHA256SUMS.txt`、模拟截图 |
+
+**字型**：思源黑体 Noto Sans SC（Adobe / Google，SIL Open Font License 1.1）。字型档不放进仓库，`build.sh` 从 npm 的 `@expo-google-fonts/noto-sans-sc@0.4.4` 取到快取；只把用到的字画成位图编进韧体（OFL 允许嵌入）。程序里加了新的中文字，要重跑 `tools/make_font.py`，不然 `build.sh` 会失败（画面会出现方框）。
 
 照上游规则：衍生 app 用自己的画面（没有沿用测试菜单 / `ui_pixel` 外壳），只重用 BSP 和 `key_guard.h`；LVGL 只在持锁时碰；按键回呼不阻塞；送蓝牙按键时不持 LVGL 锁；电量放右上角、读不到就不显示；只用 ASCII 字（没有中文字型问题）。
 
@@ -150,15 +197,19 @@ FoloToy 背面就是一枚**被动 NTAG213** NFC 芯片（官方规格：支持�
 
 ```text
 Build:        PASS      —— 2026-11-18：./build.sh（ESP-IDF 5.5.3 Docker、esp32c3）编译通过，main/ 没有警告；
-                           上游 verify_firmware.py：Firmware layout PASS、Merged firmware PASS（1,174,496 bytes，烧在 0x0）
-                           静态 DRAM 112 KB / 剩 209 KB 给 heap（蓝牙只在车用模式启动）
-Host tests:   PASS      —— test_space_card_model、test_car_remote_model（-Wall -Wextra -Werror）
+                           上游 verify_firmware.py：Firmware layout PASS、Merged firmware PASS（1,395,728 bytes，烧在 0x0）
+                           蓝牙只在车用模式启动
+Host tests:   PASS      —— test_space_card_model、test_car_remote_model、test_pocket_model、test_audio_dsp（-Wall -Wextra -Werror）
+Fonts:        PASS      —— make_font.py --check：中文 62 字、大数字，打包后逐像素读回一致
 Simulated:    PASS      —— sim/run.sh：名片 / 活动 / 大二维码三个画面，OpenCV 都扫出正确网址（带 s=folotoy）；
-                           车用四个状态画面看过（等配对、已连线、刚按播放、没连上）
-Device tests: NOT RUN   —— 还没在真机上烧过
+                           车用四个状态、口袋机 12 个画面看过（中文字正确、版面不重叠）
+Device tests: 部分      —— 2026-11-18 用户 Samsung 真机：名片、车用遥控器配对 / 重连 / YouTube 播放暂停 / 语音助理 OK；
+                           微信读书要先在 app 里按播放一次，之后 FoloToy 才控制得到（Android 的规则，见 PLAN 阶段 2）
+                           口袋机（蜡烛、生日歌、吹气、计时器）还没真机测
 Unverified:   真机画面（颜色、圆角）、手机对着这块屏幕实际扫码、背光实际亮度、电量读数、按键手感；
               车用：Samsung 配对与自动重连、播放 / 上下一首在微信读书 / Spotify 的效果、
-              「语音助理」键（Consumer 0xCF → Android VOICE_ASSIST）在 One UI 叫出哪个助理、蓝牙执行时的记忆体
+              蓝牙执行时的记忆体；
+              口袋机：喇叭音量与音色、麦克风收音大小（吹气门槛 BLOW_ABS_MIN 可能要调）、火苗动画在真机的流畅度
 ```
 
 依赖是照上游 `dependencies.lock` 的版本从各自的 git 取的（开发环境连不上 Espressif 组件仓库），内容应该相同，但组件仓库的 hash 没有逐一比对过。
