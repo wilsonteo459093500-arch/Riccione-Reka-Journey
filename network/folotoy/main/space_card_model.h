@@ -30,6 +30,8 @@ typedef enum {
     SPACE_CARD_EV_CLICK = 0,
     SPACE_CARD_EV_LONG,
     SPACE_CARD_EV_OTHER,
+    SPACE_CARD_EV_PRESS,      // 按下瞬间 / 放开瞬间：只有车用模式转给手机 app 用（按住录语音讯息）
+    SPACE_CARD_EV_RELEASE,
 } space_card_ev_t;
 
 typedef enum {

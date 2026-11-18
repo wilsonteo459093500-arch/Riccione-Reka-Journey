@@ -10,6 +10,7 @@
 #include "esp_hidd.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 #include "freertos/task.h"
 #include "host/ble_hs.h"
 #include "host/util/util.h"
@@ -62,6 +63,51 @@ static ble_uuid16_t s_hid_uuid = BLE_UUID16_INIT(HID_UUID16);
 
 static int gap_event(struct ble_gap_event *event, void *arg);
 
+// ---- SPACE 车控通道 ----
+// UUID 8d6f000X-6b3a-4c2e-9a51-535041434552（最后 6 bytes 是 "SPACER"），NimBLE 要 little-endian
+#define SPACE_UUID(x) BLE_UUID128_INIT(0x52, 0x45, 0x43, 0x41, 0x50, 0x53, 0x51, 0x9a, 0x2e, 0x4c, 0x3a, 0x6b, x, 0x00, 0x6f, 0x8d)
+static const ble_uuid128_t s_svc_uuid = SPACE_UUID(0x01);
+static const ble_uuid128_t s_evt_uuid = SPACE_UUID(0x02);
+static const ble_uuid128_t s_cmd_uuid = SPACE_UUID(0x03);
+static uint16_t s_evt_handle;
+static volatile bool s_app_present;
+
+#define CMD_MAX 32
+typedef struct {
+    uint8_t len;
+    uint8_t data[CMD_MAX];
+} cmd_msg_t;
+static QueueHandle_t s_cmds;
+
+static int space_chr_access(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg) {
+    (void)conn_handle;
+    (void)attr_handle;
+    (void)arg;
+    if (ctxt->op != BLE_GATT_ACCESS_OP_WRITE_CHR) return BLE_ATT_ERR_UNLIKELY;
+    cmd_msg_t m = { 0 };
+    const uint16_t n = OS_MBUF_PKTLEN(ctxt->om);
+    if (n == 0 || n > CMD_MAX) return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
+    if (ble_hs_mbuf_to_flat(ctxt->om, m.data, sizeof m.data, NULL) != 0) return BLE_ATT_ERR_UNLIKELY;
+    m.len = (uint8_t)n;
+    if (s_cmds) (void)xQueueSend(s_cmds, &m, 0);   // 满了就丢（画面 250ms 取一次，正常不会满）
+    return 0;
+}
+
+static const struct ble_gatt_svc_def s_space_svcs[] = {
+    {
+        .type = BLE_GATT_SVC_TYPE_PRIMARY,
+        .uuid = &s_svc_uuid.u,
+        .characteristics = (struct ble_gatt_chr_def[]) {
+            { .uuid = &s_evt_uuid.u, .access_cb = space_chr_access, .val_handle = &s_evt_handle,
+              .flags = BLE_GATT_CHR_F_NOTIFY },
+            { .uuid = &s_cmd_uuid.u, .access_cb = space_chr_access,
+              .flags = BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_NO_RSP | BLE_GATT_CHR_F_WRITE_ENC },
+            { 0 },
+        },
+    },
+    { 0 },
+};
+
 static void advertise(void) {
     struct ble_gap_adv_params params = { 0 };
     params.conn_mode = BLE_GAP_CONN_MODE_UND;
@@ -93,9 +139,16 @@ static int gap_event(struct ble_gap_event *event, void *arg) {
             advertise();
         }
         return 0;
+    case BLE_GAP_EVENT_SUBSCRIBE:
+        if (event->subscribe.attr_handle == s_evt_handle) {
+            s_app_present = event->subscribe.cur_notify;
+            ESP_LOGI(TAG, "SPACE 车控 app %s", s_app_present ? "连上了" : "离开了");
+        }
+        return 0;
     case BLE_GAP_EVENT_DISCONNECT:
         ESP_LOGI(TAG, "断线（reason=%d），重新广播", event->disconnect.reason);
         s_conn = BLE_HS_CONN_HANDLE_NONE;
+        s_app_present = false;
         advertise();
         return 0;
     case BLE_GAP_EVENT_ADV_COMPLETE:
@@ -179,6 +232,11 @@ bool ble_remote_start(const char *device_name) {
         s_link = CAR_LINK_ERROR;
         return false;
     }
+    // SPACE 车控通道（跟 HID 同一个 GATT 资料库；esp_hid 只处理 16 位元的 HID UUID，不会碰它）
+    s_cmds = xQueueCreate(8, sizeof(cmd_msg_t));
+    int rc = ble_gatts_count_cfg(s_space_svcs);
+    if (rc == 0) rc = ble_gatts_add_svcs(s_space_svcs);
+    if (rc != 0) ESP_LOGE(TAG, "SPACE 车控通道建立失败：%d（媒体键照样能用）", rc);
     ble_svc_gap_device_name_set(s_config.device_name);
     ble_svc_gap_device_appearance_set(ESP_HID_APPEARANCE_GENERIC);
 
@@ -219,4 +277,24 @@ void ble_remote_set_battery(int percent) {
     if (!s_dev || percent < 0 || percent == last) return;
     if (percent > 100) percent = 100;
     if (esp_hidd_dev_battery_set(s_dev, (uint8_t)percent) == ESP_OK) last = percent;
+}
+
+bool ble_remote_app_present(void) {
+    return s_app_present;
+}
+
+bool ble_remote_notify_key(const uint8_t evt[2]) {
+    if (!s_app_present || s_conn == BLE_HS_CONN_HANDLE_NONE) return false;
+    struct os_mbuf *om = ble_hs_mbuf_from_flat(evt, 2);
+    if (!om) return false;
+    return ble_gatts_notify_custom(s_conn, s_evt_handle, om) == 0;
+}
+
+bool ble_remote_take_cmd(uint8_t *buf, size_t *len, size_t cap) {
+    cmd_msg_t m;
+    if (!s_cmds || xQueueReceive(s_cmds, &m, 0) != pdTRUE) return false;
+    const size_t n = m.len < cap ? m.len : cap;
+    memcpy(buf, m.data, n);
+    *len = n;
+    return true;
 }

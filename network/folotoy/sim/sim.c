@@ -21,6 +21,8 @@ int g_soc = 87;       // 假电量
 int g_bl = 0;         // 最后设的背光 %
 int64_t g_now_us = 0; // 假时间
 extern car_link_t g_link;   // stub/ble_remote_stub.c
+extern bool g_app_present;
+void sim_push_cmd(const uint8_t *d, size_t n);
 extern int g_song_line;     // stub/sound_stub.c
 extern bool g_blow;
 extern uint8_t g_mic_level;
@@ -123,6 +125,20 @@ int main(int argc, char **argv) {
     car_press(&car, SPACE_CARD_BTN_DOWN, SPACE_CARD_EV_CLICK);
     advance_ms(300);
     dump("4-not-connected.ppm");
+    // 手机装了 SPACE 车控 app
+    g_link = CAR_LINK_READY;
+    g_app_present = true;
+    advance_ms(300);
+    dump("5-app.ppm");
+    // app 叫 FoloToy 进选择模式（选朋友）
+    static const uint8_t m1[] = { 0x01, 0x01 };
+    static const uint8_t ct0[] = { 0x02, 0x00, 'W', 'h', 'a', 't', 's', 'A', 'p', 'p' };
+    static const uint8_t ct1[] = { 0x02, 0x01, '2', ' ', '/', ' ', '5', ' ', ' ', 'A', 'h', ' ', 'M', 'e', 'n', 'g' };
+    sim_push_cmd(m1, sizeof m1);
+    sim_push_cmd(ct0, sizeof ct0);
+    sim_push_cmd(ct1, sizeof ct1);
+    advance_ms(300);
+    dump("6-app-select.ppm");
 
     // ---- 口袋机 ----
     s_out = pocket_out;

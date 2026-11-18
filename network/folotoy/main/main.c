@@ -68,7 +68,13 @@ static space_card_btn_t map_btn(bsp_btn_t b) {
 }
 
 static space_card_ev_t map_ev(bsp_btn_ev_t e) {
-    return e == BSP_BTN_CLICK ? SPACE_CARD_EV_CLICK : e == BSP_BTN_LONG ? SPACE_CARD_EV_LONG : SPACE_CARD_EV_OTHER;
+    switch (e) {
+    case BSP_BTN_CLICK: return SPACE_CARD_EV_CLICK;
+    case BSP_BTN_LONG: return SPACE_CARD_EV_LONG;
+    case BSP_BTN_PRESS: return SPACE_CARD_EV_PRESS;
+    case BSP_BTN_RELEASE: return SPACE_CARD_EV_RELEASE;
+    default: return SPACE_CARD_EV_OTHER;
+    }
 }
 
 // ---- 模式存在 NVS（namespace "space"、key "mode"）----
@@ -175,10 +181,18 @@ static void car_key(space_card_btn_t btn, space_card_ev_t ev) {
     const car_action_t a = car_remote_on_key(&s_car, btn, ev);
     bsp_lvgl_unlock();
     if (a == CAR_ACT_EXIT) switch_mode(APP_MODE_CARD);
-    // 送给手机（会 sleep 40ms，所以不持 LVGL 锁）
-    const uint16_t usage = car_remote_usage(a);
-    const bool sent = usage != 0 && ble_remote_send(usage);
-    if (usage != 0) ESP_LOGI(TAG, "%s → %s", car_remote_action_text(a), sent ? "已送出" : "没连上");
+    bool sent = false;
+    if (a == CAR_ACT_APP) {
+        // 交给 SPACE 车控 app（按下 / 放开也送：按住录语音讯息）
+        uint8_t evt[2];
+        sent = car_evt_encode(btn, ev, evt) && ble_remote_notify_key(evt);
+    } else {
+        // 媒体键（会 sleep 40ms，所以不持 LVGL 锁）
+        const uint16_t usage = car_remote_usage(a);
+        sent = usage != 0 && ble_remote_send(usage);
+        if (usage != 0) ESP_LOGI(TAG, "%s → %s", car_remote_action_text(a), sent ? "已送出" : "没连上");
+    }
+    if (ev != SPACE_CARD_EV_CLICK && ev != SPACE_CARD_EV_LONG) return;   // 按下 / 放开不用更新画面
     if (!bsp_lvgl_lock(500)) return;
     car_screen_on_action(a, sent);
     bsp_lvgl_unlock();
@@ -189,8 +203,11 @@ static void input_task(void *arg) {
     input_t in;
     for (;;) {
         if (xQueueReceive(s_queue, &in, portMAX_DELAY) != pdTRUE) continue;
-        if (in.ev == BSP_BTN_PRESS || in.ev == BSP_BTN_RELEASE) continue;   // 只看单击 / 长按
-        if (s_mode == APP_MODE_CAR) car_key(map_btn(in.btn), map_ev(in.ev));
+        if (s_mode == APP_MODE_CAR) {   // 车用：按下 / 放开也要（转给 app）
+            car_key(map_btn(in.btn), map_ev(in.ev));
+            continue;
+        }
+        if (in.ev == BSP_BTN_PRESS || in.ev == BSP_BTN_RELEASE) continue;   // 其他画面只看单击 / 长按
         else if (s_screen == SCR_CARD) card_key(map_btn(in.btn), map_ev(in.ev));
         else pocket_key(map_btn(in.btn), map_ev(in.ev));
     }

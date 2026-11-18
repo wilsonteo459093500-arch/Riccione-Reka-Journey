@@ -76,10 +76,59 @@ static void test_text(void) {
     assert(strcmp(car_remote_link_text(CAR_LINK_READY), "Connected") == 0);
     assert(strcmp(car_remote_link_text(CAR_LINK_ADVERTISING), "Waiting for phone") == 0);
     // 画面只有英文字型：所有字都要是 ASCII
-    for (int a = CAR_ACT_NONE; a <= CAR_ACT_EXIT; a++)
+    for (int a = CAR_ACT_NONE; a <= CAR_ACT_APP; a++)
         for (const char *p = car_remote_action_text((car_action_t)a); *p; p++) assert((unsigned char)*p < 0x80);
     for (int l = CAR_LINK_STARTING; l <= CAR_LINK_ERROR; l++)
         for (const char *p = car_remote_link_text((car_link_t)l); *p; p++) assert((unsigned char)*p < 0x80);
+}
+
+static void test_app_channel(void) {
+    car_remote_state_t s;
+    car_remote_init(&s);
+    // 没有 app：下长按没事、确定长按是语音助理、按下 / 放开不转
+    assert(car_remote_on_key(&s, SPACE_CARD_BTN_DOWN, SPACE_CARD_EV_LONG) == CAR_ACT_NONE);
+    assert(car_remote_on_key(&s, SPACE_CARD_BTN_OK, SPACE_CARD_EV_LONG) == CAR_ACT_VOICE);
+    assert(car_remote_on_key(&s, SPACE_CARD_BTN_OK, SPACE_CARD_EV_PRESS) == CAR_ACT_NONE);
+    // 有 app：下长按 / 确定长按交给 app；短按照样是媒体键；上长按照样回名片
+    s.app_present = true;
+    assert(car_remote_on_key(&s, SPACE_CARD_BTN_DOWN, SPACE_CARD_EV_LONG) == CAR_ACT_APP);
+    assert(car_remote_on_key(&s, SPACE_CARD_BTN_OK, SPACE_CARD_EV_LONG) == CAR_ACT_APP);
+    assert(car_remote_on_key(&s, SPACE_CARD_BTN_OK, SPACE_CARD_EV_CLICK) == CAR_ACT_PLAY_PAUSE);
+    assert(car_remote_on_key(&s, SPACE_CARD_BTN_UP, SPACE_CARD_EV_LONG) == CAR_ACT_EXIT);
+    assert(car_remote_on_key(&s, SPACE_CARD_BTN_OK, SPACE_CARD_EV_PRESS) == CAR_ACT_APP);
+    assert(car_remote_on_key(&s, SPACE_CARD_BTN_OK, SPACE_CARD_EV_RELEASE) == CAR_ACT_APP);
+    // 选择模式：全部交给 app（上长按也是：app 当取消）
+    const uint8_t sel[] = { CAR_CMD_MODE, 1 };
+    assert(car_cmd_apply(&s, sel, sizeof sel) && s.app_select);
+    assert(car_remote_on_key(&s, SPACE_CARD_BTN_UP, SPACE_CARD_EV_CLICK) == CAR_ACT_APP);
+    assert(car_remote_on_key(&s, SPACE_CARD_BTN_OK, SPACE_CARD_EV_CLICK) == CAR_ACT_APP);
+    assert(car_remote_on_key(&s, SPACE_CARD_BTN_UP, SPACE_CARD_EV_LONG) == CAR_ACT_APP);
+    // 文字：ASCII、截到 28 字、非 ASCII 换成 ?
+    const uint8_t t0[] = { CAR_CMD_TEXT, 0, 'W', 'e', 'R', 'e', 'a', 'd' };
+    assert(car_cmd_apply(&s, t0, sizeof t0) && strcmp(s.title, "WeRead") == 0);
+    uint8_t t1[40] = { CAR_CMD_TEXT, 1 };
+    for (int i = 2; i < 40; i++) t1[i] = 'a';
+    t1[2] = 0xE5;   // 中文 UTF-8 的第一个 byte
+    assert(car_cmd_apply(&s, t1, sizeof t1) && strlen(s.item) == CAR_TEXT_MAX && s.item[0] == '?');
+    // 坏封包：忽略
+    const uint8_t bad1[] = { 0x09, 0 }, bad2[] = { CAR_CMD_MODE, 7 }, bad3[] = { CAR_CMD_TEXT };
+    assert(!car_cmd_apply(&s, bad1, sizeof bad1));
+    assert(!car_cmd_apply(&s, bad2, sizeof bad2) && s.app_select);
+    assert(!car_cmd_apply(&s, bad3, sizeof bad3));
+    // 回一般模式：清掉两行字
+    const uint8_t normal[] = { CAR_CMD_MODE, 0 };
+    assert(car_cmd_apply(&s, normal, sizeof normal) && !s.app_select && s.title[0] == '\0');
+    // app 断线：不管在不在选择模式都回一般
+    car_cmd_apply(&s, sel, sizeof sel);
+    car_remote_app_gone(&s);
+    assert(!s.app_present && !s.app_select);
+    assert(car_remote_on_key(&s, SPACE_CARD_BTN_OK, SPACE_CARD_EV_LONG) == CAR_ACT_VOICE);
+
+    // 按键通知封包
+    uint8_t e[2];
+    assert(car_evt_encode(SPACE_CARD_BTN_DOWN, SPACE_CARD_EV_LONG, e) && e[0] == 1 && e[1] == CAR_EVT_LONG);
+    assert(car_evt_encode(SPACE_CARD_BTN_OK, SPACE_CARD_EV_RELEASE, e) && e[0] == 2 && e[1] == CAR_EVT_RELEASE);
+    assert(!car_evt_encode(SPACE_CARD_BTN_OK, SPACE_CARD_EV_OTHER, e));
 }
 
 int main(void) {
@@ -88,6 +137,7 @@ int main(void) {
     test_dim_does_not_eat_key();
     test_usage_and_report();
     test_text();
+    test_app_channel();
     printf("test_car_remote_model: OK\n");
     return 0;
 }

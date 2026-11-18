@@ -7,6 +7,12 @@
 //   上 长按     回名片模式
 //   闲置 60 秒调暗；调暗时按键照样有效（开车不用先按一下叫醒）
 //
+// 手机装了「SPACE 车控」app、连上 SPACE 车控通道（自订 GATT 服务）之后：
+//   下 长按     → 交给 app：打开微信读书（继续上次那本）
+//   确定 长按   → 交给 app：选朋友打 WhatsApp（没装 app 时照旧是语音助理）
+//   app 叫 FoloToy 进「选择模式」时：所有按键都只交给 app，不送媒体键；画面显示 app 传来的两行字
+//   按下 / 放开 也转给 app（按住确定录语音讯息，放开就送出）
+//
 // 名片模式里「下」长按 → 进车用模式。模式存在机器里，下次开机停在同一个模式。
 #pragma once
 
@@ -28,6 +34,7 @@ typedef enum {
     CAR_ACT_PREV,
     CAR_ACT_VOICE,
     CAR_ACT_EXIT,        // 回名片模式（不送给手机）
+    CAR_ACT_APP,         // 交给手机 app（经 SPACE 车控通道送按键），不送媒体键
 } car_action_t;
 
 // 蓝牙连线状态（ble_remote.c 回报，画面照这个显示）
@@ -39,10 +46,37 @@ typedef enum {
     CAR_LINK_ERROR,          // 蓝牙起不来
 } car_link_t;
 
+#define CAR_TEXT_MAX 28
+
 typedef struct {
     bool dimmed;
     car_action_t last;       // 最后一个动作（画面中间显示，1 秒后淡掉）
+    bool app_present;        // 手机 app 连上 SPACE 车控通道（订阅了按键通知）
+    bool app_select;         // app 要的选择模式：按键只给 app
+    char title[CAR_TEXT_MAX + 1];   // 选择模式第一行（app 传来，ASCII）
+    char item[CAR_TEXT_MAX + 1];    // 选择模式第二行
 } car_remote_state_t;
+
+// ---- SPACE 车控通道（FoloToy ⇄ 手机 app）的封包 ----
+// 按键通知（FoloToy → app，notify）：[按键 0 上 / 1 下 / 2 确定, 事件 0 单击 / 1 长按 / 2 按下 / 3 放开]
+// 指令（app → FoloToy，write）：
+//   [0x01, 模式]            模式 0 = 一般（媒体键）、1 = 选择模式（按键只给 app）
+//   [0x02, 行 0/1, 文字…]   选择模式画面的第一 / 二行（ASCII，最多 28 字；超过截掉、非 ASCII 换成 ?）
+#define CAR_CMD_MODE 0x01
+#define CAR_CMD_TEXT 0x02
+#define CAR_EVT_CLICK 0
+#define CAR_EVT_LONG 1
+#define CAR_EVT_PRESS 2
+#define CAR_EVT_RELEASE 3
+
+// 按键 → 通知封包；不用转的事件回 false
+bool car_evt_encode(space_card_btn_t btn, space_card_ev_t ev, uint8_t out[2]);
+
+// 收到 app 的指令 → 改状态；回 true = 画面要重画。格式不对就忽略（回 false）
+bool car_cmd_apply(car_remote_state_t *s, const uint8_t *data, size_t len);
+
+// app 断线 / 不订阅了：回到一般模式
+void car_remote_app_gone(car_remote_state_t *s);
 
 // HID Consumer Control 用法码（USB HID Usage Tables，Consumer page 0x0C）
 #define CAR_USAGE_PLAY_PAUSE 0x00CD

@@ -22,3 +22,10 @@ bool ble_remote_send(uint16_t usage);
 
 // 更新手机上看到的电量（0–100；< 0 不更新）
 void ble_remote_set_battery(int percent);
+
+// ---- SPACE 车控通道（自订 GATT 服务，给手机「SPACE 车控」app 用；封包格式见 car_remote_model.h）----
+// 服务 UUID 8d6f0001-6b3a-4c2e-9a51-535041434552；按键通知 …0002（notify）；指令 …0003（write，要加密连线）
+bool ble_remote_app_present(void);                     // app 订阅了按键通知
+bool ble_remote_notify_key(const uint8_t evt[2]);      // 送一个按键给 app；app 没连回 false
+// 取出一笔 app 送来的指令（画面计时器在持 LVGL 锁时呼叫）；没有回 false
+bool ble_remote_take_cmd(uint8_t *buf, size_t *len, size_t cap);
