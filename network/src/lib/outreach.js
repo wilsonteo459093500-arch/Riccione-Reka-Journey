@@ -380,6 +380,7 @@ export function learnings(outreach = [], campaigns = [], { minN = 5 } = {}) {
   };
   cmp('personal', outreach.filter((o) => o.personal), outreach.filter((o) => !o.personal), '有提到对方的事', '一般问候');
   cmp('polished', outreach.filter((o) => o.polished), outreach.filter((o) => !o.polished), 'AI 润色过的', '模板直接发的');
+  cmp('image', outreach.filter((o) => o.with_image), outreach.filter((o) => !o.with_image), '附海报的', '只有文字的');
   const kindOf = new Map(campaigns.map((c) => [c.id, c.kind]));
   const kinds = KIND_KEYS.map((k) => ({ k, ...rateOf(outreach.filter((o) => kindOf.get(o.campaign_id) === k)) })).filter((x) => x.n >= minN);
   if (kinds.length >= 2) {

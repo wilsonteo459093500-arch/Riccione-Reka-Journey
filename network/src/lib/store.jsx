@@ -446,8 +446,9 @@ export function StoreProvider({ children }) {
     }
 
     /** 建一次群发：每个人先用程序写好一则（不花钱） */
-    async function createCampaign({ kind, name, event_id = null, occasion = '', invite = '', template = '', lang = 'auto', personIds = [] }) {
-      const campaign = await put('campaigns', { kind, name: String(name || '').trim() || KINDS[kind].label, event_id, occasion, invite, template, lang });
+    async function createCampaign({ kind, name, event_id = null, occasion = '', invite = '', template = '', lang = 'auto', personIds = [], image = null }) {
+      let campaign = await put('campaigns', { kind, name: String(name || '').trim() || KINDS[kind].label, event_id, occasion, invite, template, lang });
+      if (image) campaign = await setCampaignImage(campaign, image);
       const event = event_id ? rowOf('events', event_id) : null;
       const rows = personIds.map((pid) => {
         const p = people.find((x) => x.id === pid);
@@ -460,6 +461,21 @@ export function StoreProvider({ children }) {
     }
 
     async function saveCampaign(row) { return put('campaigns', row); }
+
+    /** 海报：缩到长边 2048（字还看得清楚）→ 私有 bucket；换掉旧的 */
+    async function setCampaignImage(campaignOrId, file) {
+      // 刚建好的群发还没进 state → 可以直接传那一列
+      const campaign = typeof campaignOrId === 'object' ? campaignOrId : rowOf('campaigns', campaignOrId);
+      const campaignId = campaign && campaign.id;
+      if (!campaign) throw new Error('找不到这次群发');
+      if (campaign.image_path) await repo.removeImage(campaign.image_path).catch(() => null);
+      if (!file) return put('campaigns', { ...campaign, image_path: '' });
+      const owner = await repo.userId();
+      const img = await shrinkImage(file, 2048, 0.9);
+      const path = `${owner}/poster-${campaignId}-${Date.now().toString(36)}.jpg`;
+      await repo.uploadImage(path, img.blob);
+      return put('campaigns', { ...campaign, image_path: path });
+    }
 
     /** 照新的模板重写还没发的（会盖掉手改过的初稿） */
     async function redraftCampaign(campaignId) {
@@ -486,7 +502,7 @@ export function StoreProvider({ children }) {
     async function editOutreach(row, patch) { return put('outreach', { ...row, ...patch }); }
 
     /** 点了「打开 WhatsApp」= 发了：记一笔讯息互动、上次联系；邀请的话出席名单标「邀请了」 */
-    async function markSent(row) {
+    async function markSent(row, { withImage = false } = {}) {
       const campaign = rowOf('campaigns', row.campaign_id);
       const person = rowOf('people', row.person_id);
       if (!campaign || !person) throw new Error('找不到这则讯息');
@@ -494,9 +510,9 @@ export function StoreProvider({ children }) {
       const at = nowIso();
       const label = campaign.name || (KINDS[campaign.kind] ? KINDS[campaign.kind].label : '');
       const inter = await put('interactions', {
-        person_id: person.id, kind: 'message', source: 'campaign', occurred_at: at, title: `群发：${label}`, summary: String(row.text || '').slice(0, 500), ai: null,
+        person_id: person.id, kind: 'message', source: 'campaign', occurred_at: at, title: `群发：${label}${withImage ? '（附海报）' : ''}`, summary: String(row.text || '').slice(0, 500), ai: null,
       });
-      const saved = await put('outreach', { ...row, status: 'sent', sent_at: at, interaction_id: inter.id });
+      const saved = await put('outreach', { ...row, status: 'sent', sent_at: at, interaction_id: inter.id, ...(withImage ? { with_image: true } : {}) });
       await put('people', { ...person, last_contact_at: at, snooze_until: null });
       if (campaign.kind === 'invite' && campaign.event_id) await setAttendance(campaign.event_id, person.id, 'invited', { soft: true });
       return saved;
@@ -510,7 +526,7 @@ export function StoreProvider({ children }) {
         const left = dataRef.current.interactions.filter((i) => i.person_id === person.id && ['meeting', 'call', 'message', 'event'].includes(i.kind)).map((i) => i.occurred_at).sort();
         await put('people', { ...person, last_contact_at: left.length ? left[left.length - 1] : null });
       }
-      return put('outreach', { ...rowOf('outreach', row.id), status: 'draft', sent_at: null, interaction_id: null, response: null, response_at: null, rsvp: null });
+      return put('outreach', { ...rowOf('outreach', row.id), status: 'draft', sent_at: null, interaction_id: null, response: null, response_at: null, rsvp: null, with_image: false });
     }
 
     /** 他怎么回：变成那笔讯息的「气氛」（进好感度）；再按一次同一个 = 清掉 */
@@ -560,6 +576,7 @@ export function StoreProvider({ children }) {
         }).filter(Boolean);
         const { messages, usage } = await api.draftMessages({
           kind: campaign.kind,
+          has_image: !!campaign.image_path,
           occasion: event ? event.name : campaign.occasion,
           invite: campaign.invite,
           me: { name: me.display_name, business: me.business },
@@ -585,7 +602,12 @@ export function StoreProvider({ children }) {
       createCampaign,
       saveCampaign,
       redraftCampaign,
-      deleteCampaign: (id) => drop('campaigns', id),
+      setCampaignImage,
+      async deleteCampaign(id) {
+        const c = rowOf('campaigns', id);
+        if (c && c.image_path) await repo.removeImage(c.image_path).catch(() => null);
+        return drop('campaigns', id);
+      },
       changeTopic,
       editOutreach,
       markSent,

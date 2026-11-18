@@ -2,7 +2,7 @@
    第 5 阶段 · 新的群发：选类型 → 选人 → 模板 → 程序先帮每个人写好
    ============================================================ */
 import React, { useMemo, useState } from 'react';
-import { ArrowLeft, Send, AlertTriangle, ChevronDown, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Send, AlertTriangle, ChevronDown, RotateCcw, ImagePlus } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
 import { TIERS, fmtDate } from '../lib/logic.js';
 import { todayActions } from '../lib/relation.js';
@@ -30,6 +30,8 @@ export default function CampaignNew({ kind: kind0 = 'festival', eventId: event0 
   const [showTpl, setShowTpl] = useState(false);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
+  const [image, setImage] = useState(null);
+  const imageUrl = useMemo(() => (image ? URL.createObjectURL(image) : ''), [image]);
 
   // 选人
   const [tiers, setTiers] = useState([]);
@@ -82,7 +84,7 @@ export default function CampaignNew({ kind: kind0 = 'festival', eventId: event0 
     try {
       const c = await store.createCampaign({
         kind, name: name.trim() || autoName, event_id: usesEvent && eventId ? eventId : null,
-        occasion: campaign.occasion, invite: campaign.invite, template, lang, personIds: chosen.map((r) => r.p.id),
+        occasion: campaign.occasion, invite: campaign.invite, template, lang, personIds: chosen.map((r) => r.p.id), image,
       });
       onCreated(c.id);
     } catch (e) { toast(e.message, 'error'); setBusy(false); }
@@ -210,6 +212,21 @@ export default function CampaignNew({ kind: kind0 = 'festival', eventId: event0 
             {preview.points.length > 0 && <p className="mt-1 text-xs text-faint">可以提的事：{preview.points.join('、')}</p>}
           </div>
         )}
+        <div className="mt-3">
+          <span className="mb-1 block text-[13px] font-medium text-muted">海报（选填）：跟讯息一起发</span>
+          {image ? (
+            <div className="flex items-center gap-3">
+              <img src={imageUrl} alt="海报" className="h-20 w-20 rounded-lg object-cover" />
+              <Button size="sm" variant="ghost" onClick={() => setImage(null)}>拿掉</Button>
+            </div>
+          ) : (
+            <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-line px-3 py-2.5 text-sm text-muted hover:border-ink/30">
+              <ImagePlus className="h-5 w-5 text-plum" />选一张海报（节日 / 活动）
+              <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) setImage(f); }} />
+            </label>
+          )}
+          <span className="mt-1 block text-xs text-faint">手机上会用「分享」把海报 + 讯息一起交给 WhatsApp，再选那个人发送（WhatsApp 的直接链接只能带文字）。</span>
+        </div>
         <Field label="这次群发叫什么（只有你看得到）" className="mt-3"><Input value={name} onChange={(e) => setName(e.target.value)} placeholder={autoName} /></Field>
       </Section>
 

@@ -76,11 +76,12 @@ export function cleanPerson(p = {}) {
   };
 }
 
-export function buildDraftPrompt({ kind, occasion, invite, me = {}, learnings = [], people }) {
+export function buildDraftPrompt({ kind, occasion, invite, has_image = false, me = {}, learnings = [], people }) {
   const head = [
     `## 这次群发\n${KIND_LABEL[kind] || KIND_LABEL.custom}`,
     s(occasion, 120) && `节日 / 活动：${s(occasion, 120)}`,
     s(invite, 600) && `邀请内容（一字不改）：${s(invite, 600)}`,
+    has_image && '这次会配一张海报一起发（讯息是海报的说明文字：不用描述海报，可以说「附上海报」）',
     `## 我\n名字：${s(me.name, 60) || '（看初稿）'}${s(me.business, 300) ? `\n做什么：${s(me.business, 300)}` : ''}`,
     arr(learnings, 5, 200).length && `## 以前群发的经验（参考）\n${arr(learnings, 5, 200).map((x) => `• ${x}`).join('\n')}`,
   ].filter(Boolean).join('\n\n');

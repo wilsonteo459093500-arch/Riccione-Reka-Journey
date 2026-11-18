@@ -223,3 +223,12 @@ test('今日提醒：节日前 3 星期内才出现；建过节日问候就不�
   const raya = upcomingFestivals([], at('2027-03-09'))[0];
   assert.equal(festivalWhen(raya), '明天（约 3 月 10 日）');
 });
+
+test('海报：附海报 vs 只有文字的回复率；AI 知道这次有海报', () => {
+  const mk = (n, extra, response) => Array.from({ length: n }, () => ({ status: 'sent', sent_at: iso(1), response, ...extra }));
+  const rows = [...mk(5, { with_image: true }, 'warm'), ...mk(5, { with_image: false }, 'none')];
+  assert.ok(learnings(rows, []).find((t) => t.key === 'image').text.startsWith('附海报的回复率比较高：100%'));
+  const p = cleanPerson({ id: 'o1', draft: 'Hi' });
+  assert.ok(buildDraftPrompt({ kind: 'festival', has_image: true, people: [p] }).includes('配一张海报'));
+  assert.ok(!buildDraftPrompt({ kind: 'festival', people: [p] }).includes('配一张海报'));
+});

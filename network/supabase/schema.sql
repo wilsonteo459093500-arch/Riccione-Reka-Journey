@@ -260,6 +260,7 @@ create table if not exists public.campaigns (
   invite text not null default '',        -- 邀请内容（时间、地点、什么活动）
   template text not null default '',      -- 模板：{称呼} {我} {活动} {节日祝福} {邀请} {聊聊}
   lang text not null default 'auto' check (lang in ('auto','zh','en','ms')),
+  image_path text not null default '',    -- 海报（私有 bucket；分享时跟讯息一起发）
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -276,6 +277,7 @@ create table if not exists public.outreach (
   topic text not null default '',         -- 讯息里提了他的哪件事
   personal boolean not null default false,
   polished boolean not null default false, -- AI 润色过
+  with_image boolean not null default false, -- 发的时候有附海报
   status text not null default 'draft' check (status in ('draft','sent','skipped')),
   sent_at timestamptz,
   interaction_id uuid references public.interactions(id) on delete set null,  -- 发了之后记的那笔「讯息」互动
@@ -288,6 +290,9 @@ create table if not exists public.outreach (
   unique (campaign_id, person_id)
 );
 create index if not exists outreach_person on public.outreach (person_id, sent_at desc);
+-- 先跑过第 5 阶段早期版本的：补上海报栏位
+alter table public.campaigns add column if not exists image_path text not null default '';
+alter table public.outreach add column if not exists with_image boolean not null default false;
 
 alter table public.interactions drop constraint if exists interactions_source_check;
 alter table public.interactions add constraint interactions_source_check

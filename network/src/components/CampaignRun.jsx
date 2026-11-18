@@ -3,8 +3,9 @@
    ============================================================ */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  ArrowLeft, MessageCircle, Sparkles, Copy, SkipForward, Undo2, MessagesSquare, Ban, RotateCcw, Trash2, Shuffle, Check,
+  ArrowLeft, MessageCircle, Sparkles, Copy, SkipForward, Undo2, MessagesSquare, Ban, RotateCcw, Trash2, Shuffle, Check, ImagePlus, Share2, X,
 } from 'lucide-react';
+import { canShareFiles, fetchPoster, sharePoster, copyPoster } from '../lib/share.js';
 import { useStore } from '../lib/store.jsx';
 import { relDay } from '../lib/logic.js';
 import {
@@ -25,6 +26,30 @@ export default function CampaignRun({ id, onBack, onOpen, onTalk }) {
   const [polishing, setPolishing] = useState(null);
   const byId = useMemo(() => new Map(people.map((p) => [p.id, p])), [people]);
   const event = campaign && campaign.event_id ? data.events.find((e) => e.id === campaign.event_id) : null;
+
+  // 海报：先下载成 File（手机「分享」要在按下去的那一刻就拿得到）
+  const imagePath = campaign ? campaign.image_path : '';
+  const [poster, setPoster] = useState(null);
+  const [posterUrl, setPosterUrl] = useState('');
+  const [posterBusy, setPosterBusy] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    setPoster(null); setPosterUrl('');
+    if (!imagePath) return undefined;
+    store.imageUrl(imagePath).then(async (url) => {
+      if (!alive || !url) return;
+      setPosterUrl(url);
+      const f = await fetchPoster(url, campaign.name);
+      if (alive) setPoster(f);
+    }).catch(() => alive && toast('海报读不到，请重新上传', 'error'));
+    return () => { alive = false; };
+  }, [imagePath]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shareOk = !!poster && canShareFiles(poster);
+
+  async function pickPoster(file) {
+    setPosterBusy(true);
+    try { await store.setCampaignImage(id, file); if (file) toast('海报放好了：每张卡都会跟讯息一起发'); } catch (e) { toast(e.message, 'error'); } finally { setPosterBusy(false); }
+  }
 
   // 全部发完 → 跳到「已发」记回应
   useEffect(() => { if (tab === 'draft' && stats.total && !stats.left && stats.sent) setTab('sent'); }, [tab, stats.total, stats.left, stats.sent]);
@@ -75,6 +100,10 @@ export default function CampaignRun({ id, onBack, onOpen, onTalk }) {
       </div>
 
       {tab === 'draft' && stats.left > 0 && (
+        <PosterBar url={posterUrl} hasPath={!!imagePath} busy={posterBusy} shareOk={shareOk} onPick={pickPoster} />
+      )}
+
+      {tab === 'draft' && stats.left > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-violet-50 px-3 py-2.5">
           <Sparkles className="h-4 w-4 text-violet-700" />
           <span className="flex-1 text-sm text-violet-900">
@@ -91,7 +120,7 @@ export default function CampaignRun({ id, onBack, onOpen, onTalk }) {
         ))}
       </div>
 
-      {tab === 'draft' && stats.left > 0 && <p className="text-xs text-faint">按「WhatsApp」会打开跟他的对话、讯息已经填好，你在 WhatsApp 按发送；回来这里就记成「已发」。</p>}
+      {tab === 'draft' && stats.left > 0 && <p className="text-xs text-faint">{imagePath && shareOk ? '按「分享海报 + 讯息」→ 选 WhatsApp → 选那个人 → 发送；回来这里就记成「已发」。' : '按「WhatsApp」会打开跟他的对话、讯息已经填好，你在 WhatsApp 按发送；回来这里就记成「已发」。'}</p>}
       {!list.length && <p className="py-8 text-center text-sm text-faint">{tab === 'draft' ? (stats.total ? '都发完了 👏 到「已发」记一下大家怎么回' : '没有人') : '没有'}</p>}
 
       <ul className="space-y-3">
@@ -100,7 +129,7 @@ export default function CampaignRun({ id, onBack, onOpen, onTalk }) {
           if (!p) return null;
           return (
             <li key={row.id}>
-              {row.status === 'draft' && <DraftCard row={row} person={p} onOpen={onOpen} />}
+              {row.status === 'draft' && <DraftCard row={row} person={p} onOpen={onOpen} poster={imagePath ? poster : null} posterLoading={!!imagePath && !poster} shareOk={shareOk} />}
               {row.status === 'sent' && <SentCard row={row} person={p} campaign={campaign} onOpen={onOpen} onTalk={onTalk} />}
               {row.status === 'skipped' && (
                 <div className="flex items-center gap-3 rounded-2xl border border-line bg-white p-3">
@@ -133,7 +162,7 @@ function Head({ person, onOpen, children }) {
   );
 }
 
-function DraftCard({ row, person, onOpen }) {
+function DraftCard({ row, person, onOpen, poster, posterLoading, shareOk }) {
   const store = useStore();
   const toast = useToast();
   const [text, setText] = useState(row.text);
@@ -145,11 +174,21 @@ function DraftCard({ row, person, onOpen }) {
   async function save() {
     if (text !== row.text) await store.editOutreach(row, { text }).catch((e) => toast(e.message, 'error'));
   }
-  async function sent() {
+  const [copied, setCopied] = useState(false); // 电脑：海报复制 / 下载过了
+  async function sent(withImage = false) {
     try {
       if (text !== row.text) await store.editOutreach(row, { text });
-      await store.markSent({ ...row, text });
+      await store.markSent({ ...row, text }, { withImage });
     } catch (e) { toast(e.message, 'error'); }
+  }
+  function share() {
+    // 要在 click 里直接呼叫 navigator.share（不能先 await 别的）
+    sharePoster(poster, text).then((ok) => { if (ok) sent(true); }).catch((e) => toast(e.message, 'error'));
+  }
+  async function copyImg() {
+    const r = await copyPoster(poster);
+    setCopied(true);
+    toast(r === 'copied' ? '海报复制好了：打开 WhatsApp 后在对话框贴上（Ctrl / ⌘ + V）' : '海报下载好了：打开 WhatsApp 后把它拖进对话');
   }
   async function nextTopic() {
     const i = points.indexOf(row.topic);
@@ -171,13 +210,25 @@ function DraftCard({ row, person, onOpen }) {
           <span className="text-faint">他的：{points.join('、')}</span>
         </div>
       )}
+      {poster && shareOk && (
+        <p className="mt-2 rounded-xl bg-[#25D366]/10 px-2.5 py-1.5 text-xs text-ink/80">分享后在 WhatsApp 选 <b className="text-[13px]">{person.name}</b>{person.name_alt ? `（${person.name_alt}）` : ''} → 发送。讯息没跟着过去的话，在对话框贴上（已经复制了）。</p>
+      )}
       <div className="mt-3 flex flex-wrap gap-1.5">
-        <a href={link || undefined} target="_blank" rel="noreferrer" onClick={() => link && setTimeout(sent, 0)} aria-disabled={!link}
-          className={cx('inline-flex h-9 items-center gap-1.5 rounded-xl px-4 text-sm font-semibold', link ? 'bg-[#25D366] text-white hover:bg-[#1EBE5A]' : 'pointer-events-none bg-ink/5 text-faint')}>
-          <MessageCircle className="h-4 w-4" />WhatsApp
+        {poster && shareOk && (
+          <button onClick={share} className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[#25D366] px-4 text-sm font-semibold text-white hover:bg-[#1EBE5A]">
+            <Share2 className="h-4 w-4" />分享海报 + 讯息
+          </button>
+        )}
+        {poster && !shareOk && (
+          <Button size="sm" variant={copied ? 'outline' : 'primary'} className="h-9" onClick={copyImg}><ImagePlus className="h-4 w-4" />{copied ? '再复制一次海报' : '1. 复制海报'}</Button>
+        )}
+        {posterLoading && <span className="inline-flex h-9 items-center px-2 text-xs text-faint">海报读取中…</span>}
+        <a href={link || undefined} target="_blank" rel="noreferrer" onClick={() => link && setTimeout(() => sent(!!poster && !shareOk && copied), 0)} aria-disabled={!link}
+          className={cx('inline-flex h-9 items-center gap-1.5 rounded-xl px-4 text-sm font-semibold', !link ? 'pointer-events-none bg-ink/5 text-faint' : poster && shareOk ? 'border border-line bg-white text-ink hover:border-ink/30' : 'bg-[#25D366] text-white hover:bg-[#1EBE5A]')}>
+          <MessageCircle className="h-4 w-4" />{poster && shareOk ? '只发文字' : poster ? '2. 打开 WhatsApp' : 'WhatsApp'}
         </a>
         <Button size="sm" variant="outline" onClick={() => { navigator.clipboard && navigator.clipboard.writeText(text).then(() => toast('复制了'), () => {}); }}><Copy className="h-4 w-4" />复制</Button>
-        <Button size="sm" variant="outline" onClick={sent} title="用别的方式发了（例：自己在 WhatsApp 打的）"><Check className="h-4 w-4" />已发</Button>
+        <Button size="sm" variant="outline" onClick={() => sent(!!poster)} title="用别的方式发了（例：自己在 WhatsApp 打的）"><Check className="h-4 w-4" />已发</Button>
         <Button size="sm" variant="ghost" onClick={() => store.skipOutreach(row)}><SkipForward className="h-4 w-4" />跳过</Button>
       </div>
     </div>
@@ -241,6 +292,30 @@ function SentCard({ row, person, campaign, onOpen, onTalk }) {
         <Button size="sm" variant="ghost" onClick={() => onTalk(person.id)} title="他回了很多、聊开了：汇出 WhatsApp 对话让 AI 整理"><MessagesSquare className="h-4 w-4" />聊开了 · 导入对话</Button>
         <Button size="sm" variant="ghost" onClick={() => { if (window.confirm('撤回「已发」？（WhatsApp 那边的讯息要自己删）')) run(store.undoSent(row)); }}><Undo2 className="h-4 w-4" />撤回</Button>
       </div>
+    </div>
+  );
+}
+
+function PosterBar({ url, hasPath, busy, shareOk, onPick }) {
+  const input = React.useRef(null);
+  return (
+    <div className="flex items-center gap-3 rounded-2xl border border-line bg-white p-2.5">
+      <input ref={input} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) onPick(f); }} />
+      {hasPath ? (
+        <>
+          {url ? <img src={url} alt="海报" className="h-16 w-16 shrink-0 rounded-lg object-cover" /> : <div className="h-16 w-16 shrink-0 animate-pulse rounded-lg bg-ink/5" />}
+          <div className="min-w-0 flex-1 text-sm">
+            <div className="font-medium">海报会跟讯息一起发</div>
+            <div className="text-xs text-muted">{shareOk ? '手机：按「分享海报 + 讯息」' : '电脑：先复制海报，再打开 WhatsApp 贴上'}</div>
+          </div>
+          <Button size="sm" variant="ghost" busy={busy} onClick={() => input.current.click()}>换</Button>
+          <Button size="sm" variant="ghost" onClick={() => onPick(null)} aria-label="拿掉海报"><X className="h-4 w-4" /></Button>
+        </>
+      ) : (
+        <button onClick={() => input.current.click()} disabled={busy} className="flex w-full items-center gap-2 text-left text-sm text-muted hover:text-ink">
+          <ImagePlus className="h-5 w-5 text-plum" /><span className="flex-1">{busy ? '上传中…' : '加一张海报（选填）：节日 / 活动海报跟讯息一起发'}</span>
+        </button>
+      )}
     </div>
   );
 }
