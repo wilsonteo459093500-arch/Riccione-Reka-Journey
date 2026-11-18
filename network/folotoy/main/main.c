@@ -6,7 +6,8 @@
 //   上 / 下 短按   切换「名片」/「活动」二维码（menuconfig 有设活动网址才有第二个）
 //   确定 短按      亮度 100% → 60% → 30%
 //   确定 长按      大二维码模式（只剩二维码）
-//   上 长按        → 口袋机菜单：蜡烛与生日歌 / 计时器 / 倒数计时 / 车用遥控器 / 返回名片（不用重开机）
+//   上 长按        → 口袋机菜单（不用重开机）：蜡烛与生日歌 / 木鱼 / 手电筒 / 计时器 / 倒数计时 / 番茄钟 /
+//                    叠叠乐 / 记忆三色 / 求签 / 抽奖 / 车用遥控器 / 返回名片
 //   下 长按        → 车用遥控器模式
 //   闲置 60 秒自动调暗；调暗时按任何键只会叫醒
 //
@@ -25,6 +26,7 @@
 #include "candle_screen.h"
 #include "car_remote_model.h"
 #include "car_screen.h"
+#include "esp_random.h"
 #include "esp_system.h"
 #include "esp_sleep.h"
 #include "esp_timer.h"
@@ -33,12 +35,14 @@
 #include "freertos/task.h"
 #include "key_guard.h"      // 沿用上游：按键唤醒时挡住那一下（非 UI 逻辑，可以重用）
 #include "lvgl.h"
+#include "games_screen.h"
 #include "menu_screen.h"
 #include "nvs.h"
 #include "nvs_flash.h"
 #include "space_card.h"
 #include "space_card_model.h"
 #include "timer_screen.h"
+#include "tools_screen.h"
 
 static const char *TAG = "space";
 
@@ -52,12 +56,20 @@ static car_remote_state_t s_car;
 static app_mode_t s_mode = APP_MODE_CARD;
 
 // 名片模式里的画面（换画面不用重开机；车用遥控器要开蓝牙，才走重开机）
-typedef enum { SCR_CARD, SCR_MENU, SCR_CANDLE, SCR_STOPWATCH, SCR_COUNTDOWN } screen_t;
+typedef enum {
+    SCR_CARD, SCR_MENU, SCR_CANDLE, SCR_STOPWATCH, SCR_COUNTDOWN,
+    SCR_MUYU, SCR_FLASHLIGHT, SCR_POMODORO, SCR_GAME,
+} screen_t;
 static screen_t s_screen = SCR_CARD;
 static menu_state_t s_menu;
 static candle_state_t s_candle;
 static stopwatch_t s_stopwatch;    // 状态放这里：离开画面再回来，计时还在
 static countdown_t s_countdown;
+static muyu_t s_muyu;              // 功德存 NVS（namespace "space"、key "muyu"）
+static uint32_t s_muyu_saved;
+static uint8_t s_flash_color;
+static pomodoro_t s_pomodoro;
+static game_kind_t s_game;
 static QueueHandle_t s_queue;
 static volatile bool s_input_ready;
 static key_guard_t s_key_guard;
@@ -99,6 +111,26 @@ static void switch_mode(app_mode_t next) {
     esp_restart();
 }
 
+static void save_muyu(void) {
+    if (s_muyu.count == s_muyu_saved) return;
+    nvs_handle_t h;
+    if (nvs_open("space", NVS_READWRITE, &h) == ESP_OK) {
+        if (nvs_set_u32(h, "muyu", s_muyu.count) == ESP_OK) nvs_commit(h);
+        nvs_close(h);
+        s_muyu_saved = s_muyu.count;
+    }
+}
+
+static uint32_t load_muyu(void) {
+    nvs_handle_t h;
+    uint32_t v = 0;
+    if (nvs_open("space", NVS_READONLY, &h) == ESP_OK) {
+        (void)nvs_get_u32(h, "muyu", &v);
+        nvs_close(h);
+    }
+    return v;
+}
+
 static uint32_t now_ms(void) {
     return (uint32_t)(esp_timer_get_time() / 1000);
 }
@@ -112,6 +144,10 @@ static void go(screen_t next) {
     case SCR_CANDLE: candle_screen_hide(); break;
     case SCR_STOPWATCH:
     case SCR_COUNTDOWN: timer_screen_hide(); break;
+    case SCR_MUYU: muyu_screen_hide(); save_muyu(); break;
+    case SCR_FLASHLIGHT: flashlight_screen_hide(); break;
+    case SCR_POMODORO: pomodoro_screen_hide(); break;
+    case SCR_GAME: games_screen_hide(); break;
     }
     s_screen = next;
     switch (next) {
@@ -124,6 +160,10 @@ static void go(screen_t next) {
     case SCR_CANDLE: candle_screen_show(&s_candle); break;
     case SCR_STOPWATCH: timer_screen_show(&s_stopwatch, &s_countdown, false); break;
     case SCR_COUNTDOWN: timer_screen_show(&s_stopwatch, &s_countdown, true); break;
+    case SCR_MUYU: muyu_screen_show(&s_muyu); break;
+    case SCR_FLASHLIGHT: flashlight_screen_show(&s_flash_color); break;
+    case SCR_POMODORO: pomodoro_screen_show(&s_pomodoro); break;
+    case SCR_GAME: games_screen_show(s_game, s_card.count ? s_card.links[0].url : "", esp_random()); break;
     }
     if (old && old != lv_screen_active()) lv_obj_delete(old);
 }
@@ -151,6 +191,13 @@ static void menu_key(space_card_btn_t btn, space_card_ev_t ev) {
         case MENU_CANDLE: go(SCR_CANDLE); break;
         case MENU_STOPWATCH: go(SCR_STOPWATCH); break;
         case MENU_COUNTDOWN: go(SCR_COUNTDOWN); break;
+        case MENU_MUYU: go(SCR_MUYU); break;
+        case MENU_FLASHLIGHT: go(SCR_FLASHLIGHT); break;
+        case MENU_POMODORO: go(SCR_POMODORO); break;
+        case MENU_STACK: s_game = GAME_STACK; go(SCR_GAME); break;
+        case MENU_SIMON: s_game = GAME_SIMON; go(SCR_GAME); break;
+        case MENU_FORTUNE: s_game = GAME_FORTUNE; go(SCR_GAME); break;
+        case MENU_LOTTERY: s_game = GAME_LOTTERY; go(SCR_GAME); break;
         case MENU_CAR: switch_mode(APP_MODE_CAR); break;   // 要开蓝牙：存模式、重开机
         default: go(SCR_CARD); break;
         }
@@ -167,6 +214,22 @@ static void pocket_key(space_card_btn_t btn, space_card_ev_t ev) {
         const candle_do_t d = candle_on_key(&s_candle, btn, ev);
         if (d == CANDLE_DO_EXIT) go(SCR_MENU);
         else candle_screen_on_do(d);
+    } else if (s_screen == SCR_MUYU) {
+        const int what = muyu_on_key(&s_muyu, btn, ev, now_ms());
+        if (what & MUYU_EXIT) go(SCR_MENU);
+        else {
+            muyu_screen_on_key(what);
+            if (s_muyu.count % 10 == 0) save_muyu();   // 每 10 下存一次（关机前的几下最多少 9 下）
+        }
+    } else if (s_screen == SCR_FLASHLIGHT) {
+        const nav_t nav = flashlight_on_key(&s_flash_color, btn, ev);
+        if (nav == NAV_TO_MENU) go(SCR_MENU);
+        else if (nav == NAV_REDRAW) flashlight_screen_update();
+    } else if (s_screen == SCR_POMODORO) {
+        if (pomodoro_on_key(&s_pomodoro, btn, ev, now_ms()) == NAV_TO_MENU) go(SCR_MENU);
+        else pomodoro_screen_update();
+    } else if (s_screen == SCR_GAME) {
+        if (games_screen_on_key(btn, ev)) go(SCR_MENU);
     } else {
         const nav_t nav = s_screen == SCR_STOPWATCH ? stopwatch_on_key(&s_stopwatch, btn, ev, now_ms())
                                                     : countdown_on_key(&s_countdown, btn, ev, now_ms());
@@ -240,6 +303,9 @@ void app_main(void) {
     candle_init(&s_candle);
     stopwatch_init(&s_stopwatch);
     countdown_init(&s_countdown);
+    pomodoro_init(&s_pomodoro);
+    s_muyu_saved = nvs == ESP_OK ? load_muyu() : 0;
+    muyu_init(&s_muyu, s_muyu_saved);
     space_card_init(&s_card, CONFIG_SPACE_CARD_URL, CONFIG_SPACE_CARD_LABEL,
                     CONFIG_SPACE_CARD_EVENT_URL, CONFIG_SPACE_CARD_EVENT_LABEL);
     if (s_card.count == 0) ESP_LOGW(TAG, "SPACE_CARD_URL 没设或不是 https://，屏幕会显示设定说明");

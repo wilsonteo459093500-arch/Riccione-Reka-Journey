@@ -92,6 +92,7 @@ docker run --rm -v "${SRC}:/project" -w /project \
       cc -std=c11 -Wall -Wextra -Werror -Imain main/space_card_model.c main/car_remote_model.c tests/test_car_remote_model.c -o /tmp/t2 && /tmp/t2
       cc -std=c11 -Wall -Wextra -Werror -Imain main/space_card_model.c main/pocket_model.c tests/test_pocket_model.c -o /tmp/t3 && /tmp/t3
       cc -std=gnu11 -Wall -Wextra -Werror -Imain main/audio_dsp.c tests/test_audio_dsp.c -lm -o /tmp/t4 && /tmp/t4
+      cc -std=c11 -Wall -Wextra -Werror -Imain main/games_model.c tests/test_games_model.c -o /tmp/t5 && /tmp/t5
     fi
     idf.py set-target esp32c3 >/tmp/target.log 2>&1 || { tail -30 /tmp/target.log; exit 1; }
     idf.py build >/tmp/build.log 2>&1 || { tail -60 /tmp/build.log; exit 1; }

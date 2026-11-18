@@ -13,7 +13,9 @@
 #include "candle_screen.h"
 #include "car_screen.h"
 #include "menu_screen.h"
+#include "games_screen.h"
 #include "timer_screen.h"
+#include "tools_screen.h"
 #include "lvgl.h"
 #include "space_card.h"
 
@@ -215,5 +217,101 @@ int main(int argc, char **argv) {
     advance_ms(190000 + 400);
     dump("12-countdown-done.ppm");
     timer_screen_hide();
+
+    // ---- 菜单卷到下面 ----
+    old = lv_screen_active();
+    menu_init(&menu);
+    for (int i = 0; i < MENU_LOTTERY; i++) menu_on_key(&menu, SPACE_CARD_BTN_DOWN, SPACE_CARD_EV_CLICK);
+    menu_screen_show(&menu);
+    lv_obj_delete(old);
+    dump("13-menu-games.ppm");
+    menu_screen_hide();
+
+    // ---- 木鱼 ----
+    old = lv_screen_active();
+    static muyu_t muyu;
+    muyu_init(&muyu, 1233);
+    muyu_screen_show(&muyu);
+    lv_obj_delete(old);
+    muyu_screen_on_key(muyu_on_key(&muyu, SPACE_CARD_BTN_OK, SPACE_CARD_EV_CLICK, 0));
+    advance_ms(250);
+    dump("14-muyu.ppm");
+    muyu_screen_hide();
+
+    // ---- 手电筒（暖光）----
+    old = lv_screen_active();
+    static uint8_t flash = 1;
+    flashlight_screen_show(&flash);
+    lv_obj_delete(old);
+    dump("15-flashlight.ppm");
+    flashlight_screen_hide();
+
+    // ---- 番茄钟 ----
+    old = lv_screen_active();
+    static pomodoro_t pomo;
+    pomodoro_init(&pomo);
+    pomo.done = 2;
+    pomodoro_on_key(&pomo, SPACE_CARD_BTN_OK, SPACE_CARD_EV_CLICK, (uint32_t)(g_now_us / 1000));
+    pomodoro_screen_show(&pomo);
+    lv_obj_delete(old);
+    advance_ms(8 * 60 * 1000);
+    dump("16-pomodoro.ppm");
+    pomodoro_screen_hide();
+
+    const char *url = s.links[0].url;
+    // ---- 叠叠乐：叠几层（在滑的位置放下），再故意失败 ----
+    old = lv_screen_active();
+    games_screen_show(GAME_STACK, url, 12345);
+    lv_obj_delete(old);
+    const int waits[] = { 1300, 900, 1200, 700, 1000, 800, 1100 };
+    for (int i = 0; i < 7; i++) {
+        advance_ms(waits[i]);
+        games_screen_on_key(SPACE_CARD_BTN_OK, SPACE_CARD_EV_CLICK);
+    }
+    advance_ms(300);
+    dump("17-stack.ppm");
+    for (int i = 0; i < 200 && !games_screen_is_over(); i++) {   // 一直按到失败（失败就停，不要按到重开）
+        advance_ms(170 + (i * 97) % 600);
+        games_screen_on_key(SPACE_CARD_BTN_OK, SPACE_CARD_EV_CLICK);
+    }
+    advance_ms(100);
+    dump("18-stack-over.ppm");
+    games_screen_hide();
+
+    // ---- 记忆三色：播的时候 + 按错 ----
+    old = lv_screen_active();
+    games_screen_show(GAME_SIMON, url, 777);
+    lv_obj_delete(old);
+    advance_ms(800);
+    dump("19-simon.ppm");
+    advance_ms(1500);
+    // 三个键轮流试：按错就结束（结束后不再按，不然确定会重开）
+    const space_card_btn_t tries[] = { SPACE_CARD_BTN_UP, SPACE_CARD_BTN_DOWN, SPACE_CARD_BTN_OK };
+    for (int i = 0; i < 3 && !games_screen_is_over(); i++) {
+        games_screen_on_key(tries[i], SPACE_CARD_EV_CLICK);
+        advance_ms(2500);   // 答对的话等它播完下一题
+    }
+    advance_ms(100);
+    dump("20-simon-over.ppm");
+    games_screen_hide();
+
+    // ---- 求签 ----
+    old = lv_screen_active();
+    games_screen_show(GAME_FORTUNE, url, 2026);
+    lv_obj_delete(old);
+    dump("21-fortune.ppm");
+    games_screen_on_key(SPACE_CARD_BTN_OK, SPACE_CARD_EV_CLICK);
+    advance_ms(1500);
+    dump("22-fortune-result.ppm");
+    games_screen_hide();
+
+    // ---- 抽奖 ----
+    old = lv_screen_active();
+    games_screen_show(GAME_LOTTERY, url, 99);
+    lv_obj_delete(old);
+    games_screen_on_key(SPACE_CARD_BTN_OK, SPACE_CARD_EV_CLICK);
+    advance_ms(8000);
+    dump("23-lottery.ppm");
+    games_screen_hide();
     return 0;
 }

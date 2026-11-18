@@ -36,6 +36,10 @@ void dsp_render_note(uint8_t midi, uint32_t note_samples, uint32_t from, int16_t
 // 嘀声（倒数时间到）：freq_hz、n 个取样，头尾有淡入淡出不会「啪」一声
 void dsp_render_beep(uint32_t freq_hz, int16_t *out, size_t n);
 
+// 木鱼「咚」：两个会很快衰减的音（约 620 / 1180 Hz）叠起来，像敲木头；共 KNOCK_SAMPLES 个取样
+#define KNOCK_SAMPLES (DSP_RATE * 160 / 1000)
+void dsp_render_knock(uint32_t from, int16_t *out, size_t n);
+
 // ---------------- 吹气判断 ----------------
 // 对着麦克风吹气 = 很大声、持续、而且有「沙沙」的噪音感或爆音。
 // 说话 / 唱歌通常没那么大声，也比较「有音调」。门槛要用真机再调（README 有写）。

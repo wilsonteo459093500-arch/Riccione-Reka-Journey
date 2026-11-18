@@ -15,3 +15,8 @@ int sound_song_line(void) { return g_song_line; }
 bool sound_take_song_done(void) { bool v = g_song_done; g_song_done = false; return v; }
 bool sound_take_blow(void) { bool v = g_blow; g_blow = false; return v; }
 uint8_t sound_mic_level(void) { return g_mic_level; }
+void sound_knock(void) {}
+void sound_tick(void) {}
+void sound_win(void) {}
+void sound_lose(void) {}
+void sound_note(uint8_t midi) { (void)midi; }

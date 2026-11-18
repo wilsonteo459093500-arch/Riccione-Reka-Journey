@@ -17,7 +17,7 @@ static void test_menu(void) {
     menu_init(&m);
     assert(m.cursor == MENU_CANDLE);
     assert(menu_on_key(&m, UP, CLICK) == NAV_NONE);          // 到顶就停
-    assert(menu_on_key(&m, DN, CLICK) == NAV_REDRAW && m.cursor == MENU_STOPWATCH);
+    assert(menu_on_key(&m, DN, CLICK) == NAV_REDRAW && m.cursor == MENU_MUYU);
     assert(menu_on_key(&m, OK, CLICK) == NAV_OPEN);
     for (int i = 0; i < 10; i++) menu_on_key(&m, DN, CLICK);
     assert(m.cursor == MENU_BACK);                            // 到底就停
@@ -26,6 +26,23 @@ static void test_menu(void) {
     assert(menu_on_key(&m, UP, LONG) == NAV_TO_CARD);
     assert(menu_on_key(&m, OK, LONG) == NAV_NONE);
     for (int i = 0; i < MENU_COUNT; i++) assert(menu_item_text((menu_item_t)i)[0] != '\0');
+    // 卷动：游标一直在画面里（top ≤ cursor < top + 5）
+    menu_init(&m);
+    for (int i = 0; i < MENU_COUNT - 1; i++) {
+        menu_on_key(&m, DN, CLICK);
+        assert(m.top <= (int)m.cursor && (int)m.cursor < m.top + MENU_VISIBLE);
+    }
+    assert(m.top == MENU_COUNT - MENU_VISIBLE);
+    for (int i = 0; i < 3; i++) menu_on_key(&m, UP, CLICK);      // 往回走：还在画面里就不卷
+    assert(m.top == MENU_COUNT - MENU_VISIBLE);
+    for (int i = 0; i < MENU_COUNT; i++) {
+        menu_on_key(&m, UP, CLICK);
+        assert(m.top <= (int)m.cursor && (int)m.cursor < m.top + MENU_VISIBLE);
+    }
+    assert(m.top == 0 && m.cursor == 0);
+    assert(strcmp(menu_section(MENU_POMODORO), "工具") == 0);
+    assert(strcmp(menu_section(MENU_STACK), "游戏") == 0);
+    assert(menu_section(MENU_CAR)[0] == '\0');
 }
 
 static void test_candle(void) {
@@ -140,12 +157,63 @@ static void test_format(void) {
     for (const char *p = b; *p; p++) assert(strchr("0123456789:.", *p));
 }
 
+static void test_muyu(void) {
+    muyu_t m;
+    muyu_init(&m, 41);
+    assert(muyu_on_key(&m, OK, CLICK, 0) == MUYU_HIT && m.count == 42);
+    assert(!muyu_tick(&m, 99999));                                  // 没开自动：不会自己敲
+    assert(muyu_on_key(&m, DN, CLICK, 1000) == MUYU_TOGGLE && m.auto_on);
+    assert(!muyu_tick(&m, 1999));
+    assert(muyu_tick(&m, 2000) && m.count == 43);
+    assert(muyu_tick(&m, 3000) && m.count == 44);
+    muyu_on_key(&m, OK, CLICK, 3500);                               // 手敲：节拍重算
+    assert(!muyu_tick(&m, 4000) && muyu_tick(&m, 4500));
+    assert(muyu_on_key(&m, UP, CLICK, 5000) == MUYU_TOGGLE && !m.auto_on);
+    assert(muyu_on_key(&m, UP, LONG, 0) == MUYU_EXIT);
+}
+
+static void test_flashlight(void) {
+    uint8_t c = 0;
+    assert(flashlight_on_key(&c, DN, CLICK) == NAV_REDRAW && c == 1);
+    flashlight_on_key(&c, DN, CLICK);
+    flashlight_on_key(&c, DN, CLICK);
+    assert(c == 0);                                                  // 绕一圈
+    flashlight_on_key(&c, UP, CLICK);
+    assert(c == FLASH_COLORS - 1);
+    assert(flashlight_on_key(&c, OK, CLICK) == NAV_NONE);
+    assert(flashlight_on_key(&c, UP, LONG) == NAV_TO_MENU);
+    assert(flashlight_color(0) == 0xFFFFFF && strcmp(flashlight_name(2), "红光") == 0);
+}
+
+static void test_pomodoro(void) {
+    pomodoro_t p;
+    pomodoro_init(&p);
+    assert(p.focus && countdown_remaining(&p.cd, 0) == POMO_FOCUS_S * 1000u);
+    assert(pomodoro_on_key(&p, UP, CLICK, 0) == NAV_NONE);          // 不能调时间
+    pomodoro_on_key(&p, OK, CLICK, 0);                               // 开始
+    assert(!pomodoro_tick(&p, POMO_FOCUS_S * 1000u - 1));
+    assert(pomodoro_tick(&p, POMO_FOCUS_S * 1000u) && p.ringing && p.done == 1);
+    // 响铃：任何键 → 马上开始休息
+    pomodoro_on_key(&p, DN, CLICK, 1500000);
+    assert(!p.ringing && !p.focus && p.cd.phase == CD_RUNNING);
+    assert(countdown_remaining(&p.cd, 1500000 + 60000) == (POMO_BREAK_S - 60) * 1000u);
+    assert(pomodoro_tick(&p, 1500000 + POMO_BREAK_S * 1000u) && p.done == 1);   // 休息结束不算番茄
+    pomodoro_on_key(&p, OK, CLICK, 1900000);
+    assert(p.focus && p.cd.phase == CD_RUNNING);
+    // 确定长按：这一段重来
+    assert(pomodoro_on_key(&p, OK, LONG, 2000000) == NAV_REDRAW && p.cd.phase == CD_SET && p.focus);
+    assert(pomodoro_on_key(&p, UP, LONG, 0) == NAV_TO_MENU);
+}
+
 int main(void) {
     test_menu();
     test_candle();
     test_stopwatch();
     test_countdown();
     test_format();
+    test_muyu();
+    test_flashlight();
+    test_pomodoro();
     printf("test_pocket_model: OK\n");
     return 0;
 }

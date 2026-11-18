@@ -12,6 +12,12 @@ void sound_play_song(bool zh);     // 放生日歌（zh：歌词用华语，旋�
 void sound_stop(void);             // 停歌 / 停铃
 void sound_alarm(bool on);         // 倒数时间到：嘀嘀嘀，一直响到 sound_alarm(false)
 void sound_listen(bool on);        // 听吹气（蜡烛点着时开）
+// 短音效（不会卡住；新的会盖掉还没放完的）
+void sound_knock(void);            // 木鱼「咚」
+void sound_tick(void);             // 抽奖滚动的「哒」
+void sound_win(void);              // 赢：上行的四个音
+void sound_lose(void);             // 输：下行的三个音
+void sound_note(uint8_t midi);     // 一个短音（记忆三色）
 
 // 画面每次更新时读：
 int sound_song_line(void);         // 正在唱第几句（0..3）；没在唱回 -1

@@ -1,2 +1,2 @@
 f6756551314309ccd79de748c60a9655e50baaff35b823e4638dc0da1918642c  FoloToy-original-e85197d-full.bin
-8db1fd7f7f8f3d11a3364bb72e4d1472d28c10d062e39bf193a335cb4a431d99  SPACE-card-full.bin
+fc7eb2cecc9367cd04ac281c5cc1554f15aca4c11c4d37710a6d4f9a8a3382d3  SPACE-card-full.bin

@@ -129,11 +129,33 @@ static void test_blow(void) {
     assert(d.floor > 1000);
 }
 
+static void test_knock(void) {
+    static int16_t k[KNOCK_SAMPLES + 100];
+    dsp_render_knock(0, k, KNOCK_SAMPLES + 100);
+    int peak = 0, early = 0, late = 0;
+    for (int i = 0; i < KNOCK_SAMPLES + 100; i++) {
+        const int a = abs(k[i]);
+        if (a > peak) peak = a;
+        if (i < KNOCK_SAMPLES / 5 && a > early) early = a;
+        if (i > KNOCK_SAMPLES * 4 / 5 && a > late) late = a;
+    }
+    assert(abs(k[0]) < 200);                     // 起音从 0
+    assert(peak > 6000 && peak < 20000);          // 够响、不爆
+    assert(late < early / 10);                    // 很快就弱下去（「咚」不是「嗡」）
+    for (int i = KNOCK_SAMPLES; i < KNOCK_SAMPLES + 100; i++) assert(k[i] == 0);
+    // 分段合成 = 一次合成
+    static int16_t part[KNOCK_SAMPLES];
+    dsp_render_knock(0, part, 500);
+    dsp_render_knock(500, part + 500, KNOCK_SAMPLES - 500);
+    assert(memcmp(k, part, KNOCK_SAMPLES * sizeof(int16_t)) == 0);
+}
+
 int main(void) {
     test_melody();
     test_pitch();
     test_envelope();
     test_blow();
+    test_knock();
     printf("test_audio_dsp: OK\n");
     return 0;
 }

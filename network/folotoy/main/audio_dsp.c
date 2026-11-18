@@ -123,6 +123,24 @@ void dsp_render_beep(uint32_t freq_hz, int16_t *out, size_t n) {
     }
 }
 
+void dsp_render_knock(uint32_t from, int16_t *out, size_t n) {
+    if (!s_sine_ready) build_sine();
+    const uint32_t step1 = (uint32_t)(((uint64_t)620 << 32) / DSP_RATE);
+    const uint32_t step2 = (uint32_t)(((uint64_t)1180 << 32) / DSP_RATE);
+    for (size_t k = 0; k < n; k++) {
+        const uint32_t t = from + (uint32_t)k;
+        if (t >= KNOCK_SAMPLES) { out[k] = 0; continue; }
+        // 衰减：(剩下比例)^3，低音慢一点、高音快一点（木头的「咚」）
+        const int64_t rem = KNOCK_SAMPLES - t;
+        const int64_t e1 = rem * rem * rem / ((int64_t)KNOCK_SAMPLES * KNOCK_SAMPLES);            // 0..KNOCK_SAMPLES
+        const int64_t e2 = e1 * rem / KNOCK_SAMPLES * rem / KNOCK_SAMPLES;
+        const int64_t attack = t < 40 ? (int64_t)t * 1024 / 40 : 1024;                           // 2.5ms 起音，不会「啪」
+        const int64_t v = ((int64_t)s_sine[(step1 * t) >> 24] * e1 + (int64_t)s_sine[(step2 * t) >> 24] * e2 / 2)
+                          * AMP / 32767 / KNOCK_SAMPLES * attack / 1024;
+        out[k] = (int16_t)(v > 32767 ? 32767 : v < -32768 ? -32768 : v);
+    }
+}
+
 // ---------------- 吹气 ----------------
 void blow_init(blow_detector_t *d) {
     memset(d, 0, sizeof(*d));
