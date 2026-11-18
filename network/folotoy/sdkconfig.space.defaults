@@ -1,0 +1,5 @@
+# SPACE card：在上游 sdkconfig.defaults 后面接上这几行（README 第 3 步）
+# LVGL 内建的二维码元件（lv_qrcode，用 qrcodegen、ECC M）
+CONFIG_LV_USE_QRCODE=y
+# 名片 app 用不到 BLE / Wi-Fi：关掉省 RAM、省电（以后要做「碰一下传资料」再打开）
+CONFIG_BT_ENABLED=n

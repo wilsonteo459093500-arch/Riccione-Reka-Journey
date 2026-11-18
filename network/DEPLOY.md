@@ -1,4 +1,4 @@
-# S.T.A.R · 部署指南（Vercel + Supabase）
+# SPACE · 部署指南（Vercel + Supabase）
 
 大概 20 分钟。照顺序做。
 
@@ -64,6 +64,58 @@
 
 ---
 
+## 第 2 阶段升级（已经部署过第 1 阶段的话，做这两步就好）
+
+1. Supabase → **SQL Editor** → 把最新的 `network/supabase/schema.sql` **整份再跑一次**
+   （会补上 `people.avoid_topics` 栏位，资源多一种来源 `talk`；不会删资料）
+2. Vercel → Deployments → 最新那次 → ⋯ → **Redeploy**
+
+不用加新的环境变数。
+
+---
+
+## 第 3 阶段升级（关系图 + 今日行动 + TickTick）
+
+1. Supabase → **SQL Editor** → 最新的 `network/supabase/schema.sql` **整份再跑一次**
+   （补上 `people.snooze_until`，给「晚点再说」用；不会删资料）
+2. **TickTick（选填，但建议接）**：
+   1. 电脑打开 TickTick 网页版 → 左上头像 → **设定** → **帐户** → **API Token** → 产生 / 复制
+      （找不到这个选项的话：TickTick 有改过位置，搜一下设定里的「API」；真的没有，就先用下面的 .ics 方式）
+   2. Vercel → Settings → Environment Variables → 加 `TICKTICK_TOKEN` = 刚刚复制的 token，勾 **Sensitive**
+   3. （选填）想放进某个清单而不是收集箱：加 `TICKTICK_PROJECT_ID` = 清单 ID（TickTick 网页版打开那个清单，网址 `#p/<这一段>/tasks` 就是）
+3. Vercel → Deployments → 最新那次 → ⋯ → **Redeploy**
+
+没设 `TICKTICK_TOKEN` 也能用：「排时间」会变成「下载行事历档（.ics）」，手机点开就加进行事历。
+TickTick 的 token 只在服务器，前端拿不到；这个功能不用 AI，不扣 AI 预算。
+
+---
+
+## 第 4 阶段升级（个人名片页 + 扫码留资料）
+
+1. Supabase → **SQL Editor** → 最新的 `network/supabase/schema.sql` **整份再跑一次**
+   （补上 `profile.card`、`people.pending_review`、`inbox` 表、互动来源 `qr`、**公开** bucket `network-card`；不会删资料）
+2. Supabase → **Project Settings → API** → 复制 **`service_role`** key（Secret，不是 anon）
+3. Vercel → Settings → Environment Variables：
+
+   | Name | Value | 说明 |
+   |---|---|---|
+   | `SUPABASE_SERVICE_ROLE_KEY` | 第 2 步的 key | **必需**。勾 **Sensitive**；**不要**加 `VITE_` 前缀（加了会被打包进前端，等于把资料库钥匙公开） |
+   | `OWNER_EMAIL` | 你登入的邮箱 | 第 1 阶段已经设了就好：别人留的资料会写进这个帐号底下 |
+   | `OWNER_USER_ID` | 选填 | Supabase → Authentication → Users 里你那一列的 UID；设了就不用每次去找 |
+   | `TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET_KEY` | 选填 | Cloudflare → Turnstile → Add site（网域填你的 Vercel 网址）；两个都设才会启用。乱填的人多了再开 |
+
+4. Vercel → Deployments → 最新那次 → ⋯ → **Redeploy**
+5. 打开 SPACE →「我」→ **我的名片**：填名字、WhatsApp、介绍，上传照片（和展厅视频）→ **存名片** → 按「打开」看 `/c`
+6. 下载二维码 PNG，印在名片背面 / 桌卡；或建一个活动拿专属二维码
+
+> 公开页只读得到「我的名片」里填的东西（`profile.card`，只回认得的栏位）。你的人脉、对话、照片都还是只有你登入看得到。
+> `SUPABASE_SERVICE_ROLE_KEY` 会跳过 RLS，所以只用在 `/api/card`、`/api/inbox` 这两个端点，而且每个查询都锁在 `OWNER_EMAIL` 那个帐号底下。
+
+**NFC 贴纸**：买 NTAG215 / NTAG213（Shopee 一张几毛钱）。Android：SPACE「我的名片」→ NFC 贴纸 →「写进 NFC 贴纸」→ 贴近。iPhone：装 NFC Tools → 写 → 添加记录 → 网址 → 贴 `https://space-riccione-reka.vercel.app/c?s=nfc` → 写。
+**FoloToy**：见 `network/folotoy/README.md`（要一台装了 ESP-IDF 的电脑）。
+
+---
+
 ## 5) 验收清单（第 1 阶段）
 
 - [ ] 手机上扫 3 张真的名片：名字、电话、公司对不对？哪里常错记下来
@@ -73,6 +125,43 @@
 - [ ] **换帐号测 RLS**：在 Supabase 暂时打开注册（或手动 Add user）建第二个帐号，登入后应该**一个人都看不到**、照片网址也打不开；测完删掉第二个帐号、关回注册
 - [ ] 别的帐号登入后按 AI 功能 → 应该回「这个帐号不是主人」（`OWNER_EMAIL` 生效）
 
+## 6) 验收清单（第 2 阶段：对话）
+
+- [ ] **语音备注**：见完一个人，打开他的页面 →「加对话」→ 语音 → 用键盘麦克风说 1 分钟 → AI 整理 → 勾选 → 存；兴趣、资源、备注、「答应过的事」都有出现
+- [ ] **Plaud**：一段真的录音，Plaud App 汇出 TXT（或 SRT）→ 上传 → 讲者 Speaker 1 / 2 有没有分对谁是你？
+- [ ] **WhatsApp（iPhone）**：对话 → 联络人名字 → 汇出对话 →「不附加媒体」→ 存到档案 → 在 app 选那个 .zip；**再导入一次同一个档案**，应该说「没有新讯息」
+- [ ] **WhatsApp（Android）**：⋮ → 更多 → 汇出对话 → 不含媒体 → .txt
+- [ ] **截图**：3 张聊天截图 → 抄出来的对话对不对？
+- [ ] 「答应过的事」打勾 → 移到「做完的」
+- [ ] 换帐号测 RLS：第二个帐号看不到任何对话 / 逐字稿
+
+## 7) 验收清单（第 3 阶段：关系图 + 今日行动）
+
+- [ ] 打开 app 先看到「今日」：答应过的事（到期的排最前）、刚认识 3 天内的人、太久没联系的（核心每 2 周 / 重要每月 / 活跃每 2 个月 / 认识每 4 个月）
+- [ ] 一个人按「联系过了」→ 从今日消失（除非还有答应的事没做）；「晚点再说 → 3 天后」→ 3 天内不出现
+- [ ] **TickTick**：一个人按「排时间」→ 选时间 →「排进 TickTick」→ TickTick 里出现时间盒，内容有提示卡和 WhatsApp 连结；再试「一键排进 TickTick」排 3 个人，时间一个接一个
+- [ ] 没设 token 时：「下载行事历档」→ iPhone 点开能加进行事历
+- [ ] **提示卡**：见面前打开一个有对话记录的人 →「见面提示卡」：别聊、答应的事、上次聊什么、可以聊的话题都对吗？
+- [ ] **找资源**：打「律师」「建筑师」「贷款」，结果合不合理？关系浅的有没有提醒「先联络感情」
+- [ ] **星系**（电脑）：核心圈在最里面；好感度高的比较靠近中心；滑过去看得到名字和上次联系；点下去打开那个人
+- [ ] 人物页「关系」：好感度条 + 半年曲线；补记一笔半年前的见面，曲线跟着变
+- [ ] 换帐号测 RLS：第二个帐号的「今日」「星系」都是空的；按「排进 TickTick」应该回「这个帐号不是主人」
+
+## 8) 验收清单（第 4 阶段：名片页 + 扫码留资料）
+
+- [ ] 手机打开 `/c`：开场视频 / 照片、名字、WhatsApp 我、存我的联络方式都对；iPhone 按「存我的联络方式」→ 出现联络人预览 → 加入
+- [ ] 4G 下打开 `/c` 要多久（目标：2 秒内看到名字）；视频太慢就换 720p / 剪短
+- [ ] **用别人的手机**扫二维码 → 填名字 + 电话 → 勾同意 → 送出 → 「谢谢」→ 按「发 WhatsApp 给我」，讯息对不对
+- [ ] SPACE「人脉」顶部出现「新朋友 1」→ 点进去：资料对、标签「扫码」、圈层「认识」、怎么认识 = 他填的 → 确认 → 消失
+- [ ] **同一个人再扫一次**（同电话、换个职位）→ 不会多一个人，职位补上去、多一笔「扫码留资料」
+- [ ] 只拍名片不打字 → AI 读出名字、电话（「我」页 AI 费用多一笔「扫码留的名片」）；把预算调到 0 再试 → 照样存，名字「名片待确认」→ 在新朋友按「AI 读名片」
+- [ ] **活动模式**：建一个活动 → 扫活动二维码 → 页面显示「欢迎来到 …」→ 留资料 → 活动的「扫码进来的人」有他
+- [ ] 不勾同意 → 送不出；同一支手机连续送 21 次 → 第 21 次说「送出太多次了」
+- [ ] NFC：Android 写一张贴纸 → iPhone 碰一下 → 打开名片页；留资料 → 标签多一个「NFC」
+- [ ] 「我的名片」关掉「显示留资料的表格」→ 1 分钟后 `/c` 没有表格
+- [ ] 换帐号测：第二个帐号看不到「新朋友」、看不到 inbox；公开页只看得到名片内容
+- [ ] FoloToy（有的话）：照 `folotoy/README.md` 烧好 → 用 iPhone 相机、Android 相机、WhatsApp 扫屏幕都扫得到
+
 ---
 
 ## 本机开发
@@ -81,7 +170,7 @@
 cd network
 cp .env.example .env.local   # 填好（不填 Supabase = 本机模式，资料存在浏览器）
 npm install
-npm run dev                  # http://localhost:5176，/api/* 也在本机跑
+npm run dev                  # http://localhost:5176，/api/* 也在本机跑；公开名片页 http://localhost:5176/c（没设 service role = 示范名片、表格不会真的存）
 npm test                     # 单元测试（不会真的呼叫 AI）
 ```
 
@@ -92,8 +181,11 @@ npm test                     # 单元测试（不会真的呼叫 AI）
 | 动作 | 模型 | 大概 |
 |---|---|---|
 | 扫一张名片 | Haiku 5.5 | RM0.01 以下 |
+| 别人扫码时拍了名片（服务器读） | Haiku 5.5 | RM0.01 以下（超过预算就不读，照样存） |
 | 查一家公司（只查一次，存起来） | Sonnet 5.5 + 网页搜索 ≤3 次 | RM0.3–0.5 |
 | 评分 + 我能给他什么 | Sonnet 5.5 | RM0.1 |
+| 整理一段对话（30 分钟逐字稿 / 几百则 WhatsApp） | Haiku 5.5 | RM0.01 左右 |
+| 整理 6 张截图 | Haiku 5.5 | RM0.02 左右 |
 
 每月 RM50 ≈ 扫 1000+ 张名片，或深度分析约 100 个人。
 
@@ -107,3 +199,12 @@ npm test                     # 单元测试（不会真的呼叫 AI）
 | 「这个月的 AI 预算用完了」 | 调高 `AI_MONTHLY_BUDGET_MYR`，Redeploy |
 | iPhone 拍的照片读不到 | 设定 → 相机 → 格式 → 选「最兼容」（不要 HEIC） |
 | 读取失败：relation "people" does not exist | `schema.sql` 没跑 |
+| 存对话时「avoid_topics column」/「resources_source_check」错误 | 第 2 阶段的升级没跑：`schema.sql` 整份再跑一次 |
+| 按「晚点再说」出现「资料库还没升级」 | 第 3 阶段的升级没跑：`schema.sql` 整份再跑一次 |
+| 「还没接 TickTick」 / 只有「下载行事历档」 | 没设 `TICKTICK_TOKEN`，或设了没 Redeploy |
+| 「我的名片」存不了 / 上传照片说「资料库还没升级」 | 第 4 阶段的升级没跑：`schema.sql` 整份再跑一次 |
+| `/c` 显示「名片暂时打不开」 | Vercel 没设 `SUPABASE_SERVICE_ROLE_KEY`（或设了没 Redeploy）；`OWNER_EMAIL` 在 Supabase 找不到 |
+| 别人送出说「还没开放留资料」 | 同上：没设 `SUPABASE_SERVICE_ROLE_KEY` |
+| 别人送出说「验证没过」 | 设了 `TURNSTILE_SECRET_KEY` 但 `TURNSTILE_SITE_KEY` 没设 / 网域没加进 Turnstile |
+| 「TickTick 不接受这个 token」 | Token 过期或复制不完整：重新产生、贴进 `TICKTICK_TOKEN`、Redeploy |
+| WhatsApp 档案「读不到讯息」 | 选错档案了；iPhone 要选整个 .zip（或里面的 `_chat.txt`） |

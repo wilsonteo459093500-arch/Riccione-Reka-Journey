@@ -1,11 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import { Search, ScanLine, Users } from 'lucide-react';
+import { Search, ScanLine, Users, MessagesSquare, Orbit, Sparkles, ChevronRight } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
 import { matchPerson, SORTS, tierCounts, relDay } from '../lib/logic.js';
-import { Avatar, Chip, TierBadge, WorthGem, Spinner, Button, cx } from './ui.jsx';
+import { Avatar, Chip, TierBadge, WorthGem, Spinner, Button, AffinityBar, cx } from './ui.jsx';
 
-export default function PeopleList({ selectedId, onOpen, onScan }) {
-  const { people, loading, error, reload } = useStore();
+export default function PeopleList({ selectedId, onOpen, onScan, onTalk, onGalaxy, onInbox }) {
+  const { people, loading, error, reload, newFriends } = useStore();
   const [q, setQ] = useState('');
   const [tier, setTier] = useState('all');
   const [sort, setSort] = useState('recent');
@@ -21,11 +21,30 @@ export default function PeopleList({ selectedId, onOpen, onScan }) {
       <div className="space-y-3 px-4 pb-3 pt-4">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-semibold tracking-tight">人脉 <span className="text-base font-normal text-faint">{people.length}</span></h1>
-          <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="排序"
-            className="rounded-lg border border-line bg-white px-2 py-1 text-sm text-muted">
-            {Object.entries(SORTS).map(([k, s]) => <option key={k} value={k}>{s.label}</option>)}
-          </select>
+          <div className="flex items-center gap-2">
+            {people.length > 0 && onGalaxy && (
+              <button onClick={onGalaxy} className="flex items-center gap-1 rounded-lg border border-line bg-white px-2 py-1 text-sm font-medium text-ink hover:border-ink/30" title="星系图">
+                <Orbit className="h-4 w-4" /><span className="hidden sm:inline lg:hidden xl:inline">星系</span>
+              </button>
+            )}
+            {people.length > 0 && (
+              <button onClick={onTalk} className="flex items-center gap-1 rounded-lg border border-line bg-white px-2 py-1 text-sm font-medium text-ink hover:border-ink/30 lg:hidden">
+                <MessagesSquare className="h-4 w-4" />记对话
+              </button>
+            )}
+            <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="排序"
+              className="rounded-lg border border-line bg-white px-2 py-1 text-sm text-muted">
+              {Object.entries(SORTS).map(([k, s]) => <option key={k} value={k}>{s.label}</option>)}
+            </select>
+          </div>
         </div>
+        {newFriends.length > 0 && onInbox && (
+          <button onClick={onInbox} className="flex w-full items-center gap-2 rounded-xl border border-plum/30 bg-plum/10 px-3 py-2 text-left text-sm text-plum-deep">
+            <Sparkles className="h-4 w-4" />
+            <span className="flex-1"><b>新朋友 {newFriends.length}</b> · 扫码留的资料，看一眼确认</span>
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        )}
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
           <input
@@ -79,6 +98,11 @@ export default function PeopleList({ selectedId, onOpen, onScan }) {
                     {p.circles.slice(0, 2).map((c) => <Chip key={c.id} tone="soft" className="!py-0.5 !text-xs">{c.name}</Chip>)}
                     {p.resources.filter((r) => r.kind === 'has').slice(0, 2).map((r) => <Chip key={r.id} tone="has" className="!py-0.5 !text-xs">{r.label}</Chip>)}
                     {p.last_contact_at && <span className="text-xs text-faint">· {relDay(p.last_contact_at)}联系</span>}
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <AffinityBar rel={p.rel} compact className="w-24 shrink-0" />
+                    <span className="truncate text-[11px]" style={{ color: p.rel.band.color }}>{p.rel.band.label}{p.rel.trend <= -3 ? ' ↓' : p.rel.trend >= 3 ? ' ↑' : ''}</span>
+                    {p.rel.overdue && !p.rel.snoozed && <span className="shrink-0 rounded-full bg-danger/10 px-1.5 text-[11px] font-medium text-danger">该联系了</span>}
                   </div>
                 </div>
                 <WorthGem score={p.worth_score} size={36} />

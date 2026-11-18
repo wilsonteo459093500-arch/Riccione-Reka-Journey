@@ -156,3 +156,87 @@ test('buildAssessPrompt: 空的段落不出现', () => {
   assert.ok(!s.includes('他的公司'));
   assert.equal(normalizeAssessment({}).give_ideas.length, 0);
 });
+
+/* ---------- 第 2 阶段：对话分析 ---------- */
+import { analyzeTalk, normalizeTalk, buildTalkPrompt } from '../api/analyze-talk.js';
+
+const TALK_REPLY = {
+  title: '商会晚宴后喝咖啡', summary: '他在找室内设计师。', occurred_on: '2026-11-16',
+  mood: { tone: 'warm', score: 5, note: '主动约下次' },
+  interests: ['高尔夫', ''], has: [{ label: '发展商人脉', detail: '认识 3 个发展商' }, { label: '', detail: 'x' }],
+  needs: [{ label: '找室内设计师', detail: '新公寓' }], give: [{ idea: '介绍设计师 Amy', why: '他要装修' }],
+  facts: ['女儿明年读大学'], action_items: [{ who: 'me', what: '下周寄展厅位置', due: '下周' }, { who: 'boss', what: '约打球', due: '' }, { who: 'him', what: '', due: '' }],
+  avoid_topics: ['政治'], people_mentioned: [{ name: 'Lim', context: '他的合伙人' }], next_topics: ['女儿选哪间大学'], transcript: '不该有',
+};
+
+test('analyzeTalk: 文字来源用 Haiku、结构化输出、对话包在 <conversation>', async () => {
+  const client = fakeClient({ model: 'claude-haiku-5-5', stop_reason: 'end_turn', usage: { input_tokens: 3000, output_tokens: 600 }, content: [{ type: 'text', text: JSON.stringify(TALK_REPLY) }] });
+  const out = await analyzeTalk({ source: 'plaud', person: { name: 'Tan', interests: ['潜水'] }, text: 'Speaker 1: 最近在找室内设计师……'.repeat(2) }, { client });
+  const p = client.calls[0];
+  assert.equal(p.model, 'claude-haiku-5-5');
+  assert.equal(p.output_config.format.type, 'json_schema');
+  const prompt = p.messages[0].content.at(-1).text;
+  assert.ok(prompt.includes('<conversation>'));
+  assert.ok(prompt.includes('已知兴趣（不用重复）：潜水'));
+  const a = out.analysis;
+  assert.equal(a.mood.score, 2, '分数夹在 -2..2');
+  assert.deepEqual(a.interests, ['高尔夫']);
+  assert.equal(a.has.length, 1);
+  assert.equal(a.action_items.length, 2);
+  assert.equal(a.action_items[1].who, 'me', '不认得的 who 当成我');
+  assert.equal(a.transcript, '', '文字来源不留 transcript');
+  assert.equal(out.usage.feature, 'talk');
+});
+
+test('analyzeTalk: 截图送图片、留 transcript；输入检查', async () => {
+  const client = fakeClient({ model: 'claude-haiku-5-5', stop_reason: 'end_turn', usage: { input_tokens: 5000, output_tokens: 900 }, content: [{ type: 'text', text: JSON.stringify({ ...TALK_REPLY, transcript: 'Tan: hi' }) }] });
+  const out = await analyzeTalk({ source: 'whatsapp_screenshot', person: { name: 'Tan' }, images: [{ media_type: 'image/png', data: PNG }] }, { client });
+  assert.equal(client.calls[0].messages[0].content[0].type, 'image');
+  assert.equal(out.analysis.transcript, 'Tan: hi');
+  await assert.rejects(analyzeTalk({ source: 'email', person: { name: 'Tan' }, text: 'x'.repeat(20) }, { client }), (e) => e.status === 400);
+  await assert.rejects(analyzeTalk({ source: 'voice', person: {}, text: 'x'.repeat(20) }, { client }), (e) => e.status === 400);
+  await assert.rejects(analyzeTalk({ source: 'voice', person: { name: 'Tan' }, text: '短' }, { client }), (e) => e.status === 400);
+  await assert.rejects(analyzeTalk({ source: 'voice', person: { name: 'Tan' }, text: 'x'.repeat(120001) }, { client }), (e) => e.status === 413);
+  await assert.rejects(analyzeTalk({ source: 'whatsapp_screenshot', person: { name: 'Tan' }, images: [] }, { client }), (e) => e.status === 400);
+});
+
+test('normalizeTalk: 缺字段不会坏；日期格式不对就清掉', () => {
+  const t = normalizeTalk({ occurred_on: '昨天' });
+  assert.equal(t.occurred_on, '');
+  assert.equal(t.mood.tone, 'neutral');
+  assert.deepEqual(t.action_items, []);
+  assert.ok(buildTalkPrompt({ source: 'whatsapp_screenshot', person: { name: 'Tan' } }).includes('transcript'));
+});
+
+/* ---------- 第 3 阶段：TickTick ---------- */
+import { cleanTask, createTasks } from '../api/ticktick.js';
+
+test('ticktick cleanTask：只留认得的栏位、检查日期、加清单', () => {
+  const t = cleanTask({ title: ' 📞 打电话：Tan ', content: 'x', startDate: '2026-11-17T02:00:00+0000', dueDate: '2026-11-17T02:20:00+0000', timeZone: 'Asia/Kuala_Lumpur', evil: 1 }, 'proj1');
+  assert.equal(t.title, '📞 打电话：Tan');
+  assert.equal(t.projectId, 'proj1');
+  assert.deepEqual(t.reminders, ['TRIGGER:PT0S']);
+  assert.equal(t.evil, undefined);
+  assert.throws(() => cleanTask({ title: '' }), HttpError);
+  assert.throws(() => cleanTask({ title: 'a', startDate: '2026-11-17T02:00:00Z' }), HttpError); // TickTick 不收 Z
+  assert.equal(cleanTask({ title: 'a', timeZone: '"; drop' }).timeZone, 'Asia/Kuala_Lumpur');
+});
+
+test('ticktick createTasks：没设 token → 503；token 错 → 502；部分失败照回', async () => {
+  await assert.rejects(createTasks([{ title: 'a' }], { env: null }), (e) => e.status === 503);
+  const calls = [];
+  const fetchImpl = async (url, opt) => {
+    calls.push({ url, opt });
+    const body = JSON.parse(opt.body);
+    if (body.title === 'bad') return { ok: false, status: 400, json: async () => ({ errorMessage: 'nope' }) };
+    return { ok: true, status: 200, json: async () => ({ id: `id-${calls.length}`, projectId: 'inbox1' }) };
+  };
+  const out = await createTasks([{ title: 'ok' }, { title: 'bad' }], { env: { token: 'tok', project: '' }, fetchImpl });
+  assert.equal(calls[0].url, 'https://api.ticktick.com/open/v1/task');
+  assert.equal(calls[0].opt.headers.Authorization, 'Bearer tok');
+  assert.deepEqual(out.created, [{ id: 'id-1', projectId: 'inbox1', title: 'ok' }]);
+  assert.deepEqual(out.failed, [{ title: 'bad', message: 'nope' }]);
+  const deny = async () => ({ ok: false, status: 401, json: async () => ({}) });
+  await assert.rejects(createTasks([{ title: 'a' }], { env: { token: 't' }, fetchImpl: deny }), (e) => e.status === 502 && e.body.error === 'ticktick_token_invalid');
+  await assert.rejects(createTasks(new Array(11).fill({ title: 'a' }), { env: { token: 't' }, fetchImpl }), (e) => e.status === 400);
+});

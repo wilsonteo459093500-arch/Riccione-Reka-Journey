@@ -23,8 +23,8 @@ export default function Login() {
       <form onSubmit={submit} className="w-full max-w-sm space-y-5">
         <div className="text-center">
           <Logo className="mx-auto h-14 w-14" />
-          <h1 className="mt-4 text-3xl font-semibold tracking-[0.2em]">S.T.A.R</h1>
-          <p className="mt-1 text-sm italic text-muted">Strong Ties Are Riches</p>
+          <h1 className="mt-4 text-3xl font-semibold tracking-[0.2em]">SPACE</h1>
+          <p className="mt-1 text-sm italic text-muted">Give Every Tie Its Space</p>
           <MeaningRow className="mt-4" />
         </div>
         <div className="space-y-3 rounded-2xl border border-line bg-white p-4">
@@ -43,18 +43,19 @@ export default function Login() {
   );
 }
 
-/** S.T.A.R 的四个动作：寻找 → 珍惜 → 帮助 → 再联系 */
-export const STAR_WORDS = [
-  { letter: 'S', word: 'Seek', zh: '寻找' },
-  { letter: 'T', word: 'Treasure', zh: '珍惜' },
-  { letter: 'A', word: 'Assist', zh: '帮助' },
-  { letter: 'R', word: 'Reconnect', zh: '再联系' },
+/** SPACE 的五个阶段：寻 → 识 → 助 → 连 → 长（找到人 → 看懂人 → 先帮人 → 连起来 → 一起成长） */
+export const SPACE_WORDS = [
+  { letter: 'S', word: 'Seek', zh: '寻' },
+  { letter: 'P', word: 'Profile', zh: '识' },
+  { letter: 'A', word: 'Assist', zh: '助' },
+  { letter: 'C', word: 'Connect', zh: '连' },
+  { letter: 'E', word: 'Evolve', zh: '长' },
 ];
 
 export function MeaningRow({ className = '' }) {
   return (
-    <div className={`grid grid-cols-4 gap-1 ${className}`}>
-      {STAR_WORDS.map((w) => (
+    <div className={`grid grid-cols-5 gap-1 ${className}`}>
+      {SPACE_WORDS.map((w) => (
         <div key={w.letter} className="text-center">
           <div className="text-lg font-semibold text-plum-deep">{w.letter}</div>
           <div className="text-[11px] font-medium text-ink">{w.word}</div>
@@ -65,10 +66,10 @@ export function MeaningRow({ className = '' }) {
   );
 }
 
-/** 图示：中间一颗星（你），周围的点是人脉，连线 = 关系，椭圆 = 轨道 */
+/** 图示：中间一颗星（你），周围的点是人脉，连线 = 关系，椭圆 = 轨道（每个人在你的 SPACE 里都有一个位置） */
 export function Logo({ className }) {
   return (
-    <svg viewBox="0 0 64 64" className={className} role="img" aria-label="S.T.A.R">
+    <svg viewBox="0 0 64 64" className={className} role="img" aria-label="SPACE">
       <rect width="64" height="64" rx="16" fill="#1C1917" />
       <ellipse cx="32" cy="33" rx="25" ry="11" transform="rotate(-18 32 33)" fill="none" stroke="#F7F5F0" strokeWidth="1.2" opacity=".28" />
       <g stroke="#F7F5F0" strokeWidth="1.3" opacity=".55">
