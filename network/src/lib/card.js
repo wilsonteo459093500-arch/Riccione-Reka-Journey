@@ -19,7 +19,7 @@ export const MAX_MILESTONES = 10; // 发展历程的大事记
 export const MAX_STATS = 6;       // 公司的数字格子
 export const MAX_AWARDS = 8;
 export const MAX_BRANDS = 3;      // 品牌（瑞吉欧、溪岸…）
-export const MAX_POINTS = 6;      // 品牌下的重点（业务、故事、供应链…）
+export const MAX_POINTS = 8;      // 品牌下的重点（业务、故事、供应链…）
 export const MAX_SERIES = 6;      // 原创系列小格子
 export const MAX_IG_VIDEOS = 4;   // Instagram 视频（嵌入播放）
 export const MAX_EXHIBITIONS = 8; // 品牌下的标签（常年参展…）
@@ -79,60 +79,73 @@ export const DEFAULT_CARD = {
       logo_path: '/card/logo-riccione.png',
       photo_path: '/card/riccione-forest-scene.jpg',
       title: '更慢、更柔和，也更自然的生活',
-      lead: '名字取自意大利的一座海滨小镇。十余年的匠心积累，瑞吉欧专注于回归生活本质的家具：自然的材质、真实的设计、历久弥新的美。',
+      lead: '灵感源自 RICCIONE —— 这座位于意大利的海滨小镇，以其悠闲的节奏、温暖的氛围与亲近自然的生活方式而著称。承载 45 年的匠心积累，RICCIONE 专注于打造回归生活本质的家具。以自然材质、真实设计与历久弥新的美学为核心，每一件作品，都是为美好生活而存在。',
       points: [
-        { title: '实木家具', note: '100% 实木，模块化系统' },
-        { title: '全屋定制', note: 'Riccione Reka：门、墙、柜一体化设计' },
-        { title: '服务版图', note: '出口、工程与零售并行：马来西亚、中国、香港、美国、加拿大、日本、印度、泰国、越南' },
+        { title: '实木成品家具', note: '100% 实木打造 —— 甄选天然木材，坚固耐用，经得起时间考验，陪伴家的成长。' },
+        { title: '全屋定制', note: '量身定制嵌入式或定制柜体；门·墙·柜一体化设计，墙板与门系统协调统一，实现整体空间的完整与连贯。' },
+        { title: '细节', note: '圆角处理、缓冲开合、更细致的表面处理与木纹搭配，让家具更耐看，也更舒适。' },
+        { title: '自然灵感', note: '灵感源于自然与真实生活。从木纹、材质到空间氛围，坚持自主研发与系列化设计。' },
+        { title: '模块化系统', note: '通过统一尺寸、深度与结构逻辑，让不同产品之间能够自由组合搭配。' },
+        { title: '展厅与仓储', note: '吉隆坡：15 人团队办公室与四层楼展厅｜佛山：30 人团队办公室与展厅｜马来西亚 Setia Alam 仓库' },
+        { title: '服务地区', note: '出口 + 工程 + 零售：马来西亚、中国、香港、美国、加拿大、日本、印度、泰国、越南' },
       ],
       stats: [
         { value: '2002', label: '中国公司成立（广东瑞吉欧家具有限公司）' },
         { value: '20+ 年', label: '在中国经营' },
         { value: '11,000 sq ft', label: '吉隆坡四层楼展厅' },
         { value: '21,000 sq ft', label: '佛山旗舰展厅' },
-        { value: '600+', label: '个货柜出口中国（2018 年）' },
-        { value: '18 家', label: '中国品牌门店（2024 年）' },
+        { value: '600+', label: '个集装箱出口中国（2018 年）' },
+        { value: '18 家', label: '中国品牌专卖门店（2024 年）' },
       ],
       awards_photo_path: '/card/awards-mfc.jpg',
       awards: [
-        { year: '2017', title: 'ARCHIDEX 最佳展位设计奖', note: '吉隆坡 KLCC' },
+        { year: '2017', title: '马来西亚 ARCHIDEX 最佳展位设计大奖', note: '' },
         { year: '2018', title: 'Malaysian Furniture Creativity Awards · Top 5 Finalists ×3', note: 'Export Furniture Exhibition 2018 · Bedroom Set ×2 · Living Room Furniture – TV Cabinet' },
-        { year: '2019', title: '佛山最佳家具设计奖', note: '首次参展 CIFF 广州，产品销往日本与欧洲' },
+        { year: '2019', title: '中国广东佛山最佳家具设计奖', note: '' },
       ],
       chips_title: '常年参展',
       chips: ['CIFF 广州家博会', 'CIFF 上海 · 设计馆', 'ARCHIDEX · KLCC'],
       photo2_path: '/card/riccione-cabinet.jpg',
+      // 照《马来西亚瑞吉欧企业手册》Our Story；1979、2002 是本人给的
       milestones: [
         { year: '1979', text: '父辈开始做木作' },
         { year: '2002', text: '中国公司成立：广东瑞吉欧家具有限公司' },
-        { year: '2015', text: '瑞吉欧 RICCIONE 在马来西亚成立，以实木家具起步' },
-        { year: '2017', text: '佛山 21,000 sq ft 旗舰展厅；获 ARCHIDEX 最佳展位设计奖' },
-        { year: '2018', text: '出口中国超过 600 个货柜，经销商近 1,000 家' },
-        { year: '2020', text: '吉隆坡 11,000 sq ft 四层楼展厅落成；受邀参展 CIFF 上海设计馆' },
-        { year: '2024', text: '中国 18 家品牌门店；马来西亚线上线下一体化零售' },
-        { year: '2025', text: 'Riccione Reka 全屋定制成立' },
+        { year: '2015', text: '品牌成立 —— Riccione Furniture 正式成立为马来西亚家具品牌，开启实木家具品牌化发展之路。' },
+        { year: '2017', text: '进军中国市场 —— 于佛山设立 21,000 平方尺旗舰展厅，同年荣获马来西亚 Archidex 最佳展位设计大奖。' },
+        { year: '2018', text: '拓展中国市场版图 —— 积极参与中国各大家具展会，累计出口超过 600 个集装箱至中国，并建立起近 1,000 家经销商网络。' },
+        { year: '2019', text: '迈向国际市场 —— 首次亮相 CIFF 广州，产品远销日本、欧洲等国际市场，并荣获中国广东佛山最佳家具设计奖。' },
+        { year: '2020', text: '强化国际布局 —— 吉隆坡 11,000 平方尺国际工程展厅正式落成，同年受邀参展 CIFF 上海设计馆。' },
+        { year: '2022', text: '深化工程项目合作 —— 拓展工程项目领域，服务涵盖住宅、酒店及商业空间，开启品牌多元化发展布局。' },
+        { year: '2024', text: '中马双市场战略升级 —— 中国市场迭代至品牌专卖体系，拓展 18 家门店；马来西亚开启新零售模式，线上线下一体化运营。' },
+        { year: '2025', text: '拓展高端定制版图 —— 正式发展 Riccione Reka 全屋定制业务，并以东南亚总代理名义代理自然主义定制品牌「溪岸 Sail」。' },
       ],
+      // 手册第 9 页 Product Series：名字、一句话、照片照手册
       series: [
-        { title: '陀螺系列 Gasing Series', note: '埃及柱 Egyptian Pillar · 陀螺拉手 Spinning Top Handle', image_path: '/card/riccione-gasing.jpg' },
-        { title: '编藤系列 Rattan Series', note: '', image_path: '/card/riccione-rattan.jpg' },
+        { title: '北欧经典系列 Nordic Classic', note: '复刻经典 Classic Revival', image_path: '/card/r-nordic.jpg' },
+        { title: '编藤民宿系列 Wabi Sabi Series', note: '材料的探索 Material Exploration', image_path: '/card/r-wabisabi.jpg' },
+        { title: '陀螺系列 Gasing Series', note: '设计创新 Design Innovation', image_path: '/card/r-gasing.jpg' },
+        { title: '非洲木纹系列 Afrain Series', note: '个性化 Personalization', image_path: '/card/r-afrain.jpg' },
+        { title: '大圆边系列 Arked Series', note: '经典再创 Reimagined Classics', image_path: '/card/r-arked.jpg' },
+        { title: '骨骼线系列 Batang Series', note: '古典怀旧 Vintage Nostalgia', image_path: '/card/r-batang.jpg' },
       ],
     },
     {
       name: '溪岸 SAIL BY RICCIONE REKA',
       logo_path: '/card/logo-sail.png',
       photo_path: '/card/sail-hero.jpg',
-      title: '朴素的美感，自然的治愈力',
-      lead: '溪岸，是一处美而朴素的水边。2011 年创立于成都，以自然为源，用能让人安静下来的设计，带大家回到内心深处向往的栖居地。2025 年起，Riccione Reka 成为溪岸东南亚总代理，把门、墙、柜一体的生活带到马来西亚。',
+      title: '在溪岸，回归生活的美好',
+      lead: '溪岸于 2011 年创立于成都，承载着对理想生活的追求。以自然为源，让设计回归宁静与美好。我们相信：家的温度，能在时光中沉淀。',
       points: [
-        { title: '2011 · 成都', note: '溪岸创立，自然主义定制' },
-        { title: '2025 · 马来西亚', note: 'Riccione Reka 成为东南亚总代理' },
+        { title: 'Riccione Reka 全屋定制', note: '通过定制橱柜，构建空间的整体关系。从柜体、门到墙面，彼此归属，让空间回归清晰与完整。' },
+        { title: 'Sail by Riccione Reka', note: '在这一体系之中，溪岸自然延展 —— 以更安静、更有节奏的方式，让美好生活发生。' },
+        { title: '2025 · 东南亚总代理', note: 'Riccione Reka 以东南亚总代理名义代理自然主义定制品牌「溪岸 Sail」' },
         { title: '全球供应链', note: '板材 Kastamonu · Egger · Skin｜五金 Blum · Italiana Ferramenta｜岩板与设备 Laminam · HOMAG · REHAU' },
       ],
       stats: [],
       awards_photo_path: '/card/awards.jpg',
       awards: [
-        { year: '2021', title: '美国 MUSE 缪斯设计奖 · 金奖', note: '溪岸 4.0 系列 · 从 100 多个国家和地区的 3.8 万件作品中选出' },
-        { year: '2022', title: 'HCA 高定家居设计奖 · 年度产品设计奖', note: '自然线系列 · 广州设计周' },
+        { year: '2021', title: '美国 MUSE 缪斯设计奖 · 金奖', note: '溪岸 4.0 系列' },
+        { year: '2022', title: 'HCA 高定家居设计奖 · 年度产品设计奖', note: '溪岸「自然线」系列' },
         { year: '2023', title: 'HCA 高定家居设计奖 · 年度产品设计至尊奖（终评前三）', note: '骨骼线 · 闲庭' },
         { year: '2024', title: 'HCA 高定家居设计奖 · 年度产品设计奖', note: '骨骼线 · 山居' },
       ],
@@ -140,16 +153,17 @@ export const DEFAULT_CARD = {
       chips: [],
       photo2_path: '/card/sail-detail.jpg',
       milestones: [],
+      // 名字、句子照企业手册「溪岸产品」各页
       series: [
-        // 名字、句子照溪岸官方（invite/assets/js/visi/data.js 的 MB.SERIES、MB.SERIES_CONCEPT.title），照片 = 原创系列总览页那五张
-        { title: '骨骼线 Skeleton Line', note: '在时间的长河，寻找关于家具的记忆。', image_path: '/card/s-skeleton.jpg' },
-        { title: '空山 Empty Mountain', note: '入空山，感物近人。', image_path: '/card/s-kongshan.jpg' },
-        { title: '织 Weaving', note: '自然柔韧，回归感性生活。', image_path: '/card/s-zhi.jpg' },
-        { title: '雾山 Misty Mountain', note: '雾山春居。', image_path: '/card/s-wushan.jpg' },
-        { title: '侘寂东方 Wabi-Sabi Eastern', note: '山，有它的时间。', image_path: '/card/s-jidongfang.jpg' },
+        { title: '骨骼线系列 Skeleton Line', note: '古典与现代的对话。线条勾勒层次，让柜体呈现自然光影的韵律。', image_path: '/card/s-skeleton.jpg' },
+        { title: '空山系列 Empty Mountain', note: '以留白与壁龛设计，赋予空间自由呼吸的节奏，于进退之间，自然融入生活。', image_path: '/card/s-kongshan.jpg' },
+        { title: '织系列 Weaving', note: '柔韧织物的触感，唤醒生活里的温度。', image_path: '/card/s-zhi.jpg' },
+        { title: '雾山系列 Misty Mountain', note: '灵感源自「雾山春居」，轻盈纯净，于静谧之间勾勒如诗般的空间意境。', image_path: '/card/s-wushan.jpg' },
+        { title: '侘寂东方系列 Wabi-Sabi Eastern', note: '实木的纯粹与真实，承载东方生活的沉静哲思。', image_path: '/card/s-jidongfang.jpg' },
       ],
     },
   ],
+
   opening_bg_path: '/card/opening-forest.jpg',
   ig_videos: ['https://www.instagram.com/reel/DQ_tJlekgzV/'],
   whatsapp: '60163881919',
