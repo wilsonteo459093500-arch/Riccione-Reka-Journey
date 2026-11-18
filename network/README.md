@@ -9,7 +9,7 @@
 | **P**rofile | 识 | 真正看懂这个人：公司背景、4 个维度评分 |
 | **A**ssist | 助 | 先想「我能给他什么」 |
 | **C**onnect | 连 | 记得他说过的话、答应的事做到，该联系的时候出现；也把对的人介绍给对的人 |
-| **E**volve | 长 | 关系跟着时间一起成长：好感度、关系趋势（第 3 阶段） |
+| **E**volve | 长 | 关系跟着时间一起成长：好感度、关系趋势、今天该找谁 |
 
 SPACE 也是「空间 / 位置」：每个人在你心里都有一个位置；好的关系需要空间和时间。
 灵感来自 Starlink：你是中间的星，每个人是一颗卫星，圈层（核心 5 / 重要 15 / 活跃 50 / 认识 150）就是一层层轨道。
@@ -56,6 +56,72 @@ SPACE 也是「空间 / 位置」：每个人在你心里都有一个位置；�
 
 **Plaud API**：查过了（2026-11）—— Plaud **没有给个人 app 用的公开 API**（官方说用 Plaud MCP / CLI 读自己的录音；Developer Platform 是给硬件厂商的 Embedded SDK）。所以用汇出的文字档。如果以后 Plaud 开放了，加一个 `/api/plaud-import` 就好，后面的整理流程不用改。
 
+## 第 3 阶段做了什么：Sims 关系图 + 今日行动
+
+**打开 app 先到「今日」**（`#/today`）。底部导航：今日 · 人脉 · 扫名片 · 找资源 · 我；电脑左边栏多了「星系」。
+
+**好感度（Sims 风，0–100）** —— 全部由互动记录算出来，不用手动调（`src/lib/relation.js`）：
+- 刚认识 35 分；每次联系加分：见面 +18、电话 +12、活动 +10、交换名片 +8、讯息 +6
+- 对话整理过的「气氛」（-2 ~ +2）每一级 ±4：很热络的见面 +26，不愉快的讯息会扣分
+- 越接近 100 加得越少；同一天第二笔只算一半；备注不算联系
+- 不联系就慢慢掉回 10 分：每 90 天跟 10 分的距离少一半
+- 大概：每月喝一次咖啡 ≈ 60（好朋友）、每两周见一次又聊得开心 ≈ 90（挚友）、一年没联系 ≈ 11（快忘了）
+- 等级：挚友 80+ · 好朋友 60+ · 朋友 40+ · 点头之交 20+ · 快忘了
+- 每天第一次打开时存回 `people.affinity`（差 3 分以上才写）；跨等级时记一笔 `relationship_snapshots`
+
+**圈层 → 该多久联系一次**：核心每 2 周、重要每月、活跃每 2 个月、认识每 4 个月。
+
+**今天该找谁**（一天 5–7 个，最该找的在前）：
+1. 我答应过、还没做的事（到期的更前面）—— 第 2 阶段对话里整理出来的承诺
+2. 刚认识 3 天内、还没跟进的人（48 小时内发个讯息）
+3. 超过联系周期的人（越久、圈层越内圈越前面）
+4. 核心 / 重要圈里 30 天好感度掉 8 分以上的（在变淡）
+5. 他答应我、过了一星期还没下文的（可以顺便问）
+
+每张卡：理由、可以聊的话题、WhatsApp（预填「Hi 名字，」）、提示卡、排时间、联系过了、晚点再说（明天 / 3 天 / 下星期 / 一个月，存在 `people.snooze_until`）。
+
+**找资源**（`#/find`）：打「律师」「贷款」「建筑师」→ 看他有的资源（手动 / 对话 > AI 推测）、职位、公司 / 行业、商会、标签、兴趣、备注、**对话里他提过认识谁**；内建中英马同义词（律师 = lawyer = advocate = peguam…）。同样有的，关系近、圈层内圈的排前面；好感度 < 30 会提醒「先联络感情、先帮他一点，再开口」。下面还会列出「谁需要这个」—— 找到了可以介绍给他们。「我」页填的「我缺的」会变成一键搜寻。不用 AI、不花钱。
+
+**星系图**（`#/galaxy`，电脑最好看）：中间是我，四条轨道是四个圈层；好感度越高越靠近中心、颜色越绿；值得认识分越高星星越大；该联系的外面一圈红色虚线在转。可以搜寻让符合的人亮起来、只看该联系的。
+
+**人脉列表**（手机）：每个人多了 Sims 好感度条、↑↓ 趋势、「该联系了」；排序多了「该联系了」「好感度」。
+
+**见面前的提示卡**（`#/p/<id>/brief`，手机全屏）：别聊什么 → 我答应过他的（可以直接打勾）→ 他答应过的 → 上次聊了什么（含气氛）→ 可以聊（最近对话的「下次可以聊」+ 深度分析的话题 + 兴趣）→ 近况 / 喜好 → 我能给他什么 → 共同圈子 → 一句卡耐基小提醒。下面：WhatsApp、排进 TickTick、见过了、见完记对话。
+
+**TickTick**（`/api/ticktick`，官方 Open API + 个人 API Token）：一个人或「一键排进」今天的全部人 → 选开始时间 → 每个人一个时间盒（约见面 60 分 / 打电话 20 分 / 发讯息 15 分，可以改），一个接一个排；任务内容 = 提示卡文字 + WhatsApp 连结 + 回 SPACE 的连结，时间到提醒。排在以后哪天的人，那天之前不会再出现在「今日」。没接 TickTick 就下载 `.ics`。
+
+## 第 4 阶段做了什么：个人名片页 + 扫码留资料 + NFC + FoloToy
+
+活动上不用交换名片：对方扫我的二维码 → 看到我的名片 → 留下他的资料 → **自动进 SPACE**。
+
+**公开名片页 `/c`**（不用登入；`card.html` + `src/card/`，不载 React，JS + CSS 约 20KB gzip，打开很快）
+- 开场：展厅视频（静音自动播、可开声音）或照片 → 名字、职位、公司、一句话 → **WhatsApp 我** · **存我的联络方式**（`/api/card?format=vcf`，vCard 3.0）· 电话 / 邮件 / 网站
+- 关于我 · 我可以帮你 · 作品（横滑）· 社交平台 · 地址；中文 / English 一键切换（照手机语言自动选）
+- **留下你的联络方式**：名字 *、手机 / WhatsApp *、公司、职位、邮箱、在哪里认识；或者**拍他的名片代替打字**（手机先缩图，服务器用 Haiku 读，有预算才读）
+- PDPA：同意条款要勾，隐私说明可以展开（只给我本人用、不分享、可以要求删除、21 天内处理）
+- 送出后：「谢谢！」+ 一键 WhatsApp 我（预设「Hi Wilson，我是 ___，刚刚在 ___ 认识」，模板可以改）
+- 底部浮一个「交换联络方式」按钮，还没滑到表格时一按就到
+- **活动模式** `/c?e=<活动>`：显示「欢迎来到 XXX」、表格排最前面、不用填在哪里认识；扫码的人自动记到那个活动的出席名单
+- 来源：`/c?s=nfc`（NFC 贴纸）、`/c?s=folotoy`（FoloToy 屏幕）；记在互动和标签上
+
+**服务器**
+- `GET /api/card`：用 `SUPABASE_SERVICE_ROLE_KEY` 读主人的 `profile.card`，只回 `cleanCard` 认得的栏位；CDN 快取 60 秒
+- `POST /api/inbox`：隐藏栏位（陷阱）/ 不到 1.5 秒就送出 → 假装成功什么都不存 · 同意条款 · 栏位长度、格式、不准放网址 · 可选 Cloudflare Turnstile · **同 IP 每小时 20 次、全部每小时 300 次**（IP 只存加盐 hash）→ 名片照片存**私有** bucket → 找是不是已经存过（**电话末 9 码 / 邮箱**；名字一样不算）→ 新建（圈层「认识」、标签「扫码」、`how_met` / `met_on` 自动填、`pending_review`）或**只补空的栏位**（不改名字、不改圈层）→ 互动「扫码留资料」→ 活动出席 → `inbox` 记一笔（同意了哪一版条款）
+- 不管是新的还是已经存过的，回应都一样（外人试不出谁在你的名单里）
+- service role 会跳过 RLS，所以 `api/_lib/admin.js` 只开放 inbox 要用的几个动作，每个都锁在 `owner = 主人`
+- 不自动跑「深度分析」（花钱）
+
+**SPACE 里（我这边）**
+- **「人脉」顶部「新朋友 N」** → `#/inbox`：每个人看一眼 → 确认 / AI 读名片（只拍了名片的）/ WhatsApp / 打开补备注 / 删掉（防乱填）；可以「全部确认」
+- **「我的名片」** `#/card`（电脑左边栏「名片」、手机「我」页最上面）：
+  - 二维码：一般 / NFC 贴纸 / FoloToy 三种连结，下载印刷用 PNG（二维码 + 名字 + 「扫码交换联络方式」）
+  - **NFC**：Android Chrome 直接「写进 NFC 贴纸」（Web NFC）；iPhone 教你用 NFC Tools 写
+  - **活动模式**：建活动 → 专属二维码 → 看扫码进来的人
+  - 编辑名片：照片 / 展厅视频（≤ 50MB，或贴 MP4 网址）、名字、介绍、联络方式、社交、「我可以帮你」、作品（最多 6 个）、表格开关、WhatsApp 预设讯息、删除资料找谁
+  - 名片的照片 / 视频放**公开** bucket `network-card`（谁都看得到，只有本人能上传）；别人的名片照片还是在私有的 `network`
+
+**FoloToy**：`folotoy/` —— FoloToy AI Passport（ESP32-C3、240×320）开机显示名片二维码，上下键切换名片 / 活动，确定长按大二维码。怎么装见 [`folotoy/README.md`](./folotoy/README.md)。
+
 ## 结构
 
 ```
@@ -67,13 +133,22 @@ api/                    Vercel serverless（AI key 只在这里）
   company.js            公司背景（Sonnet 5.5 + web search，server-side fallback）
   assess.js             4 维度评分 + 我能给他什么（Sonnet 5.5，结构化输出）
   analyze-talk.js       对话整理（Haiku 5.5，结构化输出；截图也走这里）
+  ticktick.js           排时间盒（TickTick Open API；token 只在服务器）
+  _lib/admin.js         第 4 阶段：service role（只在服务器）+ 锁在主人底下的几个动作、IP hash
+  card.js               GET 公开名片内容 / vCard（不用登入）
+  inbox.js              POST 别人留的资料 → 自动进 SPACE（不用登入；陷阱、限次、Turnstile）
+card.html + src/card/   公开名片页 /c（不载 React）
 src/
   lib/logic.js          纯函数：圈层、评分、电话、去重、搜索（有单元测试）
   lib/talk.js           纯函数：WhatsApp 解析、字幕清理、承诺、合并（有单元测试）
+  lib/relation.js       纯函数：好感度、联系周期、今天该找谁、找资源、星系位置、提示卡、TickTick / .ics（有单元测试）
+  lib/card.js           纯函数：名片栏位清理、vCard、留资料检查、找重复、合并（前端、服务器、名片页共用；有单元测试）
+  lib/qr.js             二维码 → SVG / 印刷用 PNG
   lib/repo.js           资料层：Supabase / IndexedDB 两套，画面不直接碰
   lib/store.jsx         全局状态 + 动作（存名片、深度分析、照片…）
-  components/           PeopleList / ScanCard / TalkImport / PersonDetail / PhotoGrid / Settings / Login
-supabase/schema.sql     13 张表 + RLS + 私有 bucket
+  components/           CardStudio（我的名片）/ NewFriends（新朋友）/ Today / PeopleList / Galaxy / FindHelp / BriefCard / ScheduleSheet / ScanCard / TalkImport / PersonDetail / PhotoGrid / Settings / Login
+supabase/schema.sql     14 张表 + RLS + 私有 bucket + 公开名片 bucket
+folotoy/                FoloToy AI Passport 的名片二维码 app（ESP-IDF / LVGL；有 host 测试）
 test/                   node --test（API 用假的 client，不花钱）
 ```
 
@@ -84,5 +159,6 @@ test/                   node --test（API 用假的 client，不花钱）
 `photos` + `photo_people` 照片 · `events` + `attendance` 活动出席（第 5 阶段用）·
 `relationship_snapshots` 关系分数快照（第 3 阶段画趋势）· `ai_usage` AI 用量
 
-`people.affinity`（Sims 好感度 0–100）现在固定 50，第 3 阶段加衰减公式（可以用每笔对话的 `ai.mood.score`）。
+`people.affinity`（Sims 好感度 0–100）第 3 阶段起由互动记录算出来、每天存回一次；第 3 阶段加了 `people.snooze_until`（晚点再说）。
 第 2 阶段加了 `people.avoid_topics`（要避开的话题）。
+第 4 阶段加了 `profile.card`（公开名片内容）、`people.pending_review`（扫码进来还没确认）、`inbox`（每一次公开表格送出的记录）、互动来源 `qr`。

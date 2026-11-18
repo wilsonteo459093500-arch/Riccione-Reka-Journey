@@ -10,6 +10,8 @@ import {
   uid, findCompany, worthScore, emailDomain, pickWhatsApp, DEFAULT_PROFILE, splitTags,
 } from './logic.js';
 import { mergeList, appendFacts } from './talk.js';
+import { relationOf, bandOf } from './relation.js';
+import { cleanCard, DEFAULT_CARD } from './card.js';
 
 const Ctx = createContext(null);
 export const useStore = () => useContext(Ctx);
@@ -59,6 +61,7 @@ export function StoreProvider({ children }) {
       }
       if (table === 'photos') next.photo_people = next.photo_people.filter((r) => r.photo_id !== id);
       if (table === 'circles') next.person_circles = next.person_circles.filter((r) => r.circle_id !== id);
+      if (table === 'events') next.attendance = next.attendance.filter((r) => r.event_id !== id);
       return next;
     });
   }, []);
@@ -83,6 +86,7 @@ export function StoreProvider({ children }) {
       circlesBy: group(data.person_circles, 'person_id'),
       photoPeopleBy: group(data.photo_people, 'person_id'),
       peopleByPhoto: group(data.photo_people, 'photo_id'),
+      now: Date.now(), // 好感度、该不该联系都用同一个「现在」算
     };
   }, [data]);
 
@@ -98,6 +102,8 @@ export function StoreProvider({ children }) {
       circles: (index.circlesBy.get(p.id) || []).map((pc) => ({ ...index.circles.get(pc.circle_id), link: pc })).filter((c) => c.id),
       photos: (index.photoPeopleBy.get(p.id) || []).map((pp) => index.photos.get(pp.photo_id)).filter(Boolean)
         .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))),
+      // 第 3 阶段：好感度、趋势、上次联系、该不该联系了（由互动记录算出来）
+      rel: relationOf(p, interactions, index.now),
     };
   }, [index]);
 
@@ -284,9 +290,135 @@ export function StoreProvider({ children }) {
       return put('interactions', { ...interaction, ai: { ...interaction.ai, action_items: items } });
     }
 
+    /** 第 3 阶段：快速记一笔「联系过了」（今日行动 / 提示卡用） */
+    async function quickContact(personId, kind = 'message', title = '') {
+      const person = dataRef.current.people.find((p) => p.id === personId);
+      if (!person) throw new Error('找不到这个人');
+      const at = nowIso();
+      const saved = await put('interactions', { person_id: personId, kind, source: 'manual', occurred_at: at, title: title || { message: '发了讯息', call: '打了电话', meeting: '见面' }[kind] || '联系', summary: '' });
+      await put('people', { ...person, last_contact_at: at, snooze_until: person.snooze_until ? null : person.snooze_until });
+      return saved;
+    }
+
+    /** 晚点再说：N 天内不出现在「今天该找谁」 */
+    async function snooze(personId, days) {
+      const person = dataRef.current.people.find((p) => p.id === personId);
+      if (!person) throw new Error('找不到这个人');
+      let until = null;
+      if (days > 0) {
+        const d = new Date();
+        d.setDate(d.getDate() + days);
+        until = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      }
+      try {
+        return await put('people', { ...person, snooze_until: until });
+      } catch (e) {
+        if (/snooze_until/.test(String(e.message))) throw new Error('资料库还没升级：Supabase 重跑一次 schema.sql（见 DEPLOY.md「第 3 阶段升级」）');
+        throw e;
+      }
+    }
+
+    /**
+     * 好感度存回 people.affinity（汇出、以后群发筛选用）：差 3 分以上才写；
+     * 跨过一个等级（朋友 → 点头之交）再记一笔快照，画趋势、看历史用。
+     */
+    async function syncAffinity(views) {
+      let n = 0;
+      for (const v of views) {
+        const a = v.rel.affinity;
+        if (Math.abs((v.affinity ?? 50) - a) < 3) continue;
+        const row = dataRef.current.people.find((p) => p.id === v.id);
+        if (!row) continue;
+        const from = bandOf(row.affinity ?? 50);
+        const saved = await put('people', { ...row, affinity: a });
+        if (from.key !== bandOf(a).key) await snapshot(saved, `好感度：${from.label} → ${bandOf(a).label}`);
+        if (++n >= 40) break; // 一次最多 40 个，剩下的下次开 app 再补
+      }
+      return n;
+    }
+
+    /* ---------- 第 4 阶段：我的名片 + 扫码留资料 ---------- */
+    async function saveCard(card) {
+      try {
+        return await put('profile', { ...(profile || DEFAULT_PROFILE), card: cleanCard(card) });
+      } catch (e) {
+        if (/card/.test(String(e.message)) && /column/.test(String(e.message))) throw new Error('资料库还没升级：Supabase 重跑一次 schema.sql（见 DEPLOY.md「第 4 阶段升级」）');
+        throw e;
+      }
+    }
+
+    /** 名片的照片 / 视频 / 案例图 → 公开 bucket，回存储路径 */
+    async function uploadCardMedia(file, kind = 'photo') {
+      const owner = await repo.userId();
+      const stamp = Date.now().toString(36);
+      if (/^video\//.test(file.type)) {
+        if (!/^video\/(mp4|webm|quicktime)$/.test(file.type)) throw new Error('视频只收 MP4 / WebM / MOV');
+        if (file.size > 50 * 1024 * 1024) throw new Error('视频太大了（最多 50MB）：先剪短一点、或用 720p 汇出');
+        const ext = { 'video/mp4': 'mp4', 'video/webm': 'webm', 'video/quicktime': 'mov' }[file.type];
+        const path = `${owner}/card/${kind}-${stamp}.${ext}`;
+        await repo.uploadPublic(path, file);
+        return path;
+      }
+      const img = await shrinkImage(file, kind === 'case' ? 1400 : 1800, 0.84);
+      const path = `${owner}/card/${kind}-${stamp}.jpg`;
+      await repo.uploadPublic(path, img.blob);
+      return path;
+    }
+
+    async function saveEvent(row) {
+      return put('events', { name: String(row.name || '').trim(), held_on: row.held_on || null, location: row.location || '', notes: row.notes || '', ...(row.id ? { id: row.id } : {}) });
+    }
+
+    /** 新朋友：确认（不再出现在「新朋友」） */
+    async function confirmNew(ids) {
+      for (const id of ids) {
+        const row = dataRef.current.people.find((p) => p.id === id);
+        if (row && row.pending_review) await put('people', { ...row, pending_review: false });
+      }
+    }
+
+    /** 新朋友只拍了名片：用 AI 读那张名片，补进资料（名字是「名片待确认」就换掉） */
+    async function readCardWithAI(personId) {
+      const row = dataRef.current.people.find((p) => p.id === personId);
+      if (!row) throw new Error('找不到这个人');
+      const photo = dataRef.current.photos.find((ph) => ph.id === row.card_photo_id);
+      if (!photo) throw new Error('这个人没有名片照片');
+      const blob = await (await fetch(await repo.imageUrl(photo.path))).blob();
+      const img = await shrinkImage(blob, 1600);
+      const { card, usage } = await api.scanCard([{ media_type: img.media_type, data: img.base64 }]);
+      logUsage(usage);
+      const company = !row.company_id && card.company ? await ensureCompany(card.company, { name_alt: card.company_alt, website: card.website, address: card.address, industry: card.industry_guess }) : null;
+      const placeholder = !row.name || /名片待确认/.test(row.name);
+      const phones = [...(row.phones || [])];
+      for (const p of card.phones || []) if (!phones.some((x) => x.number.replace(/\D/g, '').slice(-9) === p.number.replace(/\D/g, '').slice(-9))) phones.push(p);
+      return put('people', {
+        ...row,
+        name: placeholder && card.name ? card.name : row.name,
+        name_alt: row.name_alt || card.name_alt || '',
+        title: row.title || card.title || '',
+        company_id: row.company_id || (company && company.id) || null,
+        phones,
+        emails: [...new Set([...(row.emails || []), ...(card.emails || [])])],
+        whatsapp: row.whatsapp || pickWhatsApp(card.phones || []),
+        website: row.website || card.website || '',
+        address: row.address || card.address || '',
+        card_notes: row.card_notes || card.card_notes || '',
+        notes: String(row.notes || '').replace(/\n?名片还没读：在「新朋友」按「AI 读名片」/, '').trim(),
+      });
+    }
+
     return {
       reload,
       logUsage,
+      saveCard,
+      uploadCardMedia,
+      saveEvent,
+      deleteEvent: (id) => drop('events', id),
+      confirmNew,
+      readCardWithAI,
+      quickContact,
+      snooze,
+      syncAffinity,
       saveTalk,
       toggleActionItem,
       ensureCompany,
@@ -365,13 +497,27 @@ export function StoreProvider({ children }) {
     };
   }, [put, drop, reload, view, index, me, profile]);
 
-  const value = { data, people, view, profile, me, loading, error, mode: repo.mode, imageUrl: repo.imageUrl, ...actions };
+  // 每天第一次打开时，把算出来的好感度存回资料库（只写变化大的）
+  const synced = useRef(false);
+  useEffect(() => {
+    if (loading || error || synced.current || !people.length) return;
+    synced.current = true;
+    let today = '';
+    try { today = new Date().toDateString(); if (localStorage.getItem('space:affinity-sync') === today) return; } catch { /* 无痕模式 */ }
+    actions.syncAffinity(people).then(() => { try { localStorage.setItem('space:affinity-sync', today); } catch { /* 无痕模式 */ } }).catch(() => null);
+  }, [loading, error, people, actions]);
+
+  // 第 4 阶段：我的名片（还没存过就用默认值 + 「我的资料」的名字）
+  const card = useMemo(() => cleanCard(profile && profile.card ? profile.card : { ...DEFAULT_CARD, name: (profile && profile.display_name) || DEFAULT_CARD.name }), [profile]);
+  const newFriends = useMemo(() => people.filter((p) => p.pending_review).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))), [people]);
+
+  const value = { data, people, view, profile, me, card, newFriends, loading, error, mode: repo.mode, imageUrl: repo.imageUrl, publicUrl: repo.publicUrl, ...actions };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
 /** 把 view 加的衍生字段拿掉，只留数据库栏位 */
 export function stripView(p) {
-  const { company, resources, interactions, meetings, circles, photos, ...row } = p;
+  const { company, resources, interactions, meetings, circles, photos, rel, ...row } = p;
   return row;
 }
 
