@@ -1,5 +1,5 @@
 // 展厅播放 · 开场（像新 iPhone 开机的「Hello」）。盖在方案页上面的一层，按时间播（文案、时间轴在 showroom/intro.js）：
-//   Hello → Selamat datang → 你好（手写）→ 你好，{名字} → 几句话一句一句浮现 → 行至溪岸，回归生活的美好 →
+//   Hello → Selamat datang → 你好（手写，下面浮出客户名字）→ 几句话一句一句浮现（不用标点）→ 行至溪岸 / 回归生活的美好 →
 //   这一层自己慢慢淡掉，下面就是方案第一页（不出 UKIR、不用再点）。
 // 声音：溪水声（showroom/creek.js 现场合成）；已上传展厅音乐的话，品牌句那一屏淡入。右上角静音 / 退出，鼠标不动 2.5 秒自动藏起来。
 // 操作：点一下 / 空格 / Enter / → = 直接淡出进方案。Esc 交给外层（退出展厅播放）。
@@ -50,20 +50,45 @@ export function IntroScreen({ frame }) {
     const p = frame.write * 118;
     const mask = `linear-gradient(90deg, #000 ${p - 18}%, transparent ${p}%)`;
     const brush = s.font === 'brush';
+    const latinName = /^[A-Za-z0-9]/.test(s.name || '');
     return (
-      <div data-intro="hello" style={{ ...move, maskImage: mask, WebkitMaskImage: mask, whiteSpace: 'nowrap' }}>
-        <span
-          style={{
-            fontFamily: brush ? BRUSH_CSS : SCRIPT_CSS,
-            fontSize: brush ? 'clamp(64px, min(10vw, 17vh), 180px)' : 'clamp(60px, min(11vw, 19vh), 200px)',
-            lineHeight: 1.1,
-            color: INK,
-            letterSpacing: brush ? '0.08em' : 0,
-            padding: '0 0.2em',
-          }}
-        >
-          {s.text}
-        </span>
+      <div data-intro="hello" style={{ ...move, position: 'relative', whiteSpace: 'nowrap', textAlign: 'center' }}>
+        <div style={{ maskImage: mask, WebkitMaskImage: mask }}>
+          <span
+            style={{
+              fontFamily: brush ? BRUSH_CSS : SCRIPT_CSS,
+              fontSize: brush ? 'clamp(64px, min(10vw, 17vh), 180px)' : 'clamp(60px, min(11vw, 19vh), 200px)',
+              lineHeight: 1.1,
+              color: INK,
+              letterSpacing: brush ? '0.08em' : 0,
+              padding: '0 0.2em',
+            }}
+          >
+            {s.text}
+          </span>
+        </div>
+        {/* 客户名字：「你好」写完后在下面浮出（不占位置，「你好」一直在正中） */}
+        {s.name && (
+          <div
+            data-intro="name"
+            style={{
+              position: 'absolute',
+              left: '50%',
+              top: '100%',
+              transform: `translate3d(-50%, ${(1 - frame.nameIn) * 8}px, 0)`,
+              opacity: frame.nameIn,
+              marginTop: '0.6em',
+              fontFamily: latinName ? SERIF_EN_CSS : SONG_CSS,
+              fontWeight: latinName ? 400 : 300,
+              fontSize: 'clamp(18px, min(2.1vw, 3.8vh), 36px)',
+              letterSpacing: latinName ? '0.12em' : '0.24em',
+              paddingLeft: latinName ? '0.12em' : '0.24em',
+              color: INK,
+            }}
+          >
+            {s.name}
+          </div>
+        )}
       </div>
     );
   }
