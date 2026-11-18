@@ -134,6 +134,29 @@
       if (why) { var s = skipRec(it, why, p.name); p.skipped.push(s); skipped.push(s); return; }
       p.files.push({ file: it.file, f: f, rel: it.parts.join('/'), key: fileKey(it) });
     }
+    // 月份文件夹（名字没有风格字，例：「2024年3月上海案例」）里面一个一个客户的家（子文件夹名有风格字）：
+    // 每个家各是一个项目（跟审核页「按文件夹名字整理」拆旧照片的规则一样：MB.clCore.regroupPlan）。手动选「一个项目」就不拆
+    var styl = MB.clCore && MB.clCore.stylesIn;
+    if (styl && opts.mode !== 'single') {
+      projects.slice().forEach(function (p) {
+        if (p.loose || styl(p.name).length) return;
+        var keep = [];
+        p.files.forEach(function (x) {
+          var i = x.f.indexOf('/'), seg = i > 0 ? x.f.slice(0, i) : '';
+          if (!seg || !styl(seg).length) { keep.push(x); return; }
+          var home = proj(seg);
+          home.files.push({ file: x.file, f: x.f.slice(i + 1), rel: x.rel, key: x.key });
+        });
+        p.files = keep;
+        p.skipped = p.skipped.filter(function (sk) {
+          var rest = sk.rel.split('/').slice(mode === 'split' ? 2 : 1);
+          if (rest.length > 1 && styl(rest[0]).length) { proj(rest[0]).skipped.push(assign1(sk, { project: rest[0] })); return false; }
+          return true;
+        });
+      });
+      projects = projects.filter(function (p) { return p.loose || p.files.length || p.skipped.length; });
+    }
+    function assign1(a, b) { var o = {}; Object.keys(a).forEach(function (k) { o[k] = a[k]; }); Object.keys(b).forEach(function (k) { o[k] = b[k]; }); return o; }
     if (looseProject) projects.unshift(looseProject);
 
     // 照档名排（数字照大小：IMG_2 在 IMG_10 前面）。固定用 en 排序：

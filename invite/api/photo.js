@@ -4,14 +4,14 @@
    → {k, url, sig}：k 是 Blob 的 pathname（c/<h>-随机后缀.jpg），之后 addPhotos 登记用；
      sig 是伺服器的签章，addPhotos 要带回来（没有上传过的 k 登记不进去）
    照片和清单分开写：先传图，传完一批再一次登记，断线也不会登记到不存在的图
-   额度（免费方案）：这个月写入到 UPLOAD_CAP、或总储存量超过 BYTES_CAP → 507 {error:'quota'}，不写
+   额度：Vercel 免费方案这个月写入到 UPLOAD_CAP、或总储存量超过 BYTES_CAP；Supabase 总储存量超过 STORAGE_CAP_MB → 507 {error:'quota'}，不写
      usage 从清单读（走 CDN 快取，便宜），在这台 function 的记忆体里留 QUOTA_TTL；
      这段时间自己传了几张也加进去。几台同时传会有一点误差，靠 WRITE_CAP − UPLOAD_CAP 的余量吸收
    ============================================================ */
 import { send, sendError, readRaw, checkWrite, methodNotAllowed, query, header, HttpError } from './_lib/http.js';
 import { requireUser, photoSig } from './_lib/auth.js';
 import { getAdapter, useOidc, indexPath } from './_lib/blob.js';
-import { blobPlan, monthWrites, storedBytes, emptyIndex, quotaError, UPLOAD_CAP, BYTES_CAP } from './_lib/catalog.js';
+import { blobPlan, writesCapped, bytesCapOf, monthWrites, storedBytes, emptyIndex, quotaError, UPLOAD_CAP } from './_lib/catalog.js';
 
 export const MAX_PHOTO = 3.5 * 1024 * 1024; // Vercel function 的请求上限是 4.5 MB，留余裕
 export const QUOTA_TTL = 30 * 1000;
@@ -21,7 +21,9 @@ var seen = null;
 export function resetQuotaCache() { seen = null; }
 
 async function checkQuota(adapter, size, now) {
-  if (blobPlan() === 'pro') return null;
+  var plan = blobPlan();
+  if (plan === 'pro') return null;
+  var capped = writesCapped(plan), bCap = bytesCapOf(plan);
   var path = indexPath();
   var month = new Date(now).toISOString().slice(0, 7);
   if (!seen || seen.path !== path || seen.month !== month || now - seen.at > QUOTA_TTL) {
@@ -32,8 +34,9 @@ async function checkQuota(adapter, size, now) {
     seen = { path: path, at: now, month: month, writes: monthWrites(index, now), bytes: storedBytes(index), plusW: 0, plusB: 0 };
   }
   var w = seen.writes + seen.plusW, b = seen.bytes + seen.plusB;
-  if (w + 1 > UPLOAD_CAP) throw quotaError('writes', UPLOAD_CAP - w, BYTES_CAP - b);
-  if (b + size > BYTES_CAP) throw quotaError('bytes', UPLOAD_CAP - w, BYTES_CAP - b);
+  var wLeft = capped ? UPLOAD_CAP - w : 0;
+  if (capped && w + 1 > UPLOAD_CAP) throw quotaError('writes', wLeft, bCap - b);
+  if (b + size > bCap) throw quotaError('bytes', wLeft, bCap - b);
   return seen;
 }
 

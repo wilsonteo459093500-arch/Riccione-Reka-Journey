@@ -32,9 +32,9 @@ test('vocab parity: browser case-vocab.js deep-equals _lib/vocab.js', () => {
   for (const s of scopes) assert.deepEqual(plain(MB.scopeCabinets(s)), V.scopeCabinets(s), JSON.stringify(s));
 });
 
-test('vocab: contract content (9 styles, 15 cabinets, 14 rooms, 5 ptypes, 4 traits)', () => {
-  assert.deepEqual(V.CASE_STYLES.map((s) => s.key), ['wood', 'wabi', 'cream', 'french', 'midcentury', 'modern', 'japandi', 'nordic', 'luxe']);
-  assert.deepEqual(V.CASE_STYLES.map((s) => s.series), ['misty', 'wabi', 'misty', 'weaving', 'weaving', 'skeleton', 'misty', 'misty', 'mountain']);
+test('vocab: contract content (12 styles, 15 cabinets, 14 rooms, 5 ptypes, 4 traits)', () => {
+  assert.deepEqual(V.CASE_STYLES.map((s) => s.key), ['wood', 'wabi', 'cream', 'french', 'midcentury', 'modern', 'japandi', 'nordic', 'luxe', 'european', 'american', 'mixed']);
+  assert.deepEqual(V.CASE_STYLES.map((s) => s.series), ['misty', 'wabi', 'misty', 'weaving', 'weaving', 'skeleton', 'misty', 'misty', 'mountain', '', '', '']);
   assert.deepEqual(V.CASE_CABINETS.map((c) => c.key), ['kitchen', 'wardrobe', 'display', 'bookcase', 'bedend', 'dresser', 'island', 'tvcab', 'tvwall', 'door', 'shoe', 'bathvanity', 'wallpanel', 'sideboard', 'bed']);
   assert.equal(V.CASE_ROOMS.length, 14);
   assert.deepEqual(V.CASE_PTYPES.map((p) => p.key), ['condo', 'landed', 'terrace', 'semid', 'bungalow']);
@@ -64,7 +64,7 @@ test('vocab: match patterns recognise brief options and folder names', () => {
   assert.deepEqual(got, {
     '原木 Natural wood': 'wood', '微侘寂 Subtle wabi-sabi': 'wabi', '奶油风 Cream style': 'cream', '轻法式 Light French': 'french',
     '中古 Mid-century': 'midcentury', '现代简约 Modern minimal': 'modern', '日式 Japandi': 'japandi', '北欧 Nordic': 'nordic',
-    '轻奢 Modern luxe': 'luxe', '还没想好 Not decided': ''
+    '轻奢 Modern luxe': 'luxe', '欧式 European': 'european', '美式 American': 'american', '混搭 Eclectic': 'mixed', '还没想好 Not decided': ''
   });
   // 旧的需求卡（客户手上还没送出的）照样认得
   assert.equal(first(V.CASE_STYLES, '自然原木 Natural wood'), 'wood');
@@ -80,6 +80,15 @@ test('vocab: match patterns recognise brief options and folder names', () => {
   assert.deepEqual(V.scopeCabinets(['门 · 墙板 Doors & wall panels']), ['door', 'wallpanel']);
   assert.deepEqual(V.scopeCabinets(['成品家具 Loose furniture']), []);
   assert.deepEqual(V.scopeCabinets(null), []);
+});
+
+test('product words: VISI (case-vocab.js MB.clProductOk) and the server (catalog.js isProduct) agree', () => {
+  const MB = loadBrowser();
+  const words = ['水吧柜', '书桌', '玄关柜', '榻榻米', '神台', '吧台', '电视墙', '衣柜', '阳台', '平台', '陈先生柜', '测试柜', '柜', 'IMG柜', '2F柜',
+    '超级超级超级长的名字柜', '格栅', '屏风', '书房', '沙发', ''];
+  for (const w of words) assert.equal(MB.clProductOk(w), lib.catalog.isProduct(w), w);
+  assert.equal(lib.catalog.isProduct('水吧柜'), true);
+  assert.equal(lib.catalog.isProduct('陈先生柜'), false);
 });
 
 test('vocab: browser file is plain ES5 (no modules, arrows, let/const, template strings)', () => {

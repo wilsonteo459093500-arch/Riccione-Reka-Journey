@@ -6,7 +6,7 @@
      /api/photo?h=  POST image/jpeg（FF D8 FF、≤ 3.5 MB）→ 存 'c/<h>-<随机>.jpg' → {k, url, sig:'local'}
      /api/catalog   GET ?view=visi|full（ETag "local-rev-N"：跟伺服器的 "rev-N" 分得开，VISI 换模式不会拿错清单；
                     If-None-Match → 304；full 多一个 quota {plan:'local', …}）
-                    POST {op: addPhotos | patch | hide | unhide | purge | importTags | clearPending}
+                    POST {op: addPhotos | patch | hide | unhide | regroup | purge | importTags | clearPending}
      /local-cases/<path>  照片、缩图包（IndexedDB 'files'）：Content-Type、Content-Length、ETag、
                     Cache-Control: no-cache、Access-Control-Allow-Origin: *（PPTX 用 mode:'cors' 拿）
    规则（invite/api/_lib/catalog.js 那一套）都在 assets/js/caselib/local-core.js（MB.clCore），这里只管存取。
@@ -348,6 +348,7 @@ function postCatalog(req) {
         return simple(body, pby, 'patch', function (idx, ts) { return C.patch(idx, body, pby, ts); });
       }
       if (op === 'hide' || op === 'unhide') return simple(body, by, op, function (idx, ts) { return C.setHidden(idx, body, op === 'hide', by, ts); });
+      if (op === 'regroup') return simple(body, by, 'regroup', function (idx, ts) { return C.regroup(idx, body, by, ts); }, function (o) { return { moved: o.moved | 0, made: o.made | 0, removed: o.removed | 0 }; });
       if (op === 'purge') return purge(body, by);
       if (op === 'importTags') return importTags(body, by);
       if (op === 'clearPending') return clearPending();
@@ -358,7 +359,7 @@ function postCatalog(req) {
 
 function save(t, index) { t.objectStore('meta').put({ k: 'index', index: index }); }
 
-function simple(body, by, op, fn) {
+function simple(body, by, op, fn, extra) {
   return queue(function () {
     return txRun(['meta'], 'readwrite', [['meta', 'index']], function (vals, t) {
       var index = vals[0] && vals[0].index ? vals[0].index : C.emptyIndex();
@@ -366,7 +367,11 @@ function simple(body, by, op, fn) {
       if (r.write) save(t, index);
       return r.out;
     });
-  }).then(function (out) { return json(200, { rev: out.rev, changed: out.changed | 0 }); });
+  }).then(function (out) {
+    var r = { rev: out.rev, changed: out.changed | 0 };
+    if (extra) { var x = extra(out); Object.keys(x).forEach(function (k) { r[k] = x[k]; }); }
+    return json(200, r);
+  });
 }
 
 function addPhotos(body, by) {

@@ -13,7 +13,7 @@ import { requireUser, checkPhotoSig, packName } from './_lib/auth.js';
 import { getAdapter, indexPath, useOidc, DEL_BATCH } from './_lib/blob.js';
 import {
   emptyIndex, visiView, mutate, addPhotos, patch, setHidden, validateAddPhotos, pidOf,
-  blobPlan, quota, monthWrites, storedBytes, checkWrites, validatePurge, planPurge, applyPurge,
+  blobPlan, writesCapped, regroup, quota, monthWrites, storedBytes, checkWrites, validatePurge, planPurge, applyPurge,
   WRITE_CAP, PURGE_CAP, BYTES_CAP
 } from './_lib/catalog.js';
 
@@ -68,7 +68,7 @@ async function postCatalog(req, res) {
   var path = indexPath();
   var op = body.op;
   var plan = blobPlan();
-  var cap = plan === 'pro' ? null : WRITE_CAP;
+  var cap = writesCapped(plan) ? WRITE_CAP : null;
 
   if (op === 'addPhotos') {
     // 先验证（不合格就不浪费一次写入）
@@ -106,6 +106,11 @@ async function postCatalog(req, res) {
     var hd = await mutate(adapter, path, function (index, ts) { return setHidden(index, body, op === 'hide', by, ts); }, { by: by, op: op, cap: cap });
     return send(res, 200, { rev: hd.rev, changed: hd.changed });
   }
+  if (op === 'regroup') {
+    // 月份文件夹拆成一个一个家：只改清单，不碰照片档
+    var rg = await mutate(adapter, path, function (index, ts) { return regroup(index, body, by, ts); }, { by: by, op: 'regroup', cap: cap });
+    return send(res, 200, { rev: rg.rev, moved: rg.moved | 0, made: rg.made | 0, removed: rg.removed | 0 });
+  }
   if (op === 'purge') return await purge(adapter, path, body, by, plan, res);
   throw new HttpError(400, { error: 'op' });
 }
@@ -124,7 +129,7 @@ async function purge(adapter, path, body, by, plan, res) {
   var batches = Math.ceil(files.length / DEL_BATCH);
   var now = Date.now();
   // 文件没写明 del() 算不算写入：保守一点，每批算 1 次
-  if (plan !== 'pro') checkWrites(monthWrites(index, now), batches + 1, PURGE_CAP, BYTES_CAP - storedBytes(index));
+  if (writesCapped(plan)) checkWrites(monthWrites(index, now), batches + 1, PURGE_CAP, BYTES_CAP - storedBytes(index));
   for (var i = 0; i < files.length; i += DEL_BATCH) await adapter.del(files.slice(i, i + DEL_BATCH));
   var out = await mutate(adapter, path, function (idx, ts) {
     var r = applyPurge(idx, plan0);
@@ -134,7 +139,7 @@ async function purge(adapter, path, body, by, plan, res) {
     r.quota.writes += batches + 1;
     if (r.quota.writesLeft != null) r.quota.writesLeft = Math.max(0, r.quota.writesLeft - batches - 1);
     return r;
-  }, { by: by, op: 'purge', cap: plan === 'pro' ? null : PURGE_CAP });
+  }, { by: by, op: 'purge', cap: writesCapped(plan) ? PURGE_CAP : null });
   return send(res, 200, { rev: out.rev, removed: out.removed | 0, projectsRemoved: out.projectsRemoved | 0, freed: plan0.freed, quota: out.quota || null });
 }
 

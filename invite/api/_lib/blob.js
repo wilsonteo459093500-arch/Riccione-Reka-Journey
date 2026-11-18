@@ -15,6 +15,7 @@
    ============================================================ */
 import { createHash, randomBytes } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { supabaseAdapter, supabaseConfigured } from './supabase.js';
 
 export class ConflictError extends Error {
   constructor() { super('index changed by someone else'); this.code = 'conflict'; this.name = 'ConflictError'; }
@@ -68,15 +69,22 @@ export function baseOf(url, pathname) {
 
 /* ---------- 目前用哪个 adapter ----------
    withAdapter(a, fn)：只在这次请求里用 a（mock server 用；同一个 process 开两个 mock 也不会互相干扰）
-   setAdapter(a)：整个 process 都用 a（单元测试用）；都没有就是正式的 @vercel/blob */
+   setAdapter(a)：整个 process 都用 a（单元测试用）
+   都没有：设了 SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY 就用 Supabase（supabase.js），不然是 @vercel/blob */
 var current = null;
 var scoped = new AsyncLocalStorage();
 export function setAdapter(a) { current = a || null; }
 export function withAdapter(a, fn) { return scoped.run(a, fn); }
+// 这次请求用的是哪一种储存（不会建立 adapter）：'supabase' | 'vercel' | 'memory'（额度规则看这个）
+export function adapterKind() {
+  var a = scoped.getStore() || current;
+  if (a) return a.kind || 'memory';
+  return supabaseConfigured() ? 'supabase' : 'vercel';
+}
 export function getAdapter() {
   var s = scoped.getStore();
   if (s) return s;
-  if (!current) current = realAdapter();
+  if (!current) current = supabaseConfigured() ? supabaseAdapter() : realAdapter();
   return current;
 }
 

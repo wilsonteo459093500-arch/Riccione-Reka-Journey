@@ -52,7 +52,9 @@
   function cmp(a, b) { a = String(a || ''); b = String(b || ''); return COLL ? COLL.compare(a, b) : (a < b ? -1 : a > b ? 1 : 0); }
 
   var R = {
-    f: { style: '', cab: '', room: '', status: '', pid: '', hidden: false },
+    f: { style: '', cab: '', prod: '', room: '', status: '', pid: '', hidden: false },
+    multi: false,               // 多选（一次删好几张）：点照片是勾选
+    picked: {},                 // 勾选的照片 h → 1
     page: 0,
     list: [],                   // 筛选结果（快照：边改边看时不会突然重排）
     sel: '', mode: '', selPid: '', from: '',
@@ -75,10 +77,14 @@
   };
 
   function cat() { return CL.cat || { photos: {}, projects: {}, log: [], base: '' }; }
-  function effStyle(ph) {
+  function effStyle(ph) { return effStyles(ph)[0] || ''; }
+  // 照片的风格（最多两种）：照片自己有就用照片的，不然跟项目
+  function effStyles(ph) {
     var pr = cat().projects[ph.p] || {};
-    return ph.style || pr.style || '';
+    var a = ph.style ? [ph.style, ph.style2 || ''] : [pr.style || '', pr.style2 || ''];
+    return a.filter(function (x, i) { return x && a.indexOf(x) === i; });
   }
+  function stylesZh(list) { return list.map(function (k) { return CL.styleZh(k); }).join(' + '); }
   function isHidden(ph) {
     var pr = cat().projects[ph.p];
     return !!(ph.hidden || (pr && pr.hidden));
@@ -100,7 +106,8 @@
         var cabs = ph.cabinets || [];
         if (f.cab === '_none' ? cabs.length : cabs.indexOf(f.cab) < 0) return;
       }
-      if (f.style) { var st = effStyle(ph); if (f.style === '_none' ? st : st !== f.style) return; }
+      if (f.style) { var sts = effStyles(ph); if (f.style === '_none' ? sts.length : sts.indexOf(f.style) < 0) return; }
+      if (f.prod) { if (f.prod === '_none' ? ph.product : ph.product !== f.prod) return; }
       out.push(h);
     });
     out.sort(function (a, b) {
@@ -285,8 +292,8 @@
   function errCode(r) { return r ? String(r.status) + (r.json && r.json.error ? ' ' + r.json.error : '') : ''; }
   function patchStuckText(r) {
     var e = (r && r.json && r.json.error) || '';
-    if (e === 'storage_blocked') return '案例库被 Vercel 暂停中，改的标签先存不进去（还留在这一页，关掉就没了）。等恢复之后按「保存」。';
-    if (e === 'not_configured') return '伺服器的设定不完整，改的标签存不进去：请告诉老板检查 Vercel 的设定。';
+    if (e === 'storage_blocked') return '案例库的储存暂停了或连不上，改的标签先存不进去（还留在这一页，关掉就没了）。等恢复之后按「保存」。';
+    if (e === 'not_configured') return '伺服器的设定不完整，改的标签存不进去：请告诉老板检查储存的设定（Vercel 环境变数）。';
     if ((r && r.json && r.json.local) || CL.mode === 'local') return '这台电脑的空间满了，改的标签先存不进去（还留在这一页，关掉就没了）。清出一些硬碟空间、或删除隐藏的照片，再按「保存」。';
     return '这个月的 Blob 写入次数用完了，改的标签先存不进去（还留在这一页，关掉就没了）。下个月 1 号重算之后按「保存」。';
   }
@@ -366,7 +373,7 @@
       return '这个月的 Blob 写入次数快用完了' + (j.writesLeft != null ? '（只剩约 ' + CL.n(j.writesLeft) + ' 次）' : '') +
         '，' + what + '没送出去，画面已经改回去。下个月 1 号会重算。';
     }
-    if (j.error === 'storage_blocked') return '案例库被 Vercel 暂停中，' + what + '没送出去（画面已经改回去）：等恢复之后再试。';
+    if (j.error === 'storage_blocked') return '案例库的储存暂停了或连不上，' + what + '没送出去（画面已经改回去）：等恢复之后再试。';
     if (r && r.status === 0) return '网路断了，' + what + '没送出去，请再试一次';
     return what + '失败，请再试一次';
   }
@@ -452,7 +459,7 @@
     // 旧的伺服器没有 quota：从清单的 usage 估，只有写入次数
     if (!q) return { plan: 'hobby', writes: local, cap: CL.LIMIT_WRITES || 2000, writeCap: null, bytes: null, bytesCap: null };
     return {
-      plan: q.plan === 'pro' || q.plan === 'local' ? q.plan : 'hobby',
+      plan: q.plan === 'pro' || q.plan === 'local' || q.plan === 'supabase' ? q.plan : 'hobby',
       writes: Math.max(q.writes | 0, local),     // 自己刚写的（CL.addWrites）也算进去
       cap: q.uploadCap, writeCap: q.writeCap,
       bytes: typeof q.bytes === 'number' ? q.bytes : null, bytesCap: q.bytesCap || null,
@@ -731,8 +738,8 @@
       return '这个月的 Blob 写入次数快用完了' + (j.writesLeft != null ? '（只剩约 ' + CL.n(j.writesLeft) + ' 次）' : '') +
         '：删除也要用写入次数，为了不让 Vercel 停掉案例库，先停下来' + done + '。下个月 1 号重算之后再删。';
     }
-    if (j.error === 'storage_blocked') return '案例库被 Vercel 暂停中，等恢复之后再删' + done + '。';
-    if (j.error === 'not_configured') return '伺服器的设定不完整，没办法删除' + done + '：请告诉老板检查 Vercel 的设定。';
+    if (j.error === 'storage_blocked') return '案例库的储存暂停了或连不上，等恢复之后再删' + done + '。';
+    if (j.error === 'not_configured') return '伺服器的设定不完整，没办法删除' + done + '：请告诉老板检查储存的设定（Vercel 环境变数）。';
     if (j.error === 'not_hidden') return '有照片刚被别人复原了，所以这一批没删' + done + '。已经重新载入：请再看一下数字，要删的话再打一次「删除」。';
     if (j.error === 'unknown') return '有照片已经不在案例库里了（可能别人刚删过）' + done + '。已经重新载入：请再看一下数字，要删的话再打一次「删除」。';
     if (r.status === 0) return '网路断了，删除没做完' + done + '：网路好了再打一次「删除」。';
@@ -932,6 +939,8 @@
       '照片存在这台电脑：没有每月的次数限制，空间看这台电脑的硬碟。照片太多 VISI 也比较难挑：一样可以每个项目只留最好的几张，<b>先隐藏</b>（可以复原），确定不要了再<b>删除</b>。' :
       q.plan === 'pro' ?
       'Pro 方案不限额度。照片太多 VISI 也比较难挑：一样可以每个项目只留最好的几张。' :
+      q.plan === 'supabase' ?
+      '云端案例库（Supabase）：没有每月的次数限制，空间最多 ' + mbNum(q.bytesCap) + ' MB（到了会自己停下来）。照片太多 VISI 也比较难挑：每个项目只留最好的几张，<b>先隐藏</b>（可以复原），确定不要了再<b>删除</b>，空间才会空出来。' :
       'Vercel 免费方案：每月最多 ' + CL.n(q.cap) + ' 次写入' + (q.bytesCap ? '、空间 ' + mbNum(q.bytesCap) + ' MB' : '') +
       '，超过会把<b>整个案例库停掉</b>（连旧方案的照片都打不开）。所以每个项目只留最好的几张：<b>先隐藏</b>（可以复原），确定不要了再<b>删除</b>，空间才会空出来。';
     if (!open) { drawTidyMsg(); return; }
@@ -1054,11 +1063,14 @@
     var el = document.createElement('section');
     el.className = 'rv-tags';
     el.id = 'rv-tags';
-    el.innerHTML = '<div class="tags-row"><span class="tags-t"><b>分类</b><small>文件夹名自动标 · 标签档：备份分类、给同事共用</small></span>' +
-      '<button class="mini" type="button" id="rv-auto" title="文件夹名的风格、区域，子文件夹名的空间（厨房、主卧…）和柜子（橱柜、衣柜…）：只填空的，人改过的不动">按文件夹名字自动标</button>' +
+    el.innerHTML = '<div class="tags-row"><span class="tags-t"><b>分类</b><small>文件夹名整理（一个家一个项目、照名字标风格）· 标签档：备份分类、给同事共用</small></span>' +
+      '<button class="mini" type="button" id="rv-auto" title="月份文件夹拆成一个一个客户的家；文件夹名的风格（最多两种）、区域，子文件夹名和档名的空间、柜子：名字优先于 AI，人确认过的不动">按文件夹名字整理</button>' +
       '<button class="mini" type="button" id="rv-export" title="备份分类、给同事汇入：只有标签（没有照片）。里面有项目的文件夹名（客户名字）：只给同事，不要传给客户、也不要放进有外人的群组">汇出标签档（备份）</button>' +
       '<label class="mini" id="rv-import-lbl" title="同事汇出的标签档：这台电脑有的照片马上套用，还没有的等汇入那个文件夹后自动套用">汇入标签档' +
-        '<input type="file" id="rv-import" accept=".json,application/json" hidden /></label></div>' +
+        '<input type="file" id="rv-import" accept=".json,application/json" hidden /></label>' +
+      (MB.clAi ? '<button class="mini dark" type="button" id="rv-ai-open" aria-expanded="false" aria-controls="rv-ai" title="文件夹名看不出风格、柜子的照片：让 Claude 一张一张看">AI 看图标风格、柜子</button>' : '') +
+      '</div>' +
+      (MB.clAi ? '<div class="rv-ai" id="rv-ai" hidden></div>' : '') +
       '<div class="tidy-msg" id="rv-tags-msg" aria-live="polite"></div>';
     host.parentNode.insertBefore(el, host);
   }
@@ -1076,6 +1088,7 @@
     ['#rv-auto', '#rv-export'].forEach(function (id) { var b = $(id); if (b) b.disabled = !!R.bulk; });
     var inp = $('#rv-import');
     if (inp) inp.disabled = !!R.bulk;
+    drawAi();
   }
   function setTagsMsg(msg, err) { TG.msg = msg; TG.err = !!err; drawTags(); }
   /* 存在这台电脑没有别的备份：人改过的分类只在这个浏览器。还没汇出过、或上次汇出之后又改了不少 → 提醒一下 */
@@ -1152,17 +1165,38 @@
     });
   }
 
+  // 月份文件夹（名字没有风格字）里装着一个一个客户的家：先问要不要拆成一个家一个项目（照片不用重传）
+  function maybeRegroup() {
+    var plan = MB.clCore.regroupPlan ? MB.clCore.regroupPlan(cat()) : [];
+    if (!plan.length) return Promise.resolve('');
+    var homes = plan.reduce(function (n, g) { return n + g.homes.length; }, 0);
+    var eg = plan[0];
+    var ask = '有 ' + plan.length + ' 个文件夹里装着好几个客户的家（例：「' + eg.name + '」里面有「' + eg.homes[0].name + '」）。\n\n' +
+      '要拆成 ' + homes + ' 个项目吗？一个家一个项目，「同项目」、帮我挑才会按客户的家来挑。照片不用重传，VISI 旧方案的照片不受影响。';
+    if (!window.confirm(ask)) return Promise.resolve('');
+    return CL.call('POST', '/api/catalog', { op: 'regroup' }).then(function (r) {
+      if (r.status !== 200 || !r.json) throw r;
+      CL.bumpRev(r.json.rev);
+      return CL.loadCatalog(true).then(function () { reapplyQueue(); return '拆成了 ' + CL.n(r.json.made | 0) + ' 个新项目（搬了 ' + CL.n(r.json.moved | 0) + ' 张照片）。'; });
+    });
+  }
+
   function runAuto() {
-    var go = beginTags('自动标签中…');
+    var go = beginTags('整理中…');
     if (!go) return Promise.resolve();
+    var split = '';
     return go.then(function (ok) {
+      if (!ok) return;
+      return maybeRegroup().then(function (msg) { split = msg; return true; }, function (r) { tagsStop(tagsFail(r)); return false; });
+    }).then(function (ok) {
       if (!ok) return;
       var p = MB.clCore.autoTags(cat());
       var nP = Object.keys(p.photos).length, nJ = Object.keys(p.projects).length;
-      if (!nP && !nJ) return tagsDone('没有可以自动标的：空着的照片，文件夹名看不出空间、柜子、风格（人改过、确认过的不会动）。');
+      if (!nP && !nJ) return tagsDone(split + '没有可以再按名字标的了（人改过、确认过的不会动）。');
       return sendAll(patchBodies(p)).then(function (res) {
         if (!res.ok) return tagsStop(tagsFail(res.r));
-        return tagsDone('已按文件夹名字自动标好 ' + CL.n(nP) + ' 张照片' + (nJ ? '、' + CL.n(nJ) + ' 个项目' : '') + '（标成「自动标签」，看一眼对不对就好）。');
+        return tagsDone(split + '已按文件夹名字标好 ' + CL.n(nP) + ' 张照片' + (nJ ? '、' + CL.n(nJ) + ' 个项目' : '') +
+          '（名字写的风格优先；标成「自动标签」，看一眼对不对就好）。名字里没写风格的家，再用「AI 看图」补。');
       });
     });
   }
@@ -1243,13 +1277,289 @@
     });
   }
 
+  /* ============================================================
+     AI 看图标风格、柜子（MB.clAi）
+     - 一个项目一个项目看，看完那个项目就送一次 patch（source:'auto'，跟「按文件夹名字自动标」同一条路）
+     - API key、进度只存在这台电脑（localStorage）；送出去的只有照片本身
+     ============================================================ */
+  var AI = { open: false, runner: null, st: null, msg: '', err: false };
+  function usd(x) { return 'US$' + (x < 1 ? x.toFixed(2) : x < 100 ? x.toFixed(1) : Math.round(x)); }
+  function drawAi() {
+    var el = $('#rv-ai'), A = MB.clAi;
+    var ob = $('#rv-ai-open');
+    if (ob) ob.setAttribute('aria-expanded', String(AI.open));
+    if (!el || !A) return;
+    el.hidden = !AI.open;
+    if (!AI.open) return;
+    // 正在打 key 的时候背景重画：留住打到一半的字
+    var old = $('#rv-ai-key'), typed = old ? old.value : '', focused = old && document.activeElement === old;
+    var key = A.getKey(), running = R.bulk === 'ai';
+    var store = A.loadStore();
+    var html = '<p class="hint">Claude 一张一张看照片，标好<b>风格</b>（一个项目定一种）和<b>柜类</b>（只算定制的柜子）。' +
+      '有把握的标成「自动标签」，没把握的标成「不确定」；人确认过、改过的不会动。' +
+      '送出去的只有照片本身（缩成 1024px、没有 EXIF / GPS）—— <b>文件夹名、客户名字不会送出去</b>。</p>';
+    if (!key) {
+      html += '<div class="ai-key"><input type="password" id="rv-ai-key" autocomplete="off" spellcheck="false" placeholder="sk-ant-…（Anthropic API key）" />' +
+        '<button class="mini dark" type="button" data-ai="save-key">存在这台电脑</button></div>' +
+        '<p class="muted">key 只存在这台电脑的这个浏览器，不会上传、不会进 repo。到 console.anthropic.com → API Keys 拿一把。</p>';
+    } else {
+      html += '<p class="muted">API key 已经存在这台电脑 · <button class="linkish" type="button" data-ai="clear-key"' + (running ? ' disabled' : '') + '>清除 key</button></p>';
+    }
+    if (running && AI.st) {
+      var st = AI.st, pr = cat().projects[st.pid];
+      html += '<p class="ai-prog"><b>看了 ' + CL.n(st.done) + ' / ' + CL.n(st.total) + ' 张</b>' + (st.failed ? '（' + CL.n(st.failed) + ' 张没看成）' : '') +
+        ' · 花了约 ' + usd(st.spent) + (pr ? ' · 现在：' + esc(pr.name) : '') + '</p>' +
+        '<div class="btn-row"><button class="mini" type="button" data-ai="stop"' + (st.stopped ? ' disabled' : '') + '>' + (st.stopped ? '停下来中…（看完手上这几张）' : '暂停') + '</button></div>';
+    } else {
+      var groups = A.plan(cat(), store), n = A.countPlan(groups);
+      html += '<p>' + (n ? '还有 <b>' + CL.n(n) + '</b> 张要看（' + groups.length + ' 个项目），全部大约 <b>' + usd(n * A.EST_PER_PHOTO) + '</b>。'
+        : '没有要看的照片了（隐藏的、已确认 / 不确定的、AI 看过的都不算）。') +
+        (store.spent ? ' 到目前一共花了约 ' + usd(store.spent) + '。' : '') + '</p>';
+      if (n > 300) html += '<p class="warn">照片很多：建议先在上面「整理空间」按「只留最好的 N 张」（例：35 张），重复的先隐藏（可以复原），再来标 —— 便宜很多，业务也不用翻几百张差不多的照片。</p>';
+      var off = !key || !n || !!R.bulk;
+      if (n) html += '<div class="btn-row">' +
+        '<button class="mini dark" type="button" data-ai="trial"' + (off ? ' disabled' : '') + '>先试 ' + Math.min(A.TRIAL, n || A.TRIAL) + ' 张</button>' +
+        '<button class="mini" type="button" data-ai="all"' + (off ? ' disabled' : '') + '>' + (store.spent ? '继续，全部看完' : '全部开始') + '</button></div>';
+    }
+    if (AI.msg) html += '<p class="' + (AI.err ? 'err' : 'ok') + '">' + esc(AI.msg) + '</p>';
+    el.innerHTML = html;
+    var inp = $('#rv-ai-key');
+    if (inp && typed) inp.value = typed;
+    if (inp && focused) inp.focus();
+  }
+  function aiMsg(msg, err) { AI.msg = msg; AI.err = !!err; drawAi(); }
+
+  function runAi(limit) {
+    var A = MB.clAi, key = A && A.getKey();
+    if (!key || R.bulk) return Promise.resolve();
+    R.bulk = 'ai';
+    AI.st = null;
+    aiMsg('', false);
+    drawTags();
+    drawTidyMsg();
+    function finish() {
+      R.bulk = '';
+      AI.runner = null;
+      return CL.loadCatalog(true).then(function () { reapplyQueue(); }, function () { /* 下次再拿 */ }).then(function () { render(); });
+    }
+    return settleAll().then(function (left) {
+      if (left) { aiMsg('还有 ' + CL.n(left) + ' 项修改没保存好' + (R.err ? '（' + R.err + '）' : '') + '：先等它保存完再试。', true); return; }
+      var store = A.loadStore();
+      var groups = A.plan(cat(), store, limit ? { limit: limit, perProject: A.TRIAL_PER_PROJECT } : null);
+      if (!A.countPlan(groups)) { aiMsg('没有要看的照片了。', false); return; }
+      var runner = A.makeRunner({
+        store: store,
+        index: cat,
+        look: function (h) {
+          var c = cat(), ph = c.photos[h];
+          var src = ph && c.base ? c.base + ph.k : CL.thumbs[h];
+          if (!src) return Promise.reject(new Error('no_photo'));
+          return A.shrink(src).then(function (b64) { return A.callApi(key, b64); });
+        },
+        send: function (p) {
+          return sendAll(patchBodies(p)).then(function (res) {
+            if (!res.ok) { var e = new Error(tagsFail(res.r)); e.fatal = true; throw e; }
+            return CL.loadCatalog(true).then(function () { reapplyQueue(); render(); }, function () { /* 下次再拿 */ });
+          });
+        },
+        save: function () { A.saveStore(store); },
+        progress: function (st) { AI.st = st; drawAi(); }
+      });
+      AI.runner = runner;
+      // 讯息等 finish() 重新载入清单、重画之后才出现（不会先看到「停下来中…」又跳回来）
+      return runner.run(groups).then(function (st) {
+        AI.err = false;
+        AI.msg = ((st.stopped ? '暂停了：' : '好了：') + '看了 ' + CL.n(st.done) + ' 张、花了约 ' + usd(st.spent) +
+          (st.failed ? '；' + CL.n(st.failed) + ' 张没看成（再按一次会再试）' : '') +
+          '。接着在「项目」选一个项目看一眼：错的点开改，对的按「这个项目看过了，全部确认」。「状态」选「不确定」可以先看 AI 没把握的。' +
+          '改完记得「汇出标签档（备份）」。');
+      }, function (e) {
+        AI.err = true;
+        AI.msg = (e && e.message) || '没做完，请再试一次';
+      });
+    }).then(finish, function (e) { aiMsg((e && e.message) || '没做完，请再试一次', true); return finish(); });
+  }
+  function onAi(act) {
+    var A = MB.clAi;
+    if (act === 'save-key') {
+      var v = ($('#rv-ai-key') || {}).value || '';
+      v = v.trim();
+      if (!/^sk-ant-\S{10,}$/.test(v)) return aiMsg('这不像 Anthropic 的 API key（应该是 sk-ant- 开头）。', true);
+      if (!A.setKey(v)) return aiMsg('这个浏览器存不了 key（无痕视窗？）：请用一般的 Chrome / Edge 视窗。', true);
+      $('#rv-ai-key').value = '';
+      aiMsg('key 存好了（只在这台电脑）。', false);
+    } else if (act === 'clear-key') {
+      A.setKey('');
+      aiMsg('key 清掉了。', false);
+    } else if (act === 'trial') runAi(A.TRIAL);
+    else if (act === 'all') runAi(0);
+    else if (act === 'stop') { if (AI.runner) AI.runner.stop(); drawAi(); }
+  }
+
+  /* 一个项目「看过了」：还是「自动标签」的照片一次改成「已确认」（人工 patch；不确定的要一张一张看，不在这里） */
+  function autoInProject(pid) {
+    var c = cat();
+    return Object.keys(c.photos).filter(function (h) { var ph = c.photos[h]; return ph.p === pid && !ph.hidden && ph.status === 'auto'; });
+  }
+  function confirmProject(pid) {
+    var hs = autoInProject(pid);
+    if (!hs.length) return;
+    if (!window.confirm('这个项目还是「自动标签」的 ' + hs.length + ' 张照片，全部改成「已确认」？\n（错的请先点开改；改成已确认之后，自动标签就不会再动它们）')) return;
+    hs.forEach(function (h) {
+      var q = R.queue.photos[h] || (R.queue.photos[h] = {});
+      q.status = 'confirmed';
+      applyFields('photos', h, { status: 'confirmed' });
+    });
+    scheduleFlush();
+    drawSave();
+    render();
+    CL.toast('已确认 ' + CL.n(hs.length) + ' 张', 3000);
+  }
+
+  /* ============================================================
+     直接删除：照片上「删除这张」、项目上「删除这个项目」、多选几张一起删
+     伺服器的 purge 只删已隐藏的照片：先隐藏（照片或整个项目），再一批最多 1,000 张删掉（同「整理空间」的删除）
+     ============================================================ */
+  function deleteFlow(prep, ids, what) {
+    if (R.bulk) { CL.toast('另一件事还在进行中：等它做完再删。', 4000); return Promise.resolve(false); }
+    if (!ids.length) return Promise.resolve(false);
+    R.bulk = 'purge';
+    render(false, true);
+    CL.toast('删除中…', 2000);
+    var removed = 0;
+    function fail(r) { var e = new Error('purge'); e.r = r; throw e; }
+    return settleAll().then(function (left) {
+      if (left) { var e = new Error('unsaved'); e.msg = '还有 ' + CL.n(left) + ' 项修改没保存好：先等它保存完再删。'; throw e; }
+      return prep();
+    }).then(function () {
+      var i = 0;
+      function next() {
+        if (i >= ids.length) return Promise.resolve();
+        var batch = ids.slice(i, i + PURGE_BATCH);
+        i += PURGE_BATCH;
+        return sendPurge(batch).then(function (r) {
+          if (r.status !== 200 || !r.json) fail(r);
+          removed += r.json.removed | 0;
+          CL.bumpRev(r.json.rev);
+          return next();
+        });
+      }
+      return next();
+    }).then(function () {
+      return { ok: true, msg: '已删除' + what + '（' + CL.n(removed) + ' 张）。' };
+    }, function (e) {
+      return { ok: false, msg: e.msg || (e.r ? purgeFailText(e.r, removed) : '没删成，请再试一次') };
+    }).then(function (res) {
+      R.bulk = '';
+      return CL.loadCatalog(true).then(function () { reapplyQueue(); }, function () { /* 下次再拿 */ }).then(function () {
+        var c = cat();
+        if (R.mode === 'photo' && !c.photos[R.sel]) closeDrawer();
+        if (R.mode === 'project' && !c.projects[R.selPid]) closeDrawer();
+        if (R.f.pid && !c.projects[R.f.pid]) R.f.pid = '';
+        Object.keys(R.picked).forEach(function (h) { if (!c.photos[h]) delete R.picked[h]; });
+        render();
+        CL.toast(res.msg, res.ok ? 3500 : 7000);
+        return res.ok;
+      });
+    });
+  }
+  // 照片：没隐藏的先隐藏（一次最多 400 张），再删
+  function deletePhotos(hs, what) {
+    var c = cat();
+    hs = hs.filter(function (h) { return !!c.photos[h]; });
+    return deleteFlow(function () {
+      var need = hs.filter(function (h) { return !isHidden(cat().photos[h]); });
+      var i = 0;
+      function next() {
+        if (i >= need.length) return Promise.resolve();
+        var b = need.slice(i, i + MAX_ENTRIES);
+        i += MAX_ENTRIES;
+        return CL.call('POST', '/api/catalog', { op: 'hide', photos: b, projects: [] }).then(function (r) {
+          if (r.status !== 200 || !r.json) { var e = new Error('hide'); e.r = r; throw e; }
+          CL.bumpRev(r.json.rev);
+          return next();
+        });
+      }
+      return next();
+    }, hs, what);
+  }
+  // 整个项目：要亲手打「删除」两个字；隐藏项目，再删它所有的照片（照片删光，项目自己拿掉）
+  function deleteProject(pid) {
+    var c = cat(), pr = c.projects[pid];
+    if (!pr) return Promise.resolve(false);
+    var hs = Object.keys(c.photos).filter(function (h) { return c.photos[h].p === pid; });
+    var typed = window.prompt('要删除整个项目「' + pr.name + '」的 ' + hs.length + ' 张照片吗？\n\n删掉就找不回来；旧方案里用到这些照片的地方会变成空位。\n确定的话，请打「删除」两个字：', '');
+    if (typed == null) return Promise.resolve(false);
+    if (String(typed).trim() !== '删除') { CL.toast('没有删：要打「删除」两个字才会删。', 4000); return Promise.resolve(false); }
+    return deleteFlow(function () {
+      if (cat().projects[pid] && cat().projects[pid].hidden) return Promise.resolve();
+      return CL.call('POST', '/api/catalog', { op: 'hide', photos: [], projects: [pid] }).then(function (r) {
+        if (r.status !== 200 || !r.json) { var e = new Error('hide'); e.r = r; throw e; }
+        CL.bumpRev(r.json.rev);
+      });
+    }, hs, '项目「' + pr.name + '」');
+  }
+
+  /* 多选：照片格子上方一条。打开后点照片是勾选 */
+  function buildMulti() {
+    var grid = $('#rv-grid');
+    if (!grid || $('#rv-multi')) return;
+    var el = document.createElement('div');
+    el.className = 'rv-multi';
+    el.id = 'rv-multi';
+    grid.parentNode.insertBefore(el, grid);
+    el.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-multi]');
+      if (!b) return;
+      var a = b.getAttribute('data-multi');
+      var ids = Object.keys(R.picked);
+      if (a === 'on') { R.multi = true; R.picked = {}; if (R.mode) closeDrawer(); drawGrid(); }
+      else if (a === 'off') { R.multi = false; R.picked = {}; drawGrid(); }
+      else if (a === 'page') {
+        var start = R.page * PAGE, slice = R.list.slice(start, start + PAGE);
+        var all = slice.every(function (h) { return R.picked[h]; });
+        slice.forEach(function (h) { if (all) delete R.picked[h]; else R.picked[h] = 1; });
+        drawGrid();
+      } else if (a === 'hide' && ids.length) {
+        ids.forEach(function (h) { if (!cat().photos[h].hidden) setHidden('photos', h, true); });
+        R.picked = {};
+        drawGrid();
+      } else if (a === 'delete' && ids.length) {
+        if (window.confirm('删除选的 ' + ids.length + ' 张照片？\n\n删掉就找不回来；旧方案里用到这些照片的地方会变成空位。')) {
+          deletePhotos(ids, '选的照片').then(function (ok) { if (ok) { R.picked = {}; drawGrid(); } });
+        }
+      }
+      drawMulti();
+    });
+  }
+  function drawMulti() {
+    var el = $('#rv-multi');
+    if (!el) return;
+    if (!R.multi) {
+      el.innerHTML = '<button class="mini" type="button" data-multi="on">多选（一次隐藏 / 删除好几张）</button>';
+      return;
+    }
+    var n = Object.keys(R.picked).length, off = !n || !!R.bulk;
+    el.innerHTML = '<span class="m-n">已选 <b>' + CL.n(n) + '</b> 张</span>' +
+      '<button class="mini" type="button" data-multi="page">全选这一页</button>' +
+      '<button class="mini" type="button" data-multi="hide"' + (off ? ' disabled' : '') + '>隐藏</button>' +
+      '<button class="mini danger" type="button" data-multi="delete"' + (off ? ' disabled' : '') + '>删除</button>' +
+      '<button class="mini" type="button" data-multi="off">取消多选</button>';
+  }
+
   function bindTags() {
     var el = $('#rv-tags');
     if (!el) return;
     el.addEventListener('click', function (e) {
+      var ai = e.target.closest('[data-ai]');
+      if (ai) { onAi(ai.getAttribute('data-ai')); return; }
+      if (e.target.closest('#rv-ai-open')) { AI.open = !AI.open; drawAi(); if (AI.open && $('#rv-ai-key')) $('#rv-ai-key').focus(); return; }
       if (e.target.closest('#rv-auto')) runAuto();
       else if (e.target.closest('#rv-export')) runExport();
       else if (e.target.closest('[data-act="clear-pending"]')) runClearPending();
+    });
+    el.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && e.target.id === 'rv-ai-key') { e.preventDefault(); onAi('save-key'); }
     });
     el.addEventListener('change', function (e) {
       if (e.target.id !== 'rv-import') return;
@@ -1322,17 +1632,23 @@
   function drawFilters() {
     var c = cat(), f = R.f;
     var counts = { unsure: 0, 'new': 0, auto: 0, confirmed: 0 };
-    var perProj = {};
+    var perProj = {}, prods = {};
     Object.keys(c.photos).forEach(function (h) {
       var ph = c.photos[h];
       if (!f.hidden && isHidden(ph)) return;
       if (counts[ph.status] != null) counts[ph.status]++;
       perProj[ph.p] = (perProj[ph.p] || 0) + 1;
+      if (ph.product) prods[ph.product] = (prods[ph.product] || 0) + 1;
     });
+    // 产品：档名读到的原字（水吧柜、书桌…），多的排前面
+    var prodList = Object.keys(prods).sort(function (a, b) { return prods[b] - prods[a] || cmp(a, b); });
+    if (f.prod && f.prod !== '_none' && !prods[f.prod]) prodList.push(f.prod);
     var html = '<label><span>风格</span><select data-f="style">' + opt('', '全部风格', f.style) +
       (MB.CASE_STYLES || []).map(function (s) { return opt(s.key, s.zh + ' ' + s.en, f.style); }).join('') + opt('_none', '（未定风格）', f.style) + '</select></label>';
     html += '<label><span>柜类</span><select data-f="cab">' + opt('', '全部柜类', f.cab) +
       (MB.CASE_CABINETS || []).map(function (s) { return opt(s.key, s.zh + ' ' + s.en, f.cab); }).join('') + opt('_none', '（没标柜类）', f.cab) + '</select></label>';
+    html += '<label><span>产品 <i>档名读的</i></span><select data-f="prod">' + opt('', '全部产品（' + prodList.length + ' 种）', f.prod) +
+      prodList.map(function (k) { return opt(k, k + '（' + (prods[k] || 0) + '）', f.prod); }).join('') + opt('_none', '（没有产品）', f.prod) + '</select></label>';
     html += '<label><span>空间</span><select data-f="room">' + opt('', '全部空间', f.room) +
       (MB.CASE_ROOMS || []).map(function (k) { return opt(k, CL.roomZh(k) + ' ' + CL.roomEn(k), f.room); }).join('') + opt('_none', '（没标空间）', f.room) + '</select></label>';
     html += '<label><span>状态</span><select data-f="status">' + opt('', '全部状态', f.status) +
@@ -1354,14 +1670,17 @@
     var cap = [];
     if (ph.room) cap.push(CL.roomZh(ph.room));
     if (ph.cabinets && ph.cabinets.length) cap.push(CL.cabZh(ph.cabinets[0]) + (ph.cabinets.length > 1 ? ' +' + (ph.cabinets.length - 1) : ''));
-    var st = effStyle(ph);
-    var cls = 'rv-card st-' + esc(ph.status || 'new') + (isHidden(ph) ? ' hid' : '') + (dirty('photos', h) ? ' dirty' : '') + (R.sel === h && R.mode === 'photo' ? ' sel' : '');
+    if (ph.product && !(ph.cabinets && ph.cabinets.length)) cap.push(ph.product);
+    var st = stylesZh(effStyles(ph));
+    var cls = 'rv-card st-' + esc(ph.status || 'new') + (isHidden(ph) ? ' hid' : '') + (dirty('photos', h) ? ' dirty' : '') + (R.sel === h && R.mode === 'photo' ? ' sel' : '') +
+      (R.multi ? ' multi' + (R.picked[h] ? ' picked' : '') : '');
     return '<button type="button" class="' + cls + '" data-h="' + esc(h) + '" title="' + esc(((c.projects[ph.p] || {}).name || '') + ' / ' + (ph.f || '')) + '">' +
       '<span class="ph"><img alt="" loading="lazy"' + (imgSrc(h) ? ' src="' + esc(imgSrc(h)) + '"' : '') + ' /></span>' +
       '<span class="st">' + esc((CL.STATUS[ph.status] || { zh: ph.status }).zh) + '</span>' +
       (ph.hero ? '<span class="hero" title="可当主图">★</span>' : '') +
       (isHidden(ph) ? '<span class="hidmark">已隐藏</span>' : '') +
-      '<span class="cap">' + (cap.length ? esc(cap.join(' · ')) : '<i>未标</i>') + (st ? '<em>' + esc(CL.styleZh(st)) + '</em>' : '') + '</span></button>';
+      (R.multi ? '<span class="pick" aria-hidden="true">' + (R.picked[h] ? '✓' : '') + '</span>' : '') +
+      '<span class="cap">' + (cap.length ? esc(cap.join(' · ')) : '<i>未标</i>') + (st ? '<em>' + esc(st) + '</em>' : '') + '</span></button>';
   }
 
   // 同一个按钮元素只换 class 和文字、图不动：
@@ -1407,7 +1726,7 @@
     if (pr.area) bits.push(pr.area);
     var pt = (MB.CASE_PTYPES || []).filter(function (x) { return x.key === pr.ptype; })[0];
     if (pt) bits.push(pt.zh);
-    if (pr.style) bits.push(CL.styleZh(pr.style));
+    if (pr.style) bits.push(stylesZh([pr.style, pr.style2].filter(Boolean)));
     (pr.traits || []).forEach(function (t) {
       var tr = (MB.CASE_TRAITS || []).filter(function (x) { return x.key === t; })[0];
       if (tr) bits.push(tr.zh);
@@ -1425,7 +1744,12 @@
     el.innerHTML = '<div><p class="sub-h">项目 · 只给业务看</p><h3>' + esc(pr.name) + (pr.hidden ? ' <span class="tag warn">已隐藏</span>' : '') + '</h3>' +
       '<p class="muted">' + (pr.n | 0) + ' 张' + (nHid ? '（隐藏了 ' + CL.n(nHid) + ' 张）' : '') + (bits.length ? ' · ' + esc(bits.join(' · ')) : ' · 还没填区域 / 房型 / 风格') +
       (pr.by ? ' · 上次修改 ' + esc(who(pr.by)) + ' ' + esc(CL.time(pr.ts)) : '') + '</p></div>' +
-      '<div class="btn-row"><button class="mini dark" type="button" data-act="proj-edit">编辑项目资料</button>' + keepButtons(pid) + '</div>';
+      '<div class="btn-row"><button class="mini dark" type="button" data-act="proj-edit">编辑项目资料</button>' + confirmButton(pid) + keepButtons(pid) +
+      '<button class="mini danger" type="button" data-act="delete-project"' + (R.bulk ? ' disabled' : '') + '>删除这个项目</button></div>';
+  }
+  function confirmButton(pid) {
+    var n = autoInProject(pid).length;
+    return n ? '<button class="mini" type="button" data-act="confirm-proj" title="错的先点开改，剩下对的一次确认">这个项目看过了，' + CL.n(n) + ' 张全部确认</button>' : '';
   }
   // 项目列、项目资料共用：只留最好的 N 张、复原这个项目隐藏的照片
   function keepButtons(pid) {
@@ -1466,7 +1790,8 @@
     (MB.CASE_CABINETS || []).forEach(function (cb) { if (ph.room && (!cb.rooms.length || cb.rooms.indexOf(ph.room) >= 0)) cabFit[cb.key] = 1; });
     var rooms = (MB.CASE_ROOMS || []).map(function (k) { return { key: k, zh: CL.roomZh(k) }; });
     var cabs = (MB.CASE_CABINETS || []).map(function (cb) { return { key: cb.key, zh: cb.zh, fit: cabFit[cb.key] }; });
-    var styles = [{ key: '', zh: '跟项目' + (pr.style ? '（' + CL.styleZh(pr.style) + '）' : '（未定）') }].concat((MB.CASE_STYLES || []).map(function (s) { return { key: s.key, zh: s.zh }; }));
+    var styles = [{ key: '', zh: '跟项目' + (pr.style ? '（' + stylesZh([pr.style, pr.style2].filter(Boolean)) + '）' : '（未定）') }].concat((MB.CASE_STYLES || []).map(function (s) { return { key: s.key, zh: s.zh }; }));
+    var styles2 = [{ key: '', zh: '没有' }].concat((MB.CASE_STYLES || []).map(function (s) { return { key: s.key, zh: s.zh }; }));
     var stats = ['unsure', 'new', 'auto', 'confirmed'].map(function (k) { return { key: k, zh: CL.STATUS[k].zh }; });
     var desc = ph.desc || {};
     var html = '<div class="dr-nav"><button class="icon" type="button" data-nav="-1" aria-label="上一张"' + (idx > 0 ? '' : ' disabled') + '>←</button>' +
@@ -1480,12 +1805,15 @@
       '<div class="dr-sec"><p class="sub-h">空间 <i>Room</i></p>' + chips('room', rooms, ph.room || '', false) + '</div>' +
       '<div class="dr-sec"><p class="sub-h">柜类 <i>可多选 · 金框 = 这个空间常见的</i></p>' + chips('cabinets', cabs, ph.cabinets || [], true) + '</div>' +
       '<div class="dr-sec"><p class="sub-h">风格 <i>不选 = 跟项目</i></p>' + chips('style', styles, ph.style || '', false) + '</div>' +
+      (ph.style ? '<div class="dr-sec"><p class="sub-h">第二种风格 <i>可不选（例：现代 + 美式）</i></p>' + chips('style2', styles2, ph.style2 || '', false) + '</div>' : '') +
+      '<div class="dr-sec"><p class="sub-h">产品 <i>照档名读的（例：水吧柜）；可以改，清空 = 没有</i></p><input type="text" data-field="product" maxlength="10" value="' + esc(ph.product || '') + '" placeholder="例：水吧柜、书桌" /></div>' +
       '<label class="switch"><input type="checkbox" data-field="hero"' + (ph.hero ? ' checked' : '') + ' /><span></span>可当主图 <small>拍得完整、光线好，适合放在方案的大图</small></label>' +
       ((desc.zh || desc.en) ? '<div class="dr-sec desc"><p class="sub-h">说明（分类时写的）</p>' + (desc.zh ? '<p>' + esc(desc.zh) + '</p>' : '') + (desc.en ? '<p class="muted">' + esc(desc.en) + '</p>' : '') + '</div>' : '') +
       '<p class="dr-meta">' + (ph.by ? '上次修改：<b>' + esc(who(ph.by)) + '</b> · ' + esc(CL.time(ph.ts)) : '') +
       ' · ' + ph.w + '×' + ph.h + (ph.sz ? ' · ' + CL.mb(ph.sz) : '') + (ph.hidden ? ' · 由 ' + esc(ph.hidden.by) + ' 隐藏' : '') + '</p>' +
       '<div class="dr-actions"><button class="btn gold" type="button" data-act="ok-next">确认 ✓ 下一张</button>' +
       '<button class="btn ghost" type="button" data-act="hide-photo"' + (R.bulk === 'purge' ? ' disabled title="正在删除，等删完再按"' : '') + '>' + (ph.hidden ? '复原这张' : '隐藏这张') + '</button>' +
+      '<button class="btn ghost danger" type="button" data-act="delete-photo"' + (R.bulk ? ' disabled' : '') + '>删除这张</button>' +
       '<button class="btn ghost" type="button" data-act="proj-edit">项目资料</button></div>';
     return html;
   }
@@ -1506,8 +1834,10 @@
       '<div class="dr-sec"><p class="sub-h">房型</p>' + chips('ptype', ptypes, pr.ptype || '', false) + '</div>' +
       '<div class="dr-sec"><p class="sub-h">家庭特点 <i>可多选</i></p>' + chips('traits', traits, pr.traits || [], true) + '</div>' +
       '<div class="dr-sec"><p class="sub-h">风格 <i>整个项目</i></p>' + chips('pstyle', styles, pr.style || '', false) + '</div>' +
+      '<div class="dr-sec"><p class="sub-h">第二种风格 <i>可不选（例：现代 + 美式）</i></p>' + chips('pstyle2', [{ key: '', zh: '没有' }].concat(styles.slice(1)), pr.style2 || '', false) + '</div>' +
       '<div class="dr-actions"><button class="btn ghost" type="button" data-act="hide-project"' + (R.bulk === 'purge' ? ' disabled title="正在删除，等删完再按"' : '') + '>' + (pr.hidden ? '复原这个项目' : '隐藏这个项目') + '</button>' +
-      (R.f.pid !== pid ? '<button class="btn ghost" type="button" data-act="only-project">只看这个项目</button>' : '') + '</div>' +
+      (R.f.pid !== pid ? '<button class="btn ghost" type="button" data-act="only-project">只看这个项目</button>' : '') +
+      '<button class="btn ghost danger" type="button" data-act="delete-project"' + (R.bulk ? ' disabled' : '') + '>删除这个项目</button></div>' +
       (MB.clPick && !pr.hidden ? '<div class="dr-sec dr-keep"><p class="sub-h">照片太多 <i>免费方案空间有限</i></p>' +
         '<p class="hint">只留最好的几张（同一个角度只留一张，每个空间都留到），其它的先隐藏，可以复原。</p>' +
         '<div class="dr-actions">' + keepButtons(pid).replace(/class="mini"/g, 'class="btn ghost"') + '</div></div>' : '') +
@@ -1550,6 +1880,10 @@
     if (q.plan === 'local') {
       b.textContent = '存在这台电脑 · 已用约 ' + CL.mb(q.bytes || 0) + (q.bytesLeft != null ? ' / 可用约 ' + CL.mb(q.bytesLeft) : '');
       b.title = '照片存在这台电脑的浏览器里（免费，没有每月的次数限制）。不要清除浏览器的资料，不然照片会不见。';
+    } else if (q.plan === 'supabase') {
+      b.textContent = '云端（Supabase）· ' + (spaceText(q) || '空间不限');
+      over = !!(q.bytes != null && q.bytesCap && q.bytes >= q.bytesCap);
+      b.title = '照片存在公司的 Supabase：没有每月的次数限制，空间到上限会自己停下来。' + (over ? '现在已经满了：先到「整理空间」删掉隐藏的照片。' : '');
     } else if (q.plan === 'pro') {
       b.textContent = 'Pro 方案 · 不限额度 · 本月写入约 ' + CL.n(q.writes) + ' 次';
       b.title = 'Vercel Pro 方案：写入次数、空间超过只是多付钱，案例库不会被停掉';
@@ -1596,6 +1930,7 @@
     drawLog();
     drawTidy();
     drawTags();
+    drawMulti();
     if (R.ask) drawAsk();
     if (quiet && R.mode) drawDrawerTag();
     else drawDrawer();
@@ -1656,12 +1991,22 @@
     });
     $('#rv-grid').addEventListener('click', function (e) {
       var b = e.target.closest('.rv-card');
-      if (b) openPhoto(b.getAttribute('data-h'));
+      if (!b) return;
+      var h = b.getAttribute('data-h');
+      if (R.multi) {
+        if (R.picked[h]) delete R.picked[h]; else R.picked[h] = 1;
+        drawCard(h);
+        drawMulti();
+        return;
+      }
+      openPhoto(h);
     });
     $('#rv-proj').addEventListener('click', function (e) {
       if (e.target.closest('[data-act="proj-edit"]')) openProject(R.f.pid);
       else if (e.target.closest('[data-act="keep-proj"]')) openAsk(R.f.pid);
       else if (e.target.closest('[data-act="unhide-proj-photos"]')) restoreProject(R.f.pid);
+      else if (e.target.closest('[data-act="confirm-proj"]')) confirmProject(R.f.pid);
+      else if (e.target.closest('[data-act="delete-project"]')) deleteProject(R.f.pid);
     });
     $('#rv-savebtn').addEventListener('click', function () { flushNow(); });
     // 离开这一页（关分页、切到别的 App）：马上存（keepalive：页面关了请求照样送完）
@@ -1693,6 +2038,10 @@
         if (!nav(1)) { CL.toast('这是最后一张了'); }
       } else if (a === 'hide-photo') {
         setHidden('photos', R.sel, !c.photos[R.sel].hidden);
+      } else if (a === 'delete-photo') {
+        if (window.confirm('删除这张照片？\n\n删掉就找不回来；旧方案里用到这张的地方会变成空位。')) deletePhotos([R.sel], '这张照片');
+      } else if (a === 'delete-project') {
+        deleteProject(R.selPid);
       } else if (a === 'proj-edit') {
         var pid = R.mode === 'photo' && c.photos[R.sel] ? c.photos[R.sel].p : R.f.pid;
         openProject(pid, R.mode === 'photo' ? R.sel : '');
@@ -1711,6 +2060,12 @@
     dr.addEventListener('change', function (e) {
       var t = e.target;
       if (t.getAttribute('data-field') === 'hero') edit('photos', R.sel, 'hero', t.checked);
+      if (t.getAttribute('data-field') === 'product') {
+        var v = t.value.trim(), cur = (cat().photos[R.sel] || {}).product || '';
+        if (v === cur) return;
+        if (v && !MB.clCore.isProduct(v)) { CL.toast('产品名要 2–10 个中文字，以柜、台、墙、门、板、床、架、桌、岛、吧结尾（例：水吧柜、书桌）', 5000); t.value = cur; return; }
+        edit('photos', R.sel, 'product', v);
+      }
     });
     // 区域：打字时不重画（游标不跳），停 0.6 秒才排队
     var areaTimer = 0;
@@ -1791,7 +2146,8 @@
       if (!ph) return;
       if (kind === 'status') edit('photos', R.sel, 'status', v);
       else if (kind === 'room') edit('photos', R.sel, 'room', ph.room === v ? '' : v);
-      else if (kind === 'style') edit('photos', R.sel, 'style', v);
+      else if (kind === 'style') { edit('photos', R.sel, 'style', v); if (!v && ph.style2) edit('photos', R.sel, 'style2', ''); }
+      else if (kind === 'style2') edit('photos', R.sel, 'style2', v === ph.style ? '' : v);
       else if (kind === 'cabinets') {
         var cur = (ph.cabinets || []).slice();
         var i = cur.indexOf(v);
@@ -1806,6 +2162,7 @@
       if (!pr) return;
       if (kind === 'ptype') edit('projects', R.selPid, 'ptype', v);
       else if (kind === 'pstyle') edit('projects', R.selPid, 'style', v);
+      else if (kind === 'pstyle2') edit('projects', R.selPid, 'style2', v === pr.style ? '' : v);
       else if (kind === 'traits') {
         var tr = (pr.traits || []).slice();
         var j = tr.indexOf(v);
@@ -1822,6 +2179,7 @@
       inited = true;
       buildTidy();
       buildTags();
+      buildMulti();
       bind();
       bindTidy();
       bindTags();
@@ -1839,6 +2197,8 @@
     hiddenStats: hiddenStats,
     quota: quotaNow,
     autoTags: function () { return runAuto(); },
+    deletePhotos: function (hs) { return deletePhotos(hs, '照片'); },
+    aiTags: function (limit) { return runAi(limit || 0); },
     importTags: function (file) { return runImport(file); }
   };
 })();

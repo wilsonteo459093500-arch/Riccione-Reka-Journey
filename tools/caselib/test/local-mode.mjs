@@ -175,7 +175,7 @@ test('local mode: 「存在这台电脑」 asks only for a name; dropped folders
   assert.equal(byF(idx, s.pid, 'IMG_0001.jpg').status, 'new', 'no sub-folder → nothing guessed');
   assert.equal(byF(idx, s.pid, 'IMG_0002.jpg').shot, byF(idx, s.pid, 'IMG_0001.jpg').hash, 'near-duplicate grouped into one shot');
   const ch = byName(idx, info.cheras), kp = byName(idx, info.kepong);
-  assert.deepEqual([ch.style, ch.area], ['', ''], '「现代」 alone is not a style word → nothing guessed');
+  assert.deepEqual([ch.style, ch.area], ['modern', 'Cheras'], '「现代」 alone reads as 现代简约 (company folders write it that way)');
   assert.deepEqual([kp.style, kp.area], ['modern', 'Kepong']);
   const chRooms = photosOf(idx, ch.pid).map((x) => x.f.split('/')[0] + '=' + x.room + ':' + x.cabinets.join('+')).sort();
   assert.deepEqual(chRooms, ['主卧=master:', '主卧=master:', '主卧=master:', '厨房=kitchen:kitchen', '厨房=kitchen:kitchen', '厨房=kitchen:kitchen', '厨房=kitchen:kitchen', '电视墙=living:tvwall', '电视墙=living:tvwall']);
@@ -246,7 +246,7 @@ test('local mode review: edit tags, hide, 只留最好的 N 张 and delete (file
   await page.click('#drawer .dr-x');
   // 「按文件夹名字自动标」：人改过的不动（这张已确认）
   await page.click('#rv-auto');
-  await page.waitForFunction(() => /自动标|没有可以自动标/.test(document.querySelector('#rv-tags-msg').textContent));
+  await page.waitForFunction(() => /按文件夹名字标好|没有可以再按名字标/.test(document.querySelector('#rv-tags-msg').textContent));
   idx = await localIndex(page);
   assert.equal(idx.photos[rot.hash].room, 'living', 'auto tags never override a confirmed photo');
 

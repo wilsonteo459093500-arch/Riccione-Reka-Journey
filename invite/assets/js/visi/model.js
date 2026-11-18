@@ -589,7 +589,7 @@
   /** 一张照片跟客户喜欢的有多像：2 同风格 · 1 同系列 · 0（没选风格就全部 0：不偏好） */
   function likeOf(p) {
     var st = (p && p.caseStyle) || '', ser = MB.likedSeries(p);
-    return function (c) { return st && c.style === st ? 2 : ser && c.series === ser ? 1 : 0; };
+    return function (c) { return st && MB.hasStyle(c, st) ? 2 : ser && c.series === ser ? 1 : 0; };
   }
   /** 一页的 key（预览的 data-goto、体检的「去改」、MB.deckImages 的 dups.where 同一套）：room:<uid> · series:<k> · type */
   MB.pageKey = function (pg) { return pg.room ? 'room:' + pg.room.uid : pg.series ? 'series:' + pg.series : pg.type; };
@@ -673,7 +673,7 @@
   /** 案例 → 图库 / 自动配图的那一份（跟内置图同一个形状，多了 isCase 与案例自己的标签） */
   function caseItem(c) {
     return { ref: c.id, src: c.src, thumb: c.thumb || '', w: +c.w || 0, h: +c.h || 0, rooms: c.rooms || [], series: c.series || '',
-      own: false, isCase: true, label: c.label || '', en: c.en || '', zh: c.zh || '', style: c.style || '', cabinets: c.cabinets || [],
+      own: false, isCase: true, label: c.label || '', en: c.en || '', zh: c.zh || '', style: c.style || '', style2: c.style2 || '', product: c.product || '', cabinets: c.cabinets || [],
       hero: !!c.hero, pid: c.pid || '', area: c.area || '', ptype: c.ptype || '', traits: c.traits || [], status: c.status || '', hidden: !!c.hidden };
   }
   /** 这份方案能自动用的案例（没隐藏、不是 unsure）：给了空间 = 拍那个空间的（setCases 先分好）。
@@ -853,7 +853,7 @@
         if (!c || have[c.id] || (resolve && !resolve(c.id))) return;
         have[c.id] = 1;
         out.push({ ref: c.id, w: +c.w || 0, h: +c.h || 0, series: c.series || '', rooms: c.rooms || [], own: false,
-          isCase: true, style: c.style || '', cabinets: c.cabinets || [], hero: !!c.hero, pid: c.pid || '', blocked: blocked });
+          isCase: true, style: c.style || '', style2: c.style2 || '', cabinets: c.cabinets || [], hero: !!c.hero, pid: c.pid || '', blocked: blocked });
       };
       poolCases(p).forEach(function (c) { addCase(c, false); });
       // 方案里已经用到的案例（销售手选、旧方案）：照样算一张图（隐藏 / 不确定的不再拿去配别页）
@@ -1307,7 +1307,7 @@
       if (ctx.traits[t] && TRAIT_WHY[t]) { s += 3; facts.push({ zh: TRAIT_WHY[t][0], en: TRAIT_WHY[t][1] }); }
     });
     // 风格：客户喜欢的那一种 > 那种风格对应的溪岸系列（系列不写进「为什么」：太笼统）
-    var st = ctx.style && c.style === ctx.style ? findKey(MB.CASE_STYLES, c.style) : null;
+    var st = ctx.style && MB.hasStyle(c, ctx.style) ? findKey(MB.CASE_STYLES, ctx.style) : null;
     if (st) { s += 4; facts.push({ zh: '同样是' + st.zh + (/风$/.test(st.zh) ? '' : '风格'), en: 'the same ' + (STYLE_EN[st.key] || st.en) + ' style' }); }
     else if (ctx.styleSeries && c.series === ctx.styleSeries) s += 3;
     if (c.hero) s += 1;
@@ -1359,7 +1359,7 @@
       // 客户说了喜欢的风格：只挑那一种（或那种风格对应的系列）—— 别的风格的厨房「厨房有橱柜」也对得上，
       // 但放进去客户会开始比较（体检也会提醒）；没说就全部系列都可以
       if (!caseIsRoom(c)) return;
-      if (ctx.style && c.style !== ctx.style && c.series !== ctx.styleSeries) return;
+      if (ctx.style && !MB.hasStyle(c, ctx.style) && c.series !== ctx.styleSeries) return;
       var f = caseFacts(p, c, ctx);
       if (f.facts.length) list.push({ c: c, f: f });
     });
@@ -1391,7 +1391,7 @@
       // 自动放进客户的方案：只放有人看过、标好空间的空间照（新上传还没人看的、平面图、截图都不放）
       if (!caseIsRoom(c) || c.status === 'new') return;
       // 客户说了喜欢的风格（p.caseStyle）就只要那一种 —— 宁可少放，也不放体检会说「风格不一样」的
-      if (ctx.style && c.style !== ctx.style) return;
+      if (ctx.style && !MB.hasStyle(c, ctx.style)) return;
       list.push({ c: c, s: caseFacts(p, c, ctx).score });
     });
     var per = {}, out = [];
