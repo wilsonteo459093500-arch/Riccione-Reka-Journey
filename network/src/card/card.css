@@ -348,9 +348,10 @@ footer { padding: 40px 0 max(36px, env(safe-area-inset-bottom)); text-align: cen
 .series { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .ser { margin: 0; }
 .ser img { width: 100%; aspect-ratio: 4 / 5; object-fit: cover; border-radius: 12px; background: #e8e8ed; }
+.ser .ser-blank { display: flex; align-items: center; justify-content: center; width: 100%; aspect-ratio: 4 / 5; border-radius: 12px; background: linear-gradient(160deg, #efe9e1, #e2d8cb); color: #8a6f52; font-size: 44px; font-weight: 600; }
 .ser figcaption { display: flex; flex-direction: column; gap: 2px; padding: 8px 2px 0; }
 .ser b { font-size: 14.5px; font-weight: 600; }
-.ser span { font-size: 12px; line-height: 1.45; color: var(--muted); }
+.ser figcaption span { font-size: 12px; line-height: 1.45; color: var(--muted); }
 
 /* ---------- Instagram 视频 ---------- */
 .videos .ig + .ig { margin-top: 18px; }

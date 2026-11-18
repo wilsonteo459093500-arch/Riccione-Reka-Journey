@@ -376,7 +376,7 @@ function brandBlock(b, pic) {
       h('ul.awards', null, b.awards.map((m) => h('li', null, h('span.yr', null, m.year), h('span.aw', null, h('b', null, m.title), m.note ? h('small', null, m.note) : null))))) : null,
     b.chips && b.chips.length ? h('div.shows', null, b.chips_title ? h('p.shows-t', null, b.chips_title) : null, h('div.chips', null, b.chips.map((x) => h('span.chip', null, x)))) : null,
     b.series && b.series.length ? h('div.b-part', null, sub(tr.series), h('div.series', null, b.series.map((m) => h('figure.ser', null,
-      m.image ? h('img', { src: m.image, alt: m.title, loading: 'lazy', decoding: 'async' }) : null,
+      m.image ? h('img', { src: m.image, alt: m.title, loading: 'lazy', decoding: 'async' }) : h('span.ser-blank', { 'aria-hidden': 'true' }, [...m.title][0]),
       h('figcaption', null, h('b', null, m.title), m.note ? h('span', null, m.note) : null))))) : null,
     pic(b.photo2, b.name),
     b.milestones && b.milestones.length ? h('div.b-part', null, sub(tr.story), h('ol.timeline', null, b.milestones.map((m) => h('li', null, h('span.yr', null, m.year), h('span', null, m.text))))) : null);

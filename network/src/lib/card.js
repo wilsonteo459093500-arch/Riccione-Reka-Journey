@@ -101,7 +101,7 @@ export const DEFAULT_CARD = {
       ],
       chips_title: '常年参展',
       chips: ['CIFF 广州家博会', 'CIFF 上海 · 设计馆', 'ARCHIDEX · KLCC'],
-      photo2_path: '/card/riccione-cabinet.jpg',
+      photo2_path: '',
       milestones: [
         { year: '1979', text: '父辈开始做木作' },
         { year: '2002', text: '中国公司成立：广东瑞吉欧家具有限公司' },
@@ -113,8 +113,12 @@ export const DEFAULT_CARD = {
         { year: '2025', text: 'Riccione Reka 全屋定制成立' },
       ],
       series: [
-        { title: '陀螺系列 Gasing', note: '埃及柱式桌腿、陀螺拉手', image_path: '/card/riccione-gasing.jpg' },
-        { title: '编藤系列 Rattan', note: '实木与藤编', image_path: '/card/riccione-rattan.jpg' },
+        { title: '陀螺 Gasing', note: '设计创新：埃及柱式桌腿、陀螺拉手', image_path: '/card/riccione-gasing.jpg' },
+        { title: '编藤 Rattan', note: '材料探索：实木与藤编', image_path: '/card/riccione-rattan.jpg' },
+        { title: '溪脉 Stream Vein', note: '流水般的波浪纹柜门', image_path: '/card/riccione-cabinet.jpg' },
+        { title: '北欧经典', note: '复刻经典', image_path: '' },
+        { title: '非洲木纹 Afrain', note: '个性化的木纹', image_path: '' },
+        { title: '大圆边 Arked', note: '经典再创', image_path: '' },
       ],
     },
     {
