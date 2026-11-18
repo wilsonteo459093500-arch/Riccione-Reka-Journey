@@ -51,6 +51,27 @@
 3. AI 方案主题建议：规则要先 brainstorm
 4. 展厅播放接 D5 / SU / 3ds Max 漫游视频：先调查设计师能导出什么格式
 
+## FoloToy（network/folotoy/，PR #81 未合并，2026-11-18）
+
+- 已做：
+  - 木纹封面 → 名片二维码
+  - 口袋机菜单 12 项：蜡烛生日歌（吹气熄）、木鱼、手电筒、计时器、倒数、番茄钟、叠叠乐、记忆三色、求签、抽奖
+  - 车用遥控器（BLE 媒体键）
+  - SPACE 车控 Android app v0.1（`android/`：按住下开微信读书、按住确定选朋友打 WhatsApp）
+- 用户真机测过：名片、车用遥控器（YouTube / 语音助理 OK）。口袋机、app 还没回报
+- 待用户给：求签签文审核、抽奖真奖项、微信读书「抓画面结构」
+- 下一步（用户要省 token、分阶段）：
+  - **A** 落落方块（不用俄罗斯方块 / Tetris 名字）+ 解压游戏（泡泡纸 / 狂按挑战 / 捏捏乐，等用户挑）
+  - **B** 手机找 FoloToy（蓝牙常开取舍待定）
+  - **C** DEKU 句库：笑话 + 稻盛和夫 / 郭鹤年 / Musk 原话附出处，用户审过才放；对它说话用关键词，不用 AI
+  - **D** Wi-Fi：星座、新闻（Grok 邮件）、读书
+- 怎么做：
+  - 照 `network/folotoy/README.md`、`network/PLAN.md`
+  - 编译：`build.sh`；截图：`sim/run.sh`；app：`android/build.sh`
+  - 新画面照 `games_screen.c` / `pocket_model.c` 的写法
+- 编 Android 要 `dl.google.com`：已建个人环境 riccione-reka-journey
+- Vercel 免费方案一天 100 次部署，推太多会被挡（不是程序问题）
+
 ## 开发备忘（blueprint/）
 
 - 测试和构建：
