@@ -10,6 +10,8 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <!-- DEKU：按住 FoloToy 确定时，用手机的语音转文字听你说什么 -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- 忘了带提醒 -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- 请手机不要为了省电把无障碍服务关掉 -->
@@ -21,6 +23,10 @@
         <package android:name="com.tencent.weread" />
         <package android:name="com.waze" />
         <package android:name="com.google.android.apps.maps" />
+        <!-- Android 11 起要宣告：用手机的语音转文字服务（DEKU） -->
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
     </queries>
 
     <application

@@ -13,6 +13,7 @@
 #include "candle_screen.h"
 #include "car_screen.h"
 #include "find_screen.h"
+#include "deku_screen.h"
 #include "menu_screen.h"
 #include "games_screen.h"
 #include "timer_screen.h"
@@ -91,12 +92,13 @@ static void car_press(car_remote_state_t *s, space_card_btn_t b, space_card_ev_t
 }
 
 int main(int argc, char **argv) {
-    if (argc < 5) { fprintf(stderr, "用法：%s <名片输出资料夹> <车用输出资料夹> <口袋机输出资料夹> <找 FoloToy 输出资料夹> [活动网址]\n", argv[0]); return 2; }
+    if (argc < 6) { fprintf(stderr, "用法：%s <名片> <车用> <口袋机> <找 FoloToy> <DEKU 输出资料夹> [活动网址]\n", argv[0]); return 2; }
     s_out = argv[1];
     const char *car_out = argv[2];
     const char *pocket_out = argv[3];
     const char *find_out = argv[4];
-    const char *event_url = argc > 5 ? argv[5] : "";
+    const char *deku_out = argv[5];
+    const char *event_url = argc > 6 ? argv[6] : "";
 
     lv_init();
     lv_tick_set_cb(tick);
@@ -413,5 +415,46 @@ int main(int argc, char **argv) {
     find_screen_hide();
     advance_ms(50);
     dump("3-found.ppm");
+
+    // ---- DEKU：菜单 → 等你（没有 app）→ 有 app 等你 → 在听 → 想 → 说 → 没听懂 ----
+    s_out = deku_out;
+    space_card_hide();
+    old = lv_screen_active();
+    menu_init(&menu);
+    while (menu.cursor != MENU_DEKU) menu_on_key(&menu, SPACE_CARD_BTN_DOWN, SPACE_CARD_EV_CLICK);
+    menu_screen_show(&menu);
+    lv_obj_delete(old);
+    dump("1-menu.ppm");
+    menu_screen_hide();
+    old = lv_screen_active();
+    static deku_state_t deku;
+    deku_init(&deku, 1);
+    g_app_present = false;
+    deku_screen_show(&deku);
+    lv_obj_delete(old);
+    advance_ms(400);
+    dump("2-idle.ppm");
+    g_app_present = true;
+    advance_ms(200);
+    dump("3-idle-app.ppm");
+    deku_on_key(&deku, SPACE_CARD_BTN_OK, SPACE_CARD_EV_PRESS, true, (uint32_t)(g_now_us / 1000));
+    deku_screen_update();
+    advance_ms(500);
+    dump("4-listen.ppm");
+    deku_on_key(&deku, SPACE_CARD_BTN_OK, SPACE_CARD_EV_RELEASE, true, (uint32_t)(g_now_us / 1000));
+    deku_screen_update();
+    advance_ms(700);
+    dump("5-think.ppm");
+    static const uint8_t say[] = { 0x04, 'J', '0', '0' };
+    deku_on_cmd(&deku, say, sizeof say, (uint32_t)(g_now_us / 1000));
+    deku_screen_update();
+    advance_ms(300);
+    dump("6-say.ppm");
+    static const uint8_t unk[] = { 0x05 };
+    deku_on_cmd(&deku, unk, 1, (uint32_t)(g_now_us / 1000));
+    deku_screen_update();
+    advance_ms(200);
+    dump("7-confused.ppm");
+    deku_screen_hide();
     return 0;
 }

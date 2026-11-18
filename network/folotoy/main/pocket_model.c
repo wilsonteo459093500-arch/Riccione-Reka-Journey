@@ -49,6 +49,7 @@ const char *menu_item_text(menu_item_t item) {
     case MENU_BUBBLE: return "泡泡纸";
     case MENU_MASH: return "狂按挑战";
     case MENU_SQUISH: return "捏捏乐";
+    case MENU_DEKU: return "DEKU 讲笑话";
     case MENU_CAR: return "车用遥控器";
     case MENU_BACK: return "返回名片";
     default: return "";
@@ -59,6 +60,7 @@ const char *menu_section(menu_item_t item) {
     if (item <= MENU_POMODORO) return "工具";
     if (item <= MENU_LOTTERY) return "游戏";
     if (item <= MENU_SQUISH) return "解压";
+    if (item == MENU_DEKU) return "小助理";
     return "";
 }
 

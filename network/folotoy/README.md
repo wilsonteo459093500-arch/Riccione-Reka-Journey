@@ -11,6 +11,7 @@ FoloToy AI Passport（ESP32-C3、240×320 屏幕、三个按键）有两个模�
   - 工具：**蜡烛与生日歌**、**木鱼**、**手电筒**、**计时器**、**倒数计时**、**番茄钟**
   - 游戏：**叠叠乐**、**落落方块**、**记忆三色**、**求签**、**抽奖**
   - 解压：**泡泡纸**、**狂按挑战**、**捏捏乐**
+  - 小助理：**DEKU 讲笑话**（笑话、稻盛和夫 / 郭鹤年 / Musk 的原话；见下面「DEKU 小助理」）
   - 车用遥控器、返回名片
   - 见下面「口袋机」
 - **车用遥控器模式**：FoloToy 当 Android 手机的**蓝牙媒体遥控器**，手机不用装 app。开车时按 FoloToy 控制微信读书听书、音乐，长按叫语音助理。见下面「车用遥控器」。
@@ -207,7 +208,32 @@ FoloToy 背面就是一枚**被动 NTAG213** NFC 芯片（官方规格：支持�
 - **关机时找不到**：任何做法都要 FoloToy 开着。没电、关机时就看「最后在哪里」。
 - 一次只能连一支手机（跟车用模式一样）。
 
-## SPACE 车控 Android app（第二阶段，v0.2）
+## DEKU 小助理（v0.3，2026-11-18）
+
+![模拟画面：菜单 / 等你（没有 app）/ 等你（有 app，眨眼）/ 在听 / 想一下 / 说（示范句）/ 没听清楚](./firmware/deku-screens.png)
+
+口袋机菜单 →「DEKU 讲笑话」。DEKU 是一块原创的小木块（跟开机封面同一种木色），会眨眼、听、想、说。
+
+| 键 | 做什么 |
+|---|---|
+| 确定 **按住** | 对它说话：「讲个笑话」「稻盛和夫」「郭鹤年」「马斯克」「名言」「再来一个」。放开后**手机念出来**，FoloToy 显示同一句和出处（要开 SPACE 车控 app v0.3） |
+| 上 短按 | 直接来一个笑话 |
+| 下 短按 | 直接来一句名人的话（稻盛和夫 → 郭鹤年 → Musk 轮流） |
+| 上 长按 | 回菜单 |
+
+- 听话用手机内建的语音转文字（Android，免费），再用**关键词**挑句子：**不用 AI、不花钱**。听不懂会说「你可以说：讲个笑话、稻盛和夫……」。
+- Musk 的话：先念中文翻译，再念英文原句（英文原句才是他说的话）。
+- 没开 app 时，上 / 下 / 确定照样有句子，只是没有声音。
+- 句子一轮里不重复。
+
+### 句库：审过才放（AI 只能建议、不能编）
+
+- 句库在 `deku/lines.json`：笑话是 Claude 写的原创；名人的话是 Claude 起草的候选，**都附出处和把握（高 / 中 / 低）**。
+- **每一句都要用户审过（`status: approved`）才会放进 FoloToy 和手机**。现在全部是草稿，所以 DEKU 会说「句库还在审」。
+- 审核网页：https://claude.ai/artifact/4DcXNNxeknMGqygntM4W6V（每句选「要 / 不要」→「复制结果」贴回给 Claude）。郭鹤年只找到二手报道，建议对过《郭鹤年自传》再勾。
+- 审好之后（给开发者）：改 `lines.json` 的 `status` → `python3 tools/make_deku.py`（产生 `main/deku_lines.c`、app 的 `assets/deku.json`）→ `tools/make_font.py`（新的中文字）→ `./build.sh`、`./android/build.sh`。
+
+## SPACE 车控 Android app（第二阶段，v0.3）
 
 装了 app 之后，FoloToy 车用模式多两个功能（没装 app 时照旧是媒体遥控器）：
 
@@ -291,6 +317,10 @@ FoloToy 背面就是一枚**被动 NTAG213** NFC 芯片（官方规格：支持�
 | `main/car_screen.c/.h` | 车用画面：蓝牙图示（颜色 = 状态）、状态大字、刚按的动作、按键说明 |
 | `main/find_model.c/.h` | 手机找 FoloToy 纯逻辑：指令 / 通知封包、30 秒自己停、红白闪节奏、按键停了之后把那一下吃掉（**有 host 测试**） |
 | `main/find_screen.c/.h` | 「我在这里！」红白闪画面：盖在 LVGL top layer，底下的画面不受影响 |
+| `main/deku_model.c/.h` | DEKU 纯逻辑：表情状态、按键、一轮不重复的抽句、名人轮流、跟 app 的封包（用句子 id 对）、逾时（**有 host 测试**） |
+| `main/deku_screen.c/.h` | DEKU 画面：原创小木块脸（眨眼、在听、想、说、没听懂）+ 句子 + 出处 |
+| `deku/lines.json`、`tools/make_deku.py`、`main/deku_lines.c` | DEKU 句库（草稿 / 审过 / 不要）→ 只把审过的产生成韧体的表和 app 的 `assets/deku.json`；`--check` 由 `build.sh` 检查 |
+| `tools/make_deku_review.py` | 句库 → 审核网页（要 / 不要、复制结果） |
 | `main/pocket_model.c/.h` | 口袋机纯逻辑：菜单、蜡烛（年龄、唱歌、熄灭）、计时器、倒数、时间文字（**有 host 测试**） |
 | `main/audio_dsp.c/.h` | 生日歌旋律与歌词、音色合成（整数正弦表 + 泛音 + 包络）、吹气判断（大声 + 持续 + 沙沙感 / 爆音）（**有 host 测试**） |
 | `main/sound.c/.h` | 喇叭 / 麦克风背景 task：放歌、响铃、听吹气；画面只送命令、读状态 |
@@ -317,9 +347,11 @@ FoloToy 背面就是一枚**被动 NTAG213** NFC 芯片（官方规格：支持�
 Build:        PASS      —— 2026-11-18：./build.sh（ESP-IDF 5.5.3 Docker、esp32c3）编译通过，main/ 没有警告；
                            上游 verify_firmware.py：Firmware layout PASS、Merged firmware PASS（1,395,728 bytes，烧在 0x0）
                            2026-11-18 阶段 B：Merged firmware PASS（1,743,392 bytes）；每个模式都开蓝牙；
+                           2026-11-18 阶段 C（DEKU）：Merged firmware PASS（1,764,288 bytes；句库 0 句审过）；
                            idf.py size：DRAM 用 122 KB、开机时还剩约 199 KB
 Host tests:   PASS      —— test_space_card_model、test_car_remote_model、test_pocket_model、test_audio_dsp、test_games_model、
-                           test_find_model（-Wall -Wextra -Werror）；app：23 个单元测试（含 FindLogicTest 6 个）
+                           test_find_model、test_deku_model（-Wall -Wextra -Werror）；
+                           app：28 个单元测试（含 FindLogicTest 6 个、DekuLogicTest 5 个）
 Fonts:        PASS      —— make_font.py --check：中文 62 字、大数字，打包后逐像素读回一致
 Simulated:    PASS      —— sim/run.sh：名片 / 活动 / 大二维码三个画面，OpenCV 都扫出正确网址（带 s=folotoy）；
                            车用四个状态、口袋机 12 个画面看过（中文字正确、版面不重叠）；找 FoloToy 三个画面（firmware/find-screens.png）
@@ -331,7 +363,9 @@ Unverified:   真机画面（颜色、圆角）、手机对着这块屏幕实际
               蓝牙执行时的记忆体；
               口袋机：喇叭音量与音色、麦克风收音大小（吹气门槛 BLOW_ABS_MIN 可能要调）、火苗动画在真机的流畅度；
               找 FoloToy：名片模式下 Samsung 会不会自己连回来、多久连上、手机接不接受放慢连线、响铃音量、
-              名片模式开蓝牙 + 喇叭 + 画面同时跑的记忆体、待机时间变化、背景拿位置（要「一律允许」）、通知震动
+              名片模式开蓝牙 + 喇叭 + 画面同时跑的记忆体、待机时间变化、背景拿位置（要「一律允许」）、通知震动；
+              DEKU：手机在背景时语音转文字能不能用（Android 对背景用麦克风有限制）、辨识中文关键词准不准、
+              手机念的声音；句子多了以后字型变大（8MB flash 还很够）
 ```
 
 依赖是照上游 `dependencies.lock` 的版本从各自的 git 取的（开发环境连不上 Espressif 组件仓库），内容应该相同，但组件仓库的 hash 没有逐一比对过。

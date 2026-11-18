@@ -337,6 +337,13 @@ int ble_remote_take_find(void) {
     return v;
 }
 
+bool ble_remote_notify_raw(const uint8_t *data, size_t len) {
+    if (!s_app_present || s_conn == BLE_HS_CONN_HANDLE_NONE || !data || len == 0 || len > 20) return false;
+    struct os_mbuf *om = ble_hs_mbuf_from_flat(data, (uint16_t)len);
+    if (!om) return false;
+    return ble_gatts_notify_custom(s_conn, s_evt_handle, om) == 0;
+}
+
 bool ble_remote_notify_find(bool ringing, find_stop_t why) {
     if (!s_app_present || s_conn == BLE_HS_CONN_HANDLE_NONE) return false;
     uint8_t evt[2];

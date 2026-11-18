@@ -58,9 +58,10 @@
   - 口袋机菜单 16 项：蜡烛生日歌（吹气熄）、木鱼、手电筒、计时器、倒数、番茄钟、叠叠乐、落落方块、记忆三色、求签、抽奖、解压（泡泡纸、狂按挑战、捏捏乐）
   - 阶段 A（2026-11-18）做完：落落方块 + 三个解压游戏都做了；游戏画面会收到按下 / 放开（main.c）；截图 `firmware/pocket3-screens.png`
   - 阶段 B（2026-11-18）做完：手机找 FoloToy（每个模式都开蓝牙）；app v0.2
+  - 阶段 C（2026-11-18）程序做完：DEKU 小助理（句库等审）；app v0.3；截图 `firmware/deku-screens.png`
   - 车用遥控器（BLE 媒体键）
   - SPACE 车控 Android app v0.1（`android/`：按住下开微信读书、按住确定选朋友打 WhatsApp）
-- 用户真机测过：名片、车用遥控器（YouTube / 语音助理 OK）。口袋机、app、找 FoloToy 还没回报
+- 用户真机测过：名片、车用遥控器（YouTube / 语音助理 OK）。口袋机、app、找 FoloToy、DEKU 还没回报（用户 2026-11-18：暂时没机会试，先往下做）
 - 待用户给：求签签文审核、抽奖真奖项、微信读书「抓画面结构」
 - 下一步（用户要省 token、分阶段）：
   - ~~**A** 落落方块 + 解压游戏~~ 已做（不用俄罗斯方块 / Tetris 名字）；等用户真机试按键手感
@@ -69,7 +70,11 @@
     - app v0.2 按「让 FoloToy 响」→ 嘀嘀响 + 红白闪 + 信号格；「最后在哪里」（断线时间 + 手机位置）、「忘了带提醒」（断线 45 秒，可关）
     - 不做：反过来找手机
     - 截图 `firmware/find-screens.png`；做法见 README「手机找 FoloToy」、PLAN「阶段 B」
-  - **C** DEKU 句库：笑话 + 稻盛和夫 / 郭鹤年 / Musk 原话附出处，用户审过才放；对它说话用关键词，不用 AI
+  - ~~**C** DEKU~~ 程序已做（2026-11-18）；**句库等用户审**：
+    - 用户选：口袋机菜单「DEKU 讲笑话」；名人原话 Claude 起草 + 出处、用户打勾；笑话：冷笑话谐音 / 马来西亚日常 / 家具装修
+    - 审核网页 https://claude.ai/artifact/4DcXNNxeknMGqygntM4W6V，用户会贴回「要：J01 … 不要：…」
+    - 收到后：改 `deku/lines.json` 的 status（approved / rejected）→ `python3 tools/make_deku.py` → `tools/make_font.py` → `build.sh`、`android/build.sh`（版本号 +1）→ sim 截图
+    - 郭鹤年只有二手报道（界面新闻；jiemian.com 这个环境连不上），提醒用户对《郭鹤年自传》
   - **D** Wi-Fi：星座、新闻（Grok 邮件）、读书
 - 怎么做：
   - 照 `network/folotoy/README.md`、`network/PLAN.md`

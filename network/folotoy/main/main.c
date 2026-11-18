@@ -7,7 +7,7 @@
 //   确定 短按      亮度 100% → 60% → 30%
 //   确定 长按      大二维码模式（只剩二维码）
 //   上 长按        → 口袋机菜单（不用重开机）：蜡烛与生日歌 / 木鱼 / 手电筒 / 计时器 / 倒数计时 / 番茄钟 /
-//                    叠叠乐 / 记忆三色 / 求签 / 抽奖 / 车用遥控器 / 返回名片
+//                    叠叠乐 / 记忆三色 / 求签 / 抽奖 / 解压 / DEKU 讲笑话 / 车用遥控器 / 返回名片
 //   下 长按        → 车用遥控器模式
 //   闲置 60 秒自动调暗；调暗时按任何键只会叫醒
 //
@@ -29,6 +29,8 @@
 #include "candle_screen.h"
 #include "car_remote_model.h"
 #include "car_screen.h"
+#include "deku_model.h"
+#include "deku_screen.h"
 #include "esp_random.h"
 #include "esp_system.h"
 #include "esp_sleep.h"
@@ -64,7 +66,7 @@ static app_mode_t s_mode = APP_MODE_CARD;
 // 名片模式里的画面（换画面不用重开机；车用遥控器要开蓝牙，才走重开机）
 typedef enum {
     SCR_CARD, SCR_MENU, SCR_CANDLE, SCR_STOPWATCH, SCR_COUNTDOWN,
-    SCR_MUYU, SCR_FLASHLIGHT, SCR_POMODORO, SCR_GAME,
+    SCR_MUYU, SCR_FLASHLIGHT, SCR_POMODORO, SCR_GAME, SCR_DEKU,
 } screen_t;
 static screen_t s_screen = SCR_CARD;
 static menu_state_t s_menu;
@@ -76,6 +78,7 @@ static uint32_t s_muyu_saved;
 static uint8_t s_flash_color;
 static pomodoro_t s_pomodoro;
 static game_kind_t s_game;
+static deku_state_t s_deku;       // DEKU 小助理（离开再回来，抽过的句子还记得）
 static QueueHandle_t s_queue;
 static volatile bool s_input_ready;
 static key_guard_t s_key_guard;
@@ -155,6 +158,7 @@ static void go(screen_t next) {
     case SCR_FLASHLIGHT: flashlight_screen_hide(); break;
     case SCR_POMODORO: pomodoro_screen_hide(); break;
     case SCR_GAME: games_screen_hide(); break;
+    case SCR_DEKU: deku_screen_hide(); break;
     }
     s_screen = next;
     switch (next) {
@@ -171,6 +175,7 @@ static void go(screen_t next) {
     case SCR_FLASHLIGHT: flashlight_screen_show(&s_flash_color); break;
     case SCR_POMODORO: pomodoro_screen_show(&s_pomodoro); break;
     case SCR_GAME: games_screen_show(s_game, s_card.count ? s_card.links[0].url : "", esp_random()); break;
+    case SCR_DEKU: deku_screen_show(&s_deku); break;
     }
     if (old && old != lv_screen_active()) lv_obj_delete(old);
 }
@@ -209,6 +214,7 @@ static void menu_key(space_card_btn_t btn, space_card_ev_t ev) {
         case MENU_BUBBLE: s_game = GAME_BUBBLE; go(SCR_GAME); break;
         case MENU_MASH: s_game = GAME_MASH; go(SCR_GAME); break;
         case MENU_SQUISH: s_game = GAME_SQUISH; go(SCR_GAME); break;
+        case MENU_DEKU: go(SCR_DEKU); break;
         case MENU_CAR: switch_mode(APP_MODE_CAR); break;   // 要开蓝牙：存模式、重开机
         default: go(SCR_CARD); break;
         }
@@ -241,6 +247,11 @@ static void pocket_key(space_card_btn_t btn, space_card_ev_t ev) {
         else pomodoro_screen_update();
     } else if (s_screen == SCR_GAME) {
         if (games_screen_on_key(btn, ev)) go(SCR_MENU);
+    } else if (s_screen == SCR_DEKU) {
+        const deku_out_t o = deku_on_key(&s_deku, btn, ev, ble_remote_app_present(), now_ms());
+        if (o.evt_len) (void)ble_remote_notify_raw(o.evt, o.evt_len);
+        if (o.action == DEKU_DO_EXIT) go(SCR_MENU);
+        else if (o.action == DEKU_DO_REDRAW) deku_screen_update();
     } else {
         const nav_t nav = s_screen == SCR_STOPWATCH ? stopwatch_on_key(&s_stopwatch, btn, ev, now_ms())
                                                     : countdown_on_key(&s_countdown, btn, ev, now_ms());
@@ -298,10 +309,12 @@ static void find_finish(find_stop_t why) {
 static void find_tick(lv_timer_t *t) {
     (void)t;
     const uint32_t now = now_ms();
-    if (s_mode != APP_MODE_CAR) {   // 车用模式由车用画面取指令；其他模式没有用，清掉免得塞满
+    if (s_mode != APP_MODE_CAR) {   // 车用模式由车用画面取指令；其他模式给 DEKU，没用的清掉免得塞满
         uint8_t buf[32];
         size_t len;
-        while (ble_remote_take_cmd(buf, &len, sizeof buf)) {}
+        while (ble_remote_take_cmd(buf, &len, sizeof buf)) {
+            if (s_screen == SCR_DEKU && deku_on_cmd(&s_deku, buf, len, now)) deku_screen_update();
+        }
     }
     const int req = ble_remote_take_find();
     if (req == 1) {
@@ -344,7 +357,7 @@ static void input_task(void *arg) {
             continue;
         }
         // 游戏画面也要按下 / 放开（落落方块按住加速、狂按挑战连按）；其他画面只看单击 / 长按
-        if ((in.ev == BSP_BTN_PRESS || in.ev == BSP_BTN_RELEASE) && s_screen != SCR_GAME) continue;
+        if ((in.ev == BSP_BTN_PRESS || in.ev == BSP_BTN_RELEASE) && s_screen != SCR_GAME && s_screen != SCR_DEKU) continue;
         else if (s_screen == SCR_CARD) card_key(map_btn(in.btn), map_ev(in.ev));
         else pocket_key(map_btn(in.btn), map_ev(in.ev));
     }
@@ -394,6 +407,7 @@ void app_main(void) {
     if (bsp_battery_init() != ESP_OK) ESP_LOGW(TAG, "电量计初始化失败：右上角不显示电量");
 
     find_init(&s_find);
+    deku_init(&s_deku, esp_random());
     // 每个模式都开蓝牙（找 FoloToy 用）；车用模式快速广播，名片 / 口袋机低频、只认配对过的手机
     const bool ble_ok = ble_remote_start(CONFIG_SPACE_REMOTE_NAME, s_mode == APP_MODE_CAR);
     if (s_mode == APP_MODE_CAR) {

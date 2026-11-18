@@ -11,8 +11,8 @@ android {
         applicationId = "app.space.car"
         minSdk = 26          // Android 8.0：无障碍手势「接着按住」要这个版本
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2"
+        versionCode = 3
+        versionName = "0.3"
     }
 
     // 固定的 debug 签名（../debug.keystore，Android 标准 debug 帐密）：

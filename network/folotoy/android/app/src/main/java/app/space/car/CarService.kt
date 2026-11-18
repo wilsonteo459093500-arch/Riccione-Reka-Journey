@@ -25,15 +25,20 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.media.AudioManager
 import android.os.Build
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.util.Log
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import app.space.car.CarLogic.Effect
+import org.json.JSONObject
 import java.io.File
 import java.util.Locale
 
@@ -51,6 +56,9 @@ import java.util.Locale
  * 找 FoloToy（FoloToy 每个模式都开蓝牙；名片 / 口袋机约每秒广播一次）：
  *  - find(true)：连着就叫它响；没连着先快速连（最多 30 秒），连上马上叫它响；响的时候每秒读一次信号强弱
  *  - 断线时记下时间和手机位置（「最后在哪里」）；断线 45 秒还没连回来 → 通知「FoloToy 没跟着你？」
+ *
+ * DEKU 小助理（FoloToy 口袋机菜单）：FoloToy 按住确定 → 这里用手机的语音转文字听（Android 内建，免费）→
+ *   关键词挑一句（DekuLogic，不用 AI）→ 手机念出来 + 叫 FoloToy 显示同一句。FoloToy 上按键挑的句子也在这里念。
  */
 class CarService : AccessibilityService() {
     private val main = Handler(Looper.getMainLooper())
@@ -75,6 +83,12 @@ class CarService : AccessibilityService() {
     private var findUntil = 0L        // 等连上就叫它响，等到这个时间为止
     private var lastRssiAsk = 0L
     val proximity = FindLogic.Proximity()
+
+    // ---- DEKU ----
+    lateinit var deku: DekuLogic
+        private set
+    private var recognizer: SpeechRecognizer? = null
+    private var listening = false
     private val leftBehind = FindLogic.LeftBehind()
 
     // ---------------- 生命周期 ----------------
@@ -84,6 +98,7 @@ class CarService : AccessibilityService() {
             contacts = { Friends.load(this).map { CarLogic.Friend(it.name, it.label) } },
         )
         tts = TextToSpeech(this) { ok -> if (ok == TextToSpeech.SUCCESS) tts?.language = Locale.SIMPLIFIED_CHINESE }
+        deku = DekuLogic(loadDeku(this))
         connect()
         main.post(ticker)
         status = "等 FoloToy 连线"
@@ -94,6 +109,7 @@ class CarService : AccessibilityService() {
         main.removeCallbacksAndMessages(null)
         gatt?.close()
         tts?.shutdown()
+        recognizer?.destroy()
         super.onDestroy()
     }
 
@@ -244,6 +260,75 @@ class CarService : AccessibilityService() {
         }
     }
 
+    // ---------------- DEKU ----------------
+    /** FoloToy 按住确定：开始听 */
+    private fun dekuListen() {
+        if (deku.size == 0) {
+            speak(DekuLogic.EMPTY)
+            send(Protocol.dekuUnknown())
+            return
+        }
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            speak("要先在 SPACE 车控 app 按「开权限」，允许麦克风")
+            send(Protocol.dekuUnknown())
+            return
+        }
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+            speak("这支手机没有语音转文字。可以按 FoloToy 的上键听笑话、下键听名人的话")
+            send(Protocol.dekuUnknown())
+            return
+        }
+        tts?.stop()   // 别让手机自己的声音被听进去
+        val r = recognizer ?: SpeechRecognizer.createSpeechRecognizer(this).also {
+            it.setRecognitionListener(dekuListener)
+            recognizer = it
+        }
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
+            .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
+            .putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
+        listening = true
+        r.startListening(intent)
+    }
+
+    /** FoloToy 放开：说完了，等结果 */
+    private fun dekuDone() {
+        if (listening) recognizer?.stopListening()
+    }
+
+    private val dekuListener = object : RecognitionListener {
+        override fun onResults(results: Bundle?) {
+            listening = false
+            val heard = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
+            Log.i(TAG, "DEKU 听到：$heard")
+            val line = deku.answer(heard)
+            if (line == null) {
+                send(Protocol.dekuUnknown())
+                speak(DekuLogic.HELP)
+            } else {
+                send(Protocol.dekuShow(line.id))
+                speak(DekuLogic.speech(line))
+            }
+        }
+
+        override fun onError(error: Int) {
+            if (!listening) return
+            listening = false
+            Log.i(TAG, "DEKU 没听到：error $error")
+            send(Protocol.dekuUnknown())
+            speak(DekuLogic.HELP)
+        }
+
+        override fun onReadyForSpeech(params: Bundle?) {}
+        override fun onBeginningOfSpeech() {}
+        override fun onRmsChanged(rmsdB: Float) {}
+        override fun onBufferReceived(buffer: ByteArray?) {}
+        override fun onEndOfSpeech() {}
+        override fun onPartialResults(partialResults: Bundle?) {}
+        override fun onEvent(eventType: Int, params: Bundle?) {}
+    }
+
     // ---------------- 找 FoloToy ----------------
     /** 设定画面按「让 FoloToy 响」/「停」 */
     fun find(ring: Boolean) {
@@ -361,6 +446,15 @@ class CarService : AccessibilityService() {
             }
             return
         }
+        Protocol.decodeDeku(data)?.let { d ->
+            main.post {
+                when (d) {
+                    is Protocol.Deku.Listen -> if (d.on) dekuListen() else dekuDone()
+                    is Protocol.Deku.Say -> deku.byId(d.id)?.let { speak(DekuLogic.speech(it)) }
+                }
+            }
+            return
+        }
         val key = Protocol.decodeKey(data) ?: return
         main.post { run(logic.onKey(key.btn, key.ev, SystemClock.elapsedRealtime())) }
     }
@@ -401,6 +495,9 @@ class CarService : AccessibilityService() {
             Effect.VoiceCancel -> voice?.release(send = false)
         }
     }
+
+    /** 设定画面「先听一句」 */
+    fun sayNow(text: String) = speak(text)
 
     private fun speak(text: String) {
         tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "space")
@@ -597,6 +694,18 @@ class CarService : AccessibilityService() {
     }
 
     companion object {
+        /** assets/deku.json（tools/make_deku.py 产生，只有审过的句子）；读不到就是空的 */
+        fun loadDeku(c: Context): List<DekuLogic.Line> = try {
+            val arr = JSONObject(c.assets.open("deku.json").bufferedReader().use { it.readText() }).getJSONArray("lines")
+            (0 until arr.length()).mapNotNull { i ->
+                val o = arr.getJSONObject(i)
+                val kind = DekuLogic.Kind.of(o.getString("kind")) ?: return@mapNotNull null
+                DekuLogic.Line(o.getString("id"), kind, o.getString("zh"), o.optString("en").ifEmpty { null })
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+
         private const val TAG = "SpaceCar"
         private const val SEGMENT_MS = 250L
         private const val FIND_CONNECT_MS = 30_000L

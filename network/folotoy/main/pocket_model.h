@@ -30,6 +30,7 @@ typedef enum {
     MENU_BUBBLE,
     MENU_MASH,
     MENU_SQUISH,
+    MENU_DEKU,
     MENU_CAR,
     MENU_BACK,
     MENU_COUNT,

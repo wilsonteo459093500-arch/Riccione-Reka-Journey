@@ -44,6 +44,7 @@ static void test_menu(void) {
     assert(strcmp(menu_section(MENU_STACK), "游戏") == 0);
     assert(strcmp(menu_section(MENU_LOTTERY), "游戏") == 0);
     assert(strcmp(menu_section(MENU_BUBBLE), "解压") == 0 && strcmp(menu_section(MENU_SQUISH), "解压") == 0);
+    assert(strcmp(menu_section(MENU_DEKU), "小助理") == 0);
     assert(menu_section(MENU_CAR)[0] == '\0');
 }
 

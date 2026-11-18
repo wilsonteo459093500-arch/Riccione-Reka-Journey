@@ -37,4 +37,7 @@ bool ble_remote_take_cmd(uint8_t *buf, size_t *len, size_t cap);
 
 // ---- 手机找 FoloToy（封包见 find_model.h）----
 int ble_remote_take_find(void);                        // app 送来的「找」：-1 没有、0 停、1 开始响（读一次就清掉）
-bool ble_remote_notify_find(bool ringing, find_stop_t why);   // 告诉 app 在响 / 为什么停了；app 没连回 false
+bool ble_remote_notify_find(bool ringing, find_stop_t why);
+
+// 送一个任意封包给 app（DEKU 用：开始听 / 放开 / 念这句）；app 没连回 false
+bool ble_remote_notify_raw(const uint8_t *data, size_t len);   // 告诉 app 在响 / 为什么停了；app 没连回 false

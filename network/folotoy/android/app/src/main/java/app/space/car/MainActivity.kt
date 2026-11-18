@@ -80,8 +80,21 @@ class MainActivity : Activity() {
             setOnCheckedChangeListener { _, on -> FindStore.setAlert(this@MainActivity, on) }
         })
 
+        // ---- DEKU ----
+        col.addView(title("DEKU 小助理", 18f))
+        val dekuCount = CarService.loadDeku(this).size
+        col.addView(text(
+            if (dekuCount == 0) "句库还在审（审好的句子才会放进来）。"
+            else "句库：审过 $dekuCount 句。FoloToy 菜单选「DEKU 讲笑话」→ 按住确定说「讲个笑话」「稻盛和夫」「郭鹤年」「马斯克」「再来一个」，放开后手机念出来。"
+        ))
+        if (dekuCount > 0) col.addView(button("在手机上先听一句笑话") {
+            val s = CarService.instance
+            if (s == null) toast("先做下面的 ②（开无障碍服务）")
+            else s.deku.pick(DekuLogic.Kind.JOKE)?.let { s.sayNow(DekuLogic.speech(it)) }
+        })
+
         col.addView(title("第一次设定（照顺序做一次就好）", 18f))
-        col.addView(button("① 开权限（附近的装置、通讯录）") { askPermissions() })
+        col.addView(button("① 开权限（附近的装置、通讯录、麦克风）") { askPermissions() })
         col.addView(button("② 开「SPACE 车控」无障碍服务") {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
             toast("设定 → 协助工具 → 已安装的应用程式 → SPACE 车控 → 开启")
@@ -215,7 +228,7 @@ class MainActivity : Activity() {
 
     // ---------------- 权限 ----------------
     private fun askPermissions() {
-        val want = mutableListOf(Manifest.permission.READ_CONTACTS)
+        val want = mutableListOf(Manifest.permission.READ_CONTACTS, Manifest.permission.RECORD_AUDIO)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) want += Manifest.permission.BLUETOOTH_CONNECT
         requestPermissions(want.toTypedArray(), PERMS)
     }
