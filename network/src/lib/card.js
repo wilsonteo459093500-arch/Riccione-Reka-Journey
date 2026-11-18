@@ -69,7 +69,7 @@ export const SOCIAL_PLATFORMS = ['linkedin', 'instagram', 'facebook', 'xiaohongs
 export const DEFAULT_CARD = {
   name: 'Wilson Teo',
   name_alt: '张炜盛',
-  title: '董事 Director · 家族企业第二代',
+  title: '董事 Director · 家具二代',
   company: '瑞吉欧 RICCIONE · 溪岸 SAIL BY RICCIONE REKA',
   tagline: '以木为语，与自然共生。',
   intro: '我是 Wilson，马来西亚第四代潮州人，麻坡长大的家具二代。小时候发誓不接班，直到因缘际会读了《郭鹤年自传》，书里的一句「百善孝为先」，让我开始了作为二代的使命。为了家人，我考了 CIMA 特许管理会计师，再从仓库扛货做起。现在带着瑞吉欧和溪岸，在马来西亚做实木家具与全屋定制。我没有成功，我只是还在路上。\n\n我推崇并践行稻盛和夫的经营理念：以心为本，坚持做对的事，思考「作为人，何谓正确」。永远记得「先做人，后做事」的人生哲学。',
