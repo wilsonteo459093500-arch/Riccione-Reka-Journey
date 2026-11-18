@@ -6,6 +6,7 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -16,6 +17,7 @@ import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -24,13 +26,18 @@ import android.widget.Toast
 import java.io.File
 
 /**
- * SPACE 车控的设定画面：开权限、加常联络的朋友、诊断。
+ * SPACE 车控的设定画面：找 FoloToy、开权限、加常联络的朋友、诊断。
  * 真正做事的是 CarService（无障碍服务），这个画面关掉也照样运作。
  */
 class MainActivity : Activity() {
     private val ui = Handler(Looper.getMainLooper())
     private lateinit var status: TextView
     private lateinit var friendsBox: LinearLayout
+    private lateinit var findStatus: TextView
+    private lateinit var findBtn: Button
+    private lateinit var findSignal: TextView
+    private lateinit var lastSeen: TextView
+    private lateinit var mapBtn: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,6 +52,34 @@ class MainActivity : Activity() {
         status = text("").apply { textSize = 17f; setPadding(0, dp(12), 0, dp(12)) }
         col.addView(status)
 
+        // ---- 找 FoloToy ----
+        col.addView(title("找 FoloToy", 20f))
+        findStatus = text("").apply { textSize = 17f }
+        col.addView(findStatus)
+        findBtn = button("让 FoloToy 响") {
+            val s = CarService.instance
+            if (s == null) {
+                toast("先做下面的 ②（开无障碍服务）")
+                return@button
+            }
+            val ringing = s.findUi == CarService.FindUi.RINGING || s.findUi == CarService.FindUi.CONNECTING
+            s.find(!ringing)
+            refreshFind()
+        }.apply { textSize = 18f }
+        col.addView(findBtn)
+        findSignal = text("").apply { textSize = 20f }
+        col.addView(findSignal)
+        lastSeen = text("")
+        col.addView(lastSeen)
+        mapBtn = button("在地图上看最后的位置") { openMap() }
+        col.addView(mapBtn)
+        col.addView(CheckBox(this).apply {
+            text = "忘了带提醒：手机离开 FoloToy 约 1 分钟还没连回来，手机震一下"
+            textSize = 15f
+            isChecked = FindStore.alertEnabled(this@MainActivity)
+            setOnCheckedChangeListener { _, on -> FindStore.setAlert(this@MainActivity, on) }
+        })
+
         col.addView(title("第一次设定（照顺序做一次就好）", 18f))
         col.addView(button("① 开权限（附近的装置、通讯录）") { askPermissions() })
         col.addView(button("② 开「SPACE 车控」无障碍服务") {
@@ -52,6 +87,7 @@ class MainActivity : Activity() {
             toast("设定 → 协助工具 → 已安装的应用程式 → SPACE 车控 → 开启")
         })
         col.addView(button("③ 不要让手机把它关掉（电池）") { askBattery() })
+        col.addView(button("④ 位置、通知（「最后在哪里」「忘了带提醒」用）") { askLocation() })
         col.addView(button("重新连 FoloToy") {
             val s = CarService.instance
             if (s == null) toast("先做 ②") else s.connect()
@@ -93,8 +129,88 @@ class MainActivity : Activity() {
     private val statusTicker = object : Runnable {
         override fun run() {
             status.text = if (CarService.instance == null) "状态：无障碍服务还没开（做 ②）" else "状态：${CarService.status}"
+            refreshFind()
             ui.postDelayed(this, 1000)
         }
+    }
+
+    // ---------------- 找 FoloToy ----------------
+    private fun refreshFind() {
+        val s = CarService.instance
+        val ui = s?.findUi ?: CarService.FindUi.IDLE
+        val near = s?.ready == true
+        findStatus.text = when (ui) {
+            CarService.FindUi.CONNECTING -> "正在连 FoloToy…（最多等 30 秒）"
+            CarService.FindUi.RINGING -> "FoloToy 正在响、红白闪 🔔 找到了按它任何一个键就停"
+            CarService.FindUi.FOUND -> "找到了 ✓"
+            CarService.FindUi.TIMEOUT -> "响了 30 秒没人按，停了。要再响按下面"
+            CarService.FindUi.LOST -> "响到一半断线了：FoloToy 可能走远了，靠近一点再按"
+            CarService.FindUi.NOT_FOUND -> "30 秒都连不上：FoloToy 不在附近、没开机或没电。看看下面「最后在哪里」"
+            CarService.FindUi.NOT_PAIRED -> "这支手机还没配对 FoloToy（FoloToy 进车用模式 → 手机蓝牙设定配对「${Protocol.DEVICE_NAME}」）"
+            CarService.FindUi.STOPPED, CarService.FindUi.IDLE ->
+                if (s == null) "（要先开无障碍服务）" else if (near) "FoloToy 在附近 ✓" else "FoloToy 现在没连上"
+        }
+        val busy = ui == CarService.FindUi.RINGING || ui == CarService.FindUi.CONNECTING
+        findBtn.text = if (busy) "停" else "让 FoloToy 响"
+
+        val rssi = s?.proximity?.latest()
+        findSignal.visibility = if (ui == CarService.FindUi.RINGING && rssi != null) View.VISIBLE else View.GONE
+        if (rssi != null && s != null) {
+            val trend = FindLogic.trendText(s.proximity.trend())
+            findSignal.text = "信号 ${FindLogic.barsText(FindLogic.bars(rssi))}" + if (trend.isNotEmpty()) "  $trend" else ""
+        }
+
+        val seen = FindStore.read(this)
+        val hasLoc = seen?.lat != null && seen.lng != null
+        lastSeen.text = when {
+            near -> "最后在哪里：现在就连着（断线时会记下时间和手机位置）"
+            seen == null -> "最后在哪里：还没有纪录（断线过一次才有）"
+            else -> {
+                val at = FindLogic.ago(System.currentTimeMillis(), seen.lostAt)
+                "最后在哪里：$at 跟手机断线" + when {
+                    hasLoc -> "，那时手机在地图上的位置（误差约 ${seen.accuracyM?.toInt() ?: "?"} 公尺）"
+                    else -> "（没记到位置：做 ④ 开位置权限，选「一律允许」）"
+                }
+            }
+        }
+        mapBtn.visibility = if (!near && hasLoc) View.VISIBLE else View.GONE
+    }
+
+    private fun openMap() {
+        val seen = FindStore.read(this) ?: return
+        val lat = seen.lat ?: return
+        val lng = seen.lng ?: return
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(FindLogic.mapUri(lat, lng))))
+        } catch (e: Exception) {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(FindLogic.mapWebUrl(lat, lng))))
+        }
+    }
+
+    /** 先要「使用应用程式时」的位置 + 通知；给了之后再按一次，要「一律允许」（断线常常是在背景） */
+    private fun askLocation() {
+        val fine = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        if (!fine) {
+            val want = mutableListOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+            if (Build.VERSION.SDK_INT >= 33) want += Manifest.permission.POST_NOTIFICATIONS
+            requestPermissions(want.toTypedArray(), PERMS)
+            toast("给了之后再按一次 ④，选「一律允许」")
+            return
+        }
+        if (Build.VERSION.SDK_INT >= 29 &&
+            checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION), PERMS)
+            toast("位置权限选「一律允许」：FoloToy 断线时手机多半在口袋里")
+            return
+        }
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), PERMS)
+            return
+        }
+        toast("④ 都开好了 ✓")
     }
 
     // ---------------- 权限 ----------------

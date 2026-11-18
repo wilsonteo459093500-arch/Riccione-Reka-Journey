@@ -3,7 +3,9 @@
 
 car_link_t g_link = CAR_LINK_ADVERTISING;
 
-bool ble_remote_start(const char *device_name) { (void)device_name; return true; }
+bool ble_remote_start(const char *device_name, bool car_mode) { (void)device_name; (void)car_mode; return true; }
+int ble_remote_take_find(void) { return -1; }
+bool ble_remote_notify_find(bool ringing, find_stop_t why) { (void)ringing; (void)why; return false; }
 car_link_t ble_remote_link(void) { return g_link; }
 bool ble_remote_send(uint16_t usage) { return g_link == CAR_LINK_READY && usage != 0; }
 void ble_remote_set_battery(int percent) { (void)percent; }

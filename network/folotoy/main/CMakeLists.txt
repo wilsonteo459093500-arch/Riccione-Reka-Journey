@@ -5,6 +5,8 @@ idf_component_register(
          "car_remote_model.c"
          "car_screen.c"
          "ble_remote.c"
+         "find_model.c"
+         "find_screen.c"
          "pocket_model.c"
          "audio_dsp.c"
          "sound.c"

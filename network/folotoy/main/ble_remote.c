@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "esp_hidd.h"
+#include "find_model.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -71,6 +72,8 @@ static const ble_uuid128_t s_evt_uuid = SPACE_UUID(0x02);
 static const ble_uuid128_t s_cmd_uuid = SPACE_UUID(0x03);
 static uint16_t s_evt_handle;
 static volatile bool s_app_present;
+static bool s_car_mode = true;
+static volatile int s_find_req = -1;   // app 送来的「找」：-1 没有、0 停、1 响
 
 #define CMD_MAX 32
 typedef struct {
@@ -89,6 +92,11 @@ static int space_chr_access(uint16_t conn_handle, uint16_t attr_handle, struct b
     if (n == 0 || n > CMD_MAX) return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
     if (ble_hs_mbuf_to_flat(ctxt->om, m.data, sizeof m.data, NULL) != 0) return BLE_ATT_ERR_UNLIKELY;
     m.len = (uint8_t)n;
+    const int find = find_cmd_parse(m.data, n);
+    if (find >= 0) {   // 「找」：任何模式都要处理，不排进车用指令的 queue
+        s_find_req = find;
+        return 0;
+    }
     if (s_cmds) (void)xQueueSend(s_cmds, &m, 0);   // 满了就丢（画面 250ms 取一次，正常不会满）
     return 0;
 }
@@ -111,9 +119,15 @@ static const struct ble_gatt_svc_def s_space_svcs[] = {
 static void advertise(void) {
     struct ble_gap_adv_params params = { 0 };
     params.conn_mode = BLE_GAP_CONN_MODE_UND;
-    params.disc_mode = BLE_GAP_DISC_MODE_GEN;
-    params.itvl_min = BLE_GAP_ADV_ITVL_MS(30);
-    params.itvl_max = BLE_GAP_ADV_ITVL_MS(50);
+    if (s_car_mode) {   // 车用：快速广播，手机设定里看得到（可以配对）
+        params.disc_mode = BLE_GAP_DISC_MODE_GEN;
+        params.itvl_min = BLE_GAP_ADV_ITVL_MS(30);
+        params.itvl_max = BLE_GAP_ADV_ITVL_MS(50);
+    } else {            // 名片 / 口袋机：约每秒一次，手机设定里看不到（配对过的手机照样会自己连）
+        params.disc_mode = BLE_GAP_DISC_MODE_NON;
+        params.itvl_min = BLE_GAP_ADV_ITVL_MS(1000);
+        params.itvl_max = BLE_GAP_ADV_ITVL_MS(1200);
+    }
     int rc = ble_gap_adv_set_fields(&s_fields);
     if (rc == 0) rc = ble_gap_adv_start(s_addr_type, NULL, BLE_HS_FOREVER, &params, gap_event, NULL);
     if (rc == 0 || rc == BLE_HS_EALREADY) {
@@ -149,6 +163,7 @@ static int gap_event(struct ble_gap_event *event, void *arg) {
         ESP_LOGI(TAG, "断线（reason=%d），重新广播", event->disconnect.reason);
         s_conn = BLE_HS_CONN_HANDLE_NONE;
         s_app_present = false;
+        s_find_req = -1;
         advertise();
         return 0;
     case BLE_GAP_EVENT_ADV_COMPLETE:
@@ -156,6 +171,22 @@ static int gap_event(struct ble_gap_event *event, void *arg) {
         return 0;
     case BLE_GAP_EVENT_ENC_CHANGE:
         if (event->enc_change.status == 0) {
+            if (!s_car_mode) {
+                // 名片 / 口袋机：只认配对过的手机（这个模式不绑定，新手机配对完 bonded 会是 0）
+                if (ble_gap_conn_find(event->enc_change.conn_handle, &desc) != 0 || !desc.sec_state.bonded) {
+                    ESP_LOGW(TAG, "没配对过的手机：断开（新手机要在车用模式配对）");
+                    ble_gap_terminate(event->enc_change.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+                    return 0;
+                }
+                // 请手机放慢连线（240–400ms）：省电；离开约 4 秒手机就知道断线（「忘了带提醒」用）
+                struct ble_gap_upd_params upd = {
+                    .itvl_min = 192, .itvl_max = 320,   // 单位 1.25ms
+                    .latency = 0,
+                    .supervision_timeout = 400,         // 单位 10ms
+                };
+                const int urc = ble_gap_update_params(event->enc_change.conn_handle, &upd);
+                if (urc != 0) ESP_LOGW(TAG, "请手机放慢连线失败：%d（照样能用）", urc);
+            }
             s_link = CAR_LINK_READY;
             ESP_LOGI(TAG, "加密完成，可以用了");
         } else {
@@ -206,8 +237,9 @@ static void host_task(void *param) {
     nimble_port_freertos_deinit();
 }
 
-bool ble_remote_start(const char *device_name) {
+bool ble_remote_start(const char *device_name, bool car_mode) {
     if (device_name && device_name[0]) s_config.device_name = device_name;
+    s_car_mode = car_mode;
     s_link = CAR_LINK_STARTING;
 
     esp_err_t err = nimble_port_init();
@@ -219,7 +251,7 @@ bool ble_remote_start(const char *device_name) {
 
     // 配对：没有萤幕可以输入 → Just Works；要绑定，下次自动重连
     ble_hs_cfg.sm_io_cap = BLE_SM_IO_CAP_NO_IO;
-    ble_hs_cfg.sm_bonding = 1;
+    ble_hs_cfg.sm_bonding = car_mode ? 1 : 0;   // 只在车用模式配对新手机（名片模式手机设定里也看不到它）
     ble_hs_cfg.sm_mitm = 0;
     ble_hs_cfg.sm_sc = 1;
     ble_hs_cfg.sm_our_key_dist = BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID;
@@ -241,7 +273,7 @@ bool ble_remote_start(const char *device_name) {
     ble_svc_gap_device_appearance_set(ESP_HID_APPEARANCE_GENERIC);
 
     memset(&s_fields, 0, sizeof s_fields);
-    s_fields.flags = BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP;
+    s_fields.flags = (car_mode ? BLE_HS_ADV_F_DISC_GEN : 0) | BLE_HS_ADV_F_BREDR_UNSUP;
     s_fields.appearance = ESP_HID_APPEARANCE_GENERIC;
     s_fields.appearance_is_present = 1;
     s_fields.name = (const uint8_t *)s_config.device_name;
@@ -254,7 +286,7 @@ bool ble_remote_start(const char *device_name) {
     ble_store_config_init();
     ble_hs_cfg.store_status_cb = ble_store_util_status_rr;   // 绑定满了删最旧的
     nimble_port_freertos_init(host_task);
-    ESP_LOGI(TAG, "蓝牙启动：%s", s_config.device_name);
+    ESP_LOGI(TAG, "蓝牙启动：%s（%s）", s_config.device_name, car_mode ? "车用：快速广播" : "名片：低频广播");
     return true;
 }
 
@@ -297,4 +329,19 @@ bool ble_remote_take_cmd(uint8_t *buf, size_t *len, size_t cap) {
     memcpy(buf, m.data, n);
     *len = n;
     return true;
+}
+
+int ble_remote_take_find(void) {
+    const int v = s_find_req;
+    if (v >= 0) s_find_req = -1;
+    return v;
+}
+
+bool ble_remote_notify_find(bool ringing, find_stop_t why) {
+    if (!s_app_present || s_conn == BLE_HS_CONN_HANDLE_NONE) return false;
+    uint8_t evt[2];
+    find_evt_encode(ringing, why, evt);
+    struct os_mbuf *om = ble_hs_mbuf_from_flat(evt, sizeof evt);
+    if (!om) return false;
+    return ble_gatts_notify_custom(s_conn, s_evt_handle, om) == 0;
 }

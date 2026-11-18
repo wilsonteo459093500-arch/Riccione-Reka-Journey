@@ -8,6 +8,9 @@ import java.util.UUID
  *   指令（手机 → FoloToy，write）：
  *     [0x01, 模式]           0 = 一般（媒体键）、1 = 选择模式（按键只给 app）
  *     [0x02, 行 0/1, 文字…]  选择模式画面的两行字（FoloToy 只有英文字型：只送 ASCII，最多 28 字）
+ *     [0x03, 1 / 0]          找 FoloToy：开始响 / 停（任何模式都收；韧体 main/find_model.h）
+ *   找 FoloToy 的状态（FoloToy → 手机，跟按键同一个 notify）：[0x80, 状态]
+ *     0 = 手机叫停、1 = 正在响、2 = 有人按键（找到了）、3 = 响了 30 秒没人按
  */
 object Protocol {
     val SERVICE: UUID = UUID.fromString("8d6f0001-6b3a-4c2e-9a51-535041434552")
@@ -29,6 +32,16 @@ object Protocol {
         val e = data[1].toInt() and 0xFF
         if (b > 2 || e > 3) return null
         return Key(Btn.entries[b], Ev.entries[e])
+    }
+
+    enum class FindState { STOPPED, RINGING, FOUND, TIMEOUT }
+
+    fun findCommand(ring: Boolean): ByteArray = byteArrayOf(0x03, if (ring) 1 else 0)
+
+    /** [0x80, 状态]；不是找 FoloToy 的通知回 null */
+    fun decodeFindState(data: ByteArray?): FindState? {
+        if (data == null || data.size != 2 || (data[0].toInt() and 0xFF) != 0x80) return null
+        return FindState.entries.getOrNull(data[1].toInt() and 0xFF)
     }
 
     fun modeCommand(select: Boolean): ByteArray = byteArrayOf(0x01, if (select) 1 else 0)

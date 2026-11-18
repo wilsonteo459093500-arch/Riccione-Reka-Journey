@@ -4,6 +4,10 @@ import android.Manifest
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.annotation.SuppressLint
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
@@ -16,6 +20,9 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Path
 import android.graphics.Rect
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
 import android.media.AudioManager
 import android.os.Build
 import android.os.Handler
@@ -40,6 +47,10 @@ import java.util.Locale
  *
  * 它做的事：连 FoloToy（蓝牙 SPACE 车控通道）→ 收按键 → CarLogic 决定做什么 → 这里执行。
  * 只在 FoloToy 按键时动作；不读讯息内容、不上网。
+ *
+ * 找 FoloToy（FoloToy 每个模式都开蓝牙；名片 / 口袋机约每秒广播一次）：
+ *  - find(true)：连着就叫它响；没连着先快速连（最多 30 秒），连上马上叫它响；响的时候每秒读一次信号强弱
+ *  - 断线时记下时间和手机位置（「最后在哪里」）；断线 45 秒还没连回来 → 通知「FoloToy 没跟着你？」
  */
 class CarService : AccessibilityService() {
     private val main = Handler(Looper.getMainLooper())
@@ -51,6 +62,20 @@ class CarService : AccessibilityService() {
     private var writing = false
     private var lastNavPackage: String? = null
     private var voice: VoiceNote? = null
+
+    // ---- 找 FoloToy ----
+    enum class FindUi { IDLE, CONNECTING, RINGING, FOUND, TIMEOUT, STOPPED, NOT_FOUND, NOT_PAIRED, LOST }
+
+    /** 通道准备好了（订阅完成）：可以送指令 */
+    @Volatile var ready = false
+        private set
+    @Volatile var findUi = FindUi.IDLE
+        private set
+    private var direct = false        // 这条连线是按「找」时开的快速连线（不是背景自动连）
+    private var findUntil = 0L        // 等连上就叫它响，等到这个时间为止
+    private var lastRssiAsk = 0L
+    val proximity = FindLogic.Proximity()
+    private val leftBehind = FindLogic.LeftBehind()
 
     // ---------------- 生命周期 ----------------
     override fun onServiceConnected() {
@@ -82,7 +107,9 @@ class CarService : AccessibilityService() {
 
     private val ticker = object : Runnable {
         override fun run() {
-            if (::logic.isInitialized) run(logic.onTick(SystemClock.elapsedRealtime()))
+            val now = SystemClock.elapsedRealtime()
+            if (::logic.isInitialized) run(logic.onTick(now))
+            findTick(now)
             main.postDelayed(this, 250)
         }
     }
@@ -99,29 +126,60 @@ class CarService : AccessibilityService() {
             status = "还没给「附近的装置」权限：打开 SPACE 车控 app 按「开权限」"
             return
         }
-        val adapter = (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter ?: return
-        val dev = adapter.bondedDevices?.firstOrNull { it.name == Protocol.DEVICE_NAME }
+        val dev = bondedFoloToy()
         if (dev == null) {
             status = "手机还没配对 FoloToy：FoloToy 进车用模式 → 手机蓝牙设定配对「${Protocol.DEVICE_NAME}」"
             main.postDelayed({ connect() }, 15_000)
             return
         }
         gatt?.close()
+        direct = false
         gatt = dev.connectGatt(this, true, gattCallback, BluetoothDevice.TRANSPORT_LE)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun bondedFoloToy(): BluetoothDevice? {
+        val adapter = (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter ?: return null
+        return adapter.bondedDevices?.firstOrNull { it.name == Protocol.DEVICE_NAME }
+    }
+
+    private fun bluetoothOn(): Boolean =
+        (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter?.isEnabled == true
+
+    /** 按「找」时还没连上：开一条快速连线（手机积极扫描，FoloToy 每秒广播一次，通常几秒就连上） */
+    @SuppressLint("MissingPermission")
+    private fun fastConnect() {
+        if (!hasBtPermission()) {
+            findUi = FindUi.NOT_PAIRED
+            return
+        }
+        val dev = bondedFoloToy()
+        if (dev == null) {
+            findUi = FindUi.NOT_PAIRED
+            return
+        }
+        gatt?.close()
+        direct = true
+        gatt = dev.connectGatt(this, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
     }
 
     private val gattCallback = object : BluetoothGattCallback() {
         @SuppressLint("MissingPermission")
         override fun onConnectionStateChange(g: BluetoothGatt, st: Int, newState: Int) {
+            if (g !== gatt) return   // 已经换掉的旧连线
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 main.post { status = "连上 FoloToy，准备中…" }
                 g.discoverServices()
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 main.post {
-                    status = "FoloToy 没连上（进车用模式会自动连）"
+                    status = "FoloToy 没连上（不在附近、没开机？靠近了会自动连）"
                     cmdChar = null
                     writeQueue.clear()
                     writing = false
+                    if (ready) onLost()
+                    ready = false
+                    if (findUi == FindUi.RINGING) findUi = FindUi.LOST
+                    if (direct) connect()   // 快速连线没连上 / 断了：改回背景自动连
                     run(logic.onDisconnected())
                 }
             }
@@ -129,6 +187,7 @@ class CarService : AccessibilityService() {
 
         @SuppressLint("MissingPermission")
         override fun onServicesDiscovered(g: BluetoothGatt, st: Int) {
+            if (g !== gatt) return
             val svc = g.getService(Protocol.SERVICE)
             if (svc == null) {
                 main.post { status = "FoloToy 的韧体太旧：请烧最新的 SPACE-card-full.bin" }
@@ -153,7 +212,13 @@ class CarService : AccessibilityService() {
             main.post {
                 status = "FoloToy 已连线 ✓"
                 writing = false
+                ready = true
+                onFound()
                 send(Protocol.modeCommand(false))
+                if (findUi == FindUi.CONNECTING) {   // 按了「找」才连上：马上叫它响
+                    findUi = FindUi.RINGING
+                    send(Protocol.findCommand(true))
+                }
             }
         }
 
@@ -173,9 +238,129 @@ class CarService : AccessibilityService() {
         override fun onCharacteristicChanged(g: BluetoothGatt, c: BluetoothGattCharacteristic, value: ByteArray) {
             onKeyBytes(value)
         }
+
+        override fun onReadRemoteRssi(g: BluetoothGatt, rssi: Int, st: Int) {
+            if (st == BluetoothGatt.GATT_SUCCESS) main.post { proximity.add(rssi) }
+        }
+    }
+
+    // ---------------- 找 FoloToy ----------------
+    /** 设定画面按「让 FoloToy 响」/「停」 */
+    fun find(ring: Boolean) {
+        if (!ring) {
+            findUntil = 0
+            if (ready) send(Protocol.findCommand(false))
+            findUi = FindUi.STOPPED
+            return
+        }
+        proximity.reset()
+        if (ready) {
+            findUi = FindUi.RINGING
+            send(Protocol.findCommand(true))
+        } else {
+            findUi = FindUi.CONNECTING
+            findUntil = SystemClock.elapsedRealtime() + FIND_CONNECT_MS
+            fastConnect()
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun findTick(now: Long) {
+        if (findUi == FindUi.CONNECTING && now > findUntil) {
+            findUi = FindUi.NOT_FOUND
+            if (direct) connect()   // 快速连线放弃，改回背景自动连
+        }
+        if (ready && findUi == FindUi.RINGING && now - lastRssiAsk >= 1000) {
+            lastRssiAsk = now
+            gatt?.readRemoteRssi()
+        }
+        if (leftBehind.due(now, FindStore.alertEnabled(this), bluetoothOn())) notifyLeftBehind()
+    }
+
+    /** 本来连着，断了：记时间、位置；开始算「忘了带」 */
+    private fun onLost() {
+        FindStore.lostNow(this)
+        recordLocation()
+        leftBehind.onLost(SystemClock.elapsedRealtime())
+    }
+
+    /** 连上了：不用提醒了，收掉之前的通知 */
+    private fun onFound() {
+        leftBehind.onConnected()
+        getSystemService(NotificationManager::class.java)?.cancel(NOTIFY_LEFT_BEHIND)
+    }
+
+    private fun hasLocationPermission() =
+        checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+    /** 断线时手机在哪里：先存手机已经知道的位置（马上有），再要一次新的（GPS 可能要几十秒） */
+    @SuppressLint("MissingPermission")
+    private fun recordLocation() {
+        if (!hasLocationPermission()) return
+        val lm = getSystemService(LocationManager::class.java) ?: return
+        try {
+            lm.getProviders(true)
+                .mapNotNull { runCatching { lm.getLastKnownLocation(it) }.getOrNull() }
+                .maxByOrNull { it.time }
+                ?.let { FindStore.saveLocation(this, it) }
+            val provider = when {
+                Build.VERSION.SDK_INT >= 31 && lm.hasProvider(LocationManager.FUSED_PROVIDER) -> LocationManager.FUSED_PROVIDER
+                lm.isProviderEnabled(LocationManager.GPS_PROVIDER) -> LocationManager.GPS_PROVIDER
+                lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER) -> LocationManager.NETWORK_PROVIDER
+                else -> return
+            }
+            if (Build.VERSION.SDK_INT >= 30) {
+                lm.getCurrentLocation(provider, null, mainExecutor) { loc: Location? -> loc?.let { FindStore.saveLocation(this, it) } }
+            } else {
+                @Suppress("DEPRECATION")
+                lm.requestSingleUpdate(provider, LocationListener { loc -> FindStore.saveLocation(this, loc) }, Looper.getMainLooper())
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "拿不到位置：$e")   // 位置关了 / 没给「一律允许」：只记时间
+        }
+    }
+
+    private fun notifyLeftBehind() {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) return
+        val nm = getSystemService(NotificationManager::class.java) ?: return
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_LEFT_BEHIND, "忘了带 FoloToy", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "手机离开 FoloToy（蓝牙断线）一阵子还没连回来时提醒"
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 400, 200, 400, 200, 400)
+            },
+        )
+        val open = PendingIntent.getActivity(
+            this, 0,
+            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val at = FindStore.read(this)?.lostAt?.let { FindLogic.ago(System.currentTimeMillis(), it) } ?: "刚才"
+        val n = Notification.Builder(this, CHANNEL_LEFT_BEHIND)
+            .setSmallIcon(android.R.drawable.stat_sys_warning)
+            .setContentTitle("FoloToy 没跟着你？")
+            .setContentText("$at 跟手机断线了。点开看最后在哪里，或让它响。")
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .build()
+        nm.notify(NOTIFY_LEFT_BEHIND, n)
     }
 
     private fun onKeyBytes(data: ByteArray?) {
+        Protocol.decodeFindState(data)?.let { fs ->
+            main.post {
+                findUi = when (fs) {
+                    Protocol.FindState.RINGING -> FindUi.RINGING
+                    Protocol.FindState.FOUND -> FindUi.FOUND
+                    Protocol.FindState.TIMEOUT -> FindUi.TIMEOUT
+                    Protocol.FindState.STOPPED -> FindUi.STOPPED
+                }
+            }
+            return
+        }
         val key = Protocol.decodeKey(data) ?: return
         main.post { run(logic.onKey(key.btn, key.ev, SystemClock.elapsedRealtime())) }
     }
@@ -414,6 +599,9 @@ class CarService : AccessibilityService() {
     companion object {
         private const val TAG = "SpaceCar"
         private const val SEGMENT_MS = 250L
+        private const val FIND_CONNECT_MS = 30_000L
+        private const val CHANNEL_LEFT_BEHIND = "left_behind"
+        private const val NOTIFY_LEFT_BEHIND = 81
         val NAV_PACKAGES = setOf("com.waze", "com.google.android.apps.maps")
 
         /** 设定画面读得到（同一个 process） */

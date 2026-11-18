@@ -6,6 +6,12 @@
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <!-- 常联络：从通讯录选朋友、找他的 WhatsApp 通话 -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- 找 FoloToy：断线时记下手机位置（「最后在哪里」；断线多半在背景，要「一律允许」） -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <!-- 忘了带提醒 -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- 请手机不要为了省电把无障碍服务关掉 -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 

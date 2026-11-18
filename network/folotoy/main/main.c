@@ -14,6 +14,9 @@
 // 车用遥控器模式：FoloToy 当 Android 的蓝牙媒体遥控器（BLE HID，手机不用装 app），按键见 car_remote_model.h。
 //   上 长按        → 名片模式
 //
+// 手机找 FoloToy：每个模式都开蓝牙（名片 / 口袋机低频广播），手机「SPACE 车控」app 按「找」→
+//   嘀嘀响 + 红白闪（盖在任何画面上）；按任何键停（这一下不会传给底下的画面），30 秒没人按也停。见 find_model.h。
+//
 // 不再显示原本的测试菜单（衍生 app 要有自己的画面，见上游 docs/development/ai-guide.md）。
 // 并发规则照上游：按键回呼在 esp_timer task，只丢进 queue；input task 拿 LVGL 锁再改画面。
 #include "ble_remote.h"
@@ -30,6 +33,8 @@
 #include "esp_system.h"
 #include "esp_sleep.h"
 #include "esp_timer.h"
+#include "find_model.h"
+#include "find_screen.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
@@ -39,6 +44,7 @@
 #include "menu_screen.h"
 #include "nvs.h"
 #include "nvs_flash.h"
+#include "sound.h"
 #include "space_card.h"
 #include "space_card_model.h"
 #include "timer_screen.h"
@@ -73,6 +79,7 @@ static game_kind_t s_game;
 static QueueHandle_t s_queue;
 static volatile bool s_input_ready;
 static key_guard_t s_key_guard;
+static find_state_t s_find;        // 手机找 FoloToy（在 LVGL 锁里改）
 #define KEY_GUARD_MAX_US (10LL * 1000 * 1000)
 
 static space_card_btn_t map_btn(bsp_btn_t b) {
@@ -265,11 +272,73 @@ static void car_key(space_card_btn_t btn, space_card_ev_t ev) {
     bsp_lvgl_unlock();
 }
 
+// ---- 手机找 FoloToy（都在 LVGL 锁里）----
+// 停了之后把背光还给底下的画面
+static void restore_backlight(void) {
+    if (s_mode == APP_MODE_CAR) {
+        s_car.dimmed = false;
+        bsp_display_backlight(car_remote_backlight(&s_car));
+    } else if (s_screen == SCR_CARD) {
+        s_card.dimmed = false;
+        space_card_on_input(0);   // 重新算闲置时间
+        bsp_display_backlight(space_card_backlight(&s_card));
+    } else {
+        bsp_display_backlight(100);   // 口袋机的画面都是全亮（计时器要调暗会自己再调）
+    }
+}
+
+static void find_finish(find_stop_t why) {
+    find_screen_hide();
+    sound_alarm(false);
+    restore_backlight();
+    (void)ble_remote_notify_find(false, why);
+    ESP_LOGI(TAG, "找 FoloToy：停了（%s）", why == FIND_STOP_KEY ? "有人按键" : why == FIND_STOP_TIMEOUT ? "30 秒到了" : "手机叫停");
+}
+
+static void find_tick(lv_timer_t *t) {
+    (void)t;
+    const uint32_t now = now_ms();
+    if (s_mode != APP_MODE_CAR) {   // 车用模式由车用画面取指令；其他模式没有用，清掉免得塞满
+        uint8_t buf[32];
+        size_t len;
+        while (ble_remote_take_cmd(buf, &len, sizeof buf)) {}
+    }
+    const int req = ble_remote_take_find();
+    if (req == 1) {
+        if (find_start(&s_find, now)) {
+            ESP_LOGI(TAG, "找 FoloToy：手机在找，开始响");
+            sound_start();
+            sound_alarm(true);
+            find_screen_show();
+        }
+        (void)ble_remote_notify_find(true, FIND_STOP_NONE);
+    } else if (req == 0 && find_stop(&s_find)) {
+        find_finish(FIND_STOP_APP);
+    }
+    const find_stop_t why = find_on_tick(&s_find, now);
+    if (why != FIND_STOP_NONE) find_finish(why);
+    if (s_find.active) {
+        find_screen_update(find_flash_red(&s_find, now));
+        bsp_display_backlight(100);   // 底下的画面可能刚好调暗：一直压回全亮
+    }
+}
+
+// 按键先给「找」：正在响就停，回 true = 这一下吃掉
+static bool find_key(bsp_btn_ev_t ev) {
+    if (!bsp_lvgl_lock(500)) return false;
+    find_stop_t why;
+    const bool eaten = find_on_key(&s_find, map_ev(ev), now_ms(), &why);
+    if (why != FIND_STOP_NONE) find_finish(why);
+    bsp_lvgl_unlock();
+    return eaten;
+}
+
 static void input_task(void *arg) {
     (void)arg;
     input_t in;
     for (;;) {
         if (xQueueReceive(s_queue, &in, portMAX_DELAY) != pdTRUE) continue;
+        if (find_key(in.ev)) continue;
         if (s_mode == APP_MODE_CAR) {   // 车用：按下 / 放开也要（转给 app）
             car_key(map_btn(in.btn), map_ev(in.ev));
             continue;
@@ -324,9 +393,12 @@ void app_main(void) {
     }
     if (bsp_battery_init() != ESP_OK) ESP_LOGW(TAG, "电量计初始化失败：右上角不显示电量");
 
+    find_init(&s_find);
+    // 每个模式都开蓝牙（找 FoloToy 用）；车用模式快速广播，名片 / 口袋机低频、只认配对过的手机
+    const bool ble_ok = ble_remote_start(CONFIG_SPACE_REMOTE_NAME, s_mode == APP_MODE_CAR);
     if (s_mode == APP_MODE_CAR) {
         car_remote_init(&s_car);
-        if (!ble_remote_start(CONFIG_SPACE_REMOTE_NAME)) ESP_LOGE(TAG, "蓝牙起不来：画面会显示 Bluetooth error");
+        if (!ble_ok) ESP_LOGE(TAG, "蓝牙起不来：画面会显示 Bluetooth error");
         if (bsp_lvgl_lock(1000)) {
             car_screen_show(&s_car, CONFIG_SPACE_REMOTE_NAME);
             bsp_lvgl_unlock();
@@ -338,6 +410,11 @@ void app_main(void) {
             bsp_lvgl_unlock();
         }
         bsp_display_backlight(space_card_backlight(&s_card));
+        if (!ble_ok) ESP_LOGW(TAG, "蓝牙起不来：手机找不到 FoloToy（名片照样能用）");
+    }
+    if (bsp_lvgl_lock(1000)) {
+        lv_timer_create(find_tick, 100, NULL);   // 一直在：任何画面都会处理手机的「找」
+        bsp_lvgl_unlock();
     }
 
     s_queue = xQueueCreate(16, sizeof(input_t));   // 狂按挑战连按：按下 + 放开 + 单击，留多一点

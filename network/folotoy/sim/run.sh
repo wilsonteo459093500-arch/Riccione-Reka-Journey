@@ -27,7 +27,8 @@ OBJ="${WORK}/sim-obj-$(md5sum "${SIM}/lv_conf.h" | cut -c1-8)"
 OUT="${WORK}/sim-out/card"
 CAR_OUT="${WORK}/sim-out/car"
 POCKET_OUT="${WORK}/sim-out/pocket"
-mkdir -p "${WORK}/cache" "${OUT}" "${CAR_OUT}" "${POCKET_OUT}"
+FIND_OUT="${WORK}/sim-out/find"
+mkdir -p "${WORK}/cache" "${OUT}" "${CAR_OUT}" "${POCKET_OUT}" "${FIND_OUT}"
 
 # --- LVGL 原始码 + 编一次的 .o（之后重用）---
 if [[ ! -d "${LVGL}/src" ]]; then
@@ -51,11 +52,11 @@ cc -O1 -Wall -Wextra -Werror -I"${SIM}" -I"${SIM}/stub" -I"${LVGL}" -I"${MAIN}" 
   "${SIM}/sim.c" "${SIM}/stub/ble_remote_stub.c" "${SIM}/stub/sound_stub.c" \
   "${MAIN}/space_card.c" "${MAIN}/space_card_model.c" "${MAIN}/car_screen.c" "${MAIN}/car_remote_model.c" \
   "${MAIN}/pocket_model.c" "${MAIN}/audio_dsp.c" "${MAIN}/menu_screen.c" "${MAIN}/candle_screen.c" "${MAIN}/timer_screen.c" \
-  "${MAIN}/tools_screen.c" "${MAIN}/games_model.c" "${MAIN}/games_screen.c" \
+  "${MAIN}/tools_screen.c" "${MAIN}/games_model.c" "${MAIN}/games_screen.c" "${MAIN}/find_screen.c" \
   "${MAIN}"/font_*.c "${MAIN}/cover_img.c" \
   "${OBJ}"/*.o -lm -o "${WORK}/sim"
-rm -f "${OUT}"/*.ppm "${OUT}"/*.png "${CAR_OUT}"/*.ppm "${CAR_OUT}"/*.png "${POCKET_OUT}"/*.ppm "${POCKET_OUT}"/*.png
-"${WORK}/sim" "${OUT}" "${CAR_OUT}" "${POCKET_OUT}" "${EVENT_URL}"
+rm -f "${OUT}"/*.ppm "${OUT}"/*.png "${CAR_OUT}"/*.ppm "${CAR_OUT}"/*.png "${POCKET_OUT}"/*.ppm "${POCKET_OUT}"/*.png "${FIND_OUT}"/*.ppm "${FIND_OUT}"/*.png
+"${WORK}/sim" "${OUT}" "${CAR_OUT}" "${POCKET_OUT}" "${FIND_OUT}" "${EVENT_URL}"
 
 # --- 扫二维码（OpenCV 装在独立 venv）---
 VENV="${WORK}/sim-venv"
@@ -66,10 +67,12 @@ fi
 "${VENV}/bin/python" -I "${SIM}/scan_qr.py" "${OUT}" "${CARD_URL}?s=folotoy" "${EVENT_URL}&s=folotoy"
 "${VENV}/bin/python" -I "${SIM}/scan_qr.py" "${CAR_OUT}"
 "${VENV}/bin/python" -I "${SIM}/scan_qr.py" "${POCKET_OUT}"
+"${VENV}/bin/python" -I "${SIM}/scan_qr.py" "${FIND_OUT}"
 
 if [[ "${1:-}" == "--update-screenshot" ]]; then
   cp "${OUT}/screens.png" "${SIM}/../firmware/screens.png"
   cp "${CAR_OUT}/screens.png" "${SIM}/../firmware/car-screens.png"
   cp "${POCKET_OUT}/screens.png" "${SIM}/../firmware/pocket-screens.png"
-  echo "已更新 firmware/screens.png、car-screens.png、pocket-screens.png"
+  cp "${FIND_OUT}/screens.png" "${SIM}/../firmware/find-screens.png"
+  echo "已更新 firmware/screens.png、car-screens.png、pocket-screens.png、find-screens.png"
 fi

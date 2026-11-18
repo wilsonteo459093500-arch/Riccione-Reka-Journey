@@ -12,6 +12,7 @@
 #include "ble_remote.h"
 #include "candle_screen.h"
 #include "car_screen.h"
+#include "find_screen.h"
 #include "menu_screen.h"
 #include "games_screen.h"
 #include "timer_screen.h"
@@ -90,11 +91,12 @@ static void car_press(car_remote_state_t *s, space_card_btn_t b, space_card_ev_t
 }
 
 int main(int argc, char **argv) {
-    if (argc < 4) { fprintf(stderr, "用法：%s <名片输出资料夹> <车用输出资料夹> <口袋机输出资料夹> [活动网址]\n", argv[0]); return 2; }
+    if (argc < 5) { fprintf(stderr, "用法：%s <名片输出资料夹> <车用输出资料夹> <口袋机输出资料夹> <找 FoloToy 输出资料夹> [活动网址]\n", argv[0]); return 2; }
     s_out = argv[1];
     const char *car_out = argv[2];
     const char *pocket_out = argv[3];
-    const char *event_url = argc > 4 ? argv[4] : "";
+    const char *find_out = argv[4];
+    const char *event_url = argc > 5 ? argv[5] : "";
 
     lv_init();
     lv_tick_set_cb(tick);
@@ -394,5 +396,22 @@ int main(int argc, char **argv) {
     advance_ms(150);
     dump("32-squish-bounce.ppm");
     games_screen_hide();
+
+    // ---- 手机找 FoloToy：盖在名片上，红白闪 → 按键停了回名片 ----
+    s_out = find_out;
+    old = lv_screen_active();
+    space_card_show(&s);
+    lv_obj_delete(old);
+    press(&s, SPACE_CARD_BTN_OK, SPACE_CARD_EV_LONG);   // 前面停在大二维码：回一般名片
+    advance_ms(100);
+    find_screen_show();
+    advance_ms(50);
+    dump("1-find-red.ppm");
+    find_screen_update(false);
+    advance_ms(50);
+    dump("2-find-white.ppm");
+    find_screen_hide();
+    advance_ms(50);
+    dump("3-found.ppm");
     return 0;
 }

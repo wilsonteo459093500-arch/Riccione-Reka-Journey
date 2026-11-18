@@ -14,6 +14,7 @@ FoloToy AI Passport（ESP32-C3、240×320 屏幕、三个按键）有两个模�
   - 车用遥控器、返回名片
   - 见下面「口袋机」
 - **车用遥控器模式**：FoloToy 当 Android 手机的**蓝牙媒体遥控器**，手机不用装 app。开车时按 FoloToy 控制微信读书听书、音乐，长按叫语音助理。见下面「车用遥控器」。
+- **手机找 FoloToy**：手机「SPACE 车控」app 按「让 FoloToy 响」→ FoloToy 嘀嘀响、屏幕红白闪（任何模式、任何画面都会）；app 还记得它最后跟手机断线的时间和地点、忘了带会提醒。见下面「手机找 FoloToy」。
 
 名片画面**「下」长按**（或菜单里选「车用遥控器」）→ 车用模式；车用画面**「上」长按** → 回名片。机器会记住模式，下次开机停在同一个（换模式会重开机，约 2 秒）。菜单里的其他功能不用重开机。
 
@@ -153,7 +154,7 @@ FoloToy 背面就是一枚**被动 NTAG213** NFC 芯片（官方规格：支持�
 
 1. 名片画面按住「下」→ FoloToy 重开机进车用模式，屏幕写 **Waiting for phone**
 2. 手机「设定 → 连接 → 蓝牙」→ 扫描 → 点 **SPACE Remote** → 配对（不用输入密码）
-3. FoloToy 蓝牙图示变**绿色**、写 **Connected** 就好了。之后进车用模式会自动重连（最多记 3 台手机）
+3. FoloToy 蓝牙图示变**绿色**、写 **Connected** 就好了。之后 FoloToy 开着（任何模式）手机就会自动重连（最多记 3 台手机）；**新手机只能在车用模式配对**
 
 ### 按键
 
@@ -172,7 +173,41 @@ FoloToy 背面就是一枚**被动 NTAG213** NFC 芯片（官方规格：支持�
 - **麦克风**：FoloToy 只有低功耗蓝牙，**不能当手机的通话麦克风**。打电话、语音助理听的是车上蓝牙或手机的麦克风。
 - 开车请把 FoloToy 固定好（出风口夹、方向盘旁），不要拿在手上按。
 
-## SPACE 车控 Android app（第二阶段，v0.1）
+## 手机找 FoloToy（v0.2，2026-11-18）
+
+![模拟画面：正在响（红）/ 正在响（白）/ 按键停了回到原来的画面](./firmware/find-screens.png)
+
+要：FoloToy 烧最新的 `SPACE-card-full.bin`、手机装最新的 [`SPACE-car-app.apk`](./firmware/SPACE-car-app.apk)（v0.2，直接覆盖安装）、手机跟 FoloToy 配对过（见下面「车用遥控器 → 第一次配对」）。
+
+### 用法
+
+打开「SPACE 车控」app，最上面就是「找 FoloToy」：
+
+| 你做 | 会怎样 |
+|---|---|
+| 按「让 FoloToy 响」 | FoloToy 嘀嘀响 + 屏幕红白闪「我在这里！」+ 全亮。app 显示信号格（▮▮▮▯▯）和「越来越近 / 越来越远」 |
+| 在 FoloToy 上按**任何一个键** | 停；app 显示「找到了 ✓」。这一下只用来停，不会让 FoloToy 跳画面 |
+| 没人按 | 响 30 秒自己停 |
+| 按「停」 | 从手机叫停 |
+| FoloToy 现在没连上 | app 先连它（最多等 30 秒），连上马上响；连不上就看「最后在哪里」 |
+
+- **最后在哪里**：FoloToy 跟手机断线时，app 记下时间和手机那时的位置，显示「昨天 21:12 跟手机断线」+「在地图上看最后的位置」（Google Maps）。只存在这支手机里，不上网。
+- **忘了带提醒**（可以关）：断线约 45 秒还没连回来 → 手机震 + 通知「FoloToy 没跟着你？」。FoloToy 换模式重开机几秒就连回来，不会吵；手机蓝牙关掉时不提醒。
+- 第一次用：app 里按「④ 位置、通知」→ 允许 → **再按一次 ④ → 位置选「一律允许」**（断线时 app 多半在背景，没有「一律允许」就只记时间、不记位置）。
+
+### 蓝牙怎么开（2026-11-18 用户选「C」）
+
+| 模式 | 蓝牙 |
+|---|---|
+| 车用遥控器 | 照旧：快速广播、手机设定里看得到、可以配对新手机 |
+| 名片 / 口袋机 | **约每秒广播一次**；手机设定里看不到它；**只让配对过的手机连**（活动上别人的手机连不上、也没办法叫它响）。连上后请手机放慢连线（约 0.3 秒一次），所以从按「找」到响最多 1 秒左右；没连着时手机要先找到它，通常几秒 |
+
+- **新手机要在车用模式配对**（名片模式不接受新配对）。
+- 耗电：FoloToy 的屏幕和处理器本来就一直开着（只会调暗），低频蓝牙多耗的电跟屏幕比很小；实际待机时间要真机量。
+- **关机时找不到**：任何做法都要 FoloToy 开着。没电、关机时就看「最后在哪里」。
+- 一次只能连一支手机（跟车用模式一样）。
+
+## SPACE 车控 Android app（第二阶段，v0.2）
 
 装了 app 之后，FoloToy 车用模式多两个功能（没装 app 时照旧是媒体遥控器）：
 
@@ -192,6 +227,7 @@ FoloToy 背面就是一枚**被动 NTAG213** NFC 芯片（官方规格：支持�
    - ① 开权限（附近的装置、通讯录）
    - ② 开无障碍服务：设定 → 协助工具 → 已安装的应用程式 → SPACE 车控 → 开启
    - ③ 电池：允许不受限制；Samsung 再到「设定 → 电池 → 背景使用限制 → 永不休眠的应用程式」加入 SPACE 车控
+   - ④ 位置、通知（找 FoloToy 的「最后在哪里」「忘了带提醒」用）：按两次，第二次位置选「一律允许」
 4. 「＋ 加朋友」从通讯录选几个常联络的人，填 FoloToy 上显示的英文名（FoloToy 只有英文字型；中文名字手机会念）
 5. app 上方状态写「FoloToy 已连线 ✓」、FoloToy 画面写「SPACE Remote + App」就好了
 
@@ -251,8 +287,10 @@ FoloToy 背面就是一枚**被动 NTAG213** NFC 芯片（官方规格：支持�
 | `main/space_card_model.c/.h` | 纯逻辑：网址加 `s=folotoy`、按键 → 状态、闲置调暗、亮度、二维码大小 / 版本估算、电量文字（**有 host 测试**） |
 | `main/space_card.c/.h` | LVGL 画面：深色底、品牌字、电量、名字、白底二维码、说明、页点；大二维码模式 |
 | `main/car_remote_model.c/.h` | 车用遥控器纯逻辑：换模式、按键 → 动作 → HID 用法码（播放 0xCD、下一首 0xB5、上一首 0xB6、语音 0xCF）、报告格式、调暗、画面文字（**有 host 测试**） |
-| `main/ble_remote.c/.h` | 蓝牙：ESP-IDF `esp_hid`（NimBLE）建 HID / 电量 / 装置资讯服务；广播「SPACE Remote」、Just Works 配对 + 绑定、断线重新广播、送媒体键 |
+| `main/ble_remote.c/.h` | 蓝牙：ESP-IDF `esp_hid`（NimBLE）建 HID / 电量 / 装置资讯服务 + SPACE 车控通道；车用模式快速广播、可配对；名片 / 口袋机低频广播、只认配对过的手机、请手机放慢连线；送媒体键、收「找」的指令 |
 | `main/car_screen.c/.h` | 车用画面：蓝牙图示（颜色 = 状态）、状态大字、刚按的动作、按键说明 |
+| `main/find_model.c/.h` | 手机找 FoloToy 纯逻辑：指令 / 通知封包、30 秒自己停、红白闪节奏、按键停了之后把那一下吃掉（**有 host 测试**） |
+| `main/find_screen.c/.h` | 「我在这里！」红白闪画面：盖在 LVGL top layer，底下的画面不受影响 |
 | `main/pocket_model.c/.h` | 口袋机纯逻辑：菜单、蜡烛（年龄、唱歌、熄灭）、计时器、倒数、时间文字（**有 host 测试**） |
 | `main/audio_dsp.c/.h` | 生日歌旋律与歌词、音色合成（整数正弦表 + 泛音 + 包络）、吹气判断（大声 + 持续 + 沙沙感 / 爆音）（**有 host 测试**） |
 | `main/sound.c/.h` | 喇叭 / 麦克风背景 task：放歌、响铃、听吹气；画面只送命令、读状态 |
@@ -278,18 +316,22 @@ FoloToy 背面就是一枚**被动 NTAG213** NFC 芯片（官方规格：支持�
 ```text
 Build:        PASS      —— 2026-11-18：./build.sh（ESP-IDF 5.5.3 Docker、esp32c3）编译通过，main/ 没有警告；
                            上游 verify_firmware.py：Firmware layout PASS、Merged firmware PASS（1,395,728 bytes，烧在 0x0）
-                           蓝牙只在车用模式启动
-Host tests:   PASS      —— test_space_card_model、test_car_remote_model、test_pocket_model、test_audio_dsp（-Wall -Wextra -Werror）
+                           2026-11-18 阶段 B：Merged firmware PASS（1,743,392 bytes）；每个模式都开蓝牙；
+                           idf.py size：DRAM 用 122 KB、开机时还剩约 199 KB
+Host tests:   PASS      —— test_space_card_model、test_car_remote_model、test_pocket_model、test_audio_dsp、test_games_model、
+                           test_find_model（-Wall -Wextra -Werror）；app：23 个单元测试（含 FindLogicTest 6 个）
 Fonts:        PASS      —— make_font.py --check：中文 62 字、大数字，打包后逐像素读回一致
 Simulated:    PASS      —— sim/run.sh：名片 / 活动 / 大二维码三个画面，OpenCV 都扫出正确网址（带 s=folotoy）；
-                           车用四个状态、口袋机 12 个画面看过（中文字正确、版面不重叠）
+                           车用四个状态、口袋机 12 个画面看过（中文字正确、版面不重叠）；找 FoloToy 三个画面（firmware/find-screens.png）
 Device tests: 部分      —— 2026-11-18 用户 Samsung 真机：名片、车用遥控器配对 / 重连 / YouTube 播放暂停 / 语音助理 OK；
                            微信读书要先在 app 里按播放一次，之后 FoloToy 才控制得到（Android 的规则，见 PLAN 阶段 2）
                            口袋机（蜡烛、生日歌、吹气、计时器）还没真机测
 Unverified:   真机画面（颜色、圆角）、手机对着这块屏幕实际扫码、背光实际亮度、电量读数、按键手感；
               车用：Samsung 配对与自动重连、播放 / 上下一首在微信读书 / Spotify 的效果、
               蓝牙执行时的记忆体；
-              口袋机：喇叭音量与音色、麦克风收音大小（吹气门槛 BLOW_ABS_MIN 可能要调）、火苗动画在真机的流畅度
+              口袋机：喇叭音量与音色、麦克风收音大小（吹气门槛 BLOW_ABS_MIN 可能要调）、火苗动画在真机的流畅度；
+              找 FoloToy：名片模式下 Samsung 会不会自己连回来、多久连上、手机接不接受放慢连线、响铃音量、
+              名片模式开蓝牙 + 喇叭 + 画面同时跑的记忆体、待机时间变化、背景拿位置（要「一律允许」）、通知震动
 ```
 
 依赖是照上游 `dependencies.lock` 的版本从各自的 git 取的（开发环境连不上 Espressif 组件仓库），内容应该相同，但组件仓库的 hash 没有逐一比对过。

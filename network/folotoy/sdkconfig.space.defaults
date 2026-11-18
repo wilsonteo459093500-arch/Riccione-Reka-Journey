@@ -6,7 +6,7 @@ CONFIG_LV_FONT_MONTSERRAT_48=y
 # 中文字型 32px 的英文 / 数字交给 Montserrat 32（tools/make_font.py 的 fallback）
 CONFIG_LV_FONT_MONTSERRAT_32=y
 
-# 车用遥控器：BLE HID（NimBLE + ESP-IDF esp_hid）。名片模式不会启动蓝牙。
+# 蓝牙：BLE HID（NimBLE + ESP-IDF esp_hid）。车用模式快速广播；名片 / 口袋机低频广播（手机找 FoloToy 用）。
 CONFIG_BT_ENABLED=y
 CONFIG_BT_NIMBLE_ENABLED=y
 CONFIG_BT_NIMBLE_ROLE_PERIPHERAL=y
