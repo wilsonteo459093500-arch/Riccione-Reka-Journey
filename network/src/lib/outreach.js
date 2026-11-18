@@ -41,7 +41,58 @@ export const FESTIVALS = [
   { key: 'christmas', label: '圣诞节', zh: '圣诞快乐！', en: 'Merry Christmas!', ms: 'Selamat Hari Krismas!' },
   { key: 'newyear', label: '元旦新年', zh: '新年快乐！祝新的一年一切顺利！', en: 'Happy New Year! Wishing you a wonderful year ahead.', ms: 'Selamat Tahun Baru!' },
   { key: 'merdeka', label: '国庆日', zh: '国庆日快乐！', en: 'Happy Merdeka Day!', ms: 'Selamat Hari Merdeka!' },
+  { key: 'haji', label: '哈芝节', zh: '哈芝节快乐！', en: 'Selamat Hari Raya Aidiladha!', ms: 'Selamat Hari Raya Aidiladha!' },
 ];
+
+/* ---------- 节日日期：「今日」在节日前 3 星期提醒 ----------
+   固定日期的（元旦、国庆日、圣诞）每年自动算。
+   农历 / 回历 / 印度历的每年不同 → 下面这张表，照马来西亚公共假期（2026-11-18 查的）：
+     2027 农历新年 2/6、开斋节 3/10、哈芝节 5/17 —— 多个假期日历一致
+     2027 中秋 9/15（不是公共假期，农历八月十五）
+     2027 屠妖节：日历之间不一致（10/28 或 10/29），官方还没公布 → 标「约」
+   回教节日要看新月，可能差一天 → 标「约」。
+   ⚠ 每年 11 月左右官方公布下一年的公共假期，要来这里补下一年（表用完了就不会提醒农历 / 回历的节日）。 */
+export const FESTIVAL_DATES = [
+  { key: 'cny', date: '2027-02-06', approx: false },
+  { key: 'raya', date: '2027-03-10', approx: true },
+  { key: 'haji', date: '2027-05-17', approx: true },
+  { key: 'midautumn', date: '2027-09-15', approx: false },
+  { key: 'deepavali', date: '2027-10-28', approx: true },
+];
+const FIXED_DATES = { newyear: '01-01', merdeka: '08-31', christmas: '12-25' };
+export const FESTIVAL_LEAD_DAYS = 21;   // 节日前几天开始提醒
+
+const localDay = (t) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const dayDiff = (from, to) => Math.round((Date.parse(`${to}T00:00:00`) - Date.parse(`${from}T00:00:00`)) / DAY);
+
+/** 今天起 N 天内的节日：[{ key, label, date, approx, daysLeft }]，近的在前 */
+export function festivalCalendar(now = Date.now(), days = 400) {
+  const today = localDay(now);
+  const y = Number(today.slice(0, 4));
+  const rows = [...FESTIVAL_DATES];
+  for (const yr of [y, y + 1]) for (const [key, md] of Object.entries(FIXED_DATES)) rows.push({ key, date: `${yr}-${md}`, approx: false });
+  return rows
+    .map((r) => ({ ...r, label: (FESTIVALS.find((f) => f.key === r.key) || {}).label || r.key, daysLeft: dayDiff(today, r.date) }))
+    .filter((r) => r.daysLeft >= 0 && r.daysLeft <= days)
+    .sort((a, b) => a.daysLeft - b.daysLeft);
+}
+
+/**
+ * 「今日」要提醒的节日：3 星期内到，而且还没为它建过节日问候（节日前 45 天内建的才算）
+ */
+export function upcomingFestivals(campaigns = [], now = Date.now(), lead = FESTIVAL_LEAD_DAYS) {
+  return festivalCalendar(now, lead).filter((f) => !campaigns.some((c) => c.kind === 'festival'
+    && String(c.occasion || '').trim() === f.label
+    && dayDiff(String(c.created_at || '').slice(0, 10) || '1970-01-01', f.date) >= 0
+    && dayDiff(String(c.created_at || '').slice(0, 10) || '1970-01-01', f.date) <= 45));
+}
+
+/** 「还有 12 天（2 月 6 日）」 */
+export function festivalWhen(f) {
+  const md = `${Number(f.date.slice(5, 7))} 月 ${Number(f.date.slice(8, 10))} 日`;
+  const left = f.daysLeft === 0 ? '就是今天' : f.daysLeft === 1 ? '明天' : `还有 ${f.daysLeft} 天`;
+  return `${left}（${f.approx ? '约 ' : ''}${md}）`;
+}
 
 /** 节日祝福语：认得的节日照上表，自己打的就「XX 快乐！」 */
 export function festivalGreeting(occasion, lang = 'zh') {

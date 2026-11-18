@@ -4,19 +4,21 @@
    ============================================================ */
 import React, { useMemo, useState } from 'react';
 import {
-  MessageCircle, Sun, CalendarPlus, Send, Check, Clock, Contact, ListChecks, Sparkles, UserPlus, TrendingDown, Hourglass, ScanLine,
+  MessageCircle, Sun, CalendarPlus, Send, PartyPopper, Check, Clock, Contact, ListChecks, Sparkles, UserPlus, TrendingDown, Hourglass, ScanLine,
 } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
 import { waLink } from '../lib/logic.js';
 import { todayActions, ACTION_LABEL, firstName } from '../lib/relation.js';
+import { upcomingFestivals, festivalWhen } from '../lib/outreach.js';
 import { Avatar, AffinityBar, Button, TierBadge, Spinner, useToast, cx } from './ui.jsx';
 import ScheduleSheet from './ScheduleSheet.jsx';
 
 const REASON_ICON = { promise: ListChecks, follow: Hourglass, new: UserPlus, overdue: Clock, soon: Clock, cooling: TrendingDown };
 const WEEK = ['日', '一', '二', '三', '四', '五', '六'];
 
-export default function Today({ onOpen, onBrief, onScan, onSend, onCampaigns }) {
-  const { people, loading, error, quickContact, snooze } = useStore();
+export default function Today({ onOpen, onBrief, onScan, onSend, onCampaigns, onFestival }) {
+  const { people, data, loading, error, quickContact, snooze } = useStore();
+  const festivals = useMemo(() => upcomingFestivals(data.campaigns), [data.campaigns]);
   const toast = useToast();
   const [limit, setLimit] = useState(7);
   const [sched, setSched] = useState(null); // [{person, action}]
@@ -62,6 +64,14 @@ export default function Today({ onOpen, onBrief, onScan, onSend, onCampaigns }) 
         </div>
         <h1 className="mt-0.5 flex items-center gap-2 text-2xl font-semibold tracking-tight"><Sun className="h-6 w-6 text-amber-500" />{hello}，今天找这几个人</h1>
       </header>
+
+      {onFestival && people.length > 0 && festivals.map((f) => (
+        <div key={`${f.key}${f.date}`} className="flex flex-wrap items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+          <PartyPopper className="h-5 w-5 shrink-0 text-amber-600" />
+          <span className="min-w-0 flex-1 text-sm text-amber-900"><b>{f.label}</b>{festivalWhen(f)}：先写好节日问候</span>
+          <Button size="sm" variant="outline" className="whitespace-nowrap" onClick={() => onFestival(f.label)}><Send className="h-4 w-4" />准备问候</Button>
+        </div>
+      ))}
 
       {people.length > 0 && (
         <div className="grid grid-cols-4 gap-2">

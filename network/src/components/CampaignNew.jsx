@@ -8,21 +8,22 @@ import { TIERS, fmtDate } from '../lib/logic.js';
 import { todayActions } from '../lib/relation.js';
 import {
   KINDS, KIND_KEYS, LANGS, FESTIVALS, PLACEHOLDERS, ATTENDANCE, ATTENDANCE_KEYS,
-  defaultTemplate, draftFor, filterAudience, warningsFor, allTags,
+  defaultTemplate, draftFor, filterAudience, warningsFor, allTags, festivalCalendar, festivalWhen,
 } from '../lib/outreach.js';
 import { Avatar, Button, Field, Input, Section, Textarea, TierBadge, useToast, cx } from './ui.jsx';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-export default function CampaignNew({ kind: kind0 = 'festival', eventId: event0 = '', onCancel, onCreated }) {
+export default function CampaignNew({ kind: kind0 = 'festival', eventId: event0 = '', occasion: occasion0 = '', onCancel, onCreated }) {
   const store = useStore();
   const toast = useToast();
   const { people, data, me } = store;
   const events = useMemo(() => data.events.slice().sort((a, b) => String(b.held_on || b.created_at).localeCompare(String(a.held_on || a.created_at))), [data.events]);
 
+  const upcoming = useMemo(() => festivalCalendar(Date.now(), 60), []);
   const [kind, setKind] = useState(KINDS[kind0] ? kind0 : 'festival');
   const [eventId, setEventId] = useState(event0 || (kind0 === 'event_follow' && events[0] ? events[0].id : ''));
-  const [occasion, setOccasion] = useState(FESTIVALS[0].label);
+  const [occasion, setOccasion] = useState(occasion0 || (upcoming[0] ? upcoming[0].label : FESTIVALS[0].label));
   const [invite, setInvite] = useState('');
   const [lang, setLang] = useState('auto');
   const [template, setTemplate] = useState('');
@@ -123,6 +124,7 @@ export default function CampaignNew({ kind: kind0 = 'festival', eventId: event0 
                 ))}
               </div>
               <Input className="mt-2" value={occasion} onChange={(e) => setOccasion(e.target.value)} placeholder="或自己打：例 端午节、公司周年" />
+              {upcoming.filter((u) => u.label === occasion).slice(0, 1).map((u) => <span key={u.date} className="mt-1 block text-xs text-amber-700">{u.label}{festivalWhen(u)}</span>)}
             </Field>
           )}
           {kind === 'invite' && (

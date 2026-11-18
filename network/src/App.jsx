@@ -33,7 +33,7 @@ function parseHash() {
   if (h === '/inbox') return { name: 'inbox' };
   if (h === '/send') return { name: 'send' };
   const sn = /^\/send\/new(?:\?(.*))?$/.exec(h);
-  if (sn) { const qs = new URLSearchParams(sn[1] || ''); return { name: 'send-new', kind: qs.get('kind') || 'festival', event: qs.get('event') || '' }; }
+  if (sn) { const qs = new URLSearchParams(sn[1] || ''); return { name: 'send-new', kind: qs.get('kind') || 'festival', event: qs.get('event') || '', occasion: qs.get('occasion') || '' }; }
   const sr = /^\/send\/([\w-]+)$/.exec(h);
   if (sr) return { name: 'send-run', id: sr[1] };
   if (h === '/events') return { name: 'events' };
@@ -100,7 +100,7 @@ function Shell() {
     if (route.name === 'event') back.current = `/events/${route.id}`;
   }, [route.name]);
   const fullScreen = ['scan', 'talk', 'brief', 'send-new'].includes(route.name);
-  const sendNew = (kind, eventId = '') => go(`/send/new?kind=${kind}${eventId ? `&event=${eventId}` : ''}`);
+  const sendNew = (kind, eventId = '', occasion = '') => go(`/send/new?kind=${kind}${eventId ? `&event=${eventId}` : ''}${occasion ? `&occasion=${encodeURIComponent(occasion)}` : ''}`);
 
   return (
     <div className="flex h-full flex-col lg:flex-row">
@@ -147,10 +147,10 @@ function Shell() {
           <div className="min-h-0 flex-1 pb-20 lg:pb-0"><Galaxy onOpen={openPerson} /></div>
         ) : (
           <div className="min-h-0 flex-1 overflow-y-auto">
-            {route.name === 'today' && <Today onOpen={openPerson} onBrief={(id) => go(`/p/${id}/brief`)} onScan={() => go('/scan')} onSend={() => sendNew('today')} onCampaigns={() => go('/send')} />}
-            {route.name === 'send' && <Campaigns onNew={(k) => sendNew(k)} onOpen={(id) => go(`/send/${id}`)} onEvents={() => go('/events')} />}
+            {route.name === 'today' && <Today onOpen={openPerson} onBrief={(id) => go(`/p/${id}/brief`)} onScan={() => go('/scan')} onSend={() => sendNew('today')} onCampaigns={() => go('/send')} onFestival={(o) => sendNew('festival', '', o)} />}
+            {route.name === 'send' && <Campaigns onNew={(k, o) => sendNew(k, '', o)} onOpen={(id) => go(`/send/${id}`)} onEvents={() => go('/events')} />}
             {route.name === 'send-new' && (
-              <CampaignNew key={`${route.kind}:${route.event}`} kind={route.kind} eventId={route.event}
+              <CampaignNew key={`${route.kind}:${route.event}:${route.occasion}`} kind={route.kind} eventId={route.event} occasion={route.occasion}
                 onCancel={() => (window.history.length > 1 ? window.history.back() : go('/send'))}
                 onCreated={(id) => { window.history.replaceState(null, '', `#/send/${id}`); window.dispatchEvent(new HashChangeEvent('hashchange')); }} />
             )}

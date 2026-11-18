@@ -5,7 +5,7 @@ import React, { useMemo } from 'react';
 import { Send, PartyPopper, CalendarHeart, Mail, Sun, PenLine, ChevronRight, Lightbulb, CalendarDays } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
 import { relDay } from '../lib/logic.js';
-import { KINDS, campaignStats, learnings } from '../lib/outreach.js';
+import { KINDS, campaignStats, learnings, festivalCalendar, festivalWhen } from '../lib/outreach.js';
 import { Section, Spinner, cx } from './ui.jsx';
 
 const ICON = { event_follow: CalendarHeart, festival: PartyPopper, invite: Mail, today: Sun, custom: PenLine };
@@ -15,6 +15,7 @@ export default function Campaigns({ onNew, onOpen, onEvents }) {
   const list = useMemo(() => data.campaigns.slice().sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))), [data.campaigns]);
   const tips = useMemo(() => learnings(data.outreach, data.campaigns), [data.outreach, data.campaigns]);
   const all = campaignStats(data.outreach);
+  const next = useMemo(() => festivalCalendar(Date.now(), 200).slice(0, 5), []);
 
   if (loading) return <div className="p-6"><Spinner label="读取中…" /></div>;
 
@@ -39,6 +40,20 @@ export default function Campaigns({ onNew, onOpen, onEvents }) {
         })}
       </div>
       <button onClick={() => onNew('custom')} className="w-full rounded-xl border border-dashed border-line py-2 text-sm text-muted hover:border-ink/30"><PenLine className="mr-1 inline h-4 w-4" />其他：自己写模板</button>
+
+      {next.length > 0 && (
+        <Section title={<span className="flex items-center gap-1.5"><PartyPopper className="h-4 w-4 text-amber-500" />接下来的节日</span>}>
+          <ul className="divide-y divide-line">
+            {next.map((f) => (
+              <li key={`${f.key}${f.date}`} className="flex items-center gap-2 py-2">
+                <span className="flex-1 text-sm"><b>{f.label}</b> <span className="text-muted">{festivalWhen(f)}</span></span>
+                <button onClick={() => onNew('festival', f.label)} className="rounded-lg border border-line bg-white px-2 py-0.5 text-xs font-medium hover:border-ink/30">准备问候</button>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-[11px] text-faint">照马来西亚公共假期；标「约」的要看官方公布 / 新月，可能差一天。节日前 3 星期「今日」会提醒。</p>
+        </Section>
+      )}
 
       <Section title={<span className="flex items-center gap-1.5"><Lightbulb className="h-4 w-4 text-amber-500" />从回应学到的</span>}>
         {all.answered === 0 ? (

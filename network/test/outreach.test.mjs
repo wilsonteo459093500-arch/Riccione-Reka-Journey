@@ -193,3 +193,33 @@ test('cleanPerson / buildDraftPrompt / normalizeDrafts', () => {
   assert.ok(!prompt.includes('以前群发的经验'));
   assert.deepEqual(normalizeDrafts(null, [p]), []);
 });
+
+/* ---------- 节日提醒 ---------- */
+import { festivalCalendar, upcomingFestivals, festivalWhen, FESTIVAL_DATES, FESTIVALS } from '../src/lib/outreach.js';
+const at = (d) => Date.parse(`${d}T09:00:00`);
+
+test('节日日期表：每个都认得、日期格式对、由近到远', () => {
+  for (const f of FESTIVAL_DATES) {
+    assert.ok(FESTIVALS.some((x) => x.key === f.key), f.key);
+    assert.match(f.date, /^\d{4}-\d{2}-\d{2}$/);
+  }
+  const cal = festivalCalendar(at('2026-11-18'), 400);
+  assert.deepEqual(cal.slice(0, 3).map((f) => [f.label, f.date]), [['圣诞节', '2026-12-25'], ['元旦新年', '2027-01-01'], ['农历新年', '2027-02-06']]);
+  assert.ok(cal.some((f) => f.label === '开斋节' && f.approx));
+  assert.ok(cal.every((f, i) => i === 0 || f.daysLeft >= cal[i - 1].daysLeft));
+});
+
+test('今日提醒：节日前 3 星期内才出现；建过节日问候就不再提醒', () => {
+  assert.deepEqual(upcomingFestivals([], at('2026-11-18')), []);
+  const dec = upcomingFestivals([], at('2026-12-10'));
+  assert.deepEqual(dec.map((f) => f.label), ['圣诞节']);
+  assert.equal(festivalWhen(dec[0]), '还有 15 天（12 月 25 日）');
+  const both = upcomingFestivals([], at('2026-12-20')).map((f) => f.label);
+  assert.deepEqual(both, ['圣诞节', '元旦新年']);
+  const done = [{ kind: 'festival', occasion: '圣诞节', created_at: '2026-12-15T02:00:00Z' }];
+  assert.deepEqual(upcomingFestivals(done, at('2026-12-20')).map((f) => f.label), ['元旦新年']);
+  // 去年的圣诞问候不算
+  assert.deepEqual(upcomingFestivals([{ kind: 'festival', occasion: '圣诞节', created_at: '2025-12-15T02:00:00Z' }], at('2026-12-20')).map((f) => f.label), ['圣诞节', '元旦新年']);
+  const raya = upcomingFestivals([], at('2027-03-09'))[0];
+  assert.equal(festivalWhen(raya), '明天（约 3 月 10 日）');
+});
