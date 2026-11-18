@@ -128,6 +128,39 @@ FoloToy 背面就是一枚**被动 NTAG213** NFC 芯片（官方规格：支持�
 - **麦克风**：FoloToy 只有低功耗蓝牙，**不能当手机的通话麦克风**。打电话、语音助理听的是车上蓝牙或手机的麦克风。
 - 开车请把 FoloToy 固定好（出风口夹、方向盘旁），不要拿在手上按。
 
+## SPACE 车控 Android app（第二阶段，v0.1）
+
+装了 app 之后，FoloToy 车用模式多两个功能（没装 app 时照旧是媒体遥控器）：
+
+| 键 | 做什么 |
+|---|---|
+| **按住「下」** | 打开微信读书 →「继续上次那本」→ 3 秒不按就自动开始播 → 2 秒后切回刚才的 Waze / Google Maps |
+| **按住「确定」** | 常联络清单：手机念名字、FoloToy 显示「2 / 5 Ah Meng」；上下选 |
+| 清单里 确定 | **WhatsApp 语音通话**（用通讯录里 WhatsApp 的通话项目直接拨） |
+| 清单里 按住确定 | **录 WhatsApp 语音讯息**：打开对话、帮你按住录音键，放开 FoloToy 的键就送出（最长 60 秒） |
+| 清单里 按住「上」 | 取消（15 秒没动作也会自动取消） |
+
+### 安装（Samsung）
+
+1. 下载 [`firmware/SPACE-car-app.apk`](./firmware/SPACE-car-app.apk) 到手机 → 点开安装（第一次会问「允许安装未知应用程式」→ 允许）
+2. FoloToy 也要烧最新的 `SPACE-card-full.bin`（有 SPACE 车控通道）
+3. 打开「SPACE 车控」app，照顺序按：
+   - ① 开权限（附近的装置、通讯录）
+   - ② 开无障碍服务：设定 → 协助工具 → 已安装的应用程式 → SPACE 车控 → 开启
+   - ③ 电池：允许不受限制；Samsung 再到「设定 → 电池 → 背景使用限制 → 永不休眠的应用程式」加入 SPACE 车控
+4. 「＋ 加朋友」从通讯录选几个常联络的人，填 FoloToy 上显示的英文名（FoloToy 只有英文字型；中文名字手机会念）
+5. app 上方状态写「FoloToy 已连线 ✓」、FoloToy 画面写「SPACE Remote + App」就好了
+
+### 怎么做到的、限制
+
+- 全部在一个 Android「无障碍服务」里：它能在背景打开别的 app（一般 app 在 Android 10 以后不行）、帮你按按钮。只在你按 FoloToy 时动作，不读讯息内容、不上网。
+- 微信读书：找画面上的「21:04 / 64:02」→ 按旁边的 ▶；在完整播放器就按中间的大 ▶；都找不到就送「播放」键。按钮位置照 2026-11-18 的截图写，微信读书改版可能要调。
+- **要是按不到**：app 里「5 秒后抓画面结构」→ 切到微信读书 → 回 app 按「分享」传给 Claude，就能对准。
+- WhatsApp 录音键也是找画面上的按钮（`voice_note_btn`）；WhatsApp 改版可能要调。
+- 还没做：上下选「最近读的书」（要先用诊断看清楚书单的结构）、微信语音。
+- 签名是固定的 debug key（`android/debug.keystore`，Android 标准 debug 帐密），新版可以直接覆盖安装；不是上架用的。
+- 编译：`./android/build.sh`（Docker `cimg/android`，会跑 17 个单元测试）
+
 ## 自己装 ESP-IDF 编译（开发者用；一般用上面的网页烧录就好）
 
 1. **Fork 上游**：GitHub 打开 `FoloToy/ai-passport` → Fork → 开一个分支 `space-card`。照上游 `docs/development/engineering/environment-setup.md` 装好 **ESP-IDF 5.5.3**。
