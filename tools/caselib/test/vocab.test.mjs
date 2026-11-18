@@ -64,7 +64,7 @@ test('vocab: match patterns recognise brief options and folder names', () => {
   assert.deepEqual(got, {
     '原木 Natural wood': 'wood', '微侘寂 Subtle wabi-sabi': 'wabi', '奶油风 Cream style': 'cream', '轻法式 Light French': 'french',
     '中古 Mid-century': 'midcentury', '现代简约 Modern minimal': 'modern', '日式 Japandi': 'japandi', '北欧 Nordic': 'nordic',
-    '轻奢 Modern luxe': 'luxe', '还没想好 Not decided': ''
+    '轻奢 Modern luxe': 'luxe', '欧式 European': 'european', '美式 American': 'american', '混搭 Eclectic': 'mixed', '还没想好 Not decided': ''
   });
   // 旧的需求卡（客户手上还没送出的）照样认得
   assert.equal(first(V.CASE_STYLES, '自然原木 Natural wood'), 'wood');

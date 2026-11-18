@@ -166,7 +166,7 @@ await login(page);
   const r = await page.evaluate(() => ({ st: MB.cloud.status(), n: MB.cases().length, usable: MB.cases().filter(MB.caseUsable).length,
     keys: Object.keys(MB.cases()[0]).sort().join(','), projects: MB.cloud.projects() }));
   ok('C1 login → catalog loaded (60 photos, 57 usable: 2 unsure + 1 hidden left out of auto use)', r.st.status === 'ok' && r.n === 60 && r.usable === 57, JSON.stringify(r.st) + ' ' + r.n + '/' + r.usable);
-  const allowed = 'area,cabinets,desc,en,h,hero,hidden,id,label,pid,plabel,ptype,rooms,series,shot,src,stale,status,style,thumb,traits,w,zh';
+  const allowed = 'area,cabinets,desc,en,h,hero,hidden,id,label,pid,plabel,ptype,rooms,series,shot,src,stale,status,style,style2,thumb,traits,w,zh';
   ok('C2 entries() carry only whitelisted fields (no name / f)', r.keys === allowed, r.keys);
   ok('C3 project labels are 「区域 · 风格 · #n」, never the folder name', r.projects.length === 6 && r.projects.every((x) => /^[^·]+ · [^·]+ · #\d+$/.test(x.label) && !leaks(x.label).length),
     r.projects.map((x) => x.label).join(' | '));
@@ -479,8 +479,8 @@ let matches = [];
     extract: typeof MB.extractPalette,
     tabs: [...document.querySelectorAll('#tabs [data-tab]')].map((b) => b.textContent.trim())
   }));
-  ok('E9 no ② 风格 tab / #dir-cards / #ref-panel / #pal-edit; #case-style in ① has 10 chips (不限 + 9); MB.extractPalette undefined; tabs ① 客户 ② 空间 ③ 平面图 ④ 到馆 ⑤ 文案 图库',
-    r.styleTab === 0 && !r.dirCards && !r.refPanel && !r.palEdit && r.chips.length === 10 && JSON.stringify(r.chips) === JSON.stringify([''].concat(r.styles)) &&
+  ok('E9 no ② 风格 tab / #dir-cards / #ref-panel / #pal-edit; #case-style in ① has 13 chips (不限 + 12); MB.extractPalette undefined; tabs ① 客户 ② 空间 ③ 平面图 ④ 到馆 ⑤ 文案 图库',
+    r.styleTab === 0 && !r.dirCards && !r.refPanel && !r.palEdit && r.chips.length === 13 && JSON.stringify(r.chips) === JSON.stringify([''].concat(r.styles)) &&
     r.extract === 'undefined' && JSON.stringify(r.tabs) === JSON.stringify(['① 客户', '② 空间', '③ 平面图', '④ 到馆', '⑤ 文案', '图库']), JSON.stringify(r));
 }
 
@@ -788,7 +788,7 @@ if (process.env.SHOTS) {
     // 'direction' 还在 setup 里 = 旧的「走一个系列」没删干净：标 DIR! 让比对失败
     const read = (text) => { const st = MB.briefToSetup(MB.parseBrief(text)); return ('direction' in st ? 'DIR!' : '') + st.caseStyle; };
     const NEW = ['原木 Natural wood', '微侘寂 Subtle wabi-sabi', '奶油风 Cream style', '轻法式 Light French', '中古 Mid-century',
-      '现代简约 Modern minimal', '日式 Japandi', '北欧 Nordic', '轻奢 Modern luxe'];
+      '现代简约 Modern minimal', '日式 Japandi', '北欧 Nordic', '轻奢 Modern luxe', '欧式 European', '美式 American', '混搭 Eclectic'];
     const out = { neu: {}, old: {}, langs: {} };
     NEW.forEach((s) => { out.neu[s] = read(mk('zh', [s])); });
     ['自然原木 Natural wood', '现代简约 Modern minimal', '侘寂 Wabi-sabi', '日式 Japandi', '北欧 Nordic', '轻奢 Modern luxe', '中古 Mid-century', '还没想好 Not decided']
@@ -800,10 +800,11 @@ if (process.env.SHOTS) {
     return out;
   });
   const wantNew = { '原木 Natural wood': 'wood', '微侘寂 Subtle wabi-sabi': 'wabi', '奶油风 Cream style': 'cream', '轻法式 Light French': 'french',
-    '中古 Mid-century': 'midcentury', '现代简约 Modern minimal': 'modern', '日式 Japandi': 'japandi', '北欧 Nordic': 'nordic', '轻奢 Modern luxe': 'luxe' };
+    '中古 Mid-century': 'midcentury', '现代简约 Modern minimal': 'modern', '日式 Japandi': 'japandi', '北欧 Nordic': 'nordic', '轻奢 Modern luxe': 'luxe',
+    '欧式 European': 'european', '美式 American': 'american', '混搭 Eclectic': 'mixed' };
   const wantOld = { '自然原木 Natural wood': 'wood', '现代简约 Modern minimal': 'modern', '侘寂 Wabi-sabi': 'wabi', '日式 Japandi': 'japandi', '北欧 Nordic': 'nordic',
     '轻奢 Modern luxe': 'luxe', '中古 Mid-century': 'midcentury', '还没想好 Not decided': '' };
-  ok('N1 new brief style options → caseStyle only, no direction (all 9)', Object.keys(wantNew).every((k) => r.neu[k] === wantNew[k]), JSON.stringify(r.neu));
+  ok('N1 new brief style options → caseStyle only, no direction (all 12)', Object.keys(wantNew).every((k) => r.neu[k] === wantNew[k]), JSON.stringify(r.neu));
   ok('N2 old brief card options still parse to the same caseStyle (还没想好 → \'\')', Object.keys(wantOld).every((k) => r.old[k] === wantOld[k]), JSON.stringify(r.old));
   ok('N3 zh / en / bi cards all read the new options (first one wins: 奶油风 → cream)', ['zh', 'en', 'bi'].every((l) => r.langs[l] === 'cream'), JSON.stringify(r.langs));
   ok('N4 brief.html style options = the case style list (+ 还没想好), value format 「华文 English」',

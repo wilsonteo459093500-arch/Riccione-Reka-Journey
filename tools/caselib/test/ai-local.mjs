@@ -142,10 +142,10 @@ test('AI tagging: key stays on this computer, only the photo is sent, trial → 
   idx = await localIndex(page);
   const tagged = hs.filter((h) => idx.photos[h].status === 'auto' || idx.photos[h].status === 'unsure');
   assert.ok(tagged.length >= 4);
-  // Kepong（文件夹名有「简约」：项目风格已经是现代简约）：AI 不改项目风格；照片有把握又不一样 → 照片自己写 luxe
+  // Kepong（文件夹名有「简约」：项目风格已经是现代简约）：名字优先 —— AI 不改项目风格，也不替照片写风格（只补柜类、空间）
   assert.equal(idx.projects[kepong].style, 'modern');
   assert.ok(kh.slice(1, 3).every((h) => idx.photos[h].cabinets.join() === 'wardrobe,tvwall' || idx.photos[h].status === 'unsure'));
-  assert.ok(kh.slice(1, 3).some((h) => idx.photos[h].style === 'luxe'));
+  assert.ok(kh.slice(1, 3).every((h) => !idx.photos[h].style), 'no AI photo style in a project named with a style');
   // 人确认过的那张一个字都没动
   assert.deepEqual(idx.photos[human].cabinets, ['shoe']);
   assert.equal(idx.photos[human].status, 'confirmed');
