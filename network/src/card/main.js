@@ -124,12 +124,25 @@ const OFFER_ICONS = [
   [/展厅|咖啡|活动|showroom|coffee|event/i, SVG('<path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V9Z"/><path d="M16 11h1.5a2.5 2.5 0 0 1 0 5H16M8 3v3M12 3v3"/>')],
   [/设计|建筑师|溪岸|定制|design|architect/i, SVG('<path d="m4 20 5-1L19.5 8.5a2.1 2.1 0 0 0-3-3L6 16l-2 4Z"/><path d="m14.5 7.5 3 3"/>')],
 ];
+/** 「工作以外」照片按 group 分组（照出现的顺序） */
+function lifeGroups(items) {
+  const out = [];
+  for (const m of items || []) {
+    const g = m.group || '';
+    let row = out.find((r) => r[0] === g);
+    if (!row) { row = [g, []]; out.push(row); }
+    row[1].push(m);
+  }
+  return out;
+}
+
 /** 兴趣的小图示 */
 const HOBBY_ICONS = [
   [/潜水|dive|diving/i, SVG('<path d="M3 9h18v4a3 3 0 0 1-3 3h-2.5l-1.5-2h-4l-1.5 2H6a3 3 0 0 1-3-3V9Z"/><path d="M19 9V5"/><path d="M3 20c1.5 0 1.5-1 3-1s1.5 1 3 1 1.5-1 3-1 1.5 1 3 1 1.5-1 3-1 1.5 1 3 1"/>')],
   [/爬山|登山|hik|mountain/i, SVG('<path d="m3 20 6.5-11 3.5 6 2.5-4L21 20H3Z"/><path d="m8 11.5 1.5 1.5 1.5-1.5"/>')],
   [/露营|camp/i, SVG('<path d="M12 4 3 20h18L12 4Z"/><path d="M12 4v16M9.5 20 12 15l2.5 5"/>')],
   [/志工|义工|volunt/i, SVG('<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z"/>')],
+  [/动漫|漫画|动画|anime|comic/i, SVG('<path d="m12 3 1.9 4.6 4.9.4-3.7 3.2 1.1 4.8L12 13.5 7.8 16l1.1-4.8L5.2 8l4.9-.4L12 3Z"/><path d="M5 20h14"/>')],
   [/看书|阅读|读书|read|book/i, SVG('<path d="M12 6c-2-1.5-5-2-8-1.5V19c3-.5 6 0 8 1.5 2-1.5 5-2 8-1.5V4.5c-3-.5-6 0-8 1.5Z"/><path d="M12 6v14.5"/>')],
 ];
 const hobbyIcon = (text) => (HOBBY_ICONS.find(([re]) => re.test(text)) || [null, OFFER_DEFAULT])[1];
@@ -318,12 +331,10 @@ function render() {
   if (lf && (lf.lead || (lf.items && lf.items.length) || (lf.hobbies && lf.hobbies.length))) {
     side.append(sec(tr.life,
       lf.lead ? h('p.st-note.life-lead', null, lf.lead) : null,
-      lf.items && lf.items.length ? h('div.life', null, lf.items.map((m) => {
-        const fig = h('figure.lf', null,
-          m.image ? h('img', { src: m.image, alt: m.title, loading: 'lazy', decoding: 'async', onload: (e) => { const i = e.currentTarget; if (i.naturalWidth > i.naturalHeight * 1.15) fig.classList.add('wide'); } }) : null,
-          h('figcaption', null, m.title ? h('b', null, m.title) : null, m.note ? h('span', null, m.note) : null));
-        return fig;
-      })) : null,
+      ...lifeGroups(lf.items).map(([g, list]) => h('div.b-part', null, g ? h('h4.b-sub', null, g) : null,
+        h('div.strip', null, list.map((m) => h('figure.lf', null,
+          m.image ? h('img', { src: m.image, alt: m.title, loading: 'lazy', decoding: 'async' }) : null,
+          h('figcaption', null, m.title ? h('b', null, m.title) : null, m.note ? h('span', null, m.note) : null)))))),
       lf.hobbies && lf.hobbies.length ? h('div.b-part', null, h('h4.b-sub', null, tr.hobbies),
         h('div.hobbies', null, lf.hobbies.map((x) => h('span.hob', null, h('span.oi', { 'aria-hidden': 'true', html: hobbyIcon(x) }), x)))) : null));
   }

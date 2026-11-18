@@ -375,3 +375,11 @@ footer { padding: 40px 0 max(36px, env(safe-area-inset-bottom)); text-align: cen
 .hob { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px 6px 6px; border-radius: 999px; background: var(--field); font-size: 14px; font-weight: 600; }
 .hob .oi { width: 30px; height: 30px; margin: 0; border-radius: 50%; background: var(--card); }
 .hob .oi svg { width: 17px; height: 17px; }
+
+/* 工作以外：每组一条左右滑的照片带（照片同高、宽度照原比例，合照不裁人） */
+.sec .b-part:first-of-type { margin-top: 18px; }
+.strip { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; margin: 0 -20px; padding: 0 20px 4px; scroll-padding: 0 20px; }
+.strip::-webkit-scrollbar { display: none; }
+.strip .lf { flex: 0 0 auto; display: flex; flex-direction: column; scroll-snap-align: start; }
+.strip .lf img { height: 240px; width: auto; max-width: 78vw; aspect-ratio: auto; object-fit: cover; border-radius: 12px; }
+.strip .lf figcaption { width: 0; min-width: 100%; }

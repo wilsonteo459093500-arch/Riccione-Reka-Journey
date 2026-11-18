@@ -97,7 +97,9 @@ test('工作以外：照片、兴趣清理和上限；预设有五个兴趣', ()
   assert.equal(c.life.items[1].image_path, '');
   assert.deepEqual(c.life.hobbies, ['潜水', '爬山']);
   const d = publicCard(DEFAULT_CARD, '');
-  assert.deepEqual(d.life.hobbies, ['潜水', '爬山', '露营', '志工', '看书']);
+  assert.deepEqual(d.life.hobbies, ['潜水', '爬山', '露营', '志工', '看书', '动漫']);
+  assert.deepEqual([...new Set(d.life.items.map((m) => m.group))], ['学习与社团', '生活与兴趣']);
+  assert.equal(cleanCard({ life: { items: Array.from({ length: 30 }, (_, i) => ({ title: `t${i}`, group: 'x'.repeat(40) })) } }).life.items.length, 24);
   assert.ok(d.life.items.every((m) => m.image.startsWith('/card/life-') && m.image_path === undefined));
 });
 

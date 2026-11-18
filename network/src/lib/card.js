@@ -22,7 +22,7 @@ export const MAX_BRANDS = 3;      // 品牌（瑞吉欧、溪岸…）
 export const MAX_POINTS = 8;      // 品牌下的重点（业务、故事、供应链…）
 export const MAX_SERIES = 6;      // 原创系列小格子
 export const MAX_IG_VIDEOS = 4;
-export const MAX_LIFE = 12;       // 「工作以外」照片
+export const MAX_LIFE = 24;       // 「工作以外」照片
 export const MAX_HOBBIES = 10;   // Instagram 视频（嵌入播放）
 export const MAX_EXHIBITIONS = 8; // 品牌下的标签（常年参展…）
 export const MAX_GROUPS = 4;      // 商会 / 组织
@@ -76,16 +76,30 @@ export const DEFAULT_CARD = {
   about_photo_path: '/card/father.jpg',
   // 「工作以外」：照片都是本人给的；说明照照片上看得到的字写（奖状、讲台名牌、横幅），不另外编
   life: {
-    lead: '工作以外，我一直在学：上台练演讲、上卡耐基的领导力课程，也在 PUMM 跟一群创业者一起做事。放假的时候，我会去潜水、爬山、露营，有空就做志工、看书。',
+    lead: '工作以外，我一直在学：上台练演讲、参加辩论赛，上卡耐基的领导力课程，也在 JCI 和 PUMM 跟一群年轻人、创业者一起做事，还参加读书会。放假的时候，我会去潜水、爬山、露营，有空就做志工、看书。我也是个动漫迷。',
     items: [
-      { title: '卡耐基训练 Dale Carnegie', note: '核心领导力训练 · 结业', image_path: '/card/life-carnegie.jpg' },
-      { title: 'Toastmasters 国际演讲会', note: '雪隆福青华语国际讲演会 SKLHA Youth Mandarin Toastmasters Club', image_path: '/card/life-toastmasters.jpg' },
-      { title: '最佳即兴讲员', note: 'Toastmasters 演讲会', image_path: '/card/life-tm-award.jpg' },
-      { title: 'PUMM 彭亨州联委会理事', note: '马来西亚创业促进会 · 彭亨州联委会', image_path: '/card/life-pumm-talk.jpg' },
-      { title: 'PUMM Members Orientation 2026', note: '会员迎新 · 分组汇报', image_path: '/card/life-pumm-orientation.jpg' },
+      { group: '学习与社团', title: '卡耐基训练 Dale Carnegie', note: '核心领导力训练 · 结业', image_path: '/card/life-carnegie.jpg' },
+      { group: '学习与社团', title: 'Toastmasters 国际演讲会', note: '雪隆福青华语国际讲演会 SKLHA Youth Mandarin Toastmasters Club', image_path: '/card/life-toastmasters.jpg' },
+      { group: '学习与社团', title: '最佳即兴讲员', note: 'Toastmasters 演讲会', image_path: '/card/life-tm-award.jpg' },
+      { group: '学习与社团', title: '辩论赛', note: '正方二辩', image_path: '/card/life-debate.jpg' },
+      { group: '学习与社团', title: 'JCI Oregon Debate Competition · 2nd Runner Up', note: '2026 JCI Malaysia Area Central Convention', image_path: '/card/life-jci-debate-award.jpg' },
+      { group: '学习与社团', title: 'JCI Kuala Lumpur West', note: '2026 JCI Malaysia Area Central Convention', image_path: '/card/life-jci-convention.jpg' },
+      { group: '学习与社团', title: 'JCI Kuala Lumpur West', note: '参访溪岸展厅', image_path: '/card/life-jci-sail.jpg' },
+      { group: '学习与社团', title: '领导力训练', note: '团队挑战', image_path: '/card/life-team-challenge.jpg' },
+      { group: '学习与社团', title: 'PUMM 彭亨州联委会理事', note: '马来西亚创业促进会 · 彭亨州联委会', image_path: '/card/life-pumm-talk.jpg' },
+      { group: '学习与社团', title: 'PUMM Members Orientation 2026', note: '会员迎新 · 分组汇报', image_path: '/card/life-pumm-orientation.jpg' },
+      { group: '学习与社团', title: '读书会', note: '南洋益社 Nanyang Harmony', image_path: '/card/life-bookclub.jpg' },
+      { group: '生活与兴趣', title: '潜水', note: '', image_path: '/card/life-diving.jpg' },
+      { group: '生活与兴趣', title: '爬山', note: '', image_path: '/card/life-hiking.jpg' },
+      { group: '生活与兴趣', title: '雪山与草原', note: '', image_path: '/card/life-snow.jpg' },
+      { group: '生活与兴趣', title: '露营', note: '', image_path: '/card/life-camping.jpg' },
+      { group: '生活与兴趣', title: '狗狗生日野餐', note: 'KOKO', image_path: '/card/life-koko.jpg' },
+      { group: '生活与兴趣', title: '动漫迷', note: '带孩子逛漫威', image_path: '/card/life-marvel.jpg' },
+      { group: '生活与兴趣', title: 'Hilux 越野挑战', note: 'Hilux Unleashed · The Ultimate Challenge', image_path: '/card/life-hilux.jpg' },
     ],
-    hobbies: ['潜水', '爬山', '露营', '志工', '看书'],
+    hobbies: ['潜水', '爬山', '露营', '志工', '看书', '动漫'],
   },
+
   // 两个品牌分开介绍（文案取自 UKIR 提案的品牌画册页 blueprint/src/engine/b/company.js + 本人给的事实）
   brands: [
     {
@@ -283,7 +297,7 @@ function cleanLife(v) {
   return {
     lead: str(x.lead, 400),
     items: (Array.isArray(x.items) ? x.items : [])
-      .map((m) => ({ title: str(m && m.title, 60), note: str(m && m.note, 120), image_path: safePath(m && m.image_path) }))
+      .map((m) => ({ group: str(m && m.group, 20), title: str(m && m.title, 60), note: str(m && m.note, 120), image_path: safePath(m && m.image_path) }))
       .filter((m) => m.title || m.image_path)
       .slice(0, MAX_LIFE),
     hobbies: cleanLines(x.hobbies, MAX_HOBBIES, 20),

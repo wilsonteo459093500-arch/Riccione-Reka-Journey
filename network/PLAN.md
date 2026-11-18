@@ -141,3 +141,4 @@ Wilson 想要一个**只给自己用**的人脉管理 app，用来记录每个�
   - 以后：没有出处的文案不写；要补先跟本人要图册原档
 - **2026-11-18 公司资料定稿**：本人给了《马来西亚瑞吉欧企业手册 Riccione Malaysia Company Profile》（PDF 23 页），写成固定 skill `.claude/skills/riccione-company-profile/`（SKILL.md = 手册全文整理 + 铁律；references/ 放 PDF 原档）。名片页瑞吉欧 / 溪岸的文案、瑞吉欧六个产品系列（名字 + 照片）都照手册；手册以外的事实（1979、2002、20+ 年、MFC 2018、HCA 2023/2024、供应链、PUMM）在 skill 里另列出处
 - **2026-11-18 加「工作以外」**（本人：让人知道职业以外做什么）：`life`（一段话 + 照片〔标题 + 一句〕+ 兴趣标签），放在「关于我」下面；照片横的占满一行、直的两张一行；兴趣潜水 / 爬山 / 露营 / 志工 / 看书自动配小图示。照片说明只写照片上看得到的字（卡耐基核心领导力训练、雪隆福青华语国际讲演会、最佳即兴讲员奖状、PUMM 彭亨州联委会理事名牌、PUMM Members Orientation 2026）。本人之后会补兴趣的照片，「我的名片 → 工作以外」可以自己加
+- **2026-11-18 「工作以外」补齐**：加辩论赛（正方二辩、JCI Oregon Debate Competition 2nd Runner Up）、JCI Kuala Lumpur West（2026 Area Central Convention、参访溪岸展厅）、领导力训练团队挑战、读书会（南洋益社 Nanyang Harmony），兴趣照片（潜水、爬山、雪山与草原、露营、狗狗生日野餐 KOKO、动漫迷 · 漫威、Hilux 越野挑战）；兴趣标签加「动漫」。照片分两组（`life.items[].group`：学习与社团 / 生活与兴趣），每组一条左右滑的照片带，照片同高、宽度照原比例

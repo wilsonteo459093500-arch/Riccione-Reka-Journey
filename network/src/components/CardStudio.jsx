@@ -335,19 +335,20 @@ function CardEditor() {
 
       <Section title="工作以外（学习、社团、兴趣）" action={<span className="text-xs text-faint">照片最多 {MAX_LIFE} 张</span>}>
         <Field label="一段话"><Textarea rows={3} value={f.life.lead} onChange={(e) => set({ life: { ...f.life, lead: e.target.value } })} maxLength={400} placeholder="工作以外，我……" /></Field>
-        <ListEditor className="mt-3" label="照片（横的会占满一行）" max={MAX_LIFE} items={f.life.items} onChange={(items) => set({ life: { ...f.life, items } })} blank={{ title: '', note: '', image_path: '' }}
+        <ListEditor className="mt-3" label="照片（同一个分组排成一条，可以左右滑）" max={MAX_LIFE} items={f.life.items} onChange={(items) => set({ life: { ...f.life, items } })} blank={{ group: '生活与兴趣', title: '', note: '', image_path: '' }}
           render={(m, upd, i) => (
             <div className="flex flex-1 gap-2">
               <MediaSlot small path={m.image_path} busy={uploading === `life${i}`} accept="image/*" icon={ImagePlus}
                 onPick={(file) => { setUploading(`life${i}`); store.uploadCardMedia(file, 'case').then((p) => upd({ ...m, image_path: p })).catch((e) => toast(e.message, 'error')).finally(() => setUploading('')); }}
                 onClear={() => upd({ ...m, image_path: '' })} />
               <div className="flex-1 space-y-1">
+                <Input value={m.group || ''} onChange={(e) => upd({ ...m, group: e.target.value })} placeholder="分组：例 学习与社团 / 生活与兴趣" maxLength={20} />
                 <Input value={m.title} onChange={(e) => upd({ ...m, title: e.target.value })} placeholder="标题：例 潜水 · 停泊岛" maxLength={60} />
                 <Input value={m.note} onChange={(e) => upd({ ...m, note: e.target.value })} placeholder="一句话" maxLength={120} />
               </div>
             </div>
           )} />
-        <Field className="mt-3" label={`我的兴趣（一行一个，最多 ${MAX_HOBBIES} 个）`} hint="潜水、爬山、露营、志工、看书会自动配小图示">
+        <Field className="mt-3" label={`我的兴趣（一行一个，最多 ${MAX_HOBBIES} 个）`} hint="潜水、爬山、露营、志工、看书、动漫会自动配小图示">
           <Textarea rows={3} value={(f.life.hobbies || []).join('\n')} onChange={(e) => set({ life: { ...f.life, hobbies: e.target.value.split('\n').slice(0, MAX_HOBBIES) } })} />
         </Field>
       </Section>
