@@ -1,5 +1,5 @@
 -- =====================================================================
--- 人脉 App · Supabase schema（第 1 阶段定稿 + 第 2 阶段升级）
+-- 人脉 App · Supabase schema（第 1 阶段定稿 + 第 2、3、4 阶段升级）
 -- ---------------------------------------------------------------------
 -- 只给自己用：每一列都有 owner（= 登入的人），RLS 规定只能读写自己的。
 -- 照片 / 名片放私有 bucket「network」，路径 <user id>/<photo id>.jpg，
@@ -11,7 +11,9 @@
 
 -- ---------- 共用：updated_at 自动更新 ----------
 create or replace function public.network_touch() returns trigger
-language plpgsql as $$
+language plpgsql
+set search_path = ''   -- 锁定 search_path（Supabase 安全检查 0011）；只用到 now()，系统内建
+as $$
 begin
   new.updated_at = now();
   return new;
@@ -216,12 +218,42 @@ alter table public.people add column if not exists avoid_topics text[] not null 
 alter table public.resources drop constraint if exists resources_source_check;
 alter table public.resources add constraint resources_source_check check (source in ('manual','ai','talk'));
 
+-- ---------- 第 3 阶段升级（关系图 + 今日行动）----------
+alter table public.people add column if not exists snooze_until date;   -- 「晚点再说」：这天以前不出现在今日行动
+-- people.affinity 现在由互动记录算出来（app 每天存回一次）；relationship_snapshots 记好感度跨等级的变化
+
+-- ---------- 第 4 阶段升级（个人名片 + 扫码留资料）----------
+alter table public.profile add column if not exists card jsonb;                          -- 公开名片的内容（「我的名片」页编辑）
+alter table public.people add column if not exists pending_review boolean not null default false;  -- 扫码进来、还没确认的「新朋友」
+alter table public.interactions drop constraint if exists interactions_source_check;
+alter table public.interactions add constraint interactions_source_check
+  check (source in ('manual','card','plaud','voice','whatsapp_txt','whatsapp_screenshot','qr'));   -- qr = 扫码 / NFC 留资料
+
+-- 每一次公开表格送出都记一笔：限次（同 IP 每小时）、审计、PDPA（同意了哪一版条款、可以要求删除）
+create table if not exists public.inbox (
+  id uuid primary key default gen_random_uuid(),
+  owner uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  at timestamptz not null default now(),
+  ip_hash text not null default '',       -- 加盐 hash，不存原本的 IP
+  event_id uuid references public.events(id) on delete set null,
+  person_id uuid references public.people(id) on delete set null,
+  outcome text not null default 'created' check (outcome in ('created','updated')),
+  source text not null default 'qr' check (source in ('qr','nfc','folotoy')),
+  payload jsonb,                           -- 他填了什么（不含照片）
+  consent_at timestamptz,
+  consent_version text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists inbox_owner_at on public.inbox (owner, at desc);
+create index if not exists inbox_ip on public.inbox (owner, ip_hash, at desc);
+
 -- ---------- updated_at trigger + RLS（每张表一样）----------
 do $$
 declare t text;
 begin
   foreach t in array array['profile','companies','people','circles','person_circles','resources','interactions',
-                           'events','attendance','photos','photo_people','relationship_snapshots','ai_usage']
+                           'events','attendance','photos','photo_people','relationship_snapshots','ai_usage','inbox']
   loop
     execute format('drop trigger if exists %I_touch on public.%I', t, t);
     execute format('create trigger %I_touch before update on public.%I for each row execute function public.network_touch()', t, t);
@@ -254,3 +286,24 @@ create policy "network owner update" on storage.objects for update to authentica
   using (bucket_id = 'network' and (storage.foldername(name))[1] = auth.uid()::text);
 create policy "network owner delete" on storage.objects for delete to authenticated
   using (bucket_id = 'network' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- ---------- 第 4 阶段：公开名片的照片 / 视频 / 案例图 ----------
+-- 公开 bucket：谁都能看（名片页要给陌生人看），只有本人能上传 / 改 / 删，路径 <user id>/card/<档名>
+-- 不要把私人的东西放这里；名片照片（别人的）还是放上面私有的 network bucket
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('network-card', 'network-card', true, 52428800,
+        array['image/jpeg','image/png','image/webp','video/mp4','video/webm','video/quicktime'])
+on conflict (id) do update set public = true, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "card owner insert" on storage.objects;
+drop policy if exists "card owner update" on storage.objects;
+drop policy if exists "card owner delete" on storage.objects;
+drop policy if exists "card owner read" on storage.objects;
+create policy "card owner read" on storage.objects for select to authenticated
+  using (bucket_id = 'network-card' and (storage.foldername(name))[1] = auth.uid()::text);
+create policy "card owner insert" on storage.objects for insert to authenticated
+  with check (bucket_id = 'network-card' and (storage.foldername(name))[1] = auth.uid()::text and (storage.foldername(name))[2] = 'card');
+create policy "card owner update" on storage.objects for update to authenticated
+  using (bucket_id = 'network-card' and (storage.foldername(name))[1] = auth.uid()::text);
+create policy "card owner delete" on storage.objects for delete to authenticated
+  using (bucket_id = 'network-card' and (storage.foldername(name))[1] = auth.uid()::text);

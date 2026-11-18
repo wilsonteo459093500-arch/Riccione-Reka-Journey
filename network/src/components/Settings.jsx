@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { LogOut, Download, Cloud, HardDrive } from 'lucide-react';
+import { LogOut, Download, Cloud, HardDrive, QrCode, ChevronRight } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
 import { supabase } from '../lib/supabase.js';
 import { monthUsage, tierCounts, DEFAULT_PROFILE } from '../lib/logic.js';
@@ -8,9 +8,9 @@ import { Logo, MeaningRow } from './Login.jsx';
 
 const RATE = Number(import.meta.env.VITE_USD_TO_MYR || 4.4);
 const BUDGET_MYR = Number(import.meta.env.VITE_AI_MONTHLY_BUDGET_MYR || 50);
-const FEATURE = { scan_card: '名片识别', company: '公司背景', assess: '深度分析', talk: '对话分析' };
+const FEATURE = { scan_card: '名片识别', company: '公司背景', assess: '深度分析', talk: '对话分析', inbox_card: '扫码留的名片' };
 
-export default function Settings() {
+export default function Settings({ onCard }) {
   const store = useStore();
   const toast = useToast();
   const [f, setF] = useState(store.me);
@@ -30,7 +30,7 @@ export default function Settings() {
     const blob = new Blob([JSON.stringify({ exported_at: new Date().toISOString(), ...store.data }, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `STAR-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `SPACE-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
@@ -38,6 +38,14 @@ export default function Settings() {
   return (
     <div className="mx-auto max-w-xl space-y-3 px-4 pb-32 pt-4">
       <h1 className="text-xl font-semibold">我</h1>
+
+      {onCard && (
+        <button onClick={onCard} className="flex w-full items-center gap-3 rounded-2xl border border-line bg-white p-4 text-left hover:border-ink/30">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-ink text-white"><QrCode className="h-5 w-5" /></span>
+          <span className="flex-1"><span className="block font-semibold">我的名片 · 二维码 · NFC</span><span className="text-sm text-muted">别人扫码看名片、留资料，自动进 SPACE</span></span>
+          <ChevronRight className="h-5 w-5 text-faint" />
+        </button>
+      )}
 
       <Section title="这个月的 AI 费用">
         <div className="flex items-baseline justify-between">
@@ -93,8 +101,8 @@ export default function Settings() {
 
       <div className="flex flex-col items-center gap-2 pt-4 text-center">
         <Logo className="h-10 w-10" />
-        <div className="text-sm font-semibold tracking-[0.2em]">S.T.A.R</div>
-        <div className="text-xs italic text-muted">Strong Ties Are Riches</div>
+        <div className="text-sm font-semibold tracking-[0.2em]">SPACE</div>
+        <div className="text-xs italic text-muted">Give Every Tie Its Space</div>
         <MeaningRow className="mt-1 w-full max-w-xs" />
       </div>
     </div>

@@ -10,6 +10,7 @@ const MESSAGES = {
   not_configured: '服务器还没设定好（见 DEPLOY.md）',
   ai_not_configured: '服务器还没设 ANTHROPIC_API_KEY',
   ai_busy: 'AI 太忙，等一下再试',
+  ticktick_not_configured: '还没接 TickTick（Vercel 设 TICKTICK_TOKEN）',
 };
 
 export class ApiError extends Error {
@@ -47,4 +48,6 @@ export const api = {
   company: (info) => post('company', info),
   assess: (payload) => post('assess', payload),
   analyzeTalk: (payload) => post('analyze-talk', payload),
+  ticktickStatus: () => post('ticktick', { action: 'status' }),
+  ticktickTasks: (tasks) => post('ticktick', { action: 'tasks', tasks }),
 };

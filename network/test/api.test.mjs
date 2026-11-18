@@ -207,3 +207,36 @@ test('normalizeTalk: 缺字段不会坏；日期格式不对就清掉', () => {
   assert.deepEqual(t.action_items, []);
   assert.ok(buildTalkPrompt({ source: 'whatsapp_screenshot', person: { name: 'Tan' } }).includes('transcript'));
 });
+
+/* ---------- 第 3 阶段：TickTick ---------- */
+import { cleanTask, createTasks } from '../api/ticktick.js';
+
+test('ticktick cleanTask：只留认得的栏位、检查日期、加清单', () => {
+  const t = cleanTask({ title: ' 📞 打电话：Tan ', content: 'x', startDate: '2026-11-17T02:00:00+0000', dueDate: '2026-11-17T02:20:00+0000', timeZone: 'Asia/Kuala_Lumpur', evil: 1 }, 'proj1');
+  assert.equal(t.title, '📞 打电话：Tan');
+  assert.equal(t.projectId, 'proj1');
+  assert.deepEqual(t.reminders, ['TRIGGER:PT0S']);
+  assert.equal(t.evil, undefined);
+  assert.throws(() => cleanTask({ title: '' }), HttpError);
+  assert.throws(() => cleanTask({ title: 'a', startDate: '2026-11-17T02:00:00Z' }), HttpError); // TickTick 不收 Z
+  assert.equal(cleanTask({ title: 'a', timeZone: '"; drop' }).timeZone, 'Asia/Kuala_Lumpur');
+});
+
+test('ticktick createTasks：没设 token → 503；token 错 → 502；部分失败照回', async () => {
+  await assert.rejects(createTasks([{ title: 'a' }], { env: null }), (e) => e.status === 503);
+  const calls = [];
+  const fetchImpl = async (url, opt) => {
+    calls.push({ url, opt });
+    const body = JSON.parse(opt.body);
+    if (body.title === 'bad') return { ok: false, status: 400, json: async () => ({ errorMessage: 'nope' }) };
+    return { ok: true, status: 200, json: async () => ({ id: `id-${calls.length}`, projectId: 'inbox1' }) };
+  };
+  const out = await createTasks([{ title: 'ok' }, { title: 'bad' }], { env: { token: 'tok', project: '' }, fetchImpl });
+  assert.equal(calls[0].url, 'https://api.ticktick.com/open/v1/task');
+  assert.equal(calls[0].opt.headers.Authorization, 'Bearer tok');
+  assert.deepEqual(out.created, [{ id: 'id-1', projectId: 'inbox1', title: 'ok' }]);
+  assert.deepEqual(out.failed, [{ title: 'bad', message: 'nope' }]);
+  const deny = async () => ({ ok: false, status: 401, json: async () => ({}) });
+  await assert.rejects(createTasks([{ title: 'a' }], { env: { token: 't' }, fetchImpl: deny }), (e) => e.status === 502 && e.body.error === 'ticktick_token_invalid');
+  await assert.rejects(createTasks(new Array(11).fill({ title: 'a' }), { env: { token: 't' }, fetchImpl }), (e) => e.status === 400);
+});

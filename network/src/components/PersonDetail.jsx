@@ -2,14 +2,17 @@ import React, { useState } from 'react';
 import {
   ChevronLeft, MessageCircle, Phone, Mail, Sparkles, RefreshCw, Pencil, Trash2, Plus, Globe, MapPin,
   Building2, ExternalLink, Gift, Users, CalendarDays, AlertTriangle, MessagesSquare,
-  AudioLines, Mic, Images, ScanLine, PenLine, ListChecks, Ban, ChevronDown,
+  AudioLines, Mic, Images, ScanLine, PenLine, ListChecks, Ban, ChevronDown, Contact, CalendarPlus, Clock,
 } from 'lucide-react';
 import { useStore, stripView } from '../lib/store.jsx';
-import { DIMS, TIERS, worthVerdict, waLink, fmtDate, relDay, splitTags } from '../lib/logic.js';
+import { DIMS, TIERS, worthVerdict, waLink, fmtDate, splitTags } from '../lib/logic.js';
 import { Avatar, Button, Chip, Section, TierBadge, WorthGem, Input, Textarea, Field, Sheet, Spinner, useToast, cx, inputCls } from './ui.jsx';
 import PhotoGrid from './PhotoGrid.jsx';
 import { PhonesEditor } from './ScanCard.jsx';
 import { openPromises, MOODS, SOURCE_BY_KEY } from '../lib/talk.js';
+import { affinityHistory, CADENCE_LABEL } from '../lib/relation.js';
+import { AffinityBar, Sparkline } from './ui.jsx';
+import ScheduleSheet from './ScheduleSheet.jsx';
 
 export default function PersonDetail({ id, onBack, autoAnalyze, onAnalyzed }) {
   const store = useStore();
@@ -73,7 +76,7 @@ export default function PersonDetail({ id, onBack, autoAnalyze, onAnalyzed }) {
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
             <span className="flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5" />见过 {p.meetings} 次</span>
             {p.met_on && <span>认识于 {fmtDate(p.met_on)}</span>}
-            {p.last_contact_at && <span>上次联系 {relDay(p.last_contact_at)}</span>}
+            {p.rel.contacted && <span>上次联系 {p.rel.daysSince === 0 ? '今天' : `${p.rel.daysSince} 天前`}</span>}
           </div>
           {(p.avoid_topics || []).length > 0 && (
             <div className="mt-1.5 flex items-start gap-1 text-[13px] text-danger"><Ban className="mt-0.5 h-3.5 w-3.5 shrink-0" />别聊：{p.avoid_topics.join('、')}</div>
@@ -102,6 +105,9 @@ export default function PersonDetail({ id, onBack, autoAnalyze, onAnalyzed }) {
           </button>
         ))}
       </div>
+
+      {/* ---------- 关系（第 3 阶段：好感度、该不该联系、提示卡、TickTick）---------- */}
+      <RelationSection person={p} />
 
       {/* ---------- 答应过的事（第 2 阶段：从对话整理出来的）---------- */}
       <PromisesSection person={p} />
@@ -189,6 +195,39 @@ export default function PersonDetail({ id, onBack, autoAnalyze, onAnalyzed }) {
 
       <EditSheet open={editing} onClose={() => setEditing(false)} person={p} />
     </div>
+  );
+}
+
+function RelationSection({ person }) {
+  const store = useStore();
+  const toast = useToast();
+  const [sched, setSched] = useState(false);
+  const r = person.rel;
+  const hist = React.useMemo(() => affinityHistory(person, person.interactions, { days: 180, step: 3 }), [person]);
+  const due = r.dueIn == null ? '' : r.snoozed ? `暂缓到 ${person.snooze_until}` : r.dueIn < 0 ? `晚了 ${-r.dueIn} 天` : r.dueIn === 0 ? '今天该联系' : `${r.dueIn} 天后该联系`;
+  return (
+    <Section
+      title={<span className="flex items-center gap-1.5">关系</span>}
+      action={<a href={`#/p/${person.id}/brief`} className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-line px-3 text-sm font-medium hover:border-ink/30"><Contact className="h-4 w-4" />见面提示卡</a>}
+    >
+      <AffinityBar rel={r} />
+      <Sparkline points={hist} height={44} className="mt-2 text-ink" />
+      <div className="mt-1 flex justify-between text-[11px] text-faint"><span>半年前</span><span>今天</span></div>
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+        <span className="flex items-center gap-1 text-muted"><Clock className="h-3.5 w-3.5" />{CADENCE_LABEL[person.tier]}联系一次</span>
+        <span className="text-muted">{r.contacted ? `上次 ${r.daysSince === 0 ? '今天' : `${r.daysSince} 天前`}` : '还没联系过'}</span>
+        {due && <span className={cx('font-medium', r.overdue && !r.snoozed ? 'text-danger' : 'text-ink/70')}>{due}</span>}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        <Button size="sm" variant="outline" onClick={() => setSched(true)}><CalendarPlus className="h-4 w-4" />排进 TickTick</Button>
+        <Button size="sm" variant="outline" onClick={() => store.quickContact(person.id, 'message').then(() => toast('记好了：联系过了')).catch((e) => toast(e.message, 'error'))}>联系过了</Button>
+        {r.snoozed
+          ? <Button size="sm" variant="ghost" onClick={() => store.snooze(person.id, 0).catch((e) => toast(e.message, 'error'))}>取消暂缓</Button>
+          : <Button size="sm" variant="ghost" onClick={() => store.snooze(person.id, 7).then(() => toast('一星期后再提醒')).catch((e) => toast(e.message, 'error'))}>一星期后再提醒</Button>}
+      </div>
+      <p className="mt-2 text-[11px] text-faint">好感度由见面 / 电话 / 讯息记录算出来：越常联系越高，气氛好的对话加更多；不联系会慢慢掉。</p>
+      <ScheduleSheet open={sched} onClose={() => setSched(false)} items={[{ person, action: person.tier === 'core' ? 'meet' : 'message' }]} />
+    </Section>
   );
 }
 

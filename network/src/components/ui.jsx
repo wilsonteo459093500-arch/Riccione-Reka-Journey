@@ -136,7 +136,7 @@ export function Avatar({ person, size = 48 }) {
 export function TierBadge({ tier, className }) {
   const t = tierOf(tier);
   return (
-    <span className={cx('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium', className)} style={{ background: `${t.color}18`, color: t.color }}>
+    <span className={cx('inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium', className)} style={{ background: `${t.color}18`, color: t.color }}>
       <span className="h-1.5 w-1.5 rounded-full" style={{ background: t.color }} />
       {t.label}
     </span>
@@ -191,5 +191,48 @@ export function ToastProvider({ children }) {
         ))}
       </div>
     </ToastCtx.Provider>
+  );
+}
+
+/* ---------- 第 3 阶段：Sims 好感度条 ---------- */
+export function AffinityBar({ rel, compact = false, className }) {
+  if (!rel) return null;
+  const { affinity, band, trend } = rel;
+  const arrow = trend >= 3 ? '↑' : trend <= -3 ? '↓' : '';
+  return (
+    <div className={cx('min-w-0', className)} title={`好感度 ${affinity} · ${band.label}${trend ? `（30 天 ${trend > 0 ? '+' : ''}${trend}）` : ''}`}>
+      {!compact && (
+        <div className="mb-1 flex items-baseline justify-between text-xs">
+          <span className="font-medium" style={{ color: band.color }}>{band.label}</span>
+          <span className="tabular-nums text-muted">
+            {affinity}
+            {arrow && <span className={cx('ml-0.5', trend > 0 ? 'text-plum-deep' : 'text-danger')}>{arrow}{Math.abs(trend)}</span>}
+          </span>
+        </div>
+      )}
+      <div className={cx('overflow-hidden rounded-full bg-ink/[0.07]', compact ? 'h-1.5' : 'h-2')} role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={affinity} aria-label="好感度">
+        <div className="h-full rounded-full transition-[width] duration-500" style={{ width: `${Math.max(3, affinity)}%`, background: band.color }} />
+      </div>
+    </div>
+  );
+}
+
+/** 好感度曲线（过去半年）；null = 那时还不认识 */
+export function Sparkline({ points, height = 40, className }) {
+  const pts = (points || []).filter((p) => p.v != null);
+  if (pts.length < 2) return null;
+  const t0 = points[0].t;
+  const t1 = points[points.length - 1].t;
+  const W = 300;
+  const x = (t) => ((t - t0) / Math.max(1, t1 - t0)) * W;
+  const y = (v) => height - 2 - (v / 100) * (height - 4);
+  const d = pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)},${y(p.v).toFixed(1)}`).join(' ');
+  const last = pts[pts.length - 1];
+  return (
+    <svg viewBox={`0 0 ${W} ${height}`} preserveAspectRatio="none" className={cx('w-full', className)} style={{ height }} aria-hidden="true">
+      {[20, 40, 60, 80].map((g) => <line key={g} x1="0" x2={W} y1={y(g)} y2={y(g)} stroke="currentColor" strokeOpacity=".07" vectorEffect="non-scaling-stroke" />)}
+      <path d={`${d} L${x(last.t)},${height} L${x(pts[0].t)},${height} Z`} fill="#22A55B" fillOpacity=".08" />
+      <path d={d} fill="none" stroke="#22A55B" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+    </svg>
   );
 }

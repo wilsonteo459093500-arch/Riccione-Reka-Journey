@@ -170,6 +170,8 @@ export function matchPerson(view, q) {
 export const SORTS = {
   recent: { label: '最近加的', fn: (a, b) => String(b.created_at).localeCompare(String(a.created_at)) },
   worth: { label: '值得认识分', fn: (a, b) => (b.worth_score ?? -1) - (a.worth_score ?? -1) || String(b.created_at).localeCompare(String(a.created_at)) },
+  due: { label: '该联系了', fn: (a, b) => ((b.rel && b.rel.ratio) || 0) - ((a.rel && a.rel.ratio) || 0) },
+  affinity: { label: '好感度', fn: (a, b) => ((b.rel && b.rel.affinity) ?? 0) - ((a.rel && a.rel.affinity) ?? 0) },
   name: { label: '名字', fn: (a, b) => String(a.name).localeCompare(String(b.name), 'zh') },
 };
 

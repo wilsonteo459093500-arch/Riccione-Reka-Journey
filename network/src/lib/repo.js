@@ -6,11 +6,13 @@
      upsert(table, row)        → row（云端会补上 owner、时间）
      remove(table, id)
      uploadImage(path, blob)   / imageUrl(path) / removeImage(path)
+     uploadPublic(path, blob)  / publicUrl(path)   ← 第 4 阶段：公开名片的照片 / 视频（谁都看得到）
    两套实作：
      cloud — Supabase（RLS：只有本人读写；照片在私有 bucket，看图用 1 小时的签名网址）
      local — IndexedDB（没设 Supabase 时；资料只在这个浏览器）
    ============================================================ */
 import { supabase, cloudConfigured, BUCKET } from './supabase.js';
+import { CARD_BUCKET } from './card.js';
 
 export const TABLES = [
   'profile', 'companies', 'people', 'circles', 'person_circles', 'resources',
@@ -77,6 +79,17 @@ function makeCloudRepo() {
     async removeImage(path) {
       urlCache.delete(path);
       await supabase.storage.from(BUCKET).remove([path]);
+    },
+    async uploadPublic(path, blob) {
+      const { error } = await supabase.storage.from(CARD_BUCKET).upload(path, blob, { contentType: blob.type || 'application/octet-stream', upsert: true, cacheControl: '31536000' });
+      if (error) throw new Error(/bucket not found/i.test(error.message) ? '资料库还没升级：Supabase 重跑一次 schema.sql（见 DEPLOY.md「第 4 阶段升级」）' : error.message);
+    },
+    publicUrl(path) {
+      if (path && path.startsWith('/')) return path; // 网站自带的图（预设名片 /card/…）
+      return path ? supabase.storage.from(CARD_BUCKET).getPublicUrl(path).data.publicUrl : '';
+    },
+    async removePublic(path) {
+      if (path) await supabase.storage.from(CARD_BUCKET).remove([path]);
     },
     async accessToken() {
       const { data } = await supabase.auth.getSession();
@@ -175,6 +188,11 @@ function makeLocalRepo() {
       urls.delete(path);
       await kvDel(`f:${path}`);
     },
+    // 本机模式没有公开网址：只在这个浏览器预览（公开名片页要接 Supabase 才看得到）
+    async uploadPublic(path, blob) { await kvSet(`f:${path}`, blob); urls.delete(path); urls.set(path, URL.createObjectURL(blob)); },
+    publicUrl(path) { return path && path.startsWith('/') ? path : urls.get(path) || ''; },
+    async removePublic(path) { await kvDel(`f:${path}`); urls.delete(path); },
+    async warmPublic(paths) { for (const p of paths) if (p && !urls.has(p)) { const b = await kvGet(`f:${p}`); if (b) urls.set(p, URL.createObjectURL(b)); } },
     async accessToken() { return null; },
   };
 }
