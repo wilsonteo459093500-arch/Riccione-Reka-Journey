@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   cleanCard, publicCard, toVCard, greeting, cleanLead, LeadError, fillLeadFromCard, findExisting,
-  leadToPerson, mergeLeadInto, safeUrl, safePath, cardLink, cleanSource, klDate, cardReady, cleanLines, DEFAULT_CARD, namePair,
+  leadToPerson, mergeLeadInto, safeUrl, safePath, cardLink, cleanSource, klDate, cardReady, cleanLines, DEFAULT_CARD, namePair, igUrl,
 } from '../src/lib/card.js';
 import { receiveLead, LIMITS } from '../api/inbox.js';
 import { loadCard } from '../api/card.js';
@@ -79,6 +79,16 @@ test('商会 / 实体名片：没名字的不要、链接只收 https、上限',
   assert.equal(c.groups.length, 1);
   assert.deepEqual(c.groups[0].links.map((l) => l.url), ['https://pumm.my/', 'https://b.my/']);
   assert.deepEqual(c.card_images, ['/card/a.jpg', '/card/b.jpg']);
+});
+
+test('Instagram 视频：只收 instagram.com 的帖子 / Reel，整理成标准网址', () => {
+  assert.equal(igUrl('https://www.instagram.com/reel/DQ_tJlekgzV/?psln=aXNr'), 'https://www.instagram.com/reel/DQ_tJlekgzV/');
+  assert.equal(igUrl('instagram.com/p/ABCdef123'), 'https://www.instagram.com/p/ABCdef123/');
+  assert.equal(igUrl('https://www.instagram.com/wilsonteo0419/reels/XYZabc12/'), 'https://www.instagram.com/reel/XYZabc12/');
+  assert.equal(igUrl('https://evil.com/reel/ABCdef123'), '');
+  assert.equal(igUrl('javascript:alert(1)'), '');
+  assert.deepEqual(cleanCard({ ig_videos: 'https://www.instagram.com/reel/AAAAA1/\nhttps://x.com/a' }).ig_videos, ['https://www.instagram.com/reel/AAAAA1/']);
+  assert.equal(publicCard(DEFAULT_CARD, '').ig_videos.length, 1);
 });
 
 test('名字显示：中文在前、英文在后', () => {

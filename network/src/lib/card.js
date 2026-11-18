@@ -21,6 +21,7 @@ export const MAX_AWARDS = 8;
 export const MAX_BRANDS = 3;      // 品牌（瑞吉欧、溪岸…）
 export const MAX_POINTS = 6;      // 品牌下的重点（业务、故事、供应链…）
 export const MAX_SERIES = 6;      // 原创系列小格子
+export const MAX_IG_VIDEOS = 4;   // Instagram 视频（嵌入播放）
 export const MAX_EXHIBITIONS = 8; // 品牌下的标签（常年参展…）
 export const MAX_GROUPS = 4;      // 商会 / 组织
 export const MAX_CARD_IMAGES = 2; // 实体名片的照片
@@ -45,6 +46,14 @@ export function safeUrl(v, max = 500) {
 export function safePath(v) {
   const s = str(v, 300);
   return /^(?:[\w-]+\/|\/)card\/[\w.-]+\.(jpe?g|png|webp|mp4|webm|mov)$/i.test(s) && !s.includes('..') ? s : '';
+}
+
+/** Instagram 帖子 / Reel 网址 → 标准的 https://www.instagram.com/reel/<id>/（不认得就空字串） */
+export function igUrl(v) {
+  const m = /^(?:https?:\/\/)?(?:www\.)?instagram\.com\/(?:[\w.]+\/)?(reels?|p|tv)\/([\w-]{5,40})/i.exec(str(v, 300));
+  if (!m) return '';
+  const kind = m[1].toLowerCase() === 'reels' ? 'reel' : m[1].toLowerCase();
+  return `https://www.instagram.com/${kind}/${m[2]}/`;
 }
 
 /** 一行一句（阵列或多行字都收）→ 去空白、截长度、限几句 */
@@ -141,6 +150,7 @@ export const DEFAULT_CARD = {
     },
   ],
   opening_bg_path: '/card/opening-forest.jpg',
+  ig_videos: ['https://www.instagram.com/reel/DQ_tJlekgzV/'],
   whatsapp: '60163881919',
   phone: '',
   email: 'wilsonteo@riccione.asia',
@@ -227,6 +237,7 @@ export function cleanCard(c = {}) {
     about_photo_path: safePath(src.about_photo_path),
     brands: (Array.isArray(src.brands) ? src.brands : []).map(cleanBrand).filter((b) => b.name).slice(0, MAX_BRANDS),
     opening_bg_path: safePath(src.opening_bg_path),
+    ig_videos: cleanLines(src.ig_videos, MAX_IG_VIDEOS, 300).map(igUrl).filter(Boolean),
     groups: (Array.isArray(src.groups) ? src.groups : []).map(cleanGroup).filter((g) => g.name).slice(0, MAX_GROUPS),
     card_images: (Array.isArray(src.card_images) ? src.card_images : []).map(safePath).filter(Boolean).slice(0, MAX_CARD_IMAGES),
     greeting: str(src.greeting, 200) || DEFAULT_CARD.greeting,

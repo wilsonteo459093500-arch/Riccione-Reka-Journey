@@ -34,7 +34,7 @@ const T = {
     send: '送出', sending: '送出中…',
     thanks: (n) => (n ? `谢谢，${n}！` : '谢谢！'), thanksSub: '资料收到了。顺手发个 WhatsApp 给我，我就记得你是哪一位 😊',
     waMe: '发 WhatsApp 给我', again: '再留一次',
-    dock: '交换联络方式', sound: '声音',
+    dock: '交换联络方式', sound: '声音', videos: '视频', igOpen: '在 Instagram 打开', igLoading: '视频载入中…',
     skip: '跳过', cue: '往下看　认识我', story: '发展历程', awards: '奖项', series: '原创系列', brand: '品牌', groups: '商会与资源', cards: '我的名片', cardsSub: '点一下看大图',
     errNet: '连不上，检查一下网络再试一次', errBusy: '送出太多次了，请稍后再试，或直接 WhatsApp 我',
     fail: '名片暂时打不开，请稍后再试。',
@@ -58,7 +58,7 @@ const T = {
     send: 'Send', sending: 'Sending…',
     thanks: (n) => (n ? `Thank you, ${n}!` : 'Thank you!'), thanksSub: 'Got it. Send me a quick WhatsApp so I know which one is you 😊',
     waMe: 'WhatsApp me now', again: 'Send again',
-    dock: 'Swap contacts', sound: 'Sound',
+    dock: 'Swap contacts', sound: 'Sound', videos: 'Videos', igOpen: 'Open in Instagram', igLoading: 'Loading video…',
     skip: 'Skip', cue: 'Scroll to meet me', story: 'Milestones', awards: 'Awards', series: 'Original collections', brand: 'Brand', groups: 'Networks', cards: 'My business cards', cardsSub: 'Tap to enlarge',
     errNet: 'Can’t connect — check your network and try again', errBusy: 'Too many tries — please try later or just WhatsApp me',
     fail: 'This card can’t be opened right now. Please try again later.',
@@ -279,6 +279,7 @@ function render() {
   const pic = (src, alt, cls = 'figure.pic') => (src ? h(cls, null, h('img', { src, alt: alt || '', loading: 'lazy', decoding: 'async' })) : null);
 
   /* 品牌：瑞吉欧、溪岸分开介绍（讲事实：年份、面积、奖项） */
+  if (card.ig_videos && card.ig_videos.length) side.append(igBlock(card.ig_videos));
   for (const b of card.brands || []) side.append(brandBlock(b, pic));
   if (card.offers && card.offers.length) {
     side.append(sec(tr.offers, h('ul.offers', null, card.offers.map((o) => h('li', null, h('span.oi', { 'aria-hidden': 'true', html: offerIcon(o) }), h('span', null, o))))));
@@ -337,6 +338,26 @@ function render() {
     const slot = document.getElementById('ts');
     if (tsWidget && slot) slot.replaceWith(tsWidget); else mountTurnstile(state.data.turnstile_site_key);
   }
+}
+
+/** Instagram 视频：用 Instagram 自己的播放框（embed.js 自动调高度）。
+ *  滑到附近才载入，不拖慢名片打开；连不上 Instagram 时还有「在 Instagram 打开」可以点 */
+function igBlock(urls) {
+  const items = urls.map((u) => h('div.ig', null,
+    h('blockquote.instagram-media', { 'data-instgrm-permalink': u, 'data-instgrm-version': '14' },
+      h('a', { href: u, target: '_blank', rel: 'noopener' }, tr.igLoading)),
+    h('a.btn.line.ig-open', { href: u, target: '_blank', rel: 'noopener' }, tr.igOpen, h('span.arrow', { 'aria-hidden': 'true' }, '↗'))));
+  const box = h('section.sec.videos', null, h('h2.kicker', null, tr.videos), items);
+  const load = () => {
+    if (window.instgrm && window.instgrm.Embeds) { window.instgrm.Embeds.process(); return; }
+    if (document.getElementById('ig-embed')) return;
+    document.head.append(h('script', { id: 'ig-embed', async: true, src: 'https://www.instagram.com/embed.js' }));
+  };
+  if ('IntersectionObserver' in window) {
+    const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) { io.disconnect(); load(); } }, { rootMargin: '800px 0px' });
+    io.observe(box);
+  } else load();
+  return box;
 }
 
 /** 一个品牌一大块：大照片（左上角 logo）→ 名字、标题、一段 → 重点 → 数字 → 奖项 → 标签 → 系列 → 发展历程 */

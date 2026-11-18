@@ -351,3 +351,11 @@ footer { padding: 40px 0 max(36px, env(safe-area-inset-bottom)); text-align: cen
 .ser figcaption { display: flex; flex-direction: column; gap: 2px; padding: 8px 2px 0; }
 .ser b { font-size: 14.5px; font-weight: 600; }
 .ser span { font-size: 12px; line-height: 1.45; color: var(--muted); }
+
+/* ---------- Instagram 视频 ---------- */
+.videos .ig + .ig { margin-top: 18px; }
+.videos .instagram-media { min-width: 0 !important; width: 100% !important; max-width: 100% !important; margin: 0 !important; border: 0 !important; border-radius: 14px !important; box-shadow: none !important; background: var(--field) !important; }
+.videos blockquote.instagram-media { display: flex; align-items: center; justify-content: center; min-height: 420px; padding: 0; }
+.videos blockquote.instagram-media a { color: var(--muted); font-size: 14px; text-decoration: none; }
+.videos iframe.instagram-media { border-radius: 14px !important; }
+.ig-open { width: 100%; justify-content: space-between; margin-top: 10px; min-height: 48px; padding: 0 16px; background: var(--field); border-color: var(--field); font-size: 14.5px; }

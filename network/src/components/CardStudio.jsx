@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
 import { repo } from '../lib/repo.js';
-import { cardLink, cardReady, cleanLines, MAX_OFFERS, MAX_CASES, MAX_SOCIALS, MAX_OPENING, MAX_MILESTONES, MAX_GROUPS, MAX_STATS, MAX_AWARDS, MAX_EXHIBITIONS, MAX_BRANDS, MAX_POINTS, MAX_SERIES, SOCIAL_PLATFORMS } from '../lib/card.js';
+import { cardLink, cardReady, cleanLines, MAX_OFFERS, MAX_CASES, MAX_SOCIALS, MAX_OPENING, MAX_MILESTONES, MAX_GROUPS, MAX_STATS, MAX_AWARDS, MAX_EXHIBITIONS, MAX_BRANDS, MAX_POINTS, MAX_SERIES, MAX_IG_VIDEOS, SOCIAL_PLATFORMS } from '../lib/card.js';
 import { qrPath, qrPng } from '../lib/qr.js';
 import { fmtDate } from '../lib/logic.js';
 import { Button, Field, Input, Textarea, Section, Sheet, useToast, cx } from './ui.jsx';
@@ -222,7 +222,7 @@ function CardEditor() {
   const set = (patch) => setF((x) => ({ ...x, ...patch }));
   async function save() {
     setBusy(true);
-    try { await store.saveCard({ ...f, opening: cleanLines(f.opening), opening_en: cleanLines(f.opening_en), brands: (f.brands || []).map((b) => ({ ...b, chips: cleanLines(b.chips, MAX_EXHIBITIONS) })) }); toast('名片存好了（公开页 1 分钟内更新）'); } catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
+    try { await store.saveCard({ ...f, opening: cleanLines(f.opening), opening_en: cleanLines(f.opening_en), ig_videos: cleanLines(f.ig_videos, MAX_IG_VIDEOS, 300), brands: (f.brands || []).map((b) => ({ ...b, chips: cleanLines(b.chips, MAX_EXHIBITIONS) })) }); toast('名片存好了（公开页 1 分钟内更新）'); } catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
   }
   async function upload(file, kind, apply) {
     if (!file) return;
@@ -240,6 +240,9 @@ function CardEditor() {
             onPick={(file) => upload(file, 'video', (p) => set({ video_path: p, video_url: '' }))} onClear={() => set({ video_path: '' })} />
         </div>
         <p className="mt-2 text-xs text-faint">视频：10–20 秒、静音也好看、竖的或横的都行，MP4 ≤ 50MB（建议 720p，打开比较快）。有视频的话照片会变成小头像。</p>
+        <Field className="mt-3" label={`Instagram 视频链接（一行一个，最多 ${MAX_IG_VIDEOS} 个）`} hint="帖子要公开；名片上会放 Instagram 的播放框，别人点一下就在名片里播">
+          <Textarea rows={2} value={(f.ig_videos || []).join('\n')} onChange={(e) => set({ ig_videos: e.target.value.split('\n').slice(0, MAX_IG_VIDEOS) })} placeholder="https://www.instagram.com/reel/…" />
+        </Field>
         {!f.video_path && (
           <Field className="mt-2" label="或者贴视频网址（MP4 直链，https）"><Input value={f.video_url} onChange={(e) => set({ video_url: e.target.value })} placeholder="https://…/showroom.mp4" /></Field>
         )}
