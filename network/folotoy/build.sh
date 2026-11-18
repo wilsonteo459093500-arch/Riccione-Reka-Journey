@@ -48,6 +48,8 @@ python3 "${HERE}/tools/make_font.py" --check \
   --ttf "${FONT_DIR}/package/500Medium/NotoSansSC_500Medium.ttf" \
   --bold-ttf "${FONT_DIR}/package/700Bold/NotoSansSC_700Bold.ttf"
 
+python3 "${HERE}/tools/make_cover.py" --check
+
 # --- 1. 上游 ---
 if [[ ! -d "${CACHE}/ai-passport/.git" ]]; then
   git clone -q "${UPSTREAM_REPO}" "${CACHE}/ai-passport"

@@ -35,12 +35,14 @@ static void test_tag_url(void) {
 static void test_init_and_keys(void) {
     space_card_state_t s;
     space_card_init(&s, "https://space.example/c", "Wilson Teo", "", "");
+    s.cover = false;   // 下面测的是二维码画面（封面另外测）
     assert(s.count == 1);
     assert(strcmp(s.links[0].label, "Wilson Teo") == 0);
     // 只有一个网址：上下键不用重画
     assert(space_card_on_key(&s, SPACE_CARD_BTN_DOWN, SPACE_CARD_EV_CLICK) == SPACE_CARD_REDRAW_NONE);
 
     space_card_init(&s, "https://space.example/c", "", "https://space.example/c?e=11111111-2222-4333-8444-555555555555", "BNI 早餐会");
+    s.cover = false;   // 下面测的是二维码画面（封面另外测）
     assert(s.count == 2);
     assert(strcmp(s.links[0].label, "Scan to connect") == 0);
     assert(strncmp(s.links[1].label, "BNI ", 4) == 0 && strchr(s.links[1].label, '?'));   // 中文换成 ?
@@ -68,12 +70,14 @@ static void test_init_and_keys(void) {
 
     // 第一个网址不对 → 没有可显示的
     space_card_init(&s, "http://bad", "x", "https://ok/c", "y");
+    s.cover = false;   // 下面测的是二维码画面（封面另外测）
     assert(s.count == 0);
 }
 
 static void test_idle(void) {
     space_card_state_t s;
     space_card_init(&s, "https://space.example/c", "W", NULL, NULL);
+    s.cover = false;   // 下面测的是二维码画面（封面另外测）
     assert(!space_card_on_idle(&s, 1000));
     assert(space_card_on_idle(&s, 60000));        // 一分钟没按 → 调暗
     assert(s.dimmed && space_card_backlight(&s) == 15);
@@ -107,12 +111,32 @@ static void test_battery(void) {
     assert(b[0] == '\0');
 }
 
+static void test_cover(void) {
+    space_card_state_t s;
+    space_card_init(&s, "https://space.example/c", "W", "https://space.example/c?e=x", "E");
+    assert(s.cover);                                                  // 开机先封面
+    assert(space_card_on_key(&s, SPACE_CARD_BTN_DOWN, SPACE_CARD_EV_CLICK) == SPACE_CARD_REDRAW_NONE && s.current == 0);
+    assert(space_card_on_key(&s, SPACE_CARD_BTN_OK, SPACE_CARD_EV_LONG) == SPACE_CARD_REDRAW_NONE && !s.big);
+    assert(space_card_on_key(&s, SPACE_CARD_BTN_OK, SPACE_CARD_EV_PRESS) == SPACE_CARD_REDRAW_NONE && s.cover);
+    assert(space_card_on_key(&s, SPACE_CARD_BTN_OK, SPACE_CARD_EV_CLICK) == (SPACE_CARD_REDRAW_LAYOUT | SPACE_CARD_REDRAW_QR));
+    assert(!s.cover && s.brightness_idx == 0);                        // 那一下不会顺便改亮度
+    space_card_on_key(&s, SPACE_CARD_BTN_OK, SPACE_CARD_EV_LONG);     // 大二维码
+    assert(s.big);
+    assert(!space_card_cover_idle(&s, 29999));
+    assert(space_card_cover_idle(&s, 30000) && s.cover && !s.big);    // 闲置 30 秒回封面、大二维码也收掉
+    assert(!space_card_cover_idle(&s, 99999));
+    // 网址没设好：没有封面（直接显示设定说明）
+    space_card_init(&s, "", "", "", "");
+    assert(!s.cover && !space_card_cover_idle(&s, 99999));
+}
+
 int main(void) {
     test_tag_url();
     test_init_and_keys();
     test_idle();
     test_qr_size();
     test_battery();
+    test_cover();
     printf("test_space_card_model: OK\n");
     return 0;
 }

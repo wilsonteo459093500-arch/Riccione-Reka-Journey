@@ -51,7 +51,7 @@ cc -O1 -Wall -Wextra -Werror -I"${SIM}" -I"${SIM}/stub" -I"${LVGL}" -I"${MAIN}" 
   "${SIM}/sim.c" "${SIM}/stub/ble_remote_stub.c" "${SIM}/stub/sound_stub.c" \
   "${MAIN}/space_card.c" "${MAIN}/space_card_model.c" "${MAIN}/car_screen.c" "${MAIN}/car_remote_model.c" \
   "${MAIN}/pocket_model.c" "${MAIN}/audio_dsp.c" "${MAIN}/menu_screen.c" "${MAIN}/candle_screen.c" "${MAIN}/timer_screen.c" \
-  "${MAIN}"/font_*.c \
+  "${MAIN}"/font_*.c "${MAIN}/cover_img.c" \
   "${OBJ}"/*.o -lm -o "${WORK}/sim"
 rm -f "${OUT}"/*.ppm "${OUT}"/*.png "${CAR_OUT}"/*.ppm "${CAR_OUT}"/*.png "${POCKET_OUT}"/*.ppm "${POCKET_OUT}"/*.png
 "${WORK}/sim" "${OUT}" "${CAR_OUT}" "${POCKET_OUT}" "${EVENT_URL}"

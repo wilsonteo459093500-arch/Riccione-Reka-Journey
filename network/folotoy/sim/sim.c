@@ -93,6 +93,12 @@ int main(int argc, char **argv) {
     space_card_init(&s, CONFIG_SPACE_CARD_URL, CONFIG_SPACE_CARD_LABEL, event_url, CONFIG_SPACE_CARD_EVENT_LABEL);
     space_card_show(&s);
     g_bl = space_card_backlight(&s);
+    // 开机封面（没有二维码：放到口袋机资料夹，名片资料夹只放要扫码的画面）
+    s_out = pocket_out;
+    advance_ms(900);   // 光扫到中间
+    dump("00-cover.ppm");
+    s_out = argv[1];
+    press(&s, SPACE_CARD_BTN_OK, SPACE_CARD_EV_CLICK);   // 确定 → 二维码
     dump("1-card.ppm");
 
     if (s.count > 1) {

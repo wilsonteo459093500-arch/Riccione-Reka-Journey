@@ -11,6 +11,7 @@
 //   │        ● ○           │  ← 有两个二维码时的页点
 //   └──────────────────────┘
 // 大二维码模式（确定长按）：只剩 224×224 的二维码，远一点也扫得到。
+// 开机封面：木纹 + RICCIONE / 溪岸 字标（tools/make_cover.py 产生），一道光扫过；确定 → 上面的名片画面。
 //
 // 所有函数都要在持有 bsp_lvgl_lock() 时呼叫（main.c 负责）。
 #include "space_card.h"
@@ -23,6 +24,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "lvgl.h"
+#include "pocket_ui.h"   // 中文字型
 
 static const char *TAG = "space_card";
 
@@ -42,6 +44,10 @@ static lv_obj_t *s_qr;
 static lv_obj_t *s_caption;
 static lv_obj_t *s_dots[SPACE_CARD_MAX_LINKS];
 static lv_timer_t *s_tick;
+static lv_obj_t *s_cover_img;
+static lv_obj_t *s_cover_hint;
+static lv_obj_t *s_sweep;
+extern const lv_image_dsc_t space_cover_img;
 static volatile int64_t s_last_input_us;
 
 static void style_label(lv_obj_t *l, const lv_font_t *font, uint32_t color) {
@@ -72,7 +78,38 @@ static void apply_qr(void) {
     }
 }
 
+static void sweep_x(void *obj, int32_t v) {
+    lv_obj_set_x((lv_obj_t *)obj, v);
+}
+
+// 封面出现时：一道光从左扫到右（只扫一次）
+static void start_sweep(void) {
+    lv_anim_t a;
+    lv_anim_init(&a);
+    lv_anim_set_var(&a, s_sweep);
+    lv_anim_set_exec_cb(&a, sweep_x);
+    lv_anim_set_values(&a, -80, 260);
+    lv_anim_set_duration(&a, 1400);
+    lv_anim_set_delay(&a, 250);
+    lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out);
+    lv_anim_start(&a);
+}
+
 static void apply_layout(void) {
+    lv_obj_t *cover_parts[] = { s_cover_img, s_cover_hint, s_sweep };
+    for (size_t i = 0; i < sizeof cover_parts / sizeof cover_parts[0]; i++) {
+        if (s_state->cover) lv_obj_remove_flag(cover_parts[i], LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(cover_parts[i], LV_OBJ_FLAG_HIDDEN);
+    }
+    if (s_state->cover) {
+        lv_obj_t *qr_parts[] = { s_brand, s_battery, s_name, s_caption, s_dots[0], s_dots[1], s_panel };
+        for (size_t i = 0; i < sizeof qr_parts / sizeof qr_parts[0]; i++)
+            if (qr_parts[i]) lv_obj_add_flag(qr_parts[i], LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_x(s_sweep, -80);
+        start_sweep();
+        return;
+    }
+    lv_obj_remove_flag(s_panel, LV_OBJ_FLAG_HIDDEN);
     const bool big = s_state->big;
     const int32_t px = space_card_qr_px(s_state);
     lv_obj_t *small_only[] = { s_brand, s_battery, s_name, s_caption, s_dots[0], s_dots[1] };
@@ -96,6 +133,7 @@ static void tick_cb(lv_timer_t *t) {
     if (space_card_on_idle(s_state, (uint32_t)(idle_us / 1000))) {
         bsp_display_backlight(space_card_backlight(s_state));
     }
+    if (space_card_cover_idle(s_state, (uint32_t)(idle_us / 1000))) apply_layout();   // 闲置 30 秒回封面
     if (++n % 10 == 0) update_battery();   // 电量 10 秒更新一次
 }
 
@@ -123,6 +161,34 @@ void space_card_show(space_card_state_t *state) {
         lv_screen_load(s_scr);
         return;
     }
+
+    // 开机封面（最底层；显示二维码时藏起来）
+    s_cover_img = lv_image_create(s_scr);
+    lv_image_set_src(s_cover_img, &space_cover_img);
+    lv_obj_set_pos(s_cover_img, 0, 0);
+    // 扫过去的光：透明容器里放左右两半，左半「透明 → 亮」、右半「亮 → 透明」
+    s_sweep = lv_obj_create(s_scr);
+    lv_obj_remove_flag(s_sweep, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_size(s_sweep, 64, 320);
+    lv_obj_set_style_bg_opa(s_sweep, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(s_sweep, 0, 0);
+    lv_obj_set_style_pad_all(s_sweep, 0, 0);
+    for (int half = 0; half < 2; half++) {
+        lv_obj_t *h = lv_obj_create(s_sweep);
+        lv_obj_remove_flag(h, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_size(h, 32, 320);
+        lv_obj_set_pos(h, half * 32, 0);
+        lv_obj_set_style_radius(h, 0, 0);
+        lv_obj_set_style_border_width(h, 0, 0);
+        lv_obj_set_style_bg_color(h, lv_color_hex(0xFFF2D8), 0);
+        lv_obj_set_style_bg_grad_color(h, lv_color_hex(0xFFF2D8), 0);
+        lv_obj_set_style_bg_grad_dir(h, LV_GRAD_DIR_HOR, 0);
+        lv_obj_set_style_bg_main_opa(h, half ? 60 : LV_OPA_TRANSP, 0);
+        lv_obj_set_style_bg_grad_opa(h, half ? LV_OPA_TRANSP : 60, 0);
+    }
+    lv_obj_set_pos(s_sweep, -80, 0);
+    s_cover_hint = ui_label(s_scr, &space_font_cjk_20, C_MUTED, "确定 看名片");
+    lv_obj_align(s_cover_hint, LV_ALIGN_TOP_MID, 0, 268);
 
     // 左上品牌字、右上电量（避开 30px 圆角：往内缩）
     s_brand = lv_label_create(s_scr);
@@ -195,6 +261,8 @@ void space_card_on_input(int redraw) {
 }
 
 void space_card_hide(void) {
+    if (s_sweep) lv_anim_delete(s_sweep, NULL);
+    s_sweep = NULL;
     if (s_tick) lv_timer_delete(s_tick);
     s_tick = NULL;
     s_state = NULL;

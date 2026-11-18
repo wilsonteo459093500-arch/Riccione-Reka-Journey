@@ -2,6 +2,10 @@
 
 FoloToy AI Passport（ESP32-C3、240×320 屏幕、三个按键）有两个模式：
 
+- **开机封面**：深色木纹 + 官方 RICCIONE® / 溪岸 sAil by Riccione Reka 白色字标，一道光扫过；**按「确定」→ 名片二维码**，二维码闲置 30 秒回封面。
+
+  ![开机封面](./firmware/cover.png)
+
 - **名片模式**（预设）：显示**你的 SPACE 名片二维码**。活动上把它拿出来：对方手机一扫 → 打开 SPACE 公开名片页 → 留资料 → **自动进 SPACE**（标签「扫码」，互动记成「扫 FoloToy 留资料」）。
 - **口袋机菜单**：名片画面**「上」长按**打开菜单，里面有**蜡烛与生日歌**、**计时器**、**倒数计时**、车用遥控器。见下面「口袋机」。
 - **车用遥控器模式**：FoloToy 当 Android 手机的**蓝牙媒体遥控器**，手机不用装 app。开车时按 FoloToy 控制微信读书听书、音乐，长按叫语音助理。见下面「车用遥控器」。
@@ -53,6 +57,7 @@ FoloToy 背面就是一枚**被动 NTAG213** NFC 芯片（官方规格：支持�
 
 | 按键 | 做什么 |
 |---|---|
+| 确定 短按（封面时） | 显示名片二维码（闲置 30 秒自动回封面） |
 | 上 / 下 短按 | 切换「名片」/「活动」二维码（menuconfig 有设活动网址才有第二个） |
 | 确定 短按 | 亮度 100% → 60% → 30% |
 | 确定 长按 | 大二维码模式：只剩 224px 的二维码，远一点也扫得到；再长按回来 |
@@ -214,6 +219,7 @@ FoloToy 背面就是一枚**被动 NTAG213** NFC 芯片（官方规格：支持�
 | `main/sound.c/.h` | 喇叭 / 麦克风背景 task：放歌、响铃、听吹气；画面只送命令、读状态 |
 | `main/menu_screen.c`、`candle_screen.c`、`timer_screen.c`、`pocket_ui.h` | 菜单、数字蜡烛（火苗动画、烟、歌词）、计时器 / 倒数（圆环、红白闪）画面 |
 | `main/font_*.c` | `tools/make_font.py` 产生的字型：中文 20 / 32px（只放用到的字）、大数字 64 / 140px |
+| `tools/make_cover.py`、`main/cover_img.c` | 开机封面：程序画的胡桃木纹 + 仓库里的官方白色字标（`blueprint/public/template/b/`），产生 240×320 RGB565；`--check` 由 `build.sh` 检查 |
 | `tools/make_font.py` | 字型产生器：从 `main/*.c` 的字串收集中文字 → Pillow 画字 → LVGL 4bpp 格式，逐像素读回比对；`--check` 检查是不是最新（`build.sh` 每次跑） |
 | `main/main.c` | 开机：NVS（模式 + 配对资料）→ BSP 初始化 → 依模式开名片或车用画面 → 按键（回呼只丢 queue，input task 拿 LVGL 锁再改画面；沿用上游的按键唤醒保护） |
 | `main/Kconfig.projbuild` | menuconfig 的「SPACE card」：网址、名字、说明字、活动网址、遥控器蓝牙名字 |
