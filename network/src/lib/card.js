@@ -68,7 +68,7 @@ export const DEFAULT_CARD = {
     {
       name: '瑞吉欧 RICCIONE',
       logo_path: '/card/logo-riccione.png',
-      photo_path: '/card/riccione-hero.jpg',
+      photo_path: '/card/riccione-forest-scene.jpg',
       title: '更慢、更柔和，也更自然的生活',
       lead: '名字取自意大利的一座海滨小镇。父辈 1979 年开始做木作，2002 年在广东成立中国公司；瑞吉欧专注于回归生活本质的实木家具：自然的材质、真实的设计、历久弥新的美。',
       points: [
@@ -103,7 +103,10 @@ export const DEFAULT_CARD = {
         { year: '2024', text: '中国 18 家品牌门店；马来西亚线上线下一体化零售' },
         { year: '2025', text: 'Riccione Reka 全屋定制成立' },
       ],
-      series: [],
+      series: [
+        { title: '陀螺系列 Gasing', note: '埃及柱式桌腿、陀螺拉手', image_path: '/card/riccione-gasing.jpg' },
+        { title: '编藤系列 Rattan', note: '实木与藤编', image_path: '/card/riccione-rattan.jpg' },
+      ],
     },
     {
       name: '溪岸 SAIL BY RICCIONE REKA',
@@ -164,7 +167,7 @@ export const DEFAULT_CARD = {
     { title: '溪岸 · 书格墙', note: '让人安静下来的客厅', image_path: '/card/g-sail-living.jpg' },
     { title: '溪岸 · 餐厅', note: '深色书格墙与长餐桌', image_path: '/card/g-sail-dining.jpg' },
     { title: '溪岸 · 门头', note: '清水墙与石凳', image_path: '/card/g-sail-facade.jpg' },
-    { title: '瑞吉欧 · 实木衣柜', note: '更慢、更柔和，也更自然的生活', image_path: '/card/g-riccione-wardrobe.jpg' },
+    { title: '瑞吉欧 · 编藤系列', note: '实木与藤编，放回自然里', image_path: '/card/riccione-rattan.jpg' },
   ],
   socials: [
     { platform: 'instagram', url: 'https://www.instagram.com/wilsonteo0419/', label: '张炜盛 Wilson', icon_path: '/card/avatar.jpg' },
