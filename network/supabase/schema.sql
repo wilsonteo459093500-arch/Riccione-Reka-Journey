@@ -134,7 +134,7 @@ create table if not exists public.interactions (
 );
 create index if not exists interactions_person on public.interactions (person_id, occurred_at desc);
 
--- ---------- 活动与出席（第 5 阶段用；表先建好）----------
+-- ---------- 活动与出席（第 5 阶段：活动页 + 邀请 / 会来 / 出席了 / 没来）----------
 create table if not exists public.events (
   id uuid primary key default gen_random_uuid(),
   owner uuid not null default auth.uid() references auth.users(id) on delete cascade,
@@ -248,12 +248,57 @@ create table if not exists public.inbox (
 create index if not exists inbox_owner_at on public.inbox (owner, at desc);
 create index if not exists inbox_ip on public.inbox (owner, ip_hash, at desc);
 
+-- ---------- 第 5 阶段升级（WhatsApp 半自动群发 + 话术 + 活动出席）----------
+-- 一次群发：活动后跟进 / 节日问候 / 邀请 / 今日该联系的人 / 自己写
+create table if not exists public.campaigns (
+  id uuid primary key default gen_random_uuid(),
+  owner uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  kind text not null default 'custom' check (kind in ('event_follow','festival','invite','today','custom')),
+  name text not null default '',
+  event_id uuid references public.events(id) on delete set null,
+  occasion text not null default '',      -- 节日名（节日问候）
+  invite text not null default '',        -- 邀请内容（时间、地点、什么活动）
+  template text not null default '',      -- 模板：{称呼} {我} {活动} {节日祝福} {邀请} {聊聊}
+  lang text not null default 'auto' check (lang in ('auto','zh','en','ms')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists campaigns_owner on public.campaigns (owner, created_at desc);
+
+-- 每个人一则讯息：初稿 → 点开 WhatsApp 发了 → 他怎么回（进好感度、调整以后的话术）
+create table if not exists public.outreach (
+  id uuid primary key default gen_random_uuid(),
+  owner uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  campaign_id uuid not null references public.campaigns(id) on delete cascade,
+  person_id uuid not null references public.people(id) on delete cascade,
+  text text not null default '',
+  lang text not null default 'zh',
+  topic text not null default '',         -- 讯息里提了他的哪件事
+  personal boolean not null default false,
+  polished boolean not null default false, -- AI 润色过
+  status text not null default 'draft' check (status in ('draft','sent','skipped')),
+  sent_at timestamptz,
+  interaction_id uuid references public.interactions(id) on delete set null,  -- 发了之后记的那笔「讯息」互动
+  response text check (response in ('warm','ok','none','cold')),
+  response_at timestamptz,
+  response_note text not null default '',
+  rsvp text check (rsvp in ('yes','maybe','no')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (campaign_id, person_id)
+);
+create index if not exists outreach_person on public.outreach (person_id, sent_at desc);
+
+alter table public.interactions drop constraint if exists interactions_source_check;
+alter table public.interactions add constraint interactions_source_check
+  check (source in ('manual','card','plaud','voice','whatsapp_txt','whatsapp_screenshot','qr','campaign'));   -- campaign = 群发
+
 -- ---------- updated_at trigger + RLS（每张表一样）----------
 do $$
 declare t text;
 begin
   foreach t in array array['profile','companies','people','circles','person_circles','resources','interactions',
-                           'events','attendance','photos','photo_people','relationship_snapshots','ai_usage','inbox']
+                           'events','attendance','photos','photo_people','relationship_snapshots','ai_usage','inbox','campaigns','outreach']
   loop
     execute format('drop trigger if exists %I_touch on public.%I', t, t);
     execute format('create trigger %I_touch before update on public.%I for each row execute function public.network_touch()', t, t);

@@ -190,7 +190,7 @@ function EventSheet({ event, onDeleted }) {
         </div>
       </div>
       <div>
-        <h3 className="mb-1 text-sm font-semibold">扫码进来的 {people.length} 个人</h3>
+        <h3 className="mb-1 flex items-center justify-between text-sm font-semibold">扫码进来的 {people.length} 个人<a href={`#/events/${event.id}`} className="font-normal text-plum-deep underline-offset-2 hover:underline">完整名单 · 群发 →</a></h3>
         {!people.length && <p className="text-sm text-faint">还没有人</p>}
         <ul className="space-y-1">
           {people.map((p) => <li key={p.id}><a href={`#/p/${p.id}`} className="text-sm underline-offset-2 hover:underline">{p.name}</a>{p.company && <span className="text-sm text-muted"> · {p.company.name}</span>}</li>)}

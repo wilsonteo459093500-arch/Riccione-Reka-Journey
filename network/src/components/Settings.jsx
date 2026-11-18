@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { LogOut, Download, Cloud, HardDrive, QrCode, ChevronRight } from 'lucide-react';
+import { LogOut, Download, Cloud, HardDrive, QrCode, ChevronRight, Send, CalendarDays } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
 import { supabase } from '../lib/supabase.js';
 import { monthUsage, tierCounts, DEFAULT_PROFILE } from '../lib/logic.js';
@@ -8,9 +8,9 @@ import { Logo, MeaningRow } from './Login.jsx';
 
 const RATE = Number(import.meta.env.VITE_USD_TO_MYR || 4.4);
 const BUDGET_MYR = Number(import.meta.env.VITE_AI_MONTHLY_BUDGET_MYR || 50);
-const FEATURE = { scan_card: '名片识别', company: '公司背景', assess: '深度分析', talk: '对话分析', inbox_card: '扫码留的名片' };
+const FEATURE = { scan_card: '名片识别', company: '公司背景', assess: '深度分析', talk: '对话分析', inbox_card: '扫码留的名片', draft: '群发 AI 润色' };
 
-export default function Settings({ onCard }) {
+export default function Settings({ onCard, onSend, onEvents }) {
   const store = useStore();
   const toast = useToast();
   const [f, setF] = useState(store.me);
@@ -45,6 +45,13 @@ export default function Settings({ onCard }) {
           <span className="flex-1"><span className="block font-semibold">我的名片 · 二维码 · NFC</span><span className="text-sm text-muted">别人扫码看名片、留资料，自动进 SPACE</span></span>
           <ChevronRight className="h-5 w-5 text-faint" />
         </button>
+      )}
+
+      {(onSend || onEvents) && (
+        <div className="grid grid-cols-2 gap-2">
+          {onSend && <MenuBtn icon={Send} title="群发" hint="节日、邀请、活动后跟进" onClick={onSend} />}
+          {onEvents && <MenuBtn icon={CalendarDays} title="活动" hint="邀请了 / 会来 / 出席了" onClick={onEvents} />}
+        </div>
       )}
 
       <Section title="这个月的 AI 费用">
@@ -106,5 +113,14 @@ export default function Settings({ onCard }) {
         <MeaningRow className="mt-1 w-full max-w-xs" />
       </div>
     </div>
+  );
+}
+
+function MenuBtn({ icon: Icon, title, hint, onClick }) {
+  return (
+    <button onClick={onClick} className="flex items-center gap-2.5 rounded-2xl border border-line bg-white p-3 text-left hover:border-ink/30">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-plum/10 text-plum-deep"><Icon className="h-5 w-5" /></span>
+      <span className="min-w-0"><span className="block font-semibold">{title}</span><span className="block truncate text-xs text-muted">{hint}</span></span>
+    </button>
   );
 }

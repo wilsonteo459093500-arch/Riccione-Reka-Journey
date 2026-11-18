@@ -17,7 +17,11 @@ import { CARD_BUCKET } from './card.js';
 export const TABLES = [
   'profile', 'companies', 'people', 'circles', 'person_circles', 'resources',
   'interactions', 'photos', 'photo_people', 'events', 'attendance', 'ai_usage',
+  'campaigns', 'outreach', // 第 5 阶段：群发
 ];
+// 后来才加的表：资料库还没升级（还没重跑 schema.sql）时当成空的，app 照样能开
+export const OPTIONAL = ['campaigns', 'outreach'];
+export const NEEDS_UPGRADE = '资料库还没升级：Supabase 重跑一次 schema.sql（见 DEPLOY.md「第 5 阶段升级」）';
 // 只写不读（第 3 阶段才画）
 export const WRITE_ONLY = ['relationship_snapshots'];
 
@@ -36,6 +40,7 @@ function makeCloudRepo() {
         q = q.gte('at', since.toISOString());
       }
       const { data, error } = await q;
+      if (error && OPTIONAL.includes(table) && /does not exist|schema cache|PGRST205|42P01/i.test(`${error.code} ${error.message}`)) return [];
       if (error) throw new Error(`${table}: ${error.message}`);
       rows.push(...data);
       if (data.length < page) break;
@@ -53,6 +58,16 @@ function makeCloudRepo() {
     async upsert(table, row) {
       const { owner, ...clean } = row; // owner 由数据库默认 auth.uid() 填，前端不送
       const { data, error } = await supabase.from(table).upsert(clean).select().single();
+      if (error && OPTIONAL.includes(table) && /does not exist|schema cache|PGRST205|42P01/i.test(`${error.code} ${error.message}`)) throw new Error(NEEDS_UPGRADE);
+      if (error && /interactions_source_check/.test(error.message)) throw new Error(NEEDS_UPGRADE);
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    async insertMany(table, rows) {
+      if (!rows.length) return [];
+      const clean = rows.map(({ owner, ...r }) => r);
+      const { data, error } = await supabase.from(table).insert(clean).select();
+      if (error && OPTIONAL.includes(table) && /does not exist|schema cache|PGRST205|42P01/i.test(`${error.code} ${error.message}`)) throw new Error(NEEDS_UPGRADE);
       if (error) throw new Error(error.message);
       return data;
     },
@@ -152,12 +167,21 @@ function makeLocalRepo() {
       await save(table);
       return { ...next };
     },
+    async insertMany(table, rows) {
+      await ensure();
+      const now = new Date().toISOString();
+      const out = rows.map((r) => ({ created_at: now, ...r, owner: LOCAL_OWNER, updated_at: now }));
+      tables[table].push(...out);
+      await save(table);
+      return out.map((r) => ({ ...r }));
+    },
     async remove(table, id) {
       await ensure();
       tables[table] = tables[table].filter((r) => r.id !== id);
       // 跟 Postgres 的 on delete cascade 一样：删人 / 删照片时连带删关联
       const cascade = {
-        people: [['person_circles', 'person_id'], ['resources', 'person_id'], ['interactions', 'person_id'], ['photo_people', 'person_id'], ['attendance', 'person_id'], ['relationship_snapshots', 'person_id']],
+        people: [['person_circles', 'person_id'], ['resources', 'person_id'], ['interactions', 'person_id'], ['photo_people', 'person_id'], ['attendance', 'person_id'], ['relationship_snapshots', 'person_id'], ['outreach', 'person_id']],
+        campaigns: [['outreach', 'campaign_id']],
         photos: [['photo_people', 'photo_id']],
         circles: [['person_circles', 'circle_id']],
         events: [['attendance', 'event_id']],
@@ -165,6 +189,14 @@ function makeLocalRepo() {
       for (const [t, col] of cascade) {
         tables[t] = tables[t].filter((r) => r[col] !== id);
         await save(t);
+      }
+      if (table === 'interactions') {
+        for (const o of tables.outreach) if (o.interaction_id === id) o.interaction_id = null;
+        await save('outreach');
+      }
+      if (table === 'events') {
+        for (const c of tables.campaigns) if (c.event_id === id) c.event_id = null;
+        await save('campaigns');
       }
       if (table === 'companies') {
         for (const p of tables.people) if (p.company_id === id) p.company_id = null;

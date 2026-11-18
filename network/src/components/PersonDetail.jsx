@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   ChevronLeft, MessageCircle, Phone, Mail, Sparkles, RefreshCw, Pencil, Trash2, Plus, Globe, MapPin,
   Building2, ExternalLink, Gift, Users, CalendarDays, AlertTriangle, MessagesSquare,
-  AudioLines, Mic, Images, ScanLine, PenLine, ListChecks, Ban, ChevronDown, Contact, CalendarPlus, Clock,
+  AudioLines, Mic, Images, ScanLine, PenLine, ListChecks, Ban, ChevronDown, Contact, CalendarPlus, Clock, Send,
 } from 'lucide-react';
 import { useStore, stripView } from '../lib/store.jsx';
 import { DIMS, TIERS, worthVerdict, waLink, fmtDate, splitTags } from '../lib/logic.js';
@@ -428,13 +428,14 @@ function InteractionsSection({ person }) {
   );
 }
 
-const SOURCE_ICON = { plaud: AudioLines, voice: Mic, whatsapp_txt: MessageCircle, whatsapp_screenshot: Images, card: ScanLine, manual: PenLine };
+const SOURCE_ICON = { plaud: AudioLines, voice: Mic, whatsapp_txt: MessageCircle, whatsapp_screenshot: Images, card: ScanLine, manual: PenLine, campaign: Send };
 
 function InteractionItem({ i, onRemove }) {
   const [open, setOpen] = useState(false);
   const a = i.ai && i.ai.summary !== undefined ? i.ai : null; // 有 AI 整理过
   const Icon = SOURCE_ICON[i.source] || PenLine;
-  const mood = a && a.mood ? MOODS[a.mood.tone] : null;
+  const moodRaw = i.ai && i.ai.mood; // 对话整理的气氛，或群发记的回应
+  const mood = moodRaw ? MOODS[moodRaw.tone] : null;
   const src = SOURCE_BY_KEY[i.source];
   const range = i.ai && i.ai.range;
   const details = a && [
@@ -452,7 +453,7 @@ function InteractionItem({ i, onRemove }) {
         <div className="text-sm">
           <span className="font-medium">{i.title || KIND_LABEL[i.kind]}</span>{' '}
           <span className="text-xs text-faint">{KIND_LABEL[i.kind]} · {fmtDate(i.occurred_at)}{src ? ` · ${src.short}` : ''}{range ? ` · ${range.count} 则` : ''}</span>
-          {mood && <span className="ml-1.5 inline-block h-2 w-2 rounded-full align-middle" style={{ background: mood.color }} title={`气氛：${mood.label}${a.mood.note ? ` —— ${a.mood.note}` : ''}`} />}
+          {mood && <span className="ml-1.5 inline-block h-2 w-2 rounded-full align-middle" style={{ background: mood.color }} title={`气氛：${mood.label}${moodRaw.note ? ` —— ${moodRaw.note}` : ''}`} />}
         </div>
         <button onClick={onRemove} className="text-faint opacity-0 hover:text-danger focus:opacity-100 group-hover:opacity-100" aria-label="删除记录"><Trash2 className="h-3.5 w-3.5" /></button>
       </div>

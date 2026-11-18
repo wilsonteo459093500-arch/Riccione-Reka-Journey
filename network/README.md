@@ -122,6 +122,42 @@ SPACE 也是「空间 / 位置」：每个人在你心里都有一个位置；�
 
 **FoloToy**：`folotoy/` —— FoloToy AI Passport（ESP32-C3、240×320）开机显示名片二维码，上下键切换名片 / 活动，确定长按大二维码。怎么装见 [`folotoy/README.md`](./folotoy/README.md)。
 
+## 第 5 阶段做了什么：WhatsApp 半自动群发 + 话术 + 活动出席
+
+**入口**：电脑左边栏「群发」「活动」；手机「今日」右上「群发」、「今日」的「一次写好讯息」、「我」页的「群发」「活动」。路由 `#/send`、`#/send/new?kind=…&event=…`、`#/send/<id>`、`#/events`、`#/events/<id>`。
+
+**四种群发**（+ 自己写模板）：
+
+| 类型 | 选谁 | 讯息 |
+|---|---|---|
+| 活动后跟进 | 选一个活动 → 出席了 / 会来的人（含扫活动二维码进来的） | 「很高兴在 XX 认识你！…有空喝杯咖啡」 |
+| 节日问候 | 圈层、标签、商会 / 圈子、好感度、搜寻 | 农历新年、开斋节、屠妖节、中秋、圣诞、元旦、国庆的常用祝福语（中 / 英 / 马来），或自己打节日名 |
+| 邀请 / 分享 | 同上；可以连到一个活动 | 邀请内容原文放进去；发了的人进活动名单「邀请了」 |
+| 今日该联系的人 | 「今日」页那几个人 | 「最近好吗？…有空约出来喝杯咖啡？」 |
+
+**怎么写**（模板打底 + 按钮才用 AI）：
+1. 程序先帮每个人写一则（**不花钱**）：叫他的名字（中文名用中文、英文讯息用英文名），再提一句他在乎的事 ——**只用档案里有的**：他的兴趣、他在找的（对话整理或手动加的；AI 推测的不算）。卡上可以「换一个 / 不提」
+2. 语言：照名字自动（中文名 → 中文，其他 → 英文），或整批指定中文 / English / Bahasa Melayu；模板可以改（`{称呼} {我} {活动} {节日祝福} {邀请} {聊聊}`）
+3. **AI 润色**（按了才跑）：`/api/draft-messages`，Haiku 5.5，一次 20 人，20 人约 RM0.02（按钮上写明）。AI 看得到：初稿、称呼、兴趣、他在找的、最近 3 笔互动摘要、别聊的话题、**他以前对群发的回应**、**从回应学到的心得**；看不到电话、备注。规则：活动名 / 日期 / 地点 / 邀请内容一字不改、不加没有的事、不推销
+4. 每则都可以手改
+
+**发**：每人一张卡 → 按「WhatsApp」→ 打开跟他的对话、讯息已经填好 → 你在 WhatsApp 按发送。按下去的同时记成「已发」：
+- 他的互动记录多一笔「讯息」（`source = campaign`，好感度 +6、更新「上次联系」）
+- 邀请群发 → 活动名单标「邀请了」（已经「会来 / 出席了」的不会被盖掉）
+- 按错了可以「撤回」；用别的方式发了按「已发」；不想发「跳过」
+
+**选人时的提醒**（默认不勾，自己可以勾回来）：没有 WhatsApp（不能勾）· 连续 2 次群发没回（「别再群发，找机会私下约」）· 3 天内刚发过；有「别聊」的人卡上红字提醒。扫码进来还没确认的新朋友不会出现。
+
+**记回应**（两种都有）：
+- 一键：回得很热 🔥 / 普通回 / 没回 / 不太高兴 → 变成那笔讯息的「气氛」（+2 / +1 / -1 / -2，进第 3 阶段的好感度公式；人物页时间线有颜色点）+ 一句「他回了什么」
+- 「别再提…」→ 加进人物的「要避开的话题」（以后程序和 AI 写讯息都会避开）
+- 聊开了 →「导入对话」直接到第 2 阶段的 WhatsApp 汇出整理
+- 邀请多三个按钮：会来 / 还不确定 / 不来 → 活动名单
+
+**从回应学到的**（「群发」页，不用 AI）：有提到对方的事 vs 一般问候、AI 润色过 vs 模板直接发、哪种群发最多人回 —— 两边都至少 5 个回应才比较；也会送给 AI 润色当参考。
+
+**活动**（`#/events`）：建活动、加人（活动还没到 → 「邀请了」，过了 → 「出席了」）、每个人点 邀请了 / 会来 / 出席了 / 没来；**出席了 = 记一笔「出席活动」互动（好感度 +10）**，改掉就拿掉那笔。按钮「邀请群发」「活动后跟进」；列出这个活动的群发。活动二维码还是在「我的名片 → 活动模式」（那里多了「完整名单 · 群发 →」）。
+
 ## 结构
 
 ```
@@ -134,6 +170,7 @@ api/                    Vercel serverless（AI key 只在这里）
   assess.js             4 维度评分 + 我能给他什么（Sonnet 5.5，结构化输出）
   analyze-talk.js       对话整理（Haiku 5.5，结构化输出；截图也走这里）
   ticktick.js           排时间盒（TickTick Open API；token 只在服务器）
+  draft-messages.js     第 5 阶段：群发讯息 AI 润色（Haiku 5.5，结构化输出，一次 20 人）
   _lib/admin.js         第 4 阶段：service role（只在服务器）+ 锁在主人底下的几个动作、IP hash
   card.js               GET 公开名片内容 / vCard（不用登入）
   inbox.js              POST 别人留的资料 → 自动进 SPACE（不用登入；陷阱、限次、Turnstile）
@@ -142,12 +179,13 @@ src/
   lib/logic.js          纯函数：圈层、评分、电话、去重、搜索（有单元测试）
   lib/talk.js           纯函数：WhatsApp 解析、字幕清理、承诺、合并（有单元测试）
   lib/relation.js       纯函数：好感度、联系周期、今天该找谁、找资源、星系位置、提示卡、TickTick / .ics（有单元测试）
+  lib/outreach.js       纯函数：群发模板、称呼、可以提的事、选人 / 提醒、回应 → 气氛、出席状态、回复率与心得（有单元测试）
   lib/card.js           纯函数：名片栏位清理、vCard、留资料检查、找重复、合并（前端、服务器、名片页共用；有单元测试）
   lib/qr.js             二维码 → SVG / 印刷用 PNG
   lib/repo.js           资料层：Supabase / IndexedDB 两套，画面不直接碰
   lib/store.jsx         全局状态 + 动作（存名片、深度分析、照片…）
-  components/           CardStudio（我的名片）/ NewFriends（新朋友）/ Today / PeopleList / Galaxy / FindHelp / BriefCard / ScheduleSheet / ScanCard / TalkImport / PersonDetail / PhotoGrid / Settings / Login
-supabase/schema.sql     14 张表 + RLS + 私有 bucket + 公开名片 bucket
+  components/           Campaigns / CampaignNew / CampaignRun（群发）/ Events（活动）/ CardStudio（我的名片）/ NewFriends（新朋友）/ Today / PeopleList / Galaxy / FindHelp / BriefCard / ScheduleSheet / ScanCard / TalkImport / PersonDetail / PhotoGrid / Settings / Login
+supabase/schema.sql     16 张表 + RLS + 私有 bucket + 公开名片 bucket
 folotoy/                FoloToy AI Passport 的名片二维码 app（ESP-IDF / LVGL；有 host 测试）
 test/                   node --test（API 用假的 client，不花钱）
 ```
@@ -156,9 +194,10 @@ test/                   node --test（API 用假的 client，不花钱）
 
 `profile` 我的资料 · `companies` 公司（含背景）· `people` 人物 · `circles` + `person_circles` 商会 / 圈子 ·
 `resources` 资源标签（has / needs / give；来源 manual / ai / talk）· `interactions` 互动（含逐字稿、AI 整理、承诺）·
-`photos` + `photo_people` 照片 · `events` + `attendance` 活动出席（第 5 阶段用）·
+`photos` + `photo_people` 照片 · `events` + `attendance` 活动出席（邀请了 / 会来 / 出席了 / 没来）· `campaigns` + `outreach` 群发（第 5 阶段）·
 `relationship_snapshots` 关系分数快照（第 3 阶段画趋势）· `ai_usage` AI 用量
 
 `people.affinity`（Sims 好感度 0–100）第 3 阶段起由互动记录算出来、每天存回一次；第 3 阶段加了 `people.snooze_until`（晚点再说）。
 第 2 阶段加了 `people.avoid_topics`（要避开的话题）。
 第 4 阶段加了 `profile.card`（公开名片内容）、`people.pending_review`（扫码进来还没确认）、`inbox`（每一次公开表格送出的记录）、互动来源 `qr`。
+第 5 阶段加了 `campaigns`（一次群发：类型、模板、语言、节日 / 邀请内容、活动）、`outreach`（每个人一则：内容、提了什么、有没有 AI 润色、发了没、连到哪笔互动、他怎么回、会不会来）、互动来源 `campaign`；出席活动的互动在 `interactions.ai.event_id`。

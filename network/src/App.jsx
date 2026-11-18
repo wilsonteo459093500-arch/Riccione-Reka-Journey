@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Users, ScanLine, UserRound, MessagesSquare, Sun, Orbit, HandHelping, QrCode } from 'lucide-react';
+import { Users, ScanLine, UserRound, MessagesSquare, Sun, Orbit, HandHelping, QrCode, Send, CalendarDays } from 'lucide-react';
 import { supabase, cloudConfigured } from './lib/supabase.js';
 import { StoreProvider, useStore } from './lib/store.jsx';
 import Login, { Logo } from './components/Login.jsx';
@@ -14,9 +14,14 @@ import FindHelp from './components/FindHelp.jsx';
 import BriefCard from './components/BriefCard.jsx';
 import CardStudio from './components/CardStudio.jsx';
 import NewFriends from './components/NewFriends.jsx';
+import Campaigns from './components/Campaigns.jsx';
+import CampaignNew from './components/CampaignNew.jsx';
+import CampaignRun from './components/CampaignRun.jsx';
+import { EventList, EventDetail } from './components/Events.jsx';
 import { ToastProvider, Spinner, cx } from './components/ui.jsx';
 
-/* ---------- 路由：#/today  #/  #/p/<id>  #/p/<id>/brief  #/p/<id>/talk  #/talk  #/scan  #/galaxy  #/find  #/me  #/card  #/inbox ---------- */
+/* ---------- 路由：#/today  #/  #/p/<id>  #/p/<id>/brief  #/p/<id>/talk  #/talk  #/scan  #/galaxy  #/find  #/me  #/card  #/inbox
+               第 5 阶段：#/send  #/send/new?kind=…&event=…  #/send/<id>  #/events  #/events/<id> ---------- */
 function parseHash() {
   const h = window.location.hash.replace(/^#/, '') || '/today'; // 打开 app 先看「今天该找谁」
   const br = /^\/p\/([\w-]+)\/brief$/.exec(h);
@@ -26,6 +31,14 @@ function parseHash() {
   if (h === '/find') return { name: 'find' };
   if (h === '/card') return { name: 'card' };
   if (h === '/inbox') return { name: 'inbox' };
+  if (h === '/send') return { name: 'send' };
+  const sn = /^\/send\/new(?:\?(.*))?$/.exec(h);
+  if (sn) { const qs = new URLSearchParams(sn[1] || ''); return { name: 'send-new', kind: qs.get('kind') || 'festival', event: qs.get('event') || '' }; }
+  const sr = /^\/send\/([\w-]+)$/.exec(h);
+  if (sr) return { name: 'send-run', id: sr[1] };
+  if (h === '/events') return { name: 'events' };
+  const ev = /^\/events\/([\w-]+)$/.exec(h);
+  if (ev) return { name: 'event', id: ev[1] };
   const t = /^\/p\/([\w-]+)\/talk$/.exec(h);
   if (t) return { name: 'talk', personId: t[1] };
   if (h === '/talk') return { name: 'talk', personId: null };
@@ -82,9 +95,12 @@ function Shell() {
   // 从哪一页点进人物页的，「返回」就回那一页
   const back = React.useRef('/');
   useEffect(() => {
-    if (['today', 'galaxy', 'find', 'list', 'inbox'].includes(route.name)) back.current = route.name === 'list' ? '/' : `/${route.name}`;
+    if (['today', 'galaxy', 'find', 'list', 'inbox', 'send', 'events'].includes(route.name)) back.current = route.name === 'list' ? '/' : `/${route.name}`;
+    if (route.name === 'send-run') back.current = `/send/${route.id}`;
+    if (route.name === 'event') back.current = `/events/${route.id}`;
   }, [route.name]);
-  const fullScreen = ['scan', 'talk', 'brief'].includes(route.name);
+  const fullScreen = ['scan', 'talk', 'brief', 'send-new'].includes(route.name);
+  const sendNew = (kind, eventId = '') => go(`/send/new?kind=${kind}${eventId ? `&event=${eventId}` : ''}`);
 
   return (
     <div className="flex h-full flex-col lg:flex-row">
@@ -97,6 +113,8 @@ function Shell() {
         <SideBtn icon={HandHelping} label="找资源" active={route.name === 'find'} onClick={() => go('/find')} />
         <SideBtn icon={ScanLine} label="扫名片" active={route.name === 'scan'} onClick={() => go('/scan')} />
         <SideBtn icon={MessagesSquare} label="记对话" active={route.name === 'talk'} onClick={() => go('/talk')} />
+        <SideBtn icon={Send} label="群发" active={route.name.startsWith('send')} onClick={() => go('/send')} />
+        <SideBtn icon={CalendarDays} label="活动" active={route.name === 'events' || route.name === 'event'} onClick={() => go('/events')} />
         <SideBtn icon={QrCode} label="名片" active={route.name === 'card'} onClick={() => go('/card')} />
         <SideBtn icon={UserRound} label="我" active={route.name === 'me'} onClick={() => go('/me')} />
       </nav>
@@ -129,7 +147,19 @@ function Shell() {
           <div className="min-h-0 flex-1 pb-20 lg:pb-0"><Galaxy onOpen={openPerson} /></div>
         ) : (
           <div className="min-h-0 flex-1 overflow-y-auto">
-            {route.name === 'today' && <Today onOpen={openPerson} onBrief={(id) => go(`/p/${id}/brief`)} onScan={() => go('/scan')} />}
+            {route.name === 'today' && <Today onOpen={openPerson} onBrief={(id) => go(`/p/${id}/brief`)} onScan={() => go('/scan')} onSend={() => sendNew('today')} onCampaigns={() => go('/send')} />}
+            {route.name === 'send' && <Campaigns onNew={(k) => sendNew(k)} onOpen={(id) => go(`/send/${id}`)} onEvents={() => go('/events')} />}
+            {route.name === 'send-new' && (
+              <CampaignNew key={`${route.kind}:${route.event}`} kind={route.kind} eventId={route.event}
+                onCancel={() => (window.history.length > 1 ? window.history.back() : go('/send'))}
+                onCreated={(id) => { window.history.replaceState(null, '', `#/send/${id}`); window.dispatchEvent(new HashChangeEvent('hashchange')); }} />
+            )}
+            {route.name === 'send-run' && <CampaignRun key={route.id} id={route.id} onBack={() => go('/send')} onOpen={openPerson} onTalk={(pid) => go(`/p/${pid}/talk`)} />}
+            {route.name === 'events' && <EventList onOpen={(id) => go(`/events/${id}`)} />}
+            {route.name === 'event' && (
+              <EventDetail key={route.id} id={route.id} onBack={() => go('/events')} onOpenPerson={openPerson}
+                onSend={sendNew} onOpenCampaign={(id) => go(`/send/${id}`)} onCard={() => go('/card')} />
+            )}
             {route.name === 'find' && <FindHelp onOpen={openPerson} />}
             {route.name === 'brief' && <BriefCard key={route.id} id={route.id} onBack={() => window.history.length > 1 ? window.history.back() : openPerson(route.id)} onTalk={() => go(`/p/${route.id}/talk`)} />}
             {route.name === 'scan' && (
@@ -146,7 +176,7 @@ function Shell() {
                 onDone={(id) => openPerson(id)}
               />
             )}
-            {route.name === 'me' && <Settings onCard={() => go('/card')} />}
+            {route.name === 'me' && <Settings onCard={() => go('/card')} onSend={() => go('/send')} onEvents={() => go('/events')} />}
             {route.name === 'card' && <CardStudio />}
             {route.name === 'inbox' && <NewFriends onBack={() => go('/')} onOpen={openPerson} onCard={() => go('/card')} />}
           </div>
@@ -157,14 +187,14 @@ function Shell() {
       {!fullScreen && (
         <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
           <div className="mx-auto flex max-w-md items-end justify-around px-2">
-            <TabBtn icon={Sun} label="今日" active={route.name === 'today'} onClick={() => go('/today')} />
+            <TabBtn icon={Sun} label="今日" active={route.name === 'today' || route.name.startsWith('send')} onClick={() => go('/today')} />
             <TabBtn icon={Users} label="人脉" active={listActive || route.name === 'galaxy'} onClick={() => go('/')} />
             <button onClick={() => go('/scan')} className="-mt-5 flex flex-col items-center gap-0.5 pb-2" aria-label="扫名片">
               <span className="flex h-14 w-14 items-center justify-center rounded-full bg-plum text-white shadow-lg shadow-plum/30"><ScanLine className="h-6 w-6" /></span>
               <span className="text-[11px] font-medium text-ink">扫名片</span>
             </button>
             <TabBtn icon={HandHelping} label="找资源" active={route.name === 'find'} onClick={() => go('/find')} />
-            <TabBtn icon={UserRound} label="我" active={route.name === 'me' || route.name === 'card'} onClick={() => go('/me')} />
+            <TabBtn icon={UserRound} label="我" active={['me', 'card', 'events', 'event'].includes(route.name)} onClick={() => go('/me')} />
           </div>
         </nav>
       )}
