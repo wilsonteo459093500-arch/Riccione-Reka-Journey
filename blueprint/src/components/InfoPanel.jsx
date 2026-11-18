@@ -2,12 +2,13 @@
 // 提案语言（华文 / English / 中英）—— English / 中英版时，标题、客户、地点、团队职位下面多一个英文输入框（写进翻译记忆）
 
 import React, { useEffect, useRef } from 'react';
-import { Plus, Trash2, ChevronUp, ChevronDown, CalendarDays, Users, Layers, ListChecks, FileText, RotateCcw, Languages } from 'lucide-react';
+import { Plus, Trash2, ChevronUp, ChevronDown, CalendarDays, Users, Layers, ListChecks, FileText, RotateCcw, Languages, Sunrise } from 'lucide-react';
 import { DEFAULT_TEAM } from '../engine/model.js';
 import { TEAM_MAX } from '../engine/b/design.js';
 import { designCoverTexts, sectionLabel } from '../engine/deck.js';
 import { deckChapters } from '../engine/b/company.js';
 import { langOf } from '../engine/lang.js';
+import { introName } from '../showroom/intro.js';
 import { TOGGLE_SECTIONS, sectionState, setSectionEnabled, kindState, setKindEnabled } from '../lib/project.js';
 import { formatDay } from '../lib/format.js';
 import { LANG_OPTIONS, LANG_HINTS, needsEnglish } from '../lib/langUi.js';
@@ -283,6 +284,31 @@ export default function InfoPanel({ project, onChange }) {
           {/* 右栏 */}
           <div className="space-y-5 min-w-0">
             <LangCard lang={lang} onLang={(v) => onChange((p) => setLang(p, v), NOW)} />
+
+            <Card icon={Sunrise} title="展厅开场" hint="展厅播放先放一段像新手机开机的问候：Hello → 你好，{名字} → 几句话 → 行至溪岸，回归生活的美好 → 轻触开始">
+              <div className="space-y-3">
+                <label className="flex items-start gap-3 rounded-xl border border-bp-line bg-white hover:border-bp-rule px-3 py-2.5 cursor-pointer transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={info.showIntro !== false}
+                    onChange={(e) => setInfo({ showIntro: e.target.checked })}
+                    className="mt-0.5 w-4 h-4 accent-[#B8995A] shrink-0"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm text-bp-ink">展厅播放先放开场</span>
+                    <span className="block text-[11px] text-bp-faint leading-snug mt-0.5">约 30 秒，有溪水声；点一下跳到最后，再点一下进方案</span>
+                  </span>
+                </label>
+                <Field label="开场称呼" hint="开场叫客户什么（「你好，Jason」）；留空 = 用上面的「客户」">
+                  <input
+                    className={cls.input}
+                    value={info.greetAs || ''}
+                    onChange={(e) => setInfo({ greetAs: e.target.value })}
+                    placeholder={((n) => (n.zhKnown ? n.zh : '如：Jason & Mei'))(introName({ ...project, info: { ...info, greetAs: '' } }))}
+                  />
+                </Field>
+              </div>
+            </Card>
 
             <Card icon={ListChecks} title="方案章节显示" hint="老客户已经了解品牌和公司时，可以隐藏这些介绍页（不导出，随时可以再打开）">
               <div className="space-y-2">
