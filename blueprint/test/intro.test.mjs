@@ -1,9 +1,9 @@
-// 展厅播放 · 开场（showroom/intro.js）：称呼、三种语言的每一屏、时间轴（淡入淡出、跳到最后、音乐淡入点）
+// 展厅播放 · 开场（showroom/intro.js）：称呼、三种语言的每一屏、时间轴（淡入淡出、播完进方案、音乐淡入点）
 import assert from 'node:assert/strict';
 import { test } from './harness.mjs';
 import {
-  introName, introScreens, introFooter, introTimeline, introFrame, introSkipTarget, introMusicAt,
-  HELLOS, INTRO_COPY, FADE_IN, HELLO_MS, END_CTA_AT,
+  introName, introScreens, introTimeline, introFrame, introMusicAt,
+  HELLOS, INTRO_COPY, FADE_IN, HELLO_MS,
 } from '../src/showroom/intro.js';
 
 const proj = (info = {}, translations = {}) => ({ info: { client: 'Mr Lau', location: 'Muar', date: '2026 · 08', ...info }, translations });
@@ -19,37 +19,32 @@ test('开场称呼：先「开场称呼」，再「客户」（两行并成一�
   assert.equal(introName(proj({ client: '刘先生' }, { 刘先生: 'Mr Lau' })).en, 'Mr Lau');
 });
 
-test('开场每一屏：三个手写问候 → 文案 → 空屏 → 品牌句 → 最后一屏；中文 / English / 中英', () => {
+test('开场每一屏：三个手写问候 → 文案 → 空屏 → 品牌句收尾（不出 UKIR、没有「轻触开始」）；中文 / English / 中英', () => {
   const zh = introScreens(proj({ lang: 'zh' }));
   assert.deepEqual(zh.slice(0, 3).map((s) => s.text), HELLOS.map((h) => h.text));
-  assert.equal(zh.length, HELLOS.length + INTRO_COPY.length + 1);
+  assert.equal(zh.length, HELLOS.length + INTRO_COPY.length);
   const greet = zh.find((s) => s.id === 'greet');
   assert.equal(greet.main, '你好，Mr Lau');
   assert.equal(greet.sub, '');
-  assert.equal(zh.find((s) => s.id === 'brand').main, '行至溪岸，\n回归生活的美好。');
   assert.equal(zh.find((s) => s.id === 'rest').type, 'rest');
-  assert.equal(zh.at(-1).type, 'end');
-  assert.equal(zh.at(-1).cta, '轻触开始');
+  const last = zh.at(-1);
+  assert.equal(last.id, 'brand');
+  assert.equal(last.main, '行至溪岸，\n回归生活的美好。');
+  assert.equal(last.last, true);
+  assert.ok(!JSON.stringify(zh).includes('UKIR'), '开场里不出 UKIR');
+  assert.ok(!JSON.stringify(zh).includes('轻触'), '播完自动进方案，不用点');
   for (const s of zh.filter((x) => x.type === 'line')) assert.ok(!/[!！]/.test(s.main), '不用感叹号');
 
   const en = introScreens(proj({ lang: 'en' }));
   assert.equal(en.find((s) => s.id === 'greet').main, 'Hello, Mr Lau');
   assert.equal(en.find((s) => s.id === 'greet').lang, 'en');
-  assert.equal(en.at(-1).cta, 'Tap to begin');
+  assert.equal(en.at(-1).main, 'Walk to the stream,\nreturn to the beauty of everyday life.');
 
   const bi = introScreens(proj({ lang: 'bi' }));
   const b = bi.find((s) => s.id === 'honour');
   assert.equal(b.main, '很荣幸，\n能成为你家的一部分。');
   assert.equal(b.sub, 'It is an honour\nto become part of your home.');
-});
-
-test('最后一屏落款：为 {名字} 的家 · 日期 · 地点；英文名在中文里前后空格；叫不出名字 = 为你的家 / For your home', () => {
-  assert.equal(introFooter(proj(), 'zh').main, '为 Mr Lau 的家 · 二〇二六年八月 · Muar');
-  assert.equal(introFooter(proj({ client: '刘先生', location: '麻坡' }), 'zh').main, '为刘先生的家 · 二〇二六年八月 · 麻坡');
-  const bi = introFooter(proj({ client: '刘先生', location: '麻坡' }), 'bi');
-  assert.equal(bi.sub, 'For your home · August 2026');
-  assert.equal(introFooter(proj({ client: '', date: '', location: '' }), 'zh').main, '为你的家');
-  assert.equal(introFooter(proj(), 'en').main, "For Mr Lau's home · August 2026 · Muar");
+  assert.equal(introScreens(proj({ client: '', lang: 'zh' })).find((s) => s.id === 'greet').main, '你好，朋友');
 });
 
 test('时间轴：每屏开始时字还没出来、中间完全清楚；手写从左到右写出来；超过总长停在最后一屏', () => {
@@ -69,14 +64,13 @@ test('时间轴：每屏开始时字还没出来、中间完全清楚；手写�
   // 空屏：什么都不显示
   const rest = tl.items.find((it) => it.type === 'rest');
   assert.equal(introFrame(rest.start + 500, tl).opacity, 0);
-  // 跳到最后：最后一屏；U 先画、「轻触开始」后出来
-  const end = introFrame(introSkipTarget(tl), tl);
-  assert.equal(end.atEnd, true);
-  assert.equal(end.cta, 0);
-  const later = introFrame(introSkipTarget(tl) + END_CTA_AT + FADE_IN, tl);
-  assert.deepEqual([later.draw, later.foot, later.cta], [1, 1, 1]);
-  assert.equal(introFrame(10 * 60 * 1000, tl).atEnd, true);
+  // 品牌句：淡入后一直清楚，不自己淡掉（和整层一起淡出，接到方案封面）；播完 = done
+  const brand = tl.items.find((it) => it.id === 'brand');
+  assert.equal(introFrame(brand.end - 1, tl).opacity, 1);
+  assert.equal(introFrame(brand.end - 1, tl).done, false);
+  assert.equal(introFrame(tl.total, tl).done, true);
+  assert.equal(tl.total, brand.end);
   // 全长约 30 秒；音乐从品牌句淡入
-  assert.ok(tl.endAt > 25000 && tl.endAt < 35000, `全长 ${tl.endAt}`);
+  assert.ok(tl.total > 25000 && tl.total < 35000, `全长 ${tl.total}`);
   assert.equal(introMusicAt(tl), tl.items.find((it) => it.id === 'brand').start);
 });

@@ -1,5 +1,5 @@
 // 展厅播放 · 开场（像新 iPhone 开机的「Hello」）：手写问候轮播 → 「你好，{名字}」→ 几句话一句一句浮现 →
-// 品牌句「行至溪岸，回归生活的美好」→ 木纹 U 画出来 +「轻触开始」。
+// 品牌句「行至溪岸，回归生活的美好」→ 整层慢慢淡出，下面就是方案封面（不出 UKIR、不用再点）。
 //
 // 和后面的方案页不一样，开场是「按时间」播的（方案页只看滑动位置，见 motion.js 的铁律）—— 所以整段放在单独一层
 // （components/showroom/ShowroomIntro.jsx），这里只放文案和时间轴的纯函数（可测）。
@@ -8,7 +8,7 @@
 
 import { clamp01, ease } from './motion.js';
 import { langOf, resolveEn, hasCJKText } from '../engine/lang.js';
-import { joinLines, dateZh, dateEn } from '../engine/b/company.js';
+import { joinLines } from '../engine/b/company.js';
 
 /** 手写问候：英文 / 马来文用手写体，中文用书法体，从左到右「写」出来 */
 export const HELLOS = [
@@ -28,24 +28,15 @@ export const INTRO_COPY = [
   { id: 'nature', zh: '我们一起，\n在自然里，寻一份平和；', en: 'together, let us find calm in nature,', hold: 3800 },
   { id: 'quiet', zh: '在日常里，找一种\n让人安静下来的设计。', en: 'and in everyday life,\na design that quiets the mind.', hold: 4200 },
   { id: 'rest', zh: '', en: '', hold: 2000 },
-  { id: 'brand', zh: '行至溪岸，\n回归生活的美好。', en: 'Walk to the stream,\nreturn to the beauty of everyday life.', hold: 4400 },
+  { id: 'brand', zh: '行至溪岸，\n回归生活的美好。', en: 'Walk to the stream,\nreturn to the beauty of everyday life.', hold: 4600, last: true },
 ];
-
-/** 最后一屏：木纹 U + 落款 +「轻触开始」 */
-export const INTRO_END = {
-  zh: { home: '为{{name}}的家', homeAnon: '为你的家', cta: '轻触开始' },
-  en: { home: "For {{name}}'s home", homeAnon: 'For your home', cta: 'Tap to begin' },
-};
 
 export const HELLO_MS = 1800; // 每个手写问候停多久
 export const WRITE_MS = 1100; // 写出来要多久
 export const FADE_IN = 1200;
 export const FADE_OUT = 800;
 export const HELLO_FADE_OUT = 450;
-export const END_DRAW_MS = 2400; // 木纹 U 画完
-export const END_FOOT_AT = 1600; // 落款开始浮现
-export const END_CTA_AT = 3000; // 「轻触开始」出现
-export const LEAVE_MS = 1400; // 轻触后整层淡出
+export const LEAVE_MS = 1400; // 播完（或点一下）后整层淡出，露出方案封面
 
 const clean = (s) => String(s ?? '').trim();
 
@@ -63,7 +54,7 @@ export function introName(project) {
   return { zh: who, en: en || 'friend', zhKnown: true, enKnown: !!en };
 }
 
-/** 中文句子里夹英文名：前后空一格（「为 Mr Lau 的家」/「为刘先生的家」）；紧跟全角标点的不空 */
+/** 中文句子里夹英文名：前后空一格；紧跟全角标点的不空（「你好，Mr Lau」） */
 function fillZh(tpl, name) {
   const latin = /^[A-Za-z0-9]/.test(name);
   return tpl.replace(/(.?)\{\{name\}\}(.?)/g, (_, a, b) => {
@@ -74,24 +65,10 @@ function fillZh(tpl, name) {
 }
 const fillEn = (tpl, name) => tpl.replace(/\{\{name\}\}/g, name);
 
-/** 最后一屏的落款：为 {名字} 的家 · 日期 · 地点（没填的就不写） */
-export function introFooter(project, lang = langOf(project)) {
-  const info = project?.info || {};
-  const name = introName(project);
-  const loc = clean(info.location);
-  const locEn = loc && (hasCJKText(loc) ? resolveEn(project, loc).text : loc);
-  const homeZh = name.zhKnown ? fillZh(INTRO_END.zh.home, name.zh) : INTRO_END.zh.homeAnon;
-  const homeEn = name.enKnown ? fillEn(INTRO_END.en.home, name.en) : INTRO_END.en.homeAnon;
-  const zh = [homeZh, dateZh(info.date), loc].filter(Boolean).join(' · ');
-  const en = [homeEn, dateEn(info.date, (x) => (hasCJKText(x) ? '' : x)), locEn].filter(Boolean).join(' · ');
-  if (lang === 'en') return { main: en, sub: '', cta: INTRO_END.en.cta };
-  if (lang === 'bi') return { main: zh, sub: en, cta: `${INTRO_END.zh.cta} · ${INTRO_END.en.cta}` };
-  return { main: zh, sub: '', cta: INTRO_END.zh.cta };
-}
-
 /**
  * 要播的每一屏（按提案语言）：
- *   { type:'hello', text, font } | { type:'line', id, main, sub, lang:'zh'|'en' } | { type:'rest' } | { type:'end', main, sub, cta }
+ *   { type:'hello', text, font } | { type:'line', id, main, sub, lang:'zh'|'en', last? } | { type:'rest' }
+ *   最后一屏是品牌句（last：不自己淡掉，和整层一起淡出，接到方案封面）
  * zh = 只有中文；en = 英文为主字；bi = 中文为主，英文小字跟在下面
  */
 export function introScreens(project) {
@@ -105,14 +82,14 @@ export function introScreens(project) {
     }
     const zh = fillZh(c.zh, name.zh);
     const en = fillEn(c.en, name.en);
-    if (lang === 'en') out.push({ type: 'line', id: c.id, main: en, sub: '', lang: 'en', hold: c.hold });
-    else out.push({ type: 'line', id: c.id, main: zh, sub: lang === 'bi' ? en : '', lang: 'zh', hold: c.hold });
+    const last = !!c.last;
+    if (lang === 'en') out.push({ type: 'line', id: c.id, main: en, sub: '', lang: 'en', hold: c.hold, last });
+    else out.push({ type: 'line', id: c.id, main: zh, sub: lang === 'bi' ? en : '', lang: 'zh', hold: c.hold, last });
   }
-  out.push({ type: 'end', ...introFooter(project, lang), hold: Infinity });
   return out;
 }
 
-/** 每一屏的开始 / 结束时间（ms）；最后一屏一直停着，等轻触 */
+/** 每一屏的开始 / 结束时间（ms）；total = 开场结束（之后整层淡出、进方案） */
 export function introTimeline(screens) {
   let t = 0;
   const items = screens.map((s) => {
@@ -120,44 +97,32 @@ export function introTimeline(screens) {
     t = it.end;
     return it;
   });
-  const endAt = items.length ? items[items.length - 1].start : 0;
-  return { items, endAt };
+  return { items, total: t };
 }
 
-/** 想跳过：直接到最后一屏（木纹 U +「轻触开始」） */
-export const introSkipTarget = (tl) => tl.endAt;
-
 /**
- * t（ms）时的画面：哪一屏、透明度、模糊、上下位移、手写进度、U 画到哪
- * @returns {{ index:number, screen:object, local:number, opacity:number, blur:number, ty:number, write:number, draw:number, foot:number, cta:number, atEnd:boolean }}
+ * t（ms）时的画面：哪一屏、透明度、模糊、上下位移、手写进度；done = 播完了（该淡出进方案）
+ * @returns {{ index:number, screen:object, local:number, opacity:number, blur:number, ty:number, write:number, done:boolean }}
  */
 export function introFrame(t, tl) {
   const { items } = tl;
+  const done = t >= tl.total;
   let index = items.findIndex((it) => t < it.end);
   if (index < 0) index = items.length - 1;
   const screen = items[index];
-  const local = Math.max(0, t - screen.start);
-  const base = { index, screen, local, opacity: 1, blur: 0, ty: 0, write: 1, draw: 1, foot: 1, cta: 1, atEnd: screen?.type === 'end' };
+  const local = Math.max(0, t - (screen?.start ?? 0));
+  const base = { index, screen, local, opacity: 1, blur: 0, ty: 0, write: 1, done };
   if (!screen) return base;
   if (screen.type === 'hello') {
     const out = ease((local - (screen.hold - HELLO_FADE_OUT)) / HELLO_FADE_OUT);
     return { ...base, write: ease(local / WRITE_MS), opacity: 1 - out, blur: out * 4, ty: 0 };
   }
-  if (screen.type === 'end') {
-    const inQ = ease(local / FADE_IN);
-    return {
-      ...base,
-      opacity: inQ,
-      draw: ease(local / END_DRAW_MS),
-      foot: ease((local - END_FOOT_AT) / FADE_IN),
-      cta: ease((local - END_CTA_AT) / FADE_IN),
-    };
-  }
   if (screen.type === 'rest') return { ...base, opacity: 0 };
   const inQ = ease(local / FADE_IN);
-  const outQ = ease((local - (screen.hold - FADE_OUT)) / FADE_OUT);
+  // 最后一句（品牌句）不自己淡掉：整层淡出时和纸面一起退场，接到方案封面
+  const outQ = screen.last ? 0 : ease((local - (screen.hold - FADE_OUT)) / FADE_OUT);
   return { ...base, opacity: clamp01(inQ * (1 - outQ)), blur: (1 - inQ) * 6 + outQ * 3, ty: (1 - inQ) * 8 - outQ * 4 };
 }
 
 /** 品牌句那一屏开始的时间：已上传的展厅音乐从这里淡入 */
-export const introMusicAt = (tl) => tl.items.find((it) => it.id === 'brand')?.start ?? tl.endAt;
+export const introMusicAt = (tl) => tl.items.find((it) => it.id === 'brand')?.start ?? tl.total;

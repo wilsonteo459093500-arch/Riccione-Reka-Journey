@@ -1,17 +1,16 @@
 // 展厅播放 · 开场（像新 iPhone 开机的「Hello」）。盖在方案页上面的一层，按时间播（文案、时间轴在 showroom/intro.js）：
 //   Hello → Selamat datang → 你好（手写）→ 你好，{名字} → 几句话一句一句浮现 → 行至溪岸，回归生活的美好 →
-//   木纹 U 一笔画出 + 落款 +「轻触开始」→ 轻触：这一层慢慢淡掉，下面就是方案第一页。
+//   这一层自己慢慢淡掉，下面就是方案第一页（不出 UKIR、不用再点）。
 // 声音：溪水声（showroom/creek.js 现场合成）；已上传展厅音乐的话，品牌句那一屏淡入。右上角静音 / 退出，鼠标不动 2.5 秒自动藏起来。
-// 操作：点一下 / 空格 / Enter / → —— 还没播完 = 跳到最后一屏；在最后一屏 = 开始看方案。Esc 交给外层（退出展厅播放）。
+// 操作：点一下 / 空格 / Enter / → = 直接淡出进方案。Esc 交给外层（退出展厅播放）。
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Volume2, VolumeX, X } from 'lucide-react';
-import { UKIR_MARK } from '../BrandMark.jsx';
 import { FONTS } from '../../theme.js';
-import { introScreens, introTimeline, introFrame, introSkipTarget, introMusicAt, END_CTA_AT, FADE_IN, LEAVE_MS } from '../../showroom/intro.js';
+import { introScreens, introTimeline, introFrame, introMusicAt, LEAVE_MS } from '../../showroom/intro.js';
 import { createCreek } from '../../showroom/creek.js';
 
-const PAPER = '#F3EEE7'; // 和 3D 户型画布、方案纸面同色：淡出时接得上
+const PAPER = '#F3EEE7'; // 暖纸色（和方案纸面同色）
 const INK = '#241C12';
 const MUTED = '#6E6353';
 const CHROME_HIDE_MS = 2500;
@@ -20,7 +19,6 @@ const SCRIPT_CSS = "'Allura','Cormorant Garamond',cursive";
 const BRUSH_CSS = "'Ma Shan Zheng','Noto Serif SC',serif";
 const SERIF_EN_CSS = "'Cormorant Garamond','Noto Serif SC',serif";
 const SONG_CSS = FONTS.songL.css;
-const OUTFIT = "'Outfit','Noto Sans SC',system-ui,sans-serif";
 
 // 很淡的纸纹（SVG 噪点）
 const GRAIN =
@@ -36,20 +34,6 @@ function Lines({ text, style }) {
         <div key={i}>{l}</div>
       ))}
     </div>
-  );
-}
-
-/** 木纹 U：每一笔用 stroke-dashoffset 画出来（像刻出来的） */
-function DrawnMark({ draw, size }) {
-  return (
-    <svg viewBox="0 0 100 100" width={size} height={size} fill="none" stroke={INK} strokeWidth={UKIR_MARK.stroke * 0.8} strokeLinecap="round" strokeLinejoin="round" aria-label="UKIR STUDIO" role="img">
-      {UKIR_MARK.paths.map((d, i) => {
-        // 外框先画，木纹一道接一道跟上
-        const k = Math.min(1, Math.max(0, (draw - i * 0.1) / 0.6));
-        return <path key={i} d={d} pathLength={1} strokeDasharray="1 1" strokeDashoffset={1 - k} />;
-      })}
-      {UKIR_MARK.knot && <ellipse {...UKIR_MARK.knot} opacity={Math.max(0, (draw - 0.8) / 0.2)} />}
-    </svg>
   );
 }
 
@@ -80,19 +64,6 @@ export function IntroScreen({ frame }) {
         >
           {s.text}
         </span>
-      </div>
-    );
-  }
-
-  if (s.type === 'end') {
-    return (
-      <div data-intro="end" style={{ opacity: frame.opacity, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <DrawnMark draw={frame.draw} size="clamp(56px, 9vh, 92px)" />
-        <div style={{ marginTop: '1.4em', fontFamily: OUTFIT, fontSize: 'clamp(10px, 1.4vh, 13px)', letterSpacing: '0.46em', paddingLeft: '0.46em', color: MUTED, opacity: frame.draw }}>UKIR STUDIO</div>
-        <div style={{ marginTop: '3.2em', opacity: frame.foot, transform: `translate3d(0, ${(1 - frame.foot) * 6}px, 0)`, textAlign: 'center' }}>
-          <div style={{ fontFamily: SONG_CSS, fontWeight: 300, fontSize: 'clamp(13px, 1.9vh, 18px)', letterSpacing: '0.16em', color: INK }}>{s.main}</div>
-          {s.sub && <div style={{ marginTop: '0.6em', fontFamily: SERIF_EN_CSS, fontStyle: 'italic', fontSize: 'clamp(13px, 1.8vh, 17px)', letterSpacing: '0.04em', color: MUTED }}>{s.sub}</div>}
-        </div>
       </div>
     );
   }
@@ -166,23 +137,31 @@ export default function ShowroomIntro({ project, music, onDone, onExit }) {
     if (!m.playing) m.play();
   }, []);
 
-  // 时钟：最后一屏的字都出来之后就不用再逐帧更新了（「轻触开始」的呼吸是 CSS 动画）
-  const run = useCallback(() => {
+  // 播完（或点一下）：整层慢慢淡掉、溪水声收掉，下面就是方案第一页
+  const left = useRef(false);
+  const leave = useCallback(() => {
+    if (left.current) return;
+    left.current = true;
     cancelAnimationFrame(raf.current);
-    const stopAt = tl.endAt + END_CTA_AT + FADE_IN + 200;
+    startMusic();
+    setLeaving(true);
+    creek.current?.fadeOut(2600);
+    setTimeout(() => onDone?.(), LEAVE_MS);
+  }, [onDone, startMusic]);
+
+  // 时钟：播到最后一句停够了 → 自己淡出进方案
+  useEffect(() => {
+    base.current = performance.now();
     const step = (now) => {
       const v = now - base.current;
       setT(v);
       if (v >= musicAt) startMusic();
-      if (v < stopAt) raf.current = requestAnimationFrame(step);
+      if (v >= tl.total) leave();
+      else raf.current = requestAnimationFrame(step);
     };
     raf.current = requestAnimationFrame(step);
-  }, [tl, musicAt, startMusic]);
-  useEffect(() => {
-    base.current = performance.now();
-    run();
     return () => cancelAnimationFrame(raf.current);
-  }, [run]);
+  }, [tl, musicAt, startMusic, leave]);
 
   // 溪水声
   useEffect(() => {
@@ -199,25 +178,8 @@ export default function ShowroomIntro({ project, music, onDone, onExit }) {
   }, []);
   useEffect(() => () => clearTimeout(chromeTimer.current), []);
 
-  const frame = introFrame(t, tl);
-
-  const leave = useCallback(() => {
-    setLeaving(true);
-    creek.current?.fadeOut(2600);
-    setTimeout(() => onDone?.(), LEAVE_MS);
-  }, [onDone]);
-
-  const advance = useCallback(() => {
-    if (leaving) return;
-    const now = performance.now();
-    if (now - base.current < tl.endAt) {
-      // 还没播完：跳到最后一屏
-      base.current = now - introSkipTarget(tl);
-      run();
-      return;
-    }
-    leave();
-  }, [leaving, tl, leave, run]);
+  const frame = introFrame(Math.min(t, tl.total - 1), tl);
+  const advance = leave;
 
   useEffect(() => {
     const onKey = (e) => {
@@ -263,13 +225,6 @@ export default function ShowroomIntro({ project, music, onDone, onExit }) {
         <IntroScreen frame={frame} />
       </div>
 
-      {frame.atEnd && (
-        <div className="absolute inset-x-0 flex justify-center pointer-events-none" style={{ bottom: '9%', opacity: frame.cta }}>
-          <span className="intro-breathe" style={{ fontFamily: SONG_CSS, fontWeight: 300, fontSize: 'clamp(12px, 1.7vh, 16px)', letterSpacing: '0.3em', paddingLeft: '0.3em', color: MUTED }}>
-            {frame.screen.cta}
-          </span>
-        </div>
-      )}
 
       <div className={`absolute top-5 right-5 flex items-center gap-1 transition-opacity duration-500 ${chrome && !leaving ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
         <CornerButton onClick={toggleMute} title={muted ? '开声音' : '静音'}>

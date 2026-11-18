@@ -285,7 +285,7 @@ export default function InfoPanel({ project, onChange }) {
           <div className="space-y-5 min-w-0">
             <LangCard lang={lang} onLang={(v) => onChange((p) => setLang(p, v), NOW)} />
 
-            <Card icon={Sunrise} title="展厅开场" hint="展厅播放先放一段像新手机开机的问候：Hello → 你好，{名字} → 几句话 → 行至溪岸，回归生活的美好 → 轻触开始">
+            <Card icon={Sunrise} title="展厅开场" hint="展厅播放先放一段像新手机开机的问候：Hello → 你好，{名字} → 几句话 → 行至溪岸，回归生活的美好 → 自动进方案">
               <div className="space-y-3">
                 <label className="flex items-start gap-3 rounded-xl border border-bp-line bg-white hover:border-bp-rule px-3 py-2.5 cursor-pointer transition-colors">
                   <input
@@ -296,7 +296,7 @@ export default function InfoPanel({ project, onChange }) {
                   />
                   <span className="min-w-0">
                     <span className="block text-sm text-bp-ink">展厅播放先放开场</span>
-                    <span className="block text-[11px] text-bp-faint leading-snug mt-0.5">约 30 秒，有溪水声；点一下跳到最后，再点一下进方案</span>
+                    <span className="block text-[11px] text-bp-faint leading-snug mt-0.5">约 30 秒，有溪水声；播完自动进方案，点一下直接进</span>
                   </span>
                 </label>
                 <Field label="开场称呼" hint="开场叫客户什么（「你好，Jason」）；留空 = 用上面的「客户」">

@@ -116,9 +116,9 @@ test('BrandMark：木纹 U —— 小于 32 px 用简化版（外框 + 一道纹
   assert.ok(icon.includes(UKIR_MARK_OUTLINE));
 });
 
-test('ShowroomIntro：开场的一帧 —— 问候屏叫出客户名字；最后一屏画木纹 U、写落款；空屏什么都不画', async () => {
+test('ShowroomIntro：开场的一帧 —— 问候屏叫出客户名字；最后是品牌句、不出 UKIR；空屏什么都不画', async () => {
   const { IntroScreen } = await loadComponent('src/components/showroom/ShowroomIntro.jsx');
-  const { introScreens, introTimeline, introFrame, introSkipTarget, FADE_IN } = await import('../src/showroom/intro.js');
+  const { introScreens, introTimeline, introFrame, FADE_IN } = await import('../src/showroom/intro.js');
   const tl = introTimeline(introScreens({ info: { client: 'Mr Lau', location: 'Muar', date: '2026 · 08', lang: 'bi' }, translations: {} }));
   const textOf = (n) => (n == null || typeof n === 'boolean' ? '' : typeof n !== 'object' ? String(n) : Array.isArray(n) ? n.map(textOf).join('|') : typeof n.type === 'function' ? textOf(n.type(n.props)) : textOf(n.props?.children));
   const greet = tl.items.find((it) => it.id === 'greet');
@@ -126,9 +126,10 @@ test('ShowroomIntro：开场的一帧 —— 问候屏叫出客户名字；最�
   assert.equal(g.props['data-intro'], 'line');
   assert.ok(textOf(g).includes('你好，Mr Lau'));
   assert.ok(textOf(g).includes('Hello, Mr Lau'));
-  const end = IntroScreen({ frame: introFrame(introSkipTarget(tl) + 5000, tl) });
-  assert.equal(end.props['data-intro'], 'end');
-  assert.ok(textOf(end).includes('为 Mr Lau 的家'));
+  const last = IntroScreen({ frame: introFrame(tl.total - 1, tl) });
+  assert.equal(last.props['data-id'], 'brand');
+  assert.ok(textOf(last).includes('行至溪岸，'));
+  assert.ok(!textOf(last).includes('UKIR'));
   const rest = tl.items.find((it) => it.type === 'rest');
   assert.equal(IntroScreen({ frame: introFrame(rest.start + 10, tl) }).props['data-intro'], 'rest');
 });
