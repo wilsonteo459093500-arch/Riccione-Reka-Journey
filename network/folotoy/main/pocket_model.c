@@ -42,9 +42,13 @@ const char *menu_item_text(menu_item_t item) {
     case MENU_COUNTDOWN: return "倒数计时";
     case MENU_POMODORO: return "番茄钟";
     case MENU_STACK: return "叠叠乐";
+    case MENU_FALL: return "落落方块";
     case MENU_SIMON: return "记忆三色";
     case MENU_FORTUNE: return "求签";
     case MENU_LOTTERY: return "抽奖";
+    case MENU_BUBBLE: return "泡泡纸";
+    case MENU_MASH: return "狂按挑战";
+    case MENU_SQUISH: return "捏捏乐";
     case MENU_CAR: return "车用遥控器";
     case MENU_BACK: return "返回名片";
     default: return "";
@@ -54,6 +58,7 @@ const char *menu_item_text(menu_item_t item) {
 const char *menu_section(menu_item_t item) {
     if (item <= MENU_POMODORO) return "工具";
     if (item <= MENU_LOTTERY) return "游戏";
+    if (item <= MENU_SQUISH) return "解压";
     return "";
 }
 

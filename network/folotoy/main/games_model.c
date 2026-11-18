@@ -210,3 +210,250 @@ int lottery_draw(uint32_t *seed) {
     }
     return LOTTERY_PRIZES - 1;
 }
+
+// ---------------- 落落方块 ----------------
+// 4×4 框，每个方向一个 16 位元：最高位 = 第 0 行第 0 格，往右往下
+static const uint16_t FALL_SHAPE[FALL_KINDS][4] = {
+    { 0x0F00, 0x2222, 0x00F0, 0x4444 },   // 长条
+    { 0x44C0, 0x8E00, 0x6440, 0x0E20 },   // J
+    { 0x4460, 0x0E80, 0xC440, 0x2E00 },   // L
+    { 0xCC00, 0xCC00, 0xCC00, 0xCC00 },   // 方块
+    { 0x06C0, 0x8C40, 0x6C00, 0x4620 },   // S
+    { 0x0E40, 0x4C40, 0x4E00, 0x4640 },   // T
+    { 0x0C60, 0x4C80, 0xC600, 0x2640 },   // Z
+};
+
+bool fall_shape_cell(int kind, int rot, int r, int c) {
+    if (kind < 0 || kind >= FALL_KINDS || r < 0 || r > 3 || c < 0 || c > 3) return false;
+    return (FALL_SHAPE[kind][rot & 3] & (0x8000u >> (r * 4 + c))) != 0;
+}
+
+static bool fall_hit(const fall_t *f, int kind, int rot, int x, int y) {
+    for (int r = 0; r < 4; r++)
+        for (int c = 0; c < 4; c++) {
+            if (!fall_shape_cell(kind, rot, r, c)) continue;
+            const int gx = x + c, gy = y + r;
+            if (gx < 0 || gx >= FALL_COLS || gy >= FALL_ROWS) return true;
+            if (gy >= 0 && f->grid[gy][gx]) return true;
+        }
+    return false;
+}
+
+static int8_t fall_from_bag(fall_t *f) {
+    if (f->bag_pos >= FALL_KINDS) {   // 七种各一块，洗牌
+        for (int i = 0; i < FALL_KINDS; i++) f->bag[i] = (uint8_t)i;
+        for (int i = FALL_KINDS - 1; i > 0; i--) {
+            const int j = (int)(game_rand(&f->seed) % (uint32_t)(i + 1));
+            const uint8_t t = f->bag[i];
+            f->bag[i] = f->bag[j];
+            f->bag[j] = t;
+        }
+        f->bag_pos = 0;
+    }
+    return (int8_t)f->bag[f->bag_pos++];
+}
+
+static void fall_spawn(fall_t *f) {
+    f->kind = f->next;
+    f->next = fall_from_bag(f);
+    f->rot = 0;
+    f->x = 3;
+    f->y = 0;
+    f->acc_ms = 0;
+    if (fall_hit(f, f->kind, f->rot, f->x, f->y)) f->phase = FALL_OVER;   // 堆到顶了
+}
+
+void fall_init(fall_t *f, uint32_t seed) {
+    memset(f, 0, sizeof(*f));
+    f->seed = seed ? seed : 1;
+    f->bag_pos = FALL_KINDS;
+    f->next = fall_from_bag(f);
+    fall_spawn(f);
+}
+
+bool fall_move(fall_t *f, int dx) {
+    if (f->phase != FALL_PLAYING || fall_hit(f, f->kind, f->rot, f->x + dx, f->y)) return false;
+    f->x = (int8_t)(f->x + dx);
+    return true;
+}
+
+bool fall_rotate(fall_t *f) {
+    if (f->phase != FALL_PLAYING) return false;
+    static const int8_t KICK[] = { 0, -1, 1, -2, 2 };   // 靠墙 / 靠方块转不了：挪一两格再试
+    const int8_t rot = (int8_t)((f->rot + 1) & 3);
+    for (size_t i = 0; i < sizeof KICK; i++)
+        if (!fall_hit(f, f->kind, rot, f->x + KICK[i], f->y)) {
+            f->rot = rot;
+            f->x = (int8_t)(f->x + KICK[i]);
+            return true;
+        }
+    return false;
+}
+
+int fall_ghost_y(const fall_t *f) {
+    int y = f->y;
+    while (!fall_hit(f, f->kind, f->rot, f->x, y + 1)) y++;
+    return y;
+}
+
+int fall_level(const fall_t *f) {
+    return 1 + f->lines / 10;
+}
+
+uint32_t fall_interval_ms(const fall_t *f) {
+    const int ms = 800 - (fall_level(f) - 1) * 70;
+    return ms < 80 ? 80 : (uint32_t)ms;
+}
+
+// 固定在格子上 → 消行 → 出下一块；回消了几行
+static int fall_lock(fall_t *f) {
+    for (int r = 0; r < 4; r++)
+        for (int c = 0; c < 4; c++) {
+            if (!fall_shape_cell(f->kind, f->rot, r, c)) continue;
+            const int gy = f->y + r;
+            if (gy < 0) { f->phase = FALL_OVER; return 0; }   // 有一格还在框外：堆到顶了
+            f->grid[gy][f->x + c] = (uint8_t)(f->kind + 1);
+        }
+    f->cleared = 0;
+    int n = 0;
+    for (int r = FALL_ROWS - 1; r >= 0; r--) {
+        bool full = true;
+        for (int c = 0; c < FALL_COLS && full; c++) full = f->grid[r][c] != 0;
+        if (!full) continue;
+        f->cleared |= 1u << (r - n);   // 原本的第几行（上面的行已经往下挪了 n 格）
+        memmove(&f->grid[1], &f->grid[0], (size_t)r * sizeof f->grid[0]);
+        memset(&f->grid[0], 0, sizeof f->grid[0]);
+        n++;
+        r++;   // 同一行再看一次（上面那行掉下来了）
+    }
+    static const uint16_t POINTS[5] = { 0, 100, 300, 500, 800 };
+    f->score += POINTS[n] * (uint32_t)fall_level(f);
+    f->lines = (uint16_t)(f->lines + n);
+    fall_spawn(f);
+    return n;
+}
+
+int fall_tick(fall_t *f, uint32_t dt_ms, bool fast) {
+    if (f->phase != FALL_PLAYING) return 0;
+    uint32_t step = fall_interval_ms(f);
+    if (fast && step > 40) step = 40;
+    f->acc_ms += dt_ms;
+    while (f->acc_ms >= step) {
+        f->acc_ms -= step;
+        if (fall_hit(f, f->kind, f->rot, f->x, f->y + 1)) return fall_lock(f);
+        f->y++;
+        if (fast) f->score++;   // 自己加速：每格 1 分
+    }
+    return 0;
+}
+
+// ---------------- 泡泡纸 ----------------
+void bubble_new_sheet(bubble_t *b) {
+    memset(b->popped, 0, sizeof b->popped);
+    b->cursor = 0;
+    b->left = BUBBLE_COUNT;
+}
+
+void bubble_init(bubble_t *b) {
+    b->total = 0;
+    bubble_new_sheet(b);
+}
+
+void bubble_step(bubble_t *b, int dir) {
+    if (b->left <= 0) return;
+    int i = b->cursor;
+    for (int n = 0; n < BUBBLE_COUNT; n++) {
+        i = (i + dir + BUBBLE_COUNT) % BUBBLE_COUNT;
+        if (!b->popped[i]) { b->cursor = i; return; }
+    }
+}
+
+bool bubble_pop(bubble_t *b) {
+    if (b->left <= 0 || b->popped[b->cursor]) return false;
+    b->popped[b->cursor] = true;
+    b->left--;
+    b->total++;
+    bubble_step(b, 1);
+    return true;
+}
+
+// ---------------- 狂按挑战 ----------------
+void mash_init(mash_t *m) {
+    memset(m, 0, sizeof(*m));
+}
+
+bool mash_press(mash_t *m, uint32_t now_ms) {
+    if (m->phase == MASH_READY) {
+        m->phase = MASH_RUNNING;
+        m->t0 = now_ms;
+        m->count = 1;
+        return true;
+    }
+    if (m->phase != MASH_RUNNING || now_ms - m->t0 >= MASH_MS) return false;
+    if (m->count < UINT16_MAX) m->count++;
+    return true;
+}
+
+bool mash_tick(mash_t *m, uint32_t now_ms) {
+    if (m->phase != MASH_RUNNING || now_ms - m->t0 < MASH_MS) return false;
+    m->phase = MASH_OVER;
+    m->end_ms = m->t0 + MASH_MS;
+    if (m->count > m->best) m->best = m->count;
+    return true;
+}
+
+uint32_t mash_left_ms(const mash_t *m, uint32_t now_ms) {
+    if (m->phase == MASH_READY) return MASH_MS;
+    if (m->phase == MASH_OVER || now_ms - m->t0 >= MASH_MS) return 0;
+    return MASH_MS - (now_ms - m->t0);
+}
+
+bool mash_restart(mash_t *m, uint32_t now_ms) {
+    if (m->phase != MASH_OVER || now_ms - m->end_ms < MASH_COOLDOWN_MS) return false;
+    m->phase = MASH_READY;
+    m->count = 0;
+    return true;
+}
+
+uint16_t mash_rate_x10(const mash_t *m) {
+    return (uint16_t)((uint32_t)m->count * 10000u / MASH_MS);
+}
+
+// ---------------- 捏捏乐 ----------------
+void squish_init(squish_t *s) {
+    memset(s, 0, sizeof(*s));
+}
+
+void squish_press(squish_t *s) {
+    if (!s->held) s->count++;
+    s->held = true;
+}
+
+void squish_release(squish_t *s) {
+    s->held = false;
+}
+
+void squish_tick(squish_t *s, uint32_t dt_ms) {
+    // 弹簧：按住时慢慢压扁（阻尼大、不晃）；放开时弹回（阻尼小、会冲过头晃几下）
+    const float k = s->held ? 40.0f : 220.0f;
+    const float damp = s->held ? 12.0f : 7.0f;
+    const float target = s->held ? 1.0f : 0.0f;
+    for (uint32_t t = 0; t < dt_ms; t += 5) {
+        const float dt = 0.005f;
+        s->vel += (k * (target - s->pos) - damp * s->vel) * dt;
+        s->pos += s->vel * dt;
+        if (s->pos > 1.0f) { s->pos = 1.0f; s->vel = 0; }
+        if (s->pos < -0.5f) { s->pos = -0.5f; s->vel = 0; }
+    }
+}
+
+static const uint32_t SQUISH_COLOR[SQUISH_TOYS] = { 0xF6A5C0, 0xF2D47B, 0x9FDDB8 };
+static const char *const SQUISH_NAME[SQUISH_TOYS] = { "桃桃", "布丁", "抹茶" };
+
+uint32_t squish_color(uint8_t toy) {
+    return SQUISH_COLOR[toy % SQUISH_TOYS];
+}
+
+const char *squish_name(uint8_t toy) {
+    return SQUISH_NAME[toy % SQUISH_TOYS];
+}

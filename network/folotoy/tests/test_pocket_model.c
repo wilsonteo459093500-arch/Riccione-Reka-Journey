@@ -19,7 +19,7 @@ static void test_menu(void) {
     assert(menu_on_key(&m, UP, CLICK) == NAV_NONE);          // 到顶就停
     assert(menu_on_key(&m, DN, CLICK) == NAV_REDRAW && m.cursor == MENU_MUYU);
     assert(menu_on_key(&m, OK, CLICK) == NAV_OPEN);
-    for (int i = 0; i < 10; i++) menu_on_key(&m, DN, CLICK);
+    for (int i = 0; i < MENU_COUNT; i++) menu_on_key(&m, DN, CLICK);
     assert(m.cursor == MENU_BACK);                            // 到底就停
     assert(menu_on_key(&m, DN, CLICK) == NAV_NONE);
     assert(menu_on_key(&m, OK, CLICK) == NAV_TO_CARD);        // 「返回名片」
@@ -42,6 +42,8 @@ static void test_menu(void) {
     assert(m.top == 0 && m.cursor == 0);
     assert(strcmp(menu_section(MENU_POMODORO), "工具") == 0);
     assert(strcmp(menu_section(MENU_STACK), "游戏") == 0);
+    assert(strcmp(menu_section(MENU_LOTTERY), "游戏") == 0);
+    assert(strcmp(menu_section(MENU_BUBBLE), "解压") == 0 && strcmp(menu_section(MENU_SQUISH), "解压") == 0);
     assert(menu_section(MENU_CAR)[0] == '\0');
 }
 

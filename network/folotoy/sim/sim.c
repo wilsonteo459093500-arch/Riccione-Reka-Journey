@@ -71,6 +71,18 @@ static void advance_ms(int ms) {
     }
 }
 
+// 游戏画面的按键：按下 / 放开（中间隔 hold_ms）
+static void key(space_card_btn_t b, space_card_ev_t e) {
+    (void)games_screen_on_key(b, e);
+}
+
+static void tap(space_card_btn_t b, int hold_ms) {
+    key(b, SPACE_CARD_EV_PRESS);
+    advance_ms(hold_ms);
+    key(b, SPACE_CARD_EV_RELEASE);
+    if (hold_ms < 300) key(b, SPACE_CARD_EV_CLICK);
+}
+
 static void car_press(car_remote_state_t *s, space_card_btn_t b, space_card_ev_t e) {
     const car_action_t a = car_remote_on_key(s, b, e);
     const uint16_t usage = car_remote_usage(a);
@@ -312,6 +324,75 @@ int main(int argc, char **argv) {
     games_screen_on_key(SPACE_CARD_BTN_OK, SPACE_CARD_EV_CLICK);
     advance_ms(8000);
     dump("23-lottery.ppm");
+    games_screen_hide();
+
+    // ---- 菜单：解压那一段 ----
+    old = lv_screen_active();
+    menu_init(&menu);
+    for (int i = 0; i < MENU_SQUISH; i++) menu_on_key(&menu, SPACE_CARD_BTN_DOWN, SPACE_CARD_EV_CLICK);
+    menu_screen_show(&menu);
+    lv_obj_delete(old);
+    dump("24-menu-relax.ppm");
+    menu_screen_hide();
+
+    // ---- 落落方块：开始画面 → 玩一阵（左右移 + 按住确定加速）→ 一直落到堆满 ----
+    old = lv_screen_active();
+    games_screen_show(GAME_FALL, url, 4242);
+    lv_obj_delete(old);
+    dump("25-fall-start.ppm");
+    key(SPACE_CARD_BTN_OK, SPACE_CARD_EV_PRESS);
+    key(SPACE_CARD_BTN_OK, SPACE_CARD_EV_RELEASE);
+    static const int moves[] = { -4, 3, 0, -2, 4, 1, -3, 2, -1, 4, -4, 0, 2 };
+    for (int i = 0; i < 13; i++) {
+        advance_ms(300);
+        if (i % 3 == 1) tap(SPACE_CARD_BTN_OK, 100);                       // 点一下：转
+        const space_card_btn_t b = moves[i] < 0 ? SPACE_CARD_BTN_UP : SPACE_CARD_BTN_DOWN;
+        for (int m = 0; m < (moves[i] < 0 ? -moves[i] : moves[i]); m++) tap(b, 60);
+        tap(SPACE_CARD_BTN_OK, 1400);                                     // 按住：加速落到底
+    }
+    advance_ms(900);
+    dump("26-fall.ppm");
+    for (int i = 0; i < 60 && !games_screen_is_over(); i++) tap(SPACE_CARD_BTN_OK, 1200);
+    advance_ms(200);
+    dump("27-fall-over.ppm");
+    games_screen_hide();
+
+    // ---- 泡泡纸：捏了 11 个，刚捏破一个 ----
+    old = lv_screen_active();
+    games_screen_show(GAME_BUBBLE, url, 1);
+    lv_obj_delete(old);
+    for (int i = 0; i < 11; i++) {
+        if (i == 7) tap(SPACE_CARD_BTN_DOWN, 50);
+        tap(SPACE_CARD_BTN_OK, 60);
+        advance_ms(200);
+    }
+    tap(SPACE_CARD_BTN_OK, 40);
+    dump("28-bubble.ppm");
+    games_screen_hide();
+
+    // ---- 狂按挑战：按到一半 → 结束 ----
+    old = lv_screen_active();
+    games_screen_show(GAME_MASH, url, 1);
+    lv_obj_delete(old);
+    for (int i = 0; i < 31; i++) tap(i % 2 ? SPACE_CARD_BTN_OK : SPACE_CARD_BTN_DOWN, 70), advance_ms(60);
+    dump("29-mash.ppm");
+    for (int i = 0; i < 40 && !games_screen_is_over(); i++) tap(SPACE_CARD_BTN_OK, 70), advance_ms(70);
+    advance_ms(300);
+    dump("30-mash-over.ppm");
+    games_screen_hide();
+
+    // ---- 捏捏乐：按住捏扁 → 放开弹起来（换成黄色那颗）----
+    old = lv_screen_active();
+    games_screen_show(GAME_SQUISH, url, 1);
+    lv_obj_delete(old);
+    tap(SPACE_CARD_BTN_DOWN, 50);
+    for (int i = 0; i < 6; i++) tap(SPACE_CARD_BTN_OK, 300), advance_ms(900);
+    key(SPACE_CARD_BTN_OK, SPACE_CARD_EV_PRESS);
+    advance_ms(700);
+    dump("31-squish.ppm");
+    key(SPACE_CARD_BTN_OK, SPACE_CARD_EV_RELEASE);
+    advance_ms(150);
+    dump("32-squish-bounce.ppm");
     games_screen_hide();
     return 0;
 }

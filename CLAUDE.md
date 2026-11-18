@@ -55,20 +55,22 @@
 
 - 已做：
   - 木纹封面 → 名片二维码
-  - 口袋机菜单 12 项：蜡烛生日歌（吹气熄）、木鱼、手电筒、计时器、倒数、番茄钟、叠叠乐、记忆三色、求签、抽奖
+  - 口袋机菜单 16 项：蜡烛生日歌（吹气熄）、木鱼、手电筒、计时器、倒数、番茄钟、叠叠乐、落落方块、记忆三色、求签、抽奖、解压（泡泡纸、狂按挑战、捏捏乐）
+  - 阶段 A（2026-11-18）做完：落落方块 + 三个解压游戏都做了；游戏画面会收到按下 / 放开（main.c）；截图 `firmware/pocket3-screens.png`
   - 车用遥控器（BLE 媒体键）
   - SPACE 车控 Android app v0.1（`android/`：按住下开微信读书、按住确定选朋友打 WhatsApp）
 - 用户真机测过：名片、车用遥控器（YouTube / 语音助理 OK）。口袋机、app 还没回报
 - 待用户给：求签签文审核、抽奖真奖项、微信读书「抓画面结构」
 - 下一步（用户要省 token、分阶段）：
-  - **A** 落落方块（不用俄罗斯方块 / Tetris 名字）+ 解压游戏（泡泡纸 / 狂按挑战 / 捏捏乐，等用户挑）
+  - ~~**A** 落落方块 + 解压游戏~~ 已做（不用俄罗斯方块 / Tetris 名字）；等用户真机试按键手感
   - **B** 手机找 FoloToy（蓝牙常开取舍待定）
   - **C** DEKU 句库：笑话 + 稻盛和夫 / 郭鹤年 / Musk 原话附出处，用户审过才放；对它说话用关键词，不用 AI
   - **D** Wi-Fi：星座、新闻（Grok 邮件）、读书
 - 怎么做：
   - 照 `network/folotoy/README.md`、`network/PLAN.md`
   - 编译：`build.sh`；截图：`sim/run.sh`；app：`android/build.sh`
-  - 新画面照 `games_screen.c` / `pocket_model.c` 的写法
+  - 新画面照 `games_screen.c` / `pocket_model.c` 的写法；格子多的画面用一个物件的 draw 事件画（落落方块、泡泡纸），不要开几百个物件
+  - 这台容器 Docker 要先 `sudo dockerd &` 才能 `build.sh`
 - 编 Android 要 `dl.google.com`：已建个人环境 riccione-reka-journey
 - Vercel 免费方案一天 100 次部署，推太多会被挡（不是程序问题）
 

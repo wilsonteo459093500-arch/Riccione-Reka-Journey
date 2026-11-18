@@ -198,6 +198,10 @@ static void menu_key(space_card_btn_t btn, space_card_ev_t ev) {
         case MENU_SIMON: s_game = GAME_SIMON; go(SCR_GAME); break;
         case MENU_FORTUNE: s_game = GAME_FORTUNE; go(SCR_GAME); break;
         case MENU_LOTTERY: s_game = GAME_LOTTERY; go(SCR_GAME); break;
+        case MENU_FALL: s_game = GAME_FALL; go(SCR_GAME); break;
+        case MENU_BUBBLE: s_game = GAME_BUBBLE; go(SCR_GAME); break;
+        case MENU_MASH: s_game = GAME_MASH; go(SCR_GAME); break;
+        case MENU_SQUISH: s_game = GAME_SQUISH; go(SCR_GAME); break;
         case MENU_CAR: switch_mode(APP_MODE_CAR); break;   // 要开蓝牙：存模式、重开机
         default: go(SCR_CARD); break;
         }
@@ -270,7 +274,8 @@ static void input_task(void *arg) {
             car_key(map_btn(in.btn), map_ev(in.ev));
             continue;
         }
-        if (in.ev == BSP_BTN_PRESS || in.ev == BSP_BTN_RELEASE) continue;   // 其他画面只看单击 / 长按
+        // 游戏画面也要按下 / 放开（落落方块按住加速、狂按挑战连按）；其他画面只看单击 / 长按
+        if ((in.ev == BSP_BTN_PRESS || in.ev == BSP_BTN_RELEASE) && s_screen != SCR_GAME) continue;
         else if (s_screen == SCR_CARD) card_key(map_btn(in.btn), map_ev(in.ev));
         else pocket_key(map_btn(in.btn), map_ev(in.ev));
     }
@@ -335,7 +340,7 @@ void app_main(void) {
         bsp_display_backlight(space_card_backlight(&s_card));
     }
 
-    s_queue = xQueueCreate(8, sizeof(input_t));
+    s_queue = xQueueCreate(16, sizeof(input_t));   // 狂按挑战连按：按下 + 放开 + 单击，留多一点
     if (!s_queue || xTaskCreate(input_task, "space_input", 4096, NULL, 5, NULL) != pdPASS) {
         ESP_LOGE(TAG, "按键任务建不起来：二维码照样显示，只是不能切换");
         return;

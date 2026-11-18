@@ -2,7 +2,8 @@
 //
 // 名片画面「上」长按 → 菜单（可以卷动）：
 //   工具：蜡烛与生日歌 / 木鱼 / 手电筒 / 计时器 / 倒数计时 / 番茄钟
-//   游戏：叠叠乐 / 记忆三色 / 求签 / 抽奖
+//   游戏：叠叠乐 / 落落方块 / 记忆三色 / 求签 / 抽奖
+//   解压：泡泡纸 / 狂按挑战 / 捏捏乐
 //   车用遥控器 / 返回名片
 // 每个功能里「上」长按 → 回菜单。
 #pragma once
@@ -22,9 +23,13 @@ typedef enum {
     MENU_COUNTDOWN,
     MENU_POMODORO,
     MENU_STACK,
+    MENU_FALL,
     MENU_SIMON,
     MENU_FORTUNE,
     MENU_LOTTERY,
+    MENU_BUBBLE,
+    MENU_MASH,
+    MENU_SQUISH,
     MENU_CAR,
     MENU_BACK,
     MENU_COUNT,
@@ -49,7 +54,7 @@ void menu_init(menu_state_t *m);
 // 上 / 下 移动（到两端就停，不绕圈）、确定打开、上 长按 回名片
 nav_t menu_on_key(menu_state_t *m, space_card_btn_t btn, space_card_ev_t ev);
 const char *menu_item_text(menu_item_t item);
-const char *menu_section(menu_item_t item);   // 这一项属于哪一段：「工具」「游戏」「」
+const char *menu_section(menu_item_t item);   // 这一项属于哪一段：「工具」「游戏」「解压」「」
 
 // ---------------- 蜡烛与生日歌 ----------------
 typedef enum {
