@@ -19,7 +19,7 @@ export function defaultLines(card, lang) {
   const first = name.split(/\s+/)[0] || name;
   const alt = String(card.name_alt || '').trim();
   if (lang === 'en') {
-    return ['Hello', `I’m ${name}.`, 'Nice to meet you.', 'I hope knowing each other creates real value for you.'];
+    return ['Hello', `I’m ${name}`, 'Nice to meet you', 'I hope knowing each other creates real value for you.'];
   }
   return ['你好', alt ? `我是${alt}，你可以叫我 ${first}` : `我是 ${name}`, '很高兴认识你', '希望我们之间的认识，能为你创造价值'];
 }
@@ -103,7 +103,8 @@ export function mountOpening({ h, card, lang, labels, force = false }) {
       }
       if (cur) out.push(cur);
     }
-    return out;
+    // 行尾的标点拿掉（已经换行了，逗号挂在行尾不好看）
+    return out.map((x) => x.replace(/[，,；;。.！!、\s]+$/u, '')).filter(Boolean);
   }
   /** 字号：撑满画面宽度（中文一个字算 1、英文字母算 0.56），短的一句（你好）特别大 */
   function sizeOf(parts) {
