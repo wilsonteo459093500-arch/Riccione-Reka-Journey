@@ -36,7 +36,7 @@ const IDENTITY = Object.freeze({ opacity: 1, ty: 0, scale: 1 });
 export const sketchProgress = (f) => ({ lineQ: span(f, 0.12, 0.55), colQ: span(f, 0.5, 0.97) });
 
 /** 「毛坯 → 柜子一件件出现」（cabinets）：线稿 → 毛坯上色 → 柜子一组组出现（过渡进度 f 的函数） */
-export const cabinetProgress = (f) => ({ lineQ: span(f, 0.08, 0.3), baseQ: span(f, 0.26, 0.46), pieceQ: span(f, 0.46, 0.94) });
+export const cabinetProgress = (f) => ({ lineQ: span(f, 0.06, 0.24), baseQ: span(f, 0.2, 0.38), pieceQ: span(f, 0.38, 0.93) });
 
 /** B 页的字（和小图）依次进来：start0 起，最后一个在 f = 1 前到位 */
 function textIn(els, start0, spread, dur) {

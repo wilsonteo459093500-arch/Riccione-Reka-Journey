@@ -288,13 +288,41 @@ export function compareShell(render, shell, W, H) {
   mask = morph(morph(mask, W, H, r, true), W, H, r, false); // 闭：柜门之间的缝、把手连成一整块
   mask = morph(morph(mask, W, H, 1, false), W, H, 1, true); // 开：去掉噪点
   const { labels, comps } = components(mask, W, H);
-  const keep = comps.map((c, id) => ({ ...c, id })).filter((c) => c.area >= MIN_PIECE * N);
-  if (!keep.length) {
+  if (!comps.some((c) => c.area >= MIN_PIECE * N)) {
     return { ok: false, changed: ratio, why: '毛坯图和效果图几乎一样：柜子图层可能没关掉' };
   }
-  // 大的（≥ 1.5%）从左到右一组组出现；放不下的、小的并进最后一组「其余」
-  const big = keep.filter((c) => c.area >= 0.015 * N).sort((p, q) => p.sx / p.area - q.sx / q.area);
-  const small = keep.filter((c) => c.area < 0.015 * N);
+  // 一大块里贴在一起的不同柜子（橡木墙板 + 胡桃木电视柜 + 展示柜）：按效果图里的材质颜色再拆开
+  const parts = []; // { area, x0, y0, x1, y1, sx, id }，id = parts 里的序号，像素写进 lab
+  const lab = new Int16Array(N).fill(-1);
+  comps.forEach((c, id) => {
+    if (c.area < MIN_PIECE * N) return;
+    const subs = c.area >= SPLIT_MIN * N ? splitByColor(render, labels, id, c, W, N) : null;
+    if (!subs) {
+      const k = parts.length;
+      parts.push({ ...c });
+      for (let y = c.y0; y <= c.y1; y++) for (let x = c.x0; x <= c.x1; x++) if (labels[y * W + x] === id) lab[y * W + x] = k;
+      return;
+    }
+    const base = parts.length;
+    subs.stats.forEach((st) => parts.push(st));
+    const bw = c.x1 - c.x0 + 1;
+    for (let y = c.y0; y <= c.y1; y++) {
+      for (let x = c.x0; x <= c.x1; x++) {
+        const v = subs.local[(y - c.y0) * bw + (x - c.x0)];
+        if (v >= 0) lab[y * W + x] = base + v;
+      }
+    }
+  });
+  parts.forEach((p, id) => (p.id = id));
+  // 出现的先后：先「后面的」（框住别人的大块，如墙板），再「前面的」（挂在它上面的，如电视柜）；同一层从左到右
+  const depth = (p) =>
+    parts.some((q) => q !== p && q.area > p.area && q.x0 <= p.sx / p.area && p.sx / p.area <= q.x1 && q.y0 <= (p.y0 + p.y1) / 2 && (p.y0 + p.y1) / 2 <= q.y1) ? 1 : 0;
+  const big = parts
+    .filter((c) => c.area >= 0.015 * N)
+    .map((c) => ({ c, d: depth(c) }))
+    .sort((p, q) => p.d - q.d || p.c.sx / p.c.area - q.c.sx / q.c.area)
+    .map((x) => x.c);
+  const small = parts.filter((c) => c.area < 0.015 * N);
   let order = big;
   let rest = small;
   if (order.length > MAX_PIECES - (rest.length ? 1 : 0)) {
@@ -306,11 +334,11 @@ export function compareShell(render, shell, W, H) {
     order = rest.slice(0, 1);
     rest = rest.slice(1);
   }
-  const map = new Int16Array(comps.length).fill(-1);
+  const map = new Int16Array(parts.length).fill(-1);
   order.forEach((c, k) => (map[c.id] = k));
   if (rest.length) rest.forEach((c) => (map[c.id] = order.length));
   const out = new Int16Array(N).fill(-1);
-  for (let i = 0; i < N; i++) if (labels[i] >= 0) out[i] = map[labels[i]];
+  for (let i = 0; i < N; i++) if (lab[i] >= 0) out[i] = map[lab[i]];
   const groups = [...order.map((c) => [c]), ...(rest.length ? [rest] : [])];
   const pieces = groups.map((g) => ({
     x0: Math.min(...g.map((c) => c.x0)),
@@ -320,6 +348,124 @@ export function compareShell(render, shell, W, H) {
     area: g.reduce((s, c) => s + c.area, 0),
   }));
   return { ok: true, changed: ratio, labels: out, pieces };
+}
+
+/** 多大的一块才试着按颜色拆（占整张图的比例） */
+export const SPLIT_MIN = 0.03;
+/** 两种颜色差多少才算两种材质（RGB 距离） */
+const SPLIT_COLOR = 48;
+
+/**
+ * 一块（连通的柜子区域）按效果图里的颜色拆成几组：颜色聚类（最多 3 类，相近的合并）→ 每类各自闭运算、连通块 →
+ * 够大的留下，零碎的像素归给最近的那一组。拆不出 2 组以上 → null（整块照旧）
+ * @returns {{ local:Int16Array（bbox 内，-1 = 不属于这块）, stats:{ area, x0, y0, x1, y1, sx }[] } | null}
+ */
+function splitByColor(render, labels, id, c, W, N) {
+  const bw = c.x1 - c.x0 + 1;
+  const bh = c.y1 - c.y0 + 1;
+  const n = bw * bh;
+  const inC = new Uint8Array(n);
+  const col = new Float32Array(n * 3);
+  const sample = [];
+  for (let y = 0; y < bh; y++) {
+    for (let x = 0; x < bw; x++) {
+      const gi = (y + c.y0) * W + (x + c.x0);
+      if (labels[gi] !== id) continue;
+      const li = y * bw + x;
+      inC[li] = 1;
+      for (let k = 0; k < 3; k++) col[li * 3 + k] = render[gi * 4 + k];
+      if ((x + y) % 3 === 0) sample.push(li);
+    }
+  }
+  if (sample.length < 30) return null;
+  // k-means（k = 3，按亮度分位起步）
+  const lum = (li) => 0.299 * col[li * 3] + 0.587 * col[li * 3 + 1] + 0.114 * col[li * 3 + 2];
+  const sorted = sample.slice().sort((a, b) => lum(a) - lum(b));
+  let cent = [0.15, 0.5, 0.85].map((q) => {
+    const li = sorted[Math.floor(q * (sorted.length - 1))];
+    return [col[li * 3], col[li * 3 + 1], col[li * 3 + 2]];
+  });
+  const near = (li) => {
+    let best = 0;
+    let bd = Infinity;
+    cent.forEach((m, k) => {
+      const dd = (col[li * 3] - m[0]) ** 2 + (col[li * 3 + 1] - m[1]) ** 2 + (col[li * 3 + 2] - m[2]) ** 2;
+      if (dd < bd) {
+        bd = dd;
+        best = k;
+      }
+    });
+    return best;
+  };
+  for (let it = 0; it < 8; it++) {
+    const sum = cent.map(() => [0, 0, 0, 0]);
+    for (const li of sample) {
+      const t = sum[near(li)];
+      t[0] += col[li * 3];
+      t[1] += col[li * 3 + 1];
+      t[2] += col[li * 3 + 2];
+      t[3]++;
+    }
+    cent = cent.map((m, k) => (sum[k][3] ? [sum[k][0] / sum[k][3], sum[k][1] / sum[k][3], sum[k][2] / sum[k][3]] : m));
+  }
+  // 相近的颜色合并（同一种材质的明暗面不拆）
+  const merged = [];
+  for (const m of cent) {
+    const hit = merged.find((x) => Math.hypot(x[0] - m[0], x[1] - m[1], x[2] - m[2]) < SPLIT_COLOR);
+    if (!hit) merged.push(m);
+  }
+  if (merged.length < 2) return null;
+  cent = merged;
+  const cls = new Int8Array(n).fill(-1);
+  for (let li = 0; li < n; li++) if (inC[li]) cls[li] = near(li);
+  // 每类：闭运算连起来 → 连通块；够大的留下
+  const local = new Int16Array(n).fill(-1);
+  const stats = [];
+  const minArea = Math.max(MIN_PIECE * N * 2, 0.08 * c.area);
+  const r = Math.max(2, Math.round(W / 220));
+  for (let k = 0; k < cent.length; k++) {
+    let m = new Uint8Array(n);
+    for (let li = 0; li < n; li++) m[li] = cls[li] === k ? 1 : 0;
+    m = morph(morph(m, bw, bh, r, true), bw, bh, r, false);
+    for (let li = 0; li < n; li++) m[li] = m[li] && inC[li] ? 1 : 0;
+    const cc = components(m, bw, bh);
+    cc.comps.forEach((s, j) => {
+      if (s.area < minArea) return;
+      const v = stats.length;
+      for (let y = s.y0; y <= s.y1; y++) for (let x = s.x0; x <= s.x1; x++) if (cc.labels[y * bw + x] === j && local[y * bw + x] < 0) local[y * bw + x] = v;
+      stats.push(null);
+    });
+  }
+  if (stats.length < 2) return null;
+  // 零碎的像素（小块、阴影、缝）归给最近的一组
+  let grown = local;
+  for (let it = 0; it < 400; it++) {
+    let left = 0;
+    const g = growLabels(grown, bw, bh, 1);
+    for (let li = 0; li < n; li++) {
+      if (!inC[li]) g[li] = -1;
+      else if (g[li] < 0) left++;
+    }
+    grown = g;
+    if (!left) break;
+  }
+  const out = stats.map(() => ({ area: 0, x0: Infinity, y0: Infinity, x1: -1, y1: -1, sx: 0 }));
+  for (let y = 0; y < bh; y++) {
+    for (let x = 0; x < bw; x++) {
+      const v = grown[y * bw + x];
+      if (v < 0) continue;
+      const o = out[v];
+      const gx = x + c.x0;
+      const gy = y + c.y0;
+      o.area++;
+      o.sx += gx;
+      if (gx < o.x0) o.x0 = gx;
+      if (gx > o.x1) o.x1 = gx;
+      if (gy < o.y0) o.y0 = gy;
+      if (gy > o.y1) o.y1 = gy;
+    }
+  }
+  return { local: grown, stats: out };
 }
 
 // ---------------------------------------------------------------------------

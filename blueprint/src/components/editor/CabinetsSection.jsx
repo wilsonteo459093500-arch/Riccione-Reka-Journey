@@ -286,7 +286,7 @@ export default function CabinetsSection({ project, slide, change, notify, settin
         label="展厅播放这张：毛坯 → 柜子一组组长出来"
       />
       <p className="text-[11px] leading-relaxed text-bp-faint mt-1.5">
-        只挑重点柜子的那几张（厨房、衣柜、电视墙）。这一段比一般换页慢，大约多 4–6 秒；白天 / 夜晚一对只播白天那张。
+        只挑重点柜子的那几张（厨房、衣柜、电视墙）。这一段比一般换页慢，大约 6 秒；白天 / 夜晚一对只播白天那张。
       </p>
       {stale && <div className="text-[11px] text-amber-700 mt-1.5">效果图换过了：之前的毛坯图 / 框是给旧图做的，已经不用。</div>}
 
