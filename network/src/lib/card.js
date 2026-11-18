@@ -126,7 +126,7 @@ export const DEFAULT_CARD = {
       ],
       chips_title: '',
       chips: [],
-      photo2_path: '',
+      photo2_path: '/card/sail-detail.jpg',
       milestones: [],
       series: [
         { title: '骨骼线', note: '古典与现代的对话', image_path: '/card/s-skeleton.jpg' },
