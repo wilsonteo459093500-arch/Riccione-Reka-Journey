@@ -93,8 +93,8 @@ Wilson 想要一个**只给自己用**的人脉管理 app，用来记录每个�
   - 没做（以后可以加）：生日提醒（要先加 `people.birthday`）；TickTick 任务做完自动记成「联系过了」（要 TickTick webhook，官方没有）
 - **第 4 阶段 ✅**（2026-11）：公开名片页 `/c`（不载 React，约 20KB；视频 / 照片开场、WhatsApp、vCard、中英切换）+ 扫码留资料（PDPA 同意、可拍名片代替打字、陷阱栏位、同 IP 限次、可选 Turnstile → 自动建人 / 只补空栏位、活动出席、`inbox` 记录）+ SPACE「新朋友」确认 +「我的名片」（编辑、二维码 PNG、活动二维码、Web NFC 写贴纸）+ FoloToy AI Passport 名片二维码 app（`folotoy/`）。做了什么见 `README.md`「第 4 阶段」，升级步骤见 `DEPLOY.md`「第 4 阶段升级」+ 第 8 节验收。
   - 还没在真的 Supabase / Vercel 上测（`/api/inbox` 用假的资料库测过 10 个情境；`service_role`、公开 bucket 的规则要部署后照第 8 节验收）
-  - FoloToy：上游是 [FoloToy/ai-passport](https://github.com/FoloToy/ai-passport)（MIT，ESP-IDF 5.5.3 + LVGL 9.5）。开发环境没有 ESP-IDF，**没编译、没烧录**；只用真的 LVGL / BSP 标头做了型别检查 + host 测试。真机要照 `folotoy/README.md` 做
-  - FoloToy 背面 NFC 能不能写还是不知道 → 先用 NTAG215 贴纸（SPACE 里可以写）
+  - FoloToy：上游是 [FoloToy/ai-passport](https://github.com/FoloToy/ai-passport)（MIT，ESP-IDF 5.5.3 + LVGL 9.5）。2026-11-18 补上：`folotoy/build.sh` 用 Docker 真编译通过 + 上游韧体检查 PASS；`folotoy/sim/` 电脑模拟屏幕，三个二维码程序扫过都对；编好的 `.bin` 在 `folotoy/firmware/`，用官方网页刷机工具烧。**还没真机测试**
+  - FoloToy 背面 NFC 是被动 NTAG213（官方规格），手机直接写，不用贴纸
   - 留给第 5 阶段：`events` / `attendance` 已经有资料了（活动模式），可以直接拿来「活动后群发」；`people.tags` 有「扫码」可以筛选
   - 没做（以后可以加）：公开页的 WhatsApp / Facebook 分享预览图（要 edge middleware 依名片动态产生 og:image）；FoloToy 用 Wi-Fi 同步最新的活动二维码；名片页浏览次数统计
 
@@ -142,3 +142,22 @@ Wilson 想要一个**只给自己用**的人脉管理 app，用来记录每个�
 - **2026-11-18 公司资料定稿**：本人给了《马来西亚瑞吉欧企业手册 Riccione Malaysia Company Profile》（PDF 23 页），写成固定 skill `.claude/skills/riccione-company-profile/`（SKILL.md = 手册全文整理 + 铁律；references/ 放 PDF 原档）。名片页瑞吉欧 / 溪岸的文案、瑞吉欧六个产品系列（名字 + 照片）都照手册；手册以外的事实（1979、2002、20+ 年、MFC 2018、HCA 2023/2024、供应链、PUMM）在 skill 里另列出处
 - **2026-11-18 加「工作以外」**（本人：让人知道职业以外做什么）：`life`（一段话 + 照片〔标题 + 一句〕+ 兴趣标签），放在「关于我」下面；照片横的占满一行、直的两张一行；兴趣潜水 / 爬山 / 露营 / 志工 / 看书自动配小图示。照片说明只写照片上看得到的字（卡耐基核心领导力训练、雪隆福青华语国际讲演会、最佳即兴讲员奖状、PUMM 彭亨州联委会理事名牌、PUMM Members Orientation 2026）。本人之后会补兴趣的照片，「我的名片 → 工作以外」可以自己加
 - **2026-11-18 「工作以外」补齐**：加辩论赛（正方二辩、JCI Oregon Debate Competition 2nd Runner Up）、JCI Kuala Lumpur West（2026 Area Central Convention、参访溪岸展厅）、领导力训练团队挑战、读书会（南洋益社 Nanyang Harmony），兴趣照片（潜水、爬山、雪山与草原、露营、狗狗生日野餐 KOKO、动漫迷 · 漫威、Hilux 越野挑战）；兴趣标签加「动漫」。照片分两组（`life.items[].group`：学习与社团 / 生活与兴趣），每组一条左右滑的照片带，照片同高、宽度照原比例
+
+## FoloToy 口袋机（2026-11-18 brainstorm 定的路线）
+
+开机仍是名片；长按「上」进应用菜单，app 里长按「上」回菜单。画面全中文（中文字型子集，只放用到的字）。每个 app 跟名片一样拆「纯逻辑（host 测试）+ 画面」，用 `folotoy/build.sh` 编、`folotoy/sim/` 截图验证。
+
+1. **名片韧体交付** ✅ 待真机测试：`folotoy/firmware/`、网页烧录说明
+2. **菜单 + 离线功能**：
+   - 木鱼（咚 + 功德+1，次数存机器里）、手电筒（全白 / 暖白 / 红光）、番茄钟（25 / 5 分）
+   - 游戏：叠叠乐、记忆三色（3 键 = 3 色）、求签 / 展厅抽奖
+   - 分数页放名片二维码「想挑战我？扫码加我」
+   - 签文、星座句库由 Claude 起草，**Wilson 审过才放进韧体**
+3. **Wi-Fi 功能**：
+   - 用官方微信小程序「蓝牙配网-FoloToy AI PASSPORT」设 Wi-Fi，连上就对时
+   - 今日星座：程序按日期 + 星座从句库挑，标「仅供娱乐」，不花 AI 费用
+   - 新闻：Wilson 的 Grok bot 每天寄新闻信 → Gmail 贴标签 → SPACE `api/news` 读最新一封整理成短文字 → FoloToy 去拿（机器不碰邮箱密码）
+   - 读书：Wilson 给 TXT，打包进机器
+   - 活动二维码自动更新
+   - 不做：网络电台（马来西亚中文台串流格式要逐台试，又耗电）
+

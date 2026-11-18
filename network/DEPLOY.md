@@ -111,8 +111,8 @@ TickTick 的 token 只在服务器，前端拿不到；这个功能不用 AI，�
 > 公开页只读得到「我的名片」里填的东西（`profile.card`，只回认得的栏位）。你的人脉、对话、照片都还是只有你登入看得到。
 > `SUPABASE_SERVICE_ROLE_KEY` 会跳过 RLS，所以只用在 `/api/card`、`/api/inbox` 这两个端点，而且每个查询都锁在 `OWNER_EMAIL` 那个帐号底下。
 
-**NFC 贴纸**：买 NTAG215 / NTAG213（Shopee 一张几毛钱）。Android：SPACE「我的名片」→ NFC 贴纸 →「写进 NFC 贴纸」→ 贴近。iPhone：装 NFC Tools → 写 → 添加记录 → 网址 → 贴 `https://space-riccione-reka.vercel.app/c?s=nfc` → 写。
-**FoloToy**：见 `network/folotoy/README.md`（要一台装了 ESP-IDF 的电脑）。
+**NFC 贴纸**：FoloToy 背面本身就是 NTAG213，可以直接写（做法同下）；别的地方用就买 NTAG215 / NTAG213 贴纸（Shopee 一张几毛钱）。Android：SPACE「我的名片」→ NFC 贴纸 →「写进 NFC 贴纸」→ 贴近。iPhone：装 NFC Tools → 写 → 添加记录 → 网址 → 贴 `https://space-riccione-reka.vercel.app/c?s=nfc` → 写。
+**FoloToy**：韧体已经编好（`network/folotoy/firmware/SPACE-card-full.bin`），用电脑 Chrome 打开 FoloToy 官方网页刷机工具烧进去就好，不用装开发工具。步骤见 `network/folotoy/README.md`「最简单：网页烧录」。
 
 ---
 
@@ -160,7 +160,7 @@ TickTick 的 token 只在服务器，前端拿不到；这个功能不用 AI，�
 - [ ] NFC：Android 写一张贴纸 → iPhone 碰一下 → 打开名片页；留资料 → 标签多一个「NFC」
 - [ ] 「我的名片」关掉「显示留资料的表格」→ 1 分钟后 `/c` 没有表格
 - [ ] 换帐号测：第二个帐号看不到「新朋友」、看不到 inbox；公开页只看得到名片内容
-- [ ] FoloToy（有的话）：照 `folotoy/README.md` 烧好 → 用 iPhone 相机、Android 相机、WhatsApp 扫屏幕都扫得到
+- [ ] FoloToy（有的话）：照 `folotoy/README.md`「网页烧录」烧好 → 用 iPhone 相机、Android 相机、WhatsApp 扫屏幕都扫得到；手机碰背面 NFC 也打开名片页
 
 ---
 
