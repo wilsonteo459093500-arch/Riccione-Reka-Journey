@@ -10,7 +10,7 @@
    所有使用者给的字都用 textContent 放进去，不用 innerHTML（防 XSS）
    ============================================================ */
 import './card.css';
-import { greeting, CONSENT_VERSION } from '../lib/card.js';
+import { greeting, CONSENT_VERSION, namePair } from '../lib/card.js';
 import { shrinkImage } from '../lib/image.js';
 import { mountOpening } from './opening.js';
 
@@ -251,7 +251,7 @@ function render() {
   side.append(h('div.id', null,
     card.photo && !photoInHero ? h('img.avatar', { src: card.photo, alt: '' }) : null,
     card.company ? h('p.company', null, card.company) : null,
-    h('h1.name', null, card.name, card.name_alt ? h('span.name-alt', null, card.name_alt) : null),
+    h(/[\u3400-\u9fff]/.test(namePair(card)[0]) ? 'h1.name.cjk' : 'h1.name', null, namePair(card)[0], namePair(card)[1] ? h('span.name-alt', null, namePair(card)[1]) : null),
     card.title ? h('p.title', null, card.title) : null,
     card.tagline ? h('p.tagline', null, card.tagline) : null));
 

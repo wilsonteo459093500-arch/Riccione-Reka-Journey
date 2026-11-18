@@ -8,6 +8,8 @@
    • 只用 CSS 动画、系统字体，不载网页字型；背景图到第三句才开始下载（不抢名字的速度）
    ============================================================ */
 
+import { namePair } from '../lib/card.js';
+
 const SEEN_KEY = 'space-card:opened';
 // 没有视频时的背景：手机 = 溪岸图册「草原上走向远山的五个人」，电脑（横的）= 瑞吉欧图册「阳光穿过的红杉林」
 const FALLBACK_BG = '/card/opening.jpg';
@@ -65,7 +67,7 @@ export function mountOpening({ h, card, lang, labels, force = false }) {
     const { card: c, labels: l } = cur;
     final.replaceChildren(
       c.company ? h('p.op-co', null, c.company.split(/\s*·\s*/).map((x) => h('span', null, x))) : null,
-      h('h2.op-name', null, c.name, c.name_alt ? h('span.op-alt', null, c.name_alt) : null),
+      h(/[\u3400-\u9fff]/.test(namePair(c)[0]) ? 'h2.op-name.cjk' : 'h2.op-name', null, namePair(c)[0], namePair(c)[1] ? h('span.op-alt', null, namePair(c)[1]) : null),
       c.tagline ? h('p.op-tag', null, c.tagline) : null,
     );
     cue.replaceChildren(h('span', null, l.cue), h('i.op-rail', { 'aria-hidden': 'true' }));

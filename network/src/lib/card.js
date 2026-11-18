@@ -57,12 +57,12 @@ export const DEFAULT_CARD = {
   name: 'Wilson Teo',
   name_alt: '张炜盛',
   title: '董事 Director · 家族企业第二代',
-  company: 'RICCIONE 瑞吉欧 · 溪岸 SAIL BY RICCIONE REKA',
+  company: '瑞吉欧 RICCIONE · 溪岸 SAIL BY RICCIONE REKA',
   tagline: '以木为语，与自然共生。',
   intro: '我是 Wilson，麻坡长大的家族企业第二代。小时候发誓不接班，后来为了家人考了 CIMA 特许管理会计师，再从仓库扛货做起。现在带着瑞吉欧和溪岸，在马来西亚做实木家具与全屋定制。我没有成功，我只是还在路上。',
   about_photo_path: '/card/father.jpg',
   firm: {
-    title: 'RICCIONE 瑞吉欧',
+    title: '瑞吉欧 RICCIONE',
     lead: '专注自然主义与实木的家具品牌。2025 年起成立 Riccione Reka 全屋定制，成为溪岸 SAIL BY RICCIONE REKA 的东南亚总代理。',
     photo_path: '/card/showroom-kl.jpg',
     stats: [
@@ -111,7 +111,7 @@ export const DEFAULT_CARD = {
     milestones: [
       { year: '1979', text: '父辈开始做木作' },
       { year: '2002', text: '中国公司成立：广东瑞吉欧家具有限公司' },
-      { year: '2015', text: 'RICCIONE 瑞吉欧在马来西亚成立，以实木家具起步' },
+      { year: '2015', text: '瑞吉欧 RICCIONE 在马来西亚成立，以实木家具起步' },
       { year: '2017', text: '佛山 21,000 sq ft 旗舰展厅；获 ARCHIDEX 最佳展位设计奖' },
       { year: '2018', text: '出口中国超过 600 个货柜，经销商近 1,000 家' },
       { year: '2019', text: '首次参展 CIFF 广州，产品销往日本与欧洲' },
@@ -138,14 +138,14 @@ export const DEFAULT_CARD = {
     { title: '瑞吉欧 · 实木', note: '更慢、更柔和，也更自然的生活', image_path: '/card/riccione.jpg' },
   ],
   socials: [
-    { platform: 'instagram', url: 'https://www.instagram.com/wilsonteo0419/', label: 'Wilson 个人', icon_path: '/card/avatar.jpg' },
+    { platform: 'instagram', url: 'https://www.instagram.com/wilsonteo0419/', label: '张炜盛 Wilson', icon_path: '/card/avatar.jpg' },
     { platform: 'instagram', url: 'https://www.instagram.com/riccione_furniture/', label: '瑞吉欧 RICCIONE', icon_path: '/card/logo-riccione.png' },
     { platform: 'instagram', url: 'https://www.instagram.com/sail_riccione_reka/', label: '溪岸 SAIL BY RICCIONE REKA', icon_path: '/card/logo-sail.png' },
     { platform: 'website', url: 'https://www.riccione.asia/', label: '官网', icon_path: '/card/logo-riccione.png' },
   ],
   groups: [
     {
-      name: 'PUMM 马来西亚创业促进会',
+      name: '马来西亚创业促进会 PUMM',
       role: '彭亨州联委会理事 · Pahang State Liaison Committee',
       note: 'Persatuan Usahawan Maju Malaysia，全国 3,000 多名会员的创业者组织。想认识各行各业的创业者、参加商会活动，或需要人脉牵线，都可以找我。',
       logo_path: '/card/logo-pumm.jpg',
@@ -261,6 +261,14 @@ function cleanGroup(v) {
       .filter((l) => l.url)
       .slice(0, 2),
   };
+}
+
+/** 名字的显示顺序：中文在前、英文在后（name / name_alt 哪个是中文都可以） → [大字, 小字] */
+export function namePair(card) {
+  const a = str(card && card.name, 80);
+  const b = str(card && card.name_alt, 80);
+  const cjk = (x) => /[\u3400-\u9fff]/.test(x);
+  return b && cjk(b) && !cjk(a) ? [b, a] : [a, b];
 }
 
 /** 名片有没有填到可以公开（至少名字 + 一个联络方式） */

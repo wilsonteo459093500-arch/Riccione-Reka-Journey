@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   cleanCard, publicCard, toVCard, greeting, cleanLead, LeadError, fillLeadFromCard, findExisting,
-  leadToPerson, mergeLeadInto, safeUrl, safePath, cardLink, cleanSource, klDate, cardReady, cleanLines, DEFAULT_CARD,
+  leadToPerson, mergeLeadInto, safeUrl, safePath, cardLink, cleanSource, klDate, cardReady, cleanLines, DEFAULT_CARD, namePair,
 } from '../src/lib/card.js';
 import { receiveLead, LIMITS } from '../api/inbox.js';
 import { loadCard } from '../api/card.js';
@@ -59,7 +59,7 @@ test('公司 / 奖项 / 展厅：只留有内容的、上限；预设名片讲�
   assert.equal(c.places.length, 1);
   assert.deepEqual(c.exhibitions, ['CIFF', 'ARCHIDEX']);
   const d = publicCard(DEFAULT_CARD, 'https://x.supabase.co');
-  assert.equal(d.company, 'RICCIONE 瑞吉欧 · 溪岸 SAIL BY RICCIONE REKA'); // 公司名字（字串）不能被「公司」区块盖掉
+  assert.equal(d.company, '瑞吉欧 RICCIONE · 溪岸 SAIL BY RICCIONE REKA'); // 公司名字（字串）不能被「公司」区块盖掉
   assert.ok(d.firm.stats.some((m) => m.value === '2002'));
   assert.ok(d.awards.items.some((m) => /MUSE/.test(m.title)) && d.awards.items.some((m) => /ARCHIDEX/.test(m.title)));
   assert.equal(d.awards.photo, '/card/awards.jpg');
@@ -74,6 +74,12 @@ test('商会 / 实体名片：没名字的不要、链接只收 https、上限',
   assert.equal(c.groups.length, 1);
   assert.deepEqual(c.groups[0].links.map((l) => l.url), ['https://pumm.my/', 'https://b.my/']);
   assert.deepEqual(c.card_images, ['/card/a.jpg', '/card/b.jpg']);
+});
+
+test('名字显示：中文在前、英文在后', () => {
+  assert.deepEqual(namePair({ name: 'Wilson Teo', name_alt: '张炜盛' }), ['张炜盛', 'Wilson Teo']);
+  assert.deepEqual(namePair({ name: '张炜盛', name_alt: 'Wilson' }), ['张炜盛', 'Wilson']);
+  assert.deepEqual(namePair({ name: 'Wilson' }), ['Wilson', '']);
 });
 
 test('cleanCard: 只留认得的栏位、WhatsApp 变数字、上限', () => {
