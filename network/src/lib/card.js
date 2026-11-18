@@ -215,12 +215,12 @@ export const DEFAULT_CARD = {
     '中马两地的设计、工程与供应链人脉',
   ],
   cases: [
+    { title: '瑞吉欧 RICCIONE · 编藤民宿系列 Wabi Sabi Series', note: '', image_path: '/card/riccione-rattan.jpg' },
     { title: '瑞吉欧 RICCIONE', note: '', image_path: '/card/g-riccione-showroom.jpg' },
     { title: '溪岸 SAIL BY RICCIONE REKA', note: '', image_path: '/card/g-sail-still.jpg' },
     { title: '溪岸 SAIL BY RICCIONE REKA', note: '', image_path: '/card/g-sail-living.jpg' },
     { title: '溪岸 SAIL BY RICCIONE REKA', note: '', image_path: '/card/g-sail-dining.jpg' },
     { title: '溪岸 SAIL BY RICCIONE REKA', note: '', image_path: '/card/g-sail-facade.jpg' },
-    { title: '瑞吉欧 RICCIONE · 编藤系列 Rattan Series', note: '', image_path: '/card/riccione-rattan.jpg' },
   ],
   socials: [
     { platform: 'instagram', url: 'https://www.instagram.com/wilsonteo0419/', label: '张炜盛 Wilson', icon_path: '/card/avatar.jpg' },
