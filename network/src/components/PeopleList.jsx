@@ -1,11 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import { Search, ScanLine, Users, MessagesSquare, Orbit } from 'lucide-react';
+import { Search, ScanLine, Users, MessagesSquare, Orbit, Sparkles, ChevronRight } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
 import { matchPerson, SORTS, tierCounts, relDay } from '../lib/logic.js';
 import { Avatar, Chip, TierBadge, WorthGem, Spinner, Button, AffinityBar, cx } from './ui.jsx';
 
-export default function PeopleList({ selectedId, onOpen, onScan, onTalk, onGalaxy }) {
-  const { people, loading, error, reload } = useStore();
+export default function PeopleList({ selectedId, onOpen, onScan, onTalk, onGalaxy, onInbox }) {
+  const { people, loading, error, reload, newFriends } = useStore();
   const [q, setQ] = useState('');
   const [tier, setTier] = useState('all');
   const [sort, setSort] = useState('recent');
@@ -38,6 +38,13 @@ export default function PeopleList({ selectedId, onOpen, onScan, onTalk, onGalax
             </select>
           </div>
         </div>
+        {newFriends.length > 0 && onInbox && (
+          <button onClick={onInbox} className="flex w-full items-center gap-2 rounded-xl border border-plum/30 bg-plum/10 px-3 py-2 text-left text-sm text-plum-deep">
+            <Sparkles className="h-4 w-4" />
+            <span className="flex-1"><b>新朋友 {newFriends.length}</b> · 扫码留的资料，看一眼确认</span>
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        )}
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
           <input
