@@ -26,7 +26,7 @@ export const INTRO_COPY = [
   { id: 'ahead', zh: '接下来的日子', en: 'In the days ahead', hold: 2800 },
   { id: 'nature', zh: '我们一起\n在自然里\n寻一份平和', en: 'together\nlet us find calm in nature', hold: 4000 },
   { id: 'quiet', zh: '在日常里\n找一种让人安静下来的设计', en: 'and in everyday life\na design that quiets the mind', hold: 4200 },
-  { id: 'rest', zh: '', en: '', hold: 2000 },
+  { id: 'rest', zh: '', en: '', hold: 1000 },
   { id: 'brand', zh: '行至溪岸\n回归生活的美好', en: 'Walk to the stream\nreturn to the beauty of everyday life', hold: 4600, last: true },
 ];
 

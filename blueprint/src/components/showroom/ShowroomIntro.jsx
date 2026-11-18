@@ -4,7 +4,7 @@
 // 声音：溪水声（showroom/creek.js 现场合成）；已上传展厅音乐的话，品牌句那一屏淡入。右上角静音 / 退出，鼠标不动 2.5 秒自动藏起来。
 // 操作：点一下 / 空格 / Enter / → = 直接淡出进方案。Esc 交给外层（退出展厅播放）。
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Volume2, VolumeX, X } from 'lucide-react';
 import { FONTS } from '../../theme.js';
 import { introScreens, introTimeline, introFrame, introMusicAt, LEAVE_MS } from '../../showroom/intro.js';
@@ -139,8 +139,11 @@ function CornerButton({ onClick, title, children }) {
  * @param {{ project:object, music?:{ hasTrack:boolean, playing:boolean, play():void, pause():void }, onDone:()=>void, onExit:()=>void }} props
  */
 export default function ShowroomIntro({ project, music, onDone, onExit }) {
-  const tl = useMemo(() => introTimeline(introScreens(project)), [project]);
-  const musicAt = useMemo(() => introMusicAt(tl), [tl]);
+  // 时间轴在打开的那一刻定下来：之后方案页在背景里重画（线稿、3D 户型算好了、自动保存……）都不能让开场从头再播
+  const [tl] = useState(() => introTimeline(introScreens(project)));
+  const musicAt = introMusicAt(tl);
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
   const [t, setT] = useState(0);
   const [leaving, setLeaving] = useState(false);
   const [muted, setMuted] = useState(false);
@@ -171,10 +174,10 @@ export default function ShowroomIntro({ project, music, onDone, onExit }) {
     startMusic();
     setLeaving(true);
     creek.current?.fadeOut(2600);
-    setTimeout(() => onDone?.(), LEAVE_MS);
-  }, [onDone, startMusic]);
+    setTimeout(() => onDoneRef.current?.(), LEAVE_MS);
+  }, [startMusic]);
 
-  // 时钟：播到最后一句停够了 → 自己淡出进方案
+  // 时钟：只在打开时起一次（依赖都是稳定的），播到最后一句停够了 → 自己淡出进方案
   useEffect(() => {
     base.current = performance.now();
     const step = (now) => {
@@ -186,7 +189,8 @@ export default function ShowroomIntro({ project, music, onDone, onExit }) {
     };
     raf.current = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf.current);
-  }, [tl, musicAt, startMusic, leave]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 溪水声
   useEffect(() => {
