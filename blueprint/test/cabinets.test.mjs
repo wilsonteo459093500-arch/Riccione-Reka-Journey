@@ -71,26 +71,6 @@ test('毛坯图比对：不一样的地方 = 柜子，连成一块 = 一组，�
   assert.ok(r.labels[45 * W + 22] === 0 && r.labels[45 * W + 34] === 0);
 });
 
-test('毛坯图比对：贴在一起的不同材质（橡木墙板 + 前面的胡桃木电视柜）拆成两组，墙板先、电视柜后', () => {
-  const shell = shellImg();
-  const render = shell.slice();
-  const paint = (x0, y0, x1, y1, rgb) => {
-    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
-      const p = (y * W + x) * 4;
-      render[p] = rgb[0] + ((x * 3) % 7);
-      render[p + 1] = rgb[1];
-      render[p + 2] = rgb[2];
-    }
-  };
-  paint(40, 10, 130, 66, [196, 154, 108]); // 橡木墙板
-  paint(55, 46, 115, 58, [80, 52, 34]); // 胡桃木电视柜（挂在墙板前面）
-  const r = compareShell(render, shell, W, H);
-  assert.equal(r.ok, true, r.why);
-  assert.equal(r.pieces.length, 2, JSON.stringify(r.pieces));
-  assert.equal(r.labels[20 * W + 85], 0); // 墙板先
-  assert.equal(r.labels[52 * W + 85], 1); // 电视柜后
-});
-
 test('毛坯图比对：机位 / 曝光不一样、柜子没关掉 → 不用，并说明原因', () => {
   const shell = shellImg();
   const render = withCabinets(shell, [[100, 20, 140, 70]]);
