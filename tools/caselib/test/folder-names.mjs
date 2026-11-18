@@ -15,6 +15,16 @@ import { join } from 'node:path';
 import { startMock } from '../mock-server.mjs';
 import { fixtures, launch, selectFolder, waitHashed, startAndWait, shotPath, PASSWORD, BASE } from './upload-kit.mjs';
 
+async function waitFor(fn, ms, what) {
+  const end = Date.now() + (ms || 15000);
+  for (;;) {
+    const v = await fn();
+    if (v) return v;
+    if (Date.now() > end) throw new Error('timed out: ' + (what || fn));
+    await new Promise((r) => setTimeout(r, 150));
+  }
+}
+
 let browser, info, m, root;
 const MONTH = '2024年3月上海案例';
 const JIA = '202403上海-测试甲-简约现代+侘寂风', YI = '202403上海-测试乙-奶油';
@@ -33,6 +43,9 @@ before(async () => {
   put(info.cheras + '/电视墙/T_01.jpg', MONTH + '/杂项/IMG_2.jpg');
   put(info.kepong + '/P_01.jpg', BING + '/IMG_3.jpg');
   put(info.kepong + '/P_03.jpg', DING + '/IMG_4.jpg');
+  put(info.kepong + '/P_05.jpg', DING + '/书桌-设计师-测试丁-1.jpg');
+  put(info.cheras + '/主卧/M_02.jpg', BING + '/衣柜-设计师-测试丙-2.jpg');
+  put(info.cheras + '/电视墙/T_02.jpg', BING + '/玄关柜-设计师-测试丙-3.jpg');
   m = await startMock({ port: 0, blobPort: 0, password: PASSWORD });
   browser = await launch();
 });
@@ -46,7 +59,7 @@ async function ctxPage() {
   const page = await ctx.newPage();
   page.errors = [];
   page.on('pageerror', (e) => page.errors.push(e.message));
-  page.on('dialog', (d) => { page.lastDialog = d.message(); d.accept(); });
+  page.on('dialog', (d) => { page.lastDialog = d.message(); d.accept(d.type() === 'prompt' ? '删除' : undefined); });
   await page.goto(m.url + '/caselib');
   await page.waitForSelector('#login:not([hidden])');
   if (await page.getAttribute('#mode-local', 'aria-pressed') !== 'true') await page.click('#mode-local');
@@ -79,11 +92,11 @@ test('new upload: month folders split into one project per home, styles read fro
   // 客户名字不进任何标签
   const tags = JSON.stringify(Object.values(idx.photos).map((x) => [x.room, x.cabinets, x.style, x.style2]));
   assert.ok(!/测试/.test(tags));
-  // 审核页：「美式」筛得到测试丁，「微侘寂」筛得到测试甲的两张
+  // 审核页：「美式」筛得到测试丁的两张，「微侘寂」筛得到测试甲的两张
   await page.click('#tabs [data-tab="review"]');
   await page.waitForSelector('#rv-grid .rv-card');
   await page.selectOption('#rv-filters select[data-f="style"]', 'american');
-  await page.waitForFunction(() => document.querySelectorAll('#rv-grid .rv-card').length === 1);
+  await page.waitForFunction(() => document.querySelectorAll('#rv-grid .rv-card').length === 2);
   await page.selectOption('#rv-filters select[data-f="style"]', 'wabi');
   await page.waitForFunction(() => document.querySelectorAll('#rv-grid .rv-card').length === 2);
   assert.match(await page.textContent('#rv-grid .rv-card .cap em'), /现代简约 \+ 微侘寂/);
@@ -137,6 +150,65 @@ test('old data: a month folder imported as one project is split by 「按文件�
   await page.waitForFunction(() => /没有可以再按名字标的了|已按文件夹名字标好/.test(document.querySelector('#rv-tags-msg').textContent), null, { timeout: 15000 });
   assert.equal(page.lastDialog, '');
   await page.screenshot({ path: shotPath('folder-names-regroup.png') });
+  assert.deepEqual(page.errors, []);
+  await ctx.close();
+});
+
+test('product filter from file names; delete one photo, several picked photos, and a whole project', async () => {
+  const { ctx, page } = await ctxPage();
+  await page.click('#tabs [data-tab="upload"]');
+  await selectFolder(page, root);
+  await waitHashed(page);
+  await startAndWait(page);
+  let idx = await localIndex(page);
+  const pb = byName(idx, BING), pd = byName(idx, DING), pj = byName(idx, JIA);
+  const desk = photosOf(idx, pd).find((h) => /^书桌/.test(idx.photos[h].f));
+  assert.equal(idx.photos[desk].product, '书桌');
+  assert.deepEqual(idx.photos[desk].cabinets, [], 'a product outside the 15 cabinet kinds keeps only its product');
+  const shoe = photosOf(idx, pb).find((h) => /^玄关柜/.test(idx.photos[h].f));
+  assert.deepEqual([idx.photos[shoe].product, idx.photos[shoe].cabinets], ['玄关柜', ['shoe']]);
+  // 客户名字、IMG 不会变成产品
+  assert.ok(Object.values(idx.photos).every((x) => !x.product || /^(水吧柜|书桌|衣柜|玄关柜)$/.test(x.product)), JSON.stringify(Object.values(idx.photos).map((x) => x.product)));
+
+  await page.click('#tabs [data-tab="review"]');
+  await page.waitForSelector('#rv-grid .rv-card');
+  const opts = await page.$$eval('#rv-filters select[data-f="prod"] option', (os) => os.map((o) => o.textContent));
+  assert.ok(opts.some((t) => /^书桌（1）$/.test(t)) && opts.some((t) => /^水吧柜（1）$/.test(t)), opts.join(' | '));
+  await page.selectOption('#rv-filters select[data-f="prod"]', '书桌');
+  await page.waitForFunction(() => document.querySelectorAll('#rv-grid .rv-card').length === 1);
+  await page.selectOption('#rv-filters select[data-f="prod"]', '');
+
+  // 1. 照片上「删除这张」：照片和档案都没了
+  const k = idx.photos[desk].k;
+  const status = (key) => page.evaluate((k) => fetch('/local-cases/' + k, { cache: 'no-store' }).then((r) => r.status), key);
+  assert.equal(await status(k), 200, 'file is there before deleting');
+  await page.click('#rv-grid .rv-card[data-h="' + desk + '"]');
+  await page.click('#drawer [data-act="delete-photo"]');
+  await waitFor(async () => !(await localIndex(page)).photos[desk], 15000, 'photo deleted');
+  assert.match(page.lastDialog, /删除这张照片/);
+  assert.equal(await status(k), 404);
+
+  // 2. 多选两张一起删
+  idx = await localIndex(page);
+  const two = photosOf(idx, pb).slice(0, 2);
+  await page.click('#rv-multi [data-multi="on"]');
+  for (const h of two) await page.click('#rv-grid .rv-card[data-h="' + h + '"]');
+  assert.match(await page.textContent('#rv-multi'), /已选 2 张/);
+  await page.screenshot({ path: shotPath('multi-delete.png') });
+  await page.click('#rv-multi [data-multi="delete"]');
+  await waitFor(async () => { const i = await localIndex(page); return two.every((h) => !i.photos[h]); }, 15000, 'picked deleted');
+  await page.click('#rv-multi [data-multi="off"]');
+
+  // 3. 删除整个项目（要打「删除」）：项目和它的照片都没了；别的家照样在
+  idx = await localIndex(page);
+  const jiaPhotos = photosOf(idx, pj);
+  assert.ok(jiaPhotos.length >= 1);
+  await page.selectOption('#rv-filters select[data-f="pid"]', pj);
+  await page.click('#rv-proj [data-act="delete-project"]');
+  await waitFor(async () => { const i = await localIndex(page); return !i.projects[pj] && jiaPhotos.every((h) => !i.photos[h]); }, 15000, 'project deleted');
+  idx = await localIndex(page);
+  assert.ok(idx.projects[pd] && photosOf(idx, pd).length >= 1, 'other homes untouched');
+  for (const h of photosOf(idx, pd)) assert.equal(await status(idx.photos[h].k), 200, 'other homes keep their files');
   assert.deepEqual(page.errors, []);
   await ctx.close();
 });

@@ -142,7 +142,7 @@ export function addPhotos(index, input, by, now) {
 
 /* ---------- patch ----------
    {source:'auto'|'human', photos:{h:{room,cabinets,style,hero,desc,status}}, projects:{pid:{area,ptype,traits,style}}} */
-var PHOTO_FIELDS = ['room', 'cabinets', 'style', 'style2', 'hero', 'desc', 'status'];
+var PHOTO_FIELDS = ['room', 'cabinets', 'style', 'style2', 'product', 'hero', 'desc', 'status'];
 var PROJECT_FIELDS = ['area', 'ptype', 'traits', 'style', 'style2'];
 
 function vocabErr(field, id, value) { return bad('vocab', { field: field, id: id, value: value }); }
@@ -165,6 +165,7 @@ function validPhotoPatch(h, x, auto) {
     if (PHOTO_FIELDS.indexOf(f) < 0) throw vocabErr(f, h);
     if (f === 'room') { if (val !== '' && !isRoom(val)) throw vocabErr(f, h, val); out.room = val; }
     else if (f === 'style' || f === 'style2') { if (val !== '' && !isStyle(val)) throw vocabErr(f, h, val); out[f] = val; }
+    else if (f === 'product') { if (val !== '' && !isProduct(val)) throw vocabErr(f, h, val); out.product = val; }
     else if (f === 'cabinets') out.cabinets = cleanList(val, isCabinet, f, h);
     else if (f === 'hero') { if (typeof val !== 'boolean') throw vocabErr(f, h, val); out.hero = val; }
     else if (f === 'desc') {
@@ -295,6 +296,13 @@ export function stylesAt(name) {
   return hits.slice(0, 2);
 }
 export function stylesIn(name) { return stylesAt(name).map(function (x) { return x.key; }); }
+
+/* ---------- 产品：档名「产品-设计师-客户-序号」的第一段（例：水吧柜-谢尔曼-沈晓燕-3 → 水吧柜） ----------
+   2–10 个中文字、以柜 / 台 / 墙 / 门 / 板 / 床 / 架 / 桌 / 岛 / 吧 / 榻榻米 / 格栅 / 隔断 / 屏风 结尾、没有称呼：
+   人名、IMG_1234 绝不会变成产品（本机版 local-core.js 一模一样） */
+var PRODUCT_END = /(柜|台|墙|门|板|床|架|桌|岛|吧|榻榻米|格栅|隔断|屏风)$/;
+var PRODUCT_BAD = /先生|太太|小姐|女士|夫人|老板|夫妇|客户|客人|测试|阳台|露台|天台|平台/;
+export function isProduct(t) { return typeof t === 'string' && /^[\u4e00-\u9fff]{2,10}$/.test(t) && PRODUCT_END.test(t) && !PRODUCT_BAD.test(t); }
 
 /* ---------- 月份文件夹拆成一个一个家（regroup） ----------
    项目名没有风格字（「2024年3月上海案例」），照片的第一层子文件夹名有风格字（「202403上海-沈晓燕-简约现代+侘寂风」）

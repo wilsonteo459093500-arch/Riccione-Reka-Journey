@@ -104,6 +104,11 @@
   MB.caseStyle = function (key) { return find(MB.CASE_STYLES, key); };
   // 案例的风格最多两种（style + style2，例：现代 + 美式）：任一种对上就算
   MB.hasStyle = function (c, key) { return !!key && !!c && (c.style === key || c.style2 === key); };
+  // 产品（档名读的原字，例：水吧柜）：跟伺服器 catalog.js 的 isProduct 同一条规则
+  MB.clProductOk = function (t) {
+    return typeof t === 'string' && /^[\u4e00-\u9fff]{2,10}$/.test(t) && /(柜|台|墙|门|板|床|架|桌|岛|吧|榻榻米|格栅|隔断|屏风)$/.test(t) &&
+      !/先生|太太|小姐|女士|夫人|老板|夫妇|客户|客人|测试|阳台|露台|天台|平台/.test(t);
+  };
   MB.caseCabinet = function (key) { return find(MB.CASE_CABINETS, key); };
 
   MB.scopeCabinets = function (scopes) {

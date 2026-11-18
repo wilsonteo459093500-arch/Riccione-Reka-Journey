@@ -52,7 +52,9 @@
   function cmp(a, b) { a = String(a || ''); b = String(b || ''); return COLL ? COLL.compare(a, b) : (a < b ? -1 : a > b ? 1 : 0); }
 
   var R = {
-    f: { style: '', cab: '', room: '', status: '', pid: '', hidden: false },
+    f: { style: '', cab: '', prod: '', room: '', status: '', pid: '', hidden: false },
+    multi: false,               // 多选（一次删好几张）：点照片是勾选
+    picked: {},                 // 勾选的照片 h → 1
     page: 0,
     list: [],                   // 筛选结果（快照：边改边看时不会突然重排）
     sel: '', mode: '', selPid: '', from: '',
@@ -105,6 +107,7 @@
         if (f.cab === '_none' ? cabs.length : cabs.indexOf(f.cab) < 0) return;
       }
       if (f.style) { var sts = effStyles(ph); if (f.style === '_none' ? sts.length : sts.indexOf(f.style) < 0) return; }
+      if (f.prod) { if (f.prod === '_none' ? ph.product : ph.product !== f.prod) return; }
       out.push(h);
     });
     out.sort(function (a, b) {
@@ -1413,6 +1416,137 @@
     CL.toast('已确认 ' + CL.n(hs.length) + ' 张', 3000);
   }
 
+  /* ============================================================
+     直接删除：照片上「删除这张」、项目上「删除这个项目」、多选几张一起删
+     伺服器的 purge 只删已隐藏的照片：先隐藏（照片或整个项目），再一批最多 1,000 张删掉（同「整理空间」的删除）
+     ============================================================ */
+  function deleteFlow(prep, ids, what) {
+    if (R.bulk) { CL.toast('另一件事还在进行中：等它做完再删。', 4000); return Promise.resolve(false); }
+    if (!ids.length) return Promise.resolve(false);
+    R.bulk = 'purge';
+    render(false, true);
+    CL.toast('删除中…', 2000);
+    var removed = 0;
+    function fail(r) { var e = new Error('purge'); e.r = r; throw e; }
+    return settleAll().then(function (left) {
+      if (left) { var e = new Error('unsaved'); e.msg = '还有 ' + CL.n(left) + ' 项修改没保存好：先等它保存完再删。'; throw e; }
+      return prep();
+    }).then(function () {
+      var i = 0;
+      function next() {
+        if (i >= ids.length) return Promise.resolve();
+        var batch = ids.slice(i, i + PURGE_BATCH);
+        i += PURGE_BATCH;
+        return sendPurge(batch).then(function (r) {
+          if (r.status !== 200 || !r.json) fail(r);
+          removed += r.json.removed | 0;
+          CL.bumpRev(r.json.rev);
+          return next();
+        });
+      }
+      return next();
+    }).then(function () {
+      return { ok: true, msg: '已删除' + what + '（' + CL.n(removed) + ' 张）。' };
+    }, function (e) {
+      return { ok: false, msg: e.msg || (e.r ? purgeFailText(e.r, removed) : '没删成，请再试一次') };
+    }).then(function (res) {
+      R.bulk = '';
+      return CL.loadCatalog(true).then(function () { reapplyQueue(); }, function () { /* 下次再拿 */ }).then(function () {
+        var c = cat();
+        if (R.mode === 'photo' && !c.photos[R.sel]) closeDrawer();
+        if (R.mode === 'project' && !c.projects[R.selPid]) closeDrawer();
+        if (R.f.pid && !c.projects[R.f.pid]) R.f.pid = '';
+        Object.keys(R.picked).forEach(function (h) { if (!c.photos[h]) delete R.picked[h]; });
+        render();
+        CL.toast(res.msg, res.ok ? 3500 : 7000);
+        return res.ok;
+      });
+    });
+  }
+  // 照片：没隐藏的先隐藏（一次最多 400 张），再删
+  function deletePhotos(hs, what) {
+    var c = cat();
+    hs = hs.filter(function (h) { return !!c.photos[h]; });
+    return deleteFlow(function () {
+      var need = hs.filter(function (h) { return !isHidden(cat().photos[h]); });
+      var i = 0;
+      function next() {
+        if (i >= need.length) return Promise.resolve();
+        var b = need.slice(i, i + MAX_ENTRIES);
+        i += MAX_ENTRIES;
+        return CL.call('POST', '/api/catalog', { op: 'hide', photos: b, projects: [] }).then(function (r) {
+          if (r.status !== 200 || !r.json) { var e = new Error('hide'); e.r = r; throw e; }
+          CL.bumpRev(r.json.rev);
+          return next();
+        });
+      }
+      return next();
+    }, hs, what);
+  }
+  // 整个项目：要亲手打「删除」两个字；隐藏项目，再删它所有的照片（照片删光，项目自己拿掉）
+  function deleteProject(pid) {
+    var c = cat(), pr = c.projects[pid];
+    if (!pr) return Promise.resolve(false);
+    var hs = Object.keys(c.photos).filter(function (h) { return c.photos[h].p === pid; });
+    var typed = window.prompt('要删除整个项目「' + pr.name + '」的 ' + hs.length + ' 张照片吗？\n\n删掉就找不回来；旧方案里用到这些照片的地方会变成空位。\n确定的话，请打「删除」两个字：', '');
+    if (typed == null) return Promise.resolve(false);
+    if (String(typed).trim() !== '删除') { CL.toast('没有删：要打「删除」两个字才会删。', 4000); return Promise.resolve(false); }
+    return deleteFlow(function () {
+      if (cat().projects[pid] && cat().projects[pid].hidden) return Promise.resolve();
+      return CL.call('POST', '/api/catalog', { op: 'hide', photos: [], projects: [pid] }).then(function (r) {
+        if (r.status !== 200 || !r.json) { var e = new Error('hide'); e.r = r; throw e; }
+        CL.bumpRev(r.json.rev);
+      });
+    }, hs, '项目「' + pr.name + '」');
+  }
+
+  /* 多选：照片格子上方一条。打开后点照片是勾选 */
+  function buildMulti() {
+    var grid = $('#rv-grid');
+    if (!grid || $('#rv-multi')) return;
+    var el = document.createElement('div');
+    el.className = 'rv-multi';
+    el.id = 'rv-multi';
+    grid.parentNode.insertBefore(el, grid);
+    el.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-multi]');
+      if (!b) return;
+      var a = b.getAttribute('data-multi');
+      var ids = Object.keys(R.picked);
+      if (a === 'on') { R.multi = true; R.picked = {}; if (R.mode) closeDrawer(); drawGrid(); }
+      else if (a === 'off') { R.multi = false; R.picked = {}; drawGrid(); }
+      else if (a === 'page') {
+        var start = R.page * PAGE, slice = R.list.slice(start, start + PAGE);
+        var all = slice.every(function (h) { return R.picked[h]; });
+        slice.forEach(function (h) { if (all) delete R.picked[h]; else R.picked[h] = 1; });
+        drawGrid();
+      } else if (a === 'hide' && ids.length) {
+        ids.forEach(function (h) { if (!cat().photos[h].hidden) setHidden('photos', h, true); });
+        R.picked = {};
+        drawGrid();
+      } else if (a === 'delete' && ids.length) {
+        if (window.confirm('删除选的 ' + ids.length + ' 张照片？\n\n删掉就找不回来；旧方案里用到这些照片的地方会变成空位。')) {
+          deletePhotos(ids, '选的照片').then(function (ok) { if (ok) { R.picked = {}; drawGrid(); } });
+        }
+      }
+      drawMulti();
+    });
+  }
+  function drawMulti() {
+    var el = $('#rv-multi');
+    if (!el) return;
+    if (!R.multi) {
+      el.innerHTML = '<button class="mini" type="button" data-multi="on">多选（一次隐藏 / 删除好几张）</button>';
+      return;
+    }
+    var n = Object.keys(R.picked).length, off = !n || !!R.bulk;
+    el.innerHTML = '<span class="m-n">已选 <b>' + CL.n(n) + '</b> 张</span>' +
+      '<button class="mini" type="button" data-multi="page">全选这一页</button>' +
+      '<button class="mini" type="button" data-multi="hide"' + (off ? ' disabled' : '') + '>隐藏</button>' +
+      '<button class="mini danger" type="button" data-multi="delete"' + (off ? ' disabled' : '') + '>删除</button>' +
+      '<button class="mini" type="button" data-multi="off">取消多选</button>';
+  }
+
   function bindTags() {
     var el = $('#rv-tags');
     if (!el) return;
@@ -1498,17 +1632,23 @@
   function drawFilters() {
     var c = cat(), f = R.f;
     var counts = { unsure: 0, 'new': 0, auto: 0, confirmed: 0 };
-    var perProj = {};
+    var perProj = {}, prods = {};
     Object.keys(c.photos).forEach(function (h) {
       var ph = c.photos[h];
       if (!f.hidden && isHidden(ph)) return;
       if (counts[ph.status] != null) counts[ph.status]++;
       perProj[ph.p] = (perProj[ph.p] || 0) + 1;
+      if (ph.product) prods[ph.product] = (prods[ph.product] || 0) + 1;
     });
+    // 产品：档名读到的原字（水吧柜、书桌…），多的排前面
+    var prodList = Object.keys(prods).sort(function (a, b) { return prods[b] - prods[a] || cmp(a, b); });
+    if (f.prod && f.prod !== '_none' && !prods[f.prod]) prodList.push(f.prod);
     var html = '<label><span>风格</span><select data-f="style">' + opt('', '全部风格', f.style) +
       (MB.CASE_STYLES || []).map(function (s) { return opt(s.key, s.zh + ' ' + s.en, f.style); }).join('') + opt('_none', '（未定风格）', f.style) + '</select></label>';
     html += '<label><span>柜类</span><select data-f="cab">' + opt('', '全部柜类', f.cab) +
       (MB.CASE_CABINETS || []).map(function (s) { return opt(s.key, s.zh + ' ' + s.en, f.cab); }).join('') + opt('_none', '（没标柜类）', f.cab) + '</select></label>';
+    html += '<label><span>产品 <i>档名读的</i></span><select data-f="prod">' + opt('', '全部产品（' + prodList.length + ' 种）', f.prod) +
+      prodList.map(function (k) { return opt(k, k + '（' + (prods[k] || 0) + '）', f.prod); }).join('') + opt('_none', '（没有产品）', f.prod) + '</select></label>';
     html += '<label><span>空间</span><select data-f="room">' + opt('', '全部空间', f.room) +
       (MB.CASE_ROOMS || []).map(function (k) { return opt(k, CL.roomZh(k) + ' ' + CL.roomEn(k), f.room); }).join('') + opt('_none', '（没标空间）', f.room) + '</select></label>';
     html += '<label><span>状态</span><select data-f="status">' + opt('', '全部状态', f.status) +
@@ -1530,13 +1670,16 @@
     var cap = [];
     if (ph.room) cap.push(CL.roomZh(ph.room));
     if (ph.cabinets && ph.cabinets.length) cap.push(CL.cabZh(ph.cabinets[0]) + (ph.cabinets.length > 1 ? ' +' + (ph.cabinets.length - 1) : ''));
+    if (ph.product && !(ph.cabinets && ph.cabinets.length)) cap.push(ph.product);
     var st = stylesZh(effStyles(ph));
-    var cls = 'rv-card st-' + esc(ph.status || 'new') + (isHidden(ph) ? ' hid' : '') + (dirty('photos', h) ? ' dirty' : '') + (R.sel === h && R.mode === 'photo' ? ' sel' : '');
+    var cls = 'rv-card st-' + esc(ph.status || 'new') + (isHidden(ph) ? ' hid' : '') + (dirty('photos', h) ? ' dirty' : '') + (R.sel === h && R.mode === 'photo' ? ' sel' : '') +
+      (R.multi ? ' multi' + (R.picked[h] ? ' picked' : '') : '');
     return '<button type="button" class="' + cls + '" data-h="' + esc(h) + '" title="' + esc(((c.projects[ph.p] || {}).name || '') + ' / ' + (ph.f || '')) + '">' +
       '<span class="ph"><img alt="" loading="lazy"' + (imgSrc(h) ? ' src="' + esc(imgSrc(h)) + '"' : '') + ' /></span>' +
       '<span class="st">' + esc((CL.STATUS[ph.status] || { zh: ph.status }).zh) + '</span>' +
       (ph.hero ? '<span class="hero" title="可当主图">★</span>' : '') +
       (isHidden(ph) ? '<span class="hidmark">已隐藏</span>' : '') +
+      (R.multi ? '<span class="pick" aria-hidden="true">' + (R.picked[h] ? '✓' : '') + '</span>' : '') +
       '<span class="cap">' + (cap.length ? esc(cap.join(' · ')) : '<i>未标</i>') + (st ? '<em>' + esc(st) + '</em>' : '') + '</span></button>';
   }
 
@@ -1601,7 +1744,8 @@
     el.innerHTML = '<div><p class="sub-h">项目 · 只给业务看</p><h3>' + esc(pr.name) + (pr.hidden ? ' <span class="tag warn">已隐藏</span>' : '') + '</h3>' +
       '<p class="muted">' + (pr.n | 0) + ' 张' + (nHid ? '（隐藏了 ' + CL.n(nHid) + ' 张）' : '') + (bits.length ? ' · ' + esc(bits.join(' · ')) : ' · 还没填区域 / 房型 / 风格') +
       (pr.by ? ' · 上次修改 ' + esc(who(pr.by)) + ' ' + esc(CL.time(pr.ts)) : '') + '</p></div>' +
-      '<div class="btn-row"><button class="mini dark" type="button" data-act="proj-edit">编辑项目资料</button>' + confirmButton(pid) + keepButtons(pid) + '</div>';
+      '<div class="btn-row"><button class="mini dark" type="button" data-act="proj-edit">编辑项目资料</button>' + confirmButton(pid) + keepButtons(pid) +
+      '<button class="mini danger" type="button" data-act="delete-project"' + (R.bulk ? ' disabled' : '') + '>删除这个项目</button></div>';
   }
   function confirmButton(pid) {
     var n = autoInProject(pid).length;
@@ -1662,12 +1806,14 @@
       '<div class="dr-sec"><p class="sub-h">柜类 <i>可多选 · 金框 = 这个空间常见的</i></p>' + chips('cabinets', cabs, ph.cabinets || [], true) + '</div>' +
       '<div class="dr-sec"><p class="sub-h">风格 <i>不选 = 跟项目</i></p>' + chips('style', styles, ph.style || '', false) + '</div>' +
       (ph.style ? '<div class="dr-sec"><p class="sub-h">第二种风格 <i>可不选（例：现代 + 美式）</i></p>' + chips('style2', styles2, ph.style2 || '', false) + '</div>' : '') +
+      '<div class="dr-sec"><p class="sub-h">产品 <i>照档名读的（例：水吧柜）；可以改，清空 = 没有</i></p><input type="text" data-field="product" maxlength="10" value="' + esc(ph.product || '') + '" placeholder="例：水吧柜、书桌" /></div>' +
       '<label class="switch"><input type="checkbox" data-field="hero"' + (ph.hero ? ' checked' : '') + ' /><span></span>可当主图 <small>拍得完整、光线好，适合放在方案的大图</small></label>' +
       ((desc.zh || desc.en) ? '<div class="dr-sec desc"><p class="sub-h">说明（分类时写的）</p>' + (desc.zh ? '<p>' + esc(desc.zh) + '</p>' : '') + (desc.en ? '<p class="muted">' + esc(desc.en) + '</p>' : '') + '</div>' : '') +
       '<p class="dr-meta">' + (ph.by ? '上次修改：<b>' + esc(who(ph.by)) + '</b> · ' + esc(CL.time(ph.ts)) : '') +
       ' · ' + ph.w + '×' + ph.h + (ph.sz ? ' · ' + CL.mb(ph.sz) : '') + (ph.hidden ? ' · 由 ' + esc(ph.hidden.by) + ' 隐藏' : '') + '</p>' +
       '<div class="dr-actions"><button class="btn gold" type="button" data-act="ok-next">确认 ✓ 下一张</button>' +
       '<button class="btn ghost" type="button" data-act="hide-photo"' + (R.bulk === 'purge' ? ' disabled title="正在删除，等删完再按"' : '') + '>' + (ph.hidden ? '复原这张' : '隐藏这张') + '</button>' +
+      '<button class="btn ghost danger" type="button" data-act="delete-photo"' + (R.bulk ? ' disabled' : '') + '>删除这张</button>' +
       '<button class="btn ghost" type="button" data-act="proj-edit">项目资料</button></div>';
     return html;
   }
@@ -1690,7 +1836,8 @@
       '<div class="dr-sec"><p class="sub-h">风格 <i>整个项目</i></p>' + chips('pstyle', styles, pr.style || '', false) + '</div>' +
       '<div class="dr-sec"><p class="sub-h">第二种风格 <i>可不选（例：现代 + 美式）</i></p>' + chips('pstyle2', [{ key: '', zh: '没有' }].concat(styles.slice(1)), pr.style2 || '', false) + '</div>' +
       '<div class="dr-actions"><button class="btn ghost" type="button" data-act="hide-project"' + (R.bulk === 'purge' ? ' disabled title="正在删除，等删完再按"' : '') + '>' + (pr.hidden ? '复原这个项目' : '隐藏这个项目') + '</button>' +
-      (R.f.pid !== pid ? '<button class="btn ghost" type="button" data-act="only-project">只看这个项目</button>' : '') + '</div>' +
+      (R.f.pid !== pid ? '<button class="btn ghost" type="button" data-act="only-project">只看这个项目</button>' : '') +
+      '<button class="btn ghost danger" type="button" data-act="delete-project"' + (R.bulk ? ' disabled' : '') + '>删除这个项目</button></div>' +
       (MB.clPick && !pr.hidden ? '<div class="dr-sec dr-keep"><p class="sub-h">照片太多 <i>免费方案空间有限</i></p>' +
         '<p class="hint">只留最好的几张（同一个角度只留一张，每个空间都留到），其它的先隐藏，可以复原。</p>' +
         '<div class="dr-actions">' + keepButtons(pid).replace(/class="mini"/g, 'class="btn ghost"') + '</div></div>' : '') +
@@ -1783,6 +1930,7 @@
     drawLog();
     drawTidy();
     drawTags();
+    drawMulti();
     if (R.ask) drawAsk();
     if (quiet && R.mode) drawDrawerTag();
     else drawDrawer();
@@ -1843,13 +1991,22 @@
     });
     $('#rv-grid').addEventListener('click', function (e) {
       var b = e.target.closest('.rv-card');
-      if (b) openPhoto(b.getAttribute('data-h'));
+      if (!b) return;
+      var h = b.getAttribute('data-h');
+      if (R.multi) {
+        if (R.picked[h]) delete R.picked[h]; else R.picked[h] = 1;
+        drawCard(h);
+        drawMulti();
+        return;
+      }
+      openPhoto(h);
     });
     $('#rv-proj').addEventListener('click', function (e) {
       if (e.target.closest('[data-act="proj-edit"]')) openProject(R.f.pid);
       else if (e.target.closest('[data-act="keep-proj"]')) openAsk(R.f.pid);
       else if (e.target.closest('[data-act="unhide-proj-photos"]')) restoreProject(R.f.pid);
       else if (e.target.closest('[data-act="confirm-proj"]')) confirmProject(R.f.pid);
+      else if (e.target.closest('[data-act="delete-project"]')) deleteProject(R.f.pid);
     });
     $('#rv-savebtn').addEventListener('click', function () { flushNow(); });
     // 离开这一页（关分页、切到别的 App）：马上存（keepalive：页面关了请求照样送完）
@@ -1881,6 +2038,10 @@
         if (!nav(1)) { CL.toast('这是最后一张了'); }
       } else if (a === 'hide-photo') {
         setHidden('photos', R.sel, !c.photos[R.sel].hidden);
+      } else if (a === 'delete-photo') {
+        if (window.confirm('删除这张照片？\n\n删掉就找不回来；旧方案里用到这张的地方会变成空位。')) deletePhotos([R.sel], '这张照片');
+      } else if (a === 'delete-project') {
+        deleteProject(R.selPid);
       } else if (a === 'proj-edit') {
         var pid = R.mode === 'photo' && c.photos[R.sel] ? c.photos[R.sel].p : R.f.pid;
         openProject(pid, R.mode === 'photo' ? R.sel : '');
@@ -1899,6 +2060,12 @@
     dr.addEventListener('change', function (e) {
       var t = e.target;
       if (t.getAttribute('data-field') === 'hero') edit('photos', R.sel, 'hero', t.checked);
+      if (t.getAttribute('data-field') === 'product') {
+        var v = t.value.trim(), cur = (cat().photos[R.sel] || {}).product || '';
+        if (v === cur) return;
+        if (v && !MB.clCore.isProduct(v)) { CL.toast('产品名要 2–10 个中文字，以柜、台、墙、门、板、床、架、桌、岛、吧结尾（例：水吧柜、书桌）', 5000); t.value = cur; return; }
+        edit('photos', R.sel, 'product', v);
+      }
     });
     // 区域：打字时不重画（游标不跳），停 0.6 秒才排队
     var areaTimer = 0;
@@ -2012,6 +2179,7 @@
       inited = true;
       buildTidy();
       buildTags();
+      buildMulti();
       bind();
       bindTidy();
       bindTags();
@@ -2029,6 +2197,7 @@
     hiddenStats: hiddenStats,
     quota: quotaNow,
     autoTags: function () { return runAuto(); },
+    deletePhotos: function (hs) { return deletePhotos(hs, '照片'); },
     aiTags: function (limit) { return runAi(limit || 0); },
     importTags: function (file) { return runImport(file); }
   };

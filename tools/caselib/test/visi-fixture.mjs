@@ -129,6 +129,8 @@ export async function buildSeed(browser) {
   photos.forEach((ph) => {
     const x = { room: ph.room, cabinets: ph.cabinets, hero: ph.hero };
     if (ph.unsure) x.status = 'unsure';
+    // 档名读到的产品（餐厅的餐边柜都当「水吧柜」）
+    if (ph.room === 'dining' && ph.cabinets.indexOf('sideboard') > -1) x.product = ph.product = '水吧柜';
     // 一部分照片有分类时写的一行描述
     if (ph.room === 'kitchen' && ph.hero) x.desc = { zh: '原木色厨房，中岛带收纳', en: 'Warm wood kitchen with a storage island' };
     P[ph.h] = x;

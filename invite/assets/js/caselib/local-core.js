@@ -257,7 +257,7 @@
   }
 
   /* ---------- patch ---------- */
-  var PHOTO_FIELDS = ['room', 'cabinets', 'style', 'style2', 'hero', 'desc', 'status'];
+  var PHOTO_FIELDS = ['room', 'cabinets', 'style', 'style2', 'product', 'hero', 'desc', 'status'];
   var PROJECT_FIELDS = ['area', 'ptype', 'traits', 'style', 'style2'];
 
   function vocabErr(field, id, value) { return bad('vocab', { field: field, id: id, value: value }); }
@@ -278,6 +278,7 @@
       if (PHOTO_FIELDS.indexOf(f) < 0) throw vocabErr(f, h);
       if (f === 'room') { if (val !== '' && !isRoom(val)) throw vocabErr(f, h, val); out.room = val; }
       else if (f === 'style' || f === 'style2') { if (val !== '' && !isStyle(val)) throw vocabErr(f, h, val); out[f] = val; }
+      else if (f === 'product') { if (val !== '' && !isProduct(val)) throw vocabErr(f, h, val); out.product = val; }
       else if (f === 'cabinets') out.cabinets = cleanList(val, isCabinet, f, h);
       else if (f === 'hero') { if (typeof val !== 'boolean') throw vocabErr(f, h, val); out.hero = val; }
       else if (f === 'desc') {
@@ -401,6 +402,17 @@
     return hits.slice(0, 2);
   }
   function stylesIn(name) { return stylesAt(name).map(function (x) { return x.key; }); }
+
+  /* ---------- 产品：档名「产品-设计师-客户-序号」的第一段（例：水吧柜-谢尔曼-沈晓燕-3 → 水吧柜） ----------
+     只收 2–10 个中文字、以柜 / 台 / 墙 / 门 / 板 / 床 / 架 / 桌 / 岛 / 吧 / 榻榻米 / 格栅 / 隔断 / 屏风 结尾、
+     没有称呼和「客户 / 测试」的：人名、IMG_1234 绝不会变成产品（伺服器 catalog.js 一模一样） */
+  var PRODUCT_END = /(柜|台|墙|门|板|床|架|桌|岛|吧|榻榻米|格栅|隔断|屏风)$/;
+  var PRODUCT_BAD = /先生|太太|小姐|女士|夫人|老板|夫妇|客户|客人|测试|阳台|露台|天台|平台/;
+  function isProduct(t) { return typeof t === 'string' && /^[\u4e00-\u9fff]{2,10}$/.test(t) && PRODUCT_END.test(t) && !PRODUCT_BAD.test(t); }
+  function productOf(text) {
+    var t = String(text || '').split(/[-_\s\u2013\u2014·]+/)[0].replace(/[0-9]+$/, '').trim();
+    return isProduct(t) ? t : '';
+  }
 
   /* ---------- 月份文件夹拆成一个一个家（regroup） ----------
      项目名没有风格字（例：「2024年3月上海案例」），而照片的第一层子文件夹名有风格字
@@ -633,7 +645,7 @@
   // 柜类：子文件夹名里明明白白写着的（床尾柜在定制床前面）
   var CABINET_WORDS = [
     ['kitchen', '橱柜|厨柜|厨房|kitchen'],
-    ['wardrobe', '衣柜|wardrobes?'],
+    ['wardrobe', '衣柜|衣帽柜|wardrobes?'],
     ['display', '展示柜|陈列柜|酒柜|display'],
     ['bookcase', '书柜|书架|book(case|shelf|shelves)'],
     ['bedend', '床尾柜|bed[\\s-]?end'],
@@ -642,7 +654,7 @@
     ['tvcab', '电视柜|tv[\\s-]?(cabinet|console)'],
     ['tvwall', '电视墙|电视背景墙|tv[\\s-]?wall|feature wall'],
     ['door', '房门|门板|\\bdoors?\\b'],
-    ['shoe', '鞋柜|shoe'],
+    ['shoe', '鞋柜|玄关柜|shoe'],
     ['bathvanity', '浴室柜|洗手台|洗脸台|bath(room)?[\\s-]?vanity|vanity'],
     ['wallpanel', '护墙板|墙板|wall[\\s-]?panel'],
     ['sideboard', '餐边柜|水吧|吧台|咖啡吧|sideboard'],
@@ -696,11 +708,12 @@
   function guessPhoto(f) {
     var parts = String(f || '').split('/').filter(Boolean);
     var file = (parts.pop() || '').replace(/\.[A-Za-z0-9]{2,5}$/, '');
-    var room = '', cabs = {}, style = '', style2 = '';
+    var room = '', cabs = {}, style = '', style2 = '', product = productOf(file);
     for (var k = parts.length - 1; k >= 0 && !style; k--) {
       var st = stylesIn(parts[k]);
       if (st.length) { style = st[0]; style2 = st[1] || ''; }
     }
+    for (var q = parts.length - 1; q >= 0 && !product; q--) product = productOf(parts[q]);
     if (file) parts.push(file);
     for (var i = parts.length - 1; i >= 0 && !room; i--) {
       for (var j = 0; j < ROOM_RE.length; j++) if (ROOM_RE[j][1].test(parts[i])) { room = ROOM_RE[j][0]; break; }
@@ -719,7 +732,7 @@
       var ks = Object.keys(only);
       if (ks.length === 1 && isRoom(ks[0])) room = ks[0];
     }
-    return { room: room, cabinets: cabinets, style: style, style2: style2 };
+    return { room: room, cabinets: cabinets, style: style, style2: style2, product: product };
   }
   /** 整份清单（或 opts.pids 那几个项目、opts.photos 那几张）→ 一份 source:'auto' 的 patch。
       空间、柜类只填空的。风格：名字优先 —— 子文件夹名有风格字就照它；项目名有风格字时，
@@ -750,10 +763,13 @@
       if (!inP[ph.p] || (only && !only[h])) return;
       if (ph.status === 'confirmed') return;
       var g = guessPhoto(ph.f), x = {};
-      // 「不确定」：人可能看过，空间、柜类不补；只有风格照名字改（名字优先于 AI）
-      var unsure = ph.status === 'unsure';
-      if (!unsure && g.room && !ph.room) x.room = g.room;
-      if (!unsure && g.cabinets.length && !(ph.cabinets && ph.cabinets.length)) x.cabinets = g.cabinets;
+      // 名字说了算：名字读得到的空间、柜类、产品、风格一律照名字（AI 标过的也改）；名字读不到的不动。
+      // 「不确定」的照样是不确定；已确认（人看过的）上面就跳过了
+      // 「不确定」是人标的（例：看了觉得不对、把柜类清掉）就只改风格；机器（自动 / AI）标的不确定照样照名字
+      var unsure = ph.status === 'unsure', machine = !unsure || ph.by === AUTO_BY;
+      if (machine && g.room && g.room !== ph.room) x.room = g.room;
+      if (machine && g.cabinets.length && !same(g.cabinets, ph.cabinets || [])) x.cabinets = g.cabinets;
+      if (machine && g.product && g.product !== (ph.product || '')) x.product = g.product;
       if (g.style) {
         if (g.style !== (ph.style || '')) x.style = g.style;
         if (g.style2 !== (ph.style2 || '')) x.style2 = g.style2;
@@ -794,7 +810,7 @@
     });
     Object.keys(index.photos || {}).sort().forEach(function (h) {
       var x = index.photos[h], d = x.desc || {};
-      out.photos[h] = { p: x.p, room: x.room || '', cabinets: (x.cabinets || []).slice(), style: x.style || '', style2: x.style2 || '', hero: !!x.hero,
+      out.photos[h] = { p: x.p, room: x.room || '', cabinets: (x.cabinets || []).slice(), style: x.style || '', style2: x.style2 || '', product: x.product || '', hero: !!x.hero,
         desc: { zh: d.zh || '', en: d.en || '' }, status: x.status || 'new', hidden: !!x.hidden };
     });
     return out;
@@ -816,7 +832,7 @@
     if (!x || typeof x !== 'object' || Array.isArray(x)) return null;
     var d = x.desc && typeof x.desc === 'object' ? x.desc : {};
     return { p: PID_RE.test(x.p || '') ? x.p : '', room: pickOne(isRoom, x.room), cabinets: pickMany(isCabinet, x.cabinets),
-      style: pickOne(isStyle, x.style), style2: pickOne(isStyle, x.style2), hero: x.hero === true, desc: { zh: cleanText(d.zh, 200), en: cleanText(d.en, 200) },
+      style: pickOne(isStyle, x.style), style2: pickOne(isStyle, x.style2), product: pickOne(isProduct, x.product), hero: x.hero === true, desc: { zh: cleanText(d.zh, 200), en: cleanText(d.en, 200) },
       status: pickOne(isStatus, x.status) || 'new', hidden: x.hidden === true };
   }
   /** 读进来的标签档：不是标签档就丢 400 {error:'kind'}；不认得的值一律拿掉（不会写坏清单） */
@@ -850,6 +866,7 @@
       if (!same(F.cabinets, lc)) x.cabinets = F.cabinets.slice();
       if (F.style !== (L.style || '')) x.style = F.style;
       if (F.style2 !== (L.style2 || '')) x.style2 = F.style2;
+      if (F.product !== (L.product || '')) x.product = F.product;
       if (F.hero !== !!L.hero) x.hero = F.hero;
       ['zh', 'en'].forEach(function (l) { if (F.desc[l] !== (ld[l] || '')) d[l] = F.desc[l]; });
     } else {
@@ -857,6 +874,7 @@
       if (F.cabinets.length && (conf ? !lc.length : !same(F.cabinets, lc))) x.cabinets = F.cabinets.slice();
       if (F.style && (conf ? !L.style : F.style !== L.style)) x.style = F.style;
       if (F.style2 && (conf ? !L.style2 : F.style2 !== L.style2)) x.style2 = F.style2;
+      if (F.product && (conf ? !L.product : F.product !== L.product)) x.product = F.product;
       if (!conf && F.hero && !L.hero) x.hero = true;
       ['zh', 'en'].forEach(function (l) { if (F.desc[l] && (conf ? !ld[l] : F.desc[l] !== ld[l])) d[l] = F.desc[l]; });
     }
@@ -969,7 +987,7 @@
     utcDay: utcDay, utcMonth: utcMonth, bumpUsage: bumpUsage, monthWrites: monthWrites, storedBytes: storedBytes, packBytes: packBytes,
     validatePurge: validatePurge, planPurge: planPurge, applyPurge: applyPurge, run: run,
     guessProject: guessProject, guessPhoto: guessPhoto, autoTags: autoTags, chunkPatch: chunkPatch,
-    stylesIn: stylesIn, regroupPlan: regroupPlan, regroup: regroup,
+    stylesIn: stylesIn, regroupPlan: regroupPlan, regroup: regroup, isProduct: isProduct, productOf: productOf,
     exportTags: exportTags, readTags: readTags, cleanPhotoTag: cleanPhotoTag, cleanProjectTag: cleanProjectTag,
     mergeTags: mergeTags, applyMerge: applyMerge, afterAdd: afterAdd
   };

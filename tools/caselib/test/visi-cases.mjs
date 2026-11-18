@@ -166,7 +166,7 @@ await login(page);
   const r = await page.evaluate(() => ({ st: MB.cloud.status(), n: MB.cases().length, usable: MB.cases().filter(MB.caseUsable).length,
     keys: Object.keys(MB.cases()[0]).sort().join(','), projects: MB.cloud.projects() }));
   ok('C1 login → catalog loaded (60 photos, 57 usable: 2 unsure + 1 hidden left out of auto use)', r.st.status === 'ok' && r.n === 60 && r.usable === 57, JSON.stringify(r.st) + ' ' + r.n + '/' + r.usable);
-  const allowed = 'area,cabinets,desc,en,h,hero,hidden,id,label,pid,plabel,ptype,rooms,series,shot,src,stale,status,style,style2,thumb,traits,w,zh';
+  const allowed = 'area,cabinets,desc,en,h,hero,hidden,id,label,pid,plabel,product,ptype,rooms,series,shot,src,stale,status,style,style2,thumb,traits,w,zh';
   ok('C2 entries() carry only whitelisted fields (no name / f)', r.keys === allowed, r.keys);
   ok('C3 project labels are 「区域 · 风格 · #n」, never the folder name', r.projects.length === 6 && r.projects.every((x) => /^[^·]+ · [^·]+ · #\d+$/.test(x.label) && !leaks(x.label).length),
     r.projects.map((x) => x.label).join(' | '));
@@ -675,6 +675,16 @@ fx.photos.forEach((p) => { caseHashes[createHash('sha256').update(Buffer.from(p.
   const okStyle = refs.every((x) => { const p = byH[x.slice(2)]; return fx.projects[p.project].style === 'wood' && p.cabinets.indexOf('island') > -1 && !p.unsure && !p.hidden; });
   ok('K3 风格 × 柜类 filters (原木 × 中岛) show only matching, usable cases', refs.length >= 2 && okStyle, refs.length + ' ' + refs.join());
   if (TAKE) await page.screenshot({ path: path.join(SHOTS, 'library-1440.png') });
+  await page.click('#lib-cfilter [data-cf-clear]');
+  await page.waitForTimeout(300);
+  const prodOpts = await page.$$eval('#lib-cfilter [data-cf="prod"] option', (os) => os.map((o) => o.value));
+  await page.selectOption('#lib-cfilter [data-cf="prod"]', '水吧柜');
+  await page.waitForTimeout(300);
+  const prodRefs = await page.$$eval('#lib-grid .lib-item.case', (els) => els.map((e) => e.getAttribute('data-ref')));
+  const wantProd = fx.photos.filter((p) => p.product === '水吧柜' && !p.unsure && !p.hidden).length;
+  ok('K3b 产品 filter (水吧柜) lists products read from file names and shows only those photos',
+    prodOpts.join() === ',水吧柜' && prodRefs.length === wantProd && wantProd >= 3 && prodRefs.every((x) => byH[x.slice(2)].product === '水吧柜'),
+    prodOpts.join() + ' ' + prodRefs.length + '/' + wantProd);
   const opts = await page.$$eval('#lib-cfilter [data-cf="pid"] option', (os) => os.map((o) => o.textContent));
   ok('K4 项目 filter labels are 「区域 · 风格 · #n」 (no folder names)', opts.length >= 2 && !leaks(opts.join('|')).length && opts.slice(1).every((t) => /#\d+/.test(t)), opts.join(' | '));
   await page.click('#lib-cfilter [data-cf-clear]');

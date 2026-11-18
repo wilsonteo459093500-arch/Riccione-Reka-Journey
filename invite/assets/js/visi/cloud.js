@@ -141,7 +141,9 @@
       out.photos[h] = {
         p: x.p, k: x.k, w: num(x.w), h: num(x.h), shot: HEX16.test(x.shot || '') ? x.shot : h,
         room: oneOf(MB.CASE_ROOMS, x.room), cabinets: manyOf(MB.CASE_CABINETS, x.cabinets), style: oneOf(MB.CASE_STYLES, x.style),
-        style2: oneOf(MB.CASE_STYLES, x.style2), hero: x.hero === true, desc: { zh: str(d.zh, 200), en: str(d.en, 200) },
+        style2: oneOf(MB.CASE_STYLES, x.style2),
+        // 产品（档名读的原字）：再检查一次，只收「…柜 / 台 / 墙…」这种（人名绝不会混进来）
+        product: MB.clProductOk && MB.clProductOk(x.product) ? x.product : '', hero: x.hero === true, desc: { zh: str(d.zh, 200), en: str(d.en, 200) },
         status: oneOf(MB.CASE_STATUS, x.status) || 'new', hidden: !!x.hidden
       };
     });
@@ -186,7 +188,7 @@
       var e = {
         // 暂停中：照片网址都回 403 —— 不给网址，方案页、PPTX、图库就不会出现破图（印成占位框）
         id: 'c:' + h, src: state.blocked ? '' : IDX.base + x.k, thumb: THUMBS[h] || '', w: x.w, h: x.h,
-        style: style, style2: style2, series: st ? st.series : '', cabinets: x.cabinets.slice(), rooms: x.room ? [x.room] : [],
+        style: style, style2: style2, product: x.product || '', series: st ? st.series : '', cabinets: x.cabinets.slice(), rooms: x.room ? [x.room] : [],
         pid: x.p, area: pr.area, ptype: pr.ptype, traits: pr.traits.slice(), shot: 'c:' + x.shot,
         hero: x.hero, status: x.status, hidden: !!(x.hidden || pr.hidden), desc: { zh: x.desc.zh, en: x.desc.en }
       };

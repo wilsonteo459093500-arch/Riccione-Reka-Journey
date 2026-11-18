@@ -673,7 +673,7 @@
   /** 案例 → 图库 / 自动配图的那一份（跟内置图同一个形状，多了 isCase 与案例自己的标签） */
   function caseItem(c) {
     return { ref: c.id, src: c.src, thumb: c.thumb || '', w: +c.w || 0, h: +c.h || 0, rooms: c.rooms || [], series: c.series || '',
-      own: false, isCase: true, label: c.label || '', en: c.en || '', zh: c.zh || '', style: c.style || '', style2: c.style2 || '', cabinets: c.cabinets || [],
+      own: false, isCase: true, label: c.label || '', en: c.en || '', zh: c.zh || '', style: c.style || '', style2: c.style2 || '', product: c.product || '', cabinets: c.cabinets || [],
       hero: !!c.hero, pid: c.pid || '', area: c.area || '', ptype: c.ptype || '', traits: c.traits || [], status: c.status || '', hidden: !!c.hidden };
   }
   /** 这份方案能自动用的案例（没隐藏、不是 unsure）：给了空间 = 拍那个空间的（setCases 先分好）。

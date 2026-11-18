@@ -82,6 +82,15 @@ test('vocab: match patterns recognise brief options and folder names', () => {
   assert.deepEqual(V.scopeCabinets(null), []);
 });
 
+test('product words: VISI (case-vocab.js MB.clProductOk) and the server (catalog.js isProduct) agree', () => {
+  const MB = loadBrowser();
+  const words = ['水吧柜', '书桌', '玄关柜', '榻榻米', '神台', '吧台', '电视墙', '衣柜', '阳台', '平台', '陈先生柜', '测试柜', '柜', 'IMG柜', '2F柜',
+    '超级超级超级长的名字柜', '格栅', '屏风', '书房', '沙发', ''];
+  for (const w of words) assert.equal(MB.clProductOk(w), lib.catalog.isProduct(w), w);
+  assert.equal(lib.catalog.isProduct('水吧柜'), true);
+  assert.equal(lib.catalog.isProduct('陈先生柜'), false);
+});
+
 test('vocab: browser file is plain ES5 (no modules, arrows, let/const, template strings)', () => {
   new vm.Script(src);
   const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
