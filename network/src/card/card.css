@@ -140,9 +140,9 @@ h1.name.cjk, .op-name.cjk { letter-spacing: 0.06em; }
 .chip { padding: 7px 12px; border-radius: 999px; background: var(--field); font-size: 13px; font-weight: 600; }
 
 /* 关于我（一小段） */
-.me { display: flex; gap: 14px; align-items: flex-start; }
-.me-photo { flex-shrink: 0; width: 96px; height: 120px; border-radius: 12px; object-fit: cover; object-position: 50% 70%; }
-.me-text { margin: 0; font-size: 14.5px; line-height: 1.7; color: var(--muted); }
+.me { display: flex; flex-direction: column; gap: 14px; }
+.me-photo { width: 100%; aspect-ratio: 4 / 3; border-radius: 14px; object-fit: cover; object-position: 50% 62%; }
+.me-text { margin: 0; font-size: 15px; line-height: 1.75; color: var(--muted); white-space: pre-line; }
 .socials { list-style: none; margin: 0; padding: 0; }
 .socials a { display: flex; justify-content: space-between; align-items: center; padding: 13px 0; border-bottom: 1px solid var(--hair); font-size: 15.5px; text-decoration: none; }
 .socials li:first-child a { padding-top: 2px; }
