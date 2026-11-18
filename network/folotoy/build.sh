@@ -48,7 +48,7 @@ git -C "${CACHE}/ai-passport" archive "${UPSTREAM_COMMIT}" | tar -x -C "${SRC}"
 # --- 2. 叠上 SPACE 名片 ---
 if [[ "${MODE}" == "space" ]]; then
   cp "${HERE}"/main/* "${SRC}/main/"
-  cp "${HERE}/tests/test_space_card_model.c" "${SRC}/tests/"
+  cp "${HERE}"/tests/test_*.c "${SRC}/tests/"
   cat "${HERE}/sdkconfig.space.defaults" >> "${SRC}/sdkconfig.defaults"
 fi
 
@@ -75,6 +75,7 @@ docker run --rm -v "${SRC}:/project" -w /project \
     set -e
     if [ "$MODE" = space ]; then
       cc -std=c11 -Wall -Wextra -Werror -Imain main/space_card_model.c tests/test_space_card_model.c -o /tmp/t && /tmp/t
+      cc -std=c11 -Wall -Wextra -Werror -Imain main/space_card_model.c main/car_remote_model.c tests/test_car_remote_model.c -o /tmp/t2 && /tmp/t2
     fi
     idf.py set-target esp32c3 >/tmp/target.log 2>&1 || { tail -30 /tmp/target.log; exit 1; }
     idf.py build >/tmp/build.log 2>&1 || { tail -60 /tmp/build.log; exit 1; }

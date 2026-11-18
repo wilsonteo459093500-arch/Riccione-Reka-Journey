@@ -1,7 +1,8 @@
 """把模拟画面转成 PNG、用 OpenCV 扫二维码，并拼一张对照图。
 
-用法：python scan_qr.py <资料夹> <预期网址1> [<预期网址2> ...]
+用法：python scan_qr.py <资料夹> [<预期网址1> <预期网址2> ...]
   资料夹里的 *.ppm 照档名顺序扫；每张扫出的网址要在预期清单里，扫不到或不对就失败。
+  没给预期网址（车用画面没有二维码）：只转 PNG、拼对照图。
 """
 import sys
 from pathlib import Path
@@ -24,6 +25,9 @@ def main() -> int:
         png = ppm.with_suffix(".png")
         Image.open(ppm).save(png)
         images.append(Image.open(png).convert("RGB"))
+        if not expected:
+            print(f"画面  {png.name}")
+            continue
         text, _, _ = detector.detectAndDecode(cv2.imread(str(png)))
         good = text in expected
         ok &= good

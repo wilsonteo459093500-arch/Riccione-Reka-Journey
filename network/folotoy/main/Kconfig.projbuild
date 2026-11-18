@@ -30,4 +30,11 @@ menu "SPACE card"
         string "Caption under the event QR (ASCII)"
         default "Event check-in"
 
+    config SPACE_REMOTE_NAME
+        string "Car remote Bluetooth name (ASCII)"
+        default "SPACE Remote"
+        help
+            车用遥控器模式在手机蓝牙清单上的名字（名片画面「下」长按进车用模式）。
+            第一次在手机「设定 → 蓝牙」里配对这个名字，之后自动重连。
+
 endmenu
