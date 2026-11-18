@@ -35,7 +35,7 @@ const T = {
     thanks: (n) => (n ? `谢谢，${n}！` : '谢谢！'), thanksSub: '资料收到了。顺手发个 WhatsApp 给我，我就记得你是哪一位 😊',
     waMe: '发 WhatsApp 给我', again: '再留一次',
     dock: '交换联络方式', sound: '声音',
-    skip: '跳过', cue: '往下看，认识我', story: '发展历程', firm: '公司', awards: '奖项', places: '展厅与展会', shows: '常年参展', groups: '商会与资源', cards: '我的名片', cardsSub: '点一下看大图',
+    skip: '跳过', cue: '往下看　认识我', story: '发展历程', firm: '公司', awards: '奖项', places: '展厅与展会', shows: '常年参展', groups: '商会与资源', cards: '我的名片', cardsSub: '点一下看大图',
     errNet: '连不上，检查一下网络再试一次', errBusy: '送出太多次了，请稍后再试，或直接 WhatsApp 我',
     fail: '名片暂时打不开，请稍后再试。',
     lang: 'EN',

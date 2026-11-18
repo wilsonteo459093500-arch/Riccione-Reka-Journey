@@ -57,13 +57,13 @@ export const DEFAULT_CARD = {
   name: 'Wilson Teo',
   name_alt: '张炜盛',
   title: '董事 Director · 家族企业第二代',
-  company: 'RICCIONE 瑞吉欧 · 溪岸 SAIL',
+  company: 'RICCIONE 瑞吉欧 · 溪岸 SAIL BY RICCIONE REKA',
   tagline: '以木为语，与自然共生。',
   intro: '我是 Wilson，麻坡长大的家族企业第二代。小时候发誓不接班，后来为了家人考了 CIMA 特许管理会计师，再从仓库扛货做起。现在带着瑞吉欧和溪岸，在马来西亚做实木家具与全屋定制。我没有成功，我只是还在路上。',
   about_photo_path: '/card/father.jpg',
   firm: {
     title: 'RICCIONE 瑞吉欧',
-    lead: '专注自然主义与实木的家具品牌。2025 年起成立 Riccione Reka 全屋定制，成为溪岸 Sail 的东南亚总代理。',
+    lead: '专注自然主义与实木的家具品牌。2025 年起成立 Riccione Reka 全屋定制，成为溪岸 SAIL BY RICCIONE REKA 的东南亚总代理。',
     photo_path: '/card/showroom-kl.jpg',
     stats: [
       { value: '2002', label: '中国公司成立（广东瑞吉欧家具有限公司）' },
@@ -117,14 +117,14 @@ export const DEFAULT_CARD = {
       { year: '2019', text: '首次参展 CIFF 广州，产品销往日本与欧洲' },
       { year: '2020', text: '吉隆坡 11,000 sq ft 展厅落成；受邀参展 CIFF 上海设计馆' },
       { year: '2024', text: '中国 18 家品牌门店；马来西亚线上线下一体化零售' },
-      { year: '2025', text: 'Riccione Reka 全屋定制成立，成为溪岸 Sail 东南亚总代理' },
+      { year: '2025', text: 'Riccione Reka 全屋定制成立，成为溪岸 SAIL BY RICCIONE REKA 东南亚总代理' },
     ],
   },
 
   offers: [
     '全屋定制：门、墙、柜一体化，从设计、生产到安装',
     '100% 实木家具，模块化，按你的家调整',
-    '溪岸 Sail 自然主义定制：建筑师、设计师的项目',
+    '溪岸 SAIL BY RICCIONE REKA 自然主义定制：建筑师、设计师的项目',
     '吉隆坡四层展厅：来喝杯咖啡，也可以借来办小型活动',
     '二代接班、家族生意：二代聊二代',
     '中马两地的设计、工程与供应链人脉',
@@ -140,7 +140,7 @@ export const DEFAULT_CARD = {
   socials: [
     { platform: 'instagram', url: 'https://www.instagram.com/wilsonteo0419/', label: 'Wilson 个人', icon_path: '/card/avatar.jpg' },
     { platform: 'instagram', url: 'https://www.instagram.com/riccione_furniture/', label: '瑞吉欧 RICCIONE', icon_path: '/card/logo-riccione.png' },
-    { platform: 'instagram', url: 'https://www.instagram.com/sail_riccione_reka/', label: '溪岸 Sail', icon_path: '/card/logo-sail.png' },
+    { platform: 'instagram', url: 'https://www.instagram.com/sail_riccione_reka/', label: '溪岸 SAIL BY RICCIONE REKA', icon_path: '/card/logo-sail.png' },
     { platform: 'website', url: 'https://www.riccione.asia/', label: '官网', icon_path: '/card/logo-riccione.png' },
   ],
   groups: [

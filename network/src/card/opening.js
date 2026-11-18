@@ -64,7 +64,7 @@ export function mountOpening({ h, card, lang, labels, force = false }) {
   function paintText() {
     const { card: c, labels: l } = cur;
     final.replaceChildren(
-      c.company ? h('p.op-co', null, c.company) : null,
+      c.company ? h('p.op-co', null, c.company.split(/\s*·\s*/).map((x) => h('span', null, x))) : null,
       h('h2.op-name', null, c.name, c.name_alt ? h('span.op-alt', null, c.name_alt) : null),
       c.tagline ? h('p.op-tag', null, c.tagline) : null,
     );

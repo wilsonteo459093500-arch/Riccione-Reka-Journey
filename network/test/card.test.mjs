@@ -59,7 +59,7 @@ test('公司 / 奖项 / 展厅：只留有内容的、上限；预设名片讲�
   assert.equal(c.places.length, 1);
   assert.deepEqual(c.exhibitions, ['CIFF', 'ARCHIDEX']);
   const d = publicCard(DEFAULT_CARD, 'https://x.supabase.co');
-  assert.equal(d.company, 'RICCIONE 瑞吉欧 · 溪岸 SAIL'); // 公司名字（字串）不能被「公司」区块盖掉
+  assert.equal(d.company, 'RICCIONE 瑞吉欧 · 溪岸 SAIL BY RICCIONE REKA'); // 公司名字（字串）不能被「公司」区块盖掉
   assert.ok(d.firm.stats.some((m) => m.value === '2002'));
   assert.ok(d.awards.items.some((m) => /MUSE/.test(m.title)) && d.awards.items.some((m) => /ARCHIDEX/.test(m.title)));
   assert.equal(d.awards.photo, '/card/awards.jpg');
