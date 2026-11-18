@@ -23,18 +23,23 @@
 
   var MB = window.MB = window.MB || {};
 
-  // 风格：暂定九种，看完 100 张样本再定。series = 对应溪岸的五个系列（MB.SERIES）。
+  // 风格：九种 + 公司文件夹名常写的欧式、美式、混搭。series = 对应溪岸的五个系列（MB.SERIES），空 = 不对应。
+  // match 也拿来读文件夹名：「日期-城市-客户-风格」，例：20210513-上海-方女士-现代美式 → 现代简约 + 美式（照字出现的先后）
   // 旧需求卡选项要一直认得（客户手上还没送出的卡）：match 只加不减
   MB.CASE_STYLES = [
     { key: 'wood', zh: '原木', en: 'Natural wood', series: 'misty', match: '原木|natural wood' },
     { key: 'wabi', zh: '微侘寂', en: 'Subtle wabi-sabi', series: 'wabi', match: '侘寂|wabi' },
     { key: 'cream', zh: '奶油风', en: 'Cream style', series: 'misty', match: '奶油|cream' },
     { key: 'french', zh: '轻法式', en: 'Light French', series: 'weaving', match: '法式|french' },
-    { key: 'midcentury', zh: '中古', en: 'Mid-century', series: 'weaving', match: '中古|mid-?century|vintage' },
-    { key: 'modern', zh: '现代简约', en: 'Modern minimal', series: 'skeleton', match: '现代简约|简约|modern minimal|minimalis' },
+    { key: 'midcentury', zh: '中古', en: 'Mid-century', series: 'weaving', match: '中古|复古|mid-?century|vintage|retro' },
+    { key: 'modern', zh: '现代简约', en: 'Modern minimal', series: 'skeleton', match: '现代|简约|极简|modern minimal|minimalis' },
     { key: 'japandi', zh: '日式', en: 'Japandi', series: 'misty', match: '日式|japandi|japanese' },
     { key: 'nordic', zh: '北欧', en: 'Nordic', series: 'misty', match: '北欧|nordic|scandi' },
-    { key: 'luxe', zh: '轻奢', en: 'Modern luxe', series: 'mountain', match: '轻奢|luxe|luxury' }
+    { key: 'luxe', zh: '轻奢', en: 'Modern luxe', series: 'mountain', match: '轻奢|luxe|luxury' },
+    // 公司文件夹名常见、不对应溪岸五个系列的（series 空：方案不拿它们配系列）
+    { key: 'european', zh: '欧式', en: 'European', series: '', match: '欧式|european' },
+    { key: 'american', zh: '美式', en: 'American', series: '', match: '美式|american' },
+    { key: 'mixed', zh: '混搭', en: 'Eclectic', series: '', match: '混搭|eclectic|mix(ed)? style' }
   ];
 
   // 柜类：老板确认的 15 种。rooms = 通常出现在哪些空间；空 = 不限空间
@@ -97,6 +102,8 @@
     return null;
   }
   MB.caseStyle = function (key) { return find(MB.CASE_STYLES, key); };
+  // 案例的风格最多两种（style + style2，例：现代 + 美式）：任一种对上就算
+  MB.hasStyle = function (c, key) { return !!key && !!c && (c.style === key || c.style2 === key); };
   MB.caseCabinet = function (key) { return find(MB.CASE_CABINETS, key); };
 
   MB.scopeCabinets = function (scopes) {

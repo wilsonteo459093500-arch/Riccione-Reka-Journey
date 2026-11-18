@@ -1317,7 +1317,7 @@
   }
   /** 公司案例的筛选（只在来源 = 公司案例时用） */
   function caseMatch(im, f) {
-    return (!f.style || im.style === f.style) && (!f.cab || (im.cabinets || []).indexOf(f.cab) > -1) && (!f.pid || im.pid === f.pid);
+    return (!f.style || MB.hasStyle(im, f.style)) && (!f.cab || (im.cabinets || []).indexOf(f.cab) > -1) && (!f.pid || im.pid === f.pid);
   }
   /** 筛好的一页：{ chips, cfilter, items（这一页要画的）, pager, total } */
   function gallery(f, all) {

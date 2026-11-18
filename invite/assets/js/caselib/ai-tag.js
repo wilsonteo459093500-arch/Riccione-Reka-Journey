@@ -67,7 +67,10 @@
     modern: '现代简约 Modern minimal：白、灰、黑为主，直线、平整的无把手大面板，几乎没有装饰，木纹不是主角。',
     japandi: '日式 Japandi：浅橡木 / 白蜡木，木格栅、低矮的家具，纸、麻、竹这类天然材质，非常平静。',
     nordic: '北欧 Nordic：白墙配浅色木头，明亮、功能性强，偶尔一点颜色点缀，造型简单。',
-    luxe: '轻奢 Modern luxe：大理石 / 岩板、金色 / 香槟色 / 黑色金属收边，带灯的玻璃展示柜、亮面、皮革，颜色偏深、有质感。'
+    luxe: '轻奢 Modern luxe：大理石 / 岩板、金色 / 香槟色 / 黑色金属收边，带灯的玻璃展示柜、亮面、皮革，颜色偏深、有质感。',
+    european: '欧式 European：古典的雕花、罗马柱、繁复的线脚和门板造型，对称、隆重，常见白色或米色配金色。',
+    american: '美式 American：深色或做旧的实木、门板有框（shaker / 凸板），宽大舒适的布艺、皮沙发，温暖厚重。',
+    mixed: '混搭 Eclectic：几种风格明显混在一起（例：现代柜体配复古家具、浓烈的撞色），说不出是哪一种单一风格。'
   };
   var CABINET_LOOK = {
     kitchen: '橱柜：厨房的地柜 + 吊柜（台面、水槽、炉头、抽油烟机那一整组）。',
@@ -173,7 +176,8 @@
   }
 
   /* ---------- 多数决与 patch ---------- */
-  /** 一个项目的结果（{h: r}）→ 项目风格：有把握的票优先；都没把握就用全部的票；平手照词表顺序 */
+  /** 一个项目的结果（{h: r}）→ 项目风格：有把握的票优先；都没把握就用全部的票；平手照词表顺序。
+      最多票的那种要过半（≥ 一半的票）才算，不然留空交给人（几种风格混在一起时 AI 不硬选） */
   function majority(results) {
     var hs = Object.keys(results || {});
     function count(onlySure) {
@@ -186,9 +190,9 @@
     }
     var n = count(true);
     if (!Object.keys(n).length) n = count(false);
-    var best = '', bestN = 0;
-    keys(styles()).forEach(function (k) { if ((n[k] || 0) > bestN) { best = k; bestN = n[k]; } });
-    return best;
+    var best = '', bestN = 0, total = 0;
+    keys(styles()).forEach(function (k) { total += n[k] || 0; if ((n[k] || 0) > bestN) { best = k; bestN = n[k]; } });
+    return bestN * 2 >= total ? best : '';
   }
 
   /** 一个项目的结果 → source:'auto' 的 patch：只填空的栏位；已确认 / 不确定 / 隐藏的照片不动 */
@@ -196,8 +200,10 @@
     var out = { source: 'auto', photos: {}, projects: {} };
     var pr = index.projects && index.projects[pid];
     if (!pr) return out;
-    var top = majority(results);
-    if (top && !pr.style) out.projects[pid] = { style: top };
+    // 项目已经有风格（文件夹名读到的、或人填的）：名字优先，AI 不写任何照片风格，只补柜类、空间
+    var named = !!pr.style;
+    var top = named ? '' : majority(results);
+    if (top) out.projects[pid] = { style: top };
     var projStyle = pr.style || top;
     Object.keys(results || {}).forEach(function (h) {
       var ph = index.photos[h], r = results[h];
@@ -207,7 +213,7 @@
       if (r.room && !ph.room) x.room = r.room;
       if (r.cabinets.length && !(ph.cabinets && ph.cabinets.length)) x.cabinets = r.cabinets.slice();
       // 照片自己的风格：只有 AI 有把握、又跟项目不一样时才写；没把握的跟项目走
-      if (r.style && r.styleSure && projStyle && r.style !== projStyle && !ph.style) x.style = r.style;
+      if (!named && r.style && r.styleSure && projStyle && r.style !== projStyle && !ph.style) x.style = r.style;
       x.status = r.sure ? 'auto' : 'unsure';
       out.photos[h] = x;
     });

@@ -406,7 +406,7 @@
       var off = [];
       MB.caseRefs(p, resolve).forEach(function (c, i) {
         var im = resolve && resolve(c.ref);
-        var st = im && im.style && im.style !== myStyle.key ? MB.caseStyle(im.style) : null;
+        var st = im && im.style && !MB.hasStyle(im, myStyle.key) ? MB.caseStyle(im.style) : null;
         if (st) off.push('第 ' + (i + 1) + ' 个（' + st.zh + '，客户选的是' + myStyle.zh + '）');
       });
       if (off.length) add('warn', '案例和客户喜欢的风格不一样：' + off.join('、'),

@@ -129,7 +129,7 @@
       var x = P[pid];
       out.projects[pid] = {
         area: str(x.area, 60), ptype: oneOf(MB.CASE_PTYPES, x.ptype), traits: manyOf(MB.CASE_TRAITS, x.traits),
-        style: oneOf(MB.CASE_STYLES, x.style), hidden: !!x.hidden,
+        style: oneOf(MB.CASE_STYLES, x.style), style2: oneOf(MB.CASE_STYLES, x.style2), hidden: !!x.hidden,
         packs: (Array.isArray(x.packs) ? x.packs : []).filter(function (k) { return typeof k === 'string' && PACK_K.test(k) && k.length < 160; }).slice(0, 300)
       };
     });
@@ -141,7 +141,7 @@
       out.photos[h] = {
         p: x.p, k: x.k, w: num(x.w), h: num(x.h), shot: HEX16.test(x.shot || '') ? x.shot : h,
         room: oneOf(MB.CASE_ROOMS, x.room), cabinets: manyOf(MB.CASE_CABINETS, x.cabinets), style: oneOf(MB.CASE_STYLES, x.style),
-        hero: x.hero === true, desc: { zh: str(d.zh, 200), en: str(d.en, 200) },
+        style2: oneOf(MB.CASE_STYLES, x.style2), hero: x.hero === true, desc: { zh: str(d.zh, 200), en: str(d.en, 200) },
         status: oneOf(MB.CASE_STATUS, x.status) || 'new', hidden: !!x.hidden
       };
     });
@@ -155,8 +155,8 @@
   /* ---------- 自动产生的说明：风格 · 柜类 · 空间（只用标签） ---------- */
   function vocab(list, k) { for (var i = 0; i < (list || []).length; i++) if (list[i].key === k) return list[i]; return null; }
   function labelOf(e, L) {
-    var st = vocab(MB.CASE_STYLES, e.style), cab = vocab(MB.CASE_CABINETS, e.cabinets[0]), rm = MB.ROOM && MB.ROOM[e.rooms[0]];
-    var parts = [st && st[L], cab && cab[L]];
+    var st = vocab(MB.CASE_STYLES, e.style), st2 = vocab(MB.CASE_STYLES, e.style2), cab = vocab(MB.CASE_CABINETS, e.cabinets[0]), rm = MB.ROOM && MB.ROOM[e.rooms[0]];
+    var parts = [st && st[L] + (st2 ? ' + ' + st2[L] : ''), cab && cab[L]];
     // 英文柜名已经带空间（Kitchen cabinets）：空间不再说一次
     if (rm && !(L === 'en' && cab && cab.en.toLowerCase().indexOf(rm.en.toLowerCase().split(' ')[0]) > -1)) parts.push(rm[L]);
     return parts.filter(Boolean).join(' · ') || (L === 'zh' ? '公司案例' : 'SAIL project');
@@ -168,8 +168,8 @@
     PLABEL = {};
     if (!IDX) return;
     Object.keys(IDX.projects).sort().forEach(function (pid, i) {
-      var x = IDX.projects[pid], st = vocab(MB.CASE_STYLES, x.style);
-      PLABEL[pid] = [x.area, st ? st.zh : ''].filter(Boolean).concat('#' + (i + 1)).join(' · ');
+      var x = IDX.projects[pid], st = vocab(MB.CASE_STYLES, x.style), st2 = vocab(MB.CASE_STYLES, x.style2);
+      PLABEL[pid] = [x.area, st ? st.zh + (st2 ? ' + ' + st2.zh : '') : ''].filter(Boolean).concat('#' + (i + 1)).join(' · ');
     });
   }
 
@@ -179,12 +179,14 @@
     if (!IDX || !IDX.base) return;
     Object.keys(IDX.photos).forEach(function (h) {
       var x = IDX.photos[h], pr = IDX.projects[x.p];
-      var style = x.style || pr.style || '';
+      // 照片自己有风格就用照片的（最多两种），不然跟项目
+      var style = x.style || pr.style || '', style2 = (x.style ? x.style2 : pr.style2) || '';
+      if (style2 === style) style2 = '';
       var st = vocab(MB.CASE_STYLES, style);
       var e = {
         // 暂停中：照片网址都回 403 —— 不给网址，方案页、PPTX、图库就不会出现破图（印成占位框）
         id: 'c:' + h, src: state.blocked ? '' : IDX.base + x.k, thumb: THUMBS[h] || '', w: x.w, h: x.h,
-        style: style, series: st ? st.series : '', cabinets: x.cabinets.slice(), rooms: x.room ? [x.room] : [],
+        style: style, style2: style2, series: st ? st.series : '', cabinets: x.cabinets.slice(), rooms: x.room ? [x.room] : [],
         pid: x.p, area: pr.area, ptype: pr.ptype, traits: pr.traits.slice(), shot: 'c:' + x.shot,
         hero: x.hero, status: x.status, hidden: !!(x.hidden || pr.hidden), desc: { zh: x.desc.zh, en: x.desc.en }
       };

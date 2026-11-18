@@ -75,10 +75,14 @@
   };
 
   function cat() { return CL.cat || { photos: {}, projects: {}, log: [], base: '' }; }
-  function effStyle(ph) {
+  function effStyle(ph) { return effStyles(ph)[0] || ''; }
+  // 照片的风格（最多两种）：照片自己有就用照片的，不然跟项目
+  function effStyles(ph) {
     var pr = cat().projects[ph.p] || {};
-    return ph.style || pr.style || '';
+    var a = ph.style ? [ph.style, ph.style2 || ''] : [pr.style || '', pr.style2 || ''];
+    return a.filter(function (x, i) { return x && a.indexOf(x) === i; });
   }
+  function stylesZh(list) { return list.map(function (k) { return CL.styleZh(k); }).join(' + '); }
   function isHidden(ph) {
     var pr = cat().projects[ph.p];
     return !!(ph.hidden || (pr && pr.hidden));
@@ -100,7 +104,7 @@
         var cabs = ph.cabinets || [];
         if (f.cab === '_none' ? cabs.length : cabs.indexOf(f.cab) < 0) return;
       }
-      if (f.style) { var st = effStyle(ph); if (f.style === '_none' ? st : st !== f.style) return; }
+      if (f.style) { var sts = effStyles(ph); if (f.style === '_none' ? sts.length : sts.indexOf(f.style) < 0) return; }
       out.push(h);
     });
     out.sort(function (a, b) {
@@ -1056,8 +1060,8 @@
     var el = document.createElement('section');
     el.className = 'rv-tags';
     el.id = 'rv-tags';
-    el.innerHTML = '<div class="tags-row"><span class="tags-t"><b>分类</b><small>文件夹名自动标 · 标签档：备份分类、给同事共用</small></span>' +
-      '<button class="mini" type="button" id="rv-auto" title="文件夹名的风格、区域，子文件夹名的空间（厨房、主卧…）和柜子（橱柜、衣柜…）：只填空的，人改过的不动">按文件夹名字自动标</button>' +
+    el.innerHTML = '<div class="tags-row"><span class="tags-t"><b>分类</b><small>文件夹名整理（一个家一个项目、照名字标风格）· 标签档：备份分类、给同事共用</small></span>' +
+      '<button class="mini" type="button" id="rv-auto" title="月份文件夹拆成一个一个客户的家；文件夹名的风格（最多两种）、区域，子文件夹名和档名的空间、柜子：名字优先于 AI，人确认过的不动">按文件夹名字整理</button>' +
       '<button class="mini" type="button" id="rv-export" title="备份分类、给同事汇入：只有标签（没有照片）。里面有项目的文件夹名（客户名字）：只给同事，不要传给客户、也不要放进有外人的群组">汇出标签档（备份）</button>' +
       '<label class="mini" id="rv-import-lbl" title="同事汇出的标签档：这台电脑有的照片马上套用，还没有的等汇入那个文件夹后自动套用">汇入标签档' +
         '<input type="file" id="rv-import" accept=".json,application/json" hidden /></label>' +
@@ -1158,17 +1162,38 @@
     });
   }
 
+  // 月份文件夹（名字没有风格字）里装着一个一个客户的家：先问要不要拆成一个家一个项目（照片不用重传）
+  function maybeRegroup() {
+    var plan = MB.clCore.regroupPlan ? MB.clCore.regroupPlan(cat()) : [];
+    if (!plan.length) return Promise.resolve('');
+    var homes = plan.reduce(function (n, g) { return n + g.homes.length; }, 0);
+    var eg = plan[0];
+    var ask = '有 ' + plan.length + ' 个文件夹里装着好几个客户的家（例：「' + eg.name + '」里面有「' + eg.homes[0].name + '」）。\n\n' +
+      '要拆成 ' + homes + ' 个项目吗？一个家一个项目，「同项目」、帮我挑才会按客户的家来挑。照片不用重传，VISI 旧方案的照片不受影响。';
+    if (!window.confirm(ask)) return Promise.resolve('');
+    return CL.call('POST', '/api/catalog', { op: 'regroup' }).then(function (r) {
+      if (r.status !== 200 || !r.json) throw r;
+      CL.bumpRev(r.json.rev);
+      return CL.loadCatalog(true).then(function () { reapplyQueue(); return '拆成了 ' + CL.n(r.json.made | 0) + ' 个新项目（搬了 ' + CL.n(r.json.moved | 0) + ' 张照片）。'; });
+    });
+  }
+
   function runAuto() {
-    var go = beginTags('自动标签中…');
+    var go = beginTags('整理中…');
     if (!go) return Promise.resolve();
+    var split = '';
     return go.then(function (ok) {
+      if (!ok) return;
+      return maybeRegroup().then(function (msg) { split = msg; return true; }, function (r) { tagsStop(tagsFail(r)); return false; });
+    }).then(function (ok) {
       if (!ok) return;
       var p = MB.clCore.autoTags(cat());
       var nP = Object.keys(p.photos).length, nJ = Object.keys(p.projects).length;
-      if (!nP && !nJ) return tagsDone('没有可以自动标的：空着的照片，文件夹名看不出空间、柜子、风格（人改过、确认过的不会动）。');
+      if (!nP && !nJ) return tagsDone(split + '没有可以再按名字标的了（人改过、确认过的不会动）。');
       return sendAll(patchBodies(p)).then(function (res) {
         if (!res.ok) return tagsStop(tagsFail(res.r));
-        return tagsDone('已按文件夹名字自动标好 ' + CL.n(nP) + ' 张照片' + (nJ ? '、' + CL.n(nJ) + ' 个项目' : '') + '（标成「自动标签」，看一眼对不对就好）。');
+        return tagsDone(split + '已按文件夹名字标好 ' + CL.n(nP) + ' 张照片' + (nJ ? '、' + CL.n(nJ) + ' 个项目' : '') +
+          '（名字写的风格优先；标成「自动标签」，看一眼对不对就好）。名字里没写风格的家，再用「AI 看图」补。');
       });
     });
   }
@@ -1505,14 +1530,14 @@
     var cap = [];
     if (ph.room) cap.push(CL.roomZh(ph.room));
     if (ph.cabinets && ph.cabinets.length) cap.push(CL.cabZh(ph.cabinets[0]) + (ph.cabinets.length > 1 ? ' +' + (ph.cabinets.length - 1) : ''));
-    var st = effStyle(ph);
+    var st = stylesZh(effStyles(ph));
     var cls = 'rv-card st-' + esc(ph.status || 'new') + (isHidden(ph) ? ' hid' : '') + (dirty('photos', h) ? ' dirty' : '') + (R.sel === h && R.mode === 'photo' ? ' sel' : '');
     return '<button type="button" class="' + cls + '" data-h="' + esc(h) + '" title="' + esc(((c.projects[ph.p] || {}).name || '') + ' / ' + (ph.f || '')) + '">' +
       '<span class="ph"><img alt="" loading="lazy"' + (imgSrc(h) ? ' src="' + esc(imgSrc(h)) + '"' : '') + ' /></span>' +
       '<span class="st">' + esc((CL.STATUS[ph.status] || { zh: ph.status }).zh) + '</span>' +
       (ph.hero ? '<span class="hero" title="可当主图">★</span>' : '') +
       (isHidden(ph) ? '<span class="hidmark">已隐藏</span>' : '') +
-      '<span class="cap">' + (cap.length ? esc(cap.join(' · ')) : '<i>未标</i>') + (st ? '<em>' + esc(CL.styleZh(st)) + '</em>' : '') + '</span></button>';
+      '<span class="cap">' + (cap.length ? esc(cap.join(' · ')) : '<i>未标</i>') + (st ? '<em>' + esc(st) + '</em>' : '') + '</span></button>';
   }
 
   // 同一个按钮元素只换 class 和文字、图不动：
@@ -1558,7 +1583,7 @@
     if (pr.area) bits.push(pr.area);
     var pt = (MB.CASE_PTYPES || []).filter(function (x) { return x.key === pr.ptype; })[0];
     if (pt) bits.push(pt.zh);
-    if (pr.style) bits.push(CL.styleZh(pr.style));
+    if (pr.style) bits.push(stylesZh([pr.style, pr.style2].filter(Boolean)));
     (pr.traits || []).forEach(function (t) {
       var tr = (MB.CASE_TRAITS || []).filter(function (x) { return x.key === t; })[0];
       if (tr) bits.push(tr.zh);
@@ -1621,7 +1646,8 @@
     (MB.CASE_CABINETS || []).forEach(function (cb) { if (ph.room && (!cb.rooms.length || cb.rooms.indexOf(ph.room) >= 0)) cabFit[cb.key] = 1; });
     var rooms = (MB.CASE_ROOMS || []).map(function (k) { return { key: k, zh: CL.roomZh(k) }; });
     var cabs = (MB.CASE_CABINETS || []).map(function (cb) { return { key: cb.key, zh: cb.zh, fit: cabFit[cb.key] }; });
-    var styles = [{ key: '', zh: '跟项目' + (pr.style ? '（' + CL.styleZh(pr.style) + '）' : '（未定）') }].concat((MB.CASE_STYLES || []).map(function (s) { return { key: s.key, zh: s.zh }; }));
+    var styles = [{ key: '', zh: '跟项目' + (pr.style ? '（' + stylesZh([pr.style, pr.style2].filter(Boolean)) + '）' : '（未定）') }].concat((MB.CASE_STYLES || []).map(function (s) { return { key: s.key, zh: s.zh }; }));
+    var styles2 = [{ key: '', zh: '没有' }].concat((MB.CASE_STYLES || []).map(function (s) { return { key: s.key, zh: s.zh }; }));
     var stats = ['unsure', 'new', 'auto', 'confirmed'].map(function (k) { return { key: k, zh: CL.STATUS[k].zh }; });
     var desc = ph.desc || {};
     var html = '<div class="dr-nav"><button class="icon" type="button" data-nav="-1" aria-label="上一张"' + (idx > 0 ? '' : ' disabled') + '>←</button>' +
@@ -1635,6 +1661,7 @@
       '<div class="dr-sec"><p class="sub-h">空间 <i>Room</i></p>' + chips('room', rooms, ph.room || '', false) + '</div>' +
       '<div class="dr-sec"><p class="sub-h">柜类 <i>可多选 · 金框 = 这个空间常见的</i></p>' + chips('cabinets', cabs, ph.cabinets || [], true) + '</div>' +
       '<div class="dr-sec"><p class="sub-h">风格 <i>不选 = 跟项目</i></p>' + chips('style', styles, ph.style || '', false) + '</div>' +
+      (ph.style ? '<div class="dr-sec"><p class="sub-h">第二种风格 <i>可不选（例：现代 + 美式）</i></p>' + chips('style2', styles2, ph.style2 || '', false) + '</div>' : '') +
       '<label class="switch"><input type="checkbox" data-field="hero"' + (ph.hero ? ' checked' : '') + ' /><span></span>可当主图 <small>拍得完整、光线好，适合放在方案的大图</small></label>' +
       ((desc.zh || desc.en) ? '<div class="dr-sec desc"><p class="sub-h">说明（分类时写的）</p>' + (desc.zh ? '<p>' + esc(desc.zh) + '</p>' : '') + (desc.en ? '<p class="muted">' + esc(desc.en) + '</p>' : '') + '</div>' : '') +
       '<p class="dr-meta">' + (ph.by ? '上次修改：<b>' + esc(who(ph.by)) + '</b> · ' + esc(CL.time(ph.ts)) : '') +
@@ -1661,6 +1688,7 @@
       '<div class="dr-sec"><p class="sub-h">房型</p>' + chips('ptype', ptypes, pr.ptype || '', false) + '</div>' +
       '<div class="dr-sec"><p class="sub-h">家庭特点 <i>可多选</i></p>' + chips('traits', traits, pr.traits || [], true) + '</div>' +
       '<div class="dr-sec"><p class="sub-h">风格 <i>整个项目</i></p>' + chips('pstyle', styles, pr.style || '', false) + '</div>' +
+      '<div class="dr-sec"><p class="sub-h">第二种风格 <i>可不选（例：现代 + 美式）</i></p>' + chips('pstyle2', [{ key: '', zh: '没有' }].concat(styles.slice(1)), pr.style2 || '', false) + '</div>' +
       '<div class="dr-actions"><button class="btn ghost" type="button" data-act="hide-project"' + (R.bulk === 'purge' ? ' disabled title="正在删除，等删完再按"' : '') + '>' + (pr.hidden ? '复原这个项目' : '隐藏这个项目') + '</button>' +
       (R.f.pid !== pid ? '<button class="btn ghost" type="button" data-act="only-project">只看这个项目</button>' : '') + '</div>' +
       (MB.clPick && !pr.hidden ? '<div class="dr-sec dr-keep"><p class="sub-h">照片太多 <i>免费方案空间有限</i></p>' +
@@ -1951,7 +1979,8 @@
       if (!ph) return;
       if (kind === 'status') edit('photos', R.sel, 'status', v);
       else if (kind === 'room') edit('photos', R.sel, 'room', ph.room === v ? '' : v);
-      else if (kind === 'style') edit('photos', R.sel, 'style', v);
+      else if (kind === 'style') { edit('photos', R.sel, 'style', v); if (!v && ph.style2) edit('photos', R.sel, 'style2', ''); }
+      else if (kind === 'style2') edit('photos', R.sel, 'style2', v === ph.style ? '' : v);
       else if (kind === 'cabinets') {
         var cur = (ph.cabinets || []).slice();
         var i = cur.indexOf(v);
@@ -1966,6 +1995,7 @@
       if (!pr) return;
       if (kind === 'ptype') edit('projects', R.selPid, 'ptype', v);
       else if (kind === 'pstyle') edit('projects', R.selPid, 'style', v);
+      else if (kind === 'pstyle2') edit('projects', R.selPid, 'style2', v === pr.style ? '' : v);
       else if (kind === 'traits') {
         var tr = (pr.traits || []).slice();
         var j = tr.indexOf(v);

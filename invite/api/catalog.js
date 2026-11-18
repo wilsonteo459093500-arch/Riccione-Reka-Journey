@@ -13,7 +13,7 @@ import { requireUser, checkPhotoSig, packName } from './_lib/auth.js';
 import { getAdapter, indexPath, useOidc, DEL_BATCH } from './_lib/blob.js';
 import {
   emptyIndex, visiView, mutate, addPhotos, patch, setHidden, validateAddPhotos, pidOf,
-  blobPlan, writesCapped, quota, monthWrites, storedBytes, checkWrites, validatePurge, planPurge, applyPurge,
+  blobPlan, writesCapped, regroup, quota, monthWrites, storedBytes, checkWrites, validatePurge, planPurge, applyPurge,
   WRITE_CAP, PURGE_CAP, BYTES_CAP
 } from './_lib/catalog.js';
 
@@ -105,6 +105,11 @@ async function postCatalog(req, res) {
   if (op === 'hide' || op === 'unhide') {
     var hd = await mutate(adapter, path, function (index, ts) { return setHidden(index, body, op === 'hide', by, ts); }, { by: by, op: op, cap: cap });
     return send(res, 200, { rev: hd.rev, changed: hd.changed });
+  }
+  if (op === 'regroup') {
+    // 月份文件夹拆成一个一个家：只改清单，不碰照片档
+    var rg = await mutate(adapter, path, function (index, ts) { return regroup(index, body, by, ts); }, { by: by, op: 'regroup', cap: cap });
+    return send(res, 200, { rev: rg.rev, moved: rg.moved | 0, made: rg.made | 0, removed: rg.removed | 0 });
   }
   if (op === 'purge') return await purge(adapter, path, body, by, plan, res);
   throw new HttpError(400, { error: 'op' });

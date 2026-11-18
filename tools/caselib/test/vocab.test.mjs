@@ -32,9 +32,9 @@ test('vocab parity: browser case-vocab.js deep-equals _lib/vocab.js', () => {
   for (const s of scopes) assert.deepEqual(plain(MB.scopeCabinets(s)), V.scopeCabinets(s), JSON.stringify(s));
 });
 
-test('vocab: contract content (9 styles, 15 cabinets, 14 rooms, 5 ptypes, 4 traits)', () => {
-  assert.deepEqual(V.CASE_STYLES.map((s) => s.key), ['wood', 'wabi', 'cream', 'french', 'midcentury', 'modern', 'japandi', 'nordic', 'luxe']);
-  assert.deepEqual(V.CASE_STYLES.map((s) => s.series), ['misty', 'wabi', 'misty', 'weaving', 'weaving', 'skeleton', 'misty', 'misty', 'mountain']);
+test('vocab: contract content (12 styles, 15 cabinets, 14 rooms, 5 ptypes, 4 traits)', () => {
+  assert.deepEqual(V.CASE_STYLES.map((s) => s.key), ['wood', 'wabi', 'cream', 'french', 'midcentury', 'modern', 'japandi', 'nordic', 'luxe', 'european', 'american', 'mixed']);
+  assert.deepEqual(V.CASE_STYLES.map((s) => s.series), ['misty', 'wabi', 'misty', 'weaving', 'weaving', 'skeleton', 'misty', 'misty', 'mountain', '', '', '']);
   assert.deepEqual(V.CASE_CABINETS.map((c) => c.key), ['kitchen', 'wardrobe', 'display', 'bookcase', 'bedend', 'dresser', 'island', 'tvcab', 'tvwall', 'door', 'shoe', 'bathvanity', 'wallpanel', 'sideboard', 'bed']);
   assert.equal(V.CASE_ROOMS.length, 14);
   assert.deepEqual(V.CASE_PTYPES.map((p) => p.key), ['condo', 'landed', 'terrace', 'semid', 'bungalow']);

@@ -83,6 +83,21 @@ test('majority: sure votes first, all votes when none is sure, ties follow vocab
   assert.equal(A.majority({ a: R('cream', false), b: R('cream', false), c: R('wood', false) }), 'cream');
   assert.equal(A.majority({ a: R('french', true), b: R('wood', true) }), 'wood');   // 平手：词表里 wood 在前
   assert.equal(A.majority({ a: R('', false) }), '');
+  // 几种风格混在一起、没有一种过半：不硬选
+  assert.equal(A.majority({ a: R('wood', true), b: R('french', true), c: R('luxe', true) }), '');
+});
+
+test('buildPatch: a project whose folder name gave a style (or a person set one) gets no photo styles from AI — only cabinets / room', () => {
+  const { idx, p1 } = makeIndex();
+  S.patch(idx, { source: 'auto', projects: { [p1]: { style: 'modern', style2: 'wabi' } } }, 'Claude', T0 + 1);
+  const h = [1, 2, 3].map(H);
+  const p = plain(A.buildPatch(idx, p1, { [h[0]]: R('french', true, ['wardrobe'], 'master'), [h[1]]: R('luxe', true, [], 'living'), [h[2]]: R('french', true, ['kitchen'], 'kitchen') }));
+  assert.deepEqual(p.projects, {});
+  assert.ok(Object.values(p.photos).every((x) => !('style' in x)), JSON.stringify(p.photos));
+  assert.deepEqual(p.photos[h[0]], { room: 'master', cabinets: ['wardrobe'], status: 'auto' });
+  // 新增的三种风格也在 AI 的选项里
+  const sys = A.systemPrompt();
+  for (const k of ['european', 'american', 'mixed']) assert.ok(sys.includes(k + '：'), k);
 });
 
 test('buildPatch fills only empty fields, sets project style by majority, odd-one-out photo style only when sure; server accepts it', () => {

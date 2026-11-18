@@ -257,8 +257,8 @@
   }
 
   /* ---------- patch ---------- */
-  var PHOTO_FIELDS = ['room', 'cabinets', 'style', 'hero', 'desc', 'status'];
-  var PROJECT_FIELDS = ['area', 'ptype', 'traits', 'style'];
+  var PHOTO_FIELDS = ['room', 'cabinets', 'style', 'style2', 'hero', 'desc', 'status'];
+  var PROJECT_FIELDS = ['area', 'ptype', 'traits', 'style', 'style2'];
 
   function vocabErr(field, id, value) { return bad('vocab', { field: field, id: id, value: value }); }
   function cleanList(arr, ok, field, id) {
@@ -277,7 +277,7 @@
       var val = x[f];
       if (PHOTO_FIELDS.indexOf(f) < 0) throw vocabErr(f, h);
       if (f === 'room') { if (val !== '' && !isRoom(val)) throw vocabErr(f, h, val); out.room = val; }
-      else if (f === 'style') { if (val !== '' && !isStyle(val)) throw vocabErr(f, h, val); out.style = val; }
+      else if (f === 'style' || f === 'style2') { if (val !== '' && !isStyle(val)) throw vocabErr(f, h, val); out[f] = val; }
       else if (f === 'cabinets') out.cabinets = cleanList(val, isCabinet, f, h);
       else if (f === 'hero') { if (typeof val !== 'boolean') throw vocabErr(f, h, val); out.hero = val; }
       else if (f === 'desc') {
@@ -304,7 +304,7 @@
       if (PROJECT_FIELDS.indexOf(f) < 0) throw vocabErr(f, pid);
       if (f === 'area') { if (typeof val !== 'string') throw vocabErr(f, pid, val); out.area = cleanText(val, 60); }
       else if (f === 'ptype') { if (val !== '' && !isPtype(val)) throw vocabErr(f, pid, val); out.ptype = val; }
-      else if (f === 'style') { if (val !== '' && !isStyle(val)) throw vocabErr(f, pid, val); out.style = val; }
+      else if (f === 'style' || f === 'style2') { if (val !== '' && !isStyle(val)) throw vocabErr(f, pid, val); out[f] = val; }
       else if (f === 'traits') out.traits = cleanList(val, isTrait, f, pid);
     });
     return out;
@@ -389,6 +389,90 @@
     return { changed: changed, n: changed, noop: changed === 0 };
   }
 
+  /* ---------- 风格字：照「字在名字里出现的先后」，最多两个（同一种只算一次） ----------
+     「20210513-上海-方女士-现代美式」→ [modern, american]；「简约现代+侘寂风」→ [modern, wabi]（伺服器 catalog.js 一模一样） */
+  function stylesAt(name) {
+    var t = String(name || ''), hits = [];
+    (MB.CASE_STYLES || []).forEach(function (st, i) {
+      var m = new RegExp(st.match, 'i').exec(t);
+      if (m) hits.push({ key: st.key, at: m.index, i: i });
+    });
+    hits.sort(function (a, b) { return a.at - b.at || a.i - b.i; });
+    return hits.slice(0, 2);
+  }
+  function stylesIn(name) { return stylesAt(name).map(function (x) { return x.key; }); }
+
+  /* ---------- 月份文件夹拆成一个一个家（regroup） ----------
+     项目名没有风格字（例：「2024年3月上海案例」），而照片的第一层子文件夹名有风格字
+     （「202403上海-沈晓燕-简约现代+侘寂风」）→ 那个子文件夹才是一个家：照片搬过去（f 去掉第一层），
+     新项目的 id 由子文件夹名算（跟以后直接上传那个文件夹一样）。缩图包新项目共用（planPurge 不会删还有人用的包）。
+     直接放在月份文件夹里的照片、没风格字的子文件夹留在原项目；原项目搬空就拿掉。照片 id 不变（VISI 旧方案不断） */
+  function regroupPlan(index) {
+    var out = [];
+    Object.keys(index.projects || {}).sort().forEach(function (pid) {
+      var pr = index.projects[pid];
+      if (stylesIn(pr.name).length) return;
+      var groups = {}, order = [];
+      Object.keys(index.photos || {}).sort().forEach(function (h) {
+        var ph = index.photos[h];
+        if (ph.p !== pid) return;
+        var f = String(ph.f || ''), i = f.indexOf('/');
+        if (i <= 0) return;
+        var seg = cleanText(f.slice(0, i), 120);
+        if (!seg || !stylesIn(seg).length) return;
+        if (!groups[seg]) { groups[seg] = []; order.push(seg); }
+        groups[seg].push(h);
+      });
+      var homes = order.map(function (seg) { return { name: seg, pid: pidOf(seg), photos: groups[seg] }; })
+        .filter(function (x) { return x.pid !== pid; });
+      if (homes.length) out.push({ from: pid, name: pr.name, homes: homes });
+    });
+    return out;
+  }
+  function regroup(index, input, by, now) {
+    input = input || {};
+    var plan = regroupPlan(index);
+    if (input.pids != null) {
+      if (!Array.isArray(input.pids) || input.pids.length > MAX_PATCH_ENTRIES) throw bad('pids');
+      input.pids.forEach(function (p) { if (!hasProject(index, p)) throw bad('unknown', { field: 'projects', id: String(p).slice(0, 40) }); });
+      plan = plan.filter(function (g) { return input.pids.indexOf(g.from) >= 0; });
+    }
+    var moved = 0, made = 0, removed = 0;
+    plan.forEach(function (g) {
+      var src = index.projects[g.from], srcPb = packBytes(src), touched = [g.from];
+      g.homes.forEach(function (home) {
+        var pr = index.projects[home.pid];
+        if (!pr) {
+          pr = index.projects[home.pid] = { name: home.name, area: '', ptype: '', traits: [], style: '', packs: [], n: 0, pb: 0, by: by, ts: now };
+          if (src.hidden) pr.hidden = { by: by, ts: now };
+          made++;
+        }
+        if (typeof pr.pb !== 'number') pr.pb = packBytes(pr);
+        (src.packs || []).forEach(function (k) { if (pr.packs.indexOf(k) < 0) pr.packs.push(k); });
+        home.photos.forEach(function (h) {
+          var ph = index.photos[h], f = String(ph.f || '');
+          ph.p = home.pid;
+          ph.f = f.slice(f.indexOf('/') + 1);
+          moved++;
+        });
+        touched.push(home.pid);
+      });
+      touched.forEach(function (pid) {
+        if (!index.projects[pid]) return;
+        index.projects[pid].n = Object.keys(index.photos).filter(function (h) { return index.photos[h].p === pid; }).length;
+      });
+      if (!src.n) {
+        // 搬空了：缩图包的大小算到第一个家（总储存量不变）
+        var first = index.projects[g.homes[0].pid];
+        first.pb = (first.pb || 0) + srcPb;
+        delete index.projects[g.from];
+        removed++;
+      }
+      touched.forEach(function (pid) { if (index.projects[pid]) groupShots(index, pid); });
+    });
+    return { moved: moved, made: made, removed: removed, n: moved, noop: !moved };
+  }
+
   /* ---------- 给 VISI 的版本：拿掉项目名、档案路径、操作纪录 ---------- */
   function visiView(index) {
     var out = clone(index);
@@ -451,9 +535,17 @@
     hs.forEach(function (h) { touched[index.photos[h].p] = 1; });
     Object.keys(touched).forEach(function (pid) {
       if (left[pid] || !hasProject(index, pid)) return;
-      var pr = index.projects[pid];
       emptied.push(pid);
-      (pr.packs || []).forEach(function (k) { if (typeof k === 'string' && k) packs.push(k); });
+    });
+    // 缩图包可能几个项目共用（月份文件夹拆成好几个家之后）：还有别的项目在用的包不删
+    var keep = {};
+    Object.keys(index.projects).forEach(function (pid) {
+      if (emptied.indexOf(pid) >= 0) return;
+      (index.projects[pid].packs || []).forEach(function (k) { keep[k] = 1; });
+    });
+    emptied.forEach(function (pid) {
+      var pr = index.projects[pid];
+      (pr.packs || []).forEach(function (k) { if (typeof k === 'string' && k && !keep[k] && packs.indexOf(k) < 0) packs.push(k); });
       freed += packBytes(pr);
     });
     return { photos: hs, keys: keys, packs: packs, emptied: emptied, freed: freed };
@@ -553,7 +645,7 @@
     ['shoe', '鞋柜|shoe'],
     ['bathvanity', '浴室柜|洗手台|洗脸台|bath(room)?[\\s-]?vanity|vanity'],
     ['wallpanel', '护墙板|墙板|wall[\\s-]?panel'],
-    ['sideboard', '餐边柜|sideboard'],
+    ['sideboard', '餐边柜|水吧|吧台|咖啡吧|sideboard'],
     ['bed', '定制床|榻榻米|床架|custom bed|bed[\\s-]?frame']
   ];
   var ROOM_RE = ROOM_WORDS.map(function (x) { return [x[0], new RegExp(x[1], 'i')]; });
@@ -576,14 +668,6 @@
   // 开头是这些字、后面还有字：一定是地名（Taman Desa Jaya、Bandar Baru Bangi…）。Sri、Alam、Mutiara 也可能是人名：不算
   var PLACE = /^(taman|tmn|bandar|bdr|desa|kota|kampung|kg|bukit|bkt|sungai|sg|tanjung|tg|teluk|pulau|lembah|puncak)\s+[a-z]/i;
 
-  function styleIn(name) {
-    var list = MB.CASE_STYLES || [];
-    for (var i = 0; i < list.length; i++) {
-      var m = new RegExp(list[i].match, 'i').exec(name);
-      if (m) return { key: list[i].key, at: m.index };
-    }
-    return null;
-  }
   function areaBefore(name, at) {
     // 风格字所在的那一段（「轻法式」整段）之前 = 区域，之后 = 客户
     var start = at > 0 ? name.lastIndexOf(' ', at - 1) + 1 : 0;
@@ -601,17 +685,23 @@
     // 看不出是地名（可能是客户的英文名字、楼盘名）：留空。after 不再拿来猜 —— 后面有称呼不代表前面是地名
     return PLACE.test(a) ? a : '';
   }
-  /** 文件夹名 → {style, area}（猜不到就是空字串） */
+  /** 文件夹名 → {style, style2, area}（猜不到就是空字串）。两种风格照字出现的先后 */
   function guessProject(name) {
     var n = cleanText(String(name || ''), 120).replace(/[_·,，、|]+/g, ' ').replace(/\s+-+\s+|\s+-+$|^-+\s+/g, ' ').replace(/\s+/g, ' ').trim();
-    var st = styleIn(n);
-    return { style: st ? st.key : '', area: st ? areaBefore(n, st.at) : '' };
+    var st = stylesAt(n);
+    return { style: st[0] ? st[0].key : '', style2: st[1] ? st[1].key : '', area: st[0] ? areaBefore(n, st[0].at) : '' };
   }
-  /** 照片的相对路径（项目里面）→ {room, cabinets}：看子文件夹名（档名本身不算） */
+  /** 照片的相对路径（项目里面）→ {room, cabinets, style, style2}：
+      空间、柜类看子文件夹名和档名（例：「水吧柜-…-3.jpg」→ 餐边柜）；风格只看子文件夹名（最里面那层有风格字的） */
   function guessPhoto(f) {
     var parts = String(f || '').split('/').filter(Boolean);
-    parts.pop();
-    var room = '', cabs = {};
+    var file = (parts.pop() || '').replace(/\.[A-Za-z0-9]{2,5}$/, '');
+    var room = '', cabs = {}, style = '', style2 = '';
+    for (var k = parts.length - 1; k >= 0 && !style; k--) {
+      var st = stylesIn(parts[k]);
+      if (st.length) { style = st[0]; style2 = st[1] || ''; }
+    }
+    if (file) parts.push(file);
     for (var i = parts.length - 1; i >= 0 && !room; i--) {
       for (var j = 0; j < ROOM_RE.length; j++) if (ROOM_RE[j][1].test(parts[i])) { room = ROOM_RE[j][0]; break; }
     }
@@ -629,10 +719,12 @@
       var ks = Object.keys(only);
       if (ks.length === 1 && isRoom(ks[0])) room = ks[0];
     }
-    return { room: room, cabinets: cabinets };
+    return { room: room, cabinets: cabinets, style: style, style2: style2 };
   }
-  /** 整份清单（或 opts.pids 那几个项目、opts.photos 那几张）→ 一份 source:'auto' 的 patch：只填空的。
-      已确认 / 不确定（人看过的）照片不动；项目只给还空着的栏位 */
+  /** 整份清单（或 opts.pids 那几个项目、opts.photos 那几张）→ 一份 source:'auto' 的 patch。
+      空间、柜类只填空的。风格：名字优先 —— 子文件夹名有风格字就照它；项目名有风格字时，
+      照片上机器（AI）写的风格清掉、跟项目走。已确认（人看过的）照片一个字不动；「不确定」的照样是不确定。
+      项目：风格照名字（空的、或上次是自动填的才改 —— 人改过的伺服器也不让盖），区域只填空的 */
   function autoTags(index, opts) {
     opts = opts || {};
     var pids = opts.pids ? opts.pids.filter(function (p) { return hasProject(index, p); }) : Object.keys(index.projects || {});
@@ -641,20 +733,36 @@
     var inP = {};
     pids.forEach(function (p) { inP[p] = 1; });
     var out = { source: 'auto', photos: {}, projects: {} };
+    var named = {};
     pids.forEach(function (pid) {
       var pr = index.projects[pid], g = guessProject(pr.name), x = {};
-      if (g.style && !pr.style) x.style = g.style;
+      var mine = !pr.by || pr.by === AUTO_BY;
+      if (g.style) {
+        named[pid] = 1;
+        if (g.style !== (pr.style || '') && (!pr.style || mine)) x.style = g.style;
+        if (g.style2 !== (pr.style2 || '') && (!pr.style2 || mine)) x.style2 = g.style2;
+      }
       if (g.area && !pr.area) x.area = g.area;
       if (Object.keys(x).length) out.projects[pid] = x;
     });
     Object.keys(index.photos || {}).forEach(function (h) {
       var ph = index.photos[h];
       if (!inP[ph.p] || (only && !only[h])) return;
-      if (ph.status === 'confirmed' || ph.status === 'unsure') return;
+      if (ph.status === 'confirmed') return;
       var g = guessPhoto(ph.f), x = {};
-      if (g.room && !ph.room) x.room = g.room;
-      if (g.cabinets.length && !(ph.cabinets && ph.cabinets.length)) x.cabinets = g.cabinets;
-      if (Object.keys(x).length) out.photos[h] = x;
+      // 「不确定」：人可能看过，空间、柜类不补；只有风格照名字改（名字优先于 AI）
+      var unsure = ph.status === 'unsure';
+      if (!unsure && g.room && !ph.room) x.room = g.room;
+      if (!unsure && g.cabinets.length && !(ph.cabinets && ph.cabinets.length)) x.cabinets = g.cabinets;
+      if (g.style) {
+        if (g.style !== (ph.style || '')) x.style = g.style;
+        if (g.style2 !== (ph.style2 || '')) x.style2 = g.style2;
+      } else if (named[ph.p] && (ph.style || ph.style2)) {
+        x.style = ''; x.style2 = '';
+      }
+      if (!Object.keys(x).length) return;
+      if (unsure) x.status = 'unsure';
+      out.photos[h] = x;
     });
     return out;
   }
@@ -682,11 +790,11 @@
     var out = { kind: TAGS_KIND, v: 1, at: ts || 0, by: String(by || '').slice(0, 30), projects: {}, photos: {} };
     Object.keys(index.projects || {}).sort().forEach(function (pid) {
       var x = index.projects[pid];
-      out.projects[pid] = { name: x.name || '', area: x.area || '', ptype: x.ptype || '', traits: (x.traits || []).slice(), style: x.style || '', hidden: !!x.hidden };
+      out.projects[pid] = { name: x.name || '', area: x.area || '', ptype: x.ptype || '', traits: (x.traits || []).slice(), style: x.style || '', style2: x.style2 || '', hidden: !!x.hidden };
     });
     Object.keys(index.photos || {}).sort().forEach(function (h) {
       var x = index.photos[h], d = x.desc || {};
-      out.photos[h] = { p: x.p, room: x.room || '', cabinets: (x.cabinets || []).slice(), style: x.style || '', hero: !!x.hero,
+      out.photos[h] = { p: x.p, room: x.room || '', cabinets: (x.cabinets || []).slice(), style: x.style || '', style2: x.style2 || '', hero: !!x.hero,
         desc: { zh: d.zh || '', en: d.en || '' }, status: x.status || 'new', hidden: !!x.hidden };
     });
     return out;
@@ -702,13 +810,13 @@
   function cleanProjectTag(x) {
     if (!x || typeof x !== 'object' || Array.isArray(x)) return null;
     return { name: cleanText(x.name, 120), area: cleanText(x.area, 60), ptype: pickOne(isPtype, x.ptype),
-      traits: pickMany(isTrait, x.traits), style: pickOne(isStyle, x.style), hidden: x.hidden === true };
+      traits: pickMany(isTrait, x.traits), style: pickOne(isStyle, x.style), style2: pickOne(isStyle, x.style2), hidden: x.hidden === true };
   }
   function cleanPhotoTag(x) {
     if (!x || typeof x !== 'object' || Array.isArray(x)) return null;
     var d = x.desc && typeof x.desc === 'object' ? x.desc : {};
     return { p: PID_RE.test(x.p || '') ? x.p : '', room: pickOne(isRoom, x.room), cabinets: pickMany(isCabinet, x.cabinets),
-      style: pickOne(isStyle, x.style), hero: x.hero === true, desc: { zh: cleanText(d.zh, 200), en: cleanText(d.en, 200) },
+      style: pickOne(isStyle, x.style), style2: pickOne(isStyle, x.style2), hero: x.hero === true, desc: { zh: cleanText(d.zh, 200), en: cleanText(d.en, 200) },
       status: pickOne(isStatus, x.status) || 'new', hidden: x.hidden === true };
   }
   /** 读进来的标签档：不是标签档就丢 400 {error:'kind'}；不认得的值一律拿掉（不会写坏清单） */
@@ -741,12 +849,14 @@
       if (F.room !== (L.room || '')) x.room = F.room;
       if (!same(F.cabinets, lc)) x.cabinets = F.cabinets.slice();
       if (F.style !== (L.style || '')) x.style = F.style;
+      if (F.style2 !== (L.style2 || '')) x.style2 = F.style2;
       if (F.hero !== !!L.hero) x.hero = F.hero;
       ['zh', 'en'].forEach(function (l) { if (F.desc[l] !== (ld[l] || '')) d[l] = F.desc[l]; });
     } else {
       if (F.room && (conf ? !L.room : F.room !== L.room)) x.room = F.room;
       if (F.cabinets.length && (conf ? !lc.length : !same(F.cabinets, lc))) x.cabinets = F.cabinets.slice();
       if (F.style && (conf ? !L.style : F.style !== L.style)) x.style = F.style;
+      if (F.style2 && (conf ? !L.style2 : F.style2 !== L.style2)) x.style2 = F.style2;
       if (!conf && F.hero && !L.hero) x.hero = true;
       ['zh', 'en'].forEach(function (l) { if (F.desc[l] && (conf ? !ld[l] : F.desc[l] !== ld[l])) d[l] = F.desc[l]; });
     }
@@ -760,11 +870,12 @@
      「就是自动猜的」：同一个文件夹名两边猜的一定一样，标签档的不一样 = 那边有人改过 */
   function projectMerge(L, F) {
     var x = {}, autoSet = L.by === AUTO_BY, g = guessProject(L.name);
-    function free(f) { return isEmpty(L[f]) || autoSet || ((f === 'style' || f === 'area') && g[f] && L[f] === g[f]); }
+    function free(f) { return isEmpty(L[f]) || autoSet || ((f === 'style' || f === 'style2' || f === 'area') && g[f] && L[f] === g[f]); }
     if (F.area && F.area !== L.area && free('area')) x.area = F.area;
     if (F.ptype && F.ptype !== L.ptype && free('ptype')) x.ptype = F.ptype;
     if (F.traits.length && !same(F.traits, L.traits || []) && free('traits')) x.traits = F.traits.slice();
     if (F.style && F.style !== L.style && free('style')) x.style = F.style;
+    if (F.style2 && F.style2 !== L.style2 && free('style2')) x.style2 = F.style2;
     return Object.keys(x).length ? x : null;
   }
   /** 标签档 → 这台电脑要做的事：
@@ -858,6 +969,7 @@
     utcDay: utcDay, utcMonth: utcMonth, bumpUsage: bumpUsage, monthWrites: monthWrites, storedBytes: storedBytes, packBytes: packBytes,
     validatePurge: validatePurge, planPurge: planPurge, applyPurge: applyPurge, run: run,
     guessProject: guessProject, guessPhoto: guessPhoto, autoTags: autoTags, chunkPatch: chunkPatch,
+    stylesIn: stylesIn, regroupPlan: regroupPlan, regroup: regroup,
     exportTags: exportTags, readTags: readTags, cleanPhotoTag: cleanPhotoTag, cleanProjectTag: cleanProjectTag,
     mergeTags: mergeTags, applyMerge: applyMerge, afterAdd: afterAdd
   };
