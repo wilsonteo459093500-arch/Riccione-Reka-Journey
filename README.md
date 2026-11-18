@@ -2,11 +2,12 @@
 
 全屋定制项目交付管理工具。围绕 **SAIL 方法论**的五个章节（Vision · Blueprint · Craft · Arrival · Signature）组织项目，让 SD / SS / WH / 采购在同一套流程上协作。
 
-> 📁 本 repo 还包含五个独立 app（共用 repo、各自独立部署）：
+> 📁 本 repo 还包含六个独立 app（共用 repo、各自独立部署）：
 > - **UKIR STUDIO**（by RICCIONE REKA）— 设计师提案工作台：把方案 PDF 丢进去，自动生成「Dreamhouse Blueprint」品牌提案 PPT（可编辑）；Material Board（可单独用，也可当方案封面）；平面布置图 + 效果图 AI 生成「Sims 风」写实 3D 全屋立体图。代码在 [`/blueprint`](./blueprint)，部署指南见 [`blueprint/DEPLOY.md`](./blueprint/DEPLOY.md)。
 > - **Sail CRM** — 销售 / pipeline / 售后管理。代码在 [`/crm`](./crm)，部署指南见 [`crm/DEPLOY.md`](./crm/DEPLOY.md)。
 > - **旧版 UKIR STUDIO**（AI 效果图 / 设计顾问 / Material Board）— 已由上面的新版 UKIR STUDIO 接替（同一网址；Material Board、材质库搬到新版）。代码仍在 [`/render`](./render) 备查 / 回滚。
 > - **CIPTA STUDIO**（by RICCIONE REKA）— 内容工作台：上传一条参考视频 + 你的原片/案例图，拆出配方、排好剪辑方案、写好发布文案。代码在 [`/studio`](./studio)，部署指南见 [`studio/DEPLOY.md`](./studio/DEPLOY.md)，工具调研见 [`studio/RESEARCH.md`](./studio/RESEARCH.md)。
+> - **SPACE**（Seek · Profile · Assist · Connect · Evolve，只给自己用）— 人脉资料库：扫名片 → AI 识别 → 公司背景 → 「值得认识吗」4 维度评分 →「我能给他什么」→ 对话整理 → Sims 关系图 + 今日行动；公开名片页 `/c`（别人扫码留资料自动进 SPACE、NFC、FoloToy 屏幕二维码）。代码在 [`/network`](./network)，计划见 [`network/PLAN.md`](./network/PLAN.md)，部署见 [`network/DEPLOY.md`](./network/DEPLOY.md)。
 > - **RICCIONE REKA JOURNEY** — 客户需求卡 + VISI by RICCIONE REKA（方案与文案生成器）+ 展厅邀请函（纯静态，无需构建）。代码在 [`/invite`](./invite)，说明见 [`invite/README.md`](./invite/README.md)。
 
 ## 功能
