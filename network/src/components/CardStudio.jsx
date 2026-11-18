@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
 import { repo } from '../lib/repo.js';
-import { cardLink, cardReady, cleanLines, MAX_OFFERS, MAX_CASES, MAX_SOCIALS, MAX_OPENING, MAX_MILESTONES, MAX_GROUPS, MAX_STATS, MAX_AWARDS, MAX_EXHIBITIONS, MAX_BRANDS, MAX_POINTS, MAX_SERIES, MAX_IG_VIDEOS, SOCIAL_PLATFORMS } from '../lib/card.js';
+import { cardLink, cardReady, cleanLines, MAX_OFFERS, MAX_CASES, MAX_SOCIALS, MAX_OPENING, MAX_MILESTONES, MAX_GROUPS, MAX_STATS, MAX_AWARDS, MAX_EXHIBITIONS, MAX_BRANDS, MAX_POINTS, MAX_SERIES, MAX_IG_VIDEOS, MAX_LIFE, MAX_HOBBIES, SOCIAL_PLATFORMS } from '../lib/card.js';
 import { qrPath, qrPng } from '../lib/qr.js';
 import { fmtDate } from '../lib/logic.js';
 import { Button, Field, Input, Textarea, Section, Sheet, useToast, cx } from './ui.jsx';
@@ -215,14 +215,14 @@ function CardEditor() {
   // 本机模式：上传过的图在 IndexedDB，打开时先放进预览网址
   const [, bump] = useState(0);
   useEffect(() => {
-    const paths = [store.card.photo_path, store.card.video_path, store.card.poster_path, store.card.about_photo_path, store.card.opening_bg_path, ...store.card.brands.flatMap((b) => [b.logo_path, b.photo_path, b.photo2_path, b.awards_photo_path, ...b.series.map((m) => m.image_path)]), ...store.card.cases.map((c) => c.image_path), ...store.card.socials.map((x) => x.icon_path), ...store.card.groups.map((g) => g.logo_path), ...store.card.card_images];
+    const paths = [store.card.photo_path, store.card.video_path, store.card.poster_path, store.card.about_photo_path, store.card.opening_bg_path, ...store.card.life.items.map((m) => m.image_path), ...store.card.brands.flatMap((b) => [b.logo_path, b.photo_path, b.photo2_path, b.awards_photo_path, ...b.series.map((m) => m.image_path)]), ...store.card.cases.map((c) => c.image_path), ...store.card.socials.map((x) => x.icon_path), ...store.card.groups.map((g) => g.logo_path), ...store.card.card_images];
     if (repo.warmPublic) repo.warmPublic(paths).then(() => bump((x) => x + 1)).catch(() => null);
   }, [store.card]);
 
   const set = (patch) => setF((x) => ({ ...x, ...patch }));
   async function save() {
     setBusy(true);
-    try { await store.saveCard({ ...f, opening: cleanLines(f.opening), opening_en: cleanLines(f.opening_en), ig_videos: cleanLines(f.ig_videos, MAX_IG_VIDEOS, 300), brands: (f.brands || []).map((b) => ({ ...b, chips: cleanLines(b.chips, MAX_EXHIBITIONS) })) }); toast('名片存好了（公开页 1 分钟内更新）'); } catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
+    try { await store.saveCard({ ...f, opening: cleanLines(f.opening), opening_en: cleanLines(f.opening_en), ig_videos: cleanLines(f.ig_videos, MAX_IG_VIDEOS, 300), life: { ...f.life, hobbies: cleanLines(f.life.hobbies, MAX_HOBBIES, 20) }, brands: (f.brands || []).map((b) => ({ ...b, chips: cleanLines(b.chips, MAX_EXHIBITIONS) })) }); toast('名片存好了（公开页 1 分钟内更新）'); } catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
   }
   async function upload(file, kind, apply) {
     if (!file) return;
@@ -331,6 +331,25 @@ function CardEditor() {
             <Button variant="ghost" onClick={() => set({ brands: [...(f.brands || []), { name: '', logo_path: '', photo_path: '', photo2_path: '', title: '', lead: '', points: [], stats: [], awards_photo_path: '', awards: [], chips_title: '', chips: [], series: [], milestones: [] }] })}>＋ 加一个品牌</Button>
           )}
         </div>
+      </Section>
+
+      <Section title="工作以外（学习、社团、兴趣）" action={<span className="text-xs text-faint">照片最多 {MAX_LIFE} 张</span>}>
+        <Field label="一段话"><Textarea rows={3} value={f.life.lead} onChange={(e) => set({ life: { ...f.life, lead: e.target.value } })} maxLength={400} placeholder="工作以外，我……" /></Field>
+        <ListEditor className="mt-3" label="照片（横的会占满一行）" max={MAX_LIFE} items={f.life.items} onChange={(items) => set({ life: { ...f.life, items } })} blank={{ title: '', note: '', image_path: '' }}
+          render={(m, upd, i) => (
+            <div className="flex flex-1 gap-2">
+              <MediaSlot small path={m.image_path} busy={uploading === `life${i}`} accept="image/*" icon={ImagePlus}
+                onPick={(file) => { setUploading(`life${i}`); store.uploadCardMedia(file, 'case').then((p) => upd({ ...m, image_path: p })).catch((e) => toast(e.message, 'error')).finally(() => setUploading('')); }}
+                onClear={() => upd({ ...m, image_path: '' })} />
+              <div className="flex-1 space-y-1">
+                <Input value={m.title} onChange={(e) => upd({ ...m, title: e.target.value })} placeholder="标题：例 潜水 · 停泊岛" maxLength={60} />
+                <Input value={m.note} onChange={(e) => upd({ ...m, note: e.target.value })} placeholder="一句话" maxLength={120} />
+              </div>
+            </div>
+          )} />
+        <Field className="mt-3" label={`我的兴趣（一行一个，最多 ${MAX_HOBBIES} 个）`} hint="潜水、爬山、露营、志工、看书会自动配小图示">
+          <Textarea rows={3} value={(f.life.hobbies || []).join('\n')} onChange={(e) => set({ life: { ...f.life, hobbies: e.target.value.split('\n').slice(0, MAX_HOBBIES) } })} />
+        </Field>
       </Section>
 
       <Section title="我可以帮你（家具以外的也写）">

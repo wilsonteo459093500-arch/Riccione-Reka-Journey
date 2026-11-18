@@ -35,7 +35,7 @@ const T = {
     thanks: (n) => (n ? `谢谢，${n}！` : '谢谢！'), thanksSub: '资料收到了。顺手发个 WhatsApp 给我，我就记得你是哪一位 😊',
     waMe: '发 WhatsApp 给我', again: '再留一次',
     dock: '交换联络方式', sound: '声音', videos: '视频', igOpen: '在 Instagram 打开', igLoading: '视频载入中…',
-    skip: '跳过', cue: '往下看　认识我', story: '发展历程', awards: '奖项', series: '原创系列', brand: '品牌', groups: '商会与资源', cards: '我的名片', cardsSub: '点一下看大图',
+    skip: '跳过', cue: '往下看　认识我', story: '发展历程', life: '工作以外', hobbies: '我的兴趣', awards: '奖项', series: '原创系列', brand: '品牌', groups: '商会与资源', cards: '我的名片', cardsSub: '点一下看大图',
     errNet: '连不上，检查一下网络再试一次', errBusy: '送出太多次了，请稍后再试，或直接 WhatsApp 我',
     fail: '名片暂时打不开，请稍后再试。',
     lang: 'EN',
@@ -59,7 +59,7 @@ const T = {
     thanks: (n) => (n ? `Thank you, ${n}!` : 'Thank you!'), thanksSub: 'Got it. Send me a quick WhatsApp so I know which one is you 😊',
     waMe: 'WhatsApp me now', again: 'Send again',
     dock: 'Swap contacts', sound: 'Sound', videos: 'Videos', igOpen: 'Open in Instagram', igLoading: 'Loading video…',
-    skip: 'Skip', cue: 'Scroll to meet me', story: 'Milestones', awards: 'Awards', series: 'Original collections', brand: 'Brand', groups: 'Networks', cards: 'My business cards', cardsSub: 'Tap to enlarge',
+    skip: 'Skip', cue: 'Scroll to meet me', story: 'Milestones', life: 'Beyond work', hobbies: 'Interests', awards: 'Awards', series: 'Original collections', brand: 'Brand', groups: 'Networks', cards: 'My business cards', cardsSub: 'Tap to enlarge',
     errNet: 'Can’t connect — check your network and try again', errBusy: 'Too many tries — please try later or just WhatsApp me',
     fail: 'This card can’t be opened right now. Please try again later.',
     lang: '中文',
@@ -124,6 +124,15 @@ const OFFER_ICONS = [
   [/展厅|咖啡|活动|showroom|coffee|event/i, SVG('<path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V9Z"/><path d="M16 11h1.5a2.5 2.5 0 0 1 0 5H16M8 3v3M12 3v3"/>')],
   [/设计|建筑师|溪岸|定制|design|architect/i, SVG('<path d="m4 20 5-1L19.5 8.5a2.1 2.1 0 0 0-3-3L6 16l-2 4Z"/><path d="m14.5 7.5 3 3"/>')],
 ];
+/** 兴趣的小图示 */
+const HOBBY_ICONS = [
+  [/潜水|dive|diving/i, SVG('<path d="M3 9h18v4a3 3 0 0 1-3 3h-2.5l-1.5-2h-4l-1.5 2H6a3 3 0 0 1-3-3V9Z"/><path d="M19 9V5"/><path d="M3 20c1.5 0 1.5-1 3-1s1.5 1 3 1 1.5-1 3-1 1.5 1 3 1 1.5-1 3-1 1.5 1 3 1"/>')],
+  [/爬山|登山|hik|mountain/i, SVG('<path d="m3 20 6.5-11 3.5 6 2.5-4L21 20H3Z"/><path d="m8 11.5 1.5 1.5 1.5-1.5"/>')],
+  [/露营|camp/i, SVG('<path d="M12 4 3 20h18L12 4Z"/><path d="M12 4v16M9.5 20 12 15l2.5 5"/>')],
+  [/志工|义工|volunt/i, SVG('<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z"/>')],
+  [/看书|阅读|读书|read|book/i, SVG('<path d="M12 6c-2-1.5-5-2-8-1.5V19c3-.5 6 0 8 1.5 2-1.5 5-2 8-1.5V4.5c-3-.5-6 0-8 1.5Z"/><path d="M12 6v14.5"/>')],
+];
+const hobbyIcon = (text) => (HOBBY_ICONS.find(([re]) => re.test(text)) || [null, OFFER_DEFAULT])[1];
 const OFFER_DEFAULT = SVG('<path d="m12 3 2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7L12 3Z"/>');
 const offerIcon = (text) => (OFFER_ICONS.find(([re]) => re.test(text)) || [null, OFFER_DEFAULT])[1];
 
@@ -303,6 +312,20 @@ function render() {
     side.append(sec(tr.about, h('div.me', null,
       card.about_photo ? h('img.me-photo', { src: card.about_photo, alt: card.name, loading: 'lazy', decoding: 'async' }) : null,
       card.intro ? h('p.me-text', null, card.intro) : null)));
+  }
+  /* 工作以外：学习、社团、兴趣（照片横的占满一行，直的两张一行） */
+  const lf = card.life;
+  if (lf && (lf.lead || (lf.items && lf.items.length) || (lf.hobbies && lf.hobbies.length))) {
+    side.append(sec(tr.life,
+      lf.lead ? h('p.st-note.life-lead', null, lf.lead) : null,
+      lf.items && lf.items.length ? h('div.life', null, lf.items.map((m) => {
+        const fig = h('figure.lf', null,
+          m.image ? h('img', { src: m.image, alt: m.title, loading: 'lazy', decoding: 'async', onload: (e) => { const i = e.currentTarget; if (i.naturalWidth > i.naturalHeight * 1.15) fig.classList.add('wide'); } }) : null,
+          h('figcaption', null, m.title ? h('b', null, m.title) : null, m.note ? h('span', null, m.note) : null));
+        return fig;
+      })) : null,
+      lf.hobbies && lf.hobbies.length ? h('div.b-part', null, h('h4.b-sub', null, tr.hobbies),
+        h('div.hobbies', null, lf.hobbies.map((x) => h('span.hob', null, h('span.oi', { 'aria-hidden': 'true', html: hobbyIcon(x) }), x)))) : null));
   }
 
   if (!event && form) side.append(form);

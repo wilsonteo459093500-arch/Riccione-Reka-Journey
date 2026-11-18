@@ -360,3 +360,18 @@ footer { padding: 40px 0 max(36px, env(safe-area-inset-bottom)); text-align: cen
 .videos blockquote.instagram-media a { color: var(--muted); font-size: 14px; text-decoration: none; }
 .videos iframe.instagram-media { border-radius: 14px !important; }
 .ig-open { width: 100%; justify-content: space-between; margin-top: 10px; min-height: 48px; padding: 0 16px; background: var(--field); border-color: var(--field); font-size: 14.5px; }
+
+/* ---------- 工作以外 ---------- */
+.life-lead { margin-top: 0; }
+.life { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
+.lf { margin: 0; min-width: 0; }
+.lf img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 12px; background: #e8e8ed; }
+.lf.wide { grid-column: 1 / -1; }
+.lf.wide img { aspect-ratio: 16 / 10; }
+.lf figcaption { display: flex; flex-direction: column; gap: 2px; padding: 8px 2px 0; }
+.lf b { font-size: 14.5px; font-weight: 600; line-height: 1.35; }
+.lf span { font-size: 12px; line-height: 1.45; color: var(--muted); }
+.hobbies { display: flex; flex-wrap: wrap; gap: 8px; }
+.hob { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px 6px 6px; border-radius: 999px; background: var(--field); font-size: 14px; font-weight: 600; }
+.hob .oi { width: 30px; height: 30px; margin: 0; border-radius: 50%; background: var(--card); }
+.hob .oi svg { width: 17px; height: 17px; }

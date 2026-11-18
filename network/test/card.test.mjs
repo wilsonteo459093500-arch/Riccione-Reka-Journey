@@ -91,6 +91,16 @@ test('Instagram 视频：只收 instagram.com 的帖子 / Reel，整理成标准
   assert.equal(publicCard(DEFAULT_CARD, '').ig_videos.length, 1);
 });
 
+test('工作以外：照片、兴趣清理和上限；预设有五个兴趣', () => {
+  const c = cleanCard({ life: { lead: 'x', items: [{ title: 'A', image_path: '/card/a.jpg' }, { note: '没标题没照片' }, { title: 'B', image_path: 'evil.html' }], hobbies: '潜水\n\n爬山' } });
+  assert.equal(c.life.items.length, 2);
+  assert.equal(c.life.items[1].image_path, '');
+  assert.deepEqual(c.life.hobbies, ['潜水', '爬山']);
+  const d = publicCard(DEFAULT_CARD, '');
+  assert.deepEqual(d.life.hobbies, ['潜水', '爬山', '露营', '志工', '看书']);
+  assert.ok(d.life.items.every((m) => m.image.startsWith('/card/life-') && m.image_path === undefined));
+});
+
 test('名字显示：中文在前、英文在后', () => {
   assert.deepEqual(namePair({ name: 'Wilson Teo', name_alt: '张炜盛' }), ['张炜盛', 'Wilson Teo']);
   assert.deepEqual(namePair({ name: '张炜盛', name_alt: 'Wilson' }), ['张炜盛', 'Wilson']);

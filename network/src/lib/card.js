@@ -21,7 +21,9 @@ export const MAX_AWARDS = 8;
 export const MAX_BRANDS = 3;      // 品牌（瑞吉欧、溪岸…）
 export const MAX_POINTS = 8;      // 品牌下的重点（业务、故事、供应链…）
 export const MAX_SERIES = 6;      // 原创系列小格子
-export const MAX_IG_VIDEOS = 4;   // Instagram 视频（嵌入播放）
+export const MAX_IG_VIDEOS = 4;
+export const MAX_LIFE = 12;       // 「工作以外」照片
+export const MAX_HOBBIES = 10;   // Instagram 视频（嵌入播放）
 export const MAX_EXHIBITIONS = 8; // 品牌下的标签（常年参展…）
 export const MAX_GROUPS = 4;      // 商会 / 组织
 export const MAX_CARD_IMAGES = 2; // 实体名片的照片
@@ -72,6 +74,18 @@ export const DEFAULT_CARD = {
   tagline: '以木为语，与自然共生。',
   intro: '我是 Wilson，麻坡长大的家族企业第二代。小时候发誓不接班，后来为了家人考了 CIMA 特许管理会计师，再从仓库扛货做起。现在带着瑞吉欧和溪岸，在马来西亚做实木家具与全屋定制。我没有成功，我只是还在路上。',
   about_photo_path: '/card/father.jpg',
+  // 「工作以外」：照片都是本人给的；说明照照片上看得到的字写（奖状、讲台名牌、横幅），不另外编
+  life: {
+    lead: '工作以外，我一直在学：上台练演讲、上卡耐基的领导力课程，也在 PUMM 跟一群创业者一起做事。放假的时候，我会去潜水、爬山、露营，有空就做志工、看书。',
+    items: [
+      { title: '卡耐基训练 Dale Carnegie', note: '核心领导力训练 · 结业', image_path: '/card/life-carnegie.jpg' },
+      { title: 'Toastmasters 国际演讲会', note: '雪隆福青华语国际讲演会 SKLHA Youth Mandarin Toastmasters Club', image_path: '/card/life-toastmasters.jpg' },
+      { title: '最佳即兴讲员', note: 'Toastmasters 演讲会', image_path: '/card/life-tm-award.jpg' },
+      { title: 'PUMM 彭亨州联委会理事', note: '马来西亚创业促进会 · 彭亨州联委会', image_path: '/card/life-pumm-talk.jpg' },
+      { title: 'PUMM Members Orientation 2026', note: '会员迎新 · 分组汇报', image_path: '/card/life-pumm-orientation.jpg' },
+    ],
+    hobbies: ['潜水', '爬山', '露营', '志工', '看书'],
+  },
   // 两个品牌分开介绍（文案取自 UKIR 提案的品牌画册页 blueprint/src/engine/b/company.js + 本人给的事实）
   brands: [
     {
@@ -250,6 +264,7 @@ export function cleanCard(c = {}) {
     opening_en: cleanLines(src.opening_en),
     opening_on: src.opening_on !== false,
     about_photo_path: safePath(src.about_photo_path),
+    life: cleanLife(src.life),
     brands: (Array.isArray(src.brands) ? src.brands : []).map(cleanBrand).filter((b) => b.name).slice(0, MAX_BRANDS),
     opening_bg_path: safePath(src.opening_bg_path),
     ig_videos: cleanLines(src.ig_videos, MAX_IG_VIDEOS, 300).map(igUrl).filter(Boolean),
@@ -260,6 +275,19 @@ export function cleanCard(c = {}) {
     form_on: src.form_on !== false,
   };
   return out;
+}
+
+/** 工作以外：一段话、几张照片（标题 + 一句）、兴趣标签 */
+function cleanLife(v) {
+  const x = v && typeof v === 'object' ? v : {};
+  return {
+    lead: str(x.lead, 400),
+    items: (Array.isArray(x.items) ? x.items : [])
+      .map((m) => ({ title: str(m && m.title, 60), note: str(m && m.note, 120), image_path: safePath(m && m.image_path) }))
+      .filter((m) => m.title || m.image_path)
+      .slice(0, MAX_LIFE),
+    hobbies: cleanLines(x.hobbies, MAX_HOBBIES, 20),
+  };
 }
 
 /** 一个品牌：logo、照片、标题、一段介绍，下面几样清单（都是选填，空的不显示） */
@@ -335,6 +363,7 @@ export function publicCard(card, supabaseUrl) {
     groups: c.groups.map(({ logo_path, ...x }) => ({ ...x, logo: url(logo_path) })),
     card_images: c.card_images.map(url),
     about_photo: url(c.about_photo_path),
+    life: { ...c.life, items: c.life.items.map(({ image_path, ...m }) => ({ ...m, image: url(image_path) })) },
     opening_bg: url(c.opening_bg_path),
     brands: c.brands.map(({ logo_path, photo_path: bp, photo2_path, awards_photo_path, series, ...x }) => ({
       ...x, logo: url(logo_path), photo: url(bp), photo2: url(photo2_path), awards_photo: url(awards_photo_path),
