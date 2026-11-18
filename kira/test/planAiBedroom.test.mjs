@@ -206,3 +206,30 @@ test('any cabinet (not only bedroom wardrobes) in front of a door is not ticked'
   assert.equal(tv.pick, false);
   assert.ok(tv.why.some((w) => /挡阳台门/.test(w.zh)));
 });
+
+// ---------------- 用户反馈 2026-11-18 #1：图上有玄关，鞋柜要放在玄关里任何一道墙 ----------------
+test('foyer on the plan: a shoe cabinet the AI put in the dining room moves into the foyer (wall the door does not swing into first)', () => {
+  // 玄关 2.0 × 2.0 m，大门在上墙左半（x 1100–1900）；AI 把鞋柜放在餐厅
+  const foyer = { type: 'entrance', name: 'Foyer', box: [100, 300, 300, 500], doors: [{ seg: [110, 300, 190, 300], to: 'main' }], windows: [], bed: [] };
+  const dining = { type: 'dining', name: 'Dining', box: [300, 300, 700, 600], doors: [], windows: [], bed: [] };
+  const s = run({ rooms: [foyer, dining], suggestions: [{ template: 'shoe', room: 'Dining', segments: [[400, 600, 520, 600]], confidence: 'low', note: '' }], notes: '' });
+  const shoe = s.find((x) => x.template === 'shoe');
+  assert.equal(shoe.room, 'Foyer');
+  assert.equal(shoe.pick, true, shoe.why.map((w) => w.zh).join());
+  assert.ok(shoe.notes.some((n) => /改放进玄关/.test(n.zh)));
+  assert.ok(!shoe.notes.some((n) => /玄关很小/.test(n.zh)), 'a 2 m foyer has a wall clear of the door');
+  const b = placedFootprint(shoe.cab).bbox;
+  assert.ok(b[0] >= 1000 - 1 && b[2] <= 3000 + 1 && b[1] >= 3000 - 1 && b[3] <= 5000 + 1, `inside the foyer: ${b}`);
+});
+
+test('tiny foyer (every wall inside the door swing): still goes in the foyer on the longest wall, ticked, with a "check on site" note', () => {
+  // 1.2 × 0.9 m 玄关，门几乎占满上墙（同用户那张图）
+  const foyer = { type: 'entrance', name: 'Foyer', box: [100, 300, 220, 390], doors: [{ seg: [110, 300, 210, 300], to: 'main' }], windows: [], bed: [] };
+  const s = run({ rooms: [foyer], suggestions: [], notes: '' });
+  const shoe = s.find((x) => x.template === 'shoe');
+  assert.equal(shoe.pick, true, shoe.why.map((w) => w.zh).join());
+  assert.ok(shoe.notes.some((n) => /玄关很小/.test(n.zh)));
+  const b = placedFootprint(shoe.cab).bbox;
+  assert.ok(Math.abs(b[3] - 3900) <= 1, `against the wall opposite the door: ${b}`);
+  assert.equal(roomZoneName({ type: 'bedroom', name: 'Bedroom 1' }), 'Bedroom 1 卧室1');
+});

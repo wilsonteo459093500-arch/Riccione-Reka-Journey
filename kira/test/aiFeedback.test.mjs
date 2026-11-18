@@ -47,3 +47,16 @@ test('AI feedback fixtures marked "relocated" / "kept"', () => {
     if (c.expect === 'kept') assert.ok(x.lenMm[0] >= c.suggestion.lenMm[0] * 1.5, `${c.f}: still short (${x.lenMm})`);
   });
 });
+
+// "infoyer"：图上有玄关，鞋柜被 👎 说「应该在 foyer 里面」→ 现在放进玄关、默认勾
+test('AI feedback fixtures marked "infoyer": the shoe cabinet is now inside the foyer and ticked', () => {
+  cases.filter((c) => c.expect === 'infoyer').forEach((c) => {
+    const p = c.ai.plan;
+    const plan = { id: 'fb', name: 'fb', image: { path: 'local:fb', w: p.w, h: p.h, kind: 'img', page: 1 }, scale: p.scale };
+    const s = buildSuggestions(c.ai.result, plan, { sentW: c.ai.sentW, crop: c.ai.crop });
+    const shoe = s.find((x) => x.template === 'shoe');
+    assert.ok(shoe?.ok && shoe.pick === true, `${c.f}: shoe not ticked`);
+    assert.equal(shoe.room, 'Foyer');
+    assert.ok(shoe.notes.some((n) => /改放进玄关/.test(n.zh)), `${c.f}: no note`);
+  });
+});

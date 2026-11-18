@@ -1,0 +1,423 @@
+{
+  "id": "1",
+  "created_at": "2026-11-18T01:23:11Z",
+  "kind": "bad",
+  "reasons": [
+    "room"
+  ],
+  "note": "应该有个在foyer里面任何一个靠墙才对",
+  "template": "shoe",
+  "suggestion": {
+    "id": "ai7",
+    "template": "shoe",
+    "room": "Dining",
+    "roomName": "Foyer 玄关",
+    "lenMm": [
+      1000
+    ]
+  },
+  "ai": {
+    "result": {
+      "scale": {
+        "found": false,
+        "a": [
+          0,
+          0
+        ],
+        "b": [
+          0,
+          0
+        ],
+        "mm": 0
+      },
+      "rooms": [
+        {
+          "bed": [
+            148,
+            362,
+            394,
+            546
+          ],
+          "box": [
+            148,
+            362,
+            474,
+            840
+          ],
+          "name": "Bedroom 1",
+          "type": "bedroom",
+          "doors": [
+            {
+              "to": "entry",
+              "seg": [
+                335,
+                730,
+                335,
+                830
+              ]
+            }
+          ],
+          "windows": [
+            [
+              195,
+              352,
+              413,
+              352
+            ]
+          ]
+        },
+        {
+          "bed": [
+            574,
+            362,
+            820,
+            546
+          ],
+          "box": [
+            490,
+            362,
+            820,
+            703
+          ],
+          "name": "Bedroom 2",
+          "type": "bedroom",
+          "doors": [
+            {
+              "to": "entry",
+              "seg": [
+                512,
+                710,
+                610,
+                710
+              ]
+            }
+          ],
+          "windows": [
+            [
+              545,
+              352,
+              765,
+              352
+            ]
+          ]
+        },
+        {
+          "bed": [
+            1292,
+            450,
+            1538,
+            671
+          ],
+          "box": [
+            1205,
+            148,
+            1538,
+            830
+          ],
+          "name": "Master Bedroom",
+          "type": "master",
+          "doors": [
+            {
+              "to": "entry",
+              "seg": [
+                1222,
+                830,
+                1325,
+                830
+              ]
+            },
+            {
+              "to": "bathroom",
+              "seg": [
+                1385,
+                840,
+                1465,
+                840
+              ]
+            }
+          ],
+          "windows": [
+            [
+              1257,
+              138,
+              1475,
+              138
+            ]
+          ]
+        },
+        {
+          "bed": [],
+          "box": [
+            835,
+            362,
+            1188,
+            718
+          ],
+          "name": "Living",
+          "type": "living",
+          "doors": [
+            {
+              "to": "balcony",
+              "seg": [
+                875,
+                352,
+                1055,
+                352
+              ]
+            }
+          ],
+          "windows": [
+            [
+              1092,
+              352,
+              1165,
+              352
+            ]
+          ]
+        },
+        {
+          "bed": [],
+          "box": [
+            800,
+            718,
+            1188,
+            1138
+          ],
+          "name": "Dining",
+          "type": "dining",
+          "doors": [
+            {
+              "to": "main",
+              "seg": [
+                1222,
+                1022,
+                1335,
+                1022
+              ]
+            }
+          ],
+          "windows": []
+        },
+        {
+          "bed": [],
+          "box": [
+            528,
+            718,
+            800,
+            1138
+          ],
+          "name": "Kitchen",
+          "type": "kitchen",
+          "doors": [],
+          "windows": []
+        },
+        {
+          "bed": [],
+          "box": [
+            1205,
+            1030,
+            1352,
+            1138
+          ],
+          "name": "Foyer",
+          "type": "entrance",
+          "doors": [
+            {
+              "to": "main",
+              "seg": [
+                1222,
+                1022,
+                1335,
+                1022
+              ]
+            }
+          ],
+          "windows": []
+        },
+        {
+          "bed": [],
+          "box": [
+            148,
+            148,
+            1188,
+            345
+          ],
+          "name": "Balcony and Yard",
+          "type": "balcony",
+          "doors": [],
+          "windows": []
+        },
+        {
+          "bed": [],
+          "box": [
+            148,
+            860,
+            320,
+            1138
+          ],
+          "name": "Bath 1",
+          "type": "bathroom",
+          "doors": [],
+          "windows": []
+        },
+        {
+          "bed": [],
+          "box": [
+            338,
+            860,
+            510,
+            1138
+          ],
+          "name": "Bath 2",
+          "type": "bathroom",
+          "doors": [],
+          "windows": []
+        },
+        {
+          "bed": [],
+          "box": [
+            1370,
+            848,
+            1538,
+            1138
+          ],
+          "name": "Master Bath",
+          "type": "bathroom",
+          "doors": [],
+          "windows": []
+        }
+      ],
+      "suggestions": [
+        {
+          "note": "Solid wall beside the room entrance, clear of the bed and the window.",
+          "room": "Bedroom 1",
+          "segments": [
+            [
+              295,
+              703,
+              474,
+              703
+            ]
+          ],
+          "template": "wardrobe",
+          "confidence": "high"
+        },
+        {
+          "note": "Bottom wall beside the door, away from the headboard wall and window.",
+          "room": "Bedroom 2",
+          "segments": [
+            [
+              620,
+              703,
+              820,
+              703
+            ]
+          ],
+          "template": "wardrobe",
+          "confidence": "high"
+        },
+        {
+          "note": "Long solid left wall above the bed walkway, clear of the doors and window.",
+          "room": "Master Bedroom",
+          "segments": [
+            [
+              1205,
+              155,
+              1205,
+              430
+            ]
+          ],
+          "template": "wardrobe",
+          "confidence": "high"
+        },
+        {
+          "note": "Long solid wall shared with Bedroom 2 facing the sofa area.",
+          "room": "Living",
+          "segments": [
+            [
+              835,
+              390,
+              835,
+              690
+            ]
+          ],
+          "template": "tv",
+          "confidence": "high"
+        },
+        {
+          "note": "L-shaped counter on the two solid walls of the open kitchen.",
+          "room": "Kitchen",
+          "segments": [
+            [
+              528,
+              860,
+              528,
+              1138
+            ],
+            [
+              528,
+              1138,
+              800,
+              1138
+            ]
+          ],
+          "template": "kitchen",
+          "confidence": "high"
+        },
+        {
+          "note": "Solid external wall in the dining area.",
+          "room": "Dining",
+          "segments": [
+            [
+              820,
+              1138,
+              1040,
+              1138
+            ]
+          ],
+          "template": "sideboard",
+          "confidence": "low"
+        },
+        {
+          "note": "Nearest solid wall inside the main door, clear of the door swing.",
+          "room": "Dining",
+          "segments": [
+            [
+              1065,
+              1138,
+              1188,
+              1138
+            ]
+          ],
+          "template": "shoe",
+          "confidence": "low"
+        }
+      ],
+      "notes": "Main door wall has no free length beside it, so the shoe cabinet position near the foyer must be checked on site. Kitchen and dining are open plan; confirm the kitchen extent. Master wardrobe is about 2.3 m."
+    },
+    "sentW": 1568,
+    "crop": {
+      "x": 114,
+      "y": 109,
+      "w": 2016,
+      "h": 1503
+    },
+    "model": "claude-opus-5-5",
+    "plan": {
+      "w": 2235,
+      "h": 1715,
+      "scale": {
+        "a": [
+          294,
+          179.7
+        ],
+        "b": [
+          2101.7,
+          179.7
+        ],
+        "mm": 11450
+      }
+    }
+  },
+  "expect": "infoyer"
+}
