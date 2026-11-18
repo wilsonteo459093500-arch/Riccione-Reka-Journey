@@ -35,7 +35,7 @@ const T = {
     thanks: (n) => (n ? `谢谢，${n}！` : '谢谢！'), thanksSub: '资料收到了。顺手发个 WhatsApp 给我，我就记得你是哪一位 😊',
     waMe: '发 WhatsApp 给我', again: '再留一次',
     dock: '交换联络方式', sound: '声音',
-    skip: '跳过', cue: '往下看　认识我', story: '发展历程', firm: '公司', awards: '奖项', places: '展厅与展会', shows: '常年参展', groups: '商会与资源', cards: '我的名片', cardsSub: '点一下看大图',
+    skip: '跳过', cue: '往下看　认识我', story: '发展历程', awards: '奖项', series: '原创系列', brand: '品牌', groups: '商会与资源', cards: '我的名片', cardsSub: '点一下看大图',
     errNet: '连不上，检查一下网络再试一次', errBusy: '送出太多次了，请稍后再试，或直接 WhatsApp 我',
     fail: '名片暂时打不开，请稍后再试。',
     lang: 'EN',
@@ -59,7 +59,7 @@ const T = {
     thanks: (n) => (n ? `Thank you, ${n}!` : 'Thank you!'), thanksSub: 'Got it. Send me a quick WhatsApp so I know which one is you 😊',
     waMe: 'WhatsApp me now', again: 'Send again',
     dock: 'Swap contacts', sound: 'Sound',
-    skip: 'Skip', cue: 'Scroll to meet me', story: 'Milestones', firm: 'Company', awards: 'Awards', places: 'Showrooms & fairs', shows: 'Trade fairs', groups: 'Networks', cards: 'My business cards', cardsSub: 'Tap to enlarge',
+    skip: 'Skip', cue: 'Scroll to meet me', story: 'Milestones', awards: 'Awards', series: 'Original collections', brand: 'Brand', groups: 'Networks', cards: 'My business cards', cardsSub: 'Tap to enlarge',
     errNet: 'Can’t connect — check your network and try again', errBusy: 'Too many tries — please try later or just WhatsApp me',
     fail: 'This card can’t be opened right now. Please try again later.',
     lang: '中文',
@@ -278,38 +278,8 @@ function render() {
   const sec = (label, ...kids) => h('section.sec', null, h('h2.kicker', null, label), ...kids);
   const pic = (src, alt, cls = 'figure.pic') => (src ? h(cls, null, h('img', { src, alt: alt || '', loading: 'lazy', decoding: 'async' })) : null);
 
-  /* 公司：一句话 + 数字格子 + 展厅照片（讲事实：年份、面积、数量） */
-  const fm = card.firm;
-  if (fm && (fm.title || fm.lead || (fm.stats && fm.stats.length))) {
-    side.append(sec(tr.firm,
-      fm.title ? h('h3.st-title', null, fm.title) : null,
-      fm.lead ? h('p.st-note', null, fm.lead) : null,
-      fm.stats && fm.stats.length ? h('dl.stats', null, fm.stats.map((m) => h('div.stat', null, h('dt', null, m.value), h('dd', null, m.label)))) : null,
-      pic(fm.photo, fm.title)));
-  }
-  /* 奖项 */
-  const aw = card.awards;
-  if (aw && aw.items && aw.items.length) {
-    side.append(sec(tr.awards,
-      pic(aw.photo, tr.awards, 'figure.pic.top'),
-      h('ul.awards', null, aw.items.map((m) => h('li', null, h('span.yr', null, m.year), h('span.aw', null, h('b', null, m.title), m.note ? h('small', null, m.note) : null))))));
-  }
-  /* 展厅、仓库、展会 */
-  if ((card.places && card.places.length) || (card.exhibitions && card.exhibitions.length)) {
-    side.append(sec(tr.places,
-      card.places && card.places.length ? h('ul.places', null, card.places.map((m) => h('li', null, h('b', null, m.title), m.note ? h('span', null, m.note) : null))) : null,
-      card.exhibitions && card.exhibitions.length ? h('div.shows', null, h('p.shows-t', null, tr.shows), h('div.chips', null, card.exhibitions.map((x) => h('span.chip', null, x)))) : null,
-      pic(card.places_photo, tr.places)));
-  }
-  /* 发展历程 */
-  const st = card.story;
-  if (st && (st.photo || st.note || (st.milestones && st.milestones.length))) {
-    side.append(sec(tr.story,
-      st.title ? h('h3.st-title', null, st.title) : null,
-      pic(st.photo, st.title, 'figure.st-photo'),
-      st.note ? h('p.st-note', null, st.note) : null,
-      st.milestones && st.milestones.length ? h('ol.timeline', null, st.milestones.map((m) => h('li', null, h('span.yr', null, m.year), h('span', null, m.text)))) : null));
-  }
+  /* 品牌：瑞吉欧、溪岸分开介绍（讲事实：年份、面积、奖项） */
+  for (const b of card.brands || []) side.append(brandBlock(b, pic));
   if (card.offers && card.offers.length) {
     side.append(sec(tr.offers, h('ul.offers', null, card.offers.map((o) => h('li', null, h('span.oi', { 'aria-hidden': 'true', html: offerIcon(o) }), h('span', null, o))))));
   }
@@ -367,6 +337,28 @@ function render() {
     const slot = document.getElementById('ts');
     if (tsWidget && slot) slot.replaceWith(tsWidget); else mountTurnstile(state.data.turnstile_site_key);
   }
+}
+
+/** 一个品牌一大块：大照片（左上角 logo）→ 名字、标题、一段 → 重点 → 数字 → 奖项 → 标签 → 系列 → 发展历程 */
+function brandBlock(b, pic) {
+  const sub = (label) => h('h4.b-sub', null, label);
+  return h('section.sec.brand', null,
+    b.photo ? h('figure.b-hero', null, h('img', { src: b.photo, alt: b.name, loading: 'lazy', decoding: 'async' }),
+      b.logo ? h('span.b-logo', null, h('img', { src: b.logo, alt: '' })) : null) : null,
+    h('h2.kicker', null, b.name),
+    b.title ? h('h3.st-title', null, b.title) : null,
+    b.lead ? h('p.st-note', null, b.lead) : null,
+    b.points && b.points.length ? h('ul.places', null, b.points.map((m) => h('li', null, h('b', null, m.title), m.note ? h('span', null, m.note) : null))) : null,
+    b.stats && b.stats.length ? h('dl.stats', null, b.stats.map((m) => h('div.stat', null, h('dt', null, m.value), h('dd', null, m.label)))) : null,
+    b.awards && b.awards.length ? h('div.b-part', null, sub(tr.awards),
+      pic(b.awards_photo, tr.awards, 'figure.pic.top'),
+      h('ul.awards', null, b.awards.map((m) => h('li', null, h('span.yr', null, m.year), h('span.aw', null, h('b', null, m.title), m.note ? h('small', null, m.note) : null))))) : null,
+    b.chips && b.chips.length ? h('div.shows', null, b.chips_title ? h('p.shows-t', null, b.chips_title) : null, h('div.chips', null, b.chips.map((x) => h('span.chip', null, x)))) : null,
+    b.series && b.series.length ? h('div.b-part', null, sub(tr.series), h('div.series', null, b.series.map((m) => h('figure.ser', null,
+      m.image ? h('img', { src: m.image, alt: m.title, loading: 'lazy', decoding: 'async' }) : null,
+      h('figcaption', null, h('b', null, m.title), m.note ? h('span', null, m.note) : null))))) : null,
+    pic(b.photo2, b.name),
+    b.milestones && b.milestones.length ? h('div.b-part', null, sub(tr.story), h('ol.timeline', null, b.milestones.map((m) => h('li', null, h('span.yr', null, m.year), h('span', null, m.text))))) : null);
 }
 
 /** 名字的缩写（左上角的小记号） */

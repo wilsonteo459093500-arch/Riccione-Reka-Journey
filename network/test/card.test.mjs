@@ -24,18 +24,17 @@ test('开场白 / 传承：一行一句、上限、网站自带的图', () => {
   assert.deepEqual(cleanLines('你好\n\n  我是 Wilson \n'), ['你好', '我是 Wilson']);
   assert.equal(cleanLines(Array.from({ length: 9 }, (_, i) => `l${i}`)).length, 6);
   assert.equal(cleanLines(['x'.repeat(99)])[0].length, 60);
-  const c = cleanCard({ opening: '你好\n很高兴认识你', story: { title: 'T', photo_path: '/card/father.jpg', milestones: [{ year: '1979', text: '起家' }, {}, { year: '<b>', text: 'x' }] } });
+  const c = cleanCard({ opening: '你好\n很高兴认识你', about_photo_path: '/card/father.jpg' });
   assert.deepEqual(c.opening, ['你好', '很高兴认识你']);
   assert.deepEqual(c.opening_en, []);
   assert.equal(c.opening_on, true);
   assert.equal(cleanCard({ opening_on: false }).opening_on, false);
-  assert.equal(c.story.milestones.length, 2);
   assert.equal(safePath('/card/father.jpg'), '/card/father.jpg');
   assert.equal(safePath('/card/../x.jpg'), '');
   assert.equal(safePath('/etc/card/x.jpg'), '');
   const pub = publicCard(c, 'https://x.supabase.co');
-  assert.equal(pub.story.photo, '/card/father.jpg');
-  assert.equal(pub.story.photo_path, undefined);
+  assert.equal(pub.about_photo, '/card/father.jpg');
+  assert.equal(pub.about_photo_path, undefined);
   // 预设名片（还没在 SPACE 存过）：图都是网站自带的、能直接打开
   const d = publicCard(DEFAULT_CARD, 'https://x.supabase.co');
   assert.equal(d.photo, '/card/avatar.jpg');
@@ -46,24 +45,30 @@ test('开场白 / 传承：一行一句、上限、网站自带的图', () => {
   assert.ok(d.socials.every((x) => x.icon && x.icon_path === undefined));
 });
 
-test('公司 / 奖项 / 展厅：只留有内容的、上限；预设名片讲事实', () => {
+test('品牌：分开介绍、只留有内容的、上限；预设名片有瑞吉欧和溪岸', () => {
   const c = cleanCard({
-    firm: { title: 'R', stats: [{ value: '2002', label: '成立' }, { label: '没数字' }, ...Array.from({ length: 8 }, (_, i) => ({ value: String(i) }))] },
-    awards: { photo_path: '/card/awards.jpg', items: [{ year: '2021', title: 'MUSE' }, { year: '2020' }] },
-    places: [{ title: 'KL', note: '11,000' }, { note: '没名字' }],
-    exhibitions: 'CIFF\nARCHIDEX',
+    brands: [
+      { name: 'R', logo_path: '/card/logo.png', stats: [{ value: '2002', label: '成立' }, { label: '没数字' }, ...Array.from({ length: 8 }, (_, i) => ({ value: String(i) }))],
+        awards: [{ year: '2021', title: 'MUSE' }, { year: '2020' }], chips: 'CIFF\nARCHIDEX', series: [{ title: '骨骼线', image_path: 'evil.html' }],
+        milestones: [{ year: '1979', text: '起家' }, {}] },
+      { title: '没名字的不要' },
+    ],
   });
-  assert.equal(c.firm.stats.length, 6);
-  assert.equal(c.firm.stats[0].value, '2002');
-  assert.equal(c.awards.items.length, 1);
-  assert.equal(c.places.length, 1);
-  assert.deepEqual(c.exhibitions, ['CIFF', 'ARCHIDEX']);
+  assert.equal(c.brands.length, 1);
+  const b = c.brands[0];
+  assert.equal(b.stats.length, 6);
+  assert.equal(b.awards.length, 1);
+  assert.deepEqual(b.chips, ['CIFF', 'ARCHIDEX']);
+  assert.equal(b.series[0].image_path, '');
+  assert.equal(b.milestones.length, 1);
   const d = publicCard(DEFAULT_CARD, 'https://x.supabase.co');
-  assert.equal(d.company, '瑞吉欧 RICCIONE · 溪岸 SAIL BY RICCIONE REKA'); // 公司名字（字串）不能被「公司」区块盖掉
-  assert.ok(d.firm.stats.some((m) => m.value === '2002'));
-  assert.ok(d.awards.items.some((m) => /MUSE/.test(m.title)) && d.awards.items.some((m) => /ARCHIDEX/.test(m.title)));
-  assert.equal(d.awards.photo, '/card/awards.jpg');
-  assert.equal(d.about_photo_path, undefined);
+  assert.equal(d.company, '瑞吉欧 RICCIONE · 溪岸 SAIL BY RICCIONE REKA'); // 公司名字（字串）
+  assert.deepEqual(d.brands.map((x) => x.name), ['瑞吉欧 RICCIONE', '溪岸 SAIL BY RICCIONE REKA']);
+  assert.ok(d.brands[0].stats.some((m) => m.value === '2002'));
+  assert.ok(d.brands[0].awards.some((m) => /ARCHIDEX/.test(m.title)) && d.brands[1].awards.some((m) => /MUSE/.test(m.title)));
+  assert.equal(d.brands[1].series[0].image, '/card/s-skeleton.jpg');
+  assert.equal(d.brands[0].logo, '/card/logo-riccione.png');
+  assert.equal(d.opening_bg, '/card/opening-forest.jpg');
 });
 
 test('商会 / 实体名片：没名字的不要、链接只收 https、上限', () => {

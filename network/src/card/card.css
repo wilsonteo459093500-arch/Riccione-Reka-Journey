@@ -264,8 +264,7 @@ footer { padding: 40px 0 max(36px, env(safe-area-inset-bottom)); text-align: cen
 .op > * { position: absolute; }
 .op-bg, .op-shade, .op-glow, .op-sweep { inset: 0; pointer-events: none; }
 .op-bg { opacity: 0; transform: scale(1.1); filter: brightness(1.12) saturate(1.06); }
-.op-bg picture { display: contents; }
-.op-bg img, .op-bg video { width: 100%; height: 100%; object-fit: cover; object-position: 50% 72%; }
+.op-bg img { width: 100%; height: 100%; object-fit: cover; object-position: 72% 40%; }
 .op-shade { opacity: 0; background: radial-gradient(ellipse 60% 40% at 50% 47%, rgba(0, 0, 0, 0.26), transparent 70%), linear-gradient(180deg, rgba(0, 0, 0, 0.4) 0%, rgba(0, 0, 0, 0.06) 36%, rgba(0, 0, 0, 0.08) 62%, rgba(0, 0, 0, 0.6) 100%); }
 .op-flash { inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(circle at 50% 50%, #fffaf0 0%, rgba(255, 236, 200, 0.85) 35%, rgba(255, 210, 150, 0.4) 70%, rgba(255, 200, 140, 0.15) 100%); }
 .op-glow { inset: auto; left: 50%; top: 50%; width: 90vmax; height: 90vmax; margin: -45vmax 0 0 -45vmax; border-radius: 50%; opacity: 0; transform: scale(0.02);
@@ -334,3 +333,21 @@ footer { padding: 40px 0 max(36px, env(safe-area-inset-bottom)); text-align: cen
 @media (min-aspect-ratio: 5/4) {
   .op-bg img { object-position: 50% 40%; }
 }
+
+/* ---------- 品牌块（瑞吉欧 / 溪岸分开） ---------- */
+.sec.brand { padding-top: 12px; }
+.b-hero { position: relative; margin: 0 -8px 18px; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #e8e8ed; }
+.b-hero img { width: 100%; height: 100%; object-fit: cover; }
+.b-logo { position: absolute; left: 12px; bottom: 12px; display: flex; align-items: center; height: 40px; padding: 0 14px; border-radius: 12px; background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.b-logo img { height: 22px; width: auto; }
+.sec.brand .kicker { color: var(--ink); font-size: 12.5px; }
+.sec.brand .places { margin-top: 16px; }
+.b-part { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--hair); }
+.b-sub { margin: 0 0 12px; font-size: 12px; font-weight: 600; letter-spacing: 0.1em; color: var(--faint); }
+.sec.brand .stats { margin-top: 16px; }
+.series { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ser { margin: 0; }
+.ser img { width: 100%; aspect-ratio: 4 / 5; object-fit: cover; border-radius: 12px; background: #e8e8ed; }
+.ser figcaption { display: flex; flex-direction: column; gap: 2px; padding: 8px 2px 0; }
+.ser b { font-size: 14.5px; font-weight: 600; }
+.ser span { font-size: 12px; line-height: 1.45; color: var(--muted); }

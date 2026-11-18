@@ -129,3 +129,8 @@ Wilson 想要一个**只给自己用**的人脉管理 app，用来记录每个�
   - 事实来源：本人（2002 中国公司、20+ 年、吉隆坡 11,000 sq ft 四层楼、PUMM 3,000+ 会员、常年参展 CIFF 广州 / CIFF 上海设计馆 / ARCHIDEX）+ `blueprint/src/engine/b/company.js` 图册（发展历程、奖项、佛山 21,000 sq ft、600+ 货柜、18 家门店）
   - 还缺：ARCHIDEX 得奖照片、仓库面积（本人之后补）
   - 注意：`card.company` 是公司名字（字串），公司区块叫 `firm`，不要搞混
+- **2026-11-18 第五轮：瑞吉欧 / 溪岸分开介绍、照片换高清、开场用森林**
+  - 新栏位 `brands`（每个品牌：logo、大照片、标题、一段、重点、数字格子、奖项 + 奖项照片、标签、系列小格子、第二张照片、发展历程），取代上一轮的 firm / awards / places / exhibitions / story；`opening_bg_path` = 开场背景（预设森林，不再用视频当开场）
+  - 文案取自 UKIR 提案的品牌画册页（`blueprint/src/engine/b/company.js`：品牌 · 溪岸、公司 · 瑞吉欧两章）+ 本人给的事实；本人新给的事实：2018 Malaysian Furniture Creativity Awards · Export Furniture Exhibition Top 5 Finalists ×3（卧室套组 ×2、客厅电视柜），放在瑞吉欧
+  - 照片「很蒙」的原因：之前用图册小图（473–889px）再放大。现在作品、品牌大图都用 ≥1300px 原图输出 1400px；系列小格子才用小图
+  - 视频：本人的视频 50–300MB，太大；请他剪 10–20 秒、720p 导出（约 5–15MB）再在「我的名片」上传（上限 50MB）

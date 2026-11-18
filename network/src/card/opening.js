@@ -1,7 +1,7 @@
 /* ============================================================
    名片页开场：像新 iPhone 开机 —— 全黑，一次一句话，然后亮起来，再请人往下看
    ------------------------------------------------------------
-   • 第一次打开：一句一句播（约 9 秒）→ 光从中间亮开 → 背景（视频 > 图册照片）亮出来 → 名字 + 口号 → 「往下看」
+   • 第一次打开：一句一句播（约 9 秒）→ 光从中间亮开 → 背景照片（森林）亮出来 → 名字 + 口号 → 「往下看」
    • 这台手机看过了：只播约 1 秒的「亮起来」
    • 点一下任何地方 / 「跳过」= 直接亮起来；往下滑随时可以
    • ?intro=1 每次都播完整版（示范用）；系统设了「减少动态效果」= 直接显示最后画面
@@ -11,9 +11,8 @@
 import { namePair } from '../lib/card.js';
 
 const SEEN_KEY = 'space-card:opened';
-// 没有视频时的背景：手机 = 溪岸图册「草原上走向远山的五个人」，电脑（横的）= 瑞吉欧图册「阳光穿过的红杉林」
-const FALLBACK_BG = '/card/opening.jpg';
-const FALLBACK_BG_WIDE = '/card/opening-wide.jpg';
+// 开场背景：名片设定的照片（预设 = 瑞吉欧图册「阳光穿过的红杉林」），手机电脑同一张
+const FALLBACK_BG = '/card/opening-forest.jpg';
 
 /** 预设的开场白（名片没自订时用） */
 export function defaultLines(card, lang) {
@@ -78,15 +77,7 @@ export function mountOpening({ h, card, lang, labels, force = false }) {
     if (bgLoaded) return;
     bgLoaded = true;
     const c = cur.card;
-    if (c.video) {
-      const v = h('video', { src: c.video, poster: c.poster || null, muted: true, loop: true, playsinline: true, 'webkit-playsinline': true, autoplay: !reduce, preload: 'auto', 'aria-hidden': 'true' });
-      v.muted = true;
-      bg.append(v);
-    } else {
-      bg.append(h('picture', null,
-        h('source', { media: '(min-aspect-ratio: 5/4)', srcset: FALLBACK_BG_WIDE }),
-        h('img', { src: FALLBACK_BG, alt: '', decoding: 'async' })));
-    }
+    bg.append(h('img', { src: c.opening_bg || FALLBACK_BG, alt: '', decoding: 'async' }));
   }
 
   /** 逗号后面换行（中文排得整齐）；字号看最长那一段 */

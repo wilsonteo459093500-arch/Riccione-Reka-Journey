@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
 import { repo } from '../lib/repo.js';
-import { cardLink, cardReady, cleanLines, MAX_OFFERS, MAX_CASES, MAX_SOCIALS, MAX_OPENING, MAX_MILESTONES, MAX_GROUPS, MAX_STATS, MAX_AWARDS, MAX_PLACES, MAX_EXHIBITIONS, SOCIAL_PLATFORMS } from '../lib/card.js';
+import { cardLink, cardReady, cleanLines, MAX_OFFERS, MAX_CASES, MAX_SOCIALS, MAX_OPENING, MAX_MILESTONES, MAX_GROUPS, MAX_STATS, MAX_AWARDS, MAX_EXHIBITIONS, MAX_BRANDS, MAX_POINTS, MAX_SERIES, SOCIAL_PLATFORMS } from '../lib/card.js';
 import { qrPath, qrPng } from '../lib/qr.js';
 import { fmtDate } from '../lib/logic.js';
 import { Button, Field, Input, Textarea, Section, Sheet, useToast, cx } from './ui.jsx';
@@ -215,14 +215,14 @@ function CardEditor() {
   // 本机模式：上传过的图在 IndexedDB，打开时先放进预览网址
   const [, bump] = useState(0);
   useEffect(() => {
-    const paths = [store.card.photo_path, store.card.video_path, store.card.poster_path, store.card.story.photo_path, store.card.about_photo_path, store.card.firm.photo_path, store.card.awards.photo_path, store.card.places_photo_path, ...store.card.cases.map((c) => c.image_path), ...store.card.socials.map((x) => x.icon_path), ...store.card.groups.map((g) => g.logo_path), ...store.card.card_images];
+    const paths = [store.card.photo_path, store.card.video_path, store.card.poster_path, store.card.about_photo_path, store.card.opening_bg_path, ...store.card.brands.flatMap((b) => [b.logo_path, b.photo_path, b.photo2_path, b.awards_photo_path, ...b.series.map((m) => m.image_path)]), ...store.card.cases.map((c) => c.image_path), ...store.card.socials.map((x) => x.icon_path), ...store.card.groups.map((g) => g.logo_path), ...store.card.card_images];
     if (repo.warmPublic) repo.warmPublic(paths).then(() => bump((x) => x + 1)).catch(() => null);
   }, [store.card]);
 
   const set = (patch) => setF((x) => ({ ...x, ...patch }));
   async function save() {
     setBusy(true);
-    try { await store.saveCard({ ...f, opening: cleanLines(f.opening), opening_en: cleanLines(f.opening_en), exhibitions: cleanLines(f.exhibitions, MAX_EXHIBITIONS) }); toast('名片存好了（公开页 1 分钟内更新）'); } catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
+    try { await store.saveCard({ ...f, opening: cleanLines(f.opening), opening_en: cleanLines(f.opening_en), brands: (f.brands || []).map((b) => ({ ...b, chips: cleanLines(b.chips, MAX_EXHIBITIONS) })) }); toast('名片存好了（公开页 1 分钟内更新）'); } catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
   }
   async function upload(file, kind, apply) {
     if (!file) return;
@@ -260,7 +260,11 @@ function CardEditor() {
             </Field>
           </div>
         )}
-        <p className="mt-2 text-xs text-faint">亮起来之后的背景：有展厅视频就放视频，没有就用溪岸图册的照片；名字下面那句是「一句话介绍」。</p>
+        <div className="mt-3 flex items-center gap-3">
+          <MediaSlot small path={f.opening_bg_path} busy={uploading === 'opbg'} accept="image/*" icon={ImagePlus}
+            onPick={(file) => upload(file, 'case', (p) => set({ opening_bg_path: p }))} onClear={() => set({ opening_bg_path: '' })} />
+          <p className="text-xs text-faint">亮起来之后的背景照片（横的、1600px 以上比较清楚；空白 = 森林）。名字下面那句是「一句话介绍」。</p>
+        </div>
       </Section>
 
       <Section title="名字和介绍">
@@ -312,78 +316,18 @@ function CardEditor() {
         <p className="mt-1 text-xs text-faint">左边的小图 = 卡片上的 logo / 头像（选填）。</p>
       </Section>
 
-      <Section title="公司（讲事实：年份、面积、数量）">
-        <div className="flex gap-3">
-          <MediaSlot small path={f.firm.photo_path} busy={uploading === 'firm'} accept="image/*" icon={ImagePlus}
-            onPick={(file) => { setUploading('firm'); store.uploadCardMedia(file, 'case').then((p) => set({ firm: { ...f.firm, photo_path: p } })).catch((e) => toast(e.message, 'error')).finally(() => setUploading('')); }}
-            onClear={() => set({ firm: { ...f.firm, photo_path: '' } })} />
-          <div className="flex-1 space-y-2">
-            <Input value={f.firm.title} onChange={(e) => set({ firm: { ...f.firm, title: e.target.value } })} placeholder="标题：例 RICCIONE 瑞吉欧" maxLength={80} />
-            <Textarea rows={2} value={f.firm.lead} onChange={(e) => set({ firm: { ...f.firm, lead: e.target.value } })} placeholder="一句话介绍公司" maxLength={400} />
-          </div>
+      <Section title="品牌（一个品牌一大块，空的部分不显示）" action={<span className="text-xs text-faint">最多 {MAX_BRANDS} 个</span>}>
+        <div className="space-y-3">
+          {(f.brands || []).map((b, i) => (
+            <BrandEditor key={i} b={b} upload={(file, key) => { setUploading(`brand${i}${key}`); return store.uploadCardMedia(file, 'case').finally(() => setUploading('')); }} uploading={uploading} idx={i}
+              onChange={(nb) => set({ brands: f.brands.map((x, k) => (k === i ? nb : x)) })}
+              onRemove={() => { if (window.confirm(`拿掉「${b.name || '这个品牌'}」？`)) set({ brands: f.brands.filter((_, k) => k !== i) }); }}
+              onError={(e) => toast(e.message, 'error')} />
+          ))}
+          {(f.brands || []).length < MAX_BRANDS && (
+            <Button variant="ghost" onClick={() => set({ brands: [...(f.brands || []), { name: '', logo_path: '', photo_path: '', photo2_path: '', title: '', lead: '', points: [], stats: [], awards_photo_path: '', awards: [], chips_title: '', chips: [], series: [], milestones: [] }] })}>＋ 加一个品牌</Button>
+          )}
         </div>
-        <ListEditor className="mt-3" label="数字格子（大字 + 说明）" max={MAX_STATS} items={f.firm.stats} onChange={(stats) => set({ firm: { ...f.firm, stats } })} blank={{ value: '', label: '' }}
-          render={(m, upd) => (
-            <div className="flex flex-1 gap-2">
-              <Input className="w-32" value={m.value} onChange={(e) => upd({ ...m, value: e.target.value })} placeholder="2002" maxLength={20} />
-              <Input value={m.label} onChange={(e) => upd({ ...m, label: e.target.value })} placeholder="中国公司成立" maxLength={60} />
-            </div>
-          )} />
-      </Section>
-
-      <Section title="奖项">
-        <div className="flex gap-3">
-          <MediaSlot small path={f.awards.photo_path} busy={uploading === 'awards'} accept="image/*" icon={ImagePlus}
-            onPick={(file) => { setUploading('awards'); store.uploadCardMedia(file, 'case').then((p) => set({ awards: { ...f.awards, photo_path: p } })).catch((e) => toast(e.message, 'error')).finally(() => setUploading('')); }}
-            onClear={() => set({ awards: { ...f.awards, photo_path: '' } })} />
-          <p className="flex-1 text-xs text-faint">奖杯 / 证书 / 颁奖的照片（选填）</p>
-        </div>
-        <ListEditor className="mt-3" max={MAX_AWARDS} items={f.awards.items} onChange={(items) => set({ awards: { ...f.awards, items } })} blank={{ year: '', title: '', note: '' }}
-          render={(m, upd) => (
-            <div className="flex flex-1 gap-2">
-              <Input className="w-20" value={m.year} onChange={(e) => upd({ ...m, year: e.target.value })} placeholder="2021" maxLength={12} />
-              <div className="flex-1 space-y-1">
-                <Input value={m.title} onChange={(e) => upd({ ...m, title: e.target.value })} placeholder="奖名：例 美国 MUSE 设计奖 · 金奖" maxLength={100} />
-                <Input value={m.note} onChange={(e) => upd({ ...m, note: e.target.value })} placeholder="哪个品牌 / 系列" maxLength={160} />
-              </div>
-            </div>
-          )} />
-      </Section>
-
-      <Section title="展厅与展会">
-        <ListEditor max={MAX_PLACES} items={f.places} onChange={(places) => set({ places })} blank={{ title: '', note: '' }}
-          render={(m, upd) => (
-            <div className="flex flex-1 gap-2">
-              <Input className="w-40" value={m.title} onChange={(e) => upd({ ...m, title: e.target.value })} placeholder="吉隆坡展厅" maxLength={60} />
-              <Input value={m.note} onChange={(e) => upd({ ...m, note: e.target.value })} placeholder="11,000 sq ft · 四层楼" maxLength={160} />
-            </div>
-          )} />
-        <div className="mt-3 flex gap-3">
-          <MediaSlot small path={f.places_photo_path} busy={uploading === 'places'} accept="image/*" icon={ImagePlus}
-            onPick={(file) => { setUploading('places'); store.uploadCardMedia(file, 'case').then((p) => set({ places_photo_path: p })).catch((e) => toast(e.message, 'error')).finally(() => setUploading('')); }}
-            onClear={() => set({ places_photo_path: '' })} />
-          <Field className="flex-1" label={`常年参展（一行一个，最多 ${MAX_EXHIBITIONS} 个）`}>
-            <Textarea rows={3} value={(f.exhibitions || []).join('\n')} onChange={(e) => set({ exhibitions: e.target.value.split('\n').slice(0, MAX_EXHIBITIONS) })} placeholder={'CIFF 广州家博会\nARCHIDEX · KLCC'} />
-          </Field>
-        </div>
-      </Section>
-
-      <Section title="发展历程">
-        <div className="flex gap-3">
-          <MediaSlot small path={f.story.photo_path} busy={uploading === 'case'} accept="image/*" icon={ImagePlus}
-            onPick={(file) => upload(file, 'case', (p) => set({ story: { ...f.story, photo_path: p } }))} onClear={() => set({ story: { ...f.story, photo_path: '' } })} />
-          <div className="flex-1 space-y-2">
-            <Input value={f.story.title} onChange={(e) => set({ story: { ...f.story, title: e.target.value } })} placeholder="标题：例 两代人，一份木作" maxLength={60} />
-            <Textarea rows={2} value={f.story.note} onChange={(e) => set({ story: { ...f.story, note: e.target.value } })} placeholder="照片下面的一句话" maxLength={300} />
-          </div>
-        </div>
-        <ListEditor className="mt-3" label="大事记" max={MAX_MILESTONES} items={f.story.milestones} onChange={(milestones) => set({ story: { ...f.story, milestones } })} blank={{ year: '', text: '' }}
-          render={(m, upd) => (
-            <div className="flex flex-1 gap-2">
-              <Input className="w-20" value={m.year} onChange={(e) => upd({ ...m, year: e.target.value })} placeholder="1979" maxLength={12} />
-              <Input value={m.text} onChange={(e) => upd({ ...m, text: e.target.value })} placeholder="发生了什么" maxLength={120} />
-            </div>
-          )} />
       </Section>
 
       <Section title="我可以帮你（家具以外的也写）">
@@ -459,6 +403,50 @@ function CardEditor() {
         </div>
       )}
     </>
+  );
+}
+
+/** 一个品牌的编辑块（可以收起来） */
+function BrandEditor({ b, onChange, onRemove, upload, uploading, idx, onError }) {
+  const [open, setOpen] = useState(false);
+  const set = (patch) => onChange({ ...b, ...patch });
+  const slot = (key, label) => (
+    <MediaSlot small label={label} path={b[key]} busy={uploading === `brand${idx}${key}`} accept="image/*" icon={ImagePlus}
+      onPick={(file) => upload(file, key).then((p) => set({ [key]: p })).catch(onError)} onClear={() => set({ [key]: '' })} />
+  );
+  return (
+    <div className="rounded-2xl border border-line p-3">
+      <div className="flex items-center gap-2">
+        <button type="button" className="flex-1 text-left text-sm font-semibold" onClick={() => setOpen(!open)}>{open ? '▾' : '▸'} {b.name || '（还没取名字的品牌）'}</button>
+        <Button size="sm" variant="ghost" onClick={onRemove}><Trash2 className="h-4 w-4" /></Button>
+      </div>
+      {open && (
+        <div className="mt-3 space-y-3">
+          <div className="flex flex-wrap gap-3">{slot('logo_path', 'Logo')}{slot('photo_path', '大照片')}{slot('photo2_path', '第二张')}{slot('awards_photo_path', '奖项照片')}</div>
+          <Input value={b.name} onChange={(e) => set({ name: e.target.value })} placeholder="品牌名：例 瑞吉欧 RICCIONE" maxLength={80} />
+          <Input value={b.title} onChange={(e) => set({ title: e.target.value })} placeholder="标题：例 更慢、更柔和，也更自然的生活" maxLength={80} />
+          <Textarea rows={3} value={b.lead} onChange={(e) => set({ lead: e.target.value })} placeholder="一段介绍（讲事实：年份、地点、做什么）" maxLength={600} />
+          <ListEditor label="重点（标题 + 一句）" max={MAX_POINTS} items={b.points} onChange={(points) => set({ points })} blank={{ title: '', note: '' }}
+            render={(m, upd) => (<div className="flex flex-1 gap-2"><Input className="w-36" value={m.title} onChange={(e) => upd({ ...m, title: e.target.value })} placeholder="实木家具" maxLength={60} /><Input value={m.note} onChange={(e) => upd({ ...m, note: e.target.value })} placeholder="100% 实木，模块化" maxLength={200} /></div>)} />
+          <ListEditor label="数字格子" max={MAX_STATS} items={b.stats} onChange={(stats) => set({ stats })} blank={{ value: '', label: '' }}
+            render={(m, upd) => (<div className="flex flex-1 gap-2"><Input className="w-32" value={m.value} onChange={(e) => upd({ ...m, value: e.target.value })} placeholder="2002" maxLength={20} /><Input value={m.label} onChange={(e) => upd({ ...m, label: e.target.value })} placeholder="中国公司成立" maxLength={60} /></div>)} />
+          <ListEditor label="奖项" max={MAX_AWARDS} items={b.awards} onChange={(awards) => set({ awards })} blank={{ year: '', title: '', note: '' }}
+            render={(m, upd) => (<div className="flex flex-1 gap-2"><Input className="w-20" value={m.year} onChange={(e) => upd({ ...m, year: e.target.value })} placeholder="2021" maxLength={12} /><div className="flex-1 space-y-1"><Input value={m.title} onChange={(e) => upd({ ...m, title: e.target.value })} placeholder="奖名" maxLength={100} /><Input value={m.note} onChange={(e) => upd({ ...m, note: e.target.value })} placeholder="系列 / 说明" maxLength={160} /></div></div>)} />
+          <div className="flex gap-2">
+            <Input className="w-32" value={b.chips_title} onChange={(e) => set({ chips_title: e.target.value })} placeholder="标签标题" maxLength={30} />
+            <Textarea rows={2} value={(b.chips || []).join('\n')} onChange={(e) => set({ chips: e.target.value.split('\n').slice(0, MAX_EXHIBITIONS) })} placeholder={'一行一个：例 CIFF 广州家博会'} />
+          </div>
+          <ListEditor label="系列（小格子）" max={MAX_SERIES} items={b.series} onChange={(series) => set({ series })} blank={{ title: '', note: '', image_path: '' }}
+            render={(m, upd, i) => (<div className="flex flex-1 gap-2">
+              <MediaSlot small path={m.image_path} busy={uploading === `brand${idx}s${i}`} accept="image/*" icon={ImagePlus}
+                onPick={(file) => upload(file, `s${i}`).then((p) => upd({ ...m, image_path: p })).catch(onError)} onClear={() => upd({ ...m, image_path: '' })} />
+              <div className="flex-1 space-y-1"><Input value={m.title} onChange={(e) => upd({ ...m, title: e.target.value })} placeholder="骨骼线" maxLength={40} /><Input value={m.note} onChange={(e) => upd({ ...m, note: e.target.value })} placeholder="一句话" maxLength={80} /></div>
+            </div>)} />
+          <ListEditor label="发展历程" max={MAX_MILESTONES} items={b.milestones} onChange={(milestones) => set({ milestones })} blank={{ year: '', text: '' }}
+            render={(m, upd) => (<div className="flex flex-1 gap-2"><Input className="w-20" value={m.year} onChange={(e) => upd({ ...m, year: e.target.value })} placeholder="2002" maxLength={12} /><Input value={m.text} onChange={(e) => upd({ ...m, text: e.target.value })} placeholder="发生了什么" maxLength={120} /></div>)} />
+        </div>
+      )}
+    </div>
   );
 }
 

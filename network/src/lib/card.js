@@ -18,8 +18,10 @@ export const MAX_OPENING = 6;     // 开场白最多几句
 export const MAX_MILESTONES = 10; // 发展历程的大事记
 export const MAX_STATS = 6;       // 公司的数字格子
 export const MAX_AWARDS = 8;
-export const MAX_PLACES = 4;      // 展厅 / 仓库
-export const MAX_EXHIBITIONS = 8;
+export const MAX_BRANDS = 3;      // 品牌（瑞吉欧、溪岸…）
+export const MAX_POINTS = 6;      // 品牌下的重点（业务、故事、供应链…）
+export const MAX_SERIES = 6;      // 原创系列小格子
+export const MAX_EXHIBITIONS = 8; // 品牌下的标签（常年参展…）
 export const MAX_GROUPS = 4;      // 商会 / 组织
 export const MAX_CARD_IMAGES = 2; // 实体名片的照片
 
@@ -61,37 +63,81 @@ export const DEFAULT_CARD = {
   tagline: '以木为语，与自然共生。',
   intro: '我是 Wilson，麻坡长大的家族企业第二代。小时候发誓不接班，后来为了家人考了 CIMA 特许管理会计师，再从仓库扛货做起。现在带着瑞吉欧和溪岸，在马来西亚做实木家具与全屋定制。我没有成功，我只是还在路上。',
   about_photo_path: '/card/father.jpg',
-  firm: {
-    title: '瑞吉欧 RICCIONE',
-    lead: '专注自然主义与实木的家具品牌。2025 年起成立 Riccione Reka 全屋定制，成为溪岸 SAIL BY RICCIONE REKA 的东南亚总代理。',
-    photo_path: '/card/showroom-kl.jpg',
-    stats: [
-      { value: '2002', label: '中国公司成立（广东瑞吉欧家具有限公司）' },
-      { value: '20+ 年', label: '在中国经营' },
-      { value: '11,000 sq ft', label: '吉隆坡四层楼展厅' },
-      { value: '21,000 sq ft', label: '佛山旗舰展厅' },
-      { value: '600+', label: '个货柜出口中国（2018 年）' },
-      { value: '18 家', label: '中国品牌门店（2024 年）' },
-    ],
-  },
-  awards: {
-    photo_path: '/card/awards.jpg',
-    items: [
-      { year: '2021', title: '美国 MUSE 缪斯设计奖 · 金奖', note: '溪岸 4.0 系列 · 从 100 多个国家和地区的 3.8 万件作品中选出' },
-      { year: '2017', title: 'ARCHIDEX 最佳展位设计奖', note: '瑞吉欧 · 吉隆坡 KLCC' },
-      { year: '2019', title: '佛山最佳家具设计奖', note: '瑞吉欧' },
-      { year: '2022', title: 'HCA 高定家居设计奖 · 年度产品设计奖', note: '溪岸 · 自然线系列' },
-      { year: '2023', title: 'HCA 高定家居设计奖 · 年度产品设计至尊奖（终评前三）', note: '溪岸 · 骨骼线 · 闲庭' },
-      { year: '2024', title: 'HCA 高定家居设计奖 · 年度产品设计奖', note: '溪岸 · 骨骼线 · 山居' },
-    ],
-  },
-  places: [
-    { title: '吉隆坡展厅', note: '11,000 sq ft · 四层楼展厅与办公室' },
-    { title: '佛山旗舰展厅', note: '21,000 sq ft · 办公室与展厅' },
-    { title: 'Setia Alam 仓储中心', note: '马来西亚仓储与配送' },
+  // 两个品牌分开介绍（文案取自 UKIR 提案的品牌画册页 blueprint/src/engine/b/company.js + 本人给的事实）
+  brands: [
+    {
+      name: '瑞吉欧 RICCIONE',
+      logo_path: '/card/logo-riccione.png',
+      photo_path: '/card/riccione-hero.jpg',
+      title: '更慢、更柔和，也更自然的生活',
+      lead: '名字取自意大利的一座海滨小镇。父辈 1979 年开始做木作，2002 年在广东成立中国公司；瑞吉欧专注于回归生活本质的实木家具：自然的材质、真实的设计、历久弥新的美。',
+      points: [
+        { title: '实木家具', note: '100% 实木，模块化系统' },
+        { title: '全屋定制', note: 'Riccione Reka：门、墙、柜一体化设计' },
+        { title: '服务版图', note: '出口、工程与零售并行：马来西亚、中国、香港、美国、加拿大、日本、印度、泰国、越南' },
+      ],
+      stats: [
+        { value: '2002', label: '中国公司成立（广东瑞吉欧家具有限公司）' },
+        { value: '20+ 年', label: '在中国经营' },
+        { value: '11,000 sq ft', label: '吉隆坡四层楼展厅' },
+        { value: '21,000 sq ft', label: '佛山旗舰展厅' },
+        { value: '600+', label: '个货柜出口中国（2018 年）' },
+        { value: '18 家', label: '中国品牌门店（2024 年）' },
+      ],
+      awards_photo_path: '/card/awards-mfc.jpg',
+      awards: [
+        { year: '2017', title: 'ARCHIDEX 最佳展位设计奖', note: '吉隆坡 KLCC' },
+        { year: '2018', title: 'Malaysian Furniture Creativity Awards · Top 5 Finalists ×3', note: 'Export Furniture Exhibition 2018：卧室套组 ×2、客厅电视柜' },
+        { year: '2019', title: '佛山最佳家具设计奖', note: '首次参展 CIFF 广州，产品销往日本与欧洲' },
+      ],
+      chips_title: '常年参展',
+      chips: ['CIFF 广州家博会', 'CIFF 上海 · 设计馆', 'ARCHIDEX · KLCC'],
+      photo2_path: '/card/riccione-cabinet.jpg',
+      milestones: [
+        { year: '1979', text: '父辈开始做木作' },
+        { year: '2002', text: '中国公司成立：广东瑞吉欧家具有限公司' },
+        { year: '2015', text: '瑞吉欧 RICCIONE 在马来西亚成立，以实木家具起步' },
+        { year: '2017', text: '佛山 21,000 sq ft 旗舰展厅；获 ARCHIDEX 最佳展位设计奖' },
+        { year: '2018', text: '出口中国超过 600 个货柜，经销商近 1,000 家' },
+        { year: '2020', text: '吉隆坡 11,000 sq ft 四层楼展厅落成；受邀参展 CIFF 上海设计馆' },
+        { year: '2024', text: '中国 18 家品牌门店；马来西亚线上线下一体化零售' },
+        { year: '2025', text: 'Riccione Reka 全屋定制成立' },
+      ],
+      series: [],
+    },
+    {
+      name: '溪岸 SAIL BY RICCIONE REKA',
+      logo_path: '/card/logo-sail.png',
+      photo_path: '/card/sail-hero.jpg',
+      title: '朴素的美感，自然的治愈力',
+      lead: '溪岸，是一处美而朴素的水边。2011 年创立于成都，以自然为源，用能让人安静下来的设计，带大家回到内心深处向往的栖居地。2025 年起，Riccione Reka 成为溪岸东南亚总代理，把门、墙、柜一体的生活带到马来西亚。',
+      points: [
+        { title: '2011 · 成都', note: '溪岸创立，自然主义定制' },
+        { title: '2025 · 马来西亚', note: 'Riccione Reka 成为东南亚总代理' },
+        { title: '全球供应链', note: '板材 Kastamonu · Egger · Skin｜五金 Blum · Italiana Ferramenta｜岩板与设备 Laminam · HOMAG · REHAU' },
+      ],
+      stats: [],
+      awards_photo_path: '/card/awards.jpg',
+      awards: [
+        { year: '2021', title: '美国 MUSE 缪斯设计奖 · 金奖', note: '溪岸 4.0 系列 · 从 100 多个国家和地区的 3.8 万件作品中选出' },
+        { year: '2022', title: 'HCA 高定家居设计奖 · 年度产品设计奖', note: '自然线系列 · 广州设计周' },
+        { year: '2023', title: 'HCA 高定家居设计奖 · 年度产品设计至尊奖（终评前三）', note: '骨骼线 · 闲庭' },
+        { year: '2024', title: 'HCA 高定家居设计奖 · 年度产品设计奖', note: '骨骼线 · 山居' },
+      ],
+      chips_title: '',
+      chips: [],
+      photo2_path: '',
+      milestones: [],
+      series: [
+        { title: '骨骼线', note: '古典与现代的对话', image_path: '/card/s-skeleton.jpg' },
+        { title: '空山', note: '留白与壁龛，让空间呼吸', image_path: '/card/s-kongshan.jpg' },
+        { title: '织', note: '织物的质感，生活的温度', image_path: '/card/s-zhi.jpg' },
+        { title: '雾山', note: '轻盈纯净，如雾中春居', image_path: '/card/s-wushan.jpg' },
+        { title: '寂东方', note: '实木的纯粹，东方的沉静', image_path: '/card/s-jidongfang.jpg' },
+      ],
+    },
   ],
-  places_photo_path: '/card/showroom-inside.jpg',
-  exhibitions: ['CIFF 广州家博会', 'CIFF 上海 · 设计馆', 'ARCHIDEX · KLCC'],
+  opening_bg_path: '/card/opening-forest.jpg',
   whatsapp: '60163881919',
   phone: '',
   email: 'wilsonteo@riccione.asia',
@@ -104,23 +150,6 @@ export const DEFAULT_CARD = {
   opening: [],
   opening_en: [],
   opening_on: true,
-  story: {
-    title: '从 1979 到今天',
-    note: '',
-    photo_path: '',
-    milestones: [
-      { year: '1979', text: '父辈开始做木作' },
-      { year: '2002', text: '中国公司成立：广东瑞吉欧家具有限公司' },
-      { year: '2015', text: '瑞吉欧 RICCIONE 在马来西亚成立，以实木家具起步' },
-      { year: '2017', text: '佛山 21,000 sq ft 旗舰展厅；获 ARCHIDEX 最佳展位设计奖' },
-      { year: '2018', text: '出口中国超过 600 个货柜，经销商近 1,000 家' },
-      { year: '2019', text: '首次参展 CIFF 广州，产品销往日本与欧洲' },
-      { year: '2020', text: '吉隆坡 11,000 sq ft 展厅落成；受邀参展 CIFF 上海设计馆' },
-      { year: '2024', text: '中国 18 家品牌门店；马来西亚线上线下一体化零售' },
-      { year: '2025', text: 'Riccione Reka 全屋定制成立，成为溪岸 SAIL BY RICCIONE REKA 东南亚总代理' },
-    ],
-  },
-
   offers: [
     '全屋定制：门、墙、柜一体化，从设计、生产到安装',
     '100% 实木家具，模块化，按你的家调整',
@@ -130,12 +159,12 @@ export const DEFAULT_CARD = {
     '中马两地的设计、工程与供应链人脉',
   ],
   cases: [
-    { title: '溪岸 · 骨骼线', note: '古典与现代的对话 · HCA 获奖系列', image_path: '/card/skeleton.jpg' },
-    { title: '溪岸 · 空山', note: '留白与壁龛，让空间呼吸', image_path: '/card/kongshan.jpg' },
-    { title: '溪岸 · 织', note: '织物的质感，生活的温度', image_path: '/card/zhi.jpg' },
-    { title: '溪岸 · 雾山', note: '轻盈纯净，如雾中春居', image_path: '/card/wushan.jpg' },
-    { title: '溪岸 · 寂东方', note: '实木的纯粹，东方的沉静', image_path: '/card/jidongfang.jpg' },
-    { title: '瑞吉欧 · 实木', note: '更慢、更柔和，也更自然的生活', image_path: '/card/riccione.jpg' },
+    { title: '瑞吉欧 RICCIONE · 展厅', note: '实木家具与生活方式', image_path: '/card/g-riccione-showroom.jpg' },
+    { title: '溪岸 SAIL BY RICCIONE REKA · 展厅', note: '朴素的美感，自然的治愈力', image_path: '/card/g-sail-still.jpg' },
+    { title: '溪岸 · 书格墙', note: '让人安静下来的客厅', image_path: '/card/g-sail-living.jpg' },
+    { title: '溪岸 · 餐厅', note: '深色书格墙与长餐桌', image_path: '/card/g-sail-dining.jpg' },
+    { title: '溪岸 · 门头', note: '清水墙与石凳', image_path: '/card/g-sail-facade.jpg' },
+    { title: '瑞吉欧 · 实木衣柜', note: '更慢、更柔和，也更自然的生活', image_path: '/card/g-riccione-wardrobe.jpg' },
   ],
   socials: [
     { platform: 'instagram', url: 'https://www.instagram.com/wilsonteo0419/', label: '张炜盛 Wilson', icon_path: '/card/avatar.jpg' },
@@ -192,13 +221,9 @@ export function cleanCard(c = {}) {
     opening: cleanLines(src.opening),
     opening_en: cleanLines(src.opening_en),
     opening_on: src.opening_on !== false,
-    story: cleanStory(src.story),
     about_photo_path: safePath(src.about_photo_path),
-    firm: cleanFirm(src.firm),
-    awards: cleanAwards(src.awards),
-    places: (Array.isArray(src.places) ? src.places : []).map((x) => ({ title: str(x && x.title, 60), note: str(x && x.note, 160) })).filter((x) => x.title).slice(0, MAX_PLACES),
-    places_photo_path: safePath(src.places_photo_path),
-    exhibitions: cleanLines(src.exhibitions, MAX_EXHIBITIONS, 60),
+    brands: (Array.isArray(src.brands) ? src.brands : []).map(cleanBrand).filter((b) => b.name).slice(0, MAX_BRANDS),
+    opening_bg_path: safePath(src.opening_bg_path),
     groups: (Array.isArray(src.groups) ? src.groups : []).map(cleanGroup).filter((g) => g.name).slice(0, MAX_GROUPS),
     card_images: (Array.isArray(src.card_images) ? src.card_images : []).map(safePath).filter(Boolean).slice(0, MAX_CARD_IMAGES),
     greeting: str(src.greeting, 200) || DEFAULT_CARD.greeting,
@@ -208,43 +233,25 @@ export function cleanCard(c = {}) {
   return out;
 }
 
-/** 「两代人」那一块：标题、一句话、一张照片、几件大事（年份 + 一句） */
-function cleanStory(v) {
+/** 一个品牌：logo、照片、标题、一段介绍，下面几样清单（都是选填，空的不显示） */
+const objList = (v, max, map, keep) => (Array.isArray(v) ? v : []).map((x) => map(x && typeof x === 'object' ? x : {})).filter(keep).slice(0, max);
+function cleanBrand(v) {
   const x = v && typeof v === 'object' ? v : {};
   return {
-    title: str(x.title, 60),
-    note: str(x.note, 300),
+    name: str(x.name, 80),
+    logo_path: safePath(x.logo_path),
     photo_path: safePath(x.photo_path),
-    milestones: (Array.isArray(x.milestones) ? x.milestones : [])
-      .map((m) => ({ year: str(m && m.year, 12), text: str(m && m.text, 120) }))
-      .filter((m) => m.year || m.text)
-      .slice(0, MAX_MILESTONES),
-  };
-}
-
-/** 公司：标题、一句话、照片、数字格子 */
-function cleanFirm(v) {
-  const x = v && typeof v === 'object' ? v : {};
-  return {
+    photo2_path: safePath(x.photo2_path),
     title: str(x.title, 80),
-    lead: str(x.lead, 400),
-    photo_path: safePath(x.photo_path),
-    stats: (Array.isArray(x.stats) ? x.stats : [])
-      .map((m) => ({ value: str(m && m.value, 20), label: str(m && m.label, 60) }))
-      .filter((m) => m.value)
-      .slice(0, MAX_STATS),
-  };
-}
-
-/** 奖项：一张照片 + 几项（年份、奖名、哪个品牌 / 哪个系列） */
-function cleanAwards(v) {
-  const x = v && typeof v === 'object' ? v : {};
-  return {
-    photo_path: safePath(x.photo_path),
-    items: (Array.isArray(x.items) ? x.items : [])
-      .map((m) => ({ year: str(m && m.year, 12), title: str(m && m.title, 100), note: str(m && m.note, 160) }))
-      .filter((m) => m.title)
-      .slice(0, MAX_AWARDS),
+    lead: str(x.lead, 600),
+    points: objList(x.points, MAX_POINTS, (m) => ({ title: str(m.title, 60), note: str(m.note, 200) }), (m) => m.title),
+    stats: objList(x.stats, MAX_STATS, (m) => ({ value: str(m.value, 20), label: str(m.label, 60) }), (m) => m.value),
+    awards_photo_path: safePath(x.awards_photo_path),
+    awards: objList(x.awards, MAX_AWARDS, (m) => ({ year: str(m.year, 12), title: str(m.title, 100), note: str(m.note, 160) }), (m) => m.title),
+    chips_title: str(x.chips_title, 30),
+    chips: cleanLines(x.chips, MAX_EXHIBITIONS, 60),
+    series: objList(x.series, MAX_SERIES, (m) => ({ title: str(m.title, 40), note: str(m.note, 80), image_path: safePath(m.image_path) }), (m) => m.title),
+    milestones: objList(x.milestones, MAX_MILESTONES, (m) => ({ year: str(m.year, 12), text: str(m.text, 120) }), (m) => m.year || m.text),
   };
 }
 
@@ -288,21 +295,22 @@ export function publicUrl(base, path) {
 export function publicCard(card, supabaseUrl) {
   const c = cleanCard(card);
   const url = (p) => publicUrl(supabaseUrl, p);
-  const { photo_path, video_path, poster_path, about_photo_path, places_photo_path, ...rest } = c;
+  const { photo_path, video_path, poster_path, about_photo_path, opening_bg_path, ...rest } = c;
   return {
     ...rest,
     photo: url(photo_path),
     video: video_path ? url(video_path) : c.video_url,
     poster: url(poster_path) || url(photo_path),
     cases: c.cases.map(({ image_path, ...x }) => ({ ...x, image: url(image_path) })),
-    story: (({ photo_path: sp, ...x }) => ({ ...x, photo: url(sp) }))(c.story),
     socials: c.socials.map(({ icon_path, ...x }) => ({ ...x, icon: url(icon_path) })),
     groups: c.groups.map(({ logo_path, ...x }) => ({ ...x, logo: url(logo_path) })),
     card_images: c.card_images.map(url),
     about_photo: url(c.about_photo_path),
-    firm: (({ photo_path: cp, ...x }) => ({ ...x, photo: url(cp) }))(c.firm),
-    awards: (({ photo_path: ap, ...x }) => ({ ...x, photo: url(ap) }))(c.awards),
-    places_photo: url(c.places_photo_path),
+    opening_bg: url(c.opening_bg_path),
+    brands: c.brands.map(({ logo_path, photo_path: bp, photo2_path, awards_photo_path, series, ...x }) => ({
+      ...x, logo: url(logo_path), photo: url(bp), photo2: url(photo2_path), awards_photo: url(awards_photo_path),
+      series: series.map(({ image_path, ...m }) => ({ ...m, image: url(image_path) })),
+    })),
   };
 }
 
