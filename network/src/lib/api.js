@@ -48,6 +48,7 @@ export const api = {
   company: (info) => post('company', info),
   assess: (payload) => post('assess', payload),
   analyzeTalk: (payload) => post('analyze-talk', payload),
+  draftMessages: (payload) => post('draft-messages', payload),
   ticktickStatus: () => post('ticktick', { action: 'status' }),
   ticktickTasks: (tasks) => post('ticktick', { action: 'tasks', tasks }),
 };

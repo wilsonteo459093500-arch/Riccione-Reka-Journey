@@ -4,19 +4,21 @@
    ============================================================ */
 import React, { useMemo, useState } from 'react';
 import {
-  MessageCircle, Sun, CalendarPlus, Check, Clock, Contact, ListChecks, Sparkles, UserPlus, TrendingDown, Hourglass, ScanLine,
+  MessageCircle, Sun, CalendarPlus, Send, PartyPopper, Check, Clock, Contact, ListChecks, Sparkles, UserPlus, TrendingDown, Hourglass, ScanLine,
 } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
 import { waLink } from '../lib/logic.js';
 import { todayActions, ACTION_LABEL, firstName } from '../lib/relation.js';
+import { upcomingFestivals, festivalWhen } from '../lib/outreach.js';
 import { Avatar, AffinityBar, Button, TierBadge, Spinner, useToast, cx } from './ui.jsx';
 import ScheduleSheet from './ScheduleSheet.jsx';
 
 const REASON_ICON = { promise: ListChecks, follow: Hourglass, new: UserPlus, overdue: Clock, soon: Clock, cooling: TrendingDown };
 const WEEK = ['日', '一', '二', '三', '四', '五', '六'];
 
-export default function Today({ onOpen, onBrief, onScan }) {
-  const { people, loading, error, quickContact, snooze } = useStore();
+export default function Today({ onOpen, onBrief, onScan, onSend, onCampaigns, onFestival }) {
+  const { people, data, loading, error, quickContact, snooze } = useStore();
+  const festivals = useMemo(() => upcomingFestivals(data.campaigns), [data.campaigns]);
   const toast = useToast();
   const [limit, setLimit] = useState(7);
   const [sched, setSched] = useState(null); // [{person, action}]
@@ -54,9 +56,22 @@ export default function Today({ onOpen, onBrief, onScan }) {
   return (
     <div className="mx-auto max-w-3xl space-y-4 px-4 pb-32 pt-4 sm:pb-10">
       <header>
-        <div className="text-sm text-muted">{d.getMonth() + 1} 月 {d.getDate()} 日 · 星期{WEEK[d.getDay()]}</div>
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-muted">{d.getMonth() + 1} 月 {d.getDate()} 日 · 星期{WEEK[d.getDay()]}</div>
+          {onCampaigns && people.length > 0 && (
+            <button onClick={onCampaigns} className="flex items-center gap-1 rounded-lg border border-line bg-white px-2.5 py-1 text-sm font-medium hover:border-ink/30"><Send className="h-4 w-4" />群发</button>
+          )}
+        </div>
         <h1 className="mt-0.5 flex items-center gap-2 text-2xl font-semibold tracking-tight"><Sun className="h-6 w-6 text-amber-500" />{hello}，今天找这几个人</h1>
       </header>
+
+      {onFestival && people.length > 0 && festivals.map((f) => (
+        <div key={`${f.key}${f.date}`} className="flex flex-wrap items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+          <PartyPopper className="h-5 w-5 shrink-0 text-amber-600" />
+          <span className="min-w-0 flex-1 text-sm text-amber-900"><b>{f.label}</b>{festivalWhen(f)}：先写好节日问候</span>
+          <Button size="sm" variant="outline" className="whitespace-nowrap" onClick={() => onFestival(f.label)}><Send className="h-4 w-4" />准备问候</Button>
+        </div>
+      ))}
 
       {people.length > 0 && (
         <div className="grid grid-cols-4 gap-2">
@@ -86,8 +101,11 @@ export default function Today({ onOpen, onBrief, onScan }) {
 
       {list.length > 1 && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-plum/[0.07] px-3 py-2.5">
-          <span className="text-sm text-plum-deep">把这 {list.length} 个人排成连续的时间盒</span>
-          <Button size="sm" variant="accent" className="whitespace-nowrap" onClick={() => setSched(list.map((x) => ({ person: x.person, action: x.action })))}><CalendarPlus className="h-4 w-4" />一键排进 TickTick</Button>
+          <span className="text-sm text-plum-deep">这 {list.length} 个人：一次写好讯息，或排成连续的时间盒</span>
+          <div className="flex flex-wrap gap-1.5">
+            {onSend && <Button size="sm" variant="outline" className="whitespace-nowrap" onClick={onSend}><Send className="h-4 w-4" />一次写好讯息</Button>}
+            <Button size="sm" variant="accent" className="whitespace-nowrap" onClick={() => setSched(list.map((x) => ({ person: x.person, action: x.action })))}><CalendarPlus className="h-4 w-4" />一键排进 TickTick</Button>
+          </div>
         </div>
       )}
 
