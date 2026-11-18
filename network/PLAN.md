@@ -156,6 +156,22 @@ Wilson 想要一个**只给自己用**的人脉管理 app，用来记录每个�
 - **阶段 2b**：微信（无障碍服务搜名字 → 语音通话 / 按住说话）。风险较高：改版勤、对自动操作敏感；只帮按，不群发、不读讯息
 - **阶段 3（选做）**：用 FoloToy 麦克风录语音讯息（参考上游社群作品 intercom：Opus 经 BLE 到手机）→ 分享到 WhatsApp；可能显示成音档，效果不好就不做
 
+## FoloToy 下一批（2026-11-18 用户选定）
+
+### 开机封面：品牌木纹
+
+- 开机不再直接是二维码：深色木纹底 + RICCIONE REKA / 溪岸 SAIL 官方字标（用仓库里现成的 `blueprint/public/template/b/riccione-logo-white.png`、`invite/assets/img/brand/sail.png`，不重画），开机一道光扫过
+- 按「确定」→ 名片二维码；30 秒没动作 → 回封面；其他键照旧（上长按菜单、下长按车用）
+- 图档在电脑上缩成 240×320 的 RGB565 编进韧体（不用 PSRAM、开机直接画）
+
+### DEKU 小助理（经手机 app）
+
+- FoloToy 芯片做不到唤醒词 → **按住键说话**（车用模式：按住「上」以外的空键，细节到时定）
+- 流程：FoloToy 按住 → SPACE 车控 app 用**手机 / 车上麦克风**听（Android 语音转文字，免费）→ SPACE 服务器 `/api/deku`（Claude Haiku，跟 SPACE 共用 AI 钥匙与「这个月的 AI 费用」）→ 手机 / 车上喇叭念答案；FoloToy 显示 DEKU 原创小表情（听 / 想 / 说）
+- 功能：问答聊天；控制 FoloToy（「倒数 5 分钟」「点蜡烛」「放生日歌」→ AI 回指令 → app 送给 FoloToy）
+- 名字 DEKU 照用；样子自己设计（不用动漫《我的英雄学院》的角色造型）
+- 待定：app 怎么证明是本人（SPACE 用 Supabase 登入；可能用一组只给 DEKU 的钥匙放 Vercel 环境变数）；每次约几分钱，画面写明
+
 ## FoloToy 口袋机 · 第一批 ✅（2026-11-18，先于 Android app 做）
 
 - 名片「上」长按 → 菜单：蜡烛与生日歌 / 计时器 / 倒数计时 / 车用遥控器 / 返回名片
