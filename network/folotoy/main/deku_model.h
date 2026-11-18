@@ -94,3 +94,10 @@ bool deku_on_tick(deku_state_t *s, uint32_t now_ms, deku_out_t *out);
 
 // 类别的中文名（「稻盛和夫」）
 const char *deku_kind_name(deku_kind_t k);
+
+// 中文断行：照字宽把 in 切成几行（用 '\n' 接起来写进 out），遵守中文排版的规矩：
+//   「，。、！？；：」』）》…」不放在行首（连前一个字一起移到下一行）；「「『（《」不放在行尾；
+//   英文、数字一个词不切开，行首的空白去掉。
+// width(cp) 回一个字的宽度（像素）。回写进 out 的行数；out 不够大就截掉（一定以 0 结尾）。
+typedef int (*deku_width_fn)(uint32_t cp, void *ctx);
+int deku_wrap(const char *in, char *out, size_t cap, int max_w, deku_width_fn width, void *ctx);

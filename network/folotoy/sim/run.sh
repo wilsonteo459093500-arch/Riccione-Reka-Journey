@@ -54,7 +54,7 @@ cc -O1 -Wall -Wextra -Werror -I"${SIM}" -I"${SIM}/stub" -I"${LVGL}" -I"${MAIN}" 
   "${MAIN}/space_card.c" "${MAIN}/space_card_model.c" "${MAIN}/car_screen.c" "${MAIN}/car_remote_model.c" \
   "${MAIN}/pocket_model.c" "${MAIN}/audio_dsp.c" "${MAIN}/menu_screen.c" "${MAIN}/candle_screen.c" "${MAIN}/timer_screen.c" \
   "${MAIN}/tools_screen.c" "${MAIN}/games_model.c" "${MAIN}/games_screen.c" "${MAIN}/find_screen.c" \
-  "${MAIN}/deku_model.c" "${MAIN}/deku_screen.c" "${SIM}/deku_lines_sim.c" \
+  "${MAIN}/deku_model.c" "${MAIN}/deku_screen.c" "${MAIN}/deku_lines.c" \
   "${MAIN}"/font_*.c "${MAIN}/cover_img.c" \
   "${OBJ}"/*.o -lm -o "${WORK}/sim"
 rm -f "${OUT}"/*.ppm "${OUT}"/*.png "${CAR_OUT}"/*.ppm "${CAR_OUT}"/*.png "${POCKET_OUT}"/*.ppm "${POCKET_OUT}"/*.png "${FIND_OUT}"/*.ppm "${FIND_OUT}"/*.png "${DEKU_OUT}"/*.ppm "${DEKU_OUT}"/*.png

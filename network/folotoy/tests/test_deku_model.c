@@ -104,7 +104,43 @@ static void test_timeouts(void) {
     assert(strcmp(deku_kind_name(DEKU_KUOK), "郭鹤年") == 0);
 }
 
+// 测试用字宽：中文 / 全形标点 20、英文数字 10、空白 5
+static int fake_width(uint32_t cp, void *ctx) {
+    (void)ctx;
+    return cp == ' ' ? 5 : cp < 0x80 ? 10 : 20;
+}
+
+static void test_wrap(void) {
+    char out[256];
+    // 一行 5 个中文字（100px）。一般情况：照宽度切
+    int n = deku_wrap("一二三四五六七八九十", out, sizeof out, 100, fake_width, NULL);
+    assert(n == 2 && strcmp(out, "一二三四五\n六七八九十") == 0);
+    // 标点在第 6 个：把「五」一起带下去
+    n = deku_wrap("一二三四五。六七", out, sizeof out, 100, fake_width, NULL);
+    assert(n == 2 && strcmp(out, "一二三四\n五。六七") == 0);
+    // 连着两个不能放行首的（。」）：再多带一个字下去
+    n = deku_wrap("一二三四「五」。六", out, sizeof out, 100, fake_width, NULL);
+    assert(n == 2 && strcmp(out, "一二三四\n「五」。六") == 0);
+    // 「「」不能放行尾
+    n = deku_wrap("他说一二「三四」", out, sizeof out, 100, fake_width, NULL);
+    assert(n == 2 && strcmp(out, "他说一二\n「三四」") == 0);
+    // 英文词不切开，行首空白去掉
+    n = deku_wrap("I think reasoning", out, sizeof out, 100, fake_width, NULL);
+    assert(n == 2 && strcmp(out, "I think\nreasoning") == 0);
+    // 原本的换行照留
+    n = deku_wrap("我是 DEKU。\n要听笑话", out, sizeof out, 200, fake_width, NULL);
+    assert(n == 2 && strcmp(out, "我是 DEKU。\n要听笑话") == 0);
+    // 放得下就一行
+    n = deku_wrap("敬天爱人。", out, sizeof out, 200, fake_width, NULL);
+    assert(n == 1 && strcmp(out, "敬天爱人。") == 0);
+    // out 太小：截掉但一定以 0 结尾
+    char small[8];
+    deku_wrap("一二三四五六七八九十", small, sizeof small, 100, fake_width, NULL);
+    assert(strlen(small) < sizeof small);
+}
+
 int main(void) {
+    test_wrap();
     test_pick_no_repeat();
     test_buttons_without_app();
     test_talk_with_app();

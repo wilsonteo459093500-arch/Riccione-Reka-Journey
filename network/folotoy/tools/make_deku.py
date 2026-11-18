@@ -20,10 +20,11 @@ OUT_JSON = ROOT / "android" / "app" / "src" / "main" / "assets" / "deku.json"
 
 KINDS = {"joke": "DEKU_JOKE", "inamori": "DEKU_INAMORI", "kuok": "DEKU_KUOK", "musk": "DEKU_MUSK"}
 WHO = {"inamori": "稻盛和夫", "kuok": "郭鹤年", "musk": "Elon Musk"}
+WHO_SHORT = {"inamori": "稻盛和夫", "kuok": "郭鹤年", "musk": "Musk"}   # FoloToy 屏幕上出处那一行（窄）
 
 
 def c_str(s: str) -> str:
-    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n") + '"'
 
 
 def display_source(line: dict) -> str:
@@ -33,7 +34,17 @@ def display_source(line: dict) -> str:
     if not where:
         m = re.search(r"《[^》]+》", line.get("source", ""))
         where = m.group(0) if m else re.split(r"[（；，(]", line.get("source", ""))[0].strip()
-    return f"——{WHO[line['kind']]}" + (f" · {where}" if where else "")
+    who = WHO_SHORT[line["kind"]]
+    if not where:
+        return f"——{who}"
+    one = f"——{who}{where}" if where.startswith("《") else f"——{who} · {where}"   # 书名号自己会分开，不用「 · 」
+    # 屏幕一行约 212px：太长就在人名后面换行（不要让 FoloToy 从书名中间切开）
+    return one if rough_width(one) <= 200 else f"——{who}\n{where}"
+
+
+def rough_width(s: str) -> float:
+    """粗估 20px 字的宽度（中文 / 全形 20、英文数字 12、空白 5）：宁可估宽一点。"""
+    return sum(5 if c == " " else 12 if ord(c) < 0x80 else 20 for c in s)
 
 
 def load() -> list[dict]:

@@ -1,3 +1,455 @@
 {
- "lines": []
+ "lines": [
+  {
+   "id": "J01",
+   "kind": "joke",
+   "zh": "太阳为什么不用去上学？因为它已经有很多「度」了。"
+  },
+  {
+   "id": "J02",
+   "kind": "joke",
+   "zh": "哪种水果最会做生意？芒果，因为它一年到头都很「忙」。"
+  },
+  {
+   "id": "J03",
+   "kind": "joke",
+   "zh": "1 和 0 吵架，谁赢了？1 赢了，因为 0 从头到尾都「没有」话说。"
+  },
+  {
+   "id": "J04",
+   "kind": "joke",
+   "zh": "我问 Wi-Fi 为什么不理我。它说：你离我太远了，我们之间没有信号。"
+  },
+  {
+   "id": "J05",
+   "kind": "joke",
+   "zh": "时钟为什么那么累？一天上班 24 小时，大家一看它还说：又迟到了！"
+  },
+  {
+   "id": "J06",
+   "kind": "joke",
+   "zh": "月亮为什么从来不迷路？因为它随身带着「月」历。"
+  },
+  {
+   "id": "J07",
+   "kind": "joke",
+   "zh": "什么书永远读不完？秘书，因为永远还有下一份。"
+  },
+  {
+   "id": "J08",
+   "kind": "joke",
+   "zh": "我跟闹钟说：明天别叫我。它很守信用，第二天真的没叫。"
+  },
+  {
+   "id": "J09",
+   "kind": "joke",
+   "zh": "手机电量 1% 的时候，是它一天里最有礼貌的时候：每分钟都提醒你一次。"
+  },
+  {
+   "id": "J10",
+   "kind": "joke",
+   "zh": "蜗牛为什么从来不迟到？因为它把家背在身上，走到哪里都算到家了。"
+  },
+  {
+   "id": "J11",
+   "kind": "joke",
+   "zh": "减肥最难的不是少吃，是看到「买一送一」的时候。"
+  },
+  {
+   "id": "J12",
+   "kind": "joke",
+   "zh": "我把「明天开始运动」写在日历上，结果每一天都是明天。"
+  },
+  {
+   "id": "L01",
+   "kind": "joke",
+   "zh": "马来西亚的天气预报只有三种：热、很热、下午三点大雨。"
+  },
+  {
+   "id": "L02",
+   "kind": "joke",
+   "zh": "怎么知道今天会下雨？把衣服晾出去就知道了。"
+  },
+  {
+   "id": "L03",
+   "kind": "joke",
+   "zh": "外国朋友问我 lah 是什么意思。我说：没什么意思 lah。"
+  },
+  {
+   "id": "L04",
+   "kind": "joke",
+   "zh": "马来西亚人问你吃饱了吗，不是关心你，是准备约你再吃一餐。"
+  },
+  {
+   "id": "L05",
+   "kind": "joke",
+   "zh": "在 KL 塞车，我把一本书从头听到结局，导航还在说：前方五百米右转。"
+  },
+  {
+   "id": "L06",
+   "kind": "joke",
+   "zh": "Grab 司机说「我到了」，意思是他刚出门。"
+  },
+  {
+   "id": "L07",
+   "kind": "joke",
+   "zh": "找车位十五分钟，走进商场两分钟，出来找自己的车二十分钟。"
+  },
+  {
+   "id": "L08",
+   "kind": "joke",
+   "zh": "朋友说榴莲要节制，一天只吃一粒。后来才知道，他说的一粒是一整个。"
+  },
+  {
+   "id": "L09",
+   "kind": "joke",
+   "zh": "在 mamak 问老板有什么推荐，他说：什么都有，就是没有「没有」。"
+  },
+  {
+   "id": "L10",
+   "kind": "joke",
+   "zh": "马来西亚的「等一下」，可以是五分钟，也可以是五天。"
+  },
+  {
+   "id": "L11",
+   "kind": "joke",
+   "zh": "开冷气怕冷，关冷气怕热，最后决定去商场吹免费的。"
+  },
+  {
+   "id": "L12",
+   "kind": "joke",
+   "zh": "我问朋友几点到。他说：快到了。我问：快到哪里？他说：快到门口——我家门口。"
+  },
+  {
+   "id": "F01",
+   "kind": "joke",
+   "zh": "客户说：要简约，要大气，要温馨，要有高级感，最好便宜一点。设计师：好的，我先给你一张白纸。"
+  },
+  {
+   "id": "F02",
+   "kind": "joke",
+   "zh": "量尺寸最怕听到的一句话：大概就这样吧。"
+  },
+  {
+   "id": "F03",
+   "kind": "joke",
+   "zh": "设计图改到第十版，客户说：我觉得还是第一版好。"
+  },
+  {
+   "id": "F04",
+   "kind": "joke",
+   "zh": "柜子对抽屉说：你别一拉就出来，矜持一点。"
+  },
+  {
+   "id": "F05",
+   "kind": "joke",
+   "zh": "设计师最怕的颜色：有点灰又不是灰、有点暖又不太暖的那种白。"
+  },
+  {
+   "id": "F06",
+   "kind": "joke",
+   "zh": "客户问桌子能不能便宜一点。老板说可以，我拿掉一只脚。"
+  },
+  {
+   "id": "F07",
+   "kind": "joke",
+   "zh": "沙发为什么总是很累？因为每个人回家第一件事，就是往它身上一躺。"
+  },
+  {
+   "id": "F08",
+   "kind": "joke",
+   "zh": "师傅说差一毫米没关系。后来门关不上，他说：你看，就是一毫米的事。"
+  },
+  {
+   "id": "F09",
+   "kind": "joke",
+   "zh": "我问设计师为什么柜子之间要留一条缝。他说：做人要留余地，柜子也要。"
+  },
+  {
+   "id": "F10",
+   "kind": "joke",
+   "zh": "客户说墙是直的。激光水平仪说：我们看法不同。"
+  },
+  {
+   "id": "F11",
+   "kind": "joke",
+   "zh": "装修完第一天最开心，因为预算终于不会再变了——直到你想换窗帘。"
+  },
+  {
+   "id": "F12",
+   "kind": "joke",
+   "zh": "衣柜做得再大也不够放，因为衣服会自己繁殖。"
+  },
+  {
+   "id": "I01",
+   "kind": "inamori",
+   "zh": "人生·工作的结果 = 思维方式 × 热情 × 能力。",
+   "who": "稻盛和夫",
+   "source": "《活法》（生き方，2004）"
+  },
+  {
+   "id": "I02",
+   "kind": "inamori",
+   "zh": "付出不亚于任何人的努力。",
+   "who": "稻盛和夫",
+   "source": "《六项精进》第一条；也是《经营十二条》第四条"
+  },
+  {
+   "id": "I03",
+   "kind": "inamori",
+   "zh": "要谦虚，不要骄傲。",
+   "who": "稻盛和夫",
+   "source": "《六项精进》第二条"
+  },
+  {
+   "id": "I04",
+   "kind": "inamori",
+   "zh": "要每天反省。",
+   "who": "稻盛和夫",
+   "source": "《六项精进》第三条"
+  },
+  {
+   "id": "I05",
+   "kind": "inamori",
+   "zh": "活着，就要感谢。",
+   "who": "稻盛和夫",
+   "source": "《六项精进》第四条"
+  },
+  {
+   "id": "I06",
+   "kind": "inamori",
+   "zh": "积善行，思利他。",
+   "who": "稻盛和夫",
+   "source": "《六项精进》第五条"
+  },
+  {
+   "id": "I07",
+   "kind": "inamori",
+   "zh": "不要有感性的烦恼。",
+   "who": "稻盛和夫",
+   "source": "《六项精进》第六条"
+  },
+  {
+   "id": "I08",
+   "kind": "inamori",
+   "zh": "敬天爱人。",
+   "who": "稻盛和夫",
+   "source": "京瓷社训"
+  },
+  {
+   "id": "I09",
+   "kind": "inamori",
+   "zh": "动机至善，私心了无。",
+   "who": "稻盛和夫",
+   "source": "创办第二电电（今 KDDI）前每晚自问的话，《活法》里有写"
+  },
+  {
+   "id": "I10",
+   "kind": "inamori",
+   "zh": "作为人，何谓正确？",
+   "who": "稻盛和夫",
+   "source": "《活法》、《京瓷哲学》（判断的基准）"
+  },
+  {
+   "id": "I11",
+   "kind": "inamori",
+   "zh": "乐观构思，悲观计划，乐观实行。",
+   "who": "稻盛和夫",
+   "source": "《京瓷哲学》"
+  },
+  {
+   "id": "I12",
+   "kind": "inamori",
+   "zh": "销售最大化，经费最小化。",
+   "who": "稻盛和夫",
+   "source": "《经营十二条》第五条"
+  },
+  {
+   "id": "I13",
+   "kind": "inamori",
+   "zh": "定价即经营。",
+   "who": "稻盛和夫",
+   "source": "《经营十二条》第六条"
+  },
+  {
+   "id": "I14",
+   "kind": "inamori",
+   "zh": "经营取决于坚强的意志。",
+   "who": "稻盛和夫",
+   "source": "《经营十二条》第七条"
+  },
+  {
+   "id": "I15",
+   "kind": "inamori",
+   "zh": "燃烧的斗魂。",
+   "who": "稻盛和夫",
+   "source": "《经营十二条》第八条；也是书名《燃烧的斗魂》（2013）"
+  },
+  {
+   "id": "I16",
+   "kind": "inamori",
+   "zh": "胸中怀有强烈的愿望。",
+   "who": "稻盛和夫",
+   "source": "《经营十二条》第三条"
+  },
+  {
+   "id": "I17",
+   "kind": "inamori",
+   "zh": "以关怀之心，诚实待人。",
+   "who": "稻盛和夫",
+   "source": "《经营十二条》第十一条"
+  },
+  {
+   "id": "I18",
+   "kind": "inamori",
+   "zh": "现场有神灵。",
+   "who": "稻盛和夫",
+   "source": "《干法》（働き方，2009）"
+  },
+  {
+   "id": "I19",
+   "kind": "inamori",
+   "zh": "要爱上自己的工作。",
+   "who": "稻盛和夫",
+   "source": "《干法》"
+  },
+  {
+   "id": "I20",
+   "kind": "inamori",
+   "zh": "人分三种：点火也烧不起来的不燃型、一点就着的可燃型、自己燃烧起来的自燃型。要做自燃型的人。",
+   "who": "稻盛和夫",
+   "source": "《干法》"
+  },
+  {
+   "id": "I21",
+   "kind": "inamori",
+   "zh": "心不唤物，物不至。",
+   "who": "稻盛和夫",
+   "source": "《活法》"
+  },
+  {
+   "id": "I22",
+   "kind": "inamori",
+   "zh": "人生的目的，在于磨炼灵魂。",
+   "who": "稻盛和夫",
+   "source": "《活法》"
+  },
+  {
+   "id": "K01",
+   "kind": "kuok",
+   "zh": "要照顾别人的利益。",
+   "who": "郭鹤年",
+   "source": "媒体报道说这是他的口头禅（界面新闻 jiemian.com/article/604451）；自传里要再对"
+  },
+  {
+   "id": "K02",
+   "kind": "kuok",
+   "zh": "一旦看清楚，马要跑得快。你能看到的，别人也能看得到，要抢在他前面。",
+   "who": "郭鹤年",
+   "source": "媒体报道转述（界面新闻 jiemian.com/article/604451）；自传里要再对"
+  },
+  {
+   "id": "K03",
+   "kind": "kuok",
+   "zh": "母亲教我：民生必需品，绝不能趁机牟取暴利。",
+   "who": "郭鹤年",
+   "source": "《郭鹤年自传》（Robert Kuok: A Memoir，2017）书评转述；这句是转述母亲的教诲，不是逐字原话"
+  },
+  {
+   "id": "M01",
+   "kind": "musk",
+   "zh": "要从第一性原理去推理，而不是靠类比。",
+   "en": "I think it's important to reason from first principles rather than by analogy.",
+   "who": "Elon Musk",
+   "source": "Kevin Rose 访谈（Foundation，2012）"
+  },
+  {
+   "id": "M02",
+   "kind": "musk",
+   "zh": "最好的零件是没有零件，最好的流程是没有流程。",
+   "en": "The best part is no part. The best process is no process.",
+   "who": "Elon Musk",
+   "source": "Everyday Astronaut 的 Starbase 访谈（2021）"
+  },
+  {
+   "id": "M03",
+   "kind": "musk",
+   "zh": "聪明的工程师最常犯的错，大概是去优化一个根本不该存在的东西。",
+   "en": "Possibly the most common error of a smart engineer is to optimize a thing that should not exist.",
+   "who": "Elon Musk",
+   "source": "Everyday Astronaut 的 Starbase 访谈（2021）"
+  },
+  {
+   "id": "M04",
+   "kind": "musk",
+   "zh": "先让需求没那么蠢，再删掉零件或流程，然后简化，再加快，最后才自动化。",
+   "en": "Make the requirements less dumb. Delete the part or process. Simplify or optimize. Accelerate cycle time. Automate.",
+   "who": "Elon Musk",
+   "source": "Everyday Astronaut 的 Starbase 访谈（2021），他说的「五步法」"
+  },
+  {
+   "id": "M05",
+   "kind": "musk",
+   "zh": "在这里，失败是可以的。如果事情从来不失败，代表你创新得不够。",
+   "en": "Failure is an option here. If things are not failing, you are not innovating enough.",
+   "who": "Elon Musk",
+   "source": "Fast Company 访谈（2005）"
+  },
+  {
+   "id": "M06",
+   "kind": "musk",
+   "zh": "当一件事够重要，就算胜算不在你这边，你也要去做。",
+   "en": "When something is important enough, you do it even if the odds are not in your favor.",
+   "who": "Elon Musk",
+   "source": "CBS《60 Minutes》访谈（2014）"
+  },
+  {
+   "id": "M07",
+   "kind": "musk",
+   "zh": "物理是法律，其他的都只是建议。",
+   "en": "Physics is the law, everything else is a recommendation.",
+   "who": "Elon Musk",
+   "source": "Everyday Astronaut 的 Starbase 访谈（2021）"
+  },
+  {
+   "id": "M08",
+   "kind": "musk",
+   "zh": "要拼命工作。每个星期工作八十到一百个小时。",
+   "en": "Work like hell. I mean you just have to put in 80 to 100 hour weeks every week.",
+   "who": "Elon Musk",
+   "source": "南加大（USC）商学院毕业典礼演讲（2014）"
+  },
+  {
+   "id": "M09",
+   "kind": "musk",
+   "zh": "专注在讯号上，不要被杂讯带走。",
+   "en": "Focus on signal over noise.",
+   "who": "Elon Musk",
+   "source": "南加大（USC）商学院毕业典礼演讲（2014）"
+  },
+  {
+   "id": "M10",
+   "kind": "musk",
+   "zh": "趁年轻去冒险，等有了家庭、责任多了，就比较难了。",
+   "en": "Now is the time to take risks. You don't have kids... as you get older your obligations increase.",
+   "who": "Elon Musk",
+   "source": "南加大（USC）商学院毕业典礼演讲（2014）"
+  },
+  {
+   "id": "M11",
+   "kind": "musk",
+   "zh": "要有一个回馈循环：一直想自己做了什么、怎样可以做得更好。",
+   "en": "I think it's very important to have a feedback loop, where you're constantly thinking about what you've done and how you could be doing it better.",
+   "who": "Elon Musk",
+   "source": "Mashable 访谈（2012）"
+  },
+  {
+   "id": "M12",
+   "kind": "musk",
+   "zh": "人生不能只是解决一个又一个悲伤的问题，要有让你感到振奋的事。",
+   "en": "Life cannot just be about solving one sad problem after another. There need to be things that inspire you.",
+   "who": "Elon Musk",
+   "source": "TED 访谈（2017）"
+  }
+ ]
 }

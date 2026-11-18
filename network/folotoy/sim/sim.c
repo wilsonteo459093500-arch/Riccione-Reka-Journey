@@ -445,11 +445,22 @@ int main(int argc, char **argv) {
     deku_screen_update();
     advance_ms(700);
     dump("5-think.ppm");
-    static const uint8_t say[] = { 0x04, 'J', '0', '0' };
+    // 最长的两句（45 字）：一句笑话、一句名人的话 + 出处，看放不放得下
+    static const uint8_t say[] = { 0x04, 'F', '0', '1' };
     deku_on_cmd(&deku, say, sizeof say, (uint32_t)(g_now_us / 1000));
     deku_screen_update();
     advance_ms(300);
-    dump("6-say.ppm");
+    dump("6-say-joke.ppm");
+    static const uint8_t say2[] = { 0x04, 'I', '2', '0' };
+    deku_on_cmd(&deku, say2, sizeof say2, (uint32_t)(g_now_us / 1000));
+    deku_screen_update();
+    advance_ms(300);
+    dump("6-say-quote.ppm");
+    static const uint8_t say3[] = { 0x04, 'M', '0', '2' };
+    deku_on_cmd(&deku, say3, sizeof say3, (uint32_t)(g_now_us / 1000));
+    deku_screen_update();
+    advance_ms(2000);
+    dump("6-say-musk.ppm");
     static const uint8_t unk[] = { 0x05 };
     deku_on_cmd(&deku, unk, 1, (uint32_t)(g_now_us / 1000));
     deku_screen_update();

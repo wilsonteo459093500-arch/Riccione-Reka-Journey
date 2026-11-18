@@ -156,10 +156,10 @@ Wilson 想要一个**只给自己用**的人脉管理 app，用来记录每个�
 - **阶段 2b**：微信（无障碍服务搜名字 → 语音通话 / 按住说话）。风险较高：改版勤、对自动操作敏感；只帮按，不群发、不读讯息
 - **阶段 3（选做）**：用 FoloToy 麦克风录语音讯息（参考上游社群作品 intercom：Opus 经 BLE 到手机）→ 分享到 WhatsApp；可能显示成音档，效果不好就不做
 
-## FoloToy 阶段 C：DEKU 小助理 ✅ 程序（2026-11-18，句库待用户审）
+## FoloToy 阶段 C：DEKU 小助理 ✅（2026-11-18，句库审好，待真机试）
 
 - 用户选：口袋机菜单加「DEKU 讲笑话」（不动车用按键）；名人原话 Claude 起草候选 + 出处、用户打勾；笑话三种口味：冷笑话谐音、马来西亚日常、家具装修
-- 句库 `folotoy/deku/lines.json`：笑话 36 句（原创）、稻盛和夫 22 句、郭鹤年 3 句（只有二手报道，把握低）、Musk 12 句（附英文原句），**全部草稿**
+- 句库 `folotoy/deku/lines.json`：笑话 36 句（原创）、稻盛和夫 22 句、郭鹤年 3 句（只有二手报道，把握低）、Musk 12 句（附英文原句）；**2026-11-18 用户审核网页 73 句全部「要」**，已放进韧体（app v0.4）
 - 审核网页 https://claude.ai/artifact/4DcXNNxeknMGqygntM4W6V（`tools/make_deku_review.py` 产生）；用户贴回「要：… 不要：…」→ 改 status → `tools/make_deku.py` → `make_font.py` → 编韧体、app
 - FoloToy：按住确定 → 通知 app 听 → app 用 Android 语音转文字 + 关键词（不用 AI）→ 手机念 + FoloToy 显示同一句（用 id 对）；上 = 笑话、下 = 名人轮流（没有 app 也能用）
 - 待真机：背景语音转文字、关键词准不准

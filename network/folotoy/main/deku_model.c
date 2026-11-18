@@ -170,3 +170,108 @@ const char *deku_kind_name(deku_kind_t k) {
     default: return "";
     }
 }
+
+// ---- 中文断行 ----
+static size_t utf8_next(const char *s, uint32_t *cp) {
+    const unsigned char c = (unsigned char)s[0];
+    if (c < 0x80) { *cp = c; return 1; }
+    if ((c >> 5) == 6 && s[1]) { *cp = ((uint32_t)(c & 0x1F) << 6) | (s[1] & 0x3F); return 2; }
+    if ((c >> 4) == 14 && s[1] && s[2]) {
+        *cp = ((uint32_t)(c & 0x0F) << 12) | ((uint32_t)(s[1] & 0x3F) << 6) | (s[2] & 0x3F);
+        return 3;
+    }
+    if ((c >> 3) == 30 && s[1] && s[2] && s[3]) {
+        *cp = ((uint32_t)(c & 0x07) << 18) | ((uint32_t)(s[1] & 0x3F) << 12) | ((uint32_t)(s[2] & 0x3F) << 6) | (s[3] & 0x3F);
+        return 4;
+    }
+    *cp = '?';
+    return 1;
+}
+
+static bool no_line_start(uint32_t cp) {   // 不能放行首
+    static const uint32_t P[] = { 0xFF0C, 0x3002, 0x3001, 0xFF01, 0xFF1F, 0xFF1B, 0xFF1A, 0x300D, 0x300F, 0xFF09,
+                                  0x300B, 0x2026, 0x2014, 0x00B7, ',', '.', '!', '?', ';', ':', ')', '%' };
+    for (size_t i = 0; i < sizeof P / sizeof P[0]; i++) if (P[i] == cp) return true;
+    return false;
+}
+
+static bool no_line_end(uint32_t cp) {     // 不能放行尾
+    return cp == 0x300C || cp == 0x300E || cp == 0xFF08 || cp == 0x300A || cp == '(' || cp == 0x201C;
+}
+
+static bool is_word(uint32_t cp) {          // 英文、数字连在一起的一个词
+    return (cp >= 'a' && cp <= 'z') || (cp >= 'A' && cp <= 'Z') || (cp >= '0' && cp <= '9') || cp == '-' || cp == '\'' || cp == '%';
+}
+
+#define WRAP_MAX_TOK 160
+typedef struct { size_t at, len; int w; uint32_t first, last; } tok_t;
+
+int deku_wrap(const char *in, char *out, size_t cap, int max_w, deku_width_fn width, void *ctx) {
+    if (!out || cap == 0) return 0;
+    out[0] = 0;
+    if (!in || !width) return 0;
+    // 1. 切成一个个「不能再拆」的单位：一个中文字 / 标点，或一个英文词
+    tok_t tok[WRAP_MAX_TOK];
+    size_t n = 0, i = 0;
+    while (in[i] && n < WRAP_MAX_TOK) {
+        uint32_t cp;
+        size_t step = utf8_next(in + i, &cp);
+        tok_t t = { i, step, width(cp, ctx), cp, cp };
+        while (is_word(cp)) {
+            const char *p = in + t.at + t.len;
+            if (!*p) break;
+            uint32_t c2;
+            const size_t s2 = utf8_next(p, &c2);
+            if (!is_word(c2)) break;
+            t.w += width(c2, ctx);
+            t.len += s2;
+            t.last = c2;
+        }
+        tok[n++] = t;
+        i = t.at + t.len;
+    }
+    // 2. 一行一行排；遇到不能放行首的标点 / 不能放行尾的括号，就把前一个单位一起移下去
+    size_t start[WRAP_MAX_TOK + 1];
+    int lines = 0;
+    size_t line_from = 0;
+    int line_w = 0;
+    for (size_t k = 0; k < n; k++) {
+        if (tok[k].first == '\n') {   // 句子里本来就有的换行
+            start[lines++] = line_from;
+            line_from = k + 1;
+            line_w = 0;
+            continue;
+        }
+        if (k == line_from && tok[k].first == ' ') {   // 行首空白不要
+            line_from = k + 1;
+            continue;
+        }
+        if (line_w + tok[k].w <= max_w || k == line_from) {
+            line_w += tok[k].w;
+            continue;
+        }
+        size_t brk = k;   // 新的一行从 brk 开始
+        while (brk - line_from >= 2 && no_line_start(tok[brk].first)) brk--;   // 「。」」连着两个也一起
+        while (brk - line_from >= 2 && no_line_end(tok[brk - 1].first)) brk--;
+        start[lines++] = line_from;
+        line_from = brk;
+        line_w = 0;
+        for (size_t j = brk; j <= k; j++) line_w += tok[j].w;
+    }
+    start[lines++] = line_from;
+    // 3. 接起来
+    size_t o = 0;
+    for (int L = 0; L < lines; L++) {
+        const size_t a = start[L];
+        size_t b = L + 1 < lines ? start[L + 1] : n;
+        while (b > a && (tok[b - 1].first == ' ' || tok[b - 1].first == '\n')) b--;   // 行尾空白 / 原来的换行不要
+        if (L > 0 && o + 1 < cap) out[o++] = '\n';
+        for (size_t k = a; k < b; k++) {
+            if (o + tok[k].len >= cap) { out[o] = 0; return L + 1; }
+            memcpy(out + o, in + tok[k].at, tok[k].len);
+            o += tok[k].len;
+        }
+    }
+    out[o] = 0;
+    return lines;
+}

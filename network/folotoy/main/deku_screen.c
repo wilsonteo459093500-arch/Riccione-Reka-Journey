@@ -18,7 +18,9 @@
 
 static deku_state_t *s_state;
 static lv_timer_t *s_timer;
-static lv_obj_t *s_head, *s_eye[2], *s_pupil[2], *s_mouth, *s_mark;
+static lv_obj_t *s_name, *s_head, *s_eye[2], *s_pupil[2], *s_mouth, *s_mark;
+static char s_wrapped[512];   // 断好行的句子
+static char s_wrapped_src[128];
 static lv_obj_t *s_text, *s_source, *s_hint;
 static bool s_app;   // 上次画的时候 app 在不在
 
@@ -64,13 +66,23 @@ static const char *hint_text(void) {
     }
 }
 
+static int glyph_w(uint32_t cp, void *ctx) {
+    return lv_font_get_glyph_width((const lv_font_t *)ctx, cp, 0);
+}
+
+// 中文断行（标点不放行首）后再给 label；宽度留 4px 余量，免得 LVGL 自己又折一次
+static void set_wrapped(lv_obj_t *label, char *buf, size_t cap, const char *text, int32_t width) {
+    deku_wrap(text, buf, cap, width - 4, glyph_w, (void *)&space_font_cjk_20);
+    lv_label_set_text(label, buf);
+}
+
 static void draw_text(void) {
     if (DEKU_LINE_COUNT == 0) {
         lv_label_set_text(s_text, "句库还在审，\n审好就有了");
         lv_label_set_text(s_source, "");
     } else if (s_state->face == DEKU_FACE_SAY && s_state->line >= 0) {
-        lv_label_set_text(s_text, DEKU_LINES[s_state->line].text);
-        lv_label_set_text(s_source, DEKU_LINES[s_state->line].source);
+        set_wrapped(s_text, s_wrapped, sizeof s_wrapped, DEKU_LINES[s_state->line].text, 216);
+        set_wrapped(s_source, s_wrapped_src, sizeof s_wrapped_src, DEKU_LINES[s_state->line].source, 216);
     } else if (s_state->face == DEKU_FACE_CONFUSED) {
         lv_label_set_text(s_text, "没听清楚，再说一次？");
         lv_label_set_text(s_source, "");
@@ -82,12 +94,16 @@ static void draw_text(void) {
         lv_label_set_text(s_source, "");
     }
     lv_label_set_text(s_hint, hint_text());
-    // 说话时字区放宽一点、行距收一点：45 字的句子 5 行 + 出处 1 行刚好放得下（到 y≈290）
+    // 说话时：脸往上移、「DEKU」字拿掉、字区放宽，45 字的句子 + 两行出处也放得下
     const bool say = s_state->face == DEKU_FACE_SAY;
+    if (say) lv_obj_add_flag(s_name, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_remove_flag(s_name, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_align(s_head, LV_ALIGN_TOP_MID, 0, say ? 8 : 38);
+    lv_obj_align(s_mark, LV_ALIGN_TOP_MID, 86, say ? 22 : 52);
     lv_obj_set_width(s_text, say ? 216 : 204);
     lv_obj_set_width(s_source, say ? 216 : 204);
-    lv_obj_set_style_text_line_space(s_text, say ? 1 : 4, 0);
-    lv_obj_align(s_text, LV_ALIGN_TOP_MID, 0, say ? 150 : 156);
+    lv_obj_set_style_text_line_space(s_text, say ? 2 : 4, 0);
+    lv_obj_align(s_text, LV_ALIGN_TOP_MID, 0, say ? 122 : 156);
     lv_obj_align_to(s_source, s_text, LV_ALIGN_OUT_BOTTOM_RIGHT, 0, 4);
 }
 
@@ -145,9 +161,9 @@ void deku_screen_show(deku_state_t *state) {
     s_app = ble_remote_app_present();
     lv_obj_t *scr = ui_screen();
 
-    lv_obj_t *name = ui_label(scr, &lv_font_montserrat_20, UI_BRASS, "DEKU");
-    lv_obj_set_style_text_letter_space(name, 4, 0);
-    lv_obj_align(name, LV_ALIGN_TOP_MID, 0, 10);
+    s_name = ui_label(scr, &lv_font_montserrat_20, UI_BRASS, "DEKU");
+    lv_obj_set_style_text_letter_space(s_name, 4, 0);
+    lv_obj_align(s_name, LV_ALIGN_TOP_MID, 0, 10);
 
     s_head = box(scr, 120, 104, C_WOOD, 26);
     lv_obj_set_style_border_color(s_head, lv_color_hex(UI_BRASS), 0);

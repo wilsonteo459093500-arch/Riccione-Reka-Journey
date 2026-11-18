@@ -208,9 +208,9 @@ FoloToy 背面就是一枚**被动 NTAG213** NFC 芯片（官方规格：支持�
 - **关机时找不到**：任何做法都要 FoloToy 开着。没电、关机时就看「最后在哪里」。
 - 一次只能连一支手机（跟车用模式一样）。
 
-## DEKU 小助理（v0.3，2026-11-18）
+## DEKU 小助理（v0.4，2026-11-18）
 
-![模拟画面：菜单 / 等你（没有 app）/ 等你（有 app，眨眼）/ 在听 / 想一下 / 说（示范句）/ 没听清楚](./firmware/deku-screens.png)
+![模拟画面：菜单 / 等你（没有 app）/ 等你（有 app，眨眼）/ 在听 / 想一下 / 说（最长的笑话、Musk、稻盛和夫）/ 没听清楚](./firmware/deku-screens.png)
 
 口袋机菜单 →「DEKU 讲笑话」。DEKU 是一块原创的小木块（跟开机封面同一种木色），会眨眼、听、想、说。
 
@@ -225,15 +225,16 @@ FoloToy 背面就是一枚**被动 NTAG213** NFC 芯片（官方规格：支持�
 - Musk 的话：先念中文翻译，再念英文原句（英文原句才是他说的话）。
 - 没开 app 时，上 / 下 / 确定照样有句子，只是没有声音。
 - 句子一轮里不重复。
+- 说话时脸往上移，留整块地方给句子；中文断行照排版规矩（「，。」不放行首、书名不从中间切）。
 
 ### 句库：审过才放（AI 只能建议、不能编）
 
 - 句库在 `deku/lines.json`：笑话是 Claude 写的原创；名人的话是 Claude 起草的候选，**都附出处和把握（高 / 中 / 低）**。
-- **每一句都要用户审过（`status: approved`）才会放进 FoloToy 和手机**。现在全部是草稿，所以 DEKU 会说「句库还在审」。
+- **每一句都要用户审过（`status: approved`）才会放进 FoloToy 和手机**。2026-11-18 用户审过 73 句，全部「要」：笑话 36、稻盛和夫 22、郭鹤年 3、Musk 12。
 - 审核网页：https://claude.ai/artifact/4DcXNNxeknMGqygntM4W6V（每句选「要 / 不要」→「复制结果」贴回给 Claude）。郭鹤年只找到二手报道，建议对过《郭鹤年自传》再勾。
 - 审好之后（给开发者）：改 `lines.json` 的 `status` → `python3 tools/make_deku.py`（产生 `main/deku_lines.c`、app 的 `assets/deku.json`）→ `tools/make_font.py`（新的中文字）→ `./build.sh`、`./android/build.sh`。
 
-## SPACE 车控 Android app（第二阶段，v0.3）
+## SPACE 车控 Android app（第二阶段，v0.4）
 
 装了 app 之后，FoloToy 车用模式多两个功能（没装 app 时照旧是媒体遥控器）：
 
@@ -347,11 +348,11 @@ FoloToy 背面就是一枚**被动 NTAG213** NFC 芯片（官方规格：支持�
 Build:        PASS      —— 2026-11-18：./build.sh（ESP-IDF 5.5.3 Docker、esp32c3）编译通过，main/ 没有警告；
                            上游 verify_firmware.py：Firmware layout PASS、Merged firmware PASS（1,395,728 bytes，烧在 0x0）
                            2026-11-18 阶段 B：Merged firmware PASS（1,743,392 bytes）；每个模式都开蓝牙；
-                           2026-11-18 阶段 C（DEKU）：Merged firmware PASS（1,764,288 bytes；句库 0 句审过）；
+                           2026-11-18 阶段 C（DEKU）：Merged firmware PASS（1,990,720 bytes；句库 73 句审过、中文字 631 个）；
                            idf.py size：DRAM 用 122 KB、开机时还剩约 199 KB
 Host tests:   PASS      —— test_space_card_model、test_car_remote_model、test_pocket_model、test_audio_dsp、test_games_model、
                            test_find_model、test_deku_model（-Wall -Wextra -Werror）；
-                           app：28 个单元测试（含 FindLogicTest 6 个、DekuLogicTest 5 个）
+                           app：28 个单元测试（含 FindLogicTest 6 个、DekuLogicTest 5 个）；test_deku_model 含中文断行
 Fonts:        PASS      —— make_font.py --check：中文 62 字、大数字，打包后逐像素读回一致
 Simulated:    PASS      —— sim/run.sh：名片 / 活动 / 大二维码三个画面，OpenCV 都扫出正确网址（带 s=folotoy）；
                            车用四个状态、口袋机 12 个画面看过（中文字正确、版面不重叠）；找 FoloToy 三个画面（firmware/find-screens.png）
