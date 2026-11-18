@@ -35,9 +35,6 @@ const IDENTITY = Object.freeze({ opacity: 1, ty: 0, scale: 1 });
 /** 「从无到有」（sketch）：线稿、上色的进度（过渡进度 f 的函数） */
 export const sketchProgress = (f) => ({ lineQ: span(f, 0.12, 0.55), colQ: span(f, 0.5, 0.97) });
 
-/** 「毛坯 → 柜子一件件出现」（cabinets）：线稿 → 毛坯上色 → 柜子一组组出现（过渡进度 f 的函数） */
-export const cabinetProgress = (f) => ({ lineQ: span(f, 0.08, 0.3), baseQ: span(f, 0.26, 0.46), pieceQ: span(f, 0.46, 0.94) });
-
 /** B 页的字（和小图）依次进来：start0 起，最后一个在 f = 1 前到位 */
 function textIn(els, start0, spread, dur) {
   const order = new Map();
@@ -99,23 +96,20 @@ export function layerMotion(role, kind, f, els = []) {
     // 元素透明度要乘上整层的透明度：字的实际透明度 = text（不超过整层）
     return { opacity: layer, el: (el) => (isText(el) && layer > 0 && text < layer ? { opacity: clamp01(text / layer), ty: 0, scale: 1 } : IDENTITY) };
   }
-  if (kind === 'sketch' || kind === 'cabinets') {
+  if (kind === 'sketch') {
     // 换到效果图页：上一页淡出 → 这一页的效果图在白纸上画线稿、上色 → 字最后进来；f = 1 原样
-    // cabinets：线稿 → 毛坯上色 → 柜子一组组长出来（分析没好时退回 sketch 的进度）
     if (role === 'a') {
       if (f <= 0) return { opacity: 1, el: () => IDENTITY };
       const out = span(f, 0, 0.2);
       return { opacity: 1 - span(f, 0.05, 0.3), el: (el) => (isText(el) ? { opacity: 1 - out, ty: -14 * out, scale: 1 } : IDENTITY) };
     }
-    if (f >= 1) return { opacity: 1, el: () => IDENTITY, sketch: null, cab: null };
-    const cabs = kind === 'cabinets';
-    const tin = cabs ? textIn(els, 0.86, 0.08, 0.06) : textIn(els, 0.72, 0.14, 0.12);
+    if (f >= 1) return { opacity: 1, el: () => IDENTITY, sketch: null };
+    const tin = textIn(els, 0.72, 0.14, 0.12);
     const sk = sketchProgress(f);
-    const late = cabs ? span(f, 0.86, 0.99) : span(f, 0.72, 0.98); // 小图（材料小样、logo）和字一起进来
+    const late = span(f, 0.72, 0.98); // 小图（材料小样、logo）和字一起进来
     return {
       opacity: span(f, 0.05, 0.3),
       sketch: sk,
-      cab: cabs ? cabinetProgress(f) : null,
       el: (el, i) => {
         if (isText(el)) {
           const o = tin(f, i);

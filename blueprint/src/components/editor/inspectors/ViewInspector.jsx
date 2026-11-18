@@ -13,7 +13,6 @@ import ImageField from '../ImageField.jsx';
 import MaterialPicker from '../MaterialPicker.jsx';
 import EnInput, { EnBox, EnAlias, EN_BADGE, EN_PLACEHOLDER } from '../EnInput.jsx';
 import CraftSection from '../CraftSection.jsx';
-import CabinetsSection from '../CabinetsSection.jsx';
 
 // 效果图页：标题（房间 · 视角名）、空间英文名、楼层、版式、图片、材料、说明。
 // English / 中英版：每个中文栏下面紧跟一个一样大的英文框（EN）—— 视角名、材料部位、材料名、备注写进翻译记忆（整套共用）；
@@ -63,7 +62,7 @@ function RowTools({ i, n, onMove, onRemove, removeTitle = '删除这一行' }) {
   );
 }
 
-export default function ViewInspector({ project, slide, change, notify, openPolish, layout, focusField, settings, onOpenSettings }) {
+export default function ViewInspector({ project, slide, change, notify, openPolish, layout, focusField }) {
   const id = slide.id;
   const set = (patch) => change((p) => updateSlide(p, id, patch));
   const setNow = (patch) => change((p) => updateSlide(p, id, patch), NOW);
@@ -384,9 +383,6 @@ export default function ViewInspector({ project, slide, change, notify, openPoli
       </Section>
 
       {!is3d && <CraftSection project={project} slide={slide} change={change} />}
-      {!is3d && slide.image && (
-        <CabinetsSection project={project} slide={slide} change={change} notify={notify} settings={settings} onOpenSettings={onOpenSettings} />
-      )}
     </div>
   );
 }

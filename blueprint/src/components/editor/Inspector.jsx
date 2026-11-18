@@ -40,11 +40,11 @@ export function focusFieldIn(root, field) {
 /**
  * @param {{ project, page, slide, layout?:string, change(updater), notify, onGoTab, activeField?:string, pickNonce:number,
  *   onHighlight(field|null), openPolish(onlySlideIds?), onDuplicate(id), onDelete(id), onInsertAfter(id), onToggle(id),
- *   pageNo?:number, settings?:object, onOpenSettings?:()=>void }} props
+ *   pageNo?:number }} props
  */
 export default function Inspector({
   project, page, slide, layout, change, notify, onGoTab, activeField, pickNonce, onHighlight, openPolish, onDuplicate, onDelete,
-  onInsertAfter, onToggle, pageNo, settings, onOpenSettings,
+  onInsertAfter, onToggle, pageNo,
 }) {
   const rootRef = useRef(null);
   const focusField = useCallback((field) => focusFieldIn(rootRef.current, field), []);
@@ -64,7 +64,7 @@ export default function Inspector({
   }
 
   const Icon = slide.tag === '3d' ? Box : KIND_ICON[slide.kind] || ImageIcon;
-  const props = { project, slide, page, change, notify, onGoTab, openPolish, layout, focusField, settings, onOpenSettings };
+  const props = { project, slide, page, change, notify, onGoTab, openPolish, layout, focusField };
   let body = null;
   switch (slide.kind) {
     case 'view':
