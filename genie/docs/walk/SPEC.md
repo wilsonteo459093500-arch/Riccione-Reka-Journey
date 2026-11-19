@@ -232,6 +232,38 @@ Rules:
 - No stop in a stair or void room.
 - `line` is a `voice-lines.js` id in the group `walk`.
 
+**As built (U4) — read these**
+
+Yaw convention, used everywhere (tour, flight, controller, marks):
+- three.js Euler order `'YXZ'`.
+- View direction in plan x/z is `(-sin yaw, -cos yaw)`.
+- `yaw = atan2(-dx, -dz)`.
+- `tour.js` exports `yawOf` and `yawToward`.
+
+Stops:
+- Each stop also has `room` (an id or `null`).
+- Stop ids are `entrance`, `living`, `tv`, `kitchen`, `bedroom`, `stairs`, `upstairs`, `tip`, `end`.
+- When the living room has a TV wall, `living` and `tv` share the TV viewing spot.
+
+`createTour({ stops, walkTo, say, hush, halt, onStop, onState, onEnd, dwell, read, wait, now })` returns:
+- `start(from) → Promise<reason>`, `stop()`, `next()`
+- `running`, `index`, `current`, `total`, `stops`
+- `state() → { running, index, total, stop, line, phase: 'walking' | 'talking' | 'idle' }`
+
+The end reason is one of `'done' | 'stopped' | 'interrupted' | 'error' | 'empty'`.
+
+`walkTo(stop)` must return `Promise<boolean>`: `true` after arriving and turning to `stop.yaw`, `false` if the guest took over (joystick / tap). Call `tour.stop()` on guest input.
+
+`TourBubble` props: `{ ...tour.state(), onNext, onSkip, onStart }`. Classes for positioning are `.walk-tour` and `.walk-tour-start`. The tour starts by itself on the first walk-in, and after that only from the button.
+
+Pixel harness notes (P0):
+- Fixtures are in the stored `localStorage` shape; load them with `store.fromStoredProject()`.
+- The harness clicks `[data-walk=enter]` / `[data-walk=exit]` with `el.click()`.
+- It needs `window.__genieWalk`, `on('state', {phase})`, `pose() → {fi, x, z}`, and `walkTo() → Promise`.
+- After exit, `engine.walk` and `engine.onTick` must be `null`.
+- Nothing may change StudioApp's measured insets while walking: `setInsets` has 2 px hysteresis, and the boot estimate is top = 185 while a fresh measure gives 184.
+- Do not add `Math.random` calls between creating the renderer and `setupComposer()`.
+
 ## 3 · three.js modules
 
 ### `walk/doors.js` (U3)
