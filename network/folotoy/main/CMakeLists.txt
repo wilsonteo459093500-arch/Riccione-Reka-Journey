@@ -10,6 +10,9 @@ idf_component_register(
          "deku_model.c"
          "deku_screen.c"
          "deku_lines.c"
+         "news_model.c"
+         "news_store.c"
+         "news_screen.c"
          "pocket_model.c"
          "audio_dsp.c"
          "sound.c"
@@ -23,8 +26,9 @@ idf_component_register(
          "font_cjk_32.c"
          "font_digits_64.c"
          "font_digits_140.c"
+         "font_news_20.c"
          "cover_img.c"
          "star_img.c"
     INCLUDE_DIRS "."
-    REQUIRES bsp esp_timer esp_hw_support esp_system nvs_flash bt esp_hid
+    REQUIRES bsp esp_timer esp_hw_support esp_system nvs_flash bt esp_hid esp_partition
 )

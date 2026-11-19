@@ -7,7 +7,7 @@
 //   确定 短按      亮度 100% → 60% → 30%
 //   确定 长按      大二维码模式（只剩二维码）
 //   上 长按        → 口袋机菜单（不用重开机）：蜡烛与生日歌 / 木鱼 / 手电筒 / 计时器 / 倒数计时 / 番茄钟 /
-//                    叠叠乐 / 记忆三色 / 求签 / 抽奖 / 解压 / DEKU 讲笑话 / 车用遥控器 / 返回名片
+//                    叠叠乐 / 记忆三色 / 求签 / 抽奖 / 解压 / S.T.A.R 讲笑话 / 每日晨报 / 车用遥控器 / 返回名片
 //   下 长按        → 车用遥控器模式
 //   闲置 60 秒自动调暗；调暗时按任何键只会叫醒
 //
@@ -44,6 +44,8 @@
 #include "lvgl.h"
 #include "games_screen.h"
 #include "menu_screen.h"
+#include "news_screen.h"
+#include "news_store.h"
 #include "nvs.h"
 #include "nvs_flash.h"
 #include "sound.h"
@@ -66,7 +68,7 @@ static app_mode_t s_mode = APP_MODE_CARD;
 // 名片模式里的画面（换画面不用重开机；车用遥控器要开蓝牙，才走重开机）
 typedef enum {
     SCR_CARD, SCR_MENU, SCR_CANDLE, SCR_STOPWATCH, SCR_COUNTDOWN,
-    SCR_MUYU, SCR_FLASHLIGHT, SCR_POMODORO, SCR_GAME, SCR_DEKU,
+    SCR_MUYU, SCR_FLASHLIGHT, SCR_POMODORO, SCR_GAME, SCR_DEKU, SCR_NEWS,
 } screen_t;
 static screen_t s_screen = SCR_CARD;
 static menu_state_t s_menu;
@@ -159,6 +161,7 @@ static void go(screen_t next) {
     case SCR_POMODORO: pomodoro_screen_hide(); break;
     case SCR_GAME: games_screen_hide(); break;
     case SCR_DEKU: deku_screen_hide(); break;
+    case SCR_NEWS: news_screen_hide(); break;
     }
     s_screen = next;
     switch (next) {
@@ -176,6 +179,7 @@ static void go(screen_t next) {
     case SCR_POMODORO: pomodoro_screen_show(&s_pomodoro); break;
     case SCR_GAME: games_screen_show(s_game, s_card.count ? s_card.links[0].url : "", esp_random()); break;
     case SCR_DEKU: deku_screen_show(&s_deku); break;
+    case SCR_NEWS: news_screen_show(); break;
     }
     if (old && old != lv_screen_active()) lv_obj_delete(old);
 }
@@ -215,6 +219,7 @@ static void menu_key(space_card_btn_t btn, space_card_ev_t ev) {
         case MENU_MASH: s_game = GAME_MASH; go(SCR_GAME); break;
         case MENU_SQUISH: s_game = GAME_SQUISH; go(SCR_GAME); break;
         case MENU_DEKU: go(SCR_DEKU); break;
+        case MENU_NEWS: go(SCR_NEWS); break;
         case MENU_CAR: switch_mode(APP_MODE_CAR); break;   // 要开蓝牙：存模式、重开机
         default: go(SCR_CARD); break;
         }
@@ -247,6 +252,8 @@ static void pocket_key(space_card_btn_t btn, space_card_ev_t ev) {
         else pomodoro_screen_update();
     } else if (s_screen == SCR_GAME) {
         if (games_screen_on_key(btn, ev)) go(SCR_MENU);
+    } else if (s_screen == SCR_NEWS) {
+        if (news_screen_on_key(btn, ev)) go(SCR_MENU);
     } else if (s_screen == SCR_DEKU) {
         const deku_out_t o = deku_on_key(&s_deku, btn, ev, ble_remote_app_present(), now_ms());
         if (o.evt_len) (void)ble_remote_notify_raw(o.evt, o.evt_len);
@@ -408,6 +415,7 @@ void app_main(void) {
 
     find_init(&s_find);
     deku_init(&s_deku, esp_random());
+    news_store_start();   // 每日晨报：手机 app 用蓝牙传来、存在 flash（每个模式都收）
     // 每个模式都开蓝牙（找 FoloToy 用）；车用模式快速广播，名片 / 口袋机低频、只认配对过的手机
     const bool ble_ok = ble_remote_start(CONFIG_SPACE_REMOTE_NAME, s_mode == APP_MODE_CAR);
     if (s_mode == APP_MODE_CAR) {

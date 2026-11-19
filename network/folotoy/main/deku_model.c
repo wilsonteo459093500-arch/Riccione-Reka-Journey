@@ -203,7 +203,7 @@ static bool is_word(uint32_t cp) {          // 英文、数字连在一起的一
     return (cp >= 'a' && cp <= 'z') || (cp >= 'A' && cp <= 'Z') || (cp >= '0' && cp <= '9') || cp == '-' || cp == '\'' || cp == '%';
 }
 
-#define WRAP_MAX_TOK 160
+#define WRAP_MAX_TOK 400   // 晨报的摘要最长约 150 字；放 static，不占 LVGL task 的堆叠（只在 LVGL task 里呼叫）
 typedef struct { size_t at, len; int w; uint32_t first, last; } tok_t;
 
 int deku_wrap(const char *in, char *out, size_t cap, int max_w, deku_width_fn width, void *ctx) {
@@ -211,7 +211,7 @@ int deku_wrap(const char *in, char *out, size_t cap, int max_w, deku_width_fn wi
     out[0] = 0;
     if (!in || !width) return 0;
     // 1. 切成一个个「不能再拆」的单位：一个中文字 / 标点，或一个英文词
-    tok_t tok[WRAP_MAX_TOK];
+    static tok_t tok[WRAP_MAX_TOK];
     size_t n = 0, i = 0;
     while (in[i] && n < WRAP_MAX_TOK) {
         uint32_t cp;
@@ -231,7 +231,7 @@ int deku_wrap(const char *in, char *out, size_t cap, int max_w, deku_width_fn wi
         i = t.at + t.len;
     }
     // 2. 一行一行排；遇到不能放行首的标点 / 不能放行尾的括号，就把前一个单位一起移下去
-    size_t start[WRAP_MAX_TOK + 1];
+    static size_t start[WRAP_MAX_TOK + 1];
     int lines = 0;
     size_t line_from = 0;
     int line_w = 0;

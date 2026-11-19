@@ -14,6 +14,11 @@ import java.util.UUID
  *   DEKU 小助理（韧体 main/deku_model.h）：
  *     FoloToy → 手机：[0x81, 1 / 0] 开始听 / 放开了；[0x82, id…] 请念这句（FoloToy 上按键挑的）
  *     手机 → FoloToy：[0x04, id…] 显示这句；[0x05] 没听懂
+ *   每日晨报（韧体 main/news_model.h；数字都是 little-endian）：
+ *     手机 → FoloToy：[0x06, 0x01, 长度 u32, crc32 u32] 开始传；[0x06, 0x02, 位置 u32, 资料…] 一段；[0x06, 0x03] 传完
+ *                     [0x07] 你有哪一份？
+ *     FoloToy → 手机：[0x83, 状态, crc32 u32] 现在有的那份（0 有、1 没有、2 收坏了、3 太大、4 写入失败）
+ *                     [0x84, 第几条 u16, crc32 u32] 请念这条
  */
 object Protocol {
     val SERVICE: UUID = UUID.fromString("8d6f0001-6b3a-4c2e-9a51-535041434552")
@@ -64,6 +69,48 @@ object Protocol {
         if (data == null || data.size != 2 || (data[0].toInt() and 0xFF) != 0x80) return null
         return FindState.entries.getOrNull(data[1].toInt() and 0xFF)
     }
+
+    const val NEWS_OK = 0
+    const val NEWS_NONE = 1
+    const val NEWS_BAD = 2
+    const val NEWS_TOO_BIG = 3
+    const val NEWS_FLASH = 4
+
+    data class NewsStatus(val status: Int, val crc: Long)
+    data class NewsSay(val index: Int, val crc: Long)
+
+    fun newsAsk(): ByteArray = byteArrayOf(0x07)
+
+    /** 整份晨报拆成封包：开始、一段段（每段最多 chunk 字节）、传完 */
+    fun newsPackets(data: ByteArray, crc: Long, chunk: Int): List<ByteArray> {
+        require(chunk > 0)
+        val out = ArrayList<ByteArray>()
+        out.add(byteArrayOf(0x06, 0x01) + le32(data.size.toLong()) + le32(crc))
+        var off = 0
+        while (off < data.size) {
+            val n = minOf(chunk, data.size - off)
+            out.add(byteArrayOf(0x06, 0x02) + le32(off.toLong()) + data.copyOfRange(off, off + n))
+            off += n
+        }
+        out.add(byteArrayOf(0x06, 0x03))
+        return out
+    }
+
+    fun decodeNewsStatus(data: ByteArray?): NewsStatus? {
+        if (data == null || data.size != 6 || (data[0].toInt() and 0xFF) != 0x83) return null
+        return NewsStatus(data[1].toInt() and 0xFF, rd32(data, 2))
+    }
+
+    fun decodeNewsSay(data: ByteArray?): NewsSay? {
+        if (data == null || data.size != 7 || (data[0].toInt() and 0xFF) != 0x84) return null
+        return NewsSay((data[1].toInt() and 0xFF) or ((data[2].toInt() and 0xFF) shl 8), rd32(data, 3))
+    }
+
+    private fun le32(v: Long) = byteArrayOf(v.toByte(), (v shr 8).toByte(), (v shr 16).toByte(), (v shr 24).toByte())
+
+    private fun rd32(b: ByteArray, at: Int): Long =
+        (b[at].toLong() and 0xFF) or ((b[at + 1].toLong() and 0xFF) shl 8) or
+            ((b[at + 2].toLong() and 0xFF) shl 16) or ((b[at + 3].toLong() and 0xFF) shl 24)
 
     fun modeCommand(select: Boolean): ByteArray = byteArrayOf(0x01, if (select) 1 else 0)
 

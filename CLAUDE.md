@@ -51,7 +51,7 @@
 3. AI 方案主题建议：规则要先 brainstorm
 4. 展厅播放接 D5 / SU / 3ds Max 漫游视频：先调查设计师能导出什么格式
 
-## FoloToy（network/folotoy/，PR #81 未合并，2026-11-18）
+## FoloToy（network/folotoy/，PR #81 未合并，2026-11-19）
 
 - 已做：
   - 像素封面（2026-11-19：整片像素夜空 + 原创像素星星 S.T.A.R，**不放公司字标**；原本木纹太沉闷）→ 名片二维码
@@ -59,10 +59,11 @@
   - 阶段 A（2026-11-18）做完：落落方块 + 三个解压游戏都做了；游戏画面会收到按下 / 放开（main.c）；截图 `firmware/pocket3-screens.png`
   - 阶段 B（2026-11-18）做完：手机找 FoloToy（每个模式都开蓝牙）；app v0.2
   - 阶段 C（2026-11-18）做完：小助理（73 句审过）；2026-11-19 改名 **S.T.A.R**、换成原创像素星星（程序里还叫 deku_*）；app v0.5；截图 `firmware/deku-screens.png`、`firmware/cover.png`
+  - 阶段 D（2026-11-19）做完：每日晨报（Gmail → app → 蓝牙 → FoloToy）；app v0.6；截图 `firmware/news-screens.png`
   - **角色不照抄**：用户给过 Pac-Man、Mario 星星、Luma 当参考，都是游戏公司角色，不能用在名片设备上；照参考的感觉画原创的（`tools/star_art.py`）
   - 车用遥控器（BLE 媒体键）
   - SPACE 车控 Android app v0.1（`android/`：按住下开微信读书、按住确定选朋友打 WhatsApp）
-- 用户真机测过：名片、车用遥控器（YouTube / 语音助理 OK）。口袋机、app、找 FoloToy、DEKU 还没回报（用户 2026-11-18：暂时没机会试，先往下做）
+- 用户真机测过：名片、车用遥控器（YouTube / 语音助理 OK）。口袋机、app、找 FoloToy、DEKU、晨报还没回报（用户 2026-11-18：暂时没机会试，先往下做）
 - 待用户给：求签签文审核、抽奖真奖项、微信读书「抓画面结构」
 - 下一步（用户要省 token、分阶段）：
   - ~~**A** 落落方块 + 解压游戏~~ 已做（不用俄罗斯方块 / Tetris 名字）；等用户真机试按键手感
@@ -77,20 +78,16 @@
     - 以后加句子：`lines.json` 加 draft → `tools/make_deku_review.py` 重发审核网页 → 用户贴回 → 改 status → `python3 tools/make_deku.py` → `tools/make_font.py`（不要接 `| head`，会写一半）→ `build.sh`、`android/build.sh`（版本号 +1）→ sim 截图
     - FoloToy 断行用 `deku_wrap()`（标点不放行首）；出处太长在人名后换行（make_deku.py `rough_width`）
     - 郭鹤年只有二手报道（界面新闻；jiemian.com 这个环境连不上），提醒用户对《郭鹤年自传》
-  - **D**（2026-11-19 用户选定）：**经手机 app、不用 Wi-Fi**（app 拿资料，用蓝牙传给 FoloToy）；**先做新闻**，之后星座、读书
-    - 新闻 = 用户的「每日晨报 DAILY MORNING BRIEF」：每天早上约 7:00（大马时间）从用户自己的 Gmail 寄给自己，主题「每日晨报 DAILY MORNING BRIEF · 2026-11-18 星期三」（偶尔有旧格式「每日晨报 · 2026年11月10日（星期二）· 共32条」）
-    - app 怎么拿信（用户选）：**应用程序密码读 Gmail**（IMAP imap.gmail.com:993；用户开两步验证、产生 16 位应用程序密码、在 app 填一次）；只读晨报那几封，不改不删不寄；FoloToy 本身不碰邮箱
-    - 信的格式（2026-11-18 那封，样本 `android/app/src/test/resources/brief-sample.html`，只有头、三件事、目录、前两栏）：
-      - 纯文字那层只有「今日三件事」一句话；**全文只在 HTML**
-      - 「今日三件事」：`<td valign="top">` 三个标题
-      - 栏目头：`<td>一、今日必读</td><td align="right">8条</td>`；九栏（今日必读、大马热议、政治、行业·房地产、AI要闻、深度观点、大马股市、全球家具、家具AI），每天 90 多条
-      - 每条：`<b>1. 标题</b><div>摘要</div><a href="…">来源 →</a>`（可能有两个来源连结）；最后有「对你的生意意味着什么」5 点
-    - 用户选定（2026-11-19）：
-      - 显示：**今日三件事 + 全部九栏 90 多条**（不只前几条）
-      - 每条：列表只放**标题**，按「确定」展开摘要（长就往下翻）
-      - 念：**按住「确定」才念**（手机念标题 + 摘要，FoloToy 显示同一条，像 S.T.A.R 讲笑话）
-      - 更新：**自动 + 手动**：早上 7:00 后 app 自动查新信、FoloToy 连上就传；app 有「现在更新」；FoloToy 记住最后一份，离开手机也能看
-      - 字：韧体放约 6,700 个常用中文字（多约 2MB，8MB 够）
+  - ~~**D** 每日晨报~~ 已做（2026-11-19，app v0.6，等用户真机试）：
+    - 用户选：经手机 app、不用 Wi-Fi；Gmail 应用程序密码（IMAP，只读）；显示**三件事 + 九栏全部**（+ 信里「对你的生意」5 点）；列表只放标题、确定看摘要；**按住确定手机念**；自动（7:00 后、每 30 分钟查到拿到今天的）+ app「存好，现在更新」
+    - 晨报信：每天约 7:00 从用户 Gmail 寄给自己，主题「每日晨报 DAILY MORNING BRIEF · 日期」；全文只在 HTML；样本 `android/app/src/test/resources/brief-2026-11-18.html`（编辑说明内文已删）；「对你的生意」框夹在第四、第五栏中间；标题可能有 `<span>【家具】</span>` 徽章
+    - app 只搜主题有「DAILY MORNING BRIEF」的信（旧格式「每日晨报 · 2026年11月10日」不认）
+    - 格式 / 封包见 `main/news_model.h`；样本 `brief-sample.txt` 由 app 测试产生，FoloToy host 测试、sim 读同一份（改了 Brief.kt 要更新它）
+    - 字型 `font_news_20.c`（GB2312 + 峇等，约 7,450 字）编译时产生、不进仓库；`NEWS_EXTRA`（make_font.py）加字 → 重跑 make_font.py（更新 `assets/news_chars.txt`）
+    - 分区表换成 `partitions_space.csv`（app 让出最后 256KB）：用户第一次要烧整份 `SPACE-card-full.bin`
+    - 这个开发环境连不上 imap.gmail.com：Gmail 只用模拟回应测过，真的登入要用户试
+    - 截图 `firmware/news-screens.png`
+  - 之后：星座、读书（还没问用户）
 - 怎么做：
   - 照 `network/folotoy/README.md`、`network/PLAN.md`
   - 编译：`build.sh`；截图：`sim/run.sh`；app：`android/build.sh`

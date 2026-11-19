@@ -15,6 +15,7 @@
 #include "find_screen.h"
 #include "deku_screen.h"
 #include "menu_screen.h"
+#include "news_screen.h"
 #include "games_screen.h"
 #include "timer_screen.h"
 #include "tools_screen.h"
@@ -27,6 +28,9 @@ int64_t g_now_us = 0; // 假时间
 extern car_link_t g_link;   // stub/ble_remote_stub.c
 extern bool g_app_present;
 void sim_push_cmd(const uint8_t *d, size_t n);
+extern uint32_t g_news_version;   // stub/news_store_stub.c
+extern int g_news_progress;
+void sim_news_load(const char *path);
 extern int g_song_line;     // stub/sound_stub.c
 extern bool g_blow;
 extern uint8_t g_mic_level;
@@ -467,5 +471,71 @@ int main(int argc, char **argv) {
     advance_ms(200);
     dump("7-confused.ppm");
     deku_screen_hide();
+
+    // ---- 每日晨报（NEWS_OUT、NEWS_BRIEF 由 run.sh 给）：菜单 → 还没有 → 接收中 → 目录 → 列表 → 一条（翻页）→ 念 ----
+    const char *news_out = getenv("NEWS_OUT");
+    const char *news_brief = getenv("NEWS_BRIEF");
+    if (news_out && news_brief) {
+        s_out = news_out;
+        old = lv_screen_active();
+        menu_init(&menu);
+        while (menu.cursor != MENU_NEWS) menu_on_key(&menu, SPACE_CARD_BTN_DOWN, SPACE_CARD_EV_CLICK);
+        menu_screen_show(&menu);
+        lv_obj_delete(old);
+        dump("1-menu.ppm");
+        menu_screen_hide();
+        old = lv_screen_active();
+        g_app_present = true;
+        news_screen_show();
+        lv_obj_delete(old);
+        advance_ms(300);
+        dump("2-empty.ppm");
+        g_news_progress = 45;
+        advance_ms(300);
+        dump("3-receiving.ppm");
+        g_news_progress = -1;
+        sim_news_load(news_brief);
+        advance_ms(300);
+        dump("4-dir.ppm");
+        for (int i = 0; i < 10; i++) news_screen_on_key(SPACE_CARD_BTN_DOWN, SPACE_CARD_EV_CLICK);
+        advance_ms(100);
+        dump("5-dir-bottom.ppm");
+        for (int i = 0; i < 9; i++) news_screen_on_key(SPACE_CARD_BTN_UP, SPACE_CARD_EV_CLICK);
+        news_screen_on_key(SPACE_CARD_BTN_OK, SPACE_CARD_EV_CLICK);   // 一 今日必读
+        advance_ms(100);
+        dump("6-list.ppm");
+        for (int i = 0; i < 5; i++) news_screen_on_key(SPACE_CARD_BTN_DOWN, SPACE_CARD_EV_CLICK);
+        advance_ms(100);
+        dump("7-list-scrolled.ppm");
+        for (int i = 0; i < 5; i++) news_screen_on_key(SPACE_CARD_BTN_UP, SPACE_CARD_EV_CLICK);
+        news_screen_on_key(SPACE_CARD_BTN_OK, SPACE_CARD_EV_CLICK);   // 第一条
+        advance_ms(100);
+        dump("8-detail.ppm");
+        // 往下翻几次（长的那条会有第二页）
+        char name[32];
+        for (int i = 1; i <= 4; i++) {
+            news_screen_on_key(SPACE_CARD_BTN_DOWN, SPACE_CARD_EV_CLICK);
+            advance_ms(100);
+            snprintf(name, sizeof name, "8-detail-%d.ppm", i);
+            dump(name);
+        }
+        news_screen_on_key(SPACE_CARD_BTN_OK, SPACE_CARD_EV_LONG);    // 按住确定 → 念
+        advance_ms(100);
+        dump("9-say.ppm");
+        g_app_present = false;
+        advance_ms(3000);
+        news_screen_on_key(SPACE_CARD_BTN_OK, SPACE_CARD_EV_LONG);
+        advance_ms(100);
+        dump("9-say-no-app.ppm");
+        // 回目录 → 最后一栏「对你的生意」第一条
+        news_screen_on_key(SPACE_CARD_BTN_UP, SPACE_CARD_EV_LONG);
+        news_screen_on_key(SPACE_CARD_BTN_UP, SPACE_CARD_EV_LONG);
+        for (int i = 0; i < 12; i++) news_screen_on_key(SPACE_CARD_BTN_DOWN, SPACE_CARD_EV_CLICK);
+        news_screen_on_key(SPACE_CARD_BTN_OK, SPACE_CARD_EV_CLICK);
+        news_screen_on_key(SPACE_CARD_BTN_OK, SPACE_CARD_EV_CLICK);
+        advance_ms(3000);
+        dump("10-business.ppm");
+        news_screen_hide();
+    }
     return 0;
 }

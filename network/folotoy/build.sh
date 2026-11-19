@@ -64,8 +64,13 @@ git -C "${CACHE}/ai-passport" archive "${UPSTREAM_COMMIT}" | tar -x -C "${SRC}"
 # --- 2. 叠上 SPACE 名片 ---
 if [[ "${MODE}" == "space" ]]; then
   cp "${HERE}"/main/* "${SRC}/main/"
-  cp "${HERE}"/tests/test_*.c "${SRC}/tests/"
+  cp "${HERE}"/tests/test_*.c "${HERE}"/android/app/src/test/resources/brief-sample.txt "${SRC}/tests/"   # 晨报样本：app 单元测试产生的同一份
   cat "${HERE}/sdkconfig.space.defaults" >> "${SRC}/sdkconfig.defaults"
+  cp "${HERE}/partitions_space.csv" "${SRC}/partitions.csv"   # 让出 256KB 给每日晨报
+  # 晨报字型（GB2312 全部汉字，原始码约 10MB，不放仓库）：编的时候才产生
+  python3 "${HERE}/tools/make_font.py" --news-out "${SRC}/main/font_news_20.c" \
+    --ttf "${FONT_DIR}/package/500Medium/NotoSansSC_500Medium.ttf" \
+    --bold-ttf "${FONT_DIR}/package/700Bold/NotoSansSC_700Bold.ttf"
 fi
 
 # --- 3. 依赖（git，blobless clone 只拿需要的资料夹）---
@@ -97,6 +102,7 @@ docker run --rm -v "${SRC}:/project" -w /project \
       cc -std=c11 -Wall -Wextra -Werror -Imain main/games_model.c tests/test_games_model.c -o /tmp/t5 && /tmp/t5
       cc -std=c11 -Wall -Wextra -Werror -Imain main/find_model.c tests/test_find_model.c -o /tmp/t6 && /tmp/t6
       cc -std=c11 -Wall -Wextra -Werror -Imain main/deku_model.c tests/test_deku_model.c -o /tmp/t7 && /tmp/t7
+      cc -std=c11 -Wall -Wextra -Werror -Imain main/news_model.c tests/test_news_model.c -o /tmp/t8 && /tmp/t8 tests/brief-sample.txt
     fi
     idf.py set-target esp32c3 >/tmp/target.log 2>&1 || { tail -30 /tmp/target.log; exit 1; }
     idf.py build >/tmp/build.log 2>&1 || { tail -60 /tmp/build.log; exit 1; }

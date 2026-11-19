@@ -98,6 +98,7 @@ const char *deku_kind_name(deku_kind_t k);
 // 中文断行：照字宽把 in 切成几行（用 '\n' 接起来写进 out），遵守中文排版的规矩：
 //   「，。、！？；：」』）》…」不放在行首（连前一个字一起移到下一行）；「「『（《」不放在行尾；
 //   英文、数字一个词不切开，行首的空白去掉。
+// 不能同时在两个 task 里呼叫（内部用 static 暂存）；最多 400 个字 / 词，再多的截掉。
 // width(cp) 回一个字的宽度（像素）。回写进 out 的行数；out 不够大就截掉（一定以 0 结尾）。
 typedef int (*deku_width_fn)(uint32_t cp, void *ctx);
 int deku_wrap(const char *in, char *out, size_t cap, int max_w, deku_width_fn width, void *ctx);

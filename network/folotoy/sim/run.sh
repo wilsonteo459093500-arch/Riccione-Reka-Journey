@@ -29,7 +29,17 @@ CAR_OUT="${WORK}/sim-out/car"
 POCKET_OUT="${WORK}/sim-out/pocket"
 FIND_OUT="${WORK}/sim-out/find"
 DEKU_OUT="${WORK}/sim-out/deku"
-mkdir -p "${WORK}/cache" "${OUT}" "${CAR_OUT}" "${POCKET_OUT}" "${FIND_OUT}" "${DEKU_OUT}"
+NEWS_OUT="${WORK}/sim-out/news"
+mkdir -p "${WORK}/cache" "${OUT}" "${CAR_OUT}" "${POCKET_OUT}" "${FIND_OUT}" "${DEKU_OUT}" "${NEWS_OUT}"
+
+# --- 晨报字型（GB2312 全部汉字，约 10MB 原始码，不放仓库）：跟 build.sh 一样从 npm 取字型档再产生 ---
+FONT_DIR="${WORK}/cache/noto-sans-sc"
+if [[ ! -f "${FONT_DIR}/package/500Medium/NotoSansSC_500Medium.ttf" ]]; then
+  mkdir -p "${FONT_DIR}"
+  curl -sSL "https://registry.npmjs.org/@expo-google-fonts/noto-sans-sc/-/noto-sans-sc-0.4.4.tgz" | tar -xz -C "${FONT_DIR}" package/500Medium/NotoSansSC_500Medium.ttf package/700Bold/NotoSansSC_700Bold.ttf package/LICENSE_FONT
+fi
+NEWS_FONT="${WORK}/sim-font_news_20.c"
+python3 "${SIM}/../tools/make_font.py" --news-out "${NEWS_FONT}" --ttf "${FONT_DIR}/package/500Medium/NotoSansSC_500Medium.ttf" --bold-ttf "${FONT_DIR}/package/700Bold/NotoSansSC_700Bold.ttf" >/dev/null
 
 # --- LVGL 原始码 + 编一次的 .o（之后重用）---
 if [[ ! -d "${LVGL}/src" ]]; then
@@ -50,15 +60,17 @@ cc -O1 -Wall -Wextra -Werror -I"${SIM}" -I"${SIM}/stub" -I"${LVGL}" -I"${MAIN}" 
   "-DCONFIG_SPACE_CARD_URL=\"${CARD_URL}\"" "-DCONFIG_SPACE_CARD_LABEL=\"${CARD_LABEL}\"" \
   "-DCONFIG_SPACE_CARD_NAME=\"${CARD_NAME}\"" "-DCONFIG_SPACE_CARD_EVENT_LABEL=\"${EVENT_LABEL}\"" \
   "-DCONFIG_SPACE_REMOTE_NAME=\"${REMOTE_NAME}\"" \
-  "${SIM}/sim.c" "${SIM}/stub/ble_remote_stub.c" "${SIM}/stub/sound_stub.c" \
+  "${SIM}/sim.c" "${SIM}/stub/ble_remote_stub.c" "${SIM}/stub/sound_stub.c" "${SIM}/stub/news_store_stub.c" \
   "${MAIN}/space_card.c" "${MAIN}/space_card_model.c" "${MAIN}/car_screen.c" "${MAIN}/car_remote_model.c" \
   "${MAIN}/pocket_model.c" "${MAIN}/audio_dsp.c" "${MAIN}/menu_screen.c" "${MAIN}/candle_screen.c" "${MAIN}/timer_screen.c" \
   "${MAIN}/tools_screen.c" "${MAIN}/games_model.c" "${MAIN}/games_screen.c" "${MAIN}/find_screen.c" \
   "${MAIN}/deku_model.c" "${MAIN}/deku_screen.c" "${MAIN}/deku_lines.c" \
+  "${MAIN}/news_model.c" "${MAIN}/news_screen.c" "${NEWS_FONT}" \
   "${MAIN}"/font_*.c "${MAIN}/cover_img.c" "${MAIN}/star_img.c" \
   "${OBJ}"/*.o -lm -o "${WORK}/sim"
-rm -f "${OUT}"/*.ppm "${OUT}"/*.png "${CAR_OUT}"/*.ppm "${CAR_OUT}"/*.png "${POCKET_OUT}"/*.ppm "${POCKET_OUT}"/*.png "${FIND_OUT}"/*.ppm "${FIND_OUT}"/*.png "${DEKU_OUT}"/*.ppm "${DEKU_OUT}"/*.png
-"${WORK}/sim" "${OUT}" "${CAR_OUT}" "${POCKET_OUT}" "${FIND_OUT}" "${DEKU_OUT}" "${EVENT_URL}"
+rm -f "${OUT}"/*.ppm "${OUT}"/*.png "${CAR_OUT}"/*.ppm "${CAR_OUT}"/*.png "${POCKET_OUT}"/*.ppm "${POCKET_OUT}"/*.png "${FIND_OUT}"/*.ppm "${FIND_OUT}"/*.png "${DEKU_OUT}"/*.ppm "${DEKU_OUT}"/*.png "${NEWS_OUT}"/*.ppm "${NEWS_OUT}"/*.png
+NEWS_OUT="${NEWS_OUT}" NEWS_BRIEF="${SIM}/../android/app/src/test/resources/brief-sample.txt" \
+  "${WORK}/sim" "${OUT}" "${CAR_OUT}" "${POCKET_OUT}" "${FIND_OUT}" "${DEKU_OUT}" "${EVENT_URL}"
 
 # --- 扫二维码（OpenCV 装在独立 venv）---
 VENV="${WORK}/sim-venv"
@@ -71,6 +83,7 @@ fi
 "${VENV}/bin/python" -I "${SIM}/scan_qr.py" "${POCKET_OUT}"
 "${VENV}/bin/python" -I "${SIM}/scan_qr.py" "${FIND_OUT}"
 "${VENV}/bin/python" -I "${SIM}/scan_qr.py" "${DEKU_OUT}"
+"${VENV}/bin/python" -I "${SIM}/scan_qr.py" "${NEWS_OUT}"
 
 if [[ "${1:-}" == "--update-screenshot" ]]; then
   cp "${OUT}/screens.png" "${SIM}/../firmware/screens.png"
@@ -78,5 +91,6 @@ if [[ "${1:-}" == "--update-screenshot" ]]; then
   cp "${POCKET_OUT}/screens.png" "${SIM}/../firmware/pocket-screens.png"
   cp "${FIND_OUT}/screens.png" "${SIM}/../firmware/find-screens.png"
   cp "${DEKU_OUT}/screens.png" "${SIM}/../firmware/deku-screens.png"
-  echo "已更新 firmware/screens.png、car-screens.png、pocket-screens.png、find-screens.png、deku-screens.png"
+  cp "${NEWS_OUT}/screens.png" "${SIM}/../firmware/news-screens.png"
+  echo "已更新 firmware/screens.png、car-screens.png、pocket-screens.png、find-screens.png、deku-screens.png、news-screens.png"
 fi

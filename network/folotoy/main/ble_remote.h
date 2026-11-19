@@ -40,4 +40,7 @@ int ble_remote_take_find(void);                        // app 送来的「找」
 bool ble_remote_notify_find(bool ringing, find_stop_t why);
 
 // 送一个任意封包给 app（DEKU 用：开始听 / 放开 / 念这句）；app 没连回 false
-bool ble_remote_notify_raw(const uint8_t *data, size_t len);   // 告诉 app 在响 / 为什么停了；app 没连回 false
+bool ble_remote_notify_raw(const uint8_t *data, size_t len);
+
+// 名片 / 口袋机：请手机加快连线（传晨报时，约 15–30ms 一次）/ 放慢回平常（240–400ms）。车用模式不用
+void ble_remote_set_fast(bool fast);   // 告诉 app 在响 / 为什么停了；app 没连回 false

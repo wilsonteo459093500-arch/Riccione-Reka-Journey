@@ -1,4 +1,4 @@
-// 模拟器用的 LVGL 设定：跟韧体 sdkconfig 一样是 RGB565、开 lv_qrcode、Montserrat 14 / 20 / 32 / 48
+// 模拟器用的 LVGL 设定：跟韧体 sdkconfig 一样是 RGB565、开 lv_qrcode、Montserrat 14 / 20 / 32 / 48、大字型格式
 #ifndef LV_CONF_H
 #define LV_CONF_H
 #define LV_COLOR_DEPTH 16
@@ -10,6 +10,8 @@
 #define LV_FONT_MONTSERRAT_20 1
 #define LV_FONT_MONTSERRAT_32 1
 #define LV_FONT_MONTSERRAT_48 1
+// 晨报字型 GB2312 全部汉字，位图超过 1MB（一般格式的位址只有 20 bit）
+#define LV_FONT_FMT_TXT_LARGE 1
 #define LV_USE_LOG 0
 #define LV_USE_OS LV_OS_NONE
 #endif

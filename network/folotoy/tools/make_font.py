@@ -17,6 +17,10 @@
   space_font_cjk_20 / 32：中文（从 main/*.c 的字串里收集 + tools/font_extra_chars.txt），
                           ASCII 交给 Montserrat 同字号（fallback），所以英文、数字跟原本一样
   space_font_digits_64 / 140：计时器、数字蜡烛用的大数字（0-9 : .）
+  space_font_news_20：每日晨报（GB2312 全部汉字 + 符号，约 7,500 字、约 1.3MB）。新闻什么字都可能有，
+                      所以不是「用到才放」；档案太大（约 8MB 原始码）不放进仓库：
+                      build.sh / sim/run.sh 编的时候用 --news-out 产生到编译资料夹。
+                      同一份字表写进 app 的 assets/news_chars.txt（app 只送 FoloToy 有的字），--check 会检查它
 """
 from __future__ import annotations
 
@@ -40,6 +44,26 @@ FONTS = [
     ("space_font_digits_140", 140, "digits", "bold", None),
 ]
 DIGITS = "0123456789:."
+NEWS_CHARS = ROOT / "android" / "app" / "src" / "main" / "assets" / "news_chars.txt"
+NEWS_EXTRA = "·—–•€éü峇啰哖吔呣嚤"   # GB2312 没有、新闻常见的（· — Python 的 gb2312 对到 U+30FB、U+2015；峇株巴辖等大马地名人名）
+
+
+def news_chars() -> list[str]:
+    """GB2312 一到九区的符号 + 十六到八十七区的汉字（6,763 个），加上 NEWS_EXTRA。ASCII 交给 Montserrat。"""
+    chars: set[str] = set(NEWS_EXTRA)
+    for hi in list(range(0xA1, 0xAA)) + list(range(0xB0, 0xF8)):
+        for lo in range(0xA1, 0xFF):
+            try:
+                ch = bytes([hi, lo]).decode("gb2312")
+            except UnicodeDecodeError:
+                continue
+            if ord(ch) > 0x7E and not ch.isspace():
+                chars.add(ch)
+    return sorted(chars)
+
+
+def news_chars_text(chars: list[str]) -> str:
+    return "# FoloToy 晨报字型有的字（tools/make_font.py 产生，不要手改）；另外 ASCII 0x20-0x7E 都有\n" + "".join(chars) + "\n"
 
 
 def strip_comments(src: str) -> str:
@@ -188,7 +212,14 @@ def main() -> int:
     ap.add_argument("--ttf", required=True, help="NotoSansSC_500Medium.ttf")
     ap.add_argument("--bold-ttf", required=True, help="NotoSansSC_700Bold.ttf（大数字）")
     ap.add_argument("--check", action="store_true", help="只检查 main/font_*.c 是不是最新")
+    ap.add_argument("--news-out", help="另外产生晨报字型 font_news_20.c 到这个路径（编译资料夹，不放仓库）")
     args = ap.parse_args()
+
+    news = news_chars()
+    if args.news_out:
+        Path(args.news_out).write_text(build_font("space_font_news_20", 20, news, Path(args.ttf), "lv_font_montserrat_20"), encoding="utf-8")
+        print(f"{args.news_out}：晨报字型 {len(news)} 个字")
+        return 0
 
     cjk = collect_cjk()
     stale = []
@@ -203,6 +234,13 @@ def main() -> int:
         else:
             out.write_text(text, encoding="utf-8")
             print(f"{out.relative_to(ROOT)}：{len(chars)} 个字")
+    news_text = news_chars_text(news)
+    if args.check:
+        if not NEWS_CHARS.exists() or NEWS_CHARS.read_text(encoding="utf-8") != news_text:
+            stale.append(NEWS_CHARS.name)
+    else:
+        NEWS_CHARS.write_text(news_text, encoding="utf-8")
+        print(f"{NEWS_CHARS.relative_to(ROOT)}：{len(news)} 个字")
     if stale:
         print("字型不是最新（程序里有新的中文字？）：重跑 tools/make_font.py →", ", ".join(stale))
         return 1

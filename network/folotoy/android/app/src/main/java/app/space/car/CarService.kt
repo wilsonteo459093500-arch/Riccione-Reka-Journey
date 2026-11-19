@@ -41,6 +41,7 @@ import app.space.car.CarLogic.Effect
 import org.json.JSONObject
 import java.io.File
 import java.util.Locale
+import java.util.concurrent.Executors
 
 /**
  * SPACE 车控：整个 app 的工作都在这个「无障碍服务」里。
@@ -91,6 +92,18 @@ class CarService : AccessibilityService() {
     private var listening = false
     private val leftBehind = FindLogic.LeftBehind()
 
+    // ---- 每日晨报 ----
+    private val bg = Executors.newSingleThreadExecutor()   // 连 Gmail（不能在主执行绪）
+    @Volatile var newsBusy = false
+        private set
+    private var mtu = 23
+    private var mtuPending = false
+    private var newsSending = false
+    private var newsTotal = 0
+    private var newsSent = 0
+    private var newsRetries = 0
+    private var lastNewsTick = 0L
+
     // ---------------- 生命周期 ----------------
     override fun onServiceConnected() {
         instance = this
@@ -110,6 +123,7 @@ class CarService : AccessibilityService() {
         gatt?.close()
         tts?.shutdown()
         recognizer?.destroy()
+        bg.shutdownNow()
         super.onDestroy()
     }
 
@@ -126,6 +140,10 @@ class CarService : AccessibilityService() {
             val now = SystemClock.elapsedRealtime()
             if (::logic.isInitialized) run(logic.onTick(now))
             findTick(now)
+            if (now - lastNewsTick >= 60_000 || lastNewsTick == 0L) {
+                lastNewsTick = now
+                newsTick(System.currentTimeMillis())
+            }
             main.postDelayed(this, 250)
         }
     }
@@ -192,6 +210,9 @@ class CarService : AccessibilityService() {
                     cmdChar = null
                     writeQueue.clear()
                     writing = false
+                    newsSending = false
+                    mtuPending = false
+                    mtu = 23
                     if (ready) onLost()
                     ready = false
                     if (findUi == FindUi.RINGING) findUi = FindUi.LOST
@@ -224,17 +245,41 @@ class CarService : AccessibilityService() {
             writing = true   // 等描述写完再送指令
         }
 
+        @SuppressLint("MissingPermission")
         override fun onDescriptorWrite(g: BluetoothGatt, d: BluetoothGattDescriptor, st: Int) {
             main.post {
                 status = "FoloToy 已连线 ✓"
-                writing = false
                 ready = true
+                newsRetries = 0
+                // 先把一次能送的量调大（传晨报用）；调好之前指令先排着
+                writing = g.requestMtu(247)
+                mtuPending = writing
+                if (!writing) newsAsk()
+                else main.postDelayed({   // 有的手机不回：3 秒后照常（一次送少一点而已）
+                    if (mtuPending) {
+                        mtuPending = false
+                        writing = false
+                        pump()
+                        newsAsk()
+                    }
+                }, 3000)
                 onFound()
                 send(Protocol.modeCommand(false))
                 if (findUi == FindUi.CONNECTING) {   // 按了「找」才连上：马上叫它响
                     findUi = FindUi.RINGING
                     send(Protocol.findCommand(true))
                 }
+            }
+        }
+
+        override fun onMtuChanged(g: BluetoothGatt, value: Int, st: Int) {
+            main.post {
+                if (st == BluetoothGatt.GATT_SUCCESS) mtu = value
+                if (!mtuPending) return@post
+                mtuPending = false
+                writing = false
+                pump()
+                newsAsk()
             }
         }
 
@@ -435,6 +480,14 @@ class CarService : AccessibilityService() {
     }
 
     private fun onKeyBytes(data: ByteArray?) {
+        Protocol.decodeNewsStatus(data)?.let { st ->
+            main.post { onNewsStatus(st) }
+            return
+        }
+        Protocol.decodeNewsSay(data)?.let { say ->
+            main.post { onNewsSay(say) }
+            return
+        }
         Protocol.decodeFindState(data)?.let { fs ->
             main.post {
                 findUi = when (fs) {
@@ -471,6 +524,7 @@ class CarService : AccessibilityService() {
         val c = cmdChar ?: return
         if (writing || writeQueue.isEmpty()) return
         val cmd = writeQueue.removeFirst()
+        if (cmd.isNotEmpty() && cmd[0] == 0x06.toByte()) newsSent++
         writing = true
         if (Build.VERSION.SDK_INT >= 33) {
             g.writeCharacteristic(c, cmd, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
@@ -494,6 +548,112 @@ class CarService : AccessibilityService() {
             Effect.VoiceStop -> voice?.release(send = true)
             Effect.VoiceCancel -> voice?.release(send = false)
         }
+    }
+
+    // ---------------- 每日晨报 ----------------
+    /** 设定画面「现在更新」 */
+    fun newsUpdateNow() = fetchNews()
+
+    /** 正在传给 FoloToy：0–100；没在传回 null */
+    fun newsProgress(): Int? = if (newsSending && newsTotal > 0) minOf(100, newsSent * 100 / newsTotal) else null
+
+    private fun newsTick(now: Long) {
+        if (NewsLogic.shouldFetch(now, NewsStore.configured(this), NewsStore.haveDate(this), NewsStore.lastAttempt(this))) fetchNews()
+    }
+
+    private fun fetchNews() {
+        if (newsBusy) return
+        if (!NewsStore.configured(this)) {
+            NewsStore.setNote(this, "还没填 Gmail 帐号和应用程序密码")
+            return
+        }
+        newsBusy = true
+        NewsStore.setAttempt(this, System.currentTimeMillis())
+        val user = NewsStore.user(this)
+        val pass = NewsStore.password(this)
+        val chars = NewsStore.chars(this)
+        bg.execute {
+            var data: ByteArray? = null
+            val note = try {
+                val raw = Gmail.fetchLatestBrief(user, pass)
+                val brief = raw?.let { Mime.html(it) }?.let { BriefParser.parse(it) }
+                when {
+                    raw == null -> "Gmail 收件匣最近 3 天没有「每日晨报 DAILY MORNING BRIEF」"
+                    brief == null -> "晨报的格式看不懂（可能是旧格式），没更新"
+                    else -> {
+                        data = BriefCodec.encode(brief, chars)
+                        "已拿到 ${brief.date} 的晨报 · 共 ${brief.itemCount} 条"
+                    }
+                }
+            } catch (e: ImapSession.ImapException) {
+                e.message ?: "Gmail 出错"
+            } catch (e: Exception) {
+                "连不上 Gmail（${e.javaClass.simpleName}）：手机有网路吗？"
+            }
+            main.post {
+                newsBusy = false
+                val hhmm = java.text.SimpleDateFormat("HH:mm", Locale.US).apply { timeZone = NewsLogic.ZONE }.format(java.util.Date())
+                NewsStore.setNote(this, "$hhmm $note")
+                data?.let { d ->
+                    if (BriefCodec.crc32(d) != NewsStore.crc(this)) NewsStore.save(this, d)
+                    newsRetries = 0
+                    newsAsk()
+                }
+            }
+        }
+    }
+
+    /** 问 FoloToy 有哪一份（回 [0x83, 状态, crc]，在 onNewsStatus 决定要不要传） */
+    private fun newsAsk() {
+        if (ready && !newsSending && NewsStore.crc(this) != null) send(Protocol.newsAsk())
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun onNewsStatus(st: Protocol.NewsStatus) {
+        val mine = NewsStore.crc(this)
+        when {
+            st.status == Protocol.NEWS_OK && mine != null && st.crc == mine -> {
+                if (newsSending) gatt?.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_BALANCED)
+                newsSending = false
+                newsRetries = 0
+                if (NewsStore.sentCrc(this) != mine) NewsStore.setSent(this, mine, System.currentTimeMillis())
+            }
+            !newsSending && NewsLogic.needSend(st.status, st.crc, mine) -> newsSend()
+            st.status == Protocol.NEWS_BAD || st.status == Protocol.NEWS_FLASH || st.status == Protocol.NEWS_TOO_BIG -> {
+                newsSending = false
+                writeQueue.removeAll { it.isNotEmpty() && it[0] == 0x06.toByte() }   // 剩下的段不用送了
+                gatt?.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_BALANCED)
+                if (st.status != Protocol.NEWS_TOO_BIG && newsRetries < 2) {
+                    newsRetries++
+                    main.postDelayed({ newsAsk() }, 3000)
+                } else {
+                    NewsStore.setNote(this, NewsStore.note(this) + "（传给 FoloToy 失败：${if (st.status == Protocol.NEWS_TOO_BIG) "太大" else "收坏了"}）")
+                }
+            }
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun newsSend() {
+        val data = NewsStore.encoded(this) ?: return
+        val crc = NewsStore.crc(this) ?: return
+        val packets = Protocol.newsPackets(data, crc, (mtu - 3 - 6).coerceIn(14, 238))
+        newsSending = true
+        newsTotal = packets.size
+        newsSent = 0
+        gatt?.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)
+        packets.forEach { send(it) }
+    }
+
+    /** FoloToy 按住确定：念那一条（用同一份晨报，crc 对得上才念） */
+    private fun onNewsSay(say: Protocol.NewsSay) {
+        val data = NewsStore.encoded(this)
+        if (data == null || BriefCodec.crc32(data) != say.crc) {
+            speak("手机上的晨报跟 FoloToy 的不一样，等一下会自动同步")
+            newsAsk()
+            return
+        }
+        BriefCodec.items(data).getOrNull(say.index)?.let { speak(BriefCodec.speech(it)) }
     }
 
     /** 设定画面「先听一句」 */

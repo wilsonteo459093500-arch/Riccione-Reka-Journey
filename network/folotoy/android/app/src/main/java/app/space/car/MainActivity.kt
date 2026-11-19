@@ -38,6 +38,7 @@ class MainActivity : Activity() {
     private lateinit var findSignal: TextView
     private lateinit var lastSeen: TextView
     private lateinit var mapBtn: Button
+    private lateinit var newsStatus: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -93,6 +94,39 @@ class MainActivity : Activity() {
             else s.deku.pick(DekuLogic.Kind.JOKE)?.let { s.sayNow(DekuLogic.speech(it)) }
         })
 
+        // ---- 每日晨报 ----
+        col.addView(title("每日晨报", 18f))
+        col.addView(text("每天早上 7 点后，自动从你的 Gmail 读「每日晨报 DAILY MORNING BRIEF」（只读：不改、不删、不寄），FoloToy 靠近手机就传过去。FoloToy 菜单选「每日晨报」看；按住「确定」手机念那一条。"))
+        col.addView(text("要一个 Gmail「应用程序密码」（16 个字母）：Google 帐号先开两步验证，再到下面的网页产生一个，名字填 FoloToy。不是你的 Gmail 密码。"))
+        col.addView(button("打开 Google「应用程序密码」网页") {
+            runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://myaccount.google.com/apppasswords"))) }
+        })
+        val newsUser = EditText(this).apply {
+            hint = "Gmail 地址"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+            setText(NewsStore.user(this@MainActivity))
+        }
+        col.addView(newsUser)
+        val newsPass = EditText(this).apply {
+            hint = if (NewsStore.password(this@MainActivity).isEmpty()) "应用程序密码（16 个字母）" else "应用程序密码（已存好；要换才填）"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        col.addView(newsPass)
+        col.addView(button("存好，现在更新") {
+            val pass = newsPass.text.toString().ifBlank { NewsStore.password(this) }
+            if (newsUser.text.isBlank() || pass.isBlank()) {
+                toast("Gmail 地址和应用程序密码都要填")
+                return@button
+            }
+            NewsStore.saveAccount(this, newsUser.text.toString(), pass)
+            newsPass.setText("")
+            newsPass.hint = "应用程序密码（已存好；要换才填）"
+            val s = CarService.instance
+            if (s == null) toast("先做下面的 ②（开无障碍服务）") else s.newsUpdateNow()
+        })
+        newsStatus = text("")
+        col.addView(newsStatus)
+
         col.addView(title("第一次设定（照顺序做一次就好）", 18f))
         col.addView(button("① 开权限（附近的装置、通讯录、麦克风）") { askPermissions() })
         col.addView(button("② 开「SPACE 车控」无障碍服务") {
@@ -143,8 +177,27 @@ class MainActivity : Activity() {
         override fun run() {
             status.text = if (CarService.instance == null) "状态：无障碍服务还没开（做 ②）" else "状态：${CarService.status}"
             refreshFind()
+            refreshNews()
             ui.postDelayed(this, 1000)
         }
+    }
+
+    // ---------------- 每日晨报 ----------------
+    private fun refreshNews() {
+        val s = CarService.instance
+        val lines = ArrayList<String>()
+        if (s?.newsBusy == true) lines.add("正在读 Gmail…")
+        NewsStore.note(this).takeIf { it.isNotEmpty() }?.let { lines.add("最后一次：$it") }
+        val mine = NewsStore.crc(this)
+        val progress = s?.newsProgress()
+        lines.add(when {
+            mine == null -> "FoloToy：还没有晨报可以传"
+            progress != null -> "FoloToy：正在传 $progress%"
+            NewsStore.sentCrc(this) == mine -> "FoloToy：已经有这份 ✓（${FindLogic.ago(System.currentTimeMillis(), NewsStore.sentAt(this))}传好）"
+            s?.ready == true -> "FoloToy：等它回话…"
+            else -> "FoloToy：还没传（FoloToy 靠近、连上就会传）"
+        })
+        newsStatus.text = lines.joinToString("\n")
     }
 
     // ---------------- 找 FoloToy ----------------

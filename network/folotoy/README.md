@@ -12,6 +12,7 @@ FoloToy AI Passport（ESP32-C3、240×320 屏幕、三个按键）有两个模�
   - 游戏：**叠叠乐**、**落落方块**、**记忆三色**、**求签**、**抽奖**
   - 解压：**泡泡纸**、**狂按挑战**、**捏捏乐**
   - 小助理：**S.T.A.R 讲笑话**（笑话、稻盛和夫 / 郭鹤年 / Musk 的原话；见下面「S.T.A.R 小助理」）
+  - 资讯：**每日晨报**（你的 Gmail 晨报，经手机传过来；见下面「每日晨报」）
   - 车用遥控器、返回名片
   - 见下面「口袋机」
 - **车用遥控器模式**：FoloToy 当 Android 手机的**蓝牙媒体遥控器**，手机不用装 app。开车时按 FoloToy 控制微信读书听书、音乐，长按叫语音助理。见下面「车用遥控器」。
@@ -236,6 +237,47 @@ FoloToy 背面就是一枚**被动 NTAG213** NFC 芯片（官方规格：支持�
 - 审核网页：https://claude.ai/artifact/4DcXNNxeknMGqygntM4W6V（每句选「要 / 不要」→「复制结果」贴回给 Claude）。郭鹤年只找到二手报道，建议对过《郭鹤年自传》再勾。
 - 审好之后（给开发者）：改 `lines.json` 的 `status` → `python3 tools/make_deku.py`（产生 `main/deku_lines.c`、app 的 `assets/deku.json`）→ `tools/make_font.py`（新的中文字）→ `./build.sh`、`./android/build.sh`。
 
+## 每日晨报（app v0.6，2026-11-19）
+
+![模拟画面：菜单 / 还没有晨报 / 正在接收 / 目录 / 目录最下面 / 标题列表 / 一条（第一页、往下翻）/ 念 / 没有 app / 对你的生意](./firmware/news-screens.png)
+
+你每天早上 7 点左右寄给自己的「每日晨报 DAILY MORNING BRIEF」，放进 FoloToy 看。口袋机菜单 →「每日晨报」。
+
+- 内容：**今日三件事** + 九栏全部（今日必读、大马热议、政治、行业·房地产、AI要闻、深度观点、大马股市、全球家具、家具AI·中国，每天 90 多条）+ 信里的「对你的生意意味着什么」5 点
+- 列表只放**标题**，按「确定」看摘要；**按住「确定」手机念**这一条（标题 + 摘要）
+- 资料从手机来（**不用 Wi-Fi**）：SPACE 车控 app 用 Gmail「应用程序密码」**只读**拿晨报 → 蓝牙传给 FoloToy。FoloToy 记住最后一份，**离开手机也能看**
+
+| 画面 | 上 / 下 | 确定 | 按住确定 | 上 长按 |
+|---|---|---|---|---|
+| 目录 | 选栏目 | 打开 | — | 回菜单 |
+| 标题列表 | 选一条 | 看摘要 | 手机念 | 回目录 |
+| 一条 | 往上 / 往下翻（翻完到上一条 / 下一条，一栏看完接下一栏） | 回列表 | 手机念 | 回列表 |
+
+### 第一次设定（手机）
+
+1. Google 帐号先开**两步验证**，再到 https://myaccount.google.com/apppasswords 产生一个「应用程序密码」（名字填 FoloToy；16 个字母，**不是** Gmail 密码）。app 里有按钮直接打开这个网页
+2. SPACE 车控 app →「每日晨报」填 Gmail 地址、应用程序密码 →「存好，现在更新」
+3. 下面会写「已拿到 2026-11-18 星期三 的晨报 · 共 105 条」→ FoloToy 靠近、连上之后几秒就传过去（「FoloToy：已经有这份 ✓」）
+
+之后不用管：每天早上 **7:00 以后** app 自己查，还没拿到今天那份就每 30 分钟再查一次；FoloToy 一连上就传。
+
+### 要先知道的
+
+- **只读**：app 用 IMAP「唯读」打开收件匣，只拿主题有「DAILY MORNING BRIEF」、最近 3 天里最新那封；不改、不删、不寄，也不会把信标成已读。应用程序密码只存在这支手机（app 自己的设定档）；不想用了到 Google 那个网页删掉它就好
+- 只认新格式的主题（「每日晨报 DAILY MORNING BRIEF · 2026-11-18 星期三」）；偶尔出现的旧格式「每日晨报 · 2026年11月10日（星期二）· 共32条」找不到 / 看不懂就不更新，FoloToy 留着前一份
+- FoloToy 的字：GB2312 的 6,763 个常用汉字 + 符号 + 「峇」等几个大马地名用字（约 7,450 字）。少数没有的字显示成「□」，手机念的时候照原文念
+- 传一份约 23KB，几秒；传到一半断线，FoloToy 上旧的那份还在，下次连上再传
+- 念的时候手机要在旁边、app 要开着（跟 S.T.A.R 一样）
+
+### 怎么做到的（给开发者）
+
+- 信的格式：HTML 里的「今日三件事」、目录（短栏名）、栏目头、每条（标题 / 摘要 / 来源）、「对你的生意」框（夹在第四、第五栏中间）；全文样本 `android/app/src/test/resources/brief-2026-11-18.html`（编辑说明内文已删）
+- app：`Gmail.kt`（只做 LOGIN / EXAMINE / UID SEARCH / UID FETCH BODY.PEEK 的小 IMAP + 解 MIME）→ `Brief.kt`（HTML → 栏目、条目 → 传给 FoloToy 的文字档）→ `News.kt`（什么时候查、存在手机里的东西）→ `CarService.kt`（蓝牙传、念）
+- 传的格式（`main/news_model.h`）：`BRIEF1` / `D<TAB>日期` / `S<TAB>栏名` / `I<TAB>标题<TAB>摘要`；蓝牙封包 `0x06` 开始 / 一段 / 传完、`0x07` 问有哪一份、`0x83` 回状态 + crc、`0x84` 念第几条
+- FoloToy 存在 flash 的 `brief` 分区（256KB，`partitions_space.csv`；app 分区让出最后 256KB），A / B 两格轮流写、整份 crc 对了才算数；读的时候直接映射 flash，不占 RAM
+- app 单元测试把样本晨报编成 `android/app/src/test/resources/brief-sample.txt`；FoloToy 的 host 测试、模拟器读同一份 → app 送什么，FoloToy 就显示什么
+- 晨报字型 `space_font_news_20`（位图约 1.4MB，原始码约 10MB）**不放仓库**：`build.sh`、`sim/run.sh` 编的时候用 `tools/make_font.py --news-out` 产生；字表同时写进 app 的 `assets/news_chars.txt`（`--check` 检查）。位图超过 1MB，所以开了 `CONFIG_LV_FONT_FMT_TXT_LARGE`
+
 ## SPACE 车控 Android app（第二阶段，v0.4）
 
 装了 app 之后，FoloToy 车用模式多两个功能（没装 app 时照旧是媒体遥控器）：
@@ -325,6 +367,10 @@ FoloToy 背面就是一枚**被动 NTAG213** NFC 芯片（官方规格：支持�
 | `tools/star_art.py`、`tools/make_star.py`、`main/star_img.c/.h` | S.T.A.R 原创像素画（32 格）→ 韧体图（封面 192px、小助理 96px，RGB565A8）；`--check` 由 `build.sh` 检查 |
 | `deku/lines.json`、`tools/make_deku.py`、`main/deku_lines.c` | DEKU 句库（草稿 / 审过 / 不要）→ 只把审过的产生成韧体的表和 app 的 `assets/deku.json`；`--check` 由 `build.sh` 检查 |
 | `tools/make_deku_review.py` | 句库 → 审核网页（要 / 不要、复制结果） |
+| `main/news_model.c/.h` | 每日晨报纯逻辑：解析晨报、目录 / 列表 / 一条的翻页、念哪一条、蓝牙收资料写 flash（A / B 两格、crc）（**有 host 测试**） |
+| `main/news_store.c/.h` | 晨报存 flash：蓝牙封包丢进自己的 task 写（不卡蓝牙）、传的时候请手机加快连线；画面直接映射 flash 读 |
+| `main/news_screen.c/.h` | 晨报画面：目录、标题列表（两行 + …）、一条（标题 + 摘要、翻页）、接收进度 |
+| `partitions_space.csv` | 分区表：上游的 + 最后 256KB 给晨报（`build.sh` 换上去） |
 | `main/pocket_model.c/.h` | 口袋机纯逻辑：菜单、蜡烛（年龄、唱歌、熄灭）、计时器、倒数、时间文字（**有 host 测试**） |
 | `main/audio_dsp.c/.h` | 生日歌旋律与歌词、音色合成（整数正弦表 + 泛音 + 包络）、吹气判断（大声 + 持续 + 沙沙感 / 爆音）（**有 host 测试**） |
 | `main/sound.c/.h` | 喇叭 / 麦克风背景 task：放歌、响铃、听吹气；画面只送命令、读状态 |
@@ -359,6 +405,7 @@ Host tests:   PASS      —— test_space_card_model、test_car_remote_model、t
 Fonts:        PASS      —— make_font.py --check：中文 62 字、大数字，打包后逐像素读回一致
 Simulated:    PASS      —— sim/run.sh：名片 / 活动 / 大二维码三个画面，OpenCV 都扫出正确网址（带 s=folotoy）；
                            车用四个状态、口袋机 12 个画面看过（中文字正确、版面不重叠）；找 FoloToy 三个画面（firmware/find-screens.png）
+                           2026-11-19 阶段 D（每日晨报）：见下面「阶段 D」
 Device tests: 部分      —— 2026-11-18 用户 Samsung 真机：名片、车用遥控器配对 / 重连 / YouTube 播放暂停 / 语音助理 OK；
                            微信读书要先在 app 里按播放一次，之后 FoloToy 才控制得到（Android 的规则，见 PLAN 阶段 2）
                            口袋机（蜡烛、生日歌、吹气、计时器）还没真机测
@@ -369,7 +416,18 @@ Unverified:   真机画面（颜色、圆角）、手机对着这块屏幕实际
               找 FoloToy：名片模式下 Samsung 会不会自己连回来、多久连上、手机接不接受放慢连线、响铃音量、
               名片模式开蓝牙 + 喇叭 + 画面同时跑的记忆体、待机时间变化、背景拿位置（要「一律允许」）、通知震动；
               DEKU：手机在背景时语音转文字能不能用（Android 对背景用麦克风有限制）、辨识中文关键词准不准、
-              手机念的声音；句子多了以后字型变大（8MB flash 还很够）
+              手机念的声音；句子多了以后字型变大（8MB flash 还很够）；
+              晨报：真的连 Gmail（这个开发环境连不上 imap.gmail.com，IMAP 只用模拟的伺服器回应测过）、
+              手机在背景能不能连网 / 每 30 分钟查、蓝牙传一份要几秒（手机接不接受加快连线）、
+              flash 写入在真机、7,400 字的字型在真机的显示速度、换新韧体后分区表（第一次烧要用整份 .bin）
+
+阶段 D（2026-11-19）：
+  Build：Merged firmware PASS（3,952,112 bytes；app 3.9MB / 分区 7.7MB，晨报字型约 1.4MB）；idf.py size：DRAM 用 136 KB、还剩约 178 KB
+  Host tests：test_news_model（解析、翻页、念、收资料：断线 / 漏段 / crc 错 / 太大 / 写入失败 / 开机挑格子；
+              用 app 产生的 brief-sample.txt 解析出 11 栏 105 条）；deku_wrap 改成最多 400 字（摘要用）
+  app：BriefTest 11 个（真的晨报 HTML 解析：九栏条数 8/10/11/12/12/8/15/10/11、三件事、【标签】、生意 5 点；
+       编码跟 brief-sample.txt 一字不差、每个字 FoloToy 都有；MIME quoted-printable / base64；IMAP 对话；什么时候查；封包）
+  Simulated：firmware/news-screens.png（12 个画面看过：中文字正确、版面不重叠、长摘要会翻页）
 ```
 
 依赖是照上游 `dependencies.lock` 的版本从各自的 git 取的（开发环境连不上 Espressif 组件仓库），内容应该相同，但组件仓库的 hash 没有逐一比对过。

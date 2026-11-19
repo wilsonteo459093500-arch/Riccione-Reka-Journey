@@ -4,6 +4,8 @@
 //   广播（名字、外观「HID」、0x1812）、配对（Just Works + 绑定）、断线后重新广播、回报状态。
 // 参考：ESP-IDF examples/bluetooth/esp_hid_device（NimBLE 分支）。
 #include "ble_remote.h"
+#include "news_model.h"
+#include "news_store.h"
 
 #include <string.h>
 
@@ -89,6 +91,14 @@ static int space_chr_access(uint16_t conn_handle, uint16_t attr_handle, struct b
     if (ctxt->op != BLE_GATT_ACCESS_OP_WRITE_CHR) return BLE_ATT_ERR_UNLIKELY;
     cmd_msg_t m = { 0 };
     const uint16_t n = OS_MBUF_PKTLEN(ctxt->om);
+    // 晨报（0x06 传资料、0x07 问有哪一份）：一段最多 MTU 那么长，交给 news_store 的 task 写 flash
+    uint8_t first = 0;
+    if (n > 0 && os_mbuf_copydata(ctxt->om, 0, 1, &first) == 0 && (first == NEWS_CMD_DATA || first == NEWS_CMD_ASK)) {
+        uint8_t buf[NEWS_PKT_MAX];
+        if (n > sizeof buf) return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
+        if (ble_hs_mbuf_to_flat(ctxt->om, buf, sizeof buf, NULL) != 0) return BLE_ATT_ERR_UNLIKELY;
+        return news_store_push(buf, n) ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
+    }
     if (n == 0 || n > CMD_MAX) return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
     if (ble_hs_mbuf_to_flat(ctxt->om, m.data, sizeof m.data, NULL) != 0) return BLE_ATT_ERR_UNLIKELY;
     m.len = (uint8_t)n;
@@ -179,13 +189,7 @@ static int gap_event(struct ble_gap_event *event, void *arg) {
                     return 0;
                 }
                 // 请手机放慢连线（240–400ms）：省电；离开约 4 秒手机就知道断线（「忘了带提醒」用）
-                struct ble_gap_upd_params upd = {
-                    .itvl_min = 192, .itvl_max = 320,   // 单位 1.25ms
-                    .latency = 0,
-                    .supervision_timeout = 400,         // 单位 10ms
-                };
-                const int urc = ble_gap_update_params(event->enc_change.conn_handle, &upd);
-                if (urc != 0) ESP_LOGW(TAG, "请手机放慢连线失败：%d（照样能用）", urc);
+                ble_remote_set_fast(false);
             }
             s_link = CAR_LINK_READY;
             ESP_LOGI(TAG, "加密完成，可以用了");
@@ -351,4 +355,17 @@ bool ble_remote_notify_find(bool ringing, find_stop_t why) {
     struct os_mbuf *om = ble_hs_mbuf_from_flat(evt, sizeof evt);
     if (!om) return false;
     return ble_gatts_notify_custom(s_conn, s_evt_handle, om) == 0;
+}
+
+void ble_remote_set_fast(bool fast) {
+    const uint16_t conn = s_conn;
+    if (s_car_mode || conn == BLE_HS_CONN_HANDLE_NONE) return;   // 车用模式本来就是手机决定的快速连线
+    // 单位 1.25ms：快 15–30ms（传晨报）、慢 240–400ms（平常省电）；断线逾时都是 4 秒
+    struct ble_gap_upd_params upd = {
+        .itvl_min = fast ? 12 : 192, .itvl_max = fast ? 24 : 320,
+        .latency = 0,
+        .supervision_timeout = 400,
+    };
+    const int rc = ble_gap_update_params(conn, &upd);
+    if (rc != 0) ESP_LOGW(TAG, "请手机%s连线失败：%d（照样能用）", fast ? "加快" : "放慢", rc);
 }
