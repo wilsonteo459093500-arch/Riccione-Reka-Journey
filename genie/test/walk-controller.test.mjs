@@ -2,6 +2,7 @@
 //   假的引擎（和 Engine 一样的接口，只记下调用）+ 真的 nav / 门 / 飞行 / 带逛，onTick 用假的 rAF 一帧一帧跑：
 //   进去（state 的顺序、onTick、window.__genieWalk、落在 P3）→ 出来（飞回去 / 一下子回去：engine.walk、engine.onTick 都是 null、镜头一点不差）；
 //   点一下按工具分（走 / 刷颜色 / 地板 / 家具 / 量尺；灯光、拍照也是走）；摇杆贴着墙滑、永远不走进走不过去的格子；
+//   摇杆把开着的门扇当墙（停在门扇前；从门扇后面推 → 门扇转开）；带逛一路不穿门扇；
 //   楼梯那一段：眼睛 = 出发那层的地面 + y + 1.55，走过一半的高度才换楼层（setFloorView instant + quiet），换完家具照规则藏；
 //   家具只画人在的那一层（楼梯 / 挑空 3m 以内加上下层）；拍照的形状、跳回收藏的角度；带逛的 walkTo 到了 → true、客人接手 → false；
 //   update(project) 只重建家具变了的那一层；拖动转头、按住选中的家具拖 = 搬（松手才提交一次）；键盘；地上的记号（marks3d）全部能拿掉。
@@ -20,6 +21,7 @@ import { entryPlan, saveOrbit, EYE } from '../src/studio/walk/flight.js';
 import { addMark } from '../src/studio/walk/marks.js';
 import { floorSlotOf } from '../src/studio/walk/paint.js';
 import { createWalk, slideMove, furnitureMask, floorAtY, changedFloors, angleDiff, TOOLS, SPEED } from '../src/studio/walk/controller.js';
+import { tourStops } from '../src/studio/walk/tour.js';
 import { createMarks } from '../src/studio/walk/marks3d.js';
 import { PALETTE } from '../src/shared/palette.js';
 
@@ -75,7 +77,7 @@ const lib = { slot: () => new THREE.MeshBasicMaterial(), fixed: { glass: new THR
 
 /**
  * 和 Engine 一样的接口（只记下调用、照着改状态）。floors：每层一个组（家具组、天花挂在里面）。
- * hitAt / itemAt / groundAt：测试自己给（engine.pick = (x, y) => hit）。
+ * hitAt / itemAt：测试自己给（engine.pick = (x, y) => hit）；rayAt：真的射线（从相机穿过画布上这一点，搬家具用）。
  */
 function fakeEngine(project, { W = 1180, H = 820 } = {}) {
   const nd = N.navDataOf(project.plan);
@@ -165,9 +167,10 @@ function fakeEngine(project, { W = 1180, H = 820 } = {}) {
     itemAt(x, y) {
       return this.hitAt(x, y)?.object?.userData?.itemId || null;
     },
-    groundAt(x, y) {
-      const h = this.pick?.(x, y);
-      return h ? { x: h.point.x, z: h.point.z, floorId: floors[this.activeIdx].id } : { x: 0, z: 0, floorId: null };
+    raycaster: new THREE.Raycaster(),
+    rayAt(x, y) {
+      this.raycaster.setFromCamera(new THREE.Vector2((x / W) * 2 - 1, -(y / H) * 2 + 1), this.camera);
+      return this.raycaster;
     },
   };
   e.camera.position.set(20, 14, 26);
@@ -494,6 +497,108 @@ await test('摇杆一步（slideMove）：随便怎么推，永远不走进走�
   assert.ok(p.z - z0 > 0.6, `沿着墙滑过去了（z ${z0} → ${p.z}）`);
 });
 
+await test('摇杆一步（slideMove）+ 别的障碍（block.clearOf，门扇）：推着往一块薄板上走 → 停在离它一个半径的地方、斜着推 → 贴着它滑；本来就贴得太近只许往外挪', () => {
+  const pr = PROJ.condo3;
+  const nav = N.buildNav(N.navDataOf(pr.plan), pr.furniture);
+  // condo3 客厅 / 餐厅之间空的那一块里一块横着的薄板（像开着的门扇）：x 4.5–5.3、z = 3.4
+  const seg = [4.5, 3.4, 5.3, 3.4];
+  const segDist = (x, z) => Math.hypot(x - Math.min(seg[2], Math.max(seg[0], x)), z - seg[1]);
+  let calls = 0;
+  const block = {
+    clearOf(fi, x, z) {
+      calls++;
+      return fi === 0 ? segDist(x, z) - 0.02 : Infinity;
+    },
+  };
+  const start = { fi: 0, x: 4.9, z: 4.4 };
+  assert.ok(N.passable(nav, start) && N.passable(nav, { fi: 0, x: 4.9, z: 2.9 }), '例子：板子两边都走得过去');
+  const out = { x: 0, z: 0, moved: false };
+  // 正对着推（−z）：停在板子前面一个半径（门板 2cm 厚算进去）
+  const p = { ...start };
+  for (let i = 0; i < 60; i++) {
+    slideMove(nav, p, 0, -0.03, out, block);
+    p.x = out.x;
+    p.z = out.z;
+  }
+  assert.ok(calls > 0, '问了 block');
+  assert.ok(block.clearOf(0, p.x, p.z) >= nav.radius - 1e-6, `进了门扇的半径（离它 ${block.clearOf(0, p.x, p.z)}）`);
+  assert.ok(block.clearOf(0, p.x, p.z) < nav.radius + 0.04 && Math.abs(p.x - 4.9) < 1e-9, `停在门扇前（z = ${p.z}）`);
+  // 没有 block：直直穿过去（和以前一样）
+  const q = { ...start };
+  for (let i = 0; i < 60; i++) {
+    slideMove(nav, q, 0, -0.03, out);
+    q.x = out.x;
+    q.z = out.z;
+  }
+  assert.ok(q.z < 3.1, `没有 block 的话穿过去了（z = ${q.z}）`);
+  // 斜着推（−z 和 +x）：贴着板子往 +x 滑，过了板子的那一头再往前
+  const r = { ...start };
+  let minC = Infinity;
+  for (let i = 0; i < 60; i++) {
+    slideMove(nav, r, 0.015, -0.03, out, block);
+    r.x = out.x;
+    r.z = out.z;
+    minC = Math.min(minC, block.clearOf(0, r.x, r.z));
+  }
+  assert.ok(minC >= nav.radius - 1e-6, `贴着滑也没进半径（最近 ${minC}）`);
+  assert.ok(r.x > 5.3 && r.z < 3.4, `滑过了板子那一头（${r.x}, ${r.z}）`);
+  // 本来就贴得太近（门扇转过来了）：往里走不动、往外可以
+  const t = { fi: 0, x: 4.9, z: 3.55 };
+  slideMove(nav, t, 0, -0.05, out, block);
+  assert.equal(out.moved, false, '往门扇里走不动');
+  slideMove(nav, t, 0, 0.05, out, block);
+  assert.ok(out.moved && out.z > t.z, '往外挪得动');
+});
+
+await test('摇杆把开着的门扇当墙（真的门，condo3 卫生间门开在走廊里）：在门扇和门洞之间往门扇上推 → 停在门扇前、门扇不动（转过去会扫到人）；从门扇后面推 → 门扇转到另一边（离人远）、人走过去；关着的门不挡', async () => {
+  const { engine, ctl, nd } = await walkIn('condo3');
+  const doors = ctl.doors;
+  const nav = ctl.nav;
+  const L = doors.leaves.find((x) => x.id === '0/w26/1');
+  assert.ok(L && L.axis === 'x', '卫生间门（x 向的墙）');
+  const s = -1; // 走廊那一边
+  const at = (u, v) => (L.axis === 'x' ? { x: u, z: L.c + s * v } : { x: L.c + s * v, z: u });
+  const yawTo = (dx, dz) => Math.atan2(-dx, -dz);
+  const floor = nd.floors[L.fi].id;
+  const leafGap = () => doors.clearOf(L.fi, ctl.pose().x, ctl.pose().z);
+  const openToCorridor = () => {
+    L.target = 0;
+    L.s = 0;
+    assert.equal(doors.open(L.opening, { fi: L.fi, from: at((L.a + L.b) / 2, -1), instant: true }), true);
+    assert.equal(L.s, s, '门扇开在走廊里');
+  };
+  // ① 在门扇和门洞之间（门扇转回去会扫过的地方），朝着门扇推
+  openToCorridor();
+  const p = at(L.a + 0.56, 0.5);
+  assert.equal(await ctl.goto({ floor, x: p.x, z: p.z, yaw: yawTo(-1, 0), pitch: 0 }), true);
+  assert.ok(Math.abs(ctl.pose().x - p.x) < 1e-9, '站好了');
+  let minGap = Infinity;
+  ctl.joystick(0, 1);
+  ticks(engine, 2, { until: () => void (minGap = Math.min(minGap, leafGap())) });
+  ctl.joystick(0, 0);
+  ticks(engine, 0.5);
+  const q = ctl.pose();
+  assert.ok(minGap >= nav.radius - 1e-6, `一路离门扇 ≥ 半径（最近 ${minGap.toFixed(3)}）`);
+  assert.ok(q.x < p.x - 0.2 && leafGap() < nav.radius + 0.04, `走到门扇前停下（x ${p.x.toFixed(2)} → ${q.x.toFixed(2)}，离门扇 ${leafGap().toFixed(3)}）`);
+  assert.ok(L.s === s && L.target === s, '门扇不动（人在它转过去会扫到的地方）');
+  // ② 从门扇后面（走廊里、门轴那一头）沿着走廊推过去：门扇转到卫生间那一边，人走过去，一路不进门扇
+  openToCorridor();
+  const b = at(L.a - 0.6, 0.5);
+  assert.equal(await ctl.goto({ floor, x: b.x, z: b.z, yaw: yawTo(1, 0), pitch: 0 }), true);
+  minGap = Infinity;
+  ctl.joystick(0, 1);
+  ticks(engine, 3, { until: () => void (minGap = Math.min(minGap, leafGap())) });
+  ctl.joystick(0, 0);
+  ticks(engine, 0.5);
+  assert.equal(L.target, -s, '门扇转到卫生间那一边（离人远）');
+  assert.ok(minGap >= nav.radius - 1e-6, `一路离门扇 ≥ 半径（最近 ${minGap.toFixed(3)}）`);
+  assert.ok(ctl.pose().x > L.a + 0.3, `沿着走廊走过了门（x = ${ctl.pose().x.toFixed(2)}）`);
+  // ③ 关着的门不挡（门洞整个走得过去）：都关上 → clearOf = Infinity
+  for (const D of doors.leaves) [D.s, D.target] = [0, 0];
+  assert.equal(doors.clearOf(L.fi, b.x, b.z), Infinity);
+  ctl.dispose();
+});
+
 await test('摇杆（按看的方向走，y > 0 = 往前）、WASD / 方向键、Q / E 转身；在输入框里打字不算；客人一动带逛就停', async () => {
   const { engine, ctl } = await walkIn('semid2');
   const p0 = ctl.pose();
@@ -723,6 +828,40 @@ await test('带逛：每一站都是走到了、转过去了才说（walkTo → 
   ctl.dispose();
 });
 
+await test('带逛一路不穿门扇（condo3 / semid2，再加 terrace2 / studio 模板）：镜头离开着 / 在动的门扇一直 ≥ 0.2m —— 大门往外开、不扫进「门口」那一站往屋里走的路；门轴挑得开', async () => {
+  const tpl = (id) => {
+    const plan = M.templatePlan(id);
+    return { plan, furniture: furnish(plan, M.buildAllWalls(plan)) };
+  };
+  for (const [name, project] of [
+    ['condo3', PROJ.condo3],
+    ['semid2', PROJ.semid2],
+    ['terrace2', tpl('terrace2')],
+    ['studio', tpl('studio')],
+  ]) {
+    const { engine, ctl } = await walkIn(name, { project, tourOpts: FAST_TOUR });
+    let min = Infinity;
+    let opened = 0;
+    let done = null;
+    ctl.tour.start().then((r) => (done = r));
+    const watch = () => {
+      const q = ctl.pose();
+      min = Math.min(min, ctl.doors.clearOf(q.fi, q.x, q.z));
+      opened = Math.max(opened, ctl.doors.leaves.filter((L) => L.s).length);
+    };
+    const end = clock + 600e3;
+    while (done == null && clock < end) {
+      ticks(engine, 0.5, { until: () => void watch() });
+      await null;
+      await null;
+    }
+    assert.equal(done, 'done', `${name}：逛完了`);
+    assert.ok(opened > 0, `${name}：路上开过门`);
+    assert.ok(min >= 0.2, `${name}：镜头离门扇只有 ${min.toFixed(3)}m`);
+    ctl.dispose();
+  }
+});
+
 await test('客人接手：带逛走着的时候推摇杆 → 带逛停下（stopped）；walkTo 被摇杆 / 点地板打断 → false', async () => {
   const { engine, ctl, events } = await walkIn('semid2', { tourOpts: FAST_TOUR });
   const end = ctl.tour.start(1);
@@ -844,38 +983,222 @@ await test('拖动转头：灵敏度 = 竖直视角 / 画布高；俯仰最多 �
   el.fire('pointermove', { pointerId: 1, pointerType: 'mouse', clientX: 410, clientY: -9000, timeStamp: 5 });
   assert.equal(ctl.pose().pitch, -1.2);
   el.fire('pointerup', { pointerId: 1, pointerType: 'mouse', clientX: 410, clientY: -9000, timeStamp: 6 });
-  // 搬沙发：按在沙发上（地面上的一点跟着手指）
+  // 搬沙发：站在沙发前面 2.5m、稍微低头看着它（走路时的视角 62°：地平线在画面上面一点）。
+  // 手指按在哪、那一点的地面（rayAt 和这一层地面的交点）就跟着手指走
   ctl.setTool('furnish');
   const it = project.furniture.find((q) => q.kind === 'sofa');
   const g = engine.items.get(it.id);
-  engine.pick = (x) => hitOf({ x: it.x + (x - 500) / 100, y: 0.4, z: it.z }, { itemId: it.id });
-  tapAt(engine, 500, 400);
-  const drag = (pid, to, end) => {
-    el.fire('pointerdown', { pointerId: pid, pointerType: 'touch', clientX: 500, clientY: 400, timeStamp: 100 });
-    el.fire('pointermove', { pointerId: pid, pointerType: 'touch', clientX: 520, clientY: 400, timeStamp: 120 });
-    el.fire('pointermove', { pointerId: pid, pointerType: 'touch', clientX: to, clientY: 400, timeStamp: 140 });
-    const live = g.position.x;
-    el.fire(end, { pointerId: pid, pointerType: 'touch', clientX: to, clientY: 400, timeStamp: 160 });
-    return live;
+  const f0 = engine.navData().floors[0];
+  assert.equal(await ctl.goto({ floor: f0.id, x: it.x + 2.5, z: it.z, yaw: Math.PI / 2, pitch: -0.35, hour: engine.time }), true);
+  assert.ok(Math.abs(ctl.pose().x - (it.x + 2.5)) < 1e-9 && Math.abs(ctl.pose().z - it.z) < 1e-9, '站在沙发前面');
+  engine.camera.fov = 62; // 和 Engine.applyView 一样：走路时用 walk.fov
+  engine.camera.updateProjectionMatrix();
+  const S = (x, z) => ctl.project({ x, y: f0.elev, z });
+  const at = S(it.x, it.z);
+  assert.ok(at.visible, '看得见沙发');
+  engine.pick = () => hitOf({ x: it.x, y: 0.4, z: it.z }, { itemId: it.id });
+  tapAt(engine, at.x, at.y);
+  let pid = 10;
+  /** 按在 from（默认沙发），挪过 path 里的每一点（画布像素），记下每一步之后沙发在哪，最后 end（pointerup / pointercancel） */
+  const drag = (path, end, from = at) => {
+    pid++;
+    el.fire('pointerdown', { pointerId: pid, pointerType: 'touch', clientX: from.x, clientY: from.y, timeStamp: 100 });
+    const seen = [];
+    for (const q of path) {
+      el.fire('pointermove', { pointerId: pid, pointerType: 'touch', clientX: q.x, clientY: q.y, timeStamp: 120 });
+      seen.push({ x: g.position.x, z: g.position.z });
+    }
+    const last = path.at(-1);
+    el.fire(end, { pointerId: pid, pointerType: 'touch', clientX: last.x, clientY: last.y, timeStamp: 160 });
+    return seen;
   };
-  const live = drag(2, 560, 'pointercancel');
-  assert.ok(Math.abs(live - Math.round((it.x + 0.6) * 20) / 20) < 1e-9, `跟着手指（${live}）`);
-  assert.equal(g.position.x, it.x, '取消 → 放回去');
+  const near = (a, x, z) => Math.abs(a.x - x) < 1e-9 && Math.abs(a.z - z) < 1e-9;
+  const sm = engine.renderer.shadowMap;
+  // 跟着手指；走路时影子不自己重画 → 每挪一下都要影子重画（不留一个影子在原地）；取消 → 放回去、影子也回去
+  sm.needsUpdate = false;
+  let seen = drag([S(it.x - 0.3, it.z), S(it.x - 0.6, it.z - 0.4)], 'pointercancel');
+  assert.ok(near(seen[1], 2.25, 5.45), `跟着手指（${JSON.stringify(seen[1])}）`);
+  assert.ok(near(g.position, it.x, it.z), '取消 → 放回去');
   assert.deepEqual(api.moves, []);
-  const live2 = drag(3, 540, 'pointerup');
-  assert.ok(Math.abs(live2 - Math.round((it.x + 0.4) * 20) / 20) < 1e-9);
+  for (const [i, x] of [0.3, 0.6].entries()) {
+    sm.needsUpdate = false;
+    drag([S(it.x - x, it.z)], 'pointercancel');
+    assert.equal(sm.needsUpdate, true, `搬的时候 / 放回去影子重画（${i}）`);
+  }
+  el.fire('pointerdown', { pointerId: 99, pointerType: 'touch', clientX: at.x, clientY: at.y, timeStamp: 100 });
+  el.fire('pointermove', { pointerId: 99, pointerType: 'touch', clientX: S(it.x - 0.5, it.z).x, clientY: S(it.x - 0.5, it.z).y, timeStamp: 120 });
+  sm.needsUpdate = false;
+  el.fire('pointermove', { pointerId: 99, pointerType: 'touch', clientX: S(it.x - 0.5, it.z).x + 0.01, clientY: S(it.x - 0.5, it.z).y, timeStamp: 130 });
+  assert.equal(sm.needsUpdate, false, '没挪动（同一个 5cm 格子）：影子不重画');
+  el.fire('pointermove', { pointerId: 99, pointerType: 'touch', clientX: S(it.x - 0.7, it.z).x, clientY: S(it.x - 0.7, it.z).y, timeStamp: 140 });
+  assert.equal(sm.needsUpdate, true, '挪了：影子重画');
+  sm.needsUpdate = false;
+  el.fire('pointercancel', { pointerId: 99, pointerType: 'touch', clientX: 0, clientY: 0, timeStamp: 150 });
+  assert.equal(sm.needsUpdate, true, '取消：影子跟着放回去');
+  assert.ok(near(g.position, it.x, it.z));
+  // 松手提交一次
+  seen = drag([S(it.x - 0.2, it.z), S(it.x - 0.4, it.z)], 'pointerup');
+  assert.ok(near(seen[1], 2.45, it.z));
   assert.equal(api.moves.length, 1, '松手提交一次');
   assert.equal(api.moves[0].id, it.id);
-  assert.ok(Math.abs(api.moves[0].x - live2) < 1e-9 && Math.abs(api.moves[0].z - it.z) < 1e-9);
+  assert.ok(near(api.moves[0], 2.45, it.z));
   // 拖出房间：停在房间里（客厅 x 0–6.6）
+  g.position.set(it.x, 0, it.z);
   api.moves.length = 0;
-  drag(4, 5000, 'pointerup');
+  drag([S(it.x - 1, it.z), S(-3, it.z)], 'pointerup');
   const room = ctl.nav.data.floors[0].rooms.find((r) => r.id === it.room);
-  const fp = (x) => {
-    const swap = it.rot === 90 || it.rot === 270;
-    return (swap ? it.d : it.w) / 2 + x;
+  const fp = (it.rot === 90 || it.rot === 270 ? it.d : it.w) / 2;
+  assert.ok(Math.abs(api.moves[0].x - (room.x + fp)) < 1e-9, `没出客厅（${api.moves[0].x}）`);
+  // 往远处推、手指过了地平线（走路时地平线就在画面中间附近）：没有交点 / 交点太远（> 15m）→ 停在上一个位置，松手提交的也是它
+  // （以前 engine.groundAt 给这一层的中心：沙发跳到不相干的地方、松手就提交了）
+  g.position.set(it.x, 0, it.z);
+  api.moves.length = 0;
+  const hz = ctl.project({ x: it.x - 5000, y: f0.elev, z: it.z }).y; // 地平线（画布 y）
+  assert.ok(hz > 20 && hz < at.y - 100, `地平线在画面里（${hz}）`);
+  const sky = { x: at.x, y: hz - 40 };
+  const edge = { x: at.x, y: hz + 2 };
+  const far = S(it.x - 17.5, it.z); // 离眼睛 20m
+  seen = drag([S(it.x - 0.5, it.z), sky, edge, far], 'pointerup');
+  assert.ok(near(seen[0], 2.35, it.z));
+  for (const q of seen.slice(1)) assert.ok(near(q, 2.35, it.z), `指到天上 / 太远：不动（${JSON.stringify(q)}）`);
+  assert.equal(api.moves.length, 1);
+  assert.ok(near(api.moves[0], 2.35, it.z), '提交的是最后一个指到地面的位置');
+  // 高的家具按在地平线以上（按下那一点指不到地面）：先不动，第一次指到地面时定抓手（不跳），之后跟着手指挪
+  g.position.set(it.x, 0, it.z);
+  api.moves.length = 0;
+  const high = { x: at.x, y: hz - 60 };
+  seen = drag([{ x: at.x, y: hz - 75 }, S(it.x + 1, it.z), S(it.x + 0.5, it.z)], 'pointercancel', high);
+  assert.ok(near(seen[0], it.x, it.z), '还指着天上：不动');
+  assert.ok(near(seen[1], it.x, it.z), '第一次指到地面：不跳');
+  assert.ok(near(seen[2], 2.35, it.z), `之后跟着手指（${JSON.stringify(seen[2])}）`);
+  assert.ok(near(g.position, it.x, it.z), '取消 → 放回去');
+  assert.deepEqual(api.moves, []);
+  ctl.dispose();
+});
+
+// ───────────────────────── 摇杆一直在微微动、换键、淡出淡入叠在一起、带逛挑站 ─────────────────────────
+
+await test('摇杆推着、手指一直微微动（几乎每帧一个新的值）：照样按 SPEED 走，不是每次都停一下；推着的时候有路 → frame 自己停', async () => {
+  const { engine, ctl } = await walkIn('semid2');
+  const p0 = ctl.pose();
+  const t0 = clock;
+  for (let i = 0; i < 63; i++) {
+    ctl.joystick(0.002 * (i % 3), 0.9 + 0.001 * (i % 2));
+    engine.onTick(clock);
+    clock += 16;
+  }
+  const secs = (clock - 16 - t0) / 1000;
+  const p1 = ctl.pose();
+  const d = Math.hypot(p1.x - p0.x, p1.z - p0.z);
+  // 0.9 × SPEED、起步 ~0.1 秒 → ≈ 1.05m；每次 joystick 都 halt（速度清零）的话只有 ~0.17m
+  assert.ok(d > 0.8 * 0.9 * SPEED * secs, `走了 ${d.toFixed(3)}m（${secs.toFixed(2)} 秒）`);
+  // 推着摇杆的时候来了一条路（另一根手指点了地板 / walkTo）：frame 停掉它，路给 false
+  const r = ctl.walkTo({ fi: 0, x: p0.x, z: p0.z });
+  ctl.joystick(0.001, 0.9);
+  ticks(engine, 0.1);
+  assert.equal(await r, false);
+  ctl.joystick(0, 0);
+  ticks(engine, 0.5);
+  ctl.dispose();
+});
+
+await test('键盘：W 按着再按 A（或 Q）不停一下（速度不清零）；从不动到动的那一下才算接手', async () => {
+  for (const second of [{ code: 'KeyA', key: 'a' }, { code: 'KeyQ', key: 'q' }]) {
+    const { engine, ctl } = await walkIn('semid2');
+    window.fire('keydown', { code: 'KeyW', key: 'w', target: { tagName: 'DIV' } });
+    ticks(engine, 0.4);
+    const a = ctl.pose();
+    window.fire('keydown', { ...second, target: { tagName: 'DIV' } });
+    engine.onTick(clock);
+    clock += 16;
+    const b = ctl.pose();
+    const step = Math.hypot(b.x - a.x, b.z - a.z);
+    // 一帧 16ms、~1.3m/s ≈ 2cm；速度被清零的话只有 ~0.3cm
+    assert.ok(step > 0.012, `${second.key}：这一帧走了 ${step.toFixed(4)}m`);
+    window.fire('keyup', { code: 'KeyW', key: 'w' });
+    window.fire('keyup', { ...second });
+    ticks(engine, 0.5);
+    ctl.dispose();
+  }
+});
+
+const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
+
+await test('跳到收藏的角度连点两下（淡出淡入叠在一起）：只淡一次，画布最后回到原来的样子（不会一直是 opacity 0）', async () => {
+  const { engine, ctl, project } = await walkIn('semid2');
+  const style = { opacity: '', transition: '' };
+  engine.renderer.domElement.style = style;
+  const f0 = engine.navData().floors[0].id;
+  const A = { floor: f0, x: 5, z: 12.4, yaw: 0.3, pitch: 0, hour: engine.time };
+  const B = { floor: f0, x: 7, z: 13, yaw: 1.2, pitch: 0, hour: engine.time };
+  // ① 还在淡出：两下一起换（后点的最后换），都 true
+  const a1 = ctl.goto(A);
+  assert.equal(style.opacity, '0');
+  const a2 = ctl.goto(B);
+  assert.deepEqual(await Promise.all([a1, a2]), [true, true]);
+  assert.equal(style.opacity, '', '回到原来的 opacity');
+  assert.equal(style.transition, '', '回到原来的 transition');
+  assert.ok(Math.abs(angleDiff(ctl.pose().yaw, 1.2)) < 1e-9, '后点的那个');
+  // ② 已经换过去、正在淡入：这一下不算（给正在跑的那一下的结果），画布照样回到原来的样子
+  const b1 = ctl.goto(A);
+  await sleepMs(170);
+  assert.equal(style.opacity, '', '淡入中');
+  const b2 = ctl.goto(B);
+  assert.deepEqual(await Promise.all([b1, b2]), [true, true]);
+  assert.ok(Math.abs(angleDiff(ctl.pose().yaw, 0.3)) < 1e-9, '淡入中再点：不算');
+  assert.equal(style.opacity, '');
+  assert.equal(style.transition, '');
+  // ③ 画布本来就不是 ''（别的地方设过）：淡完回到它
+  style.opacity = '0.9';
+  await ctl.goto(B);
+  await Promise.all([ctl.goto(A), ctl.goto(B)]);
+  assert.equal(style.opacity, '0.9');
+  ctl.dispose();
+});
+
+await test('淡出淡入的半路退出（减少动态效果：飞回去也是淡出淡入）：一起换 / 等它淡完再淡；回到鸟瞰，画布回到原来的样子', async () => {
+  globalThis.matchMedia = (q) => ({ matches: /reduce/.test(q) });
+  try {
+    for (const wait of [30, 170]) {
+      const { engine, ctl, project } = await walkIn('semid2');
+      const style = { opacity: '', transition: '' };
+      engine.renderer.domElement.style = style;
+      const f0 = engine.navData().floors[0].id;
+      const g = ctl.goto({ floor: f0, x: 7, z: 13, yaw: 1.2, pitch: 0, hour: engine.time });
+      await sleepMs(wait);
+      const out = ctl.exit();
+      assert.equal(ctl.phase, 'flying-out');
+      await Promise.all([g, out]);
+      assert.equal(ctl.phase, 'out', `${wait}ms`);
+      assert.equal(engine.walk, null);
+      assert.ok(engine.camera.position.equals(new THREE.Vector3(20, 14, 26)), '镜头放回去');
+      assert.equal(style.opacity, '', `${wait}ms：画布回到原来的 opacity`);
+      assert.equal(style.transition, '');
+      ctl.dispose();
+    }
+  } finally {
+    delete globalThis.matchMedia;
+  }
+});
+
+await test('带逛挑站按「我们做」的（tourStops 的 offer = 材质 + 锁住的那几面）；材质 / 锁住的变了 → 重新挑', async () => {
+  const { ctl, project } = await walkIn('semid2', { tourOpts: FAST_TOUR });
+  const totalNow = async () => {
+    const end = ctl.tour.start();
+    const n = ctl.tour.state().total;
+    ctl.tour.stop();
+    await end;
+    return n;
   };
-  assert.ok(api.moves[0].x <= room.x + room.w - fp(0) + 1e-9, `没出客厅（${api.moves[0].x}）`);
+  const want = (p) => tourStops(p.plan, p.furniture, ctl.nav, { materials: p.materials, locked: p.locked }).length;
+  assert.equal(await totalNow(), want(project));
+  const kept = { ...project, locked: { cabinetry: true } };
+  assert.ok(want(kept) < want(project), '柜子是客人留下来的：少了厨房 / 衣柜那几站');
+  ctl.update(kept);
+  assert.equal(await totalNow(), want(kept), '锁住的变了 → 重新挑站');
+  const back = { ...kept, locked: null, materials: { ...project.materials } };
+  ctl.update(back);
+  assert.equal(await totalNow(), want(back), '材质变了 → 重新挑站');
   ctl.dispose();
 });
 

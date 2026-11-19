@@ -3,7 +3,7 @@
 //   走在路上（phase 'walking'）字幕留着上一句、淡一点；去第一站的路上还没有上一句 → 「跟我来…」（不留一个空泡泡）；最后一站只有「好的」。按钮 ≥ 44px；字幕 aria-live。
 //   没在逛：给了 onStart 就画一颗「带我逛逛」的小按钮，没给就什么都不画。
 // props = createTour().state() 的 { running, line, index, total, phase } + onNext / onSkip / onStart、className。
-// 位置交给 walk.css（根节点 .walk-tour / .walk-tour-start，没有行内定位）；里面的样子是行内样式，只用 base.css 的变量。
+// 位置、最宽多宽、矮的屏幕上最高多高交给 walk.css（根节点 .walk-tour / .walk-tour-start，没有行内定位）；里面的样子是行内样式，只用 base.css 的变量。
 
 import Pangie, { useTalking } from '../../shared/Pangie.jsx';
 import { lineText, lineOf } from '../../shared/voice.js';
@@ -26,7 +26,7 @@ const BTN = {
 };
 
 const S = {
-  wrap: { display: 'flex', alignItems: 'flex-end', gap: 6, maxWidth: 'min(440px, calc(100vw - 32px))', pointerEvents: 'auto', fontFamily: 'var(--sans)' },
+  wrap: { display: 'flex', alignItems: 'flex-end', gap: 6, pointerEvents: 'auto', fontFamily: 'var(--sans)' }, // 多宽、放哪里：walk.css
   bubble: {
     flex: '1 1 auto',
     minWidth: 0,

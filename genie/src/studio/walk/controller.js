@@ -4,7 +4,8 @@
 // 进去：先存下鸟瞰（saveOrbit）→ 导航 / 从哪进去 / 门 → 飞进去（flyIn）→ 接管 engine.onTick。
 // 出来：飞回去（flyOut）；卸载、出错 = 一下子回去（restoreOrbit）。出来以后 engine.walk、engine.onTick 都是 null。
 // 走路：点地板走过去（A* 的路，一段一段走；楼梯那一段按折线插值，眼睛 = 出发那层的地面 + y + 1.55，走过一半的高度换楼层）；
-//   摇杆 / WASD（Q / E 转身）按看的方向走，贴着墙滑（nav 的 clearance 是连续的）；拖动 = 转头（俯仰 ±1.2）。
+//   摇杆 / WASD（Q / E 转身）按看的方向走，贴着墙滑（nav 的 clearance 是连续的）；开着 / 在动的门扇也是一块薄墙（doors.clearOf，
+//   和墙一样离一个半径）；拖动 = 转头（俯仰 ±1.2）。
 //   转身缓一缓，不晃头。客人自己动了（摇杆、按键、点地板走、带逛走路时拖动）→ 带逛停下。
 // 工具：点一下按现在的工具算 —— 走（灯光、拍照也是）/ 刷颜色、地板（'pick'）/ 家具（'item'，按住选中的那件拖 = 搬）/ 量尺（两下 = 一条线）。
 // 每帧：镜头、controls.target = 眼睛前面 2.5m、补光、门（开关 → 影子重画）、换房间 → 夜灯按人在哪排 + 'room'、
@@ -17,7 +18,7 @@ import { footprintOf } from '../engine/furnish.js';
 import { CATALOG } from '../engine/furniture.js';
 import { buildNav, rebuildFloor, path as findPath, nearest, roomAt, clearance } from './nav.js';
 import { createDoors, sideOf } from './doors.js';
-import { walkFov, walkVo, entryPlan, flyIn, flyOut, saveOrbit, restoreOrbit, EYE } from './flight.js';
+import { walkFov, walkVo, entryPlan, flyIn, flyOut, saveOrbit, restoreOrbit, fadeCanvas, EYE } from './flight.js';
 import { slotOfHit, floorSlotOf } from './paint.js';
 import { measureText, wallDims } from './measure.js';
 import { tourStops, createTour } from './tour.js';
@@ -44,6 +45,8 @@ const FLOOR_EPS = 0.12; // 点到的地方离地面这么近 = 点到地板
 const BACK_STEP = 0.1; // 点到墙 / 家具：往镜头那边一步步退回来
 const THROUGH = 0.8; // 点到门扇：走到门那一边这么远
 const SUB = 0.1; // 摇杆一步最多走多远（再长就分几步：不会一下跨过墙）
+const DRAG_FAR = 15; // 搬家具：手指指到的地面离眼睛超过这么远（地平线附近）就不跟（差一点点就跳很远）
+const FADE_MS = 240; // 跳到收藏的角度 / 没有楼梯的楼层：淡出 + 淡入一共多少毫秒
 
 const isHole = (r) => !!(r?.stairId || ROOM_TYPES[r?.type]?.stair || ROOM_TYPES[r?.type]?.void);
 const isStair = (r) => !!(r?.stairId || ROOM_TYPES[r?.type]?.stair);
@@ -69,18 +72,27 @@ const clr = (nav, fi, x, z) => {
   return clearance(nav, _q);
 };
 
-/** 能不能站到 (x, z)：clearance ≥ 半径；本来就卡在里面（c0 < 半径）只许往更空的地方挪 */
-function canStand(nav, fi, x, z, c0) {
+/** (x, z) 离墙 / 家具（导航的 clearance）、离开着 / 在动的门扇（block.clearOf：门扇当一块薄墙）多远，取近的 */
+function room(nav, fi, x, z, block) {
   const c = clr(nav, fi, x, z);
+  if (!block) return c;
+  const d = block.clearOf(fi, x, z);
+  return d < c ? d : c;
+}
+
+/** 能不能站到 (x, z)：离墙 / 家具 / 门扇 ≥ 半径；本来就卡在里面（c0 < 半径）只许往更空的地方挪 */
+function canStand(nav, fi, x, z, c0, block) {
+  const c = room(nav, fi, x, z, block);
   return c >= nav.radius - 1e-6 || (c0 < nav.radius - 1e-6 && c > c0 + 1e-6);
 }
 
 /**
- * 摇杆走一步：从 p（{ fi, x, z }）挪 (dx, dz)，碰到墙 / 家具就贴着滑（去掉往墙里的那一分量，再不行只走 x 或 z）。
- * 走得过去 = clearance ≥ 半径；本来就卡在里面（家具刚搬过来）只许往空的地方挪。每 10cm 一小步（不会一下跨过墙）。
+ * 摇杆走一步：从 p（{ fi, x, z }）挪 (dx, dz)，碰到墙 / 家具（/ 门扇）就贴着滑（去掉往墙里的那一分量，再不行只走 x 或 z）。
+ * 走得过去 = 离墙 / 家具 ≥ 半径；block（可以不给）= 别的障碍：block.clearOf(fi, x, z) → 离它多远（门：开着 / 在动的门扇，doors.clearOf），
+ * 也要 ≥ 半径。本来就卡在里面（家具刚搬过来、门扇转过来）只许往空的地方挪。每 10cm 一小步（不会一下跨过墙）。
  * → out { x, z, moved }（每帧都跑：不建新对象）
  */
-export function slideMove(nav, p, dx, dz, out = { x: 0, z: 0, moved: false }) {
+export function slideMove(nav, p, dx, dz, out = { x: 0, z: 0, moved: false }, block = null) {
   out.x = p.x;
   out.z = p.z;
   out.moved = false;
@@ -94,14 +106,14 @@ export function slideMove(nav, p, dx, dz, out = { x: 0, z: 0, moved: false }) {
   for (let i = 0; i < n; i++) {
     const x = out.x;
     const z = out.z;
-    const c0 = clr(nav, fi, x, z);
+    const c0 = room(nav, fi, x, z, block);
     let nx = x + sx;
     let nz = z + sz;
-    let ok = canStand(nav, fi, nx, nz, c0);
+    let ok = canStand(nav, fi, nx, nz, c0, block);
     if (!ok) {
       // 贴着滑：clearance 的梯度 = 离开障碍的方向，去掉往里的那一分量
-      let gx = clr(nav, fi, nx + h, nz) - clr(nav, fi, nx - h, nz);
-      let gz = clr(nav, fi, nx, nz + h) - clr(nav, fi, nx, nz - h);
+      let gx = room(nav, fi, nx + h, nz, block) - room(nav, fi, nx - h, nz, block);
+      let gz = room(nav, fi, nx, nz + h, block) - room(nav, fi, nx, nz - h, block);
       const gl = Math.hypot(gx, gz);
       if (gl > 1e-9) {
         gx /= gl;
@@ -110,7 +122,7 @@ export function slideMove(nav, p, dx, dz, out = { x: 0, z: 0, moved: false }) {
         if (dot < 0) {
           nx = x + sx - dot * gx;
           nz = z + sz - dot * gz;
-          ok = canStand(nav, fi, nx, nz, c0);
+          ok = canStand(nav, fi, nx, nz, c0, block);
         }
       }
     }
@@ -121,7 +133,7 @@ export function slideMove(nav, p, dx, dz, out = { x: 0, z: 0, moved: false }) {
       if (alongX ? !sx : !sz) continue;
       nx = alongX ? x + sx : x;
       nz = alongX ? z : z + sz;
-      ok = canStand(nav, fi, nx, nz, c0);
+      ok = canStand(nav, fi, nx, nz, c0, block);
     }
     if (!ok) break;
     out.x = nx;
@@ -172,7 +184,7 @@ export function floorAtY(floors, y) {
  *   pose() → { fi, floor, x, z, yaw, pitch, room }   z = 平面 y；room = 房间 id
  *   project(v3) → { x, y, visible }    世界坐标 → 画布上的像素（DOM 叠层用）
  *   photo() → { floor, x, z, yaw, pitch, hour, room }   给 marks.addMark
- *   goto(mark) → Promise<boolean>      淡出淡入跳到收藏的角度（几点钟也回去）
+ *   goto(mark) → Promise<boolean>      淡出淡入跳到收藏的角度（几点钟也回去）；连点两下只淡一次（见 fade）
  *   select(id | null)                  家具工具：选中 / 取消（面板删掉、关掉时用）
  *   clearMeasure()                     量尺：清掉
  *   tour: { start(from), stop(), next(), running, state() }
@@ -208,6 +220,7 @@ export function createWalk(engine, { project = null, api = null, wish = false, o
   let posePending = false;
   let tourInst = null;
   let tourStale = true;
+  let jump = null; // goto / goFloor 正在淡出淡入：{ swapped, promise }
 
   // 人：fi 楼层下标、平面 x / z、眼睛的世界 y、朝向
   const P = { fi: 0, x: 0, z: 0, y: EYE };
@@ -557,24 +570,40 @@ export function createWalk(engine, { project = null, api = null, wish = false, o
     if (doors?.update(engine.camera.position, null, 0)) shadow();
     engine.dirty = true;
   }
-  /** 淡出到纸色 → swap → 淡入（没有画布样式（Node）就直接换） */
-  function fade(swap, ms = 240) {
+  /**
+   * 淡出到纸色 → swap() → 淡入 → after() 的结果（flight.js fadeCanvas：一块画布同时只有一次淡出淡入，淡完回到画布本来的样子）。
+   * 连点两下（收藏的角度、楼层）：还在淡出 → 一起换（后点的最后换）；已经换过去、正在淡入 → 这一下不算，给正在跑的那一下的结果。
+   * 没有画布样式（Node）就直接换。
+   */
+  function fade(swap, after) {
     const style = engine.renderer?.domElement?.style;
     if (!style || typeof setTimeout !== 'function') {
       swap();
-      return Promise.resolve();
+      return Promise.resolve().then(after);
     }
-    const prev = { o: style.opacity, tr: style.transition };
-    const wait = (t) => new Promise((r) => setTimeout(r, t));
-    style.transition = `opacity ${ms / 2}ms ease`;
-    style.opacity = '0';
-    return wait(ms / 2).then(() => {
-      swap();
-      style.opacity = prev.o;
-      return wait(ms / 2).then(() => {
-        style.transition = prev.tr;
-      });
-    });
+    if (jump?.swapped) return jump.promise;
+    const J = jump || (jump = { swapped: false, promise: null });
+    const done = () => {
+      if (jump === J) jump = null;
+    };
+    J.promise = fadeCanvas(
+      engine,
+      () => {
+        J.swapped = true;
+        swap();
+      },
+      FADE_MS,
+    ).then(
+      () => {
+        done();
+        return after();
+      },
+      (e) => {
+        done();
+        throw e;
+      },
+    );
+    return J.promise;
   }
 
   // ── 点一下 ──
@@ -723,17 +752,41 @@ export function createWalk(engine, { project = null, api = null, wish = false, o
     const it = engine.itemData?.get(id);
     return !!(it && engine.items?.get(id) && !CATALOG[it.kind]?.wall);
   };
+  const _gPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  const _gPt = new THREE.Vector3();
+  /**
+   * 屏幕上这一点落在 g 那一层地面的哪里 → _gPt | null：指到天上（地平线以上，走路时就在画面中间）没有交点、
+   * 交点离眼睛 > DRAG_FAR（地平线附近差一点点就跳很远）→ null（engine.groundAt 这时给的是这一层的中心，搬家具不能用）
+   */
+  function floorPoint(cx, cy, g) {
+    const ray = engine.rayAt?.(cx, cy)?.ray;
+    if (!ray) return null;
+    _gPlane.constant = -(g.userData?.elev ?? elevOf(engine.activeIdx ?? P.fi));
+    if (!ray.intersectPlane(_gPlane, _gPt) || _gPt.distanceTo(ray.origin) > DRAG_FAR) return null;
+    return _gPt;
+  }
   function dragStart(cx, cy) {
     const g = engine.items?.get(selected);
     const it = engine.itemData?.get(selected);
-    const p = g && it ? engine.groundAt(cx, cy) : null;
-    drag = p ? { id: selected, g, it, ox: g.position.x - p.x, oz: g.position.z - p.z, x: g.position.x, z: g.position.z, moved: false } : null;
-    return !!drag;
+    if (!g || !it) {
+      drag = null;
+      return false;
+    }
+    // 按下的那一点指不到地面（高的家具按在眼睛以上）：先不定抓手，第一次指到地面时再定（不跳）
+    const p = floorPoint(cx, cy, g);
+    drag = { id: selected, g, it, ox: p ? g.position.x - p.x : null, oz: p ? g.position.z - p.z : null, x: g.position.x, z: g.position.z, moved: false };
+    return true;
   }
   function dragMove(cx, cy) {
     const d = drag;
     if (!d) return;
-    const p = engine.groundAt(cx, cy);
+    // 指到天上 / 太远：家具停在上一个位置
+    const p = floorPoint(cx, cy, d.g);
+    if (!p) return;
+    if (d.ox == null) {
+      d.ox = d.g.position.x - p.x;
+      d.oz = d.g.position.z - p.z;
+    }
     let x = Math.round((p.x + d.ox) * 20) / 20;
     let z = Math.round((p.z + d.oz) * 20) / 20;
     // 不出它的房间
@@ -755,7 +808,8 @@ export function createWalk(engine, { project = null, api = null, wish = false, o
     d.g.position.x = x;
     d.g.position.z = z;
     ringFor(d.id);
-    engine.dirty = true;
+    // 走路时影子不自己重画（setWalk：autoUpdate = false）：影子跟着家具走，不留在原地
+    shadow();
   }
   function dragEnd(commit) {
     const d = drag;
@@ -765,10 +819,13 @@ export function createWalk(engine, { project = null, api = null, wish = false, o
       api?.moveItem?.(d.id, { x: d.x, z: d.z });
       shadow();
     } else {
+      const back = d.g.position.x !== d.it.x || d.g.position.z !== d.it.z;
       d.g.position.x = d.it.x;
       d.g.position.z = d.it.z;
       ringFor(d.id);
-      engine.dirty = true;
+      // 放回去了：影子也回去
+      if (back) shadow();
+      else engine.dirty = true;
     }
   }
 
@@ -838,12 +895,15 @@ export function createWalk(engine, { project = null, api = null, wish = false, o
       return;
     }
     e.preventDefault?.();
-    if (!keys[k]) guest();
+    // 从不动到动的那一下才算客人接手（W 按着再按 A：不停一下）
+    if (!keys[k] && !steering()) guest();
     keys[k] = 1;
   };
   const clearKeys = () => {
     for (const k in keys) keys[k] = 0;
   };
+  /** 客人正推着摇杆 / 按着键 */
+  const steering = () => !!(keys.f || keys.b || keys.l || keys.r || keys.tl || keys.tr) || Math.hypot(stick.x, stick.y) > 1e-3;
 
   if (el) {
     el.addEventListener('pointerdown', onDown);
@@ -903,7 +963,8 @@ export function createWalk(engine, { project = null, api = null, wish = false, o
       vel.x = 0;
       vel.z = 0;
     } else if (!onStair) {
-      slideMove(nav, P, vel.x * dt, vel.z * dt, moved);
+      // 开着 / 在动的门扇也挡路（上一帧的样子；门照常在下面 doors.update 里开关）
+      slideMove(nav, P, vel.x * dt, vel.z * dt, moved, doors);
       if (moved.moved) {
         P.x = moved.x;
         P.z = moved.z;
@@ -958,7 +1019,7 @@ export function createWalk(engine, { project = null, api = null, wish = false, o
   // ── 带逛 ──
   function ensureTour() {
     if (tourInst?.running || (tourInst && !tourStale)) return tourInst;
-    const stops = nav ? tourStops(proj?.plan, items(), nav) : [];
+    const stops = nav ? tourStops(proj?.plan, items(), nav, { materials: proj?.materials, locked: proj?.locked }) : [];
     tourStale = false;
     tourInst = createTour({
       ...(tourOpts || {}),
@@ -1141,9 +1202,12 @@ export function createWalk(engine, { project = null, api = null, wish = false, o
     joystick(x, y) {
       const nx = clamp(Number(x) || 0, -1, 1);
       const ny = clamp(Number(y) || 0, -1, 1);
+      // 只在从不动到动的那一下停带逛、停路：手指推着摇杆一直在微微动，几乎每帧都来一个新的值 ——
+      // 每次都 guest()（halt 把速度清零）会走得一卡一卡、慢好几倍。推着的时候有路：frame() 自己会停
+      const was = steering();
       stick.x = nx;
       stick.y = ny;
-      if (Math.hypot(nx, ny) > 1e-3 && phase === 'walking') guest();
+      if (!was && Math.hypot(nx, ny) > 1e-3 && phase === 'walking') guest();
     },
     walkTo(to) {
       return go(to, to?.yaw);
@@ -1163,7 +1227,10 @@ export function createWalk(engine, { project = null, api = null, wish = false, o
       const q = rooms[0] && nearest(nav, { fi, x: rooms[0].x + rooms[0].w / 2, z: rooms[0].y + rooms[0].d / 2 });
       if (!q) return Promise.resolve(false);
       guest();
-      return fade(() => phase === 'walking' && place(fi, q.x, q.z, yaw, 0)).then(() => phase === 'walking');
+      return fade(
+        () => phase === 'walking' && place(fi, q.x, q.z, yaw, 0),
+        () => phase === 'walking',
+      );
     },
     pose,
     project(v) {
@@ -1183,12 +1250,15 @@ export function createWalk(engine, { project = null, api = null, wish = false, o
       const q = nearest(nav, { fi, x: +mark.x, z: +mark.z });
       if (!q) return Promise.resolve(false);
       guest();
-      return fade(() => phase === 'walking' && place(fi, q.x, q.z, +mark.yaw, +mark.pitch)).then(() => {
-        if (phase !== 'walking') return false;
-        const h = Number(mark.hour);
-        if (Number.isFinite(h) && Math.abs(h - (engine.time ?? h)) > 0.01) api?.setTime?.(h);
-        return true;
-      });
+      return fade(
+        () => phase === 'walking' && place(fi, q.x, q.z, +mark.yaw, +mark.pitch),
+        () => {
+          if (phase !== 'walking') return false;
+          const h = Number(mark.hour);
+          if (Number.isFinite(h) && Math.abs(h - (engine.time ?? h)) > 0.01) api?.setTime?.(h);
+          return true;
+        },
+      );
     },
     select,
     clearMeasure,
@@ -1213,6 +1283,8 @@ export function createWalk(engine, { project = null, api = null, wish = false, o
         if (selected && !items().some((it) => it.id === selected)) select(null);
         else if (selected) ringFor(selected);
       }
+      // 带逛只介绍「我们做」的：材质、锁住的那几面变了 → 下次重新挑站
+      if (next.materials !== prev.materials || next.locked !== prev.locked) tourStale = true;
       if (next.time !== prev.time && phase === 'walking') {
         engine.placeRoomLights?.({ x: P.x, z: P.z });
         // 曝光跟着时段（晚上亮一点）：引擎的 setTime 刚按旧的 walk.ev 乘过，换成这个钟点的

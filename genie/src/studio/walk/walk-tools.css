@@ -475,16 +475,31 @@
   }
 }
 
-/* 矮的横屏（手机横着拿）：面板别伸到右上角的小地图下面（地图约 170px 宽，面板在中间）；
+/* 矮的横屏（手机横着拿）：面板、量尺的控制条别伸到右上角的小地图下面（地图约 170px 宽，面板在中间）；
    再矮一点：灯光面板先不画太阳弧（白天 / 晚上和四个时刻更要紧，面板本身也能竖着滚） */
 @media (max-height: 560px) and (min-width: 601px) {
-  .walk-panel {
+  .walk-panel,
+  .walk-measure-bar {
     max-width: calc(100vw - 2 * (var(--safe-r) + 172px));
   }
 }
 @media (max-height: 480px) {
   .walk-light-arc {
     display: none;
+  }
+}
+/* 矮的横屏又只有 601–780 宽：工具轮在摇杆右边那一块里（walk.css），居中的面板 / 量尺的控制条会伸到右上角的小地图下面
+   → 贴着那一块的左边放，宽度量到地图左边为止（地图最宽 162px + 10px） */
+@media (max-height: 560px) and (min-width: 601px) and (max-width: 780px) {
+  .walk-dock > .walk-panel-slot {
+    align-self: flex-start;
+  }
+  .walk-panel,
+  .walk-measure-bar {
+    max-width: calc(100vw - var(--safe-l) - var(--walk-joy) - 12px - var(--safe-r) - 172px);
+  }
+  .walk-measure-bar {
+    margin-left: 0;
   }
 }
 

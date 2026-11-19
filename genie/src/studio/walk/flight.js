@@ -6,6 +6,8 @@
 //   趟门从「避开竖框的那一扇」正中穿过去（nav.doorCross）。没有大门 → 落到最大的客厅类房间正中（fallback）。
 // flyIn / flyOut：引擎的 onTick 驱动的补间（返回 Promise），镜头走一条转角倒圆的折线，按弧长匀顺地走（单调三次插值，起止速度 0）。
 //   进：t0 setWalk（墙全立、楼上不藏）→ 飞到 P1（视角 28°→48°、主点偏移到 walkVo：横屏归零）→ 开门 → P2 → 跨过门槛时盖上天花 → P3（视角 → walkFov）。
+//   大门往外开（离 P3 远的那一边）：门扇不扫进门那一块（落点 P3、带逛的第一站「门口」都在门里 ~0.6–1m，下一段路从那里往屋里走）；
+//   飞进来的镜头从门洞正中穿过、门扇贴着门框伸出去，两边离镜头一样远。
 //   出：门扇拿掉、天花掀掉、藏起人头上的楼层 → 升起来 → 滑回进来前的位置 → restoreOrbit 一模一样放回去（§4）。
 //   系统「减少动态效果」：两种飞行都换成 250ms 淡出到纸色再淡入。
 // 坐标：平面图 x → 世界 x、平面 y → 世界 z；yaw 和相机同一个约定（'YXZ'）：看的方向 = (−sin yaw, −cos yaw)。
@@ -174,9 +176,14 @@ function fallbackSpot(navData, nav) {
 
 // ───────────────────────── 进出时的状态（§4） ─────────────────────────
 
-/** 进去之前存下鸟瞰的样子：{ pos, quat, target, vo, voTo, floorView, lastView, framed, W, H, insets（JSON） } */
+/**
+ * 进去之前存下鸟瞰的样子：{ pos, quat, target, vo, voTo, floorView, lastView, framed, W, H, insets（JSON） }。
+ * 鸟瞰的镜头正在飞（换楼层、重新取景：engine.tween，0.7–0.9 秒）：存它要飞到的那一下（朝向 = 从那里看着目标点，
+ * 和补间结束时 OrbitControls 的 lookAt 一样）—— setWalk 会把补间停掉，存半路的样子出来就停在半路、也不算对好了。
+ * 镜头本身不动（飞进去从现在的位置起飞，不跳一下）。
+ */
 export function saveOrbit(engine) {
-  return {
+  const s = {
     pos: engine.camera.position.clone(),
     quat: engine.camera.quaternion.clone(),
     target: engine.controls.target.clone(),
@@ -189,6 +196,16 @@ export function saveOrbit(engine) {
     H: engine.container?.clientHeight || 1,
     insets: JSON.stringify(engine.insets || {}),
   };
+  const tw = engine.tween;
+  if (tw?.toP && tw.toT) {
+    s.pos.copy(tw.toP);
+    s.target.copy(tw.toT);
+    s.quat.setFromRotationMatrix(new THREE.Matrix4().lookAt(s.pos, s.target, engine.camera.up));
+    // 补间飞着的时候 isFramed() 总是 true：飞到的那一下是不是对好的取景（Engine.frame 记在 _framed 里），换楼层的补间不是
+    const f = engine._framed;
+    s.framed = !!(f?.pos && f.target && tw.toP.distanceTo(f.pos) < 0.05 && tw.toT.distanceTo(f.target) < 0.05);
+  }
+  return s;
 }
 
 /**
@@ -225,6 +242,7 @@ export function restoreOrbit(engine, saved, { doors = null } = {}) {
   engine.lastCut = null;
   engine.highlightSlot?.(null);
   engine.onTick = null;
+  resetCanvas(engine);
   engine.dirty = true;
 }
 
@@ -282,21 +300,73 @@ function drive(engine, dur, frame, end) {
   });
 }
 
-/** 淡出到纸色 → swap() → 淡入（界面给了 hooks.fade 就用它；没有画布样式（Node）就直接换） */
+// 画布的淡出淡入（减少动态效果时的飞行；控制器跳到收藏的角度 / 没有楼梯连着的楼层）：一个引擎一份 { base, job }
+const fades = new WeakMap();
+
+/**
+ * 画布淡出到纸色 → swap() → 淡入 → Promise<true>。同一个引擎同时只有一次：还在淡出时又来一个 → 一起换（按来的顺序）；
+ * 已经在淡入 → 等它淡完再淡一次。淡完回到「开始淡之前」画布的 opacity / transition（不在别人淡到一半时记：两次叠在一起
+ * 也不会把 '0' 当成原样、画布一直是空的）。swap 出错也照样淡回来，Promise 再报错。没有画布样式（Node）就直接换。
+ */
+export function fadeCanvas(engine, swap, ms = FADE) {
+  const style = engine?.renderer?.domElement?.style;
+  if (!style || typeof setTimeout !== 'function') {
+    swap();
+    return Promise.resolve(true);
+  }
+  let S = fades.get(engine);
+  if (!S) fades.set(engine, (S = { base: null, job: null }));
+  const J = S.job;
+  if (J && !J.swapped) {
+    J.swaps.push(swap);
+    return J.promise;
+  }
+  if (J) {
+    const again = () => fadeCanvas(engine, swap, ms);
+    return J.promise.then(again, again);
+  }
+  const base = (S.base = { o: style.opacity, tr: style.transition });
+  const job = { swaps: [swap], swapped: false, promise: null };
+  S.job = job;
+  const wait = (t) => new Promise((r) => setTimeout(r, t));
+  job.promise = (async () => {
+    style.transition = `opacity ${ms / 2}ms ease`;
+    style.opacity = '0';
+    await wait(ms / 2);
+    job.swapped = true;
+    let err = null;
+    for (const f of job.swaps)
+      try {
+        f();
+      } catch (e) {
+        if (!err) err = e;
+      }
+    style.opacity = base.o;
+    await wait(ms / 2);
+    style.transition = base.tr;
+    if (S.job === job) S.job = null;
+    if (err) throw err;
+    return true;
+  })();
+  return job.promise;
+}
+
+/** 回到鸟瞰时保险一下：淡过、现在没在淡，画布却不是淡之前的样子 → 放回去（没淡过 / 正在淡：不碰） */
+function resetCanvas(engine) {
+  const S = fades.get(engine);
+  const style = engine?.renderer?.domElement?.style;
+  if (!S?.base || S.job || !style) return;
+  if (style.opacity !== S.base.o) style.opacity = S.base.o;
+  if (style.transition !== S.base.tr) style.transition = S.base.tr;
+}
+
+/** 淡出到纸色 → swap() → 淡入（界面给了 hooks.fade 就用它；否则 fadeCanvas） */
 async function fadeSwap(engine, hooks, swap) {
   if (hooks.fade) return hooks.fade(swap, FADE);
-  const style = engine.renderer?.domElement?.style;
-  if (!style) return swap();
-  const prev = { o: style.opacity, tr: style.transition };
-  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-  style.transition = `opacity ${FADE / 2}ms ease`;
-  style.opacity = '0';
-  await wait(FADE / 2);
-  swap();
-  engine.dirty = true;
-  style.opacity = prev.o;
-  await wait(FADE / 2);
-  style.transition = prev.tr;
+  await fadeCanvas(engine, () => {
+    swap();
+    engine.dirty = true;
+  });
 }
 
 /**
@@ -425,9 +495,10 @@ export function flyIn(engine, plan, hooks = {}) {
   const look1 = spot.clone().add(new THREE.Vector3(-Math.sin(yaw) * LOOK, 0, -Math.cos(yaw) * LOOK));
   const ceilings = (on) => (hooks.ceilings ? hooks.ceilings(on) : engine.setCeilings(on));
   const doors = hooks.doors || null;
+  // 大门开向离 P3 远的那一边（往外）：门扇不扫进门那一块（P3、带逛的第一站「门口」，从那里往屋里走的路）
   const openDoor = () => {
     if (hooks.openDoor) hooks.openDoor();
-    else if (plan?.door) doors?.open(plan.door.id, { fi: plan.door.fi, from: plan.P1 });
+    else if (plan?.door) doors?.open(plan.door.id, { fi: plan.door.fi, from: plan.P3 });
   };
 
   // t0：进走路模式（墙全立、楼上不藏、主点和视角先不变 → 第一帧和鸟瞰一样）
@@ -453,7 +524,7 @@ export function flyIn(engine, plan, hooks = {}) {
       fadeSwap(engine, hooks, () => {
         if (plan?.door) {
           if (hooks.openDoor) hooks.openDoor();
-          else doors?.open(plan.door.id, { fi: plan.door.fi, from: plan.P1, instant: true });
+          else doors?.open(plan.door.id, { fi: plan.door.fi, from: plan.P3, instant: true });
         }
         unhide();
         ceilings(true);

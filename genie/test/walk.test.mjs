@@ -388,9 +388,274 @@ await test('⑤ 走进去时的守门：键盘快捷键、日光小图、外壳�
   assert.match(slice('keyRef.current = (ev) => {', '\n  };'), /walkRef\.current\)\s*return;/, '键盘：走进去时不做快捷键');
   assert.match(slice('const scheduleThumbs = useCallback(', '}, []);'), /walkRef\.current[^\n]*thumbsLater\.current = true/, '日光小图：等回到全屋');
   const msg = slice("ev.data.type === 'plan-file'", '\n    };');
-  assert.ok(msg.includes('walkRef.current') && msg.includes('planAfterWalk.current') && msg.includes('setWalk(false)'), '户型图：先回到全屋再读');
+  assert.ok(msg.includes('walkRef.current') && msg.includes('afterWalk.current') && msg.includes('setWalk(false)'), '户型图：先回到全屋再读');
   const back = slice('walkRef.current = walk;', '}, [walk, scheduleThumbs]);');
-  assert.ok(back.includes('scheduleThumbs()') && back.includes('readRef.current?.(f)'), '回到全屋：补画小图、读户型图');
+  assert.ok(back.includes('scheduleThumbs()') && back.includes('afterWalk.current'), '回到全屋：补画小图、做攒下的事（读 / 换户型图）');
+});
+
+// ── 把 StudioApp 里真的那几段拿出来跑（不跑浏览器）：用到的外面的名字都换成假的 ──
+
+const APP_AST = ast(STUDIO_APP);
+/** StudioApp 里 `const name = …`（或 `let`）的初始值 */
+function initOf(name) {
+  let node = null;
+  traverse(APP_AST, {
+    VariableDeclarator(p) {
+      if (!node && p.node.id.type === 'Identifier' && p.node.id.name === name) node = p.node.init;
+    },
+  });
+  assert.ok(node, `StudioApp.jsx 里找不到 const ${name}`);
+  return node;
+}
+const src = (node) => APP.slice(node.start, node.end);
+/** 一段源码（表达式）在给定的名字下面算出来；用到没给的名字 → ReferenceError（测试就知道漏了什么） */
+const evalIn = (code, env, pre = '', post = '') => new Function(...Object.keys(env), `${pre}const __v = (${code});${post || 'return __v;'}`)(...Object.values(env));
+/** 回到全屋那一个 useEffect（deps = [walk, scheduleThumbs]）的函数体 */
+function exitEffect() {
+  let node = null;
+  traverse(APP_AST, {
+    CallExpression(p) {
+      const [fn, deps] = p.node.arguments;
+      if (p.node.callee.name === 'useEffect' && deps?.type === 'ArrayExpression' && deps.elements.map((d) => d.name).join() === 'walk,scheduleThumbs') node = fn;
+    },
+  });
+  assert.ok(node, '找不到 useEffect(…, [walk, scheduleThumbs])');
+  return src(node);
+}
+const tick = () => new Promise((r) => setTimeout(r, 0));
+
+/** readGuestPlan + 回到全屋的 effect，接在一套假的上面 */
+function guestPlanRig({ walking = false, read = { status: 'ok', plan: { floors: [] }, underlays: [] }, applyFails = false } = {}) {
+  const calls = [];
+  const rig = {
+    calls,
+    banner: { state: 'idle', pct: 0 },
+    walkRef: { current: false },
+    readingRef: { current: false },
+    afterWalk: { current: null },
+    thumbsLater: { current: false },
+    setWalkArgs: [],
+  };
+  const env = {
+    projRef: { current: { profile: { id: 'p1', home: {} } } },
+    readingRef: rig.readingRef,
+    walkRef: rig.walkRef,
+    afterWalk: rig.afterWalk,
+    tellShell: (type, data) => calls.push(['tellShell', type, data]),
+    setBanner: (b) => (rig.banner = typeof b === 'function' ? b(rig.banner) : b),
+    planHint: () => ({}),
+    putPlanFile: async () => calls.push(['putPlanFile']),
+    putHomePlan: async () => calls.push(['putHomePlan']),
+    rememberGuestPlan: () => ({ state: 'read' }),
+    applyHomePlan: async (plan) => {
+      calls.push(['applyHomePlan', plan, rig.walkRef.current]);
+      if (applyFails) throw new Error('boom');
+    },
+    setWalk: (v) => rig.setWalkArgs.push(v),
+    sfx: { play: () => calls.push(['sfx']) },
+    flash: (m) => calls.push(['flash', m]),
+    t: (s) => s,
+    __readPlan: async () => {
+      // 读的那一分钟里客人走进去了（正常走不进去：canWalk / enterWalk 都拦着 —— 这里是「万一」）
+      if (walking) rig.walkRef.current = true;
+      await tick();
+      return read;
+    },
+  };
+  const code = src(initOf('readGuestPlan')).replace("import('./guest/readPlan.js')", '({ readPlan: __readPlan })');
+  assert.ok(!/\bimport\(/.test(code), 'readGuestPlan 里只有 readPlan.js 那一个 import()');
+  rig.read = evalIn(code, env);
+  // 回到全屋的 effect：walk 由测试给
+  rig.exit = () => {
+    rig.walkRef.current = false;
+    evalIn(exitEffect(), { walk: false, walkRef: rig.walkRef, thumbsLater: rig.thumbsLater, scheduleThumbs: () => calls.push(['thumbs']), afterWalk: rig.afterWalk })();
+  };
+  return rig;
+}
+
+await test('⑤ 读客人户型图：在鸟瞰读好 → 马上换上（和以前一样）', async () => {
+  const rig = guestPlanRig();
+  await rig.read('file');
+  const names = rig.calls.map((c) => c[0]);
+  assert.ok(names.includes('applyHomePlan'), '换上了');
+  assert.deepEqual(rig.calls.find((c) => c[0] === 'applyHomePlan')[2], false, '换的时候不在走进去');
+  assert.ok(rig.calls.some((c) => c[0] === 'tellShell' && c[1] === 'home-done'), '告诉外壳 home-done');
+  assert.equal(rig.banner.state, 'idle');
+  assert.deepEqual(rig.setWalkArgs, [], '没碰 walk');
+  assert.equal(rig.afterWalk.current, null);
+  assert.equal(rig.readingRef.current, false);
+});
+
+await test('⑤ 读客人户型图：读好时正在走进去 → 先回到全屋，回来再换（不在走的时候 setScene）', async () => {
+  const rig = guestPlanRig({ walking: true });
+  await rig.read('file');
+  assert.ok(!rig.calls.some((c) => c[0] === 'applyHomePlan'), '走的时候不换（控制器的格子、门、房间都是旧家的）');
+  assert.ok(!rig.calls.some((c) => c[0] === 'tellShell' && c[1] === 'home-done'), 'home-done 等换好再说');
+  assert.ok(!rig.calls.some((c) => c[0] === 'flash'), '「读好了 —— 这就是你的家」等换好再说');
+  assert.deepEqual(rig.setWalkArgs, [false], '先回到全屋');
+  assert.equal(typeof rig.afterWalk.current, 'function', '换的那一步攒着');
+  assert.equal(rig.banner.state, 'reading', '提示条还在「读」：胶囊不出来');
+  // 回到全屋：effect 做攒下的事
+  rig.exit();
+  assert.equal(rig.afterWalk.current, null, '做一次就清掉');
+  await tick();
+  const apply = rig.calls.filter((c) => c[0] === 'applyHomePlan');
+  assert.equal(apply.length, 1, '回到全屋以后换上一次');
+  assert.equal(apply[0][2], false, '换的时候已经不在走进去');
+  assert.ok(rig.calls.some((c) => c[0] === 'tellShell' && c[1] === 'home-done'));
+  assert.ok(rig.calls.some((c) => c[0] === 'flash'));
+  assert.equal(rig.banner.state, 'idle');
+  // 再回到全屋一次：不会再换
+  rig.exit();
+  await tick();
+  assert.equal(rig.calls.filter((c) => c[0] === 'applyHomePlan').length, 1);
+});
+
+await test('⑤ 读客人户型图：攒着的那一步换失败 → 提示条「读不出来」，不卡在「读」', async () => {
+  const rig = guestPlanRig({ walking: true, applyFails: true });
+  await rig.read('file');
+  rig.exit();
+  await tick();
+  await tick();
+  assert.equal(rig.banner.state, 'unreadable');
+});
+
+await test('⑤ 读客人户型图：读不出来 → 「读不出来」，不换、不碰 walk', async () => {
+  const rig = guestPlanRig({ walking: true, read: { status: 'unreadable' } });
+  await rig.read('file');
+  assert.equal(rig.banner.state, 'unreadable');
+  assert.ok(!rig.calls.some((c) => c[0] === 'applyHomePlan'));
+  assert.equal(rig.afterWalk.current, null);
+});
+
+await test('⑤ 外壳传来的户型图：走着 → 先回到全屋，回来再读；鸟瞰 → 马上读', () => {
+  const run = (walking) => {
+    const read = [];
+    const env = {
+      location: { origin: 'o' },
+      saveNow: () => {},
+      setLang: () => {},
+      walkRef: { current: walking },
+      readRef: { current: (f) => read.push(f) },
+      afterWalk: { current: null },
+      setWalk: (v) => read.push(['setWalk', v]),
+    };
+    evalIn(src(initOf('onMsg')), env)({ origin: 'o', data: { source: 'genie-shell', type: 'plan-file', file: 'F' } });
+    return { read, env };
+  };
+  const bird = run(false);
+  assert.deepEqual(bird.read, ['F']);
+  const walking = run(true);
+  assert.deepEqual(walking.read, [['setWalk', false]], '走着：先不读');
+  walking.env.afterWalk.current();
+  assert.deepEqual(walking.read, [['setWalk', false], 'F'], '回到全屋以后读');
+});
+
+await test('⑤ 正在读客人的户型图：「走进去」胶囊不出来，enterWalk 也不进', () => {
+  const can = (over = {}) =>
+    evalIn(src(initOf('canWalk')), { walk: false, demo: false, showroom: false, planDraft: null, modal: null, ask: null, ctx: null, banner: { state: 'idle' }, cmp: { mode: 'off' }, ...over });
+  assert.equal(can(), true, '鸟瞰、什么都没开：出来');
+  assert.equal(can({ banner: { state: 'reading' } }), false, '读的时候不出来');
+  assert.equal(can({ banner: { state: 'waiting' } }), true, '等员工上传时照样能走（传来时先回到全屋）');
+  assert.equal(can({ banner: { state: 'unreadable' } }), true);
+  const enter = ({ reading = false, state = 'idle' } = {}) => {
+    const log = [];
+    const env = {
+      engine: { current: { select: () => log.push('select') } },
+      walkRef: { current: false },
+      readingRef: { current: reading },
+      banner: { state },
+      voice: { unlock: () => log.push('unlock') },
+      setHover: () => {},
+      setWalk: (v) => log.push(['setWalk', v]),
+    };
+    evalIn(src(initOf('enterWalk')), env)();
+    return { log, walkRef: env.walkRef.current };
+  };
+  assert.deepEqual(enter().log, ['unlock', 'select', ['setWalk', true]]);
+  assert.equal(enter().walkRef, true);
+  for (const o of [{ reading: true }, { state: 'reading' }]) {
+    const r = enter(o);
+    assert.deepEqual(r.log, [], `读的时候不进：${JSON.stringify(o)}`);
+    assert.equal(r.walkRef, false);
+  }
+});
+
+// React 18 的 lazy：下载失败一次就一直是那个错（不再调 loader）→ walkFailed 要换一个新的 lazy
+async function renderLazy(Comp) {
+  const React = await import('react');
+  const { renderToPipeableStream } = await import('react-dom/server');
+  const { Writable } = await import('node:stream');
+  return new Promise((resolve) => {
+    const errors = [];
+    let html = '';
+    const out = new Writable({
+      write(c, _e, cb) {
+        html += c;
+        cb();
+      },
+    });
+    out.on('finish', () => resolve({ html, errors }));
+    const s = renderToPipeableStream(React.createElement(React.Suspense, { fallback: 'WAIT' }, React.createElement(Comp)), {
+      onError: (e) => void errors.push(e),
+      onAllReady: () => s.pipe(out),
+      onShellError: (e) => resolve({ html, errors: [...errors, e] }),
+    });
+  });
+}
+
+await test('⑤ 走进去那一块下载失败：walkFailed 换一个新的 lazy → 下次点能重新下载（不用重新载入页面）', async () => {
+  const React = await import('react');
+  assert.match(APP, /\nlet WalkMode = lazy\(loadWalk\);/, 'WalkMode 用 let（walkFailed 要换掉它）');
+  let n = 0;
+  const Fake = () => React.createElement('b', null, 'WALK');
+  const loadWalk = () => (++n === 1 ? Promise.reject(new Error('wifi')) : Promise.resolve({ default: Fake }));
+  const log = [];
+  const rig = evalIn(src(initOf('walkFailed')), { useCallback: (f) => f, lazy: React.lazy, loadWalk, setWalk: (v) => log.push(['setWalk', v]), flash: (m) => log.push(['flash', m]), t: (s) => s }, 'let WalkMode = lazy(loadWalk);', 'return { fn: __v, get: () => WalkMode };');
+  const first = rig.get();
+  const r1 = await renderLazy(first);
+  assert.ok(r1.errors.length && !r1.html.includes('WALK'), '第一次：下载失败');
+  // 不换的话：同一个 lazy 再画一次还是那个错，loader 也不再调（这就是要修的）
+  const again = await renderLazy(first);
+  assert.ok(again.errors.length && n === 1, 'React 记住了失败，不再下载');
+  rig.fn();
+  assert.deepEqual(log, [['setWalk', false], ['flash', '走进去出了点问题，已回到全屋']]);
+  assert.notEqual(rig.get(), first, '换了一个新的 lazy');
+  const r2 = await renderLazy(rig.get());
+  assert.equal(n, 2, '新的 lazy 重新下载');
+  assert.deepEqual(r2.errors, []);
+  assert.ok(r2.html.includes('WALK'), '这次画出来了');
+  // 等下载时点「回到全屋」：也换一个（下载要是后来失败了，下次点照样重新下载），但不说「出了点问题」
+  log.length = 0;
+  const before = rig.get();
+  rig.fn(true);
+  assert.deepEqual(log, [['setWalk', false]], 'quiet：不提示');
+  assert.notEqual(rig.get(), before);
+});
+
+await test('⑤ 下载那一块时的等待：有 ≥ 44px 的「回到全屋」按钮（鸟瞰的界面、键盘这时都不在）', () => {
+  let fb = null;
+  traverse(APP_AST, {
+    JSXElement(p) {
+      const o = p.node.openingElement;
+      if (o.name.name !== 'Suspense') return;
+      if (!p.node.children.some((c) => c.type === 'JSXElement' && c.openingElement.name.name === 'WalkMode')) return;
+      fb = o.attributes.find((a) => a.name?.name === 'fallback')?.value?.expression;
+    },
+  });
+  assert.ok(fb, '<Suspense fallback={…}><WalkMode …/></Suspense>');
+  let btn = null;
+  traverse(fb, { noScope: true, JSXElement(p) { if (p.node.openingElement.name.name === 'button') btn = p.node; } }, null, {});
+  assert.ok(btn, '等待里有一个按钮');
+  const attr = (k) => btn.openingElement.attributes.find((a) => a.name?.name === k);
+  assert.equal(attr('type')?.value?.value, 'button');
+  assert.match(attr('className')?.value?.value || '', /\bs-btn\b/, '.s-btn（min-height 44px）');
+  assert.match(src(attr('onClick').value.expression), /walkFailed\(true\)|setWalk\(false\)/, '点了回到全屋');
+  assert.match(src(btn), /t\('回到全屋'\)/);
+  assert.match(read(path.join(SRC, 'shared', 'i18n', 'en-studio.js')), /\n\s*回到全屋:\s*'/, 'en-studio.js 有「回到全屋」');
+  const rules = cssRules(read(path.join(SRC, 'studio', 'studio.css')));
+  const sbtn = rules.find((r) => !r.at.length && r.selectors.includes('.s-btn'));
+  assert.ok(parseFloat(sbtn.decls['min-height']) >= 44, '.s-btn min-height ≥ 44px');
 });
 
 await test('⑤ studio.css：is-walk 只用 opacity / visibility / pointer-events 藏鸟瞰界面；胶囊不占位置、≥ 44px、金色', () => {

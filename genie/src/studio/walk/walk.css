@@ -4,11 +4,13 @@
    整层不接指针（点画布 = 控制器的事），只有按钮、地图、摇杆、工具轮、面板接。
    留空：上面居中是 api.flash 的提示（safe-t + 60px，手机 + 136px）；许愿模式右下角约 288×60 是外壳的胶囊。
    颜色只用 base.css / studio.css 的变量；每一条选择器都带 walk（这一块在鸟瞰时就在后台载入，样式表一进来就生效，不能碰鸟瞰）。
-   给工具面板（walk-tools.css）用的：根节点 .walk-ui 上有 .is-live（走着）、.tool-<id>（正在用的工具）、.is-phone（≤ 600px），
+   给工具面板（walk-tools.css）用的：根节点 .walk-ui 上有 .is-live（走着）、.tool-<id>（正在用的工具）、.is-phone（≤ 600px）、
+   .is-map-open（手机上小地图展开着），
    变量 --walk-panel-b（工具轮正上方离底边多远）、--walk-dock-h（工具轮 + 面板多高）；面板本身画在 .walk-panel-slot 里。
    ============================================================ */
 
 .walk-ui {
+  --walk-css: 1; /* 记号：WalkMode 挂上去时量得到它 = 这份样式表在（量不到就把 <link> 再挂一次：ensureWalkCss） */
   --walk-joy: 120px; /* 摇杆 */
   --walk-tools-h: 64px; /* 工具轮的高度 */
   --walk-dock-b: var(--safe-b); /* 工具轮离底边 */
@@ -105,6 +107,10 @@
   max-width: calc(100% - var(--safe-l) - var(--safe-r));
   padding: 8px;
   border-radius: 20px;
+}
+/* 多层：卡片至少放得下两个楼层标签并排（矮的横屏上地图缩小了，标签不跟着挤成两行；地图在卡片里居中） */
+.walk-ui .walk-map.is-multi:not(.is-mini) {
+  min-width: 146px;
 }
 /* 名字那一行、楼层标签不撑宽地图（宽 = 地图本身）：width 0 + min-width 100% */
 .walk-map-head,
@@ -292,9 +298,10 @@
   border-radius: 50%;
   background: transparent;
 }
-/* 展开：放在「回到全屋」那一行下面（不盖住它） */
+/* 展开：放在「回到全屋」那一行下面（不盖住它）；临时盖在最上面（自己有收起），潘吉的泡泡、工具面板都在它下面 */
 .walk-map.is-open {
   top: calc(var(--safe-t) + 54px);
+  z-index: 1;
   animation: walk-pop 0.24s var(--ease);
   transform-origin: top right;
 }
@@ -360,6 +367,60 @@
   left: var(--safe-l);
   bottom: calc(var(--walk-joy-b) + var(--walk-joy) + 14px);
   animation: walk-rise 0.36s var(--ease);
+}
+.walk-ui > .walk-tour {
+  max-width: min(440px, calc(100vw - 32px));
+}
+/* 手机上展开了小地图：泡泡先藏起来（她照样说；收起地图就回来） */
+.walk-ui.is-map-open > .walk-tour {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 0.22s var(--ease),
+    visibility 0s linear 0.22s;
+}
+/* 矮的屏幕：泡泡最高到「回到全屋」那一行下面（44px + 12px），字幕放不下就自己竖着滚 */
+@media (max-height: 560px) {
+  .walk-ui > .walk-tour .walk-tour-bubble {
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - var(--safe-t) - 56px - var(--walk-joy-b) - var(--walk-joy) - 14px);
+    max-height: calc(100dvh - var(--safe-t) - 56px - var(--walk-joy-b) - var(--walk-joy) - 14px);
+  }
+  .walk-ui > .walk-tour .walk-tour-text {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .walk-ui > .walk-tour .walk-tour-actions {
+    flex: none;
+  }
+}
+/* 矮的横屏（手机横着拿）：摇杆上面只放得下一行字 → 泡泡放到摇杆右边、工具轮正上方，宽度让开右上角的小地图（最宽 162px + 10px） */
+@media (max-height: 560px) and (min-width: 601px) {
+  .walk-ui > .walk-tour {
+    left: calc(var(--safe-l) + var(--walk-joy) + 12px);
+    bottom: var(--walk-panel-b);
+    max-width: min(440px, calc(100vw - var(--safe-l) - var(--walk-joy) - 12px - var(--safe-r) - 172px));
+  }
+  .walk-ui > .walk-tour .walk-tour-bubble {
+    max-height: calc(100vh - var(--safe-t) - 56px - var(--walk-panel-b));
+    max-height: calc(100dvh - var(--safe-t) - 56px - var(--walk-panel-b));
+  }
+}
+/* 很小的横屏手机（≤ 600 宽：摇杆在工具轮上面的手机排版）：摇杆上面一行字都放不下 → 泡泡放到摇杆右边、和摇杆底边齐，
+   宽度让开右上角缩起来的小地图（120px + 12px） */
+@media (max-height: 420px) and (max-width: 600px) {
+  .walk-ui > .walk-tour {
+    left: calc(var(--safe-l) + var(--walk-joy) + 12px);
+    bottom: var(--walk-joy-b);
+    max-width: min(440px, calc(100vw - var(--safe-l) - var(--walk-joy) - 12px - var(--safe-r) - 132px));
+  }
+  .walk-ui > .walk-tour .walk-tour-bubble {
+    max-height: calc(100vh - var(--safe-t) - 56px - var(--walk-joy-b));
+    max-height: calc(100dvh - var(--safe-t) - 56px - var(--walk-joy-b));
+  }
 }
 
 /* 手机：打开工具面板时摇杆先让开（面板整行宽，摇杆浮在画面中间太挤）；收起面板就回来。量尺的控制条本来就在摇杆上面 */
@@ -477,6 +538,31 @@
 @media (min-width: 561px) and (max-width: 1099px) {
   .is-wish .walk-ui {
     --walk-dock-b: calc(var(--safe-b) + 66px);
+  }
+}
+/* 许愿模式 + 很矮的横屏手机（561–600 宽、≤ 420 高，例如 568×320）：工具轮抬到胶囊上面以后，摇杆再叠在它上面就顶到
+   「回到全屋」那一行了（摇杆顶 ≈ 50 < 56）。不抬也不行（整行宽的工具轮会钻到胶囊下面）→ 和窄平板一样：摇杆回到左下角
+   （胶囊在右边，碰不到），工具轮在摇杆右边、抬在胶囊上面；潘吉的泡泡、量尺的控制条放在工具轮正上方
+   （--walk-panel-b，也比摇杆顶高），从左边开始，宽度让开右上角缩起来的小地图（120px + 12px） */
+@media (min-width: 561px) and (max-width: 600px) and (max-height: 420px) {
+  .is-wish .walk-ui {
+    --walk-joy-b: var(--safe-b);
+  }
+  .is-wish .walk-dock {
+    left: calc(var(--safe-l) + var(--walk-joy) + 12px);
+  }
+  .is-wish .walk-ui > .walk-tour,
+  .is-wish .walk-measure-bar {
+    left: var(--safe-l);
+    bottom: var(--walk-panel-b);
+    max-width: calc(100vw - var(--safe-l) - var(--safe-r) - 132px);
+  }
+  .is-wish .walk-measure-bar {
+    margin-left: 0;
+  }
+  .is-wish .walk-ui > .walk-tour .walk-tour-bubble {
+    max-height: calc(100vh - var(--safe-t) - 56px - var(--walk-panel-b));
+    max-height: calc(100dvh - var(--safe-t) - 56px - var(--walk-panel-b));
   }
 }
 

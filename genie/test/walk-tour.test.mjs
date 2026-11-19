@@ -2,6 +2,7 @@
 //   每一个模板（有家具 / 没家具）和两份冻结的方案（test/fixtures/walk）：每一站都走得过去、从大门走得到（path 到得了、终点就是那一站），
 //   顺序对（大门 → 客厅 → 电视墙 → 厨房 → 卧室 → 楼梯 → 楼上 → 小提示 → 结束），不在楼梯间 / 挑空里；
 //   电视墙 / 厨房 / 衣柜那几句只在那个房间真的有那件东西时才说，而且站在它前面、对着它；每一句都在 voice-lines.js 的 walk 组。
+//   而且那件东西得是「我们做」的（offer = { materials, locked } → offer.js offerTagOf === 'make'）：客人留下来的柜子、刷漆 / 石灰墙 / 微水泥的电视墙不说。
 //   播放器：等走到了才说、说完停一下（没声音也让字幕读得完）、下一站 / 跳过 / 被客人打断。泡泡：字幕 = lineText，按钮的字有英文。
 // 跑：node test/walk-tour.test.mjs
 
@@ -21,6 +22,8 @@ import { setLang as setLang0 } from '../src/shared/i18n.js';
 import EN from '../src/shared/i18n/en.js';
 import TOUR_EN from '../src/shared/i18n/en-walktour.js';
 import '../src/studio/walk/words.js'; // 和 WalkMode 一样：先把走进去的英文并进词典
+import { offerTagOf } from '../src/studio/offer.js';
+import { realiseCase, locksOf } from '../src/shared/realise.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = path.join(ROOT, 'src') + path.sep;
@@ -244,6 +247,95 @@ await test('没有主卧：最大的、有衣柜的卧室；电视墙挪出客�
   const c2 = caseOf('tv moved', M.templatePlan('condo3'), moved);
   assert.ok(!c2.stops.some((s) => s.line === 'walk.tv'), ids(c2.stops));
   assert.ok(c2.stops.some((s) => s.line === 'walk.living'));
+});
+
+const PANEL = 'white-oak'; // 木墙板：电视墙算我们做的
+const NOT_PANEL = ['sand-limewash', 'dusty-blue', 'microcement', 'terracotta', 'navy-paint']; // 参考案例里的石灰墙 / 刷漆 / 微水泥：只有电视柜是我们做的
+const KEPT = locksOf({ cabinetry: 'white-oak' }); // K 屏：柜子留下来（保留你家原有）
+const without = (items, kinds) => items.filter((it) => !kinds.includes(it.kind));
+const linesOf = (st) => st.map((s) => s.line);
+
+await test('只说「我们做」的（offer = { materials, locked } → offerTagOf）：不给 offer / 全是我们做的 → 和以前一模一样', () => {
+  assert.deepEqual(KEPT, { cabinetry: 'white-oak' });
+  assert.equal(offerTagOf('tvWall', { materials: { feature: PANEL } }), 'make');
+  for (const c of cases.filter((x) => x.items.length)) {
+    const run = (offer) => tourStops(c.plan, c.items, c.nav, offer);
+    assert.deepEqual(run(), c.stops, c.id);
+    assert.deepEqual(run(null), c.stops, c.id);
+    assert.deepEqual(run({ materials: { feature: PANEL }, locked: null }), c.stops, c.id);
+    assert.deepEqual(run({ materials: { feature: PANEL, cabinetry: 'walnut' }, locked: {} }), c.stops, c.id);
+    // 锁住的不是柜子（地板 / 墙 / 沙发）：柜子还是我们做的
+    assert.deepEqual(run({ materials: { feature: PANEL }, locked: locksOf({ floor: 'cream-tile' }) }), c.stops, c.id);
+  }
+});
+
+await test('客人留下来的柜子（locked.cabinetry →「保留你家原有」）：不说厨房、不说衣柜 —— 就当没有；主卧在中间说小提示', () => {
+  for (const c of cases.filter((x) => x.items.length)) {
+    const st = tourStops(c.plan, c.items, c.nav, { materials: { feature: PANEL }, locked: KEPT });
+    assert.equal(offerTagOf('kitchenRun', { locked: KEPT }), 'kept');
+    assert.equal(offerTagOf('wardrobe', { locked: KEPT }), 'kept');
+    assert.ok(!linesOf(st).includes('walk.kitchen') && !linesOf(st).includes('walk.wardrobe'), `${c.id}: ${ids(st)}`);
+    assert.ok(!st.some((s) => s.id === 'kitchen'), `${c.id}: ${ids(st)}`);
+    // = 那几个房间没有橱柜 / 衣柜（nav 一样：留下来的柜子也挡路）；电视墙（木墙板）照说
+    assert.deepEqual(st, tourStops(c.plan, without(c.items, ['kitchenRun', 'wardrobe']), c.nav), c.id);
+    assert.equal(linesOf(st).includes('walk.tv'), linesOf(c.stops).includes('walk.tv'), c.id);
+    // 不给 nav：自己用全部家具建（不是只用我们做的那几件）
+    assert.deepEqual(tourStops(c.plan, c.items, null, { materials: { feature: PANEL }, locked: KEPT }), st, c.id);
+    // 每一站还是走得过去、从大门走得到
+    for (const s of st) assert.ok(N.passable(c.nav, s) && N.path(c.nav, c.nav.start, s), `${c.id} ${s.id}`);
+  }
+  const c3 = cases.find((x) => x.id === 'condo3（有家具）');
+  assert.ok(linesOf(c3.stops).includes('walk.kitchen') && linesOf(c3.stops).includes('walk.wardrobe'), ids(c3.stops));
+  const st = tourStops(c3.plan, c3.items, c3.nav, { materials: { feature: PANEL }, locked: KEPT });
+  const bed = st.find((s) => s.id === 'bedroom');
+  assert.equal(bed?.room, 'mst', ids(st));
+  assert.equal(bed.line, 'walk.paint');
+  assert.equal(st.filter((s) => s.line === 'walk.paint').length, 1);
+  assert.ok(st.some((s) => s.line === 'walk.tv'), ids(st));
+});
+
+await test('电视墙是石灰墙 / 刷漆 / 微水泥（offerTagOf → console：只有电视柜是我们做的）：不说电视墙，客厅照去；厨房、衣柜照说', () => {
+  for (const feature of NOT_PANEL) assert.equal(offerTagOf('tvWall', { materials: { feature } }), 'console', feature);
+  for (const c of cases.filter((x) => x.items.length)) {
+    for (const feature of NOT_PANEL) {
+      const st = tourStops(c.plan, c.items, c.nav, { materials: { feature }, locked: null });
+      const where = `${c.id} ${feature}: ${ids(st)}`;
+      assert.ok(!linesOf(st).includes('walk.tv') && !st.some((s) => s.id === 'tv'), where);
+      assert.deepEqual(st, tourStops(c.plan, without(c.items, ['tvWall']), c.nav), where);
+      assert.equal(linesOf(st).includes('walk.living'), linesOf(c.stops).includes('walk.living'), where);
+      for (const l of ['walk.kitchen', 'walk.wardrobe']) assert.equal(linesOf(st).includes(l), linesOf(c.stops).includes(l), `${where} ${l}`);
+    }
+    // 没有材质（offer 给了，materials 是空的）：和鸟瞰的记号一样 —— 主题墙不是墙板 → 不说电视墙
+    assert.ok(!linesOf(tourStops(c.plan, c.items, c.nav, { materials: {} })).includes('walk.tv'), c.id);
+    // 两样都不是我们做的：一件柜子都不说
+    const none = tourStops(c.plan, c.items, c.nav, { materials: { feature: 'sand-limewash' }, locked: KEPT });
+    assert.equal(offerTagOf('tvWall', { materials: { feature: 'sand-limewash' }, locked: KEPT }), null);
+    assert.ok(!none.some((s) => FEATURE[s.line]), `${c.id}: ${ids(none)}`);
+    assert.deepEqual(none, tourStops(c.plan, without(c.items, ['tvWall', 'kitchenRun', 'wardrobe']), c.nav), c.id);
+  }
+  const c3 = cases.find((x) => x.id === 'condo3（有家具）');
+  assert.ok(linesOf(c3.stops).includes('walk.tv'), ids(c3.stops));
+});
+
+await test('参考案例（src/cases/manifest.json → realiseCase）：说到的柜子都是 offerTagOf「我们做」；墙板电视墙才说电视墙；K 屏留下柜子 → 不说厨房 / 衣柜', () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'src/cases/manifest.json'), 'utf8'));
+  const tried = { console: 0, make: 0 };
+  for (const c of cases.filter((x) => x.items.length)) {
+    for (const cs of manifest.cases) {
+      for (const keep of [{}, { cabinetry: 'white-oak' }]) {
+        const r = realiseCase({ caseObj: cs, keep });
+        const st = tourStops(c.plan, c.items, c.nav, { materials: r.materials, locked: r.locked });
+        const where = `${c.id} ${cs.id} ${JSON.stringify(keep)}: ${ids(st)}`;
+        for (const s of st) if (FEATURE[s.line]) assert.equal(offerTagOf(FEATURE[s.line], r), 'make', `${where} ${s.line}`);
+        const tv = offerTagOf('tvWall', r) === 'make';
+        if (!keep.cabinetry) tried[tv ? 'make' : 'console']++;
+        assert.equal(linesOf(st).includes('walk.tv'), tv && linesOf(c.stops).includes('walk.tv'), where);
+        for (const l of ['walk.kitchen', 'walk.wardrobe']) assert.equal(linesOf(st).includes(l), !keep.cabinetry && linesOf(c.stops).includes(l), `${where} ${l}`);
+      }
+    }
+  }
+  // 两种都真的试到了（案例里有墙板的电视墙，也有刷漆 / 石灰墙 / 微水泥的）
+  assert.ok(tried.console > 0 && tried.make > 0, JSON.stringify(tried));
 });
 
 await test('没有大门：从最大的客厅中间开始；不给 nav 就自己建；坏的输入 → []', () => {

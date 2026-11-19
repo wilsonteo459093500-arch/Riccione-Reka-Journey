@@ -1,6 +1,9 @@
 // 走进去 · 门和飞进飞出（src/studio/walk/doors.js、flight.js —— docs/walk/SPEC.md §3、§4）：
 //   doorList 和 house.js 一模一样（每一个模板、每一层：门扇的数目、轴、开向哪边 —— 拿我们的门扇摆到 house.js 的 75° 和合并的门扇逐个顶点比）；
-//   开关门：1.6m 以内 / 前面 2m 的路要穿过 → 开，2.2m 以外满 3 秒 → 关，中间那一段不变；永远开向离人远的那一边；别的楼层不算；
+//   开关门：1.6m 以内 / 前面 2m 的路要穿过 → 开，2.2m 以外满 3 秒 → 关，中间那一段不变；没有路 → 开向离人远的那一边；别的楼层不算；
+//   门扇不挡路：有路就挑门扇让得开的那一边、路变了换边、楼梯上先不开；沿着 N.path 像控制器那样走一遍每个模板的每一段房间到房间的路；
+//   门轴放在哪一头：a 端两边都让不开 → b 端（镜像的门扇和 leafSeg 对得上、关着两头一样）；开着的门 → 关上换门轴再开（不扫到人）；
+//   大门往外开（flyIn 用真的门：门扇不扫进门口、镜头离门扇 ≥ 0.4m）；saveOrbit 在补间里只在飞到对好的取景时才算 framed；
 //   落地趟门的玻璃走近藏、走开放回；dispose 全部放回去、缓存的几何体不释放；
 //   entryPlan（每一个模板，再转 90° / 镜像成四个朝向）：P3 走得过去、P1 在屋子外面（或室外的房间里）、从门洞穿过去的那一点离门框 / 竖框够远；
 //   walkFov 横屏 / 竖屏；restoreOrbit 在假的引擎上把镜头 / 目标点 / 主点偏移一点不差地放回去（§4 的顺序）；
@@ -16,7 +19,7 @@ import { useLib } from '../src/studio/engine/furniture.js';
 import { buildFloorShell } from '../src/studio/engine/house.js';
 import * as N from '../src/studio/walk/nav.js';
 import { doorList, createDoors, leafAngle, sideOf, doorDist, pathCrosses, levelOf } from '../src/studio/walk/doors.js';
-import { walkFov, entryPlan, frontDoor, flyIn, flyOut, saveOrbit, restoreOrbit, cancelFlight, EYE, WALK_FOV } from '../src/studio/walk/flight.js';
+import { walkFov, entryPlan, frontDoor, flyIn, flyOut, saveOrbit, restoreOrbit, cancelFlight, fadeCanvas, EYE, WALK_FOV } from '../src/studio/walk/flight.js';
 
 let n = 0;
 let failed = 0;
@@ -434,6 +437,513 @@ await test('小工具：sideOf / doorDist', () => {
   assert.ok(near(doorDist({ axis: 'z', c: 0, a: 0, b: 1 }, { x: 3, z: 5 }), 5));
 });
 
+// ───────────────────────── 门扇开向哪一边：不挡路（unit doors · review core-door-leaf-in-path） ─────────────────────────
+// 开好的门扇不在导航里（门洞整个算走得过去、pull 会斜着拉直穿过门扇扫的那一块），所以开向哪一边要看路：
+// 门扇（伸出墙面的那一截）离眼睛 / 这一层接下来的路 ≥ 0.3m、转过去的时候不扫到人；两边都行 → 路走过去的那一边（不穿过 → 离人远的那一边）。
+// 下面像 controller.js 那样一帧一帧沿路走（起步加速、快到了减速、楼梯慢一点、楼梯走过一半高度换楼层、只给这一层这一段走路的点），
+// 每帧 doors.update(眼睛, 接下来的点, dt)，量眼睛离门扇（按门扇这一帧真的角度 —— 从 pivot.rotation.y 读）多远。
+
+const DX = await import('../src/studio/walk/doors.js'); // 量距离的小工具（门扇的线段、线段之间的距离……）
+const WALK = { SPEED: 1.3, ACCEL: 2.6, STAIR_K: 0.75 }; // 和 controller.js 的 SPEED / ACCEL / STAIR_K 一样
+const LEAF_CLEAR = 0.25; // 走路的时候眼睛离门扇至少这么远（导航半径 0.22 + 一点）
+const OPEN_OK = 0.3; // 静态：开好的门扇（某一边）离整段路这么远 = 这条路「有一边让得开」
+
+const walkScenes = new Map();
+/** sceneFor(id) 的楼层 / navData + 带家具的导航 + 大门（entryPlan） */
+function walkScene(id) {
+  if (!walkScenes.has(id)) {
+    const plan = M.templatePlan(id);
+    const { nd, floors } = sceneFor(id);
+    const nav = N.buildNav(nd, furnish(plan, M.buildAllWalls(plan)));
+    walkScenes.set(id, { id, plan, nd, floors, nav, ep: entryPlan(nd, nav) });
+  }
+  return walkScenes.get(id);
+}
+
+/** 门扇这一帧真的角度（带符号的弧度，+ = 开向 pos 那边）：从 pivot.rotation.y 反算（leafAngle 的逆；b 端的门轴反过来转） */
+const leafPhi = (L) => (L.pivot.rotation.y - L.closedAngle) * (L.axis === 'x' ? -1 : 1) * (L.dir || 1);
+/** 门扇伸出墙面的那一截（门洞里贴着门框的那一截和门框齐平，导航本来就离门框一个半径） */
+const leafOut = (L, phi = leafPhi(L)) => DX.leafSeg(L, phi, Math.min(L.width - 0.02, L.wall.t / 2), L.width - 0.02);
+const distTo = (p, g) => DX.segDist(p.x, p.z, g[0], g[1], g[2], g[3]);
+
+/** 一条路（N.path 的结果）在 fi 层走路的那几段（第一段从 from 开始）离 g 多远 */
+function pathDist(p, fi, g, from = null) {
+  let m = Infinity;
+  p.legs.forEach((l, li) => {
+    if (l.kind !== 'walk' || l.fi !== fi) return;
+    const pts = li === 0 && from ? [from, ...l.pts] : l.pts;
+    if (pts.length === 1) m = Math.min(m, distTo(pts[0], g));
+    for (let i = 1; i < pts.length; i++) m = Math.min(m, DX.segSeg(pts[i - 1], pts[i], g[0], g[1], g[2], g[3]));
+  });
+  return m;
+}
+/** 这扇门开好（90°，side 那一边）的门扇离这条路多远；四个里（门轴 a 端 / b 端 × 两边）让得多的那一个 */
+const sideRoom = (L, p, from, side) => pathDist(p, L.fi, leafOut(L, (side * Math.PI) / 2), from);
+const otherHinge = (L) => DX.hingeTo({ ...L, hinge: { ...L.hinge } }, -(L.dir || 1));
+const bestRoom = (L, p, from) => Math.max(...[L, otherHinge(L)].flatMap((H) => [sideRoom(H, p, from, 1), sideRoom(H, p, from, -1)]));
+
+/** 门轴换到 dir 那一头（和 createDoors 里一样：pivot 挪过去、门扇和把手镜像）—— 测试把门恢复到某个样子用 */
+function setHinge(L, dir) {
+  if ((L.dir || 1) === dir) return;
+  DX.hingeTo(L, dir);
+  for (const m of L.pivot.children) m.position.x = -m.position.x;
+  L.pivot.position.x = L.hinge.x;
+  L.pivot.position.z = L.hinge.z;
+}
+const smooth = (x) => x * x * (3 - 2 * x);
+
+/**
+ * 像 controller.js（start / advance / nextLeg / frame）那样从 P 走到 to：每帧 doors.update(眼睛, 这一层这一段接下来的点, dt)、onFrame(眼睛)；
+ * 到了再站 1 秒（门扇可能还在转）。P 会被改成走到的地方。→ 路（N.path 的结果）| null
+ */
+function walkLeg(S, doors, P, to, onFrame, dt = 1 / 60) {
+  const p = N.path(S.nav, { fi: P.fi, x: P.x, z: P.z }, to);
+  if (!p) return null;
+  const legs = p.legs.map((l) => ({ ...l, switched: false }));
+  const elev = (fi) => S.nd.floors[fi].elev;
+  const first = legs[0].pts[0];
+  const total = p.length + Math.hypot(first.x - P.x, first.z - P.z);
+  const R = { li: 0, pi: 0, v: 0, walked: 0, arrived: false };
+  const nextLeg = () => {
+    const leg = legs[R.li];
+    if (leg.kind === 'stair' && !leg.switched) {
+      leg.switched = true;
+      P.fi = leg.to;
+    }
+    if (R.li + 1 >= legs.length) {
+      R.arrived = true;
+      return;
+    }
+    R.li++;
+    R.pi = 1;
+    const nl = legs[R.li];
+    if (nl.kind === 'walk') {
+      P.fi = nl.fi;
+      P.y = elev(nl.fi) + EYE;
+    }
+  };
+  const ahead = [];
+  const frame = () => {
+    const eye = { x: P.x, y: P.y, z: P.z };
+    doors.update(eye, ahead, dt);
+    onFrame?.(eye);
+  };
+  for (let f = 0; f < 120 / dt && !R.arrived; f++) {
+    const left = Math.max(0, total - R.walked);
+    R.v = Math.min(WALK.SPEED, R.v + WALK.ACCEL * dt, Math.sqrt(2 * WALK.ACCEL * left) + 0.05);
+    let dist = R.v * dt * (legs[R.li].kind === 'stair' ? WALK.STAIR_K : 1);
+    while (dist > 1e-9 && !R.arrived) {
+      const leg = legs[R.li];
+      const q = leg.pts[R.pi];
+      if (!q) {
+        nextLeg();
+        continue;
+      }
+      const stair = leg.kind === 'stair';
+      const ty = stair ? elev(leg.from) + q.y + EYE : P.y;
+      const d = Math.hypot(q.x - P.x, q.z - P.z, ty - P.y);
+      if (d <= dist) {
+        [P.x, P.z, P.y] = [q.x, q.z, ty];
+        dist -= d;
+        R.walked += d;
+        R.pi++;
+      } else {
+        const k = dist / d;
+        P.x += (q.x - P.x) * k;
+        P.z += (q.z - P.z) * k;
+        P.y += (ty - P.y) * k;
+        R.walked += dist;
+        dist = 0;
+      }
+      if (stair && !leg.switched && Math.abs(P.y - EYE - elev(leg.from)) >= Math.abs(leg.pts[leg.pts.length - 1].y) / 2 - 1e-9) {
+        leg.switched = true;
+        P.fi = leg.to;
+      }
+      if (R.pi >= leg.pts.length) nextLeg();
+    }
+    ahead.length = 0;
+    const leg = legs[R.li];
+    if (!R.arrived && leg.kind === 'walk' && leg.fi === P.fi) for (let i = R.pi; i < leg.pts.length; i++) ahead.push(leg.pts[i]);
+    frame();
+  }
+  ahead.length = 0;
+  for (let k = 0; k < 1 / dt; k++) frame();
+  return p;
+}
+
+/** 每一扇门：这一段路上眼睛离（开着 / 在动的）门扇最近多远、开到过多大 */
+function leafWatch(doors, nd) {
+  const near = new Map();
+  const open = new Map();
+  return {
+    near,
+    open,
+    onFrame(eye) {
+      const fi = levelOf(nd.floors, eye.y);
+      for (const L of doors.leaves) {
+        if (L.fi !== fi || !L.s) continue;
+        near.set(L.id, Math.min(near.get(L.id) ?? Infinity, distTo(eye, leafOut(L))));
+        if (Math.abs(L.s) > Math.abs(open.get(L.id) ?? 0)) open.set(L.id, L.s);
+      }
+    },
+  };
+}
+
+/** 从大门进来（像 flight：开好大门 —— 往外开，不扫进门那一块 —— 站在 P3）的新一套门 + 人 */
+function enter(S) {
+  const doors = createDoors(doorEngine(S.floors), S.nd);
+  if (S.ep.door) doors.open(S.ep.door.id, { fi: S.ep.door.fi, from: S.ep.P3, instant: true });
+  const P = { fi: 0, x: S.ep.P3.x, y: S.nd.floors[0].elev + EYE, z: S.ep.P3.z };
+  doors.update(P, null, 0);
+  return { doors, P };
+}
+
+/** 一个房间要去的点（和 tour / 小地图一样：房间正中，挪到最近走得到的地方） */
+function roomGoal(S, fi, id) {
+  const r = S.nd.floors[fi].rooms.find((x) => x.id === id);
+  return N.nearest(S.nav, { fi, x: r.x + r.w / 2, z: r.y + r.d / 2 });
+}
+
+await test('门扇不挡路（review 的例子）：semid2 从大门走到楼上 f-bd3 / f-bd2 / f-cbth，门 1/w11/1、1/w14/1 开好的门扇不压在路上，一路离眼睛 ≥ 0.25m', () => {
+  const S = walkScene('semid2');
+  const cases = [
+    ['f-bd3', '1/w11/1'],
+    ['f-bd2', '1/w14/1'],
+    ['f-cbth', '1/w11/1'],
+  ];
+  for (const [room, id] of cases) {
+    const { doors, P } = enter(S);
+    const w = leafWatch(doors, S.nd);
+    const from = { x: P.x, z: P.z };
+    const p = walkLeg(S, doors, P, roomGoal(S, 1, room), w.onFrame);
+    assert.ok(p, `走得到 ${room}`);
+    const L = doors.leaves.find((x) => x.id === id);
+    if (room !== 'f-cbth') {
+      assert.ok(DX.pathCrosses(L, { x: 3.9, z: 4.58 }, p.legs[p.legs.length - 1].pts, 99), `去 ${room} 的路要穿过门 ${id}`);
+      assert.equal(Math.abs(w.open.get(id) ?? 0), 1, `${room}：门 ${id} 开好了`);
+    }
+    // 开好的那一边（走完以后门还开着）：门扇离整段楼上的路 ≥ 0.3m（原来开向路走过去的那一边，压在 (2.97, 2.63) / (6.37, 2.63)）
+    if (L.s) assert.ok(sideRoom(L, p, from, Math.sign(L.s)) >= OPEN_OK, `${room}：门 ${id} 开向 ${Math.sign(L.s)}，门扇离路只有 ${sideRoom(L, p, from, Math.sign(L.s)).toFixed(3)}m`);
+    for (const [d, m] of w.near) assert.ok(m >= LEAF_CLEAR, `${room}：走的时候眼睛离门 ${d} 的门扇只有 ${m.toFixed(3)}m`);
+    doors.dispose();
+  }
+});
+
+await test('门扇不挡路（review 的例子）：condo3 从大门走到每一个卧室 / 书房 / 走廊 / 卫生间，卫生间门 0/w26/1 不开到走廊里挡路', () => {
+  const S = walkScene('condo3');
+  for (const room of ['bd2', 'std', 'mst', 'cor', 'bth']) {
+    const { doors, P } = enter(S);
+    const w = leafWatch(doors, S.nd);
+    const from = { x: P.x, z: P.z };
+    const p = walkLeg(S, doors, P, roomGoal(S, 0, room), w.onFrame);
+    const L = doors.leaves.find((x) => x.id === '0/w26/1');
+    assert.ok(w.open.has(L.id), `${room}：路过卫生间门，门开了`);
+    // 走廊那一边的门扇（x = 6.86、z 3.42–4.14）会压在沿走廊走的路上：一定开向卫生间那一边
+    assert.ok(sideRoom(L, p, from, -1) < LEAF_CLEAR, `${room}：这条路本来就会穿过走廊那一边的门扇（例子没变）`);
+    assert.equal(Math.sign(w.open.get(L.id)), 1, `${room}：卫生间门开向卫生间（+），不是走廊`);
+    for (const [d, m] of w.near) assert.ok(m >= LEAF_CLEAR, `${room}：走的时候眼睛离门 ${d} 的门扇只有 ${m.toFixed(3)}m`);
+    doors.dispose();
+  }
+});
+
+await test('门扇不挡路（扫一遍）：condo3 / semid2 / terrace2 从大门走到每个房间、再从那里走到每个别的房间 —— 只要开好的门扇有一边让得开整段路，眼睛离门扇就一直 ≥ 0.25m', () => {
+  const dt = 1 / 30;
+  const report = [];
+  for (const id of ['condo3', 'semid2', 'terrace2']) {
+    const S = walkScene(id);
+    const rooms = [];
+    S.nd.floors.forEach((f, fi) => {
+      for (const r of f.rooms) {
+        if (!indoor(r) || r.stairId || M.ROOM_TYPES[r.type]?.stair || M.ROOM_TYPES[r.type]?.void) continue;
+        const q = roomGoal(S, fi, r.id);
+        if (q) rooms.push({ fi, id: r.id, q });
+      }
+    });
+    let legs = 0;
+    let checked = 0;
+    const rehung = [];
+    const bad = [];
+    const blocked = [];
+    const stuck = [];
+    /**
+     * 这一段路上每一扇碰到的门：有一种开法让得开（门轴 a 端 / b 端 × 两边）→ 一定要 ≥ LEAF_CLEAR。不算的两种（记下来）：
+     *  · 怎么开都让不开（户型本身：门扇 90° 怎么开都碰路）；
+     *  · 出发的时候门已经开在挡路的那一边、人就站在它转过去会扫到的地方（门轴 len + 0.25m 以内）—— 换边会扫到人，不换就只能擦过去。
+     * 出发的时候门开着、现在的门轴两边都让不开（要关上换门轴再开）的，另外数一下（rehung）。
+     */
+    const judge = (tag, p, from, w, doors, start) => {
+      legs++;
+      for (const [d, m] of w.near) {
+        const L = doors.leaves.find((x) => x.id === d);
+        const s0 = start.get(d);
+        // 出发时的门轴
+        const H0 = (L.dir || 1) === s0.dir ? L : otherHinge(L);
+        const best = bestRoom(L, p, from);
+        if (s0.s && Math.max(sideRoom(H0, p, from, 1), sideRoom(H0, p, from, -1)) < OPEN_OK && best >= OPEN_OK) rehung.push(`${tag} ${d} ${m.toFixed(2)}`);
+        const len = L.width - 0.02;
+        const pinned = s0.s && sideRoom(H0, p, from, Math.sign(s0.s)) < OPEN_OK && Math.hypot(from.x - H0.hinge.x, from.z - H0.hinge.z) < len + LEAF_CLEAR;
+        if (best >= OPEN_OK && !pinned) {
+          checked++;
+          if (m < LEAF_CLEAR) bad.push(`${tag} 门 ${d}：离眼睛 ${m.toFixed(3)}m（开好的门扇有一边离路 ${best.toFixed(2)}m）`);
+        } else if (m < LEAF_CLEAR) (best < OPEN_OK ? blocked : stuck).push(`${tag} ${d} ${m.toFixed(2)}/${best.toFixed(2)}`);
+      }
+    };
+    const states = (doors) => new Map(doors.leaves.map((L) => [L.id, { s: L.s, dir: L.dir }]));
+    for (const A of rooms) {
+      const { doors, P } = enter(S);
+      let w = leafWatch(doors, S.nd);
+      let from = { x: P.x, z: P.z };
+      let start = states(doors);
+      const pa = walkLeg(S, doors, P, A.q, w.onFrame, dt);
+      if (!pa) continue;
+      judge(`${id} 大门→${A.id}`, pa, from, w, doors, start);
+      // 到了 A：记下门的样子，每一个 B 都从这里出发
+      const at = { ...P };
+      const snap = doors.leaves.map((L) => [L.s, L.target, L.far, L.held, L.dir, L.rehang]);
+      for (const B of rooms) {
+        if (B === A) continue;
+        doors.leaves.forEach((L, i) => {
+          [L.s, L.target, L.far, L.held, , L.rehang] = snap[i];
+          setHinge(L, snap[i][4]);
+          L.pivot.rotation.y = leafAngle(L, Math.sign(L.s) * smooth(Math.abs(L.s)));
+        });
+        Object.assign(P, at);
+        doors.update(P, null, 0);
+        w = leafWatch(doors, S.nd);
+        from = { x: P.x, z: P.z };
+        start = states(doors);
+        const pb = walkLeg(S, doors, P, B.q, w.onFrame, dt);
+        if (pb) judge(`${id} ${A.id}→${B.id}`, pb, from, w, doors, start);
+      }
+      doors.dispose();
+    }
+    assert.deepEqual(bad.slice(0, 8), [], `${id}：${bad.length} 段路穿过 / 擦过了让得开的门扇`);
+    assert.ok(legs > rooms.length * (rooms.length - 1) * 0.9 && checked > legs / 2, `${id}：只走了 ${legs} 段路、量了 ${checked} 扇门`);
+    const eg = (a) => (a.length ? `（${a.slice(0, 2).join('，')}${a.length > 2 ? '…' : ''}）` : '');
+    report.push(`${id} ${legs} 段路、${checked} 次门扇让得开（全部 ≥ ${LEAF_CLEAR}m）、${blocked.length} 次户型本身两边都让不开${eg(blocked)}、${stuck.length} 次门已经开在挡路那边换不了${eg(stuck)}、${rehung.length} 次开着的门要换门轴才让得开${eg(rehung)}`);
+  }
+  for (const r of report) console.log(`    ${r}`);
+});
+
+/** 眼睛 + 路 → leafRoom 用的 (route, n, v0 = 0) */
+function routeOf(eye, pts) {
+  const r = [];
+  return [r, DX.clipPath(eye, pts, Infinity, r), 0];
+}
+
+await test('开着的门：客人改了路（新的路要撞上门扇）、人离得远 → 换到另一边；人站在门扇转过去会扫到的地方 → 不换', () => {
+  const S = walkScene('condo3');
+  const doors = createDoors(doorEngine(S.floors), S.nd);
+  const L = doors.leaves.find((x) => x.id === '0/w26/1'); // 卫生间门：墙 z = 4.2，轴 (6.86, 4.2)，pos = 卫生间
+  // 门开向走廊（−）
+  const corridor = (x) => ({ x, y: EYE, z: 3.75 });
+  doors.open(L.opening, { fi: 0, from: { x: 7.3, z: 5.4 }, instant: true });
+  assert.equal(L.s, -1);
+  // 人在走廊东头（离门 2m 多），要沿走廊往西走：路穿过走廊里的门扇 → 换到卫生间那一边
+  const east = corridor(9.3);
+  const west = [{ x: 5.2, z: 3.8 }, { x: 3.7, z: 5.0 }];
+  assert.ok(DX.leafRoom(L, -1, ...routeOf(east, west)) < 0.3, '走廊那一边挡路');
+  run(doors, east, 0.1, west);
+  assert.equal(L.target, 1, '换到卫生间那一边');
+  run(doors, east, 1.0, west);
+  assert.equal(L.s, 1);
+  // 再开回走廊（−）；人站在走廊里、就在门扇转回去会扫到的地方（离门轴 0.6m）→ 不换（宁可从门扇旁边挤过去）
+  L.s = -1;
+  L.target = -1;
+  L.pivot.rotation.y = leafAngle(L, -1);
+  const inSweep = { x: 7.3, y: EYE, z: 3.75 };
+  run(doors, inSweep, 0.2, west);
+  assert.equal(L.target, -1, '人在扫得到的地方：不换');
+  doors.dispose();
+});
+
+await test('开门挑边：两边都让得开 → 路走过去的那一边（门扇进那一个房间，走回来也不挡）；路不穿过 → 离人远的那一边；没有路 → 离人远的那一边', () => {
+  const S = walkScene('condo3');
+  for (const axis of ['x', 'z']) {
+    for (const side of [1, -1]) {
+      const doors = createDoors(doorEngine(S.floors), S.nd);
+      const L = interiorDoor(doors, axis);
+      const mid = (L.a + L.b) / 2;
+      // 正对着门、穿过去：开向路走过去的那一边（= 离人远的那一边）
+      run(doors, eyeAt(L, side, 1.9), 0.6, [eyeAt(L, -side, 1.2)]);
+      assert.equal(L.s, -side, `${axis}/${side}：开向路走过去的那一边`);
+      doors.dispose();
+      // 人在门旁边（1.2m）、路顺着墙走不穿过：离人远的那一边
+      const d2 = createDoors(doorEngine(S.floors), S.nd);
+      const L2 = interiorDoor(d2, axis);
+      run(d2, eyeAt(L2, side, 1.2, mid), 0.6, [eyeAt(L2, side, 1.2, mid + 2)]);
+      assert.equal(L2.s, -side, `${axis}/${side}：不穿过 → 离人远的那一边`);
+      d2.dispose();
+    }
+  }
+});
+
+await test('楼梯上（眼睛在上下、没有路）先不开门，下了楼梯有了路再挑边：不会先开一边再换边；一下子换到别的楼层不算走楼梯', () => {
+  const S = walkScene('semid2');
+  const doors = createDoors(doorEngine(S.floors), S.nd);
+  const L = doors.leaves.find((x) => x.id === '1/w11/1'); // 楼梯口旁边的 f-bd3 门（轴 (3.6, 2.61)）
+  const e1 = S.nd.floors[1].elev;
+  // 走楼梯后半段：眼睛往上走（~0.6m/s；过了楼上地面 + 0.5m 才算楼上）、离门 1.1m（1.6m 以内），没有路（控制器在楼梯那一段不给路）
+  for (let y = e1 + 0.2; y <= e1 + EYE + 1e-9; y += 0.01) doors.update({ x: 3.9, y, z: 4.58 }, [], 1 / 60);
+  for (let k = 0; k < 10; k++) doors.update({ x: 3.6 + k * 0.03, y: e1 + EYE, z: 4.58 }, [], 1 / 60);
+  assert.equal(L.target, 0, '楼梯上 / 刚走完楼梯：先不开');
+  // 下了楼梯、有了去 f-bd3 的路：门开向走廊那一边（f-bd3 那一边的门扇压在路上），一次开好、不换边
+  const pts = [{ x: 4.05, z: 3.25 }, { x: 3.05, z: 2.75 }, { x: 2.65, z: 2.15 }, { x: 2.55, z: 1.95 }];
+  const eye = { x: 3.9, y: e1 + EYE, z: 4.56 };
+  doors.update(eye, pts, 1 / 60);
+  assert.equal(L.target, 1, '有了路：开向走廊（+）');
+  assert.ok(DX.leafRoom(L, -1, ...routeOf(eye, pts)) < 0.05, 'f-bd3 那一边（−）的门扇压在路上');
+  // 一下子挪上楼（像 place 换楼层）：不算走楼梯，照常开
+  const d2 = createDoors(doorEngine(S.floors), S.nd);
+  const L2 = d2.leaves.find((x) => x.id === '1/w11/1');
+  d2.update({ x: 4.5, y: EYE, z: 3.0 }, null, 0.1);
+  run(d2, { x: 4.5, y: e1 + EYE, z: 3.0 }, 0.6);
+  assert.equal(L2.s, -1, '挪上楼：照常开（离人远的那一边）');
+  doors.dispose();
+  d2.dispose();
+});
+
+await test('小工具：crossing（穿过门洞走到哪一边）/ segSeg / leafSeg 和真的门扇对得上 / sweptDist / reach / clearOf', () => {
+  const d = { axis: 'x', c: 2, a: 1, b: 2, hinge: { x: 1.01, z: 2 }, width: 1, wall: { t: 0.12 } };
+  assert.equal(DX.crossing(d, { x: 1.5, z: 3 }, [{ x: 1.5, z: 1 }], 9), -1);
+  assert.equal(DX.crossing(d, { x: 1.5, z: 1 }, [{ x: 1.5, z: 3 }], 9), 1);
+  assert.equal(DX.crossing(d, { x: 1.5, z: 1 }, [{ x: 1.5, z: 2 }], 9), 1, '停在墙线上：算走到另一边');
+  assert.equal(DX.crossing(d, { x: 3.5, z: 1 }, [{ x: 3.5, z: 3 }], 9), 0, '墙上别的地方');
+  assert.equal(DX.crossing(d, { x: 1.5, z: 3 }, [{ x: 1.5, z: 2.5 }, { x: 1.5, z: 1 }], 0.4), 0, '0.4m 以内没穿过');
+  assert.equal(DX.pathCrosses(d, { x: 1.5, z: 3 }, [{ x: 1.5, z: 1 }]), true);
+  assert.equal(DX.segSeg({ x: 0, z: 0 }, { x: 2, z: 2 }, 0, 2, 2, 0), 0, '相交');
+  assert.ok(near(DX.segSeg({ x: 0, z: 0 }, { x: 1, z: 0 }, 0, 1, 1, 1), 1));
+  assert.ok(near(DX.segSeg({ x: 0, z: 0 }, { x: 1, z: 0 }, 2, 0, 3, 0), 1));
+  // leafSeg ↔ 真的门扇：开到 ±90°，门扇网格的包围盒中心 = leafSeg 的中点（两种朝向的墙）
+  const { nd, floors } = sceneFor('condo3');
+  const doors = createDoors(doorEngine(floors), nd);
+  for (const axis of ['x', 'z'])
+    for (const side of [1, -1]) {
+      const L = interiorDoor(doors, axis);
+      L.pivot.rotation.y = leafAngle(L, side);
+      L.pivot.parent.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(L.pivot.children.find((m) => m.userData.slot === 'cabinetry'));
+      const g = DX.leafSeg(L, (side * Math.PI) / 2);
+      assert.ok(near((box.min.x + box.max.x) / 2, (g[0] + g[2]) / 2, 0.03) && near((box.min.z + box.max.z) / 2, (g[1] + g[3]) / 2, 0.03), `${axis}/${side}：leafSeg 和门扇对不上`);
+      // clearOf：开着 → 门扇外面一点点离它很近；关上 → Infinity
+      L.s = side;
+      const mid = { x: (g[0] + g[2]) / 2, z: (g[1] + g[3]) / 2 };
+      assert.ok(doors.clearOf(0, mid.x, mid.z) < 0, '门扇上：负数（在门板里）');
+      assert.ok(near(doors.clearOf(0, mid.x + (axis === 'x' ? 0.3 : 0), mid.z + (axis === 'z' ? 0.3 : 0)), 0.28, 1e-6), '门扇旁边 0.3m：0.28（门板 2cm 厚）');
+      assert.equal(doors.clearOf(1, mid.x, mid.z), Infinity, '别的楼层');
+      L.s = 0;
+      L.pivot.rotation.y = leafAngle(L, 0);
+    }
+  assert.ok(doors.leaves.every((L) => !L.s) && doors.clearOf(0, 5, 5) === Infinity, '都关着 → Infinity');
+  doors.dispose();
+  // sweptDist：扇环里 = 0；外面 = 到边的距离
+  assert.equal(DX.sweptDist(d, 1.31, 2.3, 0, Math.PI / 2), 0, '扇环里面');
+  assert.ok(near(DX.sweptDist(d, 1.01, 3.48, 0, Math.PI / 2), 0.5, 1e-6), '门扇长 0.98，外面 0.5');
+  assert.ok(near(DX.sweptDist(d, 0.51, 2.5, 0, Math.PI / 2), 0.5, 1e-6), '门轴后面：到 90° 那一条边');
+  // reach：起步加速到 1.3m/s
+  assert.ok(near(DX.reach(0, 0.5), 0.325, 1e-9) && near(DX.reach(0, 1), 0.325 + 0.65, 1e-9) && near(DX.reach(1.3, 1), 1.3, 1e-9));
+});
+
+// ───────────────────────── 门轴放在哪一头（unit doors2）：a 端两边都让不开 → 换到 b 端；开着的门 → 关上换门轴再开 ─────────────────────────
+
+/** 门扇网格（门板）的平面包围盒中心 */
+function leafCentre(L) {
+  L.pivot.parent.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(L.pivot.children.find((m) => m.userData.slot === 'cabinetry'));
+  return { x: (box.min.x + box.max.x) / 2, z: (box.min.z + box.max.z) / 2, box };
+}
+/** 门洞里贴着 a 端门框的一条路：从 side 那一边 v 米外直直穿到另一边 —— a 端的门扇开到哪一边都压在路上（离路 ~0.24m） */
+function nearA(L, side, v) {
+  const u = L.a + 0.25;
+  const P = (vv) => (L.axis === 'x' ? { x: u, z: L.c + vv } : { x: L.c + vv, z: u });
+  return { eye: { ...P(side * v), y: EYE }, pts: [P(-side * 1.2)] };
+}
+
+await test('门轴放在哪一头：路贴着 a 端穿过门洞（a 端的门扇两边都压在路上）→ 门轴换到 b 端（pivot 挪过去、门扇镜像）、开向路走过去的那一边，门扇离路 ≥ 0.3m；关着的样子两头一样；没有路 → 不换门轴', () => {
+  const { nd, floors } = sceneFor('condo3');
+  for (const axis of ['x', 'z'])
+    for (const side of [1, -1]) {
+      const doors = createDoors(doorEngine(floors), nd);
+      const L = interiorDoor(doors, axis);
+      assert.equal(L.dir, 1, '一开始门轴在 a 端（和鸟瞰一样）');
+      const closedA = leafCentre(L).box.clone();
+      const { eye, pts } = nearA(L, side, 1.2);
+      const R = routeOf(eye, pts);
+      assert.ok(DX.leafRoom(L, 1, ...R) < 0.3 && DX.leafRoom(L, -1, ...R) < 0.3, `${axis}/${side}：a 端两边都压在路上（例子没变）`);
+      doors.update(eye, pts, 0.1);
+      assert.equal(L.dir, -1, `${axis}/${side}：门轴换到 b 端`);
+      assert.equal(L.target, -side, '开向路走过去的那一边');
+      assert.ok(near(L.axis === 'x' ? L.pivot.position.x : L.pivot.position.z, L.b - 0.01) && near(L.axis === 'x' ? L.pivot.position.z : L.pivot.position.x, L.c), 'pivot 在 b 端');
+      assert.ok(near(L.hinge.x, L.pivot.position.x) && near(L.hinge.z, L.pivot.position.z), 'hinge = pivot');
+      // 换门轴的那一下门还关着：门板还在门洞里原来那一块（看不出来换了）
+      assert.ok(Math.abs(L.s) < 0.25, '换的时候门几乎还关着');
+      run(doors, eye, 0.6, pts);
+      assert.equal(L.s, -side);
+      // 真的门扇（网格）和 leafSeg（b 端）对得上，在门洞 b 端那一头、离路 ≥ 0.3m
+      const c = leafCentre(L);
+      const g = DX.leafSeg(L, (-side * Math.PI) / 2);
+      assert.ok(near(c.x, (g[0] + g[2]) / 2, 0.03) && near(c.z, (g[1] + g[3]) / 2, 0.03), `${axis}/${side}：门扇网格和 leafSeg 对不上`);
+      assert.ok(near(leafPhi(L), (-side * Math.PI) / 2, 1e-9), 'leafPhi（测试反算的角度）对');
+      assert.ok(Math.abs((L.axis === 'x' ? c.x : c.z) - (L.b - 0.01)) < 0.03, '门扇贴着 b 端门框');
+      assert.ok(DX.leafRoom(L, -side, ...routeOf(eye, pts)) >= 0.3, '门扇离路 ≥ 0.3m');
+      // 走远、关上：关好的门板就在门洞里，和 a 端关着的时候一样
+      run(doors, eyeAt(L, side, 3.5), 4);
+      assert.equal(L.s, 0);
+      assert.equal(L.dir, -1, '关上不换回来（不用换）');
+      const closedB = leafCentre(L).box;
+      assert.ok(closedB.min.distanceTo(closedA.min) < 1e-6 && closedB.max.distanceTo(closedA.max) < 1e-6, `${axis}/${side}：关着的门板两头一样`);
+      // 没有路（摇杆）：离人远的那一边，门轴不换
+      run(doors, eyeAt(L, -side, 1.0), 0.6);
+      assert.equal(L.s, side);
+      assert.equal(L.dir, -1);
+      // dispose：拿掉的是我们的门扇，合并的门扇放回去
+      doors.dispose();
+      assert.equal(L.pivot.parent, null);
+    }
+});
+
+await test('开着的门两边都让不开（新的路贴着 a 端穿过）：先关上、换到 b 端、再开 —— 一路不扫到人；人站在门扇关回去会扫到的地方 → 不换', () => {
+  const { nd, floors } = sceneFor('condo3');
+  for (const axis of ['x', 'z']) {
+    const doors = createDoors(doorEngine(floors), nd);
+    const L = interiorDoor(doors, axis);
+    // 门开在 + 那一边（a 端），人在 + 那边 1.6m（不在门扇扫得到的地方），路贴着 a 端穿到 − 那边
+    doors.open(L.opening, { fi: 0, from: eyeAt(L, -1, 1), instant: true });
+    assert.ok(L.s === 1 && L.dir === 1);
+    const { eye, pts } = nearA(L, 1, 1.6);
+    const R = routeOf(eye, pts);
+    assert.ok(DX.leafRoom(L, 1, ...R) < 0.3 && DX.leafRoom(L, -1, ...R) < 0.3, `${axis}：a 端两边都让不开`);
+    const len = L.width - 0.02;
+    const r0 = Math.min(len, L.wall.t / 2);
+    let minEye = Infinity;
+    let rehung = false;
+    for (let t = 0; t < 1.5; t += 1 / 60) {
+      doors.update(eye, pts, 1 / 60);
+      rehung ||= L.rehang;
+      const g = DX.leafSeg(L, leafPhi(L), r0, len);
+      minEye = Math.min(minEye, distTo(eye, g));
+    }
+    assert.ok(rehung, `${axis}：关上换门轴（rehang）`);
+    assert.equal(L.dir, -1, `${axis}：换到 b 端`);
+    assert.equal(L.s, -1, `${axis}：再开到路走过去的那一边`);
+    assert.ok(DX.leafRoom(L, -1, ...routeOf(eye, pts)) >= 0.3, '门扇离路 ≥ 0.3m');
+    assert.ok(minEye > 0.5, `一路离人 ${minEye.toFixed(2)}m`);
+    doors.dispose();
+    // 人站在门扇关回去会扫到的地方（门扇和门洞之间）：不换，也不关
+    const d2 = createDoors(doorEngine(floors), nd);
+    const L2 = interiorDoor(d2, axis);
+    d2.open(L2.opening, { fi: 0, from: eyeAt(L2, -1, 1), instant: true });
+    const P = (u, v) => (L2.axis === 'x' ? { x: u, y: EYE, z: L2.c + v } : { x: L2.c + v, y: EYE, z: u });
+    const inSweep = P(L2.a + 0.45, 0.45);
+    const pts2 = [P(L2.a + 0.25, 0.3), P(L2.a + 0.25, -1.2)];
+    run(d2, inSweep, 0.5, pts2);
+    assert.ok(L2.target === 1 && L2.dir === 1 && !L2.rehang, `${axis}：人在扫得到的地方 → 不动`);
+    d2.dispose();
+  }
+});
+
+// ───────────────────────── （门扇开向哪一边：到这里） ─────────────────────────
+
 // ───────────────────────── entryPlan ─────────────────────────
 
 /** 一个单层方案转 90°（x ↔ y）/ 上下镜像：大门换到另外三个朝向 */
@@ -803,10 +1313,11 @@ await test('flyIn：t0 进走路模式（视角 / 主点不变）→ 到 P1 开�
     ticks(engine, 3.2, { each });
     assert.equal(await p, 'done');
     assert.equal(engine.onTick, prevTick, 'onTick 还回去');
-    // 开门：一次、在飞到 P1 的时候（1.6 秒）、开向离 P1 远的那一边
+    // 开门：一次、在飞到 P1 的时候（1.6 秒）
     assert.equal(doors.opened.length, 1);
     assert.equal(doors.opened[0].id, ep.door.id);
-    assert.deepEqual(doors.opened[0].from, ep.P1);
+    // 开向离 P3 远的那一边（往外）：门扇不扫进门那一块（P3、带逛的第一站「门口」）
+    assert.deepEqual(doors.opened[0].from, ep.P3);
     assert.ok(doorAt >= 1.6 - 0.02 && doorAt < 1.7, `${id}：开门在 ${doorAt}s`);
     assert.ok(doors.updates > 100, '每一帧都更新门');
     // 天花：一次，跨过门槛的时候（镜头在墙线里面）
@@ -854,6 +1365,37 @@ function solidsOf(plan, nd) {
   });
   return out;
 }
+
+await test('flyIn 用真的门：大门往外开（离 P3 远的那一边），门扇不扫进门那一块（P3 → 带逛的第一站「门口」→ 屋里）；飞进来镜头离门扇 ≥ 0.4m', async () => {
+  let hinged = 0;
+  for (const id of TPL) {
+    const { engine, ep, floors, nd, nav } = flightCase(id);
+    if (!ep.door) continue;
+    const doors = createDoors(doorEngine(floors), nd);
+    const L = doors.leaves.find((x) => x.fi === ep.door.fi && x.opening === ep.door.id);
+    const p = flyIn(engine, ep, { walk: { fov: 0, vo: { x: 0, y: 0 }, ev: 1, pr: 0 }, doors, reduced: false, ceilings: () => {} });
+    let minCam = Infinity;
+    const each = () => {
+      const c = engine.camera.position;
+      for (const D of doors.leaves) if (D.s && D.fi === levelOf(nd.floors, c.y)) minCam = Math.min(minCam, distTo(c, leafOut(D)));
+    };
+    ticks(engine, 3.2, { each });
+    assert.equal(await p, 'done');
+    if (!L) {
+      doors.dispose();
+      continue; // 趟门（terrace）：没有门扇
+    }
+    hinged++;
+    assert.equal(L.s, -ep.door.inward, `${id}：大门往外开`);
+    assert.ok(minCam >= 0.4, `${id}：飞进来镜头离门扇只有 ${minCam.toFixed(3)}m`);
+    // 门扇整个在外面：离 P3、离门里 0.6m 那一点（带逛的第一站一带）、离从那里往屋里走的路都 ≥ 0.3m
+    const g = leafOut(L);
+    const inside = (d) => (ep.door.axis === 'x' ? { x: ep.door.cross, z: ep.door.c + ep.door.inward * d } : { x: ep.door.c + ep.door.inward * d, z: ep.door.cross });
+    for (const q of [ep.P3, inside(0.6), inside(0.3), nav.start]) assert.ok(distTo(q, g) >= 0.3, `${id}：门扇离屋里 (${q.x.toFixed(2)}, ${q.z.toFixed(2)}) 只有 ${distTo(q, g).toFixed(3)}m`);
+    doors.dispose();
+  }
+  assert.ok(hinged >= 3, `${hinged} 个模板的大门有门扇`);
+});
 
 await test('flyIn 的路线不穿屋子：飞到 P2 之前不碰任何实心的部分（室内房间、楼上的楼板、车廊屋顶）；从屋子后面低低地起飞也一样', async () => {
   for (const id of TPL) {
@@ -959,6 +1501,105 @@ await test('减少动态效果：淡入淡出代替飞行，一下子到 P3 / �
   cancelFlight(e2);
   assert.equal(await p2, 'cancelled');
   assert.ok(e2.camera.position.equals(s2.pos) && e2.walk === null && e2.onTick === null, '打断也放回原样');
+});
+
+await test('saveOrbit 时鸟瞰的镜头正在飞（换楼层 / 重新取景的 engine.tween）：存它要飞到的那一下（朝向 = 看着目标点），镜头本身不动；没在飞 → 和以前一模一样', () => {
+  const e = fakeEngine();
+  const plain = saveOrbit(e);
+  // 没在飞：就是现在的镜头（拷贝）
+  assert.ok(plain.pos.equals(e.camera.position) && plain.quat.equals(e.camera.quaternion) && plain.target.equals(e.controls.target));
+  assert.ok(plain.pos !== e.camera.position && plain.quat !== e.camera.quaternion && plain.target !== e.controls.target);
+  e.tween = null;
+  assert.deepEqual(saveOrbit(e), plain, 'tween = null 也一样');
+  // 飞到一半（Engine.frame / setFloorView 的补间：fromP / fromT → toP / toT）
+  const toP = new THREE.Vector3(14, 22, 30);
+  const toT = new THREE.Vector3(3, 4.2, 5);
+  e.tween = { t0: 0, dur: 900, fromP: e.camera.position.clone(), fromT: e.controls.target.clone(), toP, toT };
+  e.camera.position.lerp(toP, 0.5);
+  e.controls.target.lerp(toT, 0.5);
+  e.camera.lookAt(e.controls.target);
+  const live = { pos: e.camera.position.clone(), quat: e.camera.quaternion.clone(), target: e.controls.target.clone() };
+  const saved = saveOrbit(e);
+  assert.ok(saved.pos.equals(toP) && saved.pos !== toP, '存的是要飞到的位置（拷贝）');
+  assert.ok(saved.target.equals(toT) && saved.target !== toT, '存的是要飞到的目标点（拷贝）');
+  const cam = new THREE.PerspectiveCamera();
+  cam.position.copy(toP);
+  cam.lookAt(toT);
+  assert.ok(Math.abs(saved.quat.dot(cam.quaternion)) > 1 - 1e-12, '朝向 = 从那里看着目标点（和补间结束时 OrbitControls 的 lookAt 一样）');
+  // 飞着的时候 isFramed() 总是 true：要看飞到的那一下是不是 frame() 对好的取景（Engine._framed）
+  assert.equal(saved.framed, false, '没有对好的取景（_framed = null）→ 不算对好');
+  e._framed = { pos: toP.clone().addScalar(0.01), target: toT.clone() };
+  assert.equal(saveOrbit(e).framed, true, '重新取景的补间（飞到 _framed）→ 对好的');
+  e._framed = { pos: toP.clone().setY(toP.y - 3), target: toT.clone().setY(toT.y - 3) };
+  assert.equal(saveOrbit(e).framed, false, '换楼层的补间（没对好的时候只是上下平移，不飞到 _framed）→ 不算对好');
+  e._framed = null;
+  assert.ok(e.camera.position.equals(live.pos) && e.camera.quaternion.equals(live.quat) && e.controls.target.equals(live.target), '镜头本身不动（飞进去从现在的位置起飞）');
+  // 出来：回到补间的终点，不是半路
+  e.walk = {};
+  e.tween = null;
+  restoreOrbit(e, saved);
+  assert.ok(e.camera.position.equals(toP) && e.controls.target.equals(toT));
+  assert.ok(e.camera.quaternion.equals(saved.quat));
+});
+
+await test('画布淡出淡入（fadeCanvas，减少动态效果的飞行也用它）：叠在一起只淡一次 / 等它淡完再淡；画布最后回到淡之前的样子；swap 出错也淡回来；restoreOrbit 保险一下（没淡过不碰）', async () => {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const e = fakeEngine();
+  const style = { opacity: '', transition: '' };
+  e.renderer.domElement = { style };
+  // 淡出的时候又来一个：一起换（按来的顺序），只淡一次
+  const ran = [];
+  const p1 = fadeCanvas(e, () => ran.push('a'), 40);
+  assert.equal(style.opacity, '0');
+  assert.match(style.transition, /opacity 20ms/);
+  const p2 = fadeCanvas(e, () => ran.push('b'), 40);
+  assert.deepEqual(await Promise.all([p1, p2]), [true, true]);
+  assert.deepEqual(ran, ['a', 'b']);
+  assert.equal(style.opacity, '');
+  assert.equal(style.transition, '');
+  // 已经在淡入：等它淡完再淡一次（swap 一定会跑：飞回去的 restoreOrbit 不能丢）
+  ran.length = 0;
+  const q1 = fadeCanvas(e, () => ran.push('a'), 40);
+  await sleep(28);
+  assert.deepEqual(ran, ['a']);
+  let q2Done = false;
+  const q2 = fadeCanvas(e, () => ran.push('b'), 40).then((v) => ((q2Done = true), v));
+  await q1;
+  assert.equal(q2Done, false);
+  assert.equal(await q2, true);
+  assert.deepEqual(ran, ['a', 'b']);
+  assert.equal(style.opacity, '');
+  assert.equal(style.transition, '');
+  // swap 出错：照样淡回来，Promise 报错
+  await assert.rejects(fadeCanvas(e, () => {
+    throw new Error('boom');
+  }, 20), /boom/);
+  assert.equal(style.opacity, '');
+  // 减少动态效果飞回去（flyOut → fadeSwap，没给 hooks.fade）：撞上控制器跳到收藏角度的淡出淡入 → 一起换；回到鸟瞰、画布回到原来的样子
+  e.walk = { fov: 62, vo: { x: 0, y: 0 }, ev: 1.3 };
+  const saved = { ...saveOrbit(e), pos: new THREE.Vector3(9, 9, 9) };
+  const jumped = fadeCanvas(e, () => ran.push('goto'), 240);
+  await sleep(10);
+  const out = flyOut(e, saved, { reduced: true });
+  assert.equal(await out, 'done');
+  await jumped;
+  assert.ok(e.camera.position.equals(saved.pos) && e.walk === null);
+  assert.equal(style.opacity, '');
+  assert.equal(style.transition, '');
+  // restoreOrbit 保险：淡过、现在没在淡，画布却还是 0 → 放回淡之前的样子
+  style.opacity = '0';
+  restoreOrbit(e, saved);
+  assert.equal(style.opacity, '');
+  // 从来没淡过的引擎：一点不碰（鸟瞰一模一样）
+  const e2 = fakeEngine();
+  const st2 = { opacity: '0.5', transition: 'x' };
+  e2.renderer.domElement = { style: st2 };
+  restoreOrbit(e2, saveOrbit(e2));
+  assert.deepEqual(st2, { opacity: '0.5', transition: 'x' });
+  // 没有画布样式（Node）：直接换
+  let direct = 0;
+  assert.equal(await fadeCanvas(fakeEngine(), () => direct++), true);
+  assert.equal(direct, 1);
 });
 
 console.log(`\n${n - failed}/${n} 通过`);

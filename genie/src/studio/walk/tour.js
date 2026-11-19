@@ -1,10 +1,13 @@
 // 走进去 · 潘吉带逛 —— docs/walk/SPEC.md §2（tourStops）、§7（台词在 shared/i18n/voice-lines.js 的 walk 组）
 //
-// tourStops(plan, items, nav)：纯函数，Node 可测。一站 = { id, fi, x, z, yaw, line, room }：
+// tourStops(plan, items, nav, offer)：纯函数，Node 可测。一站 = { id, fi, x, z, yaw, line, room }：
 //   大门里面（walk.hello）→ 客厅（walk.living；有电视墙就站在看得到整面墙的地方，原地再说 walk.tv）→ 厨房（有橱柜才去，对着最长那段 walk.kitchen）
 //   → 主卧（有衣柜就对着衣柜 walk.wardrobe，没有就说小提示 walk.paint）→ 楼梯口（walk.stairs）→ 楼上（主卧在楼上就在这里）
 //   → 小提示（刷颜色，还没说过的话）→ 结束（walk.bye，原地不动）。
 //   规则：每一句最多一站；功能那几句（电视墙 / 厨房 / 衣柜）只在那个房间真的有那件东西时才说；
+//         而且那件东西得是「我们做」的（offer = { materials, locked }：offer.js offerTagOf === 'make'，和鸟瞰 / 走进去的记号同一条）——
+//         客人留下来的柜子（locked.cabinetry →「保留你家原有」）不说厨房 / 衣柜；电视墙是刷漆 / 石灰墙 / 微水泥（'console'：只有电视柜是我们做的）
+//         不说电视墙，就当那个房间没有这件东西。不给 offer → 不看这一条（只看有没有那件东西）。
 //         除了大门那一站（= nav.start），每一站都是「从大门走得到」的格子中心（nav 的 reach）；都在房间里面，不在楼梯间 / 挑空里。
 //   没有大门（nav.start = null）→ 从最大的客厅类房间开始。楼上只去楼梯连着的那一层；没有楼梯连接就不上楼。
 // createTour({ stops, walkTo, say, onStop, … })：给控制器用的小播放器 ——
@@ -16,6 +19,7 @@ import { ROOM_TYPES } from '../plan/model.js';
 import { buildNav, navDataOf } from './nav.js';
 import { voice, lineOf, lineText, speechTimeline } from '../../shared/voice.js';
 import { getLang } from '../../shared/i18n.js';
+import { offerTagOf } from '../offer.js';
 
 /** 带逛用到的台词（voice-lines.js 的 walk 组），按出场顺序 */
 export const TOUR_LINES = ['walk.hello', 'walk.living', 'walk.tv', 'walk.kitchen', 'walk.wardrobe', 'walk.stairs', 'walk.paint', 'walk.bye'];
@@ -127,11 +131,16 @@ function pickCentre(cands, room) {
 // ───────────────────────── 站 ─────────────────────────
 
 /**
- * 潘吉带逛的每一站。plan：方案（没有 nav 时拿来建 nav）；items：家具；nav：walk/nav.js buildNav 的结果（同一份 plan + items）。
+ * 潘吉带逛的每一站。plan：方案（没有 nav 时拿来建 nav）；items：家具；nav：walk/nav.js buildNav 的结果（同一份 plan + items）；
+ * offer：{ materials, locked }（方案现在的材质、客人留下来的那几面）—— 给了，电视墙 / 厨房柜 / 衣柜只有 offerTagOf === 'make' 的才介绍；
+ * 不给（null）→ 和以前一样，不看是不是我们做的。
  * → [{ id, fi, x, z, yaw, line, room }]（room = 房间 id），走不进去的方案 → []
  */
-export function tourStops(plan, items = [], nav = null) {
+export function tourStops(plan, items = [], nav = null, offer = null) {
   const its = Array.isArray(items) ? items : [];
+  // 「我们做」的才介绍（nav 还是用全部家具建：客人留下来的柜子也挡路）。每一种只判断一次：offerTagOf 只看 kind + 材质 + 锁住的那几面
+  const judge = offer && typeof offer === 'object' ? { materials: offer.materials ?? null, locked: offer.locked ?? null } : null;
+  const ours = new Set(Object.keys(VIEW).filter((kind) => !judge || offerTagOf(kind, judge) === 'make'));
   if (!nav) {
     if (!plan) return [];
     nav = buildNav(navDataOf(plan), its);
@@ -144,7 +153,7 @@ export function tourStops(plan, items = [], nav = null) {
   /** 家具在哪一层、哪个房间（item.room 对不上就看它的位置） */
   const floorOf = (it) => (it.floor == null ? 0 : fIdx.has(it.floor) ? fIdx.get(it.floor) : -1);
   const roomOf = (it, fi) => roomsOn(fi).find((r) => r.id === it.room && inRect(r, it.x, it.z)) || roomsOn(fi).find((r) => inRect(r, it.x, it.z)) || null;
-  const inRoom = (kind, fi, room) => its.filter((it) => it.kind === kind && Number.isFinite(it.x) && Number.isFinite(it.z) && floorOf(it) === fi && roomOf(it, fi)?.id === room.id);
+  const inRoom = (kind, fi, room) => (ours.has(kind) ? its : []).filter((it) => it.kind === kind && Number.isFinite(it.x) && Number.isFinite(it.z) && floorOf(it) === fi && roomOf(it, fi)?.id === room.id);
 
   const stops = [];
   const said = new Set();

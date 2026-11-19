@@ -4947,7 +4947,8 @@
   }
 }
 
-/* 点了「走进去」、那一块还在下载（一般已经在后台取好了，看不到） */
+/* 点了「走进去」、那一块还在下载（一般已经在后台取好了，看不到）；右边是「回到全屋」（.s-btn.ghost，44px）。
+   宽 = 一行的宽（left: 50% 的缩到合适只量得到半屏，不定的话中文在手机上也会折）；放不下（320 宽的英文）就把按钮折到第二行 */
 .walk-wait {
   position: absolute;
   top: 50%;
@@ -4955,10 +4956,14 @@
   z-index: 40;
   transform: translate(-50%, -50%);
   display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
   gap: 10px;
+  width: max-content;
+  max-width: calc(100% - 32px);
   min-height: 44px;
-  padding: 0 20px;
+  padding: 4px 4px 4px 20px;
   border-radius: 999px;
   font: 600 15px/1 var(--sans);
   white-space: nowrap;

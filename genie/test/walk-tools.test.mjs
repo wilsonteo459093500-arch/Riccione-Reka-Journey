@@ -515,6 +515,74 @@ await test('walk-tools.css：选择器都带 walk；按钮 ≥ 44px；没有写�
   for (const f of ['PaintTray', 'FurnishPanel', 'LightPanel', 'MeasureLayer', 'PhotoPanel']) assert.match(read(`src/studio/walk/${f}.jsx`), /import '\.\/walk-tools\.css';/, f);
 });
 
+/** 某个画面大小下生效的声明（同一条选择器、按源码顺序后面的盖前面的；只认宽 / 高的 @media，别的当不成立） */
+function activeDecls(rules, sel, W, H) {
+  const query = (q) =>
+    q
+      .replace(/^@media\s*/, '')
+      .split(/\s*,\s*/)
+      .some((alt) =>
+        alt.split(/\s+and\s+/).every((p) => {
+          const m = p.match(/^\((min|max)-(width|height):\s*(\d+)px\)$/);
+          if (!m) return false;
+          const x = m[2] === 'width' ? W : H;
+          return m[1] === 'min' ? x >= +m[3] : x <= +m[3];
+        }),
+      );
+  return rules.filter((r) => r.selectors.includes(sel) && r.at.every(query)).reduce((a, r) => ({ ...a, ...r.decls }), {});
+}
+/** calc() → px（var() 换成给的值，100vw 换成画面宽） */
+function calcPx(expr, vars, W) {
+  let s = String(expr);
+  for (let i = 0; i < 6 && /var\(/.test(s); i++)
+    s = s.replace(/var\((--[\w-]+)\)/g, (_, k) => {
+      assert.ok(k in vars, `${k} 没有值`);
+      return `(${vars[k]})`;
+    });
+  s = s.replace(/100vw/g, String(W)).replace(/calc\(/g, '(').replace(/\bmin\(/g, 'Math.min(').replace(/(\d)px/g, '$1');
+  assert.match(s, /^[\d\s.+\-*/(),]*(?:Math\.min[\d\s.+\-*/(),]*)*$/, s);
+  return Function(`return ${s}`)();
+}
+
+await test('矮的横屏（手机横着拿）：面板、量尺的控制条不伸到右上角的小地图下面（601–780 宽贴着摇杆右边那一块的左边放）', () => {
+  const walk = cssRules(read('src/studio/walk/walk.css'));
+  const tools = cssRules(read('src/studio/walk/walk-tools.css'));
+  const both = [...walk, ...tools];
+  const MAP_W = 162; // 小地图卡片最宽（compact：146 + 边距 16）
+  for (const H of [320, 360, 414, 560])
+    for (const W of [601, 640, 667, 700, 780, 781, 844, 932, 1023]) {
+      const tag = `${W}×${H}`;
+      const vars = { '--safe-l': 16, '--safe-r': 16, '--safe-t': 16, '--safe-b': 16, ...activeDecls(walk, '.walk-ui', W, H) };
+      const dock = activeDecls(walk, '.walk-dock', W, H);
+      const slot = activeDecls(both, '.walk-dock > .walk-panel-slot', W, H);
+      const panel = activeDecls(tools, '.walk-panel', W, H);
+      const bar = activeDecls(tools, '.walk-measure-bar', W, H);
+      const mapLeft = W - 16 - MAP_W;
+      const widest = 600; // 托盘（--walk-panel-w 最宽的那个）
+      const pw = Math.min(widest, W - 32, calcPx(panel['max-width'], vars, W));
+      const bw = calcPx(bar['max-width'], vars, W); // 控制条 max-content，最宽到这里
+      let panelRight;
+      let barRight;
+      if (W <= 780) {
+        // 工具轮在摇杆右边那一块（左边 = safe-l + 摇杆 + 12）
+        const dl = calcPx(dock.left, vars, W);
+        assert.equal(dl, 148, tag);
+        assert.equal(slot['align-self'], 'flex-start', `${tag}：面板贴左边`);
+        assert.equal(bar['margin-left'], '0', `${tag}：控制条贴左边`);
+        assert.equal(calcPx(bar.left, vars, W), dl, tag);
+        panelRight = dl + pw;
+        barRight = dl + bw;
+      } else {
+        // 居中
+        panelRight = W / 2 + pw / 2;
+        barRight = W / 2 + bw / 2;
+      }
+      assert.ok(panelRight <= mapLeft, `${tag}：面板右边 ${panelRight} 伸到小地图（${mapLeft}）下面`);
+      assert.ok(barRight <= mapLeft, `${tag}：量尺的控制条右边 ${barRight} 伸到小地图（${mapLeft}）下面`);
+      assert.ok(pw >= 260, `${tag}：面板别太窄（${pw}）`);
+    }
+});
+
 await test('英文：面板的字都在 en-walktools.js 或总表；en-walktools.js 不和总表、en-walk.js 打架', () => {
   const EW = B.EWL;
   assert.ok(Object.keys(EW).length >= 25);

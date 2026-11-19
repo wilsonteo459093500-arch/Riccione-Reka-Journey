@@ -3,8 +3,10 @@
 //   方案变了（换材质、挪家具、收藏角度、撤销）→ controller.update(project)。
 //   「回到全屋」（data-walk="exit"，脚本点它）→ 先 controller.exit()（飞回去），再 onExit()。键盘 Esc：先收起工具面板，再回到全屋。
 //   排版：左上「回到全屋」+ 撤销 · 右上小地图 · 左下摇杆 · 下面居中工具轮（正在用的工具的面板在它上面）· 潘吉带逛在摇杆上面。
+//   手机上展开的小地图盖在最上面（.is-map-open：潘吉的泡泡先藏起来，收起地图再出来）。
 //   上面居中（提示 api.flash 的位置）、许愿模式右下角外壳的胶囊那一块都留空（walk.css）。飞进 / 飞出的时候界面藏起来。
 //   第一次走进去（这一页开着的期间；不存）潘吉自动带逛；之后只有按「带我逛逛」才开始。
+//   这一块的样式表下载失败过一次（Vite 不会再加）：挂上去时量 walk.css 的记号，量不到就再挂一次（ensureWalkCss）。
 // props = { engine, project, api, wish, staff, onExit }
 import './words.js';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -44,6 +46,25 @@ export function roomOf(plan, e) {
   return null;
 }
 
+/**
+ * 这一块的样式表没进来就再挂一次（挂上去时叫）。第一次下载 assets/WalkMode-*.css 失败（或后台先取的那一次失败）以后，
+ * Vite 记住「取过了」：再点「走进去」只拿得到 JS、不会再加样式表 → 整层没有样式。walk.css 在 .walk-ui 上放了记号
+ * --walk-css: 1，量不到 = 样式不在 → 把页面上那个 <link> 复制一份、网址换一个参数（绕过缓存），挂到 <head>。
+ * 页面上没有那个 <link>（开发模式：样式是 JS 插进来的）就什么都不做、不说。→ 新挂的 <link> | null
+ */
+export function ensureWalkCss(root) {
+  const doc = root?.ownerDocument;
+  const cs = doc?.defaultView?.getComputedStyle?.(root);
+  if (!cs || String(cs.getPropertyValue('--walk-css') || '').trim()) return null;
+  const all = doc.querySelectorAll('link[rel="stylesheet"][href*="/assets/WalkMode-"]');
+  const old = all[all.length - 1];
+  if (!old) return null;
+  const link = old.cloneNode(false);
+  link.href = `${String(old.href).replace(/[?#].*$/, '')}?retry=${Date.now()}`;
+  doc.head.appendChild(link);
+  return link;
+}
+
 function useMedia(q) {
   const get = () => typeof window !== 'undefined' && !!window.matchMedia?.(q).matches;
   const [on, setOn] = useState(get);
@@ -58,6 +79,64 @@ function useMedia(q) {
   return on;
 }
 
+/**
+ * 控制器的事件 → 界面的状态，然后走进去（WalkMode 挂上去时用；拆出来在 Node 里测：test/walk-ui.test.mjs）。
+ *   h = { api, set: { phase, fi, room, tour }（setState）, leave()（关掉这一层）, exiting（ref：已经在退了）,
+ *         userExit（ref：客人自己按了「回到全屋」/ Esc） }
+ *   控制器自己退出来（'state' out）→ leave()。走进去失败（enter() 抛错）：控制器先自己退回鸟瞰（'state' out → 上面已经
+ *   leave()、exiting 已经是 true），所以这里只看 userExit —— 不是客人自己要退的，就一定说一声「走进去出了点问题」。
+ * → off()：只摘掉监听（dispose 由调用的人做）
+ */
+export function wireWalk(c, { api, set, leave, exiting, userExit }) {
+  let alive = true;
+  let inside = false; // 看到过「出去」以外的状态（控制器自己退出来 → 外面也关掉）
+  const oops = () => api?.flash?.(t('走进去出了点问题，已回到全屋'), 4200);
+  const offs = [
+    c.on?.('state', (e) => {
+      const p = phaseOf(e);
+      if (!alive || !p) return;
+      if (p !== 'out') inside = true;
+      set.phase(p);
+      if (p === 'out' && inside && !exiting.current) leave();
+    }),
+    c.on?.('floor', (e) => {
+      const f = floorOf(e);
+      if (alive && f != null) set.fi(f);
+    }),
+    c.on?.('room', (e) => alive && set.room(e && typeof e === 'object' && 'room' in e ? (e.room ?? null) : (e ?? null))),
+    c.on?.('tourState', (s) => alive && s && set.tour({ ...IDLE_TOUR, ...s })),
+    c.on?.('tour', () => {
+      const s = c.tour?.state?.();
+      if (alive && s) set.tour({ ...IDLE_TOUR, ...s });
+    }),
+    // 走着走着出错：控制器自己一下子退出来（'state' out → 上面关掉这一层），这里只说一声
+    c.on?.('error', () => alive && !exiting.current && oops()),
+  ];
+  Promise.resolve()
+    .then(() => c.enter())
+    .then(() => {
+      if (!alive || exiting.current) return;
+      set.phase((p) => (p === 'flying-in' ? c.phase || 'walking' : p));
+      const p = c.pose?.();
+      if (Number.isInteger(p?.fi)) set.fi(p.fi);
+    })
+    .catch((err) => {
+      if (!alive || userExit.current) return;
+      if (import.meta.env?.DEV) console.error('[walk]', err);
+      try {
+        c.dispose();
+      } catch {
+        /* 已经退干净了 */
+      }
+      oops();
+      if (!exiting.current) leave();
+    });
+  return () => {
+    alive = false;
+    for (const off of offs) if (typeof off === 'function') off();
+  };
+}
+
 export default function WalkMode({ engine, project, api, wish = false, staff = false, onExit }) {
   const [ctl, setCtl] = useState(null);
   const [phase, setPhase] = useState('flying-in');
@@ -67,12 +146,14 @@ export default function WalkMode({ engine, project, api, wish = false, staff = f
   const [tour, setTour] = useState(IDLE_TOUR);
   const [going, setGoing] = useState(null); // 点了楼层标签、正在走过去的那一层
   const [stuck, setStuck] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false); // 手机上小地图展开着（盖在最上面；潘吉的泡泡先让开）
   const phone = useMedia('(max-width: 600px)');
   const compact = useMedia('(max-width: 1023px)');
 
   const root = useRef(null);
   const dock = useRef(null);
-  const exiting = useRef(false);
+  const exiting = useRef(false); // 已经在退了（客人按的，或者控制器自己退出来）
+  const userExit = useRef(false); // 客人自己按了「回到全屋」/ Esc（走进去失败时就不用再说「出了点问题」）
   const projRef = useRef(project);
   projRef.current = project;
   const sent = useRef(project); // controller 手里的是哪一份方案
@@ -89,54 +170,12 @@ export default function WalkMode({ engine, project, api, wish = false, staff = f
   // ── 控制器：挂上去就走进去，卸下就马上回到鸟瞰 ──
   useEffect(() => {
     if (!engine) return undefined;
-    let alive = true;
-    let inside = false; // 看到过「出去」以外的状态（控制器自己退出来 → 外面也关掉）
     const c = createWalk(engine, { project: projRef.current, api, wish });
     sent.current = projRef.current;
-    const offs = [
-      c.on?.('state', (e) => {
-        const p = phaseOf(e);
-        if (!alive || !p) return;
-        if (p !== 'out') inside = true;
-        setPhase(p);
-        if (p === 'out' && inside && !exiting.current) leave();
-      }),
-      c.on?.('floor', (e) => {
-        const f = floorOf(e);
-        if (alive && f != null) setFi(f);
-      }),
-      c.on?.('room', (e) => alive && setRoom(e && typeof e === 'object' && 'room' in e ? (e.room ?? null) : (e ?? null))),
-      c.on?.('tourState', (s) => alive && s && setTour({ ...IDLE_TOUR, ...s })),
-      c.on?.('tour', () => {
-        const s = c.tour?.state?.();
-        if (alive && s) setTour({ ...IDLE_TOUR, ...s });
-      }),
-      // 走着走着出错：控制器自己一下子退出来（'state' out → 上面关掉这一层），这里只说一声
-      c.on?.('error', () => alive && !exiting.current && api?.flash?.(t('走进去出了点问题，已回到全屋'), 4200)),
-    ];
+    const off = wireWalk(c, { api, set: { phase: setPhase, fi: setFi, room: setRoom, tour: setTour }, leave, exiting, userExit });
     setCtl(c);
-    Promise.resolve()
-      .then(() => c.enter())
-      .then(() => {
-        if (!alive || exiting.current) return;
-        setPhase((p) => (p === 'flying-in' ? c.phase || 'walking' : p));
-        const p = c.pose?.();
-        if (Number.isInteger(p?.fi)) setFi(p.fi);
-      })
-      .catch((err) => {
-        if (!alive || exiting.current) return;
-        if (import.meta.env?.DEV) console.error('[walk]', err);
-        try {
-          c.dispose();
-        } catch {
-          /* 已经退干净了 */
-        }
-        api?.flash?.(t('走进去出了点问题，已回到全屋'), 4200);
-        leave();
-      });
     return () => {
-      alive = false;
-      for (const off of offs) if (typeof off === 'function') off();
+      off();
       c.dispose();
     };
   }, [engine]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -181,6 +220,7 @@ export default function WalkMode({ engine, project, api, wish = false, staff = f
       return;
     }
     exiting.current = true;
+    userExit.current = true;
     if (ctl?.tour?.running) ctl.tour.stop();
     try {
       await ctl?.exit?.();
@@ -209,6 +249,11 @@ export default function WalkMode({ engine, project, api, wish = false, staff = f
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // 样式表没进来（下载失败过一次）：再挂一次
+  useLayoutEffect(() => {
+    ensureWalkCss(root.current);
   }, []);
 
   // 工具轮 + 面板有多高（手机上摇杆、潘吉跟着往上让）
@@ -245,7 +290,7 @@ export default function WalkMode({ engine, project, api, wish = false, staff = f
   const showTour = live && (tour.running || tool === 'walk');
 
   return (
-    <div ref={root} className={cls('walk-ui', live && 'is-live', !live && stuck && 'is-stuck', phone && 'is-phone', `tool-${tool}`)}>
+    <div ref={root} className={cls('walk-ui', live && 'is-live', !live && stuck && 'is-stuck', phone && 'is-phone', mapOpen && 'is-map-open', `tool-${tool}`)}>
       <div className="walk-top">
         <button type="button" className="walk-exit glass" data-walk="exit" data-sfx="back" onClick={exit}>
           <Icon name="home" size={17} />
@@ -258,7 +303,7 @@ export default function WalkMode({ engine, project, api, wish = false, staff = f
         )}
       </div>
 
-      <Minimap ctl={ctl} plan={project?.plan} fi={fi} room={here} going={going} size={phone ? 'phone' : compact ? 'compact' : 'wide'} onWalk={walkTo} onFloor={goFloor} />
+      <Minimap ctl={ctl} plan={project?.plan} fi={fi} room={here} going={going} size={phone ? 'phone' : compact ? 'compact' : 'wide'} onWalk={walkTo} onFloor={goFloor} onOpen={setMapOpen} />
 
       {live && tool === 'measure' && <MeasureLayer {...panelProps} />}
 

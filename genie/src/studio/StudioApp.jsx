@@ -68,7 +68,8 @@ import { boardsSoon as boardsSoonShared, missingBoardIds } from '../shared/board
 const ExportSheet = lazy(() => import('./export/ExportSheet.jsx'));
 // 走进去（人的眼睛走进家里，src/studio/walk/）：点了「走进去」才要这一块；界面好了 4 秒后先在后台取（展厅、演示不取）
 const loadWalk = () => import('./walk/WalkMode.jsx');
-const WalkMode = lazy(loadWalk);
+// let：没下载成时 walkFailed 换一个新的（React 的 lazy 记住失败，不换的话以后每次点都是同一个错，直到重新载入页面）
+let WalkMode = lazy(loadWalk);
 
 /** 走进去出错（那一块没下载成、画的时候出错）：卸掉它（卸载时 WalkMode 自己马上退回鸟瞰），工作室照常用 */
 class WalkGuard extends Component {
@@ -408,7 +409,7 @@ export default function StudioApp() {
   const [walk, setWalk] = useState(false);
   const walkRef = useRef(false); // 点下去那一刻就算（不等重画）：日光小图、外壳传来的户型图都要等回到全屋
   const thumbsLater = useRef(false);
-  const planAfterWalk = useRef(null);
+  const afterWalk = useRef(null); // 回到全屋以后再做的事：外壳传来的户型图（读）、走的时候读好的户型图（换上）
 
   // 提示停留的时间从「真正画出来」那一刻算起：换一整套材质时，下一帧要编译着色器，慢设备上会卡一下，
   // 计时要是从点击就开始，提示还没画出来就过期了。
@@ -1038,6 +1039,7 @@ export default function StudioApp() {
     tellShell('plan-wait', { on: false });
     setBanner({ state: 'reading', pct: 3 });
     const pid = cur.profile.id;
+    const bad = () => setBanner({ state: 'unreadable', pct: 0 });
     try {
       const { readPlan } = await import('./guest/readPlan.js');
       const r = await readPlan(file, { hint: planHint(cur.profile.home || {}), onProgress: (pr) => setBanner((b) => (b.state === 'reading' ? { ...b, pct: pr.pct } : b)) });
@@ -1045,15 +1047,23 @@ export default function StudioApp() {
       if ((r.status === 'ok' || r.status === 'rough') && r.plan) {
         await putHomePlan(pid, { plan: r.plan, underlays: r.underlays, source: r.source, confidence: r.confidence });
         const homePlan = rememberGuestPlan(pid, r);
-        await applyHomePlan(r.plan, r.underlays, { homePlan });
-        // 许愿模式的外壳：这一位的家变了 →「交给设计师」的链接、已经留下的名单跟着换（WishShell 的 home-done）
-        tellShell('home-done', { id: pid, plan: true });
-        setBanner({ state: 'idle', pct: 0 });
-        sfx.play?.('achievement');
-        flash(r.status === 'rough' ? t('读好了 —— 有几处是猜的，设计师见面时会再对一次') : t('读好了 —— 这就是你的家'), 4600);
-      } else setBanner({ state: 'unreadable', pct: 0 });
+        const swap = async () => {
+          await applyHomePlan(r.plan, r.underlays, { homePlan });
+          // 许愿模式的外壳：这一位的家变了 →「交给设计师」的链接、已经留下的名单跟着换（WishShell 的 home-done）
+          tellShell('home-done', { id: pid, plan: true });
+          setBanner({ state: 'idle', pct: 0 });
+          sfx.play?.('achievement');
+          flash(r.status === 'rough' ? t('读好了 —— 有几处是猜的，设计师见面时会再对一次') : t('读好了 —— 这就是你的家'), 4600);
+        };
+        // 读的时候不给走进去（canWalk、enterWalk）；万一正在走：先回到全屋再换 —— 走进去的格子、门、房间都是进去时那个家的
+        if (!walkRef.current) await swap();
+        else {
+          afterWalk.current = () => swap().catch(bad);
+          setWalk(false);
+        }
+      } else bad();
     } catch {
-      setBanner({ state: 'unreadable', pct: 0 });
+      bad();
     } finally {
       readingRef.current = false;
     }
@@ -1305,7 +1315,7 @@ export default function StudioApp() {
       if (ev.data.type === 'plan-file' && ev.data.file) {
         if (!walkRef.current) readRef.current?.(ev.data.file);
         else {
-          planAfterWalk.current = ev.data.file;
+          afterWalk.current = () => readRef.current?.(ev.data.file);
           setWalk(false);
         }
       }
@@ -1370,7 +1380,8 @@ export default function StudioApp() {
   }, []);
   const enterWalk = () => {
     const e = engine.current;
-    if (!e || walkRef.current) return;
+    // 正在读客人的户型图：读好了要整个换掉这个家（走进去的格子、门、房间是进去那一刻的）→ 读完再走
+    if (!e || walkRef.current || readingRef.current || banner.state === 'reading') return;
     voice.unlock?.(); // iPad：潘吉带逛要出声，得在这一下点击里解锁
     e.select(null);
     setHover(null);
@@ -1378,10 +1389,15 @@ export default function StudioApp() {
     setWalk(true);
   };
   const exitWalk = useCallback(() => setWalk(false), []);
-  const walkFailed = useCallback(() => {
-    setWalk(false);
-    flash(t('走进去出了点问题，已回到全屋'), 4200);
-  }, [flash]);
+  // 出错（WalkGuard）或等下载时点了「回到全屋」（quiet）：换一个新的 lazy，下次点「走进去」重新下载
+  const walkFailed = useCallback(
+    (quiet) => {
+      WalkMode = lazy(loadWalk);
+      setWalk(false);
+      if (!quiet) flash(t('走进去出了点问题，已回到全屋'), 4200);
+    },
+    [flash],
+  );
   // 回到全屋：走的时候攒下的事现在做（日光小图、外壳传来的户型图）
   useEffect(() => {
     walkRef.current = walk;
@@ -1390,9 +1406,9 @@ export default function StudioApp() {
       thumbsLater.current = false;
       scheduleThumbs();
     }
-    const f = planAfterWalk.current;
-    planAfterWalk.current = null;
-    if (f) readRef.current?.(f);
+    const f = afterWalk.current;
+    afterWalk.current = null;
+    f?.();
   }, [walk, scheduleThumbs]);
   // 先在后台取好走进去那一块：点下去不用等下载
   const walkFetched = useRef(false);
@@ -1640,8 +1656,8 @@ export default function StudioApp() {
   const pickCase = (id, el) => applyCase(id, el);
   const rawCase = project?.caseId ? () => applyCase(project.caseId, null, { raw: true }) : null;
   const showBanner = !!project?.sample && !demo && !showroom;
-  // 「走进去」只在鸟瞰、什么都没打开时出现（演示、展厅、平面图编辑器、对照、弹窗、确认框都不出现）
-  const canWalk = !walk && !demo && !showroom && !planDraft && !modal && !ask && !ctx && (cmp.mode === 'off' || cmp.mode === 'home');
+  // 「走进去」只在鸟瞰、什么都没打开时出现（演示、展厅、平面图编辑器、对照、弹窗、确认框都不出现；正在读客人的户型图也不出现）
+  const canWalk = !walk && !demo && !showroom && !planDraft && !modal && !ask && !ctx && banner.state !== 'reading' && (cmp.mode === 'off' || cmp.mode === 'home');
   const bannerEl = showBanner && (
     <SampleBanner
       wish={WISH}
@@ -1906,9 +1922,13 @@ export default function StudioApp() {
         <WalkGuard onFail={walkFailed}>
           <Suspense
             fallback={
-              <div className="glass walk-wait" role="status">
+              <div className="glass walk-wait">
                 <Icon name="spinner" size={17} />
-                {t('正在走进去…')}
+                <span role="status">{t('正在走进去…')}</span>
+                {/* 网慢、还没下载完：鸟瞰的界面、键盘都不在 → 这里随时回去 */}
+                <button type="button" className="s-btn ghost" onClick={() => walkFailed(true)}>
+                  {t('回到全屋')}
+                </button>
               </div>
             }
           >

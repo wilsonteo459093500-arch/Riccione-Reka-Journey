@@ -2,11 +2,12 @@
 // 多层就有楼层标签。点地图上一个地方 → onWalk({ fi, x, z })（x / z = 平面图的 x / y，米）；点楼层标签 → onFloor(fi)。
 //   点和扇形跟着 controller 的 'pose' 事件走：直接改 SVG 的属性，不重画 React（走路时每一帧都有）。
 //   所有楼层用同一个外框：换层时地图不跳。房间放不下名字就不写。
-//   手机：缩成 120px 的圆（以你为中心的一小块，跟着你走），点一下展开；展开后点地图走过去会自己收起来。
+//   手机：缩成 120px 的圆（以你为中心的一小块，跟着你走），点一下展开；展开后点地图走过去会自己收起来。展开着 → onOpen(true)。
+//   卡片不比画面高：量一下放得下多高（画面底边、横着叠到的工具轮），地图跟着缩（矮的横屏上楼层标签也看得到、点得到）。
 //   只用 plan/model.js 的纯函数和 kit.jsx 的房间名（不 import src/studio/export/：test/export.test.mjs 不让）。
-// props = { ctl, plan, fi, room（房间 id 或对象）, going（正在走去的那一层 / null）, size: 'wide' | 'compact' | 'phone', onWalk, onFloor, className }
+// props = { ctl, plan, fi, room（房间 id 或对象）, going（正在走去的那一层 / null）, size: 'wide' | 'compact' | 'phone', onWalk, onFloor, onOpen, className }
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { t } from '../../shared/i18n.js';
 import { ROOM_TYPES, floorName } from '../plan/model.js';
 import { Icon, roomLabel } from '../ui/kit.jsx';
@@ -21,6 +22,8 @@ export const MAP_SIZES = {
   phone: { w: 284, h: 300, area: 85200, font: 11 },
 };
 export const MINI_PX = 120; // 手机上缩起来的圆（px）
+export const MAP_GAP = 12; // 卡片的底边离画面底边 / 工具轮至少多远（px）
+export const MAP_MIN_H = 60; // 再挤，地图也至少这么高（px）
 export const MINI_SPAN = 12; // 缩起来时看多大一块（米，直径）
 const PAD = 0.5; // 外框四边留多少（米）
 
@@ -82,11 +85,24 @@ export function labelFits(name, room, scale, px) {
   return textWidth(name, px) <= room.w * scale - 6 && px + 4 <= room.d * scale;
 }
 
-/** 大小 → 每米多少 px、地图的 px 宽高 */
-export function mapScale(box, size = 'wide') {
+/** 大小 → 每米多少 px、地图的 px 宽高；maxH = 画面里放得下多高（px，mapRoomH 量出来的；没给 = 不限） */
+export function mapScale(box, size = 'wide', maxH = null) {
   const S = MAP_SIZES[size] || MAP_SIZES.wide;
-  const s = Math.min(S.w / box.w, S.h / box.h, S.area ? Math.sqrt(S.area / (box.w * box.h)) : Infinity);
+  const h = maxH > 0 ? Math.min(S.h, maxH) : S.h;
+  const s = Math.min(S.w / box.w, h / box.h, S.area ? Math.sqrt(S.area / (box.w * box.h)) : Infinity);
   return { s, W: Math.round(box.w * s), H: Math.round(box.h * s), font: S.font };
+}
+
+/**
+ * 卡片里的地图最高多少 px：卡片的底边不出画面（留 MAP_GAP），横着叠到工具轮的时候也不伸到它下面。
+ * m = { uiH（整层多高）, top（卡片顶边）, chrome（卡片里地图以外的高：名字、楼层标签、边距）, tools（工具轮顶边 / null） }
+ * → px（至少 MAP_MIN_H）；量不到（整层还没有高）→ null（不限）
+ */
+export function mapRoomH({ uiH, top = 0, chrome = 0, tools = null }) {
+  if (!(uiH > 0)) return null;
+  let bottom = uiH - MAP_GAP;
+  if (Number.isFinite(tools)) bottom = Math.min(bottom, tools - MAP_GAP);
+  return Math.max(MAP_MIN_H, Math.floor(bottom - top - chrome));
 }
 
 /** 你在哪、朝哪看 → SVG 的 transform（扇形画成朝上 = 平面图的 −y；yaw 的约定见 tour.js：看的方向 = (−sin yaw, −cos yaw)） */
@@ -102,17 +118,18 @@ function conePath(len, half = 0.62) {
   return `M0 0 L${r3(-x)} ${r3(y)} A${r3(len)} ${r3(len)} 0 0 1 ${r3(x)} ${r3(y)} Z`;
 }
 
-export default function Minimap({ ctl, plan, fi = 0, room = null, going = null, size = 'wide', onWalk, onFloor, className = '' }) {
+export default function Minimap({ ctl, plan, fi = 0, room = null, going = null, size = 'wide', onWalk, onFloor, onOpen, className = '' }) {
   const floors = plan?.floors || [];
   const multi = floors.length > 1;
   const phone = size === 'phone';
   const [open, setOpen] = useState(false);
   const mini = phone && !open;
   const [target, setTarget] = useState(null);
+  const [maxH, setMaxH] = useState(null); // 画面里放得下多高（量出来的；null = 不限）
 
   const box = useMemo(() => mapBox(plan), [plan]);
   const rooms = useMemo(() => mapRooms(plan, fi), [plan, fi]);
-  const { s, W, H, font } = mapScale(box, size);
+  const { s, W, H, font } = mapScale(box, size, maxH);
   // 缩起来的圆：每米多少 px
   const ms = MINI_PX / MINI_SPAN;
   const k = mini ? ms : s; // 点、扇形、字都按屏幕 px 定大小 → 换成米
@@ -120,6 +137,7 @@ export default function Minimap({ ctl, plan, fi = 0, room = null, going = null, 
 
   const svg = useRef(null);
   const me = useRef(null);
+  const card = useRef(null);
   const view = mini ? `${r3(box.x + box.w / 2 - MINI_SPAN / 2)} ${r3(box.y + box.h / 2 - MINI_SPAN / 2)} ${MINI_SPAN} ${MINI_SPAN}` : `${r3(box.x)} ${r3(box.y)} ${r3(box.w)} ${r3(box.h)}`;
 
   // 你在哪：pose 事件直接改 SVG
@@ -141,6 +159,45 @@ export default function Minimap({ ctl, plan, fi = 0, room = null, going = null, 
     }
     return ctl.on('pose', apply);
   }, [ctl, fi, mini]);
+
+  // 手机上展开着：告诉 WalkMode（潘吉的泡泡先让开）
+  useEffect(() => {
+    onOpen?.(phone && open);
+  }, [phone, open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 卡片放得下多高：量一下（画面变了再量）。展开的动画是 scale：用 offset*（排版的大小），不用画出来的大小
+  useLayoutEffect(() => {
+    const el = card.current;
+    const ui = el?.offsetParent;
+    if (mini || !el || !ui) return undefined;
+    const fit = () => {
+      const sv = svg.current;
+      if (!sv || !el.isConnected) return;
+      const sc = el.offsetHeight / (el.getBoundingClientRect().height || el.offsetHeight) || 1;
+      const chrome = el.offsetHeight - sv.getBoundingClientRect().height * sc;
+      // 工具轮：横着叠到卡片才让（按没缩的时候卡片多宽算：缩了以后不叠了也照样让，不会一缩一放）；
+      // 手机上展开的那一张盖在最上面，不让
+      let tools = null;
+      const tw = phone ? null : ui.querySelector('.walk-tools');
+      if (tw) {
+        const u = ui.getBoundingClientRect();
+        const r = tw.getBoundingClientRect();
+        const right = el.offsetLeft + el.offsetWidth;
+        const left = right - Math.max(el.offsetWidth, mapScale(box, size).W + 16);
+        if (r.width > 0 && r.right - u.left > left && r.left - u.left < right) tools = r.top - u.top;
+      }
+      const h = mapRoomH({ uiH: ui.clientHeight, top: el.offsetTop, chrome, tools });
+      if (h != null) setMaxH((m) => (m != null && Math.abs(m - h) < 2 ? m : h));
+    };
+    fit();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', fit);
+      return () => window.removeEventListener('resize', fit);
+    }
+    const ro = new ResizeObserver(fit);
+    ro.observe(ui);
+    return () => ro.disconnect();
+  }, [mini, phone, size, box, fi, multi, maxH]);
 
   // 点过的地方：一圈慢慢散开
   useEffect(() => {
@@ -206,7 +263,7 @@ export default function Minimap({ ctl, plan, fi = 0, room = null, going = null, 
 
   const here = roomId ? roomsOf(plan, fi).find((r) => r.id === roomId) : null;
   return (
-    <div className={cls('walk-map', 'glass', `is-${size}`, phone && open && 'is-open', className)}>
+    <div ref={card} className={cls('walk-map', 'glass', `is-${size}`, multi && 'is-multi', phone && open && 'is-open', className)}>
       <div className="walk-map-head">
         <span className="walk-map-room-name">{here ? roomLabel(here) : multi ? t(floorName(plan, floors[fi]?.id)) : t('小地图')}</span>
         {phone && (
