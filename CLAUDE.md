@@ -12,6 +12,13 @@
   - 开 draft PR，附预览链接和截图 / 录屏
   - 用户看过说「合并」才合并
 - 新对话的开场白一般是：「继续做 UKIR STUDIO（blueprint/）……这次要做：第几项」。项目用 `blueprint/README.md`、`blueprint/ARCHITECTURE.md` 的说明。
+- **「帮我看 X 这个软件怎么样 / 有什么要提升 / 做计划」→ 用 `software-checkup` skill**（2026-11-19 定的固定流程）：
+  - 找到软件 → 测试和构建 → 七个角度检查 → 两轮面试 → 分阶段计划（每阶段的 model、effort、要不要开新对话）→ 一路报进度和剩余时间
+  - 报告存 `docs/checkups/<软件>-<日期>.md`
+- **用量**（2026-11-19 的教训）：
+  - 用户的方案有 5 小时用量额度。一次派很多帮手（workflow / ultracode）几分钟就会用完，那次 14 个检查员两次都没跑完。
+  - 平常一步一步做，不派一堆帮手；只有用户说要「全面体检」、而且额度刚重置时才用 workflow。
+  - 选 model 和 effort 照 `.claude/skills/software-checkup/references/model-effort-guide.md`。
 
 ## 三条原则（UKIR STUDIO）
 
@@ -50,6 +57,28 @@
    - 同名替换，并把 `CRAFT_PHOTOS` 的 `source` 改成 `'sail'`
 3. AI 方案主题建议：规则要先 brainstorm
 4. 展厅播放接 D5 / SU / 3ds Max 漫游视频：先调查设计师能导出什么格式
+
+## KIRA（柜子规划 + 预估报价，内部用；对客户印 SAIL BY RICCIONE REKA）
+
+- **代码不在 main**（2026-11-19 时）：
+  - 正式版分支：`claude/cabinet-measurement-tool-enhance-ymc43k`（PR #58，草稿）。目录 `kira/`，说明在那条分支的 `kira/README.md`、`kira/DEPLOY.md`、`kira/docs/V3-PLAN.md`
+  - 最新还没上线的：PR #75（岩板台面报价、AI 识图改进、👎 反馈）
+  - 正式网址 `kira-by-riccione-reka.vercel.app`（Vercel 项目 `kira-riccione-reka`）。合并不会自动上线，做法写在 `V3-PLAN.md` 最后一节
+  - 云端是自己的 Supabase 项目「KIRA BY RICCIONE REKA」（不是旧报价工具那个；文档写错了）
+- **体检（2026-11-19）**：`docs/checkups/kira-2026-11-19.md`，问题、计划、每阶段的开场白都在里面。
+- **老板定的（2026-11-19）**：
+  - 业务还在用旧报价工具；还没换是因为「还没正式交给业务」和「还不放心价钱」
+  - 预估价和签约价差 10% 左右可以接受
+  - 价格表很少改，继续让 Claude 改，**不做后台改价**
+  - GitHub 仓库要改成不公开（在阶段 1B 的对话里和 Claude 一起做，当场确认还能上线）
+  - AI 自动报价：现阶段要「业务助手」（AI 出草稿、业务确认才发）；全自动回客人是长期想法，要先用真实案子验证准确度
+- **阶段**（照顺序，一个阶段一个新对话）：
+  1. 1A 修钱（AI 加的柜子不跟楼高、设计师净价版 Excel 岩板行、比例检查、折扣输入）→ PR #75 上线
+  2. 1B 合进 main、合并 = 上线、仓库不公开
+  3. 2 AI 一键整屋报价（先 brainstorm）
+  4. 3 考试：5–10 个真实案子对价 + 看 AI 差多少
+  5. 4 交给业务（备份、改动记录、单号和状态、教学）
+  6. 5 客人自助估价（阶段 3 达标才做）
 
 ## 开发备忘（blueprint/）
 
