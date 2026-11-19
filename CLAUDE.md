@@ -11,6 +11,10 @@
 - 做完：
   - 开 draft PR，附预览链接和截图 / 录屏
   - 用户看过说「合并」才合并
+- **边做边报（2026-11-19）**：每做一段就简短说进度，并估计「大约还剩多久」；估错了马上更正。不要闷着做到最后才一次讲完。
+- **「帮我看 X 怎么样 / 有什么要提升 / 做计划」一律照 `/review-plan` 的流程（2026-11-19）**：
+  - skill 在 `.claude/skills/review-plan/SKILL.md`
+  - 顺序：只读审查 → 面试 → 分阶段计划（每阶段写 model、effort、几时开新对话）→ 用户说「可以」才动手
 - 新对话的开场白一般是：「继续做 UKIR STUDIO（blueprint/）……这次要做：第几项」。项目用 `blueprint/README.md`、`blueprint/ARCHITECTURE.md` 的说明。
 
 ## 三条原则（UKIR STUDIO）
