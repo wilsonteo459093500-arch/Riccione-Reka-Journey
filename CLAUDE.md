@@ -12,9 +12,6 @@
   - 开 draft PR，附预览链接和截图 / 录屏
   - 用户看过说「合并」才合并
 - **边做边报（2026-11-19）**：每做一段就简短说进度，并估计「大约还剩多久」；估错了马上更正。不要闷着做到最后才一次讲完。
-- **「帮我看 X 怎么样 / 有什么要提升 / 做计划」一律照 `/review-plan` 的流程（2026-11-19）**：
-  - skill 在 `.claude/skills/review-plan/SKILL.md`
-  - 顺序：只读审查 → 面试 → 分阶段计划（每阶段写 model、effort、几时开新对话）→ 用户说「可以」才动手
 - 新对话的开场白一般是：「继续做 UKIR STUDIO（blueprint/）……这次要做：第几项」。项目用 `blueprint/README.md`、`blueprint/ARCHITECTURE.md` 的说明。
 
 ## 三条原则（UKIR STUDIO）
@@ -55,13 +52,42 @@
 3. AI 方案主题建议：规则要先 brainstorm
 4. 展厅播放接 D5 / SU / 3ds Max 漫游视频：先调查设计师能导出什么格式
 
+## 软件体检（`app-checkup` skill，2026-11-19 建）
+
+- 用户说「帮我看 X 这个软件怎么样、有什么要提升、做分阶段计划」→ 用 `.claude/skills/app-checkup/`，流程固定：
+  - 摸底 → 派 3–4 个人体检 → 面试两轮 → 分阶段计划（每阶段写 model、effort、几时开新对话）→ 存进 `<app>/PLAN.md`
+  - 全程每一步报进度和剩余时间（用户明确要的；「streaming responses + remaining time」指对话时这样做，不是改 app）
+- **用量是硬限制**：
+  - 第一次跑（SPACE）同一个对话撞了两次 5 小时上限
+  - 默认跑省量版：主对话和派出去的人都用 Opus 5.5 · high，不派「怀疑者」，主对话自己重跑证明脚本核实
+
+## SPACE（network/）
+
+- **2026-11-19 体检**：结论和第 0–6 阶段计划在 `network/PLAN.md` 最后一节
+  - 开场白：「读 `network/PLAN.md`，做体检计划第 N 阶段」
+  - 顺序（用户 2026-11-19 定的）：0 用户自己做的设定 → 1 公开页面关门 → 2 活动连拍 → 3 AI 稳定 + 补查 → 4 导入现有人脉 → 5 整理工具 → 6 每天提醒 → 7 WhatsApp 群发 → 8 小修
+  - 用户的决定：两星期内有活动，所以连拍提前；每天提醒用**手机推送通知**（不是 TickTick 每日任务，试不通才退回）；FoloToy / 星系图 / NFC / 名片页改版**不冻结**
+- 线上：Vercel 项目 `space-network`，Supabase 项目「SPACE NETWORK」。体检当天资料库只有 1 个人
+
 ## VISI（invite/）
 
-- **计划在 `.claude/plans/visi.md`**（2026-11-19 起草，还是草稿：等用户确认；审查只做完 2 / 7 个角度）。
-- 用户 2026-11-19 说：VISI 还没正式给销售用；销售用电脑和手机；想要更快、更好看、不丢资料、团队共用。
-- 新对话开场白：「继续做 VISI（invite/）……这次要做：计划第 N 阶段」。
-- 本机跑：`cd invite && python3 -m http.server <端口>`，开 `/visi.html`（没有 `/api` 也能用）。
-  测试：`node --test tools/caselib/test/`、`node tools/caselib/test/visi-cases.mjs`（浏览器，只测公司案例库那一段）。
+- **2026-11-19 体检**：结论和分阶段计划在 `.claude/plans/visi.md`
+  - 不放 `invite/PLAN.md`：`invite/` 整个资料夹直接上线，放进去会变成公开网页，合并时还会触发正式版部署
+  - 开场白：「读 `.claude/plans/visi.md`，做体检计划第 N 阶段」
+  - **只查完「实际操作」**（电脑 + 手机各走一遍）。安全、资料可靠性、核心规则、产品缺口还没查 → 第 1 阶段先补（省量版，派这 4 个方向）
+  - 用户的决定（2026-11-19）：先补完体检再动手；手机做轻的（贴卡、看预览、发文案，导出留给电脑）；方案存公司云端**要做**，排后段
+  - 阶段顺序和三个小问题（线上几时更新、新方案语言、方案哪里不满意）还没答 → 新对话先问
+- 用户说：VISI **还没正式给销售用**，四个原因都有：没培训、图库照片不够、销售习惯旧做法、方案还没到他要的样子。销售用电脑和手机
+- 线上：Vercel 项目 `visi-riccione-reka`。体检当天正式版停在 #57（11 月 5 日），#74 没上线；没设 Supabase 的两个环境变数
+- 本机跑：`cd invite && python3 -m http.server <端口>`，开 `/visi.html`（没有 `/api` 也能用）
+  - 测试：`node --test tools/caselib/test/`、`node tools/caselib/test/visi-cases.mjs`（浏览器，只测公司案例库那一段）
+  - VISI 的核心规则（需求卡解析、文案、体检、版面）几乎没有自动测试
+
+## 部署备忘（Vercel：全部 app 共用一个免费帐号）
+
+- **一天只能部署 100 次**（2026-11-19 撞到，错误码 `api-deployments-free-per-day`）
+  - 每次 push，每个 Vercel 项目都记一次（没改到、被跳过的看起来也算）→ **提交攒在一起再 push**，不要改一点推一次
+  - 撞到之后，那天合并进 main 的东西不会上线，之后也不会自己补（#74 很可能就是这样漏掉的）→ 合并后要看正式版是不是真的更新了
 
 ## 开发备忘（blueprint/）
 
