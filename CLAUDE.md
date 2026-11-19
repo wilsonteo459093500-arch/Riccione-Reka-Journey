@@ -87,7 +87,10 @@
     - 分区表换成 `partitions_space.csv`（app 让出最后 256KB）：用户第一次要烧整份 `SPACE-card-full.bin`
     - 这个开发环境连不上 imap.gmail.com：Gmail 只用模拟回应测过，真的登入要用户试
     - 截图 `firmware/news-screens.png`
-  - 之后：星座、读书（还没问用户）
+  - **E** 星座 + 书摘（2026-11-19 用户选定，还没做）：
+    - 星座：**加进每日晨报**（出晨报的流程每天多写一栏），**只要用户自己的星座**；FoloToy 照晨报显示（还在等：用户是哪个星座、晨报是哪个流程出的）
+    - 书摘：**微信读书「笔记 → 导出」整本贴进 app** → app 拆成一段段 → 蓝牙传 FoloToy；显示在**开机封面下面轮播**（一两行小字）
+    - 还在等：用户贴一段微信读书导出的样本（确认格式）
 - 怎么做：
   - 照 `network/folotoy/README.md`、`network/PLAN.md`
   - 编译：`build.sh`；截图：`sim/run.sh`；app：`android/build.sh`
