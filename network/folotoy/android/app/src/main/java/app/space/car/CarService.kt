@@ -98,11 +98,21 @@ class CarService : AccessibilityService() {
         private set
     private var mtu = 23
     private var mtuPending = false
-    private var newsSending = false
-    private var newsTotal = 0
-    private var newsSent = 0
-    private var newsRetries = 0
     private var lastNewsTick = 0L
+    private val newsSync = DocSync(
+        "晨报", Protocol.NEWS_DATA, Protocol.NEWS_ASK,
+        data = { NewsStore.encoded(this) }, crc = { NewsStore.crc(this) },
+        sentCrc = { NewsStore.sentCrc(this) }, setSent = { NewsStore.setSent(this, it, System.currentTimeMillis()) },
+        fail = { NewsStore.setNote(this, NewsStore.note(this) + "（传给 FoloToy 失败：$it）") },
+    )
+    // ---- 书摘（开机封面轮播）----
+    val quotesSync = DocSync(
+        "书摘", Protocol.QUOTES_DATA, Protocol.QUOTES_ASK,
+        data = { QuotesStore.encoded(this) }, crc = { QuotesStore.crc(this) },
+        sentCrc = { QuotesStore.sentCrc(this) }, setSent = { QuotesStore.setSent(this, it) },
+        fail = { quotesError = "传给 FoloToy 失败：$it" },
+    )
+    @Volatile var quotesError = ""
 
     // ---------------- 生命周期 ----------------
     override fun onServiceConnected() {
@@ -210,7 +220,8 @@ class CarService : AccessibilityService() {
                     cmdChar = null
                     writeQueue.clear()
                     writing = false
-                    newsSending = false
+                    newsSync.reset()
+                    quotesSync.reset()
                     mtuPending = false
                     mtu = 23
                     if (ready) onLost()
@@ -250,17 +261,18 @@ class CarService : AccessibilityService() {
             main.post {
                 status = "FoloToy 已连线 ✓"
                 ready = true
-                newsRetries = 0
+                newsSync.retries = 0
+                quotesSync.retries = 0
                 // 先把一次能送的量调大（传晨报用）；调好之前指令先排着
                 writing = g.requestMtu(247)
                 mtuPending = writing
-                if (!writing) newsAsk()
+                if (!writing) askDocs()
                 else main.postDelayed({   // 有的手机不回：3 秒后照常（一次送少一点而已）
                     if (mtuPending) {
                         mtuPending = false
                         writing = false
                         pump()
-                        newsAsk()
+                        askDocs()
                     }
                 }, 3000)
                 onFound()
@@ -279,7 +291,7 @@ class CarService : AccessibilityService() {
                 mtuPending = false
                 writing = false
                 pump()
-                newsAsk()
+                askDocs()
             }
         }
 
@@ -481,7 +493,11 @@ class CarService : AccessibilityService() {
 
     private fun onKeyBytes(data: ByteArray?) {
         Protocol.decodeNewsStatus(data)?.let { st ->
-            main.post { onNewsStatus(st) }
+            main.post { newsSync.onStatus(st) }
+            return
+        }
+        Protocol.decodeQuotesStatus(data)?.let { st ->
+            main.post { quotesSync.onStatus(st) }
             return
         }
         Protocol.decodeNewsSay(data)?.let { say ->
@@ -524,7 +540,8 @@ class CarService : AccessibilityService() {
         val c = cmdChar ?: return
         if (writing || writeQueue.isEmpty()) return
         val cmd = writeQueue.removeFirst()
-        if (cmd.isNotEmpty() && cmd[0] == 0x06.toByte()) newsSent++
+        if (cmd.isNotEmpty() && cmd[0] == Protocol.NEWS_DATA) newsSync.sent++
+        if (cmd.isNotEmpty() && cmd[0] == Protocol.QUOTES_DATA) quotesSync.sent++
         writing = true
         if (Build.VERSION.SDK_INT >= 33) {
             g.writeCharacteristic(c, cmd, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
@@ -555,7 +572,19 @@ class CarService : AccessibilityService() {
     fun newsUpdateNow() = fetchNews()
 
     /** 正在传给 FoloToy：0–100；没在传回 null */
-    fun newsProgress(): Int? = if (newsSending && newsTotal > 0) minOf(100, newsSent * 100 / newsTotal) else null
+    fun newsProgress(): Int? = newsSync.progress()
+
+    /** 书单改了（设定画面加书 / 删书）：问 FoloToy，不一样就传 */
+    fun quotesChanged() {
+        quotesError = ""
+        quotesSync.retries = 0
+        quotesSync.ask()
+    }
+
+    private fun askDocs() {
+        newsSync.ask()
+        quotesSync.ask()
+    }
 
     private fun newsTick(now: Long) {
         if (NewsLogic.shouldFetch(now, NewsStore.configured(this), NewsStore.haveDate(this), NewsStore.lastAttempt(this))) fetchNews()
@@ -596,53 +625,87 @@ class CarService : AccessibilityService() {
                 NewsStore.setNote(this, "$hhmm $note")
                 data?.let { d ->
                     if (BriefCodec.crc32(d) != NewsStore.crc(this)) NewsStore.save(this, d)
-                    newsRetries = 0
-                    newsAsk()
+                    newsSync.retries = 0
+                    newsSync.ask()
                 }
             }
         }
     }
 
-    /** 问 FoloToy 有哪一份（回 [0x83, 状态, crc]，在 onNewsStatus 决定要不要传） */
-    private fun newsAsk() {
-        if (ready && !newsSending && NewsStore.crc(this) != null) send(Protocol.newsAsk())
-    }
+    /**
+     * 一份要跟 FoloToy 同步的资料（晨报 / 书摘）：问 FoloToy 有哪一份（crc）→ 不一样就整份传 →
+     * FoloToy 回「有这份」才算好；收坏了等 3 秒重来，最多 2 次。两份可以同时传（封包排同一条队，FoloToy 分开收）。
+     */
+    inner class DocSync(
+        private val name: String,
+        private val dataCmd: Byte,
+        private val askCmd: Byte,
+        private val data: () -> ByteArray?,
+        private val crc: () -> Long?,
+        private val sentCrc: () -> Long?,
+        private val setSent: (Long) -> Unit,
+        private val fail: (String) -> Unit,
+    ) {
+        var sending = false
+            private set
+        var total = 0
+            private set
+        var sent = 0
+        var retries = 0
 
-    @SuppressLint("MissingPermission")
-    private fun onNewsStatus(st: Protocol.NewsStatus) {
-        val mine = NewsStore.crc(this)
-        when {
-            st.status == Protocol.NEWS_OK && mine != null && st.crc == mine -> {
-                if (newsSending) gatt?.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_BALANCED)
-                newsSending = false
-                newsRetries = 0
-                if (NewsStore.sentCrc(this) != mine) NewsStore.setSent(this, mine, System.currentTimeMillis())
-            }
-            !newsSending && NewsLogic.needSend(st.status, st.crc, mine) -> newsSend()
-            st.status == Protocol.NEWS_BAD || st.status == Protocol.NEWS_FLASH || st.status == Protocol.NEWS_TOO_BIG -> {
-                newsSending = false
-                writeQueue.removeAll { it.isNotEmpty() && it[0] == 0x06.toByte() }   // 剩下的段不用送了
-                gatt?.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_BALANCED)
-                if (st.status != Protocol.NEWS_TOO_BIG && newsRetries < 2) {
-                    newsRetries++
-                    main.postDelayed({ newsAsk() }, 3000)
-                } else {
-                    NewsStore.setNote(this, NewsStore.note(this) + "（传给 FoloToy 失败：${if (st.status == Protocol.NEWS_TOO_BIG) "太大" else "收坏了"}）")
+        fun reset() {
+            sending = false
+        }
+
+        fun progress(): Int? = if (sending && total > 0) minOf(100, sent * 100 / total) else null
+
+        fun ask() {
+            if (ready && !sending && crc() != null) send(byteArrayOf(askCmd))
+        }
+
+        @SuppressLint("MissingPermission")
+        fun onStatus(st: Protocol.NewsStatus) {
+            val mine = crc()
+            when {
+                st.status == Protocol.NEWS_OK && mine != null && st.crc == mine -> {
+                    val was = sending
+                    sending = false
+                    retries = 0
+                    if (was) balanced()
+                    if (sentCrc() != mine) setSent(mine)
+                }
+                !sending && NewsLogic.needSend(st.status, st.crc, mine) -> start()
+                st.status == Protocol.NEWS_BAD || st.status == Protocol.NEWS_FLASH || st.status == Protocol.NEWS_TOO_BIG -> {
+                    sending = false
+                    writeQueue.removeAll { it.isNotEmpty() && it[0] == dataCmd }   // 剩下的段不用送了
+                    balanced()
+                    if (st.status != Protocol.NEWS_TOO_BIG && retries < 2) {
+                        retries++
+                        main.postDelayed({ ask() }, 3000)
+                    } else {
+                        fail(if (st.status == Protocol.NEWS_TOO_BIG) "太大" else "收坏了")
+                    }
                 }
             }
         }
-    }
 
-    @SuppressLint("MissingPermission")
-    private fun newsSend() {
-        val data = NewsStore.encoded(this) ?: return
-        val crc = NewsStore.crc(this) ?: return
-        val packets = Protocol.newsPackets(data, crc, (mtu - 3 - 6).coerceIn(14, 238))
-        newsSending = true
-        newsTotal = packets.size
-        newsSent = 0
-        gatt?.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)
-        packets.forEach { send(it) }
+        @SuppressLint("MissingPermission")
+        private fun start() {
+            val d = data() ?: return
+            val c = crc() ?: return
+            val packets = Protocol.newsPackets(d, c, (mtu - 3 - 6).coerceIn(14, 238), dataCmd)
+            sending = true
+            total = packets.size
+            sent = 0
+            Log.i("SpaceCar", "传$name 给 FoloToy：${d.size} 字节、${packets.size} 个封包")
+            gatt?.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)
+            packets.forEach { send(it) }
+        }
+
+        @SuppressLint("MissingPermission")
+        private fun balanced() {
+            if (!newsSync.sending && !quotesSync.sending) gatt?.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_BALANCED)
+        }
     }
 
     /** FoloToy 按住确定：念那一条（用同一份晨报，crc 对得上才念） */
@@ -650,7 +713,7 @@ class CarService : AccessibilityService() {
         val data = NewsStore.encoded(this)
         if (data == null || BriefCodec.crc32(data) != say.crc) {
             speak("手机上的晨报跟 FoloToy 的不一样，等一下会自动同步")
-            newsAsk()
+            newsSync.ask()
             return
         }
         BriefCodec.items(data).getOrNull(say.index)?.let { speak(BriefCodec.speech(it)) }

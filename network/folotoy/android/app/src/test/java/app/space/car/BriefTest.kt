@@ -82,6 +82,26 @@ class BriefTest {
     }
 
     @Test
+    fun starsSection() {
+        // 晨报加了「今日星座」（照其他栏的格式），有中文数字或没有都认；FoloToy 上排在三件事后面
+        val html = sample()
+        val head = "<td style=\"padding:11px 16px;color:#fff;font-size:17px;font-weight:bold\">一、今日必读</td>"
+        assertTrue(html.contains(head))
+        val card = "<b style=\"display:block;font-size:17px\">1. 白羊座 · 11月18日</b><div style=\"font-size:15px\">今天适合先听后说。</div>"
+        for (title in listOf("十、今日星座", "今日星座")) {
+            val star = "<td style=\"padding:11px 16px\">$title</td><td align=\"right\" style=\"padding:11px 16px\">1条</td></tr></table></td></tr><tr><td>$card</td></tr><tr><td><table><tr>"
+            val b = BriefParser.parse(html.replace(head, star + head))!!
+            assertEquals(listOf("今日三件事", "今日星座", "一 今日必读"), b.sections.take(3).map { it.name })
+            assertEquals(Brief.Item("白羊座 · 11月18日", "今天适合先听后说。"), b.sections[1].items.single())
+            assertEquals(8, b.sections[2].items.size)   // 第一栏没被吃掉
+        }
+        // 没照卡片格式写：整栏的字当一条
+        val plain = "<td style=\"x\">今日星座</td><td align=\"right\">1条</td></tr><tr><td><p>白羊座：今天适合先听后说。</p></td></tr><tr><td><table><tr>"
+        val b = BriefParser.parse(html.replace(head, plain + head))!!
+        assertEquals(Brief.Item("今日运势", "白羊座：今天适合先听后说。"), b.sections[1].items.single())
+    }
+
+    @Test
     fun cleanAndLimits() {
         val cs = setOf('中'.code, '□'.code, '“'.code)
         assertEquals("中 a b", BriefCodec.clean("中\t a\n\nb", cs, 100))

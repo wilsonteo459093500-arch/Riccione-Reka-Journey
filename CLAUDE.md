@@ -60,10 +60,11 @@
   - 阶段 B（2026-11-18）做完：手机找 FoloToy（每个模式都开蓝牙）；app v0.2
   - 阶段 C（2026-11-18）做完：小助理（73 句审过）；2026-11-19 改名 **S.T.A.R**、换成原创像素星星（程序里还叫 deku_*）；app v0.5；截图 `firmware/deku-screens.png`、`firmware/cover.png`
   - 阶段 D（2026-11-19）做完：每日晨报（Gmail → app → 蓝牙 → FoloToy）；app v0.6；截图 `firmware/news-screens.png`
+  - 阶段 E（2026-11-19）做完：书摘封面轮播、晨报加今日星座；app v0.7
   - **角色不照抄**：用户给过 Pac-Man、Mario 星星、Luma 当参考，都是游戏公司角色，不能用在名片设备上；照参考的感觉画原创的（`tools/star_art.py`）
   - 车用遥控器（BLE 媒体键）
   - SPACE 车控 Android app v0.1（`android/`：按住下开微信读书、按住确定选朋友打 WhatsApp）
-- 用户真机测过：名片、车用遥控器（YouTube / 语音助理 OK）。口袋机、app、找 FoloToy、DEKU、晨报还没回报（用户 2026-11-18：暂时没机会试，先往下做）
+- 用户真机测过：名片、车用遥控器（YouTube / 语音助理 OK）。口袋机、app、找 FoloToy、DEKU、晨报、书摘还没回报（用户 2026-11-18：暂时没机会试，先往下做）
 - 待用户给：求签签文审核、抽奖真奖项、微信读书「抓画面结构」
 - 下一步（用户要省 token、分阶段）：
   - ~~**A** 落落方块 + 解压游戏~~ 已做（不用俄罗斯方块 / Tetris 名字）；等用户真机试按键手感
@@ -84,13 +85,15 @@
     - app 只搜主题有「DAILY MORNING BRIEF」的信（旧格式「每日晨报 · 2026年11月10日」不认）
     - 格式 / 封包见 `main/news_model.h`；样本 `brief-sample.txt` 由 app 测试产生，FoloToy host 测试、sim 读同一份（改了 Brief.kt 要更新它）
     - 字型 `font_news_20.c`（GB2312 + 峇等，约 7,450 字）编译时产生、不进仓库；`NEWS_EXTRA`（make_font.py）加字 → 重跑 make_font.py（更新 `assets/news_chars.txt`）
-    - 分区表换成 `partitions_space.csv`（app 让出最后 256KB）：用户第一次要烧整份 `SPACE-card-full.bin`
+    - 分区表换成 `partitions_space.csv`（阶段 E 起 app 让出最后 512KB）：用户第一次要烧整份 `SPACE-card-full.bin`
     - 这个开发环境连不上 imap.gmail.com：Gmail 只用模拟回应测过，真的登入要用户试
     - 截图 `firmware/news-screens.png`
-  - **E** 星座 + 书摘（2026-11-19 用户选定，还没做）：
-    - 星座：**加进每日晨报**（出晨报的流程每天多写一栏），**只要用户自己的星座**；FoloToy 照晨报显示（还在等：用户是哪个星座、晨报是哪个流程出的）
-    - 书摘：**微信读书「笔记 → 导出」整本贴进 app** → app 拆成一段段 → 蓝牙传 FoloToy；显示在**开机封面下面轮播**（一两行小字）
-    - 还在等：用户贴一段微信读书导出的样本（确认格式）
+  - ~~**E** 星座 + 书摘~~ 已做（2026-11-19，app v0.7，等用户真机试）：
+    - 星座：**加进每日晨报**、只要用户的**白羊座**（生日 1997-04-19）；app 认「今日星座」栏 → FoloToy 目录排在三件事后面
+      - 用户**不确定晨报是哪个流程出的**：README「今日星座」有一段说明请用户贴给出晨报的流程；还没确认加上
+    - 书摘：微信读书「笔记 → 导出」贴进 app（`Quotes.kt`，样本 `weread-sample.txt`）→ 蓝牙 0x08/0x09/0x85 → **开机封面下面三行轮播**（`space_card.c`）
+    - 分区 brief 512KB：前半晨报、后半书摘；样本 `quotes-sample.txt` 由 app 测试产生，sim 读同一份
+  - 之后：还没问用户
 - 怎么做：
   - 照 `network/folotoy/README.md`、`network/PLAN.md`
   - 编译：`build.sh`；截图：`sim/run.sh`；app：`android/build.sh`

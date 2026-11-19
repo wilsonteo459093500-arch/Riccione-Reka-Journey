@@ -1,4 +1,4 @@
-// news_store.h —— 每日晨报存在 flash（分区 brief，A / B 两格），蓝牙收进来、画面读出去
+// news_store.h —— 每日晨报、书摘存在 flash（分区 brief：各 A / B 两格），蓝牙收进来、画面读出去
 //
 // 收：蓝牙回呼（NimBLE task）把 0x06 / 0x07 封包丢给 news_store_push → 这里自己的 task 写 flash（擦一格要几十 ms，
 //     不能卡在蓝牙 task 里）→ 回 app [0x83, 状态, crc]。开始传时请手机加快连线，传完 / 10 秒没下一段就放慢。
@@ -24,5 +24,9 @@ uint32_t news_store_version(void);
 // 映射现在那份（只在 LVGL 锁里呼叫）；没有回 false。上一次 map 的位址会失效
 bool news_store_map(const char **text, size_t *len, uint32_t *crc);
 
-// 正在接收：0–99；没有在收回 -1
+// 晨报正在接收：0–99；没有在收回 -1
 int news_store_progress(void);
+
+// 书摘（开机封面轮播）：版本、映射（只在 LVGL 锁里呼叫；上一次的位址会失效）
+uint32_t quotes_store_version(void);
+bool quotes_store_map(const char **text, size_t *len);

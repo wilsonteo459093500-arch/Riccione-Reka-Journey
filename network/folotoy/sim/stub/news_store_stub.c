@@ -30,3 +30,25 @@ bool news_store_map(const char **text, size_t *len, uint32_t *crc) {
     *crc = news_crc32(0, s_text, s_len);
     return true;
 }
+
+// 书摘（封面轮播）
+uint32_t g_quotes_version;
+static char *s_quotes;
+static size_t s_quotes_len;
+
+void sim_quotes_load(const char *path) {
+    FILE *f = fopen(path, "rb");
+    if (!f) { perror(path); exit(1); }
+    s_quotes = malloc(NEWS_MAX_LEN);
+    s_quotes_len = fread(s_quotes, 1, NEWS_MAX_LEN, f);
+    fclose(f);
+    g_quotes_version++;
+}
+
+uint32_t quotes_store_version(void) { return g_quotes_version; }
+bool quotes_store_map(const char **text, size_t *len) {
+    if (!s_quotes) return false;
+    *text = s_quotes;
+    *len = s_quotes_len;
+    return true;
+}

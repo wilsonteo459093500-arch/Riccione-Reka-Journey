@@ -14,6 +14,8 @@ import java.util.zip.CRC32
  *   - 每条：`<b style="display:block…">[<span>【家具】</span> ]1. 标题</b><div …>摘要</div><a …>来源 →</a>`
  *   - 「对你的生意意味着什么」：一个框里 5 点（`<td valign="top" …>一句话</td>`），夹在第四、第五栏中间
  *   - 最后「编辑说明」不要
+ *   - 2026-11-19 起（用户选定）晨报多一栏「今日星座」（只写用户的白羊座），格式跟其他栏一样；
+ *     栏目头可能有、也可能没有中文数字。FoloToy 上叫「今日星座」，排在今日三件事后面
  *
  * 传给 FoloToy 的格式见韧体 main/news_model.h：
  *   BRIEF1 / D<TAB>日期 / S<TAB>栏名 / I<TAB>标题<TAB>摘要（UTF-8，一行一笔）
@@ -30,13 +32,14 @@ object BriefParser {
     private val DATE_CN = Regex("""(\d{4})年(\d{1,2})月(\d{1,2})日\s*[·（(]?\s*(星期[一二三四五六日天])""")
     private val DATE_ISO = Regex("""(\d{4})-(\d{2})-(\d{2})""")
     private val TOC = Regex("""<b[^>]*>\s*([$NUM]+)\s*</b>\s*([^<]+?)\s*<span[^>]*>\s*\d+\s*</span>""")
-    private val SECTION_HEAD = Regex("""<td[^>]*>\s*([$NUM]+)、([^<]+?)\s*</td>\s*<td[^>]*align="right"[^>]*>\s*(\d+)\s*条\s*</td>""")
+    private val SECTION_HEAD = Regex("""<td[^>]*>\s*(?:([$NUM]+)、)?([^<]+?)\s*</td>\s*<td[^>]*align="right"[^>]*>\s*(\d+)\s*条\s*</td>""")
     private val CARD = Regex("""<b[^>]*display:\s*block[^>]*>(.*?)</b>\s*(?:<div[^>]*>(.*?)</div>)?""", RegexOption.DOT_MATCHES_ALL)
     private val TOP_CELL = Regex("""<td valign="top"[^>]*>(.*?)</td>""", RegexOption.DOT_MATCHES_ALL)
     private val NUMBERED = Regex("""^((?:【[^】]*】\s*)*)\d+\s*[.、．]\s*(.*)$""", RegexOption.DOT_MATCHES_ALL)
 
     const val THREE = "今日三件事"
     const val BUSINESS = "对你的生意"
+    const val STARS = "今日星座"
 
     fun parse(html: String): Brief? {
         val date = DATE_CN.find(html)?.let { m ->
@@ -54,13 +57,21 @@ object BriefParser {
         // 九栏
         val heads = SECTION_HEAD.findAll(html).toList()
         val sections = ArrayList<Brief.Section>()
+        var stars: Brief.Section? = null
         for ((i, h) in heads.withIndex()) {
             var end = if (i + 1 < heads.size) heads[i + 1].range.first else footerAt(html, h.range.last)
             if (bizAt > h.range.last && bizAt < end) end = bizAt
-            val items = CARD.findAll(html.substring(h.range.last + 1, end)).map { card(it) }.filter { it.title.isNotEmpty() }.toList()
+            val seg = html.substring(h.range.last + 1, end)
+            var items = CARD.findAll(seg).map { card(it) }.filter { it.title.isNotEmpty() }.toList()
             val num = h.groupValues[1]
-            val name = toc[num] ?: text(h.groupValues[2])
-            if (items.isNotEmpty()) sections.add(Brief.Section("$num $name", items))
+            val head = text(h.groupValues[2])
+            if (head.contains("星座")) {   // 今日星座：卡片照常；万一没照卡片的格式写，整栏的字当一条
+                if (items.isEmpty()) text(seg).takeIf { it.isNotEmpty() }?.let { items = listOf(Brief.Item("今日运势", it)) }
+                if (items.isNotEmpty()) stars = Brief.Section(STARS, items)
+                continue
+            }
+            val name = (if (num.isNotEmpty()) toc[num] else null) ?: head
+            if (items.isNotEmpty()) sections.add(Brief.Section(if (num.isNotEmpty()) "$num $name" else name, items))
         }
         if (sections.isEmpty()) {   // 没有栏目头（旧格式？）：有条目就全部放一栏
             val items = CARD.findAll(html).map { card(it) }.filter { it.title.isNotEmpty() }.toList()
@@ -81,9 +92,10 @@ object BriefParser {
 
         val out = ArrayList<Brief.Section>()
         if (threeItems.isNotEmpty()) out.add(Brief.Section(THREE, threeItems))
+        stars?.let { out.add(it) }
         out.addAll(sections)
         if (business.isNotEmpty()) out.add(Brief.Section(BUSINESS, business.map { Brief.Item(it, "") }))
-        if (sections.isEmpty() && threeItems.isEmpty()) return null
+        if (sections.isEmpty() && threeItems.isEmpty() && stars == null) return null
         return Brief(date, out)
     }
 

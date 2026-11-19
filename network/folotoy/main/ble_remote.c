@@ -91,9 +91,9 @@ static int space_chr_access(uint16_t conn_handle, uint16_t attr_handle, struct b
     if (ctxt->op != BLE_GATT_ACCESS_OP_WRITE_CHR) return BLE_ATT_ERR_UNLIKELY;
     cmd_msg_t m = { 0 };
     const uint16_t n = OS_MBUF_PKTLEN(ctxt->om);
-    // 晨报（0x06 传资料、0x07 问有哪一份）：一段最多 MTU 那么长，交给 news_store 的 task 写 flash
+    // 晨报（0x06 传资料、0x07 问有哪一份）、书摘（0x08、0x09）：一段最多 MTU 那么长，交给 news_store 的 task 写 flash
     uint8_t first = 0;
-    if (n > 0 && os_mbuf_copydata(ctxt->om, 0, 1, &first) == 0 && (first == NEWS_CMD_DATA || first == NEWS_CMD_ASK)) {
+    if (n > 0 && os_mbuf_copydata(ctxt->om, 0, 1, &first) == 0 && (first == NEWS_CMD_DATA || first == NEWS_CMD_ASK || first == QUOTES_CMD_DATA || first == QUOTES_CMD_ASK)) {
         uint8_t buf[NEWS_PKT_MAX];
         if (n > sizeof buf) return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
         if (ble_hs_mbuf_to_flat(ctxt->om, buf, sizeof buf, NULL) != 0) return BLE_ATT_ERR_UNLIKELY;

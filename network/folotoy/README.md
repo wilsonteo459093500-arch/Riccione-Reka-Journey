@@ -274,9 +274,37 @@ FoloToy 背面就是一枚**被动 NTAG213** NFC 芯片（官方规格：支持�
 - 信的格式：HTML 里的「今日三件事」、目录（短栏名）、栏目头、每条（标题 / 摘要 / 来源）、「对你的生意」框（夹在第四、第五栏中间）；全文样本 `android/app/src/test/resources/brief-2026-11-18.html`（编辑说明内文已删）
 - app：`Gmail.kt`（只做 LOGIN / EXAMINE / UID SEARCH / UID FETCH BODY.PEEK 的小 IMAP + 解 MIME）→ `Brief.kt`（HTML → 栏目、条目 → 传给 FoloToy 的文字档）→ `News.kt`（什么时候查、存在手机里的东西）→ `CarService.kt`（蓝牙传、念）
 - 传的格式（`main/news_model.h`）：`BRIEF1` / `D<TAB>日期` / `S<TAB>栏名` / `I<TAB>标题<TAB>摘要`；蓝牙封包 `0x06` 开始 / 一段 / 传完、`0x07` 问有哪一份、`0x83` 回状态 + crc、`0x84` 念第几条
-- FoloToy 存在 flash 的 `brief` 分区（256KB，`partitions_space.csv`；app 分区让出最后 256KB），A / B 两格轮流写、整份 crc 对了才算数；读的时候直接映射 flash，不占 RAM
+- FoloToy 存在 flash 的 `brief` 分区（512KB，`partitions_space.csv`；app 分区让出最后 512KB：前半晨报、后半书摘），各 A / B 两格轮流写、整份 crc 对了才算数；读的时候直接映射 flash，不占 RAM
 - app 单元测试把样本晨报编成 `android/app/src/test/resources/brief-sample.txt`；FoloToy 的 host 测试、模拟器读同一份 → app 送什么，FoloToy 就显示什么
 - 晨报字型 `space_font_news_20`（位图约 1.4MB，原始码约 10MB）**不放仓库**：`build.sh`、`sim/run.sh` 编的时候用 `tools/make_font.py --news-out` 产生；字表同时写进 app 的 `assets/news_chars.txt`（`--check` 检查）。位图超过 1MB，所以开了 `CONFIG_LV_FONT_FMT_TXT_LARGE`
+
+## 书摘（开机封面轮播）+ 今日星座（app v0.7，2026-11-19）
+
+### 书摘
+
+开机封面的星星往上移一点，下面三行轮流显示你在微信读书划线的句子，下面写「——《书名》」。
+
+- 短的停 8 秒换下一段；长的先停 2.5 秒，每 1.5 秒往上跳一行，到底再停 2.5 秒才换
+- 一轮里每段出现一次，顺序是乱的；没有书摘时封面跟以前一样
+- 手机：微信读书打开一本有划线的书 → 笔记 → 右上角「导出」→ 复制 → SPACE 车控 app「书摘」贴上 →「加进书摘」
+  - 可以加好几本，同一本再贴一次就换成新的；不要的按「删」
+  - FoloToy 靠近就传过去（「FoloToy：已经有这份书摘 ✓」），不用重烧 FoloToy
+- 章节名、「-- 来自微信读书」不算；划线从句号后面开始的，开头的标点会拿掉
+- 一格最多约 120KB（大约十几本书），太多就从最早加的书开始少放
+
+### 今日星座
+
+照你选的：**加进每日晨报**，只写你的**白羊座**（1997 年 4 月 19 日，白羊座最后一天）。FoloToy 的晨报目录里，「今日星座」排在「今日三件事」后面。
+
+FoloToy 这边已经会认。要请出晨报的那个流程每天多写一栏，把下面这段贴给它：
+
+> 请在每日晨报加一栏「今日星座」，放在「今日三件事」后面：
+> - 只写白羊座（我是 1997 年 4 月 19 日出生）。
+> - 栏目头跟其他栏目一样：左边「今日星座」，右边「1条」；目录也加一格「今日星座 1」。
+> - 内容一张卡片，格式跟新闻卡片完全一样：粗体标题写「白羊座 · 11月20日」，下面一段 60～100 字的今日运势（工作、财运、人际各一句，再加一句提醒）。
+> - 运势是娱乐性质，不要编具体的事件、人名或数字。
+
+栏目头有没有中文数字（「十、今日星座」或「今日星座」）都认；万一没照卡片的格式写，整栏的字会当成一条「今日运势」。
 
 ## SPACE 车控 Android app（第二阶段，v0.4）
 
@@ -367,10 +395,10 @@ FoloToy 背面就是一枚**被动 NTAG213** NFC 芯片（官方规格：支持�
 | `tools/star_art.py`、`tools/make_star.py`、`main/star_img.c/.h` | S.T.A.R 原创像素画（32 格）→ 韧体图（封面 192px、小助理 96px，RGB565A8）；`--check` 由 `build.sh` 检查 |
 | `deku/lines.json`、`tools/make_deku.py`、`main/deku_lines.c` | DEKU 句库（草稿 / 审过 / 不要）→ 只把审过的产生成韧体的表和 app 的 `assets/deku.json`；`--check` 由 `build.sh` 检查 |
 | `tools/make_deku_review.py` | 句库 → 审核网页（要 / 不要、复制结果） |
-| `main/news_model.c/.h` | 每日晨报纯逻辑：解析晨报、目录 / 列表 / 一条的翻页、念哪一条、蓝牙收资料写 flash（A / B 两格、crc）（**有 host 测试**） |
+| `main/news_model.c/.h` | 每日晨报、书摘纯逻辑：解析晨报、目录 / 列表 / 一条的翻页、念哪一条、书摘轮播顺序、蓝牙收资料写 flash（各 A / B 两格、crc）（**有 host 测试**） |
 | `main/news_store.c/.h` | 晨报存 flash：蓝牙封包丢进自己的 task 写（不卡蓝牙）、传的时候请手机加快连线；画面直接映射 flash 读 |
 | `main/news_screen.c/.h` | 晨报画面：目录、标题列表（两行 + …）、一条（标题 + 摘要、翻页）、接收进度 |
-| `partitions_space.csv` | 分区表：上游的 + 最后 256KB 给晨报（`build.sh` 换上去） |
+| `partitions_space.csv` | 分区表：上游的 + 最后 512KB 给晨报、书摘（`build.sh` 换上去） |
 | `main/pocket_model.c/.h` | 口袋机纯逻辑：菜单、蜡烛（年龄、唱歌、熄灭）、计时器、倒数、时间文字（**有 host 测试**） |
 | `main/audio_dsp.c/.h` | 生日歌旋律与歌词、音色合成（整数正弦表 + 泛音 + 包络）、吹气判断（大声 + 持续 + 沙沙感 / 爆音）（**有 host 测试**） |
 | `main/sound.c/.h` | 喇叭 / 麦克风背景 task：放歌、响铃、听吹气；画面只送命令、读状态 |
@@ -428,6 +456,14 @@ Unverified:   真机画面（颜色、圆角）、手机对着这块屏幕实际
   app：BriefTest 11 个（真的晨报 HTML 解析：九栏条数 8/10/11/12/12/8/15/10/11、三件事、【标签】、生意 5 点；
        编码跟 brief-sample.txt 一字不差、每个字 FoloToy 都有；MIME quoted-printable / base64；IMAP 对话；什么时候查；封包）
   Simulated：firmware/news-screens.png（12 个画面看过：中文字正确、版面不重叠、长摘要会翻页）
+
+书摘 + 星座（2026-11-19）：
+  Host tests：test_news_model 加书摘解析、轮播顺序（1–40 段，一轮每段一次）、晨报 / 书摘两种分开存不互相干扰
+  app：QuotesTest 5 个（用户贴的《掌控谈话》导出：47 段、章节不算、开头标点；书单加 / 换 / 删；太大少放；封包）、
+       BriefTest 加「今日星座」（有 / 没有中文数字、没照卡片格式）
+  Simulated：firmware/news-screens.png 最后 7 张是封面书摘轮播（短的、长的往上跳行、书名）
+  Build：Merged firmware PASS（3,954,864 bytes）
+  Unverified：出晨报的流程还没加星座（要用户贴说明过去）；书摘在真机封面的字够不够清楚
 ```
 
 依赖是照上游 `dependencies.lock` 的版本从各自的 git 取的（开发环境连不上 Espressif 组件仓库），内容应该相同，但组件仓库的 hash 没有逐一比对过。

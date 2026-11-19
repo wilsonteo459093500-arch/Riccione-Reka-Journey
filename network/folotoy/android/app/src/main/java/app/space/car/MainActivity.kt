@@ -39,6 +39,8 @@ class MainActivity : Activity() {
     private lateinit var lastSeen: TextView
     private lateinit var mapBtn: Button
     private lateinit var newsStatus: TextView
+    private lateinit var quotesBox: LinearLayout
+    private lateinit var quotesStatus: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -127,6 +129,34 @@ class MainActivity : Activity() {
         newsStatus = text("")
         col.addView(newsStatus)
 
+        // ---- 书摘（开机封面轮播）----
+        col.addView(title("书摘（FoloToy 开机封面轮播）", 18f))
+        col.addView(text("微信读书打开一本有划线的书 → 笔记 → 右上角「导出」→ 复制，贴在下面，按「加进书摘」。可以加好几本；同一本再贴一次会换成新的。FoloToy 靠近就传过去，开机封面下面轮流显示。"))
+        val quotesInput = EditText(this).apply {
+            hint = "贴上微信读书导出的笔记"
+            minLines = 3
+            maxLines = 8
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            gravity = Gravity.TOP or Gravity.START
+        }
+        col.addView(quotesInput)
+        col.addView(button("加进书摘") {
+            val book = Quotes.parseWeRead(quotesInput.text.toString())
+            if (book == null) {
+                toast("看不出书摘：要贴微信读书「导出」的整段文字（有 ◆ 的那种）")
+                return@button
+            }
+            QuotesStore.saveLibrary(this, Quotes.add(QuotesStore.library(this), book))
+            quotesInput.setText("")
+            toast("加好了：《${book.title}》${book.quotes.size} 段")
+            CarService.instance?.quotesChanged()
+            refreshQuotes()
+        })
+        quotesBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        col.addView(quotesBox)
+        quotesStatus = text("")
+        col.addView(quotesStatus)
+
         col.addView(title("第一次设定（照顺序做一次就好）", 18f))
         col.addView(button("① 开权限（附近的装置、通讯录、麦克风）") { askPermissions() })
         col.addView(button("② 开「SPACE 车控」无障碍服务") {
@@ -161,6 +191,7 @@ class MainActivity : Activity() {
         col.addView(button("分享最近的画面结构") { shareDump() })
 
         refreshFriends()
+        refreshQuotes()
     }
 
     override fun onResume() {
@@ -178,7 +209,47 @@ class MainActivity : Activity() {
             status.text = if (CarService.instance == null) "状态：无障碍服务还没开（做 ②）" else "状态：${CarService.status}"
             refreshFind()
             refreshNews()
+            refreshQuotesStatus()
             ui.postDelayed(this, 1000)
+        }
+    }
+
+    // ---------------- 书摘 ----------------
+    private fun refreshQuotes() {
+        quotesBox.removeAllViews()
+        val lib = QuotesStore.library(this)
+        if (lib.isEmpty()) quotesBox.addView(text("还没有书摘。"))
+        for (b in lib) {
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+            row.addView(text("《${b.title}》${b.quotes.size} 段").apply {
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            })
+            row.addView(small("删") {
+                AlertDialog.Builder(this)
+                    .setMessage("从书摘拿掉《${b.title}》？")
+                    .setPositiveButton("拿掉") { _, _ ->
+                        QuotesStore.saveLibrary(this, Quotes.remove(QuotesStore.library(this), b.title))
+                        CarService.instance?.quotesChanged()
+                        refreshQuotes()
+                    }
+                    .setNegativeButton("不要", null)
+                    .show()
+            })
+            quotesBox.addView(row)
+        }
+    }
+
+    private fun refreshQuotesStatus() {
+        val s = CarService.instance
+        val mine = QuotesStore.crc(this)
+        val progress = s?.quotesSync?.progress()
+        quotesStatus.text = when {
+            mine == null -> ""
+            progress != null -> "FoloToy：正在传 $progress%"
+            QuotesStore.sentCrc(this) == mine -> "FoloToy：已经有这份书摘 ✓"
+            s?.quotesError?.isNotEmpty() == true -> "FoloToy：${s.quotesError}"
+            s?.ready == true -> "FoloToy：等它回话…"
+            else -> "FoloToy：还没传（FoloToy 靠近、连上就会传）"
         }
     }
 

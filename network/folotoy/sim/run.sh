@@ -70,6 +70,7 @@ cc -O1 -Wall -Wextra -Werror -I"${SIM}" -I"${SIM}/stub" -I"${LVGL}" -I"${MAIN}" 
   "${OBJ}"/*.o -lm -o "${WORK}/sim"
 rm -f "${OUT}"/*.ppm "${OUT}"/*.png "${CAR_OUT}"/*.ppm "${CAR_OUT}"/*.png "${POCKET_OUT}"/*.ppm "${POCKET_OUT}"/*.png "${FIND_OUT}"/*.ppm "${FIND_OUT}"/*.png "${DEKU_OUT}"/*.ppm "${DEKU_OUT}"/*.png "${NEWS_OUT}"/*.ppm "${NEWS_OUT}"/*.png
 NEWS_OUT="${NEWS_OUT}" NEWS_BRIEF="${SIM}/../android/app/src/test/resources/brief-sample.txt" \
+  QUOTES_FILE="${SIM}/../android/app/src/test/resources/quotes-sample.txt" \
   "${WORK}/sim" "${OUT}" "${CAR_OUT}" "${POCKET_OUT}" "${FIND_OUT}" "${DEKU_OUT}" "${EVENT_URL}"
 
 # --- 扫二维码（OpenCV 装在独立 venv）---

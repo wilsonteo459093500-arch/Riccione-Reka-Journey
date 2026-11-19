@@ -31,6 +31,7 @@ void sim_push_cmd(const uint8_t *d, size_t n);
 extern uint32_t g_news_version;   // stub/news_store_stub.c
 extern int g_news_progress;
 void sim_news_load(const char *path);
+void sim_quotes_load(const char *path);
 extern int g_song_line;     // stub/sound_stub.c
 extern bool g_blow;
 extern uint8_t g_mic_level;
@@ -536,6 +537,25 @@ int main(int argc, char **argv) {
         advance_ms(3000);
         dump("10-business.ppm");
         news_screen_hide();
+
+        // ---- 封面书摘轮播（QUOTES_FILE：app 测试产生的书摘档）----
+        const char *quotes = getenv("QUOTES_FILE");
+        if (quotes) {
+            sim_quotes_load(quotes);
+            old = lv_screen_active();
+            s.cover = true;
+            space_card_show(&s);
+            lv_obj_delete(old);
+            advance_ms(300);
+            dump("11-cover-quote.ppm");
+            // 往后看几段：短的停 8 秒换、长的卷动
+            for (int i = 1; i <= 6; i++) {
+                advance_ms(3500);
+                snprintf(name, sizeof name, "11-cover-quote-%d.ppm", i);
+                dump(name);
+            }
+            space_card_hide();
+        }
     }
     return 0;
 }

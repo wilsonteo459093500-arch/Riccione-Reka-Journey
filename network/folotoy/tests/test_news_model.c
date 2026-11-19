@@ -175,7 +175,7 @@ static int send_brief(news_rx_t *rx, const char *text, size_t len, size_t chunk,
 static void test_rx(void) {
     memset(s_flash, 0xFF, sizeof s_flash);   // 新烧的韧体：分区是空的
     news_rx_t rx;
-    news_rx_init(&rx, &FL);
+    news_rx_init(&rx, &FL, NEWS_KIND_BRIEF);
     assert(rx.cur == -1);
     static const uint8_t ask[] = { NEWS_CMD_ASK };
     bool committed = false;
@@ -196,7 +196,7 @@ static void test_rx(void) {
 
     // 重开机：读得回来
     news_rx_t again;
-    news_rx_init(&again, &FL);
+    news_rx_init(&again, &FL, NEWS_KIND_BRIEF);
     assert(again.cur == 0 && again.cur_seq == 1 && again.cur_len == strlen(SAMPLE));
 
     // 第二份（比一个 sector 大）→ B 格；A 格不动
@@ -207,7 +207,7 @@ static void test_rx(void) {
     assert(send_brief(&rx, big, sizeof big, 240, &committed) == NEWS_ST_OK && committed);
     assert(rx.cur == 1 && rx.cur_seq == 2);
     assert(memcmp(s_flash + NEWS_HDR_SIZE, SAMPLE, strlen(SAMPLE)) == 0);
-    news_rx_init(&again, &FL);
+    news_rx_init(&again, &FL, NEWS_KIND_BRIEF);
     assert(again.cur == 1 && again.cur_seq == 2 && again.cur_len == sizeof big);
 
     // 传到一半断线（没送「传完」）→ 旧的还在；下一次重传照样可以
@@ -220,7 +220,7 @@ static void test_rx(void) {
     memcpy(p + 6, "BRIEF1\n", 7);
     assert(news_rx_on_cmd(&rx, &FL, p, 13, &committed) == -1);
     assert(news_rx_progress(&rx) == 7);
-    news_rx_init(&again, &FL);
+    news_rx_init(&again, &FL, NEWS_KIND_BRIEF);
     assert(again.cur == 1 && again.cur_seq == 2);   // A 格被擦了一半，但 B 格还好好的
 
     // 漏了一段 → 收坏了；之后的段不再回；「传完」回收坏了
@@ -258,18 +258,96 @@ static void test_rx(void) {
     // 再传一份成功 → 回到 A 格，序号 3
     assert(send_brief(&rx, SAMPLE, strlen(SAMPLE), 240, &committed) == NEWS_ST_OK);
     assert(rx.cur == 0 && rx.cur_seq == 3);
-    news_rx_init(&again, &FL);
+    news_rx_init(&again, &FL, NEWS_KIND_BRIEF);
     assert(again.cur == 0 && again.cur_seq == 3);
 
     // 格子里的资料被改坏（crc 对不上）→ 开机不用它
     s_flash[NEWS_HDR_SIZE + 3] ^= 0x01;
-    news_rx_init(&again, &FL);
+    news_rx_init(&again, &FL, NEWS_KIND_BRIEF);
     assert(again.cur == 1 && again.cur_seq == 2);
 
     // 不认识的封包
     static const uint8_t junk[] = { 0x06, 0x09 };
     assert(news_rx_on_cmd(&rx, &FL, junk, 2, &committed) == -1);
     assert(news_rx_on_cmd(&rx, &FL, NULL, 0, &committed) == -1);
+}
+
+static void test_quotes(void) {
+    static const char Q[] =
+        "QUOTES1\n"
+        "Q\t没有书名的一段\n"
+        "B\t掌控谈话\t克里斯·沃斯\n"
+        "Q\t没有协议也好过一个坏协议。\n"
+        "Q\t提问，永远是提问\r\n"
+        "X\t不认识的行\n"
+        "B\t原则\n"
+        "Q\t痛苦 + 反思 = 进步\n";
+    const size_t n = strlen(Q);
+    assert(quotes_count(Q, n) == 4);
+    const char *q, *b;
+    size_t ql, bl;
+    assert(quotes_get(Q, n, 0, &q, &ql, &b, &bl) && ql == strlen("没有书名的一段") && bl == 0);
+    assert(quotes_get(Q, n, 1, &q, &ql, &b, &bl));
+    assert(ql == strlen("没有协议也好过一个坏协议。") && memcmp(q, "没有协议", 12) == 0);
+    assert(bl == strlen("掌控谈话") && memcmp(b, "掌控谈话", bl) == 0);
+    assert(quotes_get(Q, n, 2, &q, &ql, &b, &bl) && ql == strlen("提问，永远是提问"));   // \r 去掉
+    assert(quotes_get(Q, n, 3, &q, &ql, &b, &bl) && bl == strlen("原则"));             // 书名后面没有作者也可以
+    assert(!quotes_get(Q, n, 4, &q, &ql, &b, &bl));
+    assert(quotes_count("BRIEF1\nQ\tx\n", 11) == 0);                                    // 不是书摘
+    assert(quotes_count(NULL, 0) == 0);
+
+    // 轮播：一轮里每段刚好一次
+    for (size_t total = 1; total <= 40; total++) {
+        quotes_order_t o;
+        quotes_order_init(&o, total, (uint32_t)total * 7);
+        for (int round = 0; round < 3; round++) {
+            int seen[40] = { 0 };
+            for (size_t i = 0; i < total; i++) {
+                const size_t k = quotes_order_next(&o);
+                assert(k < total);
+                seen[k]++;
+            }
+            for (size_t i = 0; i < total; i++) assert(seen[i] == 1);
+        }
+    }
+    quotes_order_t z;
+    quotes_order_init(&z, 0, 1);
+    assert(quotes_order_next(&z) == 0);
+}
+
+// 晨报和书摘在同一个分区、各自两格，互不干扰；封包认自己的
+static void test_two_kinds(void) {
+    memset(s_flash, 0xFF, sizeof s_flash);
+    news_rx_t br, qu;
+    news_rx_init(&br, &FL, NEWS_KIND_BRIEF);
+    news_rx_init(&qu, &FL, NEWS_KIND_QUOTES);
+    bool committed;
+    static const uint8_t ask_b[] = { NEWS_CMD_ASK }, ask_q[] = { QUOTES_CMD_ASK };
+    assert(news_rx_on_cmd(&qu, &FL, ask_b, 1, &committed) == -1);   // 晨报的问题，书摘不回
+    assert(news_rx_on_cmd(&qu, &FL, ask_q, 1, &committed) == NEWS_ST_NONE);
+    static const char QT[] = "QUOTES1\nB\t书\nQ\t一段\n";
+    uint8_t pkt[64] = { QUOTES_CMD_DATA, NEWS_DATA_BEGIN };
+    put32(pkt + 2, (uint32_t)strlen(QT));
+    put32(pkt + 6, news_crc32(0, QT, strlen(QT)));
+    assert(news_rx_on_cmd(&br, &FL, pkt, 10, &committed) == -1 && !br.active);   // 书摘的封包，晨报不收
+    assert(news_rx_on_cmd(&qu, &FL, pkt, 10, &committed) == -1 && qu.active);
+    pkt[1] = NEWS_DATA_CHUNK;
+    put32(pkt + 2, 0);
+    memcpy(pkt + 6, QT, strlen(QT));
+    assert(news_rx_on_cmd(&qu, &FL, pkt, 6 + strlen(QT), &committed) == -1);
+    pkt[1] = NEWS_DATA_END;
+    assert(news_rx_on_cmd(&qu, &FL, pkt, 2, &committed) == NEWS_ST_OK && committed);
+    uint32_t off, len;
+    assert(news_rx_current(&qu, &off, &len) && off == NEWS_KIND_SIZE + NEWS_HDR_SIZE && len == strlen(QT));
+    uint8_t st[6];
+    news_status_packet(&qu, NEWS_ST_OK, st);
+    assert(st[0] == QUOTES_EVT_STATUS && st[1] == 0);
+    // 晨报那半边没动
+    news_rx_init(&br, &FL, NEWS_KIND_BRIEF);
+    assert(br.cur == -1);
+    assert(send_brief(&br, SAMPLE, strlen(SAMPLE), 100, &committed) == NEWS_ST_OK);
+    news_rx_init(&qu, &FL, NEWS_KIND_QUOTES);
+    assert(qu.cur == 0 && qu.cur_len == strlen(QT));
 }
 
 static void check_file(const char *path) {
@@ -289,6 +367,8 @@ int main(int argc, char **argv) {
     test_parse();
     test_nav();
     test_rx();
+    test_quotes();
+    test_two_kinds();
     if (argc > 1) check_file(argv[1]);
     printf("news_model: all tests passed\n");
     return 0;

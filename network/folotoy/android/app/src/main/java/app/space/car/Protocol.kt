@@ -19,6 +19,7 @@ import java.util.UUID
  *                     [0x07] 你有哪一份？
  *     FoloToy → 手机：[0x83, 状态, crc32 u32] 现在有的那份（0 有、1 没有、2 收坏了、3 太大、4 写入失败）
  *                     [0x84, 第几条 u16, crc32 u32] 请念这条
+ *   书摘（开机封面轮播）：同一套，手机 → FoloToy 用 0x08（资料）、0x09（问）；FoloToy → 手机 [0x85, 状态, crc32 u32]
  */
 object Protocol {
     val SERVICE: UUID = UUID.fromString("8d6f0001-6b3a-4c2e-9a51-535041434552")
@@ -79,25 +80,34 @@ object Protocol {
     data class NewsStatus(val status: Int, val crc: Long)
     data class NewsSay(val index: Int, val crc: Long)
 
-    fun newsAsk(): ByteArray = byteArrayOf(0x07)
+    const val NEWS_DATA: Byte = 0x06
+    const val NEWS_ASK: Byte = 0x07
+    const val QUOTES_DATA: Byte = 0x08
+    const val QUOTES_ASK: Byte = 0x09
 
-    /** 整份晨报拆成封包：开始、一段段（每段最多 chunk 字节）、传完 */
-    fun newsPackets(data: ByteArray, crc: Long, chunk: Int): List<ByteArray> {
+    fun newsAsk(): ByteArray = byteArrayOf(NEWS_ASK)
+    fun quotesAsk(): ByteArray = byteArrayOf(QUOTES_ASK)
+
+    /** 整份拆成封包：开始、一段段（每段最多 chunk 字节）、传完。cmd：晨报 0x06、书摘 0x08 */
+    fun newsPackets(data: ByteArray, crc: Long, chunk: Int, cmd: Byte = NEWS_DATA): List<ByteArray> {
         require(chunk > 0)
         val out = ArrayList<ByteArray>()
-        out.add(byteArrayOf(0x06, 0x01) + le32(data.size.toLong()) + le32(crc))
+        out.add(byteArrayOf(cmd, 0x01) + le32(data.size.toLong()) + le32(crc))
         var off = 0
         while (off < data.size) {
             val n = minOf(chunk, data.size - off)
-            out.add(byteArrayOf(0x06, 0x02) + le32(off.toLong()) + data.copyOfRange(off, off + n))
+            out.add(byteArrayOf(cmd, 0x02) + le32(off.toLong()) + data.copyOfRange(off, off + n))
             off += n
         }
-        out.add(byteArrayOf(0x06, 0x03))
+        out.add(byteArrayOf(cmd, 0x03))
         return out
     }
 
-    fun decodeNewsStatus(data: ByteArray?): NewsStatus? {
-        if (data == null || data.size != 6 || (data[0].toInt() and 0xFF) != 0x83) return null
+    fun decodeNewsStatus(data: ByteArray?): NewsStatus? = decodeStatus(data, 0x83)
+    fun decodeQuotesStatus(data: ByteArray?): NewsStatus? = decodeStatus(data, 0x85)
+
+    private fun decodeStatus(data: ByteArray?, evt: Int): NewsStatus? {
+        if (data == null || data.size != 6 || (data[0].toInt() and 0xFF) != evt) return null
         return NewsStatus(data[1].toInt() and 0xFF, rd32(data, 2))
     }
 

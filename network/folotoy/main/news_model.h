@@ -25,8 +25,12 @@
 //   FoloToy → app：[0x83, 状态, crc32 u32] 现在有的那份（状态见 news_status_t）
 //                  [0x84, 第几条 u16, crc32 u32] 请念这条（第几条 = 整份晨报里的 I 行顺序，从 0 起）
 //
-// 存法：flash 上一个 256KB 的分区（partitions_space.csv 的 brief），分 A / B 两格轮流写：
-//   新的一份写进另一格，整份 crc 对了才写格头（magic、序号、长度、crc），所以传到一半断线，旧的还在。
+// 书摘（2026-11-19 用户选定：微信读书导出的笔记贴进 app → 开机封面下面轮播）同一套传法，封包换成：
+//   app → FoloToy：0x08（同 0x06 的开始 / 一段 / 传完）、0x09（问有哪一份）；FoloToy → app：[0x85, 状态, crc32]
+//   格式：QUOTES1 / B<TAB>书名<TAB>作者 / Q<TAB>一段书摘（属于上面最近的那本书）
+//
+// 存法：flash 上一个 512KB 的分区（partitions_space.csv 的 brief）：前 256KB 晨报、后 256KB 书摘，
+//   各分 A / B 两格轮流写：新的一份写进另一格，整份 crc 对了才写格头（magic、序号、长度、crc），所以传到一半断线，旧的还在。
 #pragma once
 
 #include <stdbool.h>
@@ -42,9 +46,13 @@
 #define NEWS_CMD_ASK 0x07
 #define NEWS_EVT_STATUS 0x83
 #define NEWS_EVT_SAY 0x84
+#define QUOTES_CMD_DATA 0x08
+#define QUOTES_CMD_ASK 0x09
+#define QUOTES_EVT_STATUS 0x85
 
-#define NEWS_PART_SIZE (256u * 1024u)
-#define NEWS_SLOT_SIZE (NEWS_PART_SIZE / 2)
+#define NEWS_PART_SIZE (512u * 1024u)
+#define NEWS_KIND_SIZE (256u * 1024u)   // 一种（晨报 / 书摘）占多少
+#define NEWS_SLOT_SIZE (NEWS_KIND_SIZE / 2)
 #define NEWS_HDR_SIZE 16u
 #define NEWS_MAX_LEN (NEWS_SLOT_SIZE - NEWS_HDR_SIZE)
 #define NEWS_SECTOR 4096u
@@ -116,7 +124,17 @@ void news_nav_reset(news_nav_t *n);
 news_out_t news_on_key(news_nav_t *n, const news_doc_t *doc, space_card_btn_t btn, space_card_ev_t ev);
 int news_current_item(const news_nav_t *n, const news_doc_t *doc);   // 游标那一条在整份里的序号；没有回 -1
 
-// ---------------- 收晨报（蓝牙 → flash）----------------
+// ---------------- 书摘（开机封面轮播）----------------
+// 有几段；第 k 段（从 0 起）的字和书名（都在 text 里，不是 0 结尾）。找不到回 false
+size_t quotes_count(const char *text, size_t len);
+bool quotes_get(const char *text, size_t len, size_t k, const char **q, size_t *qlen, const char **book, size_t *blen);
+// 轮播顺序：一轮里每段刚好一次（用跟 n 互质的步长跳），换一轮换起点；回下一段的序号
+typedef struct { uint32_t n, step, start, i, rng; } quotes_order_t;
+void quotes_order_init(quotes_order_t *o, size_t n, uint32_t seed);
+size_t quotes_order_next(quotes_order_t *o);
+
+// ---------------- 收晨报 / 书摘（蓝牙 → flash）----------------
+typedef enum { NEWS_KIND_BRIEF = 0, NEWS_KIND_QUOTES = 1 } news_kind_t;
 // flash 操作由外面给（真机：esp_partition；测试：一块记忆体）。位置都是分区里的位置。
 typedef struct {
     bool (*erase)(void *ctx, uint32_t off, uint32_t len);   // off、len 都是 NEWS_SECTOR 的倍数
@@ -126,6 +144,8 @@ typedef struct {
 } news_flash_t;
 
 typedef struct {
+    uint32_t base;               // 这一种在分区里从哪里开始
+    uint8_t cmd_data, cmd_ask, evt_status;
     // 现在的那一份
     int cur;                     // 哪一格（0 / 1）；-1 = 没有
     uint32_t cur_seq, cur_len, cur_crc;
@@ -135,9 +155,9 @@ typedef struct {
 } news_rx_t;
 
 // 开机：看两格的格头 + 整份 crc，挑序号大的那格
-void news_rx_init(news_rx_t *rx, const news_flash_t *fl);
+void news_rx_init(news_rx_t *rx, const news_flash_t *fl, news_kind_t kind);
 
-// 一个 app 送来的 0x06 / 0x07 封包。回 -1 = 不用回 app；否则回状态（news_status_t），
+// 一个 app 送来的封包（晨报 0x06 / 0x07、书摘 0x08 / 0x09；不是这一种的回 -1）。回 -1 = 不用回 app；否则回状态（news_status_t），
 // 外面要送 [0x83, 状态, rx->cur_crc]（*committed = true：新的一份刚存好，画面要重读）
 int news_rx_on_cmd(news_rx_t *rx, const news_flash_t *fl, const uint8_t *data, size_t len, bool *committed);
 
@@ -147,5 +167,5 @@ bool news_rx_current(const news_rx_t *rx, uint32_t *off, uint32_t *len);
 // 收到一半（给画面显示「正在接收 45%」）：0–99；没有在收回 -1
 int news_rx_progress(const news_rx_t *rx);
 
-// 封包：[0x83, 状态, crc]
+// 封包：[0x83（书摘 0x85）, 状态, crc]
 void news_status_packet(const news_rx_t *rx, int status, uint8_t out[6]);

@@ -193,13 +193,90 @@ news_out_t news_on_key(news_nav_t *n, const news_doc_t *doc, space_card_btn_t bt
     return o;
 }
 
-// ---------------- 收晨报 ----------------
-static uint32_t slot_base(int slot) {
-    return slot ? NEWS_SLOT_SIZE : 0;
+// ---------------- 书摘 ----------------
+// 走过每一行：回 Q 行的数目；k >= 0 时停在第 k 个 Q
+static size_t quotes_walk(const char *text, size_t len, size_t k, const char **q, size_t *qlen, const char **book, size_t *blen) {
+    if (!text || len < 8 || memcmp(text, "QUOTES1", 7) != 0) return 0;
+    size_t n = 0, i = 0;
+    const char *b = NULL;
+    size_t bl = 0;
+    while (i < len) {
+        size_t e = i;
+        while (e < len && text[e] != '\n') e++;
+        size_t ll = e - i;
+        if (ll && text[i + ll - 1] == '\r') ll--;
+        const char *line = text + i;
+        if (ll > 2 && line[0] == 'B' && line[1] == '\t') {
+            b = line + 2;
+            bl = 0;
+            while (bl < ll - 2 && b[bl] != '\t') bl++;
+        } else if (ll > 2 && line[0] == 'Q' && line[1] == '\t') {
+            if (n == k && q) {
+                *q = line + 2;
+                *qlen = ll - 2;
+                *book = b ? b : "";
+                *blen = b ? bl : 0;
+                return n + 1;
+            }
+            n++;
+        }
+        i = e + 1;
+    }
+    return n;
 }
 
+size_t quotes_count(const char *text, size_t len) {
+    return quotes_walk(text, len, (size_t)-1, NULL, NULL, NULL, NULL);
+}
+
+bool quotes_get(const char *text, size_t len, size_t k, const char **q, size_t *qlen, const char **book, size_t *blen) {
+    return quotes_walk(text, len, k, q, qlen, book, blen) == k + 1 && q && *q;
+}
+
+static uint32_t gcd(uint32_t a, uint32_t b) {
+    while (b) { const uint32_t t = a % b; a = b; b = t; }
+    return a;
+}
+
+static uint32_t order_rand(quotes_order_t *o) {
+    o->rng = o->rng * 1664525u + 1013904223u;
+    return o->rng >> 8;
+}
+
+static void order_round(quotes_order_t *o) {
+    o->i = 0;
+    if (o->n == 0) return;
+    o->start = order_rand(o) % o->n;
+    o->step = 1;
+    if (o->n > 2) {   // 步长跟 n 互质：一轮里每段刚好一次，顺序看起来是乱的
+        for (int tries = 0; tries < 20; tries++) {
+            const uint32_t st = 1 + order_rand(o) % (o->n - 1);
+            if (gcd(st, o->n) == 1) { o->step = st; break; }
+        }
+    }
+}
+
+void quotes_order_init(quotes_order_t *o, size_t n, uint32_t seed) {
+    memset(o, 0, sizeof *o);
+    o->n = (uint32_t)n;
+    o->rng = seed ? seed : 1;
+    order_round(o);
+}
+
+size_t quotes_order_next(quotes_order_t *o) {
+    if (o->n == 0) return 0;
+    if (o->i >= o->n) order_round(o);
+    return (size_t)((o->start + (uint64_t)o->step * o->i++) % o->n);
+}
+
+// ---------------- 收晨报 / 书摘 ----------------
+static uint32_t slot_base_of(const news_rx_t *rx, int slot) {
+    return rx->base + (slot ? NEWS_SLOT_SIZE : 0);
+}
+#define slot_base(slot) slot_base_of(rx, (slot))
+
 // 读一格的格头 + 整份算 crc；对了回 true
-static bool slot_valid(const news_flash_t *fl, int slot, uint32_t *seq, uint32_t *len, uint32_t *crc) {
+static bool slot_valid(const news_rx_t *rx, const news_flash_t *fl, int slot, uint32_t *seq, uint32_t *len, uint32_t *crc) {
     uint8_t h[NEWS_HDR_SIZE];
     if (!fl->read(fl->ctx, slot_base(slot), h, sizeof h)) return false;
     if (rd32(h) != NEWS_MAGIC) return false;
@@ -219,12 +296,16 @@ static bool slot_valid(const news_flash_t *fl, int slot, uint32_t *seq, uint32_t
     return true;
 }
 
-void news_rx_init(news_rx_t *rx, const news_flash_t *fl) {
+void news_rx_init(news_rx_t *rx, const news_flash_t *fl, news_kind_t kind) {
     memset(rx, 0, sizeof *rx);
     rx->cur = -1;
+    rx->base = kind == NEWS_KIND_QUOTES ? NEWS_KIND_SIZE : 0;
+    rx->cmd_data = kind == NEWS_KIND_QUOTES ? QUOTES_CMD_DATA : NEWS_CMD_DATA;
+    rx->cmd_ask = kind == NEWS_KIND_QUOTES ? QUOTES_CMD_ASK : NEWS_CMD_ASK;
+    rx->evt_status = kind == NEWS_KIND_QUOTES ? QUOTES_EVT_STATUS : NEWS_EVT_STATUS;
     for (int slot = 0; slot < 2; slot++) {
         uint32_t seq, len, crc;
-        if (!slot_valid(fl, slot, &seq, &len, &crc)) continue;
+        if (!slot_valid(rx, fl, slot, &seq, &len, &crc)) continue;
         if (rx->cur < 0 || (int32_t)(seq - rx->cur_seq) > 0) {
             rx->cur = slot;
             rx->cur_seq = seq;
@@ -246,8 +327,8 @@ static int rx_fail(news_rx_t *rx, int st) {
 int news_rx_on_cmd(news_rx_t *rx, const news_flash_t *fl, const uint8_t *data, size_t len, bool *committed) {
     if (committed) *committed = false;
     if (!data || len == 0) return -1;
-    if (data[0] == NEWS_CMD_ASK && len == 1) return rx->cur >= 0 ? NEWS_ST_OK : NEWS_ST_NONE;
-    if (data[0] != NEWS_CMD_DATA || len < 2) return -1;
+    if (data[0] == rx->cmd_ask && len == 1) return rx->cur >= 0 ? NEWS_ST_OK : NEWS_ST_NONE;
+    if (data[0] != rx->cmd_data || len < 2) return -1;
     const uint32_t base = slot_base(target_slot(rx));
     switch (data[1]) {
     case NEWS_DATA_BEGIN:
@@ -319,7 +400,7 @@ int news_rx_progress(const news_rx_t *rx) {
 }
 
 void news_status_packet(const news_rx_t *rx, int status, uint8_t out[6]) {
-    out[0] = NEWS_EVT_STATUS;
+    out[0] = rx->evt_status;
     out[1] = (uint8_t)status;
     wr32(out + 2, rx->cur >= 0 ? rx->cur_crc : 0);
 }
