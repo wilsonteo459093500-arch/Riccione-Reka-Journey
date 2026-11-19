@@ -685,8 +685,11 @@ async function runJob(browser, origin, job, o) {
           // 提示（api.flash，~2.6 秒）还在的时候拍：新材质画上去了（过了两帧、贴图补完）就拍
           await until(
             () => ev((f0) => {
-              const lib = window.__genie.lib;
-              return (window.__genie._frames || 0) >= f0 + 2 && !lib.queue?.length && !lib.pumping;
+              const e = window.__genie;
+              const lib = e.lib;
+              // 引擎只在有变化时才画：站着不动、高亮也淡了（机器忙的时候）→ 叫它画，不然等不到「又画了两帧」
+              e.dirty = true;
+              return (e._frames || 0) >= f0 + 2 && !lib.queue?.length && !lib.pumping;
             }, f0),
             20e3,
             '画上新材质',
