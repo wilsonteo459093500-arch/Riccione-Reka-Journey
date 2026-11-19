@@ -12,13 +12,6 @@
   - 开 draft PR，附预览链接和截图 / 录屏
   - 用户看过说「合并」才合并
 - 新对话的开场白一般是：「继续做 UKIR STUDIO（blueprint/）……这次要做：第几项」。项目用 `blueprint/README.md`、`blueprint/ARCHITECTURE.md` 的说明。
-- **「帮我看 X 这个软件怎么样 / 有什么要提升 / 做计划」→ 用 `software-checkup` skill**（2026-11-19 定的固定流程）：
-  - 找到软件 → 测试和构建 → 七个角度检查 → 两轮面试 → 分阶段计划（每阶段的 model、effort、要不要开新对话）→ 一路报进度和剩余时间
-  - 报告存 `docs/checkups/<软件>-<日期>.md`
-- **用量**（2026-11-19 的教训）：
-  - 用户的方案有 5 小时用量额度。一次派很多帮手（workflow / ultracode）几分钟就会用完，那次 14 个检查员两次都没跑完。
-  - 平常一步一步做，不派一堆帮手；只有用户说要「全面体检」、而且额度刚重置时才用 workflow。
-  - 选 model 和 effort 照 `.claude/skills/software-checkup/references/model-effort-guide.md`。
 - **少推几次**（2026-11-19 真的撞到）：
   - Vercel 是免费方案，一天最多 100 次部署；每推一次，5 个项目（visi、space-network、sail-render、kira、wish）各算一次，不管改的是不是它的东西。
   - 用完后所有软件 24 小时内出不了预览、也更新不了正式版。
@@ -62,6 +55,25 @@
 3. AI 方案主题建议：规则要先 brainstorm
 4. 展厅播放接 D5 / SU / 3ds Max 漫游视频：先调查设计师能导出什么格式
 
+## 软件体检（`app-checkup` skill，2026-11-19 建）
+
+- 用户说「帮我看 X 这个软件怎么样、有什么要提升、做分阶段计划」→ 用 `.claude/skills/app-checkup/`，流程固定：
+  - 摸底 → 派 3–4 个人体检 → 面试两轮 → 分阶段计划（每阶段写 model、effort、几时开新对话）→ 存进 `<app>/PLAN.md`
+  - 全程每一步报进度和剩余时间（用户明确要的；「streaming responses + remaining time」指对话时这样做，不是改 app）
+  - app 还不在 main 里（例：KIRA）→ 计划存 `docs/checkups/<app>-<日期>.md`
+- **用量是硬限制**：
+  - 第一次跑（SPACE）同一个对话撞了两次 5 小时上限；同一天 KIRA 那次也撞了两次（开着 ultracode 派 14 个人，一个都没跑完），最后是主对话一个人查完的
+  - 默认跑省量版：主对话和派出去的人都用 Opus 5.5 · high，不派「怀疑者」，主对话自己重跑证明脚本核实
+  - 平常的开发对话不要开 ultracode（`/effort ultracode off`）
+
+## SPACE（network/）
+
+- **2026-11-19 体检**：结论和第 0–6 阶段计划在 `network/PLAN.md` 最后一节
+  - 开场白：「读 `network/PLAN.md`，做体检计划第 N 阶段」
+  - 顺序（用户 2026-11-19 定的）：0 用户自己做的设定 → 1 公开页面关门 → 2 活动连拍 → 3 AI 稳定 + 补查 → 4 导入现有人脉 → 5 整理工具 → 6 每天提醒 → 7 WhatsApp 群发 → 8 小修
+  - 用户的决定：两星期内有活动，所以连拍提前；每天提醒用**手机推送通知**（不是 TickTick 每日任务，试不通才退回）；FoloToy / 星系图 / NFC / 名片页改版**不冻结**
+- 线上：Vercel 项目 `space-network`，Supabase 项目「SPACE NETWORK」。体检当天资料库只有 1 个人
+
 ## KIRA（柜子规划 + 预估报价，内部用；对客户印 SAIL BY RICCIONE REKA）
 
 - **代码不在 main**（2026-11-19 时）：
@@ -83,6 +95,7 @@
   4. 3 考试：5–10 个真实案子对价 + 看 AI 差多少
   5. 4 交给业务（备份、改动记录、单号和状态、教学）
   6. 5 客人自助估价（阶段 3 达标才做）
+- 每个阶段的 model · effort 和开场白在体检报告里。阶段 1A 的开场白要写明：接着 PR #75 做、可以推到它的分支 `ccr-d50823fb-lcwm1r`。
 
 ## 开发备忘（blueprint/）
 
