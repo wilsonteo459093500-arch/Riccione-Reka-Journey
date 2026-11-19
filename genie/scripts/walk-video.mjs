@@ -68,12 +68,26 @@ async function main() {
       n++;
       return file;
     };
+    // 引擎只在有变化时才画（dirty）：每一帧都叫它画，定住以后至少再画一次（画的就是定住那一刻）
     const frame = async (dt = STEP) => {
       await ev((dt) => {
         const W = window.__warp;
         W.set(1, W.now(performance.now()) + dt);
+        window.__genie.dirty = true;
       }, dt);
-      await until(() => ev(() => window.__warp.frozen && (window.__genie._frames || 0) > window.__warp.frozenAt + 1), 120e3, '画好这一帧', 60);
+      await until(
+        () =>
+          ev(() => {
+            const W = window.__warp;
+            if (!W.frozen) return false;
+            if ((window.__genie._frames || 0) > W.frozenAt) return true;
+            window.__genie.dirty = true;
+            return false;
+          }),
+        120e3,
+        '画好这一帧',
+        60,
+      );
       return shoot();
     };
     /** 拍 ms 毫秒（页面的钟）；speed > 1 = 快进 */
