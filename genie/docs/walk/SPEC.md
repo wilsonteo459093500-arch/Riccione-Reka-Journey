@@ -500,3 +500,63 @@ Fixtures: `test/fixtures/walk/*.json`, frozen project snapshots made once from t
 - Two modes:
   - `--save`: write the baseline.
   - `--check`: compare against the baseline. Mode **B** additionally compares before-enter with after-exit.
+
+## 10 · As built in phase 1: read before phase 2
+
+### Engine seam (U1)
+- `setWalk(w)` does NOT call `setFloorView`. `flyIn` does that right after it, as `setFloorView(entryFloorId, {instant, quiet})`. Upper floors only un-hide, and `coverFrac` only becomes 1, after that call.
+- While walking, `setFloorView` makes every floor's `F.furn` visible. Re-apply the "walker floor plus the neighbouring floor near stairs" furniture rule after each call. Then set `renderer.shadowMap.needsUpdate = true`. Do the same after ANY visibility change: furniture, doors, slider glass.
+- The engine reads `walk.fov` and `walk.vo` only inside `applyView()`. After changing them, call `engine.applyView()`.
+  - After changing `walk.pr`: `engine.applyPixelRatio() && engine.resize()`.
+  - After changing `walk.ev`: `engine.renderer.toneMappingExposure = engine.day.exposure * walk.ev`.
+- Four additions, each a no-op when `walk === null`:
+  - `placeRoomLights()` with no argument reuses the last `near` while walking.
+  - `setFloorView` skips its camera tween while walking.
+  - Floors above the active one get the 'up' cutaway while walking.
+  - The hover rAF returns early while walking.
+- Studio entry is 396.95 kB gzip after phase 1. About 0.55 kB is left under the 397.5 kB limit. Do not add code to the entry chunk without asking the lead.
+
+### Doors and flight (U3): how the controller uses them
+1. `saved = saveOrbit(engine)` comes FIRST. `isFramed()` is always false once walking.
+2. Build the pieces:
+   - `nd = engine.navData()`
+   - `nav = buildNav(nd, items)`
+   - `plan = entryPlan(nd, nav)`
+   - `doors = createDoors(engine, nd)`
+3. `await flyIn(engine, plan, { walk: {ev, pr}, doors, tick })`.
+   - `flyIn` calls `setWalk` and `setFloorView` itself.
+   - It lands at `plan.P3` facing `plan.yaw`, or at `plan.fallback {fi, x, z, y, yaw}`.
+   - It restores the previous `onTick` when done. Set your own `onTick` after the `await`.
+4. Every tick: `if (doors.update(camera.position, remainingPathPointsOnThisFloor, dt)) shadowMap.needsUpdate = true`. `dt` is in seconds.
+5. On resize: `walk.fov = walkFov(W, H); engine.applyView()`.
+6. Exit with `await flyOut(engine, saved, { doors })`. For an instant exit (unmount, error), call `restoreOrbit(engine, saved, { doors })`. It also cancels any running flight and re-places the fill light.
+
+Extras on `createDoors`: `open(opening, {fi, from, instant})`, `openAll(on)`, `leaves`.
+
+Extra exports:
+- `flight.js`: `EYE`, `WALK_FOV`, `frontDoor`, `clearHeight`, `cancelFlight`, `prefersReducedMotion`.
+- `doors.js`: `leafAngle`, `sideOf`, `doorDist`, `pathCrosses`, `levelOf`.
+
+`entryPlan` also returns `approach` (descend outside the whole footprint first, to clear porch roofs) and `high`.
+
+### App shell (U7)
+- The WalkMode stub must be replaced by U5a. Keep three things:
+  - `import './words.js'` as the FIRST import
+  - a default export
+  - a 「回到全屋」 button with `data-walk="exit"`
+- Every selector in `src/studio/walk/*.css` must contain `walk`, for example `.walk-*`, `[data-walk]`, `.is-walk …` or `.is-wish .walk-…`. The chunk and its CSS are prefetched 4 s after ready, while the bird's-eye view is on screen.
+- z-index:
+  - The walk overlay root stays below 110.
+  - `api.flash` toasts sit at the top centre: `safe-t + 60px`, or `+ 136px` on phones, at z 110. Keep that spot clear.
+  - The confirm sheet and the lost-context overlay sit at 120.
+- `api.dropMaterial(slot, matId)` goes through StudioApp's own drop path: fits check, confirm for a locked surface, deal-breaker warning. It returns a boolean.
+- There is no `api.addItem`.
+- `api.undo` / `api.canUndo()` and the furniture calls update the `project` prop. Watch `project.furniture`, then:
+  - `nav.rebuildFloor`
+  - re-apply the furniture visibility rule
+  - `shadowMap.needsUpdate`
+- StudioApp keeps calling `engine.setInsets` while walking: the bird's-eye UI stays mounted but hidden. `restoreOrbit` compares the engine's current insets and size at exit.
+
+### Pixel harness
+- The camera's `position`, `quaternion` and `target` are compared with a 1e-9 tolerance. An idle `OrbitControls.update()` flips them by 1 ULP every frame, and it did so before this work too.
+- Images (hashes) must still match exactly.

@@ -118,6 +118,8 @@ for (const f of walk(path.join(ROOT, 'src'))) {
   if (f.endsWith(`${path.sep}studio${path.sep}walk${path.sep}words.js`)) continue;
   if (/['"][^'"]*en-walk\w*(\.js)?['"]/.test(fs.readFileSync(f, 'utf8'))) ewLeak.push(`${path.relative(ROOT, f)} imports en-walk*.js (only src/studio/walk/words.js may)`);
 }
+// 「走进去」的按钮、等待、「回到全屋」在懒加载之前就要显示（StudioApp）：一定在总表（en-studio.js），不能只在 en-walk*.js
+const ewShell = ['走进去', '正在走进去', '回到全屋'].filter((k) => EN[k] == null).map((k) => `${k}: not in en.js (put it in en-studio.js)`);
 const ewClash = [];
 for (const [name, D] of [['en-walk.js', EW], ['en-walktour.js', EWT], ['en-walktools.js', EWL]])
   for (const [k, v] of Object.entries(D)) {
@@ -152,10 +154,10 @@ if (ebLeak.length || ebClash.length) {
   console.log('✗ en-boards.js：');
   [...ebLeak, ...ebClash].forEach((x) => console.log('    ' + x));
 }
-if (ewLeak.length || ewClash.length) {
+if (ewLeak.length || ewClash.length || ewShell.length) {
   fail++;
   console.log('✗ en-walk*.js：');
-  [...ewLeak, ...ewClash].forEach((x) => console.log('    ' + x));
+  [...ewLeak, ...ewClash, ...ewShell].forEach((x) => console.log('    ' + x));
 }
 if (fail) process.exit(1);
 console.log(`✓ 中英双语：${checked} 处中文都有英文（词典 ${Object.keys(EN).length} 句 + 导出 ${Object.keys(EXP).length} 句 + 板材库 ${Object.keys(EB).length} 句 + 走进去 ${Object.keys(WALK).length} 句）`);

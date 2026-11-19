@@ -472,7 +472,7 @@ async function stableShot(page, label) {
     await sleep(GAP);
     await settle(page, label);
     const b = await grab(page);
-    if (a.clean && b.clean && a.frames === b.frames && a.png.equals(b.png) && J(a.json) === J(b.json)) return { ...a, hash: sha(a.png), tries: i + 1 };
+    if (a.clean && b.clean && a.frames === b.frames && a.png.equals(b.png) && !jsonDiff(a.json, b.json).length) return { ...a, hash: sha(a.png), tries: i + 1 };
     why = !a.clean || !b.clean ? '截图时画了一帧' : a.frames !== b.frames ? `中间画了 ${b.frames - a.frames} 帧` : !a.png.equals(b.png) ? '两次截图不一样' : '两次取景状态不一样';
     console.log(`    … ${label}：${why}，重来（${i + 1}）`);
   }
@@ -586,17 +586,21 @@ async function walkTo(page, target, label) {
   const t0 = Date.now();
   let last = null;
   let still = 0;
+  let went = false;
   while (Date.now() - t0 < 600e3) {
     await sleep(500);
     const p = await page.evaluate(() => ({ pose: window.__genieWalk?.pose?.() || null, arrived: window.__px.arrived ?? null }));
     if (typeof p.arrived === 'string') throw new Error(`${label}：walkTo 失败（${p.arrived}）`);
     const pose = p.pose;
     if (!pose) continue;
-    const moved = !last || Math.hypot(pose.x - last.x, pose.z - last.z) > 1e-3 || pose.fi !== last.fi;
-    still = moved ? 0 : still + 500;
+    const moved = !!last && (Math.hypot(pose.x - last.x, pose.z - last.z) > 1e-3 || pose.fi !== last.fi);
+    if (moved) went = true;
+    still = moved || !last ? 0 : still + 500;
     last = pose;
     const near = pose.fi === target.fi && Math.hypot(pose.x - target.x, pose.z - target.z) < 1.2;
+    // 到了：walkTo 的 Promise 说到了 / 停在目的地附近；目的地被家具挡住、停在别处（nearest）：到了那一层、走过、停了 5 秒
     if ((p.arrived === true || near) && still >= 2000) return pose;
+    if (went && pose.fi === target.fi && still >= 5000) return pose;
   }
   throw new Error(`${label}：10 分钟还没走到 ${J(target)}（最后在 ${J(last)}）`);
 }
@@ -608,8 +612,10 @@ async function walkCase(browser, origin, c, o) {
   if (o.noPill) return { id: c.id, skip: NO_PILL };
   const { ctx, page, errors } = await openCase(browser, origin, c, o);
   try {
-    // 「走进去」的按钮在引擎 ready 以后出现；等不到 = 还没做好 → 跳过（不算失败；同一个打包目录剩下的情形也不用再开）
-    const pill = await page.waitForSelector('[data-walk="enter"]', { state: 'attached', timeout: 20e3 }).catch(() => null);
+    // 「走进去」的按钮在界面 ready 以后出现：先等引擎静下来（机器忙时开机很慢），这时还没有 = 还没做好 → 跳过
+    // （不算失败；同一个打包目录剩下的情形也不用再开）
+    await settle(page, `${c.id} 开机`);
+    const pill = await page.waitForSelector('[data-walk="enter"]', { state: 'attached', timeout: 10e3 }).catch(() => null);
     if (!pill) {
       o.noPill = true;
       return { id: c.id, skip: NO_PILL, ms: Date.now() - t0 };
@@ -687,10 +693,14 @@ async function runAll(cases, jobs, fn) {
   return results;
 }
 
+// 鸟瞰静止时 OrbitControls.update() 每一帧都在两个只差最后一位（~1e-15）的相机值之间来回跳
+// （target.clampLength 的往返误差，改代码之前就这样），所以相机这三项允许 1e-9 以内的差；图（哈希）还是要一模一样。
+const NEAR_KEYS = new Set(['position', 'quaternion', 'target']);
+const near = (x, y) => Array.isArray(x) && Array.isArray(y) && x.length === y.length && x.every((v, i) => Math.abs(v - y[i]) <= 1e-9);
 /** 两份取景状态哪些字段不一样 */
 function jsonDiff(a, b) {
   const keys = [...new Set([...Object.keys(a || {}), ...Object.keys(b || {})])];
-  return keys.filter((k) => J(a?.[k]) !== J(b?.[k]));
+  return keys.filter((k) => J(a?.[k]) !== J(b?.[k]) && !(NEAR_KEYS.has(k) && near(a?.[k], b?.[k])));
 }
 
 function table(rows) {

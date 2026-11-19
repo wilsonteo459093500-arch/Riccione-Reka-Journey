@@ -311,7 +311,8 @@ function placeAlong(wall, mesh, along, y, offset = 0) {
   return mesh;
 }
 
-function windowFrame(wall, p, lib, H) {
+/** 窗 / 趟门的框、竖框和玻璃（走进去的导航 walk/nav.js 照它算竖框） */
+export function windowFrame(wall, p, lib, H) {
   const g = new THREE.Group();
   const len = p.b - p.a;
   const mid = (p.a + p.b) / 2;
@@ -382,7 +383,8 @@ function windowCard(wall, p, lib, H) {
   return m;
 }
 
-function doorLeaf(wall, p, lib) {
+/** 一扇门（门扇 + 把手，开 75°；> 1.3m 的门洞不放）。走进去用它另建能开关的门（walk/doors.js） */
+export function doorLeaf(wall, p, lib) {
   const len = p.b - p.a;
   if (len > 1.3) return null;
   const head = p.head ?? 2.1;
@@ -755,10 +757,12 @@ export function buildFloorShell(floor, walls, lib, { elev = 0, voidEdges = [], h
     wallSets.push({ wall: w, full: T.full, cut: T.cut, outward, lowered: false });
   }
   finish(inner);
-  const leaves = doors.leaf.build({ slot: 'cabinetry' });
-  if (leaves) root.add(leaves);
-  const handles = doors.handle.build({ slot: 'metal' });
-  if (handles) root.add(handles);
+  // 整层合并的门扇 / 把手：走进去时藏起来、换成能开关的门（walk/doors.js 认 userData.doorLeaves）
+  for (const m of [doors.leaf.build({ slot: 'cabinetry' }), doors.handle.build({ slot: 'metal' })])
+    if (m) {
+      m.userData.doorLeaves = true;
+      root.add(m);
+    }
 
   // 挑空 / 楼梯口：没有墙的那几条边立护栏（1.0m，扶手 + 细立杆）
   if (voidEdges?.length) {

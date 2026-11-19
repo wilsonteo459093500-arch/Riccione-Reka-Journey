@@ -219,6 +219,12 @@ export default {
   '我们做 · 定制柜、台面、墙板、门': 'We make this · custom cabinets, worktops, wall panels, doors',
   家具示意: 'Furniture for illustration',
   保留你家原有: 'Kept from your home',
+  // ── 走进去（StudioApp：按钮、下载那一块时的等待、出错退回；走进去里面的词在 en-walk*.js，跟着走进去懒加载） ──
+  走进去: 'Walk in',
+  正在走进去: 'Walking in',
+  回到全屋: 'Back to whole home',
+  '走进去出了点问题，已回到全屋': 'Walk-in hit a snag — you’re back in the whole home',
+
   // ── 导出给设计师（⋯ 菜单里的那一项；面板和导出文件里的词在 en-export.js，跟着导出代码懒加载） ──
   导出给设计师: 'Export for designers',
   'AutoCAD · SketchUp · 酷家乐': 'AutoCAD · SketchUp · Kujiale',
