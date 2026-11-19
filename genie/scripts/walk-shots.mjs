@@ -47,7 +47,7 @@ const SHEETS = [
   ['c', ['night', 'stairs', 'upstairs', 'minimap-zoom', 'wish-walk', 'wish-photo']],
 ];
 const FLY_K = 1.1; // 「飞进去的半路」：飞了这么多秒（到 P1 是 1.6 秒：这时还在楼外面往下降，看得到整栋楼的正面）
-const STAIR_RISE = 0.8; // 「楼梯半路」：眼睛比楼下高出这么多米时定住（第一跑走到一半：前面是往上的台阶和平台）
+const STAIR_RISE = 2.3; // 「楼梯半路」：眼睛比楼下高出这么多米时定住（U 形楼梯第二跑的一半：前面是往上的台阶、看得到楼上；第一跑对着平台那面墙）
 
 function args(argv) {
   const o = {

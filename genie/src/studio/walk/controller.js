@@ -459,8 +459,8 @@ export function createWalk(engine, { project = null, api = null, wish = false, o
         yaw = wrap(yaw + d * (1 - Math.exp(-dt * TURN_K)));
         face = Math.max(0.25, Math.cos(Math.min(Math.abs(d), Math.PI / 2)));
       }
-      // 楼梯：往上稍微抬头、往下稍微低头；平地：回到平视
-      const want = stair ? clamp((leg.rise > 0 ? 0.5 : 0.7) * Math.atan2(leg.rise, leg.run || 1), -0.45, 0.3) : 0;
+      // 楼梯：往上只抬一点头（看得到前面的台阶，不是对着一面墙 / 楼板底）、往下稍微低头；平地：回到平视
+      const want = stair ? clamp((leg.rise > 0 ? 0.2 : 0.7) * Math.atan2(leg.rise, leg.run || 1), -0.45, 0.3) : 0;
       pitch += (want - pitch) * (1 - Math.exp(-dt * PITCH_K));
     }
     R.walked += advance(R, R.v * dt * face * (stair ? STAIR_K : 1));
