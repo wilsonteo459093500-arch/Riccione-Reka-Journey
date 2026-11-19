@@ -19,6 +19,10 @@
   - 用户的方案有 5 小时用量额度。一次派很多帮手（workflow / ultracode）几分钟就会用完，那次 14 个检查员两次都没跑完。
   - 平常一步一步做，不派一堆帮手；只有用户说要「全面体检」、而且额度刚重置时才用 workflow。
   - 选 model 和 effort 照 `.claude/skills/software-checkup/references/model-effort-guide.md`。
+- **少推几次**（2026-11-19 真的撞到）：
+  - Vercel 是免费方案，一天最多 100 次部署；每推一次，5 个项目（visi、space-network、sail-render、kira、wish）各算一次，不管改的是不是它的东西。
+  - 用完后所有软件 24 小时内出不了预览、也更新不了正式版。
+  - 所以：做完一段再推，不要每个小 commit 都推。根治的办法排在 KIRA 阶段 1B（见 `docs/checkups/kira-2026-11-19.md` 问题 3b）。
 
 ## 三条原则（UKIR STUDIO）
 
