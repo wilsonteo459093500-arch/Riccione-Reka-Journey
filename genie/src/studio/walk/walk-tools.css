@@ -20,7 +20,10 @@
   border-radius: 22px;
   font-family: var(--sans);
   color: var(--pt);
-  overflow: hidden;
+  /* 矮的屏幕（横着的手机）：.walk-panel-slot 限了高，面板自己竖着滚 */
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .walk-panel-head {
   display: flex;
@@ -179,6 +182,7 @@
   margin-left: auto;
 }
 .walk-tray-row {
+  flex: none;
   display: flex;
   gap: 4px;
   margin: 0 -10px 0 -14px;
@@ -250,10 +254,11 @@
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
 }
-.walk-light .walk-seg {
-  margin-left: auto;
+.walk-light .walk-seg button {
+  flex: 1 1 0;
 }
 .walk-light-arc {
+  flex: none;
   width: min(250px, 100%);
   margin: -4px auto 0;
 }
@@ -462,6 +467,19 @@
   }
 }
 
+/* 矮的横屏（手机横着拿）：面板别伸到右上角的小地图下面（地图约 170px 宽，面板在中间）；
+   再矮一点：灯光面板先不画太阳弧（白天 / 晚上和四个时刻更要紧，面板本身也能竖着滚） */
+@media (max-height: 560px) and (min-width: 601px) {
+  .walk-panel {
+    max-width: calc(100vw - 2 * (var(--safe-r) + 172px));
+  }
+}
+@media (max-height: 480px) {
+  .walk-light-arc {
+    display: none;
+  }
+}
+
 /* 手机：面板整行宽（.walk-dock 撑满）；量尺的控制条放到摇杆上面（摇杆在工具轮正上方的左边） */
 @media (max-width: 600px) {
   .walk-panel {
@@ -471,6 +489,15 @@
   }
   .walk-tray-row {
     margin: 0 -8px 0 -12px;
+  }
+  /* 类别放到第二行（整行宽），头一行留给名字和收起 */
+  .walk-tray .walk-seg {
+    order: 1;
+    flex: 1 1 100%;
+    margin-left: 0;
+  }
+  .walk-tray .walk-seg button {
+    flex: 1 1 0;
   }
   .walk-chip,
   .is-en .walk-chip {

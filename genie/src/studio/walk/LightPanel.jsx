@@ -51,18 +51,18 @@ export default function LightPanel({ project, api, onClose }) {
           <b className="walk-light-time">{fmtTime(time)}</b>
           <em>{night ? t('晚上 · 屋里的灯都亮着') : nameOf(near)}</em>
         </span>
-        <div className="walk-seg" role="group" aria-label={t('白天 / 晚上')}>
-          <button type="button" className={night ? '' : 'on'} aria-pressed={!night} data-walk-light="day" onClick={() => night && set(lastDay.current)}>
-            <Icon name="sun" size={16} />
-            <span>{t('白天')}</span>
-          </button>
-          <button type="button" className={night ? 'on' : ''} aria-pressed={night} data-walk-light="night" onClick={() => !night && set(BY_ID.night.hour)}>
-            <Icon name="moon" size={16} />
-            <span>{t('晚上')}</span>
-          </button>
-        </div>
         <button type="button" className="walk-panel-x" aria-label={t('关闭')} title={t('关闭')} data-sfx="close" onClick={onClose}>
           <Icon name="close" size={16} />
+        </button>
+      </div>
+      <div className="walk-seg" role="group" aria-label={t('白天 / 晚上')}>
+        <button type="button" className={night ? '' : 'on'} aria-pressed={!night} data-walk-light="day" onClick={() => night && set(lastDay.current)}>
+          <Icon name="sun" size={16} />
+          <span>{t('白天')}</span>
+        </button>
+        <button type="button" className={night ? 'on' : ''} aria-pressed={night} data-walk-light="night" onClick={() => !night && set(BY_ID.night.hour)}>
+          <Icon name="moon" size={16} />
+          <span>{t('晚上')}</span>
         </button>
       </div>
       <div className="walk-light-arc">
