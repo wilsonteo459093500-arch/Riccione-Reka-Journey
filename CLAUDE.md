@@ -77,7 +77,15 @@
     - 以后加句子：`lines.json` 加 draft → `tools/make_deku_review.py` 重发审核网页 → 用户贴回 → 改 status → `python3 tools/make_deku.py` → `tools/make_font.py`（不要接 `| head`，会写一半）→ `build.sh`、`android/build.sh`（版本号 +1）→ sim 截图
     - FoloToy 断行用 `deku_wrap()`（标点不放行首）；出处太长在人名后换行（make_deku.py `rough_width`）
     - 郭鹤年只有二手报道（界面新闻；jiemian.com 这个环境连不上），提醒用户对《郭鹤年自传》
-  - **D** Wi-Fi：星座、新闻（Grok 邮件）、读书
+  - **D**（2026-11-19 用户选定）：**经手机 app、不用 Wi-Fi**（app 拿资料，用蓝牙传给 FoloToy）；**先做新闻**，之后星座、读书
+    - 新闻 = 用户的「每日晨报 DAILY MORNING BRIEF」：每天早上约 7:00（大马时间）从用户自己的 Gmail 寄给自己，主题「每日晨报 DAILY MORNING BRIEF · 2026-11-18 星期三」（偶尔有旧格式「每日晨报 · 2026年11月10日（星期二）· 共32条」）
+    - app 怎么拿信（用户选）：**应用程序密码读 Gmail**（IMAP imap.gmail.com:993；用户开两步验证、产生 16 位应用程序密码、在 app 填一次）；只读晨报那几封，不改不删不寄；FoloToy 本身不碰邮箱
+    - 信的格式（2026-11-18 那封，样本 `android/app/src/test/resources/brief-sample.html`，只有头、三件事、目录、前两栏）：
+      - 纯文字那层只有「今日三件事」一句话；**全文只在 HTML**
+      - 「今日三件事」：`<td valign="top">` 三个标题
+      - 栏目头：`<td>一、今日必读</td><td align="right">8条</td>`；九栏（今日必读、大马热议、政治、行业·房地产、AI要闻、深度观点、大马股市、全球家具、家具AI），每天 90 多条
+      - 每条：`<b>1. 标题</b><div>摘要</div><a href="…">来源 →</a>`（可能有两个来源连结）；最后有「对你的生意意味着什么」5 点
+    - 还没定、新对话先问用户：FoloToy 上显示哪些（只三件事？每栏前几条？标题还是标题 + 摘要）、怎么翻、要不要 S.T.A.R 念；任意新闻字要放约 6,700 个常用中文字（韧体多约 2MB，8MB 够）
 - 怎么做：
   - 照 `network/folotoy/README.md`、`network/PLAN.md`
   - 编译：`build.sh`；截图：`sim/run.sh`；app：`android/build.sh`
