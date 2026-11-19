@@ -1209,6 +1209,10 @@ export function createWalk(engine, { project = null, api = null, wish = false, o
     get nav() {
       return nav;
     },
+    /** 门（createDoors 的结果；没走进去 = null）：脚本看门开了没有 */
+    get doors() {
+      return doors;
+    },
     get wish() {
       return !!wish;
     },

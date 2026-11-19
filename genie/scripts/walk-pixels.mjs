@@ -838,7 +838,8 @@ async function main() {
   return code;
 }
 
-export { matrix, walkCases, decodePNG, encodePNG, pixelDiff, stairTarget };
+// scripts/walk-e2e.mjs 也用这些（同一个静态服务器、同一套样本写法、同一种「静下来」）
+export { matrix, walkCases, decodePNG, encodePNG, pixelDiff, stairTarget, serve, initScript, idleProbe, settle, openCase, launch, loadFixture, walkPhase, waitPhase, seedFor, sleep };
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url))
   main().then(
