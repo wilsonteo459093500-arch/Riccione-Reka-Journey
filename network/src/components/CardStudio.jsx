@@ -70,7 +70,7 @@ export default function CardStudio() {
             {kind === 'qr' && <p className="text-muted">印在名片背面、桌卡、展厅门口。扫进来的人标签是「扫码」。</p>}
             {kind === 'nfc' && <NfcWriter url={link} />}
             {kind === 'folotoy' && (
-              <p className="text-muted">这个连结放进 FoloToy 的韧体设定（<code>SPACE_CARD_URL</code>），屏幕上就会显示同一个二维码；扫进来的人会记成「扫 FoloToy 留资料」。做法见 <code>network/folotoy/README.md</code>。</p>
+              <p className="text-muted">FoloToy 屏幕上显示的就是这个二维码（韧体已经编好，用电脑 Chrome 打开 FoloToy 官方网页刷机工具烧进去）；扫进来的人会记成「扫 FoloToy 留资料」。做法见 <code>network/folotoy/README.md</code>「网页烧录」。</p>
             )}
             <div className="flex flex-wrap gap-2 pt-1">
               <Button size="sm" variant="outline" onClick={() => copy(link, toast)}><Copy className="h-4 w-4" />复制</Button>
@@ -111,7 +111,7 @@ function NfcWriter({ url }) {
       ) : (
         <p>这台手机的浏览器不能直接写 NFC（只有 Android 的 Chrome 可以）。iPhone：装免费的 <b>NFC Tools</b> → 写 → 添加记录 → 网址 → 贴上面的连结 → 写 → 贴近贴纸。</p>
       )}
-      <p className="text-xs">贴纸用 <b>NTAG215 / NTAG213</b>（Shopee 一张几毛钱）。写好之后别人的手机碰一下就打开名片，iPhone 不用开任何 app。贴在手机壳、名片夹、展厅桌上都可以。</p>
+      <p className="text-xs">贴纸用 <b>NTAG215 / NTAG213</b>（Shopee 一张几毛钱）。写好之后别人的手机碰一下就打开名片，iPhone 不用开任何 app。贴在手机壳、名片夹、展厅桌上都可以。<b>FoloToy 背面本身就是 NTAG213</b>，不用贴纸，直接贴近背面写。</p>
     </div>
   );
 }

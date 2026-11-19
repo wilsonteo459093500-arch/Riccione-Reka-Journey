@@ -51,6 +51,58 @@
 3. AI 方案主题建议：规则要先 brainstorm
 4. 展厅播放接 D5 / SU / 3ds Max 漫游视频：先调查设计师能导出什么格式
 
+## FoloToy（network/folotoy/，PR #81 未合并，2026-11-19）
+
+- 已做：
+  - 像素封面（2026-11-19：整片像素夜空 + 原创像素星星 S.T.A.R，**不放公司字标**；原本木纹太沉闷）→ 名片二维码
+  - 口袋机菜单 16 项：蜡烛生日歌（吹气熄）、木鱼、手电筒、计时器、倒数、番茄钟、叠叠乐、落落方块、记忆三色、求签、抽奖、解压（泡泡纸、狂按挑战、捏捏乐）
+  - 阶段 A（2026-11-18）做完：落落方块 + 三个解压游戏都做了；游戏画面会收到按下 / 放开（main.c）；截图 `firmware/pocket3-screens.png`
+  - 阶段 B（2026-11-18）做完：手机找 FoloToy（每个模式都开蓝牙）；app v0.2
+  - 阶段 C（2026-11-18）做完：小助理（73 句审过）；2026-11-19 改名 **S.T.A.R**、换成原创像素星星（程序里还叫 deku_*）；app v0.5；截图 `firmware/deku-screens.png`、`firmware/cover.png`
+  - 阶段 D（2026-11-19）做完：每日晨报（Gmail → app → 蓝牙 → FoloToy）；app v0.6；截图 `firmware/news-screens.png`
+  - 阶段 E（2026-11-19）做完：书摘封面轮播、晨报加今日星座；app v0.7
+  - **角色不照抄**：用户给过 Pac-Man、Mario 星星、Luma 当参考，都是游戏公司角色，不能用在名片设备上；照参考的感觉画原创的（`tools/star_art.py`）
+  - 2026-11-19 星星第二版「圆胖软星」：用户又给大卡司的星星、Luma（PixBrix）当参考 → 画了三个原创试稿（A 眨眼托腮 / B 圆胖软星 / C 混合），**用户选 B**：角圆、胖、长椭圆眼带亮点、下面一层暖橘、小嘴腮红；不放 Luma 的卷毛、不放大卡司的托腮手和黑圆底
+  - 车用遥控器（BLE 媒体键）
+  - SPACE 车控 Android app v0.1（`android/`：按住下开微信读书、按住确定选朋友打 WhatsApp）
+- 用户真机测过：名片、车用遥控器（YouTube / 语音助理 OK）。口袋机、app、找 FoloToy、DEKU、晨报、书摘还没回报（用户 2026-11-18：暂时没机会试，先往下做）
+- 待用户给：求签签文审核、抽奖真奖项、微信读书「抓画面结构」
+- 下一步（用户要省 token、分阶段）：
+  - ~~**A** 落落方块 + 解压游戏~~ 已做（不用俄罗斯方块 / Tetris 名字）；等用户真机试按键手感
+  - ~~**B** 手机找 FoloToy~~ 已做（2026-11-18，等用户真机试）：
+    - 用户选：车用模式照旧常开蓝牙；名片 / 口袋机**低频广播**（约每秒一次）、只认配对过的手机（新手机要在车用模式配对）
+    - app v0.2 按「让 FoloToy 响」→ 嘀嘀响 + 红白闪 + 信号格；「最后在哪里」（断线时间 + 手机位置）、「忘了带提醒」（断线 45 秒，可关）
+    - 不做：反过来找手机
+    - 截图 `firmware/find-screens.png`；做法见 README「手机找 FoloToy」、PLAN「阶段 B」
+  - ~~**C** DEKU~~ 已做（2026-11-18）；句库用户审过 73 句全部「要」，已放进韧体 + app v0.4：
+    - 用户选：口袋机菜单「DEKU 讲笑话」；名人原话 Claude 起草 + 出处、用户打勾；笑话：冷笑话谐音 / 马来西亚日常 / 家具装修
+    - 审核网页 https://claude.ai/artifact/4DcXNNxeknMGqygntM4W6V，用户贴回「要：J01 … 不要：…」
+    - 以后加句子：`lines.json` 加 draft → `tools/make_deku_review.py` 重发审核网页 → 用户贴回 → 改 status → `python3 tools/make_deku.py` → `tools/make_font.py`（不要接 `| head`，会写一半）→ `build.sh`、`android/build.sh`（版本号 +1）→ sim 截图
+    - FoloToy 断行用 `deku_wrap()`（标点不放行首）；出处太长在人名后换行（make_deku.py `rough_width`）
+    - 郭鹤年只有二手报道（界面新闻；jiemian.com 这个环境连不上），提醒用户对《郭鹤年自传》
+  - ~~**D** 每日晨报~~ 已做（2026-11-19，app v0.6，等用户真机试）：
+    - 用户选：经手机 app、不用 Wi-Fi；Gmail 应用程序密码（IMAP，只读）；显示**三件事 + 九栏全部**（+ 信里「对你的生意」5 点）；列表只放标题、确定看摘要；**按住确定手机念**；自动（7:00 后、每 30 分钟查到拿到今天的）+ app「存好，现在更新」
+    - 晨报信：每天约 7:00 从用户 Gmail 寄给自己，主题「每日晨报 DAILY MORNING BRIEF · 日期」；全文只在 HTML；样本 `android/app/src/test/resources/brief-2026-11-18.html`（编辑说明内文已删）；「对你的生意」框夹在第四、第五栏中间；标题可能有 `<span>【家具】</span>` 徽章
+    - app 只搜主题有「DAILY MORNING BRIEF」的信（旧格式「每日晨报 · 2026年11月10日」不认）
+    - 格式 / 封包见 `main/news_model.h`；样本 `brief-sample.txt` 由 app 测试产生，FoloToy host 测试、sim 读同一份（改了 Brief.kt 要更新它）
+    - 字型 `font_news_20.c`（GB2312 + 峇等，约 7,450 字）编译时产生、不进仓库；`NEWS_EXTRA`（make_font.py）加字 → 重跑 make_font.py（更新 `assets/news_chars.txt`）
+    - 分区表换成 `partitions_space.csv`（阶段 E 起 app 让出最后 512KB）：用户第一次要烧整份 `SPACE-card-full.bin`
+    - 这个开发环境连不上 imap.gmail.com：Gmail 只用模拟回应测过，真的登入要用户试
+    - 截图 `firmware/news-screens.png`
+  - ~~**E** 星座 + 书摘~~ 已做（2026-11-19，app v0.7，等用户真机试）：
+    - 星座：**加进每日晨报**、只要用户的**白羊座**（生日 1997-04-19）；app 认「今日星座」栏 → FoloToy 目录排在三件事后面
+      - 用户**不确定晨报是哪个流程出的**：README「今日星座」有一段说明请用户贴给出晨报的流程；还没确认加上
+    - 书摘：微信读书「笔记 → 导出」贴进 app（`Quotes.kt`，样本 `weread-sample.txt`）→ 蓝牙 0x08/0x09/0x85 → **开机封面下面三行轮播**（`space_card.c`）
+    - 分区 brief 512KB：前半晨报、后半书摘；样本 `quotes-sample.txt` 由 app 测试产生，sim 读同一份
+  - 之后：还没问用户
+- 怎么做：
+  - 照 `network/folotoy/README.md`、`network/PLAN.md`
+  - 编译：`build.sh`；截图：`sim/run.sh`；app：`android/build.sh`
+  - 新画面照 `games_screen.c` / `pocket_model.c` 的写法；格子多的画面用一个物件的 draw 事件画（落落方块、泡泡纸），不要开几百个物件
+  - 这台容器 Docker 要先 `sudo dockerd &` 才能 `build.sh`
+- 编 Android 要 `dl.google.com`：已建个人环境 riccione-reka-journey
+- Vercel 免费方案一天 100 次部署，推太多会被挡（不是程序问题）
+
 ## 开发备忘（blueprint/）
 
 - 测试和构建：

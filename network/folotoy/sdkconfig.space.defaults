@@ -1,5 +1,29 @@
-# SPACE card：在上游 sdkconfig.defaults 后面接上这几行（README 第 3 步）
+# SPACE card：在上游 sdkconfig.defaults 后面接上这几行（build.sh 自动接）
 # LVGL 内建的二维码元件（lv_qrcode，用 qrcodegen、ECC M）
 CONFIG_LV_USE_QRCODE=y
-# 名片 app 用不到 BLE / Wi-Fi：关掉省 RAM、省电（以后要做「碰一下传资料」再打开）
-CONFIG_BT_ENABLED=n
+# 车用遥控器画面的大图示（蓝牙、播放、下一首）
+CONFIG_LV_FONT_MONTSERRAT_48=y
+# 中文字型 32px 的英文 / 数字交给 Montserrat 32（tools/make_font.py 的 fallback）
+CONFIG_LV_FONT_MONTSERRAT_32=y
+
+# 蓝牙：BLE HID（NimBLE + ESP-IDF esp_hid）。车用模式快速广播；名片 / 口袋机低频广播（手机找 FoloToy 用）。
+CONFIG_BT_ENABLED=y
+CONFIG_BT_NIMBLE_ENABLED=y
+CONFIG_BT_NIMBLE_ROLE_PERIPHERAL=y
+CONFIG_BT_NIMBLE_ROLE_BROADCASTER=y
+# 配对资料存 NVS：下次开机手机自动重连（上游预设是关的）
+CONFIG_BT_NIMBLE_NVS_PERSIST=y
+CONFIG_BT_NIMBLE_SECURITY_ENABLE=y
+CONFIG_BT_NIMBLE_SM_LEGACY=y
+CONFIG_BT_NIMBLE_SM_SC=y
+CONFIG_BT_NIMBLE_MAX_BONDS=3
+# HID / 装置资讯 / 电量服务（esp_hid 的 NimBLE 版用到）
+CONFIG_BT_NIMBLE_HID_SERVICE=y
+CONFIG_BT_NIMBLE_DIS_SERVICE=y
+CONFIG_BT_NIMBLE_SVC_DIS_MANUFACTURER_NAME=y
+CONFIG_BT_NIMBLE_SVC_DIS_SERIAL_NUMBER=y
+CONFIG_BT_NIMBLE_SVC_DIS_PNP_ID=y
+CONFIG_BT_NIMBLE_BAS_SERVICE=y
+
+# 每日晨报的字型（GB2312 全部汉字 + 符号，约 7,400 字）位图约 1.4MB，超过一般格式的 1MB（20 bit 位址）
+CONFIG_LV_FONT_FMT_TXT_LARGE=y

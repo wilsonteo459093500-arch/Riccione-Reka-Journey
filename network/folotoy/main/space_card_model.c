@@ -7,6 +7,7 @@
 static const uint8_t BRIGHTNESS[] = { 100, 60, 30 };
 #define DIM_PERCENT 15
 #define DIM_AFTER_MS 60000u
+#define COVER_AFTER_MS 30000u
 
 bool space_card_tag_url(const char *in, char *out, size_t out_len) {
     if (!in || !out || out_len == 0) return false;
@@ -57,6 +58,7 @@ void space_card_init(space_card_state_t *s,
             copy_label(s->links[1].label, event_label, "Event");
             s->count = 2;
         }
+        s->cover = true;   // 开机先显示封面
     }
 }
 
@@ -66,7 +68,14 @@ int space_card_on_key(space_card_state_t *s, space_card_btn_t btn, space_card_ev
         s->dimmed = false;
         return SPACE_CARD_REDRAW_BACKLIGHT;
     }
-    if (ev == SPACE_CARD_EV_OTHER) return redraw;
+    if (ev != SPACE_CARD_EV_CLICK && ev != SPACE_CARD_EV_LONG) return redraw;
+    if (s->cover) {                       // 封面：只有 确定 短按 有用（→ 二维码）
+        if (ev == SPACE_CARD_EV_CLICK && btn == SPACE_CARD_BTN_OK) {
+            s->cover = false;
+            return SPACE_CARD_REDRAW_LAYOUT | SPACE_CARD_REDRAW_QR;
+        }
+        return redraw;
+    }
     if (ev == SPACE_CARD_EV_CLICK && (btn == SPACE_CARD_BTN_UP || btn == SPACE_CARD_BTN_DOWN)) {
         if (s->count > 1) {
             s->current = btn == SPACE_CARD_BTN_DOWN ? (s->current + 1) % s->count
@@ -118,4 +127,11 @@ void space_card_battery_text(int soc, char *out, size_t out_len) {
     if (soc < 0) { out[0] = '\0'; return; }
     if (soc > 100) soc = 100;
     snprintf(out, out_len, "%d%%", soc);
+}
+
+bool space_card_cover_idle(space_card_state_t *s, uint32_t idle_ms) {
+    if (s->cover || s->count == 0 || idle_ms < COVER_AFTER_MS) return false;
+    s->cover = true;
+    s->big = false;
+    return true;
 }

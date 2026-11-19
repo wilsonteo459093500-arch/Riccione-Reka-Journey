@@ -1,0 +1,8 @@
+# SPACE 名片的分区表（build.sh 拿它换掉上游的 partitions.csv）。
+# 跟上游一样，只是 app 让出最后 512KB 给「每日晨报」和「书摘」（brief：各 A / B 两格、每格 128KB，见 main/news_model.h）。
+# nvs 位置不变：换韧体后模式、蓝牙配对都还在。
+# Name,   Type, SubType, Offset,   Size,     Flags
+nvs,      data, nvs,     0x9000,   0x6000,
+phy_init, data, phy,     0xf000,   0x1000,
+factory,  app,  factory, 0x10000,  0x770000,
+brief,    data, 0x40,    0x780000, 0x80000,

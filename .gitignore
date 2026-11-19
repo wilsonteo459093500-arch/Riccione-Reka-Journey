@@ -7,3 +7,6 @@ dist-ssr
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# 晨报字型由 build.sh / sim/run.sh 产生到编译资料夹（约 10MB），不放仓库
+network/folotoy/main/font_news_20.c

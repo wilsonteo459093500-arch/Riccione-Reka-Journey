@@ -2,6 +2,7 @@
 //
 // 屏幕上显示一个二维码：别人用手机扫 → 打开 SPACE 的公开名片页 → 留资料 → 自动进 SPACE。
 //   上 / 下 短按：切换「名片」/「活动」两个二维码（活动网址有设才有）
+//   开机先显示封面（木纹 + RICCIONE / 溪岸 字标）：确定 → 二维码；二维码闲置 30 秒 → 回封面
 //   确定 短按：亮度 100% → 60% → 30%
 //   确定 长按：大二维码模式（只剩二维码，远一点也扫得到）
 //   闲置 60 秒自动调暗，按任何键恢复
@@ -30,6 +31,8 @@ typedef enum {
     SPACE_CARD_EV_CLICK = 0,
     SPACE_CARD_EV_LONG,
     SPACE_CARD_EV_OTHER,
+    SPACE_CARD_EV_PRESS,      // 按下瞬间 / 放开瞬间：只有车用模式转给手机 app 用（按住录语音讯息）
+    SPACE_CARD_EV_RELEASE,
 } space_card_ev_t;
 
 typedef enum {
@@ -46,6 +49,7 @@ typedef struct {
     uint8_t brightness_idx;   // 0..2 → 100 / 60 / 30
     bool big;                 // 大二维码模式
     bool dimmed;              // 闲置调暗中
+    bool cover;               // 显示开机封面（木纹 + 字标）；确定 → 二维码
 } space_card_state_t;
 
 // 网址加上 s=folotoy（已经有 s= 就不加）。只收 https://。成功回 true。
@@ -61,6 +65,9 @@ int space_card_on_key(space_card_state_t *s, space_card_btn_t btn, space_card_ev
 
 // 闲置多久（毫秒）→ 要不要调暗；回 true 代表状态变了（要改背光）
 bool space_card_on_idle(space_card_state_t *s, uint32_t idle_ms);
+
+// 二维码显示时闲置 30 秒 → 回封面；回 true 代表要重排画面
+bool space_card_cover_idle(space_card_state_t *s, uint32_t idle_ms);
 
 // 现在的背光百分比（调暗时固定 15%）
 uint8_t space_card_backlight(const space_card_state_t *s);

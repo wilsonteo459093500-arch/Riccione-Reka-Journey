@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SPACE 车控</string>
+    <string name="service_name">SPACE 车控</string>
+    <string name="service_desc">让 FoloToy 控制手机：按住「下」打开微信读书继续听（帮你按 ▶，再切回 Waze / Google Maps）；按住「确定」选朋友打 WhatsApp 语音通话或录语音讯息（帮你按住录音键）。也能在 app 里让 FoloToy 响（找它）、记下它最后跟手机断线的时间和位置。只在你按 FoloToy 时帮你操作别的 app，不读讯息内容、不上网。</string>
+</resources>
