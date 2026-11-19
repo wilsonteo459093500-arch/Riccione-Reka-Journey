@@ -49,7 +49,7 @@ const char *menu_item_text(menu_item_t item) {
     case MENU_BUBBLE: return "泡泡纸";
     case MENU_MASH: return "狂按挑战";
     case MENU_SQUISH: return "捏捏乐";
-    case MENU_DEKU: return "DEKU 讲笑话";
+    case MENU_DEKU: return "S.T.A.R 讲笑话";
     case MENU_CAR: return "车用遥控器";
     case MENU_BACK: return "返回名片";
     default: return "";

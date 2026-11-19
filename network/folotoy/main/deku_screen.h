@@ -1,4 +1,4 @@
-// deku_screen.h —— DEKU 小助理的画面：原创的小木块脸（等你 / 在听 / 想 / 说 / 没听懂）+ 句子
+// deku_screen.h —— 小助理 S.T.A.R（程序里叫 deku）的画面：原创像素星星（等你 / 在听 / 想 / 说 / 没听懂）+ 句子
 // 都要在持 LVGL 锁时呼叫。
 #pragma once
 

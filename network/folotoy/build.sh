@@ -49,6 +49,7 @@ python3 "${HERE}/tools/make_font.py" --check \
   --bold-ttf "${FONT_DIR}/package/700Bold/NotoSansSC_700Bold.ttf"
 
 python3 "${HERE}/tools/make_cover.py" --check
+python3 "${HERE}/tools/make_star.py" --check
 python3 "${HERE}/tools/make_deku.py" --check
 
 # --- 1. 上游 ---

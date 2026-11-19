@@ -2,7 +2,7 @@
 
 FoloToy AI Passport（ESP32-C3、240×320 屏幕、三个按键）有两个模式：
 
-- **开机封面**：深色木纹 + 官方 RICCIONE® / 溪岸 sAil by Riccione Reka 白色字标，一道光扫过；**按「确定」→ 名片二维码**，二维码闲置 30 秒回封面。
+- **开机封面**（2026-11-19 换成像素风）：像素夜空里一颗原创像素星星 **S.T.A.R**（上下飘、眨眼、旁边小闪光），底部官方 RICCIONE® / 溪岸 sAil by Riccione Reka 白色字标；**按「确定」→ 名片二维码**，二维码闲置 30 秒回封面。
 
   ![开机封面](./firmware/cover.png)
 
@@ -11,7 +11,7 @@ FoloToy AI Passport（ESP32-C3、240×320 屏幕、三个按键）有两个模�
   - 工具：**蜡烛与生日歌**、**木鱼**、**手电筒**、**计时器**、**倒数计时**、**番茄钟**
   - 游戏：**叠叠乐**、**落落方块**、**记忆三色**、**求签**、**抽奖**
   - 解压：**泡泡纸**、**狂按挑战**、**捏捏乐**
-  - 小助理：**DEKU 讲笑话**（笑话、稻盛和夫 / 郭鹤年 / Musk 的原话；见下面「DEKU 小助理」）
+  - 小助理：**S.T.A.R 讲笑话**（笑话、稻盛和夫 / 郭鹤年 / Musk 的原话；见下面「S.T.A.R 小助理」）
   - 车用遥控器、返回名片
   - 见下面「口袋机」
 - **车用遥控器模式**：FoloToy 当 Android 手机的**蓝牙媒体遥控器**，手机不用装 app。开车时按 FoloToy 控制微信读书听书、音乐，长按叫语音助理。见下面「车用遥控器」。
@@ -208,11 +208,13 @@ FoloToy 背面就是一枚**被动 NTAG213** NFC 芯片（官方规格：支持�
 - **关机时找不到**：任何做法都要 FoloToy 开着。没电、关机时就看「最后在哪里」。
 - 一次只能连一支手机（跟车用模式一样）。
 
-## DEKU 小助理（v0.4，2026-11-18）
+## S.T.A.R 小助理（原名 DEKU；app v0.5，2026-11-19）
 
 ![模拟画面：菜单 / 等你（没有 app）/ 等你（有 app，眨眼）/ 在听 / 想一下 / 说（最长的笑话、Musk、稻盛和夫）/ 没听清楚](./firmware/deku-screens.png)
 
-口袋机菜单 →「DEKU 讲笑话」。DEKU 是一块原创的小木块（跟开机封面同一种木色），会眨眼、听、想、说。
+口袋机菜单 →「S.T.A.R 讲笑话」。S.T.A.R 是原创像素星星（跟开机封面同一颗；`tools/star_art.py`），会眨眼、听、想、说。2026-11-19 用户把 DEKU 改名 S.T.A.R、换成星星；程序里的名字还是 `deku_*`。
+
+- 用户给过 Pac-Man、Mario 的星星、Luma 当参考：都是游戏公司的角色，不能照画（FoloToy 是活动上的名片）；S.T.A.R 是自己画的，跟它们不一样（有嘴巴、圆眼亮点、腮红）。
 
 | 键 | 做什么 |
 |---|---|
@@ -319,7 +321,8 @@ FoloToy 背面就是一枚**被动 NTAG213** NFC 芯片（官方规格：支持�
 | `main/find_model.c/.h` | 手机找 FoloToy 纯逻辑：指令 / 通知封包、30 秒自己停、红白闪节奏、按键停了之后把那一下吃掉（**有 host 测试**） |
 | `main/find_screen.c/.h` | 「我在这里！」红白闪画面：盖在 LVGL top layer，底下的画面不受影响 |
 | `main/deku_model.c/.h` | DEKU 纯逻辑：表情状态、按键、一轮不重复的抽句、名人轮流、跟 app 的封包（用句子 id 对）、逾时（**有 host 测试**） |
-| `main/deku_screen.c/.h` | DEKU 画面：原创小木块脸（眨眼、在听、想、说、没听懂）+ 句子 + 出处 |
+| `main/deku_screen.c/.h` | S.T.A.R 画面：像素星星五个表情（眨眼、在听、想、说、没听懂）+ 句子 + 出处 |
+| `tools/star_art.py`、`tools/make_star.py`、`main/star_img.c/.h` | S.T.A.R 原创像素画（32 格）→ 韧体图（封面 192px、小助理 96px，RGB565A8）；`--check` 由 `build.sh` 检查 |
 | `deku/lines.json`、`tools/make_deku.py`、`main/deku_lines.c` | DEKU 句库（草稿 / 审过 / 不要）→ 只把审过的产生成韧体的表和 app 的 `assets/deku.json`；`--check` 由 `build.sh` 检查 |
 | `tools/make_deku_review.py` | 句库 → 审核网页（要 / 不要、复制结果） |
 | `main/pocket_model.c/.h` | 口袋机纯逻辑：菜单、蜡烛（年龄、唱歌、熄灭）、计时器、倒数、时间文字（**有 host 测试**） |
@@ -329,7 +332,7 @@ FoloToy 背面就是一枚**被动 NTAG213** NFC 芯片（官方规格：支持�
 | `main/tools_screen.c`、`games_screen.c` | 木鱼 / 手电筒 / 番茄钟、四个小游戏的画面 |
 | `main/menu_screen.c`、`candle_screen.c`、`timer_screen.c`、`pocket_ui.h` | 菜单、数字蜡烛（火苗动画、烟、歌词）、计时器 / 倒数（圆环、红白闪）画面 |
 | `main/font_*.c` | `tools/make_font.py` 产生的字型：中文 20 / 32px（只放用到的字）、大数字 64 / 140px |
-| `tools/make_cover.py`、`main/cover_img.c` | 开机封面：程序画的胡桃木纹 + 仓库里的官方白色字标（`blueprint/public/template/b/`），产生 240×320 RGB565；`--check` 由 `build.sh` 检查 |
+| `tools/make_cover.py`、`main/cover_img.c` | 开机封面：程序画的像素夜空 + 仓库里的官方白色字标（`blueprint/public/template/b/`），产生 240×320 RGB565（星星另外放，才能动）；`--check` 由 `build.sh` 检查 |
 | `tools/make_font.py` | 字型产生器：从 `main/*.c` 的字串收集中文字 → Pillow 画字 → LVGL 4bpp 格式，逐像素读回比对；`--check` 检查是不是最新（`build.sh` 每次跑） |
 | `main/main.c` | 开机：NVS（模式 + 配对资料）→ BSP 初始化 → 依模式开名片或车用画面 → 按键（回呼只丢 queue，input task 拿 LVGL 锁再改画面；沿用上游的按键唤醒保护） |
 | `main/Kconfig.projbuild` | menuconfig 的「SPACE card」：网址、名字、说明字、活动网址、遥控器蓝牙名字 |

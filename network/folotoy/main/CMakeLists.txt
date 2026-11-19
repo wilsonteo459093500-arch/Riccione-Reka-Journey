@@ -24,6 +24,7 @@ idf_component_register(
          "font_digits_64.c"
          "font_digits_140.c"
          "cover_img.c"
+         "star_img.c"
     INCLUDE_DIRS "."
     REQUIRES bsp esp_timer esp_hw_support esp_system nvs_flash bt esp_hid
 )

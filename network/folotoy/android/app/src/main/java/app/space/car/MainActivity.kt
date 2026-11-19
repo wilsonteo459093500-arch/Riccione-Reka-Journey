@@ -81,11 +81,11 @@ class MainActivity : Activity() {
         })
 
         // ---- DEKU ----
-        col.addView(title("DEKU 小助理", 18f))
+        col.addView(title("S.T.A.R 小助理", 18f))
         val dekuCount = CarService.loadDeku(this).size
         col.addView(text(
             if (dekuCount == 0) "句库还在审（审好的句子才会放进来）。"
-            else "句库：审过 $dekuCount 句。FoloToy 菜单选「DEKU 讲笑话」→ 按住确定说「讲个笑话」「稻盛和夫」「郭鹤年」「马斯克」「再来一个」，放开后手机念出来。"
+            else "句库：审过 $dekuCount 句。FoloToy 菜单选「S.T.A.R 讲笑话」→ 按住确定说「讲个笑话」「稻盛和夫」「郭鹤年」「马斯克」「再来一个」，放开后手机念出来。"
         ))
         if (dekuCount > 0) col.addView(button("在手机上先听一句笑话") {
             val s = CarService.instance

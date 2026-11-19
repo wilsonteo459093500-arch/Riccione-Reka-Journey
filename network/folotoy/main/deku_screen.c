@@ -1,7 +1,8 @@
 // deku_screen.c —— 见 deku_screen.h
 //
-// DEKU 的样子（原创，不用任何动漫角色）：一块圆角胡桃木小方块（跟开机封面同一种木色），
-// 黄铜色细边，两只白眼睛 + 黑眼珠，一张小嘴。表情只靠眼珠位置、眨眼、嘴巴形状、旁边的小符号。
+// 小助理叫 S.T.A.R（2026-11-19 用户改名；程序里的名字还是 deku_*）。
+// 样子：原创像素星星（tools/star_art.py → main/star_img.c，跟开机封面同一颗），
+// 五个表情图（平常 / 眨眼 / 在听 / 想 / 说话）+ 旁边的小符号（在听 🔊、想 …、没听懂 ?）。
 #include "deku_screen.h"
 
 #include "ble_remote.h"
@@ -9,16 +10,15 @@
 #include "esp_timer.h"
 #include "lvgl.h"
 #include "pocket_ui.h"
+#include "star_img.h"
 
-#define C_WOOD 0x6B4A2E
-#define C_WOOD_DARK 0x4A3220
-#define C_EYE 0xFAF6EE
-#define C_PUPIL 0x1A1410
 #define TICK_MS 100
+#define STAR_Y 34        // 平常的位置（96×96）
+#define STAR_Y_SAY 8     // 说话时往上移，留地方给句子
 
 static deku_state_t *s_state;
 static lv_timer_t *s_timer;
-static lv_obj_t *s_name, *s_head, *s_eye[2], *s_pupil[2], *s_mouth, *s_mark;
+static lv_obj_t *s_name, *s_head, *s_mark;
 static char s_wrapped[512];   // 断好行的句子
 static char s_wrapped_src[128];
 static lv_obj_t *s_text, *s_source, *s_hint;
@@ -26,33 +26,6 @@ static bool s_app;   // 上次画的时候 app 在不在
 
 static uint32_t now_ms(void) {
     return (uint32_t)(esp_timer_get_time() / 1000);
-}
-
-static lv_obj_t *box(lv_obj_t *parent, int32_t w, int32_t h, uint32_t color, int32_t radius) {
-    lv_obj_t *o = lv_obj_create(parent);
-    lv_obj_remove_style_all(o);
-    lv_obj_set_size(o, w, h);
-    lv_obj_set_style_bg_color(o, lv_color_hex(color), 0);
-    lv_obj_set_style_bg_opa(o, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(o, radius, 0);
-    lv_obj_remove_flag(o, LV_OBJ_FLAG_SCROLLABLE);
-    return o;
-}
-
-// 眼睛：高度（眨眼时变扁）、眼珠偏移
-static void set_eyes(int32_t eye_h, int32_t px, int32_t py) {
-    for (int i = 0; i < 2; i++) {
-        lv_obj_set_height(s_eye[i], eye_h);
-        lv_obj_align(s_eye[i], LV_ALIGN_TOP_MID, i ? 24 : -24, 26 + (30 - eye_h) / 2);
-        if (eye_h < 10) lv_obj_add_flag(s_pupil[i], LV_OBJ_FLAG_HIDDEN);
-        else lv_obj_remove_flag(s_pupil[i], LV_OBJ_FLAG_HIDDEN);
-        lv_obj_align(s_pupil[i], LV_ALIGN_CENTER, px, py);
-    }
-}
-
-static void set_mouth(int32_t w, int32_t h) {
-    lv_obj_set_size(s_mouth, w, h);
-    lv_obj_align(s_mouth, LV_ALIGN_TOP_MID, 0, 72 + (12 - h) / 2);
 }
 
 static const char *hint_text(void) {
@@ -87,7 +60,7 @@ static void draw_text(void) {
         lv_label_set_text(s_text, "没听清楚，再说一次？");
         lv_label_set_text(s_source, "");
     } else if (s_state->face == DEKU_FACE_IDLE) {
-        lv_label_set_text(s_text, "我是 DEKU。\n要听笑话，\n还是名人的话？");
+        lv_label_set_text(s_text, "我是 S.T.A.R。\n要听笑话，\n还是名人的话？");
         lv_label_set_text(s_source, "");
     } else {
         lv_label_set_text(s_text, "");
@@ -98,8 +71,8 @@ static void draw_text(void) {
     const bool say = s_state->face == DEKU_FACE_SAY;
     if (say) lv_obj_add_flag(s_name, LV_OBJ_FLAG_HIDDEN);
     else lv_obj_remove_flag(s_name, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_align(s_head, LV_ALIGN_TOP_MID, 0, say ? 8 : 38);
-    lv_obj_align(s_mark, LV_ALIGN_TOP_MID, 86, say ? 22 : 52);
+    lv_obj_align(s_head, LV_ALIGN_TOP_MID, 0, say ? STAR_Y_SAY : STAR_Y);
+    lv_obj_align(s_mark, LV_ALIGN_TOP_MID, 72, (say ? STAR_Y_SAY : STAR_Y) + 14);
     lv_obj_set_width(s_text, say ? 216 : 204);
     lv_obj_set_width(s_source, say ? 216 : 204);
     lv_obj_set_style_text_line_space(s_text, say ? 2 : 4, 0);
@@ -110,35 +83,30 @@ static void draw_text(void) {
 // 表情（每 100ms 跑一次：眨眼、说话时嘴巴开合、想的时候点点点）
 static void animate(void) {
     const uint32_t t = now_ms() - s_state->since_ms;
+    const void *src = &star_face_idle;
+    const char *mark = "";
     switch (s_state->face) {
     case DEKU_FACE_LISTEN:
-        set_eyes(34, 0, 0);
-        set_mouth(14, 14);
-        lv_label_set_text(s_mark, (t / 400) % 2 ? LV_SYMBOL_VOLUME_MAX : LV_SYMBOL_VOLUME_MID);
+        src = &star_face_listen;
+        mark = (t / 400) % 2 ? LV_SYMBOL_VOLUME_MAX : LV_SYMBOL_VOLUME_MID;
         break;
     case DEKU_FACE_THINK:
-        set_eyes(30, 6, -7);
-        set_mouth(16, 6);
-        lv_label_set_text(s_mark, (t / 300) % 3 == 0 ? "." : (t / 300) % 3 == 1 ? ".." : "...");
+        src = &star_face_think;
+        mark = (t / 300) % 3 == 0 ? "." : (t / 300) % 3 == 1 ? ".." : "...";
         break;
-    case DEKU_FACE_SAY:
-        set_eyes(30, 0, 2);
-        set_mouth(t < 1600 && (t / 200) % 2 ? 20 : 30, t < 1600 && (t / 200) % 2 ? 14 : 8);
-        lv_label_set_text(s_mark, "");
+    case DEKU_FACE_SAY:   // 刚开始说的 1.6 秒嘴巴一开一合
+        src = t < 1600 && (t / 200) % 2 == 0 ? &star_face_say : &star_face_idle;
         break;
     case DEKU_FACE_CONFUSED:
-        set_eyes(30, -6, 0);
-        set_mouth(12, 6);
-        lv_label_set_text(s_mark, "?");
+        src = &star_face_think;
+        mark = "?";
         break;
-    default: {
-        const bool blink = (t % 3200) < 150;   // 大约 3 秒眨一次
-        set_eyes(blink ? 4 : 30, 0, 2);
-        set_mouth(30, 8);
-        lv_label_set_text(s_mark, "");
+    default:
+        src = (t % 3200) < 150 ? &star_face_blink : &star_face_idle;   // 大约 3 秒眨一次
         break;
     }
-    }
+    if (lv_image_get_src(s_head) != src) lv_image_set_src(s_head, src);
+    lv_label_set_text(s_mark, mark);
 }
 
 static void tick_cb(lv_timer_t *t) {
@@ -161,23 +129,15 @@ void deku_screen_show(deku_state_t *state) {
     s_app = ble_remote_app_present();
     lv_obj_t *scr = ui_screen();
 
-    s_name = ui_label(scr, &lv_font_montserrat_20, UI_BRASS, "DEKU");
+    s_name = ui_label(scr, &lv_font_montserrat_20, UI_BRASS, "S.T.A.R");
     lv_obj_set_style_text_letter_space(s_name, 4, 0);
     lv_obj_align(s_name, LV_ALIGN_TOP_MID, 0, 10);
 
-    s_head = box(scr, 120, 104, C_WOOD, 26);
-    lv_obj_set_style_border_color(s_head, lv_color_hex(UI_BRASS), 0);
-    lv_obj_set_style_border_width(s_head, 2, 0);
-    lv_obj_set_style_bg_grad_color(s_head, lv_color_hex(C_WOOD_DARK), 0);
-    lv_obj_set_style_bg_grad_dir(s_head, LV_GRAD_DIR_VER, 0);
-    lv_obj_align(s_head, LV_ALIGN_TOP_MID, 0, 38);
-    for (int i = 0; i < 2; i++) {
-        s_eye[i] = box(s_head, 26, 30, C_EYE, LV_RADIUS_CIRCLE);
-        s_pupil[i] = box(s_eye[i], 12, 12, C_PUPIL, LV_RADIUS_CIRCLE);
-    }
-    s_mouth = box(s_head, 30, 8, C_PUPIL, 6);
+    s_head = lv_image_create(scr);
+    lv_image_set_src(s_head, &star_face_idle);
+    lv_obj_align(s_head, LV_ALIGN_TOP_MID, 0, STAR_Y);
     s_mark = ui_label(scr, &lv_font_montserrat_32, UI_BRASS, "");
-    lv_obj_align(s_mark, LV_ALIGN_TOP_MID, 86, 52);
+    lv_obj_align(s_mark, LV_ALIGN_TOP_MID, 72, STAR_Y + 14);
 
     s_text = ui_label(scr, &space_font_cjk_20, UI_TEXT, "");
     lv_obj_set_width(s_text, 204);

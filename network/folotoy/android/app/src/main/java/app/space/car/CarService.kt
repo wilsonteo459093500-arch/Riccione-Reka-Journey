@@ -301,7 +301,7 @@ class CarService : AccessibilityService() {
         override fun onResults(results: Bundle?) {
             listening = false
             val heard = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
-            Log.i(TAG, "DEKU 听到：$heard")
+            Log.i(TAG, "S.T.A.R 听到：$heard")
             val line = deku.answer(heard)
             if (line == null) {
                 send(Protocol.dekuUnknown())
@@ -315,7 +315,7 @@ class CarService : AccessibilityService() {
         override fun onError(error: Int) {
             if (!listening) return
             listening = false
-            Log.i(TAG, "DEKU 没听到：error $error")
+            Log.i(TAG, "S.T.A.R 没听到：error $error")
             send(Protocol.dekuUnknown())
             speak(DekuLogic.HELP)
         }
