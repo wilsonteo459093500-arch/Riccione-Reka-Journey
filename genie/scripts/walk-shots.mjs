@@ -167,8 +167,9 @@ function frontSpot(nav, fi, item, dists) {
  */
 function warpInit() {
   const raf = window.requestAnimationFrame.bind(window);
-  const W = (window.__warp = { scale: 1, base: 0, anchor: 0, cap: Infinity, arm: null, stop: null, frozen: false, frozenAt: -1 });
-  W.now = (t) => Math.min(W.cap, W.base + (t - W.anchor) * W.scale);
+  const W = (window.__warp = { scale: 1, base: 0, anchor: 0, cap: Infinity, arm: null, stop: null, frozen: false, frozenAt: -1, idle: false });
+  // 时间不往回走（requestAnimationFrame 给的时间可能比 set() 的那一刻早一点）
+  W.now = (t) => Math.min(W.cap, Math.max(W.base, W.base + (t - W.anchor) * W.scale));
   W.set = (scale, cap = Infinity) => {
     const t = performance.now();
     W.base = W.now(t);
@@ -178,8 +179,10 @@ function warpInit() {
     W.frozen = false;
     W.frozenAt = -1;
   };
+  // idle（视频一帧一帧拍）：拍照的时候页面一帧都不画，截图不用等它
   window.requestAnimationFrame = (cb) =>
-    raf((t) => {
+    raf(function tick(t) {
+      if (W.idle) return raf(tick);
       const w = W.now(t);
       try {
         if (W.arm && W.arm.when()) {

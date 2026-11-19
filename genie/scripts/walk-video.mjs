@@ -18,7 +18,7 @@ import * as N from '../src/studio/walk/nav.js';
 import { footprintOf } from '../src/studio/engine/furnish.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const FPS = 24;
+const FPS = 12; // 拍 12 帧 / 秒（SwiftShader 一帧要 ~10 秒），ffmpeg 再混合成 24 帧
 const STEP = 1000 / FPS;
 
 function args(argv) {
@@ -51,7 +51,9 @@ async function main() {
     const ev = (fn, arg) => page.evaluate(fn, arg);
     const pose = () => ev(() => window.__genieWalk?.pose?.() || null);
     const log = (...a) => console.log(`  [${((Date.now() - T0) / 1000).toFixed(0)}s · 第 ${n} 帧 · ${(n / FPS).toFixed(1)}s]`, ...a);
+    // 等页面上的东西（托盘、贴图…）：先让页面接着画（拍完上一帧时停住了），贴图要靠它一帧帧补
     const until = async (fn, timeout, what, ms = 250) => {
+      await page.evaluate(() => window.__warp && (window.__warp.idle = false)).catch(() => {});
       const t0 = Date.now();
       while (Date.now() - t0 < timeout) {
         const v = await fn();
@@ -72,21 +74,35 @@ async function main() {
     const frame = async (dt = STEP) => {
       await ev((dt) => {
         const W = window.__warp;
-        W.set(1, W.now(performance.now()) + dt);
+        // 一下子跳到这一帧的时间（scale 很大）：下一次 requestAnimationFrame 就定住，只画一次
+        W.set(1e6, W.now(performance.now()) + dt);
+        W.idle = false;
         window.__genie.dirty = true;
       }, dt);
+      // 别一直叫它画（SwiftShader 一帧 ~1 秒，叫多了截图要排队）：定住了、1 秒还没画新的才再叫一次
       await until(
         () =>
           ev(() => {
             const W = window.__warp;
-            if (!W.frozen) return false;
-            if ((window.__genie._frames || 0) > W.frozenAt) return true;
-            window.__genie.dirty = true;
+            const e = window.__genie;
+            const f = e._frames || 0;
+            if (W.frozen && f > W.frozenAt) {
+              W.idle = true; // 画好了：拍照的时候别再画
+              return true;
+            }
+            const now = performance.now();
+            if (W.frozen && f !== W.lastF) {
+              W.lastF = f;
+              W.lastT = now;
+            } else if (W.frozen && now - (W.lastT || 0) > 1000) {
+              W.lastT = now;
+              e.dirty = true;
+            }
             return false;
           }),
         120e3,
         '画好这一帧',
-        60,
+        150,
       );
       return shoot();
     };
@@ -411,7 +427,7 @@ async function main() {
     srv.close();
   }
   const mp4 = join(o.out, `walk-preview-${tag}.mp4`);
-  execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', String(FPS), '-i', join(frames, '%05d.jpg'), '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', '-movflags', '+faststart', mp4]);
+  execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', String(FPS), '-i', join(frames, '%05d.jpg'), '-vf', 'minterpolate=fps=24:mi_mode=blend', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', '-movflags', '+faststart', mp4]);
   console.log(`✓ ${n} 帧 = ${(n / FPS).toFixed(1)} 秒 → ${mp4}（用时 ${((Date.now() - T0) / 60000).toFixed(0)} 分钟）`);
   return 0;
 }
