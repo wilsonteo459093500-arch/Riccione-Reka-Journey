@@ -2,7 +2,19 @@
 
 Read this first. Reply to the owner in **Chinese**, short and plain. Do one step per conversation, then stop.
 
-## Where things are (2026-11-13)
+## Where things are (2026-11-19)
+- **Step 1 (walk-in 「走进去」) is BUILT, not live.** Same branch `ccr-eb67bc6b-ecbura` / PR #65, on top of step 3 + 3b.
+  - Spec and as-built notes: `genie/docs/walk/SPEC.md`. Code: `genie/src/studio/walk/` (lazy chunk ~39.5 kB gzip); seam in `Engine.js` / `house.js` / `StudioApp.jsx` / `studio.css`.
+  - Release check passed:
+    - `npm test`
+    - build; studio entry 397.08 kB gzip (limit 397.5)
+    - bird's-eye pixel checks: mode A 14/14 and mode B 6/6 identical (`scripts/walk-pixels.mjs`)
+    - real-browser e2e: condo3 21/21, semid2 22/22, wish 21/21 (`npm run walk:e2e`)
+    - screenshots at 4 sizes × zh/en (`scripts/walk-shots.mjs`)
+    - ~78 s preview video (`scripts/walk-video.mjs`)
+    - independent Opus review: 15 findings confirmed, fixes in progress (re-run the checks above after them)
+  - **Waiting for the owner's OK** on the screenshots and video. Real iPad smoothness must be tried on the showroom iPad via the preview link.
+  - Defaults the owner may change: painting is per surface type (all cabinets together); the tour auto-starts on the first walk-in only; bookmarks stay on the device (max 12, wiped for the next guest).
 - **Step 3 (case showcase) is BUILT, not live.** Branch `ccr-eb67bc6b-ecbura` = 3ea54bf + these notes + step 3; draft PR #65 into `claude/ecstatic-keller-sw56vw`.
   - Spec: `genie/docs/showcase/SPEC.md`. Release check passed (npm test, vite build, studio chunk 395.70 kB gzip, screenshots at 4 sizes × zh/en, independent review: 14 findings fixed).
   - **Waiting for the owner's OK on the screenshots.** On "go": merge PR #65 (or deploy the branch head) to production as below; keep 3ea54bf's deployment for rollback.
@@ -16,8 +28,8 @@ Read this first. Reply to the owner in **Chinese**, short and plain. Do one step
   - Production deploys are MANUAL: `create_deployment` with gitSource github `wilsonteo459093500-arch/Riccione-Reka-Journey`, ref + sha, `target: production`.
   - Rollback: deployment of 38b6c25 (`dpl_61wydBDgYPv8BFbgaz8Dmvx5uhta`).
 - **Main working branch:** `claude/ecstatic-keller-sw56vw` = 3ea54bf. Draft PR wilsonteo459093500-arch/Riccione-Reka-Journey#50.
-- **This branch (`claude/walk-in-wip`)** = 3ea54bf + these notes only.
-  - The walk-in 「走进去」 code was **lost** when the cloud machine was replaced: it was never pushed.
+- **Branch `claude/walk-in-wip`** = 3ea54bf + older notes only (superseded by `ccr-eb67bc6b-ecbura`).
+  - The first walk-in code was lost (never pushed); step 1 was rebuilt from scratch on `ccr-eb67bc6b-ecbura`.
   - The design (GDD), the full SAIL manual digest and `boards-catalogue.json` were lost too.
   - What survived: `OWNER-ANSWERS.md`, plus `SAIL-PRODUCT-EXCERPT.md` (§1 tiers, §2.0 door model, §5 handles, §12 gaps, §13 export snapping).
 - The repo is **PUBLIC**. Never commit real client names, phone numbers, real case photos, factory scans or manual images.
@@ -42,7 +54,13 @@ Read this first. Reply to the owner in **Chinese**, short and plain. Do one step
   (The session URL may change with a new conversation; use the trailer the system gives you.)
 
 ## Steps (the owner says which one to do: 「做第 N 步」)
-**1. Walk-in 「走进去」 — rebuild.** The previous code is gone. Rebuild on `claude/ecstatic-keller-sw56vw`. Scope:
+**1. Walk-in 「走进去」 — DONE on PR #65, waiting for the owner's OK to deploy.** See `genie/docs/walk/SPEC.md` (§9 scripts, §10 as-built notes). Release check before any deploy:
+- `cd genie && npm test && npx vite build && node scripts/chunk-size.mjs`
+- `node scripts/walk-pixels.mjs --check` against a saved baseline, and `--walk --scenario all`
+- `npm run walk:e2e` (about 35 min)
+- `node scripts/walk-shots.mjs` (about 1 h)
+
+Original scope (all built):
 - **Entry and look:** from the bird's-eye studio a gold 走进去 button flies in through the front door to eye height (1.55 m).
 - **Moving:** tap-to-walk (nav grid + A*), joystick, look-drag; doors open by themselves; real stairs between floors; minimap.
 - **Tool wheel:**
