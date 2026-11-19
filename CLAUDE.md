@@ -12,6 +12,10 @@
   - 开 draft PR，附预览链接和截图 / 录屏
   - 用户看过说「合并」才合并
 - 新对话的开场白一般是：「继续做 UKIR STUDIO（blueprint/）……这次要做：第几项」。项目用 `blueprint/README.md`、`blueprint/ARCHITECTURE.md` 的说明。
+- **少推几次**（2026-11-19 真的撞到）：
+  - Vercel 是免费方案，一天最多 100 次部署；每推一次，5 个项目（visi、space-network、sail-render、kira、wish）各算一次，不管改的是不是它的东西。
+  - 用完后所有软件 24 小时内出不了预览、也更新不了正式版。
+  - 所以：做完一段再推，不要每个小 commit 都推。根治的办法排在 KIRA 阶段 1B（见 `docs/checkups/kira-2026-11-19.md` 问题 3b）。
 
 ## 三条原则（UKIR STUDIO）
 
@@ -56,9 +60,11 @@
 - 用户说「帮我看 X 这个软件怎么样、有什么要提升、做分阶段计划」→ 用 `.claude/skills/app-checkup/`，流程固定：
   - 摸底 → 派 3–4 个人体检 → 面试两轮 → 分阶段计划（每阶段写 model、effort、几时开新对话）→ 存进 `<app>/PLAN.md`
   - 全程每一步报进度和剩余时间（用户明确要的；「streaming responses + remaining time」指对话时这样做，不是改 app）
+  - app 还不在 main 里（例：KIRA）→ 计划存 `docs/checkups/<app>-<日期>.md`
 - **用量是硬限制**：
-  - 第一次跑（SPACE）同一个对话撞了两次 5 小时上限
+  - 第一次跑（SPACE）同一个对话撞了两次 5 小时上限；同一天 KIRA 那次也撞了两次（开着 ultracode 派 14 个人，一个都没跑完），最后是主对话一个人查完的
   - 默认跑省量版：主对话和派出去的人都用 Opus 5.5 · high，不派「怀疑者」，主对话自己重跑证明脚本核实
+  - 平常的开发对话不要开 ultracode（`/effort ultracode off`）
 
 ## SPACE（network/）
 
@@ -67,6 +73,29 @@
   - 顺序（用户 2026-11-19 定的）：0 用户自己做的设定 → 1 公开页面关门 → 2 活动连拍 → 3 AI 稳定 + 补查 → 4 导入现有人脉 → 5 整理工具 → 6 每天提醒 → 7 WhatsApp 群发 → 8 小修
   - 用户的决定：两星期内有活动，所以连拍提前；每天提醒用**手机推送通知**（不是 TickTick 每日任务，试不通才退回）；FoloToy / 星系图 / NFC / 名片页改版**不冻结**
 - 线上：Vercel 项目 `space-network`，Supabase 项目「SPACE NETWORK」。体检当天资料库只有 1 个人
+
+## KIRA（柜子规划 + 预估报价，内部用；对客户印 SAIL BY RICCIONE REKA）
+
+- **代码不在 main**（2026-11-19 时）：
+  - 正式版分支：`claude/cabinet-measurement-tool-enhance-ymc43k`（PR #58，草稿）。目录 `kira/`，说明在那条分支的 `kira/README.md`、`kira/DEPLOY.md`、`kira/docs/V3-PLAN.md`
+  - 最新还没上线的：PR #75（岩板台面报价、AI 识图改进、👎 反馈）
+  - 正式网址 `kira-by-riccione-reka.vercel.app`（Vercel 项目 `kira-riccione-reka`）。合并不会自动上线，做法写在 `V3-PLAN.md` 最后一节
+  - 云端是自己的 Supabase 项目「KIRA BY RICCIONE REKA」（不是旧报价工具那个；文档写错了）
+- **体检（2026-11-19）**：`docs/checkups/kira-2026-11-19.md`，问题、计划、每阶段的开场白都在里面。
+- **老板定的（2026-11-19）**：
+  - 业务还在用旧报价工具；还没换是因为「还没正式交给业务」和「还不放心价钱」
+  - 预估价和签约价差 10% 左右可以接受
+  - 价格表很少改，继续让 Claude 改，**不做后台改价**
+  - GitHub 仓库要改成不公开（在阶段 1B 的对话里和 Claude 一起做，当场确认还能上线）
+  - AI 自动报价：现阶段要「业务助手」（AI 出草稿、业务确认才发）；全自动回客人是长期想法，要先用真实案子验证准确度
+- **阶段**（照顺序，一个阶段一个新对话）：
+  1. 1A 修钱（AI 加的柜子不跟楼高、设计师净价版 Excel 岩板行、比例检查、折扣输入）→ PR #75 上线
+  2. 1B 合进 main、合并 = 上线、仓库不公开
+  3. 2 AI 一键整屋报价（先 brainstorm）
+  4. 3 考试：5–10 个真实案子对价 + 看 AI 差多少
+  5. 4 交给业务（备份、改动记录、单号和状态、教学）
+  6. 5 客人自助估价（阶段 3 达标才做）
+- 每个阶段的 model · effort 和开场白在体检报告里。阶段 1A 的开场白要写明：接着 PR #75 做、可以推到它的分支 `ccr-d50823fb-lcwm1r`。
 
 ## 开发备忘（blueprint/）
 
