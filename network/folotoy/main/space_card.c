@@ -11,7 +11,7 @@
 //   │        ● ○           │  ← 有两个二维码时的页点
 //   └──────────────────────┘
 // 大二维码模式（确定长按）：只剩 224×224 的二维码，远一点也扫得到。
-// 开机封面：像素夜空 + 原创像素星星 S.T.A.R（上下飘、眨眼、旁边小闪光）+ 底部 RICCIONE / 溪岸 字标
+// 开机封面：整片像素夜空 + 原创像素星星 S.T.A.R（上下飘、眨眼、旁边小闪光），不放公司字标（用户 2026-11-19）
 // （tools/make_cover.py、make_star.py 产生）；确定 → 上面的名片画面。
 //
 // 所有函数都要在持有 bsp_lvgl_lock() 时呼叫（main.c 负责）。
@@ -83,7 +83,7 @@ static void apply_qr(void) {
 }
 
 #define STAR_X 24
-#define STAR_Y 6     // 跟 tools/make_cover.py 的 STAR_Y 一样（预览图对得上）
+#define STAR_Y 48    // 跟 tools/make_cover.py 的 STAR_Y 一样（预览图对得上）
 
 // 封面动画：星星上下飘（±4px，2.4 秒一圈）、约 3 秒眨一次眼、闪光一亮一暗
 static void star_tick(lv_timer_t *t) {
@@ -171,9 +171,9 @@ void space_card_show(space_card_state_t *state) {
     lv_obj_set_pos(s_star, STAR_X, STAR_Y);
     s_spark = lv_image_create(s_scr);
     lv_image_set_src(s_spark, &star_sparkle);
-    lv_obj_set_pos(s_spark, 196, 30);
+    lv_obj_set_pos(s_spark, 196, STAR_Y + 24);
     s_cover_hint = ui_label(s_scr, &space_font_cjk_20, C_MUTED, "确定 看名片");
-    lv_obj_align(s_cover_hint, LV_ALIGN_TOP_MID, 0, 202);
+    lv_obj_align(s_cover_hint, LV_ALIGN_TOP_MID, 0, 262);
 
     // 左上品牌字、右上电量（避开 30px 圆角：往内缩）
     s_brand = lv_label_create(s_scr);

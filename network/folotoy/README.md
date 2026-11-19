@@ -2,7 +2,7 @@
 
 FoloToy AI Passport（ESP32-C3、240×320 屏幕、三个按键）有两个模式：
 
-- **开机封面**（2026-11-19 换成像素风）：像素夜空里一颗原创像素星星 **S.T.A.R**（上下飘、眨眼、旁边小闪光），底部官方 RICCIONE® / 溪岸 sAil by Riccione Reka 白色字标；**按「确定」→ 名片二维码**，二维码闲置 30 秒回封面。
+- **开机封面**（2026-11-19 换成像素风）：整片像素夜空里一颗原创像素星星 **S.T.A.R**（上下飘、眨眼、旁边小闪光），不放公司字标；**按「确定」→ 名片二维码**，二维码闲置 30 秒回封面。
 
   ![开机封面](./firmware/cover.png)
 
@@ -332,7 +332,7 @@ FoloToy 背面就是一枚**被动 NTAG213** NFC 芯片（官方规格：支持�
 | `main/tools_screen.c`、`games_screen.c` | 木鱼 / 手电筒 / 番茄钟、四个小游戏的画面 |
 | `main/menu_screen.c`、`candle_screen.c`、`timer_screen.c`、`pocket_ui.h` | 菜单、数字蜡烛（火苗动画、烟、歌词）、计时器 / 倒数（圆环、红白闪）画面 |
 | `main/font_*.c` | `tools/make_font.py` 产生的字型：中文 20 / 32px（只放用到的字）、大数字 64 / 140px |
-| `tools/make_cover.py`、`main/cover_img.c` | 开机封面：程序画的像素夜空 + 仓库里的官方白色字标（`blueprint/public/template/b/`），产生 240×320 RGB565（星星另外放，才能动）；`--check` 由 `build.sh` 检查 |
+| `tools/make_cover.py`、`main/cover_img.c` | 开机封面：程序画的整片像素夜空，产生 240×320 RGB565（星星另外放，才能动；2026-11-19 起不放公司字标）；`--check` 由 `build.sh` 检查 |
 | `tools/make_font.py` | 字型产生器：从 `main/*.c` 的字串收集中文字 → Pillow 画字 → LVGL 4bpp 格式，逐像素读回比对；`--check` 检查是不是最新（`build.sh` 每次跑） |
 | `main/main.c` | 开机：NVS（模式 + 配对资料）→ BSP 初始化 → 依模式开名片或车用画面 → 按键（回呼只丢 queue，input task 拿 LVGL 锁再改画面；沿用上游的按键唤醒保护） |
 | `main/Kconfig.projbuild` | menuconfig 的「SPACE card」：网址、名字、说明字、活动网址、遥控器蓝牙名字 |
