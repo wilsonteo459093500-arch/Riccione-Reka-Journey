@@ -26,6 +26,7 @@ export const meta = {
      model     体检的人用哪个 model（'opus' / 'sonnet'…）。不填 = 跟主对话一样。
                主对话用 Fable 时建议填 'opus'：十几个人同时用 Fable，很快就撞到帐号的 5 小时用量上限
      effort / verifyEffort   体检的人、怀疑者各自的 effort（不填 = 跟主对话一样；建议 'high' / 'medium'）
+     verify    false = 不派怀疑者（省量版的默认做法）：体检的人把证明脚本留在 scratch，主对话自己重跑来核实
      dryRun    true = 不派人，只回传每个方向的任务说明（检查 args 用）
    ------------------------------------------------------------------ */
 const A = args || {}
@@ -232,6 +233,7 @@ const results = await pipeline(
   (d) => agent(reviewPrompt(d), opts({ label: `体检:${d.label}`, phase: '体检', schema: FINDINGS_SCHEMA }, A.effort)),
   (review, d) => {
     if (!review || !review.findings || !review.findings.length) return { review, check: null }
+    if (A.verify === false) return { review, check: null } // 省量版：不派怀疑者，由主对话自己重跑证明脚本核实
     const runs = d.needsRun || d.needsPublic
     return agent(
       `${COMMON}\nYour scratch folder: ${A.scratch}/${d.key}-verify\nYour id prefix for anything new: ${d.prefix}-V\n\n` +

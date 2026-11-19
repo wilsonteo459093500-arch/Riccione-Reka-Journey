@@ -51,6 +51,23 @@
 3. AI 方案主题建议：规则要先 brainstorm
 4. 展厅播放接 D5 / SU / 3ds Max 漫游视频：先调查设计师能导出什么格式
 
+## 软件体检（`app-checkup` skill，2026-11-19 建）
+
+- 用户说「帮我看 X 这个软件怎么样、有什么要提升、做分阶段计划」→ 用 `.claude/skills/app-checkup/`，流程固定：
+  - 摸底 → 派 3–4 个人体检 → 面试两轮 → 分阶段计划（每阶段写 model、effort、几时开新对话）→ 存进 `<app>/PLAN.md`
+  - 全程每一步报进度和剩余时间（用户明确要的；「streaming responses + remaining time」指对话时这样做，不是改 app）
+- **用量是硬限制**：
+  - 第一次跑（SPACE）同一个对话撞了两次 5 小时上限
+  - 默认跑省量版：主对话和派出去的人都用 Opus 5.5 · high，不派「怀疑者」，主对话自己重跑证明脚本核实
+
+## SPACE（network/）
+
+- **2026-11-19 体检**：结论和第 0–6 阶段计划在 `network/PLAN.md` 最后一节
+  - 开场白：「读 `network/PLAN.md`，做体检计划第 N 阶段」
+  - 顺序：0 用户自己做的设定 → 1A 公开页面关门 → 1B AI 稳定 + 补查 → 2A 导入现有人脉 → 2B 整理工具 → 3 每天提醒 → 4 活动连拍 → 5 WhatsApp 群发 → 6 小修
+  - 先冻结：FoloToy 固件、星系图、NFC、名片页继续改版、好感度参数
+- 线上：Vercel 项目 `space-network`，Supabase 项目「SPACE NETWORK」。体检当天资料库只有 1 个人
+
 ## 开发备忘（blueprint/）
 
 - 测试和构建：
