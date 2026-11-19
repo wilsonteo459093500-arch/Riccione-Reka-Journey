@@ -219,11 +219,11 @@ Marks:
 
 ### `walk/tour.js` — pure part (U4)
 
-`tourStops(plan, items, nav)` returns `[{ id, fi, x, z, yaw, line }]`. Order:
+`tourStops(plan, items, nav, offer = null)` returns `[{ id, fi, x, z, yaw, line }]`. With `offer = { materials, locked }` (the controller always passes it), a `tvWall` / `kitchenRun` / `wardrobe` is introduced only when `offerTagOf(kind, offer) === 'make'` — kept cabinets (`locked.cabinetry`) and painted / limewash / microcement TV walls are never claimed as 我们做. `offer = null` = no filtering (tests). Order:
 1. entrance (just inside the main door)
-2. living (+ TV wall, if a `tvWall` item exists in that room)
-3. kitchen (if a `kitchenRun` exists)
-4. master bedroom (+ wardrobe, if a `wardrobe` exists)
+2. living (+ TV wall, if a 'make' `tvWall` item exists in that room)
+3. kitchen (if a 'make' `kitchenRun` exists)
+4. master bedroom (+ wardrobe, if a 'make' `wardrobe` exists; otherwise the centre + walk.paint)
 5. stairs, then upper-floor stops (if the plan is multi-floor and the stair link exists)
 6. end
 
@@ -280,7 +280,10 @@ On create:
 Swing:
 - Open when the eye is within 1.6 m, or when the next 2 m of the path crosses the door.
 - Close when the eye is beyond 2.2 m, after 3 s.
-- Swing to 90° **away from the walker's side**.
+- Swing to 90°. With no path: **away from the walker's side**. With a path (as built after review): the leaf picks hinge end (a or b, `dir`) and side so the open leaf and its sweep keep ≥ 0.3 m from the eye and the path ahead (`pickLeaf` / `pickSide` / `leafRoom`); an open leaf that would block a new path flips or re-hangs (close, switch hinge, reopen) when that cannot hit the walker. A walker pushing an open leaf from behind (joystick) swings it away.
+- The front door opens **outward** during the fly-in (`from: plan.P3`), so it never sweeps the entrance stop.
+- Joystick / WASD treat open or moving leaves as thin walls (`doors.clearOf` in `slideMove` / `canStand`, radius 0.22).
+- While the eye rises or falls on stairs (and 0.5 s after), a door with no path does not open.
 - Ease about 0.45 s.
 - `changed === true` while any leaf moves; the controller then sets `shadowMap.needsUpdate`.
 
@@ -556,8 +559,8 @@ Fixtures: `test/fixtures/walk/*.json`, frozen project snapshots made once from t
 Extras on `createDoors`: `open(opening, {fi, from, instant})`, `openAll(on)`, `leaves`.
 
 Extra exports:
-- `flight.js`: `EYE`, `WALK_FOV`, `frontDoor`, `clearHeight`, `cancelFlight`, `prefersReducedMotion`.
-- `doors.js`: `leafAngle`, `sideOf`, `doorDist`, `pathCrosses`, `levelOf`.
+- `flight.js`: `EYE`, `WALK_FOV`, `frontDoor`, `clearHeight`, `cancelFlight`, `prefersReducedMotion`, `walkVo`, `fadeCanvas` (single in-flight canvas fade, restores a base opacity captured once).
+- `doors.js`: `leafAngle`, `sideOf`, `doorDist`, `pathCrosses`, `levelOf`, `leafSeg`, `hingeTo`; `doorList` entries carry `dir` (1 = hinge at the a end as in bird's-eye, −1 = b end); `createDoors(...)` also has `clearOf(fi, x, z)`.
 
 `entryPlan` also returns `approach` (descend outside the whole footprint first, to clear porch roofs) and `high`.
 
@@ -639,3 +642,22 @@ Extra exports:
 - **Tour bubble.** While walking to the first stop (`phase 'walking'`, no line yet) it shows 「跟我来…」 / "Follow me…", not an empty bubble.
 - **Arrival facing.** `walkTo` without a `yaw` whose path changes floor ends by turning to face the centre of the arrival room (`faceRoom`), unless the walker is within 0.6 m of it.
   - Same-floor walks keep facing their walking direction.
+
+### Review fixes (independent review, 15 confirmed findings), as built
+- **Tour (owner rule).** See `tourStops(..., offer)` above: Pangie names only items tagged 'make'. The controller passes `{ materials, locked }` and marks the tour stale when either changes.
+- **Joystick.** `joystick()` / key presses call `guest()` (tour stop + route halt) only when input goes from idle to active, so continuous stick movement no longer resets the speed.
+- **Furniture drag.** Uses its own ray ∩ item-floor plane (`floorPoint`); a miss above the horizon or a hit > 15 m away keeps the last position; shadows update during the drag and on cancel.
+- **Fades.** `goto` / `goFloor` share one in-flight fade (`fadeCanvas`); a second call joins it while fading out and is ignored while fading in, so the canvas can never stay at opacity 0.
+- **Enter during a bird's-eye tween.** `saveOrbit` saves the tween's destination (`toP` / `toT`, quaternion via lookAt) and `framed` only if that destination is the framed pose; the no-tween path is unchanged (pixel checks).
+- **Doors.** See Swing above (hinge end + side, re-hang, front door outward, leaves block the joystick).
+- **StudioApp.**
+  - The 走进去 pill is hidden and `enterWalk` refuses while a guest plan is being read; a read that finishes during a walk is parked in `afterWalk` and applied after exit (also the plan-file message).
+  - A failed walk-chunk load is retryable (`WalkMode` is re-created with a fresh `lazy`), and the 「正在走进去…」 fallback has a 44 px 回到全屋 button.
+- **WalkMode / layout.**
+  - Enter failure shows 「走进去出了点问题，已回到全屋」 (`userExit` ref).
+  - The phone map opens above the tour bubble and panels (`.walk-map.is-open { z-index: 1 }`, bubble hidden while open).
+  - The minimap height is clamped to the space between its top and the tool wheel / viewport (`mapRoomH`).
+  - Short landscape: panels left-aligned in the dock at 601–780 px, the tour bubble is capped below 回到全屋 and moves beside the joystick.
+  - Wish mode at 561–600 × ≤ 420 uses the narrow-tablet arrangement.
+  - `ensureWalkCss` re-adds the walk stylesheet when the `--walk-css` sentinel is missing (a failed CSS preload is never retried by Vite).
+- **Known small leftover.** If the guest picks a new destination while standing inside an open leaf's swing area, the leaf sometimes cannot move without hitting them and the camera brushes through it. A random stress test hit this 1–3 times per 1,200 legs, about 10× fewer than before the fix. Follow-up idea: make path walking respect `doors.clearOf` like the joystick does.
