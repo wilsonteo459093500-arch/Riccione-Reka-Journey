@@ -5,7 +5,7 @@
 //   车廊上面盖着楼板 / 屋顶：镜头先在楼外面降到 2.2m，再平着从街那边飞进车廊（不会穿过屋顶）。
 //   趟门从「避开竖框的那一扇」正中穿过去（nav.doorCross）。没有大门 → 落到最大的客厅类房间正中（fallback）。
 // flyIn / flyOut：引擎的 onTick 驱动的补间（返回 Promise），镜头走一条转角倒圆的折线，按弧长匀顺地走（单调三次插值，起止速度 0）。
-//   进：t0 setWalk（墙全立、楼上不藏）→ 飞到 P1（视角 28°→48°、主点偏移归零）→ 开门 → P2 → 跨过门槛时盖上天花 → P3（视角 → walkFov）。
+//   进：t0 setWalk（墙全立、楼上不藏）→ 飞到 P1（视角 28°→48°、主点偏移到 walkVo：横屏归零）→ 开门 → P2 → 跨过门槛时盖上天花 → P3（视角 → walkFov）。
 //   出：门扇拿掉、天花掀掉、藏起人头上的楼层 → 升起来 → 滑回进来前的位置 → restoreOrbit 一模一样放回去（§4）。
 //   系统「减少动态效果」：两种飞行都换成 250ms 淡出到纸色再淡入。
 // 坐标：平面图 x → 世界 x、平面 y → 世界 z；yaw 和相机同一个约定（'YXZ'）：看的方向 = (−sin yaw, −cos yaw)。
@@ -22,6 +22,7 @@ const ORBIT_FOV = 28; // 鸟瞰的竖直视角（Engine 的 BASE_FOV）
 const MID_FOV = 48; // 飞到 P1 时的视角
 const PORTRAIT_HFOV = 70; // 竖屏：大约给这么宽的水平视角
 const MAX_FOV = 82;
+const PORTRAIT_SHIFT = 0.1; // 竖屏：地平线往上挪画面高的这么多（像移轴镜头：竖线还是竖的，少看一片灰的天花，多看地面和家具）
 const OUT1 = 3.2; // P1：门外多远
 const UP1 = 2.2; // P1：多高
 const OUT2 = 1.2; // P2：门外多远（眼睛高）
@@ -52,6 +53,15 @@ export function walkFov(W, H) {
   if (!(W > 0 && H > 0) || W >= H) return WALK_FOV;
   const half = Math.tan(THREE.MathUtils.degToRad(PORTRAIT_HFOV / 2)) * (H / W);
   return Math.min(MAX_FOV, Math.max(WALK_FOV, THREE.MathUtils.radToDeg(2 * Math.atan(half))));
+}
+
+/**
+ * 走路时的主点偏移（walk.vo，px）：横屏 0；竖屏把地平线往上挪 PORTRAIT_SHIFT × 画面高（vo.y < 0 = 往上，Engine.setPrincipal）。
+ * 竖屏的竖直视角很大（~82°），平视时上面一大块是天花；挪一挪，画面里多的是房间。
+ */
+export function walkVo(W, H) {
+  if (!(W > 0 && H > 0) || W >= H) return { x: 0, y: 0 };
+  return { x: 0, y: -Math.round(H * PORTRAIT_SHIFT) };
 }
 
 // ───────────────────────── 从哪里进去（纯函数） ─────────────────────────
@@ -394,7 +404,7 @@ function hideAbove(engine, fi) {
  *  walk（控制器的 walk 对象；ev / pr 是要到的值，fov / vo 由这里管）、doors（createDoors 的结果：每帧更新、到 P1 开大门）、
  *  openDoor()（代替默认的开门）、ceilings(on)（代替 engine.setCeilings）、tick(dt, k)（每帧另外要做的）、
  *  reduced（代替系统设置）、fade(swap, ms)（界面自己的淡入淡出）。
- * → Promise<'done' | 'cancelled'>；'done' 时镜头正好在落点，walk.fov = walkFov、walk.vo = 0。
+ * → Promise<'done' | 'cancelled'>；'done' 时镜头正好在落点，walk.fov = walkFov、walk.vo = walkVo（横屏 0）。
  */
 export function flyIn(engine, plan, hooks = {}) {
   cancelFlight(engine);
@@ -402,6 +412,7 @@ export function flyIn(engine, plan, hooks = {}) {
   const W = engine.container?.clientWidth || 1;
   const H = engine.container?.clientHeight || 1;
   const fov1 = walkFov(W, H);
+  const vo1 = walkVo(W, H);
   const ev1 = w.ev || 1;
   const vo0 = { x: engine.vo?.x || 0, y: engine.vo?.y || 0 };
   const fb = plan?.fallback || null;
@@ -429,7 +440,7 @@ export function flyIn(engine, plan, hooks = {}) {
   const unhide = fb ? hideAbove(engine, fi) : () => {};
   const land = () => {
     w.fov = fov1;
-    w.vo = { x: 0, y: 0 };
+    w.vo = { ...vo1 };
     w.ev = ev1;
     exposure(engine, w);
     engine.applyView();
@@ -504,7 +515,7 @@ export function flyIn(engine, plan, hooks = {}) {
       place(engine, pos, target);
       w.fov = k <= T1 ? lerp(ORBIT_FOV, MID_FOV, ease(k / T1)) : lerp(MID_FOV, fov1, ease((k - T1) / (TT - T1)));
       const kv = ease(k / T1);
-      w.vo = { x: lerp(vo0.x, 0, kv), y: lerp(vo0.y, 0, kv) };
+      w.vo = { x: lerp(vo0.x, vo1.x, kv), y: lerp(vo0.y, vo1.y, kv) };
       w.ev = lerp(1, ev1, ease(k / TT));
       exposure(engine, w);
       engine.applyView();

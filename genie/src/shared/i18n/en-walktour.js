@@ -4,5 +4,6 @@ export default {
   '{0}带逛': '{0}’s tour',
   下一站: 'Next stop',
   好的: 'OK',
+  跟我来: 'Follow me',
   带我逛逛: 'Show me around',
 };

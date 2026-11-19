@@ -11,11 +11,14 @@ import { t } from '../../shared/i18n.js';
 import { ROOM_TYPES, floorName } from '../plan/model.js';
 import { Icon, roomLabel } from '../ui/kit.jsx';
 
-/** 每种大小：地图最大多宽多高（px）、房间名的字号（px） */
+/**
+ * 每种大小：地图最大多宽多高（px）、最多多大一块（px²：竖长的户型可以长高一点，不会缩成一条）、房间名的字号（px）。
+ * 宽的户型（condo3）照旧碰到最大宽度；竖长的（semid2，连车廊 10.6 × 21.4m）在右上角长高，房间名才放得下。
+ */
 export const MAP_SIZES = {
-  wide: { w: 232, h: 196, font: 11 },
-  compact: { w: 146, h: 236, font: 10 },
-  phone: { w: 284, h: 300, font: 11 },
+  wide: { w: 232, h: 264, area: 42000, font: 11 },
+  compact: { w: 146, h: 264, area: 34000, font: 10 }, // 宽最多 146：竖着的 iPad（820）上地图的左边让开上面居中的提示
+  phone: { w: 284, h: 300, area: 85200, font: 11 },
 };
 export const MINI_PX = 120; // 手机上缩起来的圆（px）
 export const MINI_SPAN = 12; // 缩起来时看多大一块（米，直径）
@@ -82,7 +85,7 @@ export function labelFits(name, room, scale, px) {
 /** 大小 → 每米多少 px、地图的 px 宽高 */
 export function mapScale(box, size = 'wide') {
   const S = MAP_SIZES[size] || MAP_SIZES.wide;
-  const s = Math.min(S.w / box.w, S.h / box.h);
+  const s = Math.min(S.w / box.w, S.h / box.h, S.area ? Math.sqrt(S.area / (box.w * box.h)) : Infinity);
   return { s, W: Math.round(box.w * s), H: Math.round(box.h * s), font: S.font };
 }
 

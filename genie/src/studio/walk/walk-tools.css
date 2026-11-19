@@ -467,6 +467,14 @@
   }
 }
 
+/* 竖着的 iPad（781–1023px）：工具轮居中、摇杆在左下 —— 面板和量尺的控制条两边各让出摇杆那一块，不盖住摇杆 */
+@media (min-width: 781px) and (max-width: 1023px) {
+  .walk-panel,
+  .walk-measure-bar {
+    max-width: calc(100vw - 2 * (var(--safe-l) + var(--walk-joy) + 12px));
+  }
+}
+
 /* 矮的横屏（手机横着拿）：面板别伸到右上角的小地图下面（地图约 170px 宽，面板在中间）；
    再矮一点：灯光面板先不画太阳弧（白天 / 晚上和四个时刻更要紧，面板本身也能竖着滚） */
 @media (max-height: 560px) and (min-width: 601px) {
@@ -499,9 +507,12 @@
   .walk-tray .walk-seg button {
     flex: 1 1 0;
   }
-  .walk-chip,
-  .is-en .walk-chip {
+  .walk-chip {
     width: 68px;
+  }
+  /* 英文：最长的一个词（Herringbone、Travertine…）要放得下一行，不被切掉 */
+  .is-en .walk-chip {
+    width: 80px;
   }
   .walk-photo-list {
     max-height: 196px;

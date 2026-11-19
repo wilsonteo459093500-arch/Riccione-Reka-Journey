@@ -17,14 +17,15 @@ import { footprintOf } from '../engine/furnish.js';
 import { CATALOG } from '../engine/furniture.js';
 import { buildNav, rebuildFloor, path as findPath, nearest, roomAt, clearance } from './nav.js';
 import { createDoors, sideOf } from './doors.js';
-import { walkFov, entryPlan, flyIn, flyOut, saveOrbit, restoreOrbit, EYE } from './flight.js';
+import { walkFov, walkVo, entryPlan, flyIn, flyOut, saveOrbit, restoreOrbit, EYE } from './flight.js';
 import { slotOfHit, floorSlotOf } from './paint.js';
 import { measureText, wallDims } from './measure.js';
 import { tourStops, createTour } from './tour.js';
 import { createMarks } from './marks3d.js';
 
 export const TOOLS = ['walk', 'paint', 'floor', 'furnish', 'light', 'measure', 'photo'];
-export const WALK_EV = 1.15; // 屋里比鸟瞰暗：曝光再乘这么多（看截图再调）
+export const WALK_EV = 1.3; // 屋里比鸟瞰暗：白天曝光再乘这么多（看截图调的：1.15 时墙和天花发灰）
+const NIGHT_EV = 0.3; // 晚上再乘 (1 + 这么多 × 夜色)：屋里的灯要亮、要暖，不是黑乎乎一片
 export const SPEED = 1.3; // 走路（米 / 秒）
 const STAIR_K = 0.75; // 楼梯上慢一点
 const ACCEL = 2.6; // 起步 / 停下（米 / 秒²）
@@ -50,6 +51,8 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const wrap = (a) => a - 2 * Math.PI * Math.floor((a + Math.PI) / (2 * Math.PI));
 /** 从 b 转到 a 最近的那个方向（−π … π） */
 export const angleDiff = (a, b) => wrap(a - b);
+/** 走路时的曝光倍数（walk.ev）：跟着时段，夜色 day.night 0–1（engine.day） */
+export const walkEv = (day) => WALK_EV * (1 + NIGHT_EV * (Number(day?.night) || 0));
 const rectGap = (r, x, z) => Math.hypot(Math.max(r.x - x, 0, x - (r.x + r.w)), Math.max(r.y - z, 0, z - (r.y + r.d)));
 const isUnder = (o, root) => {
   for (let p = o; p; p = p.parent) if (p === root) return true;
@@ -310,7 +313,10 @@ export function createWalk(engine, { project = null, api = null, wish = false, o
   }
   function fit() {
     if (phase !== 'walking' || !walk) return;
-    walk.fov = walkFov(engine.container?.clientWidth || 1, engine.container?.clientHeight || 1);
+    const W = engine.container?.clientWidth || 1;
+    const H = engine.container?.clientHeight || 1;
+    walk.fov = walkFov(W, H);
+    walk.vo = walkVo(W, H);
     engine.applyView();
     engine.dirty = true;
   }
@@ -464,6 +470,14 @@ export function createWalk(engine, { project = null, api = null, wish = false, o
     }
     return true;
   }
+  /** 站在 p（fi 层）看这个房间的中间：yaw；离中间不到 0.6m（本来就在中间）或者不在房间里 → null（不转） */
+  function faceRoom(fi, p) {
+    const r = nav ? roomAt(nav, { fi, x: p.x, z: p.z }) : null;
+    if (!r) return null;
+    const dx = r.x + r.w / 2 - p.x;
+    const dz = r.y + r.d / 2 - p.z;
+    return dx * dx + dz * dz < 0.36 ? null : Math.atan2(-dx, -dz);
+  }
   /** 开始走：从现在的位置找路 → route；走不到 → resolve(false) */
   function start(to, wantYaw, resolve) {
     const fi = clamp(Math.round(Number(to?.fi) || 0), 0, Math.max(0, (nav?.floors?.length || 1) - 1));
@@ -487,6 +501,8 @@ export function createWalk(engine, { project = null, api = null, wish = false, o
     const end = legs[legs.length - 1];
     const fe = end.kind === 'walk' ? end.fi : end.to;
     const ep = end.pts[end.pts.length - 1];
+    // 没说朝哪边、又换了楼层（上楼 / 下楼）：到了转向这个房间的中间 —— 不然朝着最后一段路，常常是一面空墙
+    if (R.yaw == null && legs.some((l) => l.kind === 'stair')) R.yaw = faceRoom(fe, ep);
     if (R.total < 0.03) {
       R.arrived = true;
       P.x = ep.x;
@@ -988,7 +1004,7 @@ export function createWalk(engine, { project = null, api = null, wish = false, o
         tourStale = true;
         const plan = entryPlan(nd, nav);
         doors = createDoors(engine, nd);
-        walk = { fov: walkFov(engine.container?.clientWidth || 1, engine.container?.clientHeight || 1), vo: { x: 0, y: 0 }, ev: WALK_EV, pr: 0 };
+        walk = { fov: walkFov(engine.container?.clientWidth || 1, engine.container?.clientHeight || 1), vo: { x: 0, y: 0 }, ev: walkEv(engine.day), pr: 0 }; // fov / vo 由 flyIn 管（落地时 = walkFov / walkVo）
         const r = await flyIn(engine, plan, { walk, doors });
         if (phase !== 'flying-in') return false;
         // 别人把飞行停了（不是我们的退出）：一下子回到鸟瞰
@@ -1197,7 +1213,15 @@ export function createWalk(engine, { project = null, api = null, wish = false, o
         if (selected && !items().some((it) => it.id === selected)) select(null);
         else if (selected) ringFor(selected);
       }
-      if (next.time !== prev.time && phase === 'walking') engine.placeRoomLights?.({ x: P.x, z: P.z });
+      if (next.time !== prev.time && phase === 'walking') {
+        engine.placeRoomLights?.({ x: P.x, z: P.z });
+        // 曝光跟着时段（晚上亮一点）：引擎的 setTime 刚按旧的 walk.ev 乘过，换成这个钟点的
+        if (walk && engine.day && engine.renderer) {
+          walk.ev = walkEv(engine.day);
+          engine.renderer.toneMappingExposure = engine.day.exposure * walk.ev;
+          engine.dirty = true;
+        }
+      }
     },
     resize: fit,
     get phase() {

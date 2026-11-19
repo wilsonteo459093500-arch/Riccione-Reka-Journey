@@ -106,6 +106,13 @@
   padding: 8px;
   border-radius: 20px;
 }
+/* 名字那一行、楼层标签不撑宽地图（宽 = 地图本身）：width 0 + min-width 100% */
+.walk-map-head,
+.walk-map-floors {
+  width: 0;
+  min-width: 100%;
+  box-sizing: border-box;
+}
 .walk-map-head {
   display: flex;
   align-items: center;
@@ -222,16 +229,16 @@
   background: var(--fill-2);
 }
 .walk-map-floor {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-width: 44px;
   min-height: 44px;
-  padding: 0 10px;
+  padding: 4px 6px;
   border: 0;
   border-radius: 10px;
   background: transparent;
   color: var(--pt-soft);
   font: 600 13px/1.1 var(--sans);
-  white-space: nowrap;
+  text-wrap: balance; /* 英文「Ground floor」放不下一行：两行，不撑宽地图 */
   cursor: pointer;
   touch-action: manipulation;
   transition:
@@ -353,6 +360,20 @@
   left: var(--safe-l);
   bottom: calc(var(--walk-joy-b) + var(--walk-joy) + 14px);
   animation: walk-rise 0.36s var(--ease);
+}
+
+/* 手机：打开工具面板时摇杆先让开（面板整行宽，摇杆浮在画面中间太挤）；收起面板就回来。量尺的控制条本来就在摇杆上面 */
+.walk-ui.is-phone.tool-paint > .walk-joy,
+.walk-ui.is-phone.tool-floor > .walk-joy,
+.walk-ui.is-phone.tool-furnish > .walk-joy,
+.walk-ui.is-phone.tool-light > .walk-joy,
+.walk-ui.is-phone.tool-photo > .walk-joy {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 0.22s var(--ease),
+    visibility 0s linear 0.22s;
 }
 
 /* ---------- 下面居中：工具轮（面板在它上面） ---------- */

@@ -1,6 +1,6 @@
 // 走进去 · 潘吉带逛的泡泡（SPEC §5）：小潘吉（会说话的那一只 <Pangie speaker>，口型跟着 voice.js）+ 字幕 + 下一站 / 跳过。
 //   字幕 = lineText(id)：和她说的一字不差，所以不用 t()（台词表 voice-lines.js 自己带中英文）；轻点字幕 = 这一句不说了。
-//   走在路上（phase 'walking'）字幕留着上一句、淡一点；最后一站只有「好的」。按钮 ≥ 44px；字幕 aria-live。
+//   走在路上（phase 'walking'）字幕留着上一句、淡一点；去第一站的路上还没有上一句 → 「跟我来…」（不留一个空泡泡）；最后一站只有「好的」。按钮 ≥ 44px；字幕 aria-live。
 //   没在逛：给了 onStart 就画一颗「带我逛逛」的小按钮，没给就什么都不画。
 // props = createTour().state() 的 { running, line, index, total, phase } + onNext / onSkip / onStart、className。
 // 位置交给 walk.css（根节点 .walk-tour / .walk-tour-start，没有行内定位）；里面的样子是行内样式，只用 base.css 的变量。
@@ -82,7 +82,7 @@ export default function TourBubble({ running = false, line = null, index = 0, to
       <Pangie speaker size={64} mood={pose.mood || 'happy'} prop={pose.prop || 'ball'} className="walk-tour-pangie" />
       <div className="walk-tour-bubble" style={S.bubble}>
         <p className="walk-tour-text" style={{ ...S.text, opacity: walking ? 0.6 : 1 }} aria-live="polite" data-voice-skip="">
-          {line ? lineText(line) : ''}
+          {line ? lineText(line) : walking ? t('跟我来…') : ''}
         </p>
         <div className="walk-tour-actions" style={S.actions}>
           {total > 1 && (

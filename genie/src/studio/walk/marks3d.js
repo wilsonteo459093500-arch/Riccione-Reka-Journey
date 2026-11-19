@@ -97,7 +97,7 @@ export function createMarks(engine) {
   const fTarget = fader([ring], [ringMat]);
 
   // 选中的家具：比要去的那一圈细一点、白一点
-  const selMat = mat(PALETTE.card, 0.85);
+  const selMat = mat(PALETTE.card, 0.5); // 0.85 太抢眼（一大圈白的压在地板上）
   const sel = flat(new THREE.Mesh(own(new THREE.RingGeometry(0.95, 1, 72)), selMat));
   sel.visible = false;
   group.add(sel);

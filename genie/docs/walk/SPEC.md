@@ -501,6 +501,28 @@ Fixtures: `test/fixtures/walk/*.json`, frozen project snapshots made once from t
   - `--save`: write the baseline.
   - `--check`: compare against the baseline. Mode **B** additionally compares before-enter with after-exit.
 
+**`scripts/walk-e2e.mjs`** (I4; `npm run walk:e2e`)
+- Drives the built app in the real browser with real mouse and keyboard input.
+- Cases: condo3 staff, semid2 staff, condo3 `?mode=wish`.
+- Covers:
+  - enter and land;
+  - the tour;
+  - look-drag, tap-to-walk, minimap, joystick and keys into walls;
+  - doors, stairs;
+  - every tool, bookmarks;
+  - exit, which must restore the camera within 1e-6;
+  - re-entry.
+- Writes `report.json` plus a screenshot per step.
+- About 35 min on SwiftShader, so it is part of the release check, not `npm test`.
+
+**`scripts/walk-shots.mjs`** (I5)
+- Screenshots of every walk-in screen at 1180×820, 820×1180, 412×860 and 1440×900 in zh and en.
+  - Staff screens use semid2; the Wish screens use condo3.
+- `--sheets` rebuilds the contact sheets only.
+- `report.json` lists layout problems: tap targets under 44 px, overlaps, things off screen, clipped text, and covering the toast spot or the Wish capsule.
+- Mid-flight and mid-stairs shots freeze a scalable `requestAnimationFrame` clock (`window.__warp`).
+- About 1 h with `--jobs 2`.
+
 ## 10 · As built in phase 1: read before phase 2
 
 ### Engine seam (U1)
@@ -567,7 +589,8 @@ Extra exports:
 - Extras:
   - `select(id|null)`, `clearMeasure()`, `resize()`
   - getters `tool`, `nav`, `wish`
-  - exported helpers `slideMove`, `furnitureMask`, `floorAtY`, `changedFloors`, `angleDiff`, `TOOLS`, `SPEED`, `WALK_EV` (1.15)
+  - exported helpers `slideMove`, `furnitureMask`, `floorAtY`, `changedFloors`, `angleDiff`, `TOOLS`, `SPEED`, `WALK_EV` (1.3 after I5), `walkEv(day)`
+  - read-only getter `doors`: the `createDoors` result, or `null` when not walking (I4; used by walk-e2e)
 - Events:
 
   | Event | Payload |
@@ -597,3 +620,22 @@ Extra exports:
 - If a flight runs past 7 s, the exit button shows anyway.
 - CSS hooks: `.walk-ui.is-live`, `.tool-<id>`, `.is-phone`, `--walk-panel-b`, `--walk-dock-h`.
 - Studio entry is 397.04 kB after phase 2: the lazy chunk's CSS preload path and the export list for the walk stack. About 0.46 kB is left.
+
+### Visual pass (I5) and follow-ups, as built
+- **Exposure.** `walk.ev = walkEv(engine.day) = WALK_EV × (1 + 0.3 × night)`.
+  - The controller re-applies it when the time changes, so night interiors read warm and lit rather than black.
+  - Bird's-eye exposure is untouched.
+- **Portrait framing.** `flight.walkVo(W, H)` shifts the principal point up by 10 % of the height in portrait; it is 0 in landscape.
+  - `flyIn` lands on it and `fit()` re-applies it on resize.
+  - Verticals stay vertical; the view shows more room and less ceiling.
+- **Minimap.**
+  - `MAP_SIZES` gains an `area` cap, so tall plans (semid2) grow taller instead of shrinking to a strip.
+  - Floor tabs wrap (`text-wrap: balance`) instead of widening the map.
+- **Layout.**
+  - Portrait iPad (781–1023 px wide): panels and the measure bar keep clear of the joystick.
+  - Phones: the joystick hides while a paint, floor, furnish, light or photo panel is open.
+  - English chips are 80 px wide on phones.
+  - The selected-item ring opacity is 0.5.
+- **Tour bubble.** While walking to the first stop (`phase 'walking'`, no line yet) it shows 「跟我来…」 / "Follow me…", not an empty bubble.
+- **Arrival facing.** `walkTo` without a `yaw` whose path changes floor ends by turning to face the centre of the arrival room (`faceRoom`), unless the walker is within 0.6 m of it.
+  - Same-floor walks keep facing their walking direction.

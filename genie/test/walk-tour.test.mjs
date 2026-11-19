@@ -547,6 +547,7 @@ await test('TourBubble：字幕 = lineText（中 / 英）、aria-live、会说�
       assert.ok(end.includes(`>${lang === 'en' ? 'OK' : '好的'}</button>`) && !end.includes(`>${next}</button>`), `${lang} 最后一站`);
       const walking = render({ running: true, line: null, index: 0, total: 7, phase: 'walking' });
       assert.match(walking, /is-walking/);
+      assert.ok(walking.includes(lang === 'en' ? 'Follow me…' : '跟我来…'), `${lang} 去第一站的路上：不是空泡泡`);
       const start = render({ running: false, onStart: noop });
       assert.match(start, /class="walk-tour-start/);
       assert.ok(start.includes(lang === 'en' ? 'Show me around' : '带我逛逛'));
@@ -558,7 +559,7 @@ await test('TourBubble：字幕 = lineText（中 / 英）、aria-live、会说�
 });
 
 await test('泡泡的字都有英文（en-walktour.js 或总表），en-walktour.js 只放这一块的字、和总表不冲突', () => {
-  for (const k of ['{0}带逛', '下一站', '好的', '带我逛逛', '跳过']) assert.ok(TOUR_EN[k] ?? EN[k], k);
+  for (const k of ['{0}带逛', '下一站', '好的', '带我逛逛', '跳过', '跟我来']) assert.ok(TOUR_EN[k] ?? EN[k], k);
   for (const [k, v] of Object.entries(TOUR_EN)) {
     assert.ok(v, k);
     if (EN[k] != null) assert.equal(EN[k], v, `${k}：和 en.js 不一样`);

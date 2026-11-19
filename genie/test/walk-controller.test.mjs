@@ -597,6 +597,49 @@ await test('楼梯（semid2 一楼 → 二楼主卧）：眼睛在楼梯折线�
   ctl.dispose();
 });
 
+await test('没给朝向、换了楼层（上楼）：到了转向这个房间的中间，不是朝着最后一段路（常常是空墙）；同一层走不转', async () => {
+  const { engine, ctl } = await walkIn('semid2');
+  const room = N.roomAt(ctl.nav, { fi: 1, x: 2.9, z: 12.4 });
+  assert.ok(room, '二楼主卧');
+  // 主卧里离中间远的一角（往里 0.7m），走得到的最近一点
+  const goal = N.nearest(ctl.nav, { fi: 1, x: room.x + 0.7, z: room.y + room.d - 0.7 });
+  const p = ctl.walkTo(goal);
+  let done = false;
+  p.then(() => (done = true));
+  const end = clock + 120e3;
+  while (!done && clock < end) {
+    ticks(engine, 0.016, { step: 16 });
+    await null;
+  }
+  assert.equal(await p, true);
+  const fin = ctl.pose();
+  assert.equal(fin.fi, 1);
+  const cx = room.x + room.w / 2 - fin.x;
+  const cz = room.y + room.d / 2 - fin.z;
+  assert.ok(cx * cx + cz * cz >= 0.36, '离房间中间够远');
+  assert.ok(Math.abs(angleDiff(fin.yaw, Math.atan2(-cx, -cz))) < 0.02, `朝房间中间（yaw ${fin.yaw}）`);
+  assert.ok(Math.abs(fin.pitch) < 0.02, '平视');
+  // 同一层走过去：不转（还是朝着走的方向）
+  const here = ctl.pose();
+  const g2 = N.nearest(ctl.nav, { fi: 1, x: room.x + room.w - 0.7, z: room.y + 0.7 });
+  const q = ctl.walkTo(g2);
+  let d2 = false;
+  q.then(() => (d2 = true));
+  const end2 = clock + 120e3;
+  while (!d2 && clock < end2) {
+    ticks(engine, 0.016, { step: 16 });
+    await null;
+  }
+  assert.equal(await q, true);
+  const f2 = ctl.pose();
+  const room2 = N.roomAt(ctl.nav, { fi: 1, x: f2.x, z: f2.z });
+  const c2x = room2.x + room2.w / 2 - f2.x;
+  const c2z = room2.y + room2.d / 2 - f2.z;
+  assert.ok(Math.hypot(f2.x - here.x, f2.z - here.z) > 1, '走了一段');
+  assert.ok(c2x * c2x + c2z * c2z < 0.36 || Math.abs(angleDiff(f2.yaw, Math.atan2(-c2x, -c2z))) > 0.02, '同一层：不特地转向房间中间');
+  ctl.dispose();
+});
+
 await test('家具只画人在的这一层（furnitureMask）：楼梯 / 挑空 3m 以内加上下层；floorAtY', () => {
   const nd = N.navDataOf(PROJ.semid2.plan);
   assert.equal(furnitureMask(nd, 0, 5, 12.4), 0b01, '一楼客厅：只画一楼');
