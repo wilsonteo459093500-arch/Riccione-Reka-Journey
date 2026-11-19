@@ -151,6 +151,39 @@ API:
 
 Performance target: `buildNav` under 150 ms on semid2 with furniture; `path` under 20 ms.
 
+**As built (U2) — additions, read these**
+
+Stair legs:
+- A leg's `from` / `to` are the floors walked from and to. Going down, `from` is the upper floor and the `pts` are reversed.
+- Each point's `y` is measured from the leg's `from` floor, so it is negative when going down.
+- So eye y = `floors[leg.from].elev + y + 1.55` holds in both directions.
+
+Extra `nav` fields:
+
+| Field | Value |
+|---|---|
+| `nav.door` | the main door: `{ id, kind, wall, piece, inward: ±1, cross, apron }`, or `null` |
+| `nav.start` | `{ fi, x, z }`: a passable point 0.6 m inside the main door, at the panel centre for a slider; `null` if there is no door |
+| per floor | `pass` and `reach` (`Uint8Array`); `grid` cells are 0 free / 1 structure / 2 furniture |
+| `nav.stairs` | only the linked stairs |
+
+Extra exports:
+- `SKIP_KINDS` — kinds that never block: rugs, pendants, art, curtains.
+- `wallBlocks(wall)`
+- `doorCross(piece)` — the crossing point; for a slider, the panel centre clear of mullions. Use it in `entryPlan`.
+
+Behaviour:
+
+| Call | Behaviour |
+|---|---|
+| `nearest` | searches up to 4 m and prefers reachable cells |
+| `path` | first snaps an unreachable from/to to the nearest reachable point; returns `null` only when there is no route |
+| `rebuildFloor(nav, fi, allItems)` | takes the full item list and filters it by floor; it also redoes stair links and reachability |
+
+`clearance` is continuous (interpolated). Use it for joystick sliding.
+
+P2 (1.2 m outside the door) may land on porch furniture. Do not require P2 to be passable; P3 is.
+
 ### `walk/paint.js`, `walk/measure.js`, `walk/marks.js` (U2b)
 
 `slotOfHit(hit)` takes a three.js intersection `{ object, face }`:
@@ -165,9 +198,15 @@ Performance target: `buildNav` under 150 ms on semid2 with furniture; `path` und
 - distance in mm (rounded to 10)
 - returns `{ mm, text }`, where `text = mmFt(mm)` from `shared/units.js`
 
+`slotOfHit` also accepts `Engine.hitAt` results; it never uses `engine.slotAt`, which falls back to `'walls'`.
+
 `wallDims(wall, ceil)` returns:
 - `{ lengthMm, heightMm, text }`
 - `text` = `t('{0} 长 · {1} 高', [...])` using `mmFt`
+- The UI may show `lengthMm` and `heightMm` separately: the combined text repeats the · separator.
+- As built, `marksOf(project)` and `MAX_MARKS` are exported.
+- `mark.room` is a room id.
+- Marks are kept oldest first.
 
 Marks:
 - `addMark(list, pose)` returns a new list.
