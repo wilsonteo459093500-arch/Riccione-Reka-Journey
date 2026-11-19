@@ -560,3 +560,40 @@ Extra exports:
 ### Pixel harness
 - The camera's `position`, `quaternion` and `target` are compared with a 1e-9 tolerance. An idle `OrbitControls.update()` flips them by 1 ULP every frame, and it did so before this work too.
 - Images (hashes) must still match exactly.
+
+### Controller (U6), as built
+- `joystick(x, y)`: y > 0 = forward, x > 0 = right.
+- `walkTo({fi, x, z, yaw?})` resolves `true` after arriving. If `yaw` is given, it resolves only after turning to it. It resolves `false` on interrupt or when there is no path.
+- Extras:
+  - `select(id|null)`, `clearMeasure()`, `resize()`
+  - getters `tool`, `nav`, `wish`
+  - exported helpers `slideMove`, `furnitureMask`, `floorAtY`, `changedFloors`, `angleDiff`, `TOOLS`, `SPEED`, `WALK_EV` (1.15)
+- Events:
+
+  | Event | Payload |
+  |---|---|
+  | `state` | `{phase}` |
+  | `pose` | `pose()`, throttled to 100 ms |
+  | `room` | `{room, id}` |
+  | `floor` | `{fi, id}` |
+  | `pick` | `{slot, matId, hit, room}` — `slot` is `null` for glass or fixed surfaces |
+  | `item` | `{id}` |
+  | `measure` | `{a, b, mm, text, wall}` — first tap: `b` is `null`, and `wall` holds dims if a wall was hit |
+  | `tour` | `{stop, line}` |
+  | `tourState` | `{…}` |
+  | `error` | `{error}`, followed by an instant exit |
+- Tour stops on: joystick, keys, walk taps, `goto`, `goFloor`, and a look-drag while walking. A look-drag while she is talking does not stop it.
+- Furniture drag:
+  - Only a drag that starts on the selected item moves it. Wall items don't move.
+  - It snaps to 5 cm, clamps to its room, and makes one `api.moveItem` on release.
+- `marks3d`: `createMarks(engine)` returns `{ target, path, progress, select, measure, clearMeasure, update, visible, dispose, group }`.
+
+### WalkMode shell (U5a), as built
+- Panels render in `.walk-panel-slot` above the tool wheel.
+- `MeasureLayer` renders at the `.walk-ui` root (absolute, `pointer-events: none`). Its bar uses `bottom: var(--walk-panel-b)`.
+- Every panel gets the same props: `{ctl, engine, project, api, wish, staff, room, fi, mode, onClose}`.
+- The undo button lives in the shell, top-left. It shows only when `api.canUndo()`.
+- Esc closes the open panel first, then exits.
+- If a flight runs past 7 s, the exit button shows anyway.
+- CSS hooks: `.walk-ui.is-live`, `.tool-<id>`, `.is-phone`, `--walk-panel-b`, `--walk-dock-h`.
+- Studio entry is 397.04 kB after phase 2: the lazy chunk's CSS preload path and the export list for the walk stack. About 0.46 kB is left.

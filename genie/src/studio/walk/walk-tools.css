@@ -1,0 +1,499 @@
+/* ============================================================
+   走进去 · 工具面板（docs/walk/SPEC.md §5 · U5b）：刷颜色 / 地板的托盘、家具、灯光、拍照（都画在 .walk-dock 的
+   .walk-panel-slot 里：工具轮正上方、居中；手机上整行宽），量尺（画在整层 .walk-ui 上：标签跟着 3D 的点走 + 一条控制条）。
+   纸色玻璃卡（.glass）、按钮 ≥ 44px、颜色只用 base.css / studio.css 的变量。每一条选择器都带 walk：这一块在鸟瞰时就在后台
+   载入，样式表一进来就生效，不能碰鸟瞰的界面。样板（.sample）、名字（.chip-name）、我们做（.st-make-dot / .st-offer-tag）
+   沿用 studio.css 的样子，只在 walk 的元素里面改一点。
+   ============================================================ */
+
+/* ---------- 面板（卡片 + 头一行） ---------- */
+.walk-panel {
+  --walk-panel-w: 380px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(var(--walk-panel-w), calc(100vw - var(--safe-l) - var(--safe-r)));
+  max-width: 100%;
+  min-height: 0;
+  padding: 10px 10px 12px 14px;
+  border-radius: 22px;
+  font-family: var(--sans);
+  color: var(--pt);
+  overflow: hidden;
+}
+.walk-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-height: 44px;
+}
+.walk-panel-ico {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: var(--fill-2);
+  color: var(--gold-ink);
+}
+.walk-panel-title {
+  flex: 1 1 140px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.walk-panel-title b {
+  font: 600 15px/1.25 var(--sans);
+  letter-spacing: 0.01em;
+  overflow-wrap: anywhere;
+}
+.walk-panel-title em {
+  font: 500 12.5px/1.35 var(--sans);
+  font-style: normal;
+  color: var(--pt-soft);
+}
+.walk-panel-title .st-offer-tag {
+  margin-left: 6px;
+}
+.walk-panel-x {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin: -2px -4px -2px auto;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--pt-soft);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.walk-panel-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--fill);
+  font: 500 13.5px/1.45 var(--sans);
+  color: var(--pt-soft);
+}
+.walk-panel-hint svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--gold-ink);
+}
+.walk-panel-foot {
+  margin: -2px 2px 0;
+  font: 500 12px/1.4 var(--sans);
+  color: var(--pt-soft);
+}
+
+/* 面板里的按钮（旋转、移走、收藏、下载、清掉…） */
+.walk-btn {
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--card);
+  color: var(--pt);
+  box-shadow: 0 0 0 0.5px var(--hair), 0 1px 3px rgba(var(--shade-rgb), 0.1);
+  font: 600 14px/1.1 var(--sans);
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 0.15s var(--ease), background 0.18s var(--ease);
+}
+.walk-btn:active {
+  transform: scale(0.97);
+}
+.walk-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.walk-btn.is-gold {
+  background: var(--gold-btn);
+  color: var(--ink);
+  box-shadow: 0 0 0 0.5px rgba(var(--gold-d-rgb), 0.5), 0 4px 12px rgba(var(--gold-d-rgb), 0.28);
+}
+.walk-btn.is-danger {
+  color: var(--danger);
+}
+.walk-btns {
+  display: flex;
+  gap: 8px;
+}
+
+/* 分段（托盘的类别、灯光的白天 / 晚上） */
+.walk-seg {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 14px;
+  background: var(--fill-2);
+}
+.walk-seg button {
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--pt-soft);
+  font: 600 13px/1.1 var(--sans);
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background 0.18s var(--ease), color 0.18s var(--ease);
+}
+.walk-seg button.on {
+  background: var(--card);
+  color: var(--gold-ink);
+  box-shadow: 0 0 0 0.5px rgba(var(--gold-rgb), 0.45), 0 2px 8px rgba(var(--shade-rgb), 0.12);
+}
+
+/* ---------- 刷颜色 / 地板：材质托盘 ---------- */
+.walk-panel.walk-tray {
+  --walk-panel-w: 600px;
+}
+.walk-tray .walk-seg {
+  margin-left: auto;
+}
+.walk-tray-row {
+  display: flex;
+  gap: 4px;
+  margin: 0 -10px 0 -14px;
+  padding: 8px 12px 4px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-padding: 0 12px;
+  touch-action: pan-x;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, black 12px, black calc(100% - 18px), transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, black 12px, black calc(100% - 18px), transparent 100%);
+}
+.walk-tray-row::-webkit-scrollbar {
+  display: none;
+}
+.walk-chip {
+  flex: none;
+  width: 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 0 2px;
+  border: 0;
+  background: none;
+  color: var(--pt);
+  cursor: pointer;
+  touch-action: pan-x;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.is-en .walk-chip {
+  width: 84px;
+}
+/* 「我们做」的小记号在样板的角上：样板本身不再裁边（图自己带圆角） */
+.walk-chip .sample {
+  overflow: visible;
+  transition: transform 0.3s var(--spring), box-shadow 0.3s var(--ease);
+}
+.walk-chip .sample img {
+  border-radius: inherit;
+}
+.walk-chip:active .sample {
+  transform: scale(0.95);
+}
+.walk-chip.is-cur .sample {
+  box-shadow:
+    0 0 0 2px var(--card),
+    0 0 0 3.5px var(--gold),
+    0 8px 16px -6px rgba(var(--shade-rgb), 0.5);
+}
+.walk-chip.is-cur .chip-name b {
+  color: var(--gold-ink);
+}
+
+/* ---------- 家具 ---------- */
+.walk-panel.walk-furnish {
+  --walk-panel-w: 400px;
+}
+
+/* ---------- 灯光 ---------- */
+.walk-panel.walk-light {
+  --walk-panel-w: 360px;
+}
+.walk-light-time {
+  font: 600 26px/1 var(--display);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.walk-light .walk-seg {
+  margin-left: auto;
+}
+.walk-light-arc {
+  width: min(250px, 100%);
+  margin: -4px auto 0;
+}
+.walk-light-presets {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+.walk-light-presets button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 52px;
+  padding: 6px 2px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--pt-soft);
+  font: 600 12px/1.1 var(--sans);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.walk-light-presets button.on {
+  background: var(--card);
+  color: var(--gold-ink);
+  box-shadow: 0 0 0 0.5px rgba(var(--gold-rgb), 0.45), 0 2px 8px rgba(var(--shade-rgb), 0.12);
+}
+
+/* ---------- 拍照 = 收藏这个角度 ---------- */
+.walk-panel.walk-photo {
+  --walk-panel-w: 380px;
+}
+.walk-photo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  max-height: 236px;
+  margin: 0 -4px 0 -6px;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+.walk-photo-item {
+  display: flex;
+  align-items: center;
+  border-radius: 14px;
+}
+.walk-photo-item.is-new {
+  animation: walk-photo-in 0.5s var(--ease);
+}
+@keyframes walk-photo-in {
+  from {
+    background: rgba(var(--gold-l-rgb), 0.6);
+  }
+}
+.walk-photo-go {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--pt);
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.walk-photo-go > svg {
+  flex: none;
+  color: var(--gold-ink);
+}
+.walk-photo-go span {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.walk-photo-go b {
+  font: 600 14px/1.3 var(--sans);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.walk-photo-go em {
+  font: 500 12px/1.3 var(--sans);
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  color: var(--pt-soft);
+}
+.walk-photo-x {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--pt-soft);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+/* ---------- 量尺：画在 3D 上的标签 + 工具轮正上方的控制条 ---------- */
+.walk-measure {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.walk-measure-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 6px 11px;
+  border-radius: 12px;
+  font: 600 14px/1.3 var(--sans);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+  will-change: transform;
+}
+.walk-measure-label span + span {
+  font-weight: 500;
+  color: var(--pt-soft);
+}
+.walk-measure-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: var(--walk-panel-b);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: calc(100% - var(--safe-l) - var(--safe-r));
+  min-height: 52px;
+  margin: 0 auto;
+  padding: 4px 4px 4px 14px;
+  border-radius: 20px;
+  pointer-events: auto;
+  animation: walk-rise 0.28s var(--ease);
+}
+.walk-measure-bar > svg {
+  flex: none;
+  color: var(--gold-ink);
+}
+.walk-measure-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font: 500 13.5px/1.35 var(--sans);
+  color: var(--pt-soft);
+}
+.walk-measure-text b {
+  font: 600 15px/1.3 var(--sans);
+  font-variant-numeric: tabular-nums;
+  color: var(--pt);
+}
+.walk-measure-bar .walk-btn {
+  flex: none;
+}
+.walk-measure-bar .walk-panel-x {
+  margin: 0;
+}
+
+@media (hover: hover) {
+  .walk-chip:hover .sample {
+    transform: translateY(-2px);
+  }
+  .walk-btn:hover,
+  .walk-seg button:not(.on):hover,
+  .walk-light-presets button:not(.on):hover,
+  .walk-photo-go:hover,
+  .walk-photo-x:hover,
+  .walk-panel-x:hover {
+    background: var(--fill-2);
+  }
+  .walk-btn.is-gold:hover {
+    background: var(--gold-btn);
+    filter: brightness(1.04);
+  }
+}
+
+/* 窄的平板：工具轮在摇杆右边那一块里（walk.css）→ 量尺的控制条也是 */
+@media (min-width: 601px) and (max-width: 780px) {
+  .walk-measure-bar {
+    left: calc(var(--safe-l) + var(--walk-joy) + 12px);
+    right: var(--safe-r);
+    max-width: calc(100% - var(--safe-l) - var(--walk-joy) - 12px - var(--safe-r));
+  }
+}
+
+/* 手机：面板整行宽（.walk-dock 撑满）；量尺的控制条放到摇杆上面（摇杆在工具轮正上方的左边） */
+@media (max-width: 600px) {
+  .walk-panel {
+    width: auto;
+    padding: 8px 8px 10px 12px;
+    border-radius: 20px;
+  }
+  .walk-tray-row {
+    margin: 0 -8px 0 -12px;
+  }
+  .walk-chip,
+  .is-en .walk-chip {
+    width: 68px;
+  }
+  .walk-photo-list {
+    max-height: 196px;
+  }
+  .walk-measure-bar {
+    left: var(--safe-l);
+    right: var(--safe-r);
+    bottom: calc(var(--walk-joy-b) + var(--walk-joy) + 12px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .walk-chip .sample,
+  .walk-btn,
+  .walk-seg button {
+    transition: none;
+  }
+  .walk-photo-item.is-new,
+  .walk-measure-bar {
+    animation: none;
+  }
+}

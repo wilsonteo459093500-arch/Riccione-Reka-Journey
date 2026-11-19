@@ -1,0 +1,529 @@
+/* ============================================================
+   走进去（docs/walk/SPEC.md §5）：WalkMode 那一层 —— 回到全屋、小地图、摇杆、工具轮、潘吉带逛的位置。
+   盖在 3D 画布上（在 .studio 里面）：z 60 < 提示 110 < 确认框 / 画布收回 120。
+   整层不接指针（点画布 = 控制器的事），只有按钮、地图、摇杆、工具轮、面板接。
+   留空：上面居中是 api.flash 的提示（safe-t + 60px，手机 + 136px）；许愿模式右下角约 288×60 是外壳的胶囊。
+   颜色只用 base.css / studio.css 的变量；每一条选择器都带 walk（这一块在鸟瞰时就在后台载入，样式表一进来就生效，不能碰鸟瞰）。
+   给工具面板（walk-tools.css）用的：根节点 .walk-ui 上有 .is-live（走着）、.tool-<id>（正在用的工具）、.is-phone（≤ 600px），
+   变量 --walk-panel-b（工具轮正上方离底边多远）、--walk-dock-h（工具轮 + 面板多高）；面板本身画在 .walk-panel-slot 里。
+   ============================================================ */
+
+.walk-ui {
+  --walk-joy: 120px; /* 摇杆 */
+  --walk-tools-h: 64px; /* 工具轮的高度 */
+  --walk-dock-b: var(--safe-b); /* 工具轮离底边 */
+  --walk-dock-h: var(--walk-tools-h); /* 工具轮 + 打开的面板（WalkMode 量好了写进来） */
+  --walk-joy-b: var(--safe-b); /* 摇杆离底边 */
+  --walk-panel-b: calc(var(--walk-dock-b) + var(--walk-tools-h) + 10px); /* 工具轮正上方（量尺的控制条用） */
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  font-family: var(--sans);
+  color: var(--pt);
+}
+
+/* 飞进 / 飞出：都藏起来（淡出后 visibility 再关，读屏也跳过）；飞太久「回到全屋」先露出来 */
+.walk-ui > * {
+  transition:
+    opacity 0.45s var(--ease),
+    visibility 0s linear 0s;
+}
+.walk-ui:not(.is-live) > * {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 0.22s var(--ease),
+    visibility 0s linear 0.22s;
+}
+.walk-ui.is-stuck > .walk-top {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* ---------- 左上：回到全屋 + 撤销 ---------- */
+.walk-top {
+  position: absolute;
+  top: var(--safe-t);
+  left: var(--safe-l);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.walk-exit {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 18px 0 14px;
+  border: 0;
+  border-radius: 999px;
+  font: 600 15px/1 var(--sans);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
+  transition: transform 0.16s var(--ease);
+}
+.walk-exit svg {
+  flex: none;
+  color: var(--gold-d);
+}
+.walk-undo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
+  animation: walk-pop 0.3s var(--ease);
+  transition: transform 0.16s var(--ease);
+}
+.walk-exit:active,
+.walk-undo:active {
+  transform: scale(0.96);
+}
+
+/* ---------- 右上：小地图 ---------- */
+.walk-map {
+  position: absolute;
+  top: var(--safe-t);
+  right: var(--safe-r);
+  pointer-events: auto;
+}
+.walk-ui .walk-map:not(.is-mini) {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: calc(100% - var(--safe-l) - var(--safe-r));
+  padding: 8px;
+  border-radius: 20px;
+}
+.walk-map-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 20px;
+  padding: 2px 6px 0;
+}
+.walk-map-room-name {
+  min-width: 0;
+  overflow: hidden;
+  font: 600 13px/1.25 var(--sans);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--pt);
+}
+.walk-map-close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin: -12px -10px -12px 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--pt-soft);
+  cursor: pointer;
+}
+.walk-map-svg {
+  display: block;
+  align-self: center;
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+  background: var(--fill-2);
+  cursor: pointer;
+  touch-action: manipulation;
+  overflow: hidden;
+}
+.walk-map-room {
+  fill: var(--card);
+  stroke: rgba(var(--shade-rgb), 0.3);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+  transition:
+    fill 0.3s var(--ease),
+    stroke 0.3s var(--ease);
+}
+.walk-map-room.is-out {
+  fill: rgba(var(--accent-l-rgb), 0.22);
+  stroke-dasharray: 3 2;
+}
+.walk-map-room.is-stair {
+  fill: var(--fill-3);
+}
+.walk-map-room.is-void {
+  fill: transparent;
+  stroke-dasharray: 2 3;
+}
+.walk-map-room.is-here {
+  fill: rgba(var(--gold-l-rgb), 0.55);
+  stroke: rgba(var(--gold-rgb), 0.85);
+}
+.walk-map-label {
+  fill: var(--pt-soft);
+  font-family: var(--sans);
+  font-weight: 600;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+.walk-map-label.is-here {
+  fill: var(--gold-ink);
+}
+.walk-map-cone {
+  fill: rgba(var(--gold-rgb), 0.3);
+}
+.walk-map-dot {
+  fill: var(--gold);
+  stroke: var(--card);
+  stroke-width: 2px;
+  vector-effect: non-scaling-stroke;
+}
+.walk-map-target {
+  fill: none;
+  stroke: var(--gold-d);
+  stroke-width: 2px;
+  vector-effect: non-scaling-stroke;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: walk-map-ping 1.5s var(--ease) both;
+  pointer-events: none;
+}
+@keyframes walk-map-ping {
+  from {
+    opacity: 1;
+    transform: scale(0.35);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.7);
+  }
+}
+.walk-map-floors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 13px;
+  background: var(--fill-2);
+}
+.walk-map-floor {
+  flex: 1 1 auto;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--pt-soft);
+  font: 600 13px/1.1 var(--sans);
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    background 0.18s var(--ease),
+    color 0.18s var(--ease);
+}
+.walk-map-floor.on {
+  background: var(--card);
+  color: var(--gold-ink);
+  box-shadow:
+    0 0 0 0.5px rgba(var(--gold-rgb), 0.45),
+    0 2px 10px rgba(var(--shade-rgb), 0.14);
+}
+/* 点了这一层、正在走过去（经过楼梯）：字变金褐、下面一个小点在呼吸 */
+.walk-map-floor.is-going {
+  position: relative;
+  color: var(--gold-ink);
+}
+.walk-map-floor.is-going::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  border-radius: 50%;
+  background: var(--gold);
+  animation: walk-going 1s var(--ease) infinite alternate;
+}
+@keyframes walk-going {
+  from {
+    opacity: 0.25;
+  }
+}
+/* 手机：缩成一个圆（以你为中心），点一下展开 */
+.walk-map.is-mini {
+  display: block;
+  width: 120px;
+  height: 120px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.walk-map.is-mini .walk-map-svg {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: transparent;
+}
+/* 展开：放在「回到全屋」那一行下面（不盖住它） */
+.walk-map.is-open {
+  top: calc(var(--safe-t) + 54px);
+  animation: walk-pop 0.24s var(--ease);
+  transform-origin: top right;
+}
+
+/* ---------- 左下：摇杆；潘吉带逛在它上面 ---------- */
+.walk-joy {
+  position: absolute;
+  left: var(--safe-l);
+  bottom: var(--walk-joy-b);
+  width: var(--walk-joy);
+  height: var(--walk-joy);
+  border-radius: 50%;
+  pointer-events: auto;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: grab;
+  background: radial-gradient(closest-side, rgba(var(--glass-rgb), 0.05), rgba(var(--glass-rgb), 0.2));
+  box-shadow:
+    inset 0 0 0 1.5px rgba(var(--glass-rgb), 0.5),
+    0 10px 28px rgba(0, 0, 0, 0.22);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+.walk-joy.is-active {
+  cursor: grabbing;
+  box-shadow:
+    inset 0 0 0 1.5px rgba(var(--glass-rgb), 0.75),
+    0 10px 28px rgba(0, 0, 0, 0.26);
+}
+.walk-joy-ticks {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: rgba(var(--glass-rgb), 0.72);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.35)); /* 浅色的墙、地板前面也看得见 */
+  pointer-events: none;
+}
+.walk-joy-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 54px;
+  height: 54px;
+  margin: -27px 0 0 -27px;
+  border-radius: 50%;
+  background: var(--panel-glass);
+  box-shadow: var(--lift), var(--inner-hl);
+  pointer-events: none;
+  transition: transform 0.24s var(--spring);
+}
+.walk-joy.is-active .walk-joy-knob {
+  transition: none;
+}
+.walk-ui > .walk-tour,
+.walk-ui > .walk-tour-start {
+  position: absolute;
+  left: var(--safe-l);
+  bottom: calc(var(--walk-joy-b) + var(--walk-joy) + 14px);
+  animation: walk-rise 0.36s var(--ease);
+}
+
+/* ---------- 下面居中：工具轮（面板在它上面） ---------- */
+.walk-dock {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: var(--walk-dock-b);
+  width: max-content;
+  max-width: calc(100% - var(--safe-l) - var(--safe-r));
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  pointer-events: none;
+}
+.walk-panel-slot {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-width: 100%;
+  max-height: calc(100dvh - var(--walk-panel-b) - var(--safe-t) - 72px);
+  pointer-events: auto;
+  animation: walk-rise 0.28s var(--ease);
+}
+.walk-panel-slot:empty {
+  display: none;
+}
+.walk-tools {
+  display: flex;
+  gap: 2px;
+  max-width: 100%;
+  padding: 5px;
+  border-radius: 22px;
+  pointer-events: auto;
+}
+.walk-tool {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 60px;
+  min-height: 54px;
+  padding: 6px 8px 5px;
+  border: 0;
+  border-radius: 17px;
+  background: transparent;
+  color: var(--pt-soft);
+  font: 600 12.5px/1.1 var(--sans);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    background 0.18s var(--ease),
+    color 0.18s var(--ease),
+    transform 0.15s var(--ease);
+}
+.walk-tool svg {
+  flex: none;
+}
+.walk-tool:active {
+  transform: scale(0.95);
+}
+.walk-tool.on {
+  background: var(--card);
+  color: var(--gold-ink);
+  box-shadow:
+    0 0 0 0.5px rgba(var(--gold-rgb), 0.45),
+    0 2px 10px rgba(var(--shade-rgb), 0.14);
+}
+@media (hover: hover) {
+  .walk-tool:not(.on):hover,
+  .walk-map-floor:not(.on):hover {
+    background: var(--fill-2);
+    color: var(--pt);
+  }
+  .walk-exit:hover,
+  .walk-undo:hover {
+    transform: translateY(-1px);
+  }
+}
+
+@keyframes walk-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@keyframes walk-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+
+/* 许愿模式：右下角是外壳的胶囊（约 288×60）。工具轮居中时在 ~1100px 以下会碰到它 → 整列抬到胶囊上面 */
+@media (min-width: 561px) and (max-width: 1099px) {
+  .is-wish .walk-ui {
+    --walk-dock-b: calc(var(--safe-b) + 66px);
+  }
+}
+
+/* 窄的平板（摇杆和居中的工具轮会碰到）：工具轮在摇杆右边那一块里居中 */
+@media (min-width: 601px) and (max-width: 780px) {
+  .walk-dock {
+    left: calc(var(--safe-l) + var(--walk-joy) + 12px);
+    right: var(--safe-r);
+    width: auto;
+    max-width: none;
+    margin: 0;
+  }
+  .walk-tool {
+    min-width: 0;
+  }
+}
+
+/* 手机：工具轮一整行在最下面；摇杆、潘吉在它上面（打开面板时跟着往上让） */
+@media (max-width: 600px) {
+  .walk-ui {
+    --walk-tools-h: 60px;
+    --walk-joy-b: calc(var(--walk-dock-b) + var(--walk-dock-h) + 12px);
+  }
+  .walk-dock {
+    left: var(--safe-l);
+    right: var(--safe-r);
+    width: auto;
+    max-width: none;
+    margin: 0;
+    align-items: stretch;
+  }
+  .walk-tools {
+    padding: 4px;
+    border-radius: 20px;
+  }
+  .walk-tool {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 52px;
+    padding: 5px 1px 4px;
+    gap: 3px;
+    border-radius: 15px;
+    font-size: 11px;
+    letter-spacing: 0;
+    white-space: normal;
+    text-align: center;
+  }
+  .walk-exit {
+    padding: 0 16px 0 12px;
+    font-size: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .walk-ui > *,
+  .walk-ui:not(.is-live) > * {
+    transition: none;
+  }
+  .walk-undo,
+  .walk-map.is-open,
+  .walk-panel-slot,
+  .walk-ui > .walk-tour,
+  .walk-ui > .walk-tour-start,
+  .walk-map-target,
+  .walk-map-floor.is-going::after {
+    animation: none;
+  }
+  .walk-joy-knob {
+    transition: none;
+  }
+}
