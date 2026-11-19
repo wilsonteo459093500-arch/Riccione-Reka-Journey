@@ -312,7 +312,32 @@ await test('every line: id, zh + en, ≤ 2 sentences, no emoji, known group / le
     assert.ok(!/您|人家|潘吉会|潘吉不|潘吉在|儿[，。！？]|～/.test(l.zh), `${l.id}: ${l.zh}`);
   }
   for (const id of LINES.sequence) assert.ok(ids.has(id), id);
-  assert.equal(LINES.lines.length, 45); // 33 + the 10 「带它回家」 lines (group home, guest journey v2) + 2 lead lines (交给设计师, owner 2026-10-19)
+  assert.equal(LINES.lines.length, 53); // 33 + the 10 「带它回家」 lines (group home, guest journey v2) + 2 lead lines (交给设计师, owner 2026-10-19) + 8 走进去 lines (group walk)
+});
+await test('走进去 (group walk): the 8 tour lines, bubble captions, Pangie names only what we make — no prices, codes or timelines', () => {
+  assert.ok(LINES.groups.some((g) => g.id === 'walk' && g.zh && g.en));
+  const walk = LINES.lines.filter((l) => l.group === 'walk');
+  assert.deepEqual(
+    walk.map((l) => l.id),
+    ['walk.hello', 'walk.living', 'walk.tv', 'walk.kitchen', 'walk.wardrobe', 'walk.stairs', 'walk.paint', 'walk.bye'],
+  );
+  for (const l of walk) {
+    assert.equal(l.caption, 'bubble', l.id);
+    assert.equal(l.speaker, 'pangie', l.id);
+    assert.ok(!l.once, `${l.id}: the tour can be taken again`);
+    // no prices / board codes / timelines / sizes: no digits, no money or time words
+    assert.ok(!/[0-9０-９]|RM|价|钱|元|令吉|折|天|星期|礼拜|个月|工期|编号|毫米|公分|米/.test(l.zh), `${l.id}: ${l.zh}`);
+    assert.ok(!/[0-9]|RM|\$|price|cost|discount|day|week|month|code|mm\b|metre|meter/i.test(l.en), `${l.id}: ${l.en}`);
+  }
+  // 我们做 = only the things the firm makes: TV wall, kitchen cabinets + worktop, wardrobe
+  const made = walk.filter((l) => /我们做/.test(l.zh));
+  assert.deepEqual(made.map((l) => l.id), ['walk.tv', 'walk.kitchen', 'walk.wardrobe']);
+  for (const l of made) assert.ok(/We make/.test(l.en), l.id);
+  assert.ok(/电视墙/.test(lineText('walk.tv', 'zh')) && /TV wall/.test(lineText('walk.tv', 'en')));
+  assert.ok(/柜子和台面/.test(lineText('walk.kitchen', 'zh')) && /cabinets and the worktop/.test(lineText('walk.kitchen', 'en')));
+  assert.ok(/衣柜/.test(lineText('walk.wardrobe', 'zh')) && /wardrobe/.test(lineText('walk.wardrobe', 'en')));
+  // the end line names the exit button the guest sees (「回到全屋」)
+  assert.ok(lineText('walk.bye', 'zh').includes('回到全屋'));
 });
 await test('no line can carry guest data: no {0} placeholders, no 名字 slots', () => {
   for (const l of LINES.lines) assert.ok(!/\{\w+\}/.test(l.zh + l.en + (l.zhSay || '') + (l.enSay || '')), l.id);

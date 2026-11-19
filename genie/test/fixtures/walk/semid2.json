@@ -1,0 +1,1684 @@
+{
+  "id": "pwalksemid2",
+  "name": "双层半独立 · 40×80",
+  "createdAt": "2026-11-19T00:00:00.000Z",
+  "updatedAt": "2026-11-19T00:00:00.000Z",
+  "plan": {
+    "v": 2,
+    "name": "双层半独立 · 40×80",
+    "north": 90,
+    "floors": [
+      {
+        "id": "gf",
+        "level": 0,
+        "name": "",
+        "height": 3.4,
+        "ceil": 3,
+        "rooms": [
+          {
+            "id": "g-yard",
+            "type": "utility",
+            "name": "后院 / 晒衣处",
+            "x": 0,
+            "y": 0,
+            "w": 3.6,
+            "d": 1.6
+          },
+          {
+            "id": "g-wkit",
+            "type": "kitchen",
+            "name": "湿厨房",
+            "x": 0,
+            "y": 1.6,
+            "w": 3.6,
+            "d": 2.4
+          },
+          {
+            "id": "g-gbth",
+            "type": "bath",
+            "name": "客浴",
+            "x": 3.6,
+            "y": 0,
+            "w": 2.2,
+            "d": 2.2
+          },
+          {
+            "id": "g-hall",
+            "type": "corridor",
+            "name": "走廊",
+            "x": 3.6,
+            "y": 2.2,
+            "w": 2.2,
+            "d": 4.2
+          },
+          {
+            "id": "g-gbd",
+            "type": "bedroom",
+            "name": "客房",
+            "x": 5.8,
+            "y": 0,
+            "w": 3.8,
+            "d": 4
+          },
+          {
+            "id": "s1-gf",
+            "type": "stair",
+            "stairId": "s1",
+            "name": "",
+            "x": 0,
+            "y": 4,
+            "w": 3.6,
+            "d": 2.4
+          },
+          {
+            "id": "g-dkit",
+            "type": "kitchen",
+            "name": "干厨房",
+            "x": 5.8,
+            "y": 4,
+            "w": 3.8,
+            "d": 2.4
+          },
+          {
+            "id": "g-din",
+            "type": "dining",
+            "name": "餐厅",
+            "x": 0,
+            "y": 6.4,
+            "w": 5.8,
+            "d": 4
+          },
+          {
+            "id": "g-fam",
+            "type": "family",
+            "name": "起居厅",
+            "x": 5.8,
+            "y": 6.4,
+            "w": 3.8,
+            "d": 4
+          },
+          {
+            "id": "g-liv",
+            "type": "living",
+            "name": "客厅",
+            "x": 0,
+            "y": 10.4,
+            "w": 9.6,
+            "d": 4
+          },
+          {
+            "id": "g-por",
+            "type": "porch",
+            "name": "车廊",
+            "x": 0,
+            "y": 14.4,
+            "w": 9.6,
+            "d": 6
+          }
+        ],
+        "openings": [
+          {
+            "id": "d-main",
+            "kind": "door",
+            "x1": 6.6,
+            "y1": 14.4,
+            "x2": 7.6,
+            "y2": 14.4
+          },
+          {
+            "id": "s-liv",
+            "kind": "slider",
+            "x1": 0.6,
+            "y1": 14.4,
+            "x2": 5.6,
+            "y2": 14.4
+          },
+          {
+            "id": "d-yard",
+            "kind": "door",
+            "x1": 0.4,
+            "y1": 1.6,
+            "x2": 1.3,
+            "y2": 1.6
+          },
+          {
+            "id": "d-wk",
+            "kind": "door",
+            "x1": 3.6,
+            "y1": 2.3,
+            "x2": 3.6,
+            "y2": 3.2
+          },
+          {
+            "id": "d-gbth",
+            "kind": "door",
+            "x1": 3.9,
+            "y1": 2.2,
+            "x2": 4.7,
+            "y2": 2.2
+          },
+          {
+            "id": "d-gbd",
+            "kind": "door",
+            "x1": 5.8,
+            "y1": 2.5,
+            "x2": 5.8,
+            "y2": 3.4
+          },
+          {
+            "id": "o-dk",
+            "kind": "open",
+            "x1": 6.2,
+            "y1": 6.4,
+            "x2": 9.2,
+            "y2": 6.4
+          },
+          {
+            "id": "o-hk",
+            "kind": "open",
+            "x1": 5.8,
+            "y1": 4.4,
+            "x2": 5.8,
+            "y2": 6
+          },
+          {
+            "id": "w-wk",
+            "kind": "window",
+            "x1": 1.2,
+            "y1": 1.6,
+            "x2": 2.6,
+            "y2": 1.6,
+            "sill": 1.05
+          },
+          {
+            "id": "w-gbth",
+            "kind": "window",
+            "x1": 4.2,
+            "y1": 0,
+            "x2": 5.2,
+            "y2": 0,
+            "sill": 1.5
+          },
+          {
+            "id": "w-gbd",
+            "kind": "window",
+            "x1": 9.6,
+            "y1": 1,
+            "x2": 9.6,
+            "y2": 3
+          },
+          {
+            "id": "w-dk",
+            "kind": "window",
+            "x1": 9.6,
+            "y1": 4.6,
+            "x2": 9.6,
+            "y2": 5.8,
+            "sill": 1.05
+          },
+          {
+            "id": "w-fam",
+            "kind": "window",
+            "x1": 9.6,
+            "y1": 7.2,
+            "x2": 9.6,
+            "y2": 9.6,
+            "sill": 0.45
+          },
+          {
+            "id": "w-liv",
+            "kind": "window",
+            "x1": 9.6,
+            "y1": 11,
+            "x2": 9.6,
+            "y2": 13.6,
+            "sill": 0.45
+          },
+          {
+            "id": "w-yard",
+            "kind": "window",
+            "x1": 0.6,
+            "y1": 0,
+            "x2": 3,
+            "y2": 0,
+            "sill": 1
+          }
+        ]
+      },
+      {
+        "id": "ff",
+        "level": 1,
+        "name": "",
+        "height": 3.2,
+        "ceil": 2.9,
+        "rooms": [
+          {
+            "id": "f-bd3",
+            "type": "bedroom",
+            "name": "卧室 3",
+            "x": 0,
+            "y": 0,
+            "w": 3.6,
+            "d": 4
+          },
+          {
+            "id": "f-cbth",
+            "type": "bath",
+            "name": "公共浴室",
+            "x": 3.6,
+            "y": 0,
+            "w": 2.2,
+            "d": 2.2
+          },
+          {
+            "id": "f-bd2",
+            "type": "bedroom",
+            "name": "卧室 2",
+            "x": 5.8,
+            "y": 0,
+            "w": 3.8,
+            "d": 4
+          },
+          {
+            "id": "f-hall",
+            "type": "corridor",
+            "name": "走廊",
+            "x": 3.6,
+            "y": 2.2,
+            "w": 2.2,
+            "d": 4.2
+          },
+          {
+            "id": "s1-ff",
+            "type": "stair",
+            "stairId": "s1",
+            "name": "",
+            "x": 0,
+            "y": 4,
+            "w": 3.6,
+            "d": 2.4
+          },
+          {
+            "id": "f-bth2",
+            "type": "bath",
+            "name": "浴室",
+            "x": 5.8,
+            "y": 4,
+            "w": 3.8,
+            "d": 2.4
+          },
+          {
+            "id": "f-fam",
+            "type": "family",
+            "name": "起居厅",
+            "x": 0,
+            "y": 6.4,
+            "w": 5.8,
+            "d": 4
+          },
+          {
+            "id": "f-bd4",
+            "type": "bedroom",
+            "name": "卧室 4",
+            "x": 5.8,
+            "y": 6.4,
+            "w": 3.8,
+            "d": 4
+          },
+          {
+            "id": "f-mst",
+            "type": "master",
+            "name": "主卧",
+            "x": 0,
+            "y": 10.4,
+            "w": 5.8,
+            "d": 4
+          },
+          {
+            "id": "f-wir",
+            "type": "walkin",
+            "name": "衣帽间",
+            "x": 5.8,
+            "y": 10.4,
+            "w": 3.8,
+            "d": 2
+          },
+          {
+            "id": "f-mbth",
+            "type": "bath",
+            "name": "主卧浴室",
+            "x": 5.8,
+            "y": 12.4,
+            "w": 3.8,
+            "d": 2
+          },
+          {
+            "id": "f-bal",
+            "type": "balcony",
+            "name": "阳台",
+            "x": 0,
+            "y": 14.4,
+            "w": 5.8,
+            "d": 1.4
+          }
+        ],
+        "openings": [
+          {
+            "id": "d-bd3",
+            "kind": "door",
+            "x1": 3.6,
+            "y1": 2.6,
+            "x2": 3.6,
+            "y2": 3.5
+          },
+          {
+            "id": "d-cbth",
+            "kind": "door",
+            "x1": 4.2,
+            "y1": 2.2,
+            "x2": 5,
+            "y2": 2.2
+          },
+          {
+            "id": "d-bd2",
+            "kind": "door",
+            "x1": 5.8,
+            "y1": 2.6,
+            "x2": 5.8,
+            "y2": 3.5
+          },
+          {
+            "id": "d-bth2",
+            "kind": "door",
+            "x1": 5.8,
+            "y1": 4.6,
+            "x2": 5.8,
+            "y2": 5.4
+          },
+          {
+            "id": "d-bd4",
+            "kind": "door",
+            "x1": 5.8,
+            "y1": 7,
+            "x2": 5.8,
+            "y2": 7.9
+          },
+          {
+            "id": "d-mst",
+            "kind": "door",
+            "x1": 4.2,
+            "y1": 10.4,
+            "x2": 5.1,
+            "y2": 10.4
+          },
+          {
+            "id": "d-wir",
+            "kind": "door",
+            "x1": 5.8,
+            "y1": 10.8,
+            "x2": 5.8,
+            "y2": 11.6
+          },
+          {
+            "id": "d-mbth",
+            "kind": "door",
+            "x1": 5.8,
+            "y1": 12.9,
+            "x2": 5.8,
+            "y2": 13.7
+          },
+          {
+            "id": "s-bal",
+            "kind": "slider",
+            "x1": 0.6,
+            "y1": 14.4,
+            "x2": 4.6,
+            "y2": 14.4
+          },
+          {
+            "id": "w-bd3",
+            "kind": "window",
+            "x1": 0.8,
+            "y1": 0,
+            "x2": 2.8,
+            "y2": 0
+          },
+          {
+            "id": "w-cbth",
+            "kind": "window",
+            "x1": 4.2,
+            "y1": 0,
+            "x2": 5.2,
+            "y2": 0,
+            "sill": 1.5
+          },
+          {
+            "id": "w-bd2",
+            "kind": "window",
+            "x1": 6.4,
+            "y1": 0,
+            "x2": 8.8,
+            "y2": 0
+          },
+          {
+            "id": "w-bd2s",
+            "kind": "window",
+            "x1": 9.6,
+            "y1": 1,
+            "x2": 9.6,
+            "y2": 3
+          },
+          {
+            "id": "w-bth2",
+            "kind": "window",
+            "x1": 9.6,
+            "y1": 4.6,
+            "x2": 9.6,
+            "y2": 5.8,
+            "sill": 1.5
+          },
+          {
+            "id": "w-bd4",
+            "kind": "window",
+            "x1": 9.6,
+            "y1": 7.2,
+            "x2": 9.6,
+            "y2": 9.6
+          },
+          {
+            "id": "w-wir",
+            "kind": "window",
+            "x1": 9.6,
+            "y1": 10.8,
+            "x2": 9.6,
+            "y2": 11.8,
+            "sill": 1.5
+          },
+          {
+            "id": "w-mbth",
+            "kind": "window",
+            "x1": 9.6,
+            "y1": 12.8,
+            "x2": 9.6,
+            "y2": 13.8,
+            "sill": 1.5
+          },
+          {
+            "id": "w-mbth2",
+            "kind": "window",
+            "x1": 6.6,
+            "y1": 14.4,
+            "x2": 8.8,
+            "y2": 14.4,
+            "sill": 1.5
+          }
+        ]
+      }
+    ],
+    "stairs": [
+      {
+        "id": "s1",
+        "from": "gf",
+        "to": "ff",
+        "x": 0,
+        "y": 4,
+        "w": 3.6,
+        "d": 2.4,
+        "shape": "U",
+        "up": "W",
+        "turn": "right"
+      }
+    ],
+    "rooms": [
+      {
+        "id": "g-yard",
+        "type": "utility",
+        "name": "后院 / 晒衣处",
+        "x": 0,
+        "y": 0,
+        "w": 3.6,
+        "d": 1.6
+      },
+      {
+        "id": "g-wkit",
+        "type": "kitchen",
+        "name": "湿厨房",
+        "x": 0,
+        "y": 1.6,
+        "w": 3.6,
+        "d": 2.4
+      },
+      {
+        "id": "g-gbth",
+        "type": "bath",
+        "name": "客浴",
+        "x": 3.6,
+        "y": 0,
+        "w": 2.2,
+        "d": 2.2
+      },
+      {
+        "id": "g-hall",
+        "type": "corridor",
+        "name": "走廊",
+        "x": 3.6,
+        "y": 2.2,
+        "w": 2.2,
+        "d": 4.2
+      },
+      {
+        "id": "g-gbd",
+        "type": "bedroom",
+        "name": "客房",
+        "x": 5.8,
+        "y": 0,
+        "w": 3.8,
+        "d": 4
+      },
+      {
+        "id": "s1-gf",
+        "type": "stair",
+        "stairId": "s1",
+        "name": "",
+        "x": 0,
+        "y": 4,
+        "w": 3.6,
+        "d": 2.4
+      },
+      {
+        "id": "g-dkit",
+        "type": "kitchen",
+        "name": "干厨房",
+        "x": 5.8,
+        "y": 4,
+        "w": 3.8,
+        "d": 2.4
+      },
+      {
+        "id": "g-din",
+        "type": "dining",
+        "name": "餐厅",
+        "x": 0,
+        "y": 6.4,
+        "w": 5.8,
+        "d": 4
+      },
+      {
+        "id": "g-fam",
+        "type": "family",
+        "name": "起居厅",
+        "x": 5.8,
+        "y": 6.4,
+        "w": 3.8,
+        "d": 4
+      },
+      {
+        "id": "g-liv",
+        "type": "living",
+        "name": "客厅",
+        "x": 0,
+        "y": 10.4,
+        "w": 9.6,
+        "d": 4
+      },
+      {
+        "id": "g-por",
+        "type": "porch",
+        "name": "车廊",
+        "x": 0,
+        "y": 14.4,
+        "w": 9.6,
+        "d": 6
+      }
+    ],
+    "openings": [
+      {
+        "id": "d-main",
+        "kind": "door",
+        "x1": 6.6,
+        "y1": 14.4,
+        "x2": 7.6,
+        "y2": 14.4
+      },
+      {
+        "id": "s-liv",
+        "kind": "slider",
+        "x1": 0.6,
+        "y1": 14.4,
+        "x2": 5.6,
+        "y2": 14.4
+      },
+      {
+        "id": "d-yard",
+        "kind": "door",
+        "x1": 0.4,
+        "y1": 1.6,
+        "x2": 1.3,
+        "y2": 1.6
+      },
+      {
+        "id": "d-wk",
+        "kind": "door",
+        "x1": 3.6,
+        "y1": 2.3,
+        "x2": 3.6,
+        "y2": 3.2
+      },
+      {
+        "id": "d-gbth",
+        "kind": "door",
+        "x1": 3.9,
+        "y1": 2.2,
+        "x2": 4.7,
+        "y2": 2.2
+      },
+      {
+        "id": "d-gbd",
+        "kind": "door",
+        "x1": 5.8,
+        "y1": 2.5,
+        "x2": 5.8,
+        "y2": 3.4
+      },
+      {
+        "id": "o-dk",
+        "kind": "open",
+        "x1": 6.2,
+        "y1": 6.4,
+        "x2": 9.2,
+        "y2": 6.4
+      },
+      {
+        "id": "o-hk",
+        "kind": "open",
+        "x1": 5.8,
+        "y1": 4.4,
+        "x2": 5.8,
+        "y2": 6
+      },
+      {
+        "id": "w-wk",
+        "kind": "window",
+        "x1": 1.2,
+        "y1": 1.6,
+        "x2": 2.6,
+        "y2": 1.6,
+        "sill": 1.05
+      },
+      {
+        "id": "w-gbth",
+        "kind": "window",
+        "x1": 4.2,
+        "y1": 0,
+        "x2": 5.2,
+        "y2": 0,
+        "sill": 1.5
+      },
+      {
+        "id": "w-gbd",
+        "kind": "window",
+        "x1": 9.6,
+        "y1": 1,
+        "x2": 9.6,
+        "y2": 3
+      },
+      {
+        "id": "w-dk",
+        "kind": "window",
+        "x1": 9.6,
+        "y1": 4.6,
+        "x2": 9.6,
+        "y2": 5.8,
+        "sill": 1.05
+      },
+      {
+        "id": "w-fam",
+        "kind": "window",
+        "x1": 9.6,
+        "y1": 7.2,
+        "x2": 9.6,
+        "y2": 9.6,
+        "sill": 0.45
+      },
+      {
+        "id": "w-liv",
+        "kind": "window",
+        "x1": 9.6,
+        "y1": 11,
+        "x2": 9.6,
+        "y2": 13.6,
+        "sill": 0.45
+      },
+      {
+        "id": "w-yard",
+        "kind": "window",
+        "x1": 0.6,
+        "y1": 0,
+        "x2": 3,
+        "y2": 0,
+        "sill": 1
+      }
+    ],
+    "wallH": 3
+  },
+  "furniture": [
+    {
+      "id": "fuy9u80",
+      "kind": "tvWall",
+      "room": "g-liv",
+      "floor": "gf",
+      "x": 0.33,
+      "z": 12.4,
+      "rot": 90,
+      "w": 3.2,
+      "d": 0.45,
+      "h": 3
+    },
+    {
+      "id": "fzltdr7",
+      "kind": "sofa",
+      "room": "g-liv",
+      "floor": "gf",
+      "x": 3.75,
+      "z": 12.4,
+      "rot": 270,
+      "w": 2.3,
+      "d": 0.92,
+      "variant": "classic"
+    },
+    {
+      "id": "fx0v7ok",
+      "kind": "coffeeTable",
+      "room": "g-liv",
+      "floor": "gf",
+      "x": 2.59,
+      "z": 12.4,
+      "rot": 90,
+      "w": 1,
+      "d": 0.6,
+      "variant": "rect"
+    },
+    {
+      "id": "feovm3f",
+      "kind": "rug",
+      "room": "g-liv",
+      "floor": "gf",
+      "x": 2.525,
+      "z": 12.4,
+      "rot": 90,
+      "w": 2.9,
+      "d": 2.95,
+      "variant": "rect"
+    },
+    {
+      "id": "ft81675",
+      "kind": "floorLamp",
+      "room": "g-liv",
+      "floor": "gf",
+      "x": 3.75,
+      "z": 13.85,
+      "rot": 90,
+      "w": 0.4,
+      "d": 0.4
+    },
+    {
+      "id": "fs42ge0",
+      "kind": "floorLamp",
+      "room": "g-liv",
+      "floor": "gf",
+      "x": 3.75,
+      "z": 10.95,
+      "rot": 90,
+      "w": 0.4,
+      "d": 0.4
+    },
+    {
+      "id": "fmttp60",
+      "kind": "plant",
+      "room": "g-liv",
+      "floor": "gf",
+      "x": 9.25,
+      "z": 14.04,
+      "rot": 180,
+      "w": 0.45,
+      "d": 0.45,
+      "variant": "tall",
+      "seed": 7
+    },
+    {
+      "id": "fc5a6cu",
+      "kind": "curtains",
+      "room": "g-liv",
+      "floor": "gf",
+      "x": 9.4,
+      "z": 12.3,
+      "rot": 270,
+      "w": 2.5999999999999996,
+      "d": 0.1,
+      "h": 3
+    },
+    {
+      "id": "f98ygmz",
+      "kind": "diningTable",
+      "room": "g-din",
+      "floor": "gf",
+      "x": 2.9,
+      "z": 8.4,
+      "rot": 0,
+      "w": 1.4,
+      "d": 0.9,
+      "variant": "rect",
+      "seats": 4
+    },
+    {
+      "id": "f7fsayi",
+      "kind": "pendant",
+      "room": "g-din",
+      "floor": "gf",
+      "x": 2.9,
+      "z": 8.4,
+      "rot": 0,
+      "w": 0.5,
+      "d": 0.5,
+      "drop": 1
+    },
+    {
+      "id": "f6vfwfe",
+      "kind": "sideboard",
+      "room": "g-din",
+      "floor": "gf",
+      "x": 0.325,
+      "z": 8.4,
+      "rot": 90,
+      "w": 1.8,
+      "d": 0.45
+    },
+    {
+      "id": "fjronja",
+      "kind": "sofa",
+      "room": "g-fam",
+      "floor": "gf",
+      "x": 9.04,
+      "z": 8.43,
+      "rot": 270,
+      "w": 1.7,
+      "d": 0.92,
+      "variant": "classic"
+    },
+    {
+      "id": "frkvgtz",
+      "kind": "rug",
+      "room": "g-fam",
+      "floor": "gf",
+      "x": 8.58,
+      "z": 8.43,
+      "rot": 270,
+      "w": 2.3,
+      "d": 1.6,
+      "variant": "rect"
+    },
+    {
+      "id": "flbnbcs",
+      "kind": "curtains",
+      "room": "g-fam",
+      "floor": "gf",
+      "x": 9.4,
+      "z": 8.4,
+      "rot": 270,
+      "w": 2.3999999999999995,
+      "d": 0.1,
+      "h": 3
+    },
+    {
+      "id": "f7pmp7r",
+      "kind": "fridge",
+      "room": "g-wkit",
+      "floor": "gf",
+      "x": 3.09,
+      "z": 3.58,
+      "rot": 180,
+      "w": 0.86,
+      "d": 0.7
+    },
+    {
+      "id": "fe82c9c",
+      "kind": "kitchenRun",
+      "room": "g-wkit",
+      "floor": "gf",
+      "x": 1.37,
+      "z": 3.64,
+      "rot": 180,
+      "w": 2.54,
+      "d": 0.6,
+      "h": 3,
+      "sink": 0.8622,
+      "hob": 0.311,
+      "sinkAt": 0.8622,
+      "hobAt": 0.311,
+      "gaps": [],
+      "upper": true
+    },
+    {
+      "id": "fmljfo0",
+      "kind": "kitchenRun",
+      "room": "g-dkit",
+      "floor": "gf",
+      "x": 7.68,
+      "z": 4.36,
+      "rot": 0,
+      "w": 3.64,
+      "d": 0.6,
+      "h": 3,
+      "sink": 0.0962,
+      "hob": 0.6044,
+      "sinkAt": 0.0962,
+      "hobAt": 0.6044,
+      "gaps": [],
+      "upper": true
+    },
+    {
+      "id": "fgb7fnd",
+      "kind": "kitchenRun",
+      "room": "g-dkit",
+      "floor": "gf",
+      "x": 9.2,
+      "z": 5.5,
+      "rot": 270,
+      "w": 1.68,
+      "d": 0.6,
+      "h": 3,
+      "sink": null,
+      "hob": null,
+      "sinkAt": null,
+      "hobAt": null,
+      "gaps": [
+        {
+          "a": 0,
+          "b": 1.14
+        }
+      ],
+      "upper": true
+    },
+    {
+      "id": "fmijvss",
+      "kind": "bed",
+      "room": "g-gbd",
+      "floor": "gf",
+      "x": 7.7,
+      "z": 1.175,
+      "rot": 0,
+      "w": 1.5,
+      "d": 2.05
+    },
+    {
+      "id": "fhbi6vm",
+      "kind": "nightstand",
+      "room": "g-gbd",
+      "floor": "gf",
+      "x": 6.6,
+      "z": 0.32,
+      "rot": 0,
+      "w": 0.5,
+      "d": 0.42
+    },
+    {
+      "id": "fnvsd2f",
+      "kind": "nightstand",
+      "room": "g-gbd",
+      "floor": "gf",
+      "x": 8.8,
+      "z": 0.32,
+      "rot": 0,
+      "w": 0.5,
+      "d": 0.42
+    },
+    {
+      "id": "fboj2fe",
+      "kind": "rug",
+      "room": "g-gbd",
+      "floor": "gf",
+      "x": 7.7,
+      "z": 1.371,
+      "rot": 0,
+      "w": 2.5,
+      "d": 1.5
+    },
+    {
+      "id": "f55064m",
+      "kind": "wardrobe",
+      "room": "g-gbd",
+      "floor": "gf",
+      "x": 7.68,
+      "z": 3.64,
+      "rot": 180,
+      "w": 1.8,
+      "d": 0.6,
+      "h": 2.6,
+      "handle": "none"
+    },
+    {
+      "id": "fqf6o5l",
+      "kind": "curtains",
+      "room": "g-gbd",
+      "floor": "gf",
+      "x": 9.4,
+      "z": 2,
+      "rot": 270,
+      "w": 2,
+      "d": 0.1,
+      "h": 3
+    },
+    {
+      "id": "fk6aarr",
+      "kind": "shoeCabinet",
+      "room": "g-por",
+      "floor": "gf",
+      "x": 8.37,
+      "z": 14.65,
+      "rot": 0,
+      "w": 1.5,
+      "d": 0.38,
+      "h": 2.6
+    },
+    {
+      "id": "f4eyauu",
+      "kind": "bench",
+      "room": "g-por",
+      "floor": "gf",
+      "x": 9.31,
+      "z": 15.88,
+      "rot": 270,
+      "w": 1,
+      "d": 0.38
+    },
+    {
+      "id": "fvh28u6",
+      "kind": "shower",
+      "room": "g-gbth",
+      "floor": "gf",
+      "x": 5.29,
+      "z": 0.55,
+      "rot": 270,
+      "w": 0.9,
+      "d": 0.9
+    },
+    {
+      "id": "fvcwsbq",
+      "kind": "toilet",
+      "room": "g-gbth",
+      "floor": "gf",
+      "x": 5.39,
+      "z": 1.45,
+      "rot": 270,
+      "w": 0.45,
+      "d": 0.7
+    },
+    {
+      "id": "f63i1mk",
+      "kind": "vanity",
+      "room": "g-gbth",
+      "floor": "gf",
+      "x": 3.91,
+      "z": 0.9,
+      "rot": 90,
+      "w": 0.9,
+      "d": 0.5
+    }
+  ],
+  "materials": {
+    "floor": "smoked-oak",
+    "walls": "sand-limewash",
+    "feature": "walnut",
+    "cabinetry": "light-oak",
+    "countertop": "travertine",
+    "tile": "zellige-white",
+    "upholstery": "navy-velvet",
+    "bedding": "linen",
+    "rugs": "oat-knit",
+    "woodwork": "walnut",
+    "accents": "rust-wool",
+    "curtains": "linen",
+    "metal": "brass"
+  },
+  "mood": "cozy",
+  "time": 10,
+  "profile": null,
+  "furnitureUpper": [
+    {
+      "id": "f4j1h7t",
+      "kind": "bed",
+      "room": "f-mst",
+      "floor": "ff",
+      "x": 1.175,
+      "z": 12.4,
+      "rot": 90,
+      "w": 1.8,
+      "d": 2.05
+    },
+    {
+      "id": "ftr3lvw",
+      "kind": "nightstand",
+      "room": "f-mst",
+      "floor": "ff",
+      "x": 0.32,
+      "z": 11.15,
+      "rot": 90,
+      "w": 0.5,
+      "d": 0.42
+    },
+    {
+      "id": "f00zwpb",
+      "kind": "nightstand",
+      "room": "f-mst",
+      "floor": "ff",
+      "x": 0.32,
+      "z": 13.65,
+      "rot": 90,
+      "w": 0.5,
+      "d": 0.42
+    },
+    {
+      "id": "fw5raom",
+      "kind": "rug",
+      "room": "f-mst",
+      "floor": "ff",
+      "x": 1.371,
+      "z": 12.4,
+      "rot": 90,
+      "w": 2.8,
+      "d": 1.5
+    },
+    {
+      "id": "f6znzwv",
+      "kind": "wardrobe",
+      "room": "f-mst",
+      "floor": "ff",
+      "x": 3.17,
+      "z": 10.76,
+      "rot": 0,
+      "w": 1.8,
+      "d": 0.6,
+      "h": 2.6,
+      "handle": "none"
+    },
+    {
+      "id": "fxeg3c7",
+      "kind": "dresser",
+      "room": "f-mst",
+      "floor": "ff",
+      "x": 5.515,
+      "z": 12.25,
+      "rot": 270,
+      "w": 1.1,
+      "d": 0.45,
+      "key": "woodwork"
+    },
+    {
+      "id": "f240xkw",
+      "kind": "plant",
+      "room": "f-mst",
+      "floor": "ff",
+      "x": 1.4,
+      "z": 10.685,
+      "rot": 0,
+      "w": 0.45,
+      "d": 0.45,
+      "variant": "tall",
+      "seed": 11
+    },
+    {
+      "id": "f322lat",
+      "kind": "tvWall",
+      "room": "f-fam",
+      "floor": "ff",
+      "x": 0.33,
+      "z": 8.4,
+      "rot": 90,
+      "w": 2.4,
+      "d": 0.45,
+      "h": 2.9
+    },
+    {
+      "id": "fp0mndb",
+      "kind": "sofa",
+      "room": "f-fam",
+      "floor": "ff",
+      "x": 3.05,
+      "z": 8.4,
+      "rot": 270,
+      "w": 1.7,
+      "d": 0.92,
+      "variant": "classic"
+    },
+    {
+      "id": "fidu4cy",
+      "kind": "coffeeTable",
+      "room": "f-fam",
+      "floor": "ff",
+      "x": 1.94,
+      "z": 8.4,
+      "rot": 90,
+      "w": 0.8,
+      "d": 0.5,
+      "variant": "rect"
+    },
+    {
+      "id": "f1n58ro",
+      "kind": "rug",
+      "room": "f-fam",
+      "floor": "ff",
+      "x": 2.175,
+      "z": 8.4,
+      "rot": 90,
+      "w": 2.3,
+      "d": 2.25,
+      "variant": "rect"
+    },
+    {
+      "id": "fk1m0fc",
+      "kind": "plant",
+      "room": "f-fam",
+      "floor": "ff",
+      "x": 5.44,
+      "z": 10.05,
+      "rot": 270,
+      "w": 0.45,
+      "d": 0.45,
+      "variant": "tall",
+      "seed": 13
+    },
+    {
+      "id": "fakmgdp",
+      "kind": "bed",
+      "room": "f-bd3",
+      "floor": "ff",
+      "x": 1.175,
+      "z": 2,
+      "rot": 90,
+      "w": 1.5,
+      "d": 2.05
+    },
+    {
+      "id": "f7jfedl",
+      "kind": "nightstand",
+      "room": "f-bd3",
+      "floor": "ff",
+      "x": 0.32,
+      "z": 0.9,
+      "rot": 90,
+      "w": 0.5,
+      "d": 0.42
+    },
+    {
+      "id": "f3mojfp",
+      "kind": "nightstand",
+      "room": "f-bd3",
+      "floor": "ff",
+      "x": 0.32,
+      "z": 3.1,
+      "rot": 90,
+      "w": 0.5,
+      "d": 0.42
+    },
+    {
+      "id": "flvmq4i",
+      "kind": "rug",
+      "room": "f-bd3",
+      "floor": "ff",
+      "x": 1.371,
+      "z": 2,
+      "rot": 90,
+      "w": 2.5,
+      "d": 1.5
+    },
+    {
+      "id": "ffvi6bs",
+      "kind": "wardrobe",
+      "room": "f-bd3",
+      "floor": "ff",
+      "x": 3.24,
+      "z": 1.02,
+      "rot": 270,
+      "w": 1.8,
+      "d": 0.6,
+      "h": 2.6,
+      "handle": "none"
+    },
+    {
+      "id": "fe7p7dh",
+      "kind": "curtains",
+      "room": "f-bd3",
+      "floor": "ff",
+      "x": 1.8,
+      "z": 0.2,
+      "rot": 0,
+      "w": 1.9999999999999998,
+      "d": 0.1,
+      "h": 2.9
+    },
+    {
+      "id": "f2r2y06",
+      "kind": "bed",
+      "room": "f-bd2",
+      "floor": "ff",
+      "x": 8.2,
+      "z": 2.865,
+      "rot": 180,
+      "w": 1.5,
+      "d": 2.05
+    },
+    {
+      "id": "fbvntlg",
+      "kind": "nightstand",
+      "room": "f-bd2",
+      "floor": "ff",
+      "x": 7.1,
+      "z": 3.72,
+      "rot": 180,
+      "w": 0.5,
+      "d": 0.42
+    },
+    {
+      "id": "fof62v3",
+      "kind": "rug",
+      "room": "f-bd2",
+      "floor": "ff",
+      "x": 8.2,
+      "z": 2.669,
+      "rot": 180,
+      "w": 2.5,
+      "d": 1.5
+    },
+    {
+      "id": "fiwm586",
+      "kind": "wardrobe",
+      "room": "f-bd2",
+      "floor": "ff",
+      "x": 6.16,
+      "z": 1.02,
+      "rot": 90,
+      "w": 1.8,
+      "d": 0.6,
+      "h": 2.6,
+      "handle": "none"
+    },
+    {
+      "id": "fbh59v5",
+      "kind": "curtains",
+      "room": "f-bd2",
+      "floor": "ff",
+      "x": 7.6,
+      "z": 0.2,
+      "rot": 0,
+      "w": 2.4000000000000004,
+      "d": 0.1,
+      "h": 2.9
+    },
+    {
+      "id": "flwudyy",
+      "kind": "curtains",
+      "room": "f-bd2",
+      "floor": "ff",
+      "x": 9.4,
+      "z": 2,
+      "rot": 270,
+      "w": 2,
+      "d": 0.1,
+      "h": 2.9
+    },
+    {
+      "id": "fy5ake9",
+      "kind": "bed",
+      "room": "f-bd4",
+      "floor": "ff",
+      "x": 7.7,
+      "z": 9.265,
+      "rot": 180,
+      "w": 1.5,
+      "d": 2.05
+    },
+    {
+      "id": "fz316fz",
+      "kind": "nightstand",
+      "room": "f-bd4",
+      "floor": "ff",
+      "x": 6.6,
+      "z": 10.12,
+      "rot": 180,
+      "w": 0.5,
+      "d": 0.42
+    },
+    {
+      "id": "fuynyjf",
+      "kind": "nightstand",
+      "room": "f-bd4",
+      "floor": "ff",
+      "x": 8.8,
+      "z": 10.12,
+      "rot": 180,
+      "w": 0.5,
+      "d": 0.42
+    },
+    {
+      "id": "fvzndik",
+      "kind": "rug",
+      "room": "f-bd4",
+      "floor": "ff",
+      "x": 7.7,
+      "z": 9.069,
+      "rot": 180,
+      "w": 2.5,
+      "d": 1.5
+    },
+    {
+      "id": "f456quf",
+      "kind": "wardrobe",
+      "room": "f-bd4",
+      "floor": "ff",
+      "x": 7.68,
+      "z": 6.76,
+      "rot": 0,
+      "w": 1.8,
+      "d": 0.6,
+      "h": 2.6,
+      "handle": "none"
+    },
+    {
+      "id": "fb4fixi",
+      "kind": "curtains",
+      "room": "f-bd4",
+      "floor": "ff",
+      "x": 9.4,
+      "z": 8.4,
+      "rot": 270,
+      "w": 2.3999999999999995,
+      "d": 0.1,
+      "h": 2.9
+    },
+    {
+      "id": "fn2l8gt",
+      "kind": "shower",
+      "room": "f-cbth",
+      "floor": "ff",
+      "x": 5.29,
+      "z": 0.55,
+      "rot": 270,
+      "w": 0.9,
+      "d": 0.9
+    },
+    {
+      "id": "fjsn3a1",
+      "kind": "toilet",
+      "room": "f-cbth",
+      "floor": "ff",
+      "x": 5.39,
+      "z": 1.45,
+      "rot": 270,
+      "w": 0.45,
+      "d": 0.7
+    },
+    {
+      "id": "fij6t7j",
+      "kind": "vanity",
+      "room": "f-cbth",
+      "floor": "ff",
+      "x": 3.91,
+      "z": 1.65,
+      "rot": 90,
+      "w": 0.9,
+      "d": 0.5
+    },
+    {
+      "id": "ffbnwt1",
+      "kind": "shower",
+      "room": "f-bth2",
+      "floor": "ff",
+      "x": 9.05,
+      "z": 5.89,
+      "rot": 180,
+      "w": 0.9,
+      "d": 0.9
+    },
+    {
+      "id": "fza5rq0",
+      "kind": "toilet",
+      "room": "f-bth2",
+      "floor": "ff",
+      "x": 9.06,
+      "z": 4.41,
+      "rot": 0,
+      "w": 0.45,
+      "d": 0.7
+    },
+    {
+      "id": "fk48f1a",
+      "kind": "vanity",
+      "room": "f-bth2",
+      "floor": "ff",
+      "x": 6.31,
+      "z": 4.31,
+      "rot": 0,
+      "w": 0.9,
+      "d": 0.5
+    },
+    {
+      "id": "fem1o3t",
+      "kind": "shower",
+      "room": "f-mbth",
+      "floor": "ff",
+      "x": 9.05,
+      "z": 13.85,
+      "rot": 180,
+      "w": 0.9,
+      "d": 0.9
+    },
+    {
+      "id": "f1tq44g",
+      "kind": "toilet",
+      "room": "f-mbth",
+      "floor": "ff",
+      "x": 8.16,
+      "z": 12.81,
+      "rot": 0,
+      "w": 0.45,
+      "d": 0.7
+    },
+    {
+      "id": "f3tmv1y",
+      "kind": "vanity",
+      "room": "f-mbth",
+      "floor": "ff",
+      "x": 7.11,
+      "z": 12.71,
+      "rot": 0,
+      "w": 0.9,
+      "d": 0.5
+    },
+    {
+      "id": "f5dtzmq",
+      "kind": "wardrobe",
+      "room": "f-wir",
+      "floor": "ff",
+      "x": 8.08,
+      "z": 10.76,
+      "rot": 0,
+      "w": 2.8,
+      "d": 0.6,
+      "h": 2.6,
+      "handle": "none"
+    },
+    {
+      "id": "ftm7mkw",
+      "kind": "wardrobe",
+      "room": "f-wir",
+      "floor": "ff",
+      "x": 7.68,
+      "z": 12.04,
+      "rot": 180,
+      "w": 3.6,
+      "d": 0.6,
+      "h": 2.6,
+      "handle": "none"
+    },
+    {
+      "id": "f6e08jm",
+      "kind": "curtains",
+      "room": "f-wir",
+      "floor": "ff",
+      "x": 9.4,
+      "z": 11.3,
+      "rot": 270,
+      "w": 1,
+      "d": 0.1,
+      "h": 2.9
+    },
+    {
+      "id": "feq8cj9",
+      "kind": "lounger",
+      "room": "f-bal",
+      "floor": "ff",
+      "x": 2.35,
+      "z": 15.1,
+      "rot": 0,
+      "w": 0.7,
+      "d": 0.75
+    },
+    {
+      "id": "fmrb34a",
+      "kind": "lounger",
+      "room": "f-bal",
+      "floor": "ff",
+      "x": 3.45,
+      "z": 15.1,
+      "rot": 0,
+      "w": 0.7,
+      "d": 0.75
+    },
+    {
+      "id": "f8ly2kr",
+      "kind": "plant",
+      "room": "f-bal",
+      "floor": "ff",
+      "x": 0.35,
+      "z": 15.1,
+      "rot": 0,
+      "w": 0.45,
+      "d": 0.45,
+      "variant": "tall",
+      "seed": 2
+    },
+    {
+      "id": "f4anp7p",
+      "kind": "plant",
+      "room": "f-bal",
+      "floor": "ff",
+      "x": 5.45,
+      "z": 15.1,
+      "rot": 0,
+      "w": 0.45,
+      "d": 0.45,
+      "variant": "small",
+      "seed": 5
+    }
+  ]
+}
