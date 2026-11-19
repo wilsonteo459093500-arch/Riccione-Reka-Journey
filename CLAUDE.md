@@ -55,6 +55,14 @@
 3. AI 方案主题建议：规则要先 brainstorm
 4. 展厅播放接 D5 / SU / 3ds Max 漫游视频：先调查设计师能导出什么格式
 
+## VISI（invite/）
+
+- **计划在 `.claude/plans/visi.md`**（2026-11-19 起草，还是草稿：等用户确认；审查只做完 2 / 7 个角度）。
+- 用户 2026-11-19 说：VISI 还没正式给销售用；销售用电脑和手机；想要更快、更好看、不丢资料、团队共用。
+- 新对话开场白：「继续做 VISI（invite/）……这次要做：计划第 N 阶段」。
+- 本机跑：`cd invite && python3 -m http.server <端口>`，开 `/visi.html`（没有 `/api` 也能用）。
+  测试：`node --test tools/caselib/test/`、`node tools/caselib/test/visi-cases.mjs`（浏览器，只测公司案例库那一段）。
+
 ## 开发备忘（blueprint/）
 
 - 测试和构建：
