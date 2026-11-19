@@ -4,16 +4,18 @@ Read this first. Reply to the owner in **Chinese**, short and plain. Do one step
 
 ## Where things are (2026-11-19)
 - **Step 1 (walk-in 「走进去」) is BUILT, not live.** Same branch `ccr-eb67bc6b-ecbura` / PR #65, on top of step 3 + 3b.
-  - Spec and as-built notes: `genie/docs/walk/SPEC.md`. Code: `genie/src/studio/walk/` (lazy chunk ~39.5 kB gzip); seam in `Engine.js` / `house.js` / `StudioApp.jsx` / `studio.css`.
-  - Release check passed:
+  - Spec and as-built notes: `genie/docs/walk/SPEC.md`. Code: `genie/src/studio/walk/` (lazy chunk ~43 kB gzip); seam in `Engine.js` / `house.js` / `StudioApp.jsx` / `studio.css`.
+  - Release check passed after the review fixes (commit f12454b and later):
     - `npm test`
-    - build; studio entry 397.08 kB gzip (limit 397.5)
+    - build; studio entry 397.14 kB gzip (limit 397.5)
     - bird's-eye pixel checks: mode A 14/14 and mode B 6/6 identical (`scripts/walk-pixels.mjs`)
     - real-browser e2e: condo3 21/21, semid2 22/22, wish 21/21 (`npm run walk:e2e`)
     - screenshots at 4 sizes × zh/en (`scripts/walk-shots.mjs`)
-    - ~78 s preview video (`scripts/walk-video.mjs`)
-    - independent Opus review: 15 findings confirmed, fixes in progress (re-run the checks above after them)
+    - preview video (`scripts/walk-video.mjs`)
+  - Independent Opus review: 15 findings confirmed and fixed in two rounds, each fix re-checked by a separate agent. The 2 high ones: Pangie claimed kept cabinets as 我们做; the joystick crawled on iPad. Details are in SPEC §10 "Review fixes".
+  - Known small leftover: if the guest picks a new destination while standing inside an open door's swing, the camera can brush the door panel. A random stress test hit this 1–3 times per 1,200 walks (10× fewer than before). Idea: make path walking respect `doors.clearOf`.
   - **Waiting for the owner's OK** on the screenshots and video. Real iPad smoothness must be tried on the showroom iPad via the preview link.
+  - Deploys are by commit: step 3 alone can still go live by deploying 8c188c8; the branch head ships step 3 + 3b + step 1 together.
   - Defaults the owner may change: painting is per surface type (all cabinets together); the tour auto-starts on the first walk-in only; bookmarks stay on the device (max 12, wiped for the next guest).
 - **Step 3 (case showcase) is BUILT, not live.** Branch `ccr-eb67bc6b-ecbura` = 3ea54bf + these notes + step 3; draft PR #65 into `claude/ecstatic-keller-sw56vw`.
   - Spec: `genie/docs/showcase/SPEC.md`. Release check passed (npm test, vite build, studio chunk 395.70 kB gzip, screenshots at 4 sizes × zh/en, independent review: 14 findings fixed).
