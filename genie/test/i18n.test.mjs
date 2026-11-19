@@ -14,6 +14,9 @@ import traverseMod from '@babel/traverse';
 import EN from '../src/shared/i18n/en.js';
 import EXP from '../src/shared/i18n/en-export.js';
 import EB from '../src/shared/i18n/en-boards.js';
+import EW from '../src/shared/i18n/en-walk.js';
+import EWT from '../src/shared/i18n/en-walktour.js';
+import EWL from '../src/shared/i18n/en-walktools.js';
 
 const traverse = traverseMod.default || traverseMod;
 // 导出给设计师（src/studio/export/**）的词在 en-export.js：跟着导出代码懒加载（ExportSheet 用 addWords 并进来），
@@ -23,7 +26,10 @@ const EXPORT_DIR = `${path.sep}src${path.sep}studio${path.sep}export${path.sep}`
 // 案例库里的 BoardPicker.jsx 不在那一块里（案例库自己懒加载它），它的词要在总表；pack.js 的提醒只在板材库里显示。
 const BOARDS_DIR = `${path.sep}src${path.sep}cases${path.sep}boards${path.sep}`;
 const BOARDS_LAZY = (file) => (file.includes(BOARDS_DIR) && !file.endsWith(`${path.sep}BoardPicker.jsx`)) || file.endsWith(`${path.sep}src${path.sep}shared${path.sep}boards${path.sep}pack.js`);
-const lookup = (file, key) => EN[key] ?? (file.includes(EXPORT_DIR) ? EXP[key] : BOARDS_LAZY(file) ? EB[key] : undefined);
+// 走进去（src/studio/walk/**）的词在 en-walk*.js 三个文件里：跟着走进去懒加载（walk/words.js 用 addWords 并进来）。
+const WALK_DIR = `${path.sep}src${path.sep}studio${path.sep}walk${path.sep}`;
+const WALK = { ...EW, ...EWT, ...EWL };
+const lookup = (file, key) => EN[key] ?? (file.includes(EXPORT_DIR) ? EXP[key] : BOARDS_LAZY(file) ? EB[key] : file.includes(WALK_DIR) ? WALK[key] : undefined);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const HAN = /[一-鿿]/;
 const EDGE_CH = '[\\s\\p{So}\\p{Extended_Pictographic}\\uFE0F\\u200D→←↑↓·•…≈+]';
@@ -95,7 +101,7 @@ for (const f of fs.readdirSync(ROOT).filter((f) => f.endsWith('.html'))) {
 }
 
 const ph = (s) => (s.match(/\{\w+\}/g) || []).sort().join(',');
-const phBad = [...Object.entries(EN), ...Object.entries(EXP), ...Object.entries(EB)].filter(([k, v]) => v !== '' && ph(k) !== ph(v));
+const phBad = [...Object.entries(EN), ...Object.entries(EXP), ...Object.entries(EB), ...Object.entries(EW), ...Object.entries(EWT), ...Object.entries(EWL)].filter(([k, v]) => v !== '' && ph(k) !== ph(v));
 // en-export.js 不能进总表（不然又回到四个页面的第一块里）；和总表重复的词要一样（并进来以后不会把界面上的英文换掉）
 const enIndex = fs.readFileSync(path.join(ROOT, 'src/shared/i18n/en.js'), 'utf8');
 const expLeak = /en-export/.test(enIndex) ? ['src/shared/i18n/en.js imports en-export.js'] : [];
@@ -106,6 +112,18 @@ for (const f of walk(path.join(ROOT, 'src'))) {
   if (f.endsWith(`${path.sep}cases${path.sep}boards${path.sep}words.js`)) continue;
   if (/['"][^'"]*en-boards(\.js)?['"]/.test(fs.readFileSync(f, 'utf8'))) ebLeak.push(`${path.relative(ROOT, f)} imports en-boards.js (only src/cases/boards/words.js may)`);
 }
+// en-walk*.js 同理：不能进总表；只有 src/studio/walk/words.js 可以 import 它们；三个文件之间、和总表重复的词都要一样
+const ewLeak = /en-walk/.test(enIndex) ? ['src/shared/i18n/en.js imports en-walk*.js'] : [];
+for (const f of walk(path.join(ROOT, 'src'))) {
+  if (f.endsWith(`${path.sep}studio${path.sep}walk${path.sep}words.js`)) continue;
+  if (/['"][^'"]*en-walk\w*(\.js)?['"]/.test(fs.readFileSync(f, 'utf8'))) ewLeak.push(`${path.relative(ROOT, f)} imports en-walk*.js (only src/studio/walk/words.js may)`);
+}
+const ewClash = [];
+for (const [name, D] of [['en-walk.js', EW], ['en-walktour.js', EWT], ['en-walktools.js', EWL]])
+  for (const [k, v] of Object.entries(D)) {
+    if (EN[k] != null && EN[k] !== v) ewClash.push(`${k}: en.js「${EN[k]}」≠ ${name}「${v}」`);
+    else if (WALK[k] !== v) ewClash.push(`${k}: ${name}「${v}」≠ another en-walk*.js「${WALK[k]}」`);
+  }
 const ebClash = Object.entries(EB).filter(([k, v]) => EN[k] != null && EN[k] !== v).map(([k, v]) => `${k}: en.js「${EN[k]}」≠ en-boards.js「${v}」`);
 
 let fail = 0;
@@ -134,5 +152,10 @@ if (ebLeak.length || ebClash.length) {
   console.log('✗ en-boards.js：');
   [...ebLeak, ...ebClash].forEach((x) => console.log('    ' + x));
 }
+if (ewLeak.length || ewClash.length) {
+  fail++;
+  console.log('✗ en-walk*.js：');
+  [...ewLeak, ...ewClash].forEach((x) => console.log('    ' + x));
+}
 if (fail) process.exit(1);
-console.log(`✓ 中英双语：${checked} 处中文都有英文（词典 ${Object.keys(EN).length} 句 + 导出 ${Object.keys(EXP).length} 句 + 板材库 ${Object.keys(EB).length} 句）`);
+console.log(`✓ 中英双语：${checked} 处中文都有英文（词典 ${Object.keys(EN).length} 句 + 导出 ${Object.keys(EXP).length} 句 + 板材库 ${Object.keys(EB).length} 句 + 走进去 ${Object.keys(WALK).length} 句）`);
