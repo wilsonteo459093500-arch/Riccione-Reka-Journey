@@ -888,6 +888,10 @@ await test('沿路走：U 形楼梯的平台上看着下一跑的尽头（不是
   let onLand = 0; // 平台上走了几帧
   let late = 0; // 平台上走了 0.35s 以后的帧
   let worst = 0; // 那些帧里看的方向和「看下一跑尽头」差最多多少
+  let sideLow = 0; // 第一跑上侧着头看（和走的方向差 1.4 以上）的时候最低低到多少（pitch）
+  let sideN = 0;
+  let landLow = 0; // 平台上走了 0.6s 以后（看着下一跑）最低低到多少
+  const run1 = st.slice(0, i0 + 1);
   let atGoal = null; // 走到终点那一帧（还没原地转身）的朝向
   let lastMv = null;
   let prev = ctl.pose();
@@ -896,6 +900,11 @@ await test('沿路走：U 形楼梯的平台上看着下一跑的尽头（不是
     const mz = q.z - prev.z;
     if (mx * mx + mz * mz > 1e-10) lastMv = Math.atan2(-mx, -mz);
     const inLand = offPath(land, q) < 1e-6 && Math.hypot(q.x - land[0].x, q.z - land[0].z) > 0.05 && Math.hypot(q.x - land.at(-1).x, q.z - land.at(-1).z) > 0.05;
+    if (offPath(run1, q) < 1e-6 && !inLand && lastMv != null && Math.abs(angleDiff(q.yaw, lastMv)) > 1.4) {
+      sideN++;
+      sideLow = Math.min(sideLow, q.pitch);
+    }
+    if (inLand && onLand * 0.016 > 0.6) landLow = Math.min(landLow, q.pitch);
     if (inLand) {
       onLand++;
       if (onLand * 0.016 > 0.35) {
@@ -909,6 +918,9 @@ await test('沿路走：U 形楼梯的平台上看着下一跑的尽头（不是
   assert.equal(ok, true, '走到了');
   assert.ok(late > 10, `平台上走了 ${onLand} 帧`);
   assert.ok(worst < 0.3, `平台上转过来以后看着下一跑的尽头（最多差 ${worst.toFixed(2)}）`);
+  // 快到平台、侧着头看（对面是楼梯井的墙）：低一点头，看得到旁边那一跑的台阶和扶手；平台上看着下一跑：抬回来
+  assert.ok(sideN > 3 && sideLow < -0.2, `第一跑上侧着头看的时候低了头（${sideN} 帧，最低 ${sideLow.toFixed(2)}）`);
+  assert.ok(landLow > -0.1, `平台上看着下一跑的时候不低头（最低 ${landLow.toFixed(2)}）`);
   assert.ok(atGoal && atGoal.mv != null, '走到终点');
   const turned = Math.abs(angleDiff(want, atGoal.mv)) - Math.abs(angleDiff(want, atGoal.yaw));
   assert.ok(turned > 0.8, `走到终点时头已经往给的朝向转了 ${turned.toFixed(2)}（不是还对着走的方向）`);

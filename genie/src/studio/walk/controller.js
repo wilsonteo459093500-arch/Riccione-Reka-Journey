@@ -37,6 +37,8 @@ const TURN_K = 7; // 转身缓动
 const AHEAD = 1.5; // 沿路走：看沿着路往前这么远（米，只算水平）的那一点 —— 拐弯之前就慢慢转过去，不是走到拐角 / 门边才转（那时整个画面是墙）
 const AHEAD_STAIR = 2.0; // 楼梯上先只看这一段楼梯、往前这么远：U 形楼梯走到第一跑上头就开始转向下一跑；这一段楼梯剩下不到这么长 → 照 AHEAD 接着看后面的路
 const LEAD = 1.2; // 沿路走：看的方向最多比走的方向偏这么多（弧度，约 70°）—— 不扭着头走
+const SIDE_PITCH = -0.3; // 在一跑上侧着头看（看的方向和走的方向差 SIDE_LOOK 以上）就低头到这么多：U 形楼梯快到平台时看得到旁边那一跑的台阶和扶手，不是对面一整面墙（平台上看下一跑：不低头）
+const SIDE_LOOK = [0.6, 1.4]; // 差这么多（弧度）开始低头 → 低到 SIDE_PITCH
 const LEAD_STAIR = 2.0; // 看的那一点还在这一段楼梯上时可以偏这么多（约 115°）：U 形楼梯的平台上一边绕一边回头看下一跑，不是一直对着平台的墙
 const SEE = 0.12; // 沿路走：看的那一点和眼睛之间的直线离墙 / 家具至少这么远（米）—— 不隔着墙角 / 门框看
 const SIDE = 0.45; // 沿路走：看的方向和走的方向差这么多（弧度）以内照常走；再多就慢下来（差 90° → ×0.25），不横着快走
@@ -615,7 +617,8 @@ export function createWalk(engine, { project = null, api = null, wish = false, o
       // 看的方向：路上往前 AHEAD 米（楼梯上先看这一段楼梯往前 AHEAD_STAIR 米）、看得见的那一点（aimAt），最多比走的方向偏 LEAD
       // （那一点还在这一段楼梯上：LEAD_STAIR；已经到楼梯外面了还用 LEAD —— 不然走下楼梯的那一下偏的上限变小，头会往回扭一下）
       // 楼梯的平台上：看下一跑的尽头（landingAim）
-      let a = stair ? landingAim(R) || aimAt(R, AHEAD_STAIR, true) : null;
+      const land = stair ? landingAim(R) : null;
+      let a = stair ? land || aimAt(R, AHEAD_STAIR, true) : null;
       if (!a || a.short) a = aimAt(R, AHEAD);
       const ax = a.x - P.x;
       const az = a.z - P.z;
@@ -648,7 +651,11 @@ export function createWalk(engine, { project = null, api = null, wish = false, o
         if (off > SIDE) face = Math.max(stair ? FACE_STAIR : 0.25, Math.cos((Math.min(off, Math.PI / 2) - SIDE) * (Math.PI / 2 / (Math.PI / 2 - SIDE))));
       }
       // 楼梯：往上只抬一点头（看得到前面的台阶，不是对着一面墙 / 楼板底）、往下稍微低头；平地：回到平视
-      const want = stair ? clamp((leg.rise > 0 ? 0.2 : 0.7) * Math.atan2(leg.rise, leg.run || 1), -0.45, 0.3) : 0;
+      let want = stair ? clamp((leg.rise > 0 ? 0.2 : 0.7) * Math.atan2(leg.rise, leg.run || 1), -0.45, 0.3) : 0;
+      if (stair && mv != null && !land) {
+        const side = clamp((Math.abs(angleDiff(yaw, mv)) - SIDE_LOOK[0]) / (SIDE_LOOK[1] - SIDE_LOOK[0]), 0, 1);
+        want += (Math.min(want, SIDE_PITCH) - want) * side;
+      }
       pitch += (want - pitch) * (1 - Math.exp(-dt * PITCH_K));
     }
     R.walked += advance(R, R.v * dt * face * (stair ? STAIR_K : 1));
