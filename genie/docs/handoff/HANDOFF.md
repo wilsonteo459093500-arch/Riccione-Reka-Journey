@@ -2,9 +2,9 @@
 
 Read this first. Reply to the owner in **Chinese**, short and plain. Do one step per conversation, then stop.
 
-## Where things are (2026-11-19)
+## Where things are (2026-11-20)
 - **Step 1 (walk-in 「走进去」) is BUILT, not live.** Same branch `ccr-eb67bc6b-ecbura` / PR #65, on top of step 3 + 3b.
-  - Spec and as-built notes: `genie/docs/walk/SPEC.md`. Code: `genie/src/studio/walk/` (lazy chunk ~43 kB gzip); seam in `Engine.js` / `house.js` / `StudioApp.jsx` / `studio.css`.
+  - Spec and as-built notes: `genie/docs/walk/SPEC.md`. Code: `genie/src/studio/walk/` (lazy chunk ~44 kB gzip); seam in `Engine.js` / `house.js` / `StudioApp.jsx` / `studio.css`.
   - Release check passed after the review fixes (commit f12454b and later):
     - `npm test`
     - build; studio entry 397.14 kB gzip (limit 397.5)
@@ -13,6 +13,10 @@ Read this first. Reply to the owner in **Chinese**, short and plain. Do one step
     - screenshots at 4 sizes × zh/en (`scripts/walk-shots.mjs`)
     - preview video (`scripts/walk-video.mjs`)
   - Independent Opus review: 15 findings confirmed and fixed in two rounds, each fix re-checked by a separate agent. The 2 high ones: Pangie claimed kept cabinets as 我们做; the joystick crawled on iPad. Details are in SPEC §10 "Review fixes".
+  - Fixed after watching the preview video (2026-11-20, SPEC §10):
+    - **Turning view:** while walking a route, the view now looks 1.5 m ahead along the path (2 m on stairs) instead of at the next corner point. It no longer stares at a wall at corners, on the stair landing, or going into the wet kitchen. The path itself is unchanged; routes take about 2% longer.
+    - **Plaster edges:** the slab edge at the stair hole and the strips above doors and windows were dark ink (the bird's-eye cutaway colour) and read as black from inside. In walk mode only, `walk/plaster.js` swaps them to plaster and puts the exact original materials back on exit.
+    - **Reduced-motion fix:** an instant exit during the reduced-motion fly-in no longer leaves ceilings or plaster behind in the bird's-eye view.
   - Known small leftover: if the guest picks a new destination while standing inside an open door's swing, the camera can brush the door panel. A random stress test hit this 1–3 times per 1,200 walks (10× fewer than before). Idea: make path walking respect `doors.clearOf`.
   - **Waiting for the owner's OK** on the screenshots and video. Real iPad smoothness must be tried on the showroom iPad via the preview link.
   - Deploys are by commit: step 3 alone can still go live by deploying 8c188c8; the branch head ships step 3 + 3b + step 1 together.

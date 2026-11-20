@@ -5,10 +5,10 @@
 //   车廊上面盖着楼板 / 屋顶：镜头先在楼外面降到 2.2m，再平着从街那边飞进车廊（不会穿过屋顶）。
 //   趟门从「避开竖框的那一扇」正中穿过去（nav.doorCross）。没有大门 → 落到最大的客厅类房间正中（fallback）。
 // flyIn / flyOut：引擎的 onTick 驱动的补间（返回 Promise），镜头走一条转角倒圆的折线，按弧长匀顺地走（单调三次插值，起止速度 0）。
-//   进：t0 setWalk（墙全立、楼上不藏）→ 飞到 P1（视角 28°→48°、主点偏移到 walkVo：横屏归零）→ 开门 → P2 → 跨过门槛时盖上天花 → P3（视角 → walkFov）。
+//   进：t0 setWalk（墙全立、楼上不藏）→ 飞到 P1（视角 28°→48°、主点偏移到 walkVo：横屏归零）→ 开门 → P2 → 跨过门槛时盖上天花（楼板 / 墙的切口一起换成批荡，plaster.js）→ P3（视角 → walkFov）。
 //   大门往外开（离 P3 远的那一边）：门扇不扫进门那一块（落点 P3、带逛的第一站「门口」都在门里 ~0.6–1m，下一段路从那里往屋里走）；
 //   飞进来的镜头从门洞正中穿过、门扇贴着门框伸出去，两边离镜头一样远。
-//   出：门扇拿掉、天花掀掉、藏起人头上的楼层 → 升起来 → 滑回进来前的位置 → restoreOrbit 一模一样放回去（§4）。
+//   出：门扇拿掉、天花掀掉（切口放回墨色）、藏起人头上的楼层 → 升起来 → 滑回进来前的位置 → restoreOrbit 一模一样放回去（§4）。
 //   系统「减少动态效果」：两种飞行都换成 250ms 淡出到纸色再淡入。
 // 坐标：平面图 x → 世界 x、平面 y → 世界 z；yaw 和相机同一个约定（'YXZ'）：看的方向 = (−sin yaw, −cos yaw)。
 
@@ -17,6 +17,7 @@ import { ROOM_TYPES } from '../plan/model.js';
 import { mainEntrance } from '../engine/furnish.js';
 import { doorCross, passable, nearest } from './nav.js';
 import { levelOf } from './doors.js';
+import { plasterEdges } from './plaster.js';
 
 export const EYE = 1.55; // 眼睛离地面
 export const WALK_FOV = 62; // 横屏：竖直视角
@@ -219,6 +220,7 @@ export function restoreOrbit(engine, saved, { doors = null } = {}) {
   cancelFlight(engine);
   doors?.dispose?.();
   engine.setCeilings(false);
+  plasterEdges(engine, false); // 楼板 / 墙的边放回墨色切口（原来的材质对象）
   engine.setWalk(null);
   if (saved) {
     engine.setFloorView(saved.floorView, { instant: true, quiet: true });
@@ -249,9 +251,17 @@ export function restoreOrbit(engine, saved, { doors = null } = {}) {
 // ───────────────────────── 补间 ─────────────────────────
 
 const flights = new WeakMap();
+// 「减少动态效果」的飞进去：淡出那 125ms 里排着的那一下（开门、盖天花、换批荡、落到 P3）。
+// 这期间回到全屋（restoreOrbit / flyOut 都先 cancelFlight）→ 记成作废，那一下就不来了（不然鸟瞰里会留着天花、批荡，镜头也被挪走）
+const pendingIn = new WeakMap(); // engine → { off }
 
-/** 正在飞的那一段停下来（Promise 以 'cancelled' 结束）；没在飞 → false */
+/** 正在飞的那一段停下来（Promise 以 'cancelled' 结束）；还没换画面的「减少动态效果」飞进去也作废。没在飞 → false */
 export function cancelFlight(engine) {
+  const tok = engine && pendingIn.get(engine);
+  if (tok) {
+    tok.off = true;
+    pendingIn.delete(engine);
+  }
   const job = engine && flights.get(engine);
   if (!job) return false;
   job.finish('cancelled');
@@ -493,7 +503,12 @@ export function flyIn(engine, plan, hooks = {}) {
   const ceil = elev + (F?.ceil || 2.8);
   const yaw = fb ? fb.yaw : plan.yaw;
   const look1 = spot.clone().add(new THREE.Vector3(-Math.sin(yaw) * LOOK, 0, -Math.cos(yaw) * LOOK));
-  const ceilings = (on) => (hooks.ceilings ? hooks.ceilings(on) : engine.setCeilings(on));
+  // 盖上天花的那一下人已经在屋里：楼板 / 墙的墨色切口一起换成批荡（plaster.js；鸟瞰从外面看到的还是切口）
+  const ceilings = (on) => {
+    if (hooks.ceilings) hooks.ceilings(on);
+    else engine.setCeilings(on);
+    plasterEdges(engine, on);
+  };
   const doors = hooks.doors || null;
   // 大门开向离 P3 远的那一边（往外）：门扇不扫进门那一块（P3、带逛的第一站「门口」，从那里往屋里走的路）
   const openDoor = () => {
@@ -520,8 +535,12 @@ export function flyIn(engine, plan, hooks = {}) {
   };
 
   if (hooks.reduced ?? prefersReducedMotion()) {
+    const tok = { off: false };
+    pendingIn.set(engine, tok);
     return Promise.resolve(
       fadeSwap(engine, hooks, () => {
+        if (tok.off) return; // 淡出的时候已经回到全屋了
+        if (pendingIn.get(engine) === tok) pendingIn.delete(engine);
         if (plan?.door) {
           if (hooks.openDoor) hooks.openDoor();
           else doors?.open(plan.door.id, { fi: plan.door.fi, from: plan.P3, instant: true });
@@ -530,7 +549,7 @@ export function flyIn(engine, plan, hooks = {}) {
         ceilings(true);
         land();
       }),
-    ).then(() => 'done');
+    ).then(() => (tok.off ? 'cancelled' : 'done'));
   }
 
   const P0 = engine.camera.position.clone();
@@ -616,6 +635,7 @@ export function flyOut(engine, saved, hooks = {}) {
   cancelFlight(engine);
   hooks.doors?.dispose?.();
   engine.setCeilings(false);
+  plasterEdges(engine, false);
   const w = engine.walk;
   const finish = () => restoreOrbit(engine, saved, hooks);
   if (!w || !saved) {

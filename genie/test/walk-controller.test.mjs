@@ -745,6 +745,165 @@ await test('没给朝向、换了楼层（上楼）：到了转向这个房间�
   ctl.dispose();
 });
 
+// ───────────────────────── 沿路走：看沿着路往前一点（拐弯之前就转过去） ─────────────────────────
+
+const yawOf = (a, b) => Math.atan2(-(b.x - a.x), -(b.z - a.z));
+const wrapPi = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+/** 一帧一帧跑（16ms），每帧 onFrame(pose)，Promise settle 了就停 → 结果 */
+async function walkFrames(engine, ctl, promise, onFrame, secs = 60) {
+  let done = false;
+  let val;
+  promise.then((v) => {
+    done = true;
+    val = v;
+  });
+  const end = clock + secs * 1000;
+  while (!done && clock < end) {
+    clock += 16;
+    engine.onTick(clock);
+    onFrame?.(ctl.pose());
+    await null;
+  }
+  assert.ok(done, `${secs} 秒还没完`);
+  return val;
+}
+/** semid2 二楼：公卫 → 卧室 4 的路是一个 L（先往南走 6m 多，再往东拐约 66°）。站到起点、朝着第一段 → { ctl, engine, pts, goal } */
+async function lRoute() {
+  const w = await walkIn('semid2');
+  const { ctl, nd } = w;
+  const centre = (id) => {
+    const r = nd.floors[1].rooms.find((q) => q.id === id);
+    return N.nearest(ctl.nav, { fi: 1, x: r.x + r.w / 2, z: r.y + r.d / 2 });
+  };
+  const a = centre('f-cbth');
+  const goal = centre('f-bd4');
+  const pts0 = N.path(ctl.nav, a, goal).legs[0].pts;
+  assert.equal(await ctl.goto({ floor: nd.floors[1].id, x: a.x, z: a.z, yaw: yawOf(pts0[0], pts0[1]), pitch: 0, hour: w.engine.time }), true);
+  const p = ctl.pose();
+  const route = N.path(ctl.nav, { fi: 1, x: p.x, z: p.z }, goal);
+  assert.equal(route.legs.length, 1);
+  const pts = route.legs[0].pts;
+  assert.equal(pts.length, 3, '一个 L：两段');
+  assert.ok(Math.hypot(pts[1].x - pts[0].x, pts[1].z - pts[0].z) > 4 && Math.hypot(pts[2].x - pts[1].x, pts[2].z - pts[1].z) > 1.5, '两段都够长');
+  assert.ok(Math.abs(angleDiff(yawOf(pts[1], pts[2]), yawOf(pts[0], pts[1]))) > 0.8, '拐得够多');
+  return { ...w, pts, goal };
+}
+/** 离折线多远（只算水平） */
+function offPath(pts, p) {
+  let best = Infinity;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1];
+    const b = pts[i];
+    const ux = b.x - a.x;
+    const uz = b.z - a.z;
+    const L2 = ux * ux + uz * uz || 1;
+    const t = clamp01(((p.x - a.x) * ux + (p.z - a.z) * uz) / L2);
+    best = Math.min(best, Math.hypot(a.x + ux * t - p.x, a.z + uz * t - p.z));
+  }
+  return best;
+}
+const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+
+await test('沿路走：L 形的路，走到拐角之前头就开始往第二段转（看沿着路往前 1.5m 的那一点）；脚下的路一点不变；看的方向和走的方向差得多就慢下来，不横着快走；最后看着最后一段', async () => {
+  const { engine, ctl, pts, goal } = await lRoute();
+  const [p0, c, p2] = pts;
+  const y1 = yawOf(p0, c);
+  const y2 = yawOf(c, p2);
+  const sgn = Math.sign(angleDiff(y2, y1));
+  const l1 = Math.hypot(c.x - p0.x, c.z - p0.z);
+  let first = null; // 头往第二段转过 0.15 的第一帧：离拐角还有多远
+  let atCorner = null; // 走到拐角那一帧：头已经转了多少
+  let maxOff = 0;
+  let prev = ctl.pose();
+  let crab = 0;
+  const ok = await walkFrames(engine, ctl, ctl.walkTo(goal), (q) => {
+    maxOff = Math.max(maxOff, offPath(pts, q));
+    // 还在第一段上：离拐角多远
+    const t = ((q.x - p0.x) * (c.x - p0.x) + (q.z - p0.z) * (c.z - p0.z)) / (l1 * l1);
+    const onFirst = t < 1 - 1e-9 && Math.hypot(p0.x + (c.x - p0.x) * t - q.x, p0.z + (c.z - p0.z) * t - q.z) < 1e-6;
+    const dev = angleDiff(q.yaw, y1) * sgn;
+    if (onFirst && dev > 0.15 && !first) first = { left: (1 - t) * l1, dev };
+    if (!onFirst && !atCorner) atCorner = { dev };
+    // 不横着快走：这一帧走的方向和看的方向差 70° 以上 → 速度 < 0.75 × SPEED
+    const mx = q.x - prev.x;
+    const mz = q.z - prev.z;
+    const v = Math.hypot(mx, mz) / 0.016;
+    if (v > 1e-3 && Math.abs(angleDiff(Math.atan2(-mx, -mz), q.yaw)) > (70 * Math.PI) / 180 && v > 0.75 * SPEED) crab++;
+    prev = q;
+  });
+  assert.equal(ok, true, '走到了');
+  assert.ok(maxOff < 1e-6, `脚下的路不变（离 A* 的折线最远 ${maxOff}）`);
+  assert.ok(first, '在第一段上头就开始往第二段转');
+  assert.ok(first.left > 0.6, `离拐角还有 ${first.left.toFixed(2)}m 就开始转（不是走到拐角才转）`);
+  assert.ok(atCorner && atCorner.dev > 0.4, `走到拐角时头已经转了 ${atCorner?.dev.toFixed(2)}（整个拐角 ${Math.abs(angleDiff(y2, y1)).toFixed(2)}）`);
+  assert.equal(crab, 0, '没有横着快走的帧');
+  const fin = ctl.pose();
+  assert.ok(Math.hypot(fin.x - goal.x, fin.z - goal.z) < 1e-6, '停在终点');
+  assert.ok(Math.abs(angleDiff(fin.yaw, y2)) < 0.02, `最后看着最后一段（差 ${angleDiff(fin.yaw, y2).toFixed(3)}）`);
+  ctl.dispose();
+});
+
+await test('沿路走：给了朝向的路（同一层 L 形、上楼）到了一样准准地转到那个朝向（yaw 一点不差、平视）', async () => {
+  const { engine, ctl, pts, goal } = await lRoute();
+  const want = wrapPi(yawOf(pts[1], pts[2]) + 2);
+  assert.equal(await walkFrames(engine, ctl, ctl.walkTo({ ...goal, yaw: want })), true);
+  let fin = ctl.pose();
+  assert.ok(Math.hypot(fin.x - goal.x, fin.z - goal.z) < 1e-6, '停在终点');
+  assert.ok(Math.abs(angleDiff(fin.yaw, want)) < 1e-9, `转到给的朝向（差 ${angleDiff(fin.yaw, want)}）`);
+  assert.equal(fin.pitch, 0);
+  // 下楼（经过楼梯：看的那一点沿着楼梯、再接着楼下那一段）→ 一样准
+  const down = N.nearest(ctl.nav, { fi: 0, x: 4.8, z: 12.4 });
+  const want2 = -2.5;
+  assert.equal(await walkFrames(engine, ctl, ctl.walkTo({ ...down, yaw: want2 }), null, 120), true);
+  fin = ctl.pose();
+  assert.equal(fin.fi, 0, '到了楼下');
+  assert.ok(Math.hypot(fin.x - down.x, fin.z - down.z) < 1e-6, '停在终点');
+  assert.ok(Math.abs(angleDiff(fin.yaw, want2)) < 1e-9, `转到给的朝向（差 ${angleDiff(fin.yaw, want2)}）`);
+  assert.equal(fin.pitch, 0);
+  ctl.dispose();
+});
+
+await test('沿路走：客人拖着转了头（R.free）→ 不再自动转头（拐弯也不转、到了也不转到给的朝向），照样按路走到、速度不打折', async () => {
+  const { engine, ctl, pts, goal } = await lRoute();
+  const el = engine.renderer.domElement;
+  const p = ctl.walkTo({ ...goal, yaw: wrapPi(yawOf(pts[1], pts[2]) + 2) });
+  let settled = false;
+  p.then(() => (settled = true));
+  for (let i = 0; i < 40; i++) {
+    clock += 16;
+    engine.onTick(clock);
+  }
+  assert.equal(settled, false, '还在第一段上走着');
+  el.fire('pointerdown', { pointerId: 7, pointerType: 'touch', clientX: 400, clientY: 400, timeStamp: 1 });
+  el.fire('pointermove', { pointerId: 7, pointerType: 'touch', clientX: 330, clientY: 380, timeStamp: 30 });
+  el.fire('pointerup', { pointerId: 7, pointerType: 'touch', clientX: 330, clientY: 380, timeStamp: 60 });
+  const held = ctl.pose();
+  assert.ok(Math.abs(angleDiff(held.yaw, yawOf(pts[0], pts[1]))) > 0.05, '拖着转了头');
+  const [, c, p2] = pts;
+  const l2 = Math.hypot(p2.x - c.x, p2.z - c.z);
+  let turned = 0;
+  let maxOff = 0;
+  let prev = held;
+  let vMax = 0; // 第二段上（看的方向和走的方向差一个拐角）最快多快
+  const ok = await walkFrames(engine, ctl, p, (q) => {
+    if (q.yaw !== held.yaw || q.pitch !== held.pitch) turned++;
+    maxOff = Math.max(maxOff, offPath(pts, q));
+    const t = ((q.x - c.x) * (p2.x - c.x) + (q.z - c.z) * (p2.z - c.z)) / (l2 * l2);
+    const pt = ((prev.x - c.x) * (p2.x - c.x) + (prev.z - c.z) * (p2.z - c.z)) / (l2 * l2);
+    if (pt > 1e-9 && t < 1 && Math.hypot(c.x + (p2.x - c.x) * t - q.x, c.z + (p2.z - c.z) * t - q.z) < 1e-6) vMax = Math.max(vMax, Math.hypot(q.x - prev.x, q.z - prev.z) / 0.016);
+    prev = q;
+  });
+  assert.equal(ok, true, '照样走到了（拖着看不算打断）');
+  assert.equal(turned, 0, '拖过以后一帧也没自动转头');
+  assert.ok(maxOff < 1e-6, '照样按路走');
+  assert.ok(Math.abs(angleDiff(held.yaw, yawOf(c, p2))) > 0.8, '第二段上看的方向和走的方向差得多');
+  assert.ok(vMax > 0.95 * SPEED, `客人自己看着别处：不减速（第二段上最快 ${vMax.toFixed(2)} m/s）`);
+  const fin = ctl.pose();
+  assert.ok(Math.hypot(fin.x - goal.x, fin.z - goal.z) < 1e-6, '停在终点');
+  assert.equal(fin.yaw, held.yaw, '到了也不转到给的朝向');
+  ctl.dispose();
+});
+
 await test('家具只画人在的这一层（furnitureMask）：楼梯 / 挑空 3m 以内加上下层；floorAtY', () => {
   const nd = N.navDataOf(PROJ.semid2.plan);
   assert.equal(furnitureMask(nd, 0, 5, 12.4), 0b01, '一楼客厅：只画一楼');

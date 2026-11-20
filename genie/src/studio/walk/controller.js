@@ -6,7 +6,8 @@
 // 走路：点地板走过去（A* 的路，一段一段走；楼梯那一段按折线插值，眼睛 = 出发那层的地面 + y + 1.55，走过一半的高度换楼层）；
 //   摇杆 / WASD（Q / E 转身）按看的方向走，贴着墙滑（nav 的 clearance 是连续的）；开着 / 在动的门扇也是一块薄墙（doors.clearOf，
 //   和墙一样离一个半径）；拖动 = 转头（俯仰 ±1.2）。
-//   转身缓一缓，不晃头。客人自己动了（摇杆、按键、点地板走、带逛走路时拖动）→ 带逛停下。
+//   转身缓一缓，不晃头。沿路走时看着路上往前 1.5m（看得见的）那一点：拐弯之前就转过去，不是走到拐角 / 门边才转（§10）。
+//   客人自己动了（摇杆、按键、点地板走、带逛走路时拖动）→ 带逛停下。
 // 工具：点一下按现在的工具算 —— 走（灯光、拍照也是）/ 刷颜色、地板（'pick'）/ 家具（'item'，按住选中的那件拖 = 搬）/ 量尺（两下 = 一条线）。
 // 每帧：镜头、controls.target = 眼睛前面 2.5m、补光、门（开关 → 影子重画）、换房间 → 夜灯按人在哪排 + 'room'、
 //   家具只画人在的这一层（楼梯 / 挑空 3m 以内再加上下那一层）。每帧不建新对象。
@@ -23,6 +24,7 @@ import { slotOfHit, floorSlotOf } from './paint.js';
 import { measureText, wallDims } from './measure.js';
 import { tourStops, createTour } from './tour.js';
 import { createMarks } from './marks3d.js';
+import { plasterEdges } from './plaster.js';
 
 export const TOOLS = ['walk', 'paint', 'floor', 'furnish', 'light', 'measure', 'photo'];
 export const WALK_EV = 1.3; // 屋里比鸟瞰暗：白天曝光再乘这么多（看截图调的：1.15 时墙和天花发灰）
@@ -32,6 +34,15 @@ const STAIR_K = 0.75; // 楼梯上慢一点
 const ACCEL = 2.6; // 起步 / 停下（米 / 秒²）
 const STICK_K = 10; // 摇杆：速度跟上去有多快
 const TURN_K = 7; // 转身缓动
+const AHEAD = 1.5; // 沿路走：看沿着路往前这么远（米，只算水平）的那一点 —— 拐弯之前就慢慢转过去，不是走到拐角 / 门边才转（那时整个画面是墙）
+const AHEAD_STAIR = 2.0; // 楼梯上先只看这一段楼梯、往前这么远：U 形楼梯走到第一跑上头就开始转向下一跑；这一段楼梯剩下不到这么长 → 照 AHEAD 接着看后面的路
+const LEAD = 1.2; // 沿路走：看的方向最多比走的方向偏这么多（弧度，约 70°）—— 不扭着头走
+const LEAD_STAIR = 2.0; // 看的那一点还在这一段楼梯上时可以偏这么多（约 115°）：U 形楼梯的平台上一边绕一边回头看下一跑，不是一直对着平台的墙
+const SEE = 0.12; // 沿路走：看的那一点和眼睛之间的直线离墙 / 家具至少这么远（米）—— 不隔着墙角 / 门框看
+const SIDE = 0.45; // 沿路走：看的方向和走的方向差这么多（弧度）以内照常走；再多就慢下来（差 90° → ×0.25），不横着快走
+const FACE_STAIR = 0.65; // 楼梯上最多慢到 ×这么多（平台上回头看下一跑是常事，楼梯本来就慢 STAIR_K；0.5 时 semid2 上下楼慢 8%）
+const SEE_MAX = 160; // 沿路走：sees 每帧最多看这么多下（每下 = 一次 clearance 双线性插值，很便宜；五个模板 975 条路实测每帧平均 9 下、最多 109 下）
+const END_EASE = 0.4; // 沿路走：离终点不到这么远（米；路很短就是后一半）转头就越来越少（到终点 = 不转）；到了要转的朝向照旧转
 const PITCH_K = 4; // 走路时视线慢慢回到平视
 const KEY_TURN = 1.7; // Q / E 转身（弧度 / 秒）
 const PITCH_MAX = 1.2;
@@ -239,6 +250,8 @@ export function createWalk(engine, { project = null, api = null, wish = false, o
 
   const _f = new THREE.Vector3();
   const _v = new THREE.Vector3();
+  const _aim = { x: 0, z: 0, next: false, short: false }; // aimAt 的结果（每帧不建新对象）；next = 那一点已经在后面的段上了，short = 路不够 L 长（那一点 = 终点）
+  let seeLeft = 0; // 这一帧 sees 还能看几下（aimAt 开头 = SEE_MAX）
 
   const items = () => (Array.isArray(proj?.furniture) ? proj.furniture : []);
   const elevOf = (fi) => nd?.floors?.[fi]?.elev || 0;
@@ -437,7 +450,74 @@ export function createWalk(engine, { project = null, api = null, wish = false, o
     R.pi = 1;
     legStart(R);
   }
-  /** 每帧：沿路走（起步加速、快到了减速、转弯慢一点），到了再转到 yaw */
+  /**
+   * 从眼睛（P）到这一层的 (x, z)：直线上离墙 / 家具都有 SEE 以上（每 10cm 看一下）= 看得见，不是隔着墙角 / 门框。
+   * 每帧最多看 SEE_MAX 下（aimAt 开头重置 seeLeft）：看够了就当看不见（看近一点，不会更糟）—— iPad 上每帧的花销有个顶
+   */
+  function sees(x, z) {
+    const dx = x - P.x;
+    const dz = z - P.z;
+    const n = Math.ceil(Math.hypot(dx, dz) / 0.1);
+    if (n > seeLeft) return false;
+    seeLeft -= n;
+    for (let i = 1; i <= n; i++) if (clr(nav, P.fi, P.x + (dx * i) / n, P.z + (dz * i) / n) < SEE) return false;
+    return true;
+  }
+  /**
+   * 看哪里 → _aim：沿着还没走的路往前 L 米（只算水平 x / z）的那一点。从现在的位置经过 leg.pts[R.pi…]，这一段走完接着下一段
+   * （下一段从 pts[1] 起，和 advance 一样）；楼梯走完就停（R.cut）→ 只到这一段的头；路不够长 → 终点（快到了就看着最后一段）。
+   * 人在平地这一段上：只到看得见的地方（sees；拐过墙角 / 门框以后的那一截还看不见 → 停在这一截上最远看得见的那一点）；
+   * 脚下这一截（P → pts[R.pi]）就是要走的直线，不用查；楼梯、楼上楼下不查。only = 只看这一段（楼梯）。
+   */
+  function aimAt(R, L, only = false) {
+    let px = P.x;
+    let pz = P.z;
+    let rem = L;
+    seeLeft = SEE_MAX;
+    _aim.short = false;
+    const cur = R.legs[R.li];
+    const look = cur.kind === 'walk' && cur.fi === P.fi;
+    const end = R.cut || only ? R.li : R.legs.length - 1;
+    for (let li = R.li; li <= end; li++) {
+      const pts = R.legs[li].pts;
+      for (let i = li === R.li ? R.pi : 1; i < pts.length; i++) {
+        const dx = pts[i].x - px;
+        const dz = pts[i].z - pz;
+        const d = Math.hypot(dx, dz);
+        const k = d > rem ? rem / d : 1;
+        const tx = px + dx * k;
+        const tz = pz + dz * k;
+        if (look && li === R.li && i > R.pi && !sees(tx, tz)) {
+          let lo = 0;
+          let hi = 1;
+          for (let s = 0; s < 5; s++) {
+            const m = (lo + hi) / 2;
+            if (sees(px + (tx - px) * m, pz + (tz - pz) * m)) lo = m;
+            else hi = m;
+          }
+          _aim.x = px + (tx - px) * lo;
+          _aim.z = pz + (tz - pz) * lo;
+          _aim.next = false;
+          return _aim;
+        }
+        if (d >= rem) {
+          _aim.x = tx;
+          _aim.z = tz;
+          _aim.next = li > R.li;
+          return _aim;
+        }
+        rem -= d;
+        px = pts[i].x;
+        pz = pts[i].z;
+      }
+    }
+    _aim.x = px;
+    _aim.z = pz;
+    _aim.next = end > R.li;
+    _aim.short = true;
+    return _aim;
+  }
+  /** 每帧：沿路走（起步加速、快到了减速；看着前面 AHEAD 米的那一点，拐弯之前就转过去；看的方向和走的方向差太多就慢一点），到了再转到 yaw */
   function follow(R, dt) {
     if (R.arrived) {
       // 不用转身，或者客人自己拖着转了头：到了就算
@@ -464,13 +544,27 @@ export function createWalk(engine, { project = null, api = null, wish = false, o
     R.v = Math.min(SPEED, R.v + ACCEL * dt, Math.sqrt(2 * ACCEL * left) + 0.05);
     let face = 1;
     if (!R.free) {
-      const q = leg.pts[Math.min(R.pi, leg.pts.length - 1)];
-      const dx = q.x - P.x;
-      const dz = q.z - P.z;
-      if (dx * dx + dz * dz > 1e-4) {
-        const d = angleDiff(Math.atan2(-dx, -dz), yaw);
-        yaw = wrap(yaw + d * (1 - Math.exp(-dt * TURN_K)));
-        face = Math.max(0.25, Math.cos(Math.min(Math.abs(d), Math.PI / 2)));
+      // 走的方向：朝着下一个点（贴着脚下的跳过）
+      let qi = Math.min(R.pi, leg.pts.length - 1);
+      while (qi < leg.pts.length - 1 && (leg.pts[qi].x - P.x) ** 2 + (leg.pts[qi].z - P.z) ** 2 <= 1e-4) qi++;
+      const dx = leg.pts[qi].x - P.x;
+      const dz = leg.pts[qi].z - P.z;
+      const mv = dx * dx + dz * dz > 1e-4 ? Math.atan2(-dx, -dz) : null;
+      // 看的方向：路上往前 AHEAD 米（楼梯上先看这一段楼梯往前 AHEAD_STAIR 米）、看得见的那一点（aimAt），最多比走的方向偏 LEAD
+      // （那一点还在这一段楼梯上：LEAD_STAIR；已经到楼梯外面了还用 LEAD —— 不然走下楼梯的那一下偏的上限变小，头会往回扭一下）
+      let a = stair ? aimAt(R, AHEAD_STAIR, true) : null;
+      if (!a || a.short) a = aimAt(R, AHEAD);
+      const ax = a.x - P.x;
+      const az = a.z - P.z;
+      const lead = stair && !a.next ? LEAD_STAIR : LEAD;
+      let aimYaw = ax * ax + az * az > 1e-4 ? Math.atan2(-ax, -az) : mv;
+      if (aimYaw != null && mv != null) aimYaw = mv + clamp(angleDiff(aimYaw, mv), -lead, lead);
+      // 最后 END_EASE 米（很短的路：后一半）越转越少：终点前常有一小截折线（A* 格子中心 → 真正的终点），朝着它看会在停下的那一下甩头
+      if (aimYaw != null) yaw = wrap(yaw + angleDiff(aimYaw, yaw) * (1 - Math.exp(-dt * TURN_K)) * Math.min(1, left / Math.min(END_EASE, R.total / 2)));
+      // 看的方向和走的方向差 SIDE 以上就慢下来（差 90° → ×0.25，楼梯上最多 ×FACE_STAIR）：不横着快走
+      if (mv != null) {
+        const off = Math.abs(angleDiff(mv, yaw));
+        if (off > SIDE) face = Math.max(stair ? FACE_STAIR : 0.25, Math.cos((Math.min(off, Math.PI / 2) - SIDE) * (Math.PI / 2 / (Math.PI / 2 - SIDE))));
       }
       // 楼梯：往上只抬一点头（看得到前面的台阶，不是对着一面墙 / 楼板底）、往下稍微低头；平地：回到平视
       const want = stair ? clamp((leg.rise > 0 ? 0.2 : 0.7) * Math.atan2(leg.rise, leg.run || 1), -0.45, 0.3) : 0;
@@ -1002,6 +1096,8 @@ export function createWalk(engine, { project = null, api = null, wish = false, o
       applyFurniture();
     }
     if (marks?.update(dt)) changed = true;
+    // 楼板 / 墙的边是批荡（flight.js 盖天花时换上）；楼层重建过（engine.floors 换了）→ 新的也换上（plaster.js；平时只比一下）
+    if (plasterEdges(engine)) changed = true;
     if (posePending && t - poseAt >= POSE_MS) {
       posePending = false;
       poseAt = t;

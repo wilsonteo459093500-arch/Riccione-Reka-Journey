@@ -382,7 +382,7 @@ At enter, save: `{ pos, quat, target, vo, voTo, floorView, lastView, framed: isF
 
 Exit order:
 1. `doors.dispose()`, restore slider glass and merged leaves.
-2. `setCeilings(false)`.
+2. `setCeilings(false)`, then `plasterEdges(engine, false)`: slab and wall edges back to the ink cap (§10, Plaster edges).
 3. `setWalk(null)`.
 4. `setFloorView(saved.floorView, { instant: true, quiet: true })`.
 5. Restore camera position, quaternion and `controls.target` exactly; zero `controls._sphericalDelta` / `_panOffset` if present.
@@ -661,3 +661,45 @@ Extra exports:
   - Wish mode at 561–600 × ≤ 420 uses the narrow-tablet arrangement.
   - `ensureWalkCss` re-adds the walk stylesheet when the `--walk-css` sentinel is missing (a failed CSS preload is never retried by Vite).
 - **Known small leftover.** If the guest picks a new destination while standing inside an open leaf's swing area, the leaf sometimes cannot move without hitting them and the camera brushes through it. A random stress test hit this 1–3 times per 1,200 legs, about 10× fewer than before the fix. Follow-up idea: make path walking respect `doors.clearOf` like the joystick does.
+
+### Route-following view (look-ahead), as built
+- **Problem.** On auto-walks (tap-to-walk, minimap, tour) the yaw aimed at the next path vertex. At corners that vertex sits next to a wall or door jamb, so the screen was all wall for 0.5–1 s: the semid2 dog-leg stair landing, the upstairs master-bedroom door, and the wet kitchen.
+- **Carrot.** `follow()` now aims at the point `AHEAD` = 1.5 m ahead along the remaining route (`aimAt`, horizontal x/z only).
+  - The march goes from P through `leg.pts[R.pi…]`, then into the next legs from `pts[1]`, the same way `advance` does. After `R.cut` it stops at the end of the current stair leg.
+  - On a stair leg the carrot is first taken `AHEAD_STAIR` = 2.0 m ahead within that leg only. Near the top of a U-stair's first flight she is already turning to the next flight. If less than 2 m of the stair leg is left, the normal 1.5 m carrot is used.
+  - When less than 1.5 m of route is left, the carrot is the end point, so the final approach looks along the last segment.
+  - In the last `END_EASE` = 0.4 m (the last half on routes shorter than 0.8 m), the turn gain fades to 0. Paths often end with a short kink (A* cell centre → the real goal), and following it would jerk the head right as she stops.
+  - The arrival turn (`R.yaw` / `faceRoom`) is unchanged.
+- **Line of sight.** On a walk leg, the carrot is clipped to what the eye can see.
+  - `sees` checks that the straight eye→point line keeps at least `SEE` = 0.12 m from walls and furniture. It samples nav clearance every 10 cm. The first segment that fails is bisected 5 times.
+  - Not checked: the segment underfoot, stair legs, and the next legs.
+  - At most `SEE_MAX` = 160 samples per frame. Measured: mean 9, max 109. Over budget counts as hidden, so the carrot just moves nearer.
+- **Lead limit.** The view leads the walking direction (toward the next vertex) by at most `LEAD` = 1.2 rad.
+  - While the carrot is still on the current stair leg, the limit is `LEAD_STAIR` = 2.0 rad. On a U-stair landing she looks round to the next flight instead of staring at the landing wall.
+  - Once the carrot has left the stair, the limit is back to `LEAD`. Without that, the head jerks back as she steps off the stair.
+- **Speed.** `face` compares the yaw with the movement direction. She walks at full speed within `SIDE` = 0.45 rad, then slows along a cosine to ×0.25 at 90°, so she never crabs sideways fast.
+  - On stairs she slows to no less than `FACE_STAIR` = ×0.65. At ×0.5, semid2 stair routes took 8 % longer.
+- **Unchanged.** The positions walked, stair pitch, `R.free` (after a look-drag: no auto-yaw, no slowdown, no arrival turn), `halt()` / `R.cut`, `go()` queuing, the tour, the joystick and the keys.
+- **Measured.** Scratch metric over all 5 templates: 975 routes (room-to-room, stair and tour legs), dt = 1/30. The centre ray is tested against `wallBlocks`, skipping the first 0.3 s and the arrival turn.
+  - Wall stare under 0.8 m: 5,917 → 412 frames (1.84 % → 0.12 %).
+  - Excluding each route's last metre: 5,414 → 0 frames; longest stretch 15 → 0.
+  - What remains are final approaches to spots next to a wall (terrace2 corridor and foyer, condo3 balcony).
+  - On stairs, frames where the median of 7 rays (±30°) hits a wall within 1.6 m: 17.6 % → 0.2 %.
+  - Head swing in the last 0.3 m: max 1.26 → 0.39 rad.
+  - Total route time +2.3 % (median +0.4 %, at most +7.5 %; semid2 stair routes +4.9 %).
+  - Real app (semid2, 1180×820, living room → wet kitchen → upstairs master bedroom): mid-route frames within 1.2 m of a wall 17 → 0. On the U-stair landing the next flight comes into view about 0.7 s sooner.
+- **Tests** (`walk-controller.test.mjs`):
+  - On an L route the turn starts at least 0.6 m before the corner (measured 1.08 m), the path is unchanged, and there is no fast crabbing.
+  - An explicit `yaw` ends exactly, on the same floor and via stairs.
+  - A look-drag stops auto-yaw.
+
+### Plaster edges inside (black wedge on the stair), as built
+- **Problem.** Near the top of the semid2 stair the walker looked up through the stair hole and saw a black wedge. It was the exposed edge of the upper floor slab. `floors.js` `plateMesh()` gives every exposed slab edge `houseKit(lib).cap`, the dark ink "section cut" (`mixC(ink, plinth, 0.4)`) that makes the bird's-eye cutaway read like an architectural model. Confirmed in the real app by turning that one material magenta: the wedge, the slab band under the void rail and the slab edge seen from the porch all turned magenta.
+- **Other cap faces seen from inside.** The merged wall bodies (`house.js` `wallBox`: top face and bottom face are cap; only window sills already use the wall material). From eye height that means a dark strip under every door head and window head, and the underside of the wall drops beside the stair hole. Wall tops are hidden under the ceilings. Nothing else in a floor uses it: porch roofs, rails, frames and stairs use other materials. The trees (plinth group) also use cap but are not part of the interior. `lib.fixed.cap` (furniture feature-wall backing) is a different, deliberate material.
+- **Fix** (`walk/plaster.js`, walk only; the engine is untouched):
+  - `plasterEdges(engine, true)` gives every mesh under `F.shell.group` and every `F.plate` a NEW material array with the cap slot replaced: slab → `lib.fixed.ceiling` (same as its underside), wall body (`userData.slot === 'walls'`) → `lib.slot('walls')` (same as the jambs, so painting the walls repaints the soffits too). The cap material and the original arrays are never mutated. The cap is recognised by its `userData.fixed === 'cap'` tag, excluding `lib.fixed.cap`. Furniture (`F.furn`) and the plinth are not traversed.
+  - `plasterEdges(engine, false)` puts back the exact original `material` references (only on meshes still carrying the array we set).
+  - When: `flyIn`'s `ceilings(true)` (the walker is already through the door, so from outside the model keeps its ink cut lines). Restored in `flyOut` right after `setCeilings(false)` and in `restoreOrbit` (§4 step 2), so every exit path (fly out, reduced motion, instant, error, unmount, cancelled fly-in) restores before the bird's-eye view is back. Mode B stays pixel-identical.
+  - Reduced-motion race (found in review): `flyIn`'s fade path queues its swap (open door, unhide, `ceilings(true)`, land) behind the 125 ms fade-out. An instant exit in that window (WalkMode unmounting) used to run `restoreOrbit` first and then the swap, leaving ceilings, plaster and a moved camera in the bird's-eye view. Now the fade fly-in registers a token in `flight.js` (`pendingIn`); `cancelFlight` (called first by `restoreOrbit`, `flyOut` and every new flight) voids it, the swap returns early and `flyIn` resolves `'cancelled'`.
+  - Rebuilds: the engine does not rebuild floor meshes while walking. Paint is `lib.apply` in place, floor switches are layers/visibility, `setFurniture` rebuilds only furniture, and `setScene` cannot run (undo of a plan change and guest-plan reads are deferred until exit). As a safety net the controller calls `plasterEdges(engine)` every frame: if `engine.floors` is a new array it restores the old records and plasters the new floors; otherwise it is one comparison.
+- **Tests** (`walk-plaster.test.mjs`): fake meshes for apply / idempotent apply / exact restore / a mesh changed by someone else; the engine glue (furniture untouched, rebuild case, no-op on fake engines); a real `buildStack` for semid2 and terrace2 (no cap face left in any shell or slab, `K.cap` unchanged, every mesh's material `===` the original after restore); `flyIn` / `flyOut` / `restoreOrbit` wiring; the reduced-motion race above with both the UI fade hook and the real `fadeCanvas`.
