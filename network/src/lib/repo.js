@@ -21,6 +21,22 @@ export const TABLES = [
 // 只写不读（第 3 阶段才画）
 export const WRITE_ONLY = ['relationship_snapshots'];
 
+/** 另一台设备刚改过同一笔（手机、电脑同时开着） */
+export class ConflictError extends Error {
+  constructor(table, id) {
+    super('另一部手机 / 电脑刚改过这笔资料，已经载入最新的；请再做一次');
+    this.code = 'conflict';
+    this.table = table;
+    this.id = id;
+  }
+}
+
+/**
+ * 这几张表一笔有很多栏位、两台设备都可能改（人、公司、我的资料）：写之前先对版本。
+ * 互动、照片这些是一笔一笔新增的，不会互相盖，不用对。
+ */
+export const GUARDED = new Set(['people', 'companies', 'profile']);
+
 /* =================== 云端 =================== */
 function makeCloudRepo() {
   const urlCache = new Map(); // path → { url, exp }
@@ -50,8 +66,19 @@ function makeCloudRepo() {
       await Promise.all(TABLES.map(async (t) => { out[t] = await fetchAll(t); }));
       return out;
     },
-    async upsert(table, row) {
+    /**
+     * opts.expectUpdatedAt（体检第 3 阶段）：这台设备最后看到的版本。
+     * 资料库里的 updated_at 已经不一样 = 另一台设备刚改过 → 不写，丢 ConflictError（不会把对方改的盖掉）
+     */
+    async upsert(table, row, opts = {}) {
       const { owner, ...clean } = row; // owner 由数据库默认 auth.uid() 填，前端不送
+      if (opts.expectUpdatedAt) {
+        const { updated_at, created_at, ...fields } = clean; // updated_at 由 trigger 写
+        const { data, error } = await supabase.from(table).update(fields).eq('id', clean.id).eq('updated_at', opts.expectUpdatedAt).select();
+        if (error) throw new Error(error.message);
+        if (!data || !data.length) throw new ConflictError(table, clean.id);
+        return data[0];
+      }
       const { data, error } = await supabase.from(table).upsert(clean).select().single();
       if (error) throw new Error(error.message);
       return data;

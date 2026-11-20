@@ -4,10 +4,12 @@
    回：  { background: {...}, usage }
    Sonnet 5.5 + 网页搜索（最多 3 次）查公司背景。
    前端查到之后存在 companies.background，同一家公司不重复查。
+   体检第 3 阶段：AI 回的格式坏了、搜索分段跑到期限还没跑完 → 回错误，**不存**。
+   以前会存成「查不到」，而且以后再也不查。真的查不到才回 status: 'not_found'。
    ============================================================ */
-import { postHandler, HttpError, cleanText } from './_lib/http.js';
-import { requireOwner, requireBudget } from './_lib/auth.js';
-import { getClient, textOf, extractJson, checkStop, mapAiError, FALLBACK_BETA } from './_lib/ai.js';
+import { HttpError, cleanText } from './_lib/http.js';
+import { getClient, textOf, extractJson, checkStop, FALLBACK_BETA, callWithin, badOutput, timeoutError } from './_lib/ai.js';
+import { aiEndpoint } from './_lib/run.js';
 import { MODELS, usageRow, addUsage } from './_lib/cost.js';
 
 const SYSTEM = `你是商业背景调查助手，帮一位在马来西亚做全屋定制家具的老板了解刚认识的人的公司。
@@ -72,10 +74,11 @@ export async function lookupCompany(body, deps = {}) {
   const contents = [];
   let usage = {};
   let last;
-  try {
-    // 搜索跑太久时 API 会回 pause_turn：把这一段原样接回去续跑（最多 3 段）
-    for (let i = 0; i < 3; i++) {
-      last = await client.beta.messages.create({
+  const row = () => usageRow('company', (last && last.model) || model, usage);
+  // 搜索跑太久时 API 会回 pause_turn：把这一段原样接回去续跑（最多 3 段，而且要在期限内）
+  for (let i = 0; i < 3; i++) {
+    try {
+      last = await callWithin(deps.deadline, (opts) => client.beta.messages.create({
         model,
         max_tokens: 8000,
         betas: [FALLBACK_BETA],
@@ -84,20 +87,27 @@ export async function lookupCompany(body, deps = {}) {
         system: SYSTEM,
         tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 3 }],
         messages,
-      });
-      usage = addUsage(usage, last.usage);
-      contents.push(last.content);
-      if (last.stop_reason !== 'pause_turn') break;
-      messages.push({ role: 'assistant', content: last.content });
+      }, opts));
+    } catch (e) {
+      // 前面几段已经花了钱：带着 usage 一起丢出去记账
+      if (i > 0 && e instanceof HttpError) e.usage = row();
+      throw e;
     }
-  } catch (e) {
-    throw mapAiError(e);
+    usage = addUsage(usage, last.usage);
+    contents.push(last.content);
+    if (last.stop_reason !== 'pause_turn') break;
+    messages.push({ role: 'assistant', content: last.content });
   }
-  checkStop(last);
-  const parsed = extractJson(textOf(last)) || {};
+  if (last.stop_reason === 'pause_turn') throw timeoutError(deps.deadline || { ms: 50_000, feature: 'company' }, row());
+  checkStop(last, row());
+  const parsed = extractJson(textOf(last));
+  // 格式坏了 ≠ 查不到：不能存，存了以后就再也不查
+  if (!parsed || (parsed.found !== false && !cleanText(parsed.summary, 10).trim())) throw badOutput(row(), '公司背景这次 AI 回的格式不对，没有存；请再试一次');
   const arr = (v) => (Array.isArray(v) ? v.map((x) => cleanText(x, 300)).filter(Boolean).slice(0, 8) : []);
+  const found = parsed.found !== false;
   const background = {
-    found: parsed.found !== false && !!parsed.summary,
+    status: found ? 'found' : 'not_found',
+    found,
     name: cleanText(parsed.name || name, 200),
     industry: cleanText(parsed.industry, 100),
     summary: cleanText(parsed.summary, 1200),
@@ -111,11 +121,7 @@ export async function lookupCompany(body, deps = {}) {
     sources: collectSources(contents),
     fetched_at: new Date().toISOString(),
   };
-  return { background, usage: usageRow('company', last.model || model, usage) };
+  return { background, usage: row() };
 }
 
-export default postHandler(async (req, body) => {
-  const ctx = await requireOwner(req);
-  await requireBudget(ctx);
-  return lookupCompany(body);
-});
+export default aiEndpoint('company', lookupCompany);

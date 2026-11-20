@@ -296,3 +296,14 @@ export const DEFAULT_PROFILE = {
   lacking: '高端住宅的发展商 / 建筑师 / 室内设计师人脉；商会里的领袖；能介绍高端客户的人；好的营销、品牌合作伙伴。',
   goals: '多认识能长期互相介绍生意的人；建立商会里的影响力。',
 };
+
+/**
+ * 公司背景要不要（重新）查（体检第 3 阶段）：
+ *   • 没查过 → 查
+ *   • 以前存的「查不到」没有 status：那时 AI 格式坏掉也会存成查不到 → 重查一次
+ *   • 有 status（found / not_found）→ 不重查（要重查请按「重新查公司」）
+ */
+export function needsCompanyLookup(background) {
+  if (!background) return true;
+  return !background.status && background.found === false;
+}

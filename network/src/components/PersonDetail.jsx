@@ -5,7 +5,7 @@ import {
   AudioLines, Mic, Images, ScanLine, PenLine, ListChecks, Ban, ChevronDown, Contact, CalendarPlus, Clock,
 } from 'lucide-react';
 import { useStore, stripView } from '../lib/store.jsx';
-import { DIMS, TIERS, worthVerdict, waLink, fmtDate, splitTags } from '../lib/logic.js';
+import { DIMS, TIERS, worthVerdict, waLink, fmtDate, splitTags, needsCompanyLookup } from '../lib/logic.js';
 import { Avatar, Button, Chip, Section, TierBadge, WorthGem, Input, Textarea, Field, Sheet, Spinner, useToast, cx, inputCls } from './ui.jsx';
 import PhotoGrid from './PhotoGrid.jsx';
 import { PhonesEditor } from './ScanCard.jsx';
@@ -24,10 +24,16 @@ export default function PersonDetail({ id, onBack, autoAnalyze, onAnalyzed }) {
   const started = React.useRef(false);
 
   async function analyze(refreshCompany = false) {
-    setStep(p.company && (!p.company.background || refreshCompany) ? 'company' : 'assess');
+    setStep(p.company && (refreshCompany || needsCompanyLookup(p.company.background)) ? 'company' : 'assess');
+    let warn = '';
     try {
-      await store.deepAnalyze(p.id, { refreshCompany, onStep: (s) => setStep(s === 'done' ? '' : s) });
-      toast('分析好了');
+      await store.deepAnalyze(p.id, {
+        refreshCompany,
+        onStep: (s) => setStep(s === 'done' ? '' : s),
+        onWarn: (msg) => { warn = msg; },
+      });
+      if (warn) toast(`分析好了，但${warn}`, 'error');
+      else toast('分析好了');
     } catch (e) {
       toast(`分析失败：${e.message}`, 'error');
     } finally {

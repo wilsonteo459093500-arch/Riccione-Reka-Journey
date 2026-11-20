@@ -68,6 +68,7 @@ export default function ScanCard({ onDone, onCancel, onBurst, onInbox }) {
       if (!c.is_business_card) toast('这张看起来不像名片，请检查一下', 'error');
       startReview({ ...EMPTY_CARD, ...c });
     } catch (e) {
+      if (e.usage) store.logUsage(e.usage);
       setScanErr(e.message);
       setOffline(e.status === 0);
       setStep('capture');

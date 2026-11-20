@@ -322,6 +322,7 @@ export async function syncOnce(queue, deps, { now = Date.now(), autoRead = true,
           if (!images.length) throw Object.assign(new Error('手机上的照片不见了'), { status: 400 });
           res = await deps.scanCard(images);
         } catch (e) {
+          if (e && e.usage) deps.logUsage(e.usage); // AI 回了但没用上：钱照样算
           const f = readFailure(e);
           if (f.retry) throw e;
           await queue.update(item.id, { read: true, done: true, front: null, back: null, unread_reason: f.reason, error: '' });

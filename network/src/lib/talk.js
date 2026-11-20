@@ -19,6 +19,37 @@ export const SOURCE_BY_KEY = Object.fromEntries(TALK_SOURCES.map((s) => [s.key, 
 
 export const MAX_TALK_CHARS = 120000; // 约 1.5 小时的会议逐字稿；Haiku 跑这么多也只要几分钱
 export const MAX_SCREENSHOTS = 6;
+/**
+ * 体检第 3 阶段：超过这么多字就建议分段。
+ * 一次整理太长，AI 常常写不完（被截断，重按还是一样）或超过服务器的 52 秒期限。
+ * 3 万字大约是 1 小时的中英混杂会议逐字稿
+ */
+export const TALK_SPLIT_CHARS = 30000;
+
+/**
+ * 把很长的逐字稿切成几段，每段不超过 max 字、长度差不多。
+ * 优先在空行切，其次在换行，最后才硬切（一行就超过 max 的时候）。
+ */
+export function splitTalk(text, max = TALK_SPLIT_CHARS) {
+  const t = String(text || '').trim();
+  if (t.length <= max) return t ? [t] : [];
+  const n = Math.ceil(t.length / max);
+  const target = Math.ceil(t.length / n);
+  const out = [];
+  let rest = t;
+  while (rest.length > max) {
+    // 在 target 附近（往前最多找到一半）找空行，再找换行
+    const lo = Math.floor(target / 2);
+    const win = rest.slice(0, Math.min(max, target + Math.floor(target / 5)));
+    let cut = win.lastIndexOf('\n\n');
+    if (cut < lo) cut = win.lastIndexOf('\n');
+    if (cut < lo) cut = Math.min(max, target);
+    out.push(rest.slice(0, cut).trim());
+    rest = rest.slice(cut).trim();
+  }
+  if (rest) out.push(rest);
+  return out.filter(Boolean);
+}
 
 /* ---------- WhatsApp .txt ---------- */
 const INVISIBLE = /[‎‏‪-‮⁦-⁩﻿]/g;
