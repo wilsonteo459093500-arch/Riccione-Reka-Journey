@@ -69,6 +69,11 @@ function makeCloudRepo() {
       const { data } = await supabase.auth.getUser();
       return data && data.user ? data.user.id : null;
     },
+    /** 不连网也拿得到（读手机上存的登入资料）：连拍在断网时记下是谁拍的 */
+    async sessionUserId() {
+      const { data } = await supabase.auth.getSession();
+      return data && data.session ? data.session.user.id : null;
+    },
     async uploadImage(path, blob) {
       const { error } = await supabase.storage.from(BUCKET).upload(path, blob, { contentType: blob.type || 'image/jpeg', upsert: true });
       if (error) throw new Error(error.message);
@@ -184,6 +189,7 @@ function makeLocalRepo() {
       await save(table);
     },
     async userId() { return LOCAL_OWNER; },
+    async sessionUserId() { return LOCAL_OWNER; },
     async uploadImage(path, blob) { await kvSet(`f:${path}`, blob); },
     async imageUrl(path) {
       if (urls.has(path)) return urls.get(path);

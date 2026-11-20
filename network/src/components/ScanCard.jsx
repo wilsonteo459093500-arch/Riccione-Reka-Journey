@@ -1,9 +1,12 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Camera, ImagePlus, ScanLine, Plus, Trash2, AlertTriangle, Sparkles, ChevronLeft, PenLine } from 'lucide-react';
+import { Camera, ImagePlus, ScanLine, Plus, Trash2, AlertTriangle, Sparkles, ChevronLeft, PenLine, Layers, Smartphone } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
 import { api } from '../lib/api.js';
 import { shrinkImage } from '../lib/image.js';
-import { findDuplicates, pickWhatsApp, fmtDate } from '../lib/logic.js';
+import { findDuplicates, pickWhatsApp, fmtDate, uid } from '../lib/logic.js';
+import { repo } from '../lib/repo.js';
+import { klDate } from '../lib/card.js';
+import { burstQueue, newShot, makeSession } from '../lib/burst.js';
 import { Button, Field, Input, Textarea, Section, Spinner, Chip, useToast, cx } from './ui.jsx';
 
 const EMPTY_CARD = {
@@ -11,7 +14,7 @@ const EMPTY_CARD = {
   socials: [], industry_guess: '', card_notes: '', is_business_card: true,
 };
 
-export default function ScanCard({ onDone, onCancel }) {
+export default function ScanCard({ onDone, onCancel, onBurst, onInbox }) {
   const store = useStore();
   const toast = useToast();
   const [step, setStep] = useState('capture'); // capture | reading | review
@@ -22,6 +25,13 @@ export default function ScanCard({ onDone, onCancel }) {
   const [existingId, setExistingId] = useState(null);
   const [analyze, setAnalyze] = useState(false);
   const [saving, setSaving] = useState(false);
+  // 这一次扫描固定的 id：存到一半失败再按一次，不会多出第二个人 / 第二张照片
+  const ids = React.useRef({ person: uid(), photos: [uid(), uid()], interaction: uid() }).current;
+  // 在哪个活动认识的（今天的活动自动选好）→ 存的时候记出席
+  const events = useMemo(() => store.data.events.slice().sort((a, b) => String(b.held_on || '').localeCompare(String(a.held_on || ''))).slice(0, 8), [store.data.events]);
+  const [eventId, setEventId] = useState(() => (store.data.events.find((e) => e.held_on === klDate()) || {}).id || '');
+  const event = events.find((e) => e.id === eventId) || null;
+  const [offline, setOffline] = useState(false);
 
   async function pick(side, file) {
     if (!file) return;
@@ -42,7 +52,7 @@ export default function ScanCard({ onDone, onCancel }) {
     setForm({
       name: c.name, name_alt: c.name_alt, title: c.title, company: c.company,
       phones: c.phones.length ? c.phones : [], emails: c.emails, whatsapp: pickWhatsApp(c.phones),
-      website: c.website, address: c.address, how_met: '', met_on: today, tags: '', notes: '',
+      website: c.website, address: c.address, how_met: event ? event.name : '', met_on: (event && event.held_on) || today, tags: '', notes: '',
     });
     setStep('review');
   }
@@ -59,7 +69,26 @@ export default function ScanCard({ onDone, onCancel }) {
       startReview({ ...EMPTY_CARD, ...c });
     } catch (e) {
       setScanErr(e.message);
+      setOffline(e.status === 0);
       setStep('capture');
+    }
+  }
+
+  /** 没网络：照片先存在手机（跟活动连拍同一个地方），有网络自动读、进「新朋友」 */
+  async function keepOnPhone() {
+    try {
+      const owner = await repo.sessionUserId().catch(() => '');
+      const session = { ...makeSession({ event, howMet: '' }), started: new Date().toISOString() };
+      const toImg = async (sh) => ({ data: await sh.blob.arrayBuffer(), type: sh.media_type || 'image/jpeg', width: sh.width, height: sh.height });
+      const item = newShot({ session, front: await toImg(shots.front), thumb: `data:image/jpeg;base64,${shots.front.base64}`, owner });
+      if (shots.back) item.back = await toImg(shots.back);
+      await burstQueue().add(item);
+      toast('存在手机了：有网络会自动读好、放进「新朋友」');
+      setShots({ front: null, back: null });
+      setScanErr('');
+      setOffline(false);
+    } catch (e) {
+      toast(`存不了：${e.message}`, 'error');
     }
   }
 
@@ -83,6 +112,8 @@ export default function ScanCard({ onDone, onCancel }) {
         form: { ...form, phones: form.phones.filter((p) => p.number.trim()), emails: form.emails.filter(Boolean) },
         cardImages: [shots.front, shots.back].filter(Boolean),
         existingId,
+        ids,
+        eventId: event ? event.id : null,
       });
       toast(existingId ? '已更新' : '已存好');
       onDone(person.id, { analyze });
@@ -104,6 +135,23 @@ export default function ScanCard({ onDone, onCancel }) {
 
       {step === 'capture' && (
         <div className="space-y-4">
+          {onBurst && (
+            <button onClick={onBurst} className="flex w-full items-center gap-3 rounded-2xl border-2 border-plum/40 bg-white p-3 text-left">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-plum/10 text-plum"><Layers className="h-5 w-5" /></span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-medium">在活动现场？用连拍</span>
+                <span className="block text-sm text-muted">一张接一张拍，不用等；没网络也不会丢</span>
+              </span>
+            </button>
+          )}
+          {events.length > 0 && (
+            <Field label="在哪个活动（选填，会记进出席名单）">
+              <select value={eventId} onChange={(e) => setEventId(e.target.value)} className="h-11 w-full rounded-xl border border-line bg-white px-3">
+                <option value="">不是活动</option>
+                {events.map((e) => <option key={e.id} value={e.id}>{e.name}{e.held_on ? `（${e.held_on}）` : ''}</option>)}
+              </select>
+            </Field>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <ShotSlot label="正面" shot={shots.front} onPick={(f) => pick('front', f)} onClear={() => setShots((s) => ({ ...s, front: null }))} primary />
             <ShotSlot label="背面（可不拍）" shot={shots.back} onPick={(f) => pick('back', f)} onClear={() => setShots((s) => ({ ...s, back: null }))} />
@@ -111,7 +159,10 @@ export default function ScanCard({ onDone, onCancel }) {
           {scanErr && (
             <div className="rounded-xl border border-danger/30 bg-white p-3 text-sm text-danger">
               识别失败：{scanErr}
-              <div className="mt-2"><Button size="sm" variant="outline" onClick={() => startReview(EMPTY_CARD)}>改成手动填写（照片照样存）</Button></div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {offline && <Button size="sm" variant="accent" onClick={keepOnPhone}><Smartphone className="h-4 w-4" />先存在手机，有网络自动读</Button>}
+                <Button size="sm" variant="outline" onClick={() => startReview(EMPTY_CARD)}>改成手动填写（照片照样存）</Button>
+              </div>
             </div>
           )}
           <Button variant="accent" size="lg" className="w-full" disabled={!shots.front} onClick={read}>

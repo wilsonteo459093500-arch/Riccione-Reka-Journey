@@ -2,6 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { ArrowLeft, Check, CheckCheck, Trash2, Bot, MessageCircle, QrCode, GitMerge } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
 import { waLink, relDay, findDuplicates } from '../lib/logic.js';
+import { summarize } from '../lib/burst.js';
+import { useBurstItems } from './Burst.jsx';
 import { Button, Avatar, Chip, PrivateImage, Section, useToast } from './ui.jsx';
 
 /**
@@ -14,6 +16,8 @@ export default function NewFriends({ onBack, onOpen, onCard }) {
   const toast = useToast();
   const list = store.newFriends;
   const [busy, setBusy] = useState('');
+  // 活动连拍：还在手机里、还没进来的
+  const waiting = summarize(useBurstItems().filter((it) => !it.done));
   // 每个新朋友：像不像已经存过的人（只看手机 / 个人邮箱 / 名字 + 公司；公司总机、info@ 不算）
   const lookalike = useMemo(() => {
     const out = new Map();
@@ -42,7 +46,16 @@ export default function NewFriends({ onBack, onOpen, onCard }) {
           </Button>
         )}
       </div>
-      <p className="text-sm text-muted">别人扫你的二维码留的资料，已经自动建好、放在「认识」圈。看一眼：对的就确认，乱填的删掉；像旧朋友的，按「合并」。</p>
+      <p className="text-sm text-muted">别人扫你的二维码留的资料、你在活动连拍的名片，已经自动建好、放在「认识」圈。看一眼：对的就确认，乱填的删掉；像旧朋友的，按「合并」。</p>
+      {waiting.total > 0 && (
+        <div className="flex items-center gap-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
+          <span className="flex-1">
+            还有 {waiting.total} 张连拍的名片在处理
+            {waiting.phone ? `：${waiting.phone} 张在手机等网络（不会丢）` : waiting.saved ? `：AI 在读 ${waiting.saved} 张` : ''}
+          </span>
+          <Button size="sm" variant="outline" busy={busy === 'sync'} onClick={() => run('sync', () => store.runBurstSync())}>现在同步</Button>
+        </div>
+      )}
 
       {!list.length && (
         <div className="rounded-2xl border border-dashed border-line p-8 text-center">

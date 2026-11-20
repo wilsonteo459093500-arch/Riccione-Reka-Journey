@@ -67,7 +67,9 @@
   - 顺序（用户 2026-11-19 定的）：0 用户自己做的设定 → 1 公开页面关门 → 2 活动连拍 → 3 AI 稳定 + 补查 → 4 导入现有人脉 → 5 整理工具 → 6 每天提醒 → 7 WhatsApp 群发 → 8 小修
   - 用户的决定：两星期内有活动，所以连拍提前；每天提醒用**手机推送通知**（不是 TickTick 每日任务，试不通才退回）；FoloToy / 星系图 / NFC / 名片页改版**不冻结**
 - 线上：Vercel 项目 `space-network`，Supabase 项目「SPACE NETWORK」。体检当天资料库只有 1 个人
-- **2026-11-20 第 1 阶段（公开页面关门）做完、开了 PR**：合并前要先在 Supabase 把 `network/supabase/schema.sql` 整份再跑一次（`DEPLOY.md`「体检第 1 阶段升级」）。下一个是第 2 阶段「活动连拍」
+- **2026-11-20 第 1 阶段（公开页面关门）** 合进 main（#86）
+- **2026-11-20 第 2 阶段（活动连拍）做完、开了 PR**：用户选了「有网络自动 AI 读」+「每张可选 ⭐ / 备注」；资料库不用升级。下一个是第 3 阶段「AI 稳定 + 补查」
+- 第 0 阶段还没做完（2026-11-20 查 Vercel）：`TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` 没设（要用户在 Cloudflare 建、自己贴进 Vercel，secret 不经过对话）；`SUPABASE_SERVICE_ROLE_KEY` 还勾着 Preview
 
 ## 开发备忘（blueprint/）
 

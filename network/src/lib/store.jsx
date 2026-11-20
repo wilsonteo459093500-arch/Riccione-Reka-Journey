@@ -12,6 +12,15 @@ import {
 import { mergeList, appendFacts } from './talk.js';
 import { relationOf, bandOf } from './relation.js';
 import { cleanCard, DEFAULT_CARD } from './card.js';
+import { burstQueue, syncOnce, runExclusive, applyCardRead } from './burst.js';
+
+/* 活动连拍：正在拍的画面开着时，刚拍的先留在手机（给你加 ⭐、备注、拍背面） */
+let shooting = false;
+export function setShooting(on) { shooting = !!on; }
+export const BURST_AUTO_READ_KEY = 'space:burst-auto-read';
+export function burstAutoRead() {
+  try { return localStorage.getItem(BURST_AUTO_READ_KEY) !== '0'; } catch { return true; }
+}
 
 const Ctx = createContext(null);
 export const useStore = () => useContext(Ctx);
@@ -25,35 +34,50 @@ export function StoreProvider({ children }) {
   const [error, setError] = useState('');
   const dataRef = useRef(data);
   dataRef.current = data;
+  // 资料有没有完整载好（断网时打开会载不到）：没载好时不能说「这个人不在了」
+  const loadedOk = useRef(false);
 
   const reload = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      setData(await repo.loadAll());
+      const all = await repo.loadAll();
+      dataRef.current = all;
+      setData(all);
+      loadedOk.current = true;
     } catch (e) {
+      loadedOk.current = false;
       setError(String(e.message || e));
     } finally {
       setLoading(false);
     }
   }, []);
   useEffect(() => { reload(); }, [reload]);
+  // 断网时打开、载不到资料 → 网络回来自动再载一次
+  useEffect(() => {
+    const on = () => { if (!loadedOk.current) reload(); };
+    window.addEventListener('online', on);
+    return () => window.removeEventListener('online', on);
+  }, [reload]);
 
   /* ---------- 底层：写一列 / 删一列，同步到 state ---------- */
   const put = useCallback(async (table, row) => {
     const saved = await repo.upsert(table, { id: row.id || uid(), ...row });
-    setData((d) => {
+    const apply = (d) => {
       const list = d[table] || [];
       const i = list.findIndex((r) => r.id === saved.id);
       const next = i >= 0 ? list.map((r) => (r.id === saved.id ? saved : r)) : [...list, saved];
       return { ...d, [table]: next };
-    });
+    };
+    // dataRef 马上更新：接下来的动作（例如连拍同步）不用等画面重画就看得到刚存的
+    dataRef.current = apply(dataRef.current);
+    setData(apply);
     return saved;
   }, []);
 
   const drop = useCallback(async (table, id) => {
     await repo.remove(table, id);
-    setData((d) => {
+    const apply = (d) => {
       const next = { ...d, [table]: d[table].filter((r) => r.id !== id) };
       // state 里也照 cascade 清掉
       if (table === 'people') {
@@ -63,7 +87,9 @@ export function StoreProvider({ children }) {
       if (table === 'circles') next.person_circles = next.person_circles.filter((r) => r.circle_id !== id);
       if (table === 'events') next.attendance = next.attendance.filter((r) => r.event_id !== id);
       return next;
-    });
+    };
+    dataRef.current = apply(dataRef.current);
+    setData(apply);
   }, []);
 
   /* ---------- 衍生：一个人的完整资料 ---------- */
@@ -134,26 +160,32 @@ export function StoreProvider({ children }) {
       });
     }
 
-    async function addPhoto(personIds, file, { kind = 'group', caption = '', maxSide = 2000 } = {}) {
+    async function addPhoto(personIds, file, { kind = 'group', caption = '', maxSide = 2000, id = uid() } = {}) {
       const owner = await repo.userId();
       const img = file.blob ? file : await shrinkImage(file, maxSide);
-      const id = uid();
       const path = `${owner}/${id}.jpg`;
       await repo.uploadImage(path, img.blob);
       const photo = await put('photos', { id, kind, path, width: img.width, height: img.height, caption, taken_at: nowIso() });
-      for (const pid of personIds) await put('photo_people', { photo_id: id, person_id: pid });
+      // 按第二次（上一次中途失败）不会重复标
+      for (const pid of personIds) {
+        if (!dataRef.current.photo_people.some((pp) => pp.photo_id === id && pp.person_id === pid)) await put('photo_people', { photo_id: id, person_id: pid });
+      }
       return photo;
     }
 
-    /** 名片扫完存成一个新的人（或更新已存在的人） */
-    async function saveFromCard({ card, form, cardImages = [], existingId = null }) {
+    /**
+     * 名片扫完存成一个新的人（或更新已存在的人）
+     * ids：这一次扫描固定的 id（画面打开时就定好）→ 中途失败再按一次「存起来」，不会多出第二个人 / 第二张照片
+     * eventId：在哪个活动认识的 → 记出席
+     */
+    async function saveFromCard({ card, form, cardImages = [], existingId = null, ids = {}, eventId = null }) {
       const company = await ensureCompany(form.company, {
         name_alt: card.company_alt, website: form.website, address: form.address, industry: card.industry_guess,
       });
       const base = existingId ? dataRef.current.people.find((p) => p.id === existingId) : null;
       const merged = {
         ...(base || {}),
-        id: existingId || uid(),
+        id: existingId || ids.person || uid(),
         name: form.name.trim(),
         name_alt: form.name_alt || (base && base.name_alt) || '',
         title: form.title || (base && base.title) || '',
@@ -176,16 +208,21 @@ export function StoreProvider({ children }) {
       const person = await put('people', merged);
       if (cardImages.length) {
         let first = null;
-        for (const img of cardImages) {
-          const ph = await addPhoto([person.id], img, { kind: 'card', caption: '名片' });
+        for (const [i, img] of cardImages.entries()) {
+          const ph = await addPhoto([person.id], img, { kind: 'card', caption: '名片', id: (ids.photos || [])[i] || uid() });
           first = first || ph;
         }
         if (first && !person.card_photo_id) await put('people', { ...person, card_photo_id: first.id });
       }
       await put('interactions', {
+        ...(ids.interaction ? { id: ids.interaction } : {}),
         person_id: person.id, kind: cardImages.length ? 'card_scan' : 'meeting', source: cardImages.length ? 'card' : 'manual', occurred_at: form.met_on ? new Date(form.met_on).toISOString() : nowIso(),
         title: !cardImages.length ? (existingId ? '更新资料' : '认识') : existingId ? '又扫到他的名片' : '交换名片', summary: form.how_met || '',
       });
+      if (eventId && dataRef.current.events.some((e) => e.id === eventId)
+        && !dataRef.current.attendance.some((a) => a.event_id === eventId && a.person_id === person.id)) {
+        await put('attendance', { event_id: eventId, person_id: person.id, status: 'attended' });
+      }
       if (!existingId) await snapshot(person, '新认识');
       return person;
     }
@@ -388,23 +425,25 @@ export function StoreProvider({ children }) {
       const { card, usage } = await api.scanCard([{ media_type: img.media_type, data: img.base64 }]);
       logUsage(usage);
       const company = !row.company_id && card.company ? await ensureCompany(card.company, { name_alt: card.company_alt, website: card.website, address: card.address, industry: card.industry_guess }) : null;
-      const placeholder = !row.name || /名片待确认/.test(row.name);
-      const phones = [...(row.phones || [])];
-      for (const p of card.phones || []) if (!phones.some((x) => x.number.replace(/\D/g, '').slice(-9) === p.number.replace(/\D/g, '').slice(-9))) phones.push(p);
-      return put('people', {
-        ...row,
-        name: placeholder && card.name ? card.name : row.name,
-        name_alt: row.name_alt || card.name_alt || '',
-        title: row.title || card.title || '',
-        company_id: row.company_id || (company && company.id) || null,
-        phones,
-        emails: [...new Set([...(row.emails || []), ...(card.emails || [])])],
-        whatsapp: row.whatsapp || pickWhatsApp(card.phones || []),
-        website: row.website || card.website || '',
-        address: row.address || card.address || '',
-        card_notes: row.card_notes || card.card_notes || '',
-        notes: String(row.notes || '').replace(/\n?名片还没读：在「新朋友」按「AI 读名片」/, '').trim(),
-      });
+      const fresh = dataRef.current.people.find((p) => p.id === personId) || row;
+      return put('people', applyCardRead(fresh, card, { companyId: company && company.id }));
+    }
+
+    /**
+     * 活动连拍：手机上排队的名片 → 资料库（→ AI 读）。一次只跑一轮；失败的下次再来，手机上那份不会删
+     */
+    async function runBurstSync() {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return { saved: 0, read: 0, failed: 0 }; // 没网络就不白试
+      return runExclusive(() => syncOnce(burstQueue(), {
+        ownerId: () => repo.userId().catch(() => null),
+        put,
+        uploadImage: (path, blob) => repo.uploadImage(path, blob),
+        hasEvent: (id) => dataRef.current.events.some((e) => e.id === id),
+        getPerson: (id) => (loadedOk.current ? dataRef.current.people.find((p) => p.id === id) || null : undefined),
+        scanCard: (images) => api.scanCard(images),
+        logUsage,
+        ensureCompany,
+      }, { autoRead: burstAutoRead(), holdUntil: shooting ? Infinity : 0 }));
     }
 
     /**
@@ -446,6 +485,7 @@ export function StoreProvider({ children }) {
       deleteEvent: (id) => drop('events', id),
       confirmNew,
       readCardWithAI,
+      runBurstSync,
       quickContact,
       snooze,
       syncAffinity,
