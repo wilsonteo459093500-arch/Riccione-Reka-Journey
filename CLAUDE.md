@@ -13,6 +13,37 @@
   - 用户看过说「合并」才合并
 - 新对话的开场白一般是：「继续做 UKIR STUDIO（blueprint/）……这次要做：第几项」。项目用 `blueprint/README.md`、`blueprint/ARCHITECTURE.md` 的说明。
 
+## 全部软件在哪里（2026-11-20 盘点）
+
+- **动手前先看有没有别的分支已经做了**：这个 repo 有几十条分支，好几个软件不在 main
+  - 只读 main 会漏：2026-11-20 就这样对用户说了「KIRA 不在这个 repo」，是错的
+  - 查法：`git ls-remote --heads origin`，再对一下 Vercel 的项目清单
+- 用户叫的名字 → 目录 → 在哪里：
+
+  | 名字 | 目录 | 分支（不在 main 的才写） | Vercel 项目 |
+  |---|---|---|---|
+  | 需求卡、邀请函、VISI | `invite/` | VISI 的计划在它自己的分支：`.claude/plans/visi.md` | `visi-riccione-reka` |
+  | WISH（展厅 iPad 许愿之旅 + 3D） | `genie/` | `ccr-eb67bc6b-ecbura`（最新）、`claude/walk-in-wip` | `wish-riccione-reka` |
+  | KIRA（柜子规划 + 预估报价） | `kira/` | `claude/phase-1b-launch-repo-snqacl`（阶段 1B，正在合进 main） | `kira-riccione-reka` |
+  | 旧报价工具（业务每天在用） | `quote.html` | `claude/cabinet-quotation-tool-ba24um` | 没查 |
+  | UKUR 雏形（户型图上量延尺） | `measure/` | `claude/cabinet-length-estimator-3fku8c` | 没上线 |
+  | UKIR STUDIO | `blueprint/` | | `sail-render` |
+  | SPACE、FoloToy | `network/` | FoloToy 在 `claude/upbeat-turing-3igvvk` | `space-network` |
+  | CRM、Delivery OS | `crm/`、`src/` | | 没在用（用户 2026-11-20） |
+
+- **WISH 不是需求卡**：需求卡是到馆前客户手机上填的，WISH 是到了展厅在 iPad 上玩的
+- **STAR**（用户 2026-11-20）：另外新做一个给销售团队用的软件（跟进、提醒）。不是 FoloToy 上那颗像素星星 S.T.A.R。brainstorm 过、还没开始，用户没空处理，不要催
+- **Lark**：交付那套（Delivery OS）外包 IT 已经照 `docs/LARK-MIGRATION-SPEC.md`（在分支 `claude/lark-migration-spec`）做进 Lark，在用，团队还在学。销售每天开的是 WhatsApp 和旧报价工具
+- 别处的文档：转化诊断 `docs/GROWTH-DIAGNOSIS.md`（分支 `claude/custom-cabinet-growth-4ihwwt`）、询盘转化工具包和追踪表（分支 `claude/diagnostic-tools-templates-443qch`）
+
+## 销售阶段接通（跨软件）
+
+- **2026-11-20 盘点和计划**：`.claude/plans/sales-record.md`。开场白：「读 `.claude/plans/sales-record.md`，做销售接通第 N 步」
+- 结论：软件各存各的，没有共用的客户档案；用到 AI 的 WISH、KIRA、UKIR 各认各的平面图
+- 用户定的：**客户档案放 Lark 多维表格**；CRM 和 Delivery OS 并进 Lark
+- 第 1 步（询盘表栏位 + 统一叫法）草稿写好了，**等用户拍板**，还没改任何程序
+- **做 VISI 第 7、8 阶段、KIRA 第 4 阶段、SPACE 第 6 阶段之前先读这份计划**：这几个阶段都要做「记录」或「提醒」，记进同一份客户档案，不要各做一套
+
 ## 三条原则（UKIR STUDIO）
 
 1. **图纸必须准确**：
