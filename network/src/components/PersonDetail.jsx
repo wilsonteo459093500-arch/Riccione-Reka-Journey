@@ -10,7 +10,8 @@ import { Avatar, Button, Chip, Section, TierBadge, WorthGem, Input, Textarea, Fi
 import PhotoGrid from './PhotoGrid.jsx';
 import { PhonesEditor } from './ScanCard.jsx';
 import { openPromises, MOODS, SOURCE_BY_KEY } from '../lib/talk.js';
-import { affinityHistory, CADENCE_LABEL } from '../lib/relation.js';
+import { affinityHistory, CADENCE_LABEL, IMPORT_LABEL } from '../lib/relation.js';
+import { guessSalutation, greeting } from '../lib/salute.js';
 import { AffinityBar, Sparkline } from './ui.jsx';
 import ScheduleSheet from './ScheduleSheet.jsx';
 
@@ -59,7 +60,7 @@ export default function PersonDetail({ id, onBack, autoAnalyze, onAnalyzed }) {
   }
 
   const a = p.assessment;
-  const wa = waLink(p.whatsapp);
+  const wa = waLink(p.whatsapp, greeting(p));
   const phone = p.phones && p.phones[0];
   const email = p.emails && p.emails[0];
 
@@ -549,7 +550,10 @@ function InfoSection({ person }) {
           {person.address && <Row icon={MapPin}><a className="text-sky-700" href={`https://maps.google.com/?q=${encodeURIComponent(person.address)}`} target="_blank" rel="noreferrer">{person.address}</a></Row>}
           {(person.socials || []).map((s, i) => <Row key={i} icon={ExternalLink} label={s.platform}>{s.handle}</Row>)}
         </dl>
+        <p className="text-sm"><span className="text-muted">称呼：</span>{person.salutation || guessSalutation(person.name) || '—'}{!person.salutation && <span className="text-faint">（照名字猜的，按「编辑」可以改）</span>}</p>
+        {person.birthday && <p className="text-sm"><span className="text-muted">生日：</span>{person.birthday.replace(/^--/, '')}</p>}
         {person.how_met && <p className="text-sm"><span className="text-muted">怎么认识：</span>{person.how_met}</p>}
+        {person.import_source && <p className="text-xs text-faint">从{IMPORT_LABEL[person.import_source] || '通讯录'}导入{person.first_due ? ` · 第一次提醒：${person.first_due}` : ''}</p>}
         {person.card_notes && <p className="whitespace-pre-wrap text-sm"><span className="text-muted">名片上还写：</span>{person.card_notes}</p>}
         <NotesEditor value={person.notes || ''} onSave={(notes) => save({ notes })} />
       </div>
@@ -595,6 +599,16 @@ function DeleteButton({ person, onDeleted }) {
   );
 }
 
+/** 生日输入 → YYYY-MM-DD / --MM-DD；看不懂就照存 */
+function cleanBirthdayInput(v) {
+  const t = String(v || '').trim();
+  let m = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/.exec(t);
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+  m = /^-{0,2}(\d{1,2})[-/.](\d{1,2})$/.exec(t);
+  if (m) return `--${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
+  return t;
+}
+
 function EditSheet({ open, onClose, person }) {
   const store = useStore();
   const toast = useToast();
@@ -606,6 +620,7 @@ function EditSheet({ open, onClose, person }) {
         name: person.name, name_alt: person.name_alt || '', title: person.title || '', company: person.company ? person.company.name : '',
         phones: person.phones || [], emails: (person.emails || []).join(', '), whatsapp: person.whatsapp || '', website: person.website || '',
         address: person.address || '', how_met: person.how_met || '', met_on: person.met_on || '',
+        salutation: person.salutation || '', birthday: person.birthday || '',
       });
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -619,6 +634,9 @@ function EditSheet({ open, onClose, person }) {
         ...stripView(person), name: f.name.trim(), name_alt: f.name_alt, title: f.title, company_id: company ? company.id : null,
         phones: f.phones.filter((p) => p.number.trim()), emails: f.emails.split(/[,，\s]+/).filter(Boolean), whatsapp: f.whatsapp.replace(/\D/g, ''),
         website: f.website, address: f.address, how_met: f.how_met, met_on: f.met_on || null,
+        // 称呼跟照名字猜的一样就不存（空 = 跟着名字猜）
+        salutation: f.salutation.trim() === guessSalutation(f.name.trim()) ? '' : f.salutation.trim(),
+        birthday: cleanBirthdayInput(f.birthday),
       });
       onClose();
     } catch (e) {
@@ -633,6 +651,14 @@ function EditSheet({ open, onClose, person }) {
         <div className="grid grid-cols-2 gap-3">
           <Field label="名字"><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
           <Field label="另一种写法"><Input value={f.name_alt} onChange={(e) => setF({ ...f, name_alt: e.target.value })} /></Field>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="称呼" hint="WhatsApp「Hi ___，」和群发用">
+            <Input value={f.salutation} placeholder={guessSalutation(f.name) || 'Dato\' Lim / 国荣 / 林总'} onChange={(e) => setF({ ...f, salutation: e.target.value })} />
+          </Field>
+          <Field label="生日" hint="例：1980-03-15，不知道年份写 03-15">
+            <Input value={f.birthday.replace(/^--/, '')} placeholder="03-15" onChange={(e) => setF({ ...f, birthday: e.target.value })} />
+          </Field>
         </div>
         <Field label="职位"><Input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} /></Field>
         <Field label="公司"><Input value={f.company} onChange={(e) => setF({ ...f, company: e.target.value })} /></Field>

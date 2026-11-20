@@ -83,6 +83,23 @@ function makeCloudRepo() {
       if (error) throw new Error(error.message);
       return data;
     },
+    /** 体检第 4 阶段：一次新增很多列（导入人脉）；每批 200 列，回传存好的列 */
+    async insertMany(table, rows, onBatch = () => {}) {
+      const out = [];
+      for (let i = 0; i < rows.length; i += 200) {
+        const chunk = rows.slice(i, i + 200).map(({ owner, ...clean }) => clean);
+        const { data, error } = await supabase.from(table).insert(chunk).select();
+        if (error) {
+          const e = new Error(/column .* does not exist|could not find .* column/i.test(error.message)
+            ? '资料库还没升级：Supabase 重跑一次 schema.sql（见 DEPLOY.md「体检第 4 阶段升级」）' : error.message);
+          e.saved = out;
+          throw e;
+        }
+        out.push(...data);
+        onBatch(out.length, rows.length, data);
+      }
+      return out;
+    },
     async remove(table, id) {
       const { error } = await supabase.from(table).delete().eq('id', id);
       if (error) throw new Error(error.message);
@@ -188,6 +205,15 @@ function makeLocalRepo() {
       if (i >= 0) list[i] = next; else list.push(next);
       await save(table);
       return { ...next };
+    },
+    async insertMany(table, rows, onBatch = () => {}) {
+      await ensure();
+      const now = new Date().toISOString();
+      const out = rows.map((r) => ({ created_at: now, ...r, owner: LOCAL_OWNER, updated_at: now }));
+      tables[table].push(...out);
+      await save(table);
+      onBatch(out.length, rows.length, out);
+      return out.map((r) => ({ ...r }));
     },
     async remove(table, id) {
       await ensure();

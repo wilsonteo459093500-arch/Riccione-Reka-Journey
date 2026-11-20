@@ -3,6 +3,7 @@ import { ArrowLeft, Check, CheckCheck, Trash2, Bot, MessageCircle, QrCode, GitMe
 import { useStore } from '../lib/store.jsx';
 import { waLink, relDay, findDuplicates } from '../lib/logic.js';
 import { summarize } from '../lib/burst.js';
+import { greeting } from '../lib/salute.js';
 import { useBurstItems } from './Burst.jsx';
 import { Button, Avatar, Chip, PrivateImage, Section, Sheet, Field, Input, Textarea, useToast } from './ui.jsx';
 import { PhonesEditor } from './ScanCard.jsx';
@@ -72,7 +73,7 @@ export default function NewFriends({ onBack, onOpen, onCard }) {
       {list.map((p) => {
         const card = p.photos.find((ph) => ph.id === p.card_photo_id);
         const placeholder = /名片待确认/.test(p.name);
-        const wa = waLink(p.whatsapp, `Hi ${String(p.name).split(/\s+/)[0]}，`);
+        const wa = waLink(p.whatsapp, greeting(p));
         const scan = p.interactions.find((i) => i.source === 'qr');
         const dup = lookalike.get(p.id);
         return (

@@ -8,14 +8,15 @@ import {
 } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
 import { waLink } from '../lib/logic.js';
-import { todayActions, ACTION_LABEL, firstName } from '../lib/relation.js';
+import { todayActions, ACTION_LABEL } from '../lib/relation.js';
+import { greeting } from '../lib/salute.js';
 import { Avatar, AffinityBar, Button, TierBadge, Spinner, useToast, cx } from './ui.jsx';
 import ScheduleSheet from './ScheduleSheet.jsx';
 
 const REASON_ICON = { promise: ListChecks, follow: Hourglass, new: UserPlus, overdue: Clock, soon: Clock, cooling: TrendingDown };
 const WEEK = ['日', '一', '二', '三', '四', '五', '六'];
 
-export default function Today({ onOpen, onBrief, onScan }) {
+export default function Today({ onOpen, onBrief, onScan, onImport }) {
   const { people, loading, error, quickContact, snooze } = useStore();
   const toast = useToast();
   const [limit, setLimit] = useState(7);
@@ -71,8 +72,11 @@ export default function Today({ onOpen, onBrief, onScan }) {
         <div className="rounded-2xl border border-dashed border-line p-8 text-center">
           <Sparkles className="mx-auto h-9 w-9 text-faint" />
           <p className="mt-3 font-medium">还没有人</p>
-          <p className="mt-1 text-sm text-muted">扫几张名片、记几段对话，这里每天会告诉你该找谁。</p>
-          <Button variant="accent" className="mt-4" onClick={onScan}><ScanLine className="h-4 w-4" />扫名片</Button>
+          <p className="mt-1 text-sm text-muted">先把手机通讯录、WhatsApp 群里的人搬进来，或扫几张名片，这里每天会告诉你该找谁。</p>
+          <div className="mt-4 flex flex-wrap justify-center gap-2">
+            {onImport && <Button variant="accent" onClick={onImport}>导入现有人脉</Button>}
+            <Button variant={onImport ? 'outline' : 'accent'} onClick={onScan}><ScanLine className="h-4 w-4" />扫名片</Button>
+          </div>
         </div>
       )}
 
@@ -94,7 +98,7 @@ export default function Today({ onOpen, onBrief, onScan }) {
       <ul className="space-y-3">
         {list.map((item) => {
           const p = item.person;
-          const wa = waLink(p.whatsapp, `Hi ${firstName(p.name)}，`);
+          const wa = waLink(p.whatsapp, greeting(p));
           return (
             <li key={p.id} className="rounded-2xl border border-line bg-white p-3.5">
               <div className="flex items-start gap-3">

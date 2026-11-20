@@ -8,6 +8,7 @@
    ============================================================ */
 import { normName } from './logic.js';
 import { openPromises } from './talk.js';
+import { guessSalutation, salutationOf } from './salute.js';
 
 const DAY = 86400000;
 
@@ -112,9 +113,13 @@ export function lastContactMs(person, interactions = []) {
 export function relationOf(person, interactions = [], now = Date.now()) {
   const [before, affinity] = affinitySeries(person, interactions, [now - 30 * DAY, now]);
   const last = lastContactMs(person, interactions);
-  const ref = Number.isFinite(last) ? last : originOf(person, interactions);
-  const daysSince = Number.isFinite(ref) ? Math.max(0, Math.floor((now - ref) / DAY)) : null;
   const cadence = CADENCE[person.tier] || CADENCE.known;
+  let ref = Number.isFinite(last) ? last : originOf(person, interactions);
+  // 体检第 4 阶段：导入的人还没联系过 → 第一次提醒在 first_due（导入时分散开，不会几百人同一天到期）。
+  // 升了圈层（例：认识 → 核心）就按新圈层提早：取比较早的那个
+  const firstDue = ms(person.first_due ? `${person.first_due}T00:00:00` : '');
+  if (!Number.isFinite(last) && Number.isFinite(firstDue)) ref = Math.min(firstDue - cadence * DAY, ref);
+  const daysSince = Number.isFinite(ref) ? Math.max(0, Math.floor((now - ref) / DAY)) : null;
   const ratio = daysSince == null ? 0 : daysSince / cadence;
   const snoozeT = ms(person.snooze_until ? `${person.snooze_until}T23:59:59` : null);
   return {
@@ -142,12 +147,9 @@ export function affinityHistory(person, interactions = [], { days = 180, step = 
 }
 
 /* ---------- 今天该找谁 ---------- */
-const firstName = (name) => {
-  const s = String(name || '').replace(/\b(dato'?|datuk|dr|mr|mrs|ms|madam|tan sri|puan|encik)\.?\s+/gi, '').trim();
-  if (/[一-鿿]/.test(s)) return s.replace(/[^一-鿿]/g, '').slice(-2) || s;
-  return s.split(/\s+/)[0] || s;
-};
-export { firstName };
+// 体检第 4 阶段：改用称呼规则（Dato' Lim、Datuk Seri Zahid、Ah Kow…），本人存的称呼优先
+const firstName = guessSalutation;
+export { firstName, salutationOf };
 
 const parseDue = (due) => (/^\d{4}-\d{2}-\d{2}$/.test(String(due || '')) ? ms(`${due}T23:59:59`) : NaN);
 
@@ -195,12 +197,19 @@ export function todayActions(people, { now = Date.now(), limit = 7 } = {}) {
     const contacts = (p.interactions || []).filter((i) => ['meeting', 'call', 'message', 'event'].includes(i.kind)
       && !(Number.isFinite(born) && Math.abs(ms(i.created_at) - born) < 120000));
     const metDays = Number.isFinite(metT) ? Math.floor((now - metT) / DAY) : null;
-    if (metDays != null && metDays <= 3 && !contacts.length) {
+    // 导入的人（通讯录 / 群）早就认识了，不算「刚认识」
+    const imported = !!p.import_source;
+    if (!imported && metDays != null && metDays <= 3 && !contacts.length) {
       score += 50;
       reasons.push({ kind: 'new', text: metDays === 0 ? '今天刚认识：发个讯息，让他记得你' : `刚认识 ${metDays} 天：48 小时内跟进一下，让他记得你` });
     } else if (rel.overdue) {
       score += 15 * Math.min(rel.ratio, 2.5) * (TIER_WEIGHT[p.tier] || 1);
-      reasons.push({ kind: 'overdue', text: rel.contacted ? `上次联系 ${rel.daysSince} 天前（${CADENCE_LABEL[p.tier] || CADENCE_LABEL.known}一次）` : `认识 ${rel.daysSince} 天了，还没联系过` });
+      reasons.push({
+        kind: 'overdue',
+        text: rel.contacted ? `上次联系 ${rel.daysSince} 天前（${CADENCE_LABEL[p.tier] || CADENCE_LABEL.known}一次）`
+          : imported ? `从${IMPORT_LABEL[p.import_source] || '通讯录'}导入的，还没在 SPACE 记过联系：问候一下`
+            : `认识 ${rel.daysSince} 天了，还没联系过`,
+      });
     } else if (rel.ratio >= 0.85 && (p.tier === 'core' || p.tier === 'important')) {
       score += 8;
       reasons.push({ kind: 'soon', text: `快到该联系的时候了（${rel.dueIn <= 0 ? '今天' : `${rel.dueIn} 天后`}）` });
@@ -220,6 +229,7 @@ export function todayActions(people, { now = Date.now(), limit = 7 } = {}) {
   return out.sort((a, b) => b.score - a.score).slice(0, limit);
 }
 
+export const IMPORT_LABEL = { contacts: '手机通讯录', vcf: '通讯录', csv: '表格', whatsapp: 'WhatsApp 群' };
 export const ACTION_LABEL = { meet: '约见面', call: '打个电话', message: '发个讯息' };
 export const ACTION_MINUTES = { meet: 60, call: 20, message: 15 };
 

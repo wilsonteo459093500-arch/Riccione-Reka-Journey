@@ -598,6 +598,39 @@ export function StoreProvider({ children }) {
         }
         return done;
       },
+      /**
+       * 体检第 4 阶段：导入人脉。rows 是 importer.toPersonRow() 的结果，另外带 company（公司名字）。
+       * 公司：已经有的照用，没有的一次建好；人：每批 200 个存进去。
+       * 中途断掉：已经存好的会留着（再导入一次会显示「已在 SPACE」，不会重复）。
+       */
+      async importPeople(rows, onProgress = () => {}) {
+        const companies = dataRef.current.companies;
+        const newCompanies = [];
+        const companyId = new Map();
+        for (const r of rows) {
+          const n = String(r.company || '').trim();
+          if (!n || companyId.has(n.toLowerCase())) continue;
+          const hit = findCompany(companies, n) || findCompany(newCompanies, n);
+          if (hit) { companyId.set(n.toLowerCase(), hit.id); continue; }
+          const c = { id: uid(), name: n, name_alt: '', website: '', address: '', industry: '' };
+          newCompanies.push(c);
+          companyId.set(n.toLowerCase(), c.id);
+        }
+        const append = (table, saved) => {
+          const apply = (d) => ({ ...d, [table]: [...(d[table] || []), ...saved] });
+          dataRef.current = apply(dataRef.current);
+          setData(apply);
+        };
+        if (newCompanies.length) append('companies', await repo.insertMany('companies', newCompanies));
+        const people = rows.map(({ company, ...r }) => ({ ...r, company_id: company ? companyId.get(String(company).trim().toLowerCase()) || null : null }));
+        try {
+          const saved = await repo.insertMany('people', people, (done, total, batch) => { append('people', batch); onProgress(done, total); });
+          return saved.length;
+        } catch (e) {
+          if (e.saved && e.saved.length) e.message = `存了 ${e.saved.length} 人后停下来：${e.message}`;
+          throw e;
+        }
+      },
       async saveProfile(patch) { return put('profile', { ...(profile || DEFAULT_PROFILE), ...patch }); },
       async savePerson(row) { return put('people', row); },
       async saveCompany(row) { return put('companies', row); },

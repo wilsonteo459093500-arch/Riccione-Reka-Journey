@@ -175,6 +175,6 @@ test('lackingChips / firstName', () => {
   assert.ok(chips.includes('商会里的领袖'));
   assert.ok(chips.includes('高端客户'));
   assert.ok(chips.includes('发展商') && chips.includes('建筑师') && chips.includes('室内设计师'));
-  assert.equal(firstName("Dato' Lim Ah Kow"), 'Lim');
+  assert.equal(firstName("Dato' Lim Ah Kow"), "Dato' Lim"); // 体检第 4 阶段：称号留着
   assert.equal(firstName('陈大文'), '大文');
 });

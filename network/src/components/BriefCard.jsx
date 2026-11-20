@@ -9,7 +9,8 @@ import {
 } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
 import { waLink, fmtDate, relDay } from '../lib/logic.js';
-import { briefFor, firstName } from '../lib/relation.js';
+import { briefFor } from '../lib/relation.js';
+import { greeting } from '../lib/salute.js';
 import { MOODS } from '../lib/talk.js';
 import { Avatar, AffinityBar, TierBadge, Button, Chip, Spinner, useToast, cx } from './ui.jsx';
 import ScheduleSheet from './ScheduleSheet.jsx';
@@ -26,7 +27,7 @@ export default function BriefCard({ id, onBack, onTalk }) {
 
   if (!p) return <div className="p-6 text-center text-muted">{store.loading ? <Spinner label="读取中…" /> : '找不到这个人'}</div>;
 
-  const wa = waLink(p.whatsapp, `Hi ${firstName(p.name)}，`);
+  const wa = waLink(p.whatsapp, greeting(p));
   const mood = b.last && b.last.mood ? MOODS[b.last.mood.tone || toneOf(b.last.mood.score)] : null;
   const toggle = (x) => store.toggleActionItem(x.interaction, x.index).catch((e) => toast(e.message, 'error'));
 

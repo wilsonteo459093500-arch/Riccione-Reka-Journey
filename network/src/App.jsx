@@ -15,10 +15,11 @@ import BriefCard from './components/BriefCard.jsx';
 import CardStudio from './components/CardStudio.jsx';
 import NewFriends from './components/NewFriends.jsx';
 import Burst from './components/Burst.jsx';
+import ImportPeople from './components/ImportPeople.jsx';
 import { burstQueue } from './lib/burst.js';
 import { ToastProvider, Spinner, cx } from './components/ui.jsx';
 
-/* ---------- 路由：#/today  #/  #/p/<id>  #/p/<id>/brief  #/p/<id>/talk  #/talk  #/scan  #/galaxy  #/find  #/me  #/card  #/inbox  #/burst ---------- */
+/* ---------- 路由：#/today  #/  #/p/<id>  #/p/<id>/brief  #/p/<id>/talk  #/talk  #/scan  #/galaxy  #/find  #/me  #/card  #/inbox  #/burst  #/import ---------- */
 function parseHash() {
   const h = window.location.hash.replace(/^#/, '') || '/today'; // 打开 app 先看「今天该找谁」
   const br = /^\/p\/([\w-]+)\/brief$/.exec(h);
@@ -35,6 +36,7 @@ function parseHash() {
   if (m) return { name: 'person', id: m[1], analyze: !!m[2] };
   if (h === '/scan') return { name: 'scan' };
   if (h === '/burst') return { name: 'burst' };
+  if (h === '/import') return { name: 'import' };
   if (h === '/me') return { name: 'me' };
   return { name: 'list' };
 }
@@ -88,7 +90,7 @@ function Shell() {
   useEffect(() => {
     if (['today', 'galaxy', 'find', 'list', 'inbox'].includes(route.name)) back.current = route.name === 'list' ? '/' : `/${route.name}`;
   }, [route.name]);
-  const fullScreen = ['scan', 'talk', 'brief', 'burst'].includes(route.name);
+  const fullScreen = ['scan', 'talk', 'brief', 'burst', 'import'].includes(route.name);
 
   return (
     <div className="flex h-full flex-col lg:flex-row">
@@ -113,7 +115,7 @@ function Shell() {
           <div className="flex min-h-0 flex-1">
             {/* 列表：手机只在 list 显示；电脑一直在左边 */}
             <div className={cx('h-full w-full lg:w-[380px] lg:shrink-0 lg:border-r lg:border-line', route.name === 'person' && 'hidden lg:block')}>
-              <PeopleList selectedId={route.id} onOpen={openPerson} onScan={() => go('/scan')} onTalk={() => go('/talk')} onGalaxy={() => go('/galaxy')} onInbox={() => go('/inbox')} />
+              <PeopleList selectedId={route.id} onOpen={openPerson} onScan={() => go('/scan')} onTalk={() => go('/talk')} onGalaxy={() => go('/galaxy')} onInbox={() => go('/inbox')} onImport={() => go('/import')} />
             </div>
             <div className={cx('h-full min-w-0 flex-1 overflow-y-auto', route.name === 'list' && 'hidden lg:block')}>
               {route.name === 'person' ? (
@@ -133,7 +135,7 @@ function Shell() {
           <div className="min-h-0 flex-1 pb-20 lg:pb-0"><Galaxy onOpen={openPerson} /></div>
         ) : (
           <div className="min-h-0 flex-1 overflow-y-auto">
-            {route.name === 'today' && <Today onOpen={openPerson} onBrief={(id) => go(`/p/${id}/brief`)} onScan={() => go('/scan')} />}
+            {route.name === 'today' && <Today onOpen={openPerson} onBrief={(id) => go(`/p/${id}/brief`)} onScan={() => go('/scan')} onImport={() => go('/import')} />}
             {route.name === 'find' && <FindHelp onOpen={openPerson} />}
             {route.name === 'brief' && <BriefCard key={route.id} id={route.id} onBack={() => window.history.length > 1 ? window.history.back() : openPerson(route.id)} onTalk={() => go(`/p/${route.id}/talk`)} />}
             {route.name === 'scan' && (
@@ -145,6 +147,7 @@ function Shell() {
               />
             )}
             {route.name === 'burst' && <Burst onExit={() => go('/scan')} onInbox={() => go('/inbox')} />}
+            {route.name === 'import' && <ImportPeople onBack={() => go('/')} onOpenList={() => go('/')} />}
             {route.name === 'talk' && (
               <TalkImport
                 key={route.personId || 'any'}
