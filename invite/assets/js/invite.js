@@ -34,13 +34,27 @@
     Object.keys(ALIAS).forEach(function (k) {
       if (q.get(k)) data[ALIAS[k]] = q.get(k);
     });
-    ['n', 't', 'co', 'd', 'h', 'dur', 'by', 'role', 'wa', 'msg'].forEach(function (k) {
+    ['n', 't', 'co', 'd', 'h', 'dur', 'by', 'role', 'wa', 'msg', 'sig'].forEach(function (k) {
       if (q.get(k)) data[k] = q.get(k);
     });
     return data;
   }
 
   var P = readParams();
+
+  /* ---------- 签名（体检第 2c 阶段）--------------------------
+     销售名字、职称、WhatsApp、留言要有 VISI 登入后发的签名才算数（link-sign.js）。
+     先当没签：只留团队代号，其它退回公司预设；有签名就去问伺服器，对了再换上（问的时候先把联络人那几格藏起来）。
+     没签名 / 签名不对 / 问不到 → 公司预设，不提示客户 */
+  var LS = window.SAIL_LINK;
+  var signed = { by: P.by || '', role: P.role || '', wa: P.wa || '', note: P.msg || '' };
+  var checking = false;
+  if (!LS || LS.needs(signed)) {
+    if (!(LS && LS.member(P.by))) P.by = '';
+    P.role = ''; P.wa = ''; P.msg = '';
+    checking = !!(LS && P.sig);
+    if (checking) document.documentElement.setAttribute('data-host-pending', '');
+  }
 
   /* 称谓用短代号，链接里就不会出现 %E5%A5%B3%E5%A3%AB 这种乱码。
      写死的中文也照样认得。 */
@@ -63,12 +77,17 @@
     return null;
   }
 
-  var guest = (P.n || '').trim();
-  var honor = (P.t || '').trim();
-  var M     = member(P.by);
-  var host  = (M ? M.name : P.by || (CFG.host && CFG.host.name) || 'Wilson Teo').trim();
-  var role  = ((M && M.role) || P.role || (CFG.host && CFG.host.role) || '溪岸 Sail by Riccione Reka').trim();
-  var hostWa = String((M && M.wa) || P.wa || (CFG.host && CFG.host.wa) || '').replace(/\D/g, '');
+  // 客户名字没签：限长度，塞不进一整段「请先转账…」
+  var guest = Array.from(String(P.n || '').replace(/[\u0000-\u001f\u007f]+/g, ' ').trim()).slice(0, LS ? LS.MAX_GUEST : 40).join('').trim();
+  var honor = Array.from(String(P.t || '').trim()).slice(0, 12).join('');
+  var M, host, role, hostWa;
+  function who() {
+    M      = member(P.by);
+    host   = (M ? M.name : P.by || (CFG.host && CFG.host.name) || 'Wilson Teo').trim();
+    role   = ((M && M.role) || P.role || (CFG.host && CFG.host.role) || '溪岸 Sail by Riccione Reka').trim();
+    hostWa = String((M && M.wa) || P.wa || (CFG.host && CFG.host.wa) || '').replace(/\D/g, '');
+  }
+  who();
   var dur   = parseInt(P.dur, 10) > 0 ? parseInt(P.dur, 10) : 60;
 
   function honorText(zh) {
@@ -166,11 +185,9 @@
     if (tw) tw.textContent = when ? (zh ? dateZh(when) + (P.h ? ' · ' + timeStr(when) : '')
                                         : dateEn(when) + (P.h ? ' · ' + timeStr(when) : '')) : '';
 
-    // 销售的私人留言
-    if (P.msg) {
-      var w = $('#l-msg-wrap'), m = $('#l-msg');
-      if (w && m) { m.textContent = P.msg; w.hidden = false; }
-    }
+    // 销售的私人留言（有签名才有）
+    var w = $('#l-msg-wrap'), m = $('#l-msg');
+    if (w && m) { m.textContent = P.msg || ''; w.hidden = !P.msg; }
 
     paintCountdown(zh);
     paintLinks(zh);
@@ -300,6 +317,18 @@
   }
   setLang(['zh', 'en', 'bi'].indexOf(saved) > -1 ? saved : 'zh');
   onScroll();
+
+  // 有签名：问伺服器，对了才换上销售的名字、号码、留言
+  if (checking) {
+    LS.verify(signed, P.sig, 5000).then(function (f) {
+      if (f) {
+        P.by = f.by; P.role = f.role; P.wa = f.wa; P.msg = f.note;
+        who();
+        paint();
+      }
+      document.documentElement.removeAttribute('data-host-pending');
+    });
+  }
 
   // 预览模式：?open=1 直接跳过封面（销售端预览用）
   if (new URLSearchParams(location.search).get('open') === '1') openInvitation();

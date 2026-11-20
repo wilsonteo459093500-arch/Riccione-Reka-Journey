@@ -58,6 +58,24 @@ function recordFail(ip, now) {
 /** 测试用：清掉计数 */
 export function resetLoginLimiter() { fails = { ip: new Map(), all: [] }; }
 
+/** 名字 + 团队密码 → {name, cookie}；错了丢 HttpError（400 name · 401 password · 429 slow_down）。
+    /api/link 也用它（本机案例库模式时 /api/session 由 service worker 回答，签名链接要另外登入真的伺服器） */
+export async function login(req, body) {
+  var name = cleanName(body && body.name);
+  if (!name) throw new HttpError(400, { error: 'name' });
+  var ip = clientIp(req);
+  var wait = waitFor(ip, Date.now());
+  if (wait) throw new HttpError(429, { error: 'slow_down', retryAfter: wait });
+  if (!checkPassword(body.password)) {
+    recordFail(ip, Date.now());
+    await new Promise(function (r) { setTimeout(r, WRONG_DELAY); });
+    throw new HttpError(401, { error: 'password' });
+  }
+  fails.ip.delete(ip);
+  var token = signSession({ n: name, exp: Date.now() + MAX_AGE * 1000 });
+  return { name: name, cookie: sessionCookie(req, token) };
+}
+
 export default async function handler(req, res) {
   try {
     requireConfigured();
@@ -67,19 +85,8 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {
       checkWrite(req);
       var body = await readJson(req, 16 * 1024);
-      var name = cleanName(body.name);
-      if (!name) throw new HttpError(400, { error: 'name' });
-      var ip = clientIp(req);
-      var wait = waitFor(ip, Date.now());
-      if (wait) return send(res, 429, { error: 'slow_down', retryAfter: wait }, { 'Retry-After': String(wait) });
-      if (!checkPassword(body.password)) {
-        recordFail(ip, Date.now());
-        await new Promise(function (r) { setTimeout(r, WRONG_DELAY); });
-        throw new HttpError(401, { error: 'password' });
-      }
-      fails.ip.delete(ip);
-      var token = signSession({ n: name, exp: Date.now() + MAX_AGE * 1000 });
-      return send(res, 200, { name: name }, { 'Set-Cookie': sessionCookie(req, token) });
+      var r = await login(req, body);
+      return send(res, 200, { name: r.name }, { 'Set-Cookie': r.cookie });
     }
     if (req.method === 'DELETE') {
       checkWrite(req);

@@ -36,6 +36,10 @@
 * { box-sizing: border-box; }
 
 html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+/* 签名链接：还在问伺服器时，先不显示销售的名字 / 职称（不先闪一下公司预设再换掉） */
+html[data-host-pending] .s-host,
+html[data-host-pending] #l-role,
+html[data-host-pending] #c-role { visibility: hidden; }
 
 body {
   margin: 0;

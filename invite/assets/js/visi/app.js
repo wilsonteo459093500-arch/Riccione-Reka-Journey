@@ -226,6 +226,7 @@
     clearTimeout(renderTimer);
     // 文案页不在这里重写：销售正在改的讯息会被洗掉（切到 ⑤ 时才重新生成）
     renderTimer = setTimeout(function () { renderPreview(); if (S.tab === 'visit') renderInviteLink(); }, opts.now ? 0 : 140);
+    syncSigSoon();
   }
 
   function refreshProjectSelect() {
@@ -282,6 +283,7 @@
     refreshProjectSelect();
     renderAll();
     staleBar();
+    syncSigSoon();
   }
 
   /* ============================================================
@@ -1269,7 +1271,70 @@
     var link = MB.inviteLink(S.project);
     $('#inv-link').textContent = link.url;
     $('#inv-open').href = link.url + (link.url.indexOf('?') > -1 ? '&' : '?') + 'open=1';
+    renderSign(link);
   }
+
+  /* ---------- 签名链接（体检第 2c 阶段）----------------------
+     邀请函链接写你的名字 / 职称 / 号码时，要伺服器签过邀请函才认（没签 → 客户看到公司预设联络人）。
+     这台电脑登入过团队密码（公司案例库或这里）就自动签，签名存进方案（p.linkSig），名字 / 号码改了再签一次。
+     没登入 / 连不上：④ 邀请函链接下面说清楚，体检红灯 */
+  var SIGN = { state: '', tried: {}, busy: '', timer: 0, err: null };
+  function syncSigSoon() { clearTimeout(SIGN.timer); SIGN.timer = setTimeout(syncSig, 700); }
+  function syncSig(login) {
+    var p = S.project; if (!p || !window.SAIL_LINK) return;
+    var link = MB.inviteLink(p);
+    if (link.sign !== 'missing' || link.local) { if (S.tab === 'visit') renderSign(link); return; }
+    var k = link.key;
+    if (!login && (SIGN.busy === k || SIGN.tried[k])) return;
+    SIGN.busy = k; SIGN.state = 'busy';
+    if (S.tab === 'visit') renderSign(link);
+    window.SAIL_LINK.sign(link.fields, login || null).then(function (r) {
+      SIGN.busy = ''; SIGN.state = ''; SIGN.tried = {};
+      // 还是同一份方案、字也没再改才存（等的时候换了方案 / 又改了名字 → 下一轮再签）
+      if (S.project === p && MB.inviteLink(p).key === k) {
+        p.linkSig = { k: k, s: r.sig };
+        changed({ now: true });
+        if (login) ping('已登入，邀请函链接已认证', 2600);
+      } else syncSigSoon();
+    }, function (e) {
+      SIGN.busy = ''; SIGN.err = e || {};
+      var st = SIGN.err.status;
+      SIGN.state = st === 401 ? (SIGN.err.error === 'password' ? 'wrong' : 'login') : st === 429 ? 'slow' :
+        (!st || st === 404 || st === 503) ? 'down' : 'error';
+      SIGN.tried[k] = true;
+      if (S.tab === 'visit') renderSign();
+    });
+  }
+  function renderSign(link) {
+    var box = $('#inv-sign'); if (!box) return;
+    link = link || MB.inviteLink(S.project);
+    if (!link.sign || link.local) { box.hidden = true; return; }
+    box.hidden = false;
+    var st = $('#inv-sign-st'), form = $('#inv-sign-form');
+    var def = (CFG.host && CFG.host.name) || '公司';
+    var why = '没认证的链接，客户打开会看到公司预设的联络人（' + esc(def) + '），按「确认」也是传给' + esc(def) + '。';
+    var html, cls = 'cloud-st', showForm = false;
+    if (link.sign === 'ok') { html = '✓ 链接已认证：邀请函会写你的名字和号码。'; cls += ' ok'; }
+    else if (SIGN.state === 'busy' || (!SIGN.state && !SIGN.tried[link.key])) html = '认证链接中…';
+    else if (SIGN.state === 'login' || SIGN.state === 'wrong' || SIGN.state === 'slow') {
+      showForm = true; cls += ' bad';
+      html = (SIGN.state === 'wrong' ? '<b>团队密码不对。</b>' :
+        SIGN.state === 'slow' ? '<b>密码错太多次，请 ' + Math.ceil(((SIGN.err && SIGN.err.retryAfter) || 600) / 60) + ' 分钟后再试。</b>' : '') +
+        '链接还没认证：用<b>团队密码</b>登入一次（跟公司案例库同一个，30 天内不用再登）。' + why;
+    } else if (SIGN.state === 'down') { cls += ' bad'; html = '<b>连不上伺服器，链接还没认证。</b>' + why + '有网路时会再试。'; }
+    else { cls += ' bad'; html = '<b>认证失败（' + esc((SIGN.err && SIGN.err.error) || '') + '）。</b>' + why; }
+    st.className = cls; st.innerHTML = html;
+    form.hidden = !showForm;
+  }
+  $('#inv-sign-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var pw = e.target.elements.pw.value; if (!pw) return;
+    var name = (S.project.host.name || '').trim() || (MB.cloud && MB.cloud.status().user) || (CFG.host && CFG.host.name) || '';
+    e.target.elements.pw.value = '';
+    syncSig({ name: name, password: pw });
+  });
+  // 有网路了 / 在图库登入了公司案例库：再试一次
+  window.addEventListener('online', function () { SIGN.tried = {}; syncSigSoon(); });
 
   $('#prep-edit').addEventListener('input', function (e) {
     if (!e.target.hasAttribute('data-prep')) return;
@@ -2345,7 +2410,7 @@
     chapter: ['visit', '#pages-panel'], cases: ['rooms', '#cases-panel'], practical: ['visit', '#practical-panel'],
     language: ['visit', '#pages-panel'], team: ['visit', '#team-panel'], invite: ['visit'], back: ['visit'],
     // 体检：到馆准备的那几样；每一页用哪张图（④ 页面开关下面的缩图）
-    prep: ['visit', '#prep-edit'], slots: ['visit', '#slot-thumbs']
+    prep: ['visit', '#prep-edit'], slots: ['visit', '#slot-thumbs'], sign: ['visit', '#inv-sign']
   };
   /** 每个系列那一页是 series:<k>（MB.pageKey）：跟「系列」同一个地方（④ 页面开关） */
   function gotoOf(g) {
@@ -2611,7 +2676,11 @@
         if ($('#match-modal').classList.contains('on')) renderMatch();
         if (S.tab === 'rooms' && !typing()) { renderRooms(); renderCases(); }
       }
-      else if (what === 'status') { if (!typing()) renderCloudBox(); if (S.tab === 'rooms' && !typing()) renderCases(); }
+      else if (what === 'status') {
+        if (!typing()) renderCloudBox();
+        if (S.tab === 'rooms' && !typing()) renderCases();
+        SIGN.tried = {}; syncSigSoon();   // 刚登入公司案例库：邀请函链接也一起认证
+      }
     });
     MB.cloud.refresh();
     setInterval(function () { MB.cloud.refresh(); }, MB.cloud.EVERY);

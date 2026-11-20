@@ -21,12 +21,14 @@ export const lib = {
   auth: await import(API + '_lib/auth.js'),
   blob: await import(API + '_lib/blob.js'),
   vocab: await import(API + '_lib/vocab.js'),
-  catalog: await import(API + '_lib/catalog.js')
+  catalog: await import(API + '_lib/catalog.js'),
+  link: await import(API + '_lib/link.js')
 };
 export const handlers = {
   session: (await import(API + 'session.js')).default,
   photo: (await import(API + 'photo.js')).default,
-  catalog: (await import(API + 'catalog.js')).default
+  catalog: (await import(API + 'catalog.js')).default,
+  link: (await import(API + 'link.js')).default
 };
 
 // 8×8 灰色方块，PIL 产生后转 base64；只拿来测「开头是 FF D8 FF」和上传流程

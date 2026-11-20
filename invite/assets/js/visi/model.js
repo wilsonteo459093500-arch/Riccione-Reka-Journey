@@ -1570,6 +1570,10 @@
     Object.keys(ce).slice(0, 40).forEach(function (k) {
       if (/^[\w-]{1,40}:(zh|en|bi)$/.test(k) && typeof ce[k] === 'string') out.copyEdits[k] = ce[k].slice(0, MB.TEXT_MAX.copy);
     });
+    // 邀请函链接的签名（2c）：格式不对就当没有（会再去要）
+    var ls = p.linkSig;
+    out.linkSig = ls && typeof ls === 'object' && typeof ls.k === 'string' && ls.k.length <= 2000 &&
+      typeof ls.s === 'string' && /^[A-Za-z0-9_-]{22}$/.test(ls.s) ? { k: ls.k, s: ls.s } : null;
     out.caseStyle = styleOk(p.caseStyle) ? p.caseStyle : '';
     out.cabinets = [];
     (Array.isArray(p.cabinets) ? p.cabinets : []).forEach(function (k) {
@@ -1683,9 +1687,20 @@
         if (wa && wa !== String(def.wa || '')) q.set('wa', wa);
       }
     }
+    /* 签名（体检第 2c 阶段）：销售名字 / 职称 / 号码要伺服器签过，邀请函才认（没签 → 公司预设联络人）。
+       签名存在方案里（p.linkSig = {k: 签的是哪几个字, s}）；这几个字改了，旧签名就不算，app.js 会再去要一个。
+       sign：'' = 不用签（团队代号、公司预设）· 'ok' · 'missing' */
+    var fields = { by: q.get('from') || '', role: q.get('role') || '', wa: q.get('wa') || '', note: '' };
+    var key = MB.linkKey(fields), sign = '';
+    var LS = window.SAIL_LINK;
+    if (LS && LS.needs(fields)) {
+      if (p.linkSig && p.linkSig.k === key) { q.set('sig', p.linkSig.s); sign = 'ok'; }
+      else sign = 'missing';
+    }
     var qs = q.toString();
-    return { url: path + (qs ? '?' + qs : ''), local: local && !CFG.publicBase };
+    return { url: path + (qs ? '?' + qs : ''), local: local && !CFG.publicBase, sign: sign, fields: fields, key: key };
   };
+  MB.linkKey = function (f) { return JSON.stringify([f.by || '', f.role || '', f.wa || '', f.note || '']); };
 
   /** 文件名 = 打印对话框的预设档名 = PDF 标题：「SAIL x Mr & Mrs Lim - Sample Residence Setia Alam Home Proposal」 */
   MB.fileTitle = function (p) {

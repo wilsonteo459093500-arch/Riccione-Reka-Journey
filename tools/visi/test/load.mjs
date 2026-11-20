@@ -7,7 +7,7 @@ import vm from 'node:vm';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../invite');
 const FILES = [
-  'assets/js/config.js', 'assets/js/cases.js', 'assets/js/visi/data.js', 'assets/js/visi/case-vocab.js',
+  'assets/js/config.js', 'assets/js/link-sign.js', 'assets/js/cases.js', 'assets/js/visi/data.js', 'assets/js/visi/case-vocab.js',
   'assets/js/visi/photos.js', 'assets/js/visi/store.js', 'assets/js/visi/model.js', 'assets/js/brief-card.js',
   'assets/js/visi/brief-parse.js', 'assets/js/visi/brand.js', 'assets/js/visi/deck.js',
   'assets/js/visi/copy.js', 'assets/js/visi/check.js'

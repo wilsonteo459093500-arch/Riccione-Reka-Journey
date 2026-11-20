@@ -394,6 +394,22 @@
     // 9 · 二维码网址
     var link = MB.inviteLink(p);
     if (p.pages.invite && link.local) add('warn', '二维码指向本机网址，客户扫不开', '在 config.js 填 publicBase（正式网址），或在正式网站上做方案。', 'visit');
+    // 9b · 签名链接（2c）：链接写你的名字 / 号码，没签过邀请函不认 —— 客户会看到公司预设联络人
+    else if (link.sign === 'missing') {
+      var dh = ((window.SAIL || {}).host || {}).name || '公司';
+      add('bad', '邀请函链接还没认证', '链接里写的是你的名字和号码，要用团队密码登入一次、伺服器签过才算数（防止别人改链接冒充溪岸）。' +
+        '没认证的话，客户打开邀请函看到的是 ' + dh + '，按「确认」也是传给 ' + dh + '。到 ④「邀请函链接」下面登入。', 'sign');
+    }
+    // 9c · ⑤ 改过的讯息不会跟着更新（2b）：里面的邀请函链接是改名字 / 号码 / 时段 / 签名之前的
+    var pub = String((window.SAIL || {}).publicBase || '').replace(/\/$/, '');
+    if (pub && p.copyEdits) {
+      var URLRE = new RegExp(pub.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&') + "/[A-Za-z0-9\\-._~:/?#@!$&'()*+,;=%]*", 'g');
+      var staleLink = Object.keys(p.copyEdits).some(function (k) {
+        return (String(p.copyEdits[k]).match(URLRE) || []).some(function (u) { return u.replace(/[.,;:!?)]+$/, '') !== link.url; });
+      });
+      if (staleLink) add('warn', '⑤ 改过的讯息里，邀请函链接是旧的', '那几则讯息改过就不会再跟着更新；里面的链接跟现在的不一样' +
+        '（名字、号码、时段或认证改过）。按那一则的「↺ 用自动生成」，或把链接换成 ④ 的新链接。', 'copy');
+    }
 
     // 10 · 联络
     // 讯息和邀请函署名是销售，号码却是预设（老板）的 —— 客户按「确认」会传到别人那里

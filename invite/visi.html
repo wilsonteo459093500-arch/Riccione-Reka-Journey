@@ -258,6 +258,14 @@
           <button class="mini" type="button" id="inv-copy">复制链接</button>
           <a class="mini" id="inv-open" href="#" target="_blank" rel="noopener">预览邀请函</a>
         </div>
+        <!-- 签名链接（体检第 2c 阶段）：链接写你的名字 / 号码，要登入后伺服器签过，邀请函才认 -->
+        <div class="sign-box" id="inv-sign" hidden>
+          <p class="cloud-st" id="inv-sign-st"></p>
+          <form class="cloud-login" id="inv-sign-form" hidden autocomplete="on">
+            <input type="password" name="pw" placeholder="团队密码" autocomplete="current-password" />
+            <button class="mini dark" type="submit">登入</button>
+          </form>
+        </div>
       </div>
     </section>
 
@@ -397,6 +405,7 @@
 <div class="toast" id="toast">已复制</div>
 
 <script src="assets/js/config.js"></script>
+<script src="assets/js/link-sign.js"></script>
 <script src="assets/js/cases.js"></script>
 <script src="assets/vendor/qrcode.js"></script>
 <script src="assets/js/visi/data.js"></script>

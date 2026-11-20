@@ -342,3 +342,7 @@ body.mb-body { overflow: hidden; height: 100vh; }
 #stale-bar:not([hidden]) ~ #backup-bar { display: none; }
 .check-line { display: flex; gap: 8px; align-items: flex-start; font-size: 13.5px; color: var(--ink-soft); cursor: pointer; }
 .check-line input { width: auto; margin-top: 3px; flex: none; }
+
+/* 签名链接（体检第 2c 阶段）：④ 邀请函链接下面的认证状态 + 登入 */
+.sign-box { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line, rgba(27,24,21,.1)); }
+.sign-box .cloud-st.bad { color: #A8402A; }
