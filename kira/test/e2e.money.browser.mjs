@@ -192,6 +192,42 @@ try {
       await p.locator('text=K1').first().scrollIntoViewIfNeeded();
       await p.screenshot({ path: path.join(outDir, 'money-ai-ceiling.png') });
     }
+    if (!ceilingH) {
+      // ---------- 楼高提醒（用户 11/20 选方案 2）：AI 先加进没楼高的房间 → 补填 3.00 → 提醒 → 按了才做到顶 ----------
+      const savedCab = () => p.evaluate(() => JSON.parse(localStorage.getItem('kira.records.v1')).records[0].zones.find((x) => x.name === 'Master Bedroom 主卧').cabinets[0]);
+      const ceil = p.locator('input[placeholder="2.70"]').first();
+      const setCeil = async (v) => { await ceil.fill(v); await ceil.blur(); };
+      check('ceiling reminder: no ceiling filled → no reminder', (await p.locator('[data-ceiling-stale]').count()) === 0);
+      await setCeil('3');
+      await p.waitForSelector('[data-ceiling-stale]', { timeout: 5000 });
+      const bar = await p.locator('[data-ceiling-stale]').innerText();
+      const before = await savedCab();
+      const at30 = setPlanSize(newCabinet('wardrobe', { ceilingH: 3000 }), { W: before.spec.W }).cab;
+      const plus = Math.round(cabinetTotal(at30) - cabinetTotal(before));
+      check('ceiling reminder: fill in 3.00 → "K1 还是 2.70 m · 总价 +RM …", and the wardrobe has NOT changed by itself',
+        /楼高 3\.00 m，但 K1 还是 2\.70 m/.test(bar) && bar.replace(/\u00a0/g, ' ').includes(`+RM ${plus.toLocaleString('en-MY')}`) && before.spec.H === 2700, bar.replace(/\s+/g, ' '));
+      await p.locator('[data-ceiling-stale]').scrollIntoViewIfNeeded();
+      await p.locator('[data-ceiling-stale]').locator('xpath=..').screenshot({ path: path.join(outDir, 'money-ceiling-reminder.png') });
+      await p.locator('[data-ceiling-fit]').click();
+      await p.waitForSelector('[data-ceiling-done]');
+      const after = await savedCab();
+      check('ceiling reminder: "Fit all" → K1 becomes 3.00 m, same price as one made by hand in a 3.00 m room; "undo" offered',
+        after.spec.H === 3000 && Math.round(cabinetTotal(after)) === Math.round(cabinetTotal(at30)) && (await p.locator('[data-ceiling-stale]').count()) === 0 && (await p.locator('body').innerText()).includes(`${(after.spec.W / 1000).toFixed(2)} × 3.00 × 0.60 m`),
+        `H ${after.spec.H}`);
+      await p.locator('[data-ceiling-done]').scrollIntoViewIfNeeded();
+      await p.locator('[data-ceiling-done]').locator('xpath=..').screenshot({ path: path.join(outDir, 'money-ceiling-done.png') });
+      await p.locator('[data-ceiling-undo]').click();
+      await p.waitForSelector('[data-ceiling-done]', { state: 'detached' });
+      check('ceiling reminder: "Undo" → back to 2.70 m and no reminder for 3.00 any more', (await savedCab()).spec.H === 2700 && (await p.locator('[data-ceiling-stale]').count()) === 0);
+      await setCeil('3.1');
+      await p.waitForSelector('[data-ceiling-stale]', { timeout: 5000 });
+      check('ceiling reminder: a different ceiling (3.10) asks again', /K1 还是 2\.70 m/.test(await p.locator('[data-ceiling-stale]').innerText()));
+      await p.locator('[data-ceiling-keep]').click();
+      await p.waitForSelector('[data-ceiling-stale]', { state: 'detached' });
+      await p.reload();
+      await p.waitForSelector('[data-discount-pct]');
+      check('ceiling reminder: "Keep" → hidden, the wardrobe stays 2.70 m, still hidden after reloading', (await p.locator('[data-ceiling-stale]').count()) === 0 && (await savedCab()).spec.H === 2700);
+    }
     check(`no browser errors (AI add, ceiling ${ceilingH || 'not set'})`, errors.length === 0, errors.join(' | '));
     await ctx.close();
   }

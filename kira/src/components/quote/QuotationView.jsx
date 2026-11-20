@@ -15,6 +15,7 @@ import { buildTextQuote } from './textQuote.js';
 import { deriveZones, cabinetTotal, customSeriesCount, localizeKira } from '../../planner/bridge.js';
 import { newCabinet, nextCode } from '../../planner/templates.js';
 import { mmToM, uid } from '../../planner/model.js';
+import { staleCeiling, fitZoneToCeiling, keepCeiling, ceilingChange } from '../../planner/ceiling.js';
 import CabinetCard from '../planner/CabinetCard.jsx';
 import CabinetEditor from '../planner/CabinetEditor.jsx';
 import TemplatePicker from '../planner/TemplatePicker.jsx';
@@ -306,6 +307,21 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
   const [picking, setPicking] = useState(null);       // zoneId：正在选模板
   const [editingCab, setEditingCab] = useState(null); // { zoneId, cab, isNew }
   const [ceilNote, setCeilNote] = useState({});       // zoneId → 「2700 mm → 2.70 m」（打了毫米时提示）
+  // 楼高提醒（planner/ceiling.js）：按了「全部做到顶」→ 记下改之前的柜子，可以撤销
+  const [ceilFit, setCeilFit] = useState({});         // zoneId → { before:{ cabId: cab }, codes, h, delta }
+  const fitCeilingNow = (zone) => {
+    const { items, delta } = staleCeiling(zone, defaults);
+    if (!items.length) return;
+    setZones((zs) => zs.map((z) => (z.id === zone.id ? fitZoneToCeiling(z, defaults) : z)));
+    setCeilFit((m) => ({ ...m, [zone.id]: { before: Object.fromEntries(items.map((x) => [x.cab.id, x.cab])), codes: items.map((x) => x.cab.code), h: zone.ceilingH, delta } }));
+  };
+  const undoCeilingFit = (zone) => {
+    const f = ceilFit[zone.id];
+    if (!f) return;
+    // 撤销 = 这个楼高不要做到顶（同「不用」），柜子换回去
+    setZones((zs) => zs.map((z) => (z.id === zone.id ? { ...z, ...keepCeiling(z), cabinets: (z.cabinets || []).map((c) => f.before[c.id] || c) } : z)));
+    setCeilFit((m) => ({ ...m, [zone.id]: null }));
+  };
   const plans = doc.plans || [];
   const [drawn, setDrawn] = useState(null); // 第三版：在户型图上画的框 { planId, rect } → 选完模板用框的尺寸
   const startCabinet = (zoneId, templateId) => {
@@ -478,7 +494,8 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
                       const ok = v > 1500;
                       if (ok) e.target.value = mmToM(v);
                       setCeilNote((n) => ({ ...n, [zone.id]: ok ? note : '' }));
-                      updateZone(zone.id, { ceilingH: ok ? v : null });
+                      updateZone(zone.id, ceilingChange(zone, ok ? v : null)); // 记下上一次的楼高 → 楼高提醒
+                      if ((ok ? v : null) !== (zone.ceilingH || null)) setCeilFit((m) => ({ ...m, [zone.id]: null }));
                     }}
                     className="w-12 px-1 py-0.5 text-xs outline-none" style={{ background: T.paper, border: `1px solid ${zone.ceilingH ? T.line : T.terra}`, borderRadius: 2, color: T.ink }} />
                   m
@@ -490,6 +507,43 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
                   <div className="order-last basis-full text-right text-[10px]" style={{ color: T.wood }} data-mm-note>Ceiling 楼高 {ceilNote[zone.id]}</div>
                 )}
               </div>
+
+              {(() => {
+                // 楼高提醒：补填 / 改了楼高，还有柜子是旧高度 → 列出来、写多多少钱，按了才改（价钱不自己变）
+                const st = staleCeiling(zone, defaults);
+                const done = ceilFit[zone.id];
+                if (st.items.length) {
+                  const groups = [...new Set(st.items.map((x) => x.fromH))].map((h) => ({ h, codes: st.items.filter((x) => x.fromH === h).map((x) => x.cab.code) }));
+                  const zh = groups.map((g) => `${g.codes.join('、')} 还是 ${mmToM(g.h)} m`).join('；');
+                  const en = groups.map((g) => `${g.codes.join(', ')} ${g.codes.length > 1 ? 'are' : 'is'} still ${mmToM(g.h)} m`).join('; ');
+                  const money = st.delta === 0 ? '' : `${st.delta > 0 ? '+' : '−'}${fmtMYR(Math.abs(st.delta)).replace(' ', '\u00a0')}`; // 「+RM 2,041」不在中间断行
+                  return (
+                    <div className="px-3 py-2 text-xs flex items-center gap-2 flex-wrap" style={{ background: '#FBF1E6', borderTop: `1px solid ${T.lineSoft}`, color: T.ink }} data-ceiling-stale={st.items.length}>
+                      <span className="flex-1 min-w-[200px]">
+                        楼高 {mmToM(zone.ceilingH)} m，但 {zh}。做到顶{money ? `：总价 ${money}` : ''}
+                        <span className="block" style={{ color: T.inkSoft }}>Ceiling {mmToM(zone.ceilingH)} m, but {en}. To the ceiling{money ? `: ${money}` : ''}</span>
+                      </span>
+                      <span className="flex gap-2 shrink-0">
+                        <button onClick={() => fitCeilingNow(zone)} className="px-2.5 py-1.5 text-xs" style={{ background: T.wood, color: T.paper, borderRadius: 2 }} data-ceiling-fit>
+                          全部做到顶 Fit all
+                        </button>
+                        <button onClick={() => updateZone(zone.id, keepCeiling(zone))} className="px-2.5 py-1.5 text-xs" style={{ border: `1px solid ${T.line}`, color: T.inkSoft, borderRadius: 2 }} data-ceiling-keep>
+                          不用 Keep
+                        </button>
+                      </span>
+                    </div>
+                  );
+                }
+                if (done && done.h === zone.ceilingH) {
+                  return (
+                    <div className="px-3 py-1.5 text-xs flex items-center gap-2 flex-wrap" style={{ background: zoneBodyBg, borderTop: `1px solid ${T.lineSoft}`, color: T.inkSoft }} data-ceiling-done>
+                      <span className="flex-1">{done.codes.join('、')} 已做到顶 {mmToM(done.h)} m{done.delta ? `（${done.delta > 0 ? '+' : '−'}${fmtMYR(Math.abs(done.delta))}）` : ''} — Fitted to the ceiling</span>
+                      <button onClick={() => undoCeilingFit(zone)} className="underline" style={{ color: T.wood }} data-ceiling-undo>撤销 Undo</button>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
 
               {!zone.collapsed && (
                 <div className="p-3 space-y-3" style={{ background: zoneBodyBg }}>
