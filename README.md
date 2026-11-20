@@ -2,7 +2,8 @@
 
 全屋定制项目交付管理工具。围绕 **SAIL 方法论**的五个章节（Vision · Blueprint · Craft · Arrival · Signature）组织项目，让 SD / SS / WH / 采购在同一套流程上协作。
 
-> 📁 本 repo 还包含六个独立 app（共用 repo、各自独立部署）：
+> 📁 本 repo 还包含七个独立 app（共用 repo、各自独立部署）。**上线流程**：合并进 main = 正式版自动更新，只有改到的软件才测试、出版本 —— 见 [`DEPLOY-FLOW.md`](./DEPLOY-FLOW.md)。
+> - **KIRA**（by RICCIONE REKA）— 柜子规划 + 预估报价（积木柜 → 明细 → A/B/C 三档总价；户型图 AI 识图只给建议、要打勾）。代码在 [`/kira`](./kira)，部署见 [`kira/DEPLOY.md`](./kira/DEPLOY.md)。
 > - **UKIR STUDIO**（by RICCIONE REKA）— 设计师提案工作台：把方案 PDF 丢进去，自动生成「Dreamhouse Blueprint」品牌提案 PPT（可编辑）；Material Board（可单独用，也可当方案封面）；平面布置图 + 效果图 AI 生成「Sims 风」写实 3D 全屋立体图。代码在 [`/blueprint`](./blueprint)，部署指南见 [`blueprint/DEPLOY.md`](./blueprint/DEPLOY.md)。
 > - **Sail CRM** — 销售 / pipeline / 售后管理。代码在 [`/crm`](./crm)，部署指南见 [`crm/DEPLOY.md`](./crm/DEPLOY.md)。
 > - **旧版 UKIR STUDIO**（AI 效果图 / 设计顾问 / Material Board）— 已由上面的新版 UKIR STUDIO 接替（同一网址；Material Board、材质库搬到新版）。代码仍在 [`/render`](./render) 备查 / 回滚。

@@ -1,0 +1,81 @@
+# KIRA by RICCIONE REKA · 柜子规划报价
+
+让没有设计背景的业务 5 分钟出橱柜报价：选模板 → 打总宽 → 自动分门、画立面图和 3D 小图 → 出报价单（PDF / 长图 / WhatsApp）。
+
+- **独立 app**：自己的目录 `kira/`、自己的 Vercel 项目和网址。旧报价工具（PR #6，`quote.html`）一行都没改，照常可用。
+- **价格**：从旧报价工具原样复制 `src/constants/pricing.js`（门板 / 柜体 / 开放柜系列价、延米 vs 平米、抽屉、系数、岩板不折扣、设计师版）。以后**只在 KIRA 改价**。复制来源与指纹记在 `VENDOR.json`。
+- **数据**：本机先存（`kira.records.v1`，离线也能报价）；配置 Supabase 后要登录，资料在表 `kira_projects`（全员共享，只有做的人能删）。正式版用 KIRA 自己的 Supabase 项目（**不是**旧工具那个，没有旧工具的账号和 `quotes` 表，所以正式版「导入旧报价」导不到东西）。
+- **同步**（`src/components/quote/sync.js`，Node 测试 `test/sync.test.mjs`）：每条记录比 `updatedAt`——本机有没上云的改动且比云端新才上传，否则以云端为准；上线 / 回到前台 / 实时重连都先拉云端再推；离线删除记成 tombstone，有网重试；本机模式做的报价第一次登录时自动上传；不替别人上传；退出登录先推、再清本机；两个标签页（tab）互相合并；本机空间满会提示（没上云的一定保住）；离线 / 登录过期也能用本机资料打开。
+
+## 第一版有什么
+
+| 功能 | 说明 |
+|---|---|
+| 4 种模板积木 | 衣柜 · 厨房（一字 / L / U / 二字 + 电器高柜）· 电视柜 / 展示柜 · 鞋柜 / 玄关柜 |
+| 追加模板 | 书桌 / 妆台（整张桌按地柜延米、放脚位也算；抽屉柜 左 / 右 / 两边 / 无；上方 飘板 / 吊柜；侧边书柜 / 衣柜带内侧见光板）· 岛台（两头见光板；背面 见光板 或 背靠背两面柜；台面只示意）· 干厨 / 餐边柜（同电视柜结构：地柜 0.85 × 0.55 + 台面示意、吊柜离地 1.50、两侧高柜可选）—— 全部用现有价格 |
+| 岩板台面 | 厨房 / 岛台 / 干厨的「Worktop 台面」栏：开「加岩板台面」→ 台面延米 ÷ 0.3 × RM240（= RM800 / 延米，不进位）；转角两面各量到墙角、高柜那段不算、岛台两排只算一次；岩板不参与折扣。价钱在 `src/constants/stone.js` |
+| AI 识图 · 卧室 | 先留床位再放衣柜：AI 先标门、窗、床，再放衣柜（优先进门那面墙；不放床头墙、窗、厕所 / 阳台门前；主卧可 L 型）。程序再查一次（`src/planner/bedFit.js`）：挡床位 / 放了就放不下床 / 挡窗 / 挡门 → 不勾、写原因；指着衣柜会画「床可放这里」。房间号码照图上（Bedroom 4 → 卧室4） |
+| AI 识图 · 👎 反馈 | 每个建议旁边 👎 选原因 + 备注、「漏了柜子？」、按「加入报价」时记下勾了哪些 → `/api/plan-feedback` 存 Supabase（设定见 DEPLOY.md 2d；没设就复制到剪贴板）；`scripts/feedback-pull.mjs` 拉成测试资料，`test/aiFeedback.test.mjs` 每次重跑 |
+| AI 识图 · 鞋柜一定要有 | AI 要标出大门（`to: main`）、一定给鞋柜；没给 → 程序按大门在门边自动放 1.2 m 鞋柜（默认勾、写「自动放，请确认」）；连大门都没找到 → 清单红字「一定要加」+ 画柜子按钮。图上已有的柜子带种类告诉 AI，只跳过同一种；清单写出「图上已有 K1」免得以为漏了 |
+| AI 识图 · 每间房一套柜 | 用户定：每个房间都有一套柜（厕所、阳台、院子、车廊、冷气台、楼梯走廊不算）。卧室 = 衣柜、厨房 = 厨柜、客厅 / 家庭厅 = 电视柜、餐厅 = 餐边柜、玄关 = 鞋柜、书房 = 书桌、洗衣 / 储藏室 = 高柜（空白柜子）。清单逐间列出：图上已有 → 「图上已有 K1」；还没有 → 「还没有柜子」+ 画柜子 |
+| AI 识图 · 反馈修正（11/18） | 贴墙防呆：贴墙把线截掉三成以上或挪 0.5 m 以上 → 不信，按 AI 的线并提醒确认；鞋柜挡门 → 搬到大门同一道墙、门洞另一边（默认勾、写「改放」），和鞋柜重叠的别的建议不勾；所有柜子都查挡门；鞋柜一律归「玄关」。两笔反馈存成 `test/fixtures/ai-feedback/fb-2026-11-18-*.json` 每次重跑 |
+| AI 识图 · 鞋柜进玄关（11/18 #1） | 图上有玄关（entrance）→ 鞋柜一定放进玄关：先放门洞旁边同一道墙；放不下 → 玄关其他墙（开门碰不到的优先）；小玄关每道墙都会被开门碰到 → 放最长那道、默认勾、提醒到现场确认。「Bedroom 1」= 卧室1（不再撞名）。第一笔存进 Supabase 的反馈存成 `test/fixtures/ai-feedback/fb-1.json` |
+| 体检 1A 修钱（11/20） | 体检 2026-11-19 的问题 2、4、8、9、10：① AI 识图的柜子按「加入报价」时照房间楼高重算（`templates.js` 的 `fitCeiling`；以前一律 2.70 m）。② 设计师净价版 Excel / PDF 的岩板行印原价 RM800 / 延米。③ 报价单 / Excel 逐行加起来 = 房间小计、小计加起来 = 总额（`src/components/quote/shownMoney.js`：小计和总额不变，只把差的 RM 1–3 调到印出来的行；差太多不硬凑）。④ AI 读到的比例先换算成门宽 / 卧室 / 厕所大小（`planAi.js` 的 `checkAiScale`），不合理就不给「用这个」、请业务自己量一道墙 —— 只挡得住离谱的（约 1.7 倍以上），差一两成的看不出来。⑤ 折扣只能 0–100%（`src/constants/discount.js`：百分比、定额、设计师折扣链；`pricing.js` 不动）。浏览器测试 `test/e2e.money.browser.mjs` |
+| 楼高提醒（11/20 用户选） | 补填 / 改了房间楼高，还有柜子是旧高度（2.70 m 或上一次填的楼高）→ 房间上出现提醒：哪几个柜子、做到顶总价多多少 →「全部做到顶」（可以撤销）或「不用」（这个楼高不再提醒）。价钱不会在没人看的时候自己变。逻辑在 `src/planner/ceiling.js`（Node 测试 `test/ceiling.test.mjs`） |
+| 积木规则 | 先定总宽 → 每扇门最宽 600 自动平分（可 +/−）→ 每格点单元；默认尺寸照用户定的（地柜 850×600、吊柜 750 离地 1500 深 350、衣柜深 600 顶柜 500、电视低柜 400×400 离地 250、鞋柜深 350 架空 150…） |
+| 价格 | 全部换算成旧工具的标准明细，由旧工具的 computeItem / computeQuote 算钱：封门 = 门板 + 柜体；开放格 = 投影价（系列跟门板）；玻璃门 = 门板 × 系数表（默认 1.5）+ 柜体；抽屉 = Blum 套数（厨房全展、其他半展）；踢脚 / 柜脚 / 底层架空按总高；电器空位不计；露出侧边加见光板；L/U 每面墙各量到墙角 |
+| 图 | 线稿立面图（含挂衣杆 / 层板 / 水槽 / 炉灶示意）+ 轻量 3D（左右转 ±45°），报价单每个柜子明细旁边印小图 |
+| 比价 | 单个柜子 A / B / C 并排；整份报价 A / B / C 总价并排；整份报价默认系列、柜子可改 |
+| 输出 | PDF（品牌照旧 SAIL BY RICCIONE REKA）· 一张长图 · WhatsApp 一键打开客户对话 · Excel · 设计师双价 / 净价版 |
+| 旧报价 | 从旧工具云端只读导入接着改（要接旧工具的 Supabase 才有；正式版现在接的是 KIRA 自己的项目，导不到）；「对价报告」把旧柜体行换成积木柜重算，差异必须为 0 |
+| 新人 | 第一次打开有引导 · 示范报价 · 每格小提示 · 30 秒短视频（`npm run demo:video` 生成 public/help/kira-demo.webm） |
+| 手机 | 底部 3 tab（客户 / 设计 / 报价）· 编辑器上图下设定 · 底部常驻价钱条 · 离线可用 · 可加到主屏幕 |
+
+## 开发
+
+```bash
+cd kira
+npm install
+npm run dev           # http://localhost:5181
+npm test              # 价格黄金值 / 积木换算 / 模板 / 对价 / 立面 / 3D / 同步 的 Node 测试
+npm run test:browser  # 浏览器端到端（先 npm run build && npm run preview）：e2e.browser.mjs + e2e.money.browser.mjs（体检 1A 修钱）
+npm run build         # 产物在 dist/
+npm run check:vendor  # 检查从旧工具复制来的文件有没有被改
+```
+
+## 有意改价格表时
+
+1. 改 `src/constants/pricing.js`
+2. 更新 `test/pricing.test.mjs` 里的黄金值
+3. `npm run check:vendor -- --accept`（把新指纹记进 `VENDOR.json`）
+
+## 结构
+
+```
+src/constants/pricing.js     价格表（来自旧工具）
+src/components/quote/        报价界面（来自旧工具，加了 KIRA 的挂钩）
+src/planner/model.js         积木柜数据模型（mm；柜身切分树）
+src/planner/templates.js     衣柜模板 + 模板登记（kitchen.js / tvshoe.js / desk.js / island.js）
+src/planner/bridge.js        积木柜 → 旧工具标准明细（价格规则都在这里）
+src/planner/importOld.js     导入旧报价 + 对价报告
+src/render/                  线稿立面图 elevation.js · 轻量 3D axo.js（纯数据 → SvgShapes.jsx 画）
+src/components/planner/      加柜子 / 编辑器 / 柜子卡片 / 导入 / 新人引导
+src/planner/plan.js          第三版户型图纯逻辑：比例、柜子俯视外框、放置 / 旋转、图上拖边改尺寸、走道检查
+src/components/plan/         户型图 PlanBoard（上传 / 定比例 / 画框 / 放柜子）· 报价单平面索引图 PlanFigure
+src/services/planImages.js   户型图图片：压缩、PDF 渲页、Supabase Storage / 本机 IndexedDB
+supabase/kira_plans_storage.sql  户型图图片的 Storage 设定（可重复执行）
+api/plan-ai.js               户型图 AI 识图（Vercel function；钥匙在服务器；正式版要登录、预览要团队密码）
+src/planner/planAi.js        AI 读图结果 → 建议柜子（长度对齐、方向、厨房 L / U / 二字）→ 勾选后加入报价
+src/planner/wallSnap.js      AI 的墙线贴到图上真正的墙（深色带、朝房间那一面、角落 / 门口截断）+ 自动去黑边 / 白边
+src/services/planAi.js       浏览器去边 / 框选、缩图、带身份、调 /api/plan-ai
+src/services/kiraRepo.js     云端（kira_projects；旧 quotes 只读；分页读完，不受 1000 行上限）
+src/components/quote/shownMoney.js  印出来的金额：逐行加起来 = 小计 = 总额（纯函数）
+src/constants/discount.js    折扣只能 0–100%（算钱前都过这里；pricing.js 不动）
+src/components/quote/sync.js 本机 ↔ 云端合并 / 待同步 / 待删除 / 标签页合并 / 本机容量（纯函数）
+src/components/auth/AuthGate.jsx  登录；离线 / token 过期时用本机登录记录打开（不卡在登录页）
+src/components/ui/ErrorBoundary.jsx  出错兜底（不白屏，提示重新载入）
+supabase/kira_projects.sql   建表脚本（可重复执行）
+public/sw.js                 离线（KIRA 自己的网址，和旧工具的 SW 无关；只把 200 的 HTML 存成离线首页）
+```
+
+部署见 [DEPLOY.md](./DEPLOY.md)。

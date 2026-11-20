@@ -72,6 +72,22 @@
 - **2026-11-20 第 3 阶段（AI 稳定 + 补查）做完、开了 PR**：叠在第 2 阶段的分支上（先合 #90）；资料库不用升级。补查结论在 `network/README.md`「体检第 3 阶段」。下一个是第 4 阶段「把现有人脉搬进来」（先 brainstorm 导入画面）
 - 第 0 阶段还没做完（2026-11-20 查 Vercel）：`TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` 没设（要用户在 Cloudflare 建、自己贴进 Vercel，secret 不经过对话）；`SUPABASE_SERVICE_ROLE_KEY` 还勾着 Preview
 
+## 上线流程（全部软件，2026-11-20 起）
+
+- **合并进 main = 正式版自动更新**；别的分支 = 预览版，预览网址由 GitHub Actions 贴在 PR 留言里。详情 `DEPLOY-FLOW.md`
+- 只有改到的软件才测试、出版本（登记在 `.github/apps.json`）；测试没过不上线
+- Vercel 项目自己的 Git 自动部署已关掉（各 `vercel.json` 的 `git.deploymentEnabled: false` + 项目设定 deploymentPolicy），**不要再加 `ignoreCommand`**
+- 新增软件：照 `DEPLOY-FLOW.md`「新增一个软件」做
+- **2026-11-20 以前开的分支**（还没合 main 的）：推上去不会再自动出预览。先 `git merge origin/main` 把新流程带进来，再推一次就会出
+- 推送照样要攒着推：每推一次，改到的软件各用一次 Vercel 额度（一天 100 次）
+
+## KIRA（kira/）
+
+- 2026-11-20 合进 main（阶段 1B），正式版 <https://kira-by-riccione-reka.vercel.app> 改成从 main 出；旧的长期分支 `claude/cabinet-measurement-tool-enhance-ymc43k` 不再用
+- 体检报告和阶段计划：`docs/checkups/kira-2026-11-19.md`（在 PR #84）。下一个是阶段 2「AI 一键整屋报价」，先 brainstorm
+- Supabase 是 KIRA 自己的项目「KIRA BY RICCIONE REKA」，**不是**旧报价工具那个
+- 测试：`cd kira && npm test`（2026-11-20 时 303 项）
+
 ## 开发备忘（blueprint/）
 
 - 测试和构建：
