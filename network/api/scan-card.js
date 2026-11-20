@@ -63,7 +63,7 @@ export async function scanCard(body, deps = {}) {
         role: 'user',
         content: [...images, { type: 'text', text: images.length > 1 ? '这是同一张名片的正面和背面，请合并成一个人的资料。' : '请读这张名片。' }],
       }],
-    });
+    }, deps.requestOptions);
   } catch (e) {
     throw mapAiError(e);
   }

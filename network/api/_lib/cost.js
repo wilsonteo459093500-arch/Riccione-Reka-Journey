@@ -31,6 +31,16 @@ export function monthlyBudgetUsd() {
   return monthlyBudgetMyr() / usdToMyr();
 }
 
+/** 公开名片页（陌生人拍名片）一个月最多花多少在 AI 读名片上；花完了照样收资料，只是不读 */
+export function publicBudgetMyr() {
+  const v = Number((typeof process !== 'undefined' && process.env && process.env.AI_PUBLIC_MONTHLY_BUDGET_MYR) || 5);
+  return v > 0 ? Math.min(v, monthlyBudgetMyr()) : 5;
+}
+
+export function publicBudgetUsd() {
+  return publicBudgetMyr() / usdToMyr();
+}
+
 export function monthStartIso(now = new Date()) {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
 }

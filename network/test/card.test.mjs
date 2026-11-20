@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  cleanCard, publicCard, toVCard, greeting, cleanLead, LeadError, fillLeadFromCard, findExisting,
-  leadToPerson, mergeLeadInto, safeUrl, safePath, cardLink, cleanSource, klDate, cardReady, cleanLines, DEFAULT_CARD, namePair, igUrl,
+  cleanCard, publicCard, toVCard, greeting, cleanLead, LeadError, fillLeadFromCard,
+  leadToPerson, safeUrl, safePath, cardLink, cleanSource, klDate, cardReady, cleanLines, DEFAULT_CARD, namePair, igUrl, CONSENT_VERSION,
 } from '../src/lib/card.js';
 import { receiveLead, LIMITS } from '../api/inbox.js';
 import { loadCard } from '../api/card.js';
 import { ipHash } from '../api/_lib/admin.js';
+import { publicBudgetUsd, monthlyBudgetUsd } from '../api/_lib/cost.js';
 
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
@@ -169,22 +170,13 @@ test('cleanLead: 必填、同意、格式', () => {
   assert.equal(cleanLead({ name: 'x'.repeat(500), phone: '0123456789', consent: true }).name.length, 80);
 });
 
-test('fillLeadFromCard + findExisting + merge', () => {
+test('fillLeadFromCard: 本人打的字优先，电话挑 WhatsApp', () => {
   const lead = fillLeadFromCard({ name: '', phone: '', company: '', title: '', email: '', met_where: '', note: '' }, {
     name: 'Tan', company: 'Mega Sdn Bhd', title: 'Director', emails: ['tan@mega.my'], phones: [{ label: 'office', number: '03-111 2222' }, { label: 'whatsapp', number: '+60 12-345 6789' }],
   });
   assert.equal(lead.name, 'Tan');
   assert.equal(lead.phone, '+60 12-345 6789');
-  const people = [{ id: 'p1', name: '陈先生', phones: [{ label: 'mobile', number: '0123456789' }], emails: [], tags: ['商会'] }, { id: 'p2', name: 'Tan', phones: [], emails: [] }];
-  assert.equal(findExisting(lead, people).id, 'p1');                       // 电话末 9 码一样
-  assert.equal(findExisting({ ...lead, phone: '', extra: {} }, people), null); // 名字一样不算
-  const patch = mergeLeadInto(people[0], { ...lead, note: '想做厨房' });
-  assert.equal(patch.title, 'Director');
-  assert.deepEqual(patch.emails, ['tan@mega.my']);
-  assert.equal(patch.phones.length, 2);                                      // 加了 office，WhatsApp 那个已经有
-  assert.deepEqual(patch.tags, ['商会', '扫码']);
-  assert.match(patch.notes, /扫码留言】想做厨房/);
-  assert.equal(patch.name, undefined);                                       // 不改名字
+  assert.equal(fillLeadFromCard({ ...lead, name: 'Ah Tan' }, { name: 'Tan' }).name, 'Ah Tan');
 });
 
 test('leadToPerson: 认识圈、扫码标签、待确认', () => {
@@ -207,25 +199,36 @@ test('cardLink / cleanSource', () => {
 });
 
 /* ---------- /api/inbox 主流程（假的资料库） ---------- */
+// 每个动作都先让出一下（像真的资料库一样有来回），这样「同时送 60 次」才会真的交错
+const tick = () => new Promise((r) => setImmediate(r));
 function fakeDb(seed = {}) {
   const t = { people: [], companies: [], photos: [], photo_people: [], interactions: [], inbox: [], attendance: [], ai_usage: [], events: [], ...seed };
   let n = 0;
   const uploads = [];
+  const spent = typeof seed.spent === 'object' ? seed.spent : { all: seed.spent || 0, inbox_card: 0 };
   return {
     t, uploads, ownerId: 'owner-1',
     async profileCard() { return seed.profile || null; },
-    async event(id) { return t.events.find((e) => e.id === id) || null; },
-    async countInbox({ sinceIso, ip }) { return t.inbox.filter((r) => r.at >= sinceIso && (!ip || r.ip_hash === ip)).length; },
+    async event(id) { await tick(); return t.events.find((e) => e.id === id) || null; },
+    async countInbox({ sinceIso, ip, photo, admitted }) {
+      await tick();
+      return t.inbox.filter((r) => r.at >= sinceIso && (!ip || r.ip_hash === ip) && (!photo || r.has_photo) && (!admitted || r.outcome !== 'limited')).length;
+    },
     async people() { return t.people; },
-    async companies() { return t.companies; },
-    async insert(table, row) { const r = { id: row.id || `id${++n}`, owner: 'owner-1', ...row }; t[table].push(r); return r; },
-    async update(table, id, patch) { const r = t[table].find((x) => x.id === id); Object.assign(r, patch); return r; },
+    async companies() { await tick(); return t.companies; },
+    async insert(table, row) { await tick(); const r = { id: row.id || `id${++n}`, owner: 'owner-1', ...row }; t[table].push(r); return r; },
+    async update(table, id, patch) { await tick(); const r = t[table].find((x) => x.id === id); Object.assign(r, patch); return r; },
     async attend(event_id, person_id) { if (!t.attendance.some((a) => a.event_id === event_id && a.person_id === person_id)) t.attendance.push({ event_id, person_id }); },
-    async spentUsd() { return seed.spent || 0; },
-    async uploadPrivate(path, buf, type) { uploads.push({ path, size: buf.length, type }); },
+    async spentUsd(since, feature) { return feature ? spent[feature] || 0 : spent.all; },
+    async uploadPrivate(path, buf, type) { await tick(); uploads.push({ path, size: buf.length, type }); },
   };
 }
 const base = { name: 'Ali Bin Abu', phone: '012-345 6789', company: 'Mega Build Sdn Bhd', consent: true, ms: 9000 };
+const withCard = { consent: true, ms: 5000, card_image: { media_type: 'image/png', data: PNG } };
+const tanCard = async () => ({
+  card: { is_business_card: true, name: 'Tan Ah Kow', company: 'Mega', title: 'Boss', phones: [{ label: 'mobile', number: '019-888 7777' }], emails: ['tan@mega.my'] },
+  usage: { feature: 'scan_card', model: 'claude-haiku-5-5', cost_usd: 0.001 },
+});
 
 test('receiveLead: 新的人 → 建人、公司、互动、inbox', async () => {
   const db = fakeDb();
@@ -237,21 +240,27 @@ test('receiveLead: 新的人 → 建人、公司、互动、inbox', async () => 
   assert.equal(p.company_id, db.t.companies[0].id);
   assert.equal(db.t.interactions[0].kind, 'card_scan');
   assert.equal(db.t.interactions[0].source, 'qr');
+  assert.equal(db.t.inbox.length, 1);
   assert.equal(db.t.inbox[0].outcome, 'created');
+  assert.equal(db.t.inbox[0].person_id, p.id);
+  assert.equal(db.t.inbox[0].has_photo, false);
+  assert.equal(db.t.inbox[0].payload.name, 'Ali Bin Abu');
   assert.equal(db.t.inbox[0].ip_hash, ipHash('1.2.3.4'));
-  assert.equal(db.t.inbox[0].consent_version, 'pdpa-2026-11');
+  assert.equal(db.t.inbox[0].consent_version, CONSENT_VERSION);
   assert.notEqual(db.t.inbox[0].ip_hash, '1.2.3.4');
 });
 
-test('receiveLead: 已经存过（电话一样）→ 只补资料，不重复建；回应跟新建一样', async () => {
-  const db = fakeDb({ people: [{ id: 'p1', name: '阿里', title: '', phones: [{ label: 'mobile', number: '+60123456789' }], emails: [], tags: [], notes: '' }], companies: [{ id: 'c1', name: 'Mega Build' }] });
-  const out = await receiveLead({ ...base, title: 'Director' }, { db, ip: '1.1.1.1' });
-  assert.equal(out.ok, true);
-  assert.equal(db.t.people.length, 1);
-  assert.equal(db.t.people[0].name, '阿里');
-  assert.equal(db.t.people[0].title, 'Director');
-  assert.equal(db.t.inbox[0].outcome, 'updated');
-  assert.equal(db.t.companies.length, 1);
+test('receiveLead: 电话跟已经存过的人一样 → 不改那个人，另外建一个「新朋友」等主人合并；回应跟新建一样', async () => {
+  const old = { id: 'p1', name: '阿里', title: '', phones: [{ label: 'mobile', number: '+60123456789' }], emails: [], tags: [], notes: '', pending_review: false };
+  const db = fakeDb({ people: [{ ...old }], companies: [{ id: 'c1', name: 'Mega Build' }] });
+  const out = await receiveLead({ ...base, title: 'Director', email: 'fake@evil.com' }, { db, ip: '1.1.1.1' });
+  assert.deepEqual(out, { ok: true, name: 'Ali Bin Abu', where: '扫码留资料' });
+  assert.deepEqual(db.t.people[0], old);                       // 旧的那个一个字都没动
+  assert.equal(db.t.people.length, 2);
+  assert.equal(db.t.people[1].pending_review, true);
+  assert.equal(db.t.people[1].title, 'Director');
+  assert.equal(db.t.inbox[0].outcome, 'created');
+  assert.equal(db.t.companies.length, 1);                      // 公司名字对得上就用旧的
 });
 
 test('receiveLead: 活动模式 → 出席；别人的活动 id 不算', async () => {
@@ -261,6 +270,7 @@ test('receiveLead: 活动模式 → 出席；别人的活动 id 不算', async (
   assert.equal(db.t.attendance.length, 1);
   assert.equal(db.t.people[0].how_met, 'BNI 早餐会');
   assert.match(db.t.interactions[0].title, /BNI/);
+  assert.equal(db.t.inbox[0].event_id, ev.id);
   const db2 = fakeDb();
   await receiveLead({ ...base, event: '99999999-2222-4333-8444-555555555555' }, { db: db2, ip: '1.1.1.1' });
   assert.equal(db2.t.attendance.length, 0);
@@ -273,13 +283,70 @@ test('receiveLead: 陷阱栏位 / 太快 → 假装成功、不存', async () =>
   assert.equal(db.t.people.length + db.t.inbox.length, 0);
 });
 
-test('receiveLead: 没勾同意 → 400；同 IP 太多次 → 429', async () => {
+test('receiveLead: 没勾同意 → 400；同 IP 太多次 → 429（被挡的那次记成 limited）', async () => {
   const db = fakeDb();
   await assert.rejects(receiveLead({ ...base, consent: false }, { db, ip: 'x' }), (e) => e.status === 400 && e.body.error === 'consent_required');
   const now = new Date();
-  for (let i = 0; i < LIMITS.perIpHour; i += 1) db.t.inbox.push({ at: now.toISOString(), ip_hash: ipHash('9.9.9.9') });
+  for (let i = 0; i < LIMITS.perIpHour; i += 1) db.t.inbox.push({ at: now.toISOString(), ip_hash: ipHash('9.9.9.9'), outcome: 'created' });
   await assert.rejects(receiveLead(base, { db, ip: '9.9.9.9', now }), (e) => e.status === 429);
+  assert.equal(db.t.inbox.at(-1).outcome, 'limited');
+  assert.equal(db.t.people.length, 0);
   assert.equal((await receiveLead(base, { db, ip: '8.8.8.8', now })).ok, true); // 别的 IP 不受影响
+});
+
+test('receiveLead: 同一个 IP 同时送 60 次 → 只进得了 20 个（以前 60 个全进）', async () => {
+  const db = fakeDb();
+  const now = new Date();
+  const results = await Promise.allSettled(Array.from({ length: 60 }, (_, i) => receiveLead({ ...base, name: `Bot ${i}` }, { db, ip: '6.6.6.6', now })));
+  const ok = results.filter((r) => r.status === 'fulfilled').length;
+  // 绝对不会超过 20；完全同时到的话可能一个都不进（宁可多挡，不会多放）
+  assert.ok(ok <= LIMITS.perIpHour, `进了 ${ok} 个`);
+  assert.equal(db.t.people.length, ok);
+  assert.ok(results.filter((r) => r.status === 'rejected').every((r) => r.reason.status === 429));
+  assert.equal(db.t.inbox.filter((r) => r.outcome === 'limited').length, 60 - ok);
+});
+
+test('receiveLead: 一个接一个送 → 刚好进 20 个，第 21 个起挡', async () => {
+  const db = fakeDb();
+  const now = new Date();
+  let ok = 0;
+  for (let i = 0; i < 25; i += 1) {
+    try { await receiveLead(base, { db, ip: '7.7.7.7', now }); ok += 1; } catch (e) { assert.equal(e.status, 429); }
+  }
+  assert.equal(ok, LIMITS.perIpHour);
+});
+
+test('receiveLead: 一个人狂刷不会吃掉全部人的名额（被挡的不算进总数）', async () => {
+  const saved = { ...LIMITS };
+  Object.assign(LIMITS, { perIpHour: 3, allHour: 5 });
+  try {
+    const db = fakeDb();
+    const now = new Date();
+    await Promise.allSettled(Array.from({ length: 30 }, () => receiveLead(base, { db, ip: 'spammer', now })));
+    assert.ok(db.t.people.length <= 3);
+    const others = await Promise.allSettled(['a', 'b'].map((ip) => receiveLead(base, { db, ip, now })));
+    assert.ok(others.every((r) => r.status === 'fulfilled'));
+    // 总数到上限了：再来的不管哪个 IP 都挡
+    const flood = await Promise.allSettled(['c', 'd', 'e', 'f', 'g', 'h'].map((ip) => receiveLead(base, { db, ip, now })));
+    assert.ok(db.t.inbox.filter((r) => r.outcome !== 'limited').length <= 5);
+    assert.ok(flood.some((r) => r.status === 'rejected'));
+  } finally {
+    Object.assign(LIMITS, saved);
+  }
+});
+
+test('receiveLead: 带照片的另有低上限；不带照片的照样能送', async () => {
+  const db = fakeDb();
+  const now = new Date();
+  const results = await Promise.allSettled(Array.from({ length: 15 }, () => receiveLead(withCard, { db, ip: '4.4.4.4', now })));
+  assert.ok(results.filter((r) => r.status === 'fulfilled').length <= LIMITS.perIpPhotoHour);
+  let ok = 0;
+  for (let i = 0; i < 12; i += 1) {
+    try { await receiveLead(withCard, { db, ip: '5.5.5.5', now }); ok += 1; } catch (e) { assert.equal(e.status, 429); }
+  }
+  assert.equal(ok, LIMITS.perIpPhotoHour);
+  assert.ok(db.uploads.length <= 2 * LIMITS.perIpPhotoHour);
+  assert.equal((await receiveLead(base, { db, ip: '5.5.5.5', now })).ok, true);
 });
 
 test('receiveLead: Turnstile 有设就要验', async () => {
@@ -296,27 +363,63 @@ test('receiveLead: Turnstile 有设就要验', async () => {
 
 test('receiveLead: 只拍名片 → 存私有照片、AI 读、记费用', async () => {
   const db = fakeDb();
-  const scan = async () => ({
-    card: { is_business_card: true, name: 'Tan Ah Kow', company: 'Mega', title: 'Boss', phones: [{ label: 'mobile', number: '019-888 7777' }], emails: ['tan@mega.my'] },
-    usage: { feature: 'scan_card', model: 'claude-haiku-5-5', cost_usd: 0.001 },
-  });
-  const out = await receiveLead({ consent: true, ms: 5000, card_image: { media_type: 'image/png', data: PNG } }, { db, ip: 'x', scan });
+  const out = await receiveLead(withCard, { db, ip: 'x', scan: tanCard });
   assert.equal(out.name, 'Tan Ah Kow');
   assert.equal(db.uploads[0].path.startsWith('owner-1/'), true);
   const p = db.t.people[0];
+  assert.equal(p.name, 'Tan Ah Kow');
+  assert.equal(p.title, 'Boss');
   assert.equal(p.card_photo_id, db.t.photos[0].id);
   assert.equal(p.whatsapp, '60198887777');
+  assert.equal(p.company_id, db.t.companies[0].id);
+  assert.doesNotMatch(p.notes, /名片还没读/);
   assert.equal(db.t.photo_people.length, 1);
   assert.equal(db.t.ai_usage[0].feature, 'inbox_card');
+  assert.equal(db.t.inbox[0].has_photo, true);
+  assert.equal(db.t.inbox[0].payload.name, 'Tan Ah Kow');
+});
+
+test('receiveLead: 人先存好才读名片 —— AI 卡住 / 出错，人还在', async () => {
+  const db = fakeDb();
+  const t0 = Date.now();
+  const out = await receiveLead(withCard, { db, ip: 'x', scan: () => new Promise(() => {}), scanMs: 50 });
+  assert.ok(Date.now() - t0 < 2000);
+  assert.equal(out.ok, true);
+  assert.equal(db.t.people.length, 1);
+  assert.equal(db.t.people[0].name, '（名片待确认）');
+  assert.match(db.t.people[0].notes, /AI 读名片/);
+  assert.equal(db.t.inbox[0].outcome, 'created');
+  const db2 = fakeDb();
+  await receiveLead({ ...base, card_image: withCard.card_image }, { db: db2, ip: 'x', scan: async () => { throw new Error('boom'); } });
+  assert.equal(db2.t.people[0].name, 'Ali Bin Abu');
+  assert.equal(db2.t.interactions.length, 1);
 });
 
 test('receiveLead: 拍名片但 AI 没预算 → 照样存，名字待确认', async () => {
   const db = fakeDb({ spent: 999 });
   let called = false;
-  await receiveLead({ consent: true, ms: 5000, card_image: { media_type: 'image/png', data: PNG } }, { db, ip: 'x', scan: async () => { called = true; return {}; } });
+  await receiveLead(withCard, { db, ip: 'x', scan: async () => { called = true; return {}; } });
   assert.equal(called, false);
   assert.equal(db.t.people[0].name, '（名片待确认）');
   assert.match(db.t.people[0].notes, /AI 读名片/);
+});
+
+test('receiveLead: 公开页自己的小额度用完 → 不读（你自己的 AI 额度还在）', async () => {
+  let called = false;
+  const scan = async () => { called = true; return tanCard(); };
+  await receiveLead(withCard, { db: fakeDb({ spent: { all: 1, inbox_card: publicBudgetUsd() } }), ip: 'x', scan });
+  assert.equal(called, false);
+  await receiveLead(withCard, { db: fakeDb({ spent: { all: 1, inbox_card: 0 } }), ip: 'x', scan });
+  assert.equal(called, true);
+  assert.ok(publicBudgetUsd() < monthlyBudgetUsd());
+});
+
+test('receiveLead: 照片存不了 —— 有名字电话照样收；只有照片的才报错', async () => {
+  const db = fakeDb();
+  db.uploadPrivate = async () => { throw new Error('storage down'); };
+  assert.equal((await receiveLead({ ...base, card_image: withCard.card_image }, { db, ip: 'x' })).ok, true);
+  assert.equal(db.t.people[0].card_photo_id, undefined);
+  await assert.rejects(receiveLead(withCard, { db, ip: 'y' }));
 });
 
 test('loadCard: 本机没设 service role → 示范名片', async () => {

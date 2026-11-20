@@ -7,7 +7,7 @@ import { repo, TABLES } from './repo.js';
 import { api } from './api.js';
 import { shrinkImage } from './image.js';
 import {
-  uid, findCompany, worthScore, emailDomain, pickWhatsApp, DEFAULT_PROFILE, splitTags,
+  uid, findCompany, worthScore, emailDomain, pickWhatsApp, DEFAULT_PROFILE, splitTags, mergePersonPatch,
 } from './logic.js';
 import { mergeList, appendFacts } from './talk.js';
 import { relationOf, bandOf } from './relation.js';
@@ -407,9 +407,39 @@ export function StoreProvider({ children }) {
       });
     }
 
+    /**
+     * 新朋友其实是已经存过的人：资料补进旧的那个（不改名字、圈层），
+     * 互动、照片、活动出席、资源、圈子、扫码记录都搬过去，再删掉新的这张
+     */
+    async function mergePerson(fromId, intoId) {
+      const d = dataRef.current;
+      const from = d.people.find((p) => p.id === fromId);
+      const into = d.people.find((p) => p.id === intoId);
+      if (!from || !into || from.id === into.id) throw new Error('找不到要合并的人');
+      const patch = mergePersonPatch(into, from);
+      if (from.last_contact_at && (!into.last_contact_at || from.last_contact_at > into.last_contact_at)) patch.last_contact_at = from.last_contact_at;
+      const saved = Object.keys(patch).length ? await put('people', { ...into, ...patch }) : into;
+      const move = async (table, uniqueKey) => {
+        for (const r of d[table].filter((x) => x.person_id === from.id)) {
+          const clash = uniqueKey && d[table].some((x) => x.person_id === into.id && x[uniqueKey] === r[uniqueKey]);
+          if (clash) await drop(table, r.id);
+          else await put(table, { ...r, person_id: into.id });
+        }
+      };
+      await move('interactions');
+      await move('resources');
+      await move('photo_people', 'photo_id');
+      await move('attendance', 'event_id');
+      await move('person_circles', 'circle_id');
+      await repo.reassign('inbox', 'person_id', from.id, into.id);
+      await drop('people', from.id);
+      return saved;
+    }
+
     return {
       reload,
       logUsage,
+      mergePerson,
       saveCard,
       uploadCardMedia,
       saveEvent,

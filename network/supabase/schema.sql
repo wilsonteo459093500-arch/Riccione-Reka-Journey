@@ -248,6 +248,30 @@ create table if not exists public.inbox (
 create index if not exists inbox_owner_at on public.inbox (owner, at desc);
 create index if not exists inbox_ip on public.inbox (owner, ip_hash, at desc);
 
+-- ---------- 体检第 1 阶段（2026-11-20）：公开页面关门 ----------
+-- 限次改成「先占名额再数」：pending = 名额占了还在处理；limited = 超过上限被挡（留着继续算次数）
+alter table public.inbox add column if not exists has_photo boolean not null default false;   -- 带名片照片的另有较低上限
+alter table public.inbox drop constraint if exists inbox_outcome_check;
+alter table public.inbox add constraint inbox_outcome_check
+  check (outcome in ('pending','created','updated','limited'));
+create index if not exists inbox_owner_photo on public.inbox (owner, has_photo, at desc);
+
+-- 删人删干净：删掉一个人时，他在 inbox 留的资料（名字、电话、邮箱、留言）一起抹掉；
+-- 只留下时间和加盐的 IP（限次要用，认不出是谁）
+create or replace function public.network_scrub_inbox() returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  update public.inbox set payload = null, person_id = null where person_id = old.id;
+  return old;
+end $$;
+drop trigger if exists people_scrub_inbox on public.people;
+create trigger people_scrub_inbox before delete on public.people
+  for each row execute function public.network_scrub_inbox();
+-- 以前删掉的人（person_id 已经变空）留下的资料也抹掉
+update public.inbox set payload = null where person_id is null and payload is not null;
+
 -- ---------- updated_at trigger + RLS（每张表一样）----------
 do $$
 declare t text;

@@ -1,18 +1,30 @@
-import React, { useState } from 'react';
-import { ArrowLeft, Check, CheckCheck, Trash2, Bot, MessageCircle, QrCode } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { ArrowLeft, Check, CheckCheck, Trash2, Bot, MessageCircle, QrCode, GitMerge } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
-import { waLink, relDay } from '../lib/logic.js';
+import { waLink, relDay, findDuplicates } from '../lib/logic.js';
 import { Button, Avatar, Chip, PrivateImage, Section, useToast } from './ui.jsx';
 
 /**
  * 新朋友：别人扫码留的资料（people.pending_review = true）
  * 快速看一眼 → 确认 / 打开补备注 / 删掉（防乱填）
+ * 电话 / 邮箱跟已经存过的人一样 → 不会自动改那个人，这里显示「像是 X」，你按「合并」才算
  */
 export default function NewFriends({ onBack, onOpen, onCard }) {
   const store = useStore();
   const toast = useToast();
   const list = store.newFriends;
   const [busy, setBusy] = useState('');
+  // 每个新朋友：像不像已经存过的人（只看手机 / 个人邮箱 / 名字 + 公司；公司总机、info@ 不算）
+  const lookalike = useMemo(() => {
+    const out = new Map();
+    for (const p of list) {
+      const others = store.people.filter((x) => x.id !== p.id);
+      const hit = findDuplicates({ ...p, company: p.company && p.company.name }, others, store.data.companies).find((d) => d.strong);
+      if (hit) out.set(p.id, hit);
+    }
+    return out;
+  }, [list, store.people, store.data.companies]);
+  const plain = list.filter((p) => !lookalike.has(p.id));
 
   async function run(key, fn, msg) {
     setBusy(key);
@@ -24,13 +36,13 @@ export default function NewFriends({ onBack, onOpen, onCard }) {
       <div className="flex items-center gap-2">
         <button onClick={onBack} aria-label="返回" className="rounded-full p-2 hover:bg-ink/5"><ArrowLeft className="h-5 w-5" /></button>
         <h1 className="flex-1 text-xl font-semibold">新朋友 <span className="text-base font-normal text-faint">{list.length}</span></h1>
-        {list.length > 1 && (
-          <Button size="sm" variant="outline" busy={busy === 'all'} onClick={() => run('all', () => store.confirmNew(list.map((p) => p.id)), '全部确认了')}>
-            <CheckCheck className="h-4 w-4" />全部确认
+        {plain.length > 1 && (
+          <Button size="sm" variant="outline" busy={busy === 'all'} onClick={() => run('all', () => store.confirmNew(plain.map((p) => p.id)), lookalike.size ? '确认了；像旧朋友的还留着' : '全部确认了')}>
+            <CheckCheck className="h-4 w-4" />{lookalike.size ? `确认其他 ${plain.length} 个` : '全部确认'}
           </Button>
         )}
       </div>
-      <p className="text-sm text-muted">别人扫你的二维码留的资料，已经自动建好、放在「认识」圈。看一眼：对的就确认，乱填的删掉。</p>
+      <p className="text-sm text-muted">别人扫你的二维码留的资料，已经自动建好、放在「认识」圈。看一眼：对的就确认，乱填的删掉；像旧朋友的，按「合并」。</p>
 
       {!list.length && (
         <div className="rounded-2xl border border-dashed border-line p-8 text-center">
@@ -46,8 +58,23 @@ export default function NewFriends({ onBack, onOpen, onCard }) {
         const placeholder = /名片待确认/.test(p.name);
         const wa = waLink(p.whatsapp, `Hi ${String(p.name).split(/\s+/)[0]}，`);
         const scan = p.interactions.find((i) => i.source === 'qr');
+        const dup = lookalike.get(p.id);
         return (
           <Section key={p.id}>
+            {dup && (
+              <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm">
+                <p>
+                  像是你已经存过的{' '}
+                  <button onClick={() => onOpen(dup.person.id)} className="font-semibold underline">{dup.person.name}</button>
+                  <span className="text-muted">（{dup.reasons.join('、')}）</span>
+                </p>
+                <p className="mt-1 text-xs text-muted">没有自动改他的资料。是同一个人就合并：新的电话、邮箱、留言补进去，名字和圈层不动，这张卡删掉。</p>
+                <Button size="sm" variant="accent" className="mt-2" busy={busy === `merge${p.id}`}
+                  onClick={() => run(`merge${p.id}`, () => store.mergePerson(p.id, dup.person.id), `合并进 ${dup.person.name} 了`)}>
+                  <GitMerge className="h-4 w-4" />合并进 {dup.person.name}
+                </Button>
+              </div>
+            )}
             <div className="flex gap-3">
               <Avatar person={p} size={48} />
               <div className="min-w-0 flex-1">
@@ -68,7 +95,7 @@ export default function NewFriends({ onBack, onOpen, onCard }) {
               {scan && scan.summary && <><dt className="text-muted">备注</dt><dd>{scan.summary}</dd></>}
             </dl>
             <div className="mt-3 flex flex-wrap gap-2">
-              <Button size="sm" busy={busy === p.id} onClick={() => run(p.id, () => store.confirmNew([p.id]), `${p.name} 确认了`)}><Check className="h-4 w-4" />确认</Button>
+              <Button size="sm" busy={busy === p.id} onClick={() => run(p.id, () => store.confirmNew([p.id]), `${p.name} 确认了`)}><Check className="h-4 w-4" />{dup ? '不是，是新的人' : '确认'}</Button>
               {card && (
                 <Button size="sm" variant={placeholder ? 'accent' : 'outline'} busy={busy === `ai${p.id}`} onClick={() => run(`ai${p.id}`, () => store.readCardWithAI(p.id), 'AI 读好了，看一下对不对')}>
                   <Bot className="h-4 w-4" />AI 读名片

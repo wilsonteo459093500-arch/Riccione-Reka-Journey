@@ -4,13 +4,13 @@
    • cleanCard()   名片内容只留认得的栏位（存进 profile.card、/api/card 回给公开页）
    • toVCard()     「存我的联络方式」的 .vcf
    • cleanLead()   别人在公开页留的资料：检查、截长度、整理电话
-   • leadToPerson / mergeLeadInto  新建一个人 / 已经存过的人只补空的栏位
+   • leadToPerson  新建一个人（已经存过的人不在这里改：一律进「新朋友」，主人按「合并」才算 —— logic.js mergePersonPatch）
    • greeting()    送出后「WhatsApp 我」的预设讯息
    ============================================================ */
-import { toWhatsApp, digits, findDuplicates } from './logic.js';
+import { toWhatsApp, digits } from './logic.js';
 
 export const CARD_BUCKET = 'network-card';   // 公开 bucket：名片照片 / 视频 / 案例图（谁都看得到，只有本人能上传）
-export const CONSENT_VERSION = 'pdpa-2026-11';
+export const CONSENT_VERSION = 'pdpa-2026-11-20'; // 2026-11-20 加了「AI 读名片」那句
 export const MAX_OFFERS = 8;
 export const MAX_CASES = 6;
 export const MAX_SOCIALS = 6;
@@ -496,17 +496,6 @@ export function fillLeadFromCard(lead, card) {
   return out;
 }
 
-/** 已经存过吗？只认电话末 9 码 / 邮箱一样（名字一样不算 —— 公开表格谁都能打名字） */
-export function findExisting(lead, people) {
-  const card = {
-    name: '',
-    phones: [lead.phone, ...((lead.extra && lead.extra.phones) || []).map((p) => p.number)].filter(Boolean).map((number) => ({ number })),
-    emails: [lead.email, ...((lead.extra && lead.extra.emails) || [])].filter(Boolean),
-  };
-  const hit = findDuplicates(card, people).find((d) => d.strong);
-  return hit ? hit.person : null;
-}
-
 export function klDate(now = new Date()) {
   // 马来西亚时间的日期（UTC+8，没有夏令时）
   return new Date(now.getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
@@ -550,26 +539,6 @@ export function leadToPerson(lead, { event = null, source = 'qr', now = new Date
     notes: lead.note ? `【他留的话】${lead.note}` : '',
     pending_review: true,
   };
-}
-
-/** 已经存过的人：只补空的栏位、加新电话 / 邮箱、加标签；不改名字、不改圈层 */
-export function mergeLeadInto(person, lead, { source = 'qr' } = {}) {
-  const fresh = leadToPerson(lead, { source });
-  const patch = {};
-  for (const k of ['title', 'name_alt', 'website', 'address', 'whatsapp', 'card_notes']) {
-    if (!person[k] && fresh[k]) patch[k] = fresh[k];
-  }
-  const have = new Set([...(person.phones || []).map((p) => p.number), person.whatsapp].map((n) => digits(n).slice(-9)).filter(Boolean));
-  const newPhones = fresh.phones.filter((p) => !have.has(digits(p.number).slice(-9)));
-  if (newPhones.length) patch.phones = [...(person.phones || []), ...newPhones];
-  const emails = person.emails || [];
-  const newEmails = fresh.emails.filter((e) => !emails.map((x) => String(x).toLowerCase()).includes(e));
-  if (newEmails.length) patch.emails = [...emails, ...newEmails];
-  const tags = person.tags || [];
-  const newTags = fresh.tags.filter((t) => !tags.includes(t));
-  if (newTags.length) patch.tags = [...tags, ...newTags];
-  if (lead.note) patch.notes = [person.notes, `【${klDate()} 扫码留言】${lead.note}`].filter(Boolean).join('\n');
-  return patch;
 }
 
 /** 送进 inbox 记录的（审计 / PDPA 查询用；不放图片） */

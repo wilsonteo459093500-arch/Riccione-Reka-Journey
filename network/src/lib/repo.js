@@ -60,6 +60,11 @@ function makeCloudRepo() {
       const { error } = await supabase.from(table).delete().eq('id', id);
       if (error) throw new Error(error.message);
     },
+    /** 没载进画面的表（inbox）：把指向 from 的列改指向 to（合并新朋友用） */
+    async reassign(table, col, from, to) {
+      const { error } = await supabase.from(table).update({ [col]: to }).eq(col, from);
+      if (error) throw new Error(error.message);
+    },
     async userId() {
       const { data } = await supabase.auth.getUser();
       return data && data.user ? data.user.id : null;
@@ -170,6 +175,12 @@ function makeLocalRepo() {
         for (const p of tables.people) if (p.company_id === id) p.company_id = null;
         await save('people');
       }
+      await save(table);
+    },
+    async reassign(table, col, from, to) {
+      await ensure();
+      if (!tables[table]) return; // 本机没有 inbox（公开页只在云端收资料）
+      for (const r of tables[table]) if (r[col] === from) r[col] = to;
       await save(table);
     },
     async userId() { return LOCAL_OWNER; },

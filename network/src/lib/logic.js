@@ -113,29 +113,91 @@ export function emailDomain(emails = []) {
 }
 
 /**
+ * 这个电话是不是「公司总机」那种大家共用的（不能拿来认人）？
+ * 马来西亚：手机是 01x；03 / 04 … 09 是座机；1300 / 1800 / 1700 是热线。
+ * 别的国家看不出来，就看名片上的 label（office / fax）。
+ */
+export function isSharedPhone(number, label = '') {
+  const l = String(label || '').toLowerCase();
+  if (/^(office|fax|tel|work|landline|hotline)$/.test(l)) return true;
+  const raw = String(number || '').trim();
+  const d = digits(raw);
+  if (!d) return false;
+  if (/^1[378]00/.test(d)) return true;                       // 1300-88-1234（还没加国家码）
+  const n = toWhatsApp(raw);
+  if (n.startsWith('60')) return !/^601\d{8,9}$/.test(n) || /^601[378]00/.test(n);
+  return false;
+}
+
+/** info@ / sales@ 这种公司公用邮箱（很多人共用，不能拿来认人） */
+const SHARED_MAILBOX = /^(info|sales|admin|enquiry|enquiries|inquiry|inquiries|hello|hi|contact|contactus|office|hr|account|accounts|finance|support|marketing|cs|customerservice|customer\.service|service|services|general|mail|team|reception|order|orders|booking|bookings|noreply|no-reply)$/;
+export function isSharedEmail(email) {
+  const local = String(email || '').toLowerCase().split('@')[0];
+  return !!local && SHARED_MAILBOX.test(local);
+}
+
+/**
  * 扫到的名片是不是已经存过的人？
- * 电话末 9 码一样 / email 一样 → 很可能；名字一样 → 可能（公司也一样就更像）。
+ * 手机末 9 码一样 / 个人邮箱一样 → 很可能（strong）；
+ * 名字一样、公司总机一样、info@ 这种公用邮箱一样 → 只是「可能」（同一家公司的两个人常常共用这些）。
  */
 export function findDuplicates(card, people, companies = []) {
-  const phoneKeys = new Set((card.phones || []).map((p) => digits(p.number).slice(-9)).filter((x) => x.length >= 8));
-  const emails = new Set((card.emails || []).map((e) => String(e).toLowerCase()));
+  const keyOf = (n) => digits(n).slice(-9);
+  const cardPhones = (card.phones || []).map((p) => ({ k: keyOf(p.number), shared: isSharedPhone(p.number, p.label) })).filter((x) => x.k.length >= 8);
+  const personal = new Set(cardPhones.filter((x) => !x.shared).map((x) => x.k));
+  const shared = new Set(cardPhones.filter((x) => x.shared).map((x) => x.k));
+  const emails = (card.emails || []).map((e) => String(e).toLowerCase()).filter(Boolean);
+  const personalMail = new Set(emails.filter((e) => !isSharedEmail(e)));
+  const sharedMail = new Set(emails.filter(isSharedEmail));
   const nn = normName(card.name);
   const nnAlt = normName(card.name_alt);
   const nc = normCompany(card.company);
   const out = [];
   for (const p of people) {
     const reasons = [];
-    const pPhones = [...(p.phones || []).map((x) => x.number), p.whatsapp].map((x) => digits(x).slice(-9)).filter((x) => x.length >= 8);
-    if (pPhones.some((x) => phoneKeys.has(x))) reasons.push('电话一样');
-    if ((p.emails || []).some((e) => emails.has(String(e).toLowerCase()))) reasons.push('邮箱一样');
+    const pPhones = [...(p.phones || []).map((x) => ({ number: x.number, label: x.label })), { number: p.whatsapp, label: 'whatsapp' }]
+      .map((x) => ({ k: keyOf(x.number), shared: isSharedPhone(x.number, x.label) }))
+      .filter((x) => x.k.length >= 8);
+    // 两边都不是总机才算「电话一样」；有一边是总机 → 只是同一家公司
+    if (pPhones.some((x) => !x.shared && personal.has(x.k))) reasons.push('电话一样');
+    else if (pPhones.some((x) => personal.has(x.k) || shared.has(x.k))) reasons.push('公司电话一样');
+    const pMails = (p.emails || []).map((e) => String(e).toLowerCase());
+    if (pMails.some((e) => personalMail.has(e))) reasons.push('邮箱一样');
+    else if (pMails.some((e) => sharedMail.has(e))) reasons.push('公司公用邮箱一样');
     const pn = [normName(p.name), normName(p.name_alt)].filter(Boolean);
     if (nn && (pn.includes(nn) || (nnAlt && pn.includes(nnAlt)))) {
       const comp = companies.find((c) => c.id === p.company_id);
       reasons.push(nc && comp && normCompany(comp.name) === nc ? '名字和公司都一样' : '名字一样');
     }
-    if (reasons.length) out.push({ person: p, reasons, strong: reasons.some((r) => r !== '名字一样') });
+    if (reasons.length) out.push({ person: p, reasons, strong: reasons.some((r) => STRONG_REASONS.has(r)) });
   }
   return out.sort((a, b) => Number(b.strong) - Number(a.strong));
+}
+const STRONG_REASONS = new Set(['电话一样', '邮箱一样', '名字和公司都一样']);
+
+/**
+ * 「新朋友」合并进已经存过的人：只补空的栏位、加新电话 / 邮箱 / 标签、留言接在备注后面；
+ * 不改名字、不改圈层（旧的那个是你自己整理过的）。回传要写进 into 的栏位（没东西补就是 {}）。
+ */
+export function mergePersonPatch(into, from) {
+  const patch = {};
+  const placeholder = (s) => !s || /名片待确认/.test(s);
+  if (placeholder(into.name) && !placeholder(from.name)) patch.name = from.name;
+  for (const k of ['name_alt', 'title', 'company_id', 'whatsapp', 'website', 'address', 'card_notes', 'card_photo_id', 'avatar_photo_id', 'how_met', 'met_on']) {
+    if (!into[k] && from[k]) patch[k] = from[k];
+  }
+  const keyOf = (n) => digits(n).slice(-9);
+  const have = new Set([...(into.phones || []).map((p) => p.number), into.whatsapp].map(keyOf).filter(Boolean));
+  const newPhones = (from.phones || []).filter((p) => p && p.number && !have.has(keyOf(p.number)) && have.add(keyOf(p.number)));
+  if (newPhones.length) patch.phones = [...(into.phones || []), ...newPhones];
+  const mails = (into.emails || []).map((e) => String(e).toLowerCase());
+  const newMails = [...new Set((from.emails || []).map((e) => String(e).toLowerCase()))].filter((e) => e && !mails.includes(e));
+  if (newMails.length) patch.emails = [...(into.emails || []), ...newMails];
+  const newTags = (from.tags || []).filter((t) => !(into.tags || []).includes(t));
+  if (newTags.length) patch.tags = [...(into.tags || []), ...newTags];
+  const note = String(from.notes || '').replace(/\n?名片还没读：在「新朋友」按「AI 读名片」/, '').trim();
+  if (note && !String(into.notes || '').includes(note)) patch.notes = [into.notes, note].filter(Boolean).join('\n');
+  return patch;
 }
 
 /* ---------- 显示用 ---------- */
