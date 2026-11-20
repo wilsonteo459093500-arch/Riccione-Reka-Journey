@@ -50,11 +50,13 @@
     var host = CFG.host || {};
     return {
       id: MB.uid('p-'), ts: Date.now(), v: 1,
-      lang: 'en',
+      lang: 'bi',   // 2026-11-20 老板定：新方案一律中英双语（贴华文需求卡不会再出英文方案）
       client: { names: '', honor: '', wa: '' },
       property: { name: '', area: '', type: '', size: '' },
       date: todayISO(),
-      host: { name: profile.host || host.name || '', role: profile.role || host.role || '', wa: profile.wa || host.wa || '' },
+      // 销售自己的名字、却没填号码：不要借用预设（老板）的号码 —— 客户会回到别人那里（体检会提醒补上）
+      host: { name: profile.host || host.name || '', role: profile.role || host.role || '',
+        wa: profile.wa || (!profile.host || profile.host === host.name ? host.wa || '' : '') },
       needs: [],
       rooms: [],
       plan: { src: null, w: 0, h: 0, pins: {} },
@@ -1417,8 +1419,10 @@
 
   /** 马来西亚手机号 → wa.me 要的国际格式：012-345 6789 → 60123456789 */
   MB.msisdn = function (v) {
-    var d = String(v || '').replace(/\D/g, '');
+    // 「+60 (0)12-345 6789」：括号里的 0 是本地拨号才加的，国际格式要拿掉
+    var d = String(v || '').replace(/\(\s*0\s*\)/g, '').replace(/\D/g, '');
     if (d.indexOf('00') === 0) d = d.slice(2);
+    if (/^600\d{8,10}$/.test(d)) d = '60' + d.slice(3);
     if (d.charAt(0) === '0') return '6' + d;
     if (d.charAt(0) === '1' && d.length >= 9 && d.length <= 10) return '60' + d;
     return d;

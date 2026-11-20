@@ -261,14 +261,25 @@
     if (typeof fn !== 'function') return dflt;
     try { var v = fn.apply(null, args); return v == null || v === '' ? dflt : v; } catch (e) { return dflt; }
   }
-  /** 华文称呼：「Mr & Mrs Lim」→「Lim 先生、太太」；华文名字原样 */
+  /** 华文称呼：「Mr & Mrs Lim」→「Lim 先生、太太」；华文名字原样。
+      两个人的：「Mr Tan & Ms Lee」→「Tan 先生、Lee 女士」；「Mrs & Mr Tan」→「Tan 太太、先生」；
+      「Dr Tan & Mrs Tan」→「Tan 医生、太太」。认不出来（例：「Tan & Lee」）就原样，不乱拼 */
+  var ZH_HONOR = { mr: '先生', mrs: '太太', ms: '女士', miss: '小姐', madam: '女士', mdm: '女士', dr: '医生' };
+  var HONOR_RE = /^(mr|mrs|ms|miss|madam|mdm|dr)\.?(?:\s+(.+))?$/i;
   function zhName(names) {
     if (!names || CJK.test(names)) return names;
-    var m = /^(mr\.?\s*(?:&|and)\s*mrs\.?|mrs\.?|mr\.?|ms\.?|miss|madam|dr\.?)\s+(.+)$/i.exec(names);
-    if (!m) return names;
-    var h = m[1].toLowerCase().replace(/\./g, '');
-    var t = /&|and/.test(h) ? '先生、太太' : { mr: '先生', mrs: '太太', ms: '女士', miss: '小姐', madam: '女士', dr: '医生' }[h];
-    return m[2] + ' ' + t;
+    var parts = String(names).trim().split(/\s*(?:&|\band\b|\/)\s*/i);
+    if (parts.length > 2 || !parts[0]) return names;
+    var who = parts.map(function (x) {
+      var m = HONOR_RE.exec(x.trim());
+      return m ? { t: ZH_HONOR[m[1].toLowerCase()], name: (m[2] || '').trim() } : null;
+    });
+    if (who.some(function (w) { return !w; })) return names;
+    if (who.length === 1) return who[0].name ? who[0].name + ' ' + who[0].t : names;
+    var a = who[0], b = who[1];
+    if (!b.name) return names;                       // 「Mr Tan & Mrs」：看不懂，原样
+    if (!a.name || a.name.toLowerCase() === b.name.toLowerCase()) return b.name + ' ' + a.t + '、' + b.t;   // 同一个姓
+    return a.name + ' ' + a.t + '、' + b.name + ' ' + b.t;
   }
   // copy.js 的讯息、讲稿用同一个称呼（华文方案：PDF 写「Wong 先生、太太」，WhatsApp 也一样）
   MB.zhName = zhName;

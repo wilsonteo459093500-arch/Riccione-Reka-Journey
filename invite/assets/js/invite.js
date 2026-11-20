@@ -217,6 +217,12 @@
   }
 
   /* ---------- 日历 .ics ------------------------------------ */
+  /** 行事历的一段字：链接里的名字可能藏着换行（%0A），不处理就能多塞一行「LOCATION / URL」进客户的行事历。
+      照 RFC 5545：换行拿掉，反斜线、分号、逗号前面加反斜线，太长的剪短 */
+  function icsText(v) {
+    return String(v == null ? '' : v).replace(/[\r\n\u0000-\u001f\u007f]+/g, ' ').slice(0, 300)
+      .replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,');
+  }
   function icsStamp(d) {
     return d.getUTCFullYear() + pad(d.getUTCMonth() + 1) + pad(d.getUTCDate()) + 'T' +
            pad(d.getUTCHours()) + pad(d.getUTCMinutes()) + '00Z';
@@ -235,9 +241,9 @@
         'DTSTAMP:' + icsStamp(new Date()),
         'DTSTART:' + icsStamp(when),
         'DTEND:' + icsStamp(end),
-        'SUMMARY:' + title,
-        'LOCATION:' + (CFG.venue ? CFG.venue.address.replace(/,/g, '\\,') : ''),
-        'DESCRIPTION:' + ('邀请人 ' + host + ' · ' + role + '。约 ' + dur + ' 分钟行程。').replace(/,/g, '\\,'),
+        'SUMMARY:' + icsText(title),
+        'LOCATION:' + icsText(CFG.venue ? CFG.venue.address : ''),
+        'DESCRIPTION:' + icsText('邀请人 ' + host + ' · ' + role + '。约 ' + dur + ' 分钟行程。'),
         'BEGIN:VALARM', 'TRIGGER:-PT2H', 'ACTION:DISPLAY', 'DESCRIPTION:溪岸体验馆到访提醒', 'END:VALARM',
         'END:VEVENT', 'END:VCALENDAR'
       ].join('\r\n');
@@ -286,9 +292,13 @@
   if (bl && CFG.showBriefLink && P.brief !== '0') bl.hidden = false;
 
   /* ---------- 启动 ----------------------------------------- */
-  var saved = 'zh';
-  try { saved = localStorage.getItem('sail-lang') || 'zh'; } catch (e) {}
-  setLang(saved === 'en' ? 'en' : 'zh');
+  // 语言：lang.js 已经按「网址 ?lang= > 上次选的 > 预设」定好了（VISI 发的链接带 lang=zh / en / bi）。
+  // 中英文（bi）两种字都显示；名字、日期这些按华文写
+  var saved = document.documentElement.getAttribute('data-lang');
+  if (['zh', 'en', 'bi'].indexOf(saved) < 0) {
+    try { saved = localStorage.getItem('sail-lang'); } catch (e) {}
+  }
+  setLang(['zh', 'en', 'bi'].indexOf(saved) > -1 ? saved : 'zh');
   onScroll();
 
   // 预览模式：?open=1 直接跳过封面（销售端预览用）

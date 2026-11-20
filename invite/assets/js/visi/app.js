@@ -479,11 +479,16 @@
     renderBrief(); changed({ now: true });
     renderBriefMatch(true);
     var bare = p.rooms.filter(function (r) { return !r.images.length; }).map(function (r) { return MB.t(MB.roomTitle(p, r), 'zh'); });
+    var unknown = setup.unknownScope || [], remarks = setup.remarks || [];
     ping((fresh ? '已新建方案（' + fresh + '）· ' : '已带入：') +
       [setup.client.names, setup.rooms.length + ' 个空间', setup.needs.length + ' 条需求'].filter(Boolean).join(' · ') +
       (cst && p.caseStyle === cst.key ? ' · 客户喜欢「' + cst.zh + '」' : '') +
       (autoCases ? ' · 参考空间先放了 ' + autoCases + ' 个公司案例' : casesBlocked() ? ' · 公司案例库暂停中，先用内置照片' : '') +
-      (bare.length ? '。' + bare.join('、') + ' 还没有图 —— 到「图库」导入旧 proposal PDF 或上传' : ''), bare.length ? 5200 : 2800);
+      (bare.length ? '。' + bare.join('、') + ' 还没有图 —— 到「图库」导入旧 proposal PDF 或上传' : '') +
+      // 客户在「定制范围」自己写、认不出是哪个空间的：讲出来，不悄悄丢掉
+      (unknown.length ? '。定制范围里「' + unknown.join('」「') + '」认不出是哪个空间 —— 到 ② 自己加' : '') +
+      (remarks.length ? '。客户的备注（不印在方案上）：' + remarks.join('；') : ''),
+      bare.length || unknown.length || remarks.length ? 6400 : 2800);
   });
 
   /* 按客户「方便到馆」先替他们留时段（销售可改） */

@@ -26,6 +26,25 @@
     return s.split(/\s+/).filter(function (w) { return /[A-Za-z0-9]/.test(w); }).length;
   }
   function trim(s) { return String(s == null ? '' : s).trim(); }
+  function mins(hm) { var m = /^(\d{1,2}):(\d{2})$/.exec(hm || ''); return m ? +m[1] * 60 + +m[2] : null; }
+
+  /** 一个到馆时段有什么问题（给客户的日期、时间不能是过去的、或展厅没开的）：
+      → { level:'bad'|'warn', text } 或 null。营业时间在 config.js 的 venue.open */
+  MB.slotProblem = function (date, time, dur, today) {
+    var d = MB.parseISO(date);
+    if (!d) return null;
+    if (d < today) return { level: 'bad', text: '已经过了' };
+    var open = ((window.SAIL || {}).venue || {}).open;
+    var t = mins(time);
+    if (!open || t == null) return null;
+    var wk = d.getDay() === 0 || d.getDay() === 6;
+    var o = open[wk ? 'weekend' : 'weekday'] || [], a = mins(o[0]), b = mins(o[1]);
+    if (a == null || b == null) return null;
+    var label = (wk ? '周末' : '平日') + ' ' + o[0] + '–' + o[1];
+    if (t < a || t >= b) return { level: 'bad', text: time + ' 展厅还没开或已经关了（' + label + '）' };
+    if (t + (+dur || 60) > b) return { level: 'warn', text: time + ' 开始、' + (+dur || 60) + ' 分钟，会超过关门时间（' + label + '）' };
+    return null;
+  };
   /** 需求的原话（华文或英文，有一个就算有） */
   function quoteOf(n) {
     var q = MB.needQuote(n);
@@ -265,6 +284,15 @@
       });
       if (missing.length) add('warn', '需求对应的空间不在方案里：' + missing.join('、'),
         '客户会以为方案里有这个做法。要嘛把那个空间加进来，要嘛把这一条的做法改成「见面一起看」。', 'needs');
+      // 客户的原话太长（英文客户整段贴进来）：方案页会印成一大段，讯息只引得了前半句
+      var longQ = [];
+      p.needs.forEach(function (n, i) {
+        if (typeof n.quote !== 'string' || !n.quote.trim()) return;
+        var q = n.quote.trim(), zhQ = CJK.test(q);
+        if (zhQ ? count(q, 'zh') > 30 : count(q, 'en') > 20) longQ.push(i + 1);
+      });
+      if (longQ.length) add('warn', '第 ' + longQ.join('、') + ' 条客户原话太长',
+        '方案页会印成一大段，WhatsApp 讯息只引得了第一句。剪成最关键的一句（≤ 30 字 / 20 words），或拆成几条。', 'needs');
       // 方案页只印前几条：没印的要讲出来是哪几条
       var shown = needsShown(p);
       var dropped = p.needs.filter(function (n) { return shown.indexOf(n) < 0 && quoteOf(n); });
@@ -327,11 +355,18 @@
     if (!p.pages.invite) add('bad', '关掉了到馆邀约页', '客户记得最清楚的是最后几页：要给下一步（已经留好的时段），而不是电话号码。', 'visit');
     else if (!vd) add('bad', '还没定到馆时间', '「欢迎参观」不是下一步。先替他们留好一个时段 —— 改时间比决定要不要来容易。', 'visit');
     else if (vd < today) add('bad', '到馆日期已经过了', '改成未来的日期。', 'visit');
+    else if (MB.slotProblem(p.visit.date, p.visit.time, p.visit.mins, today)) {
+      var sp1 = MB.slotProblem(p.visit.date, p.visit.time, p.visit.mins, today);
+      add(sp1.level, '到馆时段：' + sp1.text, '邀请页、讯息、行事历都会照印这个时间。改到营业时间内。', 'visit');
+    }
     else if (p.visit.auto) add('warn', '到馆时段是按需求卡自动建议的 —— 先确认真的留了', '「已为你们保留」只有在真的保留时才能写。确认后到 ④ 按「已确认留好」（或直接改时段），这条就会消失。', 'visit');
     else {
       add('ok', '结尾已经替客户留好时段', '已经留好的时间，最容易被接受。');
       if (!MB.parseISO(p.visit.date2)) add('tip', '可以再给一个备选时段', '给两个选项，让他们回「1」或「2」就好，不用想开放题。', 'visit');
     }
+    // 备选时段也印在邀请页和讯息里（「回 1 或 2」）：过去的、展厅没开的一样要改
+    var sp2 = p.pages.invite ? MB.slotProblem(p.visit.date2, p.visit.time2, p.visit.mins, today) : null;
+    if (sp2) add(sp2.level, '备选时段：' + sp2.text, '邀请页和讯息都会照印「时段 2」。改掉，或清空备选时段。', 'visit');
     add('tip', '确认展厅真的准备好「为你们准备的三样」，时段也真的留了', '「已为你们保留」只有在真的保留时才能写；说到做到，到馆那天才会是真正的高峰。', 'visit');
 
     // 6b · 工期 · 预算 · 保障
@@ -361,7 +396,15 @@
     if (p.pages.invite && link.local) add('warn', '二维码指向本机网址，客户扫不开', '在 config.js 填 publicBase（正式网址），或在正式网站上做方案。', 'visit');
 
     // 10 · 联络
-    if (!String(p.host.wa || '').replace(/\D/g, '')) add('warn', '没有你的 WhatsApp 号码', '客户看完想问，第一个找的就是你的号码。', 'brief');
+    // 讯息和邀请函署名是销售，号码却是预设（老板）的 —— 客户按「确认」会传到别人那里
+    var defHost = (window.SAIL || {}).host || {};
+    var myName = trim(p.host.name), myWa = MB.msisdn(p.host.wa), defWa = MB.msisdn(defHost.wa);
+    var notDefault = myName && myName.toLowerCase() !== trim(defHost.name).toLowerCase();
+    if (!myWa) add(notDefault ? 'bad' : 'warn', '没有你的 WhatsApp 号码',
+      notDefault ? '邀请函会署名「' + myName + '」，客户按「确认」却会传到 ' + (defHost.name || '公司') + ' 的号码。到 ① 填你自己的 WhatsApp。'
+        : '客户看完想问，第一个找的就是你的号码。', 'brief');
+    else if (notDefault && defWa && myWa === defWa) add('bad', 'WhatsApp 号码是 ' + (defHost.name || '公司') + ' 的，不是你的',
+      '讯息和邀请函署名「' + myName + '」，客户回覆却会传到 ' + (defHost.name || '公司') + '。到 ① 改成你自己的 WhatsApp。', 'brief');
 
     // 11 · 销售打的字：假的急迫（一定要改）、空泛形容词、太长
     var mine = typed(p);
