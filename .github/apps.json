@@ -1,0 +1,11 @@
+{
+  "_说明": "每个独立部署的软件一行。dir = 仓库里的文件夹（= Vercel 项目的 Root Directory）；project = Vercel 项目 ID。只有 dir 里有改动才测试、出版本。新增软件：在这里加一行，并照 DEPLOY-FLOW.md 关掉那个 Vercel 项目自己的自动部署。",
+  "team": "team_o5uT7vzbGzKNPpi04SRuCi0n",
+  "apps": [
+    { "id": "kira",  "name": "KIRA",        "dir": "kira",      "project": "prj_xcnjRbuMnhMPNuzpxdefvlaNKRvS" },
+    { "id": "visi",  "name": "VISI / JOURNEY", "dir": "invite", "project": "prj_RMpABlFWXiRotaeku3jBR5Lly2n5" },
+    { "id": "space", "name": "SPACE",       "dir": "network",   "project": "prj_YtNYJbscoXUvF19vuIgSUlhAhPUG" },
+    { "id": "ukir",  "name": "UKIR STUDIO", "dir": "blueprint", "project": "prj_gfZ1xuyq0qn5aEtIqs3jRaz8qLUS" },
+    { "id": "wish",  "name": "WISH",        "dir": "genie",     "project": "prj_qkU4ILwMs3xAFxxN6Y2xNVUu34C7" }
+  ]
+}

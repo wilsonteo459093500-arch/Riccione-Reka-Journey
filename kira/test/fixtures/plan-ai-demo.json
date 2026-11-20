@@ -1,0 +1,72 @@
+{
+  "scale": {
+    "found": true,
+    "a": [
+      100,
+      60
+    ],
+    "b": [
+      370,
+      60
+    ],
+    "mm": 2700
+  },
+  "rooms": [
+    {
+      "type": "master",
+      "name": "Bedroom",
+      "box": [
+        104,
+        104,
+        596,
+        696
+      ]
+    },
+    {
+      "type": "kitchen",
+      "name": "Kitchen",
+      "box": [
+        604,
+        104,
+        1096,
+        696
+      ]
+    }
+  ],
+  "suggestions": [
+    {
+      "template": "wardrobe",
+      "room": "Bedroom",
+      "segments": [
+        [
+          104,
+          104,
+          344,
+          104
+        ]
+      ],
+      "note": "Top wall, no door"
+    },
+    {
+      "template": "kitchen",
+      "room": "Kitchen",
+      "kitchenShape": "L",
+      "segments": [
+        [
+          700,
+          104,
+          1096,
+          104
+        ],
+        [
+          1096,
+          104,
+          1096,
+          400
+        ]
+      ],
+      "note": "L along top and right"
+    }
+  ],
+  "notes": ""
+}

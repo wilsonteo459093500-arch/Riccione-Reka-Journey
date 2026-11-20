@@ -1,0 +1,25 @@
+{
+  "id": "sample-master-bed-wall",
+  "kind": "bad",
+  "reasons": ["bed"],
+  "note": "Plan 2 主卧：2.70 m 衣柜放在上墙，那是床头墙（「要我睡厕所吗？」）—— 按用户截图改写的样本，坐标是合成的",
+  "template": "wardrobe",
+  "suggestion": { "id": "ai1", "template": "wardrobe", "room": "Master Bedroom" },
+  "ai": {
+    "sentW": 1200, "sentH": 800, "crop": null, "model": "sample",
+    "plan": { "w": 1200, "h": 800, "scale": { "a": [100, 60], "b": [370, 60], "mm": 2700 } },
+    "result": {
+      "scale": { "found": false, "a": [0, 0], "b": [0, 0], "mm": 0 },
+      "rooms": [
+        { "type": "master", "name": "Master Bedroom", "box": [100, 100, 460, 560],
+          "doors": [{ "seg": [400, 100, 450, 100], "to": "entry" }, { "seg": [460, 300, 460, 380], "to": "bathroom" }, { "seg": [200, 560, 380, 560], "to": "balcony" }],
+          "windows": [], "bed": [180, 100, 360, 300] }
+      ],
+      "suggestions": [
+        { "template": "wardrobe", "room": "Master Bedroom", "segments": [[100, 100, 370, 100]], "confidence": "high", "note": "Solid top wall shared with the family area." }
+      ],
+      "notes": ""
+    }
+  },
+  "expect": "unpicked"
+}
