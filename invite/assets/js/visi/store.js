@@ -5,6 +5,7 @@
    images    销售自己的图库（上传 / 从旧 PDF 导入），存压缩后的 JPEG
    只存在这台电脑的这个浏览器里 —— 不上传、不进 git。
    换电脑 / 给同事：用「导出备份」存成 .json 文件再导入。
+   两个分页开同一份方案：每份方案有版本号 rev，存档前对一次（putProjectIf），被别的分页改过就不盖掉。
    ============================================================ */
 (function () {
   'use strict';
@@ -54,6 +55,27 @@
     },
     getProject: function (id) { return tx('projects', 'readonly', function (os) { return os.get(id); }); },
     putProject: function (p) { return tx('projects', 'readwrite', function (os) { os.put(p); }); },
+    /** 只在「存着的那一份没有被别的分页改过」时才写（同一个 transaction 里先读再写）。
+        p.rev = 这一份要存成第几版；base = 我们以为存着的是第几版。存着的版本比 base 新 → 不写，回 { ok: false, stored }。
+        存着的不见了（别的分页删掉了）且 base > 0 → 也不写（不要把删掉的方案悄悄救回来）。 */
+    putProjectIf: function (p, base) {
+      return open().then(function (db) {
+        return new Promise(function (resolve, reject) {
+          var t = db.transaction('projects', 'readwrite');
+          var os = t.objectStore('projects');
+          var res = { ok: true, stored: null };
+          var g = os.get(p.id);
+          g.onsuccess = function () {
+            var cur = g.result;
+            if ((cur && (+cur.rev || 0) > base) || (!cur && base > 0)) { res = { ok: false, stored: cur || null }; return; }
+            os.put(p);
+          };
+          t.oncomplete = function () { resolve(res); };
+          t.onerror = function () { reject(t.error); };
+          t.onabort = function () { reject(t.error || new Error('IndexedDB aborted')); };
+        });
+      });
+    },
     removeProject: function (id) { return tx('projects', 'readwrite', function (os) { os.delete(id); }); },
 
     listImages: function () {

@@ -72,6 +72,11 @@
   - **新照片要用新档名**：`vercel.json` 把 `assets/img/` 设成 immutable 快取一年，同名换图，看过的人一年都看到旧的。
   - 跑一次两两比对（`samephoto.py`：模板匹配，NCC ≥ 0.94 算同一张；这支脚本没放进 repo），找出跟已有照片是同一张的裁切，
     加进 `model.js` 的 `SAME_SHOT`，整份方案才不会重复。同一间房换个角度拍、看起来像同一张的，也放进同一组。
+- **溪岸真实案例**（`photos-sail.js`，照片在 `assets/img/sail/`）：老板在公司案例库「审核 → 多选 → 导出给 VISI」下载 zip
+  （照片重新画过、没有拍摄资料，清单没有客户名字 / 项目名 / 档名）→ 解压 → `node tools/visi/import-builtin.mjs <资料夹>`（先加 `--dry-run` 看）。
+  不要手改 `photos-sail.js` 的清单；说明只写「风格 + 空间」，`series` 空（不上系列页）。
+- **老板审图**：图库「老板审图」（要团队密码登入）→ 内置照片按「不发」：这台电脑马上不再自动配它，用到它的方案体检红灯。
+  「复制清单」贴给 Claude → 移到 `photos.js` 的 `MB.RETIRED_BUILTIN`（`owner`），合并后全公司都看不到（标记本身只存在那台电脑的浏览器）。
 - 自己的图：在「图库」上传，或**把以前做好的 proposal PDF 拖进去** —— 会用 pdf.js 取出原图，按页面标题（FOYER / KITCHEN …）自动分好空间。
 - 图库与方案都存在**这台电脑的浏览器（IndexedDB）**，不上传、不进 git。换电脑 / 给同事：图库页的「导出图库」「导出这份方案」存成 `.json`，再导入。
 - 这个 repo 是公开的：客户的平面图、名字、网上找的参考图都**不要**放进 `assets/`，留在浏览器图库里就好。
@@ -232,13 +237,14 @@ Vercel Blob 免费方案 2026-11-03 被停用，而且不能商用。程式的�
      有人离职就换密码（换了全员要重新登入）。
   - 已经设好（2026-11-03）：Blob store `visi-cases`（Singapore、Public，连上 Production + Preview，用 OIDC：只有 `BLOB_STORE_ID`）、
     `VISI_TEAM_PASSWORD`、`SESSION_SECRET`（登入签名）、`CATALOG_KEY`（清单的秘密路径）。后两个 Production 与 Preview 各一组随机值，
-    所以两边的清单是分开的。**`CATALOG_KEY` 不要改**（改了就找不到原来的清单）；换 `SESSION_SECRET` 或密码只会让大家重新登入。
+    所以两边的清单是分开的。**`CATALOG_KEY` 不要改**（改了就找不到原来的清单）；换密码只会让大家重新登入；
+    **`SESSION_SECRET` 也不要改**：它同时是签名链接的 key，换了所有发出去的邀请函 / 需求卡都会退回公司预设联络人。
   - Blob 只有 OIDC（没有 `BLOB_READ_WRITE_TOKEN`）时，Vercel 上缺 `SESSION_SECRET` / `CATALOG_KEY` 会回「not_configured」，不会退回猜得到的 key。
   - 清单每天第一次写入前备份一份，按星期几轮流覆盖（`catalog/<key>/bak/mon.json` …，最多 7 份）。
   - Blob 这个月的额度用完、store 被停用时，上传页会整批停下来并说明原因；已传好的照片记在那台电脑，之后再拖一次同一个文件夹就接着传。
   - **被停权之后怎么办**：到 Vercel → Storage → `visi-cases` 看什么时候恢复（约 30 天；超过还没恢复就找 Vercel 客服）。
     恢复后先在审核页「只留最好的 N 张」→ 检查 →「删除隐藏的照片」，把空间压到 950 MB 以下，再用精选模式传还没传的项目。
-- 程式：`api/session.js`（登入）、`api/photo.js`（存照片）、`api/catalog.js`（清单），共用的在 `api/_lib/`；
+- 程式：`api/session.js`（登入）、`api/photo.js`（存照片）、`api/catalog.js`（清单）、`api/link.js`（签名链接，见「链接参数」），共用的在 `api/_lib/`；
   测试与本机模拟伺服器在 repo 根目录的 `tools/caselib/`（`node --test tools/caselib/test/`、`node tools/caselib/mock-server.mjs --port 0`）。
 
 **要改的东西都在 `assets/js/visi/data.js`**：空间与卖点（`MB.ROOMS`）、
@@ -327,7 +333,8 @@ WhatsApp「发方案」与 60 秒讲解稿引用的，也是同一件事。
 
 ## 怎么用（销售）
 
-1. 打开 `create.html`，第一次填一下「我是谁」（姓名 / 职称 / WhatsApp），浏览器会记住。
+1. 打开 `create.html`，第一次填一下「我是谁」（姓名 / 职称 / WhatsApp），浏览器会记住；再用**团队密码**登入一次（30 天），
+   链接才会显示你的名字和号码（没登入：客户看到公司预设联络人，见「签名链接」）。
 2. **刚聊上客户** → 填客户称呼和他的 WhatsApp → 复制①的文案，或直接点「用 WhatsApp 发送」。
 3. **客户填完需求卡**，内容会以文字形式发到你的 WhatsApp。读完，做一版初步方案。
 4. **约好时间之后** → 回到 `create.html` 填日期时间，在「给客户的一句话」里写下邀请的理由
@@ -379,7 +386,9 @@ Formspree、Supabase Edge Function、Google Apps Script 都行。送出时会 PO
 | `on` `at` | 日期 · 时间 | `2026-08-26` `15:00`（14:00 是默认值，会省略） |
 | `mins` | 时长，默认 60 | `90` |
 | `from` | 邀请人代号，取自 `config.js` 的 `team[].code` | `wilson` |
-| `note` | 印在信里的那一句话（勾选才会带上） | |
+| `note` | 印在信里的那一句话（勾选才会带上；要签名） | |
+| `role` `wa` | 不在名单里的邀请人：职称、WhatsApp（要签名） | |
+| `sig` | 签名（登入后自动加，见下面「签名链接」） | |
 | `open=1` | 跳过封面动画，预览用 | |
 
 **需求卡** `/invite/brief?from=wilson&for=Peggy`
@@ -387,7 +396,23 @@ Formspree、Supabase Edge Function、Google Apps Script 都行。送出时会 PO
 `from` 决定填完之后送到谁的 WhatsApp。名单在 `config.js` 的 `team`，
 不在名单里的人会自动退回 `by=姓名&wa=号码` 的长格式 —— 所以新同事记得加一行。
 
-旧的短参数（`n` `t` `d` `h` `by` `wa` `msg`）和 `?i=<base64>` 都还认得，发出去的旧链接不会失效。
+旧的短参数（`n` `t` `d` `h` `by` `wa` `msg`）和 `?i=<base64>` 都还认得，发出去的旧链接打得开。
+
+### 签名链接（防冒充，2026-11-20 体检第 2c 阶段）
+
+repo 是公开的，谁都看得到参数怎么写 —— 以前改一下链接就能做出「公司网址的假邀请函」：署名写「溪岸财务部」、
+留言写「请先付订金」、「确认」按钮和需求卡送去别人的 WhatsApp。现在：
+
+- **销售名字、职称、WhatsApp、留言**（`from` / `by`、`role`、`wa`、`note`）要有 `sig=` 签名才算数。
+  没签名、签名不对、伺服器问不到 → 页面**退回公司预设**（`config.js` 的 `host`，需求卡送去 `briefInbox`），不提示客户。
+- **客户名字、日期、时间不签**，手改照样能用；客户名字最多 40 个字（塞不进一整段话）。
+- `from=wilson` 这类团队代号本来就是 `config.js` 的资料，不用签。
+- **谁能签**：用团队密码登入过的人（跟公司案例库同一个，30 天）。VISI 在 ④「邀请函链接」下面、`create.html` 在「我是谁」下面
+  有登入框；登入过就自动签，名字 / 号码改了自动重签。VISI 的签名存在方案里（导出 `.json` 也带着），体检没签到 = 红灯。
+- **伺服器**：`api/link.js`（GET 验证、POST 签名），规则在 `api/_lib/link.js`。签名的 key 由 `SESSION_SECRET` 推出来、**不含团队密码**：
+  换团队密码，发出去的链接照样有效；**换 `SESSION_SECRET` 会让所有发出去的链接退回公司预设**（不要随便换）。
+  Vercel 的执行记录（Logs）每签一次留一行「谁签了哪个销售名字」，不记客户资料。
+- 测试：`node --test tools/caselib/test/link.test.mjs`（伺服器）、`node --test tools/visi/test/`（VISI 的规则）。
 
 ---
 

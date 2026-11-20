@@ -34,13 +34,27 @@
     Object.keys(ALIAS).forEach(function (k) {
       if (q.get(k)) data[ALIAS[k]] = q.get(k);
     });
-    ['n', 't', 'co', 'd', 'h', 'dur', 'by', 'role', 'wa', 'msg'].forEach(function (k) {
+    ['n', 't', 'co', 'd', 'h', 'dur', 'by', 'role', 'wa', 'msg', 'sig'].forEach(function (k) {
       if (q.get(k)) data[k] = q.get(k);
     });
     return data;
   }
 
   var P = readParams();
+
+  /* ---------- 签名（体检第 2c 阶段）--------------------------
+     销售名字、职称、WhatsApp、留言要有 VISI 登入后发的签名才算数（link-sign.js）。
+     先当没签：只留团队代号，其它退回公司预设；有签名就去问伺服器，对了再换上（问的时候先把联络人那几格藏起来）。
+     没签名 / 签名不对 / 问不到 → 公司预设，不提示客户 */
+  var LS = window.SAIL_LINK;
+  var signed = { by: P.by || '', role: P.role || '', wa: P.wa || '', note: P.msg || '' };
+  var checking = false;
+  if (!LS || LS.needs(signed)) {
+    if (!(LS && LS.member(P.by))) P.by = '';
+    P.role = ''; P.wa = ''; P.msg = '';
+    checking = !!(LS && P.sig);
+    if (checking) document.documentElement.setAttribute('data-host-pending', '');
+  }
 
   /* 称谓用短代号，链接里就不会出现 %E5%A5%B3%E5%A3%AB 这种乱码。
      写死的中文也照样认得。 */
@@ -63,12 +77,17 @@
     return null;
   }
 
-  var guest = (P.n || '').trim();
-  var honor = (P.t || '').trim();
-  var M     = member(P.by);
-  var host  = (M ? M.name : P.by || (CFG.host && CFG.host.name) || 'Wilson Teo').trim();
-  var role  = ((M && M.role) || P.role || (CFG.host && CFG.host.role) || '溪岸 Sail by Riccione Reka').trim();
-  var hostWa = String((M && M.wa) || P.wa || (CFG.host && CFG.host.wa) || '').replace(/\D/g, '');
+  // 客户名字没签：限长度，塞不进一整段「请先转账…」
+  var guest = Array.from(String(P.n || '').replace(/[\u0000-\u001f\u007f]+/g, ' ').trim()).slice(0, LS ? LS.MAX_GUEST : 40).join('').trim();
+  var honor = Array.from(String(P.t || '').trim()).slice(0, 12).join('');
+  var M, host, role, hostWa;
+  function who() {
+    M      = member(P.by);
+    host   = (M ? M.name : P.by || (CFG.host && CFG.host.name) || 'Wilson Teo').trim();
+    role   = ((M && M.role) || P.role || (CFG.host && CFG.host.role) || '溪岸 Sail by Riccione Reka').trim();
+    hostWa = String((M && M.wa) || P.wa || (CFG.host && CFG.host.wa) || '').replace(/\D/g, '');
+  }
+  who();
   var dur   = parseInt(P.dur, 10) > 0 ? parseInt(P.dur, 10) : 60;
 
   function honorText(zh) {
@@ -166,11 +185,9 @@
     if (tw) tw.textContent = when ? (zh ? dateZh(when) + (P.h ? ' · ' + timeStr(when) : '')
                                         : dateEn(when) + (P.h ? ' · ' + timeStr(when) : '')) : '';
 
-    // 销售的私人留言
-    if (P.msg) {
-      var w = $('#l-msg-wrap'), m = $('#l-msg');
-      if (w && m) { m.textContent = P.msg; w.hidden = false; }
-    }
+    // 销售的私人留言（有签名才有）
+    var w = $('#l-msg-wrap'), m = $('#l-msg');
+    if (w && m) { m.textContent = P.msg || ''; w.hidden = !P.msg; }
 
     paintCountdown(zh);
     paintLinks(zh);
@@ -217,6 +234,12 @@
   }
 
   /* ---------- 日历 .ics ------------------------------------ */
+  /** 行事历的一段字：链接里的名字可能藏着换行（%0A），不处理就能多塞一行「LOCATION / URL」进客户的行事历。
+      照 RFC 5545：换行拿掉，反斜线、分号、逗号前面加反斜线，太长的剪短 */
+  function icsText(v) {
+    return String(v == null ? '' : v).replace(/[\r\n\u0000-\u001f\u007f]+/g, ' ').slice(0, 300)
+      .replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,');
+  }
   function icsStamp(d) {
     return d.getUTCFullYear() + pad(d.getUTCMonth() + 1) + pad(d.getUTCDate()) + 'T' +
            pad(d.getUTCHours()) + pad(d.getUTCMinutes()) + '00Z';
@@ -235,9 +258,9 @@
         'DTSTAMP:' + icsStamp(new Date()),
         'DTSTART:' + icsStamp(when),
         'DTEND:' + icsStamp(end),
-        'SUMMARY:' + title,
-        'LOCATION:' + (CFG.venue ? CFG.venue.address.replace(/,/g, '\\,') : ''),
-        'DESCRIPTION:' + ('邀请人 ' + host + ' · ' + role + '。约 ' + dur + ' 分钟行程。').replace(/,/g, '\\,'),
+        'SUMMARY:' + icsText(title),
+        'LOCATION:' + icsText(CFG.venue ? CFG.venue.address : ''),
+        'DESCRIPTION:' + icsText('邀请人 ' + host + ' · ' + role + '。约 ' + dur + ' 分钟行程。'),
         'BEGIN:VALARM', 'TRIGGER:-PT2H', 'ACTION:DISPLAY', 'DESCRIPTION:溪岸体验馆到访提醒', 'END:VALARM',
         'END:VEVENT', 'END:VCALENDAR'
       ].join('\r\n');
@@ -286,10 +309,26 @@
   if (bl && CFG.showBriefLink && P.brief !== '0') bl.hidden = false;
 
   /* ---------- 启动 ----------------------------------------- */
-  var saved = 'zh';
-  try { saved = localStorage.getItem('sail-lang') || 'zh'; } catch (e) {}
-  setLang(saved === 'en' ? 'en' : 'zh');
+  // 语言：lang.js 已经按「网址 ?lang= > 上次选的 > 预设」定好了（VISI 发的链接带 lang=zh / en / bi）。
+  // 中英文（bi）两种字都显示；名字、日期这些按华文写
+  var saved = document.documentElement.getAttribute('data-lang');
+  if (['zh', 'en', 'bi'].indexOf(saved) < 0) {
+    try { saved = localStorage.getItem('sail-lang'); } catch (e) {}
+  }
+  setLang(['zh', 'en', 'bi'].indexOf(saved) > -1 ? saved : 'zh');
   onScroll();
+
+  // 有签名：问伺服器，对了才换上销售的名字、号码、留言
+  if (checking) {
+    LS.verify(signed, P.sig, 5000).then(function (f) {
+      if (f) {
+        P.by = f.by; P.role = f.role; P.wa = f.wa; P.msg = f.note;
+        who();
+        paint();
+      }
+      document.documentElement.removeAttribute('data-host-pending');
+    });
+  }
 
   // 预览模式：?open=1 直接跳过封面（销售端预览用）
   if (new URLSearchParams(location.search).get('open') === '1') openInvitation();

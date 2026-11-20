@@ -147,7 +147,7 @@ export function methodNotAllowed(res, allow) {
 
 // handler 最外层的 catch：已知错误照原样回，储存出错给清楚的讯息，其它只回 server
 export function sendError(res, e) {
-  if (e instanceof HttpError) return send(res, e.status, e.body);
+  if (e instanceof HttpError) return send(res, e.status, e.body, e.body && e.body.retryAfter ? { 'Retry-After': String(e.body.retryAfter) } : null);
   if (e && e.code === 'conflict') return send(res, 409, { error: 'conflict' });
   if (e && (e.code === 'storage' || /^Blob/.test(String(e.name || '')) || /^Blob/.test(String(e.constructor && e.constructor.name)))) {
     console.error('[caselib] storage:', e && e.message);

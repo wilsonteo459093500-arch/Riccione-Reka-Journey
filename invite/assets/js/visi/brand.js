@@ -30,9 +30,9 @@
 
     awards: [
       { year: '2021', title: { zh: '美国 MUSE 缪斯设计奖 · 金奖', en: 'MUSE Design Awards, USA · Gold' },
-        note: { zh: '溪岸 4.0 系列 · 从 100 多个国家和地区的 3.8 万件作品中选出', en: 'SAIL 4.0 Series · chosen from 38,000 entries in 100+ countries' } },
+        note: { zh: '溪岸 4.0 系列', en: 'SAIL 4.0 Series' } },   // 2026-11-20 老板：手册查不到的作品数拿掉
       { year: '2022', title: { zh: 'HCA 高定家居设计奖 · 年度产品设计奖', en: 'HCA Home Design Awards · Product of the Year' },
-        note: { zh: '自然线系列 · 广州设计周', en: 'Natural Line Series · Guangzhou Design Week' } },
+        note: { zh: '自然线系列', en: 'Natural Line Series' } },   // 手册查不到的活动名拿掉
       { year: '2023', title: { zh: 'HCA 高定家居设计奖 · 年度产品设计至尊奖', en: 'HCA Home Design Awards · Supreme Award' },
         note: { zh: '骨骼线 · 闲庭 · 终评前三', en: 'Skeleton Line · Leisure Courtyard · top three finalist' } },
       { year: '2024', title: { zh: 'HCA 高定家居设计奖 · 年度产品设计奖', en: 'HCA Home Design Awards · Product of the Year' },

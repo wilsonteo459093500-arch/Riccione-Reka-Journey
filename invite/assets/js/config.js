@@ -11,6 +11,8 @@ window.SAIL = {
     address:   '23-3, Jalan Setia Prima S U13/S, Seksyen U13, Setia Alam, 40170 Shah Alam, Selangor',
     hoursZh:   '周一至周五 9:00am–6:00pm ／ 周六周日 10:00am–6:00pm',
     hoursEn:   'Mon–Fri 9:00am–6:00pm / Sat–Sun 10:00am–6:00pm',
+    // 同上，给 VISI 体检用（约的时段在不在营业时间内）。改营业时间，上面两行和这里一起改
+    open:      { weekday: ['09:00', '18:00'], weekend: ['10:00', '18:00'] },
     phone:     '+60189661919',      // tel: 链接用
     phoneShow: '018-966 1919',
     website:   'www.saildz.com',    // VISI 方案封底用
