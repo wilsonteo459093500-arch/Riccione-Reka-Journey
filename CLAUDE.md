@@ -75,6 +75,7 @@
 - 只有改到的软件才测试、出版本（登记在 `.github/apps.json`）；测试没过不上线
 - Vercel 项目自己的 Git 自动部署已关掉（各 `vercel.json` 的 `git.deploymentEnabled: false` + 项目设定 deploymentPolicy），**不要再加 `ignoreCommand`**
 - 新增软件：照 `DEPLOY-FLOW.md`「新增一个软件」做
+- **2026-11-20 以前开的分支**（还没合 main 的）：推上去不会再自动出预览。先 `git merge origin/main` 把新流程带进来，再推一次就会出
 - 推送照样要攒着推：每推一次，改到的软件各用一次 Vercel 额度（一天 100 次）
 
 ## KIRA（kira/）
