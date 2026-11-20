@@ -44,6 +44,7 @@ const FACE_STAIR = 0.65; // 楼梯上最多慢到 ×这么多（平台上回头�
 const SEE_MAX = 160; // 沿路走：sees 每帧最多看这么多下（每下 = 一次 clearance 双线性插值，很便宜；五个模板 975 条路实测每帧平均 9 下、最多 109 下）
 const END_EASE = 0.4; // 沿路走：离终点不到这么远（米；路很短就是后一半）转头就越来越少（到终点 = 不转）；到了要转的朝向照旧转
 const ARRIVE = 1.2; // 有要转到的朝向（yaw）：离终点不到这么远（米；路很短就是后一半）看的方向慢慢偏向它 —— 走进房间就转过去看床 / 柜子，不是对着前面的墙走到头、停下再转身
+const TAIL = 0.2; // ARRIVE 往哪偏按「走进终点的方向」算：终点前不到这么长（米）的小折线（A* 格子中心 → 真正的终点，常常朝着别处甚至朝后）不算
 const OPEN = 1.5; // ARRIVE 偏过去的方向（终点上：走的方向往要转到的朝向偏，最多 LEAD）这么远（米）以内有墙 / 洞 → 不提前偏（到了再转身）：免得侧过头对着一面墙走
 const PITCH_K = 4; // 走路时视线慢慢回到平视
 const KEY_TURN = 1.7; // Q / E 转身（弧度 / 秒）
@@ -552,18 +553,26 @@ export function createWalk(engine, { project = null, api = null, wish = false, o
     return max;
   }
   /**
-   * 最后 ARRIVE 米往哪个方向偏（每条路只算一次）：最后一截走的方向往要转到的朝向偏，最多 LEAD（要转到的朝向在背后：往近的那边偏）。
-   * 站在终点朝那个方向 OPEN 以内就是墙 / 洞 → false（不偏，到了再转身）；最后一段是楼梯 → false
+   * 最后 ARRIVE 米往哪个方向偏（每条路只算一次）：走进终点的方向（跳过终点前不到 TAIL 的小折线）往要转到的朝向偏，最多 LEAD
+   * （要转到的朝向在背后：往近的那边偏）。站在终点朝那个方向 OPEN 以内就是墙 / 洞 → false（不偏，到了再转身）；最后一段是楼梯 → false。
+   * 顺便记下走进终点的方向（R.arriveMv）和跳过的那一小截有多长（R.hook）：走那一小截的时候按 R.arriveMv 夹，不跟着折线扭头
    */
   function arriveYaw(R) {
     const leg = R.legs[R.legs.length - 1];
     const pts = leg.pts;
     if (leg.kind !== 'walk' || !nav?.floors[leg.fi]) return false;
+    let hook = 0;
     for (let k = pts.length - 1; k > 0; k--) {
       const dx = pts[k].x - pts[k - 1].x;
       const dz = pts[k].z - pts[k - 1].z;
-      if (dx * dx + dz * dz < 1e-6) continue;
+      const d2 = dx * dx + dz * dz;
+      if (d2 < 1e-6 || (d2 < TAIL * TAIL && k > 1)) {
+        hook += Math.sqrt(d2);
+        continue;
+      }
       const mv = Math.atan2(-dx, -dz);
+      R.arriveMv = mv;
+      R.hook = hook;
       const c = wrap(mv + clamp(angleDiff(R.yaw, mv), -LEAD, LEAD));
       const e = pts[pts.length - 1];
       return wallRay(leg.fi, e.x, e.z, c, OPEN) >= OPEN ? c : false;
@@ -612,15 +621,25 @@ export function createWalk(engine, { project = null, api = null, wish = false, o
       const az = a.z - P.z;
       const lead = stair && !a.next ? LEAD_STAIR : LEAD;
       let aimYaw = ax * ax + az * az > 1e-4 ? Math.atan2(-ax, -az) : mv;
-      // 有要转到的朝向：最后 ARRIVE 米（很短的路：后一半）慢慢偏过去（arriveYaw：最多比走的方向偏 LEAD；那边是墙就不偏）
+      // 有要转到的朝向：最后 ARRIVE 米慢慢偏过去（arriveYaw：最多比走的方向偏 LEAD；那边是墙就不偏）。
+      // 从 0 慢慢加：路很短 → 后一半；楼梯下来最后那一段比 ARRIVE 短 → 从踏下楼梯那一下开始（不是一下子偏一大半，头往回扭）。
+      let w = 0;
       if (aimYaw != null && R.yaw != null && !stair) {
-        const w = 1 - Math.min(1, left / Math.min(ARRIVE, R.total / 2));
-        if (w > 0) {
-          if (R.arrive == null) R.arrive = arriveYaw(R);
-          if (R.arrive !== false) aimYaw = wrap(aimYaw + angleDiff(R.arrive, aimYaw) * w);
-        }
+        w = 1 - Math.min(1, left / Math.min(ARRIVE, R.total / 2, R.tail));
+        if (w > 0 && R.arrive == null) R.arrive = arriveYaw(R);
       }
-      if (aimYaw != null && mv != null) aimYaw = mv + clamp(angleDiff(aimYaw, mv), -lead, lead);
+      const blend = w > 0 && R.arrive != null && R.arrive !== false;
+      // 按走的方向 ± lead 夹住；偏过去的时候走到终点前那一小截折线上（拐角前 5cm 起：走的方向贴着拐角就已经换成折线的了）：
+      // 按走进终点的方向夹（不跟着折线扭头、到了再扭回来）
+      const m = blend && left <= R.hook + 0.05 ? R.arriveMv : mv;
+      if (aimYaw != null && m != null) aimYaw = m + clamp(angleDiff(aimYaw, m), -lead, lead);
+      if (blend) {
+        // 偏多少接着上一帧的那一边算（R.arriveD 不在 ±π 那里跳到另一边），夹的时候也不绕 ±π
+        let d = angleDiff(R.arrive, aimYaw);
+        if (R.arriveD != null && Math.abs(d - R.arriveD) > Math.PI) d -= Math.sign(d - R.arriveD) * 2 * Math.PI;
+        R.arriveD = d;
+        aimYaw = m != null ? m + clamp(angleDiff(aimYaw, m) + d * w, -lead, lead) : wrap(aimYaw + d * w);
+      }
       // 最后 END_EASE 米（很短的路：后一半）越转越少：终点前常有一小截折线（A* 格子中心 → 真正的终点），朝着它看会在停下的那一下甩头
       if (aimYaw != null) yaw = wrap(yaw + angleDiff(aimYaw, yaw) * (1 - Math.exp(-dt * TURN_K)) * Math.min(1, left / Math.min(END_EASE, R.total / 2)));
       // 看的方向和走的方向差 SIDE 以上就慢下来（差 90° → ×0.25，楼梯上最多 ×FACE_STAIR）：不横着快走
@@ -665,7 +684,8 @@ export function createWalk(engine, { project = null, api = null, wish = false, o
     const first = legs[0].pts[0];
     const lead = Math.hypot(first.x - P.x, first.z - P.z);
     if (legs[0].kind === 'walk') legs[0].len += lead;
-    const R = { legs, li: 0, pi: 0, total: p.length + lead, walked: 0, v: 0, yaw: Number.isFinite(wantYaw) ? wantYaw : null, resolve, free: false, arrived: false, cut: false, then: null, legDone: 0, arrive: null };
+    const tail = legs[legs.length - 1]; // 最后一段：走路 → ARRIVE 最多从它的头上开始偏
+    const R = { legs, li: 0, pi: 0, total: p.length + lead, walked: 0, v: 0, yaw: Number.isFinite(wantYaw) ? wantYaw : null, resolve, free: false, arrived: false, cut: false, then: null, legDone: 0, arrive: null, arriveD: null, arriveMv: null, hook: 0, tail: tail.kind === 'walk' ? tail.len : 0 };
     route = R;
     const end = legs[legs.length - 1];
     const fe = end.kind === 'walk' ? end.fi : end.to;

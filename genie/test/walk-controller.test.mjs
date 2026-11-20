@@ -917,6 +917,69 @@ await test('沿路走：U 形楼梯的平台上看着下一跑的尽头（不是
   ctl.dispose();
 });
 
+/** 走着的那些帧：每帧的转头速度（rad/s；一帧 16ms），只算这一帧动了的 */
+function walkRates(frames) {
+  const out = [];
+  for (let i = 1; i < frames.length; i++) {
+    const a = frames[i - 1];
+    const b = frames[i];
+    if (Math.hypot(b.x - a.x, b.z - a.z) < 1e-9) continue;
+    out.push({ i, r: angleDiff(b.yaw, a.yaw) / 0.016, x: b.x, z: b.z });
+  }
+  return out;
+}
+
+await test('沿路走：终点前 A* 留下的小折线（几厘米、朝着别处甚至朝后）不决定最后往哪偏 —— 走着不会先往反方向转、再一下子甩回来', async () => {
+  const w = await walkIn('semid2');
+  const { engine, ctl, nd } = w;
+  const centre = (id) => {
+    const f = nd.floors.findIndex((F) => F.rooms.some((r) => r.id === id));
+    const r = nd.floors[f].rooms.find((q) => q.id === id);
+    return N.nearest(ctl.nav, { fi: f, x: r.x + r.w / 2, z: r.y + r.d / 2 });
+  };
+  const a = centre('g-gbd');
+  const goal = centre('g-wkit');
+  const want = -1.438;
+  const pts = N.path(ctl.nav, a, goal).legs.at(-1).pts;
+  const hook = Math.hypot(pts.at(-1).x - pts.at(-2).x, pts.at(-1).z - pts.at(-2).z);
+  assert.ok(hook > 1e-3 && hook < 0.2, `这条路最后有一小截折线（${hook.toFixed(3)}m）`);
+  assert.equal(await ctl.goto({ floor: nd.floors[a.fi].id, x: a.x, z: a.z, yaw: Math.atan2(-(pts[1].x - pts[0].x), -(pts[1].z - pts[0].z)), pitch: 0, hour: engine.time }), true);
+  const frames = [];
+  assert.equal(await walkFrames(engine, ctl, ctl.walkTo({ ...goal, yaw: want }), (q) => frames.push(q)), true);
+  const rs = walkRates(frames);
+  const max = Math.max(...rs.map((q) => Math.abs(q.r)));
+  let flips = 0;
+  for (let i = 1; i < rs.length; i++) if (rs[i].r * rs[i - 1].r < 0 && Math.abs(rs[i - 1].r) > 0.3 && Math.abs(rs[i].r) > 1) flips++;
+  assert.ok(max < 4, `走着的时候转头最快 ${max.toFixed(2)} rad/s（不甩头）`);
+  assert.equal(flips, 0, '走着的时候不来回甩');
+  assert.ok(Math.abs(angleDiff(ctl.pose().yaw, want)) < 1e-9, '最后转到给的朝向');
+  ctl.dispose();
+});
+
+await test('沿路走：楼梯下来最后那一段很短（比 1.2m 短）：往给的朝向偏是从踏下楼梯那一下慢慢开始的，头不会一下子往回扭', async () => {
+  const w = await walkIn('semid2');
+  const { engine, ctl, nd } = w;
+  const a = N.nearest(ctl.nav, { fi: 1, x: 2.9, z: 12.4 });
+  const goal = N.nearest(ctl.nav, { fi: 0, x: 4.168, z: 6.083 });
+  const route = N.path(ctl.nav, a, goal);
+  const last = route.legs.at(-1);
+  let tl = 0;
+  for (let i = 1; i < last.pts.length; i++) tl += Math.hypot(last.pts[i].x - last.pts[i - 1].x, last.pts[i].z - last.pts[i - 1].z);
+  assert.ok(route.legs.at(-2)?.kind === 'stair' && last.kind === 'walk' && tl < 1.2, `楼梯下来最后一段 ${tl.toFixed(2)}m`);
+  assert.equal(await ctl.goto({ floor: nd.floors[1].id, x: a.x, z: a.z, yaw: 0, pitch: 0, hour: engine.time }), true);
+  const frames = [];
+  // 没给朝向：到了楼下转向房间中间（faceRoom）
+  assert.equal(await walkFrames(engine, ctl, ctl.walkTo(goal), (q) => frames.push(q), 120), true);
+  const rs = walkRates(frames);
+  // 走上最后那一段（楼梯走完）的第一帧
+  const k = rs.findIndex((q) => offPath(last.pts, q) < 1e-6 && Math.hypot(q.x - last.pts[0].x, q.z - last.pts[0].z) > 1e-4);
+  assert.ok(k > 0, '走下了楼梯');
+  let jump = 0;
+  for (let i = Math.max(1, k - 2); i < Math.min(rs.length, k + 12); i++) jump = Math.max(jump, Math.abs(rs[i].r - rs[i - 1].r));
+  assert.ok(jump < 1.5, `踏下楼梯前后转头速度一帧最多变 ${jump.toFixed(2)} rad/s（不一下子往回扭）`);
+  ctl.dispose();
+});
+
 await test('沿路走：客人拖着转了头（R.free）→ 不再自动转头（拐弯也不转、到了也不转到给的朝向），照样按路走到、速度不打折', async () => {
   const { engine, ctl, pts, goal } = await lRoute();
   const el = engine.renderer.domElement;
