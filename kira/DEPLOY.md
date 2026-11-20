@@ -1,25 +1,26 @@
 # KIRA 部署
 
-## 1. Vercel（新项目，不动任何旧项目）
-1. Vercel → Add New → Project → 导入 `wilsonteo459093500-arch/Riccione-Reka-Journey`
-2. Project Name：`kira-riccione-reka`（网址 `kira-riccione-reka.vercel.app`）
-3. **Root Directory：`kira`**（Framework 自动识别为 Vite）
-4. 先不填环境变量 → Deploy（这时是「本机模式」：资料存在各自浏览器，不需登录）
+## 1. Vercel（项目 `kira-riccione-reka`，已建好）
+- 网址：<https://kira-by-riccione-reka.vercel.app>（也可以用 `kira-riccione-reka.vercel.app`）
+- Root Directory：`kira`（Framework：Vite）
+- **怎么上线**（2026-11-20 起）：代码在 main；**合并进 main = 正式版自动更新**，别的分支 = 预览版。由 GitHub Actions 只在 `kira/` 有改动时测试、出版本，测试没过不上线。Vercel 项目自己的「GitHub 一推就建」已关掉（`vercel.json` 的 `git.deploymentEnabled: false` + 项目设定）。全部细节见仓库根目录的 [`DEPLOY-FLOW.md`](../DEPLOY-FLOW.md)。
+- 换了环境变量要重新出一次版本才生效：GitHub → Actions →「测试 + 上线」→ Run workflow → 选 `main`、填 `kira`。
+- 以前正式版从长期分支 `claude/cabinet-measurement-tool-enhance-ymc43k` 出；那条分支已经不用了。
 
-> **本机模式期间做的报价**：只存在做报价的那台设备 / 那个浏览器里。第 2 步接上云端后，**在同一台设备、同一个浏览器**打开正式网址并登录，KIRA 会自动把这些报价上传到云端（谁登录上传，谁就是这些报价的主人，只有他能删）。
-> 所以接云端之前：别清浏览器资料、别换浏览器；每台用过本机模式的设备都要登录一次（有网时），等顶栏显示 *Synced 已同步*。
-> Preview 网址（见下）是另一个网址，那里做的报价**不会**跟着上传。
+> **本机模式期间做的报价**：只存在做报价的那台设备 / 那个浏览器里。接上云端后，**在同一台设备、同一个浏览器**打开正式网址并登录，KIRA 会自动把这些报价上传到云端（谁登录上传，谁就是这些报价的主人，只有他能删）。
+> Preview 网址是另一个网址，那里做的报价**不会**跟着上传。
 
-`kira/vercel.json` 的 `ignoreCommand`：预览版只在 `kira/` 有改动时才重新构建；**正式版（Production）每次都构建**；在 Vercel 按「Redeploy」（同一个 commit 重新部署）也一定会构建 —— 换了环境变量要重新 build 才生效。其他 app 的项目也各有自己的 ignoreCommand，互不触发。
+## 2. Supabase（KIRA 自己的项目「KIRA BY RICCIONE REKA」）
+> 更正（2026-11-20）：以前这里写「和旧报价工具同一个项目、同一套账号」，**实际不是**。正式版接的是 2026-11-10 新开的 Supabase 项目「KIRA BY RICCIONE REKA」，里面只有 KIRA 的表（`kira_projects`、`kira_ai_feedback`），**没有旧工具的 `quotes` 表、也没有旧工具的账号**。所以「导入旧报价」在正式版导不到东西；要搬旧报价要另外做。
 
-## 2. Supabase（和旧报价工具同一个项目、同一套账号）
-1. **先确认** Authentication → Providers → Email → *Allow new users to sign up* 已关闭
+1. **先确认** Authentication → Providers → Email → *Allow new users to sign up* 已关闭（账号由管理员在 Authentication → Users 建）
 2. SQL Editor → 整段执行 `kira/supabase/kira_projects.sql`（可重复执行；只新增 `kira_projects` 表）
 3. Vercel → kira-riccione-reka → Settings → Environment Variables（只设 **Production**）：
-   - `VITE_SUPABASE_URL` = 旧工具同一个 Project URL
-   - `VITE_SUPABASE_ANON_KEY` = 同一个 anon key
-4. Redeploy → 打开网址会出现登录页，用旧工具的账号登录
-5. 本机模式用过的每台设备：用**同一个浏览器**打开正式网址 → 登录 → 本机模式的报价自动上传（见第 1 步的说明）
+   - `VITE_SUPABASE_URL` = 这个项目的 Project URL
+   - `VITE_SUPABASE_ANON_KEY` = 这个项目的 anon key
+4. 重新出一次正式版（见第 1 步）→ 打开网址会出现登录页
+5. 本机模式用过的每台设备：用**同一个浏览器**打开正式网址 → 登录 → 本机模式的报价自动上传
+6. 安全设定：Authentication → 设定里打开 **Leaked password protection（泄漏密码检查）**
 
 Preview 部署不设这两个变量 → 预览网址永远是本机模式，不会写进正式云端。
 
@@ -37,7 +38,7 @@ Preview 部署不设这两个变量 → 预览网址永远是本机模式，不�
 2. Vercel → kira-riccione-reka → Settings → Environment Variables：
    - `ANTHROPIC_API_KEY` = 那把 key，勾 **Production** 和 **Preview**（类型选 Sensitive）
    - `KIRA_AI_PASSCODE` = 自己定一个团队密码，勾 **Preview**（预览网址没有登录，靠这个挡外人）
-3. 重新部署（预览：推一次或在 Vercel 按 Redeploy；正式版：照第二版的做法用正式版设定重建）
+3. 重新出版本（预览：推一次；正式版：GitHub Actions 手动跑一次，见第 1 步）
 4. 谁能用：正式网址 = 已登录的同事；预览网址 = 知道团队密码的人（这次浏览器开着时只问一次）
 5. 每次识图约 US$0.10（看图片大小）；面板上会显示这次用了多少 tokens。AI 只给建议，勾选确认后才加入报价
 6. 没设这些：按「AI 识图」会显示「AI 还没设定」，其他功能照常
@@ -49,7 +50,7 @@ Preview 部署不设这两个变量 → 预览网址永远是本机模式，不�
 2. Vercel → kira-riccione-reka → Settings → Environment Variables，勾 **Production** 和 **Preview**（类型选 Sensitive）：
    - `KIRA_FEEDBACK_SUPABASE_URL` = 同一个 Supabase 的 Project URL
    - `KIRA_FEEDBACK_SERVICE_KEY` = Supabase → Settings → API → **service_role** key（只放 Vercel，绝不放 `VITE_` 开头的变量）
-3. 重新部署。谁能送反馈：同 AI 识图（正式版要登录；预览版要团队密码）
+3. 重新出版本（同上）。谁能送反馈：同 AI 识图（正式版要登录；预览版要团队密码）
 4. 没设这些：按 👎 会把反馈复制到剪贴板，提示「反馈功能还没设定，已复制，可以 WhatsApp 给开发」
 5. 开发拉反馈：`KIRA_FEEDBACK_SUPABASE_URL=… KIRA_FEEDBACK_SERVICE_KEY=… node scripts/feedback-pull.mjs [--images]` → `test/fixtures/ai-feedback/`（图只存本机 `test/out/`，不进仓库）；规则抓得到的设 `"expect": "unpicked"`，`npm test` 会一直重跑
 

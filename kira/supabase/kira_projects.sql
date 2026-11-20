@@ -29,7 +29,9 @@ create policy "kira update" on public.kira_projects for update to authenticated 
 create policy "kira delete own" on public.kira_projects for delete to authenticated using (owner_id = auth.uid());
 
 -- 修改时不允许把 owner_id 改成别人
-create or replace function public.kira_keep_owner() returns trigger language plpgsql as $$
+-- search_path 固定为空（Supabase 安全提醒 0011；函数不读任何表，不影响功能）
+create or replace function public.kira_keep_owner() returns trigger language plpgsql
+  set search_path = '' as $$
 begin
   new.owner_id := old.owner_id;
   return new;
