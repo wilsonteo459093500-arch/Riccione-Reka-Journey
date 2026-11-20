@@ -343,6 +343,8 @@
   ];
   var SHOT = {};
   SAME_SHOT.forEach(function (g) { g.forEach(function (ref) { SHOT[ref] = g[0]; }); });
+  // 溪岸真实案例（photos-sail.js）：比对出来的同一张写在那一行的 shot（tools/visi/same-shot.mjs），跟上面一样算
+  (MB.BUILTIN || []).forEach(function (b) { if (b.shot && b.shot !== b.id && !SHOT[b.id]) SHOT[b.id] = SHOT[b.shot] || b.shot; });
   // 案例库的照片：同一个镜头（连拍、微调角度，dHash 分组）算同一张 —— CASE_SHOT 由 MB.setCases 填
   function shot(ref) { return SHOT[ref] || CASE_SHOT[ref] || ref; }
   MB.shotKey = shot;

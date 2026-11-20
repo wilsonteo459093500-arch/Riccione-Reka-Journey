@@ -20,7 +20,8 @@ function stubEl() {
   return el;
 }
 
-/** @param {{ now?: Date }} [opt] now = 假的「今天」，测日期规则用 */
+/** @param {{ now?: Date, sail?: object[] }} [opt] now = 假的「今天」，测日期规则用；
+ *  sail = 假的溪岸真实案例清单（换掉 photos-sail.js 里 BEGIN / END 中间那段） */
 export function loadVisi(opt = {}) {
   const RealDate = Date;
   const fixed = opt.now ? opt.now.getTime() : null;
@@ -37,6 +38,13 @@ export function loadVisi(opt = {}) {
   window.window = window;
   const ctx = vm.createContext(Object.assign(window, { console, Date: FakeDate, setTimeout, clearTimeout,
     URLSearchParams, URL, Intl, Math, JSON, RegExp, String, Number, Array, Object, encodeURIComponent, decodeURIComponent }));
-  for (const f of FILES) vm.runInContext(readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
+  for (const f of FILES) {
+    let code = readFileSync(path.join(ROOT, f), 'utf8');
+    if (opt.sail && f.endsWith('photos-sail.js')) {
+      const a = code.indexOf('/* SAIL-PHOTOS-BEGIN */') + '/* SAIL-PHOTOS-BEGIN */'.length, b = code.indexOf('/* SAIL-PHOTOS-END */');
+      code = code.slice(0, a) + JSON.stringify(opt.sail) + code.slice(b);
+    }
+    vm.runInContext(code, ctx, { filename: f });
+  }
   return ctx.MB;
 }

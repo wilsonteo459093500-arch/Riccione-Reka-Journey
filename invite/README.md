@@ -70,13 +70,20 @@
   图库、自动配图都看不到；旧方案里放了的照样印得出来（不破图），体检提醒换掉。档案留着、不删、不改名。
 - **加新照片**：
   - **新照片要用新档名**：`vercel.json` 把 `assets/img/` 设成 immutable 快取一年，同名换图，看过的人一年都看到旧的。
-  - 跑一次两两比对（`samephoto.py`：模板匹配，NCC ≥ 0.94 算同一张；这支脚本没放进 repo），找出跟已有照片是同一张的裁切，
-    加进 `model.js` 的 `SAME_SHOT`，整份方案才不会重复。同一间房换个角度拍、看起来像同一张的，也放进同一组。
+  - 跑一次比对 `node tools/visi/same-shot.mjs`（要 python3 + PIL + numpy；`--all` 连旧照片之间也比）：
+    连拍 / 同一个档（dHash 距离 ≤ 8）和裁切 / 缩图（模板比对 NCC ≥ 0.94）算同一张，整份方案只出现一次。
+    - 溪岸真实案例（`photos-sail.js`）：加 `--write`，脚本在那一行写 `shot`（带头那张的 id），`model.js` 会读。
+    - 手写的内置照片（`data.js` / `photos.js`）之间：脚本只列出来，手动加进 `model.js` 的 `SAME_SHOT`。
+    - 「要看一眼」的配对（差一点的）：打开两张图看。是同一张、或同一间房换个角度拍看起来重复的，
+      手动在 `photos-sail.js` 那一行加 `"shot": "<另一张的 id>"`（或加进 `SAME_SHOT`），再跑一次 `--write`。
 - **溪岸真实案例**（`photos-sail.js`，照片在 `assets/img/sail/`）：老板在公司案例库「审核 → 多选 → 导出给 VISI」下载 zip
   （照片重新画过、没有拍摄资料，清单没有客户名字 / 项目名 / 档名）→ 解压 → `node tools/visi/import-builtin.mjs <资料夹>`（先加 `--dry-run` 看）。
-  不要手改 `photos-sail.js` 的清单；说明只写「风格 + 空间」，`series` 空（不上系列页）。
+  清单由脚本写（`import-builtin.mjs` 加照片、`same-shot.mjs --write` 写 `shot`、`retire.mjs` 写 `retired`）；
+  手改只限上面说的补 `shot`。说明只写「风格 + 空间」，`series` 空（不上系列页）。
 - **老板审图**：图库「老板审图」（要团队密码登入）→ 内置照片按「不发」：这台电脑马上不再自动配它，用到它的方案体检红灯。
-  「复制清单」贴给 Claude → 移到 `photos.js` 的 `MB.RETIRED_BUILTIN`（`owner`），合并后全公司都看不到（标记本身只存在那台电脑的浏览器）。
+  「复制清单」贴给 Claude → 存成文字档 → `node tools/visi/retire.mjs <清单.txt>`（先加 `--dry-run` 看）：
+  溪岸真实案例直接在 `photos-sail.js` 那一行标 `retired: 'owner'`；手写的内置照片脚本会列出来，手动移到 `photos.js` 的 `MB.RETIRED_BUILTIN`（`owner`）。
+  合并后全公司都看不到（标记本身只存在那台电脑的浏览器）。
 - 自己的图：在「图库」上传，或**把以前做好的 proposal PDF 拖进去** —— 会用 pdf.js 取出原图，按页面标题（FOYER / KITCHEN …）自动分好空间。
 - 图库与方案都存在**这台电脑的浏览器（IndexedDB）**，不上传、不进 git。换电脑 / 给同事：图库页的「导出图库」「导出这份方案」存成 `.json`，再导入。
 - 这个 repo 是公开的：客户的平面图、名字、网上找的参考图都**不要**放进 `assets/`，留在浏览器图库里就好。
