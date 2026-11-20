@@ -3,7 +3,7 @@
 //
 // 规则：
 // - 手动按「Run workflow」：只跑选的那个软件（选 all = 全部）
-// - main：和上一次推送比；别的分支：和 main 的分岔点比（整条分支改过什么）
+// - 只看这一次推送改了什么（和上一次推送比）；分支第一次推才和 main 的分岔点比
 // - 改到 .github/（上线流程本身）：全部软件都跑一次，确认流程没坏
 // - 文件夹在这条分支上不存在的软件（例：genie/ 还没合进来）：跳过
 //
@@ -32,12 +32,12 @@ if (event === 'workflow_dispatch') {
 } else {
   const zero = /^0+$/.test(before);
   const known = before && !zero && trySh(`git cat-file -t ${before}`) === 'commit';
-  let base;
-  if (prod) {
-    base = known ? before : '';
-  } else {
+  // 一律只看「这一次推送」改了什么（和上一次推送比），省部署额度。
+  // 分支第一次推（没有上一次）才和 main 的分岔点比。
+  let base = known ? before : '';
+  if (!base && !prod) {
     trySh('git fetch --no-tags --depth=200 origin main');
-    base = trySh('git merge-base origin/main HEAD') || (known ? before : '');
+    base = trySh('git merge-base origin/main HEAD');
   }
   if (!base) {
     chosen = present;
