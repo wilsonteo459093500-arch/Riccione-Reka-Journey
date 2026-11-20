@@ -13,8 +13,8 @@
    ============================================================ */
 import { createHash } from 'node:crypto';
 import { HttpError } from './http.js';
-import { bakPath } from './blob.js';
-import { isStyle, isCabinet, isRoom, isPtype, isTrait, isStatus } from './vocab.js';
+import { bakPath, adapterKind } from './blob.js';
+import { isStyle, isCabinet, isRoom, isPtype, isTrait, isStatus, CASE_STYLES } from './vocab.js';
 
 export const MAX_INDEX = 3.5 * 1024 * 1024;   // 清单上限：约 1 万张照片，远超过需要
 export const MAX_PHOTOS_PER_CALL = 40;
@@ -142,8 +142,8 @@ export function addPhotos(index, input, by, now) {
 
 /* ---------- patch ----------
    {source:'auto'|'human', photos:{h:{room,cabinets,style,hero,desc,status}}, projects:{pid:{area,ptype,traits,style}}} */
-var PHOTO_FIELDS = ['room', 'cabinets', 'style', 'hero', 'desc', 'status'];
-var PROJECT_FIELDS = ['area', 'ptype', 'traits', 'style'];
+var PHOTO_FIELDS = ['room', 'cabinets', 'style', 'style2', 'product', 'hero', 'desc', 'status'];
+var PROJECT_FIELDS = ['area', 'ptype', 'traits', 'style', 'style2'];
 
 function vocabErr(field, id, value) { return bad('vocab', { field: field, id: id, value: value }); }
 
@@ -164,7 +164,8 @@ function validPhotoPatch(h, x, auto) {
     var val = x[f];
     if (PHOTO_FIELDS.indexOf(f) < 0) throw vocabErr(f, h);
     if (f === 'room') { if (val !== '' && !isRoom(val)) throw vocabErr(f, h, val); out.room = val; }
-    else if (f === 'style') { if (val !== '' && !isStyle(val)) throw vocabErr(f, h, val); out.style = val; }
+    else if (f === 'style' || f === 'style2') { if (val !== '' && !isStyle(val)) throw vocabErr(f, h, val); out[f] = val; }
+    else if (f === 'product') { if (val !== '' && !isProduct(val)) throw vocabErr(f, h, val); out.product = val; }
     else if (f === 'cabinets') out.cabinets = cleanList(val, isCabinet, f, h);
     else if (f === 'hero') { if (typeof val !== 'boolean') throw vocabErr(f, h, val); out.hero = val; }
     else if (f === 'desc') {
@@ -193,7 +194,7 @@ function validProjectPatch(pid, x) {
     if (PROJECT_FIELDS.indexOf(f) < 0) throw vocabErr(f, pid);
     if (f === 'area') { if (typeof val !== 'string') throw vocabErr(f, pid, val); out.area = cleanText(val, 60); }
     else if (f === 'ptype') { if (val !== '' && !isPtype(val)) throw vocabErr(f, pid, val); out.ptype = val; }
-    else if (f === 'style') { if (val !== '' && !isStyle(val)) throw vocabErr(f, pid, val); out.style = val; }
+    else if (f === 'style' || f === 'style2') { if (val !== '' && !isStyle(val)) throw vocabErr(f, pid, val); out[f] = val; }
     else if (f === 'traits') out.traits = cleanList(val, isTrait, f, pid);
   });
   return out;
@@ -283,6 +284,95 @@ export function setHidden(index, input, hide, by, now) {
   return { changed: changed, n: changed, noop: changed === 0 };
 }
 
+/* ---------- 风格字：照「字在名字里出现的先后」，最多两个（同一种只算一次） ----------
+   本机版 assets/js/caselib/local-core.js 一模一样（对照测试） */
+export function stylesAt(name) {
+  var t = String(name || ''), hits = [];
+  CASE_STYLES.forEach(function (st, i) {
+    var m = new RegExp(st.match, 'i').exec(t);
+    if (m) hits.push({ key: st.key, at: m.index, i: i });
+  });
+  hits.sort(function (a, b) { return a.at - b.at || a.i - b.i; });
+  return hits.slice(0, 2);
+}
+export function stylesIn(name) { return stylesAt(name).map(function (x) { return x.key; }); }
+
+/* ---------- 产品：档名「产品-设计师-客户-序号」的第一段（例：水吧柜-谢尔曼-沈晓燕-3 → 水吧柜） ----------
+   2–10 个中文字、以柜 / 台 / 墙 / 门 / 板 / 床 / 架 / 桌 / 岛 / 吧 / 榻榻米 / 格栅 / 隔断 / 屏风 结尾、没有称呼：
+   人名、IMG_1234 绝不会变成产品（本机版 local-core.js 一模一样） */
+var PRODUCT_END = /(柜|台|墙|门|板|床|架|桌|岛|吧|榻榻米|格栅|隔断|屏风)$/;
+var PRODUCT_BAD = /先生|太太|小姐|女士|夫人|老板|夫妇|客户|客人|测试|阳台|露台|天台|平台/;
+export function isProduct(t) { return typeof t === 'string' && /^[\u4e00-\u9fff]{2,10}$/.test(t) && PRODUCT_END.test(t) && !PRODUCT_BAD.test(t); }
+
+/* ---------- 月份文件夹拆成一个一个家（regroup） ----------
+   项目名没有风格字（「2024年3月上海案例」），照片的第一层子文件夹名有风格字（「202403上海-沈晓燕-简约现代+侘寂风」）
+   → 那个子文件夹是一个家：照片搬过去（f 去掉第一层），新项目 id 由子文件夹名算（跟直接上传那个文件夹一样）。
+   缩图包新项目共用（planPurge 不删还有人用的包）；原项目搬空就拿掉；照片 id 不变（VISI 旧方案不断）。不用写 Blob 档 */
+export function regroupPlan(index) {
+  var out = [];
+  Object.keys(index.projects || {}).sort().forEach(function (pid) {
+    var pr = index.projects[pid];
+    if (stylesIn(pr.name).length) return;
+    var groups = {}, order = [];
+    Object.keys(index.photos || {}).sort().forEach(function (h) {
+      var ph = index.photos[h];
+      if (ph.p !== pid) return;
+      var f = String(ph.f || ''), i = f.indexOf('/');
+      if (i <= 0) return;
+      var seg = cleanText(f.slice(0, i), 120);
+      if (!seg || !stylesIn(seg).length) return;
+      if (!groups[seg]) { groups[seg] = []; order.push(seg); }
+      groups[seg].push(h);
+    });
+    var homes = order.map(function (seg) { return { name: seg, pid: pidOf(seg), photos: groups[seg] }; })
+      .filter(function (x) { return x.pid !== pid; });
+    if (homes.length) out.push({ from: pid, name: pr.name, homes: homes });
+  });
+  return out;
+}
+export function regroup(index, input, by, now) {
+  input = input || {};
+  var plan = regroupPlan(index);
+  if (input.pids != null) {
+    if (!Array.isArray(input.pids) || input.pids.length > MAX_PATCH_ENTRIES) throw bad('pids');
+    input.pids.forEach(function (p) { if (!hasProject(index, p)) throw bad('unknown', { field: 'projects', id: String(p).slice(0, 40) }); });
+    plan = plan.filter(function (g) { return input.pids.indexOf(g.from) >= 0; });
+  }
+  var moved = 0, made = 0, removed = 0;
+  plan.forEach(function (g) {
+    var src = index.projects[g.from], srcPb = packBytes(src), touched = [g.from];
+    g.homes.forEach(function (home) {
+      var pr = index.projects[home.pid];
+      if (!pr) {
+        pr = index.projects[home.pid] = { name: home.name, area: '', ptype: '', traits: [], style: '', packs: [], n: 0, pb: 0, by: by, ts: now };
+        if (src.hidden) pr.hidden = { by: by, ts: now };
+        made++;
+      }
+      if (typeof pr.pb !== 'number') pr.pb = packBytes(pr);
+      (src.packs || []).forEach(function (k) { if (pr.packs.indexOf(k) < 0) pr.packs.push(k); });
+      home.photos.forEach(function (h) {
+        var ph = index.photos[h], f = String(ph.f || '');
+        ph.p = home.pid;
+        ph.f = f.slice(f.indexOf('/') + 1);
+        moved++;
+      });
+      touched.push(home.pid);
+    });
+    touched.forEach(function (pid) {
+      if (!index.projects[pid]) return;
+      index.projects[pid].n = Object.keys(index.photos).filter(function (h) { return index.photos[h].p === pid; }).length;
+    });
+    if (!src.n) {
+      var first = index.projects[g.homes[0].pid];
+      first.pb = (first.pb || 0) + srcPb;
+      delete index.projects[g.from];
+      removed++;
+    }
+    touched.forEach(function (pid) { if (index.projects[pid]) groupShots(index, pid); });
+  });
+  return { moved: moved, made: made, removed: removed, n: moved, noop: !moved };
+}
+
 /* ---------- 给 VISI 的版本：拿掉项目名、档案路径、操作纪录 ---------- */
 export function visiView(index) {
   var out = JSON.parse(JSON.stringify(index));
@@ -320,7 +410,9 @@ export function bumpUsage(index, ts, writes) {
    - 传新照片（/api/photo）：这个月写入到 UPLOAD_CAP 就停，总储存量超过 BYTES_CAP 也停
    - 写清单（登记、改标签、隐藏）：到 WRITE_CAP 才停 —— 已经传上去的照片还能登记，不会变成没人用的档
    - 删除（purge）：到 PURGE_CAP 才停（删东西是为了救急）
-   BLOB_PLAN=pro 就不设上限（Pro 超过只是多付钱，不会停权）。 */
+   BLOB_PLAN=pro 就不设上限（Pro 超过只是多付钱，不会停权）。
+   存在 Supabase（设了 SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY，plan = 'supabase'）：没有每月的写入次数上限，
+   只看空间：STORAGE_CAP_MB（预设 700 MB —— 免费方案 1 GB，留空间给同一个项目的 KIRA 户型图）。 */
 export const UPLOAD_CAP = 1800;
 export const WRITE_CAP = 1950;
 export const PURGE_CAP = 1990;
@@ -328,7 +420,22 @@ export const BYTES_CAP = 950 * 1024 * 1024;
 export const PACK_EST = 35 * 1024;           // 还没记大小的旧缩图包：每张缩图估 35 KB
 export const INDEX_COPIES = 8;               // 清单本身 + 7 份每日备份
 
-export function blobPlan() { return String(process.env.BLOB_PLAN || '').trim().toLowerCase() === 'pro' ? 'pro' : 'hobby'; }
+export const STORAGE_CAP_MB = 700;
+export function blobPlan() {
+  if (adapterKind() === 'supabase') return 'supabase';
+  return String(process.env.BLOB_PLAN || '').trim().toLowerCase() === 'pro' ? 'pro' : 'hobby';
+}
+// Supabase 的空间上限（bytes）
+export function storageCap() {
+  var mb = Number(process.env.STORAGE_CAP_MB);
+  return Math.round((Number.isFinite(mb) && mb > 0 ? mb : STORAGE_CAP_MB) * 1024 * 1024);
+}
+// 这个方案每月写入有没有上限（只有 Vercel 免费方案有）
+export function writesCapped(plan) { return (plan || blobPlan()) === 'hobby'; }
+export function bytesCapOf(plan) {
+  plan = plan || blobPlan();
+  return plan === 'hobby' ? BYTES_CAP : plan === 'supabase' ? storageCap() : null;
+}
 
 export function monthWrites(index, ts) {
   var u = index && index.usage && typeof index.usage === 'object' ? index.usage[utcMonth(ts)] : null;
@@ -350,12 +457,12 @@ export function storedBytes(index) {
 export function quota(index, ts, plan) {
   plan = plan || blobPlan();
   var writes = monthWrites(index, ts), bytes = storedBytes(index);
-  var pro = plan === 'pro';
+  var capped = writesCapped(plan), bCap = bytesCapOf(plan);
   return {
     plan: plan, month: utcMonth(ts), writes: writes, bytes: bytes,
-    uploadCap: pro ? null : UPLOAD_CAP, writeCap: pro ? null : WRITE_CAP, bytesCap: pro ? null : BYTES_CAP,
-    writesLeft: pro ? null : Math.max(0, UPLOAD_CAP - writes),
-    bytesLeft: pro ? null : Math.max(0, BYTES_CAP - bytes)
+    uploadCap: capped ? UPLOAD_CAP : null, writeCap: capped ? WRITE_CAP : null, bytesCap: bCap,
+    writesLeft: capped ? Math.max(0, UPLOAD_CAP - writes) : null,
+    bytesLeft: bCap == null ? null : Math.max(0, bCap - bytes)
   };
 }
 export function quotaError(reason, writesLeft, bytesLeft) {
@@ -399,9 +506,17 @@ export function planPurge(index, hs) {
   hs.forEach(function (h) { touched[index.photos[h].p] = 1; });
   Object.keys(touched).forEach(function (pid) {
     if (left[pid] || !hasProject(index, pid)) return;
-    var pr = index.projects[pid];
     emptied.push(pid);
-    (pr.packs || []).forEach(function (k) { if (typeof k === 'string' && k) packs.push(k); });
+  });
+  // 缩图包可能几个项目共用（月份文件夹拆成好几个家之后）：还有别的项目在用的包不删
+  var keep = {};
+  Object.keys(index.projects).forEach(function (pid) {
+    if (emptied.indexOf(pid) >= 0) return;
+    (index.projects[pid].packs || []).forEach(function (k) { keep[k] = 1; });
+  });
+  emptied.forEach(function (pid) {
+    var pr = index.projects[pid];
+    (pr.packs || []).forEach(function (k) { if (typeof k === 'string' && k && !keep[k] && packs.indexOf(k) < 0) packs.push(k); });
     freed += packBytes(pr);
   });
   return { photos: hs, keys: keys, packs: packs, emptied: emptied, freed: freed };

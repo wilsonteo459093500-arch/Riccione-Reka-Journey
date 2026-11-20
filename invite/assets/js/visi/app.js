@@ -1317,7 +1317,7 @@
   }
   /** 公司案例的筛选（只在来源 = 公司案例时用） */
   function caseMatch(im, f) {
-    return (!f.style || im.style === f.style) && (!f.cab || (im.cabinets || []).indexOf(f.cab) > -1) && (!f.pid || im.pid === f.pid);
+    return (!f.style || MB.hasStyle(im, f.style)) && (!f.cab || (im.cabinets || []).indexOf(f.cab) > -1) && (!f.prod || im.product === f.prod) && (!f.pid || im.pid === f.pid);
   }
   /** 筛好的一页：{ chips, cfilter, items（这一页要画的）, pager, total } */
   function gallery(f, all) {
@@ -1342,7 +1342,7 @@
       // 下拉选单的数字：别的条件不变、只换这一项时有几张
       var base = all.filter(function (im) { return im.isCase && matches(im, f.room); });
       var cnt = function (key, val) {
-        var g = {}; g.style = f.style; g.cab = f.cab; g.pid = f.pid; g[key] = val;
+        var g = {}; g.style = f.style; g.cab = f.cab; g.prod = f.prod; g.pid = f.pid; g[key] = val;
         return base.filter(function (im) { return caseMatch(im, g); }).length;
       };
       var sel = function (key, label, opts) {
@@ -1354,8 +1354,10 @@
       };
       cfilter = sel('style', '风格', (MB.CASE_STYLES || []).map(function (x) { return [x.key, x.zh]; })) +
         sel('cab', '柜类', (MB.CASE_CABINETS || []).map(function (x) { return [x.key, x.zh]; })) +
+        // 产品：档名读到的原字（水吧柜、书桌…），案例库里有的才列
+        sel('prod', '产品', base.reduce(function (a, im) { if (im.product && a.indexOf(im.product) < 0) a.push(im.product); return a; }, []).sort().map(function (k) { return [k, k]; })) +
         sel('pid', '项目', (MB.cloud ? MB.cloud.projects() : []).map(function (x) { return [x.pid, x.label]; })) +
-        (f.style || f.cab || f.pid ? '<button class="mini" type="button" data-cf-clear>清除</button>' : '');
+        (f.style || f.cab || f.prod || f.pid ? '<button class="mini" type="button" data-cf-clear>清除</button>' : '');
     }
     return { chips: '<div class="lib-row">' + srcChips(f.src, srcCount) + '</div><div class="lib-row">' + filterChips(f.room, counts) + '</div>',
       cfilter: cfilter, items: shown, pager: pager, total: items.length };
@@ -1388,10 +1390,10 @@
     if (b.hasAttribute('data-filter')) { f.room = b.getAttribute('data-filter'); f.page = 0; }
     else if (b.hasAttribute('data-src')) { f.src = b.getAttribute('data-src'); f.page = 0; if (f.src !== 'cases') f.pid = ''; }
     else if (b.hasAttribute('data-page')) f.page = +b.getAttribute('data-page') || 0;
-    else if (b.hasAttribute('data-cf-clear')) { f.style = f.cab = f.pid = ''; f.page = 0; }
+    else if (b.hasAttribute('data-cf-clear')) { f.style = f.cab = f.prod = f.pid = ''; f.page = 0; }
     else if (b.hasAttribute('data-same-proj')) {
       // 同项目其他照片：切到公司案例、只看这个家
-      f.src = 'cases'; f.pid = b.getAttribute('data-same-proj'); f.style = f.cab = ''; f.room = 'all'; f.page = 0;
+      f.src = 'cases'; f.pid = b.getAttribute('data-same-proj'); f.style = f.cab = f.prod = ''; f.room = 'all'; f.page = 0;
     }
     return true;
   }

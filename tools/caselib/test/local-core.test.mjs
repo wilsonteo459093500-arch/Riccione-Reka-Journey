@@ -48,6 +48,7 @@ function runBoth(steps, label) {
       if (kind === 'add') return M.addPhotos(idx, JSON.parse(JSON.stringify(input)), by, ts);
       if (kind === 'patch') return M.patch(idx, JSON.parse(JSON.stringify(input)), by, ts);
       if (kind === 'hide' || kind === 'unhide') return M.setHidden(idx, JSON.parse(JSON.stringify(input)), kind === 'hide', by, ts);
+      if (kind === 'regroup') return M.regroup(idx, JSON.parse(JSON.stringify(input)), by, ts);
       if (kind === 'purge') { const hs = M.validatePurge(idx, input); const plan = M.planPurge(idx, hs); return { plan, out: M.applyPurge(idx, plan) }; }
       throw new Error('bad kind');
     };
@@ -254,7 +255,7 @@ test('local-core parity: run() = the server mutate (rev, log, usage, base, noop)
 test('auto tags: folder names → style + area (never the client name), sub-folders → room + cabinets', () => {
   const proj = [
     [P1, 'wood', 'Setia Alam'], [P2, 'cream', ''], [P3, 'french', 'Bangsar'],
-    ['Cheras 现代 测试客户', '', ''], ['Kepong 简约 测试', 'modern', 'Kepong'], ['Ipoh 日式 黄小姐', 'japandi', 'Ipoh'],
+    ['Cheras 现代 测试客户', 'modern', 'Cheras'], ['Kepong 简约 测试', 'modern', 'Kepong'], ['Ipoh 日式 黄小姐', 'japandi', 'Ipoh'],
     ['Puchong 北欧 Mdm Lee', 'nordic', 'Puchong'], ['Klang 现代简约 Mr Ong', 'modern', 'Klang'],
     ['Setia_Alam_原木_陈先生', 'wood', 'Setia Alam'], ['Setia Alam - 原木 - Tan Ah Kow', 'wood', 'Setia Alam'],
     // 客户名字在前面、或看不出哪段是地名：区域留空
@@ -270,7 +271,20 @@ test('auto tags: folder names → style + area (never the client name), sub-fold
     ['Taman Desa Jaya 原木 陈先生', 'wood', 'Taman Desa Jaya'], ['Bandar Baru Bangi 北欧 Mr Tan', 'nordic', 'Bandar Baru Bangi'],
     ['Kota Damansara 奶油风 林太太', 'cream', 'Kota Damansara'], ['Taman 原木 陈先生', 'wood', '']
   ];
-  for (const [name, style, area] of proj) assert.deepEqual(plain(C.guessProject(name)), { style, area }, name);
+  for (const [name, style, area] of proj) assert.deepEqual(plain(C.guessProject(name)), { style, style2: '', area }, name);
+  // 公司文件夹的格式「日期-城市-客户-风格」：两种风格照字出现的先后；客户名字、城市绝不当成标签（假名）
+  const company = [
+    ['20180711-上海-汪先生-现代', 'modern', ''], ['20180716-上海-张女士-欧式', 'european', ''], ['20201120-上海-现代简约', 'modern', ''],
+    ['20210513-上海-方女士-现代美式', 'modern', 'american'], ['20210514-上海-王先生-现代轻奢', 'modern', 'luxe'],
+    ['20210514-上海-韩女士-现代原木', 'modern', 'wood'], ['20210515-上海-柏先生-混搭', 'mixed', ''], ['20210516-上海-李女士-复古', 'midcentury', ''],
+    ['20220917-上海-徐女士-现代极简', 'modern', ''], ['2025-9-于双-极简原木风-罗维尔素岩03野径', 'modern', 'wood'],
+    ['202403上海-沈晓燕-简约现代+侘寂风', 'modern', 'wabi'], ['2024年3月上海案例', '', '']
+  ];
+  for (const [name, style, style2] of company) {
+    const g = plain(C.guessProject(name));
+    assert.deepEqual([g.style, g.style2, g.area], [style, style2, ''], name);
+    assert.deepEqual(plain(C.stylesIn(name)), S.stylesIn(name), 'server and browser read the same styles: ' + name);
+  }
   const rooms = [
     ['厨房/K_01.jpg', 'kitchen', ['kitchen']], ['Kitchen/x.jpg', 'kitchen', ['kitchen']], ['主卧/M_01.jpg', 'master', []],
     ['Master Bedroom/x.jpg', 'master', []], ['客厅/x.jpg', 'living', []], ['Living Room/x.jpg', 'living', []], ['餐厅/x.jpg', 'dining', []],
@@ -285,7 +299,24 @@ test('auto tags: folder names → style + area (never the client name), sub-fold
     ['餐边柜/x.jpg', 'dining', ['sideboard']], ['客厅/电视柜/x.jpg', 'living', ['tvcab']], ['厨房/中岛/x.jpg', 'kitchen', ['kitchen', 'island']],
     ['IMG_0001.jpg', '', []], ['Outdoor/x.jpg', '', []], ['2F/主卧/x.jpg', 'master', []], ['陈先生家/x.jpg', '', []]
   ];
-  for (const [f, room, cabinets] of rooms) assert.deepEqual(plain(C.guessPhoto(f)), { room, cabinets }, f);
+  // 产品：最里面那层「…柜 / 台 / 墙 / 岛」的子文件夹（档名 x.jpg、K_01 读不到）
+  const PW = new Set(['衣柜', '鞋柜', '电视柜', '电视墙', '书柜', '浴室柜', '餐边柜', '橱柜', '神台', '中岛']);
+  const prodOf = (f) => f.split('/').slice(0, -1).reverse().find((seg) => PW.has(seg)) || '';
+  for (const [f, room, cabinets] of rooms) assert.deepEqual(plain(C.guessPhoto(f)), { room, cabinets, style: '', style2: '', product: prodOf(f) }, f);
+  // 档名也读（空间、柜类）；风格只看子文件夹名
+  assert.deepEqual(plain(C.guessPhoto('水吧柜-谢尔曼-测试甲-3.jpg')), { room: 'dining', cabinets: ['sideboard'], style: '', style2: '', product: '水吧柜' });
+  assert.deepEqual(plain(C.guessPhoto('202403上海-测试甲-简约现代+侘寂风/水吧柜-谢尔曼-测试甲-3.jpg')), { room: 'dining', cabinets: ['sideboard'], style: 'modern', style2: 'wabi', product: '水吧柜' });
+  assert.deepEqual(plain(C.guessPhoto('主卧衣柜-01.jpg')), { room: 'master', cabinets: ['wardrobe'], style: '', style2: '', product: '主卧衣柜' });
+  assert.deepEqual(plain(C.guessPhoto('现代客厅.jpg')), { room: 'living', cabinets: [], style: '', style2: '', product: '' }, 'file names never give a style');
+  // 产品：档名第一段；认不出柜类的照样是产品；人名、IMG、带数字的不是
+  const prod = [['书桌-设计师-测试乙-1.jpg', '书桌', []], ['玄关柜2-测试丙.jpg', '玄关柜', ['shoe']], ['榻榻米_测试.jpg', '榻榻米', ['bed']],
+    ['测试甲-1.jpg', '', []], ['IMG_1234.jpg', '', []], ['陈先生柜-1.jpg', '', []], ['2F柜-1.jpg', '', []], ['客户柜-1.jpg', '', []],
+    ['吧台/IMG_9.jpg', '吧台', ['sideboard']], ['超级超级超级长的名字柜-1.jpg', '', []]];
+  for (const [f, product, cabinets] of prod) {
+    const g = plain(C.guessPhoto(f));
+    assert.deepEqual([g.product, g.cabinets], [product, cabinets], f);
+    assert.equal(S.isProduct(product), !!product, 'server agrees: ' + f);
+  }
   // 每个猜出来的都要是词表里的 key（伺服器的 patch 收得下）
   for (const [f] of rooms) {
     const g = C.guessPhoto(f);
@@ -307,10 +338,10 @@ test('auto tags: autoTags only fills empty fields, skips confirmed / unsure phot
   const auto = plain(C.autoTags(plain(idx)));
   assert.equal(auto.source, 'auto');
   assert.equal(auto.photos[H(40)], undefined, 'confirmed photo not touched');
-  assert.equal(auto.photos[H(41)], undefined, 'unsure photo not touched');
-  assert.deepEqual(auto.photos[H(42)], { room: 'living', cabinets: ['tvwall'] });
+  assert.equal(auto.photos[H(41)], undefined, 'a photo a person marked unsure keeps its tags');
+  assert.deepEqual(auto.photos[H(42)], { room: 'living', cabinets: ['tvwall'], product: '电视墙' });
   assert.equal(auto.photos[H(43)], undefined, 'no sub-folder → nothing');
-  assert.deepEqual(auto.photos[H(46)], { room: 'master', cabinets: ['wardrobe'] });
+  assert.deepEqual(auto.photos[H(46)], { room: 'master', cabinets: ['wardrobe'], product: '衣柜' });
   assert.deepEqual(auto.projects[p1], { style: 'wood', area: 'Setia Alam' });
   assert.equal(auto.projects[p2], undefined, 'style already set by a person; 「M Vertica」 is not obviously a place → no area');
   // 客户名字绝不会出现在任何标签里
@@ -337,6 +368,69 @@ test('auto tags: autoTags only fills empty fields, skips confirmed / unsure phot
   assert.ok(chunks.every((c) => c.source === 'auto'));
 });
 
+/* ---------- 月份文件夹拆成一个一个家 ---------- */
+test('regroup: a month folder whose sub-folders carry styles splits into one project per home — server and browser identical; shared packs survive a purge', () => {
+  const MONTH = '2024年3月上海案例';
+  const HOME1 = '202403上海-测试甲-简约现代+侘寂风', HOME2 = '202403上海-测试乙-奶油';
+  const photos = [
+    ph(H(301), 'f0f0f0f0f0f0f0f0', HOME1 + '/水吧柜-测试甲-1.jpg'), ph(H(302), '0f0f0f0f0f0f0f0f', HOME1 + '/客厅/a.jpg'),
+    ph(H(303), 'ff00ff00ff00ff00', HOME2 + '/厨房/b.jpg'), ph(H(304), '00ff00ff00ff00ff', '杂项/c.jpg'), ph(H(305), 'aaaaaaaaaaaaaaaa', 'loose.jpg')
+  ];
+  const run = runBoth([
+    ['add', { project: { name: MONTH }, photos, pack: 't/pM-aaa.json', packSz: 5000 }, 'Ana', T0],
+    ['add', { project: { name: '20180711-上海-测试丙-现代' }, photos: [ph(H(306), '1234123412341234', 'd.jpg')] }, 'Ana', T0 + 1],
+    ['regroup', {}, 'Ana', T0 + 2],
+    ['regroup', {}, 'Ana', T0 + 3],                         // 再按一次：没有可以拆的
+    ['hide', { photos: [H(303)] }, 'Ana', T0 + 4],
+    ['purge', { photos: [H(303)] }, 'Ana', T0 + 5]
+  ], 'regroup');
+  const idx = plain(run.si);
+  const pm = S.pidOf(MONTH), p1 = S.pidOf(HOME1), p2 = S.pidOf(HOME2);
+  const pick = (r) => ({ moved: r.moved, made: r.made, removed: r.removed, noop: r.noop });
+  assert.deepEqual(pick(run.results[2].res), { moved: 3, made: 2, removed: 0, noop: false });
+  assert.deepEqual(pick(run.results[3].res), { moved: 0, made: 0, removed: 0, noop: true }, 'second regroup is a no-op');
+  assert.equal(idx.photos[H(301)].p, p1);
+  assert.equal(idx.photos[H(301)].f, '水吧柜-测试甲-1.jpg');
+  assert.equal(idx.photos[H(302)].f, '客厅/a.jpg');
+  assert.equal(idx.projects[p1].name, HOME1);
+  assert.equal(idx.projects[p1].n, 2);
+  // 没风格字的子文件夹、直接放的照片留在月份项目里
+  assert.equal(idx.photos[H(304)].p, pm);
+  assert.equal(idx.photos[H(305)].p, pm);
+  assert.equal(idx.projects[pm].n, 2);
+  // 已经有风格字的项目不拆
+  assert.equal(idx.photos[H(306)].p, S.pidOf('20180711-上海-测试丙-现代'));
+  // 家 2 只有一张照片，删掉之后家 2 拿掉，但月份项目和家 1 还在用的缩图包不删
+  assert.ok(!idx.projects[p2], 'emptied home removed');
+  assert.ok(idx.projects[p1].packs.includes('t/pM-aaa.json'));
+  // 拆完之后自动标：项目照名字有两种风格，档名「水吧柜」→ 餐边柜
+  const auto = plain(C.autoTags(idx));
+  assert.deepEqual(auto.projects[p1], { style: 'modern', style2: 'wabi' });
+  assert.deepEqual(auto.photos[H(301)], { room: 'dining', cabinets: ['sideboard'], product: '水吧柜' });
+  assert.equal(S.patch(idx, auto, 'Claude', T0 + 6).changed > 0, true);
+  // 拆过的项目再上传同一个家的文件夹：同一个 id
+  assert.equal(C.pidOf(HOME1), p1);
+});
+
+test('regroup: purge keeps a pack that another project still uses, deletes it once nobody does', () => {
+  const idx = S.emptyIndex();
+  S.addPhotos(idx, { project: { name: 'M 月份' }, photos: [ph(H(401), 'f0f0f0f0f0f0f0f0', '甲-现代/a.jpg'), ph(H(402), '0f0f0f0f0f0f0f0f', '乙-欧式/b.jpg')], pack: 't/pX-1.json', packSz: 100 }, 'Ana', T0);
+  S.regroup(idx, {}, 'Ana', T0 + 1);
+  assert.ok(!idx.projects[S.pidOf('M 月份')], 'month project emptied and removed');
+  S.setHidden(idx, { photos: [H(401)] }, true, 'Ana', T0 + 2);
+  assert.deepEqual(S.planPurge(idx, [H(401)]).packs, [], 'pack still used by the other home');
+  S.setHidden(idx, { photos: [H(402)] }, true, 'Ana', T0 + 3);
+  assert.deepEqual(S.planPurge(idx, [H(401), H(402)]).packs, ['t/pX-1.json'], 'nobody uses it any more');
+  // 空间统计：拆之前、拆之后一样（缩图包不重复算）
+  const a = S.emptyIndex();
+  S.addPhotos(a, { project: { name: 'M 月份' }, photos: [ph(H(403), 'f0f0f0f0f0f0f0f0', '甲-现代/a.jpg'), ph(H(404), '0f0f0f0f0f0f0f0f', '乙-欧式/b.jpg')], pack: 't/pX-2.json', packSz: 5000000 }, 'Ana', T0);
+  const before = S.storedBytes(a);
+  S.regroup(a, {}, 'Ana', T0 + 1);
+  // 只多了两个项目纪录（清单 × 8 份）；缩图包没有多算一次（一包 100 bytes 在这里看不出来，所以用很大的包）
+  assert.ok(Math.abs(S.storedBytes(a) - before) < 3000, 'bytes before ' + before + ' after ' + S.storedBytes(a));
+  assert.throws(() => S.regroup(a, { pids: ['pffffffffff'] }, 'Ana', T0 + 2), (e) => e.status === 400);
+});
+
 /* ---------- 标签档 ---------- */
 test('tags file: export has only tags (no f / k / url), readTags cleans it, mergeTags follows the rules', () => {
   const src = S.emptyIndex();
@@ -353,8 +447,8 @@ test('tags file: export has only tags (no f / k / url), readTags cleans it, merg
   assert.equal(file.v, 1);
   const text = JSON.stringify(file);
   for (const leak of ['厨房/', '"f"', '"k"', 'c/' + H(61), 'url', 'data:image']) assert.ok(!text.includes(leak), 'tags file has ' + leak);
-  assert.deepEqual(Object.keys(file.photos[H(61)]).sort(), ['cabinets', 'desc', 'hero', 'hidden', 'p', 'room', 'status', 'style']);
-  assert.deepEqual(Object.keys(file.projects[pa]).sort(), ['area', 'hidden', 'name', 'ptype', 'style', 'traits']);
+  assert.deepEqual(Object.keys(file.photos[H(61)]).sort(), ['cabinets', 'desc', 'hero', 'hidden', 'p', 'product', 'room', 'status', 'style', 'style2']);
+  assert.deepEqual(Object.keys(file.projects[pa]).sort(), ['area', 'hidden', 'name', 'ptype', 'style', 'style2', 'traits']);
   assert.equal(file.photos[H(62)].hidden, true);
   assert.equal(file.projects[pa].name, P1);
 

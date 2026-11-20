@@ -674,7 +674,7 @@
     // 绝不会有项目名、档名（cloud.js 根本不收）
     return { ref: ref, src: b.src, w: b.w, h: b.h, series: b.series || '', rooms: b.rooms || (b.tag ? [b.tag] : []),
       own: own, label: own ? (b.label || '') : (b.zh || ''), en: b.en || '', zh: b.zh || '', pos: b.pos || '',
-      isCase: ref.indexOf('c:') === 0, area: b.area || '', ptype: b.ptype || '', traits: b.traits || [], style: b.style || '', gone: goneOf(b) };
+      isCase: ref.indexOf('c:') === 0, area: b.area || '', ptype: b.ptype || '', traits: b.traits || [], style: b.style || '', style2: b.style2 || '', gone: goneOf(b) };
   }
   /** 一个案例那一句：销售写的 > copy.js 起草 > 图本身的说明（不编） */
   function caseLine(p, c, im, lang) {

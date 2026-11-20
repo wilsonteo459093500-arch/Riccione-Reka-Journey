@@ -29,6 +29,8 @@
    程式里用：import { startMock } from './mock-server.mjs'
      const m = await startMock({ port: 0, cors: true, password: 'test-pass', seed });
      m.url / m.blob / m.adapter.stats() / m.adapter.conflictNext(3) / m.setDown(true) / m.apiHits() / await m.close()
+   储存改用 Supabase：startMock({ supabase: await startFakeSupabase() })（fake-supabase.mjs）——
+     /api/* 用正式的 supabaseAdapter 打那个假的 Supabase，照片网址也是它的；/__mock/ 那些记忆体钩子就不能用了
    ============================================================ */
 import http from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
@@ -147,6 +149,10 @@ export async function startMock(opts) {
   const blobUrl = 'http://' + opts.host + ':' + blobPort + '/';
   // 只在这个 mock 的请求里用这个记忆体 adapter（不动全域的 setAdapter）
   adapter = blobLib.memoryAdapter({ base: blobUrl });
+  if (opts.supabase) {
+    const sb = await import(API + '_lib/supabase.js');
+    adapter = sb.supabaseAdapter({ env: opts.supabase.env });
+  }
   if (opts.seed) {
     const seed = typeof opts.seed === 'string' ? JSON.parse(await readFile(opts.seed, 'utf8')) : opts.seed;
     adapter.seed(seed);

@@ -352,6 +352,12 @@
     var u = usage(q);
     // Pro、存在这台电脑：没有每月的上限
     if (q.plan === 'pro' || q.plan === 'local') return { pro: true, local: q.plan === 'local', q: q, u: u, w: Infinity, b: Infinity, N: Infinity, M: Infinity, allowed: Infinity, zero: '' };
+    // Supabase：没有每月的写入上限，只看空间
+    if (q.plan === 'supabase') {
+      var sb = q.bytesLeft == null ? Infinity : Math.max(0, +q.bytesLeft || 0);
+      var sM = sb === Infinity ? Infinity : Math.floor(sb / PER_PHOTO);
+      return { pro: sb === Infinity, supa: true, q: q, u: u, w: Infinity, b: sb, N: Infinity, M: sM, allowed: sM, zero: sM <= 0 ? 'bytes' : '' };
+    }
     // 今天第一次写入前伺服器会先备份一次清单（也算 1 次写入）
     var w = Math.max(0, (q.writesLeft | 0) - pendingCost() - (u.wroteToday ? 0 : 1));
     var b = Math.max(0, +q.bytesLeft || 0);
@@ -890,9 +896,9 @@
     if (r.status === 413) return '档案太大（' + (e || 413) + '）';
     if (r.status === 415) return '不是 JPEG（' + (e || 415) + '）';
     if (r.status === 500 && e === 'storage') return '储存出错：' + ((r.json && r.json.message) || '');
-    if (e === 'storage_busy') return 'Blob 太忙（限流）';
-    if (e === 'storage_timeout') return 'Blob 太久没回应';
-    if (e === 'storage_blocked') return 'Blob 不让写入：' + ((r.json && r.json.message) || '');
+    if (e === 'storage_busy') return '储存太忙（限流）';
+    if (e === 'storage_timeout') return '储存太久没回应';
+    if (e === 'storage_blocked') return '储存不让写入：' + ((r.json && r.json.message) || '');
     // 存在这台电脑（caselib-sw.js 回 507 quota + local）：是这台电脑的空间满了，不是每月的额度
     if (e === 'quota') return (r.json && r.json.local) || CL.mode === 'local' ? '这台电脑的空间满了' : '这个月的免费额度到了';
     return '伺服器回 ' + r.status + (e ? ' ' + e : '');
@@ -903,7 +909,7 @@
   // store 被暂停 / 没权限 / 不存在：重试也没用，整批停下来、讲清楚
   function blocked(r) { return !!(r && r.json && r.json.error === 'storage_blocked'); }
   function blockedError(r) {
-    var e = new Error('Vercel Blob 暂停了写入 —— 案例库的储存被停权了（多半是免费额度用完了），或 Blob store 被停用 / 没接好。' +
+    var e = new Error('储存暂停了写入 —— 案例库的储存（Supabase 或 Vercel Blob）额度用完、被停用，或金钥 / 设定不对。' +
       '已传好的照片都记在这台电脑，之后（老板处理好、或下个月）再拖一次同一个文件夹就会接着传，不会重传。' +
       '（' + ((r.json && r.json.message) || 'storage_blocked') + '）');
     e.fatal = true;
@@ -923,7 +929,7 @@
   // 伺服器没设定好（缺 Blob 的环境变数）：跟停权不一样，要老板去 Vercel 设
   function notConfigured(r) { return !!(r && r.status === 503 && r.json && r.json.error === 'not_configured'); }
   function configError() {
-    var e = new Error('伺服器还没接好照片储存（Vercel 的 Blob 设定）：请老板到 Vercel 设定好、重新部署后再传。已传好的照片都记在这台电脑，不会重传。');
+    var e = new Error('伺服器还没接好照片储存（Vercel 环境变数：SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY，或 Blob）：请老板设定好、重新部署后再传。已传好的照片都记在这台电脑，不会重传。');
     e.fatal = true;
     e.kind = 'config';
     return e;
@@ -1204,7 +1210,7 @@
   function quotaText(running, reason) {
     var space = (reason || S.stopReason) === 'bytes';
     var t = CL.mode === 'local' ? '这台电脑给浏览器的空间满了，已经自动停下来。' :
-      space ? '案例库的空间快满了，已经自动停下来，免得 Vercel 把案例库停权。' :
+      space ? '案例库的空间快满了，已经自动停下来，免得超过储存的额度。' :
       '这个月的免费额度快用完了，已经自动停下来，免得 Vercel 把案例库停权。';
     if (running) return t + '正在把传好的照片登记好…';
     var left = pendingCommits();
@@ -1550,6 +1556,19 @@
     if (bud.pro) {
       return '<div class="budget pro"><p class="b-big"><b>Pro 方案：不限额度</b></p>' +
         '<p class="b-note">这次约 ' + CL.n(est.writes) + ' 次写入、' + CL.mb(est.bytes) + '。</p></div>';
+    }
+    if (bud.supa) {
+      var sCap = q.bytesCap || 0, sTotal = (+q.bytes || 0) + est.bytes;
+      var sh = '<div class="budget' + (bud.zero ? ' over zero' : sel.cut ? ' cut' : '') + '">' +
+        '<p class="sub-h">云端案例库（Supabase）</p>' +
+        '<p class="b-big">空间还够约 <b>' + CL.n(bud.M) + '</b> 张 · 没有每月的次数限制</p>' +
+        '<div class="b-row"><span>空间</span>' + bar(sTotal / sCap, sTotal > sCap ? 'bad' : '') +
+        '<span class="b-num">已用 ' + CL.mb(q.bytes) + ' / ' + CL.mb(sCap) + ' · 这次约 <b>' + CL.mb(est.bytes) + '</b></span></div>' +
+        '<p class="b-note">空间上限是伺服器设的（免费方案 1 GB，留一些给 KIRA），到上限会自己停下来，不会超额。</p>';
+      if (bud.zero) sh += '<div class="b-warn"><b>空间满了</b>先到「审核」删除隐藏的照片，释放空间，再回来传。</div>';
+      else if (sel.cut) sh += '<div class="b-warn b-cut"><b>空间只够再传约 ' + CL.n(sel.total) + ' 张</b>已先选好每个项目最重要的照片。其余的 ' + CL.n(sel.cut) +
+        ' 张：先到「审核」删除隐藏的照片，释放空间，再拖同一个文件夹接着传（传过的不会重传）。</div>';
+      return sh + '</div>';
     }
     var wCap = q.uploadCap || CL.LIMIT_WRITES, bCap = q.bytesCap || CL.LIMIT_BYTES;
     var wTotal = (q.writes | 0) + est.writes, bTotal = (+q.bytes || 0) + est.bytes;

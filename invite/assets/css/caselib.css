@@ -124,6 +124,14 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .rv-tags .tags-t { display: flex; flex-direction: column; margin-right: auto; min-width: 0; }
 .rv-tags .tags-t b { font-weight: 500; }
 .rv-tags .tags-t small { color: var(--ink-faint); font-size: 12px; }
+.rv-ai { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 10px; display: grid; gap: 8px; font-size: 14px; }
+.rv-ai p { margin: 0; }
+.rv-ai .ai-key { display: flex; flex-wrap: wrap; gap: 8px; }
+.rv-ai .ai-key input { flex: 1 1 260px; min-width: 0; padding: 7px 10px; border: 1px solid var(--line); background: #fff; font: inherit; }
+.rv-ai .btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.rv-ai .err { color: #A4402B; }
+.rv-ai .ok { color: #3F6B43; }
+.rv-ai .warn { color: #A8402A; }
 .rv-tags .tidy-msg p { margin: 8px 0 0; font-size: 13px; }
 .rv-tags .tidy-msg .ok { color: #3F6B43; }
 .rv-tags .tidy-msg .err { color: #A4402B; }
@@ -542,3 +550,13 @@ button.linkish { background: none; border: 0; padding: 0; font: inherit; }
   .tidy-word input[type="text"] { max-width: none; }
   .ask-btns .btn { flex: 1 1 0; }
 }
+
+/* ---------- 直接删除、多选 ---------- */
+.mini.danger, .btn.danger { color: #A4402B; border-color: rgba(164,64,43,.35); }
+.mini.danger:hover:not(:disabled), .btn.danger:hover:not(:disabled) { background: rgba(164,64,43,.08); }
+.rv-multi { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 10px; }
+.rv-multi .m-n { font-size: 14px; margin-right: 4px; }
+.rv-card.multi .pick { position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; border-radius: 50%;
+  border: 2px solid #fff; background: rgba(0,0,0,.25); color: #fff; font-size: 14px; line-height: 20px; text-align: center; }
+.rv-card.multi.picked { outline: 3px solid #A4402B; outline-offset: -3px; }
+.rv-card.multi.picked .pick { background: #A4402B; }
