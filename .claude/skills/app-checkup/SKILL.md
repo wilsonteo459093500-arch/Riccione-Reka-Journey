@@ -141,6 +141,7 @@ argument-hint: "<app 名字或资料夹，例：space、crm、blueprint、studio
 ### 6　存档
 
 - 在 `<app>/PLAN.md` 加一节「体检 YYYY-MM-DD」：面试结论、发现（按四类）、分阶段计划表。旧的内容不删
+  - 例外：`invite/`（VISI / 邀请函）整个资料夹直接上线，放进去的档案会变成公开网页，合并时还会触发正式版部署 → 它的计划放 `.claude/plans/visi.md`
 - `CLAUDE.md` 加 / 更新一行指引（写日期）
 - commit、push、开 draft PR。用户说「合并」才合并
 
@@ -183,3 +184,11 @@ argument-hint: "<app 名字或资料夹，例：space、crm、blueprint、studio
 - 这台机器的截图只有 unifont 能显示中文 —— 字体难看不算发现
 - `about` 和 `facts` 写得马虎，发现就会偏技术、离老板的实际情况很远
 - 用户说的「streaming responses + remaining time」是指**对话时**边做边报进度（2026-11-19 问过），不是要在 app 里加功能
+
+## 同一天跑 VISI 学到的（2026-11-19，这个 skill 建好之前跑的）
+
+- **Fable 派会开浏览器的人，一个约 60 万 token**（是上面估的两倍）：派 7 路 + 3 位复核，只跑完「电脑实际操作」「手机实际操作」两路就撞上限。再一次说明：主对话和派的人都用 Opus，省量版
+- **最先交回的最有用**：把「实际操作」排第一个是对的 —— 就算后面全断，手上也有截图和能给老板看的东西
+- **发现要马上存进 repo**：结果只在临时资料夹和 `journal.jsonl`，机器一回收就没了。一整理出来就先存成草稿、commit、push，不要等面试问完
+- **Vercel 免费版一天只能部署 100 次，全部 app 共用**：每次 push 每个项目都记一次。撞到之后那天合并进 main 的东西不会上线，也不会自己补 —— 摸底时一定要比对「正式版的 commit」和「main 上这个 app 最后一个 commit」。体检对话自己也要少 push（攒在一起推一次）
+- **同一类请求可能同时有别的对话在做**：开工前先 `git fetch` 看 main 和别的分支有没有已经做了同样的 skill / 计划，免得做出两个打架的版本（这次 `review-plan` 和 `app-checkup` 就撞了，留 `app-checkup`）

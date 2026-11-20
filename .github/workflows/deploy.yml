@@ -85,6 +85,8 @@ jobs:
             echo "::error::还没设 VERCEL_TOKEN（GitHub 仓库 Settings → Secrets and variables → Actions）。见 DEPLOY-FLOW.md 第 1 步"
             exit 1
           fi
+          # 出版本失败（例如 Vercel 一天 100 次的额度用完）要亮红灯：没有这行，后面的 tail 会把失败盖掉，PR 上只看到「undefined」
+          set -o pipefail
           FLAGS="--yes --archive=tgz"
           if [ "$PROD" = "true" ]; then FLAGS="$FLAGS --prod"; fi
           # 从仓库根目录上传；Vercel 照项目设定的 Root Directory（${{ matrix.app.dir }}）去构建

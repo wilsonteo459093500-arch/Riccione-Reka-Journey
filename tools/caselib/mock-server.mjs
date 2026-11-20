@@ -7,7 +7,7 @@
    就绪后在 stdout 印一行 JSON：{"url":"http://127.0.0.1:<port>","blob":"http://127.0.0.1:<blobport>/"}
 
    - 主 port：静态服务 invite/（cleanUrls：/caselib → caselib.html），
-     /api/session|photo|catalog 接「真的」handler，储存换成记忆体 adapter。
+     /api/session|photo|catalog|link 接「真的」handler，储存换成记忆体 adapter。
      vercel.json 藏起来的路径（package.json、node_modules、api/_lib…）一律 404。
    - blob port：假装是 Blob 的公开网址，照 pathname 给档案；
      默认带 Access-Control-Allow-Origin: *，--no-cors 就不带（测 PPTX 的后备路径）。
@@ -82,7 +82,8 @@ export async function startMock(opts) {
   const handlers = {
     session: (await import(API + 'session.js')).default,
     photo: (await import(API + 'photo.js')).default,
-    catalog: (await import(API + 'catalog.js')).default
+    catalog: (await import(API + 'catalog.js')).default,
+    link: (await import(API + 'link.js')).default
   };
   const state = { down: false, cors: !!opts.cors, api: { hits: 0, paths: [] } };
   let adapter = null;

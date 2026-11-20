@@ -45,6 +45,18 @@
   </div>
 </header>
 
+<!-- 两个分页开同一份方案：别的分页改过了 → 这里停存，按一下载入最新的（app.js 的 staleBar） -->
+<div class="stale-bar" id="stale-bar" role="alert" hidden>
+  <span id="stale-msg"></span>
+  <button class="mini dark" type="button" id="stale-reload">载入最新的</button>
+</div>
+<!-- 太久没备份 / 浏览器没答应一直保留资料（app.js 的 backupNag） -->
+<div class="stale-bar soft" id="backup-bar" hidden>
+  <span id="backup-msg"></span>
+  <button class="mini dark" type="button" id="backup-now">导出全部备份</button>
+  <button class="mini" type="button" id="backup-later">明天再提醒</button>
+</div>
+
 <main class="mb">
 
   <!-- ======================== 左：编辑 ======================== -->
@@ -246,6 +258,14 @@
           <button class="mini" type="button" id="inv-copy">复制链接</button>
           <a class="mini" id="inv-open" href="#" target="_blank" rel="noopener">预览邀请函</a>
         </div>
+        <!-- 签名链接（体检第 2c 阶段）：链接写你的名字 / 号码，要登入后伺服器签过，邀请函才认 -->
+        <div class="sign-box" id="inv-sign" hidden>
+          <p class="cloud-st" id="inv-sign-st"></p>
+          <form class="cloud-login" id="inv-sign-form" hidden autocomplete="on">
+            <input type="password" name="pw" placeholder="团队密码" autocomplete="current-password" />
+            <button class="mini dark" type="submit">登入</button>
+          </form>
+        </div>
       </div>
     </section>
 
@@ -283,6 +303,25 @@
           <div class="field" style="margin-bottom:0"><label class="q" for="up-tag">归到哪个空间</label><select id="up-tag"></select></div>
           <div class="drop" id="up-drop" style="margin:0">拖照片进来，或 <u>点这里</u><input type="file" id="up-file" accept="image/*" multiple hidden /></div>
         </div>
+        <label class="check-line" style="margin-top:10px"><input type="checkbox" id="up-shared" />
+          <span><b>公司共用</b>：所有客户的方案都可以自动配这批照片（公司的作品照、展厅照才勾）</span></label>
+        <p class="hint" id="up-who" style="margin:4px 0 0"></p>
+      </div>
+
+      <div class="panel" id="boss-panel">
+        <p class="sub-h" style="margin-top:0">老板审图</p>
+        <p class="hint" style="margin:0 0 10px">把不想发给客户的内置照片标成「不发」：这台电脑马上不再自动配它，已经用了它的方案，体检会请销售换掉。
+          标完按「复制清单」贴给 Claude，放进正式版以后，全公司都看不到。要先用团队密码登入。</p>
+        <div class="btn-row">
+          <button class="mini gold" type="button" id="boss-start">开始审图</button>
+          <span id="boss-tools" hidden>
+            <b id="boss-count"></b>
+            <button class="mini" type="button" id="boss-copy">复制清单（发给 Claude）</button>
+            <button class="mini" type="button" id="boss-stop">审完了</button>
+          </span>
+        </div>
+        <p class="hint" id="boss-who" style="margin:8px 0 0"></p>
+        <textarea id="boss-out" rows="5" readonly hidden style="width:100%;margin-top:8px;font-size:12px"></textarea>
       </div>
 
       <div class="lib-head">
@@ -295,7 +334,12 @@
 
       <div class="panel" style="margin-top:18px">
         <p class="sub-h" style="margin-top:0">备份 · 给同事</p>
-        <p class="hint" style="margin-bottom:10px">图库和方案只在这台电脑。换电脑、或把整理好的图库给同事，用下面的文件。</p>
+        <p class="hint" style="margin-bottom:10px">图库和方案只在这台电脑的这个浏览器里。浏览器清掉资料、换电脑，就只剩备份文件 ——
+          每星期按一次「导出全部备份」，存到云端硬碟或 WhatsApp 给自己。</p>
+        <p class="hint" id="backup-when" style="margin:0 0 10px"></p>
+        <div class="btn-row" style="margin-bottom:8px">
+          <button class="mini gold" type="button" id="all-export">导出全部备份（所有方案 + 照片）</button>
+        </div>
         <div class="btn-row">
           <button class="mini" type="button" id="lib-export">导出图库</button>
           <label class="mini">导入图库<input type="file" id="lib-import" accept="application/json,.json" hidden /></label>
@@ -377,12 +421,14 @@
 <div class="toast" id="toast">已复制</div>
 
 <script src="assets/js/config.js"></script>
+<script src="assets/js/link-sign.js"></script>
 <script src="assets/js/cases.js"></script>
 <script src="assets/vendor/qrcode.js"></script>
 <script src="assets/js/visi/data.js"></script>
 <!-- 案例库词表（风格、柜类、房型…）：跟伺服器的 api/_lib/vocab.js 一模一样 -->
 <script src="assets/js/visi/case-vocab.js"></script>
 <script src="assets/js/visi/photos.js"></script>
+<script src="assets/js/visi/photos-sail.js"></script>
 <script src="assets/js/visi/store.js"></script>
 <script src="assets/js/visi/model.js"></script>
 <!-- 公司案例库（MB.cloud）：没登入过就不发请求，静态网站上跟以前一样 -->

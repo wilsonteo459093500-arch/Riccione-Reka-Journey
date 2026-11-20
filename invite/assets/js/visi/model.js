@@ -50,11 +50,13 @@
     var host = CFG.host || {};
     return {
       id: MB.uid('p-'), ts: Date.now(), v: 1,
-      lang: 'en',
+      lang: 'bi',   // 2026-11-20 老板定：新方案一律中英双语（贴华文需求卡不会再出英文方案）
       client: { names: '', honor: '', wa: '' },
       property: { name: '', area: '', type: '', size: '' },
       date: todayISO(),
-      host: { name: profile.host || host.name || '', role: profile.role || host.role || '', wa: profile.wa || host.wa || '' },
+      // 销售自己的名字、却没填号码：不要借用预设（老板）的号码 —— 客户会回到别人那里（体检会提醒补上）
+      host: { name: profile.host || host.name || '', role: profile.role || host.role || '',
+        wa: profile.wa || (!profile.host || profile.host === host.name ? host.wa || '' : '') },
       needs: [],
       rooms: [],
       plan: { src: null, w: 0, h: 0, pins: {} },
@@ -341,6 +343,8 @@
   ];
   var SHOT = {};
   SAME_SHOT.forEach(function (g) { g.forEach(function (ref) { SHOT[ref] = g[0]; }); });
+  // 溪岸真实案例（photos-sail.js）：比对出来的同一张写在那一行的 shot（tools/visi/same-shot.mjs），跟上面一样算
+  (MB.BUILTIN || []).forEach(function (b) { if (b.shot && b.shot !== b.id && !SHOT[b.id]) SHOT[b.id] = SHOT[b.shot] || b.shot; });
   // 案例库的照片：同一个镜头（连拍、微调角度，dHash 分组）算同一张 —— CASE_SHOT 由 MB.setCases 填
   function shot(ref) { return SHOT[ref] || CASE_SHOT[ref] || ref; }
   MB.shotKey = shot;
@@ -445,7 +449,49 @@
     });
     return brandCache;
   }
-  function builtins() { return MB.BUILTIN.concat(brandImages()); }
+  function builtins() { return MB.BUILTIN.filter(function (b) { return !BOSS.hasOwnProperty(b.id); }).concat(brandImages()); }
+
+  /* ---------- 老板审图：标了「不发」的内置照片（体检计划第 3 阶段） ----------
+     老板在图库按「不发」→ app.js 存在这台电脑（localStorage）→ MB.setBossHidden(map)。
+     标了的照片当成「拿掉的照片」（retired: 'boss'）：图库、自动配图都看不到，旧方案自动配的那一格重挑；
+     销售亲手放的照样印（不破图），体检红灯请他换掉。
+     只在这台电脑生效：老板按「发给 Claude」，清单搬进 photos.js 的 MB.RETIRED_BUILTIN（owner），合并后全公司都看不到。
+     系列页 / 原创系列页的官方照片（预留的）、品牌照不能标：那几页每份方案固定要印 */
+  var BOSS = {};
+  /** map = { ref: { ts, note } }；只收内置图库里、不是预留的那几张 */
+  MB.setBossHidden = function (map) {
+    var ok = {};
+    var ids = {};
+    (MB.BUILTIN || []).forEach(function (b) { ids[b.id] = 1; });
+    Object.keys(map || {}).forEach(function (ref) {
+      if (ids[ref] && !MB.photoReserved(ref)) ok[ref] = { ts: +(map[ref] && map[ref].ts) || 0, note: String((map[ref] && map[ref].note) || '').slice(0, 200) };
+    });
+    BOSS = ok; RET = null;
+    return ok;
+  };
+  MB.bossHidden = function () { return BOSS; };
+  /** 老板可以标「不发」的照片：内置图库里的，不是系列页预留的 */
+  MB.bossCanHide = function (ref) {
+    return typeof ref === 'string' && !MB.photoReserved(ref) && (MB.BUILTIN || []).some(function (b) { return b.id === ref; });
+  };
+  /** 标了「不发」的内置照片（图库审图时列在最后，可以放回）：MB.allImages 的形状 */
+  MB.bossHiddenImages = function () {
+    return (MB.BUILTIN || []).filter(function (b) { return BOSS.hasOwnProperty(b.id); }).map(function (b) {
+      return { ref: b.id, src: b.src, w: b.w, h: b.h, rooms: b.rooms, series: b.series || '', style: b.style || '', own: false, label: b.zh, boss: true };
+    });
+  };
+  /** 拿掉的照片全部：photos.js 的 MB.RETIRED_BUILTIN + 老板在这台电脑标了「不发」的 */
+  function retiredList() {
+    var out = (MB.RETIRED_BUILTIN || []).slice();
+    (MB.BUILTIN || []).forEach(function (b) {
+      if (!BOSS.hasOwnProperty(b.id)) return;
+      var c = {};
+      for (var k in b) if (b.hasOwnProperty(k)) c[k] = b[k];
+      c.retired = 'boss';
+      out.push(c);
+    });
+    return out;
+  }
   /** 品牌照 key → 实际用的 ref */
   function brandRef(k) { return BRAND_ALIAS[k] || 'b:brand-' + k; }
 
@@ -554,14 +600,14 @@
     return RES;
   }
   function retiredMap() {
-    if (!RET) { RET = {}; (MB.RETIRED_BUILTIN || []).forEach(function (b) { RET[b.id] = b; }); }
+    if (!RET) { RET = {}; retiredList().forEach(function (b) { RET[b.id] = b; }); }
     return RET;
   }
   /** 这张是哪个系列预留的官方照片（含同一张的裁切）：回系列 key；不是就回 '' */
   MB.photoReserved = function (ref) { return (ref && reservedMap()[shot(ref)]) || ''; };
   /** 已经从图库拿掉的照片（MB.RETIRED_BUILTIN） */
   MB.photoRetired = function (ref) { return typeof ref === 'string' && retiredMap().hasOwnProperty(ref); };
-  /** 拿掉的原因：'riccione'（不是溪岸的作品）· 'owner'（老板退回的）· 'unprinted'（手册没印出来的）· '' */
+  /** 拿掉的原因：'riccione'（不是溪岸的作品）· 'owner'（老板退回的）· 'unprinted'（手册没印出来的）· 'boss'（老板在这台电脑标了不发）· '' */
   MB.retiredKind = function (ref) { return MB.photoRetired(ref) ? retiredMap()[ref].retired || '' : ''; };
   /** 预留的 10 张 ref（系列页 5 张 + 原创系列页 5 张；系列顺序） */
   MB.seriesReserved = function () {
@@ -658,7 +704,7 @@
   MB.makeResolver = function (userImages) {
     var map = {};
     // 拿掉的照片也认得：旧方案里放了的照样印（不破图），体检提醒换掉；图库、自动配图不用（pool、allImages 跳过）
-    builtins().concat(MB.RETIRED_BUILTIN || []).forEach(function (b) { map[b.id] = b; });
+    builtins().concat(retiredList()).forEach(function (b) { map[b.id] = b; });
     (userImages || []).forEach(function (u) { map['u:' + u.id] = u; });
     // 案例放最后（pool 照插入顺序走，内置 / 本机图的先后跟以前一样）
     CASES.forEach(function (c) { map[c.id] = c; });
@@ -676,6 +722,11 @@
       own: false, isCase: true, label: c.label || '', en: c.en || '', zh: c.zh || '', style: c.style || '', style2: c.style2 || '', product: c.product || '', cabinets: c.cabinets || [],
       hero: !!c.hero, pid: c.pid || '', area: c.area || '', ptype: c.ptype || '', traits: c.traits || [], status: c.status || '', hidden: !!c.hidden };
   }
+  /** 上传的照片（u:）能不能自动配进这份方案：设成公司共用的、或上传给这份方案的才行。
+      别的客户的照片、旧版没分过的照片只能在 ④ 亲手选（体检会提醒「不是这位客户的照片」）。
+      b = 图库记录（或 resolver 里的那一份：有 pid / shared） */
+  function autoOk(b, p) { return !!(b && (b.shared === true || (b.pid && p && b.pid === p.id))); }
+  MB.photoAuto = autoOk;
   /** 这份方案能自动用的案例（没隐藏、不是 unsure）：给了空间 = 拍那个空间的（setCases 先分好）。
       不再按方案的系列筛（方案介绍全部五个系列）。没给方案 = 全部能用的（图库） */
   function caseList(p, roomKey) {
@@ -690,7 +741,8 @@
       reserved = 系列页 / 原创系列页预留的官方照片（图库标「系列页专用」，选不进别页）。
       本机图（own）只有 u: 的；案例另外标 isCase，放在最后（同分的轮换顺序跟以前一样） */
   MB.allImages = function (userImages, p, roomKey) {
-    var list = (userImages || []).map(function (u) {
+    // 带了方案 = 自动配图用：上传的照片只给它属于的那份方案（或设成公司共用的）—— 不串到别的客户
+    var list = (userImages || []).filter(function (u) { return !p || autoOk(u, p); }).map(function (u) {
       return { ref: 'u:' + u.id, src: u.src, w: u.w, h: u.h, rooms: [u.tag], series: u.series || '', own: true, label: u.label || '' };
     });
     builtins().forEach(function (b) {
@@ -841,6 +893,7 @@
         if (ret[ref]) return;                                            // 拿掉的照片：只解析，不拿去配
         var b = map[ref];
         var own = ref.indexOf('u:') === 0;
+        if (own && p && !autoOk(b, p)) return;                           // 别的客户的照片：不拿去配
         var rooms = own ? [b.tag] : (b.rooms || []);
         out.push({ ref: ref, w: +b.w || 0, h: +b.h || 0, series: b.series || '', style: b.style || '', rooms: rooms, own: own });
       });
@@ -1062,7 +1115,11 @@
       // 自动配的空间：打不开的公司案例照片（案例库暂停中、已经删掉）、已经从图库拿掉的照片不印，
       // 下面照常从图库重挑（恢复了就换回来）；
       // 销售亲手放的照样占着那一格（印成占位框，不是破图；体检会说「先别发给客户」/「换掉」）
-      live[r.uid] = r.manual ? refs : refs.filter(function (ref) { return !goneOf(look(resolve, ref)) && !MB.photoRetired(ref); });
+      // 自动配的空间里旧版留下的别的客户的照片（2b 以前会串图）也不印，照常重挑
+      live[r.uid] = r.manual ? refs : refs.filter(function (ref) {
+        var im = look(resolve, ref);
+        return !goneOf(im) && !MB.photoRetired(ref) && (ref.indexOf('u:') !== 0 || autoOk(im, p));
+      });
       out.rooms[r.uid] = [];
     });
     // 手选空间的辅图（最多 2 张）也先留住：不然封面、开场会先拿走销售挑的图。第 6 步照版式再决定放几张
@@ -1417,8 +1474,10 @@
 
   /** 马来西亚手机号 → wa.me 要的国际格式：012-345 6789 → 60123456789 */
   MB.msisdn = function (v) {
-    var d = String(v || '').replace(/\D/g, '');
+    // 「+60 (0)12-345 6789」：括号里的 0 是本地拨号才加的，国际格式要拿掉
+    var d = String(v || '').replace(/\(\s*0\s*\)/g, '').replace(/\D/g, '');
     if (d.indexOf('00') === 0) d = d.slice(2);
+    if (/^600\d{8,10}$/.test(d)) d = '60' + d.slice(3);
     if (d.charAt(0) === '0') return '6' + d;
     if (d.charAt(0) === '1' && d.length >= 9 && d.length <= 10) return '60' + d;
     return d;
@@ -1436,6 +1495,15 @@
   function hm(v) { return /^\d{1,2}:\d{2}$/.test(v || '') ? v : ''; }
   function unit(v) { v = +v; return isFinite(v) ? Math.max(0, Math.min(1, v)) : 0.5; }
 
+  /** 每个栏位最多几个字：存档时（normalizeProject）照这个剪，编辑框也照这个挡（app.js 的 limitFor）——
+      打字时就知道打不下，不会下次打开才悄悄少了一截 */
+  var TM = MB.TEXT_MAX = {
+    names: 120, propName: 120, area: 120, ptype: 60, size: 30, hostName: 80, role: 120, label: 40,
+    roomTitle: 80, roomNote: 600, quote: 300, answer: 600, prepared: 200, caseNote: 300,
+    notIncluded: 300, timeline: 300, budget: 600, built: 1000, brief: 8000, letter: 3000,
+    teamRole: 60, teamName: 80, copy: 4000, roomImages: 4
+  };
+
   /** @param {{newId?: boolean}} opts  newId = 导入：换掉 id，免得覆盖本机的方案 */
   MB.normalizeProject = function (raw, opts) {
     opts = opts || {};
@@ -1443,16 +1511,18 @@
     var out = MB.newProject({});
     if (!opts.newId && typeof p.id === 'string' && /^[\w-]{1,60}$/.test(p.id)) out.id = p.id;
     out.ts = +p.ts || Date.now();
+    // 第几版（两个分页同时开的时候对版本，app.js 存档前比一次）；导入的是新的一份，从 0 开始
+    out.rev = opts.newId ? 0 : Math.max(0, Math.floor(+p.rev || 0));
     out.lang = ['en', 'zh', 'bi'].indexOf(p.lang) > -1 ? p.lang : 'en';
-    out.label = str(p.label, 40);
+    out.label = str(p.label, TM.label);
     if (p.demo === true) out.demo = true;
     var c = p.client || {};
-    out.client = { names: str(c.names, 120), honor: ['mr', 'ms', 'mrs', 'miss', 'teacher', 'designer'].indexOf(c.honor) > -1 ? c.honor : '', wa: MB.msisdn(c.wa) };
+    out.client = { names: str(c.names, TM.names), honor: ['mr', 'ms', 'mrs', 'miss', 'teacher', 'designer'].indexOf(c.honor) > -1 ? c.honor : '', wa: MB.msisdn(c.wa) };
     var pr = p.property || {};
-    out.property = { name: str(pr.name, 120), area: str(pr.area, 120), type: str(pr.type, 60), size: str(pr.size, 30) };
+    out.property = { name: str(pr.name, TM.propName), area: str(pr.area, TM.area), type: str(pr.type, TM.ptype), size: str(pr.size, TM.size) };
     out.date = iso(p.date) || out.date;
     var h = p.host || {};
-    out.host = { name: str(h.name, 80) || out.host.name, role: str(h.role, 120) || out.host.role, wa: MB.msisdn(h.wa) || out.host.wa };
+    out.host = { name: str(h.name, TM.hostName) || out.host.name, role: str(h.role, TM.role) || out.host.role, wa: MB.msisdn(h.wa) || out.host.wa };
     // 旧版的风格方向、配色、材质、三句承诺、参考图取色（direction / palette / materials / promises / paletteFrom / refImages）
     // 不再读：out 从 newProject 开始，没有这些字段 —— 存回去就没了（app.js 开机时清一次，MB.hasLegacy）
 
@@ -1465,10 +1535,10 @@
       if (typeof r.uid === 'string') uidMap[r.uid] = uid;
       var valid = MB.ROOM[r.key].feats.map(function (f) { return f.id; });
       return {
-        uid: uid, key: r.key, title: strOrNull(r.title, 80) || null,
-        images: (Array.isArray(r.images) ? r.images : []).map(ref).filter(Boolean).slice(0, 4),
+        uid: uid, key: r.key, title: strOrNull(r.title, TM.roomTitle) || null,
+        images: (Array.isArray(r.images) ? r.images : []).map(ref).filter(Boolean).slice(0, TM.roomImages),
         feats: (Array.isArray(r.feats) ? r.feats : []).filter(function (f) { return valid.indexOf(f) > -1; }),
-        note: strOrNull(r.note, 600),
+        note: strOrNull(r.note, TM.roomNote),
         manual: r.manual === true
       };
     });
@@ -1476,8 +1546,8 @@
       n = n || {};
       var o = {};
       if (typeof n.key === 'string' && MB.NEEDS.hasOwnProperty(n.key)) o.key = n.key;
-      if (n.quote != null) o.quote = str(n.quote, 300);
-      if (n.answer != null) o.answer = str(n.answer, 600);
+      if (n.quote != null) o.quote = str(n.quote, TM.quote);
+      if (n.answer != null) o.answer = str(n.answer, TM.answer);
       if (typeof n.room === 'string' && MB.ROOM.hasOwnProperty(n.room)) o.room = n.room;
       if (n.roomUid && uidMap[n.roomUid]) o.roomUid = uidMap[n.roomUid];
       return o;
@@ -1496,7 +1566,7 @@
     out.visit = {
       date: iso(v.date), time: hm(v.time) || '14:00', date2: iso(v.date2), time2: hm(v.time2) || '11:00',
       mins: Math.max(15, Math.min(480, +v.mins || 60)), auto: v.auto === true,
-      prepared: [0, 1, 2].map(function (i) { return strOrNull((v.prepared || [])[i], 200); })
+      prepared: [0, 1, 2].map(function (i) { return strOrNull((v.prepared || [])[i], TM.prepared); })
     };
     var pg = p.pages || {};
     // 存档里没有的开关用 newProject 的默认（工期·保障、团队、章节页默认关 —— moodboard 字少）。
@@ -1506,14 +1576,15 @@
     var im = p.images || {};
     Object.keys(out.images).forEach(function (k) { out.images[k] = ref(im[k]); });
     var x = p.extra || {};
-    out.extra = { notIncluded: str(x.notIncluded, 300), timeline: str(x.timeline, 300), budget: str(x.budget, 600), built: str(x.built, 1000) };
-    out.brief = str(p.brief, 8000);
+    out.extra = { notIncluded: str(x.notIncluded, TM.notIncluded), timeline: str(x.timeline, TM.timeline), budget: str(x.budget, TM.budget), built: str(x.built, TM.built) };
+    out.brief = str(p.brief, TM.brief);
     // 方案 2.0 以前的存档：「工期·保障」页只有填了工期 / 预算才出，开关一直是 true。
     // 照旧：没填就不出（不然旧方案打开会突然多一页只有公司资料的页）
     if (!Array.isArray(p.team) && !('letter' in p) && !MB.hasPractical(out)) out.pages.practical = false;
 
     /* ---- 方案 2.0 的字段：旧存档没有就用 newProject 的默认 ---- */
-    out.letter = strOrNull(p.letter, 3000);
+    // 存档里「第 N 页」是记号（{{page:…|N}}，比印出来的长）：多留 1000 字，编辑框照 TM.letter 挡
+    out.letter = strOrNull(p.letter, TM.letter + 1000);
     // 旧版存的草稿：「走某个系列 / 配色取自你们的照片」那一段、「按你们配色…」那几个字现在是假话 —— 拿掉 / 换掉（MB.legacyLetter）
     if (MB.hasLegacy(p)) {
       out.letter = MB.legacyLetter(out.letter);
@@ -1522,7 +1593,7 @@
     var seen = {};
     out.cases = (Array.isArray(p.cases) ? p.cases : []).map(function (c) {
       c = c && typeof c === 'object' ? c : {};
-      return { ref: ref(c.ref), note: strOrNull(c.note, 300) };
+      return { ref: ref(c.ref), note: strOrNull(c.note, TM.caseNote) };
     }).filter(function (c) {
       if (!c.ref || seen[shot(c.ref)]) return false;   // 同一张图（含同一张的不同裁切）不放两次
       seen[shot(c.ref)] = 1;
@@ -1531,12 +1602,22 @@
     // 旧存档没有团队：先放接待的那位销售（这份方案自己的 host，不是本机设定）
     out.team = Array.isArray(p.team)
       ? p.team.filter(function (m) { return m && typeof m === 'object'; }).slice(0, 6).map(function (m) {
-          return { role: str(m.role, 60), name: str(m.name, 80) };
+          return { role: str(m.role, TM.teamRole), name: str(m.name, TM.teamName) };
         })
       : [{ role: 'sales', name: out.host.name }];
     // 案例库用的风格、柜类：只收词表里有的 key（case-vocab.js 没载入就只收字串格式对的）
     var styleOk = function (k) { return typeof k === 'string' && /^[a-z]{1,20}$/.test(k) && (!MB.caseStyle || !!MB.caseStyle(k)); };
     var cabOk = function (k) { return typeof k === 'string' && /^[a-z]{1,20}$/.test(k) && (!MB.caseCabinet || !!MB.caseCabinet(k)); };
+    // ⑤ 文案改过的讯息：'讯息id:语言' → 文字（刷新、换电脑导入都还在）
+    out.copyEdits = {};
+    var ce = p.copyEdits && typeof p.copyEdits === 'object' ? p.copyEdits : {};
+    Object.keys(ce).slice(0, 40).forEach(function (k) {
+      if (/^[\w-]{1,40}:(zh|en|bi)$/.test(k) && typeof ce[k] === 'string') out.copyEdits[k] = ce[k].slice(0, MB.TEXT_MAX.copy);
+    });
+    // 邀请函链接的签名（2c）：格式不对就当没有（会再去要）
+    var ls = p.linkSig;
+    out.linkSig = ls && typeof ls === 'object' && typeof ls.k === 'string' && ls.k.length <= 2000 &&
+      typeof ls.s === 'string' && /^[A-Za-z0-9_-]{22}$/.test(ls.s) ? { k: ls.k, s: ls.s } : null;
     out.caseStyle = styleOk(p.caseStyle) ? p.caseStyle : '';
     out.cabinets = [];
     (Array.isArray(p.cabinets) ? p.cabinets : []).forEach(function (k) {
@@ -1553,7 +1634,9 @@
     return {
       id: u.id, tag: tags.indexOf(u.tag) > -1 ? u.tag : 'other', src: u.src,
       w: Math.max(1, +u.w || 1000), h: Math.max(1, +u.h || 1000),
-      series: MB.SERIES_OF && MB.SERIES_OF.hasOwnProperty(u.series) ? u.series : '', label: str(u.label, 80), source: str(u.source, 120), ts: +u.ts || Date.now()
+      series: MB.SERIES_OF && MB.SERIES_OF.hasOwnProperty(u.series) ? u.series : '', label: str(u.label, 80), source: str(u.source, 120), ts: +u.ts || Date.now(),
+      // 属于哪份方案（上传时开着的那份）；shared = 公司共用（所有方案都能自动配）
+      pid: typeof u.pid === 'string' && /^[\w-]{1,60}$/.test(u.pid) ? u.pid : '', shared: u.shared === true
     };
   };
   MB.roomPageNo = function (p, room) {
@@ -1568,6 +1651,53 @@
       if (list[i].type === type && (!key || list[i].series === key)) return i + 1;
     }
     return 0;
+  };
+
+  /* ---------- 开场短话里的「第 N 页」 ------------------------------
+     销售改过的开场短话存成「第 {{page:room:r-xx|8}} 页」：指的是哪一页（MB.pageKey），不是死的数字。
+     之后加平面图、开关页面，印出来的数字跟着那一页走；那一页关掉 / 删掉了 → 印原来的数字，体检说「指错页」。
+     编辑框里看到的永远是现在的页码（MB.letterPlain）；打字时按现在的页码对回去（MB.letterIn）。 */
+  var PAGE_REF = /(第\s*)(\d{1,3})(\s*页)|(\b[Pp]age\s+)(\d{1,3})\b/g;
+  var PAGE_TOKEN = /\{\{page:([^|}]{1,80})\|(\d{1,3})\}\}/g;
+  MB.pageNoByKey = function (p, key) {
+    var list = MB.pageList(p);
+    for (var i = 0; i < list.length; i++) if (MB.pageKey(list[i]) === key) return i + 1;
+    return 0;
+  };
+  /** 编辑框的字 → 存档的字（现在第 N 页是哪一页就绑那一页；没有第 N 页的照原样留着，体检会说） */
+  MB.letterIn = function (p, text) {
+    if (typeof text !== 'string') return text;
+    var list = MB.pageList(p);
+    return text.replace(PAGE_TOKEN, '$2').replace(PAGE_REF, function (m, a, n1, b, c, n2) {
+      var n = +(n1 || n2), pg = list[n - 1];
+      if (!pg) return m;
+      var tok = '{{page:' + MB.pageKey(pg) + '|' + n + '}}';
+      return n1 ? a + tok + b : c + tok;
+    });
+  };
+  /** 存档的字 → 印出来 / 编辑框里的字（现在的页码） */
+  MB.letterOut = function (p, text) {
+    if (typeof text !== 'string' || text.indexOf('{{page:') < 0) return text;
+    var list = MB.pageList(p), at = {};
+    list.forEach(function (pg, i) { at[MB.pageKey(pg)] = i + 1; });
+    return text.replace(PAGE_TOKEN, function (m, key, n) { return String(at[key] || n); });
+  };
+  /** 开场短话现在要印的字（没改过 = null，用自动草稿） */
+  MB.letterPlain = function (p) { return p.letter == null ? null : MB.letterOut(p, p.letter); };
+  /** 开场短话里指错的页码：[{ n, why: 'gone' | 'none' | 'fixed' }]
+      gone = 指的那一页关掉 / 删掉了；none = 方案没有第 N 页；fixed = 旧版存的死数字（不会跟着变，请确认） */
+  MB.letterPageIssues = function (p) {
+    var t = p.letter;
+    if (typeof t !== 'string' || !t.trim()) return [];
+    var list = MB.pageList(p), at = {}, out = [];
+    list.forEach(function (pg, i) { at[MB.pageKey(pg)] = i + 1; });
+    t.replace(PAGE_TOKEN, function (m, key, n) { if (!at[key]) out.push({ n: +n, why: 'gone' }); return m; });
+    t.replace(PAGE_TOKEN, '').replace(PAGE_REF, function (m, a, n1, b, c, n2) {
+      var n = +(n1 || n2);
+      out.push({ n: n, why: n >= 1 && n <= list.length ? 'fixed' : 'none' });
+      return m;
+    });
+    return out;
   };
 
   /* ---------- 邀请函链接（与 create.js 同一套参数） ---------- */
@@ -1601,9 +1731,20 @@
         if (wa && wa !== String(def.wa || '')) q.set('wa', wa);
       }
     }
+    /* 签名（体检第 2c 阶段）：销售名字 / 职称 / 号码要伺服器签过，邀请函才认（没签 → 公司预设联络人）。
+       签名存在方案里（p.linkSig = {k: 签的是哪几个字, s}）；这几个字改了，旧签名就不算，app.js 会再去要一个。
+       sign：'' = 不用签（团队代号、公司预设）· 'ok' · 'missing' */
+    var fields = { by: q.get('from') || '', role: q.get('role') || '', wa: q.get('wa') || '', note: '' };
+    var key = MB.linkKey(fields), sign = '';
+    var LS = window.SAIL_LINK;
+    if (LS && LS.needs(fields)) {
+      if (p.linkSig && p.linkSig.k === key) { q.set('sig', p.linkSig.s); sign = 'ok'; }
+      else sign = 'missing';
+    }
     var qs = q.toString();
-    return { url: path + (qs ? '?' + qs : ''), local: local && !CFG.publicBase };
+    return { url: path + (qs ? '?' + qs : ''), local: local && !CFG.publicBase, sign: sign, fields: fields, key: key };
   };
+  MB.linkKey = function (f) { return JSON.stringify([f.by || '', f.role || '', f.wa || '', f.note || '']); };
 
   /** 文件名 = 打印对话框的预设档名 = PDF 标题：「SAIL x Mr & Mrs Lim - Sample Residence Setia Alam Home Proposal」 */
   MB.fileTitle = function (p) {

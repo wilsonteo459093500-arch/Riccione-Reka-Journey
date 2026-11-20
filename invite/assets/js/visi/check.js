@@ -26,6 +26,25 @@
     return s.split(/\s+/).filter(function (w) { return /[A-Za-z0-9]/.test(w); }).length;
   }
   function trim(s) { return String(s == null ? '' : s).trim(); }
+  function mins(hm) { var m = /^(\d{1,2}):(\d{2})$/.exec(hm || ''); return m ? +m[1] * 60 + +m[2] : null; }
+
+  /** 一个到馆时段有什么问题（给客户的日期、时间不能是过去的、或展厅没开的）：
+      → { level:'bad'|'warn', text } 或 null。营业时间在 config.js 的 venue.open */
+  MB.slotProblem = function (date, time, dur, today) {
+    var d = MB.parseISO(date);
+    if (!d) return null;
+    if (d < today) return { level: 'bad', text: '已经过了' };
+    var open = ((window.SAIL || {}).venue || {}).open;
+    var t = mins(time);
+    if (!open || t == null) return null;
+    var wk = d.getDay() === 0 || d.getDay() === 6;
+    var o = open[wk ? 'weekend' : 'weekday'] || [], a = mins(o[0]), b = mins(o[1]);
+    if (a == null || b == null) return null;
+    var label = (wk ? '周末' : '平日') + ' ' + o[0] + '–' + o[1];
+    if (t < a || t >= b) return { level: 'bad', text: time + ' 展厅还没开或已经关了（' + label + '）' };
+    if (t + (+dur || 60) > b) return { level: 'warn', text: time + ' 开始、' + (+dur || 60) + ' 分钟，会超过关门时间（' + label + '）' };
+    return null;
+  };
   /** 需求的原话（华文或英文，有一个就算有） */
   function quoteOf(n) {
     var q = MB.needQuote(n);
@@ -58,7 +77,7 @@
     var out = [];
     var shown = needsShown(p);
     function push(v, where, go, max) { if (typeof v === 'string' && v.trim()) out.push({ text: v, where: where, go: go, max: max || null }); }
-    push(p.letter, '开场短话', 'letter', { zh: 70, en: 55 });
+    push(MB.letterPlain(p), '开场短话', 'letter', { zh: 70, en: 55 });
     p.needs.forEach(function (n, i) { push(n.answer, '第 ' + (i + 1) + ' 条需求的做法', 'needs', shown.indexOf(n) > -1 ? { zh: 30, en: 18 } : null); });
     p.rooms.forEach(function (r) { push(r.note, MB.t(MB.roomTitle(p, r), 'zh') + '的「为你」', 'room:' + r.uid, { zh: 40, en: 25 }); });
     p.visit.prepared.forEach(function (t, i) { push(t, '准备的第 ' + (i + 1) + ' 样', 'visit', { zh: 16, en: 9 }); });
@@ -265,6 +284,15 @@
       });
       if (missing.length) add('warn', '需求对应的空间不在方案里：' + missing.join('、'),
         '客户会以为方案里有这个做法。要嘛把那个空间加进来，要嘛把这一条的做法改成「见面一起看」。', 'needs');
+      // 客户的原话太长（英文客户整段贴进来）：方案页会印成一大段，讯息只引得了前半句
+      var longQ = [];
+      p.needs.forEach(function (n, i) {
+        if (typeof n.quote !== 'string' || !n.quote.trim()) return;
+        var q = n.quote.trim(), zhQ = CJK.test(q);
+        if (zhQ ? count(q, 'zh') > 30 : count(q, 'en') > 20) longQ.push(i + 1);
+      });
+      if (longQ.length) add('warn', '第 ' + longQ.join('、') + ' 条客户原话太长',
+        '方案页会印成一大段，WhatsApp 讯息只引得了第一句。剪成最关键的一句（≤ 30 字 / 20 words），或拆成几条。', 'needs');
       // 方案页只印前几条：没印的要讲出来是哪几条
       var shown = needsShown(p);
       var dropped = p.needs.filter(function (n) { return shown.indexOf(n) < 0 && quoteOf(n); });
@@ -282,7 +310,7 @@
       p.needs.forEach(function (n) { hit(MB.needQuote(n), 'brief'); hit(MB.needAnswer(n, p), 'brief'); });
       p.rooms.forEach(function (r) { hit(r.title, 'rooms'); hit(r.note, 'rooms'); });
       p.visit.prepared.forEach(function (t) { hit(t, 'visit'); });
-      hit(p.letter, 'letter');
+      hit(MB.letterPlain(p), 'letter');
       (p.cases || []).forEach(function (c) { if (c) hit(c.note, 'cases'); });
       var x = p.extra || {};
       if (MB.hasPractical(p) && p.pages.practical !== false) { hit(x.timeline, 'visit'); hit(x.budget, 'visit'); hit(x.built, 'visit'); }
@@ -327,11 +355,18 @@
     if (!p.pages.invite) add('bad', '关掉了到馆邀约页', '客户记得最清楚的是最后几页：要给下一步（已经留好的时段），而不是电话号码。', 'visit');
     else if (!vd) add('bad', '还没定到馆时间', '「欢迎参观」不是下一步。先替他们留好一个时段 —— 改时间比决定要不要来容易。', 'visit');
     else if (vd < today) add('bad', '到馆日期已经过了', '改成未来的日期。', 'visit');
+    else if (MB.slotProblem(p.visit.date, p.visit.time, p.visit.mins, today)) {
+      var sp1 = MB.slotProblem(p.visit.date, p.visit.time, p.visit.mins, today);
+      add(sp1.level, '到馆时段：' + sp1.text, '邀请页、讯息、行事历都会照印这个时间。改到营业时间内。', 'visit');
+    }
     else if (p.visit.auto) add('warn', '到馆时段是按需求卡自动建议的 —— 先确认真的留了', '「已为你们保留」只有在真的保留时才能写。确认后到 ④ 按「已确认留好」（或直接改时段），这条就会消失。', 'visit');
     else {
       add('ok', '结尾已经替客户留好时段', '已经留好的时间，最容易被接受。');
       if (!MB.parseISO(p.visit.date2)) add('tip', '可以再给一个备选时段', '给两个选项，让他们回「1」或「2」就好，不用想开放题。', 'visit');
     }
+    // 备选时段也印在邀请页和讯息里（「回 1 或 2」）：过去的、展厅没开的一样要改
+    var sp2 = p.pages.invite ? MB.slotProblem(p.visit.date2, p.visit.time2, p.visit.mins, today) : null;
+    if (sp2) add(sp2.level, '备选时段：' + sp2.text, '邀请页和讯息都会照印「时段 2」。改掉，或清空备选时段。', 'visit');
     add('tip', '确认展厅真的准备好「为你们准备的三样」，时段也真的留了', '「已为你们保留」只有在真的保留时才能写；说到做到，到馆那天才会是真正的高峰。', 'visit');
 
     // 6b · 工期 · 预算 · 保障
@@ -359,9 +394,33 @@
     // 9 · 二维码网址
     var link = MB.inviteLink(p);
     if (p.pages.invite && link.local) add('warn', '二维码指向本机网址，客户扫不开', '在 config.js 填 publicBase（正式网址），或在正式网站上做方案。', 'visit');
+    // 9b · 签名链接（2c）：链接写你的名字 / 号码，没签过邀请函不认 —— 客户会看到公司预设联络人
+    else if (link.sign === 'missing') {
+      var dh = ((window.SAIL || {}).host || {}).name || '公司';
+      add('bad', '邀请函链接还没认证', '链接里写的是你的名字和号码，要用团队密码登入一次、伺服器签过才算数（防止别人改链接冒充溪岸）。' +
+        '没认证的话，客户打开邀请函看到的是 ' + dh + '，按「确认」也是传给 ' + dh + '。到 ④「邀请函链接」下面登入。', 'sign');
+    }
+    // 9c · ⑤ 改过的讯息不会跟着更新（2b）：里面的邀请函链接是改名字 / 号码 / 时段 / 签名之前的
+    var pub = String((window.SAIL || {}).publicBase || '').replace(/\/$/, '');
+    if (pub && p.copyEdits) {
+      var URLRE = new RegExp(pub.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&') + "/[A-Za-z0-9\\-._~:/?#@!$&'()*+,;=%]*", 'g');
+      var staleLink = Object.keys(p.copyEdits).some(function (k) {
+        return (String(p.copyEdits[k]).match(URLRE) || []).some(function (u) { return u.replace(/[.,;:!?)]+$/, '') !== link.url; });
+      });
+      if (staleLink) add('warn', '⑤ 改过的讯息里，邀请函链接是旧的', '那几则讯息改过就不会再跟着更新；里面的链接跟现在的不一样' +
+        '（名字、号码、时段或认证改过）。按那一则的「↺ 用自动生成」，或把链接换成 ④ 的新链接。', 'copy');
+    }
 
     // 10 · 联络
-    if (!String(p.host.wa || '').replace(/\D/g, '')) add('warn', '没有你的 WhatsApp 号码', '客户看完想问，第一个找的就是你的号码。', 'brief');
+    // 讯息和邀请函署名是销售，号码却是预设（老板）的 —— 客户按「确认」会传到别人那里
+    var defHost = (window.SAIL || {}).host || {};
+    var myName = trim(p.host.name), myWa = MB.msisdn(p.host.wa), defWa = MB.msisdn(defHost.wa);
+    var notDefault = myName && myName.toLowerCase() !== trim(defHost.name).toLowerCase();
+    if (!myWa) add(notDefault ? 'bad' : 'warn', '没有你的 WhatsApp 号码',
+      notDefault ? '邀请函会署名「' + myName + '」，客户按「确认」却会传到 ' + (defHost.name || '公司') + ' 的号码。到 ① 填你自己的 WhatsApp。'
+        : '客户看完想问，第一个找的就是你的号码。', 'brief');
+    else if (notDefault && defWa && myWa === defWa) add('bad', 'WhatsApp 号码是 ' + (defHost.name || '公司') + ' 的，不是你的',
+      '讯息和邀请函署名「' + myName + '」，客户回覆却会传到 ' + (defHost.name || '公司') + '。到 ① 改成你自己的 WhatsApp。', 'brief');
 
     // 11 · 销售打的字：假的急迫（一定要改）、空泛形容词、太长
     var mine = typed(p);
@@ -384,10 +443,19 @@
 
     // 12 · 开场短话：还是自动草稿 = 每个客户都一样
     if (p.pages.letter) {
-      var lt = typeof p.letter === 'string' ? p.letter.trim() : '';
+      var lt = typeof p.letter === 'string' ? MB.letterPlain(p).trim() : '';
       if (!lt || letterDrafts(p).indexOf(lt) > -1) add('warn', '开场短话还是自动草稿',
         '草稿只用得到需求卡上的字。加一件只有你知道的事 —— 见面时他们提过的一个细节 —— 这一页才像是写给他们的。', 'letter');
       else add('ok', '开场短话是你自己写的', '翻开第一页之后，先读到的是写给他们的话。');
+    }
+    // 12a · 开场短话里的「第 N 页」：指的那一页关掉 / 删掉了、或方案没有那一页 —— 客户翻过去是别的东西
+    if (p.pages.letter && MB.letterPageIssues) {
+      var lpi = MB.letterPageIssues(p);
+      var lpBad = lpi.filter(function (x) { return x.why !== 'fixed'; }), lpOld = lpi.filter(function (x) { return x.why === 'fixed'; });
+      if (lpBad.length) add('bad', '开场短话指错页：' + lpBad.map(function (x) { return '第 ' + x.n + ' 页'; }).join('、'),
+        '你写的那一页已经关掉 / 删掉了，或方案没有那么多页 —— 客户翻过去看到的是别的东西。改成现在的页码。', 'letter');
+      else if (lpOld.length) add('warn', '开场短话的页码请再对一次：' + lpOld.map(function (x) { return '第 ' + x.n + ' 页'; }).join('、'),
+        '这是旧版存的页码，页面增减时不会自己跟着变。看一眼是不是还指对那一页；在开场短话里随便改一个字，之后就会自动跟着变。', 'letter');
     }
     // 12b · 还写着旧版的「这一份走「某个系列」」/ 配色：方案现在介绍全部五个系列、没有配色 —— 印出来就是假话。
     //       旧存档打开时已经清过一次（model.js 的 MB.legacyLetter / MB.legacyPrep）；这里抓销售改过、清不掉的那几种
@@ -466,11 +534,23 @@
     //       瑞吉欧的家具（不是溪岸的作品）一定要换（bad）；手册没印出来的、老板退回的建议换（warn）
     var retired = MB.photoRetired ? uses.filter(function (u) { return MB.photoRetired(u.ref); }) : [];
     var notOurs = retired.filter(function (u) { return MB.retiredKind && MB.retiredKind(u.ref) === 'riccione'; });
-    var pulled = retired.filter(function (u) { return notOurs.indexOf(u) < 0; });
+    // 老板在图库标了「不发」的（这台电脑的审图）：老板不想发给客户 —— 一定要换（bad）
+    var boss = retired.filter(function (u) { return MB.retiredKind && MB.retiredKind(u.ref) === 'boss'; });
+    var pulled = retired.filter(function (u) { return notOurs.indexOf(u) < 0 && boss.indexOf(u) < 0; });
+    if (boss.length) add('bad', '用了老板标了「不发」的照片：' + useLabels(p, boss).join('、'),
+      '老板审图时把这张标成「不发给客户」。换一张 —— ' + swapHow(useGoto(boss)), useGoto(boss));
     if (notOurs.length) add('bad', '用了不是溪岸作品的照片：' + useLabels(p, notOurs).join('、'),
       '这张不是溪岸的作品照片（瑞吉欧的家具），已经从图库拿掉：客户会以为那是我们做的。换一张 —— ' + swapHow(useGoto(notOurs)), useGoto(notOurs));
     if (pulled.length) add('warn', '用了已经从图库拿掉的照片：' + useLabels(p, pulled).join('、'),
       '这张已经从图库拿掉（不是溪岸确认过的作品照片，或放错了系列）。换一张 —— ' + swapHow(useGoto(pulled)), useGoto(pulled));
+    // 16f · 不是这位客户的上传照片（上传给别的方案的、旧版没分过的）：自动配图不会再用，只会是亲手选的 —— 提醒一声
+    var foreign = MB.photoAuto ? uses.filter(function (u) {
+      if (String(u.ref).indexOf('u:') !== 0) return false;
+      var im = resolve && resolve(u.ref);
+      return !!im && !MB.photoAuto(im, p);
+    }) : [];
+    if (foreign.length) add('warn', '用了不是这位客户的照片：' + useLabels(p, foreign).join('、'),
+      '这张是上传给别的客户的方案的（或旧版没分过的）。别人家的照片别发给这位客户 —— 换一张；是公司的作品照片，就到「图库」把它设成「公司共用」。', useGoto(foreign));
     // 16b · 印出来的公司案例照片：分类时标了「不确定」、或已经被隐藏（拍到客户、不想再用）—— 发出去之前换掉
     var shaky = [], gone = [], odd = [], shakyGo = null, goneGo = null, oddGo = null;
     uses.forEach(function (u) {
