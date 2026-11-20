@@ -327,3 +327,18 @@ body.mb-body { overflow: hidden; height: 100vh; }
 .pick-held .lib-item .own { background: #8A5E22; }
 /* 格子里的占位块（暂停中、载不出来的案例照片）：跟图一样是正方形 */
 .lib-item .img-gone { aspect-ratio: 1; height: auto; }
+
+/* ---------- 停存提示 · 备份提醒（固定在下面，不推动版面） ---------- */
+.stale-bar {
+  position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 60;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center;
+  max-width: min(720px, calc(100vw - 32px)); padding: 12px 16px; border-radius: 14px;
+  background: #FBEDE6; border: 1px solid #E2A792; color: #6E2A18; font-size: 14px; line-height: 1.45;
+  box-shadow: 0 10px 30px rgba(40, 24, 10, .18);
+}
+.stale-bar[hidden] { display: none; }
+.stale-bar span { flex: 1 1 260px; }
+.stale-bar.soft { background: #FFF8EA; border-color: #E4CF9F; color: #5A4318; bottom: 18px; }
+#stale-bar:not([hidden]) ~ #backup-bar { display: none; }
+.check-line { display: flex; gap: 8px; align-items: flex-start; font-size: 13.5px; color: var(--ink-soft); cursor: pointer; }
+.check-line input { width: auto; margin-top: 3px; flex: none; }

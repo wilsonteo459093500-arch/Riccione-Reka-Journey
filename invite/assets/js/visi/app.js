@@ -29,7 +29,6 @@
     libFilter: 'all',
     // 图库的筛选：来源（全部 / 我的 / 内置 / 公司案例）× 空间；公司案例再按 风格 × 柜类 × 项目，每页 48 张
     lib: { src: 'all', room: 'all', style: '', cab: '', pid: '', page: 0 },
-    copyEdits: {},      // 销售在 ⑤ 改过的讯息：'方案id:讯息id:语言' → 文字（切页不丢）
     briefDraft: {},     // 贴了还没按「带入」的需求卡（切页不丢）
     lastPin: null,      // 刚放下的编号（放完会跳到下一间，「拿掉」要能撤回它）
     overflow: null      // 排版放不下的页（renderPreview 量出来，体检用）
@@ -110,7 +109,8 @@
 
   function rebuildResolver() {
     var view = S.userImages.map(function (u) {
-      return { id: u.id, src: blobUrl('u:' + u.id, u.src), w: u.w, h: u.h, tag: u.tag, series: u.series || '', label: u.label };
+      return { id: u.id, src: blobUrl('u:' + u.id, u.src), w: u.w, h: u.h, tag: u.tag, series: u.series || '', label: u.label,
+        pid: u.pid || '', shared: u.shared === true };
     });
     S.resolve = MB.makeResolver(view);
     S.viewImages = view;
@@ -120,22 +120,109 @@
      存档
      ============================================================ */
   var saveTimer, renderTimer, pendingSave = null;
+  var FULL = '存不进去：浏览器的存储空间可能满了。先「导出全部备份」，再到「图库」删掉用不到的照片';
+  /* 两个分页开同一份方案：每份方案有版本号 rev。存档时对一次 —— 存着的比我们以为的新，就是别的分页改过了：
+     不盖掉，这一份停止存档，顶上出一条「载入最新的」。别的分页存好了也会马上广播过来（BroadcastChannel）。 */
+  var chan = null;
+  try { chan = 'BroadcastChannel' in window ? new BroadcastChannel('sail-visi') : null; } catch (e) { chan = null; }
+  /** 写一份方案（只在没有被别的分页改过时）。回 Promise：成功 resolve；被别的分页改过 / 存不进去 reject（err.stale / err.full） */
+  function writeProject(p) {
+    if (S.noStore) return Promise.resolve();
+    if (S.stale && S.stale[p.id]) { var e0 = new Error('stale'); e0.stale = true; return Promise.reject(e0); }
+    var base = +p.rev || 0;
+    p.rev = base + 1;   // 先加：同一个分页连着存两次，第二次的 base 就是第一次存成的那一版
+    return MB.store.putProjectIf(MB.clone ? MB.clone(p) : p, base).then(function (r) {
+      if (r.ok) { if (chan) try { chan.postMessage({ id: p.id, rev: p.rev }); } catch (e) {} return; }
+      markStale(p.id, r.stored ? 'changed' : 'deleted');
+      var e1 = new Error('stale'); e1.stale = true; throw e1;
+    }, function (err) { var e2 = new Error(FULL); e2.full = true; e2.cause = err; throw e2; });
+  }
   /** 立刻写入还在排队的存档（切换方案前一定要先写，不然会写到下一份） */
   function flushSave() {
     clearTimeout(saveTimer);
     var p = pendingSave;
     pendingSave = null;
     if (!p || S.noStore) return Promise.resolve();
-    return MB.store.putProject(p).catch(function () { ping('存档失败：浏览器存储空间可能满了'); });
+    return writeProject(p).catch(function (err) { if (!err.stale) ping(FULL, 5000); });
   }
-  function storePut(p) { return S.noStore ? Promise.resolve() : MB.store.putProject(p).catch(function () {}); }
-  function storeImgs(list) { return S.noStore ? Promise.resolve() : MB.store.putImages(list); }
+  /** 不是销售正在改的那份（新建、复制、导入、开机清旧字段）：失败照样 reject，由呼叫的地方决定怎么说 */
+  function storePut(p) { return writeProject(p); }
+  /** 背景顺手写的（开机清旧字段、换掉拿掉的照片）：失败不吵（下次改的时候照样会存） */
+  function storeQuiet(p) { return writeProject(p).catch(function () {}); }
+  function storeImgs(list) { return S.noStore ? Promise.resolve() : MB.store.putImages(list).catch(function (err) { var e = new Error(FULL); e.full = true; e.cause = err; throw e; }); }
+  /** 失败时给销售看的那一句 */
+  function failMsg(err) { return err && err.stale ? '这份方案在另一个分页改过了 —— 按顶上的「载入最新的」' : err && err.full ? FULL : '存不进去：' + (err && err.message || err); }
+
+  /** 这份方案被别的分页改过 / 删掉了：停止存档，顶上出一条 */
+  function markStale(id, why) {
+    S.stale = S.stale || {};
+    S.stale[id] = why || 'changed';
+    if (pendingSave && pendingSave.id === id) { pendingSave = null; clearTimeout(saveTimer); }
+    staleBar();
+  }
+  function staleBar() {
+    var bar = $('#stale-bar'); if (!bar) return;
+    var why = S.project && S.stale && S.stale[S.project.id];
+    bar.hidden = !why;
+    if (!why) return;
+    $('#stale-msg').textContent = why === 'deleted'
+      ? '这份方案在另一个分页被删掉了。这里的修改不会再存。'
+      : '这份方案在另一个分页改过了。为了不盖掉那边的修改，这里暂停存档（这里刚改的字不会存）。';
+    $('#stale-reload').textContent = why === 'deleted' ? '另存成新的一份' : '载入最新的';
+  }
+  if (chan) chan.onmessage = function (e) {
+    var m = e.data || {};
+    if (!m.id) return;
+    var mine = S.projects.filter(function (x) { return x.id === m.id; })[0];
+    if (m.deleted) {
+      if (mine && mine === S.project) markStale(m.id, 'deleted');
+      else if (mine) { S.projects = S.projects.filter(function (x) { return x !== mine; }); refreshProjectSelect(); }
+      return;
+    }
+    if (mine && (+mine.rev || 0) >= m.rev) return;
+    if (mine && mine === S.project) { markStale(m.id, 'changed'); return; }
+    // 没在看的那份 / 新的一份：换成存着的最新版（清单的名字跟着变）
+    MB.store.getProject(m.id).then(function (raw) {
+      if (!raw) return;
+      var n = MB.normalizeProject(raw);
+      if (S.project && S.project.id === n.id) { markStale(n.id, 'changed'); return; }
+      S.projects = S.projects.filter(function (x) { return x.id !== n.id; }).concat([n]);
+      refreshProjectSelect();
+    }).catch(function () {});
+  };
+  function reloadStale() {
+    var p = S.project, why = S.stale && S.stale[p.id];
+    if (!why) return;
+    if (pendingSave === p) { pendingSave = null; clearTimeout(saveTimer); }
+    delete S.stale[p.id];
+    if (why === 'deleted') {
+      // 另存成新的一份：这里画面上的就是要留的
+      var q = MB.clone(p);
+      q.id = MB.uid('p-'); q.rev = 0; q.ts = Date.now();
+      S.projects = S.projects.filter(function (x) { return x !== p; });
+      storePut(q).then(function () { S.projects.push(q); openProject(q); ping('已另存成新的一份'); },
+        function (err) { S.projects.push(p); markStale(p.id, 'deleted'); ping(failMsg(err), 5000); });
+      return;
+    }
+    MB.store.getProject(p.id).then(function (raw) {
+      if (!raw) { markStale(p.id, 'deleted'); return; }
+      var n = MB.normalizeProject(raw);
+      S.projects = S.projects.filter(function (x) { return x.id !== n.id; }).concat([n]);
+      openProject(n);
+      ping('已载入另一个分页存的版本');
+    }).catch(function (err) { markStale(p.id, why); ping(failMsg(err), 4000); });
+  }
+
   function changed(opts) {
     opts = opts || {};
-    S.project.ts = Date.now();
-    pendingSave = S.project;
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(function () { flushSave(); refreshProjectSelect(); }, 400);
+    var stale = S.stale && S.stale[S.project.id];
+    if (stale) staleBar();   // 停存中：画面照改（预览照排），但不排存档 —— 不盖掉另一个分页的
+    else {
+      S.project.ts = Date.now();
+      pendingSave = S.project;
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(function () { flushSave(); refreshProjectSelect(); }, 400);
+    }
     clearTimeout(renderTimer);
     // 文案页不在这里重写：销售正在改的讯息会被洗掉（切到 ⑤ 时才重新生成）
     renderTimer = setTimeout(function () { renderPreview(); if (S.tab === 'visit') renderInviteLink(); }, opts.now ? 0 : 140);
@@ -179,7 +266,7 @@
     var moved = MB.stripRetired ? MB.stripRetired(p) : [];
     moved.forEach(function (x) { if (x.emptied) x.room.images = MB.autoPick(p, x.room, S.viewImages); });
     if (!moved.length) return;
-    storePut(p);
+    storeQuiet(p);
     ping('「' + moved.map(function (x) { return MB.t(MB.roomTitle(p, x.room), 'zh'); }).join('、') +
       '」换了一张图：原来那张不是溪岸的作品照片，或是系列页专用的', 3200);
   }
@@ -194,6 +281,7 @@
     if (S.projects.indexOf(p) < 0) S.projects.push(p);
     refreshProjectSelect();
     renderAll();
+    staleBar();
   }
 
   /* ============================================================
@@ -325,7 +413,8 @@
   }
   function renderLetter() {
     var p = S.project, ta = $('#letter-text');
-    ta.value = p.letter == null ? letterDraft(p) : p.letter;
+    // 改过的：「第 N 页」显示那一页现在的页码（存档里记的是哪一页，MB.letterIn / MB.letterPlain）
+    ta.value = p.letter == null ? letterDraft(p) : MB.letterPlain(p);
     // 草稿还没载入（或删光了）时给一个具体的开头，不要一个空框
     ta.placeholder = p.lang === 'zh' ? '例：你们说厨房永远收不干净 —— 所以这份方案从厨房开始……'
       : 'e.g. You told us the kitchen never stays tidy, so this proposal starts there…';
@@ -348,7 +437,7 @@
   }
   $('#letter-text').addEventListener('input', function (e) {
     var v = e.target.value;
-    S.project.letter = v.trim() ? v : null;   // 删光 = 回到自动草稿
+    S.project.letter = v.trim() ? MB.letterIn(S.project, v) : null;   // 删光 = 回到自动草稿
     letterState(); changed();
   });
   $('#letter-text').addEventListener('blur', function () { if (S.project.letter == null) renderLetter(); });
@@ -435,11 +524,11 @@
     var p = S.project, setup = MB.briefToSetup(b);
     var who = (setup.client.names || '').trim(), had = (p.client.names || '').trim();
     var fresh = '';
-    // 示范方案不能被客户资料盖掉；别的客户的方案也先问一声（多半是忘了按「新方案」）
-    if (p.demo || (had && who && had.toLowerCase() !== who.toLowerCase() &&
-        !confirm('这份方案是「' + had + '」的，要带入「' + who + '」的需求卡吗？\n取消 = 另外新建一份'))) {
+    // 示范方案不能被客户资料盖掉；别的客户的需求卡（名字不一样）一律另开一份 —— 两位客户不会混成一份（用户 2026-11-20 定的）
+    if (p.demo || (had && who && had.toLowerCase() !== who.toLowerCase())) {
       fresh = p.demo ? '示范方案保留' : '「' + had + '」的方案不动';
       delete S.briefDraft[p.id];
+      flushSave();
       p = MB.newProject(loadProfile());
       S.projects.push(p);
       openProject(p);
@@ -738,8 +827,10 @@
     if (e.target.hasAttribute('data-room-upload')) {
       var files = Array.prototype.slice.call(e.target.files || []);
       e.target.value = '';
-      saveUploads(files, r.key).then(function (ids) {
-        ids.forEach(function (id) { r.images.push('u:' + id); });
+      saveUploads(files, r.key, false).then(function (ids) {
+        var room = MB.TEXT_MAX.roomImages, fit = Math.max(0, room - r.images.length);
+        ids.slice(0, fit).forEach(function (id) { r.images.push('u:' + id); });
+        if (ids.length > fit) ping('一页最多 ' + room + ' 张：' + (ids.length - fit) + ' 张放进了图库，没放进这一页', 4000);
         if (ids.length) r.manual = true;
         renderRooms(); changed({ now: true });
       });
@@ -1216,10 +1307,11 @@
     $('#copy-to').textContent = cwa ? '发送对象：+' + cwa : '（在 ① 填客户 WhatsApp，就能一键发送）';
     var list = MB.writeCopy(p, S.copyLang);
     $('#copy-list').innerHTML = list.map(function (c, i) {
-      var edit = S.copyEdits[copyKey(c)];
+      var edit = copyEdits()[copyKey(c)];
       return '<div class="copy-card" data-i="' + i + '">' +
         '<h4>' + esc(c.title) + '<button class="reset" type="button" data-copy-reset' + (edit == null ? ' hidden' : '') + '>↺ 用自动生成</button></h4>' +
         '<p class="when">' + esc(c.when) + '</p>' +
+        '<p class="hint copy-edited"' + (edit == null ? ' hidden' : '') + ' style="margin:0 0 6px">已改过（会保存）。方案再改，这一则不会跟着更新 —— 要更新按「用自动生成」。</p>' +
         '<textarea rows="10">' + esc(edit != null ? edit : c.text) + '</textarea>' +
         '<div class="pr">' + c.principles.map(function (pr, k) {
           return '<span data-pr="' + k + '" title="' + esc(pr.d) + '">' + esc(pr.zh) + '</span>';
@@ -1233,12 +1325,15 @@
     S.copyList = list;
   }
 
-  /** 改过的讯息按「方案 · 哪一则 · 语言」记住；切页、切方案语言都不会洗掉 */
-  function copyKey(c) { return S.project.id + ':' + c.id + ':' + S.copyLang; }
+  /** 改过的讯息存在方案里（p.copyEdits：'哪一则:语言' → 文字）：切页、刷新、导出给同事都还在 */
+  function copyEdits() { var p = S.project; if (!p.copyEdits || typeof p.copyEdits !== 'object') p.copyEdits = {}; return p.copyEdits; }
+  function copyKey(c) { return c.id + ':' + S.copyLang; }
   $('#copy-list').addEventListener('input', function (e) {
     var card = e.target.closest('.copy-card'); if (!card || e.target.tagName !== 'TEXTAREA') return;
-    S.copyEdits[copyKey(S.copyList[+card.getAttribute('data-i')])] = e.target.value;
+    copyEdits()[copyKey(S.copyList[+card.getAttribute('data-i')])] = e.target.value;
     $('[data-copy-reset]', card).hidden = false;
+    $('.copy-edited', card).hidden = false;
+    changed();
   });
 
   $('#copy-lang').addEventListener('click', function (e) {
@@ -1249,8 +1344,8 @@
   $('#copy-list').addEventListener('click', function (e) {
     var card = e.target.closest('.copy-card'); if (!card) return;
     if (e.target.closest('[data-copy-reset]')) {
-      delete S.copyEdits[copyKey(S.copyList[+card.getAttribute('data-i')])];
-      renderCopy(); return;
+      delete copyEdits()[copyKey(S.copyList[+card.getAttribute('data-i')])];
+      renderCopy(); changed(); return;
     }
     var text = $('textarea', card).value;
     var pr = e.target.closest('[data-pr]');
@@ -1412,8 +1507,28 @@
     return im.isCase && im.pid ? '<button class="same-proj" type="button" data-same-proj="' + esc(im.pid) + '" title="同项目其他照片">同项目</button>' : '';
   }
 
+  /** 这张上传的照片给谁用：只给某一位客户（自动配图只配进那一份）/ 公司共用（所有方案都能自动配） */
+  function projName(id) {
+    var q = S.projects.filter(function (x) { return x.id === id; })[0];
+    return q ? (q.client.names || '未命名客户') + (q.property.name ? ' · ' + q.property.name : '') : '';
+  }
+  function scopeSelect(im) {
+    var u = S.userImages.filter(function (x) { return 'u:' + x.id === im.ref; })[0];
+    if (!u) return '';
+    var cur = u.shared ? 'shared' : u.pid === S.project.id ? 'mine' : u.pid ? 'other' : 'none';
+    var opt = function (v, label) { return '<option value="' + v + '"' + (cur === v ? ' selected' : '') + '>' + esc(label) + '</option>'; };
+    var mine = projName(S.project.id) || '这份方案';
+    return '<select data-scope aria-label="给谁用" title="自动配图只会用在这里选的方案">' +
+      opt('mine', '只给：' + mine) +
+      (cur === 'other' ? opt('other', '只给：' + (projName(u.pid) || '另一份方案（已删除）')) : '') +
+      (cur === 'none' ? opt('none', '没分过（只能手选）') : '') +
+      opt('shared', '公司共用') + '</select>';
+  }
+
   function renderLibrary() {
     $('#up-tag').innerHTML = tagOptions($('#up-tag').value || 'kitchen', true);
+    $('#up-who').textContent = $('#up-shared').checked ? '这批照片：所有客户的方案都会自动配。'
+      : '这批照片只会自动配进「' + (projName(S.project.id) || '这份方案') + '」—— 不会跑到别的客户的方案。';
     renderCloudBox();
     var g = gallery(S.lib, libraryItems());
     $('#lib-filter').innerHTML = g.chips;
@@ -1431,6 +1546,7 @@
       return '<div class="lib-item' + (rcap ? ' used reserved' : '') + '" data-ref="' + esc(im.ref) + '"><img src="' + esc(im.src) + '" alt="" loading="lazy" />' +
         (im.own
           ? '<span class="own">我的</span><select data-retag aria-label="空间">' + tagOptions(im.rooms[0], true) + '</select>' +
+            scopeSelect(im) +
             '<button class="icon del" type="button" data-del-img title="删除">×</button>'
           : '<span class="cap">' + (rcap ? esc(rcap) : '内置 · ' + esc(im.label || '')) + '</span>') +
         '</div>';
@@ -1447,13 +1563,25 @@
   $('#lib-cfilter').addEventListener('change', function (e) { if (galleryChange(S.lib, e)) renderLibrary(); });
   $('#lib-cfilter').addEventListener('click', function (e) { if (galleryClick(S.lib, e)) renderLibrary(); });
   $('#lib-match').addEventListener('click', function () { openMatch(); });
+  $('#up-shared').addEventListener('change', function () { renderLibrary(); });
   $('#lib-grid').addEventListener('change', function (e) {
+    if (e.target.hasAttribute('data-scope')) {
+      var sid = e.target.closest('[data-ref]').getAttribute('data-ref').slice(2);
+      var su = S.userImages.filter(function (x) { return x.id === sid; })[0];
+      if (!su) return;
+      var v = e.target.value;
+      if (v === 'shared') su.shared = true;
+      else if (v === 'mine') { su.shared = false; su.pid = S.project.id; }
+      storeImgs([su]).then(function () { rebuildResolver(); renderLibrary(); changed({ now: true }); },
+        function (err) { ping(failMsg(err), 5000); });
+      return;
+    }
     if (!e.target.hasAttribute('data-retag')) return;
     var id = e.target.closest('[data-ref]').getAttribute('data-ref').slice(2);
     var u = S.userImages.filter(function (x) { return x.id === id; })[0];
     if (!u) return;
     u.tag = e.target.value;
-    storeImgs([u]).then(function () { rebuildResolver(); renderLibrary(); });
+    storeImgs([u]).then(function () { rebuildResolver(); renderLibrary(); }, function (err) { ping(failMsg(err), 5000); });
   });
   $('#lib-grid').addEventListener('click', function (e) {
     if (e.target.closest('[data-same-proj]')) { if (galleryClick(S.lib, e)) renderLibrary(); return; }
@@ -1475,13 +1603,20 @@
           p.cases = p.cases.filter(function (c) { return c.ref !== ref; });
           if (p.cases.length !== nc) hit = true;
         }
-        if (hit && p !== S.project) storePut(p);
+        if (hit && p !== S.project) storeQuiet(p);
       });
       rebuildResolver(); renderLibrary(); changed({ now: true });
     });
   });
 
-  function saveUploads(files, tag) {
+  /** 新收进图库的照片属于谁：勾了「公司共用」= 所有方案；不然只属于现在开着的这份（不串到别的客户） */
+  function ownedBy(rec, shared) {
+    rec.shared = !!shared;
+    rec.pid = S.project ? S.project.id : '';
+    return rec;
+  }
+  /** shared 省略 = 照图库的「公司共用」勾选（空间页里直接上传的永远只给这位客户） */
+  function saveUploads(files, tag, shared) {
     files = files.filter(function (f) { return /^image\//.test(f.type); });
     if (!files.length) return Promise.resolve([]);
     ping('处理 ' + files.length + ' 张照片…', 8000);
@@ -1489,7 +1624,7 @@
     return files.reduce(function (chain, f) {
       return chain.then(function () {
         return MB.compress(f, 1600, 0.84).then(function (out) {
-          recs.push({ id: MB.uid(), tag: tag, src: out.src, w: out.w, h: out.h, label: f.name, source: 'upload', ts: Date.now() });
+          recs.push(ownedBy({ id: MB.uid(), tag: tag, src: out.src, w: out.w, h: out.h, label: f.name, source: 'upload', ts: Date.now() }, shared));
         }).catch(function () {});
       });
     }, Promise.resolve()).then(function () {
@@ -1497,13 +1632,13 @@
     }).then(function () {
       S.userImages = recs.concat(S.userImages);
       rebuildResolver();
-      ping('已存入图库：' + recs.length + ' 张');
+      ping('已存入图库：' + recs.length + ' 张' + (shared ? '（公司共用）' : '（只给这位客户）'));
       if (S.tab === 'library') renderLibrary();
       return recs.map(function (r) { return r.id; });
-    });
+    }, function (err) { ping(failMsg(err), 5000); return []; });
   }
 
-  dropZone('#up-drop', '#up-file', function (files) { saveUploads(files, $('#up-tag').value || 'other'); });
+  dropZone('#up-drop', '#up-file', function (files) { saveUploads(files, $('#up-tag').value || 'other', $('#up-shared').checked); });
 
   /* PDF 收图 */
   dropZone('#pdf-drop', '#pdf-file', function (files) {
@@ -1561,7 +1696,7 @@
   $('#imp-none').addEventListener('click', function () { S.importBatch.forEach(function (x) { x.sel = false; }); renderImport(); });
   $('#imp-save').addEventListener('click', function () {
     var recs = S.importBatch.filter(function (x) { return x.sel; }).map(function (x) {
-      return { id: MB.uid(), tag: x.tag, src: x.src, w: x.w, h: x.h, label: 'PDF p.' + x.page + ' · ' + (x.label || '').slice(0, 30), source: x.source, ts: Date.now() };
+      return ownedBy({ id: MB.uid(), tag: x.tag, src: x.src, w: x.w, h: x.h, label: 'PDF p.' + x.page + ' · ' + (x.label || '').slice(0, 30), source: x.source, ts: Date.now() }, $('#up-shared').checked);
     });
     if (!recs.length) { closeModals(); return; }
     storeImgs(recs).then(function () {
@@ -1576,7 +1711,7 @@
       closeModals();
       renderLibrary(); changed({ now: true });
       ping('已存入 ' + recs.length + ' 张' + (filled ? '，并配好 ' + filled + ' 个空着的空间' : '') + '。想全部换上新图：② → 全部重新自动配图', 4200);
-    }).catch(function () { ping('存档失败：浏览器存储空间可能满了', 3200); });
+    }).catch(function (err) { ping(failMsg(err), 5000); });
   });
 
   /* ============================================================
@@ -1831,13 +1966,17 @@
     var name = (p.client.names || 'client').replace(/[^\w一-龥]+/g, '-');
     download('visi-' + name + '-' + stamp() + '.json', JSON.stringify({ type: 'visi-project', v: 1, project: p, images: imgs }));
   });
+  /* 导入：图库备份 / 一份方案 / 全部备份（三种 .json，两个导入按钮都认得全部备份）。
+     先存好才说「已导入」：浏览器空间满了就照实说存不进去 */
   function importJson(input, kind) {
     input.addEventListener('change', function () {
       var f = input.files && input.files[0]; input.value = '';
       if (!f) return;
       readFileText(f).then(function (txt) {
         var data = JSON.parse(txt);
-        if (!data || data.type !== 'visi-' + kind) throw new Error('不是' + (kind === 'library' ? '图库' : '方案') + '备份文件');
+        var type = data && data.type;
+        if (type === 'visi-all') return importAll(data);
+        if (type !== 'visi-' + kind) throw new Error('不是' + (kind === 'library' ? '图库' : '方案') + '备份文件');
         // 同 id 的图本机已经有了就不动（不悄悄覆盖同事那边改过的版本）
         var known = {};
         S.userImages.forEach(function (u) { known[u.id] = 1; });
@@ -1848,13 +1987,15 @@
           if (!data.project || !Array.isArray(data.project.rooms)) throw new Error('方案内容不完整');
           p = MB.normalizeProject(data.project, { newId: true });
           p.ts = Date.now();
+          // 同事方案里带来的照片（客户家的厨房…）只属于这一份：不会被自动配进别的客户的方案。公司共用的照样共用
+          imgs.forEach(function (u) { if (!u.shared) u.pid = p.id; });
         }
         return storeImgs(imgs).then(function () {
           S.userImages = imgs.concat(S.userImages);
           rebuildResolver();
           if (p) {
-            S.projects.push(p);
             return storePut(p).then(function () {
+              S.projects.push(p);
               openProject(p); ping('已导入方案');
               // 同事的方案用了这台电脑清单里还没有的案例照片（可能是刚上传的）：马上问一次，不要先当成「已经被删除」
               if (MB.cloud && MB.caseRefsIn && MB.cloud.status().status === 'ok' &&
@@ -1863,7 +2004,29 @@
           }
           renderLibrary(); ping('已导入 ' + imgs.length + ' 张图');
         });
-      }).catch(function (err) { ping('导入失败：' + (err && err.message || err), 3200); });
+      }).catch(function (err) { ping('导入失败：' + (err && err.message || err), 5000); });
+    });
+  }
+  /** 全部备份（换电脑、浏览器被清掉之后）：id 照旧（照片跟方案的归属才对得上）；本机已经有的方案、照片不动 */
+  function importAll(data) {
+    var knownImg = {}, knownP = {};
+    S.userImages.forEach(function (u) { knownImg[u.id] = 1; });
+    S.projects.forEach(function (p) { knownP[p.id] = 1; });
+    var imgs = (Array.isArray(data.images) ? data.images : []).map(MB.normalizeImage).filter(function (u) { return u && !knownImg[u.id]; });
+    var all = (Array.isArray(data.projects) ? data.projects : []).filter(function (r) { return r && Array.isArray(r.rooms); });
+    var ps = all.map(function (r) { return MB.normalizeProject(r); }).filter(function (p) { return !knownP[p.id]; });
+    var skipped = all.length - ps.length;
+    return storeImgs(imgs).then(function () {
+      S.userImages = imgs.concat(S.userImages);
+      rebuildResolver();
+      if (S.noStore) return;
+      return ps.reduce(function (c, p) { return c.then(function () { return MB.store.putProject(p); }); }, Promise.resolve())
+        .catch(function (err) { var e = new Error(FULL); e.full = true; e.cause = err; throw e; });
+    }).then(function () {
+      ps.forEach(function (p) { S.projects.push(p); });
+      refreshProjectSelect();
+      if (S.tab === 'library') renderLibrary();
+      ping('已还原 ' + ps.length + ' 份方案、' + imgs.length + ' 张照片' + (skipped ? '（' + skipped + ' 份这台电脑已经有了，没动）' : ''), 5000);
     });
   }
   importJson($('#lib-import'), 'library');
@@ -2293,11 +2456,13 @@
   });
   $('#proj-new').addEventListener('click', function () {
     var p = MB.newProject(loadProfile());
-    S.projects.push(p);
-    storePut(p);
-    openProject(p);
-    showTab('brief');
-    ping('新方案 —— 先贴需求卡');
+    // 先存好才打开：存不进去就照实说，不要多一份重新整理就不见的方案
+    storePut(p).then(function () {
+      S.projects.push(p);
+      openProject(p);
+      showTab('brief');
+      ping('新方案 —— 先贴需求卡');
+    }, function (err) { ping(failMsg(err), 5000); });
   });
   $('#proj-dup').addEventListener('click', function () {
     var p = MB.clone(S.project);
@@ -2305,19 +2470,22 @@
     p.label = '副本';
     delete p.demo;   // 复制出来的是要改的那份；贴别人的需求卡时会先问一声
     p.date = MB.newProject({}).date;
-    S.projects.push(p);
-    storePut(p);
-    openProject(p);
-    ping('已复制一份');
+    p.rev = 0;
+    flushSave().then(function () { return storePut(p); }).then(function () {
+      S.projects.push(p);
+      openProject(p);
+      ping('已复制一份');
+    }, function (err) { ping('没有复制：' + failMsg(err), 5000); });
   });
   $('#proj-del').addEventListener('click', function () {
     var p = S.project;
     if (!confirm('删除「' + (p.client.names || '未命名客户') + '」这份方案？删除后不能恢复。')) return;
     if (pendingSave === p) { pendingSave = null; clearTimeout(saveTimer); }
     (S.noStore ? Promise.resolve() : MB.store.removeProject(p.id).catch(function () {})).then(function () {
+      if (chan) try { chan.postMessage({ id: p.id, deleted: true }); } catch (e) {}
       S.projects = S.projects.filter(function (x) { return x.id !== p.id; });
       var next = S.projects.sort(function (a, b) { return (b.ts || 0) - (a.ts || 0); })[0];
-      if (!next) { next = MB.newProject(loadProfile()); S.projects.push(next); storePut(next); }
+      if (!next) { next = MB.newProject(loadProfile()); S.projects.push(next); storeQuiet(next); }
       openProject(next);
     });
   });
@@ -2325,6 +2493,103 @@
   $('#tabs').addEventListener('click', function (e) {
     var b = e.target.closest('[data-tab]'); if (b) showTab(b.getAttribute('data-tab'));
   });
+
+  $('#stale-reload').addEventListener('click', reloadStale);
+
+  /* ============================================================
+     字数上限：跟存档时剪的一样（MB.TEXT_MAX）。打字 / 贴上时就挡住并说一声，
+     不会编辑时打得进去、下次打开才悄悄少了一截
+     ============================================================ */
+  var TM = MB.TEXT_MAX;
+  var LIMITS = [
+    ['[data-bind="client.names"]', TM.names], ['[data-bind="property.name"]', TM.propName], ['[data-bind="property.area"]', TM.area],
+    ['[data-bind="property.type"]', TM.ptype], ['[data-bind="property.size"]', TM.size], ['[data-bind="host.name"]', TM.hostName],
+    ['[data-bind="host.role"]', TM.role], ['[data-bind="extra.notIncluded"]', TM.notIncluded], ['[data-bind="extra.timeline"]', TM.timeline],
+    ['[data-bind="extra.budget"]', TM.budget], ['[data-bind="extra.built"]', TM.built], ['#brief-text', TM.brief], ['#letter-text', TM.letter],
+    ['[data-need-q]', TM.quote], ['[data-need-a]', TM.answer], ['[data-room-title]', TM.roomTitle], ['[data-room-note]', TM.roomNote],
+    ['[data-prep]', TM.prepared], ['[data-case-note]', TM.caseNote], ['[data-team-role]', TM.teamRole], ['[data-team-custom]', TM.teamRole],
+    ['[data-team-name]', TM.teamName], ['#copy-list textarea', TM.copy]
+  ];
+  function limitFor(el) {
+    if (!el || !el.matches || (el.tagName !== 'TEXTAREA' && !(el.tagName === 'INPUT' && /^(text|tel|search|)$/.test(el.type)))) return 0;
+    for (var i = 0; i < LIMITS.length; i++) if (el.matches(LIMITS[i][0])) return LIMITS[i][1];
+    return 0;
+  }
+  // 捕获阶段：比每个栏位自己的 input 处理先跑 —— 存进方案的就是剪好的
+  document.addEventListener('focusin', function (e) { var n = limitFor(e.target); if (n) e.target.maxLength = n; }, true);
+  document.addEventListener('input', function (e) {
+    var el = e.target, n = limitFor(el);
+    if (!n || el.value.length < n) return;
+    if (el.value.length > n) el.value = el.value.slice(0, n);
+    ping('这一栏最多 ' + n + ' 个字 —— 后面的打不进去了', 2600);
+  }, true);
+
+  /* ============================================================
+     备份：请浏览器别自动清掉资料 + 太久没备份就提醒
+     ============================================================ */
+  var BACKUP_KEY = 'sail-visi-backup', NAG_KEY = 'sail-visi-backup-nag';
+  var persisted = null;   // 浏览器答应一直保留资料了吗（null = 不知道 / 不支援）
+  function exportAll() {
+    flushSave().then(function () {
+      var mine = S.projects.filter(function (p) { return !p.demo; });
+      download('visi-全部备份-' + stamp() + '.json', JSON.stringify({ type: 'visi-all', v: 1, ts: Date.now(), projects: mine, images: S.userImages }));
+      lsSet(BACKUP_KEY, String(Date.now()));
+      backupNag();
+      ping('已导出 ' + mine.length + ' 份方案、' + S.userImages.length + ' 张照片 —— 把文件存到云端硬碟或 WhatsApp 给自己', 5000);
+    });
+  }
+  function daysSince(ts) { return ts ? Math.floor((Date.now() - ts) / 864e5) : null; }
+  function backupNag() {
+    var last = +lsGet(BACKUP_KEY) || 0, d = daysSince(last);
+    var when = $('#backup-when');
+    if (when) when.textContent = (last ? '上次导出全部备份：' + (d ? d + ' 天前' : '今天') : '还没有导出过全部备份') +
+      (persisted === true ? '。这个浏览器已答应一直保留资料。' : persisted === false ? '。这个浏览器没有答应一直保留资料（Safari 太久没开可能会清掉）—— 备份更要紧。' : '。');
+    // 提醒条：有自己的方案、最近改过，而且从没备份 / 超过 7 天（没答应保留的：超过 3 天）；按「明天再提醒」就 24 小时不出
+    var mine = S.projects.filter(function (p) { return !p.demo && (p.ts || 0) > last; });
+    var limit = persisted === false ? 3 : 7;
+    var oldest = mine.reduce(function (m, p) { return Math.min(m, p.ts || Date.now()); }, Date.now());
+    var due = mine.length && (last ? d >= limit : daysSince(oldest) >= 1);
+    var snooze = +lsGet(NAG_KEY) || 0;
+    var bar = $('#backup-bar');
+    if (!bar) return;
+    bar.hidden = !due || Date.now() - snooze < 864e5;
+    if (!bar.hidden) $('#backup-msg').textContent = (last ? '已经 ' + d + ' 天没备份了' : '还没备份过') + '：' + mine.length +
+      ' 份方案只存在这个浏览器里。浏览器清掉资料、电脑坏了，就没了。';
+  }
+  $('#all-export').addEventListener('click', exportAll);
+  $('#backup-now').addEventListener('click', exportAll);
+  $('#backup-later').addEventListener('click', function () { lsSet(NAG_KEY, String(Date.now())); backupNag(); });
+  function askPersist() {
+    var st = navigator.storage;
+    if (!st || !st.persist) { persisted = null; backupNag(); return; }
+    (st.persisted ? st.persisted() : Promise.resolve(false)).then(function (already) {
+      return already || st.persist();
+    }).then(function (ok) { persisted = !!ok; backupNag(); }, function () { persisted = null; backupNag(); });
+  }
+
+  /* 2b 以前上传的照片没有分给哪份方案（会自动串到每一位客户）：开机分一次 ——
+     只有一份方案用到的 → 属于那一份；没用到 / 好几份都用到 → 没分过（只能亲手选，图库里可以改成公司共用） */
+  function migrateOwners(raws, projects) {
+    var users = {};
+    projects.forEach(function (p) {
+      var refs = {};
+      p.rooms.forEach(function (r) { (r.images || []).forEach(function (x) { refs[x] = 1; }); });
+      Object.keys(p.images || {}).forEach(function (k) { if (p.images[k]) refs[p.images[k]] = 1; });
+      (p.cases || []).forEach(function (c) { if (c && c.ref) refs[c.ref] = 1; });
+      Object.keys(refs).forEach(function (x) { if (x.indexOf('u:') === 0) (users[x] = users[x] || []).push(p.id); });
+    });
+    var fix = [];
+    raws.forEach(function (raw, i) {
+      if (!raw || 'pid' in raw) return;
+      var u = S.userImages.filter(function (x) { return x.id === raw.id; })[0];
+      if (!u) return;
+      var who = users['u:' + u.id] || [];
+      u.pid = who.length === 1 ? who[0] : '';
+      u.shared = false;
+      fix.push(u);
+    });
+    if (fix.length) storeImgs(fix).catch(function () {});
+  }
 
   // 关掉分页前把排队中的存档写掉
   window.addEventListener('pagehide', flushSave);
@@ -2353,19 +2618,20 @@
   }
   Promise.all([MB.store.listImages(), MB.store.listProjects(), cloudCached]).then(function (res) {
     S.userImages = res[0].map(MB.normalizeImage).filter(Boolean);
-    rebuildResolver();
     // 旧存档还带着旧版的字段（风格方向、配色、参考图取色、一页看懂…）：normalizeProject 已经丢掉了，
     // 把干净的那一份写回去一次（storePut：ts 不变，列表顺序不跳）
     S.projects = res[1].map(function (raw) {
       var n = MB.normalizeProject(raw);
-      if (MB.hasLegacy && MB.hasLegacy(raw)) storePut(n);
+      if (MB.hasLegacy && MB.hasLegacy(raw)) storeQuiet(n);
       return n;
     });
+    migrateOwners(res[0], S.projects);
+    rebuildResolver();
     var active = lsGet(ACTIVE_KEY);
     var first = S.projects.filter(function (x) { return x.id === active; })[0] || S.projects[0];
     if (!first) {
       first = demoProject();
-      storePut(first);
+      storeQuiet(first);
       S.projects.push(first);
       setTimeout(function () { ping('这是一份示范方案。按「＋ 新方案」开始做你的客户', 4200); }, 600);
     }
@@ -2380,6 +2646,7 @@
       S.projects.push(fresh); openProject(fresh); showTab('brief');
     }
     startCloud();
+    askPersist();
   }, function (err) {
     // 无痕模式 / 存储被关：照样能用，只是不存档
     console.error(err);

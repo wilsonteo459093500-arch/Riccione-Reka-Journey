@@ -77,7 +77,7 @@
     var out = [];
     var shown = needsShown(p);
     function push(v, where, go, max) { if (typeof v === 'string' && v.trim()) out.push({ text: v, where: where, go: go, max: max || null }); }
-    push(p.letter, '开场短话', 'letter', { zh: 70, en: 55 });
+    push(MB.letterPlain(p), '开场短话', 'letter', { zh: 70, en: 55 });
     p.needs.forEach(function (n, i) { push(n.answer, '第 ' + (i + 1) + ' 条需求的做法', 'needs', shown.indexOf(n) > -1 ? { zh: 30, en: 18 } : null); });
     p.rooms.forEach(function (r) { push(r.note, MB.t(MB.roomTitle(p, r), 'zh') + '的「为你」', 'room:' + r.uid, { zh: 40, en: 25 }); });
     p.visit.prepared.forEach(function (t, i) { push(t, '准备的第 ' + (i + 1) + ' 样', 'visit', { zh: 16, en: 9 }); });
@@ -310,7 +310,7 @@
       p.needs.forEach(function (n) { hit(MB.needQuote(n), 'brief'); hit(MB.needAnswer(n, p), 'brief'); });
       p.rooms.forEach(function (r) { hit(r.title, 'rooms'); hit(r.note, 'rooms'); });
       p.visit.prepared.forEach(function (t) { hit(t, 'visit'); });
-      hit(p.letter, 'letter');
+      hit(MB.letterPlain(p), 'letter');
       (p.cases || []).forEach(function (c) { if (c) hit(c.note, 'cases'); });
       var x = p.extra || {};
       if (MB.hasPractical(p) && p.pages.practical !== false) { hit(x.timeline, 'visit'); hit(x.budget, 'visit'); hit(x.built, 'visit'); }
@@ -427,10 +427,19 @@
 
     // 12 · 开场短话：还是自动草稿 = 每个客户都一样
     if (p.pages.letter) {
-      var lt = typeof p.letter === 'string' ? p.letter.trim() : '';
+      var lt = typeof p.letter === 'string' ? MB.letterPlain(p).trim() : '';
       if (!lt || letterDrafts(p).indexOf(lt) > -1) add('warn', '开场短话还是自动草稿',
         '草稿只用得到需求卡上的字。加一件只有你知道的事 —— 见面时他们提过的一个细节 —— 这一页才像是写给他们的。', 'letter');
       else add('ok', '开场短话是你自己写的', '翻开第一页之后，先读到的是写给他们的话。');
+    }
+    // 12a · 开场短话里的「第 N 页」：指的那一页关掉 / 删掉了、或方案没有那一页 —— 客户翻过去是别的东西
+    if (p.pages.letter && MB.letterPageIssues) {
+      var lpi = MB.letterPageIssues(p);
+      var lpBad = lpi.filter(function (x) { return x.why !== 'fixed'; }), lpOld = lpi.filter(function (x) { return x.why === 'fixed'; });
+      if (lpBad.length) add('bad', '开场短话指错页：' + lpBad.map(function (x) { return '第 ' + x.n + ' 页'; }).join('、'),
+        '你写的那一页已经关掉 / 删掉了，或方案没有那么多页 —— 客户翻过去看到的是别的东西。改成现在的页码。', 'letter');
+      else if (lpOld.length) add('warn', '开场短话的页码请再对一次：' + lpOld.map(function (x) { return '第 ' + x.n + ' 页'; }).join('、'),
+        '这是旧版存的页码，页面增减时不会自己跟着变。看一眼是不是还指对那一页；在开场短话里随便改一个字，之后就会自动跟着变。', 'letter');
     }
     // 12b · 还写着旧版的「这一份走「某个系列」」/ 配色：方案现在介绍全部五个系列、没有配色 —— 印出来就是假话。
     //       旧存档打开时已经清过一次（model.js 的 MB.legacyLetter / MB.legacyPrep）；这里抓销售改过、清不掉的那几种
@@ -514,6 +523,14 @@
       '这张不是溪岸的作品照片（瑞吉欧的家具），已经从图库拿掉：客户会以为那是我们做的。换一张 —— ' + swapHow(useGoto(notOurs)), useGoto(notOurs));
     if (pulled.length) add('warn', '用了已经从图库拿掉的照片：' + useLabels(p, pulled).join('、'),
       '这张已经从图库拿掉（不是溪岸确认过的作品照片，或放错了系列）。换一张 —— ' + swapHow(useGoto(pulled)), useGoto(pulled));
+    // 16f · 不是这位客户的上传照片（上传给别的方案的、旧版没分过的）：自动配图不会再用，只会是亲手选的 —— 提醒一声
+    var foreign = MB.photoAuto ? uses.filter(function (u) {
+      if (String(u.ref).indexOf('u:') !== 0) return false;
+      var im = resolve && resolve(u.ref);
+      return !!im && !MB.photoAuto(im, p);
+    }) : [];
+    if (foreign.length) add('warn', '用了不是这位客户的照片：' + useLabels(p, foreign).join('、'),
+      '这张是上传给别的客户的方案的（或旧版没分过的）。别人家的照片别发给这位客户 —— 换一张；是公司的作品照片，就到「图库」把它设成「公司共用」。', useGoto(foreign));
     // 16b · 印出来的公司案例照片：分类时标了「不确定」、或已经被隐藏（拍到客户、不想再用）—— 发出去之前换掉
     var shaky = [], gone = [], odd = [], shakyGo = null, goneGo = null, oddGo = null;
     uses.forEach(function (u) {

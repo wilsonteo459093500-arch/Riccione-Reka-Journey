@@ -382,12 +382,14 @@
   /** 开场短话的字（deck 与 PPTX 共用）：{ salute:[{s,L}], body:[{s,L}], sign:{ name, role } } */
   MB.letterText = function (p, lang) {
     var Ls = lang === 'bi' ? ['zh', 'en'] : [lang === 'zh' ? 'zh' : 'en'];
-    var custom = typeof p.letter === 'string' && p.letter.trim();
+    // 销售改过的字：「第 N 页」换成那一页现在的页码（MB.letterPlain）
+    var mine = MB.letterPlain ? MB.letterPlain(p) : p.letter;
+    var custom = typeof mine === 'string' && mine.trim();
     // 销售改过的就原样；称呼跟着内文用的语言（华文信配华文称呼，有整句英文才加英文称呼）
     // 双语、客户名字是华文（陈先生、陈太太）：英文称呼会变成「Dear 陈先生、陈太太,」两种语言混在一行 —— 只留华文那行
     var sal = Ls;
     if (custom) {
-      var hasZh = CJK.test(p.letter), hasEn = /[A-Za-z]+(\s+[A-Za-z’']+){3,}/.test(p.letter);
+      var hasZh = CJK.test(mine), hasEn = /[A-Za-z]+(\s+[A-Za-z’']+){3,}/.test(mine);
       sal = lang === 'bi' ? (hasZh ? ['zh'] : []).concat(hasEn || !hasZh ? ['en'] : []) : [hasZh ? 'zh' : 'en'];
     }
     var nm = MB.namesOr(p);
@@ -395,7 +397,7 @@
     // 双语、很长的英文名字（Dato’ … bin … & Datin …）：华文那行只是同一串英文名字加「你们好」，
     // 两行都会断成两行、往上顶到 logo —— 只留英文那行（跟华文名字只留华文那行同一个道理）
     else if (lang === 'bi' && nm && !CJK.test(nm) && nm.length > 30 && sal.length > 1) sal = ['en'];
-    var body = custom ? [{ s: p.letter, L: CJK.test(p.letter) ? 'zh' : 'en' }]
+    var body = custom ? [{ s: mine, L: CJK.test(mine) ? 'zh' : 'en' }]
       : Ls.map(function (L) { return { s: String(safe(MB.draftLetter, [p, L], fallbackLetter(p, L))), L: L }; });
     return {
       salute: sal.map(function (L) { return { s: salute(p, L), L: L }; }),
