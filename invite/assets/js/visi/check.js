@@ -534,7 +534,11 @@
     //       瑞吉欧的家具（不是溪岸的作品）一定要换（bad）；手册没印出来的、老板退回的建议换（warn）
     var retired = MB.photoRetired ? uses.filter(function (u) { return MB.photoRetired(u.ref); }) : [];
     var notOurs = retired.filter(function (u) { return MB.retiredKind && MB.retiredKind(u.ref) === 'riccione'; });
-    var pulled = retired.filter(function (u) { return notOurs.indexOf(u) < 0; });
+    // 老板在图库标了「不发」的（这台电脑的审图）：老板不想发给客户 —— 一定要换（bad）
+    var boss = retired.filter(function (u) { return MB.retiredKind && MB.retiredKind(u.ref) === 'boss'; });
+    var pulled = retired.filter(function (u) { return notOurs.indexOf(u) < 0 && boss.indexOf(u) < 0; });
+    if (boss.length) add('bad', '用了老板标了「不发」的照片：' + useLabels(p, boss).join('、'),
+      '老板审图时把这张标成「不发给客户」。换一张 —— ' + swapHow(useGoto(boss)), useGoto(boss));
     if (notOurs.length) add('bad', '用了不是溪岸作品的照片：' + useLabels(p, notOurs).join('、'),
       '这张不是溪岸的作品照片（瑞吉欧的家具），已经从图库拿掉：客户会以为那是我们做的。换一张 —— ' + swapHow(useGoto(notOurs)), useGoto(notOurs));
     if (pulled.length) add('warn', '用了已经从图库拿掉的照片：' + useLabels(p, pulled).join('、'),

@@ -346,3 +346,10 @@ body.mb-body { overflow: hidden; height: 100vh; }
 /* 签名链接（体检第 2c 阶段）：④ 邀请函链接下面的认证状态 + 登入 */
 .sign-box { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line, rgba(27,24,21,.1)); }
 .sign-box .cloud-st.bad { color: #A8402A; }
+
+/* 老板审图（体检计划第 3 阶段）：内置照片右上角「不发」；标了的排在最后、变灰，按「放回」 */
+.lib-item .boss-btn { position: absolute; right: 4px; top: 4px; min-height: 30px; padding: 4px 10px; border: 0; border-radius: 15px;
+  background: #A33A2B; color: #fff; font: inherit; font-size: 12px; cursor: pointer; }
+.lib-item .boss-btn.back { background: #1B1815; }
+.lib-item.boss-off img { opacity: .35; filter: grayscale(1); }
+.lib-item.boss-off .own { background: #A33A2B; }

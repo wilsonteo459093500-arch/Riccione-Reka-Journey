@@ -308,6 +308,22 @@
         <p class="hint" id="up-who" style="margin:4px 0 0"></p>
       </div>
 
+      <div class="panel" id="boss-panel">
+        <p class="sub-h" style="margin-top:0">老板审图</p>
+        <p class="hint" style="margin:0 0 10px">把不想发给客户的内置照片标成「不发」：这台电脑马上不再自动配它，已经用了它的方案，体检会请销售换掉。
+          标完按「复制清单」贴给 Claude，放进正式版以后，全公司都看不到。要先用团队密码登入。</p>
+        <div class="btn-row">
+          <button class="mini gold" type="button" id="boss-start">开始审图</button>
+          <span id="boss-tools" hidden>
+            <b id="boss-count"></b>
+            <button class="mini" type="button" id="boss-copy">复制清单（发给 Claude）</button>
+            <button class="mini" type="button" id="boss-stop">审完了</button>
+          </span>
+        </div>
+        <p class="hint" id="boss-who" style="margin:8px 0 0"></p>
+        <textarea id="boss-out" rows="5" readonly hidden style="width:100%;margin-top:8px;font-size:12px"></textarea>
+      </div>
+
       <div class="lib-head">
         <div class="lib-tools" id="lib-filter"></div>
         <button class="mini gold" type="button" id="lib-match" hidden>帮我挑</button>
@@ -412,6 +428,7 @@
 <!-- 案例库词表（风格、柜类、房型…）：跟伺服器的 api/_lib/vocab.js 一模一样 -->
 <script src="assets/js/visi/case-vocab.js"></script>
 <script src="assets/js/visi/photos.js"></script>
+<script src="assets/js/visi/photos-sail.js"></script>
 <script src="assets/js/visi/store.js"></script>
 <script src="assets/js/visi/model.js"></script>
 <!-- 公司案例库（MB.cloud）：没登入过就不发请求，静态网站上跟以前一样 -->

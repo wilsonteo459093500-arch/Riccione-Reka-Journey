@@ -93,6 +93,15 @@
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
 
+  /* 老板审图（体检计划第 3 阶段）：标了「不发」的内置照片存在这台电脑；model.js 当成拿掉的照片 */
+  var BOSS_KEY = 'visi.bossHidden.v1';
+  function loadBoss() {
+    var m = {};
+    try { m = JSON.parse(lsGet(BOSS_KEY) || '{}') || {}; } catch (e) { m = {}; }
+    if (MB.setBossHidden) MB.setBossHidden(m);
+  }
+  loadBoss();
+
   /* 本机图片用 blob URL 显示：方案每次重排都塞几 MB 的 dataURL 会卡 */
   var blobUrls = {};
   function blobUrl(key, dataUrl) {
@@ -269,7 +278,7 @@
     if (!moved.length) return;
     storeQuiet(p);
     ping('「' + moved.map(function (x) { return MB.t(MB.roomTitle(p, x.room), 'zh'); }).join('、') +
-      '」换了一张图：原来那张不是溪岸的作品照片，或是系列页专用的', 3200);
+      '」换了一张图：原来那张不是溪岸的作品照片、老板标了不发，或是系列页专用的', 3200);
   }
 
   function openProject(p) {
@@ -1469,7 +1478,9 @@
   function libraryItems() {
     return MB.allImages(S.viewImages);
   }
+  /** 空间按钮上的数字 = 选得进去的张数：系列页专用的官方照片照样列出来（排在最后），但不算（体检计划第 3 阶段） */
   function countTags(items) {
+    items = items.filter(function (im) { return !im.reserved; });
     var c = { all: items.length, own: 0 };
     items.forEach(function (im) {
       if (im.own) c.own++;
@@ -1487,13 +1498,15 @@
   /** 筛好的一页：{ chips, cfilter, items（这一页要画的）, pager, total } */
   function gallery(f, all) {
     var srcCount = { all: all.length, own: 0, builtin: 0, cases: 0 };
-    all.forEach(function (im) { srcCount[srcOf(im)]++; });
+    all.forEach(function (im) { if (!im.reserved) srcCount[srcOf(im)]++; else srcCount.all--; });
     if (f.src !== 'all' && !srcCount[f.src] && f.src !== 'own') f.src = 'all';   // 那个来源没有图了（例：登出）
     var cases = f.src === 'cases';
     var list = all.filter(function (im) { return (f.src === 'all' || srcOf(im) === f.src) && (!cases || caseMatch(im, f)); });
     var counts = countTags(list);
     if (f.room !== 'all' && !counts[f.room]) f.room = 'all';
     var items = list.filter(function (im) { return matches(im, f.room); });
+    // 系列页专用的（选不进来）排到最后：先看到能选的
+    items = items.filter(function (im) { return !im.reserved; }).concat(items.filter(function (im) { return im.reserved; }));
     // 案例几千张：分页（自己的、内置的照旧全部列出）
     var mine = items.filter(function (im) { return !im.isCase; }), cs = items.filter(function (im) { return im.isCase; });
     var pages = Math.max(1, Math.ceil(cs.length / PAGE));
@@ -1590,6 +1603,65 @@
       opt('shared', '公司共用') + '</select>';
   }
 
+  /* ---------- 老板审图 ----------
+     要先用团队密码登入（跟公司案例库同一个）才开得了：GET api/session 回名字才算。
+     标了只在这台电脑生效；「复制清单」交给 Claude 放进正式版（photos.js 的 MB.RETIRED_BUILTIN），全公司才看不到 */
+  function bossCount() { return Object.keys(MB.bossHidden ? MB.bossHidden() : {}).length; }
+  function renderBossPanel() {
+    var on = !!S.boss, n = bossCount();
+    $('#boss-start').hidden = on;
+    $('#boss-tools').hidden = !on;
+    $('#boss-who').textContent = on ? '审图中（' + S.boss + '）：内置照片下面按「不发」，按错了在最后面「放回」。'
+      : n ? '这台电脑标了 ' + n + ' 张「不发」（还没放进正式版的话，只有这台电脑看不到）。' : '';
+    $('#boss-count').textContent = '不发 ' + n + ' 张';
+    $('#boss-copy').disabled = !n;
+  }
+  function bossMark(ref, hide) {
+    var m = {}, cur = MB.bossHidden();
+    Object.keys(cur).forEach(function (k) { m[k] = cur[k]; });
+    if (hide) { if (!MB.bossCanHide(ref)) return; m[ref] = { ts: Date.now() }; } else delete m[ref];
+    MB.setBossHidden(m);
+    lsSet(BOSS_KEY, JSON.stringify(MB.bossHidden()));
+    rebuildResolver();
+    migratePhotos(S.project);   // 这份方案自动配的空间用了它：马上换一张
+    renderLibrary();
+    renderPreview();
+    var b = (MB.BUILTIN || []).filter(function (x) { return x.id === ref; })[0];
+    ping((hide ? '不发：' : '放回：') + ((b && b.zh) || ref) + (hide ? '（自动配图不会再用它）' : ''), 2400);
+  }
+  /** 给 Claude 的清单：一行一张（id · 名字 · 空间） */
+  function bossList() {
+    var m = MB.bossHidden(), d = new Date();
+    var day = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+    var rows = (MB.BUILTIN || []).filter(function (b) { return m.hasOwnProperty(b.id); }).map(function (b) {
+      return b.id + ' · ' + b.zh + ' · ' + (b.rooms || []).map(tagName).join(' / ');
+    });
+    return 'VISI 老板审图 · ' + day + ' · 不发 ' + rows.length + ' 张\n' + rows.join('\n');
+  }
+  $('#boss-start').addEventListener('click', function () {
+    var btn = this;
+    btn.disabled = true;
+    fetch('api/session', { credentials: 'same-origin' }).then(function (r) {
+      return r.ok ? r.json() : null;
+    }).catch(function () { return null; }).then(function (j) {
+      btn.disabled = false;
+      if (!j || !j.name) {
+        ping('要先用团队密码登入：在上面「公司案例库」登入，再按一次「开始审图」', 4200);
+        var box = $('#cloud-panel'); if (box) box.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        return;
+      }
+      S.boss = j.name;
+      S.lib.src = 'builtin'; S.lib.room = 'all'; S.lib.page = 0;
+      renderLibrary();
+    });
+  });
+  $('#boss-stop').addEventListener('click', function () { S.boss = ''; renderLibrary(); });
+  $('#boss-copy').addEventListener('click', function () {
+    var t = bossList();
+    $('#boss-out').value = t; $('#boss-out').hidden = false;
+    copyText(t, '已复制清单：贴到跟 Claude 的对话里');
+  });
+
   function renderLibrary() {
     $('#up-tag').innerHTML = tagOptions($('#up-tag').value || 'kitchen', true);
     $('#up-who').textContent = $('#up-shared').checked ? '这批照片：所有客户的方案都会自动配。'
@@ -1600,7 +1672,16 @@
     $('#lib-cfilter').innerHTML = g.cfilter;
     $('#lib-cfilter').hidden = !g.cfilter;
     $('#lib-match').hidden = !(hasCases() || casesBlocked());
-    $('#lib-grid').innerHTML = g.items.map(function (im) {
+    renderBossPanel();
+    var items = g.items;
+    // 审图中：老板标了「不发」的照片列在最后（同一个空间筛选），可以放回
+    if (S.boss) items = items.concat(MB.bossHiddenImages().filter(function (im) { return S.lib.src !== 'own' && S.lib.src !== 'cases' && matches(im, S.lib.room); }));
+    $('#lib-grid').innerHTML = items.map(function (im) {
+      if (im.boss) {
+        return '<div class="lib-item boss-off" data-ref="' + esc(im.ref) + '"><img src="' + esc(im.src) + '" alt="" loading="lazy" />' +
+          '<span class="own">不发</span><button class="boss-btn back" type="button" data-boss-show>放回</button>' +
+          '<span class="cap">' + esc(im.label || '') + '</span></div>';
+      }
       if (im.isCase) {
         return '<div class="lib-item case" data-ref="' + esc(im.ref) + '" title="' + esc((MB.cloud && MB.cloud.projectLabel(im.pid)) || '') + '">' +
           caseImg(im) + '<span class="own">案例</span>' + sameProjBtn(im) +
@@ -1613,7 +1694,8 @@
           ? '<span class="own">我的</span><select data-retag aria-label="空间">' + tagOptions(im.rooms[0], true) + '</select>' +
             scopeSelect(im) +
             '<button class="icon del" type="button" data-del-img title="删除">×</button>'
-          : '<span class="cap">' + (rcap ? esc(rcap) : '内置 · ' + esc(im.label || '')) + '</span>') +
+          : (S.boss && MB.bossCanHide(im.ref) ? '<button class="boss-btn" type="button" data-boss-hide title="不想发给客户">不发</button>' : '') +
+            '<span class="cap">' + (rcap ? esc(rcap) : '内置 · ' + esc(im.label || '')) + '</span>') +
         '</div>';
     }).join('') || '<p class="hint">这一类还没有图。</p>';
     $('#lib-pager').innerHTML = g.pager;
@@ -1649,6 +1731,8 @@
     storeImgs([u]).then(function () { rebuildResolver(); renderLibrary(); }, function (err) { ping(failMsg(err), 5000); });
   });
   $('#lib-grid').addEventListener('click', function (e) {
+    var bb = e.target.closest('[data-boss-hide],[data-boss-show]');
+    if (bb) { bossMark(bb.closest('[data-ref]').getAttribute('data-ref'), bb.hasAttribute('data-boss-hide')); return; }
     if (e.target.closest('[data-same-proj]')) { if (galleryClick(S.lib, e)) renderLibrary(); return; }
     if (!e.target.hasAttribute('data-del-img')) return;
     var ref = e.target.closest('[data-ref]').getAttribute('data-ref');

@@ -447,7 +447,49 @@
     });
     return brandCache;
   }
-  function builtins() { return MB.BUILTIN.concat(brandImages()); }
+  function builtins() { return MB.BUILTIN.filter(function (b) { return !BOSS.hasOwnProperty(b.id); }).concat(brandImages()); }
+
+  /* ---------- 老板审图：标了「不发」的内置照片（体检计划第 3 阶段） ----------
+     老板在图库按「不发」→ app.js 存在这台电脑（localStorage）→ MB.setBossHidden(map)。
+     标了的照片当成「拿掉的照片」（retired: 'boss'）：图库、自动配图都看不到，旧方案自动配的那一格重挑；
+     销售亲手放的照样印（不破图），体检红灯请他换掉。
+     只在这台电脑生效：老板按「发给 Claude」，清单搬进 photos.js 的 MB.RETIRED_BUILTIN（owner），合并后全公司都看不到。
+     系列页 / 原创系列页的官方照片（预留的）、品牌照不能标：那几页每份方案固定要印 */
+  var BOSS = {};
+  /** map = { ref: { ts, note } }；只收内置图库里、不是预留的那几张 */
+  MB.setBossHidden = function (map) {
+    var ok = {};
+    var ids = {};
+    (MB.BUILTIN || []).forEach(function (b) { ids[b.id] = 1; });
+    Object.keys(map || {}).forEach(function (ref) {
+      if (ids[ref] && !MB.photoReserved(ref)) ok[ref] = { ts: +(map[ref] && map[ref].ts) || 0, note: String((map[ref] && map[ref].note) || '').slice(0, 200) };
+    });
+    BOSS = ok; RET = null;
+    return ok;
+  };
+  MB.bossHidden = function () { return BOSS; };
+  /** 老板可以标「不发」的照片：内置图库里的，不是系列页预留的 */
+  MB.bossCanHide = function (ref) {
+    return typeof ref === 'string' && !MB.photoReserved(ref) && (MB.BUILTIN || []).some(function (b) { return b.id === ref; });
+  };
+  /** 标了「不发」的内置照片（图库审图时列在最后，可以放回）：MB.allImages 的形状 */
+  MB.bossHiddenImages = function () {
+    return (MB.BUILTIN || []).filter(function (b) { return BOSS.hasOwnProperty(b.id); }).map(function (b) {
+      return { ref: b.id, src: b.src, w: b.w, h: b.h, rooms: b.rooms, series: b.series || '', style: b.style || '', own: false, label: b.zh, boss: true };
+    });
+  };
+  /** 拿掉的照片全部：photos.js 的 MB.RETIRED_BUILTIN + 老板在这台电脑标了「不发」的 */
+  function retiredList() {
+    var out = (MB.RETIRED_BUILTIN || []).slice();
+    (MB.BUILTIN || []).forEach(function (b) {
+      if (!BOSS.hasOwnProperty(b.id)) return;
+      var c = {};
+      for (var k in b) if (b.hasOwnProperty(k)) c[k] = b[k];
+      c.retired = 'boss';
+      out.push(c);
+    });
+    return out;
+  }
   /** 品牌照 key → 实际用的 ref */
   function brandRef(k) { return BRAND_ALIAS[k] || 'b:brand-' + k; }
 
@@ -556,14 +598,14 @@
     return RES;
   }
   function retiredMap() {
-    if (!RET) { RET = {}; (MB.RETIRED_BUILTIN || []).forEach(function (b) { RET[b.id] = b; }); }
+    if (!RET) { RET = {}; retiredList().forEach(function (b) { RET[b.id] = b; }); }
     return RET;
   }
   /** 这张是哪个系列预留的官方照片（含同一张的裁切）：回系列 key；不是就回 '' */
   MB.photoReserved = function (ref) { return (ref && reservedMap()[shot(ref)]) || ''; };
   /** 已经从图库拿掉的照片（MB.RETIRED_BUILTIN） */
   MB.photoRetired = function (ref) { return typeof ref === 'string' && retiredMap().hasOwnProperty(ref); };
-  /** 拿掉的原因：'riccione'（不是溪岸的作品）· 'owner'（老板退回的）· 'unprinted'（手册没印出来的）· '' */
+  /** 拿掉的原因：'riccione'（不是溪岸的作品）· 'owner'（老板退回的）· 'unprinted'（手册没印出来的）· 'boss'（老板在这台电脑标了不发）· '' */
   MB.retiredKind = function (ref) { return MB.photoRetired(ref) ? retiredMap()[ref].retired || '' : ''; };
   /** 预留的 10 张 ref（系列页 5 张 + 原创系列页 5 张；系列顺序） */
   MB.seriesReserved = function () {
@@ -660,7 +702,7 @@
   MB.makeResolver = function (userImages) {
     var map = {};
     // 拿掉的照片也认得：旧方案里放了的照样印（不破图），体检提醒换掉；图库、自动配图不用（pool、allImages 跳过）
-    builtins().concat(MB.RETIRED_BUILTIN || []).forEach(function (b) { map[b.id] = b; });
+    builtins().concat(retiredList()).forEach(function (b) { map[b.id] = b; });
     (userImages || []).forEach(function (u) { map['u:' + u.id] = u; });
     // 案例放最后（pool 照插入顺序走，内置 / 本机图的先后跟以前一样）
     CASES.forEach(function (c) { map[c.id] = c; });
