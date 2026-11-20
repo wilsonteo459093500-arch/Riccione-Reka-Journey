@@ -58,3 +58,34 @@ body {
   background-size: 800px 100%;
   animation: shimmer 1.4s infinite linear;
 }
+
+/* 展厅播放 · 开场（ShowroomIntro）：晨光慢慢移动、「轻触开始」呼吸 */
+@keyframes intro-light {
+  0% {
+    transform: translate3d(-8%, -4%, 0);
+  }
+  100% {
+    transform: translate3d(9%, 6%, 0);
+  }
+}
+@keyframes intro-breathe {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+.intro-light {
+  animation: intro-light 26s ease-in-out infinite alternate;
+}
+.intro-breathe {
+  animation: intro-breathe 3.2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .intro-light,
+  .intro-breathe {
+    animation: none;
+  }
+}

@@ -10,6 +10,8 @@
 //     coverTitle: '',            // 方案封面（Material Board 页）大标题，空 = 自动（客户与地点两行）
 //     coverSubtitle: '',         // 方案封面副标题，空 = 自动（楼层：一楼与二楼）
 //     lang: 'zh'|'en'|'bi',      // 提案语言：华文 / English / 中英（engine/lang.js）
+//     greetAs: '',               // 展厅开场的称呼（如 Jason & Mei），空 = 用「客户」（showroom/intro.js）
+//     showIntro: true,           // 展厅播放先放「Hello」开场（false = 直接进第一页）
 //     sourceFile: '2026.8.6 Muar - Mr Lau - GF L1.pdf',
 //     team: [{ en:'DESIGN', name:'Sheerly', role:'方案设计师' }, ...],
 //   },
@@ -78,6 +80,8 @@ export function newProject(partial = {}) {
       proposalTitle: '全屋定制设计方案',
       coverTitle: '',
       coverSubtitle: '',
+      greetAs: '',
+      showIntro: true,
       sourceFile: '',
       team: DEFAULT_TEAM.map((m) => ({ ...m })),
     },

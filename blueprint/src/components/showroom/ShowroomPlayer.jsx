@@ -3,10 +3,12 @@
 // 控制：鼠标滚轮 / 触控板、触控大屏拖动（上下或左右都行）、方向键 / 空格 / PageDown；停手后轻轻吸到最近的一页，
 //       所以停下来的画面永远是完整原图（见 showroom/motion.js 的铁律）。
 // 角落：目录（跳到任一空间）· 音乐（第一次点选一首，存在本机）· 全屏 · 退出；鼠标不动 2.5 秒后自动隐藏。
+// 开场：先播「Hello」开场（ShowroomIntro，按时间播的单独一层），轻触后淡出，下面就是第一页；项目信息里可以关掉（info.showIntro = false）。
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LayoutGrid, Music, VolumeX, Maximize, X, Eye, EyeOff } from 'lucide-react';
 import SlideCanvas from '../SlideCanvas.jsx';
+import ShowroomIntro from './ShowroomIntro.jsx';
 import { renderDeck, exportableSlides } from '../../engine/deck.js';
 import { metaOf, resolveUrl } from '../../store/assets.js';
 import { getAssetRecord, putAssetRecord } from '../../store/db.js';
@@ -380,6 +382,10 @@ export default function ShowroomPlayer({ project, onClose }) {
   const [chrome, setChrome] = useState(true);
   const [showIndex, setShowIndex] = useState(false);
   const music = useMusic();
+  // 开场（Hello）：播着的时候方案页不接滑动 / 按键
+  const [intro, setIntro] = useState(() => project?.info?.showIntro !== false);
+  const introOn = useRef(intro);
+  introOn.current = intro;
 
   const target = useRef(0);
   const cur = useRef(0);
@@ -510,6 +516,7 @@ export default function ShowroomPlayer({ project, onClose }) {
     const onWheel = (e) => {
       if (indexOpen.current) return;
       e.preventDefault();
+      if (introOn.current) return;
       const unit = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? window.innerHeight : 1;
       const dy = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
       nudge((dy * unit) / WHEEL_UNIT);
@@ -526,7 +533,7 @@ export default function ShowroomPlayer({ project, onClose }) {
         else close();
         return;
       }
-      if (indexOpen.current) return;
+      if (indexOpen.current || introOn.current) return;
       const fwd = ['ArrowDown', 'ArrowRight', 'PageDown', ' ', 'Enter'];
       const back = ['ArrowUp', 'ArrowLeft', 'PageUp'];
       if (fwd.includes(e.key)) goTo(Math.round(target.current) + 1);
@@ -542,6 +549,7 @@ export default function ShowroomPlayer({ project, onClose }) {
 
   // 触控大屏 / 鼠标拖动：手指往上（或往左）= 往后翻；放手带一点惯性，然后吸到最近一页
   const onPointerDown = (e) => {
+    if (introOn.current) return;
     poke();
     if (showIndex || e.button > 0) return;
     e.currentTarget.setPointerCapture?.(e.pointerId);
@@ -549,6 +557,7 @@ export default function ShowroomPlayer({ project, onClose }) {
     jump.current = null;
   };
   const onPointerMove = (e) => {
+    if (introOn.current) return;
     poke();
     const d = drag.current;
     if (!d || d.id !== e.pointerId) return;
@@ -654,7 +663,19 @@ export default function ShowroomPlayer({ project, onClose }) {
         <div className="h-full bg-white/50" style={{ width: `${progress * 100}%` }} />
       </div>
 
-      <div className={`absolute top-5 right-5 z-10 flex items-center gap-2 transition-opacity duration-500 ${chrome ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+      {intro && (
+        <ShowroomIntro
+          project={project}
+          music={music}
+          onExit={close}
+          onDone={() => {
+            setIntro(false);
+            poke();
+          }}
+        />
+      )}
+
+      <div className={`absolute top-5 right-5 z-10 flex items-center gap-2 transition-opacity duration-500 ${chrome && !intro ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
         <ChromeButton onClick={() => setShowIndex(true)} title="目录">
           <LayoutGrid size={16} /> 目录
         </ChromeButton>
