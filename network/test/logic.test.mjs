@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   toWhatsApp, waLink, pickWhatsApp, findDuplicates, normCompany, findCompany, emailDomain,
   worthScore, worthVerdict, tierCounts, initials, splitTags, matchPerson, monthUsage,
+  isSharedPhone, isSharedEmail, mergePersonPatch,
 } from '../src/lib/logic.js';
 
 test('toWhatsApp: 马来西亚号码各种写法', () => {
@@ -53,6 +54,56 @@ test('findDuplicates: 电话 / 邮箱 / 名字', () => {
   assert.deepEqual(r3.map((x) => x.person.id).sort(), ['p1', 'p3']);
   assert.ok(r3.find((x) => x.person.id === 'p1').reasons.includes('名字和公司都一样'));
   assert.equal(findDuplicates({ name: 'Nobody', phones: [], emails: [] }, people).length, 0);
+});
+
+test('isSharedPhone / isSharedEmail: 公司总机、热线、info@ 认得出来', () => {
+  assert.equal(isSharedPhone('012-345 6789'), false);
+  assert.equal(isSharedPhone('+60 11-2345 6789'), false);
+  assert.equal(isSharedPhone('03-7890 1234'), true);
+  assert.equal(isSharedPhone('+603 7890 1234'), true);
+  assert.equal(isSharedPhone('1300-88-1234'), true);
+  assert.equal(isSharedPhone('1-800-22-8888'), true);
+  assert.equal(isSharedPhone('+65 9123 4567'), false);           // 外国号码看不出来 → 当手机
+  assert.equal(isSharedPhone('+65 6123 4567', 'office'), true);  // 名片上写 office
+  assert.equal(isSharedEmail('info@abc.com.my'), true);
+  assert.equal(isSharedEmail('Sales@abc.com.my'), true);
+  assert.equal(isSharedEmail('tan@abc.com.my'), false);
+});
+
+test('findDuplicates: 同公司两个人共用总机 / info@ → 不算同一个人（只是提示）', () => {
+  const people = [{ id: 'p1', name: 'Tan Ah Kow', phones: [{ label: 'office', number: '03-7890 1234' }, { label: 'mobile', number: '012-111 2222' }], emails: ['info@abc.my', 'tan@abc.my'] }];
+  const lim = { name: 'Lim Mei Ling', phones: [{ label: 'office', number: '+603-7890 1234' }, { label: 'mobile', number: '019-333 4444' }], emails: ['info@abc.my'] };
+  const r = findDuplicates(lim, people);
+  assert.equal(r.length, 1);
+  assert.equal(r[0].strong, false);
+  assert.deepEqual(r[0].reasons, ['公司电话一样', '公司公用邮箱一样']);
+  // 总机没写 label 也认得出来（03 开头）
+  assert.equal(findDuplicates({ name: 'X', phones: [{ number: '03 7890 1234' }], emails: [] }, people)[0].strong, false);
+  // 手机 / 个人邮箱一样 → 还是同一个人
+  assert.equal(findDuplicates({ name: 'X', phones: [{ number: '+60121112222' }], emails: [] }, people)[0].strong, true);
+  assert.equal(findDuplicates({ name: 'X', phones: [], emails: ['TAN@abc.my'] }, people)[0].strong, true);
+});
+
+test('mergePersonPatch: 只补空的、加新电话邮箱标签、留言接后面；不改名字', () => {
+  const into = { id: 'p1', name: '陈先生', title: '', phones: [{ label: 'mobile', number: '0123456789' }], emails: [], tags: ['商会'], notes: '老客户', company_id: null };
+  const from = {
+    id: 'n1', name: 'Tan', title: 'Director', company_id: 'c9', whatsapp: '60123456789',
+    phones: [{ label: 'whatsapp', number: '+60 12-345 6789' }, { label: 'office', number: '03-111 2222' }],
+    emails: ['tan@mega.my'], tags: ['扫码'], notes: '【他留的话】想做厨房\n名片还没读：在「新朋友」按「AI 读名片」',
+  };
+  const patch = mergePersonPatch(into, from);
+  assert.equal(patch.name, undefined);
+  assert.equal(patch.title, 'Director');
+  assert.equal(patch.company_id, 'c9');
+  assert.equal(patch.whatsapp, '60123456789');
+  assert.deepEqual(patch.phones.map((p) => p.number), ['0123456789', '03-111 2222']);
+  assert.deepEqual(patch.emails, ['tan@mega.my']);
+  assert.deepEqual(patch.tags, ['商会', '扫码']);
+  assert.equal(patch.notes, '老客户\n【他留的话】想做厨房');
+  // 旧的是「名片待确认」→ 用新的名字
+  assert.equal(mergePersonPatch({ name: '（名片待确认）' }, { name: 'Ali' }).name, 'Ali');
+  // 没东西补
+  assert.deepEqual(mergePersonPatch(into, { name: 'x', phones: [{ number: '012 345 6789' }] }), {});
 });
 
 test('worthScore: 4 维度平均 × 10，超出范围会夹住', () => {

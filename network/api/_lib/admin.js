@@ -108,9 +108,12 @@ export function ownerDb({ client, ownerId }) {
       const data = must(await db.from('events').select('id, name, held_on, location').eq('owner', ownerId).eq('id', id).limit(1), 'events');
       return data && data[0] ? data[0] : null;
     },
-    async countInbox({ sinceIso, ip = null }) {
+    /** 这一小时几笔：ip = 只算这个 IP；photo = 只算带照片的；admitted = 不算被挡掉（limited）的 */
+    async countInbox({ sinceIso, ip = null, photo = false, admitted = false }) {
       let q = db.from('inbox').select('id', { count: 'exact', head: true }).eq('owner', ownerId).gte('at', sinceIso);
       if (ip) q = q.eq('ip_hash', ip);
+      if (photo) q = q.eq('has_photo', true);
+      if (admitted) q = q.neq('outcome', 'limited');
       const { count, error } = await q;
       if (error) throw new HttpError(500, { error: 'db_error', message: `inbox: ${error.message}` });
       return count || 0;
@@ -131,9 +134,12 @@ export function ownerDb({ client, ownerId }) {
     async attend(eventId, personId) {
       must(await db.from('attendance').upsert({ owner: ownerId, event_id: eventId, person_id: personId, status: 'attended' }, { onConflict: 'event_id,person_id' }).select(), 'attendance');
     },
-    async spentUsd(sinceIso) {
-      const { data, error } = await db.from('ai_usage').select('cost_usd').eq('owner', ownerId).gte('at', sinceIso);
-      if (error) return 0;
+    /** 这个月花了多少（feature 有给就只算那个功能，例如 inbox_card） */
+    async spentUsd(sinceIso, feature = '') {
+      let q = db.from('ai_usage').select('cost_usd').eq('owner', ownerId).gte('at', sinceIso);
+      if (feature) q = q.eq('feature', feature);
+      const { data, error } = await q;
+      if (error) return Infinity; // 查不到就当作没钱了（宁可不读名片，也不要超支）
       return (data || []).reduce((s, r) => s + Number(r.cost_usd || 0), 0);
     },
     async uploadPrivate(path, buffer, contentType) {

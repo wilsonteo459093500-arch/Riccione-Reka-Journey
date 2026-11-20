@@ -98,6 +98,11 @@ Wilson 想要一个**只给自己用**的人脉管理 app，用来记录每个�
   - 留给第 5 阶段：`events` / `attendance` 已经有资料了（活动模式），可以直接拿来「活动后群发」；`people.tags` 有「扫码」可以筛选
   - 没做（以后可以加）：公开页的 WhatsApp / Facebook 分享预览图（要 edge middleware 依名片动态产生 og:image）；FoloToy 用 Wi-Fi 同步最新的活动二维码；名片页浏览次数统计
 
+- **体检第 1 阶段 ✅ 公开页面关门**（2026-11-20）：限次「先占名额再数」（并发绕不过）+ 带照片另设低上限；已存在的人不再被公开表格改，进「新朋友」显示「像是 ×××」、按「合并」才算（`mergePerson`）；公司总机 / 1300 / `info@` 不算同一人（`findDuplicates`，自己扫名片也一样）；先存人再读名片（最多等 20 秒）；公开页 AI 读卡单独额度 `AI_PUBLIC_MONTHLY_BUDGET_MYR`（预设 RM5）；删人时触发器抹掉 `inbox` 里他留的资料；隐私说明加 AI 那句（条款版本 `pdpa-2026-11-20`）。升级步骤见 `DEPLOY.md`「体检第 1 阶段升级」。
+  - 测试：82 项（并发 60 次、带照片上限、旧的人不被改、AI 卡住人还在、小额度、总机 / info@、合并）；`schema.sql` 在本机 Postgres 16 上连跑两次、用登入身份（RLS）测过删人会抹掉资料
+  - 照实写：同时到的请求超过上限时，可能那一批**全部**被挡（宁可多挡、绝不多放）；一个接一个送就刚好 20 个。活动现场同一个 Wi-Fi 同一秒 20 个人送出不太可能
+  - 还没在真的 Supabase / Vercel 上测；Turnstile 还是要第 0 阶段你自己设
+
 ## 名片页 `/c` 重新设计（2026-11-17：本人觉得第 4 阶段的版本太丑，开新对话重做）
 **只改外观和排版，功能不变**：WhatsApp 我、存我的联络方式（vCard）、留资料表格（PDPA 同意、拍名片代替打字）、活动模式 `?e=`、来源 `?s=nfc / folotoy`、中英切换、送出后 WhatsApp 我。
 - 代码：`card.html` + `src/card/main.js`（画面，原生 JS，不载 React）+ `src/card/card.css`；资料来自 `GET /api/card`（栏位见 `src/lib/card.js` 的 `cleanCard`）。后端、`/api/inbox`、SPACE 里的「我的名片」编辑页尽量不动；真的需要新栏位，就在 `cleanCard` + `CardStudio.jsx` 一起加

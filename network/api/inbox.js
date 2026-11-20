@@ -2,27 +2,34 @@
    POST /api/inbox   ← 公开名片页（/c）的「留下你的联络方式」
    body: { name, phone, company, title, email, met_where, note,
            consent: true, event?, src?, card_image?: { media_type, data }, turnstile?, fax(陷阱), ms(填表花了几毫秒) }
-   回：  { ok: true, name }   （不管是新的人还是已经存过的，都回一样的 —— 不让外人试出谁在你的名单里）
+   回：  { ok: true, name, where }   （不管是新的人还是已经存过的，都回一样的 —— 不让外人试出谁在你的名单里）
    ------------------------------------------------------------
-   流程：陷阱 / 太快 → 假装成功 · 同意条款 · 检查栏位 · Turnstile（有设才验）· 同 IP 每小时限次
-        → 名片照片存私有 bucket + Haiku 读（有预算才读）→ 找是不是已经存过（电话末 9 码 / 邮箱）
-        → 新建（圈层「认识」、标签「扫码」、待确认）或只补空的栏位 → 记一笔互动「扫码留资料」
-        → 有活动就记出席 → inbox 记一笔（审计、PDPA 查询用）
+   流程：陷阱 / 太快 → 假装成功 · 同意条款 · 检查栏位 · Turnstile（有设才验）
+        → 先占一个名额（inbox 先写一笔再数，同时送 60 次也只进得了上限那么多）
+        → 名片照片存私有 bucket → **先把人存好**（一律是新的一个「新朋友」，待确认）→ 互动「扫码留资料」→ 活动出席
+        → 最后才让 Haiku 读名片（公开页自己的小额度、最多等 20 秒；读不到人也已经存好了）
+   已经存过的人**不会被改**：电话 / 邮箱对得上也一样进「新朋友」，主人在那里看了按「合并」才算。
    不跑「深度分析」（花钱），主人想深入再按。
    ============================================================ */
 import { randomUUID } from 'node:crypto';
 import { send, sendError, readJson, HttpError, cleanText } from './_lib/http.js';
 import { getAdmin, ownerDb, onVercel, clientIp, ipHash } from './_lib/admin.js';
 import { cleanImages } from './_lib/ai.js';
-import { monthlyBudgetUsd, monthStartIso } from './_lib/cost.js';
+import { monthlyBudgetUsd, publicBudgetUsd, monthStartIso } from './_lib/cost.js';
 import { scanCard } from './scan-card.js';
 import { findCompany } from '../src/lib/logic.js';
 import {
-  cleanLead, LeadError, fillLeadFromCard, findExisting, leadToPerson, mergeLeadInto, leadForLog,
+  cleanLead, LeadError, fillLeadFromCard, leadToPerson, leadForLog,
   cleanSource, UUID_RE, CONSENT_VERSION, howMet,
 } from '../src/lib/card.js';
 
-export const LIMITS = { perIpHour: 20, allHour: 300, minFillMs: 1500 };
+/**
+ * 每小时的上限。活动现场大家可能连同一个 Wi-Fi，所以同 IP 给 20 次；
+ * 带名片照片的要存图、要花 AI 钱，另外设低一点。
+ */
+export const LIMITS = { perIpHour: 20, perIpPhotoHour: 8, allHour: 300, allPhotoHour: 60, minFillMs: 1500, scanMs: 20_000 };
+
+const BUSY = { error: 'too_many', message: '送出太多次了，请稍后再试，或直接 WhatsApp 我' };
 
 async function verifyTurnstile(token, ip, fetchImpl = fetch) {
   const secret = process.env.TURNSTILE_SECRET_KEY;
@@ -39,9 +46,63 @@ async function verifyTurnstile(token, ip, fetchImpl = fetch) {
 }
 
 /**
+ * 占名额：先在 inbox 写一笔「pending」，再数这一小时有几笔（包括自己）。
+ * 为什么先写再数：同时送进来的每一笔，数的时候至少看得到排在它前面、已经写进去的那些，
+ * 所以排第 21 个以后的一定数到 > 20 —— 不会像「先数再写」那样 60 次同时都数到 0。
+ * 超过的那笔改成「limited」留着（同 IP 再刷还是算它的），回 429。
+ * 「全部加起来」那个上限不算 limited 的 —— 一个人狂刷不会把别人的名额吃掉。
+ */
+export async function claimSlot(db, { ip, hasPhoto, now, consentAt }) {
+  const sinceIso = new Date(now.getTime() - 3600 * 1000).toISOString();
+  const row = await db.insert('inbox', {
+    at: now.toISOString(), ip_hash: ip, outcome: 'pending', has_photo: hasPhoto, source: 'qr',
+    consent_at: consentAt, consent_version: CONSENT_VERSION,
+  });
+  const [mine, all, minePhoto, allPhoto] = await Promise.all([
+    db.countInbox({ sinceIso, ip }),
+    db.countInbox({ sinceIso, admitted: true }),
+    hasPhoto ? db.countInbox({ sinceIso, ip, photo: true }) : 0,
+    hasPhoto ? db.countInbox({ sinceIso, photo: true, admitted: true }) : 0,
+  ]);
+  const over = mine > LIMITS.perIpHour || all > LIMITS.allHour
+    || (hasPhoto && (minePhoto > LIMITS.perIpPhotoHour || allPhoto > LIMITS.allPhotoHour));
+  if (over) {
+    await db.update('inbox', row.id, { outcome: 'limited' }).catch(() => null);
+    throw new HttpError(429, BUSY);
+  }
+  return row;
+}
+
+/** 有没有钱让 AI 读这张名片：公开页自己的小额度 + 整个月的总预算，两个都还有才读 */
+async function canScan(db, now) {
+  const since = monthStartIso(now);
+  const [publicSpent, allSpent] = await Promise.all([db.spentUsd(since, 'inbox_card'), db.spentUsd(since)]);
+  return publicSpent < publicBudgetUsd() && allSpent < monthlyBudgetUsd();
+}
+
+/** 读名片最多等 ms 毫秒（AI 卡住就放弃，人已经存好了） */
+function withTimeout(promise, ms) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('scan_timeout')), ms); }),
+  ]).finally(() => clearTimeout(timer));
+}
+
+/** 找公司（没有就建一个） */
+async function companyFor(db, lead) {
+  const name = lead.company;
+  if (!name) return null;
+  const hit = findCompany(await db.companies(), name);
+  if (hit) return hit;
+  const x = lead.extra || {};
+  return db.insert('companies', { name, name_alt: '', website: x.website || '', address: x.address || '', industry: x.industry_guess || '' });
+}
+
+/**
  * 主流程（测试直接叫这个，db / scan 都可以换成假的）
  * @param body  前端送来的
- * @param ctx   { db: ownerDb, ip, now, scan(images) → {card, usage}, fetchImpl }
+ * @param ctx   { db: ownerDb, ip, now, scan(images) → {card, usage}, fetchImpl, scanMs }
  */
 export async function receiveLead(body, ctx) {
   const now = ctx.now || new Date();
@@ -69,71 +130,39 @@ export async function receiveLead(body, ctx) {
   }
 
   const db = ctx.db;
-  // 4) 限次：同一个 IP 每小时 20 次（活动现场大家可能连同一个 Wi-Fi）；全部加起来每小时 300 次
-  const hourAgo = new Date(now.getTime() - 3600 * 1000).toISOString();
   const ip = ipHash(ctx.ip || '');
-  if ((await db.countInbox({ sinceIso: hourAgo, ip })) >= LIMITS.perIpHour || (await db.countInbox({ sinceIso: hourAgo })) >= LIMITS.allHour) {
-    throw new HttpError(429, { error: 'too_many', message: '送出太多次了，请稍后再试，或直接 WhatsApp 我' });
-  }
+
+  // 4) 占名额（并发也绕不过；带照片的另有低上限）
+  const slot = await claimSlot(db, { ip, hasPhoto: !!images, now, consentAt: now.toISOString() });
 
   // 5) 活动（只认主人自己的活动）
   const eventId = UUID_RE.test(String(b.event || '')) ? String(b.event) : '';
   const event = eventId ? await db.event(eventId) : null;
   const source = cleanSource(b.src);
 
-  // 6) 名片照片：先存起来（私有 bucket），有预算再让 Haiku 读
+  // 6) 名片照片先存起来（私有 bucket）。存不了：有名字、电话就照样收；只有照片的才算失败
   let photo = null;
-  let scanned = false;
   if (images) {
     const id = randomUUID();
     const path = `${db.ownerId}/${id}.jpg`;
     const img = images[0].source;
-    await db.uploadPrivate(path, Buffer.from(img.data, 'base64'), img.media_type);
-    photo = await db.insert('photos', { id, kind: 'card', path, caption: '名片（扫码留资料）', taken_at: now.toISOString() });
-    if (ctx.scan) {
-      try {
-        const spent = await db.spentUsd(monthStartIso(now));
-        if (spent < monthlyBudgetUsd()) {
-          const { card, usage } = await ctx.scan(images);
-          if (card && card.is_business_card !== false) {
-            lead = fillLeadFromCard(lead, card);
-            scanned = true;
-          }
-          if (usage) await db.insert('ai_usage', { ...usage, feature: 'inbox_card', at: now.toISOString() }).catch(() => null);
-        }
-      } catch { /* AI 读不到就算了，主人在「新朋友」再按「AI 读名片」 */ }
+    try {
+      await db.uploadPrivate(path, Buffer.from(img.data, 'base64'), img.media_type);
+      photo = await db.insert('photos', { id, kind: 'card', path, caption: '名片（扫码留资料）', taken_at: now.toISOString() });
+    } catch (e) {
+      if (!lead.name || !lead.phone) throw e;
     }
   }
 
-  // 7) 已经存过？（电话末 9 码 / 邮箱）
-  const people = await db.people();
-  const existing = findExisting(lead, people);
-  let person;
-  let outcome;
-  if (existing) {
-    const patch = mergeLeadInto(existing, lead, { source });
-    if (photo && !existing.card_photo_id) patch.card_photo_id = photo.id;
-    person = Object.keys(patch).length ? await db.update('people', existing.id, patch) : existing;
-    outcome = 'updated';
-  } else {
-    const row = leadToPerson(lead, { event, source, now });
-    if (photo) {
-      row.card_photo_id = photo.id;
-      if (!scanned && !lead.name) row.notes = [row.notes, '名片还没读：在「新朋友」按「AI 读名片」'].filter(Boolean).join('\n');
-    }
-    const companyName = lead.company;
-    if (companyName) {
-      const companies = await db.companies();
-      const hit = findCompany(companies, companyName);
-      const company = hit || await db.insert('companies', {
-        name: companyName, name_alt: '', website: (lead.extra && lead.extra.website) || '', address: (lead.extra && lead.extra.address) || '', industry: (lead.extra && lead.extra.industry_guess) || '',
-      });
-      row.company_id = company.id;
-    }
-    person = await db.insert('people', row);
-    outcome = 'created';
+  // 7) 先把人存好 —— 一律是新的一个、待确认；就算电话 / 邮箱跟已经存过的人一样，也不去改那个人
+  const row = leadToPerson(lead, { event, source, now });
+  if (photo) {
+    row.card_photo_id = photo.id;
+    if (!lead.name) row.notes = [row.notes, '名片还没读：在「新朋友」按「AI 读名片」'].filter(Boolean).join('\n');
   }
-
+  const company = await companyFor(db, lead);
+  if (company) row.company_id = company.id;
+  let person = await db.insert('people', row);
   if (photo) await db.insert('photo_people', { photo_id: photo.id, person_id: person.id });
 
   // 8) 互动 + 活动出席
@@ -144,15 +173,37 @@ export async function receiveLead(body, ctx) {
     source: 'qr',
     occurred_at: now.toISOString(),
     title: event ? `扫码留资料 · ${event.name}` : source === 'nfc' ? '碰 NFC 留资料' : source === 'folotoy' ? '扫 FoloToy 留资料' : '扫码留资料',
-    summary: [lead.met_where && `在 ${lead.met_where} 认识`, lead.note && `留言：${lead.note}`, outcome === 'updated' && '（已经存过，补上新资料）'].filter(Boolean).join('；'),
+    summary: [lead.met_where && `在 ${lead.met_where} 认识`, lead.note && `留言：${lead.note}`].filter(Boolean).join('；'),
   });
   if (event) await db.attend(event.id, person.id);
 
-  // 9) 记录（谁、什么时候、同意了哪一版条款）
-  await db.insert('inbox', {
-    at: now.toISOString(), ip_hash: ip, event_id: event ? event.id : null, person_id: person.id, outcome, source,
-    payload: leadForLog(lead), consent_at: now.toISOString(), consent_version: CONSENT_VERSION,
+  // 9) 名额那一笔补完整（谁、什么时候、同意了哪一版条款、他填了什么）
+  await db.update('inbox', slot.id, {
+    event_id: event ? event.id : null, person_id: person.id, outcome: 'created', source, payload: leadForLog(lead),
   });
+
+  // 10) 最后才让 AI 读名片：有额度才读、最多等 20 秒；读不到没关系，主人在「新朋友」再按「AI 读名片」
+  if (photo && ctx.scan) {
+    try {
+      if (await canScan(db, now)) {
+        const { card, usage } = await withTimeout(ctx.scan(images), ctx.scanMs || LIMITS.scanMs);
+        if (usage) await db.insert('ai_usage', { ...usage, feature: 'inbox_card', at: now.toISOString() }).catch(() => null);
+        if (card && card.is_business_card !== false) {
+          const read = fillLeadFromCard(lead, card);
+          const patch = leadToPerson(read, { event, source, now });
+          const fill = { notes: lead.name ? row.notes : String(row.notes || '').replace(/\n?名片还没读：在「新朋友」按「AI 读名片」/, '').trim() };
+          for (const k of ['name', 'name_alt', 'title', 'phones', 'emails', 'whatsapp', 'website', 'address', 'socials', 'card_notes']) fill[k] = patch[k];
+          if (!company) {
+            const c = await companyFor(db, read);
+            if (c) fill.company_id = c.id;
+          }
+          person = await db.update('people', person.id, fill);
+          await db.update('inbox', slot.id, { payload: leadForLog(read) }).catch(() => null);
+          lead = read;
+        }
+      }
+    } catch { /* AI 读不到 / 太慢就算了 */ }
+  }
 
   return { ok: true, name: lead.name || '', where };
 }
@@ -168,7 +219,10 @@ export default async function handler(req, res) {
       try { cleanLead(body, { hasCard: !!body.card_image }); } catch (e) { if (e instanceof LeadError) throw new HttpError(400, { error: e.code, message: e.message }); throw e; }
       return send(res, 200, { ok: true, name: cleanText(body.name, 80), demo: true });
     }
-    const scan = process.env.ANTHROPIC_API_KEY ? (images) => scanCard({ images: images.map((i) => ({ media_type: i.source.media_type, data: i.source.data })) }) : null;
+    const scan = process.env.ANTHROPIC_API_KEY ? (images) => scanCard(
+      { images: images.map((i) => ({ media_type: i.source.media_type, data: i.source.data })) },
+      { requestOptions: { timeout: LIMITS.scanMs, maxRetries: 0 } },
+    ) : null;
     const out = await receiveLead(body, { db: ownerDb(admin), ip: clientIp(req), scan });
     return send(res, 200, out);
   } catch (e) {
