@@ -337,7 +337,10 @@ export function pickerToContacts(list) {
  *   • 同一个号码 / 邮箱在档案里出现两次 → 并成一个
  *   • 已经在 SPACE 的人 → existing（灰掉，不重复建）；只是名字一样 → maybe（提醒你看一下）
  *   • 猜好称呼、挑好 WhatsApp
- *   • 默认勾不勾：有手机号、不是已在 SPACE、不像旧朋友、没退群 → 勾（WhatsApp 群）；通讯录默认不勾（人太杂，你自己挑）
+ *   • 默认勾不勾：
+ *       WhatsApp 群：有手机号 / 有名字、不是已在 SPACE、不像旧朋友、没退群 → 勾
+ *       从手机通讯录挑（contacts）：你在手机上已经挑过一次了 → 勾好（已在 SPACE、像旧朋友的除外）
+ *       通讯录档案 / 表格：整本通讯录人太杂 → 不勾，你自己挑
  */
 export function prepareCandidates(contacts, { people = [], companies = [], source = 'vcf' } = {}) {
   const merged = [];
@@ -371,7 +374,10 @@ export function prepareCandidates(contacts, { people = [], companies = [], sourc
     const maybe = existing ? null : dups[0] || null;
     const whatsapp = pickWhatsApp(c.phones);
     const left = !!(c.groupInfo && c.groupInfo.left);
-    const checked = source === 'whatsapp' ? !existing && !maybe && !left && (!!whatsapp || !!c.name) : false;
+    const fresh = !existing && !maybe;
+    const checked = source === 'whatsapp' ? fresh && !left && (!!whatsapp || !!c.name)
+      : source === 'contacts' ? fresh
+        : false;
     return {
       key: `c${i}`,
       name: c.name,

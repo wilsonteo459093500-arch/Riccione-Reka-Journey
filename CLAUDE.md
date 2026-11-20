@@ -71,6 +71,10 @@
 - **2026-11-20 第 2 阶段（活动连拍）做完、开了 PR**：用户选了「有网络自动 AI 读」+「每张可选 ⭐ / 备注」；资料库不用升级。下一个是第 3 阶段「AI 稳定 + 补查」
 - **2026-11-20 第 3 阶段（AI 稳定 + 补查）做完、开了 PR**：叠在第 2 阶段的分支上（先合 #90）；资料库不用升级。补查结论在 `network/README.md`「体检第 3 阶段」。下一个是第 4 阶段「把现有人脉搬进来」（先 brainstorm 导入画面）
 - **2026-11-20 第 4 阶段（把现有人脉搬进来）做完、开了 PR**：叠在第 3 阶段（#92）上，合并顺序 #90 → #92 → 第 4 阶段；**合并前要先重跑 `schema.sql`**（people 加称呼 / 生日 / 导入来源 / 第一次提醒日）。用户选的：清单打勾、用 Android、导入的人先全放「认识」（第一次提醒分散 120 天）、WhatsApp 群用汇出的聊天记录（不用截图 AI）。称呼规则 `network/src/lib/salute.js`，导入 `network/src/lib/importer.js`。下一个是第 5 阶段「整理工具」
+- **2026-11-20 第 2、3、4 阶段验收后一起合进 main**：
+  - 资料库「SPACE NETWORK」已经升级好（那 4 个栏位），不用再跑
+  - 验收只在电脑上模拟手机走过（通讯录挑选器是假的）；真的 Android 通讯录、真的相机连拍、真的 AI 还要用户自己照 `network/DEPLOY.md` 走一遍
+  - 验收时改了一处：从手机通讯录挑的人，回到清单就是勾好的（档案 / 表格照旧不勾）
 - 第 0 阶段还没做完（2026-11-20 查 Vercel）：`TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` 没设（要用户在 Cloudflare 建、自己贴进 Vercel，secret 不经过对话）；`SUPABASE_SERVICE_ROLE_KEY` 还勾着 Preview
 
 ## 上线流程（全部软件，2026-11-20 起）
@@ -81,6 +85,9 @@
 - 新增软件：照 `DEPLOY-FLOW.md`「新增一个软件」做
 - **2026-11-20 以前开的分支**（还没合 main 的）：推上去不会再自动出预览。先 `git merge origin/main` 把新流程带进来，再推一次就会出
 - 推送照样要攒着推：每推一次，改到的软件各用一次 Vercel 额度（一天 100 次）
+- **2026-11-20 发现的两个坑**（还没修）：
+  - 额度用完时（`api-deployments-free-per-day`），Actions 照样显示成功，PR 留言的网址变成「undefined」，版本其实没出。合并后要到 Vercel 看那一版是不是真的 READY；没出成就等额度回来，在 Actions 手动按「Run workflow」重出
+  - 还没合 main 的旧分支（例：`ccr-eb67bc6b-ecbura`，PR #65）每推一次，Vercel 自己会给 5 个软件各建一版，额度就是这样被吃掉的
 
 ## KIRA（kira/）
 

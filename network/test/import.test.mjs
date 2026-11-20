@@ -224,6 +224,21 @@ test('清单：档案里重复的人并成一个；已在 SPACE 的灰掉；公�
   assert.ok(list.every((c) => !c.checked)); // 通讯录：默认都不勾，你自己挑
 });
 
+test('清单：从手机通讯录挑的人回来就是勾好的（手机上已经挑过）；已在 SPACE、像旧朋友的不勾', () => {
+  const picked = pickerToContacts([
+    { name: ["Dato' Lim Kok Wing"], tel: ['+60 12-999 8888'], email: [] },
+    { name: ['Tan AK'], tel: ['+60 12-345 6789'], email: [] },   // 跟 p1 同手机 → 已在 SPACE
+    { name: ['Lee Wei'], tel: ['03-1234 5678'], email: [] },     // 跟 p3 同总机 → 像旧朋友，留给你看一眼
+  ]);
+  const list = prepareCandidates(picked, { people: PEOPLE, source: 'contacts' });
+  assert.deepEqual(list.map((c) => c.checked), [true, false, false]);
+  assert.equal(list[0].salutation, "Dato' Lim");
+  assert.equal(list[1].existing.id, 'p1');
+  assert.equal(list[2].maybe.id, 'p3');
+  // 同样的人从档案进来：照旧不勾
+  assert.ok(prepareCandidates(picked, { people: PEOPLE, source: 'vcf' }).every((c) => !c.checked));
+});
+
 test('清单：WhatsApp 群默认勾好有号码 / 有名字的；只有名字一样的当作已在 SPACE；退群的不勾', () => {
   const { group, members } = groupMembers(CHAT, '', { meNames: ['Wilson'] });
   const list = prepareCandidates(membersToContacts(members, group), { people: PEOPLE, source: 'whatsapp' });
