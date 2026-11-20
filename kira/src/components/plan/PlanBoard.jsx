@@ -9,7 +9,7 @@ import { T } from '../../theme.js';
 import { BLOCK_COLORS, BLOCK_SELECTED, INK } from '../../render/palette.js';
 import { mmToM, uid } from '../../planner/model.js';
 import { cabinetTitle, templateOf } from '../../planner/templates.js';
-import { aiScaleToPlan, buildSuggestions, applySuggestions, sentToPlan, cleanText, aiCoverage } from '../../planner/planAi.js';
+import { aiScaleToPlan, checkAiScale, buildSuggestions, applySuggestions, sentToPlan, cleanText, aiCoverage } from '../../planner/planAi.js';
 import { snapSegment } from '../../planner/wallSnap.js';
 import { readPlanWithAi, needsPasscode, savedPasscode, savePasscode, aiErrorText, sendPlanFeedback, feedbackAi, feedbackSuggestion } from '../../services/planAi.js';
 import { mmPerPx, planReady, placedFootprint, placeAt, rotatePlace, dragPlanEdge, aisleWarnings, dist } from '../../planner/plan.js';
@@ -216,8 +216,11 @@ const PlanBoard = forwardRef(function PlanBoard({ plans = [], zones = [], onChan
       const r = await readPlanWithAi(p, { mmPerPx: kk, passcode, area, cabinets });
       if (!alive.current) return;
       if (needsPasscode()) savePasscode(passcode);
-      const scale = planReady(p) ? null : aiScaleToPlan(r.result, r.sentW, p, r.crop);
-      setAi({ stage: 'result', planId: p.id, area, r, scale, ...suggest(r, p) });
+      // AI 读到的比例先查合不合理（换算成门宽 / 房间大小）；不合理 → 不给「用这个」，请业务自己量一道墙
+      const read = planReady(p) ? null : aiScaleToPlan(r.result, r.sentW, p, r.crop);
+      const chk = read ? checkAiScale(r.result, read, p, { sentW: r.sentW, crop: r.crop }) : null;
+      const scale = chk?.ok ? read : null;
+      setAi({ stage: 'result', planId: p.id, area, r, scale, scaleBad: read && !chk.ok ? { mm: read.mm, why: chk.why } : null, ...suggest(r, p) });
     } catch (e) {
       if (!alive.current) return;
       if (e?.code === 'passcode') { savePasscode(''); setAi({ stage: 'pass', planId: p.id, area, error: aiErrorText(e) }); return; }
@@ -872,7 +875,13 @@ function AiPanel({ ai, ready, pass, setPass, onRun, onClose, onToggle, onAdd, on
               <Btn on onClick={onUseScale} data-plan-ai-scale-ok>用这个 Use</Btn>
             </div>
           )}
-          {!ready && !ai.scale && <div className="mb-1.5" style={{ color: T.terra }}>先定比例（点两点打长度），AI 才能放柜子 — Set the scale first, then the AI can place cabinets</div>}
+          {!ready && !ai.scale && ai.scaleBad && (
+            <div className="mb-1.5" style={{ color: T.terra }} data-plan-ai-scale-bad>
+              AI 读到图上的尺寸 {mmToM(ai.scaleBad.mm)} m，但照这个算{ai.scaleBad.why.map((w) => w.zh).join('、')}，不合理，所以没有采用。请自己量一道墙：在图上点两点、打真实长度。
+              <span className="block" style={{ color: T.inkSoft }}>AI read {mmToM(ai.scaleBad.mm)} m on the plan, but then {ai.scaleBad.why.map((w) => w.en).join(', ')} — not used. Tap two points on a wall and type its real length.</span>
+            </div>
+          )}
+          {!ready && !ai.scale && !ai.scaleBad && <div className="mb-1.5" style={{ color: T.terra }}>先定比例（点两点打长度），AI 才能放柜子 — Set the scale first, then the AI can place cabinets</div>}
           {ready && !ai.sugg.length && <div style={{ color: T.inkSoft }}>AI 没找到适合放柜子的地方 — No cabinet suggestions</div>}
           {ready && ai.sugg.length > 0 && (
             <div className="space-y-1 mb-2" data-plan-ai-list>

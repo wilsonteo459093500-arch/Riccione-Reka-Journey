@@ -2,6 +2,7 @@ import { tr, pickLang, capColor, cabTypeById, cabDimsLabel, RLBL, QUOTE_TERMS, L
 import { fmt } from '../../utils/helpers.js';
 import { cabinetTitle, frameTitle } from '../../planner/templates.js';
 import { frameDimsLabel } from '../../planner/bridge.js';
+import { splitRounded, shownExact, zoneSubtotals } from './shownMoney.js';
 
 const round0 = (n) => Math.round(Number(n) || 0);
 
@@ -26,7 +27,6 @@ export function excelWorkbook(XLSX, meta, computed, loose, notes = {}, lang = 'b
   const px = (v) => Math.round((Number(v) || 0) * priceScale);
   // 岩板 sintered stone 不折扣：设计师版也不打供货折扣
   const pxi = (v, ir) => (ir?.noDiscount ? Math.round(Number(v) || 0) : px(v));
-  const zoneShown = (zr) => Math.round(zr.items.reduce((s, ir) => s + (ir.noDiscount ? ir.total : ir.total * priceScale), 0));
   const excluded = computed.excluded || 0;
   const exclTag = excluded > 0 ? ` · ${t(RLBL.noDiscExcl)}` : '';
   const discTag = discountChainLabel(notes.designerDisc);
@@ -74,7 +74,13 @@ export function excelWorkbook(XLSX, meta, computed, loose, notes = {}, lang = 'b
     row([t(RLBL.pic), meta.pic || '', '', t(RLBL.rev), meta.version || '1']);
     row([]);
     const HEAD = [t(RLBL.desc), t(RLBL.qty), t(RLBL.uom), t(RLBL.unitPrice), t(RLBL.amount)];
-    zones.forEach((zr) => {
+    // 印出来的数要对得上（shownMoney.js）：逐行加起来 = 小计，小计加起来 = 总额。钱的算法不变。
+    const cabRetail = anyDesigner ? computed.gross : computed.net; // 设计师版按原价
+    const cabSupply = supply(cabRetail - excluded) + Math.round(excluded); // 岩板不打供货折扣
+    const zoneSub = zoneSubtotals(zones, priceScale, isDesignerNet ? cabSupply : computed.gross);
+    zones.forEach((zr, zi) => {
+      const money = []; // 这个房间的每一行金额：{ r: 第几行, exact: 精确金额 } → 房间印完再一起定整数
+      const moneyRow = (cells, total, noDiscount) => money.push({ r: row([...cells, 0]), exact: shownExact(total, noDiscount, priceScale) });
       const zr0 = row([pickLang(zr.zone.name, lang) || t(RLBL.untitled)]);
       merges.push({ s: { r: zr0, c: 0 }, e: { r: zr0, c: 4 } });
       row(HEAD);
@@ -97,12 +103,13 @@ export function excelWorkbook(XLSX, meta, computed, loose, notes = {}, lang = 'b
                 : ln.bucket === 'panel' && x.item.kira.part === 'panelBack' ? t({ en: `Back Panel: ${sid} Series`, zh: `背面见光板：${sid} 系列` })
                 : ln.bucket === 'panel' ? t({ en: `Side Panel: ${sid} Series`, zh: `见光板：${sid} 系列` })
                 : ln.bucket === 'door' && x.item.kira.part === 'glass' ? t({ en: `Glass Door: ${sid} Series`, zh: `玻璃门：${sid} 系列` }) : cabLineLabel(ln);
-              const hit = lines.find((o) => o.label === label && o.unitMyr === ln.unitMyr && o.uom === lineUom(ln));
-              if (hit) { hit.qty += ln.qty; hit.total += ln.total; } else lines.push({ label, qty: ln.qty, piece: ln.piece, uom: lineUom(ln), unitMyr: ln.unitMyr, total: ln.total });
+              // 岩板台面不折扣（x.noDiscount）：净价版也印原价，和小计 / 总额同一个算法；不和会打折的行合并
+              const hit = lines.find((o) => o.label === label && o.unitMyr === ln.unitMyr && o.uom === lineUom(ln) && o.noDiscount === !!x.noDiscount);
+              if (hit) { hit.qty += ln.qty; hit.total += ln.total; } else lines.push({ label, qty: ln.qty, piece: ln.piece, uom: lineUom(ln), unitMyr: ln.unitMyr, total: ln.total, noDiscount: !!x.noDiscount });
             }));
             if (!lines.length) return;
             row([`  ${frameTitle(cab, f, lang)}  —  ${frameDimsLabel(f, lang === 'zh' ? 'zh' : 'en')}`]);
-            lines.forEach((ln) => row([`    ${ln.label}`, ln.piece ? round0(ln.qty) : Number(ln.qty.toFixed(2)), ln.uom, px(ln.unitMyr), px(ln.total)]));
+            lines.forEach((ln) => moneyRow([`    ${ln.label}`, ln.piece ? round0(ln.qty) : Number(ln.qty.toFixed(2)), ln.uom, pxi(ln.unitMyr, ln)], ln.total, ln.noDiscount));
           });
           return;
         }
@@ -113,26 +120,25 @@ export function excelWorkbook(XLSX, meta, computed, loose, notes = {}, lang = 'b
           row([`${[typeLabel, nm].filter(Boolean).join(' · ')}  —  ${cabDimsLabel(ir.item, lang === 'zh' ? 'zh' : 'en')}`]);
           ir.lines.forEach((ln) => {
             const qty = ln.piece ? round0(ln.qty) : Number(ln.qty.toFixed(2));
-            row([`    ${cabLineLabel(ln)}`, qty, lineUom(ln), pxi(ln.unitMyr, ir), pxi(ln.total, ir)]);
+            moneyRow([`    ${cabLineLabel(ln)}`, qty, lineUom(ln), pxi(ln.unitMyr, ir)], ln.total, ir.noDiscount);
           });
         } else {
           ir.lines.forEach((ln, i) => {
             const nm = i === 0 ? pickLang(ir.item.name || '', lang) : '';
             const label = nm ? `${nm} · ${lineDesc(ln)}` : lineDesc(ln);
             const qty = ln.piece ? round0(ln.qty) : Number(ln.qty.toFixed(2));
-            row([label, qty, lineUom(ln), pxi(ln.unitMyr, ir), pxi(ln.total, ir)]);
+            moneyRow([label, qty, lineUom(ln), pxi(ln.unitMyr, ir)], ln.total, ir.noDiscount);
           });
         }
       });
-      row(['', '', '', t(RLBL.subtotal), zoneShown(zr)]);
+      splitRounded(money.map((m) => m.exact), zoneSub[zi]).forEach((v, i) => { aoa[money[i].r][4] = v; });
+      row(['', '', '', t(RLBL.subtotal), zoneSub[zi]]);
       row([]);
     });
     if (!anyDesigner) {
       row(['', '', '', t(RLBL.gross), round0(computed.gross)]);
       if (computed.discount > 0) row(['', '', '', `${t(RLBL.discount)}${computed.discountMode === 'amt' ? '' : ` (${computed.adjustPct}%)`}${computed.excluded > 0 ? ` · ${t(RLBL.noDiscExcl)}` : ''}${notes.discountNote ? ` — ${notes.discountNote}` : ''}`, -round0(computed.discount)]);
     }
-    const cabRetail = anyDesigner ? computed.gross : computed.net; // 设计师版按原价
-    const cabSupply = supply(cabRetail - excluded) + Math.round(excluded); // 岩板不打供货折扣
     if (isDesignerNet) {
       row(['', '', '', dTotalLbl(), cabSupply]);
     } else {
@@ -160,14 +166,16 @@ export function excelWorkbook(XLSX, meta, computed, loose, notes = {}, lang = 'b
     row([t(RLBL.site), meta.location || '', '', t(RLBL.rev), meta.version || '1']);
     row([]);
     row([t(RLBL.productType), t(RLBL.model), t(RLBL.color), t(RLBL.qty), t(RLBL.unitPrice), t(RLBL.amount)]);
-    looseRows.forEach((r) => {
-      row([r.type || '', r.model || '', capColor(r.color) || '', round0(r.qty), px(r.unitMyr), px(r.total)]);
+    const looseRetail = anyDesigner ? loose.gross : loose.net; // 设计师版按原价
+    // 逐行加起来 = 原价（净价版 = 设计师总额）
+    const looseShown = splitRounded(looseRows.map((r) => shownExact(r.total, false, priceScale)), isDesignerNet ? supply(looseRetail) : round0(loose.gross));
+    looseRows.forEach((r, i) => {
+      row([r.type || '', r.model || '', capColor(r.color) || '', round0(r.qty), px(r.unitMyr), looseShown[i]]);
     });
     if (!anyDesigner) {
       row(['', '', '', '', t(RLBL.gross), round0(loose.gross)]);
       if (loose.discount > 0) row(['', '', '', '', `${t(RLBL.discount)}${loose.discountMode === 'amt' ? '' : ` (${loose.adjustPct}%)`}${notes.looseDiscountNote ? ` — ${notes.looseDiscountNote}` : ''}`, -round0(loose.discount)]);
     }
-    const looseRetail = anyDesigner ? loose.gross : loose.net; // 设计师版按原价
     if (isDesignerNet) {
       row(['', '', '', '', dTotalLbl(), supply(looseRetail)]);
     } else {

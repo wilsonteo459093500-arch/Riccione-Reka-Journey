@@ -9,6 +9,7 @@ import { planImageDataUrl } from '../../services/planImages.js';
 import { useBackClose } from '../planner/bits.jsx';
 import { cabinetTitle, frameTitle } from '../../planner/templates.js';
 import { frameDimsLabel } from '../../planner/bridge.js';
+import { splitRounded, shownExact, zoneSubtotals } from './shownMoney.js';
 import { T } from '../../theme.js';
 import { fmtMYR, fmtNum, tr, pickLang, capColor, cabTypeById, cabDimsLabel, RLBL, QUOTE_TERMS, LOOSE_TERMS, discountChainRate, discountChainLabel } from '../../constants/pricing.js';
 import { fmt } from '../../utils/helpers.js';
@@ -46,7 +47,6 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
   const px = (v) => Math.round((Number(v) || 0) * priceScale); // 显示价（净价版=供货价）
   // 岩板 sintered stone 不折扣：设计师版也不打供货折扣。按项目判断（ir.noDiscount）。
   const pxi = (v, ir) => (ir?.noDiscount ? Math.round(Number(v) || 0) : px(v));
-  const zoneShown = (zr) => Math.round(zr.items.reduce((s, ir) => s + (ir.noDiscount ? ir.total : ir.total * priceScale), 0));
   const excluded = computed.excluded || 0;
   // 设计师版按「零售原价 gross」计（不理会给零售客户的折扣）；零售版按折后 net 计。
   const cabRetail = anyDesigner ? computed.gross : computed.net;
@@ -56,6 +56,9 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
   const cabSupply = supply(cabRetail - excluded) + Math.round(excluded);
   const looseSupply = supply(looseRetailV);
   const grandSupply = cabSupply + looseSupply;
+  // 印出来的数要对得上（shownMoney.js）：逐行加起来 = 小计，小计加起来 = 总额。钱的算法不变。
+  const zoneSub = zoneSubtotals(zones, priceScale, isDesignerNet ? cabSupply : computed.gross);
+  const looseShown = splitRounded(looseRows.map((r) => shownExact(r.total, false, priceScale)), isDesignerNet ? looseSupply : Math.round(loose?.gross || 0));
   const exclTag = excluded > 0 ? ` · ${tr(RLBL.noDiscExcl, lang)}` : '';
   const t = (obj) => tr(obj, lang);
   const lineDesc = (ln) => (lang === 'en' ? ln.descEn : lang === 'zh' ? ln.descZh : `${ln.descEn} ${ln.descZh}`);
@@ -211,10 +214,11 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
   };
   const frameLines = (frame, irs) => {
     const lines = irs.filter((ir) => ir.item.kira?.frameId === frame.id)
-      .flatMap((ir) => ir.lines.map((ln) => ({ ...ln, part: ir.item.kira.part })));
+      .flatMap((ir) => ir.lines.map((ln) => ({ ...ln, part: ir.item.kira.part, noDiscount: !!ir.noDiscount })));
     const out = [];
     lines.forEach((ln) => {
-      const key = `${ln.bucket}|${ln.unitMyr}|${ln.uomEn}|${partLabel(ln)}`;
+      // 岩板台面不折扣：净价版也印原价（pxi），不和会打折的行合并
+      const key = `${ln.bucket}|${ln.unitMyr}|${ln.uomEn}|${partLabel(ln)}|${ln.noDiscount ? 'nd' : ''}`;
       const hit = out.find((o) => o.key === key);
       if (hit) { hit.qty += ln.qty; hit.total += ln.total; } else out.push({ ...ln, key });
     });
@@ -222,8 +226,9 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
   };
   // 宽版（电脑 / 打印 / 长图 820 px）：小图在左边一栏（rowSpan）；
   // 窄版（手机上看预览，报价单 < 600 px）：小图单独一行在上，明细占满整行。两版都出，用容器查询切换（kq-w / kq-n）。
-  const kiraCabinetRows = (cab, irs) => {
-    const frames = (cab.frames || []).map((f) => ({ f, lines: frameLines(f, irs) })).filter((x) => x.lines.length);
+  const cabFrames = (cab, irs) => (cab.frames || []).map((f) => ({ f, lines: frameLines(f, irs) })).filter((x) => x.lines.length);
+  // frames：cabFrames(…) 的结果；shown：这一行印的金额（整个房间一起定，逐行加起来 = 小计）
+  const kiraCabinetRows = (cab, frames, shown) => {
     const multi = frames.length > 1;
     const nRows = frames.reduce((a, x) => a + x.lines.length + (multi ? 1 : 0), 0);
     const title = [cab.code, cabinetTitle(cab, lang)].filter(Boolean).join(' · ');
@@ -264,8 +269,8 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
             <td className="py-1 px-2 pl-6" colSpan={side ? 1 : 2} style={{ color: T.inkSoft }}>{partLabel(ln)}</td>
             <td className="text-right py-1 px-2">{fmtNum(ln.qty, ln.piece ? 0 : 2)}</td>
             <td className="py-1 px-2">{lineUom(ln)}</td>
-            <td className="text-right py-1 px-2">{fmtNum(px(ln.unitMyr), 0)}</td>
-            <td className="text-right py-1 px-2">{fmtNum(px(ln.total), 0)}</td>
+            <td className="text-right py-1 px-2">{fmtNum(pxi(ln.unitMyr, ln), 0)}</td>
+            <td className="text-right py-1 px-2">{fmtNum(shown.get(ln) ?? pxi(ln.total, ln), 0)}</td>
           </tr>,
         ));
       });
@@ -389,7 +394,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
               <Head brand="SAIL BY RICCIONE REKA" logo="/brand/sail-logo.png" logoH={58} />
               <CustomerRow />
 
-              {zones.map((zr) => {
+              {zones.map((zr, zi) => {
                 // KIRA：积木柜的明细按柜子分组；有积木柜的房间多一栏放小图（立面 + 3D 在明细左边）
                 const cabById = new Map((zr.zone.cabinets || []).map((c) => [c.id, c]));
                 const groups = [];
@@ -401,6 +406,14 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                     else groups.push({ cab: cabById.get(cid), irs: [ir] });
                   } else groups.push({ ir });
                 });
+                // 这个房间每一行印的金额：先各自四舍五入，再把差的 RM 1–3 调到加起来 = 小计
+                const moneyRows = [];
+                groups.forEach((g) => {
+                  if (g.cab) { g.frames = cabFrames(g.cab, g.irs); g.frames.forEach((x) => x.lines.forEach((ln) => moneyRows.push({ ln, exact: shownExact(ln.total, ln.noDiscount, priceScale) }))); }
+                  else g.ir.lines.forEach((ln) => moneyRows.push({ ln, exact: shownExact(ln.total, g.ir.noDiscount, priceScale) }));
+                });
+                const shown = new Map();
+                splitRounded(moneyRows.map((m) => m.exact), zoneSub[zi]).forEach((v, i) => shown.set(moneyRows[i].ln, v));
                 const withPics = groups.some((g) => g.cab);
                 const descSpan = withPics ? 2 : 1;
                 return (
@@ -419,7 +432,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                     </thead>
                     <tbody>
                       {groups.flatMap((g) => {
-                        if (g.cab) return kiraCabinetRows(g.cab, g.irs);
+                        if (g.cab) return kiraCabinetRows(g.cab, g.frames, shown);
                         const ir = g.ir;
                         const qtyCell = (ln) => <td className="text-right py-1 px-2">{fmtNum(ln.qty, ln.piece ? 0 : 2)}</td>;
                         // 定制柜体：柜体类型（+名称）作为分组抬头，门板/柜体/抽屉缩进列在下面
@@ -441,7 +454,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                                 {qtyCell(ln)}
                                 <td className="py-1 px-2">{lineUom(ln)}</td>
                                 <td className="text-right py-1 px-2">{fmtNum(pxi(ln.unitMyr, ir), 0)}</td>
-                                <td className="text-right py-1 px-2">{fmtNum(pxi(ln.total, ir), 0)}</td>
+                                <td className="text-right py-1 px-2">{fmtNum(shown.get(ln) ?? pxi(ln.total, ir), 0)}</td>
                               </tr>
                             )),
                           ];
@@ -459,13 +472,13 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                             {qtyCell(ln)}
                             <td className="py-1 px-2">{lineUom(ln)}</td>
                             <td className="text-right py-1 px-2">{fmtNum(pxi(ln.unitMyr, ir), 0)}</td>
-                            <td className="text-right py-1 px-2">{fmtNum(pxi(ln.total, ir), 0)}</td>
+                            <td className="text-right py-1 px-2">{fmtNum(shown.get(ln) ?? pxi(ln.total, ir), 0)}</td>
                           </tr>
                         ));
                       })}
                       <tr style={{ borderTop: `1.5px solid ${T.line}` }}>
                         <td colSpan={3 + descSpan} className="text-right py-1 px-2 text-xs" style={{ color: T.inkSoft }}>{t(RLBL.subtotal)}</td>
-                        <td className="text-right py-1 px-2 font-medium">{fmtNum(zoneShown(zr), 0)}</td>
+                        <td className="text-right py-1 px-2 font-medium" data-zone-subtotal>{fmtNum(zoneSub[zi], 0)}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -538,7 +551,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                     </tr>
                   </thead>
                   <tbody>
-                    {looseRows.map((r) => (
+                    {looseRows.map((r, li) => (
                       <tr key={r.id} style={{ borderTop: `1px solid ${T.lineSoft}`, breakInside: 'avoid' }}>
                         <td className="py-1 px-2">
                           {r.image ? <img src={r.image} alt="" style={{ width: 96, height: 96, objectFit: 'cover', borderRadius: 2, border: `1px solid ${T.lineSoft}` }} /> : null}
@@ -548,7 +561,7 @@ export default function QuotePrint({ meta, computed, loose, cabinetNote = '', lo
                         <td className="py-1 px-2">{capColor(r.color) || '—'}</td>
                         <td className="text-right py-1 px-2">{fmtNum(Number(r.qty) || 0, 0)}</td>
                         <td className="text-right py-1 px-2">{fmtNum(px(r.unitMyr), 0)}</td>
-                        <td className="text-right py-1 px-2">{fmtNum(px(r.total), 0)}</td>
+                        <td className="text-right py-1 px-2">{fmtNum(looseShown[li], 0)}</td>
                       </tr>
                     ))}
                     {!anyDesigner && (

@@ -17,7 +17,8 @@
 //   平米柜：门板/柜体平米 += s × 格高
 //   开放格：平米 += s × 格高（旧工具开放柜本来就按 长×高）
 // ============================================================
-import { computeQuote, computeItem, isLinear, CARCASS_SERIES, OPEN_SERIES, DOOR_SERIES } from '../constants/pricing.js';
+import { computeItem, isLinear, CARCASS_SERIES, OPEN_SERIES, DOOR_SERIES } from '../constants/pricing.js';
+import { quoteOf } from '../constants/discount.js';
 import { SINTERED_MYR_PER_M } from '../constants/stone.js';
 import { layoutLeaves, bodyHeight, mmToM, DEFAULT_GLASS_COEF } from './model.js';
 import { pickL, FRAME_KIND_NAME } from './lang.js';
@@ -267,7 +268,7 @@ export function deriveZones(zones = [], defaults = {}) {
 }
 
 export function computeRecordQuote(r) {
-  return localizeKira(computeQuote(deriveZones(r.zones || [], r.defaults || {}), r.adjustPct, r.discountMode, r.discountAmt));
+  return localizeKira(quoteOf(deriveZones(r.zones || [], r.defaults || {}), r.adjustPct, r.discountMode, r.discountAmt)); // 折扣夹在 0–100%
 }
 
 // 旧工具的「其他」行只有一个描述字串（中英同一句）→ KIRA 自己的行换成中英各一句；单位默认 pc / 块（飘板），岩板 L.m / 延米。只改文字，不改钱。

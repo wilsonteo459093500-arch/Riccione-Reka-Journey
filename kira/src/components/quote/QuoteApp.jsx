@@ -4,7 +4,8 @@ import { T } from '../../theme.js';
 import { newId } from '../../utils/helpers.js';
 import { UIProvider, useToast, useConfirm } from '../ui/UIProvider.jsx';
 import ErrorBoundary from '../ui/ErrorBoundary.jsx';
-import { computeLoose, fmtMYR } from '../../constants/pricing.js';
+import { fmtMYR } from '../../constants/pricing.js';
+import { looseOf } from '../../constants/discount.js';
 import { computeRecordQuote } from '../../planner/bridge.js';
 import KiraMark from '../ui/KiraMark.jsx';
 import Guide, { guideSeen } from '../planner/Guide.jsx';
@@ -404,7 +405,7 @@ function Inner({ signOut, user, cloudReady = false } = {}) {
     records.forEach((r) => {
       try {
         const cab = computeRecordQuote(r).net;
-        const loose = computeLoose(r.looseItems || [], r.looseAdjustPct || 0, r.looseDiscountMode, r.looseDiscountAmt).net;
+        const loose = looseOf(r.looseItems || [], r.looseAdjustPct || 0, r.looseDiscountMode, r.looseDiscountAmt).net;
         m[r.id] = cab + loose;
       } catch (e) { m[r.id] = 0; } // 坏资料：列表照常显示，不让整个 app 出错
     });

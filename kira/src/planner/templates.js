@@ -270,6 +270,30 @@ export function updateSpec(cab, patch) {
   return next;
 }
 
+// ---------------- 楼高：把「按默认 2.70 m 做到顶」的柜子换成这个房间的楼高 ----------------
+// AI 识图的柜子在按「加入报价」时才知道进哪个房间（planAi.applySuggestions），那时再照房间楼高重算。
+// 哪些高度跟楼高走，直接问模板的 defaults（衣柜 / 鞋柜 / 高柜的 H、两侧高柜 sides.H、电视墙 tvWall.H、书桌高柜 tower.H…），
+// 以后加新模板不用改这里。只换还停在默认值的；业务自己改过的高度不动。
+const isPlain = (v) => v != null && typeof v === 'object' && !Array.isArray(v);
+function ceilingPatch(cur, base, want) {
+  let out = null;
+  Object.keys(want || {}).forEach((k) => {
+    const a = base?.[k], b = want[k], c = cur?.[k];
+    if (isPlain(a) && isPlain(b) && isPlain(c)) {
+      const sub = ceilingPatch(c, a, b);
+      if (sub) (out = out || {})[k] = { ...c, ...sub };
+    } else if (typeof b === 'number' && typeof a === 'number' && a !== b && c === a) (out = out || {})[k] = b;
+  });
+  return out;
+}
+export function fitCeiling(cab, ceilingH) {
+  const h = Number(ceilingH) > 0 ? Math.round(Number(ceilingH)) : 0;
+  if (!h || !cab?.spec) return cab;
+  const t = templateOf(cab.template);
+  const patch = ceilingPatch(cab.spec, t.normalize(t.defaults({})), t.normalize(t.defaults({ ceilingH: h })));
+  return patch ? updateSpec(cab, patch) : cab;
+}
+
 // ---------------- 第二版：改模板设定时保留手画的框框（三方合并） ----------------
 // o = 现在画面上的（含手画），t = 旧设定的模板原样，n = 新设定的模板原样
 //   o 跟 t 一样（没画过）→ 用 n；t 跟 n 一样（模板没改这里）→ 留 o；

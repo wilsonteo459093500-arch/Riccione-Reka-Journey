@@ -14,7 +14,7 @@
 // 摆放：试 4 个方向 × 墙的两种顺序，选「墙线和 AI 线段最贴合、柜门朝房间」的那个。
 // 加入报价（applySuggestions）由业务勾选后才做；价钱照常由柜子尺寸算。
 // ============================================================
-import { newCabinet, updateSpec, cabinetWalls, nextCode } from './templates.js';
+import { newCabinet, updateSpec, cabinetWalls, nextCode, fitCeiling } from './templates.js';
 import { mmPerPx, normRot, rotPt, setPlanSize, placedFootprint } from './plan.js';
 import { findBed, bedSizeFor, wardrobeZone, doorZone, windowBand, normRect, overlaps } from './bedFit.js';
 
@@ -66,6 +66,53 @@ export function aiScaleToPlan(ai, sentW, plan, crop = null) {
   const a = pt(s.a), b = pt(s.b);
   if (!a || !b || Math.hypot(b[0] - a[0], b[1] - a[1]) < 20) return null;
   return { a, b, mm: Math.round(num(s.mm)) };
+}
+
+// ---------------- 比例合不合理 ----------------
+// 比例错了，全屋的柜子长度跟着错，直接变成钱（差 15% → 整屋报价差 12%）。AI 读到的比例先换算成「这间屋有多大」再用：
+//   房间门 0.6–1.4 m 宽、卧室短边 2.0–5.5 m、厕所短边 0.8–3.0 m、图上那条尺寸 ≤ 50 m、整间屋 ≤ 60 m。
+//   每一种看中位数（AI 的房间框也会画歪一两个）；有一种对不上 → 不采用，请业务自己量一道墙。
+// 范围照两张真的户型图量出来的定（test/fixtures/ai-feedback：门 0.65–1.34 m、卧室 2.66–3.87 m、厕所 1.37–2.13 m），留了余量。
+// 只挡得住离谱的（大约差到 1.7 倍以上 / 0.7 倍以下：把 3000 读成 9000、尺寸线只点到一半…）；差一两成的看不出来，还是要人看一眼。
+export const SCALE_SANE = {
+  door: [600, 1400],      // 房间门 / 厕所门 / 大门的门洞宽（mm）；阳台趟门不算
+  bedroom: [2000, 5500],  // 卧室短边
+  bathroom: [800, 3000],  // 厕所短边
+  labelMax: 50000,        // 图上印的那条尺寸
+  houseMax: 60000,        // 所有房间合起来的长边
+};
+const median = (list) => { const a = list.slice().sort((x, y) => x - y); const n = a.length; return n ? (n % 2 ? a[(n - 1) / 2] : (a[n / 2 - 1] + a[n / 2]) / 2) : null; };
+const m2 = (mm) => (mm / 1000).toFixed(2);
+// scale：aiScaleToPlan 的结果（原图 px）→ { ok, checked, why:[{ en, zh }] }
+//   checked = 图上有东西可以对（门 / 卧室 / 厕所）；false = 没得对，只查了尺寸本身（ok 仍是 true，由人决定）
+export function checkAiScale(ai, scale, plan, { sentW, crop = null } = {}) {
+  const px = scale ? Math.hypot(num(scale.b?.[0]) - num(scale.a?.[0]), num(scale.b?.[1]) - num(scale.a?.[1])) : 0;
+  const { k } = sentToPlan(plan, sentW, crop);
+  if (!(px > 0) || !(num(scale?.mm) > 0) || !(k > 0)) return { ok: false, checked: false, why: [T('No usable dimension on the plan', '图上没有读得到的尺寸')] };
+  const mmSent = (num(scale.mm) / px) * k; // 送去那张图 1 px = 几 mm（AI 的房间 / 门都是这个坐标）
+  const why = [];
+  let checked = false;
+  const box4 = (b) => (Array.isArray(b) && b.length === 4 && b.every((v) => Number.isFinite(Number(v))) ? b.map(Number) : null);
+  const rooms = (ai?.rooms || []).map((r) => ({ type: r?.type, box: box4(r?.box), doors: r?.doors || [] })).filter((r) => r.box && Math.abs(r.box[2] - r.box[0]) > 1 && Math.abs(r.box[3] - r.box[1]) > 1);
+  const short = (r) => Math.min(Math.abs(r.box[2] - r.box[0]), Math.abs(r.box[3] - r.box[1])) * mmSent;
+  const outside = (v, [lo, hi]) => v < lo || v > hi;
+
+  if (num(scale.mm) > SCALE_SANE.labelMax) why.push(T(`the dimension reads ${m2(scale.mm)} m`, `图上那条尺寸读成 ${m2(scale.mm)} 米`));
+  // 门：同一个门洞会出现在两间房，量出来一样宽，不影响中位数
+  const doors = rooms.flatMap((r) => r.doors).filter((d) => ['entry', 'bathroom', 'main'].includes(d?.to) && segOk(d.seg))
+    .map((d) => Math.hypot(d.seg[2] - d.seg[0], d.seg[3] - d.seg[1]) * mmSent).filter((v) => v > 0);
+  const door = median(doors);
+  if (door != null) { checked = true; if (outside(door, SCALE_SANE.door)) why.push(T(`doors would be ${m2(door)} m wide`, `房间门变成 ${m2(door)} 米宽`)); }
+  const bed = median(rooms.filter((r) => r.type === 'bedroom' || r.type === 'master').map(short));
+  if (bed != null) { checked = true; if (outside(bed, SCALE_SANE.bedroom)) why.push(T(`bedrooms would be ${m2(bed)} m wide`, `卧室变成 ${m2(bed)} 米宽`)); }
+  const bath = median(rooms.filter((r) => r.type === 'bathroom').map(short));
+  if (bath != null) { checked = true; if (outside(bath, SCALE_SANE.bathroom)) why.push(T(`bathrooms would be ${m2(bath)} m wide`, `厕所变成 ${m2(bath)} 米宽`)); }
+  if (rooms.length) {
+    const xs = rooms.flatMap((r) => [r.box[0], r.box[2]]), ys = rooms.flatMap((r) => [r.box[1], r.box[3]]);
+    const house = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) * mmSent;
+    if (house > SCALE_SANE.houseMax) why.push(T(`the whole home would be ${m2(house)} m long`, `整间屋变成 ${m2(house)} 米长`));
+  }
+  return { ok: !why.length, checked, why };
 }
 
 // ---------------- 房间 → 报价里的房间名（同旧工具的房间下拉）----------------
@@ -533,9 +580,11 @@ export function applySuggestions(zones, picked, { makeZone, uid } = {}) {
     }
     const id = uid ? uid() : `cab_${s.id}`;
     const pre = `${s.cab.id}-`;
+    // 这间房填了楼高 → 照它重算（同手动加柜子：newCabinet(…, { ceilingH })）；没填 → 照旧按 2.70 m
+    const src = fitCeiling(s.cab, z.ceilingH);
     const cab = {
-      ...s.cab, id, code: nextCode(zs), name: '',
-      frames: (s.cab.frames || []).map((f, i) => ({ ...f, id: typeof f.id === 'string' && f.id.startsWith(pre) ? `${id}-${f.id.slice(pre.length)}` : `${id}-f${i}` })),
+      ...src, id, code: nextCode(zs), name: '',
+      frames: (src.frames || []).map((f, i) => ({ ...f, id: typeof f.id === 'string' && f.id.startsWith(pre) ? `${id}-${f.id.slice(pre.length)}` : `${id}-f${i}` })),
     };
     z.cabinets.push(cab);
     zs = zs.map((x) => (x.id === z.id ? z : x));
