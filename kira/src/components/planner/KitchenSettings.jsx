@@ -1,7 +1,7 @@
 // 厨房设定：形状 → 每面墙长度（量到墙角）→ 吊柜要不要 → 每格单元 → 电器高柜
 import { T } from '../../theme.js';
 import { KITCHEN_SHAPES, KITCHEN_BASE_UNITS, KITCHEN_UPPER_UNITS, TALL_KINDS, wallRuns } from '../../planner/kitchen.js';
-import { Section, Segmented, Toggle, MeterInput, Collapse, Tip } from './bits.jsx';
+import { Section, Segmented, Toggle, MeterInput, Collapse, Tip, WorktopToggles } from './bits.jsx';
 
 const LETTER = ['A', 'B', 'C'];
 const WALL_NAME = {
@@ -109,6 +109,10 @@ export default function KitchenSettings({ cab, setSpec }) {
         )}
       </Section>
 
+      <Section title="Worktop 台面">
+        <WorktopToggles cab={cab} setSpec={setSpec} />
+      </Section>
+
       <Collapse title="Sizes 尺寸细节（一般不用改）">
         <div className="grid grid-cols-3 gap-2">
           <MeterInput label="Base H 地柜高" mm={spec.baseH} onChange={(baseH) => setSpec({ baseH })} />
@@ -122,7 +126,6 @@ export default function KitchenSettings({ cab, setSpec }) {
           <Segmented size="sm" value={spec.base.kind} onChange={(kind) => setSpec({ base: { kind } })}
             options={[{ id: 'plinth', label: '踢脚 Plinth' }, { id: 'legs', label: '柜脚 Legs' }]} />
         </div>
-        <div className="mt-2"><Toggle on={!!spec.worktop} onChange={(worktop) => setSpec({ worktop })} label="Show worktop 显示台面（仅示意，台面价钱另外手动加）" /></div>
       </Collapse>
     </>
   );

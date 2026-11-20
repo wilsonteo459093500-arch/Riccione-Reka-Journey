@@ -3,7 +3,8 @@ import { Plus, Copy, Trash2, GripVertical, Sofa, ChevronUp, ChevronDown, Chevron
 import { T } from '../../theme.js';
 import { newId, copyToClipboard } from '../../utils/helpers.js';
 import { useToast, useConfirm } from '../ui/UIProvider.jsx';
-import { computeQuote, computeLoose, ROOMS, CUSTOM_ROOM, OUTPUT_LANGS, pickLang, cabTypeById, fmtMYR, discountChainRate, discountChainLabel } from '../../constants/pricing.js';
+import { ROOMS, CUSTOM_ROOM, OUTPUT_LANGS, pickLang, cabTypeById, fmtMYR, discountChainRate, discountChainLabel } from '../../constants/pricing.js';
+import { quoteOf, looseOf, clampPct, clampAmt, pctOutOfRange, cleanDiscChain } from '../../constants/discount.js';
 import QuoteLineItem from './QuoteLineItem.jsx';
 import QuotePrint from './QuotePrint.jsx';
 import CatalogPicker from './CatalogPicker.jsx';
@@ -14,6 +15,7 @@ import { buildTextQuote } from './textQuote.js';
 import { deriveZones, cabinetTotal, customSeriesCount, localizeKira } from '../../planner/bridge.js';
 import { newCabinet, nextCode } from '../../planner/templates.js';
 import { mmToM, uid } from '../../planner/model.js';
+import { staleCeiling, fitZoneToCeiling, keepCeiling, ceilingChange } from '../../planner/ceiling.js';
 import CabinetCard from '../planner/CabinetCard.jsx';
 import CabinetEditor from '../planner/CabinetEditor.jsx';
 import TemplatePicker from '../planner/TemplatePicker.jsx';
@@ -24,6 +26,8 @@ import { parseMeters } from '../planner/bits.jsx';
 import { DOOR_SERIES, CARCASS_SERIES } from '../../constants/pricing.js';
 import { Boxes } from 'lucide-react';
 import { waLink } from '../../utils/whatsapp.js';
+
+const PCT_HINT = 'Discount must be between 0 and 100% 折扣只能填 0–100%';
 
 // 手机（< lg）用弹窗编辑项目；桌面保持行内编辑
 function useIsMobile() {
@@ -198,33 +202,39 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
   };
   const isMobile = useIsMobile();
   const [editing, setEditing] = useState(null); // { zoneId, item, isNew } → 手机弹窗编辑
-  const { meta, zones, adjustPct } = doc;
+  const { meta, zones } = doc;
+  // 折扣只能 0–100%（constants/discount.js）：旧记录里存了怪数字的，也照夹好的算、照夹好的显示
+  const adjustPct = clampPct(doc.adjustPct);
   const looseItems = doc.looseItems || [];
-  const looseAdjustPct = doc.looseAdjustPct || 0;
+  const looseAdjustPct = clampPct(doc.looseAdjustPct);
   const cabinetNote = doc.cabinetNote || '';
   const looseNote = doc.looseNote || '';
   const discountNote = doc.discountNote || '';
   const looseDiscountNote = doc.looseDiscountNote || '';
   const discountMode = doc.discountMode || 'pct';           // 'pct' 百分比 | 'amt' 定额
-  const discountAmt = doc.discountAmt || 0;
+  const discountAmt = clampAmt(doc.discountAmt);
   const looseDiscountMode = doc.looseDiscountMode || 'pct';
-  const looseDiscountAmt = doc.looseDiscountAmt || 0;
+  const looseDiscountAmt = clampAmt(doc.looseDiscountAmt);
   const lang = meta.outputLang || 'en';
   const audience = meta.audience || 'retail';          // 'retail' 零售 | 'designer' 设计师
   // 设计师折扣链："30" 或 "30+10"（叠加）；供货价 = 零售 × 系数
-  const designerDisc = meta.designerDisc ?? (meta.designerPct != null ? String(meta.designerPct) : '30');
+  // 设计师折扣：框里照业务打的显示（打到一半的「30+」也行），算钱 / 出单用整理过的（每段 0–100%）
+  const designerDiscTyped = meta.designerDisc ?? (meta.designerPct != null ? String(meta.designerPct) : '30');
+  const designerDisc = cleanDiscChain(designerDiscTyped);
   const designerRate = discountChainRate(designerDisc);
   // 整份报价默认系列（柜子可单独改）
   const defaults = doc.defaults || { door: 'A', carcass: 'A' };
   // 积木柜会变成标准明细一起算（deriveZones）；手动明细照旧
-  const computed = useMemo(() => localizeKira(computeQuote(deriveZones(zones, defaults), adjustPct, discountMode, discountAmt)), [zones, defaults, adjustPct, discountMode, discountAmt]);
-  const looseCalc = useMemo(() => computeLoose(looseItems, looseAdjustPct, looseDiscountMode, looseDiscountAmt), [looseItems, looseAdjustPct, looseDiscountMode, looseDiscountAmt]);
+  const computed = useMemo(() => localizeKira(quoteOf(deriveZones(zones, defaults), adjustPct, discountMode, discountAmt)), [zones, defaults, adjustPct, discountMode, discountAmt]);
+  const looseCalc = useMemo(() => looseOf(looseItems, looseAdjustPct, looseDiscountMode, looseDiscountAmt), [looseItems, looseAdjustPct, looseDiscountMode, looseDiscountAmt]);
   const grandTotal = computed.net + looseCalc.net;
   const dragRef = useRef(null); // { zoneId, from } 或 { loose:true, from }
 
   // ---- mutators ----
   const patch = (p) => onChange({ ...doc, ...p });
   const setMeta = (p) => patch({ meta: { ...meta, ...p } });
+  // 折扣 %：超过 100 / 负数 → 夹回 0–100，并告诉业务
+  const setPct = (key, raw) => { if (pctOutOfRange(raw)) toast(PCT_HINT, 'info'); patch({ [key]: clampPct(raw) }); };
   const setZones = (fn) => patch({ zones: fn(zones) });
   const addZone = () => setZones((zs) => [...zs, blankZone('')]);
   // Ukur 量尺 → 把量到的长度变成柜体项目加入报价
@@ -297,6 +307,21 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
   const [picking, setPicking] = useState(null);       // zoneId：正在选模板
   const [editingCab, setEditingCab] = useState(null); // { zoneId, cab, isNew }
   const [ceilNote, setCeilNote] = useState({});       // zoneId → 「2700 mm → 2.70 m」（打了毫米时提示）
+  // 楼高提醒（planner/ceiling.js）：按了「全部做到顶」→ 记下改之前的柜子，可以撤销
+  const [ceilFit, setCeilFit] = useState({});         // zoneId → { before:{ cabId: cab }, codes, h, delta }
+  const fitCeilingNow = (zone) => {
+    const { items, delta } = staleCeiling(zone, defaults);
+    if (!items.length) return;
+    setZones((zs) => zs.map((z) => (z.id === zone.id ? fitZoneToCeiling(z, defaults) : z)));
+    setCeilFit((m) => ({ ...m, [zone.id]: { before: Object.fromEntries(items.map((x) => [x.cab.id, x.cab])), codes: items.map((x) => x.cab.code), h: zone.ceilingH, delta } }));
+  };
+  const undoCeilingFit = (zone) => {
+    const f = ceilFit[zone.id];
+    if (!f) return;
+    // 撤销 = 这个楼高不要做到顶（同「不用」），柜子换回去
+    setZones((zs) => zs.map((z) => (z.id === zone.id ? { ...z, ...keepCeiling(z), cabinets: (z.cabinets || []).map((c) => f.before[c.id] || c) } : z)));
+    setCeilFit((m) => ({ ...m, [zone.id]: null }));
+  };
   const plans = doc.plans || [];
   const [drawn, setDrawn] = useState(null); // 第三版：在户型图上画的框 { planId, rect } → 选完模板用框的尺寸
   const startCabinet = (zoneId, templateId) => {
@@ -328,12 +353,12 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
       const list = z.cabinets || [];
       return { ...z, cabinets: list.some((c) => c.id === draft.id) ? list.map((c) => (c.id === draft.id ? draft : c)) : [...list, draft] };
     });
-    return computeQuote(deriveZones(zs, defaults), adjustPct, discountMode, discountAmt).net + looseCalc.net;
+    return quoteOf(deriveZones(zs, defaults), adjustPct, discountMode, discountAmt).net + looseCalc.net;
   };
   // 整份报价换系列比价（A/B/C）：所有积木柜都用该系列
   const wholeCompare = useMemo(() => ['A', 'B', 'C'].map((L) => {
     const zs = zones.map((z) => ({ ...z, cabinets: (z.cabinets || []).map((c) => ({ ...c, series: { door: L, carcass: L, open: 'door' } })) }));
-    return { L, net: computeQuote(deriveZones(zs, { door: L, carcass: L }), adjustPct, discountMode, discountAmt).net };
+    return { L, net: quoteOf(deriveZones(zs, { door: L, carcass: L }), adjustPct, discountMode, discountAmt).net };
   }), [zones, adjustPct, discountMode, discountAmt]);
   const hasCabinets = zones.some((z) => (z.cabinets || []).length);
   // 画框框里单独选了系列的格子：一键比价只换柜子的系列，这些格子不跟着换
@@ -469,7 +494,8 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
                       const ok = v > 1500;
                       if (ok) e.target.value = mmToM(v);
                       setCeilNote((n) => ({ ...n, [zone.id]: ok ? note : '' }));
-                      updateZone(zone.id, { ceilingH: ok ? v : null });
+                      updateZone(zone.id, ceilingChange(zone, ok ? v : null)); // 记下上一次的楼高 → 楼高提醒
+                      if ((ok ? v : null) !== (zone.ceilingH || null)) setCeilFit((m) => ({ ...m, [zone.id]: null }));
                     }}
                     className="w-12 px-1 py-0.5 text-xs outline-none" style={{ background: T.paper, border: `1px solid ${zone.ceilingH ? T.line : T.terra}`, borderRadius: 2, color: T.ink }} />
                   m
@@ -481,6 +507,43 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
                   <div className="order-last basis-full text-right text-[10px]" style={{ color: T.wood }} data-mm-note>Ceiling 楼高 {ceilNote[zone.id]}</div>
                 )}
               </div>
+
+              {(() => {
+                // 楼高提醒：补填 / 改了楼高，还有柜子是旧高度 → 列出来、写多多少钱，按了才改（价钱不自己变）
+                const st = staleCeiling(zone, defaults);
+                const done = ceilFit[zone.id];
+                if (st.items.length) {
+                  const groups = [...new Set(st.items.map((x) => x.fromH))].map((h) => ({ h, codes: st.items.filter((x) => x.fromH === h).map((x) => x.cab.code) }));
+                  const zh = groups.map((g) => `${g.codes.join('、')} 还是 ${mmToM(g.h)} m`).join('；');
+                  const en = groups.map((g) => `${g.codes.join(', ')} ${g.codes.length > 1 ? 'are' : 'is'} still ${mmToM(g.h)} m`).join('; ');
+                  const money = st.delta === 0 ? '' : `${st.delta > 0 ? '+' : '−'}${fmtMYR(Math.abs(st.delta)).replace(' ', '\u00a0')}`; // 「+RM 2,041」不在中间断行
+                  return (
+                    <div className="px-3 py-2 text-xs flex items-center gap-2 flex-wrap" style={{ background: '#FBF1E6', borderTop: `1px solid ${T.lineSoft}`, color: T.ink }} data-ceiling-stale={st.items.length}>
+                      <span className="flex-1 min-w-[200px]">
+                        楼高 {mmToM(zone.ceilingH)} m，但 {zh}。做到顶{money ? `：总价 ${money}` : ''}
+                        <span className="block" style={{ color: T.inkSoft }}>Ceiling {mmToM(zone.ceilingH)} m, but {en}. To the ceiling{money ? `: ${money}` : ''}</span>
+                      </span>
+                      <span className="flex gap-2 shrink-0">
+                        <button onClick={() => fitCeilingNow(zone)} className="px-2.5 py-1.5 text-xs" style={{ background: T.wood, color: T.paper, borderRadius: 2 }} data-ceiling-fit>
+                          全部做到顶 Fit all
+                        </button>
+                        <button onClick={() => updateZone(zone.id, keepCeiling(zone))} className="px-2.5 py-1.5 text-xs" style={{ border: `1px solid ${T.line}`, color: T.inkSoft, borderRadius: 2 }} data-ceiling-keep>
+                          不用 Keep
+                        </button>
+                      </span>
+                    </div>
+                  );
+                }
+                if (done && done.h === zone.ceilingH) {
+                  return (
+                    <div className="px-3 py-1.5 text-xs flex items-center gap-2 flex-wrap" style={{ background: zoneBodyBg, borderTop: `1px solid ${T.lineSoft}`, color: T.inkSoft }} data-ceiling-done>
+                      <span className="flex-1">{done.codes.join('、')} 已做到顶 {mmToM(done.h)} m{done.delta ? `（${done.delta > 0 ? '+' : '−'}${fmtMYR(Math.abs(done.delta))}）` : ''} — Fitted to the ceiling</span>
+                      <button onClick={() => undoCeilingFit(zone)} className="underline" style={{ color: T.wood }} data-ceiling-undo>撤销 Undo</button>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
 
               {!zone.collapsed && (
                 <div className="p-3 space-y-3" style={{ background: zoneBodyBg }}>
@@ -570,14 +633,14 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
                 <option value="amt">RM 定额</option>
               </select>
               {discountMode === 'amt' ? (
-                <input type="number" value={discountAmt}
-                  onChange={(e) => patch({ discountAmt: Number(e.target.value) || 0 })}
+                <input type="number" min="0" value={discountAmt} data-discount-amt
+                  onChange={(e) => patch({ discountAmt: clampAmt(e.target.value) })}
                   className="w-24 px-2 py-1 text-sm outline-none"
                   style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }} />
               ) : (
                 <>
-                  <input type="number" value={adjustPct}
-                    onChange={(e) => patch({ adjustPct: Number(e.target.value) || 0 })}
+                  <input type="number" min="0" max="100" value={adjustPct} data-discount-pct
+                    onChange={(e) => setPct('adjustPct', e.target.value)}
                     className="w-16 px-2 py-1 text-sm outline-none"
                     style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }} />
                   <span>%</span>
@@ -680,14 +743,14 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
                     <option value="amt">RM 定额</option>
                   </select>
                   {looseDiscountMode === 'amt' ? (
-                    <input type="number" value={looseDiscountAmt}
-                      onChange={(e) => patch({ looseDiscountAmt: Number(e.target.value) || 0 })}
+                    <input type="number" min="0" value={looseDiscountAmt}
+                      onChange={(e) => patch({ looseDiscountAmt: clampAmt(e.target.value) })}
                       className="w-24 px-2 py-1 text-sm outline-none"
                       style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }} />
                   ) : (
                     <>
-                      <input type="number" value={looseAdjustPct}
-                        onChange={(e) => patch({ looseAdjustPct: Number(e.target.value) || 0 })}
+                      <input type="number" min="0" max="100" value={looseAdjustPct} data-loose-discount-pct
+                        onChange={(e) => setPct('looseAdjustPct', e.target.value)}
                         className="w-16 px-2 py-1 text-sm outline-none"
                         style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }} />
                       <span>%</span>
@@ -826,8 +889,13 @@ export default function QuotationView({ doc, onChange, mobileTab = null, onMobil
             {audience !== 'retail' && (
               <div className="flex items-center gap-2 mt-2 text-xs flex-wrap" style={{ color: T.inkSoft }}>
                 <span className="uppercase tracking-widest text-[10px]">Designer discount 设计师折扣</span>
-                <input type="text" value={designerDisc}
+                <input type="text" value={designerDiscTyped} data-designer-disc
                   onChange={(e) => setMeta({ designerDisc: e.target.value })}
+                  onBlur={() => {
+                    if (designerDiscTyped === designerDisc) return;
+                    if (designerDiscTyped.split('+').some((x) => pctOutOfRange(parseFloat(x)))) toast(PCT_HINT, 'info');
+                    setMeta({ designerDisc }); // 整理成「30+10」；超过范围的已经夹回 0–100
+                  }}
                   placeholder="30 或 30+10"
                   className="w-24 px-2 py-1 text-sm outline-none"
                   style={{ background: T.paper, color: T.ink, border: `1px solid ${T.line}`, borderRadius: '2px' }} />

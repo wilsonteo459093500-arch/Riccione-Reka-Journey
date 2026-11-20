@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "test": "node test/run.mjs",
     "check:vendor": "node scripts/check-vendor.mjs",
-    "test:browser": "node test/e2e.browser.mjs",
+    "test:browser": "node test/e2e.browser.mjs && node test/e2e.money.browser.mjs",
     "demo:video": "node test/e2e.browser.mjs --video"
   },
   "dependencies": {

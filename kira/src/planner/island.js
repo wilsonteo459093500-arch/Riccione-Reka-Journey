@@ -39,6 +39,7 @@ export function islandNormalize(spec) {
   if (s.base.kind === 'wallhung' || s.base.kind === 'raised') s.base = normBase({ kind: 'plinth' });
   s.back = s.back === 'cabinets' ? 'cabinets' : 'panel';
   s.worktop = s.worktop !== false;
+  if (s.stone) s.stone = true; else delete s.stone; // 岩板台面；没开不存
   const n = autoDoors(s.W);
   s.units = resize(s.units, n, 'doors');
   s.backUnits = resize(s.backUnits, n, 'doors');
@@ -64,7 +65,8 @@ export function islandBuild(spec, cab) {
     W: spec.W, H: spec.H, D: spec.D, base: { ...spec.base }, worktop: !!spec.worktop, ends: wall ? { left: 'end', right: 'start' } : { left: true, right: true },
     body: vsplit(splitEven(spec.W, units.length), units.map(unitLeaf)),
   });
-  const front = row(0, spec.units);
+  // 岩板：两排共用一块台面 → 只在前排算一次（延米 = 岛台长）
+  const front = { ...row(0, spec.units), ...(spec.worktop && spec.stone ? { stone: true } : {}) };
   if (spec.back === 'cabinets') return [front, row(1, spec.backUnits)];
   // 背面一整块见光板：宽 × 高（mm²）
   return [{ ...front, backPanel: { area: spec.W * spec.H } }];

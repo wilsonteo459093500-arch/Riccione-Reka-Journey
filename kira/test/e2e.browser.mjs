@@ -564,8 +564,16 @@ try {
     const B = (b) => [...P([b[0], b[1]]), ...P([b[2], b[3]])];
     return { ...ans, scale: { ...ans.scale, a: P(ans.scale.a), b: P(ans.scale.b) }, rooms: ans.rooms.map((r) => ({ ...r, box: B(r.box) })), suggestions: ans.suggestions.map((sg) => ({ ...sg, segments: sg.segments.map(B) })) };
   };
-  const actx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const actx = await browser.newContext({ viewport: { width: 1280, height: 900 }, permissions: ['clipboard-read', 'clipboard-write'] });
   const ap = await actx.newPage();
+  // 👎 反馈（/api/plan-feedback）：fbMode 'ok' = 存好；'off' = 还没设定（503 → 复制到剪贴板）
+  const fbBodies = [];
+  let fbMode = 'ok';
+  await ap.route('**/api/plan-feedback', (route) => {
+    fbBodies.push(route.request().postDataJSON());
+    return fbMode === 'ok' ? route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, image: true }) })
+      : route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'not_configured' }) });
+  });
   const aerr = [];
   ap.on('pageerror', (e) => aerr.push(e.message));
   let aiCalls = 0, aiBody = null;
@@ -595,12 +603,46 @@ try {
   const dashed = await ap.locator('[data-plan-ai-overlay] rect').count();
   check('v3 AI: scale from the printed 2700 → 2 suggestions (wardrobe + L kitchen) drawn dashed on the plan', items === 2 && dashed >= 2 && /1 px = 10\.0 mm/.test(await ap.locator('[data-plan-board]').innerText()), `${items} items, ${dashed} rects`);
   await ap.locator('[data-plan-board]').screenshot({ path: path.join(outDir, 'v3-plan-ai-suggest.png') });
+  const coverTxt = await ap.locator('[data-plan-ai-cover-row="missing"][data-template="shoe"]').innerText().catch(() => '');
+  check('AI: no shoe cabinet and no main door found → red "一定要加" row with a Draw button', /一定要加/.test(coverTxt) && (await ap.locator('[data-plan-ai-cover-draw="shoe"]').count()) === 1, coverTxt);
+  // 👎 第一个建议：选「挡床位」+ 备注 → 送出 → 那行显示「已反馈」；第一笔带图（送去 AI 的那张 JPEG）
+  const firstRow = ap.locator('[data-plan-ai-row]').first();
+  await firstRow.locator('[data-plan-ai-item]').hover();
+  const bedKind = await ap.locator('[data-plan-ai-bed]').getAttribute('data-plan-ai-bed').catch(() => null);
+  await ap.locator('[data-plan-board]').screenshot({ path: path.join(outDir, 'v3-plan-ai-bed.png') });
+  check('AI bedroom: pointing at the wardrobe shows where the bed still fits', bedKind === 'fit', String(bedKind));
+  await firstRow.locator('[data-plan-ai-bad]').click();
+  await firstRow.locator('[data-fb-reason="bed"]').click();
+  await firstRow.locator('[data-fb-note]').fill('衣柜挡到床头墙');
+  await ap.locator('[data-plan-ai-panel]').screenshot({ path: path.join(outDir, 'v3-plan-ai-feedback.png') });
+  await firstRow.locator('[data-fb-send]').click();
+  await firstRow.locator('[data-plan-ai-fb-done="sent"]').waitFor({ timeout: 5000 });
+  const fb1 = fbBodies[0] || {};
+  check('AI feedback: 👎 + reason + note → saved, row shows "已反馈"; first one carries the image, AI result and plan scale',
+    fb1.kind === 'bad' && fb1.reasons?.join() === 'bed' && fb1.note === '衣柜挡到床头墙' && fb1.image?.startsWith('/9j/') && /^[a-z0-9]+-[a-z0-9]+$/.test(fb1.readId || '')
+      && fb1.suggestion?.template && fb1.ai?.result?.rooms?.length === 2 && fb1.ai?.plan?.scale?.mm === 2700 && !('dark' in (fb1.ai || {})),
+    JSON.stringify({ ...fb1, image: fb1.image?.slice(0, 8), ai: !!fb1.ai }).slice(0, 300));
+  // 漏了柜子（这时反馈功能「还没设定」）→ 复制到剪贴板、显示「已复制」；不再带图
+  fbMode = 'off';
+  await ap.locator('[data-plan-ai-missing-open]').click();
+  await ap.locator('[data-plan-ai-missing] [data-fb-reason="shoe"]').click();
+  await ap.locator('[data-plan-ai-missing] [data-fb-note]').fill('Foyer 大门旁边');
+  await ap.locator('[data-plan-ai-missing] [data-fb-send]').click();
+  await ap.locator('[data-plan-ai-missing] [data-plan-ai-fb-done="copied"]').waitFor({ timeout: 5000 });
+  const clip = await ap.evaluate(() => navigator.clipboard.readText()).catch(() => '');
+  const fb2 = fbBodies[1] || {};
+  check('AI feedback: "Missing a cabinet" → shoe + note; not set up yet → copied to the clipboard for WhatsApp, no image re-sent',
+    fb2.kind === 'missing' && fb2.template === 'shoe' && fb2.readId === fb1.readId && !fb2.image && /"kira":"plan-ai-feedback"/.test(clip) && /Foyer/.test(clip) && !/9j/.test(clip),
+    `${fb2.kind} ${fb2.template} clip ${clip.slice(0, 80)}`);
+  fbMode = 'ok';
   await ap.locator('[data-plan-ai-item="ok"] input').first().uncheck();
   await ap.locator('[data-plan-ai-add]').click();
   await ap.waitForTimeout(300);
   const placed = await ap.locator('[data-pcab]').count();
   const kitchenRoom = await ap.locator('text=Dry Kitchen 干厨').count();
   check('v3 AI: untick the wardrobe, add → only the kitchen goes in (new room Dry Kitchen, on the plan)', placed === 1 && kitchenRoom > 0 && (await ap.locator('[data-plan-ai-panel]').count()) === 0, `placed ${placed}, room ${kitchenRoom}`);
+  const fb3 = fbBodies[2] || {};
+  check('AI feedback: "Add" quietly records which suggestions were ticked / left out', fb3.kind === 'added' && fb3.picks?.added?.length === 1 && fb3.picks?.notPicked?.length === 1 && fb3.picks?.suggestions?.length === 2, JSON.stringify(fb3.picks || {}).slice(0, 200));
   await ap.locator('[data-plan-undo]').click();
   await ap.waitForTimeout(200);
   check('v3 AI: Undo takes the added cabinets back out', (await ap.locator('[data-pcab]').count()) === 0);
@@ -622,9 +664,10 @@ try {
   fp.on('pageerror', (e) => ferr.push(e.message));
   let fCalls = 0, fBody = null;
   // 这里的假回答：衣柜那条线故意偏进房间 16 px（AI 常见的误差）→ 要贴回墙上；多两间重叠的小房间测名字不叠
+  // （厕所要像真的大小，约 1.5 m：0.66 m 宽的「厕所」会被比例检查 checkAiScale 当成比例读错，不给「用这个」）
   const offAnswer = {
     ...aiAnswer,
-    rooms: [...aiAnswer.rooms, { type: 'bathroom', name: 'Bath 1', box: [104, 104, 220, 170] }, { type: 'bathroom', name: 'Bath 2', box: [104, 104, 230, 180] }],
+    rooms: [...aiAnswer.rooms, { type: 'bathroom', name: 'Bath 1', box: [104, 104, 260, 250] }, { type: 'bathroom', name: 'Bath 2', box: [104, 104, 270, 260] }],
     suggestions: aiAnswer.suggestions.map((sg, i) => (i === 0 ? { ...sg, segments: [[104, 120, 344, 120]], note: 'Top wall."}],"notes":""}' } : sg)),
   };
   await fp.route('**/api/plan-ai', async (route) => {
@@ -681,6 +724,7 @@ try {
   await fp.getByRole('button', { name: /Read 开始/ }).click();
   await fp.waitForSelector('[data-plan-ai-list]', { timeout: 10000 });
   await fp.locator('[data-plan-ai-area]').first().click();
+  await fp.locator('[data-plan-svg]').evaluate((e) => e.scrollIntoView({ block: 'center' })); // AI 面板变高了：先把图捲回来再拖
   const fpt = planPt(fp);
   const [ax, ay] = await fpt(60, 80), [bx, by] = await fpt(620, 720);
   await fp.mouse.move(ax, ay); await fp.mouse.down(); await fp.mouse.move((ax + bx) / 2, (ay + by) / 2, { steps: 4 }); await fp.mouse.move(bx, by, { steps: 4 }); await fp.mouse.up();

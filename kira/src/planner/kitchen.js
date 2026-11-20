@@ -50,7 +50,7 @@ export function kitchenDefaults() {
     base: { kind: 'plinth', h: 100 }, baseH: 850, baseD: 600,
     upperH: 750, upperY: 1500, upperD: 350,
     tall: { on: false, end: 'end', W: 600, H: 2250, kind: 'oven', fridgeH: 1800 },
-    worktop: true,
+    worktop: true, // stone: true = 台面加岩板（按台面延米计价）；没开就不存这个字段（旧记录不变）
   };
 }
 
@@ -118,6 +118,8 @@ export function kitchenNormalize(spec) {
   s.tall.fridgeH = clamp(int(s.tall.fridgeH, 1800), 1200, s.tall.H - 200);
   s.tall.end = s.tall.end === 'start' ? 'start' : 'end';
   s.tall.kind = TALL_KINDS.some((k) => k.id === s.tall.kind) ? s.tall.kind : 'oven';
+  s.worktop = s.worktop !== false;
+  if (s.stone) s.stone = true; else delete s.stone;
   s.walls = walls.map((w) => ({ ...w, len: clamp(int(w.len, 2400), 600, 12000), upper: w.upper !== false }));
   // 每面墙的单元数 = ceil(实物宽 / 600)
   const runs = wallRuns(s);
@@ -165,6 +167,7 @@ export function kitchenBuild(spec, cab) {
       frames.push({
         id: `${cab.id}-w${r.i}-base`, kind: 'base', label: `${bi(FRAME_KIND_NAME.base)}${tag}`, wall: r.i, x: r.x0, y: 0,
         W: r.runW, H: spec.baseH, D: spec.baseD, base: { ...spec.base }, worktop: !!spec.worktop,
+        ...(spec.worktop && spec.stone ? { stone: true } : {}),
         cornerW: r.cornerW, ends: ends(r.runW),
         body: r.runW > 0 ? vsplit(splitEven(r.runW, n), w.units.map((u) => baseColumn(u, Hb))) : leaf('closed'),
       });

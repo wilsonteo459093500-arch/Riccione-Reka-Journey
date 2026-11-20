@@ -2,9 +2,10 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from './harness.mjs';
-import { aiScaleToPlan, buildSuggestions, applySuggestions, roomZoneName, AI_LIMITS, cleanText } from '../src/planner/planAi.js';
+import { aiScaleToPlan, checkAiScale, buildSuggestions, applySuggestions, roomZoneName, AI_LIMITS, AI_TEMPLATES, cleanText } from '../src/planner/planAi.js';
+import { newCabinet, updateSpec, fitCeiling } from '../src/planner/templates.js';
 import { snapSegment } from '../src/planner/wallSnap.js';
-import { placedFootprint } from '../src/planner/plan.js';
+import { placedFootprint, setPlanSize } from '../src/planner/plan.js';
 import { cabinetTotal } from '../src/planner/bridge.js';
 
 // 示范户型图（test/fixtures/floorplan.png）：1200 × 800 px，比例 10 mm / px；左边卧室、右边厨房
@@ -95,6 +96,97 @@ test('applySuggestions: new rooms named like the room list, codes continue, over
   const again = applySuggestions(r.zones, [s[0]], { uid: () => 'cabY' });
   assert.equal(again.added.length, 0); assert.equal(again.skipped.length, 1);
   assert.equal(roomZoneName({ type: 'kitchen', name: 'Wet kitchen' }), 'Wet Kitchen 湿厨');
+});
+
+// 体检 2026-11-19 问题 2：AI 加进来的柜子一律按 2.70 m 楼高算（3.0 m 的房间少报 10%）
+test('applySuggestions: the room has a ceiling height → the AI cabinet is priced at that height, same as adding it by hand', () => {
+  const ai = { rooms: [{ type: 'master', name: 'Master', box: [104, 104, 596, 696] }], suggestions: [{ template: 'wardrobe', room: 'Master', segments: [[104, 104, 249, 104]] }] };
+  const [w] = buildSuggestions(ai, plan, { sentW: 1200 });
+  assert.equal(w.cab.spec.W, 1450);
+  const room = (ceilingH) => [{ id: 'z1', name: 'Master Bedroom 主卧', items: [], cabinets: [], ceilingH }];
+  const added = (ceilingH) => applySuggestions(room(ceilingH), [w], { uid: () => 'cabA' }).zones[0].cabinets[0];
+  const byHand = (ceilingH) => setPlanSize(newCabinet('wardrobe', { ceilingH }), { W: 1450 }).cab;
+  // 楼高 3.0 m：和手动加的一样（RM 8,912），不再是 2.70 m 的价钱（RM 8,020）
+  const tall = added(3000);
+  assert.equal(tall.spec.H, 3000);
+  assert.ok(tall.frames.every((f) => f.id.startsWith('cabA-')));
+  assert.deepEqual(tall.place, w.cab.place); // 图上的位置不变
+  assert.equal(Math.round(cabinetTotal(tall)), 8912);
+  assert.equal(cabinetTotal(tall), cabinetTotal(byHand(3000)));
+  assert.equal(Math.round(cabinetTotal(byHand(undefined))), 8020);
+  // 楼高比 2.70 矮也一样跟着（不多报）
+  assert.equal(cabinetTotal(added(2500)), cabinetTotal(byHand(2500)));
+  // 楼高没填 → 照旧按 2.70 m
+  assert.equal(added(null).spec.H, 2700);
+  assert.equal(added(0).spec.H, 2700);
+  // AI 新开的房间（还没有楼高）→ 2.70 m
+  assert.equal(applySuggestions([], [w], { uid: () => 'cabB' }).zones[0].cabinets[0].spec.H, 2700);
+});
+
+test('fitCeiling: every AI template ends up exactly like the hand-made cabinet for that ceiling; edited heights are left alone', () => {
+  AI_TEMPLATES.forEach((t) => {
+    [2400, 3000, 3300].forEach((ceilingH) => {
+      const hand = setPlanSize(newCabinet(t, { ceilingH }), { W: 1800 }).cab;
+      const ai = fitCeiling(setPlanSize(newCabinet(t, {}), { W: 1800 }).cab, ceilingH);
+      assert.deepEqual(ai.spec, hand.spec, `${t} @ ${ceilingH}`);
+      assert.equal(cabinetTotal(ai), cabinetTotal(hand), `${t} @ ${ceilingH}`);
+    });
+  });
+  // 电视柜的两侧高柜、书桌的侧边高柜：打开以后也是房间楼高（不是 2.70）
+  assert.equal(fitCeiling(newCabinet('tv', {}), 3000).spec.sides.H, 3000);
+  assert.equal(fitCeiling(newCabinet('tv', {}), 3000).spec.tvWall.H, 3000);
+  assert.equal(fitCeiling(newCabinet('desk', {}), 3000).spec.tower.H, 3000);
+  // 业务改过高度的（2.40 m 的衣柜）不动；没填楼高 / 乱填 → 原样
+  const low = updateSpec(newCabinet('wardrobe', {}), { H: 2400 });
+  assert.equal(fitCeiling(low, 3000).spec.H, 2400);
+  const c = newCabinet('wardrobe', {});
+  [null, undefined, 0, -1, '', 'abc'].forEach((v) => assert.equal(fitCeiling(c, v), c));
+  // 厨房不跟楼高（地柜 / 吊柜固定高度）
+  const k = newCabinet('kitchen', {});
+  assert.equal(fitCeiling(k, 3000), k);
+});
+
+// 体检 2026-11-19 问题 8：AI 读到的比例没有合理性检查（读成 90 米也收）
+test('checkAiScale: the scale is turned into door / room sizes first; an absurd one is not offered', () => {
+  const fb = (name) => JSON.parse(readFileSync(new URL(`./fixtures/ai-feedback/${name}.json`, import.meta.url), 'utf8')).ai;
+  // 两张真的户型图（AI 真的回答 + 业务确认过的比例）：都要过
+  [fb('fb-1'), fb('fb-2026-11-18-condo-shoe-door')].forEach((a) => {
+    const p = { id: 'p', image: { w: a.plan.w, h: a.plan.h }, scale: null };
+    const good = a.plan.scale;
+    const chk = (scale) => checkAiScale(a.result, scale, p, { sentW: a.sentW, crop: a.crop });
+    assert.deepEqual(chk(good), { ok: true, checked: true, why: [] });
+    // 读错一倍 / 一半 / 十倍（3000 读成 30000、尺寸线只点到一半…）→ 不采用，并说得出哪里不合理
+    [2, 0.5, 10, 0.1, 1.8, 0.6].forEach((f) => {
+      const r = chk({ ...good, mm: good.mm * f });
+      assert.equal(r.ok, false, `×${f}`);
+      assert.ok(r.why.length && r.why.every((w) => w.en && w.zh), `×${f}`);
+    });
+    // 差一成：看不出来（这种还是要人看一眼）
+    assert.equal(chk({ ...good, mm: good.mm * 1.1 }).ok, true);
+    assert.equal(chk({ ...good, mm: good.mm * 0.9 }).ok, true);
+  });
+  // 示范图：卧室 4.92 m → 过；同一条线读成 90 m → 卧室变成 164 米宽
+  const r90 = checkAiScale(DEMO_AI, { a: [100, 60], b: [370, 60], mm: 90000 }, plan, { sentW: 1200 });
+  assert.equal(checkAiScale(DEMO_AI, aiScaleToPlan(DEMO_AI, 1200, plan), plan, { sentW: 1200 }).ok, true);
+  assert.equal(r90.ok, false);
+  assert.match(r90.why.map((w) => w.zh).join('、'), /一条尺寸线就超过 50 米/);
+  assert.match(r90.why.map((w) => w.zh).join('、'), /卧室变成 164\.00 米宽/);
+  // 一间 12 米宽的卧室（体检报告举的例子）
+  const one = { rooms: [{ type: 'bedroom', name: 'B', box: [100, 100, 500, 400], doors: [], windows: [], bed: [] }] };
+  const wide = checkAiScale(one, { a: [100, 60], b: [500, 60], mm: 16000 }, plan, { sentW: 1200 });
+  assert.equal(wide.ok, false);
+  assert.match(wide.why[0].zh, /卧室变成 12\.00 米宽/);
+  // 一两间房画歪了不算（看中位数）：三间卧室里一间框得很大
+  const three = { rooms: [[100, 100, 400, 500], [420, 100, 720, 500], [100, 520, 1100, 790]].map((box, i) => ({ type: 'bedroom', name: `B${i}`, box, doors: [] })) };
+  assert.equal(checkAiScale(three, { a: [100, 60], b: [400, 60], mm: 3000 }, plan, { sentW: 1200 }).ok, true);
+  // 图上没有房间 / 门可以对：只查尺寸本身，checked = false（由人决定）
+  assert.deepEqual(checkAiScale({ rooms: [] }, { a: [100, 60], b: [370, 60], mm: 2700 }, plan, { sentW: 1200 }), { ok: true, checked: false, why: [] });
+  assert.equal(checkAiScale({ rooms: [] }, { a: [100, 60], b: [370, 60], mm: 90000 }, plan, { sentW: 1200 }).ok, false);
+  assert.equal(checkAiScale(DEMO_AI, null, plan, { sentW: 1200 }).ok, false);
+  // 送去的图是缩小 / 裁过的：照样换算（原图 2400 宽、送去 1200）
+  const big = { id: 'p', image: { w: 2400, h: 1600 } };
+  assert.equal(checkAiScale(DEMO_AI, { a: [200, 120], b: [740, 120], mm: 2700 }, big, { sentW: 1200 }).ok, true);
+  assert.equal(checkAiScale(DEMO_AI, { a: [200, 120], b: [740, 120], mm: 5400 }, big, { sentW: 1200 }).ok, false);
 });
 
 test('AI text clean-up: JSON that leaked into a note is cut off', () => {

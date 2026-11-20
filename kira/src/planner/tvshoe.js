@@ -95,7 +95,8 @@ export function tvNormalize(spec) {
     s.lowKind = 'floor';
     s.tvWall = { ...s.tvWall, on: false };
     s.worktop = s.worktop !== false;
-  } else delete s.variant;
+    if (s.stone) s.stone = true; else delete s.stone; // 岩板台面；没开不存
+  } else { delete s.variant; delete s.stone; }
   const run = tvRun(s);
   const n = autoDoors(run.runW);
   s.lowUnits = resize(s.lowUnits, n, 'doors');
@@ -126,13 +127,14 @@ export function tvBuild(spec, cab) {
   const N = frameNames(spec);
   const sideboard = spec.variant === 'sideboard';
   const worktop = sideboard && !!spec.worktop;
+  const stone = worktop && !!spec.stone;
   const frames = [];
   if (run.runW > 0) {
     const floating = spec.lowKind === 'floating';
     frames.push({
       id: `${cab.id}-low`, kind: 'base', label: bi(N.base), wall: 0, x: run.x0, y: floating ? spec.lowY : 0,
       W: run.runW, H: spec.lowH, D: spec.lowD, base: floating ? { kind: 'wallhung', h: 0 } : { kind: 'plinth', h: 80 },
-      ends: { left: !run.left, right: !run.right }, ...(worktop ? { worktop: true } : {}),
+      ends: { left: !run.left, right: !run.right }, ...(worktop ? { worktop: true } : {}), ...(stone ? { stone: true } : {}),
       body: vsplit(splitEven(run.runW, spec.lowUnits.length), spec.lowUnits.map((u) => tvLowLeaf(u, sideboard))),
     });
     if (spec.upper.on) {

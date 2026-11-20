@@ -42,6 +42,17 @@ Preview 部署不设这两个变量 → 预览网址永远是本机模式，不�
 5. 每次识图约 US$0.10（看图片大小）；面板上会显示这次用了多少 tokens。AI 只给建议，勾选确认后才加入报价
 6. 没设这些：按「AI 识图」会显示「AI 还没设定」，其他功能照常
 
+## 2d. AI 识图「👎 反馈」（存在 Supabase，只有服务器读写）
+业务在 AI 建议旁边按 👎 选原因、报「漏了柜子」，或按「加入报价」时，会存一笔反馈（连同送去 AI 的那张图），给开发调规则用。
+1. SQL Editor → 整段执行 `kira/supabase/kira_ai_feedback.sql`（可重复执行；只新增表 `kira_ai_feedback` 和私有 bucket `kira-ai-feedback`）
+   - 不给浏览器任何权限：只有服务器用 service key 能读写（客户户型图是私人资料）
+2. Vercel → kira-riccione-reka → Settings → Environment Variables，勾 **Production** 和 **Preview**（类型选 Sensitive）：
+   - `KIRA_FEEDBACK_SUPABASE_URL` = 同一个 Supabase 的 Project URL
+   - `KIRA_FEEDBACK_SERVICE_KEY` = Supabase → Settings → API → **service_role** key（只放 Vercel，绝不放 `VITE_` 开头的变量）
+3. 重新部署。谁能送反馈：同 AI 识图（正式版要登录；预览版要团队密码）
+4. 没设这些：按 👎 会把反馈复制到剪贴板，提示「反馈功能还没设定，已复制，可以 WhatsApp 给开发」
+5. 开发拉反馈：`KIRA_FEEDBACK_SUPABASE_URL=… KIRA_FEEDBACK_SERVICE_KEY=… node scripts/feedback-pull.mjs [--images]` → `test/fixtures/ai-feedback/`（图只存本机 `test/out/`，不进仓库）；规则抓得到的设 `"expect": "unpicked"`，`npm test` 会一直重跑
+
 ## 3. 手机加到主屏幕
 打开网址 → 浏览器菜单「加到主屏幕 / Add to Home Screen」→ 出现 KIRA 图标；没讯号时也能打开、继续报价，有网后自动同步。
 

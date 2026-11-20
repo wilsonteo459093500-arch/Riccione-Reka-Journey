@@ -1,0 +1,416 @@
+{
+  "id": "2026-11-18-condo-shoe-door",
+  "kind": "bad",
+  "reasons": [],
+  "note": "挡着门口 应该在对面",
+  "template": "shoe",
+  "suggestion": {
+    "id": "ai4",
+    "template": "shoe",
+    "room": "Kitchen",
+    "roomName": "Dry Kitchen 干厨",
+    "lenMm": [
+      1100
+    ],
+    "why": [
+      {
+        "en": "AI is not sure about this one",
+        "zh": "AI 不太确定"
+      }
+    ]
+  },
+  "ai": {
+    "result": {
+      "scale": {
+        "found": true,
+        "a": [
+          253,
+          190
+        ],
+        "b": [
+          970,
+          190
+        ],
+        "mm": 12500
+      },
+      "rooms": [
+        {
+          "type": "living",
+          "name": "Living",
+          "box": [
+            460,
+            330,
+            680,
+            500
+          ],
+          "doors": [
+            {
+              "seg": [
+                470,
+                327,
+                630,
+                327
+              ],
+              "to": "balcony"
+            }
+          ],
+          "windows": [],
+          "bed": []
+        },
+        {
+          "type": "dining",
+          "name": "Dining",
+          "box": [
+            445,
+            500,
+            680,
+            750
+          ],
+          "doors": [
+            {
+              "seg": [
+                440,
+                505,
+                440,
+                565
+              ],
+              "to": "other"
+            }
+          ],
+          "windows": [],
+          "bed": []
+        },
+        {
+          "type": "kitchen",
+          "name": "Kitchen",
+          "box": [
+            445,
+            750,
+            678,
+            908
+          ],
+          "doors": [
+            {
+              "seg": [
+                445,
+                908,
+                522,
+                908
+              ],
+              "to": "main"
+            },
+            {
+              "seg": [
+                678,
+                800,
+                678,
+                858
+              ],
+              "to": "other"
+            }
+          ],
+          "windows": [],
+          "bed": []
+        },
+        {
+          "type": "master",
+          "name": "Bedroom 1",
+          "box": [
+            218,
+            355,
+            440,
+            745
+          ],
+          "doors": [
+            {
+              "seg": [
+                440,
+                505,
+                440,
+                565
+              ],
+              "to": "entry"
+            },
+            {
+              "seg": [
+                322,
+                640,
+                322,
+                700
+              ],
+              "to": "bathroom"
+            }
+          ],
+          "windows": [
+            [
+              300,
+              355,
+              440,
+              355
+            ]
+          ],
+          "bed": [
+            222,
+            400,
+            337,
+            503
+          ]
+        },
+        {
+          "type": "bedroom",
+          "name": "Bedroom 2",
+          "box": [
+            688,
+            333,
+            975,
+            497
+          ],
+          "doors": [
+            {
+              "seg": [
+                735,
+                497,
+                790,
+                497
+              ],
+              "to": "entry"
+            }
+          ],
+          "windows": [
+            [
+              720,
+              330,
+              840,
+              330
+            ]
+          ],
+          "bed": [
+            860,
+            370,
+            975,
+            456
+          ]
+        },
+        {
+          "type": "bedroom",
+          "name": "Bedroom 3",
+          "box": [
+            815,
+            505,
+            985,
+            748
+          ],
+          "doors": [
+            {
+              "seg": [
+                810,
+                503,
+                865,
+                503
+              ],
+              "to": "entry"
+            }
+          ],
+          "windows": [
+            [
+              860,
+              748,
+              950,
+              748
+            ]
+          ],
+          "bed": [
+            895,
+            507,
+            983,
+            622
+          ]
+        },
+        {
+          "type": "bathroom",
+          "name": "Bath 1",
+          "box": [
+            218,
+            578,
+            325,
+            745
+          ],
+          "doors": [],
+          "windows": [],
+          "bed": []
+        },
+        {
+          "type": "bathroom",
+          "name": "Bath 2",
+          "box": [
+            688,
+            575,
+            810,
+            748
+          ],
+          "doors": [],
+          "windows": [],
+          "bed": []
+        },
+        {
+          "type": "balcony",
+          "name": "Balcony",
+          "box": [
+            460,
+            275,
+            640,
+            325
+          ],
+          "doors": [],
+          "windows": [],
+          "bed": []
+        },
+        {
+          "type": "balcony",
+          "name": "Yard",
+          "box": [
+            682,
+            755,
+            820,
+            908
+          ],
+          "doors": [],
+          "windows": [],
+          "bed": []
+        }
+      ],
+      "suggestions": [
+        {
+          "template": "tv",
+          "confidence": "high",
+          "room": "Living",
+          "segments": [
+            [
+              678,
+              340,
+              678,
+              495
+            ]
+          ],
+          "note": "Long solid wall facing the sofa area in the living room."
+        },
+        {
+          "template": "sideboard",
+          "confidence": "high",
+          "room": "Dining",
+          "segments": [
+            [
+              677,
+              590,
+              677,
+              740
+            ]
+          ],
+          "note": "Solid wall beside the dining table, clear of doors."
+        },
+        {
+          "template": "kitchen",
+          "confidence": "low",
+          "room": "Kitchen",
+          "segments": [
+            [
+              528,
+              835,
+              528,
+              905
+            ],
+            [
+              528,
+              905,
+              675,
+              905
+            ]
+          ],
+          "note": "L-shaped counter on the solid back wall away from the main and yard doors."
+        },
+        {
+          "template": "shoe",
+          "confidence": "low",
+          "room": "Kitchen",
+          "segments": [
+            [
+              447,
+              840,
+              447,
+              903
+            ]
+          ],
+          "note": "Beside the main entrance door inside the unit."
+        },
+        {
+          "template": "wardrobe",
+          "confidence": "high",
+          "room": "Bedroom 1",
+          "segments": [
+            [
+              437,
+              575,
+              437,
+              740
+            ]
+          ],
+          "note": "On the entry door wall below the door, clear of the bed and bath door."
+        },
+        {
+          "template": "wardrobe",
+          "confidence": "high",
+          "room": "Bedroom 2",
+          "segments": [
+            [
+              690,
+              360,
+              690,
+              490
+            ]
+          ],
+          "note": "Side wall next to the entry door, opposite the headboard wall."
+        },
+        {
+          "template": "wardrobe",
+          "confidence": "low",
+          "room": "Bedroom 3",
+          "segments": [
+            [
+              817,
+              610,
+              817,
+              745
+            ]
+          ],
+          "note": "Left solid wall away from the bed and window, room is tight."
+        }
+      ],
+      "notes": "Main entrance door position and swing near the kitchen are hard to read; confirm before quoting the shoe cabinet. Bedroom 3 is about 3.0 m wide so check clearance between bed and wardrobe."
+    },
+    "sentW": 1279,
+    "sentH": 1060,
+    "crop": {
+      "x": 0,
+      "y": 0,
+      "w": 1279,
+      "h": 1060
+    },
+    "model": "claude-opus-5-5",
+    "plan": {
+      "w": 1279,
+      "h": 1060,
+      "scale": {
+        "a": [
+          253,
+          190
+        ],
+        "b": [
+          970,
+          190
+        ],
+        "mm": 12500
+      }
+    }
+  },
+  "expect": "relocated"
+}
