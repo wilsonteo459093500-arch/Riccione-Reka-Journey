@@ -23,6 +23,13 @@
   - 长名字、很多空间时 PDF / PPTX 的版面；PPTX 在 WPS / Keynote
   - 真 iPhone / Android：点输入框会不会自动放大、导出 PDF 是不是 16:9、Safari 一段时间没开会不会清资料
 
+### 2026-11-20 更新（第 0 阶段 ①）
+
+- **正式版已更新到最新（#74）**：2026-11-20 00:08 UTC Claude 用 Vercel 触发了一次正式版部署（用 #74 的 commit `b411816`，`invite/` 跟 main 一模一样），15 秒建好，`visi-riccione-reka.vercel.app` 和 `journey-riccione-reka.vercel.app` 都指过去了；取了线上的 `case-vocab.js` 比对，是 #74 的内容
+  - 之前没更新的原因查清楚了：这个项目有「这次 commit 没改到 `invite/` 就取消」的规则（Vercel 上设的，不在 `invite/vercel.json`），所以平常的取消是正常的；#74 那一次是完全没有部署记录（撞了一天 100 次上限）
+  - 以后补部署的做法：Vercel 里对「最后一个改到 `invite/` 的 commit」开一次 production 部署。对 main 最新的 commit 开会被那条规则取消
+- **云端案例库还没接（第 0 阶段 ② 还等用户）**：Vercel 还是没有 `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`；Supabase「KIRA BY RICCIONE REKA」里还没有 `visi_catalog` 表（`invite/supabase/visi_cases.sql` 还没跑）
+
 ### 面试结论
 
 | 问 | 答 |
