@@ -863,6 +863,60 @@ await test('沿路走：给了朝向的路（同一层 L 形、上楼）到了�
   ctl.dispose();
 });
 
+await test('沿路走：U 形楼梯的平台上看着下一跑的尽头（不是下一跑第一级后面那面墙）；给了朝向的路，最后 1.2m 就慢慢转向那个朝向（不是对着前面的墙走到头再转身）', async () => {
+  const w = await walkIn('semid2');
+  const { engine, ctl, nd } = w;
+  const liv = nd.floors[0].rooms.find((r) => r.type === 'living');
+  const a = N.nearest(ctl.nav, { fi: 0, x: liv.x + liv.w / 2, z: liv.y + liv.d / 2 });
+  const goal = N.nearest(ctl.nav, { fi: 1, x: 5, z: 13.6 });
+  const want = 1.052;
+  assert.equal(await ctl.goto({ floor: nd.floors[0].id, x: a.x, z: a.z, yaw: 1.862, pitch: 0, hour: engine.time }), true);
+  const p0 = ctl.pose();
+  const route = N.path(ctl.nav, { fi: 0, x: p0.x, z: p0.z }, goal);
+  const st = route.legs.find((l) => l.kind === 'stair').pts;
+  const top = st.at(-1).y;
+  const flat = (i) => Math.abs(st[i + 1].y - st[i].y) < 1e-3;
+  // 平台 = 中间平的那几截（高度在楼上楼下之间）；它后面那一跑的尽头
+  const i0 = st.findIndex((q, i) => i < st.length - 1 && flat(i) && q.y > 0.1 && q.y < top - 0.1);
+  assert.ok(i0 > 0, 'U 形楼梯中间有平台');
+  let i1 = i0;
+  while (flat(i1)) i1++;
+  let e = i1;
+  while (e < st.length - 1 && !flat(e)) e++;
+  const land = st.slice(i0, i1 + 1);
+  const end = st[e];
+  let onLand = 0; // 平台上走了几帧
+  let late = 0; // 平台上走了 0.35s 以后的帧
+  let worst = 0; // 那些帧里看的方向和「看下一跑尽头」差最多多少
+  let atGoal = null; // 走到终点那一帧（还没原地转身）的朝向
+  let lastMv = null;
+  let prev = ctl.pose();
+  const ok = await walkFrames(engine, ctl, ctl.walkTo({ ...goal, yaw: want }), (q) => {
+    const mx = q.x - prev.x;
+    const mz = q.z - prev.z;
+    if (mx * mx + mz * mz > 1e-10) lastMv = Math.atan2(-mx, -mz);
+    const inLand = offPath(land, q) < 1e-6 && Math.hypot(q.x - land[0].x, q.z - land[0].z) > 0.05 && Math.hypot(q.x - land.at(-1).x, q.z - land.at(-1).z) > 0.05;
+    if (inLand) {
+      onLand++;
+      if (onLand * 0.016 > 0.35) {
+        late++;
+        worst = Math.max(worst, Math.abs(angleDiff(q.yaw, Math.atan2(-(end.x - q.x), -(end.z - q.z)))));
+      }
+    }
+    if (!atGoal && Math.hypot(q.x - goal.x, q.z - goal.z) < 1e-6) atGoal = { yaw: q.yaw, mv: lastMv };
+    prev = q;
+  }, 120);
+  assert.equal(ok, true, '走到了');
+  assert.ok(late > 10, `平台上走了 ${onLand} 帧`);
+  assert.ok(worst < 0.3, `平台上转过来以后看着下一跑的尽头（最多差 ${worst.toFixed(2)}）`);
+  assert.ok(atGoal && atGoal.mv != null, '走到终点');
+  const turned = Math.abs(angleDiff(want, atGoal.mv)) - Math.abs(angleDiff(want, atGoal.yaw));
+  assert.ok(turned > 0.8, `走到终点时头已经往给的朝向转了 ${turned.toFixed(2)}（不是还对着走的方向）`);
+  const fin = ctl.pose();
+  assert.ok(Math.abs(angleDiff(fin.yaw, want)) < 1e-9, '最后一样准准地转到给的朝向');
+  ctl.dispose();
+});
+
 await test('沿路走：客人拖着转了头（R.free）→ 不再自动转头（拐弯也不转、到了也不转到给的朝向），照样按路走到、速度不打折', async () => {
   const { engine, ctl, pts, goal } = await lRoute();
   const el = engine.renderer.domElement;

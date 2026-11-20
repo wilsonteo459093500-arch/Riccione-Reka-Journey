@@ -43,6 +43,8 @@ const SIDE = 0.45; // 沿路走：看的方向和走的方向差这么多（弧�
 const FACE_STAIR = 0.65; // 楼梯上最多慢到 ×这么多（平台上回头看下一跑是常事，楼梯本来就慢 STAIR_K；0.5 时 semid2 上下楼慢 8%）
 const SEE_MAX = 160; // 沿路走：sees 每帧最多看这么多下（每下 = 一次 clearance 双线性插值，很便宜；五个模板 975 条路实测每帧平均 9 下、最多 109 下）
 const END_EASE = 0.4; // 沿路走：离终点不到这么远（米；路很短就是后一半）转头就越来越少（到终点 = 不转）；到了要转的朝向照旧转
+const ARRIVE = 1.2; // 有要转到的朝向（yaw）：离终点不到这么远（米；路很短就是后一半）看的方向慢慢偏向它 —— 走进房间就转过去看床 / 柜子，不是对着前面的墙走到头、停下再转身
+const OPEN = 1.5; // ARRIVE 偏过去的方向（终点上：走的方向往要转到的朝向偏，最多 LEAD）这么远（米）以内有墙 / 洞 → 不提前偏（到了再转身）：免得侧过头对着一面墙走
 const PITCH_K = 4; // 走路时视线慢慢回到平视
 const KEY_TURN = 1.7; // Q / E 转身（弧度 / 秒）
 const PITCH_MAX = 1.2;
@@ -517,6 +519,57 @@ export function createWalk(engine, { project = null, api = null, wish = false, o
     _aim.short = true;
     return _aim;
   }
+  /**
+   * 楼梯上走到平的一截（平台），后面还有一跑：看下一跑的尽头 → _aim。U 形楼梯的平台上，往前 AHEAD_STAIR 米正好是下一跑的第一级
+   * （比眼睛低一米多，在画面下面）—— 画面里只剩对面的墙；顺着下一跑看上去（下楼：看下去）才看得到台阶、扶手和楼上。
+   * 不在平的一截上 / 后面没有下一跑（楼梯顶上那一小截）→ null（照 aimAt）
+   */
+  function landingAim(R) {
+    const pts = R.legs[R.li].pts;
+    const n = pts.length;
+    const flat = (a, b) => Math.abs((pts[b].y || 0) - (pts[a].y || 0)) < 1e-3;
+    let j = R.pi;
+    if (j < 1 || j >= n || !flat(j - 1, j)) return null;
+    while (j < n - 1 && flat(j, j + 1)) j++;
+    if (j >= n - 1) return null;
+    while (j < n - 1 && !flat(j, j + 1)) j++;
+    _aim.x = pts[j].x;
+    _aim.z = pts[j].z;
+    _aim.next = false;
+    _aim.short = false;
+    return _aim;
+  }
+  /** 从 (x, z) 沿 yaw 到第一面墙 / 洞 / 屋外（不算家具：家具正是要看的）多远；最多 max */
+  function wallRay(fi, x, z, yaw, max) {
+    const F = nav.floors[fi];
+    const dx = -Math.sin(yaw);
+    const dz = -Math.cos(yaw);
+    for (let s = 0; s < max; s += F.cell / 2) {
+      const i = Math.floor((x + dx * s - F.x0) / F.cell);
+      const j = Math.floor((z + dz * s - F.z0) / F.cell);
+      if (i < 0 || j < 0 || i >= F.nx || j >= F.nz || F.base[j * F.nx + i]) return s;
+    }
+    return max;
+  }
+  /**
+   * 最后 ARRIVE 米往哪个方向偏（每条路只算一次）：最后一截走的方向往要转到的朝向偏，最多 LEAD（要转到的朝向在背后：往近的那边偏）。
+   * 站在终点朝那个方向 OPEN 以内就是墙 / 洞 → false（不偏，到了再转身）；最后一段是楼梯 → false
+   */
+  function arriveYaw(R) {
+    const leg = R.legs[R.legs.length - 1];
+    const pts = leg.pts;
+    if (leg.kind !== 'walk' || !nav?.floors[leg.fi]) return false;
+    for (let k = pts.length - 1; k > 0; k--) {
+      const dx = pts[k].x - pts[k - 1].x;
+      const dz = pts[k].z - pts[k - 1].z;
+      if (dx * dx + dz * dz < 1e-6) continue;
+      const mv = Math.atan2(-dx, -dz);
+      const c = wrap(mv + clamp(angleDiff(R.yaw, mv), -LEAD, LEAD));
+      const e = pts[pts.length - 1];
+      return wallRay(leg.fi, e.x, e.z, c, OPEN) >= OPEN ? c : false;
+    }
+    return false;
+  }
   /** 每帧：沿路走（起步加速、快到了减速；看着前面 AHEAD 米的那一点，拐弯之前就转过去；看的方向和走的方向差太多就慢一点），到了再转到 yaw */
   function follow(R, dt) {
     if (R.arrived) {
@@ -552,12 +605,21 @@ export function createWalk(engine, { project = null, api = null, wish = false, o
       const mv = dx * dx + dz * dz > 1e-4 ? Math.atan2(-dx, -dz) : null;
       // 看的方向：路上往前 AHEAD 米（楼梯上先看这一段楼梯往前 AHEAD_STAIR 米）、看得见的那一点（aimAt），最多比走的方向偏 LEAD
       // （那一点还在这一段楼梯上：LEAD_STAIR；已经到楼梯外面了还用 LEAD —— 不然走下楼梯的那一下偏的上限变小，头会往回扭一下）
-      let a = stair ? aimAt(R, AHEAD_STAIR, true) : null;
+      // 楼梯的平台上：看下一跑的尽头（landingAim）
+      let a = stair ? landingAim(R) || aimAt(R, AHEAD_STAIR, true) : null;
       if (!a || a.short) a = aimAt(R, AHEAD);
       const ax = a.x - P.x;
       const az = a.z - P.z;
       const lead = stair && !a.next ? LEAD_STAIR : LEAD;
       let aimYaw = ax * ax + az * az > 1e-4 ? Math.atan2(-ax, -az) : mv;
+      // 有要转到的朝向：最后 ARRIVE 米（很短的路：后一半）慢慢偏过去（arriveYaw：最多比走的方向偏 LEAD；那边是墙就不偏）
+      if (aimYaw != null && R.yaw != null && !stair) {
+        const w = 1 - Math.min(1, left / Math.min(ARRIVE, R.total / 2));
+        if (w > 0) {
+          if (R.arrive == null) R.arrive = arriveYaw(R);
+          if (R.arrive !== false) aimYaw = wrap(aimYaw + angleDiff(R.arrive, aimYaw) * w);
+        }
+      }
       if (aimYaw != null && mv != null) aimYaw = mv + clamp(angleDiff(aimYaw, mv), -lead, lead);
       // 最后 END_EASE 米（很短的路：后一半）越转越少：终点前常有一小截折线（A* 格子中心 → 真正的终点），朝着它看会在停下的那一下甩头
       if (aimYaw != null) yaw = wrap(yaw + angleDiff(aimYaw, yaw) * (1 - Math.exp(-dt * TURN_K)) * Math.min(1, left / Math.min(END_EASE, R.total / 2)));
@@ -603,7 +665,7 @@ export function createWalk(engine, { project = null, api = null, wish = false, o
     const first = legs[0].pts[0];
     const lead = Math.hypot(first.x - P.x, first.z - P.z);
     if (legs[0].kind === 'walk') legs[0].len += lead;
-    const R = { legs, li: 0, pi: 0, total: p.length + lead, walked: 0, v: 0, yaw: Number.isFinite(wantYaw) ? wantYaw : null, resolve, free: false, arrived: false, cut: false, then: null, legDone: 0 };
+    const R = { legs, li: 0, pi: 0, total: p.length + lead, walked: 0, v: 0, yaw: Number.isFinite(wantYaw) ? wantYaw : null, resolve, free: false, arrived: false, cut: false, then: null, legDone: 0, arrive: null };
     route = R;
     const end = legs[legs.length - 1];
     const fe = end.kind === 'walk' ? end.fi : end.to;

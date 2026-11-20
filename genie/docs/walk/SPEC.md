@@ -692,6 +692,18 @@ Extra exports:
   - On an L route the turn starts at least 0.6 m before the corner (measured 1.08 m), the path is unchanged, and there is no fast crabbing.
   - An explicit `yaw` ends exactly, on the same floor and via stairs.
   - A look-drag stops auto-yaw.
+- **Second pass, after the re-recorded video.** Two wall moments were still visible.
+  - *U-stair landing, about 1 s of wall.* The 2 m carrot on the landing lands on the first tread of the next flight. That point is 1.25 m to the side and 1.55 m below the eye, so it falls below the frame and the far stairwell wall fills the screen.
+    - Fix: `landingAim`. While the segment underfoot is flat (the landing, by `pts[i].y`) and another flight follows, the carrot is the end of that next flight. Looking up, or down, the next flight shows the treads, the handrail and the floor above or below.
+    - The last flat bit at the top of the stair has no flight after it, so it falls back to the normal carrot.
+    - Trace on the video route: the yaw turns to the next flight within about 0.4 s of reaching the landing, and the view distance goes from 1.8 m to over 9 m.
+  - *Arriving with a given `yaw`, about 0.5 s of wall.* Example: the master-bedroom view spot, 0.8 m from a wall. She walked at the wall, stopped 0.76 m from it, then turned to the bed.
+    - Fix: `ARRIVE` = 1.2 m. Over the last 1.2 m, or the last half of shorter routes, the carrot yaw blends toward `R.arrive`.
+    - `R.arrive` (`arriveYaw`, computed once per route) is the last segment's direction turned toward `R.yaw` by at most `LEAD`. The lead clamp around the walking direction still applies, and the arrival turn still ends exactly on `R.yaw`.
+    - When the target is nearly behind her, the turn goes the shorter way, fixed once, so it cannot flip sides.
+    - Guard: from the end point, `wallRay` follows that direction on the static grid (walls, holes and outside, not furniture). If it is blocked within `OPEN` = 1.5 m, there is no blend; she walks in and then turns, as before. Without the guard, one studio tour leg (kitchen → bedroom) turned sideways into a wall 0.65 m away for 28 frames.
+  - Same metric, 975 routes: no route worse, 10 better. Wall stare under 0.8 m 412 → 402 frames; whole-view-wall frames 799 → 719; total time +3 s out of 11,353 s. Head swing in the last 0.3 m goes 0.022 → 0.033 rad mean and 0.39 → 0.58 rad max; that is the intended early turn.
+  - Test: on the semid2 video route (living room → master bedroom view spot), once she has been on the landing for 0.35 s the view stays within 0.3 rad of the end of the next flight. By the time she reaches the end point she has already turned at least 0.8 rad toward the given yaw. The test fails on the previous controller.
 
 ### Plaster edges inside (black wedge on the stair), as built
 - **Problem.** Near the top of the semid2 stair the walker looked up through the stair hole and saw a black wedge. It was the exposed edge of the upper floor slab. `floors.js` `plateMesh()` gives every exposed slab edge `houseKit(lib).cap`, the dark ink "section cut" (`mixC(ink, plinth, 0.4)`) that makes the bird's-eye cutaway read like an architectural model. Confirmed in the real app by turning that one material magenta: the wedge, the slab band under the void rail and the slab edge seen from the porch all turned magenta.

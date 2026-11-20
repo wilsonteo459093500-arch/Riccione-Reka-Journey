@@ -17,6 +17,9 @@ Read this first. Reply to the owner in **Chinese**, short and plain. Do one step
     - **Turning view:** while walking a route, the view now looks 1.5 m ahead along the path (2 m on stairs) instead of at the next corner point. It no longer stares at a wall at corners, on the stair landing, or going into the wet kitchen. The path itself is unchanged; routes take about 2% longer.
     - **Plaster edges:** the slab edge at the stair hole and the strips above doors and windows were dark ink (the bird's-eye cutaway colour) and read as black from inside. In walk mode only, `walk/plaster.js` swaps them to plaster and puts the exact original materials back on exit.
     - **Reduced-motion fix:** an instant exit during the reduced-motion fly-in no longer leaves ceilings or plaster behind in the bird's-eye view.
+    - **Second pass after re-recording the video:**
+      - On the U-stair landing the view now looks up the next flight, instead of about 1 s of the stairwell wall.
+      - When a walk ends with a given direction (tour stops, room views), the view starts turning that way over the last 1.2 m, but only if that side is open. Walking into the master bedroom it no longer walks at the wall and then spins round.
   - Known small leftover: if the guest picks a new destination while standing inside an open door's swing, the camera can brush the door panel. A random stress test hit this 1–3 times per 1,200 walks (10× fewer than before). Idea: make path walking respect `doors.clearOf`.
   - **Waiting for the owner's OK** on the screenshots and video. Real iPad smoothness must be tried on the showroom iPad via the preview link.
   - Deploys are by commit: step 3 alone can still go live by deploying 8c188c8; the branch head ships step 3 + 3b + step 1 together.
