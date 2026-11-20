@@ -97,7 +97,7 @@ export function checkAiScale(ai, scale, plan, { sentW, crop = null } = {}) {
   const short = (r) => Math.min(Math.abs(r.box[2] - r.box[0]), Math.abs(r.box[3] - r.box[1])) * mmSent;
   const outside = (v, [lo, hi]) => v < lo || v > hi;
 
-  if (num(scale.mm) > SCALE_SANE.labelMax) why.push(T(`the dimension reads ${m2(scale.mm)} m`, `图上那条尺寸读成 ${m2(scale.mm)} 米`));
+  if (num(scale.mm) > SCALE_SANE.labelMax) why.push(T('one dimension line would be longer than 50 m', '一条尺寸线就超过 50 米'));
   // 门：同一个门洞会出现在两间房，量出来一样宽，不影响中位数
   const doors = rooms.flatMap((r) => r.doors).filter((d) => ['entry', 'bathroom', 'main'].includes(d?.to) && segOk(d.seg))
     .map((d) => Math.hypot(d.seg[2] - d.seg[0], d.seg[3] - d.seg[1]) * mmSent).filter((v) => v > 0);

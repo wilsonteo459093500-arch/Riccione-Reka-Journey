@@ -664,9 +664,10 @@ try {
   fp.on('pageerror', (e) => ferr.push(e.message));
   let fCalls = 0, fBody = null;
   // 这里的假回答：衣柜那条线故意偏进房间 16 px（AI 常见的误差）→ 要贴回墙上；多两间重叠的小房间测名字不叠
+  // （厕所要像真的大小，约 1.5 m：0.66 m 宽的「厕所」会被比例检查 checkAiScale 当成比例读错，不给「用这个」）
   const offAnswer = {
     ...aiAnswer,
-    rooms: [...aiAnswer.rooms, { type: 'bathroom', name: 'Bath 1', box: [104, 104, 220, 170] }, { type: 'bathroom', name: 'Bath 2', box: [104, 104, 230, 180] }],
+    rooms: [...aiAnswer.rooms, { type: 'bathroom', name: 'Bath 1', box: [104, 104, 260, 250] }, { type: 'bathroom', name: 'Bath 2', box: [104, 104, 270, 260] }],
     suggestions: aiAnswer.suggestions.map((sg, i) => (i === 0 ? { ...sg, segments: [[104, 120, 344, 120]], note: 'Top wall."}],"notes":""}' } : sg)),
   };
   await fp.route('**/api/plan-ai', async (route) => {

@@ -20,6 +20,7 @@
 | AI 识图 · 每间房一套柜 | 用户定：每个房间都有一套柜（厕所、阳台、院子、车廊、冷气台、楼梯走廊不算）。卧室 = 衣柜、厨房 = 厨柜、客厅 / 家庭厅 = 电视柜、餐厅 = 餐边柜、玄关 = 鞋柜、书房 = 书桌、洗衣 / 储藏室 = 高柜（空白柜子）。清单逐间列出：图上已有 → 「图上已有 K1」；还没有 → 「还没有柜子」+ 画柜子 |
 | AI 识图 · 反馈修正（11/18） | 贴墙防呆：贴墙把线截掉三成以上或挪 0.5 m 以上 → 不信，按 AI 的线并提醒确认；鞋柜挡门 → 搬到大门同一道墙、门洞另一边（默认勾、写「改放」），和鞋柜重叠的别的建议不勾；所有柜子都查挡门；鞋柜一律归「玄关」。两笔反馈存成 `test/fixtures/ai-feedback/fb-2026-11-18-*.json` 每次重跑 |
 | AI 识图 · 鞋柜进玄关（11/18 #1） | 图上有玄关（entrance）→ 鞋柜一定放进玄关：先放门洞旁边同一道墙；放不下 → 玄关其他墙（开门碰不到的优先）；小玄关每道墙都会被开门碰到 → 放最长那道、默认勾、提醒到现场确认。「Bedroom 1」= 卧室1（不再撞名）。第一笔存进 Supabase 的反馈存成 `test/fixtures/ai-feedback/fb-1.json` |
+| 体检 1A 修钱（11/20） | 体检 2026-11-19 的问题 2、4、8、9、10：① AI 识图的柜子按「加入报价」时照房间楼高重算（`templates.js` 的 `fitCeiling`；以前一律 2.70 m）。② 设计师净价版 Excel / PDF 的岩板行印原价 RM800 / 延米。③ 报价单 / Excel 逐行加起来 = 房间小计、小计加起来 = 总额（`src/components/quote/shownMoney.js`：小计和总额不变，只把差的 RM 1–3 调到印出来的行；差太多不硬凑）。④ AI 读到的比例先换算成门宽 / 卧室 / 厕所大小（`planAi.js` 的 `checkAiScale`），不合理就不给「用这个」、请业务自己量一道墙 —— 只挡得住离谱的（约 1.7 倍以上），差一两成的看不出来。⑤ 折扣只能 0–100%（`src/constants/discount.js`：百分比、定额、设计师折扣链；`pricing.js` 不动）。浏览器测试 `test/e2e.money.browser.mjs` |
 | 积木规则 | 先定总宽 → 每扇门最宽 600 自动平分（可 +/−）→ 每格点单元；默认尺寸照用户定的（地柜 850×600、吊柜 750 离地 1500 深 350、衣柜深 600 顶柜 500、电视低柜 400×400 离地 250、鞋柜深 350 架空 150…） |
 | 价格 | 全部换算成旧工具的标准明细，由旧工具的 computeItem / computeQuote 算钱：封门 = 门板 + 柜体；开放格 = 投影价（系列跟门板）；玻璃门 = 门板 × 系数表（默认 1.5）+ 柜体；抽屉 = Blum 套数（厨房全展、其他半展）；踢脚 / 柜脚 / 底层架空按总高；电器空位不计；露出侧边加见光板；L/U 每面墙各量到墙角 |
 | 图 | 线稿立面图（含挂衣杆 / 层板 / 水槽 / 炉灶示意）+ 轻量 3D（左右转 ±45°），报价单每个柜子明细旁边印小图 |
@@ -36,7 +37,7 @@ cd kira
 npm install
 npm run dev           # http://localhost:5181
 npm test              # 价格黄金值 / 积木换算 / 模板 / 对价 / 立面 / 3D / 同步 的 Node 测试
-npm run test:browser  # 浏览器端到端（先 npm run build && npm run preview）
+npm run test:browser  # 浏览器端到端（先 npm run build && npm run preview）：e2e.browser.mjs + e2e.money.browser.mjs（体检 1A 修钱）
 npm run build         # 产物在 dist/
 npm run check:vendor  # 检查从旧工具复制来的文件有没有被改
 ```
@@ -67,6 +68,8 @@ src/planner/planAi.js        AI 读图结果 → 建议柜子（长度对齐、�
 src/planner/wallSnap.js      AI 的墙线贴到图上真正的墙（深色带、朝房间那一面、角落 / 门口截断）+ 自动去黑边 / 白边
 src/services/planAi.js       浏览器去边 / 框选、缩图、带身份、调 /api/plan-ai
 src/services/kiraRepo.js     云端（kira_projects；旧 quotes 只读；分页读完，不受 1000 行上限）
+src/components/quote/shownMoney.js  印出来的金额：逐行加起来 = 小计 = 总额（纯函数）
+src/constants/discount.js    折扣只能 0–100%（算钱前都过这里；pricing.js 不动）
 src/components/quote/sync.js 本机 ↔ 云端合并 / 待同步 / 待删除 / 标签页合并 / 本机容量（纯函数）
 src/components/auth/AuthGate.jsx  登录；离线 / token 过期时用本机登录记录打开（不卡在登录页）
 src/components/ui/ErrorBoundary.jsx  出错兜底（不白屏，提示重新载入）

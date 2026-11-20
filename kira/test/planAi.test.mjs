@@ -169,7 +169,7 @@ test('checkAiScale: the scale is turned into door / room sizes first; an absurd 
   const r90 = checkAiScale(DEMO_AI, { a: [100, 60], b: [370, 60], mm: 90000 }, plan, { sentW: 1200 });
   assert.equal(checkAiScale(DEMO_AI, aiScaleToPlan(DEMO_AI, 1200, plan), plan, { sentW: 1200 }).ok, true);
   assert.equal(r90.ok, false);
-  assert.match(r90.why.map((w) => w.zh).join('、'), /图上那条尺寸读成 90\.00 米/);
+  assert.match(r90.why.map((w) => w.zh).join('、'), /一条尺寸线就超过 50 米/);
   assert.match(r90.why.map((w) => w.zh).join('、'), /卧室变成 164\.00 米宽/);
   // 一间 12 米宽的卧室（体检报告举的例子）
   const one = { rooms: [{ type: 'bedroom', name: 'B', box: [100, 100, 500, 400], doors: [], windows: [], bed: [] }] };

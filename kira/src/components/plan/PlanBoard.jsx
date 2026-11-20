@@ -695,7 +695,7 @@ const PlanBoard = forwardRef(function PlanBoard({ plans = [], zones = [], onChan
                   const x = Math.min(a[0], b[0]), y = Math.min(a[1], b[1]), w = Math.abs(b[0] - a[0]), h = Math.abs(b[1] - a[1]);
                   const name = cleanText(rm.name, 24);
                   const f = Math.max(8 * upp, Math.min(fs, (w * 0.9) / Math.max(4, name.length * 0.6), h * 0.3));
-                  const lw = name.length * f * 0.6, lh = f * 1.2;
+                  const lw = name.length * f * 0.6, lh = f * 1.4; // 字的实际高度约 1.4 倍字号（1.2 时同字号的两行会叠到 2–3 px）
                   let ly = y + 3 * upp;
                   const hit = (yy) => used.some((u) => x + 3 * upp < u[2] && u[0] < x + 3 * upp + lw && yy < u[3] && u[1] < yy + lh);
                   for (let n = 0; n < 6 && hit(ly); n++) ly += lh;
