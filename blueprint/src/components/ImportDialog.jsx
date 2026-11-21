@@ -1,9 +1,12 @@
 // 导入 PDF：读取 → 逐页解析 → 保存图片 → 排版 → 存项目 → 打开编辑器
-// 大文件（20–60 MB）很正常：进度回调按帧合并更新，界面不卡；导入中不能关闭（关了也停不下来）
+// 大文件（20–60 MB）很正常：进度回调按帧合并更新，界面不卡。
+// 可以「取消」（体检第 4 阶段）：做完手上这一页就停，已经存进去的图片清掉；最后「保存项目」那一下取消不了（很快）
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { FileText, Check, Loader2, AlertTriangle, RotateCcw } from 'lucide-react';
+import { FileText, Check, Loader2, AlertTriangle, RotateCcw, X } from 'lucide-react';
 import { saveProject } from '../store/db.js';
+import { discardProjectData } from '../lib/bundle.js';
+import { withSharedLock, WRITE_LOCK } from '../lib/locks.js';
 import { Modal, ProgressBar, cls } from '../lib/ui.jsx';
 import { formatBytes } from '../lib/format.js';
 
@@ -41,9 +44,9 @@ function stageText({ stage, done, total }) {
 }
 
 /**
- * @param {{ file:File, onDone:(project:object)=>void, onClose:()=>void }} props
+ * @param {{ file:File, onDone:(project:object)=>void, onClose:()=>void, onCancelled?:()=>void }} props
  */
-export default function ImportDialog({ file, onDone, onClose }) {
+export default function ImportDialog({ file, onDone, onClose, onCancelled }) {
   const [phase, setPhase] = useState('running'); // 'running' | 'error'
   const [error, setError] = useState('');
   const [prog, setProg] = useState({ stage: 'read', done: 0, total: 1 });
@@ -57,11 +60,16 @@ export default function ImportDialog({ file, onDone, onClose }) {
   const frame = useRef(0);
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
+  const onCancelledRef = useRef(onCancelled);
+  onCancelledRef.current = onCancelled;
+  const abort = useRef(null);
+  const [stopping, setStopping] = useState(false);
 
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
+      abort.current?.abort(); // 窗口被关掉（例如离开首页）：别在背后接着导入
       cancelAnimationFrame(frame.current);
       frame.current = 0;
     };
@@ -70,34 +78,58 @@ export default function ImportDialog({ file, onDone, onClose }) {
   const run = useCallback(async () => {
     const id = ++runId.current;
     const alive = () => mounted.current && id === runId.current;
+    const ctrl = new AbortController();
+    abort.current = ctrl;
     setPhase('running');
+    setStopping(false);
     setError('');
     setProg({ stage: 'read', done: 0, total: 1 });
     setStartedAt(Date.now());
     try {
-      // pdf.js 体积大：用到时再加载（首页打开更快）
-      const { importPdfFile } = await import('../import/importPdf.js');
-      if (!alive()) return;
-      const project = await importPdfFile(file, {
-        onProgress: (stage, done, total) => {
-          latest.current = { stage, done, total };
-          if (frame.current) return;
-          frame.current = requestAnimationFrame(() => {
-            frame.current = 0;
-            if (alive() && latest.current) setProg(latest.current);
-          });
-        },
+      // 导入中拿着「正在写」的锁：自动清图片不会把还没挂到项目上的新图当成没人用
+      const saved = await withSharedLock(WRITE_LOCK, async () => {
+        // pdf.js 体积大：用到时再加载（首页打开更快）
+        const { importPdfFile } = await import('../import/importPdf.js');
+        const project = await importPdfFile(file, {
+          signal: ctrl.signal,
+          onProgress: (stage, done, total) => {
+            latest.current = { stage, done, total };
+            if (frame.current) return;
+            frame.current = requestAnimationFrame(() => {
+              frame.current = 0;
+              if (alive() && latest.current) setProg(latest.current);
+            });
+          },
+        });
+        if (ctrl.signal.aborted) {
+          await discardProjectData(project.id);
+          return null;
+        }
+        if (alive()) {
+          cancelAnimationFrame(frame.current);
+          frame.current = 0;
+          setProg({ stage: 'done', done: 1, total: 1 });
+        }
+        try {
+          return await saveProject(project);
+        } catch (err) {
+          await discardProjectData(project.id); // 项目没存进去：图片别留着占空间
+          throw err;
+        }
       });
-      if (!alive()) return;
-      cancelAnimationFrame(frame.current);
-      frame.current = 0;
-      setProg({ stage: 'done', done: 1, total: 1 });
-      const saved = await saveProject(project);
+      if (!saved) {
+        if (alive()) onCancelledRef.current?.();
+        return;
+      }
       if (alive()) onDoneRef.current?.(saved);
     } catch (e) {
       if (!alive()) return;
       cancelAnimationFrame(frame.current);
       frame.current = 0;
+      if (e?.name === 'AbortError') {
+        onCancelledRef.current?.();
+        return;
+      }
       const msg = e?.name === 'QuotaExceededError' || /quota|空间不足/i.test(e?.message || '')
         ? '浏览器存储空间不够了 —— 可以先在首页删掉旧项目（删前可下载项目备份），再重试。'
         : e?.message || 'PDF 解析失败';
@@ -105,6 +137,12 @@ export default function ImportDialog({ file, onDone, onClose }) {
       setPhase('error');
     }
   }, [file]);
+
+  const cancel = useCallback(() => {
+    if (!abort.current || abort.current.signal.aborted) return;
+    setStopping(true);
+    abort.current.abort();
+  }, []);
 
   // 只启动一次（React 开发模式会重复执行 effect）
   useEffect(() => {
@@ -133,7 +171,13 @@ export default function ImportDialog({ file, onDone, onClose }) {
       width="max-w-md"
       footer={
         running ? (
-          <div className="text-xs text-bp-faint">大文件一般需要 10–40 秒，请不要关闭或刷新页面</div>
+          <>
+            <div className="flex-1 text-xs text-bp-faint">{stopping ? '正在停下，做完手上这一页就停…' : '大文件一般需要 10–40 秒，请不要关闭或刷新页面'}</div>
+            <button type="button" onClick={cancel} disabled={stopping || prog.stage === 'done'} className={cls.btnGhost} data-testid="import-cancel">
+              {stopping ? <Loader2 size={15} className="animate-spin" /> : <X size={15} />}
+              {stopping ? '正在取消' : '取消'}
+            </button>
+          </>
         ) : (
           <>
             <div className="flex-1" />

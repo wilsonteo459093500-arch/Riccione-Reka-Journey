@@ -26,7 +26,15 @@ function openDb() {
           db.createObjectStore(SHOTS, { keyPath: 'id' }).createIndex('boardId', 'boardId', { unique: false });
         }
       };
-      req.onsuccess = () => resolve(req.result);
+      req.onsuccess = () => {
+        const db = req.result;
+        // 别的分页要删库（「清除本机全部资料」）：先放手，下次用到再重新打开
+        db.onversionchange = () => {
+          db.close();
+          dbPromise = null;
+        };
+        resolve(db);
+      };
       req.onerror = () => {
         dbPromise = null;
         reject(req.error);
@@ -35,6 +43,19 @@ function openDb() {
   }
   return dbPromise;
 }
+
+/** 关掉连接（删库前用）；之后再读写会自动重新打开 */
+export async function closeDb() {
+  const p = dbPromise;
+  dbPromise = null;
+  try {
+    (await p)?.close();
+  } catch {
+    /* 没打开过 / 打开失败 */
+  }
+}
+
+export const DB_NAMES = [DB_NAME];
 
 /** 一个事务：fn(store) 可返回 request，resolve 它的 result */
 async function tx(storeName, mode, fn) {
@@ -59,6 +80,15 @@ export async function listBoards(projectId) {
   try {
     const all = (await byIndex(BOARDS, 'projectId', projectId)) || [];
     return all.sort((a, b) => (a.createdAt || a.ts || 0) - (b.createdAt || b.ts || 0));
+  } catch {
+    return [];
+  }
+}
+
+/** 全部画板（不分项目）：清理「项目已经不在了」的画板时用 */
+export async function listAllBoards() {
+  try {
+    return (await tx(BOARDS, 'readonly', (s) => s.getAll())) || [];
   } catch {
     return [];
   }

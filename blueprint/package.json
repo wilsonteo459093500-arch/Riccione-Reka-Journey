@@ -11,7 +11,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "node test/run.mjs",
-    "test:browser": "node test/browser/showroom.mjs"
+    "test:browser": "node test/browser/showroom.mjs && node test/browser/data.mjs"
   },
   "dependencies": {
     "jszip": "3.10.1",

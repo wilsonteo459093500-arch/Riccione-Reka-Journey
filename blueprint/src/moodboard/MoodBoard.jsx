@@ -61,6 +61,8 @@ export default function MoodBoard({ project, settings, notify, onOpenSettings, o
   const saveTimer = useRef(null);
   const latestRef = useRef(null); // 待落盘的画板记录
   const recRef = useRef(null); // 当前画板的 { id, projectId, createdAt }
+  // 刚载入的那一份（同一个对象）：自动保存看到的还是它 = 没人改过，不存 —— 只是打开看看不算「改过」（首页的备份提醒靠画板的 ts）
+  const loadedRef = useRef(null);
   const itemsRef = useRef(items);
   const boardRef = useRef(board);
   const importingRef = useRef(false);
@@ -79,10 +81,13 @@ export default function MoodBoard({ project, settings, notify, onOpenSettings, o
   function applyRecord(rec) {
     recRef.current = { id: rec.id, projectId: rec.projectId, createdAt: rec.createdAt || rec.ts || Date.now() };
     const nextItems = (rec.items || []).map((it) => ({ ...it, busy: false }));
+    const nextBoard = { ...DEFAULT_BOARD, ...(rec.board || {}) };
+    const nextName = rec.name || '画板';
+    loadedRef.current = { id: rec.id, items: nextItems, board: nextBoard, name: nextName };
     itemsRef.current = nextItems;
     setActiveId(rec.id);
-    setBoardName(rec.name || '画板');
-    setBoardState({ ...DEFAULT_BOARD, ...(rec.board || {}) });
+    setBoardName(nextName);
+    setBoardState(nextBoard);
     setItems(nextItems);
     setSelectedId(null);
   }
@@ -135,6 +140,9 @@ export default function MoodBoard({ project, settings, notify, onOpenSettings, o
   // ---- 自动保存（800ms 防抖） ----
   useEffect(() => {
     if (!loaded || !activeId || recRef.current?.id !== activeId) return undefined;
+    const l = loadedRef.current;
+    if (l && l.id === activeId && l.items === items && l.board === board && l.name === boardName) return undefined; // 刚载入、还没改
+    loadedRef.current = null;
     latestRef.current = {
       ...recRef.current,
       name: boardName,

@@ -13,7 +13,15 @@ function openDb() {
       req.onupgradeneeded = () => {
         if (!req.result.objectStoreNames.contains(STORE)) req.result.createObjectStore(STORE, { keyPath: 'id' });
       };
-      req.onsuccess = () => resolve(req.result);
+      req.onsuccess = () => {
+        const db = req.result;
+        // 别的分页要删库（「清除本机全部资料」）：先放手，下次用到再重新打开
+        db.onversionchange = () => {
+          db.close();
+          dbPromise = null;
+        };
+        resolve(db);
+      };
       req.onerror = () => {
         dbPromise = null;
         reject(req.error);
@@ -22,6 +30,19 @@ function openDb() {
   }
   return dbPromise;
 }
+
+/** 关掉连接（删库前用）；之后再读写会自动重新打开 */
+export async function closeDb() {
+  const p = dbPromise;
+  dbPromise = null;
+  try {
+    (await p)?.close();
+  } catch {
+    /* 没打开过 / 打开失败 */
+  }
+}
+
+export const DB_NAMES = [DB_NAME];
 
 async function tx(mode, fn) {
   const db = await openDb();

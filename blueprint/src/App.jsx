@@ -15,6 +15,7 @@ import { migrateOnce } from './moodboard/migrate.js';
 import { hasUnsavedEdits } from './lib/useProjectState.js';
 import { startUpdateWatch } from './lib/appVersion.js';
 import { useUpdateReady } from './lib/useUpdateReady.js';
+import { holdTabLock } from './lib/locks.js';
 
 /** '#/p/<id>' → id */
 function parseHash() {
@@ -54,7 +55,10 @@ function Workspace({ onLogout }) {
   const current = useRef(projectId);
   const { toasts, notify, dismiss } = useToasts();
 
-  // 申请持久化存储（避免浏览器空间紧张时清掉项目），只问一次
+  // 这个分页开着（「清除本机全部资料」要先确认没有别的分页开着）
+  useEffect(() => holdTabLock(), []);
+
+  // 申请持久化存储（避免浏览器空间紧张时清掉项目），只问一次；结果显示在首页「资料安全」
   useEffect(() => {
     if (persistenceAsked) return;
     persistenceAsked = true;

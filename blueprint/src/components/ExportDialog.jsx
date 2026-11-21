@@ -11,9 +11,10 @@ import { buildPptx } from '../engine/pptx/writer.js';
 import { langOf } from '../engine/lang.js';
 import { FONT_PACK } from '../theme.js';
 import { metaOf, loadForPptx, missingImagesIn } from '../store/assets.js';
-import { exportBundle } from '../lib/bundle.js';
+import { downloadProjectBackup } from '../lib/backupAll.js';
+import { getProject } from '../store/db.js';
 import { downloadBlob } from '../lib/download.js';
-import { pptxFileName, bundleFileName, formatBytes } from '../lib/format.js';
+import { pptxFileName, formatBytes } from '../lib/format.js';
 import {
   exportHealth, exportInfo, pptxTitle, missingEnText, missingEnHint, langNameInline, LANG_OPTIONS, LANG_HINTS, LANG_VERSION,
 } from '../lib/langUi.js';
@@ -26,7 +27,7 @@ const missingImages = missingImagesIn;
 /** writer 的提示里带着 'asset:…' 引用，换成更好懂的说法 */
 const friendlyWriterWarning = (w) => String(w).replace(/asset:[\w-]+/g, '项目图片').replace(/\/template\/[\w.-]+/g, '模板图片');
 
-export default function ExportDialog({ project, notify, onClose, onGoTab }) {
+export default function ExportDialog({ project, notify, onClose, onGoTab, onFlush }) {
   const projectLang = langOf(project);
   const [lang, setLang] = useState(projectLang); // 这次导出的语言（不写回项目）
   // 按选定的语言渲染：只换 info.lang，项目本身不动
@@ -80,11 +81,14 @@ export default function ExportDialog({ project, notify, onClose, onGoTab }) {
     if (backup) return;
     setBackup('准备中…');
     try {
-      const { blob, missing } = await exportBundle(project, {
+      // 先把还没存的修改存进去：备份记录要记「备份的是第几版」，首页才知道之后有没有再改过
+      await onFlush?.();
+      const rev = (await getProject(project.id).catch(() => null))?.rev;
+      const { size, missing } = await downloadProjectBackup(project, {
+        rev,
         onProgress: (stage, done, total) => setBackup(stage === 'zip' ? `打包 ${done}%` : `${done}/${total}`),
       });
-      downloadBlob(blob, bundleFileName(project));
-      notify?.({ type: 'ok', text: `项目备份已下载（${formatBytes(blob.size)}）—— 换电脑时在首页「导入项目备份」即可恢复` });
+      notify?.({ type: 'ok', text: `项目备份已下载（${formatBytes(size)}）—— 换电脑时在首页「导入备份」即可恢复` });
       if (missing) notify?.({ type: 'warn', text: `有 ${missing} 张图片在本机找不到，没能放进备份。` });
     } catch (e) {
       notify?.({ type: 'error', text: `备份失败：${e?.message || e}` });

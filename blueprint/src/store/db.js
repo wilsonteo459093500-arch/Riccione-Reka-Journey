@@ -19,7 +19,15 @@ function openDb() {
           s.createIndex('projectId', 'projectId', { unique: false });
         }
       };
-      req.onsuccess = () => resolve(req.result);
+      req.onsuccess = () => {
+        const db = req.result;
+        // 别的分页要删库（「清除本机全部资料」）/ 升级：先放手，下次用到再重新打开
+        db.onversionchange = () => {
+          db.close();
+          dbPromise = null;
+        };
+        resolve(db);
+      };
       req.onerror = () => {
         dbPromise = null;
         reject(req.error);
@@ -28,6 +36,19 @@ function openDb() {
   }
   return dbPromise;
 }
+
+/** 关掉连接（删库前用）；之后再读写会自动重新打开 */
+export async function closeDb() {
+  const p = dbPromise;
+  dbPromise = null;
+  try {
+    (await p)?.close();
+  } catch {
+    /* 没打开过 / 打开失败 */
+  }
+}
+
+export const DB_NAMES = [DB_NAME];
 
 function run(storeName, mode, fn) {
   return openDb().then(
@@ -144,6 +165,36 @@ export async function deleteAssetsOf(projectId) {
   });
 }
 
+/**
+ * 全部图片的清单（不读图片内容）：[{ id, projectId, ts, size }] —— 清理没人用的图片时用
+ * IndexedDB 取出来的 Blob 只是个把手，读 size 不会把整张图读进内存
+ */
+export async function listAssetInfo() {
+  const db = await openDb();
+  return await new Promise((resolve, reject) => {
+    const out = [];
+    const t = db.transaction('assets', 'readonly');
+    const req = t.objectStore('assets').openCursor();
+    req.onsuccess = () => {
+      const cur = req.result;
+      if (!cur) return;
+      const v = cur.value || {};
+      out.push({ id: v.id, projectId: v.projectId ?? null, ts: v.ts || 0, size: v.blob?.size || 0 });
+      cur.continue();
+    };
+    t.oncomplete = () => resolve(out);
+    t.onerror = () => reject(t.error);
+  });
+}
+
+/** 一次删掉多张图片 */
+export async function deleteAssetRecords(ids) {
+  if (!ids?.length) return;
+  await run('assets', 'readwrite', (s) => {
+    for (const id of ids) s.delete(id);
+  });
+}
+
 /** 估算本机存储用量（浏览器支持时） */
 export async function storageEstimate() {
   try {
@@ -154,11 +205,26 @@ export async function storageEstimate() {
   }
 }
 
-/** 申请持久化存储，避免浏览器在空间紧张时清掉项目 */
+/**
+ * 长期保存（浏览器答应了，空间紧张时就不会自己清掉这个网站的资料）
+ * @returns {Promise<'on'|'off'|'unsupported'>}
+ */
+export async function persistenceState() {
+  try {
+    if (!navigator.storage?.persisted) return 'unsupported';
+    return (await navigator.storage.persisted()) ? 'on' : 'off';
+  } catch {
+    return 'unsupported';
+  }
+}
+
+/** 申请长期保存（Chrome 按网站常不常用、有没有加书签自己决定；Firefox 会问用户）→ 现在的状态 */
 export async function requestPersistence() {
   try {
-    if (navigator.storage?.persisted && !(await navigator.storage.persisted())) await navigator.storage.persist?.();
+    if (!navigator.storage?.persist) return await persistenceState();
+    if (await navigator.storage.persisted()) return 'on';
+    return (await navigator.storage.persist()) ? 'on' : 'off';
   } catch {
-    /* ignore */
+    return await persistenceState();
   }
 }

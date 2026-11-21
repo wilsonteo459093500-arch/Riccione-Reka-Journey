@@ -48,6 +48,7 @@
   - **2026-11-21 第 2 阶段上半做完、合进 main（#101）**（体检列的认错写法全修好、忽略清单、测试数据自动抹客户资料）；下半要用户附上真的 PDF 才能做，进度和那张表在 `blueprint/PLAN.md` 最后一节
   - **2026-11-21 第 1 阶段（展厅播放敢给客户看）做完、合进 main（#104）**：进度和「还没做的」在 `blueprint/PLAN.md`「第 1 阶段做完了」。用户定的：检查清单每次都出；点左边四分之一 = 上一页；说明栏放不下只放前几条。**用户还要去展厅大屏彩排一次**（合并时还没去）。下一个：用户给了真的 PDF 就做第 2 阶段下半，没有就做第 3 阶段「认不准的地方会告诉设计师」
   - **2026-11-21 第 3 阶段（认不准的地方会告诉设计师）做完、合进 main（#106）**：「请核对这几处」清单 + 项目信息加 / 删 / 移楼层，详情在 `blueprint/PLAN.md`「第 3 阶段做完了」。下一个：有真的 PDF 就做第 2 阶段下半，否则第 4 阶段「资料不丢」
+  - **2026-11-21 第 4 阶段（资料不丢）做完、开了 PR**（和第 3 阶段 #106 同时做，合并时已经接上）：首页「资料安全」、全部备份（资料夹 + 一个文件，用户选两种都要）、恢复问「更新 / 另存」、7 天提醒、自动清没用的图片、导入可取消、清除本机全部资料。`sail-render` 网址在 Vercel 上 2026-08-14 起就转到 `ukir-studio`，体检那条说法不对、不用做。详情 `blueprint/PLAN.md`「第 4 阶段做完了」。下一个：有真的 PDF 就做第 2 阶段下半，否则第 5 阶段「试点准备」
 - 用户 2026-11-20 定的：
   - **先修展厅播放，再修 PDF 导入**
   - 3D 户型图**继续改进**（第 7 阶段，先 brainstorm 具体是慢、贵还是不准）
@@ -153,7 +154,11 @@
 - 测试和构建：
   - `cd blueprint && npm test`：Node 跑全部测试（2026-11-16 时 560 项）
   - `npx vite build`：构建
-- 浏览器测试（2026-11-21 起）：`npm run test:browser`（`test/browser/showroom.mjs`，自己起 Vite、建样例项目）；`SHOTS=<资料夹>` 顺便存截图。上线流程里也跑
+- 浏览器测试（2026-11-21 起）：`npm run test:browser`（`test/browser/showroom.mjs` 展厅播放 + `test/browser/data.mjs` 资料不丢，自己起 Vite、建样例项目）；`SHOTS=<资料夹>` 顺便存截图。上线流程里也跑
+  - 这台机器的系统语系不是 UTF-8：Chromium 下载中文文件名会变成「download」，`data.mjs` 启动时指定了 `LANG=C.UTF-8`
+  - 自动清图片只清 1 小时以前存的：测试里要先把图片「放旧」（`data.mjs` 的 `ageAllAssets`）
+  - **Playwright 预设的临时无痕设定档（`browser.newContext()`）里，从 IndexedDB 读回存起来的资料夹把手会让 Chromium 整个当掉**（SIGTRAP；GitHub 的机器上撞到，本机用没包装的 headless shell 重现）。一般设定档（`launchPersistentContext`）没事，所以 `data.mjs` 用一般设定档；首页也只在按「备份到资料夹」时才读那个把手
+  - 本机的 Playwright 浏览器有一层包装，跟 GitHub 机器上的不完全一样：怀疑只在 GitHub 上坏时，用 `executablePath: '/opt/pw-browsers/headless_shell_as_downloaded/chrome-headless-shell'` 重现
   - 上线流程只对「有 `test:browser` 而且自己把 `playwright` 列进依赖」的软件跑浏览器测试。KIRA 也有 `test:browser`，但没列依赖、只手动跑 —— 要接进去得先在 `kira/` 加依赖并确认它在 GitHub 的机器上跑得过
   - Playwright 的 `mouse.wheel` 一律报成「有刻度的一格」，而且数值会除以屏幕缩放倍数；要模拟触控板得自己 `dispatchEvent(new WheelEvent(...))`
   - `waitForFunction` 传 async 函数不会等它的结果，要轮询就在 Node 这边写循环

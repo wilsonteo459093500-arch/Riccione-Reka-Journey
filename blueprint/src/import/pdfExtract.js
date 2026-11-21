@@ -338,12 +338,20 @@ function effectivePx(place, pxW, pxH) {
  *   encodeImage?: (imgObj:object, info:{ key, pxW, pxH, maxArea, place }) => Promise<Blob|undefined>|Blob|undefined,
  *       place = null（正放、未裁切：原样编码）或 { tm, box, vis }（用 placementTransform 画成页面上的样子）
  *   renderThumb?: (page:object, viewport:object) => Promise<Blob|undefined>,
+ *   signal?: AbortSignal,   // 取消：做完手上这一页就停（抛 AbortError）
  *   maxPages?: number,
  *   docOptions?: object,   // 透传给 pdfjs.getDocument（Node 里传 { isOffscreenCanvasSupported:false }）
  * }} [opts]
  * @returns {Promise<{ meta:{ numPages, title, creationDate }, pages: object[], blobs: Map<string, Blob> }>}
  */
-export async function extractPdf(pdfjs, data, { onProgress, encodeImage, renderThumb, maxPages, docOptions } = {}) {
+/** 设计师按了「取消」 */
+export function abortError() {
+  const e = new Error('已取消导入');
+  e.name = 'AbortError';
+  return e;
+}
+
+export async function extractPdf(pdfjs, data, { onProgress, encodeImage, renderThumb, maxPages, docOptions, signal } = {}) {
   const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
   const task = pdfjs.getDocument({ data: bytes, verbosity: 0, ...(docOptions || {}) });
   const doc = await task.promise;
@@ -365,6 +373,7 @@ export async function extractPdf(pdfjs, data, { onProgress, encodeImage, renderT
     onProgress?.('extract', 0, total);
 
     for (let n = 1; n <= total; n++) {
+      if (signal?.aborted) throw abortError();
       const page = await doc.getPage(n);
       const viewport = page.getViewport({ scale: 1 });
       const W = viewport.width;
