@@ -38,7 +38,7 @@ function boardView(id) {
 }
 
 function Chip({ id, size = '' }) {
-  return <span className={`sample ${size} cab-chip`}>{id && <img src={swatchURL(id, 96) || ''} alt="" draggable={false} />}</span>;
+  return <span className={`sample ${size} cab-chip ${id ? '' : 'none'}`}>{id && <img src={swatchURL(id, 96) || ''} alt="" draggable={false} />}</span>;
 }
 
 export default function Cab({ engine, project, open, commit, flash, onClose }) {
@@ -119,8 +119,9 @@ export default function Cab({ engine, project, open, commit, flash, onClose }) {
     flash(t('{0} · {1} 跟回去了', [L(GROUP_BY_ID[group]), partName(group, part)]));
   };
   const usePreset = (P) => {
+    // 这个搭配要动的组，这个家一组都没有（双色厨房、家里没有厨房）
+    if (P.id !== 'one' && !Object.keys(P.set).some((g) => here.some((h) => h.id === g))) return flash(t('这个家没有「{0}」用得到的柜子', [L(P)]));
     const cab = applyPreset(P.id, { cab: project.cab, furniture: project.furniture });
-    if (P.id !== 'one' && JSON.stringify(cab ?? null) === JSON.stringify(project.cab ?? null) && !Object.keys(P.set).some((g) => here.some((h) => h.id === g))) return flash(t('这个家没有「{0}」用得到的柜子', [L(P)]));
     const next = { cab };
     if (project.locked?.cabinetry && cab) {
       const { cabinetry: _gone, ...rest } = project.locked;
@@ -210,10 +211,9 @@ export default function Cab({ engine, project, open, commit, flash, onClose }) {
                               <em>
                                 {info.own ? pv.name : follow}
                                 {info.own && pv.code && <code>{pv.code}</code>}
-                                {info.own && pv.sample && <u>{t('示意色')}</u>}
                               </em>
                             </span>
-                            <span className="cab-act">{info.own || pid === 'door' || pid === 'plinth' ? t('换') : t('分开')}</span>
+                            {!info.own && <span className="cab-act">{pid === 'door' || pid === 'plinth' ? t('换') : t('分开')}</span>}
                           </button>
                           {info.own && (
                             <button type="button" className="cab-back" onClick={() => clear(g.id, pid)}>

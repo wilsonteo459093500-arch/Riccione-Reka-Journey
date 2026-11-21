@@ -89,7 +89,11 @@ Original scope (all built):
 - **Bird's-eye must stay pixel-identical.** Keep it light on an iPad: lazy-load the walk modules and keep the studio first-load chunk ≈ 396 kB gzip.
 - **Before any deploy:** release check, then the owner's OK.
 
-**2. Cabinet detail configurator.** Owner request in OWNER-ANSWERS.md. Wait for the owner's reference screenshots first.
+**2. Cabinet detail configurator — in progress, NOT live.** Owner request in OWNER-ANSWERS.md.
+- The staged plan, the owner's decisions and the as-built notes are in `.claude/plans/wish-cabinet.md` (repo root). Start a conversation with 「读 `.claude/plans/wish-cabinet.md`，做橱柜计划第 N 阶段」.
+- **Stage 2a (colour per group, parts, one-tap combinations) is built on branch `ccr-ba54e03e-l1zolg`** (on top of PR #65), draft PR, waiting for the owner. Code: `genie/src/studio/cabinet/` (lazy chunk, 8.2 kB gzip); seam in `furniture.js` (`CAB`, `K()`), `StudioApp.jsx`, `Toolbar.jsx`, `store.js`. Test: `test/cabinet.test.mjs`.
+- The studio entry is now 397.50 kB of the 397.5 limit: nothing more fits in the entry without the owner raising the limit.
+- Original scope:
 - **Colour per group:** kitchen base / wall / tall / island, TV wall, wardrobe, shoe, bookshelf, vanity, wall panels, and per single cabinet.
 - **Parts:** carcass vs door (+ drawer fronts, end panels, plinth, open shelves) coloured separately.
 - **SAIL door styles** (`doorFace(spec)` in SAIL-PRODUCT-EXCERPT §2.0), **handles** (§5 codes + finishes) and **boards** (溪岸板材 library + tiers).

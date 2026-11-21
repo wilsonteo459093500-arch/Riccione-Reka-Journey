@@ -3,7 +3,8 @@
   left: var(--safe-l);
   top: var(--safe-t);
   width: var(--panel-w);
-  max-height: calc(100% - var(--safe-t) - var(--safe-b));
+  /* 整列一样高：下面的情绪面板不露出来 */
+  height: calc(100% - var(--safe-t) - var(--safe-b));
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -130,6 +131,20 @@
 .cab-chip {
   flex: none;
 }
+.cab-row .cab-chip {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+}
+/* 踢脚没设：原来的黑色 */
+.cab-chip.none {
+  background: var(--ink);
+}
+.cab-prow .cab-chip {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
 .cab-txt {
   flex: 1;
   min-width: 0;
@@ -207,6 +222,7 @@
     left: 8px;
     right: 8px;
     width: auto;
+    height: auto;
     max-height: 52%;
   }
 }

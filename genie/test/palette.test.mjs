@@ -29,6 +29,7 @@ const CONTENT = [
   'src/studio/diag.js', // 开发用的诊断面板（?diag=1），不是给客人看的界面
   'src/studio/export/palette.js', // 导出的 3D 文件里的固定材质色（玻璃、窗框…），和 matlib 一致
   'src/shared/boards/library.js', // 溪岸板材库：导入的真实板材量出来的颜色（scripts/import-boards.mjs 生成）
+  'src/studio/cabinet/seed.js', // 一键搭配的 6 块溪岸板材：手册上的颜色（test/cabinet.test.mjs 和 catalog-seed.json 逐项比）
 ];
 
 // 界面文件里允许写死的个别值（小写）
