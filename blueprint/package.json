@@ -10,7 +10,8 @@
     "prebuild": "node scripts/copy_pdfjs_assets.mjs",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node test/run.mjs"
+    "test": "node test/run.mjs",
+    "test:browser": "node test/browser/showroom.mjs"
   },
   "dependencies": {
     "jszip": "3.10.1",
@@ -22,6 +23,7 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
+    "playwright": "1.63.0",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.15",
     "vite": "^5.4.11"

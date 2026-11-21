@@ -1,8 +1,11 @@
 // 展厅播放：在展厅大屏上「滑着看」方案。内容、版面和导出的 PPT 一模一样（renderDeck → exportableSlides），只是动起来。
 //
-// 控制：鼠标滚轮 / 触控板、触控大屏拖动（上下或左右都行）、方向键 / 空格 / PageDown；停手后轻轻吸到最近的一页，
-//       所以停下来的画面永远是完整原图（见 showroom/motion.js 的铁律）。
+// 控制：鼠标滚轮（一格翻一页）/ 触控板（跟手滑，滑过一小段就翻过去）、触控大屏拖动（上下或左右都行）、
+//       点一下（左边四分之一 = 上一页，其余 = 下一页）、方向键 / 空格 / PageDown；停手后吸到一页上，
+//       所以停下来的画面永远是完整原图（见 showroom/motion.js 的铁律）。Esc 按两次才退出（免得讲解时误碰）。
 // 角落：目录（跳到任一空间）· 音乐（第一次点选一首，存在本机）· 全屏 · 退出；鼠标不动 2.5 秒后自动隐藏。
+// 大屏上不出洋相：播放时屏幕常亮（Wake Lock）；动效出错 → 这一页退回静态原图（ShowroomBoundary.jsx）；
+//       3D 开场画不出来 → 跳过那一页；编辑器在下面整个停用（inert），它的快捷键收不到按键。
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LayoutGrid, Music, VolumeX, Maximize, X, Eye, EyeOff } from 'lucide-react';
@@ -11,8 +14,9 @@ import { renderDeck, exportableSlides } from '../../engine/deck.js';
 import { metaOf, resolveUrl } from '../../store/assets.js';
 import { getAssetRecord, putAssetRecord } from '../../store/db.js';
 import { buildStops, transitionKind, transitionWeight, indexOf, SECTION_NAMES } from '../../showroom/timeline.js';
-import { layerMotion, frameAt, snapTarget, cssOf, clamp01, plan3dMotion, enterProgress, morphRects } from '../../showroom/motion.js';
-import { plan3dKey, peekPlan3d, requestPlan3d, onPlan3dProgress } from '../../showroom/build3dCache.js';
+import { layerMotion, frameAt, snapTarget, snapToward, isWheelStep, cssOf, clamp01, plan3dMotion, enterProgress, morphRects } from '../../showroom/motion.js';
+import { plan3dKey, peekPlan3d, requestPlan3d, onPlan3dProgress, plan3dState } from '../../showroom/build3dCache.js';
+import { Boundary, StillPage, EscHint } from './ShowroomBoundary.jsx';
 import { matchRoom } from '../../showroom/build3d.js';
 import { sketchFrame } from '../../showroom/sketch.js';
 import { sketchGeom, peekSketch, requestSketch, onSketchReady } from '../../showroom/sketchCache.js';
@@ -25,6 +29,14 @@ const JUMP_MS = 1400; // 目录跳转的过渡时长
 const CHROME_HIDE_MS = 2500;
 const MUSIC_ID = 'showroom-music'; // 背景音乐存在素材库里的固定 id（不属于任何项目）
 const MUSIC_VOLUME = 0.55;
+const WHEEL_STREAM_MS = 120; // 两下滚轮隔多久算「另一下」：有刻度的滚轮一格翻一页，一口气连滚（或触控板一甩的惯性）只算一次
+const TAP_MS = 500; // 按下到放开不超过这么久、又没拖动 = 点一下
+const TAP_BACK_ZONE = 0.25; // 点屏幕左边这么宽 = 上一页，其余 = 下一页
+const ESC_CONFIRM_MS = 3000; // 第一次 Esc 后多久内再按一次才退出
+// 只在本机开发时有：浏览器测试用它故意弄坏一层，看「出错不空白」有没有接住（正式版构建时这一行整个去掉）
+const devBreak = (what) => {
+  if (import.meta.env?.DEV && typeof window !== 'undefined' && window.__showroomBreak === what) throw new Error(`测试：${what} 故意出错`);
+};
 
 function useViewport() {
   const [vp, setVp] = useState({ w: window.innerWidth, h: window.innerHeight });
@@ -34,6 +46,59 @@ function useViewport() {
     return () => window.removeEventListener('resize', on);
   }, []);
   return vp;
+}
+
+/**
+ * 屏幕常亮：停在一页讲久了，屏幕不会自己变黑（Screen Wake Lock，Chrome / Edge / Safari 都有）。
+ * 切到别的窗口时浏览器会自动放掉，切回来再申请一次。浏览器不支持 → 什么都不做（播放前检查会提醒去关电脑的睡眠）。
+ */
+export const canKeepAwake = () => typeof navigator !== 'undefined' && !!navigator.wakeLock?.request;
+function useKeepAwake() {
+  useEffect(() => {
+    if (!canKeepAwake()) return undefined;
+    let alive = true;
+    let lock = null;
+    const ask = async () => {
+      if (!alive || document.visibilityState !== 'visible' || (lock && !lock.released)) return;
+      try {
+        const l = await navigator.wakeLock.request('screen');
+        if (alive) lock = l;
+        else l.release?.().catch(() => {});
+      } catch {
+        // 省电模式、页面在后台：申请不到就算了，下次回到前台再试
+      }
+    };
+    ask();
+    document.addEventListener('visibilitychange', ask);
+    document.addEventListener('fullscreenchange', ask);
+    return () => {
+      alive = false;
+      document.removeEventListener('visibilitychange', ask);
+      document.removeEventListener('fullscreenchange', ask);
+      lock?.release?.().catch(() => {});
+    };
+  }, []);
+}
+
+/**
+ * 全屏时把 Esc 留给播放器（Chrome / Edge 的 Keyboard Lock）：按一下 Esc 是「再按一次退出」的提示，不会直接退出全屏。
+ * 不支持的浏览器：第一下 Esc 先退出全屏（浏览器自己的规矩），播放器还在，再按两次才退出。
+ */
+function useEscLock() {
+  useEffect(() => {
+    const kb = typeof navigator !== 'undefined' ? navigator.keyboard : null;
+    if (!kb?.lock) return undefined;
+    const sync = () => {
+      if (document.fullscreenElement) kb.lock(['Escape']).catch(() => {});
+      else kb.unlock?.();
+    };
+    sync();
+    document.addEventListener('fullscreenchange', sync);
+    return () => {
+      document.removeEventListener('fullscreenchange', sync);
+      kb.unlock?.();
+    };
+  }, []);
 }
 
 /** 背景音乐：存在本机 IndexedDB；淡入淡出 */
@@ -169,7 +234,7 @@ function Plan3dLayer({ stop, m, width }) {
     ctx.globalAlpha = 1;
     ctx.fillStyle = '#F3EEE7';
     ctx.fillRect(0, 0, W, H);
-    if (!entry) return;
+    if (!entry?.built) return;
     const { built, frames, plan } = entry;
     const k = W / built.w; // 关键帧 → 画布
     // 推近：以要去的房间中心为原点
@@ -243,7 +308,7 @@ function Plan3dLayer({ stop, m, width }) {
 function plan3dInfo(stops, k, role, kind) {
   const stop = stops[k];
   const entry = peekPlan3d(plan3dKey(stop.plan3d));
-  const areas = entry?.built.final.floorAreas || [];
+  const areas = entry?.built?.final.floorAreas || [];
   const next = role === 'a' && kind === 'enter' ? stops[k + 1]?.slide : null;
   return { frames: entry?.total || 1, areas: areas.length, target: next ? matchRoom(areas, next) : -1 };
 }
@@ -288,6 +353,33 @@ function Layer({ stop, role, kind, f, width, peer }) {
         replaceEl={entry || fromEl ? replaceEl : undefined}
         noBg={kind === 'craft' && role === 'a'}
       />
+    </div>
+  );
+}
+
+/** 舞台上的一层或两层（停在一页 = 一层；两页之间 = 两层） */
+function StageLayers({ stops, view, width }) {
+  devBreak('layers');
+  const layers = [{ role: 'a', k: view.a }];
+  if (view.b != null) layers.push({ role: 'b', k: view.b });
+  // 进设计特点：原页（不画底色）盖在设计特点页上面 —— 字淡掉时还在纸面上，效果图由下面那层接手移过去
+  return (view.kind === 'craft' ? [...layers].reverse() : layers).map((l) =>
+    stops[l.k].plan3d ? (
+      <Plan3dLayer key={stops[l.k].key} stop={stops[l.k]} width={width} m={plan3dMotion(l.role, view.kind, view.f, plan3dInfo(stops, l.k, l.role, view.kind))} />
+    ) : (
+      <Layer key={stops[l.k].key} stop={stops[l.k]} role={l.role} kind={view.kind} f={view.f} width={width} peer={l.role === 'b' ? stops[view.a] : null} />
+    )
+  );
+}
+
+/** 一个停点的静态画面（动效出错时顶上）：一般的页 = 这一页原样；3D 开场 = 这层楼的原平面图 */
+function StillStop({ stop, width }) {
+  if (!stop) return null;
+  if (!stop.plan3d) return <StillPage page={stop.page} width={width} label={stop.label} />;
+  const url = resolveUrl(stop.plan3d.plan);
+  return (
+    <div data-showroom-still="plan" style={{ position: 'absolute', inset: 0, background: '#F3EEE7' }} className="flex items-center justify-center">
+      {url ? <img src={url} alt="" draggable={false} style={{ maxWidth: '86%', maxHeight: '86%', objectFit: 'contain' }} /> : <div className="text-[#7B593D] text-2xl tracking-[0.2em]">{stop.label}</div>}
     </div>
   );
 }
@@ -367,10 +459,14 @@ function IndexPanel({ stops, current, width, onPick, onClose, music, craftPrevie
 }
 
 export default function ShowroomPlayer({ project, onClose }) {
+  devBreak('player');
   const pages = useMemo(() => exportableSlides(renderDeck(project, { meta: metaOf })), [project]);
   // 内部预览：待审的设计特点也放（只在这次打开有效，下次打开又关上 —— 免得在客人面前忘了关）
   const [craftPreview, setCraftPreview] = useState(false);
-  const stops = useMemo(() => buildStops(pages, project, { craftPreview }), [pages, project, craftPreview]);
+  const allStops = useMemo(() => buildStops(pages, project, { craftPreview }), [pages, project, craftPreview]);
+  // 3D 开场画不出来的楼层：跳过那个停点（以前是整屏只剩米色）。failed3d = 画不出来的停点 key 连成的字串，变了才重排
+  const [failed3d, setFailed3d] = useState('');
+  const stops = useMemo(() => (failed3d ? allStops.filter((st) => !st.plan3d || plan3dState(st.plan3d) !== 'failed') : allStops), [allStops, failed3d]);
   const count = stops.length;
   const vp = useViewport();
   const stageW = Math.min(vp.w, (vp.h * 16) / 9);
@@ -380,12 +476,22 @@ export default function ShowroomPlayer({ project, onClose }) {
   const [chrome, setChrome] = useState(true);
   const [showIndex, setShowIndex] = useState(false);
   const music = useMusic();
+  useKeepAwake();
+  useEscLock();
+  const [escHint, setEscHint] = useState(false);
+  const escAt = useRef(-1e9);
+  const escTimer = useRef(0);
+  useEffect(() => () => clearTimeout(escTimer.current), []);
 
   const target = useRef(0);
   const cur = useRef(0);
   const lastInput = useRef(0);
   const drag = useRef(null);
   const jump = useRef(null);
+  // 滚轮手势：from = 这一下从哪一页开始；active = 还没吸附；last = 上一下滚轮的时间；streamStepped = 这一口气已经翻过一页
+  const wheel = useRef({ from: 0, active: false, last: -1e9, streamStepped: false });
+  const tickFailed = useRef(false);
+  const openedAt = useRef(performance.now());
   const chromeTimer = useRef(0);
   const indexOpen = useRef(false);
   indexOpen.current = showIndex;
@@ -404,7 +510,6 @@ export default function ShowroomPlayer({ project, onClose }) {
   }, [stops]);
 
   const clampPos = useCallback((p) => Math.min(Math.max(p, 0), Math.max(0, count - 1)), [count]);
-  /** 一次手势最多走到当前页的前后一页：讲解时不会一下滑过好几页 */
   /** 当前位置往 dir 方向的那一段过渡要滑多长（「从无到有」慢一些） */
   const weightAt = useCallback(
     (pos, dir) => {
@@ -412,16 +517,6 @@ export default function ShowroomPlayer({ project, onClose }) {
       return a < 0 || a + 1 >= count ? 1 : transitionWeight(transitionKind(stops, a, a + 1));
     },
     [stops, count]
-  );
-  const nudge = useCallback(
-    (raw) => {
-      const base = cur.current;
-      const delta = raw / weightAt(target.current, raw);
-      target.current = clampPos(Math.min(Math.max(target.current + delta, Math.floor(base) - 1), Math.ceil(base) + 1));
-      lastInput.current = performance.now();
-      jump.current = null;
-    },
-    [clampPos, weightAt]
   );
   const goTo = useCallback(
     (k) => {
@@ -444,7 +539,7 @@ export default function ShowroomPlayer({ project, onClose }) {
     let last = performance.now();
     const set = (next) =>
       setView((v) => (v.a === next.a && v.b === next.b && Math.abs(v.f - next.f) < 1e-4 && v.kind === next.kind ? v : next));
-    const tick = (now) => {
+    const step = (now) => {
       const dt = Math.min(64, now - last);
       last = now;
       const j = jump.current;
@@ -455,11 +550,15 @@ export default function ShowroomPlayer({ project, onClose }) {
           cur.current = target.current = j.to;
         } else {
           set({ a: j.from, b: j.to, f: p, kind: 'cut', pos: j.to });
-          raf = requestAnimationFrame(tick);
           return;
         }
       }
-      if (!drag.current && now - lastInput.current > IDLE_SNAP_MS) target.current = snapTarget(target.current, count);
+      if (!drag.current && now - lastInput.current > IDLE_SNAP_MS) {
+        // 滚轮 / 触控板：往一个方向滑过一小段就翻过去（不用滑过半页）；其他（拖动、按键）照旧吸到最近一页
+        const g = wheel.current;
+        target.current = g.active ? snapToward(target.current, g.from, count) : snapTarget(target.current, count);
+        g.active = false;
+      }
       const d = target.current - cur.current;
       // 「从无到有」那段（按键 / 吸附时）走得慢一些
       const w = weightAt(cur.current, d);
@@ -471,6 +570,18 @@ export default function ShowroomPlayer({ project, onClose }) {
       cur.current = Math.abs(d) < 5e-4 ? target.current : cur.current + step;
       const fr = frameAt(cur.current, count);
       set({ ...fr, kind: fr.b == null ? 'cut' : transitionKind(stops, fr.a, fr.b), pos: cur.current });
+    };
+    // 这一帧算错了也不能让画面定住：直接站到目标那一页（静态原图），下一帧照常
+    const tick = (now) => {
+      try {
+        step(now);
+      } catch (err) {
+        if (!tickFailed.current) console.error('[展厅播放] 动画这一帧出错，已直接停到目标页', err);
+        tickFailed.current = true;
+        jump.current = null;
+        cur.current = target.current = snapTarget(target.current, count);
+        set({ a: cur.current, b: null, f: 0, kind: 'cut', pos: cur.current });
+      }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -483,8 +594,15 @@ export default function ShowroomPlayer({ project, onClose }) {
   useEffect(() => onPlan3dProgress(() => setSketchTick((t) => t + 1)), []);
   // 3D 开场的关键帧：一打开就在空闲时开始画（讲品牌那几页的时间够画完）
   useEffect(() => {
-    for (const st of stops) if (st.plan3d) requestPlan3d(st.plan3d);
-  }, [stops]);
+    const failed = () =>
+      allStops
+        .filter((st) => st.plan3d && plan3dState(st.plan3d) === 'failed')
+        .map((st) => st.key)
+        .join('|');
+    for (const st of allStops) if (st.plan3d) requestPlan3d(st.plan3d);
+    setFailed3d(failed());
+    return onPlan3dProgress(() => setFailed3d(failed()));
+  }, [allStops]);
 
   // 角落按钮：动一下鼠标 / 碰一下屏幕就出来，2.5 秒不动就藏起来
   const poke = useCallback(() => {
@@ -511,22 +629,58 @@ export default function ShowroomPlayer({ project, onClose }) {
       if (indexOpen.current) return;
       e.preventDefault();
       const unit = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? window.innerHeight : 1;
-      const dy = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
-      nudge((dy * unit) / WHEEL_UNIT);
+      const vertical = Math.abs(e.deltaY) >= Math.abs(e.deltaX);
+      const px = (vertical ? e.deltaY : e.deltaX) * unit;
+      if (!px) return;
+      const g = wheel.current;
+      const now = performance.now();
+      if (now - g.last > WHEEL_STREAM_MS) g.streamStepped = false; // 新的一口气
+      g.last = now;
+      if (g.streamStepped) return; // 这一口气已经翻过一页：剩下的（连滚、惯性）不再翻
+      if (!g.active) {
+        g.from = Math.round(target.current);
+        g.active = true;
+      }
+      if (isWheelStep(vertical ? e : { deltaMode: e.deltaMode }, px, window.devicePixelRatio)) {
+        // 有刻度的滚轮：一格翻一页
+        g.streamStepped = true;
+        g.active = false;
+        goTo(g.from + Math.sign(px));
+        return;
+      }
+      // 触控板 / 无刻度滚轮：跟手滑，最多到前后一页；停手后滑过一小段就翻过去（tick 里的 snapToward）
+      const moved = px / WHEEL_UNIT / weightAt(target.current, px);
+      target.current = clampPos(Math.min(Math.max(target.current + moved, g.from - 1), g.from + 1));
+      lastInput.current = now;
+      jump.current = null;
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, [nudge]);
+  }, [goTo, clampPos, weightAt]);
 
   // 键盘
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === 'Escape') {
-        if (indexOpen.current) setShowIndex(false);
-        else close();
+        e.preventDefault();
+        if (e.repeat) return; // 按住不放（全屏时长按 Esc = 退出全屏）不算第二次
+        if (indexOpen.current) {
+          setShowIndex(false);
+          return;
+        }
+        // 按两次才退出：讲解时误碰一下不会掉回编辑器
+        const now = performance.now();
+        if (now - escAt.current < ESC_CONFIRM_MS) {
+          close();
+          return;
+        }
+        escAt.current = now;
+        setEscHint(true);
+        clearTimeout(escTimer.current);
+        escTimer.current = setTimeout(() => setEscHint(false), ESC_CONFIRM_MS);
         return;
       }
-      if (indexOpen.current) return;
+      if (indexOpen.current || e.metaKey || e.ctrlKey || e.altKey) return;
       const fwd = ['ArrowDown', 'ArrowRight', 'PageDown', ' ', 'Enter'];
       const back = ['ArrowUp', 'ArrowLeft', 'PageUp'];
       if (fwd.includes(e.key)) goTo(Math.round(target.current) + 1);
@@ -544,6 +698,7 @@ export default function ShowroomPlayer({ project, onClose }) {
   const onPointerDown = (e) => {
     poke();
     if (showIndex || e.button > 0) return;
+    wheel.current.active = false;
     e.currentTarget.setPointerCapture?.(e.pointerId);
     drag.current = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now(), start: target.current, axis: null, v: 0, lx: e.clientX, ly: e.clientY, lt: performance.now() };
     jump.current = null;
@@ -572,6 +727,12 @@ export default function ShowroomPlayer({ project, onClose }) {
     const d = drag.current;
     if (!d || d.id !== e.pointerId) return;
     drag.current = null;
+    // 点一下（没拖动、很快放开）：左边四分之一 = 上一页，其余 = 下一页
+    // （刚打开的半秒内不算：连点两下「开始播放」，第二下不该把第一页翻过去）
+    if (!d.axis && e.type === 'pointerup' && performance.now() - d.t < TAP_MS && d.t - openedAt.current > 500) {
+      goTo(Math.round(target.current) + (e.clientX / Math.max(1, window.innerWidth) < TAP_BACK_ZONE ? -1 : 1));
+      return;
+    }
     if (d.axis) {
       // 快速一甩：不到半页也翻过去
       const fling = d.v * 220;
@@ -609,8 +770,6 @@ export default function ShowroomPlayer({ project, onClose }) {
     );
   }
 
-  const layers = [{ role: 'a', k: view.a }];
-  if (view.b != null) layers.push({ role: 'b', k: view.b });
   const progress = count > 1 ? clamp01(view.pos / (count - 1)) : 1;
 
   return (
@@ -622,31 +781,20 @@ export default function ShowroomPlayer({ project, onClose }) {
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
+      role="dialog"
+      aria-modal="true"
+      aria-label="展厅播放"
       data-testid="showroom"
+      data-showroom-mode="player"
       data-pos={view.pos.toFixed(3)}
+      data-count={count}
+      data-stop={stops[Math.min(count - 1, Math.max(0, Math.round(view.pos)))]?.key}
     >
       <div style={{ position: 'absolute', left: (vp.w - stageW) / 2, top: (vp.h - stageH) / 2, width: stageW, height: stageH, overflow: 'hidden' }}>
-        {/* 进设计特点：原页（不画底色）盖在设计特点页上面 —— 字淡掉时还在纸面上，效果图由下面那层接手移过去 */}
-        {(view.kind === 'craft' ? [...layers].reverse() : layers).map((l) =>
-          stops[l.k].plan3d ? (
-            <Plan3dLayer
-              key={stops[l.k].key}
-              stop={stops[l.k]}
-              width={stageW}
-              m={plan3dMotion(l.role, view.kind, view.f, plan3dInfo(stops, l.k, l.role, view.kind))}
-            />
-          ) : (
-            <Layer
-              key={stops[l.k].key}
-              stop={stops[l.k]}
-              role={l.role}
-              kind={view.kind}
-              f={view.f}
-              width={stageW}
-              peer={l.role === 'b' ? stops[view.a] : null}
-            />
-          )
-        )}
+        {/* 动效这一层出错（线稿画布、3D 开场…）：这一页退回静态原图，翻页照常；翻到别的页再试一次动效 */}
+        <Boundary resetKey={`${view.a}|${view.b ?? ''}`} what="动效" fallback={<StillStop stop={stops[Math.min(count - 1, Math.max(0, Math.round(view.pos)))]} width={stageW} />}>
+          <StageLayers stops={stops} view={view} width={stageW} />
+        </Boundary>
       </div>
 
       {/* 进度：底部一条很细的线 */}
@@ -670,10 +818,12 @@ export default function ShowroomPlayer({ project, onClose }) {
         >
           <Maximize size={16} />
         </ChromeButton>
-        <ChromeButton onClick={close} title="退出展厅播放（Esc）">
+        <ChromeButton onClick={close} title="退出展厅播放（或按两次 Esc）">
           <X size={16} />
         </ChromeButton>
       </div>
+
+      {escHint && !showIndex && <EscHint />}
 
       {showIndex && (
         <IndexPanel

@@ -10,7 +10,7 @@ import { renderDeck, exportableSlides } from '../engine/deck.js';
 import { buildPptx } from '../engine/pptx/writer.js';
 import { langOf } from '../engine/lang.js';
 import { FONT_PACK } from '../theme.js';
-import { metaOf, loadForPptx, resolveUrl, isAssetSrc } from '../store/assets.js';
+import { metaOf, loadForPptx, missingImagesIn } from '../store/assets.js';
 import { exportBundle } from '../lib/bundle.js';
 import { downloadBlob } from '../lib/download.js';
 import { pptxFileName, bundleFileName, formatBytes } from '../lib/format.js';
@@ -20,8 +20,7 @@ import {
 import { Modal, ProgressBar, cls } from '../lib/ui.jsx';
 import { Segmented } from './editor/ui.jsx';
 
-/** 这一页有几张项目图片在本机找不到 */
-const missingImages = (s) => (s.els || []).filter((el) => el.t === 'img' && el.src && isAssetSrc(el.src) && !resolveUrl(el.src)).length;
+const missingImages = missingImagesIn;
 
 /** writer 的提示里带着 'asset:…' 引用，换成更好懂的说法 */
 const friendlyWriterWarning = (w) => String(w).replace(/asset:[\w-]+/g, '项目图片').replace(/\/template\/[\w.-]+/g, '模板图片');

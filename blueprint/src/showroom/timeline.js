@@ -38,7 +38,7 @@ export function dayNightPair(a, b) {
  * @param {object[]} pages    exportableSlides(renderDeck(project, { meta }))
  * @param {object}   project
  * @param {{ craftPreview?:boolean }} opts  craftPreview = 内部预览：待审的设计特点也放（卡片上标「待审」）
- * @returns {{ key, page, slide, segment:number, phase:'day'|'night'|null, label:string, section:string, craft? }[]}
+ * @returns {{ key, page, slide, segment:number, phase:'day'|'night'|null, label:string, section:string, craft?, notes? }[]}
  *   page = 播放用的页（满版效果图页多了说明那一栏）；craft = 设计特点停点 { entries, from }（from = 前一个停点的序号）
  */
 export function buildStops(pages, project, opts = {}) {
@@ -81,12 +81,14 @@ export function buildStops(pages, project, opts = {}) {
     if (paired) last.inPair = true;
     else if (!sameSlide) segment += 1;
     const tod = slide?.kind === 'view' ? splitTimeOfDay(slide.subtitle).tod : null;
-    const extra = isFullView(pg) && slide ? bViewFullNotes(ctx, slide).els : [];
+    const notes = isFullView(pg) && slide ? bViewFullNotes(ctx, slide) : null;
+    const extra = notes?.els || [];
     const page = extra.length ? { ...pg, els: [...pg.els, ...extra] } : pg;
     stops.push({
       key: pg.key,
       page,
       hero: heroIndex(page), // 换页进来时「线稿 → 上色 → 原图」的那张效果图
+      ...(notes?.total ? { notes: { shown: notes.shown, total: notes.total, cut: notes.cut } } : {}), // 播放前检查用：说明栏放下了几条
       slide,
       segment,
       phase: tod,

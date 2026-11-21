@@ -3,6 +3,7 @@
 
 import { analyseSketch, SKETCH_W } from './sketch.js';
 import { placeImage } from '../engine/spec.js';
+import { checkUpdate } from '../lib/appVersion.js';
 
 const cache = new Map(); // key → { status:'pending'|'ready'|'error', an?, src? }
 const listeners = new Set();
@@ -24,6 +25,8 @@ function getWorker() {
       waiting.delete(e.data.id);
       done?.(e.data);
     };
+    // 后台线程的程序载不进来：多半是上线了新版、旧的分片不在了 → 去看一眼版本号，界面上会请设计师刷新
+    worker.onerror = () => checkUpdate();
   } catch {
     worker = false; // 不支持 Worker：在主线程算
   }

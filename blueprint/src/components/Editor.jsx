@@ -10,6 +10,8 @@ import MaterialsPanel from './MaterialsPanel.jsx';
 import InfoPanel from './InfoPanel.jsx';
 import ExportDialog from './ExportDialog.jsx';
 import ShowroomPlayer from './showroom/ShowroomPlayer.jsx';
+import ShowroomGuard from './showroom/ShowroomBoundary.jsx';
+import ShowroomPreflight from './showroom/ShowroomPreflight.jsx';
 import DollhousePanel from './DollhousePanel.jsx';
 import MoodBoard from '../moodboard/MoodBoard.jsx';
 import { getProject } from '../store/db.js';
@@ -145,6 +147,7 @@ function Workspace({ initial, settings, notify, onOpenSettings, onExit }) {
   // 展厅播放：#/p/<id>/show（浏览器后退 = 退出播放；刷新后仍在播放，只是要再按一次全屏）
   const isShowHash = () => /^#\/p\/[^/?#]+\/show\b/.test(window.location.hash || '');
   const [showroom, setShowroom] = useState(isShowHash);
+  const [preflight, setPreflight] = useState(false); // 播放前检查：点「展厅播放」每次都先出这张清单
   const pushedShow = useRef(false);
   useEffect(() => {
     const onHash = () => setShowroom(isShowHash());
@@ -152,7 +155,8 @@ function Workspace({ initial, settings, notify, onOpenSettings, onExit }) {
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
   const openShowroom = useCallback(() => {
-    // 全屏必须在点击里直接请求（浏览器只认用户手势）
+    setPreflight(false);
+    // 全屏必须在点击里直接请求（浏览器只认用户手势）——「开始播放」那一下
     document.documentElement.requestFullscreen?.().catch(() => {});
     if (!isShowHash()) {
       window.history.pushState(null, '', `#/p/${encodeURIComponent(projectId)}/show`);
@@ -296,7 +300,9 @@ function Workspace({ initial, settings, notify, onOpenSettings, onExit }) {
   }
 
   return (
-    <div className="h-[100dvh] flex flex-col overflow-hidden bg-bp-paper">
+    <>
+    {/* 播放时编辑器整个停用（inert）：它的快捷键、焦点都收不到 —— 以前开着「调整版面」去播放，方向键会被它截走，还偷偷挪图 */}
+    <div className="h-[100dvh] flex flex-col overflow-hidden bg-bp-paper" inert={showroom ? '' : undefined}>
       <Header
         onOpenSettings={onOpenSettings}
         hasKey={!!settings?.apiKey}
@@ -307,7 +313,10 @@ function Workspace({ initial, settings, notify, onOpenSettings, onExit }) {
           saveState,
           onRetrySave: flush,
           onExport: () => setShowExport(true),
-          onShow: openShowroom,
+          onShow: () => {
+            commitDrafts(); // 正在打的字先收进项目，检查的才是最新的
+            setPreflight(true);
+          },
           canUndo,
           canRedo,
           onUndo: undo,
@@ -397,7 +406,17 @@ function Workspace({ initial, settings, notify, onOpenSettings, onExit }) {
         )}
       </main>
 
-      {showroom && <ShowroomPlayer project={project} onClose={closeShowroom} />}
+      {preflight && !showroom && (
+        <ShowroomPreflight
+          project={project}
+          onStart={openShowroom}
+          onClose={() => setPreflight(false)}
+          onGoTab={(tabId, slideId) => {
+            setPreflight(false);
+            goTab(tabId, slideId);
+          }}
+        />
+      )}
 
       {showExport && (
         <ExportDialog
@@ -411,5 +430,12 @@ function Workspace({ initial, settings, notify, onOpenSettings, onExit }) {
         />
       )}
     </div>
+
+    {showroom && (
+      <ShowroomGuard project={project} onClose={closeShowroom}>
+        <ShowroomPlayer project={project} onClose={closeShowroom} />
+      </ShowroomGuard>
+    )}
+    </>
   );
 }
