@@ -113,6 +113,8 @@
     - 速度：64 张全部两两比约 9 秒；250 张新照片约 3 分钟
   - **`tools/visi/retire.mjs`**：老板「复制清单」那段字存成文字档 → 溪岸真实案例直接标 `retired: 'owner'`（`photos-sail.js` 自动放进 `MB.RETIRED_BUILTIN`）；手写的内置照片列出来手动移
   - 测试：`node --test tools/visi/test/*.test.mjs` 41 项（新加 `same-shot.test.mjs` 4 项）；`node --test tools/caselib/test/` 152 项（要先在 `invite/` 跑 `npm ci`）
+- **2026-11-20 已合并**：用户选「合并 #97，一次全上」→ 2a、2b、2c、3 上半和这些工具都在 main 了（#91 / #94 / #96 关掉，内容已并进 #97）
+  - 合并当下 Vercel 一天 100 次的额度用完；**2026-11-21 00:16 UTC 用 GitHub Actions「测试 + 上线」→ Run workflow（main、`visi`）补出**，正式版是 #97 了（取了线上的 `photos-sail.js` 核对过）
 - **收到 zip 之后照这个做**（下一个对话，开场白：「读 `.claude/plans/visi.md`，做体检计划第 3 阶段下半」+ 附上 zip）：
   1. 解压到 scratchpad → `node tools/visi/import-builtin.mjs <资料夹> --dry-run` → 没问题再正式跑
   2. `node tools/visi/same-shot.mjs` → 看「要看一眼」的配对 → `--write`
