@@ -10,6 +10,9 @@ const OLD_LIBRARY = 'sail-library';
 const OLD_BOARDS = 'sail-moodboard';
 const DONE_KEY = 'ukir.migrated.v1';
 
+/** 旧版的库：「清除本机全部资料」时一起删（不然下次打开又会被搬回来） */
+export const LEGACY_DB_NAMES = [OLD_LIBRARY, OLD_BOARDS];
+
 /** 打开已存在的库；不存在时不创建（升级回调里中止），返回 null */
 function openExisting(name) {
   return new Promise((resolve) => {

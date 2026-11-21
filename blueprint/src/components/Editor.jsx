@@ -23,6 +23,7 @@ import { designCoverSlideId, projectStats, ensureDesignCoverSlide, upgradeProjec
 import { sectionLabel } from '../engine/deck.js';
 import { deckChapters } from '../engine/b/company.js';
 import { cls } from '../lib/ui.jsx';
+import { holdLock, EDIT_PREFIX } from '../lib/locks.js';
 
 export const TABS = [
   { id: 'pages', label: '页面', icon: LayoutTemplate },
@@ -138,6 +139,8 @@ function Workspace({ initial, settings, notify, onOpenSettings, onExit }) {
     [notify]
   );
   const { project, onChange, undo, redo, canUndo, canRedo, saveState, flush, hasUnsaved } = useProjectState(initial, { onSaveError, preserve: keepGenerated });
+  // 告诉别的分页「这个项目正在编辑」：首页自动清图片时跳过它（撤销历史里可能还用着换掉的图）
+  useEffect(() => holdLock(`${EDIT_PREFIX}${projectId}`, 'shared'), [projectId]);
 
   const [tab, setTab] = useState('pages');
   const [visited, setVisited] = useState(() => new Set(['pages']));
@@ -422,6 +425,7 @@ function Workspace({ initial, settings, notify, onOpenSettings, onExit }) {
         <ExportDialog
           project={project}
           notify={notify}
+          onFlush={flush}
           onClose={() => setShowExport(false)}
           onGoTab={(tabId, slideId) => {
             setShowExport(false);

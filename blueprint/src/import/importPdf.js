@@ -3,11 +3,12 @@
 
 import * as pdfjs from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import { extractPdf, placementTransform, RENDER_AREA } from './pdfExtract.js';
+import { extractPdf, placementTransform, RENDER_AREA, abortError } from './pdfExtract.js';
 import { PDFJS_DOC_OPTIONS } from './pdfjsAssets.js';
 import { analyzePages } from './analyze.js';
 import { newProject, assembleDeck, uid, clientLine } from '../engine/model.js';
 import { storeBlob } from '../store/assets.js';
+import { deleteAssetsOf } from '../store/db.js';
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -154,10 +155,11 @@ const baseName = (name) => String(name || '').replace(/^.*[\\/]/, '').replace(/\
 
 /**
  * @param {File} file  设计师方案 PDF
- * @param {{ onProgress?: (stage:'read'|'extract'|'save'|'layout', done:number, total:number) => void }} [opts]
+ * @param {{ onProgress?: (stage:'read'|'extract'|'save'|'layout', done:number, total:number) => void, signal?: AbortSignal }} [opts]
+ *   signal：设计师按「取消」→ 做完手上这一页 / 这张图就停，抛 AbortError，已经存进去的图片清掉
  * @returns {Promise<object>} Project（engine/model.js），图片已存入 IndexedDB，slides 已排好整套
  */
-export async function importPdfFile(file, { onProgress } = {}) {
+export async function importPdfFile(file, { onProgress, signal } = {}) {
   if (!file) throw new Error('请选择一个 PDF 文件。');
   if (file.size > MAX_FILE_BYTES) {
     throw new Error(`PDF 有 ${Math.round(file.size / 1024 / 1024)} MB，太大了 —— 建议导出时压缩图片，或按楼层分成几份再导入。`);
@@ -170,7 +172,12 @@ export async function importPdfFile(file, { onProgress } = {}) {
     }
   };
 
+  const check = () => {
+    if (signal?.aborted) throw abortError();
+  };
+
   // 1) 读文件
+  check();
   progress('read', 0, 1);
   let data;
   try {
@@ -194,10 +201,13 @@ export async function importPdfFile(file, { onProgress } = {}) {
       },
       renderThumb: renderPageThumb,
       docOptions: PDFJS_DOC_OPTIONS, // 没嵌入字体的中文 PDF 靠 CMap 才读得出字
+      signal,
     });
   } catch (err) {
+    if (err?.name === 'AbortError') throw err;
     throw friendlyError(err);
   }
+  check();
   if (!raw.meta.numPages || !raw.pages.length) throw new Error('这个 PDF 没有页面。');
 
   const analysis = analyzePages(raw, { fileName: file.name });
@@ -224,65 +234,77 @@ export async function importPdfFile(file, { onProgress } = {}) {
     if (f.planKey) needed.add(f.planKey);
   }
   const toStore = [...needed].filter((k) => raw.blobs.has(k));
-  const thumbs = raw.pages.filter((p) => p.thumb);
-  const total = toStore.length + thumbs.length;
-  let done = 0;
-  progress('save', 0, total);
-
-  const srcOf = new Map();
-  for (const key of toStore) {
-    const d = dims.get(key) || {};
-    srcOf.set(key, await storeBlob(raw.blobs.get(key), { projectId: project.id, w: d.w, h: d.h }));
-    progress('save', ++done, total);
+  try {
+    return await storeAndLayout();
+  } catch (err) {
+    // 取消 / 存不进去（多半是空间不足）：这次存进去的图片清掉，不留孤儿
+    await deleteAssetsOf(project.id).catch(() => {});
+    throw err;
   }
-  const thumbOf = new Map();
-  for (const p of thumbs) {
-    thumbOf.set(p.n, await storeBlob(p.thumb, { projectId: project.id }));
-    progress('save', ++done, total);
+
+  async function storeAndLayout() {
+    const thumbs = raw.pages.filter((p) => p.thumb);
+    const total = toStore.length + thumbs.length;
+    let done = 0;
+    progress('save', 0, total);
+
+    const srcOf = new Map();
+    for (const key of toStore) {
+      check();
+      const d = dims.get(key) || {};
+      srcOf.set(key, await storeBlob(raw.blobs.get(key), { projectId: project.id, w: d.w, h: d.h }));
+      progress('save', ++done, total);
+    }
+    const thumbOf = new Map();
+    for (const p of thumbs) {
+      check();
+      thumbOf.set(p.n, await storeBlob(p.thumb, { projectId: project.id }));
+      progress('save', ++done, total);
+    }
+    raw.blobs.clear();
+
+    // 4) 楼层 / 材料 / 效果图页
+    progress('layout', 0, 1);
+    const floorId = new Map();
+    project.floors = analysis.floors.map((f) => {
+      const id = uid('f');
+      floorId.set(f.key, id);
+      return { id, zh: f.zh, en: f.en, image: srcOf.get(f.imageKey) || null, ...(f.planKey && srcOf.get(f.planKey) ? { plan: srcOf.get(f.planKey) } : {}) };
+    });
+    const materialId = new Map();
+    project.materials = analysis.materials.map((m) => {
+      const id = uid('m');
+      materialId.set(m.key, id);
+      return { id, name: m.name, code: m.code, image: srcOf.get(m.imageKey) || null, pending: !!m.pending };
+    });
+
+    const views = analysis.views.map((v) => ({
+      id: uid('s'),
+      kind: 'view',
+      enabled: true,
+      floorId: v.floorKey ? floorId.get(v.floorKey) || null : null,
+      layout: 'auto',
+      image: srcOf.get(v.imageKey) || null,
+      room: v.room,
+      roomEn: v.roomEn,
+      subtitle: v.subtitle,
+      materials: v.materials.filter((m) => materialId.has(m.materialKey)).map((m) => ({ role: m.role, materialId: materialId.get(m.materialKey) })),
+      notes: v.notes.map((n) => ({ label: n.label, text: n.text })),
+      sourcePage: v.page,
+    }));
+    // 版式留 'auto'：满版 / 图文由整套的排版计划决定（engine/b/design.js planViews）
+
+    // 方案页：没有楼层的视角在前（不加楼层页），然后每层「楼层页 + 该层视角」
+    const designSlides = views.filter((v) => !v.floorId);
+    for (const f of project.floors) {
+      designSlides.push({ id: uid('s'), kind: 'floor', floorId: f.id, enabled: true });
+      designSlides.push(...views.filter((v) => v.floorId === f.id));
+    }
+    project.slides = assembleDeck(designSlides);
+    project.pages = analysis.pages.map((p) => ({ n: p.n, kind: p.kind, title: p.title || '', thumb: thumbOf.get(p.n) || null }));
+    project.updatedAt = Date.now();
+    if (importWarnings.length) project.importWarnings = importWarnings;
+    progress('layout', 1, 1);
+    return project;
   }
-  raw.blobs.clear();
-
-  // 4) 楼层 / 材料 / 效果图页
-  progress('layout', 0, 1);
-  const floorId = new Map();
-  project.floors = analysis.floors.map((f) => {
-    const id = uid('f');
-    floorId.set(f.key, id);
-    return { id, zh: f.zh, en: f.en, image: srcOf.get(f.imageKey) || null, ...(f.planKey && srcOf.get(f.planKey) ? { plan: srcOf.get(f.planKey) } : {}) };
-  });
-  const materialId = new Map();
-  project.materials = analysis.materials.map((m) => {
-    const id = uid('m');
-    materialId.set(m.key, id);
-    return { id, name: m.name, code: m.code, image: srcOf.get(m.imageKey) || null, pending: !!m.pending };
-  });
-
-  const views = analysis.views.map((v) => ({
-    id: uid('s'),
-    kind: 'view',
-    enabled: true,
-    floorId: v.floorKey ? floorId.get(v.floorKey) || null : null,
-    layout: 'auto',
-    image: srcOf.get(v.imageKey) || null,
-    room: v.room,
-    roomEn: v.roomEn,
-    subtitle: v.subtitle,
-    materials: v.materials.filter((m) => materialId.has(m.materialKey)).map((m) => ({ role: m.role, materialId: materialId.get(m.materialKey) })),
-    notes: v.notes.map((n) => ({ label: n.label, text: n.text })),
-    sourcePage: v.page,
-  }));
-  // 版式留 'auto'：满版 / 图文由整套的排版计划决定（engine/b/design.js planViews）
-
-  // 方案页：没有楼层的视角在前（不加楼层页），然后每层「楼层页 + 该层视角」
-  const designSlides = views.filter((v) => !v.floorId);
-  for (const f of project.floors) {
-    designSlides.push({ id: uid('s'), kind: 'floor', floorId: f.id, enabled: true });
-    designSlides.push(...views.filter((v) => v.floorId === f.id));
-  }
-  project.slides = assembleDeck(designSlides);
-  project.pages = analysis.pages.map((p) => ({ n: p.n, kind: p.kind, title: p.title || '', thumb: thumbOf.get(p.n) || null }));
-  project.updatedAt = Date.now();
-  if (importWarnings.length) project.importWarnings = importWarnings;
-  progress('layout', 1, 1);
-  return project;
 }

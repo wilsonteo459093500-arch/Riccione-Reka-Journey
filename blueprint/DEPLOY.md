@@ -57,8 +57,13 @@ Vercel 的 **Deployment Protection → Vercel Authentication**：
 
 ## 数据存在哪里
 
-项目和图片存在**各自电脑浏览器的 IndexedDB** 里（清浏览器数据会清掉）。
-换电脑 / 发给同事：导出时点「下载项目备份」（含 Material Board 画板），对方在首页「导入项目备份」即可。
+项目和图片存在**各自电脑浏览器的 IndexedDB** 里（清浏览器数据会清掉）。首页「资料安全」写着浏览器答没答应长期保存、
+每个项目上次备份几天前（改过、7 天没备份变黄）。
+- 平时：首页「全部备份」→「备份到资料夹」（Chrome / Edge；第一次选一个资料夹，建议是会自动同步的 Google Drive / OneDrive 资料夹）
+- 换电脑 / 交还电脑：「打包成一个文件」，新电脑首页「导入备份」；单个项目也可以在卡片上备份、发给同事
+- 交还电脑：首页最下面「清除本机全部资料」
+
+`sail-render.vercel.app` 在 Vercel 上 2026-08-14 起已经自动转到 `ukir-studio.vercel.app`（307），只发 `ukir-studio` 这个网址给设计师。
 
 ## 常见问题
 

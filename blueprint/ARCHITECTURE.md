@@ -33,7 +33,8 @@ Project ──engine/deck.js renderDeck()──▶ 渲染页 [{ bg, els }]（eng
 | `src/engine/deck.js` | `renderDeck(project, { meta })` → 渲染页（每页的提醒、缺英文清单）；`sectionLabel(section, deckChapters(project))` = 编辑器里的章节名（页面列表、章节开关），编号与目录一致 |
 | `src/engine/adjust.js` | 手动调整版面：`groupsOf(page)`（一页上可以调的块 = `edit.field` 相同的元素）、`applyAdjust(page, adjust, pageIndex)`（文字块 `{dx,dy,k}`，照片 `{box, view}` → 显式 `crop`）、`setAdjust` / `clearAdjust`；界面在 `components/editor/AdjustLayer.jsx` |
 | `src/engine/pptx/` | `buildPptx(slides, { loadImage })` → .pptx（JSZip，浏览器 / Node 通用） |
-| `src/store/db.js` | IndexedDB：projects / assets |
+| `src/store/db.js` | IndexedDB：projects / assets；`listAssetInfo`（不读图片内容）/ `deleteAssetRecords`；`persistenceState` / `requestPersistence`（长期保存）；`closeDb`（删库前） |
+| `src/store/local.js` | 这台电脑的小设定（IndexedDB `ukir-local`）：「全部备份」选过的资料夹把手 |
 | `src/store/assets.js` | `'asset:<id>'` ↔ Blob / object URL / 尺寸；`storeBlob`、`preloadProjectAssets`、`resolveUrl`、`metaOf`、`loadForPptx`、`toInlineImage` |
 | `src/ai/` | Gemini 客户端（`gemini.js`）、设置（`settings.js`）、标题润色（`polish.js`）、AI 翻译（`translate.js`）、3D 立体图（`dollhouse.js`：图纸转图片、框选范围、材质样本、楼层 / 提案页的纯函数；`plan3d.js`：存在楼层上的坐标 / 视角 / 贴图、AI 框图的两次看图、出图参数） |
 | `src/plan3d/` | 3D 户型图的核心（ES5、无依赖，以后原样搬到 VISI）：几何模型 `geometry.js`、场景 `scene.js`、画法 `paint.js`、配色 `palette.js`、编辑器的纯函数 `edit.js` / `settle.js`、整理 AI 回复 `detect.js`、AI 框图提示词 `prompt.js` |
@@ -41,7 +42,7 @@ Project ──engine/deck.js renderDeck()──▶ 渲染页 [{ bg, els }]（eng
 | `src/showroom/` | 展厅播放（纯函数，Node 可测）：`timeline.js` 把导出的那套页排成停点（白天 / 夜晚配对用 `import/labels.js splitTimeOfDay`；满版页叠说明用 `b/design.js bViewFullNotes`）；`motion.js` 滚动位置 → 每层 / 每个元素的透明度、位移、效果图推近（铁律：停点上一切原样）；`sketch.js`「从无到有」（效果图 → 线稿边缘 + 上色先后，`sketchFrame` 合成一帧，上色完成 = 原图逐像素相同），`sketch.worker.js` 在背景线程分析，`sketchCache.js` 按版面裁切取像素、缓存；`craft.js` 房间设计特点：词库（与 `cabinet-craft.md` 一字不差，`test/craft.test.mjs` 对）+ `detectCrafts(slide)` 只从这一页的图纸文字认（带原文、不猜、认否定）+ `playableCrafts`（勾过 `slide.crafts` + 老板审过才播；`timeline.js withCrafts` 在这一段后面插设计特点停点，页面是 `b/design.js bCraftPage`：效果图整张在左、右边每张卡 = 名称 · 题眼 · 特点 · 优势；过渡 `'craft'` = `motion.js morphRects` 把效果图从原页的框移过去，两头和两页原样一模一样）；编辑器里勾选在 `components/editor/CraftSection.jsx`；`build3d.js` 3D 户型开场的关键帧场景（墙升起、物件分组出现，镜头不动：每帧 build 完整场景再按 id 过滤）与房间名对应，`build3dCache.js` 空闲时一帧帧画到离屏画布、缓存。界面在 `components/showroom/ShowroomPlayer.jsx`（`SlideCanvas` 的 `elStyle` 加动效；路由 `#/p/<id>/show`）。体检第 1 阶段（2026-11-21）加的：`health.js` 播放前检查的规则（复用导出前检查 + 说明栏放不下 + 3D 画不出来），清单画面 `ShowroomPreflight.jsx`；`ShowroomBoundary.jsx` 出错不空白（动效层 → 静态原图；播放器 → 最简单的翻页器）；`motion.js` 的 `isWheelStep` / `snapToward`（滚轮一格翻一页、滑过一小段就翻）；播放时编辑器 `inert` + 播放器 `role="dialog"`（编辑器的快捷键都认这个）；屏幕常亮（Wake Lock）、Esc 两次。新版上线提示刷新：`vite.config.js` 每次构建写 `__BUILD_ID__` 和 `dist/version.json`，`lib/appVersion.js` 定时比对。浏览器测试 `test/browser/showroom.mjs`（`npm run test:browser`，上线流程里也跑） |
 | `src/moodboard/` | Material Board（移植自旧版 UKIR STUDIO，只保留 material board 功能）；`migrate.js` = 同网址时把旧版材质库 / 画板搬过来 |
 | `src/components/` | 界面：首页 / 编辑器 / 检查器 / 材料清单 / 导出 / 设置 / 独立画板（`BoardsPage.jsx`） |
-| `src/lib/` | 编辑器状态（`useProjectState.js`：撤销重做、带版本号的自动保存）、项目备份（`bundle.js`，含画板）、复制 / 删除项目 |
+| `src/lib/` | 编辑器状态（`useProjectState.js`：撤销重做、带版本号的自动保存）、项目备份（`bundle.js`，含画板）、复制 / 删除项目。体检第 4 阶段「资料不丢」（2026-11-21）：`bundle.js` 另外认两种备份档（Material Board 画板 + 材质库 `boards-backup.json`；全部打成一个文件 `ukir-all.json`），`openBackupFile` → `restoreBundle(opened, { mode: 'keep' \| 'update' \| 'copy' })`（这台电脑上没有 → 照原项目 id；有 → 首页问「更新原项目 / 另存一份」）；`backupLog.js` 备份记录（localStorage，每个项目备份的是第几版 `rev`）+ 7 天提醒的规则；`backupAll.js` 单个项目下载、「全部备份到资料夹」（File System Access，只重写改过的）、打包成一个文件、恢复；`cleanup.js` 自动清掉没人用的图片 / 画板（1 小时内存的、正在编辑的项目、有人在导入 / 恢复时都不清）；`locks.js` 分页之间打招呼（Web Locks：`ukir-tab:*` 每个分页、`ukir-edit:<项目>` 编辑器开着、`ukir-write` 导入 / 恢复中）；`wipe.js`「清除本机全部资料」（别的分页开着就不删）。界面在 `components/home/`（`DataPanel` 资料安全、`RestoreDialog`、`WipeDialog`），浏览器测试 `test/browser/data.mjs` |
 | `public/template/` | 公司页照片（`b/` = 品牌画册的照片、深色 logo、Instagram 二维码） |
 | `test/` | `npm test`：纯函数与导出结构测试（Node，无需浏览器） |
 
@@ -59,7 +60,7 @@ Project ──engine/deck.js renderDeck()──▶ 渲染页 [{ bg, els }]（eng
 - **存图**：`storeBlob(blob, { projectId })` → `'asset:<id>'`；同步读：`resolveUrl(src)`（预览）、`metaOf(src)`（尺寸）。
 - **提示**：`notify({ type: 'ok' | 'warn' | 'error', text })`。
 - **AI 设置**：`settings`（`ai/settings.js`）；没 key 时调用 `onOpenSettings()`。
-- `importPdfFile(file, { onProgress(stage, done, total) })` → `Project`（已存好全部图片、已排好整套页面）。
+- `importPdfFile(file, { onProgress(stage, done, total), signal })` → `Project`（已存好全部图片、已排好整套页面）。`signal` 取消 → 做完手上这一页就停、抛 `AbortError`，已存的图片清掉；失败也一样清。
 - `<MoodBoard project settings notify onOpenSettings onUseAsCover={async (blob, meta) => …} />`
   —— `meta = { source: 'board' | 'flatlay' | 'upload', orientation: 'portrait' | 'landscape' | 'square' }`；
   MoodBoard 会 await 它并自己弹成功 / 失败提示（壳层出错直接抛）。封面上 Board 整张放在右侧，任何比例都不裁。

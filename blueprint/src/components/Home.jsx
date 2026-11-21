@@ -1,17 +1,30 @@
-// 首页：拖入方案 PDF（或点击 / 粘贴）→ 导入；独立 Material Board 入口；四步说明；最近项目（打开 / 复制 / 删除）；存储用量；导入项目备份
+// 首页：拖入方案 PDF（或点击 / 粘贴）→ 导入；独立 Material Board 入口；四步说明；最近项目（打开 / 备份 / 复制 / 删除）；
+// 「资料安全」（体检第 4 阶段）：长期保存开没开、本机用量、全部备份（资料夹 / 一个文件）、导入备份、7 天没备份提醒、
+// 自动清掉没人用的图片、清除本机全部资料
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  FileUp, FileText, Copy, Trash2, Loader2, ArchiveRestore, HardDrive, ScanSearch, Stamp, Download, ImageOff, ArrowRight, LayoutGrid,
+  FileUp, FileText, Copy, Trash2, Loader2, ScanSearch, Stamp, Download, ImageOff, ArrowRight, LayoutGrid, Archive,
 } from 'lucide-react';
 import Header from './Header.jsx';
 import ImportDialog from './ImportDialog.jsx';
-import { listProjects, saveProject, storageEstimate } from '../store/db.js';
+import DataPanel from './home/DataPanel.jsx';
+import RestoreDialog from './home/RestoreDialog.jsx';
+import WipeDialog from './home/WipeDialog.jsx';
+import { listProjects, storageEstimate, persistenceState, requestPersistence } from '../store/db.js';
 import { preloadProjectAssets, resolveUrl } from '../store/assets.js';
 import { clientLine } from '../engine/model.js';
 import { projectThumbSrc, projectStats } from '../lib/project.js';
 import { duplicateProject, removeProjectEverywhere } from '../lib/projectOps.js';
-import { importBundle, discardProjectData } from '../lib/bundle.js';
+import { openBackupFile, restoreBoardsBackup, boardsChangedAt } from '../lib/bundle.js';
+import {
+  folderSupported, savedFolder, pickFolder, folderWritable, backupAllToFolder, backupAllToOneFile, backupAllAsDownloads,
+  downloadProjectBackup, restoreProjectBackup,
+} from '../lib/backupAll.js';
+import {
+  readBackupLog, writeBackupLog, onBackupLogChanged, pruneLog, backupStatus, boardsBackupStatus, dueProjects, BACKUP_LOG_KEY,
+} from '../lib/backupLog.js';
+import { cleanUpStorage } from '../lib/cleanup.js';
 import { waitForSaves } from '../lib/useProjectState.js';
 import { timeAgo, formatBytes } from '../lib/format.js';
 import { ConfirmDialog, cls } from '../lib/ui.jsx';
@@ -36,16 +49,29 @@ export default function Home({ notify, onOpenProject, onOpenBoards, onOpenSettin
   const [confirmDelete, setConfirmDelete] = useState(null); // project
   const [busy, setBusy] = useState(null); // { id, kind:'copy'|'delete', text? }
   const [restoring, setRestoring] = useState(null); // null | '读取中…' | 'n / N'
+  const [restoreAsk, setRestoreAsk] = useState(null); // 打开的备份档：要设计师选「更新 / 另存」
+  const [log, setLog] = useState(readBackupLog);
+  const [persist, setPersist] = useState(null); // 'on' | 'off' | 'unsupported'
+  const [cleaned, setCleaned] = useState(null); // 这次自动清掉了多少
+  const [folder, setFolder] = useState(null); // 上次选的备份资料夹
+  const [backing, setBacking] = useState(null); // 'folder:<进度>' | 'file:<进度>'
+  const [boardsChanged, setBoardsChanged] = useState(0); // 独立 Material Board / 材质库最近改动
+  const [wipeOpen, setWipeOpen] = useState(false);
   const pdfInput = useRef(null);
   const zipInput = useRef(null);
   const blocked = useRef(false); // 导入 / 恢复中不接新文件
-  blocked.current = !!importFile || !!restoring;
+  blocked.current = !!importFile || !!restoring || !!restoreAsk;
 
   const refresh = useCallback(async () => {
     await waitForSaves(); // 刚从编辑器回来：等最后一次保存写完
     const list = await listProjects();
     setProjects(list);
     storageEstimate().then(setUsage);
+    boardsChangedAt().then(setBoardsChanged).catch(() => {});
+    // 删掉的项目不用再记备份
+    const cur = readBackupLog();
+    const pruned = pruneLog(cur, list.map((p) => p.id));
+    if (Object.keys(pruned.projects).length !== Object.keys(cur.projects).length) writeBackupLog(pruned);
     // 缩略图：每个项目只预加载一张
     const srcs = list.map(projectThumbSrc).filter(Boolean);
     if (srcs.length) {
@@ -55,12 +81,46 @@ export default function Home({ notify, onOpenProject, onOpenBoards, onOpenSettin
     }
   }, []);
 
+  /** 自动清掉没人用的图片 / 画板（有人正在导入、恢复、编辑那个项目时会跳过） */
+  const clean = useCallback(async () => {
+    try {
+      const r = await cleanUpStorage();
+      if (r && (r.images || r.boards)) {
+        setCleaned((prev) => ({
+          images: (prev?.images || 0) + r.images,
+          bytes: (prev?.bytes || 0) + r.bytes,
+          boards: (prev?.boards || 0) + r.boards,
+        }));
+        storageEstimate().then(setUsage);
+      }
+    } catch {
+      /* 清不了就下次再清 */
+    }
+  }, []);
+
   useEffect(() => {
-    refresh().catch((e) => {
-      setProjects([]);
-      notify({ type: 'error', text: `读取本机项目失败：${e?.message || e}` });
-    });
-  }, [refresh, notify]);
+    refresh()
+      .then(clean)
+      .catch((e) => {
+        setProjects([]);
+        notify({ type: 'error', text: `读取本机项目失败：${e?.message || e}` });
+      });
+  }, [refresh, clean, notify]);
+
+  // 长期保存开没开；备份资料夹；备份记录（别的分页备份了也跟着变）
+  useEffect(() => {
+    persistenceState().then(setPersist);
+    savedFolder().then(setFolder).catch(() => {});
+    const off = onBackupLogChanged(() => setLog(readBackupLog()));
+    const onStorage = (e) => {
+      if (e.key === BACKUP_LOG_KEY) setLog(readBackupLog());
+    };
+    window.addEventListener('storage', onStorage);
+    return () => {
+      off();
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
 
   // ---------------- 文件入口 ----------------
 
@@ -68,16 +128,24 @@ export default function Home({ notify, onOpenProject, onOpenBoards, onOpenSettin
     async (file) => {
       setRestoring('读取中…');
       try {
-        const { project, missing } = await importBundle(file, {
+        const opened = await openBackupFile(file);
+        if (opened.kind === 'boards') {
+          const r = await restoreBoardsBackup(opened);
+          notify({
+            type: 'ok',
+            text: r.boards || r.library ? `Material Board 恢复好了：画板 ${r.boards} 块、材质 ${r.library} 个（在首页「Material Board」里）` : 'Material Board 备份里的东西这台电脑上都有了，没有要加的。',
+          });
+          await refresh();
+          return;
+        }
+        const list = await listProjects();
+        if (opened.kind === 'all' || list.some((p) => p.id === opened.project.id)) {
+          setRestoreAsk({ opened, projects: list }); // 要设计师选
+          return;
+        }
+        const { project: saved, missing } = await restoreProjectBackup(opened, 'keep', {
           onProgress: (_s, done, total) => setRestoring(`${done} / ${total}`),
         });
-        let saved;
-        try {
-          saved = await saveProject(project);
-        } catch (err) {
-          await discardProjectData(project.id); // 项目没存进去：刚写进去的图片 / 画板别留着占空间
-          throw err;
-        }
         notify({ type: 'ok', text: `已恢复「${saved.name || '未命名方案'}」` });
         if (missing) notify({ type: 'warn', text: `备份里少了 ${missing} 张图片，对应位置会显示灰块。` });
         onOpenProject(saved.id);
@@ -87,7 +155,7 @@ export default function Home({ notify, onOpenProject, onOpenBoards, onOpenSettin
         setRestoring(null);
       }
     },
-    [notify, onOpenProject]
+    [notify, onOpenProject, refresh]
   );
 
   const handleFile = useCallback(
@@ -161,6 +229,79 @@ export default function Home({ notify, onOpenProject, onOpenBoards, onOpenSettin
     onOpenProject(project.id);
   }
 
+  // ---------------- 备份 ----------------
+
+  /** 全部备份到资料夹（不能选资料夹的浏览器：改过的一个个下载） */
+  async function backupFolder({ choose = false } = {}) {
+    if (backing) return;
+    try {
+      if (!folderSupported()) {
+        setBacking('folder:准备中…');
+        const r = await backupAllAsDownloads({ onProgress: (i, n, name) => setBacking(`folder:${Math.min(i + 1, n)} / ${n} · ${name}`) });
+        notify({
+          type: 'ok',
+          text: r.written || r.boards ? `下载了 ${r.written} 个项目的备份${r.boards ? ' + Material Board' : ''}，存好放在安全的地方` : '全部项目都已经备份过、之后没改过，没有要下载的。',
+        });
+        if (r.missing) notify({ type: 'warn', text: `有 ${r.missing} 张图片在本机找不到，没能放进备份。` });
+        return;
+      }
+      // 权限要在点击里问：先问，再做别的
+      let dir = choose ? null : folder;
+      if (dir && !(await folderWritable(dir, { ask: true }))) dir = null;
+      if (!dir) {
+        dir = await pickFolder();
+        if (!dir) return; // 取消了
+        setFolder(dir);
+      }
+      setBacking('folder:准备中…');
+      const r = await backupAllToFolder(dir, { onProgress: (i, n, name) => setBacking(`folder:${Math.min(i + 1, n)} / ${n} · ${name}`) });
+      notify({
+        type: 'ok',
+        text: `已备份到资料夹「${r.folder}」：${r.written ? `写了 ${r.written} 个项目` : '项目都没改过'}${r.skipped && r.written ? `，${r.skipped} 个没改过的不用重写` : ''}${r.boards ? '，Material Board 也备份了' : ''}`,
+      });
+      if (r.missing) notify({ type: 'warn', text: `有 ${r.missing} 张图片在本机找不到，没能放进备份。` });
+    } catch (e) {
+      notify({ type: 'error', text: `备份失败：${e?.message || e}` });
+    } finally {
+      setBacking(null);
+    }
+  }
+
+  async function backupFile() {
+    if (backing) return;
+    setBacking('file:准备中…');
+    try {
+      const r = await backupAllToOneFile({ onProgress: (i, n, name) => setBacking(`file:${Math.min(i + 1, n)} / ${n} · ${name}`) });
+      notify({ type: 'ok', text: `全部备份已下载：${r.projects} 个项目 + Material Board，共 ${formatBytes(r.size)}。存好放在安全的地方。` });
+      if (r.missing) notify({ type: 'warn', text: `有 ${r.missing} 张图片在本机找不到，没能放进备份。` });
+    } catch (e) {
+      notify({ type: 'error', text: `打包失败：${e?.message || e}` });
+    } finally {
+      setBacking(null);
+    }
+  }
+
+  async function backupOne(p) {
+    if (busy) return;
+    setBusy({ id: p.id, kind: 'backup' });
+    try {
+      const r = await downloadProjectBackup(p, {
+        rev: p.rev,
+        onProgress: (stage, done, total) => setBusy({ id: p.id, kind: 'backup', text: stage === 'zip' ? `${done}%` : `${done}/${total}` }),
+      });
+      notify({ type: 'ok', text: `「${p.name || '未命名方案'}」的备份已下载（${formatBytes(r.size)}）` });
+      if (r.missing) notify({ type: 'warn', text: `有 ${r.missing} 张图片在本机找不到，没能放进备份。` });
+    } catch (e) {
+      notify({ type: 'error', text: `备份失败：${e?.message || e}` });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function askPersist() {
+    setPersist(await requestPersistence());
+  }
+
   // ---------------- 项目操作 ----------------
 
   async function handleDuplicate(p) {
@@ -189,6 +330,7 @@ export default function Home({ notify, onOpenProject, onOpenBoards, onOpenSettin
       notify({ type: 'ok', text: `已删除「${p.name || '未命名方案'}」` });
       setConfirmDelete(null);
       await refresh();
+      storageEstimate().then(setUsage);
     } catch (e) {
       notify({ type: 'error', text: `删除失败：${e?.message || e}` });
     } finally {
@@ -200,6 +342,8 @@ export default function Home({ notify, onOpenProject, onOpenBoards, onOpenSettin
 
   const list = projects || [];
   const returning = list.length > 0;
+  const due = dueProjects(list, log);
+  const boardsSt = boardsBackupStatus(boardsChanged, log.boards);
 
   // 四步说明：第一次用放在拖放区下面，已有项目时放到页面底部
   const steps = (
@@ -295,6 +439,11 @@ export default function Home({ notify, onOpenProject, onOpenBoards, onOpenSettin
             <span className="block mt-0.5 text-xs sm:text-sm text-bp-muted">
               不做提案也能用：材质库、拖拽排版、AI 实拍排版，下载高清 PNG 发客户
             </span>
+            {boardsSt.state !== 'empty' && (
+              <span className={`block mt-1 text-[11px] ${boardsSt.due ? 'text-bp-warn' : 'text-bp-faint'}`} data-testid="boards-backup-state">
+                画板和材质库：{statusText(boardsSt)}
+              </span>
+            )}
           </span>
           <ArrowRight size={18} className="text-bp-faint shrink-0" />
         </button>
@@ -310,30 +459,39 @@ export default function Home({ notify, onOpenProject, onOpenBoards, onOpenSettin
                 最近的项目{list.length ? <span className="ml-2 text-sm text-bp-faint font-sans">{list.length}</span> : null}
               </h2>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
-              {usage && usage.usage > 0 && (
-                <span className="inline-flex items-center gap-1.5 text-xs text-bp-faint" title="项目和图片都存在这台电脑的浏览器里">
-                  <HardDrive size={13} />
-                  本机已用 {formatBytes(usage.usage)}
-                  {usage.quota ? ` / 可用约 ${formatBytes(usage.quota)}` : ''}
-                </span>
-              )}
-              <button type="button" onClick={() => zipInput.current?.click()} disabled={!!restoring || !!importFile} className={cls.btnGhost}>
-                {restoring ? <Loader2 size={15} className="animate-spin" /> : <ArchiveRestore size={15} />}
-                {restoring ? `恢复中 ${restoring}` : '导入项目备份 (.blueprint.zip)'}
-              </button>
-              <input
-                ref={zipInput}
-                type="file"
-                accept=".zip,application/zip"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  e.target.value = '';
-                  if (f) restoreBackup(f);
-                }}
-              />
-            </div>
+          </div>
+
+          <div className="mb-5">
+            <DataPanel
+              persist={persist}
+              onAskPersist={askPersist}
+              usage={usage}
+              cleaned={cleaned}
+              log={log}
+              dueCount={due.length}
+              hasData={list.length > 0 || boardsSt.state !== 'empty'}
+              folderOk={folderSupported()}
+              folderName={folder?.name || null}
+              backing={backing}
+              onBackupFolder={() => backupFolder()}
+              onChangeFolder={() => backupFolder({ choose: true })}
+              onBackupFile={backupFile}
+              onPickRestore={() => zipInput.current?.click()}
+              restoring={restoring}
+              onWipe={() => setWipeOpen(true)}
+            />
+            <input
+              ref={zipInput}
+              type="file"
+              accept=".zip,application/zip"
+              className="hidden"
+              data-testid="restore-input"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = '';
+                if (f) restoreBackup(f);
+              }}
+            />
           </div>
 
           {projects === null ? (
@@ -360,9 +518,11 @@ export default function Home({ notify, onOpenProject, onOpenBoards, onOpenSettin
                 <ProjectCard
                   key={p.id}
                   project={p}
+                  backup={backupStatus(p, log.projects[p.id])}
                   busy={busy?.id === p.id ? busy : null}
-                  disabled={!!busy}
+                  disabled={!!busy || !!backing}
                   onOpen={() => onOpenProject(p.id)}
+                  onBackup={() => backupOne(p)}
                   onDuplicate={() => handleDuplicate(p)}
                   onDelete={() => setConfirmDelete(p)}
                 />
@@ -371,7 +531,7 @@ export default function Home({ notify, onOpenProject, onOpenBoards, onOpenSettin
           )}
 
           <p className="mt-6 text-[11px] text-bp-faint leading-relaxed">
-            项目只存在这台电脑的浏览器里。换电脑或清理浏览器前，请在项目的「导出 PPT」窗口里下载项目备份。
+            项目只存在这台电脑的浏览器里，不会上传。电脑坏了、清了浏览器资料、换电脑，项目都会不见 —— 请定期按上面的「全部备份」。
           </p>
         </section>
 
@@ -383,7 +543,34 @@ export default function Home({ notify, onOpenProject, onOpenBoards, onOpenSettin
         )}
       </main>
 
-      {importFile && <ImportDialog file={importFile} onDone={onImported} onClose={() => setImportFile(null)} />}
+      {importFile && (
+        <ImportDialog
+          file={importFile}
+          onDone={onImported}
+          onClose={() => setImportFile(null)}
+          onCancelled={() => {
+            setImportFile(null);
+            notify({ type: 'ok', text: '已取消导入，这次读进来的图片都清掉了' });
+            storageEstimate().then(setUsage);
+          }}
+        />
+      )}
+
+      {restoreAsk && (
+        <RestoreDialog
+          opened={restoreAsk.opened}
+          projects={restoreAsk.projects}
+          notify={notify}
+          onClose={() => setRestoreAsk(null)}
+          onDone={({ openId } = {}) => {
+            setRestoreAsk(null);
+            if (openId) onOpenProject(openId);
+            else refresh().catch(() => {});
+          }}
+        />
+      )}
+
+      {wipeOpen && <WipeDialog projectCount={list.length} onClose={() => setWipeOpen(false)} />}
 
       {confirmDelete && (
         <ConfirmDialog
@@ -398,20 +585,34 @@ export default function Home({ notify, onOpenProject, onOpenBoards, onOpenSettin
             「<span className="text-bp-ink">{confirmDelete.name || '未命名方案'}</span>」的页面、图片和 Material Board 画板都会从这台电脑上删除，
             <b className="font-medium text-bp-danger">无法恢复</b>。
           </p>
-          <p className="text-xs text-bp-faint">需要留底的话，先打开项目 →「导出 PPT」→「下载项目备份」。</p>
+          <p className="text-xs text-bp-faint">需要留底的话，先按项目卡片上的「备份」图示下载一份。</p>
         </ConfirmDialog>
       )}
     </div>
   );
 }
 
-function ProjectCard({ project, busy, disabled, onOpen, onDuplicate, onDelete }) {
+/** 备份状态 → 一句话 */
+function statusText(st) {
+  if (st.state === 'never') return '还没备份过';
+  if (st.state === 'due' && !st.at) return '还没备份过 · 该备份了';
+  if (st.state === 'fresh') return `已备份 · ${timeAgo(st.at)}`;
+  if (st.state === 'changed') return `备份 ${timeAgo(st.at)} · 之后改过`;
+  if (st.state === 'due') return `备份 ${timeAgo(st.at)} · 之后改过，该备份了`;
+  return '';
+}
+
+function ProjectCard({ project, backup, busy, disabled, onOpen, onBackup, onDuplicate, onDelete }) {
   const src = projectThumbSrc(project);
   const url = src ? resolveUrl(src) : null;
   const st = projectStats(project);
   const who = clientLine(project.info);
   return (
-    <div className={`${cls.card} overflow-hidden group flex flex-col hover:shadow-md hover:border-bp-rule transition`}>
+    <div
+      className={`${cls.card} overflow-hidden group flex flex-col hover:shadow-md hover:border-bp-rule transition ${backup?.due ? '!border-bp-warn/60' : ''}`}
+      data-testid="project-card"
+      data-backup={backup?.state}
+    >
       <button type="button" onClick={onOpen} className="block text-left focus:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-bp-gold/40">
         <div className="aspect-[16/9] bg-bp-tint relative overflow-hidden">
           {url ? (
@@ -435,15 +636,25 @@ function ProjectCard({ project, busy, disabled, onOpen, onDuplicate, onDelete })
         </div>
       </button>
       <div className="mt-auto px-4 pb-3 flex items-center gap-2">
-        <span className="flex-1 min-w-0 truncate text-[11px] text-bp-faint">
-          {timeAgo(project.updatedAt)} · {st.slides} 页
+        <span className="flex-1 min-w-0 text-[11px] text-bp-faint">
+          <span className="block truncate">
+            {timeAgo(project.updatedAt)} · {st.slides} 页
+          </span>
+          {backup && (
+            <span className={`block truncate ${backup.due ? 'text-bp-warn' : ''}`} data-testid="backup-state">
+              {statusText(backup)}
+            </span>
+          )}
         </span>
-        {busy?.kind === 'copy' ? (
+        {busy?.kind === 'copy' || busy?.kind === 'backup' ? (
           <span className="inline-flex items-center gap-1 text-[11px] text-bp-faint">
-            <Loader2 size={13} className="animate-spin" /> 复制中 {busy.text || ''}
+            <Loader2 size={13} className="animate-spin" /> {busy.kind === 'copy' ? '复制中' : '备份中'} {busy.text || ''}
           </span>
         ) : (
           <>
+            <button type="button" onClick={onBackup} disabled={disabled} className={`${cls.iconBtn} ${backup?.due ? '!text-bp-warn' : ''}`} title="下载这个项目的备份（.blueprint.zip）" aria-label="备份项目" data-testid="project-backup">
+              <Archive size={15} />
+            </button>
             <button type="button" onClick={onDuplicate} disabled={disabled} className={cls.iconBtn} title="复制一份（改给别的客户 / 做第二版）" aria-label="复制项目">
               <Copy size={15} />
             </button>

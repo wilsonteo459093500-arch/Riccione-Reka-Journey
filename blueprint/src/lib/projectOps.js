@@ -6,12 +6,18 @@ import { collectAssetSrcs, assetIdOf, storeBlob } from '../store/assets.js';
 import { removeBoardsOf, exportBoardsOf, importBoardsTo } from '../moodboard/store.js';
 import { remapAssetSrcs, discardProjectData } from './bundle.js';
 import { copyName } from './project.js';
+import { withSharedLock, WRITE_LOCK } from './locks.js';
 
 /**
  * 复制项目：图片按新项目重新入库（删除原项目时按 projectId 清图，副本不受影响）
  * @returns {Promise<object>} 已保存的副本
  */
-export async function duplicateProject(project, { existingNames = [], onProgress } = {}) {
+export async function duplicateProject(project, opts = {}) {
+  // 复制中拿着「正在写」的锁：自动清图片不会把还没挂到副本上的新图当成没人用
+  return await withSharedLock(WRITE_LOCK, () => duplicateNow(project, opts));
+}
+
+async function duplicateNow(project, { existingNames = [], onProgress } = {}) {
   const id = uid('p');
   const srcs = [...collectAssetSrcs(project)];
   const map = new Map();
