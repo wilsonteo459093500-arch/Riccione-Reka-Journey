@@ -94,6 +94,13 @@
   - 验收时改了一处：从手机通讯录挑的人，回到清单就是勾好的（档案 / 表格照旧不勾）
 - 第 0 阶段还没做完（2026-11-20 查 Vercel）：`TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` 没设（要用户在 Cloudflare 建、自己贴进 Vercel，secret 不经过对话）；`SUPABASE_SERVICE_ROLE_KEY` 还勾着 Preview
 
+## P.L.A.Y（play/，游戏平台，2026-11-21 计划）
+
+- 自己手机开房 → 二维码给家人朋友加入；游戏：密码机、露营达人、象棋、军棋（两人暗棋 / 翻翻棋 / 四国）、森林身份游戏（Avalon 类）、看图说故事（Dixit 类）
+- 计划在 `play/PLAN.md`（第 0–10 阶段）。开场白：「读 `play/PLAN.md`，做第 N 阶段」。还没开始写程序
+- **Dixit / Avalon 只做玩法同类的原创版**：名字、角色、图卡都不能用原版的；GiiKER 的密码机、露营只借玩法，外观和关卡自己做
+- FoloToy（第 2 阶段）：固定「我的游戏房」二维码 + 密码机，**用户在别的对话做**
+
 ## 上线流程（全部软件，2026-11-20 起）
 
 - **合并进 main = 正式版自动更新**；别的分支 = 预览版，预览网址由 GitHub Actions 贴在 PR 留言里。详情 `DEPLOY-FLOW.md`
