@@ -1,0 +1,26 @@
+{
+  "name": "play-app",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "P.L.A.Y — 自己手机开房、家人朋友扫码一起玩的游戏平台",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --host",
+    "test": "node --test test/*.test.mjs",
+    "test:browser": "node test/browser/room.browser.mjs",
+    "vectors": "node scripts/make-vectors.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.106.2",
+    "qrcode-generator": "^2.0.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^5.4.11",
+    "vite-plugin-pwa": "^0.21.1"
+  }
+}

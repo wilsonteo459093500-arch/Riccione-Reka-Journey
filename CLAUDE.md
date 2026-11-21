@@ -97,7 +97,10 @@
 ## P.L.A.Y（play/，游戏平台，2026-11-21 计划）
 
 - 自己手机开房 → 二维码给家人朋友加入；游戏：密码机、露营达人、象棋、军棋（两人暗棋 / 翻翻棋 / 四国）、森林身份游戏（Avalon 类）、看图说故事（Dixit 类）
-- 计划在 `play/PLAN.md`（第 0–10 阶段）。开场白：「读 `play/PLAN.md`，做第 N 阶段」。还没开始写程序
+- 计划在 `play/PLAN.md`（第 0–10 阶段）。开场白：「读 `play/PLAN.md`，做第 N 阶段」
+- **2026-11-21 第 1 阶段（平台 + 密码机）做完、开了 PR**。Vercel 项目 `play-wilson`（Claude 用 Vercel 工具建的，没连 GitHub，已登记 `.github/apps.json`）
+- 房间连线**借用 SPACE NETWORK 的 Supabase Realtime**（频道前缀 `play:`，不碰资料表）。Supabase 免费方案只能 2 个项目，满了
+- 测试：`cd play && npm test`；浏览器：先 `npx vite --port 5175`，再 `node test/browser/room.browser.mjs`（`?net=local&as=名字` 同一个浏览器模拟多支手机）。这个开发环境连不到 supabase.co，真的连线只能用手机在预览版试
 - **Dixit / Avalon 只做玩法同类的原创版**：名字、角色、图卡都不能用原版的；GiiKER 的密码机、露营只借玩法，外观和关卡自己做
 - FoloToy（第 2 阶段）：固定「我的游戏房」二维码 + 密码机，**用户在别的对话做**
 
