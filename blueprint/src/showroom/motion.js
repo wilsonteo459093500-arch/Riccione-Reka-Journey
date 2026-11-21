@@ -175,6 +175,37 @@ export function frameAt(pos, count) {
 /** 停手后吸到最近的停点（保证停下来就是完整原图） */
 export const snapTarget = (pos, count) => Math.min(Math.max(Math.round(pos), 0), Math.max(0, count - 1));
 
+/**
+ * 滚轮 / 触控板停手后吸到哪一页：从 from 页出发，往一个方向滑过了 commit（一页的一小段）就翻过去，没到就回 from。
+ * 以前是四舍五入：要滑过半页才翻 ——「从无到有」那一段等于鼠标滚 10 格，滚少了 1 秒后弹回原页。
+ * 一次手势最多翻一页（from ± 1）。
+ */
+export const WHEEL_COMMIT = 0.12;
+export function snapToward(pos, from, count, commit = WHEEL_COMMIT) {
+  const d = pos - from;
+  const to = Math.abs(d) >= commit ? from + Math.sign(d) : from;
+  return Math.min(Math.max(to, 0), Math.max(0, count - 1));
+}
+
+/**
+ * 这一下滚轮是不是「一格」（有刻度的鼠标滚轮）：是 → 直接翻一页；不是（触控板、无刻度滚轮的细碎小步）→ 跟手滑。
+ *   · 按行 / 按页报的（Firefox、部分鼠标驱动）
+ *   · 一下就 80 px 以上（Windows 的鼠标一格 100 px）。高分屏（4K 电视、缩放 150–200% 的笔电）上浏览器报的数会除以缩放倍数
+ *     （200% 时一格只报 50），所以先乘回屏幕的缩放倍数 dpr 再比
+ *   · macOS 的鼠标：deltaY 只有几 px，但旧式的 wheelDeltaY 是 120 的整数倍
+ * 触控板快速一甩偶尔也会被算成一格 —— 那本来就是要翻页，结果一样。
+ * @param {{ deltaMode?:number, wheelDeltaY?:number }} e
+ * @param {number} px   这一下换算成 px 的滚动量（主方向）
+ * @param {number} dpr  window.devicePixelRatio
+ */
+export function isWheelStep(e, px, dpr = 1) {
+  if (!px) return false;
+  if (e.deltaMode === 1 || e.deltaMode === 2) return true;
+  if (Math.abs(px) * Math.max(1, dpr || 1) >= 80) return true;
+  const wd = Math.abs(e.wheelDeltaY || 0);
+  return wd >= 120 && wd % 120 === 0;
+}
+
 /** 元素样式 → CSS（给 SlideCanvas 的 elStyle） */
 export function cssOf(m) {
   if (!m || (m.opacity === 1 && !m.ty && m.scale === 1)) return null;

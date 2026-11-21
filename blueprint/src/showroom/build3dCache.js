@@ -46,13 +46,36 @@ export function peekPlan3d(key) {
   return key ? cache.get(key) || null : null;
 }
 
+/**
+ * 这层楼的 3D 开场现在能不能播：'ready' 停点那一帧（最后一帧）画好了 | 'pending' 还在画 / 还没开始 | 'failed' 画不出来
+ * 播放前检查用；播放器遇到 'failed' 跳过这个停点（以前是整屏只剩米色）
+ */
+export function plan3dState(floor) {
+  const key = plan3dKey(floor);
+  if (!key) return 'failed';
+  const e = cache.get(key);
+  if (!e) return 'pending';
+  if (e.failed) return 'failed';
+  return e.frames[e.total - 1] ? 'ready' : 'pending';
+}
+
 /** 开始画（重复调用无妨） */
 export function requestPlan3d(floor) {
   const key = plan3dKey(floor);
   if (!key || cache.has(key)) return key;
   const p3 = floorPlan3d(floor);
-  const built = build3dScenes(p3.geo, p3.view);
-  if (!built) return null;
+  let built = null;
+  try {
+    built = build3dScenes(p3.geo, p3.view);
+  } catch (err) {
+    console.warn('[展厅播放] 3D 开场排不出来', err);
+  }
+  if (!built || !built.scenes?.length) {
+    // 排不出场景：记成失败（不再重试），播放器跳过这一页
+    cache.set(key, { frames: [], total: 0, built: null, plan: null, done: false, failed: true });
+    emit(key);
+    return key;
+  }
   const entry = { frames: [], total: built.scenes.length, built, plan: null, done: false };
   cache.set(key, entry);
   (async () => {

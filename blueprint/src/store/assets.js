@@ -221,3 +221,6 @@ export async function toInlineImage(srcOrBlob, maxEdge = 1600) {
   const dataUrl = await blobToDataUrl(jpeg);
   return { mimeType: 'image/jpeg', base64: dataUrl.split(',')[1], dataUrl };
 }
+
+/** 这一页有几张项目图片在本机找不到（导出前检查、播放前检查共用） */
+export const missingImagesIn = (page) => (page?.els || []).filter((el) => el.t === 'img' && el.src && isAssetSrc(el.src) && !resolveUrl(el.src)).length;

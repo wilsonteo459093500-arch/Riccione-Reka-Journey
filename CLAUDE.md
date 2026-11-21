@@ -46,7 +46,7 @@
   - 第 0 阶段是用户自己做的设定；Claude 从第 1 阶段「展厅播放敢给客户看」开始
   - 原来的下一项「用真的方案 PDF 测」现在是第 2 阶段
   - **2026-11-21 第 2 阶段上半做完、合进 main（#101）**（体检列的认错写法全修好、忽略清单、测试数据自动抹客户资料）；下半要用户附上真的 PDF 才能做，进度和那张表在 `blueprint/PLAN.md` 最后一节
-  - 第 1 阶段（展厅播放）当时还没做，第 2 阶段先做是用户选的
+  - **2026-11-21 第 1 阶段（展厅播放敢给客户看）做完、开了 PR**：进度和「还没做的」在 `blueprint/PLAN.md`「第 1 阶段做完了」。用户定的：检查清单每次都出；点左边四分之一 = 上一页；说明栏放不下只放前几条。**用户还要去展厅大屏彩排一次**。下一个是第 2 阶段下半（等真的 PDF）或第 3 阶段
 - 用户 2026-11-20 定的：
   - **先修展厅播放，再修 PDF 导入**
   - 3D 户型图**继续改进**（第 7 阶段，先 brainstorm 具体是慢、贵还是不准）
@@ -145,6 +145,9 @@
 - 测试和构建：
   - `cd blueprint && npm test`：Node 跑全部测试（2026-11-16 时 560 项）
   - `npx vite build`：构建
+- 浏览器测试（2026-11-21 起）：`npm run test:browser`（`test/browser/showroom.mjs`，自己起 Vite、建样例项目）；`SHOTS=<资料夹>` 顺便存截图。上线流程里也跑
+  - Playwright 的 `mouse.wheel` 一律报成「有刻度的一格」，而且数值会除以屏幕缩放倍数；要模拟触控板得自己 `dispatchEvent(new WheelEvent(...))`
+  - `waitForFunction` 传 async 函数不会等它的结果，要轮询就在 Node 这边写循环
 - 浏览器实测（Playwright，镜像里已经装好）：
   - 先 `npx vite --port 5173`
   - 登录：`localStorage['blueprint.auth.v1']` = `src/store/auth.js` 里的 `AUTH_HASH`，设好后要 `page.reload()`，只换网址的 `#` 部分不会重新载入

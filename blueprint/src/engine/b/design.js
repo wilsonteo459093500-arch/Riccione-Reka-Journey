@@ -972,38 +972,55 @@ export function bViewFull(ctx, slide, plan) {
 /**
  * 展厅播放用：满版效果图页不印设计说明（lostOnFull 会提醒），播放时在右下角叠上一栏说明（白字 + 托字渐变）。
  * 只在播放器里出现，不进 PPT。右栏 1330–1810，最后一行的底 1004（和左下材料同一条底）；最多 4 条、每条正文最多 3 行。
- * @returns {{ els:object[] }}  没有说明 → els 为空
+ * 高度上限：这一栏最高到 FULL_NOTES_TOP（屏幕一半高），放不下的后面几条不显示（显示出来的每条照旧完整）——
+ * 以前中英版 4 条长说明会冲出屏幕顶、压在右上角的 logo 上。
+ * @returns {{ els:object[], shown:number, total:number, cut:number }}
+ *   没有说明 → els 为空；shown / total = 显示了几条 / 设计师写了几条；cut = 显示的里面有几条正文超过 3 行被截短
  */
 export const FULL_NOTES_MAX = 4;
+export const FULL_NOTES_BOTTOM = 1004;
+export const FULL_NOTES_TOP = 464;
 export function bViewFullNotes(ctx, slide) {
   const { project, lang, tr } = env(ctx);
-  const notes = notesOf(project, slide || {}, lang, tr).slice(0, FULL_NOTES_MAX);
-  if (!notes.length) return { els: [] };
+  const all = notesOf(project, slide || {}, lang, tr);
+  if (!all.length) return { els: [], shown: 0, total: 0, cut: 0 };
   const x = 1330;
   const w = PAGE.right - x;
   const label = { zh: style(ST.noteLabel, { color: B.cream }), en: style(ST.noteLabelEn, { color: B.cream }) };
   const body = { zh: style(ST.note, { color: B.white }), en: style(ST.noteEn, { color: B.white }) };
-  const parts = [];
-  const els = [];
-  let y = 0;
-  notes.forEach((n, k) => {
-    if (k) y += 22;
-    if (n.label) {
-      const lb = pairBlock(x, y, w, n.label, lang, label.zh, { enRole: label.en, gap: 0, maxLines: 1, name: 'showroom-note' });
-      els.push(...lb.els);
-      parts.push(lb);
-      y = lb.bottom + 2;
-    }
-    const tb = pairBlock(x, y, w, n.text, lang, body.zh, { enRole: body.en, gap: 4, maxLines: 3, name: 'showroom-note' });
-    els.push(...tb.els);
-    parts.push(tb);
-    y = tb.bottom;
-  });
-  const dy = 1004 - y;
-  const moved = els.map((el) => ({ ...el, y: el.y + dy, edit: undefined }));
-  const ink = inkBox(...parts.map((p) => ({ x0: p.x0, x1: p.x1, top: p.top + dy, bottom: p.bottom + dy })));
+  const lay = (notes) => {
+    const parts = [];
+    const els = [];
+    let cut = 0;
+    let y = 0;
+    notes.forEach((n, k) => {
+      if (k) y += 22;
+      if (n.label) {
+        const lb = pairBlock(x, y, w, n.label, lang, label.zh, { enRole: label.en, gap: 0, maxLines: 1, name: 'showroom-note' });
+        els.push(...lb.els);
+        parts.push(lb);
+        y = lb.bottom + 2;
+      }
+      const tb = pairBlock(x, y, w, n.text, lang, body.zh, { enRole: body.en, gap: 4, maxLines: 3, name: 'showroom-note' });
+      els.push(...tb.els);
+      parts.push(tb);
+      if (tb.cut) cut += 1;
+      y = tb.bottom;
+    });
+    return { els, parts, cut, h: y };
+  };
+  // 放得下几条就放几条（至少一条）
+  let shown = Math.min(all.length, FULL_NOTES_MAX);
+  let col = lay(all.slice(0, shown));
+  while (shown > 1 && col.h > FULL_NOTES_BOTTOM - FULL_NOTES_TOP) {
+    shown -= 1;
+    col = lay(all.slice(0, shown));
+  }
+  const dy = FULL_NOTES_BOTTOM - col.h;
+  const moved = col.els.map((el) => ({ ...el, y: el.y + dy, edit: undefined }));
+  const ink = inkBox(...col.parts.map((p) => ({ x0: p.x0, x1: p.x1, top: p.top + dy, bottom: p.bottom + dy })));
   const sh = shade(ink, fullBleed(), { dir: 'v' });
-  return { els: [sh ? { ...sh.el, name: 'showroom-shade' } : null, ...moved].filter(Boolean) };
+  return { els: [sh ? { ...sh.el, name: 'showroom-shade' } : null, ...moved].filter(Boolean), shown, total: all.length, cut: col.cut };
 }
 
 /**

@@ -13,6 +13,8 @@ import { requestPersistence } from './store/db.js';
 import { loadSettings, saveSettings, SETTINGS_KEY } from './ai/settings.js';
 import { migrateOnce } from './moodboard/migrate.js';
 import { hasUnsavedEdits } from './lib/useProjectState.js';
+import { startUpdateWatch } from './lib/appVersion.js';
+import { useUpdateReady } from './lib/useUpdateReady.js';
 
 /** '#/p/<id>' → id */
 function parseHash() {
@@ -58,6 +60,11 @@ function Workspace({ onLogout }) {
     persistenceAsked = true;
     requestPersistence();
   }, []);
+
+  // 新版上线后提示刷新（一直开着的旧页面，导入 PDF、展厅的线稿动画会出错）
+  const updateReady = useUpdateReady();
+  const [updateLater, setUpdateLater] = useState(false);
+  useEffect(() => startUpdateWatch(), []);
 
   // 旧版 UKIR STUDIO 的材质库 / 画板（同一网址时读得到）→ 搬到独立 Material Board，只搬一次
   useEffect(() => {
@@ -157,6 +164,30 @@ function Workspace({ onLogout }) {
             onLogout();
           }}
         />
+      )}
+
+      {updateReady && !updateLater && (
+        <div role="status" data-testid="update-ready" className="fixed left-4 bottom-4 z-[45] max-w-sm flex items-start gap-3 rounded-2xl border border-bp-line bg-bp-card shadow-xl px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <div className="text-sm text-bp-ink font-medium">UKIR STUDIO 上线了新版</div>
+            <div className="mt-0.5 text-xs text-bp-muted leading-snug">这个页面还是旧的，导入 PDF、展厅播放可能出错。刷新一下就好，改过的内容已经自动保存。</div>
+          </div>
+          <div className="shrink-0 flex flex-col items-end gap-1.5">
+            <button
+              type="button"
+              className="px-3 py-1.5 rounded-xl bg-bp-dark text-bp-light text-xs font-medium hover:opacity-90"
+              onClick={() => {
+                if (hasUnsavedEdits() && !window.confirm('最近的修改没能保存。现在刷新，这些修改会丢失。确定刷新？')) return;
+                window.location.reload();
+              }}
+            >
+              刷新
+            </button>
+            <button type="button" className="text-[11px] text-bp-faint hover:text-bp-ink" onClick={() => setUpdateLater(true)}>
+              晚点再说
+            </button>
+          </div>
+        </div>
       )}
 
       <Toaster toasts={toasts} onDismiss={dismiss} />
