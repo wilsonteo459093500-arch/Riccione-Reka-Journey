@@ -75,15 +75,17 @@ jobs:
             echo "这个软件没有自动测试，跳过"
           fi
 
-      # 浏览器测试（真的开 Chromium 走一遍）：软件的 package.json 有 test:browser 才跑。现在只有 UKIR STUDIO 有（展厅播放）
+      # 浏览器测试（真的开 Chromium 走一遍）：软件的 package.json 有 test:browser、**并且自己把 playwright 列进依赖**才跑。
+      # 现在只有 UKIR STUDIO（展厅播放）。KIRA 也有 test:browser，但它靠开发机器上装好的 Playwright、只手动跑，
+      # 没列进依赖 → 这里不跑（2026-11-21 第一次加这一步时把它也拉进来跑，找不到 playwright，红了）
       - name: 浏览器测试
         working-directory: ${{ matrix.app.dir }}
         run: |
-          if node -e "process.exit(require('./package.json').scripts?.['test:browser'] ? 0 : 1)" 2>/dev/null; then
+          if node -e "const p=require('./package.json');process.exit(p.scripts?.['test:browser'] && ({...p.dependencies,...p.devDependencies}).playwright ? 0 : 1)" 2>/dev/null; then
             npx playwright install --with-deps chromium
             npm run test:browser
           else
-            echo "这个软件没有浏览器测试，跳过"
+            echo "这个软件没有接进上线流程的浏览器测试，跳过"
           fi
 
       - name: 出版本（${{ needs.changes.outputs.prod == 'true' && '正式版' || '预览' }}）

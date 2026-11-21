@@ -146,6 +146,7 @@
   - `cd blueprint && npm test`：Node 跑全部测试（2026-11-16 时 560 项）
   - `npx vite build`：构建
 - 浏览器测试（2026-11-21 起）：`npm run test:browser`（`test/browser/showroom.mjs`，自己起 Vite、建样例项目）；`SHOTS=<资料夹>` 顺便存截图。上线流程里也跑
+  - 上线流程只对「有 `test:browser` 而且自己把 `playwright` 列进依赖」的软件跑浏览器测试。KIRA 也有 `test:browser`，但没列依赖、只手动跑 —— 要接进去得先在 `kira/` 加依赖并确认它在 GitHub 的机器上跑得过
   - Playwright 的 `mouse.wheel` 一律报成「有刻度的一格」，而且数值会除以屏幕缩放倍数；要模拟触控板得自己 `dispatchEvent(new WheelEvent(...))`
   - `waitForFunction` 传 async 函数不会等它的结果，要轮询就在 Node 这边写循环
 - 浏览器实测（Playwright，镜像里已经装好）：
