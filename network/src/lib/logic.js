@@ -54,14 +54,17 @@ export function digits(s) { return String(s || '').replace(/\D/g, ''); }
  * 马来西亚本地写法 012-345 6789 → 60123456789；+65 / 65 开头的照留。
  */
 export function toWhatsApp(number, defaultCc = '60') {
-  const raw = String(number || '').trim();
+  // 体检第 4 阶段：「+60 (0)12-345 6789」的 (0) 不算；分机号（ext 12 / x12 / #12）不接在后面
+  const raw = String(number || '').trim()
+    .replace(/\s*(?:ext\.?|extension|x|#|分机|轉|转)\s*\d{1,5}\s*$/i, '')
+    .replace(/\(\s*0\s*\)/g, '');
   let d = digits(raw);
   if (!d) return '';
-  if (raw.startsWith('+')) return d;
-  if (d.startsWith('00')) return d.slice(2);
-  if (d.startsWith('0')) return defaultCc + d.slice(1);
-  if (defaultCc === '60' && /^1\d{8,9}$/.test(d)) return '60' + d; // 少打了 0
-  return d;
+  if (/^1[378]00/.test(d)) return ''; // 1300 / 1800 / 1700 热线：没有 WhatsApp
+  if (raw.startsWith('+')) { /* 已经有国家码 */ } else if (d.startsWith('00')) d = d.slice(2);
+  else if (d.startsWith('0')) d = defaultCc + d.slice(1);
+  else if (defaultCc === '60' && /^1\d{8,9}$/.test(d)) d = '60' + d; // 少打了 0
+  return /^601[378]00/.test(d) ? '' : d;
 }
 
 export function waLink(number, text = '') {
@@ -70,10 +73,19 @@ export function waLink(number, text = '') {
   return `https://wa.me/${n}${text ? `?text=${encodeURIComponent(text)}` : ''}`;
 }
 
-/** 从名片的电话里挑一个当 WhatsApp：有标 whatsapp 的优先，再来 mobile，再来第一个 */
+/**
+ * 从名片 / 通讯录的电话里挑一个当 WhatsApp：有标 whatsapp 的优先，再来 mobile，再来看起来像手机的。
+ * 体检第 4 阶段：马来西亚的座机（03…）和热线（1300…）不会被挑（WhatsApp 打不开）；外国号码看不出来，照挑。
+ */
 export function pickWhatsApp(phones = []) {
-  const by = (l) => phones.find((p) => String(p.label || '').toLowerCase() === l);
-  const p = by('whatsapp') || by('mobile') || phones.find((x) => /^(\+?60)?0?1\d/.test(digits(x.number)) || /^\+?601/.test(x.number)) || phones[0];
+  const list = (phones || []).filter((p) => p && toWhatsApp(p.number));
+  const by = (l) => list.find((p) => String(p.label || '').toLowerCase() === l);
+  const tagged = by('whatsapp');
+  if (tagged) return toWhatsApp(tagged.number);
+  const mobile = (p) => /^601\d{8,9}$/.test(toWhatsApp(p.number));
+  const p = list.find((x) => mobile(x) && String(x.label || '').toLowerCase() === 'mobile')
+    || list.find(mobile)
+    || list.find((x) => !toWhatsApp(x.number).startsWith('60') && !/^(office|fax|work|home|landline|hotline)$/i.test(String(x.label || '')));
   return p ? toWhatsApp(p.number) : '';
 }
 
@@ -123,7 +135,7 @@ export function isSharedPhone(number, label = '') {
   const raw = String(number || '').trim();
   const d = digits(raw);
   if (!d) return false;
-  if (/^1[378]00/.test(d)) return true;                       // 1300-88-1234（还没加国家码）
+  if (/^(?:60)?1[378]00/.test(d)) return true;                // 1300-88-1234 / +60 1300…（热线）
   const n = toWhatsApp(raw);
   if (n.startsWith('60')) return !/^601\d{8,9}$/.test(n) || /^601[378]00/.test(n);
   return false;
@@ -221,7 +233,7 @@ export function matchPerson(view, q) {
   const query = String(q || '').trim().toLowerCase();
   if (!query) return true;
   const hay = [
-    view.name, view.name_alt, view.title, view.company && view.company.name, view.how_met, view.notes,
+    view.name, view.name_alt, view.salutation, view.title, view.company && view.company.name, view.how_met, view.notes,
     ...(view.tags || []), ...(view.interests || []),
     ...(view.resources || []).map((r) => r.label),
     ...(view.circles || []).map((c) => c.name),
@@ -296,3 +308,14 @@ export const DEFAULT_PROFILE = {
   lacking: '高端住宅的发展商 / 建筑师 / 室内设计师人脉；商会里的领袖；能介绍高端客户的人；好的营销、品牌合作伙伴。',
   goals: '多认识能长期互相介绍生意的人；建立商会里的影响力。',
 };
+
+/**
+ * 公司背景要不要（重新）查（体检第 3 阶段）：
+ *   • 没查过 → 查
+ *   • 以前存的「查不到」没有 status：那时 AI 格式坏掉也会存成查不到 → 重查一次
+ *   • 有 status（found / not_found）→ 不重查（要重查请按「重新查公司」）
+ */
+export function needsCompanyLookup(background) {
+  if (!background) return true;
+  return !background.status && background.found === false;
+}

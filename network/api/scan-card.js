@@ -4,9 +4,8 @@
    回：  { card: {...}, usage: {feature, model, ..., cost_usd} }
    用 Haiku 5.5 读名片（便宜、快）；结构化输出保证字段齐全。
    ============================================================ */
-import { postHandler, HttpError } from './_lib/http.js';
-import { requireOwner, requireBudget } from './_lib/auth.js';
-import { getClient, textOf, extractJson, checkStop, mapAiError, cleanImages } from './_lib/ai.js';
+import { getClient, textOf, extractJson, checkStop, cleanImages, callWithin, badOutput } from './_lib/ai.js';
+import { aiEndpoint } from './_lib/run.js';
 import { MODELS, usageRow } from './_lib/cost.js';
 
 const str = { type: 'string' };
@@ -52,9 +51,7 @@ export async function scanCard(body, deps = {}) {
   const images = cleanImages(body.images, 2);
   const client = deps.client || getClient();
   const model = MODELS.fast;
-  let message;
-  try {
-    message = await client.messages.create({
+  const message = await callWithin(deps.deadline, (opts) => client.messages.create({
       model,
       max_tokens: 4000,
       output_config: { effort: 'low', format: { type: 'json_schema', schema: CARD_SCHEMA } },
@@ -63,14 +60,12 @@ export async function scanCard(body, deps = {}) {
         role: 'user',
         content: [...images, { type: 'text', text: images.length > 1 ? '这是同一张名片的正面和背面，请合并成一个人的资料。' : '请读这张名片。' }],
       }],
-    }, deps.requestOptions);
-  } catch (e) {
-    throw mapAiError(e);
-  }
-  checkStop(message);
+  }, deps.requestOptions || opts));
+  const usage = usageRow('scan_card', message.model || model, message.usage);
+  checkStop(message, usage);
   const card = extractJson(textOf(message));
-  if (!card) throw new HttpError(502, { error: 'ai_bad_output', message: 'AI 回的不是 JSON，请再试一次' });
-  return { card: normalizeCard(card), usage: usageRow('scan_card', message.model || model, message.usage) };
+  if (!card) throw badOutput(usage, 'AI 回的不是 JSON，请再试一次');
+  return { card: normalizeCard(card), usage };
 }
 
 /** 修整 AI 回来的名片：去空白、电话去掉怪字元、email 小写、去重 */
@@ -99,8 +94,4 @@ export function normalizeCard(c = {}) {
   };
 }
 
-export default postHandler(async (req, body) => {
-  const ctx = await requireOwner(req);
-  await requireBudget(ctx);
-  return scanCard(body);
-});
+export default aiEndpoint('scan_card', scanCard);

@@ -2,7 +2,11 @@ import React, { useMemo, useState } from 'react';
 import { ArrowLeft, Check, CheckCheck, Trash2, Bot, MessageCircle, QrCode, GitMerge } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
 import { waLink, relDay, findDuplicates } from '../lib/logic.js';
-import { Button, Avatar, Chip, PrivateImage, Section, useToast } from './ui.jsx';
+import { summarize } from '../lib/burst.js';
+import { greeting } from '../lib/salute.js';
+import { useBurstItems } from './Burst.jsx';
+import { Button, Avatar, Chip, PrivateImage, Section, Sheet, Field, Input, Textarea, useToast } from './ui.jsx';
+import { PhonesEditor } from './ScanCard.jsx';
 
 /**
  * 新朋友：别人扫码留的资料（people.pending_review = true）
@@ -14,6 +18,10 @@ export default function NewFriends({ onBack, onOpen, onCard }) {
   const toast = useToast();
   const list = store.newFriends;
   const [busy, setBusy] = useState('');
+  // 体检第 3 阶段：AI 读完先给你核对 { person, card, form }
+  const [review, setReview] = useState(null);
+  // 活动连拍：还在手机里、还没进来的
+  const waiting = summarize(useBurstItems().filter((it) => !it.done));
   // 每个新朋友：像不像已经存过的人（只看手机 / 个人邮箱 / 名字 + 公司；公司总机、info@ 不算）
   const lookalike = useMemo(() => {
     const out = new Map();
@@ -42,7 +50,16 @@ export default function NewFriends({ onBack, onOpen, onCard }) {
           </Button>
         )}
       </div>
-      <p className="text-sm text-muted">别人扫你的二维码留的资料，已经自动建好、放在「认识」圈。看一眼：对的就确认，乱填的删掉；像旧朋友的，按「合并」。</p>
+      <p className="text-sm text-muted">别人扫你的二维码留的资料、你在活动连拍的名片，已经自动建好、放在「认识」圈。看一眼：对的就确认，乱填的删掉；像旧朋友的，按「合并」。</p>
+      {waiting.total > 0 && (
+        <div className="flex items-center gap-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
+          <span className="flex-1">
+            还有 {waiting.total} 张连拍的名片在处理
+            {waiting.phone ? `：${waiting.phone} 张在手机等网络（不会丢）` : waiting.saved ? `：AI 在读 ${waiting.saved} 张` : ''}
+          </span>
+          <Button size="sm" variant="outline" busy={busy === 'sync'} onClick={() => run('sync', () => store.runBurstSync())}>现在同步</Button>
+        </div>
+      )}
 
       {!list.length && (
         <div className="rounded-2xl border border-dashed border-line p-8 text-center">
@@ -56,7 +73,7 @@ export default function NewFriends({ onBack, onOpen, onCard }) {
       {list.map((p) => {
         const card = p.photos.find((ph) => ph.id === p.card_photo_id);
         const placeholder = /名片待确认/.test(p.name);
-        const wa = waLink(p.whatsapp, `Hi ${String(p.name).split(/\s+/)[0]}，`);
+        const wa = waLink(p.whatsapp, greeting(p));
         const scan = p.interactions.find((i) => i.source === 'qr');
         const dup = lookalike.get(p.id);
         return (
@@ -97,7 +114,10 @@ export default function NewFriends({ onBack, onOpen, onCard }) {
             <div className="mt-3 flex flex-wrap gap-2">
               <Button size="sm" busy={busy === p.id} onClick={() => run(p.id, () => store.confirmNew([p.id]), `${p.name} 确认了`)}><Check className="h-4 w-4" />{dup ? '不是，是新的人' : '确认'}</Button>
               {card && (
-                <Button size="sm" variant={placeholder ? 'accent' : 'outline'} busy={busy === `ai${p.id}`} onClick={() => run(`ai${p.id}`, () => store.readCardWithAI(p.id), 'AI 读好了，看一下对不对')}>
+                <Button size="sm" variant={placeholder ? 'accent' : 'outline'} busy={busy === `ai${p.id}`} onClick={() => run(`ai${p.id}`, async () => {
+                  const { card: read, draft } = await store.readCardWithAI(p.id);
+                  setReview({ person: p, card: read, form: formFrom(draft) });
+                })}>
                   <Bot className="h-4 w-4" />AI 读名片
                 </Button>
               )}
@@ -111,6 +131,70 @@ export default function NewFriends({ onBack, onOpen, onCard }) {
           </Section>
         );
       })}
+
+      {review && (
+        <CardReview
+          review={review}
+          onChange={(form) => setReview({ ...review, form })}
+          onClose={() => setReview(null)}
+          busy={busy === 'review'}
+          onSave={() => run('review', async () => {
+            await store.saveCardReview(review.person.id, review.card, review.form);
+            setReview(null);
+          }, '存好了')}
+        />
+      )}
     </div>
+  );
+}
+
+/** AI 读出来、补进去之后的样子 → 画面上的表单 */
+function formFrom(d) {
+  return {
+    name: /名片待确认/.test(d.name || '') ? '' : d.name || '',
+    name_alt: d.name_alt || '',
+    title: d.title || '',
+    company: d.company || '',
+    phones: (d.phones || []).length ? d.phones.map((p) => ({ label: p.label || 'mobile', number: p.number })) : [{ label: 'mobile', number: '' }],
+    emails: (d.emails || []).join('\n'),
+    website: d.website || '',
+    address: d.address || '',
+  };
+}
+
+/**
+ * AI 读名片 → 先给你核对（体检第 3 阶段）
+ * 上面是名片照片，下面是要存的资料（你原本填过的不会被换掉），对着照片改好再按「存进去」。
+ * 按「不要」什么都不改（这次读名片的钱已经算进预算，大约 RM0.01）
+ */
+function CardReview({ review, onChange, onClose, onSave, busy }) {
+  const { person, card, form } = review;
+  const photo = person.photos.find((ph) => ph.id === person.card_photo_id);
+  const set = (k) => (e) => onChange({ ...form, [k]: e.target.value });
+  return (
+    <Sheet open onClose={onClose} title="AI 读的，对一下再存" wide>
+      {photo && <PrivateImage path={photo.path} className="mb-3 max-h-56 w-full rounded-xl bg-ink/5 object-contain" />}
+      {card && card.is_business_card === false && (
+        <p className="mb-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">AI 说这张看起来不像名片，请特别看一下。</p>
+      )}
+      <p className="mb-3 text-sm text-muted">对着上面的照片看：错的直接改，没有的留空。按「存进去」才会改他的资料。</p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="名字"><Input value={form.name} onChange={set('name')} placeholder="名片上的名字" /></Field>
+        <Field label="另一种写法"><Input value={form.name_alt} onChange={set('name_alt')} placeholder="中文名 / 英文名" /></Field>
+        <Field label="职位"><Input value={form.title} onChange={set('title')} /></Field>
+        <Field label="公司"><Input value={form.company} onChange={set('company')} /></Field>
+      </div>
+      <div className="mt-3"><PhonesEditor phones={form.phones} onChange={(phones) => onChange({ ...form, phones })} /></div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <Field label="邮箱" hint="一行一个"><Textarea rows={2} value={form.emails} onChange={set('emails')} /></Field>
+        <Field label="网站"><Input value={form.website} onChange={set('website')} /></Field>
+      </div>
+      <Field label="地址" className="mt-3"><Textarea rows={2} value={form.address} onChange={set('address')} /></Field>
+      <div className="mt-4 flex gap-2">
+        <Button variant="accent" className="flex-1" busy={busy} disabled={!form.name.trim()} onClick={onSave}><Check className="h-4 w-4" />存进去</Button>
+        <Button variant="ghost" onClick={onClose}>不要</Button>
+      </div>
+      {!form.name.trim() && <p className="mt-2 text-xs text-faint">名字要填才能存</p>}
+    </Sheet>
   );
 }

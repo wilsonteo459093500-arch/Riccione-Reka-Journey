@@ -45,7 +45,7 @@
 - **照 `blueprint/PLAN.md` 的第 0–10 阶段做**。开场白：「读 `blueprint/PLAN.md`，做体检计划第 N 阶段」
   - 第 0 阶段是用户自己做的设定；Claude 从第 1 阶段「展厅播放敢给客户看」开始
   - 原来的下一项「用真的方案 PDF 测」现在是第 2 阶段
-  - **2026-11-21 第 2 阶段上半做完**（体检列的认错写法全修好、忽略清单、测试数据自动抹客户资料）；下半要用户附上真的 PDF 才能做，进度和那张表在 `blueprint/PLAN.md` 最后一节
+  - **2026-11-21 第 2 阶段上半做完、合进 main（#101）**（体检列的认错写法全修好、忽略清单、测试数据自动抹客户资料）；下半要用户附上真的 PDF 才能做，进度和那张表在 `blueprint/PLAN.md` 最后一节
   - 第 1 阶段（展厅播放）当时还没做，第 2 阶段先做是用户选的
 - 用户 2026-11-20 定的：
   - **先修展厅播放，再修 PDF 导入**
@@ -84,16 +84,28 @@
   - 顺序（用户 2026-11-19 定的）：0 用户自己做的设定 → 1 公开页面关门 → 2 活动连拍 → 3 AI 稳定 + 补查 → 4 导入现有人脉 → 5 整理工具 → 6 每天提醒 → 7 WhatsApp 群发 → 8 小修
   - 用户的决定：两星期内有活动，所以连拍提前；每天提醒用**手机推送通知**（不是 TickTick 每日任务，试不通才退回）；FoloToy / 星系图 / NFC / 名片页改版**不冻结**
 - 线上：Vercel 项目 `space-network`，Supabase 项目「SPACE NETWORK」。体检当天资料库只有 1 个人
-- **2026-11-20 第 1 阶段（公开页面关门）做完、开了 PR**：合并前要先在 Supabase 把 `network/supabase/schema.sql` 整份再跑一次（`DEPLOY.md`「体检第 1 阶段升级」）。下一个是第 2 阶段「活动连拍」
+- **2026-11-20 第 1 阶段（公开页面关门）** 合进 main（#86）
+- **2026-11-20 第 2 阶段（活动连拍）做完、开了 PR**：用户选了「有网络自动 AI 读」+「每张可选 ⭐ / 备注」；资料库不用升级。下一个是第 3 阶段「AI 稳定 + 补查」
+- **2026-11-20 第 3 阶段（AI 稳定 + 补查）做完、开了 PR**：叠在第 2 阶段的分支上（先合 #90）；资料库不用升级。补查结论在 `network/README.md`「体检第 3 阶段」。下一个是第 4 阶段「把现有人脉搬进来」（先 brainstorm 导入画面）
+- **2026-11-20 第 4 阶段（把现有人脉搬进来）做完、开了 PR**：叠在第 3 阶段（#92）上，合并顺序 #90 → #92 → 第 4 阶段；**合并前要先重跑 `schema.sql`**（people 加称呼 / 生日 / 导入来源 / 第一次提醒日）。用户选的：清单打勾、用 Android、导入的人先全放「认识」（第一次提醒分散 120 天）、WhatsApp 群用汇出的聊天记录（不用截图 AI）。称呼规则 `network/src/lib/salute.js`，导入 `network/src/lib/importer.js`。下一个是第 5 阶段「整理工具」
+- **2026-11-20 第 2、3、4 阶段验收后一起合进 main**：
+  - 资料库「SPACE NETWORK」已经升级好（那 4 个栏位），不用再跑
+  - 验收只在电脑上模拟手机走过（通讯录挑选器是假的）；真的 Android 通讯录、真的相机连拍、真的 AI 还要用户自己照 `network/DEPLOY.md` 走一遍
+  - 验收时改了一处：从手机通讯录挑的人，回到清单就是勾好的（档案 / 表格照旧不勾）
+- 第 0 阶段还没做完（2026-11-20 查 Vercel）：`TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` 没设（要用户在 Cloudflare 建、自己贴进 Vercel，secret 不经过对话）；`SUPABASE_SERVICE_ROLE_KEY` 还勾着 Preview
 
 ## 上线流程（全部软件，2026-11-20 起）
 
 - **合并进 main = 正式版自动更新**；别的分支 = 预览版，预览网址由 GitHub Actions 贴在 PR 留言里。详情 `DEPLOY-FLOW.md`
 - 只有改到的软件才测试、出版本（登记在 `.github/apps.json`）；测试没过不上线
-- Vercel 项目自己的 Git 自动部署已关掉（各 `vercel.json` 的 `git.deploymentEnabled: false` + 项目设定 deploymentPolicy），**不要再加 `ignoreCommand`**
+- Vercel 项目自己的 Git 自动部署已关掉（各 `vercel.json` 的 `git.deploymentEnabled: false` + 2026-11-21 把 KIRA / VISI / SPACE / UKIR 四个 Vercel 项目和 GitHub 的连接断开），**不要再加 `ignoreCommand`**。免费方案没有 Deployment Policy，别再试
 - 新增软件：照 `DEPLOY-FLOW.md`「新增一个软件」做
 - **2026-11-20 以前开的分支**（还没合 main 的）：推上去不会再自动出预览。先 `git merge origin/main` 把新流程带进来，再推一次就会出
 - 推送照样要攒着推：每推一次，改到的软件各用一次 Vercel 额度（一天 100 次）
+- **2026-11-21 修了两个坑**：
+  - 版本没出成（例：额度用完 `api-deployments-free-per-day`）以前照样显示成功、PR 留言写「undefined」。现在一定亮红灯，留言写「没出成」。合并后还是到 Vercel 看一眼那一版是不是 READY
+  - 额度是被旧分支吃掉的：还没合 main 的分支每推一次，Vercel 自己给每个连着的项目各建一版。断开连接后不会了
+  - WISH 的 Vercel 项目故意还连着（`genie/` 只在 PR #65 的分支上，靠 Vercel 自己出预览）；PR #65 合了 main 以后再断开
 
 ## KIRA（kira/）
 
