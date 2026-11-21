@@ -174,8 +174,13 @@ export function craftText(entry, lang = 'zh') {
 
 const norm = (s) => String(s ?? '').toLowerCase().replace(/[\s　]+/g, '');
 const isLatin = (s) => /^[a-z0-9 °-]+$/i.test(s);
-// 前面紧挨着否定词（「不做海棠角」「取消隐形门」「无透气孔」）→ 不算
+// 前面紧挨着否定词（「不做海棠角」「取消隐形门」「无透气孔」「no hidden door」）→ 不算
 const NEGATION = /(不|无|没有|没|取消|去掉|不要|不用|免)[做用加设留开]?$/;
+const NEGATION_EN = /(?:^|[^a-z])(?:no|not|non|without|remove|cancel(?:led)?|exclude|excluding)[\s-]*$/i;
+// 后面紧跟否定、而且否定到这里就完了（「海棠角不做」「隐形门：取消」）→ 不算；
+// 「隐形门不要门套」的「不要」后面还有东西，否定的是门套，照样算
+const NEGATION_AFTER = /^[\s　：:，,（(]*(?:不做|不要|不用|不需要|不加|不设|取消|去掉|免做|没有|无)[\s　）)]*(?:$|[，,。；;、!！.?？/|｜])/;
+const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
  * 这一页的图纸文字从哪里来（导入时从 PDF 读出来、设计师可能改过的栏位）：
@@ -203,21 +208,33 @@ export function matchEntry(entry, text) {
   // 先挖掉 exclude 的写法（「夹心板」），剩下的再找
   let hay = t;
   for (const ex of entry.exclude || []) hay = hay.split(norm(ex)).join('｜');
+  // 拉丁字母的别名在保留空格的原文上找整词（去掉空格会把「with hidden door」粘成一串，认不出）
+  let rawHay = raw.toLowerCase().replace(/[\s　]+/g, ' ');
+  for (const ex of entry.exclude || []) {
+    rawHay = rawHay.replace(new RegExp(norm(ex).split('').map(escRe).join('\\s*'), 'gi'), '｜');
+  }
   for (const alias of entry.aliases) {
     const a = norm(alias);
     if (!a) continue;
+    if (isLatin(alias)) {
+      // 整词：前后不能紧挨字母（'aba' 不认 'abacus'）；别名里的空格在原文里可有可无（'shadowgap' 也认）
+      const re = new RegExp(`(^|[^a-z])(${a.split('').map(escRe).join('\\s*')})(?![a-z])`, 'gi');
+      for (const m of rawHay.matchAll(re)) {
+        const k = m.index + m[1].length;
+        const before = rawHay.slice(Math.max(0, k - 14), k);
+        if (NEGATION_EN.test(before) || NEGATION.test(before.replace(/\s+/g, '').slice(-4))) continue;
+        if (NEGATION_AFTER.test(rawHay.slice(k + m[2].length))) continue;
+        return alias;
+      }
+      continue;
+    }
     let from = 0;
     while (true) {
       const k = hay.indexOf(a, from);
       if (k < 0) break;
       from = k + 1;
-      if (isLatin(alias)) {
-        // 拉丁字母整词：前后不能紧挨字母（'aba' 不认 'abacus'）
-        const before = hay[k - 1] || '';
-        const after = hay[k + a.length] || '';
-        if (/[a-z]/.test(before) || /[a-z]/.test(after)) continue;
-      }
       if (NEGATION.test(hay.slice(Math.max(0, k - 4), k))) continue;
+      if (NEGATION_AFTER.test(hay.slice(k + a.length))) continue;
       return alias;
     }
   }

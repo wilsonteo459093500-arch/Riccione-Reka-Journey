@@ -7,3 +7,15 @@ dist-ssr
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# 真实客户资料不进仓库（仓库是公开的；UKIR STUDIO 体检第 2 阶段，2026-11-21）
+# 方案 PDF、导出的 PPT、项目备份只放临时资料夹；要进测试的，用 blueprint/scripts/dump_pages.mjs --fixture 转成抹掉客户资料的 JSON
+*.pdf
+*.PDF
+*.pptx
+*.ppt
+*.key
+*.blueprint.zip
+# 已经在仓库里、不是客户资料的 PDF（公司手册、KIRA 测试用的合成平面图）照旧
+!.claude/skills/riccione-company-profile/references/*.pdf
+!kira/test/fixtures/*.pdf

@@ -11,7 +11,7 @@
 // }
 
 import {
-  parseRoomTitle, parseFloorLabel, parseMaterialLabel, materialKey, parseFileName, parseClientLine, formatPdfDate,
+  parseRoomTitle, parseFloorLabel, parseMaterialLabel, parseMaterialLabels, isGroundStyleLabel, materialKey, parseFileName, parseClientLine, formatPdfDate,
   parseNoteText, looksLikeMaterial, inferRole, findCode, joinLines, hasHan, SUBTITLE_KEYWORDS, ROLE_WORDS,
 } from './labels.js';
 
@@ -195,6 +195,13 @@ export function analyzePages(raw, { fileName } = {}) {
   };
   const anyText = rawPages.some((p) => (p.lines || []).length > 0);
 
+  // 同一份方案里明写了 GF / Ground Floor：'1F' 指的是 GF 上面那层（马来西亚写法 GF、1F、2F）；
+  // 没写 GF 的方案照中文习惯，1F = 一楼
+  const nfAboveGround =
+    /(?:^|[^A-Za-z0-9])G\/?F(?![A-Za-z0-9])/i.test(String(fileName || '')) ||
+    rawPages.some((p) => (p.lines || []).some((l) => isGroundStyleLabel(l.text)));
+  const floorOpts = { nfAboveGround };
+
   // -------------------------------------------------------------------------
   // 2) 逐页分类 + 视角解析
   // -------------------------------------------------------------------------
@@ -272,11 +279,11 @@ export function analyzePages(raw, { fileName } = {}) {
     }
 
     // —— 楼层章节页
-    let floorLabel = lines.length && lines.length <= 6 && text.length <= 60 ? parseFloorLabel(text) : null;
+    let floorLabel = lines.length && lines.length <= 6 && text.length <= 60 ? parseFloorLabel(text, floorOpts) : null;
     if (!floorLabel && !big && lines.length && lines.length <= 12) {
       // 章节页上还列了本层空间（'主人房 · 中厅 · 客房'）：字号最大的几行里有一行是纯楼层标签就算
       const maxFs = Math.max(...lines.map((l) => l.fs));
-      const cand = lines.filter((l) => l.fs >= 0.8 * maxFs && l.text.length <= 30).map((l) => parseFloorLabel(l.text)).find(Boolean);
+      const cand = lines.filter((l) => l.fs >= 0.8 * maxFs && l.text.length <= 30).map((l) => parseFloorLabel(l.text, floorOpts)).find(Boolean);
       if (cand) floorLabel = cand;
     }
     if (floorLabel && (!big || area(big) / PA >= 0.85)) {
@@ -455,19 +462,38 @@ export function analyzePages(raw, { fileName } = {}) {
     };
     matsHere.sort((a, b) => a.swatch.y - b.swatch.y || a.swatch.x - b.swatch.x);
     for (const { swatch, lines: ls } of matsHere) {
-      const parsed = parseMaterialLabel(ls.map((l) => l.text).join('\n'));
-      if (!parsed.name && !parsed.code) continue;
-      const key = addMaterial(parsed, swatch.key);
-      if (key && !viewMats.some((m) => m.materialKey === key)) viewMats.push({ role: parsed.role, materialKey: key, explicit: !!parsed.role });
+      // 一条标签写了两种材料（'柜体 AG273 柜门 AG275'）：两种都收；色板图片只给第一种（分不出图上是哪一种）
+      parseMaterialLabels(ls.map((l) => l.text).join('\n')).forEach((parsed, i) => {
+        if (!parsed.name && !parsed.code) return;
+        const key = addMaterial(parsed, i === 0 ? swatch.key : null);
+        if (key && !viewMats.some((m) => m.materialKey === key)) viewMats.push({ role: parsed.role, materialKey: key, explicit: !!parsed.role });
+      });
     }
     // 没有色板的标签：有编号（或「部位：」写法且紧挨其它标签）的仍算材料，其它当备注
     for (const blk of freeBlocks) {
       const joined = blk.lines.map((l) => l.text).join('\n');
       const parsedNote = /^[*※•]/.test(blk.lines[0].text) ? null : parseMaterialLabel(joined);
       const nearLabels = matsHere.some((m) => rectDistance(unionBox(m.lines), blk.box) <= 60);
+      // 单独一行「TBC / 待确认」：挨着哪张色板的标签，那种材料就是待确认；不当备注
+      if (parsedNote && parsedNote.pending && !parsedNote.name && !parsedNote.code && !parsedNote.role) {
+        const near = matsHere
+          .map((m) => ({ m, d: rectDistance(unionBox(m.lines), blk.box) }))
+          .filter((x) => x.d <= 60)
+          .sort((a, b) => a.d - b.d)[0];
+        if (near) {
+          for (const parsed of parseMaterialLabels(near.m.lines.map((l) => l.text).join('\n'))) {
+            const m = matMap.get(materialKey(parsed));
+            if (m) m.pending = true;
+          }
+          continue;
+        }
+      }
       if (parsedNote && looksLikeMaterial(joined) && (parsedNote.code || (parsedNote.role && nearLabels))) {
-        const key = addMaterial(parsedNote, null);
-        if (key && !viewMats.some((m) => m.materialKey === key)) viewMats.push({ role: parsedNote.role, materialKey: key, explicit: !!parsedNote.role });
+        for (const parsed of parseMaterialLabels(joined)) {
+          if (!parsed.name && !parsed.code) continue;
+          const key = addMaterial(parsed, null);
+          if (key && !viewMats.some((m) => m.materialKey === key)) viewMats.push({ role: parsed.role, materialKey: key, explicit: !!parsed.role });
+        }
         continue;
       }
       for (const item of splitItems(blk)) pushNote(parseNoteText(item.map((l) => l.text)), true, item[0].y);
@@ -479,7 +505,7 @@ export function analyzePages(raw, { fileName } = {}) {
     notes.sort((a, b) => a.y - b.y);
 
     // 空间标题
-    let parsedTitle = titleText ? parseRoomTitle(titleText) : null;
+    let parsedTitle = titleText ? parseRoomTitle(titleText, floorOpts) : null;
     if (parsedTitle && !parsedTitle.room && !parsedTitle.roomEn) parsedTitle = null;
     const prev = views[views.length - 1];
     // 标题里写了楼层（'二楼 主人房'、'GF Living Room'）→ 以标题为准
@@ -525,6 +551,25 @@ export function analyzePages(raw, { fileName } = {}) {
       .map((vm, i) => ({ vm, i }))
       .sort((a, b) => rank(a.vm) - rank(b.vm) || a.i - b.i)
       .map(({ vm }) => ({ role: vm.role, materialKey: vm.materialKey }));
+  }
+
+  // -------------------------------------------------------------------------
+  // 3b) 同一层、同一个英文名的空间换了写法（'干厨房' / '干厨' / 'Dry Kitchen'）→ 统一成设计师第一次写的中文名
+  //     只合并两种情况：标题只写了英文（中文是程序翻的）；或两个中文名只差结尾的「房 / 室 / 间」
+  //     （'主卧' / '主人房'、'卫生间' / '浴室' 可能真是两个地方，不合）
+  // -------------------------------------------------------------------------
+  const stem = (r) => String(r || '').replace(/\s+/g, '').replace(/[房室间区]$/, '');
+  const firstZh = new Map(); // floorKey|roomEn → 设计师写的中文名
+  for (const v of views) {
+    if (!v.roomEn || !hasHan(v.titleRaw || '')) continue;
+    const k = `${v.floorKey}|${v.roomEn}`;
+    if (!firstZh.has(k)) firstZh.set(k, v.room);
+  }
+  for (const v of views) {
+    const target = v.roomEn ? firstZh.get(`${v.floorKey}|${v.roomEn}`) : null;
+    if (!target || target === v.room) continue;
+    const fromEnglish = !!v.titleRaw && !hasHan(v.titleRaw);
+    if (fromEnglish || stem(v.room) === stem(target)) v.room = target;
   }
 
   // -------------------------------------------------------------------------
