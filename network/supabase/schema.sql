@@ -272,6 +272,12 @@ create trigger people_scrub_inbox before delete on public.people
 -- 以前删掉的人（person_id 已经变空）留下的资料也抹掉
 update public.inbox set payload = null where person_id is null and payload is not null;
 
+-- ---------- 体检第 4 阶段（2026-11-20）：把现有人脉搬进来 ----------
+alter table public.people add column if not exists salutation text not null default '';     -- 称呼（Dato' Lim / 国荣 / 林总）；空 = 照名字猜
+alter table public.people add column if not exists birthday text not null default '';       -- YYYY-MM-DD，不知道年份写 --MM-DD（通讯录带进来的）
+alter table public.people add column if not exists import_source text not null default '';  -- contacts / vcf / csv / whatsapp：导入的人不算「刚认识」
+alter table public.people add column if not exists first_due date;                          -- 导入的人第一次提醒的日子（分散开，不会几百人同一天到期）
+
 -- ---------- updated_at trigger + RLS（每张表一样）----------
 do $$
 declare t text;

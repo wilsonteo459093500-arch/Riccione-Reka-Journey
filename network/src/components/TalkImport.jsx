@@ -13,6 +13,7 @@ import { matchPerson, fmtDate, normName } from '../lib/logic.js';
 import {
   TALK_SOURCES, SOURCE_BY_KEY, MAX_TALK_CHARS, MAX_SCREENSHOTS, MOODS, parseWhatsApp, nameFromWhatsAppFile, matchParticipant,
   suggestPeople, selectWhatsApp, cleanTranscript, estimateTalkMyr, fmtStamp,
+  splitTalk, TALK_SPLIT_CHARS,
 } from '../lib/talk.js';
 import { Avatar, Button, Chip, Field, Input, Textarea, Section, Spinner, useToast, cx, inputCls } from './ui.jsx';
 
@@ -51,6 +52,9 @@ export default function TalkImport({ personId = null, onCancel, onDone }) {
   // 逐字稿 / 语音备注：打到一半离开也不会丢
   const [texts, setTexts] = useState(() => ({ plaud: ls.get('star.draft.plaud', ''), voice: ls.get('star.draft.voice', '') }));
   const setText = (key, v) => { setTexts((t) => ({ ...t, [key]: v })); ls.set(`star.draft.${key}`, v); };
+  // 体检第 3 阶段：很长的录音分段整理。seg = { k: 第几段, n: 共几段, rest: [还没整理的段] }（存在手机，离开也不会丢）
+  const [segs, setSegs] = useState(() => ({ plaud: ls.get('star.draft.plaud.seg', null), voice: ls.get('star.draft.voice.seg', null) }));
+  const setSeg = (key, v) => { setSegs((x) => ({ ...x, [key]: v })); if (v) ls.set(`star.draft.${key}.seg`, v); else ls.del(`star.draft.${key}.seg`); };
 
   const [wa, setWa] = useState(null); // { fileName, parsed, fileGuess }
   const [waMe, setWaMe] = useState('');
@@ -142,6 +146,22 @@ export default function TalkImport({ personId = null, onCancel, onDone }) {
   const payloadText = source === 'whatsapp_txt' ? (waSel ? waSel.text : '') : source === 'whatsapp_screenshot' ? '' : (texts[source] || '').trim();
   const ready = !!person && (source === 'whatsapp_screenshot' ? shots.length > 0 : source === 'whatsapp_txt' ? !!(waSel && waSel.count) : payloadText.length >= 10);
   const tooLong = payloadText.length > MAX_TALK_CHARS;
+  const textSource = source === 'plaud' || source === 'voice';
+  const seg = textSource ? segs[source] : null;
+  const segLabel = seg ? `（第 ${seg.k}/${seg.n} 段）` : '';
+  const splitParts = textSource && payloadText.length > TALK_SPLIT_CHARS ? splitTalk(payloadText).length : 0;
+
+  /** 分成几段：现在这格放第 1 段，其他的留在手机等着 */
+  function splitNow() {
+    const parts = splitTalk(payloadText);
+    if (parts.length < 2) return;
+    const before = seg ? seg.rest : [];
+    const k = seg ? seg.k : 1;
+    setSeg(source, { k, n: (seg ? seg.n - 1 : 0) + parts.length, rest: [...parts.slice(1), ...before] });
+    setText(source, parts[0]);
+    setErr('');
+    toast(`分成 ${parts.length} 段了：先整理第 ${k} 段，存好会自动放下一段`);
+  }
   const cost = estimateTalkMyr(payloadText.length, source === 'whatsapp_screenshot' ? shots.length : 0, RATE);
 
   function occurredAt() {
@@ -168,6 +188,7 @@ export default function TalkImport({ personId = null, onCancel, onDone }) {
       setResult({ analysis });
       setStep('review');
     } catch (e) {
+      if (e.usage) store.logUsage(e.usage);
       setErr(e.message);
       setStep('input');
     }
@@ -183,7 +204,17 @@ export default function TalkImport({ personId = null, onCancel, onDone }) {
   }
 
   function finish() {
-    if (source === 'plaud' || source === 'voice') setText(source, '');
+    if (textSource && seg && seg.rest.length) {
+      // 还有下一段：放进来，留在这页继续
+      const [next, ...rest] = seg.rest;
+      setSeg(source, { k: seg.k + 1, n: seg.n, rest });
+      setText(source, next);
+      setResult(null);
+      setStep('input');
+      toast(`第 ${seg.k} 段存好了，第 ${seg.k + 1}/${seg.n} 段放好了`);
+      return;
+    }
+    if (textSource) { setText(source, ''); setSeg(source, null); }
     onDone(pid);
   }
 
@@ -194,7 +225,7 @@ export default function TalkImport({ personId = null, onCancel, onDone }) {
       const t = payloadText;
       await store.saveTalk(pid, {
         source, kind, occurredAt: occurredAt(),
-        title: { plaud: 'Plaud 录音', voice: '语音备注', whatsapp_txt: 'WhatsApp 聊天' }[source],
+        title: `${{ plaud: 'Plaud 录音', voice: '语音备注', whatsapp_txt: 'WhatsApp 聊天' }[source]}${segLabel}`,
         summary: source === 'voice' ? t.slice(0, 1200) : '',
         transcript: t, range: rangeFor(),
       });
@@ -211,7 +242,7 @@ export default function TalkImport({ personId = null, onCancel, onDone }) {
     setSaving(true);
     try {
       await store.saveTalk(pid, {
-        source, kind, occurredAt: occurredAt(), title, summary, transcript: transcriptFor(result.analysis),
+        source, kind, occurredAt: occurredAt(), title: seg ? `${title || '对话'}${segLabel}` : title, summary, transcript: transcriptFor(result.analysis),
         analysis: result.analysis, pick, range: rangeFor(),
       });
       toast(`写进 ${person.name} 的档案了`);
@@ -286,7 +317,20 @@ export default function TalkImport({ personId = null, onCancel, onDone }) {
           </Section>
 
           {err && <div role="alert" className="rounded-xl border border-danger/30 bg-white p-3 text-sm text-danger">{err}</div>}
-          {tooLong && <p className="text-sm text-danger">太长了（{payloadText.length.toLocaleString()} 字，上限 {MAX_TALK_CHARS.toLocaleString()}），请分两次。</p>}
+          {seg && (
+            <div className="flex items-center gap-2 rounded-xl bg-ink/5 p-3 text-sm">
+              <span className="flex-1">长录音分段整理：现在是<b> 第 {seg.k} 段 / 共 {seg.n} 段</b>{seg.rest.length ? `，存好会自动放下一段` : '（最后一段）'}</span>
+              <button className="text-xs font-medium text-muted underline" onClick={() => { setSeg(source, null); toast('不分段了：剩下的段已经丢掉，框里的字还在'); }}>不分了</button>
+            </div>
+          )}
+          {splitParts > 1 ? (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+              <p>这段很长（{payloadText.length.toLocaleString()} 字）。一次整理，AI 常常写不完或等太久。</p>
+              <p className="mt-1">建议分成 {splitParts} 段，一段一段整理，每段存成一笔对话。</p>
+              <Button size="sm" variant="accent" className="mt-2" onClick={splitNow}>分成 {splitParts} 段</Button>
+              {!tooLong && <p className="mt-1 text-xs">也可以不分，直接按下面的按钮试试。</p>}
+            </div>
+          ) : tooLong && <p className="text-sm text-danger">太长了（{payloadText.length.toLocaleString()} 字，上限 {MAX_TALK_CHARS.toLocaleString()}），请分两次。</p>}
 
           <Button variant="accent" size="lg" className="w-full" disabled={!ready || tooLong} onClick={analyze}>
             <Sparkles className="h-5 w-5" />AI 整理重点

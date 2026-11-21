@@ -12,9 +12,9 @@
    Haiku 5.5（便宜、快）：从对话里挑出兴趣、需求、资源、情绪、承诺……
    前端给使用者勾选之后才写进人物档案。
    ============================================================ */
-import { postHandler, HttpError, cleanText } from './_lib/http.js';
-import { requireOwner, requireBudget } from './_lib/auth.js';
-import { getClient, textOf, extractJson, checkStop, mapAiError, cleanImages } from './_lib/ai.js';
+import { HttpError, cleanText } from './_lib/http.js';
+import { getClient, textOf, extractJson, checkStop, cleanImages, callWithin, badOutput } from './_lib/ai.js';
+import { aiEndpoint } from './_lib/run.js';
 import { MODELS, usageRow } from './_lib/cost.js';
 
 export const SOURCES = ['plaud', 'voice', 'whatsapp_txt', 'whatsapp_screenshot'];
@@ -160,31 +160,24 @@ export async function analyzeTalk(body, deps = {}) {
 
   const client = deps.client || getClient();
   const model = MODELS.fast;
-  let message;
-  try {
-    message = await client.messages.create({
+  const message = await callWithin(deps.deadline, (opts) => client.messages.create({
       model,
       max_tokens: shots ? 16000 : 6000,
       output_config: { effort: 'medium', format: { type: 'json_schema', schema: TALK_SCHEMA } },
       system: SYSTEM,
       messages: [{ role: 'user', content: [...images, { type: 'text', text: buildTalkPrompt({ ...body, text }) }] }],
-    });
-  } catch (e) {
-    throw mapAiError(e);
-  }
-  checkStop(message);
+    }, opts));
+  const usage = usageRow('talk', message.model || model, message.usage);
+  // 被截断：再按一次结果一样，所以叫人分段，不是「再试一次」
+  checkStop(message, usage, shots ? '截图太多，AI 写不完——请少选几张，分两次整理' : '这段对话太长，AI 整理不完——请分成两三段，一段一段整理');
   const parsed = extractJson(textOf(message));
-  if (!parsed) throw new HttpError(502, { error: 'ai_bad_output', message: 'AI 回的格式不对，请再试一次' });
+  if (!parsed) throw badOutput(usage);
   const analysis = normalizeTalk(parsed);
   if (!shots) analysis.transcript = '';
   return {
     analysis: { ...analysis, model: message.model || model, analyzed_at: new Date().toISOString() },
-    usage: usageRow('talk', message.model || model, message.usage),
+    usage,
   };
 }
 
-export default postHandler(async (req, body) => {
-  const ctx = await requireOwner(req);
-  await requireBudget(ctx);
-  return analyzeTalk(body);
-});
+export default aiEndpoint('talk', analyzeTalk);

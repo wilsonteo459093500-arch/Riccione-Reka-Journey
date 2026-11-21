@@ -10,6 +10,7 @@ const MESSAGES = {
   not_configured: '服务器还没设定好（见 DEPLOY.md）',
   ai_not_configured: '服务器还没设 ANTHROPIC_API_KEY',
   ai_busy: 'AI 太忙，等一下再试',
+  ai_timeout: 'AI 想太久了，请再试一次',
   ticktick_not_configured: '还没接 TickTick（Vercel 设 TICKTICK_TOKEN）',
 };
 
@@ -18,6 +19,8 @@ export class ApiError extends Error {
     super((body && (body.message || MESSAGES[body.error])) || `出错了（${status}）`);
     this.status = status;
     this.code = body && body.error;
+    // 失败但 AI 已经花了钱（服务器记过账的会带 logged: true）
+    this.usage = (body && body.usage) || null;
   }
 }
 
@@ -37,6 +40,8 @@ async function post(path, body) {
   try { data = await res.json(); } catch { /* 不是 JSON */ }
   if (!res.ok) {
     if (res.status === 413) throw new ApiError(413, { message: '内容太大了（截图请少选几张，逐字稿请分段）' });
+    // 服务器被 Vercel 砍掉（不是我们自己回的 JSON）：说人话
+    if (!data && (res.status === 504 || res.status === 502)) throw new ApiError(504, { message: '服务器等 AI 等太久被切断了，这次没有结果；请再按一次' });
     if (res.status === 404) throw new ApiError(404, { message: '找不到 AI 服务（本机开发请在 .env.local 放 ANTHROPIC_API_KEY 后 npm run dev）' });
     throw new ApiError(res.status, data || {});
   }

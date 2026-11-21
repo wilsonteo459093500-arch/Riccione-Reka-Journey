@@ -14,9 +14,12 @@ import FindHelp from './components/FindHelp.jsx';
 import BriefCard from './components/BriefCard.jsx';
 import CardStudio from './components/CardStudio.jsx';
 import NewFriends from './components/NewFriends.jsx';
+import Burst from './components/Burst.jsx';
+import ImportPeople from './components/ImportPeople.jsx';
+import { burstQueue } from './lib/burst.js';
 import { ToastProvider, Spinner, cx } from './components/ui.jsx';
 
-/* ---------- 路由：#/today  #/  #/p/<id>  #/p/<id>/brief  #/p/<id>/talk  #/talk  #/scan  #/galaxy  #/find  #/me  #/card  #/inbox ---------- */
+/* ---------- 路由：#/today  #/  #/p/<id>  #/p/<id>/brief  #/p/<id>/talk  #/talk  #/scan  #/galaxy  #/find  #/me  #/card  #/inbox  #/burst  #/import ---------- */
 function parseHash() {
   const h = window.location.hash.replace(/^#/, '') || '/today'; // 打开 app 先看「今天该找谁」
   const br = /^\/p\/([\w-]+)\/brief$/.exec(h);
@@ -32,6 +35,8 @@ function parseHash() {
   const m = /^\/p\/([\w-]+)(\?analyze)?$/.exec(h);
   if (m) return { name: 'person', id: m[1], analyze: !!m[2] };
   if (h === '/scan') return { name: 'scan' };
+  if (h === '/burst') return { name: 'burst' };
+  if (h === '/import') return { name: 'import' };
   if (h === '/me') return { name: 'me' };
   return { name: 'list' };
 }
@@ -76,6 +81,7 @@ function Shell() {
   const route = useRoute();
   const { mode } = useStore();
   const [analyzeId, setAnalyzeId] = useState(null);
+  useBurstSync();
 
   const openPerson = (id) => go(`/p/${id}`);
   const listActive = route.name === 'list' || route.name === 'person';
@@ -84,7 +90,7 @@ function Shell() {
   useEffect(() => {
     if (['today', 'galaxy', 'find', 'list', 'inbox'].includes(route.name)) back.current = route.name === 'list' ? '/' : `/${route.name}`;
   }, [route.name]);
-  const fullScreen = ['scan', 'talk', 'brief'].includes(route.name);
+  const fullScreen = ['scan', 'talk', 'brief', 'burst', 'import'].includes(route.name);
 
   return (
     <div className="flex h-full flex-col lg:flex-row">
@@ -109,7 +115,7 @@ function Shell() {
           <div className="flex min-h-0 flex-1">
             {/* 列表：手机只在 list 显示；电脑一直在左边 */}
             <div className={cx('h-full w-full lg:w-[380px] lg:shrink-0 lg:border-r lg:border-line', route.name === 'person' && 'hidden lg:block')}>
-              <PeopleList selectedId={route.id} onOpen={openPerson} onScan={() => go('/scan')} onTalk={() => go('/talk')} onGalaxy={() => go('/galaxy')} onInbox={() => go('/inbox')} />
+              <PeopleList selectedId={route.id} onOpen={openPerson} onScan={() => go('/scan')} onTalk={() => go('/talk')} onGalaxy={() => go('/galaxy')} onInbox={() => go('/inbox')} onImport={() => go('/import')} />
             </div>
             <div className={cx('h-full min-w-0 flex-1 overflow-y-auto', route.name === 'list' && 'hidden lg:block')}>
               {route.name === 'person' ? (
@@ -129,15 +135,19 @@ function Shell() {
           <div className="min-h-0 flex-1 pb-20 lg:pb-0"><Galaxy onOpen={openPerson} /></div>
         ) : (
           <div className="min-h-0 flex-1 overflow-y-auto">
-            {route.name === 'today' && <Today onOpen={openPerson} onBrief={(id) => go(`/p/${id}/brief`)} onScan={() => go('/scan')} />}
+            {route.name === 'today' && <Today onOpen={openPerson} onBrief={(id) => go(`/p/${id}/brief`)} onScan={() => go('/scan')} onImport={() => go('/import')} />}
             {route.name === 'find' && <FindHelp onOpen={openPerson} />}
             {route.name === 'brief' && <BriefCard key={route.id} id={route.id} onBack={() => window.history.length > 1 ? window.history.back() : openPerson(route.id)} onTalk={() => go(`/p/${route.id}/talk`)} />}
             {route.name === 'scan' && (
               <ScanCard
                 onCancel={() => go('/')}
                 onDone={(id, { analyze }) => { if (analyze) setAnalyzeId(id); openPerson(id); }}
+                onBurst={() => go('/burst')}
+                onInbox={() => go('/inbox')}
               />
             )}
+            {route.name === 'burst' && <Burst onExit={() => go('/scan')} onInbox={() => go('/inbox')} />}
+            {route.name === 'import' && <ImportPeople onBack={() => go('/')} onOpenList={() => go('/')} />}
             {route.name === 'talk' && (
               <TalkImport
                 key={route.personId || 'any'}
@@ -170,6 +180,36 @@ function Shell() {
       )}
     </div>
   );
+}
+
+/**
+ * 活动连拍：手机上排队的名片在背景自动存进资料库（打开 app、网络回来、拍了新的、每 15 秒）
+ * 在 app 里哪一页都会跑，不用停在连拍画面
+ */
+function useBurstSync() {
+  const store = useStore();
+  const run = React.useRef(store.runBurstSync);
+  run.current = store.runBurstSync;
+  useEffect(() => {
+    let timer = null;
+    let debounce = null;
+    let stopped = false;
+    const tick = async () => {
+      clearTimeout(timer);
+      if (stopped) return;
+      let left = 0;
+      try {
+        if (navigator.onLine !== false) await run.current();
+        left = (await burstQueue().list()).filter((it) => !it.done).length;
+      } catch { /* 下次再来 */ }
+      if (!stopped) timer = setTimeout(tick, left ? 15000 : 120000);
+    };
+    const kick = () => { clearTimeout(debounce); debounce = setTimeout(tick, 1500); };
+    tick();
+    window.addEventListener('online', kick);
+    const off = burstQueue().subscribe(kick);
+    return () => { stopped = true; clearTimeout(timer); clearTimeout(debounce); window.removeEventListener('online', kick); off(); };
+  }, []);
 }
 
 function TabBtn({ icon: Icon, label, active, onClick }) {

@@ -1,13 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { LogOut, Download, Cloud, HardDrive, QrCode, ChevronRight } from 'lucide-react';
+import { LogOut, Download, Upload, Cloud, HardDrive, QrCode, ChevronRight } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
 import { supabase } from '../lib/supabase.js';
 import { monthUsage, tierCounts, DEFAULT_PROFILE } from '../lib/logic.js';
 import { Button, Field, Section, Textarea, Input, useToast } from './ui.jsx';
+import { parseBackup, planRestore } from '../lib/backup.js';
 import { Logo, MeaningRow } from './Login.jsx';
 
 const RATE = Number(import.meta.env.VITE_USD_TO_MYR || 4.4);
 const BUDGET_MYR = Number(import.meta.env.VITE_AI_MONTHLY_BUDGET_MYR || 50);
+const TABLE_LABEL = { profile: '我的资料', companies: '公司', circles: '圈子', events: '活动', photos: '照片', people: '人', person_circles: '圈子成员', resources: '资源标签', interactions: '互动', attendance: '活动出席', photo_people: '照片里的人', ai_usage: 'AI 用量' };
 const FEATURE = { scan_card: '名片识别', company: '公司背景', assess: '深度分析', talk: '对话分析', inbox_card: '扫码留的名片' };
 
 export default function Settings({ onCard }) {
@@ -24,6 +26,27 @@ export default function Settings({ onCard }) {
   async function save() {
     setBusy(true);
     try { await store.saveProfile(f); toast('存好了'); } catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
+  }
+
+  const fileRef = React.useRef(null);
+  const [restoring, setRestoring] = useState('');
+  async function restoreFrom(file) {
+    if (!file) return;
+    try {
+      const backup = parseBackup(await file.text());
+      const { plan, counts, skipped } = planRestore(backup, store.data);
+      if (!plan.length) { toast('备份里的资料现在都在，不用补'); return; }
+      const list = Object.entries(counts).map(([t, n]) => `${TABLE_LABEL[t] || t} ${n}`).join('、');
+      const when = backup.exported_at ? `（${String(backup.exported_at).slice(0, 10)} 汇出的）` : '';
+      if (!window.confirm(`从备份${when}补回不见的：\n${list}\n\n现在有的资料一律不改。${skipped ? `\n另有 ${skipped} 笔指到已经不在的人 / 照片，会跳过。` : ''}`)) return;
+      setRestoring('0');
+      const n = await store.restoreBackup(plan, (done, total) => setRestoring(`${done}/${total}`));
+      toast(`补回 ${n} 笔了`);
+    } catch (e) {
+      toast(`补不回：${e.message}`, 'error');
+    } finally {
+      setRestoring('');
+    }
   }
 
   function exportJson() {
@@ -95,8 +118,13 @@ export default function Settings({ onCard }) {
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={exportJson}><Download className="h-4 w-4" />汇出全部（JSON）</Button>
+          <Button variant="outline" size="sm" busy={!!restoring} onClick={() => fileRef.current.click()}>
+            <Upload className="h-4 w-4" />{restoring ? `补回中 ${restoring}` : '从备份补回'}
+          </Button>
+          <input ref={fileRef} type="file" accept=".json,application/json" className="hidden" onChange={(e) => { restoreFrom(e.target.files[0]); e.target.value = ''; }} />
           {supabase && <Button variant="outline" size="sm" onClick={() => supabase.auth.signOut()}><LogOut className="h-4 w-4" />登出</Button>}
         </div>
+        <p className="mt-2 text-xs text-faint">「从备份补回」只补现在不见的，不会改现在有的。备份里没有照片本身（照片还在云端就看得到）。</p>
       </Section>
 
       <div className="flex flex-col items-center gap-2 pt-4 text-center">

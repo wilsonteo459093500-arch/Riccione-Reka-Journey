@@ -5,9 +5,9 @@
    Sonnet 5.5 深度分析：「值得认识吗」4 个维度 + 我能给他的资源（家具以外）。
    只在按「深度分析」时跑。
    ============================================================ */
-import { postHandler, HttpError, cleanText } from './_lib/http.js';
-import { requireOwner, requireBudget } from './_lib/auth.js';
-import { getClient, textOf, extractJson, checkStop, mapAiError, FALLBACK_BETA } from './_lib/ai.js';
+import { HttpError, cleanText } from './_lib/http.js';
+import { getClient, textOf, extractJson, checkStop, FALLBACK_BETA, callWithin, badOutput } from './_lib/ai.js';
+import { aiEndpoint } from './_lib/run.js';
 import { MODELS, usageRow } from './_lib/cost.js';
 
 export const DIM_KEYS = ['business', 'connector', 'has_what_i_lack', 'i_can_help'];
@@ -132,9 +132,7 @@ export async function assessPerson(body, deps = {}) {
   if (!body || !body.person || !cleanText(body.person.name, 100).trim()) throw new HttpError(400, { error: 'no_person' });
   const client = deps.client || getClient();
   const model = MODELS.deep;
-  let message;
-  try {
-    message = await client.beta.messages.create({
+  const message = await callWithin(deps.deadline, (opts) => client.beta.messages.create({
       model,
       max_tokens: 8000,
       betas: [FALLBACK_BETA],
@@ -142,21 +140,15 @@ export async function assessPerson(body, deps = {}) {
       output_config: { effort: 'medium', format: { type: 'json_schema', schema: ASSESS_SCHEMA } },
       system: SYSTEM,
       messages: [{ role: 'user', content: buildAssessPrompt(body) }],
-    });
-  } catch (e) {
-    throw mapAiError(e);
-  }
-  checkStop(message);
+    }, opts));
+  const usage = usageRow('assess', message.model || model, message.usage);
+  checkStop(message, usage);
   const parsed = extractJson(textOf(message));
-  if (!parsed) throw new HttpError(502, { error: 'ai_bad_output', message: 'AI 回的格式不对，请再试一次' });
+  if (!parsed) throw badOutput(usage);
   return {
     assessment: { ...normalizeAssessment(parsed), model: message.model || model, assessed_at: new Date().toISOString() },
-    usage: usageRow('assess', message.model || model, message.usage),
+    usage,
   };
 }
 
-export default postHandler(async (req, body) => {
-  const ctx = await requireOwner(req);
-  await requireBudget(ctx);
-  return assessPerson(body);
-});
+export default aiEndpoint('assess', assessPerson);

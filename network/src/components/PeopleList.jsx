@@ -1,10 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { Search, ScanLine, Users, MessagesSquare, Orbit, Sparkles, ChevronRight } from 'lucide-react';
+import { Search, ScanLine, Users, MessagesSquare, Orbit, Sparkles, ChevronRight, Import } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
 import { matchPerson, SORTS, tierCounts, relDay } from '../lib/logic.js';
 import { Avatar, Chip, TierBadge, WorthGem, Spinner, Button, AffinityBar, cx } from './ui.jsx';
 
-export default function PeopleList({ selectedId, onOpen, onScan, onTalk, onGalaxy, onInbox }) {
+export default function PeopleList({ selectedId, onOpen, onScan, onTalk, onGalaxy, onInbox, onImport }) {
   const { people, loading, error, reload, newFriends } = useStore();
   const [q, setQ] = useState('');
   const [tier, setTier] = useState('all');
@@ -22,6 +22,11 @@ export default function PeopleList({ selectedId, onOpen, onScan, onTalk, onGalax
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-semibold tracking-tight">人脉 <span className="text-base font-normal text-faint">{people.length}</span></h1>
           <div className="flex items-center gap-2">
+            {people.length > 0 && onImport && (
+              <button onClick={onImport} className="flex min-h-[32px] items-center gap-1 rounded-lg border border-line bg-white px-2 py-1 text-sm font-medium text-ink hover:border-ink/30" title="导入通讯录 / WhatsApp 群">
+                <Import className="h-4 w-4" /><span className="hidden sm:inline lg:hidden xl:inline">导入</span>
+              </button>
+            )}
             {people.length > 0 && onGalaxy && (
               <button onClick={onGalaxy} className="flex items-center gap-1 rounded-lg border border-line bg-white px-2 py-1 text-sm font-medium text-ink hover:border-ink/30" title="星系图">
                 <Orbit className="h-4 w-4" /><span className="hidden sm:inline lg:hidden xl:inline">星系</span>
@@ -72,8 +77,11 @@ export default function PeopleList({ selectedId, onOpen, onScan, onTalk, onGalax
           <div className="mt-8 rounded-2xl border border-dashed border-line p-8 text-center">
             <Users className="mx-auto h-10 w-10 text-faint" />
             <p className="mt-3 font-medium">还没有人</p>
-            <p className="mt-1 text-sm text-muted">下次活动拿到名片，拍一下就进来了。</p>
-            <Button variant="accent" className="mt-4" onClick={onScan}><ScanLine className="h-4 w-4" />扫第一张名片</Button>
+            <p className="mt-1 text-sm text-muted">手机通讯录、WhatsApp 群里的人，一个晚上就能搬进来；下次活动拿到名片，拍一下就进来了。</p>
+            <div className="mt-4 flex flex-wrap justify-center gap-2">
+              {onImport && <Button variant="accent" onClick={onImport}><Import className="h-4 w-4" />导入现有人脉</Button>}
+              <Button variant={onImport ? 'outline' : 'accent'} onClick={onScan}><ScanLine className="h-4 w-4" />扫第一张名片</Button>
+            </div>
           </div>
         )}
         {!loading && people.length > 0 && list.length === 0 && <p className="py-10 text-center text-sm text-muted">没有符合的人</p>}

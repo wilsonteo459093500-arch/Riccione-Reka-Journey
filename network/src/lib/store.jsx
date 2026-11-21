@@ -3,15 +3,24 @@
    画面用 useStore() 拿资料和动作；所有写入都走 repo，回来的列再放进 state。
    ============================================================ */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { repo, TABLES } from './repo.js';
+import { repo, TABLES, GUARDED, ConflictError } from './repo.js';
 import { api } from './api.js';
 import { shrinkImage } from './image.js';
 import {
-  uid, findCompany, worthScore, emailDomain, pickWhatsApp, DEFAULT_PROFILE, splitTags, mergePersonPatch,
+  uid, findCompany, worthScore, emailDomain, pickWhatsApp, DEFAULT_PROFILE, splitTags, mergePersonPatch, needsCompanyLookup,
 } from './logic.js';
 import { mergeList, appendFacts } from './talk.js';
 import { relationOf, bandOf } from './relation.js';
 import { cleanCard, DEFAULT_CARD } from './card.js';
+import { burstQueue, syncOnce, runExclusive, applyCardRead } from './burst.js';
+
+/* 活动连拍：正在拍的画面开着时，刚拍的先留在手机（给你加 ⭐、备注、拍背面） */
+let shooting = false;
+export function setShooting(on) { shooting = !!on; }
+export const BURST_AUTO_READ_KEY = 'space:burst-auto-read';
+export function burstAutoRead() {
+  try { return localStorage.getItem(BURST_AUTO_READ_KEY) !== '0'; } catch { return true; }
+}
 
 const Ctx = createContext(null);
 export const useStore = () => useContext(Ctx);
@@ -25,35 +34,70 @@ export function StoreProvider({ children }) {
   const [error, setError] = useState('');
   const dataRef = useRef(data);
   dataRef.current = data;
+  // 资料有没有完整载好（断网时打开会载不到）：没载好时不能说「这个人不在了」
+  const loadedOk = useRef(false);
 
-  const reload = useCallback(async () => {
-    setLoading(true);
+  const loadedAt = useRef(0);
+  const reload = useCallback(async ({ quiet = false } = {}) => {
+    if (!quiet) setLoading(true);
     setError('');
     try {
-      setData(await repo.loadAll());
+      const all = await repo.loadAll();
+      dataRef.current = all;
+      setData(all);
+      loadedOk.current = true;
+      loadedAt.current = Date.now();
     } catch (e) {
+      loadedOk.current = false;
       setError(String(e.message || e));
     } finally {
       setLoading(false);
     }
   }, []);
   useEffect(() => { reload(); }, [reload]);
+  // 断网时打开、载不到资料 → 网络回来自动再载一次
+  useEffect(() => {
+    const on = () => { if (!loadedOk.current) reload(); };
+    window.addEventListener('online', on);
+    return () => window.removeEventListener('online', on);
+  }, [reload]);
+  // 体检第 3 阶段：手机、电脑同时开着 —— 切回这个 app 时（离开超过 1 分钟）悄悄载入最新的，
+  // 不然拿着早上的旧资料一存，就把另一台下午改的盖掉
+  useEffect(() => {
+    const on = () => {
+      if (document.visibilityState !== 'visible' || !loadedOk.current) return;
+      if (Date.now() - loadedAt.current > 60_000) reload({ quiet: true });
+    };
+    document.addEventListener('visibilitychange', on);
+    return () => document.removeEventListener('visibilitychange', on);
+  }, [reload]);
 
   /* ---------- 底层：写一列 / 删一列，同步到 state ---------- */
   const put = useCallback(async (table, row) => {
-    const saved = await repo.upsert(table, { id: row.id || uid(), ...row });
-    setData((d) => {
+    // 已经有的人 / 公司 / 我的资料：对一下版本（这台设备最后看到的），另一台改过就不盖
+    const known = GUARDED.has(table) && row.id ? (dataRef.current[table] || []).find((r) => r.id === row.id) : null;
+    let saved;
+    try {
+      saved = await repo.upsert(table, { id: row.id || uid(), ...row }, known && known.updated_at ? { expectUpdatedAt: known.updated_at } : undefined);
+    } catch (e) {
+      if (e instanceof ConflictError) reload({ quiet: true });
+      throw e;
+    }
+    const apply = (d) => {
       const list = d[table] || [];
       const i = list.findIndex((r) => r.id === saved.id);
       const next = i >= 0 ? list.map((r) => (r.id === saved.id ? saved : r)) : [...list, saved];
       return { ...d, [table]: next };
-    });
+    };
+    // dataRef 马上更新：接下来的动作（例如连拍同步）不用等画面重画就看得到刚存的
+    dataRef.current = apply(dataRef.current);
+    setData(apply);
     return saved;
-  }, []);
+  }, [reload]);
 
   const drop = useCallback(async (table, id) => {
     await repo.remove(table, id);
-    setData((d) => {
+    const apply = (d) => {
       const next = { ...d, [table]: d[table].filter((r) => r.id !== id) };
       // state 里也照 cascade 清掉
       if (table === 'people') {
@@ -63,7 +107,9 @@ export function StoreProvider({ children }) {
       if (table === 'circles') next.person_circles = next.person_circles.filter((r) => r.circle_id !== id);
       if (table === 'events') next.attendance = next.attendance.filter((r) => r.event_id !== id);
       return next;
-    });
+    };
+    dataRef.current = apply(dataRef.current);
+    setData(apply);
   }, []);
 
   /* ---------- 衍生：一个人的完整资料 ---------- */
@@ -113,7 +159,19 @@ export function StoreProvider({ children }) {
 
   /* ---------- 动作 ---------- */
   const actions = useMemo(() => {
-    const logUsage = (row) => (row ? put('ai_usage', { ...row, at: nowIso() }).catch(() => null) : null);
+    // 体检第 3 阶段：服务器已经记过账（logged: true）就不再记；本机模式 / 服务器没记成才由这里记
+    const logUsage = (row) => {
+      if (!row) return null;
+      const { logged, ...clean } = row;
+      if (logged) {
+        // 资料库里已经有了：只放进画面（「设定」的本月用量马上看得到），不再写一次
+        const local = { id: uid(), ...clean, at: nowIso() };
+        dataRef.current = { ...dataRef.current, ai_usage: [...dataRef.current.ai_usage, local] };
+        setData((d) => ({ ...d, ai_usage: [...d.ai_usage, local] }));
+        return null;
+      }
+      return put('ai_usage', { ...clean, at: nowIso() }).catch(() => null);
+    };
 
     const snapshot = (person, reason) => put('relationship_snapshots', {
       person_id: person.id, at: nowIso(), affinity: person.affinity, tier: person.tier, worth_score: person.worth_score ?? null, reason,
@@ -134,26 +192,32 @@ export function StoreProvider({ children }) {
       });
     }
 
-    async function addPhoto(personIds, file, { kind = 'group', caption = '', maxSide = 2000 } = {}) {
+    async function addPhoto(personIds, file, { kind = 'group', caption = '', maxSide = 2000, id = uid() } = {}) {
       const owner = await repo.userId();
       const img = file.blob ? file : await shrinkImage(file, maxSide);
-      const id = uid();
       const path = `${owner}/${id}.jpg`;
       await repo.uploadImage(path, img.blob);
       const photo = await put('photos', { id, kind, path, width: img.width, height: img.height, caption, taken_at: nowIso() });
-      for (const pid of personIds) await put('photo_people', { photo_id: id, person_id: pid });
+      // 按第二次（上一次中途失败）不会重复标
+      for (const pid of personIds) {
+        if (!dataRef.current.photo_people.some((pp) => pp.photo_id === id && pp.person_id === pid)) await put('photo_people', { photo_id: id, person_id: pid });
+      }
       return photo;
     }
 
-    /** 名片扫完存成一个新的人（或更新已存在的人） */
-    async function saveFromCard({ card, form, cardImages = [], existingId = null }) {
+    /**
+     * 名片扫完存成一个新的人（或更新已存在的人）
+     * ids：这一次扫描固定的 id（画面打开时就定好）→ 中途失败再按一次「存起来」，不会多出第二个人 / 第二张照片
+     * eventId：在哪个活动认识的 → 记出席
+     */
+    async function saveFromCard({ card, form, cardImages = [], existingId = null, ids = {}, eventId = null }) {
       const company = await ensureCompany(form.company, {
         name_alt: card.company_alt, website: form.website, address: form.address, industry: card.industry_guess,
       });
       const base = existingId ? dataRef.current.people.find((p) => p.id === existingId) : null;
       const merged = {
         ...(base || {}),
-        id: existingId || uid(),
+        id: existingId || ids.person || uid(),
         name: form.name.trim(),
         name_alt: form.name_alt || (base && base.name_alt) || '',
         title: form.title || (base && base.title) || '',
@@ -176,40 +240,58 @@ export function StoreProvider({ children }) {
       const person = await put('people', merged);
       if (cardImages.length) {
         let first = null;
-        for (const img of cardImages) {
-          const ph = await addPhoto([person.id], img, { kind: 'card', caption: '名片' });
+        for (const [i, img] of cardImages.entries()) {
+          const ph = await addPhoto([person.id], img, { kind: 'card', caption: '名片', id: (ids.photos || [])[i] || uid() });
           first = first || ph;
         }
         if (first && !person.card_photo_id) await put('people', { ...person, card_photo_id: first.id });
       }
       await put('interactions', {
+        ...(ids.interaction ? { id: ids.interaction } : {}),
         person_id: person.id, kind: cardImages.length ? 'card_scan' : 'meeting', source: cardImages.length ? 'card' : 'manual', occurred_at: form.met_on ? new Date(form.met_on).toISOString() : nowIso(),
         title: !cardImages.length ? (existingId ? '更新资料' : '认识') : existingId ? '又扫到他的名片' : '交换名片', summary: form.how_met || '',
       });
+      if (eventId && dataRef.current.events.some((e) => e.id === eventId)
+        && !dataRef.current.attendance.some((a) => a.event_id === eventId && a.person_id === person.id)) {
+        await put('attendance', { event_id: eventId, person_id: person.id, status: 'attended' });
+      }
       if (!existingId) await snapshot(person, '新认识');
       return person;
     }
 
-    /** 深度分析：公司背景（查过就不查）→ 4 维度评分 + 我能给他什么 */
-    async function deepAnalyze(personId, { refreshCompany = false, onStep = () => {} } = {}) {
+    /**
+     * 深度分析：公司背景（查过就不查）→ 4 维度评分 + 我能给他什么
+     * 体检第 3 阶段：公司背景这次没查成（超时 / 格式坏）→ 不挡住评分，先用名片资料分析，onWarn 告诉画面
+     */
+    async function deepAnalyze(personId, { refreshCompany = false, onStep = () => {}, onWarn = () => {} } = {}) {
       const d = dataRef.current;
       let person = d.people.find((p) => p.id === personId);
       if (!person) throw new Error('找不到这个人');
       let company = person.company_id ? d.companies.find((c) => c.id === person.company_id) : null;
 
-      if (company && (!company.background || refreshCompany)) {
+      if (company && (refreshCompany || needsCompanyLookup(company.background))) {
         onStep('company');
-        const { background, usage } = await api.company({
-          name: company.name, alt_name: company.name_alt, website: company.website || person.website, address: company.address || person.address,
-          email_domain: emailDomain(person.emails), industry_guess: company.industry, card_notes: person.card_notes,
-        });
-        logUsage(usage);
-        company = await put('companies', { ...company, background, background_at: nowIso(), industry: company.industry || background.industry });
+        try {
+          const { background, usage } = await api.company({
+            name: company.name, alt_name: company.name_alt, website: company.website || person.website, address: company.address || person.address,
+            email_domain: emailDomain(person.emails), industry_guess: company.industry, card_notes: person.card_notes,
+          });
+          logUsage(usage);
+          company = await put('companies', { ...company, background, background_at: nowIso(), industry: company.industry || background.industry });
+        } catch (e) {
+          if (e && e.usage) logUsage(e.usage);
+          // 预算、登入这类问题评分也一样会失败 → 照样丢出去；只有「这次 AI 没弄好」才跳过公司继续
+          if (!(e && (e.status === 502 || e.status === 504))) throw e;
+          onWarn(`公司背景没查成（${e.message}）先用名片资料分析，之后可以按「重新查公司」`);
+        }
       }
 
       onStep('assess');
       const v = view(person);
-      const { assessment, usage } = await api.assess({
+      let assessment;
+      let usage;
+      try {
+        ({ assessment, usage } = await api.assess({
         me,
         person: {
           name: person.name, title: person.title, company: company ? company.name : '', card_notes: person.card_notes,
@@ -222,7 +304,11 @@ export function StoreProvider({ children }) {
           interactions: v.interactions.slice(0, 10).map((i) => `${String(i.occurred_at).slice(0, 10)} ${i.title} ${i.summary}`.trim()),
         },
         company: company && company.background ? company.background : (company ? { name: company.name, industry: company.industry } : {}),
-      });
+        }));
+      } catch (e) {
+        if (e && e.usage) logUsage(e.usage);
+        throw e;
+      }
       logUsage(usage);
       person = await put('people', { ...person, assessment, worth_score: worthScore(assessment) });
 
@@ -377,7 +463,10 @@ export function StoreProvider({ children }) {
       }
     }
 
-    /** 新朋友只拍了名片：用 AI 读那张名片，补进资料（名字是「名片待确认」就换掉） */
+    /**
+     * 新朋友只拍了名片：用 AI 读那张名片 —— **先不存**（体检第 3 阶段）
+     * 回 { card, draft }：draft = 补进去之后会长什么样（你已经填的不会被换掉），给画面让你核对、改
+     */
     async function readCardWithAI(personId) {
       const row = dataRef.current.people.find((p) => p.id === personId);
       if (!row) throw new Error('找不到这个人');
@@ -385,26 +474,61 @@ export function StoreProvider({ children }) {
       if (!photo) throw new Error('这个人没有名片照片');
       const blob = await (await fetch(await repo.imageUrl(photo.path))).blob();
       const img = await shrinkImage(blob, 1600);
-      const { card, usage } = await api.scanCard([{ media_type: img.media_type, data: img.base64 }]);
-      logUsage(usage);
-      const company = !row.company_id && card.company ? await ensureCompany(card.company, { name_alt: card.company_alt, website: card.website, address: card.address, industry: card.industry_guess }) : null;
-      const placeholder = !row.name || /名片待确认/.test(row.name);
-      const phones = [...(row.phones || [])];
-      for (const p of card.phones || []) if (!phones.some((x) => x.number.replace(/\D/g, '').slice(-9) === p.number.replace(/\D/g, '').slice(-9))) phones.push(p);
+      let res;
+      try {
+        res = await api.scanCard([{ media_type: img.media_type, data: img.base64 }]);
+      } catch (e) {
+        if (e && e.usage) logUsage(e.usage);
+        throw e;
+      }
+      logUsage(res.usage);
+      const card = res.card || {};
+      const draft = applyCardRead(row, card);
+      const company = row.company_id ? dataRef.current.companies.find((c) => c.id === row.company_id) : null;
+      return { card, draft: { ...draft, company: (company && company.name) || card.company || '' } };
+    }
+
+    /** 核对过的名片资料存进去（form = 画面上改好的） */
+    async function saveCardReview(personId, card, form) {
+      const row = dataRef.current.people.find((p) => p.id === personId);
+      if (!row) throw new Error('找不到这个人');
+      const c = card || {};
+      const company = form.company && form.company.trim()
+        ? await ensureCompany(form.company, { name_alt: c.company_alt, website: form.website, address: form.address, industry: c.industry_guess })
+        : null;
+      const phones = (form.phones || []).filter((p) => p && String(p.number || '').trim());
+      const fresh = dataRef.current.people.find((p) => p.id === personId) || row;
+      const base = applyCardRead(fresh, c); // 社交帐号、名片上的其他字、拿掉「名片还没读」那行
       return put('people', {
-        ...row,
-        name: placeholder && card.name ? card.name : row.name,
-        name_alt: row.name_alt || card.name_alt || '',
-        title: row.title || card.title || '',
-        company_id: row.company_id || (company && company.id) || null,
+        ...base,
+        name: String(form.name || '').trim() || base.name,
+        name_alt: String(form.name_alt || '').trim(),
+        title: String(form.title || '').trim(),
+        company_id: company ? company.id : null,
         phones,
-        emails: [...new Set([...(row.emails || []), ...(card.emails || [])])],
-        whatsapp: row.whatsapp || pickWhatsApp(card.phones || []),
-        website: row.website || card.website || '',
-        address: row.address || card.address || '',
-        card_notes: row.card_notes || card.card_notes || '',
-        notes: String(row.notes || '').replace(/\n?名片还没读：在「新朋友」按「AI 读名片」/, '').trim(),
+        emails: [...new Set(String(form.emails || '').split(/[\s,;]+/).map((e) => e.trim().toLowerCase()).filter((e) => /.+@.+\..+/.test(e)))],
+        // 原本的 WhatsApp 号码还在电话里就留着，不然照电话重挑
+        whatsapp: fresh.whatsapp && phones.some((p) => String(p.number).replace(/\D/g, '').slice(-9) === String(fresh.whatsapp).replace(/\D/g, '').slice(-9)) ? fresh.whatsapp : pickWhatsApp(phones),
+        website: String(form.website || '').trim(),
+        address: String(form.address || '').trim(),
       });
+    }
+
+    /**
+     * 活动连拍：手机上排队的名片 → 资料库（→ AI 读）。一次只跑一轮；失败的下次再来，手机上那份不会删
+     */
+    async function runBurstSync() {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return { saved: 0, read: 0, failed: 0 }; // 没网络就不白试
+      return runExclusive(() => syncOnce(burstQueue(), {
+        ownerId: () => repo.userId().catch(() => null),
+        put,
+        uploadImage: (path, blob) => repo.uploadImage(path, blob),
+        hasEvent: (id) => dataRef.current.events.some((e) => e.id === id),
+        getPerson: (id) => (loadedOk.current ? dataRef.current.people.find((p) => p.id === id) || null : undefined),
+        scanCard: (images) => api.scanCard(images),
+        logUsage,
+        ensureCompany,
+      }, { autoRead: burstAutoRead(), holdUntil: shooting ? Infinity : 0 }));
     }
 
     /**
@@ -446,6 +570,8 @@ export function StoreProvider({ children }) {
       deleteEvent: (id) => drop('events', id),
       confirmNew,
       readCardWithAI,
+      saveCardReview,
+      runBurstSync,
       quickContact,
       snooze,
       syncAffinity,
@@ -455,6 +581,56 @@ export function StoreProvider({ children }) {
       addPhoto,
       saveFromCard,
       deepAnalyze,
+      /** 从汇出的 JSON 补回不见的资料（现在有的不动）。plan 来自 planRestore */
+      async restoreBackup(plan, onProgress = () => {}) {
+        let done = 0;
+        const total = plan.reduce((n, [, rows]) => n + rows.length, 0);
+        try {
+          for (const [table, rows] of plan) {
+            for (const row of rows) {
+              await repo.upsert(table, row);
+              done += 1;
+              onProgress(done, total);
+            }
+          }
+        } finally {
+          await reload({ quiet: true }); // 中途断掉也把已经补回的显示出来；再按一次会接着补剩下的
+        }
+        return done;
+      },
+      /**
+       * 体检第 4 阶段：导入人脉。rows 是 importer.toPersonRow() 的结果，另外带 company（公司名字）。
+       * 公司：已经有的照用，没有的一次建好；人：每批 200 个存进去。
+       * 中途断掉：已经存好的会留着（再导入一次会显示「已在 SPACE」，不会重复）。
+       */
+      async importPeople(rows, onProgress = () => {}) {
+        const companies = dataRef.current.companies;
+        const newCompanies = [];
+        const companyId = new Map();
+        for (const r of rows) {
+          const n = String(r.company || '').trim();
+          if (!n || companyId.has(n.toLowerCase())) continue;
+          const hit = findCompany(companies, n) || findCompany(newCompanies, n);
+          if (hit) { companyId.set(n.toLowerCase(), hit.id); continue; }
+          const c = { id: uid(), name: n, name_alt: '', website: '', address: '', industry: '' };
+          newCompanies.push(c);
+          companyId.set(n.toLowerCase(), c.id);
+        }
+        const append = (table, saved) => {
+          const apply = (d) => ({ ...d, [table]: [...(d[table] || []), ...saved] });
+          dataRef.current = apply(dataRef.current);
+          setData(apply);
+        };
+        if (newCompanies.length) append('companies', await repo.insertMany('companies', newCompanies));
+        const people = rows.map(({ company, ...r }) => ({ ...r, company_id: company ? companyId.get(String(company).trim().toLowerCase()) || null : null }));
+        try {
+          const saved = await repo.insertMany('people', people, (done, total, batch) => { append('people', batch); onProgress(done, total); });
+          return saved.length;
+        } catch (e) {
+          if (e.saved && e.saved.length) e.message = `存了 ${e.saved.length} 人后停下来：${e.message}`;
+          throw e;
+        }
+      },
       async saveProfile(patch) { return put('profile', { ...(profile || DEFAULT_PROFILE), ...patch }); },
       async savePerson(row) { return put('people', row); },
       async saveCompany(row) { return put('companies', row); },
