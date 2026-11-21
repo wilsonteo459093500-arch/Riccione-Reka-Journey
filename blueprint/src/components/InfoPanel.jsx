@@ -3,7 +3,8 @@
 
 import React, { useEffect, useRef } from 'react';
 import { Plus, Trash2, ChevronUp, ChevronDown, CalendarDays, Users, Layers, ListChecks, FileText, RotateCcw, Languages } from 'lucide-react';
-import { DEFAULT_TEAM } from '../engine/model.js';
+import { DEFAULT_TEAM, uid } from '../engine/model.js';
+import { addFloor, removeFloor, moveFloor, nextFloorName, floorViewCount } from '../lib/floors.js';
 import { TEAM_MAX } from '../engine/b/design.js';
 import { designCoverTexts, sectionLabel } from '../engine/deck.js';
 import { deckChapters } from '../engine/b/company.js';
@@ -311,30 +312,84 @@ export default function InfoPanel({ project, onChange }) {
               <p className="mt-3 text-[11px] text-bp-faint leading-relaxed">隐藏的章节不进目录，后面章节的编号（目录、章节页、方案封面）自动往前排。</p>
             </Card>
 
-            {floors.length > 0 && (
-              <Card icon={Layers} title="楼层" hint="楼层章节页、效果图页标签（一楼　客厅）、目录和方案封面上的楼层名">
+            <Card
+              icon={Layers}
+              title="楼层"
+              hint="楼层章节页、效果图页标签（一楼　客厅）、目录和方案封面上的楼层名；上下箭头 = 整层的页一起换位置"
+              right={
+                <button
+                  type="button"
+                  onClick={() => {
+                    const name = nextFloorName(project);
+                    const floorId = uid('f');
+                    const slideId = uid('s');
+                    onChange((p) => addFloor(p, { floorId, slideId, ...name }), NOW);
+                  }}
+                  className={`${cls.btnGhost} shrink-0`}
+                >
+                  <Plus size={14} /> 加一层
+                </button>
+              }
+            >
+              {floors.length ? (
                 <div className="space-y-2">
-                  {floors.map((f) => (
-                    <div key={f.id} className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] gap-2">
-                      <input
-                        className={`${cls.input} font-serif`}
-                        value={f.zh || ''}
-                        onChange={(e) => setFloor(f.id, { zh: e.target.value })}
-                        placeholder="一楼"
-                        aria-label="楼层中文名"
-                      />
-                      <input
-                        className={`${cls.input} uppercase tracking-wider text-xs`}
-                        value={f.en || ''}
-                        onChange={(e) => setFloor(f.id, { en: e.target.value })}
-                        placeholder="GROUND FLOOR"
-                        aria-label="楼层英文名"
-                      />
-                    </div>
-                  ))}
+                  {floors.map((f, i) => {
+                    const n = floorViewCount(project, f.id);
+                    return (
+                      <div key={f.id} className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)_auto] gap-2 items-center" data-floor-row>
+                        <input
+                          className={`${cls.input} font-serif`}
+                          value={f.zh || ''}
+                          onChange={(e) => setFloor(f.id, { zh: e.target.value })}
+                          placeholder="一楼"
+                          aria-label="楼层中文名"
+                        />
+                        <input
+                          className={`${cls.input} uppercase tracking-wider text-xs`}
+                          value={f.en || ''}
+                          onChange={(e) => setFloor(f.id, { en: e.target.value })}
+                          placeholder="GROUND FLOOR"
+                          aria-label="楼层英文名"
+                        />
+                        <div className="flex items-center">
+                          <button type="button" onClick={() => onChange((p) => moveFloor(p, f.id, -1), NOW)} disabled={i === 0} className={cls.iconBtn} aria-label="上移" title="上移（整层的页一起移）">
+                            <ChevronUp size={15} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onChange((p) => moveFloor(p, f.id, 1), NOW)}
+                            disabled={i === floors.length - 1}
+                            className={cls.iconBtn}
+                            aria-label="下移"
+                            title="下移（整层的页一起移）"
+                          >
+                            <ChevronDown size={15} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const label = f.zh || f.en || '这一层';
+                              if (n && !window.confirm(`「${label}」有 ${n} 张效果图页。删掉这一层后，它们并到排在前面的那一层（前面没有楼层就不分楼层），页面不会删。确定删除？`)) return;
+                              onChange((p) => removeFloor(p, f.id), NOW);
+                            }}
+                            className={`${cls.iconBtn} hover:!text-bp-danger`}
+                            aria-label="删除这一层"
+                            title={`删除这一层（${n} 张效果图页会并到前面那一层；可以撤销）`}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <p className="pt-1 text-[11px] text-bp-faint leading-relaxed">
+                    新加的楼层排在方案最后；到「页面」把效果图页右边的「楼层」改过去，再点「移到该层章节末尾」。
+                  </p>
                 </div>
-              </Card>
-            )}
+              ) : (
+                <div className="text-sm text-bp-faint">这份方案没有分楼层 —— 需要的话点「加一层」。</div>
+              )}
+            </Card>
 
             <Card icon={FileText} title="原稿">
               <dl className="text-xs space-y-2">

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Type, LayoutTemplate, Image as ImageIcon, Palette, StickyNote, ArrowUp, ArrowDown, X, Plus, Sparkles, CopyCheck, MoveRight, Box } from 'lucide-react';
 import { findFloor, uid } from '../../../engine/model.js';
 import { langOf } from '../../../engine/lang.js';
@@ -82,6 +82,7 @@ export default function ViewInspector({ project, slide, change, notify, openPoli
   /** English / 中英版里这段字本来就是英文（没有 EN 框，画布上点英文落到中文框） */
   const latin = (text, kind) => en && isLatinSource(project, text, kind);
   const heading = en ? viewTitlePreview(project, slide) : null;
+  const [clearedEn, setClearedEn] = useState(null); // { en, room }：改房间名时跟着清掉的英文名（检查器按页重建，换页就忘）
 
   const listOp = (name, fn) => change((p) => updateViewList(p, id, name, fn));
   const listNow = (name, fn) => change((p) => updateViewList(p, id, name, fn), NOW);
@@ -99,8 +100,35 @@ export default function ViewInspector({ project, slide, change, notify, openPoli
       className={inputCls}
       value={slide.room || ''}
       placeholder="客厅"
-      onChange={(e) => set({ room: e.target.value })}
+      onChange={(e) => onRoom(e.target.value)}
     />
+  );
+  // 改了中文房间名：原来的空间英文名是给旧名字的（导入时从原稿带来 / 程序翻的），一起清掉，改用词典译新名字；可以还原
+  const onRoom = (room) => {
+    const oldEn = String(slide.roomEn || '').trim();
+    if (oldEn && !clearedEn && room.trim() !== String(slide.room || '').trim()) {
+      setClearedEn({ en: slide.roomEn, room: slide.room || '' });
+      set({ room, roomEn: '' });
+    } else set({ room });
+  };
+  const roomEnAuto = roomEnState(project, slide).auto;
+  const clearedNote = clearedEn && !String(slide.roomEn || '').trim() && (
+    <div className="mt-1.5 flex items-start gap-2 rounded-lg bg-bp-tint px-2.5 py-1.5 text-[11px] text-bp-muted leading-snug">
+      <span className="flex-1 min-w-0">
+        原来的空间英文名「{clearedEn.en}」是给「{clearedEn.room || '旧名字'}」的，已经跟着清掉 ——{' '}
+        {roomEnAuto ? `现在用词典译的「${roomEnAuto}」` : '词典里没有新名字的英文，English / 中英版请补上空间英文名'}。
+      </span>
+      <button
+        type="button"
+        className="shrink-0 text-bp-gold hover:underline"
+        onClick={() => {
+          set({ roomEn: clearedEn.en });
+          setClearedEn(null);
+        }}
+      >
+        还原
+      </button>
+    </div>
   );
   const titleInput = (
     <input
@@ -127,6 +155,7 @@ export default function ViewInspector({ project, slide, change, notify, openPoli
           <div className="space-y-2.5">
             <div>
               <Field label="房间">{roomInput}</Field>
+              {clearedNote}
               <RoomEnInput className="mt-1.5" project={project} slide={slide} onChange={(v) => set({ roomEn: v })} />
             </div>
             <div>
@@ -150,6 +179,7 @@ export default function ViewInspector({ project, slide, change, notify, openPoli
                 </EnAlias>
               </Field>
             </div>
+            {clearedNote}
             {slide.subtitle?.trim() && !isLatinSource(project, slide.subtitle, 'view') && (
               <Field label="视角名的英文（页眉上的英文大写）" className="mt-2.5" hint="华文版只在页眉上印一行英文大写；English / 中英版也用它（整套共用，改一处所有页一起变）">
                 <EnInput project={project} zh={slide.subtitle} kind="view" change={change} field="subtitleEn" />
@@ -188,7 +218,7 @@ export default function ViewInspector({ project, slide, change, notify, openPoli
             className="mt-2.5"
             hint={slide.subtitle?.trim() ? 'English / 中英版的空间名（只改这一页）；华文版页面上不显示' : '没有视角名时，华文版页眉上的英文大写就是它；English / 中英版的空间名（只改这一页）'}
           >
-            <input data-field="roomEn" className={inputCls} value={slide.roomEn || ''} placeholder="Living Area" onChange={(e) => set({ roomEn: e.target.value })} />
+            <input data-field="roomEn" className={inputCls} value={slide.roomEn || ''} placeholder={roomEnAuto || 'Living Area'} onChange={(e) => set({ roomEn: e.target.value })} />
           </Field>
         )}
         <Field label="楼层" className="mt-2.5">
