@@ -23,6 +23,7 @@
 | SPACE | `network/` | space-network |
 | UKIR STUDIO | `blueprint/` | sail-render |
 | WISH | `genie/`（还在 PR #65，没进 main） | wish-riccione-reka |
+| P.L.A.Y | `play/` | play-wilson（2026-11-21 建，一开始就没连 GitHub） |
 
 没登记的（`render/` 旧版 UKIR、`crm/`、`studio/`、根目录 Delivery OS）这次没动：它们现在没有在 Vercel 自动部署。
 

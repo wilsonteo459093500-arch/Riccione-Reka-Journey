@@ -6,6 +6,7 @@
     { "id": "visi",  "name": "VISI / JOURNEY", "dir": "invite", "project": "prj_RMpABlFWXiRotaeku3jBR5Lly2n5" },
     { "id": "space", "name": "SPACE",       "dir": "network",   "project": "prj_YtNYJbscoXUvF19vuIgSUlhAhPUG" },
     { "id": "ukir",  "name": "UKIR STUDIO", "dir": "blueprint", "project": "prj_gfZ1xuyq0qn5aEtIqs3jRaz8qLUS" },
-    { "id": "wish",  "name": "WISH",        "dir": "genie",     "project": "prj_qkU4ILwMs3xAFxxN6Y2xNVUu34C7" }
+    { "id": "wish",  "name": "WISH",        "dir": "genie",     "project": "prj_qkU4ILwMs3xAFxxN6Y2xNVUu34C7" },
+    { "id": "play",  "name": "P.L.A.Y",     "dir": "play",      "project": "prj_ALuXJ8lxsmHAOWoE03CmMUjeALOK" }
   ]
 }
