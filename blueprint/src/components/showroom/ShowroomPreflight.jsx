@@ -6,7 +6,7 @@
 // 开着清单的这几秒顺手做两件事：开始画 3D 开场、先算前几张效果图的线稿 —— 一开场就滑到效果图时「从无到有」已经准备好。
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { MonitorPlay, CheckCircle2, AlertTriangle, AlertOctagon, ArrowUpRight, Languages, Loader2, RefreshCw, Sun, Keyboard } from 'lucide-react';
+import { MonitorPlay, CheckCircle2, AlertTriangle, AlertOctagon, ArrowUpRight, Languages, Loader2, RefreshCw, Sun, Keyboard, ClipboardCheck } from 'lucide-react';
 import { renderDeck, exportableSlides } from '../../engine/deck.js';
 import { langOf } from '../../engine/lang.js';
 import { metaOf, resolveUrl, missingImagesIn } from '../../store/assets.js';
@@ -19,6 +19,7 @@ import { useUpdateReady } from '../../lib/useUpdateReady.js';
 import { LANG_VERSION } from '../../lib/langUi.js';
 import { Modal, cls } from '../../lib/ui.jsx';
 import { canKeepAwake } from './ShowroomPlayer.jsx';
+import { reviewList } from '../../lib/review.js';
 
 const WARM_SKETCHES = 3;
 
@@ -55,7 +56,9 @@ export default function ShowroomPreflight({ project, onStart, onClose, onGoTab }
   const jump = (slideId) => onGoTab?.('pages', slideId);
   const count = stops.length;
   const awake = canKeepAwake();
-  const allGood = health.ok && !updateReady;
+  // 导入时没把握、还没核对的地方（空间名、材料、楼层）：播放前提一句
+  const reviewOpen = reviewList(project).filter((it) => it.status === 'open');
+  const allGood = health.ok && !updateReady && !reviewOpen.length;
 
   return (
     <Modal
@@ -112,6 +115,21 @@ export default function ShowroomPreflight({ project, onStart, onClose, onGoTab }
             {health.missing.firstSlideId && (
               <button type="button" onClick={() => jump(health.missing.firstSlideId)} className="shrink-0 mt-0.5 inline-flex items-center gap-0.5 text-xs text-bp-eyebrow hover:underline">
                 去页面 <ArrowUpRight size={12} />
+              </button>
+            )}
+          </div>
+        )}
+
+        {reviewOpen.length > 0 && (
+          <div className="flex items-start gap-2.5 rounded-xl border border-bp-warn/30 bg-bp-warn/10 px-3.5 py-2.5" data-testid="showroom-review">
+            <ClipboardCheck size={15} className="shrink-0 mt-0.5 text-bp-warn" />
+            <div className="min-w-0 flex-1">
+              <div className="text-sm text-bp-ink leading-snug">导入时程序没把握的地方，还有 {reviewOpen.length} 处没核对</div>
+              <div className="mt-0.5 text-xs text-bp-muted leading-snug">空间名、材料、楼层可能认错了。在「页面」列表上方点「请核对」逐条看过、打勾。</div>
+            </div>
+            {reviewOpen.find((it) => it.slideId) && (
+              <button type="button" onClick={() => jump(reviewOpen.find((it) => it.slideId).slideId)} className="shrink-0 mt-0.5 inline-flex items-center gap-0.5 text-xs text-bp-eyebrow hover:underline">
+                去核对 <ArrowUpRight size={12} />
               </button>
             )}
           </div>

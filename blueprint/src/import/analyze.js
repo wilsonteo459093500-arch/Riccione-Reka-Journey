@@ -2,11 +2,13 @@
 //
 // Analysis = {
 //   info:      { client, location, date, sourceFile },
-//   floors:    [{ key, zh, en, imageKey, planKey }],
+//   floors:    [{ key, zh, en, imageKey, planKey, page, nfGuess:{ page, text:'1F' }|null }],   // nfGuess = 楼层是从 '1F' 这种写法推断的
 //   materials: [{ key, name, code, pending, imageKey }],                        // 全稿去重，按首次出现排序
 //   views:     [{ page, floorKey, imageKey, room, roomEn, subtitle, materials:[{ role, materialKey }],
-//                notes:[{ label, text }], renderAspect, inherited }],          // inherited = 材料沿用同一空间的其它视角
-//   pages:     [{ n, kind:'cover'|'title'|'floor'|'view'|'end'|'other', title }],
+//                notes:[{ label, text }], renderAspect, inherited,              // inherited = 材料沿用同一空间的其它视角
+//                inheritedFrom, roomFrom:'title'|'prev'|'none', roomKnown, titleRaw }],  // inheritedFrom = 材料照哪一页放的；roomFrom = 空间名从哪来
+//   nfAboveGround: boolean,                                                     // 这份方案写了 GF：'1F' 当 GF 上面那层
+//   pages:     [{ n, kind:'cover'|'title'|'floor'|'view'|'end'|'other', title, used?:'plan' }],  // used = 'other' 页其实用上了（平面布置图）
 //   report:    string[],                                                         // 每页一行，便于人工核对
 // }
 
@@ -14,6 +16,9 @@ import {
   parseRoomTitle, parseFloorLabel, parseMaterialLabel, parseMaterialLabels, isGroundStyleLabel, materialKey, parseFileName, parseClientLine, formatPdfDate,
   parseNoteText, looksLikeMaterial, inferRole, findCode, joinLines, hasHan, SUBTITLE_KEYWORDS, ROLE_WORDS,
 } from './labels.js';
+
+// '1F' '2F' 写法（和 labels.js 认楼层的规则同一个样子）：是一楼还是 GF 上面那层要看整份方案有没有写 GF —— 算推断
+const NF_STYLE_RE = /(?:^|[^A-Za-z0-9])([1-9]\s*F)(?![A-Za-z0-9])/i;
 
 // ---------------------------------------------------------------------------
 // 几何工具
@@ -234,12 +239,15 @@ export function analyzePages(raw, { fileName } = {}) {
     return key;
   };
 
-  const floorFor = (f) => {
+  // src / n：楼层是从哪一行字、哪一页认出来的 —— '1F' 这种写法是一楼还是 GF 上面那层要看整份方案，算推断（导入后请设计师核对）
+  const floorFor = (f, src = '', n = 0) => {
     let fl = floors.find((x) => x.zh === f.zh && x.en === f.en);
     if (!fl) {
-      fl = { key: `f${floors.length + 1}`, zh: f.zh, en: f.en, imageKey: null, planKey: null };
+      fl = { key: `f${floors.length + 1}`, zh: f.zh, en: f.en, imageKey: null, planKey: null, page: n || null, nfGuess: null };
       floors.push(fl);
     }
+    const nf = NF_STYLE_RE.exec(String(src || ''));
+    if (nf && !fl.nfGuess) fl.nfGuess = { page: n || null, text: nf[1].replace(/\s+/g, '').toUpperCase() };
     return fl;
   };
 
@@ -287,7 +295,7 @@ export function analyzePages(raw, { fileName } = {}) {
       if (cand) floorLabel = cand;
     }
     if (floorLabel && (!big || area(big) / PA >= 0.85)) {
-      curFloor = floorFor(floorLabel);
+      curFloor = floorFor(floorLabel, text, p.n);
       if (pendingPlan && !curFloor.planKey) curFloor.planKey = pendingPlan;
       pendingPlan = null;
       pages.push({ n: p.n, kind: 'floor', title: `${curFloor.zh} ${curFloor.en}` });
@@ -391,7 +399,7 @@ export function analyzePages(raw, { fileName } = {}) {
     if (PLAN_RE.test(titleText)) {
       if (curFloor && !curFloor.planKey) curFloor.planKey = render.key;
       else pendingPlan = render.key;
-      pages.push({ n: p.n, kind: 'other', title: `平面布置图 · ${titleText}` });
+      pages.push({ n: p.n, kind: 'other', title: `平面布置图 · ${titleText}`, used: 'plan' });
       report(p.n, 'other', `平面布置图 · ${titleText}`);
       continue;
     }
@@ -509,7 +517,7 @@ export function analyzePages(raw, { fileName } = {}) {
     if (parsedTitle && !parsedTitle.room && !parsedTitle.roomEn) parsedTitle = null;
     const prev = views[views.length - 1];
     // 标题里写了楼层（'二楼 主人房'、'GF Living Room'）→ 以标题为准
-    if (parsedTitle?.floor) curFloor = floorFor(parsedTitle.floor);
+    if (parsedTitle?.floor) curFloor = floorFor(parsedTitle.floor, titleText, p.n);
     const v = {
       page: p.n,
       floorKey: curFloor ? curFloor.key : null,
@@ -518,6 +526,9 @@ export function analyzePages(raw, { fileName } = {}) {
       roomEn: parsedTitle ? parsedTitle.roomEn : prev?.roomEn || '',
       feature: parsedTitle ? parsedTitle.feature : prev?.feature || '',
       qualifier: parsedTitle ? parsedTitle.qualifier : '',
+      // 空间名从哪来：title = 这一页的标题；prev = 没认出标题，沿用上一页；none = 都没有（导入后请设计师核对）
+      roomFrom: parsedTitle ? 'title' : prev?.room || prev?.roomEn ? 'prev' : 'none',
+      roomKnown: !!parsedTitle?.known,
       subtitle: '',
       materials: viewMats,
       notes,
@@ -596,6 +607,7 @@ export function analyzePages(raw, { fileName } = {}) {
           if (src) {
             v.materials = src.materials.slice(0, 3).map((m) => ({ ...m }));
             v.inherited = true;
+            v.inheritedFrom = src.page;
           }
         }
         continue;
@@ -604,6 +616,7 @@ export function analyzePages(raw, { fileName } = {}) {
       if (src) {
         v.materials = src.materials.slice(0, 3).map((m) => ({ ...m }));
         v.inherited = true;
+        v.inheritedFrom = src.page;
       }
       const srcN = nearest(run, v, (o) => ownNotes.has(o) && o.notes.some((n) => n.free));
       if (srcN) {
@@ -714,11 +727,13 @@ export function analyzePages(raw, { fileName } = {}) {
 
   return {
     info,
-    floors: floors.map(({ key, zh, en, imageKey, planKey }) => ({ key, zh, en, imageKey, planKey })),
+    floors: floors.map(({ key, zh, en, imageKey, planKey, page, nfGuess }) => ({ key, zh, en, imageKey, planKey, page, nfGuess })),
     materials,
-    views: views.map(({ page, floorKey, imageKey, room, roomEn, subtitle, materials: ms, notes, renderAspect, inherited }) => ({
+    views: views.map(({ page, floorKey, imageKey, room, roomEn, subtitle, materials: ms, notes, renderAspect, inherited, inheritedFrom, roomFrom, roomKnown, titleRaw }) => ({
       page, floorKey, imageKey, room, roomEn, subtitle, materials: ms, notes: notes.map(({ label, text }) => ({ label, text })), renderAspect, inherited,
+      inheritedFrom: inheritedFrom || null, roomFrom, roomKnown, titleRaw: titleRaw || '',
     })),
+    nfAboveGround,
     pages,
     report: reportLines,
   };
