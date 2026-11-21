@@ -105,6 +105,14 @@
   - 额度是被旧分支吃掉的：还没合 main 的分支每推一次，Vercel 自己给每个连着的项目各建一版。断开连接后不会了
   - WISH 的 Vercel 项目故意还连着（`genie/` 只在 PR #65 的分支上，靠 Vercel 自己出预览）；PR #65 合了 main 以后再断开
 
+## WISH（genie/）
+
+- `genie/` 还没进 main，在分支 `ccr-eb67bc6b-ecbura`（PR #65）。规矩和上线检查读那上面的 `genie/docs/handoff/HANDOFF.md`
+- **2026-11-21 橱柜细节计划**：`.claude/plans/wish-cabinet.md`（7 个阶段，每阶段写了 model、effort、时间）
+  - 开场白：「读 `.claude/plans/wish-cabinet.md`，做橱柜计划第 N 阶段」
+  - 用户定的：家里 3D + 单独特写台都要；只有设计师操作；一键切换 A / B；先拉手 + 颜色，再门板款式
+  - 开工前等用户三样：看完 PR #65 说行不行、上传整本《SAIL 产品标准设计手册》PDF、发参考网站的截图 / 录屏（cabinetflowai.com、prompt2cad.com 这个环境打不开）
+
 ## KIRA（kira/）
 
 - 2026-11-20 合进 main（阶段 1B），正式版 <https://kira-by-riccione-reka.vercel.app> 改成从 main 出；旧的长期分支 `claude/cabinet-measurement-tool-enhance-ymc43k` 不再用
