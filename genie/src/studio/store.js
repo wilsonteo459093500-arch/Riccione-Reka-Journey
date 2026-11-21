@@ -233,9 +233,9 @@ export function designerFacts(p, { staffNote = null } = {}) {
 /** 分享链接（v: 2，存档形：旧版打开也看得到一楼）。参考案例：caseRef + keep（+ 选过的几个案例的 id / 标题），没有照片；预算、时间表不带 */
 export async function packProject(p) {
   const s = toStoredProject(p);
-  const { id, name, plan, furniture, furnitureUpper, materials, mood, time } = s;
+  const { id, name, plan, furniture, furnitureUpper, materials, mood, time } = s; // + cab（柜子设定；没有 = undefined，JSON 里不出现）
   const profile = clientProfile(s.profile);
-  return packJSON({ v: 2, id, name, plan, furniture, ...(furnitureUpper ? { furnitureUpper } : {}), materials, mood, time, profile, ...caseFields(s) });
+  return packJSON({ v: 2, id, name, plan, furniture, ...(furnitureUpper ? { furnitureUpper } : {}), materials, mood, time, profile, ...caseFields(s), cab: s.cab });
 }
 
 /** 别人分享的方案（v1 或 v2 的链接）→ 自己的一份：新 id、记下来源、名字标「分享」 */

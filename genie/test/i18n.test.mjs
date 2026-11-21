@@ -17,6 +17,7 @@ import EB from '../src/shared/i18n/en-boards.js';
 import EW from '../src/shared/i18n/en-walk.js';
 import EWT from '../src/shared/i18n/en-walktour.js';
 import EWL from '../src/shared/i18n/en-walktools.js';
+import ECAB from '../src/shared/i18n/en-cabinet.js';
 
 const traverse = traverseMod.default || traverseMod;
 // 导出给设计师（src/studio/export/**）的词在 en-export.js：跟着导出代码懒加载（ExportSheet 用 addWords 并进来），
@@ -29,7 +30,9 @@ const BOARDS_LAZY = (file) => (file.includes(BOARDS_DIR) && !file.endsWith(`${pa
 // 走进去（src/studio/walk/**）的词在 en-walk*.js 三个文件里：跟着走进去懒加载（walk/words.js 用 addWords 并进来）。
 const WALK_DIR = `${path.sep}src${path.sep}studio${path.sep}walk${path.sep}`;
 const WALK = { ...EW, ...EWT, ...EWL };
-const lookup = (file, key) => EN[key] ?? (file.includes(EXPORT_DIR) ? EXP[key] : BOARDS_LAZY(file) ? EB[key] : file.includes(WALK_DIR) ? WALK[key] : undefined);
+// 柜子细节（src/studio/cabinet/**）的词在 en-cabinet.js：跟着那一块懒加载（cabinet/words.js 用 addWords 并进来）。
+const CAB_DIR = `${path.sep}src${path.sep}studio${path.sep}cabinet${path.sep}`;
+const lookup = (file, key) => EN[key] ?? (file.includes(EXPORT_DIR) ? EXP[key] : BOARDS_LAZY(file) ? EB[key] : file.includes(WALK_DIR) ? WALK[key] : file.includes(CAB_DIR) ? ECAB[key] : undefined);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const HAN = /[一-鿿]/;
 const EDGE_CH = '[\\s\\p{So}\\p{Extended_Pictographic}\\uFE0F\\u200D→←↑↓·•…≈+]';
@@ -37,7 +40,7 @@ const EDGE = new RegExp(`^${EDGE_CH}+|${EDGE_CH}+$`, 'gu');
 const norm = (s) => s.replace(/\s+/g, ' ').replace(EDGE, '').trim();
 
 // 生成的资料文件（不是界面文字）：溪岸板材库里是产品名字（7号黑胡桃、晓山白……），像 cases/manifest.json 一样原样显示
-const GENERATED = [path.join('src', 'shared', 'boards', 'library.js')];
+const GENERATED = [path.join('src', 'shared', 'boards', 'library.js'), path.join('src', 'studio', 'cabinet', 'seed.js')];
 
 function walk(dir, acc = []) {
   for (const f of fs.readdirSync(dir)) {

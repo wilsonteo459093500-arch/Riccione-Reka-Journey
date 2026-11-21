@@ -54,6 +54,15 @@ function own(key) {
 
 const mat = (key) => (typeof key === 'object' ? key : SLOT_BY_ID[key] ? LIB.slot(key) : LIB.fixed[key] || own(key) || LIB.fixed.black);
 
+/**
+ * 柜子细节（src/studio/cabinet/，点到才下载）的口子：CAB.h 装上以后，每件定制柜的每个部分先问它用哪个材质
+ * （p：'b' 柜体 'd' 柜门 'w' 抽屉面 'p' 踢脚 'o' 开放格；g：这一段算哪一组，不给 = 按家具种类；k：原来的颜色位）。
+ * 没装（没有柜子设定的方案）= 原来的颜色位，一个新材质都不建。
+ */
+export const CAB = {};
+let IT = null;
+const K = (p, g, k = 'cabinetry') => (CAB.h && CAB.h(IT, p, k, g)) || k;
+
 /** 挂画的画面：A 竖幅（拱门 + 日 + 一道线，中古感）；B 横幅（雾里的山，层层远去） */
 function artTexture(kind) {
   const land = kind === 'artB';
@@ -157,7 +166,9 @@ function M(geo, key, x = 0, y = 0, z = 0, { rx = 0, ry = 0, rz = 0, order = 'XYZ
   }
   m.castShadow = shadow;
   m.receiveShadow = true;
-  if (typeof key === 'string' && SLOT_BY_ID[key]) m.userData.slot = key;
+  // 表面的材质（含柜子细节那一包给的）：网格上也记一下是哪个表面
+  key = m.material.userData.slot;
+  if (key) m.userData.slot = key;
   return m;
 }
 const B = (w, h, d, key, x, y, z, r = 0, o) => M(boxGeo(w, h, d, r), key, x, y, z, o);
@@ -662,8 +673,8 @@ function tvWall({ w = 2.4, h = 2.8 }) {
   return group(
     featurePanel(w, h, 0),
     // 悬浮电视柜：推弹门、门缝 3mm、底下一条灯带
-    B(cab, ch, zF - zB, 'cabinetry', 0, cy, (zB + zF) / 2, 0.003),
-    doorRow(-cab / 2 + 0.005, cab / 2 - 0.005, cy + 0.006, cy + ch - 0.006, zF, 'cabinetry', { maxW: 0.55, t: 0.016 }),
+    B(cab, ch, zF - zB, K('b'), 0, cy, (zB + zF) / 2, 0.003),
+    doorRow(-cab / 2 + 0.005, cab / 2 - 0.005, cy + 0.006, cy + ch - 0.006, zF, K('d'), { maxW: 0.55, t: 0.016 }),
     led(cab - 0.1, 0, cy - 0.012, 0.3),
     // 超薄电视 + 窄边
     B(tvw, tvh, 0.024, 'tv', 0, 0.86, 0.06, 0.004),
@@ -680,10 +691,12 @@ function tvWall({ w = 2.4, h = 2.8 }) {
 /** 书墙：侧板、顶板、内退踢脚、背板；书高矮厚薄不同，有平放的一摞、斜靠的一本、几件摆件（留白） */
 function bookshelf({ w = 1.2, h = 2.2, d = 0.34, key = 'woodwork', seed = 1 }) {
   const parts = [];
+  const open = K('o', 0, key);
+  key = K('b', 0, key);
   const t = 0.025;
   const base = 0.07;
   parts.push(B(t, h, d, key, -w / 2 + t / 2, 0, 0), B(t, h, d, key, w / 2 - t / 2, 0, 0), B(w, t, d, key, 0, h - t, 0));
-  parts.push(B(w - 2 * t, base, d - 0.04, 'black', 0, 0, -0.02), B(w - 2 * t, t, d - 0.01, key, 0, base, 0.005), B(w - 2 * t, h - base, 0.012, key, 0, base, -d / 2 + 0.006));
+  parts.push(B(w - 2 * t, base, d - 0.04, K('p', 0, 'black'), 0, 0, -0.02), B(w - 2 * t, t, d - 0.01, open, 0, base, 0.005), B(w - 2 * t, h - base, 0.012, open, 0, base, -d / 2 + 0.006));
   const shelves = Math.max(3, Math.round((h - base) / 0.36));
   const sh = (h - base - t - t) / shelves;
   const rand = rng(seed * 997 + Math.round(w * 13));
@@ -692,7 +705,7 @@ function bookshelf({ w = 1.2, h = 2.2, d = 0.34, key = 'woodwork', seed = 1 }) {
   const zFront = d / 2 - 0.03;
   for (let s = 0; s < shelves; s++) {
     const y = base + t + s * sh;
-    if (s > 0) parts.push(B(w - 2 * t, t, d - 0.012, key, 0, y - t, 0.006));
+    if (s > 0) parts.push(B(w - 2 * t, t, d - 0.012, open, 0, y - t, 0.006));
     shelfBooks(geos, -w / 2 + t + 0.02, w / 2 - t - 0.02, y, zFront, sh - t, rand, decor);
   }
   if (geos.length) parts.push(M(merge(geos), 'books', 0, 0, 0));
@@ -759,14 +772,14 @@ function displayCabinet({ w = 1.2, h = 2.2, d = 0.42 }) {
   const t = 0.02;
   const base = 0.08;
   const rand = rng(Math.round(w * 100 + h * 10));
-  parts.push(B(t, h, d, 'cabinetry', -w / 2 + t / 2, 0, 0), B(t, h, d, 'cabinetry', w / 2 - t / 2, 0, 0), B(w, t, d, 'cabinetry', 0, h - t, 0));
-  parts.push(B(w - 0.04, base, d - 0.06, 'black', 0, 0, -0.03), B(w - 2 * t, t, d - 0.03, 'cabinetry', 0, base, -0.01), B(w - 2 * t, h - base, 0.012, 'cabinetry', 0, base, -d / 2 + 0.006));
+  parts.push(B(t, h, d, K('b'), -w / 2 + t / 2, 0, 0), B(t, h, d, K('b'), w / 2 - t / 2, 0, 0), B(w, t, d, K('b'), 0, h - t, 0));
+  parts.push(B(w - 0.04, base, d - 0.06, K('p', 0, 'black'), 0, 0, -0.03), B(w - 2 * t, t, d - 0.03, K('o'), 0, base, -0.01), B(w - 2 * t, h - base, 0.012, K('o'), 0, base, -d / 2 + 0.006));
   const shelves = 4;
   const sh = (h - base - t) / shelves;
   for (let s = 0; s < shelves; s++) {
     const y = base + t + s * sh;
     if (s > 0) {
-      parts.push(B(w - 2 * t, 0.012, d - 0.06, 'cabinetry', 0, y - 0.012, -0.02));
+      parts.push(B(w - 2 * t, 0.012, d - 0.06, K('o'), 0, y - 0.012, -0.02));
       parts.push(led(w - 0.12, 0, y - 0.02, 0.12));
     }
     // 摆件：每层两三件，留白
@@ -966,11 +979,11 @@ function altar({ w = 1.2 }) {
   const parts = [];
   const D = 0.5;
   const zF = D / 2 - 0.018;
-  parts.push(B(w - 0.04, 0.06, D - 0.08, 'black', 0, 0, -0.04));
-  parts.push(B(w, 0.79 - 0.06, D - 0.018, 'cabinetry', 0, 0.06, -0.009, 0.002));
-  parts.push(...doorRow(-w / 2 + 0.005, w / 2 - 0.005, 0.065, 0.785, zF, 'cabinetry', { maxW: 0.6, handle: 'knob', hy: 0.66 }));
+  parts.push(B(w - 0.04, 0.06, D - 0.08, K('p', 0, 'black'), 0, 0, -0.04));
+  parts.push(B(w, 0.79 - 0.06, D - 0.018, K('b'), 0, 0.06, -0.009, 0.002));
+  parts.push(...doorRow(-w / 2 + 0.005, w / 2 - 0.005, 0.065, 0.785, zF, K('d'), { maxW: 0.6, handle: 'knob', hy: 0.66 }));
   parts.push(SL(w + 0.02, D + 0.02, 0.04, 'countertop', 0, 0.79, 0.005, { bevel: 0.003 }));
-  parts.push(B(w, 1.12, 0.03, 'cabinetry', 0, 0.83, -D / 2 + 0.015));
+  parts.push(B(w, 1.12, 0.03, K('b'), 0, 0.83, -D / 2 + 0.015));
   parts.push(B(w * 0.62, 0.62, 0.012, 'altarRed', 0, 1.1, -D / 2 + 0.036));
   parts.push(B(w * 0.66, 0.025, 0.02, 'metal', 0, 1.72, -D / 2 + 0.04), B(w * 0.66, 0.025, 0.02, 'metal', 0, 1.08, -D / 2 + 0.04));
   // 两层台座
@@ -1094,8 +1107,8 @@ function sideboard({ w = 1.8 }) {
   const H = 0.62;
   const zF = D / 2 - 0.018;
   return group(
-    B(w, H, D - 0.018, 'cabinetry', 0, y0, -0.009, 0.003),
-    doorRow(-w / 2 + 0.006, w / 2 - 0.006, y0 + 0.006, y0 + H - 0.006, zF, 'cabinetry', { maxW: 0.48, fluted: 0.03, t: 0.026, handle: 'knob', hy: y0 + H * 0.55 }),
+    B(w, H, D - 0.018, K('b'), 0, y0, -0.009, 0.003),
+    doorRow(-w / 2 + 0.006, w / 2 - 0.006, y0 + 0.006, y0 + H - 0.006, zF, K('d'), { maxW: 0.48, fluted: 0.03, t: 0.026, handle: 'knob', hy: y0 + H * 0.55 }),
     squareLegs(corners(w / 2 - 0.06, D / 2 - 0.06), y0, 'metal', 0.026, 0.02),
     vase(-w / 3, y0 + H, 0, { h: 0.34, r: 0.09, key: 'pot', style: 'amphora' }),
     branches(-w / 3, y0 + H + 0.31, 0, rand, { n: 4, h: 0.5, spread: 0.2 }),
@@ -1174,9 +1187,9 @@ function kitchenRun({ w = 3, h = 2.8, upper = true, sink = 0.3, hob = 0.72, sink
   else if (segs.length) segs[segs.length - 1].b = w / 2;
   else segs.push({ a: -w / 2, b: w / 2, type: 'doors' });
   // 踢脚（内退）+ 柜体（水槽那段柜体矮一截，让出水槽）
-  parts.push(B(w - 0.004, 0.1, D - 0.12, 'black', 0, 0, -0.06));
+  parts.push(B(w - 0.004, 0.1, D - 0.12, K('p', 0, 'black'), 0, 0, -0.06));
   const cut = sx != null ? [sx - sinkW / 2 - 0.01, sx + sinkW / 2 + 0.01] : null;
-  const carc = (a, b, top) => b - a > 0.005 && parts.push(B(b - a, top - 0.1, D - 0.02, 'cabinetry', (a + b) / 2, 0.1, -0.01, 0.002));
+  const carc = (a, b, top) => b - a > 0.005 && parts.push(B(b - a, top - 0.1, D - 0.02, K('b'), (a + b) / 2, 0.1, -0.01, 0.002));
   if (cut) {
     carc(-w / 2, cut[0], ctY);
     carc(cut[0], cut[1], ctY - 0.21);
@@ -1184,8 +1197,8 @@ function kitchenRun({ w = 3, h = 2.8, upper = true, sink = 0.3, hob = 0.72, sink
   } else carc(-w / 2, w / 2, ctY);
   parts.push(B(w, fy1 - fy0 + 0.035, 0.002, 'black', 0, fy0, zF + 0.001, 0, { shadow: false }));
   for (const s of segs) {
-    if (s.type === 'hob') parts.push(...drawerStack(s.a + 0.002, s.b - 0.002, fy0, fy1, zF + 0.002, 'cabinetry', [0.42, 0.36, 0.22], { channel: 0.025 }));
-    else parts.push(...doorRow(s.a + 0.002, s.b - 0.002, fy0, fy1, zF + 0.002, 'cabinetry', { maxW: s.type === 'sink' ? 0.42 : 0.6, backer: false }));
+    if (s.type === 'hob') parts.push(...drawerStack(s.a + 0.002, s.b - 0.002, fy0, fy1, zF + 0.002, K('w'), [0.42, 0.36, 0.22], { channel: 0.025 }));
+    else parts.push(...doorRow(s.a + 0.002, s.b - 0.002, fy0, fy1, zF + 0.002, K('d'), { maxW: s.type === 'sink' ? 0.42 : 0.6, backer: false }));
   }
   // 台面：3cm 石材、前沿圆角；水槽处开孔（台下盆）——用几段直条围出开孔（不用带孔的形状，三角化不会跨过孔）
   const zb = 0.01 - (D + 0.02) / 2;
@@ -1238,10 +1251,10 @@ function kitchenRun({ w = 3, h = 2.8, upper = true, sink = 0.3, hob = 0.72, sink
     for (const [a, b] of segsU) {
       const L = b - a;
       const cx = (a + b) / 2;
-      parts.push(B(L, 0.72, 0.33, 'cabinetry', cx, 1.52, -D / 2 + 0.165, 0.002));
-      parts.push(...doorRow(a + 0.002, b - 0.002, 1.5, 2.24, zU, 'cabinetry', { maxW: 0.5, t: 0.017 }));
+      parts.push(B(L, 0.72, 0.33, K('b', 'wall'), cx, 1.52, -D / 2 + 0.165, 0.002));
+      parts.push(...doorRow(a + 0.002, b - 0.002, 1.5, 2.24, zU, K('d', 'wall'), { maxW: 0.5, t: 0.017 }));
       parts.push(led(L - 0.06, cx, 1.507, -D / 2 + 0.28));
-      if (h - 2.25 > 0.05) parts.push(B(L, h - 2.25, 0.33, 'cabinetry', cx, 2.25, -D / 2 + 0.165));
+      if (h - 2.25 > 0.05) parts.push(B(L, h - 2.25, 0.33, K('b', 'wall'), cx, 2.25, -D / 2 + 0.165));
     }
     if (hx != null) {
       // 抽油烟机：薄罩 + 烟管到顶；灶后面的挡水板加高
@@ -1293,10 +1306,10 @@ function tallUnit({ w = 0.6, h = 2.4 }) {
   const zF = D / 2 - 0.02;
   const split = Math.min(1.4, h * 0.58);
   return group(
-    B(w - 0.004, 0.1, D - 0.12, 'black', 0, 0, -0.06),
-    B(w, h - 0.1, D - 0.02, 'cabinetry', 0, 0.1, -0.01, 0.002),
-    doorRow(-w / 2 + 0.002, w / 2 - 0.002, 0.105, split, zF, 'cabinetry', { maxW: 0.6, handle: 'bar', hy: split - 0.56 }),
-    doorRow(-w / 2 + 0.002, w / 2 - 0.002, split, h - 0.004, zF, 'cabinetry', { maxW: 0.6, handle: 'bar', hy: split + 0.06 })
+    B(w - 0.004, 0.1, D - 0.12, K('p', 0, 'black'), 0, 0, -0.06),
+    B(w, h - 0.1, D - 0.02, K('b'), 0, 0.1, -0.01, 0.002),
+    doorRow(-w / 2 + 0.002, w / 2 - 0.002, 0.105, split, zF, K('d'), { maxW: 0.6, handle: 'bar', hy: split - 0.56 }),
+    doorRow(-w / 2 + 0.002, w / 2 - 0.002, split, h - 0.004, zF, K('d'), { maxW: 0.6, handle: 'bar', hy: split + 0.06 })
   );
 }
 
@@ -1305,9 +1318,9 @@ function island({ w = 1.8, d = 0.9 }) {
   const parts = [];
   const bodyD = d - 0.3;
   const bz = -d / 2 + bodyD / 2;
-  parts.push(B(w - 0.12, 0.1, bodyD - 0.08, 'black', 0, 0, bz));
-  parts.push(B(w - 0.08, 0.76, bodyD, 'cabinetry', 0, 0.1, bz, 0.002));
-  const fr = group(doorRow(-w / 2 + 0.05, w / 2 - 0.05, 0.105, 0.82, 0.002, 'cabinetry', { maxW: 0.6, handle: 'groove' }));
+  parts.push(B(w - 0.12, 0.1, bodyD - 0.08, K('p', 0, 'black'), 0, 0, bz));
+  parts.push(B(w - 0.08, 0.76, bodyD, K('b'), 0, 0.1, bz, 0.002));
+  const fr = group(doorRow(-w / 2 + 0.05, w / 2 - 0.05, 0.105, 0.82, 0.002, K('d'), { maxW: 0.6, handle: 'groove' }));
   fr.rotation.y = Math.PI;
   fr.position.z = bz - bodyD / 2;
   parts.push(fr);
@@ -1430,7 +1443,7 @@ function nightstand() {
 function wardrobe({ w = 2.4, h = 2.6, handle = 'none' }) {
   const D = 0.6;
   const zF = D / 2 - 0.02;
-  const parts = [B(w - 0.004, 0.08, D - 0.12, 'black', 0, 0, -0.06), B(w, h - 0.08, D - 0.02, 'cabinetry', 0, 0.08, -0.01, 0.002)];
+  const parts = [B(w - 0.004, 0.08, D - 0.12, K('p', 0, 'black'), 0, 0, -0.06), B(w, h - 0.08, D - 0.02, K('b'), 0, 0.08, -0.01, 0.002)];
   parts.push(B(w, h - 0.085, 0.002, 'black', 0, 0.083, zF + 0.001, 0, { shadow: false }));
   const n = Math.max(2, Math.round(w / 0.5));
   const dw = w / n;
@@ -1446,7 +1459,7 @@ function wardrobe({ w = 2.4, h = 2.6, handle = 'none' }) {
     const r = pairRight ? meet : 0.0015;
     const pw = dw - l - r;
     const cx = x + (l - r) / 2;
-    parts.push(B(pw, H, 0.019, 'cabinetry', cx, y0, zF + 0.002 + 0.0095, 0.003));
+    parts.push(B(pw, H, 0.019, K('d'), cx, y0, zF + 0.002 + 0.0095, 0.003));
     if (handle !== 'none') {
       const hx = cx + side * (pw / 2 - 0.04);
       parts.push(B(0.012, 0.6, 0.012, 'metal', hx, 0.82, zF + 0.048, 0.005));
@@ -1535,11 +1548,11 @@ function kidsBed({ w = 1.0, d = 2.0, key = 'cabinetry' }) {
 function toyStorage({ w = 1.2 }) {
   const D = 0.38;
   const H = 0.62;
-  const parts = [B(w, 0.04, D, 'cabinetry', 0, 0, 0, 0.004), B(w, 0.025, D, 'cabinetry', 0, H - 0.025, 0, 0.004), B(w, 0.02, D - 0.02, 'cabinetry', 0, 0.31, 0)];
+  const parts = [B(w, 0.04, D, K('b'), 0, 0, 0, 0.004), B(w, 0.025, D, K('b'), 0, H - 0.025, 0, 0.004), B(w, 0.02, D - 0.02, K('o'), 0, 0.31, 0)];
   const n = Math.max(2, Math.round(w / 0.3));
   const cw = (w - 0.02) / n;
-  for (let i = 0; i <= n; i++) parts.push(B(0.02, H - 0.065, D, 'cabinetry', -w / 2 + 0.01 + cw * i, 0.04, 0));
-  parts.push(B(w, H, 0.01, 'cabinetry', 0, 0, -D / 2 + 0.005));
+  for (let i = 0; i <= n; i++) parts.push(B(0.02, H - 0.065, D, K(i % n ? 'o' : 'b'), -w / 2 + 0.01 + cw * i, 0.04, 0));
+  parts.push(B(w, H, 0.01, K('o'), 0, 0, -D / 2 + 0.005));
   for (let row = 0; row < 2; row++)
     for (let i = 0; i < n; i++) {
       if ((i + row) % 3 === 2) continue; // 留几格空
@@ -1574,17 +1587,17 @@ function shoeCabinet({ w = 1.5, h = 2.5 }) {
   const lowTop = 1.0;
   const nicheTop = Math.min(1.4, h - 0.5);
   const parts = [];
-  parts.push(B(w, lowTop - lowY, D - 0.018, 'cabinetry', 0, lowY, -0.009, 0.002));
-  parts.push(...doorRow(-w / 2 + 0.003, w / 2 - 0.003, lowY + 0.003, lowTop - 0.003, zF, 'cabinetry', { maxW: 0.45, fluted: true, t: 0.02 }));
+  parts.push(B(w, lowTop - lowY, D - 0.018, K('b'), 0, lowY, -0.009, 0.002));
+  parts.push(...doorRow(-w / 2 + 0.003, w / 2 - 0.003, lowY + 0.003, lowTop - 0.003, zF, K('d'), { maxW: 0.45, fluted: true, t: 0.02 }));
   parts.push(led(w - 0.08, 0, lowY - 0.009, 0.0));
   // 开放台面
   parts.push(SL(w, D, 0.025, 'countertop', 0, lowTop, 0, { bevel: 0.002 }));
-  parts.push(B(w - 0.036, nicheTop - lowTop - 0.025, 0.012, 'feature', 0, lowTop + 0.025, -D / 2 + 0.006));
-  for (const s of [-1, 1]) parts.push(B(0.018, nicheTop - lowTop, D, 'cabinetry', s * (w / 2 - 0.009), lowTop, 0));
+  parts.push(B(w - 0.036, nicheTop - lowTop - 0.025, 0.012, K('o', 0, 'feature'), 0, lowTop + 0.025, -D / 2 + 0.006));
+  for (const s of [-1, 1]) parts.push(B(0.018, nicheTop - lowTop, D, K('b'), s * (w / 2 - 0.009), lowTop, 0));
   parts.push(led(w - 0.08, 0, nicheTop - 0.012, 0.06));
   // 上柜
-  parts.push(B(w, h - nicheTop, D - 0.018, 'cabinetry', 0, nicheTop, -0.009, 0.002));
-  parts.push(...doorRow(-w / 2 + 0.003, w / 2 - 0.003, nicheTop - 0.018, h - 0.004, zF, 'cabinetry', { maxW: 0.45 }));
+  parts.push(B(w, h - nicheTop, D - 0.018, K('b'), 0, nicheTop, -0.009, 0.002));
+  parts.push(...doorRow(-w / 2 + 0.003, w / 2 - 0.003, nicheTop - 0.018, h - 0.004, zF, K('d'), { maxW: 0.45 }));
   // 台面上：钥匙盘、小花瓶插一枝
   const ny = lowTop + 0.025;
   parts.push(tray(-w / 2 + 0.25, ny, 0.02, 0.1, 'metal'));
@@ -1615,8 +1628,8 @@ function vanity({ w = 0.9 }) {
   const top = 0.85;
   const zF = D / 2 - 0.016;
   return group(
-    B(w, top - 0.03 - y0, D - 0.016, 'cabinetry', 0, y0, -0.008, 0.002),
-    doorRow(-w / 2 + 0.003, w / 2 - 0.003, y0 + 0.003, top - 0.033, zF, 'cabinetry', { maxW: 0.46, handle: 'groove', t: 0.016 }),
+    B(w, top - 0.03 - y0, D - 0.016, K('b'), 0, y0, -0.008, 0.002),
+    doorRow(-w / 2 + 0.003, w / 2 - 0.003, y0 + 0.003, top - 0.033, zF, K('d'), { maxW: 0.46, handle: 'groove', t: 0.016 }),
     SL(w + 0.01, D + 0.02, 0.03, 'countertop', 0, top - 0.03, 0.01, { bevel: 0.0025 }),
     LA([[0, 0], [0.12, 0], [0.16, 0.015], [0.19, 0.06], [0.2, 0.11], [0.195, 0.12], [0.185, 0.11], [0.175, 0.065], [0.14, 0.03], [0, 0.022]], 'porcelain', 0, top, 0.04, {}, Q(40, 28)),
     C(0.022, 0.022, 0.004, 'chrome', 0, top + 0.022, 0.04, 16),
@@ -1969,7 +1982,9 @@ export const CATALOG = {
 export function buildItem(item, ctx = {}) {
   const def = CATALOG[item.kind];
   if (!def) return null;
+  IT = item;
   const raw = def.build({ ...item, h: item.h || ctx.wallH || 2.8, palette: ctx.palette, key: item.key });
+  CAB.h && CAB.h(item, raw);
   const g = compact(raw, { seed: item.id ?? item.kind });
   g.position.set(item.x, item.y || 0, item.z);
   g.rotation.y = ((item.rot || 0) * Math.PI) / 180;

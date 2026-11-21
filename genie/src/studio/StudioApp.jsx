@@ -26,7 +26,7 @@ import { Component, lazy, Suspense, useCallback, useEffect, useLayoutEffect, use
 import { Engine } from './engine/Engine.js';
 import { buildWalls, buildAllWalls, templatePlan, emptyPlan, migratePlan, isMultiFloor, floorById, floorName, uid, roomSides, ROOM_TYPES } from './plan/model.js';
 import * as Furnish from './engine/furnish.js';
-import { CATALOG } from './engine/furniture.js';
+import { CATALOG, CAB } from './engine/furniture.js';
 import { DAY_PRESETS } from './engine/daylight.js';
 import { createProject, loadProjects, saveProject, currentProject, packProject, unpackProject, getUnderlays, putUnderlays, migrateProject, loadSettings, safeMaterials, profileForStudio } from './store.js';
 import { realiseCase } from '../shared/realise.js';
@@ -66,6 +66,8 @@ import PlanEditor from './plan/PlanEditor.jsx';
 import { boardsSoon as boardsSoonShared, missingBoardIds } from '../shared/boards/soon.js';
 // 导出给设计师（DXF / 酷家乐 / SketchUp）：只有点了才下载这部分代码
 const ExportSheet = lazy(() => import('./export/ExportSheet.jsx'));
+// 柜子细节（每组一个色、一键搭配，src/studio/cabinet/）：打开面板、或方案里有柜子设定（project.cab）时才下载
+const Cab = lazy(() => import('./cabinet/Cab.jsx'));
 // 走进去（人的眼睛走进家里，src/studio/walk/）：点了「走进去」才要这一块；界面好了 4 秒后先在后台取（展厅、演示不取）
 const loadWalk = () => import('./walk/WalkMode.jsx');
 // let：没下载成时 walkFailed 换一个新的（React 的 lazy 记住失败，不换的话以后每次点都是同一个错，直到重新载入页面）
@@ -212,6 +214,7 @@ const snap = (p) => ({
   mood: p.mood,
   plan: p.plan,
   furnEdited: p.furnEdited,
+  cab: p.cab,
   // 参考案例：换案例、解锁、套用建议都能撤销
   caseId: p.caseId ?? null,
   caseRef: p.caseRef ?? null,
@@ -407,6 +410,7 @@ export default function StudioApp() {
   const caseLib = useCaseLib(project?.cases);
   // 走进去：鸟瞰的界面照样挂着（只是藏起来，排版不变 → 取景留白照样量得准），回到全屋时一模一样
   const [walk, setWalk] = useState(false);
+  const [cabOn, setCabOn] = useState(false); // 「柜子」面板开着
   const walkRef = useRef(false); // 点下去那一刻就算（不等重画）：日光小图、外壳传来的户型图都要等回到全屋
   const thumbsLater = useRef(false);
   const afterWalk = useRef(null); // 回到全屋以后再做的事：外壳传来的户型图（读）、走的时候读好的户型图（换上）
@@ -850,6 +854,8 @@ export default function StudioApp() {
   const dropMaterial = (matId, targetSlot, { quiet = false } = {}) => {
     const mat = MAT_BY_ID[matId];
     if (!mat) return false;
+    // 柜子分了组（或「柜子」面板里选着一组）：换的是那一组，不是全屋的柜体
+    if (CAB.drop && CAB.drop(matId, targetSlot)) return true;
     // 没选表面就点了一下：这种材质默认去哪（溪岸板材 → 柜体，不是木头默认的地板）
     const s = targetSlot || (slot && fits(matId, slot) ? slot : defaultSlotFor(matId));
     if (!fits(matId, s)) {
@@ -1778,6 +1784,7 @@ export default function StudioApp() {
             onStart={staffView && !WISH ? () => setModal('start') : null}
             // 导出 CAD / 3D 文件只给设计师（客人版、许愿模式、展厅都没有）
             onExport={staffView && !WISH ? () => setModal('export') : null}
+            onCab={staffView && !WISH && (() => setCabOn(!cabOn))}
             onHelp={() => setModal('help')}
             // 设置里是公司的 AI key、识别模型、接口地址：只给设计师（客人版、许愿模式都没有这一项；「语言」那一行照样在）
             onSettings={staffView ? () => setModal('settings') : null}
@@ -1899,6 +1906,14 @@ export default function StudioApp() {
         <Suspense fallback={null}>
           <ExportSheet project={project} onClose={() => setModal(null)} onToast={flash} />
         </Suspense>
+      )}
+
+      {project && (cabOn || project.cab) && (
+        <WalkGuard onFail={setCabOn}>
+          <Suspense fallback={null}>
+            <Cab engine={engine.current} project={project} open={cabOn} commit={commit} flash={flash} onClose={() => setCabOn(false)} />
+          </Suspense>
+        </WalkGuard>
       )}
 
       {/* 设置（AI key）只给设计师：客人版、许愿模式从「平面图 → AI 识别」也走不到设置。
