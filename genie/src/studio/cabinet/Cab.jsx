@@ -8,11 +8,13 @@
 import './words.js';
 import './cabinet.css';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { t, L } from '../../shared/i18n.js';
+import { t, L, isEn } from '../../shared/i18n.js';
+import { tagsOf } from '../../shared/moods.js';
+import { AVOID_LABEL } from '../../shared/summary.js';
 import { MAT_BY_ID, BOARDS, onBoards } from '../../shared/materials.js';
 import { swatchURL } from '../../shared/textures.js';
-import { Icon } from '../ui/kit.jsx';
-import { CabRuntime, ensureSeeds } from './runtime.js';
+import { Icon, listSep } from '../ui/kit.jsx';
+import { CabRuntime, ensureSeeds, known } from './runtime.js';
 import { GROUP_BY_ID, PART_BY_ID, PRESETS, groupsIn, GROUPS, partInfo, setPart, applyPreset, presetOf, presetBoards, realOf, seedKeyOf } from './model.js';
 
 /** 每组面板上有哪几个部分（那一组的柜子上真的有的）。书柜、展示柜这类没有门的：第一项叫「整体」 */
@@ -24,7 +26,7 @@ const GROUP_PARTS = {
   tv: ['door', 'body', 'side'],
   wardrobe: ['door', 'body', 'side', 'plinth'],
   shoe: ['door', 'body', 'side', 'open'],
-  book: ['door', 'open', 'plinth'],
+  book: ['door', 'body', 'side', 'open', 'plinth'],
   vanity: ['door', 'body', 'side'],
   other: ['door', 'body', 'side', 'open', 'plinth'],
 };
@@ -33,7 +35,7 @@ const WHOLE = { book: 1 };
 /** 一块板显示成什么：手册颜色的板在这台设备上有真的 → 真的那块；没有 → 手册上的名字 + 「示意色」 */
 function boardView(id) {
   const real = realOf(id, BOARDS);
-  const m = MAT_BY_ID[real] || MAT_BY_ID[id];
+  const m = known(real) ? MAT_BY_ID[real] : known(id) ? MAT_BY_ID[id] : null;
   return { id: m ? m.id : null, name: m ? L(m) : '', code: m?.board?.code || '', sample: !!seedKeyOf(real) };
 }
 
@@ -43,6 +45,7 @@ function Chip({ id, size = '' }) {
 
 export default function Cab({ engine, project, open, commit, flash, onClose }) {
   const rt = useRef(null);
+  const syncRef = useRef(null);
   const latest = useRef(project);
   latest.current = project;
   const [sel, setSel] = useState(null); // { group, part }
@@ -54,13 +57,22 @@ export default function Cab({ engine, project, open, commit, flash, onClose }) {
     if (!engine) return undefined;
     const r = new CabRuntime(engine);
     rt.current = r;
+    // 同步出错（坏掉的方案资料）也要走到下面的 return：不然口子装着卸不掉
+    const sync = () => {
+      const p = latest.current;
+      try {
+        r.locked = !!p.locked?.cabinetry;
+        r.sync({ cab: p.cab, materials: p.materials });
+      } catch (err) {
+        if (import.meta.env?.DEV) console.error('[cab]', err);
+      }
+    };
+    syncRef.current = sync;
     r.activate();
-    const p = latest.current;
-    r.sync({ cab: p.cab, materials: p.materials, furniture: p.furniture });
+    sync();
     // 板材登记好 / 变了（本机板材包读好、员工导入了板材）：手册颜色换成真的、顶着的换回来
     const off = onBoards(() => {
-      const q = latest.current;
-      r.sync({ cab: q.cab, materials: q.materials, furniture: q.furniture });
+      sync();
       bump((n) => n + 1);
     });
     return () => {
@@ -72,8 +84,8 @@ export default function Cab({ engine, project, open, commit, flash, onClose }) {
 
   // 方案变了（改了一组、套了搭配、撤销 / 重做、换了全屋的柜体色）
   useEffect(() => {
-    rt.current?.sync({ cab: project.cab, materials: project.materials, furniture: project.furniture });
-  }, [project.cab, project.materials, project.furniture]);
+    syncRef.current?.();
+  }, [project.cab, project.materials, project.furniture, project.locked]);
 
   // 面板关着（客人、走进去、演示）就没有「选着的那一组」
   const active = open ? sel : null;
@@ -87,21 +99,18 @@ export default function Cab({ engine, project, open, commit, flash, onClose }) {
   useEffect(() => {
     const r = rt.current;
     if (!r) return undefined;
+    // 走到这里的都是能上柜子的材质、柜子也没锁（runtime.drop 先挡掉了：那两种照原来的路走）
     r.onSet = (group, part, matId) => {
       const p = latest.current;
-      const next = { cab: setPart(p.cab, group, part, matId) };
-      // 客人家里留下来的柜子：换了颜色就不再锁
-      if (p.locked?.cabinetry) {
-        const { cabinetry: _gone, ...rest } = p.locked;
-        next.locked = rest;
-      }
-      commit(next);
-      flash(t('{0} · {1} → {2}', [L(GROUP_BY_ID[group]), partName(group, part), boardView(matId).name]));
+      commit({ cab: setPart(p.cab, group, part, matId) });
+      // 客人说过不要的（雷区）：和换别的表面一样提醒一句
+      const tags = tagsOf(MAT_BY_ID[matId]);
+      const hit = (p.profile?.avoid || []).filter((k) => tags.has(k));
+      if (hit.length) flash(t('{0} 说过不要「{1}」—— 想试试也可以，按撤销就能还原', [p.profile?.name || t('这位客人'), hit.map((k) => t(AVOID_LABEL[k] || k)).join(listSep())]), 4800);
+      else flash(t('{0} · {1} → {2}', [N(GROUP_BY_ID[group]), partName(group, part), boardView(matId).name]));
     };
-    r.onMisfit = (matId) => flash(t('溪岸板材和木、漆可以用在柜子上；{0} 不行', [L(MAT_BY_ID[matId])]));
     return () => {
       r.onSet = null;
-      r.onMisfit = null;
     };
   }, [engine, commit, flash]);
 
@@ -116,11 +125,11 @@ export default function Cab({ engine, project, open, commit, flash, onClose }) {
   };
   const clear = (group, part) => {
     commit({ cab: setPart(project.cab, group, part, null) });
-    flash(t('{0} · {1} 跟回去了', [L(GROUP_BY_ID[group]), partName(group, part)]));
+    flash(t('{0} · {1} 跟回去了', [N(GROUP_BY_ID[group]), partName(group, part)]));
   };
   const usePreset = (P) => {
     // 这个搭配要动的组，这个家一组都没有（双色厨房、家里没有厨房）
-    if (P.id !== 'one' && !Object.keys(P.set).some((g) => here.some((h) => h.id === g))) return flash(t('这个家没有「{0}」用得到的柜子', [L(P)]));
+    if (P.id !== 'one' && !Object.keys(P.set).some((g) => here.some((h) => h.id === g))) return flash(t('这个家没有「{0}」用得到的柜子', [N(P)]));
     const cab = applyPreset(P.id, { cab: project.cab, furniture: project.furniture });
     const next = { cab };
     if (project.locked?.cabinetry && cab) {
@@ -129,7 +138,7 @@ export default function Cab({ engine, project, open, commit, flash, onClose }) {
     }
     commit(next);
     setSel(null);
-    flash(t('已套用「{0}」', [L(P)]));
+    flash(t('已套用「{0}」', [N(P)]));
   };
   let anySample = false;
 
@@ -141,7 +150,7 @@ export default function Cab({ engine, project, open, commit, flash, onClose }) {
             <p className="eyebrow">{t('柜子 · 颜色')}</p>
             <h2 className="mp-title">{t('每组一个色')}</h2>
           </div>
-          <button type="button" className="ibtn sm" onClick={onClose} aria-label={t('关闭')} title={t('关闭')}>
+          <button type="button" className="ibtn sm" onClick={() => onClose(false)} aria-label={t('关闭')} title={t('关闭')}>
             <Icon name="close" size={18} />
           </button>
         </header>
@@ -162,7 +171,7 @@ export default function Cab({ engine, project, open, commit, flash, onClose }) {
             const on = curPreset === P.id;
             return (
               <button key={P.id} type="button" className={`cab-preset ${on ? 'on' : ''}`} aria-pressed={on} data-sfx="apply" data-preset={P.id} onClick={() => usePreset(P)} title={chips.length ? chips.map((c) => c.name).join(' + ') : t('现在的柜体色')}>
-                <b>{L(P)}</b>
+                <b>{N(P)}</b>
                 <span className="cab-bars" aria-hidden="true">
                   {(chips.length ? chips : [{ id: project.materials.cabinetry }]).map((c, i) => (
                     <i key={i}>{c.id && <img src={swatchURL(c.id, 48) || ''} alt="" draggable={false} />}</i>
@@ -186,7 +195,7 @@ export default function Cab({ engine, project, open, commit, flash, onClose }) {
                 <button type="button" className="cab-row" aria-expanded={openRow} onClick={() => (openRow ? pick(null) : pick(g.id, 'door'))}>
                   <Chip id={v.id} />
                   <span className="cab-txt">
-                    <b>{L(g)}</b>
+                    <b>{N(g)}</b>
                     <em>
                       {main.own ? v.name : t('跟全屋的柜体色')}
                       {main.own && v.sample && <u>{t('示意色')}</u>}
@@ -223,7 +232,7 @@ export default function Cab({ engine, project, open, commit, flash, onClose }) {
                         </li>
                       );
                     })}
-                    <li className="cab-hint">{t('选好了「{0} · {1}」：点下面的板材，或把板材拖到柜子上', [L(g), partName(g.id, active.part)])}</li>
+                    <li className="cab-hint">{t('选好了「{0} · {1}」：点下面的板材，或把板材拖到柜子上', [N(g), partName(g.id, active.part)])}</li>
                   </ul>
                 )}
               </li>
@@ -231,14 +240,17 @@ export default function Cab({ engine, project, open, commit, flash, onClose }) {
           })}
         </ul>
 
-        {missing.length > 0 && here.length > 0 && <p className="cab-foot">{t('这个家没有：{0}', [missing.map((g) => L(g)).join('、')])}</p>}
+        {missing.length > 0 && here.length > 0 && <p className="cab-foot">{t('这个家没有：{0}', [missing.map((g) => N(g)).join('、')])}</p>}
         {anySample && <p className="cab-foot">{t('标「示意色」的板材这台设备还没导入贴图，先用手册上的颜色；导入后自动换成真的。')}</p>}
       </div>
     </aside>
   );
 }
 
+/** 组、部分、搭配的名字：用 model.js 自己的那一对（L() 会先查总词典 ——「柜体」在那里是 Cabinetry，这里要的是 Carcass） */
+const N = (o) => (isEn() ? o.en : o.zh);
+
 /** 部分的名字（书柜这类没有门的，第一项叫「整体」） */
 function partName(group, part) {
-  return part === 'door' && WHOLE[group] ? t('整体') : L(PART_BY_ID[part]);
+  return part === 'door' && WHOLE[group] ? t('整体') : N(PART_BY_ID[part]);
 }

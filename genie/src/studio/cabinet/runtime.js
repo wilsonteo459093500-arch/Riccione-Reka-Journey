@@ -14,15 +14,16 @@ import { boxGeo } from '../engine/geom.js';
 import { MAT_BY_ID, BOARDS, fits } from '../../shared/materials.js';
 import { boardMat } from '../../shared/boards/library-api.js';
 import { PALETTE } from '../../shared/palette.js';
-import { decide, matIdOf, parseKey, groupOf, KIND_GROUP, SEED, seedId, seedRecord, realOf } from './model.js';
+import { decide, matIdOf, parseKey, groupOf, cleanCab, FOLLOW, KIND_GROUP, SEED, seedId, seedRecord, realOf } from './model.js';
 
-const FOLLOW = ['cabinetry', 'woodwork', 'feature'];
+/** 认得的材质 id（方案是别人给的链接里来的：'constructor' 这种也不能当成材质） */
+export const known = (id) => typeof id === 'string' && Object.hasOwn(MAT_BY_ID, id);
 
 /** 手册颜色的 6 块板放进材质表（只有资料、没有贴图；不进板材栏、不进板材库）。幂等 */
 export function ensureSeeds() {
   for (const key of Object.keys(SEED)) {
     const id = seedId(key);
-    if (!MAT_BY_ID[id]) {
+    if (!known(id)) {
       const m = boardMat(seedRecord(key), { src: 'seed' });
       if (m) MAT_BY_ID[id] = m;
     }
@@ -50,10 +51,10 @@ export class CabRuntime {
     this.calls = new Map(); // itemId → [[part, legacyKey, groupOv, 答的钥匙], …]
     this.glowing = []; // 正在发金光的材质
     this.ptr = null; // 最后一次指针的位置
-    this.downGroup = null; // 最后一次在画布上按下时，按的是哪一组
+    this.tapGroup = null; // 最后一次在画布上「点一下」（不是拖）点的是哪一组：走进去刷色用
     this.sel = null; // 面板上选着的 { group, part }
     this.onSet = null; // (group, part, matId) → 面板那边存进方案
-    this.onMisfit = null;
+    this.locked = false; // 柜子是客人家里留下来的（方案的 locked.cabinetry）
   }
 
   // ───────────── 开 / 关 ─────────────
@@ -83,17 +84,33 @@ export class CabRuntime {
       for (const m of this.glowing) m.emissiveIntensity = k;
       return true;
     };
-    CAB.h = (item, part, key, group) => (typeof part === 'object' ? this.post(item, part) : this.ask(item, part, key, group));
+    // 这里出任何错都不能让一件柜子建不出来：退回原来的材质
+    CAB.h = (item, part, key, group) => {
+      try {
+        return typeof part === 'object' ? this.post(item, part) : this.ask(item, part, key, group);
+      } catch {
+        return null;
+      }
+    };
     CAB.drop = (matId, slot) => this.drop(matId, slot);
     this.onMove = (ev) => {
       this.ptr = { x: ev.clientX, y: ev.clientY };
     };
     this.onDown = (ev) => {
       this.ptr = { x: ev.clientX, y: ev.clientY };
-      if (ev.target === this.e.renderer?.domElement) this.downGroup = this.groupAtPointer();
+      this.down = ev.target === this.e.renderer?.domElement ? { x: ev.clientX, y: ev.clientY } : null;
+    };
+    // 在画布上点一下（按下、抬起没挪开）：记下点的是哪一组（没点到柜子 = 没有）；拖着转镜头不算
+    this.onUp = (ev) => {
+      const d = this.down;
+      this.down = null;
+      if (!d || Math.hypot(ev.clientX - d.x, ev.clientY - d.y) > 8) return;
+      this.ptr = { x: ev.clientX, y: ev.clientY };
+      this.tapGroup = this.groupAt(ev.clientX, ev.clientY);
     };
     window.addEventListener('pointermove', this.onMove, true);
     window.addEventListener('pointerdown', this.onDown, true);
+    window.addEventListener('pointerup', this.onUp, true);
   }
 
   deactivate() {
@@ -108,6 +125,7 @@ export class CabRuntime {
     lib.pulse = this.orig.pulse;
     window.removeEventListener('pointermove', this.onMove, true);
     window.removeEventListener('pointerdown', this.onDown, true);
+    window.removeEventListener('pointerup', this.onUp, true);
     this.cab = undefined;
     // 柜子重建回原来的材质（引擎还在的话），再释放这里建的
     try {
@@ -140,9 +158,9 @@ export class CabRuntime {
   /** 这把钥匙现在该是哪块板：手册颜色的板在这台设备上有真的就用真的；这台设备不认识的板材先顶一个（MatLib 的规矩） */
   matIdFor(key) {
     let id = realOf(matIdOf(key, this.cab, this.materials), BOARDS);
-    if (!MAT_BY_ID[id]) id = this.lib.boards?.stand?.(id, 'cabinetry') ?? id;
-    if (!MAT_BY_ID[id]) id = this.lib.current.cabinetry || this.materials.cabinetry;
-    return MAT_BY_ID[id] ? id : null;
+    if (!known(id)) id = this.lib.boards?.stand?.(id, 'cabinetry') ?? id;
+    if (!known(id)) id = this.lib.current.cabinetry || this.materials.cabinetry;
+    return known(id) ? id : null;
   }
 
   paint(key) {
@@ -217,12 +235,15 @@ export class CabRuntime {
           continue;
         }
         if (w < 0.1) continue;
+        // 和柜体并排放（不是放在柜体里面：compact() 遇到「这个材质只有一个网格」会原样留着它，里面的侧板就画了两次）
+        o.updateMatrix();
         for (const s of [-1, 1]) {
           const slab = new THREE.Mesh(boxGeo(0.002, h, d), ms);
           slab.position.set(s > 0 ? b.max.x + 0.001 : b.min.x - 0.001, b.min.y, (b.min.z + b.max.z) / 2);
+          slab.applyMatrix4(o.matrix);
           slab.castShadow = false;
           slab.receiveShadow = true;
-          o.add(slab);
+          (o.parent || raw).add(slab);
         }
       }
     }
@@ -234,9 +255,10 @@ export class CabRuntime {
   /** 方案的柜子设定 / 材质 / 家具变了：能原地换板材的原地换，答案变了的那几件重建 */
   sync({ cab, materials, furniture }) {
     if (!this.on) return;
-    this.cab = cab;
+    void furniture;
+    this.cab = cleanCab(cab);
+    cab = this.cab;
     this.materials = materials || {};
-    this.furniture = furniture || [];
     const e = this.e;
     const redo = [];
     for (const [id, calls] of this.calls) {
@@ -256,11 +278,14 @@ export class CabRuntime {
     e.dirty = true;
   }
 
-  /** 这几件柜子重建（引擎的 setFurniture：资料没变的那几件不动，所以先让引擎「忘记」它们） */
+  /**
+   * 这几件柜子重建（引擎的 setFurniture：资料没变的那几件不动，所以先让引擎「忘记」它们）。
+   * 用引擎自己手上的那份家具，不用方案的：换方案时引擎先换（setScene）、这里后知道 —— 用旧方案的家具会把上一个家画出来。
+   */
   rebuild(ids) {
     const e = this.e;
     if (!ids.length || !e?.itemData) return;
-    const list = this.furniture?.length ? this.furniture : [...e.itemData.values()];
+    const list = [...e.itemData.values()];
     for (const id of ids) {
       e.itemData.delete(id);
       this.calls.delete(id);
@@ -297,34 +322,37 @@ export class CabRuntime {
     return h?.material?.userData?.cab || null;
   }
 
+  /** 指针现在是不是直接指着 3D 画布（不是盖在上面的面板、标签） */
+  onCanvas() {
+    return !!this.ptr && typeof document !== 'undefined' && document.elementFromPoint(this.ptr.x, this.ptr.y) === this.e.renderer?.domElement;
+  }
+
+  /** 指针指着的那一组（指着的是界面、不是画布 = 没有） */
   groupAtPointer() {
-    return this.ptr ? this.groupAt(this.ptr.x, this.ptr.y) : null;
+    return this.onCanvas() ? this.groupAt(this.ptr.x, this.ptr.y) : null;
   }
 
   // ───────────── 板材栏 / 走进去的刷色 ─────────────
 
   /**
    * StudioApp.dropMaterial 先问这里：这一下换的是不是某一组。
-   *   · 拖到画布上的柜子（slot = 柜体那几个颜色位）→ 指着的那一组的柜门（面板上正选着这一组的某个部分 → 那个部分）；
-   *     走进去刷色是先点柜子、再在托盘里选：用按下时记的那一组。
+   *   · 拖到画布上的柜子（slot = 柜体那两个颜色位）→ 指着的那一组的柜门（面板上正选着这一组的某个部分 → 那个部分）；
+   *   · 走进去刷色是先点一下柜子、再在托盘里选：用点那一下记的那一组；
+   *   · 拖到标签 / 材质板上的「柜体」（不在画布上、也不是走进去）→ 不接：那是换全屋的柜体色；
    *   · 在板材栏点一下（没有 slot）→ 面板上选着的那一组那个部分。
-   * 返回 true = 这里接了；false = 照原来的（全屋的柜体一起换）。
+   * 不接的（返回 false，照原来的路走）：不能上柜子的材质（布、石、砖…：原来的路会说为什么 / 换到它该去的表面）、
+   * 柜子是客人家里留下来的（locked.cabinetry：原来的路会先问一句，换了才解锁）。
    */
   drop(matId, slot) {
-    if (!this.on || !this.onSet) return false;
+    if (!this.on || !this.onSet || this.locked || !fits(matId, 'cabinetry')) return false;
     let group = null;
     if (slot) {
       if (!FOLLOW.includes(slot)) return false;
-      const onCanvas = this.ptr && document.elementFromPoint(this.ptr.x, this.ptr.y) === this.e.renderer?.domElement;
-      group = onCanvas ? this.groupAtPointer() : this.downGroup;
+      if (this.onCanvas()) group = this.groupAtPointer();
+      else if (this.e.renderer?.domElement?.closest?.('.is-walk')) group = this.tapGroup;
     } else if (this.sel) group = this.sel.group;
     if (!group) return false;
-    const part = this.sel?.group === group ? this.sel.part : 'door';
-    if (!fits(matId, 'cabinetry')) {
-      this.onMisfit?.(matId);
-      return true;
-    }
-    this.onSet(group, part, matId);
+    this.onSet(group, this.sel?.group === group ? this.sel.part : 'door', matId);
     return true;
   }
 }

@@ -95,7 +95,7 @@ await test('「没填就照旧」: an unset part follows the chain, then the slo
   assert.equal(decide(undefined, 'kitchenRun', 'd', 'cabinetry', 'wall'), 'cab:wall:~cabinetry');
   assert.equal(decide(undefined, 'kitchenRun', 'w', 'cabinetry'), 'cab:base:~cabinetry');
   assert.equal(decide(undefined, 'bookshelf', 'o', 'woodwork'), 'cab:book:~woodwork');
-  assert.equal(decide(undefined, 'shoeCabinet', 'o', 'feature'), 'cab:shoe:~feature', 'the shoe-cabinet niche keeps following the feature wall');
+  assert.equal(decide(undefined, 'shoeCabinet', 'o', 'feature'), null, 'the shoe-cabinet niche back stays part of the feature wall until the group is set');
   // 设了柜门：别的部分跟柜门
   const c = { v: 1, g: { base: { door: 'walnut' }, shoe: { door: 'walnut', body: 'charcoal' } } };
   for (const p of ['d', 'w', 'b', 's']) assert.equal(decide(c, 'kitchenRun', p, 'cabinetry'), 'cab:base:door', p);
@@ -159,6 +159,11 @@ await test('the six preset boards are the manual’s (name, code, colour, finish
   }
   assert.equal(seedKeyOf('sail-7'), null);
   assert.equal(seedKeyOf('walnut'), null);
+  // 别人给的链接里的方案：'constructor' 这种 id 不能被当成手册的板（以前会让整件柜子建不出来）
+  for (const bad of ['constructor', 'toString', '__proto__', 'hasOwnProperty', '', null, undefined, 7, {}]) {
+    assert.equal(seedKeyOf(bad), null, String(bad));
+    assert.equal(realOf(bad, BOARDS), bad);
+  }
 });
 
 await test('presets use the boards the owner chose on 2026-11-21', () => {
@@ -297,13 +302,27 @@ function fakeEngine(lib, furniture) {
     builds: [],
     renderer: { domElement: {} },
     dirty: false,
+    // 和 Engine.setFurniture 一样：没变的不动，变了 / 新的重建，不在名单里的拿掉
     setFurniture(list) {
+      const keep = new Set();
       for (const it of list) {
+        keep.add(it.id);
         if (this.itemData.has(it.id)) continue;
         this.items.set(it.id, buildItem(it, { wallH: 2.8 }));
         this.itemData.set(it.id, it);
         this.builds.push(it.id);
       }
+      for (const id of [...this.items.keys()])
+        if (!keep.has(id)) {
+          this.items.delete(id);
+          this.itemData.delete(id);
+        }
+    },
+    /** 换方案（setScene）：整个场景重建 */
+    setScene(list) {
+      this.items.clear();
+      this.itemData.clear();
+      this.setFurniture(list);
     },
     hitAt: () => null,
   };
@@ -388,6 +407,16 @@ await test('runtime: each group gets its own material; a colour change is applie
     if (o.material.userData.cabKey === 'cab:wardrobe:body') bodyBox.union(o.geometry.boundingBox);
   }
   assert.ok(box.min.x < bodyBox.min.x && box.max.x > bodyBox.max.x, 'the door-coloured end panels cover both ends of the dark carcass');
+  for (const it of HOME) for (const o of meshes(e.items.get(it.id))) assert.ok(!o.parent?.isMesh, `${it.id}: no mesh nested inside another (an end panel would be drawn twice)`);
+  // 手改过的链接：材质 id 是 'constructor' / 数字 / 不认识的 —— 不出错，先顶上现在的柜体色
+  for (const bad of ['constructor', '__proto__', 'no-such-material']) {
+    rt.sync({ cab: { v: 1, g: { wardrobe: { door: bad, body: bad } } }, materials: MATS, furniture: HOME });
+    assert.equal(lib.current['cab:wardrobe:door'], 'light-oak', bad);
+  }
+  rt.sync({ cab: { v: 1, g: { wardrobe: { door: 7, body: {} }, zzz: 3 } }, materials: MATS, furniture: HOME });
+  assert.ok(matsOf(e, 'w1').includes('cab:wardrobe:~cabinetry'), 'junk values = not set');
+  rt.sync({ cab: 'junk', materials: MATS, furniture: HOME });
+  rt.sync({ cab: applyPreset('wabi', { furniture: HOME }), materials: MATS, furniture: HOME });
   assert.ok(matsOf(e, 'b1').includes('cab:book:open') && matsOf(e, 'b1').includes('cab:book:door'), 'bookshelf: dark shelves, wood end boards');
 
   // 卸掉：柜子回到原来的材质，这里建的全部释放，MatLib 还原
@@ -402,6 +431,26 @@ await test('runtime: each group gets its own material; a colour change is applie
   assert.equal(sig(e.items.get('w1')), sig(buildItem(HOME[4], { wallH: 2.8 })), 'a wardrobe is exactly the old wardrobe again');
 });
 
+await test('runtime: opening another design, then closing — the new design keeps ITS furniture (not the previous design’s)', () => {
+  const lib = fakeLib();
+  useLib(lib);
+  for (const [s, id] of Object.entries(MATS)) lib.apply(s, id);
+  const e = fakeEngine(lib, HOME);
+  const rt = new CabRuntime(e);
+  rt.activate();
+  rt.sync({ cab: applyPreset('updown', { furniture: HOME }), materials: MATS, furniture: HOME });
+  // StudioApp.loadProjectIntoEngine：引擎先换成另一个方案（这时口子还装着），这个组件随后才卸掉
+  const OTHER = [
+    { id: 'x1', kind: 'wardrobe', x: 0, z: 0 },
+    { id: 'x2', kind: 'sofa', x: 0, z: 0 },
+  ];
+  e.setScene(OTHER);
+  rt.deactivate();
+  assert.deepEqual([...e.itemData.keys()].sort(), ['x1', 'x2'], 'the other design’s furniture, nothing from the first');
+  assert.ok(!matsOf(e, 'x1').some((k) => k.startsWith('cab:')), 'and its wardrobe is back on the old material');
+  assert.ok(!Object.keys(lib.slots).some((k) => k.startsWith('cab:')));
+});
+
 await test('runtime: dropping a board on a cabinet changes that group only; a part picked in the panel takes the dock tap', () => {
   const lib = fakeLib();
   useLib(lib);
@@ -412,21 +461,42 @@ await test('runtime: dropping a board on a cabinet changes that group only; a pa
   rt.sync({ cab: undefined, materials: MATS, furniture: HOME });
   const set = [];
   rt.onSet = (...a) => set.push(a.join('/'));
-  const bad = [];
-  rt.onMisfit = (id) => bad.push(id);
   ensureSeeds();
+  let walking = false;
+  e.renderer.domElement = { closest: (sel) => (sel === '.is-walk' && walking ? {} : null) };
   // 没指着柜子、面板上也没选：不接（照原来的，全屋一起换）
+  globalThis.document = { elementFromPoint: () => null };
   assert.equal(CAB.drop('walnut', 'cabinetry'), false);
   assert.equal(CAB.drop('walnut', undefined), false);
   assert.equal(CAB.drop('linen', 'upholstery'), false, 'other surfaces are never ours');
-  // 走进去刷色：先点柜子（记下那一组），再在托盘里选
-  globalThis.document = { elementFromPoint: () => null };
-  rt.downGroup = 'wardrobe';
+  assert.equal(CAB.drop('walnut', 'feature'), false, 'the feature wall is never ours');
+  // 鸟瞰：之前点过衣柜，现在把板材拖到标签 / 材质板的「柜体」上（不在画布上）→ 不接：那是换全屋
+  rt.ptr = { x: 10, y: 10 };
+  rt.tapGroup = 'wardrobe';
+  assert.equal(CAB.drop('walnut', 'cabinetry'), false, 'a drop on a UI label is the whole home, not the group tapped earlier');
+  // 走进去刷色：先点一下柜子（记下那一组），再在托盘里选
+  walking = true;
   assert.equal(CAB.drop('walnut', 'cabinetry'), true);
   assert.deepEqual(set, ['wardrobe/door/walnut']);
+  // 点一下才算：拖着转镜头（按下、挪开、抬起）不改记下的那一组；点到不是柜子的地方 = 没有
+  e.hitAt = () => ({ material: lib.slots['cab:base:~cabinetry'] });
+  rt.onDown({ clientX: 10, clientY: 10, target: e.renderer.domElement });
+  rt.onUp({ clientX: 90, clientY: 40 });
+  assert.equal(rt.tapGroup, 'wardrobe', 'a look-drag is not a tap');
+  rt.onDown({ clientX: 10, clientY: 10, target: e.renderer.domElement });
+  rt.onUp({ clientX: 12, clientY: 11 });
+  assert.equal(rt.tapGroup, 'base');
+  rt.onDown({ clientX: 10, clientY: 10, target: {} });
+  rt.onUp({ clientX: 10, clientY: 10 });
+  assert.equal(rt.tapGroup, 'base', 'a tap on a panel (the tray) keeps it');
+  e.hitAt = () => ({ material: lib.slots.walls });
+  rt.onDown({ clientX: 10, clientY: 10, target: e.renderer.domElement });
+  rt.onUp({ clientX: 10, clientY: 10 });
+  assert.equal(rt.tapGroup, null, 'a tap on a wall clears it');
+  assert.equal(CAB.drop('walnut', 'cabinetry'), false);
+  walking = false;
   // 拖到画布上的柜子：指着的那一组
   globalThis.document = { elementFromPoint: () => e.renderer.domElement };
-  rt.ptr = { x: 10, y: 10 };
   e.hitAt = () => ({ material: lib.slots['cab:base:~cabinetry'] });
   assert.equal(CAB.drop('charcoal', 'cabinetry'), true);
   assert.equal(set[1], 'base/door/charcoal');
@@ -435,9 +505,14 @@ await test('runtime: dropping a board on a cabinet changes that group only; a pa
   assert.equal(CAB.drop('white-lacquer', 'cabinetry'), true);
   assert.equal(CAB.drop('white-lacquer', undefined), true);
   assert.deepEqual(set.slice(2), ['base/body/white-lacquer', 'base/body/white-lacquer']);
-  // 不能上柜子的（布、石）：说一声，不换
-  assert.equal(CAB.drop('linen', undefined), true);
-  assert.deepEqual(bad, ['linen']);
+  // 不能上柜子的（布、石）：不接 —— 原来的路会把它换到该去的表面 / 说为什么不行
+  assert.equal(CAB.drop('linen', undefined), false);
+  assert.equal(CAB.drop('carrara', 'cabinetry'), false);
+  // 柜子是客人家里留下来的（锁住）：不接 —— 原来的路会先问一句
+  rt.locked = true;
+  assert.equal(CAB.drop('walnut', 'cabinetry'), false);
+  assert.equal(CAB.drop('walnut', undefined), false);
+  rt.locked = false;
   assert.equal(set.length, 4);
   rt.deactivate();
   delete globalThis.document;

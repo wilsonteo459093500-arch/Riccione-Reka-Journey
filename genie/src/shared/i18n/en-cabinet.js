@@ -39,7 +39,6 @@ export default {
   '{0} · {1} 跟回去了': '{0} · {1} follows again',
   '已套用「{0}」': 'Applied “{0}”',
   '这个家没有「{0}」用得到的柜子': 'This home has no cabinets for “{0}”',
-  '溪岸板材和木、漆可以用在柜子上；{0} 不行': 'SAIL boards, wood and paint work on cabinets; {0} does not',
   柜子是你家原有的: 'These cabinets were kept from your home',
   '换了颜色就不再算「保留原有」。': 'Changing a colour means they are no longer “kept”.',
   现在的柜体色: 'Current cabinet colour',

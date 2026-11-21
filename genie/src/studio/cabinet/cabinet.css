@@ -219,16 +219,20 @@
 /* 手机：面板贴在上面、矮一点（下面要看得到 3D 和板材栏） */
 @media (max-width: 900px) {
   .cab-panel {
+    /* 在工具条下面（和日光面板同一条线），不盖住撤销 / 更多 */
+    top: calc(var(--safe-t) + 62px);
     left: 8px;
     right: 8px;
     width: auto;
     height: auto;
-    max-height: 52%;
+    max-height: 46%;
   }
 }
 
 /* 走进去、演示模式：面板收起来（StudioApp 根元素上的 is-walk / is-demo；面板还「开着」，回来就在） */
 .is-walk .cab-panel,
-.is-demo .cab-panel {
+.is-demo .cab-panel,
+.is-showroom .cab-panel,
+.is-wish .cab-panel {
   display: none;
 }

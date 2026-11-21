@@ -66,8 +66,8 @@ export const CHAIN = {
   open: ['open', 'body', 'door'],
   plinth: ['plinth'],
 };
-/** 能跟的颜色位（柜子原来用的那几个） */
-const FOLLOW = { cabinetry: 1, woodwork: 1, feature: 1 };
+/** 能跟的颜色位（柜子原来用的那两个）。鞋柜开放格的背板原来用主题墙的颜色（feature）：没设时不归我们管，照旧算主题墙 */
+export const FOLLOW = ['cabinetry', 'woodwork'];
 
 const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
 
@@ -94,7 +94,7 @@ export function decide(cab, kind, part, legacyKey, groupOv) {
   const p = CODE[part] || part;
   const src = sourcePart(cab, group, p);
   if (src) return `cab:${group}:${src}`;
-  return p !== 'plinth' && FOLLOW[legacyKey] ? `cab:${group}:~${legacyKey}` : null;
+  return p !== 'plinth' && FOLLOW.includes(legacyKey) ? `cab:${group}:~${legacyKey}` : null;
 }
 
 /** 钥匙 → { group, part } 或 { group, follow }（不是我们的钥匙 = null） */
@@ -181,7 +181,7 @@ export { SEED };
 export const seedId = (key) => `sail-m-${String(key).toLowerCase()}`;
 const SEED_BY_ID = Object.fromEntries(Object.keys(SEED).map((k) => [seedId(k), k]));
 /** 这个 id 是不是「手册颜色」的板（还没导入贴图的示意色）；是 → 手册条目的 key */
-export const seedKeyOf = (id) => SEED_BY_ID[id] || null;
+export const seedKeyOf = (id) => (typeof id === 'string' && Object.hasOwn(SEED_BY_ID, id) ? SEED_BY_ID[id] : null);
 
 /** 手册条目 → 板材记录（library-api.js 的形状；img: false = 只有资料，3D 用这个颜色的近似贴图；hidden：不进板材栏） */
 export function seedRecord(key) {

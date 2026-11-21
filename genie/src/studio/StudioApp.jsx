@@ -1911,7 +1911,7 @@ export default function StudioApp() {
       {project && (cabOn || project.cab) && (
         <WalkGuard onFail={setCabOn}>
           <Suspense fallback={null}>
-            <Cab engine={engine.current} project={project} open={cabOn} commit={commit} flash={flash} onClose={() => setCabOn(false)} />
+            <Cab engine={engine.current} project={project} open={cabOn && staffView} commit={commit} flash={flash} onClose={setCabOn} />
           </Suspense>
         </WalkGuard>
       )}
