@@ -10,7 +10,20 @@ import { Logo } from '../ui/Logo.jsx';
 import { LangButton } from '../ui/TopBar.jsx';
 import { QR } from '../ui/QR.jsx';
 
-const ICONS = { codebreaker: '🔐', camping: '⛺', xiangqi: '♟️', junqi: '🎖️', forest: '🦊', story: '🖼️' };
+const ICONS = {
+  codebreaker: '🔐',
+  ox: '❌',
+  camping: '⛺',
+  xiangqi: '♟️',
+  junqi: '🎖️',
+  forest: '🦊',
+  story: '🖼️',
+  mahjong: '🀄',
+  artillery: '💣',
+  maze: '🍒',
+  brawl: '🥊',
+  kart: '🏎️',
+};
 
 function Settings({ onClose }) {
   const t = useT();
