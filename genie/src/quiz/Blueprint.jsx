@@ -14,7 +14,8 @@
 //   复制 / 存海报成功：「小提示」一声 + 按钮被光扫一下。在 3D 里看见它：暮色拂过再打开。下一位：晨光拂过，潘吉说再见。
 //
 // 带它回家（SPEC §9.2）：VI · 你的家（客人自己答的：房子 · 现在 · 大小 · 房间 · 做哪里 · 什么时候 · 户型图）、
-//   VII · 参考案例（选的案例 → 详情；「更多像你的家」= 最像的几个）、材质板上锁住的表面（🔒 保留 · 你家现有的）。
+//   VII · 参考案例（选的案例 → 详情；「更多像你的家」= 最像的几个）、VIII · 建议的系列（溪岸五大系列最适合的那个，
+//   docs/showcase/SERIES.md §3）、材质板上锁住的表面（🔒 保留 · 你家现有的）。
 //   主按钮：「你的家」走完了 → 在 3D 里看见我的家（studio.html?from=home&case=…）；还没走 → 带它回家（#home=<档案号>）。
 //   设计师版多一块「预算（员工记）」：只存在这台设备的 localStorage 'genie.staffnotes.v1'，永远不进档案、不进链接、不给客人看。
 
@@ -86,6 +87,8 @@ const STAFF = (() => {
 const { APPLIANCES, PAIRS, SPLURGE } = FLOW;
 // 蓝图 VII：案例库读好了再补上（蓝图先出来）
 const BlueprintCases = lazy(() => import('./home/BlueprintCases.jsx'));
+// 蓝图 VIII：建议的系列（要看客人选的案例是哪个系列：也等案例库读好）
+const BlueprintSeries = lazy(() => import('./home/SeriesCard.jsx').then((m) => ({ default: m.BlueprintSeries })));
 
 /** 快选那一题的标签：新题库的 pickLabel（认得旧的 palette / shelf），没有就退回 PAIRS 里找 */
 const quickLabel = (id, pick) => {
@@ -842,6 +845,13 @@ export default function Blueprint({ profile, onRestart, fresh = false, designerO
         <Sec num="VII" title={t('参考案例')} note={(profile.cases || []).length ? null : t('（和你的牌最像的家）')}>
           <Suspense fallback={null}>
             <BlueprintCases profile={profile} />
+          </Suspense>
+        </Sec>
+
+        {/* VIII · 建议的系列 */}
+        <Sec num="VIII" title={t('建议的系列')}>
+          <Suspense fallback={null}>
+            <BlueprintSeries profile={profile} />
           </Suspense>
         </Sec>
 

@@ -161,6 +161,101 @@
             "en": "Oak in the Morning Light — the whole home from above · 3D concept"
           },
           "cover": false
+        },
+        {
+          "id": "04",
+          "room": "kitchen",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-zen-condo/04-1600.webp",
+          "thumb": "seed-zen-condo/04-480.webp",
+          "alt": {
+            "zh": "「晨光里的原木家」的厨房 · 3D 示意",
+            "en": "Oak in the Morning Light — kitchen · 3D concept"
+          },
+          "caption": {
+            "zh": "白橡橱柜，吊柜做到顶；台面 石英石·洞石纹",
+            "en": "White oak kitchen, wall units up to the ceiling; worktop in quartz, travertine look"
+          },
+          "detail": false,
+          "cover": false
+        },
+        {
+          "id": "05",
+          "room": "master",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-zen-condo/05-1600.webp",
+          "thumb": "seed-zen-condo/05-480.webp",
+          "alt": {
+            "zh": "「晨光里的原木家」的主卧 · 3D 示意",
+            "en": "Oak in the Morning Light — master bedroom · 3D concept"
+          },
+          "caption": {
+            "zh": "整面到顶的白橡衣柜，免拉手",
+            "en": "A full wall of floor-to-ceiling white oak wardrobes, handle-free"
+          },
+          "detail": false,
+          "cover": false
+        },
+        {
+          "id": "06",
+          "room": "dining",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-zen-condo/06-1600.webp",
+          "thumb": "seed-zen-condo/06-480.webp",
+          "alt": {
+            "zh": "「晨光里的原木家」的餐厅 · 3D 示意",
+            "en": "Oak in the Morning Light — dining room · 3D concept"
+          },
+          "caption": {
+            "zh": "餐厅 · 家具只是示意",
+            "en": "Dining room · the furniture is for illustration only"
+          },
+          "detail": false,
+          "cover": false
+        },
+        {
+          "id": "07",
+          "room": "foyer",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-zen-condo/07-1600.webp",
+          "thumb": "seed-zen-condo/07-480.webp",
+          "alt": {
+            "zh": "「晨光里的原木家」的玄关 · 鞋柜细节 · 3D 示意",
+            "en": "Oak in the Morning Light — foyer, shoe cabinet detail · 3D concept"
+          },
+          "caption": {
+            "zh": "白橡鞋柜：下柜是竖凹槽门，中间一格开放台面（石英石·洞石纹），背板 砂洗石灰",
+            "en": "White oak shoe cabinet: fluted lower doors, an open ledge in quartz, travertine look, and a sand limewash back panel"
+          },
+          "detail": true,
+          "cover": false
+        },
+        {
+          "id": "08",
+          "room": "kitchen",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-zen-condo/08-1600.webp",
+          "thumb": "seed-zen-condo/08-480.webp",
+          "alt": {
+            "zh": "「晨光里的原木家」的厨房 · 橱柜细节 · 3D 示意",
+            "en": "Oak in the Morning Light — kitchen, kitchen cabinet detail · 3D concept"
+          },
+          "caption": {
+            "zh": "白橡门板 + 石英石·洞石纹台面，台面下一道阴影槽当拉手",
+            "en": "White oak doors and a worktop in quartz, travertine look; a shadow gap below the worktop instead of handles"
+          },
+          "detail": true,
+          "cover": false
         }
       ],
       "createdAt": "2026-10-18T00:00:00.000Z",
@@ -321,6 +416,63 @@
             "en": "A Nordic Studio for One — the whole home from above · 3D concept"
           },
           "cover": false
+        },
+        {
+          "id": "04",
+          "room": "kitchen",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-nordic-studio/04-1600.webp",
+          "thumb": "seed-nordic-studio/04-480.webp",
+          "alt": {
+            "zh": "「一个人的北欧小公寓」的厨房 · 3D 示意",
+            "en": "A Nordic Studio for One — kitchen · 3D concept"
+          },
+          "caption": {
+            "zh": "白色烤漆橱柜，免拉手；台面 纯白石英石",
+            "en": "White lacquer kitchen, handle-free; pure white quartz worktop"
+          },
+          "detail": false,
+          "cover": false
+        },
+        {
+          "id": "05",
+          "room": "kitchen",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-nordic-studio/05-1600.webp",
+          "thumb": "seed-nordic-studio/05-480.webp",
+          "alt": {
+            "zh": "「一个人的北欧小公寓」的厨房 · 抽屉细节 · 3D 示意",
+            "en": "A Nordic Studio for One — kitchen, drawer detail · 3D concept"
+          },
+          "caption": {
+            "zh": "白色烤漆抽屉，抽屉之间的横槽当拉手；台面 纯白石英石",
+            "en": "White lacquer drawers with recessed pulls between them; pure white quartz worktop"
+          },
+          "detail": true,
+          "cover": false
+        },
+        {
+          "id": "06",
+          "room": "kitchen",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-nordic-studio/06-1600.webp",
+          "thumb": "seed-nordic-studio/06-480.webp",
+          "alt": {
+            "zh": "「一个人的北欧小公寓」的厨房 · 橱柜细节 · 3D 示意",
+            "en": "A Nordic Studio for One — kitchen, kitchen cabinet detail · 3D concept"
+          },
+          "caption": {
+            "zh": "白色烤漆门板 + 纯白石英石台面，台面下的阴影槽当拉手",
+            "en": "White lacquer doors and a pure white quartz worktop, with a shadow-gap pull"
+          },
+          "detail": true,
+          "cover": false
         }
       ],
       "createdAt": "2026-10-18T00:00:00.000Z",
@@ -480,6 +632,82 @@
             "zh": "「都会里的白色盒子」整个家的 3D 鸟瞰 · 示意",
             "en": "The White Box in the City — the whole home from above · 3D concept"
           },
+          "cover": false
+        },
+        {
+          "id": "04",
+          "room": "master",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-urban-condo/04-1600.webp",
+          "thumb": "seed-urban-condo/04-480.webp",
+          "alt": {
+            "zh": "「都会里的白色盒子」的主卧 · 3D 示意",
+            "en": "The White Box in the City — master bedroom · 3D concept"
+          },
+          "caption": {
+            "zh": "整面到顶的白色烤漆衣柜，免拉手",
+            "en": "Floor-to-ceiling white lacquer wardrobes, handle-free"
+          },
+          "detail": false,
+          "cover": false
+        },
+        {
+          "id": "05",
+          "room": "study",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-urban-condo/05-1600.webp",
+          "thumb": "seed-urban-condo/05-480.webp",
+          "alt": {
+            "zh": "「都会里的白色盒子」的书房 · 3D 示意",
+            "en": "The White Box in the City — study · 3D concept"
+          },
+          "caption": {
+            "zh": "书房柜 · 书桌：白色烤漆到顶门柜夹着开放书架，书桌 灰橡",
+            "en": "Study cabinets & desk: full-height white lacquer cupboards around open shelving; greige oak desk"
+          },
+          "detail": false,
+          "cover": false
+        },
+        {
+          "id": "06",
+          "room": "kitchen",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-urban-condo/06-1600.webp",
+          "thumb": "seed-urban-condo/06-480.webp",
+          "alt": {
+            "zh": "「都会里的白色盒子」的厨房 · 橱柜细节 · 3D 示意",
+            "en": "The White Box in the City — kitchen, kitchen cabinet detail · 3D concept"
+          },
+          "caption": {
+            "zh": "白色烤漆门板 + 岩板灰台面，台面下的阴影槽当拉手",
+            "en": "White lacquer doors and a sintered stone worktop, with a shadow-gap pull"
+          },
+          "detail": true,
+          "cover": false
+        },
+        {
+          "id": "07",
+          "room": "living",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-urban-condo/07-1600.webp",
+          "thumb": "seed-urban-condo/07-480.webp",
+          "alt": {
+            "zh": "「都会里的白色盒子」的客厅 · 电视柜细节 · 3D 示意",
+            "en": "The White Box in the City — living room, TV console detail · 3D concept"
+          },
+          "caption": {
+            "zh": "白色烤漆悬浮电视柜，推弹门不装拉手；后面是微水泥格栅墙板",
+            "en": "Floating white lacquer TV console with push-to-open doors, against microcement slatted panelling"
+          },
+          "detail": true,
           "cover": false
         }
       ],
@@ -645,6 +873,82 @@
             "en": "A Semi-D in Cream — the whole home from above · 3D concept"
           },
           "cover": false
+        },
+        {
+          "id": "04",
+          "room": "kitchen",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-softluxe-semid/04-1600.webp",
+          "thumb": "seed-softluxe-semid/04-480.webp",
+          "alt": {
+            "zh": "「奶油色的半独立」的厨房 · 3D 示意",
+            "en": "A Semi-D in Cream — kitchen · 3D concept"
+          },
+          "caption": {
+            "zh": "奶油烤漆橱柜和岛台；台面、挡水板、岛台两头的瀑布边都是金线白",
+            "en": "Cream lacquer kitchen and island; Calacatta gold worktop, splashback and waterfall ends"
+          },
+          "detail": false,
+          "cover": false
+        },
+        {
+          "id": "05",
+          "room": "master",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-softluxe-semid/05-1600.webp",
+          "thumb": "seed-softluxe-semid/05-480.webp",
+          "alt": {
+            "zh": "「奶油色的半独立」的主卧 · 3D 示意",
+            "en": "A Semi-D in Cream — master bedroom · 3D concept"
+          },
+          "caption": {
+            "zh": "整面到顶的奶油烤漆衣柜，免拉手",
+            "en": "Floor-to-ceiling cream lacquer wardrobes, handle-free"
+          },
+          "detail": false,
+          "cover": false
+        },
+        {
+          "id": "06",
+          "room": "kitchen",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-softluxe-semid/06-1600.webp",
+          "thumb": "seed-softluxe-semid/06-480.webp",
+          "alt": {
+            "zh": "「奶油色的半独立」的厨房 · 橱柜细节 · 3D 示意",
+            "en": "A Semi-D in Cream — kitchen, kitchen cabinet detail · 3D concept"
+          },
+          "caption": {
+            "zh": "奶油烤漆门板 + 金线白台面，台面下的阴影槽当拉手",
+            "en": "Cream lacquer doors and a Calacatta gold worktop, with a shadow-gap pull"
+          },
+          "detail": true,
+          "cover": false
+        },
+        {
+          "id": "07",
+          "room": "living",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-softluxe-semid/07-1600.webp",
+          "thumb": "seed-softluxe-semid/07-480.webp",
+          "alt": {
+            "zh": "「奶油色的半独立」的客厅 · 电视柜细节 · 3D 示意",
+            "en": "A Semi-D in Cream — living room, TV console detail · 3D concept"
+          },
+          "caption": {
+            "zh": "奶油烤漆悬浮电视柜，推弹门不装拉手；后面是砂洗石灰格栅墙板",
+            "en": "Floating cream lacquer TV console with push-to-open doors, against sand limewash slatted panelling"
+          },
+          "detail": true,
+          "cover": false
         }
       ],
       "createdAt": "2026-10-18T00:00:00.000Z",
@@ -806,6 +1110,82 @@
             "zh": "「把森林搬进排屋」整个家的 3D 鸟瞰 · 示意",
             "en": "A Forest in a Terrace House — the whole home from above · 3D concept"
           },
+          "cover": false
+        },
+        {
+          "id": "04",
+          "room": "family",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-forest-terrace/04-1600.webp",
+          "thumb": "seed-forest-terrace/04-480.webp",
+          "alt": {
+            "zh": "「把森林搬进排屋」的起居厅 · 3D 示意",
+            "en": "A Forest in a Terrace House — family hall · 3D concept"
+          },
+          "caption": {
+            "zh": "电视墙：烟熏橡格栅墙板 + 灰绿烤漆悬浮电视柜",
+            "en": "TV wall: smoked oak slatted panelling with a floating sage lacquer console"
+          },
+          "detail": false,
+          "cover": false
+        },
+        {
+          "id": "05",
+          "room": "bedroom",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-forest-terrace/05-1600.webp",
+          "thumb": "seed-forest-terrace/05-480.webp",
+          "alt": {
+            "zh": "「把森林搬进排屋」的卧室 · 3D 示意",
+            "en": "A Forest in a Terrace House — bedroom · 3D concept"
+          },
+          "caption": {
+            "zh": "到顶的灰绿烤漆衣柜，古铜长拉手",
+            "en": "Floor-to-ceiling sage lacquer wardrobes with long bronze handles"
+          },
+          "detail": false,
+          "cover": false
+        },
+        {
+          "id": "06",
+          "room": "bedroom",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-forest-terrace/06-1600.webp",
+          "thumb": "seed-forest-terrace/06-480.webp",
+          "alt": {
+            "zh": "「把森林搬进排屋」的卧室 · 衣柜细节 · 3D 示意",
+            "en": "A Forest in a Terrace House — bedroom, wardrobe detail · 3D concept"
+          },
+          "caption": {
+            "zh": "灰绿烤漆衣柜门和古铜长拉手",
+            "en": "Sage lacquer wardrobe doors with long bronze pulls"
+          },
+          "detail": true,
+          "cover": false
+        },
+        {
+          "id": "07",
+          "room": "kitchen",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-forest-terrace/07-1600.webp",
+          "thumb": "seed-forest-terrace/07-480.webp",
+          "alt": {
+            "zh": "「把森林搬进排屋」的厨房 · 橱柜细节 · 3D 示意",
+            "en": "A Forest in a Terrace House — kitchen, kitchen cabinet detail · 3D concept"
+          },
+          "caption": {
+            "zh": "灰绿烤漆门板 + 石英石·洞石纹台面，台面下的阴影槽当拉手",
+            "en": "Sage lacquer doors and a worktop in quartz, travertine look, with a shadow-gap pull"
+          },
+          "detail": true,
           "cover": false
         }
       ],
@@ -971,6 +1351,63 @@
             "en": "A Home Full of Journeys — the whole home from above · 3D concept"
           },
           "cover": false
+        },
+        {
+          "id": "04",
+          "room": "dining",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-wander-terrace/04-1600.webp",
+          "thumb": "seed-wander-terrace/04-480.webp",
+          "alt": {
+            "zh": "「旅行带回来的家」的餐厅 · 3D 示意",
+            "en": "A Home Full of Journeys — dining room · 3D concept"
+          },
+          "caption": {
+            "zh": "餐厅 · 家具只是示意",
+            "en": "Dining room · the furniture is for illustration only"
+          },
+          "detail": false,
+          "cover": false
+        },
+        {
+          "id": "05",
+          "room": "kitchen",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-wander-terrace/05-1600.webp",
+          "thumb": "seed-wander-terrace/05-480.webp",
+          "alt": {
+            "zh": "「旅行带回来的家」的厨房 · 橱柜细节 · 3D 示意",
+            "en": "A Home Full of Journeys — kitchen, kitchen cabinet detail · 3D concept"
+          },
+          "caption": {
+            "zh": "浅川橡门板 + 水磨石台面和挡水板，台面下的阴影槽当拉手",
+            "en": "Natural oak doors with a terrazzo worktop and splashback, and a shadow-gap pull"
+          },
+          "detail": true,
+          "cover": false
+        },
+        {
+          "id": "06",
+          "room": "living",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-wander-terrace/06-1600.webp",
+          "thumb": "seed-wander-terrace/06-480.webp",
+          "alt": {
+            "zh": "「旅行带回来的家」的客厅 · 电视柜细节 · 3D 示意",
+            "en": "A Home Full of Journeys — living room, TV console detail · 3D concept"
+          },
+          "caption": {
+            "zh": "浅川橡悬浮电视柜，推弹门不装拉手；后面是陶土红格栅墙板",
+            "en": "Floating natural oak TV console with push-to-open doors, against terracotta slatted panelling"
+          },
+          "detail": true,
+          "cover": false
         }
       ],
       "createdAt": "2026-10-18T00:00:00.000Z",
@@ -1134,6 +1571,63 @@
             "en": "A Wall of Stories — the whole home from above · 3D concept"
           },
           "cover": false
+        },
+        {
+          "id": "04",
+          "room": "dining",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-library-semid/04-1600.webp",
+          "thumb": "seed-library-semid/04-480.webp",
+          "alt": {
+            "zh": "「一整面会说故事的书墙」的餐厅 · 3D 示意",
+            "en": "A Wall of Stories — dining room · 3D concept"
+          },
+          "caption": {
+            "zh": "餐厅 · 家具只是示意",
+            "en": "Dining room · the furniture is for illustration only"
+          },
+          "detail": false,
+          "cover": false
+        },
+        {
+          "id": "05",
+          "room": "study",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-library-semid/05-1600.webp",
+          "thumb": "seed-library-semid/05-480.webp",
+          "alt": {
+            "zh": "「一整面会说故事的书墙」的书房 · 书墙细节 · 3D 示意",
+            "en": "A Wall of Stories — study, bookwall detail · 3D concept"
+          },
+          "caption": {
+            "zh": "胡桃木书墙的层板和侧板",
+            "en": "Walnut bookwall: shelves and side panels"
+          },
+          "detail": true,
+          "cover": false
+        },
+        {
+          "id": "06",
+          "room": "living",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-library-semid/06-1600.webp",
+          "thumb": "seed-library-semid/06-480.webp",
+          "alt": {
+            "zh": "「一整面会说故事的书墙」的客厅 · 电视柜细节 · 3D 示意",
+            "en": "A Wall of Stories — living room, TV console detail · 3D concept"
+          },
+          "caption": {
+            "zh": "樱桃木悬浮电视柜，推弹门不装拉手；后面是午夜蓝格栅墙板",
+            "en": "Floating cherry TV console with push-to-open doors, against midnight blue slatted panelling"
+          },
+          "detail": true,
+          "cover": false
         }
       ],
       "createdAt": "2026-10-18T00:00:00.000Z",
@@ -1295,6 +1789,63 @@
             "en": "Midnight Blue, High Up — the whole home from above · 3D concept"
           },
           "cover": false
+        },
+        {
+          "id": "04",
+          "room": "kitchen",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-jazz-condo/04-1600.webp",
+          "thumb": "seed-jazz-condo/04-480.webp",
+          "alt": {
+            "zh": "「午夜蓝的公寓」的厨房 · 3D 示意",
+            "en": "Midnight Blue, High Up — kitchen · 3D concept"
+          },
+          "caption": {
+            "zh": "黑色哑光橱柜，玻璃吊柜里有灯带；台面、挡水板 黑金花",
+            "en": "Matte black kitchen with lit glass wall cabinets; Nero marquina worktop and splashback"
+          },
+          "detail": false,
+          "cover": false
+        },
+        {
+          "id": "05",
+          "room": "kitchen",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-jazz-condo/05-1600.webp",
+          "thumb": "seed-jazz-condo/05-480.webp",
+          "alt": {
+            "zh": "「午夜蓝的公寓」的厨房 · 橱柜细节 · 3D 示意",
+            "en": "Midnight Blue, High Up — kitchen, kitchen cabinet detail · 3D concept"
+          },
+          "caption": {
+            "zh": "黑色哑光门板 + 黑金花台面，台面下的阴影槽当拉手",
+            "en": "Matte black doors and a Nero marquina worktop, with a shadow-gap pull"
+          },
+          "detail": true,
+          "cover": false
+        },
+        {
+          "id": "06",
+          "room": "living",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-jazz-condo/06-1600.webp",
+          "thumb": "seed-jazz-condo/06-480.webp",
+          "alt": {
+            "zh": "「午夜蓝的公寓」的客厅 · 电视柜细节 · 3D 示意",
+            "en": "Midnight Blue, High Up — living room, TV console detail · 3D concept"
+          },
+          "caption": {
+            "zh": "黑色哑光悬浮电视柜，推弹门不装拉手；后面是胡桃木格栅墙板",
+            "en": "Floating matte black TV console with push-to-open doors, against walnut slatted panelling"
+          },
+          "detail": true,
+          "cover": false
         }
       ],
       "createdAt": "2026-10-18T00:00:00.000Z",
@@ -1453,6 +2004,101 @@
             "zh": "「线条利落的独立洋房」整个家的 3D 鸟瞰 · 示意",
             "en": "A Bungalow of Clean Lines — the whole home from above · 3D concept"
           },
+          "cover": false
+        },
+        {
+          "id": "04",
+          "room": "dining",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-architect-bungalow/04-1600.webp",
+          "thumb": "seed-architect-bungalow/04-480.webp",
+          "alt": {
+            "zh": "「线条利落的独立洋房」的餐厅 · 3D 示意",
+            "en": "A Bungalow of Clean Lines — dining room · 3D concept"
+          },
+          "caption": {
+            "zh": "餐厅的两只到顶玻璃展示柜：黑色哑光柜体、细框玻璃门、层板灯带",
+            "en": "Two tall glass display cabinets in the dining room: matte black bodies, slim-framed glass doors, lit shelves"
+          },
+          "detail": false,
+          "cover": false
+        },
+        {
+          "id": "05",
+          "room": "kitchen",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-architect-bungalow/05-1600.webp",
+          "thumb": "seed-architect-bungalow/05-480.webp",
+          "alt": {
+            "zh": "「线条利落的独立洋房」的厨房 · 3D 示意",
+            "en": "A Bungalow of Clean Lines — kitchen · 3D concept"
+          },
+          "caption": {
+            "zh": "黑色哑光橱柜和岛台；台面、挡水板、岛台两头的瀑布边都是卡拉拉白",
+            "en": "Matte black kitchen and island; Carrara marble worktop, splashback and waterfall ends"
+          },
+          "detail": false,
+          "cover": false
+        },
+        {
+          "id": "06",
+          "room": "study",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-architect-bungalow/06-1600.webp",
+          "thumb": "seed-architect-bungalow/06-480.webp",
+          "alt": {
+            "zh": "「线条利落的独立洋房」的书房 · 3D 示意",
+            "en": "A Bungalow of Clean Lines — study · 3D concept"
+          },
+          "caption": {
+            "zh": "书房柜 · 书桌：黑色哑光到顶门柜夹着开放书架，书桌 乌木",
+            "en": "Study cabinets & desk: full-height matte black cupboards around open shelving; ebonized oak desk"
+          },
+          "detail": false,
+          "cover": false
+        },
+        {
+          "id": "07",
+          "room": "dining",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-architect-bungalow/07-1600.webp",
+          "thumb": "seed-architect-bungalow/07-480.webp",
+          "alt": {
+            "zh": "「线条利落的独立洋房」的餐厅 · 展示柜细节 · 3D 示意",
+            "en": "A Bungalow of Clean Lines — dining room, display cabinet detail · 3D concept"
+          },
+          "caption": {
+            "zh": "玻璃展示柜：黑色哑光细框门、枪灰长拉手、层板灯带",
+            "en": "Glass display cabinet: slim matte black frames, long gunmetal pulls and lit shelves"
+          },
+          "detail": true,
+          "cover": false
+        },
+        {
+          "id": "08",
+          "room": "kitchen",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-architect-bungalow/08-1600.webp",
+          "thumb": "seed-architect-bungalow/08-480.webp",
+          "alt": {
+            "zh": "「线条利落的独立洋房」的厨房 · 橱柜细节 · 3D 示意",
+            "en": "A Bungalow of Clean Lines — kitchen, kitchen cabinet detail · 3D concept"
+          },
+          "caption": {
+            "zh": "黑色哑光门板 + 卡拉拉白台面，台面下的阴影槽当拉手",
+            "en": "Matte black doors and a Carrara marble worktop, with a shadow-gap pull"
+          },
+          "detail": true,
           "cover": false
         }
       ],
@@ -1616,6 +2262,82 @@
             "zh": "「一家人窝在一起的家」整个家的 3D 鸟瞰 · 示意",
             "en": "A Home for Curling Up Together — the whole home from above · 3D concept"
           },
+          "cover": false
+        },
+        {
+          "id": "04",
+          "room": "family",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-cosy-townhouse/04-1600.webp",
+          "thumb": "seed-cosy-townhouse/04-480.webp",
+          "alt": {
+            "zh": "「一家人窝在一起的家」的起居厅 · 3D 示意",
+            "en": "A Home for Curling Up Together — family hall · 3D concept"
+          },
+          "caption": {
+            "zh": "电视墙：胡桃木格栅墙板 + 浅川橡悬浮电视柜",
+            "en": "TV wall: walnut slatted panelling with a floating natural oak console"
+          },
+          "detail": false,
+          "cover": false
+        },
+        {
+          "id": "05",
+          "room": "kitchen",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-cosy-townhouse/05-1600.webp",
+          "thumb": "seed-cosy-townhouse/05-480.webp",
+          "alt": {
+            "zh": "「一家人窝在一起的家」的厨房 · 3D 示意",
+            "en": "A Home for Curling Up Together — kitchen · 3D concept"
+          },
+          "caption": {
+            "zh": "浅川橡橱柜，上面是开放层板；台面 石英石·洞石纹",
+            "en": "Natural oak kitchen with open shelves above; worktop in quartz, travertine look"
+          },
+          "detail": false,
+          "cover": false
+        },
+        {
+          "id": "06",
+          "room": "kids",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-cosy-townhouse/06-1600.webp",
+          "thumb": "seed-cosy-townhouse/06-480.webp",
+          "alt": {
+            "zh": "「一家人窝在一起的家」的儿童房 · 衣柜细节 · 3D 示意",
+            "en": "A Home for Curling Up Together — kids' room, wardrobe detail · 3D concept"
+          },
+          "caption": {
+            "zh": "浅川橡衣柜门和拉丝黄铜长拉手",
+            "en": "Natural oak wardrobe doors with long brushed brass pulls"
+          },
+          "detail": true,
+          "cover": false
+        },
+        {
+          "id": "07",
+          "room": "family",
+          "kind": "render",
+          "w": 1600,
+          "h": 1200,
+          "src": "seed-cosy-townhouse/07-1600.webp",
+          "thumb": "seed-cosy-townhouse/07-480.webp",
+          "alt": {
+            "zh": "「一家人窝在一起的家」的起居厅 · 电视柜细节 · 3D 示意",
+            "en": "A Home for Curling Up Together — family hall, TV console detail · 3D concept"
+          },
+          "caption": {
+            "zh": "浅川橡悬浮电视柜，推弹门不装拉手；后面是胡桃木格栅墙板",
+            "en": "Floating natural oak TV console with push-to-open doors, against walnut slatted panelling"
+          },
+          "detail": true,
           "cover": false
         }
       ],

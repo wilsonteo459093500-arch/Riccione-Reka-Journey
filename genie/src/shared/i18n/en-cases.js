@@ -469,7 +469,7 @@ export default {
   '编织膜': 'Woven film',
   '织系列': 'Woven',
   '藤': 'Rattan',
-  '织': 'Weave',
+  '织': 'Weaving', // 也是五大系列「织」的英文名（src/shared/series.js）—— 板材名字里的「织」只用来认类别，不单独显示
   '桑榆': 'Mulberry-elm',
   '墨染': 'Ink-dyed',
   '白苎': 'White ramie',
@@ -533,4 +533,84 @@ export default {
   '{0}（溪岸 · {1}）': '{0} (sAil · {1})',
   '{0}（溪岸）': '{0} (sAil)',
   '这个家还用了溪岸板材：{0}': 'This home also uses sAil boards: {0}',
+
+  // ── 案例展示 · 资料（src/shared/cases.js：照片标签、每个房间我们做了什么、房子档案、看全部的筛选）──
+  // 「全部」「全屋」「房子」「房间」「楼层」「{0} 层楼」「整个家」「{0} 个房间」「风格」「地区」别的词典里已经有，同一个英文
+  '细节': 'Details', // 和 en-boards.js、en-photopick.js 一样
+  建筑面积: 'Built-up area', // 不用「面积」：en-export.js 里「面积」是 Areas（总表不能有不一样的英文）
+  我们做了: 'We made',
+  做过的家: 'Homes we made',
+  '3D 方案': '3D schemes',
+
+  // ── 溪岸五大系列（src/shared/series.js；docs/showcase/SERIES.md）──
+  // 名字、family、title / body / note / quote：照 VISI 的 MB.SERIES_CONCEPT 原文（老板认可的品牌手册文字），不改一个字。
+  // 「织」的英文在上面板材那一段（Weaving）。
+  骨骼线: 'Skeleton Line',
+  空山: 'Empty Mountain',
+  雾山: 'Misty Mountain',
+  侘寂东方: 'Wabi-Sabi Eastern',
+  '溪岸 · 自然线系列': 'SAIL · Natural Line',
+  '溪岸 · 实木系列': 'SAIL · Solid Wood',
+  '在时间的长河，寻找关于家具的记忆。': 'In the long river of time, looking for the memory of furniture.',
+  '我们将古典家具美学融入现代设计，打造「没那么现代」的设计：用柜子本身的装饰线条形成把手，营造家具的自然生长感。':
+    'We bring the beauty of classical furniture into modern design — a design that is “not quite so modern”. The cabinet’s own lines become its handles, so the furniture feels as if it grew there.',
+  '灵感取自古典实木家具的形态：骨骼结构既是装饰，也是把手。': 'Inspired by classical solid-wood furniture: the frame is both the ornament and the handle.',
+  '入空山，感物近人。': 'Enter the empty mountain, and feel close to things and people.',
+  '我们弱化不必要的设计与装饰，以「退一步」的产品形态，消融大型柜体在空间里的存在感，衬托空间真正的主角，把视线重新聚焦到生活与人本身。':
+    'We pare back unnecessary design and ornament. With a form that “takes a step back”, large cabinetry quietly dissolves into the room, leaving the focus on life and the people living it.',
+  '以「退」为设计哲学，「空而不空」的陈列美学。': '“Stepping back” as a design philosophy — display that is empty, yet never empty.',
+  '自然柔韧，回归感性生活。': 'Natural and supple — back to a life of the senses.',
+  '织系列汲取麻纤维织物的质感，以织物的朴素美学，唤醒对生活与材料的感知力。':
+    'Weaving draws on the texture of woven linen fibre; its quiet, honest beauty reawakens how we feel our life and our materials.',
+  '在城市的喧嚣中迷失的感觉，在接近麻纤维的时候，会慢慢平复下来。': 'What gets lost in the noise of the city slowly settles when you are close to linen.',
+  '雾山春居。': 'A spring house on the misty mountain.',
+  '以「雾山春居」为设计灵感：山腰一间木屋，以更自由的产品、更身心共融的家，将春日里雾山平和、纯粹、轻盈、充沛的自然表达，尽诉其中。':
+    'Inspired by a spring house on a misty mountain: a timber cabin halfway up the slope. With freer pieces and a home where body and mind are at ease, it holds all the calm, purity, lightness and fullness of the mountain in spring.',
+  '轻于色、安于形：取晨雾之「灰」、春山之「木」、早春山间将有未有之「绿」，消隐大型柜体的存在感，让空间平静温和。':
+    'Light in colour, at ease in form: the grey of morning mist, the wood of the spring hills and the green that is only just arriving — large cabinetry fades back and the room stays calm and gentle.',
+  '「我心中有一种东西像薄雾，我被它包裹着……让我们保持安静，被生活环绕……」—— 费尔南多·佩索阿':
+    '“There is something in me like a mist, and I am wrapped in it… let us stay quiet, surrounded by life…” — Fernando Pessoa',
+  '山，有它的时间。': 'Mountains have their own time.',
+  '我们将东方哲思中「关于时间的探索」融入设计，在造物与空间中，注入对生命流动的理解与尊重。':
+    'We bring the Eastern way of thinking about time into design, so that every piece and every space carries an understanding of, and respect for, the flow of life.',
+  '打磨出能滋养心灵、连接自然、经得起时间洗礼的设计。': 'Design that nourishes the mind, connects with nature, and stands the test of time.',
+  // 系列的风格标签（SERIES_TARGET.styles / CARD_STYLES：只是资料，不显示；和案例整理 data.json 的风格名字一样）。「原木」在上面板材那一段
+  中古: 'Mid-century',
+  美式复古: 'American vintage',
+  法式: 'French',
+  极简: 'Minimal',
+  侘寂: 'Wabi-sabi',
+  南洋: 'Nanyang tropical',
+  奶油: 'Cream',
+  // 为什么建议这个系列（recommendSeries 的理由：只说客人自己的答案）
+  '你喜欢{0}，也喜欢{1}': 'You like {0} and {1}',
+  '你喜欢{0}': 'You like {0}',
+  暖暖的木头: 'warm wood',
+  清爽的颜色: 'cool, fresh colours',
+  简简单单的留白: 'simple, open space',
+  有层次的家: 'a layered home',
+  自然的质感: 'natural textures',
+  细致的做工: 'refined finishes',
+  看不见杂物的家: 'a home with no clutter in sight',
+  几件心爱的摆设: 'a few loved things on show',
+  明亮的光: 'bright light',
+  沉静的光: 'soft, quiet light',
+  圆润的线条: 'rounded lines',
+  利落的线条: 'clean lines',
+  经典的线条: 'classic lines',
+  安安静静的留白: 'quiet, open space',
+  亚麻一样的质感: 'the feel of linen',
+  柔软的线条: 'soft lines',
+  淡淡的灰绿: 'soft grey-greens',
+  温暖的色调: 'warm tones',
+  轻盈明亮的光: 'light, airy brightness',
+  实木的质感: 'the feel of solid wood',
+  '你选了「{0}」—— 这个系列就是这种感觉': 'You chose "{0}" — this series has that same feel',
+  '也照顾到你的愿望「{0}」': 'It also looks after your wish: "{0}"',
+  '和你的牌「{0}」很合拍': 'A natural fit for your card, {0}',
+  '你挑的家「{0}」就是这个系列': 'The home you picked, {0}, is from this series',
+  你挑的家里有一个就是这个系列: 'One of the homes you picked is from this series',
+  // 案例那边（cases.js：配对的理由、房子档案、看全部的筛选）
+  '和最适合你的系列一样：{0}': 'Same as the series that suits you best: {0}',
+  系列: 'Series', // 和 en-boards.js 一样
 };

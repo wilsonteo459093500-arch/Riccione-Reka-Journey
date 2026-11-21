@@ -21,6 +21,7 @@ export const GROUPS = [
   { id: 'reveal', zh: '揭晓', en: 'The reveal' },
   { id: 'blueprint', zh: '梦想家蓝图', en: 'The blueprint' },
   { id: 'home', zh: '带它回家', en: 'Bring it home' },
+  { id: 'walk', zh: '走进去', en: 'Walk-in' },
   { id: 'bye', zh: '闲置与告别', en: 'Idle & goodbye' },
   { id: 'staff', zh: '员工试听', en: 'Staff audition' },
 ];
@@ -286,6 +287,56 @@ export const LINES = [
     zh: '谢谢你！接下来，让我们的设计师来帮你。',
     en: 'Thank you! Now let our designer take it from here.',
     note: 'Genuinely grateful, then a calm hand-over — proud of what you made together.',
+  },
+  // ── 走进去（3D 里用人的眼睛走进家，src/studio/walk/）── 潘吉带逛一圈：只说我们做的东西（电视墙、厨房柜和台面、衣柜），
+  //    不说价钱、编号、工期；每一句都是一站（walk/tour.js 的 tourStops），泡泡 = TourBubble 里的 lineText(id)
+  {
+    id: 'walk.hello', group: 'walk', level: 'key', speaker: 'pangie', mood: 'happy', prop: 'ball', delay: 400, mode: 'interrupt', caption: 'bubble', at: 'src/studio/walk/tour.js · stop entrance (just inside the front door) → TourBubble',
+    zh: '欢迎回家！点一下地面，就能走过去。',
+    en: 'Welcome home! Tap anywhere on the floor to walk there.',
+    note: 'A warm, bright welcome at the front door, like opening the door for a friend. The second sentence easy and inviting.',
+  },
+  {
+    id: 'walk.living', group: 'walk', level: 'key', speaker: 'pangie', mood: 'happy', prop: 'ball', delay: 300, mode: 'interrupt', caption: 'bubble', at: 'src/studio/walk/tour.js · stop living → TourBubble',
+    zh: '客厅到啦！一家人最常聚在这里。',
+    en: 'Here’s the living room — where everyone gathers most.',
+    note: 'Relaxed and cosy, a small happy sigh, as if sinking into the sofa.',
+  },
+  {
+    id: 'walk.tv', group: 'walk', level: 'key', speaker: 'pangie', mood: 'happy', prop: 'ball', delay: 300, mode: 'interrupt', caption: 'bubble', at: 'src/studio/walk/tour.js · stop tv (facing the tvWall) → TourBubble',
+    zh: '这面电视墙是我们做的，电线和杂物都收得好好的。',
+    en: 'We make this TV wall — cables and clutter tucked neatly away.',
+    note: 'Proud but never salesy, like showing a friend something you made; a little sparkle on “我们做的” / “We make”.',
+  },
+  {
+    id: 'walk.kitchen', group: 'walk', level: 'key', speaker: 'pangie', mood: 'happy', prop: 'ball', delay: 300, mode: 'interrupt', caption: 'bubble', at: 'src/studio/walk/tour.js · stop kitchen (facing the kitchenRun) → TourBubble',
+    zh: '厨房的柜子和台面，都是我们做的。煮饭的人最懂，顺手最重要！',
+    en: 'We make the kitchen cabinets and the worktop. Anyone who cooks knows — easy reach is everything!',
+    note: 'Proud first, then warm and knowing, with a been-there little laugh in the second sentence.',
+  },
+  {
+    id: 'walk.wardrobe', group: 'walk', level: 'key', speaker: 'pangie', mood: 'wink', prop: 'ball', delay: 300, mode: 'interrupt', caption: 'bubble', at: 'src/studio/walk/tour.js · stop bedroom (facing the wardrobe) → TourBubble',
+    zh: '这个衣柜是我们做的，每件衣服都有自己的位置。',
+    en: 'We make this wardrobe — every outfit gets its own place.',
+    note: 'Earnest and a little proud (she loves wardrobes); soft and neat on the second half.',
+  },
+  {
+    id: 'walk.stairs', group: 'walk', level: 'key', speaker: 'pangie', mood: 'happy', prop: 'ball', delay: 200, mode: 'interrupt', caption: 'bubble', at: 'src/studio/walk/tour.js · stop stairs (at the foot of the stairs) → TourBubble',
+    zh: '走，我们上楼看看！',
+    en: 'Come on, let’s go upstairs!',
+    note: 'Bright and eager, a little skip in the voice, leading the way.',
+  },
+  {
+    id: 'walk.paint', group: 'walk', level: 'full', speaker: 'pangie', mood: 'wink', prop: 'ball', delay: 300, mode: 'interrupt', caption: 'bubble', at: 'src/studio/walk/tour.js · tip stop (near the end, or a bedroom without a wardrobe) → TourBubble',
+    zh: '小提示：点一下任何东西，就能给它换颜色。',
+    en: 'A little tip: tap anything to give it a new colour.',
+    note: 'Playful and conspiratorial, sharing a small secret; light and quick.',
+  },
+  {
+    id: 'walk.bye', group: 'walk', level: 'key', speaker: 'pangie', mood: 'happy', prop: 'ball', delay: 300, mode: 'interrupt', caption: 'bubble', at: 'src/studio/walk/tour.js · stop end (the tour is over) → TourBubble',
+    zh: '逛完啦！你可以自己再走走，想看全屋就点「回到全屋」。',
+    en: 'That’s the tour! Wander around on your own, or tap the back button to see the whole home.',
+    note: 'Content and warm, handing the guest the keys; unhurried, no goodbye in it (she stays with you).',
   },
   {
     id: 'idle.still', group: 'bye', level: 'key', speaker: 'pangie', mood: 'think', prop: 'none', delay: 300, mode: 'interrupt', caption: 'screen', at: 'src/quiz/QuizApp.jsx · Prompt (idle, Wish Mode)',

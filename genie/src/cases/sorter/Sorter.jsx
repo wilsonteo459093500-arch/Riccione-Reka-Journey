@@ -1,5 +1,6 @@
 // 员工 · 案例整理（cases.html?staff=1&sorter=1）—— 把老板电脑上的一整个照片文件夹（9 000+ 张）变成一个精选的案例库。
-//   选文件夹 / 拖进来 → 自动按项目分组 → worker 在后台看每一张（指纹、清晰度、曝光、主色…）→ 每个项目自动挑封面 + 5 张
+//   选文件夹 / 拖进来 → 自动按项目分组 → worker 在后台看每一张（指纹、清晰度、曝光、主色…）→ 每个项目自动挑封面 + 最多 17 张
+//   （每个房间最多 4 张，细节特写另外最多 4 张）
 //   → 员工一行一行确认（风格、房子、业主同意）→ 存成草稿案例 / 导出案例包（每份 ≤ 20 MB）
 // 只给员工：从案例库（已经按住 3 秒解锁）进来；许愿模式里没有任何路到这里。
 // 隐私：照片只在这台电脑上处理；只有员工自己按「AI 帮我填」才会把小图发给 Google；文件夹里的人名永远不显示、不进案例。
@@ -8,14 +9,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, FolderTree, Images, Keyboard, Library, Download, Pause, Play, Sparkles, ChevronDown, ChevronUp, Info } from 'lucide-react';
 import LangToggle from '../../shared/LangToggle.jsx';
 import { t, L, isEn, useLang } from '../../shared/i18n.js';
-import { PROPERTY_TYPES } from '../../shared/cases.js';
+import { PROPERTY_TYPES, roomLabel } from '../../shared/cases.js';
 import { sfx } from '../../shared/sfx.js';
 import fx from '../../shared/fx.js';
 import DATA from './data.json';
 import { setData, getData } from './data.js';
 import { fromFiles, fromDrop, canPickFolder } from './listing.js';
 import { Session, Thumbs } from './session.js';
-import { bestPerStyle } from './pick.js';
+import { bestPerStyle, PICK } from './pick.js';
 import { Pool } from './pool.js';
 import Row from './Row.jsx';
 import { Preview, RoomPicker, Rename, MergePick, Help, AiSheet, OutputSheet, aiPref, aiTargets, hasAiKey, runAutoTag } from './Sheets.jsx';
@@ -156,7 +157,7 @@ function Start({ onEntries, listing }) {
         </li>
         <li>
           <b>{t('自动挑选')}</b>
-          <span>{t('每个项目挑一张封面 + 最多 5 张；重复、模糊、截图、单据先藏起来（找得回来）。')}</span>
+          <span>{t('每个项目挑一张封面 + 最多 {0} 张（每个房间最多 {1} 张，细节特写最多 {2} 张）；重复、模糊、截图、单据先藏起来（找得回来）。', [PICK.max - 1, PICK.perRoom, PICK.details])}</span>
         </li>
         <li>
           <b>{t('你来确认')}</b>
@@ -540,11 +541,21 @@ export default function Sorter() {
         return;
       }
       if (lower === 'v' && (fk || s.pickedOf(g)[0])) setSheet({ type: 'preview', gid: g.id, k: fk || s.pickedOf(g)[0] });
+      // D = 这张是不是细节特写（门板、拉手、木纹的近拍）
+      if (lower === 'd' && fk) {
+        const on = !s.detailOf(g, fk);
+        const was = s.pickedOf(g).includes(fk);
+        s.setDetail(g.id, fk, on);
+        sfx.play(on ? 'toggleOn' : 'toggleOff');
+        if (was && !s.pickedOf(g).includes(fk)) onDropped(g.id, fk);
+        return;
+      }
       // R = 给这张（没有选中就从封面开始）标房间；按键标好自动跳到下一张
       if (lower === 'r') {
         const k0 = fk || s.pickedOf(g)[0];
         if (!k0) return;
         e.preventDefault();
+        startFlow(g.id, k0);
         openRoom(g.id, k0);
       }
     };
@@ -556,23 +567,51 @@ export default function Sorter() {
   const openRoom = (gid, k) => {
     setFocus(gid);
     setFocusKey(k);
-    const el = photoEl(gid, k);
-    el?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
-    setSheet({ type: 'room', gid, k, anchor: el?.querySelector('.so-ph-room') || el, kbd: true });
+    // 这张可能是刚标完上一张才挑进来的（还没画出来）→ 小卡打开的时候（画好了）再找它、滚过去
+    const anchor = () => {
+      const el = photoEl(gid, k);
+      el?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+      return el?.querySelector('.so-ph-room') || el;
+    };
+    setSheet({ type: 'room', gid, k, anchor, kbd: true });
   };
-  /** 标完一张：跳到同一行的下一张（挑好的照片；展开时也包括其它照片），最后一张标完就关 */
+  // 一轮「标房间」：标完一张跳到下一张。标房间 / 细节以后，自动挑的照片会跟着变（每个房间最多 4 张、细节最多 4 张；
+  // 没标房间的标好了，空出来的位子会再挑进新的照片）→ 不按位置往下数，而是记住这一轮已经看过哪几张，
+  // 每次跳到「现在的顺序里第一张还没看过的」（从中间开始的，前面的算看过）
+  const roomFlow = useRef(null); // { gid, seen:Set<key> }
+  const orderFor = (g) => (expanded.has(g.id) ? s.orderOf(g) : s.pickedOf(g));
+  const startFlow = (gid, k) => {
+    const g = s?.groups.find((x) => x.id === gid);
+    const order = g ? orderFor(g) : [];
+    roomFlow.current = { gid, seen: new Set(order.slice(0, Math.max(0, order.indexOf(k)))) };
+  };
+  /** 标完一张：跳到这一轮还没看过的下一张，都看过了就关 */
   const nextRoom = (gid, k) => {
     const g = s?.groups.find((x) => x.id === gid);
     if (!g) return setSheet(null);
-    const order = expanded.has(gid) ? s.orderOf(g) : s.pickedOf(g);
-    const nk = order[order.indexOf(k) + 1];
+    if (roomFlow.current?.gid !== gid) startFlow(gid, k);
+    const seen = roomFlow.current.seen;
+    seen.add(k);
+    const nk = orderFor(g).find((x) => !seen.has(x));
     if (!nk) {
       setSheet(null);
+      roomFlow.current = null;
       const left = s.pickedOf(g).filter((x) => !s.roomOf(g, x)).length;
       setToast({ msg: left ? t('还有 {0} 张没标房间', [left]) : t('这个项目的房间都标好了') });
       return;
     }
     openRoom(gid, nk);
+  };
+  /** 刚标的这张因为房间 / 细节的名额满了，不在挑好的里面了 → 说一声（「其它照片」里点一下就能拿回来） */
+  const onDropped = (gid, k) => {
+    const g = s?.groups.find((x) => x.id === gid);
+    if (!g) return;
+    const room = s.roomOf(g, k);
+    setToast({
+      msg: s.detailOf(g, k)
+        ? t('细节特写已经挑了 {0} 张：这张先放进「其它照片」（点一下就能拿回来）', [PICK.details])
+        : t('{0}已经挑了 {1} 张：这张先放进「其它照片」（点一下就能拿回来）', [room ? roomLabel(room) : t('没标房间的照片'), PICK.perRoom]),
+    });
   };
 
   const toggleExpand = (gid) =>
@@ -777,7 +816,7 @@ export default function Sorter() {
               }}
               onExpand={toggleExpand}
               onZoom={(gid, k) => setSheet({ type: 'preview', gid, k })}
-              onRoom={(gid, k, anchor) => setSheet({ type: 'room', gid, k, anchor })}
+              onRoom={(gid, k, anchor) => (startFlow(gid, k), setSheet({ type: 'room', gid, k, anchor }))}
               onMerge={(gid, target) => (target ? (s.merge(target, gid), setToast({ msg: t('已经并进去了') })) : setSheet({ type: 'merge', gid }))}
               onRename={(gid) => setSheet({ type: 'rename', gid })}
               onAct={act}
@@ -806,7 +845,7 @@ export default function Sorter() {
       </footer>
 
       {sheet?.type === 'preview' && <Preview s={s} pool={poolRef.current} gid={sheet.gid} k0={sheet.k} onClose={() => setSheet(null)} />}
-      {sheet?.type === 'room' && <RoomPicker key={sheet.k} s={s} gid={sheet.gid} k={sheet.k} anchor={sheet.anchor} onClose={() => setSheet(null)} onNext={(k) => nextRoom(sheet.gid, k)} />}
+      {sheet?.type === 'room' && <RoomPicker key={sheet.k} s={s} gid={sheet.gid} k={sheet.k} anchor={sheet.anchor} onClose={() => setSheet(null)} onNext={(k) => nextRoom(sheet.gid, k)} onDropped={(k) => onDropped(sheet.gid, k)} />}
       {sheet?.type === 'rename' && <Rename s={s} gid={sheet.gid} onClose={() => setSheet(null)} />}
       {sheet?.type === 'merge' && (
         <MergePick

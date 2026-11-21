@@ -4881,3 +4881,145 @@
   margin-left: 6px;
   vertical-align: 0;
 }
+
+/* ============================================================
+   走进去（docs/walk/SPEC.md §6）
+   鸟瞰的界面在走进去时藏起来，但不拆、不改排版：StudioApp 量的取景留白（insets）照样准，回到全屋时一模一样。
+   所以只用 opacity / visibility / pointer-events，不用 display、尺寸、位置。
+   情绪面板、工具条只用 visibility：kit.jsx 的 freeBand 按它们的 opacity 判断「是不是藏起来了」，
+   opacity 一变，材质标签那一带就会重排 → 留白变了 → 回到全屋时镜头对不上。
+   ============================================================ */
+
+/* 「走进去」：材质栏正上方、居中的金色胶囊。绝对定位 —— 不占底部那一列的位置（.dock-wrap 的高度、材质栏的位置都不变）；
+   许愿模式右下角外壳的胶囊那一块，.dock-wrap 本来就让开了 */
+.walk-pill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 12px);
+  width: max-content;
+  margin: 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 22px 0 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--gold-btn);
+  color: var(--ink);
+  font: 600 16px/1 var(--sans);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  box-shadow:
+    0 0 0 1.5px rgba(var(--glass-rgb), 0.85),
+    0 6px 16px rgba(var(--gold-d-rgb), 0.35),
+    0 14px 30px rgba(0, 0, 0, 0.28);
+  animation: walk-pill-in 0.5s var(--spring);
+  transition:
+    transform 0.16s var(--ease),
+    box-shadow 0.2s var(--ease);
+}
+.is-en .walk-pill {
+  letter-spacing: 0.01em;
+}
+.walk-pill svg {
+  flex: none;
+}
+.walk-pill:active {
+  transform: scale(0.96);
+}
+@media (hover: hover) {
+  .walk-pill:hover {
+    transform: translateY(-1px);
+    box-shadow:
+      0 0 0 1.5px rgba(var(--glass-rgb), 0.95),
+      0 8px 20px rgba(var(--gold-d-rgb), 0.42),
+      0 16px 34px rgba(0, 0, 0, 0.3);
+  }
+}
+@keyframes walk-pill-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.94);
+  }
+}
+
+/* 点了「走进去」、那一块还在下载（一般已经在后台取好了，看不到）；右边是「回到全屋」（.s-btn.ghost，44px）。
+   宽 = 一行的宽（left: 50% 的缩到合适只量得到半屏，不定的话中文在手机上也会折）；放不下（320 宽的英文）就把按钮折到第二行 */
+.walk-wait {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 40;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  width: max-content;
+  max-width: calc(100% - 32px);
+  min-height: 44px;
+  padding: 4px 4px 4px 20px;
+  border-radius: 999px;
+  font: 600 15px/1 var(--sans);
+  white-space: nowrap;
+  animation: fade 0.3s var(--ease) 0.2s both;
+}
+.walk-wait svg {
+  color: var(--gold-d);
+  animation: spin 0.9s linear infinite;
+}
+
+/* 走进去时：鸟瞰的面板、标签、楼层、字标、对照、示范户型提示、悬停 / 选择条 */
+.is-walk .mood-panel,
+.is-walk .toolbar {
+  visibility: hidden;
+  pointer-events: none;
+}
+.is-walk .dock-wrap,
+.is-walk .floor-switch,
+.is-walk .callouts,
+.is-walk .foot,
+.is-walk .st-split,
+.is-walk .st-divider,
+.is-walk .st-mine-label,
+.is-walk .st-pip,
+.is-walk .st-seg,
+.is-walk .st-cmp-phone,
+.is-walk .st-banner,
+.is-walk .hovertip,
+.is-walk .selbar {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+/* 提示（WalkMode 用 api.flash）：放在上面中间（下面是摇杆和工具轮）；手机上让开右上角的小地图 */
+.is-walk .s-toast.floating {
+  top: calc(var(--safe-t) + 60px);
+  bottom: auto;
+  z-index: 110;
+  max-width: min(460px, calc(100% - 32px));
+}
+@media (max-width: 600px) {
+  .is-walk .s-toast.floating {
+    top: calc(var(--safe-t) + 136px);
+  }
+}
+/* 确认框（换掉锁住的表面）、画布被收回：盖在走进去的界面上面 */
+.is-walk .s-modal-wrap,
+.is-walk .ctx-lost {
+  z-index: 120;
+}
+@media (prefers-reduced-motion: reduce) {
+  .walk-pill,
+  .walk-wait {
+    animation: none;
+  }
+  .walk-wait svg {
+    animation-duration: 3s;
+  }
+}

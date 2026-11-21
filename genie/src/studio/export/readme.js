@@ -5,6 +5,7 @@
 import { bi, biFill, both, SAIL_LINE } from './names.js';
 import { catLabel, CATEGORY, UNCERTAIN, boardCode } from './catalog.js';
 import { MAT_BY_ID } from '../../shared/materials.js';
+import { seriesLine } from './brief.js';
 import { LAYERS } from './plan.js';
 import { CATALOG } from '../engine/furniture.js';
 import { BRAND } from '../../shared/config.js';
@@ -90,6 +91,9 @@ export function readme(brief, { files = [], base = 'WISH', dxf = true, kujiale =
   const st = brief.stats || {};
   const nOpen = st.openings ? st.openings.door + st.openings.window + st.openings.slider : 0;
   say(L, biFill('{0} 层 · {1} 个房间 · {2} 扇门窗 · {3} 件柜子和家具', [brief.floors.length, brief.rooms.length, nOpen, brief.items.length]));
+  // 客人适合的溪岸系列（只有名字；没有答题 = 不写）
+  const sl = seriesLine(brief);
+  if (sl) say(L, sl);
   L.push('');
   const n = bi('概念示意，尺寸以现场量尺为准');
   say(L, { zh: `${n.zh}。`, en: n.en });

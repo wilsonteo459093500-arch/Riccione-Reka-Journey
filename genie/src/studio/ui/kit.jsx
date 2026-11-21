@@ -171,6 +171,7 @@ const ICONS = {
   compare: SquareSplitHorizontal,
   spinner: LoaderCircle,
   make: Hammer, // 我们做 · We make this（公司做的定制柜、台面、墙板、门）
+  walk: Footprints, // 走进去（人的眼睛走进家里）
 };
 
 export function Icon({ name, size = 18, stroke = 1.75, className = '' }) {

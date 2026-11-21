@@ -22,7 +22,7 @@
 //   没有「设置」（公司的 AI key、接口地址），梦想家卡打开的是客人版蓝图（不带 ?staff=1）。
 //   许愿模式再少两样：不能上传平面图（只能画）、不能下载概念图 —— 都会碰到展厅 iPad 的相册 / 文件，里面有前面客人的图。
 
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Component, lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Engine } from './engine/Engine.js';
 import { buildWalls, buildAllWalls, templatePlan, emptyPlan, migratePlan, isMultiFloor, floorById, floorName, uid, roomSides, ROOM_TYPES } from './plan/model.js';
 import * as Furnish from './engine/furnish.js';
@@ -45,6 +45,7 @@ import { BRAND } from '../shared/config.js';
 import { t, L, isEn, setLang } from '../shared/i18n.js';
 import { fmt } from '../shared/units.js';
 import { isWishMode, tellShell } from '../shared/zen.js';
+import { voice } from '../shared/voice.js';
 import MoodPanel, { CaseRow } from './ui/MoodPanel.jsx';
 import Compare from './ui/Compare.jsx';
 import SampleBanner from './ui/SampleBanner.jsx';
@@ -65,6 +66,28 @@ import PlanEditor from './plan/PlanEditor.jsx';
 import { boardsSoon as boardsSoonShared, missingBoardIds } from '../shared/boards/soon.js';
 // 导出给设计师（DXF / 酷家乐 / SketchUp）：只有点了才下载这部分代码
 const ExportSheet = lazy(() => import('./export/ExportSheet.jsx'));
+// 走进去（人的眼睛走进家里，src/studio/walk/）：点了「走进去」才要这一块；界面好了 4 秒后先在后台取（展厅、演示不取）
+const loadWalk = () => import('./walk/WalkMode.jsx');
+// let：没下载成时 walkFailed 换一个新的（React 的 lazy 记住失败，不换的话以后每次点都是同一个错，直到重新载入页面）
+let WalkMode = lazy(loadWalk);
+
+/** 走进去出错（那一块没下载成、画的时候出错）：卸掉它（卸载时 WalkMode 自己马上退回鸟瞰），工作室照常用 */
+class WalkGuard extends Component {
+  constructor(p) {
+    super(p);
+    this.state = { bad: false };
+  }
+  static getDerivedStateFromError() {
+    return { bad: true };
+  }
+  componentDidCatch(err) {
+    if (import.meta.env?.DEV) console.error('[walk]', err);
+    this.props.onFail();
+  }
+  render() {
+    return this.state.bad ? null : this.props.children;
+  }
+}
 
 const WISH = isWishMode();
 const QS = new URLSearchParams(location.search);
@@ -382,6 +405,11 @@ export default function StudioApp() {
   const panelsBeforeCmp = useRef(null);
   const [banner, setBanner] = useState({ state: 'idle', pct: 0 });
   const caseLib = useCaseLib(project?.cases);
+  // 走进去：鸟瞰的界面照样挂着（只是藏起来，排版不变 → 取景留白照样量得准），回到全屋时一模一样
+  const [walk, setWalk] = useState(false);
+  const walkRef = useRef(false); // 点下去那一刻就算（不等重画）：日光小图、外壳传来的户型图都要等回到全屋
+  const thumbsLater = useRef(false);
+  const afterWalk = useRef(null); // 回到全屋以后再做的事：外壳传来的户型图（读）、走的时候读好的户型图（换上）
 
   // 提示停留的时间从「真正画出来」那一刻算起：换一整套材质时，下一帧要编译着色器，慢设备上会卡一下，
   // 计时要是从点击就开始，提示还没画出来就过期了。
@@ -632,11 +660,14 @@ export default function StudioApp() {
 
   // ── 日光小图（材质变了就重画，防抖） ──
   const thumbTimer = useRef(0);
+  // 走进去时不画（小图要借画布换时间、换镜头）：记下来，回到全屋再画
   const scheduleThumbs = useCallback(() => {
     clearTimeout(thumbTimer.current);
     if (showroomRef.current) return;
+    if (walkRef.current) return void (thumbsLater.current = true);
     thumbTimer.current = setTimeout(() => {
       if (!engine.current || showroomRef.current) return;
+      if (walkRef.current) return void (thumbsLater.current = true);
       try {
         setThumbs(engine.current.thumbs(DAY_PRESETS.map((d) => d.hour)));
       } catch {
@@ -1008,6 +1039,7 @@ export default function StudioApp() {
     tellShell('plan-wait', { on: false });
     setBanner({ state: 'reading', pct: 3 });
     const pid = cur.profile.id;
+    const bad = () => setBanner({ state: 'unreadable', pct: 0 });
     try {
       const { readPlan } = await import('./guest/readPlan.js');
       const r = await readPlan(file, { hint: planHint(cur.profile.home || {}), onProgress: (pr) => setBanner((b) => (b.state === 'reading' ? { ...b, pct: pr.pct } : b)) });
@@ -1015,15 +1047,23 @@ export default function StudioApp() {
       if ((r.status === 'ok' || r.status === 'rough') && r.plan) {
         await putHomePlan(pid, { plan: r.plan, underlays: r.underlays, source: r.source, confidence: r.confidence });
         const homePlan = rememberGuestPlan(pid, r);
-        await applyHomePlan(r.plan, r.underlays, { homePlan });
-        // 许愿模式的外壳：这一位的家变了 →「交给设计师」的链接、已经留下的名单跟着换（WishShell 的 home-done）
-        tellShell('home-done', { id: pid, plan: true });
-        setBanner({ state: 'idle', pct: 0 });
-        sfx.play?.('achievement');
-        flash(r.status === 'rough' ? t('读好了 —— 有几处是猜的，设计师见面时会再对一次') : t('读好了 —— 这就是你的家'), 4600);
-      } else setBanner({ state: 'unreadable', pct: 0 });
+        const swap = async () => {
+          await applyHomePlan(r.plan, r.underlays, { homePlan });
+          // 许愿模式的外壳：这一位的家变了 →「交给设计师」的链接、已经留下的名单跟着换（WishShell 的 home-done）
+          tellShell('home-done', { id: pid, plan: true });
+          setBanner({ state: 'idle', pct: 0 });
+          sfx.play?.('achievement');
+          flash(r.status === 'rough' ? t('读好了 —— 有几处是猜的，设计师见面时会再对一次') : t('读好了 —— 这就是你的家'), 4600);
+        };
+        // 读的时候不给走进去（canWalk、enterWalk）；万一正在走：先回到全屋再换 —— 走进去的格子、门、房间都是进去时那个家的
+        if (!walkRef.current) await swap();
+        else {
+          afterWalk.current = () => swap().catch(bad);
+          setWalk(false);
+        }
+      } else bad();
     } catch {
-      setBanner({ state: 'unreadable', pct: 0 });
+      bad();
     } finally {
       readingRef.current = false;
     }
@@ -1222,7 +1262,8 @@ export default function StudioApp() {
   // ── 键盘（读最新的状态，监听只装一次） ──
   const keyRef = useRef(null);
   keyRef.current = (ev) => {
-    if (ev.target.closest?.('input,textarea,select') || planDraft || modal || ask) return;
+    // 走进去时键盘归 WalkMode（WASD、方向键）：这里的快捷键一个都不做
+    if (ev.target.closest?.('input,textarea,select') || planDraft || modal || ask || walkRef.current) return;
     const mod = ev.metaKey || ev.ctrlKey;
     if (showroom) {
       if (ev.key === 'Escape') exitShowroom();
@@ -1270,8 +1311,14 @@ export default function StudioApp() {
         saveNow();
         setLang(ev.data.lang);
       }
-      // 员工在员工区帮客人上传的户型图（许愿模式；SPEC §5.3）
-      if (ev.data.type === 'plan-file' && ev.data.file) readRef.current?.(ev.data.file);
+      // 员工在员工区帮客人上传的户型图（许愿模式；SPEC §5.3）。正在走进去：先马上回到全屋（WalkMode 卸载时立刻退出），再读
+      if (ev.data.type === 'plan-file' && ev.data.file) {
+        if (!walkRef.current) readRef.current?.(ev.data.file);
+        else {
+          afterWalk.current = () => readRef.current?.(ev.data.file);
+          setWalk(false);
+        }
+      }
     };
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
@@ -1284,6 +1331,95 @@ export default function StudioApp() {
   useEffect(() => {
     engine.current?.setWallMode(wallMode);
   }, [wallMode]);
+
+  // ── 走进去（docs/walk/SPEC.md §6） ──
+  /** 高清概念图下载到这台设备（工具条、走进去的「下载这张」）；许愿模式不给：存下来的图会留在展厅 iPad 的相册里 */
+  const shoot = async () => {
+    const p = projRef.current;
+    try {
+      const blob = await engine.current.snapshot(2);
+      const { stampSnapshot } = await import('./ui/stamp.js');
+      // 多层、只看某一层时：图注写上是哪一层
+      const fv = engine.current.floorView;
+      const floor = isMultiFloor(p.plan) && fv && fv !== 'all' && floorById(p.plan, fv) ? t(floorName(p.plan, fv)) : '';
+      const out = await stampSnapshot(blob, p, { floor });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(out);
+      a.download = `WISH-${String(t(p.name) || 'concept').replace(/[\s/\\:*?"<>|]+/g, '-')}.png`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+      flash(t('概念图已下载'));
+    } catch {
+      flash(t('这台设备暂时存不了高清图，换「流畅」画质再试一次'), 4200);
+    }
+  };
+  // 给 WalkMode 的接口：对象只建一次（控制器拿着它），每一项都转给这一次重画的函数（读的是最新的方案）
+  const walkFns = useRef(null);
+  walkFns.current = { dropMaterial, setTime, updateFurniture, rotateItem, removeItem, undo, flash, shoot };
+  const walkApi = useMemo(() => {
+    const F = () => walkFns.current;
+    /** 撤销只撤这一步：最上面那一步换过平面图（要重建整个场景）→ 走进去时不能撤 */
+    const canUndo = () => {
+      const top = past.current[past.current.length - 1];
+      return !!top && top.plan === projRef.current?.plan;
+    };
+    return {
+      // 和材质栏同一条路：合不合适、锁住的先问、踩雷区提醒 → applyMaterial（可以撤销）
+      dropMaterial: (slotId, matId) => F().dropMaterial(matId, slotId),
+      setTime: (h) => F().setTime(h),
+      moveItem: (id, p) => F().updateFurniture((l) => l.map((f) => (f.id === id ? { ...f, x: +p.x.toFixed(3), z: +p.z.toFixed(3) } : f))),
+      rotateItem: (id) => F().rotateItem(id),
+      removeItem: (id) => F().removeItem(id),
+      undo: () => canUndo() && F().undo(),
+      canUndo,
+      flash: (msg, ms) => F().flash(msg, ms),
+      // 收藏的角度：跟着方案存（自动保存），不进撤销
+      setMarks: (list) => setProject((p) => (p ? { ...p, walkMarks: list } : p)),
+      shoot: WISH ? null : () => F().shoot(),
+    };
+  }, []);
+  const enterWalk = () => {
+    const e = engine.current;
+    // 正在读客人的户型图：读好了要整个换掉这个家（走进去的格子、门、房间是进去那一刻的）→ 读完再走
+    if (!e || walkRef.current || readingRef.current || banner.state === 'reading') return;
+    voice.unlock?.(); // iPad：潘吉带逛要出声，得在这一下点击里解锁
+    e.select(null);
+    setHover(null);
+    walkRef.current = true;
+    setWalk(true);
+  };
+  const exitWalk = useCallback(() => setWalk(false), []);
+  // 出错（WalkGuard）或等下载时点了「回到全屋」（quiet）：换一个新的 lazy，下次点「走进去」重新下载
+  const walkFailed = useCallback(
+    (quiet) => {
+      WalkMode = lazy(loadWalk);
+      setWalk(false);
+      if (!quiet) flash(t('走进去出了点问题，已回到全屋'), 4200);
+    },
+    [flash],
+  );
+  // 回到全屋：走的时候攒下的事现在做（日光小图、外壳传来的户型图）
+  useEffect(() => {
+    walkRef.current = walk;
+    if (walk) return;
+    if (thumbsLater.current) {
+      thumbsLater.current = false;
+      scheduleThumbs();
+    }
+    const f = afterWalk.current;
+    afterWalk.current = null;
+    f?.();
+  }, [walk, scheduleThumbs]);
+  // 先在后台取好走进去那一块：点下去不用等下载
+  const walkFetched = useRef(false);
+  useEffect(() => {
+    if (!ready || showroom || demo || walkFetched.current) return undefined;
+    const tm = setTimeout(() => {
+      walkFetched.current = true;
+      loadWalk().catch(() => {});
+    }, 4000);
+    return () => clearTimeout(tm);
+  }, [ready, showroom, demo]);
 
   // ── 取景留白：告诉引擎四边各被面板挡住多少（engine.setInsets），模型就在没挡住的那块里居中、放得下 ──
   //   左：情绪面板（宽屏、展开时；窄屏它是临时盖上来的抽屉，不算）
@@ -1520,6 +1656,8 @@ export default function StudioApp() {
   const pickCase = (id, el) => applyCase(id, el);
   const rawCase = project?.caseId ? () => applyCase(project.caseId, null, { raw: true }) : null;
   const showBanner = !!project?.sample && !demo && !showroom;
+  // 「走进去」只在鸟瞰、什么都没打开时出现（演示、展厅、平面图编辑器、对照、弹窗、确认框都不出现；正在读客人的户型图也不出现）
+  const canWalk = !walk && !demo && !showroom && !planDraft && !modal && !ask && !ctx && banner.state !== 'reading' && (cmp.mode === 'off' || cmp.mode === 'home');
   const bannerEl = showBanner && (
     <SampleBanner
       wish={WISH}
@@ -1567,7 +1705,7 @@ export default function StudioApp() {
 
   return (
     <div
-      className={`studio panels-${panels} ${demo ? 'is-demo' : ''} ${showroom ? 'is-showroom' : ''} ${WISH ? 'is-wish' : ''} ${isEn() ? 'is-en' : ''} ${cmpOpen ? `cmp-${cmpLayout}-${cmp.mode}` : ''} ${phone && canCompare ? 'has-seg' : ''}`}
+      className={`studio panels-${panels} ${demo ? 'is-demo' : ''} ${showroom ? 'is-showroom' : ''} ${WISH ? 'is-wish' : ''} ${walk ? 'is-walk' : ''} ${isEn() ? 'is-en' : ''} ${cmpOpen ? `cmp-${cmpLayout}-${cmp.mode}` : ''} ${phone && canCompare ? 'has-seg' : ''}`}
       style={cmpOpen && cmpLayout === 'land' && cmp.mode === 'split' ? { '--cmp-x': `${Math.round(cmp.split * 1000) / 10}%` } : undefined}
     >
       <div className="stage3d" ref={host} />
@@ -1619,24 +1757,7 @@ export default function StudioApp() {
             onUndo={undo}
             onRedo={redo}
             // 许愿模式不下载概念图：存下来的图（底座写着客人名字）会留在展厅 iPad 的相册里，下一位客人一开相册就看得到
-            onShot={WISH ? null : async () => {
-              try {
-                const blob = await engine.current.snapshot(2);
-                const { stampSnapshot } = await import('./ui/stamp.js');
-                // 多层、只看某一层时：图注写上是哪一层
-                const fv = engine.current.floorView;
-                const floor = isMultiFloor(project.plan) && fv && fv !== 'all' && floorById(project.plan, fv) ? t(floorName(project.plan, fv)) : '';
-                const out = await stampSnapshot(blob, project, { floor });
-                const a = document.createElement('a');
-                a.href = URL.createObjectURL(out);
-                a.download = `WISH-${String(t(project.name) || 'concept').replace(/[\s/\\:*?"<>|]+/g, '-')}.png`;
-                a.click();
-                setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-                flash(t('概念图已下载'));
-              } catch {
-                flash(t('这台设备暂时存不了高清图，换「流畅」画质再试一次'), 4200);
-              }
-            }}
+            onShot={WISH ? null : shoot}
             onShare={WISH ? null : () => setModal('share')}
             onCompare={canCompare && !phone ? toggleCompare : null}
             compareOn={cmp.mode !== 'off' && cmp.mode !== 'home'}
@@ -1666,7 +1787,14 @@ export default function StudioApp() {
 
           {/* 底部这一列（从下往上）：材质栏 · 窄屏时的日光条 · 许愿模式说明 · 提示；宽屏时日光面板固定在右上 */}
           <div className="dock-wrap">
-            {toast && (
+            {/* 走进去：材质栏正上方、居中的金色胶囊（绝对定位：不占这一列的位置，取景留白一点不变） */}
+            {canWalk && (
+              <button type="button" className="walk-pill" data-walk="enter" data-sfx="open" onClick={enterWalk}>
+                <Icon name="walk" size={19} stroke={1.9} />
+                <span>{t('走进去')}</span>
+              </button>
+            )}
+            {toast && !walk && (
               <div className="glass s-toast" role="status" aria-live="polite">
                 {toast}
               </div>
@@ -1790,7 +1918,26 @@ export default function StudioApp() {
 
       {ask && <ConfirmSheet title={ask.title} body={ask.body} ok={ask.ok} onOk={() => ask.done(true)} onCancel={() => ask.done(false)} />}
 
-      {toast && (!ready || planDraft) && (
+      {walk && (
+        <WalkGuard onFail={walkFailed}>
+          <Suspense
+            fallback={
+              <div className="glass walk-wait">
+                <Icon name="spinner" size={17} />
+                <span role="status">{t('正在走进去…')}</span>
+                {/* 网慢、还没下载完：鸟瞰的界面、键盘都不在 → 这里随时回去 */}
+                <button type="button" className="s-btn ghost" onClick={() => walkFailed(true)}>
+                  {t('回到全屋')}
+                </button>
+              </div>
+            }
+          >
+            <WalkMode engine={engine.current} project={project} api={walkApi} wish={WISH} staff={staffView} onExit={exitWalk} />
+          </Suspense>
+        </WalkGuard>
+      )}
+
+      {toast && (!ready || planDraft || walk) && (
         <div className="glass s-toast floating" role="status" aria-live="polite">
           {toast}
         </div>

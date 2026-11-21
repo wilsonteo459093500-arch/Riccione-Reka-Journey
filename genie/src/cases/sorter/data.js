@@ -27,9 +27,13 @@ export function index() {
   const styleWords = [];
   for (const s of d.styles) for (const w of [s.id, s.zh, ...(s.words || [])]) styleWords.push({ w: lower(w), id: s.id });
   styleWords.sort((a, b) => b.w.length - a.w.length);
+  // 溪岸五大系列（id = src/shared/series.js 的 key）+ 只暗示风格、不算系列的词（自然线、庭前：seriesHints）
   const seriesWords = [];
   for (const s of d.series) for (const w of s.words || []) seriesWords.push({ w: lower(w), id: s.id });
   seriesWords.sort((a, b) => b.w.length - a.w.length);
+  const hintWords = [];
+  for (const s of d.seriesHints || []) for (const w of s.words || []) hintWords.push({ w: lower(w), id: s.id });
+  hintWords.sort((a, b) => b.w.length - a.w.length);
   const boards = [...d.boards].sort((a, b) => b.name.length - a.name.length);
   const roomWords = [];
   for (const r of d.rooms) for (const w of r.words) roomWords.push({ w: lower(w), room: r.room });
@@ -43,6 +47,7 @@ export function index() {
   IDX = {
     styleWords,
     seriesWords,
+    hintWords,
     boards,
     roomWords,
     viewWords,
@@ -50,6 +55,7 @@ export function index() {
     cities: new Set(d.cities.map(lower)),
     styleById: Object.fromEntries(d.styles.map((s) => [s.id, s])),
     seriesById: Object.fromEntries(d.series.map((s) => [s.id, s])),
+    hintById: Object.fromEntries((d.seriesHints || []).map((s) => [s.id, s])),
     familyById: Object.fromEntries(d.families.map((f) => [f.id, f])),
     specialById: Object.fromEntries(d.special.map((s) => [s.id, s])),
   };

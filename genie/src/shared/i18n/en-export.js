@@ -119,4 +119,7 @@ export default {
   '台面 · 外购': 'Worktop (sourced)',
   外购: 'sourced',
   '台面由我们配，向别的厂家采购（外购），没有 sAil 板材编号。': 'We supply the worktop but buy it in from another maker (sourced), so it has no sAil board code.',
+  // ── 建议客人用的溪岸系列（五大系列，brief.js seriesLine；docs/showcase/SERIES.md §4）。系列名字的英文在 en-cases.js ──
+  '建议客人用的溪岸系列：{0}': 'Suggested sAil series for this client: {0}',
+  '建议客人用的溪岸系列：{0}（也可以看看：{1}）': 'Suggested sAil series for this client: {0} (also worth a look: {1})',
 };

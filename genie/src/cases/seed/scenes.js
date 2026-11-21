@@ -27,6 +27,72 @@ export const SHOTS = {
 /** 场景 → 照片的房间标签（manifest images[].room） */
 export const ROOM_OF = { living: 'living', foyer: 'foyer', bedroom: 'bedroom', master: 'master', kitchen: 'kitchen', dining: 'dining', study: 'study', display: 'living', kids: 'kids' };
 
+/**
+ * 案例展示（docs/showcase/SPEC.md §5）：每个种子再多拍几张 —— 还没有照片的房间（只从案例自己的 rooms 里挑）+ 1–2 张「细节」特写
+ * （我们做的柜门 / 拉手 / 板材纹理 / 收口，不拍活动家具）。id 接着 03 往下编（= manifest images[].id，文件 NN-1600.webp / NN-480.webp）；
+ * shot = 下面 BUILD 里的场景，room = 照片的房间标签，detail = 细节特写。上面 SHOTS 那两张不动（重拍还是一模一样）。
+ */
+export const MORE = {
+  'seed-zen-condo': [
+    { id: '04', shot: 'kitchenAngle', room: 'kitchen' },
+    { id: '05', shot: 'masterWardrobe', room: 'master' },
+    { id: '06', shot: 'dining', room: 'dining' },
+    { id: '07', shot: 'detailShoe', room: 'foyer', detail: true },
+    { id: '08', shot: 'detailKitchen', room: 'kitchen', detail: true },
+  ],
+  'seed-nordic-studio': [
+    { id: '04', shot: 'kitchenPlain', room: 'kitchen' },
+    { id: '05', shot: 'detailDrawers', room: 'kitchen', detail: true },
+    { id: '06', shot: 'detailKitchen', room: 'kitchen', detail: true },
+  ],
+  'seed-urban-condo': [
+    { id: '04', shot: 'masterWardrobe', room: 'master' },
+    { id: '05', shot: 'studyCabinets', room: 'study' },
+    { id: '06', shot: 'detailKitchen', room: 'kitchen', detail: true },
+    { id: '07', shot: 'detailTvWall', room: 'living', detail: true },
+  ],
+  'seed-softluxe-semid': [
+    { id: '04', shot: 'kitchenIsland', room: 'kitchen' },
+    { id: '05', shot: 'masterWardrobe', room: 'master' },
+    { id: '06', shot: 'detailKitchen', room: 'kitchen', detail: true },
+    { id: '07', shot: 'detailTvWall', room: 'living', detail: true },
+  ],
+  'seed-forest-terrace': [
+    { id: '04', shot: 'family', room: 'family' },
+    { id: '05', shot: 'masterWardrobe', room: 'bedroom' },
+    { id: '06', shot: 'detailWardrobe', room: 'bedroom', detail: true },
+    { id: '07', shot: 'detailKitchen', room: 'kitchen', detail: true },
+  ],
+  'seed-wander-terrace': [
+    { id: '04', shot: 'dining', room: 'dining' },
+    { id: '05', shot: 'detailKitchen', room: 'kitchen', detail: true },
+    { id: '06', shot: 'detailTvWall', room: 'living', detail: true },
+  ],
+  'seed-library-semid': [
+    { id: '04', shot: 'dining', room: 'dining' },
+    { id: '05', shot: 'detailBookwall', room: 'study', detail: true },
+    { id: '06', shot: 'detailTvWall', room: 'living', detail: true },
+  ],
+  'seed-jazz-condo': [
+    { id: '04', shot: 'kitchenGlass', room: 'kitchen' },
+    { id: '05', shot: 'detailKitchen', room: 'kitchen', detail: true },
+    { id: '06', shot: 'detailTvWall', room: 'living', detail: true },
+  ],
+  'seed-architect-bungalow': [
+    { id: '04', shot: 'diningDisplay', room: 'dining' },
+    { id: '05', shot: 'kitchenIsland', room: 'kitchen' },
+    { id: '06', shot: 'studyCabinets', room: 'study' },
+    { id: '07', shot: 'detailDisplay', room: 'dining', detail: true },
+    { id: '08', shot: 'detailKitchen', room: 'kitchen', detail: true },
+  ],
+  'seed-cosy-townhouse': [
+    { id: '04', shot: 'family', room: 'family' },
+    { id: '05', shot: 'kitchenOpen', room: 'kitchen' },
+    { id: '06', shot: 'detailWardrobe', room: 'kids', detail: true },
+    { id: '07', shot: 'detailTvWall', room: 'family', detail: true },
+  ],
+};
+
 export const sceneId = (caseId, shot) => `case-${caseId}-${shot}`;
 
 // ───────────────────────── 光：按案例的情绪 / 时间 ─────────────────────────
@@ -263,12 +329,332 @@ function display(S, c, h) {
   lightFor(S, c, h.lib, outside);
 }
 
-const BUILD = { living, kitchen, dining, bedroom, master: bedroom, study, foyer, kids, display };
+// ───────────────────────── 案例展示：多拍的几张（MORE） ─────────────────────────
+
+/**
+ * 特写凑得很近：工作室的表面贴图（柜体 512、台面 1024）放大了会糊 → 这件柜子换成 2048 的同一种贴图。
+ * 克隆表面材质（参数完全一样），只换贴图；房间里别的东西照旧用表面材质。
+ */
+function sharpen(S, h, g, slots, R = 2048) {
+  for (const slot of slots) {
+    const id = S.caseMats?.[slot];
+    const from = h.lib.slot(slot);
+    if (!id || !from) continue;
+    const hi = h.pbr(id, { slot, R });
+    const to = from.clone();
+    to.map = hi.map;
+    to.normalMap = hi.normalMap;
+    to.roughnessMap = hi.roughnessMap;
+    to.aoMap = hi.roughnessMap;
+    to.userData = { ...from.userData, vgOwn: true };
+    g.traverse((o) => {
+      if (o.isMesh && o.material === from) o.material = to;
+    });
+  }
+  return g;
+}
+
+/** 烤漆的清漆层磨砂一点（只这件柜子）：窗口的天光 / 台灯是一个个抖动的点光源，镜面一样的清漆会把它们映成一串小亮点 */
+function satin(S, h, g, slot = 'cabinetry', rough = 0.55) {
+  const from = h.lib.slot(slot);
+  if (!from || !(from.clearcoat > 0)) return g;
+  const to = from.clone();
+  to.clearcoatRoughness = Math.max(from.clearcoatRoughness, rough);
+  to.userData = { ...from.userData, vgOwn: true };
+  g.traverse((o) => {
+    if (o.isMesh && o.material === from) o.material = to;
+  });
+  return g;
+}
+
+/** 夜里：没有太阳、没有天光，柜里的灯带亮着（盖房间之前先把天花板的自发光关掉：S.ceilingGlow = 0） */
+function nightOnly(S, lib) {
+  S.sunCfg = null;
+  S.sky({ intensity: 0 });
+  lib.setNight(1);
+  S.hemi = { sky: PALETTE.dusk, ground: PALETTE.shade, intensity: 0.14 };
+  S.scene.environmentIntensity = 0.06;
+  S.exposure = 1.25;
+}
+
+/** 直觉牌的厨房场景窗外固定是白天 → 夜里把窗外的画压暗 */
+function darkWindows(S, k = 0.05) {
+  S.scene.traverse((o) => {
+    if (o.isMesh && o.material?.isMeshBasicMaterial && o.material.map) o.material.color.setScalar(k);
+  });
+}
+
+/**
+ * 厨房（多拍的那张）：直觉牌同一个厨房，换成这个案例的材质。
+ * mode：false 干净台面 + 吊柜 · true 开放层板 · 'glass' 玻璃吊柜（柜里灯带）· 'island' 岛台 + 两盏吊灯；angle = 从右边斜着看整排柜子
+ */
+function kitchenMore(S, c, h, { mode = false, angle = false } = {}) {
+  const outside = outsideOf(c);
+  if (outside === 'night') S.ceilingGlow = 0;
+  K.kitchenScene(S, h, mode);
+  const m = mats(c);
+  S.caseMats = m;
+  S.slots(m);
+  const bz = -3.6;
+  if (angle) S.look({ pos: [1.75, 1.5, -0.55], target: [-0.55, 1.05, -3.35], fov: 50 });
+  if (outside === 'night') {
+    nightOnly(S, h.lib);
+    darkWindows(S);
+    // 天花板三盏筒灯照柜门和台面（台面高度不放点光：亮面的挡水板会把抖动的灯反射成一串小亮点）
+    for (const x of [-0.75, 0.3, 1.35]) S.spot({ pos: [x, 2.74, bz + 1.15], target: [x, 0.4, bz + 0.45], intensity: 5, angle: 0.62 });
+  } else if (outside === 'evening') {
+    K.lightWarmEvening(S);
+    S.exposure = 1.06;
+  } else if (outside === 'morning') K.lightCoolMorning(S);
+}
+
+/** 主卧（衣柜做主角）：和 bedroom 左右反过来 —— 床靠后墙偏左，右墙一整排到顶的衣柜（我们做的），镜头站在窗边看过去 */
+function masterWardrobe(S, c, h) {
+  const m = mats(c);
+  S.caseMats = m;
+  S.slots(m);
+  const R = { w: 4.4, d: 4.4, h: 2.8 };
+  const win = [{ wall: 'left', a: -2.9, b: -1.1, y0: 0.45, y1: 2.45, mullions: 1 }];
+  const outside = outsideOf(c);
+  if (outside === 'night') S.ceilingGlow = 0;
+  S.room({ ...R, windows: win, outside });
+  const bz = backOf(R);
+  const bx = -0.6;
+  const featureDifferent = m.feature && m.feature !== m.walls;
+  if (featureDifferent) S.item('featureWall', { w: 2.7, x: bx, z: bz + 0.03 });
+  const fz = featureDifferent ? 0.06 : 0;
+  S.item('rug', { w: 2.6, d: 2.0, x: bx, z: bz + 1.55 + fz });
+  S.item('bed', { w: 1.8, d: 2.1, x: bx, z: bz + 1.08 + fz });
+  S.item('nightstand', { x: bx - 1.2, z: bz + 0.24 + fz });
+  S.item('nightstand', { x: bx + 1.2, z: bz + 0.24 + fz });
+  artOn(S, { x: bx, y: 1.32, z: bz + 0.019 + (featureDifferent ? 0.056 : 0), w: 1.0, h: 0.5 });
+  // 衣柜：右墙，到顶（2.78m），正面朝房间；傍晚 / 夜里床头灯亮着：烤漆门磨砂一点（不然两盏灯会在门上映成两颗亮点）
+  const robe = S.item('wardrobe', { w: 2.6, h: 2.78, handle: c.furniture?.handle || 'none', x: R.w / 2 - 0.31, z: bz + 1.36, rot: -90 });
+  if (outside === 'night' || outside === 'evening') satin(S, h, robe);
+  S.item('curtains', { w: 2.0, h: 2.8, x: -R.w / 2 + 0.09, z: (win[0].a + win[0].b) / 2, rot: 90 });
+  if (outside === 'night' || outside === 'evening') S.lamp({ pos: [bx + 1.2, 0.9, bz + 0.26 + fz], intensity: 1.3, radius: 0.04 });
+  S.look({ pos: [-1.5, 1.42, -0.2], target: [0.75, 0.98, -3.5], fov: 52 });
+  lightFor(S, c, h.lib, outside, { lampAt: [bx - 1.2, 0.9, bz + 0.26 + fz] });
+}
+
+/** 书房（书房柜 · 书桌）：后墙一整排 —— 两边到顶的门柜、中间开放书架（都用柜体的材质），书桌在前面 */
+function studyCabinets(S, c, h) {
+  const m = mats(c);
+  S.caseMats = m;
+  S.slots(m);
+  const R = { w: 4.0, d: 3.8, h: 2.8 };
+  const win = [{ wall: 'left', a: -3.0, b: -1.0, y0: 0.5, y1: 2.45, mullions: 1 }];
+  const outside = outsideOf(c);
+  if (outside === 'night') S.ceilingGlow = 0;
+  S.room({ ...R, windows: win, outside });
+  const bz = backOf(R);
+  const handle = c.furniture?.handle || 'none';
+  // 左边的门柜正好映着窗：烤漆的清漆层磨砂一点（不然窗口的天光会在门上映成一串小亮点）
+  satin(S, h, S.item('wardrobe', { w: 1.0, h: 2.78, handle, x: -1.45, z: bz + 0.31 }));
+  S.item('bookshelf', { key: 'cabinetry', w: 1.8, h: 2.78, x: -0.05, z: bz + 0.18, seed: 5 });
+  satin(S, h, S.item('wardrobe', { w: 1.0, h: 2.78, handle, x: 1.35, z: bz + 0.31 }));
+  S.item('rug', { w: 2.2, d: 1.6, x: -0.05, z: bz + 1.6 });
+  S.item('desk', { w: 1.5, d: 0.7, x: -0.05, z: bz + 1.35, rot: 180 });
+  S.item('plant', { variant: 'tall', seed: 4, x: -1.6, z: bz + 1.35 });
+  S.item('curtains', { w: 2.2, h: 2.8, x: -R.w / 2 + 0.09, z: (win[0].a + win[0].b) / 2, rot: 90 });
+  S.look({ pos: [0.55, 1.42, -0.1], target: [-0.1, 1.15, -3.7], fov: 52 });
+  lightFor(S, c, h.lib, outside, { lampAt: [-0.6, 1.1, bz + 1.2] });
+}
+
+/** 起居厅：后墙一整面电视墙（墙板 + 悬浮电视柜），沙发背对着镜头 */
+function family(S, c, h) {
+  const f = c.furniture || {};
+  const m = mats(c);
+  S.caseMats = m;
+  S.slots(m);
+  const R = { w: 4.8, d: 4.6, h: 2.8 };
+  const win = [{ wall: 'left', a: -3.6, b: -1.4, y0: 0.32, y1: 2.5, mullions: 2 }];
+  const outside = outsideOf(c);
+  if (outside === 'night') S.ceilingGlow = 0;
+  S.room({ ...R, windows: win, outside });
+  const bz = backOf(R);
+  S.item('tvWall', { w: 3.4, x: 0.35, z: bz + 0.005 });
+  S.item('rug', { variant: f.rug === 'round' ? 'round' : 'rect', w: 2.6, d: 1.8, x: 0.4, z: bz + 2.15 });
+  S.item('coffeeTable', { variant: f.coffeeTable || 'round', w: 0.9, d: 0.55, x: 0.4, z: bz + 2.2 });
+  S.item('sofa', { variant: f.sofa === 'curvy' ? 'curvy' : 'classic', w: 2.3, d: 0.92, x: 0.6, z: bz + 3.3, rot: 180 });
+  S.item('plant', { variant: 'tall', seed: 9, x: -1.95, z: bz + 0.45 });
+  S.item('curtains', { w: 2.4, h: 2.8, x: -R.w / 2 + 0.09, z: (win[0].a + win[0].b) / 2, rot: 90 });
+  S.look({ pos: [-1.35, 1.48, -0.2], target: [0.55, 0.98, -4.3], fov: 50 });
+  lightFor(S, c, h.lib, outside, { lampAt: [-1.6, 1.36, bz + 1.0] });
+}
+
+/** 餐厅 + 玻璃展示柜（我们做的）：后墙两只到顶的展示柜，柜里灯带 */
+function diningDisplay(S, c, h) {
+  const f = c.furniture || {};
+  const m = mats(c);
+  S.caseMats = m;
+  S.slots(m);
+  const R = { w: 4.4, d: 4.2, h: 2.8 };
+  const win = [{ wall: 'left', a: -3.4, b: -1.2, y0: 0.35, y1: 2.5, mullions: 2 }];
+  const outside = outsideOf(c);
+  if (outside === 'night') S.ceilingGlow = 0;
+  S.room({ ...R, windows: win, outside });
+  const bz = backOf(R);
+  const cz = -2.35;
+  const cx = 0.15;
+  for (const x of [-0.4, 0.7]) S.item('displayCabinet', { w: 1.1, h: 2.5, x, z: bz + 0.22 });
+  for (const x of [-0.4, 0.7]) for (const y of [0.9, 1.5, 2.1]) S.lamp({ pos: [x, y, bz + 0.3], intensity: 0.2, radius: 0.02, shadow: false });
+  S.item('rug', { variant: 'rect', w: 2.8, d: 2.0, x: cx, z: cz });
+  S.item('diningTable', { variant: f.diningTable || 'rect', w: 1.9, d: 0.95, seats: 6, x: cx, z: cz });
+  S.item('pendant', { drop: 1.05, x: cx, z: cz });
+  S.item('plant', { variant: 'tall', seed: 3, x: 1.75, z: bz + 0.45 });
+  S.item('curtains', { w: 2.2, h: 2.8, x: -R.w / 2 + 0.09, z: (win[0].a + win[0].b) / 2, rot: 90 });
+  S.look({ pos: [1.3, 1.5, -0.2], target: [-0.05, 0.95, -3.0], fov: 47 });
+  lightFor(S, c, h.lib, outside);
+}
+
+// ── 细节特写（细节：柜门 / 拉手 / 板材纹理 / 收口）——镜头离柜子 0.6–0.9m，斜着看；那件柜子换上 2048 的贴图 ──
+
+/** 一间小房间 + 左墙的窗（特写都在这里拍） */
+function closeRoom(S, c, { w = 3.6, d = 3.4, win } = {}) {
+  const m = mats(c);
+  S.caseMats = m;
+  S.slots(m);
+  const outside = outsideOf(c);
+  if (outside === 'night') S.ceilingGlow = 0;
+  S.room({ w, d, h: 2.8, windows: [win || { wall: 'left', a: -d + 0.8, b: -0.8, y0: 0.45, y1: 2.45, mullions: 1 }], outside });
+  return { bz: -d, outside };
+}
+
+/**
+ * 特写的光：白天 / 傍晚只用窗（不放台灯 —— 烤漆门上会映出一小团抖动的灯）；
+ * 夜里：一盏灯 + 天花板的筒灯斜斜地扫过柜门（spots = [[x, z, 目标 x, 目标 y, 目标 z]…]）
+ */
+function closeLight(S, c, h, outside, { lampAt, spots = [] } = {}) {
+  if (outside !== 'night') return lightFor(S, c, h.lib, outside);
+  lightFor(S, c, h.lib, outside, { lampAt });
+  // 特写里黑色的门几乎把光全吃掉：比房间的夜景亮一点（曝光、环境、筒灯都加一点），门缝和台面前沿才看得出来
+  S.exposure = 1.6;
+  S.scene.environmentIntensity = 0.1;
+  for (const [x, z, tx, ty, tz] of spots) S.spot({ pos: [x, 2.74, z], target: [tx, ty, tz], intensity: 9, angle: 0.55 });
+}
+
+/** 衣柜门：门缝、手扣槽 / 长拉手、门板木纹或烤漆；右端空出来 —— 看得到侧板、门板厚度、踢脚 */
+function detailWardrobe(S, c, h) {
+  const { bz, outside } = closeRoom(S, c);
+  const handle = c.furniture?.handle || 'none';
+  const g = S.item('wardrobe', { w: 2.5, h: 2.78, handle, x: -0.25, z: bz + 0.31 });
+  sharpen(S, h, g, ['cabinetry', 'metal']);
+  // 对准一对门中间（x = 0：手扣槽 / 两根拉手），从窗这一边（左前方）斜着看 —— 烤漆门上不会映出窗口那一串抖动的灯。
+  // 免拉手的门往下一点：连门底、内退的踢脚和地板一起拍（只有一道缝的门板太空）
+  if (handle === 'none') S.look({ pos: [-0.8, 1.0, bz + 1.6], target: [0.05, 0.62, bz + 0.61], fov: 36 });
+  else S.look({ pos: [-0.75, 1.3, bz + 1.55], target: [0.05, 1.05, bz + 0.61], fov: 34 });
+  closeLight(S, c, h, outside, { lampAt: [-0.6, 1.3, bz + 1.5], spots: [[-0.3, bz + 1.0, -0.3, 0.8, bz + 0.62], [0.4, bz + 1.0, 0.4, 0.8, bz + 0.62]] });
+}
+
+/** 厨房：台面前沿、台面下的免拉手阴影槽、门板 */
+function detailKitchen(S, c, h) {
+  const { bz, outside } = closeRoom(S, c, { d: 3.2, win: { wall: 'left', a: -2.6, b: -1.3, y0: 1.0, y1: 2.35, mullions: 1 } });
+  const upper = (c.style?.axes?.storage ?? 50) >= 50 && !(c.style?.features || []).includes('openshelf');
+  const g = S.item('kitchenRun', { w: 3.0, h: 2.8, upper, sinkAt: 0.28, hobAt: null, x: 0.2, z: bz + 0.3 });
+  sharpen(S, h, g, ['cabinetry', 'countertop']);
+  S.look({ pos: [1.3, 1.22, bz + 1.2], target: [0.25, 0.7, bz + 0.45], fov: 40 });
+  closeLight(S, c, h, outside, { lampAt: [-1.2, 1.5, bz + 1.6], spots: [[0.3, bz + 0.95, 0.3, 0.5, bz + 0.6], [1.2, bz + 0.95, 1.2, 0.5, bz + 0.6]] });
+}
+
+/** 电视墙：悬浮电视柜的推弹门、门缝、底下的灯带，后面的墙板 */
+function detailTvWall(S, c, h) {
+  const { bz, outside } = closeRoom(S, c, { w: 4.0, d: 3.6 });
+  const g = S.item('tvWall', { w: 3.0, x: 0.2, z: bz + 0.005 });
+  sharpen(S, h, g, ['cabinetry', 'feature']);
+  S.look({ pos: [-0.85, 0.8, bz + 1.55], target: [0.25, 0.46, bz + 0.3], fov: 38 });
+  closeLight(S, c, h, outside, { lampAt: [-1.4, 1.3, bz + 1.6], spots: [[-0.4, bz + 0.6, -0.4, 0.9, bz + 0.05], [0.8, bz + 0.6, 0.8, 0.9, bz + 0.05], [0.2, bz + 1.3, 0.2, 0.4, bz + 0.45]] });
+}
+
+/** 书墙：层板前沿、侧板收口、书 */
+function detailBookwall(S, c, h) {
+  const { bz, outside } = closeRoom(S, c, { w: 4.0, d: 3.6 });
+  const g = S.item('bookshelf', { w: 2.6, h: 2.5, x: 0.2, z: bz + 0.18, seed: 7 });
+  sharpen(S, h, g, ['woodwork']);
+  S.look({ pos: [1.6, 1.35, bz + 1.15], target: [0.6, 1.1, bz + 0.3], fov: 42 });
+  closeLight(S, c, h, outside, { lampAt: [-0.6, 1.4, bz + 1.4], spots: [[1.0, bz + 0.7, 1.0, 1.0, bz + 0.2]] });
+}
+
+/** 鞋柜：下柜透气的竖凹槽门、中间开放台面（深色背板 + 灯带）、上柜的门 */
+function detailShoe(S, c, h) {
+  const { bz, outside } = closeRoom(S, c);
+  const g = S.item('shoeCabinet', { w: 2.0, h: 2.6, x: 0.1, z: bz + 0.19 });
+  sharpen(S, h, g, ['cabinetry', 'countertop', 'feature']);
+  S.look({ pos: [1.0, 1.3, bz + 1.3], target: [0.2, 1.02, bz + 0.3], fov: 42 });
+  closeLight(S, c, h, outside, { lampAt: [-0.8, 1.4, bz + 1.5], spots: [[0.3, bz + 0.7, 0.3, 0.6, bz + 0.2]] });
+}
+
+/** 厨房的灶下三抽：抽屉之间横向的手扣槽、门板，台面上的灶 */
+function detailDrawers(S, c, h) {
+  const { bz, outside } = closeRoom(S, c, { d: 3.2, win: { wall: 'left', a: -2.6, b: -1.3, y0: 1.0, y1: 2.35, mullions: 1 } });
+  const upper = (c.style?.axes?.storage ?? 50) >= 50 && !(c.style?.features || []).includes('openshelf');
+  const g = S.item('kitchenRun', { w: 3.0, h: 2.8, upper, sinkAt: null, hobAt: 0.55, x: 0.2, z: bz + 0.3 });
+  sharpen(S, h, g, ['cabinetry', 'countertop']);
+  // 灶在 x ≈ 0.35：从窗这一边（左前方）斜着看三只抽屉
+  S.look({ pos: [-0.55, 1.15, bz + 1.35], target: [0.4, 0.55, bz + 0.6], fov: 40 });
+  closeLight(S, c, h, outside, { lampAt: [-1.2, 1.5, bz + 1.6], spots: [[0.35, bz + 1.0, 0.35, 0.4, bz + 0.6]] });
+}
+
+/**
+ * 柜门玻璃磨砂一点点（和 sets.js 的 softGlass 一样的参数）：窗口的天光是一个个点光源，
+ * 特写里锐利的玻璃会把它们映成一颗颗小白点。只换这几件柜子的玻璃。
+ */
+function softGlass(h, ...gs) {
+  const from = h.lib.fixed.glass;
+  const to = from.clone();
+  to.roughness = 0.38;
+  to.specularIntensity = 0.55;
+  for (const g of gs) {
+    g.traverse((o) => {
+      if (o.isMesh && o.material === from) o.material = to;
+    });
+  }
+}
+
+/** 玻璃展示柜：细框玻璃门、拉手、层板灯带 */
+function detailDisplay(S, c, h) {
+  const { bz, outside } = closeRoom(S, c, { w: 4.0, d: 3.6 });
+  const g = S.item('displayCabinet', { w: 1.1, h: 2.5, x: 0.4, z: bz + 0.22 });
+  softGlass(h, g, S.item('displayCabinet', { w: 1.1, h: 2.5, x: -0.7, z: bz + 0.22 }));
+  for (const x of [-0.7, 0.4]) for (const y of [0.9, 1.5, 2.1]) S.lamp({ pos: [x, y, bz + 0.3], intensity: 0.2, radius: 0.02, shadow: false });
+  sharpen(S, h, g, ['cabinetry', 'metal']);
+  S.look({ pos: [0.75, 1.4, bz + 1.35], target: [0.0, 1.2, bz + 0.42], fov: 42 });
+  closeLight(S, c, h, outside, { lampAt: [-1.2, 1.4, bz + 1.6] });
+}
+
+const BUILD = {
+  living,
+  kitchen,
+  dining,
+  bedroom,
+  master: bedroom,
+  study,
+  foyer,
+  kids,
+  display,
+  // 案例展示多拍的（MORE）
+  kitchenPlain: (S, c, h) => kitchenMore(S, c, h),
+  kitchenAngle: (S, c, h) => kitchenMore(S, c, h, { angle: true }),
+  kitchenIsland: (S, c, h) => kitchenMore(S, c, h, { mode: 'island' }),
+  kitchenGlass: (S, c, h) => kitchenMore(S, c, h, { mode: 'glass' }),
+  kitchenOpen: (S, c, h) => kitchenMore(S, c, h, { mode: true }),
+  masterWardrobe,
+  studyCabinets,
+  family,
+  diningDisplay,
+  detailWardrobe,
+  detailKitchen,
+  detailTvWall,
+  detailBookwall,
+  detailDisplay,
+  detailShoe,
+  detailDrawers,
+};
 
 /** 所有种子的场景：{ 'case-<id>-<shot>': (S, h) => … }（stage.js 的 VG.register 认这个形状） */
 export const SCENES = {};
 for (const c of MANIFEST.cases.filter((x) => x.kind === 'concept')) {
-  for (const shot of SHOTS[c.id] || ['living']) {
+  for (const shot of [...(SHOTS[c.id] || ['living']), ...(MORE[c.id] || []).map((x) => x.shot)]) {
     SCENES[sceneId(c.id, shot)] = (S, h) => {
       S.size = [1600, 1200];
       S.outs = [

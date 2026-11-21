@@ -18,7 +18,8 @@ export default function SorterNote({ id }) {
     };
   }, [id]);
   if (!n) return null;
-  const series = (n.series || []).map((s) => DATA.series.find((x) => x.id === s)).filter(Boolean);
+  // 系列：现在记的是五大系列的 key；以前的版本记的是中文名字（「骨骼线」「空山」「织」）也认；「自然线」「庭前」不是系列，不显示
+  const series = (n.series || []).map((s) => DATA.series.find((x) => x.id === s || x.zh === s)).filter(Boolean);
   const boards = n.boards || [];
   const city = n.city ? (isEn() ? DATA.cityEn?.[n.city] || n.city : n.city) : '';
   return (

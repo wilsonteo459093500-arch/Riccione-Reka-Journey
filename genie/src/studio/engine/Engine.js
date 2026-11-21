@@ -177,6 +177,8 @@ export class Engine {
     // 出射光进半精度 HDR 缓冲之前先洗干净（NaN / Inf 会让后期链整屏变透明，见 hdrguard.js）
     patchHdrChunks();
     this.demo = false;
+    // 走进去：walk/controller.js 管这个对象（{ fov, vo, ev, pr }），引擎只读；null = 鸟瞰（setWalk）
+    this.walk = null;
     this._prOverride = 0;
     // 界面面板挡住的边（CSS 像素）：模型在没被挡住的那块里居中、放得下（setInsets）
     this.insets = { left: 0, right: 0, top: 0, bottom: 0 };
@@ -316,10 +318,10 @@ export class Engine {
     this._raf = requestAnimationFrame(this.loop);
   }
 
-  /** 现在该用的像素比：画质档的上限 × 设备；截图时临时调高；演示模式降一点（长边约 1920 像素就够电视看） */
+  /** 现在该用的像素比：画质档的上限 × 设备（走进去可以再压一档：walk.pr）；截图时临时调高；演示模式降一点（长边约 1920 像素就够电视看） */
   targetPR() {
     if (this._prOverride) return this._prOverride;
-    const base = Math.min(QUALITY[this.quality].pr, devicePixelRatio || 1);
+    const base = Math.min(QUALITY[this.quality].pr, devicePixelRatio || 1, this.walk?.pr || 9);
     if (!this.demo) return base;
     const long = Math.max(this.container.clientWidth, this.container.clientHeight) || 1;
     return Math.max(Math.min(0.75, base), Math.min(base, 1920 / long));
@@ -588,13 +590,15 @@ export class Engine {
     }
   }
 
-  /** 把主点偏移 this.vo 套到相机上：画布是一张更大的虚拟画面里的一扇窗，焦距（像素）不变 */
+  /** 把主点偏移 this.vo 套到相机上：画布是一张更大的虚拟画面里的一扇窗，焦距（像素）不变。走进去：用 walk 的主点和视角 */
   applyView() {
-    setPrincipal(this.camera, this.container.clientWidth || 1, this.container.clientHeight || 1, this.vo.x, this.vo.y);
+    const w = this.walk;
+    setPrincipal(this.camera, this.container.clientWidth || 1, this.container.clientHeight || 1, w ? w.vo.x : this.vo.x, w ? w.vo.y : this.vo.y, w ? w.fov : BASE_FOV);
   }
 
-  /** 镜头是不是还停在上次 frame() 对好的位置（或正在飞过去） */
+  /** 镜头是不是还停在上次 frame() 对好的位置（或正在飞过去）；走进去的时候永远不算（不重新取景） */
   isFramed() {
+    if (this.walk) return false;
     if (this.tween) return true;
     const f = this._framed;
     if (!f) return false;
@@ -670,8 +674,13 @@ export class Engine {
     }
   }
 
-  /** 把灯池放到（只在「这一层」）：每个房间里最高的那盏灯（落地灯 / 吊灯优先）→ 没有灯的房间放一盏吸顶的柔光 → 剩下的灯具 */
-  placeRoomLights() {
+  /**
+   * 把灯池放到（只在「这一层」）：每个房间里最高的那盏灯（落地灯 / 吊灯优先）→ 没有灯的房间放一盏吸顶的柔光 → 剩下的灯具。
+   * 房间按面积排（大的先拿到灯）；near = { x, z }（走进去：人在哪）就按离那里多远排（近的先拿到）。
+   * 走着的时候不带参数（换家具、换楼层）= 上一次的 near，灯不会跳回按面积排。
+   */
+  placeRoomLights(near = this.walk && this._litAt) {
+    if (near) this._litAt = near;
     if (!this.roomLights.length || !this.rooms) return;
     const bulbMat = this.lib.fixed.bulb;
     const bulbs = [];
@@ -690,7 +699,8 @@ export class Engine {
     const inRoom = (r, q) => Math.abs(q.x - r.x) <= r.w / 2 + 0.05 && Math.abs(q.z - r.z) <= r.d / 2 + 0.05;
     const list = [];
     // 户外（阳台、车廊 / 前院）没有天花板，不放吸顶的柔光
-    const rooms = [...this.rooms].filter((r) => !isOutdoor(r.type)).sort((a, b) => b.area - a.area);
+    const d2 = (r) => (r.x - near.x) ** 2 + (r.z - near.z) ** 2;
+    const rooms = [...this.rooms].filter((r) => !isOutdoor(r.type)).sort(near ? (a, b) => d2(a) - d2(b) : (a, b) => b.area - a.area);
     for (const r of rooms) {
       const mine = bulbs.filter((b) => !b.used && inRoom(r, b.pos)).sort((a, b) => b.pos.y - a.pos.y);
       if (mine[0]) list.push(lamp(mine[0]));
@@ -912,6 +922,8 @@ export class Engine {
     this.placeRoomLights();
     if (this.selected && !this.items.has(this.selected)) this.select(null);
     this.updateSelBox();
+    // 走进去时影子只在有变化时重画（setWalk）；鸟瞰每帧都画，这一下不起作用
+    this.renderer.shadowMap.needsUpdate = true;
     this.dirty = true;
   }
 
@@ -1083,7 +1095,9 @@ export class Engine {
     neutralColor(d.hemiGround, 0.5, this.hemi.groundColor);
     this.hemi.intensity = d.hemiIntensity;
     this.fill.color.set(d.fillColor || PALETTE.stream);
-    this.renderer.toneMappingExposure = d.exposure;
+    // 走进去：曝光再乘 walk.ev（屋里比鸟瞰暗）；太阳动了，影子重画（走进去时不是每帧都画）
+    this.renderer.toneMappingExposure = d.exposure * (this.walk?.ev || 1);
+    this.renderer.shadowMap.needsUpdate = true;
     // IBL：同一档（半小时）只建一次（上下文丢失时先不建，恢复后 restoreGPU 会重画）
     if (!this.contextLost && (this.envKey !== d.envKey || !this.scene.environment)) {
       this.scene.environment = this.env.get(d);
@@ -1181,6 +1195,8 @@ export class Engine {
    * 「全部放低」照放低；展厅演示（一直绕着转、没有楼层按钮）照切开，让人看得见楼上屋里。单层：照墙按钮。
    */
   activeWallMode() {
+    // 走进去：人在屋里，墙全立
+    if (this.walk) return 'up';
     return this.wallMode === 'cut' && this.floorView === 'all' && this.floors.length > 1 && !this.demo ? 'up' : this.wallMode;
   }
 
@@ -1208,7 +1224,8 @@ export class Engine {
     this.floorView = view;
     this.activeIdx = idx;
     this.floors.forEach((F, i) => {
-      const hide = i > idx;
+      // 走进去：楼上不藏（人在屋里、天花盖着；楼梯口往上看得见楼上）
+      const hide = !this.walk && i > idx;
       if (hide !== F.hidden) {
         // 藏起来的楼层：墙先全部立起来（影子是整面墙的），再整层换到「只投影」的那一层（HIDDEN_LAYER）
         if (hide) applyCutaway(F.wallSets, null, 'up');
@@ -1229,8 +1246,8 @@ export class Engine {
     this.wallH = F.ceil;
     this.beams.setWindows(F.windows);
     this.setupWindowLights(F.windows);
-    // 楼上藏起来、还在挡太阳：这一层被盖住多少，白天的环境光就补多少（COVER）
-    this.coverFrac = idx < n - 1 ? F.cover || 0 : 0;
+    // 楼上藏起来、还在挡太阳：这一层被盖住多少，白天的环境光就补多少（COVER）；走进去 = 整个被天花盖住
+    this.coverFrac = this.walk ? 1 : idx < n - 1 ? F.cover || 0 : 0;
     this.applyNightKey();
     this.applyWindowLights();
     this.applyBeams();
@@ -1245,7 +1262,9 @@ export class Engine {
     this.collectPickables();
     this.computeAnchors();
     this.placeRoomLights();
-    if (!instant && this.center && !this.demo) {
+    this.renderer.shadowMap.needsUpdate = true;
+    // 走进去：镜头归走路的控制器管，这里不动它
+    if (!instant && this.center && !this.demo && !this.walk) {
       if (framed) this.frame(this.lastView, true, FLOOR_TWEEN);
       else {
         // 用户自己转过 / 缩放过：角度和远近不变，只把镜头和目标点一起平移到这一层的高度
@@ -1315,9 +1334,9 @@ export class Engine {
     }
   }
 
-  /** 按现在看的楼层 + 镜头远近，开关楼下被盖住的家具（markCovered） */
+  /** 按现在看的楼层 + 镜头远近，开关楼下被盖住的家具（markCovered）；走进去时镜头再近也算「远」（楼下的看不见） */
   applyCovered() {
-    const far = !this._showAll && !this._near;
+    const far = this.walk || (!this._showAll && !this._near);
     let n = 0;
     for (const [id, g] of this.items) {
       const F = this.floorRec(this.itemData.get(id));
@@ -1386,6 +1405,9 @@ export class Engine {
         F.ceiling.visible = this.ceilingsOn;
         F.ceiling.castShadow = this.ceilingsOn;
       }
+    // 盖上的天花也点得到（挡住楼上）；影子重画
+    this.collectPickables();
+    this.renderer.shadowMap.needsUpdate = true;
     this.dirty = true;
   }
 
@@ -1402,6 +1424,34 @@ export class Engine {
     };
   }
 
+  /**
+   * 进 / 出走进去：w = { fov, vo:{x,y}, ev, pr }（walk/controller.js 管、引擎只读）| null = 回到鸟瞰。
+   * 走着的时候：OrbitControls 停（镜头归控制器）、影子只在有变化时重画（iPad 省电）、没有景深、不选不悬停、
+   * 曝光 × ev、楼下被盖住的家具照藏、墙全立、不重新取景。null：每个开关都回到鸟瞰原来的路。
+   */
+  setWalk(w) {
+    this.walk = w || null;
+    this._litAt = null;
+    this.tween = null;
+    this.controls.enabled = !w;
+    const sm = this.renderer.shadowMap;
+    sm.autoUpdate = !w;
+    sm.needsUpdate = true;
+    if (this.dof) this.dof.enabled = !w;
+    if (w) {
+      this.select(null);
+      this.hovered = null;
+      this.hovBox.visible = false;
+      this.cb.onHover?.(null);
+    }
+    if (this.day) this.renderer.toneMappingExposure = this.day.exposure * (w?.ev || 1);
+    this.lastCut = null;
+    this.applyCovered();
+    if (this.applyPixelRatio()) this.resize();
+    else this.applyView();
+    this.dirty = true;
+  }
+
   // ───────────────────────── 相机 ─────────────────────────
 
   /**
@@ -1411,6 +1461,8 @@ export class Engine {
    * 房子大约占满电视画面的 65%（最宽的角度 ~80%）。
    */
   frame(view = 'iso', animate = true, dur = 900) {
+    // 走进去：镜头归走路的控制器管（退出后由它按原样放回 / 重新取景）
+    if (this.walk) return;
     if (view !== 'demo') this.lastView = view;
     const v = VIEWS[view] || VIEWS.iso;
     this.updateViewTarget(!animate);
@@ -1634,6 +1686,8 @@ export class Engine {
       this.cb.onDragCancel?.(d.id);
     };
     const onDown = (e) => {
+      // 走进去：指针归走路的控制器（不选、不拖）
+      if (this.walk) return;
       if (down) {
         // 第二根手指（或另一支笔）：交给 OrbitControls 做双指缩放 / 平移
         if (e.pointerId !== down.pointerId) cancelDrag();
@@ -1684,9 +1738,11 @@ export class Engine {
         }
         return;
       }
-      if (e.buttons || e.pointerType === 'touch' || this.demo) return;
+      if (e.buttons || e.pointerType === 'touch' || this.demo || this.walk) return;
       cancelAnimationFrame(hoverRaf);
       hoverRaf = requestAnimationFrame(() => {
+        // 排队的这一下赶上刚走进去：不悬停
+        if (this.walk) return;
         const id = this.itemAt(e.clientX, e.clientY);
         if (id !== this.hovered) {
           this.hovered = id;
@@ -2043,8 +2099,8 @@ export class Engine {
       this.applyNightKey();
       this.dirty = true;
     }
-    // 传 dt：自动环绕按真实时间转，帧率高低都一样快
-    const moved = this.controls.update(dt);
+    // 传 dt：自动环绕按真实时间转，帧率高低都一样快。走进去：镜头归控制器（停了的 OrbitControls 照样会甩惯性，不调）
+    const moved = this.walk ? false : this.controls.update(dt);
     if (this.lib.pulse(t)) this.dirty = true;
     if (moved) this.dirty = true;
     // 镜头拉近 / 拉远：楼下被盖住的家具开 / 关（多层才有）。不只看 OrbitControls 说动了没有：
@@ -2058,7 +2114,8 @@ export class Engine {
       let changed = false;
       const mode = this.activeWallMode();
       this.floors.forEach((F, i) => {
-        if (i > this.activeIdx) return;
+        // 走进去：楼上没藏（setFloorView），墙也全立
+        if (i > this.activeIdx && !this.walk) return;
         if (applyCutaway(F.wallSets, camDir, i === this.activeIdx ? mode : 'up')) changed = true;
       });
       if (changed) {
@@ -2070,7 +2127,8 @@ export class Engine {
     }
     this.renderNow();
     this._frames = (this._frames || 0) + 1;
-    if (!this.demo) {
+    // 走进去：材质标签、选择条都藏着，不每帧打扰 React
+    if (!this.demo && !this.walk) {
       this.emitAnchors();
       this.emitSelMove();
     }
@@ -2129,18 +2187,18 @@ function isVisible(o) {
 
 /**
  * 主点偏移（ox, oy 像素，+ = 往右 / 往下）套到一台透视相机上：W×H 的画面是一张更大的虚拟画面里的一扇窗，焦距（像素）不变。
- * 引擎的主相机（面板留白）和日光小图的相机（给底下的字留白）都用它。
+ * 引擎的主相机（面板留白）和日光小图的相机（给底下的字留白）都用它。base：没有偏移时的竖直视角（走进去用 walk.fov）。
  */
-function setPrincipal(cam, W, H, ox, oy) {
+function setPrincipal(cam, W, H, ox, oy, base = BASE_FOV) {
   if (Math.abs(ox) < 0.25 && Math.abs(oy) < 0.25) {
-    cam.fov = BASE_FOV;
+    cam.fov = base;
     cam.aspect = W / H;
     cam.clearViewOffset();
     return;
   }
   const fw = W + 2 * Math.abs(ox);
   const fh = H + 2 * Math.abs(oy);
-  cam.fov = THREE.MathUtils.radToDeg(2 * Math.atan((Math.tan(THREE.MathUtils.degToRad(BASE_FOV) / 2) * fh) / H));
+  cam.fov = THREE.MathUtils.radToDeg(2 * Math.atan((Math.tan(THREE.MathUtils.degToRad(base) / 2) * fh) / H));
   cam.setViewOffset(fw, fh, Math.abs(ox) - ox, Math.abs(oy) - oy, W, H);
 }
 

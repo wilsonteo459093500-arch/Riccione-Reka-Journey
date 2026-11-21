@@ -87,8 +87,28 @@ export class Session {
     this._applyEdits();
     for (const g of this.groups) this._repick(g);
     this._crossCheck();
+    this._restampOld();
     this.changed(true);
     return hit;
+  }
+
+  /**
+   * 以前的版本存的项目（saved 里没有 keys —— 不知道存的是哪几张）、员工也没点过照片的：那时候存的是旧规则自动挑的。
+   * 挑的规则后来变了（一个项目最多 18 张），自动挑的结果不一样 → 指纹对不上，每个都会变成「改过，要再存」、被一起重新存。
+   * 所以这种项目的指纹不算挑的照片，重新盖一次章（只盖一次：nopick）：案例库里还是那时候存的照片，员工再改什么才算改过。
+   */
+  _restampOld() {
+    let n = 0;
+    for (const g of this.groups) {
+      const d = this.dec.get(g.id);
+      if (!d?.saved || Array.isArray(d.saved.keys) || d.saved.nopick || d.picked != null) continue;
+      const next = { ...d, saved: { ...d.saved, nopick: true } };
+      this.dec.set(g.id, next);
+      next.saved.sig = this.sigOf(g);
+      n++;
+    }
+    if (n) this.saveSoon();
+    return n;
   }
 
   saveSoon() {
@@ -176,6 +196,7 @@ export class Session {
       if (g.flat) {
         this._regroupFlat(g.id);
         this._applyEdits();
+        this._restampOld(); // 按时间分出来的项目这时候才有（上次存过的也要盖章）
       } else this._repick(g);
     }
     if (--this._inflight <= 0) {
@@ -248,7 +269,11 @@ export class Session {
     const m = this._doMerge(a, b);
     const da = this.dec.get(aId) || {};
     const db = this.dec.get(bId) || {};
-    if (da.picked || db.picked) this.dec.set(aId, { ...da, picked: [...new Set([...this.pickedOf(a), ...(db.picked || [])])] });
+    const own = (x) => x.picked ?? x.saved?.keys; // 员工点过的 / 存进案例库的那一份（都没有 = 自动挑）
+    if (own(da) || own(db)) this.dec.set(aId, { ...da, picked: [...new Set([...this.pickedOf(a), ...(own(db) || [])])] });
+    // b 那边标好的房间 / 细节也带过来（a 自己标过的优先）
+    for (const f of ['rooms', 'detail']) if (db[f]) this.dec.set(aId, { ...this.decision(aId), [f]: { ...db[f], ...(this.decision(aId)[f] || {}) } });
+    if (db.rooms || db.detail) this._repick(m);
     this.dec.delete(bId);
     this.saveSoon();
     this.changed(true);
@@ -279,7 +304,7 @@ export class Session {
     const photos = g.keys.map((k) => {
       const f = this.files.get(k);
       const a = this.an.get(k) || null;
-      return { key: k, a, room: this.dec.get(g.id)?.rooms?.[k] || f?.room || null, view: f?.view || null, t: a?.dto ?? f?.mtime ?? null };
+      return { key: k, a, room: this.dec.get(g.id)?.rooms?.[k] || f?.room || null, view: f?.view || null, detail: this.detailOf(g, k), t: a?.dto ?? f?.mtime ?? null };
     });
     const crossDup = new Set(g.keys.filter((k) => this.cross.dupPhoto.has(k)));
     this.auto.set(g.id, autoPick(photos, { crossDup }));
@@ -320,7 +345,7 @@ export class Session {
     const d = { ...this.decision(gid), ...patch };
     this.dec.set(gid, d);
     this._touch(gid);
-    if (patch.rooms) {
+    if (patch.rooms || patch.detail) {
       const g = this.groups.find((x) => x.id === gid);
       if (g) this._repick(g);
     }
@@ -347,11 +372,16 @@ export class Session {
     rest.sort((x, y) => (q.get(y) || 0) - (q.get(x) || 0));
     return [...picked, ...rest];
   }
+  /**
+   * 挑好的照片（封面第一）：员工点过的 → 存进案例库的那一份（saved.keys）→ 自动挑的。
+   * 存过的项目照样是存的那几张：自动挑的规则以后变了，也不会变成「改过，要再存」（员工自己改了照片才算）。
+   */
   pickedOf(g) {
     const d = this.decision(g.id);
-    const auto = this.auto.get(g.id)?.picked || [];
-    const list = (d.picked ?? auto).filter((k) => g.keys.includes(k));
-    const cover = this.coverOf(g, list);
+    const frozen = d.picked == null && Array.isArray(d.saved?.keys);
+    const list = (d.picked ?? (frozen ? d.saved.keys : this.auto.get(g.id)?.picked) ?? []).filter((k) => g.keys.includes(k));
+    // 存的那一份：封面就是存的时候的第一张（自动挑的封面以后变了也不换）
+    const cover = frozen ? (d.cover && list.includes(d.cover) ? d.cover : list[0] || null) : this.coverOf(g, list);
     return cover ? [cover, ...list.filter((k) => k !== cover)] : list;
   }
   coverOf(g, list = null) {
@@ -364,6 +394,18 @@ export class Session {
   }
   roomOf(g, k) {
     return this.decision(g.id).rooms?.[k] || this.files.get(k)?.room || null;
+  }
+  /** 这张是不是细节特写：员工 / AI 标过的（dec.detail[k] = true / false）优先，没标就看文件名 / 子文件夹 */
+  detailOf(g, k) {
+    const v = this.decision(g.id).detail?.[k];
+    if (typeof v === 'boolean') return v;
+    const f = this.files.get(k);
+    return !!(f?.detail || f?.view === 'detail');
+  }
+  /** 员工改「是不是细节特写」：记下来（是 / 不是都记 —— 之后 AI 预填不会再改员工标过的） */
+  setDetail(gid, k, on) {
+    if (!this.groups.some((x) => x.id === gid)) return;
+    this.setDecision(gid, { detail: { ...(this.decision(gid).detail || {}), [k]: !!on } });
   }
   /** 这个项目值不值得先做（pick.js projectScore）：照片好不好、够不够、拍到几个房间 */
   scoreOf(g) {
@@ -409,7 +451,11 @@ export class Session {
   }
   sigOf(g) {
     const d = this.decision(g.id);
-    return hashKey(JSON.stringify([this.pickedOf(g), this.stylesOf(g), d.type, d.bedrooms, d.consent, d.rooms, d.aiMats]));
+    // 以前的版本存的、员工之后没点过照片：挑的照片不算进指纹（_restampOld）
+    const picks = d.saved?.nopick && d.picked == null ? null : this.pickedOf(g);
+    const parts = [picks, this.stylesOf(g), d.type, d.bedrooms, d.consent, d.rooms, d.aiMats];
+    if (d.detail && Object.keys(d.detail).length) parts.push(d.detail); // 没标过细节 = 和以前一样的指纹（存过的不会都变成「改过」）
+    return hashKey(JSON.stringify(parts));
   }
 
   counts() {
@@ -428,7 +474,9 @@ export class Session {
   // ───────────── 存进案例库 / 导出 ─────────────
   /**
    * 把「好了」的项目压缩照片、存成草稿案例。onStep({ i, n, photos, done }) 报进度。
-   * → { saved:[caseId], skipped:[{ gid, why }] }
+   * 再存一次（存过的项目）：员工在案例库里做的（上架、业主同意、说明、细节、顺序、封面、自己加的照片、每个房间做了什么…）都留着。
+   * → { saved:[caseId], skipped:[{ gid, why }], error? }（存不进去：why ['space'] 空间满了 / ['error']，error = 那个错误；
+   *   空间满了就不再存后面的项目；已经存好的照样记下来）
    */
   async saveToLibrary(gids, { onStep } = {}) {
     const out = { saved: [], skipped: [] };
@@ -462,29 +510,67 @@ export class Session {
         continue;
       }
       const id = d.saved?.caseId || caseIdFor(g.from || g.split || g.merged ? `${g.dir}#${g.id}` : g.dir, g.kind);
-      const prev = await C.getCase(id);
       const picked = this.pickedOf(g);
-      const shots = [];
+      const written = []; // 这次写进去的照片编号（存不进去的时候，没有案例指着的要删掉）
+      let prev = null;
+      let c = null;
+      let saved = null;
       let bytes = 0;
-      for (let j = 0; j < picked.length; j++) {
-        const k = picked[j];
-        const f = this.files.get(k);
-        const blobs = all[j];
-        const imgId = String(j + 1).padStart(2, '0');
-        // 没标的就空着（不再把封面猜成客厅）
-        const room = this.roomOf(g, k) || null;
-        const image = await C.putImage(id, null, { id: imgId, room: room || '', kind: room === 'plan3d' ? 'plan3d' : f.view === 'render' ? 'render' : 'photo', blobs });
-        bytes += blobs[1600]?.size || 0;
-        shots.push({ key: k, room, view: f.view, image });
+      try {
+        prev = await C.getCase(id);
+        // 上次存的时候每张照片的编号（01、02…）→ 同一张照片再存一次，员工在案例库里写的说明 / 替代文字 / 细节 / 顺序留着
+        const before = new Map((d.saved?.keys || []).map((k, j) => [k, prev?.images?.find((im) => im.id === String(j + 1).padStart(2, '0')) || null]));
+        const shots = [];
+        for (let j = 0; j < picked.length; j++) {
+          const k = picked[j];
+          const f = this.files.get(k);
+          const blobs = all[j];
+          const imgId = String(j + 1).padStart(2, '0');
+          // 没标的就空着（不再把封面猜成客厅）
+          const room = this.roomOf(g, k) || null;
+          const pv = before.get(k) || null;
+          // detail：细节特写（客人那边有「细节」一栏）。整理工具自己说了算的（员工 / AI 标过、文件名说是细节）才盖过
+          // 员工在案例库里标的；没说 → 上次存的那张怎么标就怎么标
+          const v = d.detail?.[k];
+          const said = typeof v === 'boolean' ? v : f.detail || f.view === 'detail' ? true : undefined;
+          written.push(imgId);
+          const image = await C.putImage(id, null, { id: imgId, room: room || '', kind: room === 'plan3d' ? 'plan3d' : f.view === 'render' ? 'render' : 'photo', blobs, detail: said ?? !!pv?.detail });
+          bytes += blobs[1600]?.size || 0;
+          shots.push({ key: k, room, view: f.view, detail: said, image, prev: pv });
+        }
+        // 员工在案例库里自己加的照片（编号不是 01、02… 的）：原样留着
+        for (const im of prev?.images || []) if (!/^\d+$/.test(im.id)) shots.push({ key: null, keep: true, image: im, prev: im });
+        if (prev?.images?.length) {
+          // 员工在案例库里排过的顺序：上次也在的照片按案例库的先后，新挑的接在后面（和 import-cases 一样）
+          const at = new Map(prev.images.map((im, n) => [im.id, n]));
+          const rank = (x) => (x.prev && at.has(x.prev.id) ? at.get(x.prev.id) : prev.images.length);
+          shots.sort((a, b) => rank(a) - rank(b));
+          // 封面：整理工具里没换过封面 → 案例库里员工挑的封面留着（那张还在的话）
+          const pc = prev.images.find((im) => im.cover)?.id;
+          const top = (pc && d.saved?.keys?.[0] === picked[0] && shots.find((x) => x.prev?.id === pc)) || shots.find((x) => x.key === picked[0]) || shots[0];
+          for (const x of shots) x.cover = x === top;
+        }
+        // 「业主同意」：上次存了以后在整理工具里改过（勾上 / 拿掉）才算数；没改过 → 案例库里员工勾的 / 拿掉的留着
+        const consent = d.saved && typeof d.saved.consent === 'boolean' && !!d.consent === d.saved.consent ? undefined : d.consent;
+        const pal = this.paletteOf(g);
+        c = caseFromGroup(g, { ...d, consent, styles: this.stylesOf(g) }, shots, pal, { prev: prev ? { ...prev, id } : { id } });
+        if (d.aiMats) c.materials = { ...c.materials, ...d.aiMats };
+        saved = await C.saveCase(c);
+      } catch (e) {
+        // 存不进去（多半是这台设备的照片空间满了）：这个项目这次写进去、又没有案例指着的照片删掉（不白占空间）
+        const used = new Set((prev?.images || []).map((im) => im.id));
+        for (const imgId of written) if (!used.has(imgId)) await C.dropImage(id, imgId).catch(() => {});
+        const space = C.isQuotaError(e);
+        out.skipped.push({ gid: g.id, why: [space ? 'space' : 'error'] });
+        out.error = e;
+        this.changed();
+        if (space) break; // 空间满了：后面的项目也存不进去
+        continue;
       }
-      // 上次存的比这次多 → 多出来的照片删掉
-      for (const im of prev?.images || []) if (im.device && !shots.some((x) => x.image.id === im.id)) await C.dropImage(id, im.id);
-      const pal = this.paletteOf(g);
-      const c = caseFromGroup(g, { ...d, styles: this.stylesOf(g) }, shots, pal, { prev: prev ? { ...prev, id } : { id } });
-      if (d.aiMats) c.materials = { ...c.materials, ...d.aiMats };
-      const saved = await C.saveCase(c);
+      // 上次存的比这次多 → 多出来的照片删掉（案例存好了才删：存不进去的时候，旧案例的照片都还在）
+      for (const im of prev?.images || []) if (im.device && !c.images.some((x) => x.id === im.id)) await C.dropImage(id, im.id).catch(() => {});
       await cache.put('notes', saved.id, this.noteOf(g));
-      this.dec.set(g.id, { ...this.decision(g.id), state: 'ready', saved: { caseId: saved.id, at: Date.now(), sig: this.sigOf(g), bytes, json: JSON.stringify(saved).length } });
+      this.dec.set(g.id, { ...this.decision(g.id), state: 'ready', saved: { caseId: saved.id, at: Date.now(), sig: this.sigOf(g), bytes, json: JSON.stringify(saved).length, keys: picked, consent: !!d.consent } });
       this._touch(g.id);
       out.saved.push(saved.id);
       onStep?.({ photos: photosDone, photosTotal, projects: out.saved.length });

@@ -11,18 +11,22 @@
 //
 // 没有任何颜色写死：案例的色板从材质 id 推出来（MAT_BY_ID[id].color）。
 //
+// 溪岸五大系列（docs/showcase/SERIES.md）：case.series = 'skeleton' | 'mountain' | 'weaving' | 'misty' | 'wabi' | null（series.js）。
+// 种子 3D 方案没有系列；真实项目由案例整理从文件夹名字读出来，或者员工在案例库里选。配对时和客人「最适合的系列」一样的家加一点分。
+//
 // 溪岸板材（SPEC §4.2 + §8 R11）：case.boards = { cabinetry?, feature? } 是设计师真的用的那几块板（板材 id，'sail-7'），
 // case.boardsAlso = [id…] 是照片里还看得到的别的板（例如织系列编织门：只显示、不上 3D）。
 // 板材 id 就算这台设备还不认得也留着（员工可能先填 23号、板材包后来才导入）；case.materials[slot] 永远留一个程序化的
 // 近似材质（板材的 near）—— 旧版本、手机、没导入板材包的设备照样看得懂这个案例。
 
 import { CONFIG } from './config.js';
-import { t, L, isEn } from './i18n.js';
+import { t, tIn, L, isEn, missing } from './i18n.js';
 import { MAT_BY_ID, SLOTS, SLOT_BY_ID, fits, BOARD_SLOTS } from './materials.js';
-import { BOARD_ID_RE } from './boards/library-api.js';
-import { exactBoards, idLabel } from './boards/match.js';
+import { BOARD_ID_RE, isColourCode } from './boards/library-api.js';
+import { exactBoards, idLabel, boardsOn } from './boards/match.js';
 import { tagsOf } from './moods.js';
 import { AXES, HIDDEN_AXES, DREAMERS, DREAMER_BY_CODE, codeOf } from './dreamers.js';
+import { SERIES, SERIES_BY_KEY, seriesKeyOf, recommendSeries, topSeries } from './series.js';
 import * as FLOW from '../quiz/flow.js';
 
 export const CASE_V = 1;
@@ -80,6 +84,43 @@ export const SUPPLY_BY_ID = Object.fromEntries([...SUPPLY.firm, ...SUPPLY.contex
 /** 员工编辑器分两组显示（存的时候都在 supplies.firm 里，客人那边由 home.js splitSupply 再分） */
 export const SUPPLY_OFFER = SUPPLY.firm.filter((s) => s.group === 'offer');
 export const SUPPLY_FURNITURE = SUPPLY.firm.filter((s) => s.group === 'furniture');
+const OFFER_IDS = new Set(SUPPLY_OFFER.map((s) => s.id));
+const OFFER_ORDER = Object.fromEntries(SUPPLY_OFFER.map((s, i) => [s.id, i]));
+
+/**
+ * 「每个房间我们做了什么」自动推算（员工没写 roomsMade[room] 的房间）：我们做的这一样，放在候选房间里
+ * 第一个这个家真的做了的（case.rooms）；一个都没有 → 「全屋」（ROOM_HOME）。门永远算全屋。
+ * 台面不看这张表的第一个：跟着厨房橱柜 / 浴室柜放在同一个房间（caseRoomsMade）。
+ */
+export const SUPPLY_ROOMS = {
+  kitchen: ['kitchen'],
+  worktop: ['kitchen', 'bath'],
+  wardrobe: ['master', 'bedroom', 'kids'],
+  walkin: ['walkin', 'master'],
+  tvWall: ['living', 'family'],
+  shoeCabinet: ['foyer'],
+  displayShelf: ['living', 'family', 'dining'],
+  displayCabinet: ['dining', 'living'],
+  bookwall: ['study', 'living', 'family'],
+  study: ['study'],
+  bedStorage: ['master', 'bedroom', 'kids'],
+  toyStorage: ['kids', 'family'],
+  vanity: ['bath'],
+  altar: ['living', 'dining', 'family'],
+  wallPanel: ['living', 'master', 'bedroom', 'dining', 'family', 'foyer'],
+  featureWall: ['living', 'master', 'dining', 'family'],
+  doors: [],
+};
+/** 不算「柜子」的那几样（案例的柜体板不跟着它们走）：墙板、主题墙、门、台面 */
+const NOT_CABINET = new Set(['wallPanel', 'featureWall', 'doors', 'worktop']);
+/** 案例的主题墙板跟着这两样走 */
+const PANEL_OFFERS = new Set(['wallPanel', 'featureWall']);
+/**
+ * 这个案例的台面算不算「我们做」：做了厨房橱柜 / 浴室柜（或单独写了台面）—— 和 home.js 的 offersWorktop 同一条。
+ * 不 import home.js：它会把板材的配对代码一起拖进员工案例库那一页（多 10 kB）；test/showcase.test.mjs 逐个对过两边一样。
+ */
+const WORKTOP_WITH = new Set(['kitchen', 'vanity', 'worktop']);
+const offersWorktop = (ids) => (Array.isArray(ids) ? ids : []).some((id) => WORKTOP_WITH.has(id));
 
 /** 案例照片拍的是哪个房间（id 和 3D 工作室的 ROOM_TYPES 一致；plan3d = 整个家的 3D 鸟瞰） */
 export const ROOMS = [
@@ -105,6 +146,11 @@ export const ROOM_BY_ID = Object.fromEntries(ROOMS.map((r) => [r.id, r]));
 export const ROOM_UNKNOWN = '';
 export const roomOk = (id) => id === ROOM_UNKNOWN || !!ROOM_BY_ID[id];
 export const roomLabel = (id, { ask = false } = {}) => (ROOM_BY_ID[id] ? L(ROOM_BY_ID[id]) : ask ? t('房间？') : '');
+/** 「全屋」：不属于哪一个房间的（室内门之类）—— 只用在 case.roomsMade 和 caseRoomsMade，不是照片的房间 */
+export const ROOM_HOME = 'home';
+/** case.roomsMade 认的房间：照片的房间（整个家的 3D 鸟瞰不算）+ 全屋，按这个顺序显示 */
+const MADE_ROOMS = [...ROOMS.filter((r) => r.id !== 'plan3d').map((r) => r.id), ROOM_HOME];
+const madeRoomLabel = (room) => (room === ROOM_HOME ? t('全屋') : roomLabel(room));
 
 /** 房子类型（id 和 src/shared/home.js 的 PROPERTY 一致；这里只放案例要用的短名字） */
 export const PROPERTY_TYPES = [
@@ -215,9 +261,32 @@ export function placeLine(c) {
 // ───────────────────────── 版本迁移 / 检查 ─────────────────────────
 
 /**
+ * case.roomsMade（员工写的「这个房间我们做了什么」）整理：{ [room]: { firm: [我们做的 id], boards: [板材 id ≤ 4], note: { zh, en } } }。
+ * room 只收 MADE_ROOMS（照片的房间、不含 plan3d，+ 'home'）；firm 只收我们做的（SUPPLY_OFFER，家具 / 现场搭配不算）；
+ * boards 只收样子对的板材 id（不认得的也留着，和 case.boards 一样）。按 MADE_ROOMS 的顺序写，可以重复调用。
+ */
+function cleanRoomsMade(v) {
+  const out = {};
+  if (!isObj(v)) return out;
+  for (const room of MADE_ROOMS) {
+    const x = v[room];
+    if (!isObj(x)) continue;
+    out[room] = {
+      firm: [...new Set((Array.isArray(x.firm) ? x.firm : []).filter((id) => OFFER_IDS.has(id)))],
+      boards: [...new Set((Array.isArray(x.boards) ? x.boards : []).filter(isBoardId))].slice(0, 4),
+      note: txt(x.note),
+    };
+  }
+  return out;
+}
+
+/**
  * 任何版本的案例 → v1 的完整形状（缺的字段补默认值；v1 本身原样整理，可以重复调用）。
  * v0（早期草稿 / 手写 JSON）：title 是字符串、dreamer / dreamers / axes / hidden 放在最外层、
  * photos: [url | { src, room }]、type / size / bedrooms 放在最外层、tags = features。
+ * 案例展示（showcase）加的字段都是补出来的（v 还是 1）：照片的 caption { zh, en } / detail，案例的 roomsMade（cleanRoomsMade）。
+ * 五大系列：series = 系列的 key 或 null（旧的写法 —— 「空山」「织系列」「Skeleton Line」—— 也认，seriesKeyOf；「自然线」「庭前」= null）。
+ * case.images 的顺序就是员工排的顺序。
  */
 export function migrateCase(raw) {
   const r = isObj(raw) ? clone(raw) : {};
@@ -243,6 +312,9 @@ export function migrateCase(raw) {
       alt: txt(im.alt),
       cover: !!im.cover,
       ...(im.device ? { device: true } : {}),
+      // 给客人看的照片说明（中 / 英）+ 细节特写（柜门、拉手、板材纹理、收口…）
+      caption: txt(im.caption),
+      detail: !!im.detail,
     }));
   if (images.length && !images.some((im) => im.cover)) images[0].cover = true;
   let seenCover = false;
@@ -298,6 +370,7 @@ export function migrateCase(raw) {
       wishes: [...new Set(style.wishes || r.wishes || [])],
       features: [...new Set(style.features || r.features || r.tags || [])].filter((f) => FEATURES.some((x) => x.id === f)),
     },
+    series: seriesKeyOf(r.series),
     materials,
     boards,
     boardsAlso,
@@ -305,9 +378,12 @@ export function migrateCase(raw) {
     time: num(r.time, null),
     furniture,
     supplies: { firm: [...(supplies.firm || [])], context: [...(supplies.context || [])] },
+    roomsMade: cleanRoomsMade(r.roomsMade),
     products: Array.isArray(r.products) ? r.products.filter(isObj).map((p) => ({ id: String(p.id || ''), name: txt(p.name), kind: p.kind === 'furniture' ? 'furniture' : 'cabinet', note: txt(p.note) })) : [],
     wishNotes: Object.fromEntries(Object.entries(isObj(r.wishNotes) ? r.wishNotes : {}).map(([k, v]) => [k, txt(v)])),
     images,
+    // 设备上的副本存的时候，随网站那一份的照片 id 和 rev（saveCase 记的；merged 用它认出网站后来新加的照片）
+    ...(Array.isArray(r.bundledImages) ? { bundledImages: [...new Set(r.bundledImages.map(String))], ...(num(r.bundledRev) != null ? { bundledRev: num(r.bundledRev) } : {}) } : {}),
     createdAt: at,
     updatedAt: r.updatedAt || at,
   };
@@ -494,11 +570,22 @@ export function picksMaterials(profile) {
 
 // ───────────────────────── 配对 ─────────────────────────
 
-export const WEIGHTS = { style: 1, hidden: 0.35, card: 0.18, cardNear: 0.08, wish: 0.05, propClass: 0.1, propType: 0.04, size: 0.05, scope: 0.1, pick: 0.04, real: 0.05, swap: 0.03 };
+/** series：案例的系列 = 客人最适合的系列（recommendSeries 第一名）· series2：= 第二名 */
+export const WEIGHTS = { style: 1, hidden: 0.35, card: 0.18, cardNear: 0.08, wish: 0.05, propClass: 0.1, propType: 0.04, size: 0.05, scope: 0.1, pick: 0.04, real: 0.05, swap: 0.03, series: 0.12, series2: 0.05 };
 const simOf = (a = {}, b = {}, keys) => 1 - keys.reduce((s, k) => s + Math.abs((a[k] ?? 50) - (b[k] ?? 50)), 0) / (100 * keys.length);
 const caseSim = (a, b) => 0.7 * simOf(a.style?.axes, b.style?.axes, AX) + 0.3 * (a.style?.dreamers?.[0] && a.style.dreamers[0] === b.style?.dreamers?.[0] ? 1 : 0);
 
-function scoreOne(p, c, picksMats) {
+/**
+ * 客人最适合的前两个系列（[第一, 第二]）—— 只在这一批里有写了系列的家、客人也答过题（有轴）的时候才算：
+ * 没答题的客人（看全部 profile = null）不说「最适合你的系列」；种子 3D 方案都没有系列 → 分数和以前一模一样。
+ */
+function seriesTop(p, pool) {
+  if (!pool.some((c) => c?.series)) return [];
+  if (!AX.some((k) => Number.isFinite(p?.axes?.[k]))) return [];
+  return topSeries(recommendSeries(p), 2);
+}
+
+function scoreOne(p, c, picksMats, top = []) {
   const W = WEIGHTS;
   const parts = [];
   const add = (kind, v) => {
@@ -527,6 +614,10 @@ function scoreOne(p, c, picksMats) {
   const hit = [...new Set([...Object.values(c.materials || {}), ...nears].filter((id) => picksMats.has(id)))];
   add('pick', W.pick * Math.min(3, hit.length));
   if (c.kind === 'project') add('real', W.real);
+  // 五大系列：这个家的系列 = 客人最适合的（第二适合的少一点）
+  const cs = seriesKeyOf(c.series);
+  if (cs && cs === top[0]) add('series', W.series);
+  else if (cs && cs === top[1]) add('series', W.series2);
   return { score: parts.reduce((s, x) => s + x.v, 0), parts, wishes, pickHits: hit };
 }
 
@@ -534,11 +625,14 @@ function scoreOne(p, c, picksMats) {
  * 理由候选（只用客人看得到的事实），按「最能说明为什么」排好；matchCases 再挑出每张卡最多 3 条，
  * 而且同一批卡片的第一条（卡片上看得到的那条）不重复。key = 中文模板（也是 i18n key）
  */
-function reasonsOf(p, c, m, picks) {
+function reasonsOf(p, c, m, picks, top = []) {
   const out = [];
   const d = DREAMER_BY_CODE[p.code];
   const ds = c.style?.dreamers || [];
   if (d && ds[0] === p.code) out.push({ kind: 'card', key: '和你的牌一样：{0}', vars: [{ zh: d.zh, en: d.en }] });
+  // 五大系列：和客人最适合的系列一样（只说第一名；名字中英文都给）
+  const sr = SERIES_BY_KEY[seriesKeyOf(c.series)];
+  if (sr && sr.key === top[0]) out.push({ kind: 'series', key: '和最适合你的系列一样：{0}', vars: [{ zh: sr.zh, en: sr.en }] });
   // 你选的图：最多两条，而且是两张不同的图（第一条被别的卡片用掉时，还有第二张可以说）
   const labels = new Set();
   const exact = exactBoards(c);
@@ -548,11 +642,11 @@ function reasonsOf(p, c, m, picks) {
     const bs = boardSlot(id);
     if (!label || labels.has(label) || (!bs && !HERO.some((s) => c.materials?.[s] === id))) continue;
     const mat = MAT_BY_ID[id];
-    // 这一面是案例原板：说出那块板（客人看的名字：序号 + 名字，没有厂家编号）
-    if (bs) {
-      const b = MAT_BY_ID[exact[bs]];
-      out.push({ kind: 'pick', key: '你选了「{0}」—— 这个家用的就是溪岸 {1}', vars: [label, { zh: b.zh, en: b.en }] });
-    } else out.push({ kind: 'pick', key: '你选了「{0}」—— 这个家也是{1}', vars: [label, { zh: mat.zh, en: mat.en.toLowerCase() }] });
+    // 这一面是案例原板：说出那块板（客人看的名字 boardGuestNames：序号 + 名字，没有厂家编号）；
+    // 板没有客人看的名字（只有编号）→ 和没有原板一样，说客人选的那个材质（= 这块板的近似材质 near，或者这一面的程序化材质）
+    const gn = bs ? boardGuestNames(exact[bs], { series: false }) : null;
+    if (gn && (gn.zh || gn.en)) out.push({ kind: 'pick', key: '你选了「{0}」—— 这个家用的就是溪岸 {1}', vars: [label, gn] });
+    else out.push({ kind: 'pick', key: '你选了「{0}」—— 这个家也是{1}', vars: [label, { zh: mat.zh, en: mat.en.toLowerCase() }] });
     labels.add(label);
     if (labels.size >= 2) break;
   }
@@ -626,22 +720,44 @@ export function reasonText(r) {
 }
 
 /**
+ * 哪些案例可以给客人看（matchCases、相似的家、看全部都用这一条）：
+ *   客人：只有上架的；真实项目还要有业主同意。员工预览（allowDrafts）：草稿也算，隐藏的不算。
+ *   展厅照片（kind showroom）永远不配：不是客人的家。
+ *   上架、有业主同意的真实项目 ≥ CONFIG.cases.hideConceptsAt（默认 1：老板 2026-11-13「3D 太不好看了，直接用我们实体照的案例」）
+ *   以后不再给 3D 风格方案（keepConcepts = 照样给）—— 没有一个真实的家合适，客人就带着自己的牌往下走，不拿 3D 补。
+ *   草稿、没有业主同意的项目不算数（员工预览 allowDrafts 也一样：数的是客人真的看得到的）；
+ *   这台设备一个真实项目都没有（客人自己的手机）→ 3D 方案照常给。
+ */
+export function guestPool(cases, { allowDrafts = false, keepConcepts = false } = {}) {
+  const live = (cases || []).filter((c) => c && c.kind !== 'showroom' && (allowDrafts ? c.status !== 'hidden' : c.status === 'live' && (c.kind !== 'project' || c.consent)));
+  const projects = live.filter((c) => c.kind === 'project' && c.status === 'live' && c.consent).length;
+  const hideAt = CONFIG.cases?.hideConceptsAt ?? 1;
+  return !keepConcepts && hideAt > 0 && projects >= hideAt ? live.filter((c) => c.kind === 'project') : live;
+}
+
+/**
  * 为一位客人挑案例。
  * profile：客人档案（code / axes / hidden / wishes / avoid / home / answers.pairs）。
- * cases：listCases() 的结果（草稿、隐藏的这里再挡一次，客人永远看不到）。
+ * 五大系列：recommendSeries(profile) 算一次；系列 = 客人最适合的 + WEIGHTS.series、第二适合的 + WEIGHTS.series2，
+ *   理由「和最适合你的系列一样：{0}」（kind 'series'）。没写系列的家（种子 3D 方案）分数和以前一模一样。
+ * cases：listCases() 的结果（草稿、隐藏的这里再挡一次，客人永远看不到 —— guestPool）。
  * → { picks: Match[], excluded: [{ id, tags }], rest: Match[] }，Match = { case, score, parts, reasons }
  */
 export function matchCases(profile, cases = [], { limit = 4, picksMats, lambda = 0.3, allowDrafts = false, keepConcepts = false } = {}) {
+  return rankCases(profile, guestPool(cases, { allowDrafts, keepConcepts }), { limit, picksMats, lambda });
+}
+
+/**
+ * matchCases 的本体（pool0 = 已经挑好、可以给客人看的案例）。
+ * readmit = false（看全部）：雷区挡掉的家不放回来，只留在 excluded 里。
+ */
+function rankCases(profile, pool0, { limit = 4, picksMats, lambda = 0.3, readmit = true } = {}) {
   const p = profile || {};
-  // 客人：只有上架的；真实项目还要有业主同意。员工预览（allowDrafts）：草稿也算，隐藏的不算
-  // 展厅照片（kind showroom）永远不配：不是客人的家
-  const live = (cases || []).filter((c) => c && c.kind !== 'showroom' && (allowDrafts ? c.status !== 'hidden' : c.status === 'live' && (c.kind !== 'project' || c.consent)));
-  const projects = live.filter((c) => c.kind === 'project' && c.status === 'live').length;
-  const hideAt = CONFIG.cases?.hideConceptsAt ?? 8;
-  const pool0 = !keepConcepts && hideAt > 0 && projects >= hideAt ? live.filter((c) => c.kind === 'project') : live;
   const avoid = new Set(p.avoid || []);
   const pm = picksMats instanceof Set ? picksMats : picksMaterials(p);
   const picksLabel = pickIndex(p);
+  // 客人最适合的系列（一次算好；这一批没有写了系列的家 → []，分数和以前一样）
+  const top = seriesTop(p, pool0);
   const excluded = [];
   const pool = [];
   // 每个表面一条：{ slot, tags }（3D 里 avoidMaterials 会把这些表面换成最接近的安全材质）
@@ -658,7 +774,7 @@ export function matchCases(profile, cases = [], { limit = 4, picksMats, lambda =
       continue;
     }
     const swap = bySlot(hits);
-    const s = scoreOne(p, c, pm);
+    const s = scoreOne(p, c, pm, top);
     if (swap.length) {
       s.parts.push({ kind: 'swap', v: -WEIGHTS.swap * swap.length });
       s.score -= WEIGHTS.swap * swap.length;
@@ -667,25 +783,30 @@ export function matchCases(profile, cases = [], { limit = 4, picksMats, lambda =
   }
   pool.sort((a, b) => b.score - a.score || (a.c.order ?? 0) - (b.c.order ?? 0));
   const out = [];
+  // MMR：每个候选和已经挑出来的家「最像」的那个（red[i]，和 pool 一一对应）—— 每挑出一个只更新一次，
+  // 看全部（limit = 全部）100 个案例也只是 n² 次比较
+  const red = pool.map(() => -Infinity);
   while (out.length < limit && pool.length) {
     let bi = 0;
     let bv = -Infinity;
-    pool.forEach((m, i) => {
-      const red = out.length ? Math.max(...out.map((o) => caseSim(o.c, m.c))) : 0;
-      const v = m.score - lambda * red;
+    for (let i = 0; i < pool.length; i++) {
+      const v = pool[i].score - lambda * (out.length ? red[i] : 0);
       if (v > bv + 1e-9) {
         bv = v;
         bi = i;
       }
-    });
-    out.push(pool.splice(bi, 1)[0]);
+    }
+    const m = pool.splice(bi, 1)[0];
+    red.splice(bi, 1);
+    out.push(m);
+    for (let i = 0; i < pool.length; i++) red[i] = Math.max(red[i], caseSim(m.c, pool[i].c));
   }
   // 雷区挡掉太多、凑不满一屏：把「只是表面材质踩雷」的家放回来（3D 里换掉那几个表面），
   // 换得少的先、分数高的先；员工标的特征（开放层板、玻璃柜门…）换不掉，永远不放回来
-  if (out.length < limit) {
+  if (readmit && out.length < limit) {
     const back = excluded
       .filter((e) => e.hits.every((x) => x.slot))
-      .map((e) => ({ e, swap: bySlot(e.hits), ...scoreOne(p, e.c, pm) }))
+      .map((e) => ({ e, swap: bySlot(e.hits), ...scoreOne(p, e.c, pm, top) }))
       .sort((a, b) => a.swap.length - b.swap.length || b.score - a.score || (a.e.c.order ?? 0) - (b.e.c.order ?? 0));
     for (const b of back.slice(0, limit - out.length)) {
       excluded.splice(excluded.indexOf(b.e), 1);
@@ -694,7 +815,7 @@ export function matchCases(profile, cases = [], { limit = 4, picksMats, lambda =
     }
   }
   const wrapAll = (list) => {
-    const reasons = pickReasons(list.map((m) => ({ cands: reasonsOf(p, m.c, m, picksLabel), swap: m.swap, readmit: m.readmit })));
+    const reasons = pickReasons(list.map((m) => ({ cands: reasonsOf(p, m.c, m, picksLabel, top), swap: m.swap, readmit: m.readmit })));
     return list.map((m, i) => ({
       case: m.c,
       score: Math.round(m.score * 1000) / 1000,
@@ -716,12 +837,315 @@ export function noGoLabel(tag) {
   return x ? t(x.label) : '';
 }
 
+// ───────────────────────── 案例展示：照片标签、每个房间我们做了什么、房子档案、相似的家、看全部 ─────────────────────────
+
+/** { zh, en } → 现在的语言；这一种语言没写就用另一种（员工只写了中文的说明，英文客人也看得到） */
+const txtNow = (o) => (isObj(o) ? L(o) || o.zh || o.en || '' : '');
+
+/**
+ * 详情的照片标签 → [{ id, n, label }]：
+ *   'all'（全部）· 各个房间（ROOMS 的顺序，至少有一张才有）· 'detail'（细节，有细节特写才有）· 'plan3d'（整个家（3D），有才有，永远最后）。
+ * 没标房间的照片（room ''）只在「全部」里。
+ */
+export function galleryTabs(c) {
+  const imgs = c?.images || [];
+  const count = new Map();
+  let detail = 0;
+  for (const im of imgs) {
+    if (ROOM_BY_ID[im.room]) count.set(im.room, (count.get(im.room) || 0) + 1);
+    if (im.detail) detail++;
+  }
+  const room = (id) => ({ id, n: count.get(id), label: roomLabel(id) });
+  return [
+    { id: 'all', n: imgs.length, label: t('全部') },
+    ...ROOMS.filter((r) => r.id !== 'plan3d' && count.get(r.id)).map((r) => room(r.id)),
+    ...(detail ? [{ id: 'detail', n: detail, label: t('细节') }] : []),
+    ...(count.get('plan3d') ? [room('plan3d')] : []),
+  ];
+}
+
+/**
+ * 一个标签里的照片（员工排的顺序 = case.images 的顺序；返回的就是原来的图片对象）：
+ *   不给 / 'all' = 全部 · 'detail' = 所有细节特写 · 房间 id = 这个房间的（含这个房间的细节特写）。
+ */
+export function galleryImages(c, tabId = 'all') {
+  const imgs = c?.images || [];
+  if (!tabId || tabId === 'all') return imgs.slice();
+  if (tabId === 'detail') return imgs.filter((im) => im.detail);
+  return imgs.filter((im) => im.room === tabId);
+}
+
+const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const HAN_RE = /[一-鿿]/;
+
+/** { zh, en } → 指定的语言（不管界面现在是哪一种）。英文和 L() 一样：中文在词典里就用词典的，没有再用 en（不出「还没翻译」的提醒） */
+function inLang(l, o) {
+  const zh = String(o?.zh ?? '');
+  const en = String(o?.en ?? '');
+  if (l !== 'en') return zh || en;
+  return zh && HAN_RE.test(zh) && missing(zh) == null ? tIn('en', zh) : en || zh;
+}
+
+/**
+ * 客人看的板材名字，中英文各一个 → { zh, en }：这台设备认得的板 → 「7号 · 黑胡桃」；有系列、名字里又没有的 → 「织系列 · …」
+ * （和详情的「还用了」一样）。这台设备不认得、板材整个关掉（CONFIG.boards.on = false）→ { zh: '', en: '' }。
+ * 没有真正的名字（没有序号、没有色号、没有名字、员工也没写显示名）→ ''：显示名只剩 id，拿掉编号也只剩 id 的碎片（'sail-c'）。
+ * 永远不出厂家编号（XA-TP-01、AG337 …）：员工写的显示名里万一带了，也拿掉（色号 2810 这种本来就是名字）。
+ * series: false = 不加系列（「为什么适合你」那一句只说序号 + 名字）。
+ */
+export function boardGuestNames(id, { series = true } = {}) {
+  const m = isBoardId(id) && boardsOn() ? MAT_BY_ID[id] : null;
+  const b = m?.board;
+  if (!b) return { zh: '', en: '' };
+  const code = String(b.code || '').trim();
+  const named = !!b.rec?.label?.zh || !!(b.name?.zh || b.name?.en) || (b.seq != null && b.seq !== '') || isColourCode(code);
+  if (!named) return { zh: '', en: '' };
+  const one = (l) => {
+    let name = inLang(l, m);
+    if (code && !isColourCode(code) && name.toLowerCase().includes(code.toLowerCase())) {
+      name = name
+        .replace(new RegExp(escRe(code), 'gi'), ' ')
+        .replace(/\s*·\s*(·\s*)+/g, ' · ')
+        .replace(/\s+/g, ' ')
+        .replace(/^[\s·]+|[\s·]+$/g, '');
+    }
+    // 剩下的还是 id（或 id 的一段）：不是名字
+    if (!name || name === id || /^sail-[a-z0-9-]*$/i.test(name)) return '';
+    const pre = series && b.series && !name.includes(b.series) ? inLang(l, { zh: b.series, en: b.series }) : '';
+    return pre ? `${pre} · ${name}` : name;
+  };
+  return { zh: one('zh'), en: one('en') };
+}
+
+/** boardGuestNames 现在这个语言的那一个（'' = 不给客人说这块板） */
+export function boardGuestName(id) {
+  return boardGuestNames(id)[isEn() ? 'en' : 'zh'];
+}
+
+/**
+ * 每个房间我们做了什么 → [{ room, label, firm: [{ id, label }], boards: [{ id, name, color }], note, images, cover, derived, tab }]，
+ * ROOMS 的顺序，「全屋」（ROOM_HOME）最后。
+ *   员工写了 roomsMade[room] 的房间：用员工的（derived false，不推算）。
+ *   没写的自动推算（derived true）：
+ *     · 我们做的每一样（supplies.firm 里 SUPPLY_OFFER 的）→ SUPPLY_ROOMS 里第一个这个家做了的房间（case.rooms），没有 → 全屋；门永远全屋；
+ *     · 台面：只有 offersWorktop（做了厨房橱柜 / 浴室柜，或单独写了台面）才有，和厨房橱柜 / 浴室柜同一个房间（只写了台面 → SUPPLY_ROOMS.worktop）；
+ *     · 案例的柜体板（boards.cabinetry）→ 每个拿到柜子的房间（墙板、主题墙、门、台面不算柜子）；一个都没有 → 全屋；
+ *     · 案例的主题墙板（boards.feature）→ 拿到墙板 / 主题墙的房间；没有 → 全屋。
+ *   客人（默认）：板只列这台设备认得的（名字 = boardGuestName，没有厂家编号）；什么都没有的房间不列。
+ *   员工（{ staff: true }）：不认得的板也列（name = idLabel，color = null）、每块板多一个 known；case.rooms 里的房间、全屋、
+ *     员工写过的房间就算是空的也列；每行多一个 made = { firm: [id], boards: [id], note: { zh, en } }（写 roomsMade[room] 用的完整资料）。
+ *   note：员工写的说明（现在的语言；只写了一种语言就用那一种）。
+ *   images / cover / tab：这个房间几张照片、封面小图（这个房间的封面 / 第一张不是细节的；全屋 = 案例封面，images = 全部照片）、
+ *     点这一行照片切到哪个标签（galleryTabs 的 id；这个房间没有照片 → 'all'）。
+ */
+export function caseRoomsMade(c, { staff = false } = {}) {
+  if (!c) return [];
+  const rooms = new Set(c.rooms || []);
+  const own = isObj(c.roomsMade) ? c.roomsMade : {};
+  const firmAll = Array.isArray(c.supplies?.firm) ? c.supplies.firm : [];
+  const firmIds = [...new Set(firmAll.filter((id) => OFFER_IDS.has(id)))];
+  // 自动推算：room → { firm: Set, boards: Set }（先全部算好；员工写过的房间最后用员工的）
+  const auto = new Map();
+  const at = (room) => {
+    if (!auto.has(room)) auto.set(room, { firm: new Set(), boards: new Set() });
+    return auto.get(room);
+  };
+  const roomOf = (id) => (SUPPLY_ROOMS[id] || []).find((r) => rooms.has(r)) || ROOM_HOME;
+  const cabRooms = new Set();
+  const panelRooms = new Set();
+  for (const id of firmIds) {
+    if (id === 'worktop') continue;
+    const room = roomOf(id);
+    at(room).firm.add(id);
+    if (!NOT_CABINET.has(id)) cabRooms.add(room);
+    if (PANEL_OFFERS.has(id)) panelRooms.add(room);
+  }
+  if (offersWorktop(firmAll)) {
+    const next = ['kitchen', 'vanity'].filter((id) => firmIds.includes(id)).map(roomOf);
+    for (const room of next.length ? next : [roomOf('worktop')]) at(room).firm.add('worktop');
+  }
+  const cab = c.boards?.cabinetry;
+  const feat = c.boards?.feature;
+  if (isBoardId(cab)) for (const room of cabRooms.size ? cabRooms : [ROOM_HOME]) at(room).boards.add(cab);
+  if (isBoardId(feat)) for (const room of panelRooms.size ? panelRooms : [ROOM_HOME]) at(room).boards.add(feat);
+
+  const imgs = c.images || [];
+  const out = [];
+  for (const room of MADE_ROOMS) {
+    const o = isObj(own[room]) ? own[room] : null;
+    const a = auto.get(room);
+    const firm = [...new Set(o ? (Array.isArray(o.firm) ? o.firm : []) : a ? [...a.firm] : [])].filter((id) => OFFER_IDS.has(id)).sort((x, y) => OFFER_ORDER[x] - OFFER_ORDER[y]);
+    const boardIds = [...new Set(o ? (Array.isArray(o.boards) ? o.boards : []) : a ? [...a.boards] : [])].filter(isBoardId).slice(0, 4);
+    const note = o ? txt(o.note) : { zh: '', en: '' };
+    const boards = [];
+    for (const id of boardIds) {
+      const name = boardGuestName(id);
+      const known = !!MAT_BY_ID[id]?.board;
+      if (name) boards.push({ id, name, color: MAT_BY_ID[id].color, ...(staff ? { known } : {}) });
+      else if (staff) boards.push({ id, name: idLabel(id), color: known ? MAT_BY_ID[id].color : null, known });
+    }
+    const noteText = txtNow(note);
+    if (!firm.length && !boards.length && !noteText && !(staff && (o || rooms.has(room) || room === ROOM_HOME))) continue;
+    const home = room === ROOM_HOME;
+    const mine = home ? imgs : imgs.filter((im) => im.room === room);
+    const cover = home ? coverOf(c) : mine.find((im) => im.cover) || mine.find((im) => !im.detail) || mine[0] || null;
+    out.push({
+      room,
+      label: madeRoomLabel(room),
+      firm: firm.map((id) => ({ id, label: L(SUPPLY_BY_ID[id]) })),
+      boards,
+      note: noteText,
+      images: mine.length,
+      cover,
+      derived: !o,
+      tab: home || !mine.length ? 'all' : room,
+      ...(staff ? { made: { firm, boards: boardIds, note } } : {}),
+    });
+  }
+  return out;
+}
+
+/** 案例的地点其实就是「公寓 · 3 房 2 卫 · 约 1,100 sq ft」这种房子的一行（种子案例）→ 不当地区再说一遍 */
+const PLACE_LINE_RE = /sq\s*ft|\d+\s*(房|卫|bed|bath)/i;
+
+/**
+ * 房子档案（客人看的，只有这些）→ [{ k, label, value }]：
+ *   type 房子 · size 面积 · beds 几房几卫（3 房 2 卫；和蓝图 homeSummary 同一个标签）· storeys 楼层（有地的房子、两层以上才有）· scope 我们做了（整个家 / {0} 个房间）·
+ *   style 风格（主牌的名字）· series 系列（五大系列的名字，写了才有）· area 地区（case.place，不是又把房子那一行说一遍才有）。
+ * 永远没有价钱、预算、时间、员工的资料。
+ */
+export function caseFacts(c) {
+  if (!c) return [];
+  const p = c.property || {};
+  const out = [];
+  const add = (k, label, value) => {
+    if (value) out.push({ k, label, value: String(value) });
+  };
+  const type = PROPERTY_BY_ID[p.type];
+  if (type && p.type !== 'other') add('type', t('房子'), t(type.zh));
+  if (p.sizeSqft > 0) add('size', t('建筑面积'), t('约 {0} sq ft', [Math.round(p.sizeSqft).toLocaleString('en-US')]));
+  if (p.bedrooms > 0) add('beds', t('几房几卫'),p.bathrooms > 0 ? t('{0} 房 {1} 卫', [p.bedrooms, p.bathrooms]) : t('{0} 房', [p.bedrooms]));
+  if (type?.landed && p.storeys > 1) add('storeys', t('楼层'), t('{0} 层楼', [p.storeys]));
+  const rooms = (c.rooms || []).filter((r) => ROOM_BY_ID[r] && r !== 'plan3d');
+  if (c.scope !== 'rooms') add('scope', t('我们做了'), t('整个家'));
+  else if (rooms.length === 1) add('scope', t('我们做了'), roomLabel(rooms[0]));
+  else if (rooms.length > 1) add('scope', t('我们做了'), t('{0} 个房间', [rooms.length]));
+  const d = DREAMER_BY_CODE[c.style?.dreamers?.[0]];
+  if (d) add('style', t('风格'), L(d));
+  const sr = SERIES_BY_KEY[seriesKeyOf(c.series)];
+  if (sr) add('series', t('系列'), L(sr));
+  const area = txtNow(c.place);
+  if (area && area !== placeLine(c) && !PLACE_LINE_RE.test(area)) add('area', t('地区'), area);
+  return out;
+}
+
+const r3 = (v) => Math.round(v * 1000) / 1000;
+
+/**
+ * 相似的家 → [{ case, score }]（最多 n 个）：从 guestPool(cases)（员工预览 allowDrafts）里挑，不含 c 自己、exclude 的 id、
+ * 客人档案一定要避开的家（caseNoGo(x) ∩ profile.avoid）。
+ * 分数：0.55 四条风格轴的相似 + 0.15 主牌一样 + 0.1 有同一张牌 + 0.1 同一类房子（高楼 / 有地；同一种类型再 + 0.05）
+ *       + 0.1 做的房间（Jaccard）+ 0.02 真实项目；同分按 order。
+ */
+export function similarCases(c, cases, { n = 4, profile = null, exclude = [], allowDrafts = false } = {}) {
+  if (!c) return [];
+  const skip = new Set([c.id, ...(Array.isArray(exclude) ? exclude : []).map((x) => (isObj(x) ? x.id : x))]);
+  const avoid = new Set(profile?.avoid || []);
+  const ds = c.style?.dreamers || [];
+  const rooms = new Set(c.rooms || []);
+  const type = c.property?.type;
+  const cls = CLASS[type];
+  const out = [];
+  for (const x of guestPool(cases, { allowDrafts })) {
+    if (skip.has(x.id)) continue;
+    if (avoid.size && [...caseNoGo(x)].some((tag) => avoid.has(tag))) continue;
+    const xd = x.style?.dreamers || [];
+    let s = 0.55 * simOf(c.style?.axes, x.style?.axes, AX);
+    if (ds[0] && ds[0] === xd[0]) s += 0.15;
+    if (ds.some((d) => xd.includes(d))) s += 0.1;
+    if (cls && cls === CLASS[x.property?.type]) s += 0.1;
+    if (type && type !== 'other' && type === x.property?.type) s += 0.05;
+    const xr = new Set(x.rooms || []);
+    const union = new Set([...rooms, ...xr]).size;
+    if (union) s += (0.1 * [...rooms].filter((r) => xr.has(r)).length) / union;
+    if (x.kind === 'project') s += 0.02;
+    out.push({ case: x, score: Math.round(s * 1e6) / 1e6 });
+  }
+  out.sort((a, b) => b.score - a.score || (a.case.order ?? 1000) - (b.case.order ?? 1000) || String(a.case.id).localeCompare(String(b.case.id)));
+  return out.slice(0, Math.max(0, n)).map((m) => ({ case: m.case, score: r3(m.score) }));
+}
+
+/** 看全部的筛选用的几样：种类 · 房子类型 · 房间（做了的 + 有照片的）· 风格（主牌）· 系列（五大系列，没写 = null） */
+function browseKeys(c) {
+  const rooms = new Set((c.rooms || []).filter((r) => ROOM_BY_ID[r] && r !== 'plan3d'));
+  for (const im of c.images || []) if (ROOM_BY_ID[im.room] && im.room !== 'plan3d') rooms.add(im.room);
+  const d = c.style?.dreamers?.[0];
+  return { kind: c.kind === 'project' ? 'project' : 'concept', type: PROPERTY_BY_ID[c.property?.type] ? c.property.type : 'other', rooms, style: DREAMER_BY_CODE[d] ? d : null, series: seriesKeyOf(c.series) };
+}
+const KIND_FACETS = [
+  { id: 'project', zh: '做过的家', en: 'Homes we made' },
+  { id: 'concept', zh: '3D 方案', en: '3D schemes' },
+];
+const asList = (v) => (Array.isArray(v) ? v : v ? [v] : []).filter(Boolean);
+
+/**
+ * 看全部（客人可以翻所有的家）→ { list: Match[], excluded: [{ id, tags }], facets, total }
+ *   list：筛选以后的家，排法和 matchCases 一样（limit = 全部、MMR、理由一起给，同一页第一条理由不重复）；雷区一定要避开的家不放回来。
+ *   excluded：雷区一定要避开的家（不管筛选；界面照旧说「已经帮你避开…」）。
+ *   facets：{ kind: [{ id, n, label }], type: [{ id, n, label }], room: [{ id, n, label }], style: [{ code, n, label }], series: [{ id, n, label }] }
+ *     —— 在没筛选、可以给客人看、没被雷区挡掉的家里数（n ≥ 1 的才有；种类 / 房子 / 房间 / 牌 / 系列各按自己的表的顺序；
+ *     系列 id = 系列的 key，按品牌手册的顺序，没写系列的家不算在里面）。
+ *   total：没筛选时一共几个家（= facets 数的那一批）。
+ * filters = { kind: 'all' | 'project' | 'concept', type: [], room: [], style: [], series: [] }：不同组之间「而且」，同一组里「或者」；
+ *   room = case.rooms 里有、或者有这个房间的照片；style = 主牌；series = 系列的 key（名字也认，seriesKeyOf）。
+ * opts（和 matchCases 一样）：picksMats、lambda、allowDrafts（员工预览）、keepConcepts。
+ */
+export function browseCases(profile, cases, filters = {}, { picksMats, lambda = 0.3, allowDrafts = false, keepConcepts = false } = {}) {
+  const p = profile || {};
+  const avoid = new Set(p.avoid || []);
+  const f = filters || {};
+  const excluded = [];
+  const ok = [];
+  for (const c of guestPool(cases, { allowDrafts, keepConcepts })) {
+    const tags = avoid.size ? [...new Set(caseNoGoSources(c).filter((x) => !x.soft && avoid.has(x.tag)).map((x) => x.tag))] : [];
+    if (tags.length) excluded.push({ id: c.id, tags });
+    else ok.push({ c, k: browseKeys(c) });
+  }
+  // 数一数（没筛选的那一批）
+  const cnt = { kind: new Map(), type: new Map(), room: new Map(), style: new Map(), series: new Map() };
+  const bump = (m, key) => key && m.set(key, (m.get(key) || 0) + 1);
+  for (const { k } of ok) {
+    bump(cnt.kind, k.kind);
+    bump(cnt.type, k.type);
+    for (const r of k.rooms) bump(cnt.room, r);
+    bump(cnt.style, k.style);
+    bump(cnt.series, k.series);
+  }
+  const facets = {
+    kind: KIND_FACETS.filter((x) => cnt.kind.get(x.id)).map((x) => ({ id: x.id, n: cnt.kind.get(x.id), label: L(x) })),
+    type: PROPERTY_TYPES.filter((x) => cnt.type.get(x.id)).map((x) => ({ id: x.id, n: cnt.type.get(x.id), label: L(x) })),
+    room: ROOMS.filter((x) => cnt.room.get(x.id)).map((x) => ({ id: x.id, n: cnt.room.get(x.id), label: L(x) })),
+    style: DREAMERS.filter((x) => cnt.style.get(x.code)).map((x) => ({ code: x.code, n: cnt.style.get(x.code), label: L(x) })),
+    series: SERIES.filter((x) => cnt.series.get(x.key)).map((x) => ({ id: x.key, n: cnt.series.get(x.key), label: L(x) })),
+  };
+  const kind = f.kind === 'project' || f.kind === 'concept' ? f.kind : null;
+  const types = asList(f.type);
+  const rooms = asList(f.room);
+  const styles = asList(f.style);
+  const series = asList(f.series).map(seriesKeyOf).filter(Boolean);
+  const shown = ok
+    .filter(({ k }) => (!kind || k.kind === kind) && (!types.length || types.includes(k.type)) && (!rooms.length || rooms.some((r) => k.rooms.has(r))) && (!styles.length || styles.includes(k.style)) && (!series.length || series.includes(k.series)))
+    .map((x) => x.c);
+  const r = rankCases(p, shown, { limit: shown.length, picksMats, lambda, readmit: false });
+  return { list: r.picks, excluded, facets, total: ok.length };
+}
+
 // ───────────────────────── 本机存储（IndexedDB + localStorage；Node 测试里用内存） ─────────────────────────
 
 const DB_NAME = 'genie-cases';
 const META_KEY = 'genie.cases.meta.v1';
 const hasIDB = () => typeof indexedDB !== 'undefined';
-const mem = { cases: new Map(), photos: new Map(), meta: null };
+const mem = { cases: new Map(), photos: new Map(), meta: null, fail: null };
 let dbp = null;
 
 function openDB() {
@@ -747,24 +1171,88 @@ function openDB() {
   return dbp;
 }
 
+/**
+ * 交易失败的原因：出错的那一个请求的错误。请求的 error 事件冒泡到交易的时候 tx.error 还是 null
+ * （规范如此，iPad 的 WebKit 也一样：先发 error 事件，然后才 abort、才填 tx.error）—— 只看 tx.error 就会拿到 null。
+ */
+const txError = (tx, e) => tx.error || e?.target?.error || new Error('IndexedDB transaction failed');
+
 async function idb(store, mode, fn) {
   const db = await openDB();
   if (!db) return fn(null, mem[store]);
   return new Promise((res, rej) => {
+    let tx = null;
     try {
-      const tx = db.transaction(store, mode);
+      tx = db.transaction(store, mode);
       const out = fn(tx.objectStore(store), null);
       const isReq = typeof IDBRequest !== 'undefined' && out instanceof IDBRequest;
       tx.oncomplete = () => res(isReq ? out.result : out);
-      tx.onerror = () => rej(tx.error);
-      tx.onabort = () => rej(tx.error);
+      tx.onerror = (e) => rej(txError(tx, e));
+      tx.onabort = (e) => rej(txError(tx, e));
     } catch (e) {
+      // fn 里同步出错：已经排进这个交易的写入也不要留下来
+      try {
+        tx?.abort();
+      } catch {
+        /* 交易已经结束了 */
+      }
       rej(e);
     }
   });
 }
+
+/** 写进这台设备的时候出的错（isQuotaError 用：写的时候出的 NotFound / UnknownError 多半是空间满了） */
+const WRITE_ERRS = new WeakSet();
+function writeError(e) {
+  const err = e && typeof e === 'object' ? e : new Error(String(e ?? 'write failed'));
+  WRITE_ERRS.add(err);
+  return err;
+}
+
+/**
+ * 是不是「这台设备的空间不够了」：QuotaExceededError；错误信息里说 quota / space；或者写案例 / 照片的时候出的
+ * NotFoundError / UnknownError（iPad 的 WebKit 空间满的时候常常是这两个：SQLite 写不进去、Blob 的临时文件建不出来）。
+ * 员工的案例库、整理照片都用这一条：空间不够 = 停下来说一声，不要每张照片都说「打不开」。
+ */
+export function isQuotaError(e) {
+  if (!e || typeof e !== 'object') return false;
+  if (e.name === 'QuotaExceededError') return true;
+  if (/quota|\bspace\b/i.test(String(e.message || ''))) return true;
+  return (e.name === 'NotFoundError' || e.name === 'UnknownError') && WRITE_ERRS.has(e);
+}
+
+/** 内存仓库（Node 测试）写一样；测试可以让它失败（_failWrites），模拟设备空间满了 */
+function memSet(store, m, key, val) {
+  const err = mem.fail?.(store, key);
+  if (err) throw err;
+  m.set(key, val);
+}
+
+/** 一起写几样：同一个 readwrite 交易（一样写不进去，整个交易都不算）；内存仓库写到一半失败也退回原样 */
+function dbPutAll(store, entries) {
+  return idb(store, 'readwrite', (os, m) => {
+    if (os) {
+      for (const [key, val] of entries) os.put(val, key);
+      return undefined;
+    }
+    const before = entries.map(([key]) => [key, m.has(key), m.get(key)]);
+    try {
+      for (const [key, val] of entries) memSet(store, m, key, val);
+    } catch (e) {
+      for (const [key, had, old] of before) {
+        if (had) m.set(key, old);
+        else m.delete(key);
+      }
+      throw e;
+    }
+    return undefined;
+  }).catch((e) => {
+    throw writeError(e);
+  });
+}
+
 const dbGet = (store, key) => idb(store, 'readonly', (os, m) => (os ? os.get(key) : m.get(key)));
-const dbPut = (store, key, val) => idb(store, 'readwrite', (os, m) => (os ? (os.put(val, key), undefined) : (m.set(key, val), undefined)));
+const dbPut = (store, key, val) => dbPutAll(store, [[key, val]]);
 const dbDel = (store, key) => idb(store, 'readwrite', (os, m) => (os ? (os.delete(key), undefined) : (m.delete(key), undefined)));
 async function dbAll(store) {
   const db = await openDB();
@@ -781,7 +1269,7 @@ async function dbAll(store) {
       }
     };
     tx.oncomplete = () => res(out);
-    tx.onerror = () => rej(tx.error);
+    tx.onerror = (e) => rej(txError(tx, e));
   });
 }
 
@@ -833,11 +1321,17 @@ function loadBundled() {
   return bundledP;
 }
 
+/** 测试用：fail(store, key) 返回一个错误 → 内存仓库的那一次写入抛出它（模拟设备空间满了）；不给 = 恢复正常 */
+export function _failWrites(fail) {
+  mem.fail = typeof fail === 'function' ? fail : null;
+}
+
 /** 测试用：清掉内存里的设备资料 */
 export function _resetDevice() {
   mem.cases.clear();
   mem.photos.clear();
   mem.meta = null;
+  mem.fail = null;
   try {
     if (typeof localStorage !== 'undefined') localStorage.removeItem(META_KEY);
   } catch {
@@ -845,7 +1339,36 @@ export function _resetDevice() {
   }
 }
 
-/** 随网站发布的 + 这台设备上的，合在一起（rev 大的赢），排好序 */
+const NUM_ID = /^\d+$/;
+
+/**
+ * 设备上的副本盖过随网站的案例（override）时：网站后来新加的照片照样补上（排在副本的照片后面，封面不变）。
+ * 副本「已经知道」的随网站照片不补 —— 员工删掉的永远不会回来：
+ *   · 存的时候记下来的 copy.bundledImages（saveCase：那时候随网站那一份的照片 id）；随网站那一份后来重新发布过（rev 和记下的
+ *     bundledRev 不一样，例如这台设备的案例包合回了网站）→ 一张都不补：新的照片可能就是副本里设备上的那几张，补了会重复；
+ *   · 旧副本没记：副本里不是设备上的照片的 id，加上编号不超过其中最大那个的（副本有 01、03 → 01–03 都算知道）；
+ *     副本里一张随网站的照片都没有（员工全删了）→ 全部算知道。
+ */
+function withNewBundled(copy, base) {
+  const imgs = copy.images || [];
+  let known;
+  if (Array.isArray(copy.bundledImages)) {
+    if (copy.bundledRev != null && copy.bundledRev !== base.rev) return copy;
+    known = new Set(copy.bundledImages);
+  } else {
+    const own = imgs.filter((im) => !im.device);
+    if (!own.length) return copy;
+    const top = Math.max(...own.map((im) => (NUM_ID.test(im.id) ? +im.id : -Infinity)));
+    known = new Set(own.map((im) => im.id));
+    for (const im of base.images || []) if (NUM_ID.test(im.id) && +im.id <= top) known.add(im.id);
+  }
+  const have = new Set(imgs.map((im) => im.id));
+  const add = (base.images || []).filter((im) => !known.has(im.id) && !have.has(im.id));
+  if (!add.length) return copy;
+  return { ...copy, images: [...imgs, ...add.map((im) => ({ ...clone(im), cover: false }))] };
+}
+
+/** 随网站发布的 + 这台设备上的，合在一起（rev 大的赢；盖过随网站的副本照样拿到网站新加的照片），排好序 */
 async function merged() {
   const base = await loadBundled();
   let device = [];
@@ -860,7 +1383,7 @@ async function merged() {
   for (const c of device) {
     const b = byId.get(c.id);
     if (!b) byId.set(c.id, { ...c, origin: 'device' });
-    else if (c.rev > b.rev) byId.set(c.id, { ...c, origin: 'override' });
+    else if (c.rev > b.rev) byId.set(c.id, { ...withNewBundled(c, b), origin: 'override' });
   }
   const out = [...byId.values()];
   for (const c of out) {
@@ -887,12 +1410,17 @@ export function newCase(kind = 'project') {
   return migrateCase({ id: `p-${Date.now().toString(36)}`, kind, v: CASE_V, rev: 0, status: 'draft', order: 1000, createdAt: at, updatedAt: at });
 }
 
-/** 存一个案例到这台设备（rev + 1；比随网站发布的那份大，所以会盖过它） */
+/**
+ * 存一个案例到这台设备（rev + 1；比随网站发布的那份大，所以会盖过它）。
+ * 随网站也有的案例：记下那一份现在的照片 id 和 rev（bundledImages / bundledRev）—— 网站以后新加的照片才认得出来（merged / withNewBundled）。
+ */
 export async function saveCase(c) {
   const cur = migrateCase(c);
   const prev = await getCase(cur.id);
+  const base = (await loadBundled()).find((x) => x.id === cur.id);
   const rev = Math.max(cur.rev || 0, prev?.rev || 0) + 1;
-  const { origin, ...rest } = { ...cur, rev, updatedAt: nowISO() };
+  const { origin, bundledImages, bundledRev, ...rest } = { ...cur, rev, updatedAt: nowISO() };
+  if (base) Object.assign(rest, { bundledImages: base.images.map((im) => im.id), bundledRev: base.rev });
   const meta = loadMeta();
   if (meta.hidden.includes(rest.id) && rest.status !== 'hidden') saveMeta({ ...meta, hidden: meta.hidden.filter((x) => x !== rest.id) });
   await dbPut('cases', rest.id, rest);
@@ -930,6 +1458,11 @@ export async function setStatus(id, status) {
 }
 
 // ───────────────────────── 照片 ─────────────────────────
+
+/** 一个案例最多几张照片（员工编辑器的上限；随网站的 / 导入的案例超过了也照样显示） */
+export const PHOTO_MAX = CONFIG.cases?.maxPhotos ?? 40;
+/** 设备上一张照片大约占多少（1600 + 480 两张 WebP）—— 员工编辑器估算还能放几张 */
+export const PHOTO_EST_BYTES = 330 * 1024;
 
 const ABS = /^(https?:|data:|blob:|\/\/)/;
 function baseURL() {
@@ -1003,6 +1536,71 @@ export function releaseImages(c) {
   objURLs.delete(c);
 }
 
+const NOOP = () => {};
+
+/**
+ * 只读一张图（详情 / 全屏一次读一张大图，不会把 40 张 1600 一起解出来）→ { url, release() }。
+ *   设备上的照片：从 IndexedDB 读成 object URL（release() 收回；这一个尺寸没有就用另一个尺寸）；
+ *   随网站的照片：imageURL()，release() 什么都不做。读不到 → url ''。
+ */
+export async function loadImageURL(c, img, size = 1600) {
+  if (!img) return { url: '', release: NOOP };
+  if (!img.device) return { url: imageURL(c, img, size), release: NOOP };
+  const want = size <= 480 ? [480, 1600] : [1600, 480];
+  for (const w of want) {
+    try {
+      const blob = await dbGet('photos', `${c?.id}/${img.id}/${w}`);
+      if (!blob || typeof URL === 'undefined' || !URL.createObjectURL) continue;
+      const url = URL.createObjectURL(blob);
+      let done = false;
+      return {
+        url,
+        release() {
+          if (done) return;
+          done = true;
+          try {
+            URL.revokeObjectURL(url);
+          } catch {
+            /* ignore */
+          }
+        },
+      };
+    } catch {
+      /* 这个尺寸读不到：试另一个 */
+    }
+  }
+  return { url: '', release: NOOP };
+}
+
+/** 这台设备存照片的空间（navigator.storage）→ { usage, quota, persisted }（字节）；不支持（Node、旧浏览器）→ null */
+export async function storageInfo() {
+  try {
+    const s = typeof navigator !== 'undefined' ? navigator.storage : null;
+    if (!s?.estimate) return null;
+    const e = await s.estimate();
+    let persisted = false;
+    try {
+      persisted = s.persisted ? !!(await s.persisted()) : false;
+    } catch {
+      persisted = false;
+    }
+    return { usage: Number(e?.usage) || 0, quota: Number(e?.quota) || 0, persisted };
+  } catch {
+    return null;
+  }
+}
+
+/** 请浏览器别在空间不够时清掉这台设备的照片（navigator.storage.persist）→ true = 答应了；不支持 → false */
+export async function askPersist() {
+  try {
+    const s = typeof navigator !== 'undefined' ? navigator.storage : null;
+    if (!s?.persist) return false;
+    return !!(await s.persist());
+  } catch {
+    return false;
+  }
+}
+
 /** 浏览器里压缩：长边 / 宽不超过 max，WebP（Safari 不支持编码 WebP 时用 JPEG）。重新画一次 = EXIF / GPS 都没了 */
 export async function compressImage(src, { maxW = 1600, maxH = 1600, q = 0.82 } = {}) {
   if (typeof document === 'undefined' && typeof OffscreenCanvas === 'undefined') throw new Error('no canvas');
@@ -1051,8 +1649,9 @@ export async function compressImage(src, { maxW = 1600, maxH = 1600, q = 0.82 } 
  * 给案例加一张照片（员工编辑器）：压缩成 1600 + 480，存进这台设备。
  * 返回 image 条目（还没写进案例：调用的人把它放进 c.images 再 saveCase）。
  * blobs：已经压好的 { 1600: Blob, 480: Blob, w, h }（导入案例包 / 测试用）。
+ * 存不进去 → 抛出写的那个错误（空间不够用 isQuotaError 认）。
  */
-export async function putImage(caseId, file, { room = ROOM_UNKNOWN, id, blobs, kind = 'photo' } = {}) {
+export async function putImage(caseId, file, { room = ROOM_UNKNOWN, id, blobs, kind = 'photo', detail = false, caption } = {}) {
   let big = blobs?.[1600];
   let small = blobs?.[480];
   let w = blobs?.w;
@@ -1071,9 +1670,12 @@ export async function putImage(caseId, file, { room = ROOM_UNKNOWN, id, blobs, k
     }
   }
   const imgId = id || `d${Date.now().toString(36)}${Math.floor(Math.random() * 1e4).toString(36)}`;
-  await dbPut('photos', `${caseId}/${imgId}/1600`, big);
-  await dbPut('photos', `${caseId}/${imgId}/480`, small);
-  return { id: imgId, room: ROOM_BY_ID[room] ? room : ROOM_UNKNOWN, kind: room === 'plan3d' ? 'plan3d' : kind, w: w || 1600, h: h || 1200, src: '', thumb: '', alt: { zh: '', en: '' }, cover: false, device: true };
+  // 大图、小图同一个交易：小图写不进去（多半是空间满了）大图也不留下（不会有一张没有案例指着、永远清不掉的照片）
+  await dbPutAll('photos', [
+    [`${caseId}/${imgId}/1600`, big],
+    [`${caseId}/${imgId}/480`, small],
+  ]);
+  return { id: imgId, room: ROOM_BY_ID[room] ? room : ROOM_UNKNOWN, kind: room === 'plan3d' ? 'plan3d' : kind, w: w || 1600, h: h || 1200, src: '', thumb: '', alt: { zh: '', en: '' }, cover: false, device: true, caption: txt(caption), detail: !!detail };
 }
 
 /** 删掉设备上的一张照片（编辑器里移除） */
@@ -1180,7 +1782,12 @@ export async function importPack(file) {
           /* Node / 没有 canvas：小图先用大图 */
         }
         await putImage(c.id, null, { id: im.id, room: im.room, kind: im.kind, blobs: { 1600: big, 480: small, w: im.w, h: im.h } });
-      } catch {
+      } catch (e) {
+        // 设备满了：说清楚、停下来（后面的照片一样存不进去）；别的错只是这一张读不出来
+        if (isQuotaError(e)) {
+          res.errors.push({ id: c.id, zh: '这台设备的空间不够了：后面的照片没有存进去' });
+          return res;
+        }
         res.errors.push({ id: c.id, zh: '有一张照片读不出来' });
       }
     }

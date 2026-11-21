@@ -146,7 +146,8 @@ export default function HomeJourney({ profile: p0, start, ui, onBlueprint, onRes
     C.listCases()
       .then((all) => {
         if (!alive) return;
-        const byId = new Map((all || []).map((c) => [c.id, c]));
+        // 客人能看到的才放回来：有真实项目上架以后，以前挑的 3D 示意就不再带回来
+        const byId = new Map(C.guestPool(all || []).map((c) => [c.id, c]));
         setChosen(refs.map((r) => byId.get(r.id)).filter(Boolean));
       })
       .catch(() => {});

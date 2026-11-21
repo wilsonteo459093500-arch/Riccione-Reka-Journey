@@ -1152,5 +1152,14 @@ await test('门窗合并的规则：同一个 id 首尾相接 → 一扇；同�
   assert.ok(mergeOpenings([pc(w1, 1, 2, 'window'), pc({ ...w2, c: 4 }, 2, 3, 'window')]).length === 2, 'other wall line');
 });
 
+await test('README：有客人的答题 → 写一行建议的溪岸系列（中英）；没有客人 → 不写', () => {
+  const readOf = (tag) => new TextDecoder().decode(RUN[tag].r.entries.find((e) => e.name.endsWith('/README.txt')).bytes.subarray(3));
+  const busy = readOf('terrace2-busy');
+  assert.ok(busy.includes('建议客人用的溪岸系列：'), 'zh series line');
+  assert.ok(busy.includes('Suggested sAil series for this client:'), 'en series line');
+  const none = readOf('terrace2');
+  assert.ok(!none.includes('建议客人用的溪岸系列') && !none.includes('Suggested sAil series'), 'no profile → no series line');
+});
+
 console.log(`\n${n - failed}/${n} 通过`);
 if (failed) process.exit(1);

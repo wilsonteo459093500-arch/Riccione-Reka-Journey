@@ -279,7 +279,7 @@ await test('亮面高光：只排除镜面一样亮的主角表面；缎面烤�
   // 地板是抛光大理石 → 真的「亮面高光」，排除
   const zen = LIVE.find((c) => c.id === 'seed-zen-condo');
   const shiny = { ...zen, id: 'p-shiny', kind: 'project', consent: true, materials: { ...zen.materials, floor: 'carrara' } };
-  const r2 = C.matchCases(p, [...LIVE, shiny], { limit: 4 });
+  const r2 = C.matchCases(p, [...LIVE, shiny], { limit: 4, keepConcepts: true }); // 这条测的是雷区，不是「有真实项目就不推荐 3D 示意」
   assert.deepEqual(r2.excluded, [{ id: 'p-shiny', tags: ['glossy'] }]);
   // 员工点了「亮面高光」特征（钢琴烤漆之类）→ 一定排除，凑不满也不放回来
   const piano = { ...zen, id: 'p-piano', kind: 'project', consent: true, style: { ...zen.style, features: ['glossy'] } };
@@ -328,9 +328,9 @@ await test('真实项目同分时 +0.05；上架项目 ≥ hideConceptsAt 以后
   const zen = LIVE.find((c) => c.id === 'seed-zen-condo');
   const p = tableProfile(GUESTS.peggy);
   const real = { ...zen, id: 'p-zen-real', kind: 'project', consent: true };
-  const r = C.matchCases(p, [zen, real]);
+  const r = C.matchCases(p, [zen, real], { keepConcepts: true }); // 同分比较：两个都要在池子里
   assert.equal(r.picks[0].case.id, 'p-zen-real');
-  assert.ok(Math.abs(r.picks[0].score - C.matchCases(p, [zen]).picks[0].score - 0.05) < 0.002);
+  assert.ok(Math.abs(r.picks[0].score - C.matchCases(p, [zen], { keepConcepts: true }).picks[0].score - 0.05) < 0.002);
   const at = CONFIG.cases.hideConceptsAt;
   const many = Array.from({ length: at }, (_, i) => ({ ...LIVE[i % LIVE.length], id: `p-${i}`, kind: 'project', consent: true, status: 'live' }));
   const r2 = C.matchCases(p, [...LIVE, ...many], { limit: 20 });
@@ -454,7 +454,9 @@ await test('migrateCase：v0（早期草稿）→ v1 的完整形状；v1 原样
   assert.deepEqual(C.migrateCase(c), c);
   for (const raw of MANIFEST.cases) {
     const m = C.migrateCase(raw);
-    for (const k of Object.keys(raw)) assert.deepEqual(m[k], raw[k], `${raw.id}.${k} unchanged`);
+    // 案例展示补的默认值（照片说明、细节特写）之外，一个字都不变
+    const want = (k) => (k === 'images' ? raw.images.map((im) => ({ caption: { zh: '', en: '' }, detail: false, ...im })) : raw[k]);
+    for (const k of Object.keys(raw)) assert.deepEqual(m[k], want(k), `${raw.id}.${k} unchanged`);
   }
 });
 

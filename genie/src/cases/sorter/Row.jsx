@@ -1,5 +1,6 @@
 // 案例整理 · 一个项目一行：挑好的照片（封面在前）+ 被藏起来的（重复 / 不合适）+ 风格 / 房子 / 几房 / 业主同意 + 好了 / 跳过。
-// 点照片 = 要 / 不要；星星 = 封面；房间小标签 = 改房间；放大镜 = 看大图。键盘：见「键盘」说明。
+// 点照片 = 要 / 不要；星星 = 封面；房间小标签 = 改房间（也能标「细节特写」）；放大镜 = 看大图。键盘：见「键盘」说明。
+// 一个项目最多自动挑 18 张（每个房间 4 张 + 细节特写 4 张）：小图照样换行排（不横着滚），一眼看得到全部挑好的。
 
 import { memo, useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, ChevronUp, Merge, Pencil, RotateCcw, Scissors, Star, ZoomIn, X, TriangleAlert, CircleCheck } from 'lucide-react';
@@ -55,6 +56,7 @@ export function Thumb({ thumbs, k, className = '' }) {
 
 function Photo({ s, g, k, cover, picked, thumbs, focus, onPick, onCover, onRoom, onZoom, onSplit, why }) {
   const room = s.roomOf(g, k);
+  const detail = s.detailOf(g, k);
   return (
     <figure className={`so-ph ${cover ? 'is-cover' : ''} ${picked ? 'is-picked' : 'is-out'} ${focus ? 'is-focus' : ''}`} data-k={k}>
       <button type="button" className="so-ph-img" aria-pressed={picked} data-sfx="choice" title={picked ? t('点一下：不要这张') : t('点一下：要这张')} onClick={() => onPick(k)}>
@@ -65,6 +67,7 @@ function Photo({ s, g, k, cover, picked, thumbs, focus, onPick, onCover, onRoom,
           </span>
         )}
         {cover && <span className="so-ph-badge">{t('封面')}</span>}
+        {detail && <span className="so-ph-detail">{t('细节')}</span>}
         {!picked && why?.length > 0 && <span className="so-ph-why">{why.map(whyLabel).join(' · ')}</span>}
       </button>
       <div className="so-ph-tools">
@@ -110,6 +113,7 @@ function Row({ s, g, sig, thumbs, focused, expanded, focusKey, onFocus, onExpand
   const dupTarget = dupOf ? s.groups.find((x) => x.id === dupOf.of) : null;
   const miss = s.readyCheck(g);
   const noRoom = picked.filter((k) => !s.roomOf(g, k)).length;
+  const detailN = picked.filter((k) => s.detailOf(g, k)).length;
   const saved = d.saved && !s.dirty(g);
   const { styleById } = index();
   const D = getData();
@@ -146,6 +150,7 @@ function Row({ s, g, sig, thumbs, focused, expanded, focusKey, onFocus, onExpand
           </h3>
           <p className="so-row-sub">
             {t('{0} 张 · 挑了 {1} 张', [g.keys.length, picked.length])}
+            {detailN > 0 && <span> · {t('细节 {0}', [detailN])}</span>}
             {dupN > 0 && <span> · {t('重复 {0}', [dupN])}</span>}
             {hiddenN - dupN > 0 && <span> · {t('不合适 {0}', [hiddenN - dupN])}</span>}
             {failed > 0 && <span className="so-warn"> · {t('读不了 {0}', [failed])}</span>}
