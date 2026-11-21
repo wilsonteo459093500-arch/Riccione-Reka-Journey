@@ -6,6 +6,7 @@ import { isRoomCode } from '../lib/rng.js';
 import { navigate } from '../lib/router.js';
 import { useT } from '../lib/i18n.js';
 import { TopBar } from '../ui/TopBar.jsx';
+import { Dots } from '../ui/pixel.jsx';
 
 export default function MyRoom({ slug: raw }) {
   const t = useT();
@@ -27,7 +28,7 @@ export default function MyRoom({ slug: raw }) {
     <div className="page">
       <TopBar title={t('home.findTitle', { slug })} back="/" />
       <section className="card center stack">
-        <div className="spinner" aria-hidden />
+        <Dots />
         <p className="big">{waiting ? t('home.notOpen') : t('home.finding')}</p>
       </section>
     </div>

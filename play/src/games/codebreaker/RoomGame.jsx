@@ -4,6 +4,7 @@ import { CodeInput, History, Secret } from './Board.jsx';
 import { DifficultyPicker } from './Solo.jsx';
 import { MODES } from './game.js';
 import { useT } from '../../lib/i18n.js';
+import { Check, Cross, Medal, Dots } from '../../ui/pixel.jsx';
 
 /** 大厅里的玩法设定（房主能改，其他人只看） */
 export function CodebreakerOptions({ options, editable, onChange }) {
@@ -41,10 +42,22 @@ function Progress({ players, names, me, showGuesses, cfg }) {
             <div className="row between">
               <b>{names[p.pid] || '?'}</b>
               <span className="muted small">
-                {p.left ? t('cb.left') : p.solved ? `✅ ${t('cb.solved')}` : p.out ? `✖ ${t('cb.out')}` : t('cb.progress', { n: p.tries })}
+                {p.left ? (
+                  t('cb.left')
+                ) : p.solved ? (
+                  <>
+                    <Check scale={2} /> {t('cb.solved')}
+                  </>
+                ) : p.out ? (
+                  <>
+                    <Cross scale={2} /> {t('cb.out')}
+                  </>
+                ) : (
+                  t('cb.progress', { n: p.tries })
+                )}
               </span>
             </div>
-            {showGuesses && p.guesses?.length ? <History cfg={cfg} guesses={p.guesses} size={20} /> : null}
+            {showGuesses && p.guesses?.length ? <History cfg={cfg} guesses={p.guesses} size={28} /> : null}
           </li>
         ))}
     </ul>
@@ -87,7 +100,8 @@ export function CodebreakerRoom({ view, act, names }) {
       </section>
     ) : (
       <section className="card center">
-        <p className="big">⏳ {t('cb.waitSetter', { name: setterName })}</p>
+        <Dots />
+        <p className="big">{t('cb.waitSetter', { name: setterName })}</p>
       </section>
     );
   } else if (g.stage === 'guessing') {
@@ -111,7 +125,7 @@ export function CodebreakerRoom({ view, act, names }) {
           </div>
           <History cfg={cfg} guesses={mine.guesses} />
           {myDone ? (
-            <p className="center big">{mine.solvedAt !== null ? `🎉 ${t('cb.win', { n: mine.guesses.length })}` : `✖ ${t('cb.out')}`}</p>
+            <p className="center big">{mine.solvedAt !== null ? `★ ${t('cb.win', { n: mine.guesses.length })} ★` : t('cb.out')}</p>
           ) : (
             <CodeInput key={mine.guesses.length} cfg={cfg} onSubmit={(code) => act({ type: 'guess', code })} />
           )}
@@ -129,7 +143,7 @@ export function CodebreakerRoom({ view, act, names }) {
         {g.secret ? (
           <div className="row between">
             <span>{t('cb.answer')}</span>
-            <Secret code={g.secret} size={34} />
+            <Secret code={g.secret} size={28} />
           </div>
         ) : (
           <p className="muted">{t('cb.setterLeft')}</p>
@@ -137,8 +151,8 @@ export function CodebreakerRoom({ view, act, names }) {
         <ol className="ranking">
           {(g.ranking || []).map((r, i) => (
             <li key={r.pid} className="row between">
-              <span>
-                {r.solved ? ['🥇', '🥈', '🥉'][i] || '✅' : '✖'} {names[r.pid] || '?'}
+              <span className="row gap-s">
+                {r.solved ? <Medal place={i} /> : <Cross scale={3} />} {names[r.pid] || '?'}
               </span>
               <span className="muted small">{r.solved ? `${t('cb.progress', { n: r.tries })} · ${Math.round(r.ms / 1000)}s` : t('cb.out')}</span>
             </li>

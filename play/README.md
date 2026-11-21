@@ -18,6 +18,13 @@
   - 房间「轮流出题」：一个人出题、看得到大家猜到哪里；别人没猜中出题人得分；每局换人出
   - 颜色都配形状，色弱也分得出来
 - **中英切换**、可以「加到主画面」（装了以后一个人玩不用网络）
+- **像素风**（2026-11-21 用户要的，Dave the Diver / Stardew Valley 那种温暖的感觉，全部原创）：海蓝背景、木框羊皮纸面板、像素按钮；密码机的形状由程序画成像素（`Peg.jsx`）；游戏图示是像素字块；没有 emoji
+
+## 像素字体
+
+`public/fonts/play-pixel.woff2` 是 [Fusion Pixel 12px](https://github.com/TakWolf/fusion-pixel-font)（TakWolf，SIL OFL 1.1）裁出来的：画面上用到的字 + ASCII + GB2312 一级常用字 3755 个（玩家名字用），约 115KB。
+OFL 规定改过的字体不能用保留名称，所以改名叫「PLAY Pixel」；授权全文在 `public/fonts/OFL.txt`。
+**画面加了新的字**（例如新游戏的说明）要重跑：`pip install fonttools brotli && python3 scripts/make-font.py`（字体里没有的字会用手机字体代替，不会坏）。
 
 ## 怎么运作
 

@@ -14,6 +14,7 @@ import { QR } from '../ui/QR.jsx';
 import { toast } from '../ui/Toast.jsx';
 import { CodebreakerOptions, CodebreakerRoom } from '../games/codebreaker/RoomGame.jsx';
 import { cleanName } from '../net/room.js';
+import { Crown, Dots } from '../ui/pixel.jsx';
 import { save } from '../lib/storage.js';
 
 const GAME_UI = {
@@ -51,7 +52,7 @@ function Waiting() {
   }, []);
   return (
     <section className="card center stack">
-      <div className="spinner" aria-hidden />
+      <Dots />
       <p className="muted">{t('room.status.connecting')}</p>
       {slow ? <p className="muted small">{t('room.notFound')}</p> : null}
     </section>
@@ -146,7 +147,9 @@ function Lobby({ view, act, names }) {
         <span className="room-code" data-testid="room-code">
           {view.code}
         </span>
-        <QR text={url} size={196} />
+        <div className="qr-frame">
+          <QR text={url} size={196} />
+        </div>
         <span className="muted small">{t('room.scan')}</span>
         <button type="button" className="btn ghost" onClick={share}>
           {t('room.share')}
@@ -160,7 +163,11 @@ function Lobby({ view, act, names }) {
             <li key={p.pid} className="row between">
               <span>
                 <span className={`dot ${p.online ? 'on' : 'off'}`} /> {p.name}
-                {p.isHost ? <span className="chip tiny">👑 {t('room.host')}</span> : null}
+                {p.isHost ? (
+                  <span className="chip tiny">
+                    <Crown /> {t('room.host')}
+                  </span>
+                ) : null}
                 {p.pid === view.me ? <span className="muted small"> ({t('room.you')})</span> : null}
                 {!p.online ? <span className="muted small"> · {t('room.offline')}</span> : null}
               </span>

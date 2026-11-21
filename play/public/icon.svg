@@ -1,13 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#FFF6E8"/>
-  <g font-family="Arial Black, Arial, Helvetica, sans-serif" font-weight="900" font-size="150" fill="#fff" text-anchor="middle">
-    <rect x="60" y="60" width="180" height="180" rx="36" fill="#E5484D" transform="rotate(-4 150 150)"/>
-    <text x="150" y="203">P</text>
-    <rect x="272" y="60" width="180" height="180" rx="36" fill="#F2B705" transform="rotate(3 362 150)"/>
-    <text x="362" y="203">L</text>
-    <rect x="60" y="272" width="180" height="180" rx="36" fill="#2F6FED" transform="rotate(-2 150 362)"/>
-    <text x="150" y="415">A</text>
-    <rect x="272" y="272" width="180" height="180" rx="36" fill="#2DA44E" transform="rotate(4 362 362)"/>
-    <text x="362" y="415">Y</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" shape-rendering="crispEdges">
+  <rect width="32" height="32" fill="#326196"/>
+  <rect x="2" y="2" width="28" height="28" fill="#5a3214"/>
+  <rect x="3" y="3" width="26" height="26" fill="#f6e2b3"/>
+  <rect x="4" y="4" width="11" height="11" fill="#9c2a22"/><rect x="5" y="5" width="9" height="9" fill="#e04a3c"/>
+  <rect x="17" y="4" width="11" height="11" fill="#b7791f"/><rect x="18" y="5" width="9" height="9" fill="#f2c14e"/>
+  <rect x="4" y="17" width="11" height="11" fill="#22508f"/><rect x="5" y="18" width="9" height="9" fill="#3c7fd1"/>
+  <rect x="17" y="17" width="11" height="11" fill="#346b1f"/><rect x="18" y="18" width="9" height="9" fill="#5fae3b"/>
+  <g fill="#fff8e6">
+    <path d="M7 6h4v1h1v2h-1v1H8v3H7zM8 7v2h3V7z"/>
+    <path d="M20 6h1v6h4v1h-5z"/>
+    <path d="M8 19h3v1h1v6h-1v-2H8v2H7v-6h1zM8 20v3h3v-3z"/>
+    <path d="M20 19h1v2h1v1h1v-1h1v-2h1v2h-1v1h-1v4h-1v-4h-1v-1h-1z"/>
   </g>
 </svg>

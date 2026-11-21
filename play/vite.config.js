@@ -8,13 +8,13 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: false,
-      includeAssets: ['icon.svg', 'apple-touch-icon.png', 'robots.txt'],
+      includeAssets: ['icon.svg', 'apple-touch-icon.png', 'robots.txt', 'fonts/play-pixel.woff2'],
       manifest: {
         name: 'P.L.A.Y',
         short_name: 'P.L.A.Y',
         description: '开个房，一起玩 · Open a room. Play together.',
-        theme_color: '#FFF6E8',
-        background_color: '#FFF6E8',
+        theme_color: '#326196',
+        background_color: '#326196',
         display: 'standalone',
         orientation: 'portrait',
         scope: '/',
@@ -28,7 +28,7 @@ export default defineConfig({
       },
       workbox: {
         navigateFallback: '/index.html',
-        globPatterns: ['**/*.{js,css,html,svg,png,txt}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,txt,woff2}'],
       },
     }),
   ],

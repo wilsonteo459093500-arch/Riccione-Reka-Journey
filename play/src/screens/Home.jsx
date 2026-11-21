@@ -9,21 +9,32 @@ import { cleanName } from '../net/room.js';
 import { Logo } from '../ui/Logo.jsx';
 import { LangButton } from '../ui/TopBar.jsx';
 import { QR } from '../ui/QR.jsx';
+import { Tile } from '../ui/pixel.jsx';
 
+// 游戏图示：像麻将「中」字牌那样的像素字块
 const ICONS = {
-  codebreaker: '🔐',
-  ox: '❌',
-  camping: '⛺',
-  xiangqi: '♟️',
-  junqi: '🎖️',
-  forest: '🦊',
-  story: '🖼️',
-  mahjong: '🀄',
-  artillery: '💣',
-  maze: '🍒',
-  brawl: '🥊',
-  kart: '🏎️',
+  codebreaker: ['密', '#3c7fd1', '#22508f'],
+  ox: ['井', '#e04a3c', '#9c2a22'],
+  camping: ['营', '#5fae3b', '#346b1f'],
+  xiangqi: ['帅', '#c0392b', '#7a1f16'],
+  junqi: ['军', '#6b8e23', '#3d5414'],
+  forest: ['狐', '#f08a2c', '#a8551a'],
+  story: ['图', '#9b5fc0', '#5e3480'],
+  mahjong: ['中', '#2fa36b', '#1a6640'],
+  artillery: ['炮', '#8a5528', '#5a3214'],
+  maze: ['豆', '#f2c14e', '#b7791f'],
+  brawl: ['拳', '#e8669a', '#a33a66'],
+  kart: ['车', '#2fb3a5', '#1a7268'],
 };
+
+function GameIcon({ id, size = 48 }) {
+  const [ch, c, d] = ICONS[id];
+  return (
+    <Tile color={c} dark={d} size={size}>
+      {ch}
+    </Tile>
+  );
+}
 
 function Settings({ onClose }) {
   const t = useT();
@@ -50,7 +61,9 @@ function Settings({ onClose }) {
         <>
           <p className="muted small pre">{t('settings.slugHelp', { url })}</p>
           <div className="center">
-            <QR text={url} size={160} label={t('settings.slugQr')} />
+            <span className="qr-frame">
+              <QR text={url} size={160} label={t('settings.slugQr')} />
+            </span>
           </div>
         </>
       ) : null}
@@ -81,7 +94,7 @@ export default function Home() {
       <header className="home-head">
         <div className="row between">
           <button type="button" className="btn tiny ghost" onClick={() => setSettings((s) => !s)} aria-label={t('home.settings')}>
-            ⚙︎ {t('home.settings')}
+            {t('home.settings')}
           </button>
           <LangButton />
         </div>
@@ -100,7 +113,9 @@ export default function Home() {
             {rooms.map((r) => (
               <li key={r.code} className="row between">
                 <span>
-                  {ICONS[r.gameId]} {t(`game.${r.gameId}`)} · <b>{r.code}</b>
+                  <span className="row gap-s">
+                    <GameIcon id={r.gameId} size={30} /> {t(`game.${r.gameId}`)} · <b>{r.code}</b>
+                  </span>
                 </span>
                 <button type="button" className="btn tiny primary" onClick={() => navigate(`/j/${r.code}`)}>
                   {t('home.back')}
@@ -145,7 +160,7 @@ export default function Home() {
               onClick={() => setOpenGame(openGame === g.id ? null : g.id)}
               aria-expanded={openGame === g.id}
             >
-              <span className="game-icon">{ICONS[g.id]}</span>
+              <GameIcon id={g.id} />
               <span className="game-text">
                 <b>{t(`game.${g.id}`)}</b>
                 <small>{t(`game.${g.id}.desc`)}</small>

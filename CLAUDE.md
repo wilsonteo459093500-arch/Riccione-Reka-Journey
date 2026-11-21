@@ -103,6 +103,7 @@
 - 测试：`cd play && npm test`；浏览器：先 `npx vite --port 5175`，再 `node test/browser/room.browser.mjs`（`?net=local&as=名字` 同一个浏览器模拟多支手机）。这个开发环境连不到 supabase.co，真的连线只能用手机在预览版试
 - **Dixit / Avalon / Pac-Man / Tekken / Worms / Mario Kart 只做玩法同类的原创版**：名字、角色、图卡、地图、音乐都不能用原版的；GiiKER 的密码机、露营只借玩法，外观和关卡自己做
 - FoloToy（第 2 阶段）：固定「我的游戏房」二维码 + 密码机，**用户在别的对话做**
+- **整个画面是像素风**（2026-11-21 用户定的：全部像素、连中文字也是；配色像 Dave the Diver / Stardew Valley，原创）。字体是裁过的 Fusion Pixel（OFL，改名 PLAY Pixel）；**加了新的中文字要重跑 `play/scripts/make-font.py`**；不用 emoji，图示用 `src/ui/pixel.jsx` 画
 
 ## 上线流程（全部软件，2026-11-20 起）
 

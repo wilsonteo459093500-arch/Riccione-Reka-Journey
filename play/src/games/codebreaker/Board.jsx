@@ -4,7 +4,7 @@ import { useContext, useState } from 'react';
 import { Peg, Feedback, PALETTE } from './Peg.jsx';
 import { LangContext, useT } from '../../lib/i18n.js';
 
-export function History({ cfg, guesses, size = 30 }) {
+export function History({ cfg, guesses, size = 28 }) {
   const { lang } = useContext(LangContext);
   if (!guesses?.length) return null;
   return (
@@ -55,7 +55,7 @@ export function CodeInput({ cfg, onSubmit, submitLabel, disabled }) {
       <div className="cb-draft" role="group">
         {draft.map((c, i) => (
           <button key={i} type="button" className="cb-slot" onClick={() => c >= 0 && clearAt(i)} aria-label={`${i + 1}`}>
-            <Peg c={c} size={40} lang={lang} />
+            <Peg c={c} size={42} lang={lang} />
           </button>
         ))}
       </div>
@@ -64,7 +64,7 @@ export function CodeInput({ cfg, onSubmit, submitLabel, disabled }) {
           const used = !cfg.repeat && draft.includes(c);
           return (
             <button key={c} type="button" className="cb-color" disabled={used || full || disabled} onClick={() => pick(c)}>
-              <Peg c={c} size={34} lang={lang} />
+              <Peg c={c} size={42} lang={lang} />
             </button>
           );
         })}
@@ -81,7 +81,7 @@ export function CodeInput({ cfg, onSubmit, submitLabel, disabled }) {
   );
 }
 
-export function Secret({ code, size = 34 }) {
+export function Secret({ code, size = 28 }) {
   const { lang } = useContext(LangContext);
   if (!code) return null;
   return (

@@ -8,7 +8,7 @@ const path = require('path');
   const p = await b.newPage({ deviceScaleFactor: 1 });
   for (const [name, size] of [['icon-192.png', 192], ['icon-512.png', 512], ['apple-touch-icon.png', 180]]) {
     await p.setViewportSize({ width: size, height: size });
-    await p.setContent(`<style>html,body{margin:0;background:#FFF6E8}</style>${svg.replace('<svg ', `<svg width="${size}" height="${size}" `)}`);
+    await p.setContent(`<style>html,body{margin:0;background:#326196}svg{image-rendering:pixelated}</style>${svg.replace('<svg ', `<svg width="${size}" height="${size}" `)}`);
     await p.screenshot({ path: path.join(__dirname, '../public', name) });
   }
   await b.close();

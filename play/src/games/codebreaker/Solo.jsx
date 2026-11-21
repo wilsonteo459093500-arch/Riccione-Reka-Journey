@@ -77,11 +77,11 @@ export default function Solo() {
         ) : (
           <div className="cb-done">
             {g.done === 'win' ? (
-              <p className="big">🎉 {t('cb.win', { n: g.guesses.length })}</p>
+              <p className="big win">★ {t('cb.win', { n: g.guesses.length })} ★</p>
             ) : (
               <p className="big">{t('cb.lose')}</p>
             )}
-            <Secret code={g.secret} size={40} />
+            <Secret code={g.secret} size={42} />
             <button type="button" className="btn primary" onClick={() => setG(newGame(difficulty))}>
               {t('cb.again')}
             </button>
