@@ -4,7 +4,7 @@
 
 import React, { useMemo, useRef, useState } from 'react';
 import {
-  Download, Loader2, CheckCircle2, AlertTriangle, ArrowUpRight, Archive, Presentation, ExternalLink, Type, Stamp, RotateCcw, Languages,
+  Download, Loader2, CheckCircle2, AlertTriangle, ArrowUpRight, Archive, Presentation, ExternalLink, Type, Stamp, RotateCcw, Languages, ClipboardCheck,
 } from 'lucide-react';
 import { renderDeck, exportableSlides } from '../engine/deck.js';
 import { buildPptx } from '../engine/pptx/writer.js';
@@ -19,6 +19,7 @@ import {
   exportHealth, exportInfo, pptxTitle, missingEnText, missingEnHint, langNameInline, LANG_OPTIONS, LANG_HINTS, LANG_VERSION,
 } from '../lib/langUi.js';
 import { Modal, ProgressBar, cls } from '../lib/ui.jsx';
+import { reviewList } from '../lib/review.js';
 import { Segmented } from './editor/ui.jsx';
 
 const missingImages = missingImagesIn;
@@ -108,6 +109,8 @@ export default function ExportDialog({ project, notify, onClose, onGoTab, onFlus
   }
 
   const jump = (slideId) => onGoTab?.('pages', slideId);
+  const reviewOpen = reviewList(project).filter((it) => it.status === 'open');
+  const reviewFirst = reviewOpen.find((it) => it.slideId);
   const sliding = prog.total ? prog.done / prog.total : 0;
   const packing = building && prog.total > 0 && prog.done >= prog.total;
 
@@ -221,6 +224,25 @@ export default function ExportDialog({ project, notify, onClose, onGoTab, onFlus
         {phase !== 'done' && (
           <div>
             <div className="text-xs font-semibold text-bp-faint mb-2">导出前检查</div>
+            {reviewOpen.length > 0 && (
+              <div className="mb-2.5 flex items-start gap-2.5 rounded-xl border border-bp-warn/30 bg-bp-warn/10 px-3.5 py-2.5">
+                <ClipboardCheck size={15} className="shrink-0 mt-0.5 text-bp-warn" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm text-bp-ink leading-snug">导入时程序没把握的地方，还有 {reviewOpen.length} 处没核对</div>
+                  <div className="mt-0.5 text-xs text-bp-muted leading-snug">空间名、材料、楼层可能认错了。在「页面」列表上方点「请核对」逐条看过、打勾。</div>
+                </div>
+                {reviewFirst && (
+                  <button
+                    type="button"
+                    onClick={() => jump(reviewFirst.slideId)}
+                    disabled={building}
+                    className="shrink-0 mt-0.5 inline-flex items-center gap-0.5 text-xs text-bp-eyebrow hover:underline disabled:opacity-50"
+                  >
+                    去核对 <ArrowUpRight size={12} />
+                  </button>
+                )}
+              </div>
+            )}
             {missing && (
               <div className="mb-2.5 flex items-start gap-2.5 rounded-xl border border-bp-warn/30 bg-bp-warn/10 px-3.5 py-2.5">
                 <Languages size={15} className="shrink-0 mt-0.5 text-bp-warn" />

@@ -1,6 +1,6 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Eye, EyeOff, MoreHorizontal, Copy, Trash2, ImagePlus, ArrowUp, ArrowDown, TriangleAlert, ChevronRight, Box,
+  Eye, EyeOff, MoreHorizontal, Copy, Trash2, ImagePlus, ArrowUp, ArrowDown, TriangleAlert, ChevronRight, Box, ClipboardCheck,
 } from 'lucide-react';
 import SlideCanvas from '../SlideCanvas.jsx';
 import { groupSections, canDelete, canDuplicate, canInsertViewAfter } from './ops.js';
@@ -235,7 +235,7 @@ function ItemMenu({ menu, page, slide, actions }) {
  */
 export default function SlideList({
   pages, pageNos, selectedKey, slidesById, chapters = null, horizontal = false, onSelect, onToggle, onMove, onMoveBy, onDuplicate,
-  onDelete, onInsertAfter, warningCount = 0, onNextWarning,
+  onDelete, onInsertAfter, warningCount = 0, onNextWarning, reviewCount = 0, onOpenReview,
 }) {
   const scrollRef = useRef(null);
   const [menu, setMenu] = useState(null); // { key, x, y, anchorTop }
@@ -352,6 +352,19 @@ export default function SlideList({
           共 {pages.length} 页 · 导出 {pageNos.size} 页
         </div>
       </div>
+      <div className="flex flex-wrap items-center justify-end gap-1">
+      {reviewCount > 0 && (
+        <button
+          type="button"
+          onClick={onOpenReview}
+          title="导入时程序没把握的地方：打开清单，逐条核对、打勾"
+          className="inline-flex items-center gap-1 text-[11px] text-bp-eyebrow bg-bp-gold/15 hover:bg-bp-gold/25 rounded-full pl-2 pr-1.5 py-0.5"
+        >
+          <ClipboardCheck className="w-3 h-3" />
+          请核对 {reviewCount}
+          <ChevronRight className="w-3 h-3" />
+        </button>
+      )}
       {warningCount > 0 && (
         <button
           type="button"
@@ -364,6 +377,7 @@ export default function SlideList({
           <ChevronRight className="w-3 h-3" />
         </button>
       )}
+      </div>
     </div>
   );
 

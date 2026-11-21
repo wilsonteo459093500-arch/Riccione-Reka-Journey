@@ -6,7 +6,9 @@ import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { extractPdf, placementTransform, RENDER_AREA, abortError } from './pdfExtract.js';
 import { PDFJS_DOC_OPTIONS } from './pdfjsAssets.js';
 import { analyzePages } from './analyze.js';
+import { buildReview } from './review.js';
 import { newProject, assembleDeck, uid, clientLine } from '../engine/model.js';
+import { reviewFromDrafts } from '../lib/review.js';
 import { storeBlob } from '../store/assets.js';
 import { deleteAssetsOf } from '../store/db.js';
 
@@ -304,6 +306,9 @@ export async function importPdfFile(file, { onProgress, signal } = {}) {
     project.pages = analysis.pages.map((p) => ({ n: p.n, kind: p.kind, title: p.title || '', thumb: thumbOf.get(p.n) || null }));
     project.updatedAt = Date.now();
     if (importWarnings.length) project.importWarnings = importWarnings;
+    // 认得没把握的地方 → 「请核对这几处」清单（编辑器页面列表上方，设计师打勾消掉）
+    const review = reviewFromDrafts(buildReview(analysis), { project, floorId });
+    if (review) project.review = review;
     progress('layout', 1, 1);
     return project;
   }

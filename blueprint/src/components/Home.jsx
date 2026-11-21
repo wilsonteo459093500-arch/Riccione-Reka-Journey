@@ -223,7 +223,9 @@ export default function Home({ notify, onOpenProject, onOpenBoards, onOpenSettin
     const st = projectStats(project);
     notify({
       type: 'ok',
-      text: `导入完成：${st.floors} 个楼层 · ${st.views} 张效果图 · ${st.materials} 种材料`,
+      text: `导入完成：${st.floors} 个楼层 · ${st.views} 张效果图 · ${st.materials} 种材料${
+        project.review?.items?.length ? ` —— 有 ${project.review.items.length} 处程序没把握，页面列表那里列出来了，请逐条核对` : ''
+      }`,
     });
     for (const w of project.importWarnings || []) notify({ type: 'warn', text: w });
     onOpenProject(project.id);

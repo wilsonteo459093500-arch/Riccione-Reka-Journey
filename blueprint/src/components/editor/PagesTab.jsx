@@ -19,6 +19,8 @@ import {
 } from './ops.js';
 import { setAdjust, clearAdjust } from '../../engine/adjust.js';
 import { useMediaQuery, useFillViewport, useStableCallback, isTypingTarget } from './hooks.js';
+import ReviewPanel from './ReviewPanel.jsx';
+import { reviewList, setReviewDone } from '../../lib/review.js';
 import { uploadImage, imageFiles } from './upload.js';
 
 // 「页面」标签：左 页面列表 / 中 大画布 / 右 检查器。设计师在这里逐页检查自动生成的提案并修改，所见即所得。
@@ -78,6 +80,11 @@ export default function PagesTab({ project, onChange, settings, notify, onOpenSe
   const [polish, setPolish] = useState(null); // { only?: string[] }
   const [translate, setTranslate] = useState(null); // { items:[{zh,kind}] }
   const [busy, setBusy] = useState('');
+  // 「请核对这几处」：还有没核对的就先打开（这次打开页面里关过就不再自动开）
+  const reviewKey = `bp.review.closed.${project.id}`;
+  const review = useMemo(() => reviewList(project), [project]);
+  const reviewOpen = review.filter((it) => it.status === 'open').length;
+  const [showReview, setShowReview] = useState(() => reviewOpen > 0 && store.get(reviewKey) !== '1');
 
   const wide = useMediaQuery('(min-width: 1024px)');
   const xl = useMediaQuery('(min-width: 1280px)');
@@ -279,6 +286,16 @@ export default function PagesTab({ project, onChange, settings, notify, onOpenSe
     if (i >= 0) select(pages[i].key);
   });
 
+  const reviewDone = useStableCallback((id, done) => act((p) => setReviewDone(p, id, done)));
+  const reviewGo = useStableCallback((item) => {
+    const pg = pages.find((p) => p.slideId === item.slideId);
+    if (pg) select(pg.key);
+  });
+  const closeReview = useStableCallback(() => {
+    store.set(reviewKey, '1');
+    setShowReview(false);
+  });
+
   const toggleCompare = useStableCallback(() => {
     setCompare((c) => {
       store.set('bp.pages.compare', c ? '0' : '1');
@@ -339,6 +356,24 @@ export default function PagesTab({ project, onChange, settings, notify, onOpenSe
       onInsertAfter={insertAfter}
       warningCount={warningCount}
       onNextWarning={nextWarning}
+      reviewCount={reviewOpen}
+      onOpenReview={() => setShowReview(true)}
+    />
+  );
+  const reviewPanel = showReview && review.length > 0 && (
+    <ReviewPanel
+      items={review}
+      project={project}
+      pageNoOf={(sid) => {
+        const pg = pages.find((p) => p.slideId === sid);
+        return pg ? pageNos.get(pg.key) : undefined;
+      }}
+      currentSlideId={slide?.id}
+      onGo={reviewGo}
+      onDone={reviewDone}
+      onClose={closeReview}
+      onGoInfo={() => onGoTab?.('info')}
+      horizontal={!wide}
     />
   );
 
@@ -395,6 +430,8 @@ export default function PagesTab({ project, onChange, settings, notify, onOpenSe
       onInsertAfter={insertAfter}
       onToggle={toggle}
       pageNo={page ? pageNos.get(page.key) : undefined}
+      review={slide ? review.filter((it) => it.slideId === slide.id && it.status === 'open') : []}
+      onReviewDone={reviewDone}
     />
   );
 
@@ -407,10 +444,12 @@ export default function PagesTab({ project, onChange, settings, notify, onOpenSe
     >
       {wide ? (
         <aside data-slide-list className="w-[248px] shrink-0 border-r border-bp-line bg-bp-paper min-h-0">
-          {list}
+          {reviewPanel || list}
         </aside>
       ) : (
-        <div data-slide-list>{list}</div>
+        <div data-slide-list>
+          {reviewPanel ? <div className="bg-bp-tint/60 border-b border-bp-line px-3 pt-2 pb-2">{reviewPanel}</div> : list}
+        </div>
       )}
 
       <main

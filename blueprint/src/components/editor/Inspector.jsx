@@ -9,6 +9,7 @@ import CoverInspector from './inspectors/CoverInspector.jsx';
 import MaterialsInspector from './inspectors/MaterialsInspector.jsx';
 import CompanyInspector from './inspectors/CompanyInspector.jsx';
 import TeamInspector from './inspectors/TeamInspector.jsx';
+import { SlideReviewNotes } from './ReviewPanel.jsx';
 
 // 右侧检查器：按页面类型给表单；所有修改走 change(p => …)（不可变更新，外壳负责撤销 / 自动保存）。
 // 画布点选 → 定位到 data-field 对应的输入框；输入框获得焦点 → 画布高亮对应元素（data-hl 优先）。
@@ -44,7 +45,7 @@ export function focusFieldIn(root, field) {
  */
 export default function Inspector({
   project, page, slide, layout, change, notify, onGoTab, activeField, pickNonce, onHighlight, openPolish, onDuplicate, onDelete,
-  onInsertAfter, onToggle, pageNo,
+  onInsertAfter, onToggle, pageNo, review, onReviewDone,
 }) {
   const rootRef = useRef(null);
   const focusField = useCallback((field) => focusFieldIn(rootRef.current, field), []);
@@ -144,7 +145,10 @@ export default function Inspector({
           </div>
         )}
       </div>
-      <div className="p-3 pb-10">{body}</div>
+      <div className="p-3 pb-10">
+        <SlideReviewNotes items={review} onDone={onReviewDone} />
+        {body}
+      </div>
     </div>
   );
 }
