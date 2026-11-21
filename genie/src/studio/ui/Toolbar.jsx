@@ -90,6 +90,7 @@ export default function Toolbar(p) {
           )}
           <div className="menu-sec">
             <MenuItem icon="showroom" label={t('演示模式')} hint={t('自动环绕 + 24 小时光影')} active={p.demo} onClick={run(p.onDemo)} />
+            {p.onCab && <MenuItem icon="storage" label={t('柜子：每组一个色')} onClick={run(p.onCab)} />}
             {p.onExport && <MenuItem icon="download" label={t('导出给设计师')} hint={t('AutoCAD · SketchUp · 酷家乐')} onClick={run(p.onExport)} data-export="" />}
             <MenuItem icon="help" label={t('怎么用')} onClick={run(p.onHelp)} />
             {p.onSettings && <MenuItem icon="gear" label={t('设置')} onClick={run(p.onSettings)} />}

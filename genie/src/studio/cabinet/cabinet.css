@@ -1,0 +1,238 @@
+/* 柜子细节 · 面板（左边，盖在情绪面板上面）。颜色只用 base.css / studio.css 的 token，不写十六进制颜色。 */
+.cab-panel {
+  left: var(--safe-l);
+  top: var(--safe-t);
+  width: var(--panel-w);
+  /* 整列一样高：下面的情绪面板不露出来 */
+  height: calc(100% - var(--safe-t) - var(--safe-b));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 26;
+}
+.cab-inner {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 18px 18px 16px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--shade-rgb), 0.18) transparent;
+}
+.cab-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.cab-sub {
+  margin: 16px 0 8px;
+  font: 600 13px/1.2 var(--sans);
+  letter-spacing: 0.04em;
+  color: var(--pt-soft, var(--ink-soft));
+}
+.cab-note,
+.cab-foot,
+.cab-empty {
+  margin: 10px 0 0;
+  font: 400 12.5px/1.5 var(--sans);
+  color: var(--pt-soft, var(--ink-soft));
+}
+.cab-note {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+.cab-note svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+/* 一键搭配：2 × 2 */
+.cab-presets {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.cab-preset {
+  display: grid;
+  gap: 7px;
+  justify-items: start;
+  min-height: 56px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 14px;
+  background: rgba(var(--shade-rgb), 0.07);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cab-preset:hover {
+  background: rgba(var(--shade-rgb), 0.11);
+}
+.cab-preset.on {
+  background: var(--paper, rgba(255, 255, 255, 0.9));
+  box-shadow: 0 0 0 1.5px var(--ink);
+}
+.cab-preset b {
+  font: 600 14.5px/1.2 var(--sans);
+}
+.cab-bars {
+  display: flex;
+  gap: 3px;
+}
+.cab-bars i {
+  width: 22px;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: rgba(var(--shade-rgb), 0.16);
+  box-shadow: inset 0 0 0 0.5px rgba(var(--shade-rgb), 0.25);
+}
+.cab-bars img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 每组一行 */
+.cab-groups,
+.cab-parts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.cab-group {
+  border-top: 1px solid rgba(var(--shade-rgb), 0.1);
+}
+.cab-group.open {
+  background: rgba(var(--shade-rgb), 0.045);
+  border-radius: 14px;
+  border-top-color: transparent;
+  margin: 2px -8px;
+  padding: 0 8px 8px;
+}
+.cab-group.open + .cab-group {
+  border-top-color: transparent;
+}
+.cab-row,
+.cab-prow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 7px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cab-chip {
+  flex: none;
+}
+.cab-row .cab-chip {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+}
+/* 踢脚没设：原来的黑色 */
+.cab-chip.none {
+  background: var(--ink);
+}
+.cab-prow .cab-chip {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+.cab-txt {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.cab-txt b {
+  font: 600 15px/1.2 var(--sans);
+}
+.cab-txt em {
+  font: 400 12.5px/1.3 var(--sans);
+  font-style: normal;
+  color: var(--pt-soft, var(--ink-soft));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cab-txt code {
+  margin-left: 6px;
+  font: 500 11px/1 var(--mono, ui-monospace, monospace);
+  opacity: 0.8;
+}
+.cab-txt u {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(var(--gold-rgb), 0.16);
+  color: var(--gold-ink);
+  font: 600 11px/1.5 var(--sans);
+  text-decoration: none;
+}
+.cab-act {
+  flex: none;
+  font: 500 12.5px/1 var(--sans);
+  color: var(--pt-soft, var(--ink-soft));
+}
+.cab-part {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border-radius: 10px;
+}
+.cab-part.on {
+  background: var(--paper, rgba(255, 255, 255, 0.85));
+  box-shadow: 0 0 0 1.5px var(--gold);
+}
+.cab-prow {
+  min-height: 44px;
+  padding: 5px 0;
+}
+.cab-prow b {
+  font-size: 14px;
+}
+.cab-back {
+  flex: none;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(var(--shade-rgb), 0.08);
+  color: inherit;
+  font: 500 12px/1 var(--sans);
+  cursor: pointer;
+}
+.cab-hint {
+  margin: 8px 8px 0;
+  font: 400 12.5px/1.45 var(--sans);
+  color: var(--gold-ink);
+}
+
+/* 手机：面板贴在上面、矮一点（下面要看得到 3D 和板材栏） */
+@media (max-width: 900px) {
+  .cab-panel {
+    /* 在工具条下面（和日光面板同一条线），不盖住撤销 / 更多 */
+    top: calc(var(--safe-t) + 62px);
+    left: 8px;
+    right: 8px;
+    width: auto;
+    height: auto;
+    max-height: 46%;
+  }
+}
+
+/* 走进去、演示模式：面板收起来（StudioApp 根元素上的 is-walk / is-demo；面板还「开着」，回来就在） */
+.is-walk .cab-panel,
+.is-demo .cab-panel,
+.is-showroom .cab-panel,
+.is-wish .cab-panel {
+  display: none;
+}

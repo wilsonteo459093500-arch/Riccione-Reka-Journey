@@ -227,6 +227,7 @@ export default {
 
   // ── 导出给设计师（⋯ 菜单里的那一项；面板和导出文件里的词在 en-export.js，跟着导出代码懒加载） ──
   导出给设计师: 'Export for designers',
+  '柜子：每组一个色': 'Cabinets: a colour per group',
   'AutoCAD · SketchUp · 酷家乐': 'AutoCAD · SketchUp · Kujiale',
 
   // boards data ── 溪岸板材 · 材质栏、设计师简报、导出（src/studio/ui/MaterialDock.jsx、src/shared/summary.js、src/studio/export/readme.js；builder C 维护这一段）
