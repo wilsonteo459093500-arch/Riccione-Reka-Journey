@@ -157,6 +157,8 @@
 - 浏览器测试（2026-11-21 起）：`npm run test:browser`（`test/browser/showroom.mjs` 展厅播放 + `test/browser/data.mjs` 资料不丢，自己起 Vite、建样例项目）；`SHOTS=<资料夹>` 顺便存截图。上线流程里也跑
   - 这台机器的系统语系不是 UTF-8：Chromium 下载中文文件名会变成「download」，`data.mjs` 启动时指定了 `LANG=C.UTF-8`
   - 自动清图片只清 1 小时以前存的：测试里要先把图片「放旧」（`data.mjs` 的 `ageAllAssets`）
+  - **Playwright 预设的临时无痕设定档（`browser.newContext()`）里，从 IndexedDB 读回存起来的资料夹把手会让 Chromium 整个当掉**（SIGTRAP；GitHub 的机器上撞到，本机用没包装的 headless shell 重现）。一般设定档（`launchPersistentContext`）没事，所以 `data.mjs` 用一般设定档；首页也只在按「备份到资料夹」时才读那个把手
+  - 本机的 Playwright 浏览器有一层包装，跟 GitHub 机器上的不完全一样：怀疑只在 GitHub 上坏时，用 `executablePath: '/opt/pw-browsers/headless_shell_as_downloaded/chrome-headless-shell'` 重现
   - 上线流程只对「有 `test:browser` 而且自己把 `playwright` 列进依赖」的软件跑浏览器测试。KIRA 也有 `test:browser`，但没列依赖、只手动跑 —— 要接进去得先在 `kira/` 加依赖并确认它在 GitHub 的机器上跑得过
   - Playwright 的 `mouse.wheel` 一律报成「有刻度的一格」，而且数值会除以屏幕缩放倍数；要模拟触控板得自己 `dispatchEvent(new WheelEvent(...))`
   - `waitForFunction` 传 async 函数不会等它的结果，要轮询就在 Node 这边写循环

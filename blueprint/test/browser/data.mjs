@@ -17,6 +17,8 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { mkdirSync, readFileSync, mkdtempSync } from 'node:fs';
 import os from 'node:os';
+// 用一般的设定档（launchPersistentContext），跟设计师平常开 Chrome 一样：
+// Playwright 预设的临时无痕设定档里，从 IndexedDB 读回存起来的资料夹会让 Chromium 整个当掉（2026-11-21 在 GitHub 的机器上撞到，本机重现过）
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
@@ -35,8 +37,12 @@ const server = await createServer({ root: ROOT, logLevel: 'error', server: { por
 await server.listen();
 const base = server.resolvedUrls.local[0].replace(/\/$/, '');
 // 中文文件名：系统语系不是 UTF-8 时 Chromium 会把下载的文件名换成「download」（真的电脑上不会），这里指定 UTF-8
-const browser = await chromium.launch({ env: { ...process.env, LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8' } });
-const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: SHOTS ? 2 : 1, acceptDownloads: true });
+const context = await chromium.launchPersistentContext(mkdtempSync(path.join(os.tmpdir(), 'ukir-profile-')), {
+  env: { ...process.env, LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8' },
+  viewport: { width: 1280, height: 900 },
+  deviceScaleFactor: SHOTS ? 2 : 1,
+  acceptDownloads: true,
+});
 // 「选资料夹」换成浏览器自带的私有资料夹（真的选择窗口在无头浏览器里点不了）
 await context.addInitScript(() => {
   window.showDirectoryPicker = async () => {
@@ -44,7 +50,7 @@ await context.addInitScript(() => {
     return await root.getDirectoryHandle('UKIR 备份', { create: true });
   };
 });
-const page = await context.newPage();
+const page = context.pages()[0] || (await context.newPage());
 const pageErrors = [];
 page.on('pageerror', (e) => pageErrors.push(String(e)));
 const shot = async (name, p = page, fullPage = false) => SHOTS && p.screenshot({ path: path.join(SHOTS, `${name}.png`), fullPage });
@@ -384,7 +390,7 @@ try {
     console.log(`  ✗ 浏览器 › 资料不丢 › 页面报错：\n      ${pageErrors.slice(0, 5).join('\n      ')}`);
   }
 } finally {
-  await browser.close();
+  await context.close();
   await server.close();
 }
 console.log(`\n浏览器测试（资料不丢）：${failed ? '没过' : `${steps.length}/${steps.length} 段全过`}`);

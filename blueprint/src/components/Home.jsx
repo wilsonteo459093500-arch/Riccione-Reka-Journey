@@ -53,7 +53,7 @@ export default function Home({ notify, onOpenProject, onOpenBoards, onOpenSettin
   const [log, setLog] = useState(readBackupLog);
   const [persist, setPersist] = useState(null); // 'on' | 'off' | 'unsupported'
   const [cleaned, setCleaned] = useState(null); // 这次自动清掉了多少
-  const [folder, setFolder] = useState(null); // 上次选的备份资料夹
+  const [folder, setFolder] = useState(null); // 这次打开后用过的备份资料夹（上次选的那个要按了「备份到资料夹」才去读）
   const [backing, setBacking] = useState(null); // 'folder:<进度>' | 'file:<进度>'
   const [boardsChanged, setBoardsChanged] = useState(0); // 独立 Material Board / 材质库最近改动
   const [wipeOpen, setWipeOpen] = useState(false);
@@ -110,7 +110,8 @@ export default function Home({ notify, onOpenProject, onOpenBoards, onOpenSettin
   // 长期保存开没开；备份资料夹；备份记录（别的分页备份了也跟着变）
   useEffect(() => {
     persistenceState().then(setPersist);
-    savedFolder().then(setFolder).catch(() => {});
+    // 存起来的资料夹不在打开首页时读：有的浏览器环境（Playwright 的临时无痕设定档）读它会让整个浏览器当掉，
+    // 只在按「备份到资料夹」时才读，首页本身永远打得开
     const off = onBackupLogChanged(() => setLog(readBackupLog()));
     const onStorage = (e) => {
       if (e.key === BACKUP_LOG_KEY) setLog(readBackupLog());
@@ -248,7 +249,7 @@ export default function Home({ notify, onOpenProject, onOpenBoards, onOpenSettin
         return;
       }
       // 权限要在点击里问：先问，再做别的
-      let dir = choose ? null : folder;
+      let dir = choose ? null : folder || (await savedFolder().catch(() => null));
       if (dir && !(await folderWritable(dir, { ask: true }))) dir = null;
       if (!dir) {
         dir = await pickFolder();
@@ -473,7 +474,7 @@ export default function Home({ notify, onOpenProject, onOpenBoards, onOpenSettin
               dueCount={due.length}
               hasData={list.length > 0 || boardsSt.state !== 'empty'}
               folderOk={folderSupported()}
-              folderName={folder?.name || null}
+              folderName={folder?.name || (log.all?.via === 'folder' ? log.all.folder : null) || null}
               backing={backing}
               onBackupFolder={() => backupFolder()}
               onChangeFolder={() => backupFolder({ choose: true })}
