@@ -259,6 +259,8 @@ export const ROOM_DICT = {
   '茶水间': 'PANTRY',
   '储藏室': 'STORE ROOM',
   '工人房': 'MAID\'S ROOM',
+  '干厨房': 'DRY KITCHEN',
+  '湿厨房': 'WET KITCHEN',
 };
 
 // 英文空间名（大写、撇号统一为 '）→ 规范英文；用于修正设计师的写法
@@ -296,6 +298,9 @@ const EN_ALIASES = {
   'POWDER': 'POWDER ROOM',
   'LIVING AND DINING': 'LIVING & DINING',
   'LIVING DINING': 'LIVING & DINING',
+  'LIVING & DINING AREA': 'LIVING & DINING',
+  'LIVING DINING AREA': 'LIVING & DINING',
+  'LIVING & DINING ROOM': 'LIVING & DINING',
   'BED ROOM': 'BEDROOM',
 };
 
@@ -311,7 +316,7 @@ export const ROOM_EN_TO_ZH = (() => {
 export function canonicalRoomEn(str) {
   let s = fixTypos(String(str ?? '')).replace(/[’‘`]/g, '\'').replace(/\s+/g, ' ').trim().toUpperCase();
   if (!s) return '';
-  s = s.replace(/\s*'\s*/g, '\'');
+  s = s.replace(/\s*'\s*/g, '\'').replace(/\s*\/\s*/g, ' & ');
   return EN_ALIASES[s] || s;
 }
 
@@ -338,48 +343,72 @@ const FLOOR_LEVELS = [
   { zh: '四楼', en: 'THIRD FLOOR' },
   { zh: '五楼', en: 'FOURTH FLOOR' },
   { zh: '六楼', en: 'FIFTH FLOOR' },
+  { zh: '七楼', en: 'SIXTH FLOOR' },
+  { zh: '八楼', en: 'SEVENTH FLOOR' },
+  { zh: '九楼', en: 'EIGHTH FLOOR' },
+  { zh: '十楼', en: 'NINTH FLOOR' },
 ];
 const SPECIAL_FLOORS = {
   basement: { zh: '地下室', en: 'BASEMENT' },
+  basement1: { zh: '地下一层', en: 'BASEMENT 1' },
+  basement2: { zh: '地下二层', en: 'BASEMENT 2' },
+  basement3: { zh: '地下三层', en: 'BASEMENT 3' },
   lower: { zh: '地下层', en: 'LOWER GROUND FLOOR' },
   mezz: { zh: '夹层', en: 'MEZZANINE' },
   attic: { zh: '阁楼', en: 'ATTIC' },
   roof: { zh: '天台', en: 'ROOF TOP' },
+  roofTerrace: { zh: '天台', en: 'ROOF TERRACE' },
+  top: { zh: '顶楼', en: 'TOP FLOOR' },
   upper: { zh: 'UG 层', en: 'UPPER GROUND FLOOR' },
 };
-const ZH_NUM = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6 };
-const EN_ORD = { GROUND: 0, FIRST: 1, SECOND: 2, THIRD: 3, FOURTH: 4, FIFTH: 5 };
+const ZH_NUM = { 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
+const EN_ORD = { GROUND: 0, FIRST: 1, SECOND: 2, THIRD: 3, FOURTH: 4, FIFTH: 5, SIXTH: 6, SEVENTH: 7, EIGHTH: 8, NINTH: 9 };
+const level = (i) => FLOOR_LEVELS[i] || null;
 
-/** 在字符串中找楼层记号（第一个），返回 { floor:{zh,en}, index, length } | null */
-function findFloorToken(s) {
+/**
+ * 在字符串中找楼层记号，返回 [{ floor:{zh,en}, index, length, zh, gStyle, nfStyle }]（按位置排序）| null
+ * gStyle：'GF' / 'Ground Floor' / 'Tingkat Bawah' 这种明写「地面层」的写法
+ * nfStyle：'1F' '2F' 这种写法（中文习惯 1F = 一楼；同一份方案里另有 GF 时，1F 就是 GF 上面那层）
+ * @param {{ nfAboveGround?: boolean }} [opts]  true = 1F 当二楼（马来西亚写法：GF、1F、2F）
+ */
+function findFloorToken(s, { nfAboveGround = false } = {}) {
   const cands = [];
-  const push = (re, fn) => {
+  const push = (re, fn, extra = {}) => {
     const m = re.exec(s);
     if (m) {
       const f = fn(m);
-      if (f) cands.push({ floor: f, index: m.index, length: m[0].length, zh: /[㐀-鿿]/.test(m[0]) });
+      if (f) cands.push({ floor: f, index: m.index, length: m[0].length, zh: /[㐀-鿿]/.test(m[0]), ...extra });
     }
   };
-  push(/(?:^|[^A-Za-z])(GROUND|FIRST|SECOND|THIRD|FOURTH|FIFTH)\s*(?:FLOOR|FLR)\b/i, (m) => FLOOR_LEVELS[EN_ORD[m[1].toUpperCase()]]);
-  push(/LOWER\s*GROUND(?:\s*FLOOR)?/i, () => SPECIAL_FLOORS.lower);
-  push(/UPPER\s*GROUND(?:\s*FLOOR)?|(?:^|[^A-Za-z0-9])UG(?:\s*FLOOR)?(?![A-Za-z0-9])/i, () => SPECIAL_FLOORS.upper);
+  push(/(?:^|[^A-Za-z])(GROUND|FIRST|SECOND|THIRD|FOURTH|FIFTH|SIXTH|SEVENTH|EIGHTH|NINTH)\s*(?:FLOOR|FLR)\b/i, (m) => level(EN_ORD[m[1].toUpperCase()]), { gStyleIf: /GROUND/i });
+  push(/LOWER\s*GROUND(?:\s*FLOOR)?|(?:^|[^A-Za-z0-9])LG(?:F|\s*FLOOR)?(?![A-Za-z0-9])/i, () => SPECIAL_FLOORS.lower);
+  push(/UPPER\s*GROUND(?:\s*FLOOR)?|(?:^|[^A-Za-z0-9])UG(?:F|\s*FLOOR)?(?![A-Za-z0-9])/i, () => SPECIAL_FLOORS.upper);
   // '1st Floor' / '2nd Floor'（马来西亚：1st = 二楼）、'1/F'（港式：G/F 之上的第一层 = 二楼）
-  push(/(?:^|[^A-Za-z0-9])([1-5])\s*(?:ST|ND|RD|TH)\s*(?:FLOOR|FLR)\b/i, (m) => FLOOR_LEVELS[Number(m[1])]);
-  push(/(?:^|[^A-Za-z0-9])([1-5])\s*\/\s*F(?![A-Za-z0-9])/i, (m) => FLOOR_LEVELS[Number(m[1])]);
-  push(/\bBASEMENT\b/i, () => SPECIAL_FLOORS.basement);
+  push(/(?:^|[^A-Za-z0-9])([1-9])\s*(?:ST|ND|RD|TH)\s*(?:FLOOR|FLR)\b/i, (m) => level(Number(m[1])));
+  push(/(?:^|[^A-Za-z0-9])([1-9])\s*\/\s*F(?![A-Za-z0-9])/i, (m) => level(Number(m[1])));
+  // 马来文：Tingkat Bawah = 地面层；Tingkat 1 / Aras 1 = 地面层上面那层
+  push(/\bTINGKAT\s*BAWAH\b|\bARAS\s*BAWAH\b/i, () => FLOOR_LEVELS[0], { gStyle: true });
+  push(/\b(?:TINGKAT|ARAS)\s*([0-9])(?![0-9])/i, (m) => level(Number(m[1])));
+  push(/\bBASEMENT\b(?!\s*\d)/i, () => SPECIAL_FLOORS.basement);
+  push(/(?:^|[^A-Za-z0-9])(?:B|BASEMENT\s*)([1-3])(?![0-9A-Za-z])/i, (m) => SPECIAL_FLOORS[`basement${m[1]}`]);
   push(/\bMEZZANINE\b/i, () => SPECIAL_FLOORS.mezz);
   push(/\bATTIC\b/i, () => SPECIAL_FLOORS.attic);
-  push(/\bROOF\s*(?:TOP)?\b/i, () => SPECIAL_FLOORS.roof);
-  push(/(?:^|[^A-Za-z0-9])(G\/?F)(?![A-Za-z0-9])/i, () => FLOOR_LEVELS[0]);
-  push(/(?:^|[^A-Za-z0-9])([1-6])\s*F(?![A-Za-z0-9])/i, (m) => FLOOR_LEVELS[Number(m[1]) - 1]);
-  push(/(?:^|[^A-Za-z0-9])L\s*([0-5])(?![0-9])/i, (m) => FLOOR_LEVELS[Number(m[1])]);
-  push(/(?:^|[^A-Za-z0-9])LEVEL\s*([0-5])(?![0-9])/i, (m) => FLOOR_LEVELS[Number(m[1])]);
-  push(/([一二三四五六1-6])\s*(?:楼|层)/, (m) => FLOOR_LEVELS[ZH_NUM[m[1]] - 1]);
-  push(/负一楼|地下室|地下一层/, () => SPECIAL_FLOORS.basement);
-  push(/阁楼/, () => SPECIAL_FLOORS.attic);
-  push(/天台|屋顶/, () => SPECIAL_FLOORS.roof);
-  push(/夹层/, () => SPECIAL_FLOORS.mezz);
+  push(/\bROOF\s*(TOP|TERRACE)?\b/i, (m) => (/TERRACE/i.test(m[1] || '') ? SPECIAL_FLOORS.roofTerrace : SPECIAL_FLOORS.roof));
+  push(/(?:^|[^A-Za-z0-9])(G\/?F)(?![A-Za-z0-9])/i, () => FLOOR_LEVELS[0], { gStyle: true });
+  push(/(?:^|[^A-Za-z0-9])([1-9])\s*F(?![A-Za-z0-9])/i, (m) => level(Number(m[1]) - (nfAboveGround ? 0 : 1)), { nfStyle: true });
+  push(/(?:^|[^A-Za-z0-9])L\s*([0-9])(?![0-9])/i, (m) => level(Number(m[1])));
+  push(/(?:^|[^A-Za-z0-9])LEVEL\s*([0-9])(?![0-9])/i, (m) => level(Number(m[1])));
+  push(/([一二两三四五六七八九十1-9])\s*(?:楼|层|樓|層)/, (m) => level((ZH_NUM[m[1]] || Number(m[1])) - 1));
+  push(/负一楼|负一层|地下室|地下一层/, () => SPECIAL_FLOORS.basement);
+  push(/阁楼|閣樓/, () => SPECIAL_FLOORS.attic);
+  push(/顶楼|顶层|頂樓|頂層/, () => SPECIAL_FLOORS.top);
+  push(/天台|屋顶|屋頂/, () => SPECIAL_FLOORS.roof);
+  push(/夹层|夾層/, () => SPECIAL_FLOORS.mezz);
   if (!cands.length) return null;
+  for (const c of cands) {
+    if (c.gStyleIf) c.gStyle = c.gStyleIf.test(s.slice(c.index, c.index + c.length));
+    delete c.gStyleIf;
+  }
   cands.sort((a, b) => a.index - b.index);
   return cands;
 }
@@ -392,10 +421,10 @@ const FLOOR_FILLER = /设计图|效果图|平面图|布置图|设计|方案|楼�
  * 'GROUND FLOOR 一楼设计图' → { zh:'一楼', en:'GROUND FLOOR' }；'2F' → 二楼 / FIRST FLOOR；'L1' → 二楼 / FIRST FLOOR
  * 只认「纯楼层标签」：去掉楼层记号与「设计图」等字样后不能剩下别的内容（避免把「一楼客厅」当楼层页）
  */
-export function parseFloorLabel(str) {
+export function parseFloorLabel(str, opts) {
   const s = cleanLine(str);
   if (!s || s.length > 48) return null;
-  const cands = findFloorToken(s);
+  const cands = findFloorToken(s, opts);
   if (!cands) return null;
   let rest = s;
   for (const c of [...cands].sort((a, b) => b.index - a.index)) {
@@ -409,12 +438,23 @@ export function parseFloorLabel(str) {
   return { zh: (zhC || enC).floor.zh, en: (enC || zhC).floor.en };
 }
 
+/**
+ * 这行字是不是「明写地面层」的楼层标签（GF / Ground Floor / Tingkat Bawah）。
+ * 同一份方案里有这种写法时，'1F' 指的是 GF 上面那层（导入时用 nfAboveGround 读）
+ */
+export function isGroundStyleLabel(str) {
+  const s = cleanLine(str);
+  if (!s || s.length > 48) return false;
+  if (parseFloorLabel(s)?.en !== 'GROUND FLOOR') return false;
+  return (findFloorToken(s) || []).some((c) => c.gStyle);
+}
+
 /** 标题开头的楼层前缀（'一楼客厅' → { floor, rest:'客厅' }），没有返回 null */
-export function splitFloorPrefix(str) {
+export function splitFloorPrefix(str, opts) {
   const s = String(str ?? '').trim();
-  const m = /^(?:([一二三四五六1-6])\s*(?:楼|层)|(GF|G\/F|[1-6]F|L[0-5]))\s*[-–·:：]?\s*/i.exec(s);
+  const m = /^(?:([一二两三四五六七八九十1-9])\s*(?:楼|层|樓|層)|(GF|G\/F|LG|UG|[1-9]F|L[0-9]))\s*[-–·:：]?\s*/i.exec(s);
   if (!m || m[0].length >= s.length) return null;
-  const f = parseFloorLabel(m[0]);
+  const f = parseFloorLabel(m[0], opts);
   return f ? { floor: f, rest: s.slice(m[0].length) } : null;
 }
 
@@ -425,9 +465,9 @@ export function splitFloorPrefix(str) {
 function mapQualifier(q) {
   const s = normalizeText(q).replace(/\s+/g, '');
   if (!s) return '';
-  if (/^(白天|日景|日间|白昼|day(time)?)$/i.test(s)) return '白天';
-  if (/^(晚上|夜晚|夜景|夜间|黄昏|night)$/i.test(s)) return '夜晚';
-  if (/^待(确认|定)$/.test(s)) return '';
+  if (/^(白天|日景|日间|白昼|day(time)?(view|scene|shot|mode)?)$/i.test(s)) return '白天';
+  if (/^(晚上|夜晚|夜景|夜间|黄昏|night(time)?(view|scene|shot|mode)?)$/i.test(s)) return '夜晚';
+  if (/^待(确认|定)$/.test(s) || PENDING_WORD_RE.test(s)) return '';
   const m = /^(?:之前的?|原来的?|原)(.+)$/.exec(s);
   if (m) return `原${m[1]}`;
   return pangu(s);
@@ -459,7 +499,7 @@ const CN_ORDINAL = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八
  *   '客房1（之前的女儿房）'        → { room:'客房 1', roomEn:'GUEST ROOM 1', subtitle:'原女儿房' }
  *   '麻将房 Mah Jong’s Room'      → { room:'麻将房', roomEn:'MAHJONG ROOM' }
  */
-export function parseRoomTitle(str) {
+export function parseRoomTitle(str, floorOpts) {
   const out = { room: '', roomEn: '', subtitle: '', qualifier: '', feature: '', floor: null, known: false };
   let s = cleanLine(str);
   if (!s) return out;
@@ -469,17 +509,21 @@ export function parseRoomTitle(str) {
   const sepParts = s.split(/\s+[-–—]\s+|\s*[｜|：]\s*/).map((x) => x.trim()).filter((x) => x && !/^[-–—|｜/:：·•\s]+$/.test(x));
   s = sepParts[0] || '';
   // 英文楼层前缀（'GF Living Room'、'1F 客厅'）
-  const fp0 = splitFloorPrefix(s);
+  const fp0 = splitFloorPrefix(s, floorOpts);
   if (fp0) {
     out.floor = fp0.floor;
     s = fp0.rest;
   }
-  const tailFeatures = sepParts.slice(1).map((x) => (/[A-Za-z]/.test(x) && !hasHan(x) ? titleCase(fixTypos(x)) : x));
-
-  // 1) 括号里的限定词
+  // 1) 限定词：括号里的（'（白天）' '(Night)'），和分隔符后面单独写的「白天 / Night」
   const quals = [];
-  s = s.replace(/（([^）]*)(?:）|$)/g, (_, q) => {
-    quals.push(q);
+  const tailFeatures = [];
+  for (const x of sepParts.slice(1)) {
+    const q = mapQualifier(x);
+    if (q === '白天' || q === '夜晚') quals.push(x);
+    else tailFeatures.push(/[A-Za-z]/.test(x) && !hasHan(x) ? titleCase(fixTypos(x)) : x);
+  }
+  s = s.replace(/（([^）]*)(?:）|$)|\(([^)]*)(?:\)|$)/g, (_, q1, q2) => {
+    quals.push(q1 ?? q2);
     return ' ';
   });
   out.qualifier = quals.map(mapQualifier).filter(Boolean).join(' · ');
@@ -502,10 +546,22 @@ export function parseRoomTitle(str) {
   // 3) 拆出英文部分（独立的英文单词串；'U形' 这种贴着汉字的字母不算）
   const enWords = [];
   const zhTokens = [];
+  let enNumber = '';
   let prevEn = false;
-  for (const tok of s.split(/\s+/).filter(Boolean)) {
+  // 'Bedroom2' → 'Bedroom 2'；'Living/Dining' 当一个英文词
+  const toks = s.split(/\s+/).filter(Boolean).flatMap((t) => {
+    const m = /^([A-Za-z]{3,})(\d{1,2})$/.exec(t);
+    return m ? [m[1], m[2]] : [t];
+  });
+  for (const tok of toks) {
     if (/^[-–—|｜/:：·•]+$/.test(tok)) continue; // 孤立的分隔符
-    const en = (/^[A-Za-z][A-Za-z'.\-]*$/.test(tok) && tok.length > 1) || (tok === '&' && prevEn);
+    // 英文空间名后面紧跟的编号（'Bedroom 2'）：是房间编号，不是副标题
+    if (prevEn && !enNumber && /^\d{1,2}$/.test(tok)) {
+      enNumber = tok;
+      prevEn = false;
+      continue;
+    }
+    const en = (/^[A-Za-z][A-Za-z'.\-/]*$/.test(tok) && tok.length > 1) || (tok === '&' && prevEn);
     if (en) enWords.push(tok);
     else zhTokens.push(tok);
     prevEn = en;
@@ -514,7 +570,7 @@ export function parseRoomTitle(str) {
   let zh = zhTokens.join('');
 
   // 4) 楼层前缀
-  const fp = splitFloorPrefix(zh);
+  const fp = splitFloorPrefix(zh, floorOpts);
   if (fp) {
     out.floor = fp.floor;
     zh = fp.rest;
@@ -527,7 +583,7 @@ export function parseRoomTitle(str) {
     .map((x) => (x.length > 3 && /设计$/.test(x) ? x.replace(/的?设计$/, '') : x))
     .filter(Boolean);
 
-  let number = '';
+  let number = enNumber;
   const features = [];
   if (!roomKey && segs.length) {
     const seg0 = segs[0];
@@ -615,13 +671,24 @@ export function findCode(s) {
   if (!m) return null;
   return { code: m[2].toUpperCase(), index: m.index + m[1].length, length: m[2].length };
 }
-const PENDING_RE = /[（(【\[]?\s*待\s*(?:确\s*认|定)\s*[）)】\]]?/g;
+// 待确认：中文「待确认 / 待定」，英文 TBC / TBA / TBD / To be confirmed（可带括号）
+// （不用后行断言，兼容旧版 Safari：英文写法前面的字用 $1 留下来）
+const PENDING_ZH = '待\\s*(?:确\\s*认|定)';
+const PENDING_EN = 'T\\.?\\s?B\\.?\\s?[CAD]\\.?(?![A-Za-z])|to\\s+be\\s+(?:confirm(?:ed)?|advised|determined)';
+const PENDING_CORE = `${PENDING_ZH}|${PENDING_EN}`;
+const PENDING_RE_ZH = new RegExp(`[（(【\\[]?\\s*(?:${PENDING_ZH})\\s*[）)】\\]]?`, 'g');
+const PENDING_RE_EN = new RegExp(`(^|[^A-Za-z])[（(【\\[]?\\s*(?:${PENDING_EN})\\s*[）)】\\]]?`, 'gi');
+const PENDING_TEST = new RegExp(`${PENDING_ZH}|(?:^|[^A-Za-z])(?:${PENDING_EN})`, 'i');
+/** 整段就是「待确认」（mapQualifier 用） */
+export const PENDING_WORD_RE = new RegExp(`^(?:${PENDING_CORE})$`, 'i');
+/** 一段文字里写了「待确认 / TBC」 */
+export const hasPending = (s) => PENDING_TEST.test(String(s ?? ''));
 
 /** 名称片段整理：中文片段用 ' · ' 连，英文单词保持空格 */
 function tidyName(raw, role) {
   let s = normalizeText(raw, { keepHanSpaces: true })
     .replace(/[：:，,。;；]+/g, ' ')
-    .replace(/^[\s*·•\-–—&]+|[\s*·•\-–—&]+$/g, '');
+    .replace(/^[\s*·•\-–—&/|｜+、]+|[\s*·•\-–—&/|｜+、]+$/g, '');
   // 括号里的说明（'（3000k）'）接在后面
   const extra = [];
   s = s.replace(/（([^）]*)(?:）|$)/g, (_, q) => {
@@ -670,7 +737,8 @@ function leadingRole(s, hasCode = false) {
   const rest = s.slice(i);
   // 部位后面必须有分隔（空格 / 冒号），或者已经是「A & B」这种明确的部位组合
   if (!/^[\s：:]/.test(rest) && words.length < 2 && !hasCode) return null;
-  if (!rest.trim()) return null;
+  // 只有部位、没有名称：有编号时（'柜体 AG273'）部位照收、名称留空；没编号（'拉手'）那个词就是名称
+  if (!rest.trim() && !hasCode) return null;
   return { role: words.join(' & '), rest: rest.replace(/^[\s：:]+/, '') };
 }
 
@@ -683,8 +751,8 @@ function leadingRole(s, hasCode = false) {
 export function parseMaterialLabel(text) {
   const norm = (x) => normalizeText(x, { keepHanSpaces: true });
   let s = norm(String(text ?? '').replace(/\n/g, ' '));
-  const pending = /待\s*(确\s*认|定)/.test(s);
-  s = s.replace(PENDING_RE, ' ').replace(/^[\s*※•·]+/, '');
+  const pending = hasPending(s);
+  s = s.replace(PENDING_RE_ZH, ' ').replace(PENDING_RE_EN, '$1 ').replace(/^[\s*※•·]+/, '');
   s = norm(s);
   let code = '';
   const cm = findCode(s);
@@ -710,8 +778,55 @@ export function parseMaterialLabel(text) {
     // 只有一个词（'拉手'）：那就是名称
     name = role;
     role = '';
+  } else if (!name && code && MATERIAL_ROLES.test(role)) {
+    // '岩板 SS083M'：部位本身就说明了是什么材料，当名称用（'柜体 AG273' 的「柜体」不是材料，名称留空）
+    name = role;
   }
   return { role, name, code, pending };
+}
+
+const CODE_RE_G = new RegExp(CODE_RE.source, 'g');
+
+/**
+ * 一条标签里写了几种材料（'柜体 AG273 柜门 AG275'）→ 拆成几段，每段一个编号；拆不开返回 [原文]
+ * 拆法：① 第二个部位词开头的地方切开（前一段已经有编号）；② 没有部位词：名称在编号前面就在编号后面切，编号在最前面就在编号前面切
+ */
+export function splitMaterialLabel(text) {
+  const s = normalizeText(String(text ?? '').replace(/\n/g, ' '), { keepHanSpaces: true });
+  const codes = [...s.matchAll(CODE_RE_G)].map((m) => ({ index: m.index + m[1].length, end: m.index + m[0].length }));
+  if (codes.length < 2) return [String(text ?? '')];
+  const codeCount = (a, b) => codes.filter((c) => c.index >= a && c.end <= b).length;
+  const valid = (parts) => parts.length >= 2 && parts.every((p) => p.trim()) && parts.every((p) => codeCount(...p.range) === 1);
+  // ① 部位词：在开头或分隔符（空格 / 斜杠 / 逗号 / +）后面
+  const roleStarts = [];
+  for (let i = 1; i < s.length; i++) {
+    if (!/[\s/|｜,，;；+、]/.test(s[i - 1])) continue;
+    if (ROLE_WORDS.some((r) => r.length > 1 && s.startsWith(r, i))) roleStarts.push(i);
+  }
+  const cutAt = (points) => {
+    const pts = [0, ...points, s.length];
+    const parts = [];
+    for (let k = 0; k < pts.length - 1; k++) {
+      const seg = s.slice(pts[k], pts[k + 1]);
+      parts.push(Object.assign(new String(seg), { range: [pts[k], pts[k + 1]] }));
+    }
+    return parts;
+  };
+  const byRole = roleStarts.filter((i) => codeCount(0, i) > 0 && codeCount(i, s.length) > 0);
+  let parts = cutAt(byRole);
+  if (!valid(parts)) {
+    // 第一个编号前面只有部位词 / 分隔符 → 名称写在编号后面
+    let prefix = s.slice(0, codes[0].index);
+    for (const r of ROLE_WORDS) prefix = prefix.split(r).join('');
+    const startsWithCode = !prefix.replace(/[\s：:&、和与/|｜,，+]/g, '');
+    parts = cutAt(startsWithCode ? codes.slice(1).map((c) => c.index) : codes.slice(0, -1).map((c) => c.end));
+  }
+  return valid(parts) ? parts.map((p) => String(p).trim()) : [String(text ?? '')];
+}
+
+/** 和 parseMaterialLabel 一样，但一条标签写了几种材料时拆开，返回数组 */
+export function parseMaterialLabels(text) {
+  return splitMaterialLabel(text).map(parseMaterialLabel).filter((m) => m.name || m.code || m.pending);
 }
 
 /** 材料去重键：有编号用编号，否则用规范化名称 */
@@ -726,7 +841,7 @@ export function looksLikeMaterial(text) {
   const s = normalizeText(String(text ?? '').replace(/\n/g, ' '));
   if (!s || /^[*※•]/.test(s)) return false;
   if (CODE_RE.test(s)) return true;
-  if (/待\s*(确\s*认|定)/.test(s)) return true;
+  if (hasPending(s)) return true;
   if (/[。！？]/.test(s)) return false;
   const colon = /^([^：:]{1,10})[：:](.{1,24})$/.exec(s);
   if (colon && !/[，,]/.test(colon[2])) return true;
@@ -900,6 +1015,33 @@ export function parseClientLine(str) {
   return { location: '', client: '' };
 }
 
+const MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12 };
+const ym = (y, m) => (m >= 1 && m <= 12 && y >= 2000 && y <= 2099 ? `${y} · ${String(m).padStart(2, '0')}` : '');
+
+/**
+ * 文件名里的日期（在哪个位置都行）→ { date:'2026 · 08', index, length } | null
+ *   年在前：'2026.8.6' '2026-08-06' '2026年8月6日' '20260806'
+ *   年在后（马来西亚习惯 日.月.年）：'6.8.2026' '06-08-2026' '6/8/2026'
+ *   英文月份：'6 Aug 2026' 'Aug 2026'
+ */
+export function findFileDate(str) {
+  const s = String(str ?? '');
+  // 第 1 组 = 日期前面的那个字（不用后行断言，兼容旧版 Safari）
+  const pats = [
+    [/(^|[^\d])(\d{4})[.\-/年](\d{1,2})(?:[.\-/月](\d{1,2})日?)?(?!\d)/, (m) => ym(+m[2], +m[3])],
+    [/(^|[^\d])(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})(?!\d)/, (m) => ym(+m[4], +m[3])],
+    [/(^|[^\dA-Za-z])(?:(\d{1,2})(?:st|nd|rd|th)?\s*)?(jan|feb|mar|apr|may|jun|jul|aug|sept?|oct|nov|dec)[a-z]*\.?\s*,?\s*(\d{4})(?!\d)/i, (m) => ym(+m[4], MONTHS[m[3].toLowerCase()])],
+    [/(^|[^\d])(\d{4})(\d{2})(\d{2})(?!\d)/, (m) => ym(+m[2], +m[3])],
+  ];
+  for (const [re, fn] of pats) {
+    const m = re.exec(s);
+    if (!m) continue;
+    const date = fn(m);
+    if (date) return { date, index: m.index + m[1].length, length: m[0].length - m[1].length };
+  }
+  return null;
+}
+
 export function parseFileName(name) {
   const out = { date: '', location: '', client: '' };
   let s = String(name ?? '').trim();
@@ -908,11 +1050,14 @@ export function parseFileName(name) {
   // 上传时加的哈希前缀：'5e430e16-' / 'a1b2c3d4_'
   s = s.replace(/^(?=[0-9a-f]*[a-f])(?=[0-9a-f]*\d)[0-9a-f]{6,32}[-_]/i, '');
   s = s.replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
-  const dm = /^(\d{4})[.\-/年](\d{1,2})(?:[.\-/月](\d{1,2})日?)?\s*/.exec(s) || /^(\d{4})(\d{2})(\d{2})(?!\d)\s*/.exec(s);
-  if (dm) {
-    const mm = Number(dm[2]);
-    if (mm >= 1 && mm <= 12) out.date = `${dm[1]} · ${String(mm).padStart(2, '0')}`;
-    s = s.slice(dm[0].length).replace(/^[-–—\s]+/, '');
+  const d = findFileDate(s);
+  if (d) {
+    out.date = d.date;
+    s = `${s.slice(0, d.index)} ${s.slice(d.index + d.length)}`
+      .replace(/^[\s\-–—|｜·]+|[\s\-–—|｜·]+$/g, '')
+      .replace(/\s*([-–—|｜·])\s*[-–—|｜·]\s*/g, ' $1 ')
+      .replace(/\s+/g, ' ')
+      .trim();
   }
   const { location, client } = parseClientLine(s);
   out.location = location;
