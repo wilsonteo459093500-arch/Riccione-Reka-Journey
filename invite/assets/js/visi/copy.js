@@ -179,6 +179,19 @@
    *   told    需求卡勾选项的转述（data.js 的 told）：不加引号
    *   answer  我们的做法（只给 L 语言的）；answered = 任何语言有做法（「第 N 页就是为这个做的」看这个）
    */
+  /** 讯息、讲稿引客户原话只引一句：一大段（旧方案里英文客户整段被当成一句）先取第一句，
+      还是太长就在字 / 词中间剪短加「…」—— 不整段照抄进 WhatsApp */
+  function clipQuote(q) {
+    q = String(q || '').trim();
+    var cjk = CJK.test(q), max = cjk ? 40 : 120;
+    if (q.length <= max) return q;
+    var first = MB.splitSentences ? MB.splitSentences(q)[0] || q : q;
+    first = first.replace(/[。．.！!？?]+$/, '');
+    if (first.length <= max) return first;
+    var cut = first.slice(0, max);
+    if (!cjk && cut.lastIndexOf(' ') > max * 0.6) cut = cut.slice(0, cut.lastIndexOf(' '));
+    return cut.replace(/[\s,，、;；:：]+$/, '') + '…';
+  }
   function needView(p, n, L) {
     if (!n) return null;
     var zh = L === 'zh';
@@ -191,7 +204,7 @@
     var any = strip(MB.t(MB.needAnswer(n, p), L));
     return {
       n: n, custom: custom,
-      quote: custom && (zh || !CJK.test(q)) ? q : '',
+      quote: custom && (zh || !CJK.test(q)) ? clipQuote(q) : '',
       told: told,
       // 旧资料没有 told 的勾选项：只能照选项文字转述（不加引号）
       plain: !custom && q && !told && sameLang(q, L) ? q : '',

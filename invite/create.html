@@ -67,6 +67,14 @@
         <input type="tel" id="g-wa" placeholder="60189661919" />
       </div>
     </div>
+    <!-- 签名链接（体检第 2c 阶段）：链接里写你的名字 / 号码 / 留言，要登入后伺服器签过才算数 -->
+    <div id="sign-box" hidden style="margin-top:18px;padding-top:16px;border-top:1px solid rgba(27,24,21,.1)">
+      <p class="small" id="sign-status" style="margin:0 0 10px;line-height:1.7"></p>
+      <form id="sign-login" hidden style="display:flex;flex-wrap:wrap;gap:10px;align-items:center" autocomplete="on">
+        <input type="password" id="sign-pw" name="pw" placeholder="团队密码" autocomplete="current-password" style="flex:1;min-width:180px;max-width:260px" />
+        <button class="btn gold" type="submit">登入</button>
+      </form>
+    </div>
   </section>
 
   <div class="gen">
@@ -180,6 +188,7 @@
 <div class="toast" id="toast">已复制</div>
 
 <script src="assets/js/config.js"></script>
+<script src="assets/js/link-sign.js"></script>
 <script src="assets/js/create.js"></script>
 </body>
 </html>

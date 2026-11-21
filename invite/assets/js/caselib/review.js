@@ -1524,6 +1524,8 @@
         ids.forEach(function (h) { if (!cat().photos[h].hidden) setHidden('photos', h, true); });
         R.picked = {};
         drawGrid();
+      } else if (a === 'visi' && ids.length) {
+        exportToVisi(ids);
       } else if (a === 'delete' && ids.length) {
         if (window.confirm('删除选的 ' + ids.length + ' 张照片？\n\n删掉就找不回来；旧方案里用到这些照片的地方会变成空位。')) {
           deletePhotos(ids, '选的照片').then(function (ok) { if (ok) { R.picked = {}; drawGrid(); } });
@@ -1532,17 +1534,40 @@
       drawMulti();
     });
   }
+  /* 导出给 VISI 内置图库（VISI 体检计划第 3 阶段）：先说每个空间几张、哪些还是 0 张，再下载 zip */
+  function exportToVisi(ids) {
+    var X = MB.clVisiExport;
+    if (!X) return;
+    var pl = X.plan(cat(), ids);
+    if (!pl.items.length) { CL.toast('选的照片都不能导出（隐藏了、还没分空间）', 4000); return; }
+    if (!window.confirm(X.summary(pl))) return;
+    R.bulk = 'visi';
+    drawMulti();
+    CL.toast('准备照片 0 / ' + pl.items.length + '…', 60000);
+    X.build(cat(), ids, { onProgress: function (d, n) { CL.toast('准备照片 ' + d + ' / ' + n + '…', 60000); } }).then(function (out) {
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(out.blob);
+      a.download = out.name;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); a.parentNode.removeChild(a); }, 1500);
+      CL.toast('已导出 ' + out.n + ' 张：把这个 zip 上传到跟 Claude 的对话' + (out.skipped.length ? '（' + out.skipped.length + ' 张没导出）' : ''), 8000);
+    }, function (err) {
+      CL.toast('导出失败：' + ((err && err.message) || err), 6000);
+    }).then(function () { R.bulk = ''; drawMulti(); });
+  }
   function drawMulti() {
     var el = $('#rv-multi');
     if (!el) return;
     if (!R.multi) {
-      el.innerHTML = '<button class="mini" type="button" data-multi="on">多选（一次隐藏 / 删除好几张）</button>';
+      el.innerHTML = '<button class="mini" type="button" data-multi="on">多选（一次隐藏 / 删除 / 导出给 VISI）</button>';
       return;
     }
     var n = Object.keys(R.picked).length, off = !n || !!R.bulk;
     el.innerHTML = '<span class="m-n">已选 <b>' + CL.n(n) + '</b> 张</span>' +
       '<button class="mini" type="button" data-multi="page">全选这一页</button>' +
       '<button class="mini" type="button" data-multi="hide"' + (off ? ' disabled' : '') + '>隐藏</button>' +
+      '<button class="mini gold" type="button" data-multi="visi"' + (off ? ' disabled' : '') + ' title="放进 VISI 的内置图库：每个空间挑约 20 张">导出给 VISI</button>' +
       '<button class="mini danger" type="button" data-multi="delete"' + (off ? ' disabled' : '') + '>删除</button>' +
       '<button class="mini" type="button" data-multi="off">取消多选</button>';
   }

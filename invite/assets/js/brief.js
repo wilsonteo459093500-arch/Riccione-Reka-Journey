@@ -20,11 +20,27 @@
     }
     return null;
   }
+  /* 签名（体检第 2c 阶段）：客户填的全部资料会送去链接里的 WhatsApp —— 所以销售名字和号码
+     要有 VISI 登入后发的签名才算数（link-sign.js）。没签名 / 不对 / 问不到 → 送去公司的收件号码（config.js briefInbox）。
+     团队代号（from=wilson）照旧。销售端发的是 by=名字&wa=号码&sig=…；from= 后面写名字也认（跟邀请函一样） */
+  var LS = window.SAIL_LINK;
+  var rawBy = Q.get('by') || (member(Q.get('from')) ? '' : Q.get('from')) || '';
+  var signed = { by: rawBy, wa: Q.get('wa') || '' };
+  var by = rawBy, wa = signed.wa;
+  var checking = false;
+  if (!LS || LS.needs(signed)) {
+    by = ''; wa = '';
+    checking = !!(LS && Q.get('sig'));
+  }
   var M = member(Q.get('from'));
-  var hostName = (M ? M.name : Q.get('by') || (CFG.host && CFG.host.name) || 'Wilson Teo').trim();
-  var inbox = String((M && M.wa) || Q.get('wa') || CFG.briefInbox ||
-                     (CFG.host && CFG.host.wa) || '').replace(/\D/g, '');
-  var preName = Q.get('for') || Q.get('n') || '';
+  var hostName, inbox;
+  function who() {
+    hostName = (M ? M.name : by || (CFG.host && CFG.host.name) || 'Wilson Teo').trim();
+    inbox = String((M && M.wa) || wa || CFG.briefInbox || (CFG.host && CFG.host.wa) || '').replace(/\D/g, '');
+  }
+  who();
+  // 客户名字没签：限长度
+  var preName = Array.from(String(Q.get('for') || Q.get('n') || '').trim()).slice(0, LS ? LS.MAX_GUEST : 40).join('').trim();
 
   var steps = $$('.step');
   var LAST_INPUT = steps.length - 2;   // 最后一个填写步骤（不含完成页）
@@ -40,8 +56,19 @@
   /* ---------- 预填 ---------------------------------------- */
   if (preName) $('#f-name').value = preName;
   var fl = $('#from-line');
-  if (fl && (M || Q.get('by'))) { $('#from-name').textContent = hostName; fl.hidden = false; }
-  $('#done-host').textContent = hostName;
+  function paintHost() {
+    if (fl && (M || by)) { $('#from-name').textContent = hostName; fl.hidden = false; }
+    $('#done-host').textContent = hostName;
+  }
+  paintHost();
+  if (checking) {
+    LS.verify(signed, Q.get('sig'), 5000).then(function (f) {
+      if (!f) return;
+      by = f.by; wa = f.wa;
+      who();
+      paintHost();
+    });
+  }
   if (CFG.venue) $('#done-hours').textContent = CFG.venue.hoursZh;
 
   /* ---------- 草稿自动保存 -------------------------------- */
