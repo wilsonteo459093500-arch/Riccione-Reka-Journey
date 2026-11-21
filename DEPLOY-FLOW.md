@@ -34,29 +34,36 @@
 
 ## 2026-11-20 以前开的分支
 
-那些分支上还没有这个流程，推上去不会出预览（Vercel 自己的自动部署已关）。在那条分支先把 main 合进来（`git merge origin/main`），再推一次就会照新流程出预览。
+那些分支上还没有这个流程，推上去不会出预览（KIRA、VISI、SPACE、UKIR 这 4 个 Vercel 项目已经不再自己盯着仓库，见「一次性设定」第 2 步）。在那条分支先把 main 合进来（`git merge origin/main`），再推一次就会照新流程出预览。
+
+例外：WISH（`genie/`，PR #65）还没进 main，它的 Vercel 项目先留着连接，那条分支推上去照旧由 Vercel 自己出 WISH 的预览。等 PR #65 把 main 合进去以后，再把 WISH 也断开。
 
 ## 常用操作
 
 - **重新出一次版本**（例：换了环境变量）：GitHub → Actions →「测试 + 上线」→ **Run workflow** → 分支选 `main`（= 正式版）→ 填软件代号（`kira` / `visi` / `space` / `ukir` / `wish` / `all`）。
 - **紧急退回上一版**：Vercel → 那个项目 → Deployments → 找上一个正常的正式版 → ⋯ → **Promote to Production**（不用等 GitHub）。
-- **看为什么没上线**：GitHub → Actions → 点那一次 → 红色的那一步就是原因（测试没过、钥匙没设……）。
+- **看为什么没上线**：GitHub → Actions → 点那一次 → 红色的那一步就是原因（测试没过、钥匙没设、Vercel 额度用完……）。版本没出成一定是红的；PR 留言里那个软件会写「没出成」。
+- **额度用完了**（红字写「Vercel 今天的 100 次额度用完了」）：等 24 小时内额度回来，照上面「重新出一次版本」再出。
 
 ## 一次性设定（2026-11-20 做的，换电脑 / 换人时照这个检查）
 
 1. **Vercel 钥匙**：vercel.com → 右上头像 → Account Settings → **Tokens** → Create（Scope 选你的团队，Expiration 选 No Expiration 或 1 年）→ 复制。
    GitHub 仓库 → **Settings → Secrets and variables → Actions → New repository secret**：Name `VERCEL_TOKEN`，Secret 贴上 → Add。
    钥匙到期或外泄：在 Vercel 删掉旧的、建新的，GitHub 这里按 Update 换掉。
-2. **关掉 Vercel 自己的自动部署**（两层，都做了）：
-   - 各软件的 `vercel.json`：`"git": { "deploymentEnabled": false }`
-   - 各 Vercel 项目设定：只允许 CLI 出版本、不接受 Git 自动部署（旧分支上的 `vercel.json` 还是旧的，所以要靠这一层挡）
+2. **关掉 Vercel 自己的自动部署**（两层）：
+   - 各软件的 `vercel.json`：`"git": { "deploymentEnabled": false }`。只管得到已经有这一行的分支
+   - **把 Vercel 项目和 GitHub 仓库的连接断开**（2026-11-21，KIRA、VISI、SPACE、UKIR）：旧分支上的 `vercel.json` 还是旧的，每推一次 Vercel 照样给每个项目建一版，所以要靠这一层挡。
+     做法：GitHub → Actions →「Vercel 断开 GitHub 连接」→ Run workflow（分支选 `main`）。
+     检查：Vercel → 项目 → Settings → Git，应该写着没有连接仓库。
+     接回去：同一页按 Connect Git Repository。
+   - 2026-11-20 原本写的是「项目设定只允许 CLI 出版本」。那个设定（Deployment Policy）免费方案没有，其实从来没生效，当天额度就是被旧分支吃光的
 3. **仓库不公开**：GitHub 仓库 → Settings → 最下面 Danger Zone → Change visibility → Make private。
 
 ## 新增一个软件
 
 1. Vercel 建项目（Root Directory = 那个文件夹）
 2. `.github/apps.json` 加一行（Vercel 项目 ID 在项目 Settings → General 最下面）
-3. 那个文件夹的 `vercel.json` 加 `"git": { "deploymentEnabled": false }`，Vercel 项目设定也照第 2 步关掉 Git 自动部署
+3. 那个文件夹的 `vercel.json` 加 `"git": { "deploymentEnabled": false }`；Vercel 项目照第 2 步断开和 GitHub 的连接（Run workflow 时填那个软件的代号）
 4. 推一次，确认 Actions 出得了预览
 
 ## 额度

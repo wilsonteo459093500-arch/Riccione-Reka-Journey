@@ -90,7 +90,21 @@ jobs:
           FLAGS="--yes --archive=tgz"
           if [ "$PROD" = "true" ]; then FLAGS="$FLAGS --prod"; fi
           # 从仓库根目录上传；Vercel 照项目设定的 Root Directory（${{ matrix.app.dir }}）去构建
-          URL=$(npx --yes "$VERCEL_CLI" deploy $FLAGS --token "$VERCEL_TOKEN" | tail -n 1)
+          # 出不成一定要亮红灯：以前额度用完时这一步照样算成功，网址是空的（2026-11-20 踩过）
+          set +e
+          npx --yes "$VERCEL_CLI" deploy $FLAGS --token "$VERCEL_TOKEN" > deploy.out 2> deploy.err
+          CODE=$?
+          set -e
+          cat deploy.err >&2
+          URL=$(tail -n 1 deploy.out)
+          if [ "$CODE" -ne 0 ] || ! printf '%s' "$URL" | grep -q '^https://'; then
+            if grep -q 'api-deployments-free-per-day' deploy.err deploy.out; then
+              echo "::error::${{ matrix.app.name }} 没出成：Vercel 今天的 100 次额度用完了。等额度回来（24 小时内），到 Actions 按「Run workflow」重出一次"
+            else
+              echo "::error::${{ matrix.app.name }} 没出成版本，原因看上面 Vercel 的讯息"
+            fi
+            exit 1
+          fi
           echo "url=$URL" >> "$GITHUB_OUTPUT"
           echo "### ${{ matrix.app.name }}：$URL" >> "$GITHUB_STEP_SUMMARY"
           mkdir -p out && printf '%s\t%s\n' "${{ matrix.app.name }}" "$URL" > "out/${{ matrix.app.id }}.tsv"
@@ -115,12 +129,17 @@ jobs:
           path: out
         continue-on-error: true
       - uses: actions/github-script@v7
+        env:
+          APPS: ${{ needs.changes.outputs.apps }}
         with:
           script: |
             const fs = require('fs');
-            const rows = fs.existsSync('out')
+            const rows = (fs.existsSync('out')
               ? fs.readdirSync('out').map((f) => fs.readFileSync(`out/${f}`, 'utf8').trim().split('\t'))
-              : [];
+              : []).filter(([n, u]) => n && /^https:\/\//.test(u || ''));
+            // 应该出、却没有网址的软件：明讲「没出成」，不要漏掉或写成 undefined
+            const done = new Set(rows.map(([n]) => n));
+            const missing = JSON.parse(process.env.APPS || '[]').map((a) => a.name).filter((n) => !done.has(n));
             const branch = context.ref.replace('refs/heads/', '');
             const { data: prs } = await github.rest.pulls.list({
               ...context.repo, state: 'open', head: `${context.repo.owner}:${branch}`,
@@ -133,7 +152,8 @@ jobs:
               marker,
               `**预览版**（提交 \`${sha}\`）`,
               '',
-              rows.length ? rows.map(([n, u]) => `- ${n}：${u}`).join('\n') : '- 这次没有出成预览，看下面的执行记录',
+              ...rows.map(([n, u]) => `- ${n}：${u}`),
+              ...missing.map((n) => `- ${n}：**没出成**（测试没过，或 Vercel 今天的额度用完了；原因看下面的执行记录）`),
               '',
               `测试和出版本的记录：${run}`,
               '',

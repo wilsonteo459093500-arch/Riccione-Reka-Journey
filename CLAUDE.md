@@ -82,13 +82,14 @@
 
 - **合并进 main = 正式版自动更新**；别的分支 = 预览版，预览网址由 GitHub Actions 贴在 PR 留言里。详情 `DEPLOY-FLOW.md`
 - 只有改到的软件才测试、出版本（登记在 `.github/apps.json`）；测试没过不上线
-- Vercel 项目自己的 Git 自动部署已关掉（各 `vercel.json` 的 `git.deploymentEnabled: false` + 项目设定 deploymentPolicy），**不要再加 `ignoreCommand`**
+- Vercel 项目自己的 Git 自动部署已关掉（各 `vercel.json` 的 `git.deploymentEnabled: false` + 2026-11-21 把 KIRA / VISI / SPACE / UKIR 四个 Vercel 项目和 GitHub 的连接断开），**不要再加 `ignoreCommand`**。免费方案没有 Deployment Policy，别再试
 - 新增软件：照 `DEPLOY-FLOW.md`「新增一个软件」做
 - **2026-11-20 以前开的分支**（还没合 main 的）：推上去不会再自动出预览。先 `git merge origin/main` 把新流程带进来，再推一次就会出
 - 推送照样要攒着推：每推一次，改到的软件各用一次 Vercel 额度（一天 100 次）
-- **2026-11-20 发现的两个坑**（还没修）：
-  - 额度用完时（`api-deployments-free-per-day`），Actions 照样显示成功，PR 留言的网址变成「undefined」，版本其实没出。合并后要到 Vercel 看那一版是不是真的 READY；没出成就等额度回来，在 Actions 手动按「Run workflow」重出
-  - 还没合 main 的旧分支（例：`ccr-eb67bc6b-ecbura`，PR #65）每推一次，Vercel 自己会给 5 个软件各建一版，额度就是这样被吃掉的
+- **2026-11-21 修了两个坑**：
+  - 版本没出成（例：额度用完 `api-deployments-free-per-day`）以前照样显示成功、PR 留言写「undefined」。现在一定亮红灯，留言写「没出成」。合并后还是到 Vercel 看一眼那一版是不是 READY
+  - 额度是被旧分支吃掉的：还没合 main 的分支每推一次，Vercel 自己给每个连着的项目各建一版。断开连接后不会了
+  - WISH 的 Vercel 项目故意还连着（`genie/` 只在 PR #65 的分支上，靠 Vercel 自己出预览）；PR #65 合了 main 以后再断开
 
 ## KIRA（kira/）
 

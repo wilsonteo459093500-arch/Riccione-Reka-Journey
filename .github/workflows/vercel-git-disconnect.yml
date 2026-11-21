@@ -1,0 +1,60 @@
+# 一次性工具：把 Vercel 项目和这个 GitHub 仓库的连接断开（说明见 DEPLOY-FLOW.md「一次性设定」第 2 步）
+#
+# 为什么：版本现在都由「测试 + 上线」用 Vercel 钥匙出。Vercel 自己的连接还留着的话，
+# 还没合 main 的旧分支每推一次，Vercel 照样给每个项目建一版（建了再取消也算额度），一天 100 次就这样被吃光。
+# 免费方案没有「项目层面只准 CLI 出版本」的设定（Deployment Policy 要 Pro），所以只能断开连接。
+#
+# 断开以后：正式版、预览版照旧由「测试 + 上线」出；Vercel 不再自己盯着仓库。
+# 要接回去：Vercel → 那个项目 → Settings → Git → Connect Git Repository。
+
+name: Vercel 断开 GitHub 连接
+
+on:
+  workflow_dispatch:
+    inputs:
+      apps:
+        description: '要断开的软件代号，用空格分开（kira visi space ukir wish）'
+        required: true
+        default: 'kira visi space ukir'
+
+permissions:
+  contents: read
+
+jobs:
+  disconnect:
+    name: 断开连接
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 断开
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          APPS: ${{ inputs.apps }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error::还没设 VERCEL_TOKEN（见 DEPLOY-FLOW.md 第 1 步）"
+            exit 1
+          fi
+          TEAM=$(node -p "require('./.github/apps.json').team")
+          FAIL=0
+          for ID in $APPS; do
+            PROJECT=$(node -p "(require('./.github/apps.json').apps.find((a) => a.id === process.argv[1]) || {}).project || ''" "$ID")
+            if [ -z "$PROJECT" ]; then
+              echo "::error::.github/apps.json 里没有「$ID」"
+              FAIL=1
+              continue
+            fi
+            echo "=== $ID（$PROJECT）"
+            if VERCEL_ORG_ID="$TEAM" VERCEL_PROJECT_ID="$PROJECT" \
+              npx --yes vercel@65.9.0 git disconnect --yes --token "$VERCEL_TOKEN"; then
+              echo "### $ID：已断开" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "::error::$ID 没断开成功，原因看上面 Vercel 的讯息（已经断开过的也会走到这里）"
+              echo "### $ID：没断开成功（或本来就没连着）" >> "$GITHUB_STEP_SUMMARY"
+              FAIL=1
+            fi
+          done
+          exit $FAIL
